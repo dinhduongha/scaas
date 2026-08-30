@@ -220,7 +220,6 @@ là JSON-RPC envelope (`{"jsonrpc":"2.0","params":{...}}`), không phải REST J
 viết bằng `curl` sẽ không đoán ra. Mẫu đúng:
 
 ```python
-```python
 # dms_blockchain/controllers/intent_bus.py
 import json
 from odoo import http
