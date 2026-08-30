@@ -1469,7 +1469,7 @@ Viết ra vì một lớp "thống nhất" luôn bị đề nghị làm thêm, v
 | **[BẢN 3]** Xác minh provenance của token | `blockchain.token._verify_provenance()` (§10.4.4) | Settlement chỉ **đọc** `provenance_verified`. Một lớp thanh toán tự đi kiểm contract là một lớp thanh toán có quyền quyết định tiền nào hợp lệ |
 
 ---
-### 15.9. Kiem chung bat buoc cho section nay
+
 ### 15.9. Kiểm chứng bắt buộc cho section này
 
 Mỗi mục phải xanh trước khi gọi section này là xong. Mục có SQL thì **chạy SQL**, không đọc code (bẫy #2 CLAUDE.md).
