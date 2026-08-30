@@ -1269,3 +1269,76 @@ cấp nút bấm; ai tạo token thì người đó vặn và người đó ch�
    precompile vắng mặt không revert, nó trả về thành công với output rỗng. Không có
    triệu chứng nào cho tới khi đã có người nạp tiền. Trong hệ đóng ta biết chain của
    mình; trong factory mở thì không.
+
+## 21. Open Relayer: hai mode, hai bản cài đặt
+
+User chốt:
+
+> *"App cho Open Relayer network có thể làm việc theo 2 mode: 1. Chỉ đơn thuần relay
+> transactions đến blockchain. 2. Tham gia network, ngoài việc relay tx đến các
+> blockchain, các tx không phù hợp với nó được đưa vào pool, relay đến các node khác."*
+>
+> *"A. Có thể chạy độc lập không liên quan đến odoo, addons... viết bằng Rust. Có API
+> cho các node khác và RPC API cho client (web/desktop, wallet). B. Version thứ 2, song
+> song, viết theo kiểu odoo addons."*
+
+### 21.1 Hai mode
+
+| Mode | Làm gì | Ai chạy |
+|---|---|---|
+| **1. Relay thuần** | Nhận intent qua RPC, ký, đẩy lên chain. Không gossip, không pool, không peer | Doanh nghiệp tự chạy gas station cho chính mình. Đây chính là *"relay pool nội bộ"* ở §3.4b — không cần mạng nào cả |
+| **2. Node mạng** | Mode 1, cộng: intent **không hợp acceptance policy của mình** thì **không vứt đi mà đẩy vào pool và gossip sang node khác** | Ai muốn tham gia mesh mở |
+
+**Điểm hay nhất nằm ở mệnh đề "tx không phù hợp với nó được đưa vào pool, relay đến
+các node khác".** Nó biến acceptance policy (§6 mục 5) từ một bộ lọc thành một **bộ
+định tuyến**, và đó là chỗ thiết kế này hơn 0x-mesh.
+
+0x-mesh gossip mọi thứ tới mọi người và để từng node tự lọc — nên mỗi node trả chi phí
+băng thông cho toàn bộ lưu lượng của mạng, kể cả phần nó không bao giờ nhận. Ở đây,
+một node từ chối một việc vẫn **chuyển tiếp** nó, nên:
+
+- Intent phí 0 nhắm contract đối tác đi thẳng tới node đối tác thay vì lang thang.
+- Một node chuyên một chain không phải mang lưu lượng của sáu chain kia.
+- Mạng vẫn liên thông mà không cần mọi node biết mọi thứ.
+
+Ràng buộc kèm theo, phải thiết kế ngay chứ không vá sau: **chuyển tiếp phải có
+TTL/hop-count và dedup theo `intent_id`**, nếu không hai node có policy loại trừ nhau
+sẽ đẩy qua đẩy lại một intent cho tới khi nó hết hạn. Đây là bài toán định tuyến, và
+nó có bẫy định tuyến — gossipsub v1.1 lo phần chống lụt, không lo phần vòng lặp ở tầng
+ứng dụng.
+
+### 21.2 Hai bản cài đặt song song
+
+| | A — Rust standalone | B — Odoo addon |
+|---|---|---|
+| Phụ thuộc | **không có Odoo, không có addon** | chạy trong Odoo |
+| Đối tượng | ai cũng chạy được — mesh là mở, và phần lớn thế giới không dùng Odoo | bản triển khai DMS vốn đã có Odoo, không muốn thêm một daemon |
+| Bề mặt | API node↔node + **RPC API cho client** (web, desktop, wallet) | như trên, qua RPC surface của Odoo (§6 của `CLAUDE.md`: `call_kw` + `/json/2`) |
+
+Lý do có hai bản là chính đáng và không phải trùng lặp: bản A tồn tại để mạng **mở
+thật** — nếu chạy relayer đòi cài Odoo thì "mở cho toàn thế giới" là khẩu hiệu. Bản B
+tồn tại vì một site DMS đã có Odoo, có cron, có ACL, có nơi lưu khoá, và bắt họ vận
+hành thêm một tiến trình Rust là chi phí không đổi lấy gì.
+
+### 21.3 Hệ quả nặng nhất: giao thức phải có SPEC, không chỉ có code
+
+Hai bản cài đặt của cùng một giao thức gossip là **đúng chỗ mà lỗi bất đồng thuận
+sinh ra**. Node A chấp nhận một intent mà node B từ chối, hoặc hai bên tính `intent_id`
+lệch nhau một byte, là mạng chia đôi âm thầm.
+
+Nên thứ tự phải là: **spec trước, hai bản cài đặt sau** — không phải viết bản Rust rồi
+coi nó là spec. Ba thứ bắt buộc:
+
+1. **Wire format cố định bằng văn bản**: encoding của intent, cách tính `intent_id`,
+   digest EIP-712, topic name, và thứ tự byte. Một bảng, không phải một struct Rust.
+2. **Bộ vector tuân thủ (conformance vectors)** dùng chung: N intent mẫu kèm
+   `intent_id` và digest kỳ vọng. Cả hai bản cài đặt phải chạy đúng bộ này trong CI.
+   Đây là thứ rẻ nhất chặn được drift, và thiếu nó thì hai bản sẽ lệch trong vòng vài
+   tháng mà không ai biết cho tới lúc có tiền thật.
+3. **Test liên thông (interop) A↔B**: một node Rust và một node Odoo trong cùng một
+   mesh, gossip qua lại được, cả hai đều relay được một intent thật.
+
+Điểm này nối với `_REVIEW-01-UPGRADE.md`: relayer **không nằm trên đường tới hạn của
+giai đoạn private** (chain 9000 có `MinGasPrice = 0`, gas miễn phí, không cần relayer
+nào). Nhưng spec giao thức thì nên chốt sớm, vì nó rẻ khi còn trên giấy và đắt khi đã
+có hai bản cài đặt chạy lệch nhau.

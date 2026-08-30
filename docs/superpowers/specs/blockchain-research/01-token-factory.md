@@ -1,68 +1,72 @@
-## 01. Token Factory, vong doi Token va co che Peg/Wrap
+## 01. Token Factory, vòng đời Token và cơ chế Peg/Wrap
 
-### 1.0. Ket luan truoc, ly luan sau
+### 1.0. Kết luận trước, lý luận sau
 
-Muoi hai quyet dinh cua section nay, de mot nguoi doc plan khong phai doc het:
+Mười ba quyết định của section này, để một người đọc plan không phải đọc hết:
 
-| # | Quyet dinh | Muc |
+| # | Quyết định | Mục |
 |---|---|---|
-| 1 | Proxy pattern = **Beacon**, mot `UpgradeableBeacon` cho moi cap `(archetype, majorVersion)`. Khong Diamond. Clone EIP-1167 chi cho token co chu y bat bien | 1.3 |
-| 2 | Chuoi xac dinh dia chi co **ba tang**: deployer xac dinh to factory xac dinh to beacon xac dinh to proxy. Thieu mot tang la mat parity | 1.4 |
-| 3 | `salt` cam ket ca `initData` bang hash, con `init_code` thi khong. Nho vay doi ten token khong doi dia chi ma van chong front-run `initialize()` | 1.4 |
-| 4 | Them archetype moi = 1 tx `registerPrototype`, **khong** upgrade factory | 1.5 |
-| 5 | Invariant `WRAP_1_1` la **`<=`**, khong phai `==`. Ai cung co the tang ton (donate) underlying vao vault | 1.6 |
-| 6 | `PEG_RATIO` cho Z-VND: reserve **bang VND**, khong phai USDT. `FIXED_RATE` + spread hai chieu + hang doi redemption T+1 | 1.7 |
-| 7 | Rang buoc that len decimals khong phai la decimals, ma la **`totalSupply` tinh theo raw unit phai `<= 2^44`** — do la tran chi phi giai ma Zether | 1.8 |
-| 8 | Range proof width = **64 bit** (luy thua cua 2), tach hoan toan khoi tran giai ma. `2^48` trong ban nhap truoc la sai vi Bulletproofs can `n*m` la luy thua cua 2 | 1.8 |
-| 9 | Bat bien chong in tien la **`confidentialLocked == balanceOf(address(this))`**, khong phai mot cong thuc tren "tong so du cong khai" (khong the liet ke on-chain) | 1.9 |
-| 10 | `blacklist` mo: **tu choi tren public profile**. `pause` co tran 7 ngay, va loi thoat duy nhat khoi tran do la `WIND_DOWN` mot chieu | 1.10 |
-| 11 | Upgrade: timelock 48h, executor mo, khong co duong tat. Guardian duoc phep **dung**, khong duoc phep **doi** | 1.11 |
-| 12 | Con so quyet dinh kien truc: mot Zether transfer 64-bit ton **~1.9M gas**. Tren Gnosis (block limit ~17M, 5s) day la ~0.4 tx/s ben vung. Tren Besu QBFT zero-gas, tran that la CPU validator, ~20-45 tx/s | 1.12, 1.16 |
+| 1 | Proxy pattern = **EIP-1167 clone, BẤT BIẾN**. Không Beacon, không UUPS, không Diamond. Token đã deploy thì không ai nâng cấp được, kể cả người tạo | 1.3 |
+| 2 | Chuỗi xác định địa chỉ có **hai tầng**: deployer xác định → factory xác định → clone. Tầng beacon biến mất cùng với upgrade | 1.4 |
+| 3 | `salt` cam kết cả `initData` bằng hash, còn `init_code` thì không. Nhờ vậy đổi tên token không đổi địa chỉ mà vẫn chống front-run `initialize()` | 1.4 |
+| 4 | Thêm archetype hoặc version mới = 1 tx `registerImplementation`, **không** upgrade factory. Catalogue **append-only**: `(kind, version)` đã đăng ký không bao giờ trỏ lại chỗ khác | 1.5 |
+| 5 | Invariant `WRAP_1_1` là **`<=`**, không phải `==`. Ai cũng có thể tặng thêm (donate) underlying vào vault | 1.6 |
+| 6 | `PEG_RATIO` cho Z-VND: reserve **bằng VND**, không phải USDT. `FIXED_RATE` + spread hai chiều + hàng đợi redemption T+1 | 1.7 |
+| 7 | Ràng buộc thật lên decimals không phải là decimals, mà là **`totalSupply` tính theo raw unit phải `<= 2^44`** — đó là trần chi phí giải mã Zether | 1.8 |
+| 8 | Range proof width = **64 bit** (luỹ thừa của 2), tách hoàn toàn khỏi trần giải mã. `2^48` trong bản nháp trước là sai vì Bulletproofs cần `n*m` là luỹ thừa của 2 | 1.8 |
+| 9 | Bất biến chống in tiền là **`confidentialLocked == balanceOf(address(this))`**, không phải một công thức trên "tổng số dư công khai" (không thể liệt kê on-chain) | 1.9 |
+| 10 | `blacklist` mở: **từ chối trên public profile**. `pause` có trần 7 ngày, và lối thoát duy nhất khỏi trần đó là `WIND_DOWN` một chiều | 1.10 |
+| 11 | Không còn quyền upgrade để mà quản trị. Quyền còn lại của người vận hành factory: xuất bản một version mới (không ai buộc phải chọn) và emit event deprecate (không chặn gì). Role bên trong token thuộc về **người tạo token** | 1.11 |
+| 12 | `MigrationSink` là **đường duy nhất** để sửa bất cứ thứ gì, kể cả một lỗi logic tầm thường. Với token Zether đó là một chiến dịch 180 ngày, không phải một hàm | 1.17.2 |
+| 13 | Con số quyết định kiến trúc: một Zether transfer 64-bit tốn **~1,9M gas**. Trên Gnosis (block limit ~17M, 5s) đây là ~0,4 tx/s bền vững. Trên Besu QBFT zero-gas, trần thật là CPU validator, ~20–45 tx/s | 1.12, 1.16 |
 
 ---
 
-### 1.1. Pham vi, gia dinh an, va nhung cho `blockchain.md` con bo ngo
+### 1.1. Phạm vi, giả định ẩn, và những chỗ `blockchain.md` còn bỏ ngỏ
 
-Note goc (dong 3-11) neu 6 yeu cau, tat ca deu dung y dinh nhung khong du de code:
+Note gốc (dòng 3–11) nêu 6 yêu cầu, tất cả đều đúng ý định nhưng không đủ để code:
 
-| Yeu cau trong note | Trang thai | Xu ly o muc 1.2-1.11 |
+| Yêu cầu trong note | Trạng thái | Xử lý ở mục 1.2–1.11 |
 |---|---|---|
-| Tu mint (issuer token) | Ro | archetype `ISSUER_NATIVE` |
-| Wrap ERC-20 san co (USDT to Z-USDT) | Thieu xu ly fee-on-transfer, blacklist cua underlying, decimals, donate, rebase | archetype `WRAP_1_1`, muc 1.6 |
-| Mint/burn theo ty le (1 USDT to 25000 Z-VND) | **Thieu hoan toan**: ai chiu FX risk, rate tu dau, de-peg, redemption, spread, hang doi | archetype `PEG_RATIO`, muc 1.7 |
-| "Mint/burn tu 1 hoac 1 **group** ERC-20" | **Chua ai thiet ke gio (basket)**: trong so, rebalance, NAV, N oracle = N diem gay | muc 1.7.6 |
-| "Dung co che delegate de chia se code, khac data, support nhieu version" | Chua chon pattern; va note khong he nhac den ky luat storage layout — thu duy nhat lam `delegatecall` nguy hiem | muc 1.3, khuyen nghi Beacon |
-| "Factory Contract de tu do create2" | Chua co cong thuc dia chi, chua noi salt gom gi, chua noi ai deploy chinh factory | muc 1.4 |
-| "Co kha nang them nguyen mau Contract" | Chua co registry | muc 1.5 |
+| Tự mint (issuer token) | Rõ | archetype `ISSUER_NATIVE` |
+| Wrap ERC-20 sẵn có (USDT → Z-USDT) | Thiếu xử lý fee-on-transfer, blacklist của underlying, decimals, donate, rebase | archetype `WRAP_1_1`, mục 1.6 |
+| Mint/burn theo tỷ lệ (1 USDT → 25000 Z-VND) | **Thiếu hoàn toàn**: ai chịu FX risk, rate từ đâu, de-peg, redemption, spread, hàng đợi | archetype `PEG_RATIO`, mục 1.7 |
+| "Mint/burn từ 1 hoặc 1 **group** ERC-20" | **Chưa ai thiết kế giỏ (basket)**: trọng số, rebalance, NAV, N oracle = N điểm gãy | mục 1.7.6 |
+| "Dùng cơ chế delegate để chia sẻ code, khác data, support nhiều version" | Chưa chọn pattern; và note không hề nhắc đến kỷ luật storage layout — thứ duy nhất làm `delegatecall` nguy hiểm | mục 1.3. **Khuyến nghị đã lật: EIP-1167 clone bất biến**, xem 1.3.1 |
+| "Factory Contract để tự do create2" | Chưa có công thức địa chỉ, chưa nói salt gồm gì, chưa nói ai deploy chính factory | mục 1.4 |
+| "Có khả năng thêm nguyên mẫu Contract" | Chưa có registry | mục 1.5 |
 
-Bon thu note **khong** nhac den nhung chan moi thiet ke: **decimals cua VND**, **total-supply invariant khi mot token vua la ERC-20 cong khai vua giu so du Zether ma hoa**, **quyen upgrade thuoc ve ai**, va **tran giai ma quyet dinh tran cung tien**. Cac muc 1.8, 1.9, 1.11.
+Bốn thứ note **không** nhắc đến nhưng chặn mọi thiết kế: **decimals của VND**, **total-supply invariant khi một token vừa là ERC-20 công khai vừa giữ số dư Zether mã hoá**, **quyền upgrade thuộc về ai**, và **trần giải mã quyết định trần cung tiền**. Các mục 1.8, 1.9, 1.11.
 
-Truc **chain profile** (public/private, khoa quyet dinh #5) khong phai la mot truong config phu: no quyet dinh archetype nao duoc phep deploy, va tren private profile no con noi lien EIP-170 (xem 1.16). Model chinh tac la `blockchain.chain` voi truong `chain_profile` (dinh nghia o §08.1 va §10.4.2); section nay khong dinh nghia lai model do.
+Câu thứ ba trong bốn câu đó có một đáp án mà bản nháp không lường: **không ai cả, vì không có quyền upgrade.** Xem 1.11.
 
-#### 1.1.1. Muoi hai gia dinh an — noi ra de con kiem chung duoc
+Trục **chain profile** (public/private, khoá quyết định #5) không phải là một trường config phụ: nó quyết định archetype nào được phép deploy, và trên private profile nó còn nối liền EIP-170 (xem 1.16). Model chính tắc là `blockchain.chain` với trường `chain_profile` (định nghĩa ở §08.1 và §10.4.2); section này không định nghĩa lại model đó.
 
-Ban nhap dau tien im lang ve muoi hai dieu duoi day. Moi dong la mot cho co the lam hong he thong ma khong ai thay truoc.
+#### 1.1.1. Mười ba giả định ẩn — nói ra để còn kiểm chứng được
 
-| # | Gia dinh an | Neu sai thi sao | Kiem chung o dau |
+Bản nháp đầu tiên im lặng về mười ba điều dưới đây. Mỗi dòng là một chỗ có thể làm hỏng hệ thống mà không ai thấy trước.
+
+| # | Giả định ẩn | Nếu sai thì sao | Kiểm chứng ở đâu |
 |---|---|---|---|
-| A1 | Co mot khoa nao do deploy duoc `DmsTokenFactory`, va khoa do khong bao gio mat | Mat khoa = khong deploy duoc token moi tren chain do, **va** mat parity dia chi cross-chain vinh vien | 1.4, 1.11 |
-| A2 | `initialize()` khong bi front-run giua `CREATE2` va lan goi dau | Ke tan cong lam admin cua token ta vua deploy | 1.4 |
-| A3 | `solc` build la deterministic | Cung source, hai may, hai `init_code`, hai dia chi. Mac dinh solc **khong** deterministic | 1.14 |
-| A4 | Code cham dat tai dia chi du doan chinh la code ta muon | Metamorphic contract / squatting | 1.2, 1.4 |
-| A5 | Chain da co Cancun (EIP-6780) | Implementation chua `initialize` co the bi chiem va `SELFDESTRUCT` to brick toan bo N proxy | 1.3 |
-| A6 | `underlying.balanceOf(vault)` chi doi qua wrap/unwrap | Donate + rebase pha vo bat bien `==` | 1.6 |
-| A7 | Reserve off-chain doi soat duoc tuc thi | Mint on-chain nhanh hon tien ve tai khoan. Can `in_flight` buffer va mint cap | 1.7 |
-| A8 | Mot rate duy nhat dung chung cho mint va redeem | Round-trip arbitrage quanh moi lan cap nhat oracle, mien phi | 1.7.3 |
-| A9 | `totalSupply` khong lien quan gi den kha nang giai ma so du Zether | Sai. `totalSupply` raw chinh la khong gian tim kiem BSGS | 1.8 |
-| A10 | Odoo la nguon su that | Chain la nguon su that; Odoo la ban chieu. Huong doi soat phai duoc phat bieu, khong duoc suy dien | 1.13 |
-| A11 | Mot token = mot lan deploy | Cron chay hai lan, hai broadcast, hai dia chi, mot record | 1.13 |
-| A12 | Block gas limit du cho mot Zether tx | 128-bit range proof (~3.5M) chiem 20% mot block Gnosis. Tren mot so L2 no khong vao noi mot block | 1.12 |
+| A1 | ~~Có một khoá nào đó deploy được factory, và khoá đó không bao giờ mất~~ **ĐẢO CHIỀU.** Mất khoá registrar = catalogue đóng băng ở version cuối, **và mọi người vẫn deploy được qua `createUnregistered`** | Suy giảm, không chết. Hồ sơ rủi ro cũ xếp A1 ở mức thảm hoạ; mức đúng là vệ sinh vận hành | 1.5, 1.11 |
+| A2 | `initialize()` không bị front-run giữa `CREATE2` và lần gọi đầu | Kẻ tấn công làm admin của token ta vừa deploy | 1.4 |
+| A3 | `solc` build là deterministic | Cùng source, hai máy, hai `init_code`, hai địa chỉ. Mặc định solc **không** deterministic | 1.14 |
+| A4 | Code chạm đất tại địa chỉ dự đoán chính là code ta muốn | Metamorphic contract / squatting | 1.2, 1.4 |
+| A5 | Chain đã có Cancun (EIP-6780) | Implementation chưa `initialize` có thể bị chiếm và `SELFDESTRUCT` → brick mọi clone trỏ tới nó. **Giảm nhẹ chứ không mất khi bỏ upgrade**: không ai *thay* được implementation nữa, nhưng *phá* thì vẫn phá được | 1.3 |
+| A6 | `underlying.balanceOf(vault)` chỉ đổi qua wrap/unwrap | Donate + rebase phá vỡ bất biến `==` | 1.6 |
+| A7 | Reserve off-chain đối soát được tức thì | Mint on-chain nhanh hơn tiền về tài khoản. Cần `in_flight` buffer và mint cap | 1.7 |
+| A8 | Một rate duy nhất dùng chung cho mint và redeem | Round-trip arbitrage quanh mỗi lần cập nhật oracle, miễn phí | 1.7.3 |
+| A9 | `totalSupply` không liên quan gì đến khả năng giải mã số dư Zether | Sai. `totalSupply` raw chính là không gian tìm kiếm BSGS | 1.8 |
+| A10 | Odoo là nguồn sự thật | Chain là nguồn sự thật; Odoo là bản chiếu. Hướng đối soát phải được phát biểu, không được suy diễn | 1.13 |
+| A11 | Một token = một lần deploy | Cron chạy hai lần, hai broadcast, hai địa chỉ, một record | 1.13 |
+| A13 | Một lỗi trong v1 có thể sửa được | **Sai, và đây là giả định đắt nhất.** Token bất biến: không có bản vá nào. Đường duy nhất là `MigrationSink`, và với số dư confidential đó là một chiến dịch 180 ngày | 1.17.2 |
+| A12 | Block gas limit đủ cho một Zether tx | 128-bit range proof (~3,5M) chiếm 20% một block Gnosis. Trên một số L2 nó không vào nổi một block. Chain private 9000 có gasLimit 16,7M — **đã đo**, không phải 200M như bản nháp giả định | 1.12, 1.16 |
 
 ---
 
-### 1.2. Nguyen tac chu dao: "deploy khong phai la da co token"
+### 1.2. Nguyên tắc chủ đạo: "deploy không phải là đã có token"
 
-Ap dung nguyen tac `dms_vietqr` ("quet QR khong phai la da thu tien") vao vong doi contract. Mot `CREATE2` da broadcast **khong** la mot token dang ton tai. State machine cua `blockchain.token`:
+Áp dụng nguyên tắc `dms_vietqr` ("quét QR không phải là đã thu tiền") vào vòng đời contract. Một `CREATE2` đã broadcast **không** là một token đang tồn tại. State machine của `blockchain.token`:
 
 ```
 draft -> predicted -> broadcast -> pending_finality -> verified -> live
@@ -71,218 +75,344 @@ draft -> predicted -> broadcast -> pending_finality -> verified -> live
                        failed         failed          mismatch    paused -> wind_down -> retired
 ```
 
-So voi ban nhap, them mot trang thai: **`verified`**. Ly do la gia dinh A4. Giua `pending_finality` va `live` phai co mot buoc **kiem tra code that su nam o dia chi do**, chu khong chi kiem tra receipt `status == 1`:
+So với bản nháp, thêm một trạng thái: **`verified`**. Lý do là giả định A4. Giữa `pending_finality` và `live` phải có một bước **kiểm tra code thật sự nằm ở địa chỉ đó**, chứ không chỉ kiểm tra receipt `status == 1`:
 
 ```python
 def _verify_deployed_code(self):
-    """Chay sau finality, truoc khi set live. Ba phep kiem, khong phep nao bo duoc."""
+    """Chạy sau finality, trước khi set live. Ba phép kiểm, không phép nào bỏ được."""
     for tok in self:
         code_hash = tok._rpc_extcodehash(tok.contract_address)          # eth_getCode + keccak
         if code_hash != tok.prototype_id.expected_proxy_code_hash:
             tok.deploy_state = 'mismatch'; continue
-        if tok._rpc_call('beacon()') != tok.prototype_id.beacon_address:
+        if tok._rpc_call('implementation()') != tok.prototype_id.implementation_address:
             tok.deploy_state = 'mismatch'; continue
-        if tok._rpc_call('owner()') != tok.chain_id.governance_safe:
+        if tok._rpc_call('creator()') != tok.creator_address:
             tok.deploy_state = 'mismatch'; continue
         tok.deploy_state = 'live'
 ```
 
-`live` chi duoc set boi Finality Gate **cong** ba phep kiem tren. Nguong finality doc tu `blockchain.chain.finality_hard_blocks` / `finality_hard_seconds` (Gnosis: 2 epoch ~12.8 phut cho hard; 1 block ~5s cho soft — xem §08). Truoc do moi RPC tra ve dia chi deu phai kem `deploy_state`, va client **khong duoc phep** mint vao mot token o trang thai `broadcast`.
+Phép kiểm thứ hai đổi so với bản trước: nó so `implementation()` chứ không so `beacon()`, vì không còn beacon. Phép kiểm thứ ba cũng đổi — bản cũ so `owner()` với `governance_safe` của chain, giả định mọi token đều thuộc về ta. Trên factory mở thì không: thứ phải khớp là **người tạo**, và với token bất biến thì `creator()` là một hằng số chứ không phải một vai trò có thể chuyển.
 
-Ly do khong phai ly thuyet: reorg tren Gnosis truoc finality checkpoint la co that, va mot `CREATE2` bi reorg de lai mot dia chi da duoc ghi vao Odoo nhung khong co code. Sau reorg, dia chi do **van du doan duoc boi bat ky ai** — ke tan cong chi can doc `TokenDeployed` event da bi reorg, tinh lai salt, va deploy truoc ta bang chinh Arachnid deployer neu factory cua ta khong permissioned. Trang thai `mismatch` la mot incident, khong phai mot warning.
+`live` chỉ được set bởi Finality Gate **cộng** ba phép kiểm trên. Ngưỡng finality đọc từ `blockchain.chain.finality_hard_blocks` / `finality_hard_seconds` (Gnosis: 2 epoch ~12,8 phút cho hard; 1 block ~5s cho soft — xem §08). Trước đó mọi RPC trả về địa chỉ đều phải kèm `deploy_state`, và client **không được phép** mint vào một token ở trạng thái `broadcast`.
+
+Lý do không phải lý thuyết: reorg trên Gnosis trước finality checkpoint là có thật, và một `CREATE2` bị reorg để lại một địa chỉ đã được ghi vào Odoo nhưng không có code. Sau reorg, địa chỉ đó **vẫn dự đoán được bởi bất kỳ ai** — kẻ tấn công chỉ cần đọc `TokenDeployed` event đã bị reorg, tính lại salt, và deploy trước ta bằng chính Arachnid deployer.
+
+Trên factory mở, cửa này **hẹp hơn bản cũ chứ không rộng hơn**: salt cam kết cả `keccak256(initData)` lẫn `address` người tạo (1.4.3), nên kẻ tấn công không tái tạo được salt của ta trừ khi họ dùng đúng địa chỉ của ta. Cái họ làm được là deploy một token khác ở một địa chỉ khác — tức là rác, không phải chiếm đoạt. Trạng thái `mismatch` vẫn là một incident, không phải một warning.
 
 ---
 
 ### 1.3. Proxy pattern: EIP-1167 vs UUPS vs Beacon vs Diamond
 
-Yeu cau cua note la "chia se code, khac data, support nhieu version". Bon lua chon khong tuong duong nhau:
+Yêu cầu của note là "chia sẻ code, khác data, support nhiều version". Bốn lựa chọn không tương đương nhau:
 
-| Pattern | Deploy gas/token | Upgrade N token | Overhead call **lanh** (lan dau/tx) | Overhead call **am** | Dia chi du doan co on dinh qua cac version? | Hiem hoa storage |
+| Pattern | Deploy gas/token | Upgrade N token | Overhead call **lạnh** (lần đầu/tx) | Overhead call **ấm** | Địa chỉ dự đoán có ổn định qua các version? | Hiểm hoạ storage |
 |---|---|---|---|---|---|---|
-| EIP-1167 minimal proxy | ~45,000 | **Khong the** (impl hardcode trong 45 byte runtime) | ~2,700 | ~150 | **Khong** — doi impl la doi `init_code` la doi dia chi tuong lai | Khong co (khong upgrade) |
-| UUPS (ERC-1822) | ~200,000 - 240,000 | **N transaction** | ~4,800 (SLOAD lanh 2,100 + DELEGATECALL lanh 2,600) | ~200 | **Khong** — cung ly do | Impl quen ke thua `UUPSUpgradeable` to brick vinh vien |
-| Beacon proxy | ~200,000 - 240,000 | **1 transaction cho ca N** | **~9,400** (SLOAD 2,100 + STATICCALL 2,600 + SLOAD trong beacon 2,100 + DELEGATECALL 2,600) | ~400 | **Co** — `init_code` chi chua dia chi beacon | Blast radius = toan bo N token |
-| Diamond (EIP-2535) | ~400,000+ | 1 `diamondCut`/proxy | ~4,900 (SLOAD selector map 2,100 + DELEGATECALL 2,600) | ~200 | Co (voi `DiamondCutFacet` co dinh) | Cao nhat: AppStorage/Diamond Storage phai ky luat tuyet doi |
+| EIP-1167 minimal proxy | ~45.000 | **Không thể** (impl hardcode trong 45 byte runtime) | ~2.700 | ~150 | **Không** — đổi impl là đổi `init_code` là đổi địa chỉ tương lai | Không có (không upgrade) |
+| UUPS (ERC-1822) | ~200.000 – 240.000 | **N transaction** | ~4.800 (SLOAD lạnh 2.100 + DELEGATECALL lạnh 2.600) | ~200 | **Không** — cùng lý do | Impl quên kế thừa `UUPSUpgradeable` → brick vĩnh viễn |
+| Beacon proxy | ~200.000 – 240.000 | **1 transaction cho cả N** | **~9.400** (SLOAD 2.100 + STATICCALL 2.600 + SLOAD trong beacon 2.100 + DELEGATECALL 2.600) | ~400 | **Có** — `init_code` chỉ chứa địa chỉ beacon | Blast radius = toàn bộ N token |
+| Diamond (EIP-2535) | ~400.000+ | 1 `diamondCut`/proxy | ~4.900 (SLOAD selector map 2.100 + DELEGATECALL 2.600) | ~200 | Có (với `DiamondCutFacet` cố định) | Cao nhất: AppStorage/Diamond Storage phải kỷ luật tuyệt đối |
 
-**Sua so lieu so voi ban nhap:** ban nhap ghi Beacon `~4,800` va Diamond `~4,800` — sai o hai cho. Beacon co **mot external call phu** (STATICCALL sang beacon) ma Diamond khong co, nen Beacon dat hon Diamond, khong bang nhau. Con so lanh cho Beacon la **~9,400**, khong phai 4,800. Con so nay chi phat sinh **mot lan cho moi transaction** (sau do dia chi beacon va impl da warm, cost ve ~400). Voi mot `transfer` don le do la ~9,000 gas tren tong ~46,000 — **20% overhead**, khong phai 10%. Con so nay la co so cho quyet dinh o 1.12.
+**Sửa số liệu so với bản nháp:** bản nháp ghi Beacon `~4.800` và Diamond `~4.800` — sai ở hai chỗ. Beacon có **một external call phụ** (STATICCALL sang beacon) mà Diamond không có, nên Beacon đắt hơn Diamond, không bằng nhau. Con số lạnh cho Beacon là **~9.400**, không phải 4.800. Con số này chỉ phát sinh **một lần cho mỗi transaction** (sau đó địa chỉ beacon và impl đã warm, cost về ~400). Với một `transfer` đơn lẻ đó là ~9.000 gas trên tổng ~46.000 — **20% overhead**, không phải 10%. Con số này là cơ sở cho quyết định ở 1.12.
 
-**Khuyen nghi: Beacon proxy, mot `UpgradeableBeacon` cho moi cap (archetype, majorVersion), deploy qua CREATE2.**
+**Khuyến nghị: EIP-1167 minimal proxy, BẤT BIẾN. Không Beacon, không UUPS, không Diamond.**
 
-Ly do, xep theo suc nang:
+Bản nháp và bản thứ hai của mục này đều khuyến nghị **Beacon**, và cả hai đều dựa trên
+một mệnh đề sai. Bảng trên giữ nguyên — số liệu vẫn đúng — nhưng kết luận lật.
 
-1. **Ky ban an cua UUPS trong bai toan nay la N transaction de va mot lo hong.** Neu ban co 40 token loyalty cua 40 nha phan phoi va can va gap, 40 tx tren 2 chain la 80 tx phai dieu phoi qua timelock, moi tx mot co hoi that bai rieng. Beacon lam viec do bang 1 tx moi chain.
-2. **Beacon la pattern duy nhat giu dia chi du doan on dinh qua cac version** — cot moi ma ban nhap bo sot. Voi UUPS va voi clone, `init_code` chua dia chi implementation. Doi implementation to doi `keccak256(init_code)` to **moi dia chi du doan trong tuong lai deu doi**. Neu ta hua voi doi tac "dia chi Z-VND cua ban se la 0x..." roi va mot lo hong, loi hua do gay. Voi Beacon, `init_code = BeaconProxy.creationCode ++ abi.encode(beacon, "")` — khong co impl trong do.
-3. EIP-1167 re nhat va an toan nhat nhung mau thuan truc tiep voi "support nhieu version". No van co cho: mot token phat hanh cho ben thu ba yeu cau bat bien (immutability) thi deploy bang clone, va **ghi ro trong `blockchain.token.upgradeable = False`**.
-4. Diamond: **khong dung cho token.** Ly do khong phai gas ma la audit surface va tooling. Blockscout cua Gnosis va explorer cua Celo verify Diamond rat kem (moi facet phai verify rieng, va giao dien "Read/Write contract" khong gop lai), `diamondCut` mo rong be mat tan cong bang so facet, va Diamond Storage sai mot slot la mat tien. Diamond chi giai quyet duoc **mot** van de that: gioi han 24,576 byte (EIP-170).
+#### 1.3.1. Mệnh đề sai đã đẩy cả section sang Beacon
 
-**Ve EIP-170, va tai sao no khong con la ly do chon Diamond:**
+Bản trước viết:
 
-- Neu `ZToken` + Zether + Bulletproofs verifier vuot 24KB tren **public profile**, giai phap re hon la tach `BulletproofVerifier` thanh mot contract **stateless** goi bang `staticcall`, khong phai facet: cung chia se code, khong co Diamond Storage, va verifier co the duoc audit doc lap va tai su dung cho moi token.
-- Chi phi cua viec tach: mot `staticcall` lanh (2,600 gas) cong voi chi phi copy calldata cua proof (~1.3 KB to ~700 gas memory + copy). Tong ~3,500 gas tren mot giao dich ~1.9M — **0.18%**. Doi lay mot contract duoi 24KB va mot audit boundary sach. Khong co ly do gi de chon Diamond.
-- Tren **private profile** (Besu, §1.16), `contractSizeLimit` la mot tham so genesis va co the dat 64KB. Nhung **khong duoc dua vao dieu do**: neu source cua public build va private build khac nhau, ta co hai codebase. Quy tac: **moi contract phai fit 24,000 byte tren moi profile**; CI enforce (1.14).
+> *"EIP-1167 rẻ nhất và an toàn nhất nhưng mâu thuẫn trực tiếp với 'support nhiều
+> version'."*
 
-**Hiem hoa storage collision, cu the cho tung pattern:**
+**Sai.** Nó giả định *"support nhiều version"* bắt buộc phải là **đi một token qua
+nhiều version theo thời gian**. Có cách đọc thứ hai, và nó thoả đúng yêu cầu gốc:
+**nhiều version cùng tồn tại trong một catalogue, người tạo chọn một lúc deploy, và nó
+ghim vĩnh viễn.**
 
-1. ERC-1967 dat impl o slot `keccak256("eip1967.proxy.implementation") - 1` = `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc`, beacon o `keccak256("eip1967.proxy.beacon") - 1` = `0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50`, admin o `keccak256("eip1967.proxy.admin") - 1` = `0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103`. Tru 1 la de khong slot Solidity nao roi trung (khong ton tai preimage cho `keccak(x) - 1` ma solc sinh ra). **Tuyet doi khong tu che slot.**
-2. Doi thu tu ke thua giua hai version se **im lang** doi map slot. Chong bang **ERC-7201 namespaced storage**: moi module giu struct rieng tai
-   `keccak256(abi.encode(uint256(keccak256("dms.blockchain.token.v1")) - 1)) & ~bytes32(uint256(0xff))`.
-   Khi do thu tu ke thua khong con y nghia, va bo `__gap[50]` co dien tro nen khong can thiet. **Rang buoc bat buoc di kem:** ten namespace **khong duoc chua so version cua implementation**. `"dms.blockchain.token.v1"` la ten cua *lop du lieu*, khong phai cua *lan build*. Doi ten namespace giua hai implementation = mat toan bo state cua N token trong mot tx. Day la cach nhanh nhat de xoa so mot he thong Beacon, va no khong revert.
-3. `constructor` **khong chay tren proxy**. Moi gia tri `immutable` set trong constructor la gia tri cua *implementation*, khong phai cua token. Bat buoc: `initialize()` voi modifier `initializer`, va constructor cua implementation phai goi `_disableInitializers()`. Bo qua buoc nay thi ke tan cong `initialize()` chinh implementation. Voi UUPS ho goi tiep `upgradeToAndCall` va `SELFDESTRUCT` implementation, brick toan bo N proxy. **EIP-6780 (Cancun) da lam SELFDESTRUCT bot nguy hiem — nhung chi tren chain da co Cancun.** Gnosis da fork Dencun; mot chain private Besu chay client cu, hoac mot chain trong 5 he sinh thai con lai, co the chua. Gia dinh A5 phai duoc kiem chung bang mot test on-chain thuc te tren moi chain truoc khi deploy, khong bang doc changelog.
-4. `MAX_AMOUNT()` trong note (`blockchain.md`, interface `IZetherToken`) khai bao la `external pure`. **Voi Beacon proxy dieu do co nghia la moi token dung chung mot beacon deu co cung tran.** Neu Z-VND can tran khac Z-USDT ma hai token dung chung archetype, `pure` lam dieu do bat kha thi. Sua thanh `external view` doc tu bien duoc set trong `initialize()`. Day la mot loi cu the trong note, khong phai mot y kien.
-5. CI gate: luu `storage-layouts/v<N>/*.json` vao repo, moi PR chay `forge inspect <c> storageLayout` va OpenZeppelin `validateUpgrade` doi chieu voi version da deploy. Khong co gate nay thi ky luat o (2) chi la loi hua.
+Yêu cầu gốc trong note là *"dùng cơ chế delegate để chia sẻ code, khác data, support
+nhiều version"*. EIP-1167 thoả **cả ba**:
 
-**Giam blast radius cua Beacon** (nhuoc diem duy nhat that su): mot beacon cho moi archetype **va** moi risk tier, cong them `PinnedProxy` — mot bien the doc `implementation()` mot lan trong `initialize()` roi ghi cung vao slot ERC-1967 cua chinh no, khong bao gio doc lai beacon. Token nao muon "khong ai upgrade duoc toi" thi deploy `PinnedProxy`.
+| Yêu cầu | Clone làm được không |
+|---|---|
+| chia sẻ code | có — mọi clone `delegatecall` tới cùng một implementation |
+| khác data | có — mỗi clone có storage riêng |
+| nhiều version | có — catalogue giữ v1, v2, v3 song song; token ghim một cái |
 
-`PinnedProxy` co mot hau qua ke toan phai noi ro: no **khong** re hon BeaconProxy khi call (van la 1 SLOAD + 1 DELEGATECALL = ~4,800 lanh) nhung no **re hon 4,600 gas** vi bo duoc STATICCALL sang beacon. Voi mot token co 1M transfer/nam tren Gnosis, do la 4.6e9 gas = ~6.9 xDAI/nam o 1.5 gwei. Khong dang ke ve tien; dang ke ve viec no cat duoc rui ro upgrade.
+Giả định ẩn *"version = đường đi theo thời gian của một token"* chưa từng được viết ra
+để kiểm, và chính nó là thứ đã loại EIP-1167 từ vòng đầu.
+
+#### 1.3.2. Đọc lại bảng với tiền đề đúng
+
+Với tiền đề mới, hai cột mà bảng xếp là **điểm trừ** của EIP-1167 trở thành **điểm
+cộng**:
+
+| Cột | Đọc cũ | Đọc đúng |
+|---|---|---|
+| "Upgrade N token" = *Không thể* | thiếu tính năng | **bất biến là tính năng chính** — không tồn tại nút bấm nào, của bất kỳ ai, đổi được contract đang giữ tiền của bạn |
+| "Hiểm hoạ storage" = *Không có* | trung tính | **xoá hẳn một lớp rủi ro**: không ERC-7201, không `__gap`, không CI gate storage layout, không `validateUpgrade` |
+
+Cộng với hai thứ bảng không đo được: deploy rẻ hơn **4–5 lần** (45.000 so với
+200.000–240.000) và call rẻ hơn **3,5 lần lạnh** (2.700 so với 9.400 của Beacon).
+
+Lý lẽ mạnh nhất của Beacon — *"40 token cần vá gấp, 1 tx thay vì 80 tx"* — chính là
+thứ ta không được phép có trên factory mở. Xem 1.11.
+
+#### 1.3.3. Cái giá, nói thẳng
+
+Bỏ upgrade không miễn phí. Một lỗi trong v1 là **lỗi vĩnh viễn** của mọi token trên
+v1 — không bản vá, không ngoại lệ khẩn cấp. Đường duy nhất là `MigrationSink`, và với
+số dư confidential đó là một chiến dịch 180 ngày chứ không phải một hàm (1.17.2, giả
+định A13).
+
+Hệ quả ngân sách: **implementation Zether v1 phải được audit nặng hơn Meta Token v1**,
+vì giá của một lỗi cao hơn hẳn.
+
+#### 1.3.4. Diamond: vẫn không dùng, lý do không đổi
+
+Không phải gas mà là audit surface và tooling. Blockscout của Gnosis và explorer của
+Celo verify Diamond rất kém (mỗi facet phải verify riêng, giao diện "Read/Write
+contract" không gộp lại), `diamondCut` mở rộng bề mặt tấn công bằng số facet, và
+Diamond Storage sai một slot là mất tiền. Diamond chỉ giải quyết được **một** vấn đề
+thật: giới hạn 24.576 byte (EIP-170).
+
+**Về EIP-170, và tại sao nó không còn là lý do chọn Diamond:**
+
+- Nếu `ZToken` + Zether + Bulletproofs verifier vượt 24KB trên **public profile**, giải
+  pháp rẻ hơn là tách `BulletproofVerifier` thành một contract **stateless** gọi bằng
+  `staticcall`, không phải facet: cùng chia sẻ code, không có Diamond Storage, và
+  verifier có thể được audit độc lập và tái sử dụng cho mọi token.
+  Đây cũng chính là hình dáng mà factory mở đòi hỏi: verifier là một địa chỉ **inject
+  lúc `initialize()`**, nên một token chọn curve nào là chọn địa chỉ verifier nào.
+- Chi phí của việc tách: một `staticcall` lạnh (2.600 gas) cộng chi phí copy calldata
+  của proof (~1,3 KB → ~700 gas memory + copy). Tổng ~3.500 gas trên một giao dịch
+  ~1,9M — **0,18%**.
+- Trên **private profile** (§1.16), `contractSizeLimit` là tham số genesis và có thể
+  đặt 64KB. Nhưng **không được dựa vào điều đó**: nếu source của public build và
+  private build khác nhau, ta có hai codebase. Quy tắc: **mọi contract phải fit 24.000
+  byte trên mọi profile**; CI enforce (1.14).
+
+#### 1.3.5. Hai hiểm hoạ CÒN LẠI (ba cái kia chết cùng upgrade)
+
+Ba mục của bản trước — ERC-1967 slot, ERC-7201 namespaced storage, và CI gate
+`validateUpgrade` — **không còn ý nghĩa**. Kỷ luật storage layout chỉ cần khi hai
+implementation khác nhau chạy trên **cùng** một state. Clone bất biến không bao giờ đổi
+implementation, nên không bao giờ có implementation thứ hai để mà lệch layout.
+
+Hai mục dưới đây **vẫn sống, và đều bắt buộc**:
+
+1. **`constructor` không chạy trên clone.** Mọi giá trị `immutable` set trong
+   constructor là giá trị của *implementation*, không phải của token. Bắt buộc:
+   `initialize()` với modifier `initializer`, và constructor của implementation gọi
+   `_disableInitializers()`.
+
+   Bỏ qua bước này thì kẻ tấn công `initialize()` chính implementation. Với UUPS họ đi
+   tiếp được tới `upgradeToAndCall` và `SELFDESTRUCT`; với clone thì đường đó đóng,
+   nhưng `SELFDESTRUCT` chính implementation vẫn **brick mọi clone trỏ tới nó**. Rủi ro
+   giảm, không mất. **EIP-6780 (Cancun) đã làm `SELFDESTRUCT` bớt nguy hiểm — nhưng chỉ
+   trên chain đã có Cancun.** Gnosis đã fork Dencun; chain private 9000 thì **chưa có
+   cả London** (xem `TRAPS.md`). Giả định A5 phải được kiểm chứng bằng một test
+   on-chain thực tế trên mọi chain trước khi deploy, không bằng đọc changelog.
+
+2. **`MAX_AMOUNT()` phải là `external view`, không được là `external pure`.** Note gốc
+   (`blockchain.md`, interface `IZetherToken`) khai `pure`. Đây là một lỗi cụ thể,
+   không phải một ý kiến.
+
+   Lý lẽ cũ là *"mọi token dùng chung một beacon đều có cùng trần"*. Lý lẽ mới **mạnh
+   hơn**: bỏ upgrade nghĩa là **mọi tham số per-token chỉ còn duy nhất một đường đến là
+   `initialize()`** — không còn cách nào khác để phân biệt hai clone của cùng một
+   implementation. `pure` khoá cứng giá trị vào bytecode dùng chung, nên nó làm mọi
+   token của một version giống hệt nhau về trần, decimals, và `SHIELD_SCALE`.
+
+   Cùng lớp lỗi này đã bắt được trong code thật: `ZSC.sol:21`
+   `uint256 constant MAX = 4294967295;` — `constant` nên không thể per-token.
 
 ---
-
-### 1.4. CREATE2 va du doan dia chi
+### 1.4. CREATE2 và dự đoán địa chỉ
 
 ```
 address = keccak256(0xff ++ factory ++ salt ++ keccak256(init_code))[12:32]
 ```
 
-#### 1.4.1. Chuoi xac dinh ba tang
+#### 1.4.1. Chuỗi xác định HAI tầng
 
-Ban nhap chi noi ve tang thu ba. Thuc te muon `predictAddress()` tra ra cung mot dia chi tren Gnosis va Celo, ca **ba** tang phai xac dinh:
+Bản nháp nói một tầng, bản thứ hai nói ba. Với clone bất biến thì là **hai**:
 
 ```
-Tang 1: deployer      -> Arachnid 0x4e59b44847b379578588920cA78FbF26c0B4956C (hoac EIP-2470 0xce0042B868300000d44A59004Da54A005ffdcf9f)
-Tang 2: factory       -> CREATE2 tu tang 1, salt = keccak256("dms.blockchain.factory.v1")
-Tang 3: beacon        -> CREATE2 tu tang 2, salt = keccak256("beacon" | archetype | majorVersion)
-Tang 4: token proxy   -> CREATE2 tu tang 2, salt = xem 1.4.3, init_code chua dia chi beacon (tang 3)
+Tầng 1: deployer   -> Arachnid 0x4e59b44847b379578588920cA78FbF26c0B4956C (hoặc EIP-2470 0xce0042B868300000d44A59004Da54A005ffdcf9f)
+Tầng 2: factory    -> CREATE2 từ tầng 1, salt = keccak256("dms.blockchain.factory.v1")
+Tầng 3: token      -> CREATE2 từ tầng 2, salt = xem 1.4.3, init_code = clone bytecode ++ implementation
 ```
 
-Gay mot tang la gay tat ca tang duoi. Cu the: neu beacon cua `WRAP_1_1 v1` nam o dia chi khac nhau tren hai chain, thi moi token `WRAP_1_1 v1` cung co dia chi khac nhau, du salt giong het. Ban nhap bo sot phu thuoc nay.
+Tầng beacon của bản trước biến mất cùng với upgrade. Nó tồn tại **chỉ để** giữ địa chỉ
+ổn định khi implementation đổi — vì với Beacon thì `init_code` chứa địa chỉ beacon chứ
+không chứa implementation. Không còn lần đổi nào thì không còn gì để mà giữ ổn định.
 
-#### 1.4.2. Bay so 1 — `initData` trong `init_code`
+Đổi lại, `init_code` bây giờ chứa **chính địa chỉ implementation**. Nghĩa là:
 
-Voi `BeaconProxy`, `init_code = type(BeaconProxy).creationCode ++ abi.encode(beacon, data)`. Neu `data` la calldata cua `initialize(name, symbol, ...)` thi **doi ten token la doi dia chi**. Xu ly: luon deploy voi `data = ""`.
+- Hai token cùng `(kind, version)` trên hai chain có cùng địa chỉ **khi và chỉ khi**
+  implementation của version đó nằm ở cùng địa chỉ trên cả hai chain. Mà implementation
+  cũng deploy bằng CREATE2 từ tầng 2, nên điều đó đạt được bằng cách dùng cùng salt.
+- `predictAddress` trở thành một **hàm thuần tuý**: không đọc storage nào, tính được
+  hoàn toàn off-chain từ `(factory, implementation, salt)`. Bản trước phải lưu
+  `initCodeHash` trong registry để client khỏi phải giữ bản sao bytecode của
+  `BeaconProxy`; với clone thì bytecode là 45 byte cố định và client tự dựng được.
 
-Nhung `data = ""` mo ra bay so 2.
+Gãy một tầng vẫn là gãy tất cả tầng dưới — nhưng giờ chỉ còn một tầng có thể gãy.
 
-#### 1.4.3. Bay so 2 — front-run `initialize()` (gia dinh A2)
+#### 1.4.2. Bẫy số 1 — `initData` trong `init_code`
 
-Voi `data = ""`, contract sinh ra chua duoc initialize. Neu factory deploy o tx 1 va initialize o tx 2, bat ky ai cung co the chen giua va goi `initialize()` truoc, tro thanh admin. Ba lop chong, phai co **ca ba**:
+Bẫy này **không còn** với EIP-1167: clone bytecode là 45 byte chỉ chứa địa chỉ
+implementation, không có chỗ để nhét `initData` vào. Đổi tên token không bao giờ đổi
+địa chỉ, miễn phí.
 
-1. **Atomic**: factory `deploy()` goi `CREATE2` roi `token.initialize(...)` **trong cung mot ham**, mot transaction. Khong bao gio de khoang trong.
-2. **Factory-only guard**: `initialize()` co `require(msg.sender == FACTORY)`. `FACTORY` la mot `immutable` cua *implementation* (constructor cua implementation chay binh thuong, gia tri nay dung cho moi proxy tro toi no). Ke ca khi ai do dua duoc mot proxy chua init vao trang thai lo, ho khong initialize duoc.
-3. **Salt cam ket `initData`**: dia chi phai phu thuoc vao noi dung khoi tao, nhung `init_code` thi khong duoc. Giai bang cach dua hash cua initData vao salt:
+Nhưng điều đó có nghĩa contract sinh ra **chưa được initialize**, và đó là bẫy số 2 —
+y hệt trường hợp `BeaconProxy` deploy với `data = ""`.
+
+#### 1.4.3. Bẫy số 2 — front-run `initialize()` (giả định A2)
+
+Contract sinh ra chưa được initialize. Nếu factory deploy ở tx 1 và initialize ở tx 2, bất kỳ ai cũng có thể chèn giữa và gọi `initialize()` trước, trở thành admin. Ba lớp chống, phải có **cả ba**:
+
+1. **Atomic**: factory gọi `CREATE2` rồi `token.initialize(...)` **trong cùng một hàm**, một transaction. Không bao giờ để khoảng trống.
+2. **Factory-only guard**: `initialize()` có `require(msg.sender == FACTORY)`. `FACTORY` là một `immutable` của *implementation* (constructor của implementation chạy bình thường, giá trị này đúng cho mọi clone trỏ tới nó). Kể cả khi ai đó đưa được một clone chưa init vào trạng thái lộ, họ không initialize được.
+3. **Salt cam kết `initData`**: địa chỉ phải phụ thuộc vào nội dung khởi tạo, nhưng `init_code` thì không được. Giải bằng cách đưa hash của initData vào salt:
 
 ```solidity
 bytes32 salt = keccak256(abi.encode(
-    uint64(issuerOrgId),      // dinh danh to chuc phat hanh, khong phai ten
-    bytes32(archetype),       // keccak256("PEG_RATIO")
+    address(creator),         // NGƯỜI TẠO, không phải một id nội bộ — xem ghi chú dưới
+    uint8(kind),              // TokenKind.META | TokenKind.ZETHER | TokenKind.MIGRATION
+    uint64(version),          // 0 nếu deploy qua createUnregistered
     bytes8(assetCode),        // "ZVND", "ZUSDT"
-    uint16(series),           // 0, 1, 2... cho phep re-deploy sau khi retire
-    keccak256(initData)       // <-- cam ket noi dung khoi tao MA KHONG nam trong init_code
+    uint16(series),           // 0, 1, 2... cho phép re-deploy sau khi retire
+    keccak256(initData)       // <-- cam kết nội dung khởi tạo MÀ KHÔNG nằm trong init_code
 ));
 ```
 
-Ket qua: `predictAddress(salt)` van tra loi duoc truoc khi deploy (client tu tinh `keccak256(initData)`), dia chi cam ket vao `name`/`symbol`/`decimals`/`maxSupply`, va `init_code` van chi phu thuoc beacon. Day la thu ban nhap thieu.
+Kết quả: `predictAddress(salt)` vẫn trả lời được trước khi deploy (client tự tính `keccak256(initData)`), địa chỉ cam kết vào `name`/`symbol`/`decimals`/`maxSupply`, và `init_code` vẫn chỉ phụ thuộc `implementation`. Đây là thứ bản nháp thiếu.
 
-Khong dua `chainId` vao salt: ta *muon* cung dia chi tren nhieu chain. `chainId` da nam trong EIP-712 domain separator o tang meta-tx (§04), do la cho dung cua no.
+**Trường đầu đổi so với bản trước, và đó không phải đổi tên.** Bản trước ghi
+`uint64(issuerOrgId)` — "định danh tổ chức phát hành". Trên factory mở không có hệ
+thống nào để định danh ai cả; trường đó phải là **`address` của người tạo**. Và nó
+không chỉ là chỗ giữ chỗ: chính nó làm cho zDAI-A và zDAI-B của hai người khác nhau ra
+hai địa chỉ khác nhau **kể cả khi mọi tham số còn lại giống hệt** — điều bắt buộc phải
+đúng khi ai cũng wrap được cùng một underlying.
 
-#### 1.4.4. Bay so 3 — squatting va metamorphic
+Không đưa `chainId` vào salt: ta *muốn* cùng địa chỉ trên nhiều chain. `chainId` đã nằm trong EIP-712 domain separator ở tầng meta-tx (§04), đó là chỗ đúng của nó.
 
-Neu `DeterministicFactory.deploy()` la **permissionless**, bat ky ai doc duoc `PrototypeRegistered` event cung tinh duoc dia chi tuong lai cua ta va deploy truoc voi initData cua ho. Ho khong chiem duoc dia chi cua ta (salt khac vi `keccak256(initData)` khac) nhung ho **rac dia chi** va lam nhieu indexer.
+#### 1.4.4. Bẫy số 3 — squatting và metamorphic
 
-Xu ly cu the: `deploy()` gan `DEPLOYER_ROLE`. Deploy tu do khong phai la mot yeu cau nghiep vu — note viet "tu do create2" voi nghia "khong phai sua factory moi them duoc kieu token", va yeu cau do duoc `registerPrototype` (1.5) dap ung day du.
+Nếu `deploy()` là **permissionless**, bất kỳ ai đọc được event đăng ký version cũng tính được địa chỉ tương lai của ta và deploy trước với initData của họ. Họ không chiếm được địa chỉ của ta (salt khác vì `keccak256(initData)` và `address(creator)` khác) nhưng họ **rác địa chỉ** và làm nhiễu indexer.
 
-**Metamorphic:** truoc EIP-6780, mot contract co the `SELFDESTRUCT` roi duoc `CREATE2` lai cung dia chi voi code khac. Tren chain chua Cancun, dieu nay bien "dia chi = danh tinh" thanh sai. Xu ly: `BeaconProxy` khong co `SELFDESTRUCT`; nhung `expected_proxy_code_hash` trong Odoo (1.2) phai duoc **kiem lai dinh ky**, khong chi mot lan luc deploy. Mot cron hang ngay so `EXTCODEHASH` cua moi token `live` voi gia tri da luu; lech = incident.
+**Xử lý cũ, KHÔNG còn dùng được:** bản trước gắn `DEPLOYER_ROLE` cho `deploy()` và lập
+luận *"deploy tự do không phải là một yêu cầu nghiệp vụ"*. Trên factory mở thì deploy
+tự do **chính là** yêu cầu nghiệp vụ.
 
-#### 1.4.5. Deployer co san khong?
+Xử lý đúng: `keccak256(initData)` và `address(creator)` đều nằm trong salt (1.4.3),
+nên không ai chiếm được địa chỉ của ai — địa chỉ của ta phụ thuộc vào địa chỉ của ta.
+Cái còn lại chỉ là **rác địa chỉ**, và đó là chi phí của permissionless, không phải lỗ
+hổng. Indexer lọc bằng `isDeployedHere` cộng với các tín hiệu ở 1.2.
 
-Arachnid deployer `0x4e59b44847b379578588920cA78FbF26c0B4956C` duoc bootstrap bang mot **pre-EIP-155 signed transaction** (nonce 0 tu `0x3fab184622dc19b6109349b94811493bf2a45362`, gas price 100 gwei, gas limit 100,000 to can 0.01 ETH-tuong-duong tren chain do). Chain khong chap nhan legacy tx thi khong co san.
+Nói cách khác: bẫy này không được *chặn*, nó được *chấp nhận* và đẩy sang tầng indexer.
 
-Kiem chung bang mot lenh, khong bang doc doc:
+**Metamorphic:** trước EIP-6780, một contract có thể `SELFDESTRUCT` rồi được `CREATE2` lại cùng địa chỉ với code khác. Trên chain chưa Cancun, điều này biến "địa chỉ = danh tính" thành sai — và chain private 9000 **chưa có cả London**, nên nó thuộc diện này. Xử lý: clone EIP-1167 không có `SELFDESTRUCT`; nhưng `expected_proxy_code_hash` trong Odoo (1.2) phải được **kiểm lại định kỳ**, không chỉ một lần lúc deploy. Một cron hàng ngày so `EXTCODEHASH` của mọi token `live` với giá trị đã lưu; lệch = incident.
+
+#### 1.4.5. Deployer có sẵn không?
+
+Arachnid deployer `0x4e59b44847b379578588920cA78FbF26c0B4956C` được bootstrap bằng một **pre-EIP-155 signed transaction** (nonce 0 từ `0x3fab184622dc19b6109349b94811493bf2a45362`, gas price 100 gwei, gas limit 100.000 → cần 0,01 ETH-tương-đương trên chain đó). Chain không chấp nhận legacy tx thì không có sẵn.
+
+Kiểm chứng bằng một lệnh, không bằng đọc docs:
 
 ```bash
 cast code 0x4e59b44847b379578588920cA78FbF26c0B4956C --rpc-url $RPC
 # khac "0x" = co san
 ```
 
-- Gnosis: co san.
-- Celo: **phai kiem lai.** Celo L1 dung cac transaction type rieng va tung han che legacy tx; sau khi Celo chuyen sang L2 tren OP Stack (2025) thi ho tro tx type chuan. Chay lenh tren truoc khi chot kien truc parity.
-- Private Besu: ta tu bootstrap bang chinh presigned tx do (funding 0.01 native cho `0x3fab18...` roi broadcast raw tx). Neu chain o che do zero-gas thi buoc funding bo qua.
+- Gnosis: có sẵn.
+- Celo: **phải kiểm lại.** Celo L1 dùng các transaction type riêng và từng hạn chế legacy tx; sau khi Celo chuyển sang L2 trên OP Stack (2025) thì hỗ trợ tx type chuẩn. Chạy lệnh trên trước khi chốt kiến trúc parity.
+- Private (Nethermind 9000): ta tự bootstrap bằng chính presigned tx đó (funding 0,01 native cho `0x3fab18...` rồi broadcast raw tx). Nếu chain ở chế độ zero-gas thì bước funding bỏ qua.
 
-#### 1.4.6. Khuyen nghi thuc dung ve parity
+#### 1.4.6. Khuyến nghị thực dụng về parity
 
-Coi cross-chain address parity la *nice-to-have*, khong phai rang buoc. Client cua ta **khong bao gio hardcode dia chi** — no resolve tu `blockchain.token` qua RPC (`blockchain_list_tokens`). Neu parity kho tren mot chain, ghi nhan dia chi khac nhau va di tiep; dung dinh CI vao mot rang buoc khong can thiet.
+Coi cross-chain address parity là *nice-to-have*, không phải ràng buộc. Client của ta **không bao giờ hardcode địa chỉ** — nó resolve từ `blockchain.token` qua RPC (`blockchain_list_tokens`). Nếu parity khó trên một chain, ghi nhận địa chỉ khác nhau và đi tiếp; đừng đính CI vào một ràng buộc không cần thiết.
 
-Cai *phai* co, va khac han parity, la **tinh tai lap (reproducibility)**: cung salt + cung factory + cung beacon phai luon ra cung dia chi, tren cung mot chain, tu bat ky may nao. Cai do la CI gate (1.14), va no phu thuoc `bytecode_hash = "none"`.
+Cái *phải* có, và khác hẳn parity, là **tính tái lập (reproducibility)**: cùng salt + cùng factory + cùng implementation phải luôn ra cùng địa chỉ, trên cùng một chain, từ bất kỳ máy nào. Cái đó là CI gate (1.14), và nó phụ thuộc `bytecode_hash = "none"`.
 
 ---
 
-### 1.5. Prototype / Implementation Registry
+### 1.5. Catalogue implementation (thay cho Prototype Registry)
 
-Yeu cau "co kha nang them nguyen mau Contract" duoc thoa man bang mot registry on-chain, **khong** bang cach sua factory:
+Yêu cầu "có khả năng thêm nguyên mẫu Contract" được thoả mãn bằng một catalogue on-chain, **không** bằng cách sửa factory. Đây là nơi version sống — và là nơi duy nhất, vì token đã deploy thì bất biến.
 
 ```solidity
-struct Prototype {
-    bytes32 archetype;       // keccak256("WRAP_1_1")
-    uint16  majorVersion;
-    address beacon;          // != 0 => BeaconProxy
-    address implementation;  // != 0 && beacon == 0 => EIP-1167 clone (bat bien)
-    bytes32 initCodeHash;    // keccak256(init_code) — de predictAddress khong can rebuild bytecode
-    bytes32 implCodeHash;    // EXTCODEHASH ky vong cua implementation, de Odoo doi chieu
-    uint8   profileMask;     // bit0 = public chain, bit1 = private chain
-    bytes4  interfaceId;     // ERC-165: indexer phan loai contract khong can registry
-    bool    deprecated;
-}
+enum TokenKind { META, ZETHER, MIGRATION }
 
-interface IContractPrototypeRegistry {
-    function registerPrototype(Prototype calldata p) external;              // PROTOTYPE_ADMIN + timelock 48h
-    function deprecatePrototype(bytes32 archetype, uint16 v) external;      // GUARDIAN, tuc thi
-    function prototypeOf(bytes32 archetype, uint16 v) external view returns (Prototype memory);
-    function predictAddress(bytes32 archetype, uint16 v, bytes32 salt) external view returns (address);
-    function deploy(bytes32 archetype, uint16 v, bytes32 salt, bytes calldata initData)
-        external returns (address token);                                   // DEPLOYER_ROLE
-
-    event PrototypeRegistered(bytes32 indexed archetype, uint16 indexed majorVersion,
-                              address beacon, bytes32 initCodeHash, uint8 profileMask);
-    event PrototypeDeprecated(bytes32 indexed archetype, uint16 indexed majorVersion, bytes32 reason);
-    event TokenDeployed(bytes32 indexed archetype, uint16 majorVersion, bytes32 indexed salt,
-                        address indexed token, bytes32 initDataHash);
+struct Implementation {
+    address implementation;  // clone trỏ thẳng tới đây, vĩnh viễn
+    bytes32 implCodeHash;    // EXTCODEHASH kỳ vọng, để Odoo và ví đối chiếu
+    bytes4  interfaceId;     // ERC-165: indexer phân loại contract không cần gọi catalogue
+    uint8   profileHint;     // bit0 = public chain, bit1 = private chain. GỢI Ý, không chặn
+    bool    deprecated;      // đánh dấu, KHÔNG chặn deploy
 }
 ```
 
-So voi ban nhap, them bon truong va mot event, moi thu deu co ly do van hanh:
+So với bản trước, ba trường **bỏ** và một trường **hạ cấp**:
 
-- `initCodeHash`: `predictAddress` off-chain (trong Odoo, bang Python) khong phai giu ban sao bytecode cua `BeaconProxy`. Doc mot lan tu chain, cache trong `blockchain.token.prototype`.
-- `implCodeHash`: buoc verify o 1.2 can no. Neu chi luu trong Odoo thi mot Odoo bi xam nhap tu sua ky vong cua chinh no.
-- `interfaceId` (ERC-165): indexer (§11) phan loai mot dia chi la `WRAP_1_1` hay `PEG_RATIO` **khong can** goi registry. Voi mot chain co hang tram token, mot `supportsInterface` re hon mot vong loop registry.
-- `PrototypeDeprecated` co `reason` (bytes32): khi guardian deprecate luc 3 gio sang, cai ma nguoi truc can la ly do, khong phai mot event trong.
-- `TokenDeployed` index ca `salt` va `token`: indexer tra nguoc tu dia chi ve salt duoc.
+| Trường cũ | Số phận |
+|---|---|
+| `beacon` | **bỏ** — không còn beacon |
+| `archetype` + `majorVersion` | gộp thành khoá `(TokenKind kind, uint64 version)` của catalogue |
+| `initCodeHash` | **bỏ** — với clone thì bytecode là 45 byte cố định, client tự dựng, không cần cache |
+| `profileMask` → `profileHint` | **hạ cấp thành metadata.** Bản trước dùng nó để `require`: catalogue từ chối deploy archetype `permissioned` lên chain public. Đó là gác cổng **chính sách**, không phải chặn một cái brick — và người khác có thể có lý do chính đáng mà ta không biết. Giữ làm cảnh báo cho UI, bỏ `require` |
 
-`profileMask` la truc chain profile o tang contract: registry tu choi `deploy` mot archetype `permissioned` tren chain public va nguoc lai. Contract khong tu biet minh dang o chain nao ngoai `block.chainid`, nen `profileMask` duoc doi chieu voi mot bien `PROFILE` set luc deploy registry (`immutable`, mot registry moi chain).
+Ba trường **giữ**, và lý do vận hành không đổi:
 
-Them archetype moi (vi du `REVENUE_SHARE_TOKEN` sau nay) = 1 tx `registerPrototype` + 1 record Odoo. Factory khong bao gio phai upgrade.
+- `implCodeHash`: bước verify ở 1.2 cần nó. Nếu chỉ lưu trong Odoo thì một Odoo bị xâm nhập tự sửa kỳ vọng của chính nó.
+- `interfaceId` (ERC-165): trên factory mở điều này **cần hơn trước**. Indexer sẽ gặp token của người lạ mà nó chưa từng thấy; một `supportsInterface` rẻ hơn một vòng loop catalogue, và nó vẫn trả lời được khi catalogue không biết gì về token đó.
+- `deprecated`: giữ, nhưng nghĩa đã đổi — xem dưới.
 
-`deprecatePrototype` khong xoa: token da deploy van chay. No chi chan `deploy` moi. Dieu nay phai duoc noi ro voi doi van hanh: **deprecate khong cuu duoc mot lo hong dang bi khai thac tren cac token da song** — cai do la `pause` (1.10) roi `upgrade` (1.11).
+#### 1.5.1. Ba bất biến của catalogue
+
+**1. Append-only.** `(kind, version)` đã đăng ký thì **không bao giờ trỏ lại chỗ khác**. Đây là bất biến quan trọng nhất, và nó phải có test riêng (§14).
+
+Nếu `v1` trỏ lại được thì *"tôi muốn v1"* trở thành một mục tiêu di động: người tạo token đọc mã nguồn v1 hôm nay, deploy tuần sau, và nhận về một implementation khác. Cho phép sửa trỏ là dựng lại đúng cái quyền mà việc bỏ beacon vừa xoá đi — chỉ khác là nó tác động lên token tương lai thay vì token hiện tại.
+
+**2. `deprecate()` đánh dấu, KHÔNG chặn.** Bản trước viết *"`deprecatePrototype` không xoá: token đã deploy vẫn chạy. Nó chỉ chặn `deploy` mới."* Nửa đầu vẫn đúng; nửa sau bỏ.
+
+Chặn là thứ tự trấn an: `createUnregistered` bỏ qua catalogue hoàn toàn, nên bất kỳ rào nào cũng đi vòng được bằng một tham số. Một rào đi vòng được không mua thêm an toàn — nó chỉ mua cảm giác an toàn, và đổi lấy quyền chặn người khác deploy, thứ một factory mở không nên có.
+
+Việc thật là **phát tín hiệu**: emit event kèm `reason`, để ví và UI hiện cảnh báo, để indexer đánh dấu mọi token đang chạy version đó. Lý do `reason` phải có vẫn như bản trước: khi ai đó deprecate lúc 3 giờ sáng, cái người trực cần là lý do, không phải một event trống.
+
+Và câu cảnh báo cũ giờ mạnh hơn: **deprecate không cứu được một lỗ hổng đang bị khai thác trên các token đã sống** — cái đó là `pause` (1.10) rồi `MigrationSink` (1.17.2). Không còn `upgrade` trong danh sách.
+
+**3. `createUnregistered` phải tồn tại.** Nếu chỉ version đã đăng ký mới deploy được thì người giữ quyền đăng ký quyết định được cả thế giới được tạo cái gì, và *"ai cũng tạo được"* thành khẩu hiệu.
+
+Token sinh ra đường này mang `version() == 0`, và số 0 đó **cố ý nhìn thấy được**: ví phân biệt được "chạy v2 đã công bố, mã nguồn đọc được" với "chạy code người tạo tự mang tới". Cả hai đều hợp lệ; người sắp nạp tiền có quyền biết mình đang dùng cái nào.
+
+Thêm archetype hoặc version mới = 1 tx `registerImplementation` + 1 record Odoo. **Factory không bao giờ phải upgrade** — câu này của bản trước vẫn đúng, và giờ nó là xương sống chứ không phải một tiện ích, vì factory cũng bất biến.
+
+Interface đầy đủ ở `smartcontracts/src/common/IOpenFactory.sol`; section này không định nghĩa lại nó.
 
 ---
 
-### 1.6. Ba nguon goc token
+### 1.6. Ba nguồn gốc token
 
-| Archetype | Contract | Collateral | Invariant kiem tra duoc on-chain |
+| Archetype | Contract | Collateral | Invariant kiểm tra được on-chain |
 |---|---|---|---|
-| `ISSUER_NATIVE` | `IssuerNativeToken` | Khong | `totalSupply() <= maxSupply` |
-| `WRAP_1_1` | `WrappedToken` + `ReserveVault` | 1:1 cung asset | `totalSupply() <= reserveAccounted && reserveAccounted <= underlying.balanceOf(vault)` |
-| `PEG_RATIO` | `PeggedToken` + `PegController` + `ReserveVault` | 1 hoac gio ERC-20, hoac reserve off-chain | `totalSupply() <= mulDiv(reserveValue(), rateNum, rateDen)` |
+| `ISSUER_NATIVE` | `IssuerNativeToken` | Không | `totalSupply() <= maxSupply` |
+| `WRAP_1_1` | `WrappedToken` + `ReserveVault` | 1:1 cùng asset | `totalSupply() <= reserveAccounted && reserveAccounted <= underlying.balanceOf(vault)` |
+| `PEG_RATIO` | `PeggedToken` + `PegController` + `ReserveVault` | 1 hoặc giỏ ERC-20, hoặc reserve off-chain | `totalSupply() <= mulDiv(reserveValue(), rateNum, rateDen)` |
+#### 1.6.1. `WRAP_1_1` — bẫy cụ thể
 
-#### 1.6.1. `WRAP_1_1` — bay cu the
+**Sửa so với bản nháp:** invariant không phải `totalSupply() == underlying.balanceOf(vault)`. Dạng `==` sai vì hai hướng:
 
-**Sua so voi ban nhap:** invariant khong phai `totalSupply() == underlying.balanceOf(vault)`. Dang `==` sai vi hai huong:
+- **Donate.** Bất kỳ ai cũng có thể `underlying.transfer(vault, x)`. Khi đó `balanceOf(vault) > totalSupply()` và một invariant test dạng `==` sẽ fail trên một hành vi vô hại. Tệ hơn: nếu code contract *tin* vào dạng `==` (ví dụ tính redeem theo `balanceOf`) thì donate trở thành một vector thao túng.
+- **Rebase.** Nếu underlying là aToken, stETH, hay bất kỳ token rebasing nào, `balanceOf(vault)` thay đổi mà không có ai gọi hàm nào. Dạng `==` gãy ngay lập tức.
 
-- **Donate.** Bat ky ai cung co the `underlying.transfer(vault, x)`. Khi do `balanceOf(vault) > totalSupply()` va mot invariant test dang `==` se fail tren mot hanh vi vo hai. Te hon: neu code contract *tin* vao dang `==` (vi du tinh redeem theo `balanceOf`) thi donate tro thanh mot vector thao tung.
-- **Rebase.** Neu underlying la aToken, stETH, hay bat ky token rebasing nao, `balanceOf(vault)` thay doi ma khong co ai goi ham nao. Dang `==` gay ngay lap tuc.
-
-Thiet ke dung: giu mot bien ke toan noi bo.
+Thiết kế đúng: giữ một biến kế toán nội bộ.
 
 ```solidity
-uint256 public reserveAccounted;   // chi thay doi trong wrap/unwrap
+uint256 public reserveAccounted;   // chỉ thay đổi trong wrap/unwrap
 
 function wrap(uint256 amountIn, address to) external nonReentrant {
     uint256 before = underlying.balanceOf(address(this));
@@ -300,124 +430,129 @@ function sweepDonation(address to) external onlyRole(TREASURY_ROLE) {
 }
 ```
 
-Invariant `totalSupply() == reserveAccounted` (cai nay dung dang `==`) **va** `reserveAccounted <= underlying.balanceOf(vault)`.
+Invariant `totalSupply() == reserveAccounted` (cái này đúng dạng `==`) **và** `reserveAccounted <= underlying.balanceOf(vault)`.
 
-Voi rebasing token: **tu choi wrap** o tang registry. `WRAP_1_1` khong ho tro rebasing underlying, cham het. Muon ho tro thi do la mot archetype khac (`WRAP_SHARES`, kieu ERC-4626) — khong lam trong v1.
+Với rebasing token: **từ chối wrap** ở tầng catalogue. `WRAP_1_1` không hỗ trợ rebasing underlying, chấm hết. Muốn hỗ trợ thì đó là một archetype khác (`WRAP_SHARES`, kiểu ERC-4626) — không làm trong v1.
 
-Bay con lai:
+Trên factory mở, "từ chối" ở đây là **từ chối trong code của archetype**, không phải một allowlist do ai đó duyệt: `WRAP_1_1` v1 đơn giản là không xử lý đúng rebasing, và ai wrap một rebasing token bằng nó thì tự chịu. Ai muốn làm đúng thì đăng ký một version khác.
 
-1. **Fee-on-transfer.** USDT tren Ethereum co `basisPointsRate` (hien 0, nhung code song, va contract la upgradeable proxy nen "hien 0" khong phai la bao dam). USDT bridge sang Gnosis/Celo la contract khac voi behaviour khac. **Khong bao gio tin tham so `amount`**: do `balanceAfter - balanceBefore` nhu tren.
-2. **USDT khong tuan thu ERC-20**: `transfer`/`approve` khong return bool tren mainnet. Dung `SafeERC20`. Va `approve` phai ve 0 truoc khi set gia tri moi.
-3. **Underlying co the freeze vault.** USDC/USDT co the blacklist dia chi vault. Khi do Z-USDT van transfer duoc nhung khong redeem duoc — de facto de-peg tren mot tai san ta da hua la 1:1. Bat buoc co state `REDEMPTION_HALTED` phat `event RedemptionHalted(bytes32 reason)`, **khong duoc de `redeem` revert im lang**. Mot `revert` khong co ly do la mot su co ho tro khach hang; mot event co ly do la mot muc trong incident log.
-4. **Underlying la mot proxy va co the doi hanh vi ngay mai.** USDT, USDC deu upgradeable. Ta khong the audit mot muc tieu di dong. Xu ly toi thieu: mot cron doc `EXTCODEHASH` cua implementation cua underlying hang ngay; doi = canh bao, khong tu dong halt (halt tu dong tren mot upgrade routine cua Circle la mot su co tu gay ra).
-5. **Decimals**: **mirror y het underlying**, khong "chuan hoa ve 18". Doc bang `underlying.decimals()` **tai thoi diem initialize** va luu vao storage; khong hardcode trong Odoo. Wrap 1:1 theo raw unit thi rounding = 0, dust = 0, va invariant la mot phep so sanh bang. Bat ky phep scale nao cung tao ra mot huong lam tron. Luu y phu: `decimals()` **khong** thuoc interface ERC-20 bat buoc; mot underlying kho tinh co the khong co ham do. Neu khong co, tu choi wrap.
+Bẫy còn lại:
+
+1. **Fee-on-transfer.** USDT trên Ethereum có `basisPointsRate` (hiện 0, nhưng code sống, và contract là upgradeable proxy nên "hiện 0" không phải là bảo đảm). USDT bridge sang Gnosis/Celo là contract khác với behaviour khác. **Không bao giờ tin tham số `amount`**: đo `balanceAfter - balanceBefore` như trên.
+2. **USDT không tuân thủ ERC-20**: `transfer`/`approve` không return bool trên mainnet. Dùng `SafeERC20`. Và `approve` phải về 0 trước khi set giá trị mới.
+3. **Underlying có thể freeze vault.** USDC/USDT có thể blacklist địa chỉ vault. Khi đó Z-USDT vẫn transfer được nhưng không redeem được — de facto de-peg trên một tài sản ta đã hứa là 1:1. Bắt buộc có state `REDEMPTION_HALTED` phát `event RedemptionHalted(bytes32 reason)`, **không được để `redeem` revert im lặng**. Một `revert` không có lý do là một sự cố hỗ trợ khách hàng; một event có lý do là một mục trong incident log.
+4. **Underlying là một proxy và có thể đổi hành vi ngày mai.** USDT, USDC đều upgradeable. Ta không thể audit một mục tiêu di động. Xử lý tối thiểu: một cron đọc `EXTCODEHASH` của implementation của underlying hàng ngày; đổi = cảnh báo, không tự động halt (halt tự động trên một upgrade routine của Circle là một sự cố tự gây ra).
+
+   Điểm này có một sự trớ trêu đáng ghi ra: **token của ta bất biến còn underlying của nó thì không.** Bỏ upgrade ở tầng của mình không mua được tính bất biến của thứ mình wrap. Người dùng zDAI-A tin hai thứ: code của zDAI-A (đọc được, cố định) và code của DAI (đọc được, có thể đổi). Tài liệu tích hợp phải nói rõ cả hai, đừng để tính bất biến của lớp ngoài che mất tính khả biến của lớp trong.
+5. **Decimals**: **mirror y hệt underlying**, không "chuẩn hoá về 18". Đọc bằng `underlying.decimals()` **tại thời điểm initialize** và lưu vào storage; không hardcode trong Odoo. Wrap 1:1 theo raw unit thì rounding = 0, dust = 0, và invariant là một phép so sánh bằng. Bất kỳ phép scale nào cũng tạo ra một hướng làm tròn. Lưu ý phụ: `decimals()` **không** thuộc interface ERC-20 bắt buộc; một underlying khó tính có thể không có hàm đó. Nếu không có, từ chối wrap.
 
 #### 1.6.2. `ISSUER_NATIVE`
 
-Don gian nhat, nhung `maxSupply` phai la `immutable`-tuong-duong (set trong `initialize`, khong co setter). Mot `maxSupply` co the tang duoc thi khong phai la tran, no la mot cai nut.
+Đơn giản nhất, nhưng `maxSupply` phải là `immutable`-tương-đương (set trong `initialize`, không có setter). Một `maxSupply` có thể tăng được thì không phải là trần, nó là một cái nút.
 
-Hai thu ban nhap thieu:
+Hai thứ bản nháp thiếu:
 
-- **`maxMintPerEpoch`.** `maxSupply` bao ve tong; no khong bao ve toc do. Mot khoa MINTER bi lo co the in het `maxSupply` trong mot block. Them `uint256 mintedThisEpoch` + `uint64 epochLength` (mac dinh 1 ngay) + `require(mintedThisEpoch + amount <= maxMintPerEpoch)`. Dat `maxMintPerEpoch` = 2% `maxSupply`: mot ke tan cong can 50 ngay, con doi truc co 24 gio de phat hien.
-- **`maxSupply` cung la tran giai ma Zether.** Xem 1.8. `require(maxSupply <= MAX_DECRYPTABLE_RAW)` trong `initialize()` — mot dong, va no chan mot lop loi khong the sua sau khi da mint.
+- **`maxMintPerEpoch`.** `maxSupply` bảo vệ tổng; nó không bảo vệ tốc độ. Một khoá MINTER bị lộ có thể in hết `maxSupply` trong một block. Thêm `uint256 mintedThisEpoch` + `uint64 epochLength` (mặc định 1 ngày) + `require(mintedThisEpoch + amount <= maxMintPerEpoch)`. Đặt `maxMintPerEpoch` = 2% `maxSupply`: một kẻ tấn công cần 50 ngày, còn đội trực có 24 giờ để phát hiện.
+- **`maxSupply` cũng là trần giải mã Zether.** Xem 1.8. `require(maxSupply <= MAX_DECRYPTABLE_RAW)` trong `initialize()` — một dòng, và nó chặn một lớp lỗi không thể sửa sau khi đã mint. Với token bất biến thì "không thể sửa sau" là nghĩa đen: không có bản vá, chỉ có `MigrationSink`.
 
 ---
 
-### 1.7. `PEG_RATIO`: ai chiu FX risk, rate tu dau, de-peg
+### 1.7. `PEG_RATIO`: ai chịu FX risk, rate từ đâu, de-peg
 
-Vi du trong note — `1 USDT -> 25000 Z-VND` — **khong phai la mot peg. No la mot loi hua hoan tra, va no la mot vi the short USD cua issuer.**
+Ví dụ trong note — `1 USDT -> 25000 Z-VND` — **không phải là một peg. Nó là một lời hứa hoàn trả, và nó là một vị thế short USD của issuer.**
 
-Neu ty gia thi truong ve 27,000 VND/USD ma ta van cam ket doi 25,000 Z-VND lay 1 USDT, moi 25,000 Z-VND redeem lam issuer mat 2,000 VND gia tri kinh te. Dinh luong: float 10 ty VND (= 400,000 USDT o rate 25,000), VND mat gia 6%/nam (2024 VND mat khoang 4.5-5% so voi USD — uoc tinh, co so la bien dong ty gia trung tam) to **~24,000 USDT P&L mot nam**. Con so nay phai la mot dong trong `account.move`, khong phai mot bat ngo.
+Nếu tỷ giá thị trường về 27.000 VND/USD mà ta vẫn cam kết đổi 25.000 Z-VND lấy 1 USDT, mỗi 25.000 Z-VND redeem làm issuer mất 2.000 VND giá trị kinh tế. Định lượng: float 10 tỷ VND (= 400.000 USDT ở rate 25.000), VND mất giá 6%/năm (2024 VND mất khoảng 4,5–5% so với USD — ước tính, cơ sở là biến động tỷ giá trung tâm) → **~24.000 USDT P&L một năm**. Con số này phải là một dòng trong `account.move`, không phải một bất ngờ.
 
-#### 1.7.1. Ba che do, va cai nao dung cho cai gi
+#### 1.7.1. Ba chế độ, và cái nào dùng cho cái gì
 
-| Che do | Ai chiu FX | Redemption guarantee | Dung khi nao |
+| Chế độ | Ai chịu FX | Redemption guarantee | Dùng khi nào |
 |---|---|---|---|
-| `FIXED_RATE` | **Issuer** | Luon dung ty le da cong bo | Loyalty/reward diem, closed-loop. Ty le la *chinh sach thuong mai*, khong phai ty gia |
-| `ORACLE_RATE` | **Holder** | Theo rate tai thoi diem redeem | Khi Z-VND that su muon la stablecoin VND |
-| `RESERVE_FLOAT` | Chia se qua bo dem over-collateral | Theo rate, halt khi CR thap | B2B settlement co quy du phong |
+| `FIXED_RATE` | **Issuer** | Luôn đúng tỷ lệ đã công bố | Loyalty/reward điểm, closed-loop. Tỷ lệ là *chính sách thương mại*, không phải tỷ giá |
+| `ORACLE_RATE` | **Holder** | Theo rate tại thời điểm redeem | Khi Z-VND thật sự muốn là stablecoin VND |
+| `RESERVE_FLOAT` | Chia sẻ qua bộ đệm over-collateral | Theo rate, halt khi CR thấp | B2B settlement có quỹ dự phòng |
+**Khuyến nghị cho cả ba use case trong scope:** dùng `FIXED_RATE`, **nhưng đặt reserve bằng VND, không phải USDT**. Sai lầm cốt lõi là giữ tài sản USDT đối ứng một nghĩa vụ ghi bằng VND. Nếu token là Z-VND thì:
 
-**Khuyen nghi cho ca ba use case trong scope:** dung `FIXED_RATE`, **nhung dat reserve bang VND, khong phai USDT**. Sai lam cot loi la giu tai san USDT doi ung mot nghia vu ghi bang VND. Neu token la Z-VND thi:
+- reserve là số dư VND ở một tài khoản ngân hàng tách biệt (hoặc tài sản thanh toán bằng VND);
+- chân USDT chỉ là **on-ramp một chiều**, quy đổi theo spot rate **tại thời điểm nạp**, đọc từ oracle **chỉ tại biên giới đó**;
+- redemption guarantee phát biểu bằng VND: 25.000 Z-VND đổi 25.000 VND. Không bao giờ phát biểu bằng USDT.
 
-- reserve la so du VND o mot tai khoan ngan hang tach biet (hoac tai san thanh toan bang VND);
-- chan USDT chi la **on-ramp mot chieu**, quy doi theo spot rate **tai thoi diem nap**, doc tu oracle **chi tai bien gioi do**;
-- redemption guarantee phat bieu bang VND: 25,000 Z-VND doi 25,000 VND. Khong bao gio phat bieu bang USDT.
+Làm vậy thì FX mismatch biến mất hoàn toàn, và `1 USDT -> 25000 Z-VND` trở thành một tỷ giá tức thời chứ không phải một cam kết vĩnh viễn.
 
-Lam vay thi FX mismatch bien mat hoan toan, va `1 USDT -> 25000 Z-VND` tro thanh mot ty gia tuc thoi chu khong phai mot cam ket vinh vien.
+#### 1.7.2. Mint cap khi reserve nằm ngoài chain (giả định A7)
 
-#### 1.7.2. Mint cap khi reserve nam ngoai chain (gia dinh A7)
+Bản nháp bỏ qua độ trễ thanh toán. On-chain mint là tức thì; tiền VND vào tài khoản là T+0 đến T+2. Nếu contract cho phép mint theo attestation gần nhất, ta mint trước khi tiền đến.
 
-Ban nhap bo qua do tre thanh toan. On-chain mint la tuc thi; tien VND vao tai khoan la T+0 den T+2. Neu contract cho phep mint theo attestation gan nhat, ta mint truoc khi tien den.
-
-Cong thuc mint cap bat buoc, danh gia o moi lan mint:
+Công thức mint cap bắt buộc, đánh giá ở mỗi lần mint:
 
 ```
 mintable = attested_reserve_minor
          - totalSupply_in_minor
-         - in_flight_redemption_minor        // da requestRedeem, chua settle
-         - safety_buffer_minor               // mac dinh 2% attested_reserve
+         - in_flight_redemption_minor        // đã requestRedeem, chưa settle
+         - safety_buffer_minor               // mặc định 2% attested_reserve
 ```
 
-`attested_reserve_minor` co **staleness**. Quy tac cu the:
+`attested_reserve_minor` có **staleness**. Quy tắc cụ thể:
 
-| Tuoi attestation | Mint | Redeem | Ghi chu |
+| Tuổi attestation | Mint | Redeem | Ghi chú |
 |---|---|---|---|
-| <= 7 ngay | Binh thuong | Binh thuong | — |
-| 8 - 35 ngay | Cho phep, nhung `safety_buffer` tang len 10% | Binh thuong | Canh bao |
-| 36 - 60 ngay | **Chan** | Binh thuong | Incident |
-| > 60 ngay | Chan | Chan mint, redeem pro-rata theo CR gia dinh = 100% | Chuyen `UNDERCOLLATERALIZED` |
+| <= 7 ngày | Bình thường | Bình thường | — |
+| 8 – 35 ngày | Cho phép, nhưng `safety_buffer` tăng lên 10% | Bình thường | Cảnh báo |
+| 36 – 60 ngày | **Chặn** | Bình thường | Incident |
+| > 60 ngày | Chặn | Chặn mint, redeem pro-rata theo CR giả định = 100% | Chuyển `UNDERCOLLATERALIZED` |
 
-Ly do khong bao gio chan redeem theo staleness: staleness la loi cua issuer, khong phai cua nguoi giu token.
+Lý do không bao giờ chặn redeem theo staleness: staleness là lỗi của issuer, không phải của người giữ token.
 
-#### 1.7.3. Spread — thu ban nhap bo sot va no la mot lo hong kinh te
+#### 1.7.3. Spread — thứ bản nháp bỏ sót và nó là một lỗ hổng kinh tế
 
-Neu `mintRate == redeemRate` va khong co phi, thi moi lan oracle cap nhat la mot co hoi arbitrage khong rui ro: ke tan cong mint ngay truoc khi rate tang va redeem ngay sau, an tron delta, va tien do ra thang tu reserve. Voi circuit breaker 2%/lan cap nhat (duoi day) va 96 lan cap nhat/ngay, be mat mat mat toi da la khong gioi han.
+Nếu `mintRate == redeemRate` và không có phí, thì mỗi lần oracle cập nhật là một cơ hội arbitrage không rủi ro: kẻ tấn công mint ngay trước khi rate tăng và redeem ngay sau, ăn trọn delta, và tiền đó ra thẳng từ reserve. Với circuit breaker 2%/lần cập nhật (dưới đây) và 96 lần cập nhật/ngày, bề mặt mất mát tối đa là không giới hạn.
 
-Bat buoc co spread hai chieu:
+Bắt buộc có spread hai chiều:
 
 ```solidity
-// spreadBps ap dung doi xung, luon co loi cho reserve
-uint256 mintRate   = Math.mulDiv(oracleRate, 10_000 - spreadBps, 10_000);   // nguoi mint nhan it Z hon
-uint256 redeemRate = Math.mulDiv(oracleRate, 10_000 + spreadBps, 10_000);   // nguoi redeem tra nhieu Z hon
+// spreadBps áp dụng đối xứng, luôn có lợi cho reserve
+uint256 mintRate   = Math.mulDiv(oracleRate, 10_000 - spreadBps, 10_000);   // người mint nhận ít Z hơn
+uint256 redeemRate = Math.mulDiv(oracleRate, 10_000 + spreadBps, 10_000);   // người redeem trả nhiều Z hơn
 ```
 
-Chon `spreadBps`: phai `>= ` bien dong toi da giua hai lan cap nhat. Voi breaker 200 bps/lan cap nhat, `spreadBps >= 100` (1%) la nguong toi thieu ly thuyet. Thuc dung cho VND/USD (bien dong ngay thuong duoi 30 bps): **`spreadBps = 50`** (0.5%), cong `redemptionDelaySeconds = 86400` cho moi khoan redeem vuot 100 trieu VND. Do tre nay la thu bien arbitrage tu "khong rui ro" thanh "co rui ro qua dem", va do la du.
+Chọn `spreadBps`: phải `>=` biến động tối đa giữa hai lần cập nhật. Với breaker 200 bps/lần cập nhật, `spreadBps >= 100` (1%) là ngưỡng tối thiểu lý thuyết. Thực dụng cho VND/USD (biến động ngày thường dưới 30 bps): **`spreadBps = 50`** (0,5%), cộng `redemptionDelaySeconds = 86400` cho mọi khoản redeem vượt 100 triệu VND. Độ trễ này là thứ biến arbitrage từ "không rủi ro" thành "có rủi ro qua đêm", và đó là đủ.
 
-Voi `FIXED_RATE` khong dung oracle, spread co the = 0 — nhung khi do phai co `redemptionDelay` va `dailyRedemptionCap`, vi rui ro khong con la arbitrage ma la bank run.
+Với `FIXED_RATE` không dùng oracle, spread có thể = 0 — nhưng khi đó phải có `redemptionDelay` và `dailyRedemptionCap`, vì rủi ro không còn là arbitrage mà là bank run.
 
-#### 1.7.4. Nguon rate, xep theo do tin cay
+#### 1.7.4. Nguồn rate, xếp theo độ tin cậy
 
-1. **AMM TWAP** — **loai bo cho VND**. Khong co pool VND thanh khoan on-chain. Thao tung mot pool sau $50k trong mot block ton khoang $1-2k voi flashloan; ke tan cong mint theo rate gia. Chi chap nhan neu depth >= $5M va TWAP >= 30 phut, dieu khong ton tai voi VND.
-2. **Oracle ben thu ba** — Chainlink khong co feed VND/USD tren Gnosis hay Celo (kiem chung tai `data.chain.link` truoc khi chot; tinh den thoi diem viet la khong co). Thuc te la **ta phai tu van hanh feed**:
+1. **AMM TWAP** — **loại bỏ cho VND**. Không có pool VND thanh khoản on-chain. Thao túng một pool sâu $50k trong một block tốn khoảng $1–2k với flashloan; kẻ tấn công mint theo rate giả. Chỉ chấp nhận nếu depth >= $5M và TWAP >= 30 phút, điều không tồn tại với VND.
+2. **Oracle bên thứ ba** — Chainlink không có feed VND/USD trên Gnosis hay Celo (kiểm chứng tại `data.chain.link` trước khi chốt; tính đến thời điểm viết là không có). Thực tế là **ta phải tự vận hành feed**:
 
 ```solidity
 struct SignedRate {
     bytes32 pair;            // keccak256("VND/USD")
-    uint128 price;           // gia, theo priceDecimals
+    uint128 price;           // giá, theo priceDecimals
     uint8   priceDecimals;
     uint64  publishTime;
-    uint64  roundId;         // tang dan, chan replay mot round cu
+    uint64  roundId;         // tăng dần, chặn replay một round cũ
 }
-// 2-of-3 signer, EIP-712, domain co chainId + verifyingContract
+// 2-of-3 signer, EIP-712, domain có chainId + verifyingContract
 require(block.timestamp - r.publishTime <= 900, "stale");
 require(r.roundId > lastRoundId, "replay");
-require(_absDeltaBps(r.price, lastPrice) <= 200, "breaker");   // 2% moi lan cap nhat
+require(_absDeltaBps(r.price, lastPrice) <= 200, "breaker");   // 2% mỗi lần cập nhật
 ```
 
-**Cai ban nhap chua tra loi: khi oracle stale thi sao?** Neu `require(stale)` lam `mint` revert, mot su co oracle 20 phut lam dung toan bo luong nap tien — mot DoS ta tu gay ra. Chinh sach ro rang:
+**Cái bản nháp chưa trả lời: khi oracle stale thì sao?** Nếu `require(stale)` làm `mint` revert, một sự cố oracle 20 phút làm dừng toàn bộ luồng nạp tiền — một DoS ta tự gây ra. Chính sách rõ ràng:
 
-| Tinh trang oracle | `mint` | `redeem` | `CR` |
+| Tình trạng oracle | `mint` | `redeem` | `CR` |
 |---|---|---|---|
-| Tuoi <= 15 phut | Rate hien tai | Rate hien tai | Tinh binh thuong |
-| 15 phut - 6 gio | **Chan** | `lastGoodRate` + spread gap doi | Dung `lastGoodRate` |
-| > 6 gio | Chan | `lastGoodRate` + spread gap doi, cap 10 trieu VND/ngay/dia chi | Coi nhu stale, khong tu dong doi state |
-| Breaker nay lien tuc 3 lan | Chan | Nhu tren | `GUARDIAN` duoc goi day |
+| Tuổi <= 15 phút | Rate hiện tại | Rate hiện tại | Tính bình thường |
+| 15 phút – 6 giờ | **Chặn** | `lastGoodRate` + spread gấp đôi | Dùng `lastGoodRate` |
+| > 6 giờ | Chặn | `lastGoodRate` + spread gấp đôi, cap 10 triệu VND/ngày/địa chỉ | Coi như stale, không tự động đổi state |
+| Breaker này liên tục 3 lần | Chặn | Như trên | `GUARDIAN` được gọi dậy |
 
-3. **Admin-set qua timelock** — lua chon trung thuc cho loyalty closed-loop. `setRate` qua timelock 48h, va mint/burn dung rate **da co hieu luc tai thoi diem tich luy** (luu theo lo), khong phai rate hien tai. Nguoi dung tich diem hom qua khong bi dinh gia lai sau mot dem.
+3. **Admin-set qua timelock** — lựa chọn trung thực cho loyalty closed-loop. `setRate` qua timelock 48h, và mint/burn dùng rate **đã có hiệu lực tại thời điểm tích luỹ** (lưu theo lô), không phải rate hiện tại. Người dùng tích điểm hôm qua không bị định giá lại sau một đêm.
 
-**Bo sung bat buoc cho lua chon 3:** "rate theo lo" nghia la contract phai luu `mapping(uint64 batchId => uint256 rateNum)` va nguoi redeem phai chi ra lo. Do la mot cau truc du lieu tang khong gioi han. Thuc dung hon: **rate khong bao gio giam** cho loyalty (mot chinh sach thuong mai, khong phai mot rang buoc ky thuat), khi do rate hien tai luon co loi cho nguoi giu diem va khong can luu theo lo. Neu ban khong the cam ket dieu do, thi phai luu theo lo va phai co `pruneBatches` sau 24 thang.
+   Lưu ý: timelock ở đây là của **người tạo token**, trên chính token của họ, và nó là một tham số `initialize()` chứ không phải một thiết chế toàn hệ thống. Nó không liên quan gì tới timelock upgrade đã bị xoá ở 1.11 — cái đó chết vì không còn upgrade; cái này sống vì `setRate` vẫn là một quyền thật trên tiền thật.
 
-#### 1.7.5. De-peg: state machine bat buoc co tu ngay dau
+**Bổ sung bắt buộc cho lựa chọn 3:** "rate theo lô" nghĩa là contract phải lưu `mapping(uint64 batchId => uint256 rateNum)` và người redeem phải chỉ ra lô. Đó là một cấu trúc dữ liệu tăng không giới hạn. Thực dụng hơn: **rate không bao giờ giảm** cho loyalty (một chính sách thương mại, không phải một ràng buộc kỹ thuật), khi đó rate hiện tại luôn có lợi cho người giữ điểm và không cần lưu theo lô. Nếu bạn không thể cam kết điều đó, thì phải lưu theo lô và phải có `pruneBatches` sau 24 tháng.
+
+#### 1.7.5. De-peg: state machine bắt buộc có từ ngày đầu
 
 ```
 PEGGED  --CR < 100%-->  UNDERCOLLATERALIZED  --CR < 90%-->  REDEMPTION_HALTED
@@ -426,170 +561,189 @@ PEGGED  --CR < 100%-->  UNDERCOLLATERALIZED  --CR < 90%-->  REDEMPTION_HALTED
                                                               WIND_DOWN
 ```
 
-`CR = reserveValue() * rateDen / (totalSupply() * rateNum)`, tinh lai o moi mint/burn va moi lan cap nhat rate. Lam tron: **floor tren tu so, ceil tren mau so** — CR luon duoc bao cao thap hon hoac bang su that.
+`CR = reserveValue() * rateDen / (totalSupply() * rateNum)`, tính lại ở mỗi mint/burn và mỗi lần cập nhật rate. Làm tròn: **floor trên tử số, ceil trên mẫu số** — CR luôn được báo cáo thấp hơn hoặc bằng sự thật.
 
-Diem quan trong nhat, va la cho de sai nhat: **trong `UNDERCOLLATERALIZED`, redemption phai la pro-rata tai muc CR, khong duoc first-come-first-served.** FCFS duoi tinh trang thieu tai san bao dam la **mot co che sinh ra bank run**: nguoi rut dau lay 100%, nguoi cuoi lay 0%, va ai cung biet dieu do nen ai cung rut ngay. Pro-rata (`payout = amount * CR`) la quy tac cong bang duy nhat va **phai nam trong contract tu dau**, khong the them sau — them sau tuc la doi dieu kien hoan tra giua chung.
+Điểm quan trọng nhất, và là chỗ dễ sai nhất: **trong `UNDERCOLLATERALIZED`, redemption phải là pro-rata tại mức CR, không được first-come-first-served.** FCFS dưới tình trạng thiếu tài sản bảo đảm là **một cơ chế sinh ra bank run**: người rút đầu lấy 100%, người cuối lấy 0%, và ai cũng biết điều đó nên ai cũng rút ngay. Pro-rata (`payout = amount * CR`) là quy tắc công bằng duy nhất và **phải nằm trong contract từ đầu**, không thể thêm sau — thêm sau tức là đổi điều kiện hoàn trả giữa chừng.
 
-`WIND_DOWN`: mint tat vinh vien, redeem `min(1, CR)` pro-rata, cua so claim 180 ngay, phan du chuyen ve `RecoveryVault`. `RecoveryVault` phai la mot contract rieng khong nam sau beacon cua token — neu no nam sau beacon, mot upgrade beacon dieu khien duoc so tien du.
+Với token bất biến thì "không thể thêm sau" mạnh hơn một lời khuyên: nó là sự thật vật lý. Một `PEG_RATIO` v1 quên pro-rata sẽ chạy FCFS cho tới ngày nó chết, và cách duy nhất sửa là một token v2 cộng một chiến dịch di cư (1.17.2).
 
-**`ReserveVault` khong nam sau beacon dung chung.** Ban nhap khong noi dieu nay va no la mot lo hong nghiem trong: neu vault dung chung beacon voi token, mot lan `upgradeTo` sai (hoac ac y) doi hanh vi cua **moi vault dang giu tien** cung luc. Quy tac: `ReserveVault` la UUPS rieng voi timelock **7 ngay** (khong phai 48h), hoac tot hon la bat bien hoan toan va thay bang migration co giam sat.
+`WIND_DOWN`: mint tắt vĩnh viễn, redeem `min(1, CR)` pro-rata, cửa sổ claim 180 ngày, phần dư chuyển về `RecoveryVault`.
 
-#### 1.7.6. Gio (basket) — thu note yeu cau va chua ai thiet ke
+**`RecoveryVault` và `ReserveVault` phải là contract riêng, và lý do đã đổi.** Bản trước lập luận: nếu chúng nằm sau beacon dùng chung với token thì một lần `upgradeTo` sai (hoặc ác ý) điều khiển được số tiền dư của mọi vault cùng lúc. Vector đó **không còn** — không có beacon, không có `upgradeTo`.
 
-Note viet "mint/burn tu 1 hoac 1 group ERC-20". Mot gio khong phai la mot vault voi nhieu token; no la mot bai toan NAV. Toi thieu can:
+Nhưng kết luận vẫn giữ, vì lý do thứ hai mạnh hơn: **tách vault khỏi token là tách bề mặt tấn công**, và với contract bất biến điều đó quan trọng hơn chứ không kém. Một lỗi trong logic token không được phép chạm tới tài sản bảo đảm, vì không có bản vá nào cả — bề mặt duy nhất giữa hai bên phải là một interface hẹp, kiểm được. Bản trước còn viết `ReserveVault` là "UUPS riêng với timelock 7 ngày, hoặc tốt hơn là bất biến hoàn toàn"; nhánh "tốt hơn" giờ là nhánh duy nhất.
+
+#### 1.7.6. Giỏ (basket) — thứ note yêu cầu và chưa ai thiết kế
+
+Note viết "mint/burn từ 1 hoặc 1 group ERC-20". Một giỏ không phải là một vault với nhiều token; nó là một bài toán NAV. Tối thiểu cần:
 
 ```solidity
 struct BasketLeg {
     address token;
-    uint16  targetBps;      // tong 10,000
-    uint16  bandBps;        // duoc lech bao nhieu truoc khi bat buoc rebalance
-    bytes32 pricePair;      // khoa doc tu SignedRateSource
+    uint16  targetBps;      // tổng 10.000
+    uint16  bandBps;        // được lệch bao nhiêu trước khi bắt buộc rebalance
+    bytes32 pricePair;      // khoá đọc từ SignedRateSource
     uint8   tokenDecimals;
 }
 function reserveValue() public view returns (uint256 minorUnits) {
-    // sum over legs: balanceOf(vault) * price / 10^tokenDecimals, quy ve minor unit cua Z-token
-    // MOI leg can mot rate tuoi. Mot leg stale => toan bo reserveValue stale.
+    // sum over legs: balanceOf(vault) * price / 10^tokenDecimals, quy về minor unit của Z-token
+    // MỌI leg cần một rate tươi. Một leg stale => toàn bộ reserveValue stale.
 }
 ```
 
-Ba he qua ma nguoi quyet dinh phai nghe truoc khi dong y:
+Ba hệ quả mà người quyết định phải nghe trước khi đồng ý:
 
-1. **N leg = N oracle = N diem gay.** Voi quy tac staleness o 1.7.2, xac suat "co it nhat mot leg stale" tang gan tuyen tinh theo N. Voi 3 leg va uptime oracle 99.5% moi leg, uptime tong = 98.5% — tuc ~5.5 ngay/nam khong mint duoc.
-2. **Rebalance la mot giao dich giao ngay tren DEX**, tuc la slippage, MEV, va mot khoa co quyen chi tieu reserve. Khoa do la be mat tan cong lon nhat trong toan bo he thong. Neu rebalance thu cong qua Safe 4-of-7, no khong kip voi bien dong; neu tu dong, ta vua tao mot bot co quyen ban reserve.
-3. **Gio lam ke toan Odoo phuc tap gap N lan** vi moi leg la mot `res.currency` khac nhau va mot `account.account` khac nhau.
+1. **N leg = N oracle = N điểm gãy.** Với quy tắc staleness ở 1.7.2, xác suất "có ít nhất một leg stale" tăng gần tuyến tính theo N. Với 3 leg và uptime oracle 99,5% mỗi leg, uptime tổng = 98,5% — tức ~5,5 ngày/năm không mint được.
+2. **Rebalance là một giao dịch giao ngay trên DEX**, tức là slippage, MEV, và một khoá có quyền chi tiêu reserve. Khoá đó là bề mặt tấn công lớn nhất trong toàn bộ hệ thống. Nếu rebalance thủ công qua Safe 4-of-7, nó không kịp với biến động; nếu tự động, ta vừa tạo một bot có quyền bán reserve.
+3. **Giỏ làm kế toán Odoo phức tạp gấp N lần** vì mỗi leg là một `res.currency` khác nhau và một `account.account` khác nhau.
 
-**Khuyen nghi dut khoat: khong lam basket trong v1.** Neu can da tai san, lam N token `WRAP_1_1` doc lap (Z-USDT, Z-USDC) va de viec tron nam o tang nghiep vu (Odoo), noi ma bo phan tai chinh nhin thay va kiem soat duoc. Thiet ke gio de o day duoi dang giay, va `profileMask` cua archetype `BASKET_PEG` de la `0x00` (khong deploy duoc o dau) cho den khi co quyet dinh nguoc lai.
+**Khuyến nghị dứt khoát: không làm basket trong v1.** Nếu cần đa tài sản, làm N token `WRAP_1_1` độc lập (Z-USDT, Z-USDC) và để việc trộn nằm ở tầng nghiệp vụ (Odoo), nơi mà bộ phận tài chính nhìn thấy và kiểm soát được. Thiết kế giỏ để ở đây dưới dạng giấy, và archetype `BASKET_PEG` **không được đăng ký vào catalogue** cho đến khi có quyết định ngược lại.
 
-#### 1.7.7. Reserve accounting va proof-of-reserve
+Lưu ý cách phát biểu đã đổi: bản trước nói `profileMask = 0x00` để "không deploy được ở đâu". Trên factory mở thì không có cách nào chặn ai đó tự viết một basket và deploy qua `createUnregistered`. Thứ ta kiểm soát là **cái gì có mặt trong catalogue của ta** — và đó là đủ, vì catalogue là thứ nói lên ta đứng sau cái gì.
 
-| Loai reserve | Bang chung kha thi | Cadence |
+#### 1.7.7. Reserve accounting và proof-of-reserve
+
+| Loại reserve | Bằng chứng khả thi | Cadence |
 |---|---|---|
-| On-chain ERC-20 trong `ReserveVault` | `underlying.balanceOf(vault)` — la bang chung, khong can attest | moi block, indexer ghi vao `blockchain.reserve.snapshot` |
-| Off-chain VND o ngan hang | **Khong co PoR mat ma nao**. Chi co attestation | snapshot so du hang ngay, attestation ky hang thang |
+| On-chain ERC-20 trong `ReserveVault` | `underlying.balanceOf(vault)` — là bằng chứng, không cần attest | mỗi block, indexer ghi vào `blockchain.reserve.snapshot` |
+| Off-chain VND ở ngân hàng | **Không có PoR mật mã nào**. Chỉ có attestation | snapshot số dư hàng ngày, attestation ký hàng tháng |
 
 Cho reserve off-chain:
 
 ```solidity
 function attest(
-    bytes32 statementHash,   // keccak256 cua ban PDF luu tren Garage
-    uint256 amountMinor,     // so du VND * 100
+    bytes32 statementHash,   // keccak256 của bản PDF lưu trên Garage
+    uint256 amountMinor,     // số dư VND * 100
     uint64  asOf,
-    bytes   calldata sig     // EIP-712, signer = khoa cua don vi kiem toan
+    bytes   calldata sig     // EIP-712, signer = khoá của đơn vị kiểm toán
 ) external;
 ```
 
-Ban ke PDF luu tren Garage duoi dang `ir.attachment` (Many2many, khong base64 trong DB, khong JSON blob) va `keccak256` cua no ghi on-chain. Phia Odoo, `blockchain.reserve.attestation` doi soat voi mot `account.account` (tai khoan ngan hang tach biet) de con so tren GL va con so cong bo on-chain la mot.
+Bản kê PDF lưu trên Garage dưới dạng `ir.attachment` (Many2many, không base64 trong DB, không JSON blob) và `keccak256` của nó ghi on-chain. Phía Odoo, `blockchain.reserve.attestation` đối soát với một `account.account` (tài khoản ngân hàng tách biệt) để con số trên GL và con số công bố on-chain là một.
 
-**Goi dung ten: day la "attested reserve", khong phai "proof of reserve".** Cay Merkle kieu san giao dich chung minh *nghia vu* (tong so du nguoi dung), khong chung minh *tai san*; no khong giai bai toan o day. Noi "proof of reserve" trong tai lieu marketing la mot phat bieu sai su that ma bo phan phap che se phai go lai sau.
+**Gọi đúng tên: đây là "attested reserve", không phải "proof of reserve".** Cây Merkle kiểu sàn giao dịch chứng minh *nghĩa vụ* (tổng số dư người dùng), không chứng minh *tài sản*; nó không giải bài toán ở đây. Nói "proof of reserve" trong tài liệu marketing là một phát biểu sai sự thật mà bộ phận pháp chế sẽ phải gỡ lại sau.
 
-Ba dieu ban nhap chua noi:
+Ba điều bản nháp chưa nói:
 
-- **Neu don vi kiem toan ky sai so thi sao?** Attestation la mot chu ky tren mot con so; contract khong the biet no dung. Bien phap duy nhat co that: `require(amountMinor <= lastAmountMinor * 3)` — mot breaker chan sai so kieu them so 0, khong chan gian lan. Va **hai** signer doc lap cho moi attestation vuot 50 ty VND.
-- **Reserve khong duoc la tai khoan van hanh.** Neu tai khoan giu reserve cung la tai khoan tra luong, so du dao dong vi ly do khong lien quan va CR nhay lung tung. Phai la mot tai khoan tach biet, va so hieu tai khoan do phai nam trong `blockchain.token.peg` de doi soat kiem duoc.
-- **Ai chiu chi phi attestation?** Mot cong ty kiem toan lon se khong ky hang thang cho mot float nho voi gia hop ly. Do la mot cau hoi ngan sach, khong phai ky thuat — dua vao 1.19.
+- **Nếu đơn vị kiểm toán ký sai số thì sao?** Attestation là một chữ ký trên một con số; contract không thể biết nó đúng. Biện pháp duy nhất có thật: `require(amountMinor <= lastAmountMinor * 3)` — một breaker chặn sai số kiểu thêm số 0, không chặn gian lận. Và **hai** signer độc lập cho mọi attestation vượt 50 tỷ VND.
+- **Reserve không được là tài khoản vận hành.** Nếu tài khoản giữ reserve cũng là tài khoản trả lương, số dư dao động vì lý do không liên quan và CR nhảy lung tung. Phải là một tài khoản tách biệt, và số hiệu tài khoản đó phải nằm trong `blockchain.token.peg` để đối soát kiểm được.
+- **Ai chịu chi phí attestation?** Một công ty kiểm toán lớn sẽ không ký hàng tháng cho một float nhỏ với giá hợp lý. Đó là một câu hỏi ngân sách, không phải kỹ thuật — đưa vào 1.19.
 
-Invariant `attested_reserve_minor >= totalSupply() * unit` chain **khong the** tu kiem tra (chain khong biet so du ngan hang). No thuoc ve mot cron Odoo (`model._cron_reserve_check()`), va vi pham thi mo incident, khong phai ghi log.
+Invariant `attested_reserve_minor >= totalSupply() * unit` chain **không thể** tự kiểm tra (chain không biết số dư ngân hàng). Nó thuộc về một cron Odoo (`model._cron_reserve_check()`), và vi phạm thì mở incident, không phải ghi log.
+
 
 ---
 
-### 1.8. Decimals, lam tron, dust — va VND khong co don vi phu
+### 1.8. Decimals, làm tròn, dust — và VND không có đơn vị phụ
 
-VND co ISO 4217 exponent = 0. Decimals "dung" cho Z-VND la 0. Nhung `decimals = 0` khien moi phi phan tram khong bieu dien duoc va moi phep quy doi tu USDT (6 decimals) sinh dust.
+VND có ISO 4217 exponent = 0. Decimals "đúng" cho Z-VND là 0. Nhưng `decimals = 0` khiến mọi phí phần trăm không biểu diễn được và mọi phép quy đổi từ USDT (6 decimals) sinh dust.
 
-**Khuyen nghi: `decimals = 2` cho Z-VND** (don vi toi thieu on-chain = 0.01 VND, khong bao gio hien thi cho nguoi dung). Ly do dinh luong: 1 raw unit USDT = 0.000001 USDT = 0.025 VND. Voi `decimals = 0` thi moi phep mint bo mat toi 0.999 VND; voi `decimals = 2` thi bo mat toi 0.009 VND — nho hon 100 lan, va du de bieu dien phi 1.5% tren cac gia tri nho.
+**Khuyến nghị: `decimals = 2` cho Z-VND** (đơn vị tối thiểu on-chain = 0,01 VND, không bao giờ hiển thị cho người dùng). Lý do định lượng: 1 raw unit USDT = 0,000001 USDT = 0,025 VND. Với `decimals = 0` thì mỗi phép mint bỏ mất tới 0,999 VND; với `decimals = 2` thì bỏ mất tới 0,009 VND — nhỏ hơn 100 lần, và đủ để biểu diễn phí 1,5% trên các giá trị nhỏ.
 
-Hai rang buoc ban nhap khong dat ra:
+Hai ràng buộc bản nháp không đặt ra:
 
-- **`decimals` la bat bien.** Vi khong co setter, va vi vi va block explorer cache no. Doi decimals sau khi mint la doi y nghia cua moi so da phat ra. Dieu nay lam viec chon `decimals = 2` thanh mot quyet dinh nghiep vu can chu ky, khong phai mot config (1.19).
-- **`decimals()` khong thuoc ERC-20 bat buoc.** Mot so tich hop gia dinh 18. Ta khong the sua the gioi; ta chi co the **ghi decimals vao ten hien thi trong metadata** va **khong bao gio phat hanh Z-VND len mot DEX cong khai ma khong co canh bao**.
+- **`decimals` là bất biến.** Vì không có setter, và vì ví và block explorer cache nó. Đổi decimals sau khi mint là đổi ý nghĩa của mọi số đã phát ra. Điều này làm việc chọn `decimals = 2` thành một quyết định nghiệp vụ cần chữ ký, không phải một config (1.19).
 
-#### 1.8.1. Bien gioi Odoo — mot van de ke toan, khong phai mot van de contract
+  Với token bất biến, "bất biến" ở đây không còn là một kỷ luật tự nguyện: nó là hệ quả của việc không có implementation thứ hai nào để mà đổi hành vi. Nhưng điều đó cắt cả hai chiều — chọn sai decimals ở v1 thì cách sửa duy nhất là một token v2 và một chiến dịch di cư 180 ngày (1.17.2).
+- **`decimals()` không thuộc ERC-20 bắt buộc.** Một số tích hợp giả định 18. Ta không thể sửa thế giới; ta chỉ có thể **ghi decimals vào tên hiển thị trong metadata** và **không bao giờ phát hành Z-VND lên một DEX công khai mà không có cảnh báo**.
 
-`res.currency` cua VND trong Odoo co `rounding = 1.0`. Chain co granularity 0.01 VND. Hai he thong khong the khop tuyet doi.
+#### 1.8.1. Biên giới Odoo — một vấn đề kế toán, không phải một vấn đề contract
 
-> Quy tac cung: lam tron **luon co loi cho ben giu quy**: floor khi chi tra, ceil khi thu. Phan du duoc hach toan vao mot tai khoan `Dust`, khong bao gio bi bo im lang.
+`res.currency` của VND trong Odoo có `rounding = 1.0`. Chain có granularity 0,01 VND. Hai hệ thống không thể khớp tuyệt đối.
 
-| Thao tac | Huong lam tron | Ai huong phan le | Ghi so |
+> Quy tắc cứng: làm tròn **luôn có lợi cho bên giữ quỹ**: floor khi chi trả, ceil khi thu. Phần dư được hạch toán vào một tài khoản `Dust`, không bao giờ bị bỏ im lặng.
+
+| Thao tác | Hướng làm tròn | Ai hưởng phần lẻ | Ghi sổ |
 |---|---|---|---|
-| mint (nap underlying to Z) | floor `zOut` | reserve | `reserveDust` on-chain |
-| redeem (Z to underlying) | floor payout | reserve | `reserveDust` on-chain |
+| mint (nạp underlying → Z) | floor `zOut` | reserve | `reserveDust` on-chain |
+| redeem (Z → underlying) | floor payout | reserve | `reserveDust` on-chain |
 | fee thu | ceil | fee recipient | doanh thu |
-| refund / rebate tra | floor | reserve | `reserveDust` |
-| CR | floor tu so / ceil mau so | bao thu | — |
-| Post len `account.move` | round half-up ve 1 VND | GL | tai khoan `Dust` |
+| refund / rebate trả | floor | reserve | `reserveDust` |
+| CR | floor tử số / ceil mẫu số | bảo thủ | — |
+| Post lên `account.move` | round half-up về 1 VND | GL | tài khoản `Dust` |
 
-**Rang buoc thuc dung de dust khong sinh ra tu phia Odoo:** moi lenh mint/burn **khoi tao tu Odoo** phai la boi so cua `10^decimals` (tuc so nguyen VND). Enforce o tang Odoo (`_check_amount_is_whole_major`), khong o tang contract — contract van phai chap nhan don vi le vi luong on-chain (Zether transfer, phi relayer) sinh ra chung. Nho vay 100% cac but toan GL la so nguyen VND, va dust chi ton tai o cac luong on-chain thuan tuy.
+**Ràng buộc thực dụng để dust không sinh ra từ phía Odoo:** mọi lệnh mint/burn **khởi tạo từ Odoo** phải là bội số của `10^decimals` (tức số nguyên VND). Enforce ở tầng Odoo (`_check_amount_is_whole_major`), không ở tầng contract — contract vẫn phải chấp nhận đơn vị lẻ vì luồng on-chain (Zether transfer, phí relayer) sinh ra chúng. Nhờ vậy 100% các bút toán GL là số nguyên VND, và dust chỉ tồn tại ở các luồng on-chain thuần tuý.
 
-#### 1.8.2. Cong thuc mint/burn khong sinh dust
+#### 1.8.2. Công thức mint/burn không sinh dust
 
 ```solidity
 uint256 zOut       = Math.mulDiv(amountIn, rateNum, rateDen);              // floor
 uint256 consumedIn = Math.mulDiv(zOut, rateDen, rateNum, Math.Rounding.Ceil);
 uint256 refund     = amountIn - consumedIn;
 if (refund >= refundThreshold) underlying.safeTransfer(msg.sender, refund);
-else reserveDust += refund;   // giu lai => CR tang, khong bao gio ve tay admin
+else reserveDust += refund;   // giữ lại => CR tăng, không bao giờ về tay admin
 ```
 
-`Math.mulDiv` cua OpenZeppelin dung 512-bit trung gian nen khong overflow.
+`Math.mulDiv` của OpenZeppelin dùng 512-bit trung gian nên không overflow.
 
-**`refundThreshold` khong duoc la hang so** — ban nhap de no la hang so va dieu do sai tren chuoi. Nguong dung la "gia tri refund > chi phi gas de tra no". Mot `safeTransfer` ~35,000 gas:
+**`refundThreshold` không được là hằng số** — bản nháp để nó là hằng số và điều đó sai trên chuỗi. Ngưỡng đúng là "giá trị refund > chi phí gas để trả nó". Một `safeTransfer` ~35.000 gas:
 
-| Chain | Gas price | Native | Chi phi 1 transfer | `refundThreshold` hop ly (USDT raw, 6 dec) |
+| Chain | Gas price | Native | Chi phí 1 transfer | `refundThreshold` hợp lý (USDT raw, 6 dec) |
 |---|---|---|---|---|
-| Gnosis | 1.5 gwei | xDAI = $1 | ~$0.00005 | 100 (= $0.0001) |
-| Celo | ~5 gwei | CELO ~$0.4 | ~$0.00007 | 100 |
-| Ethereum L1 | 10 gwei | ETH $3,000 | ~$1.05 | 2,000,000 (= $2) |
+| Gnosis | 1,5 gwei | xDAI = $1 | ~$0,00005 | 100 (= $0,0001) |
+| Celo | ~5 gwei | CELO ~$0,4 | ~$0,00007 | 100 |
+| Ethereum L1 | 10 gwei | ETH $3.000 | ~$1,05 | 2.000.000 (= $2) |
 | Besu private (zero gas) | 0 | — | $0 | 1 |
 
-Ket luan: `refundThreshold` la mot bien storage set trong `initialize()` va sua duoc qua `TREASURY_ROLE` + timelock 48h.
+Kết luận: `refundThreshold` là một biến storage set trong `initialize()`.
 
-#### 1.8.3. Rang buoc bat ngo tu Zether — va ban nhap truoc cung sai o day
+**Và ở đây bản trước có một câu không còn đúng:** nó viết `refundThreshold` "sửa được qua `TREASURY_ROLE` + timelock 48h". Với token bất biến thì một setter vẫn khả thi — bất biến nói về *code*, không phải về *state* — nhưng nó phải là một quyết định có ý thức của người tạo token, không phải mặc định. Hai nhánh, và người tạo chọn ở `initialize()`:
 
-Note (`blockchain.md`, muc 10.5.2 va 10.5.3) khang dinh nang `MAX` tu `2^32 - 1` len `2^128 - 1` la du. **Dieu nay sai o mot diem quan trong**: gioi han `2^32` trong `anonymous-zether` cua ConsenSys khong (chi) la gioi han range proof, no la **gioi han giai ma**. Chu tai khoan phai khoi phuc `b` tu `g^b` bang baby-step giant-step; voi khong gian `2^128` thi BSGS can `2^64` phep tinh — bat kha thi. Nang MAX len `2^128` khong lam so du doc duoc. (Chi tiet mat ma o §03; o day chi lay he qua len token design.)
+- **Có setter**: `refundThreshold` theo kịp giá gas, nhưng token có một khoá sống mãi mãi mà không ai thu hồi được, vì không có upgrade để gỡ nó ra sau này.
+- **Không setter**: token không có khoá nào cả, nhưng nếu gas trên chain đó tăng 100 lần thì ngưỡng thành sai vĩnh viễn.
 
-**Nhung ban nhap truoc cua chinh section nay cung sai khi de xuat `MAX_CONFIDENTIAL = 2^48 - 1`.** Hai ly do:
+Trên chain private zero-gas thì nhánh hai là hiển nhiên. Trên public thì đây là một đánh đổi thật, và nó phải nằm trong mô tả archetype để người tạo đọc được trước khi chọn version.
 
-1. **48 khong phai luy thua cua 2.** Bulletproofs inner-product argument doi `n * m` la luy thua cua 2. Voi `n = 48`, prover phai pad len 64, va **chi phi verify la chi phi cua 64 bit**. Chon 48 la tra tien cho 64 ma nhan soundness cua 48. Chon **`n = 64`**.
-2. **Range proof width va tran giai ma la hai thu khac nhau va phai duoc tach ra.** Range proof bao dam *soundness* (khong ai chuyen so am, khong ai tieu qua so du). Tran giai ma bao dam *usability* (chu tai khoan doc duoc so du cua minh). Gan chung vao mot hang so la loi thiet ke.
+#### 1.8.3. Ràng buộc bất ngờ từ Zether — và bản nháp trước cũng sai ở đây
 
-**Cong thuc dung:** chi phi BSGS bi chan boi **`totalSupply` tinh theo raw unit**, khong phai boi `2^n`. Ly do: tong moi so du confidential = `confidentialLocked <= totalSupply`, nen moi so du ca nhan cung `<= totalSupply`. Do do:
+Note (`blockchain.md`, mục 10.5.2 và 10.5.3) khẳng định nâng `MAX` từ `2^32 - 1` lên `2^128 - 1` là đủ. **Điều này sai ở một điểm quan trọng**: giới hạn `2^32` trong `anonymous-zether` của ConsenSys không (chỉ) là giới hạn range proof, nó là **giới hạn giải mã**. Chủ tài khoản phải khôi phục `b` từ `g^b` bằng baby-step giant-step; với không gian `2^128` thì BSGS cần `2^64` phép tính — bất khả thi. Nâng MAX lên `2^128` không làm số dư đọc được. (Chi tiết mật mã ở §03; ở đây chỉ lấy hệ quả lên token design.)
 
-> **Quy tac chot: `maxSupply` tinh theo raw unit phai `<= 2^44` (= 1.759e13). Enforce trong `initialize()`.**
+**Nhưng bản nháp trước của chính section này cũng sai khi đề xuất `MAX_CONFIDENTIAL = 2^48 - 1`.** Hai lý do:
 
-Dinh luong BSGS voi khong gian tim kiem `S`, bang baby-step kich thuoc `B = sqrt(S)`:
+1. **48 không phải luỹ thừa của 2.** Bulletproofs inner-product argument đòi `n * m` là luỹ thừa của 2. Với `n = 48`, prover phải pad lên 64, và **chi phí verify là chi phí của 64 bit**. Chọn 48 là trả tiền cho 64 mà nhận soundness của 48. Chọn **`n = 64`**.
+2. **Range proof width và trần giải mã là hai thứ khác nhau và phải được tách ra.** Range proof bảo đảm *soundness* (không ai chuyển số âm, không ai tiêu quá số dư). Trần giải mã bảo đảm *usability* (chủ tài khoản đọc được số dư của mình). Gắn chúng vào một hằng số là lỗi thiết kế.
 
-| Token | decimals | Tran cung tien | `S` (raw) | `log2 S` | `B = sqrt(S)` | Bo nho bang | Thoi gian giai ma xau nhat |
+**Công thức đúng:** chi phí BSGS bị chặn bởi **`totalSupply` tính theo raw unit**, không phải bởi `2^n`. Lý do: tổng mọi số dư confidential = `confidentialLocked <= totalSupply`, nên mỗi số dư cá nhân cũng `<= totalSupply`. Do đó:
+
+> **Quy tắc chốt: `maxSupply` tính theo raw unit phải `<= 2^44` (= 1,759e13). Enforce trong `initialize()`.**
+
+Định lượng BSGS với không gian tìm kiếm `S`, bảng baby-step kích thước `B = sqrt(S)`:
+
+| Token | decimals | Trần cung tiền | `S` (raw) | `log2 S` | `B = sqrt(S)` | Bộ nhớ bảng | Thời gian giải mã xấu nhất |
 |---|---|---|---|---|---|---|---|
-| Z-VND | **2** | 100 ty VND | 1.0e13 | 43.2 | 3.2e6 | ~130 MB | ~0.8 - 1.0 s |
-| Z-VND | 0 | 100 ty VND | 1.0e11 | 36.5 | 3.2e5 | ~13 MB | ~0.08 s |
-| Z-USDT | 6 | 10 trieu USDT | 1.0e13 | 43.2 | 3.2e6 | ~130 MB | ~0.8 - 1.0 s |
-| (note de xuat) | — | `2^128` | 3.4e38 | 128 | 1.8e19 | bat kha thi | bat kha thi |
+| Z-VND | **2** | 100 tỷ VND | 1,0e13 | 43,2 | 3,2e6 | ~130 MB | ~0,8 – 1,0 s |
+| Z-VND | 0 | 100 tỷ VND | 1,0e11 | 36,5 | 3,2e5 | ~13 MB | ~0,08 s |
+| Z-USDT | 6 | 10 triệu USDT | 1,0e13 | 43,2 | 3,2e6 | ~130 MB | ~0,8 – 1,0 s |
+| (note đề xuất) | — | `2^128` | 3,4e38 | 128 | 1,8e19 | bất khả thi | bất khả thi |
 
-Co so: mot phep cong diem affine tren `bn254` trong Rust toi uu ~250-300 ns; vong giant-step la (1 cong diem + 1 tra bang hash) ~350-400 ns; `3.2e6 * 350ns ≈ 1.1 s` xau nhat, ~0.55 s trung binh. Bo nho: 3.2e6 entry x (32 byte toa do nen + 8 byte index) ≈ 128 MB, cong overhead hash map ~1.5x neu dung `HashMap` chuan; dung mot open-addressing table thi sat 130 MB.
+Cơ sở: một phép cộng điểm affine trên `bn254` trong Rust tối ưu ~250–300 ns; vòng giant-step là (1 cộng điểm + 1 tra bảng hash) ~350–400 ns; `3,2e6 * 350ns ≈ 1,1 s` xấu nhất, ~0,55 s trung bình. Bộ nhớ: 3,2e6 entry × (32 byte toạ độ nén + 8 byte index) ≈ 128 MB, cộng overhead hash map ~1,5x nếu dùng `HashMap` chuẩn; dùng một open-addressing table thì sát 130 MB.
 
-**Do la mot uoc tinh, va no thay doi mot quyet dinh:** `decimals = 2` dat gap 10 lan `decimals = 0` ve thoi gian khoi phuc (1 s vs 0.08 s). Van khuyen nghi `decimals = 2`, vi:
+Con số này là của `bn254`. Trên BLS12-381, một điểm nén là 48 byte thay vì 32, nên **bảng baby-step lớn hơn ~1,4 lần** ở cùng `S` — 130 MB thành ~180 MB. Đó là một chi phí của việc chọn curve mà bảng gas không hiện ra, và nó rơi vào thiết bị của người dùng cuối chứ không vào hoá đơn gas. Với factory mở, curve là lựa chọn của người tạo token, nên con số này thuộc về tài liệu hướng dẫn chọn version chứ không phải một quyết định của ta.
 
-- duong hanh phuc khong dung BSGS: moi giao dich kem mot ciphertext phu `encSelf = AEAD(kdf(x), value || randomness)` trong event log. Vi doc so du bang cach giai AEAD, `O(1)`, khong toi 1 ms. BSGS chi chay khi **recovery** (mat cache cuc bo, dong bo may moi).
-- 1 giay cho mot thao tac chay vai lan trong doi mot tai khoan la chap nhan duoc; mat kha nang bieu dien phi phan tram thi khong.
+**Đó là một ước tính, và nó thay đổi một quyết định:** `decimals = 2` đắt gấp 10 lần `decimals = 0` về thời gian khôi phục (1 s vs 0,08 s). Vẫn khuyến nghị `decimals = 2`, vì:
 
-Chot tham so cho v1:
+- đường hạnh phúc không dùng BSGS: mỗi giao dịch kèm một ciphertext phụ `encSelf = AEAD(kdf(x), value || randomness)` trong event log. Ví đọc số dư bằng cách giải AEAD, `O(1)`, không tới 1 ms. BSGS chỉ chạy khi **recovery** (mất cache cục bộ, đồng bộ máy mới).
+- 1 giây cho một thao tác chạy vài lần trong đời một tài khoản là chấp nhận được; mất khả năng biểu diễn phí phần trăm thì không.
+
+Chốt tham số cho v1:
 
 ```solidity
-uint8   public constant RANGE_BITS          = 64;          // luy thua cua 2, soundness
-uint256 public constant MAX_DECRYPTABLE_RAW = 1 << 44;     // 1.759e13, usability
+uint8   public immutable RANGE_BITS;            // 64 — luỹ thừa của 2, soundness
+uint256 public immutable MAX_DECRYPTABLE_RAW;   // 1 << 44 = 1,759e13, usability
 // initialize(): require(maxSupply_ <= MAX_DECRYPTABLE_RAW, "supply exceeds decryptable range");
 // mint():       require(totalSupply() + amount <= maxSupply, "cap");
 ```
 
-Neu mot ngay nao do can vuot `2^44`, duong nang cap khong phai la tang `RANGE_BITS` — do la **chia token thanh nhieu series** (`series` da co trong salt, 1.4.3), moi series co so cai rieng. Do la mot van de ke toan, khong phai mat ma.
+**Hai giá trị này là `immutable` chứ không `constant`, và đó là một sửa lỗi so với bản trước.** Bản trước khai `public constant`. Cùng lớp lỗi với `MAX_AMOUNT()` khai `pure` (1.3.5 mục 2) và với `ZSC.sol:21` `uint256 constant MAX = 4294967295;`: một hằng số biên dịch làm **mọi token dùng chung implementation đó có cùng trần**, và Z-VND với Z-USDT thì không thể cùng trần. Giá trị per-token chỉ có một đường đến duy nhất là `initialize()`.
 
-Dinh luong gas cua chinh quyet dinh nay o muc 1.12.
+Nếu một ngày nào đó cần vượt `2^44`, đường nâng cấp không phải là tăng `RANGE_BITS` — đó là **chia token thành nhiều series** (`series` đã có trong salt, 1.4.3), mỗi series có sổ cái riêng. Đó là một vấn đề kế toán, không phải mật mã. Và với token bất biến thì đó cũng là đường duy nhất, vì `RANGE_BITS` của một token đã deploy không đổi được kể cả khi muốn.
+
+Định lượng gas của chính quyết định này ở mục 1.12.
 
 ---
 
 ### 1.9. Total-supply invariants
-
-Viet duoi dang property test (Foundry invariant), khong phai comment:
+Viết dưới dạng property test (Foundry invariant), không phải comment:
 
 ```
 inv_wrap_1  : totalSupply() == reserveAccounted
@@ -599,20 +753,25 @@ inv_native  : totalSupply() == mintedCumulative - burnedCumulative <= maxSupply
 inv_cap     : maxSupply <= MAX_DECRYPTABLE_RAW
 inv_conf    : confidentialLocked == balanceOf(address(this))
 inv_conf_2  : confidentialLocked <= totalSupply()
-inv_rate    : |rate_t - rate_{t-1}| * 10000 / rate_{t-1} <= 200   // stateful, qua nhieu lan cap nhat
+inv_rate    : |rate_t - rate_{t-1}| * 10000 / rate_{t-1} <= 200   // stateful, qua nhiều lần cập nhật
 inv_state   : pegState != PEGGED  =>  mint reverts
+inv_impl    : implementation() không đổi qua MỌI chuỗi call            // xem §14, test bất biến
 ```
 
-**Sua so voi ban nhap:** ban nhap viet `inv_conf : confidentialLocked == totalSupply() - sum(public ERC20 balances)`. Sai o hai cho:
+**Sửa so với bản nháp:** bản nháp viết `inv_conf : confidentialLocked == totalSupply() - sum(public ERC20 balances)`. Sai ở hai chỗ:
 
-1. **`sum(public ERC20 balances)` khong the danh gia duoc on-chain** — khong co cach nao liet ke holder cua mot ERC-20. Mot bat bien khong danh gia duoc khong phai la mot bat bien; no la mot cau van.
-2. Cong thuc dung don gian hon nhieu: token contract giu chinh so token da nap vao vung confidential, nen `balanceOf(address(this))` **la** so do. Vay `confidentialLocked == balanceOf(address(this))`, mot phep so sanh mot SLOAD voi mot mapping read. Danh gia duoc trong `assert` cuoi moi `deposit`/`withdraw`, khong chi trong test.
+1. **`sum(public ERC20 balances)` không thể đánh giá được on-chain** — không có cách nào liệt kê holder của một ERC-20. Một bất biến không đánh giá được không phải là một bất biến; nó là một câu văn.
+2. Công thức đúng đơn giản hơn nhiều: token contract giữ chính số token đã nạp vào vùng confidential, nên `balanceOf(address(this))` **là** số đó. Vậy `confidentialLocked == balanceOf(address(this))`, một phép so sánh một SLOAD với một mapping read. Đánh giá được trong `assert` cuối mỗi `deposit`/`withdraw`, không chỉ trong test.
 
-`inv_conf` la thu note bo sot va no la thu de mat tien nhat. Mot Zether token vua la ERC-20 cong khai vua giu so du ma hoa co **hai khong gian so du**. Phia ma hoa khong the cong on-chain (do la muc dich cua no). Bat bien duy nhat re tien la mot bien dem **cong khai** `confidentialLocked`, tang khi `deposit`, giam khi `withdraw`, voi `unchecked` bi cam — mot underflow o day chinh la mot lan in tien.
+`inv_impl` là dòng mới, và nó là bất biến rẻ nhất trong danh sách nhưng lại canh thứ đắt nhất: nếu nó gãy thì mọi bất biến còn lại đều vô nghĩa, vì code sinh ra chúng đã bị thay. Với EIP-1167 nó đúng theo cấu trúc (implementation nằm trong 45 byte runtime, không có storage slot nào để ghi đè) — nhưng đúng theo cấu trúc là lý do để test nó, không phải lý do để bỏ qua.
 
-Danh doi: `confidentialLocked` **lo tong float confidential** (khong lo tung tai khoan). Day la mot tiet lo **co chu y va chap nhan duoc** — no la cai gia de co the phat hien mot lo hong mint vo han. Neu khong co no, mot bug trong Bulletproof verifier co the in tien ma khong ai thay cho den khi vault can.
+`inv_conf` là thứ note bỏ sót và nó là thứ dễ mất tiền nhất. Một Zether token vừa là ERC-20 công khai vừa giữ số dư mã hoá có **hai không gian số dư**. Phía mã hoá không thể cộng on-chain (đó là mục đích của nó). Bất biến duy nhất rẻ tiền là một biến đếm **công khai** `confidentialLocked`, tăng khi `deposit`, giảm khi `withdraw`, với `unchecked` bị cấm — một underflow ở đây chính là một lần in tiền.
 
-Cau hinh fuzz cu the (khong phai "chay invariant test"):
+Đánh đổi: `confidentialLocked` **lộ tổng float confidential** (không lộ từng tài khoản). Đây là một tiết lộ **có chủ ý và chấp nhận được** — nó là cái giá để có thể phát hiện một lỗ hổng mint vô hạn. Nếu không có nó, một bug trong Bulletproof verifier có thể in tiền mà không ai thấy cho đến khi vault cạn.
+
+Với token bất biến, lập luận này mạnh thêm một bậc: **phát hiện sớm là biện pháp duy nhất còn lại.** Không có bản vá khẩn cấp, nên khoảng cách giữa "bug bắt đầu bị khai thác" và "có người nhìn thấy" là toàn bộ thiệt hại. Một bất biến rẻ, đánh giá được ở mọi giao dịch, đáng giá hơn hẳn so với khi còn có `upgradeTo` để chạy theo sau.
+
+Cấu hình fuzz cụ thể (không phải "chạy invariant test"):
 
 ```toml
 [invariant]
@@ -622,205 +781,250 @@ fail_on_revert = false
 shrink_run_limit = 5_000
 ```
 
-`depth = 64` vi cac loi de-peg chi lo ra sau mot chuoi mint/burn/rate-update dan xen; `depth = 15` mac dinh cua Foundry khong bao gio cham toi `UNDERCOLLATERALIZED`. Handler phai co mot `warp` ngau nhien (0 - 30 ngay) de invariant staleness (1.7.2) duoc thu.
+`depth = 64` vì các lỗi de-peg chỉ lộ ra sau một chuỗi mint/burn/rate-update đan xen; `depth = 15` mặc định của Foundry không bao giờ chạm tới `UNDERCOLLATERALIZED`. Handler phải có một `warp` ngẫu nhiên (0 – 30 ngày) để invariant staleness (1.7.2) được thử.
 
 ---
 
-### 1.10. Pause / freeze / blacklist — cai nao chap nhan duoc
+### 1.10. Pause / freeze / blacklist — cái nào chấp nhận được
 
-Ba thu nay khong giong nhau va phai duoc doi xu khac nhau:
+Ba thứ này không giống nhau và phải được đối xử khác nhau:
 
-| Co che | Public chain profile | Private chain profile | Rang buoc bat buoc |
+| Cơ chế | Public chain profile | Private chain profile | Ràng buộc bắt buộc |
 |---|---|---|---|
-| `pause()` toan cuc | Chap nhan | Chap nhan | **`MAX_PAUSE = 7 ngay`**: sau moc do, `redeem`/`withdraw` tu dong mo lai bat ke pause. Pause khong gioi han thoi han la tich thu tai san co giay to |
-| `freeze(account)` | Chi cho `WRAP_1_1` cua underlying von da freeze duoc, va chi theo lenh toa | Chap nhan | Phat `AccountFrozen(account, bytes32 caseRef)`, role giu boi multisig, khong bao gio EOA |
-| `blacklist` mo (admin tu them) | **Tu choi** | Thua (transfer da bi allowlist cua registry chan) | — |
+| `pause()` toàn cục | Chấp nhận | Chấp nhận | **`MAX_PAUSE = 7 ngày`**: sau mốc đó, `redeem`/`withdraw` tự động mở lại bất kể pause. Pause không giới hạn thời hạn là tịch thu tài sản có giấy tờ |
+| `freeze(account)` | Chỉ cho `WRAP_1_1` của underlying vốn đã freeze được, và chỉ theo lệnh toà | Chấp nhận | Phát `AccountFrozen(account, bytes32 caseRef)`, role giữ bởi multisig, không bao giờ EOA |
+| `blacklist` mở (admin tự thêm) | **Từ chối** | Thừa (transfer đã bị allowlist của registry chặn) | — |
 
-Ly do tu choi blacklist tren public chain khong phai y thuc he: mot token co the bi blacklist tuy y **khong dung lam collateral o bat cu dau khac**, va lam cho tuyen bo "wrapped 1:1" tro thanh sai su that. Voi `WRAP_1_1` cua USDC thi ta **da** thua ke kha nang freeze cua USDC roi; giau dieu do di moi la khong trung thuc — cong bo no.
+Lý do từ chối blacklist trên public chain không phải ý thức hệ: một token có thể bị blacklist tuỳ ý **không dùng làm collateral ở bất cứ đâu khác**, và làm cho tuyên bố "wrapped 1:1" trở thành sai sự thật. Với `WRAP_1_1` của USDC thì ta **đã** thừa kế khả năng freeze của USDC rồi; giấu điều đó đi mới là không trung thực — công bố nó.
 
-**Bien no thanh dac tinh cua archetype, khong phai co runtime:**
+**Biến nó thành đặc tính của archetype, không phải cờ runtime:**
 
-- `ZTokenOpen` — khong `freeze`, khong `blacklist`, `pause` gioi han 7 ngay. Deploy duoc tren profile public.
-- `ZTokenPermissioned` — transfer gated boi allowlist cua registry. Chi deploy duoc tren profile private (`profileMask` bit1).
+- `ZTokenOpen` — không `freeze`, không `blacklist`, `pause` giới hạn 7 ngày.
+- `ZTokenPermissioned` — transfer gated bởi allowlist của registry.
 
-Khi da mint duoi `ZTokenOpen` thi **khong ai bat duoc blacklist ve sau**, ke ca admin, ke ca qua upgrade — vi beacon cua `ZTokenOpen` chi nhan implementation cung archetype (registry kiem tra `archetype` trong `validateUpgrade`, va beacon cua archetype nay khong duoc tro sang implementation cua archetype khac).
+Trên factory mở, hai cái này là **hai entry trong catalogue**, không phải hai nhánh của một cờ. Người tạo muốn token pause được thì chọn version có pause; muốn token không có admin nào thì chọn version không có. Đó chính là công dụng của catalogue, và nó làm cho lựa chọn hiện ra trong `version()` — thứ ví đọc được — thay vì nằm trong một biến storage mà không ai kiểm.
 
-#### 1.10.1. Loi thoat khoi tran pause 7 ngay
+Bản trước viết `ZTokenPermissioned` "chỉ deploy được trên profile private (`profileMask` bit1)". Câu đó không còn thực thi được (1.5), và cũng không nên: nó là gác cổng chính sách. `profileHint` giữ lại làm cảnh báo trong UI.
+Khi đã mint dưới `ZTokenOpen` thì **không ai bật được blacklist về sau**, kể cả admin, kể cả người tạo, kể cả người deploy factory.
 
-Ban nhap dat `MAX_PAUSE = 7 ngay` nhung khong tra loi: **neu chinh `withdraw` la ham co bug thi sao?** Tu dong mo lai `withdraw` sau 7 ngay la mo lai lo hong.
+**Lý do đảm bảo điều đó đã đổi, và bản mới mạnh hơn.** Bản trước viết: *"vì beacon của `ZTokenOpen` chỉ nhận implementation cùng archetype (registry kiểm tra `archetype` trong `validateUpgrade`)"* — tức lời hứa được thực thi bằng **logic registry**, và nó đúng chừng nào registry không có bug và không ai đổi được registry.
 
-Loi thoat duy nhat, va no phai la mot chieu:
+Bây giờ nó được thực thi bằng **vật lý**: không tồn tại đường nâng cấp nào cả. Lời hứa mạnh lên, còn cơ chế phải viết ra để bảo vệ nó thì biến mất. Đây là ví dụ rõ nhất trong cả section về việc bỏ upgrade mua được cái gì.
+
+#### 1.10.1. Lối thoát khỏi trần pause 7 ngày
+
+Bản nháp đặt `MAX_PAUSE = 7 ngày` nhưng không trả lời: **nếu chính `withdraw` là hàm có bug thì sao?** Tự động mở lại `withdraw` sau 7 ngày là mở lại lỗ hổng.
+
+Lối thoát duy nhất, và nó phải là một chiều:
 
 ```
-paused --(7 ngay het han)--> auto-unpause redeem/withdraw
+paused --(7 ngày hết hạn)--> auto-unpause redeem/withdraw
    |
-   +--(GUARDIAN + Safe 4-of-7, KHONG timelock)--> WIND_DOWN  [mot chieu, khong quay lai]
+   +--(GUARDIAN của token, KHÔNG timelock)--> WIND_DOWN  [một chiều, không quay lại]
 ```
 
-`WIND_DOWN` khong phai la "pause lau hon". No la: mint tat vinh vien, `RecoveryVault` duoc cap von bang toan bo reserve, va nguoi giu token doi qua `RecoveryVault` (mot contract khac, code khac, khong chia se bug voi token). Nghia la ban khong duoc phep keo dai pause; ban chi duoc phep **tu bo token va tra tien qua mot duong khac**. Do la mot lua chon dat, va no dung phai dat — no la thu ngan mot pause "tam thoi" keo dai 3 nam.
+`WIND_DOWN` không phải là "pause lâu hơn". Nó là: mint tắt vĩnh viễn, `RecoveryVault` được cấp vốn bằng toàn bộ reserve, và người giữ token đòi qua `RecoveryVault` (một contract khác, code khác, không chia sẻ bug với token). Nghĩa là bạn không được phép kéo dài pause; bạn chỉ được phép **từ bỏ token và trả tiền qua một đường khác**. Đó là một lựa chọn đắt, và nó đúng phải đắt — nó là thứ ngăn một pause "tạm thời" kéo dài 3 năm.
 
-#### 1.10.2. Pause va tinh kha ket hop
+**Với token bất biến, `WIND_DOWN` không còn là phương án cuối cùng — nó là phương án duy nhất.** Bản trước ngầm giả định có một nhánh thứ ba: pause, vá bằng `upgradeTo`, mở lại. Nhánh đó không tồn tại. Nên chuỗi xử lý sự cố đầy đủ, viết ra để không ai đi tìm nhánh đã chết:
 
-Mot token bi pause dang nam trong mot pool DEX hoac lam collateral o mot giao thuc khac se lam ke thu ba khong thanh ly duoc vi the, va ho se mat tien vi quyet dinh cua ta. Hai he qua thuc te:
+```
+phát hiện bug -> pause (tối đa 7 ngày)
+                   |
+                   +-- bug không chạm tiền  -> hết 7 ngày, tự mở, sống chung với nó
+                   +-- bug chạm tiền        -> WIND_DOWN -> token v2 + MigrationSink (1.17.2)
+```
 
-- Voi `ZTokenOpen` phat hanh cong khai, phai cong bo `MAX_PAUSE` trong tai lieu tich hop, va phat `Paused(uint64 autoUnpauseAt)` de bot cua ho doc duoc moc tu dong mo.
-- Voi `ZTokenPermissioned` tren private chain, khong co ben thu ba, van de nay khong ton tai. Day la mot ly do nua de moi luong tien co quy dinh nen o private profile truoc.
+Hệ quả cho người tạo token: **`pause` chỉ mua được 7 ngày để quyết định, không mua được thời gian để sửa.** Ai deploy một token không có `pause` thì thậm chí không có 7 ngày đó — một lựa chọn hợp lệ, nhưng phải chọn có ý thức, và nó nằm ở việc chọn version.
 
-#### 1.10.3. Freeze giao voi Zether
+#### 1.10.2. Pause và tính khả kết hợp
 
-Dong bang mot `schnorrAddress` (co trong registry, §02) chan `rollOver` va `withdraw`, nhung **khong the tich thu** so du ma hoa — contract khong biet no bang bao nhieu. Freeze o tang Zether nghia la "ket", khong phai "thu hoi". Bo phan phap che se hoi cau nay; tra loi truoc.
+Một token bị pause đang nằm trong một pool DEX hoặc làm collateral ở một giao thức khác sẽ làm kẻ thứ ba không thanh lý được vị thế, và họ sẽ mất tiền vì quyết định của ta. Hai hệ quả thực tế:
 
-He qua phap ly ma ban nhap khong keo den tan cung: **neu quy dinh doi hoi kha nang tich thu (seizure) theo lenh co quan, thi Zether tren public chain khong dap ung duoc, cham het.** Chi co hai duong: (a) token khong the redeem ra tien phap dinh (loyalty thuan tuy) nen khong thuoc pham vi dieu chinh do, hoac (b) chay tren private chain noi mot lenh toa duoc thuc thi bang mot `forceTransfer` co su chung kien cua N validator. Ket noi voi 1.15 va §13.
+- Với `ZTokenOpen` phát hành công khai, phải công bố `MAX_PAUSE` trong tài liệu tích hợp, và phát `Paused(uint64 autoUnpauseAt)` để bot của họ đọc được mốc tự động mở.
+- Với `ZTokenPermissioned` trên private chain, không có bên thứ ba, vấn đề này không tồn tại. Đây là một lý do nữa để mọi luồng tiền có quy định nên ở private profile trước.
+
+Trên factory mở có thêm một hệ quả thứ ba: **người tích hợp không biết trước token họ gặp có `pause` hay không.** Đó là lý do `version()` và `interfaceId` phải đọc được — chúng là cách duy nhất một bot trả lời được câu "token này có ai pause được không" mà không phải đọc bytecode.
+
+#### 1.10.3. Freeze giao với Zether
+
+Đóng băng một `schnorrAddress` (có trong registry, §02) chặn `rollOver` và `withdraw`, nhưng **không thể tịch thu** số dư mã hoá — contract không biết nó bằng bao nhiêu. Freeze ở tầng Zether nghĩa là "kẹt", không phải "thu hồi". Bộ phận pháp chế sẽ hỏi câu này; trả lời trước.
+
+Hệ quả pháp lý mà bản nháp không kéo đến tận cùng: **nếu quy định đòi hỏi khả năng tịch thu (seizure) theo lệnh cơ quan, thì Zether trên public chain không đáp ứng được, chấm hết.** Chỉ có hai đường: (a) token không thể redeem ra tiền pháp định (loyalty thuần tuý) nên không thuộc phạm vi điều chỉnh đó, hoặc (b) chạy trên private chain nơi một lệnh toà được thực thi bằng một `forceTransfer` có sự chứng kiến của N validator.
+
+Có một đường thứ ba mà bản trước không có, và nó không phải tịch thu: **chứng minh chọn lọc** (`transferWithProof`, `_USER-DECISIONS.md` §12). Phần lớn yêu cầu thật của cơ quan thuế và toà án là *xuất trình được*, không phải *tịch thu được* — và đó là thứ mở ciphertext trả lời được, trong khi tịch thu thì không. Ba đường này khác nhau và không thay thế nhau; §13 phải nói rõ cái nào đáp ứng yêu cầu nào.
 
 ---
 
-### 1.11. Quan tri upgrade
+### 1.11. Quản trị: của factory, và của token
 
-Khong dung `Ownable`. `AccessControl` voi cac role tach bach:
+Mục này trong bản trước tên là *"Quản trị upgrade"* và dài ~110 dòng: mười role, Safe 4-of-7, timelock 48h không đường tắt, `RECOVERY` 6-of-7 trễ 30 ngày, cron dò governance drift cross-chain, và một model `blockchain.upgrade.proposal` bắt buộc đính kèm báo cáo audit và storage diff.
 
-| Role | Ai giu | Nguong | Do tre |
-|---|---|---|---|
-| `DEFAULT_ADMIN_ROLE` | Safe 4-of-7 (board + CTO + 1 ben ngoai) | 4/7 | 7 ngay de doi role |
-| `PROTOTYPE_ADMIN` | Safe 3-of-5 (engineering) | 3/5 | 48h de `registerPrototype` |
-| Beacon owner (`UPGRADE_ADMIN`) | `TimelockController` (proposer = Safe 4-of-7, executor = `address(0)` mo) | — | **48h, khong co duong tat** |
-| `DEPLOYER_ROLE` | service account cua Odoo, khoa trong HSM | — | khong tre |
-| `MINTER` / `BURNER` | service account, khoa trong HSM FIPS 140-2 L3 | — | khong tre, nhung `maxMintPerEpoch` on-chain |
-| `TREASURY_ROLE` | Safe 3-of-5 | 3/5 | 48h cho `setRefundThreshold`, `sweepDonation` |
-| `RATE_SIGNER` | 2-of-3 | 2/3 | staleness 15 phut |
-| `ATTESTOR` | khoa cua don vi kiem toan (ngoai cong ty) | 1, hoac 2 khi > 50 ty | — |
-| `GUARDIAN` | 1-of-5 ky su truc | 1/5 | tuc thi, **chi `pause` va `deprecatePrototype`**, tu het hieu luc sau 7 ngay |
-| `RECOVERY` | Safe 6-of-7 | 6/7 | **30 ngay**, chi de thay toan bo signer set khi mat khoa |
+**Toàn bộ bộ máy đó tồn tại để kiểm soát đúng một quyền: upgrade. Quyền đó không còn.**
 
-Nguyen tac: **guardian duoc phep dung, chi timelock duoc phep doi.** Mot quyen upgrade thuc thi tuc thi khong phan biet duoc voi mot khoa mint. Neu co bug can va gap, cau tra loi trung thuc la pause to cho 48h to upgrade, va chap nhan downtime. Moi role "emergency upgrade" deu la mot backdoor co thu tuc.
+Nhưng mục này không bị xoá — nó **tách làm đôi**, vì hai loại quản trị còn lại thuộc về hai chủ thể khác nhau và bị nhầm làm một trong bản trước.
 
-Executor cua timelock de mo (`address(0)`) de mot executor mat khoa khong the chan mot upgrade da queue.
+#### 1.11.1. Quản trị factory — gần như trống
 
-#### 1.11.1. Bon cho quyen upgrade van ro ri neu chi lam nhu tren
+Quyền của người vận hành factory, liệt kê đầy đủ:
 
-Ban nhap dung nhung chua du. Bon lo con lai:
+| Quyền | Hại tối đa gây được |
+|---|---|
+| `registerImplementation` | Xuất bản một version dở. Chỉ ảnh hưởng token deploy **sau** đó, và **chỉ khi có người chọn nó** |
+| `deprecate` | Emit một event. Không chặn gì (1.5.1) |
 
-1. **Beacon la `Ownable`, khong phai `AccessControl`.** `UpgradeableBeacon` cua OZ chi co `owner()`. Neu `transferOwnership` cua beacon goi duoc tuc thi, thi timelock la trang tri. Bat buoc: beacon owner = timelock, **va** dung `Ownable2Step` (implementation rieng, khong dung `UpgradeableBeacon` mac dinh) de `transferOwnership` can hai buoc. Doi owner cua beacon la mot hanh dong phai qua chinh timelock 48h do.
-2. **Governance drift cross-chain.** Safe tren Gnosis va Safe tren Celo la hai contract khac nhau voi hai signer set co the lech nhau. Sau mot nam co the khong ai biet ai dang ky duoc gi tren Celo. Bat buoc: mot cron Odoo hang ngay doc `getOwners()` + `getThreshold()` cua moi Safe tren moi chain va so voi `blockchain.governance.signer` (danh sach ky vong trong Odoo); lech = incident. Day la ~40 dong Python va no chan mot lop rui ro khong co cach nao khac de phat hien.
-3. **Khong co duong tu mot ban audit den mot lan execute.** Timelock 48h bao ve chong sua doi lut, khong bao ve chong upgrade sang mot implementation chua ai doc. Bat buoc mot record Odoo lam so ghi chep:
+Không quyền nào chạm được vào tiền của ai. Nên câu hỏi *"ai giữ khoá factory"* rớt từ **hạng mục rủi ro sống còn** xuống **vệ sinh vận hành**: một Safe 2-of-3 của đội kỹ thuật là đủ, và không cần timelock — timelock bảo vệ chống một hành động không đảo ngược được, còn `registerImplementation` thì không ai bị bắt phải dùng.
 
-```python
-class BlockchainUpgradeProposal(models.Model):
-    _name = 'blockchain.upgrade.proposal'
-    _inherit = ['mail.thread']
+**Giả định A1 đảo chiều.** Bản trước: *"mất khoá = không deploy được token mới trên chain đó, và mất parity địa chỉ cross-chain vĩnh viễn"* — xếp ở mức thảm hoạ. Bây giờ: mất khoá ⇒ catalogue đóng băng ở version cuối, **và mọi người vẫn deploy được qua `createUnregistered`** (1.5.1). Suy giảm, không chết.
 
-    beacon_address   = fields.Char(size=42, required=True, index=True)
-    chain_id         = fields.Many2one('blockchain.chain', required=True, index=True)
-    from_impl        = fields.Char(size=42, required=True)
-    to_impl          = fields.Char(size=42, required=True)
-    to_impl_codehash = fields.Char(size=66, required=True)   # doi chieu on-chain truoc khi execute
-    storage_diff_ids = fields.Many2many('ir.attachment', 'bc_upgrade_storage_rel',
-                                        string='Storage layout diff')   # Garage, khong base64
-    audit_report_ids = fields.Many2many('ir.attachment', 'bc_upgrade_audit_rel',
-                                        string='Audit report')
-    queue_tx_hash    = fields.Char(size=66)
-    eta_datetime     = fields.Datetime(readonly=True)        # KHONG dat ten 'date'
-    execute_tx_hash  = fields.Char(size=66)
-    proposal_state   = fields.Selection([
-        ('draft','Draft'), ('reviewed','Reviewed'), ('queued','Queued'),
-        ('executable','Executable'), ('executed','Executed'),
-        ('cancelled','Cancelled'), ('mismatch','Code Mismatch')],
-        default='draft', required=True, tracking=True)
-```
+Một điều duy nhất còn đáng bảo vệ nghiêm túc ở tầng factory: **bất biến append-only** (1.5.1 mục 1). Nó không phải là một chính sách vận hành mà là một `require` trong code, và code thì bất biến — nên nó không cần khoá nào canh cả. Đó là hình dạng đúng: thay một quy trình bằng một dòng code không sửa được.
 
-Chuyen sang `reviewed` doi it nhat mot `audit_report_ids` va mot `storage_diff_ids`; chuyen sang `executed` doi `to_impl_codehash` khop voi `EXTCODEHASH` doc lai tu chain. Khong phai vi quy trinh; vi da tung co du an upgrade nham dia chi implementation cua testnet len mainnet.
+#### 1.11.2. Quản trị token — của NGƯỜI TẠO, không phải của ta
 
-4. **Mat 4 trong 7 khoa.** Khong co `RECOVERY` thi he thong chet vinh vien va khong ai noi ra dieu do. Safe 6-of-7 voi timelock 30 ngay la du cham de ke tan cong bi phat hien, va du de cuu neu chi mat 3 khoa. Neu mat 4 khoa thi ke ca `RECOVERY` cung khong cuu duoc — do la mot rui ro ton du phai duoc ghi vao ho so rui ro, khong phai duoc lo di.
+Các role bên trong một token không biến mất: `MINTER`, `BURNER`, `TREASURY_ROLE`, `RATE_SIGNER`, `ATTESTOR`, `GUARDIAN`, `pause`. Chúng thuộc về **người tạo token**, đặt lúc `initialize()`, và ta không có quyền gì trên chúng.
+
+Nên bảng dưới đây đổi giọng: nó không còn là *"ta phải làm thế này"* mà là *"nếu token của bạn có role này, đây là các ngưỡng đã được cân nhắc và đây là lý do"*. Nó là tài liệu hướng dẫn kèm archetype, không phải một thiết chế.
+
+| Role | Khuyến nghị | Ngưỡng | Độ trễ | Vì sao |
+|---|---|---|---|---|
+| `DEFAULT_ADMIN_ROLE` | Safe nhiều bên, có ít nhất một bên ngoài tổ chức | 4/7 | 7 ngày để đổi role | Bảy khoá của bảy nhân viên cùng một công ty là một chữ ký, không phải bảy |
+| `MINTER` / `BURNER` | service account, khoá trong HSM | — | không trễ, nhưng `maxMintPerEpoch` on-chain (1.6.2) | Trần tổng không bảo vệ tốc độ |
+| `TREASURY_ROLE` | Safe nhỏ hơn | 3/5 | 48h cho `sweepDonation`, `setRefundThreshold` | Chi tiêu reserve là hành động không đảo ngược |
+| `RATE_SIGNER` | 2-of-3 | 2/3 | staleness 15 phút | 1.7.4 |
+| `ATTESTOR` | khoá của đơn vị kiểm toán, **ngoài công ty** | 1, hoặc 2 khi > 50 tỷ | — | 1.7.7 |
+| `GUARDIAN` | 1-of-5 kỹ sư trực | 1/5 | tức thì, **chỉ `pause`** | Guardian được phép **dừng**, không được phép **đổi** |
+| `RECOVERY` | Safe rộng hơn | 6/7 | 30 ngày | Chỉ để thay toàn bộ signer set khi mất khoá |
+
+Nguyên tắc cũ **vẫn đúng và giờ là tuyệt đối**: *guardian được phép dừng, chỉ timelock được phép đổi.* Trước đây nó là một kỷ luật; bây giờ nửa sau của nó được thực thi bởi việc không tồn tại hàm nào để mà đổi.
+
+**Và một lựa chọn phải được ghi ra trước, vì trên factory mở nó là lựa chọn hợp lý nhất cho nhiều người: một archetype KHÔNG có role nào cả.** Không admin, không pause, không mint sau khi deploy. Một `WRAP_1_1` thuần tuý không cần bất kỳ khoá nào để hoạt động đúng — wrap và unwrap là hai hàm không cần ai cho phép. Token đó không có gì để mất khoá, không có gì để bị tấn công quản trị, và không có gì để người dùng phải tin. Nó nên là entry đầu tiên trong catalogue, không phải một trường hợp đặc biệt ở cuối danh sách.
+
+#### 1.11.3. Ba thứ trong bản trước bị xoá hẳn
+
+1. **Model `blockchain.upgrade.proposal`** cùng toàn bộ ràng buộc `audit_report_ids` / `storage_diff_ids` / `to_impl_codehash` / `proposal_state`. Không có upgrade để mà đề xuất.
+2. **Cron dò governance drift cross-chain** (`getOwners()` + `getThreshold()` của mỗi Safe trên mỗi chain, so với danh sách kỳ vọng trong Odoo). Nó canh signer set của các Safe điều khiển upgrade. Với token của **ta** thì cron này vẫn hữu ích như một kiểm tra vận hành, nhưng nó là chuyện của `dms_blockchain`, không phải một yêu cầu của protocol — và nó không áp dụng cho token của người khác.
+3. **`Ownable2Step` cho beacon owner.** Không có beacon.
+
+Thứ **không** bị xoá và vẫn phải làm: câu *"không có đường từ một bản audit đến một lần execute"* của bản trước là một quan sát đúng, và nó chuyển thành một yêu cầu khác — **catalogue phải liên kết mỗi version với bản audit của nó**. Không phải bằng một model quy trình, mà bằng một sự thật đọc được: `implCodeHash` on-chain, cộng một bản audit công bố công khai với đúng hash đó. Người tạo token chọn v2 thì họ đọc được v2 đã audit hay chưa, và điều đó phải kiểm được mà không cần tin ai.
 
 ---
 
-### 1.12. Dinh luong gas, calldata va thong luong
+### 1.12. Định lượng gas, calldata và thông lượng
 
-Co so: chi phi opcode EVM sau EIP-1108 (`ecAdd` = 150, `ecMul` = 6,000, `ecPairing` = 45,000 + 34,000k) va EIP-2929 (cold account 2,600, cold SLOAD 2,100). Code deposit = 200 gas/byte (EIP-170 gioi han 24,576 byte; EIP-3860 gioi han initcode 49,152 byte + 2 gas/word). Gnosis: ~1.5 gwei, xDAI = 1 USD. Ethereum L1 doi chieu: 10 gwei, ETH = 3,000 USD. **Tat ca la uoc tinh; do lai bang `forge test --gas-report` truoc khi chot ngan sach.**
+Cơ sở: chi phí opcode EVM sau EIP-1108 (`ecAdd` = 150, `ecMul` = 6.000, `ecPairing` = 45.000 + 34.000k) và EIP-2929 (cold account 2.600, cold SLOAD 2.100). Code deposit = 200 gas/byte (EIP-170 giới hạn 24.576 byte; EIP-3860 giới hạn initcode 49.152 byte + 2 gas/word). Gnosis: ~1,5 gwei, xDAI = 1 USD. Ethereum L1 đối chiếu: 10 gwei, ETH = 3.000 USD. **Tất cả là ước tính; đo lại bằng `forge test --gas-report` trước khi chốt ngân sách.**
 
-| Thao tac | Gas | Gnosis | Ethereum L1 |
+| Thao tác | Gas | Gnosis | Ethereum L1 |
 |---|---|---|---|
-| Deploy implementation `ZTokenBase` (~13 KB runtime) | ~2,800,000 | $0.0042 | $84 |
-| Deploy `UpgradeableBeacon` | ~350,000 | $0.00053 | $10.50 |
-| Deploy BeaconProxy qua CREATE2 + `initialize` | ~230,000 | $0.00035 | $6.90 |
-| Deploy EIP-1167 clone | ~45,000 | $0.00007 | $1.35 |
-| `transfer`, nguoi nhan da co so du (warm slot) | ~37,000 | $0.00006 | $1.11 |
-| `transfer`, nguoi nhan moi (slot 0 to non-0) + overhead beacon lanh | ~54,000 | $0.00008 | $1.62 |
-| `mint` `PEG_RATIO` (doc rate + vault transferFrom) | ~120,000 | $0.00018 | $3.60 |
-| `attest()` | ~85,000 | $0.00013 | $2.55 |
-| Zether `transferConfidential`, `RANGE_BITS = 32` | ~1,150,000 | $0.0017 | $34.50 |
-| Zether `transferConfidential`, **`RANGE_BITS = 64` (chot)** | **~1,900,000** | **$0.0029** | **$57** |
-| Zether `transferConfidential`, `RANGE_BITS = 128` (note de xuat) | ~3,500,000 | $0.0053 | $105 |
+| Deploy implementation `ZTokenBase` (~13 KB runtime) | ~2.800.000 | $0,0042 | $84 |
+| ~~Deploy `UpgradeableBeacon`~~ | — | — | không còn (1.3) |
+| ~~Deploy BeaconProxy qua CREATE2 + `initialize`~~ | ~~230.000~~ | — | không còn (1.3) |
+| **Deploy EIP-1167 clone + `initialize`** | **~70.000** | **$0,00011** | **$2,10** |
+| `transfer`, người nhận đã có số dư (warm slot) | ~37.000 | $0,00006 | $1,11 |
+| `transfer`, người nhận mới (slot 0 → non-0) | ~46.000 | $0,00007 | $1,38 |
+| `mint` `PEG_RATIO` (đọc rate + vault transferFrom) | ~120.000 | $0,00018 | $3,60 |
+| `attest()` | ~85.000 | $0,00013 | $2,55 |
+| Zether `transferConfidential`, `RANGE_BITS = 32` | ~1.150.000 | $0,0017 | $34,50 |
+| Zether `transferConfidential`, **`RANGE_BITS = 64` (chốt)** | **~1.900.000** | **$0,0029** | **$57** |
+| Zether `transferConfidential`, `RANGE_BITS = 128` (note đề xuất) | ~3.500.000 | $0,0053 | $105 |
 
-#### 1.12.1. Phan bac con so Zether — va sua lai chinh ban nhap
+**Hai dòng đổi so với bản trước, và cả hai đều rẻ đi.** Deploy một token rớt từ ~230.000 xuống ~70.000 gas (45.000 cho clone + ~25.000 cho `initialize`) vì không còn `BeaconProxy`. Và `transfer` tới người nhận mới rớt từ ~54.000 xuống ~46.000 vì mất phần *"overhead beacon lạnh"* — STATICCALL sang beacon cộng SLOAD trong beacon, ~4.600 gas mỗi transaction đầu tiên. Với một token có 1 triệu transfer/năm trên Gnosis, riêng khoản đó là ~4,6e9 gas.
 
-Ban nhap ket luan "con so 180,000 - 250,000 gas trong note thap hon thuc te khoang mot bac". **Ket luan do dung cho Bulletproofs nhung sai o cho no khong noi ra rang con so cua note la dat duoc voi mot he chung minh khac.** Phan bac day du:
+Đây là lợi ích không nằm trong lý lẽ chính của việc bỏ upgrade (1.3.2) nhưng nó có thật, và nó đi đúng chiều: thứ an toàn hơn cũng là thứ rẻ hơn.
 
-Bulletproofs verify la mot multi-scalar multiplication kich thuoc `2*n*m + 2*ceil(log2(n*m)) + ~7` diem, va EVM khong co precompile MSM — moi diem la mot `ecMul` rieng:
+#### 1.12.1. Phản bác con số Zether — và sửa lại chính bản nháp
 
-| `n` (bit) | `m` (so gia tri) | So diem MSM | Gas MSM | Sigma-protocol | Cap nhat state | **Tong** |
+Bản nháp kết luận "con số 180.000 – 250.000 gas trong note thấp hơn thực tế khoảng một bậc". **Kết luận đó đúng cho Bulletproofs nhưng sai ở chỗ nó không nói ra rằng con số của note là đạt được với một hệ chứng minh khác.** Phản bác đầy đủ:
+
+Bulletproofs verify là một multi-scalar multiplication kích thước `2*n*m + 2*ceil(log2(n*m)) + ~7` điểm, và EVM không có precompile MSM cho `bn254` — mỗi điểm là một `ecMul` riêng:
+
+| `n` (bit) | `m` (số giá trị) | Số điểm MSM | Gas MSM | Sigma-protocol | Cập nhật state | **Tổng** |
 |---|---|---|---|---|---|---|
-| 32 | 2 | 128 + 14 + 7 = 149 | ~916k | ~150k | ~50k | ~1.15M |
-| **64** | **2** | 256 + 14 + 7 = 277 | ~1.70M | ~150k | ~50k | **~1.90M** |
-| 128 | 2 | 512 + 16 + 7 = 535 | ~3.29M | ~150k | ~50k | ~3.50M |
+| 32 | 2 | 128 + 14 + 7 = 149 | ~916k | ~150k | ~50k | ~1,15M |
+| **64** | **2** | 256 + 14 + 7 = 277 | ~1,70M | ~150k | ~50k | **~1,90M** |
+| 128 | 2 | 512 + 16 + 7 = 535 | ~3,29M | ~150k | ~50k | ~3,50M |
 
-Calldata cua proof: `2*log2(n*m)` diem cho inner-product + 4 diem cam ket + 5 scalar. Voi `n=64, m=2`: 14 + 4 = 18 diem x 64 byte + 5 x 32 byte = **1,312 byte**, ~21,000 gas calldata tren L1 (16 gas/byte khac 0). Tren mot L2 dung calldata (khong dung blob), calldata la thanh phan chi phi **lon nhat**, khong phai execution. Do la mot ly do nua de Zether o private chain hoac o Gnosis L1-nhu-L2, khong o mot rollup.
+**Câu "EVM không có precompile MSM" đúng cho `bn254` và SAI cho BLS12-381.** EIP-2537 có `G1MSM` ở `0x0c` — một lệnh duy nhất cho cả bó điểm. Đã đo thật trên Gnosis (`eth_estimateGas`, 2026-08-30), và kết quả lật ngược trực giác:
 
-Con so `~7.2M gas` ma `anonymous-zether` cua ConsenSys bao cao la cho **anonymity set 16**; kien truc cua ta khong co anonymity set (nguoi gui/nhan cong khai theo khoa quyet dinh cua note), nen phan `many-out-of-many` bien mat. Dung con so 1.9M, khong dung 7.2M, khi lam ngan sach.
+| k điểm | BLS12-381 `G1MSM` (1 lệnh) | alt_bn128 (k×`ecMul` + (k−1)×`ecAdd`) |
+|---|---|---|
+| 1 | 12.357 | 6.000 |
+| 32 | 244.175 | 196.650 |
+| 128 | 805.495 | 787.050 |
+| **277** | **1.741.589** | **1.703.400** |
 
-**Con so 180k-250k cua note dat duoc bang mot he chung minh pairing-based, khong bang Bulletproofs:**
+Ở đúng quy mô của bảng trên (k = 277), MSM một-lệnh của BLS **đắt hơn ~2%** so với 277 `ecMul` rời của bn254 — không rẻ hơn. Bảng discount của EIP-2537 định giá MSM gần như tuyến tính theo k, nên lợi thế "một lệnh" là lợi thế về calldata và về số lần vào-ra precompile, không phải về gas. Con số ~1,70M trong bảng đứng vững cho cả hai curve.
 
-| He chung minh | Gas verify | Kich thuoc proof | Prover time (client) | Trusted setup |
+Hệ quả cho factory mở: **người tạo token chọn curve nào cũng trả gas xấp xỉ nhau**, nên curve là lựa chọn về biên an toàn và về chain khả dụng, không phải về chi phí (`_USER-DECISIONS.md` §17, §20.1).
+
+Calldata của proof: `2*log2(n*m)` điểm cho inner-product + 4 điểm cam kết + 5 scalar. Với `n=64, m=2` trên bn254: 14 + 4 = 18 điểm × 64 byte + 5 × 32 byte = **1.312 byte**, ~21.000 gas calldata trên L1 (16 gas/byte khác 0). Trên BLS12-381 thì mỗi điểm là 128 byte, nên proof thành **2.464 byte** và calldata gần gấp đôi — đây là chỗ BLS thật sự đắt hơn, và nó không hiện trong bảng MSM.
+
+Trên một L2 dùng calldata (không dùng blob), calldata là thành phần chi phí **lớn nhất**, không phải execution. Đó là một lý do nữa để Zether ở private chain hoặc ở Gnosis L1-như-L2, không ở một rollup.
+
+Con số `~7,2M gas` mà `anonymous-zether` của ConsenSys báo cáo là cho **anonymity set 16**. Kiến trúc mặc định của ta không có anonymity set (người gửi/nhận công khai), nên phần `many-out-of-many` biến mất. Dùng con số 1,9M, không dùng 7,2M, khi làm ngân sách.
+
+Trên factory mở có một sửa đổi cho câu trên: **ring size là thuộc tính của verifier, do người tạo token chọn** (`IZetherVerifier.ringSize()`). Ai muốn ẩn danh trong đám đông thì đăng ký một verifier ring lớn và trả 7,2M gas; ai muốn rẻ và lộ danh tính thì ring = 2. Cả hai đều là entry hợp lệ trong catalogue. **Mọi con số gas trong tài liệu vì thế phải gắn với một `m` cụ thể** — một con số gas không kèm ring size là một con số vô nghĩa.
+
+**Con số 180k–250k của note đạt được bằng một hệ chứng minh pairing-based, không bằng Bulletproofs:**
+
+| Hệ chứng minh | Gas verify | Kích thước proof | Prover time (client) | Trusted setup |
 |---|---|---|---|---|
-| Bulletproofs, n=64 | ~1.9M | ~1.3 KB | ~150 - 400 ms | Khong |
-| Groth16 (bn254) | **~230k - 280k** (1 `ecPairing` 4 cap = 181k + ~8 `ecMul` input) | 128 byte | ~0.5 - 3 s | **Co, per-circuit ceremony** |
-| PLONK / Halo2-KZG | ~350k - 500k | ~500 byte - 1 KB | ~1 - 5 s | Universal (co the tai su dung) |
+| Bulletproofs, n=64 | ~1,9M | ~1,3 KB | ~150 – 400 ms | Không |
+| Groth16 (bn254) | **~230k – 280k** (1 `ecPairing` 4 cặp = 181k + ~8 `ecMul` input) | 128 byte | ~0,5 – 3 s | **Có, per-circuit ceremony** |
+| PLONK / Halo2-KZG | ~350k – 500k | ~500 byte – 1 KB | ~1 – 5 s | Universal (có thể tái sử dụng) |
 
-Doi lai 1.9M to 250k gas (**giam 87%**) la: mot ceremony trusted setup (Groth16) hoac mot circuit phuc tap hon (PLONK), cong voi viec circuit tro thanh mot artifact phai version va audit rieng. **Khuyen nghi v1: Bulletproofs**, vi private chain lam gas thanh don vi ke toan noi bo (khoa quyet dinh #5) va vi khong co ceremony la mot bot ganh nang van hanh that. Nhung ghi ro trong plan rang duong nang cap ton tai va no la duong duy nhat dua Zether len public chain o quy mo. Xem §03.
+Đổi lại 1,9M → 250k gas (**giảm 87%**) là: một ceremony trusted setup (Groth16) hoặc một circuit phức tạp hơn (PLONK), cộng với việc circuit trở thành một artifact phải version và audit riêng. **Khuyến nghị v1: Bulletproofs**, vì private chain làm gas thành đơn vị kế toán nội bộ (khoá quyết định #5) và vì không có ceremony là một bớt gánh nặng vận hành thật.
 
-#### 1.12.2. Thong luong — con so ban nhap khong co, va no doi kien truc
+Trên factory mở, câu này cũng nhẹ đi: đường nâng cấp sang Groth16 **không cần ai đồng ý** — nó là một `IZetherVerifier` khác, đăng ký thành `ZETHER v2`, và người tạo token nào muốn thì chọn. Không phải một cuộc di cư, chỉ là một entry mới trong catalogue. Xem §03.
 
-Gas per tx la mot con so. Con so quyet dinh la **bao nhieu giao dich bao mat mot giay**.
+#### 1.12.2. Thông lượng — con số bản nháp không có, và nó đổi kiến trúc
 
-| Chain | Block gas limit (uoc, kiem lai) | Block time | Zether tx/block neu chiem 100% block | Thuc te (gia dinh chiem 25% block) |
+Gas per tx là một con số. Con số quyết định là **bao nhiêu giao dịch bảo mật một giây**.
+
+| Chain | Block gas limit (ước, kiểm lại) | Block time | Zether tx/block nếu chiếm 100% block | Thực tế (giả định chiếm 25% block) |
 |---|---|---|---|---|
-| Ethereum L1 | ~36M | 12 s | 18 | 0.37 tx/s |
-| Gnosis | ~17M | 5 s | 8 | **0.45 tx/s** |
-| Celo (L2) | ~30M | ~1 s | 15 | 3.7 tx/s |
-| Besu QBFT private, gas limit 200M | 200M | 2 s | 105 | **xem duoi** |
+| Ethereum L1 | ~36M | 12 s | 18 | 0,37 tx/s |
+| Gnosis | ~17M | 5 s | 8 | **0,45 tx/s** |
+| Celo (L2) | ~30M | ~1 s | 15 | 3,7 tx/s |
+| Nethermind private 9000, gas limit 16,7M | 16,7M | 5 s | 8 | **xem dưới** |
 
-Tren private chain, gas limit khong con la rang buoc — nhung **CPU cua validator thi con**. 277 `ecMul` tren bn254; Besu dung thu vien native cho alt_bn128 precompile, ~50-100 us moi `ecMul`. `277 * 80us ≈ 22 ms` de verify mot proof. EVM chay tuan tu trong mot block, nen tran that la:
+**Dòng cuối đã đo, không còn là giả định.** Chain private ở `/home/dockers/mba-chain-nethermind` có `gasLimit = 0x1000000` = 16.777.216, Clique period 5s, một signer. Đó là con số thật, và nó **không** phải "200M gas limit, 2s" như bản nháp giả định cho một Besu QBFT tưởng tượng. Với 16,7M thì một block chứa tối đa 8 Zether tx, y hệt Gnosis.
+
+Nâng gasLimit trên Clique làm được bằng signer vote, **không cần reset chain** — khác với đổi genesis (`TRAPS.md`). Nên con số này là một tham số vận hành, không phải một trần cứng.
+
+Trên private chain, khi gas limit đã được nâng, ràng buộc thật là **CPU của validator**. 277 `ecMul` trên bn254; Nethermind dùng thư viện native cho alt_bn128 precompile, ~50–100 µs mỗi `ecMul`. `277 × 80µs ≈ 22 ms` để verify một proof. EVM chạy tuần tự trong một block, nên trần thật là:
 
 ```
-2000 ms / 22 ms = ~90 proof/block  ->  ~45 confidential tx/s
+5000 ms / 22 ms = ~225 proof/block  ->  ~45 confidential tx/s
 ```
 
-Con so nay, khong phai gas limit, la thu phai xuat hien trong tai lieu nang luc. Va no la mot con so **du** cho moi khoi luong B2B thuc te (45 tx/s = 3.9 trieu giao dich/ngay), dong thoi la mot con so **khong du** cho thanh toan nguoi dung cuoi ban le o quy mo quoc gia. Ket noi voi 1.15.
+Con số này, không phải gas limit, là thứ phải xuất hiện trong tài liệu năng lực. Và nó là một con số **đủ** cho mọi khối lượng B2B thực tế (45 tx/s = 3,9 triệu giao dịch/ngày), đồng thời là một con số **không đủ** cho thanh toán người dùng cuối bán lẻ ở quy mô quốc gia. Kết nối với 1.15.
 
-#### 1.12.3. Con so cung co khoa quyet dinh #5
+#### 1.12.3. Con số củng cố khoá quyết định #5
+#### 1.12.3. Con số củng cố khoá quyết định #5
 
-Tren chain rieng, gas la gia tri ke toan noi bo (zero-gas mode). Va no dinh luong loi ich cua viec chon `RANGE_BITS = 64` thay vi 128: **giam ~46% gas** va **~46% thoi gian CPU validator** (90 to 49 proof/block neu dung 128 bit), doi lay mot tran range 1.8e19 raw — thua xa `MAX_DECRYPTABLE_RAW = 1.76e13` von la rang buoc that su.
+Trên chain riêng, gas là giá trị kế toán nội bộ (zero-gas mode). Và nó định lượng lợi ích của việc chọn `RANGE_BITS = 64` thay vì 128: **giảm ~46% gas** và **~46% thời gian CPU validator** (225 → 122 proof/block nếu dùng 128 bit), đổi lấy một trần range 1,8e19 raw — thừa xa `MAX_DECRYPTABLE_RAW = 1,76e13` vốn là ràng buộc thật sự.
 
 ---
 
-### 1.13. Phia Odoo — `dms_blockchain` doc lap
+### 1.13. Phía Odoo — `dms_blockchain` độc lập
 
-`__manifest__.py`: `'depends': ['base', 'mail']`. **Khong co `dms`.** Model prefix la `blockchain.`, khong phai `dms.` — dung `dms.` khi DMS khong duoc cai la mot lo noi doi ve pham vi. (Prefix nay duoc chot o §10.3; section nay tuan theo.)
+`__manifest__.py`: `'depends': ['base', 'mail']`. **Không có `dms`.** Model prefix là `blockchain.`, không phải `dms.` — dùng `dms.` khi DMS không được cài là một lời nói dối về phạm vi. (Prefix này được chốt ở §10.3; section này tuân theo.)
 
 ```
 dms_blockchain/
 ├── __manifest__.py
 ├── models/
-│   ├── chain.py                # blockchain.chain              (dinh nghia o §08.1 / §10.4.2)
+│   ├── chain.py                # blockchain.chain              (định nghĩa ở §08.1 / §10.4.2)
 │   ├── token_archetype.py      # blockchain.token.archetype
-│   ├── token_prototype.py      # blockchain.token.prototype    (mirror on-chain registry)
+│   ├── token_version.py        # blockchain.token.version      (mirror catalogue on-chain)
 │   ├── token.py                # blockchain.token
 │   ├── token_peg.py            # blockchain.token.peg          (rate_num, rate_den, cr, peg_state)
 │   ├── reserve_snapshot.py     # blockchain.reserve.snapshot
-│   ├── reserve_attestation.py  # blockchain.reserve.attestation (M2M ir.attachment tren Garage)
-│   └── upgrade_proposal.py     # blockchain.upgrade.proposal
+│   └── reserve_attestation.py  # blockchain.reserve.attestation (M2M ir.attachment trên Garage)
 ├── data/ir_cron.xml
 └── security/{ir.model.access.csv, blockchain_security.xml}
 ```
+
+**Hai thay đổi so với bản trước.** `upgrade_proposal.py` (model `blockchain.upgrade.proposal`) **bị xoá** — không có upgrade để mà đề xuất (1.11.3). Và `token_prototype.py` đổi thành `token_version.py`, mirror catalogue `(kind, version)` thay vì registry prototype có beacon (1.5).
 
 #### 1.13.1. `blockchain.token`
 
@@ -841,8 +1045,12 @@ class BlockchainToken(models.Model):
                                          ('wrap_1_1', 'Wrapped 1:1'),
                                          ('peg_ratio', 'Ratio Pegged')], required=True)
     chain_id         = fields.Many2one('blockchain.chain', required=True, index=True)
-    prototype_id     = fields.Many2one('blockchain.token.prototype', required=True)
-    upgradeable      = fields.Boolean(default=True)
+
+    # Version thay cho prototype_id + upgradeable. Ca hai deu BAT BIEN sau deploy.
+    version_id       = fields.Many2one('blockchain.token.version')   # rong => createUnregistered
+    impl_version     = fields.Integer(readonly=True, help='0 = ngoai catalogue')
+    impl_address     = fields.Char(size=42, readonly=True)
+    creator_address  = fields.Char(size=42, readonly=True)
 
     contract_address = fields.Char(size=42, index=True)   # LUON lowercase (xem _normalize)
     predicted_address= fields.Char(size=42)
@@ -876,11 +1084,11 @@ class BlockchainToken(models.Model):
         'max_supply_base phai la chuoi thap phan uint256.')
 
     @api.model
-    def blockchain_predict_address(self, archetype, major_version, salt_hex, chain_code):
+    def blockchain_predict_address(self, kind, version, salt_hex, chain_code):
         """POST /web/dataset/call_kw/blockchain.token/blockchain_predict_address
            POST /json/2/blockchain.token/blockchain_predict_address
         Khong nhan allowed_company_ids tu client; pham vi suy tu self.env.company."""
-        return self._predict_address(archetype, major_version, salt_hex, chain_code)
+        return self._predict_address(kind, version, salt_hex, chain_code)
 
     @api.model
     def blockchain_list_tokens(self, chain_code=None):
@@ -889,18 +1097,22 @@ class BlockchainToken(models.Model):
         if chain_code:
             dom.append(('chain_id.code', '=', chain_code))
         return self.search_read(dom, ['symbol', 'token_decimals', 'contract_address',
-                                      'archetype', 'chain_id'])
+                                      'archetype', 'chain_id', 'impl_version'])
 
-    def _predict_address(self, archetype, major_version, salt_hex, chain_code):
+    def _predict_address(self, kind, version, salt_hex, chain_code):
         ...
 ```
 
-#### 1.13.2. Sau chi tiet Odoo ban nhap bo sot
+**`upgradeable = fields.Boolean(default=True)` bị xoá.** Nó luôn `False`, nên nó là một trường luôn nói dối hoặc luôn thừa. Thay bằng `impl_version` + `impl_address`, cả hai `readonly` và cả hai là sự thật đọc được từ chain.
 
-1. **Dia chi phai duoc chuan hoa lowercase.** EIP-55 checksum nghia la `0xAbC...` va `0xabc...` la **cung mot dia chi** nhung la hai chuoi khac nhau. Mot `UNIQUE(chain_id, contract_address)` tren chuoi mixed-case khong chan duoc trung. Luu lowercase (`create`/`write` override, hoac `_normalize` trong `_inherits`), hien thi checksummed bang mot compute khong luu.
-2. **`company_id` va record rule.** Cai gi giu tien thi co `company_id` (§10.9). Record rule chuan `[('company_id','in',company_ids)]`. Neu mot ngay nao do can hierarchy don vi, dung `child_of` tren mot **many2one**, khong bao gio tren `parent_path`.
-3. **`res.users.group_ids`** (Odoo 19 doi ten tu `groups_id`) — dung ten moi trong moi data XML va moi doan Python cua addon.
-4. **Deploy phai idempotent (gia dinh A11).** Cron broadcast khong duoc broadcast hai lan cho cung mot record. Khoa o tang DB, khong o tang Python:
+`impl_version` lọt vào `blockchain_list_tokens` là có chủ ý: client cần phân biệt được token chạy version đã công bố với token chạy code người tạo tự mang tới (1.5.1 mục 3), và nó phải thấy điều đó **trước** khi nạp tiền, không phải sau.
+
+#### 1.13.2. Sáu chi tiết Odoo bản nháp bỏ sót
+
+1. **Địa chỉ phải được chuẩn hoá lowercase.** EIP-55 checksum nghĩa là `0xAbC...` và `0xabc...` là **cùng một địa chỉ** nhưng là hai chuỗi khác nhau. Một `UNIQUE(chain_id, contract_address)` trên chuỗi mixed-case không chặn được trùng. Lưu lowercase (`create`/`write` override, hoặc `_normalize`), hiển thị checksummed bằng một compute không lưu.
+2. **`company_id` và record rule.** Cái gì giữ tiền thì có `company_id` (§10.9). Record rule chuẩn `[('company_id','in',company_ids)]`. Nếu một ngày nào đó cần hierarchy đơn vị, dùng `child_of` trên một **many2one**, không bao giờ trên `parent_path`.
+3. **`res.users.group_ids`** (Odoo 19 đổi tên từ `groups_id`) — dùng tên mới trong mọi data XML và mọi đoạn Python của addon.
+4. **Deploy phải idempotent (giả định A11).** Cron broadcast không được broadcast hai lần cho cùng một record. Khoá ở tầng DB, không ở tầng Python:
 
 ```python
 def _cron_broadcast_pending_deploys(self):
@@ -916,64 +1128,82 @@ def _cron_broadcast_pending_deploys(self):
         tok._broadcast_deploy()     # set deploy_state='broadcast' + deploy_tx_hash truoc khi commit
 ```
 
-`UNIQUE(chain_id, salt_hex)` la lop chan thu hai: ke ca khi hai worker vuot qua khoa, lan insert thu hai chet.
+`UNIQUE(chain_id, salt_hex)` là lớp chặn thứ hai: kể cả khi hai worker vượt qua khoá, lần insert thứ hai chết.
 
-5. **Cron XML chi mot dong.** `<field name="code">model._cron_reserve_check()</field>` — eval context khong co `fields` lan `relativedelta`. Bon cron cua section nay: `_cron_verify_deployed_code`, `_cron_broadcast_pending_deploys`, `_cron_reserve_check`, `_cron_governance_drift_check`.
-6. **`deploy_state` la Selection thuong, khong la stored computed field.** Mot stored compute co nhanh khong gan gi se cho INSERT chet vi NULL tren cot required — bay da biet cua stack nay.
+5. **Cron XML chỉ một dòng.** `<field name="code">model._cron_reserve_check()</field>` — eval context không có `fields` lẫn `relativedelta`. Ba cron của section này: `_cron_verify_deployed_code`, `_cron_broadcast_pending_deploys`, `_cron_reserve_check`.
 
-Nhac lai hai bay cu, vi chung se quay lai:
+   Bản trước liệt kê bốn, cái thứ tư là `_cron_governance_drift_check` — nó canh signer set của các Safe điều khiển upgrade, và không còn upgrade để canh (1.11.3). Nếu tổ chức muốn giữ nó như một kiểm tra vận hành trên token **của chính mình** thì được, nhưng nó không phải yêu cầu của protocol.
+6. **`deploy_state` là Selection thường, không là stored computed field.** Một stored compute có nhánh không gán gì sẽ cho INSERT chết vì NULL trên cột required — bẫy đã biết của stack này.
 
-- `_sql_constraints` dang list bi Odoo 19 **bo qua hoan toan**; dung `models.Constraint` nhu tren va **kiem chung bang SQL, dung tin code**:
+Nhắc lại hai bẫy cũ, vì chúng sẽ quay lại:
+
+- `_sql_constraints` dạng list bị Odoo 19 **bỏ qua hoàn toàn**; dùng `models.Constraint` như trên và **kiểm chứng bằng SQL, đừng tin code**:
   `SELECT conname FROM pg_constraint WHERE conrelid='blockchain_token'::regclass;`
-- Khoa deployer/HSM: `ir.config_parameter` giu **`key_ref`** (ten cua khoa trong HSM/KMS), khong bao gio giu khoa. `password=True` khong ton tai o Odoo 19 va chua bao gio chan `read()`/RPC/export.
+- Khoá deployer/HSM: `ir.config_parameter` giữ **`key_ref`** (tên của khoá trong HSM/KMS), không bao giờ giữ khoá. `password=True` không tồn tại ở Odoo 19 và chưa bao giờ chặn `read()`/RPC/export.
 
-#### 1.13.3. Huong doi soat — Odoo khong phai nguon su that (gia dinh A10)
+#### 1.13.3. Hướng đối soát — Odoo không phải nguồn sự thật (giả định A10)
 
-Phai phat bieu ro trong plan, vi no quyet dinh cach viet moi cron:
+Phải phát biểu rõ trong plan, vì nó quyết định cách viết mọi cron:
 
-> **Chain la nguon su that cho: `contract_address`, `totalSupply`, `reserveAccounted`, `CR`, `pegState`, danh sach role holder.
-> Odoo la nguon su that cho: y dinh (`draft`/`predicted`), gan ket nghiep vu, va lich su phe duyet.**
+> **Chain là nguồn sự thật cho: `contract_address`, `implementation`, `totalSupply`, `reserveAccounted`, `CR`, `pegState`, danh sách role holder.
+> Odoo là nguồn sự thật cho: ý định (`draft`/`predicted`), gắn kết nghiệp vụ, và lịch sử phê duyệt.**
 
-Ket qua: moi cron dong bo chay theo huong chain to Odoo va **ghi de** gia tri trong Odoo. Neu Odoo va chain lech ve mot gia tri thuoc nhom thu nhat, chain thang va Odoo mo mot activity, khong phai nguoc lai. Mot cron ghi chieu nguoc lai ("sua chain cho khop Odoo") khong duoc phep ton tai.
+Kết quả: mọi cron đồng bộ chạy theo hướng chain → Odoo và **ghi đè** giá trị trong Odoo. Nếu Odoo và chain lệch về một giá trị thuộc nhóm thứ nhất, chain thắng và Odoo mở một activity, không phải ngược lại. Một cron ghi chiều ngược lại ("sửa chain cho khớp Odoo") không được phép tồn tại.
 
-#### 1.13.4. Cau (seam) noi sang `dms`
+Trên factory mở, nguyên tắc này còn có một hệ quả mà bản trước không cần đến: **`blockchain.token` có thể chứa token ta không tạo ra.** Một bản triển khai DMS hoàn toàn có thể muốn nhận thanh toán bằng zDAI-B của người khác. Với những record đó, Odoo không có cả "ý định" lẫn "lịch sử phê duyệt" — nó chỉ có bản chiếu của chain, cộng một quyết định nghiệp vụ là có chấp nhận token đó hay không. Trường `creator_address` tồn tại để phân biệt hai loại record này mà không cần đoán.
 
-Mot addon cau `dms_blockchain_bridge` sau nay se map `dms.trade.settlement.line.payout_line_ids` va `dms.payment.collection` sang mint/burn, va `dms.incentive.rule.line` sang `ISSUER_NATIVE`. `dms_blockchain` khong biet ten nao trong so do, va khong duoc `import` chung. Cach kiem chung rang buoc nay khong bi vi pham theo thoi gian: mot CI grep
+#### 1.13.4. Cầu (seam) nối sang `dms`
+
+Một addon cầu `dms_blockchain_bridge` sau này sẽ map `dms.trade.settlement.line.payout_line_ids` và `dms.payment.collection` sang mint/burn, và `dms.incentive.rule.line` sang `ISSUER_NATIVE`. `dms_blockchain` không biết tên nào trong số đó, và không được `import` chúng. Cách kiểm chứng ràng buộc này không bị vi phạm theo thời gian: một CI grep
 
 ```bash
 grep -rnE "\bdms\.[a-z_]+\b|from odoo.addons.dms\b" dms_blockchain/ && exit 1
 ```
 
-va mot test cai `dms_blockchain` tren mot database **khong co** `dms`.
+và một test cài `dms_blockchain` trên một database **không có** `dms`.
 
----
-
-### 1.14. Bo cuc `smartcontracts/` (ngoai addon, o goc repo)
+### 1.14. Bố cục `smartcontracts/` (ngoài addon, ở gốc repo)
 
 ```
 smartcontracts/
-├── evm/
-│   ├── foundry.toml
-│   ├── src/
-│   │   ├── factory/{DeterministicFactory.sol,ContractPrototypeRegistry.sol}
-│   │   ├── proxy/{DmsBeaconProxy.sol,PinnedProxy.sol,DmsUpgradeableBeacon.sol}
-│   │   ├── token/{ZTokenBase.sol,ZTokenOpen.sol,ZTokenPermissioned.sol,
-│   │   │          IssuerNativeToken.sol,WrappedToken.sol,PeggedToken.sol}
-│   │   ├── peg/{ReserveVault.sol,SignedRateSource.sol,PegController.sol,
-│   │   │        ReserveAttestation.sol,RecoveryVault.sol}
-│   │   ├── zether/{ZetherAccountRegistry.sol,ZetherTokenModule.sol,BulletproofVerifier.sol}
-│   │   └── governance/{DmsTimelock.sol,Guardian.sol}
-│   ├── test/
-│   │   ├── invariant/{WrapInvariant.t.sol,PegInvariant.t.sol,SupplyInvariant.t.sol,
-│   │   │              ConfidentialInvariant.t.sol}
-│   │   └── fork/{UsdtGnosisFork.t.sol,UsdcCeloFork.t.sol}
-│   ├── script/{Deploy.s.sol,PredictAddress.s.sol,QueueUpgrade.s.sol}
-│   └── storage-layouts/v1/*.json
-├── hedera/  ton/  sui/  soroban/  cosmwasm/     # thiet ke tren giay truoc
-└── .github/workflows/contracts.yml
+├── foundry.toml
+├── src/
+│   ├── common/{IOpenFactory.sol,MetaTxLib.sol,FeePolicy.sol,SigLib.sol}
+│   ├── factory/{OpenFactory.sol}                      # CREATE2 + catalogue, BAT BIEN
+│   ├── metatx/{IERC20MetaTx.sol,IERC20Payment.sol}
+│   ├── token/{ZTokenBase.sol,ZTokenOpen.sol,ZTokenPermissioned.sol,
+│   │          IssuerNativeToken.sol,WrappedToken.sol,PeggedToken.sol}
+│   ├── peg/{ReserveVault.sol,SignedRateSource.sol,PegController.sol,
+│   │        ReserveAttestation.sol,RecoveryVault.sol}
+│   ├── migration/{MigrationSink.sol}                  # TokenKind.MIGRATION — xem 1.17.2
+│   ├── zether/{IZetherToken.sol,IZetherVerifier.sol,ITransferDisclosure.sol,
+│   │           ZetherAccountRegistry.sol,ZetherTypes.sol}
+│   ├── verifier/{BulletproofVerifierBn254.sol,BulletproofVerifierBls12381.sol}
+│   └── chains/{private9000,gnosis,celo}/              # cau hinh + script deploy theo chain
+├── test/
+│   ├── invariant/{WrapInvariant.t.sol,PegInvariant.t.sol,SupplyInvariant.t.sol,
+│   │              ConfidentialInvariant.t.sol,ImmutabilityInvariant.t.sol}
+│   ├── catalogue/{AppendOnly.t.sol,UnsupportedVerifier.t.sol}
+│   └── fork/{UsdtGnosisFork.t.sol,UsdcCeloFork.t.sol}
+└── script/{Deploy.s.sol,PredictAddress.s.sol,RegisterVersion.s.sol}
 ```
 
-#### 1.14.1. `foundry.toml` — ba dong quyet dinh tinh tai lap
+**Bốn thay đổi so với bản trước**, tất cả là hệ quả trực tiếp của 1.3 và 1.5:
+
+| Cũ | Mới |
+|---|---|
+| `proxy/{DmsBeaconProxy,PinnedProxy,DmsUpgradeableBeacon}` | **xoá cả thư mục.** Clone EIP-1167 là 45 byte bytecode, không cần một file Solidity |
+| `governance/{DmsTimelock,Guardian}` | **xoá `DmsTimelock`** — không có upgrade để trễ (1.11.1). `Guardian` chuyển vào `token/` vì `pause` là chuyện của từng token |
+| `storage-layouts/v1/*.json` | **xoá.** Không có implementation thứ hai để mà lệch layout (1.3.5) |
+| `factory/ContractPrototypeRegistry.sol` | gộp vào `factory/OpenFactory.sol` — catalogue và CREATE2 là một contract, và nó bất biến |
+
+Và ba thứ **mới**, tương ứng ba quyết định mới:
+
+- `verifier/` có **hai** verifier, một cho mỗi curve. Chúng không chia sẻ code (scalar field khác nhau), chỉ chia sẻ interface `IZetherVerifier`. Đây là chỗ chi phí audit tăng gấp đôi, và nó là chi phí đã biết của việc hỗ trợ cả hai curve.
+- `migration/MigrationSink.sol` lên hạng nhất, không còn là phụ lục (1.17.2).
+- `test/catalogue/` với hai test chặn hai bất biến mà cả hệ thống dựa vào: append-only, và từ chối verifier không chạy được trên chain hiện tại.
+
+#### 1.14.1. `foundry.toml` — ba dòng quyết định tính tái lập
 
 ```toml
 [profile.default]
@@ -982,94 +1212,114 @@ bytecode_hash  = "none"       # BAT BUOC: mac dinh solc gan IPFS metadata hash v
 cbor_metadata  = false        # BAT BUOC: bo not phan metadata CBOR con lai
 optimizer      = true
 optimizer_runs = 200          # PIN. Doi con so nay doi bytecode doi dia chi.
-via_ir         = true         # struct MetaTransaction 12 truong => stack too deep neu khong bat
-evm_version    = "cancun"     # doi chieu voi tung chain; Besu genesis phai khai cung fork
+via_ir         = true         # struct MetaTransaction nhieu truong => stack too deep neu khong bat
+evm_version    = "cancun"     # doi chieu voi tung chain — xem profile rieng ben duoi
+
+[profile.private9000]
+evm_version    = "berlin"     # chain Nethermind private chay TRUOC London. Xem TRAPS.md
 ```
 
-Khong co `bytecode_hash = "none"`, cung mot source build tren hai may CI cho hai `init_code` khac nhau, hai dia chi CREATE2 khac nhau, va toan bo muc 1.4 sup do. Day la gia dinh A3, va no la mot dong config.
+Không có `bytecode_hash = "none"`, cùng một source build trên hai máy CI cho hai `init_code` khác nhau, hai địa chỉ CREATE2 khác nhau, và toàn bộ mục 1.4 sụp đổ. Đây là giả định A3, và nó là một dòng config.
 
-`evm_version` phai khop chinh xac giua public va private profile. Neu Besu genesis khai `shanghai` con Foundry build `cancun`, contract dung `TSTORE`/`MCOPY` se revert tren private chain sau khi da pass moi test.
+`evm_version` phải khớp chính xác với chain. Bản trước viết câu này như một cảnh báo giả định; **giờ nó là một sự thật đã đo được**: chain private 9000 chạy trước London — genesis khai `londonBlock: 0` nhưng Nethermind dùng chainspec riêng và bỏ qua key kiểu Geth **trong im lặng**. Build với `evm_version = "cancun"` sinh `PUSH0` (Shanghai) và chain không hiểu opcode đó. Đó là lý do có profile riêng, không phải một sự cẩn thận thừa.
 
-#### 1.14.2. CI gate (fail build, khong phai warning)
+#### 1.14.2. CI gate (fail build, không phải warning)
 
-1. `forge test` + `forge coverage` >= 90% tren `src/token`, `src/peg`, `src/factory`;
-2. `forge build --sizes` fail neu bat ky contract nao > 24,000 byte (le an toan 576 byte duoi EIP-170); rieng `init_code` phai < 49,152 byte (EIP-3860);
-3. `slither` + `slither-check-upgradeability`;
-4. OZ `validateUpgrade` doi chieu `storage-layouts/v<N-1>/`;
-5. mot job rieng chay bon invariant o muc 1.9 voi 50,000 run, `depth = 64`;
-6. **fork test** tren Gnosis va Celo mainnet fork voi **dia chi USDT/USDC that**, khong voi mock. Mot mock ERC-20 khong co fee-on-transfer, khong co blacklist, va khong thieu return value — tuc la no khong thu duoc bat ky cai bay nao o 1.6.1;
-7. **determinism gate**: build hai lan trong hai container sach, `diff` `keccak256(init_code)`. Khac nhau = fail. Day la CI test duy nhat bao ve muc 1.4;
-8. `PredictAddress.s.sol` chay tren moi chain trong `blockchain.chain` va so ket qua voi `blockchain.token.predicted_address` da luu; lech = fail.
+1. `forge test` + `forge coverage` >= 90% trên `src/token`, `src/peg`, `src/factory`;
+2. `forge build --sizes` fail nếu bất kỳ contract nào > 24.000 byte (lề an toàn 576 byte dưới EIP-170); riêng `init_code` phải < 49.152 byte (EIP-3860);
+3. `slither` — **bỏ `slither-check-upgradeability`**, không còn upgrade để kiểm;
+4. **~~OZ `validateUpgrade` đối chiếu `storage-layouts/v<N-1>/`~~ — xoá.** Thay bằng **test bất biến**: sau deploy, không call nào từ bất kỳ địa chỉ nào (creator, factory owner, chính token) đổi được `implementation()`. Quét cả selector `upgradeTo` / `upgradeToAndCall` / `setImplementation`;
+5. một job riêng chạy các invariant ở mục 1.9 với 50.000 run, `depth = 64`;
+6. **fork test** trên Gnosis và Celo mainnet fork với **địa chỉ USDT/USDC thật**, không với mock. Một mock ERC-20 không có fee-on-transfer, không có blacklist, và không thiếu return value — tức là nó không thu được bất kỳ cái bẫy nào ở 1.6.1;
+7. **determinism gate**: build hai lần trong hai container sạch, `diff` `keccak256(init_code)`. Khác nhau = fail. Đây là CI test duy nhất bảo vệ mục 1.4;
+8. `PredictAddress.s.sol` chạy trên mọi chain trong `blockchain.chain` và so kết quả với `blockchain.token.predicted_address` đã lưu; lệch = fail.
+
+Và **ba gate mới**, mỗi cái chặn một bất biến mà thiết kế mới dựa vào:
+
+9. **Catalogue append-only**: `registerImplementation(kind, v, X)` rồi `registerImplementation(kind, v, Y)` phải revert (1.5.1 mục 1).
+10. **`isSupportedOnThisChain()` bắt được chain thiếu precompile**: fork chain 9000 (hoặc `vm.etch` xoá `0x0b`), verifier BLS phải trả `false` và `createZetherToken` phải revert. **Đây là gate có giá trị nhất trong ba cái** — nó là cái bẫy im lặng duy nhất còn lại có thể làm mất tiền của người lạ, vì precompile vắng mặt không revert mà trả về thành công với output rỗng.
+11. **Ma trận CI hai curve**: mọi test Zether chạy hai lần, bn254 và BLS12-381, và khẳng định `g1EncodedBytes()` là 64 với cái này, 128 với cái kia. Nhầm curve trong payload phải revert chứ không được verify sai.
 
 ---
 
-### 1.15. Ba use case to archetype to profile — bang quyet dinh
+### 1.15. Ba use case → archetype → profile — bảng quyết định
 
-Khoa quyet dinh #3 dua ca ba use case vao pham vi. Ban nhap khong anh xa chung. Day la bang quyet dinh, va no la thu doi truc can khi mot yeu cau nghiep vu moi den:
+Khoá quyết định #3 đưa cả ba use case vào phạm vi. Bản nháp không ánh xạ chúng. Đây là bảng quyết định, và nó là thứ đội trực cần khi một yêu cầu nghiệp vụ mới đến:
 
-| Use case | Archetype | Token class | Profile khoi diem | Peg mode | Doi ra tien phap dinh? | Pause/Freeze | Rui ro phap ly chinh |
+| Use case | Archetype | Token class | Profile khởi điểm | Peg mode | Đổi ra tiền pháp định? | Pause/Freeze | Rủi ro pháp lý chính |
 |---|---|---|---|---|---|---|---|
-| **Loyalty / reward point** | `ISSUER_NATIVE` | `ZTokenOpen` | public (Gnosis) hoac private | `FIXED_RATE`, rate khong giam | **Khong.** Chi doi hang/chiet khau | `pause` 7 ngay. Khong `freeze` | Thap. Khong redeem tien = kho bi coi la phuong tien thanh toan |
-| **B2B settlement (brand to distributor)** | `PEG_RATIO` (Z-VND) hoac `WRAP_1_1` (Z-USDT) | `ZTokenPermissioned` | **private truoc** | `FIXED_RATE`, reserve VND | Co, hang doi T+1 | `pause` + `freeze` theo lenh toa | Cao. §13 |
-| **Thanh toan nguoi dung cuoi** | `WRAP_1_1` cua mot token e-money da co giay phep, HOAC `PEG_RATIO` Z-VND | tuy giay phep | public sau khi co giay phep | theo giay phep | Co | theo giay phep | Cao nhat. Khong lam truoc §13 |
+| **Loyalty / reward point** | `ISSUER_NATIVE` | `ZTokenOpen` | public (Gnosis) hoặc private | `FIXED_RATE`, rate không giảm | **Không.** Chỉ đổi hàng/chiết khấu | `pause` 7 ngày. Không `freeze` | Thấp. Không redeem tiền = khó bị coi là phương tiện thanh toán |
+| **B2B settlement (brand → distributor)** | `PEG_RATIO` (Z-VND) hoặc `WRAP_1_1` (Z-USDT) | `ZTokenPermissioned` | **private trước** | `FIXED_RATE`, reserve VND | Có, hàng đợi T+1 | `pause` + `freeze` theo lệnh toà | Cao. §13 |
+| **Thanh toán người dùng cuối** | `WRAP_1_1` của một token e-money đã có giấy phép, HOẶC `PEG_RATIO` Z-VND | tuỳ giấy phép | public sau khi có giấy phép | theo giấy phép | Có | theo giấy phép | Cao nhất |
 
-Ba he qua dieu huong ke hoach:
+Ba hệ quả điều hướng kế hoạch:
 
-1. **Loyalty di truoc**, khong phai vi de nhat ky thuat ma vi no la use case duy nhat khong phu thuoc mot ket luan phap ly con treo. `ISSUER_NATIVE` + `ZTokenOpen` + Gnosis co the deploy va chay that trong wave 1.
-2. **B2B settlement can Zether va can private chain**, va con so o 1.12.2 noi ro tai sao: 45 tx/s tren Besu la du cho B2B, 0.45 tx/s tren Gnosis thi khong.
-3. **Thanh toan nguoi dung cuoi khong the chay tren Zether o quy mo** voi Bulletproofs. Neu use case do that su duoc theo duoi, no bat buoc keo theo lua chon Groth16 o 1.12.1 hoac bo confidentiality o luong do. Do la mot danh doi phai duoc dat ra truoc khi viet dong code dau tien, khong phai sau.
+1. **Loyalty đi trước**, không phải vì nó dễ nhất kỹ thuật mà vì nó là use case duy nhất không phụ thuộc một kết luận pháp lý còn treo. `ISSUER_NATIVE` + `ZTokenOpen` có thể deploy và chạy thật trong wave 1.
+2. **B2B settlement cần Zether và cần private chain**, và con số ở 1.12.2 nói rõ tại sao: 45 tx/s trên private chain là đủ cho B2B, 0,45 tx/s trên Gnosis thì không.
+3. **Thanh toán người dùng cuối không thể chạy trên Zether ở quy mô** với Bulletproofs. Nếu use case đó thật sự được theo đuổi, nó bắt buộc kéo theo lựa chọn Groth16 ở 1.12.1 hoặc bỏ confidentiality ở luồng đó. Trên factory mở, "kéo theo" nhẹ hơn trước: đó là một `ZETHER v2` mới trong catalogue, không phải một cuộc cải tổ.
+
+**Lưu ý về phạm vi của bảng này.** Nó mô tả các use case **của bản triển khai DMS**, không phải giới hạn của protocol. Factory mở nghĩa là ai cũng có thể tạo một token cho use case ta chưa nghĩ tới, và bảng này không nói gì về việc đó — nó là tài liệu nội bộ để chọn archetype, không phải một danh sách được phép.
 
 ---
 
-### 1.16. Chain profile o tang token — private chain la chain nao
+### 1.16. Chain profile ở tầng token — private chain là chain nào
 
-§08.10 chot stack private la **Hyperledger Besu + QBFT**. Section nay chi ghi lai nhung tham so cua chain do **anh huong truc tiep den token design**, vi chung la dieu kien bien cua moi con so o tren:
+Bản trước viết mục này quanh một stack giả định: **Hyperledger Besu + QBFT**, 4 validator, gasLimit 200M, block 2s. **Chain private thật thì khác, và nó đã tồn tại, đang chạy** — `/home/dockers/mba-chain-nethermind`. Bảng dưới là tham số thật, không phải đề xuất:
 
-| Tham so genesis Besu | Gia tri de xuat | Vi sao token design quan tam |
+| Tham số | Giá trị thật (đã đo) | Vì sao token design quan tâm |
 |---|---|---|
-| `blockperiodseconds` (QBFT) | 2 | Mau so cua con so thong luong o 1.12.2 |
-| `gaslimit` | `0xBEBC200` (200,000,000) | Cho phep 105 Zether tx/block ve mat gas; tran that la CPU |
-| `zeroBaseFee` / gas price 0 | bat | Hien thuc hoa khoa quyet dinh #5: "gas khong phai la moi lo" |
-| `contractSizeLimit` | **giu 24576** | Khong noi long. Neu noi long, public build va private build phan nhanh, va ta co hai codebase de audit |
-| `evmStackSize` | mac dinh | — |
-| Fork | `cancun` | Phai khop `foundry.toml`. Neu Besu build khong ho tro cancun, ha `evm_version` cho **ca hai** profile |
-| So validator | 4 (chiu duoc 1 loi) hoac 7 (chiu duoc 2) | 4 la toi thieu BFT that. 3 khong chiu duoc loi nao |
-| Permissioning | on-chain node + account allowlist | La co so cua `ZTokenPermissioned` (1.10) |
+| Client | **Nethermind**, không phải Besu | Chainspec khác cú pháp genesis Geth — xem cảnh báo dưới |
+| Consensus | **Clique**, không phải QBFT | Clique **không** có instant finality như QBFT. Xem phần finality |
+| chainId | 9000 (`0x2328`) | — |
+| `period` | 5 s | Mẫu số của con số thông lượng ở 1.12.2 |
+| `gaslimit` | `0x1000000` = **16.777.216** | 8 Zether tx/block, y hệt Gnosis. Nâng được bằng signer vote, **không cần reset chain** |
+| Gas price | `MinGasPrice = 0` | Hiện thực hoá khoá quyết định #5 |
+| Số signer | **1** | Xem câu treo ở cuối mục |
+| EVM fork thực tế | **trước London** | Không EIP-1559, không EIP-2537. Build với `FOUNDRY_PROFILE=private9000` |
+| `contractSizeLimit` | giữ 24576 | Không nới lỏng. Nới lỏng thì public build và private build phân nhánh, và ta có hai codebase để audit |
 
-**Diem quan trong ma ban nhap khong noi: "private chain" khong xoa bo nhu cau finality gate.** QBFT co instant finality (mot block da vote la final), nen `finality_hard_blocks = 1`. Nhung neu chi co 4 validator va 2 trong so do la may cua ta trong cung mot AZ, thi "finality" la mot phat bieu ve mot he thong ta so huu. Nguyen tac `dms_vietqr` van ap dung, chi la nguong khac: `_set_done` khi block da final **va** it nhat 2 validator doc lap (khac chu so huu ha tang) da ky.
+**Cảnh báo, và nó là loại bẫy im lặng tệ nhất:** genesis khai `londonBlock: 0`, `cancunBlock: 0`, `pragueBlock: 0`. **Không key nào có tác dụng.** Nethermind đọc chainspec riêng và bỏ qua key kiểu Geth mà không log gì. Cách duy nhất phát hiện là kiểm block header (`baseFeePerGas` vắng mặt) hoặc gọi thử precompile. Chi tiết ở `TRAPS.md` §"Private chain".
 
-**Cau con treo:** ai chay 4 validator do? Neu ca 4 la cua ta thi "permissioned blockchain" ve mat ky thuat la mot database Postgres dat tien co chu ky. Dieu do khong sai — no van cho immutability, audit trail, va Zether — nhung phai goi dung ten trong tai lieu ban hang. Xem 1.19.
+Hệ quả trực tiếp lên token design: **BLS12-381 không dùng được trên chain này**, nên một `createZetherToken` với verifier BLS phải bị chặn ở `isSupportedOnThisChain()` (1.14.2 gate 10) chứ không được deploy thành một cái brick.
 
----
+**Finality: Clique không phải QBFT, và điều này đổi một kết luận.** Bản trước viết *"QBFT có instant finality (một block đã vote là final), nên `finality_hard_blocks = 1`"*. Clique thì không: nó là proof-of-authority theo lượt, và một chain Clique **một signer** không có finality theo nghĩa BFT nào cả — nó có đúng cái đảm bảo mà signer đó đưa ra. Đặt `finality_hard_blocks` theo một con số bảo thủ và ghi rõ cơ sở, đừng chép `= 1` từ một stack khác.
 
-### 1.17. Vong doi day du: runbook deploy, migrate, retire
+Nguyên tắc `dms_vietqr` vẫn áp dụng, chỉ là ngưỡng khác.
 
-#### 1.17.1. Deploy (16 buoc, tuong ung state machine o 1.2)
+**Câu còn treo, và giờ nó gắt hơn:** bản trước hỏi *"ai chạy 4 validator đó?"* và cảnh báo rằng nếu cả 4 là của ta thì "permissioned blockchain" về mặt kỹ thuật là một database Postgres đắt tiền có chữ ký. Chain thật có **một** signer. Điều đó không sai — nó vẫn cho immutability, audit trail, và Zether — nhưng phải gọi đúng tên trong tài liệu bán hàng, và nó là một lý do độc lập để đường lên public tồn tại trong lộ trình. Xem 1.19.
 
-| # | Buoc | Actor | State sau buoc |
+### 1.17. Vòng đời đầy đủ: runbook deploy, migrate, retire
+
+#### 1.17.1. Deploy (16 bước, tương ứng state machine ở 1.2)
+
+| # | Bước | Actor | State sau bước |
 |---|---|---|---|
-| 1 | Tao `blockchain.token`, chon archetype + prototype + chain | Nghiep vu | `draft` |
-| 2 | Kiem `prototype.profileMask` khop `chain.chain_profile` | He thong | `draft` |
-| 3 | Kiem `max_supply_base <= 2^44` | He thong | `draft` |
-| 4 | Sinh `initData`, tinh `keccak256(initData)`, dung `salt` (1.4.3) | He thong | `draft` |
-| 5 | Goi `registry.predictAddress()`, luu `predicted_address` | He thong | `predicted` |
-| 6 | Phe duyet (Safe 3-of-5 neu `PEG_RATIO`, tu dong neu `ISSUER_NATIVE` loyalty) | Nguoi | `predicted` |
-| 7 | `_cron_broadcast_pending_deploys` khoa record (`FOR UPDATE SKIP LOCKED`) | Cron | `predicted` |
-| 8 | Broadcast `registry.deploy(archetype, v, salt, initData)` | HSM key | `broadcast` |
-| 9 | Nhan tx hash, luu `deploy_tx_hash`, commit **truoc** khi lam gi khac | He thong | `broadcast` |
+| 1 | Tạo `blockchain.token`, chọn archetype + **version** + chain | Nghiệp vụ | `draft` |
+| 2 | Kiểm `version.profileHint` so với `chain.chain_profile` — **cảnh báo, không chặn** (1.5) | Hệ thống | `draft` |
+| 3 | Kiểm `max_supply_base <= 2^44` | Hệ thống | `draft` |
+| 4 | Sinh `initData`, tính `keccak256(initData)`, dựng `salt` (1.4.3) | Hệ thống | `draft` |
+| 5 | Gọi `factory.predictAddress()`, lưu `predicted_address` | Hệ thống | `predicted` |
+| 6 | Phê duyệt (Safe 3-of-5 nếu `PEG_RATIO`, tự động nếu `ISSUER_NATIVE` loyalty) | Người | `predicted` |
+| 7 | `_cron_broadcast_pending_deploys` khoá record (`FOR UPDATE SKIP LOCKED`) | Cron | `predicted` |
+| 8 | Broadcast `factory.createZetherToken(version, ...)` hoặc `createMetaToken(...)` | HSM key | `broadcast` |
+| 9 | Nhận tx hash, lưu `deploy_tx_hash`, commit **trước** khi làm gì khác | Hệ thống | `broadcast` |
 | 10 | Receipt `status == 1` | Indexer | `pending_finality` |
-| 11 | Dat `finality_hard_blocks` cua chain | Indexer | `pending_finality` |
-| 12 | So `EXTCODEHASH` voi `prototype.expected_proxy_code_hash` | Cron | `verified` hoac `mismatch` |
-| 13 | So `token.beacon()` voi `prototype.beacon_address` | Cron | `verified` hoac `mismatch` |
-| 14 | So `token.owner()`/`getRoleMember(DEFAULT_ADMIN_ROLE)` voi Safe ky vong | Cron | `verified` hoac `mismatch` |
-| 15 | Verify source tren Blockscout/explorer (chain public) | CI | `verified` |
-| 16 | Set `live`; tu day `blockchain_list_tokens` moi tra ve token nay | He thong | `live` |
+| 11 | Đạt `finality_hard_blocks` của chain | Indexer | `pending_finality` |
+| 12 | So `EXTCODEHASH` với `version.expected_proxy_code_hash` | Cron | `verified` hoặc `mismatch` |
+| 13 | So `token.implementation()` với `version.impl_address` | Cron | `verified` hoặc `mismatch` |
+| 14 | So `token.creator()` với `creator_address` kỳ vọng | Cron | `verified` hoặc `mismatch` |
+| 15 | Verify source trên Blockscout/explorer (chain public) | CI | `verified` |
+| 16 | Set `live`; từ đây `blockchain_list_tokens` mới trả về token này | Hệ thống | `live` |
 
-Buoc 9 la buoc de sai nhat: neu broadcast xong ma chua commit tx hash da co exception, record ve `predicted` va cron se broadcast lan hai. `UNIQUE(chain_id, salt_hex)` khong cuu duoc vi salt giong nhau va `CREATE2` lan hai revert — nhung ta mat mot lan gas va co mot tx that bai trong so sach. Commit ngay sau khi co tx hash.
+Ba bước đổi so với bản trước: bước 2 hạ từ chặn xuống cảnh báo (1.5), bước 13 so `implementation()` thay vì `beacon()`, và bước 14 so `creator()` thay vì `owner()` — trên factory mở, thứ phải khớp là người tạo, và với token bất biến thì `creator()` là hằng số chứ không phải một vai trò chuyển được.
 
-#### 1.17.2. Migrate (khi upgrade khong du)
+Bước 9 là bước dễ sai nhất: nếu broadcast xong mà chưa commit tx hash đã có exception, record về `predicted` và cron sẽ broadcast lần hai. `UNIQUE(chain_id, salt_hex)` không cứu được vì salt giống nhau và `CREATE2` lần hai revert — nhưng ta mất một lần gas và có một tx thất bại trong sổ sách. Commit ngay sau khi có tx hash.
 
-Upgrade beacon giai quyet loi logic. No **khong** giai quyet duoc: doi storage layout khong tuong thich, doi decimals, doi archetype, doi chain. Cho nhung viec do can migration:
+#### 1.17.2. Migrate — ĐƯỜNG DUY NHẤT, không còn là phương án dự phòng
+
+Bản trước đặt tên mục này là *"Migrate (khi upgrade không đủ)"* và liệt kê những gì upgrade không giải quyết được: đổi storage layout không tương thích, đổi decimals, đổi archetype, đổi chain.
+
+**Bỏ upgrade thì danh sách đó thành: mọi thứ.** Một lỗi logic tầm thường — thứ trước đây vá bằng một `upgradeTo` — giờ cũng phải đi qua migration. `MigrationSink` không còn là phụ lục; nó là một entry catalogue hạng nhất (`TokenKind.MIGRATION`), phải có trong v1, và phải được audit cùng đợt với token.
 
 ```solidity
 contract MigrationSink {
@@ -1086,54 +1336,75 @@ contract MigrationSink {
 }
 ```
 
-Ba dieu kien bat buoc di kem, khong duoc bo:
+Trên factory mở, `MigrationSink` phải deploy được bởi **người tạo token**, cho token **của họ** — ta không deploy hộ ai, và ta cũng không có quyền gì trên cặp token của người khác.
 
-- `oldToken` phai vao `WIND_DOWN` truoc (mint tat) — neu khong, tong cung tien cua hai token cong lai vuot `maxSupply`.
-- `newToken.MINTER` cap cho `MigrationSink` phai co `maxMintPerEpoch = oldToken.totalSupply()` va **het han** sau `deadline`.
-- So du **confidential** khong migrate duoc bang `burnFrom` (contract khong biet no bang bao nhieu). Nguoi giu phai `withdraw` ve cong khai truoc. Do la mot chien dich truyen thong, khong phai mot ham. **Cua so `deadline` toi thieu 180 ngay** vi ly do nay.
+Ba điều kiện bắt buộc đi kèm, không được bỏ:
+
+- `oldToken` phải vào `WIND_DOWN` trước (mint tắt) — nếu không, tổng cung tiền của hai token cộng lại vượt `maxSupply`.
+- `newToken.MINTER` cấp cho `MigrationSink` phải có `maxMintPerEpoch = oldToken.totalSupply()` và **hết hạn** sau `deadline`.
+- Số dư **confidential** không migrate được bằng `burnFrom` (contract không biết nó bằng bao nhiêu). Người giữ phải `withdraw` về công khai trước. Đó là một chiến dịch truyền thông, không phải một hàm. **Cửa sổ `deadline` tối thiểu 180 ngày** vì lý do này.
+
+**Điều kiện thứ ba là cái giá thật của việc bỏ upgrade với token Zether, và nó phải được nói thẳng ở chỗ dễ thấy:** vá một lỗi ở một Zether token nghĩa là mọi người giữ số dư bí mật phải **tự tay lộ số dư của mình ra công khai** rồi chuyển sang token mới. Không có đường nào khác — và ai không làm trong 180 ngày thì tiền của họ nằm lại ở token cũ.
+
+Hai hệ quả điều hướng ngân sách, và chúng thuộc về mục này chứ không phải một phụ lục:
+
+1. **Implementation Zether v1 phải được audit nặng hơn Meta Token v1.** Giá của một lỗi cao hơn hẳn, vì đường sửa đắt hơn hẳn.
+2. **Mọi archetype Zether phải có một `withdraw` đơn giản, độc lập, và được audit riêng.** Nó là lối thoát duy nhất trong kịch bản xấu nhất; một `withdraw` chia sẻ bug với phần còn lại của token là một lối thoát không tồn tại.
 
 #### 1.17.3. Retire
 
-`retired` nghia la: khong mint, khong migrate, `RecoveryVault` da dong, va record Odoo giu lai vinh vien de doi soat lich su. Contract on-chain **khong bien mat** va van co the co nguoi cam token. Odoo phai tiep tuc index no (o muc toi thieu: log `Transfer`) trong 10 nam theo yeu cau luu tru chung tu ke toan. `active = False` trong Odoo **khong** duoc dung tat indexer.
+`retired` nghĩa là: không mint, không migrate, `RecoveryVault` đã đóng, và record Odoo giữ lại vĩnh viễn để đối soát lịch sử. Contract on-chain **không biến mất** và vẫn có thể có người cầm token. Odoo phải tiếp tục index nó (ở mức tối thiểu: log `Transfer`) trong 10 năm theo yêu cầu lưu trữ chứng từ kế toán. `active = False` trong Odoo **không** được dùng tắt indexer.
+
+Với token bất biến, "retired" là một trạng thái **trong Odoo**, không phải trên chain. Chain không có khái niệm đó: contract vẫn ở đó, vẫn nhận call, vẫn chạy đúng như ngày đầu, mãi mãi. Đó là điều cần nói rõ với đội vận hành — họ không "tắt" được một token, họ chỉ ngừng dùng nó.
 
 ---
 
-### 1.18. Nhung gi co y KHONG lam trong v1
+### 1.18. Những gì cố ý KHÔNG làm trong v1
 
-Danh sach nay ton tai de mot nguoi doc plan sau nay khong tuong day la thieu sot:
+Danh sách này tồn tại để một người đọc plan sau này không tưởng đây là thiếu sót:
 
-| Khong lam | Ly do | Them khi nao |
+| Không làm | Lý do | Thêm khi nào |
 |---|---|---|
-| Diamond (EIP-2535) | Tach `BulletproofVerifier` bang `staticcall` giai quyet EIP-170 voi 0.18% gas overhead | Khong bao gio, tru khi co mot yeu cau ma facet la cach duy nhat |
-| Basket / gio nhieu ERC-20 | N oracle = N diem gay; rebalance can mot khoa co quyen ban reserve | Khi co mot use case cu the va mot nguoi chiu trach nhiem treasury |
-| AMM TWAP oracle | Khong co pool VND thanh khoan | Khong bao gio cho VND |
-| Groth16 / PLONK verifier | Can trusted setup ceremony; Bulletproofs du cho private chain | Khi Zether phai chay tren public chain o quy mo (1.12.1) |
-| Anonymity set trong Zether | Khoa quyet dinh: lo danh tinh, an so tien. Anonymity set con lam gas x4 | Khong bao gio (mau thuan voi AML) |
-| CI gate cho cross-chain address parity | Parity la nice-to-have; client resolve dia chi qua RPC | Khong |
-| `WRAP_SHARES` (rebasing underlying, kieu ERC-4626) | `WRAP_1_1` tu choi rebasing token o registry | Khi co yeu cau wrap stETH/aToken |
-| Rate theo lo (`mapping(batchId => rate)`) | Thay bang chinh sach "rate khong giam" | Neu chinh sach do khong duoc chap nhan (1.7.4) |
-| Bridge private to public cho Z-VND | Mot bridge la mot he thong rieng voi mo hinh de doa rieng | §08, wave sau |
+| Diamond (EIP-2535) | Tách `BulletproofVerifier` bằng `staticcall` giải quyết EIP-170 với 0,18% gas overhead | Không bao giờ, trừ khi có một yêu cầu mà facet là cách duy nhất |
+| **Bất kỳ hình thức upgrade nào** | Xem 1.3. Đây là quyết định kiến trúc, không phải hoãn lại | **Không bao giờ** |
+| Basket / giỏ nhiều ERC-20 | N oracle = N điểm gãy; rebalance cần một khoá có quyền bán reserve | Khi có một use case cụ thể và một người chịu trách nhiệm treasury |
+| AMM TWAP oracle | Không có pool VND thanh khoản | Không bao giờ cho VND |
+| Groth16 / PLONK verifier | Cần trusted setup ceremony; Bulletproofs đủ cho private chain | Khi Zether phải chạy trên public chain ở quy mô (1.12.1). Trên factory mở đây chỉ là một `ZETHER v2` mới trong catalogue |
+| Anonymity set lớn trong Zether mặc định | Ring lớn làm gas ×4. **Nhưng đây là lựa chọn của người tạo token** (`ringSize()`), không phải một cấm đoán — ta chỉ không đăng ký nó vào catalogue v1 | Khi có người cần và chịu chi phí |
+| CI gate cho cross-chain address parity | Parity là nice-to-have; client resolve địa chỉ qua RPC | Không |
+| `WRAP_SHARES` (rebasing underlying, kiểu ERC-4626) | `WRAP_1_1` không xử lý đúng rebasing token | Khi có yêu cầu wrap stETH/aToken |
+| Rate theo lô (`mapping(batchId => rate)`) | Thay bằng chính sách "rate không giảm" | Nếu chính sách đó không được chấp nhận (1.7.4) |
+| Bridge private → public cho Z-VND | Một bridge là một hệ thống riêng với mô hình đe doạ riêng | §08, wave sau |
+
+Một dòng của bản trước đã bị **sửa chứ không giữ**: *"Anonymity set trong Zether — không bao giờ (mâu thuẫn với AML)"*. Câu đó đúng khi ta là nhà phát hành và phải tuân thủ AML. Trên factory mở ta là người deploy protocol, và ring size là tham số của verifier do người tạo token chọn. Ta không đăng ký ring lớn vào catalogue v1 vì ta không cần nó — nhưng ta không cấm được, và giả vờ cấm được là mô tả sai hệ thống.
 
 ---
 
-### 1.19. Cau hoi con lai cho nguoi quyet dinh
+### 1.19. Câu hỏi còn lại cho người quyết định
 
-Tam cau duoi day khong the tra loi bang ky thuat, va moi cau chan mot phan cua implementation:
+Bản trước có tám câu. **Bốn câu đã rời khỏi danh sách của ta** — không phải vì có đáp án, mà vì mô hình factory mở chuyển chúng sang **người tạo token**. Chúng vẫn là câu hỏi thật, chỉ là không phải của ta, và chúng thuộc về tài liệu hướng dẫn kèm archetype (1.11.2).
 
-1. **Z-VND co doi ra tien phap dinh VND duoc khong?** Cau tra loi quyet dinh giay phep (§13), quyet dinh `ZTokenOpen` co hop phap khong, va quyet dinh ca kien truc reserve o 1.7. Neu cau tra loi la "khong" thi 60% do phuc tap cua section nay bien mat.
-2. **`decimals` cua Z-VND: 2 hay 0?** Bat bien sau khi deploy. `2` cho phep phi phan tram va giam dust 100 lan; `0` giam thoi gian khoi phuc Zether 10 lan va khop `res.currency` VND. Khuyen nghi `2`. Can chu ky.
-3. **Tran cung tien (`maxSupply`) cua moi token la bao nhieu?** Phai `<= 2^44` raw. Voi decimals 2 do la 175,900 ty VND — nhung con so *nghiep vu* thi thap hon nhieu va no phai duoc chon truoc khi `initialize()`.
-4. **Ai la 7 nguoi ky Safe `DEFAULT_ADMIN_ROLE`, va co it nhat mot nguoi ngoai cong ty khong?** Bay khoa cua bay nhan vien cung mot cong ty la mot chu ky, khong phai bay.
-5. **Ai chay 4 validator cua private chain?** Neu ca 4 la cua ta, phai goi dung ten trong tai lieu (1.16).
-6. **Ai ky reserve attestation, cadence nao, ngan sach bao nhieu?** Mot cong ty kiem toan lon se khong ky hang thang cho mot float nho. Neu khong co ai ky, thi `PEG_RATIO` voi reserve off-chain khong the chay va chi con `WRAP_1_1` on-chain.
-7. **Chap nhan `MAX_PAUSE = 7 ngay` va loi thoat duy nhat la `WIND_DOWN` mot chieu?** Day la mot cam ket voi nguoi giu token ma sau nay khong the rut lai.
-8. **Neu quy dinh doi hoi kha nang tich thu (seizure), ta chon (a) token khong redeem duoc, hay (b) private chain voi `forceTransfer`?** Khong co lua chon thu ba tren Zether (1.10.3).
+Còn lại của ta:
 
----
+1. **Ai chạy signer của private chain, và có thêm signer độc lập không?** Chain thật hiện có **một** signer (1.16). Nếu giữ nguyên, phải gọi đúng tên trong tài liệu: đó là một sổ cái có chữ ký, không phải một mạng phi tập trung. Đây là câu duy nhất của bản cũ còn nguyên vẹn là của ta.
+2. **Ai giữ khoá registrar của catalogue, và ngưỡng bao nhiêu?** Đã hạ cấp mạnh (1.11.1): mất khoá không chặn ai deploy. Safe 2-of-3 kỹ thuật là đủ. Vẫn cần một câu trả lời để có người chịu trách nhiệm.
+3. **Ngân sách audit, và phân bổ giữa Zether v1 và Meta Token v1.** Không phải một con số tổng: 1.17.2 lập luận Zether phải nặng hơn, và tỷ lệ đó cần một quyết định.
+4. **`ZETHER v1` của catalogue dùng verifier nào — bn254, BLS12-381, hay cả hai?** Cả hai đều đăng ký được. Câu hỏi thật là ta audit và đứng sau cái nào trước, vì đó là thứ tốn tiền. Chain private chỉ chạy được bn254 (1.16).
 
-### 1.20. Kiem chung bat buoc — khong tin code, tin chain va `pg_constraint`
+Bốn câu **chuyển sang người tạo token**, giữ lại đây làm tham chiếu chéo:
 
-Tam lenh, chay truoc khi bat ky ai noi "xong":
+| Câu | Thuộc về ai bây giờ |
+|---|---|
+| Z-VND có đổi ra tiền pháp định được không? | Người phát hành Z-VND. Với ta nó chỉ đổi archetype nào ta dùng, không đổi protocol |
+| `decimals` của Z-VND: 2 hay 0? | Người tạo token đó, ở `initialize()`. Khuyến nghị 2 (1.8) |
+| Trần cung tiền (`maxSupply`) là bao nhiêu? | Như trên. Ràng buộc kỹ thuật `<= 2^44` thì protocol enforce |
+| Chấp nhận `MAX_PAUSE = 7 ngày`, lối thoát duy nhất là `WIND_DOWN`? | Người tạo token, và nó thể hiện ra bằng việc họ chọn version nào |
+
+Hai câu **không đi đâu cả, chỉ đổi chủ thể**: ai ký reserve attestation và với ngân sách nào (1.7.7), và nếu quy định đòi tịch thu thì chọn đường nào (1.10.3). Cả hai là câu hỏi của bất kỳ ai phát hành một token có reserve — kể cả ta, nếu ta phát hành.
+
+### 1.20. Kiểm chứng bắt buộc — không tin code, tin chain và `pg_constraint`
+
+Chín lệnh, chạy trước khi bất kỳ ai nói "xong":
 
 ```bash
 # 1. Constraint co that su ton tai trong Postgres khong (Odoo 19 bo qua _sql_constraints dang list)
@@ -1143,8 +1414,8 @@ psql -c "SELECT conname, contype FROM pg_constraint WHERE conrelid='blockchain_t
 cast code 0x4e59b44847b379578588920cA78FbF26c0B4956C --rpc-url $RPC
 
 # 3. Build hai lan trong hai container sach, init_code hash phai giong het
-docker run --rm -v $PWD:/w -w /w/smartcontracts/evm foundry forge build && \
-  cast keccak $(jq -r '.bytecode.object' out/BeaconProxy.sol/BeaconProxy.json)
+docker run --rm -v $PWD:/w -w /w/smartcontracts foundry forge build && \
+  cast keccak $(jq -r '.bytecode.object' out/OpenFactory.sol/OpenFactory.json)
 
 # 4. Dia chi du doan trong Odoo khop dia chi tinh tu chain
 forge script script/PredictAddress.s.sol --rpc-url $RPC --sig "run(bytes32)" $SALT
@@ -1152,14 +1423,25 @@ forge script script/PredictAddress.s.sol --rpc-url $RPC --sig "run(bytes32)" $SA
 # 5. Code that su nam o dia chi do (chan A4 va metamorphic)
 cast keccak $(cast code $TOKEN --rpc-url $RPC)
 
-# 6. Beacon owner la timelock, khong phai mot EOA
-cast call $BEACON "owner()(address)" --rpc-url $RPC
+# 6. Token BAT BIEN: implementation() la mot hang so, va khong co selector upgrade nao
+cast call $TOKEN "implementation()(address)" --rpc-url $RPC
+cast code $TOKEN --rpc-url $RPC | grep -qiE '3659cfe6|4f1ef286' && echo "FAIL: co selector upgradeTo"
 
 # 7. Kich thuoc contract duoi 24,000 byte tren MOI contract
 forge build --sizes | awk '$3 > 24000 {print; found=1} END {exit found}'
 
-# 8. Addon cai duoc tren database khong co dms
+# 8. Chain co dung fork nhu genesis khai khong (Nethermind bo qua key kieu Geth trong im lang)
+cast block latest --rpc-url $RPC --json | jq -e '.baseFeePerGas' || echo "PRE-LONDON"
+cast call 0x000000000000000000000000000000000000000b $BLS_G1ADD_INPUT --rpc-url $RPC
+
+# 9. Addon cai duoc tren database khong co dms
 odoo -d test_no_dms -i dms_blockchain --stop-after-init --test-enable
 ```
 
-Lenh 8 la lenh quan trong nhat trong section nay: khoa quyet dinh #7 (`dms_blockchain` doc lap) la thu de vi pham nhat va de phat hien nhat, va no chi duoc dam bao boi mot lenh chay trong CI, khong boi mot dong trong tai lieu nay.
+**Lệnh 6 và 8 là hai lệnh mới, và cả hai kiểm một điều mà tài liệu không kiểm được.**
+
+Lệnh 6 kiểm bất biến của token bằng cách quét bytecode tìm selector `upgradeTo(address)` = `0x3659cfe6` và `upgradeToAndCall(address,bytes)` = `0x4f1ef286`. Một clone EIP-1167 là 45 byte và không thể chứa chúng — nên lệnh này gần như luôn pass, và đó chính là lý do chạy nó: nó phát hiện ngày mà ai đó vô tình deploy một proxy khác dưới cùng một quy trình.
+
+Lệnh 8 chặn cái bẫy đã thật sự xảy ra trên chain 9000: genesis khai `pragueBlock: 0`, chain chạy trước London, không log một dòng cảnh báo nào (1.16, `TRAPS.md`). Cách duy nhất phát hiện là hỏi chain chứ không đọc file cấu hình.
+
+Lệnh 9 vẫn là lệnh quan trọng nhất trong section này: khoá quyết định #7 (`dms_blockchain` độc lập) là thứ dễ vi phạm nhất và dễ phát hiện nhất, và nó chỉ được đảm bảo bởi một lệnh chạy trong CI, không bởi một dòng trong tài liệu này.
