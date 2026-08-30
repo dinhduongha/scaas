@@ -28,7 +28,13 @@ import {FeeMode} from "./FeePolicy.sol";
 ///
 /// Giữ lại từ bản trước, vì chúng không đến từ mô hình forwarder:
 ///  - nonce 2D `(batch, nonce)`: một intent kẹt ở batch 0 không chặn batch 1.
-///  - wildcard `relayer == address(0)`: giữ digest cố định, không cross-mode replay.
+///  - wildcard `relayer == address(0)` thay cho `mode` bitmask. KHÔNG phải vì bitmask
+///    hở: bản cũ dùng canonical zeroing và `mode` nằm trong hash, nên không có
+///    cross-mode replay. Bỏ vì bit dư thừa với chính trường nó canh; vì trạng thái
+///    mâu thuẫn (`RESTRICT` + `relayer=0`) biểu diễn được và revert vĩnh viễn; vì quy
+///    tắc canonical phải khớp ở ba nơi (contract, SDK, Odoo); vì cấp phát bit đã va
+///    chạm thật giữa các section; và vì sau typed-op thì 3/5 bit không còn referent.
+///    Chi tiết: `04-eip1776-metatx.md` §04.4.
 ///  - `fee` + `feeMode` trong struct: relayer đọc được phí từ intent trên mesh mà
 ///    không phải gọi thêm hàm nào.
 ///
