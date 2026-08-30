@@ -778,3 +778,128 @@ hỏi này vào đúng phạm vi review đó.
 Lưu ý kỹ thuật kèm theo: `delete nonceSet` khi epoch toàn cục tiến — đó là cơ chế
 chống replay theo epoch mà canon định thay bằng `accSeq`. Hai thứ này gắn nhau, đổi
 một phải đổi cả hai, và đó là lý do §C5.4 nói "năm section revert cùng nhau".
+
+## 14. Preflight EIP-2537 — ĐÃ CHẠY THẬT, D1 có đáp án
+
+Canon §C21 D1 đặt điều kiện: *"`bls12_381` **nếu** `0x0c` sống trên Gnosis và Celo
+— nó rẻ hơn 45–60% **và** mạnh hơn 17–26 bit."* Điều kiện đó chưa ai kiểm.
+
+Đã kiểm, 2026-08-30, bằng `eth_call` thật tới RPC công khai:
+
+| Precompile | Địa chỉ | Gnosis | Celo |
+|---|---|---|---|
+| `BLS12_G1ADD` | `0x0b` | **sống** (128 B) | **sống** (128 B) |
+| `BLS12_G1MSM` | `0x0c` | **sống** (128 B) | **sống** (128 B) |
+| `BLS12_PAIRING_CHECK` | `0x0f` | **sống** (32 B) | **sống** (32 B) |
+| `BLS12_MAP_FP_TO_G1` | `0x10` | **sống** (128 B) | **sống** (128 B) |
+
+Phương pháp và đối chứng: input toàn số 0 hợp lệ theo EIP-2537 (G1ADD 256 B,
+G1MSM 160 B, PAIRING 384 B, MAP_FP 64 B); đối chứng `alt_bn128 ecAdd` (`0x06`) trả
+64 B trên cả hai. Precompile **không tồn tại** sẽ trả `0x` rỗng chứ không trả dữ
+liệu — nên độ dài output khác 0 là bằng chứng nó đang thực thi.
+
+Lần thử đầu `0x0c` báo lỗi vì tôi gửi 128 B thay vì 160 B. Bản thân thông báo lỗi
+(`invalid input length` trên Celo, `PrecompileError` trên Gnosis) **đã chứng minh
+precompile tồn tại và đang validate input** — nếu không có code thì không có lỗi,
+chỉ có kết quả rỗng.
+
+### Hệ quả
+
+**D1 → `bls12_381`.** Đây không phải ý kiến của tôi, đó là quy tắc do chính canon
+đặt ra, với tiền đề vừa được xác minh.
+
+**D2 chốt cùng D1** theo đúng chỉ dẫn của canon.
+
+**`0x0f` sống mở luôn đường nâng cấp Groth16** — con số ~181 k gas mà canon §C7
+nói là cách duy nhất đưa Zether lên public chain ở quy mô. Trước đây nó là giả
+định; giờ là năng lực có thật trên cả hai chain đầu tiên.
+
+### Còn phải đo, chưa xong
+
+Precompile **sống** không có nghĩa là **rẻ**. Con số "rẻ hơn 45–60%" của canon vẫn
+là ước tính. Spike S7 phải đo gas thật của một `transferConfidential` đầy đủ trên
+`bls12_381` so với `bn254`, trên testnet của cả hai chain, trước khi đóng băng
+struct ở G2.
+
+## 15. Quyết định D1/D2/D7/D12/D14/D17 — ĐÃ CHỐT
+
+| # | Quyết định | Chốt |
+|---|---|---|
+| **D1** | curve | **`bls12_381`** — điều kiện canon đặt ra đã xác minh (§14) |
+| **D2** | đóng băng struct | chốt cùng D1 |
+| **D7** | custody | **A/B** ($2.900–9.750/tháng), HSM FIPS 140-2 L3 hoặc MPC thương mại |
+| **D12** | phạm vi đợt đầu | **cấu hình đầy đủ** — cả ba use case cùng lúc |
+| **D14** | onboarding `register` | **KHÔNG thuộc `dms_blockchain`** — xem dưới |
+| **D17** | `rollOver` | **giữ code hiện tại** + thêm `rollOverPublic` / `rollOverBatch` |
+
+D12 = đầy đủ nên D7 = A/B là bắt buộc, không phải lựa chọn — canon đã ghi A/B là
+điều kiện cần khi bật B2B.
+
+### D14: đăng ký key KHÔNG phải việc của addon
+
+User: *"Tùy bên vận hành. Nhưng blockchain không liên quan dms. Nên việc đăng ký
+key cho outlet là việc riêng. Không lẫn."*
+
+Câu hỏi tôi đặt đã ngầm giả định sai — nó cho rằng `dms_blockchain` lo onboarding
+outlet. **Không.** Addon không được biết "outlet" là gì; đó là khái niệm của `dms`,
+và ràng buộc #7 cấm phụ thuộc đó.
+
+Sửa lại phạm vi:
+
+| Ai | Việc |
+|---|---|
+| `dms_blockchain` | quản lý `blockchain.account`: đăng ký khoá, PoP, vòng đời, liên kết tới `res.partner` **generic** |
+| Bridge addon (`dms` ↔ chain) | ánh xạ outlet → account, nếu deployment nào cần |
+| Bên vận hành | chính sách: ai được cấp khoá, khi nào, ai trả gas đăng ký |
+
+Canon §C21 D14 phải viết lại theo hướng này — nó đang mô tả một luồng onboarding
+mà addon không có thẩm quyền thực hiện.
+
+## 16. Chain đích đầu tiên là PRIVATE, không phải Gnosis
+
+`/home/dockers/mba-chain-nethermind` — Nethermind, hiện chưa chạy.
+
+| | |
+|---|---|
+| chainId | `0x2328` = **9000** |
+| Engine | **Clique** PoA, `period: 5` (block 5 giây), `epoch: 30000` |
+| Fork | `pragueBlock: 0` ⇒ **EIP-2537 BLS12-381 có sẵn từ genesis** — tương thích D1 |
+| gasLimit | `0x1000000` = **16.777.216** |
+| MinGasPrice | **0** — gas miễn phí, khớp quyết định "gas không phải ràng buộc" |
+| Signer | **một** account: `0xdE36845Cc887783397b2808c13f2Ed95DC2646BB` |
+| RPC | 8545 / WS 8546, modules gồm `clique`, `trace` |
+| Alloc | 6 tài khoản |
+
+### Vấn đề 1: gasLimit quá thấp cho Zether
+
+16,7 M gas/block chia cho ~1,9 M gas một `transferConfidential` = **~8 giao dịch
+bảo mật mỗi block**. Với block 5 giây thì **~1,7 tx/s** — và đó là khi block chỉ
+chứa Zether, không còn chỗ cho gì khác.
+
+Canon §C17.2 đã khuyến nghị **50 M** cho chain private. Cần sửa `gasLimit` trong
+genesis. Chain demo nên reset được, nên đây là thay đổi rẻ — nhưng phải làm **trước**
+khi có state đáng giữ.
+
+Ghi chú: Clique cho phép signer nâng dần gasLimit (`gasLimitBoundDivisor = 0x400`
+⇒ ~0,1%/block), nhưng sửa genesis rồi reset nhanh hơn nhiều cho một chain demo.
+
+### Vấn đề 2: một signer thì phải gọi đúng tên
+
+Clique với **một** signer duy nhất không phải blockchain phi tập trung theo bất kỳ
+nghĩa nào — nó là một cơ sở dữ liệu có hash và chữ ký. Hoàn toàn ổn cho demo và cả
+cho vận hành nội bộ, nhưng:
+
+- Tài liệu bán hàng **không được** gọi nó là "blockchain phi tập trung"
+- Mô hình đe doạ (§12) phải ghi: signer đơn = một điểm kiểm duyệt và một điểm hỏng
+- Nếu B2B thật chạy trên nó, đối tác phải biết ai kiểm soát signer
+
+Canon §C21 D10 đã nêu đúng lo ngại này cho Besu; áp nguyên cho Nethermind.
+
+### Hệ quả cho lộ trình
+
+Canon giả định **Gnosis trước**. Thực tế: **private trước, Gnosis sau**. Điều đó
+hợp với locked #5 (Zether chạy private trước vì gas không phải ràng buộc), nhưng
+§16 roadmap phải đảo lại thứ tự, và §14 phải thêm chain 9000 vào ma trận CI.
+
+Ưu điểm không nhỏ: `MinGasPrice = 0` và Prague sẵn có nghĩa là **spike S7 đo gas
+BLS12-381 chạy được ngay trên chain này**, không cần faucet, không cần testnet.
