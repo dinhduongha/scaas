@@ -13,9 +13,14 @@ pragma solidity ^0.8.20;
 ///
 /// ## Ba thứ factory này CỐ TÌNH không làm
 ///
-/// 1. **Không có wrapper chính thức.** Không `getWrapper(underlying) -> address`, không
-///    ràng buộc duy nhất trên `underlying`. Mười zDAI là hợp lệ. Thiết kế cũ (`getWrapper`
-///    trong bản Grok) hàm ý có một bản chính thức — bỏ.
+/// 1. **Không có wrapper chính thức.** Ông A wrap xDAI ra `zDAI-A`; ông B wrap cùng
+///    xDAI ra `zDAI-B`. Hai địa chỉ khác nhau, cả hai đều thật, cả hai đều hợp lệ. Thị
+///    trường quyết định cái nào được dùng nhiều.
+///
+///    `getWrapper` **được giữ**, nhưng khoá là `(creator, underlying)` chứ không phải
+///    `underlying`. *"Wrapper xDAI của ông A là cái nào"* có đúng một đáp án; *"wrapper
+///    xDAI là cái nào"* thì không, và một hàm trả về một địa chỉ cho câu hỏi đó sẽ nói
+///    dối. Không ràng buộc duy nhất trên riêng `underlying`.
 /// 2. **Không allowlist verifier, không allowlist underlying, không duyệt tên.** Một
 ///    verifier độc hại chỉ hại đúng token đã chọn nó. Một cái tên giả chỉ lừa được người
 ///    không kiểm xuất xứ.
@@ -85,7 +90,32 @@ interface IOpenFactory {
 
     function creatorOf(address token) external view returns (address);
 
-    /// @notice Đếm token đã tạo cho một underlying. **Không phải một, và không nên là một.**
+    // ---- Tra cứu theo NGƯỜI TẠO: "wrapper xDAI của ông A là cái nào" ----
+
+    /// @notice Wrapper của `creator` cho `underlying`. Cái đầu tiên họ tạo.
+    /// @dev Đây là `getWrapper` của bản thiết kế cũ, đã đổi khoá. Bản cũ khoá trên
+    ///      riêng `underlying` nên hàm ý tồn tại một zDAI chính thức. Khoá trên
+    ///      `(creator, underlying)` thì câu hỏi có đáp án thật: mỗi người một wrapper.
+    /// @return `address(0)` nếu `creator` chưa tạo wrapper nào cho `underlying`.
+    function getWrapper(address creator, address underlying) external view returns (address);
+
+    /// @notice Một người tạo VẪN có thể có nhiều wrapper cho cùng một underlying —
+    ///         ví dụ một cái trên bn254 và một cái trên BLS12-381, hoặc hai biểu phí.
+    ///         `getWrapper` trả cái đầu tiên; danh sách đầy đủ ở đây.
+    function getWrapperCount(address creator, address underlying) external view returns (uint256);
+
+    function getWrapperAt(address creator, address underlying, uint256 index)
+        external
+        view
+        returns (address);
+
+    // ---- Tra cứu theo THỊ TRƯỜNG: "có những zDAI nào, của ai" ----
+
+    /// @notice Đếm mọi token wrap `underlying`, của mọi người tạo.
+    /// @dev Đây là thứ cho phép so sánh zDAI-A với zDAI-B. Tín hiệu xếp hạng không cần
+    ///      hàm mới: `IERC20(underlying).balanceOf(token)` là lượng tài sản thật đang
+    ///      bị khoá sau mỗi wrapper. Thị trường bỏ phiếu bằng tiền, và phiếu đó đọc
+    ///      được on-chain miễn phí. Factory không xếp hạng hộ.
     function deployCountFor(address underlying) external view returns (uint256);
 
     function deployedFor(address underlying, uint256 index) external view returns (address);

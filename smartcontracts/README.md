@@ -8,9 +8,15 @@ quyết. Implementation đi theo plan.
 
 ## Mô hình: factory mở
 
-Ai cũng tạo token được. Ai cũng wrap thành Meta Token hoặc Zether Token được. Mười
-người wrap xDAI thành mười contract khác nhau là hợp lệ và không ai chặn — **không có
-wrapper chính thức**, và factory không có hàm nào hàm ý là có.
+Ai cũng tạo token được. Ai cũng wrap thành Meta Token hoặc Zether Token được.
+
+Ông A wrap xDAI ra `zDAI-A`. Ông B wrap cùng xDAI ra `zDAI-B`. **Hai địa chỉ khác
+nhau, cả hai đều thật.** Thị trường quyết định cái nào được dùng nhiều — và nó bỏ
+phiếu bằng tiền: `IERC20(xDAI).balanceOf(zDAI_A)` là lượng tài sản thật khoá sau
+wrapper của A, đọc được on-chain miễn phí. Factory không xếp hạng hộ.
+
+`getWrapper` khoá trên `(creator, underlying)`, không trên riêng `underlying`:
+*"wrapper xDAI của ông A"* có đúng một đáp án, *"wrapper xDAI"* thì không.
 
 Ba hệ quả xuyên suốt cây này:
 

@@ -1137,15 +1137,50 @@ Dọn dẹp kèm theo: **chuỗi CREATE2 ba tầng của §1.4 không còn lý d
 mặt chỉ để giữ địa chỉ ổn định qua các lần nâng cấp. Với clone bất biến thì không có
 lần nâng cấp nào để mà giữ. Còn hai tầng: factory → token.
 
-### 20.3 Không có wrapper chính thức. Bỏ `getWrapper`
+### 20.3 Mỗi người tạo một wrapper. `getWrapper` GIỮ, đổi khoá
 
-*"10 người có thể wrap thành 10 contract khác nhau, kệ họ."*
+User đính chính (tôi đã đọc sai ở lần đầu):
 
-`getWrapper(underlying) -> address` trong bản Grok **hàm ý có một bản chính thức**.
-Bỏ. Thay bằng `deployCountFor(underlying)` + `deployedFor(underlying, i)` — một danh
-sách, không một câu trả lời.
+> *"Không bỏ getWrapper. Và hiểu ý sai rồi. Ông A wrapper thì ra zDAI-A, Ông B wrap
+> thì ra TokenContract zDAI-B .v.v. Thị trường sẽ tự quyết định dùng zDAI-a nhiều hay
+> zDAI-b nhiều. Hai cái có 2 địa chỉ khác nhau."*
 
-Không ràng buộc duy nhất trên `underlying`. Không duyệt tên, không duyệt symbol.
+Tôi đã hiểu *"10 người wrap ra 10 contract, kệ họ"* thành **"không có tra cứu nào"**.
+Sai. Ý đúng là **không có wrapper chính thức**, không phải không có tra cứu — mỗi
+người tạo có wrapper của riêng mình, và nó tra được.
+
+Khác biệt nằm ở **khoá**, không ở việc có hay không có hàm:
+
+| Câu hỏi | Có đáp án? |
+|---|---|
+| `getWrapper(A, xDAI)` — *"wrapper xDAI của ông A là cái nào"* | **có, đúng một** |
+| `getWrapper(xDAI)` — *"wrapper xDAI là cái nào"* | **không**, và một hàm trả một địa chỉ cho câu này sẽ nói dối |
+
+Nên bản Grok không sai vì có `getWrapper`; nó sai vì khoá trên riêng `underlying`.
+Đổi khoá thành `(creator, underlying)` là xong, và hàm trở nên đúng.
+
+Ba mức tra cứu, ba câu hỏi khác nhau:
+
+```solidity
+// "wrapper xDAI của ông A"  -> một địa chỉ
+getWrapper(creator, underlying) -> address
+
+// "ông A có mấy wrapper xDAI"  -> A vẫn có thể có nhiều: một bn254, một BLS12-381,
+// hoặc hai biểu phí. getWrapper trả cái đầu tiên, đây là danh sách đầy đủ.
+getWrapperCount(creator, underlying) / getWrapperAt(creator, underlying, i)
+
+// "có những zDAI nào trên đời, của ai"  -> để thị trường so sánh A với B
+deployCountFor(underlying) / deployedFor(underlying, i)
+```
+
+**Không ràng buộc duy nhất trên riêng `underlying`.** Không duyệt tên, không duyệt
+symbol. `zDAI-A` và `zDAI-B` cùng tồn tại là trạng thái bình thường, không phải xung
+đột cần giải quyết.
+
+**Tín hiệu xếp hạng không cần hàm mới.** `IERC20(xDAI).balanceOf(zDAI_A)` là lượng
+tài sản thật đang bị khoá sau wrapper của A. Thị trường bỏ phiếu bằng tiền, và phiếu
+đó đọc được on-chain miễn phí. Factory không xếp hạng hộ ai — đó đúng là phần
+*"thị trường tự quyết định"*.
 
 ### 20.4 Bỏ gác cổng thì phải bù bằng xuất xứ kiểm được
 
