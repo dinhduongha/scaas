@@ -893,8 +893,13 @@ class BlockchainCustodyProvider(models.Model):
         ('enclave', 'Confidential enclave (tu van hanh)'),
         ('custodial', 'Custodial'), ('on_device', 'Non-custodial on-device'),
         ('smart_account', 'Smart account / passkey'),
+        ('local_dev', 'Khoa trong bien moi truong — CHI dev/CI'),   # [BAN 3]
     ], required=True, tracking=True)
-    endpoint_url = fields.Char(required=True, tracking=True)   # signer service, mTLS
+    # [BAN 3] KHONG con required tuyet doi. Chi cac kind that su la SERVICE NGOAI moi
+    # can endpoint. `kms` la mot loi goi SDK; `on_device`/`smart_account` khong co gi
+    # phia server; `local_dev` doc bien moi truong. Bat endpoint_url cho chung la ep
+    # deployment bia ra mot URL gia. Xem §07.12.1b.
+    endpoint_url = fields.Char(tracking=True)                  # signer service, mTLS
     client_cert_path = fields.Char(
         required=True,
         help='Duong dan file tren dia (chmod 0600, owner odoo). KHONG luu private key '
@@ -979,6 +984,80 @@ Ba điểm về `custody_probe` mà bản nháp trước bỏ:
 - `@api.model` + nhận `provider_id` là một RPC nhận id tùy ý. `self.browse(id)` **không** kiểm quyền cho tới khi đọc field. Phải gọi `check_access('write')` tường minh (Odoo 19 hợp nhất `check_access_rights`/`check_access_rule` thành `check_access(operation)`; nó mang `@api.private` nên không tự lộ ra RPC, gọi nội bộ được).
 - `_probe()` là private → không lộ RPC. Đúng mẫu §6 của CLAUDE.md.
 - Probe **phải** so `expected_measurement`; nếu lệch thì đặt `state='disabled'` và tạo `security.event` mức critical, chứ không phải ghi đè giá trị mới. Ghi đè là tự tay vô hiệu hóa attestation.
+
+
+#### 07.12.1b. [BẢN 3] Custody có tắt được không — và vì sao `endpoint_url` không còn `required`
+
+Câu hỏi (user, 2026-08-31): *"Custody Provider này cũng là option bật tắt?"* Trả lời phải tách theo trục,
+vì hai trục có hai câu trả lời khác nhau.
+
+| Trục | Tắt được không | Điều kiện |
+|---|---|---|
+| **`conf_custody`** (oracle lane, giữ `x`) | **CÓ, tắt hoàn toàn** | Không dùng Zether ⇒ `conf_provider_id` để rỗng. Sau khi Zether cho B2B thành tuỳ chọn (§07.0), đây là **mặc định** |
+| **`auth_custody`** (ký vỏ tx) | **Không tắt được toàn cục — nhưng tắt được theo vai** | Xem dưới |
+
+**Vì sao `auth_custody` không tắt toàn cục được:** ai đó phải ký transaction gửi lên chuỗi. Kể cả chain
+private với `MinGasPrice = 0` — gas miễn phí không có nghĩa tx không cần chữ ký.
+
+**Nhưng "ai đó" không nhất thiết là ta.** Ba cấu hình hợp lệ, phía ta không có `auth_custody` nào:
+
+1. **Node `submit: false`** — pool thuần / forwarder / observer (`_USER-DECISIONS.md` §21.4). Nhận intent,
+   chuyển tiếp, **không cầm khoá nào**. Đây là một vai chính thức trong ma trận, không phải một cấu hình
+   thiếu sót.
+2. **Deployment chỉ nhận và index** — theo dõi địa chỉ, đối soát, sinh `account.move`. Không phát tx nào
+   ⇒ không cần khoá nào. Đây là §09 mode M0/M4.
+3. **Mọi thứ do user ký trên thiết bị** (`smart_account` passkey), và relay do bên thứ ba làm. Ta không
+   ký gì.
+
+Ngược lại, `auth_custody` **chắc chắn tồn tại** ngay khi ta: chạy relayer, refill hot wallet, deploy
+contract, hoặc chi từ treasury.
+
+**Điểm quan trọng nhất, và là chỗ §07.1b nói quá:** custody **không phải một feature flag mà là một slot
+cắm được, và cái cắm vào có thể rất nhỏ.**
+
+§07.1b viết *"`confidential-signer` là một sản phẩm riêng: deploy, HA, monitoring, cert lifecycle,
+on-call. Không phải một file `.py`."* Câu đó **đúng cho `enclave` và `hsm`**, và **sai cho `kms`**:
+`kind = 'kms'` là một lời gọi AWS SDK từ chính tiến trình đang chạy — không có dịch vụ nào để vận hành,
+không có cert nào để xoay, không có ai phải on-call.
+
+| `kind` | Có phải service ngoài không | `endpoint_url` |
+|---|---|---|
+| `hsm`, `enclave`, `tee_saas`, `mpc` | **có** — tiến trình riêng, mTLS | **bắt buộc** |
+| `kms` | không — SDK call trong tiến trình | không có |
+| `on_device`, `smart_account` | không — không có gì phía server | không có |
+| `custodial` | có, nếu tách; không, nếu nhúng | tuỳ |
+| `local_dev` | không — biến môi trường | không có |
+
+Vì thế `endpoint_url` **bỏ `required=True`**, và thay bằng ràng buộc có điều kiện:
+
+```python
+@api.constrains('kind', 'endpoint_url', 'client_cert_path')
+def _check_endpoint_required(self):
+    """Chi cac kind that su la service ngoai moi can endpoint + cert. Bat moi kind
+    khai endpoint la ep deployment bia ra mot URL gia, va mot URL gia trong cau hinh
+    bao mat te hon mot o trong."""
+    REMOTE = {'hsm', 'enclave', 'tee_saas', 'mpc'}
+    for rec in self:
+        if rec.kind in REMOTE and not (rec.endpoint_url and rec.client_cert_path):
+            raise ValidationError(_(
+                "kind=%s la mot service ngoai: bat buoc co endpoint_url va client_cert_path.",
+                rec.kind))
+        if rec.kind not in REMOTE and rec.endpoint_url:
+            raise ValidationError(_(
+                "kind=%s khong phai service ngoai; de endpoint_url trong.", rec.kind))
+```
+
+Và thêm `kind = 'local_dev'` (khoá trong biến môi trường) — nó vốn đã tồn tại trong bảng cấu hình của
+`10-odoo-addon-design.md` §10.8.1 (`blockchain.signer.<ref>.backend` nhận `local_dev`) nhưng thiếu trong
+Selection này. Hai chỗ nói khác nhau về cùng một tập giá trị là một lỗi sẽ nổ lúc validate cấu hình.
+
+**Guard bắt buộc đi kèm `local_dev`:** `@api.constrains` chặn `state = 'active'` khi
+`kind == 'local_dev'` và `blockchain.environment != 'dev'`. Một khoá trong biến môi trường trên
+production là đúng cái §07.11 dựng ba lớp để chặn.
+
+**Cấu hình tối thiểu chạy được (META v1, §24):** một provider `kind = 'kms'`, `conf_provider_id` rỗng,
+không enclave, không HSM, không tiến trình signer nào. Chi phí ~$107/tháng theo §07.12b cấu hình C.
+Đó là mức khởi điểm, và §07 nên đọc từ đó lên chứ không phải từ HSM xuống.
 
 #### 07.12.2. `blockchain.custody.key`
 
