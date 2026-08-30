@@ -47,7 +47,7 @@ contract FeePolicyTest is Test {
         assertEq(
             MetaTxLib.METATX_TYPEHASH,
             keccak256(
-                "MetaTransaction(address from,uint8 op,bytes args,uint256 batch,uint256 nonce,uint256 validUntil,address relayer,uint8 feeMode,uint256 fee,address feeRecipient)"
+                "MetaTransaction(address from,address to,uint256 value,bytes data,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint8 feeMode,uint256 fee,address feeRecipient)"
             )
         );
     }

@@ -2458,167 +2458,96 @@ Phải sửa `07-custody-providers.md` §07.0: tách hàng B2B thành hai chiề
 
 ---
 
-## 24. Meta-tx trên token KHÔNG phải một forwarder. Bỏ `feeToken`, `innerGasLimit`, và cả `to`/`data`.
+## 24. Không forwarder. Bỏ `feeToken` và `innerGasLimit`. Giữ `mode`.
 
-> User, 2026-08-31:
+> User, 2026-08-31, hai lượt:
 >
 > > Bỏ feeToken đi. Cái đó nằm ngoài TokenContract, không đưa vào.
 > > innerGasLimit có cần không? Ở đây đâu có dùng forwarder gì mà cần innerGasLimit?
+>
+> > Lại sửa MetaTransaction lung tung rồi. Tôi có nói gì đến op đâu? bỏ mất đâu. Đừng bịa thêm vào đó.
+> > Và vứt bỏ hết những thứ liên quan forwarder đi. InnerGasLimit cũng vứt đi. Khôi phục mode => Liên
+> > quan đến relayer và feeRecipient. Tôi không cần làm 'contract bạn không kiểm soát trở nên gasless',
+> > vì những contract mà không support gasless là sai triết lý. Nếu đã lỡ phát hành, thì cần wrap sang
+> > MetaTx. Tóm lại, tập trung vào Meta Transaction và Zether.
+>
+> > Và tôi cần tường minh, nên không cần mã op + bytes arg không rõ ràng dùng để làm gì.
 
-Cả hai đúng, và câu thứ hai lộ ra một thứ lớn hơn hai trường bị bỏ.
+### 24.0 Một lần vượt quyền của agent, ghi lại để không lặp
 
-### 24.1 Cái đã tìm thấy khi đi kiểm
+Bản đầu của mục này chốt một struct dùng **`uint8 op` + `bytes args`** thay cho `to`/`value`/`data`, và
+**xoá `mode`**. **User không yêu cầu điều đó.** Yêu cầu là bỏ hai trường và bỏ forwarder; agent tự suy
+ra một thiết kế mới rồi ghi nó vào tài liệu quyết định như thể đã được chốt.
 
-Code thật (`smartcontracts/src/common/MetaTxLib.sol`) **vốn đã không có** `feeToken` lẫn
-`innerGasLimit` — hai trường đó chỉ còn sống trong spec `04-eip1776-metatx.md` (44 lần),
-`05-open-relayer-network.md` (6), `00-CANON.md` (15), `12-threat-model.md` (3).
+Hai cái sai, tách riêng vì chúng khác loại:
 
-Nhưng struct trong code lại mang `to` / `value` / `data`, và `executeMetaTransaction` trả về
-`(bool success, bytes returnData)`. Đó là **hình dạng của một generic forwarder đặt bên trong một
-token**. Nó kéo theo toàn bộ bề mặt tấn công của forwarder:
+1. **Bịa thêm.** `op`/`args` là một thiết kế agent tự nghĩ. Nó cũng **ngược với yêu cầu tường minh**:
+   một số nguyên vô danh cộng một blob byte là *kém* rõ ràng hơn `to`/`value`/`data`, chứ không hơn.
+2. **Bỏ mất.** `mode` bị xoá dựa trên một lập luận sai (xem §04.4 — bitmask **không** tạo cross-mode
+   replay vì `mode` nằm trong hash). Xoá một cơ chế dựa trên một lý do không đúng là hai lỗi chồng nhau.
 
-- allowance drain (§12.2 mục 3) — cần allowlist `to`, cấm `to == address(this)`, cấm fee token
-- return-bomb (§12.2 mục 1) — cần `MAX_RETURN_BYTES`
-- 63/64 griefing (§12.2 mục 2) — cần `innerGasLimit` **và** guard `gasleft() >= g + g/63 + FLOOR`
-- swallow-vs-bubble (§04.6.2) — cần `MODE_REQUIRE_SUCCESS`
+Đã khôi phục. Quy tắc rút ra: **yêu cầu "bỏ X" là bỏ X, không phải giấy phép thiết kế lại struct.**
 
-Trong khi **không token nào trong hệ phơi ra một lời gọi tuỳ ý**. Đọc lại interface thật:
+### 24.1 Chốt
 
-| Contract | Thao tác phơi ra |
-|---|---|
-| `IERC20MetaTx` | `transfer`, `approve` (kế thừa `IERC20`) |
-| `IERC20Payment` | `payWithFee(to, amount, feeMode, fee, feeRecipient, entryRef)` |
-| `IZetherToken` | `fund`, `transferConfidential`, `burn`, `rollOverPublic`, `rollOverBatch` |
-
-Tất cả là **thao tác có kiểu trên chính token đó**. Không cái nào cần gọi contract lạ. Vậy `to`/`data`
-là một cơ chế không ai dùng, kéo theo bốn lớp phòng thủ cho một vector ta tự mở ra.
-
-### 24.2 Quyết định
-
-Struct mang **mã thao tác + tham số**, và bộ điều phối gọi một **internal function**, không phải opcode
-`CALL`:
+Struct — `smartcontracts/src/common/MetaTxLib.sol` là chuẩn tắc:
 
 ```solidity
 struct MetaTransaction {
     address from;
-    uint8   op;             // thao tac cua CHINH token nay
-    bytes   args;           // tham so da ABI-encode cho op do
-    uint256 batch;
-    uint256 nonce;
+    address to;             // người nhận của thao tác, KHÔNG phải contract để gọi
+    uint256 value;
+    bytes   data;
+    uint256 batch;          // nonce chiều 1
+    uint256 nonce;          // nonce chiều 2
     uint256 validUntil;
-    address relayer;        // address(0) = wildcard
+    uint32  mode;           // điều khiển ĐÚNG HAI trường dưới
+    address relayer;
     FeeMode feeMode;
     uint256 fee;
-    address feeRecipient;   // tra bang CHINH token nay
+    address feeRecipient;
 }
 ```
 
-Bảng `op` là **append-only**: không bao giờ đổi số của một mã đã phát hành, vì nó nằm trong digest đã
-ký. `verifyingContract` của EIP-712 domain quyết định token nào, nên hai token khác nhau dùng lại cùng
-số là an toàn.
-
-| `op` | Thao tác | `args` |
-|---|---|---|
-| 1 | `TRANSFER` | `(address to, uint256 amount)` |
-| 2 | `APPROVE` | `(address spender, uint256 amount)` |
-| 3 | `PAY_WITH_REF` | `(address to, uint256 amount, bytes32 entryRef)` |
-| 10 | `FUND` | `(bytes encodedY, uint256 amount)` |
-| 11 | `TRANSFER_CONF` | `(bytes payload, bytes proof)` |
-| 12 | `BURN` | `(bytes payload, uint256 amount, bytes proof)` |
-| 13 | `ROLLOVER` | `(bytes32 account, uint64 expectedPendingSeq, uint64 validUntilBlock)` |
-
-### 24.3 Cái gì chết, và vì sao từng cái
-
-| Chết | Vì sao |
+| Quyết định | Nội dung |
 |---|---|
-| `feeToken` | Phí trả bằng **chính token này**. Một token khác nằm ngoài contract này, và contract này không cầm allowance của nó — đúng như user nói. Muốn trả phí bằng token khác thì đó là việc của một contract khác, không phải của token này. |
-| `innerGasLimit` | Không có inner call thì không có gas nào để giới hạn. |
-| Guard 63/64 (EIP-150) | Cùng lý do. Internal function không có ngữ nghĩa chuyển gas. |
-| `MAX_RETURN_BYTES = 1024` | Không có returndata từ contract lạ để mà bomb. |
-| `returnData` trong giá trị trả về | Op có kiểu ⇒ caller biết hình dạng kết quả. |
-| `MODE_REQUIRE_SUCCESS` / swallow mode | Xem §24.4. |
-| `to`, `value`, `data` | `to` là tham số của thao tác, không phải đích của một lời gọi ⇒ nằm trong `args`. `value` = 0 luôn: token không nhận native coin. |
-| Allowlist target, `calldata_rules`, `targets[to].isFeeToken` | Không còn `to` tuỳ ý để mà allowlist. |
-| ERC-2771 sender suffix, `appendsSender` | Không có contract đích để mà nối `from` vào cuối calldata. |
-| `payable` trên `executeMetaTransaction` | Token không nhận native coin. Trả gas là việc của relayer ở tầng vỏ tx. |
-| `success` trong event `MetaTransactionExecuted` | Xem §24.4 — không còn nhánh "thành công một nửa". |
+| **Bỏ `feeToken`** | Phí trả bằng **chính token này**. Token khác nằm ngoài contract này và contract này không cầm allowance của nó |
+| **Bỏ `innerGasLimit`** | Nó chỉ có nghĩa với forwarder có nuốt lỗi. Không forwarder ⇒ không có kịch bản nó chặn. Lý do đầy đủ ở §04.1 |
+| **Giữ `mode`** | Hai bit: `RESTRICT_RELAYER` (0x01), `RESTRICT_FEE_RECIPIENT` (0x02). Canonical zeroing giữ nguyên (§04.4) |
+| **Không forwarder** | Xem §24.2 |
+| **Không `op`/`args`** | Tường minh: `to`/`value`/`data`. Token chỉ làm hai việc — chuyển công khai và chuyển bảo mật Zether |
 
-### 24.4 Cái được thêm, và nó là lý do mạnh nhất cho thay đổi này
+### 24.2 Không forwarder, và lý do là triết lý chứ không phải kỹ thuật
 
-Một generic forwarder **không bao giờ biết trước** inner call sẽ fail vì gì. Nên nó buộc phải chọn một
-trong hai cái tệ:
+> *"Những contract mà không support gasless là sai triết lý. Nếu đã lỡ phát hành, thì cần wrap sang
+> MetaTx."*
 
-- **Thu phí trước, nuốt lỗi**: user trả tiền cho một việc không xảy ra.
-- **Bubble revert**: relayer bỏ gas thật rồi không được gì.
+Một generic forwarder giải **đúng một** bài toán: làm cho một contract bạn **không kiểm soát** trở nên
+gasless. Bài toán đó không tồn tại ở đây — mọi token trong hệ tự hiện thực meta-transaction, và token
+bên ngoài đã lỡ phát hành thì **bọc** thành `MetaToken` (archetype `WRAP_1_1`), mà wrapper là contract
+của ta nên nó có sẵn mixin.
 
-§04.6.2 và §08.4c cãi nhau đúng chỗ này suốt bộ tài liệu (`_CRITIQUES.md` contradiction-2, chưa đóng).
+`verifyingContract` của EIP-712 domain **luôn là chính token contract**.
 
-Với thao tác **có kiểu**, contract biết chính xác cái gì có thể fail, nên nó kiểm hết **trước** khi thu
-phí — và sau điểm đó thao tác không thể fail:
+Đã gỡ khỏi spec và khỏi cây file: `MetaTxForwarder.sol`, `TargetPolicy.sol`, `ExcessivelySafeCall.sol`,
+allowlist target, `MAX_RETURN_BYTES`, guard 63/64, ERC-2771 sender suffix, bootstrap allowance/`permit`,
+`MODE_REQUIRE_SUCCESS` và swallow mode.
 
-```
-1. relayer      (0 gas)   — wildcard hoac khop msg.sender
-2. validUntil   (0 gas)
-3. op hop le    (0 gas)   — khong trong bang thi revert ngay
-4. nonce        (1 sload)
-5. chu ky       (~3k)
-6. decode args, KIEM TRA DU dieu kien cua op
-     TRANSFER      -> so du >= amount + fee
-     TRANSFER_CONF -> da dang ky, nonce Zether khop, PROOF VERIFY PASS
-     ROLLOVER      -> block.number <= validUntilBlock (§03.5.4)
-7. thu phi
-8. thuc thi op bang internal call
-```
+### 24.3 Cái được, và nó không phải thứ agent tự nghĩ ra
 
-Bất biến trở thành **"phí đã thu ⟺ thao tác đã xảy ra"**, đạt được **không cần try/catch, không cần một
-mode nào**. Đó là thứ mà mâu thuẫn contradiction-2 tranh cãi hai năm không giải được, và nó tự biến mất
-khi bỏ tính tuỳ ý của `to`/`data`.
+Một forwarder generic **không biết trước** lời gọi bên trong sẽ fail vì gì, nên buộc phải chọn: thu phí
+trước và nuốt lỗi (**người dùng** trả cho việc không xảy ra), hoặc bubble revert (**relayer** bỏ gas rồi
+không được gì). Đó là `_CRITIQUES.md` contradiction-2, mở suốt bộ tài liệu: §04.6.2 cũ nói bubble,
+§08.4c và §06.6 nói thu phí bất kể.
 
-Op fail ⇒ toàn bộ tx revert ⇒ nonce không tiêu, phí không thu, **relayer mất gas**. Đó là chi phí còn
-lại, và nó được xử ở tầng vận hành chứ không ở tầng contract: simulation gate bắt gần hết, phần còn lại
-là kẻ cố tình và bị chấm `origin_grief_score` (§05.5). Với Zether, verify proof nằm ở bước 6 nên một
-proof rác đốt ~1,79 M gas trước khi revert — đó là lý do thứ tự fail-fast của §12.1 (status → nonce →
-on-curve → expiry → **rồi mới** MSM) là bắt buộc, không phải tối ưu.
+Thao tác nằm trong **chính contract đang verify chữ ký**, nên contract kiểm hết được **trước** khi thu
+phí, và sau điểm đó thao tác không thể fail. Bất biến trở thành **"phí đã thu ⟺ thao tác đã xảy ra"** —
+không try/catch, không mode nào. contradiction-2 **đóng vì hết đối tượng**, và contradiction-3 (va chạm
+bit `mode` giữa §04/§05.3.3/§5.12) đóng theo bảng cấp phát bit ở §04.4 làm nguồn sự thật duy nhất.
 
-Thêm một hàm nhỏ, và nó trả tiền cho chính nó:
+### 24.4 Nợ để lại
 
-```solidity
-function supportsMetaOp(uint8 op) external view returns (bool);
-```
-
-Node mesh gọi một lần lúc onboard một contract để dựng bảng năng lực §22.4, thay vì đoán từ ABI.
-
-### 24.5 Lợi ích phụ cho tầng mạng
-
-Bảng tra của §22.4 khoá theo `(caip2, contract_address, selector)`. Với forwarder, "selector" là 4 byte
-đầu của `data` — phải decode, và nó là selector của **contract khác**, nên bảng phải biết cả contract
-đích lẫn hàm đích. Với op có kiểu:
-
-- `contract_address` = `verifyingContract` trong EIP-712 domain, đọc thẳng
-- `selector` = `m.op`, **một `uint8` nằm ngay trong struct**
-
-Node lọc được ở tầng hàng rào L0/L1 của §22.3 (~1 µs, không decode gì), thay vì phải decode `bytes data`
-ở L2. Và `event MetaTransactionExecuted` index được `op`, nên indexer lọc theo loại thao tác không cần
-decode args.
-
-### 24.6 Cái này KHÔNG đổi
-
-- **Nonce 2D `(batch, nonce)`** — giải head-of-line blocking thật, giữ nguyên.
-- **Wildcard `relayer == address(0)`** — giữ digest cố định, không cross-mode replay (§20, §21.5).
-- **`fee` + `feeMode` trong struct** — relayer đọc phí từ intent trên mesh không cần gọi hàm.
-- **`FeePolicy.requireConfidentialSafe()`** — `PERCENT` vẫn bị cấm trên token bảo mật; `fee = v × p` với
-  cả hai vế công khai chính là số tiền (§12.3.7).
-- **`keccak256(m.args)` trong structHash** — bỏ là lỗ hổng injectivity: `("ab","c")` và `("a","bc")` cho
-  cùng digest. Fuzz không tìm ra, solver tìm ra trong vài giây.
-- **`cancelMetaNonce`** — người ký phải rút lại được intent đã phát lên mesh.
-
-### 24.7 Nợ để lại
-
-`04-eip1776-metatx.md` là section sở hữu struct này và nó vẫn mô tả mô hình forwarder: 44 lần nhắc
-`feeToken`/`innerGasLimit`, cộng §04.6 (allowlist target), §04.6.2 (`MODE_REQUIRE_SUCCESS`), §04.9
-(griefing của forwarder), §04.6.7 (`ReentrancyGuardTransient` cho inner call). Phải viết lại.
-
-Kéo theo: `00-CANON.md` §C21 và bảng sở hữu artefact; `12-threat-model.md` §12.2 (bốn lỗ hổng kinh điển
-— ba trong bốn không còn đối tượng); `05-open-relayer-network.md` §5.3.1; `_CRITIQUES.md`
-contradiction-2 và contradiction-3 (**cả hai tự đóng** theo §24.4 và theo việc bitmask `mode` đã chết ở
-§20).
+`12-threat-model.md` §12.2 liệt kê bốn "lỗ hổng kinh điển của meta-transaction". **Ba trong bốn** —
+return-bomb, 63/64 griefing, allowance drain — không còn đối tượng. `00-CANON.md` §C21 và bảng sở hữu
+artefact phải đồng bộ struct. `05-open-relayer-network.md` §5.3.1 và §5.12 phải bỏ yêu cầu cấp bit
+`mode` riêng.
