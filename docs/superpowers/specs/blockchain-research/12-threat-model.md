@@ -1,29 +1,29 @@
-## 12. Mo hinh de doa va bao mat
+## 12. Mô hình đe doạ và bảo mật
 
-### 12.0. Bien tin cay, doi thu, va nguyen tac chu dao
+### 12.0. Biên tin cậy, đối thủ, và nguyên tắc chủ đạo
 
-Nguyen tac VietQR ap dung o day o dang manh nhat: **broadcast khong phai la thanh toan, va `receipt.status == 1` cung khong phai**. Mot tx thanh cong tren chuoi voi `innerSuccess = false` van la tx thanh cong. Vi vay moi bien phap trong section nay deu quy ve mot cau hoi duy nhat: *dieu gi co the lam cho `blockchain.metatx.state` chuyen sang `done` trong khi tien khong thuc su di chuyen, hoac lam cho tien di chuyen ma khong co ban ghi nao trong Odoo?*
+Nguyên tắc VietQR áp dụng ở đây ở dạng mạnh nhất: **broadcast không phải là thanh toán, và `receipt.status == 1` cũng không phải**. Một tx thành công trên chuỗi với `innerSuccess = false` vẫn là tx thành công. Vì vậy mọi biện pháp trong section này đều quy về một câu hỏi duy nhất: *điều gì có thể làm cho `blockchain.metatx.state` chuyển sang `done` trong khi tiền không thực sự di chuyển, hoặc làm cho tiền di chuyển mà không có bản ghi nào trong Odoo?*
 
-#### 12.0.1. Muoi gia dinh an cua ban nhap truoc — noi ra de con kiem chung duoc
+#### 12.0.1. Mười giả định ẩn của bản nháp trước — nói ra để còn kiểm chứng được
 
-Ban nhap truoc dung ca muoi gia dinh nay ma khong phat bieu cai nao. Mot mo hinh de doa khong liet ke gia dinh cua no thi khong kiem chung duoc, va moi gia dinh sai o day deu la mot lo hong khong ai tim.
+Bản nháp trước dùng cả mười giả định này mà không phát biểu cái nào. Một mô hình đe doạ không liệt kê giả định của nó thì không kiểm chứng được, và mọi giả định sai ở đây đều là một lỗ hổng không ai tìm.
 
-| # | Gia dinh an | Co dung khong | Hau qua neu sai | Xu ly |
+| # | Giả định ẩn | Có đúng không | Hậu quả nếu sai | Xử lý |
 |---|---|---|---|---|
-| G1 | Chi co mot tenant / mot phap nhan | **Sai** — §10.9 la multi-company | Operator cong ty A ky duoc bang khoa cong ty B | Them A9; §07.11 `resolve(tenant_uuid, signer_ref)` la bien that |
-| G2 | `dms_blockchain` la mot process | **Sai** — co it nhat 4 process: Odoo, `relay-pool`, `confidential-signer`, indexer | Moi ranh gioi process la mot ranh gioi tin cay khong duoc mo ta | Bang 12.0.2 |
-| G3 | Indexer chi doc | **Sai** — indexer la thu **ghi** `finalized`/`done` | Chiem indexer = tao tien trong so ke toan ma khong cham chuoi | Them A11 |
-| G4 | `chain_profile = private` giam rui ro | **Chi doi rui ro** | Validator set la chinh ta ⇒ rewind duoc, precompile la code Go chua audit | 12.1.1, A12 |
-| G5 | Prover client la tin cay va RNG cua no tot | **Chua kiem chung** | Lap `s` hoac `k` mot lan = **lo `x`** = mat sach tai khoan | 12.3.1 — day la lo hong nghiem trong nhat ma ban nhap bo sot hoan toan |
-| G6 | `base.group_system` yeu hon RCE | **Sai tren Odoo** | `ir.actions.server` `state='code'` chay Python tuy y trong process Odoo ⇒ **A4 = A5** | 12.6.1 |
-| G7 | Dong ho Odoo va dong ho chuoi khop nhau | Khong bao dam | `expiry` tinh sai ⇒ intent chet luc sinh, hoac song qua lau | 12.7.4 |
-| G8 | Audit tim ra loi ⇒ deploy an toan | Khong suy ra duoc | Bytecode deploy khac bytecode audit | 12.7.3, va `to_impl_codehash` cua §1.11.1 |
-| G9 | Supply chain chi la toolchain contract | **Thieu mot nua** | Client SDK (npm/pypi) cam `x` — backdoor o do lay khoa truc tiep | Them A13 |
-| G10 | Bulletproofs an toan vi da co bai bao | Bai bao an toan, **trien khai thi khong** | Fiat-Shamir yeu = proof gia | 12.3.2 |
+| G1 | Chỉ có một tenant / một pháp nhân | **Sai** — §10.9 là multi-company | Operator công ty A ký được bằng khoá công ty B | Thêm A9; §07.11 `resolve(tenant_uuid, signer_ref)` là biên thật |
+| G2 | `dms_blockchain` là một process | **Sai** — có ít nhất 4 process: Odoo, `relay-pool`, `confidential-signer`, indexer | Mỗi ranh giới process là một ranh giới tin cậy không được mô tả | Bảng 12.0.2 |
+| G3 | Indexer chỉ đọc | **Sai** — indexer là thứ **ghi** `finalized`/`done` | Chiếm indexer = tạo tiền trong sổ kế toán mà không chạm chuỗi | Thêm A11 |
+| G4 | `chain_profile = private` giảm rủi ro | **Chỉ đổi rủi ro** | Validator set là chính ta ⇒ rewind được, precompile là code Go chưa audit | 12.1.1, A12 |
+| G5 | Prover client là tin cậy và RNG của nó tốt | **Chưa kiểm chứng** | Lặp `s` hoặc `k` một lần = **lộ `x`** = mất sạch tài khoản | 12.3.1 — đây là lỗ hổng nghiêm trọng nhất mà bản nháp bỏ sót hoàn toàn |
+| G6 | `base.group_system` yếu hơn RCE | **Sai trên Odoo** | `ir.actions.server` `state='code'` chạy Python tuỳ ý trong process Odoo ⇒ **A4 = A5** | 12.6.1 |
+| G7 | Đồng hồ Odoo và đồng hồ chuỗi khớp nhau | Không bảo đảm | `expiry` tính sai ⇒ intent chết lúc sinh, hoặc sống quá lâu | 12.7.4 |
+| G8 | Audit tìm ra lỗi ⇒ deploy an toàn | Không suy ra được | Bytecode deploy khác bytecode audit | 12.7.3, và `to_impl_codehash` của §1.11.1 |
+| G9 | Supply chain chỉ là toolchain contract | **Thiếu một nửa** | Client SDK (npm/pypi) cầm `x` — backdoor ở đó lấy khoá trực tiếp | Thêm A13 |
+| G10 | Bulletproofs an toàn vì đã có bài báo | Bài báo an toàn, **triển khai thì không** | Fiat-Shamir yếu = proof giả | 12.3.2 |
 
-#### 12.0.2. Ranh gioi tin cay theo process (thieu hoan toan o ban nhap)
+#### 12.0.2. Ranh giới tin cậy theo process (thiếu hoàn toàn ở bản nháp)
 
-Mo hinh de doa phai ve theo **process**, khong theo module, vi mot lo hong chi vuot duoc ranh gioi process qua mot giao dien co the liet ke duoc.
+Mô hình đe doạ phải vẽ theo **process**, không theo module, vì một lỗ hổng chỉ vượt được ranh giới process qua một giao diện có thể liệt kê được.
 
 ```
 [ Browser / Mobile ]                     tin cay: 0
@@ -44,144 +44,143 @@ Mo hinh de doa phai ve theo **process**, khong theo module, vi mot lo hong chi v
         ^ 3 RPC provider doc lap (§06.7)          <-- A7
 ```
 
-Bon bat bien ve ranh gioi, moi cai la mot dong test:
+Bốn bất biến về ranh giới, mỗi cái là một dòng test:
 
-1. **Odoo khong bao gio giu vat lieu khoa.** Grep gate trong CI: khong file nao trong `dms_blockchain/` chua `eth_keys`, `eth_account`, `coincurve`, `PKCS11`, `boto3.client('kms')`.
-2. **Odoo khong goi truc tiep signer.** Chi `relay-pool` co credential mTLS. Odoo ghi outbox.
-3. **`confidential-signer` khong tin `tenant_uuid` do body gui len**, chi tin cai trong client cert (§07.11).
-4. **Indexer khong co quyen ghi bang nghiep vu nao ngoai `blockchain.chain.event`, `blockchain.chain.effect`, `blockchain.transaction`.** DB role rieng, `GRANT` hep. Neu indexer bi chiem ma van ghi duoc `account.move` thi ranh gioi la gia.
+1. **Odoo không bao giờ giữ vật liệu khoá.** Grep gate trong CI: không file nào trong `dms_blockchain/` chứa `eth_keys`, `eth_account`, `coincurve`, `PKCS11`, `boto3.client('kms')`.
+2. **Odoo không gọi trực tiếp signer.** Chỉ `relay-pool` có credential mTLS. Odoo ghi outbox.
+3. **`confidential-signer` không tin `tenant_uuid` do body gửi lên**, chỉ tin cái trong client cert (§07.11).
+4. **Indexer không có quyền ghi bảng nghiệp vụ nào ngoài `blockchain.chain.event`, `blockchain.chain.effect`, `blockchain.transaction`.** DB role riêng, `GRANT` hẹp. Nếu indexer bị chiếm mà vẫn ghi được `account.move` thì ranh giới là giả.
 
-#### 12.0.3. Bang doi thu (mo rong tu 8 len 13)
+#### 12.0.3. Bảng đối thủ (mở rộng từ 8 lên 13)
 
-| # | Doi thu | Nang luc gia dinh | Khong co | Bien phap chinh |
+| # | Đối thủ | Năng lực giả định | Không có | Biện pháp chính |
 |---|---|---|---|---|
-| A1 | Nguoi ngoai tren public chain | Doc toan bo state + mempool, submit tx bat ky, tra gas khong gioi han hop ly | Khoa cua ai | Contract |
-| A2 | Open relayer ac y | Nhu A1 + nhan intent truoc khi len chain, tri hoan / bo qua / dao thu tu | Sua duoc digest | 12.2, 12.4 |
-| A3 | Hub operator | Nhu A2 + thay toan bo intent flow, chon nguoi thang exclusivity | Khoa cua user | 12.4, duong thoat Enterprise Pool |
-| A4 | Nhan vien noi bo co `base.group_system` | **Bang A5** — xem 12.6.1 | Khoa trong HSM/enclave | 12.6 |
-| A5 | Ke chiem duoc app server Odoo | Goi tuy y vao signer API bang credential cua service | Khoa raw | Policy phia signer (12.5) |
-| A6 | Ke chiem duoc admin key cua contract | Upgrade, pause, doi tham so | Khoa cua user | Timelock 48h, guardian chi pause |
-| A7 | Ke chiem duoc RPC provider (hoac chinh provider noi doi) | Tra state gia, nuot tx, gia lap receipt | Ghi len chain | 4 lop cua §06.7 |
-| A8 | Supply chain toolchain contract (solc, foundry, npm, cargo) | Chen bytecode khac voi source | — | 12.7.3 |
-| **A9** | **Insider cua tenant khac** (Odoo multi-company) | Doc/ghi record cua minh, goi moi RPC method public | `signer_ref` cua tenant khac | Rule `company_id` + `resolve()` phia signer |
-| **A10** | **Ke chiem `relay-pool` worker** | Nonce lease, chon tx nao broadcast, doc calldata truoc khi len chain | Khoa; policy cua signer | Signer policy la lop cuoi, khong phai relay-pool |
-| **A11** | **Ke chiem indexer (hoac chi ghi duoc bang cua no)** | Dat `finalized` cho mot tx khong ton tai ⇒ Odoo `_set_done` ⇒ giao hang | Ghi len chain | DB role hep + xac nhan 2 provider + hash check |
-| **A12** | **Validator set cua private chain** (chinh ta, hoac mot nha thau) | Rewind, kiem duyet, doi genesis, doi precompile | Khoa cua user | Anchor head hash sang HCS (§11.3), 4-eyes tren binary |
-| **A13** | **Supply chain client SDK** (npm `@bamboo/zether-sdk`, pypi) | Doc `x` trong RAM cua client, doi `recipient` truoc khi ky | — | 12.3.6 |
+| A1 | Người ngoài trên public chain | Đọc toàn bộ state + mempool, submit tx bất kỳ, trả gas không giới hạn hợp lý | Khoá của ai | Contract |
+| A2 | Open relayer ác ý | Như A1 + nhận intent trước khi lên chuỗi, trì hoãn / bỏ qua / đảo thứ tự | Sửa được digest | 12.2, 12.4 |
+| A3 | Hub operator | Như A2 + thấy toàn bộ intent flow, chọn người thắng exclusivity | Khoá của user | 12.4, đường thoát Enterprise Pool |
+| A4 | Nhân viên nội bộ có `base.group_system` | **Bằng A5** — xem 12.6.1 | Khoá trong HSM/enclave | 12.6 |
+| A5 | Kẻ chiếm được app server Odoo | Gọi tuỳ ý vào signer API bằng credential của service | Khoá raw | Policy phía signer (12.5) |
+| A6 | Kẻ chiếm được admin key của contract | Upgrade, pause, đổi tham số | Khoá của user | Timelock 48h, guardian chỉ pause |
+| A7 | Kẻ chiếm được RPC provider (hoặc chính provider nói dối) | Trả state giả, nuốt tx, giả lập receipt | Ghi lên chuỗi | 4 lớp của §06.7 |
+| A8 | Supply chain toolchain contract (solc, foundry, npm, cargo) | Chèn bytecode khác với source | — | 12.7.3 |
+| **A9** | **Insider của tenant khác** (Odoo multi-company) | Đọc/ghi record của mình, gọi mọi RPC method public | `signer_ref` của tenant khác | Rule `company_id` + `resolve()` phía signer |
+| **A10** | **Kẻ chiếm `relay-pool` worker** | Nonce lease, chọn tx nào broadcast, đọc calldata trước khi lên chuỗi | Khoá; policy của signer | Signer policy là lớp cuối, không phải relay-pool |
+| **A11** | **Kẻ chiếm indexer (hoặc chỉ ghi được bảng của nó)** | Đặt `finalized` cho một tx không tồn tại ⇒ Odoo `_set_done` ⇒ giao hàng | Ghi lên chuỗi | DB role hẹp + xác nhận 2 provider + hash check |
+| **A12** | **Validator set của private chain** (chính ta, hoặc một nhà thầu) | Rewind, kiểm duyệt, đổi genesis, đổi precompile | Khoá của user | Anchor head hash sang HCS (§11.3), 4-eyes trên binary |
+| **A13** | **Supply chain client SDK** (npm `@bamboo/zether-sdk`, pypi) | Đọc `x` trong RAM của client, đổi `recipient` trước khi ký | — | 12.3.6 |
 
-#### 12.0.4. Tai san, xep theo thiet hai giam dan, kem gia tri quy uoc
+#### 12.0.4. Tài sản, xếp theo thiệt hại giảm dần, kèm giá trị quy ước
 
-| Hang | Tai san | Thiet hai neu mat | Gia tri quy uoc (gia dinh pilot) |
+| Hạng | Tài sản | Thiệt hại nếu mất | Giá trị quy ước (giả định pilot) |
 |---|---|---|---|
-| 1 | `encKey x` cua Zether + vault ERC-20 phia sau Z-token | Rut sach vault; lo toan bo lich su so tien | = TVL. Pilot B2B gia dinh **$2M** |
-| 2 | Admin/upgrade key (`DEFAULT_ADMIN_ROLE`, beacon owner) | Mint vo han, backdoor | = TVL + gia tri thuong hieu |
-| 3 | Khoa auditor `x_audit` | Giai ma **toan bo lich su** moi tai khoan, khong hoi to duoc | Bi mat gia ca cua ca mang luoi phan phoi |
-| 4 | Treasury EOA | Mat so du treasury | Theo so du, thuong < $200k |
-| 5 | Toan ven cua `blockchain.metatx.state = done` | Giao hang ma khong nhan tien | = gia tri hang chua thu tien trong 1 chu ky doi soat |
-| 6 | Tinh bi mat cua so tien | Doi thu biet bang gia | Khong dinh gia duoc; la ly do ton tai cua Zether |
-| 7 | Hot wallet gas | Mat runway 4h gas | < $2,000 |
+| 1 | `encKey x` của Zether + vault ERC-20 phía sau Z-token | Rút sạch vault; lộ toàn bộ lịch sử số tiền | = TVL. Pilot B2B giả định **$2M** |
+| 2 | Admin/upgrade key (`DEFAULT_ADMIN_ROLE`, beacon owner) | Mint vô hạn, backdoor | = TVL + giá trị thương hiệu |
+| 3 | Khoá auditor `x_audit` | Giải mã **toàn bộ lịch sử** mọi tài khoản, không hồi tố được | Bí mật giá cả của cả mạng lưới phân phối |
+| 4 | Treasury EOA | Mất số dư treasury | Theo số dư, thường < $200k |
+| 5 | Toàn vẹn của `blockchain.metatx.state = done` | Giao hàng mà không nhận tiền | = giá trị hàng chưa thu tiền trong 1 chu kỳ đối soát |
+| 6 | Tính bí mật của số tiền | Đối thủ biết bảng giá | Không định giá được; là lý do tồn tại của Zether |
+| 7 | Hot wallet gas | Mất runway 4h gas | < $2,000 |
 
-#### 12.0.5. So rui ro uu tien (doc bang nay truoc, phan con lai la chi tiet)
+#### 12.0.5. Sổ rủi ro ưu tiên (đọc bảng này trước, phần còn lại là chi tiết)
 
-Xep theo `likelihood × impact`, va cot cuoi la thu quyet dinh ngan sach.
+Xếp theo `likelihood × impact`, và cột cuối là thứ quyết định ngân sách.
 
-| Hang | Rui ro | Kha nang | Thiet hai | Bien phap co ty le loi ich/chi phi cao nhat |
+| Hạng | Rủi ro | Khả năng | Thiệt hại | Biện pháp có tỷ lệ lợi ích/chi phí cao nhất |
 |---|---|---|---|---|
-| 1 | Fiat-Shamir yeu trong Bulletproof verifier tu viet | **Cao** (lop bug pho bien nhat cua BP trien khai tay) | Mint vo han = 100% TVL | Audit mat ma Phase B + bo negative test tung public input (12.3.2) |
-| 2 | **Lap nonce/randomness trong prover ⇒ lo `x`** | Trung binh | 100% so du cua tai khoan do | Nonce tat dinh RFC-6979-style + test known-answer (12.3.1) |
-| 3 | `withdraw` proof khong bind `chainId`/`address(this)` | **Da xac nhan trong note** | Replay cross-chain, mat tien that | Sua challenge (12.3.3) |
-| 4 | A4/A5 lam dung HSM (khong trich xuat khoa) | Trung binh | Treasury + upgrade | `SigningPolicyService` cung phia signer (12.5.1) |
-| 5 | RPC noi doi / indexer bi chiem ⇒ `_set_done` sai | Trung binh | Hang giao khong thu tien | 2 provider + hash + canary (12.7.1) |
-| 6 | Rut sach cham qua mot bug chua biet | Trung binh | Toan bo TVL | **`WithdrawLimiter` on-chain** (12.11) — bien "mat tat ca" thanh "mat 0.5%" |
-| 7 | Upgrade key compromise | Thap | 100% TVL | Timelock 48h + monitor `Upgraded` realtime |
-| 8 | Toolchain/bytecode drift | Thap | 100% TVL | `EXTCODEHASH` doi chieu truoc execute (12.7.3) |
-| 9 | Precompile Go tu viet tren private chain sai | Trung binh | Chain halt hoac accept proof gia | Audit rieng cho Go, differential test (12.1.1) |
-| 10 | Ro ri do thi brand-distributor tren public chain | **Chac chan** (la thiet ke) | Tinh bao canh tranh | Quyet dinh kinh doanh: ep B2B ve private (12.12) |
-
+| 1 | Fiat-Shamir yếu trong Bulletproof verifier tự viết | **Cao** (lớp bug phổ biến nhất của BP triển khai tay) | Mint vô hạn = 100% TVL | Audit mật mã Phase B + bộ negative test từng public input (12.3.2) |
+| 2 | **Lặp nonce/randomness trong prover ⇒ lộ `x`** | Trung bình | 100% số dư của tài khoản đó | Nonce tất định RFC-6979-style + test known-answer (12.3.1) |
+| 3 | `withdraw` proof không bind `chainId`/`address(this)` | **Đã xác nhận trong note** | Replay cross-chain, mất tiền thật | Sửa challenge (12.3.3) |
+| 4 | A4/A5 lạm dụng HSM (không trích xuất khoá) | Trung bình | Treasury + upgrade | `SigningPolicyService` cùng phía signer (12.5.1) |
+| 5 | RPC nói dối / indexer bị chiếm ⇒ `_set_done` sai | Trung bình | Hàng giao không thu tiền | 2 provider + hash + canary (12.7.1) |
+| 6 | Rút sạch chậm qua một bug chưa biết | Trung bình | Toàn bộ TVL | **`WithdrawLimiter` on-chain** (12.11) — biến "mất tất cả" thành "mất 0.5%" |
+| 7 | Upgrade key compromise | Thấp | 100% TVL | Timelock 48h + monitor `Upgraded` realtime |
+| 8 | Toolchain/bytecode drift | Thấp | 100% TVL | `EXTCODEHASH` đối chiếu trước execute (12.7.3) |
+| 9 | Precompile Go tự viết trên private chain sai | Trung bình | Chain halt hoặc accept proof giả | Audit riêng cho Go, differential test (12.1.1) |
+| 10 | Rò rỉ đồ thị brand-distributor trên public chain | **Chắc chắn** (là thiết kế) | Tình báo cạnh tranh | Quyết định kinh doanh: ép B2B về private (12.12) |
 ---
 
 ### 12.1. Smart contract
 
-| Vector | Kich ban cu the tren thiet ke nay | Bien phap chot |
+| Vector | Kịch bản cụ thể trên thiết kế này | Biện pháp chốt |
 |---|---|---|
-| Reentrancy | `withdraw()` chuyen ERC-20 cho `recipient`; token co hook (ERC-777, hoac underlying la contract) goi nguoc vao `transferConfidential` khi `zetherNonce` chua tang | CEI nghiem: `zetherNonce++` va tru `(C,D)` **truoc** `safeTransfer`; `ReentrancyGuardTransient` tren moi ham doi state tai chinh; `MetaTxForwarder` tang `batchNonce` truoc inner call (§04.5, buoc 5 truoc 6) |
-| Reentrancy **cross-function** | `withdraw` va `migrateAccount` dung chung `(C,D)` nhung khac guard | Mot guard duy nhat theo **contract**, khong theo ham; test `ReentrancyCross.t.sol` goi cheo tung cap ham doi state |
-| Upgrade key compromise (A6) | Doi implementation cua `ZTokenBase` sang ban co backdoor `mint()` | Upgrade **chi** qua `TimelockController` 48h (§1.11 la nguon su that); beacon owner = timelock va dung `Ownable2Step` (§1.11.1 muc 1); `GUARDIAN` chi duoc `pause()`, khong bao gio `upgrade()`; **`ZetherAccountRegistry` khong upgradeable** (§02.3) |
-| Registry key swap | Neu registry la UUPS, admin doi `getPublicKey(addr)` sang khoa cua minh; moi khoan chuyen den sau do bi ma hoa duoi khoa attacker, nan nhan khong doc duoc va khong biet | Da chan boi quyet dinh registry immutable + `successorAddr` set mot lan qua `selfMigrate`. Day la ly do ky thuat quan trong nhat de **khong** ap UUPS len moi contract nhu note yeu cau |
-| Storage collision tren proxy | Them field vao giua struct cua v2; beacon nang cap ca ho proxy cung luc | ERC-7201 namespaced storage cho moi module; CI gate `validateUpgrade` (§14.9) doi chieu `smartcontracts/evm/storage-layouts/v<N-1>/*.json`, fail build; cam `__gap` thu cong |
-| Initialisation front-running | Factory `create2` roi goi `initialize()` o tx thu hai; A1 xen vao giua, chiem owner | Deploy + init **nguyen tu trong mot call** cua `DeterministicFactory`; `_disableInitializers()` trong constructor cua implementation; salt = `keccak256(msg.sender, userSalt)` de khong ai squat duoc dia chi da predict (§1.4.3) |
-| Unchecked delegatecall | Note (§TOKEN) yeu cau "dung co che delegate de dung chung code". Mot `delegatecall(target, data)` voi `target` do caller cung cap = xoa slot 0, doi owner | `delegatecall` **chi** toi dia chi lay tu `ContractPrototypeRegistry` co `approved = true`; khong `delegatecall` trong vong lap; CI grep chan `delegatecall` ngoai 2 file duoc allowlist |
-| `selfdestruct` lam brick proxy | **Sua so voi ban nhap**: sau EIP-6780 (Cancun), `SELFDESTRUCT` chi xoa code khi nam trong **cung tx voi lan tao**. Gnosis da kich hoat Dencun (2024), Celo la OP-stack post-Cancun ⇒ vector "brick implementation bang selfdestruct" **da chet tren ca hai chain muc tieu** | Van cam `selfdestruct` trong implementation (chi phi bang 0), nhung dung dua no vao ho so rui ro nhu mot moi de doa song. Rui ro that con lai cua delegatecall la **ghi de storage + doi owner** |
-| ERC-20 approve race (nghia goc) | Nan nhan `approve(spender, 100)` roi doi y `approve(spender, 50)`; spender front-run tx thu hai, tieu 100, roi tieu tiep 50 = **150** | Khong bao gio dung `approve` de dat lai gia tri khac 0. Chi `approve(0)` roi `approve(n)`, hoac dung `permit` (EIP-2612) co `deadline` va `nonce` |
-| Approve race (dang nguy hiem hon o thiet ke nay) | Hinh thai `MetaTxForwarder` generic can `approve`. `approve(forwarder, type(uint256).max)` + forwarder bi upgrade = rut sach moi nguoi | Uu tien `ERC1776Native` mixin (khong can approve, §04.6.4). Neu buoc dung forwarder: EIP-2612 `permit` dung so, co `deadline`; tran approve = `fee_ceiling × 30 ngay`; **forwarder khong upgradeable**; `require(m.to != address(this))` va `!targets[to].isFeeToken` (§04.9) |
-| `transferFrom` khong tra `bool` | USDT tren nhieu chain khong tra gia tri; `require(token.transferFrom(...))` revert nham hoac bo qua that bai | `SafeERC20` o **moi** cho, khong ngoai le. CI grep chan `.transfer(` / `.transferFrom(` tho tren kieu `IERC20` |
-| `ecrecover` tra `address(0)` | Chu ky rac ⇒ `ecrecover` tra 0; neu `from` chua khoi tao cung la 0 thi so sanh bang cho **pass** | `ECDSA.tryRecover` cua OZ (da reject `v` sai va `s` cao) + `require(signer != address(0) && signer == m.from)` |
-| Fee-on-transfer | `WrappedToken.deposit(amount)` mint `amount` nhung vault chi nhan `amount - fee`. FoT 1% tren vault $1M = lo hong $10,000 va no lon dan | Do delta thuc: `received = after - before`, mint theo `received`; allowlist underlying kem test `assertEq(received, amount)` khi onboarding |
-| Rebasing token | `balanceOf(vault)` cua stETH/aToken tu tang giam ⇒ invariant `totalSupply == balanceOf(vault)` sai moi ngay, khong con phan biet duoc bug voi rebase | **Cam tuyet doi** rebasing token cho archetype `WRAP_1_1`. Muon ho tro thi wrap ban share-based (wstETH) chu khong wrap ban rebasing |
-| `decimals` khac nhau | Underlying 6 decimals (USDC) vs Z-token 18; `peg_ratio` nhan sai luy thua ⇒ sai 10^12 lan | `decimals` doc mot lan tu underlying luc `initialize` va **luu immutable**; khong doc lai runtime (mot token co the noi doi hoac doi qua upgrade) |
-| Precision / rounding drain | `peg_ratio` 1 DAI → 25,000 Z-VND, Zether dung don vi cent (§03.2). Lap deposit/withdraw dust de moi vong an 1 cent | Lam tron **luon co loi cho pool**: mint floor, burn ceil; `require(erc20Amount % 10**(decimals-2) == 0)` (§03.2); `MIN_WRAP = 100 cent`; invariant test `SupplyInvariant.t.sol` 50,000 run kiem `vaultBalance >= totalSupply` sau moi chuoi thao tac ngau nhien |
-| Share-inflation / first-depositor | **Khong ap dung** — vault la 1:1, khong phat hanh share, khong co `totalAssets/totalSupply`. Ghi ra day de reviewer khong phai hoi | Neu bao gio doi sang mo hinh share (yield-bearing reserve) thi vector nay quay lai va phai them dead-share |
-| Gas-limit DoS cua verifier | Neu giu Bulletproofs 128/128, verify **~3.87M gas** (§03.3.6) = **22.8% block limit Gnosis (17M)**. Doi thu spam vai tx/block lam nghen chuoi | Da chot: `n_v = 32`, `n_b = 64` ⇒ **~1.88M gas** contract-level, **1.72–2.62M** ca envelope (§04.10). Public profile di Groth16/Baby Jubjub **~215k gas** (181k pairing + ~30k), **khong phai 250–350k** — sua so voi ban nhap |
-| Verifier tieu gas roi moi revert | Attacker gui proof rac; contract chay 1.5M gas MSM roi revert ⇒ relayer mat tien | **Thu tu fail-fast bat buoc**: (1) `status(from)==ACTIVE && status(to)!=NONE` (2 SLOAD ≈ 4.2k), (2) `zetherNonce` (2.1k), (3) on-curve + subgroup + reject identity (~1.5k), (4) `expiry`, (5) **roi moi** MSM. Ty le: reject som **~1,000× re hon** reject muon. Ghi thanh test `VerifierFailFast.t.sol` do gas cua tung nhanh revert |
-| Event thieu ⇒ indexer phai doc state | Reorg lam state-read sai, event thi khong | Moi thay doi tai chinh **phai** phat event mang du du lieu de dung lai state, gom `bytes32 ref` (§11.5 tang 1). Test: chay indexer chi tu log, khong `eth_call` nao, phai dung so du |
+| Reentrancy | `withdraw()` chuyển ERC-20 cho `recipient`; token có hook (ERC-777, hoặc underlying là contract) gọi ngược vào `transferConfidential` khi `zetherNonce` chưa tăng | CEI nghiêm: `zetherNonce++` và trừ `(C,D)` **trước** `safeTransfer`; `ReentrancyGuardTransient` trên mọi hàm đổi state tài chính; `MetaTxForwarder` tăng `batchNonce` trước inner call (§04.5, bước 5 trước 6) |
+| Reentrancy **cross-function** | `withdraw` và `migrateAccount` dùng chung `(C,D)` nhưng khác guard | Một guard duy nhất theo **contract**, không theo hàm; test `ReentrancyCross.t.sol` gọi chéo từng cặp hàm đổi state |
+| Upgrade key compromise (A6) | Đổi implementation của `ZTokenBase` sang bản có backdoor `mint()` | **[BẢN 3] Không còn áp dụng cho token đã deploy** — token do factory sinh ra là immutable (§20.2). Rủi ro chuyển sang factory: kẻ chiếm được `registerImplementation` đăng ký một implementation có backdoor và chờ người lạ chọn nó. Biện pháp: `registerImplementation` chỉ append, đi qua `TimelockController` 48h, và `deprecate` là cờ một chiều không xoá được bản đã đăng ký. `ZetherAccountRegistry` không upgradeable (§02.3) |
+| Registry key swap | Nếu registry là UUPS, admin đổi `getPublicKey(addr)` sang khoá của mình; mọi khoản chuyển đến sau đó bị mã hoá dưới khoá attacker, nạn nhân không đọc được và không biết | Đã chặn bởi quyết định registry immutable + `successorAddr` set một lần qua `selfMigrate`. Đây là lý do kỹ thuật quan trọng nhất để **không** áp UUPS lên mọi contract như note yêu cầu |
+| Storage collision trên proxy | **[BẢN 3] Không còn tồn tại.** Không có proxy, không có beacon, không có storage layout phải giữ tương thích giữa hai phiên bản. Một `ZETHER v2` là một contract mới, deploy cho token mới; token v1 đã tồn tại không bao giờ trỏ sang nó | CI gate `validateUpgrade` bị xoá cùng với cơ chế. Thứ thay thế: `implementation_codehash` ghi trong registry của factory phải khớp `EXTCODEHASH` đọc từ chuỗi (12.7.3) |
+| Initialisation front-running | Factory `create2` rồi gọi `initialize()` ở tx thứ hai; A1 xen vào giữa, chiếm owner | Deploy + init **nguyên tử trong một call** của factory; `_disableInitializers()` trong constructor của implementation; salt = `keccak256(msg.sender, userSalt)` để không ai squat được địa chỉ đã predict (§1.4.3) |
+| Unchecked delegatecall | Note (§TOKEN) yêu cầu "dùng cơ chế delegate để dùng chung code". Một `delegatecall(target, data)` với `target` do caller cung cấp = xoá slot 0, đổi owner | `delegatecall` **chỉ** tới địa chỉ lấy từ catalogue implementation của factory có `approved = true`; không `delegatecall` trong vòng lặp; CI grep chặn `delegatecall` ngoài 2 file được allowlist |
+| `selfdestruct` làm brick proxy | **Sửa so với bản nháp**: sau EIP-6780 (Cancun), `SELFDESTRUCT` chỉ xoá code khi nằm trong **cùng tx với lần tạo**. Gnosis đã kích hoạt Dencun (2024), Celo là OP-stack post-Cancun ⇒ vector "brick implementation bằng selfdestruct" **đã chết trên cả hai chain mục tiêu** | Vẫn cấm `selfdestruct` trong implementation (chi phí bằng 0), nhưng đừng đưa nó vào hồ sơ rủi ro như một mối đe doạ sống. Rủi ro thật còn lại của delegatecall là **ghi đè storage + đổi owner** |
+| ERC-20 approve race (nghĩa gốc) | Nạn nhân `approve(spender, 100)` rồi đổi ý `approve(spender, 50)`; spender front-run tx thứ hai, tiêu 100, rồi tiêu tiếp 50 = **150** | Không bao giờ dùng `approve` để đặt lại giá trị khác 0. Chỉ `approve(0)` rồi `approve(n)`, hoặc dùng `permit` (EIP-2612) có `deadline` và `nonce` |
+| Approve race (dạng nguy hiểm hơn ở thiết kế này) | Hình thái `MetaTxForwarder` generic cần `approve`. `approve(forwarder, type(uint256).max)` + forwarder bị upgrade = rút sạch mọi người | Ưu tiên `ERC1776Native` mixin (không cần approve, §04.6.4). Nếu buộc dùng forwarder: EIP-2612 `permit` đúng số, có `deadline`; trần approve = `fee_ceiling × 30 ngày`; **forwarder không upgradeable**; `require(m.to != address(this))` và `!targets[to].isFeeToken` (§04.9) |
+| `transferFrom` không trả `bool` | USDT trên nhiều chain không trả giá trị; `require(token.transferFrom(...))` revert nhầm hoặc bỏ qua thất bại | `SafeERC20` ở **mọi** chỗ, không ngoại lệ. CI grep chặn `.transfer(` / `.transferFrom(` thô trên kiểu `IERC20` |
+| `ecrecover` trả `address(0)` | Chữ ký rác ⇒ `ecrecover` trả 0; nếu `from` chưa khởi tạo cũng là 0 thì so sánh bằng cho **pass** | `ECDSA.tryRecover` của OZ (đã reject `v` sai và `s` cao) + `require(signer != address(0) && signer == m.from)` |
+| Fee-on-transfer | `WrappedToken.deposit(amount)` mint `amount` nhưng vault chỉ nhận `amount - fee`. FoT 1% trên vault $1M = lỗ hổng $10,000 và nó lớn dần | Đo delta thực: `received = after - before`, mint theo `received`; allowlist underlying kèm test `assertEq(received, amount)` khi onboarding |
+| Rebasing token | `balanceOf(vault)` của stETH/aToken tự tăng giảm ⇒ invariant `totalSupply == balanceOf(vault)` sai mỗi ngày, không còn phân biệt được bug với rebase | **Cấm tuyệt đối** rebasing token cho archetype `WRAP_1_1`. Muốn hỗ trợ thì wrap bản share-based (wstETH) chứ không wrap bản rebasing |
+| `decimals` khác nhau | Underlying 6 decimals (USDC) vs Z-token 18; `peg_ratio` nhân sai luỹ thừa ⇒ sai 10^12 lần | `decimals` đọc một lần từ underlying lúc `initialize` và **lưu immutable**; không đọc lại runtime (một token có thể nói dối hoặc đổi qua upgrade) |
+| Precision / rounding drain | `peg_ratio` 1 DAI → 25,000 Z-VND, Zether dùng đơn vị cent (§03.2). Lặp deposit/withdraw dust để mỗi vòng ăn 1 cent | Làm tròn **luôn có lợi cho pool**: mint floor, burn ceil; `require(erc20Amount % 10**(decimals-2) == 0)` (§03.2); `MIN_WRAP = 100 cent`; invariant test `SupplyInvariant.t.sol` 50,000 run kiểm `vaultBalance >= totalSupply` sau mọi chuỗi thao tác ngẫu nhiên |
+| Share-inflation / first-depositor | **Không áp dụng** — vault là 1:1, không phát hành share, không có `totalAssets/totalSupply`. Ghi ra đây để reviewer không phải hỏi | Nếu bao giờ đổi sang mô hình share (yield-bearing reserve) thì vector này quay lại và phải thêm dead-share |
+| Gas-limit DoS của verifier | Nếu giữ Bulletproofs 128/128, verify **~3.87M gas** (§03.3.6) = **22.8% block limit Gnosis (17M)**. Đối thủ spam vài tx/block làm nghẽn chuỗi | Đã chốt: `n_v = 32`, `n_b = 64` ⇒ **~1.88M gas** contract-level, **1.72–2.62M** cả envelope (§04.10). Public profile đi Groth16/Baby Jubjub **~215k gas** (181k pairing + ~30k), **không phải 250–350k** — sửa so với bản nháp |
+| Verifier tiêu gas rồi mới revert | Attacker gửi proof rác; contract chạy 1.5M gas MSM rồi revert ⇒ relayer mất tiền | **Thứ tự fail-fast bắt buộc**: (1) `status(from)==ACTIVE && status(to)!=NONE` (2 SLOAD ≈ 4.2k), (2) `zetherNonce` (2.1k), (3) on-curve + subgroup + reject identity (~1.5k), (4) `expiry`, (5) **rồi mới** MSM. Tỷ lệ: reject sớm **~1,000× rẻ hơn** reject muộn. Ghi thành test `VerifierFailFast.t.sol` đo gas của từng nhánh revert |
+| Event thiếu ⇒ indexer phải đọc state | Reorg làm state-read sai, event thì không | Mọi thay đổi tài chính **phải** phát event mang đủ dữ liệu để dựng lại state, gồm `bytes32 ref` (§11.5 tầng 1). Test: chạy indexer chỉ từ log, không `eth_call` nào, phải đúng số dư |
+| **[BẢN 3] Implementation giả mạo trong catalogue** | Factory mở: một người lạ đọc `implementations(ZETHER, 3)` và tin rằng nó là bản đã audit. Nếu kẻ tấn công đăng ký được một entry, mọi token deploy sau đó bằng version ấy đều có backdoor — và chúng **immutable**, không sửa được | `registerImplementation` sau timelock; mỗi entry ghi `audit_report_uri` + `audit_covers_code_hash`; §10.4.4 bắt Odoo so `EXTCODEHASH` on-chain với `audit_covers_code_hash` trước khi cho một token vào `accepted_token_ids`. Không có đường vá: một token đã mint bằng implementation xấu chỉ có thể bị **bỏ dùng**, và đó là lý do `MigrationSink` là artefact v1 chứ không phải v2 |
 
-#### 12.1.1. Private chain: precompile Go la mot be mat tan cong moi (ban nhap bo trong)
+#### 12.1.1. Private chain: precompile Go là một bề mặt tấn công mới (bản nháp bỏ trống)
 
-§03.3.9 chot **native precompile trong go-quorum/geth-QBFT** de dat ~500 tx/s. Do la lua chon dung, nhung no doi ban chat rui ro va khong cho nao trong ban nhap noi dieu do:
+§03.3.9 chốt **native precompile trong go-quorum/geth-QBFT** để đạt ~500 tx/s. Đó là lựa chọn đúng, nhưng nó đổi bản chất rủi ro và không chỗ nào trong bản nháp nói điều đó:
 
-| Rui ro moi | Vi sao no khac contract | Bien phap |
+| Rủi ro mới | Vì sao nó khác contract | Biện pháp |
 |---|---|---|
-| **Bug trong precompile = consensus bug** | Mot revert sai o Solidity chi hong mot tx. Mot ket qua khac nhau giua hai validator lam **fork chain** | Moi validator chay **cung mot binary, cung mot hash**. Kich hoat theo block number trong genesis, khong theo flag. Do hash binary vao monitoring |
-| **Precompile tra `true` cho proof gia** | Khong co lop nao ben tren bat duoc: contract tin no tuyet doi | **Differential test bat buoc**: cung `testvectors/zether_transfer_v1.json` chay qua ca `BulletproofsVerifier.sol` va precompile Go, 100% khop, gom ca **negative vector**. Day la ly do §03.3.9 giu ban Solidity lam oracle |
-| **Gia gas co dinh sai** | Dat 60,000 cho mot phep tinh 1 ms ⇒ mot attacker mua duoc 1 giay CPU voi gia 60k gas ⇒ DoS re | Benchmark thuc, nhan he so an toan 3×, **va** dat `blockGasLimit` sao cho worst-case block khong vuot 500 ms CPU |
-| **A12: validator la chinh ta** | `block.timestamp`, thu tu tx, va ca lich su deu do ta quyet | Anchor `head_hash` moi 15 s sang Hedera HCS (~$0.6/ngay, §11.3). Do la thu bien "toi hua" thanh "co bang chung thoi diem" |
-| Nang cap precompile | Doi logic verify = doi consensus = phai coordinate downtime | Hard-fork co lich, `proofSystemId` doi theo, contract chon verifier qua `IZetherVerifier` chu khong hard-code dia chi |
+| **Bug trong precompile = consensus bug** | Một revert sai ở Solidity chỉ hỏng một tx. Một kết quả khác nhau giữa hai validator làm **fork chain** | Mọi validator chạy **cùng một binary, cùng một hash**. Kích hoạt theo block number trong genesis, không theo flag. Đo hash binary vào monitoring |
+| **Precompile trả `true` cho proof giả** | Không có lớp nào bên trên bắt được: contract tin nó tuyệt đối | **Differential test bắt buộc**: cùng `testvectors/zether_transfer_v1.json` chạy qua cả `BulletproofsVerifier.sol` và precompile Go, 100% khớp, gồm cả **negative vector**. Đây là lý do §03.3.9 giữ bản Solidity làm oracle |
+| **Giá gas cố định sai** | Đặt 60,000 cho một phép tính 1 ms ⇒ một attacker mua được 1 giây CPU với giá 60k gas ⇒ DoS rẻ | Benchmark thực, nhân hệ số an toàn 3×, **và** đặt `blockGasLimit` sao cho worst-case block không vượt 500 ms CPU |
+| **A12: validator là chính ta** | `block.timestamp`, thứ tự tx, và cả lịch sử đều do ta quyết | Anchor `head_hash` mỗi 15 s sang Hedera HCS (~$0.6/ngày, §11.3). Đó là thứ biến "tôi hứa" thành "có bằng chứng thời điểm" |
+| Nâng cấp precompile | Đổi logic verify = đổi consensus = phải coordinate downtime | Hard-fork có lịch, `proofSystemId` đổi theo, contract chọn verifier qua `IZetherVerifier` chứ không hard-code địa chỉ |
 
-**Ngan sach audit rieng**: code Go nay **khong** nam trong pham vi audit Solidity. Uoc **$30k–60k** cho mot review chuyen ve implementation crypto Go + consensus integration (co so: gia thi truong cho review 2,000–5,000 dong code crypto Go, 2 tuan, 2 nguoi). Ban nhap khong phan bo dong nao cho no.
+**Lưu ý bản 3 về chain 9000 thật:** chain private hiện có **không** phải go-quorum/QBFT mà là **Nethermind + Clique, một signer, block 5 s, gasLimit 16.7M, chạy pre-London** (không EIP-1559, không PUSH0, không EIP-2537 — xem `TRAPS.md`). Ba hệ quả: (1) precompile Go nói ở trên phải viết lại thành plugin Nethermind (C#) hoặc đổi client; (2) Clique **không có instant finality** và reorg được, nên A12 mạnh hơn bảng trên mô tả; (3) một signer duy nhất nghĩa là `finality_quorum = 2` không thoả mãn được — §09 đã ghi.
+
+**Ngân sách audit riêng**: code precompile này **không** nằm trong phạm vi audit Solidity. Ước **$30k–60k** cho một review chuyên về implementation crypto + consensus integration (cơ sở: giá thị trường cho review 2,000–5,000 dòng code crypto, 2 tuần, 2 người). Bản nháp không phân bổ đồng nào cho nó.
 
 ---
 
 ### 12.2. Meta-transaction (EIP-1776)
 
-- **Replay cross-chain / cross-contract / cross-mode.** EIP-712 domain `{name, version, chainId, verifyingContract}` chan hai cai dau. Cai thu ba chan bang viec `mode` nam **trong** struct duoc hash (§04.4); bo `mode` ra la MODE_OPEN va MODE_RESTRICT_* voi `relayer = 0` trung digest. Domain separator phai tinh lai khi `block.chainid` doi (hard fork): dung `EIP712` cua OpenZeppelin (no cache theo `address(this)` + `chainid` va tu tinh lai), **khong** hard-code separator vao `immutable`.
-- **Digest injectivity — cho ban nhap chi noi mot nua.** Chan replay chua du; con phai chan **hai struct khac nhau cho ra cung digest**. Loi kinh dien: `bytes data` khong duoc `keccak256` truoc khi dua vao `abi.encode` cua struct hash, khien `("ab","c")` va `("a","bc")` trung digest. Khong fuzz nao tim ra (xac suat 0), solver tim ra trong vai giay. Bat buoc property `check_digest_injective` bang `halmos` (§14.9) — day la property dang gia nhat trong ca bo formal.
-- **Canonical zeroing.** Chu "hoac" trong note ("khong bao gom, **hoac** hash voi `address(0)`") la loi spec: hai cach cho hai digest. Chot `_canon()` (§04.4), verifier tu chuan hoa, khong bao gio hash `m.relayer` tho. Mot type string, hai gia tri canonical — khong duoc tao `TYPEHASH` thu hai cho MODE_OPEN.
-- **Malleability.** `ECDSA.tryRecover` (reject `s > n/2`, `v ∉ {27,28}`, reject `signer == address(0)`). Khoa idempotency phia Odoo la **EIP-712 digest**, khong phai `keccak256(signature)` va khong phai `keccak256(calldata)`: trong MODE_OPEN hai calldata khac nhau cung verify voi mot chu ky.
-- **EIP-1271 la stateful, va do la mot cua so tan cong.** Voi smart account, `isValidSignature` co the tra `true` luc simulate va `false` luc inclusion (doi owner, revoke session key). Relayer mat gas, user mat 0 — dung phia chiu, nhung phai (a) `expiry` ngan, (b) re-simulate tai block muc tieu, (c) hub khong tra bounty cho relayer trong truong hop nay. Nguoc lai: mot account co the tra `true` **sau** khi da revoke neu implementation cache — khong phai loi cua ta, nhung phai co trong danh sach kiem tra khi allowlist mot loai smart account.
-- **EIP-7702 pha vo mot gia dinh cu.** Sau Pectra, mot EOA **co the co code**. Moi kiem tra dang `require(from.code.length == 0)` hoac `msg.sender == tx.origin` deu khong con nghia. Neu contract nao trong `smartcontracts/evm/` dung mot trong hai mau nay thi phai bo. Grep gate CI.
-- **Expiry bypass.** Validator lech timestamp ±12s khong dang ke. Rui ro that la `expiry` qua dai: mot metaTx ky voi expiry 15 phut (con so trong note §10.3) cho relayer quyen giu no nhu mot **free option**, broadcast khi co loi cho relayer. Chot theo §04.5: **60s cho Zether** (khong phai 20s — epoch da bi loai boi owner-exclusive rollover), 120s cho call co doc state, 300s cho ERC-20 transfer thuong, 900s cho anchor/log. Check `expiry` phai nam **truoc** `nonce++` va truoc thu fee: relayer tre han thi revert, nonce khong tieu, fee khong tra.
-- **Thu tu check la mot quyet dinh kinh te, khong phai phong cach.** `mode` va `expiry` ton **0 gas**; `nonce` ton 2,100 (cold SLOAD); chu ky ton ~3,000. Kiem cai mien phi truoc. Ban nhap dat `nonce` truoc `expiry` — sai thu tu.
-- **Relayer griefing.** Bang day du o §04.9. Ba muc phai co trong contract: `innerGasLimit` trong digest (thieu no la lo hong GSN v1); `MAX_RETURN_BYTES = 1024` voi `out = 0` trong `call` de chan return bomb (memory bac hai) — chi phi con lai **98 gas**; `require(gasleft() >= g + g/63 + FLOOR_GAS)` **truoc** inner call va hau kiem trong nhanh `!success` de chan relayer co tinh cap thieu gas.
-- **User griefing nguoc lai relayer** (note khong nhac): user ky `innerGasLimit = 20,000,000`, relayer phai du tru gas do de bid. Hai lop: `targets[to].maxInnerGas` **on-chain** (khong chi hub) va hub reject `innerGasLimit > 3,200,000` cho Zether / `> 1,500,000` cho phan con lai, dinh gia bid theo `gasUsed` mo phong chu khong theo `innerGasLimit`.
-- **Rut `approve` sau khi publish** (§5.5, ban nhap 12 bo sot): attacker publish 100 intent hop le, cho relayer broadcast, roi `approve(forwarder, 0)` trong cung block. 100 tx revert, attacker mat **mot** tx. Ty le 100:1. Bien phap: `hints.allowance_ok` kiem o tang 4; `origin_grief_score` theo `meta_tx.from` (3 lan revert/24h ⇒ ep PoW + `max_inflight = 1`); duong ban chat la `permit`/Permit2 de allowance nam **trong** tx.
-- **Cross-lane reordering.** `batchNonce` chi bao dam thu tu **trong mot lane**. Neu Odoo dat `escrow` va `settle` o hai `batchId` khac nhau, relayer duoc phep dao thu tu. Quy tac cung phia Odoo (§15.2.1): moi chuoi phu thuoc phai dung **cung mot** `batchId` duoc dan xuat tat dinh tu `origin_key`; `_build_metatx` raise khi phat hien mot `origin_ref` sinh ra hai lane.
-- **Lane exhaustion.** `batchId` la `uint256` ngau nhien ⇒ khong het. Nhung mot lane **ket** (nonce da cap, tx khong bao gio len chuoi) khoa vinh vien moi giao dich phu thuoc. Phai co `lane_epoch++` (§04.3) va `bumpBatchNonce` on-chain; thieu no thi mot tx treo lam chet ca chuoi settlement va khong ai go duoc.
-
----
-
+- **Replay cross-chain / cross-contract / cross-mode.** EIP-712 domain `{name, version, chainId, verifyingContract}` chặn hai cái đầu. Cái thứ ba chặn bằng việc `mode` nằm **trong** struct được hash (§04.4); bỏ `mode` ra là MODE_OPEN và MODE_RESTRICT_* với `relayer = 0` trùng digest. Domain separator phải tính lại khi `block.chainid` đổi (hard fork): dùng `EIP712` của OpenZeppelin (nó cache theo `address(this)` + `chainid` và tự tính lại), **không** hard-code separator vào `immutable`.
+- **Digest injectivity — chỗ bản nháp chỉ nói một nửa.** Chặn replay chưa đủ; còn phải chặn **hai struct khác nhau cho ra cùng digest**. Lỗi kinh điển: `bytes data` không được `keccak256` trước khi đưa vào `abi.encode` của struct hash, khiến `("ab","c")` và `("a","bc")` trùng digest. Không fuzz nào tìm ra (xác suất 0), solver tìm ra trong vài giây. Bắt buộc property `check_digest_injective` bằng `halmos` (§14.9) — đây là property đáng giá nhất trong cả bộ formal.
+- **Canonical zeroing.** Chữ "hoặc" trong note ("không bao gồm, **hoặc** hash với `address(0)`") là lỗi spec: hai cách cho hai digest. Chốt `_canon()` (§04.4), verifier tự chuẩn hoá, không bao giờ hash `m.relayer` thô. Một type string, hai giá trị canonical — không được tạo `TYPEHASH` thứ hai cho MODE_OPEN.
+- **Malleability.** `ECDSA.tryRecover` (reject `s > n/2`, `v ∉ {27,28}`, reject `signer == address(0)`). Khoá idempotency phía Odoo là **EIP-712 digest**, không phải `keccak256(signature)` và không phải `keccak256(calldata)`: trong MODE_OPEN hai calldata khác nhau cùng verify với một chữ ký.
+- **EIP-1271 là stateful, và đó là một cửa sổ tấn công.** Với smart account, `isValidSignature` có thể trả `true` lúc simulate và `false` lúc inclusion (đổi owner, revoke session key). Relayer mất gas, user mất 0 — đúng phía chịu, nhưng phải (a) `expiry` ngắn, (b) re-simulate tại block mục tiêu, (c) hub không trả bounty cho relayer trong trường hợp này. Ngược lại: một account có thể trả `true` **sau** khi đã revoke nếu implementation cache — không phải lỗi của ta, nhưng phải có trong danh sách kiểm tra khi allowlist một loại smart account.
+- **EIP-7702 phá vỡ một giả định cũ.** Sau Pectra, một EOA **có thể có code**. Mọi kiểm tra dạng `require(from.code.length == 0)` hoặc `msg.sender == tx.origin` đều không còn nghĩa. Nếu contract nào trong `smartcontracts/` dùng một trong hai mẫu này thì phải bỏ. Grep gate CI.
+- **Expiry bypass.** Validator lệch timestamp ±12s không đáng kể. Rủi ro thật là `expiry` quá dài: một metaTx ký với expiry 15 phút (con số trong note §10.3) cho relayer quyền giữ nó như một **free option**, broadcast khi có lợi cho relayer. Chốt theo §04.5: **60s cho Zether** (không phải 20s — epoch đã bị loại bởi owner-exclusive rollover), 120s cho call có đọc state, 300s cho ERC-20 transfer thường, 900s cho anchor/log. Check `expiry` phải nằm **trước** `nonce++` và trước thu fee: relayer trễ hạn thì revert, nonce không tiêu, fee không trả.
+- **Thứ tự check là một quyết định kinh tế, không phải phong cách.** `mode` và `expiry` tốn **0 gas**; `nonce` tốn 2,100 (cold SLOAD); chữ ký tốn ~3,000. Kiểm cái miễn phí trước. Bản nháp đặt `nonce` trước `expiry` — sai thứ tự.
+- **Relayer griefing.** Bảng đầy đủ ở §04.9. Ba mục phải có trong contract: `innerGasLimit` trong digest (thiếu nó là lỗ hổng GSN v1); `MAX_RETURN_BYTES = 1024` với `out = 0` trong `call` để chặn return bomb (memory bậc hai) — chi phí còn lại **98 gas**; `require(gasleft() >= g + g/63 + FLOOR_GAS)` **trước** inner call và hậu kiểm trong nhánh `!success` để chặn relayer cố tình cấp thiếu gas.
+- **User griefing ngược lại relayer** (note không nhắc): user ký `innerGasLimit = 20,000,000`, relayer phải dự trữ gas đó để bid. Hai lớp: `targets[to].maxInnerGas` **on-chain** (không chỉ hub) và hub reject `innerGasLimit > 3,200,000` cho Zether / `> 1,500,000` cho phần còn lại, định giá bid theo `gasUsed` mô phỏng chứ không theo `innerGasLimit`.
+- **Rút `approve` sau khi publish** (§5.5, bản nháp 12 bỏ sót): attacker publish 100 intent hợp lệ, chờ relayer broadcast, rồi `approve(forwarder, 0)` trong cùng block. 100 tx revert, attacker mất **một** tx. Tỷ lệ 100:1. Biện pháp: `hints.allowance_ok` kiểm ở tầng 4; `origin_grief_score` theo `meta_tx.from` (3 lần revert/24h ⇒ ép PoW + `max_inflight = 1`); đường bản chất là `permit`/Permit2 để allowance nằm **trong** tx.
+- **Cross-lane reordering.** `batchNonce` chỉ bảo đảm thứ tự **trong một lane**. Nếu Odoo đặt `escrow` và `settle` ở hai `batchId` khác nhau, relayer được phép đảo thứ tự. Quy tắc cứng phía Odoo (§15.2.1): mọi chuỗi phụ thuộc phải dùng **cùng một** `batchId` được dẫn xuất tất định từ `origin_key`; `_build_metatx` raise khi phát hiện một `origin_ref` sinh ra hai lane.
+- **Lane exhaustion.** `batchId` là `uint256` ngẫu nhiên ⇒ không hết. Nhưng một lane **kẹt** (nonce đã cấp, tx không bao giờ lên chuỗi) khoá vĩnh viễn mọi giao dịch phụ thuộc. Phải có `lane_epoch++` (§04.3) và `bumpBatchNonce` on-chain; thiếu nó thì một tx treo làm chết cả chuỗi settlement và không ai gỡ được.
 ### 12.3. Zether
 
-#### 12.3.1. Randomness — lo hong nghiem trong nhat ma ban nhap khong nhac mot chu
+#### 12.3.1. Randomness — lỗ hổng nghiêm trọng nhất mà bản nháp không nhắc một chữ
 
-Toan bo bao mat cua Zether nam tren gia dinh rang `r`, `s`, va nonce Schnorr `k` la **ngau nhien va khong bao gio lap**. Ba he qua neu sai, tat ca deu la mat sach tai khoan chu khong phai ro ri nho:
+Toàn bộ bảo mật của Zether nằm trên giả định rằng `r`, `s`, và nonce Schnorr `k` là **ngẫu nhiên và không bao giờ lặp**. Ba hệ quả nếu sai, tất cả đều là mất sạch tài khoản chứ không phải rò rỉ nhỏ:
 
-| Loi | Toan hoc | Hau qua |
+| Lỗi | Toán học | Hậu quả |
 |---|---|---|
-| Lap `k` giua hai chu ky Schnorr | `k = (z1 - z2)/(c1 - c2) mod q`, roi `x = (z1 - c1·k)/1` | **Lo `x` hoan toan.** Day la loi da giet Sony PS3 va nhieu vi Android |
-| Lap `s` giua hai transfer cho **cung** nguoi nhan | `C1/C2 = g^(v1-v2)` ⇒ hieu hai so tien lo ra; voi mot so tien da biet thi ca hai lo | Lo so tien, pha bo mat |
-| RNG yeu (seed theo `time()`, `Math.random()`, `/dev/urandom` trong container moi khoi dong chua co entropy) | Khong gian tim kiem nho | Brute-force ra `x` |
+| Lặp `k` giữa hai chữ ký Schnorr | `k = (z1 - z2)/(c1 - c2) mod q`, rồi `x = (z1 - c1·k)/1` | **Lộ `x` hoàn toàn.** Đây là lỗi đã giết Sony PS3 và nhiều ví Android |
+| Lặp `s` giữa hai transfer cho **cùng** người nhận | `C1/C2 = g^(v1-v2)` ⇒ hiệu hai số tiền lộ ra; với một số tiền đã biết thì cả hai lộ | Lộ số tiền, phá bí mật |
+| RNG yếu (seed theo `time()`, `Math.random()`, `/dev/urandom` trong container mới khởi động chưa có entropy) | Không gian tìm kiếm nhỏ | Brute-force ra `x` |
 
-**Chot, bat buoc, va phai co test:**
+**Chốt, bắt buộc, và phải có test:**
 
-1. **Nonce tat dinh kieu RFC 6979 / synthetic nonce** cho moi chu ky Schnorr va moi randomness cua sigma proof:
-   `k = HMAC-SHA512(key = x, msg = domain_sep || chainId || address(this) || zetherNonce || H(statement) || 32_byte_random)`, roi reduce mod `q`. Ket hop **tat dinh + entropy** (synthetic): tat dinh chan lap khi RNG chet, entropy chan phan tich sai lech theo fault injection.
-2. **`s` cua ElGamal khong duoc tat dinh theo (v, y_recv)** — neu tat dinh thuan thi hai lan chuyen cung so tien cho cung nguoi cho ra **cung ciphertext**, lo ngay. Phai them `zetherNonce` vao input HMAC. Do la mot khac biet tinh te giua chu ky va ma hoa ma nhieu implementation lam sai.
-3. **Test bat buoc** `test_no_nonce_reuse`: chay 10,000 proof voi RNG bi ep tra hang so, assert rang tat ca `k` va `s` van khac nhau (vi da co `zetherNonce` trong transcript). Va `test_extract_x_fails`: hai proof cho cung `zetherNonce` phai **khong the** tao ra (contract da tang nonce), va neu ep tao thi bo test phai chung minh khong giai duoc `x`.
-4. **Cam dung RNG cua ngon ngu.** `Math.random`, `random.random()`, `rand()` bi CI grep chan trong `smartcontracts/` va trong client SDK. Chi `getrandom(2)` / `crypto.getRandomValues` / `OsRng`.
+1. **Nonce tất định kiểu RFC 6979 / synthetic nonce** cho mọi chữ ký Schnorr và mọi randomness của sigma proof:
+   `k = HMAC-SHA512(key = x, msg = domain_sep || chainId || address(this) || zetherNonce || H(statement) || 32_byte_random)`, rồi reduce mod `q`. Kết hợp **tất định + entropy** (synthetic): tất định chặn lặp khi RNG chết, entropy chặn phân tích sai lệch theo fault injection.
+2. **`s` của ElGamal không được tất định theo (v, y_recv)** — nếu tất định thuần thì hai lần chuyển cùng số tiền cho cùng người cho ra **cùng ciphertext**, lộ ngay. Phải thêm `zetherNonce` vào input HMAC. Đó là một khác biệt tinh tế giữa chữ ký và mã hoá mà nhiều implementation làm sai.
+3. **Test bắt buộc** `test_no_nonce_reuse`: chạy 10,000 proof với RNG bị ép trả hằng số, assert rằng tất cả `k` và `s` vẫn khác nhau (vì đã có `zetherNonce` trong transcript). Và `test_extract_x_fails`: hai proof cho cùng `zetherNonce` phải **không thể** tạo ra (contract đã tăng nonce), và nếu ép tạo thì bộ test phải chứng minh không giải được `x`.
+4. **Cấm dùng RNG của ngôn ngữ.** `Math.random`, `random.random()`, `rand()` bị CI grep chặn trong `smartcontracts/` và trong client SDK. Chỉ `getrandom(2)` / `crypto.getRandomValues` / `OsRng`.
 
-#### 12.3.2. Proof forgery — rui ro so 1, va no la loi transcript chu khong phai loi toan hoc
+#### 12.3.2. Proof forgery — rủi ro số 1, và nó là lỗi transcript chứ không phải lỗi toán học
 
-Lop bug pho bien nhat cua Bulletproofs trien khai tay la Fiat-Shamir yeu ("Frozen Heart"): thieu mot public input trong transcript la proof gia duoc. Transcript **bat buoc** hap thu, dung thu tu, **dung do dai co dinh, co domain separation va length-prefix**:
+Lớp bug phổ biến nhất của Bulletproofs triển khai tay là Fiat-Shamir yếu ("Frozen Heart"): thiếu một public input trong transcript là proof giả được. Transcript **bắt buộc** hấp thụ, đúng thứ tự, **đúng độ dài cố định, có domain separation và length-prefix**:
 
 ```
 absorb("ZETHER_BP_V1")                 // domain, 12 byte co dinh
@@ -197,127 +196,135 @@ absorb_b32(keccak(generators_blob))    // tap generator, KHONG hap thu tung diem
 absorb_u64(deadline)
 ```
 
-Ba quy tac ma neu thieu thi transcript van "trong nhu dung":
+Ba quy tắc mà nếu thiếu thì transcript vẫn "trông như đúng":
 
-- **Length-prefix moi truong do dai bien.** Neu hap thu `bytes` tho, `("ab","c")` va `("a","bc")` cho cung challenge. Day la cung mot lop loi voi digest injectivity o §12.2.
-- **Hap thu `generators_blob` hash, khong hap thu tung generator.** Vua re vua chan duoc "doi generator" — mot vector that neu generator doc tu SSTORE2 (§03.3.5).
-- **`proofSystemId` phai nam trong transcript**, khong chi trong interface. Nguoc lai, mot proof Groth16 co the duoc trinh cho verifier Bulletproof va nguoc lai trong tuong lai da-verifier.
+- **Length-prefix mọi trường độ dài biến.** Nếu hấp thụ `bytes` thô, `("ab","c")` và `("a","bc")` cho cùng challenge. Đây là cùng một lớp lỗi với digest injectivity ở §12.2.
+- **Hấp thụ `generators_blob` hash, không hấp thụ từng generator.** Vừa rẻ vừa chặn được "đổi generator" — một vector thật nếu generator đọc từ SSTORE2 (§03.3.5).
+- **`proofSystemId` phải nằm trong transcript**, không chỉ trong interface. Ngược lại, một proof Groth16 có thể được trình cho verifier Bulletproof và ngược lại trong tương lai đa-verifier.
 
-Kiem chung: mot file `smartcontracts/testvectors/zether_transfer_v1.json` dung chung cho prover Rust, verifier Solidity **va** precompile Go, cong mot bo **negative test** doi tung byte cua tung public input va assert revert. Bo negative test phai co **it nhat mot case cho moi truong** trong transcript o tren (13 truong ⇒ >= 13 negative vector). **Khong co bo negative test nay thi khong duoc deploy.**
+**[BẢN 3] Và với hai đường cong song song, `curveName()` phải nằm cùng chỗ.** Quyết định §20.1 cho phép cả bn254 lẫn BLS12-381 tồn tại trong cùng một factory. Hai verifier khác đường cong sinh hai không gian điểm khác nhau, nhưng một transcript chỉ hấp thụ `proofSystemId` mà không hấp thụ tên đường cong sẽ để hai hệ nói cùng một ngôn ngữ challenge. `IZetherVerifier.curveName()` và `g1EncodedBytes()` (64 với bn254, **128** với BLS12-381) phải đi vào transcript như hai trường riêng — không suy ra từ `proofSystemId`, vì `proofSystemId` do người đăng ký implementation đặt tên và không ai kiểm được.
 
-#### 12.3.3. Loi that trong note: `withdraw` khong bind chain
+Kiểm chứng: một file `smartcontracts/testvectors/zether_transfer_v1.json` dùng chung cho prover Rust, verifier Solidity **và** precompile native, cộng một bộ **negative test** đổi từng byte của từng public input và assert revert. Bộ negative test phải có **ít nhất một case cho mỗi trường** trong transcript ở trên (13 trường ⇒ >= 13 negative vector). **Không có bộ negative test này thì không được deploy.**
 
-Note bam `recipient, amount, zetherNonce` vao challenge — dung, chan duoc relayer doi `recipient`. Nhung `schnorrAddress = keccak256(pkX, pkY)` **giong het nhau tren moi EVM chain** (§02.8). Neu cung mot tai khoan ton tai tren Gnosis va Celo va `zetherNonce` tinh co bang nhau, mot proof withdraw hop le tren chain A replay duoc tren chain B. Phai them `block.chainid`, `address(this)` va `authEpoch` vao challenge. Day la lo hong mat tien that, khong phai gop y phong cach.
+#### 12.3.3. Lỗi thật trong note: `withdraw` không bind chain
 
-He qua tuong tu, va ban nhap cung bo sot: **thieu `address(this)` thi chu ky/proof cho Z-USDC dung duoc tren Z-VND** (§02.4.2 da neu cho `assertAuthorized`, nhung dieu do phai ap cho ca Fiat-Shamir challenge cua `transferConfidential`, khong chi cho `withdraw`). Va note goc bam `recipient` vao challenge cho `withdraw` nhung **khong** bam `feeRecipient` vao challenge cho `transferConfidential` — do la mot lo hong anti-MEV that: relayer doi `feeRecipient` sang vi cua no.
+Note băm `recipient, amount, zetherNonce` vào challenge — đúng, chặn được relayer đổi `recipient`. Nhưng `schnorrAddress = keccak256(pkX, pkY)` **giống hệt nhau trên mọi EVM chain** (§02.8). Nếu cùng một tài khoản tồn tại trên Gnosis và Celo và `zetherNonce` tình cờ bằng nhau, một proof withdraw hợp lệ trên chain A replay được trên chain B. Phải thêm `block.chainid`, `address(this)` và `authEpoch` vào challenge. Đây là lỗ hổng mất tiền thật, không phải góp ý phong cách.
 
-#### 12.3.4. Malformed ciphertext va diem xau
+Hệ quả tương tự, và bản nháp cũng bỏ sót: **thiếu `address(this)` thì chữ ký/proof cho Z-USDC dùng được trên Z-VND** (§02.4.2 đã nêu cho `assertAuthorized`, nhưng điều đó phải áp cho cả Fiat-Shamir challenge của `transferConfidential`, không chỉ cho `withdraw`). Và note gốc băm `recipient` vào challenge cho `withdraw` nhưng **không** băm `feeRecipient` vào challenge cho `transferConfidential` — đó là một lỗ hổng anti-MEV thật: relayer đổi `feeRecipient` sang ví của nó.
 
-- alt_bn128 G1 co **cofactor 1** nen chi can on-curve check; nhung neu chuyen sang **Baby Jubjub** (public profile, va §03.3.9 khuyen nghi dung ngay tu dau) cofactor la **8** ⇒ **bat buoc subgroup check** (`[q]P == O`), khong co ngoai le. Bo qua no = small-subgroup attack, ro ri tung bit cua `x`.
-- **Diem identity phai bi reject moi noi**: `y = O` lam `C = g^v` (lo thang so tien), `D = O` lam giai ma tam thuong. Registry PoP (§02.2) da chan `y = O` luc dang ky; contract van phai reject identity trong ciphertext — khong duoc gia dinh input den tu registry.
-- **Invalid-curve**: diem khong nam tren duong cong nhung precompile van tinh (bn254 precompile cua EVM tu reject, nhung mot implementation Go tu viet thi **khong** neu quen). Test vector am phai co ca diem off-curve va diem trong subgroup nho.
-- **`C_audit` phai duoc validate nhu moi diem khac.** No la duong lot de nhat vi no "chi de kiem toan".
+**[BẢN 3] Trong factory mở, `address(this)` còn quan trọng hơn.** Có mười contract cùng tên `zDAI` do mười người tạo (§20.3). Một proof không bind `address(this)` là một proof dùng được trên cả mười — và chín trong số đó không phải tiền của người ký.
 
-#### 12.3.5. Epoch race, va cai gia cua quyet dinh owner-exclusive
+#### 12.3.4. Malformed ciphertext và điểm xấu
 
-Voi thiet ke epoch goc, xac suat lech epoch giua simulate va inclusion la dang ke tren Gnosis (block 5s, epoch 5 block = 25s: mot tx nam o 20% cuoi epoch va cham 1 block la lech). Quyet dinh **owner-exclusive rollover** (§03.5) xoa han vector nay: `acc[from]` chi doi trong tx cua chinh `from`.
+- alt_bn128 G1 có **cofactor 1** nên chỉ cần on-curve check; nhưng nếu chuyển sang **Baby Jubjub** (public profile, và §03.3.9 khuyến nghị dùng ngay từ đầu) cofactor là **8** ⇒ **bắt buộc subgroup check** (`[q]P == O`), không có ngoại lệ. Bỏ qua nó = small-subgroup attack, rò rỉ từng bit của `x`.
+- **[BẢN 3] BLS12-381 G1 có cofactor khác 1** (`h = 0x396c8c005555e1568c00aaab0000aaab`), nên nhánh BLS **luôn** phải subgroup-check, không được sao chép logic của nhánh bn254. Precompile EIP-2537 tự làm subgroup check cho input của nó, nhưng điểm do client gửi lên và được lưu vào storage phải được check trước khi lưu — không phải trước khi tính.
+- **Điểm identity phải bị reject mọi nơi**: `y = O` làm `C = g^v` (lộ thẳng số tiền), `D = O` làm giải mã tầm thường. Registry PoP (§02.2) đã chặn `y = O` lúc đăng ký; contract vẫn phải reject identity trong ciphertext — không được giả định input đến từ registry.
+- **Invalid-curve**: điểm không nằm trên đường cong nhưng precompile vẫn tính (bn254 precompile của EVM tự reject, nhưng một implementation native tự viết thì **không** nếu quên). Test vector âm phải có cả điểm off-curve và điểm trong subgroup nhỏ.
+- **`C_audit` phải được validate như mọi điểm khác.** Nó là đường lọt dễ nhất vì nó "chỉ để kiểm toán".
 
-Nhung phai noi thang hai dieu ban nhap khong noi:
+#### 12.3.5. Epoch race, và cái giá của quyết định owner-exclusive
 
-1. **Do la mot thay doi tang giao thuc so voi bai bao Zether.** No **khong** duoc quyet bang suy luan trong tai lieu nay. No la muc trung tam cua audit Phase B. Neu reviewer bac, thi `uint64 targetEpoch` quay lai struct **va** `expiry` cua Zether tut ve <= 1 epoch — hai thu di cung nhau (§04.10).
-2. **Neu deployment nao giu thiet ke goc**: thieu `require(currentEpoch() == targetEpoch)` thi proof cua epoch `e` mined o `e+1` co the **pass tren state cu** neu `rollOver` chua chay, va do la **mat tien** chu khong phai revert. Day la khac biet giua "kho chiu" va "mat quy".
+Với thiết kế epoch gốc, xác suất lệch epoch giữa simulate và inclusion là đáng kể trên Gnosis (block 5s, epoch 5 block = 25s: một tx nằm ở 20% cuối epoch và chậm 1 block là lệch). Quyết định **owner-exclusive rollover** (§03.5) xoá hẳn vector này: `acc[from]` chỉ đổi trong tx của chính `from`.
 
-#### 12.3.6. Recipient DoS bang pending flooding — kinh te thuc te, sua lai con so cua ban nhap
+Nhưng phải nói thẳng hai điều bản nháp không nói:
 
-Storage la O(1) nho tinh dong hinh, nen chuoi khong sao. Nan nhan la **client**: vi phai giai ma de giu so cuc bo.
+1. **Đó là một thay đổi tầng giao thức so với bài báo Zether.** Nó **không** được quyết bằng suy luận trong tài liệu này. Nó là mục trung tâm của audit Phase B. Nếu reviewer bác, thì `uint64 targetEpoch` quay lại struct **và** `expiry` của Zether tụt về <= 1 epoch — hai thứ đi cùng nhau (§04.10).
+2. **Nếu deployment nào giữ thiết kế gốc**: thiếu `require(currentEpoch() == targetEpoch)` thì proof của epoch `e` mined ở `e+1` có thể **pass trên state cũ** nếu `rollOver` chưa chạy, và đó là **mất tiền** chứ không phải revert. Đây là khác biệt giữa "khó chịu" và "mất quỹ".
 
-Ban nhap tinh: `10,000 dust transfer × 60k gas ≈ 600M gas ≈ $0.60`, ty le thiet hai 1,700:1, ket luan "kinh te khong chan duoc". **Ca ba con so deu sai:**
+#### 12.3.6. Recipient DoS bằng pending flooding — kinh tế thực tế, sửa lại con số của bản nháp
 
-| | Ban nhap | Dung |
+Storage là O(1) nhờ tính đồng hình, nên chuỗi không sao. Nạn nhân là **client**: ví phải giải mã để giữ số cục bộ.
+
+Bản nháp tính: `10,000 dust transfer × 60k gas ≈ 600M gas ≈ $0.60`, tỷ lệ thiệt hại 1,700:1, kết luận "kinh tế không chặn được". **Cả ba con số đều sai:**
+| | Bản nháp | Đúng |
 |---|---|---|
-| Gas mot Zether transfer | 60,000 | **1.72M–2.62M** (§04.10) |
-| Tong gas cho 10,000 tx | 600M | **~20 Ggas** |
-| Chi phi tien mat (Gnosis @1.5 gwei, xDAI=$1) | $0.60 | **~$30** (va base fee se tang khi chiem block) |
-| Thoi gian de land 10,000 tx | khong tinh | 20 Ggas ÷ 3.4 Mgas/s = **~98 phut o 100% block space cua ca Gnosis** |
-| Thiet hai phia nan nhan | 17 phut BSGS | 17 phut, **hoac ~0 neu co memo (§03.2.5)** |
+| Gas một Zether transfer | 60,000 | **1.72M–2.62M** (§04.10) |
+| Tổng gas cho 10,000 tx | 600M | **~20 Ggas** |
+| Chi phí tiền mặt (Gnosis @1.5 gwei, xDAI=$1) | $0.60 | **~$30** (và base fee sẽ tăng khi chiếm block) |
+| Thời gian để land 10,000 tx | không tính | 20 Ggas ÷ 3.4 Mgas/s = **~98 phút ở 100% block space của cả Gnosis** |
+| Thiệt hại phía nạn nhân | 17 phút BSGS | 17 phút, **hoặc ~0 nếu có memo (§03.2.5)** |
 
-Ket luan doi chieu: ty le thiet hai khong phai 1,700:1 ma vao khoang **1:1 den 10:1**, va tan cong bi chan boi chinh block space chu khong boi vi tien. **Khong** con la "kinh te khong chan duoc". Van phai chan, nhung bang thiet ke client chu khong bang hoang loan:
+Kết luận đối chiếu: tỷ lệ thiệt hại không phải 1,700:1 mà vào khoảng **1:1 đến 10:1**, và tấn công bị chặn bởi chính block space chứ không bởi ví tiền. **Không** còn là "kinh tế không chặn được". Vẫn phải chặn, nhưng bằng thiết kế client chứ không bằng hoảng loạn:
 
-- (a) Vi doc `getPendingBalance` va BSGS **mot lan tren tong** khi so event chua xu ly > 200, thay vi cong don tung khoan. Voi tinh dong hinh day la mot phep giai ma, khong phai N.
-- (b) **Memo ma hoa so tien** (§03.2.5) xoa bo BSGS hoan toan cho duong thong thuong. Do la bien phap thuc su, (a) chi la du phong.
-- (c) Indexer phia Odoo tinh `pending_event_count` va canh bao (bang 12.11 dong 13).
-- (d) **Khong** them allowlist nguoi gui o tang contract — no pha tinh nhan tien khong can xin phep va khong giai quyet duoc goc.
+- (a) Ví đọc `getPendingBalance` và BSGS **một lần trên tổng** khi số event chưa xử lý > 200, thay vì cộng dồn từng khoản. Với tính đồng hình đây là một phép giải mã, không phải N.
+- (b) **Memo mã hoá số tiền** (§03.2.5) xoá bỏ BSGS hoàn toàn cho đường thông thường. Đó là biện pháp thực sự, (a) chỉ là dự phòng.
+- (c) Indexer phía Odoo tính `pending_event_count` và cảnh báo (bảng 12.11 dòng 13).
+- (d) **Không** thêm allowlist người gửi ở tầng contract — nó phá tính nhận tiền không cần xin phép và không giải quyết được gốc.
 
-**Con so quan trong hon, va ban nhap khong co no:** neu 10,000 tx rac chiem 98 phut block space cua Gnosis thi **chinh he thong cua ta bi DoS**, khong phai mot client. Xem 12.7.5.
+**Con số quan trọng hơn, và bản nháp không có nó:** nếu 10,000 tx rác chiếm 98 phút block space của Gnosis thì **chính hệ thống của ta bị DoS**, không phải một client. Xem 12.7.5.
 
-#### 12.3.7. Ro ri metadata
+#### 12.3.7. Rò rỉ metadata
 
-Bon duong, ba trong so do phai chan bang quy tac:
+Bốn đường, ba trong số đó phải chặn bằng quy tắc:
 
-1. **Phi tuyet doi khong duoc la ham cua so tien bi mat.** Neu bao gia relayer theo phan tram gia tri giao dich (mot quy tac nghiep vu rat tu nhien), `metaTx.fee` cong khai **lo chinh xac so tien**: `v = fee / 0.003`, mot phep chia, pha huy toan bo Zether. Chot: **phi phang lay tu mot thang roi rac nho** (vi du `{0.01, 0.05, 0.25, 1.00}` don vi), hoac bac thang theo `innerGasLimit`. Day la rang buoc **thiet ke contract**, khong phai tuy chon van hanh. Ghi vao `_build_zether_metatx` mot assert **va** ghi vao `TargetPolicy` mot `CalldataRule` (§04.10 muc 3).
-2. **Cam ca hai kenh phi cung > 0** (§04.10): thu phi hai lan, va hai con so cong khai cung luc cho quan sat vien mot he phuong trinh ve co cau phi. Enforce o ca ba cho: builder Odoo, `ERC1776Native` mixin, `CalldataRule` cua forwarder.
-3. **`deposit`/`withdraw` cong khai so tien.** Mot cong ty nap $250k roi 3 transfer roi rut $0 da lo tong luong. **Dinh luong:** voi thang 8 menh gia va < 5 tai khoan hoat dong moi epoch, tinh an danh cua so tien **sup do gan nhu hoan toan** (§11.10). Giam thieu: giu float lam viec, nap theo lich co dinh va so tron (buoc $50k), khong nap "vua du" ngay truoc mot lan thanh toan, va **dwell time toi thieu** giua deposit va transfer.
-4. **Gas nhu kenh phu.** Proof size co dinh nen verify khong lo gi. Nhung bat ky nhanh re nao (`if (fee == 0)`, `if (feeRecipient == 0)`) lam gas khac nhau va ro ri mot bit. Quy tac: **thuc thi phai cung hinh dang** cho moi input hop le; test `GasUniformity.t.sol` do gas cua 3 nhom input va assert lech < 2,000 gas.
-5. **`simulateAccounts` la mot oracle** (ban nhap khong nhac). No la `view`, khong ton gas, khong xac thuc, va cho phep bat ky ai **liet ke** tap tai khoan da dang ky va quan sat `pending` doi theo thoi gian thuc. Do khong phai so tien, nhung no la do thi + timing voi do phan giai cao hon ca event. Khong the bo (client can no), nen: (a) chap nhan tren public profile, (b) tren private profile dat node RPC sau mTLS, (c) rate-limit o RPC gateway.
+1. **Phí tuyệt đối không được là hàm của số tiền bí mật.** Nếu báo giá relayer theo phần trăm giá trị giao dịch (một quy tắc nghiệp vụ rất tự nhiên), `metaTx.fee` công khai **lộ chính xác số tiền**: `v = fee / 0.003`, một phép chia, phá huỷ toàn bộ Zether. Chốt: **phí phẳng lấy từ một thang rời rạc nhỏ** (ví dụ `{0.01, 0.05, 0.25, 1.00}` đơn vị), hoặc bậc thang theo `innerGasLimit`. Đây là ràng buộc **thiết kế contract**, không phải tuỳ chọn vận hành. Ghi vào `_build_zether_metatx` một assert **và** ghi vào `TargetPolicy` một `CalldataRule` (§04.10 mục 3). Trong `smartcontracts/src/common/FeePolicy.sol`, `requireConfidentialSafe()` revert thẳng trên `FeeMode.PERCENT` — quy tắc này đã là code, không còn là lời khuyên.
+2. **Cấm cả hai kênh phí cùng > 0** (§04.10): thu phí hai lần, và hai con số công khai cùng lúc cho quan sát viên một hệ phương trình về cơ cấu phí. Enforce ở cả ba chỗ: builder Odoo, `ERC1776Native` mixin, `CalldataRule` của forwarder.
+3. **`deposit`/`withdraw` công khai số tiền.** Một công ty nạp $250k rồi 3 transfer rồi rút $0 đã lộ tổng lượng. **Định lượng:** với thang 8 mệnh giá và < 5 tài khoản hoạt động mỗi epoch, tính ẩn danh của số tiền **sụp đổ gần như hoàn toàn** (§11.10). Giảm thiểu: giữ float làm việc, nạp theo lịch cố định và số tròn (bước $50k), không nạp "vừa đủ" ngay trước một lần thanh toán, và **dwell time tối thiểu** giữa deposit và transfer.
+4. **Gas như kênh phụ.** Proof size cố định nên verify không lộ gì. Nhưng bất kỳ nhánh rẽ nào (`if (fee == 0)`, `if (feeRecipient == 0)`) làm gas khác nhau và rò rỉ một bit. Quy tắc: **thực thi phải cùng hình dạng** cho mọi input hợp lệ; test `GasUniformity.t.sol` đo gas của 3 nhóm input và assert lệch < 2,000 gas.
+5. **`simulateAccounts` là một oracle** (bản nháp không nhắc). Nó là `view`, không tốn gas, không xác thực, và cho phép bất kỳ ai **liệt kê** tập tài khoản đã đăng ký và quan sát `pending` đổi theo thời gian thực. Đó không phải số tiền, nhưng nó là đồ thị + timing với độ phân giải cao hơn cả event. Không thể bỏ (client cần nó), nên: (a) chấp nhận trên public profile, (b) trên private profile đặt node RPC sau mTLS, (c) rate-limit ở RPC gateway.
 
-#### 12.3.8. Danh tinh cong khai la thiet ke, nhung he qua thi phai noi thang
+#### 12.3.8. Danh tính công khai là thiết kế, nhưng hệ quả thì phải nói thẳng
 
-Doi thu doc chuoi biet **toan bo danh sach distributor** cua mot brand, biet khi nao mot distributor bi cat, biet tan suat thanh toan, va biet **luc luong** (so transfer moi cap moi ky). Do la tinh bao canh tranh, khong phai so tien. Tren public chain khong co cach nao giau do thi ma khong quay lai mixer (da bi loai theo yeu cau AML). Neu do thi la bi mat ⇒ B2B settlement **phai** chay tren `chain_profile = private`. Day la mot quyet dinh kinh doanh, dua vao muc 12.12.
+Đối thủ đọc chuỗi biết **toàn bộ danh sách distributor** của một brand, biết khi nào một distributor bị cắt, biết tần suất thanh toán, và biết **lực lượng** (số transfer mỗi cặp mỗi kỳ). Đó là tình báo cạnh tranh, không phải số tiền. Trên public chain không có cách nào giấu đồ thị mà không quay lại mixer (đã bị loại theo yêu cầu AML). Nếu đồ thị là bí mật ⇒ B2B settlement **phải** chạy trên `chain_profile = private`. Đây là một quyết định kinh doanh, đưa vào mục 12.12.
 
-Them mot he qua phap ly ma §02.7.6 da chi ra va ban nhap 12 khong nhac: **lo danh tinh khong lam thoa man FATF Travel Rule.** Rec.16 doi thong tin originator/beneficiary **va so tien**. Danh tinh khong kem so tien khong du. Do la ly do `C_audit` ton tai va la ly do no phai **bat buoc** tren B2B, khong phai tuy chon.
+Thêm một hệ quả pháp lý mà §02.7.6 đã chỉ ra và bản nháp 12 không nhắc: **lộ danh tính không làm thoả mãn FATF Travel Rule.** Rec.16 đòi thông tin originator/beneficiary **và số tiền**. Danh tính không kèm số tiền không đủ. Đó là lý do `C_audit` tồn tại và là lý do nó phải **bắt buộc** trên B2B, không phải tuỳ chọn.
 
-#### 12.3.9. Khoa auditor `x_audit`
+#### 12.3.9. Khoá auditor `x_audit`
 
-No giai ma duoc moi giao dich co `C_audit`, **ca lich su**, va mot lan lo la lo vinh vien (khong co forward secrecy). No la muc tieu gia tri cao hon bat ky tai khoan don le nao. Bat buoc, theo §02.7.6:
+Nó giải mã được mọi giao dịch có `C_audit`, **cả lịch sử**, và một lần lộ là lộ vĩnh viễn (không có forward secrecy). Nó là mục tiêu giá trị cao hơn bất kỳ tài khoản đơn lẻ nào. Bắt buộc, theo §02.7.6:
 
-- `y_audit` la khoa **threshold k-of-n** giua n auditor (DKG Pedersen). Khong ton them gas on-chain (van la mot diem G1); toan bo do phuc tap nam o quy trinh off-chain.
-- Rieng theo **chain profile va theo phap nhan phat hanh**, khong dung chung mot khoa toan cau.
-- Luu offline/HSM, tach hoan toan khoi ha tang van hanh; khong bao gio nam trong cung tai khoan cloud voi production.
-- Xoay theo ky (de xuat 12 thang), **xoay khong lam mat hieu luc lich su** — ciphertext cu van duoi khoa cu ⇒ phai luu tru khoa cu theo lich luu ho so, khong huy.
-- Gia thuc: `C_audit` + equality proof Chaum-Pedersen = **~25,300 gas/transfer (~+11%)**, khong phai 13,200 nhu mot ban nhap truoc ghi (§02.7.6 da sua).
+- `y_audit` là khoá **threshold k-of-n** giữa n auditor (DKG Pedersen). Không tốn thêm gas on-chain (vẫn là một điểm G1); toàn bộ độ phức tạp nằm ở quy trình off-chain.
+- Riêng theo **chain profile và theo pháp nhân phát hành**, không dùng chung một khoá toàn cầu.
+- Lưu offline/HSM, tách hoàn toàn khỏi hạ tầng vận hành; không bao giờ nằm trong cùng tài khoản cloud với production.
+- Xoay theo kỳ (đề xuất 12 tháng), **xoay không làm mất hiệu lực lịch sử** — ciphertext cũ vẫn dưới khoá cũ ⇒ phải lưu trữ khoá cũ theo lịch lưu hồ sơ, không huỷ.
+- Giá thực: `C_audit` + equality proof Chaum-Pedersen = **~25,300 gas/transfer (~+11%)**, không phải 13,200 như một bản nháp trước ghi (§02.7.6 đã sửa).
 
-#### 12.3.10. Client SDK (A13) — vector ma ban nhap bo hoan toan
+**[BẢN 3] Trong factory mở, `C_audit` là tuỳ chọn của người tạo token, không phải của ta.** §20.5 đã ghi: `compliance_profile` rời khỏi đường tới hạn. Một người lạ wrap xDAI thành zDAI-B mà không bật `C_audit` thì token đó không dùng được cho B2B của ta — và đó là toàn bộ hệ quả. Không có cơ chế nào ép được, và cũng không nên có: factory chỉ deploy, thị trường chọn.
 
-`x` song trong RAM cua client. Ke chen duoc mot dong vao `@bamboo/zether-sdk` hoac vao mot dependency cua no lay duoc `x` cua **moi** nguoi dung, khong can cham chain, khong cham Odoo, khong cham HSM. Do la duong re nhat trong ca mo hinh nay.
+#### 12.3.10. Client SDK (A13) — vector mà bản nháp bỏ hoàn toàn
 
-| Bien phap | Cu the |
+`x` sống trong RAM của client. Kẻ chèn được một dòng vào `@bamboo/zether-sdk` hoặc vào một dependency của nó lấy được `x` của **mọi** người dùng, không cần chạm chain, không chạm Odoo, không chạm HSM. Đó là đường rẻ nhất trong cả mô hình này.
+
+| Biện pháp | Cụ thể |
 |---|---|
-| Pin va lock | `package-lock.json` commit, `npm ci --ignore-scripts`, cam `postinstall` |
-| Toi thieu hoa dependency | Prover Rust bien dich sang WASM, chi lo mot mat cat API. Muc tieu: **< 10 dependency truc tiep** cho duong cham `x` |
-| Subresource Integrity | Web client tai SDK bang `<script integrity="sha384-...">`, khong bao gio tu CDN khong pin |
-| Reproducible build + ky | Artifact WASM co hash cong bo; client kiem hash truoc khi nap. Ky bang khoa release rieng, khong phai khoa CI |
-| Tach `x` khoi UI | Prover chay trong Web Worker / enclave, UI khong bao gio doc duoc `x`. Khong xoa duoc XSS nhung nang chi phi khai thac |
-| `recipient` phai hien thi tu **du lieu da ky** | Client render `to` tu chinh struct sap ky, khong tu bien state khac. Chan "UI hien A, ky B" |
+| Pin và lock | `package-lock.json` commit, `npm ci --ignore-scripts`, cấm `postinstall` |
+| Tối thiểu hoá dependency | Prover Rust biên dịch sang WASM, chỉ lộ một mặt cắt API. Mục tiêu: **< 10 dependency trực tiếp** cho đường chạm `x` |
+| Subresource Integrity | Web client tải SDK bằng `<script integrity="sha384-...">`, không bao giờ từ CDN không pin |
+| Reproducible build + ký | Artifact WASM có hash công bố; client kiểm hash trước khi nạp. Ký bằng khoá release riêng, không phải khoá CI |
+| Tách `x` khỏi UI | Prover chạy trong Web Worker / enclave, UI không bao giờ đọc được `x`. Không xoá được XSS nhưng nâng chi phí khai thác |
+| `recipient` phải hiển thị từ **dữ liệu đã ký** | Client render `to` từ chính struct sắp ký, không từ biến state khác. Chặn "UI hiện A, ký B" |
 
 ---
 
-### 12.4. Mang luoi relayer
+### 12.4. Mạng lưới relayer
 
-| Vector | Danh gia | Bien phap |
+| Vector | Đánh giá | Biện pháp |
 |---|---|---|
-| Sybil | Chi phi tao intent gia ~50 µs (mot ECDSA) vs 15–40 ms simulate (**60–150 ms** neu Zether) ⇒ ty le **500:1**, len **~3,000:1** voi Zether | 6 tang cua §5.5. **Sua so voi ban nhap:** tang 0 (IP) phai o **nginx `limit_req`**, khong trong Odoo (moi worker la mot process, bo dem trong bien module dem sai theo he so `workers`); tang 1 (`from`) o Redis |
-| PoW | Ban nhap ghi "PoW 20 bit o tang 3" | **Sua:** 20 bit ≈ 1M keccak ≈ **5 s tren Android tam trung** — khong chap nhan duoc cho app ban hang. Mobile luon di duong **JWT `bamboo_token_auth`** (§5.5 lua chon c). PoW chi cho nguoi la hoan toan, va khi buoc phai co tren mobile thi **16 bit** (~0.3 s). `blockchain.intent.pow_bits` la config, tang tu dong khi hang doi simulate > 500, **tat hoan toan khi private profile** |
-| Storage DoS | Botnet 10,000 dia chi × 10 intent/phut = 1,667 intent/s × 1.5 KB = **216 GB/ngay** neu persist | **Khong persist gi truoc tang 3.** Intent song trong Redis `TTL = expiry - now`. Chi qua tang 4 moi `create()` row `blockchain.metatx` |
-| Intent theft | **Khong the** — digest chan sua noi dung; `feeRecipient` la thu duy nhat doi duoc va no dang tra cho chinh no | Khong can them |
-| Fee front-run giua N relayer | Ke thua revert, EV giam ve ~18% khi N=5 | Soft-exclusivity **W = 3s tren Gnosis, va W = 0 cho `is_zether`** (§5.4.4a — ban nhap bo mat ve thu hai) + lottery |
-| **Lottery weighting** | Ban nhap ghi `sqrt(stake) × reputation`. **Sai, va sai theo huong nguy hiem** | §5.4.4a da bac: voi trong so can bac hai, tach stake `S` thanh `k` danh tinh cho tong `sqrt(k)·sqrt(S)` — **thuong sybil `sqrt(k)` lan mien phi** (k=100 ⇒ 10×). Trong so can bac hai chi co nghia khi co registry danh tinh duy nhat; o day khong co. **Chot: trong so tuyen tinh × reputation, `MIN_BOND` ~$500, `CAP_SHARE = 0.20`, `REP_FLOOR = 0.10`** |
-| Kiem duyet cua mot relayer | Hub re-publish sau `W` | Reputation EWMA |
-| **Kiem duyet cua toan bo hub** (A3) | Note khong xu ly | Duong thoat bat buoc: `blockchain.relay.job` chuyen sang **Enterprise Relay Pool** noi bo bang mot co switch; **drill blackout hub hang thang**, do thoi gian chuyen mach. Duong thoat khong duoc kiem thu la duong thoat khong ton tai |
-| Ro ri du lieu qua intent bus | §5.4.5: `MODE_OPEN` = moi nguoi doc duoc calldata **truoc** khi len chuoi. Voi ERC-20 B2B do la **toan bo** giao dich | Private profile: bus chi nghe noi bo, **mTLS hai chieu, khong federation**. Public profile: `blockchain.chain.max_public_intent_value_base` — builder tu choi publish `MODE_OPEN` khi `amount > nguong` va khong confidential |
-| MEV sandwich quanh deposit/withdraw | Voi `WRAP_1_1` khong co gia ⇒ khong sandwich duoc. Voi `PeggedToken` **co**: front-run mot lan cap nhat rate | `minAmountOut` tren moi phep quy doi peg; `SignedRateSource` k-of-n publisher, `maxRateAge = 3600s`, `maxDeviationBps = 200`/lan cap nhat, **halt mint (khong halt burn)** khi lech > 500 bps |
-| MEV tren `withdraw` Zether | `recipient` da bam vao Fiat-Shamir ⇒ khong doi duoc. Nhung **`amount` cua withdraw la plaintext**, nen mot withdraw lon van la tin hieu giao dich cho ke khac | `blockchain.rpc.endpoint.propagation`: tx co `mev_sensitive=True` chi gui toi endpoint `private orderflow`, **khong fan-out** (§06.7.2 quy tac 3). Ban nhap bo mat quy tac nay |
-| Slashing | v1 **khong co**. Xay adjudication on-chain cho khieu nai $0.005 la vo ly (§5.6) | `UNBOND_PERIOD = 7 days` de chan bond-chiem-lottery-rut. Bond bang **native cua chain (xDAI)**, khong bang enterprise token — bond bang token minh in ra khong phai la stake |
-| Relayer doc bus de thu thap tinh bao thuong mai | **Co the**, va khong slashing nao chan duoc | Chan bang **quyen truy cap bus** (mTLS, NDA cho `MODE_RESTRICT_RELAYER`), khong bang tien |
+| Sybil | Chi phí tạo intent giả ~50 µs (một ECDSA) vs 15–40 ms simulate (**60–150 ms** nếu Zether) ⇒ tỷ lệ **500:1**, lên **~3,000:1** với Zether | 6 tầng của §5.5. **Sửa so với bản nháp:** tầng 0 (IP) phải ở **nginx `limit_req`**, không trong Odoo (mỗi worker là một process, bộ đếm trong biến module đếm sai theo hệ số `workers`); tầng 1 (`from`) ở Redis |
+| PoW | Bản nháp ghi "PoW 20 bit ở tầng 3" | **Sửa:** 20 bit ≈ 1M keccak ≈ **5 s trên Android tầm trung** — không chấp nhận được cho app bán hàng. Mobile luôn đi đường **JWT `bamboo_token_auth`** (§5.5 lựa chọn c). PoW chỉ cho người lạ hoàn toàn, và khi buộc phải có trên mobile thì **16 bit** (~0.3 s). `blockchain.intent.pow_bits` là config, tăng tự động khi hàng đợi simulate > 500, **tắt hoàn toàn khi private profile** |
+| Storage DoS | Botnet 10,000 địa chỉ × 10 intent/phút = 1,667 intent/s × 1.5 KB = **216 GB/ngày** nếu persist | **Không persist gì trước tầng 3.** Intent sống trong Redis `TTL = expiry - now`. Chỉ qua tầng 4 mới `create()` row `blockchain.metatx` |
+| Intent theft | **Không thể** — digest chặn sửa nội dung; `feeRecipient` là thứ duy nhất đổi được và nó đang trả cho chính nó | Không cần thêm |
+| Fee front-run giữa N relayer | Kẻ thua revert, EV giảm về ~18% khi N=5 | Soft-exclusivity **W = 3s trên Gnosis, và W = 0 cho `is_zether`** (§5.4.4a — bản nháp bỏ mất vế thứ hai) + lottery |
+| **Lottery weighting** | Bản nháp ghi `sqrt(stake) × reputation`. **Sai, và sai theo hướng nguy hiểm** | §5.4.4a đã bác: với trọng số căn bậc hai, tách stake `S` thành `k` danh tính cho tổng `sqrt(k)·sqrt(S)` — **thưởng sybil `sqrt(k)` lần miễn phí** (k=100 ⇒ 10×). Trọng số căn bậc hai chỉ có nghĩa khi có registry danh tính duy nhất; ở đây không có. **Chốt: trọng số tuyến tính × reputation, `MIN_BOND` ~$500, `CAP_SHARE = 0.20`, `REP_FLOOR = 0.10`** |
+| Kiểm duyệt của một relayer | Hub re-publish sau `W` | Reputation EWMA |
+| **Kiểm duyệt của toàn bộ hub** (A3) | Note không xử lý | Đường thoát bắt buộc: `blockchain.relay.job` chuyển sang **Enterprise Relay Pool** nội bộ bằng một cờ switch; **drill blackout hub hàng tháng**, đo thời gian chuyển mạch. Đường thoát không được kiểm thử là đường thoát không tồn tại |
+| Rò rỉ dữ liệu qua intent bus | §5.4.5: `MODE_OPEN` = mọi người đọc được calldata **trước** khi lên chuỗi. Với ERC-20 B2B đó là **toàn bộ** giao dịch | Private profile: bus chỉ nghe nội bộ, **mTLS hai chiều, không federation**. Public profile: `blockchain.chain.max_public_intent_value_base` — builder từ chối publish `MODE_OPEN` khi `amount > ngưỡng` và không confidential |
+| MEV sandwich quanh deposit/withdraw | Với `WRAP_1_1` không có giá ⇒ không sandwich được. Với `PeggedToken` **có**: front-run một lần cập nhật rate | `minAmountOut` trên mọi phép quy đổi peg; `SignedRateSource` k-of-n publisher, `maxRateAge = 3600s`, `maxDeviationBps = 200`/lần cập nhật, **halt mint (không halt burn)** khi lệch > 500 bps |
+| MEV trên `withdraw` Zether | `recipient` đã băm vào Fiat-Shamir ⇒ không đổi được. Nhưng **`amount` của withdraw là plaintext**, nên một withdraw lớn vẫn là tín hiệu giao dịch cho kẻ khác | `blockchain.rpc.endpoint.propagation`: tx có `mev_sensitive=True` chỉ gửi tới endpoint `private orderflow`, **không fan-out** (§06.7.2 quy tắc 3). Bản nháp bỏ mất quy tắc này |
+| Slashing | v1 **không có**. Xây adjudication on-chain cho khiếu nại $0.005 là vô lý (§5.6) | `UNBOND_PERIOD = 7 days` để chặn bond-chiếm-lottery-rút. Bond bằng **native của chain (xDAI)**, không bằng enterprise token — bond bằng token mình in ra không phải là stake |
+| Relayer đọc bus để thu thập tình báo thương mại | **Có thể**, và không slashing nào chặn được | Chặn bằng **quyền truy cập bus** (mTLS, NDA cho `MODE_RESTRICT_RELAYER`), không bằng tiền |
+| **[BẢN 3] Node trong mesh mở nhận vai trò nó không nên có** | §21.4: một node cấu hình sai có thể vừa là pool công khai vừa cầm khoá submit, và forward intent của người khác trong khi tự race chúng lên chuỗi | Ma trận năng lực phải **evaluate được trước khi simulate**, và thuật toán submit-vs-forward là forward **kèm `exclusive_until`**, không phải forward-rồi-đua. Pool thuần chấm điểm bằng **forward hữu ích** (intent sau đó lên chuỗi), không bằng lưu lượng — nếu không, spam forward là chiến lược tối ưu |
+| **[BẢN 3] Key pool bị dùng để né rate limit hoặc né reputation** | §21.5 cho một node xoay nhiều khoá ký để không nghẽn ở nonce tuần tự. Cùng cơ chế đó cho phép một node xấu xuất hiện như N relayer | Khoá trong pool **không phải danh tính**: `feeRecipient` cố định và tách khỏi khoá ký, reputation chấm theo `relayer_id` chứ không theo địa chỉ gửi. Khoá chỉ trả gas, giữ float nhỏ, không giữ vai trò nào trong contract — nên N khoá **an toàn hơn** một khoá, và đồng thời không mua được N phiếu |
 
 ---
 
 ### 12.5. Custody
 
-#### 12.5.1. HSM khong biet no dang ky cai gi
+#### 12.5.1. HSM không biết nó đang ký cái gì
 
-Day la hieu lam nguy hiem nhat quanh yeu cau "FIPS 140-2 L3". Mot HSM PKCS#11 ky bat ky 32 byte nao ban dua vao. A5 chiem duoc app server thi ky duoc mot tx rut sach treasury **ma khong can trich xuat khoa**. **FIPS L3 chong trich xuat khoa, khong chong lam dung khoa.**
+Đây là hiểu lầm nguy hiểm nhất quanh yêu cầu "FIPS 140-2 L3". Một HSM PKCS#11 ký bất kỳ 32 byte nào bạn đưa vào. A5 chiếm được app server thì ký được một tx rút sạch treasury **mà không cần trích xuất khoá**. **FIPS L3 chống trích xuất khoá, không chống lạm dụng khoá.**
 
-Bien phap: **policy phai nam cung phia voi signer**, khong nam trong Odoo. Ban nhap dung o ket luan nhung hand-wave o co che. Cu the:
+Biện pháp: **policy phải nằm cùng phía với signer**, không nằm trong Odoo. Bản nháp đúng ở kết luận nhưng hand-wave ở cơ chế. Cụ thể:
 
 ```python
 # confidential-signer/policy.py  — chay TRONG enclave, truoc moi lan ky
@@ -333,58 +340,59 @@ def authorize(tenant_uuid: str, signer_ref: str, payload: bytes) -> None:
     assert digest_not_seen(sha256(payload))         # chong replay VAO signer
 ```
 
-Sau diem ma neu thieu thi lop nay chi la trang tri:
+Sáu điểm mà nếu thiếu thì lớp này chỉ là trang trí:
 
-1. **Parse duoc moi tx type, ke ca `0x04` (EIP-7702 SetCode).** Mot payload type 4 ky duoc se gan code vao EOA cua treasury. Neu parser khong biet type 4, mac dinh phai la **tu choi**, khong phai bo qua.
-2. **Signer tu giu nonce.** Neu no tin `tx.nonce` do relay-pool gui thi A10 ky duoc hai tx cung nonce (mot cho ta, mot cho no) va thay the trong mempool.
-3. **Chong replay vao chinh signer.** Cung mot payload gui hai lan phai bi tu choi; neu khong, A10 tua lai mot lenh rut hop le.
-4. **Enclave image duoc pin.** Tren AWS: `kms:Decrypt` voi tham so `Recipient` (attestation document COSE_Sign1 ky boi Nitro PKI) va key policy dieu kien tren `kms:RecipientAttestation:PCR0` / `ImageSha384`. Ket qua: **chi dung mot image, do bang hash, moi unwrap duoc `x`**. Root tren EC2 host cung khong doc duoc. Tren GCP: Confidential Space + attribute condition tren `submods.container.image_digest`.
-5. **Doi image la mot su kien governance, khong phai mot lan deploy.** Pin PCR0 nghia la moi ban va deu phai duoc them vao key policy — do la co y. Phai co runbook, 2 nguoi duyet, va monitoring tren thay doi key policy.
-6. **Rollback protection.** Neu key policy con cho phep PCR0 cu, mot attacker chay lai image cu co bug. Chinh sach: giu **toi da 2 PCR0** (hien tai + ban truoc, de rollback khan), xoa cai thu ba.
+1. **Parse được mọi tx type, kể cả `0x04` (EIP-7702 SetCode).** Một payload type 4 ký được sẽ gắn code vào EOA của treasury. Nếu parser không biết type 4, mặc định phải là **từ chối**, không phải bỏ qua.
+2. **Signer tự giữ nonce.** Nếu nó tin `tx.nonce` do relay-pool gửi thì A10 ký được hai tx cùng nonce (một cho ta, một cho nó) và thay thế trong mempool.
+3. **Chống replay vào chính signer.** Cùng một payload gửi hai lần phải bị từ chối; nếu không, A10 tua lại một lệnh rút hợp lệ.
+4. **Enclave image được pin.** Trên AWS: `kms:Decrypt` với tham số `Recipient` (attestation document COSE_Sign1 ký bởi Nitro PKI) và key policy điều kiện trên `kms:RecipientAttestation:PCR0` / `ImageSha384`. Kết quả: **chỉ đúng một image, đo bằng hash, mới unwrap được `x`**. Root trên EC2 host cũng không đọc được. Trên GCP: Confidential Space + attribute condition trên `submods.container.image_digest`.
+5. **Đổi image là một sự kiện governance, không phải một lần deploy.** Pin PCR0 nghĩa là mọi bản vá đều phải được thêm vào key policy — đó là cố ý. Phải có runbook, 2 người duyệt, và monitoring trên thay đổi key policy.
+6. **Rollback protection.** Nếu key policy còn cho phép PCR0 cũ, một attacker chạy lại image cũ có bug. Chính sách: giữ **tối đa 2 PCR0** (hiện tại + bản trước, để rollback khẩn), xoá cái thứ ba.
 
-Va mot cau phai viet vao hop dong khach hang: **o mo hinh nay `x` khong nam trong bien FIPS 140-2 Level 3 tai thoi diem su dung.** Nitro Enclave / Intel TDX khong co chung nhan FIPS L3 cho vai tro nay. Neu mot co quan quan ly doi FIPS L3 cho khoa ma hoa so du, cau tra loi trung thuc la yeu cau do **hom nay khong thoa man duoc voi Zether** (§07.2).
+Và một câu phải viết vào hợp đồng khách hàng: **ở mô hình này `x` không nằm trong biên FIPS 140-2 Level 3 tại thời điểm sử dụng.** Nitro Enclave / Intel TDX không có chứng nhận FIPS L3 cho vai trò này. Nếu một cơ quan quản lý đòi FIPS L3 cho khoá mã hoá số dư, câu trả lời trung thực là yêu cầu đó **hôm nay không thoả mãn được với Zether** (§07.2).
 
-#### 12.5.2. Hai lop khoa, va cho note sai
+#### 12.5.2. Hai lớp khoá, và chỗ note sai
 
-Note yeu cau moi private key nam trong HSM/MPC. **Mot HSM PKCS#11 khong tinh duoc Bulletproof/ElGamal**: `encKey x` phai o trong process prover, duoc dung lien tuc. (Chi tiet ky thuat: `CKM_ECDH1_DERIVE` *la* phep nhan vo huong, nhung khong HSM nao co OID cho BN254/Baby Jubjub, va hang nghin round-trip PKCS#11 cho mot transfer la vai giay — §07.2.)
+Note yêu cầu mọi private key nằm trong HSM/MPC. **Một HSM PKCS#11 không tính được Bulletproof/ElGamal**: `encKey x` phải ở trong process prover, được dùng liên tục. (Chi tiết kỹ thuật: `CKM_ECDH1_DERIVE` *là* phép nhân vô hướng, nhưng không HSM nào có OID cho BN254/Baby Jubjub, và hàng nghìn round-trip PKCS#11 cho một transfer là vài giây — §07.2.)
 
-| Lop khoa | Dung de | Noi song | Ai duyet | Throughput |
+| Lớp khoá | Dùng để | Nơi sống | Ai duyệt | Throughput |
 |---|---|---|---|---|
-| `authKey` treasury / contract admin | Upgrade, pause, refill, mint | HSM FIPS L3 hoac MPC, **dual control** | Governance Safe | 10^3/s (khong can) |
-| `authKey` relayer hot | Ky vo tx cua relayer EOA | Nitro Enclave / SGX, **xoay 30 ngay** (khong phai moi gio — sua so voi ban nhap, §06.5.1), runway 4h | Ops | 10^4/s |
-| Session key cua Agent | Ky `MetaTransaction` | Enclave hoac secure element cua thiet bi | Policy on-chain | — |
-| **`encKey x` (Zether)** | Giai ma so du, dung proof | Enclave; hoac MPC threshold ElGamal (chi phi ky cao); toi thieu la DEK wrap boi KMS, giai trong RAM, **khong bao gio persist** | Bat buoc backup Shamir 2-of-3 **truoc khi mo tai khoan dau tien** | 1 proof/200–800 ms |
+| `authKey` treasury / contract admin | Đăng ký implementation, pause, refill, mint | HSM FIPS L3 hoặc MPC, **dual control** | Governance Safe | 10^3/s (không cần) |
+| `authKey` relayer hot | Ký vỏ tx của relayer EOA | Nitro Enclave / SGX, **xoay 30 ngày** (không phải mỗi giờ — sửa so với bản nháp, §06.5.1), runway 4h | Ops | 10^4/s |
+| Session key của Agent | Ký `MetaTransaction` | Enclave hoặc secure element của thiết bị | Policy on-chain | — |
+| **`encKey x` (Zether)** | Giải mã số dư, dựng proof | Enclave; hoặc MPC threshold ElGamal (chi phí ký cao); tối thiểu là DEK wrap bởi KMS, giải trong RAM, **không bao giờ persist** | Bắt buộc backup Shamir 2-of-3 **trước khi mở tài khoản đầu tiên** | 1 proof/200–800 ms |
 
-**Nut co chai phai biet truoc:** MPC SaaS cho **5–30 sign/s va p50 300 ms – 3 s** cho mot vault (§06.6). Neu moi business action = 1 chu ky thi tran he thong la 5–30 action/s — thap hon ca chuoi. Duong ra la `MetaTxBatcher.executeBatch` (1 chu ky HSM cho N=50 meta-tx) chu khong phai them EOA. Nhung batcher **mo ra mot vector moi**: mot item hong keo ca batch chet, va mot relayer co the dot nonce cua user. Ba rang buoc bat buoc len batcher (§06.6): `require(gasleft() >= g + g/63 + 12_000)` truoc moi item; **khong** revert ca batch khi mot item fail; thu fee **truoc** inner call.
+**Nút cổ chai phải biết trước:** MPC SaaS cho **5–30 sign/s và p50 300 ms – 3 s** cho một vault (§06.6). Nếu mỗi business action = 1 chữ ký thì trần hệ thống là 5–30 action/s — thấp hơn cả chuỗi. Đường ra là `MetaTxBatcher.executeBatch` (1 chữ ký HSM cho N=50 meta-tx) chứ không phải thêm EOA. Nhưng batcher **mở ra một vector mới**: một item hỏng kéo cả batch chết, và một relayer có thể đốt nonce của user. Ba ràng buộc bắt buộc lên batcher (§06.6): `require(gasleft() >= g + g/63 + 12_000)` trước mỗi item; **không** revert cả batch khi một item fail; thu fee **trước** inner call.
+
+**[BẢN 3] Batching và key pool giải hai nút thắt khác nhau, và cần cả hai.** Batching gộp N công việc vào một chữ ký — chỉ làm được khi **ta tự sinh cả N** (§06.6.1: 6 EOA là đủ). Key pool (§21.5) giải nút thắt **nonce tuần tự của EVM**: một khoá ký được khoảng một tx mỗi block dù ký nhanh đến đâu. Một node relayer mở nhận việc của người lạ không batch được, nên nó cần 50 khoá. Hai con số không mâu thuẫn nhau; chúng trả lời hai câu hỏi.
 
 #### 12.5.3. Session-key over-scoping
 
-Mot session key voi `to = MetaTxForwarder` va calldata tu do la **toan quyen**. Scope phai la `(chainId, target, selector, tokenContract, cumulative_value_cap, expiry, batchId range)` va phai duoc enforce **on-chain** boi smart account, khong chi trong Odoo — vi A5 va A10 di vong qua Odoo duoc.
+Một session key với `to = MetaTxForwarder` và calldata tự do là **toàn quyền**. Scope phải là `(chainId, target, selector, tokenContract, cumulative_value_cap, expiry, batchId range)` và phải được enforce **on-chain** bởi smart account, không chỉ trong Odoo — vì A5 và A10 đi vòng qua Odoo được.
 
-Bon quy tac them:
+Bốn quy tắc thêm:
 
-- **`authEpoch` phai nam trong digest** (§02.4.2). Thieu no thi xoay khoa khong vo hieu hoa chu ky cu, va toan bo co che thu hoi la trang tri.
-- **Cumulative cap phai on-chain**, khong phai per-tx cap. Mot tran $1,000/tx voi 500 tx la $500,000.
-- **Thoi han 1–8 gio**, va revoke phai la mot lenh **on-chain** (`authEpoch++`), khong phai mot co trong Odoo.
-- **Khong pre-sign hang loat theo nonce** (§06.6.4): mot kho tx da ky trong Redis la mot kho tien ai doc duoc Redis cung phat song duoc, va khong huy duoc. Ngoai le duy nhat duoc xem xet la **mot** tx cancel (self-send, 21,000 gas) cho moi nonce inflight, luu trong enclave chu khong trong Redis, va mac dinh **tat**.
+- **`authEpoch` phải nằm trong digest** (§02.4.2). Thiếu nó thì xoay khoá không vô hiệu hoá chữ ký cũ, và toàn bộ cơ chế thu hồi là trang trí.
+- **Cumulative cap phải on-chain**, không phải per-tx cap. Một trần $1,000/tx với 500 tx là $500,000.
+- **Thời hạn 1–8 giờ**, và revoke phải là một lệnh **on-chain** (`authEpoch++`), không phải một cờ trong Odoo.
+- **Không pre-sign hàng loạt theo nonce** (§06.6.4): một kho tx đã ký trong Redis là một kho tiền ai đọc được Redis cũng phát sóng được, và không huỷ được. Ngoại lệ duy nhất được xem xét là **một** tx cancel (self-send, 21,000 gas) cho mỗi nonce inflight, lưu trong enclave chứ không trong Redis, và mặc định **tắt**.
 
-#### 12.5.4. Custodial mode va rui ro noi bo
+#### 12.5.4. Custodial mode và rủi ro nội bộ
 
-**Custodial mode**: omnibus `schnorrAddress` chung ⇒ operator thay moi so tien cua moi khach, va so phu Odoo tro thanh nguon su that duy nhat. Ve mat phap ly do la **nhan giu tien cua nguoi khac** (§13.4 — co the roi vao pham vi giay phep trung gian thanh toan). Ghi ro trong tai lieu deploy; khong bat mac dinh.
+**Custodial mode**: omnibus `schnorrAddress` chung ⇒ operator thấy mọi số tiền của mọi khách, và sổ phụ Odoo trở thành nguồn sự thật duy nhất. Về mặt pháp lý đó là **nhận giữ tiền của người khác** (§13.4). Ghi rõ trong tài liệu deploy; không bật mặc định.
 
-**Insider risk, cu the chu khong chung chung:**
+**Insider risk, cụ thể chứ không chung chung:**
 
-| Kich ban | Chan bang |
+| Kịch bản | Chặn bằng |
 |---|---|
-| Mot ky su co ca quyen deploy va quyen duyet | Tach `DEPLOYER_ROLE` (service account) khoi `PROTOTYPE_ADMIN` (Safe 3-of-5) — §1.11. Nguoi khong duoc o ca hai |
-| Nguoi giu treasury cung la nguoi duyet relayer | `group_blockchain_treasury` va `group_blockchain_relayer_admin` **khong bao gio** cung mot user; test ACL assert giao rong (§10.5) |
-| Nhan vien nghi viec van con quyen | Offboarding checklist co: xoa khoi Safe (on-chain tx!), xoay `authEpoch`, thu hoi client cert mTLS, xoay credential RPC. Cron doi chieu `getOwners()` cua moi Safe voi `blockchain.governance.signer` **hang ngay** (§1.11.1 muc 2) |
-| Break-glass bi lam dung | Moi lan dung khoa break-glass phat event on-chain + page toan doi + post-mortem bat buoc, ke ca khi hop le |
+| Một kỹ sư có cả quyền deploy và quyền duyệt | Tách `DEPLOYER_ROLE` (service account) khỏi `PROTOTYPE_ADMIN` (Safe 3-of-5) — §1.11. Người không được ở cả hai |
+| Người giữ treasury cũng là người duyệt relayer | `group_blockchain_treasury` và `group_blockchain_relayer_admin` **không bao giờ** cùng một user; test ACL assert giao rỗng (§10.5) |
+| Nhân viên nghỉ việc vẫn còn quyền | Offboarding checklist có: xoá khỏi Safe (on-chain tx!), xoay `authEpoch`, thu hồi client cert mTLS, xoay credential RPC. Cron đối chiếu `getOwners()` của mọi Safe với `blockchain.governance.signer` **hàng ngày** (§1.11.1 mục 2) |
+| Break-glass bị lạm dụng | Mỗi lần dùng khoá break-glass phát event on-chain + page toàn đội + post-mortem bắt buộc, kể cả khi hợp lệ |
 
 ---
 
-### 12.6. Tang Odoo
-
+### 12.6. Tầng Odoo
 ```python
 @api.model
 def relay_submit_intent(self, caip2, target_address, calldata_hex, ...):
@@ -401,146 +409,150 @@ def relay_submit_intent(self, caip2, target_address, calldata_hex, ...):
     return self._submit_intent(self.env.company, ...)   # logic private
 ```
 
-#### 12.6.1. `base.group_system` = RCE trong process Odoo (sua mot sai lam cua ban nhap)
+#### 12.6.1. `base.group_system` = RCE trong process Odoo (sửa một sai lầm của bản nháp)
 
-Ban nhap tach A4 (`base.group_system`) va A5 (chiem app server) thanh hai muc do khac nhau. **Tren Odoo do la mot.** Mot user `base.group_system` co the tao `ir.actions.server` voi `state = 'code'` va chay Python tuy y **trong chinh process Odoo**, voi moi bien moi truong, moi socket, moi credential ma process do co. Cung nhu vay voi `base.automation`, voi `ir.cron` (`state='code'`), va voi cai dat mot module tuy y.
+Bản nháp tách A4 (`base.group_system`) và A5 (chiếm app server) thành hai mức độ khác nhau. **Trên Odoo đó là một.** Một user `base.group_system` có thể tạo `ir.actions.server` với `state = 'code'` và chạy Python tuỳ ý **trong chính process Odoo**, với mọi biến môi trường, mọi socket, mọi credential mà process đó có. Cũng như vậy với `base.automation`, với `ir.cron` (`state='code'`), và với cài đặt một module tuỳ ý.
 
-He qua, phai viet ra chu khong duoc de nguoi doc tu suy:
+Hệ quả, phải viết ra chứ không được để người đọc tự suy:
 
-1. **Moi bien phap dua tren "chi group_system moi doc duoc" deu bang khong.** `ir.config_parameter` chi la mot vi du; ke ca `fields.Char(groups=...)` cung khong chan duoc A4 vi A4 chay code, khong goi `read()`.
-2. **Do do policy signer phai o ngoai Odoo** (12.5.1). Do khong phai "defense in depth", do la **duy nhat** lop con lai khi A4 xuat hien.
-3. **Danh sach nguoi co `base.group_system` phai ngan va phai duoc review dinh ky** nhu danh sach signer cua Safe. Trong Odoo 19, kiem bang `group_ids` (khong con `groups_id`).
-4. **Monitoring bat buoc**: bat ky `create`/`write` tren `ir.actions.server`, `base.automation`, `ir.cron`, `ir.model`, `ir.model.fields` deu la su kien bao mat, khong phai su kien cau hinh (bang 12.11 dong 12).
-5. Cau hoi con lai cho nguoi quyet: `base.group_system` co nam trong bien tin cay khong. Hien tai **co** — va do la mot lua chon, khong phai mot su that.
+1. **Mọi biện pháp dựa trên "chỉ group_system mới đọc được" đều bằng không.** `ir.config_parameter` chỉ là một ví dụ; kể cả `fields.Char(groups=...)` cũng không chặn được A4 vì A4 chạy code, không gọi `read()`.
+2. **Do đó policy signer phải ở ngoài Odoo** (12.5.1). Đó không phải "defense in depth", đó là **duy nhất** lớp còn lại khi A4 xuất hiện.
+3. **Danh sách người có `base.group_system` phải ngắn và phải được review định kỳ** như danh sách signer của Safe. Trong Odoo 19, kiểm bằng `group_ids` (không còn `groups_id`).
+4. **Monitoring bắt buộc**: bất kỳ `create`/`write` trên `ir.actions.server`, `base.automation`, `ir.cron`, `ir.model`, `ir.model.fields` đều là sự kiện bảo mật, không phải sự kiện cấu hình (bảng 12.11 dòng 12).
+5. Câu hỏi còn lại cho người quyết: `base.group_system` có nằm trong biên tin cậy không. Hiện tại **có** — và đó là một lựa chọn, không phải một sự thật.
 
-#### 12.6.2. Bang vector tang Odoo
+#### 12.6.2. Bảng vector tầng Odoo
 
-| Vector | Cu the | Bien phap |
+| Vector | Cụ thể | Biện pháp |
 |---|---|---|
-| Record-rule bypass | Rule dung `('organization_id', 'child_of', ...)` tren mot Char `parent_path` ⇒ `ValueError`, va o Odoo 19 mot rule loi lam **moi** search raise (bay §2 CLAUDE.md). `dms_blockchain` khong co `organization_id`; dung `company_id` many2one + `('company_id', 'in', company_ids)` | Guard CI da co; them test doc/ghi cheo company cho **tung** model `blockchain.*` (A9) |
-| Ro ri qua `read_group` / `search_read` | Rule loc **dong**, va `read_group` van bi rule chan — nhung mot `read_group` tren `amount_base` cua model khong company-scoped (`blockchain.transaction`, §10.9) lo tong hop cho tenant khac | `blockchain.transaction` phai co rule gian tiep `['|', ('settlement_ids','=',False), ('settlement_ids.company_id','in',company_ids)]`. Test: user cong ty A `read_group` khong thay tong cua B |
-| Ro ri cot, khong phai dong | Rule khong loc cot. `signer_ref`, `endpoint_ref`, `pow` cua account | `fields.Char(groups='dms_blockchain.group_blockchain_manager')` — **Odoo thuc su chan o `read()`**, khac han `password=True` von khong ton tai o Odoo 19 va chua bao gio chan `read()`/RPC/export |
-| RPC lo method nguy hiem | Bat ky method khong `_` va khong `@api.private` deu goi duoc qua `call_kw` **va** `/json/2` | Quy tac cung: **khong method public nao duoc gay ra mot chu ky HSM dong bo**. Ky chi xay ra trong cron/worker, tren record da o state duoc rule cho phep. Test liet ke moi method public cua `blockchain.*` va assert no nam trong allowlist da review (§10.6) |
-| Nhan `allowed_company_ids` tu client | Mot method public nhan `company_id` la mot lo hong leo thang pham vi | `self.env.companies` do session/JWT quyet dinh. Grep gate: khong signature nao cua method public chua `company_id` hay `allowed_company_ids` |
-| `ir.config_parameter` doc duoc boi `base.group_system` | `get_param` goi duoc qua RPC; **va** dump DB chua no nguyen ven | Chi luu **handle** (`signer_ref`, `url_ref`, `key_ref`). Bi mat that nam trong bien moi truong / file doc luc khoi dong (`odoo.tools.config`) hoac secret manager. §06.7 de nghi luu URL RPC **kem API key** trong `ir.config_parameter` — **do la ro ri credential toi moi Settings admin va toi moi ban backup**, phai sua |
-| Backup DB va filestore | Mot ban dump `.sql` la mot ban sao cua moi `ir.config_parameter`, moi `res.users.password` hash, moi attachment metadata | Backup ma hoa at-rest, khoa nam ngoai Odoo; **khong bao gio** restore production dump len staging ma khong chay script scrub (`ir.config_parameter` `blockchain.*`, `ir.mail_server`, `fetchmail.server`) |
-| Ro ri qua log | Traceback cua `requests` in ca URL kem query string; mot API key trong URL vao thang `ir.logging` va vao Sentry | Credential khong bao gio o query string; `logging` filter cho `Authorization`; `ir.logging` retention 30 ngay |
-| SQL injection | Indexer xu ly reorg thuong viet raw SQL co ten bang dong | Dung `odoo.tools.SQL` (Odoo 17+ co object nay va `cr.execute` nhan truc tiep) hoac `cr.execute(query, params)` voi `%s`; ten bang dong dung `SQL.identifier(...)`; **cam f-string trong `execute` bang mot grep gate trong CI** |
-| Privilege escalation qua `sudo()` | `sudo()` de ghi audit row roi vo tinh dung `self` da sudo cho ca nhanh nghiep vu | `sudo()` chi tren mot recordset **moi lay lai** (`self.env['x'].sudo().create(...)`), khong bao gio tren `self`; moi `sudo()` phai co comment mot dong ly do; CI dem so lan `sudo()` va fail khi tang ma khong co review |
-| `ir.attachment` cua audit report / proof blob | Attachment `public=True` hoac lo `access_token` ⇒ bao cao kiem toan reserve doc duoc boi bat ky ai. Chung nam tren Garage (S3) | `public=False`, `res_model`/`res_id` tro dung record, khong sinh `access_token`; bucket Garage **khong** public-read; presigned URL TTL <= 15 phut |
-| Consumer suy sai trang thai | `payment.transaction._set_done()` goi tu `mined` | `_set_done()` **chi** khi `blockchain.metatx.state == 'done'` (finalized **va** `innerSuccess = true`), roi `_post_process()`. `_set_pending()` cho moi trang thai truoc do. Voi hoan tien: settlement moi + refund tx, **khong** `_set_canceled()` tren tx cu (§10.8) |
-| **Duong ghi `done` khong duoc kiem soat** (ban nhap thieu) | Ngoai Finality Gate con: sua tay tren UI, `sudo()` trong bridge, script migration, A4 | Guard trong `write()`: chuyen sang `done` chi hop le khi `self.env.context.get('finality_gate')` va caller la cron; moi chuyen trang thai ghi mot dong vao `blockchain.settlement.transition` (append-only, khong `unlink`); monitoring dong 12 canh bao khi co `done` khong kem transition row |
-| Trap Odoo 19 | `_sql_constraints` dang list bi bo qua hoan toan ⇒ tuong co UNIQUE ma khong co ⇒ double-spend theo digest | `models.Constraint('UNIQUE(metatx_digest)', ...)` + test tich hop `SELECT conname FROM pg_constraint WHERE conrelid='blockchain_metatx'::regclass;` |
-| Trap Odoo 19 (2) | Stored computed field khong duoc nhan `default`; mot nhanh compute khong gan gi ⇒ cot `required` bi NULL ⇒ INSERT chet | Ap dung cho `lane_slot` (§04.3) va moi compute stored cua `blockchain.*`: **moi nhanh phai gan gia tri** |
-| Bridge lam ro ri nguoc | `dms_blockchain_bridge` depend `dms`; mot rule cua `dms` bi loi lam hong ca `blockchain.*` | Core `dms_blockchain` **khong** depend `dms` (locked #7). Test: cai dat core tren mot DB khong co `dms` va chay full test suite |
+| Record-rule bypass | Rule dùng `('organization_id', 'child_of', ...)` trên một Char `parent_path` ⇒ `ValueError`, và ở Odoo 19 một rule lỗi làm **mọi** search raise (bẫy §2 CLAUDE.md). `dms_blockchain` không có `organization_id`; dùng `company_id` many2one + `('company_id', 'in', company_ids)` | Guard CI đã có; thêm test đọc/ghi chéo company cho **từng** model `blockchain.*` (A9) |
+| Rò rỉ qua `read_group` / `search_read` | Rule lọc **dòng**, và `read_group` vẫn bị rule chặn — nhưng một `read_group` trên `amount_base` của model không company-scoped (`blockchain.transaction`, §10.9) lộ tổng hợp cho tenant khác | `blockchain.transaction` phải có rule gián tiếp `['|', ('settlement_ids','=',False), ('settlement_ids.company_id','in',company_ids)]`. Test: user công ty A `read_group` không thấy tổng của B |
+| Rò rỉ cột, không phải dòng | Rule không lọc cột. `signer_ref`, `endpoint_ref`, `pow` của account | `fields.Char(groups='dms_blockchain.group_blockchain_manager')` — **Odoo thực sự chặn ở `read()`**, khác hẳn `password=True` vốn không tồn tại ở Odoo 19 và chưa bao giờ chặn `read()`/RPC/export |
+| RPC lộ method nguy hiểm | Bất kỳ method không `_` và không `@api.private` đều gọi được qua `call_kw` **và** `/json/2` | Quy tắc cứng: **không method public nào được gây ra một chữ ký HSM đồng bộ**. Ký chỉ xảy ra trong cron/worker, trên record đã ở state được rule cho phép. Test liệt kê mọi method public của `blockchain.*` và assert nó nằm trong allowlist đã review (§10.6) |
+| Nhận `allowed_company_ids` từ client | Một method public nhận `company_id` là một lỗ hổng leo thang phạm vi | `self.env.companies` do session/JWT quyết định, và `Environment.companies` raise `AccessError` với company ngoài `_get_company_ids()` — client thu hẹp được, không mở rộng được (§10.6.2). Grep gate: không signature nào của method public chứa `company_id` hay `allowed_company_ids` |
+| `ir.config_parameter` đọc được bởi `base.group_system` | `get_param` gọi được qua RPC; **và** dump DB chứa nó nguyên vẹn | Chỉ lưu **handle** (`signer_ref`, `url_ref`, `key_ref`). Bí mật thật nằm trong biến môi trường / file đọc lúc khởi động (`odoo.tools.config`) hoặc secret manager. §06.7 đề nghị lưu URL RPC **kèm API key** trong `ir.config_parameter` — **đó là rò rỉ credential tới mọi Settings admin và tới mọi bản backup**, phải sửa |
+| Backup DB và filestore | Một bản dump `.sql` là một bản sao của mọi `ir.config_parameter`, mọi `res.users.password` hash, mọi attachment metadata | Backup mã hoá at-rest, khoá nằm ngoài Odoo; **không bao giờ** restore production dump lên staging mà không chạy script scrub (`ir.config_parameter` `blockchain.*`, `ir.mail_server`, `fetchmail.server`) |
+| Rò rỉ qua log | Traceback của `requests` in cả URL kèm query string; một API key trong URL vào thẳng `ir.logging` và vào Sentry | Credential không bao giờ ở query string; `logging` filter cho `Authorization`; `ir.logging` retention 30 ngày |
+| SQL injection | Indexer xử lý reorg thường viết raw SQL có tên bảng động | Dùng `odoo.tools.SQL` (Odoo 17+ có object này và `cr.execute` nhận trực tiếp) hoặc `cr.execute(query, params)` với `%s`; tên bảng động dùng `SQL.identifier(...)`; **cấm f-string trong `execute` bằng một grep gate trong CI** |
+| Privilege escalation qua `sudo()` | `sudo()` để ghi audit row rồi vô tình dùng `self` đã sudo cho cả nhánh nghiệp vụ | `sudo()` chỉ trên một recordset **mới lấy lại** (`self.env['x'].sudo().create(...)`), không bao giờ trên `self`; mọi `sudo()` phải có comment một dòng lý do; CI đếm số lần `sudo()` và fail khi tăng mà không có review |
+| `ir.attachment` của audit report / proof blob | Attachment `public=True` hoặc lộ `access_token` ⇒ báo cáo kiểm toán reserve đọc được bởi bất kỳ ai. Chúng nằm trên Garage (S3) | `public=False`, `res_model`/`res_id` trỏ đúng record, không sinh `access_token`; bucket Garage **không** public-read; presigned URL TTL <= 15 phút |
+| Consumer suy sai trạng thái | `payment.transaction._set_done()` gọi từ `mined` | `_set_done()` **chỉ** khi `blockchain.metatx.state == 'done'` (finalized **và** `innerSuccess = true`), rồi `_post_process()`. `_set_pending()` cho mọi trạng thái trước đó. Với hoàn tiền: settlement mới + refund tx, **không** `_set_canceled()` trên tx cũ (§10.8) |
+| **Đường ghi `done` không được kiểm soát** (bản nháp thiếu) | Ngoài Finality Gate còn: sửa tay trên UI, `sudo()` trong bridge, script migration, A4 | Guard trong `write()`: chuyển sang `done` chỉ hợp lệ khi context mang **sentinel object** của module (không phải một khoá boolean client gửi được) và caller là cron; mọi chuyển trạng thái ghi một dòng vào `blockchain.settlement.transition` (append-only, không `unlink`); monitoring dòng 12 cảnh báo khi có `done` không kèm transition row |
+| Trap Odoo 19 | `_sql_constraints` dạng list bị bỏ qua hoàn toàn ⇒ tưởng có UNIQUE mà không có ⇒ double-spend theo digest | `models.Constraint('UNIQUE(metatx_digest)', ...)` + test tích hợp `SELECT conname FROM pg_constraint WHERE conrelid='blockchain_metatx'::regclass;` |
+| Trap Odoo 19 (2) | Stored computed field không được nhận `default`; một nhánh compute không gán gì ⇒ cột `required` bị NULL ⇒ INSERT chết | Áp dụng cho `lane_slot` (§04.3) và mọi compute stored của `blockchain.*`: **mọi nhánh phải gán giá trị** |
+| Bridge làm rò rỉ ngược | `dms_blockchain_bridge` depend `dms`; một rule của `dms` bị lỗi làm hỏng cả `blockchain.*` | Core `dms_blockchain` **không** depend `dms` (locked #7). Test: cài đặt core trên một DB không có `dms` và chạy full test suite |
 
 ---
 
-### 12.7. Van hanh
+### 12.7. Vận hành
 
-#### 12.7.1. RPC noi doi (A7) va indexer bi chiem (A11) — duong mat tien lon nhat ngoai smart contract
+#### 12.7.1. RPC nói dối (A7) và indexer bị chiếm (A11) — đường mất tiền lớn nhất ngoài smart contract
 
-Mot provider bi chiem tra ve mot receipt cho tx chua bao gio ton tai ⇒ Finality Gate confirm ⇒ Odoo `_set_done` ⇒ hang duoc giao. Bien phap, **bon lop** (ban nhap ghi "3 lop", §06.7 co bon):
+Một provider bị chiếm trả về một receipt cho tx chưa bao giờ tồn tại ⇒ Finality Gate confirm ⇒ Odoo `_set_done` ⇒ hàng được giao. Biện pháp, **bốn lớp** (bản nháp ghi "3 lớp", §06.7 có bốn):
 
-| Lop | Kiem gi | Chu ky | Hanh dong khi lech |
+| Lớp | Kiểm gì | Chu kỳ | Hành động khi lệch |
 |---|---|---|---|
-| 1 | Liveness: `eth_blockNumber` + `head_age` | 5s | `head_lag > 3` hoac `head_age > 4×block_time` ⇒ demote |
-| 2 | `blockhash(head - witness_depth)` k-of-n | 30s | Lech lan dau ⇒ `divergence_suspect`, hoi lai sau 2 block **o chieu sau moi**; van lech ⇒ **eject vinh vien** (khong auto-recover) + P1 |
-| 3 | **Canary state**: cung mot `eth_call` pin theo `blockHash`, byte-identical tren moi endpoint | 60s | Lech ⇒ P1. **Day la lop duy nhat bat duoc archive node phuc vu state sai** — blockhash khop khong chung minh `eth_call` trung thuc |
-| 4 | Drop im lang: sau 2 block, xac nhan tx ton tai qua **provider khac** | per-tx | Khong thay ⇒ re-broadcast qua provider khac; 3 lan ⇒ eject |
+| 1 | Liveness: `eth_blockNumber` + `head_age` | 5s | `head_lag > 3` hoặc `head_age > 4×block_time` ⇒ demote |
+| 2 | `blockhash(head - witness_depth)` k-of-n | 30s | Lệch lần đầu ⇒ `divergence_suspect`, hỏi lại sau 2 block **ở chiều sâu mới**; vẫn lệch ⇒ **eject vĩnh viễn** (không auto-recover) + P1 |
+| 3 | **Canary state**: cùng một `eth_call` pin theo `blockHash`, byte-identical trên mọi endpoint | 60s | Lệch ⇒ P1. **Đây là lớp duy nhất bắt được archive node phục vụ state sai** — blockhash khớp không chứng minh `eth_call` trung thực |
+| 4 | Drop im lặng: sau 2 block, xác nhận tx tồn tại qua **provider khác** | per-tx | Không thấy ⇒ re-broadcast qua provider khác; 3 lần ⇒ eject |
 
-**`witness_depth` khong phai hang so 12.** `max(finality_depth, 2)` cho chain BFT, `max(finality_depth, 12)` cho chain probabilistic (§06.7.1).
+**`witness_depth` không phải hằng số 12.** `max(finality_depth, 2)` cho chain BFT, `max(finality_depth, 12)` cho chain probabilistic (§06.7.1).
 
-**Xac nhan finality khong dem block tren Gnosis.** §11.3 chot `finality_source = 'tag'`: hoi node `eth_getBlockByNumber("finalized")`. Va sua mot con so quan trong cua note: **Gnosis 2 epoch ≈ 3–4 phut** (16 slot/epoch × 5s = 80s/epoch), **khong phai 12.8 phut**. Con so sai theo huong bat loi cho UX va cho SLA.
+**Xác nhận finality không đếm block trên Gnosis.** §11.3 chốt `finality_source = 'tag'`: hỏi node `eth_getBlockByNumber("finalized")`. Và sửa một con số quan trọng của note: **Gnosis 2 epoch ≈ 160 giây** (16 slot/epoch × 5s = 80s/epoch), **không phải 12.8 phút**. Con số sai theo hướng bất lợi cho UX và cho SLA.
 
-Yeu cau cung cho Finality Gate: **hai provider doc lap khop nhau ca `receipt` va `blockhash(receipt.blockNumber)`**, cong `tag=finalized` bao trum block do; log/topic doc tu chinh log, khong tin field da decode cua provider; sticky provider cho `getTransactionCount` (§06.7.2 quy tac 1).
+Yêu cầu cứng cho Finality Gate: **hai provider độc lập khớp nhau cả `receipt` và `blockhash(receipt.blockNumber)`**, cộng `tag=finalized` bao trùm block đó; log/topic đọc từ chính log, không tin field đã decode của provider; sticky provider cho `getTransactionCount` (§06.7.2 quy tắc 1).
 
-**A11 (indexer) can mot lop rieng ma ban nhap khong co:** indexer la thu **ghi** `finalized`. Neu chiem duoc no thi khong can noi doi RPC nua. Ba bien phap:
-- DB role rieng, `GRANT INSERT/UPDATE` chi tren 3 bang cua indexer, khong co quyen tren `blockchain.settlement`.
-- Chuyen trang thai `finalized → done` do **Odoo cron** thuc hien sau khi **doc lai** receipt tu mot provider (khong tin bang cua indexer).
-- Doi soat dinh ky (§15.5): tong tren chuoi vs tong trong so ke toan; lech ≠ 0 la P1.
+**[BẢN 3] Trên chain private 9000 lớp này phải viết khác.** Clique một signer: không có `finalized` tag có nghĩa, không có k-of-n provider (chỉ một node), và reorg là khả năng thật. §09 đã ghi `finality_quorum = 2` không thoả mãn được ở đó. Lớp thay thế duy nhất còn hiệu lực là anchor head hash ra ngoài (§11.3) — nếu không anchor thì trên chain đó "finality" chỉ là lời hứa của người vận hành node.
+
+**A11 (indexer) cần một lớp riêng mà bản nháp không có:** indexer là thứ **ghi** `finalized`. Nếu chiếm được nó thì không cần nói dối RPC nữa. Ba biện pháp:
+- DB role riêng, `GRANT INSERT/UPDATE` chỉ trên 3 bảng của indexer, không có quyền trên `blockchain.settlement`.
+- Chuyển trạng thái `finalized → done` do **Odoo cron** thực hiện sau khi **đọc lại** receipt từ một provider (không tin bảng của indexer).
+- Đối soát định kỳ (§15.5): tổng trên chuỗi vs tổng trong sổ kế toán; lệch ≠ 0 là P1.
 
 #### 12.7.2. Oracle cho peg
 
-Rate tu TWAP mot pool DEX mong la manipulable: voi $50k thanh khoan, mot swap $10k day gia ~20% ⇒ attacker mint them 20%. Dung `SignedRateSource` k-of-n publisher ky EIP-712, lay **median** (khong phai trung binh — trung binh bi keo boi mot outlier), `maxRateAge = 3600s`, `maxDeviationBps = 200`/lan cap nhat, va **halt mint (khong halt burn)** khi lech > 500 bps. Halt burn la giam giu tien nguoi khac; halt mint chi la ngung ban.
+Rate từ TWAP một pool DEX mỏng là manipulable: với $50k thanh khoản, một swap $10k đẩy giá ~20% ⇒ attacker mint thêm 20%. Dùng `SignedRateSource` k-of-n publisher ký EIP-712, lấy **median** (không phải trung bình — trung bình bị kéo bởi một outlier), `maxRateAge = 3600s`, `maxDeviationBps = 200`/lần cập nhật, và **halt mint (không halt burn)** khi lệch > 500 bps. Halt burn là giam giữ tiền người khác; halt mint chỉ là ngừng bán.
 
-Reserve ratio kiem moi 5 phut, `< 100%` la P1. Va mot dieu ban nhap khong noi: **publisher key la mot khoa nong voi quyen in tien gian tiep.** No phai o enclave, xoay theo lich, va k-of-n phai co `k >= 2` ke ca trong pilot.
+Reserve ratio kiểm mỗi 5 phút, `< 100%` là P1. Và một điều bản nháp không nói: **publisher key là một khoá nóng với quyền in tiền gián tiếp.** Nó phải ở enclave, xoay theo lịch, và k-of-n phải có `k >= 2` kể cả trong pilot.
 
 #### 12.7.3. Supply chain toolchain (A8)
 
-- `forge install` theo tag la **mutable**; pin bang commit SHA trong `foundry.lock` va commit file do.
-- Pin `solc_version` **chinh xac** (khong `^`), kiem checksum binary, build trong container hermetic co digest co dinh.
-- Sau deploy, **doi chieu bytecode on-chain voi bytecode build lai cuc bo** (`cast code <addr>` vs `forge inspect <C> deployedBytecode`) va verify tren Sourcify. Mot buoc, chan duoc ca "compiler noi doi" lan "deploy nham branch".
-- **`to_impl_codehash` phai khop `EXTCODEHASH` doc lai tu chain truoc khi `execute` timelock** (§1.11.1 muc 3). Da tung co du an upgrade nham dia chi implementation cua testnet len mainnet.
-- Phia Python: `requirements.txt` hash-pinned (`--require-hashes`), khong `--extra-index-url` (chan dependency confusion).
-- Phia client SDK: xem 12.3.10 — do la mot chuoi cung ung **khac**, khong duoc gop chung.
-- CI runner co quyen deploy la mot muc tieu: khoa deploy khong bao gio nam trong CI secret. CI **de xuat** tx; nguoi ky.
+- `forge install` theo tag là **mutable**; pin bằng commit SHA trong `foundry.lock` và commit file đó.
+- Pin `solc_version` **chính xác** (không `^`), kiểm checksum binary, build trong container hermetic có digest cố định.
+- Sau deploy, **đối chiếu bytecode on-chain với bytecode build lại cục bộ** (`cast code <addr>` vs `forge inspect <C> deployedBytecode`) và verify trên Sourcify. Một bước, chặn được cả "compiler nói dối" lẫn "deploy nhầm branch".
+- **[BẢN 3] `implementation_codehash` trong catalogue của factory phải khớp `EXTCODEHASH` đọc lại từ chain trước khi một token được chấp nhận** (§10.4.4). Đây là thứ thay thế cho `to_impl_codehash` của luồng upgrade cũ: không còn nâng cấp để mà đối chiếu, nhưng vẫn phải chứng minh rằng bản đã audit và bản đang chạy là một.
+- Phía Python: `requirements.txt` hash-pinned (`--require-hashes`), không `--extra-index-url` (chặn dependency confusion).
+- Phía client SDK: xem 12.3.10 — đó là một chuỗi cung ứng **khác**, không được gộp chung.
+- CI runner có quyền deploy là một mục tiêu: khoá deploy không bao giờ nằm trong CI secret. CI **đề xuất** tx; người ký.
 
-#### 12.7.4. Thoi gian (G7)
+#### 12.7.4. Thời gian (G7)
 
-`expiry` duoc tinh o Odoo, kiem o chain. Odoo lech dong ho 90 giay ⇒ moi Zether intent (expiry 60s) chet luc sinh, hoac song 150s ma ta tuong 60s. Bien phap: NTP bat buoc, va **`_build_metatx` lay moc thoi gian tu `block.timestamp` cua head da doc gan nhat**, khong tu `fields.Datetime.now()`. Monitoring: `abs(chain_head_timestamp - odoo_now)` > 30s la ticket.
+`expiry` được tính ở Odoo, kiểm ở chain. Odoo lệch đồng hồ 90 giây ⇒ mọi Zether intent (expiry 60s) chết lúc sinh, hoặc sống 150s mà ta tưởng 60s. Biện pháp: NTP bắt buộc, và **`_build_metatx` lấy mốc thời gian từ `block.timestamp` của head đã đọc gần nhất**, không từ `fields.Datetime.now()`. Monitoring: `abs(chain_head_timestamp - odoo_now)` > 30s là ticket.
 
-Tren private chain, `block.timestamp` do chinh validator cua ta dat ⇒ `expiry` khong con la mot bao dam mat ma, chi la mot bao dam van hanh (A12).
+Trên private chain, `block.timestamp` do chính validator của ta đặt ⇒ `expiry` không còn là một bảo đảm mật mã, chỉ là một bảo đảm vận hành (A12).
 
-#### 12.7.5. DoS chuoi nen (ban nhap khong co muc nay)
+#### 12.7.5. DoS chuỗi nền (bản nháp không có mục này)
 
-Con so quyet dinh: **17M gas/block × 17,280 block/ngay = ~294 Ggas/ngay** tren Gnosis. O 1.5 gwei va xDAI = $1, mua **100% block space cua ca Gnosis mot ngay ton ~$441** (uoc tinh, chua tinh EIP-1559 base fee tang khi block day). Thuc te base fee tang ~12.5%/block khi block day, nen mot gio phong toa ton vao khoang **$200–500** (uoc tinh, can do lai).
+Con số quyết định: **17M gas/block × 17,280 block/ngày = ~294 Ggas/ngày** trên Gnosis. Ở 1.5 gwei và xDAI = $1, mua **100% block space của cả Gnosis một ngày tốn ~$441** (ước tính, chưa tính EIP-1559 base fee tăng khi block đầy). Thực tế base fee tăng ~12.5%/block khi block đầy, nên một giờ phong toả tốn vào khoảng **$200–500** (ước tính, cần đo lại).
 
-Nghia la: mot doi thu co dong co canh tranh co the **day chi phi va do tre giao dich cua ta len bat cu luc nao voi ngan sach vai tram do la mot gio**, va Zether cua ta tieu 1.88M gas/tx nen ta la nan nhan tu nhien. Hai bien phap:
+Nghĩa là: một đối thủ có động cơ cạnh tranh có thể **đẩy chi phí và độ trễ giao dịch của ta lên bất cứ lúc nào với ngân sách vài trăm đô la một giờ**, và Zether của ta tiêu 1.88M gas/tx nên ta là nạn nhân tự nhiên. Hai biện pháp:
 
-1. **Lop uu tien gas (§06.4.4)**: R3/R4 khong bao gio bi throttle, chap nhan tra tip cao. R1/R2 dung.
-2. **Duong lui sang private profile** cho B2B — day la mot ly do dinh luong nua cho quyet dinh khoa #5, ngoai block space (§04.10).
+1. **Lớp ưu tiên gas (§06.4.4)**: R3/R4 không bao giờ bị throttle, chấp nhận trả tip cao. R1/R2 dừng.
+2. **Đường lui sang private profile** cho B2B — đây là một lý do định lượng nữa cho quyết định khoá #5, ngoài block space (§04.10).
 
 ---
 
-### 12.8. Ke hoach kiem toan
+### 12.8. Kế hoạch kiểm toán
 
-| Phase | Pham vi | Ai lam | Thoi luong | Uoc tinh chi phi | Gate |
+| Phase | Phạm vi | Ai làm | Thời lượng | Ước tính chi phí | Gate |
 |---|---|---|---|---|---|
-| A | Slither + `slither-check-upgradeability`, Halmos tren `MetaTxLib`/`Bn254`/`PegController`, Echidna + `forge` invariant 50k run, `validateUpgrade` | Noi bo | CI, moi PR | 0 | Fail = fail build |
-| B | **Mat ma hoc**: transcript, Bulletproof verifier, sigma protocol, **sinh nonce/randomness (12.3.1)**, bien the *owner-exclusive rollover* (day la thay doi tang giao thuc, **khong** duoc quyet bang suy luan trong tai lieu) | Hang chuyen ZK (ZKSecurity / Least Authority / Veridise / ABDK) | 3–4 tuan | **$60k–120k** | Khong deploy co gia tri that neu chua dong |
-| **B2** | **Precompile Go + consensus integration** cho private chain (12.1.1) | Hang co nang luc Go + crypto | 2 tuan | **$30k–60k** | Chi bat buoc khi bat private profile |
-| C | Factory, proxy, token, peg, registry, forwarder, batcher, `WithdrawLimiter` | Hang audit EVM tuyen 1–2 | 2–3 tuan | **$40k–80k** | Nhu tren |
-| C2 | Certora tren `MetaTxForwarder` + `WrappedToken` (§14.9) | Certora / noi bo co license | 1–2 tuan | $15k–30k | Truoc mainnet co tien that |
-| D | Hub relayer, Odoo control plane, RPC gateway, custody + **enclave attestation chain** | Pentest | 2 tuan | $20k–40k | Truoc go-live |
-| D2 | **Client SDK + supply chain** (12.3.10) | Cung don vi D | 3–5 ngay | $8k–15k | Truoc khi phat hanh SDK |
-| E | Re-audit | Bat ky thay doi nao cham vao: verifier, transcript, storage layout, ngu nghia `mode`, sinh nonce, hoac them chain adapter | Cung hang phase B/C | 3–5 ngay/lan | Bat buoc |
+| A | Slither, Halmos trên `MetaTxLib`/`Bn254`/`Bls12381`/`PegController`, Echidna + `forge` invariant 50k run | Nội bộ | CI, mỗi PR | 0 | Fail = fail build |
+| B | **Mật mã học**: transcript, Bulletproof verifier, sigma protocol, **sinh nonce/randomness (12.3.1)**, biến thể *owner-exclusive rollover* (đây là thay đổi tầng giao thức, **không** được quyết bằng suy luận trong tài liệu) | Hãng chuyên ZK (ZKSecurity / Least Authority / Veridise / ABDK) | 3–4 tuần | **$60k–120k** | Không deploy có giá trị thật nếu chưa đóng |
+| **B2** | **Precompile native + consensus integration** cho private chain (12.1.1) | Hãng có năng lực Go/C# + crypto | 2 tuần | **$30k–60k** | Chỉ bắt buộc khi bật private profile |
+| C | Factory, token, peg, registry, forwarder, batcher, `WithdrawLimiter` | Hãng audit EVM tuyến 1–2 | 2–3 tuần | **$40k–80k** | Như trên |
+| C2 | Certora trên `MetaTxForwarder` + `WrappedToken` (§14.9) | Certora / nội bộ có license | 1–2 tuần | $15k–30k | Trước mainnet có tiền thật |
+| D | Hub relayer, Odoo control plane, RPC gateway, custody + **enclave attestation chain** | Pentest | 2 tuần | $20k–40k | Trước go-live |
+| D2 | **Client SDK + supply chain** (12.3.10) | Cùng đơn vị D | 3–5 ngày | $8k–15k | Trước khi phát hành SDK |
+| E | Re-audit | Bất kỳ thay đổi nào chạm vào: verifier, transcript, ngữ nghĩa `mode`, sinh nonce, hoặc thêm chain adapter | Cùng hãng phase B/C | 3–5 ngày/lần | Bắt buộc |
 
-**Tong ngan sach chuong trinh: $173k–345k** cho lan dau (khong ke bounty float), cong ~$15k/nam cho re-audit dinh ky. Ban nhap ghi $120k–240k vi thieu B2, C2, D2.
+**Tổng ngân sách chương trình: $173k–345k** cho lần đầu (không kể bounty float), cộng ~$15k/năm cho re-audit định kỳ. Bản nháp ghi $120k–240k vì thiếu B2, C2, D2.
 
-Bon quy tac quy trinh ma ban nhap khong co, va thieu chung thi con so tren la tien vut:
+**[BẢN 3] Và hai đường cong nghĩa là phase C chạy hai lần.** §20.1 đã ghi: verifier bn254 và verifier BLS12-381 là hai bộ code khác nhau, không dùng chung phần lớn logic, nên chi phí audit **gấp đôi** cho hạng mục verifier. Đó là cái giá đã biết trước của việc để thị trường chọn đường cong, không phải một khoản phát sinh.
 
-1. **B truoc C.** Mot loi tang giao thuc lam vo hieu ket qua audit contract.
-2. **Scope freeze.** Commit SHA duoc audit phai duoc dong bang. Moi commit sau do vao pham vi audit di vao **danh sach delta** va phai duoc reviewer xac nhan lai bang van ban. Khong co "sua nho sau audit".
-3. **"Dong" nghia la** moi finding Critical/High da fix **va** duoc chinh reviewer xac nhan lai bang van ban. Remediation retest phai nam trong hop dong, khong phai mua them.
-4. **Ai so huu fix nao, SLA bao lau**: Critical 48h, High 5 ngay, Medium 30 ngay, Low vao backlog co ngay. Mot finding qua han la mot muc trong risk register, khong phai mot dong Slack.
+Bốn quy tắc quy trình mà bản nháp không có, và thiếu chúng thì con số trên là tiền vứt:
 
-Va mot dieu can noi thang: **audit khong thay the duoc `WithdrawLimiter`.** Moi he thong bi hack deu da tung duoc audit. Ngan sach $250k cho audit ma khong co tran rut on-chain la phan bo sai.
+1. **B trước C.** Một lỗi tầng giao thức làm vô hiệu kết quả audit contract.
+2. **Scope freeze.** Commit SHA được audit phải được đóng băng. Mọi commit sau đó vào phạm vi audit đi vào **danh sách delta** và phải được reviewer xác nhận lại bằng văn bản. Không có "sửa nhỏ sau audit".
+3. **"Đóng" nghĩa là** mọi finding Critical/High đã fix **và** được chính reviewer xác nhận lại bằng văn bản. Remediation retest phải nằm trong hợp đồng, không phải mua thêm.
+4. **Ai sở hữu fix nào, SLA bao lâu**: Critical 48h, High 5 ngày, Medium 30 ngày, Low vào backlog có ngày. Một finding quá hạn là một mục trong risk register, không phải một dòng Slack.
+
+Và một điều cần nói thẳng: **audit không thay thế được `WithdrawLimiter`.** Mọi hệ thống bị hack đều đã từng được audit. Ngân sách $250k cho audit mà không có trần rút on-chain là phân bổ sai. **[BẢN 3]** Điều này nặng hơn nữa khi token không nâng cấp được: một bug đã deploy chỉ có thể chặn bằng thứ đã có sẵn trong contract lúc deploy.
 
 ### 12.9. Bug bounty
 
-**Khong mo bounty truoc khi Phase B + C dong** — mo som la thue nguoi ngoai lam viec ma audit se lam, chat luong thap hon va lo som hon. Bat dau tren testnet (ca public lan private profile) voi state giong production, 3 thang truoc go-live.
+**Không mở bounty trước khi Phase B + C đóng** — mở sớm là thuê người ngoài làm việc mà audit sẽ làm, chất lượng thấp hơn và lộ sớm hơn. Bắt đầu trên testnet (cả public lẫn private profile) với state giống production, 3 tháng trước go-live.
 
-| Muc | Vi du | Thuong |
+| Mức | Ví dụ | Thưởng |
 |---|---|---|
-| Critical | Proof forgery, mint trai phep, rut khoi vault khong co proof, **trich duoc `x` tu prover/SDK**, bypass Finality Gate lam `_set_done` sai, chiem admin/upgrade | 10% so tien co the mat, **tran $250,000**, san $25,000 |
-| High | Khoa vinh vien tien nguoi khac, an cap phi relayer o quy mo, doi `recipient`/`feeRecipient`, bypass `WithdrawLimiter` | $10,000 |
-| Medium | Griefing lam relayer lo, DoS verifier, ro ri so tien bi mat, ro ri cross-tenant trong Odoo | $2,500 |
-| Low / Info | Thieu event, sai NatSpec | $250 / ghi nhan |
+| Critical | Proof forgery, mint trái phép, rút khỏi vault không có proof, **trích được `x` từ prover/SDK**, bypass Finality Gate làm `_set_done` sai, chiếm quyền `registerImplementation` của factory | 10% số tiền có thể mất, **trần $250,000**, sàn $25,000 |
+| High | Khoá vĩnh viễn tiền người khác, ăn cắp phí relayer ở quy mô, đổi `recipient`/`feeRecipient`, bypass `WithdrawLimiter` | $10,000 |
+| Medium | Griefing làm relayer lỗ, DoS verifier, rò rỉ số tiền bí mật, rò rỉ cross-tenant trong Odoo | $2,500 |
+| Low / Info | Thiếu event, sai NatSpec | $250 / ghi nhận |
 
-Vi tri cu the (ban nhap chi co mot dong "safe harbour"):
+Vị trí cụ thể (bản nháp chỉ có một dòng "safe harbour"):
 
-- **Nen tang**: Immunefi cho contract (no la noi nguoi san contract o), **self-hosted** cho Odoo/hub (khong muon lo topology noi bo len mot marketplace cong khai).
-- **Primacy of impact**: tra theo tac dong chung minh duoc, khong theo nhan cua ta ve muc do.
-- **PoC bat buoc** tren fork hoac testnet cua ta. **Cam tuyet doi test tren mainnet co gia tri that**; vi pham = mat quyen nhan thuong va co the bi truy cuu.
-- **Safe harbour** viet ro: khong kien, khong bao cong an, mien tru CFAA/luat tuong duong, voi dieu kien tuan thu scope va khong exfiltrate du lieu nguoi dung.
-- **Triage 72h**, phan hoi trang thai moi 7 ngay, thanh toan trong 30 ngay sau khi xac nhan.
-- **KYC cho payout > $10,000** va sang loc danh sach cam van — bat buoc voi mot to chuc Viet Nam co nghia vu AML (§13). Noi truoc, khong noi luc tra tien.
-- **Duplicate**: bao cao dau tien co PoC hop le duoc tra. Khong tra cho van de da nam trong bao cao audit **da cong bo**.
-- **Loai tru**: hub availability, gia token, loi cua chain nen, social engineering nhan vien, DoS thuan tuy khong co lo hong logic.
-- **Ngan sach float**: giu san **$300,000** thanh khoan (tran $250k + du phong). Mot bounty khong tra duoc la mot bounty tra bang danh tieng.
+- **Nền tảng**: Immunefi cho contract (nó là nơi người săn contract ở), **self-hosted** cho Odoo/hub (không muốn lộ topology nội bộ lên một marketplace công khai).
+- **Primacy of impact**: trả theo tác động chứng minh được, không theo nhãn của ta về mức độ.
+- **PoC bắt buộc** trên fork hoặc testnet của ta. **Cấm tuyệt đối test trên mainnet có giá trị thật**; vi phạm = mất quyền nhận thưởng và có thể bị truy cứu.
+- **Safe harbour** viết rõ: không kiện, không báo công an, miễn trừ CFAA/luật tương đương, với điều kiện tuân thủ scope và không exfiltrate dữ liệu người dùng.
+- **Triage 72h**, phản hồi trạng thái mỗi 7 ngày, thanh toán trong 30 ngày sau khi xác nhận.
+- **KYC cho payout > $10,000** và sàng lọc danh sách cấm vận.
+- **Duplicate**: báo cáo đầu tiên có PoC hợp lệ được trả. Không trả cho vấn đề đã nằm trong báo cáo audit **đã công bố**.
+- **Loại trừ**: hub availability, giá token, lỗi của chain nền, social engineering nhân viên, DoS thuần tuý không có lỗ hổng logic.
+- **Ngân sách float**: giữ sẵn **$300,000** thanh khoản (trần $250k + dự phòng). Một bounty không trả được là một bounty trả bằng danh tiếng.
 
-### 12.10. Ung pho su co va duong pause on-chain
+### 12.10. Ứng phó sự cố và đường pause on-chain
 
 ```
 GUARDIAN (1-of-5 ky su truc, KHONG timelock)  -> pause()   : dung deposit, transferConfidential, mint
@@ -549,69 +561,72 @@ GUARDIAN (1-of-5 ky su truc, KHONG timelock)  -> pause()   : dung deposit, trans
    +-- Safe 4-of-7 (GUARDIAN + board), KHONG timelock -> WIND_DOWN  [MOT CHIEU]
            : mint tat vinh vien, reserve chuyen sang RecoveryVault (code khac)
 
-TimelockController 48h (proposer Safe 4-of-7, executor mo) -> upgrade() / unpause()
+TimelockController 48h (proposer Safe 4-of-7) -> registerImplementation() / unpause()
 ```
 
-**Sua so voi ban nhap:** ban nhap ghi "Guardian 2-of-3" va "Governance 3-of-5"; §1.11 (chu so huu cua quan tri token) chot **GUARDIAN 1-of-5** (tuc thi, chi `pause` va `deprecatePrototype`, tu het hieu luc 7 ngay), **DEFAULT_ADMIN Safe 4-of-7**, **PROTOTYPE_ADMIN 3-of-5**, **RECOVERY 6-of-7 timelock 30 ngay**. Hai ban so khong khop nhau la mot bug tai lieu; **lay §1.11 lam nguon su that** va sua o day.
+**Sửa so với bản nháp:** bản nháp ghi "Guardian 2-of-3" và "Governance 3-of-5"; §1.11 chốt **GUARDIAN 1-of-5** (tức thì, chỉ `pause` và `deprecate`, tự hết hiệu lực 7 ngày), **DEFAULT_ADMIN Safe 4-of-7**, **PROTOTYPE_ADMIN 3-of-5**, **RECOVERY 6-of-7 timelock 30 ngày**. Hai bản số không khớp nhau là một bug tài liệu; **lấy §1.11 làm nguồn sự thật** và sửa ở đây.
 
-`pause()` **khong duoc chan `withdraw`**. Neu pause khoa luon duong rut, thi chinh cai pause la vu tan cong: ai chiem duoc guardian se dong bang tien cua khach. Thay vao do `withdraw` van mo nhung di qua `WithdrawLimiter` (tran theo tai khoan/gio va tran toan cuc/gio). Chi `WIND_DOWN` — 4-of-7, mot chieu, phat event kem ly do — moi duoc dung han duong mint, va no khong dung `withdraw` ma **chuyen** no sang `RecoveryVault`.
+**[BẢN 3] Và pause chỉ áp được lên contract của chính ta.** Trong factory mở, `GUARDIAN` không có vai trò nào trong zDAI-B do người lạ tạo — token ấy có guardian riêng, hoặc không có guardian nào. Runbook dưới đây áp cho hạ tầng và cho token ta phát hành; với token của người khác, hành động duy nhất là gỡ nó khỏi `accepted_token_ids` và ngừng nhận.
 
-Va mot cau tra loi ban nhap khong co: **neu chinh `withdraw` la ham co bug thi sao?** Tu dong mo lai sau 7 ngay la mo lai lo hong. Loi thoat duy nhat la `WIND_DOWN` (§1.10.1): ban khong duoc keo dai pause; ban chi duoc **tu bo token va tra tien qua mot duong khac**. Do la mot lua chon dat, va no dung phai dat.
+`pause()` **không được chặn `withdraw`**. Nếu pause khoá luôn đường rút, thì chính cái pause là vụ tấn công: ai chiếm được guardian sẽ đóng băng tiền của khách. Thay vào đó `withdraw` vẫn mở nhưng đi qua `WithdrawLimiter` (trần theo tài khoản/giờ và trần toàn cục/giờ). Chỉ `WIND_DOWN` — 4-of-7, một chiều, phát event kèm lý do — mới được dừng hẳn đường mint, và nó không dừng `withdraw` mà **chuyển** nó sang `RecoveryVault`.
 
-Runbook (dong ho bat dau tu alert dau tien):
+Và một câu trả lời bản nháp không có: **nếu chính `withdraw` là hàm có bug thì sao?** Tự động mở lại sau 7 ngày là mở lại lỗ hổng. Lối thoát duy nhất là `WIND_DOWN` (§1.10.1): bạn không được kéo dài pause; bạn chỉ được **từ bỏ token và trả tiền qua một đường khác**. Đó là một lựa chọn đắt, và nó đúng phải đắt. **[BẢN 3]** Với token immutable, đây không còn là lựa chọn cuối cùng mà là lựa chọn *duy nhất* — không có bản vá nào để chờ. `MigrationSink` vì thế phải tồn tại từ v1, không phải v2.
 
-| T | Hanh dong | Ai |
+Runbook (đồng hồ bắt đầu từ alert đầu tiên):
+
+| T | Hành động | Ai |
 |---|---|---|
-| T+0 | Alert P1 (12.11) | Tu dong |
-| T+1' | **Bao toan chung cu truoc khi cham vao gi**: snapshot `head`, dump mempool, snapshot DB (`pg_dump` vao bucket write-once), giu nguyen log. Khong restart service | Tu dong (script `ir-preserve.sh`) |
-| T+2' | Xac nhan bang nguon thu hai (provider khac + explorer) | On-call |
-| T+5' | `GUARDIAN.pause()` tren contract lien quan; dat `blockchain.chain.profile.state = 'halted'` ⇒ moi cron dung, moi `blockchain.relay.job` treo o `held` | On-call |
-| T+10' | Dong bang custody: `authEpoch++` (revoke session key), rut hot wallet ve treasury, xoay credential RPC, thu hoi client cert mTLS cua worker nghi ngo | Ops + Security |
-| T+15' | **Ai duoc tuyen bo su co**: on-call co quyen pause khong can hoi. Chi CEO/CTO duoc tuyen bo "breach" ra ben ngoai | Lead |
-| T+15' | Thong bao noi bo + doi tac dang co giao dich treo (mau thu soan san, khong viet luc 3h sang) | Lead |
-| T+30' | Danh gia phap ly: co du lieu ca nhan lien quan khong (ND 13/2023) ⇒ nghia vu thong bao. Co nghi ngo AML ⇒ nghia vu bao cao | Legal |
-| T+60' | Root cause so bo, quyet dinh `WIND_DOWN` hay khong | Lead + Sec |
-| T+2h | Neu private chain: quyet dinh **co rewind khong**. Day la quyet dinh cua nguoi, phai co bien ban, va phai thong bao doi tac — mot rewind im lang la mot su co thu hai | Lead + Legal |
-| T+24h | Post-mortem viet, khong quy loi ca nhan, kem test hoi quy da merge | Team |
+| T+0 | Alert P1 (12.11) | Tự động |
+| T+1' | **Bảo toàn chứng cứ trước khi chạm vào gì**: snapshot `head`, dump mempool, snapshot DB (`pg_dump` vào bucket write-once), giữ nguyên log. Không restart service | Tự động (script `ir-preserve.sh`) |
+| T+2' | Xác nhận bằng nguồn thứ hai (provider khác + explorer) | On-call |
+| T+5' | `GUARDIAN.pause()` trên contract liên quan; đặt `blockchain.chain.state = 'halted'` ⇒ mọi cron dừng, mọi `blockchain.relay.job` treo ở `held` | On-call |
+| T+10' | Đóng băng custody: `authEpoch++` (revoke session key), rút hot wallet về treasury, xoay credential RPC, thu hồi client cert mTLS của worker nghi ngờ | Ops + Security |
+| T+15' | **Ai được tuyên bố sự cố**: on-call có quyền pause không cần hỏi. Chỉ CEO/CTO được tuyên bố "breach" ra bên ngoài | Lead |
+| T+15' | Thông báo nội bộ + đối tác đang có giao dịch treo (mẫu thư soạn sẵn, không viết lúc 3h sáng) | Lead |
+| T+30' | Đánh giá pháp lý: có dữ liệu cá nhân liên quan không ⇒ nghĩa vụ thông báo | Legal |
+| T+60' | Root cause sơ bộ, quyết định `WIND_DOWN` hay không | Lead + Sec |
+| T+2h | Nếu private chain: quyết định **có rewind không**. Đây là quyết định của người, phải có biên bản, và phải thông báo đối tác — một rewind im lặng là một sự cố thứ hai | Lead + Legal |
+| T+24h | Post-mortem viết, không quy lỗi cá nhân, kèm test hồi quy đã merge | Team |
 
-Bon luu y bat buoc, tat ca deu la bay:
+Bốn lưu ý bắt buộc, tất cả đều là bẫy:
 
-1. **Job dang `held` khong duoc auto-cancel.** Mot tx da broadcast van co the len chuoi sau khi ta pause. Consumer phai giu `pending`, khong `_set_canceled`, cho den khi reconcile.
-2. **`encKey` bi lo thi khong the khac phuc nguoc.** Khong co forward secrecy: attacker giai ma duoc **toan bo lich su** da ghi tren chuoi. Hanh dong duy nhat la `migrateAccount()` ngay lap tuc sang khoa moi (giam thiet hai tuong lai) va thong bao pham vi lo cho doi tac. **Phai co trong hop dong, khong chi trong runbook.**
-3. **`x_audit` bi lo la mot su co lon hon `encKey` cua mot tai khoan.** No lo toan bo lich su cua **moi** tai khoan. Runbook rieng: dung ngay `C_audit` moi (doi `y_audit`), thong bao **moi** doi tac, va chap nhan rang lich su cu khong cuu duoc.
-4. **Pause tren public chain lam ke thu ba mat tien.** `ZTokenOpen` co the dang lam collateral o cho khac; phat `Paused(uint64 autoUnpauseAt)` de bot cua ho doc duoc moc tu dong mo, va cong bo `MAX_PAUSE` trong tai lieu tich hop (§1.10.2).
+1. **Job đang `held` không được auto-cancel.** Một tx đã broadcast vẫn có thể lên chuỗi sau khi ta pause. Consumer phải giữ `pending`, không `_set_canceled`, cho đến khi reconcile.
+2. **`encKey` bị lộ thì không thể khắc phục ngược.** Không có forward secrecy: attacker giải mã được **toàn bộ lịch sử** đã ghi trên chuỗi. Hành động duy nhất là `migrateAccount()` ngay lập tức sang khoá mới (giảm thiệt hại tương lai) và thông báo phạm vi lộ cho đối tác. **Phải có trong hợp đồng, không chỉ trong runbook.**
+3. **`x_audit` bị lộ là một sự cố lớn hơn `encKey` của một tài khoản.** Nó lộ toàn bộ lịch sử của **mọi** tài khoản. Runbook riêng: dừng ngay `C_audit` mới (đổi `y_audit`), thông báo **mọi** đối tác, và chấp nhận rằng lịch sử cũ không cứu được.
+4. **Pause trên public chain làm kẻ thứ ba mất tiền.** `ZTokenOpen` có thể đang làm collateral ở chỗ khác; phát `Paused(uint64 autoUnpauseAt)` để bot của họ đọc được mốc tự động mở, và công bố `MAX_PAUSE` trong tài liệu tích hợp (§1.10.2).
 
-### 12.11. Giam sat: phat hien trong vai phut, khong phai vai ngay
+### 12.11. Giám sát: phát hiện trong vài phút, không phải vài ngày
 
-Nguyen tac chon chi so: **uu tien invariant co the kiem bang mot cau hoi RPC, va uu tien cai chan duoc thiet hai chu khong chi bao cao no.**
+Nguyên tắc chọn chỉ số: **ưu tiên invariant có thể kiểm bằng một câu hỏi RPC, và ưu tiên cái chặn được thiệt hại chứ không chỉ báo cáo nó.**
 
-| # | Invariant / tin hieu | Tan suat | Nguong bao | MTTD ky vong |
+| # | Invariant / tín hiệu | Tần suất | Ngưỡng báo | MTTD kỳ vọng |
 |---|---|---|---|---|
-| 1 | `WrappedToken.totalSupply() == underlying.balanceOf(vault)` | moi block | lech ≠ 0 | <= 10s |
-| 2 | `zether.depositTotal - zether.withdrawTotal == underlying.balanceOf(zether)` | moi block | lech ≠ 0 | <= 10s |
-| 3 | **Withdraw velocity** tong theo gio vs baseline | moi block | > 3σ hoac > `2% TVL/gio` ⇒ **auto-pause**, khong chi alert | <= 30s |
-| 4 | Su kien `Upgraded(address)` / `BeaconUpgraded` tren bat ky proxy nao | realtime | bat ky, neu khong khop `blockchain.upgrade.proposal` o state `executable` | <= 15s |
-| 5 | Tx bat ky tu admin/timelock/guardian address | realtime | bat ky | <= 15s |
-| 6 | `AuthRotationRequested`, `successorAddr` set, `RecoveryAnnounced` | realtime | bat ky | <= 15s |
-| 7 | Ty le revert cua verifier | 1' | > 1% (baseline) | <= 2' |
-| 8 | RPC divergence lop 2 (`blockhash`) **va lop 3 (canary state)** | 30s / 60s | bat ky lech (sau xac nhan lan 2) ⇒ eject vinh vien + P1 | <= 60s |
-| 9 | `nonce_allocated - nonce_confirmed` moi relayer; `nonce_desync` (`latest > next`) | 30s | > 20; hoac desync >= 1 ⇒ P1 + quarantine | <= 1' |
-| 10 | Fee spread relayer am | 1' | am lien tuc > 10' | <= 10' |
-| 11 | Peg: lech rate vs median publisher; reserve ratio | 5' | > 200 bps; < 100% | <= 5' |
-| 12 | Odoo: `relay_submit_intent` theo user; user ngoai group; ghi `ir.config_parameter` key `blockchain.*`; **ghi `ir.actions.server` / `base.automation` / `ir.cron`**; `done` khong kem transition row | realtime | vuot baseline 5×; hoac bat ky voi nhom `ir.*` | <= 1' |
-| 13 | `pending_event_count` cua mot `schnorrAddress` | 5' | > 500 (dau hieu flooding 12.3.6) | <= 5' |
-| 14 | **Dead man's switch**: indexer da xu ly block trong N phut qua chua? worker relay-pool con heartbeat? | 60s | khong co tien do > 5 phut ⇒ P1 | <= 5' |
-| 15 | **Doi chieu Safe**: `getOwners()`/`getThreshold()` moi chain vs `blockchain.governance.signer` | hang ngay | lech ⇒ incident | <= 24h |
-| 16 | **Hash binary validator** (private chain) va **PCR0 cua enclave dang chay** | 5' | khac gia tri da duyet ⇒ P1 | <= 5' |
-| 17 | Lech dong ho `abs(chain_head_ts - odoo_now)` | 1' | > 30s ⇒ ticket | <= 1' |
+| 1 | `WrappedToken.totalSupply() == underlying.balanceOf(vault)` | mỗi block | lệch ≠ 0 | <= 10s |
+| 2 | `zether.depositTotal - zether.withdrawTotal == underlying.balanceOf(zether)` | mỗi block | lệch ≠ 0 | <= 10s |
+| 3 | **Withdraw velocity** tổng theo giờ vs baseline | mỗi block | > 3σ hoặc > `2% TVL/giờ` ⇒ **auto-pause**, không chỉ alert | <= 30s |
+| 4 | **[BẢN 3]** `ImplementationRegistered` / `ImplementationDeprecated` trên factory | realtime | bất kỳ, nếu không khớp một đề xuất timelock đã duyệt | <= 15s |
+| 5 | Tx bất kỳ từ admin/timelock/guardian address | realtime | bất kỳ | <= 15s |
+| 6 | `AuthRotationRequested`, `successorAddr` set, `RecoveryAnnounced` | realtime | bất kỳ | <= 15s |
+| 7 | Tỷ lệ revert của verifier | 1' | > 1% (baseline) | <= 2' |
+| 8 | RPC divergence lớp 2 (`blockhash`) **và lớp 3 (canary state)** | 30s / 60s | bất kỳ lệch (sau xác nhận lần 2) ⇒ eject vĩnh viễn + P1 | <= 60s |
+| 9 | `nonce_allocated - nonce_confirmed` mỗi relayer; `nonce_desync` (`latest > next`) | 30s | > 20; hoặc desync >= 1 ⇒ P1 + quarantine | <= 1' |
+| 10 | Fee spread relayer âm | 1' | âm liên tục > 10' | <= 10' |
+| 11 | Peg: lệch rate vs median publisher; reserve ratio | 5' | > 200 bps; < 100% | <= 5' |
+| 12 | Odoo: `relay_submit_intent` theo user; user ngoài group; ghi `ir.config_parameter` key `blockchain.*`; **ghi `ir.actions.server` / `base.automation` / `ir.cron`**; `done` không kèm transition row | realtime | vượt baseline 5×; hoặc bất kỳ với nhóm `ir.*` | <= 1' |
+| 13 | `pending_event_count` của một `schnorrAddress` | 5' | > 500 (dấu hiệu flooding 12.3.6) | <= 5' |
+| 14 | **Dead man's switch**: indexer đã xử lý block trong N phút qua chưa? worker relay-pool còn heartbeat? | 60s | không có tiến độ > 5 phút ⇒ P1 | <= 5' |
+| 15 | **Đối chiếu Safe**: `getOwners()`/`getThreshold()` mỗi chain vs `blockchain.governance.signer` | hàng ngày | lệch ⇒ incident | <= 24h |
+| 16 | **Hash binary validator** (private chain) và **PCR0 của enclave đang chạy** | 5' | khác giá trị đã duyệt ⇒ P1 | <= 5' |
+| 17 | Lệch đồng hồ `abs(chain_head_ts - odoo_now)` | 1' | > 30s ⇒ ticket | <= 1' |
+| 18 | **[BẢN 3]** `EXTCODEHASH` của mọi token trong `accepted_token_ids` vs `audit_covers_code_hash` | hàng ngày | lệch ⇒ gỡ token khỏi danh sách chấp nhận + P1 | <= 24h |
 
-Ba dieu ve **cach** giam sat, khong phai giam sat cai gi, ma ban nhap khong noi:
+Ba điều về **cách** giám sát, không phải giám sát cái gì, mà bản nháp không nói:
 
-- **Giam sat khong duoc chay tren ha tang no dang giam sat.** Neu Prometheus + alertmanager song cung cum Odoo thi mot ke chiem cum do tat luon canh bao. Toi thieu: alerting o mot tai khoan cloud/khu vuc khac, va mot heartbeat ra ngoai (dead man's switch #14 phai duoc mot dich vu **ben ngoai** kiem).
-- **Alert phai co chu.** Nam alert page nguoi luc 3h sang (§06.8): `nonce_gap_age`, `nonce_desync`, `signed_orphan`, `rpc_divergence` (gom canary), `hot_wallet_runway < 1h`. Cong tu section nay: #3 (auto-pause, page sau khi da pause), #4, #5, #14, #16. Con lai la ticket.
-- **Vang tin hieu la mot tin hieu.** Cach hong ton tai nhieu ngay nhat khong phai mot alert bi bo qua, ma la mot pipeline chet im lang. Do la ly do #14 ton tai va la ly do no phai duoc test bang cach **that su tat indexer** trong drill.
+- **Giám sát không được chạy trên hạ tầng nó đang giám sát.** Nếu Prometheus + alertmanager sống cùng cụm Odoo thì một kẻ chiếm cụm đó tắt luôn cảnh báo. Tối thiểu: alerting ở một tài khoản cloud/khu vực khác, và một heartbeat ra ngoài (dead man's switch #14 phải được một dịch vụ **bên ngoài** kiểm).
+- **Alert phải có chủ.** Năm alert page người lúc 3h sáng (§06.8): `nonce_gap_age`, `nonce_desync`, `signed_orphan`, `rpc_divergence` (gồm canary), `hot_wallet_runway < 1h`. Cộng từ section này: #3 (auto-pause, page sau khi đã pause), #4, #5, #14, #16. Còn lại là ticket.
+- **Vắng tín hiệu là một tín hiệu.** Cách hỏng tồn tại nhiều ngày nhất không phải một alert bị bỏ qua, mà là một pipeline chết im lặng. Đó là lý do #14 tồn tại và là lý do nó phải được test bằng cách **thật sự tắt indexer** trong drill.
 
-**Dong quan trong nhat cua bang nay la #3.** Proof forgery, mint trai phep, bug rounding — **tat ca deu chi bien thanh tien khi ai do `withdraw`**. Cong thuc de dat tham so:
+**Dòng quan trọng nhất của bảng này là #3.** Proof forgery, mint trái phép, bug rounding — **tất cả đều chỉ biến thành tiền khi ai đó `withdraw`**. Công thức để đặt tham số:
 
 ```
 thiet_hai_toi_da = cap_rate_per_hour × thoi_gian_phan_ung
@@ -623,70 +638,72 @@ Tran theo tai khoan: max(5,000 USD, 20% cua tran toan cuc) — de mot tai khoan 
 khong tieu het han muc cua ca he thong.
 ```
 
-Do la bien phap co ty le loi ich/chi phi cao nhat trong ca section nay (mot contract ~80 dong, ~5,000 gas/withdraw), va no phai duoc trien khai **on-chain** (`WithdrawLimiter`), khong phai trong Odoo — vi Odoo khong nam tren duong di cua mot tx truc tiep.
+Đó là biện pháp có tỷ lệ lợi ích/chi phí cao nhất trong cả section này (một contract ~80 dòng, ~5,000 gas/withdraw), và nó phải được triển khai **on-chain** (`WithdrawLimiter`), không phải trong Odoo — vì Odoo không nằm trên đường đi của một tx trực tiếp. **[BẢN 3]** Với token immutable, nó còn phải nằm trong implementation *ngay từ v1*: không thêm được sau.
 
-**Nam drill dinh ky co bien ban** (ban nhap co ba):
+**Năm drill định kỳ có biên bản** (bản nháp có ba):
 
-| Drill | Chu ky | Do cai gi |
+| Drill | Chu kỳ | Đo cái gì |
 |---|---|---|
-| Blackout toan bo hub | hang thang | Thoi gian chuyen sang Enterprise Relay Pool |
-| `GUARDIAN.pause()` tren staging | hang quy | T+5' co dat khong; ai bam nut khi on-call chinh nghi |
-| Gia lap mot RPC noi doi | hang quy | Lop 2 va lop 3 eject dung endpoint |
-| **Tat indexer khong bao truoc** | hang quy | Dead man's switch #14 co keu khong, sau bao lau |
-| **Khoi phuc Shamir cua `x`** tren tai khoan thu nghiem | 6 thang | Quy trinh co chay duoc khong, ai giu share nao, share co con doc duoc khong (§02.7.5) |
+| Blackout toàn bộ hub | hàng tháng | Thời gian chuyển sang Enterprise Relay Pool |
+| `GUARDIAN.pause()` trên staging | hàng quý | T+5' có đạt không; ai bấm nút khi on-call chính nghỉ |
+| Giả lập một RPC nói dối | hàng quý | Lớp 2 và lớp 3 eject đúng endpoint |
+| **Tắt indexer không báo trước** | hàng quý | Dead man's switch #14 có kêu không, sau bao lâu |
+| **Khôi phục Shamir của `x`** trên tài khoản thử nghiệm | 6 tháng | Quy trình có chạy được không, ai giữ share nào, share có còn đọc được không (§02.7.5) |
 
-### 12.12. Con phai quyet
+### 12.12. Còn phải quyết
 
-Muoi diem con can nguoi quyet (ban nhap co bay):
+Mười điểm còn cần người quyết (bản nháp có bảy):
 
-1. **Do thi brand-distributor lo tren public chain** — chap nhan hay ep B2B settlement ve `chain_profile = private`. Anh huong: kien truc, chi phi van hanh chain rieng, va §13.
-2. **Ai giu `y_audit`**, theo co so phap ly nao, k-of-n bang bao nhieu, xoay the nao, va ai chiu trach nhiem khi lo.
-3. **Quyen freeze tren private chain thuoc vai tro nao**, co duong lenh toa an khong (`forceTransfer` co su chung kien cua N validator, §1.10.3).
-4. **`WITHDRAW_CAP_PER_HOUR`** — de xuat 2% TVL/gio voi co so o 12.11; can nguoi chap nhan rang thiet hai xau nhat la 2% TVL.
-5. **Compliance co chap nhan relayer hot key trong enclave** (thay vi HSM L3) de doi tu 10–30 len 10^4 sign/s khong. Neu khong, tran he thong la ~10–30 tx/s va **batch executor tro thanh bat buoc**, khong phai toi uu.
-6. **Ngan sach $173k–345k** cho toan bo chuong trinh audit (gom B2 precompile Go, C2 Certora, D2 SDK) co duoc duyet truoc go-live khong, hay ship thiet ke epoch goc truoc de tranh audit Phase B cho bien the.
-7. **`base.group_system` co nam trong bien tin cay khong** — hien tai **co**, va 12.6.1 chi ra rang do dong nghia voi RCE. Neu khong chap nhan duoc thi phai giam so nguoi co group nay xuong con 1–2 va them break-glass.
-8. **Bounty float $300,000** co duoc phong toa khong, va ai la ben tra (issuer hay platform).
-9. **Duong cong cua ElGamal: BN254 G1 hay Baby Jubjub.** §03.3.9 khuyen nghi dut khoat Baby Jubjub **ngay tu dau** vi do la dieu kien can de giu duong Groth16 ma khong phai migrate (migrate = lo toan bo so du). Day la quyet dinh **khong sua duoc sau khi deploy contract dau tien** va no la quyet dinh bao mat, khong chi hieu nang.
-10. **Chinh sach rewind tren private chain**: ta co quyen ky thuat de rewind. Co duoc phep khong, ai duyet, va co phai thong bao doi tac khong. Neu khong tra loi truoc, cau tra loi se duoc dua ra luc 3h sang boi mot nguoi dang hoang.
+1. **Đồ thị brand-distributor lộ trên public chain** — chấp nhận hay ép B2B settlement về `chain_profile = private`. Ảnh hưởng: kiến trúc, chi phí vận hành chain riêng, và §13.
+2. **Ai giữ `y_audit`**, theo cơ sở nào, k-of-n bằng bao nhiêu, xoay thế nào, và ai chịu trách nhiệm khi lộ.
+3. **Quyền freeze trên private chain thuộc vai trò nào**, có đường lệnh toà án không (`forceTransfer` có sự chứng kiến của N validator, §1.10.3).
+4. **`WITHDRAW_CAP_PER_HOUR`** — đề xuất 2% TVL/giờ với cơ sở ở 12.11; cần người chấp nhận rằng thiệt hại xấu nhất là 2% TVL.
+5. **Compliance có chấp nhận relayer hot key trong enclave** (thay vì HSM L3) để đổi từ 10–30 lên 10^4 sign/s không. Nếu không, trần hệ thống là ~10–30 tx/s và **batch executor trở thành bắt buộc**, không phải tối ưu.
+6. **Ngân sách $173k–345k** cho toàn bộ chương trình audit (gồm B2 precompile, C2 Certora, D2 SDK, và **hai lần** hạng mục verifier vì hai đường cong) có được duyệt trước go-live không, hay ship thiết kế epoch gốc trước để tránh audit Phase B cho biến thể.
+7. **`base.group_system` có nằm trong biên tin cậy không** — hiện tại **có**, và 12.6.1 chỉ ra rằng đó đồng nghĩa với RCE. Nếu không chấp nhận được thì phải giảm số người có group này xuống còn 1–2 và thêm break-glass.
+8. **Bounty float $300,000** có được phong toả không, và ai là bên trả (issuer hay platform).
+9. **Đường cong của ElGamal.** §20.1 chốt hỗ trợ **cả hai** (bn254 và BLS12-381) và để thị trường chọn — nhưng đó là quyết định ở tầng factory. Ở tầng một token cụ thể, người tạo chọn một lần và **không sửa được sau khi deploy** (§20.2), vì đổi đường cong = migrate = lộ toàn bộ số dư. Điều còn phải quyết là **ta** phát hành token của mình trên đường cong nào; §19 chốt bn254 cho giai đoạn private, với ba điều kiện mở lại.
+10. **Chính sách rewind trên private chain**: ta có quyền kỹ thuật để rewind. Có được phép không, ai duyệt, và có phải thông báo đối tác không. Nếu không trả lời trước, câu trả lời sẽ được đưa ra lúc 3h sáng bởi một người đang hoảng.
 
-### 12.13. Rui ro ton du — cai khong co bien phap, va phai ky nhan
+### 12.13. Rủi ro tồn dư — cái không có biện pháp, và phải ký nhận
 
-Mot mo hinh de doa trung thuc phai co muc nay. Bay rui ro duoi day **khong** co bien phap trong pham vi du an; chung phai duoc ghi vao ho so rui ro va co nguoi ky chap nhan.
+Một mô hình đe doạ trung thực phải có mục này. Bảy rủi ro dưới đây **không** có biện pháp trong phạm vi dự án; chúng phải được ghi vào hồ sơ rủi ro và có người ký chấp nhận.
 
-| # | Rui ro ton du | Vi sao khong chan duoc | Neu xay ra |
+| # | Rủi ro tồn dư | Vì sao không chặn được | Nếu xảy ra |
 |---|---|---|---|
-| R1 | >1/3 stake Gnosis equivocate | Ngoai tam kiem soat | Finality bi dao ⇒ `finality_violation`, halt chain, dao but toan thu cong (§11.4) |
-| R2 | BN254 chi con **~100 bit** an toan sau cac tan cong TNFS | La thuoc tinh cua duong cong | Chap nhan cho "money in motion"; voi "money at rest" dai han thi phai co ke hoach doi curve (§03.1.2) |
-| R3 | **Harvest-now-decrypt-later** tren ciphertext ElGamal | Ciphertext da tren chuoi vinh vien; PQ khong cuu duoc cai da ghi | So tien cua hom nay bi giai ma khi co CRQC. Do la ly do B2B nen o private chain, noi chuoi khong cong khai (§02.6.6) |
-| R4 | Mat `x` = mat vinh vien quyen chi tieu | Thuoc tinh giao thuc | Uoc **0.3–1.0%/nam** tai khoan tu quan; 10,000 outlet ⇒ 30–100 tai khoan/nam, 15–50 trieu VND/nam khoa vinh vien (§07.10). Chap nhan duoc voi loyalty, **khong** voi B2B |
-| R5 | Khong tich thu duoc (seizure) tren public chain | Contract khong biet so du bang bao nhieu | Neu quy dinh doi seizure thi Zether public **khong dap ung duoc, cham het** (§1.10.3) |
-| R6 | Luc luong (cardinality) cua do thi thanh toan la cong khai | La thiet ke anti-mixer | Doi thu biet tan suat dat hang. Phai noi voi khach hang, khong duoc giau |
-| R7 | Mat 4 trong 7 khoa Safe | `RECOVERY` 6-of-7 cung khong cuu duoc | He thong chet vinh vien. Phai o ho so rui ro, khong duoc lo di (§1.11.1 muc 4) |
+| R1 | >1/3 stake Gnosis equivocate | Ngoài tầm kiểm soát | Finality bị đảo ⇒ `finality_violation`, halt chain, đảo bút toán thủ công (§11.4) |
+| R2 | BN254 chỉ còn **~100 bit** an toàn sau các tấn công TNFS | Là thuộc tính của đường cong | Chấp nhận cho "money in motion"; với "money at rest" dài hạn thì phải có kế hoạch đổi curve (§03.1.2). BLS12-381 giữ ~126 bit và §20.1 để cửa đó mở, nhưng phép đo S7 cho thấy nó **không** rẻ hơn về gas — lý do đổi là biên an toàn, không phải chi phí |
+| R3 | **Harvest-now-decrypt-later** trên ciphertext ElGamal | Ciphertext đã trên chuỗi vĩnh viễn; PQ không cứu được cái đã ghi | Số tiền của hôm nay bị giải mã khi có CRQC. Đó là lý do B2B nên ở private chain, nơi chuỗi không công khai (§02.6.6) |
+| R4 | Mất `x` = mất vĩnh viễn quyền chi tiêu | Thuộc tính giao thức | Ước **0.3–1.0%/năm** tài khoản tự quản; 10,000 outlet ⇒ 30–100 tài khoản/năm, 15–50 triệu VND/năm khoá vĩnh viễn (§07.10). Chấp nhận được với loyalty, **không** với B2B |
+| R5 | Không tịch thu được (seizure) trên public chain | Contract không biết số dư bằng bao nhiêu | Nếu quy định đòi seizure thì Zether public **không đáp ứng được, chấm hết** (§1.10.3) |
+| R6 | Lực lượng (cardinality) của đồ thị thanh toán là công khai | Là thiết kế anti-mixer | Đối thủ biết tần suất đặt hàng. Phải nói với khách hàng, không được giấu |
+| R7 | Mất 4 trong 7 khoá Safe | `RECOVERY` 6-of-7 cũng không cứu được | Hệ thống chết vĩnh viễn. Phải ở hồ sơ rủi ro, không được lờ đi (§1.11.1 mục 4) |
+| **R8** | **[BẢN 3] Một token do người lạ tạo bằng implementation đã deprecate vẫn chạy vĩnh viễn** | Factory mở + không upgrade: `deprecate` chỉ là một cờ, nó không dừng được contract đã tồn tại | Người dùng zDAI-B vẫn giao dịch với một bản có lỗi đã biết. Ta chỉ gỡ được nó khỏi `accepted_token_ids` của mình. Đây là cái giá đã chọn của §20.2 và §20.4: provenance thay cho gatekeeping |
 
-### 12.14. Ma tran truy vet: bien phap -> noi enforce -> test chung minh
+### 12.14. Ma trận truy vết: biện pháp -> nơi enforce -> test chứng minh
 
-Mot bien phap khong co test la mot y dinh. Bang nay la thu ma team dung de biet **da xong hay chua**; moi dong phai co mot file test that.
+Một biện pháp không có test là một ý định. Bảng này là thứ mà team dùng để biết **đã xong hay chưa**; mỗi dòng phải có một file test thật.
 
-| Bien phap | Enforce o dau | Test chung minh no song |
+| Biện pháp | Enforce ở đâu | Test chứng minh nó sống |
 |---|---|---|
-| Transcript day du (12.3.2) | `BulletproofsVerifier.sol` + prover Rust + precompile Go | `testvectors/zether_transfer_v1.json` + >= 13 negative vector; differential 3 chieu |
-| Nonce khong lap (12.3.1) | Prover (Rust/WASM) | `test_no_nonce_reuse` voi RNG bi ep hang so |
-| `withdraw` bind chain (12.3.3) | Fiat-Shamir challenge | `ReplayCrossChain.t.sol`: proof hop le tren chainId A phai revert tren B |
-| Fail-fast verifier (12.1) | Thu tu check trong `transferConfidential` | `VerifierFailFast.t.sol` do gas tung nhanh revert, assert < 20k |
-| Gas uniformity (12.3.7 muc 4) | Verifier | `GasUniformity.t.sol`, lech < 2,000 gas |
+| Transcript đầy đủ (12.3.2) | `BulletproofsVerifier.sol` + prover Rust + precompile | `testvectors/zether_transfer_v1.json` + >= 13 negative vector; differential 3 chiều |
+| Nonce không lặp (12.3.1) | Prover (Rust/WASM) | `test_no_nonce_reuse` với RNG bị ép hằng số |
+| `withdraw` bind chain (12.3.3) | Fiat-Shamir challenge | `ReplayCrossChain.t.sol`: proof hợp lệ trên chainId A phải revert trên B |
+| Fail-fast verifier (12.1) | Thứ tự check trong `transferConfidential` | `VerifierFailFast.t.sol` đo gas từng nhánh revert, assert < 20k |
+| Gas uniformity (12.3.7 mục 4) | Verifier | `GasUniformity.t.sol`, lệch < 2,000 gas |
 | Digest injectivity (12.2) | `MetaTxLib` | `halmos` `check_digest_injective` |
-| MODE_OPEN bo qua relayer (12.2) | `_canon()` | `halmos` `check_mode_open_ignores_relayer` |
-| Khong `delegatecall` tu do (12.1) | CI grep + `ContractPrototypeRegistry` | `grep_gate.sh` + `PrototypeOnly.t.sol` |
-| Storage layout khong va cham (12.1) | `validateUpgrade` | CI fail khi lech `storage-layouts/v<N-1>/` |
-| `WithdrawLimiter` 2%/gio (12.11) | `WithdrawLimiter.sol` | `LimiterInvariant.t.sol`: 50k run, tong rut/gio khong bao gio > cap |
-| Registry khong cache trong token (12.1) | `ZTokenBase` doc truc tiep | Freeze o block N, `transferConfidential` o N+1 phai revert |
+| MODE_OPEN bỏ qua relayer (12.2) | `_canon()` | `halmos` `check_mode_open_ignores_relayer` |
+| Phí phần trăm không dùng được với token bí mật (12.3.7) | `FeePolicy.requireConfidentialSafe()` | `FeePolicy.t.sol` — đã có, revert trên `FeeMode.PERCENT` |
+| Không `delegatecall` tự do (12.1) | CI grep + catalogue implementation của factory | `grep_gate.sh` + `PrototypeOnly.t.sol` |
+| **[BẢN 3]** Implementation đã đăng ký khớp bản đã audit | `implementation_codehash` trong factory + §10.4.4 | `test_provenance_codehash_mismatch_rejects` |
+| `WithdrawLimiter` 2%/giờ (12.11) | `WithdrawLimiter.sol` | `LimiterInvariant.t.sol`: 50k run, tổng rút/giờ không bao giờ > cap |
+| Registry không cache trong token (12.1) | `ZTokenBase` đọc trực tiếp | Freeze ở block N, `transferConfidential` ở N+1 phải revert |
 | Signer policy (12.5.1) | `confidential-signer/policy.py` (enclave) | `test_policy_rejects_type4`, `test_policy_rejects_replay`, `test_policy_owns_nonce` |
-| PCR0 pin (12.5.1) | KMS key policy | Drill: chay image khac ⇒ `kms:Decrypt` phai fail |
-| Khong method public gay chu ky (12.6) | Quy uoc + test | `test_public_methods_allowlist` liet ke moi method cua `blockchain.*` |
+| PCR0 pin (12.5.1) | KMS key policy | Drill: chạy image khác ⇒ `kms:Decrypt` phải fail |
+| Không method public gây chữ ký (12.6) | Quy ước + test | `test_public_methods_allowlist` liệt kê mọi method của `blockchain.*` |
 | Cross-tenant (A9) | Rule `company_id` + `resolve()` | `test_cross_company_read`, `test_signer_rejects_foreign_ref` |
-| `done` chi tu Finality Gate (12.6) | Guard trong `write()` + `settlement.transition` | `test_cannot_set_done_from_ui`, `test_done_requires_transition_row` |
-| `models.Constraint` that su ton tai | Postgres | `SELECT conname FROM pg_constraint WHERE conrelid='blockchain_metatx'::regclass;` |
-| RPC canary (12.7.1) | `relay-pool` lop 3 | Drill quy: fake mot endpoint tra state cu |
-| Dead man's switch (12.11 #14) | Dich vu ngoai | Drill quy: tat indexer, do thoi gian den alert |
-| Bytecode khop audit (12.7.3) | Runbook deploy | `cast code` vs `forge inspect` trong script deploy, fail = abort |
+| `done` chỉ từ Finality Gate (12.6) | Guard trong `write()` + `settlement.transition` | `test_cannot_set_done_from_ui`, `test_done_requires_transition_row` |
+| `models.Constraint` thật sự tồn tại | Postgres | `SELECT conname FROM pg_constraint WHERE conrelid='blockchain_metatx'::regclass;` |
+| RPC canary (12.7.1) | `relay-pool` lớp 3 | Drill quý: fake một endpoint trả state cũ |
+| Dead man's switch (12.11 #14) | Dịch vụ ngoài | Drill quý: tắt indexer, đo thời gian đến alert |
+| Bytecode khớp audit (12.7.3) | Runbook deploy | `cast code` vs `forge inspect` trong script deploy, fail = abort |
