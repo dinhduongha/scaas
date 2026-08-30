@@ -16,7 +16,7 @@ smartcontracts/src/
 ├── common/MetaTxLib.sol        # struct, TYPEHASH, bang op, hashStruct
 ├── common/FeePolicy.sol        # FeeMode, tran phi, requireConfidentialSafe()
 ├── common/SigLib.sol           # EIP-712 + ERC-1271
-├── metatx/IERC20MetaTx.sol     # tang nen: moi token deu gasless duoc
+├── metatx/IERC20MetaTx.sol     # tầng nền: mọi token đều gasless được
 ├── metatx/IERC20Payment.sol    # token thanh toan cong khai
 ├── zether/IZetherToken.sol     # ke thua IERC20MetaTx
 └── test/
@@ -26,7 +26,7 @@ dms_blockchain/lib/eip1776.py                  # signer thuan Python, KHONG impo
 dms_blockchain/tests/test_eip1776_vectors.py   # doc chinh metatx_v1.json o tren
 dms_blockchain/models/blockchain_metatx.py
 
-# KHONG CON: MetaTxForwarder.sol, TargetPolicy.sol, ExcessivelySafeCall.sol, Griefing.t.sol
+# KHÔNG CÒN: MetaTxForwarder.sol, TargetPolicy.sol, ExcessivelySafeCall.sol, Griefing.t.sol
 ```
 
 ---
@@ -59,15 +59,15 @@ hash"* và *"`innerGasLimit` phải nằm trong digest"* — đã hết đối t
 ```solidity
 struct MetaTransaction {
     address from;           // signer (EOA hoac smart account EIP-1271)
-    uint8   op;             // thao tac cua CHINH token nay. KHONG phai dia chi de goi.
-    bytes   args;           // tham so da ABI-encode cho `op`
+    uint8   op;             // thao tác của CHÍNH token này. KHÔNG phải địa chỉ để gọi.
+    bytes   args;           // tham số đã ABI-encode cho `op`
     uint256 batch;          // lane cua 2D nonce
-    uint256 nonce;          // so thu tu trong lane
+    uint256 nonce;          // số thứ tự trong lane
     uint256 validUntil;     // unix seconds, inclusive
     address relayer;        // address(0) = ai cung gui duoc (wildcard)
     FeeMode feeMode;        // NONE | PERCENT | FIXED
-    uint256 fee;            // ppm neu PERCENT, tuyet doi neu FIXED
-    address feeRecipient;   // tra bang CHINH token nay
+    uint256 fee;            // ppm nếu PERCENT, tuyệt đối nếu FIXED
+    address feeRecipient;   // trả bằng CHÍNH token này
 }
 ```
 
@@ -130,11 +130,11 @@ cả khi inner call fail** — và chế độ đó là cái mở cửa.
 Ghép hai lý do lại thì mới ra được vector:
 
 ```
-1. Forwarder PHAI nuot loi de relayer duoc tra khi inner fail vi ly do nghiep vu
-2. Nuot loi  =>  frame ngoai commit: nonce++, thu phi, emit success=false
-3. Relayer AC Y "che tao" mot inner failure bang cach bop gas
-4. Contract KHONG PHAN BIET DUOC: fail do nghiep vu va fail do doi gas nhin giong het nhau
-5. Nguoi dung mat phi + mot nonce. Hanh dong khong xay ra. Relayer giu phi.
+1. Forwarder PHẢI nuốt lỗi để relayer được trả khi inner fail vì lý do nghiệp vụ
+2. Nuốt lỗi  =>  frame ngoài commit: nonce++, thu phí, emit success=false
+3. Relayer ÁC Ý "chế tạo" một inner failure bằng cách bóp gas
+4. Contract KHÔNG PHÂN BIỆT ĐƯỢC: fail do nghiệp vụ và fail do đói gas nhìn giống hệt nhau
+5. Người dùng mất phí + một nonce. Hành động không xảy ra. Relayer giữ phí.
 ```
 
 `innerGasLimit` trong digest cho contract một cách phân biệt: `require(gasleft() >= innerGasLimit*64/63
@@ -212,6 +212,82 @@ Và một hệ quả nữa từ `_USER-DECISIONS.md` §20.2: token **không upgr
 trỏ sang nó.
 
 ---
+#### 04.1b. Forwarder: vì sao spec từng có, và khi nào người ta THẬT SỰ cần một cái
+
+Câu hỏi đúng (user, 2026-08-31): *"Tại sao có forwarder? Có dùng forwarder đâu, dùng khi nào?"*
+**Không dùng. Không chỗ nào trong hệ này dùng.** Ghi mục này ra để không ai thêm nó lại.
+
+##### Forwarder là gì, và nó giải bài toán gì
+
+Một **generic meta-tx forwarder** là *một* contract đứng giữa, nhận chữ ký của người dùng rồi
+`CALL` sang một contract **thứ ba** với calldata tuỳ ý:
+
+```
+nguoi dung ──ky──> [ MetaTxForwarder ] ──CALL(to, data)──> [ contract BAT KY ]
+                     giu nonce, thu phi
+```
+
+Nó tồn tại để giải **đúng một** bài toán: *làm cho một contract mà bạn KHÔNG kiểm soát trở nên
+gasless.* Bạn không sửa được contract đó, nên bạn đặt một lớp đệm trước nó. Đó là hình dạng của
+GSN, của ERC-2771, và của cách phần lớn thế giới hiểu "meta-transaction".
+
+##### Vì sao nó lọt vào spec này
+
+Ba bước, mỗi bước hợp lý, kết quả thì không:
+
+1. `blockchain.md` yêu cầu "meta-transaction theo EIP-1776" một cách chung chung.
+2. Hình dạng chuẩn tắc của EIP-1776/GSN **là** forwarder, nên bản 1 đặc tả nó.
+3. Bản 1 **cũng** nhận ra mixin tốt hơn và ghi *"với Zether, dùng native mixin"* — nhưng vẫn giữ
+   nguyên đặc tả forwarder song song.
+
+Hệ quả: spec mang theo toàn bộ máy móc của forwarder (`innerGasLimit`, 63/64, `MAX_RETURN_BYTES`,
+allowlist target, ERC-2771 suffix, quản lý allowance) cho một hình thái **không ai dùng**. Bốn lớp
+phòng thủ cho một vector do chính lớp đệm đó mở ra.
+
+##### Vì sao hệ này không cần
+
+Vì **mọi token trong hệ đều là token ta kiểm soát** — và "ta" ở đây gồm cả người lạ dùng factory mở
+(§20), vì họ deploy từ chính implementation của ta. Kiểm soát contract nghĩa là nhúng thẳng meta-tx
+vào nó được. Không cần lớp đệm.
+
+Ba trường hợp trông như cần forwarder, và cách hệ này giải mà không cần:
+
+| Trường hợp | Tưởng cần forwarder | Thực tế |
+|---|---|---|
+| Trả một hoá đơn có mã đối soát | gọi contract hoá đơn qua forwarder | `OP_PAY_WITH_REF` — một op của chính token, `entryRef` nằm trong `args` |
+| Gasless cho một ERC-20 **của người khác** (USDC chẳng hạn) | forwarder trước USDC | **Wrap nó**: `MetaToken` bọc USDC. Wrapper là contract của ta ⇒ có mixin. Đây chính là archetype `WRAP_1_1` của §01 |
+| Chuyển bảo mật | Zether là "inner call" sau forwarder | `IZetherToken` **kế thừa** `IERC20MetaTx`. `transferConfidential` là `OP_TRANSFER_CONF`, một op như mọi op khác |
+
+Hàng cuối là chỗ bản 1 hiểu sai kiến trúc nặng nhất: nó viết *"Zether là inner call, không phải một
+tầng song song"*, đúng về ý (Zether không phải tầng riêng) nhưng sai về cơ chế (nó không phải một
+`CALL` nào cả — nó là một nhánh trong cùng contract).
+
+##### Khi nào thì THẬT SỰ cần một forwarder
+
+Một câu: **khi bạn muốn gasless-hoá một contract bạn không sửa được và không bọc được.**
+
+Ví dụ có thật: gasless một lệnh swap trên Uniswap, hay một lệnh stake trên một protocol bên thứ ba.
+Bạn không deploy được lại Uniswap, và bọc nó thì mất tính thanh khoản — nên lớp đệm là lối duy nhất.
+
+**Không use case nào trong locked #3 có hình dạng đó.** Loyalty, B2B settlement, end-user payment —
+cả ba đều di chuyển token của chính hệ này.
+
+##### Nếu sau này thật sự cần
+
+Đừng thêm `to`/`data` lại vào struct. Deploy một contract **riêng**, và cho nó là một `op` mới:
+
+```
+OP_EXTERNAL_CALL = 200   // args: (address to, bytes data, uint256 gasCap)
+```
+
+Khi đó `innerGasLimit` (dưới tên `gasCap`) quay lại — **nhưng chỉ trong `args` của đúng op đó**, và
+mọi biện pháp phòng vệ của forwarder (allowlist target, cap returndata, guard 63/64) chỉ áp cho nhánh
+ấy. Phần còn lại của token không phải trả giá cho một tính năng nó không dùng.
+
+Đó là khác biệt giữa "tất cả đều là forwarder" và "có một op là forwarder": **cái giá bị cô lập.**
+
+---
+
 ### 04.2. EIP-712 domain: từng trường đều chịu lực
 
 ```solidity
@@ -297,9 +373,9 @@ dùng đúng `(batch_id, batch_nonce)` cũ — và INSERT sẽ vi phạm UNIQUE.
 # dms_blockchain/models/blockchain_metatx.py
 _unique_live_lane = models.Constraint(
     "UNIQUE NULLS NOT DISTINCT (chain_id, from_account_id, batch_id_hex, batch_nonce, lane_slot)",
-    'Mot lane (batchId, batchNonce) chi duoc co mot ban ghi song.')
+    'Một lane (batchId, batchNonce) chỉ được có một bản ghi sống.')
 # lane_slot: Integer, NULL khi metatx_state in ('expired','failed','superseded'),
-#            = 0 khi con song. Compute stored, MOI nhanh deu gan gia tri (bay Odoo 19).
+#            = 0 khi còn sống. Compute stored, MỌI nhánh đều gán giá trị (bẫy Odoo 19).
 ```
 
 Lý do dùng `lane_slot` nullable thay vì partial unique index: Odoo `models.Constraint` sinh
@@ -416,8 +492,8 @@ Còn hai bit sống, cả hai dư thừa. Một bitmask như vậy không gánh 
 #### Cách của bản 3
 
 ```
-relayer == address(0)   ->  ai cung gui duoc
-relayer == 0xABC…       ->  chi 0xABC… gui duoc
+relayer == address(0)   ->  ai cũng gửi được
+relayer == 0xABC…       ->  chỉ 0xABC… gửi được
 ```
 
 `relayer` **luôn** trong struct hash, giá trị nào cũng vậy. Không nhánh, không canonical form, không quy
@@ -523,12 +599,12 @@ mà rút**: token tự trừ số dư nội bộ, và không có `to` tuỳ ý. 
 ```
 1. relayer      (0 gas)   — m.relayer == address(0) || m.relayer == msg.sender
 2. validUntil   (0 gas)   — block.timestamp <= m.validUntil
-3. op hop le    (0 gas)   — supportsMetaOp(m.op), khong thi revert ngay
+3. op hợp lệ    (0 gas)   — supportsMetaOp(m.op), không thì revert ngay
 4. nonce        (1 sload) — metaNonce[from][batch] == m.nonce
-5. chu ky       (~3k)     — SigLib: ECDSA hoac ERC-1271 staticcall{gas:50_000}
-6. decode args + KIEM TRA DU dieu kien cua op
+5. chữ ký       (~3k)     — SigLib: ECDSA hoặc ERC-1271 staticcall{gas:50_000}
+6. decode args + KIỂM TRA ĐỦ điều kiện của op
 7. thu phi
-8. thuc thi op bang INTERNAL call
+8. thực thi op bằng INTERNAL call
 9. metaNonce[from][batch]++   va emit
 ```
 
@@ -627,9 +703,9 @@ hai nút thắt khác nhau.
 pragma solidity ^0.8.20;   // KHONG doi Cancun: chain 9000 chay pre-London, xem §04.6.3
 
 library MetaTxLib {
-    // Bang op: APPEND-ONLY. Khong bao gio doi so cua mot ma da phat hanh —
-    // no nam trong digest da ky. verifyingContract quyet dinh token nao,
-    // nen hai token dung lai cung so la an toan.
+    // Bảng op: APPEND-ONLY. Không bao giờ đổi số của một mã đã phát hành —
+    // nó nằm trong digest đã ký. verifyingContract quyết định token nào,
+    // nên hai token dùng lại cùng số là an toàn.
     uint8 constant OP_TRANSFER      = 1;   // (address to, uint256 amount)
     uint8 constant OP_APPROVE       = 2;   // (address spender, uint256 amount)
     uint8 constant OP_PAY_WITH_REF  = 3;   // (address to, uint256 amount, bytes32 entryRef)
@@ -658,7 +734,7 @@ library MetaTxLib {
 
     function hashStruct(MetaTransaction memory m) internal pure returns (bytes32) {
         return keccak256(abi.encode(
-            METATX_TYPEHASH, m.from, m.op, keccak256(m.args),   // <-- keccak(args), BAT BUOC
+            METATX_TYPEHASH, m.from, m.op, keccak256(m.args),   // <-- keccak(args), BẮT BUỘC
             m.batch, m.nonce, m.validUntil, m.relayer,
             uint8(m.feeMode), m.fee, m.feeRecipient
         ));
@@ -670,7 +746,7 @@ interface IERC20MetaTx is IERC20 {
         address indexed from, address indexed relayer, uint256 indexed batch,
         uint256 nonce, uint8 op, bytes32 digest
     );
-    event MetaTxSkipped(bytes32 digest, uint8 reason);   // chi trong batch, §04.6.4
+    event MetaTxSkipped(bytes32 digest, uint8 reason);   // chỉ trong batch, §04.6.4
 
     error MetaTxExpired(uint256 validUntil, uint256 nowTs);
     error MetaTxBadNonce(uint256 expected, uint256 got);
@@ -718,24 +794,24 @@ từ `/policy` của node (`_USER-DECISIONS.md` §21.3). Một `chainId` sai là
 # dms_blockchain/lib/eip1776.py  — thuan Python, KHONG import odoo
 def build_and_sign(token_addr, chain_id, op, args_encoded, batch, nonce,
                    valid_until, relayer, fee_mode, fee, fee_recipient, signer):
-    # 1. Domain: verifyingContract LA CHINH TOKEN (mixin, khong forwarder)
+    # 1. Domain: verifyingContract LÀ CHÍNH TOKEN (mixin, không forwarder)
     domain = {'name': TOKEN_NAME, 'version': '1',
               'chainId': chain_id, 'verifyingContract': token_addr}
 
-    # 2. FeeMode PERCENT bi CAM tren token bao mat: fee = v*p voi ca hai ve cong khai
-    #    CHINH LA so tien. §12.3.7. Kiem o client de loi hien som, contract kiem lai.
+    # 2. FeeMode PERCENT bị CẤM trên token bảo mật: fee = v*p với cả hai vế công khai
+    #    CHÍNH LÀ số tiền. §12.3.7. Kiểm ở client để lỗi hiện sớm, contract kiểm lại.
     if is_confidential(token_addr) and fee_mode == FeeMode.PERCENT:
-        raise ValueError('PERCENT fee lam lo so tien tren token bao mat')
+        raise ValueError('PERCENT fee làm lộ số tiền trên token bảo mật')
 
-    # 3. relayer = 0 la wildcard. KHONG canonical-zero hoa gi ca — moi truong
-    #    vao hash dung nhu no la. Do la toan bo diem cua §04.4.
+    # 3. relayer = 0 là wildcard. KHÔNG canonical-zero hoá gì cả — mọi trường
+    #    vào hash đúng như nó là. Đó là toàn bộ điểm của §04.4.
     m = MetaTransaction(from_=signer.address, op=op, args=args_encoded,
                         batch=batch, nonce=nonce, valid_until=valid_until,
                         relayer=relayer, fee_mode=fee_mode, fee=fee,
                         fee_recipient=fee_recipient)
 
-    # 4. keccak(args) — KHONG encode thang. Bo la vo injectivity:
-    #    ("ab","c") va ("a","bc") cho cung mot digest.
+    # 4. keccak(args) — KHÔNG encode thẳng. Bỏ là vỡ injectivity:
+    #    ("ab","c") và ("a","bc") cho cùng một digest.
     digest = eip712_digest(domain, METATX_TYPE_STRING, m)
     sig = signer.sign_digest(digest)
     return m, sig, digest
@@ -981,8 +1057,8 @@ def metatx_build(self, origin_model, origin_id, action_code, params=None):
 
 @api.model
 def metatx_quote(self, metatx_id):
-    """Tra gas uoc tinh theo `op` (bang §04.10), fee de xuat, validUntil. Read-only, khong ky.
-    [BAN 3] KHONG con tra innerGasLimit/requiredOuterGas — hai thu do khong con ton tai."""
+    """Trả gas ước tính theo `op` (bảng §04.10), fee đề xuất, validUntil. Read-only, không ký.
+    [BẢN 3] KHÔNG còn trả innerGasLimit/requiredOuterGas — hai thứ đó không còn tồn tại."""
 
 @api.model
 def metatx_status(self, digest_hash):
