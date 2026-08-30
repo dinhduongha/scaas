@@ -88,7 +88,10 @@ enum FeeMode { NONE, PERCENT, FIXED }
 | `PERCENT` | `feeAmount = amount * feePpm / 1e6` | mẫu số **1e6 ppm**, trần **1% = 10000 ppm** |
 | `FIXED` | `feeAmount` tuyệt đối theo đơn vị token | vẫn chịu trần 1% của `amount` |
 
-`feeRecipient` do **người gửi** chỉ định trong cả ba mode.
+`feeRecipient` do **người gửi** chỉ định trong cả ba mode — nhưng thường là điền theo giá trị mà
+relayer công bố ở `/policy`, không phải người gửi tự nghĩ ra. Và `address(0)` là một giá trị hợp lệ
+có nghĩa "trả cho `msg.sender`". Xem §21.5: `feeRecipient` cố định là cấu hình **tự nhiên** của một
+relayer có pool khoá ký, không phải một vấn đề.
 
 ### 3.2 Zether: PHÍ BẮT BUỘC LÀ FIXED. Đây là ràng buộc bảo mật, không phải tuỳ chọn
 
@@ -1480,26 +1483,63 @@ Nếu đã chọn `MODE_RESTRICT_RELAYER` với một địa chỉ cụ thể tr
 lần phải xin chữ ký lại từ mọi người dùng. Quyết định wildcard được đưa ra vì lý do khác (chống
 cross-mode replay), và đây là một lợi ích kèm theo mà lúc đó chưa ai tính.
 
-#### Một lỗ hổng thiết kế phát hiện từ đây, phải chốt lại
+#### `feeRecipient` và khoá ký là hai thứ khác nhau — và đó là điều làm xoay khoá chạy được
 
-§3.1 viết: *"`feeRecipient` do **người gửi** chỉ định trong cả ba mode."*
+*(Mục này thay cho một đoạn sai ở bản trước. Bản trước viết rằng `feeRecipient` do người gửi chỉ định
+"làm thị trường mở không chạy được, vì không relayer lý trí nào nhận việc khi phí không về tay
+mình". **Kết luận đó sai**, và nó sai vì lập luận bằng mô hình "relayer tối đa hoá lợi nhuận trên
+từng intent" — đúng cái mô hình mà §3.4b và §5.3.4 đã bác bỏ.)*
 
-Kết hợp với wildcard relayer thì điều đó **làm thị trường mở không chạy được**: bất kỳ ai relay cũng
-trả gas, nhưng phí đi tới địa chỉ mà *người gửi* đã chọn. Nếu địa chỉ đó không phải của người relay,
-không relayer lý trí nào nhận việc. Người gửi thì **không biết trước ai sẽ relay** — đó chính là ý
-nghĩa của "mở".
+**Vì sao kết luận cũ sai.** Relayer được trả bằng nhiều đường, và phần lớn không phải qua trường
+`fee` của intent:
 
-Sửa: **`feeRecipient == address(0)` nghĩa là "trả cho `msg.sender`"**, và đó là giá trị mặc định của
-intent mở. Người gửi chỉ điền một địa chỉ cụ thể khi họ **cố ý** chỉ định relayer (luồng đối tác, hoặc
-relay pool nội bộ).
+| Đường | `fee` trên intent | `feeRecipient` |
+|---|---|---|
+| Hợp đồng dịch vụ với issuer | thường **0** | không liên quan |
+| Issuer tài trợ qua `SponsorshipPool.settle()` | 0 | pool trả thẳng cho `msg.sender` |
+| Relayer **là** bên hưởng lợi (distributor giữ đường settlement của chính mình) | 0 | không liên quan |
+| Đối tác, thu hồi ngoài chuỗi | 0 | không liên quan |
+| Thị trường mở thuần tuý | > 0 | mới là chỗ nó quan trọng |
 
-Hai điều kiện đi kèm:
+Bốn hàng đầu là **đa số các trường hợp thật** (§5.3.4: trên chain gas rẻ, phí bù gas không nuôi nổi
+một thị trường relayer độc lập; ai relay là vì lý do khác). Với chúng, `feeRecipient` trỏ đi đâu
+không đổi hành vi của ai.
 
-- `feeRecipient` vẫn nằm **trong digest**. Wildcard không có nghĩa là bỏ nó ra khỏi chữ ký — nó chỉ
-  là một giá trị đặc biệt có ý nghĩa quy ước, y hệt `relayer == address(0)`. Bỏ nó ra khỏi digest
-  chính là cái sai của mode bitmask.
-- Relayer phải kiểm `feeRecipient == address(0) || feeRecipient == <ví thu phí của mình>` **trước khi
-  simulate**. Đây là một luật thuộc ma trận §21.4 (đọc được từ intent, không cần `eth_call`).
+**Và điểm quan trọng hơn, mà bản trước bỏ hẳn: `feeRecipient` cố định là thứ một relayer xoay khoá
+CHỦ ĐỘNG MUỐN.** Hai trường trả lời hai câu hỏi khác nhau:
+
+| Trường | Câu hỏi | Giá trị tự nhiên với pool khoá |
+|---|---|---|
+| `relayer` | **Ai được phép submit?** | `address(0)` — để xoay tự do quanh N khoá |
+| `feeRecipient` | **Tiền về đâu?** | **một địa chỉ cố định** — ví lạnh thu phí |
+
+Đó chính là cấu hình mà §21.5 mô tả ở phần bảo mật: khoá ký giữ float nhỏ và **không bao giờ là nơi
+nhận phí**. Nếu `feeRecipient` bám theo khoá ký thì phí rơi rải rác trên N ví nóng — đúng thứ phải
+tránh. Nên với một relayer có pool khoá, `feeRecipient` **phải** là một địa chỉ cố định, và
+`relayer = address(0)` là thứ cho phép nó xoay khoá bên dưới.
+
+User diễn đạt đúng luồng thật, và nó là luồng UI chứ không phải luồng giao thức:
+
+> *"Có thể do UI của Node Relayer: Tôi muốn người nhận fee là người này, và hãy để địa chỉ relayer = 0
+> để tôi còn roll quanh các ví gửi của tôi."*
+
+Nghĩa là **relayer công bố `feeRecipient` của mình, người gửi điền vào**. Không cần wildcard nào cả.
+
+#### Điều còn lại phải làm, nhỏ hơn nhiều
+
+Hai thứ, và không thứ nào là sửa lỗ hổng:
+
+1. **`/policy` phải công bố `fee_recipient` của node** (§5.2). Không có nó, người gửi không biết điền
+   gì và phải hỏi ngoài băng. Một trường trong một endpoint đã tồn tại.
+2. **`feeRecipient == address(0)` nghĩa là "trả cho `msg.sender`"** — giữ, nhưng đúng vai của nó: một
+   **tiện ích cho trường hợp người gửi không biết và không quan tâm ai sẽ relay**, không phải điều
+   kiện để thị trường tồn tại. Nó vẫn nằm **trong digest**; wildcard là một giá trị quy ước, không
+   phải một trường bị loại khỏi chữ ký.
+
+Và một luật cho ma trận §21.4, đọc được trước khi simulate: node chấp nhận intent khi
+`feeRecipient ∈ {address(0), <ví thu phí của mình>}` **hoặc** khi ma trận nói nhận bất kể phí
+(`min_fee: 0` cho contract đối tác). Vế thứ hai là vế quan trọng — thiếu nó, node đối tác tự loại
+mình khỏi đúng luồng nó sinh ra để phục vụ.
 
 #### Thiết kế pool khoá
 

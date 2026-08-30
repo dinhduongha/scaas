@@ -254,7 +254,7 @@ một cookie — 200 relayer × 5 Hz = 1000 session/s. Đây là một lỗ DoS 
 
 | Route | Method | Mục đích | Auth |
 |---|---|---|---|
-| `/intents/v1/policy` | GET | fee floor theo (chain, token), PoW bits, danh sách chain + profile, `spec` versions được chấp nhận, khoá công khai của gateway, **danh sách bootstrap multiaddr của mesh** | public, `ETag` + `Cache-Control: max-age=60` |
+| `/intents/v1/policy` | GET | fee floor theo `(chain, token)`, **`fee_recipient` của node này**, PoW bits, danh sách chain + profile, `spec` versions được chấp nhận, khoá công khai của gateway, **danh sách bootstrap multiaddr của mesh** | public, `ETag` + `Cache-Control: max-age=60` |
 | `/intents/v1/publish` | POST | Nhận một intent envelope. Trả `409` nếu `intent_id` đã tồn tại (idempotent) | public + tầng 0–3 §5.5 |
 | `/intents/v1/pending` | GET | `?chain_id=100&since=<cursor>&min_fee=…&token=0x…&target=0x…&fields=summary&urgent=1` | public |
 | `/intents/v1/get` | GET | `?ids=0x..,0x..` — lấy envelope đầy đủ cho tối đa 50 id | public |
@@ -1803,7 +1803,7 @@ Section này đã tự sửa theo §03/§04/§10. Những điều đi **ngược
 | Section | Hiện tại | Phải sửa thành |
 |---|---|---|
 | §04.4 | `mode` bitmask với `MODE_KNOWN_MASK`, `MODE_RESTRICT_RELAYER`, `MODE_REQUIRE_SUCCESS` | **Xoá toàn bộ bitmask.** `_USER-DECISIONS.md` §5 chốt wildcard `relayer == address(0)`; hành vi bubble/swallow là thuộc tính của contract đích, không phải một bit trong digest |
-| §04.4 | `feeRecipient` do người gửi chỉ định | **`feeRecipient == address(0)` nghĩa là trả cho `msg.sender`.** Không có quy ước này thì thị trường mở không chạy được — xem `_USER-DECISIONS.md` §21.5 |
+| §04.4 | `feeRecipient` chỉ nhận một địa chỉ cụ thể | Thêm quy ước **`address(0)` = trả cho `msg.sender`** như một tiện ích cho người gửi không biết ai sẽ relay. Không phải điều kiện sống còn: `feeRecipient` cố định là cấu hình tự nhiên của relayer có pool khoá, và relayer công bố nó ở `/policy` (`_USER-DECISIONS.md` §21.5) |
 | §04.4 | Struct `MetaTransaction` không có `feeMode` | Thêm `feeMode` **vào digest**; nếu không, relayer đổi cách diễn giải `fee` từ tuyệt đối sang ppm (§5.2) |
 | §10.4.5 | `metatx_state` thiếu `queued`, `broadcast`, `superseded`, `done`, `reverted` | Dùng state machine hợp nhất ở §5.8.1 (11 trạng thái) |
 | §10.4.5 | `mode_flags` | Xoá cột. Thay bằng `fee_mode` + `pool_visibility` (§5.8.2) |
