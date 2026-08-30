@@ -1342,3 +1342,213 @@ coi nó là spec. Ba thứ bắt buộc:
 giai đoạn private** (chain 9000 có `MinGasPrice = 0`, gas miễn phí, không cần relayer
 nào). Nhưng spec giao thức thì nên chốt sớm, vì nó rẻ khi còn trên giấy và đắt khi đã
 có hai bản cài đặt chạy lệch nhau.
+
+### 21.4 Node là MA TRẬN NĂNG LỰC, không phải hai mode
+
+User bổ sung:
+
+> *"Bộ định tuyến có thể linh động, làm nhiều vai. Chỉ là pool thuần, không có key để relay đến
+> chain, chỉ relay sang node khác. Có thể tách riêng Open pool (relay đến node khác) và private pool
+> (chờ private relayer khác lấy đẩy lên chain). Có thể vừa relay đến node khác, vừa đẩy tx lên chain,
+> tùy vào network và smartcontract và có thuật toán tối ưu fee. Có thể phải có matrix config."*
+
+**Hai mode ở §21.1 là cách nhìn sai, và phải thay.** "Mode 1 / mode 2" gợi ý một enum toàn cục, trong
+khi thực tế có **ba trục độc lập**, và trục thứ ba còn **thay đổi theo từng đích đến**:
+
+| Trục | Giá trị | Ghi chú |
+|---|---|---|
+| **Ingest** | nhận qua HTTP / nhận qua gossip / cả hai / không nhận | Node chỉ submit thì không cần ingest công khai |
+| **Pool** | `open` (gossip ra mesh) / `private` (giữ, chỉ phục vụ peer được phép) / `none` | Đây là trục user vừa thêm |
+| **Submit** | có key + có gas → đẩy lên chain / **không có key** → chỉ chuyển tiếp | **Theo từng `(chain, contract)`**, không toàn cục |
+
+Trục thứ ba là chỗ "ma trận" đến từ: một node hoàn toàn có thể **submit trên Gnosis nhưng chỉ forward
+cho chain 9000**, vì nó có gas trên chain này mà không có quyền trên chain kia. Một enum không diễn
+đạt được điều đó.
+
+#### Sáu vai, sinh ra từ ba trục
+
+| Vai | Ingest | Pool | Submit | Vì sao tồn tại |
+|---|---|---|---|---|
+| **Pool thuần** | gossip | open | **không có key** | Chạy được bởi bất kỳ ai, không cần tiền, không cần tin tưởng. Đây là thứ làm mạng **thật sự mở** — rào vào thấp nhất có thể |
+| **Gateway** | HTTP | none | có | Nhận từ ví/web, ký, đẩy. Không tham gia mesh. Đây là "mode 1" cũ |
+| **Node đầy đủ** | cả hai | open | **theo ma trận** | Vai chính của mesh |
+| **Private pool** | cả hai | **private** | không | Giữ intent không nên phát công khai, chờ relayer được phép lấy |
+| **Private relayer** | kéo từ private pool | none | có | Đối tác của private pool. Cặp này là mô hình private mempool kiểu Flashbots |
+| **Observer** | gossip | open | không | Chỉ index. Không có chính sách, không claim. Hữu ích cho explorer và cho đối soát |
+
+#### Private pool: vì sao cần, và cái bẫy của nó
+
+Ba lý do chính đáng để **không** gossip một intent ra mesh mở:
+
+1. **Giá trị rò rỉ khi bị nhìn thấy** — front-run, sandwich. Đây là lý do private mempool tồn tại
+   trên Ethereum.
+2. **Intent của chain private** không nên xuất hiện trên mesh công khai chút nào, kể cả dưới dạng
+   summary — nó lộ đối tác, tần suất, và quy mô (§5.4.5).
+3. **Đối tác độc quyền**: sponsor trả tiền cho một relayer cụ thể, không muốn đấu giá.
+
+**Bẫy, và nó nghiêm trọng:** một intent vào private pool mà relayer đối tác chết thì nó **chết im
+lặng** — người gửi không biết, không có ai khác thấy nó, và nó chỉ biến mất khi hết hạn. Đó là một
+chế độ hỏng tệ hơn hẳn "không ai nhận" trên mesh mở, vì trên mesh mở người gửi ít nhất thấy intent
+của mình còn sống.
+
+Bắt buộc kèm theo: **promote-to-open sau `T` giây chưa ai claim** (mặc định `T = expiry / 3`), trừ
+khi người gửi đặt cờ `never_public`. Cờ đó phải là lựa chọn tường minh của người gửi, không phải mặc
+định của node — và khi bật, người gửi chấp nhận rằng liveness phụ thuộc đúng một đối tác.
+
+#### Ma trận cấu hình
+
+Hình dạng cụ thể, và điều kiện quan trọng nhất nằm ở dòng cuối:
+
+```yaml
+defaults:            { ingest: gossip+http, pool: open, forward: true, submit: false }
+
+chains:
+  100:                                   # Gnosis
+    submit: true
+    max_gas_price_gwei: 5
+    targets:
+      "0xPARTNER...":  { min_fee: 0, priority: high }    # doi tac: nhan ca fee = 0
+      "*":             { min_fee_native: "200000000000000" }
+
+  9000:                                  # private chain
+    pool: private                        # KHONG gossip ra mesh cong khai
+    submit: false                        # cho private relayer lay
+    peers_allowed: ["12D3Koo..."]
+```
+
+**Ma trận phải đánh giá được TRƯỚC khi simulate.** Nó chỉ được đọc các trường có sẵn trong intent —
+`chain_id`, `to`, `tokenContract`, `fee`, `feeMode`, `innerGasLimit`. Đó là điều làm nó rẻ (một phép
+so khớp, không một `eth_call` nào) và là lý do acceptance policy chạy được ở tốc độ gossip. Một luật
+cần simulate mới quyết được thì không thuộc về ma trận này; nó thuộc về bước định giá ở §5.3.
+
+#### Thuật toán submit-vs-forward, và một bẫy hợp tác
+
+Quy tắc ngây thơ *"nếu có lãi thì submit, không thì forward"* **sai ở một chỗ**: nếu một node vừa
+định submit vừa forward cùng lúc, nó tự tạo đối thủ cho chính mình và làm một node khác đốt gas vô
+ích. Đó chính là cuộc đua relayer (§6 mục 4) mà mạng đang cố tránh.
+
+Quy tắc đúng:
+
+```
+policy = matrix.match(intent)                      # re, khong simulate
+if not policy.accept:            forward(intent); return      # khong phai viec cua minh
+if not policy.submit:            forward(intent); return      # khong co key cho chain nay
+if not profitable(intent):       forward(intent); return      # nguoi khac co the co cau truc chi phi khac
+claim(intent)                                                  # danh dau exclusive, co han
+forward(intent, exclusive_until=now+W)                         # van forward, NHUNG kem han doc quyen
+submit(intent)
+```
+
+Điểm mấu chốt ở hai dòng cuối: **vẫn forward, nhưng kèm `exclusive_until`**. Mạng vẫn biết intent tồn
+tại (nên nếu node này chết, node khác nhặt sau khi hết hạn độc quyền), mà không ai lãng phí gas trong
+cửa sổ đó. Đây là soft-exclusivity của §5.4 áp dụng ở tầng mesh thay vì tầng hub.
+
+Với intent Zether, `W = 0` (§5.1.1): ngân sách 20 giây không chịu nổi một cửa sổ độc quyền. Ở đó,
+chấp nhận đua và chấp nhận lãng phí — hoặc dùng private pool.
+
+#### Hệ quả: pool thuần không bị phạt được bằng kinh tế
+
+Một node không có key thì **không tốn gì để chạy**, nên nó cũng không mất gì khi cư xử tệ. Kinh tế
+học không bảo vệ được lớp này; peer scoring của gossipsub v1.1 phải làm.
+
+Và điểm này quyết định cách chấm điểm: **chấm theo forward CÓ ÍCH, không theo lưu lượng.** Một
+forward có ích = một intent mà node này chuyển tiếp và sau đó **thật sự lên chain**. Chấm theo lưu
+lượng thì một node bơm rác được điểm cao; chấm theo kết quả thì nó không được gì. Điều kiện để làm
+được: node phải quan sát chain (hoặc nhận receipt gossip) để biết intent nào đã landed — nên
+`/receipt` của §5.2 không chỉ là tiện ích vận hành, nó là **đầu vào của hệ thống danh tiếng**.
+
+### 21.5 Pool khoá ký: một khoá là một nút thắt cổ chai
+
+User: *"Node Relayer thậm chí có khả năng quay vòng khoá dùng submit lên chain để không bị nghẽn ở 1
+khoá duy nhất."*
+
+Đúng, và nó **không phải tối ưu hoá — nó là ràng buộc cứng của EVM**. Nonce của một EOA là tuần tự
+tuyệt đối: transaction nonce `n+1` không vào block được trước `n`. Hệ quả:
+
+- Một tx bị kẹt (gas price dưới đáy mempool, hoặc nonce gap) **chặn toàn bộ hàng đợi phía sau nó**.
+  Đây là head-of-line blocking, và với một khoá duy nhất thì một tx kẹt = relayer chết hoàn toàn cho
+  tới khi ai đó can thiệp.
+- Thông lượng trần của một khoá ≈ 1 tx/block trong thực tế vận hành an toàn. Trên Gnosis (5 s) đó là
+  **0,2 tx/s**. Muốn 10 tx/s thì cần ~50 khoá, không phải một khoá nhanh hơn.
+
+#### Vì sao xoay khoá MIỄN PHÍ ở thiết kế này
+
+Vì `_USER-DECISIONS.md` §5 chốt **wildcard `relayer == address(0)`** thay cho mode bitmask có tên
+relayer. Intent không nêu tên relayer nào, nên **đổi khoá ký không làm hỏng chữ ký nào cả**.
+
+Nếu đã chọn `MODE_RESTRICT_RELAYER` với một địa chỉ cụ thể trong digest, thì mỗi lần xoay khoá là một
+lần phải xin chữ ký lại từ mọi người dùng. Quyết định wildcard được đưa ra vì lý do khác (chống
+cross-mode replay), và đây là một lợi ích kèm theo mà lúc đó chưa ai tính.
+
+#### Một lỗ hổng thiết kế phát hiện từ đây, phải chốt lại
+
+§3.1 viết: *"`feeRecipient` do **người gửi** chỉ định trong cả ba mode."*
+
+Kết hợp với wildcard relayer thì điều đó **làm thị trường mở không chạy được**: bất kỳ ai relay cũng
+trả gas, nhưng phí đi tới địa chỉ mà *người gửi* đã chọn. Nếu địa chỉ đó không phải của người relay,
+không relayer lý trí nào nhận việc. Người gửi thì **không biết trước ai sẽ relay** — đó chính là ý
+nghĩa của "mở".
+
+Sửa: **`feeRecipient == address(0)` nghĩa là "trả cho `msg.sender`"**, và đó là giá trị mặc định của
+intent mở. Người gửi chỉ điền một địa chỉ cụ thể khi họ **cố ý** chỉ định relayer (luồng đối tác, hoặc
+relay pool nội bộ).
+
+Hai điều kiện đi kèm:
+
+- `feeRecipient` vẫn nằm **trong digest**. Wildcard không có nghĩa là bỏ nó ra khỏi chữ ký — nó chỉ
+  là một giá trị đặc biệt có ý nghĩa quy ước, y hệt `relayer == address(0)`. Bỏ nó ra khỏi digest
+  chính là cái sai của mode bitmask.
+- Relayer phải kiểm `feeRecipient == address(0) || feeRecipient == <ví thu phí của mình>` **trước khi
+  simulate**. Đây là một luật thuộc ma trận §21.4 (đọc được từ intent, không cần `eth_call`).
+
+#### Thiết kế pool khoá
+
+```
+KeyPool:
+  keys[]: { address, nonce_local, in_flight, balance_native, stuck_since }
+  hot_treasury: mot khoa RIENG, giu von, nap gas cho cac key
+  fee_sink:     mot dia chi LANH, nhan phi. KHONG bao gio la khoa ky.
+```
+
+| Quyết định | Chọn | Lý do |
+|---|---|---|
+| Cách chọn khoá | **least-in-flight**, không round-robin | Round-robin vẫn gửi vào một khoá đang kẹt. Least-in-flight tự tránh nó |
+| Nonce | Theo dõi **cục bộ**, không hỏi `eth_getTransactionCount` mỗi lần | RPC trả `pending` không nhất quán giữa các node. Đồng bộ lại từ chain chỉ khi khởi động và khi phát hiện gap |
+| Phát hiện kẹt | `stuck_since > 3 block` | Không dùng thời gian tuyệt đối; block time khác nhau theo chain |
+| Xử lý kẹt | Thay thế bằng self-send 0 giá trị **cùng nonce**, gas price ×1,25 | Đây là cách duy nhất giải phóng nonce. Huỷ không tồn tại trên EVM |
+| Số dư mỗi khoá | Nhỏ, đủ ~50 tx. Treasury nạp lại khi dưới ngưỡng | Xem phần bảo mật dưới |
+| Nơi nhận phí | **Không phải khoá ký** | Xem phần bảo mật dưới |
+
+#### Bảo mật: N khoá là N thứ để mất
+
+Đây là cái giá thật của pool khoá, và nó phải được thiết kế chứ không phải chấp nhận.
+
+**Nguyên tắc: khoá ký chỉ được phép làm đúng một việc — trả gas.** Cụ thể:
+
+- Khoá ký giữ số dư nhỏ (đủ ~50 tx). Mất một khoá = mất số tiền đó, không hơn.
+- Khoá ký **không** là `feeRecipient`. Phí chảy về một địa chỉ lạnh, và địa chỉ đó không bao giờ ký gì.
+- Khoá ký **không** có role nào trên bất kỳ contract nào. Không `MINTER`, không `TREASURY`, không gì
+  cả. Một khoá relayer bị lộ phải là một sự cố tài chính nhỏ, không phải một sự cố an ninh.
+- Treasury nạp gas là một khoá riêng, giữ nhiều tiền hơn, và **không bao giờ nằm trong đường nóng** —
+  nó chỉ chạy theo lịch hoặc theo cảnh báo ngưỡng.
+
+Điều này làm pool khoá trở thành thứ **an toàn hơn** một khoá duy nhất giữ nhiều tiền, không phải kém
+an toàn hơn. Đó là lý lẽ chính, và nó ngược trực giác nên phải viết ra.
+
+#### Bảng thông lượng để định cỡ
+
+| Chain | Block time | tx/khoá/block (an toàn) | Khoá cần cho 1 tx/s | cho 10 tx/s |
+|---|---|---|---|---|
+| Gnosis | 5 s | 1 | 5 | 50 |
+| Celo | ~1 s | 1 | 1 | 10 |
+| Chain private 9000 | 5 s | 1 | 5 | 50 |
+
+Nhưng trần thật trên chain private **không phải nonce mà là CPU validator** — ~45 confidential tx/s
+(§01.1.12.2). Thêm khoá quá con số đó không mua được gì.
+
+#### Còn phải làm
+
+Mục này giao thẳng với §06 (relay pool nội bộ), vốn đã thiết kế một gas station có HSM. Hai chỗ phải
+hợp nhất: **cùng một `KeyPool`, hai bối cảnh vận hành** — một cái khoá trong HSM cho doanh nghiệp,
+một cái khoá trong file cho một node mesh do cá nhân chạy. Interface giống nhau; nơi giữ khoá khác
+nhau, và đó là một tham số cấu hình chứ không phải hai bản cài đặt.
