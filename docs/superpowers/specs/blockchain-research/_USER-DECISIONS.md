@@ -2370,6 +2370,85 @@ một batch payout 300 người, restart giữa chừng nghĩa là dựng lại 
 (30–50 ms/proof, §03), không phải tiền, và không có tx nào đã ký bị mất — vì tx chỉ được ký sau khi proof
 xong.
 
+### 23.11 "Non-custody thì bỏ được oracle lane?" — không hẳn, và đây là bảng quyết định
+
+Câu hỏi gộp **ba trục khác nhau**. Tách ra thì trả lời được từng cái.
+
+| Trục | Câu hỏi | Ảnh hưởng tới oracle lane |
+|---|---|---|
+| **1. Custody khoá của NGƯỜI DÙNG** | Platform có giữ `x` của người khác không? | Non-custodial ⇒ **không có `x` của user** ở server |
+| **2. Tài khoản Zether của CHÍNH công ty** | Công ty có ví Zether riêng không? | Tự giữ khoá của mình **vẫn là giữ khoá**. Trục 1 không nói gì về trục này |
+| **3. Có dùng Zether không** | Token là Meta công khai hay Zether? | Không Zether ⇒ **không có `x` nào tồn tại** |
+
+Chỗ dễ nhầm là trục 2. **"Non-custodial" nghĩa là không giữ tiền của người khác — nó không có nghĩa là
+không có khoá nào ở server.** Ví treasury của chính công ty là self-custody, và self-custody vẫn là một
+khoá phải nằm ở đâu đó.
+
+#### Trả lời theo từng dòng tiền
+
+Bảng §07.0 đã chốt `conf_custody` cho từng dòng tiền, và đọc theo câu hỏi này thì ra thế này:
+
+| Dòng tiền | `conf_custody` (§07.0) | Oracle lane có cần không |
+|---|---|---|
+| Loyalty / reward | `on_device` 1-of-1 | **KHÔNG.** Prover chạy trên máy người dùng; signer không nằm trên đường đi (§07 dòng 173) |
+| End-user payment tại quầy | `on_device` 1-of-1 | **KHÔNG.** Cùng lý do |
+| Treasury / mint / pause | không áp dụng — chỉ ECDSA | **KHÔNG.** Không có Zether ở đây |
+| Relayer EOA nóng | không áp dụng | **KHÔNG** |
+| Auditor `y_audit` | DKG 3-of-5 threshold ElGamal | **KHÔNG** — giải mã không cần proving |
+| **B2B settlement** | `x` chia Shamir 2-of-3 | **CÓ, nhưng chỉ giữ MỘT share** |
+
+Nên câu trả lời chính xác: **hai trong ba use case của locked #3 vốn đã không cần oracle lane.** Chỉ B2B
+cần, và ngay cả ở đó platform giữ **một share 2-of-3**, không giữ `x` — platform một mình không chi tiêu
+được. Đó đúng là hình dạng "non-custodial" mà một doanh nghiệp muốn, và nó **không** loại bỏ oracle lane,
+nó chỉ làm cho oracle lane bất lực khi đứng một mình.
+
+#### Vì sao B2B không bỏ được, kể cả khi chỉ NHẬN tiền
+
+Cám dỗ: "công ty chỉ nhận thanh toán từ NPP, không gửi đi, nên không cần dựng proof, nên không cần `x`."
+**Sai** — đọc số dư của chính mình cũng cần `x`:
+
+- Số dư trên chuỗi là cặp `(C, D)`. Giá trị là `C · D^{-x}`.
+- Đường nhanh là memo AEAD (§03.2.5), nhưng khoá memo dẫn xuất từ `D^x` — vẫn là `x`.
+- §15.5.5 xếp "chủ tài khoản" là mức duy nhất **đối soát đầy đủ** được, và cơ chế của nó là HSM/enclave
+  expose đúng một phép `ecdh(D) -> compress(D^x)`.
+
+Nghĩa là: một treasury Zether **chỉ nhận** vẫn cần `x` để biết nó nhận được bao nhiêu. Bỏ oracle lane ở
+đây không phải bỏ một tính năng — nó là **bỏ đối soát**, và §15.5.5 sẽ trả về `run_state = 'partial'`
+vĩnh viễn thay vì `clean`. Báo "clean" khi chỉ kiểm được tính liên tục của nonce là một lối nói dối.
+
+#### Cấu hình DUY NHẤT thật sự không có oracle lane
+
+**Công ty không có tài khoản Zether nào cả.** Treasury là Meta Token công khai; Zether nếu có thì chỉ
+chạy giữa các bên thứ ba với nhau. Đây chính là **META v1** (§20, §24) và là thứ đang ship trước.
+
+Cái giá: công ty không nhận được thanh toán bảo mật. Với B2B thì đó là mất chính lý do dùng Zether — giá
+gốc là bí mật sống còn (§07.0, §2.6). Với loyalty thì không mất gì, vì D9 đã chốt điểm thưởng **không**
+cần bảo mật số dư.
+
+#### Nếu vẫn muốn B2B mà tuyệt đối không có `x` phía server
+
+Có một đường, và phải nói rõ giá của nó: **một người thật với một thiết bị.**
+
+- Payout: 500 NPP × 12 tháng = 6.000 giao dịch/năm (§15.1.4). Zether **không batch proof được** (§15.7:
+  300 `transferConfidential` = 564M gas, phải là 300 tx riêng), nên một đợt payout tháng là 500 proof.
+  Ở 0,2–0,5 s/proof trên ARM64 là 100–250 giây tính toán — chạy được trên laptop, không chạy được trên
+  điện thoại, và phải có người ngồi đó.
+- **Đối soát thì không.** §15.5.5 đòi giải mã số dư sau mỗi lần rollOver, hằng ngày tối thiểu. Đó là
+  automation, không phải một người bấm nút.
+
+Nên kết luận thẳng: **thiết bị-người-thật xử được đường chi tiền, không xử được đường đối soát.** Ai chọn
+đường này phải chấp nhận đối soát thủ công hoặc `run_state = 'partial'`.
+
+#### Nợ: bảng §07.0 chưa nói CHIỀU
+
+Hàng B2B của §07.0 ghi *"prover chạy phía distributor (họ vốn đã biết số tiền của chính họ)"*. Câu đó
+đúng cho chiều **distributor → brand**. Chiều **brand → distributor** thì người gửi là brand, nên proof
+phải dựng ở nơi có `x` của **brand** — và hàng "Treasury" ngay dưới lại ghi *"không có Zether ở đây"*.
+Hai hàng nói ngược nhau về cùng một ví.
+
+Phải sửa `07-custody-providers.md` §07.0: tách hàng B2B thành hai chiều, và nói rõ ví treasury của brand
+**có** tài khoản Zether khi B2B bật.
+
 ---
 
 ## 24. Meta-tx trên token KHÔNG phải một forwarder. Bỏ `feeToken`, `innerGasLimit`, và cả `to`/`data`.
