@@ -903,3 +903,94 @@ hợp với locked #5 (Zether chạy private trước vì gas không phải ràn
 
 Ưu điểm không nhỏ: `MinGasPrice = 0` và Prague sẵn có nghĩa là **spike S7 đo gas
 BLS12-381 chạy được ngay trên chain này**, không cần faucet, không cần testnet.
+
+## 17. Spike S7 — ĐÃ ĐO. Canon SAI về chi phí BLS12-381
+
+Đo thật bằng `eth_estimateGas` trên Gnosis mainnet, 2026-08-30. Trừ base
+(21.000 + 4 gas/byte-zero calldata). Sai số hệ thống ~350 gas, kiểm bằng đối chứng:
+`bn128 ecMul` đo 6.345 so với spec 6.000; `G1MSM k=1` đo 12.357 so với spec 12.000.
+
+### Kết quả: MSM ở quy mô Bulletproofs
+
+| k điểm | BLS12-381 `G1MSM` (1 lệnh) | alt_bn128 (k×`ecMul` + (k−1)×`ecAdd`) | Chênh |
+|---|---|---|---|
+| 1 | 12.357 | 6.000 | **BLS đắt hơn 106%** |
+| 8 | 70.852 | 49.050 | BLS đắt hơn 44% |
+| 32 | 244.175 | 196.650 | BLS đắt hơn 24% |
+| 64 | 447.538 | 393.450 | BLS đắt hơn 14% |
+| 128 | 805.495 | 787.050 | BLS đắt hơn 2% |
+| **277** | **1.741.589** | **1.703.400** | **BLS đắt hơn 2%** |
+
+Kiểm chứng chéo với bảng discount của EIP-2537: `1.741.589 / (12.000 × 277) = 0,524`
+— khớp mức đáy ~519–524/1000 của bảng. Phép đo nhất quán với spec, không phải nhiễu.
+
+### Canon §C21 D1 nói sai
+
+Canon: *"`bls12_381` **nếu** `0x0c` sống trên Gnosis và Celo — nó **rẻ hơn 45–60%**
+và mạnh hơn 17–26 bit."*
+
+Nửa đầu **sai**. Ở quy mô Bulletproofs thật (k≈277), BLS12-381 **không rẻ hơn** —
+nó **đắt hơn ~2%**. Ở k nhỏ thì tệ hơn nhiều. Không có mức tiết kiệm 45–60% nào ở
+bất kỳ k nào.
+
+Nửa sau vẫn đúng: BLS12-381 ~126 bit an toàn so với BN254 ~100 bit (sau
+Kim–Barbulescu).
+
+### D1 phải mở lại
+
+Tiền đề đã đổi, nên câu trả lời có thể đổi. Cân lại trung thực:
+
+| | BLS12-381 | alt_bn128 (BN254) |
+|---|---|---|
+| Gas ở k=277 | 1,74 M | **1,70 M** |
+| An toàn | **~126 bit** | ~100 bit |
+| Code Zether hiện có của user | phải **viết lại verifier** | **đã chạy** (`ZetherVerifier.sol`, `InnerProductVerifier.sol`) |
+| Thư viện Bulletproofs | ít trưởng thành hơn | arkworks/circom nhiều, hệ sinh thái sâu |
+| Có trên chain private 9000 | **KHÔNG** (xem §16) | **có** |
+| Đường Groth16 sau này | `0x0f` sống trên Gnosis/Celo | `0x08` sống ở mọi nơi |
+
+Lý do duy nhất còn lại để chọn BLS là **biên an toàn 26 bit**, trả bằng: viết lại
+verifier, hệ sinh thái mỏng hơn, và **không chạy được trên chain private hiện tại**.
+
+Canon §C21 D3 hỏi đúng câu liên quan: *"chấp nhận giải mã được 2035–2045 trên
+public, hay bắt buộc private/BLS"*. Với quyết định #5 (Zether chạy **private**
+trước) thì đe doạ mà 26 bit kia phòng ngừa **chưa áp dụng cho giai đoạn đầu** —
+chain private không công khai ciphertext cho kẻ tấn công thu thập.
+
+**Khuyến nghị đảo lại: `bn254` cho giai đoạn private, xem lại BLS trước khi lên
+public.** Nó giữ được code đang chạy, chạy được trên chain 9000, gas ngang nhau, và
+đẩy đánh đổi an toàn sang đúng thời điểm nó thật sự quan trọng.
+
+Cần user quyết lại D1.
+
+## 18. Chain private 9000: genesis viết sai định dạng
+
+`pragueBlock: 0` trong `params` **không kích hoạt Prague**. Nethermind dùng
+chainspec riêng, không đọc key kiểu Geth. Bằng chứng đo được:
+
+| Kiểm | Kết quả |
+|---|---|
+| `0x0b`/`0x0c`/`0x0f`/`0x10` (BLS12-381) | **rỗng — không tồn tại** |
+| `0x06`/`0x07` (alt_bn128) | sống (đối chứng hợp lệ) |
+| `baseFeePerGas` trong block header | **không có ⇒ London CHƯA bật** |
+| `withdrawalsRoot` | không có ⇒ Shanghai chưa bật |
+| `blobGasUsed` / `excessBlobGas` | không có ⇒ Cancun chưa bật |
+
+Chain đang chạy ở mức **trước London**, dù genesis khai `londonBlock: 0`,
+`cancunBlock: 0`, `pragueBlock: 0`. Tất cả bị bỏ qua **im lặng** — không log cảnh
+báo nào.
+
+Hệ quả:
+
+- Không có EIP-1559 ⇒ không `baseFeePerGas`, mô hình phí khác hẳn public chain
+- Không có EIP-2537 ⇒ **BLS12-381 không dùng được**, khoá chặt D1 về `bn254` nếu
+  giữ chain này nguyên trạng
+- Muốn bật thì phải viết lại `params` theo đúng key của Nethermind
+  (`eip1559TransitionTimestamp`, `eip2537TransitionTimestamp`, ...) **và reset
+  632 MB data** vì genesis hash đổi
+
+Chưa làm gì. Đã backup `genesis.json`. Chain đang chạy nguyên trạng, block 7367+.
+
+Đây là một cái bẫy đáng vào `TRAPS.md`: **chainspec Nethermind bỏ qua key kiểu Geth
+mà không báo lỗi**, và cách duy nhất phát hiện là kiểm block header hoặc gọi thử
+precompile.
