@@ -1,9 +1,9 @@
 # Grok3_Continued — code blocks
 
-Nguon: `~/Downloads/Grok3_Continued.html`, 49 block.
+Nguồn: `~/Downloads/Grok3_Continued.html`, 49 block.
 
 
-## Block 1 (115 dong)
+## Block 1 (115 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -124,7 +124,7 @@ contract MetaTxExample is Ownable {
 ```
 
 
-## Block 2 (120 dong)
+## Block 2 (120 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -250,7 +250,7 @@ contract MetaTxExample is Ownable {
 ```
 
 
-## Block 3 (35 dong)
+## Block 3 (35 dòng)
 
 ```javascript
 const ethers = require('ethers');
@@ -291,7 +291,7 @@ console.log(signature);
 ```
 
 
-## Block 4 (137 dong)
+## Block 4 (137 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -434,14 +434,14 @@ contract WrappedERC20MetaTx is ERC20, Ownable {
 ```
 
 
-## Block 5 (1 dong)
+## Block 5 (1 dòng)
 
 ```javascript
 await underlyingToken.approve(contractAddress, amount);
 ```
 
 
-## Block 6 (36 dong)
+## Block 6 (36 dòng)
 
 ```javascript
 const ethers = require('ethers');
@@ -483,7 +483,7 @@ const signature = await wallet._signTypedData(domain, types, metaTx);
 ```
 
 
-## Block 7 (168 dong)
+## Block 7 (168 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -657,7 +657,7 @@ contract WrappedERC20MetaTx is ERC20, Ownable {
 ```
 
 
-## Block 8 (153 dong)
+## Block 8 (153 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -816,7 +816,7 @@ contract WrappedERC20MetaTx is ERC20, Ownable {
 ```
 
 
-## Block 9 (42 dong)
+## Block 9 (42 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -864,7 +864,7 @@ contract WrappedERC20Factory {
 ```
 
 
-## Block 10 (15 dong)
+## Block 10 (15 dòng)
 
 ```javascript
 const ethers = require('ethers');
@@ -885,7 +885,7 @@ createWrapper('0x6B175474E89094C44Da98b954EedeAC495271d0F'); // Ví dụ với D
 ```
 
 
-## Block 11 (175 dong)
+## Block 11 (175 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -1066,7 +1066,7 @@ contract WrappedERC20MetaTx is ERC20, Ownable {
 ```
 
 
-## Block 12 (47 dong)
+## Block 12 (47 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -1119,7 +1119,7 @@ contract WrappedERC20Factory {
 ```
 
 
-## Block 13 (16 dong)
+## Block 13 (16 dòng)
 
 ```javascript
 const ethers = require('ethers');
@@ -1141,7 +1141,7 @@ createWrapper('0x6B175474E89094C44Da98b954EedeAC495271d0F', 2, 1);
 ```
 
 
-## Block 14 (215 dong)
+## Block 14 (215 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -1362,7 +1362,7 @@ contract WrappedERC20MetaTx is ERC20, Ownable {
 ```
 
 
-## Block 15 (52 dong)
+## Block 15 (52 dòng)
 
 ```javascript
 const ethers = require('ethers');
@@ -1420,7 +1420,7 @@ signAndTransfer('0xRecipientAddress', 10); // Chuyển 10 wERC20
 ```
 
 
-## Block 16 (214 dong)
+## Block 16 (214 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -1640,7 +1640,7 @@ contract WrappedERC20MetaTx is ERC20, Ownable {
 ```
 
 
-## Block 17 (53 dong)
+## Block 17 (53 dòng)
 
 ```javascript
 const ethers = require('ethers');
@@ -1699,7 +1699,7 @@ signAndTransfer('0xRecipientAddress', 10);
 ```
 
 
-## Block 18 (10 dong)
+## Block 18 (10 dòng)
 
 ```javascript
 const metaTx = {
@@ -1715,7 +1715,7 @@ const metaTx = {
 ```
 
 
-## Block 19 (261 dong)
+## Block 19 (261 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -1982,7 +1982,7 @@ contract MultiUnderlyingWrappedERC20MetaTx is ERC20, Ownable {
 ```
 
 
-## Block 20 (18 dong)
+## Block 20 (18 dòng)
 
 ```javascript
 const ethers = require('ethers');
@@ -2006,7 +2006,7 @@ addTokens();
 ```
 
 
-## Block 21 (9 dong)
+## Block 21 (9 dòng)
 
 ```javascript
 async function wrapToken(underlyingToken, amount) {
@@ -2021,7 +2021,7 @@ wrapToken('0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', 10); // Wrap 10 USDC
 ```
 
 
-## Block 22 (46 dong)
+## Block 22 (46 dòng)
 
 ```javascript
 async function signAndTransfer(recipient, amount) {
@@ -2073,7 +2073,7 @@ signAndTransfer('0xRecipientAddress', 5);
 ```
 
 
-## Block 23 (290 dong)
+## Block 23 (290 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -2369,7 +2369,7 @@ contract MultiUnderlyingWrappedERC20MetaTx is ERC20, Ownable {
 ```
 
 
-## Block 24 (53 dong)
+## Block 24 (53 dòng)
 
 ```javascript
 const ethers = require('ethers');
@@ -2428,7 +2428,7 @@ signAndTransfer('0xRecipientAddress', 1000); // Chuyển 1000 mwERC20
 ```
 
 
-## Block 25 (327 dong)
+## Block 25 (327 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -2761,7 +2761,7 @@ contract MultiUnderlyingWrappedERC20MetaTx is ERC20, Ownable {
 ```
 
 
-## Block 26 (14 dong)
+## Block 26 (14 dòng)
 
 ```javascript
 const ethers = require('ethers');
@@ -2781,7 +2781,7 @@ setFeeRecipient();
 ```
 
 
-## Block 27 (46 dong)
+## Block 27 (46 dòng)
 
 ```javascript
 async function signAndTransferWithFee(recipient, amount) {
@@ -2833,7 +2833,7 @@ signAndTransferWithFee('0xRecipientAddress', 1000); // Chuyển 1000 mwERC20
 ```
 
 
-## Block 28 (309 dong)
+## Block 28 (309 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -3148,7 +3148,7 @@ contract MultiUnderlyingWrappedERC20MetaTx is ERC20, Ownable {
 ```
 
 
-## Block 29 (63 dong)
+## Block 29 (63 dòng)
 
 ```javascript
 const ethers = require('ethers');
@@ -3217,7 +3217,7 @@ signAndTransferWithFee('0xRecipientAddress', 1000, 0, '0x00000000000000000000000
 ```
 
 
-## Block 30 (314 dong)
+## Block 30 (314 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -3537,7 +3537,7 @@ contract MultiUnderlyingWrappedERC20MetaTx is ERC20, Ownable {
 ```
 
 
-## Block 31 (63 dong)
+## Block 31 (63 dòng)
 
 ```javascript
 const ethers = require('ethers');
@@ -3606,7 +3606,7 @@ signAndTransferWithFee('0xRecipientAddress', 1000, 0, '0x00000000000000000000000
 ```
 
 
-## Block 32 (214 dong)
+## Block 32 (214 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -3826,7 +3826,7 @@ contract WrappedERC20MetaTx is ERC20, Ownable {
 ```
 
 
-## Block 33 (179 dong)
+## Block 33 (179 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -4011,7 +4011,7 @@ contract MultiUnderlyingWrappedERC20MetaTx is WrappedERC20MetaTx {
 ```
 
 
-## Block 34 (14 dong)
+## Block 34 (14 dòng)
 
 ```javascript
 const ethers = require('ethers');
@@ -4031,7 +4031,7 @@ addTokens();
 ```
 
 
-## Block 35 (53 dong)
+## Block 35 (53 dòng)
 
 ```javascript
 async function signAndTransferWithFee(recipient, amount, feeAmount, feeRecipient) {
@@ -4090,7 +4090,7 @@ signAndTransferWithFee('0xRecipientAddress', 1000, 0, '0x00000000000000000000000
 ```
 
 
-## Block 36 (329 dong)
+## Block 36 (329 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -4425,7 +4425,7 @@ contract WrappedERC20MetaTx is ERC20, Ownable {
 ```
 
 
-## Block 37 (116 dong)
+## Block 37 (116 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -4547,7 +4547,7 @@ contract MultiUnderlyingWrappedERC20MetaTx is WrappedERC20MetaTx {
 ```
 
 
-## Block 38 (59 dong)
+## Block 38 (59 dòng)
 
 ```javascript
 const ethers = require('ethers');
@@ -4612,7 +4612,7 @@ signAndTransferWithFee('0xRecipientAddress', 1000, 10, '0xFeeRecipientAddress');
 ```
 
 
-## Block 39 (61 dong)
+## Block 39 (61 dòng)
 
 ```javascript
 async function signAndExecuteWithFee(to, value, data, feeAmount, feeRecipient) {
@@ -4679,7 +4679,7 @@ signAndExecuteWithFee(
 ```
 
 
-## Block 40 (341 dong)
+## Block 40 (341 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -5026,7 +5026,7 @@ contract WrappedERC20MetaTx is ERC20, Ownable {
 ```
 
 
-## Block 41 (116 dong)
+## Block 41 (116 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -5148,7 +5148,7 @@ contract MultiUnderlyingWrappedERC20MetaTx is WrappedERC20MetaTx {
 ```
 
 
-## Block 42 (62 dong)
+## Block 42 (62 dòng)
 
 ```javascript
 const ethers = require('ethers');
@@ -5216,7 +5216,7 @@ signAndExecuteWithFee('0xRecipientAddress', 1000, 10, '0xFeeRecipientAddress'); 
 ```
 
 
-## Block 43 (178 dong)
+## Block 43 (178 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -5400,7 +5400,7 @@ contract WrappedERC20MetaTx is ERC20, Ownable {
 ```
 
 
-## Block 44 (23 dong)
+## Block 44 (23 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -5429,7 +5429,7 @@ contract NoUnderlyingWrappedERC20MetaTx is WrappedERC20MetaTx {
 ```
 
 
-## Block 45 (60 dong)
+## Block 45 (60 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -5495,7 +5495,7 @@ contract SingleUnderlyingWrappedERC20MetaTx is WrappedERC20MetaTx {
 ```
 
 
-## Block 46 (114 dong)
+## Block 46 (114 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -5615,7 +5615,7 @@ contract MultiUnderlyingWrappedERC20MetaTx is WrappedERC20MetaTx {
 ```
 
 
-## Block 47 (190 dong)
+## Block 47 (190 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -5811,7 +5811,7 @@ contract PayableWrappedERC20MetaTx is WrappedERC20MetaTx {
 ```
 
 
-## Block 48 (80 dong)
+## Block 48 (80 dòng)
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -5897,7 +5897,7 @@ contract WrappedERC20Factory {
 ```
 
 
-## Block 49 (62 dong)
+## Block 49 (62 dòng)
 
 ```javascript
 const ethers = require('ethers');
