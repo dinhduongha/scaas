@@ -8,67 +8,96 @@
 
 ---
 
-### 06.0. Phạm vi, ranh giới process, và ràng buộc standalone
+### 06.0. Phạm vi, ranh giới tiến trình, và ràng buộc standalone
 
-Relay Pool nội bộ là cụm máy **ứng trước native gas** cho các giao dịch của chính doanh nghiệp. Nó không phải là Open Relayer Network (§10.1 mục 1 của note) — Open Relayer là bên thứ ba tự quyết định lợi nhuận; Relay Pool nội bộ là hạ tầng phải có SLA. Hai thứ chạy song song và **cạnh tranh cùng một intent**: nếu Open Relayer nhặt intent trước, job nội bộ phải bị huỷ sạch chứ không phát sóng trùng.
+> **[BẢN 3 — viết lại theo `_USER-DECISIONS.md` §23]** Bản 1 và bản 2 của §06.0/§06.1 xây trên một giả
+> định chưa ai phát biểu: tầng daemon là **N tiến trình Python không trạng thái**. Từ đó suy ra Redis làm
+> store nonce, Lua script cấp lease, fencing token, ownership lease, consistent-hash shard. `_USER-DECISIONS.md` §23.3 chốt
+> **một binary Rust**, và bài toán đó biến mất cùng toàn bộ giải pháp của nó. **Không Redis. Không Lua.**
 
-**Cách nói đó đúng ở bản 1 và cần một sắc thái ở bản 2.** Theo ma trận §21.4, "relay pool nội bộ" và "node mesh" không phải hai loại phần mềm — chúng là hai **cấu hình** của cùng một thứ: relay pool là một node có `ingest: http`, `pool: none`, `submit: true`, chạy sau vành đai. Điều đó quan trọng vì nó nói rằng mọi cơ chế trong section này (nonce manager, breaker, simulation gate) **cũng cần cho một node mesh có submit** — chúng không phải đặc quyền của hạ tầng doanh nghiệp.
+Relay Pool nội bộ là năng lực **ứng trước native gas** cho giao dịch của chính doanh nghiệp. Nó không
+phải Open Relayer Network — Open Relayer là bên thứ ba tự quyết định lợi nhuận; relay pool nội bộ là hạ
+tầng phải có SLA. Hai thứ chạy song song và **cạnh tranh cùng một intent**: nếu Open Relayer nhặt intent
+trước, job nội bộ phải bị huỷ sạch chứ không phát sóng trùng.
 
-Quyết định kiến trúc đầu tiên, và note không nói rõ: **vòng lặp broadcast KHÔNG được chạy trong `ir.cron`.**
+Theo ma trận `_USER-DECISIONS.md` §21.4, "relay pool nội bộ" và "node mesh" **không phải hai phần mềm** — chúng là hai **cấu
+hình** của cùng một binary: relay pool là một node có `ingest: http`, `pool: none`, `submit: true`, chạy
+sau vành đai. Mọi cơ chế trong section này (nonce manager, breaker, simulation gate) **cũng cần cho một
+node mesh có submit**; chúng không phải đặc quyền của hạ tầng doanh nghiệp.
+
+Quyết định kiến trúc đầu tiên, và note gốc không nói rõ: **vòng lặp broadcast KHÔNG chạy trong `ir.cron`.**
 
 | Thành phần | Chạy ở đâu | Lý do |
 |---|---|---|
 | Control plane: chain config, policy, relayer account, job record, audit, breaker state | Odoo 19 addon `dms_blockchain` | Cần ACL, record rule, view, multi-company, audit trail |
-| Hot loop: lease nonce, sign, broadcast, watch receipt, replace | Service Python asyncio độc lập `relay-pool` | Odoo worker là sync/blocking, `ir.cron` tối thiểu 1 phút và chạy trong transaction dài; một tx bị treo sẽ giữ lock hàng row |
-| State chia sẻ | Redis (nonce, lease, spend counter, breaker), PostgreSQL (job of record) | Redis cho hot path, Postgres cho sự thật cuối cùng |
+| Hot loop: cấp nonce, xin ký, broadcast, theo dõi receipt, replace | `bamboo-node` vai `submit` (Rust) | Odoo worker là sync/blocking, `ir.cron` tối thiểu 1 phút và chạy trong transaction dài; một tx treo sẽ giữ lock hàng row |
+| State nonce | **Bộ nhớ tiến trình** (một task sở hữu duy nhất) + **journal Postgres** | Không có state chia sẻ giữa các tiến trình ⇒ không cần store phân tán |
+| Vật liệu khoá | **Không nằm ở đây.** Làn custody giữ (`_USER-DECISIONS.md` §23.2) | Làn relay parse byte của người lạ; khoá không được cùng address space |
 | Cron Odoo | Chỉ reconcile + janitor, mỗi 1–5 phút | XML gọi đúng một dòng: `model._cron_relay_reconcile()` |
 
-Bảng này cũng là lời giải thích kỹ thuật cho việc có **hai bản cài đặt** relayer (`_USER-DECISIONS.md` §21.2): hot loop giữ kết nối dài và chạy không đồng bộ là đúng thứ Odoo prefork không làm được, và đúng thứ Rust làm tốt. Bản Odoo phục vụ control plane; bản Rust phục vụ hot loop. Ranh giới kỹ thuật trùng ranh giới hai bản cài đặt.
+Ràng buộc standalone (khoá cứng): `dms_blockchain` **không depend `dms`**. Relay pool không biết gì về
+`dms.trade.settlement` hay `dms.payment.collection`. Job mang con trỏ lỏng lẻo `origin_model` (Char) +
+`origin_res_id` (Integer) + `origin_ref` (Char, idempotency key do consumer cấp). Không Many2one ngược về
+consumer, không `ir.model.data` cross-addon.
 
-Ràng buộc standalone (khoá cứng): `dms_blockchain` **không depend `dms`**. Relay Pool không biết gì về `dms.trade.settlement` hay `dms.payment.collection`. Job mang một con trỏ lỏng lẻo `origin_model` (Char) + `origin_res_id` (Integer) + `origin_ref` (Char, idempotency key do consumer cấp). Không có Many2one ngược về consumer, không có `ir.model.data` cross-addon.
-
-Đường dẫn:
+Đường dẫn, sau khi gộp:
 
 ```
-custom-addons/dms_blockchain/                    # addon Odoo (control plane)
+custom-addons/bamboo-dms/dms_blockchain/          # addon Odoo (control plane)
     models/blockchain_chain.py
     models/blockchain_rpc_endpoint.py
     models/blockchain_relayer_account.py
     models/blockchain_relay_job.py
     models/blockchain_gas_policy.py
     models/blockchain_breaker_event.py
-    models/blockchain_target_policy.py            # [MOI] allowlist theo (address, selector)
+    models/blockchain_target_policy.py
     data/ir_cron.xml
-relay-pool/                                       # service (hot loop), Python 3.12 + asyncio
-    adapters/evm.py  adapters/sui.py  adapters/soroban.py  adapters/cosmwasm.py
-    adapters/ton.py  adapters/hedera.py
-    nonce/redis_lease.py   nonce/reconcile.py   nonce/coldstart.py     # [MOI]
-    sim/gate.py            breaker/gas.py       signer/client.py
-    keypool/pool.py                                                     # [MOI ban 2] §21.5
-    wal/journal.py                                                      # [MOI]
-    shard/ownership.py                                                  # [MOI]
-    lua/lease_nonce.lua    lua/release_nonce.lua  lua/spend_reserve.lua  # [MOI]
+
+bamboo-node/                                      # MOT binary Rust (`_USER-DECISIONS.md` §23.3)
+    src/roles/{gateway,mesh,pool,submit,indexer}.rs
+    src/roles/{custody,oracle}.rs                 # lan khac, xem `_USER-DECISIONS.md` §23.2
+    src/chain/{evm,sui,soroban,cosmwasm,ton,hedera}.rs
+    src/nonce/{actor.rs, journal.rs, coldstart.rs, gapfill.rs}
+    src/keypool/pool.rs                           # `_USER-DECISIONS.md` §21.5
+    src/sim/gate.rs   src/breaker/gas.rs
+                                                  # KHONG co lua/  KHONG co shard/
 smartcontracts/                                   # ngoai addon, theo quyet dinh da khoa
 ```
 
-Định danh chain dùng **CAIP-2** ở mọi nơi (`eip155:100` = Gnosis, `eip155:42220` = Celo, `eip155:9000` = chain private, `sui:mainnet`, `stellar:pubnet`, `cosmos:<chain-id>`, `hedera:mainnet`, `ton:-239`). Lý do: bây giờ trở thành một trường `Char` duy nhất chạy xuyên 7 hệ sinh thái, thay vì một `Integer chain_id` chỉ dùng được cho EVM. Tránh đặt tên field `chain_id` cho số nguyên EVM — `chain_id` là Many2one tới `blockchain.chain`; số EVM lưu tại `blockchain.chain.evm_chain_number`.
+Định danh chain dùng **CAIP-2** ở mọi nơi (`eip155:100` = Gnosis, `eip155:42220` = Celo, `eip155:9000` =
+chain private, `sui:mainnet`, `stellar:pubnet`, `cosmos:<chain-id>`, `hedera:mainnet`, `ton:-239`). Lý do:
+một trường `Char` duy nhất chạy xuyên 7 hệ sinh thái, thay vì `Integer chain_id` chỉ dùng được cho EVM.
+Tránh đặt tên field `chain_id` cho số nguyên EVM — `chain_id` là Many2one tới `blockchain.chain`; số EVM
+lưu tại `blockchain.chain.evm_chain_number`.
 
-#### 06.0.1. [MỚI] Giao diện Odoo ↔ relay worker: phải định nghĩa, không được để mở
+#### 06.0.1. [BẢN 3] Giao diện Odoo ↔ node: outbox, không Redis Stream
 
-Bản nháp đầu nói "Redis Stream consumer group" rồi bỏ đó. Đó là một câu chữ, không phải một giao diện. Chốt:
+Bản 1 nói "Redis Stream consumer group". §08.2b đã bác điều đó và chốt **transactional outbox**; `_USER-DECISIONS.md` §23 xoá
+Redis khỏi kiến trúc hoàn toàn. Chốt lại đầy đủ:
 
 | Hướng | Kênh | Payload | Ai là sự thật |
 |---|---|---|---|
-| Odoo → worker (dispatch) | Redis Stream `bc:jobs:{caip2}`, consumer group `relay`, một consumer mỗi shard | `{job_uuid, caip2, relayer_hint, risk_class, target, calldata_ref, meta_tx_ref, deadline_ms}` | Postgres (`blockchain.relay.job`) là bản gốc; Stream chỉ là thông báo. Worker mất message vẫn tìm lại được qua reconcile |
-| Worker → Odoo (status) | HTTP `POST /json/2/blockchain.relay.job/relay_report_batch`, `auth='bearer'` (JWT `bamboo_token_auth`), service account riêng | Mảng tối đa 200 bản ghi `{job_uuid, state, tx_hash, nonce, gas_used, cost_base_units, error_code, observed_at_ms}` | Odoo là sự thật cuối. Ghi bằng một `write()` đa record |
-| Worker → Odoo (khẩn) | Cùng endpoint, `flush=True` | Chỉ cho `quarantined`, `nonce_desync`, `rpc_divergence` | |
-| Backstop | `ir.cron` 5 phút `model._cron_relay_reconcile()` | Đọc Redis + RPC, sửa mọi job lệch | Bắt buộc, không tuỳ chọn |
+| Odoo → node (dispatch) | **Bảng `blockchain.relay.job` trong Postgres.** Node `SELECT ... FOR UPDATE SKIP LOCKED` | bản ghi job đầy đủ | Postgres. Job được ghi **cùng transaction** với thay đổi nghiệp vụ sinh ra nó |
+| Đánh thức | `LISTEN/NOTIFY` trên channel `bc_job_{caip2}` | chỉ một tín hiệu, không dữ liệu | Không ai — mất NOTIFY thì poll bắt được |
+| Node → Odoo (kết quả) | **Bảng `blockchain.relay.result`**, node ghi bằng DB role riêng | `{job_uuid, state, tx_hash, nonce, gas_used, cost_base_units, error_code, observed_at_ms}` | Odoo đọc bằng cron và áp vào job |
+| Backstop | `ir.cron` 5 phút `model._cron_relay_reconcile()` | đọc chain + journal, sửa mọi job lệch | Bắt buộc, không tuỳ chọn |
 
-Lý do worker **không** ghi thẳng vào Postgres của Odoo: bỏ qua ORM là bỏ qua record rule, `write_date`, mail thread, và mọi `@api.constrains`. Chi phí của đường HTTP: một round-trip 5–15 ms cho 200 job, tức **~0,05 ms/job**. Không đáng để đổi lấy việc phá vỡ invariant của ORM.
+Ba thay đổi so với bản 1, mỗi cái có lý do:
 
-Lý do có `_cron_relay_reconcile` dù đã có callback: callback có thể mất (Odoo restart giữa deploy, worker OOM). Reconcile là cơ chế đảm bảo **eventual consistency**; callback chỉ là tối ưu latency. Nếu chỉ có callback, một lần Odoo down 90 giây sẽ để lại một đám job "broadcast" vĩnh viễn.
+1. **Redis Stream → bảng Postgres.** Stream không tham gia được transaction của Odoo, nên luôn tồn tại
+   cửa sổ "job đã ghi Stream, transaction rollback" hoặc ngược lại. Outbox không có cửa sổ đó. Đây là
+   cùng lập luận §15.2.4 dùng cho settlement, và nó không có ngoại lệ nào cho relay.
+2. **HTTP callback `relay_report_batch` → bảng kết quả.** Bản 1 cho node gọi HTTP vào Odoo. Bỏ: một
+   round-trip HTTP có thể mất, có thể timeout sau khi Odoo đã commit, và nó bắt node biết URL + JWT của
+   Odoo. Node ghi một dòng vào bảng nó có quyền ghi; Odoo đọc. Không ai phải bắt lỗi mạng.
+   *Đánh đổi đã cân:* bản 1 lập luận "không ghi thẳng Postgres vì bỏ qua ORM là bỏ qua record rule và
+   `@api.constrains`". Đúng — nên node **không** ghi vào `blockchain.relay.job`; nó ghi vào
+   `blockchain.relay.result`, một bảng chỉ-thêm không có logic nghiệp vụ, và Odoo áp kết quả qua ORM.
+   Invariant của ORM còn nguyên, cửa sổ mất mạng biến mất.
+3. **`LISTEN/NOTIFY` thay cho poll 1 giây.** Độ trễ xuống dưới 10 ms mà không cần thêm hạ tầng. Mất
+   NOTIFY là vô hại vì poll định kỳ vẫn chạy — NOTIFY là tối ưu latency, poll là bảo đảm.
 
-#### 06.0.2. [MỚI] Trục `chain_profile`: private làm thay đổi nửa số cơ chế trong section này
+#### 06.0.2. Trục `chain_profile`: private làm thay đổi nửa số cơ chế trong section này
 
 Quyết định khoá #5 (private chain đi trước cho Zether) không chỉ đổi chi phí — nó đổi cả mô hình lỗi.
 
@@ -78,266 +107,225 @@ Quyết định khoá #5 (private chain đi trước cho Zether) không chỉ đ
 | Velocity limit | Đơn vị **USD** | Đơn vị **gas** (không có giá USD; runaway loop vẫn phải chặn) |
 | Mempool eviction | Có, tx bị drop → cần re-broadcast | Không (txpool không bị ép giá). Trạng thái `dropped` gần như không xảy ra |
 | Replacement | Speed-up bằng fee bump | Fee bump vô nghĩa. "Treo" = **signer đang kẹt** → alarm hạ tầng, không phải bump |
-| Block gas limit | Cho trước (Gnosis ~17M) | **Ta đặt** — nhưng chain 9000 hiện là 16,7M, ngang Gnosis, và nâng được bằng signer vote không cần reset (§01.1.16) |
-| Finality | Theo bảng §11 | **Clique một signer không có finality BFT.** Đừng chép `finality_depth = 1` từ một stack QBFT — xem §01.1.16 |
+| Block gas limit | Cho trước (Gnosis ~17M) | **Ta đặt** — chain 9000 hiện 16,7M, ngang Gnosis, nâng được bằng signer vote không cần reset |
+| Finality | Theo bảng §11 | **Clique một signer không có finality BFT.** Đừng chép `finality_depth = 1` từ một stack QBFT |
 | RPC divergence check | Bật | **Vẫn bật**. Một validator bị chiếm là kịch bản dễ xảy ra hơn trên mạng nhỏ |
-| Reorg | Có | Clique có thể reorg ngắn khi signer đổi lượt; không phải "không bao giờ" như BFT |
+| Reorg | Có | Clique reorg ngắn được khi signer đổi lượt; không phải "không bao giờ" như BFT |
 | MEV / front-run | Có | Không |
 
-**Hai hàng đã sửa so với bản 1**, và cả hai vì bản 1 giả định một stack Besu QBFT không tồn tại. Chain private thật là **Nethermind + Clique, một signer** (§01.1.16). Clique không phải BFT: nó không cho instant finality, và nó có thể reorg ngắn. Viết `finality = 1 block` cho nó là chép nhầm từ một tài liệu khác.
+Hai hàng cuối đã sửa so với bản 1, vì bản 1 giả định một stack Besu QBFT không tồn tại. Chain private
+thật là **Nethermind + Clique, một signer**. Clique không phải BFT: không instant finality, và reorg
+ngắn được. Viết `finality = 1 block` cho nó là chép nhầm từ tài liệu khác.
 
-Field: `blockchain.chain.chain_profile = fields.Selection([('public','Public'), ('private','Private/Permissioned')], required=True, default='public')`. Mọi đoạn breaker/replacement dưới đây guard bằng profile. Không guard = build một đấu giá gas cho một mạng ba node của chính mình.
+Field: `blockchain.chain.chain_profile = fields.Selection([('public','Public'), ('private','Private/Permissioned')], required=True, default='public')`.
+Mọi đoạn breaker/replacement dưới đây guard bằng profile. Không guard = build một đấu giá gas cho một
+mạng một node của chính mình.
 
-#### 06.0.3. [MỚI] Những giả định bản nháp đầu không nói ra
+#### 06.0.3. Những giả định bản nháp đầu không nói ra
 
-Liệt kê thẳng, vì mỗi cái đều là một cách hệ thống hỏng:
+Liệt kê thẳng, vì mỗi cái là một cách hệ thống hỏng. **Hai giả định đầu của bản 1 đã chết cùng Redis** —
+giữ lại số thứ tự và ghi rõ, để ai đọc bản cũ biết vì sao.
 
-1. **Redis được coi là sự thật về nonce.** Sai. Redis AOF `appendfsync everysec` mất tới 1 giây ghi khi kernel panic; replica async có thể roll back khi failover. Nếu `next` tụt lùi, ta cấp lại nonce đã dùng → mọi tx sau đều bị `nonce too low`, hoặc tệ hơn, cấp trùng nonce với một tx đã ký khác. **Chốt: chain là sự thật, Postgres là journal, Redis là cache có thể tái tạo được.** Giao thức cold start ở §06.1.2.
-2. **Một worker sở hữu một relayer account "qua consistent hash".** Consistent hash không phải là quyền sở hữu. Khi `N_workers` đổi (deploy, OOM, network partition), hai worker cùng tưởng mình sở hữu một shard trong vài giây. Đó là split-brain trên nonce. Cần **ownership lease có fencing** (§06.1.3).
-3. **`eth_estimateGas` cho ra chi phí.** Sai trên mọi L2 rollup: phí L1 data (blob/calldata) **không** nằm trong `gas` của L2. Bỏ sót nó làm ước tính chi phí thấp hơn thực tế 2–10 lần trên Base/Optimism/Celo-L2 (§06.2.5).
-4. **Tx đã ký luôn có thể re-broadcast.** Sai. Nếu base fee đã vượt `maxFeePerGas` của tx đã ký, node nhận tx nhưng không bao giờ đào nó. Đó là trạng thái `underpriced`, chưa thuộc `dropped`, và cách chữa là **bump**, không phải re-broadcast.
-5. **Sim là miễn phí.** Tenderly không miễn phí ở quy mô này (§06.3.5). `eth_call` một tx Zether 1,79M gas không miễn phí với nhà cung cấp RPC và nhiều nhà cung cấp **cap gas của `eth_call`** ở 10M–50M.
-6. **Ký là một thao tác.** Với MPC SaaS, một vault thường **serialize** yêu cầu ký; song song hoá trong cùng một vault không tăng throughput. Con số 5–30 sign/s là cho cả vault, không phải cho mỗi connection.
-7. **Job Postgres có thể giữ raw tx.** Ở 100 job/s, 6 KB/job là 52 GB/ngày. Phải có chính sách lưu trữ (§06.10.3).
-8. **Giá USD luôn có.** Nếu oracle giá native token stale, velocity limit tính sai. Phải có chính sách fail-closed (§06.4.3).
-9. **Tenant = company.** Chưa nói ra. Chốt: `company_id` trên job; velocity bucket theo `company_id`; record rule theo `company_ids` của user.
-10. **Consumer hiểu đúng "final".** Chưa có bảng ánh xạ state → nghĩa vụ tài chính. Bổ sung ở §06.2.6.
-11. **[Bản 2] Một relayer account = một khoá.** Sai, và nó là ràng buộc cứng của EVM: nonce tuần tự nghĩa là một tx kẹt chặn toàn bộ hàng đợi phía sau. Một relayer cần **pool khoá** (`_USER-DECISIONS.md` §21.5), và mọi thứ trong §06.1 phải hiểu "relayer" là một `relayer_id` có N khoá, không phải một địa chỉ.
+1. ~~**Redis được coi là sự thật về nonce.**~~ **Không còn Redis.** Sự thật là chain; journal là Postgres;
+   cache là bộ nhớ của tiến trình sở hữu. Điều bản 1 lo — AOF `everysec` mất 1 giây ghi, replica async
+   roll back khi failover — biến mất cùng thành phần gây ra nó.
+2. ~~**Một worker sở hữu một relayer account "qua consistent hash".**~~ **Không còn worker thứ hai để
+   tranh.** Xem §06.1.1: quyền sở hữu do **advisory lock của Postgres** cấp, một dòng, và nó tự nhả khi
+   connection chết.
+3. **`eth_estimateGas` cho ra chi phí.** Sai trên mọi L2 rollup: phí L1 data (blob/calldata) **không**
+   nằm trong `gas` của L2. Bỏ sót nó làm ước tính thấp hơn thực tế 2–10 lần trên Base/Optimism/Celo-L2
+   (§06.2.5).
+4. **Tx đã ký luôn re-broadcast được.** Sai. Nếu base fee đã vượt `maxFeePerGas` của tx đã ký, node nhận
+   nhưng không bao giờ đào. Đó là `underpriced`, chưa phải `dropped`, và cách chữa là **bump**.
+5. **Sim là miễn phí.** `eth_call` một tx Zether 1,79M gas không miễn phí với nhà cung cấp RPC, và nhiều
+   nhà cung cấp **cap gas của `eth_call`** ở 10M–50M (§06.3.5).
+6. **Ký là một thao tác.** Với MPC SaaS, một vault thường **serialize** yêu cầu ký; song song hoá trong
+   cùng vault không tăng throughput. 5–30 sign/s là cho cả vault, không phải mỗi connection.
+7. **Job Postgres giữ được raw tx.** Ở 100 job/s, 6 KB/job là 52 GB/ngày. Phải có chính sách lưu trữ
+   (§06.10.3).
+8. **Giá USD luôn có.** Oracle giá native stale thì velocity limit tính sai. Phải fail-closed (§06.4.3).
+9. **Tenant = company.** Chốt: `company_id` trên job; velocity bucket theo `company_id`; record rule theo
+   `company_ids` của user.
+10. **Consumer hiểu đúng "final".** Bảng ánh xạ state → nghĩa vụ tài chính ở §06.2.6.
+11. **Một relayer account = một khoá.** Sai, và là ràng buộc cứng của EVM: nonce tuần tự nghĩa là một tx
+    kẹt chặn toàn bộ hàng đợi phía sau. Một relayer cần **pool khoá** (`_USER-DECISIONS.md` §21.5); mọi thứ dưới đây hiểu
+    "relayer" là một `relayer_id` có N khoá, không phải một địa chỉ.
+12. **[BẢN 3] Node giữ khoá ký.** Không. Node xin làn custody ký (`_USER-DECISIONS.md` §23.2). Nonce manager quản **số**, không
+    quản **khoá** — nó biết địa chỉ và nonce kế tiếp, không bao giờ thấy vật liệu khoá.
 
 ---
-### 06.1. Nonce manager: tại sao `INCRBY` không đủ
 
-Note (§10.3 mục 2) viết: *"Duy trì bộ đếm tăng dần bất biến (`INCRBY`) cho từng địa chỉ Relayer trên từng Chain ID"*. **Sai ở một chỗ chỉ mang tính chất quyết định**: `INCR` cấp phát, nhưng không ai trả lại. Đây là **gap problem**:
+### 06.1. Nonce manager: vì sao `INCRBY` không đủ, và nó trông thế nào khi chỉ có một tiến trình
+
+Note (§10.3 mục 2) viết: *"Duy trì bộ đếm tăng dần bất biến (`INCRBY`) cho từng địa chỉ Relayer trên từng
+Chain ID"*. **Sai ở một chỗ mang tính quyết định**: `INCR` cấp phát, nhưng không ai trả lại. Đây là
+**bài toán lỗ thủng nonce**:
 
 ```
-t0  job A  INCR -> nonce 41   -> sign -> broadcast OK
-t1  job B  INCR -> nonce 42   -> HSM timeout -> job B chet
-t2  job C  INCR -> nonce 43   -> broadcast OK
+t0  job A  cap -> nonce 41   -> ky -> broadcast OK
+t1  job B  cap -> nonce 42   -> signer timeout -> job B chet
+t2  job C  cap -> nonce 43   -> broadcast OK
 ```
 
-Nonce 42 không bao giờ được phát sóng. Trên EVM, tx nonce 43 nằm vĩnh viễn trong mempool ở trạng thái *queued* (không phải *pending*), không bao giờ được đào, và **mọi tx sau đó của ví này đều chết theo**. Một lỗi HSM timeout duy nhất làm đóng băng toàn bộ relayer account. Đúng trên Cosmos (account sequence), Stellar (sequence number), TON (seqno) với cùng cơ chế.
+Nonce 42 không bao giờ được phát sóng. Trên EVM, tx nonce 43 nằm vĩnh viễn trong mempool ở trạng thái
+*queued* (không phải *pending*), không bao giờ được đào, và **mọi tx sau đó của ví này chết theo**. Một
+lỗi signer timeout duy nhất đóng băng toàn bộ relayer account. Đúng y hệt trên Cosmos (account sequence),
+Stellar (sequence number), TON (seqno).
 
 Giải pháp: **nonce leasing** — cấp phát có thời hạn, có trả lại, có freelist.
 
-**Và một giải pháp thứ hai, ở tầng trên, mà bản 1 không có: nhiều khoá** (`_USER-DECISIONS.md` §21.5). Leasing chữa được lỗ thủng *trong* một khoá; nó không chữa được việc một khoá chỉ chạy được ~1 tx/block. Hai cơ chế giải hai bài toán khác nhau và cần cả hai:
+**Và một giải pháp thứ hai ở tầng trên: nhiều khoá** (`_USER-DECISIONS.md` §21.5). Leasing chữa lỗ thủng *trong* một khoá; nó
+không chữa việc một khoá chỉ chạy được ~1 tx/block. Hai cơ chế giải hai bài toán khác nhau, cần cả hai:
 
 | Bài toán | Cơ chế | Mục |
 |---|---|---|
 | Nonce bị cấp rồi không dùng → khoá chết | Nonce leasing + freelist | §06.1 |
-| Một khoá = 1 tx/block → trần thông lượng | Pool N khoá, chọn least-in-flight | §06.5.4 |
-| Một tx kẹt chặn hàng đợi phía sau nó | Replacement (§06.2) **cộng** chuyển job sang khoá khác | cả hai |
+| Một khoá = 1 tx/block → trần thông lượng | Pool N khoá, chọn least-in-flight | §06.5.4, `_USER-DECISIONS.md` §21.5 |
+| Một tx kẹt chặn hàng đợi phía sau | Replacement (§06.2) **cộng** chuyển job sang khoá khác | cả hai |
 
-Hàng thứ ba là chỗ hai cơ chế gặp nhau: với một khoá, một tx kẹt buộc phải chờ replacement thành công. Với pool khoá, job mới đi sang khoá khác **ngay lập tức** và việc gỡ khoá kẹt trở thành một tác vụ nền chứ không phải một sự cố chặn dịch vụ. Đó là lý do thực dụng nhất để có pool, mạnh hơn cả lý do thông lượng.
+Hàng thứ ba là chỗ hai cơ chế gặp nhau: với một khoá, tx kẹt buộc phải chờ replacement thành công. Với
+pool khoá, job mới đi sang khoá khác **ngay**, và gỡ khoá kẹt thành tác vụ nền chứ không phải sự cố chặn
+dịch vụ. Đó là lý do thực dụng nhất để có pool, mạnh hơn cả lý do thông lượng.
 
-#### 06.1.1. Cấu trúc Redis
+#### 06.1.1. [BẢN 3] Một task sở hữu, không một store phân tán
 
+Toàn bộ máy móc đồng bộ của bản 1 và bản 2 — Lua script, fencing token, `owner_fence`, ownership lease
+TTL 10 s, consistent hash `% N_workers`, generation counter `gen` — tồn tại để giải **một** bài toán:
+nhiều tiến trình tranh cùng một không gian nonce. Một tiến trình thì không có bài toán đó.
+
+Hình dạng đúng trong Rust là **actor**: một task `tokio` sở hữu state của một `(caip2, key_addr)`, và mọi
+yêu cầu đi qua một kênh `mpsc`. Không mutex, không lock, không race — **theo cấu trúc**, không theo kỷ
+luật lập trình.
+
+```rust
+// Moi (caip2, key_addr) co dung MOT task nay. State la bien local cua no.
+struct NonceActor {
+    caip2: String,
+    addr: Address,
+    confirmed: u64,              // tu getTransactionCount('latest')
+    next: u64,                   // nonce ke tiep chua tung cap
+    leased: BTreeMap<u64, Lease>,       // nonce -> (job_uuid, expire_at)
+    free: BinaryHeap<Reverse<u64>>,     // freelist, uu tien nonce nho nhat
+    signed: BTreeMap<u64, TxHash>,      // nonce DA co raw tx da ky — KHONG BAO GIO ve free
+    inflight: BTreeMap<u64, Instant>,
+}
+
+enum Msg {
+    Acquire { job: Uuid, reply: oneshot::Sender<Result<u64>> },
+    MarkSigned { nonce: u64, tx: TxHash },
+    Release { nonce: u64, reason: ReleaseReason },
+    Confirmed { upto: u64 },
+    Reap,                        // het han lease
+}
 ```
-bc:n:{caip2}:{addr}:gen         STRING  int   generation, INCR moi lan reseed tu chain (cold start)
-bc:n:{caip2}:{addr}:owner       STRING  "{worker_id}|{owner_fence}|{expire_ms}"   [SUA] quyen so huu shard
-bc:n:{caip2}:{addr}:confirmed   STRING  int   nonce da confirm on-chain (tu getTransactionCount 'latest')
-bc:n:{caip2}:{addr}:next        STRING  int   nonce ke tiep chua tung cap
-bc:n:{caip2}:{addr}:lease       HASH    nonce -> "{job_uuid}|{expire_ms}|{gen}|{owner_fence}"
-bc:n:{caip2}:{addr}:free        ZSET    nonce -> score = ready_at_ms   (freelist, uu tien nonce nho nhat)
-bc:n:{caip2}:{addr}:inflight    ZSET    nonce -> broadcast_ms
-bc:n:{caip2}:{addr}:signed      HASH    nonce -> "{job_uuid}|{tx_hash}"  [MOI] nonce DA co raw tx da ky
+
+`Acquire` ưu tiên `free` trước, rồi mới `next += 1`. Backpressure nằm ngay trong `Acquire`: nếu
+`leased.len() + inflight.len() >= max_inflight` thì trả `Err(Backpressure)` — **không** cấp một nonce chắc
+chắn rơi vào hư vô. `max_inflight = 16` không phải con số tuỳ ý mà là `txpool.accountslots` mặc định của
+node (`_USER-DECISIONS.md` §23.1).
+
+**Quy tắc tài chính, giữ nguyên từ bản 1 và là quy tắc quan trọng nhất ở đây:** một nonce đã có raw tx
+**đã ký** thì **không bao giờ** quay về `free`. Hai tx đã ký trên cùng nonce nghĩa là một hành động
+nghiệp vụ đã huỷ vẫn có thể được đào. Đó là lỗi tiền thật, không phải lỗi vận hành. Vì thế `Release`
+kiểm `signed` trước:
+
+```rust
+Msg::Release { nonce, reason } => {
+    if self.signed.contains_key(&nonce) {
+        // KHONG tra ve free. Duong duy nhat la replacement (§06.2) hoac gap-filler (§06.1.7).
+        self.mark_stuck(nonce, reason);
+    } else {
+        self.free.push(Reverse(nonce));
+        self.leased.remove(&nonce);
+    }
+}
 ```
 
-Khoá `{addr}` ở đây là **một khoá ký cụ thể**, không phải `relayer_id`. Với pool N khoá, có N bộ key này. Cái chung cho cả pool là một ZSET thứ hai:
+**Chọn khoá trong pool** cũng nằm trong một actor riêng cho mỗi `(caip2, relayer_id)`, giữ một
+`BTreeMap<Address, usize>` đếm inflight và trả về khoá ít việc nhất (least-in-flight, `_USER-DECISIONS.md` §21.5). Round-robin
+**không** dùng được: nó vẫn gửi vào một khoá đang kẹt.
 
+**Quyền sở hữu, khi ai đó vẫn chạy hai tiến trình.** Cấu hình đúng là một tiến trình có vai `submit` cho
+một `(caip2, relayer_id)`. Cấu hình sai thì phải bị chặn, không phải bị phát hiện muộn — và Postgres đã
+có sẵn công cụ:
+
+```sql
+SELECT pg_try_advisory_lock(hashtext('bc:submit:' || :caip2 || ':' || :relayer_id));
 ```
-bc:pool:{caip2}:{relayer_id}    ZSET    addr -> so tx dang inflight   [MOI ban 2]
-```
 
-Chọn khoá = `ZRANGEBYSCORE ... LIMIT 0 1` (least-in-flight, §21.5) rồi `ZINCRBY` — một thao tác nguyên tử, không cần Lua. Round-robin **không** dùng được vì nó vẫn gửi vào một khoá đang kẹt.
+Một dòng. Lấy được thì chạy; không lấy được thì **từ chối khởi động vai `submit`** và log rõ ai đang
+giữ. Lock tự nhả khi connection chết, nên không có lease TTL, không có fencing token, không có heartbeat.
+Đây là toàn bộ §06.1.3 của bản 1, thay bằng một câu lệnh.
 
-`bc:...:signed` là key quan trọng nhất mà bản nháp đầu không có. Xem §06.1.4.
+#### 06.1.2. Journal: cái gì phải bền, và ghi theo thứ tự nào
 
-Cấu hình Redis bắt buộc cho namespace `bc:n:*`: `appendonly yes`, `appendfsync always` cho instance nonce (chấp nhận ~5–10k ops/s thay vì 100k — ta chỉ cần ~1,5k ops/s ở 100 job/s), **không** bật auto-failover của Sentinel cho instance này. Nếu Redis chết, relay pool **dừng lại** và cold-start lại; đó là hành vi đúng. Một Redis "vẫn chạy nhưng mất 1 giây ghi" nguy hiểm hơn một Redis chết hẳn.
-
-#### 06.1.2. [MỚI] Cold start: giao thức bắt buộc khi Redis trống
-
-Đây là lỗ hổng lớn nhất của bản nháp đầu. `INCR` trên key không tồn tại trả về 1, tức nonce 0. Với một account đang ở nonce 4.128, mọi tx sau đó bị node trả `nonce too low` và relay pool quay vòng vô hạn.
+State trong bộ nhớ mất khi tiến trình chết. Cái không được mất là **quan hệ nonce ↔ tx đã ký**, vì đó là
+thứ duy nhất phân biệt "nonce này an toàn để cấp lại" với "nonce này đã có một tx có thể được đào".
 
 ```python
-async def cold_start(caip2, addr):
-    # 1. Dat account ve 'draining' trong Odoo. Khong nhan job moi.
-    await odoo.set_account_state(caip2, addr, 'draining')
+class BlockchainNonceJournal(models.Model):
+    _name = 'blockchain.nonce.journal'
+    _description = 'Durable nonce ledger for one signing key'
 
-    # 2. Doc chain tu ENDPOINT DA PIN (khong doc tu provider khac, xem 06.7 quy tac 1)
-    latest  = await rpc.eth_getTransactionCount(addr, 'latest')
-    pending = await rpc.eth_getTransactionCount(addr, 'pending')
+    chain_id     = fields.Many2one('blockchain.chain', required=True, index=True)
+    key_address  = fields.Char(required=True, index=True)
+    nonce        = fields.Char(required=True)          # uint64 dang chuoi, theo §10.4.1
+    job_uuid     = fields.Uuid(index=True)
+    journal_state = fields.Selection([
+        ('leased', 'Leased'), ('signed', 'Signed'), ('broadcast', 'Broadcast'),
+        ('confirmed', 'Confirmed'), ('released', 'Released'), ('stuck', 'Stuck')],
+        required=True, default='leased', index=True)
+    tx_hash      = fields.Char(index=True)
+    leased_datetime = fields.Datetime(required=True)
 
-    # 3. Doc journal Postgres: moi job cua account nay chua o trang thai cuoi
-    open_jobs = await odoo.jobs_not_terminal(caip2, addr)   # signed | broadcast | replaced
-    max_signed = max([j.nonce for j in open_jobs if j.raw_tx_ref], default=-1)
-
-    # 4. next = max(pending, max_signed + 1). KHONG BAO GIO nho hon.
-    nxt = max(pending, max_signed + 1)
-
-    # 5. Dung lai signed-set tu journal; moi nonce trong [latest, nxt) khong co job
-    #    -> la LO THUNG THAT (worker chet truoc khi ky). Dua vao freelist.
-    for n in range(latest, nxt):
-        if n in {j.nonce for j in open_jobs}:
-            await redis.hset(k_signed, n, f"{job.uuid}|{job.tx_hash or ''}")
-        else:
-            await redis.zadd(k_free, {n: 0})
-
-    await redis.mset({k_confirmed: latest, k_next: nxt})
-    await redis.incr(k_gen)                 # moi lease cu deu vo hieu
-    await odoo.set_account_state(caip2, addr, 'active')
+    _unique_live_nonce = models.UniqueIndex(
+        "(chain_id, key_address, nonce) WHERE journal_state != 'released'",
+        'Mot nonce chi co mot ban ghi song cho mot khoa.')
 ```
 
-Bước 5 là lý do phải có journal Postgres: chain cho biết nonce cao nhất, nó không cho biết nonce nào *của ta*. Nếu bỏ journal, ta không thể phân biệt "lỗ thủng" với "tx đã ký chưa lan truyền".
-
-`gen` là fencing thật sự: mỗi lease mang `gen` lúc cấp; trước `eth_sendRawTransaction`, worker đọc lại `gen`, khác → huỷ broadcast.
-
-Với pool khoá, cold start phải chạy cho **từng khoá**, và `bc:pool:*` phải được dựng lại từ tổng inflight của các khoá — không phải đặt về 0. Một pool 50 khoá cold-start bằng 50 lần `eth_getTransactionCount` × 2; ở 5 khoá/s đó là 20 giây trước khi nhận job lại. Chấp nhận được, nhưng phải nằm trong RTO chứ không phải là một bất ngờ.
-
-#### 06.1.3. [SỬA] Quyền sở hữu shard: ownership lease, không phải consistent hash
-
-Bản nháp đầu: *"mỗi relayer account được gán cứng cho đúng một worker qua consistent hash `hash(caip2+addr) % N_workers`"*. Chưa đủ. Khi `N_workers` đổi từ 3 sang 4, gần một phần tư shard đổi chủ **ngay lập tức và không đồng bộ** — worker cũ chưa biết mình mất shard.
-
-Chốt: ownership lease trong Redis, TTL 10s, renew mỗi 3s.
-
-```lua
--- lua/acquire_owner.lua  KEYS: owner, owner_fence   ARGV: worker_id, now_ms, ttl_ms
-local cur = redis.call('GET', KEYS[1])
-if cur then
-  local w, f, exp = cur:match('([^|]+)|([^|]+)|([^|]+)')
-  if w == ARGV[1] then                              -- renew
-    redis.call('SET', KEYS[1], w..'|'..f..'|'..(tonumber(ARGV[2])+tonumber(ARGV[3])))
-    return tonumber(f)
-  end
-  if tonumber(exp) > tonumber(ARGV[2]) then return -1 end   -- nguoi khac dang giu
-end
-local f = redis.call('INCR', KEYS[2])               -- doi chu -> fence moi
-redis.call('SET', KEYS[1], ARGV[1]..'|'..f..'|'..(tonumber(ARGV[2])+tonumber(ARGV[3])))
-return f
-```
-
-**`owner_fence` chỉ tăng khi đổi chủ**, không tăng mỗi lần lease. Bản nháp đầu làm ngược (`local fence = redis.call('INCR', KEYS[4])` trong `lease_nonce.lua`) — với hai job đồng thời, fence luôn đổi giữa lúc lease và lúc broadcast, nên kiểm tra fence hoặc luôn fail hoặc bị bỏ qua. Đó là một bug, không phải một bảo vệ.
-
-Giao thức mất shard (worker cũ): khi renew trả `-1`, worker **dừng ngay**, không broadcast job đang cầm, `NACK` tất cả message trong Redis Stream. Job đang ở `signed` **không** được trả freelist (§06.1.4) — chủ mới sẽ tiếp quản qua journal.
-
-#### 06.1.4. [SỬA] Lua cấp lease và ba (bốn) đường trả lease
-
-```lua
--- lua/lease_nonce.lua
--- KEYS: next, lease, free, gen, owner, signed, confirmed
--- ARGV: job_uuid, ttl_ms, now_ms, worker_id, max_inflight
-local cur = redis.call('GET', KEYS[5])
-if not cur then return {-1, 'no_owner'} end
-local w, ofence = cur:match('([^|]+)|([^|]+)|')
-if w ~= ARGV[4] then return {-1, 'not_owner'} end
-
-local confirmed = tonumber(redis.call('GET', KEYS[7]) or '0')
-local nxt       = tonumber(redis.call('GET', KEYS[1]) or tostring(confirmed))
-if nxt - confirmed >= tonumber(ARGV[5]) then return {-1, 'inflight_full'} end   -- backpressure
-
-local nonce
-local free = redis.call('ZRANGEBYSCORE', KEYS[3], '-inf', ARGV[3], 'LIMIT', 0, 1)
-if #free > 0 then
-  nonce = tonumber(free[1])
-  if redis.call('HEXISTS', KEYS[6], free[1]) == 1 then return {-1, 'signed_conflict'} end
-  redis.call('ZREM', KEYS[3], free[1])
-else
-  nonce = redis.call('INCR', KEYS[1]) - 1
-end
-if nonce < confirmed then return {-1, 'stale_nonce'} end                        -- guard cold start
-
-local gen = redis.call('GET', KEYS[4]) or '0'
-redis.call('HSET', KEYS[2], nonce,
-  ARGV[1]..'|'..(tonumber(ARGV[3])+tonumber(ARGV[2]))..'|'..gen..'|'..ofence)
-return {nonce, tonumber(gen), tonumber(ofence)}
-```
-
-Ba thứ thêm so với bản nháp đầu, mỗi thứ chặn một kiểu hỏng thật:
-
-- `inflight_full` — backpressure. Geth mặc định `--txpool.accountslots = 16`: quá 16 tx pending cho một account, node **im lặng bỏ** các tx thừa. Cấp nonce 17 là cấp một nonce chắc chắn rơi vào hư vô. `max_inflight` mặc định **16**, không phải một con số tuỳ ý.
-
-  Đây cũng là **trần thông lượng thật của một khoá**, và nó giải thích tại sao pool khoá là bắt buộc chứ không phải tuỳ chọn (§21.5): 16 tx inflight với block time 5 s là ~3 tx/block trong điều kiện lý tưởng, và thực tế an toàn thấp hơn nhiều. Muốn 10 tx/s thì phải nhân số khoá, không có cách nào khác.
-- `signed_conflict` — không bao giờ cấp lại một nonce đã có raw tx đã ký.
-- `stale_nonce` — chặn hậu quả của Redis reseed sai.
-
-`ttl_ms` mặc định = `3 * block_time + sign_p99 + sim_p99`. **[SỬA]** Gnosis: `3*5000 + 800 + 300 = 16,1s`. Ethereum L1: `3*12000 + 800 + 300 = 37,1s` (bản nháp đầu ghi 45s — sai số học, đổi thành 37s, làm tròn 40s). Chain private 9000 (Clique 5 s): giống Gnosis.
-
-Bốn đường trả lease:
-
-| # | Tình huống | Job đã ký chưa? | Hành động |
-|---|---|---|---|
-| 1 | Broadcast thành công | Rồi | `HDEL lease`, `ZADD inflight nonce now`, giữ nguyên `signed` |
-| 2 | Thất bại **trước khi ký** (sim fail, breaker, policy, lease timeout trước `sign`) | Chưa | `ZADD free nonce 0`. Tái sử dụng ngay. **Đây là đường `INCR` không có** |
-| 3 | Thất bại **sau khi ký, trước broadcast** (HSM trả chữ ký rồi worker chết) | Rồi | **KHÔNG trả freelist.** Ghi `signed[nonce]`, đưa job về `signed_orphan`. Chỉ thoát bằng **replacement** ở cùng nonce, hoặc chờ nó được đào |
-| 4 | Lease hết hạn (worker chết giữa chừng) | Kiểm tra `signed` | Có trong `signed` → như (3). Không có → truy vấn RPC (`getTransactionCount(pending)` + `eth_getTransactionByHash` nếu có hash) → chưa lên chain thì `ZADD free nonce 0` |
-
-**[SỬA] Đường (3) là sửa sai quan trọng nhất của section này.** Bản nháp đầu viết: *"Lease hết hạn → nếu chưa lên chain → `ZADD free nonce 0`"*. Nếu raw tx đã được ký và nằm đâu đó (Redis, WAL, log, một retry đang ngủ), trả nonce về freelist tạo ra **hai tx đã ký khác nhau trên cùng một nonce**. Cái nào vào block trước thì thắng. Nếu cái thắng là cái ta tưởng đã huỷ, ta vừa thực thi một hành động nghiệp vụ đã bị huỷ — chuyển tiền không ai duyệt. Đó là lỗi tài chính, không phải lỗi vận hành.
-
-Quy tắc tổng quát: **một nonce rơi vào trạng thái `signed` thì chỉ còn một đường ra là một tx được đào tại nonce đó.** Muốn huỷ, phải *thay thế* (§06.2.4), không được *bỏ qua*.
-
-#### 06.1.5. [MỚI] Write-ahead: thứ tự ghi bắt buộc
-
-Không có thứ tự này thì không thể phục hồi sau crash:
+**Thứ tự ghi bắt buộc (write-ahead), giữ nguyên từ bản 1:**
 
 ```
-1. Postgres  : job -> 'simulated'                    (co sim_block_height)
-2. Redis     : lease nonce                            (Lua tren)
-3. Postgres  : job -> 'nonce_leased', luu nonce + gen + owner_fence
-4. Signer    : ky
-5. Redis     : HSET signed[nonce]                     <-- TRUOC khi ghi Postgres
-6. Postgres  : job -> 'signed', luu tx_hash + raw_tx_ref
-7. Redis     : GET gen, GET owner  -> kiem tra khop
-8. RPC       : eth_sendRawTransaction (fan-out)
-9. Redis     : HDEL lease, ZADD inflight
-10. Postgres : job -> 'broadcast'
+1. INSERT journal (leased)          -- COMMIT truoc khi lam gi tiep
+2. xin lan custody ky               -- co the timeout
+3. UPDATE journal -> signed + tx_hash   -- COMMIT truoc khi broadcast
+4. broadcast
+5. UPDATE journal -> broadcast
 ```
 
-Bước 5 trước bước 6 là cố ý: nếu crash giữa 5 và 6, reconcile thấy `signed[nonce]` không có job tương ứng → **quarantine account**, bắt người xử lý. Thất bại ồn ào tốt hơn thất bại im lặng. Ngược lại (6 trước 5) tạo ra một job "signed" mà nonce manager không biết, và nonce đó có thể bị cấp lại.
+Đảo bước 3 và 4 là mở lại đúng cái lỗ mà cả mục này tồn tại để bịt: crash giữa broadcast và ghi journal
+để lại một tx trên mạng mà ta không biết là của nonce nào.
 
-`raw_tx_ref` **không** phải raw tx. Nó là key Redis `bc:raw:{job_uuid}` (TTL 24h) + `ir.attachment` trên Garage cho job R3/R4. Lý do ở §06.10.3.
+Bước 1 và bước 2 **không nằm trong một transaction** — bước 2 là một lời gọi mạng, và §15.2.4 cấm gọi
+mạng trong transaction. Đó là lý do `leased` là một trạng thái riêng chứ không phải một biến tạm.
 
-#### 06.1.6. Reconciliation với chain
+#### 06.1.3. Cold start: giao thức khi tiến trình khởi động lại
 
-Mỗi `reconcile_interval` (mặc định 5 block-time, tối thiểu 10s):
+Bản 1 gọi đây là "cold start khi Redis trống". Không còn Redis, nhưng bài toán còn nguyên: tiến trình
+khởi động lại thì state trong bộ nhớ rỗng, và cấp nonce từ 0 cho một account đang ở nonce 4.128 làm mọi
+tx bị `nonce too low` và quay vòng vô hạn.
 
-```python
-latest  = rpc.eth_getTransactionCount(addr, 'latest')    # da dao
-pending = rpc.eth_getTransactionCount(addr, 'pending')   # geth: latest + so tx pending LIEN TUC
+```
+Voi moi (caip2, key_addr) co vai submit:
+  1. lay advisory lock (§06.1.1). Khong lay duoc -> khong khoi dong vai nay.
+  2. chain_pending  = getTransactionCount(addr, 'pending')   qua >= 2 RPC doc lap, phai khop
+  3. chain_latest   = getTransactionCount(addr, 'latest')
+  4. journal_max    = SELECT max(nonce::bigint) FROM blockchain_nonce_journal
+                      WHERE key_address = addr AND journal_state IN ('signed','broadcast')
+  5. next      = max(chain_pending, journal_max + 1)
+     confirmed = chain_latest
+  6. nap lai `signed` tu journal cho moi nonce >= confirmed
+  7. free = {} — KHONG suy ra freelist tu chenh lech.
+     Lo thung giua confirmed va next do gap-filler xu ly (§06.1.7), khong do cold start doan.
 ```
 
-| Điều kiện | Kết luận | Hành động |
-|---|---|---|
-| `latest > confirmed` | tx đã đào | Cập nhật `confirmed`, xoá `inflight` và `signed` < latest, đóng job |
-| **[MỚI] `latest < confirmed`** | **reorg** — tx đã đào bị đảo ngược | Không panic. `confirmed = latest`; mọi job đã báo `mined` nhưng chưa `final` chuyển về `reorged`; **không** cập nhật ngược `next`. Báo Finality Gate (§11) |
-| `pending == latest` và `inflight` không rỗng | mempool đã drop tx của ta | **[SỬA]** Trước khi re-broadcast: so `maxFeePerGas` của raw tx với `base_fee_next`. Nếu `maxFee < base_fee` → **không phải dropped, là `underpriced`** → phải bump (§06.2.3), re-broadcast sẽ vô ích |
-| `next > pending` và gap tồn tại > `gap_timeout` (60s) | **nonce gap thật sự** | Phát *gap-filler* (§06.1.7) |
-| `latest > next` | có ai khác dùng ví này | **Alarm P1**, `state=quarantined`, đồng bộ `next = latest`, **không** tự động resume |
-| **[MỚI]** `signed[n]` tồn tại với `n < latest` nhưng không có receipt cho `tx_hash` đó | tx của ta bị **thay thế bởi người khác** ở cùng nonce | Alarm P1 bảo mật: hoặc khoá bị lộ, hoặc có worker ma. Quarantine |
+Bước 2 hỏi **hai RPC độc lập và bắt chúng khớp**: một node tụt hậu trả `pending` thấp hơn thực tế, và
+tin nó là cấp lại một nonce đã dùng. Đây là §06.7 áp vào đúng chỗ nguy hiểm nhất.
 
-`pending` của geth chỉ đếm chuỗi liên tục từ `latest`; một nonce thủng làm `pending` dừng lại ngay đó — chính là tín hiệu phát hiện gap rẻ nhất, không cần quét mempool. **Cảnh báo:** không phải node nào cũng thế. Erigon và một số RPC managed trả `pending` = `latest` luôn. Adapter phải **dò khả năng này lúc khởi động** (`rpc.capabilities.pending_nonce_accurate`) bằng cách gửi một tx test trên testnet hoặc so sánh với `txpool_content` nếu có; không dò được thì lui về quét `inflight` theo hash.
-
-Nethermind (chain 9000) chưa được kiểm ở điểm này. Thêm vào danh sách kiểm chứng §06.11: **dò `pending_nonce_accurate` trên chain 9000 trước khi tin nhánh gap-detection.**
-
-#### 06.1.7. [MỚI] Gap-filler: định nghĩa đầy đủ
-
-Bản nháp đầu để mở. Chốt:
-
-```python
-def gap_filler_tx(addr, nonce, chain, last_known_fee=None):
-    base = rpc.base_fee_next_block()
-    p75  = rpc.fee_history_percentile(75, blocks=20)
-    tip  = max(p75.tip, chain.min_tip_wei)
-    if last_known_fee:                      # lo thung do tx bi drop, khong phai chua tung ky
-        tip = max(tip, ceil_bump(last_known_fee.tip))
-    return {'to': addr, 'value': 0, 'data': b'', 'gas': 21000,
-            'nonce': nonce, 'maxPriorityFeePerGas': tip,
-            'maxFeePerGas': min(base * 2 + tip, chain.absolute_max_fee_wei)}
-```
-
-Chi phí: 21.000 gas. Gnosis @ 2 gwei = 0,000042 xDAI. Ai trả? **Overhead của pool, không tính vào tenant** — tenant không gây ra lỗ thủng. Ghi vào `blockchain.breaker.event(kind='gap_filler')` để theo dõi: `gap_filler` tăng là triệu chứng, không phải giải pháp.
-
-Trên chain private 9000, `base_fee_next_block()` **không tồn tại** — chain chạy trước London nên không có EIP-1559 (§01.1.16). Adapter phải lui về legacy `gasPrice`, và với `MinGasPrice = 0` thì gap-filler ở đó miễn phí. Đây là một trong những chỗ mà một hàm gọi thẳng `base_fee_next_block()` sẽ ném lỗi thay vì trả số; phải guard theo capability, không theo `chain_profile`.
-
-Trên chain không phải EVM: Cosmos không thể "fill" một sequence — phải gửi một tx thật (vd `MsgSend` 1 uatom cho chính mình). Stellar: `BumpSequence` operation, dùng chính xác cho việc này, chi phí 100 stroops. TON: gửi external message rỗng tới wallet. Sui: **không có gap** (không có nonce). Hedera: không có gap (`validStart`).
+Bước 7 là chỗ dễ viết sai. Cám dỗ là "mọi nonce trong `[confirmed, next)` mà không có trong `signed` thì
+cho vào freelist". **Không**: một tx đã broadcast nhưng journal chưa kịp ghi `signed` (crash giữa bước 3
+và 4 ở §06.1.2) sẽ bị coi là free, và ta ký một tx thứ hai trên nonce đó. Cold start **không đoán**; nó
+để lỗ thủng lại cho gap-filler, thứ có thời gian hỏi chain cẩn thận.
 
 #### 06.1.8. Ngữ nghĩa sequence từng chuỗi — không đồng nhất
 
@@ -355,7 +343,7 @@ Hàng SUI đáng chú ý vì nó là chuỗi duy nhất mà **pool gas coin thay
 
 **Note gộp hai không gian nonce làm một.** `meta_nonce(from, batchId)` là nonce của *người dùng* trong contract; nonce EOA là của *relayer*. Chúng độc lập. Relay Pool phải quản lý cả hai:
 
-- Nonce relayer EOA: Redis lease như trên.
+- Nonce relayer EOA: actor sở hữu + journal như §06.1.1.
 - `batchNonce`: **không** do relay pool cấp. Client/Agent cấp khi ký, vì chữ ký phủ lên nó. Relay pool chỉ **kiểm tra trước khi broadcast**: `meta_nonce(from, batchId) == metaTx.batchNonce`. Nếu lệch → job về `stale`, trả về consumer để ký lại. Không bao giờ sửa payload đã ký.
 - Head-of-line blocking ở tầng meta-tx: nếu `batchNonce=5` fail vĩnh viễn, 6..n của cùng `batchId` treo. Chính sách: **mỗi intent độc lập dùng một `batchId` ngẫu nhiên 128-bit với `batchNonce=0`**; chỉ dùng chuỗi tuần tự khi nghiệp vụ thật sự có thứ tự (deposit → transfer → settle). Job trong một `batchId` tuần tự được đánh dấu `chain_group_key`; một job fail thì cả group về `blocked` chứ không retry lẻ tẻ.
 - **[MỚI] Kiểm tra `meta_nonce` phải ghim block.** Đọc `meta_nonce` tại block N rồi broadcast ở N+3, một tx khác của cùng user có thể đã tiêu nó. Ghi `meta_nonce_block` vào job; nếu `head - meta_nonce_block > 3` thì đọc lại. Trên thực tế gọi `meta_nonce` **trong chính `eth_call` của sim gate** (một multicall) để không tốn thêm round-trip.
@@ -686,49 +674,76 @@ Velocity limit tính bằng USD → phải có giá. Chưa ai nói lấy ở đ�
 
 Chính sách khi giá stale (`age > 2 * max_age`): **fail-closed với giá bảo thủ** — dùng `price_usd = last_known * 3` cho mọi tính toán chi phí. Không dùng `last_known` (đánh giá thấp rủi ro) và không chặn hết (dừng dịch vụ vì một oracle chết là phản ứng quá mức). Con số 3x là một lựa chọn, ghi vào `blockchain.chain.stale_price_multiplier`, chỉnh được.
 
-#### 06.4.3. [SỬA] Velocity limit: phải nguyên tử, phải là số nguyên, phải có refund
+#### 06.4.3. [BẢN 3] Velocity limit: nguyên tử, số nguyên, có refund — và không Lua
 
 Bản nháp đầu dùng `INCRBYFLOAT` rồi kiểm tra riêng. Hai bug:
 
-1. **TOCTOU**: đọc → so sánh → ghi không nguyên tử. Với 50 job/s song song, bucket vượt trần rồi mới bị phát hiện. Vượt bao nhiêu thì tuỳ may.
+1. **TOCTOU**: đọc → so sánh → ghi không nguyên tử. Với 50 job/s song song, bucket vượt trần rồi mới bị
+   phát hiện. Vượt bao nhiêu thì tuỳ may.
 2. **Float**: `INCRBYFLOAT` trên hàng trăm nghìn thao tác tích luỹ sai số. Bucket tiền không được dùng float.
 
-Bản đúng: một Lua script, đơn vị **micro-USD (số nguyên)**, reserve trước — settle sau.
+Bản 2 chữa hai bug đó bằng một Lua script trên Redis. **Bản 3 bỏ Redis (`_USER-DECISIONS.md` §23), nên chữa bằng thứ vốn đã
+có transaction thật: Postgres.** Cùng ngữ nghĩa — đơn vị **micro-USD số nguyên**, reserve trước, settle
+sau — nhưng nguyên tử là do `BEGIN ... COMMIT` chứ không do một script chạy đơn luồng.
 
-```lua
--- lua/spend_reserve.lua
--- KEYS: agent, tenant, global, resv
--- ARGV: cost_uusd, cap_agent, cap_tenant, cap_global, ttl_s, job_uuid
-local c = tonumber(ARGV[1])
-local a = tonumber(redis.call('GET', KEYS[1]) or '0')
-local t = tonumber(redis.call('GET', KEYS[2]) or '0')
-local g = tonumber(redis.call('GET', KEYS[3]) or '0')
-if a + c > tonumber(ARGV[2]) then return {0, 'agent',  a, c} end
-if t + c > tonumber(ARGV[3]) then return {0, 'tenant', t, c} end
-if g + c > tonumber(ARGV[4]) then return {0, 'global', g, c} end
-redis.call('INCRBY', KEYS[1], c); redis.call('EXPIRE', KEYS[1], ARGV[5])
-redis.call('INCRBY', KEYS[2], c); redis.call('EXPIRE', KEYS[2], ARGV[5])
-redis.call('INCRBY', KEYS[3], c); redis.call('EXPIRE', KEYS[3], ARGV[5])
-redis.call('HSET', KEYS[4], ARGV[6], c)               -- reservation, de refund
-return {1, 'ok', 0, c}
+```sql
+CREATE TABLE blockchain_spend_bucket (
+    scope       text   NOT NULL,          -- 'agent' | 'tenant' | 'global'
+    scope_key   text   NOT NULL,          -- agent_id | company_id | ''
+    window_key  text   NOT NULL,          -- 'YYYYMMDDHH'
+    spent_uusd  bigint NOT NULL DEFAULT 0,-- micro-USD, SO NGUYEN
+    PRIMARY KEY (scope, scope_key, window_key)
+);
+
+CREATE TABLE blockchain_spend_reservation (
+    job_uuid      uuid   PRIMARY KEY,
+    window_key    text   NOT NULL,
+    reserved_uusd bigint NOT NULL,
+    reserved_at   timestamptz NOT NULL DEFAULT now()
+);
 ```
 
-Key (TTL 7200s, giữ 2 cửa sổ để tính trượt):
+Reserve là **một** transaction, và `UPDATE ... RETURNING` với điều kiện trần làm việc kiểm tra và việc
+ghi trở thành cùng một thao tác — đúng cái Lua script được thuê để làm:
 
+```sql
+BEGIN;
+-- Ba dong, khoa theo thu tu co dinh (agent -> tenant -> global) de khong deadlock.
+UPDATE blockchain_spend_bucket SET spent_uusd = spent_uusd + :cost
+ WHERE scope='agent'  AND scope_key=:agent  AND window_key=:w
+   AND spent_uusd + :cost <= :cap_agent   RETURNING spent_uusd;
+-- khong co dong tra ve  ->  vuot tran  ->  ROLLBACK, tra ly do 'agent'
+... lap lai cho tenant, global ...
+INSERT INTO blockchain_spend_reservation(job_uuid, window_key, reserved_uusd)
+VALUES (:job, :w, :cost);
+COMMIT;
 ```
-bc:spend:agent:{agent_id}:{yyyymmddHH}     STRING  int micro-USD
-bc:spend:tenant:{company_id}:{yyyymmddHH}  STRING  int micro-USD
-bc:spend:global:{yyyymmddHH}               STRING  int micro-USD
-bc:spend:resv:{yyyymmddHH}                 HASH    job_uuid -> reserved_uusd
-```
 
-Kiểm tra **trước khi lease nonce** (không phải trước sim — sim gần như miễn phí trên node của mình, lease thì không): `est_cost_uusd = (l2_gas * buffer * gas_price + l1_fee_wei) * native_price_usd * 1e6 / 1e18`.
-Trên chain private 9000 (`MinGasPrice = 0`), `est_cost_uusd` luôn bằng 0 và velocity limit tính bằng USD trở nên vô nghĩa. Nhưng **vẫn phải có velocity limit** — tính bằng **gas**, vì cái nó chặn không phải chi phí mà là một vòng lặp chạy loạn làm ngập block. Hai đơn vị, cùng một cơ chế, chọn theo `chain.supports_eip1559`.
+Ba điểm phải giữ đúng:
 
-- Khi job kết thúc (`final` hoặc `rejected`), **settle**: `INCRBY` phần chênh giữa reserved và thực tế (âm nếu rẻ hơn), `HDEL` reservation.
-- Janitor mỗi 5 phút quét `bc:spend:resv:*` của cửa sổ *trước*, mọi entry còn lại quá 2 giờ → refund và ghi `relay_spend_reservation_leaked_total`.
+- **Thứ tự khoá cố định** `agent → tenant → global`. Hai job khoá ngược chiều nhau là deadlock, và
+  Postgres sẽ giết một trong hai — đúng về an toàn, tệ về vận hành. Thứ tự cố định thì không bao giờ xảy ra.
+- **`bigint`, không `numeric`, không `float`.** Micro-USD trong `bigint` cho trần 9.2e12 USD; đủ.
+- **Row-level lock chỉ giữ trong một transaction ngắn.** Không có lời gọi mạng nào bên trong. Nếu ai đó
+  đặt `eth_estimateGas` vào giữa `BEGIN` và `COMMIT`, hàng `global` thành một điểm serialize toàn hệ thống.
 
-Chi phí của Lua: một round-trip, ~0,2 ms. Không đáng tranh cãi.
+Kiểm tra **trước khi lease nonce** (không phải trước sim — sim gần như miễn phí trên node của mình, lease
+thì không): `est_cost_uusd = (l2_gas * buffer * gas_price + l1_fee_wei) * native_price_usd * 1e6 / 1e18`.
+
+Trên chain private 9000 (`MinGasPrice = 0`), `est_cost_uusd` luôn bằng 0 và velocity limit tính bằng USD
+trở nên vô nghĩa. Nhưng **vẫn phải có velocity limit** — tính bằng **gas**, vì cái nó chặn không phải chi
+phí mà là một vòng lặp chạy loạn làm ngập block. Hai đơn vị, cùng một cơ chế, chọn theo `chain_profile`.
+
+- Khi job kết thúc (`final` hoặc `rejected`), **settle**: một `UPDATE` cộng phần chênh giữa reserved và
+  thực tế (âm nếu rẻ hơn), rồi `DELETE` reservation. Cùng transaction.
+- Janitor mỗi 5 phút quét `blockchain_spend_reservation` của cửa sổ *trước*; entry còn lại quá 2 giờ →
+  refund và ghi `relay_spend_reservation_leaked_total`.
+- Cửa sổ cũ hơn 2 giờ bị `DELETE` bởi cùng janitor. Đây là thứ thay cho `EXPIRE` của Redis, và nó là một
+  dòng cron chứ không phải một tính năng của store.
+
+Chi phí: một transaction Postgres ~0,3–0,8 ms trên cùng máy. Cùng bậc với round-trip Redis mà bản 2 tính
+(~0,2 ms), và đổi lại là **một hệ thống lưu trữ ít hơn phải vận hành, backup, và giải thích khi nó mất
+một giây ghi.**
 
 #### 06.4.4. Thứ tự bị throttle — lớp ưu tiên
 
@@ -939,9 +954,9 @@ Nói cách khác: **batch giải nút cổ chai chữ ký, pool khoá giải nú
 
 Với mô hình mesh mở, tầng này có một biến thể thứ ba mà bản 1 không có: **một node mesh do cá nhân chạy giữ khoá trong một file.** Đó không phải cấu hình sai — nó là cấu hình đúng cho một khoá giữ $5 tiền gas và không có quyền gì khác (`_USER-DECISIONS.md` §21.5). `KeyPool` phải nhận cả ba: HSM, enclave, và file. Cùng interface `sign(tx) -> bytes`, khác backend, chọn bằng cấu hình. Đừng viết hai bản.
 
-**Điểm quan trọng phải nói thẳng:** một khoá file chỉ chấp nhận được **vì** các ràng buộc ở §21.5 — float nhỏ, không phải `feeRecipient`, không role nào trên contract nào. Nếu ai đó bỏ một trong ba ràng buộc đó, khoá file trở thành một lỗ hổng. Ba ràng buộc và một backend rẻ đi cùng nhau; không tách được.
+**Điểm quan trọng phải nói thẳng:** một khoá file chỉ chấp nhận được **vì** các ràng buộc ở `_USER-DECISIONS.md` §21.5 — float nhỏ, không phải `feeRecipient`, không role nào trên contract nào. Nếu ai đó bỏ một trong ba ràng buộc đó, khoá file trở thành một lỗ hổng. Ba ràng buộc và một backend rẻ đi cùng nhau; không tách được.
 
-**4. Không pre-sign hàng loạt theo nonce.** Ký trước nonce n..n+50 rồi cất trong Redis nghe hấp dẫn (amortize latency) nhưng tạo một kho tx đã ký có thể phát sóng bởi bất kỳ ai đọc được Redis, và không thể huỷ sau khi ký vì gas price đã chốt. **Cấm.** Ngoại lệ duy nhất được xem xét: pre-sign **một** tx cancel (self-send, 21000 gas, giá cao) cho mỗi nonce inflight, lưu trong enclave chứ không trong Redis — đó là một "dead man switch" có giá trị, nhưng vẫn là một tx đã ký nằm chờ, nên mặc định **tắt**.
+**4. Không pre-sign hàng loạt theo nonce.** Ký trước nonce n..n+50 rồi cất sẵn nghe hấp dẫn (amortize latency) nhưng tạo một kho tx đã ký có thể phát sóng bởi bất kỳ ai đọc được nơi cất, và không thể huỷ sau khi ký vì gas price đã chốt. **Cấm.** Ngoại lệ duy nhất được xem xét: pre-sign **một** tx cancel (self-send, 21000 gas, giá cao) cho mỗi nonce inflight, lưu trong enclave chứ không trong store thường — đó là một "dead man switch" có giá trị, nhưng vẫn là một tx đã ký nằm chờ, nên mặc định **tắt**.
 
 Ngân sách latency một job (Gnosis, MPC SaaS, không batch):
 Ngân sách latency một job (Gnosis, MPC SaaS, không batch):
@@ -949,14 +964,14 @@ Ngân sách latency một job (Gnosis, MPC SaaS, không batch):
 ```
 policy + allowlist + selector                     2 ms
 sim (eth_call + estimateGas + getL1Fee, 3 RPC)  120 ms
-velocity reserve (Redis Lua)                      0.2 ms
-lease nonce (Redis Lua)                           0.2 ms
-WAL Postgres (job -> nonce_leased)               15 ms   [MOI] khong mien phi
-sign (MPC)                                      800 ms   <-- 74% ngan sach
-WAL Postgres (job -> signed) + Redis signed      16 ms
-fence re-check + serialize + broadcast fan-out   80 ms
+velocity reserve (1 transaction Postgres)         0.6 ms   [BAN 3] thay Lua
+lease nonce (actor in-process, khong I/O)         0.01 ms  [BAN 3] thay Lua
+journal (job -> leased), COMMIT                  15 ms   khong mien phi
+sign (MPC, qua lan custody)                     800 ms   <-- 74% ngan sach
+journal (job -> signed), COMMIT                  15 ms
+serialize + broadcast fan-out                    80 ms
 ------------------------------------------------------
-tong truoc khi len mempool                    ~1.033 ms
+tong truoc khi len mempool                    ~1.031 ms
 inclusion (1 block)                            5.000 ms
 finality soft (1 block) / hard (2 epoch)        5 s / ~13 phut
 ```
@@ -981,9 +996,10 @@ Moi EOA: gioi han boi (a) sign serial, (b) txpool.accountslots = 16
 => Voi enclave: K = ceil(7 / 3,2) = 3 EOA. Lay K = 6 (2x headroom + cach ly HOL).
 => Voi MPC:     tran he thong = 10 tx/s bat ke K. Phai batch.
 
-Worker process: moi worker giu 1-3 shard. K=6 -> 3 worker (2 shard/worker) + 1 standby.
-Redis ops:  ~14 ops/job * 100 job/s = 1.400 ops/s. Redis appendfsync=always lam ~5-10k ops/s. Du.
-Postgres:   ~4 write/job (qua callback gom 200) = ~0,5 commit/s tu worker. Khong dang ke.
+[BAN 3] Khong con "worker process" nao de dem: MOT tien trinh bamboo-node giu ca K khoa,
+moi khoa mot task tokio. K=6 la sau task, khong phai sau tien trinh.
+Postgres:  ~4 write/job. O 100 job/s va gom theo lo = ~2-5 commit/s. Khong dang ke.
+Bo nho:    state nonce mot khoa < 4 KB. K=6 tren 3 chain = ~72 KB. Khong dang ke.
 ```
 
 Kết luận đúng một câu: **với MPC SaaS, số EOA không quan trọng; với enclave, 6 EOA là đủ cho 100 action/s.** Bất cứ ai đề xuất 50 relayer EOA nên bị hỏi trước đó số này.
@@ -1082,7 +1098,7 @@ SLO đề xuất: broadcast→`final` p95 <= `finality_hard + 60s`; tỷ lệ jo
 
 | Sự cố | Triệu chứng | Các bước |
 |---|---|---|
-| **Redis bị xoá sạch** | Mọi key `bc:*` biến mất; worker báo `no_owner` | 1. Dừng toàn bộ worker. 2. Với mỗi account: `cold_start()` (§06.1.2). 3. Đối chiếu `signed` tái tạo từ journal với `getTransactionCount(pending)`. 4. Nếu có nonce trong `[latest, pending)` không có job → gap-filler. 5. Khởi động lại worker từng shard một, cách nhau 30s |
+| **Tiến trình node chết / mất state bộ nhớ** | Khởi động lại, state nonce rỗng | 1. Lấy advisory lock (§06.1.1) — không lấy được thì dừng, có tiến trình khác đang giữ. 2. Với mỗi khoá: `cold_start()` (§06.1.3). 3. Đối chiếu `signed` nạp từ journal với `getTransactionCount(pending)`. 4. Nonce trong `[latest, pending)` không có job → gap-filler (§06.1.7). 5. **Không** suy freelist từ chênh lệch (§06.1.3 bước 7) |
 | **`nonce_desync` (`latest > next`)** | Metric >= 1 | 1. Quarantine account **ngay** (tự động). 2. Không tự resume. 3. Người trực kiểm: có ai chạy script thủ công không? Khoá có bị export không? 4. Nếu nghi lộ khoá: `state='retired'`, sweep số dư về treasury bằng treasury signer, tạo EOA mới. 5. Chỉ resume khi giải thích được nguồn gốc |
 | **Sequencer down (Arbitrum/OP)** | `head_age > 60s` trên mọi endpoint | 1. Breaker `SEQUENCER_DOWN`, dừng nhận job mới. 2. **Không** bump, **không** cancel (tx đang nằm trong hàng đợi của sequencer). 3. Nếu > 2h và có job R3 giá trị lớn: đánh giá force-inclusion qua L1 delayed inbox — đó là quyết định của người, không tự động. 4. Reset breaker khi head tăng liên tục 5 phút |
 
@@ -1110,7 +1126,7 @@ class BlockchainRelayerAccount(models.Model):
                                       ondelete='cascade', index=True)
     # chain_id, address, custody_mode, signer_ref, role, company_id -> tu blockchain.account
 
-    # [MOI ban 2] Mot relayer_id co N khoa ky. Xem _USER-DECISIONS.md §21.5.
+    # [MOI ban 2] Mot relayer_id co N khoa ky. Xem _USER-DECISIONS.md `_USER-DECISIONS.md` §21.5.
     relayer_id      = fields.Many2one('blockchain.relayer', index=True, ondelete='restrict',
                                       help='Danh tinh relayer. N account nay thuoc mot relayer_id.')
 
@@ -1125,7 +1141,7 @@ class BlockchainRelayerAccount(models.Model):
     nonce_gen       = fields.Integer(readonly=True, help='Generation, tang moi lan cold start.')
     pinned_endpoint_id = fields.Many2one('blockchain.rpc.endpoint', ondelete='restrict')
 
-    nonce_confirmed = fields.Integer(readonly=True)      # mirror tu Redis, cho UI/audit
+    nonce_confirmed = fields.Integer(readonly=True)      # mirror tu journal, cho UI/audit
     nonce_allocated = fields.Integer(readonly=True)
     nonce_gap_count = fields.Integer(readonly=True)
 
@@ -1168,8 +1184,8 @@ class BlockchainRelayJob(models.Model):
 
     target_address = fields.Char(required=True, size=42, index=True)
     selector_hex   = fields.Char(compute='_compute_selector', store=True, size=10, index=True)
-    calldata_ref   = fields.Char(help='Redis key bc:calldata:{uuid}; ir.attachment cho R3/R4.')
-    raw_tx_ref     = fields.Char(help='Redis key bc:raw:{uuid}, TTL 24h. KHONG luu raw tx tren record.')
+    calldata_ref   = fields.Char(help='Khoa trong blockchain_relay_blob; ir.attachment cho R3/R4.')
+    raw_tx_ref     = fields.Char(help='Khoa trong blockchain_relay_blob, TTL 24h. KHONG luu raw tx tren record.')
 
     nonce          = fields.Integer(index=True)
     nonce_gen      = fields.Integer()
@@ -1266,7 +1282,7 @@ Nhóm quyền (khớp §10.5): `group_blockchain_viewer` (đọc), `group_blockc
 | Mục | Cấu hình | USD/tháng (ước) |
 |---|---|---|
 | 3 relay worker | 2 vCPU / 4 GB | 120 |
-| Redis (nonce), HA primary + replica, AOF always | 2 GB | 60 |
+| ~~Redis (nonce)~~ **bỏ** — state nằm trong tiến trình + journal Postgres | — | **0** |
 | Node Gnosis tự vận hành (archive nhẹ, cho `eth_call`/`debug_traceCall`) | 8 vCPU / 2 TB NVMe | 200 |
 | 2 RPC provider (fallback + witness) | gói growth | 100 – 400 |
 | Prometheus + Grafana + Alertmanager | dùng chung hạ tầng | 0 – 50 |
@@ -1296,8 +1312,8 @@ Chấp nhận được **chỉ khi** không lưu raw tx và calldata trên recor
 
 | Dữ liệu | Nơi lưu | TTL |
 |---|---|---|
-| `calldata_hex` (có thể 2–4 KB với Zether) | Redis `bc:calldata:{uuid}` | 24h |
-| `raw_tx` đã ký | Redis `bc:raw:{uuid}` | 24h (đủ cho mọi vòng replacement) |
+| `calldata_hex` (có thể 2–4 KB với Zether) | `blockchain_relay_blob`, janitor xoá | 24h |
+| `raw_tx` đã ký | `blockchain_relay_blob`, janitor xoá | 24h (đủ cho mọi vòng replacement) |
 | Cả hai, cho job R3/R4 | `ir.attachment` trên Garage (S3), Many2many như quy ước repo | 7 năm (nghĩa vụ kế toán) |
 | Cả hai, cho job R1/R2 | Không giữ sau 24h | — |
 | `sim_trace` của job có divergence | `ir.attachment` | 1 năm |
@@ -1314,19 +1330,19 @@ Không phải một kế hoạch QA đầy đủ; chỉ là những thứ **khô
 
 | Hạng mục | Công cụ | Kịch bản bắt buộc |
 |---|---|---|
-| Nonce lease/freelist | `pytest` + `fakeredis` (Lua chạy thật qua `redis-server` trong container) | Ký HSM timeout giữa chừng; worker SIGKILL sau `signed` trước broadcast; hai worker cùng xin cùng shard |
-| Cold start | anvil + `anvil_setNonce` | Redis flushall khi có 5 job inflight; kiểm tra không nonce nào bị cấp lại |
-| **Pool khoá** | anvil + Redis | Một khoá kẹt ở `stuck_at_ceiling` → job mới **phải** đi sang khoá khác trong < 1 chu kỳ; `bc:pool` ZSET không đếm khoá `draining` |
+| Nonce lease/freelist | test Rust trên actor + Postgres thật | Ký timeout giữa chừng; SIGKILL sau `signed` trước broadcast; **tiến trình thứ hai xin cùng khoá phải bị advisory lock từ chối** |
+| Cold start | anvil + `anvil_setNonce` | Kill tiến trình khi có 5 job inflight; khởi động lại; kiểm tra không nonce nào bị cấp lại và freelist rỗng |
+| **Pool khoá** | anvil | Một khoá kẹt ở `stuck_at_ceiling` → job mới **phải** đi sang khoá khác trong < 1 chu kỳ; bộ đếm least-in-flight không đếm khoá `draining` |
 | Replacement / bump | anvil `--block-time 1` + `anvil_setNextBlockBaseFeePerGas` | Base fee tăng 12,5%/block × 15 block; xác nhận không bao giờ bị `replacement underpriced` |
 | Reorg | anvil `evm_snapshot` / `evm_revert` | `latest` giảm 3 block sau khi job đã `mined`; job phải về `reorged`, không về `final` |
 | RPC nói dối | 2 anvil khác nhau sau một proxy | Lớp 2 và lớp 3 phải eject đúng endpoint, và **không** eject khi chỉ là reorg nông 1 block |
-| Velocity limit | Redis thật, 200 task song song | Tổng chi tiêu **không được** vượt cap quá 1 job. Kiểm tra refund khi job fail |
+| Velocity limit | Postgres thật, 200 task song song | Tổng chi tiêu **không được** vượt cap quá 1 job. Kiểm tra refund khi job fail, và **không deadlock** (thứ tự khoá cố định, §06.4.3) |
 | Zether epoch | anvil + contract thật | Trì hoãn tx quá `epoch_deadline_block`; phải cancel, không được speed-up |
 | Batch griefing | Foundry | Item có `gasLimit` sát trần → `batch: gas grief` revert, không phải item cuối im lặng fail |
 | **Chain private 9000** | chain thật | Dò `pending_nonce_accurate` (§06.1.6); xác nhận adapter phát **legacy tx**, không phải type-2; xác nhận `base_fee_next_block()` không được gọi |
 | Odoo constraint | Odoo test + SQL | `SELECT conname FROM pg_constraint WHERE conrelid LIKE 'blockchain_%'` phải có đủ các UNIQUE/CHECK đã khai |
 
-Kiểm tra cuối cùng, bắt buộc, không thể bỏ: **chạy pool trên testnet Gnosis (Chiado) liên tục 72 giờ với fault injection ngẫu nhiên** (kill worker, ngắt Redis, chậm RPC, base fee spike giả lập). Chỉ số nghiệm thu: `relay_signed_orphan_total == 0` và `nonce_gap_age` p99 < 120s.
+Kiểm tra cuối cùng, bắt buộc, không thể bỏ: **chạy pool trên testnet Gnosis (Chiado) liên tục 72 giờ với fault injection ngẫu nhiên** (kill tiến trình node, chậm RPC, base fee spike giả lập, ngắt làn custody). Chỉ số nghiệm thu: `relay_signed_orphan_total == 0` và `nonce_gap_age` p99 < 120s.
 
 ---
 
@@ -1395,7 +1411,7 @@ Kiểm tra cuối cùng, bắt buộc, không thể bỏ: **chạy pool trên te
 | 27 | Pool khoá ký | Xem sharding K EOA là "chỉ giải head-of-line blocking" | Head-of-line blocking **là** trần thông lượng cứng của EVM. Batch giải nút chữ ký, pool khoá giải nút nonce — hai nút khác nhau, cần cả hai (§06.6 mục 2) |
 | 28 | `blockchain.relayer.account` | Không có khái niệm "N khoá của một relayer" | Thêm `relayer_id`. Thiếu nó, cap per-relayer (§05.7), lottery (§05.4.4) và đối soát gas (§05.8.3) đều đếm một relayer thành N |
 | 29 | Xoay khoá 30 ngày | Một thủ tục bảo trì | Với pool 50 khoá là **một khoá rời pool mỗi ~14 giờ** → phải tự động hoàn toàn, cần đệm `N+2` khoá, và `draining` phải rời ZSET chọn khoá |
-| 30 | Custody | Hai tầng: HSM (treasury) / enclave (relayer hot) | Ba tầng — thêm **khoá file** cho node mesh cá nhân. Chấp nhận được **chỉ vì** ba ràng buộc của §21.5 (float nhỏ, không phải `feeRecipient`, không role nào) |
+| 30 | Custody | Hai tầng: HSM (treasury) / enclave (relayer hot) | Ba tầng — thêm **khoá file** cho node mesh cá nhân. Chấp nhận được **chỉ vì** ba ràng buộc của `_USER-DECISIONS.md` §21.5 (float nhỏ, không phải `feeRecipient`, không role nào) |
 | 31 | Chain private | Giả định Besu QBFT, gasLimit 200M, block 2s, finality 1 block | **Nethermind + Clique, một signer, 16,7M gas, block 5s, chạy trước London** (§01.1.16). Không EIP-1559 → không type-2 tx, không `base_fee`, không spike breaker. Clique **không** có instant finality |
 | 32 | `mode` bitmask | `MODE_RESTRICT_RELAYER`, `MODE_OPEN` | Bitmask bị loại (`_USER-DECISIONS.md` §5). Wildcard `relayer == address(0)`, và đó **là điều kiện để pool khoá tồn tại** (§06.1.8) |
 | 33 | Alert | Năm alert page người | Sáu — thêm `relay_key_pool_available == 0`. Mất hết khoá là mất dịch vụ, và nó xảy ra âm thầm vì mỗi khoá kẹt lẻ chỉ là một ticket |

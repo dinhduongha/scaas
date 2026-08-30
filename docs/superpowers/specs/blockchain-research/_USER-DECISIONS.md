@@ -3,6 +3,32 @@
 Chốt trong phiên brainstorming 2026-08-30. **Đây là nguồn có thẩm quyền cao nhất**,
 cao hơn `blockchain.md` và cao hơn mọi suy đoán của agent. Không tranh luận lại.
 
+
+---
+
+## 0. Cách đọc tham chiếu `§` — BẢNG TRA
+
+Bộ tài liệu này trộn hai kiểu đánh số và trước đây không nói ra ở đâu cả. Bảng tra:
+
+| Viết `§...` | Là file nào | Ví dụ |
+|---|---|---|
+| `§00`–`§16` | file spec cùng số: `00-CANON.md` … `16-decomposition-roadmap.md` | `§06.1` = mục 6.1 trong `06-relay-pool-enterprise.md` |
+| `§1.x` … `§16.x` (một chữ số đầu) | vẫn là file spec đó | `§3.5.4` = `03-zether-crypto.md` mục 3.5.4 |
+| **`§17`–`§23`** | **`_USER-DECISIONS.md`** (file này) — nó tiếp tục dãy số sau 16 | `§21.2` = mục 21.2 **trong file này** |
+| `§C…` | `00-CANON.md`, phần đánh số canon | `§C5.1` = canon mục C5.1 |
+| `D1`–`D17` | bảng quyết định cần người chốt, ở `00-CANON.md` cuối file | `D8` = dòng D8 của bảng đó |
+| `locked #1`–`#9` | chín quyết định user khoá, ở `§1`–`§9` của file này | `locked #5` = §5 file này |
+| `A1`–`A13` | bảng đối thủ ở `12-threat-model.md` §12.0.3 | `A5` = kẻ chiếm app server |
+| `P01`–`P23`, `S0`–`S9`, `M0` | sub-project / spike / milestone ở `16-decomposition-roadmap.md` | `P10` = Zether core Rust |
+
+**Chỗ dễ nhầm nhất, và là lý do bảng này tồn tại:** `§21`, `§22`, `§23` **không** phải file
+`21-*.md` — không có file nào như thế. Chúng nằm trong `_USER-DECISIONS.md`, và chúng tiếp
+dãy số sau `16-decomposition-roadmap.md` vì chúng là quyết định ra sau khi 16 section đã viết xong.
+
+**Quy ước khi viết mới:** tham chiếu sang file khác thì **ghi tên file**, ví dụ
+`_USER-DECISIONS.md §21.2` hoặc `06-relay-pool-enterprise.md §06.1`. Chỉ dùng `§` trần khi
+tham chiếu trong cùng một file.
+
 ## 1. Phạm vi và định hướng
 
 | | |
@@ -1310,41 +1336,58 @@ sẽ đẩy qua đẩy lại một intent cho tới khi nó hết hạn. Đây l
 nó có bẫy định tuyến — gossipsub v1.1 lo phần chống lụt, không lo phần vòng lặp ở tầng
 ứng dụng.
 
-### 21.2 Hai bản cài đặt song song
+### 21.2 Một bản cài đặt của ta, và một hợp đồng cho người ngoài
 
-| | A — Rust standalone | B — Odoo addon |
+> **[SỬA §23.8]** Bản đầu của mục này chốt **hai** bản cài đặt song song — A Rust standalone và B Odoo
+> addon. §23.3 gộp tầng daemon thành một binary Rust, và điều đó xoá lý do tồn tại của B. Viết lại.
+
+| | **Node** — `bamboo-node` (Rust) | **Control plane** — addon Odoo |
 |---|---|---|
+| Là gì | tiến trình mạng: gateway, mesh, pool, submit, indexer | ERP quyết định chi tiền và đọc kết quả |
 | Phụ thuộc | **không có Odoo, không có addon** | chạy trong Odoo |
-| Đối tượng | ai cũng chạy được — mesh là mở, và phần lớn thế giới không dùng Odoo | bản triển khai DMS vốn đã có Odoo, không muốn thêm một daemon |
-| Bề mặt | API node↔node + **RPC API cho client** (web, desktop, wallet) | như trên, qua RPC surface của Odoo (§6 của `CLAUDE.md`: `call_kw` + `/json/2`) |
+| Đối tượng | ai cũng chạy được — mesh là mở, và phần lớn thế giới không dùng Odoo | bản triển khai DMS |
+| Giao tiếp với nhau | outbox Postgres một chiều vào, bảng kết quả một chiều ra (§22.9) | như bên trái |
+| Có gossip không | **có** | **không** |
+| Có giữ pool không | **có** | **không** |
+| Có ký vỏ tx không | có — xin làn custody ký bằng `authKey` | **không** |
 
-Lý do có hai bản là chính đáng và không phải trùng lặp: bản A tồn tại để mạng **mở
-thật** — nếu chạy relayer đòi cài Odoo thì "mở cho toàn thế giới" là khẩu hiệu. Bản B
-tồn tại vì một site DMS đã có Odoo, có cron, có ACL, có nơi lưu khoá, và bắt họ vận
-hành thêm một tiến trình Rust là chi phí không đổi lấy gì.
+Lý do bản đầu đưa ra cho B — *"một site DMS đã có Odoo, bắt họ vận hành thêm một tiến trình Rust là chi
+phí không đổi lấy gì"* — đúng khi lựa chọn là "thêm bốn daemon hai ngôn ngữ". Sau §23.3 lựa chọn là
+**một binary tĩnh**, và cái giá của việc giữ B thì không hề giảm: hai bản cài đặt của cùng một giao thức
+gossip là đúng chỗ lỗi bất đồng thuận sinh ra (§21.3). Một site DMS chạy `bamboo-node` như chạy bất kỳ
+daemon nào khác — nginx, redis, postgres đã có sẵn ở đó rồi.
+
+Điều **không** đổi: mạng vẫn mở thật. Bất kỳ ai cũng chạy được node mà không cần Odoo — đó vẫn là điều
+kiện để "mở cho toàn thế giới" không phải khẩu hiệu.
 
 ### 21.3 Hệ quả nặng nhất: giao thức phải có SPEC, không chỉ có code
 
-Hai bản cài đặt của cùng một giao thức gossip là **đúng chỗ mà lỗi bất đồng thuận
-sinh ra**. Node A chấp nhận một intent mà node B từ chối, hoặc hai bên tính `intent_id`
-lệch nhau một byte, là mạng chia đôi âm thầm.
+> **[SỬA §23.8]** Kết luận của mục này giữ nguyên; **lý do đổi, và lý do mới mạnh hơn.**
 
-Nên thứ tự phải là: **spec trước, hai bản cài đặt sau** — không phải viết bản Rust rồi
-coi nó là spec. Ba thứ bắt buộc:
+Bản đầu lập luận: ta viết hai bản cài đặt, nên phải có spec để chúng không lệch nhau. Sau §23.8 ta chỉ
+viết một bản — nhưng spec **vẫn bắt buộc**, vì lý do tốt hơn: **mạng là mở, nên người lạ sẽ viết bản của
+họ.** Node A chấp nhận một intent mà node B từ chối, hoặc hai bên tính `intent_id` lệch nhau một byte, là
+mạng chia đôi âm thầm — và ta không kiểm soát được node B là ai.
 
-1. **Wire format cố định bằng văn bản**: encoding của intent, cách tính `intent_id`,
-   digest EIP-712, topic name, và thứ tự byte. Một bảng, không phải một struct Rust.
-2. **Bộ vector tuân thủ (conformance vectors)** dùng chung: N intent mẫu kèm
-   `intent_id` và digest kỳ vọng. Cả hai bản cài đặt phải chạy đúng bộ này trong CI.
-   Đây là thứ rẻ nhất chặn được drift, và thiếu nó thì hai bản sẽ lệch trong vòng vài
-   tháng mà không ai biết cho tới lúc có tiền thật.
-3. **Test liên thông (interop) A↔B**: một node Rust và một node Odoo trong cùng một
-   mesh, gossip qua lại được, cả hai đều relay được một intent thật.
+Một spec chỉ để ta đồng bộ với chính mình là thứ dễ bị bỏ khi gấp. Một spec là **hợp đồng với người
+ngoài** thì không: bỏ nó nghĩa là mạng mở không mở được.
 
-Điểm này nối với `_REVIEW-01-UPGRADE.md`: relayer **không nằm trên đường tới hạn của
-giai đoạn private** (chain 9000 có `MinGasPrice = 0`, gas miễn phí, không cần relayer
-nào). Nhưng spec giao thức thì nên chốt sớm, vì nó rẻ khi còn trên giấy và đắt khi đã
-có hai bản cài đặt chạy lệch nhau.
+Nên thứ tự vẫn là: **spec trước, code sau** — không phải viết bản Rust rồi coi nó là spec. Ba thứ bắt buộc:
+
+1. **Wire format cố định bằng văn bản**: encoding của intent, cách tính `intent_id`, digest EIP-712,
+   topic name, và thứ tự byte. Một bảng, không phải một struct Rust.
+2. **Bộ vector tuân thủ (conformance vectors)** công bố công khai: N intent mẫu kèm `intent_id` và digest
+   kỳ vọng. Bản cài đặt của ta chạy nó trong CI; **bất kỳ ai viết node cũng chạy được nó** để tự kiểm
+   trước khi vào mesh. Đây là thứ rẻ nhất chặn được drift.
+3. **Test liên thông (interop)**: hai node trong cùng một mesh gossip qua lại được và cùng relay được một
+   intent thật. Với một bản cài đặt, "hai node" là hai tiến trình cùng binary khác cấu hình — vẫn bắt
+   được lỗi wire format, không bắt được lỗi hiểu spec. Lỗi loại sau chỉ lộ ra khi có bản cài đặt thứ hai
+   thật, nên **bộ vector ở mục 2 là thứ duy nhất đứng thay được**, và vì thế nó phải đầy đủ chứ không
+   phải tượng trưng.
+
+Điểm này nối với `_REVIEW-01-UPGRADE.md`: relayer **không nằm trên đường tới hạn của giai đoạn private**
+(chain 9000 có `MinGasPrice = 0`, gas miễn phí, không cần relayer nào). Nhưng spec giao thức thì nên chốt
+sớm, vì nó rẻ khi còn trên giấy và đắt khi đã có node của người khác chạy lệch.
 
 ### 21.4 Node là MA TRẬN NĂNG LỰC, không phải hai mode
 
@@ -1977,65 +2020,155 @@ Cái **không** biến mất, vì nó không đến từ giả định đó:
 - **`max_inflight = 16`** (`txpool.accountslots` của node). Là trần của mạng, không của kiến trúc ta.
 - **Simulation gate.** Là logic, chạy ở đâu cũng được.
 
-### 23.2 `confidential-signer` để làm gì
+### 23.2 `confidential-signer` để làm gì — và vì sao câu hỏi này khó
 
-Nó tồn tại **chỉ vì Zether**, và **chỉ để giữ `x`**.
+Bản §23 đầu tiên trả lời câu này **nhập nhằng**, nên viết lại từ đầu.
 
-`x` là khoá giải mã ElGamal của một tài khoản Zether. Nó cần cho đúng hai việc:
+Nguồn gốc nhập nhằng: cái tên `confidential-signer` đang gánh **hai thứ chẳng liên quan gì nhau**, và
+§07.1 gộp cả hai vào một interface `ICustodyProvider`. Tách ra thì mọi thứ sáng ngay.
 
-1. **Đọc số dư của chính mình.** Số dư trên chuỗi là `(C, D)`; giá trị là `C · D^{-x}`, rồi giải log rời
-   rạc (hoặc mở memo AEAD — §03.2.5, nhanh hơn 50.000 lần, nhưng khoá memo cũng dẫn xuất từ `D^x`).
-2. **Sinh phần sigma của một chứng minh chuyển tiền**: `s = k + c·x mod r`.
+#### Có HAI loại khoá, và chúng không dính gì đến nhau
 
-Ba điều làm nó thành một tiến trình riêng chứ không phải một hàm:
+| | **`authKey`** — khoá ký EVM | **`encKey x`** — khoá Zether |
+|---|---|---|
+| Là gì | scalar secp256k1 | scalar trên bn254 (hoặc Baby Jubjub) |
+| Ký/tính gì | chữ ký ECDSA trên một transaction Ethereum | `D^x` (giải mã ElGamal) và `s = k + c·x` (đáp sigma) |
+| **Của ai** | của **node** — nó là người trả gas | của **chủ tài khoản Zether** — người/pháp nhân giữ tiền |
+| Để làm gì | đẩy một tx lên chuỗi | đọc số dư của **chính mình**; dựng chứng minh chuyển tiền của **chính mình** |
+| HSM/KMS giữ được | **có** — secp256k1 có trong mọi firmware | **không** — không HSM thương mại nào có bn254 (§07.2) |
+| Cần khi nào | **luôn luôn**, kể cả cấu hình META-only | **chỉ khi có Zether** |
+| Mất nó thì sao | mất số dư gas của node đó; xoay khoá là xong (§21.5) | mất tiền **và** lộ toàn bộ lịch sử số dư, không hồi tố được |
+| Trong `ICustodyProvider` | NHÓM A (`sign_digest_secp256k1`, `sign_raw_tx`) | NHÓM B (`zk_mul_by_x`, `zk_response`, `elgamal_decrypt`) |
 
-- **Không HSM thương mại nào giữ được `x`** (§07.2). HSM là signing oracle trên các đường cong có trong
-  firmware đã chứng nhận; bn254 và Baby Jubjub không có OID ở CloudHSM / Cloud KMS / Managed HSM, và
-  không HSM nào expose phép `k + c·x` trên scalar field tuỳ ý. Nên `x` **bắt buộc** nằm trong bộ nhớ của
-  một tiến trình nào đó. Câu hỏi duy nhất là: tiến trình nào.
-- **Không được là tiến trình phân tích byte từ Internet.** Node relayer parse intent của người lạ; §14
-  bắt buộc ba cargo-fuzz target vì *một `panic!` là DoS toàn mạng bằng một gói tin 200 byte*. Một lỗi bộ
-  nhớ trong parser mà cùng address space với `x` là mất sạch mọi tài khoản node đó phục vụ.
-- **Phần chạm `x` rất nhỏ** (§07.2b): 2 phép nhân vô hướng trên điểm công khai + 1 scalar response.
-  `ZetherKeyOracle` **dưới 300 dòng**. Tách một thứ 300 dòng ra khỏi một thứ vài chục nghìn dòng là rẻ,
-  và nó cho phép chạy 300 dòng đó trong enclave có attestation.
+Trong §07.1 chúng nằm chung một Protocol. Đó là lý do sơ đồ §12.0.2 vẽ `relay-pool → confidential-signer`
+và làm người đọc tưởng node relayer cần `x`. **Nó không cần.**
 
-**Hệ quả thực dụng: chưa có Zether thì không có signer.** META v1 (§20, factory + `ERC20MetaTx`) không
-có `x` nào cả — khoá duy nhất là khoá ký tx EVM, và cái đó HSM/KMS giữ được bình thường. Signer chỉ xuất
-hiện khi Zether bật.
+#### Node relayer KHÔNG BAO GIỜ cần `x` — và đó là toàn bộ mô hình bảo mật
+
+Một relayer nhận một intent **đã ký, đã kèm chứng minh** từ người lạ và đẩy nó lên chuỗi. Nó:
+
+- **không giải mã được** số tiền (không có `x` của ai cả),
+- **không dựng được** chứng minh (chứng minh cần `x` của người gửi),
+- **không sửa được** gì (mọi trường nằm trong digest EIP-712 đã ký).
+
+Nếu relayer cần `x` thì Zether vô nghĩa: người relay sẽ đọc được mọi số tiền họ chuyển tiếp. Việc relayer
+mù hoàn toàn về nội dung là **tính chất**, không phải hạn chế.
+
+Nên với vai `submit` của `bamboo-node`, khoá duy nhất nó chạm là `authKey` — và cái đó KMS/HSM giữ được
+bình thường. **Cấu hình META-only không có `x` nào tồn tại trong hệ thống.**
+
+#### Vậy vì sao lại cần `x` ở phía server?
+
+Đúng một lý do: **khi chính công ty là người gửi.**
+
+Người dùng cuối giữ `x` của họ trên thiết bị của họ — điện thoại, passkey, ví. Không có gì phía server.
+Nhưng khi brand trả 300 nhà phân phối từ **ví treasury Zether của chính brand**, không ai bấm điện thoại
+300 lần. ERP quyết định chi, và **một thứ gì đó phía server phải giữ `x` của treasury** để dựng 300
+chứng minh.
+
+Đó là toàn bộ lý do `x` tồn tại ngoài thiết bị người dùng. Nó là bài toán **custody** (§07), không phải
+bài toán **relay** (§06/§21). Hai luồng khác nhau:
+
+```
+Người dùng cuối gửi tiền Zether:
+   thiết bị của họ giữ x  ->  dựng proof trên máy họ  ->  intent đã ký
+   ->  bamboo-node [gateway/mesh]  ->  [submit] ký vỏ tx bằng authKey  ->  chain
+   (không có x nào ở phía server)
+
+Công ty gửi tiền Zether (treasury payout):
+   Odoo quyet dinh chi  ->  outbox
+   ->  custody: dung proof bang x cua treasury   <-- CHO NAY, va chi cho nay
+   ->  intent đã ký  ->  bamboo-node [submit]  ->  chain
+```
+
+#### Vì sao `x` phải ở một tiến trình riêng, không nằm trong `bamboo-node`
+
+Ba lý do, xếp theo sức nặng:
+
+1. **Nó không thuộc về đó.** `x` của treasury là tài sản của pháp nhân, thuộc luồng custody do Odoo điều
+   khiển. `bamboo-node` là hạ tầng mạng; một node relayer thuần (§21.4 vai "pool thuần") không có `x`
+   nào cả và vẫn chạy đúng.
+2. **`bamboo-node` parse byte của người lạ.** §14 bắt buộc ba cargo-fuzz target trên parser intent vì
+   *một `panic!` là DoS toàn mạng bằng một gói tin 200 byte*. Một lỗi bộ nhớ trong parser mà cùng address
+   space với `x` là mất sạch mọi tài khoản mà tiến trình đó phục vụ. Đây là khác biệt giữa "node bị
+   crash" và "treasury bị rút cạn".
+3. **Phần chạm `x` rất nhỏ nên tách rất rẻ.** §07.2b đã đo: chỉ 2 phép nhân vô hướng trên điểm công khai
+   + 1 scalar response. `ZetherKeyOracle` **dưới 300 dòng**, enclave image **< 5.000 dòng kể cả crypto
+   backend**, không I/O ngoài vsock, không parser. Đó là thứ audit được trong một tuần. Prover
+   Bulletproofs (nặng, hàng trăm crate phụ thuộc) chạy **ngoài** enclave vì nó không giữ bí mật về khoá —
+   nó chỉ giữ bí mật về *số tiền*, và đó là một biên khác.
+
+#### Và vì sao nó cũng không nằm trong Odoo
+
+`x` trong tiến trình Odoo nghĩa là A4 (`base.group_system`) đọc được nó. §12.6.1 đã chứng minh
+`base.group_system` = RCE trong tiến trình Odoo: một `ir.actions.server` với `state='code'` chạy Python
+tuỳ ý với mọi biến môi trường và mọi socket của tiến trình đó. Odoo giữ **`signer_ref`** — một handle —
+và không bao giờ giữ vật liệu khoá. CI có grep gate cho việc này (§12.0.2 bất biến 1).
+
+#### Tóm lại
+
+`confidential-signer` = **dịch vụ custody**, không phải một phần của mạng relay. Nó phục vụ hai nhóm
+thao tác rất khác nhau, và chúng nên được gọi bằng hai tên:
+
+| Tên nên dùng | Nội dung | Chạy ở đâu | Ai gọi | Cần khi |
+|---|---|---|---|---|
+| **custody broker** | NHÓM A: `sign_digest_secp256k1`, `sign_raw_tx`, `attest`, vòng đời | tiến trình thường, proxy sang KMS/HSM/MPC | vai `submit` của node (ký vỏ tx) **và** Odoo (thao tác treasury) | luôn luôn |
+| **key oracle** | NHÓM B: `zk_mul_by_x`, `zk_response`, `elgamal_decrypt` | **enclave**, < 300 dòng, chỉ vsock | custody broker, thay mặt Odoo | **chỉ khi Zether bật** |
+
+Câu trả lời một dòng cho câu hỏi của user: **`confidential-signer` giữ khoá; nó không relay gì cả. Phần
+liên quan Zether của nó chỉ tồn tại để công ty tự chi tiền từ ví bảo mật của chính công ty, và nếu chưa
+có Zether thì phần đó không tồn tại.**
 
 ### 23.3 Quyết định: MỘT codebase, MỘT binary, vai chọn bằng config
 
 ```
-bamboo-node --config node.toml          # mặc định: mọi vai trừ signer
-bamboo-node --role=signer --config signer.toml   # cùng binary, chỉ khi Zether bật
+bamboo-node --config node.toml                  # tang relay: gateway/mesh/pool/submit/indexer
+bamboo-node --role=custody --config cust.toml   # tang custody: broker khoa. CUNG binary.
+bamboo-node --role=oracle  --config orac.toml   # trong enclave, CHI khi Zether bat
 ```
 
-Bốn "dịch vụ" cũ trở thành **bốn vai trong một binary**, và chúng nối vào đúng ba trục năng lực của
-§21.4 chứ không phải một danh sách mới:
+Bốn "dịch vụ" cũ của tầng daemon trở thành **năm vai trong một binary**, nối vào đúng ba trục năng lực
+của §21.4 chứ không phải một danh sách mới:
 
-| Vai | Cũ là gì | Trục §21.4 | Bật/tắt bằng |
+| Vai | Cũ là gì | Trục §21.4 | Chạm khoá nào |
 |---|---|---|---|
-| `gateway` | phần RPC của `relay-pool` | ingest | `[gateway] enabled` |
-| `mesh` | `intent-hub` | ingest + pool | `[mesh] enabled` |
-| `pool` | hàng đợi của `relay-pool` | pool `open` \| `private` \| `none` | `[pool] visibility` |
-| `submit` | nonce manager + simulation gate | submit theo `(chain, contract)` | `[submit] chains` |
-| `indexer` | `chain-indexer` | — (mới, §22.8 cần nó) | `[indexer] chains` |
-| `signer` | `confidential-signer` | — | **tiến trình riêng**, xem §23.5 |
+| `gateway` | phần RPC của `relay-pool` | ingest | không |
+| `mesh` | `intent-hub` | ingest + pool | không |
+| `pool` | hàng đợi của `relay-pool` | pool `open` \| `private` \| `none` | không |
+| `submit` | nonce manager + simulation gate | submit theo `(chain, contract)` | **`authKey`** — qua custody broker, không giữ trong tiến trình |
+| `indexer` | `chain-indexer` | — (§22.8 cần nó) | không |
 
-Một binary, không phải một tiến trình bắt buộc: một triển khai lớn vẫn chạy được hai bản sao với vai
-khác nhau (một chỉ `indexer`, một chỉ `submit`) nếu muốn tách tải. Khác biệt với thiết kế cũ là **tách
-tiến trình trở thành lựa chọn vận hành, không phải ràng buộc kiến trúc**, và không có tiến trình nào cần
-một giao thức đồng bộ phân tán để nói chuyện với anh em của nó — chúng nói chuyện qua Postgres, thứ đã có
-transaction thật.
+Và **hai vai ở một làn khác**, không thuộc mạng relay (§23.2):
+
+| Vai | Cũ là gì | Ai gọi | Cần khi |
+|---|---|---|---|
+| `custody` | NHÓM A của `confidential-signer` | vai `submit`, **và** Odoo | luôn luôn |
+| `oracle` | NHÓM B — `ZetherKeyOracle` | `custody`, thay mặt Odoo | **chỉ khi Zether bật** |
+
+Một binary, không phải một tiến trình bắt buộc. Ba làn triển khai:
+
+1. **Làn relay** — `bamboo-node`. Nói chuyện với chuỗi, parse byte của người lạ, **không giữ vật liệu
+   khoá nào**. Muốn ký vỏ tx thì *hỏi* làn custody.
+2. **Làn custody** — `bamboo-node --role=custody`. Giữ/môi giới khoá. NHÓM A đẩy xuống KMS/HSM/MPC.
+   Với cấu hình META-only, làn này mỏng: một lớp bọc quanh KMS cộng cache idempotency.
+3. **Làn oracle** — chỉ tồn tại khi Zether bật, chạy trong enclave, giao diện hai hàm qua vsock.
+
+Một triển khai lớn vẫn chạy được nhiều bản sao của làn 1 với vai khác nhau (một chỉ `indexer`, một chỉ
+`submit`) nếu muốn tách tải. Khác biệt với thiết kế cũ: **tách tiến trình là lựa chọn vận hành, không
+phải ràng buộc kiến trúc**, và không tiến trình nào cần giao thức đồng bộ phân tán để nói chuyện với anh
+em của nó — chúng nói chuyện qua Postgres, thứ đã có transaction thật.
 
 Vì sao Rust cho tất cả, không phải Python cho phần dễ:
 
-- Verifier và prover Zether **phải** là Rust (arkworks/gnark-crypto). Đã có một binary Rust rồi.
+- Verifier và prover Zether **phải** là Rust (arkworks). `ZetherKeyOracle` cũng vậy. Đã có binary Rust rồi.
 - Parser intent là bề mặt tấn công đòi fuzz; Python asyncio không cho gì ở đây mà lấy đi memory safety.
 - Một binary tĩnh dễ pin hash, dễ attest, dễ chạy trong enclave. Bốn tiến trình hai ngôn ngữ thì không.
 - §21.3 đòi conformance vector giữa các bản cài đặt. Một bản cài đặt của ta là một bộ vector ít hơn phải
   giữ đồng bộ.
+
+**Lưu ý về §07:** §07.1 viết `ICustodyProvider` bằng Python (`confidential-signer/custody/base.py`). Sau
+quyết định này nó là Rust, cùng binary, vai `custody`. Ngữ nghĩa của interface giữ nguyên từng hàm — kể
+cả `idem` bắt buộc, `attest(h, nonce32)`, và ranh giới NHÓM A/B/B'. Chỉ ngôn ngữ và cách đóng gói đổi.
 
 ### 23.4 Nguy cơ thật của việc gộp: ranh giới TIN CẬY không được gộp theo
 
@@ -2059,48 +2192,69 @@ Ranh giới phải được dựng lại bằng thứ khác, và có sẵn thứ
 Quy tắc rút ra, và nó nên là một dòng test: **mỗi vai khai báo tập quyền DB của nó, và binary từ chối
 khởi động nếu một vai được cấp quyền ngoài tập đó.** Gộp tiến trình được; gộp quyền thì không.
 
-### 23.5 Ngoại lệ duy nhất: `signer` vẫn là tiến trình riêng, và chỉ khi Zether bật
+### 23.5 Hai ranh giới tiến trình còn lại, và vì sao chỉ còn hai
 
-Cùng codebase, cùng binary, khác tiến trình. Lý do đã nêu ở §23.2: nó ở cùng address space với parser
-intent thì `x` nằm trong tầm với của một lỗi parser.
+Gộp bốn daemon thành một binary **không** có nghĩa gộp mọi thứ vào một tiến trình. Còn đúng hai ranh
+giới, và mỗi cái có một lý do không thể thay bằng cấu hình:
 
-Ranh giới cụ thể:
+**(a) Làn relay ↔ làn custody.** Làn relay parse byte của người lạ; làn custody chạm khoá. Ranh giới này
+tồn tại kể cả khi không có Zether, vì `authKey` của node cũng không nên nằm cùng address space với
+parser. Giao tiếp qua mTLS (hoặc Unix socket nếu cùng máy), và custody **không tin `tenant_uuid` trong
+body** — chỉ tin cái trong client cert (§07.11). Chi phí: một round-trip mỗi lần ký, đã nằm trong ngân
+sách §06.6.
 
-- Giao diện **hẹp và cố định**: `ecdh(D) -> compress(D^x)` và `sigma_response(k, c) -> s`. Không có
-  `decrypt(C, D)` tuỳ ý — đó là một decryption oracle trên `x` (§07.4b).
-- Signer **tự giữ nonce của nó** và **chống replay theo digest** (§12.5.1 mục 2, 3).
-- Triển khai enclave: vai `signer` chạy trong Nitro Enclave / SEV-SNP, giao tiếp **chỉ qua vsock**, và
-  `x` được unwrap bằng KMS có điều kiện trên PCR0. Triển khai tối thiểu (loyalty-only, §07 cấu hình C):
-  cùng máy, Unix socket, `x` wrap bởi KMS — vẫn là tiến trình riêng, vẫn giao diện hẹp.
-- **Không Zether ⇒ không chạy vai này.** Cấu hình META-only không có tiến trình signer nào.
+**(b) Làn custody ↔ làn oracle** — *chỉ khi Zether bật*. Đây là ranh giới enclave:
+
+- Giao diện **hẹp và cố định**: `zk_mul_by_x(points, ctx)`, `zk_nonce_commit(bases, ctx)`,
+  `zk_response(nonce_id, challenge)`. Không có `decrypt(C, D)` tuỳ ý — đó là một decryption oracle trên
+  `x` (§07.4b): `decrypt(C, D)` với `D` do kẻ tấn công chọn trả về log của `C·D^{-x}`, tức một ECDH
+  oracle. `elgamal_decrypt` **bắt buộc** nhận `ChainWitness` chứng minh `(C,D)` là trạng thái thật trên
+  chuỗi.
+- Oracle **tự giữ nonce của nó** và **chống replay theo digest** (§12.5.1 mục 2, 3).
+- Triển khai enclave: Nitro Enclave / SEV-SNP, **chỉ vsock**, `x` unwrap bằng KMS có điều kiện trên PCR0.
+  Triển khai tối thiểu (loyalty-only, §07 cấu hình C): cùng máy, Unix socket, `x` wrap bởi KMS — vẫn là
+  tiến trình riêng, vẫn giao diện hẹp.
+- **Không Zether ⇒ không chạy vai này.** Cấu hình META-only không có tiến trình oracle nào, và không có
+  `x` nào tồn tại trong hệ thống.
+
+Cái **không** còn là ranh giới tiến trình: `indexer` vs `submit`. Chúng ở chung làn relay, và bất biến
+"indexer chỉ ghi ba bảng của nó" chuyển sang DB role (§23.4).
 
 ### 23.6 Sơ đồ sau khi sửa
 
 ```
 +-------------------------------------------------------------------------+
 |  Odoo 19  —  dms_blockchain (+ _bridge / _account / _payment)           |
-|  Control plane. Không khoá, không RPC ra chain trong transaction.       |
-+---------------------------------+---------------------------------------+
-                                  |  outbox trong Postgres
-                                  |  (SELECT ... FOR UPDATE SKIP LOCKED)
-+---------------------------------v---------------------------------------+
-|  bamboo-node  (MỘT binary Rust)                                          |
-|                                                                          |
-|   [gateway]   RPC cho client  ──┐                                        |
-|   [mesh]      libp2p gossipsub ─┼─> máy trạng thái §22.1                 |
-|   [pool]      open / private  ──┤                                        |
-|   [submit]    key pool §21.5, nonce in-process + journal Postgres        |
-|   [indexer]   multi-RPC quorum, finality gate, nuôi cache nonce §22.3    |
-|                                                                          |
-|   Hai connection Postgres, hai DB role. Không Redis. Không Lua.          |
-+---------------------------------+---------------------------------------+
-                                  |  vsock / unix socket, giao diện 2 hàm
-                                  |  CHỈ TỒN TẠI KHI ZETHER BẬT
-+---------------------------------v---------------------------------------+
-|  bamboo-node --role=signer   (cùng binary, trong enclave nếu có)        |
-|  ZetherKeyOracle < 300 dòng. Giữ x. Không parse gì từ Internet.         |
-+-------------------------------------------------------------------------+
+|  Control plane. Giu signer_ref, KHONG giu vat lieu khoa.                |
+|  Khong goi RPC ra chain trong transaction.                              |
++------------------+---------------------------------+--------------------+
+                   | outbox (Postgres,               | mTLS
+                   |  FOR UPDATE SKIP LOCKED)        | (thao tac treasury)
+                   v                                 v
++----------------------------------------+  +----------------------------------+
+|  LAN RELAY   bamboo-node               |  |  LAN CUSTODY                     |
+|                                        |  |  bamboo-node --role=custody      |
+|   [gateway]  RPC cho client            |  |                                  |
+|   [mesh]     libp2p gossipsub          |  |  NHOM A: sign_digest_secp256k1,  |
+|   [pool]     open / private            |  |          sign_raw_tx, attest     |
+|   [submit]   key pool §21.5,           |--|-> ky vo tx bang authKey          |
+|              nonce in-process          |mTLS|  -> KMS / HSM / MPC             |
+|   [indexer]  multi-RPC, finality gate  |  |                                  |
+|                                        |  |  Khong parse byte tu Internet.   |
+|  Parse byte cua NGUOI LA. Fuzz target. |  +---------------+------------------+
+|  KHONG giu vat lieu khoa nao.          |                  | vsock
+|  Hai connection PG, hai DB role.       |                  | CHI KHI ZETHER BAT
+|  Khong Redis. Khong Lua.               |                  v
++----------------------------------------+  +----------------------------------+
+                                             |  LAN ORACLE (trong enclave)      |
+                                             |  bamboo-node --role=oracle       |
+                                             |  ZetherKeyOracle < 300 dong      |
+                                             |  Giu x. Ba ham. Khong parser.    |
+                                             +----------------------------------+
 ```
+
+Đọc sơ đồ theo một câu: **byte của người lạ đi vào làn trái, khoá nằm ở làn phải, và giữa hai làn là một
+giao diện đếm được bằng đầu ngón tay.**
 
 ### 23.7 Cái gì chết trong spec
 
@@ -2110,34 +2264,48 @@ Ranh giới cụ thể:
 |---|---|---|
 | `relay-pool` như một dịch vụ Python | §06 toàn bộ tiêu đề, §08.2b, sơ đồ §12.0.2 | vai `submit` + `pool` trong `bamboo-node` |
 | Redis làm store nonce | §06.1 | bộ nhớ tiến trình + journal Postgres |
-| Lua script nguyên tử | §06.1, §06.6 (velocity limit) | `Mutex` / task sở hữu; velocity limit là một transaction Postgres |
+| Lua script nguyên tử | §06.1.4, §06.4.3 (velocity limit) | task sở hữu duy nhất; velocity limit là một transaction Postgres |
 | Fencing token, ownership lease, consistent hash shard, `gen` | §06.1.3–06.1.5 | — (bài toán không còn) |
 | `intent-hub` như tiến trình riêng | §05.1, §12.0.2 | vai `mesh` |
-| `chain-indexer` như tiến trình riêng | §11, §12.0.2 | vai `indexer`, DB role riêng |
+| `chain-indexer` như tiến trình riêng | §11, §12.0.2 | vai `indexer`, **DB role riêng** |
 | Python asyncio ở tầng daemon | §06, §11 | Rust |
+| `ICustodyProvider` bằng Python | §07.1 | Rust, vai `custody`; **ngữ nghĩa từng hàm giữ nguyên** |
+| Cái tên `confidential-signer` gánh hai việc | §07, §12.0.2 | tách tên: **custody broker** (NHÓM A) và **key oracle** (NHÓM B) — §23.2 |
+| Sơ đồ `relay-pool → confidential-signer` gợi ý node cần `x` | §12.0.2 | node **không bao giờ** cần `x`; nó chỉ xin ký vỏ tx bằng `authKey` |
 | "1 TypeScript Engineer" cho Pod D | §16 §9.2 (và báo cáo AGY chép lại) | Rust engineer |
 
-Cái **giữ nguyên** dù sơ đồ đổi: outbox Postgres là biên duy nhất giữa Odoo và node; Odoo không bao giờ
-gọi HTTP trong transaction; `_set_done` chỉ đến từ Finality Gate; indexer không ghi bảng nghiệp vụ.
+Cái **giữ nguyên** dù sơ đồ đổi: outbox Postgres là biên duy nhất giữa Odoo và làn relay; Odoo không bao
+giờ gọi HTTP trong transaction; `_set_done` chỉ đến từ Finality Gate; indexer không ghi bảng nghiệp vụ;
+Odoo chỉ giữ `signer_ref`, không giữ vật liệu khoá.
 
-### 23.8 Hệ quả cho §21.2 — cần xác nhận
+### 23.8 §21.2 đảo: addon Odoo là control plane, không phải một node
 
-§21.2 chốt **hai bản cài đặt song song**: A Rust standalone, B Odoo addon. Lý do của B là *"một site DMS
-đã có Odoo, bắt họ vận hành thêm một tiến trình Rust là chi phí không đổi lấy gì"*.
+**Đã chốt** (user, 2026-08-31: *"Sửa và viết lại đi"*).
 
-Quyết định này làm lý do đó yếu đi đáng kể: trước là "thêm bốn daemon hai ngôn ngữ", giờ là **một binary
-tĩnh**. Và giữ B nghĩa là hai bản cài đặt của cùng một giao thức gossip — đúng chỗ §21.3 nói lỗi bất đồng
-thuận sinh ra — cho một lợi ích đã teo lại.
+§21.2 chốt hai bản cài đặt song song: A Rust standalone, B Odoo addon. Lý do của B là *"một site DMS đã
+có Odoo, bắt họ vận hành thêm một tiến trình Rust là chi phí không đổi lấy gì"*.
 
-Đề xuất: **bỏ B như một bản cài đặt node; addon Odoo trở thành control plane của node, không phải một
-node.** Spec và conformance vector của §21.3 **vẫn bắt buộc**, nhưng lý do đổi: không phải vì ta viết hai
-bản, mà vì **mạng mở nên người lạ sẽ viết bản của họ**. Đó là lý do mạnh hơn.
+Quyết định §23.3 làm lý do đó hết hiệu lực: trước là "thêm bốn daemon hai ngôn ngữ", giờ là **một binary
+tĩnh**. Và cái giá của việc giữ B thì không đổi: hai bản cài đặt của cùng một giao thức gossip là đúng
+chỗ §21.3 nói lỗi bất đồng thuận sinh ra — node A nhận một intent mà node B từ chối, hoặc hai bên tính
+`intent_id` lệch một byte, là mạng chia đôi âm thầm. Trả cái giá đó cho một lợi ích đã teo lại là sai.
 
-Chưa chốt — đây là đảo một quyết định user đã ra ở §21.2, nên cần user xác nhận.
+Chốt: **addon Odoo là control plane của node, không phải một bản cài đặt node.** Nó quyết định chi tiền,
+ghi outbox, đọc kết quả, giữ ACL và `signer_ref`. Nó không gossip, không giữ pool, không ký vỏ tx.
+
+Spec và conformance vector của §21.3 **vẫn bắt buộc**, nhưng lý do đổi và lý do mới mạnh hơn: không phải
+vì ta viết hai bản, mà vì **mạng mở nên người lạ sẽ viết bản của họ**. Một spec chỉ để tự ta đồng bộ với
+chính mình là thứ dễ bị bỏ; một spec là hợp đồng với người ngoài thì không.
+
+§21.2 đã được viết lại theo quyết định này.
 
 ### 23.9 Nợ kỹ thuật để lại
 
-1. §06 cần một lần viết lại thật, không chỉ một dòng ghi chú. Khoảng một phần ba nội dung của nó nói về
-   một bài toán không còn tồn tại, và để nguyên thì người hiện thực sẽ xây Redis + Lua vì spec bảo thế.
+1. ~~§06 cần một lần viết lại thật~~ — **đã làm**: §06.0 và §06.1 viết lại hoàn toàn, §06.4.3 đổi từ Lua
+   sang transaction Postgres, §06.6.1 đổi theo pool khoá §21.5. Phần còn lại của §06 (bump rule, phân
+   loại L2, chi phí L1 data, sim gate, breaker, multi-RPC, observability, chi phí) nói về **chuỗi**, không
+   về topology tiến trình, nên giữ nguyên.
 2. §12.0.2 phải vẽ lại theo **ranh giới quyền** chứ không theo ranh giới tiến trình, kèm bảng ở §23.4.
+   Và sơ đồ của nó phải bỏ mũi tên `relay-pool → confidential-signer` (§23.2).
 3. Bảng năng lực của §21.4 và bảng vai ở §23.3 phải hợp nhất — hiện là hai cách nói về cùng một cấu hình.
+4. §07.1 phải đổi ngôn ngữ sang Rust và tách tên theo §23.2, giữ nguyên ngữ nghĩa từng hàm.

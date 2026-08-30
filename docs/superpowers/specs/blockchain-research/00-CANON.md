@@ -3,6 +3,10 @@
 Tài liệu này là **xương sống chuẩn tắc** của bộ 16 section. Nó không thay thế
 section nào; nó quyết định điểm nào đúng khi hai section nói khác nhau.
 
+> **Tham chiếu `§` đọc thế nào:** `§00`–`§16` là file spec cùng số; **`§17`–`§23` nằm trong
+> `_USER-DECISIONS.md`** (không có file `21-*.md` nào cả); `§C…` là chính file này. Bảng tra đầy đủ:
+> `_USER-DECISIONS.md` §0.
+
 **Quy tắc ưu tiên (đọc trước khi tranh luận bất cứ điều gì):**
 
 1. Quyết định người dùng đã khoá (locked #1–#9) đứng trên tất cả. Canon không
