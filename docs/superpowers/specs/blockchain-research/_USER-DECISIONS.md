@@ -1593,53 +1593,343 @@ hợp nhất: **cùng một `KeyPool`, hai bối cảnh vận hành** — một 
 một cái khoá trong file cho một node mesh do cá nhân chạy. Interface giống nhau; nơi giữ khoá khác
 nhau, và đó là một tham số cấu hình chứ không phải hai bản cài đặt.
 
-## 22. [CHƯA XỬ LÝ] Vòng đời một meta-tx / Zether tx trong node — danh sách câu hỏi
+## 22. Vòng đời một meta-tx / Zether tx bên trong một node
 
-> **Trạng thái: ghi lại nguyên văn, chưa thiết kế.** User: *"Note những cái này sau khi xong hết các
-> phần đang làm."* Mục này tồn tại để danh sách không bị mất; nội dung đầy đủ sẽ thay thế nó sau khi
-> hoàn tất đợt chuyển dấu tiếng Việt (`09`, `10`, `12`, `15`, `_CRITIQUES`).
+> User, 2026-08-31 — tám câu hỏi, giữ nguyên văn vì chúng là mục lục của mục này:
+>
+> > Sẽ có nhiều câu hỏi xung quanh 1 meta tx và zether:
+> > - Nhận từ đâu: Cổng RPC, queue nội bộ hay từ Node Relay khác.
+> > - Có hợp lệ: Ví dụ nonce bé hơn nonce cuối cùng ⇒ không hợp lệ. (Chain → Contract → Address → Nonce …)
+> > - Có hỗ trợ, hay bị lọc gì không?
+> > - Sau đó thì làm gì? Submit to chain, đưa vào pool, relay to other node .v.v.
+> > - Nếu submit pool thì làm gì: 2 câu hỏi ai được submit và tiền về đâu
+> > - Để trong queue/mempool bao lâu.
+> > - Có monitor network để nếu xử lý xong thì sao? Node khác xử lý thì sao?
+> > - Có ném kết quả vào queue kết quả, hay callback-hook .v.v.
 
-User, 2026-08-31:
+§21.4 mô tả node **có thể là ai** (ma trận vai). §21.5 mô tả node **ký bằng gì** (pool khoá). Mục này
+mô tả cái ở giữa: một intent đi vào node rồi ra khỏi node bằng đường nào. Nó là **spec chung cho cả hai
+bản cài đặt** (§21.3) — Rust standalone và Odoo addon phải cho cùng một kết quả trên cùng một intent,
+và bộ vector kiểm chứng của §21.3 chính là bộ vector cho máy trạng thái này.
 
-> Sẽ có nhiều câu hỏi xung quanh 1 meta tx và zether:
-> - Nhận từ đâu: Cổng RPC, queue nội bộ hay từ Node Relay khác.
-> - Có hợp lệ: Ví dụ nonce bé hơn nonce cuối cùng ⇒ không hợp lệ. (Chain → Contract → Address → Nonce …)
-> - Có hỗ trợ, hay bị lọc gì không?
-> - Sau đó thì làm gì? Submit to chain, đưa vào pool, relay to other node .v.v.
-> - Nếu submit pool thì làm gì: 2 câu hỏi ai được submit và tiền về đâu
-> - Để trong queue/mempool bao lâu.
-> - Có monitor network để nếu xử lý xong thì sao? Node khác xử lý thì sao?
-> - Có ném kết quả vào queue kết quả, hay callback-hook .v.v.
+### 22.1 Một máy trạng thái, và ba cái cũ ánh xạ vào nó thế nào
 
-### Ghi chú định hướng (chưa phải thiết kế)
+Hiện có ba máy trạng thái rời rạc và chồng lấn: intent trên bus (§05.8.1), job broadcast trong pool
+(§06.2.6), và các vai của §21.4. Chúng **không phải ba tầng của một thứ** — chúng là cùng một thứ nhìn
+từ ba chỗ. Hợp nhất:
 
-Đây là **vòng đời đầy đủ của một intent bên trong một node** — thứ mà §21.4 (ma trận vai) và §21.5
-(pool khoá) mới chỉ mô tả từng mảnh rời. Nó sẽ là một máy trạng thái, và nó phải là **spec chung cho
-cả hai bản cài đặt** (§21.3), không phải mô tả một bản.
+```
+                    ┌─────────────────────────────────────────────┐
+   ingest ─────────▶│ RECEIVED  (chưa tin gì, chưa tốn gì)        │
+                    └──────┬──────────────────────────────────────┘
+                           │ hàng rào L0–L2 (§22.3, chỉ CPU cục bộ)
+                    ┌──────▼───────┐                  ┌──────────┐
+                    │  SCREENED    │──── rớt ────────▶│ REJECTED │ (terminal, có mã)
+                    └──────┬───────┘                  └──────────┘
+                           │ tra bảng năng lực (§22.4)
+              ┌────────────┼─────────────┬──────────────────┐
+              ▼            ▼             ▼                  ▼
+        ┌──────────┐ ┌──────────┐ ┌────────────┐    ┌──────────────┐
+        │ POOLED   │ │ POOLED   │ │ FORWARDING │    │ SUBMITTABLE  │
+        │ (open)   │ │ (private)│ │            │    └──────┬───────┘
+        └────┬─────┘ └────┬─────┘ └─────┬──────┘           │ L3–L4 (tốn RPC)
+             │            │             │                  ▼
+             │  promote   │             │           ┌──────────────┐
+             └───after T─▶│             │           │  SIMULATED   │
+                          │             │           └──────┬───────┘
+                          └─────────────┴──────────────────┤ chọn khoá (§21.5)
+                                                           ▼
+                                                    ┌──────────────┐
+                                                    │  BROADCAST   │
+                                                    └──────┬───────┘
+                                                           │
+        ┌──────────────┬───────────────┬───────────────────┼──────────────┐
+        ▼              ▼               ▼                   ▼              ▼
+   ┌─────────┐   ┌───────────┐   ┌───────────┐      ┌────────────┐  ┌──────────┐
+   │ LANDED  │   │ LANDED_   │   │ DROPPED   │      │ SUPERSEDED │  │ EXPIRED  │
+   │ (ta)    │   │ ELSEWHERE │   │ (replace) │      │ (nonce đi) │  │          │
+   └─────────┘   └───────────┘   └───────────┘      └────────────┘  └──────────┘
+```
 
-Những chỗ đã có sẵn nguyên liệu, để khi viết không làm lại từ đầu:
+Ánh xạ với ba máy cũ, để không ai phải đoán:
 
-| Câu hỏi của user | Nguyên liệu đã có |
-|---|---|
-| Nhận từ đâu | §21.4 trục **ingest**; §05.1 hai lớp gateway/mesh; §05.1.2 các route |
-| Có hợp lệ không | §05.5 sáu tầng hàng rào; §06.1.8 hai không gian nonce (EOA và `meta_nonce`) — câu "nonce bé hơn nonce cuối" của user thuộc **`meta_nonce(from, batchId)`**, không phải nonce EOA |
-| Có hỗ trợ / bị lọc | §21.4 ma trận `(chain, contract)`; §06.3.3 `blockchain.target.policy` — hai chỗ này là **cùng một bảng tra**, phải hợp nhất |
-| Sau đó làm gì | §21.4 thuật toán submit-vs-forward; §05.1.0 từ chối thì chuyển tiếp |
-| Ai được submit / tiền về đâu | §21.5 — chính hai câu hỏi này, `relayer` và `feeRecipient` |
-| Ở trong queue bao lâu | §05.2 `expiry` là trần cứng; §21.4 `promote-to-open` sau `T`; §06.3.4 cửa sổ epoch Zether hẹp hơn nhiều |
-| Monitor network, node khác xử lý | §05.4.4 soft-exclusivity + `intent_id` dedup; §05.8.1 state machine |
-| Ném kết quả đi đâu | §05.2 `/receipt`; §06.0.1 `relay_report_batch`; §05.4.4(b) receipt là đầu vào của danh tiếng |
+| Trạng thái ở đây | §05.8.1 (bus) | §06.2.6 (job pool) | Ai sở hữu |
+|---|---|---|---|
+| `RECEIVED` | `published` | — | tầng ingest |
+| `SCREENED` | `validated` | — | tầng ingest |
+| `POOLED(open)` | `open` | — | pool |
+| `POOLED(private)` | — | `held` | pool |
+| `FORWARDING` | `gossiped` | — | mesh |
+| `SUBMITTABLE` / `SIMULATED` | `claimed` | `ready` / `simulated` | submit |
+| `BROADCAST` | `broadcast` | `sent` | submit |
+| `LANDED` | `included` | `mined` | watcher |
+| `LANDED_ELSEWHERE` | — (§05 thiếu) | — (§06 thiếu) | watcher |
+| `SUPERSEDED` | — | `nonce_consumed` | watcher |
+| `EXPIRED` / `REJECTED` | `expired` / `rejected` | `expired` / `dead` | mọi tầng |
 
-**Ba chỗ chưa có nguyên liệu và sẽ phải thiết kế mới:**
+Hai trạng thái **mới, và chúng là lý do phải hợp nhất**: `LANDED_ELSEWHERE` (một node khác đã đưa
+chính intent này lên chuỗi) và `SUPERSEDED` (một tx khác đã tiêu `meta_nonce` này, intent còn nằm đây
+là rác). Cả hai section cũ đều thiếu, và thiếu chúng thì một node mở sẽ đốt gas broadcast những thứ
+chắc chắn revert — xem §22.8.
 
-1. **Một máy trạng thái duy nhất cho intent bên trong node.** Hiện có ba máy trạng thái rời: intent
-   trên bus (§05.8.1), job broadcast trong pool (§06.2.6), và các vai của §21.4. Chúng chồng lấn
-   nhưng không khớp. Cần một bản hợp nhất — hoặc một tuyên bố rõ ràng rằng chúng là ba tầng khác
-   nhau và ánh xạ giữa chúng là gì.
-2. **Kiểm `meta_nonce` ở tầng node trước khi nhận.** §06.1.8 nói relay pool kiểm trước khi broadcast.
-   Một node mesh nên kiểm **sớm hơn** — ngay lúc nhận, trước khi gossip — vì gossip một intent có
-   nonce đã tiêu là lãng phí băng thông của cả mạng. Nhưng nó tốn một `eth_call`, nên không làm được
-   ở tốc độ gossip. Đây là một đánh đổi thật chưa ai cân.
-3. **Giao diện trả kết quả cho người gửi.** Queue kết quả hay callback/webhook là hai mô hình khác
-   nhau, và trên một mạng mở thì "callback về đâu" là một câu hỏi bảo mật (SSRF, và một URL trong
-   intent là một kênh rò rỉ). Chưa có gì về việc này ở bất kỳ section nào.
+### 22.2 Nhận từ đâu: ba cửa, ba mức tin cậy, không trộn
+
+| Cửa | Đường | Xác thực | Mức tin cậy | Rate limit ở đâu |
+|---|---|---|---|---|
+| **A. RPC gateway** | `POST /v1/intents`, hoặc `call_kw`/`json/2` với bản Odoo | JWT (§CLAUDE.md §6) hoặc API key, hoặc **mở** nếu node muốn | Cao khi có JWT, thấp nhất khi mở | nginx `limit_req` theo IP, **không** trong process (§05.5 tầng 0) |
+| **B. Queue nội bộ** | Bảng outbox trong cùng DB, hoặc Redis stream | Không cần — cùng biên tin cậy | Cao nhất; **bỏ qua L0–L1** | không cần |
+| **C. Mesh** | gossipsub v1.1 topic `bamboo/intent/<caip2>/v1` | Chữ ký peer libp2p + peer score | Trung bình, và **giảm dần theo `hop_count`** | peer scoring của gossipsub, cộng trần intent/giây/peer |
+
+Ba quy tắc cứng:
+
+1. **`source` là một trường bất biến trên bản ghi intent**, không phải một biến tạm. Mọi quyết định về
+   sau (có gossip không, có tính vào điểm forward không, có được ưu tiên không) đều tra vào nó.
+2. **Cửa B không bao giờ được lộ ra ngoài process.** Nếu bản Odoo để `_enqueue_intent` thành một method
+   public thì cửa B trở thành cửa A không xác thực. Method phải bắt đầu bằng `_`.
+3. **Intent đến từ cửa C với `hop_count >= MAX_HOPS` (mặc định 4) bị bỏ ngay, không phản hồi.** Đây là
+   biện pháp chống lặp duy nhất rẻ hơn dedup, vì nó không cần trạng thái.
+
+### 22.3 Có hợp lệ không: thang hàng rào xếp theo giá, và chỗ `meta_nonce` thật sự nằm
+
+Nguyên tắc: **kiểm cái miễn phí trước, và không bao giờ để một kiểm tra tốn RPC đứng trên đường gossip.**
+
+| Tầng | Kiểm gì | Giá | Chạy khi nào |
+|---|---|---|---|
+| **L0** | Kích thước, độ dài trường, JSON/CBOR hợp lệ, `chainId` là chain node này biết | ~1 µs | mọi cửa |
+| **L1** | `expiry > now + skew`; `hop_count`; `intent_id` chưa thấy (bloom filter + LRU) | ~1 µs | mọi cửa |
+| **L2** | Digest EIP-712 tính lại và khớp; chữ ký `ecrecover` ra đúng `from`; `mode` nằm trong `MODE_KNOWN_MASK` | ~50 µs | mọi cửa trừ B |
+| **L3** | `meta_nonce(from, batchId)` so với **cache trạng thái chuỗi** | ~0 (đọc cache) | trước khi gossip |
+| **L4** | `meta_nonce` so với `eth_call` thật; số dư; allowance; `isRegistered` cho Zether | 1 RPC round-trip | **chỉ** trước khi submit |
+| **L5** | `eth_estimateGas` / `debug_traceCall` đầy đủ | 1 RPC nặng | chỉ khi node định submit và giá trị vượt ngưỡng |
+
+**Câu hỏi của user — "nonce bé hơn nonce cuối cùng ⇒ không hợp lệ" — thuộc L3/L4, và nó là
+`meta_nonce(from, batchId)` chứ không phải nonce EOA.** Hai không gian nonce hoàn toàn khác nhau
+(§06.1.8): nonce EOA là của **khoá ký của node** và §21.5 quản; `meta_nonce` là của **người ký intent**
+và contract quản. Trộn hai cái là một lớp lỗi riêng.
+
+Đường tra đúng, theo thứ tự user viết (Chain → Contract → Address → Nonce):
+
+```
+key   = (caip2, verifying_contract, from_address, batch_id)
+known = nonce_cache.get(key)          # None nếu chưa từng thấy cặp này
+```
+
+**Đánh đổi mà §22 stub gọi là "chưa ai cân", cân ở đây:**
+
+Kiểm `meta_nonce` bằng `eth_call` ngay lúc nhận thì đúng nhất nhưng không chạy được ở tốc độ gossip —
+một node nhận 500 intent/giây sẽ tạo 500 RPC/giây chỉ để lọc rác. Bỏ hẳn thì node gossip rác cho cả
+mạng. Chốt **ba tầng cache**, và tầng 2 là thứ làm cho nó chạy được:
+
+1. **Cache dương** (`known`): giá trị `meta_nonce` đọc lần cuối cho `key`, kèm block đọc. TTL = 1 block.
+   Reject ngay nếu `intent.nonce < known`. Đây là hàng rào bắt được đa số rác thật.
+2. **Cache suy ra từ chuỗi (tầng quan trọng nhất).** Node đã theo dõi log của các contract nó hỗ trợ
+   (§22.8 cần watcher đó rồi). Mỗi event `MetaTransactionExecuted(from, batchId, nonce)` **tăng cache
+   mà không tốn một RPC nào**. Nghĩa là cache tự cập nhật theo thời gian thực cho mọi cặp đang hoạt
+   động, và `eth_call` chỉ cần cho cặp **chưa từng thấy** — đúng một lần cho mỗi `(from, batchId)` mới.
+3. **Tra lười:** `key` chưa có trong cache thì **không** gọi RPC ở đường gossip. Intent đi tiếp với cờ
+   `nonce_unverified = True`; L4 sẽ tra thật nếu node định submit. Một intent `nonce_unverified` **được
+   forward nhưng không được tính vào điểm forward hữu ích** (§21.4) cho đến khi biết kết quả.
+
+Kết quả định lượng: với cặp `(from, batchId)` hoạt động thường xuyên — tức gần như toàn bộ lưu lượng
+thật — chi phí kiểm nonce ở đường gossip là **một lần tra hash map**. RPC chỉ trả cho người lạ thật sự,
+và một node bị dội bằng `(from, batchId)` ngẫu nhiên sẽ tự bảo vệ bằng chính cờ `nonce_unverified`:
+những intent đó không bao giờ được ưu tiên và rơi ra khi hàng đợi đầy.
+
+`meta_nonce` **lớn hơn** `known` là hợp lệ, không phải lỗi: 2D nonce cho phép nhiều lane, và một lane
+mới bắt đầu ở 0 trong khi lane khác đã ở 40. Chỉ `<` mới là rác. Đây là chỗ dễ viết sai nhất trong cả
+thang hàng rào.
+
+### 22.4 Có hỗ trợ / bị lọc: MỘT bảng tra, không phải hai
+
+§21.4 có ma trận `(chain, contract)` để quyết node làm gì; §06.3.3 có `blockchain.target.policy` để
+quyết pool có nhận việc không. **Hai cái là một bảng tra với hai mục đích, và hiện thực hai lần là bảo
+đảm chúng sẽ lệch nhau.** Hợp nhất thành một bảng, khoá `(caip2, contract_address, selector)` với
+fallback `selector = '*'`:
+
+| Cột | Nghĩa | Ai đọc |
+|---|---|---|
+| `support` | `none` \| `forward_only` \| `full` | §22.5 |
+| `pool_visibility` | `open` \| `private` \| `none` | §22.5, §21.4 |
+| `never_public` | chặn promote-to-open vĩnh viễn | §22.7 |
+| `submit` | node này có khoá và chịu submit cho cặp này không | §22.5 |
+| `max_inner_gas` | trần `innerGasLimit` chấp nhận | L2 |
+| `min_fee` / `fee_recipient_allow` | sàn phí, và có nhận `feeRecipient` lạ không | §22.6 |
+| `requires_simulation` | ép L5 kể cả khi giá trị nhỏ | §22.3 |
+| `calldata_rules` | ràng buộc trên calldata (§04.9) | L2 |
+
+Một dòng `support = 'none'` nghĩa là intent bị **REJECTED có mã**, không phải bị nuốt im lặng: người
+gửi cần biết node này không làm được việc đó để đi tìm node khác. Đây là khác biệt giữa một mạng dùng
+được và một mạng có những lỗ đen im lặng.
+
+**Bảng phải evaluate được TRƯỚC khi simulate** (§21.4 đã đòi). Nghĩa là mọi cột trên đây phải là dữ
+liệu tĩnh, không cột nào được là một hàm gọi ra ngoài.
+
+### 22.5 Sau đó làm gì: submit / pool / forward
+
+Không phải ba lựa chọn loại trừ. Một intent có thể vừa vào pool vừa được forward; cái duy nhất loại
+trừ là submit.
+
+```
+policy = lookup(caip2, contract, selector)
+
+if policy.support == 'none':                      → REJECTED('unsupported')
+if policy.support == 'forward_only':              → FORWARDING (+ POOLED nếu pool_visibility != none)
+
+# support == 'full'
+can_submit = policy.submit
+             and key_pool.has_capacity(caip2)
+             and profitable(intent, policy)       # §22.6
+             and not intent.nonce_unverified
+
+if can_submit and not held_by_someone_else(intent):
+    → SUBMITTABLE
+else:
+    → POOLED(policy.pool_visibility) + FORWARDING
+```
+
+**`held_by_someone_else` là chỗ §21.4 chốt forward-kèm-`exclusive_until` thay vì forward-rồi-đua.** Khi
+một node forward một intent nó cũng định submit, nó gắn `exclusive_until = now + W` vào bản gossip. Node
+nhận thấy `exclusive_until` còn hiệu lực thì **giữ trong pool, không submit** — nhưng vẫn forward tiếp.
+Hết `W` mà chưa `LANDED` thì ai cũng được submit. `W = 3s` trên Gnosis, và **`W = 0` cho Zether**
+(§05.4.4a): một va chạm Zether đốt ~1.79M gas trước khi revert, nên với Zether thì single-flight nghiêm
+ngặt qua pool là bắt buộc chứ không phải soft-exclusivity.
+
+`exclusive_until` **không phải một khoá phân tán** — không có ai cưỡng chế nó. Nó là một tín hiệu lịch
+sự, và một node bỏ qua nó thì bị hạ điểm bởi chính cơ chế điểm của §21.4 (nó sẽ có nhiều
+`BROADCAST → SUPERSEDED` — tức đốt gas mà không land). Đó là cách đúng: động cơ kinh tế, không phải
+consensus.
+
+### 22.6 Nếu vào pool: ai được submit, và tiền về đâu
+
+Đây là hai câu hỏi user tách ra, và §21.5 đã trả lời chúng — nhắc lại ở đây vì đây là chỗ chúng được
+dùng:
+
+**Ai được submit** = trường `relayer` trong struct meta-tx.
+- `relayer == address(0)`: bất kỳ ai. Đây là mặc định của một mạng mở, và là điều kiện để key pool của
+  §21.5 chạy được — node xoay khoá ký tự do vì contract không ghim địa chỉ nào.
+- `relayer == <địa chỉ cụ thể>`: chỉ khoá đó. Node khác thấy intent này thì **forward, không submit**,
+  và nó vẫn được tính điểm forward hữu ích nếu intent sau đó land.
+
+**Tiền về đâu** = trường `feeRecipient`, và nó **độc lập với `relayer`**.
+- Một `feeRecipient` cố định + `relayer = address(0)` là **cấu hình đúng của một relayer xoay khoá**:
+  phí về một ví duy nhất, còn khoá nào ký thì tuỳ node. §21.5 đòi ví thu phí không phải khoá ký, và
+  đây là cách nó được diễn đạt trong struct.
+- `feeRecipient` là địa chỉ của người khác, hoặc `fee = 0`: **hợp lệ và không hiếm.** Relayer có thể
+  được trả bằng hợp đồng dịch vụ, bởi issuer tài trợ, hoặc chính nó là bên hưởng lợi từ giao dịch. Một
+  node không nhận việc này chỉ vì `feeRecipient` khác nó là một node cấu hình hẹp, không phải một node
+  lý trí.
+- `policy.fee_recipient_allow` quyết định node này có nhận hay không, và `/policy` (§21.3) phải công bố
+  nó để người gửi biết trước.
+
+`profitable()` vì thế **không** phải `fee > gas_cost`. Nó là:
+
+```
+profitable(intent, policy) =
+       intent.fee >= policy.min_fee                    # sàn của node, có thể là 0
+   and (intent.fee_recipient in policy.fee_recipient_allow
+        or policy.fee_recipient_allow == '*')
+   and estimated_gas_cost <= policy.gas_budget_remaining()
+```
+
+Một node chạy vì được trả tiền ngoài chuỗi đặt `min_fee = 0` và `fee_recipient_allow = '*'`, và nó vẫn
+là một node đúng.
+
+### 22.7 Ở trong queue bao lâu
+
+Bốn đồng hồ chạy song song. Cái nào hết trước thì thắng.
+
+| Đồng hồ | Giá trị | Nguồn | Hết thì sao |
+|---|---|---|---|
+| `expiry` của chính intent | 60s Zether / 120s call đọc state / 300s ERC-20 / 900s anchor (§04.5) | trong chữ ký | `EXPIRED`, terminal. **Trần cứng, mọi cái dưới đây phải ngắn hơn** |
+| `exclusive_until` | 3s Gnosis, 0 cho Zether | node forward đặt | mở khoá cho node khác submit |
+| `promote_after` | mặc định 300s | `policy` | `POOLED(private) → POOLED(open)`, trừ khi `never_public` |
+| TTL của hàng đợi | `min(expiry, queue_max_age)` | cấu hình node | rơi khỏi hàng đợi, ghi `EXPIRED('queue_pressure')` |
+
+**Không có đồng hồ nào được dài hơn `expiry`.** Giữ một intent quá `expiry` là giữ rác, và nó chiếm chỗ
+của intent thật. Một node giữ đầy intent hết hạn là một node có bug, không phải một node thận trọng.
+
+`never_public` tồn tại cho private pool của một doanh nghiệp: calldata B2B không được đi ra mesh công
+khai sau 300 giây chỉ vì không ai trong pool riêng nhặt được. Hết `expiry` thì nó chết, và đó là hành
+vi đúng — §05.4.5 đã nói bus là một kênh rò rỉ thương mại.
+
+### 22.8 Monitor network: xong rồi thì sao, node khác làm thì sao
+
+Node **phải** có một watcher đọc log của các contract nó hỗ trợ. Watcher này không phải tính năng thêm —
+nó là thứ nuôi cache nonce của §22.3, nên nó đã cần thiết từ trước.
+
+| Sự kiện quan sát được | Intent trong node chuyển sang | Hệ quả |
+|---|---|---|
+| `MetaTransactionExecuted` với đúng `digest` của ta, tx của **ta** | `LANDED` | trả kết quả (§22.9); +1 điểm submit |
+| Cùng `digest`, tx của **người khác** | `LANDED_ELSEWHERE` | trả kết quả; **+1 điểm forward hữu ích** nếu ta đã forward nó |
+| `MetaTransactionExecuted` khác `digest` nhưng **cùng `(from, batchId, nonce)`** | `SUPERSEDED` | huỷ ngay, **không** broadcast; nếu đã broadcast thì tx của ta chắc chắn revert |
+| Không thấy gì, quá `expiry` | `EXPIRED` | trả kết quả với lý do |
+| Đã broadcast, tx biến mất khỏi mempool | `DROPPED` | thử lại **cùng lane** với khoá cùng pool, hoặc trả về pool |
+
+Ba điểm dễ làm sai:
+
+1. **`LANDED_ELSEWHERE` phải huỷ tx của ta nếu ta đã broadcast.** Không huỷ được trên chuỗi, nhưng phải
+   dừng mọi thao tác bump/replace — bump một tx chắc chắn revert là đốt tiền hai lần.
+2. **Dedup theo `digest`, không theo `intent_id`.** `intent_id` do người gửi đặt và hai node có thể thấy
+   hai `intent_id` khác nhau cho cùng một chữ ký. `digest` là thứ contract nhìn thấy, nên nó là danh
+   tính thật của một intent. `intent_id` chỉ dùng cho dedup ở tầng gossip (rẻ hơn, và ở đó sai một chút
+   không sao).
+3. **Điểm forward hữu ích tính ở đây, không ở lúc forward.** §21.4 chốt pool thuần được chấm bằng
+   "intent sau đó land", và đây là chỗ duy nhất biết được điều đó. Không có watcher thì không có cách
+   nào chấm điểm một pool không cầm khoá, và toàn bộ vai "pool thuần" của §21.4 mất động cơ.
+
+### 22.9 Trả kết quả về đâu: queue là mặc định, callback là tuỳ chọn có rào
+
+Hai mô hình, và chúng không thay thế nhau:
+
+**(a) Queue kết quả — mặc định, luôn có.** Mọi intent có một bản ghi kết quả đọc được bằng
+`GET /v1/intents/<digest>`, giữ tối thiểu 24 giờ sau khi terminal. Người gửi poll, hoặc mở
+`GET /v1/intents/<digest>/stream` (SSE). Không có trạng thái nào ở phía node phụ thuộc vào việc người
+gửi có đọc hay không — một người gửi biến mất không để lại gì phải dọn.
+
+Với bản Odoo, queue này **là** một bảng: `blockchain.relay.result`, và bridge đọc nó bằng cron. Không
+có HTTP nào trong transaction (§10.4.11, §15.2.4).
+
+**(b) Callback/webhook — tuỳ chọn, và một URL trong intent thì KHÔNG.**
+
+Đây là câu hỏi bảo mật mà stub đã nêu và nó có một câu trả lời dứt khoát: **node không bao giờ gọi một
+URL lấy từ nội dung intent.** Lý do:
+
+- **SSRF.** Một intent với `callback_url = http://169.254.169.254/latest/meta-data/` biến mọi node trong
+  mạng thành một máy quét metadata cloud của chính nó. Trên một mạng mở, người gửi là người lạ.
+- **Khuếch đại.** Một intent được gossip tới N node, N node cùng gọi một URL: mạng relayer trở thành
+  một công cụ DDoS mà kẻ tấn công không phải trả gì ngoài một chữ ký.
+- **Rò rỉ.** URL nằm trong intent là công khai trên mesh; đặt token vào nó là lộ token.
+
+Chốt: callback **chỉ** cấu hình được ở phía node, cho những người gửi node đó biết:
+
+```
+[[callback]]
+subject      = "did:key:z6Mk..."     # hoặc API key id, hoặc user Odoo
+url          = "https://erp.example.com/hook/relay"
+secret_ref   = "env:CALLBACK_HMAC_ERP"   # KHÔNG phải secret, là con trỏ (§10.8.1)
+allow_hosts  = ["erp.example.com"]
+max_rps      = 5
+```
+
+Và bốn rào bắt buộc: chỉ HTTPS; host phải nằm trong allowlist đã cấu hình; **giải DNS rồi từ chối mọi
+IP private/link-local/loopback** (kiểm sau khi giải, không chỉ kiểm chuỗi — nếu không thì một tên miền
+trỏ về 127.0.0.1 đi lọt); ký payload bằng HMAC với khoá lấy từ `secret_ref`, để bên nhận biết là node
+gọi chứ không phải ai đó.
+
+Callback là **at-least-once và không đáng tin**: nó là một tiện ích, còn queue (a) mới là nguồn sự thật.
+Một node không gọi được callback vẫn phải ghi kết quả vào queue.
+
+### 22.10 Còn phải quyết
+
+1. **`MAX_HOPS` = 4 là con số đặt bừa.** Cần đo trên một mesh thật: đường kính mạng gossipsub với D=8
+   thường là 3–4 hop cho vài trăm node, nhưng nếu mesh phân mảnh theo địa lý thì 4 là quá ngắn.
+2. **`promote_after = 300s` mặc định có đúng cho luồng B2B không?** Với `expiry = 300s` của ERC-20, giá
+   trị này nghĩa là private pool không bao giờ promote kịp. Hoặc hạ xuống ~120s, hoặc thừa nhận rằng
+   promote-to-open chỉ có nghĩa cho intent có `expiry` dài.
+3. **Điểm forward hữu ích chống được sybil đến đâu?** Một node có thể tự gửi intent của chính mình,
+   forward chúng, rồi submit chúng để tự cộng điểm. Chi phí là gas thật, nên không miễn phí — nhưng
+   chưa ai tính tỷ lệ. Cần một mô hình trước khi điểm forward được dùng để phân phối bất cứ thứ gì có
+   giá trị.
+4. **Ai giữ danh sách `subject` cho callback trên một node công cộng?** Nếu là thủ công thì callback chỉ
+   dùng được cho private pool. Nếu tự động (ví dụ chứng minh sở hữu domain) thì đó là một hệ thống danh
+   tính, và nó vượt ra ngoài phạm vi một relayer.
