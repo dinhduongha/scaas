@@ -1,30 +1,36 @@
-## 06. Relay Pool noi bo: nonce manager, gas circuit breaker, simulation gate
+## 06. Relay Pool nội bộ: nonce manager, gas circuit breaker, simulation gate
 
-> **Trang thai ban nay:** ban nhap dau bi ra soat lai theo huong "hostile review". Nhung cho da sua duoc danh dau **[SUA]**; nhung cho la bo sung moi danh dau **[MOI]**. Bay cai sai ky thuat trong chinh ban nhap dau da duoc go, liet ke tap trung o §06.13.
+> **Trạng thái bản này:** bản nháp đầu bị rà soát lại theo hướng "hostile review". Những chỗ đã sửa được đánh dấu **[SỬA]**; những chỗ là bổ sung mới đánh dấu **[MỚI]**. Bảy cái sai kỹ thuật trong chính bản nháp đầu đã được gỡ, liệt kê tập trung ở §06.13.
 >
-> Quy uoc dat ten: prefix model `blockchain.*` (theo chot cua §10.3 — **khong** phai `dms.blockchain.*` nhu §05 dang viet). `dms_blockchain` **khong depend `dms`**.
+> Quy ước đặt tên: prefix model `blockchain.*` (theo chốt của §10.3 — **không** phải `dms.blockchain.*` như §05 đang viết). `dms_blockchain` **không depend `dms`**.
+>
+> **Bản 2 — sau khi user chốt kiến trúc mesh.** `_USER-DECISIONS.md` §21.4 và §21.5 đổi hai thứ trong section này: relay pool nội bộ giờ là **một vai** (gateway / node có submit) trong một ma trận vai, không phải một loại hạ tầng riêng; và `KeyPool` mô tả ở đây **dùng chung** với node mesh do cá nhân chạy — cùng interface, khác nơi giữ khoá. Xem §06.5 và §06.6.
 
 ---
 
-### 06.0. Pham vi, ranh gioi process, va rang buoc standalone
+### 06.0. Phạm vi, ranh giới process, và ràng buộc standalone
 
-Relay Pool noi bo la cum may **ung truoc native gas** cho cac giao dich cua chinh doanh nghiep. No khong phai la Open Relayer Network (§10.1 muc 1 cua note) — Open Relayer la ben thu ba tu quyet dinh loi nhuan; Relay Pool noi bo la ha tang phai co SLA. Hai thu chay song song va **canh tranh cung mot intent**: neu Open Relayer nhat intent truoc, job noi bo phai bi huy sach chu khong phat song trung.
+Relay Pool nội bộ là cụm máy **ứng trước native gas** cho các giao dịch của chính doanh nghiệp. Nó không phải là Open Relayer Network (§10.1 mục 1 của note) — Open Relayer là bên thứ ba tự quyết định lợi nhuận; Relay Pool nội bộ là hạ tầng phải có SLA. Hai thứ chạy song song và **cạnh tranh cùng một intent**: nếu Open Relayer nhặt intent trước, job nội bộ phải bị huỷ sạch chứ không phát sóng trùng.
 
-Quyet dinh kien truc dau tien, va note khong noi ro: **vong lap broadcast KHONG duoc chay trong `ir.cron`.**
+**Cách nói đó đúng ở bản 1 và cần một sắc thái ở bản 2.** Theo ma trận §21.4, "relay pool nội bộ" và "node mesh" không phải hai loại phần mềm — chúng là hai **cấu hình** của cùng một thứ: relay pool là một node có `ingest: http`, `pool: none`, `submit: true`, chạy sau vành đai. Điều đó quan trọng vì nó nói rằng mọi cơ chế trong section này (nonce manager, breaker, simulation gate) **cũng cần cho một node mesh có submit** — chúng không phải đặc quyền của hạ tầng doanh nghiệp.
 
-| Thanh phan | Chay o dau | Ly do |
+Quyết định kiến trúc đầu tiên, và note không nói rõ: **vòng lặp broadcast KHÔNG được chạy trong `ir.cron`.**
+
+| Thành phần | Chạy ở đâu | Lý do |
 |---|---|---|
-| Control plane: chain config, policy, relayer account, job record, audit, breaker state | Odoo 19 addon `dms_blockchain` | Can ACL, record rule, view, multi-company, audit trail |
-| Hot loop: lease nonce, sign, broadcast, watch receipt, replace | Service Python asyncio doc lap `relay-pool` | Odoo worker la sync/blocking, `ir.cron` toi thieu 1 phut va chay trong transaction dai; mot tx bi treo se giu lock hang row |
-| State chia se | Redis (nonce, lease, spend counter, breaker), PostgreSQL (job of record) | Redis cho hot path, Postgres cho su that cuoi cung |
-| Cron Odoo | Chi reconcile + janitor, moi 1-5 phut | XML goi dung mot dong: `model._cron_relay_reconcile()` |
+| Control plane: chain config, policy, relayer account, job record, audit, breaker state | Odoo 19 addon `dms_blockchain` | Cần ACL, record rule, view, multi-company, audit trail |
+| Hot loop: lease nonce, sign, broadcast, watch receipt, replace | Service Python asyncio độc lập `relay-pool` | Odoo worker là sync/blocking, `ir.cron` tối thiểu 1 phút và chạy trong transaction dài; một tx bị treo sẽ giữ lock hàng row |
+| State chia sẻ | Redis (nonce, lease, spend counter, breaker), PostgreSQL (job of record) | Redis cho hot path, Postgres cho sự thật cuối cùng |
+| Cron Odoo | Chỉ reconcile + janitor, mỗi 1–5 phút | XML gọi đúng một dòng: `model._cron_relay_reconcile()` |
 
-Rang buoc standalone (khoa cung): `dms_blockchain` **khong depend `dms`**. Relay Pool khong biet gi ve `dms.trade.settlement` hay `dms.payment.collection`. Job mang mot con tro long leo `origin_model` (Char) + `origin_res_id` (Integer) + `origin_ref` (Char, idempotency key do consumer cap). Khong co Many2one nguoc ve consumer, khong co `ir.model.data` cross-addon.
+Bảng này cũng là lời giải thích kỹ thuật cho việc có **hai bản cài đặt** relayer (`_USER-DECISIONS.md` §21.2): hot loop giữ kết nối dài và chạy không đồng bộ là đúng thứ Odoo prefork không làm được, và đúng thứ Rust làm tốt. Bản Odoo phục vụ control plane; bản Rust phục vụ hot loop. Ranh giới kỹ thuật trùng ranh giới hai bản cài đặt.
 
-Duong dan:
+Ràng buộc standalone (khoá cứng): `dms_blockchain` **không depend `dms`**. Relay Pool không biết gì về `dms.trade.settlement` hay `dms.payment.collection`. Job mang một con trỏ lỏng lẻo `origin_model` (Char) + `origin_res_id` (Integer) + `origin_ref` (Char, idempotency key do consumer cấp). Không có Many2one ngược về consumer, không có `ir.model.data` cross-addon.
+
+Đường dẫn:
 
 ```
-/home/dockers/odoo19/custom-addons/dms_blockchain/       # addon Odoo (control plane)
+custom-addons/dms_blockchain/                    # addon Odoo (control plane)
     models/blockchain_chain.py
     models/blockchain_rpc_endpoint.py
     models/blockchain_relayer_account.py
@@ -33,72 +39,75 @@ Duong dan:
     models/blockchain_breaker_event.py
     models/blockchain_target_policy.py            # [MOI] allowlist theo (address, selector)
     data/ir_cron.xml
-/home/dockers/odoo19/relay-pool/                          # service (hot loop), Python 3.12 + asyncio
+relay-pool/                                       # service (hot loop), Python 3.12 + asyncio
     adapters/evm.py  adapters/sui.py  adapters/soroban.py  adapters/cosmwasm.py
     adapters/ton.py  adapters/hedera.py
     nonce/redis_lease.py   nonce/reconcile.py   nonce/coldstart.py     # [MOI]
     sim/gate.py            breaker/gas.py       signer/client.py
+    keypool/pool.py                                                     # [MOI ban 2] §21.5
     wal/journal.py                                                      # [MOI]
     shard/ownership.py                                                  # [MOI]
     lua/lease_nonce.lua    lua/release_nonce.lua  lua/spend_reserve.lua  # [MOI]
-/home/dockers/odoo19/smartcontracts/                      # ngoai addon, theo quyet dinh da khoa
+smartcontracts/                                   # ngoai addon, theo quyet dinh da khoa
 ```
 
-Dinh danh chain dung **CAIP-2** o moi noi (`eip155:100` = Gnosis, `eip155:42220` = Celo, `sui:mainnet`, `stellar:pubnet`, `cosmos:<chain-id>`, `hedera:mainnet`, `ton:-239`). Ly do: bay tro thanh mot truong `Char` duy nhat chay xuyen 7 he sinh thai, thay vi mot `Integer chain_id` chi dung duoc cho EVM. Tranh dat ten field `chain_id` cho so nguyen EVM — `chain_id` la Many2one toi `blockchain.chain`; so EVM luu tai `blockchain.chain.evm_chain_number`.
+Định danh chain dùng **CAIP-2** ở mọi nơi (`eip155:100` = Gnosis, `eip155:42220` = Celo, `eip155:9000` = chain private, `sui:mainnet`, `stellar:pubnet`, `cosmos:<chain-id>`, `hedera:mainnet`, `ton:-239`). Lý do: bây giờ trở thành một trường `Char` duy nhất chạy xuyên 7 hệ sinh thái, thay vì một `Integer chain_id` chỉ dùng được cho EVM. Tránh đặt tên field `chain_id` cho số nguyên EVM — `chain_id` là Many2one tới `blockchain.chain`; số EVM lưu tại `blockchain.chain.evm_chain_number`.
 
-#### 06.0.1. [MOI] Giao dien Odoo <-> relay worker: phai dinh nghia, khong duoc de mo
+#### 06.0.1. [MỚI] Giao diện Odoo ↔ relay worker: phải định nghĩa, không được để mở
 
-Ban nhap dau noi "Redis Stream consumer group" roi bo do. Do la mot cau chu, khong phai giao dien. Chot:
+Bản nháp đầu nói "Redis Stream consumer group" rồi bỏ đó. Đó là một câu chữ, không phải một giao diện. Chốt:
 
-| Huong | Kenh | Payload | Ai la su that |
+| Hướng | Kênh | Payload | Ai là sự thật |
 |---|---|---|---|
-| Odoo -> worker (dispatch) | Redis Stream `bc:jobs:{caip2}`, consumer group `relay`, mot consumer moi shard | `{job_uuid, caip2, relayer_hint, risk_class, target, calldata_ref, meta_tx_ref, deadline_ms}` | Postgres (`blockchain.relay.job`) la ban goc; Stream chi la thong bao. Worker mat message van tim lai duoc qua reconcile |
-| Worker -> Odoo (status) | HTTP `POST /json/2/blockchain.relay.job/relay_report_batch`, `auth='bearer'` (JWT `bamboo_token_auth`), service account rieng | Mang toi da 200 ban ghi `{job_uuid, state, tx_hash, nonce, gas_used, cost_base_units, error_code, observed_at_ms}` | Odoo la su that cuoi. Ghi bang mot `write()` da record |
-| Worker -> Odoo (khan) | Cung endpoint, `flush=True` | Chi cho `quarantined`, `nonce_desync`, `rpc_divergence` | |
-| Backstop | `ir.cron` 5 phut `model._cron_relay_reconcile()` | Doc Redis + RPC, sua moi job lech | Bat buoc, khong tuy chon |
+| Odoo → worker (dispatch) | Redis Stream `bc:jobs:{caip2}`, consumer group `relay`, một consumer mỗi shard | `{job_uuid, caip2, relayer_hint, risk_class, target, calldata_ref, meta_tx_ref, deadline_ms}` | Postgres (`blockchain.relay.job`) là bản gốc; Stream chỉ là thông báo. Worker mất message vẫn tìm lại được qua reconcile |
+| Worker → Odoo (status) | HTTP `POST /json/2/blockchain.relay.job/relay_report_batch`, `auth='bearer'` (JWT `bamboo_token_auth`), service account riêng | Mảng tối đa 200 bản ghi `{job_uuid, state, tx_hash, nonce, gas_used, cost_base_units, error_code, observed_at_ms}` | Odoo là sự thật cuối. Ghi bằng một `write()` đa record |
+| Worker → Odoo (khẩn) | Cùng endpoint, `flush=True` | Chỉ cho `quarantined`, `nonce_desync`, `rpc_divergence` | |
+| Backstop | `ir.cron` 5 phút `model._cron_relay_reconcile()` | Đọc Redis + RPC, sửa mọi job lệch | Bắt buộc, không tuỳ chọn |
 
-Ly do worker **khong** ghi thang vao Postgres cua Odoo: bo qua ORM la bo qua record rule, `write_date`, mail thread, va moi `@api.constrains`. Chi phi cua duong HTTP: mot round-trip 5-15 ms cho 200 job, tuc **~0.05 ms/job**. Khong dang de doi lay viec pha vo invariant cua ORM.
+Lý do worker **không** ghi thẳng vào Postgres của Odoo: bỏ qua ORM là bỏ qua record rule, `write_date`, mail thread, và mọi `@api.constrains`. Chi phí của đường HTTP: một round-trip 5–15 ms cho 200 job, tức **~0,05 ms/job**. Không đáng để đổi lấy việc phá vỡ invariant của ORM.
 
-Ly do co `_cron_relay_reconcile` du da co callback: callback co the mat (Odoo restart giua deploy, worker OOM). Reconcile la co che dam bao **eventual consistency**; callback chi la toi uu latency. Neu chi co callback, mot lan Odoo down 90 giay se de lai mot dam job "broadcast" vinh vien.
+Lý do có `_cron_relay_reconcile` dù đã có callback: callback có thể mất (Odoo restart giữa deploy, worker OOM). Reconcile là cơ chế đảm bảo **eventual consistency**; callback chỉ là tối ưu latency. Nếu chỉ có callback, một lần Odoo down 90 giây sẽ để lại một đám job "broadcast" vĩnh viễn.
 
-#### 06.0.2. [MOI] Truc `chain_profile`: private lam thay doi nua so co che trong section nay
+#### 06.0.2. [MỚI] Trục `chain_profile`: private làm thay đổi nửa số cơ chế trong section này
 
-Quyet dinh khoa #5 (private chain di truoc cho Zether) khong chi doi chi phi — no doi ca mo hinh loi.
+Quyết định khoá #5 (private chain đi trước cho Zether) không chỉ đổi chi phí — nó đổi cả mô hình lỗi.
 
-| Co che | `chain_profile = 'public'` | `chain_profile = 'private'` (PoA / IBFT / QBFT) |
+| Cơ chế | `chain_profile = 'public'` | `chain_profile = 'private'` (Clique / PoA) |
 |---|---|---|
-| Gas price | Bien dong, phai co spike breaker | Co dinh (thuong 0 hoac 1 wei). **Tat spike breaker** |
-| Velocity limit | Don vi **USD** | Don vi **gas** (khong co gia USD; runaway loop van phai chan) |
-| Mempool eviction | Co, tx bi drop → can re-broadcast | Khong (txpool khong bi ep gia). Trang thai `dropped` gan nhu khong xay ra |
-| Replacement | Speed-up bang fee bump | Fee bump vo nghia. "Treo" = **validator set dang ket** → alarm ha tang, khong phai bump |
-| Block gas limit | Cho truoc (Gnosis ~17M) | **Ta dat**. Day la thu lam Zether kha thi (§06.4) |
-| Finality | Theo bang §11 | 1 block (BFT instant), nhung **van phai qua Finality Gate** — khong duoc bo qua |
-| RPC divergence check | Bat | **Van bat**. Mot validator bi chiem la kich ban de xay ra hon tren mang nho |
-| Reorg | Co | Khong (BFT khong fork), tru khi governance rollback thu cong |
-| MEV / front-run | Co | Khong |
+| Gas price | Biến động, phải có spike breaker | Cố định (`MinGasPrice = 0` trên chain 9000). **Tắt spike breaker** |
+| Velocity limit | Đơn vị **USD** | Đơn vị **gas** (không có giá USD; runaway loop vẫn phải chặn) |
+| Mempool eviction | Có, tx bị drop → cần re-broadcast | Không (txpool không bị ép giá). Trạng thái `dropped` gần như không xảy ra |
+| Replacement | Speed-up bằng fee bump | Fee bump vô nghĩa. "Treo" = **signer đang kẹt** → alarm hạ tầng, không phải bump |
+| Block gas limit | Cho trước (Gnosis ~17M) | **Ta đặt** — nhưng chain 9000 hiện là 16,7M, ngang Gnosis, và nâng được bằng signer vote không cần reset (§01.1.16) |
+| Finality | Theo bảng §11 | **Clique một signer không có finality BFT.** Đừng chép `finality_depth = 1` từ một stack QBFT — xem §01.1.16 |
+| RPC divergence check | Bật | **Vẫn bật**. Một validator bị chiếm là kịch bản dễ xảy ra hơn trên mạng nhỏ |
+| Reorg | Có | Clique có thể reorg ngắn khi signer đổi lượt; không phải "không bao giờ" như BFT |
+| MEV / front-run | Có | Không |
 
-Field: `blockchain.chain.chain_profile = fields.Selection([('public','Public'), ('private','Private/Permissioned')], required=True, default='public')`. Moi doan breaker/replacement duoi day guard bang profile. Khong guard = build mot dau gia gas cho mot mang ba node cua chinh minh.
+**Hai hàng đã sửa so với bản 1**, và cả hai vì bản 1 giả định một stack Besu QBFT không tồn tại. Chain private thật là **Nethermind + Clique, một signer** (§01.1.16). Clique không phải BFT: nó không cho instant finality, và nó có thể reorg ngắn. Viết `finality = 1 block` cho nó là chép nhầm từ một tài liệu khác.
 
-#### 06.0.3. [MOI] Nhung gia dinh ban nhap dau khong noi ra
+Field: `blockchain.chain.chain_profile = fields.Selection([('public','Public'), ('private','Private/Permissioned')], required=True, default='public')`. Mọi đoạn breaker/replacement dưới đây guard bằng profile. Không guard = build một đấu giá gas cho một mạng ba node của chính mình.
 
-Liet ke thang, vi moi cai deu la mot cach he thong hong:
+#### 06.0.3. [MỚI] Những giả định bản nháp đầu không nói ra
 
-1. **Redis duoc coi la su that ve nonce.** Sai. Redis AOF `appendfsync everysec` mat toi 1 giay ghi khi kernel panic; replica async co the roll back khi failover. Neu `next` tut lui, ta cap lai nonce da dung → moi tx sau deu bi `nonce too low`, hoac te hon, cap trung nonce voi mot tx da ky khac. **Chot: chain la su that, Postgres la journal, Redis la cache co the tai tao duoc.** Giao thuc cold start o §06.1.2.
-2. **Mot worker so huu mot relayer account "qua consistent hash".** Consistent hash khong phai la quyen so huu. Khi `N_workers` doi (deploy, OOM, network partition), hai worker cung tuong minh so huu mot shard trong vai giay. Do la split-brain tren nonce. Can **ownership lease co fencing** (§06.1.3).
-3. **`eth_estimateGas` cho ra chi phi.** Sai tren moi L2 rollup: phi L1 data (blob/calldata) **khong** nam trong `gas` cua L2. Bo sot no lam uoc tinh chi phi thap hon thuc te 2-10 lan tren Base/Optimism/Celo-L2 (§06.2.5).
-4. **Tx da ky luon co the re-broadcast.** Sai. Neu base fee da vuot `maxFeePerGas` cua tx da ky, node nhan tx nhung khong bao gio dao no. Do la trang thai `underpriced`, chua thuoc `dropped`, va cach chua la **bump**, khong phai re-broadcast.
-5. **Sim la mien phi.** Tenderly khong mien phi o quy mo nay (§06.3.5). `eth_call` mot tx Zether 6M gas khong mien phi voi nha cung cap RPC va nhieu nha cung cap **cap gas cua `eth_call`** o 10M-50M.
-6. **Ky la mot thao tac.** Voi MPC SaaS, mot vault thuong **serialize** yeu cau ky; song song hoa trong cung mot vault khong tang throughput. Con so 5-30 sign/s la cho ca vault, khong phai cho moi connection.
-7. **Job Postgres co the giu raw tx.** O 100 job/s, 6 KB/job la 52 GB/ngay. Phai co chinh sach luu tru (§06.10.3).
-8. **Gia USD luon co.** Neu oracle gia native token stale, velocity limit tinh sai. Phai co chinh sach fail-closed (§06.4.3).
-9. **Tenant = company.** Chua noi ra. Chot: `company_id` tren job; velocity bucket theo `company_id`; record rule theo `company_ids` cua user.
-10. **Consumer hieu dung "final".** Chua co bang anh xa state → nghia vu tai chinh. Bo sung o §06.2.6.
+Liệt kê thẳng, vì mỗi cái đều là một cách hệ thống hỏng:
+
+1. **Redis được coi là sự thật về nonce.** Sai. Redis AOF `appendfsync everysec` mất tới 1 giây ghi khi kernel panic; replica async có thể roll back khi failover. Nếu `next` tụt lùi, ta cấp lại nonce đã dùng → mọi tx sau đều bị `nonce too low`, hoặc tệ hơn, cấp trùng nonce với một tx đã ký khác. **Chốt: chain là sự thật, Postgres là journal, Redis là cache có thể tái tạo được.** Giao thức cold start ở §06.1.2.
+2. **Một worker sở hữu một relayer account "qua consistent hash".** Consistent hash không phải là quyền sở hữu. Khi `N_workers` đổi (deploy, OOM, network partition), hai worker cùng tưởng mình sở hữu một shard trong vài giây. Đó là split-brain trên nonce. Cần **ownership lease có fencing** (§06.1.3).
+3. **`eth_estimateGas` cho ra chi phí.** Sai trên mọi L2 rollup: phí L1 data (blob/calldata) **không** nằm trong `gas` của L2. Bỏ sót nó làm ước tính chi phí thấp hơn thực tế 2–10 lần trên Base/Optimism/Celo-L2 (§06.2.5).
+4. **Tx đã ký luôn có thể re-broadcast.** Sai. Nếu base fee đã vượt `maxFeePerGas` của tx đã ký, node nhận tx nhưng không bao giờ đào nó. Đó là trạng thái `underpriced`, chưa thuộc `dropped`, và cách chữa là **bump**, không phải re-broadcast.
+5. **Sim là miễn phí.** Tenderly không miễn phí ở quy mô này (§06.3.5). `eth_call` một tx Zether 1,79M gas không miễn phí với nhà cung cấp RPC và nhiều nhà cung cấp **cap gas của `eth_call`** ở 10M–50M.
+6. **Ký là một thao tác.** Với MPC SaaS, một vault thường **serialize** yêu cầu ký; song song hoá trong cùng một vault không tăng throughput. Con số 5–30 sign/s là cho cả vault, không phải cho mỗi connection.
+7. **Job Postgres có thể giữ raw tx.** Ở 100 job/s, 6 KB/job là 52 GB/ngày. Phải có chính sách lưu trữ (§06.10.3).
+8. **Giá USD luôn có.** Nếu oracle giá native token stale, velocity limit tính sai. Phải có chính sách fail-closed (§06.4.3).
+9. **Tenant = company.** Chưa nói ra. Chốt: `company_id` trên job; velocity bucket theo `company_id`; record rule theo `company_ids` của user.
+10. **Consumer hiểu đúng "final".** Chưa có bảng ánh xạ state → nghĩa vụ tài chính. Bổ sung ở §06.2.6.
+11. **[Bản 2] Một relayer account = một khoá.** Sai, và nó là ràng buộc cứng của EVM: nonce tuần tự nghĩa là một tx kẹt chặn toàn bộ hàng đợi phía sau. Một relayer cần **pool khoá** (`_USER-DECISIONS.md` §21.5), và mọi thứ trong §06.1 phải hiểu "relayer" là một `relayer_id` có N khoá, không phải một địa chỉ.
 
 ---
+### 06.1. Nonce manager: tại sao `INCRBY` không đủ
 
-### 06.1. Nonce manager: tai sao `INCRBY` khong du
-
-Note (§10.3 muc 2) viet: *"Duy tri bo dem tang dan bat bien (`INCRBY`) cho tung dia chi Relayer tren tung Chain ID"*. **Sai o mot cho chi mang tinh chat quyet dinh**: `INCR` cap phat, nhung khong ai tra lai. Day la **gap problem**:
+Note (§10.3 mục 2) viết: *"Duy trì bộ đếm tăng dần bất biến (`INCRBY`) cho từng địa chỉ Relayer trên từng Chain ID"*. **Sai ở một chỗ chỉ mang tính chất quyết định**: `INCR` cấp phát, nhưng không ai trả lại. Đây là **gap problem**:
 
 ```
 t0  job A  INCR -> nonce 41   -> sign -> broadcast OK
@@ -106,11 +115,21 @@ t1  job B  INCR -> nonce 42   -> HSM timeout -> job B chet
 t2  job C  INCR -> nonce 43   -> broadcast OK
 ```
 
-Nonce 42 khong bao gio duoc phat song. Tren EVM, tx nonce 43 nam vinh vien trong mempool o trang thai *queued* (khong phai *pending*), khong bao gio duoc dao, va **moi tx sau do cua vi nay deu chet theo**. Mot loi HSM timeout duy nhat lam dong bang toan bo relayer account. Dung tren Cosmos (account sequence), Stellar (sequence number), TON (seqno) voi cung co che.
+Nonce 42 không bao giờ được phát sóng. Trên EVM, tx nonce 43 nằm vĩnh viễn trong mempool ở trạng thái *queued* (không phải *pending*), không bao giờ được đào, và **mọi tx sau đó của ví này đều chết theo**. Một lỗi HSM timeout duy nhất làm đóng băng toàn bộ relayer account. Đúng trên Cosmos (account sequence), Stellar (sequence number), TON (seqno) với cùng cơ chế.
 
-Giai phap: **nonce leasing** — cap phat co thoi han, co tra lai, co freelist.
+Giải pháp: **nonce leasing** — cấp phát có thời hạn, có trả lại, có freelist.
 
-#### 06.1.1. Cau truc Redis
+**Và một giải pháp thứ hai, ở tầng trên, mà bản 1 không có: nhiều khoá** (`_USER-DECISIONS.md` §21.5). Leasing chữa được lỗ thủng *trong* một khoá; nó không chữa được việc một khoá chỉ chạy được ~1 tx/block. Hai cơ chế giải hai bài toán khác nhau và cần cả hai:
+
+| Bài toán | Cơ chế | Mục |
+|---|---|---|
+| Nonce bị cấp rồi không dùng → khoá chết | Nonce leasing + freelist | §06.1 |
+| Một khoá = 1 tx/block → trần thông lượng | Pool N khoá, chọn least-in-flight | §06.5.4 |
+| Một tx kẹt chặn hàng đợi phía sau nó | Replacement (§06.2) **cộng** chuyển job sang khoá khác | cả hai |
+
+Hàng thứ ba là chỗ hai cơ chế gặp nhau: với một khoá, một tx kẹt buộc phải chờ replacement thành công. Với pool khoá, job mới đi sang khoá khác **ngay lập tức** và việc gỡ khoá kẹt trở thành một tác vụ nền chứ không phải một sự cố chặn dịch vụ. Đó là lý do thực dụng nhất để có pool, mạnh hơn cả lý do thông lượng.
+
+#### 06.1.1. Cấu trúc Redis
 
 ```
 bc:n:{caip2}:{addr}:gen         STRING  int   generation, INCR moi lan reseed tu chain (cold start)
@@ -123,13 +142,21 @@ bc:n:{caip2}:{addr}:inflight    ZSET    nonce -> broadcast_ms
 bc:n:{caip2}:{addr}:signed      HASH    nonce -> "{job_uuid}|{tx_hash}"  [MOI] nonce DA co raw tx da ky
 ```
 
-`bc:...:signed` la key quan trong nhat ma ban nhap dau khong co. Xem §06.1.4.
+Khoá `{addr}` ở đây là **một khoá ký cụ thể**, không phải `relayer_id`. Với pool N khoá, có N bộ key này. Cái chung cho cả pool là một ZSET thứ hai:
 
-Cau hinh Redis bat buoc cho namespace `bc:n:*`: `appendonly yes`, `appendfsync always` cho instance nonce (chap nhan ~5-10k ops/s thay vi 100k — ta chi can ~1.5k ops/s o 100 job/s), **khong** bat auto-failover cua Sentinel cho instance nay. Neu Redis chet, relay pool **dung lai** va cold-start lai; do la hanh vi dung. Mot Redis "van chay nhung mat 1 giay ghi" nguy hiem hon mot Redis chet han.
+```
+bc:pool:{caip2}:{relayer_id}    ZSET    addr -> so tx dang inflight   [MOI ban 2]
+```
 
-#### 06.1.2. [MOI] Cold start: giao thuc bat buoc khi Redis trong
+Chọn khoá = `ZRANGEBYSCORE ... LIMIT 0 1` (least-in-flight, §21.5) rồi `ZINCRBY` — một thao tác nguyên tử, không cần Lua. Round-robin **không** dùng được vì nó vẫn gửi vào một khoá đang kẹt.
 
-Day la lo hong lon nhat cua ban nhap dau. `INCR` tren key khong ton tai tra ve 1, tuc nonce 0. Voi mot account dang o nonce 4.128, moi tx sau do bi node tra `nonce too low` va relay pool quay vong vo han.
+`bc:...:signed` là key quan trọng nhất mà bản nháp đầu không có. Xem §06.1.4.
+
+Cấu hình Redis bắt buộc cho namespace `bc:n:*`: `appendonly yes`, `appendfsync always` cho instance nonce (chấp nhận ~5–10k ops/s thay vì 100k — ta chỉ cần ~1,5k ops/s ở 100 job/s), **không** bật auto-failover của Sentinel cho instance này. Nếu Redis chết, relay pool **dừng lại** và cold-start lại; đó là hành vi đúng. Một Redis "vẫn chạy nhưng mất 1 giây ghi" nguy hiểm hơn một Redis chết hẳn.
+
+#### 06.1.2. [MỚI] Cold start: giao thức bắt buộc khi Redis trống
+
+Đây là lỗ hổng lớn nhất của bản nháp đầu. `INCR` trên key không tồn tại trả về 1, tức nonce 0. Với một account đang ở nonce 4.128, mọi tx sau đó bị node trả `nonce too low` và relay pool quay vòng vô hạn.
 
 ```python
 async def cold_start(caip2, addr):
@@ -160,15 +187,17 @@ async def cold_start(caip2, addr):
     await odoo.set_account_state(caip2, addr, 'active')
 ```
 
-Buoc 5 la ly do phai co journal Postgres: chain cho biet nonce cao nhat, no khong cho biet nonce nao *cua ta*. Neu bo journal, ta khong the phan biet "lo thung" voi "tx da ky chua lan truyen".
+Bước 5 là lý do phải có journal Postgres: chain cho biết nonce cao nhất, nó không cho biết nonce nào *của ta*. Nếu bỏ journal, ta không thể phân biệt "lỗ thủng" với "tx đã ký chưa lan truyền".
 
-`gen` la fencing that su: moi lease mang `gen` luc cap; truoc `eth_sendRawTransaction`, worker doc lai `gen`, khac → huy broadcast.
+`gen` là fencing thật sự: mỗi lease mang `gen` lúc cấp; trước `eth_sendRawTransaction`, worker đọc lại `gen`, khác → huỷ broadcast.
 
-#### 06.1.3. [SUA] Quyen so huu shard: ownership lease, khong phai consistent hash
+Với pool khoá, cold start phải chạy cho **từng khoá**, và `bc:pool:*` phải được dựng lại từ tổng inflight của các khoá — không phải đặt về 0. Một pool 50 khoá cold-start bằng 50 lần `eth_getTransactionCount` × 2; ở 5 khoá/s đó là 20 giây trước khi nhận job lại. Chấp nhận được, nhưng phải nằm trong RTO chứ không phải là một bất ngờ.
 
-Ban nhap dau: *"moi relayer account duoc gan cung cho dung mot worker qua consistent hash `hash(caip2+addr) % N_workers`"*. Chua du. Khi `N_workers` doi tu 3 sang 4, gan mot phan tu shard doi chu **ngay lap tuc va khong dong bo** — worker cu chua biet minh mat shard.
+#### 06.1.3. [SỬA] Quyền sở hữu shard: ownership lease, không phải consistent hash
 
-Chot: ownership lease trong Redis, TTL 10s, renew moi 3s.
+Bản nháp đầu: *"mỗi relayer account được gán cứng cho đúng một worker qua consistent hash `hash(caip2+addr) % N_workers`"*. Chưa đủ. Khi `N_workers` đổi từ 3 sang 4, gần một phần tư shard đổi chủ **ngay lập tức và không đồng bộ** — worker cũ chưa biết mình mất shard.
+
+Chốt: ownership lease trong Redis, TTL 10s, renew mỗi 3s.
 
 ```lua
 -- lua/acquire_owner.lua  KEYS: owner, owner_fence   ARGV: worker_id, now_ms, ttl_ms
@@ -186,11 +215,11 @@ redis.call('SET', KEYS[1], ARGV[1]..'|'..f..'|'..(tonumber(ARGV[2])+tonumber(ARG
 return f
 ```
 
-**`owner_fence` chi tang khi doi chu**, khong tang moi lan lease. Ban nhap dau lam nguoc (`local fence = redis.call('INCR', KEYS[4])` trong `lease_nonce.lua`) — voi hai job dong thoi, fence luon doi giua luc lease va luc broadcast, nen kiem tra fence hoac luon fail hoac bi bo qua. Do la mot bug, khong phai mot bao ve.
+**`owner_fence` chỉ tăng khi đổi chủ**, không tăng mỗi lần lease. Bản nháp đầu làm ngược (`local fence = redis.call('INCR', KEYS[4])` trong `lease_nonce.lua`) — với hai job đồng thời, fence luôn đổi giữa lúc lease và lúc broadcast, nên kiểm tra fence hoặc luôn fail hoặc bị bỏ qua. Đó là một bug, không phải một bảo vệ.
 
-Giao thuc mat shard (worker cu): khi renew tra `-1`, worker **dung ngay**, khong broadcast job dang cam, `NACK` tat ca message trong Redis Stream. Job dang o `signed` **khong** duoc tra freelist (§06.1.4) — chu moi se tiep quan qua journal.
+Giao thức mất shard (worker cũ): khi renew trả `-1`, worker **dừng ngay**, không broadcast job đang cầm, `NACK` tất cả message trong Redis Stream. Job đang ở `signed` **không** được trả freelist (§06.1.4) — chủ mới sẽ tiếp quản qua journal.
 
-#### 06.1.4. [SUA] Lua cap lease va ba (bon) duong tra lease
+#### 06.1.4. [SỬA] Lua cấp lease và ba (bốn) đường trả lease
 
 ```lua
 -- lua/lease_nonce.lua
@@ -222,29 +251,32 @@ redis.call('HSET', KEYS[2], nonce,
 return {nonce, tonumber(gen), tonumber(ofence)}
 ```
 
-Ba thu them so voi ban nhap dau, moi thu chan mot kieu hong that:
-- `inflight_full` — backpressure. Geth mac dinh `--txpool.accountslots = 16`: qua 16 tx pending cho mot account, node **im lang bo** cac tx thua. Cap nonce 17 la cap mot nonce chac chan roi vao hu vo. `max_inflight` mac dinh **16**, khong phai mot con so tuy y.
-- `signed_conflict` — khong bao gio cap lai mot nonce da co raw tx da ky.
-- `stale_nonce` — chan hau qua cua Redis reseed sai.
+Ba thứ thêm so với bản nháp đầu, mỗi thứ chặn một kiểu hỏng thật:
 
-`ttl_ms` mac dinh = `3 * block_time + sign_p99 + sim_p99`. **[SUA]** Gnosis: `3*5000 + 800 + 300 = 16.1s`. Ethereum L1: `3*12000 + 800 + 300 = 37.1s` (ban nhap dau ghi 45s — sai so hoc, doi thanh 37s, lam tron 40s).
+- `inflight_full` — backpressure. Geth mặc định `--txpool.accountslots = 16`: quá 16 tx pending cho một account, node **im lặng bỏ** các tx thừa. Cấp nonce 17 là cấp một nonce chắc chắn rơi vào hư vô. `max_inflight` mặc định **16**, không phải một con số tuỳ ý.
 
-Bon duong tra lease:
+  Đây cũng là **trần thông lượng thật của một khoá**, và nó giải thích tại sao pool khoá là bắt buộc chứ không phải tuỳ chọn (§21.5): 16 tx inflight với block time 5 s là ~3 tx/block trong điều kiện lý tưởng, và thực tế an toàn thấp hơn nhiều. Muốn 10 tx/s thì phải nhân số khoá, không có cách nào khác.
+- `signed_conflict` — không bao giờ cấp lại một nonce đã có raw tx đã ký.
+- `stale_nonce` — chặn hậu quả của Redis reseed sai.
 
-| # | Tinh huong | Job da ky chua? | Hanh dong |
+`ttl_ms` mặc định = `3 * block_time + sign_p99 + sim_p99`. **[SỬA]** Gnosis: `3*5000 + 800 + 300 = 16,1s`. Ethereum L1: `3*12000 + 800 + 300 = 37,1s` (bản nháp đầu ghi 45s — sai số học, đổi thành 37s, làm tròn 40s). Chain private 9000 (Clique 5 s): giống Gnosis.
+
+Bốn đường trả lease:
+
+| # | Tình huống | Job đã ký chưa? | Hành động |
 |---|---|---|---|
-| 1 | Broadcast thanh cong | Roi | `HDEL lease`, `ZADD inflight nonce now`, giu nguyen `signed` |
-| 2 | That bai **truoc khi ky** (sim fail, breaker, policy, lease timeout truoc `sign`) | Chua | `ZADD free nonce 0`. Tai su dung ngay. **Day la duong `INCR` khong co** |
-| 3 | That bai **sau khi ky, truoc broadcast** (HSM tra chu ky roi worker chet) | Roi | **KHONG tra freelist.** Ghi `signed[nonce]`, dua job ve `signed_orphan`. Chi thoat bang **replacement** o cung nonce, hoac cho no duoc dao |
-| 4 | Lease het han (worker chet giua chung) | Kiem tra `signed` | Co trong `signed` → nhu (3). Khong co → truy van RPC (`getTransactionCount(pending)` + `eth_getTransactionByHash` neu co hash) → chua len chain thi `ZADD free nonce 0` |
+| 1 | Broadcast thành công | Rồi | `HDEL lease`, `ZADD inflight nonce now`, giữ nguyên `signed` |
+| 2 | Thất bại **trước khi ký** (sim fail, breaker, policy, lease timeout trước `sign`) | Chưa | `ZADD free nonce 0`. Tái sử dụng ngay. **Đây là đường `INCR` không có** |
+| 3 | Thất bại **sau khi ký, trước broadcast** (HSM trả chữ ký rồi worker chết) | Rồi | **KHÔNG trả freelist.** Ghi `signed[nonce]`, đưa job về `signed_orphan`. Chỉ thoát bằng **replacement** ở cùng nonce, hoặc chờ nó được đào |
+| 4 | Lease hết hạn (worker chết giữa chừng) | Kiểm tra `signed` | Có trong `signed` → như (3). Không có → truy vấn RPC (`getTransactionCount(pending)` + `eth_getTransactionByHash` nếu có hash) → chưa lên chain thì `ZADD free nonce 0` |
 
-**[SUA] Duong (3) la sua sai quan trong nhat cua section nay.** Ban nhap dau viet: *"Lease het han → neu chua len chain → `ZADD free nonce 0`"*. Neu raw tx da duoc ky va nam dau do (Redis, WAL, log, mot retry dang ngu), tra nonce ve freelist tao ra **hai tx da ky khac nhau tren cung mot nonce**. Cai nao vao block truoc thi thang. Neu cai thang la cai ta tuong da huy, ta vua thuc thi mot hanh dong nghiep vu da bi huy — chuyen tien khong ai duyet. Do la loi tai chinh, khong phai loi van hanh.
+**[SỬA] Đường (3) là sửa sai quan trọng nhất của section này.** Bản nháp đầu viết: *"Lease hết hạn → nếu chưa lên chain → `ZADD free nonce 0`"*. Nếu raw tx đã được ký và nằm đâu đó (Redis, WAL, log, một retry đang ngủ), trả nonce về freelist tạo ra **hai tx đã ký khác nhau trên cùng một nonce**. Cái nào vào block trước thì thắng. Nếu cái thắng là cái ta tưởng đã huỷ, ta vừa thực thi một hành động nghiệp vụ đã bị huỷ — chuyển tiền không ai duyệt. Đó là lỗi tài chính, không phải lỗi vận hành.
 
-Quy tac tong quat: **mot nonce roi vao trang thai `signed` thi chi con mot duong ra la mot tx duoc dao tai nonce do.** Muon huy, phai *thay the* (§06.2.4), khong duoc *bo qua*.
+Quy tắc tổng quát: **một nonce rơi vào trạng thái `signed` thì chỉ còn một đường ra là một tx được đào tại nonce đó.** Muốn huỷ, phải *thay thế* (§06.2.4), không được *bỏ qua*.
 
-#### 06.1.5. [MOI] Write-ahead: thu tu ghi bat buoc
+#### 06.1.5. [MỚI] Write-ahead: thứ tự ghi bắt buộc
 
-Khong co thu tu nay thi khong the phuc hoi sau crash:
+Không có thứ tự này thì không thể phục hồi sau crash:
 
 ```
 1. Postgres  : job -> 'simulated'                    (co sim_block_height)
@@ -259,33 +291,35 @@ Khong co thu tu nay thi khong the phuc hoi sau crash:
 10. Postgres : job -> 'broadcast'
 ```
 
-Buoc 5 truoc buoc 6 la co y: neu crash giua 5 va 6, reconcile thay `signed[nonce]` khong co job tuong ung → **quarantine account**, bat nguoi xu ly. That bai on ao tot hon that bai im lang. Nguoc lai (6 truoc 5) tao ra mot job "signed" ma nonce manager khong biet, va nonce do co the bi cap lai.
+Bước 5 trước bước 6 là cố ý: nếu crash giữa 5 và 6, reconcile thấy `signed[nonce]` không có job tương ứng → **quarantine account**, bắt người xử lý. Thất bại ồn ào tốt hơn thất bại im lặng. Ngược lại (6 trước 5) tạo ra một job "signed" mà nonce manager không biết, và nonce đó có thể bị cấp lại.
 
-`raw_tx_ref` **khong** phai raw tx. No la key Redis `bc:raw:{job_uuid}` (TTL 24h) + `ir.attachment` tren Garage cho job R3/R4. Ly do o §06.10.3.
+`raw_tx_ref` **không** phải raw tx. Nó là key Redis `bc:raw:{job_uuid}` (TTL 24h) + `ir.attachment` trên Garage cho job R3/R4. Lý do ở §06.10.3.
 
-#### 06.1.6. Reconciliation voi chain
+#### 06.1.6. Reconciliation với chain
 
-Moi `reconcile_interval` (mac dinh 5 block-time, toi thieu 10s):
+Mỗi `reconcile_interval` (mặc định 5 block-time, tối thiểu 10s):
 
 ```python
 latest  = rpc.eth_getTransactionCount(addr, 'latest')    # da dao
 pending = rpc.eth_getTransactionCount(addr, 'pending')   # geth: latest + so tx pending LIEN TUC
 ```
 
-| Dieu kien | Ket luan | Hanh dong |
+| Điều kiện | Kết luận | Hành động |
 |---|---|---|
-| `latest > confirmed` | tx da dao | Cap nhat `confirmed`, xoa `inflight` va `signed` < latest, dong job |
-| **[MOI] `latest < confirmed`** | **reorg** — tx da dao bi dao nguoc | Khong panic. `confirmed = latest`; moi job da bao `mined` nhung chua `final` chuyen ve `reorged`; **khong** cap nhat nguoc `next`. Bao Finality Gate (§11) |
-| `pending == latest` va `inflight` khong rong | mempool da drop tx cua ta | **[SUA]** Truoc khi re-broadcast: so `maxFeePerGas` cua raw tx voi `base_fee_next`. Neu `maxFee < base_fee` → **khong phai dropped, la `underpriced`** → phai bump (§06.2.3), re-broadcast se vo ich |
-| `next > pending` va gap ton tai > `gap_timeout` (60s) | **nonce gap that su** | Phat *gap-filler* (§06.1.7) |
-| `latest > next` | co ai khac dung vi nay | **Alarm P1**, `state=quarantined`, dong bo `next = latest`, **khong** tu dong resume |
-| **[MOI]** `signed[n]` ton tai voi `n < latest` nhung khong co receipt cho `tx_hash` do | tx cua ta bi **thay the boi nguoi khac** o cung nonce | Alarm P1 bao mat: hoac khoa bi lo, hoac co worker ma. Quarantine |
+| `latest > confirmed` | tx đã đào | Cập nhật `confirmed`, xoá `inflight` và `signed` < latest, đóng job |
+| **[MỚI] `latest < confirmed`** | **reorg** — tx đã đào bị đảo ngược | Không panic. `confirmed = latest`; mọi job đã báo `mined` nhưng chưa `final` chuyển về `reorged`; **không** cập nhật ngược `next`. Báo Finality Gate (§11) |
+| `pending == latest` và `inflight` không rỗng | mempool đã drop tx của ta | **[SỬA]** Trước khi re-broadcast: so `maxFeePerGas` của raw tx với `base_fee_next`. Nếu `maxFee < base_fee` → **không phải dropped, là `underpriced`** → phải bump (§06.2.3), re-broadcast sẽ vô ích |
+| `next > pending` và gap tồn tại > `gap_timeout` (60s) | **nonce gap thật sự** | Phát *gap-filler* (§06.1.7) |
+| `latest > next` | có ai khác dùng ví này | **Alarm P1**, `state=quarantined`, đồng bộ `next = latest`, **không** tự động resume |
+| **[MỚI]** `signed[n]` tồn tại với `n < latest` nhưng không có receipt cho `tx_hash` đó | tx của ta bị **thay thế bởi người khác** ở cùng nonce | Alarm P1 bảo mật: hoặc khoá bị lộ, hoặc có worker ma. Quarantine |
 
-`pending` cua geth chi dem chuoi lien tuc tu `latest`; mot nonce thung lam `pending` dung lai ngay do — chinh la tin hieu phat hien gap re nhat, khong can quet mempool. **Canh bao:** khong phai node nao cung the. Erigon va mot so RPC managed tra `pending` = `latest` luon. Adapter phai **do kha nang nay luc khoi dong** (`rpc.capabilities.pending_nonce_accurate`) bang cach gui mot tx test tren testnet hoac so sanh voi `txpool_content` neu co; khong do duoc thi lui ve quet `inflight` theo hash.
+`pending` của geth chỉ đếm chuỗi liên tục từ `latest`; một nonce thủng làm `pending` dừng lại ngay đó — chính là tín hiệu phát hiện gap rẻ nhất, không cần quét mempool. **Cảnh báo:** không phải node nào cũng thế. Erigon và một số RPC managed trả `pending` = `latest` luôn. Adapter phải **dò khả năng này lúc khởi động** (`rpc.capabilities.pending_nonce_accurate`) bằng cách gửi một tx test trên testnet hoặc so sánh với `txpool_content` nếu có; không dò được thì lui về quét `inflight` theo hash.
 
-#### 06.1.7. [MOI] Gap-filler: dinh nghia day du
+Nethermind (chain 9000) chưa được kiểm ở điểm này. Thêm vào danh sách kiểm chứng §06.11: **dò `pending_nonce_accurate` trên chain 9000 trước khi tin nhánh gap-detection.**
 
-Ban nhap dau de mo. Chot:
+#### 06.1.7. [MỚI] Gap-filler: định nghĩa đầy đủ
+
+Bản nháp đầu để mở. Chốt:
 
 ```python
 def gap_filler_tx(addr, nonce, chain, last_known_fee=None):
@@ -299,77 +333,86 @@ def gap_filler_tx(addr, nonce, chain, last_known_fee=None):
             'maxFeePerGas': min(base * 2 + tip, chain.absolute_max_fee_wei)}
 ```
 
-Chi phi: 21.000 gas. Gnosis @ 2 gwei = 0.000042 xDAI. Ai tra? **Overhead cua pool, khong tinh vao tenant** — tenant khong gay ra lo thung. Ghi vao `blockchain.breaker.event(kind='gap_filler')` de theo doi: `gap_filler` tang la trieu chung, khong phai giai phap.
+Chi phí: 21.000 gas. Gnosis @ 2 gwei = 0,000042 xDAI. Ai trả? **Overhead của pool, không tính vào tenant** — tenant không gây ra lỗ thủng. Ghi vào `blockchain.breaker.event(kind='gap_filler')` để theo dõi: `gap_filler` tăng là triệu chứng, không phải giải pháp.
 
-Tren chain khong phai EVM: Cosmos khong the "fill" mot sequence — phai gui mot tx that (vd `MsgSend` 1 uatom cho chinh minh). Stellar: `BumpSequence` operation, dung chinh xac cho viec nay, chi phi 100 stroops. TON: gui external message rong toi wallet. Sui: **khong co gap** (khong co nonce). Hedera: khong co gap (`validStart`).
+Trên chain private 9000, `base_fee_next_block()` **không tồn tại** — chain chạy trước London nên không có EIP-1559 (§01.1.16). Adapter phải lui về legacy `gasPrice`, và với `MinGasPrice = 0` thì gap-filler ở đó miễn phí. Đây là một trong những chỗ mà một hàm gọi thẳng `base_fee_next_block()` sẽ ném lỗi thay vì trả số; phải guard theo capability, không theo `chain_profile`.
 
-#### 06.1.8. Ngu nghia sequence tung chuoi — khong dong nhat
+Trên chain không phải EVM: Cosmos không thể "fill" một sequence — phải gửi một tx thật (vd `MsgSend` 1 uatom cho chính mình). Stellar: `BumpSequence` operation, dùng chính xác cho việc này, chi phí 100 stroops. TON: gửi external message rỗng tới wallet. Sui: **không có gap** (không có nonce). Hedera: không có gap (`validStart`).
 
-| Chuoi | Don vi thu tu | Tx revert co tieu don vi? | Song song trong 1 tai khoan | Cach relay pool xu ly |
+#### 06.1.8. Ngữ nghĩa sequence từng chuỗi — không đồng nhất
+
+| Chuỗi | Đơn vị thứ tự | Tx revert có tiêu đơn vị? | Song song trong 1 tài khoản | Cách relay pool xử lý |
 |---|---|---|---|---|
-| EVM | `nonce` per EOA, tuan tu tuyet doi | Co (revert van dao, van tieu nonce) | Toi da `txpool.accountslots` = **16** pending | Lease + freelist + `signed` set |
-| Cosmos SDK | `account sequence` | Co, neu tx vao block; **khong** neu bi CheckTx tu choi | Khong | Giong EVM; CheckTx fail phai tra lease (duong 2). Luu y `sequence mismatch` la loi CheckTx pho bien nhat |
-| Stellar/Soroban | `sequence number` cua source account | Co, neu vao ledger | Khong | Fee-bump khong doi sequence cua inner tx. Gap-filler = `BumpSequence` |
-| TON | `seqno` trong wallet contract | Co | Khong, **tru Highload Wallet V3** | **[SUA]** Highload V3 dung `query_id` **23 bit = 8.388.608 slot** trong mot cua so `timeout` (mac dinh 128 s, toi da 1300 s) — khong phai "~8k slot" nhu ban nhap dau viet, lech 1000 lan. Highload V3 la lua chon bat buoc cho throughput |
-| SUI | **Khong co nonce.** Thu tu = version cua gas coin va owned object | n/a | Co, neu moi tx dung **gas coin khac nhau** | Quan ly *pool gas coin* (§06.5) |
-| Hedera | `TransactionId = payerAccount + validStart` (nanos) | n/a, duplicate bi tu choi | Co | Cap phat `validStart` doc nhat. **`validStart` phai o qua khu va trong `transactionValidDuration`** (mac dinh 120 s, max 180 s) — dong ho lech > 10 s lam tx bi tu choi hang loat. Bat buoc chronyd/NTP tren relay worker |
-| EIP-1776 meta-tx | `meta_nonce(from, batchId)` — **khong gian nonce THU HAI** | Co | Co, qua `batchId` khac nhau | Xem duoi |
+| EVM | `nonce` per EOA, tuần tự tuyệt đối | Có (revert vẫn đào, vẫn tiêu nonce) | Tối đa `txpool.accountslots` = **16** pending | Lease + freelist + `signed` set |
+| Cosmos SDK | `account sequence` | Có, nếu tx vào block; **không** nếu bị CheckTx từ chối | Không | Giống EVM; CheckTx fail phải trả lease (đường 2). Lưu ý `sequence mismatch` là lỗi CheckTx phổ biến nhất |
+| Stellar/Soroban | `sequence number` của source account | Có, nếu vào ledger | Không | Fee-bump không đổi sequence của inner tx. Gap-filler = `BumpSequence` |
+| TON | `seqno` trong wallet contract | Có | Không, **trừ Highload Wallet V3** | **[SỬA]** Highload V3 dùng `query_id` **23 bit = 8.388.608 slot** trong một cửa sổ `timeout` (mặc định 128 s, tối đa 1300 s) — không phải "~8k slot" như bản nháp đầu viết, lệch 1000 lần. Highload V3 là lựa chọn bắt buộc cho throughput |
+| SUI | **Không có nonce.** Thứ tự = version của gas coin và owned object | n/a | Có, nếu mỗi tx dùng **gas coin khác nhau** | Quản lý *pool gas coin* (§06.5) |
+| Hedera | `TransactionId = payerAccount + validStart` (nanos) | n/a, duplicate bị từ chối | Có | Cấp phát `validStart` độc nhất. **`validStart` phải ở quá khứ và trong `transactionValidDuration`** (mặc định 120 s, max 180 s) — đồng hồ lệch > 10 s làm tx bị từ chối hàng loạt. Bắt buộc chronyd/NTP trên relay worker |
+| EIP-1776 meta-tx | `meta_nonce(from, batchId)` — **không gian nonce THỨ HAI** | Có | Có, qua `batchId` khác nhau | Xem dưới |
 
-**Note gop hai khong gian nonce lam mot.** `meta_nonce(from, batchId)` la nonce cua *nguoi dung* trong contract; nonce EOA la cua *relayer*. Chung doc lap. Relay Pool phai quan ly ca hai:
+Hàng SUI đáng chú ý vì nó là chuỗi duy nhất mà **pool gas coin thay thế hoàn toàn pool khoá**: song song đến từ việc có nhiều gas coin, không từ việc có nhiều địa chỉ. Cùng bài toán (một tài nguyên tuần tự là một nút thắt), khác hình dạng lời giải.
 
-- Nonce relayer EOA: Redis lease nhu tren.
-- `batchNonce`: **khong** do relay pool cap. Client/Agent cap khi ky, vi chu ky phu len no. Relay pool chi **kiem tra truoc khi broadcast**: `meta_nonce(from, batchId) == metaTx.batchNonce`. Neu lech → job ve `stale`, tra ve consumer de ky lai. Khong bao gio sua payload da ky.
-- Head-of-line blocking o tang meta-tx: neu `batchNonce=5` fail vinh vien, 6..n cua cung `batchId` treo. Chinh sach: **moi intent doc lap dung mot `batchId` ngau nhien 128-bit voi `batchNonce=0`**; chi dung chuoi tuan tu khi nghiep vu that su co thu tu (deposit → transfer → settle). Job trong mot `batchId` tuan tu duoc danh dau `chain_group_key`; mot job fail thi ca group ve `blocked` chu khong retry le te.
-- **[MOI] Kiem tra `meta_nonce` phai ghim block.** Doc `meta_nonce` tai block N roi broadcast o N+3, mot tx khac cua cung user co the da tieu no. Ghi `meta_nonce_block` vao job; neu `head - meta_nonce_block > 3` thi doc lai. Tren thuc te goi `meta_nonce` **trong chinh `eth_call` cua sim gate** (mot multicall) de khong ton them round-trip.
+**Note gộp hai không gian nonce làm một.** `meta_nonce(from, batchId)` là nonce của *người dùng* trong contract; nonce EOA là của *relayer*. Chúng độc lập. Relay Pool phải quản lý cả hai:
 
-Loi ich phu cua `MODE_OPEN (0x00)`: chu ky nguoi dung khong rang buoc `relayer`, nen **bat ky EOA nao trong pool cung nop duoc**. Sharding K EOA cho ta K duong ong song song ma khong dong toi payload. Day la loi the that su cua EIP-1776 so voi ERC-2771 (bi rang vao mot TrustedForwarder) trong boi canh relay pool.
+- Nonce relayer EOA: Redis lease như trên.
+- `batchNonce`: **không** do relay pool cấp. Client/Agent cấp khi ký, vì chữ ký phủ lên nó. Relay pool chỉ **kiểm tra trước khi broadcast**: `meta_nonce(from, batchId) == metaTx.batchNonce`. Nếu lệch → job về `stale`, trả về consumer để ký lại. Không bao giờ sửa payload đã ký.
+- Head-of-line blocking ở tầng meta-tx: nếu `batchNonce=5` fail vĩnh viễn, 6..n của cùng `batchId` treo. Chính sách: **mỗi intent độc lập dùng một `batchId` ngẫu nhiên 128-bit với `batchNonce=0`**; chỉ dùng chuỗi tuần tự khi nghiệp vụ thật sự có thứ tự (deposit → transfer → settle). Job trong một `batchId` tuần tự được đánh dấu `chain_group_key`; một job fail thì cả group về `blocked` chứ không retry lẻ tẻ.
+- **[MỚI] Kiểm tra `meta_nonce` phải ghim block.** Đọc `meta_nonce` tại block N rồi broadcast ở N+3, một tx khác của cùng user có thể đã tiêu nó. Ghi `meta_nonce_block` vào job; nếu `head - meta_nonce_block > 3` thì đọc lại. Trên thực tế gọi `meta_nonce` **trong chính `eth_call` của sim gate** (một multicall) để không tốn thêm round-trip.
+
+Lợi ích phụ của wildcard `relayer == address(0)`: chữ ký người dùng không ràng buộc `relayer`, nên **bất kỳ EOA nào trong pool cũng nộp được**. Sharding K EOA cho ta K đường ống song song mà không động tới payload. Đây là lợi thế thật sự của EIP-1776 so với ERC-2771 (bị ràng vào một TrustedForwarder) trong bối cảnh relay pool.
+
+Và nó là **điều kiện kỹ thuật để pool khoá tồn tại** (`_USER-DECISIONS.md` §21.5). Nếu intent nêu tên relayer trong digest, mỗi lần đổi khoá là một lần xin lại chữ ký của mọi người dùng — pool khoá sẽ không khả thi. Hai quyết định được đưa ra vì hai lý do khác nhau (chống cross-mode replay; chống nút thắt nonce) và chúng khớp nhau.
 
 ---
 
-### 06.2. Phat hien va thay the tx treo
+### 06.2. Phát hiện và thay thế tx treo
 
-#### 06.2.1. Nguong "treo" phai tinh bang block, khong bang giay
+#### 06.2.1. Ngưỡng "treo" phải tính bằng block, không bằng giây
 
-Note noi 60 giay. Tren Gnosis (5s/block) do la 12 block — hop ly. Tren Ethereum L1 do la 5 block — qua som, gay bao replacement luc nghen mang va **tu no lam tang chi phi**. Nguong dung:
+Note nói 60 giây. Trên Gnosis (5s/block) đó là 12 block — hợp lý. Trên Ethereum L1 đó là 5 block — quá sớm, gây bão replacement lúc nghẽn mạng và **tự nó làm tăng chi phí**. Ngưỡng đúng:
 
-| Chuoi | `stuck_after_blocks` | Tuong duong | `escalate_every_blocks` | Tran leo thang |
+| Chuỗi | `stuck_after_blocks` | Tương đương | `escalate_every_blocks` | Trần leo thang |
 |---|---|---|---|---|
-| Gnosis xDAI | 12 | 60s | 6 | 8x gia ban dau |
+| Gnosis xDAI | 12 | 60s | 6 | 8x giá ban đầu |
 | Celo (L2, 1s block) | 60 | ~60s | 20 | 4x |
-| Ethereum L1 | 20 | ~4 phut | 10 | 10x |
+| Ethereum L1 | 20 | ~4 phút | 10 | 10x |
 | Polygon PoS | 30 | 60s | 10 | 8x |
-| Base / Optimism (OP Stack) | 120 | ~4 phut | 60 | 3x |
+| Base / Optimism (OP Stack) | 120 | ~4 phút | 60 | 3x |
 | Arbitrum One (Nitro) | n/a — xem §06.2.2 | | | |
-| Chain rieng (PoA/IBFT) | 5 | ~10s | n/a | n/a — bump vo nghia |
+| **Chain private 9000 (Clique)** | 5 | ~25s | n/a | n/a — bump vô nghĩa (`MinGasPrice = 0`) |
 
-#### 06.2.2. [SUA] Phan loai L2 dung: ba nhom, khong phai mot
+Hàng cuối sửa so với bản 1, vốn ghi "chain riêng (PoA/IBFT) | 5 | ~10s". Chain thật là Clique period **5 s**, nên 5 block là ~25 s, không phải 10 s.
 
-Ban nhap dau gop "Arbitrum/Base" lam mot va gan Celo vao nhom L1 co mempool. Ca hai deu sai.
+#### 06.2.2. [SỬA] Phân loại L2 đúng: ba nhóm, không phải một
 
-| Nhom | Chain | Mempool | Replacement co chay khong? | Che do hong that |
+Bản nháp đầu gộp "Arbitrum/Base" làm một và gán Celo vào nhóm L1 có mempool. Cả hai đều sai.
+
+| Nhóm | Chain | Mempool | Replacement có chạy không? | Chế độ hỏng thật |
 |---|---|---|---|---|
-| **A. L1 co mempool cong khai** | Ethereum, Gnosis, Polygon PoS, BSC | Cong khai | Co, `txpool.pricebump` 10% | Tx treo vi underpriced |
-| **B. OP Stack (sequencer + op-geth txpool rieng)** | Base, Optimism, **Celo (tu 03/2025)** | Rieng, khong cong khai | **Co** — op-geth giu nguyen luat pricebump 10% | Sequencer downtime; tx treo hiem |
-| **C. Arbitrum Nitro** | Arbitrum One/Nova | Sequencer FIFO theo thu tu den | **Khong dang tin** — sequencer sap thu tu theo arrival, tx nonce tuong lai bi giu lai; replacement co the duoc chap nhan nhung khong duoc uu tien lai | Sequencer downtime; loi thoat la force-inclusion qua L1 delayed inbox (~24h) |
+| **A. L1 có mempool công khai** | Ethereum, Gnosis, Polygon PoS, BSC | Công khai | Có, `txpool.pricebump` 10% | Tx treo vì underpriced |
+| **B. OP Stack (sequencer + op-geth txpool riêng)** | Base, Optimism, **Celo (từ 03/2025)** | Riêng, không công khai | **Có** — op-geth giữ nguyên luật pricebump 10% | Sequencer downtime; tx treo hiếm |
+| **C. Arbitrum Nitro** | Arbitrum One/Nova | Sequencer FIFO theo thứ tự đến | **Không đáng tin** — sequencer sắp thứ tự theo arrival, tx nonce tương lai bị giữ lại; replacement có thể được chấp nhận nhưng không được ưu tiên lại | Sequencer downtime; lối thoát là force-inclusion qua L1 delayed inbox (~24h) |
 
-He qua thiet ke:
-- Nhom B: giu co che replacement, nhung `stuck_after_blocks` phai lon (block 1-2s, 120 block = 2-4 phut) — bump som tren mot chain co block 1s la dot tien.
-- Nhom C: **khong cai replacement**. Cai **detector sequencer**: `head` khong tang > 60s → breaker `SEQUENCER_DOWN`, dung nhan job moi, giu inflight, khong bump. Them mot health probe rieng `arb_sequencer_feed` (WebSocket feed cua sequencer) vi `eth_blockNumber` van tra ket qua khi sequencer chi ngung *nhan* tx.
-- **Celo da chuyen sang OP Stack thang 3/2025, block time 1s** (dong bo voi cai chinh cua §11). Bang finality trong note (`Celo | 5s | IBFT 2.0 | 1 block`) da loi thoi ca ba cot.
+Hệ quả thiết kế:
 
-#### 06.2.3. [SUA] Luat bump tren EVM — con so 15% cua note can duoc noi ro
+- Nhóm B: giữ cơ chế replacement, nhưng `stuck_after_blocks` phải lớn (block 1–2s, 120 block = 2–4 phút) — bump sớm trên một chain có block 1s là đốt tiền.
+- Nhóm C: **không cài replacement**. Cài **detector sequencer**: `head` không tăng > 60s → breaker `SEQUENCER_DOWN`, dừng nhận job mới, giữ inflight, không bump. Thêm một health probe riêng `arb_sequencer_feed` (WebSocket feed của sequencer) vì `eth_blockNumber` vẫn trả kết quả khi sequencer chỉ ngưng *nhận* tx.
+- **Celo đã chuyển sang OP Stack tháng 3/2025, block time 1s** (đồng bộ với cái chính của §11). Bảng finality trong note (`Celo | 5s | IBFT 2.0 | 1 block`) đã lỗi thời cả ba cột.
 
-Ba con so khac nhau hay bi lan:
+#### 06.2.3. [SỬA] Luật bump trên EVM — con số 15% của note cần được nói rõ
 
-| Con so | La gi | He qua |
+Ba con số khác nhau hay bị lẫn:
+
+| Con số | Là gì | Hệ quả |
 |---|---|---|
-| **10%** | `--txpool.pricebump` mac dinh cua go-ethereum (va op-geth). Tx thay the phai co `maxFeePerGas` **va** `maxPriorityFeePerGas` moi >= cu * 1.10 | Duoi nguong nay node **tu choi im lang** (`replacement transaction underpriced`) |
-| **12.5%** | `BASE_FEE_MAX_CHANGE_DENOMINATOR = 8` — muc base fee co the tang **moi block** | Bump 10% mot lan co the van thua base fee sau 1 block |
-| **15%** | Con so note de xuat | Du de vuot ca hai — nhung chi cho **lan bump dau tien** |
+| **10%** | `--txpool.pricebump` mặc định của go-ethereum (và op-geth). Tx thay thế phải có `maxFeePerGas` **và** `maxPriorityFeePerGas` mới >= cũ × 1,10 | Dưới ngưỡng này node **từ chối im lặng** (`replacement transaction underpriced`) |
+| **12,5%** | `BASE_FEE_MAX_CHANGE_DENOMINATOR = 8` — mức base fee có thể tăng **mỗi block** | Bump 10% một lần có thể vẫn thua base fee sau 1 block |
+| **15%** | Con số note đề xuất | Đủ để vượt cả hai — nhưng chỉ cho **lần bump đầu tiên** |
 
-Sai lam thuc te: bump 15% *mot lan* roi doi. Lan bump thu hai phai >= 1.10 lan **gia da bump**, khong phai gia goc. Va neu mang dang tang base fee 12,5%/block trong 10 block lien tiep (x3,25), mot bump 15% khong bao gio duoi kip.
+Sai lầm thực tế: bump 15% *một lần* rồi đợi. Lần bump thứ hai phải >= 1,10 lần **giá đã bump**, không phải giá gốc. Và nếu mạng đang tăng base fee 12,5%/block trong 10 block liên tiếp (×3,25), một bump 15% không bao giờ đuổi kịp.
 
-**[SUA] Ban nhap dau con hai bug so hoc trong ham `bump()`:** (a) so sanh `tip` voi `cap` cua `max_fee` — nham hai dai luong; (b) nhan float roi truncate co the roi *duoi* nguong `floor(old*110/100)` cua geth. Ban dung:
+**[SỬA] Bản nháp đầu còn hai bug số học trong hàm `bump()`:** (a) so sánh `tip` với `cap` của `max_fee` — nhầm hai đại lượng; (b) nhân float rồi truncate có thể rơi *dưới* ngưỡng `floor(old*110/100)` của geth. Bản đúng:
 
 ```python
 def ceil_bump(x, pct=15):
@@ -387,45 +430,54 @@ def bump(prev_max_fee, prev_tip, attempt, chain):
     return max_fee, tip
 ```
 
-`BumpCeilingReached` khong duoc nuot. Job ve `stuck_at_ceiling`, breaker `GAS_CEILING`, thong bao — vi tu day tro di tx **se treo cho den khi mang re lai hoac ta cancel**, va cancel cung can vuot nguong bump nen cung co the khong lam duoc. Do la mot trang thai that, phai co ten.
+`BumpCeilingReached` không được nuốt. Job về `stuck_at_ceiling`, breaker `GAS_CEILING`, thông báo — vì từ đây trở đi tx **sẽ treo cho đến khi mạng rẻ lại hoặc ta cancel**, và cancel cũng cần vượt ngưỡng bump nên cũng có thể không làm được. Đó là một trạng thái thật, phải có tên.
 
-Bat buoc: bump **ca hai** truong. Bump chi `maxFeePerGas` ma giu `maxPriorityFeePerGas` la loi pho bien nhat, node tu choi va tx cu van treo.
+Với pool khoá, `stuck_at_ceiling` bớt nghiêm trọng một bậc: job **mới** đi sang khoá khác ngay, nên nó là một khoá bị kẹt chứ không phải dịch vụ bị kẹt. Nhưng khoá đó vẫn phải được gỡ, và cho tới lúc đó nó là một khoá chết mang theo số dư gas của nó. Cảnh báo phải nói rõ "1/50 khoá kẹt", không phải "hệ thống bình thường".
 
-Type-2 tx la mac dinh; tren Celo phai phat **CIP-64 (tx type `0x7b`)** de khai `feeCurrency` — ethers.js/web3.py chuan **khong serialize duoc type nay**, adapter Celo phai tu dung va ky RLP. **[MOI]** He qua thu hai it ai noi: `eth_estimateGas` tren Celo **khong** tinh phi quy doi `feeCurrency`; phai cong them `intrinsicGasForFeeCurrency` (hien ~50k gas cho token co adapter, doc tu `FeeCurrencyDirectory`). Bo sot no lam tx bi `out of gas` ngay o khau tru phi.
+Bắt buộc: bump **cả hai** trường. Bump chỉ `maxFeePerGas` mà giữ `maxPriorityFeePerGas` là lỗi phổ biến nhất, node từ chối và tx cũ vẫn treo.
+
+Type-2 tx là mặc định; trên Celo phải phát **CIP-64 (tx type `0x7b`)** để khai `feeCurrency` — ethers.js/web3.py chuẩn **không serialize được type này**, adapter Celo phải tự dựng và ký RLP. **[MỚI]** Hệ quả thứ hai ít ai nói: `eth_estimateGas` trên Celo **không** tính phí quy đổi `feeCurrency`; phải cộng thêm `intrinsicGasForFeeCurrency` (hiện ~50k gas cho token có adapter, đọc từ `FeeCurrencyDirectory`). Bỏ sót nó làm tx bị `out of gas` ngay ở khâu trừ phí.
+
+**Chain private 9000 không có type-2.** Nó chạy trước London, nên tx phải là legacy (type 0) với `gasPrice`, không phải `maxFeePerGas`/`maxPriorityFeePerGas`. Một adapter mặc định type-2 sẽ bị chain từ chối mọi tx. Đây là hệ quả trực tiếp của `TRAPS.md` §"Private chain", và nó phải là một capability flag chứ không phải suy từ `chain_profile` — một chain private khác hoàn toàn có thể có London.
 
 #### 06.2.4. Cancel-by-self-send
 
-Khong ton tai "cancel" tren EVM. Cai goi la cancel chi la mot **replacement re hon**: tx toi chinh minh, `value=0`, `data=0x`, `gas=21000`, cung nonce, phi vuot nguong bump. Dung khi:
-- Job da bi consumer huy, hoac
-- `expiry` cua meta-tx da qua (contract se revert, tra ve tien gas vo ich), hoac
-- Sim gate phat hien target contract vua bi dua vao denylist, hoac
-- **[MOI]** Job Zether qua `epoch_deadline_block` (§06.3.4), hoac
-- **[MOI]** Job o `signed_orphan` (§06.1.4 duong 3) can duoc trung hoa.
+Không tồn tại "cancel" trên EVM. Cái gọi là cancel chỉ là một **replacement rẻ hơn**: tx tới chính mình, `value=0`, `data=0x`, `gas=21000`, cùng nonce, phí vượt ngưỡng bump. Dùng khi:
 
-Chi phi: 21.000 gas. Tren Gnosis o 2 gwei = 0,000042 xDAI (~$0,00004). Tren Ethereum L1 o 30 gwei = 0,00063 ETH. **Dung cancel voi mot tx da co kha nang dao thanh cong** — se tra gia ca hai lan ma khong duoc gi. Quy tac: cancel chi cho tx *chac chan se revert*; con lai thi speed-up.
+- Job đã bị consumer huỷ, hoặc
+- `expiry` của meta-tx đã qua (contract sẽ revert, trả về tiền gas vô ích), hoặc
+- Sim gate phát hiện target contract vừa bị đưa vào denylist, hoặc
+- **[MỚI]** Job Zether quá `epoch_deadline_block` (§06.3.4), hoặc
+- **[MỚI]** Job ở `signed_orphan` (§06.1.4 đường 3) cần được trung hoà.
 
-**[MOI] Cancel co the that bai.** Neu tx goc dang o gia rat cao, cancel phai vuot no 10% — tuc cancel *dat hon* tx goc. Kiem tra truoc: `cancel_cost = 21000 * ceil_bump(prev_max_fee)`. Neu `cancel_cost > value_at_risk` thi **khong cancel**, de tx revert va chi mat gas cua no. Ghi quyet dinh nay vao job (`cancel_declined_reason`).
+Chi phí: 21.000 gas. Trên Gnosis ở 2 gwei = 0,000042 xDAI (~$0,00004). Trên Ethereum L1 ở 30 gwei = 0,00063 ETH. **Đừng cancel với một tx đã có khả năng đào thành công** — sẽ trả giá cả hai lần mà không được gì. Quy tắc: cancel chỉ cho tx *chắc chắn sẽ revert*; còn lại thì speed-up.
 
-#### 06.2.5. [MOI] Chi phi L1 data tren rollup — thanh phan bi bo sot hoan toan
+**[MỚI] Cancel có thể thất bại.** Nếu tx gốc đang ở giá rất cao, cancel phải vượt nó 10% — tức cancel *đắt hơn* tx gốc. Kiểm tra trước: `cancel_cost = 21000 * ceil_bump(prev_max_fee)`. Nếu `cancel_cost > value_at_risk` thì **không cancel**, để tx revert và chỉ mất gas của nó. Ghi quyết định này vào job (`cancel_declined_reason`).
 
-`eth_estimateGas` tren mot L2 tra ve **gas thuc thi L2**. Phi that = `L2_execution_fee + L1_data_fee`. Voi mot tx Zether calldata ~2 KB, phan L1 thuong **chiem 60-90% tong chi phi** tren OP Stack khi L1 dong.
+#### 06.2.5. [MỚI] Chi phí L1 data trên rollup — thành phần bị bỏ sót hoàn toàn
 
-| Chain | Cach lay phi L1 | Ghi chu |
+`eth_estimateGas` trên một L2 trả về **gas thực thi L2**. Phí thật = `L2_execution_fee + L1_data_fee`. Với một tx Zether calldata ~2 KB, phần L1 thường **chiếm 60–90% tổng chi phí** trên OP Stack khi L1 đông.
+
+| Chain | Cách lấy phí L1 | Ghi chú |
 |---|---|---|
-| OP Stack (Base, Optimism, Celo) | Predeploy `GasPriceOracle` tai `0x420000000000000000000000000000000000000F`, goi `getL1Fee(bytes rawTx)` | Tu Ecotone la ham cua `l1BaseFee` + `blobBaseFee`. Phai goi voi **raw tx da RLP**, khong phai calldata |
-| Arbitrum Nitro | `NodeInterface` tai `0x00000000000000000000000000000000000000C8`, `gasEstimateComponents(...)` tra `gasEstimateForL1` | Arbitrum gop phi L1 vao `gas` nhung phan bo dong; dung `gasEstimateComponents` de tach |
-| Gnosis, Polygon, BSC, chain rieng | Khong ap dung | L1 |
+| OP Stack (Base, Optimism, Celo) | Predeploy `GasPriceOracle` tại `0x420000000000000000000000000000000000000F`, gọi `getL1Fee(bytes rawTx)` | Từ Ecotone là hàm của `l1BaseFee` + `blobBaseFee`. Phải gọi với **raw tx đã RLP**, không phải calldata |
+| Arbitrum Nitro | `NodeInterface` tại `0x00000000000000000000000000000000000000C8`, `gasEstimateComponents(...)` trả `gasEstimateForL1` | Arbitrum gộp phí L1 vào `gas` nhưng phân bổ động; dùng `gasEstimateComponents` để tách |
+| Gnosis, Polygon, BSC, chain private 9000 | Không áp dụng | L1 |
 
-Chot: `est_cost_usd` trong velocity limit (§06.4.3) va trong danh gia loi nhuan **phai** goi lop nay. Adapter EVM co `async def estimate_total_fee(raw_tx) -> (l2_gas, l1_fee_wei)`; adapter cho chain L1 tra `l1_fee_wei = 0`.
+Chốt: `est_cost_usd` trong velocity limit (§06.4.3) và trong đánh giá lợi nhuận **phải** gọi lớp này. Adapter EVM có `async def estimate_total_fee(raw_tx) -> (l2_gas, l1_fee_wei)`; adapter cho chain L1 trả `l1_fee_wei = 0`.
 
-Uoc tinh do lon (co so: calldata 2 KB, ~95% byte khac 0):
-- Truoc EIP-4844: `2048 * 16 = 32.768` L1 gas. @ L1 20 gwei, ETH $3k → **$1,97/tx**.
-- Voi blob (Ecotone, blob base fee 1 wei — truong hop thuong): gan **$0,001-0,01/tx**.
-- Khi blob market dong (blobBaseFee tang 100-1000x): **$0,1-1/tx**.
+Ước tính độ lớn (cơ sở: calldata 2 KB, ~95% byte khác 0):
 
-Bien do 1000 lan giua hai che do la ly do breaker tren L2 phai theo doi **blobBaseFee** nhu mot dai luong rieng, khong chi `base_fee` cua L2.
+- Trước EIP-4844: `2048 * 16 = 32.768` L1 gas. @ L1 20 gwei, ETH $3k → **$1,97/tx**.
+- Với blob (Ecotone, blob base fee 1 wei — trường hợp thường): gần **$0,001–0,01/tx**.
+- Khi blob market đông (blobBaseFee tăng 100–1000x): **$0,1–1/tx**.
 
-#### 06.2.6. Trang thai job va nghia vu bao cho consumer
+Biên độ 1000 lần giữa hai chế độ là lý do breaker trên L2 phải theo dõi **blobBaseFee** như một đại lượng riêng, không chỉ `base_fee` của L2.
+
+Với BLS12-381, calldata của proof gấp đôi (điểm 128 B thay vì 64 B — §01.1.12.1), nên toàn bộ cột chi phí L1 ở trên nhân đôi. Trên một rollup lúc blob đông, đó là chênh lệch $0,1 → $0,2/tx cho **cùng một mức bảo mật gas**. Đây là chi phí thật của việc chọn curve mà bảng gas MSM không hiện ra, và nó rơi vào đúng môi trường (rollup) mà L2 vốn được chọn vì rẻ.
+
+#### 06.2.6. Trạng thái job và nghĩa vụ báo cho consumer
+#### 06.2.6. Trạng thái job và nghĩa vụ báo cho consumer
 
 ```
 draft -> simulated -> nonce_leased -> signed -> broadcast
@@ -441,60 +493,66 @@ broadcast/mined -> epoch_expired  (rieng Zether, §06.3.4)
 * -> quarantined  (nonce lech, RPC noi doi, divergence lap lai, signed khong co job)
 ```
 
-**[MOI] Anh xa state → nghia vu tai chinh** (day la cho consumer doc, va la cho `_set_done()` duoc phep chay):
+**[MỚI] Ánh xạ state → nghĩa vụ tài chính** (đây là chỗ consumer đọc, và là chỗ `_set_done()` được phép chạy):
 
-| State | Consumer duoc ket luan gi | Duoc goi `payment.transaction._set_*` khong |
+| State | Consumer được kết luận gì | Được gọi `payment.transaction._set_*` không |
 |---|---|---|
-| `draft` … `signed` | Chua co gi tren chain | Khong |
-| `broadcast` | Da gui. **KHONG phai da thanh toan** | `_set_pending()` |
-| `mined` | Da vao mot block. Van co the bi dao nguoc | `_set_pending()` — **van la pending** |
-| `final` | Qua Finality Gate | `_set_done()` — **trang thai duy nhat** |
-| `reorged` | Da tung `mined`, bi dao nguoc | Giu `_set_pending()`, retry hoac `_set_error()` |
-| `cancelled`, `rejected`, `epoch_expired` | Khong xay ra tren chain | `_set_canceled()` |
-| `quarantined`, `stuck_at_ceiling` | **Khong xac dinh** | Khong goi gi. Nguoi phai vao xem |
+| `draft` … `signed` | Chưa có gì trên chain | Không |
+| `broadcast` | Đã gửi. **KHÔNG phải đã thanh toán** | `_set_pending()` |
+| `mined` | Đã vào một block. Vẫn có thể bị đảo ngược | `_set_pending()` — **vẫn là pending** |
+| `final` | Qua Finality Gate | `_set_done()` — **trạng thái duy nhất** |
+| `reorged` | Đã từng `mined`, bị đảo ngược | Giữ `_set_pending()`, retry hoặc `_set_error()` |
+| `cancelled`, `rejected`, `epoch_expired` | Không xảy ra trên chain | `_set_canceled()` |
+| `quarantined`, `stuck_at_ceiling` | **Không xác định** | Không gọi gì. Người phải vào xem |
 
-`final` la trang thai **duy nhat** duoc phep bao cho consumer la tien da chuyen. Day la nguyen tac `dms_vietqr` dich sang on-chain: **broadcast khong phai la da thanh toan; mined cung chua phai**. Consumer nao goi `_set_done()` tai `broadcast` la mot bug tai chinh. `quarantined` la trang thai *khong xac dinh* — bug nguy hiem thu hai la anh xa no thanh `_set_error()` roi cho consumer retry, vi tx co the van dao sau do.
+`final` là trạng thái **duy nhất** được phép báo cho consumer là tiền đã chuyển. Đây là nguyên tắc `dms_vietqr` dịch sang on-chain: **broadcast không phải là đã thanh toán; mined cũng chưa phải**. Consumer nào gọi `_set_done()` tại `broadcast` là một bug tài chính. `quarantined` là trạng thái *không xác định* — bug nguy hiểm thứ hai là ánh xạ nó thành `_set_error()` rồi cho consumer retry, vì tx có thể vẫn đào sau đó.
+
+Bảng này khớp với state machine hợp nhất của §05.8.1 nhưng **không** giống hệt: §05 mô tả vòng đời của một *intent* trên bus (có `published`, `claimed`, `queued`), §06 mô tả vòng đời của một *job broadcast* trong pool. Một intent có thể sinh ra nhiều job (retry, replacement); một job không bao giờ thuộc hai intent. Hai bảng, hai model (`blockchain.metatx` và `blockchain.relay.job`), và **đừng hợp nhất chúng** — chúng có vòng đời khác nhau và gộp lại sẽ tạo ra một state machine 20 trạng thái mà không ai đọc nổi.
 
 ---
 
-### 06.3. Simulation gate bat buoc
+### 06.3. Simulation gate bắt buộc
 
-| Chuoi | Loi goi | Tra ve gi dung duoc | Buffer gas de xuat |
+| Chuỗi | Lời gọi | Trả về gì dùng được | Buffer gas đề xuất |
 |---|---|---|---|
-| EVM | `eth_call` (pin `blockHash`, khong pin `blockNumber`) → `eth_estimateGas` → `getL1Fee` (§06.2.5) → tuy chon `debug_traceCall` | revert reason, gas, state diff, logs | **1.25x** binh thuong; **1.6x** cho Zether; **2.0x** khi co `SLOAD` cold chua ro |
-| SUI | `sui_devInspectTransactionBlock` (khong ton gas, khong can gas coin hop le) va `sui_dryRunTransactionBlock` (can gas coin that) | effects, ket qua tung lenh PTB | budget = `computationCost + storageCost - storageRebate`, x1.3 |
-| Soroban | `simulateTransaction` | CPU/mem instructions, **footprint bat buoc**, resource fee, auth entries | Bat buoc dung ket qua sim; khong the doan footprint. x1.15 tren resource fee |
-| Cosmos WASM | `POST /cosmos/tx/v1beta1/simulate` | `gas_used` | x1.4 (mac dinh cosmjs la 1.3; WASM bien thien manh hon) |
-| TON | `ton-emulator` cuc bo tren state snapshot | cell tree, phi forward nanoTON | Cong 0,05 TON du phong cho chain message |
-| Hedera | SDK dry-run / `contractCallLocal` | gas, revert | x1.2; phi neo USD nen it bien dong |
+| EVM | `eth_call` (pin `blockHash`, không pin `blockNumber`) → `eth_estimateGas` → `getL1Fee` (§06.2.5) → tuỳ chọn `debug_traceCall` | revert reason, gas, state diff, logs | **1,25x** bình thường; **1,6x** cho Zether; **2,0x** khi có `SLOAD` cold chưa rõ |
+| SUI | `sui_devInspectTransactionBlock` (không tốn gas, không cần gas coin hợp lệ) và `sui_dryRunTransactionBlock` (cần gas coin thật) | effects, kết quả từng lệnh PTB | budget = `computationCost + storageCost − storageRebate`, ×1,3 |
+| Soroban | `simulateTransaction` | CPU/mem instructions, **footprint bắt buộc**, resource fee, auth entries | Bắt buộc dùng kết quả sim; không thể đoán footprint. ×1,15 trên resource fee |
+| Cosmos WASM | `POST /cosmos/tx/v1beta1/simulate` | `gas_used` | ×1,4 (mặc định cosmjs là 1,3; WASM biến thiên mạnh hơn) |
+| TON | `ton-emulator` cục bộ trên state snapshot | cell tree, phí forward nanoTON | Cộng 0,05 TON dự phòng cho chain message |
+| Hedera | SDK dry-run / `contractCallLocal` | gas, revert | ×1,2; phí neo USD nên ít biến động |
 
-**[SUA] Ghim bang `blockHash`, khong bang `blockNumber`.** `eth_call` voi `{"blockNumber": "0x..."}` van co the bi mot provider tra loi tren mot nhanh khac sau reorg. `{"blockHash": "0x..."}` la xac dinh. Moi provider hien dai deu ho tro; provider nao khong ho tro thi khong dung cho sim.
+**[SỬA] Ghim bằng `blockHash`, không bằng `blockNumber`.** `eth_call` với `{"blockNumber": "0x..."}` vẫn có thể bị một provider trả lời trên một nhánh khác sau reorg. `{"blockHash": "0x..."}` là xác định. Mọi provider hiện đại đều hỗ trợ; provider nào không hỗ trợ thì không dùng cho sim.
 
-#### 06.3.1. Sim phai bi ghim state
+#### 06.3.1. Sim phải bị ghim state
 
-Ket qua sim chi dung tai block N. Ghi `sim_block_hash` + `sim_block_height` vao job; neu tai thoi diem broadcast `head - sim_block_height > max_sim_staleness` (EVM: 5 block; Sui: 10s; Soroban: 2 ledger) thi **sim lai**, khong broadcast. Khong lam viec nay thi sim gate chi la trang tri.
+Kết quả sim chỉ đúng tại block N. Ghi `sim_block_hash` + `sim_block_height` vào job; nếu tại thời điểm broadcast `head − sim_block_height > max_sim_staleness` (EVM: 5 block; Sui: 10s; Soroban: 2 ledger) thì **sim lại**, không broadcast. Không làm việc này thì sim gate chỉ là trang trí.
 
-**[MOI] Sim lai khong duoc mien phi vo han.** Toi da 3 lan sim cho mot job; lan thu 4 → `rejected(reason='sim_thrash')`. Mot job phai sim lai 4 lan la mot job dang chay dua voi state cua chinh no; retry them chi dot RPC quota.
+**[MỚI] Sim lại không được miễn phí vô hạn.** Tối đa 3 lần sim cho một job; lần thứ 4 → `rejected(reason='sim_thrash')`. Một job phải sim lại 4 lần là một job đang chạy đua với state của chính nó; retry thêm chỉ đốt RPC quota.
 
-#### 06.3.2. "Ty le revert 0%" la khong dat duoc
+#### 06.3.2. "Tỷ lệ revert 0%" là không đạt được
 
-Sim doc state tai N, tx thuc thi tai N+k voi state da doi. Note §14.2.8 yeu cau "ty le revert bang 0%" — do la mot muc tieu khong the dat, va nguy hiem hon la no khien nguoi ta **bo qua viec do luong**. Cac nguon divergence that:
+Sim đọc state tại N, tx thực thi tại N+k với state đã đổi. Note §14.2.8 yêu cầu "tỷ lệ revert bằng 0%" — đó là một mục tiêu không thể đạt, và nguy hiểm hơn là nó khiến người ta **bỏ qua việc đo lường**. Các nguồn divergence thật:
 
-| Nguyen nhan | Vi du cu the | Xu ly |
+| Nguyên nhân | Ví dụ cụ thể | Xử lý |
 |---|---|---|
-| State drift | ERC-20 `allowance` bi tieu boi tx khac cua cung user | Sim lai + `expiry` ngan (5 phut) |
-| **Zether epoch rollover** | Proof dung `simulateAccounts(addrs, e)`; tx dao o epoch `e+1` → ciphertext lech → revert | §06.3.4, nguon divergence lon nhat |
-| `meta_nonce` bi tieu | Tx khac cua cung user tren cung `batchId` | Ghim `meta_nonce_block` (§06.1.8) |
-| Sui shared object contention | Hai PTB cung cham shared object → mot cai bi huy | Retry voi backoff, khong tinh la divergence |
-| Soroban footprint sai | State doi lam footprint mo rong → `ExceededLimit` | Bat buoc re-simulate, khong reuse |
-| Gas underestimate | `estimateGas` chay tren nhanh re hon (storage slot dang zero luc sim, non-zero luc thuc thi: 20k vs 5k gas — chenh 15k/slot) | Buffer o bang tren |
-| Cosmos gas multiplier thap | Contract co vong lap phu thuoc so item | x1.4 |
-| **[MOI]** Access list thieu | Tx type-1/2 co `accessList` sinh tu sim; state doi lam slot ngoai list → cold access dat hon | Chi dung `accessList` khi tiet kiem > 10%; buffer 2.0x khi dung |
-| **[MOI]** Block gas limit | Tx 6M gas tren chain gioi han `eth_call` o 10M van pass sim nhung bi tu choi khi vao block cung block khac | Guard `gas * buffer < block_gas_limit * 0.4` |
+| State drift | ERC-20 `allowance` bị tiêu bởi tx khác của cùng user | Sim lại + `expiry` ngắn (5 phút) |
+| **Zether epoch rollover** | Proof dùng `simulateAccounts(addrs, e)`; tx đào ở epoch `e+1` → ciphertext lệch → revert | §06.3.4, nguồn divergence lớn nhất |
+| `meta_nonce` bị tiêu | Tx khác của cùng user trên cùng `batchId` | Ghim `meta_nonce_block` (§06.1.8) |
+| Sui shared object contention | Hai PTB cùng chạm shared object → một cái bị huỷ | Retry với backoff, không tính là divergence |
+| Soroban footprint sai | State đổi làm footprint mở rộng → `ExceededLimit` | Bắt buộc re-simulate, không reuse |
+| Gas underestimate | `estimateGas` chạy trên nhánh rẻ hơn (storage slot đang zero lúc sim, non-zero lúc thực thi: 20k vs 5k gas — chênh 15k/slot) | Buffer ở bảng trên |
+| Cosmos gas multiplier thấp | Contract có vòng lặp phụ thuộc số item | ×1,4 |
+| **[MỚI]** Access list thiếu | Tx type-1/2 có `accessList` sinh từ sim; state đổi làm slot ngoài list → cold access đắt hơn | Chỉ dùng `accessList` khi tiết kiệm > 10%; buffer 2,0x khi dùng |
+| **[MỚI]** Block gas limit | Tx 1,79M gas trên chain giới hạn `eth_call` ở 10M vẫn pass sim nhưng bị từ chối khi vào block cùng block khác | Guard `gas * buffer < block_gas_limit * 0.4` |
 
-SLO thuc te de xuat: **divergence rate < 0,5% tren tong so broadcast, < 0,05% cho lop R3/R4**. Vuot nguong 20 divergence/gio tren cung mot `target_address` → **auto-quarantine contract do** (`blockchain.target.policy.state = 'quarantined'`), dung nhan job moi toi no, tao `blockchain.breaker.event` va page on-call. Ly do quarantine theo contract chu khong theo chain: divergence tap trung mot contract gan nhu luon la bug contract hoac bug ABI, khong phai su co mang.
+Hàng cuối có một con số cụ thể đáng ghi: với chain private 9000 (`gasLimit` 16,7M), guard 40% cho phép **6,7M gas/tx** — thừa cho một Zether Bulletproofs 1,79M, nhưng **không** thừa nếu ai đó chọn ring size lớn (§05.3.2: ring 16 là ~7,2M). Guard này là thứ chặn một token cấu hình sai làm nghẽn cả block.
 
-**[MOI] Quy trinh khi sim va thuc thi bat dong** (brief hoi thang cau nay):
+SLO thực tế đề xuất: **divergence rate < 0,5% trên tổng số broadcast, < 0,05% cho lớp R3/R4**. Vượt ngưỡng 20 divergence/giờ trên cùng một `target_address` → **auto-quarantine contract đó** (`blockchain.target.policy.state = 'quarantined'`), dừng nhận job mới tới nó, tạo `blockchain.breaker.event` và page on-call. Lý do quarantine theo contract chứ không theo chain: divergence tập trung một contract gần như luôn là bug contract hoặc bug ABI, không phải sự cố mạng.
+
+Trên factory mở, quy tắc này còn cần hơn: pool sẽ gặp token của người lạ, và một token v-nào-đó cấu hình sai là chuyện bình thường chứ không phải sự cố. Quarantine theo `target_address` là cách cô lập nó mà không dừng cả chain.
+
+**[MỚI] Quy trình khi sim và thực thi bất đồng** (brief hỏi thẳng câu này):
 
 ```
 1. Bat receipt.status == 0 (hoac Cosmos code != 0, Sui effects.status.error, ...)
@@ -513,11 +571,11 @@ SLO thuc te de xuat: **divergence rate < 0,5% tren tong so broadcast, < 0,05% ch
    khong duoc phep retry vo han mot thu no khong hieu.
 ```
 
-Diem quan trong: **`unknown` khong bao gio duoc retry.** Retry mot thu ta khong phan loai duoc la cach dot tien nhanh nhat ma van tin la minh dang "tu phuc hoi".
+Điểm quan trọng: **`unknown` không bao giờ được retry.** Retry một thứ ta không phân loại được là cách đốt tiền nhanh nhất mà vẫn tin là mình đang "tự phục hồi".
 
-#### 06.3.3. [MOI] Policy gate: allowlist phai theo `(address, selector)`, khong chi theo address
+#### 06.3.3. [MỚI] Policy gate: allowlist phải theo `(address, selector)`, không chỉ theo address
 
-Note noi "Target Contract Allowlist". Chua du: mot contract co `transfer()` vo hai va `upgradeTo()` chet nguoi. Model:
+Note nói "Target Contract Allowlist". Chưa đủ: một contract có `transfer()` vô hại và `upgradeTo()` chết người. Model:
 
 ```python
 class BlockchainTargetPolicy(models.Model):
@@ -545,39 +603,48 @@ class BlockchainTargetPolicy(models.Model):
         'Selector phai la 0x + 8 hex lowercase, hoac 0x*.')
 ```
 
-Mac dinh **deny**. Mot job co `calldata_hex` ma 4 byte dau khong khop entry `active` nao → `rejected(reason='selector_not_allowed')`. Entry `0x*` chi duoc tao boi `group_blockchain_manager` va bi ghi vao audit log — no la mot ngoai le, khong phai mot tien ich.
+Mặc định **deny**. Một job có `calldata_hex` mà 4 byte đầu không khớp entry `active` nào → `rejected(reason='selector_not_allowed')`. Entry `0x*` chỉ được tạo bởi `group_blockchain_manager` và bị ghi vào audit log — nó là một ngoại lệ, không phải một tiện ích.
 
-#### 06.3.4. Zether: sim gate phai co rang buoc epoch — note bo trong hoan toan
+`blockchain.target.policy` là **cùng một khái niệm** với acceptance policy của node mesh (`_USER-DECISIONS.md` §21.4), nhìn từ phía doanh nghiệp: cả hai đều là một bảng tra `(chain, contract, selector) → chấp nhận hay không`, đọc được trước khi simulate. Khác nhau ở mục đích — bên này là **kiểm soát rủi ro** (đừng ký thứ ta không hiểu), bên kia là **định tuyến kinh tế** (việc này có phải của tôi không). Cùng cấu trúc dữ liệu, hai cột chính sách. Đừng cài hai lần.
 
-`simulateAccounts(schnorrAddresses, epoch)` (§10.5.3) tra `(C, D)` sau khi gop `pending_transfers` tai epoch muc tieu. Proof duoc dung *cho epoch do*. Nhung khong co gi trong note dam bao tx dao dung epoch do. Voi `Δ = 5 block` tren Gnosis = 25s, mot tx bi tre 25s la proof vo hieu.
+#### 06.3.4. Zether: sim gate phải có ràng buộc epoch — note bỏ trống hoàn toàn
 
-Chot: job Zether mang them
-- `zether_target_epoch` (Integer) — epoch proof duoc dung cho,
-- `zether_epoch_deadline_block` (Integer) = `(target_epoch + 1) * Δ - safety_margin`, voi `safety_margin = 1` block.
+`simulateAccounts(schnorrAddresses, epoch)` (§10.5.3) trả `(C, D)` sau khi gộp `pending_transfers` tại epoch mục tiêu. Proof được dựng *cho epoch đó*. Nhưng không có gì trong note đảm bảo tx đào đúng epoch đó. Với `Δ = 5 block` trên Gnosis = 25s, một tx bị trễ 25s là proof vô hiệu.
 
-Truoc broadcast: `require head < epoch_deadline_block`. Sau broadcast, neu chua mined khi `head >= epoch_deadline_block` → **khong speed-up ma cancel** (self-send) va tra job ve consumer voi `state='epoch_expired'` de dung proof moi. Speed-up mot tx Zether qua han epoch la dot tien vao mot tx chac chan revert.
+Chốt: job Zether mang thêm
 
-He qua ve chinh sach phi: lop Zether **luon uu tien tip cao ngay tu lan dau** (mot lan dao dat hon hai lan revert). Cu the: `zether_initial_tip = p90(tip, 20 block)` thay vi `p50` cua lop khac. **[MOI]** Va vi cua so chi con `Δ * block_time - sim_time - sign_time`, tren Gnosis la `25 - 0,3 - 0,8 ≈ 23,9s` (~4,8 block), **khong con cho cho mot chu ky bump nao**. Neu MPC ky mat 3s p99, cua so con ~4,4 block. Do la ly do ky thuat truc tiep de dua Zether len enclave signer (§06.6), khong chi la ly do throughput.
+- `zether_target_epoch` (Integer) — epoch proof được dựng cho,
+- `zether_epoch_deadline_block` (Integer) = `(target_epoch + 1) * Δ - safety_margin`, với `safety_margin = 1` block.
 
-**[MOI] Verify proof off-chain truoc khi ky.** Mot tx Zether 6M gas tren `eth_call` mat 200-600 ms CPU cua provider va nhieu provider **cap gas cua `eth_call`** (Alchemy/Infura thuong 10M-50M, mot so goi thap hon). Cheo: verify Bulletproof bang thu vien Rust cuc bo mat **5-12 ms** (co so: `dalek-cryptography/bulletproofs` verify n=64, m=1 ~1,5 ms tren x86 hien dai; n=512 tong bit ~8x → ~12 ms). Chot pipeline Zether: `verify_offchain (10ms) → eth_call day du (300ms) → estimateGas`. Neu verify off-chain fail thi khong ton mot RPC call nao.
+Trước broadcast: `require head < epoch_deadline_block`. Sau broadcast, nếu chưa mined khi `head >= epoch_deadline_block` → **không speed-up mà cancel** (self-send) và trả job về consumer với `state='epoch_expired'` để dựng proof mới. Speed-up một tx Zether quá hạn epoch là đốt tiền vào một tx chắc chắn revert.
 
-#### 06.3.5. [MOI] Chi phi cua chinh sim gate
+Hệ quả về chính sách phí: lớp Zether **luôn ưu tiên tip cao ngay từ lần đầu** (một lần đào đắt hơn hai lần revert). Cụ thể: `zether_initial_tip = p90(tip, 20 block)` thay vì `p50` của lớp khác. **[MỚI]** Và vì cửa sổ chỉ còn `Δ * block_time − sim_time − sign_time`, trên Gnosis là `25 − 0,3 − 0,8 ≈ 23,9s` (~4,8 block), **không còn chỗ cho một chu kỳ bump nào**. Nếu MPC ký mất 3s p99, cửa sổ còn ~4,4 block. Đó là lý do kỹ thuật trực tiếp để đưa Zether lên enclave signer (§06.6), không chỉ là lý do throughput.
 
-| Cong cu | Don gia | O 24.000 tx/ngay (720k/thang) | Ket luan |
+Ràng buộc này là lý do độc lập thứ hai để **Zether không dùng soft-exclusivity** (§05.1.1 đã kết luận `W = 0` từ phía ngân sách latency của intent bus). Hai section, hai đường suy luận, cùng một kết luận — và khi hai đường độc lập gặp nhau ở cùng một chỗ thì đó là dấu hiệu kết luận đúng.
+
+Trên chain private 9000, cửa sổ này rộng hơn nhiều vì `MinGasPrice = 0` nên không có ai cạnh tranh block space, và không có bump để mà lo. Đây là một trong những lý do cụ thể nhất khiến quyết định #5 (Zether chạy private trước) là đúng.
+
+**[MỚI] Verify proof off-chain trước khi ký.** Một tx Zether 1,79M gas trên `eth_call` mất 200–600 ms CPU của provider và nhiều provider **cap gas của `eth_call`** (Alchemy/Infura thường 10M–50M, một số gói thấp hơn). Chéo: verify Bulletproof bằng thư viện Rust cục bộ mất **5–12 ms** (cơ sở: `dalek-cryptography/bulletproofs` verify n=64, m=1 ~1,5 ms trên x86 hiện đại; n=512 tổng bit ~8x → ~12 ms). Chốt pipeline Zether: `verify_offchain (10ms) → eth_call đầy đủ (300ms) → estimateGas`. Nếu verify off-chain fail thì không tốn một RPC call nào.
+
+#### 06.3.5. [MỚI] Chi phí của chính sim gate
+
+| Công cụ | Đơn giá | Ở 24.000 tx/ngày (720k/tháng) | Kết luận |
 |---|---|---|---|
-| `eth_call` + `eth_estimateGas` tren node tu van hanh | ~0 bien phi | ~$200/thang (amortize node) | **Mac dinh** |
-| `eth_call` tren RPC managed (Alchemy/QuickNode) | tinh theo compute unit; `eth_call` nang gap ~5-25x `eth_blockNumber` | Vuot goi growth, roi vao bac enterprise | Chi dung lam fallback |
-| Tenderly Simulation API | goi theo don vi; free tier ~50k don vi/thang | 720k don vi/thang → **bac tra phi cao** | **Khong dung trong hot path** |
+| `eth_call` + `eth_estimateGas` trên node tự vận hành | ~0 biến phí | ~$200/tháng (amortize node) | **Mặc định** |
+| `eth_call` trên RPC managed (Alchemy/QuickNode) | tính theo compute unit; `eth_call` nặng gấp ~5–25x `eth_blockNumber` | Vượt gói growth, rơi vào bậc enterprise | Chỉ dùng làm fallback |
+| Tenderly Simulation API | gọi theo đơn vị; free tier ~50k đơn vị/tháng | 720k đơn vị/tháng → **bậc trả phí cao** | **Không dùng trong hot path** |
 
-Chot: **Tenderly chi dung cho hau kiem (post-mortem) mot divergence**, khong nam trong duong broadcast. Ban nhap dau va note deu de Tenderly o hot path — o quy mo 24k tx/ngay do la mot dong chi phi khong ai du toan. Hot path dung `eth_call` + `debug_traceCall` tren archive node cua chinh minh.
+Chốt: **Tenderly chỉ dùng cho hậu kiểm (post-mortem) một divergence**, không nằm trong đường broadcast. Bản nháp đầu và note đều để Tenderly ở hot path — ở quy mô 24k tx/ngày đó là một dòng chi phí không ai dự toán. Hot path dùng `eth_call` + `debug_traceCall` trên archive node của chính mình.
+
+Với chain private 9000, cả bảng này biến mất: node là của ta, `eth_call` miễn phí, và không có provider nào để mà vượt quota. Chi phí sim gate là một chi phí của giai đoạn public.
 
 ---
 
 ### 06.4. Gas circuit breakers
 
-#### 06.4.1. Spike breaker — "300% cua trung binh 1h" can sua thong ke
+#### 06.4.1. Spike breaker — "300% của trung bình 1h" cần sửa thống kê
 
-Trung binh (mean) bi keo boi dung mot block spike; dung mean thi breaker vua nhay lai vua tre. Dung:
+Trung bình (mean) bị kéo bởi đúng một block spike; dùng mean thì breaker vừa nhạy lại vừa trễ. Dùng:
 
 ```
 ref  = rolling_median(base_fee, window = 1h)      # Gnosis: 720 block; L1: 300 block
@@ -586,44 +653,47 @@ trip     khi  base_fee_next > max(3.0 * ref, ref + 6 * mad)
 reset    khi  base_fee_next < 1.5 * ref  lien tuc 20 block      # hysteresis
 ```
 
-Hysteresis la bat buoc. Khong co no, breaker flapping quanh nguong 3,0x se tao ra chinh xac cai kieu tai bung nhip lam mang te hon.
+Hysteresis là bắt buộc. Không có nó, breaker flapping quanh ngưỡng 3,0x sẽ tạo ra chính xác cái kiểu tải bùng nhịp làm mạng tệ hơn.
 
-**[MOI] Cua so 1h can duoc mo rong luc khoi dong.** Khi service vua len, chua co 720 mau. Chinh sach: dung `fee_history` cua RPC de nap 1024 block gan nhat ngay o buoc khoi dong (mot loi goi `eth_feeHistory(1024, 'latest', [10,50,75,90])`); truoc khi co >= 200 mau, breaker o che do **fail-closed cho R1/R2** (khong chay job deferrable) va fail-open cho R3/R4.
+**[MỚI] Cửa sổ 1h cần được mồi lúc khởi động.** Khi service vừa lên, chưa có 720 mẫu. Chính sách: dùng `fee_history` của RPC để nạp 1024 block gần nhất ngay ở bước khởi động (một lời gọi `eth_feeHistory(1024, 'latest', [10,50,75,90])`); trước khi có >= 200 mẫu, breaker ở chế độ **fail-closed cho R1/R2** (không chạy job deferrable) và fail-open cho R3/R4.
 
-**[MOI] Breaker phai co trang thai `half_open`.** Khi reset dieu kien duoc thoa, khong mo hoan toan ngay: cho qua 10% luu luong trong 5 phut, do divergence va chi phi thuc, roi moi mo. `relay_breaker_state` la Gauge 0/1/2 dung nghia closed/half/open.
+**[MỚI] Breaker phải có trạng thái `half_open`.** Khi reset điều kiện được thoả, không mở hoàn toàn ngay: cho qua 10% lưu lượng trong 5 phút, đo divergence và chi phí thực, rồi mới mở. `relay_breaker_state` là Gauge 0/1/2 đúng nghĩa closed/half/open.
 
-Breaker phai do **hai** dai luong tren chain co native token bien dong:
+Breaker phải đo **hai** đại lượng trên chain có native token biến động:
 
-| Chain | Dai luong theo doi | Ghi chu |
+| Chain | Đại lượng theo dõi | Ghi chú |
 |---|---|---|
-| Gnosis xDAI | `base_fee` (xDAI) — mot chieu la du | xDAI neo USD, chi phi USD = gas x price truc tiep |
-| Celo (L2) | `base_fee` theo `feeCurrency` (cUSD/USDC) **VA** `l1_blob_base_fee` | **[SUA]** Sau khi thanh OP Stack, phi L1 la mot chieu doc lap (§06.2.5) |
-| Base / Optimism | `base_fee` (ETH) **VA** `l1_blob_base_fee` **VA** `native_price_usd` | Ba chieu |
-| Ethereum/Polygon/BSC | `base_fee` **VA** `native_price_usd` | Gas 30 gwei o ETH $2k khac han o ETH $8k. Breaker phai trip theo **USD/tx** |
-| Chain rieng (PoA/IBFT) | Khong can spike breaker | Gas tinh; van can velocity limit **tinh bang gas** |
+| Gnosis xDAI | `base_fee` (xDAI) — một chiều là đủ | xDAI neo USD, chi phí USD = gas × price trực tiếp |
+| Celo (L2) | `base_fee` theo `feeCurrency` (cUSD/USDC) **VÀ** `l1_blob_base_fee` | **[SỬA]** Sau khi thành OP Stack, phí L1 là một chiều độc lập (§06.2.5) |
+| Base / Optimism | `base_fee` (ETH) **VÀ** `l1_blob_base_fee` **VÀ** `native_price_usd` | Ba chiều |
+| Ethereum/Polygon/BSC | `base_fee` **VÀ** `native_price_usd` | Gas 30 gwei ở ETH $2k khác hẳn ở ETH $8k. Breaker phải trip theo **USD/tx** |
+| **Chain private 9000** | **Không có `base_fee` để mà đo** | Chain chạy trước London: không EIP-1559, `MinGasPrice = 0`. Tắt spike breaker; vẫn cần velocity limit **tính bằng gas** |
 
-Day la ly do ky thuat cung cung cho thu tu chain da khoa (Gnosis truoc, Celo sau): tren Gnosis, breaker chi can mot chieu do va nguong tinh bang USD la con so that, khong phai uoc luong. **[SUA]** Celo sau khi thanh L2 **khong** con don gian nhu vay — no can ba chieu do; do la mot ly do bo sung de Gnosis di truoc, khong chi la thu tu tuy y.
+Hàng cuối sửa so với bản 1 ("chain riêng PoA/IBFT — gas tĩnh"). Nó không chỉ tĩnh: **`eth_feeHistory` và `base_fee_next_block()` sẽ ném lỗi hoặc trả rác** trên chain đó, nên breaker không phải "tắt logic" mà là "không được gọi hàm đó". Guard theo capability (`chain.supports_eip1559`), không theo `chain_profile` — một chain private khác hoàn toàn có thể có EIP-1559.
 
-#### 06.4.2. [MOI] Gia native token: nguon, do tre, va chinh sach fail
+Đây là lý do kỹ thuật cứng cho thứ tự chain đã khoá (Gnosis trước, Celo sau): trên Gnosis, breaker chỉ cần một chiều đo và ngưỡng tính bằng USD là con số thật, không phải ước lượng. **[SỬA]** Celo sau khi thành L2 **không** còn đơn giản như vậy — nó cần ba chiều đo; đó là một lý do bổ sung để Gnosis đi trước, không chỉ là thứ tự tuỳ ý.
 
-Velocity limit tinh bang USD → phai co gia. Chua ai noi lay o dau.
+#### 06.4.2. [MỚI] Giá native token: nguồn, độ trễ, và chính sách fail
 
-| Chain | Nguon gia | Do tre chap nhan |
+Velocity limit tính bằng USD → phải có giá. Chưa ai nói lấy ở đâu.
+
+| Chain | Nguồn giá | Độ trễ chấp nhận |
 |---|---|---|
-| Gnosis (xDAI) | Hang so 1,00 USD, **co canh bao depeg**: doc Chainlink DAI/USD tren Ethereum moi 15 phut; lech > 2% → breaker `PEG_BROKEN` | 15 phut |
-| Celo (cUSD) | Tuong tu, `SortedOracles` on-chain cua Celo | 15 phut |
-| ETH/MATIC/BNB | Chainlink price feed on-chain tren chinh chain do (khong dung REST cua san) | 5 phut |
-| Chain rieng | Khong ap dung — velocity tinh bang gas | — |
+| Gnosis (xDAI) | Hằng số 1,00 USD, **có cảnh báo depeg**: đọc Chainlink DAI/USD trên Ethereum mỗi 15 phút; lệch > 2% → breaker `PEG_BROKEN` | 15 phút |
+| Celo (cUSD) | Tương tự, `SortedOracles` on-chain của Celo | 15 phút |
+| ETH/MATIC/BNB | Chainlink price feed on-chain trên chính chain đó (không dùng REST của sàn) | 5 phút |
+| Chain private | Không áp dụng — velocity tính bằng gas | — |
 
-Chinh sach khi gia stale (`age > 2 * max_age`): **fail-closed voi gia bao thu** — dung `price_usd = last_known * 3` cho moi tinh toan chi phi. Khong dung `last_known` (danh gia thap rui ro) va khong chan het (dung dich vu vi mot oracle chet la phan ung qua muc). Con so 3x la mot lua chon, ghi vao `blockchain.chain.stale_price_multiplier`, chinh duoc.
+Chính sách khi giá stale (`age > 2 * max_age`): **fail-closed với giá bảo thủ** — dùng `price_usd = last_known * 3` cho mọi tính toán chi phí. Không dùng `last_known` (đánh giá thấp rủi ro) và không chặn hết (dừng dịch vụ vì một oracle chết là phản ứng quá mức). Con số 3x là một lựa chọn, ghi vào `blockchain.chain.stale_price_multiplier`, chỉnh được.
 
-#### 06.4.3. [SUA] Velocity limit: phai nguyen tu, phai la so nguyen, phai co refund
+#### 06.4.3. [SỬA] Velocity limit: phải nguyên tử, phải là số nguyên, phải có refund
 
-Ban nhap dau dung `INCRBYFLOAT` roi kiem tra rieng. Hai bug:
-1. **TOCTOU**: doc → so sanh → ghi khong nguyen tu. Voi 50 job/s song song, bucket vuot tran roi moi bi phat hien. Vuot bao nhieu thi tuy may.
-2. **Float**: `INCRBYFLOAT` tren hang tram nghin thao tac tich luy sai so. Bucket tien khong duoc dung float.
+Bản nháp đầu dùng `INCRBYFLOAT` rồi kiểm tra riêng. Hai bug:
 
-Ban dung: mot Lua script, don vi **micro-USD (so nguyen)**, reserve truoc — settle sau.
+1. **TOCTOU**: đọc → so sánh → ghi không nguyên tử. Với 50 job/s song song, bucket vượt trần rồi mới bị phát hiện. Vượt bao nhiêu thì tuỳ may.
+2. **Float**: `INCRBYFLOAT` trên hàng trăm nghìn thao tác tích luỹ sai số. Bucket tiền không được dùng float.
+
+Bản đúng: một Lua script, đơn vị **micro-USD (số nguyên)**, reserve trước — settle sau.
 
 ```lua
 -- lua/spend_reserve.lua
@@ -643,7 +713,7 @@ redis.call('HSET', KEYS[4], ARGV[6], c)               -- reservation, de refund
 return {1, 'ok', 0, c}
 ```
 
-Key (TTL 7200s, giu 2 cua so de tinh truot):
+Key (TTL 7200s, giữ 2 cửa sổ để tính trượt):
 
 ```
 bc:spend:agent:{agent_id}:{yyyymmddHH}     STRING  int micro-USD
@@ -652,37 +722,38 @@ bc:spend:global:{yyyymmddHH}               STRING  int micro-USD
 bc:spend:resv:{yyyymmddHH}                 HASH    job_uuid -> reserved_uusd
 ```
 
-Kiem tra **truoc khi lease nonce** (khong phai truoc sim — sim gan nhu mien phi tren node cua minh, lease thi khong): `est_cost_uusd = (l2_gas * buffer * gas_price + l1_fee_wei) * native_price_usd * 1e6 / 1e18`.
+Kiểm tra **trước khi lease nonce** (không phải trước sim — sim gần như miễn phí trên node của mình, lease thì không): `est_cost_uusd = (l2_gas * buffer * gas_price + l1_fee_wei) * native_price_usd * 1e6 / 1e18`.
+Trên chain private 9000 (`MinGasPrice = 0`), `est_cost_uusd` luôn bằng 0 và velocity limit tính bằng USD trở nên vô nghĩa. Nhưng **vẫn phải có velocity limit** — tính bằng **gas**, vì cái nó chặn không phải chi phí mà là một vòng lặp chạy loạn làm ngập block. Hai đơn vị, cùng một cơ chế, chọn theo `chain.supports_eip1559`.
 
-**Settle bat buoc** (day la thu ban nhap dau khong co, va thieu no thi bucket ro ri cho den khi TTL het):
-- Job den `mined`: `delta = actual - reserved`; `INCRBY` cac bucket voi `delta` (co the am); `HDEL resv`.
-- Job `rejected`/`cancelled` truoc broadcast: `INCRBY` voi `-reserved`; `HDEL resv`.
-- Janitor moi 5 phut quet `bc:spend:resv:*` cua cua so *truoc*, moi entry con lai qua 2 gio → refund va ghi `relay_spend_reservation_leaked_total`.
+- Khi job kết thúc (`final` hoặc `rejected`), **settle**: `INCRBY` phần chênh giữa reserved và thực tế (âm nếu rẻ hơn), `HDEL` reservation.
+- Janitor mỗi 5 phút quét `bc:spend:resv:*` của cửa sổ *trước*, mọi entry còn lại quá 2 giờ → refund và ghi `relay_spend_reservation_leaked_total`.
 
-Chi phi cua Lua: mot round-trip, ~0,2 ms. Khong dang tranh cai.
+Chi phí của Lua: một round-trip, ~0,2 ms. Không đáng tranh cãi.
 
-#### 06.4.4. Thu tu bi throttle — lop uu tien
+#### 06.4.4. Thứ tự bị throttle — lớp ưu tiên
 
-Note noi "R1/R2 bi dinh chi, giu R3". Bang lop day du, va co mot dieu note bo sot: **mot so traffic bao tri that ra la R4**.
+Note nói "R1/R2 bị đình chỉ, giữ R3". Bảng lớp đầy đủ, và có một điều note bỏ sót: **một số traffic bảo trì thật ra là R4**.
 
-| Lop | Noi dung | Hanh vi khi breaker trip | Deferrable |
+| Lớp | Nội dung | Hành vi khi breaker trip | Deferrable |
 |---|---|---|---|
-| **R1** | Anchoring hash audit, proof-of-action, batch merkle root | Dung ngay, gom vao batch lon hon, phat lai khi reset | Vo han (gom 24h van dung) |
-| **R2** | Loyalty point accrual, cap nhat metadata, index refresh | Dung, hang doi giu toi 6h | Hang gio |
-| **R3** | B2B settlement, `withdraw` Zether, thanh toan end-user | Giam throughput 50%, chi qua neu `est_cost_usd < value * 0.5%` | Hang phut |
-| **R4** | Refill hot wallet, Zether `rollOver`, Soroban `extend_ttl`, unwind rui ro thanh khoan, cancel tx doc, **gap-filler**, **replacement cua job R3 dang inflight** | **Khong bao gio throttle** | Khong |
+| **R1** | Anchoring hash audit, proof-of-action, batch merkle root | Dừng ngay, gom vào batch lớn hơn, phát lại khi reset | Vô hạn (gom 24h vẫn đúng) |
+| **R2** | Loyalty point accrual, cập nhật metadata, index refresh | Dừng, hàng đợi giữ tới 6h | Hàng giờ |
+| **R3** | B2B settlement, `withdraw` Zether, thanh toán end-user | Giảm throughput 50%, chỉ qua nếu `est_cost_usd < value * 0.5%` | Hàng phút |
+| **R4** | Refill hot wallet, Zether `rollOver`, Soroban `extend_ttl`, unwind rủi ro thanh khoản, cancel tx độc, **gap-filler**, **replacement của job R3 đang inflight** | **Không bao giờ throttle** | Không |
 
-`rollOver()` va `extend_ttl` bi xep nham vao "bao tri dinh ky" la mot bay. Throttle `rollOver` lam dong bang so du kha dung cua **moi** nguoi dung Zether; throttle `extend_ttl` tren Soroban lam **mat state contract** khi TTL het. Chung la R4.
+`rollOver()` và `extend_ttl` bị xếp nhầm vào "bảo trì định kỳ" là một bẫy. Throttle `rollOver` làm đóng băng số dư khả dụng của **mọi** người dùng Zether; throttle `extend_ttl` trên Soroban làm **mất state contract** khi TTL hết. Chúng là R4.
 
-**[MOI]** Them hai muc vao R4 ma ban nhap dau bo sot: gap-filler (throttle no = de nguyen lo thung = chan toan bo account) va replacement cua mot job R3 **da broadcast** (throttle no = de tien treo giua duong). Quy tac tong quat: **khong bao giờ throttle mot hanh dong ma muc dich la go ket mot hanh dong truoc do.** Breaker chan *dau vao*, khong chan *loi thoat*.
+Với `rollOver` có một sắc thái mà `_USER-DECISIONS.md` §13.3 làm rõ: trong code Zether thật, `rollOver` là `internal` và **được gọi ngầm** ở đầu mọi thao tác chạm tài khoản, nên nó không phải một job riêng để mà throttle. Cái cần xếp R4 là hàm **`rollOverPublic`/`rollOverBatch`** (§01) — thứ tồn tại để một tài khoản nhận tiền rồi im lặng vẫn được dọn pending. Nó hiếm, rẻ, và chặn nó là để tiền kẹt.
 
-Nguong canh bao: 90% → thong bao (Odoo activity + webhook), 100% → chan lop <= R3. R4 vuot tran can `blockchain.breaker.override` (record co `approver_uid`, `override_expiry`, `reason`, chi group `blockchain_treasury_manager` tao duoc) — khong co bien moi truong nao bypass duoc.
+**[MỚI]** Thêm hai mục vào R4 mà bản nháp đầu bỏ sót: gap-filler (throttle nó = để nguyên lỗ thủng = chặn toàn bộ account) và replacement của một job R3 **đã broadcast** (throttle nó = để tiền treo giữa đường). Quy tắc tổng quát: **không bao giờ throttle một hành động mà mục đích là gỡ kẹt một hành động trước đó.** Breaker chặn *đầu vào*, không chặn *lối thoát*.
 
-#### 06.4.5. [SUA] Kich thuoc that: Zether tren EVM cong khai
+Ngưỡng cảnh báo: 90% → thông báo (Odoo activity + webhook), 100% → chặn lớp <= R3. R4 vượt trần cần `blockchain.breaker.override` (record có `approver_uid`, `override_expiry`, `reason`, chỉ group `blockchain_treasury_manager` tạo được) — không có biến môi trường nào bypass được.
 
-Note viet ZKP verify "~180.000 - 250.000 gas". **Con so nay co hinh dang cua mot verifier Groth16, khong phai cua Bulletproofs.** Groth16 tren alt_bn128 = 3 pairing + vai `ecMul`: `45.000 + 3*34.000 + ~10 * 6.000 ≈ 207.000 gas`. Khop hoan hao voi con so cua note. Nhung note **cung** noi dung Bulletproofs (§10.5.2 muc 3, va `zkpProof` trong `EncryptedTransfer`). Hai thu khong the cung dung.
+#### 06.4.5. [SỬA] Kích thước thật: Zether trên EVM công khai
 
-So hoc cho Bulletproofs (co so: EIP-1108 dinh gia lai `ecAdd` = 150, `ecMul` = 6.000 gas; **khong** phai EIP-196 nhu ban nhap dau ghi — EIP-196 goc la 500/40.000, EIP-1108 moi ha xuong):
+Note viết ZKP verify "~180.000 – 250.000 gas". **Con số này có hình dạng của một verifier Groth16, không phải của Bulletproofs.** Groth16 trên alt_bn128 = 3 pairing + vài `ecMul`: `45.000 + 3*34.000 + ~10 * 6.000 ≈ 207.000 gas`. Khớp hoàn hảo với con số của note. Nhưng note **cũng** nói dùng Bulletproofs (§10.5.2 mục 3, và `zkpProof` trong `EncryptedTransfer`). Hai thứ không thể cùng đúng.
+
+Số học cho Bulletproofs (cơ sở: EIP-1108 định giá lại `ecAdd` = 150, `ecMul` = 6.000 gas; **không** phải EIP-196 như bản nháp đầu ghi — EIP-196 gốc là 500/40.000, EIP-1108 mới hạ xuống):
 
 ```
 Verify mot aggregated Bulletproof, m statement, n bit moi statement:
@@ -690,41 +761,47 @@ Verify mot aggregated Bulletproof, m statement, n bit moi statement:
 Voi precompile alt_bn128 khong co MSM san, chi phi ~ (so diem) * 6.000 gas
 ```
 
-| Cau hinh | m*n bit | MSM (diem) | Gas MSM | + Sigma + calldata + keccak | **Tong uoc tinh** |
+| Cấu hình | m×n bit | MSM (điểm) | Gas MSM | + Sigma + calldata + keccak | **Tổng ước tính** |
 |---|---|---|---|---|---|
-| ConsenSys goc, n=32, m=2 | 64 | 141 | 0,85M | ~0,25M | **~1,1M** |
-| Note de xuat, n=128, m=2 (`v`, `b-v`) | 256 | 528 | 3,17M | ~0,3M | **~3,5M** |
+| ConsenSys gốc, n=32, m=2 | 64 | 141 | 0,85M | ~0,25M | **~1,1M** |
+| Note đề xuất, n=128, m=2 (`v`, `b−v`) | 256 | 528 | 3,17M | ~0,3M | **~3,5M** |
 | Note + fee, n=128, m=3→pad 4 | 512 | 1.049 | 6,29M | ~0,35M | **~6,6M** |
-| **De xuat: n=64, m=3→pad 4** | 256 | 528 | 3,17M | ~0,3M | **~3,5M** |
+| **Đề xuất: n=64, m=3→pad 4** | 256 | 528 | 3,17M | ~0,3M | **~3,5M** |
 | Groth16 thay Bulletproofs | — | — | — | — | **~0,21M** |
 
-**Ban nhap dau uoc 2,0-2,5M — thap hon thuc te khi tinh ca fee proof.** Co che phi bao mat cua note (§10.5.3 muc 5: `fee >= 0`, `v >= 0`, `b-fee >= 0`, `b-fee-v >= 0`) can **ba** range statement doc lap, aggregate phai pad len bon → 512 bit → ~6,6M gas.
+**Bản nháp đầu ước 2,0–2,5M — thấp hơn thực tế khi tính cả fee proof.** Cơ chế phí bảo mật của note (§10.5.3 mục 5: `fee >= 0`, `v >= 0`, `b−fee >= 0`, `b−fee−v >= 0`) cần **ba** range statement độc lập, aggregate phải pad lên bốn → 512 bit → ~6,6M gas.
 
-He qua tren Gnosis (block gas limit 17M):
+Hệ quả trên Gnosis (block gas limit 17M):
 
-| Chi so | n=128 + fee (~6,6M) | n=64 + fee (~3,5M) | Groth16 (~0,21M) |
+| Chỉ số | n=128 + fee (~6,6M) | n=64 + fee (~3,5M) | Groth16 (~0,21M) |
 |---|---|---|---|
-| tx/block toi da (17M) | 2 | 4 | 80 |
-| tx/block thuc te (20% block space, 3,4M) | 0,5 | ~1 | 16 |
-| **tx/ngay (block 5s)** | **~8.600** | **~17.000** | **~276.000** |
-| Chi phi @ 2 gwei | 0,0132 xDAI ≈ $0,013 | 0,007 xDAI ≈ $0,007 | 0,0004 ≈ $0,0004 |
-| Cung tx tren Ethereum L1 @ 25 gwei, ETH $3k | **$495** | **$263** | **$16** |
-| Thoi gian prove (Rust, x86) | ~120 ms | ~60 ms | ~800 ms (Groth16 prove dat) |
-| Thoi gian prove (WASM/mobile) | ~2-4 s | ~1-2 s | ~15-30 s |
-| Trusted setup | Khong | Khong | **Co (per-circuit)** |
+| tx/block tối đa (17M) | 2 | 4 | 80 |
+| tx/block thực tế (20% block space, 3,4M) | 0,5 | ~1 | 16 |
+| **tx/ngày (block 5s)** | **~8.600** | **~17.000** | **~276.000** |
+| Chi phí @ 2 gwei | 0,0132 xDAI ≈ $0,013 | 0,007 xDAI ≈ $0,007 | 0,0004 ≈ $0,0004 |
+| Cùng tx trên Ethereum L1 @ 25 gwei, ETH $3k | **$495** | **$263** | **$16** |
+| Thời gian prove (Rust, x86) | ~120 ms | ~60 ms | ~800 ms (Groth16 prove đắt) |
+| Thời gian prove (WASM/mobile) | ~2–4 s | ~1–2 s | ~15–30 s |
+| Trusted setup | Không | Không | **Có (per-circuit)** |
 
-**De xuat cu the, can nguoi duyet:** ha range tu 128 xuong **64 bit** bang cach cho Zether token dung **6 decimals noi bo** thay vi 18. `2^64 ≈ 1,8e19`; voi 6 decimals do la **18 nghin ty don vi tien** — thua cho moi giao dich B2B tuong tuong duoc. Note bac 32 bit vi `2^32` wei @ 18 decimals la $0,0000000043 — lap luan do dung, nhung ket luan "vay thi len 128 bit" bo qua rang buoc *scale*, khong phai rang buoc *bit*. Doi lai: gas giam ~47%, prove nhanh gap doi tren mobile (day la yeu to quyet dinh cho luong "end-user payment tai quay" cua §07), va **dust duoi 10^-6 khong the chuyen bao mat** — `deposit` phai tu choi so tien khong chia het cho `10^12`, hoac giu phan du o so du cong khai. Do la mot dieu khoan san pham, phai chot voi nguoi lam nghiep vu.
+**Đề xuất cụ thể, cần người duyệt:** hạ range từ 128 xuống **64 bit** bằng cách cho Zether token dùng **6 decimals nội bộ** thay vì 18. `2^64 ≈ 1,8e19`; với 6 decimals đó là **18 nghìn tỷ đơn vị tiền** — thừa cho mọi giao dịch B2B tưởng tượng được. Note bác 32 bit vì `2^32` wei @ 18 decimals là $0,0000000043 — lập luận đó đúng, nhưng kết luận "vậy thì lên 128 bit" bỏ qua ràng buộc *scale*, không phải ràng buộc *bit*. Đổi lại: gas giảm ~47%, prove nhanh gấp đôi trên mobile (đây là yếu tố quyết định cho luồng "end-user payment tại quầy" của §07), và **dust dưới 10^-6 không thể chuyển bảo mật** — `deposit` phải từ chối số tiền không chia hết cho `10^12`, hoặc giữ phần dư ở số dư công khai. Đó là một điều khoản sản phẩm, phải chốt với người làm nghiệp vụ.
 
-Mot con so de doi chieu quy mo DMS: 2.000 salesman x 30 visit/ngay = **60.000 su kien/ngay** — vuot tran Gnosis o **moi** cau hinh Bulletproofs. Ket luan bat buoc: khong bao gio dua tung su kien nghiep vu len chain. R1 anchoring gom Merkle root (1 tx/gio/tenant), R2/R3 chi len chain o cap chung tu tien te. Va con so nay xac nhan quyet dinh da khoa cua user (private chain truoc cho Zether) la dung ve ky thuat, khong chi ve chi phi: tren chain rieng, block gas limit do ta dat (de nghi **100M**, cho ~14 tx Zether/block = 240.000 tx/ngay o block 5s) va 6,6M gas/tx khong con la rang buoc.
+Đề xuất này **đã được §01.1.8 và §03 chốt theo một đường khác và mạnh hơn**: `decimals` là tham số per-token đặt trong `initialize()`, `SHIELD_SCALE` tách khỏi `decimals`, và ràng buộc thật là `maxSupply / SHIELD_SCALE <= MAX_DECRYPTABLE_SHIELDED` với mặc định `2^44`. Đọc §01.1.8 làm nguồn; mục này chỉ cần nhớ **hệ quả gas** của lựa chọn đó.
 
-**Chot con so cho policy** (cho den khi co benchmark Foundry that, §06.12 muc 4):
-`blockchain.chain.max_gas_per_tx` = 8.000.000 tren chain rieng, 3.500.000 tren Gnosis (tuc **chi cho phep cau hinh n=64**). Neu contract deploy voi n=128, Gnosis bi tat cho Zether transfer va chi con `deposit`/`withdraw`.
+Một con số để đối chiếu quy mô DMS: 2.000 salesman × 30 visit/ngày = **60.000 sự kiện/ngày** — vượt trần Gnosis ở **mọi** cấu hình Bulletproofs. Kết luận bắt buộc: không bao giờ đưa từng sự kiện nghiệp vụ lên chain. R1 anchoring gộp Merkle root (1 tx/giờ/tenant), R2/R3 chỉ lên chain ở cấp chứng từ tiền tệ.
+
+Và con số này xác nhận quyết định đã khoá của user (private chain trước cho Zether) là đúng về kỹ thuật, không chỉ về chi phí. **Nhưng với một điều chỉnh so với bản 1:** bản 1 đề nghị đặt block gas limit private ở **100M** cho ~14 tx Zether/block. Chain private thật hiện ở **16,7M** (§01.1.16), tức ngang Gnosis, tức **~4 tx Zether/block** ở cấu hình n=64. Nâng được bằng signer vote không cần reset chain — nhưng nó là một việc phải làm, không phải một điều kiện có sẵn. Và trần thật ở đó không phải gas mà là **CPU validator, ~45 confidential tx/s** (§01.1.12.2).
+
+**Chốt con số cho policy** (cho đến khi có benchmark Foundry thật, §06.12 mục 4):
+`blockchain.chain.max_gas_per_tx` = 8.000.000 trên chain private (sau khi nâng gasLimit), 3.500.000 trên Gnosis (tức **chỉ cho phép cấu hình n=64**). Nếu contract deploy với n=128, Gnosis bị tắt cho Zether transfer và chỉ còn `deposit`/`withdraw`.
+
+Trên factory mở, `max_gas_per_tx` là một **chính sách của pool**, không phải một giới hạn của protocol: ai đó deploy một token ring-16 tốn 7,2M gas là quyền của họ, và pool của ta đơn giản từ chối relay nó trên Gnosis. Đó là cùng cơ chế `blockchain.target.policy` ở §06.3.3.
 
 ---
 
-### 06.5. Hot wallet: so du, refill, va gas coin
+### 06.5. Hot wallet: số dư, refill, và gas coin
 
-Mo hinh 3 nguong tren `blockchain.relayer.account`:
+Mô hình 3 ngưỡng trên `blockchain.relayer.account`:
 
 ```
 low_watermark    = expected_tx_per_hour * avg_gas * p90_gas_price * refill_lead_hours
@@ -732,11 +809,13 @@ target_balance   = low_watermark * 3
 high_watermark   = low_watermark * 6        # vuot -> sweep ve treasury
 ```
 
-`refill_lead_hours = 4` (du de mot nguoi truc tinh day xu ly manual neu automation hong). Vi du Gnosis, 500 tx/h, 2,5M gas, 2 gwei: `500 * 2,5e6 * 2e-9 = 2,5 xDAI/h` → low = 10 xDAI, target = 30, high = 60. So tien nho la co y: **vi hot khong bao gio giu qua vai gio runway**. Rui ro mat khoa hot duoc gioi han bang so du, khong bang do manh cua custody.
+`refill_lead_hours = 4` (đủ để một người trực tỉnh dậy xử lý manual nếu automation hỏng). Ví dụ Gnosis, 500 tx/h, 2,5M gas, 2 gwei: `500 * 2,5e6 * 2e-9 = 2,5 xDAI/h` → low = 10 xDAI, target = 30, high = 60. Số tiền nhỏ là cố ý: **ví hot không bao giờ giữ quá vài giờ runway**. Rủi ro mất khoá hot được giới hạn bằng số dư, không bằng độ mạnh của custody.
 
-Refill: cron Odoo 5 phut goi `model._cron_relayer_refill_scan()`, tao `blockchain.refill.request` khi `balance < low`. Refill duoc ky boi **treasury signer (HSM FIPS 140-2 L3, 2-of-3)** — day moi la cho bat buoc HSM, khong phai vi relayer (xem §06.6). Tu dong tra ve `low → target` neu `amount < auto_refill_cap_usd` (mac dinh $500); vuot thi can approve tay.
+Đây chính là nguyên tắc mà `_USER-DECISIONS.md` §21.5 phát biểu ở dạng tổng quát: **khoá ký chỉ được phép làm đúng một việc — trả gas.** Với pool N khoá, công thức trên áp cho **từng khoá**, nên `low_watermark` mỗi khoá nhỏ hơn N lần và tổng vốn nằm chết không tăng. Điều tăng lên là số lần refill, và đó là lý do treasury phải nạp theo lô chứ không từng khoá một.
 
-**[MOI] Chong vong lap refill.** Neu balance khong tang sau khi refill (tx refill bi treo, hoac dia chi sai), scan tiep se tao them request. Guard: toi da **1 request `pending` moi account**, va `_unique_pending_refill` bang partial unique index:
+Refill: cron Odoo 5 phút gọi `model._cron_relayer_refill_scan()`, tạo `blockchain.refill.request` khi `balance < low`. Refill được ký bởi **treasury signer (HSM FIPS 140-2 L3, 2-of-3)** — đây mới là chỗ bắt buộc HSM, không phải ví relayer (xem §06.6). Tự động trả về `low → target` nếu `amount < auto_refill_cap_usd` (mặc định $500); vượt thì cần approve tay.
+
+**[MỚI] Chống vòng lặp refill.** Nếu balance không tăng sau khi refill (tx refill bị treo, hoặc địa chỉ sai), scan tiếp sẽ tạo thêm request. Guard: tối đa **1 request `pending` mỗi account**, và `_unique_pending_refill` bằng partial unique index:
 
 ```python
 _unique_pending_refill = models.Constraint(
@@ -744,14 +823,14 @@ _unique_pending_refill = models.Constraint(
     'Moi relayer account chi co mot yeu cau refill dang xu ly.')
 ```
 
-**[MOI] `balance_native` khong duoc la `Float`.** §10.4.1 da chot: `uint256` khong vua vao `fields.Float` (mat chinh xac tu 2^53; 1 ETH = 1e18 wei). Ban nhap dau viet `fields.Float(digits=(24,8))` — mau thuan voi §10 va mat chinh xac o wei. Sua:
+**[MỚI] `balance_native` không được là `Float`.** §10.4.1 đã chốt: `uint256` không vừa vào `fields.Float` (mất chính xác từ 2^53; 1 ETH = 1e18 wei). Bản nháp đầu viết `fields.Float(digits=(24,8))` — mâu thuẫn với §10 và mất chính xác ở wei. Sửa:
 
 ```python
 balance_native_base = fields.Char(readonly=True, help='So du native, base units (wei), chuoi thap phan.')
 balance_native_ui   = fields.Float(digits=(18, 6), readonly=True, help='Chi de hien thi/sort. Khong tinh toan tren truong nay.')
 ```
 
-**[SUA] `runway_hours` khong nen `required=True`.** Ban nhap dau dung `store=True, required=True, default=0.0` roi phai canh giac chuyen NULL. Giai phap don gian hon: **bo `required=True`**. Mot chi so hien thi khong can rang buoc NOT NULL; `required` o day khong bao ve gi ma chi tao mot cai bay. Neu van muon giu (de query khong phai xu ly NULL), thi quy tac "compute gan gia tri o **moi** nhanh" van bat buoc:
+**[SỬA] `runway_hours` không nên `required=True`.** Bản nháp đầu dùng `store=True, required=True, default=0.0` rồi phải cảnh giác chuyện NULL. Giải pháp đơn giản hơn: **bỏ `required=True`**. Một chỉ số hiển thị không cần ràng buộc NOT NULL; `required` ở đây không bảo vệ gì mà chỉ tạo một cái bẫy. Nếu vẫn muốn giữ (để query không phải xử lý NULL), thì quy tắc "compute gán giá trị ở **mọi** nhánh" vẫn bắt buộc:
 
 ```python
 runway_hours = fields.Float(compute='_compute_runway_hours', store=True, default=0.0)
@@ -763,49 +842,56 @@ def _compute_runway_hours(self):
         rec.runway_hours = 9999.0 if not rate else rec.balance_native_ui / rate
 ```
 
-Dac thu tung chuoi:
+Đặc thù từng chuỗi:
 
-| Chuoi | Thu phai "refill" khong phai native balance | Co che |
+| Chuỗi | Thứ phải "refill" không phải native balance | Cơ chế |
 |---|---|---|
-| **SUI** | **Pool gas coin.** Song song = so coin object roi, khong phai nonce | Giu `max_inflight` coin object, moi coin >= `gas_budget`. Job `_sui_split_gas_coins()` dinh ky `SplitCoins`. Dung mot coin cho hai tx song song = **equivocation**, object bi khoa het epoch (~24h) |
-| **Cosmos** | `x/feegrant` allowance con han muc | Theo doi `PeriodicAllowance.period_spend_limit`, gia han truoc khi can |
-| **Soroban** | TTL cua contract instance/persistent entry | `extend_ttl` la R4, lich theo `live_until_ledger - 100k ledger` |
-| **Stellar** | Base reserve + so du XLM cho fee-bump | Fee-bump lay phi tu FeeSource, khong tu inner source |
-| **TON** | So du Highload Wallet V3 + cua so `query_id` | `query_id` het cua so (mac dinh 128 s) la mot dang "nonce exhaustion" rieng |
-| **Celo** | So du `feeCurrency` (cUSD/USDC) chu khong phai CELO | Refill bang stablecoin; van giu mot it CELO du phong. **[MOI]** Sau khi thanh L2, con can theo doi so du ETH tren L1 cua batcher neu ta tu chay node |
-| **Hedera** | So du HBAR cua payer account | Phi neo USD → burn rate on dinh, de du bao nhat trong 7 chuoi |
+| **SUI** | **Pool gas coin.** Song song = số coin object rời, không phải nonce | Giữ `max_inflight` coin object, mỗi coin >= `gas_budget`. Job `_sui_split_gas_coins()` định kỳ `SplitCoins`. Dùng một coin cho hai tx song song = **equivocation**, object bị khoá hết epoch (~24h) |
+| **Cosmos** | `x/feegrant` allowance còn hạn mức | Theo dõi `PeriodicAllowance.period_spend_limit`, gia hạn trước khi cạn |
+| **Soroban** | TTL của contract instance/persistent entry | `extend_ttl` là R4, lịch theo `live_until_ledger − 100k ledger` |
+| **Stellar** | Base reserve + số dư XLM cho fee-bump | Fee-bump lấy phí từ FeeSource, không từ inner source |
+| **TON** | Số dư Highload Wallet V3 + cửa sổ `query_id` | `query_id` hết cửa sổ (mặc định 128 s) là một dạng "nonce exhaustion" riêng |
+| **Celo** | Số dư `feeCurrency` (cUSD/USDC) chứ không phải CELO | Refill bằng stablecoin; vẫn giữ một ít CELO dự phòng. **[MỚI]** Sau khi thành L2, còn cần theo dõi số dư ETH trên L1 của batcher nếu ta tự chạy node |
+| **Hedera** | Số dư HBAR của payer account | Phí neo USD → burn rate ổn định, dễ dự báo nhất trong 7 chuỗi |
+| **Chain private 9000** | **Không refill gì cả** (`MinGasPrice = 0`) | Toàn bộ mục này là no-op ở đó. Đừng build refill automation cho nó |
 
-#### 06.5.1. [MOI] Xoay khoa va rut lui relayer account (draining)
+Hàng SUI là chuỗi duy nhất mà **pool gas coin thay thế hoàn toàn pool khoá** (§06.1.8): song song đến từ số coin object, không từ số địa chỉ. Cùng bài toán, khác hình dạng lời giải — và cái bẫy equivocation ở đó nghiêm trọng hơn nonce gap trên EVM, vì object bị khoá cả epoch chứ không phải chờ một replacement.
 
-Thieu hoan toan trong ban nhap dau. Mot relayer EOA phai xoay duoc ma khong lam ket nonce.
+#### 06.5.1. [MỚI] Xoay khoá và rút lui relayer account (draining)
+
+Thiếu hoàn toàn trong bản nháp đầu. Một relayer EOA phải xoay được mà không làm kẹt nonce.
 
 ```
 active -> draining : dung nhan job moi; giu nguyen quyen broadcast/replace cho inflight
 draining -> retired: khi inflight rong VA signed rong VA balance da sweep ve treasury
 ```
 
-Chinh sach: xoay moi **30 ngay** cho relayer EOA (chu khong phai treasury). Trong luc draining, mot EOA moi da duoc them vao pool tu truoc (`state='paused'` → `active`) nen khong co khoang trong nang luc. Truoc khi `retired`, bat buoc mot lan `cold_start()` cua EOA moi va mot lan `reconcile` cua EOA cu; `retired` account giu nguyen record de audit, khong duoc xoa (`ondelete='restrict'` tu job).
+Chính sách: xoay mỗi **30 ngày** cho relayer EOA (chứ không phải treasury). Trong lúc draining, một EOA mới đã được thêm vào pool từ trước (`state='paused'` → `active`) nên không có khoảng trống năng lực. Trước khi `retired`, bắt buộc một lần `cold_start()` của EOA mới và một lần `reconcile` của EOA cũ; `retired` account giữ nguyên record để audit, không được xoá (`ondelete='restrict'` từ job).
 
----
+**Với pool khoá (`_USER-DECISIONS.md` §21.5), state machine này là cơ chế xoay vòng, không phải một thủ tục bảo trì hiếm.** Xoay 30 ngày trên một pool 50 khoá nghĩa là **một khoá rời pool mỗi ~14 giờ** — nó phải hoàn toàn tự động, không có bước người, và `draining → retired` phải là một cron chứ không phải một nút bấm. Ba yêu cầu kèm theo:
 
-### 06.6. HSM/MPC: nut co chai that su
+1. Pool phải luôn có `N + 2` khoá: N đang `active`, một đang `draining`, một `paused` chờ vào. Không có đệm thì mỗi lần xoay là một lần giảm năng lực.
+2. `draining` không được đếm vào `bc:pool:{caip2}:{relayer_id}` (ZSET chọn khoá) nữa — nếu không, least-in-flight vẫn gửi job mới vào nó.
+3. Chi phí sweep: mỗi lần retire là một tx chuyển số dư còn lại về treasury. Ở 50 khoá xoay 30 ngày, đó là ~50 tx/tháng — không đáng kể, nhưng phải nằm trong dự toán gas chứ không xuất hiện như một bất ngờ.
 
-Con so (uoc tinh co co so, **can benchmark lai tren ha tang thuc truoc khi khoa kien truc**):
+### 06.6. HSM/MPC: nút cổ chai thật sự
 
-| Custody | Throughput ky | Latency p50 / p99 | Co so uoc tinh |
+Con số (ước tính có cơ sở, **cần benchmark lại trên hạ tầng thực trước khi khoá kiến trúc**):
+
+| Custody | Throughput ký | Latency p50 / p99 | Cơ sở ước tính |
 |---|---|---|---|
-| HSM tai cho (Thales/Utimaco, PKCS#11, ECDSA P-256) | 10^3 – 10^4 sign/s | 1-5 ms / 20 ms | Spec nha san xuat cho ECDSA. **secp256k1 phai xac nhan rieng** — nhieu HSM chi co P-256/P-384 |
-| AWS CloudHSM (hsm2m.medium) | ~10^3 sign/s/HSM | 3-10 ms / 50 ms | Bac do lon cong bo cho ECDSA. secp256k1 co ho tro tren hsm2m |
-| AWS KMS asymmetric `Sign` (ECC_SECG_P256K1) | **~500 req/s** quota mac dinh (**thay doi theo region**, mot so region 300) | 15-40 ms / 150 ms | Service quota, khong phai gioi han crypto. Xin nang duoc |
-| **MPC SaaS** (Fireblocks/Fordefi/Turnkey) | **5 – 30 sign/s cho mot vault** | **300 ms – 3 s** / 10 s | Nhieu vong MPC qua mang + policy engine + API rate limit. **Song song trong cung vault thuong bi serialize** |
-| Threshold Schnorr/FROST tu van hanh, cung DC | 10^2 – 10^3 sign/s | 10-50 ms / 200 ms | 2 vong, RTT noi bo |
-| Session key trong Nitro Enclave/SGX | 10^4+ sign/s | < 1 ms | Ky cuc bo, khong ra mang |
+| HSM tại chỗ (Thales/Utimaco, PKCS#11, ECDSA P-256) | 10^3 – 10^4 sign/s | 1–5 ms / 20 ms | Spec nhà sản xuất cho ECDSA. **secp256k1 phải xác nhận riêng** — nhiều HSM chỉ có P-256/P-384 |
+| AWS CloudHSM (hsm2m.medium) | ~10^3 sign/s/HSM | 3–10 ms / 50 ms | Bậc độ lớn công bố cho ECDSA. secp256k1 có hỗ trợ trên hsm2m |
+| AWS KMS asymmetric `Sign` (ECC_SECG_P256K1) | **~500 req/s** quota mặc định (**thay đổi theo region**, một số region 300) | 15–40 ms / 150 ms | Service quota, không phải giới hạn crypto. Xin nâng được |
+| **MPC SaaS** (Fireblocks/Fordefi/Turnkey) | **5 – 30 sign/s cho một vault** | **300 ms – 3 s** / 10 s | Nhiều vòng MPC qua mạng + policy engine + API rate limit. **Song song trong cùng vault thường bị serialize** |
+| Threshold Schnorr/FROST tự vận hành, cùng DC | 10^2 – 10^3 sign/s | 10–50 ms / 200 ms | 2 vòng, RTT nội bộ |
+| Session key trong Nitro Enclave/SGX | 10^4+ sign/s | < 1 ms | Ký cục bộ, không ra mạng |
 
-**MPC SaaS o 5-30 sign/s la nut co chai nghiem trong hon ca chain.** Neu moi business action = 1 chu ky, tran he thong la 5-30 action/s — thap hon ca Gnosis. Bon cach thiet ke quanh no, theo thu tu hieu qua:
+**MPC SaaS ở 5–30 sign/s là nút cổ chai nghiêm trọng hơn cả chain.** Nếu mỗi business action = 1 chữ ký, trần hệ thống là 5–30 action/s — thấp hơn cả Gnosis. Bốn cách thiết kế quanh nó, theo thứ tự hiệu quả:
 
-**1. Batch executor: 1 chu ky relayer cho N meta-tx.** Don bay lon nhat, va no roi ra tu chinh EIP-1776: chu ky *nguoi dung* nam trong `MetaTransaction.signature` (do session key ky, re), con HSM chi ky **vo ngoai** — tx cua relayer EOA. Mot contract `MetaTxBatcher.executeBatch(MetaTransaction[] calldata txs, bytes[] calldata sigs)` gom N=50 meta-tx vao 1 tx on-chain → tai HSM giam 50 lan. Voi MPC 10 sign/s: 500 business action/s.
+**1. Batch executor: 1 chữ ký relayer cho N meta-tx.** Đòn bẩy lớn nhất, và nó rơi ra từ chính EIP-1776: chữ ký *người dùng* nằm trong `MetaTransaction.signature` (do session key ký, rẻ), còn HSM chỉ ký **vỏ ngoài** — tx của relayer EOA. Một contract `MetaTxBatcher.executeBatch(MetaTransaction[] calldata txs, bytes[] calldata sigs)` gộp N=50 meta-tx vào 1 tx on-chain → tải HSM giảm 50 lần. Với MPC 10 sign/s: 500 business action/s.
 
-**[MOI] Ba yeu cau bat buoc len contract batcher ma ban nhap dau chi noi mot:**
+**[MỚI] Ba yêu cầu bắt buộc lên contract batcher mà bản nháp đầu chỉ nói một:**
 
 ```solidity
 function executeBatch(MetaTransaction[] calldata txs, bytes[] calldata sigs) external {
@@ -837,19 +923,28 @@ function executeOne(MetaTransaction calldata t, bytes calldata sig) external {
 }
 ```
 
-Diem (c) la mot **quyet dinh contract ma relay pool khong the an toan neu thieu**, va no keo theo van de grief nguoc lai (mot relayer doc dot nonce cua user) — xem §06.12 muc 3.
+Điểm (c) là một **quyết định contract mà relay pool không thể an toàn nếu thiếu**, và nó kéo theo vấn đề grief ngược lại (một relayer độc đốt nonce của user) — xem §06.12 mục 3.
 
-**[MOI] Batch lam sim gate kho hon, va do la chi phi that.** Sim mot batch 50 item mat gas gap ~50 lan; mot `eth_call` 50 x 200k = 10M gas co the vuot cap cua provider. Chot: **sim tung item rieng le tren cung mot `blockHash`** (50 `eth_call` song song, moi cai nho), roi sim ca batch **mot lan** de lay gas tong. Item nao sim fail thi loai khoi batch truoc khi ky — do la ly do sim phai xay ra **truoc** batching, khong phai sau.
+**[MỚI] Batch làm sim gate khó hơn, và đó là chi phí thật.** Sim một batch 50 item mất gas gấp ~50 lần; một `eth_call` 50 × 200k = 10M gas có thể vượt cap của provider. Chốt: **sim từng item riêng lẻ trên cùng một `blockHash`** (50 `eth_call` song song, mỗi cái nhỏ), rồi sim cả batch **một lần** để lấy gas tổng. Item nào sim fail thì loại khỏi batch trước khi ký — đó là lý do sim phải xảy ra **trước** batching, không phải sau.
 
-**Kich thuoc batch tot nhat khong phai la lon nhat.** Danh doi: batch lon → it chu ky hon, nhung (i) mot tx to hon co xac suat treo cao hon va replacement dat hon, (ii) latency chờ gom batch, (iii) mot lan revert cap batch mat het. De xuat: `batch_size = min(50, ceil(arrival_rate * max_batch_wait_ms / 1000))`, `max_batch_wait_ms = 1500` cho R2, **0 (khong batch)** cho R3/R4. Job R3 dung batch la dat mot khoan tien that vao chung so phan voi 49 job khac.
+**Kích thước batch tốt nhất không phải là lớn nhất.** Đánh đổi: batch lớn → ít chữ ký hơn, nhưng (i) một tx to hơn có xác suất treo cao hơn và replacement đắt hơn, (ii) latency chờ gom batch, (iii) một lần revert cấp batch mất hết. Đề xuất: `batch_size = min(50, ceil(arrival_rate * max_batch_wait_ms / 1000))`, `max_batch_wait_ms = 1500` cho R2, **0 (không batch)** cho R3/R4. Job R3 dùng batch là đặt một khoản tiền thật vào chung số phận với 49 job khác.
 
-**2. Sharding K relayer EOA.** Song song hoa, nhung *khong* tang throughput HSM (van cung mot HSM/vault). Chi giai quyet head-of-line blocking. **[MOI]** Ngoai le: neu MPC provider cho phep **nhieu vault**, moi vault mot EOA thi throughput *co* nhan len — nhung chi phi license thuong theo vault. Kiem tra voi nha cung cap truoc khi dua vao mo hinh nang luc.
+**2. Pool khoá — và bản 1 đánh giá thấp nó.** Bản 1 viết: *"sharding K relayer EOA song song hoá, nhưng không tăng throughput HSM (vẫn cùng một HSM/vault). Chỉ giải quyết head-of-line blocking."* Câu đó đúng về mặt chữ ký và **bỏ sót vế quan trọng hơn**: head-of-line blocking không phải một phiền toái, nó là **trần thông lượng cứng của EVM** (§06.1: `txpool.accountslots = 16`, và một tx kẹt chặn cả hàng). Với một khoá, throughput bị chặn ở ~1 tx/block bất kể HSM nhanh cỡ nào.
 
-**3. Phan tang custody theo lop rui ro** — de xuat can nguoi duyet: HSM FIPS L3 bat buoc cho **treasury + refill signer + admin contract (upgrade/pause)**; relayer EOA hot dung khoa sinh trong **Nitro Enclave/SGX**, khong bao gio ra plaintext ngoai enclave, tran chi tieu bang runway 4h, xoay vong 30 ngay (§06.5.1). Nguyen tac "cam Agent luu private key plaintext" van duoc giu tuyet doi — enclave khong phai plaintext-on-disk. Doi lai throughput tu 10 len 10^4 sign/s. Neu compliance khong chap nhan, phai chap nhan tran ~10-30 tx/s va thiet ke batch theo (1). Trung khop voi bang cua §07.0.
+Nói cách khác: **batch giải nút cổ chai chữ ký, pool khoá giải nút cổ chai nonce.** Hai nút khác nhau, và hệ thống bị chặn ở cái thấp hơn. Cần cả hai.
 
-**4. Khong pre-sign hang loat theo nonce.** Ky truoc nonce n..n+50 roi cat trong Redis nghe hap dan (amortize latency) nhung tao mot kho tx da ky co the phat song boi bat ky ai doc duoc Redis, va khong the huy sau khi ky vi gas price da chot. **Cam.** Ngoai le duy nhat duoc xem xet: pre-sign **mot** tx cancel (self-send, 21000 gas, gia cao) cho moi nonce inflight, luu trong enclave chu khong trong Redis — do la mot "dead man switch" co gia tri, nhung van la mot tx da ky nam cho, nen mac dinh **tat**.
+**[MỚI]** Ngoại lệ về throughput ký: nếu MPC provider cho phép **nhiều vault**, mỗi vault một EOA thì throughput ký *có* nhân lên — nhưng chi phí license thường theo vault. Kiểm tra với nhà cung cấp trước khi đưa vào mô hình năng lực.
 
-Ngan sach latency mot job (Gnosis, MPC SaaS, khong batch):
+**3. Phân tầng custody theo lớp rủi ro** — đề xuất cần người duyệt: HSM FIPS L3 bắt buộc cho **treasury + refill signer + admin contract (upgrade/pause)**; relayer EOA hot dùng khoá sinh trong **Nitro Enclave/SGX**, không bao giờ ra plaintext ngoài enclave, trần chi tiêu bằng runway 4h, xoay vòng 30 ngày (§06.5.1). Nguyên tắc "cấm Agent lưu private key plaintext" vẫn được giữ tuyệt đối — enclave không phải plaintext-on-disk. Đổi lại throughput từ 10 lên 10^4 sign/s. Nếu compliance không chấp nhận, phải chấp nhận trần ~10–30 tx/s và thiết kế batch theo (1). Trùng khớp với bảng của §07.0.
+
+Với mô hình mesh mở, tầng này có một biến thể thứ ba mà bản 1 không có: **một node mesh do cá nhân chạy giữ khoá trong một file.** Đó không phải cấu hình sai — nó là cấu hình đúng cho một khoá giữ $5 tiền gas và không có quyền gì khác (`_USER-DECISIONS.md` §21.5). `KeyPool` phải nhận cả ba: HSM, enclave, và file. Cùng interface `sign(tx) -> bytes`, khác backend, chọn bằng cấu hình. Đừng viết hai bản.
+
+**Điểm quan trọng phải nói thẳng:** một khoá file chỉ chấp nhận được **vì** các ràng buộc ở §21.5 — float nhỏ, không phải `feeRecipient`, không role nào trên contract nào. Nếu ai đó bỏ một trong ba ràng buộc đó, khoá file trở thành một lỗ hổng. Ba ràng buộc và một backend rẻ đi cùng nhau; không tách được.
+
+**4. Không pre-sign hàng loạt theo nonce.** Ký trước nonce n..n+50 rồi cất trong Redis nghe hấp dẫn (amortize latency) nhưng tạo một kho tx đã ký có thể phát sóng bởi bất kỳ ai đọc được Redis, và không thể huỷ sau khi ký vì gas price đã chốt. **Cấm.** Ngoại lệ duy nhất được xem xét: pre-sign **một** tx cancel (self-send, 21000 gas, giá cao) cho mỗi nonce inflight, lưu trong enclave chứ không trong Redis — đó là một "dead man switch" có giá trị, nhưng vẫn là một tx đã ký nằm chờ, nên mặc định **tắt**.
+
+Ngân sách latency một job (Gnosis, MPC SaaS, không batch):
+Ngân sách latency một job (Gnosis, MPC SaaS, không batch):
 
 ```
 policy + allowlist + selector                     2 ms
@@ -866,11 +961,13 @@ inclusion (1 block)                            5.000 ms
 finality soft (1 block) / hard (2 epoch)        5 s / ~13 phut
 ```
 
-Voi batch 50: 800/50 = 16 ms/action cho phan ky; tong ~1.180 ms cho ca batch → **~24 ms/action**. Do la toan bo ly do batch executor la must-have chu khong phai toi uu.
+**74% ngân sách nằm ở một lời gọi ký.** Đó là con số nói rõ nhất tại sao §06.6 mục 3 (enclave cho relayer hot) không phải một tối ưu hoá mà là một quyết định kiến trúc. Với enclave, dòng đó rớt từ 800 ms xuống < 1 ms và tổng trước mempool còn ~235 ms.
 
-#### 06.6.1. [MOI] Mo hinh hang doi: bao nhieu worker, bao nhieu EOA
+Và nó là lý do độc lập thứ ba để **Zether không đi qua MPC SaaS**: cửa sổ epoch chỉ còn ~4,8 block (§06.3.4), một chữ ký 800 ms p50 / 3 s p99 ăn mất 12–60% cửa sổ đó trước khi tx rời máy.
 
-Little's law, muc tieu **100 business action/s** (bien tren cho ca DMS + loyalty + payment):
+#### 06.6.1. [MỚI] Mô hình hàng đợi: bao nhiêu worker, bao nhiêu EOA
+
+Little's law, mục tiêu **100 business action/s** (biên trên cho cả DMS + loyalty + payment):
 
 ```
 Voi batch 50, R2:        2 on-chain tx/s
@@ -889,101 +986,119 @@ Redis ops:  ~14 ops/job * 100 job/s = 1.400 ops/s. Redis appendfsync=always lam 
 Postgres:   ~4 write/job (qua callback gom 200) = ~0,5 commit/s tu worker. Khong dang ke.
 ```
 
-Ket luan dung mot cau: **voi MPC SaaS, so EOA khong quan trong; voi enclave, 6 EOA la du cho 100 action/s.** Bat cu ai de xuat 50 relayer EOA nen bi hoi truoc do so nay.
+Kết luận đúng một câu: **với MPC SaaS, số EOA không quan trọng; với enclave, 6 EOA là đủ cho 100 action/s.** Bất cứ ai đề xuất 50 relayer EOA nên bị hỏi trước đó số này.
+
+**Nhưng con số 6 là cho tải nội bộ có batch.** `_USER-DECISIONS.md` §21.5 đưa ra bảng 50 khoá cho 10 tx/s — không mâu thuẫn, mà là **một bài toán khác**: đó là một node mesh relay intent của người lạ, nơi **không batch được** (mỗi intent một chữ ký người dùng riêng, đến rời rạc, không có ai để gom) và mỗi tx là một `executeMetaTransaction` độc lập. Batch chỉ khả thi khi ta là người sinh ra cả N job cùng lúc.
+
+Nói gọn: **batch được thì cần ít khoá; không batch được thì cần nhiều khoá.** Relay pool nội bộ ở vế đầu, node mesh ở vế sau, và cùng một `KeyPool` phục vụ cả hai với cấu hình khác nhau.
+
+Thêm hai dòng cho chain private 9000: `block_time` là 5 s như Gnosis nên `(b)` không đổi, và MPC/HSM không nằm trên đường đó (chain nội bộ, khoá nội bộ), nên `(a)` cũng không. Trần thật ở đó là **CPU validator ~45 confidential tx/s** (§01.1.12.2), và nó cao hơn cả hai giới hạn trên — tức là ở giai đoạn private, không có nút cổ chai nào trong section này ràng buộc.
 
 ---
 
-### 06.7. Multi-RPC: failover va phat hien RPC noi doi / tut hau
+### 06.7. Multi-RPC: failover và phát hiện RPC nói dối / tụt hậu
 
-Toi thieu **3 provider doc lap** moi chain (1 node tu van hanh + 2 nha cung cap). `blockchain.rpc.endpoint` co `endpoint_ref` (Char, tro toi `ir.config_parameter` chua URL + API key — **khong** luu key tren record), `weight`, `role` (`primary`/`fallback`/`witness`), `health_state`, `score`, `divergence_count`.
+Tối thiểu **3 provider độc lập** mỗi chain (1 node tự vận hành + 2 nhà cung cấp). `blockchain.rpc.endpoint` có `endpoint_ref` (Char, trỏ tới `ir.config_parameter` chứa URL + API key — **không** lưu key trên record), `weight`, `role` (`primary`/`fallback`/`witness`), `health_state`, `score`, `divergence_count`.
 
-#### 06.7.1. Bon lop kiem tra
+Trên chain private 9000 hiện chỉ có **một** node, nên "3 provider độc lập" không áp dụng. Điều đó không làm các lớp kiểm tra dưới đây vô nghĩa — lớp 1 (liveness) và lớp 4 (drop im lặng) vẫn chạy được với một endpoint; lớp 2 và 3 (đối chứng giữa các provider) thì không. Ghi rõ trong cấu hình chain rằng hai lớp đó **tắt vì thiếu quorum**, đừng để chúng báo "pass" một cách vô nghĩa.
 
-**Lop 1 — song (liveness), moi 5s:** `eth_blockNumber` + `eth_getBlockByNumber(head)`. Do `head_lag_blocks` so voi max cua ca cum, va `head_age = now - block.timestamp`. Trip khi `head_lag > 3` hoac `head_age > 4 * block_time`. Day la *lagging RPC*.
+#### 06.7.1. Bốn lớp kiểm tra
 
-**Lop 2 — trung thuc (correctness), moi 30s:** hoi **k-of-n** cung mot cau hoi tai chieu sau an toan `H = head - witness_depth`:
+**Lớp 1 — sống (liveness), mỗi 5s:** `eth_blockNumber` + `eth_getBlockByNumber(head)`. Đo `head_lag_blocks` so với max của cả cụm, và `head_age = now − block.timestamp`. Trip khi `head_lag > 3` hoặc `head_age > 4 * block_time`. Đây là *lagging RPC*.
+
+**Lớp 2 — trung thực (correctness), mỗi 30s:** hỏi **k-of-n** cùng một câu hỏi tại chiều sâu an toàn `H = head − witness_depth`:
 
 ```
 blockhash(H)  tu tat ca endpoint  ->  phai bang nhau
 ```
 
-**[SUA] `witness_depth` phai theo chain, khong phai hang so 12.** Ban nhap dau chot 12 block cho moi chain: tren Gnosis do la 60s (chap nhan duoc), tren Celo L2 block 1s do la 12s (qua nong, reorg cua sequencer restart co the sau hon), tren Cosmos/Stellar (finality tuc thoi) 12 la thua. Chot `witness_depth = max(chain.finality_depth, 2)` cho chain BFT, `max(chain.finality_depth, 12)` cho chain probabilistic.
+**[SỬA] `witness_depth` phải theo chain, không phải hằng số 12.** Bản nháp đầu chốt 12 block cho mọi chain: trên Gnosis đó là 60s (chấp nhận được), trên Celo L2 block 1s đó là 12s (quá nông, reorg của sequencer restart có thể sâu hơn), trên Cosmos/Stellar (finality tức thời) 12 là thừa. Chốt `witness_depth = max(chain.finality_depth, 2)` cho chain BFT, `max(chain.finality_depth, 12)` cho chain probabilistic.
 
-**[SUA] Mot lan lech khong duoc eject ngay.** Hai provider co the tra khac nhau *hop phap* trong vai giay ngay sau mot reorg nong. Chot: lech lan dau → `divergence_suspect`, hoi lai sau 2 block **tai cung chieu sau moi**; van lech → **eject vinh vien** (khong auto-recover), `blockchain.breaker.event(kind='rpc_divergence')`, page P1. Neu **quorum bi vo** (khong co da so) → dung broadcast toan chain, chuyen sang read-only.
+Clique (chain 9000) thuộc nhóm **probabilistic, không phải BFT** — nó không có instant finality (§01.1.16). Đừng xếp nó vào nhánh `max(finality_depth, 2)` chỉ vì nó là chain riêng.
 
-**[MOI] Lop 3 — canary state:** blockhash bang nhau khong chung minh `eth_call` trung thuc. Mot provider co the phuc vu state cu. Moi 60s, goi cung mot `eth_call` toi mot contract canary (mot counter tang don, hoac don gian la `balanceOf(relayer)` cua mot ERC-20 quen thuoc) **pin theo `blockHash`** giong nhau tren moi endpoint; ket qua phai byte-identical. Day la kiem tra duy nhat bat duoc mot archive node dang phuc vu state sai — kieu loi da tung xay ra voi nha cung cap that.
+**[SỬA] Một lần lệch không được eject ngay.** Hai provider có thể trả khác nhau *hợp pháp* trong vài giây ngay sau một reorg nông. Chốt: lệch lần đầu → `divergence_suspect`, hỏi lại sau 2 block **tại cùng chiều sâu mới**; vẫn lệch → **eject vĩnh viễn** (không auto-recover), `blockchain.breaker.event(kind='rpc_divergence')`, page P1. Nếu **quorum bị vỡ** (không có đa số) → dừng broadcast toàn chain, chuyển sang read-only.
 
-**Lop 4 — phat hien drop im lang:** loi hong nguy hiem nhat la RPC tra ve tx hash cho `eth_sendRawTransaction` roi **khong lan truyen** — job tuong da broadcast, thuc te khong. Phat hien: sau 2 block, xac nhan tx ton tai qua **mot provider KHAC** (`eth_getTransactionByHash` != null hoac `getTransactionCount(pending)` da tang). Khong thay → re-broadcast raw tx (giong het, cung chu ky) qua provider khac; sau 3 lan → eject provider.
+**[MỚI] Lớp 3 — canary state:** blockhash bằng nhau không chứng minh `eth_call` trung thực. Một provider có thể phục vụ state cũ. Mỗi 60s, gọi cùng một `eth_call` tới một contract canary (một counter tăng đơn, hoặc đơn giản là `balanceOf(relayer)` của một ERC-20 quen thuộc) **pin theo `blockHash`** giống nhau trên mọi endpoint; kết quả phải byte-identical. Đây là kiểm tra duy nhất bắt được một archive node đang phục vụ state sai — kiểu lỗi đã từng xảy ra với nhà cung cấp thật.
 
-#### 06.7.2. Ba quy tac dinh tuyen bat buoc
+**Lớp 4 — phát hiện drop im lặng:** lối hỏng nguy hiểm nhất là RPC trả về tx hash cho `eth_sendRawTransaction` rồi **không lan truyền** — job tưởng đã broadcast, thực tế không. Phát hiện: sau 2 block, xác nhận tx tồn tại qua **một provider KHÁC** (`eth_getTransactionByHash` != null hoặc `getTransactionCount(pending)` đã tăng). Không thấy → re-broadcast raw tx (giống hệt, cùng chữ ký) qua provider khác; sau 3 lần → eject provider.
 
-1. **Sticky provider cho doc nonce-critical.** `getTransactionCount` phai luon hoi cung mot provider trong suot vong doi mot relayer account (ghi `pinned_endpoint_id` tren account). Doc `latest=41` tu node A roi `latest=39` tu node B tut hau → nonce manager tu tao gap. Doi provider chi khi eject, va khi doi thi **bat buoc `cold_start()` toan bo** truoc khi cap lease tiep (§06.1.2) — khong phai chi "reconcile".
-2. **Broadcast fan-out, doc thi khong.** Gui raw tx toi **tat ca** provider khoe (tang xac suat lan truyen, khong co tac dung phu vi tx la idempotent theo hash). Nguoc lai, doc state thi chi tu primary + witness kiem chung.
-3. **[MOI] Fan-out phai tru cac endpoint co orderflow rieng.** Mot so RPC (MEV-protect, private orderflow, builder-affiliated) **khong** phat tan tx ra mempool cong khai, va gui tx toi do la trao quyen uu tien cho mot ben. Field `blockchain.rpc.endpoint.propagation = Selection([('public','Public mempool'), ('private','Private orderflow'), ('unknown','Unknown')])`. Fan-out chi toi `public`. Endpoint `private` chi dung cho tx co `mev_sensitive=True` (vi du `withdraw` Zether, noi §10.5.3 da bam `recipient` vao challenge nhung gia tri rut van lo ra), va khi do **chi** gui toi do, khong fan-out.
+Với một node duy nhất, lớp 4 lui về "xác nhận qua `txpool_content` của chính node đó" — yếu hơn hẳn, và phải được ghi nhận là một rủi ro tồn dư của cấu hình một node, không phải một kiểm tra tương đương.
 
-Scoring de chon primary: `score = 0.5*ewma(latency_p95) + 0.3*error_rate + 0.2*head_lag`, EWMA alpha=0,2, danh gia lai moi 30s, doi primary co hysteresis (chi doi khi score tot hon primary hien tai > 25% trong 3 lan lien tiep).
+#### 06.7.2. Ba quy tắc định tuyến bắt buộc
 
-**[MOI] Khong bao gio doi primary trong luc co job o `signed` chua broadcast.** Doi primary keo theo doi endpoint doc nonce (quy tac 1) keo theo cold start. Cho inflight rong, hoac hoan sang chu ky sau.
+1. **Sticky provider cho đọc nonce-critical.** `getTransactionCount` phải luôn hỏi cùng một provider trong suốt vòng đời một relayer account (ghi `pinned_endpoint_id` trên account). Đọc `latest=41` từ node A rồi `latest=39` từ node B tụt hậu → nonce manager tự tạo gap. Đổi provider chỉ khi eject, và khi đổi thì **bắt buộc `cold_start()` toàn bộ** trước khi cấp lease tiếp (§06.1.2) — không phải chỉ "reconcile".
+2. **Broadcast fan-out, đọc thì không.** Gửi raw tx tới **tất cả** provider khoẻ (tăng xác suất lan truyền, không có tác dụng phụ vì tx là idempotent theo hash). Ngược lại, đọc state thì chỉ từ primary + witness kiểm chứng.
+3. **[MỚI] Fan-out phải trừ các endpoint có orderflow riêng.** Một số RPC (MEV-protect, private orderflow, builder-affiliated) **không** phát tán tx ra mempool công khai, và gửi tx tới đó là trao quyền ưu tiên cho một bên. Field `blockchain.rpc.endpoint.propagation = Selection([('public','Public mempool'), ('private','Private orderflow'), ('unknown','Unknown')])`. Fan-out chỉ tới `public`. Endpoint `private` chỉ dùng cho tx có `mev_sensitive=True` (ví dụ `withdraw` Zether, nơi §10.5.3 đã băm `recipient` vào challenge nhưng giá trị rút vẫn lộ ra), và khi đó **chỉ** gửi tới đó, không fan-out.
+
+   Trường `propagation` này là cùng một khái niệm với `pool_visibility` của §05.8.2 nhìn từ tầng RPC: một nơi là "intent này có được gossip không", một nơi là "tx này có được phát tán không". Hai tầng, cùng một quyết định bảo mật, và chúng phải nhất quán — một intent `pool: private` mà cuối cùng được fan-out ra mempool công khai thì lớp bảo vệ đầu là vô ích.
+
+Scoring để chọn primary: `score = 0.5*ewma(latency_p95) + 0.3*error_rate + 0.2*head_lag`, EWMA alpha=0,2, đánh giá lại mỗi 30s, đổi primary có hysteresis (chỉ đổi khi score tốt hơn primary hiện tại > 25% trong 3 lần liên tiếp).
+
 
 ---
 
-### 06.8. Observability: chi so nao that su quan trong
+### 06.8. Observability: chỉ số nào thật sự quan trọng
 
 Prometheus, label chung `{caip2, relayer_addr, tenant, risk_class}`.
 
-| Metric | Type | Y nghia | Alert |
+| Metric | Type | Ý nghĩa | Alert |
 |---|---|---|---|
-| `relay_nonce_gap_age_seconds` | Gauge | Tuoi cua nonce bi thung cu nhat | > 120s → **page P1** (moi tx sau do dang chet) |
-| `relay_nonce_lease_expired_total` | Counter | Lease het han phai reclaim | > 5/phut → ticket (worker dang chet hoac signer cham) |
-| `relay_nonce_desync_total` | Counter | `latest > next` (ai do dung chung vi) | >= 1 → **page P1**, quarantine account |
-| `relay_signed_orphan_total` | Counter **[MOI]** | Nonce co raw tx da ky nhung khong co job | >= 1 → **page P1** (mat toan ven WAL) |
-| `relay_shard_ownership_lost_total` | Counter **[MOI]** | Worker mat lease shard | > 2/gio → ticket (worker flapping) |
-| `relay_sim_exec_divergence_total` | Counter | Sim pass nhung tx revert, label `{category}` | > 0,5% broadcast/15p → ticket; > 20/h cung contract → auto-quarantine |
-| `relay_sim_thrash_total` | Counter **[MOI]** | Job phai sim lai >= 3 lan | Tang = state drift cao, xem lai `expiry` |
-| `relay_tx_stuck_seconds` | Histogram | broadcast → mined | p99 > 3x `block_time * stuck_after` → ticket |
-| `relay_replacement_total` | Counter, label `{kind=speedup\|cancel\|gapfill}` | Speed-up + cancel + gap-filler | Tang dot bien = breaker sap trip hoac fee model sai |
-| `relay_bump_ceiling_total` | Counter **[MOI]** | `BumpCeilingReached` | >= 1 → ticket ngay: tx dang ket va khong go duoc |
-| `relay_hot_wallet_runway_hours` | Gauge | So du / burn rate | < 4h → ticket; **< 1h → page** |
-| `relay_refill_pending_seconds` | Gauge **[MOI]** | Tuoi refill request chua xong | > 1800s → page (automation refill dang hong) |
-| `relay_signer_latency_seconds` | Histogram | Do tai HSM/MPC boundary | p99 > 3s → ticket; nut co chai, dashboard rieng |
-| `relay_signer_throttled_total` | Counter | 429 tu KMS/MPC | > 0 → tang batch size hoac xin nang quota |
-| `relay_batch_size` | Histogram **[MOI]** | So item/batch thuc te | p50 << `batch_size` cau hinh = dang cho vo ich, giam `max_batch_wait_ms` |
+| `relay_nonce_gap_age_seconds` | Gauge | Tuổi của nonce bị thủng cũ nhất | > 120s → **page P1** (mọi tx sau đó đang chết) |
+| `relay_nonce_lease_expired_total` | Counter | Lease hết hạn phải reclaim | > 5/phút → ticket (worker đang chết hoặc signer chậm) |
+| `relay_nonce_desync_total` | Counter | `latest > next` (ai đó dùng chung ví) | >= 1 → **page P1**, quarantine account |
+| `relay_signed_orphan_total` | Counter **[MỚI]** | Nonce có raw tx đã ký nhưng không có job | >= 1 → **page P1** (mất toàn vẹn WAL) |
+| `relay_shard_ownership_lost_total` | Counter **[MỚI]** | Worker mất lease shard | > 2/giờ → ticket (worker flapping) |
+| `relay_sim_exec_divergence_total` | Counter | Sim pass nhưng tx revert, label `{category}` | > 0,5% broadcast/15p → ticket; > 20/h cùng contract → auto-quarantine |
+| `relay_sim_thrash_total` | Counter **[MỚI]** | Job phải sim lại >= 3 lần | Tăng = state drift cao, xem lại `expiry` |
+| `relay_tx_stuck_seconds` | Histogram | broadcast → mined | p99 > 3× `block_time * stuck_after` → ticket |
+| `relay_replacement_total` | Counter, label `{kind=speedup\|cancel\|gapfill}` | Speed-up + cancel + gap-filler | Tăng đột biến = breaker sắp trip hoặc fee model sai |
+| `relay_bump_ceiling_total` | Counter **[MỚI]** | `BumpCeilingReached` | >= 1 → ticket ngay: tx đang kẹt và không gỡ được |
+| `relay_hot_wallet_runway_hours` | Gauge | Số dư / burn rate | < 4h → ticket; **< 1h → page** |
+| `relay_key_pool_available` | Gauge **[MỚI bản 2]** | Số khoá `active` không kẹt, không draining | < 2 → ticket; **0 → page** (mất hoàn toàn khả năng submit) |
+| `relay_key_pool_stuck_total` | Counter **[MỚI bản 2]** | Khoá rơi vào `stuck_at_ceiling` | > 10% pool → ticket: đây là sự cố mạng, không phải một khoá xui |
+| `relay_refill_pending_seconds` | Gauge **[MỚI]** | Tuổi refill request chưa xong | > 1800s → page (automation refill đang hỏng) |
+| `relay_signer_latency_seconds` | Histogram | Đo tại HSM/MPC boundary | p99 > 3s → ticket; nút cổ chai, dashboard riêng |
+| `relay_signer_throttled_total` | Counter | 429 từ KMS/MPC | > 0 → tăng batch size hoặc xin nâng quota |
+| `relay_batch_size` | Histogram **[MỚI]** | Số item/batch thực tế | p50 << `batch_size` cấu hình = đang chờ vô ích, giảm `max_batch_wait_ms` |
 | `relay_rpc_head_lag_blocks` | Gauge | Per endpoint | > 3 → demote |
-| `relay_rpc_divergence_total` | Counter | Hash lech tai `head - witness_depth`, sau xac nhan lan 2 | >= 1 → **page P1 bao mat** |
-| `relay_rpc_state_canary_mismatch_total` | Counter **[MOI]** | `eth_call` canary lech | >= 1 → **page P1 bao mat** |
-| `relay_breaker_state` | Gauge (0/1/2) | closed/half/open, per chain per class | Chuyen sang open → thong bao ngay |
-| `relay_gas_spend_usd_total` | Counter | Per tenant, per risk_class | 90% quota → thong bao |
-| `relay_spend_reservation_leaked_total` | Counter **[MOI]** | Reservation phai refund boi janitor | > 10/gio → bug o duong settle |
-| `relay_l1_data_fee_ratio` | Gauge **[MOI]** | `l1_fee / total_fee` tren rollup | > 0,9 → cannh bao chi phi, xem xet nen batch to hon |
-| `relay_cost_per_business_action_usd` | Gauge | `gas_spend / batch_item_count` | Chi so ROI that; theo doi hang ngay |
-| `relay_zether_epoch_miss_total` | Counter | Tx Zether qua `epoch_deadline_block` | > 1% → tang tip mac dinh lop Zether |
-| `relay_finality_wait_seconds` | Histogram | mined → final | Doi chieu bang finality §11; lech ben vung = cau hinh depth sai |
-| `relay_admission_queue_depth` | Gauge **[MOI]** | Job `draft` cho lease | > 5 phut worth of throughput → he thong dang tich luy no |
+| `relay_rpc_divergence_total` | Counter | Hash lệch tại `head − witness_depth`, sau xác nhận lần 2 | >= 1 → **page P1 bảo mật** |
+| `relay_rpc_state_canary_mismatch_total` | Counter **[MỚI]** | `eth_call` canary lệch | >= 1 → **page P1 bảo mật** |
+| `relay_breaker_state` | Gauge (0/1/2) | closed/half/open, per chain per class | Chuyển sang open → thông báo ngay |
+| `relay_gas_spend_usd_total` | Counter | Per tenant, per risk_class | 90% quota → thông báo |
+| `relay_spend_reservation_leaked_total` | Counter **[MỚI]** | Reservation phải refund bởi janitor | > 10/giờ → bug ở đường settle |
+| `relay_l1_data_fee_ratio` | Gauge **[MỚI]** | `l1_fee / total_fee` trên rollup | > 0,9 → cảnh báo chi phí, xem xét nên batch to hơn |
+| `relay_cost_per_business_action_usd` | Gauge | `gas_spend / batch_item_count` | Chỉ số ROI thật; theo dõi hàng ngày |
+| `relay_zether_epoch_miss_total` | Counter | Tx Zether quá `epoch_deadline_block` | > 1% → tăng tip mặc định lớp Zether |
+| `relay_finality_wait_seconds` | Histogram | mined → final | Đối chiếu bảng finality §11; lệch bền vững = cấu hình depth sai |
+| `relay_admission_queue_depth` | Gauge **[MỚI]** | Job `draft` chờ lease | > 5 phút worth of throughput → hệ thống đang tích luỹ nợ |
 
-**Nam alert page nguoi luc 3h sang** (ban nhap dau co bon), con lai la ticket: `nonce_gap_age`, `nonce_desync`, `signed_orphan`, `rpc_divergence` (bao gom canary), `hot_wallet_runway < 1h`. Bon cai dau la mat toan ven; cai cuoi la mat dich vu hoan toan trong < 60 phut. Moi thu khac (gas dat, sim fail, tx cham) tu no khong lam hong du lieu.
+**Năm alert page người lúc 3h sáng** (bản nháp đầu có bốn), còn lại là ticket: `nonce_gap_age`, `nonce_desync`, `signed_orphan`, `rpc_divergence` (bao gồm canary), `hot_wallet_runway < 1h`. Bốn cái đầu là mất toàn vẹn; cái cuối là mất dịch vụ hoàn toàn trong < 60 phút. Mọi thứ khác (gas đắt, sim fail, tx chậm) tự nó không làm hỏng dữ liệu.
 
-SLO de xuat: broadcast→`final` p95 <= `finality_hard + 60s`; ty le job den `final` khong can can thiep tay >= 99,5%/thang; `nonce_gap_age` = 0 trong 99,9% thoi gian; `relay_signed_orphan_total` = 0 tuyet doi.
+**Bản 2 thêm một cái thứ sáu: `relay_key_pool_available == 0`.** Với pool khoá, mất hết khoá là mất dịch vụ y hệt mất số dư — và nó xảy ra âm thầm hơn, vì mỗi khoá kẹt riêng lẻ chỉ là một ticket. Cảnh báo phải nhìn vào *số khoá còn dùng được*, không vào *số khoá kẹt*.
 
-#### 06.8.1. [MOI] Ba runbook phai viet truoc khi len production
+SLO đề xuất: broadcast→`final` p95 <= `finality_hard + 60s`; tỷ lệ job đến `final` không cần can thiệp tay >= 99,5%/tháng; `nonce_gap_age` = 0 trong 99,9% thời gian; `relay_signed_orphan_total` = 0 tuyệt đối.
 
-| Su co | Trieu chung | Cac buoc |
+#### 06.8.1. [MỚI] Ba runbook phải viết trước khi lên production
+
+| Sự cố | Triệu chứng | Các bước |
 |---|---|---|
-| **Redis bi xoa sach** | Moi key `bc:*` bien mat; worker bao `no_owner` | 1. Dung toan bo worker. 2. Voi moi account: `cold_start()` (§06.1.2). 3. Doi chieu `signed` tai tao tu journal voi `getTransactionCount(pending)`. 4. Neu co nonce trong `[latest, pending)` khong co job → gap-filler. 5. Khoi dong lai worker tung shard mot, cach nhau 30s |
-| **`nonce_desync` (`latest > next`)** | Metric >= 1 | 1. Quarantine account **ngay** (tu dong). 2. Khong tu resume. 3. Nguoi truc kiem: co ai chay script thu cong khong? Khoa co bi export khong? 4. Neu nghi lo khoa: `state='retired'`, sweep so du ve treasury bang treasury signer, tao EOA moi. 5. Chi resume khi giai thich duoc nguon goc |
-| **Sequencer down (Arbitrum/OP)** | `head_age > 60s` tren moi endpoint | 1. Breaker `SEQUENCER_DOWN`, dung nhan job moi. 2. **Khong** bump, **khong** cancel (tx dang nam trong hang doi cua sequencer). 3. Neu > 2h va co job R3 gia tri lon: danh gia force-inclusion qua L1 delayed inbox — do la quyet dinh cua nguoi, khong tu dong. 4. Reset breaker khi head tang lien tuc 5 phut |
+| **Redis bị xoá sạch** | Mọi key `bc:*` biến mất; worker báo `no_owner` | 1. Dừng toàn bộ worker. 2. Với mỗi account: `cold_start()` (§06.1.2). 3. Đối chiếu `signed` tái tạo từ journal với `getTransactionCount(pending)`. 4. Nếu có nonce trong `[latest, pending)` không có job → gap-filler. 5. Khởi động lại worker từng shard một, cách nhau 30s |
+| **`nonce_desync` (`latest > next`)** | Metric >= 1 | 1. Quarantine account **ngay** (tự động). 2. Không tự resume. 3. Người trực kiểm: có ai chạy script thủ công không? Khoá có bị export không? 4. Nếu nghi lộ khoá: `state='retired'`, sweep số dư về treasury bằng treasury signer, tạo EOA mới. 5. Chỉ resume khi giải thích được nguồn gốc |
+| **Sequencer down (Arbitrum/OP)** | `head_age > 60s` trên mọi endpoint | 1. Breaker `SEQUENCER_DOWN`, dừng nhận job mới. 2. **Không** bump, **không** cancel (tx đang nằm trong hàng đợi của sequencer). 3. Nếu > 2h và có job R3 giá trị lớn: đánh giá force-inclusion qua L1 delayed inbox — đó là quyết định của người, không tự động. 4. Reset breaker khi head tăng liên tục 5 phút |
+
+Runbook thứ hai đáng đọc kỹ với pool khoá: `nonce_desync` trên **một** khoá trong 50 không phải sự cố toàn hệ thống, và quarantine đúng một khoá là phản ứng đúng. Nhưng nếu nó xảy ra trên **nhiều** khoá cùng lúc, đó không phải nhiều sự cố — đó là một sự cố (khoá bị export hàng loạt, hoặc một worker ma đang chạy), và phản ứng phải là dừng cả pool. Ngưỡng: >= 2 khoá desync trong 1 giờ → quarantine toàn bộ `relayer_id`.
 
 ---
 
-### 06.9. Be mat model Odoo (control plane)
-
-Prefix `blockchain.*` (khop voi chot cua §10.3). Tat ca constraint dung `models.Constraint`, khong dung list `_sql_constraints` — Odoo 19 **bo qua hoan toan** dang list, constraint khong bao gio duoc tao trong PostgreSQL. Kiem chung sau khi cai:
+### 06.9. Bề mặt model Odoo (control plane)
+Prefix `blockchain.*` (khớp với chốt của §10.3). Tất cả constraint dùng `models.Constraint`, không dùng list `_sql_constraints` — Odoo 19 **bỏ qua hoàn toàn** dạng list, constraint không bao giờ được tạo trong PostgreSQL. Kiểm chứng sau khi cài:
 
 ```sql
 SELECT conname, contype FROM pg_constraint
 WHERE conrelid = 'blockchain_relayer_account'::regclass;
 ```
 
-Theo §10.4.3, `blockchain.relayer.account` la `_inherits` cua `blockchain.account`, khong phai mot bang song song:
+Theo §10.4.3, `blockchain.relayer.account` là `_inherits` của `blockchain.account`, không phải một bảng song song:
 
 ```python
 class BlockchainRelayerAccount(models.Model):
@@ -994,6 +1109,10 @@ class BlockchainRelayerAccount(models.Model):
     account_id      = fields.Many2one('blockchain.account', required=True,
                                       ondelete='cascade', index=True)
     # chain_id, address, custody_mode, signer_ref, role, company_id -> tu blockchain.account
+
+    # [MOI ban 2] Mot relayer_id co N khoa ky. Xem _USER-DECISIONS.md §21.5.
+    relayer_id      = fields.Many2one('blockchain.relayer', index=True, ondelete='restrict',
+                                      help='Danh tinh relayer. N account nay thuoc mot relayer_id.')
 
     pool_state      = fields.Selection([('paused','Paused'), ('active','Active'),
                                         ('draining','Draining'), ('quarantined','Quarantined'),
@@ -1025,9 +1144,11 @@ class BlockchainRelayerAccount(models.Model):
         'max_inflight phai trong (0, 64]. Vuot 16 chi khi node duoc cau hinh accountslots cao hon.')
 ```
 
-Ten field da tranh trung ten kieu Odoo: `balance_sync_datetime` (khong phai `datetime`), `lease_expiry` (khong phai `date`), `payload_text` (khong phai `text`), `calldata_hex` (khong phai `binary`), `rotate_due_date` (khong phai `date`).
+Trường `relayer_id` là bổ sung của bản 2 và nó không phải trang trí: **`registerSubmitter` của §05.6, cap per-relayer của §05.7, và đối soát gas của §05.8.3 đều cần biết N địa chỉ này là một người.** Thiếu nó, một relayer 50 khoá được đếm thành 50 relayer ở mọi chỗ có ngưỡng — và đó chính là sybil mà các ngưỡng đó tồn tại để chặn.
 
-`blockchain.relay.job` (rut gon, chi cac truong quyet dinh):
+Tên field đã tránh trùng tên kiểu Odoo: `balance_sync_datetime` (không phải `datetime`), `lease_expiry` (không phải `date`), `payload_text` (không phải `text`), `calldata_hex` (không phải `binary`), `rotate_due_date` (không phải `date`).
+
+`blockchain.relay.job` (rút gọn, chỉ các trường quyết định):
 
 ```python
 class BlockchainRelayJob(models.Model):
@@ -1080,10 +1201,9 @@ class BlockchainRelayJob(models.Model):
         "('nonce_leased','signed','signed_orphan','broadcast','mined')",
         'Chi mot job song tren mot nonce cua mot relayer.')
 ```
+**[MỚI] `_unique_origin` là cơ chế idempotency thật sự.** Bản nháp đầu nói "idempotent theo `origin_ref`" mà không nói bằng gì. Với partial unique index này, `relay_submit_intent` gọi lại với cùng `origin_ref` sẽ đụng `INSERT` và trả về job cũ — không phải nhờ code kiểm tra trước (có race), mà nhờ database. `_unique_nonce_live` là partial index chặn trực tiếp lỗi nghiêm trọng nhất của §06.1.4.
 
-**[MOI] `_unique_origin` la co che idempotency that su.** Ban nhap dau noi "idempotent theo `origin_ref`" ma khong noi bang gi. Voi partial unique index nay, `relay_submit_intent` goi lai voi cung `origin_ref` se dung `INSERT` va tra ve job cu — khong phai nho code kiem tra truoc (co race), ma nho database. `_unique_nonce_live` la partial index chan truc tiep loi nghiem trong nhat cua §06.1.4.
-
-Method public phuc vu ca `call_kw` lan `/json/2` (khong `_`, khong `@api.private`, khong nhan `allowed_company_ids` tu client):
+Method public phục vụ cả `call_kw` lẫn `/json/2` (không `_`, không `@api.private`, không nhận `allowed_company_ids` từ client):
 
 ```python
 @api.model
@@ -1114,7 +1234,7 @@ def relay_report_batch(self, reports):
     Toi da 200 ban ghi/lan."""
 ```
 
-Cron XML (mot dong, khong inline `fields.`/`relativedelta` — `ir.cron` eval context khong co chung):
+Cron XML (một dòng, không inline `fields.`/`relativedelta` — `ir.cron` eval context không có chúng):
 
 ```xml
 <record id="cron_relay_reconcile" model="ir.cron">
@@ -1136,122 +1256,149 @@ Cron XML (mot dong, khong inline `fields.`/`relativedelta` — `ir.cron` eval co
 </record>
 ```
 
-Nhom quyen (khop §10.5): `group_blockchain_viewer` (doc), `group_blockchain_relay_worker` (chi `relay_report_batch`, khong doc duoc `blockchain.account.signer_ref`), `group_blockchain_relayer_admin` (CRUD relayer account, endpoint), `group_blockchain_treasury_manager` (refill approve, breaker override). **Nguoi tao `blockchain.breaker.override` khong duoc dong thoi la nguoi duyet `blockchain.refill.request`** — do la mot duong rut tien mot nguoi.
+Nhóm quyền (khớp §10.5): `group_blockchain_viewer` (đọc), `group_blockchain_relay_worker` (chỉ `relay_report_batch`, không đọc được `blockchain.account.signer_ref`), `group_blockchain_relayer_admin` (CRUD relayer account, endpoint), `group_blockchain_treasury_manager` (refill approve, breaker override). **Người tạo `blockchain.breaker.override` không được đồng thời là người duyệt `blockchain.refill.request`** — đó là một đường rút tiền một người.
 
 ---
 
-### 06.10. [MOI] Nang luc, chi phi, va luu tru
+### 06.10. [MỚI] Năng lực, chi phí, và lưu trữ
+#### 06.10.1. Ngân sách chi phí hạ tầng, một chain (Gnosis), 24.000 tx/ngày
 
-#### 06.10.1. Ngan sach chi phi ha tang, mot chain (Gnosis), 24.000 tx/ngay
-
-| Muc | Cau hinh | USD/thang (uoc) |
+| Mục | Cấu hình | USD/tháng (ước) |
 |---|---|---|
 | 3 relay worker | 2 vCPU / 4 GB | 120 |
 | Redis (nonce), HA primary + replica, AOF always | 2 GB | 60 |
-| Node Gnosis tu van hanh (archive nhe, cho `eth_call`/`debug_traceCall`) | 8 vCPU / 2 TB NVMe | 200 |
-| 2 RPC provider (fallback + witness) | goi growth | 100 – 400 |
-| Prometheus + Grafana + Alertmanager | dung chung ha tang | 0 – 50 |
-| **Tong ha tang** | | **480 – 830** |
-| Gas that (24k tx/ngay @ $0,007 tx Zether n=64) | | **~5.000** |
-| Gas that (24k tx/ngay @ $0,00005 tx thuong 100k gas) | | **~36** |
+| Node Gnosis tự vận hành (archive nhẹ, cho `eth_call`/`debug_traceCall`) | 8 vCPU / 2 TB NVMe | 200 |
+| 2 RPC provider (fallback + witness) | gói growth | 100 – 400 |
+| Prometheus + Grafana + Alertmanager | dùng chung hạ tầng | 0 – 50 |
+| **Tổng hạ tầng** | | **480 – 830** |
+| Gas thật (24k tx/ngày @ $0,007 tx Zether n=64) | | **~5.000** |
+| Gas thật (24k tx/ngày @ $0,00005 tx thường 100k gas) | | **~36** |
 
-Doc bang nay theo mot huong: **chi phi gas cua Zether cong khai lon gap 6-10 lan toan bo chi phi ha tang.** Do la lap luan kinh te manh nhat cho private chain, manh hon lap luan bao mat.
+Đọc bảng này theo một hướng: **chi phí gas của Zether công khai lớn gấp 6–10 lần toàn bộ chi phí hạ tầng.** Đó là lập luận kinh tế mạnh nhất cho private chain, mạnh hơn lập luận bảo mật.
 
-Chi phi MPC SaaS **khong** co trong bang vi o 24k tx/ngay (720k chu ky/thang neu khong batch) khong nha cung cap MPC nao ban theo don gia ma con hop ly. Voi batch 50: 14.400 chu ky/thang — nam trong bac thuong. Day la mot rang buoc thuong mai, khong chi ky thuat.
+Trên chain private 9000, dòng gas về **0** và bảng còn lại chỉ có hạ tầng — trong đó dòng "2 RPC provider" cũng biến mất (không có provider nào), nên tổng rơi về **~380/tháng**. Đây là con số nên dùng khi so sánh hai giai đoạn, không phải con số Gnosis.
 
-#### 06.10.2. Tang truong bang job
+Chi phí MPC SaaS **không** có trong bảng vì ở 24k tx/ngày (720k chữ ký/tháng nếu không batch) không nhà cung cấp MPC nào bán theo đơn giá mà còn hợp lý. Với batch 50: 14.400 chữ ký/tháng — nằm trong bậc thường. Đây là một ràng buộc thương mại, không chỉ kỹ thuật.
 
-| Gia dinh | So |
+#### 06.10.2. Tăng trưởng bảng job
+
+| Giả định | Số |
 |---|---|
-| Job/ngay | 24.000 |
-| Byte/row (khong ke raw tx / calldata) | ~800 B |
-| Postgres/ngay | ~19 MB |
-| Postgres/nam | **~7 GB** |
-| Index (5 index) | +~60% → **~11 GB/nam** |
+| Job/ngày | 24.000 |
+| Byte/row (không kể raw tx / calldata) | ~800 B |
+| Postgres/ngày | ~19 MB |
+| Postgres/năm | **~7 GB** |
+| Index (5 index) | +~60% → **~11 GB/năm** |
 
-Chap nhan duoc **chi khi** khong luu raw tx va calldata tren record.
+Chấp nhận được **chỉ khi** không lưu raw tx và calldata trên record.
 
-#### 06.10.3. Chinh sach luu tru raw tx va calldata
+#### 06.10.3. Chính sách lưu trữ raw tx và calldata
 
-| Du lieu | Noi luu | TTL |
+| Dữ liệu | Nơi lưu | TTL |
 |---|---|---|
-| `calldata_hex` (co the 2-4 KB voi Zether) | Redis `bc:calldata:{uuid}` | 24h |
-| `raw_tx` da ky | Redis `bc:raw:{uuid}` | 24h (du cho moi vong replacement) |
-| Ca hai, cho job R3/R4 | `ir.attachment` tren Garage (S3), Many2many nhu quy uoc repo | 7 nam (nghia vu ke toan) |
-| Ca hai, cho job R1/R2 | Khong giu sau 24h | — |
-| `sim_trace` cua job co divergence | `ir.attachment` | 1 nam |
+| `calldata_hex` (có thể 2–4 KB với Zether) | Redis `bc:calldata:{uuid}` | 24h |
+| `raw_tx` đã ký | Redis `bc:raw:{uuid}` | 24h (đủ cho mọi vòng replacement) |
+| Cả hai, cho job R3/R4 | `ir.attachment` trên Garage (S3), Many2many như quy ước repo | 7 năm (nghĩa vụ kế toán) |
+| Cả hai, cho job R1/R2 | Không giữ sau 24h | — |
+| `sim_trace` của job có divergence | `ir.attachment` | 1 năm |
 
-Ly do R1/R2 khong giu: mot record `blockchain.relay.job` co `tx_hash` la du de tai tao moi thu tu chain. Giu raw tx cua 8,7 trieu job/nam la giu 35 GB de khong bao gio doc.
+Lý do R1/R2 không giữ: một record `blockchain.relay.job` có `tx_hash` là đủ để tái tạo mọi thứ từ chain. Giữ raw tx của 8,7 triệu job/năm là giữ 35 GB để không bao giờ đọc.
 
-Job `final` qua 90 ngay: chuyen sang bang lich su bang cron thang (`_cron_relay_archive()`), giu `job_uuid`, `tx_hash`, `origin_ref`, `actual_cost_uusd`, `state`. Khong dung `active=False` — mot bang 8 trieu row voi `active` index van lam moi `search()` cham.
+Job `final` quá 90 ngày: chuyển sang bảng lịch sử bằng cron tháng (`_cron_relay_archive()`), giữ `job_uuid`, `tx_hash`, `origin_ref`, `actual_cost_uusd`, `state`. Không dùng `active=False` — một bảng 8 triệu row với `active` index vẫn làm mọi `search()` chậm.
 
 ---
 
-### 06.11. [MOI] Test: cai gi phai co truoc khi cham mainnet
+### 06.11. [MỚI] Test: cái gì phải có trước khi chạm mainnet
 
-Khong phai mot ke hoach QA day du; chi la nhung thu **khong the** kiem chung sau khi len production.
+Không phải một kế hoạch QA đầy đủ; chỉ là những thứ **không thể** kiểm chứng sau khi lên production.
 
-| Hang muc | Cong cu | Kich ban bat buoc |
+| Hạng mục | Công cụ | Kịch bản bắt buộc |
 |---|---|---|
-| Nonce lease/freelist | `pytest` + `fakeredis` (Lua chay that qua `redis-server` trong container) | Ky HSM timeout giua chung; worker SIGKILL sau `signed` truoc broadcast; hai worker cung xin cung shard |
-| Cold start | anvil + `anvil_setNonce` | Redis flushall khi co 5 job inflight; kiem tra khong nonce nao bi cap lai |
-| Replacement / bump | anvil `--block-time 1` + `anvil_setNextBlockBaseFeePerGas` | Base fee tang 12,5%/block x 15 block; xac nhan khong bao gio bi `replacement underpriced` |
-| Reorg | anvil `evm_snapshot` / `evm_revert` | `latest` giam 3 block sau khi job da `mined`; job phai ve `reorged`, khong ve `final` |
-| RPC noi doi | 2 anvil khac nhau sau mot proxy | Lop 2 va lop 3 phai eject dung endpoint, va **khong** eject khi chi la reorg nong 1 block |
-| Velocity limit | Redis that, 200 goroutine/task song song | Tong chi tieu **khong duoc** vuot cap qua 1 job. Kiem tra refund khi job fail |
-| Zether epoch | anvil + contract that | Tri hoan tx qua `epoch_deadline_block`; phai cancel, khong duoc speed-up |
-| Batch griefing | Foundry | Item co `gasLimit` sat tran → `batch: gas grief` revert, khong phai item cuoi im lang fail |
-| Odoo constraint | Odoo test + SQL | `SELECT conname FROM pg_constraint WHERE conrelid LIKE 'blockchain_%'` phai co du cac UNIQUE/CHECK da khai |
+| Nonce lease/freelist | `pytest` + `fakeredis` (Lua chạy thật qua `redis-server` trong container) | Ký HSM timeout giữa chừng; worker SIGKILL sau `signed` trước broadcast; hai worker cùng xin cùng shard |
+| Cold start | anvil + `anvil_setNonce` | Redis flushall khi có 5 job inflight; kiểm tra không nonce nào bị cấp lại |
+| **Pool khoá** | anvil + Redis | Một khoá kẹt ở `stuck_at_ceiling` → job mới **phải** đi sang khoá khác trong < 1 chu kỳ; `bc:pool` ZSET không đếm khoá `draining` |
+| Replacement / bump | anvil `--block-time 1` + `anvil_setNextBlockBaseFeePerGas` | Base fee tăng 12,5%/block × 15 block; xác nhận không bao giờ bị `replacement underpriced` |
+| Reorg | anvil `evm_snapshot` / `evm_revert` | `latest` giảm 3 block sau khi job đã `mined`; job phải về `reorged`, không về `final` |
+| RPC nói dối | 2 anvil khác nhau sau một proxy | Lớp 2 và lớp 3 phải eject đúng endpoint, và **không** eject khi chỉ là reorg nông 1 block |
+| Velocity limit | Redis thật, 200 task song song | Tổng chi tiêu **không được** vượt cap quá 1 job. Kiểm tra refund khi job fail |
+| Zether epoch | anvil + contract thật | Trì hoãn tx quá `epoch_deadline_block`; phải cancel, không được speed-up |
+| Batch griefing | Foundry | Item có `gasLimit` sát trần → `batch: gas grief` revert, không phải item cuối im lặng fail |
+| **Chain private 9000** | chain thật | Dò `pending_nonce_accurate` (§06.1.6); xác nhận adapter phát **legacy tx**, không phải type-2; xác nhận `base_fee_next_block()` không được gọi |
+| Odoo constraint | Odoo test + SQL | `SELECT conname FROM pg_constraint WHERE conrelid LIKE 'blockchain_%'` phải có đủ các UNIQUE/CHECK đã khai |
 
-Kiem tra cuoi cung, bat buoc, khong the bo: **chay pool tren testnet Gnosis (Chiado) lien tuc 72 gio voi fault injection ngau nhien** (kill worker, ngat Redis, cham RPC, base fee spike gia lap). Chi so nghiem thu: `relay_signed_orphan_total == 0` va `nonce_gap_age` p99 < 120s.
-
----
-
-### 06.12. Nhung cho note chua chot, va de xuat
-
-1. **Ai la chu so huu nonce khi ca Open Relayer lan Relay Pool noi bo deu nhin thay mot intent?** De xuat: intent noi bo mac dinh `MODE_RESTRICT_RELAYER (0x01)` gan vao pool noi bo trong `T_exclusive = 2 * block_time`; het han thi consumer ky lai ban `MODE_OPEN` va tha ra intent bus cong khai (§05). Ky hai lan la chi phi CPU, re hon mot tx trung. **[MOI]** Ky hai lan cung co nghia la **hai chu ky HSM cho mot hanh dong** — voi MPC 10 sign/s do la 10% ngan sach ky. Neu dung session key cua user (re) cho `MetaTransaction.signature` thi khong sao; neu la HSM thi phai tinh vao mo hinh nang luc §06.6.1.
-2. **Khong co dinh nghia "gap-filler" nao trong note.** Da chot o §06.1.7 (self-send 21.000 gas, gia = `max(p75, ceil_bump(last_known))`, chi phi vao overhead cua pool). Can nguoi duyet dong ngan sach nay.
-3. **`meta_nonce` tang truoc hay sau `call`?** Day la **quyet dinh contract, nhung relay pool khong the an toan neu chua chot.** Ba lua chon:
-   - (a) Tang **sau**, chi khi `call` thanh cong: user khong bi dot nonce, nhung **relayer tra gas cho mot tx revert va khong duoc gi** → open relayer se khong bao gio nhan intent cua ta.
-   - (b) Tang **truoc**, thu phi ke ca khi `call` fail (de xuat o §06.6 muc 1 (c)): relayer luon duoc tra, nhung mot relayer doc co the dot nonce va **phi** cua user bang cach nop tx chac chan revert.
-   - (c) Tang truoc + thu phi + **`antiGriefBond`**: `msg.sender` phai stake mot khoan; neu `call` fail thi bond bi tich thu ve user. De xuat con so: `bond = 3 * fee`, hoan lai ngay trong cung tx neu thanh cong (chi phi ~5.000 gas cho 2 SSTORE warm).
-   **De xuat chon (c)**, nhung no lam contract phuc tap hon va can mot lan audit rieng. Neu chon (b) thi relay pool phai giu `MODE_RESTRICT_RELAYER` cho moi thu co gia tri, tuc bo phan lon loi ich cua Open Relayer Network.
-4. **Chi phi Zether that** can benchmark tren Foundry truoc khi khoa `max_gas_per_tx`. Con so 3,5M (n=64) va 6,6M (n=128) o §06.4.5 la uoc tinh tu so diem MSM x 6.000 gas — no bo qua moi toi uu batching precompile va co the sai 30% ve mot phia. **[MOI]** Va cau hoi lon hon nam truoc no: **n=64 hay n=128?** Do la mot quyet dinh san pham (dust 10^-6), khong phai quyet dinh ky thuat.
-5. **Phan tang custody** (HSM cho treasury, enclave cho relayer hot) can nguoi duyet ve compliance — day la danh doi throughput 3 bac do lon. §07.0 da de xuat cung huong; can mot chu ky.
-6. **[MOI] Bulletproofs hay Groth16?** Note dung ca hai ngon ngu (§10.5.2 noi Bulletproofs, con so gas lai la Groth16). Chenh lech **~30 lan gas**. Bulletproofs: khong trusted setup, prove nhanh, verify dat. Groth16: trusted setup per-circuit (ceremony), prove cham (bat loi tren mobile), verify re. Voi private chain (gas khong quan trong) Bulletproofs thang de dang. Voi public chain va luong "end-user payment tai quay", Groth16 co the la lua chon dung nhung keo theo mot ceremony phai to chuc. **Can chot truoc khi viet contract**, vi no doi ca client SDK.
-7. **[MOI] Ai so huu ngan sach gas?** Velocity limit co ba tang (agent, tenant, global) nhung khong ai noi tenant co *mua* han muc khong, hay do la chi phi cua nen tang. Neu la chi phi nen tang thi `relay_cost_per_business_action_usd` la mot dong lo/lai that va phai co nguoi chiu trach nhiem. Neu tenant tra thi can mot mo hinh tinh phi va no cham vao §09 (payment modes).
-8. **[MOI] Chinh sach khi mot job R3 gia tri lon roi vao `quarantined`.** Hien tai: "nguoi phai vao xem". Chua du cho mot khoan B2B settlement. Can mot SLA: bao lau thi phai co quyet dinh, ai quyet, va co duong tra tien bang kenh khac (bank transfer) khong. Do la quy trinh nghiep vu, khong phai code, nhung thieu no thi `quarantined` la mot ho den.
-9. **[MOI] Dong ho.** Hedera (`validStart`), TON (`timeout` cua Highload V3), va moi `expiry`/`deadline` cua meta-tx deu phu thuoc dong ho cua relay worker. Chua ai noi ai bao dam NTP. De xuat: chronyd voi >= 3 nguon, alert khi `|offset| > 500 ms`, va relay worker **tu tat** khi `|offset| > 5 s`.
-10. **[MOI] Private chain: ai la validator?** Quyet dinh khoa #5 dua private chain len truoc, nhung "private" chua duoc dinh nghia: mot node cua ta (khi do "blockchain" chi la mot database co chu ky), hay N node cua N doi tac B2B (khi do moi co y nghia). Toan bo phan RPC divergence (§06.7) va Finality Gate chi co gia tri o phuong an sau. Can chot truoc khi chon client (Besu QBFT / Quorum / go-ethereum Clique).
+Kiểm tra cuối cùng, bắt buộc, không thể bỏ: **chạy pool trên testnet Gnosis (Chiado) liên tục 72 giờ với fault injection ngẫu nhiên** (kill worker, ngắt Redis, chậm RPC, base fee spike giả lập). Chỉ số nghiệm thu: `relay_signed_orphan_total == 0` và `nonce_gap_age` p99 < 120s.
 
 ---
 
-### 06.13. [MOI] Tong hop nhung cho ban nhap dau nay da sua so voi ban truoc
+### 06.12. Những chỗ note chưa chốt, và đề xuất
 
-| # | Cho | Ban truoc | Ban nay |
+1. **Ai là chủ sở hữu nonce khi cả Open Relayer lẫn Relay Pool nội bộ đều nhìn thấy một intent?** Đề xuất: intent nội bộ mặc định điền `relayer = <địa chỉ pool>` trong `T_exclusive = 2 * block_time`; hết hạn thì consumer ký lại bản `relayer = address(0)` và thả ra mesh công khai (§05). Ký hai lần là chi phí CPU, rẻ hơn một tx trùng.
+
+   **[MỚI]** Ký hai lần cũng có nghĩa là **hai chữ ký cho một hành động** — nhưng đó là chữ ký của *user*, không phải của HSM. Bản 1 tính nhầm nó vào ngân sách ký của relayer. Với session key của user thì nó gần như miễn phí; chỉ khi user ký bằng HSM (tài khoản treasury) thì mới phải tính vào §06.6.1.
+
+   **[Bản 2]** Với pool khoá và wildcard relayer, phương án này có một biến thể rẻ hơn hẳn: ký **một** lần với `relayer = address(0)` và để pool nội bộ dùng **private pool** (`_USER-DECISIONS.md` §21.4) trong `T_exclusive`, rồi promote-to-open. Không phải ký lại lần nào, và nó dùng đúng cơ chế đã có.
+2. **Không có định nghĩa "gap-filler" nào trong note.** Đã chốt ở §06.1.7 (self-send 21.000 gas, giá = `max(p75, ceil_bump(last_known))`, chi phí vào overhead của pool). Cần người duyệt dòng ngân sách này.
+3. **`meta_nonce` tăng trước hay sau `call`?** Đây là **quyết định contract, nhưng relay pool không thể an toàn nếu chưa chốt.** Ba lựa chọn:
+   - (a) Tăng **sau**, chỉ khi `call` thành công: user không bị đốt nonce, nhưng **relayer trả gas cho một tx revert và không được gì** → open relayer sẽ không bao giờ nhận intent của ta.
+   - (b) Tăng **trước**, thu phí kể cả khi `call` fail (đề xuất ở §06.6 mục 1 (c)): relayer luôn được trả, nhưng một relayer độc có thể đốt nonce và **phí** của user bằng cách nộp tx chắc chắn revert.
+   - (c) Tăng trước + thu phí + **`antiGriefBond`**: `msg.sender` phải stake một khoản; nếu `call` fail thì bond bị tịch thu về user. Đề xuất con số: `bond = 3 * fee`, hoàn lại ngay trong cùng tx nếu thành công (chi phí ~5.000 gas cho 2 SSTORE warm).
+
+   **Đề xuất chọn (c)**, nhưng nó làm contract phức tạp hơn và cần một lần audit riêng. Nếu chọn (b) thì relay pool phải điền tên relayer cho mọi thứ có giá trị, tức bỏ phần lớn lợi ích của Open Relayer Network — **và mất luôn khả năng xoay khoá** (`_USER-DECISIONS.md` §21.5), vì tên relayer trong digest khoá cứng một địa chỉ ký.
+
+   Điểm cuối là một lý lẽ mới mà bản 1 không có, và nó nghiêng cán cân về (c) rõ hơn hẳn.
+4. **Chi phí Zether thật** cần benchmark trên Foundry trước khi khoá `max_gas_per_tx`. Con số 3,5M (n=64) và 6,6M (n=128) ở §06.4.5 là ước tính từ số điểm MSM × 6.000 gas — nó bỏ qua mọi tối ưu batching precompile và có thể sai 30% về một phía. **[MỚI]** Và câu hỏi lớn hơn nằm trước nó: **n=64 hay n=128?** Đó là một quyết định sản phẩm (dust 10^-6), không phải quyết định kỹ thuật. §01.1.8 đã trả lời theo một khung khác (`decimals` + `SHIELD_SCALE` + `MAX_DECRYPTABLE_SHIELDED`) — đọc ở đó.
+5. **Phân tầng custody** (HSM cho treasury, enclave cho relayer hot) cần người duyệt về compliance — đây là đánh đổi throughput 3 bậc độ lớn. §07.0 đã đề xuất cùng hướng; cần một chữ ký. **[Bản 2]** Thêm một tầng thứ ba: khoá file cho node mesh cá nhân (§06.6 mục 3). Nó không cần compliance duyệt vì nó không phải khoá của ta — nhưng `KeyPool` phải hỗ trợ nó.
+6. **[MỚI] Bulletproofs hay Groth16?** Note dùng cả hai ngôn ngữ (§10.5.2 nói Bulletproofs, con số gas lại là Groth16). Chênh lệch **~30 lần gas**. Bulletproofs: không trusted setup, prove nhanh, verify đắt. Groth16: trusted setup per-circuit (ceremony), prove chậm (bất lợi trên mobile), verify rẻ. Với private chain (gas không quan trọng) Bulletproofs thắng dễ dàng.
+
+   **[Bản 2]** Trên factory mở, câu hỏi này **nhẹ đi rất nhiều**: hai verifier là hai entry catalogue, người tạo token chọn, và cả hai cùng tồn tại (§01.1.5). Không cần chốt một cái trước khi viết contract — cần chốt cái nào **ta audit và đứng sau trước**, và đó là câu hỏi ngân sách chứ không phải kiến trúc.
+7. **[MỚI] Ai sở hữu ngân sách gas?** Velocity limit có ba tầng (agent, tenant, global) nhưng không ai nói tenant có *mua* hạn mức không, hay đó là chi phí của nền tảng. Nếu là chi phí nền tảng thì `relay_cost_per_business_action_usd` là một dòng lỗ/lãi thật và phải có người chịu trách nhiệm. Nếu tenant trả thì cần một mô hình tính phí và nó chạm vào §09 (payment modes).
+8. **[MỚI] Chính sách khi một job R3 giá trị lớn rơi vào `quarantined`.** Hiện tại: "người phải vào xem". Chưa đủ cho một khoản B2B settlement. Cần một SLA: bao lâu thì phải có quyết định, ai quyết, và có đường trả tiền bằng kênh khác (bank transfer) không. Đó là quy trình nghiệp vụ, không phải code, nhưng thiếu nó thì `quarantined` là một hố đen.
+9. **[MỚI] Đồng hồ.** Hedera (`validStart`), TON (`timeout` của Highload V3), và mọi `expiry`/`deadline` của meta-tx đều phụ thuộc đồng hồ của relay worker. Chưa ai nói ai bảo đảm NTP. Đề xuất: chronyd với >= 3 nguồn, alert khi `|offset| > 500 ms`, và relay worker **tự tắt** khi `|offset| > 5 s`.
+10. **[MỚI] Private chain: ai là validator?** Quyết định khoá #5 đưa private chain lên trước, nhưng "private" chưa được định nghĩa. **[Bản 2] Câu hỏi này giờ đã có một phần đáp án, và đáp án đó không dễ chịu:** chain thật là Nethermind + Clique với **một signer** (§01.1.16). Nghĩa là ở hình thái hiện tại, "blockchain" đúng là một sổ cái có chữ ký của một bên — toàn bộ phần RPC divergence (§06.7) và Finality Gate mất phần lớn ý nghĩa. Chúng chỉ có giá trị khi có N signer của N đối tác. Đây vẫn là câu hỏi phải chốt, nhưng giờ nó là câu hỏi *"khi nào thêm signer thứ hai"*, không phải *"chọn client nào"*.
+
+---
+### 06.13. [MỚI] Tổng hợp những chỗ bản này đã sửa so với bản trước
+
+| # | Chỗ | Bản trước | Bản này |
 |---|---|---|---|
-| 1 | `lease_nonce.lua` fence | `INCR` fence moi lan lease → kiem tra fence vo tac dung | `owner_fence` chi tang khi doi chu; them `gen` cho cold start |
-| 2 | Tra lease khi lease het han | Luon `ZADD free` neu chua len chain | **Khong bao gio** tra freelist neu da `signed`; chi thoat bang replacement |
-| 3 | Cold start | Khong co | Giao thuc day du §06.1.2, dua tren journal Postgres |
-| 4 | Quyen so huu shard | Consistent hash | Ownership lease co TTL + fencing |
-| 5 | `ttl_ms` L1 | 45s | 37s (so hoc dung: `3*12000+1100`) |
-| 6 | TON Highload V3 | "~8k slot query_id" | **8.388.608 slot (23 bit)**, cua so 128s |
-| 7 | Celo | L1 IBFT 2.0, 5s block | **OP Stack L2 tu 03/2025**, 1s block, co L1 data fee |
-| 8 | Arbitrum + Base | Gop lam mot ("khong co mempool") | Ba nhom khac nhau (§06.2.2); OP Stack **co** replacement, Arbitrum thi khong dang tin |
-| 9 | Ham `bump()` | So sanh tip voi cap cua max_fee; nhan float | Tran rieng cho tip; so nguyen `ceil_bump`; `BumpCeilingReached` |
-| 10 | Chi phi L1 data tren rollup | Khong nhac | §06.2.5, co dia chi predeploy va bien do 1000x |
-| 11 | Gia dinh dropped vs underpriced | Gop lam mot | Tach: `underpriced` phai bump, khong phai re-broadcast |
-| 12 | EIP-196 dinh gia `ecAdd`/`ecMul` | Gan cho EIP-196 | **EIP-1108** moi la cai ha xuong 150/6.000; EIP-196 goc la 500/40.000 |
-| 13 | Gas Zether | 2,0–2,5M | 3,5M (n=64+fee) / **6,6M (n=128+fee)**; note bo sot ba range statement cua co che fee |
-| 14 | Note "180-250k gas" | "chi dung cho vai ecAdd/ecMul" | Chinh xac hon: **do la con so cua Groth16**, khong phai Bulletproofs. Hai thu trong note mau thuan nhau |
-| 15 | Velocity limit | `INCRBYFLOAT`, kiem tra rieng | Lua nguyen tu, micro-USD so nguyen, reserve + settle + janitor refund |
-| 16 | `balance_native` | `fields.Float(digits=(24,8))` | Mau thuan §10.4.1 → `Char` base units + `Float` chi de hien thi |
-| 17 | `runway_hours` | `required=True` roi phai canh giac NULL | Bo `required=True`; quy tac "gan o moi nhanh" van giu |
-| 18 | Idempotency `origin_ref` | Noi "idempotent" khong noi bang gi | Partial unique index `_unique_origin` |
-| 19 | `witness_depth` | Hang so 12 block | Theo chain; va lech mot lan khong duoc eject ngay |
-| 20 | Kiem tra RPC | 3 lop | 4 lop, them **canary `eth_call`** — 3 lop cu khong bat duoc state sai |
-| 21 | Batch executor | Chi noi `try/catch` | Them EIP-150 63/64 guard, fee-on-failure, va cach sim mot batch |
-| 22 | Backpressure | Khong co | `max_inflight = 16` (co so: `txpool.accountslots`), `inflight_full` trong Lua |
-| 23 | Tenderly | O hot path | **Ra khoi hot path** — chi phi 720k don vi/thang; hot path dung node cua minh |
-| 24 | Luu tru | Khong nhac | §06.10.3; raw tx khong nam tren record |
-| 25 | Reorg | Khong nhac trong nonce manager | `latest < confirmed` → `reorged`, khong lui `next` |
+| 1 | `lease_nonce.lua` fence | `INCR` fence mỗi lần lease → kiểm tra fence vô tác dụng | `owner_fence` chỉ tăng khi đổi chủ; thêm `gen` cho cold start |
+| 2 | Trả lease khi lease hết hạn | Luôn `ZADD free` nếu chưa lên chain | **Không bao giờ** trả freelist nếu đã `signed`; chỉ thoát bằng replacement |
+| 3 | Cold start | Không có | Giao thức đầy đủ §06.1.2, dựa trên journal Postgres |
+| 4 | Quyền sở hữu shard | Consistent hash | Ownership lease có TTL + fencing |
+| 5 | `ttl_ms` L1 | 45s | 37s (số học đúng: `3*12000+1100`) |
+| 6 | TON Highload V3 | "~8k slot query_id" | **8.388.608 slot (23 bit)**, cửa sổ 128s |
+| 7 | Celo | L1 IBFT 2.0, 5s block | **OP Stack L2 từ 03/2025**, 1s block, có L1 data fee |
+| 8 | Arbitrum + Base | Gộp làm một ("không có mempool") | Ba nhóm khác nhau (§06.2.2); OP Stack **có** replacement, Arbitrum thì không đáng tin |
+| 9 | Hàm `bump()` | So sánh tip với cap của max_fee; nhân float | Trần riêng cho tip; số nguyên `ceil_bump`; `BumpCeilingReached` |
+| 10 | Chi phí L1 data trên rollup | Không nhắc | §06.2.5, có địa chỉ predeploy và biên độ 1000x |
+| 11 | Giả định dropped vs underpriced | Gộp làm một | Tách: `underpriced` phải bump, không phải re-broadcast |
+| 12 | EIP-196 định giá `ecAdd`/`ecMul` | Gán cho EIP-196 | **EIP-1108** mới là cái hạ xuống 150/6.000; EIP-196 gốc là 500/40.000 |
+| 13 | Gas Zether | 2,0–2,5M | 3,5M (n=64+fee) / **6,6M (n=128+fee)**; note bỏ sót ba range statement của cơ chế fee |
+| 14 | Note "180–250k gas" | "chỉ đúng cho vài ecAdd/ecMul" | Chính xác hơn: **đó là con số của Groth16**, không phải Bulletproofs. Hai thứ trong note mâu thuẫn nhau |
+| 15 | Velocity limit | `INCRBYFLOAT`, kiểm tra riêng | Lua nguyên tử, micro-USD số nguyên, reserve + settle + janitor refund |
+| 16 | `balance_native` | `fields.Float(digits=(24,8))` | Mâu thuẫn §10.4.1 → `Char` base units + `Float` chỉ để hiển thị |
+| 17 | `runway_hours` | `required=True` rồi phải cảnh giác NULL | Bỏ `required=True`; quy tắc "gán ở mọi nhánh" vẫn giữ |
+| 18 | Idempotency `origin_ref` | Nói "idempotent" không nói bằng gì | Partial unique index `_unique_origin` |
+| 19 | `witness_depth` | Hằng số 12 block | Theo chain; và lệch một lần không được eject ngay |
+| 20 | Kiểm tra RPC | 3 lớp | 4 lớp, thêm **canary `eth_call`** — 3 lớp cũ không bắt được state sai |
+| 21 | Batch executor | Chỉ nói `try/catch` | Thêm EIP-150 63/64 guard, fee-on-failure, và cách sim một batch |
+| 22 | Backpressure | Không có | `max_inflight = 16` (cơ sở: `txpool.accountslots`), `inflight_full` trong Lua |
+| 23 | Tenderly | Ở hot path | **Ra khỏi hot path** — chi phí 720k đơn vị/tháng; hot path dùng node của mình |
+| 24 | Lưu trữ | Không nhắc | §06.10.3; raw tx không nằm trên record |
+| 25 | Reorg | Không nhắc trong nonce manager | `latest < confirmed` → `reorged`, không lùi `next` |
+
+### 06.14. [BẢN 2] Những chỗ sửa sau khi user chốt kiến trúc mesh và pool khoá
+
+| # | Chỗ | Bản trước | Bản này |
+|---|---|---|---|
+| 26 | Vai của relay pool | Một loại hạ tầng riêng, song song với Open Relayer | **Một cấu hình** trong ma trận vai (`_USER-DECISIONS.md` §21.4): `ingest: http, pool: none, submit: true`. Mọi cơ chế ở đây cũng cần cho node mesh có submit |
+| 27 | Pool khoá ký | Xem sharding K EOA là "chỉ giải head-of-line blocking" | Head-of-line blocking **là** trần thông lượng cứng của EVM. Batch giải nút chữ ký, pool khoá giải nút nonce — hai nút khác nhau, cần cả hai (§06.6 mục 2) |
+| 28 | `blockchain.relayer.account` | Không có khái niệm "N khoá của một relayer" | Thêm `relayer_id`. Thiếu nó, cap per-relayer (§05.7), lottery (§05.4.4) và đối soát gas (§05.8.3) đều đếm một relayer thành N |
+| 29 | Xoay khoá 30 ngày | Một thủ tục bảo trì | Với pool 50 khoá là **một khoá rời pool mỗi ~14 giờ** → phải tự động hoàn toàn, cần đệm `N+2` khoá, và `draining` phải rời ZSET chọn khoá |
+| 30 | Custody | Hai tầng: HSM (treasury) / enclave (relayer hot) | Ba tầng — thêm **khoá file** cho node mesh cá nhân. Chấp nhận được **chỉ vì** ba ràng buộc của §21.5 (float nhỏ, không phải `feeRecipient`, không role nào) |
+| 31 | Chain private | Giả định Besu QBFT, gasLimit 200M, block 2s, finality 1 block | **Nethermind + Clique, một signer, 16,7M gas, block 5s, chạy trước London** (§01.1.16). Không EIP-1559 → không type-2 tx, không `base_fee`, không spike breaker. Clique **không** có instant finality |
+| 32 | `mode` bitmask | `MODE_RESTRICT_RELAYER`, `MODE_OPEN` | Bitmask bị loại (`_USER-DECISIONS.md` §5). Wildcard `relayer == address(0)`, và đó **là điều kiện để pool khoá tồn tại** (§06.1.8) |
+| 33 | Alert | Năm alert page người | Sáu — thêm `relay_key_pool_available == 0`. Mất hết khoá là mất dịch vụ, và nó xảy ra âm thầm vì mỗi khoá kẹt lẻ chỉ là một ticket |
+| 34 | §06.12 mục 3 (`meta_nonce`) | Ba lựa chọn, nghiêng (c) | Nghiêng (c) rõ hơn: chọn (b) buộc phải điền tên relayer cho mọi thứ có giá trị, tức **mất luôn khả năng xoay khoá** |
+| 35 | §06.12 mục 6 (Bulletproofs vs Groth16) | "Phải chốt trước khi viết contract" | Trên factory mở, hai verifier là hai entry catalogue cùng tồn tại. Câu hỏi còn lại là **audit cái nào trước** — ngân sách, không phải kiến trúc |
+| 36 | §06.12 mục 10 (ai là validator) | Câu hỏi mở hoàn toàn | Có một phần đáp án, và nó không dễ chịu: **một signer**. Câu hỏi đổi từ "chọn client nào" thành "khi nào thêm signer thứ hai" |
