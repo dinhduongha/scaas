@@ -779,17 +779,48 @@ Chữ ký uỷ quyền cho rollOver — hai biến thể, chọn ở deploy:
 function rollOver(
     bytes32 acct,
     uint64  expectedPendingSeq,   // chống rollOver trùng, và cho phép client biết nó gộp cái gì
+    uint64  validUntilBlock,      // BẮT BUỘC — xem "tấn công giữ blob" ngay dưới
     bytes32[2] calldata R,        // Schnorr commitment
     bytes32 z                     // Schnorr response
 ) external;
-//  message = H(chainId, address(this), "ZETHER_ROLLOVER_V1", acct, accSeq[acct], expectedPendingSeq)
-//  cost: 2 ecMul + 1 ecAdd + keccak + 5 SSTORE  ≈ 13k + 15k = ~28k gas
+//  require(block.number <= validUntilBlock);            // vài trăm gas
+//  message = H(chainId, address(this), "ZETHER_ROLLOVER_V1",
+//              acct, accSeq[acct], expectedPendingSeq, validUntilBlock)
+//  cost: 2 ecMul + 1 ecAdd + keccak + 10 SSTORE + event  ≈ 13k + ~18k = ~31k gas
 
 // Biến thể B: controller EOA gắn ở registry, rẻ hơn, kém linh hoạt hơn
 function rollOverByController(bytes32 acct, uint64 expectedPendingSeq) external;
 //  require(msg.sender == registry.controllerOf(acct) || _isMetaTxFrom(registry.controllerOf(acct)));
-//  cost: ~2.1k SLOAD + 15k SSTORE = ~17k gas
+//  cost: ~2.1k SLOAD + ~18k SSTORE = ~20k gas
+//  KHÔNG cần validUntilBlock: chữ ký không tồn tại, quyền đến từ msg.sender tại thời điểm gọi.
 ```
+
+**`validUntilBlock` không phải trang trí — thiếu nó thì §3.5.3 nói sai về chính mình.** §3.5.3 kết luận
+"vì `accSeq` chỉ đổi khi chính chủ rollOver, không ai grief được proof đang bay". Điều đó **chỉ đúng khi
+chữ ký rollOver không sống lâu hơn ý định của người ký.** Kịch bản, gọi là **tấn công giữ blob**:
+
+1. Chủ tài khoản ký một `rollOver` hợp lệ ở block `N` (ví dụ để gộp một khoản vừa nhận), và vì lý do
+   nào đó nó không lên chuỗi — relayer bỏ, mạng nghẽn, hoặc chính chủ đổi ý.
+2. Kẻ tấn công **giữ lại** blob đã ký đó. Nó hợp lệ vĩnh viễn: không có trường nào trong thông điệp
+   ràng buộc thời gian, và `expectedPendingSeq` chỉ chống gọi trùng chứ không chống gọi **muộn**.
+3. Ở block `N + 5000`, chủ tài khoản phát một `transferConfidential` chứng minh trên `accSeq = k`.
+4. Kẻ tấn công phát blob cũ **ngay trước** đó. `rollOver` chạy, `accSeq` thành `k+1`, và
+   `require(accSeq == provedAccSeq)` làm transfer revert — sau khi đã đốt gần hết gas verify
+   (~1.79 M gas trên bn254, §3.3.6, vì `accSeq` được kiểm ở fail-fast **trước** MSM chỉ khi contract
+   xếp đúng thứ tự; nếu xếp sai thì mất toàn bộ).
+
+Chi phí tấn công: một tx ~31k gas. Thiệt hại: một lần prove lại cộng phí relayer, lặp lại được mỗi lần
+nạn nhân thử. Đúng bằng griefing mà `accSeq` sinh ra để loại bỏ — chỉ khác là nó đi vòng qua chữ ký cũ
+của chính nạn nhân thay vì qua một lời gọi permissionless.
+
+`validUntilBlock` đóng nó lại với giá vài trăm gas. Quy tắc ví: đặt `validUntilBlock = block.number + W`
+với `W` ngắn — đề xuất **`W = 50 block`** trên Gnosis (~4 phút, đủ cho một lần relay chậm, không đủ để
+thành vũ khí). Client **không** được đặt `W` lớn "cho chắc": một `W = 100,000` là quay lại đúng lỗ hổng
+trên.
+
+Và một hệ quả cho §21/§22: một `rollOver` đã ký nằm trong pool của node relayer là một blob có hạn dùng,
+nên `expiry` của intent bọc nó phải **không dài hơn** `validUntilBlock` quy ra thời gian. Node từ chối
+intent nào vi phạm — đây là một dòng trong thang hàng rào L2 của §22.3, không phải một kiểm tra riêng.
 
 **Mặc định: biến thể A** — nó không đòi hỏi tài khoản Zether phải gắn với một EOA, điều bắt buộc nếu custody là MPC hoặc smart-account/passkey (quyết định đã chốt số 6). Biến thể B là tối ưu cho profile custodial.
 

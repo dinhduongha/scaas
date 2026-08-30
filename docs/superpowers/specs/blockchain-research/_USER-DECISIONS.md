@@ -1933,3 +1933,211 @@ Một node không gọi được callback vẫn phải ghi kết quả vào queu
 4. **Ai giữ danh sách `subject` cho callback trên một node công cộng?** Nếu là thủ công thì callback chỉ
    dùng được cho private pool. Nếu tự động (ví dụ chứng minh sở hữu domain) thì đó là một hệ thống danh
    tính, và nó vượt ra ngoài phạm vi một relayer.
+
+---
+
+## 23. MỘT app Rust duy nhất cho tầng daemon. Không relay-pool Python, không Lua.
+
+> User, 2026-08-31, sau khi đọc `AUDIT_SPEC_REPORT_20260831_021000.md`:
+>
+> > Phần DECOUPLED DAEMON SERVICES (Outside Odoo Container): Cần sửa lại trong spec: Chỉ chạy 1 app
+> > viết bằng rust, làm nhiều chức năng của DECOUPLED DAEMON SERVICES. Tôi không hiểu vì sao lại có
+> > relay-pool, và dính cả Lua ở đây? Và tôi cũng chưa rõ confidential-signer để làm gì?
+
+Ba câu hỏi đều đúng chỗ. Trả lời trước, quyết định sau.
+
+### 23.1 Vì sao có `relay-pool`, và vì sao nó biến mất
+
+`relay-pool` không phải một quyết định kiến trúc — nó là **hệ quả của một giả định chưa ai phát biểu**:
+rằng tầng daemon là **N tiến trình Python không trạng thái**, scale ngang.
+
+Từ giả định đó mọi thứ trong §06 suy ra một cách logic:
+
+| §06 xây cái gì | Vì sao | Còn cần không khi chỉ có 1 tiến trình |
+|---|---|---|
+| Nonce leasing qua Redis | N worker tranh cùng một không gian nonce EOA | **Không** — một tiến trình thì nonce là biến trong bộ nhớ |
+| Lua script nguyên tử | `allocate` + `freelist` + tập `signed` phải nguyên tử **giữa các tiến trình** | **Không** — trong một tiến trình đó là một `Mutex`, hoặc tốt hơn là một task sở hữu duy nhất + kênh mpsc |
+| Fencing token, `owner_fence` | phát hiện một worker mất quyền sở hữu shard | **Không** — không có shard, không có worker khác để mất quyền vào tay |
+| Ownership lease TTL 10 s | worker chết thì shard phải chuyển chủ | **Không** — tiến trình chết thì khởi động lại và đọc lại journal |
+| Consistent hash `% N_workers` | chia shard | **Không** |
+| Generation counter `gen` | chống worker cũ hồi sinh ghi đè | **Không** |
+
+Toàn bộ §06.1 (nonce manager phân tán) là **giải pháp cho một bài toán ta tự tạo ra**. Bỏ giả định
+"N worker Python" thì bài toán biến mất cùng với giải pháp. Đây là khoảng một phần ba §06.
+
+Cái **không** biến mất, vì nó không đến từ giả định đó:
+
+- **Journal trên Postgres là bản ghi bền.** Redis chưa bao giờ được phép là sự thật (§06.1.2: AOF
+  everysec mất 1 s ghi, replica async roll back khi failover). Chain là sự thật, Postgres là journal.
+  Bỏ Redis không mất gì vì Redis vốn chỉ là cache.
+- **Quy tắc "nonce đã có tx đã ký thì KHÔNG BAO GIỜ trả về freelist".** Đây là quy tắc tài chính, không
+  phải quy tắc đồng bộ. Giữ nguyên.
+- **Giao thức cold start**: dựng lại `next` từ `max(getTransactionCount(pending), max_signed_nonce_in_journal + 1)`.
+  Vẫn cần — tiến trình vẫn khởi động lại. Nhưng nó là một hàm khởi động, không phải một giao thức phân tán.
+- **`max_inflight = 16`** (`txpool.accountslots` của node). Là trần của mạng, không của kiến trúc ta.
+- **Simulation gate.** Là logic, chạy ở đâu cũng được.
+
+### 23.2 `confidential-signer` để làm gì
+
+Nó tồn tại **chỉ vì Zether**, và **chỉ để giữ `x`**.
+
+`x` là khoá giải mã ElGamal của một tài khoản Zether. Nó cần cho đúng hai việc:
+
+1. **Đọc số dư của chính mình.** Số dư trên chuỗi là `(C, D)`; giá trị là `C · D^{-x}`, rồi giải log rời
+   rạc (hoặc mở memo AEAD — §03.2.5, nhanh hơn 50.000 lần, nhưng khoá memo cũng dẫn xuất từ `D^x`).
+2. **Sinh phần sigma của một chứng minh chuyển tiền**: `s = k + c·x mod r`.
+
+Ba điều làm nó thành một tiến trình riêng chứ không phải một hàm:
+
+- **Không HSM thương mại nào giữ được `x`** (§07.2). HSM là signing oracle trên các đường cong có trong
+  firmware đã chứng nhận; bn254 và Baby Jubjub không có OID ở CloudHSM / Cloud KMS / Managed HSM, và
+  không HSM nào expose phép `k + c·x` trên scalar field tuỳ ý. Nên `x` **bắt buộc** nằm trong bộ nhớ của
+  một tiến trình nào đó. Câu hỏi duy nhất là: tiến trình nào.
+- **Không được là tiến trình phân tích byte từ Internet.** Node relayer parse intent của người lạ; §14
+  bắt buộc ba cargo-fuzz target vì *một `panic!` là DoS toàn mạng bằng một gói tin 200 byte*. Một lỗi bộ
+  nhớ trong parser mà cùng address space với `x` là mất sạch mọi tài khoản node đó phục vụ.
+- **Phần chạm `x` rất nhỏ** (§07.2b): 2 phép nhân vô hướng trên điểm công khai + 1 scalar response.
+  `ZetherKeyOracle` **dưới 300 dòng**. Tách một thứ 300 dòng ra khỏi một thứ vài chục nghìn dòng là rẻ,
+  và nó cho phép chạy 300 dòng đó trong enclave có attestation.
+
+**Hệ quả thực dụng: chưa có Zether thì không có signer.** META v1 (§20, factory + `ERC20MetaTx`) không
+có `x` nào cả — khoá duy nhất là khoá ký tx EVM, và cái đó HSM/KMS giữ được bình thường. Signer chỉ xuất
+hiện khi Zether bật.
+
+### 23.3 Quyết định: MỘT codebase, MỘT binary, vai chọn bằng config
+
+```
+bamboo-node --config node.toml          # mặc định: mọi vai trừ signer
+bamboo-node --role=signer --config signer.toml   # cùng binary, chỉ khi Zether bật
+```
+
+Bốn "dịch vụ" cũ trở thành **bốn vai trong một binary**, và chúng nối vào đúng ba trục năng lực của
+§21.4 chứ không phải một danh sách mới:
+
+| Vai | Cũ là gì | Trục §21.4 | Bật/tắt bằng |
+|---|---|---|---|
+| `gateway` | phần RPC của `relay-pool` | ingest | `[gateway] enabled` |
+| `mesh` | `intent-hub` | ingest + pool | `[mesh] enabled` |
+| `pool` | hàng đợi của `relay-pool` | pool `open` \| `private` \| `none` | `[pool] visibility` |
+| `submit` | nonce manager + simulation gate | submit theo `(chain, contract)` | `[submit] chains` |
+| `indexer` | `chain-indexer` | — (mới, §22.8 cần nó) | `[indexer] chains` |
+| `signer` | `confidential-signer` | — | **tiến trình riêng**, xem §23.5 |
+
+Một binary, không phải một tiến trình bắt buộc: một triển khai lớn vẫn chạy được hai bản sao với vai
+khác nhau (một chỉ `indexer`, một chỉ `submit`) nếu muốn tách tải. Khác biệt với thiết kế cũ là **tách
+tiến trình trở thành lựa chọn vận hành, không phải ràng buộc kiến trúc**, và không có tiến trình nào cần
+một giao thức đồng bộ phân tán để nói chuyện với anh em của nó — chúng nói chuyện qua Postgres, thứ đã có
+transaction thật.
+
+Vì sao Rust cho tất cả, không phải Python cho phần dễ:
+
+- Verifier và prover Zether **phải** là Rust (arkworks/gnark-crypto). Đã có một binary Rust rồi.
+- Parser intent là bề mặt tấn công đòi fuzz; Python asyncio không cho gì ở đây mà lấy đi memory safety.
+- Một binary tĩnh dễ pin hash, dễ attest, dễ chạy trong enclave. Bốn tiến trình hai ngôn ngữ thì không.
+- §21.3 đòi conformance vector giữa các bản cài đặt. Một bản cài đặt của ta là một bộ vector ít hơn phải
+  giữ đồng bộ.
+
+### 23.4 Nguy cơ thật của việc gộp: ranh giới TIN CẬY không được gộp theo
+
+Đây là chỗ đơn giản hoá có thể phản tác dụng, và nó phải được nói ra.
+
+§12.0.2 vẽ mô hình đe doạ **theo tiến trình**, và bốn bất biến của nó dựa vào ranh giới tiến trình:
+Odoo không giữ khoá, Odoo không gọi signer, signer không tin `tenant_uuid` trong body, và **indexer
+không có quyền ghi bảng nghiệp vụ nào**. Nếu gộp bốn tiến trình thành một mà không làm gì khác, bất biến
+thứ tư mất: một binary chạy cả `indexer` lẫn `submit` có một connection Postgres duy nhất với đủ quyền
+cho cả hai, và A11 (chiếm indexer) lập tức bằng A10 (chiếm relay worker).
+
+Ranh giới phải được dựng lại bằng thứ khác, và có sẵn thứ tốt hơn tiến trình:
+
+| Bất biến §12.0.2 | Trước: ranh giới tiến trình | Sau: ranh giới gì |
+|---|---|---|
+| Indexer chỉ ghi 3 bảng của nó | tiến trình riêng | **DB role riêng**. Vai `indexer` mở connection bằng `bamboo_indexer` với `GRANT` hẹp; vai `submit` dùng connection khác. Cùng binary, hai connection pool, hai role. Mạnh hơn ranh giới tiến trình cũ vì nó do Postgres cưỡng chế chứ không do sơ đồ. |
+| Odoo không giữ vật liệu khoá | tiến trình riêng | không đổi — Odoo vẫn là tiến trình khác, và grep gate CI của §12.0.2 vẫn chạy |
+| Signer không tin body | tiến trình riêng + mTLS | không đổi — signer **vẫn** là tiến trình riêng (§23.5) |
+| Odoo không gọi thẳng chain | outbox trong Postgres | không đổi |
+
+Quy tắc rút ra, và nó nên là một dòng test: **mỗi vai khai báo tập quyền DB của nó, và binary từ chối
+khởi động nếu một vai được cấp quyền ngoài tập đó.** Gộp tiến trình được; gộp quyền thì không.
+
+### 23.5 Ngoại lệ duy nhất: `signer` vẫn là tiến trình riêng, và chỉ khi Zether bật
+
+Cùng codebase, cùng binary, khác tiến trình. Lý do đã nêu ở §23.2: nó ở cùng address space với parser
+intent thì `x` nằm trong tầm với của một lỗi parser.
+
+Ranh giới cụ thể:
+
+- Giao diện **hẹp và cố định**: `ecdh(D) -> compress(D^x)` và `sigma_response(k, c) -> s`. Không có
+  `decrypt(C, D)` tuỳ ý — đó là một decryption oracle trên `x` (§07.4b).
+- Signer **tự giữ nonce của nó** và **chống replay theo digest** (§12.5.1 mục 2, 3).
+- Triển khai enclave: vai `signer` chạy trong Nitro Enclave / SEV-SNP, giao tiếp **chỉ qua vsock**, và
+  `x` được unwrap bằng KMS có điều kiện trên PCR0. Triển khai tối thiểu (loyalty-only, §07 cấu hình C):
+  cùng máy, Unix socket, `x` wrap bởi KMS — vẫn là tiến trình riêng, vẫn giao diện hẹp.
+- **Không Zether ⇒ không chạy vai này.** Cấu hình META-only không có tiến trình signer nào.
+
+### 23.6 Sơ đồ sau khi sửa
+
+```
++-------------------------------------------------------------------------+
+|  Odoo 19  —  dms_blockchain (+ _bridge / _account / _payment)           |
+|  Control plane. Không khoá, không RPC ra chain trong transaction.       |
++---------------------------------+---------------------------------------+
+                                  |  outbox trong Postgres
+                                  |  (SELECT ... FOR UPDATE SKIP LOCKED)
++---------------------------------v---------------------------------------+
+|  bamboo-node  (MỘT binary Rust)                                          |
+|                                                                          |
+|   [gateway]   RPC cho client  ──┐                                        |
+|   [mesh]      libp2p gossipsub ─┼─> máy trạng thái §22.1                 |
+|   [pool]      open / private  ──┤                                        |
+|   [submit]    key pool §21.5, nonce in-process + journal Postgres        |
+|   [indexer]   multi-RPC quorum, finality gate, nuôi cache nonce §22.3    |
+|                                                                          |
+|   Hai connection Postgres, hai DB role. Không Redis. Không Lua.          |
++---------------------------------+---------------------------------------+
+                                  |  vsock / unix socket, giao diện 2 hàm
+                                  |  CHỈ TỒN TẠI KHI ZETHER BẬT
++---------------------------------v---------------------------------------+
+|  bamboo-node --role=signer   (cùng binary, trong enclave nếu có)        |
+|  ZetherKeyOracle < 300 dòng. Giữ x. Không parse gì từ Internet.         |
++-------------------------------------------------------------------------+
+```
+
+### 23.7 Cái gì chết trong spec
+
+Đánh dấu để không ai hiện thực lại:
+
+| Chết | Ở đâu | Thay bằng |
+|---|---|---|
+| `relay-pool` như một dịch vụ Python | §06 toàn bộ tiêu đề, §08.2b, sơ đồ §12.0.2 | vai `submit` + `pool` trong `bamboo-node` |
+| Redis làm store nonce | §06.1 | bộ nhớ tiến trình + journal Postgres |
+| Lua script nguyên tử | §06.1, §06.6 (velocity limit) | `Mutex` / task sở hữu; velocity limit là một transaction Postgres |
+| Fencing token, ownership lease, consistent hash shard, `gen` | §06.1.3–06.1.5 | — (bài toán không còn) |
+| `intent-hub` như tiến trình riêng | §05.1, §12.0.2 | vai `mesh` |
+| `chain-indexer` như tiến trình riêng | §11, §12.0.2 | vai `indexer`, DB role riêng |
+| Python asyncio ở tầng daemon | §06, §11 | Rust |
+| "1 TypeScript Engineer" cho Pod D | §16 §9.2 (và báo cáo AGY chép lại) | Rust engineer |
+
+Cái **giữ nguyên** dù sơ đồ đổi: outbox Postgres là biên duy nhất giữa Odoo và node; Odoo không bao giờ
+gọi HTTP trong transaction; `_set_done` chỉ đến từ Finality Gate; indexer không ghi bảng nghiệp vụ.
+
+### 23.8 Hệ quả cho §21.2 — cần xác nhận
+
+§21.2 chốt **hai bản cài đặt song song**: A Rust standalone, B Odoo addon. Lý do của B là *"một site DMS
+đã có Odoo, bắt họ vận hành thêm một tiến trình Rust là chi phí không đổi lấy gì"*.
+
+Quyết định này làm lý do đó yếu đi đáng kể: trước là "thêm bốn daemon hai ngôn ngữ", giờ là **một binary
+tĩnh**. Và giữ B nghĩa là hai bản cài đặt của cùng một giao thức gossip — đúng chỗ §21.3 nói lỗi bất đồng
+thuận sinh ra — cho một lợi ích đã teo lại.
+
+Đề xuất: **bỏ B như một bản cài đặt node; addon Odoo trở thành control plane của node, không phải một
+node.** Spec và conformance vector của §21.3 **vẫn bắt buộc**, nhưng lý do đổi: không phải vì ta viết hai
+bản, mà vì **mạng mở nên người lạ sẽ viết bản của họ**. Đó là lý do mạnh hơn.
+
+Chưa chốt — đây là đảo một quyết định user đã ra ở §21.2, nên cần user xác nhận.
+
+### 23.9 Nợ kỹ thuật để lại
+
+1. §06 cần một lần viết lại thật, không chỉ một dòng ghi chú. Khoảng một phần ba nội dung của nó nói về
+   một bài toán không còn tồn tại, và để nguyên thì người hiện thực sẽ xây Redis + Lua vì spec bảo thế.
+2. §12.0.2 phải vẽ lại theo **ranh giới quyền** chứ không theo ranh giới tiến trình, kèm bảng ở §23.4.
+3. Bảng năng lực của §21.4 và bảng vai ở §23.3 phải hợp nhất — hiện là hai cách nói về cùng một cấu hình.
