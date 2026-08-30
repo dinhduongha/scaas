@@ -1,49 +1,50 @@
-## 15. Lop settlement thong nhat va doi soat voi ke toan
+## 15. Lớp settlement thống nhất và đối soát với kế toán
 
-> Section 10 la canonical ve ten model va ACL. Section nay **khong dinh nghia lai** `blockchain.settlement`; no
-> bo sung nhung thu section 10 chua co: (a) tang batch va he qua atomicity on-chain, (b) crash-safety tung buoc,
-> (c) cau ke toan `account.move` va FX, (d) routine doi soat drift, (e) hop dong callback nguoc ve consumer.
-> Cho nao lech voi §10 duoc danh dau **[SUA §10]**. Cho nao ban nhap cu cua chinh section nay sai duoc danh dau
-> **[SUA §15 v1]** — co bay cho, va ba trong so do la sai su that ve model `dms` chu khong phai sai thiet ke.
-
----
-
-### 15.0. Muoi gia dinh ban nhap khong noi ra
-
-Moi dong duoi day la mot thu ban nhap **coi la hien nhien**. Neu mot trong chung sai o deployment that, thiet ke
-hong theo mot cach khong co canh bao.
-
-| # | Gia dinh ngam | Neu sai thi sao | Chot o day |
-|---|---|---|---|
-| A1 | Mot `blockchain.settlement` co dung mot nguoi nhan | Payout "1 brand → 300 NPP" khong con la 300 settlement ma la 300 line trong mot record, va toan bo lap luan §15.1 sup | Giu A1 **la mot bat bien co the kiem tra**: `payee_account_id` la `required` khi `transport='onchain'` |
-| A2 | Consumer luon co the sinh mot `origin_key` **on dinh** truoc khi goi | Retry sau crash sinh key moi ⇒ chi tra hai lan. Day la che do hong dat nhat trong ca section | §15.3.4: key phai la ham thuan cua chung tu, **khong** chua timestamp, khong chua `uuid4()` |
-| A3 | Chain la nguon su that ve **da xay ra**, Odoo la nguon su that ve **dinh lam gi** | Neu dao chieu, mot reorg se ghi de mot quyet dinh nghiep vu | §15.2.6 |
-| A4 | Mot settlement `final` khong bao gio quay lai | `finalized` tag noi doi duoc (§11.3b), chain private rewind duoc | Them state `disputed`. **`final` khong con la terminal tuyet doi** |
-| A5 | Odoo doc duoc so tien cua moi settlement | Voi Zether va khong giu khoa, khong doc duoc | §15.4.8 + §15.5.5 |
-| A6 | `account` da duoc cai va cau hinh xong | Mode 4 mac dinh chay khong co `account`; va khi co `account`, van con **bon** thu phai cau hinh truoc khi post duoc dong dau tien | §15.4.1 |
-| A7 | Mot settlement sinh dung mot but toan | Netting sinh ba; compensation sinh mot but toan doc lap; batch mode 4 sinh mot but toan cho **N** settlement | `gl_state` la mot may trang thai **rieng**, khong phai mot Boolean |
-| A8 | Ty gia trong ngay la du | USDC roi ve ~$0.87 trong phien 11/03/2023 (depeg SVB), lech ~13% so voi rate cuoi ngay | §15.4.5: rate phai co `fx_rate_datetime`, khong chi `date` |
-| A9 | Relayer fee va gas la chi phi cua ai do khac | Chung la chi phi that, bang token that, va neu khong vao so thi sub-ledger va GL khong bao gio khop | §15.4.2 co but toan cho ca hai |
-| A10 | Doi soat chay duoc bang cach "hoi chain" | Khong RPC nao tra loi "moi transfer den dia chi X tu truoc toi nay". Phai co indexer | §15.5.3: huong (A) la anti-join voi `blockchain.chain.effect` cua §11, **khong** phai mot lenh goi RPC |
+> Section 10 là canonical về tên model và ACL. Section này **không định nghĩa lại** `blockchain.settlement`; nó
+> bổ sung những thứ section 10 chưa có: (a) tầng batch và hệ quả atomicity on-chain, (b) crash-safety từng bước,
+> (c) cầu kế toán `account.move` và FX, (d) routine đối soát drift, (e) hợp đồng callback ngược về consumer.
+> Chỗ nào lệch với §10 được đánh dấu **[SỬA §10]**. Chỗ nào bản nháp cũ của chính section này sai được đánh dấu
+> **[SỬA §15 v1]** — có bảy chỗ, và ba trong số đó là sai sự thật về model `dms` chứ không phải sai thiết kế.
 
 ---
 
-### 15.1. Settlement la "y dinh chuyen gia tri", khong phai "giao dich"
+### 15.0. Mười giả định bản nháp không nói ra
 
-#### 15.1.1. Ba truc doc lap
+Mỗi dòng dưới đây là một thứ bản nháp **coi là hiển nhiên**. Nếu một trong chúng sai ở deployment thật, thiết kế
+hỏng theo một cách không có cảnh báo.
 
-Mot rang buoc phai noi truoc vi no quyet dinh moi thu con lai: **`blockchain.settlement` khong tuong ung 1-1 voi
-mot transaction on-chain.** Anh xa that la N-1: nhieu settlement dung chung mot `blockchain.transaction` (batch
-payout), va mot settlement co the trai qua nhieu transaction (replace-by-fee, retry sau khi drop). Neu ai do thiet
-ke voi gia dinh 1-1, buoc dau tien lam vo no la brand tra 300 nha phan phoi trong mot tx.
-
-| Truc | Model | Don vi | Ai so huu |
+| # | Giả định ngầm | Nếu sai thì sao | Chốt ở đây |
 |---|---|---|---|
-| **Y dinh nghiep vu** | `blockchain.settlement` | Mot khoan tien, mot ben nhan, mot `origin_key`. Don vi idempotency va don vi ke toan. | Consumer (bridge) |
-| **Van chuyen** | `blockchain.settlement.batch` | Mot lo duoc gui cung nhau. Don vi toi uu gas, **don vi lane 2D nonce**, don vi retry. | Core |
-| **Su that on-chain** | `blockchain.transaction` / `blockchain.chain.effect` (§11) | Cai da xay ra. Don vi finality va don vi reorg. | Indexer |
+| A1 | Một `blockchain.settlement` có đúng một người nhận | Payout "1 brand → 300 NPP" không còn là 300 settlement mà là 300 line trong một record, và toàn bộ lập luận §15.1 sụp | Giữ A1 **là một bất biến có thể kiểm tra**: `payee_account_id` là `required` khi `transport='onchain'` |
+| A2 | Consumer luôn có thể sinh một `origin_key` **ổn định** trước khi gọi | Retry sau crash sinh key mới ⇒ chi trả hai lần. Đây là chế độ hỏng đắt nhất trong cả section | §15.3.4: key phải là hàm thuần của chứng từ, **không** chứa timestamp, không chứa `uuid4()` |
+| A3 | Chain là nguồn sự thật về **đã xảy ra**, Odoo là nguồn sự thật về **định làm gì** | Nếu đảo chiều, một reorg sẽ ghi đè một quyết định nghiệp vụ | §15.2.6 |
+| A4 | Một settlement `final` không bao giờ quay lại | `finalized` tag nói dối được (§11.3b), chain private rewind được | Thêm state `disputed`. **`final` không còn là terminal tuyệt đối** |
+| A5 | Odoo đọc được số tiền của mọi settlement | Với Zether và không giữ khoá, không đọc được | §15.4.8 + §15.5.5 |
+| A6 | `account` đã được cài và cấu hình xong | Mode 4 mặc định chạy không có `account`; và khi có `account`, vẫn còn **bốn** thứ phải cấu hình trước khi post được dòng đầu tiên | §15.4.1 |
+| A7 | Một settlement sinh đúng một bút toán | Netting sinh ba; compensation sinh một bút toán độc lập; batch mode 4 sinh một bút toán cho **N** settlement | `gl_state` là một máy trạng thái **riêng**, không phải một Boolean |
+| A8 | Tỷ giá trong ngày là đủ | USDC rơi về ~$0.87 trong phiên 11/03/2023 (depeg SVB), lệch ~13% so với rate cuối ngày | §15.4.5: rate phải có `fx_rate_datetime`, không chỉ `date` |
+| A9 | Relayer fee và gas là chi phí của ai đó khác | Chúng là chi phí thật, bằng token thật, và nếu không vào sổ thì sub-ledger và GL không bao giờ khớp | §15.4.2 có bút toán cho cả hai |
+| A10 | Đối soát chạy được bằng cách "hỏi chain" | Không RPC nào trả lời "mọi transfer đến địa chỉ X từ trước tới nay". Phải có indexer | §15.5.3: hướng (A) là anti-join với `blockchain.chain.effect` của §11, **không** phải một lệnh gọi RPC |
+| **A11** | **[BẢN 3] Một `token_symbol` xác định được một token** | Factory mở: mười người wrap xDAI ra mười contract khác nhau, tất cả tự gọi mình là `zDAI` (§20.3). Một settlement ghi `token_symbol='zDAI'` không nói được nó là zDAI của ai | `token_id` (Many2one tới `blockchain.token`, tức tới một **địa chỉ**) là bắt buộc; `token_symbol` chỉ là nhãn hiển thị. §09.4 đã sửa; ghi lại ở đây vì batch cũng khoá theo token |
 
-Truc thu hai la thu §10 thieu. Bo sung.
+---
+
+### 15.1. Settlement là "ý định chuyển giá trị", không phải "giao dịch"
+
+#### 15.1.1. Ba trục độc lập
+
+Một ràng buộc phải nói trước vì nó quyết định mọi thứ còn lại: **`blockchain.settlement` không tương ứng 1-1 với
+một transaction on-chain.** Ánh xạ thật là N-1: nhiều settlement dùng chung một `blockchain.transaction` (batch
+payout), và một settlement có thể trải qua nhiều transaction (replace-by-fee, retry sau khi drop). Nếu ai đó thiết
+kế với giả định 1-1, bước đầu tiên làm vỡ nó là brand trả 300 nhà phân phối trong một tx.
+
+| Trục | Model | Đơn vị | Ai sở hữu |
+|---|---|---|---|
+| **Ý định nghiệp vụ** | `blockchain.settlement` | Một khoản tiền, một bên nhận, một `origin_key`. Đơn vị idempotency và đơn vị kế toán. | Consumer (bridge) |
+| **Vận chuyển** | `blockchain.settlement.batch` | Một lô được gửi cùng nhau. Đơn vị tối ưu gas, **đơn vị lane 2D nonce**, đơn vị retry. | Core |
+| **Sự thật on-chain** | `blockchain.transaction` / `blockchain.chain.effect` (§11) | Cái đã xảy ra. Đơn vị finality và đơn vị reorg. | Indexer |
+
+Trục thứ hai là thứ §10 thiếu. Bổ sung.
 
 #### 15.1.2. `blockchain.settlement.batch`
 
@@ -66,10 +67,10 @@ class BlockchainSettlementBatch(models.Model):
                                         ('chunked', 'Nhieu tx, thanh cong tung phan la binh thuong')],
                                        required=True, default='chunked')
     chunk_size      = fields.Integer(required=True, default=150)
-    line_count      = fields.Integer(compute='_compute_totals', store=True, default=0)
-    total_base      = fields.Char(compute='_compute_totals', store=True, default='0')
-    settled_count   = fields.Integer(compute='_compute_totals', store=True, default=0)
-    failed_count    = fields.Integer(compute='_compute_totals', store=True, default=0)
+    line_count      = fields.Integer(compute='_compute_totals', store=True)
+    total_base      = fields.Char(compute='_compute_totals', store=True)
+    settled_count   = fields.Integer(compute='_compute_totals', store=True)
+    failed_count    = fields.Integer(compute='_compute_totals', store=True)
     batch_state     = fields.Selection([
         ('draft', 'Draft'), ('authorized', 'Authorized'), ('submitted', 'Submitted'),
         ('partial', 'Partially final'), ('final', 'Final'),
@@ -110,8 +111,9 @@ class BlockchainSettlementBatchChunk(models.Model):
         'UNIQUE(batch_id, sequence)', 'Mot chunk sequence chi ton tai mot lan trong mot batch.')
 ```
 
-`_compute_totals` la stored computed: **phai gan gia tri o moi nhanh**, ke ca khi `settlement_ids` rong. Dat bon
-dong gan mac dinh o **dau** method, truoc moi `if`:
+`_compute_totals` là stored computed: **phải gán giá trị ở mọi nhánh**, kể cả khi `settlement_ids` rỗng, và
+**không được nhận `default=`** (Odoo bỏ qua `default` trên stored computed). Đặt bốn dòng gán mặc định ở **đầu**
+method, trước mọi `if`:
 
 ```python
 @api.depends('settlement_ids.amount_base', 'settlement_ids.settle_state')
@@ -130,61 +132,58 @@ def _compute_totals(self):
         rec.failed_count = len(lines.filtered(lambda s: s.settle_state in ('failed', 'expired')))
 ```
 
-Hai chi tiet khong hien nhien:
+Hai chi tiết không hiển nhiên:
 
-1. `sum(int(...))` dung so nguyen Python (khong gioi han bit), **khong** `float`. Mot tong 300 × 10^24 base units
-   vuot `2^53` va `float` se lam tron im lang. Day la cung ly do §10.4.1 cam `fields.Float` cho `amount_base`.
-2. `total_base` la `Char` nen **khong group by hay so sanh so hoc duoc trong domain**. Bao cao tong theo lo phai
-   dung `amount_display` (Float, §10.4.1) hoac `read_group` tren mot cot Numeric phu. Neu ai do can so sanh chinh
-   xac trong SQL, them mot cot `total_numeric = fields.Float(digits=(38, 0))`? **Khong** — dung
-   `column_type` mac dinh khong du. Cach dung: mot index bieu thuc
-   `CREATE INDEX ... ON blockchain_settlement ((amount_base::numeric))` khai qua `init()`, va cac truy van doi soat
-   cua §15.5 dung SQL truc tiep chu khong qua ORM. Viet ra vi day la thu se bi phat hien vao dung luc mot bao cao
-   tong dau tien duoc yeu cau.
+1. `sum(int(...))` dùng số nguyên Python (không giới hạn bit), **không** `float`. Một tổng 300 × 10^24 base units
+   vượt `2^53` và `float` sẽ làm tròn im lặng. Đây là cùng lý do §10.4.1 cấm `fields.Float` cho `amount_base`.
+2. `total_base` là `Char` nên **không group by hay so sánh số học được trong domain**. Báo cáo tổng theo lô phải
+   dùng `amount_display` (Float, §10.4.1) hoặc `read_group` trên một cột Numeric phụ. Cách dùng: một index biểu thức
+   `CREATE INDEX ... ON blockchain_settlement ((amount_base::numeric))` khai qua `init()`, và các truy vấn đối soát
+   của §15.5 dùng SQL trực tiếp chứ không qua ORM. Viết ra vì đây là thứ sẽ bị phát hiện vào đúng lúc một báo cáo
+   tổng đầu tiên được yêu cầu.
+#### 15.1.3. Vì sao không phải "một settlement, nhiều line"
 
-#### 15.1.3. Vi sao khong phai "mot settlement, nhieu line"
+Đề xuất header/line nghe hợp lý và sai ở đúng một chỗ: **trạng thái**. Một payout tới 300 nhà phân phối có 300 kết
+cục độc lập — một địa chỉ bị đóng băng KYC, một địa chỉ gõ sai, một bên chưa register Zether. Nếu cả 300 nằm trong
+một record thì `settle_state` phải nói dối về 299 dòng còn lại, `origin_key` không còn là khoá idempotency của từng
+khoản chi, và bridge không có chỗ để ghi ngược trạng thái về từng chứng từ gốc. Ngược lại, batch chỉ là một nhãn
+vận chuyển: mất nó không mất gì, tạo lại nó không mất gì.
 
-De xuat header/line nghe hop ly va sai o dung mot cho: **trang thai**. Mot payout toi 300 nha phan phoi co 300 ket
-cuc doc lap — mot dia chi bi dong bang KYC, mot dia chi go sai, mot ben chua register Zether. Neu ca 300 nam trong
-mot record thi `settle_state` phai noi doi ve 299 dong con lai, `origin_key` khong con la khoa idempotency cua tung
-khoan chi, va bridge khong co cho de ghi nguoc trang thai ve tung chung tu goc. Nguoc lai, batch chi la mot nhan
-van chuyen: mat no khong mat gi, tao lai no khong mat gi.
-
-**[SUA §15 v1] Va co mot ly do manh hon ban nhap khong biet: trong `dms`, "300 nha phan phoi" von da la 300 record.**
-`dms.trade.settlement` co dung mot `beneficiary_partner_id` (`required=True`), va `amount` la computed tu
-`claim_ids.approved_amount`. Khong ton tai mot chung tu DMS nao mang N nguoi nhan. Vay anh xa 1 settlement ↔ 1 chung
-tu la **anh xa tu nhien**, khong phai mot lua chon phai bien ho. Ban nhap dan `dms.trade.settlement.line` lam vi du
+**[SỬA §15 v1] Và có một lý do mạnh hơn bản nháp không biết: trong `dms`, "300 nhà phân phối" vốn đã là 300 record.**
+`dms.trade.settlement` có đúng một `beneficiary_partner_id` (`required=True`), và `amount` là computed từ
+`claim_ids.approved_amount`. Không tồn tại một chứng từ DMS nào mang N người nhận. Vậy ánh xạ 1 settlement ↔ 1 chứng
+từ là **ánh xạ tự nhiên**, không phải một lựa chọn phải biện hộ. Bản nháp dẫn `dms.trade.settlement.line` làm ví dụ
 "payout line" — sai, xem §15.6.0.
 
-#### 15.1.4. Do lon: bao nhieu record, bao nhieu batch
+#### 15.1.4. Độ lớn: bao nhiêu record, bao nhiêu batch
 
-Uoc tinh, co so: deployment DMS 5,000 outlet, 500 nha phan phoi, chu ky settlement thang.
+Ước tính, cơ sở: deployment DMS 5,000 outlet, 500 nhà phân phối, chu kỳ settlement tháng.
 
-| Doi tuong | So luong/nam | Ghi chu |
+| Đối tượng | Số lượng/năm | Ghi chú |
 |---|---|---|
-| `blockchain.settlement` (B2B payout) | 500 × 12 = 6,000 | 1/NPP/thang |
-| `blockchain.settlement` (outlet collection) | 5,000 × 250 ngay = 1,250,000 | dong lon nhat |
-| `blockchain.settlement` (loyalty) | ~200,000 | phu thuoc chuong trinh |
-| `blockchain.settlement.batch` | 12 (B2B) + 250 (collection theo ngay) + 12 (loyalty) ≈ 274 | rat it |
-| `blockchain.settlement.batch.chunk` | 12 × ceil(500/150) = 48, cong collection | |
-| Dung luong `blockchain_settlement` + index | ~1.2 GB/nam (uoc tinh, co so ~400 B/dong ke ca 8 index) | |
+| `blockchain.settlement` (B2B payout) | 500 × 12 = 6,000 | 1/NPP/tháng |
+| `blockchain.settlement` (outlet collection) | 5,000 × 250 ngày = 1,250,000 | dòng lớn nhất |
+| `blockchain.settlement` (loyalty) | ~200,000 | phụ thuộc chương trình |
+| `blockchain.settlement.batch` | 12 (B2B) + 250 (collection theo ngày) + 12 (loyalty) ≈ 274 | rất ít |
+| `blockchain.settlement.batch.chunk` | 12 × ceil(500/150) = 48, cộng collection | |
+| Dung lượng `blockchain_settlement` + index | ~1.2 GB/năm (ước tính, cơ sở ~400 B/dòng kể cả 8 index) | |
 
-Ket luan lam viec: **bang settlement la bang lon, bang batch la bang nho.** Moi index dat tren settlement phai
-duoc bien ho; moi index tren batch la mien phi.
+Kết luận làm việc: **bảng settlement là bảng lớn, bảng batch là bảng nhỏ.** Mọi index đặt trên settlement phải
+được biện hộ; mọi index trên batch là miễn phí.
 
 ---
 
-### 15.2. Vong doi va noi crash
+### 15.2. Vòng đời và nơi crash
 
-#### 15.2.1. Bang chuyen trang thai day du
+#### 15.2.1. Bảng chuyển trạng thái đầy đủ
 
-Ban nhap ve mot so do va bo trong cot "ai duoc phep". Do la cot quan trong nhat: mot may trang thai khong noi ai
-bam nut la mot may trang thai chua duoc thiet ke.
+Bản nháp vẽ một sơ đồ và bỏ trống cột "ai được phép". Đó là cột quan trọng nhất: một máy trạng thái không nói ai
+bấm nút là một máy trạng thái chưa được thiết kế.
 
-**[SUA §10]** `reversed` doi thanh `compensated`; them `disputed`. Ly do `compensated` khong phai tham my:
-`reversed` goi y mot phep dao tren chinh ban ghi cu, ma so cai on-chain khong co UNDO. `compensated` mo ta dung co
-che: mot settlement moi, chieu nguoc, co `origin_key` rieng, co tx rieng, tro ve ban goc bang `compensation_of_id`.
-Ban goc van `final` vinh vien — vi no *da* xay ra.
+**[SỬA §10]** `reversed` đổi thành `compensated`; thêm `disputed`. Lý do `compensated` không phải thẩm mỹ:
+`reversed` gợi ý một phép đảo trên chính bản ghi cũ, mà sổ cái on-chain không có UNDO. `compensated` mô tả đúng cơ
+chế: một settlement mới, chiều ngược, có `origin_key` riêng, có tx riêng, trỏ về bản gốc bằng `compensation_of_id`.
+Bản gốc vẫn `final` vĩnh viễn — vì nó *đã* xảy ra.
 
 ```
 draft ──authorize──▶ authorized ──submit──▶ submitted ──worker claim──▶ broadcast
@@ -199,24 +198,24 @@ draft ──authorize──▶ authorized ──submit──▶ submitted ──
 final ──(mot settlement nguoc chieu, khong bao gio write nguoc)──▶ ban goc van final, ban moi la compensated
 ```
 
-| Tu | Den | Ai/cai gi kich hoat | Nhom | Dieu kien cung |
+| Từ | Đến | Ai/cái gì kích hoạt | Nhóm | Điều kiện cứng |
 |---|---|---|---|---|
-| `draft` | `authorized` | `blockchain_authorize_payout` | **treasury** | pre-flight pass (duoi) |
-| `draft` | `expired` | `_cron_expire_settlements` | he thong | `create_date + settlement_ttl_hours < now` |
-| `authorized` | `submitted` | `_cron_advance_authorized` hoac `blockchain_submit_settlement` | operator/he thong | co metatx da ky, co `blockchain.relay.job` |
-| `authorized` | `failed` | `blockchain_cancel_settlement` | treasury | chua co tx nao |
-| `submitted` | `broadcast` | relay worker ghi `tx_hash` | he thong | `UNIQUE(chain_id, tx_hash)` |
-| `submitted` | `expired` | `_cron_expire_metatx` | he thong | `metatx.expiry_datetime < now` va chua co tx |
-| `broadcast` | `pending_finality` | `_cron_poll_receipts` | he thong | receipt `status == 1` |
-| `broadcast` | `failed` | `_cron_poll_receipts` | he thong | receipt `status == 0` (reverted) |
-| `broadcast` | `submitted` | replace-by-fee | he thong | qua `finality_warn_seconds`, cung lane |
-| `pending_finality` | `final` | **chi** `_set_finality` | he thong | §11.3 gate: `finality_source` thoa + hash check |
-| `pending_finality` | `failed` | `_cron_poll_receipts` | he thong | tx bi `dropped` va lane da bi mot tx khac chiem |
-| `final` | `disputed` | `_cron_reorg_watch` (§11.4) hoac `_cron_anchor_verify` | he thong | block chua tx khong con tren canonical chain |
-| `disputed` | `final` | `blockchain_resolve_dispute` | **treasury** + auditor | nguoi that xac nhan sau khi doc bang chung |
-| `disputed` | `compensated` | tao settlement nguoc | treasury | |
+| `draft` | `authorized` | `blockchain_authorize_payout` | **treasury** | pre-flight pass (dưới) |
+| `draft` | `expired` | `_cron_expire_settlements` | hệ thống | `create_date + settlement_ttl_hours < now` |
+| `authorized` | `submitted` | `_cron_advance_authorized` hoặc `blockchain_submit_settlement` | operator/hệ thống | có metatx đã ký, có `blockchain.relay.job` |
+| `authorized` | `failed` | `blockchain_cancel_settlement` | treasury | chưa có tx nào |
+| `submitted` | `broadcast` | relay worker ghi `tx_hash` | hệ thống | `UNIQUE(chain_id, tx_hash)` |
+| `submitted` | `expired` | `_cron_expire_metatx` | hệ thống | `metatx.expiry_datetime < now` và chưa có tx |
+| `broadcast` | `pending_finality` | `_cron_poll_receipts` | hệ thống | receipt `status == 1` |
+| `broadcast` | `failed` | `_cron_poll_receipts` | hệ thống | receipt `status == 0` (reverted) |
+| `broadcast` | `submitted` | replace-by-fee | hệ thống | quá `finality_warn_seconds`, cùng lane |
+| `pending_finality` | `final` | **chỉ** `_set_finality` | hệ thống | §11.3 gate: `finality_source` thoả + hash check |
+| `pending_finality` | `failed` | `_cron_poll_receipts` | hệ thống | tx bị `dropped` và lane đã bị một tx khác chiếm |
+| `final` | `disputed` | `_cron_reorg_watch` (§11.4) hoặc `_cron_anchor_verify` | hệ thống | block chứa tx không còn trên canonical chain |
+| `disputed` | `final` | `blockchain_resolve_dispute` | **treasury** + auditor | người thật xác nhận sau khi đọc bằng chứng |
+| `disputed` | `compensated` | tạo settlement ngược | treasury | |
 
-**Pre-flight truoc khi cho `authorized`** — ban nhap khong co, va thieu no thi tien di ra roi moi biet dia chi sai:
+**Pre-flight trước khi cho `authorized`** — bản nháp không có, và thiếu nó thì tiền đi ra rồi mới biết địa chỉ sai:
 
 ```python
 def _preflight(self):
@@ -227,19 +226,26 @@ def _preflight(self):
     if self.transport == 'onchain' and not self.payee_account_id: r.append('no_payee_account')
     if self.payee_account_id.state != 'active':               r.append('payee_frozen')
     if self.token_id not in self.chain_id.token_ids:          r.append('token_not_on_chain')
+    if not self.token_id.provenance_verified:                 r.append('token_provenance_unverified')
     if self.confidential and not self.payee_account_id.zether_registered: r.append('payee_not_registered')
     if int(self.amount_base) <= 0:                            r.append('non_positive_amount')
     if int(self.amount_base) > int(self.token_id.max_amount_base or '0'): r.append('exceeds_token_max')
     return r
 ```
 
-`payee_not_registered` la ly do dung nhat de mot batch Zether 300 nguoi that bai o dong thu 47, va no phat hien
-duoc **truoc** khi tra mot xu gas. Voi Zether, `registry.isRegistered(to)` la mot `eth_call` — 300 lan goi la mot
-multicall, khong phai 300 round-trip.
+`payee_not_registered` là lý do đúng nhất để một batch Zether 300 người thất bại ở dòng thứ 47, và nó phát hiện
+được **trước** khi trả một xu gas. Với Zether, `registry.isRegistered(to)` là một `eth_call` — 300 lần gọi là một
+multicall, không phải 300 round-trip.
 
-#### 15.2.2. Ep bang code, khong bang tai lieu
+**[BẢN 3] `token_provenance_unverified` là dòng mới, và nó là dòng quan trọng nhất trong danh sách này.** Trong một
+factory mở, `token_id` trỏ tới một địa chỉ mà bất kỳ ai cũng deploy được. §10.4.4 bắt Odoo đọc `factory()`,
+`version()` và `EXTCODEHASH` từ chuỗi và so với catalogue trước khi đặt `provenance_verified = True`. Không có dòng
+này thì một nhân viên gõ nhầm địa chỉ zDAI-B thay vì zDAI-A sẽ chi trả bằng một token khác, cùng ký hiệu, khác giá
+trị, và không có gì trong hệ thống kêu lên.
 
-§10.11 kiem chung #8 doi mot test rang khong duong nao ghi `final` ngoai `_set_finality`. Co che:
+#### 15.2.2. Ép bằng code, không bằng tài liệu
+
+§10.11 kiểm chứng #8 đòi một test rằng không đường nào ghi `final` ngoài `_set_finality`. Cơ chế:
 
 ```python
 _ALLOWED = {
@@ -267,12 +273,13 @@ def write(self, vals):
     return super().write(vals)
 ```
 
-`_set_finality` la ben duy nhat dat `blockchain_state_engine=True` trong context. Mot cai co trong context la mot
-hang rao yeu — **co y**: no chan nham lan, khong chan ac y (ai co quyen write thi cung set context duoc). Hang rao
-that la ACL: `perm_write` tren `blockchain.settlement` khong bao gio cap cho `group_blockchain_viewer`, va
-`_set_finality` chi duoc goi tu cron chay bang `sudo()`.
+`_set_finality` là bên duy nhất đặt sentinel này vào context. **[BẢN 3] Và nó phải là một object sentinel của
+module, không phải giá trị `True`** — một khoá boolean trong context là thứ client gửi lên được qua `call_kw` hoặc
+`/json/2`, nên `context.get('blockchain_state_engine') is _STATE_ENGINE` là điều kiện đúng, còn
+`context.get(...) == True` là một lỗ hổng. Hàng rào thật vẫn là ACL: `perm_write` trên `blockchain.settlement`
+không bao giờ cấp cho `group_blockchain_viewer`, và `_set_finality` chỉ được gọi từ cron chạy bằng `sudo()`.
 
-Ba field vong doi bat buoc phai co, §10 chua liet ke:
+Ba field vòng đời bắt buộc phải có, §10 chưa liệt kê:
 
 ```python
 authorized_uid      = fields.Many2one('res.users', readonly=True)
@@ -290,15 +297,15 @@ compensation_of_id  = fields.Many2one('blockchain.settlement', index=True)
 notified_datetime   = fields.Datetime(readonly=True, index=True)
 ```
 
-`gl_state` tach roi khoi `settle_state` la quyet dinh quan trong nhat cua muc nay. Xem §15.4.4.
+`gl_state` tách rời khỏi `settle_state` là quyết định quan trọng nhất của mục này. Xem §15.4.4.
 
-#### 15.2.3. Lane 2D nonce thuoc ve BATCH, khong thuoc ve settlement
+#### 15.2.3. Lane 2D nonce thuộc về BATCH, không thuộc về settlement
 
-**[SUA §15 v1]** Ban nhap suy lane tu `origin_key` cua **settlement**. Sai khi co batch: mot chunk 150 settlement
-la **mot** metatx, nen no chi co **mot** `(batchId, batchNonce)`. Neu moi settlement suy ra mot lane rieng thi hoac
-lane bi bo qua, hoac ta phai chon tuy tien lane cua settlement nao trong 150.
+**[SỬA §15 v1]** Bản nháp suy lane từ `origin_key` của **settlement**. Sai khi có batch: một chunk 150 settlement
+là **một** metatx, nên nó chỉ có **một** `(batchId, batchNonce)`. Nếu mỗi settlement suy ra một lane riêng thì hoặc
+lane bị bỏ qua, hoặc ta phải chọn tuỳ tiện lane của settlement nào trong 150.
 
-Chot lai:
+Chốt lại:
 
 ```python
 def _lane(self):
@@ -316,27 +323,28 @@ def _lane(self):
 # batch_nonce trong CUNG mot lane, va khi do lane la cua CHUOI chu khong cua tung buoc.
 ```
 
-Ba he qua:
+Ba hệ quả:
 
-1. `chain_id.caip2` co trong seed ⇒ cung mot `origin_key` settle tren hai chain khac nhau cho hai lane khac nhau.
-   Khong co no, mot retry sau khi doi chain se dung lai lane cu tren chain moi — vo hai nhung gay nham lan khi debug.
-2. Mot chu ky bi ro ri, bi phat lai, hoac duoc hai relayer cung nop → tx thu hai revert vi
-   `meta_nonce(from, batchId)` da tang. **On-chain la trong tai, khong phai Odoo.** Day cung la ly do
-   `UNIQUE(chain_id, from_account_id, batch_id_hex, batch_nonce)` cua §10 phai giu.
-3. Mot chi tiet ban nhap khong noi: khi metatx het han (`expiry_datetime`) va ta ky lai, digest **khac** (expiry
-   khac) nhung lane **giong**. Ket qua: hai chu ky hop le tren cung lane. Neu ca hai cung duoc nop, cai thu hai
-   revert. Dung, nhung phai ghi ro trong runbook, vi mot relayer se bao "tx cua toi revert" va do la hanh vi dung.
+1. `chain_id.caip2` có trong seed ⇒ cùng một `origin_key` settle trên hai chain khác nhau cho hai lane khác nhau.
+   Không có nó, một retry sau khi đổi chain sẽ dùng lại lane cũ trên chain mới — vô hại nhưng gây nhầm lẫn khi debug.
+2. Một chữ ký bị rò rỉ, bị phát lại, hoặc được hai relayer cùng nộp → tx thứ hai revert vì
+   `meta_nonce(from, batchId)` đã tăng. **On-chain là trọng tài, không phải Odoo.** Đây cũng là lý do
+   `UNIQUE(chain_id, from_account_id, batch_id_hex, batch_nonce)` của §10 phải giữ — dưới dạng partial index, để
+   một lane đã hết hạn còn thử lại được.
+3. Một chi tiết bản nháp không nói: khi metatx hết hạn (`expiry_datetime`) và ta ký lại, digest **khác** (expiry
+   khác) nhưng lane **giống**. Kết quả: hai chữ ký hợp lệ trên cùng lane. Nếu cả hai cùng được nộp, cái thứ hai
+   revert. Đúng, nhưng phải ghi rõ trong runbook, vì một relayer sẽ báo "tx của tôi revert" và đó là hành vi đúng.
 
-#### 15.2.4. Outbox, khong phai RPC trong request
+#### 15.2.4. Outbox, không phải RPC trong request
 
-Lenh goi relay worker **khong duoc** nam trong transaction cua `blockchain_submit_settlement`. Neu goi, hai che do
-hong deu that: HTTP thanh cong roi transaction rollback (worker broadcast mot khoan chi Odoo khong con biet), hoac
-transaction commit roi HTTP timeout (khong ai biet worker co nhan hay khong).
+Lệnh gọi relay worker **không được** nằm trong transaction của `blockchain_submit_settlement`. Nếu gọi, hai chế độ
+hỏng đều thật: HTTP thành công rồi transaction rollback (worker broadcast một khoản chi Odoo không còn biết), hoặc
+transaction commit rồi HTTP timeout (không ai biết worker có nhận hay không).
 
-Chot: ghi mot dong `blockchain.relay.job` trong **cung** transaction voi `settle_state='submitted'`; worker poll.
-Do la transactional outbox, va no la ly do `bamboo_idempotency` (§11.5) phai la dependency.
+Chốt: ghi một dòng `blockchain.relay.job` trong **cùng** transaction với `settle_state='submitted'`; worker poll.
+Đó là transactional outbox, và nó là lý do `bamboo_idempotency` (§11.5) phải là dependency.
 
-Model nay ban nhap goi ten ma khong dinh nghia:
+Model này bản nháp gọi tên mà không định nghĩa:
 
 ```python
 class BlockchainRelayJob(models.Model):
@@ -348,7 +356,7 @@ class BlockchainRelayJob(models.Model):
     settlement_id= fields.Many2one('blockchain.settlement', index=True, ondelete='cascade')
     chain_id     = fields.Many2one('blockchain.chain', required=True, index=True)
     payload_attachment_id = fields.Many2one('ir.attachment')   # metatx + signature, len Garage
-    payload_sha256 = fields.Char(size=64, index=True)
+    payload_sha256 = fields.Char(index=True)                   # khong dung size=: xem §10.4.0(1)
     priority     = fields.Integer(required=True, default=0)
     job_state    = fields.Selection([('ready', 'Ready'), ('claimed', 'Claimed'), ('done', 'Done'),
                                      ('dead', 'Dead letter')], required=True, default='ready', index=True)
@@ -363,46 +371,46 @@ class BlockchainRelayJob(models.Model):
         'Mot relay job phai tro toi mot chunk hoac mot settlement.')
 ```
 
-Bon chi tiet van hanh ban nhap bo qua:
+Bốn chi tiết vận hành bản nháp bỏ qua:
 
-1. **Worker claim bang `SELECT ... FOR UPDATE SKIP LOCKED`**, khong bang `write({'job_state': 'claimed'})` sau mot
-   `search`. `search` roi `write` la mot race duoc trang tri thanh mot bao dam. Odoo cho phep SQL tho o day; day la
-   dung cho de dung no.
-2. **`claimed` co timeout.** Mot worker chet giua chung de lai mot job `claimed` vinh vien. Cron
-   `_cron_reap_stale_jobs()` tra job ve `ready` khi `claimed_datetime < now - 5 min` **va** chunk chua co `tx_hash`.
-   Neu chunk **da co** `tx_hash`, khong tra ve — do la truong hop worker da broadcast xong.
-3. **Dead letter sau 5 lan.** Backoff 1/5/15/60/240 phut roi `job_state='dead'` + `mail.activity` cho
-   `group_blockchain_treasury`. Mot cron retry vo han tren mot loi cau hinh tao 1,440 activity/ngay va khong ai doc.
-   (Cung quy tac §11.5.)
-4. **Do tre.** Poll 1 phut la qua cham cho `ENDUSER_PAY` (§09.5d). Dung `self.env.ref('dms_blockchain.cron_relay_dispatch').sudo()._trigger()`
-   ngay sau khi tao job — `_trigger()` cua Odoo 19 lap lich mot lan chay ngay ma **khong** goi HTTP trong
-   transaction; no chi ghi mot dong `ir_cron_trigger`, va dong do rollback cung transaction neu transaction hong.
-   Do la dung tinh chat ta can.
+1. **Worker claim bằng `SELECT ... FOR UPDATE SKIP LOCKED`**, không bằng `write({'job_state': 'claimed'})` sau một
+   `search`. `search` rồi `write` là một race được trang trí thành một bảo đảm. Odoo cho phép SQL thô ở đây; đây là
+   đúng chỗ để dùng nó.
+2. **`claimed` có timeout.** Một worker chết giữa chừng để lại một job `claimed` vĩnh viễn. Cron
+   `_cron_reap_stale_jobs()` trả job về `ready` khi `claimed_datetime < now - 5 min` **và** chunk chưa có `tx_hash`.
+   Nếu chunk **đã có** `tx_hash`, không trả về — đó là trường hợp worker đã broadcast xong.
+3. **Dead letter sau 5 lần.** Backoff 1/5/15/60/240 phút rồi `job_state='dead'` + `mail.activity` cho
+   `group_blockchain_treasury`. Một cron retry vô hạn trên một lỗi cấu hình tạo 1,440 activity/ngày và không ai đọc.
+   (Cùng quy tắc §11.5.)
+4. **Độ trễ.** Poll 1 phút là quá chậm cho `ENDUSER_PAY` (§09.5d). Dùng
+   `self.env.ref('dms_blockchain.cron_relay_dispatch').sudo()._trigger()` ngay sau khi tạo job — `_trigger()` của
+   Odoo 19 lập lịch một lần chạy ngay mà **không** gọi HTTP trong transaction; nó chỉ ghi một dòng
+   `ir_cron_trigger`, và dòng đó rollback cùng transaction nếu transaction hỏng. Đó là đúng tính chất ta cần.
 
-#### 15.2.5. Bang crash
+#### 15.2.5. Bảng crash
 
-Doc theo cot giua: "sau crash, tren dia co gi". Moi dong deu phai an toan **ma khong can nguoi**.
+Đọc theo cột giữa: "sau crash, trên đĩa có gì". Mọi dòng đều phải an toàn **mà không cần người**.
 
-| Crash tai | Tren dia | Phuc hoi |
+| Crash tại | Trên đĩa | Phục hồi |
 |---|---|---|
-| Sau `submit` RPC, truoc commit | Khong co gi | Client retry cung `origin_key`; `_submit` tra ban ghi cu hoac tao moi. Idempotent. |
-| Sau khi tao settlement `draft` | `draft` | Khong lam gi. `draft` khong tieu ton tai nguyen nao. Expiry sweep don sau `settlement_ttl_hours`. |
-| Sau `authorized`, truoc khi build metatx | `authorized` | `_cron_advance_authorized()` build lai metatx tu lane suy dien. |
-| Sau khi goi custody ky, truoc commit | `authorized`, chu ky mat | Ky lai. Digest giong het khi expiry chua doi; neu doi thi digest khac nhung **lane giong** (§15.2.3). Chu ky cu neu da ro ri thi vo hai. |
-| Sau commit `submitted` + `relay.job`, truoc khi worker doc | `submitted` + job `ready` | Worker poll thay job. **Khong bao gio goi worker trong cung request transaction.** |
-| Worker da claim, chet truoc khi broadcast | job `claimed`, khong co tx | `_cron_reap_stale_jobs()` tra ve `ready` sau 5 phut. An toan vi lane chua bi tieu. |
-| Worker da broadcast, Odoo chua ghi `tx_hash` | `submitted`, chain co tx | Worker retry ghi; `UNIQUE(chain_id, tx_hash)` chan trung. Neu worker cung chet: `_cron_reconcile_orphan_tx()` quet tx tu `payer_account` co `ref` khop lane → gan lai. |
-| Batch `chunked`: chunk 3/7 broadcast, crash | 3 chunk co tx, 4 chunk `draft` | Cron tiep tuc tu `sequence` nho nhat con `draft`. **Khong** gui lai chunk da co tx. `batch_state='partial'`. |
-| Batch `atomic`: chunk duy nhat revert | 0 settlement `final` | Ca batch → `failed`. Khong co gi de bu. Day la ly do `atomic` chi duoc dung khi nghiep vu doi vay. |
-| Sau `broadcast`, node drop tx | `broadcast` qua `finality_warn_seconds` | Canh bao. Qua `finality_stuck_seconds` (§11.3) → replace-by-fee cung lane, hoac `failed` + page nguoi that. |
-| Giua `_set_finality` va post `account.move` | `final` + `gl_state='queued'` | Cron `_cron_post_gl()` post sau. **Day la cho duy nhat can hai transaction.** Xem §15.4.4. |
-| Sau khi post `account.move`, truoc khi ghi `gl_state='posted'` | move da post, `gl_state='queued'` | **Post lan hai la mot but toan trung.** Chan bang `bamboo_create_idempotent` tren mot khoa `uuid5(NS_GL, settlement.uuid)` **cung transaction** voi `move.action_post()`, dung nguyen mau §11.5b. |
-| Sau `final`, truoc callback bridge | `final`, consumer chua biet | `_cron_notify_origin()` doc `notified_datetime IS NULL`, khong qua post-commit hook. |
-| Reorg xoa block chua tx da `final` | `final` sai su that | §15.2.6: `disputed`, **khong** tu dong quay ve. |
-| Compensation da tao, chua broadcast, crash | settlement moi `draft` co `compensation_of_id` | Binh thuong. Ban goc van `final`. |
+| Sau `submit` RPC, trước commit | Không có gì | Client retry cùng `origin_key`; `_submit` trả bản ghi cũ hoặc tạo mới. Idempotent. |
+| Sau khi tạo settlement `draft` | `draft` | Không làm gì. `draft` không tiêu tốn tài nguyên nào. Expiry sweep dọn sau `settlement_ttl_hours`. |
+| Sau `authorized`, trước khi build metatx | `authorized` | `_cron_advance_authorized()` build lại metatx từ lane suy diễn. |
+| Sau khi gọi custody ký, trước commit | `authorized`, chữ ký mất | Ký lại. Digest giống hệt khi expiry chưa đổi; nếu đổi thì digest khác nhưng **lane giống** (§15.2.3). Chữ ký cũ nếu đã rò rỉ thì vô hại. |
+| Sau commit `submitted` + `relay.job`, trước khi worker đọc | `submitted` + job `ready` | Worker poll thấy job. **Không bao giờ gọi worker trong cùng request transaction.** |
+| Worker đã claim, chết trước khi broadcast | job `claimed`, không có tx | `_cron_reap_stale_jobs()` trả về `ready` sau 5 phút. An toàn vì lane chưa bị tiêu. |
+| Worker đã broadcast, Odoo chưa ghi `tx_hash` | `submitted`, chain có tx | Worker retry ghi; `UNIQUE(chain_id, tx_hash)` chặn trùng. Nếu worker cũng chết: `_cron_reconcile_orphan_tx()` quét tx từ `payer_account` có `ref` khớp lane → gắn lại. |
+| Batch `chunked`: chunk 3/7 broadcast, crash | 3 chunk có tx, 4 chunk `draft` | Cron tiếp tục từ `sequence` nhỏ nhất còn `draft`. **Không** gửi lại chunk đã có tx. `batch_state='partial'`. |
+| Batch `atomic`: chunk duy nhất revert | 0 settlement `final` | Cả batch → `failed`. Không có gì để bù. Đây là lý do `atomic` chỉ được dùng khi nghiệp vụ đòi vậy. |
+| Sau `broadcast`, node drop tx | `broadcast` quá `finality_warn_seconds` | Cảnh báo. Quá `finality_stuck_seconds` (§11.3) → replace-by-fee cùng lane, hoặc `failed` + page người thật. |
+| Giữa `_set_finality` và post `account.move` | `final` + `gl_state='queued'` | Cron `_cron_post_gl()` post sau. **Đây là chỗ duy nhất cần hai transaction.** Xem §15.4.4. |
+| Sau khi post `account.move`, trước khi ghi `gl_state='posted'` | move đã post, `gl_state='queued'` | **Post lần hai là một bút toán trùng.** Chặn bằng `bamboo_create_idempotent` trên một khoá `uuid5(NS_GL, settlement.uuid)` **cùng transaction** với `move.action_post()`, dùng nguyên mẫu §11.5b. |
+| Sau `final`, trước callback bridge | `final`, consumer chưa biết | `_cron_notify_origin()` đọc `notified_datetime IS NULL`, không qua post-commit hook. |
+| Reorg xoá block chứa tx đã `final` | `final` sai sự thật | §15.2.6: `disputed`, **không** tự động quay về. |
+| Compensation đã tạo, chưa broadcast, crash | settlement mới `draft` có `compensation_of_id` | Bình thường. Bản gốc vẫn `final`. |
 
-**Cai bay tinh vi nhat, viet ra vi no khong nhin thay duoc:** `_apply` cua GL va callback bridge deu co the cham
-he thong ngoai va deu **phai idempotent theo chinh no**, khong chi dua vao viec duoc goi mot lan. Mau:
+**Cái bẫy tinh vi nhất, viết ra vì nó không nhìn thấy được:** `_apply` của GL và callback bridge đều có thể chạm
+hệ thống ngoài và đều **phải idempotent theo chính nó**, không chỉ dựa vào việc được gọi một lần. Mẫu:
 
 ```python
 def _post_gl(self):
@@ -414,35 +422,39 @@ def _post_gl(self):
 
 #### 15.2.6. Reorg sau `final`: state `disputed`
 
-Ban nhap khong co muc nay va do la mot lo hong nghiem trong: no gia dinh Finality Gate khong bao gio sai. §11.3b
-liet ke ba cach `finalized` tag noi doi, va §11.3 ghi ro chain private **rewind duoc boi chinh operator**.
+Bản nháp không có mục này và đó là một lỗ hổng nghiêm trọng: nó giả định Finality Gate không bao giờ sai. §11.3b
+liệt kê ba cách `finalized` tag nói dối, và §11.3 ghi rõ chain private **rewind được bởi chính operator**.
 
-Quy tac:
+Quy tắc:
 
-- Khi `_cron_reorg_watch` (§11.4) thay block chua `transaction_id` khong con tren canonical chain:
-  `settle_state: final → disputed`, `gl_state` **khong doi**, `mail.activity` cho treasury va auditor.
-- **Khong tu dong dao but toan.** Mot but toan dao tu dong tren mot su kien co the la loi cua node la cach nhanh
-  nhat de bien mot su co RPC thanh mot su co ke toan.
-- `blockchain_resolve_dispute(origin_key, resolution)` voi `resolution ∈ {'confirmed', 'compensate'}`, nhom
-  **treasury**, ghi `mail.thread` ly do. `confirmed` → ve `final`. `compensate` → giu `disputed`, tao settlement
-  nguoc, va **khi settlement nguoc `final`** thi ban goc chuyen sang `compensated`.
-- Tren chain private, `_cron_anchor_verify()` doi chieu head hash da neo (§11.3, HCS 60 s) voi head hien tai. Lech
-  ⇒ moi settlement `final` sau diem neo cuoi cung → `disputed`. Chi phi: $53/nam. Gia tri: bien "toi hua khong
-  rewind" thanh "rewind qua 60 s la chung minh duoc".
+- Khi `_cron_reorg_watch` (§11.4) thấy block chứa `transaction_id` không còn trên canonical chain:
+  `settle_state: final → disputed`, `gl_state` **không đổi**, `mail.activity` cho treasury và auditor.
+- **Không tự động đảo bút toán.** Một bút toán đảo tự động trên một sự kiện có thể là lỗi của node là cách nhanh
+  nhất để biến một sự cố RPC thành một sự cố kế toán.
+- `blockchain_resolve_dispute(origin_key, resolution)` với `resolution ∈ {'confirmed', 'compensate'}`, nhóm
+  **treasury**, ghi `mail.thread` lý do. `confirmed` → về `final`. `compensate` → giữ `disputed`, tạo settlement
+  ngược, và **khi settlement ngược `final`** thì bản gốc chuyển sang `compensated`.
+- Trên chain private, `_cron_anchor_verify()` đối chiếu head hash đã neo (§11.3, HCS 60 s) với head hiện tại. Lệch
+  ⇒ mọi settlement `final` sau điểm neo cuối cùng → `disputed`. Chi phí: $53/năm. Giá trị: biến "tôi hứa không
+  rewind" thành "rewind quá 60 s là chứng minh được".
+
+  **[BẢN 3] Trên chain 9000 thật, đây không phải phòng xa mà là đường duy nhất.** Nethermind + Clique một signer
+  không có `finalized` tag có nghĩa và reorg được bất cứ lúc nào bởi chính người vận hành node. Nếu không neo ra
+  ngoài, `final` trên chain đó chỉ là một dòng trong DB của chính ta.
 
 ---
 
-### 15.3. Lien ket nguoc ve chung tu nghiep vu, khong depend `dms`
+### 15.3. Liên kết ngược về chứng từ nghiệp vụ, không depend `dms`
 
-#### 15.3.1. Ba lua chon Odoo chuan
+#### 15.3.1. Ba lựa chọn Odoo chuẩn
 
-| Co che | Luu gi | Search/join | Uninstall consumer | Callback | ondelete |
+| Cơ chế | Lưu gì | Search/join | Uninstall consumer | Callback | ondelete |
 |---|---|---|---|---|---|
-| `fields.Reference` | mot `Char` `'model,id'` | **Khong** index duoc theo id; `search` phai so sanh chuoi; khong group by duoc | De lai chuoi tro toi model khong con ton tai | Khong | Khong co |
-| `fields.Many2oneReference` + `Char` model | `int4` id + `Char` model rieng | Index duoc tren id; `[('origin_model','=',m),('origin_id','in',ids)]` chay nhanh | Dong con lai nhung khong vo | Khong | **Khong co FK, khong co ondelete** |
-| `models.AbstractModel` mixin | Khong luu gi; dinh nghia hop dong method | n/a | n/a | **Co** | n/a |
+| `fields.Reference` | một `Char` `'model,id'` | **Không** index được theo id; `search` phải so sánh chuỗi; không group by được | Để lại chuỗi trỏ tới model không còn tồn tại | Không | Không có |
+| `fields.Many2oneReference` + `Char` model | `int4` id + `Char` model riêng | Index được trên id; `[('origin_model','=',m),('origin_id','in',ids)]` chạy nhanh | Dòng còn lại nhưng không vỡ | Không | **Không có FK, không có ondelete** |
+| `models.AbstractModel` mixin | Không lưu gì; định nghĩa hợp đồng method | n/a | n/a | **Có** | n/a |
 
-**Chot: dung ca ba, moi cai mot viec.**
+**Chốt: dùng cả ba, mỗi cái một việc.**
 
 ```python
 # CORE. Khong depend gi ngoai base + mail + bamboo_idempotency.
@@ -509,27 +521,26 @@ class BlockchainSettlementOrigin(models.AbstractModel):
             [('origin_model', '=', self._name), ('origin_id', '=', self.id)])
 ```
 
-**[SUA §15 v1]** Ban nhap viet `isinstance(target, type(rec.env['blockchain.settlement.origin']))`. Dung *tinh co*
-(vi `type()` cua mot recordset la lop registry), nhung no phu thuoc mot chi tiet noi bo va doc ra thi khong ai biet
-no kiem gi. Dang tren dung `self.env.registry.get(name)` — day la API cong khai cua registry, la idiom Odoo dung o
-`mail` va `account`, va no khong can instantiate mot recordset chi de lay lop.
+**[SỬA §15 v1]** Bản nháp viết `isinstance(target, type(rec.env['blockchain.settlement.origin']))`. Đúng *tình cờ*
+(vì `type()` của một recordset là lớp registry), nhưng nó phụ thuộc một chi tiết nội bộ và đọc ra thì không ai biết
+nó kiểm gì. Dạng trên dùng `self.env.registry.get(name)` — đây là API công khai của registry, là idiom Odoo dùng ở
+`mail` và `account`, và nó không cần instantiate một recordset chỉ để lấy lớp.
 
-Ly do mixin nam o **core** chu khong o bridge: core la ben *goi* callback. Neu hop dong nam trong bridge, core phai
-`hasattr`-sniff, va mot consumer khong phai DMS (mot addon khac, mot he thong ngoai qua RPC) khong co cho de cam
-vao. Mixin trong core khong tao dependency nao: mot `AbstractModel` khong co bang, khong co ACL, khong co gi de go.
+Lý do mixin nằm ở **core** chứ không ở bridge: core là bên *gọi* callback. Nếu hợp đồng nằm trong bridge, core phải
+`hasattr`-sniff, và một consumer không phải DMS (một addon khác, một hệ thống ngoài qua RPC) không có chỗ để cắm
+vào. Mixin trong core không tạo dependency nào: một `AbstractModel` không có bảng, không có ACL, không có gì để gỡ.
 
-#### 15.3.2. Ba bay bao mat ban nhap khong noi
+#### 15.3.2. Ba bẫy bảo mật bản nháp không nói
 
-1. **`origin_model` la mot chuoi do client dat.** `blockchain_submit_settlement` nhan `meta` tu RPC. Neu bridge
-   hoac client set `origin_model='res.users'`, core se goi `_on_blockchain_settlement` tren mot model khong co
-   method do → `AttributeError` trong cron, cron chet, moi settlement khac dung lai. Chan bang kiem `issubclass`
-   nhu tren, **va** bang cach **khong** cho `origin_model`/`origin_id` di qua be mat RPC cong khai: chung chi duoc
-   dat boi code Python trong cung DB (bridge). RPC ngoai chi cung cap `origin_key`.
-2. **Callback chay `sudo()`.** Bat buoc, vi cron chay bang user he thong va record rule cua consumer co the loc no
-   ra. Nhung `sudo()` co nghia bridge co the ghi bat cu dau — nen callback phai kiem `company_id` truoc, nhu tren.
-3. **`_on_blockchain_settlement` co the raise.** Mot bridge viet vung se lam cron `_cron_notify_origin` chet giua
-   chung va cac settlement con lai khong bao gio duoc thong bao. Bat tung record trong savepoint:
-
+1. **`origin_model` là một chuỗi do client đặt.** `blockchain_submit_settlement` nhận `meta` từ RPC. Nếu bridge
+   hoặc client set `origin_model='res.users'`, core sẽ gọi `_on_blockchain_settlement` trên một model không có
+   method đó → `AttributeError` trong cron, cron chết, mọi settlement khác dừng lại. Chặn bằng kiểm `issubclass`
+   như trên, **và** bằng cách **không** cho `origin_model`/`origin_id` đi qua bề mặt RPC công khai: chúng chỉ được
+   đặt bởi code Python trong cùng DB (bridge). RPC ngoài chỉ cung cấp `origin_key`.
+2. **Callback chạy `sudo()`.** Bắt buộc, vì cron chạy bằng user hệ thống và record rule của consumer có thể lọc nó
+   ra. Nhưng `sudo()` có nghĩa bridge có thể ghi bất cứ đâu — nên callback phải kiểm `company_id` trước, như trên.
+3. **`_on_blockchain_settlement` có thể raise.** Một bridge viết vụng sẽ làm cron `_cron_notify_origin` chết giữa
+   chừng và các settlement còn lại không bao giờ được thông báo. Bắt từng record trong savepoint:
 ```python
 for rec in batch:
     try:
@@ -540,10 +551,11 @@ for rec in batch:
         rec.sudo().notify_error = tools.ustr(sys.exc_info()[1])[:500]
 ```
 
-#### 15.3.3. `origin_key`: quy uoc khi mot chung tu sinh nhieu settlement
+#### 15.3.3. `origin_key`: quy ước khi một chứng từ sinh nhiều settlement
 
-`UNIQUE(company_id, origin_key)` la chot chan cuoi. Netting sinh **ba** settlement tu mot cap chung tu; mot payout
-bi compensate sinh **hai**. Nen `origin_key` phai co hau to co cau truc, khong phai mot so tang dan:
+`UNIQUE(company_id, origin_producer, origin_key)` là chốt chặn cuối. Netting sinh **ba** settlement từ một cặp
+chứng từ; một payout bị compensate sinh **hai**. Nên `origin_key` phải có hậu tố có cấu trúc, không phải một số
+tăng dần:
 
 ```
 <origin_model>:<origin_id>[:<role>][:<attempt>]
@@ -555,110 +567,114 @@ netting:2026-03:P12345                         # chan net, khoa theo (ky, partne
 dms.trade.settlement:4471:comp:1               # compensation lan 1
 ```
 
-**Cam tuyet doi**: `uuid4()`, `fields.Datetime.now()`, `time.time()` trong `origin_key`. Mot key khong on dinh la
-mot key khong idempotent, va he qua la chi hai lan. Kiem bang mot test: goi `_blockchain_origin_key()` hai lan
-cach nhau mot `write()` len chung tu goc va so sanh.
+**Cấm tuyệt đối**: `uuid4()`, `fields.Datetime.now()`, `time.time()` trong `origin_key`. Một key không ổn định là
+một key không idempotent, và hệ quả là chi hai lần. Kiểm bằng một test: gọi `_blockchain_origin_key()` hai lần
+cách nhau một `write()` lên chứng từ gốc và so sánh.
 
-Trong `dms`, **da co san mot khoa dung**: `dms.trade.settlement._dms_event_uuid()` la mot UUIDv7 sinh mot lan,
-`readonly=True, copy=False`, luu o `event_uuid`. Bridge dung no, **khong** tu che khoa moi (§15.6.1).
+Trong `dms`, **đã có sẵn một khoá đúng**: `dms.trade.settlement._dms_event_uuid()` là một UUIDv7 sinh một lần,
+`readonly=True, copy=False`, lưu ở `event_uuid`. Bridge dùng nó, **không** tự chế khoá mới (§15.6.1).
 
-#### 15.3.4. Khong co FK: chung tu goc bi xoa
+#### 15.3.4. Không có FK: chứng từ gốc bị xoá
 
-`Many2oneReference` khong tao FK, nen khong co `ondelete`. Ba hau qua, va chot cho tung cai:
+`Many2oneReference` không tạo FK, nên không có `ondelete`. Ba hậu quả, và chốt cho từng cái:
 
-| Tinh huong | Hau qua | Chot |
+| Tình huống | Hậu quả | Chốt |
 |---|---|---|
-| Chung tu goc bi `unlink` | `origin_id` tro toi mot id khong con | `.exists()` o moi cho doc. Da co trong `_notify_origin`. |
-| Consumer addon bi go | `origin_model` la mot ten model khong con trong registry | `model not in rec.env` → skip im lang. Da co. |
-| Chung tu bi xoa **truoc khi** settlement `final` | Tien van di, khong ai nhan trang thai | `_cron_orphan_settlements()` hang ngay: settlement chua terminal ma `origin` khong `.exists()` → `mail.activity` cho treasury. **Khong** tu huy settlement: tien co the da tren duong di. |
+| Chứng từ gốc bị `unlink` | `origin_id` trỏ tới một id không còn | `.exists()` ở mọi chỗ đọc. Đã có trong `_notify_origin`. |
+| Consumer addon bị gỡ | `origin_model` là một tên model không còn trong registry | `model not in rec.env` → skip im lặng. Đã có. |
+| Chứng từ bị xoá **trước khi** settlement `final` | Tiền vẫn đi, không ai nhận trạng thái | `_cron_orphan_settlements()` hàng ngày: settlement chưa terminal mà `origin` không `.exists()` → `mail.activity` cho treasury. **Không** tự huỷ settlement: tiền có thể đã trên đường đi. |
 
-Mot lua chon **da bi bac bo**: them mot `ir.model.constraint` gia hoac mot `@api.ondelete` tren consumer de chan
-xoa. No doi core biet ten model consumer (vi pham rang buoc standalone), va no bien mot rang buoc cua core thanh
-mot rao can trong workflow cua nguoi khac.
+Một lựa chọn **đã bị bác bỏ**: thêm một `ir.model.constraint` giả hoặc một `@api.ondelete` trên consumer để chặn
+xoá. Nó đòi core biết tên model consumer (vi phạm ràng buộc standalone), và nó biến một ràng buộc của core thành
+một rào cản trong workflow của người khác.
 
 ---
 
-### 15.4. Cau ke toan: `account.move` nao, luc nao
+### 15.4. Cầu kế toán: `account.move` nào, lúc nào
 
-Module `dms_blockchain_account` (`depends: ['dms_blockchain', 'account']`). Core **khong** biet `account.move` ton
-tai. Bang chung: `_gl_required()` song trong module nay, va §10.11 kiem chung #4 doi cai core mot minh phai chay.
+Module `dms_blockchain_account` (`depends: ['dms_blockchain', 'account']`). Core **không** biết `account.move` tồn
+tại. Bằng chứng: `_gl_required()` sống trong module này, và §10.11 kiểm chứng #4 đòi cái core một mình phải chạy.
 
-#### 15.4.1. Vi la mot `account.journal`, indexer la mot bank feed — va bon thu phai cau hinh truoc
+#### 15.4.1. Ví là một `account.journal`, indexer là một bank feed — và bốn thứ phải cấu hình trước
 
-Khong tu viet co che doi soat. Odoo da co day du:
+Không tự viết cơ chế đối soát. Odoo đã có đầy đủ:
 
-- Mot `account.journal` `type='bank'` cho moi **(company, chain, token) co giu tien**. `currency_id` = currency cua
-  token (§15.4.5). Tai khoan mac dinh = tai khoan tai san "Crypto wallet — <token> — <chain>".
-- **Outstanding Payments / Outstanding Receipts** cua journal do chinh la **bieu dien ke toan cua mot chuyen khoan
-  da broadcast nhung chua final**. Do dung la thu chung sinh ra de lam: mot tam sec da phat nhung chua duoc lay tien.
-- `blockchain.chain.effect` da `final` → `account.bank.statement.line`. Tu do tro di la reconciliation widget,
-  `account.reconcile.model`, va `dms.bank.reconciliation` cua DMS chay nguyen ven.
+- Một `account.journal` `type='bank'` cho mỗi **(company, chain, token) có giữ tiền**. `currency_id` = currency của
+  token (§15.4.5). Tài khoản mặc định = tài khoản tài sản "Crypto wallet — <token> — <chain>".
+- **Outstanding Payments / Outstanding Receipts** của journal đó chính là **biểu diễn kế toán của một chuyển khoản
+  đã broadcast nhưng chưa final**. Đó đúng là thứ chúng sinh ra để làm: một tấm séc đã phát nhưng chưa được lấy tiền.
+- `blockchain.chain.effect` đã `final` → `account.bank.statement.line`. Từ đó trở đi là reconciliation widget,
+  `account.reconcile.model`, và `dms.bank.reconciliation` của DMS chạy nguyên vẹn.
 
-**[SUA §15 v1] Ban nhap dung o hinh dang va bo trang cai kho: Odoo 19 khong tu co outstanding account.**
-`account.payment._compute_outstanding_account_id` trong Odoo 19 la dung mot dong:
+**[BẢN 3] Một journal cho mỗi (company, chain, token) — và "token" nghĩa là địa chỉ, không phải ký hiệu.** zDAI-A
+và zDAI-B là hai tài sản khác nhau với hai journal khác nhau, dù cả hai đều hiện chữ "zDAI" trên màn hình. Gộp
+chúng vào một journal là trộn hai loại tiền và làm đối soát vĩnh viễn không khớp.
+
+**[SỬA §15 v1] Bản nháp đúng ở hình dạng và bỏ trắng cái khó: Odoo 19 không tự có outstanding account.**
+`account.payment._compute_outstanding_account_id` trong Odoo 19 là đúng một dòng:
 
 ```python
 pay.outstanding_account_id = pay.payment_method_line_id.payment_account_id
 ```
 
-**Khong co fallback nao.** Neu `payment_account_id` tren `account.payment.method.line` cua journal chua duoc dat,
+**Không có fallback nào.** Nếu `payment_account_id` trên `account.payment.method.line` của journal chưa được đặt,
 `_prepare_move_line_default_vals` raise:
 
 > "You can't create a new payment without an outstanding payments/receipts account set either on the company or the
 > %(payment_method)s payment method in the %(journal)s journal."
 
-Bon thu phai co truoc khi post duoc dong dau tien, kiem bang mot `_check_setup()` chay luc cai va truoc moi lo post:
+Bốn thứ phải có trước khi post được dòng đầu tiên, kiểm bằng một `_check_setup()` chạy lúc cài và trước mọi lô post:
 
-| # | Thu | Neu thieu |
+| # | Thứ | Nếu thiếu |
 |---|---|---|
-| 1 | `journal.inbound_payment_method_line_ids[0].payment_account_id` | `action_post()` raise, lo GL ket o `gl_state='failed'` |
-| 2 | `journal.outbound_payment_method_line_ids[0].payment_account_id` | nhu tren, cho chieu chi |
-| 3 | `company.currency_exchange_journal_id` + `income_/expense_currency_exchange_account_id` | reconcile hai dong khac ty gia raise, **khong** sinh exchange move |
-| 4 | Tai khoan "Crypto dust / rounding" (loai `expense`) | dust khong co cho di, sub-ledger va GL khong bao gio khop (§15.4.6) |
+| 1 | `journal.inbound_payment_method_line_ids[0].payment_account_id` | `action_post()` raise, lô GL kẹt ở `gl_state='failed'` |
+| 2 | `journal.outbound_payment_method_line_ids[0].payment_account_id` | như trên, cho chiều chi |
+| 3 | `company.currency_exchange_journal_id` + `income_/expense_currency_exchange_account_id` | reconcile hai dòng khác tỷ giá raise, **không** sinh exchange move |
+| 4 | Tài khoản "Crypto dust / rounding" (loại `expense`) | dust không có chỗ đi, sub-ledger và GL không bao giờ khớp (§15.4.6) |
 
-`_check_setup()` tra ve list ma loi va hien tren dashboard doi soat §15.5, **khong** raise luc cai module — cai
-module tren mot DB chua cau hinh chart of accounts khong duoc phep that bai.
+`_check_setup()` trả về list mã lỗi và hiện trên dashboard đối soát §15.5, **không** raise lúc cài module — cài
+module trên một DB chưa cấu hình chart of accounts không được phép thất bại.
 
-#### 15.4.2. But toan cu the: cai ban nhap noi "sinh but toan" ma khong noi but toan gi
+#### 15.4.2. Bút toán cụ thể: cái bản nháp nói "sinh bút toán" mà không nói bút toán gì
 
-Day la lo hong lon nhat cua ban nhap. Duoi day la but toan cho tung su kien, chinh sach `on_final` (mac dinh),
-mot brand tra mot NPP 100,000,000 VND bang Z-VND, phi relayer 500 VND.
+Đây là lỗ hổng lớn nhất của bản nháp. Dưới đây là bút toán cho từng sự kiện, chính sách `on_final` (mặc định),
+một brand trả một NPP 100,000,000 VND bằng Z-VND, phí relayer 500 VND.
 
-**Luong OUT (B2B payout), `direction='out'`, `transport='onchain'`:**
+**Luồng OUT (B2B payout), `direction='out'`, `transport='onchain'`:**
 
-| Su kien | But toan | Ghi chu |
+| Sự kiện | Bút toán | Ghi chú |
 |---|---|---|
-| Chung tu goc posted (ngoai pham vi settlement layer) | Dr Trade payable 100,000,000 / Cr Rebate expense hoac Accrual | Do `dms.trade.settlement._dms_create_credit_note()` lam, khong phai chung ta |
-| `authorized` | **khong but toan** | Mot cam ket chua phai mot su kien ke toan |
-| `broadcast` | **khong but toan** (mode `on_final`) | Rui ro nam o sub-ledger; bao cao rieng, xem duoi |
-| `final` | `account.payment` outbound posted:<br>Dr Trade payable (`destination_account_id`) 100,000,000<br>Cr Outstanding Payments 100,000,000 | Roi `account.bank.statement.line` −100,000,000 tren journal Z-VND, reconcile voi Outstanding Payments |
-| Phi relayer (`fee_base` = 500) | Dr Bank/transaction fee expense 500<br>Cr Crypto wallet Z-VND 500 | Mot dong rieng tren cung statement line, hoac mot statement line thu hai. **Khong duoc gop vao 100,000,000** — no lam sai so du cong no |
-| Gas native (chain profile `public`, relayer noi bo) | Dr Bank/transaction fee expense (native, quy doi)<br>Cr Crypto wallet <native> | Journal khac (token native). Neu `fee_mode='gasless'` (private chain) thi khong co but toan nao |
-| `failed` sau `broadcast`, mode `on_final` | **khong co gi de dao** | Do la toan bo ly do `on_final` la mac dinh |
-| `disputed` | **khong but toan tu dong** | §15.2.6 |
-| `compensated` | But toan cua settlement nguoc (chieu `in`), doc lap, `ref` tro ve ban goc | Khong bao gio `unlink` |
+| Chứng từ gốc posted (ngoài phạm vi settlement layer) | Dr Trade payable 100,000,000 / Cr Rebate expense hoặc Accrual | Do `dms.trade.settlement._dms_create_credit_note()` làm, không phải chúng ta |
+| `authorized` | **không bút toán** | Một cam kết chưa phải một sự kiện kế toán |
+| `broadcast` | **không bút toán** (mode `on_final`) | Rủi ro nằm ở sub-ledger; báo cáo riêng, xem dưới |
+| `final` | `account.payment` outbound posted:<br>Dr Trade payable (`destination_account_id`) 100,000,000<br>Cr Outstanding Payments 100,000,000 | Rồi `account.bank.statement.line` −100,000,000 trên journal Z-VND, reconcile với Outstanding Payments |
+| Phí relayer (`fee_base` = 500) | Dr Bank/transaction fee expense 500<br>Cr Crypto wallet Z-VND 500 | Một dòng riêng trên cùng statement line, hoặc một statement line thứ hai. **Không được gộp vào 100,000,000** — nó làm sai số dư công nợ |
+| Gas native (chain profile `public`, relayer nội bộ) | Dr Bank/transaction fee expense (native, quy đổi)<br>Cr Crypto wallet <native> | Journal khác (token native). Nếu `fee_mode='gasless'` (private chain) thì không có bút toán nào |
+| `failed` sau `broadcast`, mode `on_final` | **không có gì để đảo** | Đó là toàn bộ lý do `on_final` là mặc định |
+| `disputed` | **không bút toán tự động** | §15.2.6 |
+| `compensated` | Bút toán của settlement ngược (chiều `in`), độc lập, `ref` trỏ về bản gốc | Không bao giờ `unlink` |
 
-**Luong IN (outlet collection), `direction='in'`:**
+**Luồng IN (outlet collection), `direction='in'`:**
 
-| Su kien | But toan |
+| Sự kiện | Bút toán |
 |---|---|
-| `final` | `account.payment` inbound posted: Dr Outstanding Receipts / Cr Trade receivable. Roi statement line +amount, reconcile. |
-| Trong DMS: `dms_post_payment` da tao `account.payment` roi | **Khong tao them.** Bridge goi thang `dms_post_payment`, va `dms_blockchain_account` bo qua settlement co `gl_state='not_required'` do bridge dat. Xem §15.6.2 — day la cho hai module de dam nhau nhat. |
+| `final` | `account.payment` inbound posted: Dr Outstanding Receipts / Cr Trade receivable. Rồi statement line +amount, reconcile. |
+| Trong DMS: `dms_post_payment` đã tạo `account.payment` rồi | **Không tạo thêm.** Bridge gọi thẳng `dms_post_payment`, và `dms_blockchain_account` bỏ qua settlement có `gl_state='not_required'` do bridge đặt. Xem §15.6.2 — đây là chỗ hai module dễ đâm nhau nhất. |
 
-**Luong OFFSET (`transport='offset'`, netting):**
+**Luồng OFFSET (`transport='offset'`, netting):**
 
-| | But toan |
+| | Bút toán |
 |---|---|
-| Chan gross out 100,000,000 | Dr Trade payable 100,000,000 / Cr **Netting clearing** 100,000,000 |
-| Chan gross in 30,000,000 | Dr **Netting clearing** 30,000,000 / Cr Trade receivable 30,000,000 |
-| Chan net 70,000,000 on-chain | Dr **Netting clearing** 70,000,000 / Cr Outstanding Payments 70,000,000, roi statement line |
-| Tong tren Netting clearing | 100 − 30 − 70 = **0** | Neu khong bang 0, netting set khong can bang. Day la cho `@api.constrains` cua §15.6.3 phai bat. |
+| Chân gross out 100,000,000 | Dr Trade payable 100,000,000 / Cr **Netting clearing** 100,000,000 |
+| Chân gross in 30,000,000 | Dr **Netting clearing** 30,000,000 / Cr Trade receivable 30,000,000 |
+| Chân net 70,000,000 on-chain | Dr **Netting clearing** 70,000,000 / Cr Outstanding Payments 70,000,000, rồi statement line |
+| Tổng trên Netting clearing | 100 − 30 − 70 = **0** | Nếu không bằng 0, netting set không cân bằng. Đây là chỗ `@api.constrains` của §15.6.3 phải bắt. |
 
-Tai khoan **Netting clearing** la tai khoan trung gian, loai `current_liability`, `reconcile=True`. No la thu bien
-"netting la mot y tuong" thanh "netting la mot so du kiem tra duoc": so du cuoi ky cua no phai bang 0 cho moi ky da
-dong. Mot bao cao mot dong.
+Tài khoản **Netting clearing** là tài khoản trung gian, loại `current_liability`, `reconcile=True`. Nó là thứ biến
+"netting là một ý tưởng" thành "netting là một số dư kiểm tra được": số dư cuối kỳ của nó phải bằng 0 cho mọi kỳ đã
+đóng. Một báo cáo một dòng.
 
-**Mode 4 (sub-ledger, post theo lo) — but toan tong hop hang ngay:**
+**Mode 4 (sub-ledger, post theo lô) — bút toán tổng hợp hàng ngày:**
 
 ```
 Dr Trade payable          Σ(payout final trong ngay)
@@ -666,25 +682,22 @@ Dr Trade payable          Σ(payout final trong ngay)
 Dr Transaction fee expense   Σ(fee)
 ```
 
-Mot `account.move` cho moi `(journal, direction, ngay)`. `ref` = `BLK/<chain>/<token>/<YYYY-MM-DD>/<direction>`.
-`narration` chua so luong settlement va khoang id, de tra nguoc. **Khong** liet ke 5,000 dong chi tiet vao
-`narration` — chung o sub-ledger, va sub-ledger la noi tra cuu.
+Một `account.move` cho mỗi `(journal, direction, ngày)`. `ref` = `BLK/<chain>/<token>/<YYYY-MM-DD>/<direction>`.
+`narration` chứa số lượng settlement và khoảng id, để tra ngược. **Không** liệt kê 5,000 dòng chi tiết vào
+`narration` — chúng ở sub-ledger, và sub-ledger là nơi tra cứu.
 
-#### 15.4.3. Chinh sach post
+#### 15.4.3. Chính sách post
 
 `ir.config_parameter blockchain.account.posting_policy` ∈ `{on_final, on_broadcast}`.
 
-| Su kien | `on_final` (mac dinh) | `on_broadcast` |
+| Sự kiện | `on_final` (mặc định) | `on_broadcast` |
 |---|---|---|
-| `authorized` | khong but toan | khong but toan |
-| `broadcast` | khong but toan; rui ro nam o sub-ledger, bao cao rieng | `account.payment` posted → Dr Payable / Cr **Outstanding Payments** |
-| `final` | `account.payment` posted **+** statement line **+** reconcile trong cung mot buoc | statement line → reconcile voi outstanding |
-| `failed` sau `broadcast` | khong co gi de dao | `_reverse_moves(default_values_list=[{'date': ...,'ref': ...}], cancel=True)` — **khong bao gio unlink** |
-| `disputed` | khong tu dong | khong tu dong |
-| `compensated` | but toan cua settlement nguoc, doc lap | nhu tren |
+| `authorized` | không bút toán | không bút toán |
+| `broadcast` | không bút toán; rủi ro nằm ở sub-ledger, báo cáo riêng | `account.payment` posted → Dr Payable / Cr **Outstanding Payments** |
+| `final` | `account.payment` posted **+** statement line **+** reconcile trong cùng một bước | statement line → reconcile với outstanding |
 
-`on_final` la mac dinh vi no giu GL sach khoi nhung giao dich chua tung xay ra. Doi lai, treasury mat tam nhin ve
-tien da cam ket — bu bang mot **bao cao** doc tu sub-ledger, khong bang but toan:
+`on_final` là mặc định vì nó giữ GL sạch khỏi những giao dịch chưa từng xảy ra. Đổi lại, treasury mất tầm nhìn về
+tiền đã cam kết — bù bằng một **báo cáo** đọc từ sub-ledger, không bằng bút toán:
 
 ```
 Tien dang tren duong (committed, not settled)
@@ -692,30 +705,30 @@ Tien dang tren duong (committed, not settled)
   GROUP BY company, chain, token, direction
 ```
 
-Bao cao nay phai o cung dashboard voi §15.5, va phai co cot "gia nhat cua khoan cu nhat" — mot khoan `broadcast`
-tu ba ngay truoc la mot su co, khong phai mot con so.
+Báo cáo này phải ở cùng dashboard với §15.5, và phải có cột "già nhất của khoản cũ nhất" — một khoản `broadcast`
+từ ba ngày trước là một sự cố, không phải một con số.
 
-`on_broadcast` danh cho deployment ma kiem toan doi tien mat cam ket phai hien tren bang can doi; gia phai tra la
-nhung but toan dao khi tx fail. Dinh luong: voi ty le revert quan sat duoc ~0.5% (uoc tinh, co so: simulation gate
-bat gan het, phan con lai la race ve so du va allowance), 6,000 payout/nam ⇒ ~30 but toan dao/nam. It. Voi
-1,250,000 collection/nam ⇒ ~6,250 but toan dao/nam. Nhieu. Ket luan: `on_broadcast` chi hop ly cho luong B2B, va
-day la mot ly do nua de `posting_policy` co the dat **theo money-flow** chu khong chi toan he thong.
+`on_broadcast` dành cho deployment mà kiểm toán đòi tiền mặt cam kết phải hiện trên bảng cân đối; giá phải trả là
+những bút toán đảo khi tx fail. Định lượng: với tỷ lệ revert quan sát được ~0.5% (ước tính, cơ sở: simulation gate
+bắt gần hết, phần còn lại là race về số dư và allowance), 6,000 payout/năm ⇒ ~30 bút toán đảo/năm. Ít. Với
+1,250,000 collection/năm ⇒ ~6,250 bút toán đảo/năm. Nhiều. Kết luận: `on_broadcast` chỉ hợp lý cho luồng B2B, và
+đây là một lý do nữa để `posting_policy` có thể đặt **theo money-flow** chứ không chỉ toàn hệ thống.
 
-**[SUA §10]** `blockchain.account.posting_policy` nen la mot field tren `blockchain.money.flow` (§09.4) voi fallback
-ve `ir.config_parameter`, khong phai mot khoa toan cuc duy nhat.
+**[SỬA §10]** `blockchain.account.posting_policy` nên là một field trên `blockchain.money.flow` (§09.4) với fallback
+về `ir.config_parameter`, không phải một khoá toàn cục duy nhất.
 
-#### 15.4.4. Ky ke toan bi khoa, va tai sao GL phai la mot transaction khac
+#### 15.4.4. Kỳ kế toán bị khoá, và tại sao GL phải là một transaction khác
 
-**Buoc `final` sinh but toan khong duoc nam trong transaction cua `_set_finality`.** Ky ke toan bi khoa
-(`account.move` raise `UserError` khi post vao ky da lock qua `fiscalyear_lock_date` / `tax_lock_date`) la mot su
-co **thuong xuyen**, khong phai hiem — dac biet trong ba ngay dau thang. Neu post nam cung transaction, ca
-`settle_state='final'` bi rollback va settlement ket vinh vien o `pending_finality` — Odoo noi doi ve mot khoan
-tien da nam tren chain. Chot:
+**Bước `final` sinh bút toán không được nằm trong transaction của `_set_finality`.** Kỳ kế toán bị khoá
+(`account.move` raise `UserError` khi post vào kỳ đã lock qua `fiscalyear_lock_date` / `tax_lock_date`) là một sự
+cố **thường xuyên**, không phải hiếm — đặc biệt trong ba ngày đầu tháng. Nếu post nằm cùng transaction, cả
+`settle_state='final'` bị rollback và settlement kẹt vĩnh viễn ở `pending_finality` — Odoo nói dối về một khoản
+tiền đã nằm trên chain. Chốt:
 
 ```python
 def _set_finality(self):
     """Transaction 1: su that on-chain. Khong goi account.* o day."""
-    self.with_context(blockchain_state_engine=True).write({
+    self.with_context(**_STATE_ENGINE_CTX).write({
         'settle_state': 'final',
         'finality_datetime': fields.Datetime.now(),
         'gl_state': 'queued' if self._gl_required() else 'not_required',
@@ -725,30 +738,35 @@ def _set_finality(self):
 #   model._cron_post_gl()   -> doc gl_state='queued', post theo lo, bat UserError -> gl_state='failed'
 ```
 
-Khi ky bi khoa, ba lua chon va chot:
+Khi kỳ bị khoá, ba lựa chọn và chốt:
 
-| Lua chon | Hau qua | Chot |
+| Lựa chọn | Hậu quả | Chốt |
 |---|---|---|
-| Post vao dung `finality_datetime` | raise, `gl_state='failed'`, cho nguoi mo ky | **Mac dinh.** Trung thuc, va ke toan la nguoi quyet dinh |
-| Doi `move.date` sang ngay dau ky mo | GL khop ky, nhung ngay ke toan khac ngay su kien | Cho phep bang `blockchain.account.late_posting = 'shift'`; **bat buoc** ghi `finality_datetime` vao `ref` de truy nguoc |
-| Bo qua | Tien mat khoi so | Khong bao gio |
+| Post vào đúng `finality_datetime` | raise, `gl_state='failed'`, chờ người mở kỳ | **Mặc định.** Trung thực, và kế toán là người quyết định |
+| Đổi `move.date` sang ngày đầu kỳ mở | GL khớp kỳ, nhưng ngày kế toán khác ngày sự kiện | Cho phép bằng `blockchain.account.late_posting = 'shift'`; **bắt buộc** ghi `finality_datetime` vào `ref` để truy ngược |
+| Bỏ qua | Tiền mất khỏi sổ | Không bao giờ |
 
-`gl_state='failed'` la mot hang doi nguoi that phai xu ly. No hien tren dashboard doi soat §15.5, co `gl_error`
-mang nguyen van thong diep `UserError`, **khong im lang**, va khong retry vo han: sau 3 lan that bai lien tiep,
-cron ngung thu lai record do va tao mot `mail.activity` duy nhat.
+`gl_state='failed'` là một hàng đợi người thật phải xử lý. Nó hiện trên dashboard đối soát §15.5, có `gl_error`
+mang nguyên văn thông điệp `UserError`, **không im lặng**, và không retry vô hạn: sau 3 lần thất bại liên tiếp,
+cron ngừng thử lại record đó và tạo một `mail.activity` duy nhất.
 
-#### 15.4.5. FX khi token khong phai currency cua cong ty
+#### 15.4.5. FX khi token không phải currency của công ty
 
-Ba truong hop, ba cach xu ly khac han. Gop chung la sai:
+Ba trường hợp, ba cách xử lý khác hẳn. Gộp chung là sai:
 
-| Truong hop | Vi du | Xu ly |
+| Trường hợp | Ví dụ | Xử lý |
 |---|---|---|
-| Token neo dung currency so sach | Z-VND tren so VND | **Khong** tao `res.currency` moi. Token la *phuong tien thanh toan*, journal dung company currency, khong co FX. |
-| Token neo mot fiat khac | USDC tren so VND | Tao `res.currency` rieng ten `USDC` (**khong** dung `USD`: USDC khong phai USD, va mot su kien depeg phai the hien duoc tren so). Nap `res.currency.rate` tu oracle. FX theo co che chuan cua Odoo. |
-| Token bien dong / diem thuong | reward point, native coin | **Khong phai currency.** Xem §15.4.8 — ban nhap chot sai o day. |
+| Token neo đúng currency sổ sách | Z-VND trên sổ VND | **Không** tạo `res.currency` mới. Token là *phương tiện thanh toán*, journal dùng company currency, không có FX. |
+| Token neo một fiat khác | USDC trên sổ VND | Tạo `res.currency` riêng tên `USDC` (**không** dùng `USD`: USDC không phải USD, và một sự kiện depeg phải thể hiện được trên sổ). Nạp `res.currency.rate` từ oracle. FX theo cơ chế chuẩn của Odoo. |
+| Token biến động / điểm thưởng | reward point, native coin | **Không phải currency.** Xem §15.4.8 — bản nháp chốt sai ở đây. |
 
-Ngay tinh ty gia: **`finality_datetime`, khong phai ngay chung tu goc, khong phai `broadcast`.** Su kien ke toan la
-finality. Dong bang no tren record:
+**[BẢN 3] Ánh xạ là nhiều-một, không phải một-một.** Nhiều `blockchain.token` (zDAI-A, zDAI-B, cả hai neo DAI) trỏ
+về **cùng** một `res.currency`. Đó là quan hệ đúng: `res.currency` là đơn vị đo, `blockchain.token` là công cụ. Điều
+này cũng nghĩa là một `res.currency` không đủ để định danh tiền trong một settlement — `token_id` mới là thứ định
+danh, và §15.4.1 vì thế đòi một journal cho mỗi token chứ không cho mỗi currency.
+
+Ngày tính tỷ giá: **`finality_datetime`, không phải ngày chứng từ gốc, không phải `broadcast`.** Sự kiện kế toán là
+finality. Đóng băng nó trên record:
 
 ```python
 fx_rate          = fields.Float(digits=(16, 12), readonly=True)
@@ -756,13 +774,13 @@ fx_rate_source   = fields.Char(readonly=True)      # 'res.currency.rate' | 'orac
 fx_rate_datetime = fields.Datetime(readonly=True)
 ```
 
-**[SUA §15 v1] Mot rate theo NGAY la khong du, va ban nhap khong noi.** `res.currency.rate` khoa theo `name`
-(mot `Date`), nen moi settlement trong ngay dung cung mot ty gia. Voi mot stablecoin binh thuong do la vo hai. Voi
-mot su kien depeg thi khong: USDC giao dich quanh **$0.87** trong phien 11/03/2023, tuc lech **~13%** so voi rate
-$1.00 se duoc dung cho ca ngay. Tren 1,250,000 collection/nam, mot ngay depeg co the sai lech hang tram trieu VND
-tren so.
+**[SỬA §15 v1] Một rate theo NGÀY là không đủ, và bản nháp không nói.** `res.currency.rate` khoá theo `name`
+(một `Date`), nên mọi settlement trong ngày dùng cùng một tỷ giá. Với một stablecoin bình thường đó là vô hại. Với
+một sự kiện depeg thì không: USDC giao dịch quanh **$0.87** trong phiên 11/03/2023, tức lệch **~13%** so với rate
+$1.00 sẽ được dùng cho cả ngày. Trên 1,250,000 collection/năm, một ngày depeg có thể sai lệch hàng trăm triệu VND
+trên sổ.
 
-Chot: mot bang snapshot rieng, va `res.currency.rate` chi de Odoo tu chay may FX cua no:
+Chốt: một bảng snapshot riêng, và `res.currency.rate` chỉ để Odoo tự chạy máy FX của nó:
 
 ```python
 class BlockchainTokenRate(models.Model):
@@ -782,83 +800,86 @@ class BlockchainTokenRate(models.Model):
         'Mot snapshot ty gia chi ghi mot lan.')
 ```
 
-Chu ky nap: 15 phut (96 dong/token/ngay ≈ 35,000 dong/token/nam — khong dang ke). Quy tac chon rate cho mot
-settlement: snapshot gan `finality_datetime` nhat trong vong ±30 phut; neu khong co, fallback `res.currency.rate`
-cua ngay do va dat `fx_rate_source='res.currency.rate'` — **khac biet nay phai hien trong bao cao**, khong duoc chim.
-Va mot canh bao khi `abs(deviation_pct) > 2`: mot stablecoin lech 2% la mot su kien nghiep vu, khong phai mot con so.
+Chu kỳ nạp: 15 phút (96 dòng/token/ngày ≈ 35,000 dòng/token/năm — không đáng kể). Quy tắc chọn rate cho một
+settlement: snapshot gần `finality_datetime` nhất trong vòng ±30 phút; nếu không có, fallback `res.currency.rate`
+của ngày đó và đặt `fx_rate_source='res.currency.rate'` — **khác biệt này phải hiện trong báo cáo**, không được chìm.
+Và một cảnh báo khi `abs(deviation_pct) > 2`: một stablecoin lệch 2% là một sự kiện nghiệp vụ, không phải một con số.
 
-Chenh lech ty gia giua ngay ghi nhan cong no va ngay settlement **de Odoo tu lam**: khi `account.move.line` cua
-payable va cua payment cung `currency_id` nhung khac ty gia duoc reconcile, Odoo sinh exchange difference move.
-Dieu kien: ca hai dong deu mang `currency_id` va `amount_currency` dung, **va** `company.currency_exchange_journal_id`
-cung hai tai khoan gain/loss da duoc dat (§15.4.1 muc 3). Khong tu tinh FX.
+**[BẢN 3] Và trong factory mở, `token_id` trong bảng này là bắt buộc chứ không phải tiện lợi.** zDAI-A và zDAI-B có
+thể lệch giá với nhau — chúng là hai contract khác nhau với hai vault khác nhau, và thị trường không buộc phải định
+giá chúng bằng nhau. Một bảng rate khoá theo ký hiệu sẽ trộn hai giá thành một.
+Chênh lệch tỷ giá giữa ngày ghi nhận công nợ và ngày settlement **để Odoo tự làm**: khi `account.move.line` của
+payable và của payment cùng `currency_id` nhưng khác tỷ giá được reconcile, Odoo sinh exchange difference move.
+Điều kiện: cả hai dòng đều mang `currency_id` và `amount_currency` đúng, **và** `company.currency_exchange_journal_id`
+cùng hai tài khoản gain/loss đã được đặt (§15.4.1 mục 3). Không tự tính FX.
 
-#### 15.4.6. Bui (dust) la co that, va Odoo dat mot tran cung o 6 chu so
+#### 15.4.6. Bụi (dust) là có thật, và Odoo đặt một trần cứng ở 6 chữ số
 
-`amount_base` la chuoi wei chinh xac tuyet doi; `res.currency` thi khong the theo kip. **[SUA §15 v1] Ly do manh
-hon ban nhap noi**: `res.currency.rounding` duoc khai bao `digits=(12, 6)` trong `odoo/addons/base/models/res_currency.py`,
-va `decimal_places = int(math.ceil(math.log10(1/rounding)))`. Nghia la **gia tri rounding min biet duoc la `1e-6`**,
-va `decimal_places` toi da la **6**, do la mot gioi han cua framework chu khong phai mot lua chon cua ta. Khong co
-cach cau hinh nao vuot qua.
+`amount_base` là chuỗi wei chính xác tuyệt đối; `res.currency` thì không thể theo kịp. **[SỬA §15 v1] Lý do mạnh
+hơn bản nháp nói**: `res.currency.rounding` được khai báo `digits=(12, 6)` trong `odoo/addons/base/models/res_currency.py`,
+và `decimal_places = int(math.ceil(math.log10(1/rounding)))`. Nghĩa là **giá trị rounding min biểu diễn được là `1e-6`**,
+và `decimal_places` tối đa là **6**, đó là một giới hạn của framework chứ không phải một lựa chọn của ta. Không có
+cách cấu hình nào vượt qua.
 
-He qua so hoc, token 18 decimals tren currency 6 decimals:
+Hệ quả số học, token 18 decimals trên currency 6 decimals:
 
-| Dai luong | Gia tri | Co so |
+| Đại lượng | Giá trị | Cơ sở |
 |---|---|---|
-| Dust toi da mot settlement | `10^12 − 1` base units = 0.000000999999 token | 18 − 6 = 12 chu so bi cat |
-| 1.83 trieu settlement/nam, lech mot chieu | ≤ 1.83 token/nam | tich luy toi da |
-| Quy ra tien, Z-VND | ≤ 1.83 VND/nam | khong dang ke ve tien |
-| Quy ra tien, USDC | ≤ $1.83/nam | khong dang ke ve tien |
-| **Anh huong doi soat** | **dang ke** | mot nguong tolerance = 0 se bao drift moi ngay |
+| Dust tối đa một settlement | `10^12 − 1` base units = 0.000000999999 token | 18 − 6 = 12 chữ số bị cắt |
+| 1.83 triệu settlement/năm, lệch một chiều | ≤ 1.83 token/năm | tích luỹ tối đa |
+| Quy ra tiền, Z-VND | ≤ 1.83 VND/năm | không đáng kể về tiền |
+| Quy ra tiền, USDC | ≤ $1.83/năm | không đáng kể về tiền |
+| **Ảnh hưởng đối soát** | **đáng kể** | một ngưỡng tolerance = 0 sẽ báo drift mỗi ngày |
 
 ```python
 dust_base = fields.Char(readonly=True, default='0',
                         help='amount_base - (amount_currency quy nguoc ve base units). Luon >= 0.')
 ```
 
-**Va dust phai co cho di trong GL**, khong chi duoc do. Neu khong, so du tai khoan "Crypto wallet" trong GL se
-lech dan khoi `balanceOf` on-chain va khong ai giai thich duoc. Chot: mot but toan quet dust hang thang,
+**Và dust phải có chỗ đi trong GL**, không chỉ được đo. Nếu không, số dư tài khoản "Crypto wallet" trong GL sẽ
+lệch dần khỏi `balanceOf` on-chain và không ai giải thích được. Chốt: một bút toán quét dust hàng tháng,
 
 ```
 Dr Crypto rounding expense    Σ dust quy ra currency
     Cr Crypto wallet <token>      Σ dust
 ```
 
-chay boi `_cron_sweep_dust()`, chi khi `Σ dust >= 1` don vi currency (neu khong thi chinh but toan bi lam tron ve 0).
-Voi so lieu tren, but toan nay chay khoang **1 lan/nam** cho Z-VND. Do la ket qua dung: no gan nhu khong bao gio
-chay, nhung khi no chay thi doi soat khop.
+chạy bởi `_cron_sweep_dust()`, chỉ khi `Σ dust >= 1` đơn vị currency (nếu không thì chính bút toán bị làm tròn về 0).
+Với số liệu trên, bút toán này chạy khoảng **1 lần/năm** cho Z-VND. Đó là kết quả đúng: nó gần như không bao giờ
+chạy, nhưng khi nó chạy thì đối soát khớp.
 
-#### 15.4.7. Khoi luong: vi sao mode 4 la mac dinh
+#### 15.4.7. Khối lượng: vì sao mode 4 là mặc định
 
-Uoc tinh, co so: deployment DMS 5,000 outlet, 1 collection/outlet/ngay, 250 ngay lam viec.
+Ước tính, cơ sở: deployment DMS 5,000 outlet, 1 collection/outlet/ngày, 250 ngày làm việc.
 
-| | Mode 3: post tung settlement | Mode 4: post theo lo ngay |
+| | Mode 3: post từng settlement | Mode 4: post theo lô ngày |
 |---|---|---|
-| `account.move`/nam | 1.25 trieu (collection) + 6,000 (B2B) ≈ **1.26 trieu** | 250 × (so journal × so direction) ≈ **1,000 – 4,400** |
-| `account.move.line`/nam | ~3.8 trieu (3 dong/move) | ~13,000 |
-| Dung luong `account_move` + `account_move_line` + index | ~4 – 6 GB/nam (uoc tinh, co so ~1 KB/dong `account_move_line` ke ca 12 index cua Odoo) | ~15 MB/nam |
-| Thoi gian dong so cuoi thang | phut den chuc phut | giay |
-| Thoi gian mo bao cao "so cai chi tiet" 1 nam | khong mo duoc trong UI | tuc thi |
-| Tra cuu "khoan thu cua outlet X ngay Y" | tren `account.move.line` | tren `blockchain.settlement` (van du chi tiet) |
+| `account.move`/năm | 1.25 triệu (collection) + 6,000 (B2B) ≈ **1.26 triệu** | 250 × (số journal × số direction) ≈ **1,000 – 4,400** |
+| `account.move.line`/năm | ~3.8 triệu (3 dòng/move) | ~13,000 |
+| Dung lượng `account_move` + `account_move_line` + index | ~4 – 6 GB/năm (ước tính, cơ sở ~1 KB/dòng `account_move_line` kể cả 12 index của Odoo) | ~15 MB/năm |
+| Thời gian đóng sổ cuối tháng | phút đến chục phút | giây |
+| Thời gian mở báo cáo "sổ cái chi tiết" 1 năm | không mở được trong UI | tức thì |
+| Tra cứu "khoản thu của outlet X ngày Y" | trên `account.move.line` | trên `blockchain.settlement` (vẫn đủ chi tiết) |
 
-Sub-ledger `blockchain.settlement` van giu du 1.25 trieu dong chi tiet (~400 B/dong + index ≈ 1.2 GB/nam), va do la
-noi tra cuu tung khoan. GL nhan tong hop. Day la ly do §10.8 chot mode 4 mac dinh, va con so tren la bien so thuc.
+Sub-ledger `blockchain.settlement` vẫn giữ đủ 1.25 triệu dòng chi tiết (~400 B/dòng + index ≈ 1.2 GB/năm), và đó là
+nơi tra cứu từng khoản. GL nhận tổng hợp. Đây là lý do §10.8 chốt mode 4 mặc định, và con số trên là biện hộ thực.
 
-**Nguong quyet dinh, viet ra de deployment tu chon:** duoi **20,000 settlement/nam** mot money-flow, mode 3
-(mot `account.payment`/settlement) chay tot va cho ke toan cai ho quen thuoc. Tren nguong do, mode 4. Voi so lieu
-DMS: B2B (6,000/nam) → mode 3; collection (1.25 trieu/nam) → mode 4. **Do la ly do mode 5 "ket hop theo luong tien"
-khong phai mot tuy chon xa xi ma la cau hinh dung cho deployment DMS day du.**
+**Ngưỡng quyết định, viết ra để deployment tự chọn:** dưới **20,000 settlement/năm** một money-flow, mode 3
+(một `account.payment`/settlement) chạy tốt và cho kế toán cái họ quen thuộc. Trên ngưỡng đó, mode 4. Với số liệu
+DMS: B2B (6,000/năm) → mode 3; collection (1.25 triệu/năm) → mode 4. **Đó là lý do mode 5 "kết hợp theo luồng tiền"
+không phải một tuỳ chọn xa xỉ mà là cấu hình đúng cho deployment DMS đầy đủ.**
 
-#### 15.4.8. Loyalty: `_gl_required() = False` la sai ke toan
+#### 15.4.8. Loyalty: `_gl_required() = False` là sai kế toán
 
-**[SUA §15 v1]** Ban nhap viet: token bien dong / diem thuong ⇒ `_gl_required()` tra `False`, gia tri vao GL chi
-khi doi ra tien that. Dung ve *transfer*, sai ve *tong the*.
+**[SỬA §15 v1]** Bản nháp viết: token biến động / điểm thưởng ⇒ `_gl_required()` trả `False`, giá trị vào GL chỉ
+khi đổi ra tiền thật. Đúng về *transfer*, sai về *tổng thể*.
 
-Mot diem thuong da phat hanh la mot **nghia vu hop dong** (contract liability): doanh nghiep no khach hang mot
-khoan trong tuong lai. IFRS 15 (va VAS tuong duong) doi trich truoc phan doanh thu phan bo cho diem thuong tai
-thoi diem **phat hanh**, khong phai thoi diem doi thuong. Neu settlement layer noi "khong sinh but toan" ma khong
-ai khac lam viec do, thi bang can doi thieu mot khoan phai tra tang dan theo quy mo chuong trinh.
+Một điểm thưởng đã phát hành là một **nghĩa vụ hợp đồng** (contract liability): doanh nghiệp nợ khách hàng một
+khoản trong tương lai. IFRS 15 (và VAS tương đương) đòi trích trước phần doanh thu phân bổ cho điểm thưởng tại
+thời điểm **phát hành**, không phải thời điểm đổi thưởng. Nếu settlement layer nói "không sinh bút toán" mà không
+ai khác làm việc đó, thì bảng cân đối thiếu một khoản phải trả tăng dần theo quy mô chương trình.
 
-Chot, va no khong lam nang settlement layer:
+Chốt, và nó không làm nặng settlement layer:
 
 ```python
 gl_policy = fields.Selection([
@@ -868,24 +889,24 @@ gl_policy = fields.Selection([
 ], required=True, default='cash')          # tren blockchain.token, khong tren settlement
 ```
 
-| `gl_policy` | `direction='out'` (phat hanh diem) | `direction='in'` (thu ve / doi thuong) |
+| `gl_policy` | `direction='out'` (phát hành điểm) | `direction='in'` (thu về / đổi thưởng) |
 |---|---|---|
-| `none` | khong gi | khong gi |
+| `none` | không gì | không gì |
 | `cash` | Dr Payable / Cr Wallet | Dr Wallet / Cr Receivable |
-| `liability` | Dr Marketing expense / **Cr Loyalty liability** | Dr **Loyalty liability** / Cr Revenue (hoac Cr Wallet neu doi ra tien) |
+| `liability` | Dr Marketing expense / **Cr Loyalty liability** | Dr **Loyalty liability** / Cr Revenue (hoặc Cr Wallet nếu đổi ra tiền) |
 
-Va mot con so de deployment biet minh dang o dau: voi 200,000 diem phat/nam va ty le doi thuong quan sat duoc
-5–15% (§09 M18), so du `Loyalty liability` o trang thai on dinh ≈ 85–95% cua tong phat hanh luy ke. Do la mot con
-so tang khong gioi han neu diem khong het han. **Diem thuong phai co han su dung, va do la mot quyet dinh ke toan
-truoc khi la mot quyet dinh marketing.** Xem §15.10.
+Và một con số để deployment biết mình đang ở đâu: với 200,000 điểm phát/năm và tỷ lệ đổi thưởng quan sát được
+5–15% (§09 M18), số dư `Loyalty liability` ở trạng thái ổn định ≈ 85–95% của tổng phát hành luỹ kế. Đó là một con
+số tăng không giới hạn nếu điểm không hết hạn. **Điểm thưởng phải có hạn sử dụng, và đó là một quyết định kế toán
+trước khi là một quyết định marketing.** Xem §15.10.
 
 ---
 
-### 15.5. Doi soat: tim drift giua chain va so ke toan
+### 15.5. Đối soát: tìm drift giữa chain và sổ kế toán
 
-#### 15.5.1. Nam huong, khong phai ba
+#### 15.5.1. Năm hướng, không phải ba
 
-Ban nhap co ba. Hai huong con lai bat nhung loi ba huong dau khong bat duoc.
+Bản nháp có ba. Hai hướng còn lại bắt những lỗi ba hướng đầu không bắt được.
 
 ```
 (A) chain  -> sub-ledger : co transfer nao tren dia chi cua ta ma khong co settlement?
@@ -895,12 +916,12 @@ Ban nhap co ba. Hai huong con lai bat nhung loi ba huong dau khong bat duoc.
 (E) sub-ledger -> origin : settlement terminal nao chua duoc callback (notified_datetime IS NULL)?
 ```
 
-(D) bat loi tinh chunk: mot chunk 150 dong ma calldata chi mang 149 nguoi nhan. On-chain thanh cong, sub-ledger noi
-150 dong `final`, va mot NPP khong nhan duoc tien — khong huong nao trong ba huong dau bat duoc no vi tong so du
-van khop neu dong thu 150 co so tien nho.
+(D) bắt lỗi tính chunk: một chunk 150 dòng mà calldata chỉ mang 149 người nhận. On-chain thành công, sub-ledger nói
+150 dòng `final`, và một NPP không nhận được tiền — không hướng nào trong ba hướng đầu bắt được nó vì tổng số dư
+vẫn khớp nếu dòng thứ 150 có số tiền nhỏ.
 
-(E) bat loi "tien da den nhung chung tu goc khong biet": DMS van bao mot payout dang cho trong khi tien da tra.
-Day la loai loi khong lam mat tien nhung sinh mot khoan tra lan hai khi ai do bam nut lai.
+(E) bắt lỗi "tiền đã đến nhưng chứng từ gốc không biết": DMS vẫn báo một payout đang chờ trong khi tiền đã trả.
+Đây là loại lỗi không làm mất tiền nhưng sinh một khoản trả lần hai khi ai đó bấm nút lại.
 
 #### 15.5.2. Model
 
@@ -915,12 +936,12 @@ class BlockchainReconciliationRun(models.Model):
     token_id       = fields.Many2one('blockchain.token', required=True, index=True)
     account_id     = fields.Many2one('blockchain.account', index=True)
     as_of_block    = fields.Integer(required=True)      # snapshot tai mot block da final
-    as_of_block_hash = fields.Char(size=66, required=True)   # de chung minh khong doi soat tren fork
+    as_of_block_hash = fields.Char(required=True)       # de chung minh khong doi soat tren fork
     as_of_datetime = fields.Datetime(required=True)
     chain_balance_base     = fields.Char()
     subledger_balance_base = fields.Char()
     gl_balance_base        = fields.Char()
-    drift_base     = fields.Char(compute='_compute_drift', store=True, default='0')
+    drift_base     = fields.Char(compute='_compute_drift', store=True)
     tolerance_base = fields.Char(readonly=True, default='0')  # tinh tai luc chay, khong phai hang so
     duration_ms    = fields.Integer()
     line_ids       = fields.One2many('blockchain.reconciliation.line', 'run_id')
@@ -948,7 +969,8 @@ class BlockchainReconciliationLine(models.Model):
         ('fx_only',             'Chi lech do ty gia'),
         ('dust',                'Lech trong nguong lam tron'),
         ('zether_nonce_gap',    'Nonce Zether khong lien tuc'),
-        ('zether_sum_mismatch', 'Tong dong hinh khong khop so du ma hoa')],
+        ('zether_sum_mismatch', 'Tong dong hinh khong khop so du ma hoa'),
+        ('token_provenance',    'Token khong con khop catalogue cua factory')],
         required=True, index=True)
     severity      = fields.Selection([('info', 'Info'), ('warn', 'Warn'), ('block', 'Blocking')],
                                      required=True, default='warn', index=True)
@@ -960,15 +982,15 @@ class BlockchainReconciliationLine(models.Model):
     note_text     = fields.Char()                       # khong dat ten 'text'
 ```
 
-**`severity` la cot ban nhap thieu va no quyet dinh ai bi danh thuc.** `dust` la `info`; `pending_over_sla` la
-`warn`; `unattributed_chain` va `zether_nonce_gap` la `block` — chung nghia la tien di chuyen ma ta khong biet.
+**`severity` là cột bản nháp thiếu và nó quyết định ai bị đánh thức.** `dust` là `info`; `pending_over_sla` là
+`warn`; `unattributed_chain`, `zether_nonce_gap` và **[BẢN 3]** `token_provenance` là `block` — chúng nghĩa là tiền
 
-#### 15.5.3. Co che tung huong
+#### 15.5.3. Cơ chế từng hướng
 
-Ban nhap viet "co transfer nao tren dia chi cua ta ma khong co settlement?" va khong noi lam the nao. **Khong RPC
-nao tra loi cau hoi do.** `eth_getLogs` tra ve log theo khoang block, khong theo "tu truoc toi nay"; va tren mot
-chain co retention gioi han (§11.1) thi ca khoang do cung khong co san. Co che that: doi soat voi **bang cua chinh
-ta** ma indexer §11 da xay, va do la ly do indexer la dependency cua doi soat chu khong phai mot tuy chon.
+Bản nháp viết "có transfer nào trên địa chỉ của ta mà không có settlement?" và không nói làm thế nào. **Không RPC
+nào trả lời câu hỏi đó.** `eth_getLogs` trả về log theo khoảng block, không theo "từ trước tới nay"; và trên một
+chain có retention giới hạn (§11.1) thì cả khoảng đó cũng không có sẵn. Cơ chế thật: đối soát với **bảng của chính
+ta** mà indexer §11 đã xây, và đó là lý do indexer là dependency của đối soát chứ không phải một tuỳ chọn.
 
 ```sql
 -- (A) unattributed_chain: effect da final nhung khong settlement nao nhan
@@ -1007,74 +1029,75 @@ WHERE  settle_state IN ('final','failed','expired','compensated')
   AND  write_date < now() - interval '15 minutes';
 ```
 
-`amount_base::numeric` la ly do §15.1.2 doi mot index bieu thuc tren `(amount_base::numeric)`: khong co no, (D)
-lam mot seq scan tren 1.25 trieu dong moi lan chay.
+`amount_base::numeric` là lý do §15.1.2 đòi một index biểu thức trên `(amount_base::numeric)`: không có nó, (D)
+làm một seq scan trên 1.25 triệu dòng mỗi lần chạy.
 
-Cron `_cron_reconcile_ledger()` chay hang ngay sau khi Finality Gate da xu ly xong block cua ngay hom truoc.
-Snapshot **phai lay tai mot block da final**, va phai luu **ca hash** — doi soat tai tip se bao drift moi lan chay
-chi vi tip da di tiep, va doi soat tren mot block da bi reorg se bao "clean" tren mot nhanh khong ton tai.
+Cron `_cron_reconcile_ledger()` chạy hàng ngày sau khi Finality Gate đã xử lý xong block của ngày hôm trước.
+Snapshot **phải lấy tại một block đã final**, và phải lưu **cả hash** — đối soát tại tip sẽ báo drift mỗi lần chạy
+chỉ vì tip đã đi tiếp, và đối soát trên một block đã bị reorg sẽ báo "clean" trên một nhánh không tồn tại.
 
-*Uoc tinh thoi gian chay, co so: 1.25 trieu settlement/nam, index dung, PostgreSQL tren SSD:* (A) va (D) la hash
-join tren tap da loc theo `(chain, token, block_number)` ⇒ **2 – 8 giay**; (B), (C), (E) la index scan ⇒ **< 1 giay**.
-Toan bo run cho mot `(company, chain, token)`: **duoi 15 giay**. Voi 3 token × 2 chain × 5 company = 30 run ⇒
-**~7 phut/dem**. Nam trong ngan sach; khong can chia nho.
+*Ước tính thời gian chạy, cơ sở: 1.25 triệu settlement/năm, index đúng, PostgreSQL trên SSD:* (A) và (D) là hash
+join trên tập đã lọc theo `(chain, token, block_number)` ⇒ **2 – 8 giây**; (B), (C), (E) là index scan ⇒ **< 1 giây**.
+Toàn bộ run cho một `(company, chain, token)`: **dưới 15 giây**. Với 3 token × 2 chain × 5 company = 30 run ⇒
+**~7 phút/đêm**. Nằm trong ngân sách; không cần chia nhỏ.
 
-#### 15.5.4. Nguong
+#### 15.5.4. Ngưỡng
 
-**[SUA §15 v1] Ban nhap tu mau thuan:** no noi "nguong tolerance phai la `sum(dust_base)`, khong phai 0" roi dinh
-nghia `recon_tolerance_base` la mot hang so `10^(token_decimals − currency_decimals)`. Hai thu khac nhau: hang so
-la dust cua **mot** settlement, con drift luy ke la dust cua **tat ca**.
+**[SỬA §15 v1] Bản nháp tự mâu thuẫn:** nó nói "ngưỡng tolerance phải là `sum(dust_base)`, không phải 0" rồi định
+nghĩa `recon_tolerance_base` là một hằng số `10^(token_decimals − currency_decimals)`. Hai thứ khác nhau: hằng số
+là dust của **một** settlement, còn drift luỹ kế là dust của **tất cả**.
 
-Chot: `tolerance_base` duoc tinh **tai luc chay**, va luu vao run de bao cao co the giai thich duoc:
+Chốt: `tolerance_base` được tính **tại lúc chạy**, và lưu vào run để báo cáo có thể giải thích được:
 
 ```python
 tolerance = sum(int(s.dust_base) for s in settlements_in_scope) \
             + int(token.recon_slack_base or '0')      # slack cau hinh, mac dinh 0
 ```
 
-`recon_slack_base` ton tai cho mot truong hop duy nhat: token co phi chuyen khoan on-chain (fee-on-transfer). Neu
-token khong co, dat 0 va giu 0. Mot slack duoc noi rong "cho chac" la mot cho de giau drift.
+`recon_slack_base` tồn tại cho một trường hợp duy nhất: token có phí chuyển khoản on-chain (fee-on-transfer). Nếu
+token không có, đặt 0 và giữ 0. Một slack được nới rộng "cho chắc" là một chỗ để giấu drift.
 
+| Điều kiện | Kết quả |
+|---|---|
 | `|drift| ≤ tolerance` | `kind='dust'`, `severity='info'`, `run_state='clean'` |
-| `tolerance < |drift|` | `run_state='drift'`, `mail.activity` cho `group_blockchain_treasury`, va **`group_blockchain_auditor` duoc CC** |
+| `tolerance < |drift|` | `run_state='drift'`, `mail.activity` cho `group_blockchain_treasury`, và **`group_blockchain_auditor` được CC** |
 
-Doi soat **khong bao gio tu sua**. No mo mot activity va dung lai. Mot routine doi soat co quyen ghi la mot routine
-co the che giau chinh loi cua no.
+Đối soát **không bao giờ tự sửa**. Nó mở một activity và dừng lại. Một routine đối soát có quyền ghi là một routine
+có thể che giấu chính lỗi của nó.
 
-#### 15.5.5. Zether pha vo huong (C), va cai gi con lai
+#### 15.5.5. Zether phá vỡ hướng (C), và cái gì còn lại
 
-So du bao mat khong doc duoc tu chain neu cong ty khong giu khoa giai ma; `getEncryptedBalance` tra ve mot cap diem
-duong cong, khong tra ve mot so. Nhung **[SUA §15 v1] ban nhap ket luan qua bi quan**: no viet "khi khong giu khoa,
-nonce-continuity la tat ca nhung gi con lai" va bo qua ca hai truong hop quan trong hon.
+Số dư bảo mật không đọc được từ chain nếu công ty không giữ khoá giải mã; `getEncryptedBalance` trả về một cặp điểm
+đường cong, không trả về một số. Nhưng **[SỬA §15 v1] bản nháp kết luận quá bi quan**: nó viết "khi không giữ khoá,
+nonce-continuity là tất cả những gì còn lại" và bỏ qua cả hai trường hợp quan trọng hơn.
 
-Ba muc do, xep theo cai ta thuc su biet:
+Ba mức độ, xếp theo cái ta thực sự biết:
 
-| Ta la gi voi tai khoan do | Doi soat lam duoc gi | Co che |
+| Ta là gì với tài khoản đó | Đối soát làm được gì | Cơ chế |
 |---|---|---|
-| **Chu tai khoan** (treasury cua chinh minh) | **Doi soat day du**, ngang mot token cong khai | §03.2.5 memo AEAD: giai `memoTo`/`memoFrom` cho ra `v` trong ~60 µs; roi kiem tong dong hinh `g^{Σv} == C_acc · D_acc^{−x}` sau moi rollOver (§03.2.6). Odoo khong giu `x`: HSM expose mot phep `ecdh(D) -> compress(D^x)` duy nhat (§11.10) |
-| **Doi tac cong bo** | Doi soat tung dong, co xac minh | `recipient_decrypted`: doi tac gui `(v, s)`, ta kiem `C_out == g^v · y_recv^s` — 2 scalar mul, khong can khoa bi mat |
-| **Khong biet gi** | **Chi phat hien duoc mat mat, khong phat hien duoc sai so tien** | Tinh lien tuc cua `zetherNonce`, cong `accSeq` |
-
+| **Chủ tài khoản** (treasury của chính mình) | **Đối soát đầy đủ**, ngang một token công khai | §03.2.5 memo AEAD: giải `memoTo`/`memoFrom` cho ra `v` trong ~60 µs; rồi kiểm tổng đồng hình `g^{Σv} == C_acc · D_acc^{−x}` sau mỗi rollOver (§03.2.6). Odoo không giữ `x`: HSM expose một phép `ecdh(D) -> compress(D^x)` duy nhất (§11.10) |
+| **Đối tác công bố** | Đối soát từng dòng, có xác minh | `recipient_decrypted`: đối tác gửi `(v, s)`, ta kiểm `C_out == g^v · y_recv^s` — 2 scalar mul, không cần khoá bí mật. **[BẢN 3]** Hoặc `transferWithProof` / `verifyTransferAmount` (§09): đối tác mở ciphertext bằng một chứng minh gắn với `entryRef`, và ta xác minh on-chain thay vì tin lời |
+| **Không biết gì** | **Chỉ phát hiện được mất mát, không phát hiện được sai số tiền** | Tính liên tục của `zetherNonce`, cộng `accSeq` |
 ```
 Voi moi (token, zether_account) ma ta KHONG giu khoa:
     spend_nonces = [e.zether_nonce for e in entries if direction in ('transfer_out', 'withdraw')]
     Neu sorted(spend_nonces) != list(range(min, max + 1)):  ->  zether_nonce_gap  (severity='block')
 ```
 
-Mot lo hong trong day nonce nghia la co dung mot giao dich ra khoi tai khoan nay ma sub-ledger khong ghi — do la
-tin hieu doi soat manh ngang mot chenh lech so du, va no doc duoc tu chain cong khai (nonce khong bi ma hoa).
+Một lỗ hổng trong dãy nonce nghĩa là có đúng một giao dịch ra khỏi tài khoản này mà sub-ledger không ghi — đó là
+tín hiệu đối soát mạnh ngang một chênh lệch số dư, và nó đọc được từ chain công khai (nonce không bị mã hoá).
 
-**[SUA §10] Va constraint cua §10 sai o day.** §10.4.7 khai:
+**[SỬA §10] Và constraint của §10 sai ở đây.** §10.4.7 khai:
 
 ```python
 _unique_zether_nonce = models.Constraint(
     'UNIQUE(token_id, account_id, zether_nonce, direction)', ...)
 ```
 
-`direction` trong khoa cho phep cung mot `zether_nonce` ton tai dong thoi cho `transfer_out` **va** `withdraw` cua
-cung mot tai khoan. On-chain dieu do khong the xay ra: `zetherNonce[schnorrAddress]` la mot bo dem duy nhat, tang
-o **ca hai** thao tac tieu tien (§03, `transferConfidential` va `withdraw` deu `++`). Mot khoa co `direction` bien
-mot su co "hai ban ghi cho mot nonce" thanh hai dong hop le, va chinh la thu doi soat dang di tim. Sua:
+`direction` trong khoá cho phép cùng một `zether_nonce` tồn tại đồng thời cho `transfer_out` **và** `withdraw` của
+cùng một tài khoản. On-chain điều đó không thể xảy ra: `zetherNonce[schnorrAddress]` là một bộ đếm duy nhất, tăng
+ở **cả hai** thao tác tiêu tiền (§03, `transferConfidential` và `withdraw` đều `++`). Một khoá có `direction` biến
+một sự cố "hai bản ghi cho một nonce" thành hai dòng hợp lệ, và chính là thứ đối soát đang đi tìm. Sửa:
 
 ```python
 _unique_zether_spend_nonce = models.Constraint(
@@ -1082,63 +1105,64 @@ _unique_zether_spend_nonce = models.Constraint(
 # ap dung cho cac direction tieu tien; deposit/transfer_in khong tieu nonce cua chinh minh
 ```
 
-Vi `deposit` va `transfer_in` **khong** tang nonce cua chu tai khoan, chung khong duoc mang `zether_nonce` cua
-tai khoan do. De `zether_nonce` NULL cho hai direction do, va PostgreSQL UNIQUE cho phep nhieu NULL — dung tinh
-chat ta can, khong can partial index.
+Vì `deposit` và `transfer_in` **không** tăng nonce của chủ tài khoản, chúng không được mang `zether_nonce` của
+tài khoản đó. Để `zether_nonce` NULL cho hai direction đó, và PostgreSQL UNIQUE cho phép nhiều NULL — đúng tính
+chất ta cần, không cần partial index.
 
-**[SUA §15 v1] `epoch` da bien mat khoi thiet ke.** Ban nhap noi "epoch rollOver" va "300 nguoi nhan deu nhan duoc
-trong cung mot epoch". §03.5.4 da bo hoan toan mo hinh epoch va thay bang `accSeq` — mot dai luong khong phu thuoc
-thoi gian, chi doi khi chinh chu goi `rollOver`. He qua cho doi soat: khong con "epoch boundary" nao de doi; thay
-vao do, doi soat phai doc **ca** `accSeq` va `pendingSeq` (`viewAccounts`, §03.6) va bao `zether_sum_mismatch` khi
-`g^{Σv_da_rollOver} != C_acc · D_acc^{−x}`. Tien nam trong `pending` **khong** la drift — no la tien chua rollOver,
-va bao cao phai the hien no thanh mot cot rieng chu khong tron vao so du.
+**[SỬA §15 v1] `epoch` đã biến mất khỏi thiết kế.** Bản nháp nói "epoch rollOver" và "300 người nhận đều nhận được
+trong cùng một epoch". §03.5.4 đã bỏ hoàn toàn mô hình epoch và thay bằng `accSeq` — một đại lượng không phụ thuộc
+thời gian, chỉ đổi khi chính chủ gọi `rollOver`. Hệ quả cho đối soát: không còn "epoch boundary" nào để đợi; thay
+vào đó, đối soát phải đọc **cả** `accSeq` và `pendingSeq` (`viewAccounts`, §03.6) và báo `zether_sum_mismatch` khi
+`g^{Σv_da_rollOver} != C_acc · D_acc^{−x}`. Tiền nằm trong `pending` **không** là drift — nó là tiền chưa rollOver,
+và báo cáo phải thể hiện nó thành một cột riêng chứ không trộn vào số dư.
 
-Bao cao cho token `is_confidential` phai noi ro no dang o muc nao trong ba muc tren. `run_state='partial'` ton tai
-chinh vi diem nay: bao "clean" khi ta chi kiem duoc nonce la mot lo noi doi.
+Báo cáo cho token `is_confidential` phải nói rõ nó đang ở mức nào trong ba mức trên. `run_state='partial'` tồn tại
+chính vì điểm này: báo "clean" khi ta chỉ kiểm được nonce là một lối nói dối.
 
-#### 15.5.6. Khi tim thay drift
+#### 15.5.6. Khi tìm thấy drift
 
-| `kind` | Ai xu ly | Buoc dau tien |
+| `kind` | Ai xử lý | Bước đầu tiên |
 |---|---|---|
-| `unattributed_chain` | treasury + auditor | Tra `ref_hex` nguoc ve `blockchain.payment.request` (§09.6). Neu khong co: ai do gui tien vao vi cua ta ma khong qua he thong — ghi nhan nhu mot khoan phai tra chua xac dinh, **khong** tu dong cap cho ai |
-| `missing_onchain` | treasury | Kiem `finality_source` (§11.3b). Gan nhu luon la node noi doi, khong phai tien mat |
-| `amount_mismatch` | treasury | Dung moi settlement cua cung `payer_account` cho toi khi ro |
-| `missing_gl` | ke toan | Mo ky, hoac `late_posting='shift'` |
-| `orphan_move` | ke toan | But toan tay do ai do tao. Khong tu xoa |
-| `batch_short` | treasury | So sanh calldata da luu (`ir.attachment` cua chunk) voi `settlement_ids`. Day la loi code, khong phai loi du lieu |
-| `zether_nonce_gap` | treasury + auditor | **Dung** moi settlement tren tai khoan Zether do. Mot nonce bien mat co the la mot lan chi khong duoc ghi |
+| `unattributed_chain` | treasury + auditor | Tra `ref_hex` ngược về `blockchain.payment.request` (§09.6). Nếu không có: ai đó gửi tiền vào ví của ta mà không qua hệ thống — ghi nhận như một khoản phải trả chưa xác định, **không** tự động cấp cho ai |
+| `missing_onchain` | treasury | Kiểm `finality_source` (§11.3b). Gần như luôn là node nói dối, không phải tiền mất |
+| `amount_mismatch` | treasury | Dừng mọi settlement của cùng `payer_account` cho tới khi rõ |
+| `missing_gl` | kế toán | Mở kỳ, hoặc `late_posting='shift'` |
+| `orphan_move` | kế toán | Bút toán tay do ai đó tạo. Không tự xoá |
+| `batch_short` | treasury | So sánh calldata đã lưu (`ir.attachment` của chunk) với `settlement_ids`. Đây là lỗi code, không phải lỗi dữ liệu |
+| `zether_nonce_gap` | treasury + auditor | **Dừng** mọi settlement trên tài khoản Zether đó. Một nonce biến mất có thể là một lần chi không được ghi |
+| **[BẢN 3]** `token_provenance` | treasury | Gỡ token khỏi `accepted_token_ids` ngay, rồi tra: `EXTCODEHASH` đổi là không thể (contract immutable), nên lệch nghĩa là **địa chỉ trong DB đã bị sửa**, không phải contract đã đổi. Đó là một sự cố bảo mật của Odoo, không của chain |
 
 ---
 
-### 15.6. Ba luong DMS cam vao qua bridge, core khong biet gi
+### 15.6. Ba luồng DMS cắm vào qua bridge, core không biết gì
 
-`dms_blockchain_bridge` (`depends: ['dms_blockchain', 'dms']`, `auto_install: True`). Toan bo noi dung cua no la:
-`_inherit` mixin, sinh settlement, va nhan callback. Khong mot dong nao trong core doc chuoi `dms`.
+`dms_blockchain_bridge` (`depends: ['dms_blockchain', 'dms']`, `auto_install: True`). Toàn bộ nội dung của nó là:
+`_inherit` mixin, sinh settlement, và nhận callback. Không một dòng nào trong core đọc chuỗi `dms`.
 
-#### 15.6.0. Su that ve model DMS — ba cho ban nhap sai
+#### 15.6.0. Sự thật về model DMS — ba chỗ bản nháp sai
 
-Doc thang tu `dms/models/trade/dms_trade_settlement.py` va `dms/models/orders/dms_payment_collection.py`:
+Đọc thẳng từ `dms/models/trade/dms_trade_settlement.py` và `dms/models/orders/dms_payment_collection.py`:
 
-| Ban nhap noi | Su that | He qua |
+| Bản nháp nói | Sự thật | Hệ quả |
 |---|---|---|
-| `dms.trade.settlement.line` la "payout line" cho nhieu nguoi nhan | No la **dong hang tang**: `product_id` + `quantity`, docstring *"Mot dong hang tang. Chi co nghia khi `settlement_method = goods`"*. `payout_line_ids` co `string="Free goods"` | Bridge phai gan vao `dms.trade.settlement`, khong phai `.line`. Anh xa la 1 settlement ↔ 1 chung tu |
-| Bridge ghi `payout_state`, `payout_datetime` | **Hai field nay khong ton tai.** `dms.trade.settlement` co `state ∈ {draft, posted, settled_external, cancelled}` | Bridge phai dung `state` co san, hoac them field moi va noi ro la them |
-| Bridge tu che idempotency | DMS **da co** `dms.sync.operation._dms_once(uuid, type, payload, run)` tra `(record, replayed)`, va `_dms_event_uuid()` sinh UUIDv7 on dinh luu o `event_uuid` (`readonly`, `copy=False`) | Dung lai. Mot lop idempotency thu hai la mot lop co the lech voi lop thu nhat |
+| `dms.trade.settlement.line` là "payout line" cho nhiều người nhận | Nó là **dòng hàng tặng**: `product_id` + `quantity`, docstring *"Một dòng hàng tặng. Chỉ có nghĩa khi `settlement_method = goods`"*. `payout_line_ids` có `string="Free goods"` | Bridge phải gắn vào `dms.trade.settlement`, không phải `.line`. Ánh xạ là 1 settlement ↔ 1 chứng từ |
+| Bridge ghi `payout_state`, `payout_datetime` | **Hai field này không tồn tại.** `dms.trade.settlement` có `state ∈ {draft, posted, settled_external, cancelled}` | Bridge phải dùng `state` có sẵn, hoặc thêm field mới và nói rõ là thêm |
+| Bridge tự chế idempotency | DMS **đã có** `dms.sync.operation._dms_once(uuid, type, payload, run)` trả `(record, replayed)`, và `_dms_event_uuid()` sinh UUIDv7 ổn định lưu ở `event_uuid` (`readonly`, `copy=False`) | Dùng lại. Một lớp idempotency thứ hai là một lớp có thể lệch với lớp thứ nhất |
 
-Mot phat hien co loi: **`state='settled_external'` da ton tai** voi y nghia *"Settled outside the Odoo ledger"*, va
-`dms_settle` dung no cho topology `lightweight`. Do dung la hinh dang cua mot settlement on-chain o mode 4. Bridge
-khong can phat minh trang thai moi cho truong hop do.
+Một phát hiện có lợi: **`state='settled_external'` đã tồn tại** với ý nghĩa *"Settled outside the Odoo ledger"*, và
+`dms_settle` dùng nó cho topology `lightweight`. Đó đúng là hình dạng của một settlement on-chain ở mode 4. Bridge
+không cần phát minh trạng thái mới cho trường hợp đó.
 
 #### 15.6.1. Trade settlement payout
 
 | | |
 |---|---|
-| Model goc | `dms.trade.settlement` (**khong** phai `.line`) |
-| Chieu | `out` |
-| Anh xa | 1 `blockchain.settlement` / 1 `dms.trade.settlement`; gom vao 1 `blockchain.settlement.batch` theo `(chain, token, payer_account, ky)` |
-| `origin_key` | `dms.trade.settlement._dms_event_uuid()` — UUIDv7 da co, on dinh, `copy=False` |
-| Kich hoat | `settlement_method = 'onchain'` (them bang `selection_add`) |
-| Diem tinh te | Batch `atomic` chi khi **toan bo** payee da qua `_preflight()`; nguoc lai `chunked` |
+| Model gốc | `dms.trade.settlement` (**không** phải `.line`) |
+| Chiều | `out` |
+| Ánh xạ | 1 `blockchain.settlement` / 1 `dms.trade.settlement`; gom vào 1 `blockchain.settlement.batch` theo `(chain, token, payer_account, kỳ)` |
+| `origin_key` | `dms.trade.settlement._dms_event_uuid()` — UUIDv7 đã có, ổn định, `copy=False` |
+| Kích hoạt | `settlement_method = 'onchain'` (thêm bằng `selection_add`) |
+| Điểm tinh tế | Batch `atomic` chỉ khi **toàn bộ** payee đã qua `_preflight()`; ngược lại `chunked` |
 
 ```python
 class DmsTradeSettlement(models.Model):
@@ -1168,17 +1192,17 @@ class DmsTradeSettlement(models.Model):
         # 'disputed' va 'compensated': KHONG doi state. Mot nguoi phai nhin.
 ```
 
-Ba quyet dinh trong 12 dong tren, viet ro vi chung khong hien nhien:
+Ba quyết định trong 12 dòng trên, viết rõ vì chúng không hiển nhiên:
 
-1. **Bridge khong goi `dms_settle()`.** `dms_settle` sinh credit note / gift order va `action_settle()` claim — do
-   la buoc *nghiep vu*, xay ra truoc, doc lap voi viec tien di duong nao. Bridge chi dong buoc *tien*.
-2. **`super(...).write()` bo qua override cua `dms.trade.settlement`** neu no co guard tren `state`. Neu model goc
-   khong co guard, dung `self.sudo().write()` binh thuong. Kiem truoc khi viet — mot `super()` khong can thiet la
-   mot cua hau mo san.
-3. **`disputed` khong doi `state`.** Mot chung tu DMS nhay qua nhay lai theo mot tin hieu RPC la cach nhanh nhat de
-   mat niem tin vao he thong.
+1. **Bridge không gọi `dms_settle()`.** `dms_settle` sinh credit note / gift order và `action_settle()` claim — đó
+   là bước *nghiệp vụ*, xảy ra trước, độc lập với việc tiền đi đường nào. Bridge chỉ đóng bước *tiền*.
+2. **`super(...).write()` bỏ qua override của `dms.trade.settlement`** nếu nó có guard trên `state`. Nếu model gốc
+   không có guard, dùng `self.sudo().write()` bình thường. Kiểm trước khi viết — một `super()` không cần thiết là
+   một cửa hậu mở sẵn.
+3. **`disputed` không đổi `state`.** Một chứng từ DMS nhảy qua nhảy lại theo một tín hiệu RPC là cách nhanh nhất để
+   mất niềm tin vào hệ thống.
 
-Chieu di (sinh settlement) khong nam trong `_on_blockchain_settlement` ma trong mot method rieng, goi tu
+Chiều đi (sinh settlement) không nằm trong `_on_blockchain_settlement` mà trong một method riêng, gọi từ
 `dms_settle` khi `settlement_method == 'onchain'`:
 
 ```python
@@ -1188,33 +1212,36 @@ def _dms_create_blockchain_settlement(self):
     return self.env['blockchain.settlement'].sudo()._submit(
         self.company_id, self._blockchain_origin_key(),
         use_case='b2b', direction='out',
-        chain_code=flow.chain_id.code, token_symbol=flow.token_id.symbol,
+        chain_code=flow.chain_id.code, token_id=flow.token_id.id,      # token_id, KHONG token_symbol
         amount_base=flow.token_id._to_base(self.amount, self.currency_id),
         payee=self.beneficiary_partner_id,
         origin_model=self._name, origin_id=self.id)
 ```
 
-`_to_base` la cho quy doi tien → base units xay ra, va no phai **lam tron xuong** (`ROUND_DOWN`): lam tron len chi
-nhieu hon 1 wei so voi so tien duoc duyet. Chenh lech di vao `dust_base`.
+**[BẢN 3] `token_id`, không phải `token_symbol`.** Xem A11 ở §15.0: một ký hiệu không định danh được token trong
+một factory mở. `blockchain.money.flow` đã giữ `token_id`, nên bridge chỉ việc chuyển tiếp nó.
+
+`_to_base` là chỗ quy đổi tiền → base units xảy ra, và nó phải **làm tròn xuống** (`ROUND_DOWN`): làm tròn lên chi
+nhiều hơn 1 wei so với số tiền được duyệt. Chênh lệch đi vào `dust_base`.
 
 #### 15.6.2. Outlet payment collection
 
 | | |
 |---|---|
-| Model goc | `dms.payment.collection` |
-| Chieu | `in` |
-| Anh xa | 1 `blockchain.settlement` / 1 collection; `blockchain.payment.request` (§09.6 R1) cap dia chi CREATE2 derived |
-| `origin_key` | `dms.payment.collection:<id>` (model nay chua co `event_uuid`; xem §15.10) |
-| Diem tinh te | Nguyen tac `dms_vietqr` nguyen ven, va `status` da co dung trang thai can dung |
+| Model gốc | `dms.payment.collection` |
+| Chiều | `in` |
+| Ánh xạ | 1 `blockchain.settlement` / 1 collection; `blockchain.payment.request` (§09.6 R1) cấp địa chỉ CREATE2 derived |
+| `origin_key` | `dms.payment.collection:<id>` (model này chưa có `event_uuid`; xem §15.10) |
+| Điểm tinh tế | Nguyên tắc `dms_vietqr` nguyên vẹn, và `status` đã có đúng trạng thái cần dùng |
 
-`dms.payment.collection.status` da co **`pending_reconciliation`** voi y nghia *"Awaiting bank reconciliation"*, va
-`dms_post_payment` chap nhan `status in ('validated', 'confirmed', 'pending_reconciliation')`. Anh xa tu nhien:
+`dms.payment.collection.status` đã có **`pending_reconciliation`** với ý nghĩa *"Awaiting bank reconciliation"*, và
+`dms_post_payment` chấp nhận `status in ('validated', 'confirmed', 'pending_reconciliation')`. Ánh xạ tự nhiên:
 
 | `settle_state` | `collection.status` | Ai ghi |
 |---|---|---|
 | `submitted`, `broadcast`, `pending_finality` | `pending_reconciliation` | bridge |
-| `final` | goi `dms_post_payment(operation_uuid=<settlement uuid>)` → `payment_posted` | bridge |
-| sau do | `dms_allocate(...)` → `allocated` | **nguoi**, khong tu dong |
+| `final` | gọi `dms_post_payment(operation_uuid=<settlement uuid>)` → `payment_posted` | bridge |
+| sau đó | `dms_allocate(...)` → `allocated` | **người**, không tự động |
 | `failed`, `expired` | `exception` + `message_post` | bridge |
 
 ```python
@@ -1230,34 +1257,34 @@ def _on_blockchain_settlement(self, settlement):
         self.sudo().message_post(body=self.env._("On-chain collection failed."))
 ```
 
-Bon dieu phai noi ro:
+Bốn điều phải nói rõ:
 
-1. **`broadcast` KHONG phai la da thu tien.** Day la nguyen tac `dms_vietqr` ("quet QR khong phai la da thu tien")
-   ap thang: mot tx da phat song la mot QR da hien, khong hon. `pending_reconciliation` la trang thai dung, va no
-   da co san — khong can phat minh.
-2. **`dms_post_payment` tu tao `account.payment`.** Nghia la voi luong nay, `dms_blockchain_account` **khong** duoc
-   tao them but toan. Bridge dat `gl_state='not_required'` tren settlement luc tao. Neu quen, moi khoan thu se co
-   **hai** but toan — mot cua DMS, mot cua module account bridge — va doi soat huong (B) se bao `orphan_move` hang
-   loat. Day la cho hai module de dam nhau nhat trong ca thiet ke, va no phai co mot test rieng.
-3. **`operation_uuid` la settlement uuid**, nen mot callback goi lai sau crash di vao `_dms_once` va tra ve
-   `replayed=True` thay vi post lan hai. Hai lop idempotency **cung mot khoa** — do la cach chung khong lech nhau.
-4. **`dms_allocate` khong tu dong.** Phan bo mot khoan thu vao hoa don nao la mot quyet dinh, khong phai mot he qua.
-   Ban nhap noi "`dms.collection.allocation` chi duoc tao khi `final`" — dung nhung chua du: no chi duoc tao khi
-   `final` **va** co nguoi bam.
+1. **`broadcast` KHÔNG phải là đã thu tiền.** Đây là nguyên tắc `dms_vietqr` ("quét QR không phải là đã thu tiền")
+   áp thẳng: một tx đã phát sóng là một QR đã hiện, không hơn. `pending_reconciliation` là trạng thái đúng, và nó
+   đã có sẵn — không cần phát minh.
+2. **`dms_post_payment` tự tạo `account.payment`.** Nghĩa là với luồng này, `dms_blockchain_account` **không** được
+   tạo thêm bút toán. Bridge đặt `gl_state='not_required'` trên settlement lúc tạo. Nếu quên, mỗi khoản thu sẽ có
+   **hai** bút toán — một của DMS, một của module account bridge — và đối soát hướng (B) sẽ báo `orphan_move` hàng
+   loạt. Đây là chỗ hai module dễ đâm nhau nhất trong cả thiết kế, và nó phải có một test riêng.
+3. **`operation_uuid` là settlement uuid**, nên một callback gọi lại sau crash đi vào `_dms_once` và trả về
+   `replayed=True` thay vì post lần hai. Hai lớp idempotency **cùng một khoá** — đó là cách chúng không lệch nhau.
+4. **`dms_allocate` không tự động.** Phân bổ một khoản thu vào hoá đơn nào là một quyết định, không phải một hệ quả.
+   Bản nháp nói "`dms.collection.allocation` chỉ được tạo khi `final`" — đúng nhưng chưa đủ: nó chỉ được tạo khi
+   `final` **và** có người bấm.
 
 #### 15.6.3. B2B claim offset (netting)
 
-Mot brand no distributor 100 trieu (payout) va distributor no brand 30 trieu (claim bi tu choi). Hai cach:
+Một brand nợ distributor 100 triệu (payout) và distributor nợ brand 30 triệu (claim bị từ chối). Hai cách:
 
-1. Hai transfer on-chain gross (100 va 30 nguoc chieu). Trung thuc, ton gas gap doi, va **can distributor thuc su
-   co 30 trieu token trong vi** — thuong la khong.
-2. Netting off-chain: mot transfer 70 trieu.
+1. Hai transfer on-chain gross (100 và 30 ngược chiều). Trung thực, tốn gas gấp đôi, và **cần distributor thực sự
+   có 30 triệu token trong ví** — thường là không.
+2. Netting off-chain: một transfer 70 triệu.
 
-Chot phuong an 2, nhung **so ke toan van phai la gross**. Cu the: ba settlement — hai `transport='offset'`
-(100 out, 30 in, khong tx, `settle_state` di thang `draft → final` khi net settlement `final`) va mot
-`transport='onchain'` 70 out. `_gl_required()` tra `True` cho ca ba; but toan gross giu nguyen trinh bay cong no
-(§15.4.2, tai khoan **Netting clearing**), con dong tien chi 70. Neu bo hai dong gross, bao cao cong no voi
-distributor mat 30 trieu va khong ai tim ra tai sao.
+Chốt phương án 2, nhưng **sổ kế toán vẫn phải là gross**. Cụ thể: ba settlement — hai `transport='offset'`
+(100 out, 30 in, không tx, `settle_state` đi thẳng `draft → final` khi net settlement `final`) và một
+`transport='onchain'` 70 out. `_gl_required()` trả `True` cho cả ba; bút toán gross giữ nguyên trình bày công nợ
+(§15.4.2, tài khoản **Netting clearing**), còn dòng tiền chỉ 70. Nếu bỏ hai dòng gross, báo cáo công nợ với
+distributor mất 30 triệu và không ai tìm ra tại sao.
 
 ```python
 transport = fields.Selection([('onchain', 'On-chain transfer'),
@@ -1267,7 +1294,7 @@ transport = fields.Selection([('onchain', 'On-chain transfer'),
 netting_set_id = fields.Many2one('blockchain.netting.set', index=True)
 ```
 
-Rang buoc bat buoc tren `blockchain.netting.set`:
+Ràng buộc bắt buộc trên `blockchain.netting.set`:
 
 ```python
 @api.constrains('settlement_ids')
@@ -1285,16 +1312,16 @@ def _check_balanced(self):
                 gross_out, gross_in, net))
 ```
 
-Kiem bang **mot test that**, khong bang doc code. Mot netting set khong can bang la mot lo that thoat tien.
+Kiểm bằng **một test thật**, không bằng đọc code. Một netting set không cân bằng là một lối thất thoát tiền.
 
-Va hai rang buoc khong phai ky thuat, lay tu §09 M15, phai ghi vao spec vi khong ai khac se ghi:
+Và hai ràng buộc không phải kỹ thuật, lấy từ §09 M15, phải ghi vào spec vì không ai khác sẽ ghi:
 
-- **Netting phai co dieu khoan bu tru trong hop dong.** Neu khong, mot ben pha san thi phan bu tru co the bi toa
-  lat lai va brand mat toan bo 100 trieu thay vi 70.
-- **`dms.trade.claim` da settle la immutable.** Bridge **khong sua claim**, chi ghi settlement moi. Mot claim da
-  `settled` di vao netting set bang `claim_ids` cua chung tu goc, khong bang mot `write` len chinh no.
+- **Netting phải có điều khoản bù trừ trong hợp đồng.** Nếu không, một bên phá sản thì phần bù trừ có thể bị toà
+  lật lại và brand mất toàn bộ 100 triệu thay vì 70.
+- **`dms.trade.claim` đã settle là immutable.** Bridge **không sửa claim**, chỉ ghi settlement mới. Một claim đã
+  `settled` đi vào netting set bằng `claim_ids` của chứng từ gốc, không bằng một `write` lên chính nó.
 
-#### 15.6.4. Cay file cua bridge
+#### 15.6.4. Cây file của bridge
 
 ```
 dms_blockchain_bridge/
@@ -1325,187 +1352,209 @@ class BlockchainMoneyFlow(models.Model):
                   'DMS_TRADE_PAYOUT': 'set default'})
 ```
 
-**Toan bo bridge duoi 400 dong Python.** Neu no vuot 800, mot phan logic dang thuoc ve core hoac ve DMS chu khong
-ve cau noi — do la tin hieu de dung lai va chia lai.
+**Toàn bộ bridge dưới 400 dòng Python.** Nếu nó vượt 800, một phần logic đang thuộc về core hoặc về DMS chứ không
+về cầu nối — đó là tín hiệu để dừng lại và chia lại.
 
 ---
 
-### 15.7. Dinh luong batch: khi nao lo co loi, khi nao khong
+### 15.7. Định lượng batch: khi nào lô có lợi, khi nào không
 
-Uoc tinh, co so: chi phi opcode EVM (SSTORE 20,000 cho slot 0→nonzero, 5,000 warm nonzero→nonzero, 2,900 warm
-SLOAD), 21,000 base/tx, 16 gas/byte calldata khac 0. **Gia gas thong nhat voi §09.10a: Gnosis 2 gwei, xDAI = $1.00.**
-(Ban nhap dung 1.5 gwei — da sua de ca bo tai lieu dung mot con so.)
+Ước tính, cơ sở: chi phí opcode EVM (SSTORE 20,000 cho slot 0→nonzero, 5,000 warm nonzero→nonzero, 2,900 warm
+SLOAD), 21,000 base/tx, 16 gas/byte calldata khác 0. **Giá gas thống nhất với §09.10a: Gnosis 2 gwei, xDAI = $1.00.**
+(Bản nháp dùng 1.5 gwei — đã sửa để cả bộ tài liệu dùng một con số.)
 
-| Kich ban, 300 nguoi nhan | Gas | Gnosis @2 gwei | Ethereum L1 @20 gwei, ETH $3,000 |
+| Kịch bản, 300 người nhận | Gas | Gnosis @2 gwei | Ethereum L1 @20 gwei, ETH $3,000 |
 |---|---|---|---|
-| 300 tx `ERC20.transfer` rieng le (nguoi nhan chua co token) | 300 × 65,000 = 19,500,000 | 0.039 xDAI = **$0.039** | **$1,170** |
+| 300 tx `ERC20.transfer` riêng lẻ (người nhận chưa có token) | 300 × 65,000 = 19,500,000 | 0.039 xDAI = **$0.039** | **$1,170** |
 | 2 tx `disperseToken` × 150 | 2 × (21,000 + 150 × 30,000) = 9,042,000 | 0.018 xDAI = **$0.018** | **$542** |
 | 300 `transferConfidential` (Zether 32/64) | 300 × 1,880,000 = **564,000,000** | 1.128 xDAI = **$1.13** | **$33,840** |
 
-**[SUA §15 v1] Con so Zether cua ban nhap sai 7.5 lan theo huong lac quan.** No dung 250,000 gas/transfer, con so
-ma §03.3.7 da truy ra la chi phi verify mot **Groth16 SNARK tren alt_bn128** (4 pairing), khong phai Bulletproofs.
-Con so dung la **1,880,000** cho cau hinh 32/64 (§03.3.6, §09.10a). Sua o day de ca bo tai lieu nhat quan.
+**[SỬA §15 v1] Con số Zether của bản nháp sai 7.5 lần theo hướng lạc quan.** Nó dùng 250,000 gas/transfer, con số
+mà §03.3.7 đã truy ra là chi phí verify một **Groth16 SNARK trên alt_bn128** (4 pairing), không phải Bulletproofs.
+Con số đúng là **1,880,000** cho cấu hình 32/64 (§03.3.6, §09.10a). Sửa ở đây để cả bộ tài liệu nhất quán.
 
-Bon ket luan doc duoc tu bang tren, va ba trong so do nguoc voi truc giac:
+Bốn kết luận đọc được từ bảng trên, và ba trong số đó ngược với trực giác:
 
-1. **Tren Gnosis, batch khong tiet kiem tien.** $0.039 xuong $0.018 la vo nghia. Cai batch tiet kiem tren Gnosis la
-   **so nonce, so lan cho finality, va so dong `blockchain.transaction`**.
+1. **Trên Gnosis, batch không tiết kiệm tiền.** $0.039 xuống $0.018 là vô nghĩa. Cái batch tiết kiệm trên Gnosis là
+   **số nonce, số lần chờ finality, và số dòng `blockchain.transaction`**.
 
-   **[SUA §15 v1] Va ly do "300 tx tuan tu mat 25 phut" cua ban nhap la sai.** Mot relayer **co the** nop nhieu tx
-   voi nonce lien tiep vao cung mot block; nonce tuan tu khong co nghia mot tx moi block. Tran that la
-   **so tx pending toi da mot tai khoan** ma mempool chap nhan: geth mac dinh `txpool.accountslots = 16`
-   (Nethermind va Erigon dat nguong tuong duong). Voi 300 tx tren mot dia chi relayer:
+   **[SỬA §15 v1] Và lý do "300 tx tuần tự mất 25 phút" của bản nháp là sai.** Một relayer **có thể** nộp nhiều tx
+   với nonce liên tiếp vào cùng một block; nonce tuần tự không có nghĩa một tx mỗi block. Trần thật là
+   **số tx pending tối đa một tài khoản** mà mempool chấp nhận: geth mặc định `txpool.accountslots = 16`
+   (Nethermind và Erigon đặt ngưỡng tương đương). Với 300 tx trên một địa chỉ relayer:
 
-   | | 300 tx rieng le | 2 chunk |
+   | | 300 tx riêng lẻ | 2 chunk |
    |---|---|---|
-   | Vong nop (16 pending/vong) | 19 | 1 |
-   | Thoi gian toi thieu (block 5 s) | ~95 s | ~5 s |
-   | Rui ro head-of-line | **mot tx ket chan 299 cai sau** | mot chunk ket chan 1 chunk |
-   | Dong `blockchain.transaction` | 300 | 2 |
-   | Lan cho finality (240 s hard) | 300 lan theo doi | 2 |
+   | Vòng nộp (16 pending/vòng) | 19 | 1 |
+   | Thời gian tối thiểu (block 5 s) | ~95 s | ~5 s |
+   | Rủi ro head-of-line | **một tx kẹt chặn 299 cái sau** | một chunk kẹt chặn 1 chunk |
+   | Dòng `blockchain.transaction` | 300 | 2 |
+   | Lần chờ finality (240 s hard) | 300 lần theo dõi | 2 |
 
-   Do moi la ly do batch. Lam batch vi ly do do, dung noi doi rang la vi gas.
+   Đó mới là lý do batch. Làm batch vì lý do đó, đừng nói dối rằng là vì gas.
 
-2. **Block gas limit la tran cung, va `chunk_size = 150` con rong hon ban nhap nghi.** Mot chunk 150 ton
-   **4,521,000 gas**, khong phai 9M (ban nhap doc nham tong hai chunk thanh mot). Gnosis ~17M gas/block ⇒ mot chunk
-   chiem **27%** block. Co the day len 300/chunk (~9M, 53% block) nhung **khong nen**: mot revert khi do dot 9M gas
-   thay vi 4.5M, va mot block co the bi mot tx khac chiem cho. Giu 150 lam mac dinh; `chunk_size` phai duoc
-   simulation gate (§10) xac nhan tung lan, khong duoc hard-code tin tuong.
+   **[BẢN 3] Và đây là chỗ key pool (§21.5) giao với batching, hai thứ giải hai nút thắt khác nhau.** Trần 16
+   pending/tài khoản là trần của **một khoá**; N khoá cho 16N. Batching gộp 300 việc thành 2 chữ ký — làm được vì
+   ta tự sinh cả 300. Một node relayer mở nhận việc của người lạ không gộp được, nên nó xoay khoá. Số 6 EOA của
+   §06.6.1 và số 50 khoá của §21.5 không mâu thuẫn: chúng trả lời hai câu hỏi.
 
-   *Kiem tra mot rang buoc it ai nho:* voi 150 nguoi nhan, calldata ≈ 150 × 52 B = 7,800 B, gan nhu toan byte khac 0
-   ⇒ ~31,200 token calldata ⇒ san calldata theo EIP-7623 = 21,000 + 40 × 31,200 = **1,269,000 gas**, thap hon
-   4,521,000 rat nhieu. San khong rang buoc. Neu chunk_size tang qua ~500, phai tinh lai.
+2. **Block gas limit là trần cứng, và `chunk_size = 150` còn rộng hơn bản nháp nghĩ.** Một chunk 150 tốn
+   **4,521,000 gas**, không phải 9M (bản nháp đọc nhầm tổng hai chunk thành một). Gnosis ~17M gas/block ⇒ một chunk
+   chiếm **27%** block. Có thể đẩy lên 300/chunk (~9M, 53% block) nhưng **không nên**: một revert khi đó đốt 9M gas
+   thay vì 4.5M, và một block có thể bị một tx khác chiếm chỗ. Giữ 150 làm mặc định; `chunk_size` phải được
+   simulation gate (§10) xác nhận từng lần, không được hard-code tin tưởng.
 
-3. **Zether khong batch duoc, va khoang cach lon hon ban nhap nghi.** 564M gas la **33 block Gnosis lien tiep**
-   (17M/block), tuc ~2.8 phut chiem **toan bo** khong gian block cua ca mang luoi. Khong the. Moi
-   `transferConfidential` phai la mot tx rieng. Do khong phai nhuoc diem cua thiet ke — do la ly do chain profile
-   chot **private chain di truoc cho Zether**: tren chain private `fee_mode='gasless'`, tran duy nhat con lai la
-   thoi gian sinh proof (**30–50 ms/proof** tren server Rust native cho cau hinh 32/64, §03; khong phai 30–60 ms
-   nhu ban nhap uoc, va con so 300–800 ms cua ban nhap la cua **WASM trong browser**, khong phai cua prover server)
-   va throughput verify (~500 tx/s voi MSM Pippenger, §03.3.8).
+   *Kiểm tra một ràng buộc ít ai nhớ:* với 150 người nhận, calldata ≈ 150 × 52 B = 7,800 B, gần như toàn byte khác 0
+   ⇒ ~31,200 token calldata ⇒ sàn calldata theo EIP-7623 = 21,000 + 40 × 31,200 = **1,269,000 gas**, thấp hơn
+   4,521,000 rất nhiều. Sàn không ràng buộc. Nếu chunk_size tăng quá ~500, phải tính lại.
 
-   300 proof tren mot core = **9–15 giay**; chay song song 8 core = **1.2–1.9 giay**. Khong phai nut co chai.
+   **[BẢN 3] Trên chain 9000 hai con số này khác.** gasLimit 16.7M (gần Gnosis), nhưng chain chạy **pre-London**:
+   không EIP-1559, nên không có base fee và `MinGasPrice = 0`; và EIP-7623 chưa tồn tại, nên sàn calldata không áp.
+   Cũng nghĩa là PUSH0 không dùng được — `foundry.toml` phải để `evm_version = "berlin"` cho profile đó.
 
-4. **[SUA §15 v1] "Epoch" khong con ton tai.** Ban nhap ket bang mot cau ve "epoch rollOver" khong con dung sau
-   §03.5.4. Cai thay the no la `accSeq`, va cai gia phai tra la **mot transaction thua**: de tieu tien vua nhan,
-   vi phai `rollOver(self)` truoc (~28k gas ≈ $0.00006 tren Gnosis). Voi mot batch 300 nguoi nhan, 300 lan rollOver
-   la **8.4M gas ≈ $0.017** — cung bac voi chinh batch transfer, va **relayer-driven duoc** (§03.5.5): worker theo
-   doi `pendingSeq` va tu goi `rollOver` gasless. Chi phi nay phai nam trong mo hinh chi phi cua batch Zether;
-   ban nhap bo qua no hoan toan.
+3. **Zether không batch được, và khoảng cách lớn hơn bản nháp nghĩ.** 564M gas là **33 block Gnosis liên tiếp**
+   (17M/block), tức ~2.8 phút chiếm **toàn bộ** không gian block của cả mạng lưới. Không thể. Mỗi
+   `transferConfidential` phải là một tx riêng. Đó không phải nhược điểm của thiết kế — đó là lý do chain profile
+   chốt **private chain đi trước cho Zether**: trên chain private `fee_mode='gasless'`, trần duy nhất còn lại là
+   thời gian sinh proof (**30–50 ms/proof** trên server Rust native cho cấu hình 32/64, §03; không phải 30–60 ms
+   như bản nháp ước, và con số 300–800 ms của bản nháp là của **WASM trong browser**, không phải của prover server)
+   và throughput verify. **[BẢN 3] Trần thật đo được trên chain 9000 là ~45 tx bảo mật/giây, giới hạn bởi CPU của
+   validator, không bởi gas** — con số ~500 tx/s của §03.3.8 là của một cấu hình nhiều validator với MSM Pippenger,
+   không phải của một signer Clique duy nhất.
 
-**`atomicity='atomic'`: khi nao, va no thuc su nghia la gi.**
+   300 proof trên một core = **9–15 giây**; chạy song song 8 core = **1.2–1.9 giây**. Không phải nút cổ chai.
 
-`atomic` chi dung khi nghiep vu **thuc su** doi tat-ca-hoac-khong — vi du mot dot chi thuong ma chi mot phan la vi
-pham chinh sach. Mac dinh `chunked`, vi trong payout B2B thuc te, 299 nguoi duoc tra va 1 nguoi bi giu lai la ket
-qua **dung**, khong phai loi.
+4. **[SỬA §15 v1] "Epoch" không còn tồn tại.** Bản nháp kết bằng một câu về "epoch rollOver" không còn đúng sau
+   §03.5.4. Cái thay thế nó là `accSeq`, và cái giá phải trả là **một transaction thừa**: để tiêu tiền vừa nhận,
+   ví phải `rollOver(self)` trước (~28k gas ≈ $0.00006 trên Gnosis). Với một batch 300 người nhận, 300 lần rollOver
+   là **8.4M gas ≈ $0.017** — cùng bậc với chính batch transfer, và **relayer-driven được** (§03.5.5): worker theo
+   dõi `pendingSeq` và tự gọi `rollOver` gasless. Chi phí này phải nằm trong mô hình chi phí của batch Zether;
+   bản nháp bỏ qua nó hoàn toàn.
 
-**Nhung "mot tx" khong tu dong co nghia atomic.** §09 M17 chot rang `disperseToken` phai `try/catch` tung transfer
-va phat event thanh/bai theo tung dong — neu khong, mot nguoi nhan la contract revert lam hong ca lo. Nghia la mot
-tx co the chua ca thanh cong lan that bai. Vay:
+**`atomicity='atomic'`: khi nào, và nó thực sự nghĩa là gì.**
 
-| Ta muon | Contract phai | `atomicity` |
+`atomic` chỉ dùng khi nghiệp vụ **thực sự** đòi tất-cả-hoặc-không — ví dụ một đợt chi thưởng mà chỉ một phần là vi
+phạm chính sách. Mặc định `chunked`, vì trong payout B2B thực tế, 299 người được trả và 1 người bị giữ lại là kết
+quả **đúng**, không phải lỗi.
+
+**Nhưng "một tx" không tự động có nghĩa atomic.** §09 M17 chốt rằng `disperseToken` phải `try/catch` từng transfer
+và phát event thành/bại theo từng dòng — nếu không, một người nhận là contract revert làm hỏng cả lô. Nghĩa là một
+tx có thể chứa cả thành công lẫn thất bại. Vậy:
+
+| Ta muốn | Contract phải | `atomicity` |
 |---|---|---|
-| Tat ca hoac khong | **khong** try/catch; revert toan bo | `atomic` |
-| Toi da so nguoi duoc tra | try/catch tung dong, event `TransferFailed(ref, reason)` | `chunked` |
+| Tất cả hoặc không | **không** try/catch; revert toàn bộ | `atomic` |
+| Tối đa số người được trả | try/catch từng dòng, event `TransferFailed(ref, reason)` | `chunked` |
 
-Hai hanh vi nay la **hai ham khac nhau tren contract** (`disperseStrict` va `disperseBestEffort`), khong phai mot
-co truyen vao. Mot co bo-luc khien mot lan doc audit khong tra loi duoc cau hoi "ham nay co the tra mot phan
-khong". Chot: hai ham, hai selector, hai duong test.
+Hai hành vi này là **hai hàm khác nhau trên contract** (`disperseStrict` và `disperseBestEffort`), không phải một
+cờ truyền vào. Một cờ bố-cục khiến một lần đọc audit không trả lời được câu hỏi "hàm này có thể trả một phần
+không". Chốt: hai hàm, hai selector, hai đường test.
 
 ---
 
-### 15.8. Cai settlement layer KHONG lam
+### 15.8. Cái settlement layer KHÔNG làm
 
-Viet ra vi mot lop "thong nhat" luon bi de nghi lam them, va moi lan them mot thu la mot lan `depends` moi.
+Viết ra vì một lớp "thống nhất" luôn bị đề nghị làm thêm, và mỗi lần thêm một thứ là một lần `depends` mới.
 
-| Khong lam | Ai lam | Vi sao khong o day |
+| Không làm | Ai làm | Vì sao không ở đây |
 |---|---|---|
-| Tinh so tien | Chung tu goc (`dms.trade.settlement.amount` computed tu claim) | "Amount khong lay tu client" la nguyen tac cua chinh DMS. Settlement layer nhan mot so, khong tinh mot so |
-| Thue / VAT | Chung tu goc | Thue thuoc ve giao dich thuong mai, khong thuoc ve phuong tien thanh toan |
-| Duyet nghiep vu | Chung tu goc | `blockchain_authorize_payout` la duyet **chi tien**, khong phai duyet **khoan chi** |
-| Chon chain / token | `blockchain.money.flow` (§09.4) | Mot settlement nhan chain va token da duoc quyet |
-| Ky | Custody provider (§07) | Core khong bao gio thay khoa |
-| Broadcast | Relay worker (§06) | Odoo khong mo socket toi chain tu HTTP worker (§10.1) |
-| Quyet dinh finality | Finality Gate (§11) | Settlement chi **nhan** tin hieu |
-| Doi soat ngan hang fiat | `dms.bank.reconciliation`, `account.reconcile.model` | Da co, va tot hon cai ta se viet |
+| Tính số tiền | Chứng từ gốc (`dms.trade.settlement.amount` computed từ claim) | "Amount không lấy từ client" là nguyên tắc của chính DMS. Settlement layer nhận một số, không tính một số |
+| Thuế / VAT | Chứng từ gốc | Thuế thuộc về giao dịch thương mại, không thuộc về phương tiện thanh toán |
+| Duyệt nghiệp vụ | Chứng từ gốc | `blockchain_authorize_payout` là duyệt **chi tiền**, không phải duyệt **khoản chi** |
+| Chọn chain / token | `blockchain.money.flow` (§09.4) | Một settlement nhận chain và token đã được quyết |
+| Ký | Custody provider (§07) | Core không bao giờ thấy khoá |
+| Broadcast | Relay worker (§06) | Odoo không mở socket tới chain từ HTTP worker (§10.1) |
+| Quyết định finality | Finality Gate (§11) | Settlement chỉ **nhận** tín hiệu |
+| Đối soát ngân hàng fiat | `dms.bank.reconciliation`, `account.reconcile.model` | Đã có, và tốt hơn cái ta sẽ viết |
+| **[BẢN 3]** Xác minh provenance của token | `blockchain.token._verify_provenance()` (§10.4.4) | Settlement chỉ **đọc** `provenance_verified`. Một lớp thanh toán tự đi kiểm contract là một lớp thanh toán có quyền quyết định tiền nào hợp lệ |
 
 ---
-
 ### 15.9. Kiem chung bat buoc cho section nay
+### 15.9. Kiểm chứng bắt buộc cho section này
 
-Moi muc phai xanh truoc khi goi section nay la xong. Muc co SQL thi **chay SQL**, khong doc code (bay #2 CLAUDE.md).
+Mỗi mục phải xanh trước khi gọi section này là xong. Mục có SQL thì **chạy SQL**, không đọc code (bẫy #2 CLAUDE.md).
 
-1. `SELECT conname, contype FROM pg_constraint WHERE conrelid = 'blockchain_settlement_batch'::regclass;` — phai co
-   `UNIQUE(company_id, origin_key)` va CHECK `chunk_size`. `_sql_constraints` dang list bi Odoo 19 bo qua.
-2. `SELECT conname FROM pg_constraint WHERE conrelid = 'blockchain_settlement_batch_chunk'::regclass;` — phai co
+1. `SELECT conname, contype FROM pg_constraint WHERE conrelid = 'blockchain_settlement_batch'::regclass;` — phải có
+   `UNIQUE(company_id, origin_key)` và CHECK `chunk_size`. `_sql_constraints` dạng list bị Odoo 19 bỏ qua.
+2. `SELECT conname FROM pg_constraint WHERE conrelid = 'blockchain_settlement_batch_chunk'::regclass;` — phải có
    `UNIQUE(batch_id, sequence)`.
-3. `SELECT indexname FROM pg_indexes WHERE indexname = 'blockchain_settlement_origin_idx';` — mot dong. Khong co
-   dong nao nghia la moi truy van nguoc ve chung tu la seq scan tren 1.25 trieu dong.
-4. Tao settlement, kill worker giua broadcast, restart → `_cron_reconcile_orphan_tx()` gan lai tx, khong sinh
-   settlement thu hai, khong sinh tx thu hai.
-5. Kill worker sau khi `claim` truoc khi broadcast → `_cron_reap_stale_jobs()` tra job ve `ready` sau 5 phut.
-   Nhung neu chunk **da co** `tx_hash`, job **khong** duoc tra ve `ready`.
-6. Khoa ky ke toan roi ep mot settlement sang `final` → `settle_state='final'` **va** `gl_state='failed'` **va**
-   `gl_error` chua nguyen van thong diep. Khong duoc rollback ve `pending_finality`.
-7. Post GL thanh cong roi kill process truoc khi ghi `gl_state='posted'` → chay lai cron: **khong** sinh but toan
-   thu hai (`bamboo_create_idempotent` tren `uuid5(NS_GL, settlement_uuid)`).
-8. Cai `dms_blockchain` khong co `account`: khong loi import, moi settlement `gl_state='not_required'`,
-   `_cron_post_gl` khong ton tai hoac khong lam gi.
-9. Cai `dms_blockchain_account` **truoc khi** cau hinh `payment_account_id` → `_check_setup()` tra ve 4 ma loi,
-   module cai duoc, khong raise. Post mot settlement → `gl_state='failed'` voi dung thong diep cua Odoo.
-10. Go `dms`: `origin_model='dms.trade.settlement'` con trong bang; `_notify_origin()` skip im lang (co log WARNING),
-    khong raise, va `notified_datetime` duoc dat.
-11. Dat `origin_model='res.users'` bang SQL truc tiep roi chay `_cron_notify_origin()` → log WARNING, cron **khong
-    chet**, cac settlement khac van duoc thong bao.
-12. Netting set khong can bang → `@api.constrains` raise. Viet test that, khong tin doc code.
-13. Doi soat tren token `is_confidential` voi mot entry bi xoa thu cong → phai ra `zether_nonce_gap` voi
-    `severity='block'`, va `run_state` phai la `drift`, khong phai `clean`.
-14. Doi soat tren token `is_confidential` ma ta **khong** giu khoa → `run_state='partial'`, **khong bao gio**
-    `clean`. Bao "clean" o day la mot lo noi doi.
-15. Luong collection: bat mot settlement `final` → co dung **mot** `account.payment`, khong phai hai. Chay doi soat
-    huong (B) → 0 dong `orphan_move`.
-16. `_blockchain_origin_key()` goi hai lan cach nhau mot `write()` len chung tu goc → cung mot chuoi.
-17. Ep mot settlement `final` → `disputed` bang cron reorg gia lap → `gl_state` **khong doi**, khong co but toan
-    dao nao duoc sinh tu dong.
-18. Chay `_cron_reconcile_ledger()` tren 1 trieu dong settlement gia lap → duoi 15 giay/run. Neu qua, index bieu
-    thuc tren `(amount_base::numeric)` chua duoc tao.
+3. `SELECT indexname FROM pg_indexes WHERE indexname = 'blockchain_settlement_origin_idx';` — một dòng. Không có
+   dòng nào nghĩa là mọi truy vấn ngược về chứng từ là seq scan trên 1.25 triệu dòng.
+4. Tạo settlement, kill worker giữa broadcast, restart → `_cron_reconcile_orphan_tx()` gắn lại tx, không sinh
+   settlement thứ hai, không sinh tx thứ hai.
+5. Kill worker sau khi `claim` trước khi broadcast → `_cron_reap_stale_jobs()` trả job về `ready` sau 5 phút.
+   Nhưng nếu chunk **đã có** `tx_hash`, job **không** được trả về `ready`.
+6. Khoá kỳ kế toán rồi ép một settlement sang `final` → `settle_state='final'` **và** `gl_state='failed'` **và**
+   `gl_error` chứa nguyên văn thông điệp. Không được rollback về `pending_finality`.
+7. Post GL thành công rồi kill process trước khi ghi `gl_state='posted'` → chạy lại cron: **không** sinh bút toán
+   thứ hai (`bamboo_create_idempotent` trên `uuid5(NS_GL, settlement_uuid)`).
+8. Cài `dms_blockchain` không có `account`: không lỗi import, mọi settlement `gl_state='not_required'`,
+   `_cron_post_gl` không tồn tại hoặc không làm gì.
+9. Cài `dms_blockchain_account` **trước khi** cấu hình `payment_account_id` → `_check_setup()` trả về 4 mã lỗi,
+   module cài được, không raise. Post một settlement → `gl_state='failed'` với đúng thông điệp của Odoo.
+10. Gỡ `dms`: `origin_model='dms.trade.settlement'` còn trong bảng; `_notify_origin()` skip im lặng (có log WARNING),
+    không raise, và `notified_datetime` được đặt.
+11. Đặt `origin_model='res.users'` bằng SQL trực tiếp rồi chạy `_cron_notify_origin()` → log WARNING, cron **không
+    chết**, các settlement khác vẫn được thông báo.
+12. Netting set không cân bằng → `@api.constrains` raise. Viết test thật, không tin đọc code.
+13. Đối soát trên token `is_confidential` với một entry bị xoá thủ công → phải ra `zether_nonce_gap` với
+    `severity='block'`, và `run_state` phải là `drift`, không phải `clean`.
+14. Đối soát trên token `is_confidential` mà ta **không** giữ khoá → `run_state='partial'`, **không bao giờ**
+    `clean`. Báo "clean" ở đây là một lối nói dối.
+15. Luồng collection: bắt một settlement `final` → có đúng **một** `account.payment`, không phải hai. Chạy đối soát
+    hướng (B) → 0 dòng `orphan_move`.
+16. `_blockchain_origin_key()` gọi hai lần cách nhau một `write()` lên chứng từ gốc → cùng một chuỗi.
+17. Ép một settlement `final` → `disputed` bằng cron reorg giả lập → `gl_state` **không đổi**, không có bút toán
+    đảo nào được sinh tự động.
+18. Chạy `_cron_reconcile_ledger()` trên 1 triệu dòng settlement giả lập → dưới 15 giây/run. Nếu quá, index biểu
+    thức trên `(amount_base::numeric)` chưa được tạo.
+19. **[BẢN 3]** Tạo hai `blockchain.token` cùng `symbol='zDAI'` khác `address` → hai journal khác nhau, hai dòng
+    `blockchain.token.rate` khác nhau, và một settlement trỏ token A **không** khớp được với một effect của token B.
+20. **[BẢN 3]** Đặt `provenance_verified = False` trên token của một settlement `draft` → `_preflight()` trả về
+    `token_provenance_unverified` và `blockchain_authorize_payout` từ chối.
 
 ---
 
-### 15.10. Con phai nguoi quyet
+### 15.10. Còn phải người quyết
 
-1. **Diem thuong co han su dung khong?** Neu khong, `Loyalty liability` tang khong gioi han va khong bao gio duoc
-   giai phong. Day la mot quyet dinh ke toan va phap ly, khong phai ky thuat, va no chan §15.4.8.
-2. **`posting_policy` theo money-flow hay toan he thong?** §15.4.3 de xuat theo flow. Neu ke toan doi mot chinh
-   sach duy nhat cho de kiem toan, chot toan he thong va chap nhan 6,250 but toan dao/nam o luong collection.
-3. **`dms.payment.collection` co nen co `event_uuid` nhu `dms.trade.settlement` khong?** Hien tai khong co, nen
-   `origin_key` phai la `dms.payment.collection:<id>` — on dinh nhung khong mang y nghia nghiep vu, va khong dung
-   duoc lam `operation_uuid` cho `_dms_once` neu ai do doi chinh sach. Them mot field la mot thay doi trong `dms`,
-   khong trong bridge.
-4. **Netting: co dieu khoan bu tru trong hop dong voi NPP chua?** Neu chua, §15.6.3 khong duoc bat len o production
-   du code chay dung.
-5. **Ai la nguoi thu hai trong `blockchain_resolve_dispute`?** §15.2.6 doi treasury. Voi mot so tien du lon, doi
-   hai nguoi (four-eyes) — nhung Odoo khong co co che four-eyes san. Xay hay chap nhan mot nguoi?
-6. **Nguong `recon_slack_base`: 0 hay khac 0?** Chot mac dinh 0 o day. Neu mot token co fee-on-transfer duoc dua
-   vao, phai quyet lai va phai ghi ly do vao `mail.thread` cua token.
-7. **Chain private rewind: ai co quyen, va co bi log khong?** `_cron_anchor_verify` phat hien duoc, nhung neu chinh
-   operator la nguoi rewind thi anchor cung do operator ky. Can mot ben thu ba giu khoa neo, hoac chap nhan rang
-   dam bao chi la "chung minh duoc voi ben ngoai", khong phai "chan duoc tu ben trong".
+1. **Điểm thưởng có hạn sử dụng không?** Nếu không, `Loyalty liability` tăng không giới hạn và không bao giờ được
+   giải phóng. Đây là một quyết định kế toán và pháp lý, không phải kỹ thuật, và nó chặn §15.4.8.
+2. **`posting_policy` theo money-flow hay toàn hệ thống?** §15.4.3 đề xuất theo flow. Nếu kế toán đòi một chính
+   sách duy nhất cho dễ kiểm toán, chốt toàn hệ thống và chấp nhận 6,250 bút toán đảo/năm ở luồng collection.
+3. **`dms.payment.collection` có nên có `event_uuid` như `dms.trade.settlement` không?** Hiện tại không có, nên
+   `origin_key` phải là `dms.payment.collection:<id>` — ổn định nhưng không mang ý nghĩa nghiệp vụ, và không dùng
+   được làm `operation_uuid` cho `_dms_once` nếu ai đó đổi chính sách. Thêm một field là một thay đổi trong `dms`,
+   không trong bridge.
+4. **Netting: có điều khoản bù trừ trong hợp đồng với NPP chưa?** Nếu chưa, §15.6.3 không được bật lên ở production
+   dù code chạy đúng.
+5. **Ai là người thứ hai trong `blockchain_resolve_dispute`?** §15.2.6 đòi treasury. Với một số tiền đủ lớn, đòi
+   hai người (four-eyes) — nhưng Odoo không có cơ chế four-eyes sẵn. Xây hay chấp nhận một người?
+6. **Ngưỡng `recon_slack_base`: 0 hay khác 0?** Chốt mặc định 0 ở đây. Nếu một token có fee-on-transfer được đưa
+   vào, phải quyết lại và phải ghi lý do vào `mail.thread` của token.
+7. **Chain private rewind: ai có quyền, và có bị log không?** `_cron_anchor_verify` phát hiện được, nhưng nếu chính
+   operator là người rewind thì anchor cũng do operator ký. Cần một bên thứ ba giữ khoá neo, hoặc chấp nhận rằng
+   đảm bảo chỉ là "chứng minh được với bên ngoài", không phải "chặn được từ bên trong".
+8. **[BẢN 3] Ai quyết một token của người lạ được vào `accepted_token_ids`?** Provenance verify chứng minh được
+   contract do factory sinh ra và khớp bản đã audit — nó **không** chứng minh được người tạo sẽ không bỏ rơi vault.
+   Đó là một phán đoán thương mại, và §10.13 mục 10 để ngỏ giữa "danh sách thủ công" và "điểm tin cậy suy ra".
+   Settlement layer chỉ đọc kết quả; ai đó phải là người quyết.
 
 ---
 
-### 15.11. Mau thuan can dong bo giua cac section
+### 15.11. Mâu thuẫn cần đồng bộ giữa các section
 
-| Cho | Hien tai | Phai sua thanh | Ai sua |
+| Chỗ | Hiện tại | Phải sửa thành | Ai sửa |
 |---|---|---|---|
-| §10.4.8 `settle_state` | co `reversed` | bo `reversed`, them `compensated` va `disputed` | §10 |
+| §10.4.8 `settle_state` | có `reversed` | bỏ `reversed`, thêm `compensated` và `disputed` | §10 |
 | §10.4.7 nonce Zether | `UNIQUE(token_id, account_id, zether_nonce, direction)` | `UNIQUE(token_id, account_id, zether_nonce)`; `zether_nonce` NULL cho `deposit`/`transfer_in` | §10 |
-| §10.8 `posting_policy` | mot khoa `ir.config_parameter` toan cuc | field tren `blockchain.money.flow`, fallback ve config param | §10, §09 |
-| §10.4.8 | khong co `batch_id`, `chunk_id`, `gl_state`, `transport` | them (liet ke o §15.2.2) | §10 |
-| §15 v1 gas Zether | 250,000/transfer | 1,880,000 (32/64), theo §03.3.6 | **da sua o day** |
-| §15 v1 gia gas Gnosis | 1.5 gwei | 2 gwei, theo §09.10a | **da sua o day** |
-| §15 v1 chunk 150 | "9M gas" | 4,521,000 gas/chunk | **da sua o day** |
-| §15 v1 epoch Zether | con noi ve epoch rollOver | `accSeq`, theo §03.5.4 | **da sua o day** |
-| §15 v1 model DMS | `dms.trade.settlement.line` + `payout_state` | `dms.trade.settlement` + `state`/`settled_external` | **da sua o day** |
-| §15 v1 lane 2D nonce | suy tu `origin_key` cua settlement | suy tu don vi van chuyen (chunk khi co batch) | **da sua o day** |
-| §11.5 dependency | `depends: ['base', 'bamboo_idempotency']` | phai khop `__manifest__` cua §10.1 (`['base', 'mail']`) — **mot trong hai sai** | §10 hoac §11 |
+| §10.8 `posting_policy` | một khoá `ir.config_parameter` toàn cục | field trên `blockchain.money.flow`, fallback về config param | §10, §09 |
+| §10.4.8 | không có `batch_id`, `chunk_id`, `gl_state`, `transport` | thêm (liệt kê ở §15.2.2) | §10 |
+| §15 v1 gas Zether | 250,000/transfer | 1,880,000 (32/64), theo §03.3.6 | **đã sửa ở đây** |
+| §15 v1 giá gas Gnosis | 1.5 gwei | 2 gwei, theo §09.10a | **đã sửa ở đây** |
+| §15 v1 chunk 150 | "9M gas" | 4,521,000 gas/chunk | **đã sửa ở đây** |
+| §15 v1 epoch Zether | còn nói về epoch rollOver | `accSeq`, theo §03.5.4 | **đã sửa ở đây** |
+| §15 v1 model DMS | `dms.trade.settlement.line` + `payout_state` | `dms.trade.settlement` + `state`/`settled_external` | **đã sửa ở đây** |
+| §15 v1 lane 2D nonce | suy từ `origin_key` của settlement | suy từ đơn vị vận chuyển (chunk khi có batch) | **đã sửa ở đây** |
+| **[BẢN 3]** `token_symbol` làm khoá | §15 v1 truyền `token_symbol` vào `_submit` | `token_id`; ký hiệu không định danh được token trong factory mở (A11) | **đã sửa ở đây** |
+| **[BẢN 3]** Chain private | §15 v1 giả định QBFT, instant finality | Nethermind + Clique, một signer, pre-London, reorg được | **đã sửa ở đây** |
+| §11.5 dependency | `depends: ['base', 'bamboo_idempotency']` | phải khớp `__manifest__` của §10.1 (`['base', 'mail']`) — **một trong hai sai** | §10 hoặc §11 |
