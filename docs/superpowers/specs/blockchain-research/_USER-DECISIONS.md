@@ -2395,7 +2395,14 @@ Bảng §07.0 đã chốt `conf_custody` cho từng dòng tiền, và đọc the
 | Treasury / mint / pause | không áp dụng — chỉ ECDSA | **KHÔNG.** Không có Zether ở đây |
 | Relayer EOA nóng | không áp dụng | **KHÔNG** |
 | Auditor `y_audit` | DKG 3-of-5 threshold ElGamal | **KHÔNG** — giải mã không cần proving |
-| **B2B settlement** | `x` chia Shamir 2-of-3 | **CÓ, nhưng chỉ giữ MỘT share** |
+| B2B settlement — **không Zether** (mặc định) | không áp dụng | **KHÔNG** |
+| B2B settlement — **có Zether** (tuỳ chọn) | `x` chia Shamir 2-of-3 | **CÓ, nhưng chỉ giữ MỘT share** |
+
+> **[user, 2026-08-31] Zether cho B2B là TUỲ CHỌN, không bắt buộc.** *"B2B dùng Zether thì là option,
+> không bắt buộc. Tôi sẽ nghiên cứu lại sau."* Hệ quả trực tiếp: cấu hình mặc định của B2B **không có
+> `x` nào**, nên **không dòng tiền nào trong locked #3 bắt buộc oracle lane**. Nó chỉ xuất hiện khi ai
+> đó chủ động bật Zether cho B2B. `blockchain.custody.policy.conf_provider_id` để rỗng là hợp lệ và là
+> mặc định; ràng buộc `min_threshold_n >= 3` chỉ áp khi trường đó có giá trị (§07.12.3, đã sửa).
 
 Nên câu trả lời chính xác: **hai trong ba use case của locked #3 vốn đã không cần oracle lane.** Chỉ B2B
 cần, và ngay cả ở đó platform giữ **một share 2-of-3**, không giữ `x` — platform một mình không chi tiêu

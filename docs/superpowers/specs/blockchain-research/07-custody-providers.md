@@ -17,7 +17,8 @@ Mặc định theo dòng tiền (locked #3), chọn lúc deploy:
 | Dòng tiền | chain profile | `auth_custody` | `conf_custody` | Lý do |
 |---|---|---|---|---|
 | Loyalty / reward points | public (Gnosis) | `smart_account` (passkey) | `on_device` 1-of-1, PRF-wrapped | Giá trị nhỏ, UX là tất cả, không có nghĩa vụ custody |
-| B2B settlement brand ↔ distributor | **private** | `hsm` hoặc `ecdsa_multisig` 3-of-5 | **`x` chia Shamir 2-of-3** (thiết bị finance officer / enclave attested / két offline) + prover chạy phía distributor | Giá gốc là bí mật sống còn (§2.6 harvest-now-decrypt-later); mất khóa là thảm họa nên 1-of-1 bị cấm |
+| B2B settlement — **không Zether** (mặc định) | private hoặc public | `hsm` hoặc `ecdsa_multisig` 3-of-5 | **không áp dụng** | **[BẢN 3]** Zether cho B2B là **tuỳ chọn, không bắt buộc** (user, 2026-08-31). Không bật thì không có `x` nào, không có oracle lane, không có Shamir |
+| B2B settlement — **có Zether** (tuỳ chọn) | **private** | `hsm` hoặc `ecdsa_multisig` 3-of-5 | **`x` chia Shamir 2-of-3** (thiết bị finance officer / enclave attested / két offline). Chiều distributor→brand prover chạy phía distributor; chiều brand→distributor prover chạy nơi có `x` của brand | Giá gốc là bí mật sống còn (§2.6 harvest-now-decrypt-later); mất khóa là thảm họa nên 1-of-1 bị cấm |
 | End-user payment tại quầy | public (Gnosis/Celo) | `smart_account` | `on_device` 1-of-1 | Người mua đứng đợi → Bulletproofs, prove tại chỗ (§3.8) |
 | Treasury / mint / upgrade / pause | mọi profile | **`hsm` FIPS 140-3 L3, bắt buộc, dual control** | không áp dụng | Không có Zether ở đây, chỉ ECDSA secp256k1 |
 | Relayer EOA nóng | mọi profile | `enclave` (§06.6 mục 3), runway trần 4h | không áp dụng | Throughput 10 → 10^4 sign/s |
@@ -1081,12 +1082,17 @@ class BlockchainCustodyPolicy(models.Model):
                     "Chon enclave / on_device / custodial.",
                     rec.conf_provider_id.name, rec.conf_provider_id.kind))
 
-    @api.constrains('money_flow', 'min_threshold_n')
+    @api.constrains('money_flow', 'min_threshold_n', 'conf_provider_id')
     def _check_b2b_threshold(self):
+        """[BAN 3] Chi ap khi B2B THUC SU dung Zether. Zether cho B2B la tuy chon;
+        conf_provider_id rong nghia la khong co `x` nao de mat, nen nguong vo nghia."""
         for rec in self:
-            if rec.money_flow == 'b2b_settlement' and rec.min_threshold_n < 3:
+            if (rec.money_flow == 'b2b_settlement'
+                    and rec.conf_provider_id            # <-- dieu kien moi
+                    and rec.min_threshold_n < 3):
                 raise ValidationError(_(
-                    "B2B settlement cam 1-of-1: dust do mat khoa khong chap nhan duoc (§07.10)."))
+                    "B2B settlement co Zether cam 1-of-1: dust do mat khoa "
+                    "khong chap nhan duoc (§07.10)."))
 ```
 
 #### 07.12.4. Còn lại
