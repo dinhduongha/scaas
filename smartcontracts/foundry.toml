@@ -1,0 +1,25 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+test = "test"
+solc_version = "0.8.28"
+optimizer = true
+optimizer_runs = 200
+via_ir = false
+remappings = [
+  "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+  "forge-std/=lib/forge-std/src/",
+]
+
+# Chain 9000 (Nethermind, private) chạy TRƯỚC London — không EIP-1559, không
+# EIP-2537. Xem TRAPS.md §"Private chain". EVM version phải hạ xuống cho khớp,
+# nếu không bytecode sinh ra dùng opcode chain không hiểu (PUSH0 từ Shanghai).
+[profile.private9000]
+evm_version = "berlin"
+
+[profile.gnosis]
+evm_version = "cancun"
+
+[profile.celo]
+evm_version = "cancun"

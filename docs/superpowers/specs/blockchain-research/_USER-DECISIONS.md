@@ -994,3 +994,53 @@ Chưa làm gì. Đã backup `genesis.json`. Chain đang chạy nguyên trạng, 
 Đây là một cái bẫy đáng vào `TRAPS.md`: **chainspec Nethermind bỏ qua key kiểu Geth
 mà không báo lỗi**, và cách duy nhất phát hiện là kiểm block header hoặc gọi thử
 precompile.
+
+## 19. D1 CHỐT LẠI: `bn254` cho giai đoạn private
+
+Sau khi §17 đo được rằng tiền đề "BLS rẻ hơn 45–60%" là sai, user chốt tiếp
+(*"tiếp tục"* trên khuyến nghị đảo lại). **`curve_profile = 'bn254'`.**
+
+Đây là quyết định **cho giai đoạn private**, không phải vĩnh viễn. Nó đóng gate G1
+đủ để P10 chạy được, và mở lại đúng một lần nữa trước khi lên public.
+
+### Cái gì được mở khoá ngay
+
+| | |
+|---|---|
+| `ZetherVerifier.sol` / `InnerProductVerifier.sol` của user | **giữ nguyên**, không viết lại |
+| Chain 9000 | chạy được như hiện trạng, `0x06/0x07` sống — **không reset 632 MB** |
+| Genesis Nethermind | **không sửa**. Chỉ sửa nếu sau này thật sự cần EIP-1559 hoặc EIP-2537 |
+| G2 (D2 — đóng băng struct) | mở được, vì nó chờ G1 |
+| Prover Rust | nhắm `bn254` (arkworks `ark-bn254`), hệ sinh thái sâu hơn |
+
+### Điều kiện mở lại D1 — ghi ra để không quên
+
+`bn254` ~100 bit sau Kim–Barbulescu. Con số đó chấp nhận được **vì chain private
+không phát ciphertext ra cho kẻ tấn công thu thập**. Giả định đó chết ngay khi
+bất kỳ điều nào sau đây xảy ra:
+
+1. Zether được deploy lên **public chain** (Gnosis/Celo) — ciphertext thành công
+   khai vĩnh viễn, harvest-now-decrypt-later áp dụng.
+2. Chân trời bảo mật cần > 10 năm (đó chính là **D3**, vẫn đang mở).
+3. Read RPC của chain private mở ra ngoài vành đai tin cậy.
+
+Ở mỗi mốc đó, D1 phải được hỏi lại — không mặc định trôi theo.
+
+### Ràng buộc kỹ thuật để việc mở lại không tốn cả hệ thống
+
+Curve phải là **tham số deploy-time, không phải hằng số biên dịch rải khắp code**:
+
+- `blockchain.zether.token.curve_profile` là Selection `bn254 | bls12_381`, và
+  `proof_system_id` khoá cứng theo nó. Một token đã deploy **không đổi được**
+  curve — migrate nghĩa là token mới + bridge, không phải setter.
+- Contract verifier nằm sau một địa chỉ được inject lúc `initialize()`, không
+  `import` trực tiếp vào `ZSC`. Đổi curve = deploy verifier khác, không sửa `ZSC`.
+- Prover Rust trait-hoá theo curve từ đầu (`ark-ec::PairingEngine`), kể cả khi
+  chỉ có một implementation chạy. Đây là chỗ **duy nhất** đáng trả giá trừu tượng
+  hoá sớm, vì nó là chỗ duy nhất biết được là sẽ có nhánh thứ hai.
+
+### Canon phải sửa
+
+`00-CANON.md` §C21 hàng D1: bỏ mệnh đề *"rẻ hơn 45–60%"* (đo được là sai), đổi
+khuyến nghị sang `bn254`, và trỏ tới §17 làm bằng chứng. §C7.2 nếu có bảng gas
+BLS thì thay bằng số đo thật ở §17.

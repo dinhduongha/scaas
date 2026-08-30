@@ -3251,7 +3251,8 @@ Mỗi section phải áp những mục dưới đây trước khi được coi l
 
 ## C21. Những gì canon KHÔNG quyết được
 
-Mười sáu quyết định dưới đây cần một con người, vì chúng là ngân sách, pháp lý,
+Mười sáu quyết định dưới đây cần một con người (D1, D2, D7, D12, D14, D17 nay
+đã chốt — xem `_USER-DECISIONS.md` §15 và §19), vì chúng là ngân sách, pháp lý,
 hoặc một đánh đổi nghiệp vụ mà không dữ liệu kỹ thuật nào giải được.
 
 **Chúng được liệt kê Ở ĐÂY, không ở nơi khác.** Bản 1 nói chúng nằm "ở đầu ra có
@@ -3263,7 +3264,7 @@ cũng không thực thi được nếu không có danh sách.
 
 | # | Quyết định | Ai quyết | Chặn gì | Khuyến nghị | Chỗ giữ chỗ (`state='draft'`) |
 |---|---|---|---|---|---|
-| **D1** | **Gate G1 — curve cuối**: `bn254` / `bls12_381` / (`babyjubjub` đã loại) | CTO + nhà mật mã hợp đồng, sau preflight `0x0c` và spike S7 | **P10** toàn bộ, và prover Rust | **`bls12_381`** nếu `0x0c` sống trên Gnosis và Celo — nó rẻ hơn 45–60% **và** mạnh hơn 17–26 bit (§C7.2). Nếu không, `bn254` | `blockchain.zether.token.curve_profile = 'bn254'`, token `state='draft'` |
+| ~~**D1**~~ **ĐÃ CHỐT: `bn254`** | **Gate G1 — curve cuối** | user, 2026-08-30 | — (gate đã mở) | Spike S7 **đã chạy** và bác bỏ tiền đề của khuyến nghị cũ: BLS12-381 **không** rẻ hơn 45–60%, ở k=277 nó **đắt hơn ~2%**. Lý do duy nhất còn lại (26 bit) chưa áp dụng vì Zether chạy **private** trước. Chốt `bn254`; mở lại D1 trước khi lên public. Bằng chứng: `_USER-DECISIONS.md` §17–19 | `curve_profile = 'bn254'`, **không còn `state='draft'` vì lý do này** |
 | **D2** | **Gate G2 — đóng băng struct**: `C_aud` shared-`s` + biến thể `ZTX_V1_RELAYED` với `digest_hash` trong transcript | CTO, cùng lúc với D1 | **P10**, selector và struct không retrofit được | chốt cả hai cùng G1 | `proof_system_id` để rỗng, deploy bị chặn |
 | **D3** | **Chân trời bảo mật B2B**: chấp nhận "giải mã được 2035–2045" trên public, hay bắt buộc private/BLS | Ban giám đốc + pháp chế | hình thái P22 trên public | ≤ 10 năm trên `bn254`×public, hoặc chuyển private (locked #5 đã ưu tiên private cho Zether) | `confidentiality_horizon_years = 5` |
 | **D4** | **Ngân sách audit** $173 k – 345 k (B → B2 → C → C2 → D → D2) | duyệt ngân sách | **mọi luồng tiền thật** | duyệt tối thiểu B + B2 trước P10 | — |
