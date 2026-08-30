@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {ZetherTypes} from "./ZetherTypes.sol";
-
 /// @title Selective disclosure: chứng minh "tôi đã gửi ĐÚNG số tiền này, trong ĐÚNG
 ///        giao dịch này" mà không công khai gì khác.
 ///
@@ -86,5 +84,5 @@ interface ITransferDisclosure {
     function transferCiphertext(bytes32 entryRef)
         external
         view
-        returns (ZetherTypes.Ciphertext memory ct, ZetherTypes.G1Point memory yTo);
+        returns (bytes memory encodedCiphertext, bytes memory encodedYTo);
 }

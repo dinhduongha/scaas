@@ -6,6 +6,42 @@ có vòng đời riêng (audit, deploy, immutability) không trùng vòng đời
 Chưa có implementation. Đây là **interface đã compile được**, chốt lại những gì đã
 quyết. Implementation đi theo plan.
 
+## Mô hình: factory mở
+
+Ai cũng tạo token được. Ai cũng wrap thành Meta Token hoặc Zether Token được. Mười
+người wrap xDAI thành mười contract khác nhau là hợp lệ và không ai chặn — **không có
+wrapper chính thức**, và factory không có hàm nào hàm ý là có.
+
+Ba hệ quả xuyên suốt cây này:
+
+1. **Hỗ trợ mọi curve, không ưu tiên cái nào.** Người tạo token truyền địa chỉ verifier.
+   Vì bn254 mã hoá G1 bằng 64 byte còn BLS12-381 bằng 128 byte, interface chung nhận
+   điểm dạng `bytes` — `struct G1Point { uint256 x; uint256 y; }` là kiểu của bn254,
+   không phải kiểu của "một điểm".
+2. **Không Beacon proxy.** Beacon nghĩa là chủ beacon thay được implementation của mọi
+   token người lạ từng tạo. Mặc định là EIP-1167 clone bất biến; UUPS do chính người
+   tạo sở hữu là tuỳ chọn.
+3. **Bỏ gác cổng thì bù bằng xuất xứ.** `factory()`, `creator()`, `underlying()`,
+   `verifier()` bất biến và công khai, `isDeployedHere()` để đối chiếu ngược. Đủ để
+   trả lời "cái này wrap gì, ai tạo, verifier nào" — không đủ để trả lời "cái này có
+   phải bản nên dùng không", và đó là câu hỏi của thị trường.
+
+### Chọn curve nào — hướng dẫn, không phải quy định
+
+Đo thật trên Gnosis, `eth_estimateGas`, k = 277 điểm (quy mô Bulletproofs):
+
+| | bn254 | BLS12-381 |
+|---|---|---|
+| Gas MSM ở k=277 | **1,70 M** | 1,74 M (đắt hơn ~2%) |
+| Gas ở k=1 | **6.000** | 12.357 (đắt hơn 106%) |
+| An toàn | ~100 bit | **~126 bit** |
+| Chain chạy được | **mọi chain EVM** (Byzantium 2017) | chỉ chain có Prague |
+| G1 on-chain | 64 byte | 128 byte |
+
+Canon từng ghi BLS *"rẻ hơn 45–60%"*. Đo được là **sai** — không có mức tiết kiệm đó
+ở bất kỳ `k` nào. Chọn BLS khi và chỉ khi chân trời bảo mật vượt thời hạn an toàn của
+bn254; trả bằng gas nhỉnh hơn và mất khả năng chạy trên chain không có Prague.
+
 ```
 src/
 ├── common/     chain-agnostic: struct, phí, chữ ký

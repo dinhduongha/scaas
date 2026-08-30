@@ -1044,3 +1044,154 @@ Curve phải là **tham số deploy-time, không phải hằng số biên dịch
 `00-CANON.md` §C21 hàng D1: bỏ mệnh đề *"rẻ hơn 45–60%"* (đo được là sai), đổi
 khuyến nghị sang `bn254`, và trỏ tới §17 làm bằng chứng. §C7.2 nếu có bảng gas
 BLS thì thay bằng số đo thật ở §17.
+
+## 20. LẬT KIẾN TRÚC: factory mở cho toàn thế giới
+
+User, 2026-08-30:
+
+> *"Hệ thống factory, contract này sẽ open cho toàn thế giới. Ai cũng tạo được, ai
+> cũng wrap token thành Meta Token được. Ai cũng wrap token thành Zether được. Thị
+> trường sẽ quyết định dùng cái nào. Tôi chỉ deploy factory thôi."*
+>
+> *"Ví dụ wrap xDAI => zDAI, 10 người có thể wrap thành 10 contract khác nhau, kệ họ."*
+
+Đây **không phải một yêu cầu tính năng**. Nó đổi vai của toàn bộ dự án: từ *nhà phát
+hành token* sang *người deploy protocol*. Hầu hết các quyết định mở trong canon là
+quyết định của nhà phát hành, và chúng không còn thuộc về ta nữa.
+
+### 20.1 D1 tan biến. Hỗ trợ CẢ HAI curve
+
+Không còn "curve của hệ thống". `curve_profile` không phải cấu hình toàn cục — nó là
+thuộc tính của **từng token**, do người tạo token chọn qua địa chỉ verifier.
+
+Thiết kế đã sẵn sàng cho việc này (verifier inject, không import cứng), nhưng có một
+chỗ **phải sửa và đã sửa**: kiểu điểm.
+
+| | bn254 | BLS12-381 |
+|---|---|---|
+| Fp | 254 bit, vừa một `uint256` | 381 bit; EIP-2537 pad thành **64 byte** |
+| **G1 point on-chain** | **64 byte** | **128 byte** — đã đo `eth_call` 0x0b trên Gnosis |
+| Scalar field `r` | 254 bit | 255 bit |
+| Precompile | 0x06/0x07/0x08, có từ Byzantium 2017 | 0x0b…0x10, cần Prague |
+| Gas ở k=277 (đo thật) | 1,70 M | 1,74 M |
+| An toàn | ~100 bit | ~126 bit |
+
+Nên `struct G1Point { uint256 x; uint256 y; }` **không dùng làm kiểu chung được** —
+nó là kiểu của bn254. Interface chung nhận điểm dạng `bytes`, mã hoá theo
+`proofSystemId()`. Điều này còn **rẻ hơn**: gói cả bó điểm vào một blob bỏ được toàn
+bộ ABI offset của mảng động.
+
+**Chi phí thật của việc hỗ trợ hai curve**, nói thẳng để đây là quyết định chứ không
+phải mong muốn:
+
+| Hạng mục | Chi phí |
+|---|---|
+| Verifier contract | **2×** — scalar field khác nhau nên không chia sẻ code được, chỉ chia sẻ cấu trúc. Đây là hạng mục audit đắt nhất |
+| Prover Rust | ~1,3× — arkworks generic over `Pairing`; gadget Bulletproofs dùng chung, chỉ khác instantiation |
+| Interface | 0 — đã curve-agnostic |
+| Odoo addon | ~0 — `proof_system_id` vốn đã là một chuỗi |
+| **Interop giữa hai curve** | **không có, và không thể có.** Z-token bn254 không chuyển bí mật sang Z-token BLS được. Cầu nối là unwrap → wrap. Đây là bản chất, không phải thiếu sót |
+
+Và một cái bẫy phải ghi ra: **UA phụ thuộc curve.** Cùng một con người trên hai curve
+có hai UA khác nhau — hai keypair trên hai nhóm khác nhau, không phải một danh tính
+hai cách viết. Ví tuyệt đối không được gộp chúng thành một dòng số dư.
+
+Spike S7 (§17) **không phí**. Nó chuyển từ *"quyết định của ta"* thành *"con số người
+tạo token đọc để tự chọn"*, và nó là hướng dẫn thật:
+
+> bn254 — gas ngang nhau, chạy trên **mọi** chain EVM, hệ sinh thái thư viện sâu, ~100 bit.
+> BLS12-381 — đắt hơn ~2% ở quy mô Bulletproofs, chỉ chạy trên chain có Prague, ~126 bit.
+> Chọn BLS khi và chỉ khi chân trời bảo mật vượt quá thời hạn an toàn của bn254.
+
+Chain private 9000 chỉ chạy được bn254. Đó là dữ kiện triển khai, không còn là quyết
+định kiến trúc.
+
+### 20.2 Beacon proxy phải bị loại. Đây là hệ quả nghiêm trọng nhất
+
+Canon §01 mục 1 chốt **Beacon proxy**, một `UpgradeableBeacon` cho mỗi
+`(archetype, majorVersion)`, và tự ghi nhận nhược điểm: *"Blast radius = toàn bộ N
+token."*
+
+Trong hệ đóng nơi ta sở hữu cả N token, đó là **ưu điểm** — vá 40 token của 40 nhà
+phân phối bằng 1 giao dịch mỗi chain, đúng như lý lẽ §1.3 mục 1.
+
+Với factory mở, **cùng cơ chế đó nghĩa là chủ beacon thay được implementation của mọi
+token mà mọi người lạ từng tạo** — im lặng, một giao dịch, không cần ai đồng ý. Đó là
+cửa hậu lên tiền của người khác, và nó chính xác là cái quyền mà mô hình mở hứa là
+không tồn tại.
+
+Beacon do chính người tạo sở hữu thì vô nghĩa: một beacon cho một token = UUPS cộng
+~4.600 gas mỗi giao dịch.
+
+**Thay bằng hai mode, người tạo chọn:**
+
+| Mode | Ai nâng cấp được | Deploy | Call (warm) |
+|---|---|---|---|
+| `IMMUTABLE` — EIP-1167 clone | **không ai**, kể cả người tạo | ~45.000 | ~2.700 |
+| `UPGRADEABLE_BY_CREATOR` — UUPS, owner = người tạo | chỉ người tạo, chỉ token của mình | ~200.000 | ~4.800 |
+
+Mặc định `IMMUTABLE`: rẻ nhất, và không có bề mặt tin cậy nào — đúng thứ một protocol
+phi tập trung nên mặc định.
+
+Dọn dẹp kèm theo: **chuỗi CREATE2 ba tầng của §1.4 không còn lý do tồn tại.** Nó có
+mặt chỉ để giữ địa chỉ ổn định qua các lần nâng cấp. Với clone bất biến thì không có
+lần nâng cấp nào để mà giữ. Còn hai tầng: factory → token.
+
+### 20.3 Không có wrapper chính thức. Bỏ `getWrapper`
+
+*"10 người có thể wrap thành 10 contract khác nhau, kệ họ."*
+
+`getWrapper(underlying) -> address` trong bản Grok **hàm ý có một bản chính thức**.
+Bỏ. Thay bằng `deployCountFor(underlying)` + `deployedFor(underlying, i)` — một danh
+sách, không một câu trả lời.
+
+Không ràng buộc duy nhất trên `underlying`. Không duyệt tên, không duyệt symbol.
+
+### 20.4 Bỏ gác cổng thì phải bù bằng xuất xứ kiểm được
+
+"Kệ họ" không được biến thành "không ai kiểm được gì". Mười zDAI, chín cái có thể là
+giả — đây đúng là bài toán token-list của ERC-20, và lời giải đã biết **không phải**
+allowlist, mà là **provenance kiểm được on-chain**:
+
+- Token trả lời bất biến: `factory()`, `creator()`, `underlying()`, `verifier()`
+- Factory giữ `isDeployedHere(token)` để đối chiếu ngược — một contract tự khai
+  `factory()` mà factory không xác nhận thì đó chỉ là một chuỗi tự khai
+
+Điều này trả lời chính xác *"contract này có đúng là wrap xDAI bằng verifier X do địa
+chỉ Y tạo không"*.
+
+Nó **không** trả lời *"đây có phải cái zDAI tôi nên dùng không"*. Câu đó không có đáp
+án on-chain, và giả vờ là có mới là chỗ nguy hiểm thật. Đó là câu hỏi của danh tiếng
+và thanh khoản — của thị trường, đúng như thiết kế.
+
+### 20.5 Những gì rơi khỏi đường tới hạn
+
+Đây là quyết định của **nhà phát hành token**, không phải của protocol. Protocol cung
+cấp nút bấm; ai tạo token thì người đó vặn và người đó chịu.
+
+| Canon | Vì sao rơi |
+|---|---|
+| **D3** chân trời bảo mật | Người tạo token chọn curve theo chân trời của họ |
+| **D6** giấy phép VN | Ta deploy protocol, không phát hành token. **User đã nói để sau — không nêu lại** |
+| **D9** số dư điểm thưởng có cần bí mật không | Ai tạo token loyalty thì người đó chọn |
+| **D10** chain và archetype của loyalty | Như trên |
+| **D13** một bit rò rỉ khi chia nhỏ B2B | Thuộc về `ringSize()` và tham số token, do người tạo chọn |
+| **`compliance_profile`** trên contract | Không có ở tầng contract. Nó là thuộc tính bên Odoo, mô tả token mà **bản triển khai này** chọn tương tác |
+| **AML ⇒ ring = 2** | Ring size là thuộc tính verifier. Ring 2 lộ danh tính, ring lớn ẩn danh. Hai thị trường, hai lựa chọn |
+| **`C_aud` auditor key** | **Tuỳ chọn theo token**, không bắt buộc. Người tạo muốn kiểm toán được thì bật |
+
+### 20.6 Những gì NẶNG THÊM
+
+Đổi lại, ba thứ nặng lên và phải nhận:
+
+1. **Factory là artefact bảo mật quan trọng nhất, và nó bất biến.** Không có "vá sau".
+   Sai một dòng trong factory là sai vĩnh viễn cho mọi token mọi người từng tạo. Ngân
+   sách audit phải dồn về đây, không dàn đều.
+2. **Không kiểm soát được ai dùng vào việc gì.** Đó là bản chất của permissionless và
+   user đã chọn nó có chủ ý. Điều làm được: tài liệu rõ, verifier tham chiếu chất
+   lượng cao, và **không tự nhận vai trò mình không giữ**.
+3. **`isSupportedOnThisChain()` trở nên bắt buộc.** Một verifier BLS12-381 deploy
+   **thành công** trên chain không có EIP-2537 rồi revert ở mọi proof mãi mãi —
+   precompile vắng mặt không revert, nó trả về thành công với output rỗng. Không có
+   triệu chứng nào cho tới khi đã có người nạp tiền. Trong hệ đóng ta biết chain của
+   mình; trong factory mở thì không.

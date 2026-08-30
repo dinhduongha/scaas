@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {IERC20MetaTx} from "../metatx/IERC20MetaTx.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
+import {IZetherVerifier} from "./IZetherVerifier.sol";
 import {FeeMode} from "../common/FeePolicy.sol";
 
 /// @title Token có số dư bí mật. Kế thừa TOÀN BỘ meta-transaction từ tầng nền.
@@ -56,11 +57,13 @@ interface IZetherToken is IERC20MetaTx {
     function registered(ZetherTypes.UA account) external view returns (bool);
 
     /// @notice Số dư mã hoá, đã cộng pending nếu epoch đã tiến.
-    /// @dev Trả về CIPHERTEXT. Nó không giải mã gì cả — contract không có `x`.
-    function simulateAccounts(ZetherTypes.G1Point[] calldata y, uint256 epoch)
+    /// @dev Trả về CIPHERTEXT, mã hoá theo `verifier().proofSystemId()`. Nó không
+    ///      giải mã gì cả — contract không có `x`, và không curve nào đổi điều đó.
+    /// @param encodedY các public key nối liền, mỗi cái `g1EncodedBytes()` byte
+    function simulateAccounts(bytes calldata encodedY, uint256 epoch)
         external
         view
-        returns (ZetherTypes.Ciphertext[] memory);
+        returns (bytes memory encodedCiphertexts);
 
     /// @notice Gộp `pending` vào `acc` cho một tài khoản, không cần chữ ký của ai.
     /// @dev Code hiện tại của user gọi `rollOver` NGẦM ở đầu mọi thao tác chạm tài
@@ -78,7 +81,7 @@ interface IZetherToken is IERC20MetaTx {
     ///      tài khoản có pending cũ rồi dọn một lượt.
     function rollOverBatch(ZetherTypes.UA[] calldata accounts) external;
 
-    function fund(ZetherTypes.G1Point calldata y, uint256 amount) external;
+    function fund(bytes calldata encodedY, uint256 amount) external;
 
     /// @notice Chuyển bí mật.
     /// @param outerFeeMode phí TẦNG NGOÀI. Bắt buộc NONE hoặc FIXED — PERCENT bị
@@ -92,11 +95,12 @@ interface IZetherToken is IERC20MetaTx {
     ///      2. chỉ phí trong  — user CHỈ có số dư bí mật; đây là luồng duy nhất mở
     ///                          được nút "tài khoản Zether thuần bị kẹt"
     ///      3. cả hai = 0     — user tự trả native gas, gọi thẳng, không qua relayer
+    /// @param payload C[], D, y[], u — mã hoá theo `verifier().proofSystemId()`.
+    ///        Một blob thay vì bốn mảng có kiểu: đó là điều kiện để interface này
+    ///        dùng chung được cho mọi curve (điểm bn254 là 64 byte, điểm BLS12-381 là
+    ///        128 byte), và nó còn rẻ hơn — bỏ được toàn bộ ABI offset của mảng động.
     function transferConfidential(
-        ZetherTypes.G1Point[] calldata c,
-        ZetherTypes.G1Point calldata d,
-        ZetherTypes.G1Point[] calldata y,
-        ZetherTypes.G1Point calldata u,
+        bytes calldata payload,
         bytes calldata proof,
         ZetherTypes.UA beneficiary,
         FeeMode outerFeeMode,
@@ -104,12 +108,27 @@ interface IZetherToken is IERC20MetaTx {
         address outerFeeRecipient
     ) external returns (bytes32 entryRef);
 
-    function burn(
-        ZetherTypes.G1Point calldata y,
-        uint256 amount,
-        ZetherTypes.G1Point calldata u,
-        bytes calldata proof
-    ) external;
+    function burn(bytes calldata payload, uint256 amount, bytes calldata proof) external;
+
+    // ------------------------------------------------------------------
+    // Xuất xứ — thứ ví và indexer cần để tự quyết có tin token này không
+    // ------------------------------------------------------------------
+
+    /// @notice Verifier của token này. Bất biến, đặt lúc `initialize()`.
+    /// @dev Cùng với `factory()` đây là hai thứ người dùng phải kiểm được TRƯỚC khi
+    ///      nạp tiền. Không có allowlist nào thay được việc này, vì factory mở.
+    function verifier() external view returns (IZetherVerifier);
+
+    /// @notice Factory đã sinh ra token này, hoặc `address(0)` nếu deploy tay.
+    function factory() external view returns (address);
+
+    /// @notice Token gốc được wrap, hoặc `address(0)` nếu không có underlying
+    ///         (issuer tự mint), hoặc sentinel native nếu wrap coin gốc của chain.
+    /// @dev **Không hàm ý duy nhất.** Mười người wrap xDAI thành mười contract khác
+    ///      nhau là chuyện bình thường và không ai chặn. Hàm này chỉ trả lời "cái này
+    ///      wrap cái gì", không trả lời "cái này có phải bản chính thức không" — câu
+    ///      thứ hai không có đáp án on-chain, và giả vờ là có mới là chỗ nguy hiểm.
+    function underlying() external view returns (address);
 
     /// @notice Bộ đếm gửi của một UA, đọc TỪ CHUỖI.
     /// @dev Client suy `s` bằng PRF:
