@@ -2309,3 +2309,230 @@ chính mình là thứ dễ bị bỏ; một spec là hợp đồng với ngư�
    Và sơ đồ của nó phải bỏ mũi tên `relay-pool → confidential-signer` (§23.2).
 3. Bảng năng lực của §21.4 và bảng vai ở §23.3 phải hợp nhất — hiện là hai cách nói về cùng một cấu hình.
 4. §07.1 phải đổi ngôn ngữ sang Rust và tách tên theo §23.2, giữ nguyên ngữ nghĩa từng hàm.
+
+### 23.10 Zether Signer ghi vào đâu
+
+Hai nghĩa, trả lời cả hai.
+
+#### (a) Đặc tả của nó nằm ở file nào
+
+| Thứ | File | Trạng thái |
+|---|---|---|
+| **Quyết định** (vì sao có, vì sao tiến trình riêng, ba làn) | `_USER-DECISIONS.md` §23.2, §23.5 | xong |
+| **Đặc tả** (interface, backend, vòng đời khoá, attestation, mua sắm) | **`07-custody-providers.md`** — đây là section **sở hữu** | cần sửa: §07.1 viết bằng Python và gộp NHÓM A với NHÓM B dưới một tên (§23.9 mục 4) |
+| Chính sách trước khi ký, chống lạm dụng | `12-threat-model.md` §12.5.1 | xong |
+| Hạt nhân `ZetherKeyOracle` (< 300 dòng, cái gì vào enclave) | `07-custody-providers.md` §07.2b | xong |
+| Cấu hình custody theo money flow | `07-custody-providers.md`, model `blockchain.custody.policy` | xong |
+| Đường Odoo gọi tới nó | `10-odoo-addon-design.md` — chỉ giữ `signer_ref`, gọi qua mTLS | xong |
+| Mã nguồn | `bamboo-node/src/roles/oracle.rs` (§23.3) | chưa viết |
+
+Nói ngắn: **`07-custody-providers.md` là nhà của nó.** `_USER-DECISIONS.md` chỉ ghi quyết định, không
+phải đặc tả — đừng đi tìm chi tiết interface ở đó.
+
+#### (b) Nó ghi state vào đâu
+
+Câu trả lời ngắn: **gần như không ghi gì cả**, và đó là cố ý.
+
+| State | Ở đâu | Mất khi restart thì sao |
+|---|---|---|
+| `x` (khoá giải mã ElGamal) | **Không bao giờ ở dạng rõ.** Blob đã wrap nằm ở KMS/HSM, unwrap vào bộ nhớ enclave lúc khởi động, có điều kiện trên PCR0 | Unwrap lại. Ảnh khác PCR0 ⇒ KMS từ chối ⇒ enclave không chạy được. Đúng như thiết kế |
+| Nonce của chính signer (chống hai chữ ký cùng nonce, §12.5.1 mục 2) | Bộ nhớ enclave | Đọc lại từ chain (`getTransactionCount`) khi khởi động |
+| Cache chống replay `digest → đã thấy` | Bộ nhớ enclave, TTL 24 h | **Rỗng sau restart, và điều đó AN TOÀN** — xem dưới |
+| `nonce_id` đang mở của `zk_nonce_commit` | Bộ nhớ enclave | **Rỗng sau restart, và fail-closed** — xem dưới |
+| `sendCounter` cho PRF sinh `s` (§03) | **Không giữ.** Đọc từ chain (`IZetherToken.sendCounter`) | Không có gì để mất |
+| Audit log ai xin ký cái gì | Ghi ra **ngoài** qua làn custody, vào `blockchain.security.event` của Odoo | Không mất — nó không nằm trong enclave |
+
+**Vì sao mất cache replay khi restart là an toàn.** Với ECDSA sinh nonce theo RFC 6979 (tất định), ký
+lại cùng một payload cho ra **đúng chữ ký cũ** — replay vô hại. Cache chỉ để tiết kiệm một lần ký, không
+phải để bảo vệ.
+
+**Vì sao mất `nonce_id` khi restart cũng an toàn, và nó là chỗ nguy hiểm nhất nếu làm sai.** Với sigma
+protocol, `zk_nonce_commit` chọn `k`, `zk_response` trả `s = k + c·x`. Trả lời **hai lần cho cùng một
+`k` với hai `c` khác nhau** là lộ `x` ngay lập tức: `x = (s₁ − s₂)/(c₁ − c₂)`. Đây là §12.3.1 và nó là
+lỗ hổng nghiêm trọng nhất trong cả mô hình.
+
+Nên quy tắc bắt buộc là **`nonce_id` không biết ⇒ TỪ CHỐI**, không phải "không biết ⇒ chấp nhận":
+
+```
+zk_response(nonce_id, c):
+    k = open_nonces.remove(nonce_id)     # remove, khong phai get — dung mot lan
+    if k is None: reject("unknown or already used nonce_id")
+    return k + c * x mod r
+```
+
+`remove` chứ không `get` là toàn bộ cơ chế. Sau restart, mọi `nonce_id` cũ đều "không biết" ⇒ mọi yêu
+cầu cũ bị từ chối ⇒ prover phải commit lại từ đầu. Bất tiện, và **đúng**. Một enclave persist bảng này
+ra đĩa là một enclave có thể bị rollback về trạng thái cũ và trả lời lần thứ hai — nên **không persist
+là một tính năng bảo mật, không phải một thiếu sót.**
+
+Hệ quả vận hành phải ghi vào runbook: **restart làn oracle làm hỏng mọi chứng minh đang dựng dở.** Với
+một batch payout 300 người, restart giữa chừng nghĩa là dựng lại các proof chưa xong. Chi phí là CPU
+(30–50 ms/proof, §03), không phải tiền, và không có tx nào đã ký bị mất — vì tx chỉ được ký sau khi proof
+xong.
+
+---
+
+## 24. Meta-tx trên token KHÔNG phải một forwarder. Bỏ `feeToken`, `innerGasLimit`, và cả `to`/`data`.
+
+> User, 2026-08-31:
+>
+> > Bỏ feeToken đi. Cái đó nằm ngoài TokenContract, không đưa vào.
+> > innerGasLimit có cần không? Ở đây đâu có dùng forwarder gì mà cần innerGasLimit?
+
+Cả hai đúng, và câu thứ hai lộ ra một thứ lớn hơn hai trường bị bỏ.
+
+### 24.1 Cái đã tìm thấy khi đi kiểm
+
+Code thật (`smartcontracts/src/common/MetaTxLib.sol`) **vốn đã không có** `feeToken` lẫn
+`innerGasLimit` — hai trường đó chỉ còn sống trong spec `04-eip1776-metatx.md` (44 lần),
+`05-open-relayer-network.md` (6), `00-CANON.md` (15), `12-threat-model.md` (3).
+
+Nhưng struct trong code lại mang `to` / `value` / `data`, và `executeMetaTransaction` trả về
+`(bool success, bytes returnData)`. Đó là **hình dạng của một generic forwarder đặt bên trong một
+token**. Nó kéo theo toàn bộ bề mặt tấn công của forwarder:
+
+- allowance drain (§12.2 mục 3) — cần allowlist `to`, cấm `to == address(this)`, cấm fee token
+- return-bomb (§12.2 mục 1) — cần `MAX_RETURN_BYTES`
+- 63/64 griefing (§12.2 mục 2) — cần `innerGasLimit` **và** guard `gasleft() >= g + g/63 + FLOOR`
+- swallow-vs-bubble (§04.6.2) — cần `MODE_REQUIRE_SUCCESS`
+
+Trong khi **không token nào trong hệ phơi ra một lời gọi tuỳ ý**. Đọc lại interface thật:
+
+| Contract | Thao tác phơi ra |
+|---|---|
+| `IERC20MetaTx` | `transfer`, `approve` (kế thừa `IERC20`) |
+| `IERC20Payment` | `payWithFee(to, amount, feeMode, fee, feeRecipient, entryRef)` |
+| `IZetherToken` | `fund`, `transferConfidential`, `burn`, `rollOverPublic`, `rollOverBatch` |
+
+Tất cả là **thao tác có kiểu trên chính token đó**. Không cái nào cần gọi contract lạ. Vậy `to`/`data`
+là một cơ chế không ai dùng, kéo theo bốn lớp phòng thủ cho một vector ta tự mở ra.
+
+### 24.2 Quyết định
+
+Struct mang **mã thao tác + tham số**, và bộ điều phối gọi một **internal function**, không phải opcode
+`CALL`:
+
+```solidity
+struct MetaTransaction {
+    address from;
+    uint8   op;             // thao tac cua CHINH token nay
+    bytes   args;           // tham so da ABI-encode cho op do
+    uint256 batch;
+    uint256 nonce;
+    uint256 validUntil;
+    address relayer;        // address(0) = wildcard
+    FeeMode feeMode;
+    uint256 fee;
+    address feeRecipient;   // tra bang CHINH token nay
+}
+```
+
+Bảng `op` là **append-only**: không bao giờ đổi số của một mã đã phát hành, vì nó nằm trong digest đã
+ký. `verifyingContract` của EIP-712 domain quyết định token nào, nên hai token khác nhau dùng lại cùng
+số là an toàn.
+
+| `op` | Thao tác | `args` |
+|---|---|---|
+| 1 | `TRANSFER` | `(address to, uint256 amount)` |
+| 2 | `APPROVE` | `(address spender, uint256 amount)` |
+| 3 | `PAY_WITH_REF` | `(address to, uint256 amount, bytes32 entryRef)` |
+| 10 | `FUND` | `(bytes encodedY, uint256 amount)` |
+| 11 | `TRANSFER_CONF` | `(bytes payload, bytes proof)` |
+| 12 | `BURN` | `(bytes payload, uint256 amount, bytes proof)` |
+| 13 | `ROLLOVER` | `(bytes32 account, uint64 expectedPendingSeq, uint64 validUntilBlock)` |
+
+### 24.3 Cái gì chết, và vì sao từng cái
+
+| Chết | Vì sao |
+|---|---|
+| `feeToken` | Phí trả bằng **chính token này**. Một token khác nằm ngoài contract này, và contract này không cầm allowance của nó — đúng như user nói. Muốn trả phí bằng token khác thì đó là việc của một contract khác, không phải của token này. |
+| `innerGasLimit` | Không có inner call thì không có gas nào để giới hạn. |
+| Guard 63/64 (EIP-150) | Cùng lý do. Internal function không có ngữ nghĩa chuyển gas. |
+| `MAX_RETURN_BYTES = 1024` | Không có returndata từ contract lạ để mà bomb. |
+| `returnData` trong giá trị trả về | Op có kiểu ⇒ caller biết hình dạng kết quả. |
+| `MODE_REQUIRE_SUCCESS` / swallow mode | Xem §24.4. |
+| `to`, `value`, `data` | `to` là tham số của thao tác, không phải đích của một lời gọi ⇒ nằm trong `args`. `value` = 0 luôn: token không nhận native coin. |
+| Allowlist target, `calldata_rules`, `targets[to].isFeeToken` | Không còn `to` tuỳ ý để mà allowlist. |
+| ERC-2771 sender suffix, `appendsSender` | Không có contract đích để mà nối `from` vào cuối calldata. |
+| `payable` trên `executeMetaTransaction` | Token không nhận native coin. Trả gas là việc của relayer ở tầng vỏ tx. |
+| `success` trong event `MetaTransactionExecuted` | Xem §24.4 — không còn nhánh "thành công một nửa". |
+
+### 24.4 Cái được thêm, và nó là lý do mạnh nhất cho thay đổi này
+
+Một generic forwarder **không bao giờ biết trước** inner call sẽ fail vì gì. Nên nó buộc phải chọn một
+trong hai cái tệ:
+
+- **Thu phí trước, nuốt lỗi**: user trả tiền cho một việc không xảy ra.
+- **Bubble revert**: relayer bỏ gas thật rồi không được gì.
+
+§04.6.2 và §08.4c cãi nhau đúng chỗ này suốt bộ tài liệu (`_CRITIQUES.md` contradiction-2, chưa đóng).
+
+Với thao tác **có kiểu**, contract biết chính xác cái gì có thể fail, nên nó kiểm hết **trước** khi thu
+phí — và sau điểm đó thao tác không thể fail:
+
+```
+1. relayer      (0 gas)   — wildcard hoac khop msg.sender
+2. validUntil   (0 gas)
+3. op hop le    (0 gas)   — khong trong bang thi revert ngay
+4. nonce        (1 sload)
+5. chu ky       (~3k)
+6. decode args, KIEM TRA DU dieu kien cua op
+     TRANSFER      -> so du >= amount + fee
+     TRANSFER_CONF -> da dang ky, nonce Zether khop, PROOF VERIFY PASS
+     ROLLOVER      -> block.number <= validUntilBlock (§03.5.4)
+7. thu phi
+8. thuc thi op bang internal call
+```
+
+Bất biến trở thành **"phí đã thu ⟺ thao tác đã xảy ra"**, đạt được **không cần try/catch, không cần một
+mode nào**. Đó là thứ mà mâu thuẫn contradiction-2 tranh cãi hai năm không giải được, và nó tự biến mất
+khi bỏ tính tuỳ ý của `to`/`data`.
+
+Op fail ⇒ toàn bộ tx revert ⇒ nonce không tiêu, phí không thu, **relayer mất gas**. Đó là chi phí còn
+lại, và nó được xử ở tầng vận hành chứ không ở tầng contract: simulation gate bắt gần hết, phần còn lại
+là kẻ cố tình và bị chấm `origin_grief_score` (§05.5). Với Zether, verify proof nằm ở bước 6 nên một
+proof rác đốt ~1,79 M gas trước khi revert — đó là lý do thứ tự fail-fast của §12.1 (status → nonce →
+on-curve → expiry → **rồi mới** MSM) là bắt buộc, không phải tối ưu.
+
+Thêm một hàm nhỏ, và nó trả tiền cho chính nó:
+
+```solidity
+function supportsMetaOp(uint8 op) external view returns (bool);
+```
+
+Node mesh gọi một lần lúc onboard một contract để dựng bảng năng lực §22.4, thay vì đoán từ ABI.
+
+### 24.5 Lợi ích phụ cho tầng mạng
+
+Bảng tra của §22.4 khoá theo `(caip2, contract_address, selector)`. Với forwarder, "selector" là 4 byte
+đầu của `data` — phải decode, và nó là selector của **contract khác**, nên bảng phải biết cả contract
+đích lẫn hàm đích. Với op có kiểu:
+
+- `contract_address` = `verifyingContract` trong EIP-712 domain, đọc thẳng
+- `selector` = `m.op`, **một `uint8` nằm ngay trong struct**
+
+Node lọc được ở tầng hàng rào L0/L1 của §22.3 (~1 µs, không decode gì), thay vì phải decode `bytes data`
+ở L2. Và `event MetaTransactionExecuted` index được `op`, nên indexer lọc theo loại thao tác không cần
+decode args.
+
+### 24.6 Cái này KHÔNG đổi
+
+- **Nonce 2D `(batch, nonce)`** — giải head-of-line blocking thật, giữ nguyên.
+- **Wildcard `relayer == address(0)`** — giữ digest cố định, không cross-mode replay (§20, §21.5).
+- **`fee` + `feeMode` trong struct** — relayer đọc phí từ intent trên mesh không cần gọi hàm.
+- **`FeePolicy.requireConfidentialSafe()`** — `PERCENT` vẫn bị cấm trên token bảo mật; `fee = v × p` với
+  cả hai vế công khai chính là số tiền (§12.3.7).
+- **`keccak256(m.args)` trong structHash** — bỏ là lỗ hổng injectivity: `("ab","c")` và `("a","bc")` cho
+  cùng digest. Fuzz không tìm ra, solver tìm ra trong vài giây.
+- **`cancelMetaNonce`** — người ký phải rút lại được intent đã phát lên mesh.
+
+### 24.7 Nợ để lại
+
+`04-eip1776-metatx.md` là section sở hữu struct này và nó vẫn mô tả mô hình forwarder: 44 lần nhắc
+`feeToken`/`innerGasLimit`, cộng §04.6 (allowlist target), §04.6.2 (`MODE_REQUIRE_SUCCESS`), §04.9
+(griefing của forwarder), §04.6.7 (`ReentrancyGuardTransient` cho inner call). Phải viết lại.
+
+Kéo theo: `00-CANON.md` §C21 và bảng sở hữu artefact; `12-threat-model.md` §12.2 (bốn lỗ hổng kinh điển
+— ba trong bốn không còn đối tượng); `05-open-relayer-network.md` §5.3.1; `_CRITIQUES.md`
+contradiction-2 và contradiction-3 (**cả hai tự đóng** theo §24.4 và theo việc bitmask `mode` đã chết ở
+§20).
