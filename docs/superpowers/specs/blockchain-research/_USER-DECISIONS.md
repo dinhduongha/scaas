@@ -1592,3 +1592,54 @@ Mục này giao thẳng với §06 (relay pool nội bộ), vốn đã thiết k
 hợp nhất: **cùng một `KeyPool`, hai bối cảnh vận hành** — một cái khoá trong HSM cho doanh nghiệp,
 một cái khoá trong file cho một node mesh do cá nhân chạy. Interface giống nhau; nơi giữ khoá khác
 nhau, và đó là một tham số cấu hình chứ không phải hai bản cài đặt.
+
+## 22. [CHƯA XỬ LÝ] Vòng đời một meta-tx / Zether tx trong node — danh sách câu hỏi
+
+> **Trạng thái: ghi lại nguyên văn, chưa thiết kế.** User: *"Note những cái này sau khi xong hết các
+> phần đang làm."* Mục này tồn tại để danh sách không bị mất; nội dung đầy đủ sẽ thay thế nó sau khi
+> hoàn tất đợt chuyển dấu tiếng Việt (`09`, `10`, `12`, `15`, `_CRITIQUES`).
+
+User, 2026-08-31:
+
+> Sẽ có nhiều câu hỏi xung quanh 1 meta tx và zether:
+> - Nhận từ đâu: Cổng RPC, queue nội bộ hay từ Node Relay khác.
+> - Có hợp lệ: Ví dụ nonce bé hơn nonce cuối cùng ⇒ không hợp lệ. (Chain → Contract → Address → Nonce …)
+> - Có hỗ trợ, hay bị lọc gì không?
+> - Sau đó thì làm gì? Submit to chain, đưa vào pool, relay to other node .v.v.
+> - Nếu submit pool thì làm gì: 2 câu hỏi ai được submit và tiền về đâu
+> - Để trong queue/mempool bao lâu.
+> - Có monitor network để nếu xử lý xong thì sao? Node khác xử lý thì sao?
+> - Có ném kết quả vào queue kết quả, hay callback-hook .v.v.
+
+### Ghi chú định hướng (chưa phải thiết kế)
+
+Đây là **vòng đời đầy đủ của một intent bên trong một node** — thứ mà §21.4 (ma trận vai) và §21.5
+(pool khoá) mới chỉ mô tả từng mảnh rời. Nó sẽ là một máy trạng thái, và nó phải là **spec chung cho
+cả hai bản cài đặt** (§21.3), không phải mô tả một bản.
+
+Những chỗ đã có sẵn nguyên liệu, để khi viết không làm lại từ đầu:
+
+| Câu hỏi của user | Nguyên liệu đã có |
+|---|---|
+| Nhận từ đâu | §21.4 trục **ingest**; §05.1 hai lớp gateway/mesh; §05.1.2 các route |
+| Có hợp lệ không | §05.5 sáu tầng hàng rào; §06.1.8 hai không gian nonce (EOA và `meta_nonce`) — câu "nonce bé hơn nonce cuối" của user thuộc **`meta_nonce(from, batchId)`**, không phải nonce EOA |
+| Có hỗ trợ / bị lọc | §21.4 ma trận `(chain, contract)`; §06.3.3 `blockchain.target.policy` — hai chỗ này là **cùng một bảng tra**, phải hợp nhất |
+| Sau đó làm gì | §21.4 thuật toán submit-vs-forward; §05.1.0 từ chối thì chuyển tiếp |
+| Ai được submit / tiền về đâu | §21.5 — chính hai câu hỏi này, `relayer` và `feeRecipient` |
+| Ở trong queue bao lâu | §05.2 `expiry` là trần cứng; §21.4 `promote-to-open` sau `T`; §06.3.4 cửa sổ epoch Zether hẹp hơn nhiều |
+| Monitor network, node khác xử lý | §05.4.4 soft-exclusivity + `intent_id` dedup; §05.8.1 state machine |
+| Ném kết quả đi đâu | §05.2 `/receipt`; §06.0.1 `relay_report_batch`; §05.4.4(b) receipt là đầu vào của danh tiếng |
+
+**Ba chỗ chưa có nguyên liệu và sẽ phải thiết kế mới:**
+
+1. **Một máy trạng thái duy nhất cho intent bên trong node.** Hiện có ba máy trạng thái rời: intent
+   trên bus (§05.8.1), job broadcast trong pool (§06.2.6), và các vai của §21.4. Chúng chồng lấn
+   nhưng không khớp. Cần một bản hợp nhất — hoặc một tuyên bố rõ ràng rằng chúng là ba tầng khác
+   nhau và ánh xạ giữa chúng là gì.
+2. **Kiểm `meta_nonce` ở tầng node trước khi nhận.** §06.1.8 nói relay pool kiểm trước khi broadcast.
+   Một node mesh nên kiểm **sớm hơn** — ngay lúc nhận, trước khi gossip — vì gossip một intent có
+   nonce đã tiêu là lãng phí băng thông của cả mạng. Nhưng nó tốn một `eth_call`, nên không làm được
+   ở tốc độ gossip. Đây là một đánh đổi thật chưa ai cân.
+3. **Giao diện trả kết quả cho người gửi.** Queue kết quả hay callback/webhook là hai mô hình khác
+   nhau, và trên một mạng mở thì "callback về đâu" là một câu hỏi bảo mật (SSRF, và một URL trong
+   intent là một kênh rò rỉ). Chưa có gì về việc này ở bất kỳ section nào.
