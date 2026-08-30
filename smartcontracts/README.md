@@ -24,9 +24,22 @@ Ba hệ quả xuyên suốt cây này:
    Vì bn254 mã hoá G1 bằng 64 byte còn BLS12-381 bằng 128 byte, interface chung nhận
    điểm dạng `bytes` — `struct G1Point { uint256 x; uint256 y; }` là kiểu của bn254,
    không phải kiểu của "một điểm".
-2. **Không Beacon proxy.** Beacon nghĩa là chủ beacon thay được implementation của mọi
-   token người lạ từng tạo. Mặc định là EIP-1167 clone bất biến; UUPS do chính người
-   tạo sở hữu là tuỳ chọn.
+2. **Không có upgrade, chấm hết.** Chỉ EIP-1167 clone. Không Beacon, không UUPS, không
+   Diamond — người tạo cũng không nâng cấp được token của chính mình.
+
+   Version sống ở **factory**, không ở token: factory đăng ký `ZETHER v1, v2, v3…` và
+   `META v1, v2, v3…`, người tạo chọn version lúc deploy và nó ghim vĩnh viễn. Thêm v4
+   vào catalogue **không chạm** một byte nào của zDAI-A đang chạy v1.
+
+   Cái giá, nói thẳng: **một lỗi trong v1 là lỗi vĩnh viễn của mọi token trên v1.**
+   Đường duy nhất là deploy token mới trên v2 rồi người dùng unwrap/wrap sang — di cư
+   tự nguyện, từng người một. Đổi lại: không tồn tại nút bấm nào, của bất kỳ ai, thay
+   đổi được contract đang giữ tiền bạn.
+
+   Catalogue là **danh mục, không phải cổng**: append-only (`v1` không bao giờ trỏ lại
+   chỗ khác), `deprecate()` chỉ đánh dấu chứ không chặn, và `createUnregistered` cho
+   phép deploy implementation ngoài catalogue — token đó mang `version() == 0`, cố ý
+   nhìn thấy được.
 3. **Bỏ gác cổng thì bù bằng xuất xứ.** `factory()`, `creator()`, `underlying()`,
    `verifier()` bất biến và công khai, `isDeployedHere()` để đối chiếu ngược. Đủ để
    trả lời "cái này wrap gì, ai tạo, verifier nào" — không đủ để trả lời "cái này có

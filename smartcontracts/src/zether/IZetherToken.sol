@@ -122,6 +122,21 @@ interface IZetherToken is IERC20MetaTx {
     /// @notice Factory đã sinh ra token này, hoặc `address(0)` nếu deploy tay.
     function factory() external view returns (address);
 
+    /// @notice Người tạo token này. Bất biến.
+    function creator() external view returns (address);
+
+    /// @notice Implementation mà clone này trỏ tới. Bất biến — **không có setter, và
+    ///         không có ai trên đời nâng cấp được nó**, kể cả người tạo, kể cả người
+    ///         deploy factory.
+    function implementation() external view returns (address);
+
+    /// @notice Số version trong catalogue của factory. **0 nghĩa là không có trong
+    ///         catalogue** (deploy qua `createUnregistered`).
+    /// @dev Số 0 cố ý nhìn thấy được. Ví phải phân biệt được "chạy v2 đã công bố, mã
+    ///      nguồn đọc được" với "chạy code người tạo tự mang tới". Cả hai đều hợp lệ;
+    ///      người sắp nạp tiền có quyền biết mình đang dùng cái nào.
+    function version() external view returns (uint64);
+
     /// @notice Token gốc được wrap, hoặc `address(0)` nếu không có underlying
     ///         (issuer tự mint), hoặc sentinel native nếu wrap coin gốc của chain.
     /// @dev **Không hàm ý duy nhất.** Mười người wrap xDAI thành mười contract khác

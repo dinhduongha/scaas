@@ -1106,36 +1106,75 @@ tạo token đọc để tự chọn"*, và nó là hướng dẫn thật:
 Chain private 9000 chỉ chạy được bn254. Đó là dữ kiện triển khai, không còn là quyết
 định kiến trúc.
 
-### 20.2 Beacon proxy phải bị loại. Đây là hệ quả nghiêm trọng nhất
+### 20.2 KHÔNG CÓ UPGRADE. Version nằm ở factory, bất biến nằm ở token
 
-Canon §01 mục 1 chốt **Beacon proxy**, một `UpgradeableBeacon` cho mỗi
-`(archetype, majorVersion)`, và tự ghi nhận nhược điểm: *"Blast radius = toàn bộ N
-token."*
+User chốt:
 
-Trong hệ đóng nơi ta sở hữu cả N token, đó là **ưu điểm** — vá 40 token của 40 nhà
-phân phối bằng 1 giao dịch mỗi chain, đúng như lý lẽ §1.3 mục 1.
+> *"Và không có upgrade cho zDAI-A, zDAI-B. Factory sẽ đăng ký các version zether
+> implement v1, v2, v3 … hoặc meta token v1, v2, v3. User create zether xDAI-A, xDAI-B
+> tùy họ chọn implement version."*
 
-Với factory mở, **cùng cơ chế đó nghĩa là chủ beacon thay được implementation của mọi
-token mà mọi người lạ từng tạo** — im lặng, một giao dịch, không cần ai đồng ý. Đó là
-cửa hậu lên tiền của người khác, và nó chính xác là cái quyền mà mô hình mở hứa là
-không tồn tại.
+Đây là mô hình sạch hơn hẳn bản tôi đề xuất trước đó (clone bất biến **hoặc** UUPS do
+người tạo sở hữu). Bỏ luôn UUPS. **Chỉ còn EIP-1167 clone.** Người tạo cũng không nâng
+cấp được token của chính mình.
 
-Beacon do chính người tạo sở hữu thì vô nghĩa: một beacon cho một token = UUPS cộng
-~4.600 gas mỗi giao dịch.
+Canon §01 mục 1 chốt **Beacon proxy** và tự ghi nhận *"blast radius = toàn bộ N token"*.
+Trong hệ đóng nơi ta sở hữu cả N token đó là **ưu điểm** — vá 40 token bằng 1 giao
+dịch. Với factory mở thì cùng cơ chế đó nghĩa là chủ beacon thay được implementation
+của mọi token mà mọi người lạ từng tạo, im lặng, một giao dịch. Loại.
 
-**Thay bằng hai mode, người tạo chọn:**
+#### Chỗ tách đôi mà toàn bộ thiết kế xoay quanh
 
-| Mode | Ai nâng cấp được | Deploy | Call (warm) |
-|---|---|---|---|
-| `IMMUTABLE` — EIP-1167 clone | **không ai**, kể cả người tạo | ~45.000 | ~2.700 |
-| `UPGRADEABLE_BY_CREATOR` — UUPS, owner = người tạo | chỉ người tạo, chỉ token của mình | ~200.000 | ~4.800 |
+| | Ai đổi được | Ảnh hưởng tới |
+|---|---|---|
+| **Catalogue version** ở factory | thêm được v4 | **chỉ token deploy SAU đó** |
+| **Token đã deploy** | **không ai** | — |
 
-Mặc định `IMMUTABLE`: rẻ nhất, và không có bề mặt tin cậy nào — đúng thứ một protocol
-phi tập trung nên mặc định.
+Đăng ký v4 không chạm được một byte nào của zDAI-A đang chạy v1. Đó là khác biệt
+tuyệt đối so với beacon, nơi đổi implementation là đổi hành vi của mọi token đang lưu
+hành, ngay lập tức.
 
-Dọn dẹp kèm theo: **chuỗi CREATE2 ba tầng của §1.4 không còn lý do tồn tại.** Nó có
-mặt chỉ để giữ địa chỉ ổn định qua các lần nâng cấp. Với clone bất biến thì không có
-lần nâng cấp nào để mà giữ. Còn hai tầng: factory → token.
+Nên câu hỏi *"ai được đăng ký version"* **không** phải câu hỏi về quyền lực lên tiền
+người khác. Kẻ đăng ký tệ nhất cũng chỉ xuất bản được một v4 dở mà người tạo token mới
+có thể chọn hoặc không.
+
+#### Ba bất biến của catalogue
+
+1. **Append-only.** `(kind, version)` đã đăng ký thì **không bao giờ trỏ lại chỗ khác**.
+   Nếu `v1` trỏ lại được thì *"tôi muốn v1"* thành mục tiêu di động: người tạo đọc mã
+   nguồn v1 hôm nay, deploy tuần sau, nhận về implementation khác. Cho phép sửa trỏ là
+   dựng lại đúng cái quyền mà việc bỏ beacon vừa xoá — chỉ khác là nó tác động lên
+   token tương lai thay vì token hiện tại.
+2. **`deprecate()` đánh dấu, KHÔNG chặn.** Chặn ở đây là trấn an: `createUnregistered`
+   bỏ qua catalogue hoàn toàn, nên mọi rào đều đi vòng được bằng một tham số. Rào đi
+   vòng được không mua thêm an toàn, chỉ mua cảm giác an toàn — và đổi lấy quyền chặn
+   người khác deploy, thứ factory mở không nên có. Việc thật là phát tín hiệu: event,
+   ví hiện cảnh báo, indexer đánh dấu token đang chạy version đó.
+3. **`createUnregistered` phải tồn tại.** Nếu chỉ version đã đăng ký mới deploy được
+   thì người giữ quyền đăng ký quyết định được cả thế giới được tạo cái gì, và
+   *"ai cũng tạo được"* thành khẩu hiệu. Token sinh ra đường này có `version() == 0`, và
+   số 0 đó **cố ý nhìn thấy được** — ví phân biệt được "chạy v2 đã công bố" với "chạy
+   code người tạo tự mang tới". Cả hai hợp lệ; người sắp nạp tiền có quyền biết.
+
+#### Cái giá, nói thẳng
+
+**Một lỗi trong v1 là lỗi vĩnh viễn của mọi token trên v1.** Không có bản vá, không có
+đường tắt, không có ngoại lệ khẩn cấp. Đường duy nhất: người tạo deploy token mới trên
+v2, người dùng `unwrap` khỏi cái cũ và `wrap` vào cái mới — di cư tự nguyện, từng người
+một, không ai bị ép.
+
+Đó chính xác là thứ mua được bằng việc bỏ upgrade: **không tồn tại một nút bấm nào, của
+bất kỳ ai, thay đổi được contract đang giữ tiền của bạn.** Không có nút thì không có ai
+để phải tin, và không có gì để bị đánh cắp quyền.
+
+Hệ quả kèm theo là dọn dẹp: `getWrapperCount(creator, underlying) > 1` giờ mang nghĩa
+mới và hữu ích — "ông A có zDAI trên v1 và zDAI trên v2" là cách **duy nhất** còn tồn
+tại của việc nâng cấp, và nó hiện ra như hai địa chỉ chứ không phải một trạng thái ẩn.
+
+Và: chuỗi CREATE2 **ba tầng** của canon §1.4 mất lý do tồn tại. Nó có mặt chỉ để giữ
+địa chỉ ổn định qua các lần nâng cấp. Không còn nâng cấp thì còn hai tầng, và với
+EIP-1167 thì `init_code` chỉ phụ thuộc `implementation` nên `predictAddress` xác định
+hoàn toàn và tính được off-chain.
 
 ### 20.3 Mỗi người tạo một wrapper. `getWrapper` GIỮ, đổi khoá
 
