@@ -646,10 +646,14 @@ Guard vẫn bắt buộc, quy tắc không đổi:
   `burn` với `migrateAccount` dùng chung `(C,D)`.
 - Test `ReentrancyCross.t.sol` gọi chéo **từng cặp** hàm đổi state.
 
-Lưu ý chain private 9000: nó chạy **pre-London**, nên `TSTORE`/`TLOAD` (Cancun) **không có**.
-`ReentrancyGuardTransient` không compile được cho profile đó — phải dùng bản storage-slot thường. Đây là
-một dòng trong `foundry.toml` profile `private9000` (`evm_version = "berlin"`), không phải một phát hiện
-lúc deploy.
+**[CẬP NHẬT 2026-08-31] Chain 9000 đã nâng lên Nethermind 1.39.0 với Fusaka + BPO2, nên `TSTORE`/`TLOAD`
+đã có** và `ReentrancyGuardTransient` dùng được. Profile `private9000` trong `foundry.toml` đổi từ
+`berlin` sang `prague`.
+
+Nhưng lý do bản trước phải hạ xuống `berlin` thì đáng giữ làm bài học: genesis khai `cancunBlock: 0`
+kiểu Geth trong một file **format chainspec Nethermind**, và Nethermind bỏ qua im lặng mọi key ngoài
+schema của nó. Không warning. Chain chạy pre-London trong khi file khai là Prague, và cách duy nhất
+phát hiện là **đo** — `eth_call` một initcode chứa `PUSH0`, hoặc xem header có `baseFeePerGas` không.
 
 #### 04.6.4. Batch — relayer sẽ hỏi, tốt hơn là thiết kế trước
 
@@ -678,7 +682,7 @@ hai nút thắt khác nhau.
 
 ```solidity
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.20;   // KHÔNG đòi Cancun: chain 9000 chạy pre-London, xem §04.6.3
+pragma solidity ^0.8.20;   // chain 9000 nay da co Cancun/Prague, xem §04.6.3
 
 library MetaTxLib {
     // bit 3..0 = cờ ràng buộc; bit 7..4 = cách tính phí. Xem §04.4
@@ -773,7 +777,7 @@ Bốn điểm đã đổi so với bản 1, mỗi cái nối về một mục:
 | Đổi gì | Vì sao | Mục |
 |---|---|---|
 | Bỏ `feeToken`, `innerGasLimit`, `tokenContract` | Không forwarder; phí bằng chính token; `verifyingContract` đã là token | §04.1, §04.1b |
-| `pragma ^0.8.24` → `^0.8.20`, bỏ transient storage | Chain 9000 chạy **pre-London** — không `TSTORE`, không `PUSH0` | §04.6.3 |
+| `pragma ^0.8.24` → `^0.8.20` | Giữ sàn thấp cho khả năng chuyển chain. Transient storage nay **dùng được** trên 9000 (Fusaka) | §04.6.3 |
 | `event` bỏ `success`, thêm `feeRecipient`/`fee` đã resolve | Không còn nhánh "thành công một nửa"; indexer cần biết phí thực trả về đâu | §04.6.2 |
 | `mode` mask `0x1F` → `0xF3`, bỏ trường `feeMode` | Ba bit chết cùng forwarder; cách tính phí dời vào nửa byte sau | §04.4 |
 

@@ -1408,9 +1408,11 @@ Bốn kết luận đọc được từ bảng trên, và ba trong số đó ng�
    ⇒ ~31,200 token calldata ⇒ sàn calldata theo EIP-7623 = 21,000 + 40 × 31,200 = **1,269,000 gas**, thấp hơn
    4,521,000 rất nhiều. Sàn không ràng buộc. Nếu chunk_size tăng quá ~500, phải tính lại.
 
-   **[BẢN 3] Trên chain 9000 hai con số này khác.** gasLimit 16.7M (gần Gnosis), nhưng chain chạy **pre-London**:
-   không EIP-1559, nên không có base fee và `MinGasPrice = 0`; và EIP-7623 chưa tồn tại, nên sàn calldata không áp.
-   Cũng nghĩa là PUSH0 không dùng được — `foundry.toml` phải để `evm_version = "berlin"` cho profile đó.
+   **[CẬP NHẬT 2026-08-31] Chain 9000 đã nâng lên Nethermind 1.39.0, Fusaka + BPO2.** gasLimit vẫn 16,7M.
+   EIP-1559 **đã bật**, nhưng `baseFeePerGas` đặt 0 ngay ở genesis và công thức 1559 giữ nó dính vĩnh viễn
+   ở 0 (`next = base + base·delta/target/denom`, base = 0 ⇒ mọi số hạng bằng 0) — **gas vẫn miễn phí**.
+   EIP-7623 **đã bật**, nên sàn calldata nay **có** áp: phải tính lại cho chunk lớn. PUSH0/TSTORE/MCOPY
+   dùng được; `foundry.toml` profile `private9000` đổi sang `evm_version = "prague"`.
 
 3. **Zether không batch được, và khoảng cách lớn hơn bản nháp nghĩ.** 564M gas là **33 block Gnosis liên tiếp**
    (17M/block), tức ~2.8 phút chiếm **toàn bộ** không gian block của cả mạng lưới. Không thể. Mỗi

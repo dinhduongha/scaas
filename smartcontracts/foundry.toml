@@ -12,11 +12,14 @@ remappings = [
   "forge-std/=lib/forge-std/src/",
 ]
 
-# Chain 9000 (Nethermind, private) chạy TRƯỚC London — không EIP-1559, không
-# EIP-2537. Xem TRAPS.md §"Private chain". EVM version phải hạ xuống cho khớp,
-# nếu không bytecode sinh ra dùng opcode chain không hiểu (PUSH0 từ Shanghai).
+# Chain 9000 (Nethermind 1.39.0, private, Clique một signer) — Fusaka + BPO2.
+# [2026-08-31] Trước đây profile này phải là "berlin": genesis khai fork kiểu Geth mà
+# Nethermind bỏ qua im lặng, nên chain chạy pre-London — không PUSH0, không TSTORE,
+# không EIP-2537. Đã sửa chainspec và đo lại: PUSH0/TLOAD/MCOPY/BASEFEE/CLZ đều sống,
+# cả 7 precompile BLS12-381 trả đúng số byte, base fee dính 0 nên gas vẫn miễn phí.
+# Chi tiết: /home/dockers/mba-chain-nethermind/README-chainspec.md
 [profile.private9000]
-evm_version = "berlin"
+evm_version = "prague"
 
 [profile.gnosis]
 evm_version = "cancun"
