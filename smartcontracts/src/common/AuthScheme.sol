@@ -12,15 +12,17 @@ pragma solidity ^0.8.20;
 /// digest bao trùm toàn bộ giao dịch. Bỏ vế thứ hai thì lộ `encKey` = mất tiền, thay vì
 /// chỉ là read-only breach.
 enum AuthScheme {
-    SELF_SCHNORR,    // 0 — KHÔNG có chữ ký riêng. ZK proof CHÍNH LÀ uỷ quyền
-    ECDSA_MULTISIG,  // 1 — N-of-M ECDSA thô, xem MultiSig.sol
-    FROST_BN254,     // 2 — threshold Schnorr t-of-n trên bn254
-    MUSIG2_BN254,    // 3 — Schnorr n-of-n trên bn254
-    BLS_BN254,       // 4 — BLS trên bn254. Chỉ private chain, ~100 bit
-    BLS12381         // 5 — BLS12-381 qua EIP-2537. ~126 bit. Xem Bls12381.sol
+    SELF_SCHNORR,        // 0 — KHÔNG có chữ ký riêng. ZK proof CHÍNH LÀ uỷ quyền
+    ECDSA_MULTISIG,      // 1 — N-of-M ECDSA thô, xem MultiSig.sol
+    FROST_BN254,         // 2 — threshold Schnorr t-of-n (KHÔNG phải MuSig2)
+    MUSIG2_BN254,        // 3 — n-of-n
+    BLS_BN254,           // 4 — chỉ private chain, ~100 bit
+    BLS_12381,           // 5 — cần EIP-2537. ~126 bit. Xem Bls12381.sol + HashToCurve.sol
+    PQ_COMMITMENT,       // 6 — verify off-chain
+    SMART_ACCOUNT_1271   // 7
 }
 
-/// @title Ánh xạ sơ đồ -> đường xác minh. NĂM giá trị, nhưng chỉ BỐN đường code.
+/// @title Ánh xạ sơ đồ -> đường xác minh. TÁM giá trị, nhưng chỉ SÁU đường code.
 library AuthSchemeLib {
     /// @notice MPC KHÔNG cần một đường xác minh riêng, và đây là điều dễ thiết kế thừa nhất.
     ///
@@ -41,11 +43,13 @@ library AuthSchemeLib {
     /// TỔNG HỢP** của nhóm, không phải share của ai. Đó là ràng buộc lúc đăng ký (§02.2 PoP),
     /// không phải lúc verify.
     function verifierPath(AuthScheme s) internal pure returns (uint8) {
-        if (s == AuthScheme.SELF_SCHNORR)   return 0;  // không chữ ký nào để kiểm
-        if (s == AuthScheme.ECDSA_MULTISIG) return 1;  // MultiSig.sol
-        if (s == AuthScheme.BLS_BN254)      return 3;  // pairing bn254, precompile 0x08
-        if (s == AuthScheme.BLS12381)       return 4;  // pairing BLS12-381, precompile 0x0f
-        return 2;                                      // FROST + MUSIG2 -> CÙNG Schnorr bn254
+        if (s == AuthScheme.SELF_SCHNORR)        return 0;  // không chữ ký nào để kiểm
+        if (s == AuthScheme.ECDSA_MULTISIG)      return 1;  // MultiSig.sol
+        if (s == AuthScheme.BLS_BN254)           return 3;  // pairing bn254, precompile 0x08
+        if (s == AuthScheme.BLS_12381)           return 4;  // Bls12381.sol + HashToCurve.sol
+        if (s == AuthScheme.PQ_COMMITMENT)       return 5;  // verify off-chain, on-chain chỉ giữ cam kết
+        if (s == AuthScheme.SMART_ACCOUNT_1271)  return 6;  // SigLib.requireValid -> ERC-1271
+        return 2;                                           // FROST + MUSIG2 -> CÙNG Schnorr bn254
     }
 
     /// @notice Sơ đồ này có chống được compromise `encKey` không.

@@ -372,6 +372,8 @@ uint8   public immutable generation;    // v1 = 1; require(generation <= 2)
 
 function resolve(bytes32 addr) external view returns (Account memory);
 // resolve() doc local truoc; neu status == NONE va predecessor != 0 -> doc predecessor.
+```
+
 **Giới hạn 2 thế hệ, cứng.** Bản nháp trước không đặt giới hạn. Chi phí mỗi hộp fallback = 2.600 (cold CALL) + 2.100 (cold SLOAD) + overhead ≈ **5.000 gas**. Với 4 thế hệ, hot path thêm 15.000 gas và trở thành không xác định (phụ thuộc tài khoản đăng ký đời nào). `require(generation <= 2)` trong constructor; trước khi deploy v3, phải chạy **migration sweep**: một hàm `bulkImport(bytes32[] addrs)` permissionless đọc từ predecessor và ghi vào local (chi phí ~25.000 gas/account, 5.000 account = 125M gas ≈ $0,25 trên Gnosis). Sau sweep, set `predecessor = 0` không được (immutable) — thay vào đó đặt cờ `sweepComplete` để `resolve()` bỏ qua fallback.
 
 **(b) Linkability chéo token.** Một `schnorrAddress` dùng cho Z-USDC + Z-VND + Z-Loyalty → mọi hoạt động của pháp nhân đó liên kết được. Với triết lý "lộ danh tính, ẩn số tiền" thì đây là **chấp nhận được theo thiết kế**, nhưng phải có lối thoát: registry **không được** ép 1 khoá/pháp nhân. Một legal entity đăng ký N `schnorrAddress` cho N mục đích (treasury, payroll, loyalty, settlement với từng distributor). Mapping entity → tập địa chỉ nằm **off-chain trong Odoo**, không lên chain.
@@ -437,6 +439,66 @@ interface ISignatureVerifier {
         external view returns (bytes4 magic);
 }
 ```
+
+##### [BẢN 3] Tám giá trị, nhưng chỉ SÁU verifier — và MPC không cần cái nào
+
+Đây là chỗ dễ thiết kế thừa nhất của cả mục, và bản trước không nói.
+
+**FROST (2) và MUSIG2 (3) dùng CHUNG một đường xác minh.** Cả hai là giao thức **off-chain** để
+nhiều bên cùng tạo ra **một chữ ký Schnorr duy nhất**. Chữ ký đó `(R, z)` verify bằng đúng phương
+trình của chữ ký một người: `z·G == R + c·P`. Contract **không phân biệt được**, và không cần.
+Viết hai `ISignatureVerifier` cho chúng là hiện thực hai lần cùng một phép toán.
+
+Hai giá trị enum vẫn tách vì chúng khác nhau ở chỗ **khác**: registry ghi lại *cơ chế quản trị nào
+đang bảo vệ tài khoản* — t-of-n hay n-of-n. Đó là thông tin kiểm toán và chính sách, không phải
+thông tin xác minh.
+
+Điều **duy nhất** MPC đòi ở tầng contract: khoá đăng ký phải là **khoá TỔNG HỢP** của nhóm, không
+phải share của ai. Đó là ràng buộc lúc `register` (PoP §2.2), không phải lúc verify. Và §2.2 đã bắt
+PoP cho **mọi** khoá không ngoại lệ, chính vì rogue-key — nên ràng buộc này đã có sẵn.
+
+| `AuthScheme` | Verifier | Hiện thực |
+|---|---|---|
+| 0 `SELF_SCHNORR` | — | Không chữ ký nào để kiểm; ZK proof là uỷ quyền |
+| 1 `ECDSA_MULTISIG` | N-of-M ECDSA | `MultiSig.sol` |
+| 2 `FROST_BN254` | Schnorr bn254 | **cùng một** verifier |
+| 3 `MUSIG2_BN254` | Schnorr bn254 | **cùng một** verifier |
+| 4 `BLS_BN254` | pairing bn254 (0x08) | — |
+| 5 `BLS_12381` | pairing BLS12-381 (0x0f) | `Bls12381.sol` + `HashToCurve.sol` |
+| 6 `PQ_COMMITMENT` | off-chain | on-chain chỉ giữ cam kết |
+| 7 `SMART_ACCOUNT_1271` | ERC-1271 | `SigLib.requireValid` |
+
+##### [BẢN 3] BLS_12381: đã hiện thực và đã đo trên chain 9000
+
+Chain 9000 đã bật EIP-2537 (2026-08-31). Số đo thật, `eth_estimateGas` trừ intrinsic + calldata:
+
+| Thành phần | Gas |
+|---|---:|
+| `MAP_FP_TO_G1` (0x10) × 2 | 11.682 |
+| `G1ADD` (0x0b) | ~1.100 |
+| `expand_message_xmd` + 2× MODEXP rút gọn mod p | ~4.000 (ước) |
+| `PAIRING_CHECK` (0x0f) k=2 | **103.959** |
+| **Tổng verify min-sig** | **~120k** |
+
+Khớp ước tính ~118k của §2.5.2. Và một kết quả ngược trực giác: **pairing BLS12-381 (103.959) rẻ
+hơn pairing bn254 (114.091)** trên cùng chain đó — nên `BLS_BN254` (giá trị 4) mất lý do tồn tại
+trừ khi chain không có EIP-2537. Đường cong 126-bit không đắt hơn đường cong 100-bit; nó rẻ hơn.
+
+Điều này **không** mâu thuẫn spike S7: S7 đo **MSM ở quy mô Bulletproofs** (k=277), nơi BLS12-381
+đắt hơn ~2%. Pairing và MSM là hai phép toán khác nhau, và cả hai đều đo được.
+
+Ba chi tiết hiện thực mà sai một cái là hỏng im lặng:
+
+1. **Địa chỉ precompile.** Bản cuối EIP-2537 **đánh số lại**: `G2ADD` là `0x0d` (không phải `0x0e`),
+   `MAP_FP_TO_G1` là `0x10` (không phải `0x11`). Dùng số của draft là gọi trúng precompile khác, và
+   với input toàn 0 nó **vẫn trả byte**.
+2. **Bỏ `clear_cofactor` là ĐÚNG ở đây.** RFC 9380 làm `P = clear_cofactor(Q0 + Q1)`, nhưng
+   `MAP_FP_TO_G1` của EIP-2537 đã clear cofactor rồi. Ta tính `h·Q0 + h·Q1` thay vì `h·(Q0+Q1)` —
+   **bằng nhau**, vì nhân vô hướng là đồng cấu nhóm. Đã kiểm trên chain: `G1MSM(H(m), 1) == H(m)`,
+   tức `H(m)` nằm trong subgroup bậc nguyên tố.
+3. **`G1ADD`/`G2ADD` KHÔNG kiểm subgroup**, chỉ kiểm on-curve. `G1MSM`/`G2MSM`/`PAIRING_CHECK` thì
+   có. Nên tổng hợp khoá bằng một chuỗi `G2ADD` rẻ tiền là **không** được bảo vệ — phải ép qua
+   `G2MSM` k=1 một lần lúc đăng ký (§2.5.3 đã nói; `Bls12381.requireInG2Subgroup` là hiện thực).
 
 #### 2.4.2. **Lỗ hổng lớn nhất của bản nháp trước: không ai bắt buộc gọi `assertAuthorized`**
 
@@ -1166,8 +1228,6 @@ Khoá bí mật `x`: **không bao giờ** nằm trong DB — `secret_ref` chỉ 
 
 Bản nháp trước không có mục này. Brief yêu cầu nhất quán cross-chain, và bốn trong năm chuỗi còn lại **phá vỡ một giả định nền tảng của thiết kế EVM**: rằng token có thể gọi registry **đồng bộ** trong cùng một giao dịch.
 
-| Chuoi | Registry o dau | Van de rieng | Giai phap de xuat |
-|---|---|---|---|
 | Chuỗi | Registry ở đâu | Vấn đề riêng | Giải pháp đề xuất |
 |---|---|---|---|
 | **HBAR (HSCS)** | Contract EVM y hệt | Gas theo USD-peg; `ecPairing`/`ecMul` bn254 **có** trên HSCS nhưng giá khác. HCS dùng làm audit log cho event registry | Tái sử dụng nguyên code EVM. Neo `AccountRegistered` vào HCS topic để có consensus timestamp pháp lý |

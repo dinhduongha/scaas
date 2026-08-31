@@ -22,7 +22,7 @@ contract AuthSchemeTest is Test {
         assertFalse(AuthSchemeLib.survivesEncKeyLeak(AuthScheme.SELF_SCHNORR));
         assertTrue(AuthSchemeLib.survivesEncKeyLeak(AuthScheme.ECDSA_MULTISIG));
         assertTrue(AuthSchemeLib.survivesEncKeyLeak(AuthScheme.FROST_BN254));
-        assertTrue(AuthSchemeLib.survivesEncKeyLeak(AuthScheme.BLS12381));
+        assertTrue(AuthSchemeLib.survivesEncKeyLeak(AuthScheme.BLS_12381));
     }
 
     /// Số enum nằm trong storage đã ghi và trong digest đã ký. Ghim chúng.
@@ -31,8 +31,10 @@ contract AuthSchemeTest is Test {
         assertEq(uint8(AuthScheme.ECDSA_MULTISIG), 1);
         assertEq(uint8(AuthScheme.FROST_BN254),    2);
         assertEq(uint8(AuthScheme.MUSIG2_BN254),   3);
-        assertEq(uint8(AuthScheme.BLS_BN254),      4);
-        assertEq(uint8(AuthScheme.BLS12381),       5);
+        assertEq(uint8(AuthScheme.BLS_BN254),          4);
+        assertEq(uint8(AuthScheme.BLS_12381),          5);
+        assertEq(uint8(AuthScheme.PQ_COMMITMENT),      6);
+        assertEq(uint8(AuthScheme.SMART_ACCOUNT_1271), 7);
     }
 
     /// Địa chỉ precompile EIP-2537 — bản cuối đánh số lại so với draft. Sai một số là gọi
