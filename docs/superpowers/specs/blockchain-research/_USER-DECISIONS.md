@@ -1411,16 +1411,43 @@ Trục thứ ba là chỗ "ma trận" đến từ: một node hoàn toàn có th
 cho chain 9000**, vì nó có gas trên chain này mà không có quyền trên chain kia. Một enum không diễn
 đạt được điều đó.
 
-#### Sáu vai, sinh ra từ ba trục
+#### Sáu HÌNH DẠNG TRIỂN KHAI, sinh ra từ ba trục
 
-| Vai | Ingest | Pool | Submit | Vì sao tồn tại |
-|---|---|---|---|---|
-| **Pool thuần** | gossip | open | **không có key** | Chạy được bởi bất kỳ ai, không cần tiền, không cần tin tưởng. Đây là thứ làm mạng **thật sự mở** — rào vào thấp nhất có thể |
-| **Gateway** | HTTP | none | có | Nhận từ ví/web, ký, đẩy. Không tham gia mesh. Đây là "mode 1" cũ |
-| **Node đầy đủ** | cả hai | open | **theo ma trận** | Vai chính của mesh |
-| **Private pool** | cả hai | **private** | không | Giữ intent không nên phát công khai, chờ relayer được phép lấy |
-| **Private relayer** | kéo từ private pool | none | có | Đối tác của private pool. Cặp này là mô hình private mempool kiểu Flashbots |
-| **Observer** | gossip | open | không | Chỉ index. Không có chính sách, không claim. Hữu ích cho explorer và cho đối soát |
+> **[HỢP NHẤT với §23.3]** Bảng này và bảng ở §23.3 từng dùng chung một chữ "vai" cho
+> **hai thứ khác nhau**, và đó là lý do đọc hai bảng cạnh nhau thấy mâu thuẫn. Tách hẳn
+> từ vựng:
+>
+> - **Mô-đun** (§23.3) — một hệ thống con **bật/tắt được** trong binary: `gateway`,
+>   `mesh`, `pool`, `submit`, `indexer`, và hai mô-đun ở làn khác là `custody`, `oracle`.
+> - **Hình dạng** (bảng dưới) — một **điểm trong không gian ba trục**, tức một tập
+>   mô-đun cộng giá trị ba trục. Đây là thứ người vận hành chọn.
+>
+> Một hình dạng **là** một tập mô-đun. Không có mô-đun nào chỉ tồn tại cho một hình dạng,
+> và không có hình dạng nào cần mô-đun ngoài danh sách bảy cái trên.
+
+| Hình dạng | Ingest | Pool | Submit | Mô-đun bật | Vì sao tồn tại |
+|---|---|---|---|---|---|
+| **Pool thuần** | gossip | open | **không có key** | `mesh`, `pool` | Chạy được bởi bất kỳ ai, không cần tiền, không cần tin tưởng. Đây là thứ làm mạng **thật sự mở** — rào vào thấp nhất có thể |
+| **Gateway** | HTTP | none | có | `gateway`, `submit`, `custody` | Nhận từ ví/web, ký, đẩy. Không tham gia mesh. Đây là "mode 1" cũ |
+| **Node đầy đủ** | cả hai | open | **theo ma trận** | cả năm + `custody` | Vai chính của mesh |
+| **Private pool** | cả hai | **private** | không | `gateway`, `mesh`, `pool` | Giữ intent không nên phát công khai, chờ relayer được phép lấy |
+| **Private relayer** | **kéo từ private pool** | none | có | `mesh` (chế độ pull), `submit`, `custody` | Đối tác của private pool. Cặp này là mô hình private mempool kiểu Flashbots |
+| **Observer** | gossip | open | không | `mesh`, `indexer` | Chỉ index. Không có chính sách, không claim. Hữu ích cho explorer và cho đối soát |
+
+**Hai chỗ việc hợp nhất làm lộ ra, và cả hai là thiếu sót thật chứ không phải chuyện từ ngữ:**
+
+1. **`mesh` phải có chế độ *pull*, không chỉ gossip.** Hình dạng "private relayer" ingest
+   bằng cách **kéo từ một private pool đã biết**, không phải bằng gossip. §23.3 liệt kê
+   `mesh` là "ingest + pool" và ngầm hiểu gossip. Một private relayer không subscribe topic
+   công khai nào cả; nó mở một kết nối tới đúng một peer và hỏi. Đó là một chế độ thứ hai
+   của cùng mô-đun, và nó phải được nói ra vì bảo mật của nó khác hẳn: **danh sách peer là
+   allowlist tường minh, không phải kết quả của peer discovery.**
+2. **Hai hàng đợi khác nhau cùng tên "pool".** Mô-đun `pool` là **hàng đợi hướng mesh** —
+   intent đang chờ ai đó nhặt. Hàng đợi việc của `submit` (job, nonce, bump, replace) là
+   **thứ khác**, nằm bên trong `submit`, và tồn tại kể cả khi `pool: none`. Hình dạng
+   "Gateway" có `pool: none` mà vẫn có hàng đợi việc — đọc bảng cũ thì tưởng nó không có
+   hàng đợi nào. `06-relay-pool-enterprise.md` nói về **hàng đợi thứ hai**, bất kể cái tên
+   "relay-pool" của nó.
 
 #### Private pool: vì sao cần, và cái bẫy của nó
 
@@ -1463,7 +1490,10 @@ chains:
 ```
 
 **Ma trận phải đánh giá được TRƯỚC khi simulate.** Nó chỉ được đọc các trường có sẵn trong intent —
-`chain_id`, `to`, `tokenContract`, `fee`, `feeMode`, `innerGasLimit`. Đó là điều làm nó rẻ (một phép
+`chain_id`, `to`, `value`, `fee`, `mode`, và **4 byte đầu của `data`** (selector). **[BẢN 4]**
+`tokenContract` không còn là trường của struct (`verifyingContract` của EIP-712 domain *là* token);
+`feeMode` nằm trong nửa byte sau của `mode`; `innerGasLimit` không tồn tại, và cái thay nó — gas ước
+tính — tra từ **bảng tĩnh theo selector** (§04.10), tức vẫn là một phép so khớp offline. Đó là điều làm nó rẻ (một phép
 so khớp, không một `eth_call` nào) và là lý do acceptance policy chạy được ở tốc độ gossip. Một luật
 cần simulate mới quyết được thì không thuộc về ma trận này; nó thuộc về bước định giá ở §5.3.
 
@@ -2127,23 +2157,29 @@ bamboo-node --role=custody --config cust.toml   # tang custody: broker khoa. CUN
 bamboo-node --role=oracle  --config orac.toml   # trong enclave, CHI khi Zether bat
 ```
 
-Bốn "dịch vụ" cũ của tầng daemon trở thành **năm vai trong một binary**, nối vào đúng ba trục năng lực
-của §21.4 chứ không phải một danh sách mới:
+Bốn "dịch vụ" cũ của tầng daemon trở thành **năm mô-đun trong một binary**, nối vào đúng ba trục
+năng lực của §21.4 chứ không phải một danh sách mới. **Mô-đun** là thứ bật/tắt; **hình dạng triển
+khai** (§21.4) là một tập mô-đun. Hai từ, hai thứ — bản đầu dùng chung chữ "vai" cho cả hai và đó là
+lý do hai bảng đọc như mâu thuẫn nhau.
 
-| Vai | Cũ là gì | Trục §21.4 | Chạm khoá nào |
-|---|---|---|---|
-| `gateway` | phần RPC của `relay-pool` | ingest | không |
-| `mesh` | `intent-hub` | ingest + pool | không |
-| `pool` | hàng đợi của `relay-pool` | pool `open` \| `private` \| `none` | không |
-| `submit` | nonce manager + simulation gate | submit theo `(chain, contract)` | **`authKey`** — qua custody broker, không giữ trong tiến trình |
-| `indexer` | `chain-indexer` | — (§22.8 cần nó) | không |
+| Mô-đun | Cũ là gì | Trục §21.4 | Chạm khoá nào | Có mặt ở hình dạng nào (§21.4) |
+|---|---|---|---|---|
+| `gateway` | phần RPC của `relay-pool` | ingest `http` | không | Gateway, Node đầy đủ, Private pool |
+| `mesh` | `intent-hub` | ingest `gossip` **hoặc `pull`** | không | Pool thuần, Node đầy đủ, Private pool, Private relayer, Observer |
+| `pool` | hàng đợi **hướng mesh** của `relay-pool` | pool `open` \| `private` \| `none` | không | Pool thuần, Node đầy đủ, Private pool |
+| `submit` | nonce manager + simulation gate + **hàng đợi việc** | submit theo `(chain, contract)` | **`authKey`** — qua custody broker, không giữ trong tiến trình | Gateway, Node đầy đủ, Private relayer |
+| `indexer` | `chain-indexer` | — (§22.8 cần nó) | không | Node đầy đủ, Observer; **và bất kỳ hình dạng nào chấm điểm forward có ích** (§21.4 cuối) |
 
-Và **hai vai ở một làn khác**, không thuộc mạng relay (§23.2):
+Và **hai mô-đun ở một làn khác**, không thuộc mạng relay (§23.2):
 
-| Vai | Cũ là gì | Ai gọi | Cần khi |
-|---|---|---|---|
-| `custody` | NHÓM A của `confidential-signer` | vai `submit`, **và** Odoo | luôn luôn |
-| `oracle` | NHÓM B — `ZetherKeyOracle` | `custody`, thay mặt Odoo | **chỉ khi Zether bật** |
+| Mô-đun | Cũ là gì | Ai gọi | Cần khi | Hình dạng |
+|---|---|---|---|---|
+| `custody` | NHÓM A của `confidential-signer` → **custody broker** | mô-đun `submit`, **và** Odoo | mọi hình dạng có `submit` | Gateway, Node đầy đủ, Private relayer |
+| `oracle` | NHÓM B — **key oracle** | `custody`, thay mặt Odoo | **chỉ khi Zether bật** | không hình dạng relay nào — nó ở làn riêng (§23.11) |
+
+Đọc bảng theo chiều dọc cột cuối là đọc được §21.4; đọc theo chiều ngang là đọc được cái gì bật trong
+binary. Một hình dạng **không** phải một cờ trong config — nó là tập `[modules]` cộng ba trục, và
+config chỉ có tập mô-đun cộng ma trận `chains:`. Không có `--preset=gateway`; có `--config` nói bật gì.
 
 Một binary, không phải một tiến trình bắt buộc. Ba làn triển khai:
 
@@ -2307,7 +2343,10 @@ chính mình là thứ dễ bị bỏ; một spec là hợp đồng với ngư�
    về topology tiến trình, nên giữ nguyên.
 2. §12.0.2 phải vẽ lại theo **ranh giới quyền** chứ không theo ranh giới tiến trình, kèm bảng ở §23.4.
    Và sơ đồ của nó phải bỏ mũi tên `relay-pool → confidential-signer` (§23.2).
-3. Bảng năng lực của §21.4 và bảng vai ở §23.3 phải hợp nhất — hiện là hai cách nói về cùng một cấu hình.
+3. ~~Bảng năng lực của §21.4 và bảng vai ở §23.3 phải hợp nhất~~ — **đã làm.** Chúng không phải hai
+   cách nói về cùng một thứ, mà là **hai thứ khác nhau dùng chung một chữ**: mô-đun (bật/tắt) và hình
+   dạng triển khai (tập mô-đun + ba trục). Hợp nhất làm lộ hai thiếu sót thật — `mesh` cần chế độ
+   *pull* cho private relayer, và "pool" là tên của **hai** hàng đợi khác nhau. Xem §21.4.
 4. ~~§07.1 phải đổi ngôn ngữ sang Rust và tách tên theo §23.2~~ — **đã làm** (§24.4).
 
 2 và 4 đã trả; **3 còn nợ**. Xem bảng ở §24.4 cho trạng thái đầy đủ.
@@ -2565,11 +2604,21 @@ bit `mode` giữa §04/§05.3.3/§5.12) đóng theo bảng cấp phát bit ở �
 | `07-custody-providers.md` §07.1 sang Rust, tách tên broker/oracle (§23.9 mục 4) | **xong** — trait `CustodyProvider`, bảng hai vai, `authz.rs` |
 | `06-relay-pool-enterprise.md`: còn dấu vết forwarder / 63-64 / Lua | **xong** — §06.1 và bảng delta §06.11 |
 
+**Đợt hai, cùng ngày — hai món cuối đã trả:**
+
+| Món | Kết quả |
+|---|---|
+| Hợp nhất bảng §21.4 ↔ §23.3 (§23.9 mục 3) | **xong.** Chúng không phải hai cách nói về một thứ — là **mô-đun** (bật/tắt) và **hình dạng triển khai** (tập mô-đun + ba trục). Làm lộ hai thiếu sót thật: `mesh` cần chế độ *pull*, và "pool" là tên của hai hàng đợi khác nhau |
+| Bảng gas §C7 tính theo `innerGasLimit` | **xong, và bằng SỐ ĐO.** Viết `ERC20MetaTx.sol` + `MetaTxGas.t.sol`, deploy thật lên chain 9000. Kết quả ở `00-CANON.md` **§C7.6** |
+
+Ba con số canon từng dẫn bằng tay, và số đo của chúng: phong bì lane ấm **15.160** (canon nói
+25.000), batch dùng lần đầu **32.260** (canon nói 42.000), thêm cho ERC-1271 **+2.189** (canon nói
+9.000). Và một dòng canon **thiếu hẳn**: một lần thu phí tốn **+8.324**, đắt hơn mọi thứ trong phong
+bì trừ chữ ký.
+
 **Còn nợ thật, chưa làm:**
 
 1. **~920 dòng tiếng Việt không dấu trong code block** rải trên ~20 file. User hoãn có chủ ý.
-2. **Bảng năng lực §21.4 và bảng vai §23.3 phải hợp nhất** (§23.9 mục 3) — hiện là hai cách nói về
-   cùng một cấu hình. Chưa làm vì hợp nhất chúng là quyết định về *hình dạng cấu hình*, không phải
-   một phép sửa văn bản.
-3. **Tám bảng ngân sách gas trong `00-CANON.md` §C7** vẫn tính theo phong bì `innerGasLimit`. Khối
-   `[BẢN 3]` ở §C8 tuyên bố chúng hết đối tượng chứ **không** tính lại — số mới phải đo, không suy ra.
+2. **§C7.2 dòng Bulletproofs và toàn bộ §C7.3 vẫn là phép dẫn.** Không có verifier Zether nào được
+   viết nên không có gì để đo. Đo được phần nào thì đã đo (giá precompile trên chain 9000: `ecMul`
+   6.342). **Spike S1 vẫn phải chạy** — xem §C7.6 mục cuối.

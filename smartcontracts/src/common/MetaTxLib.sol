@@ -114,8 +114,8 @@ library MetaTxLib {
     }
 
     /// @dev Thứ tự và kiểu ở đây phải khớp TỪNG KÝ TỰ với chuỗi type trong SDK client.
-    ///      `FeeMode` là enum ⇒ ABI của nó là `uint8`, và trong chuỗi EIP-712 phải viết
-    ///      là `uint8`, không phải `FeeMode`.
+    ///      Ghim bởi `test_metaTxTypehashIsPinned` — đổi một ký tự là đổi mọi digest đã
+    ///      phát hành, nên test phải fail chứ không được tự chỉnh theo.
     bytes32 internal constant METATX_TYPEHASH = keccak256(
         "MetaTransaction(address from,address to,uint256 value,bytes data,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );

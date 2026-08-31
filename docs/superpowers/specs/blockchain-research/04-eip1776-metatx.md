@@ -959,7 +959,7 @@ Cái thay thế chúng là **một bảng tĩnh phía relayer**, không phải m
 
 | Thao tác | Gas ước tính | Relayer đặt `tx.gasLimit` |
 |---|---|---|
-| Chuyển token công khai | ~50.000 – 90.000 | ~120.000 |
+| Chuyển token công khai | **58.702 – 75.802 (ĐO)** — 67.4 k khi có phí; xem `00-CANON.md` §C7.6 | ~120.000 |
 | Nạp vào Zether (`fund`) | ~120.000 | ~180.000 |
 | **`transferConfidential`** | **1.720.000 – 2.620.000** | **3.200.000** |
 | Rút khỏi Zether (`burn`) | ~1.900.000 | 3.200.000 |

@@ -1140,29 +1140,52 @@ và trạng thái ổn định là một sự thật về UI và về chi phí, 
 
 ### C7.4. Hằng số cấu hình dẫn ra từ bảng trên
 
+> **[BẢN 4 — ba hằng số đầu bảng đã chết, và cái thay chúng là SỐ ĐO, không phải
+> phép dẫn.]** `innerGasLimit`, `maxInnerGas`, `requiredOuterGas` cùng chết với inner
+> `CALL` (`_USER-DECISIONS.md` §24). Phong bì bây giờ **đo được**, vì đã có contract để
+> đo: `smartcontracts/src/metatx/ERC20MetaTx.sol` + `test/MetaTxGas.t.sol`, và một bản
+> deploy thật trên chain 9000. Số ở **§C7.6**.
+>
+> Cái còn lại của bảng này — throughput, chi phí tiền mặt, `max_gas_per_tx` — vẫn dẫn
+> từ §C7.2 và vẫn đúng, vì chúng nói về chi phí *thi hành Zether*, không về phong bì.
+>
+> Quy tắc thay cho `requiredOuterGas`: **relayer chọn `tx.gasLimit` từ bảng tĩnh theo
+> selector** (§04.10), không từ một trường người dùng ký. Công thức mới, không có 63/64
+> và không có `FLOOR_GAS`:
+>
+> ```
+> tx_gas_limit = 21,000 + calldata_gas + envelope + op_gas   (rồi × 1.15 biên)
+> ```
+>
+> `envelope` lấy từ §C7.6; `op_gas` từ §C7.2/§C7.3.
+
 Dẫn từ cấu hình **lớn nhất đã ship** (32/64, auditor ON, người nhận lần đầu), và
 mỗi hằng số dẫn từ **đúng một** trong hai con số của §C7.2.
 
 | Hằng số | Giá trị | Cách dẫn |
 |---|---|---|
-| `innerGasLimit` (trường **đã ký** trong struct) | **2,600,000** | từ **thi hành inner**: `(1,827,000 + 45,000) × 1.25 = 2,340,000`, cộng ~11% biên |
-| `targets[ZetherToken].maxInnerGas` (trần on-chain per-target) | **2,800,000** | trên `innerGasLimit` để một verifier +7.7% không cần đổi policy |
-| **`requiredOuterGas`** | **≈ 2,820,000** | **công thức, không phải literal** — xem dưới |
-| **Relayer đặt tx gas limit** | **2,900,000** | `ceil(requiredOuterGas × 1.02)` làm tròn lên 10 k. **Phải LỚN HƠN `requiredOuterGas`** |
+| ~~`innerGasLimit`~~ | ~~2,600,000~~ | **chết** — không còn inner call, không còn trường đã ký |
+| ~~`targets[ZetherToken].maxInnerGas`~~ | ~~2,800,000~~ | **chết** cùng lý do |
+| ~~**`requiredOuterGas`**~~ | ~~≈ 2,820,000~~ | **chết** — thay bằng công thức ở khối trên |
+| **Relayer đặt tx gas limit** | **2,900,000** | vẫn là con số đúng cho `transferConfidential`, nhưng dẫn lại: `(21,000 + 68,800 + 15,160 + 1,872,000) × 1.15 = 2,272,000`; giữ 2,900,000 vì §04.10 chốt trần 3,2 M và biên rộng ở đây rẻ hơn một lần OOG |
 | `blockchain.chain.max_gas_per_tx` (Gnosis) | **3,000,000** | phải `>=` gas limit của relayer. §06.4.5's 3,500,000 là một trần đặt lên **inner**, tức nó **thấp hơn** outer requirement và sẽ từ chối mọi meta-tx Zether của chính pool |
 | Trần throughput Gnosis, 20% block space | **~30,000 tx/ngày toàn mạng** | 17 M gas/block ÷ 5 s = 3.40 M gas/s; 20% = 680 k gas/s; ÷ **1.94 M** = 0.350 tx/s |
 | Chi phí tiền mặt Gnosis | **$0.002 – $0.006/tx** | 1.94 M × 1–3 gwei, xDAI = $1 |
 
 ```
-requiredOuterGas = 21,000                       # intrinsic cua GIAO DICH NGOAI
-                 + outer_calldata_bytes × 16    # ~4,300 B  → 68,800
-                 + 25,000                       # envelope, lane warm, chu ky EOA
-                 + innerGasLimit × 64 / 63      # 2,600,000 → 2,641,270
-                 + FLOOR_GAS 60,000
-                 = 2,816,070   →  2,820,000
+# [BẢN 4] Công thức cũ, giữ lại để đối chiếu — hai dòng giữa không còn đối tượng:
+#   requiredOuterGas = 21,000 + calldata×16 + 25,000
+#                    + innerGasLimit × 64/63     <- CHẾT: không còn inner call
+#                    + FLOOR_GAS 60,000          <- CHẾT: không còn frame ngoài để cứu
+#
+# Công thức đang dùng:
+tx_gas_limit = 21,000                    # intrinsic cua GIAO DICH NGOAI
+             + calldata_gas              # phu thuoc payload, xem §C7.6 dong I
+             + envelope                  # 15,160 warm / 32,260 batch moi  <- DO, §C7.6
+             + op_gas                    # 1,872,000 cho transferConfidential (§C7.2)
+             ; roi × 1.15 va lam tron len 10 k
 
-relayer_tx_gas_limit  = ceil(requiredOuterGas × 1.02) lam tron len 10 k = 2,900,000
-max_gas_per_tx       >= relayer_tx_gas_limit
+max_gas_per_tx >= tx_gas_limit
 ```
 
 Bản 1 dẫn `requiredOuterGas ≈ 2,730,000` **bỏ mất intrinsic 21,000 và toàn bộ
@@ -1194,13 +1217,97 @@ bắt buộc.
 
 | Section | Con số sai | Thay bằng |
 |---|---|---|
-| §04.10 | 1.72–2.62 M; `innerGasLimit = 3,000,000`; `maxInnerGas = 3,200,000`; `requiredOuterGas ≈ 3,178,000` | bảng C7.4 |
+| §04.10 | 1.72–2.62 M; `innerGasLimit = 3,000,000`; `maxInnerGas = 3,200,000`; `requiredOuterGas ≈ 3,178,000` | bảng C7.4. **[BẢN 4]** ba hằng số sau đã chết; dòng "chuyển token công khai ~50.000–90.000" của §04.10 thì **đúng** và nay có số đo: 58.702–75.802 (§C7.6) |
 | §05.3.1 | 342 k – 422 k | xoá dòng, trích C7.2 |
 | §06.4.5 | 3.5 M (n=64) / 6.6 M (n=128), ba range statement | xoá cả bảng, trích C7.2 |
 | §08.4b, §08.9b | 2.7 M (3 × 64-bit) | xoá cả bảng, trích C7.2 |
 | §10.4.7 | 1.2 – 2.5 M, giả định Pippenger batching | xoá; Pippenger **thua** naive trên BN254 vì tỷ giá `ecAdd`/`ecMul`, không phải vì thiếu precompile (§C7.1) |
 | §15.7 | mọi con số dẫn lại, kể cả `rollOver` 49 k | trích C7.2 và C7.3: **`rollOver` +70 k/tài khoản nhận khi batch, +186 k cho tài khoản lần đầu** |
 | **§12, §09, §14, §16** | **1.88 M** | **SAI — đổi thành `1,905,000`.** 1.88 M là hình auditor **OFF**, mà sau §C1.4 mọi luồng còn lại trên Zether đều auditor-**bắt buộc** (§C6.5), tức **không luồng nào đã ship chạy ở 1.88 M**. Bản 1 bảo bốn section này *giữ* 1.88 M và chỉ đổi thành trích dẫn — tức lan con số auditor-OFF vào threat model, payment mode, ngưỡng CI và roadmap. Dùng **1,905,000** (full-tx trực tiếp) hoặc **1,940,000** (gas một block tiêu cho một transfer relay), tuỳ hình mà section đó cần |
+
+
+### C7.6. Phong bì meta-transaction — **ĐO, không dẫn** (2026-08-31)
+
+Mọi con số phong bì ở §C7.2 và §C7.4 trước đây là phép tính tay. Chúng bây giờ đo được,
+vì đã có contract để đo. Hai nguồn, và chúng khớp nhau:
+
+- `smartcontracts/test/MetaTxGas.t.sol` — `forge test`, `evm_version = prague`. Đo **chi
+  phí thi hành**.
+- Deploy thật lên **chain 9000** (Nethermind 1.39.0, Fusaka+BPO2), `gasUsed` lấy từ
+  receipt. Đo **toàn giao dịch**.
+
+Contract đo là `src/metatx/ERC20MetaTx.sol`: bản cài đặt tham chiếu đúng thứ tự chín bước
+của §04.6.1, thao tác mặc định là chuyển ERC-20 công khai.
+
+| # | Hình | forge (thi hành) | chain 9000 (`gasUsed` toàn tx) |
+|---|---|---|---|
+| A | batch **ấm**, `MODE_OPEN`, không phí | **35.241** | **58.702** |
+| B | batch **mới** (nonce slot 0→1), không phí | **52.341** | **75.802** |
+| C | batch ấm, phí **FIXED** | **43.565** | **67.362** |
+| D | batch ấm, phí **PERCENT** | **43.511** | **67.260** |
+| E | batch ấm, FIXED + ràng buộc relayer + feeRecipient | **43.763** | **67.560** |
+| F | batch ấm, người nhận **chưa từng giữ token** | **52.341** | — |
+| G | batch mới, chữ ký **ERC-1271** (verifier tầm thường) | **54.530** | — |
+| H | `cancelMetaNonce` (batch mới) | **27.579** | — |
+| J | **đường cơ sở**: `transfer` thường, cùng độ ấm | **20.081** | — |
+| I | calldata của giao dịch ngoài | 580 B → 4.180 gas (425 byte 0 / 155 byte khác 0) | |
+
+**Phong bì = A − J**, không phải A. Đo A rồi gọi nó là phong bì là cộng cả chi phí của
+thao tác vào phong bì — chính là lỗi §C7.2 mắc khi trộn "thi hành inner" với "toàn giao
+dịch".
+
+| Đại lượng | Canon bản cũ | **Đo được** | Sai bao nhiêu |
+|---|---|---|---|
+| Phong bì, lane ấm, chữ ký EOA | +25.000 | **+15.160** | thừa 65% |
+| Phong bì, batch dùng lần đầu | +42.000 | **+32.260** | thừa 30% |
+| Thêm cho ERC-1271 | +9.000 | **+2.189** | thừa 4,1× |
+| Thêm cho một lần thu phí | (không có dòng) | **+8.324** | thiếu hẳn |
+| PERCENT so với FIXED | (không có dòng) | **−54** | — |
+| Ràng buộc relayer + feeRecipient | (không có dòng) | **+198** | — |
+
+Bốn điều đọc ra từ bảng, mỗi cái đổi một quyết định:
+
+1. **Phong bì rẻ hơn canon tưởng, và điều đó làm yếu một lập luận của chính canon.** 15.160
+   trên nền một `transfer` 20.081 nghĩa là gasless **tăng gấp 1,76 lần** chi phí của một
+   chuyển token thường. Với Zether 1,87 M thì phong bì là nhiễu (0,8%); với chuyển token
+   công khai thì nó là **thứ đắt nhất trong giao dịch**. Bảng phí sàn của §05.3 phải chia
+   theo thao tác, không một con số cho mọi thao tác.
+2. **Thu phí đắt hơn cả phần còn lại của phong bì trừ chữ ký** (+8.324 cho một `_transfer`
+   thứ hai). `MODE_FEE_NONE` không phải một trường hợp biên cần chiều — nó là **cấu hình rẻ
+   nhất một khoảng lớn**, và sponsor trả gas ngoài băng nên chọn nó.
+3. **`mode` gần như miễn phí** (+198 cho hai ràng buộc, −54 giữa hai nhánh tính phí). Lập
+   luận "gộp `feeMode` vào `mode` để tiết kiệm gas" **không** phải lý do đúng để gộp — lý
+   do đúng là một trường ít hơn trong digest và trong SDK. Nếu ai đó dẫn con số gas để biện
+   hộ cho quyết định đó, đây là bằng chứng phản lại.
+4. **ERC-1271 rẻ hơn canon tưởng 4 lần**, nhưng con số +2.189 là của một verifier **tầm
+   thường** — nó đo *đường đi* (staticcall + returndata), không đo ví thật. Một Safe hay một
+   passkey wallet cộng phần của nó lên trên. Dùng 2.189 làm sàn, không làm ước tính.
+
+#### Hai lỗi đo mắc phải trong chính lần đo này, ghi lại vì chúng vô hình
+
+Cả hai đều cho ra một con số **trông hợp lý** và **sai**:
+
+1. **Đo năm kịch bản nối tiếp trong một hàm test.** Forge chạy trọn một hàm test trong một
+   frame, nên access list của EIP-2929 **không** reset giữa các lời gọi. Lời gọi thứ hai
+   trở đi thấy slot đã dirty và trả 100 gas thay vì 5.000 cho cùng một SSTORE. Kết quả: phí
+   FIXED rẻ hơn PERCENT **4.744 gas** — một khác biệt không tồn tại, nó chỉ là thứ tự. Đảo
+   thứ tự hai kịch bản thì con số đi theo vị trí chứ không theo mode; đó là cách phát hiện.
+   Sửa: **một kịch bản một hàm test.**
+2. **Tạo smart account của phép đo ERC-1271 bên trong hàm test.** Địa chỉ vừa tạo là warm và
+   slot số dư vừa mint là dirty, nên ERC-1271 đo ra **rẻ hơn ECDSA 9.611 gas**. Sửa: tạo và
+   cấp vốn trong `setUp`, và con số lật dấu thành +2.189.
+
+Quy tắc rút ra: **một phép đo gas mà thứ tự chạy đổi được kết quả thì nó đang đo access
+list, không đo code.**
+
+#### Cái vẫn CHƯA đo, và đừng giả vờ là đã đo
+
+§C7.2 dòng Bulletproofs (230 điểm × 6.550) và toàn bộ §C7.3 **vẫn là phép dẫn**. Không có
+verifier Zether nào được viết, nên không có gì để đo. Cái đã đo được của phần đó là **giá
+precompile**, trên chính chain 9000: `ecMul` **6.342** gas (EIP-1108 đang bật, không phải
+40.813 của EIP-196 gốc). Giá đó xác nhận hằng số 6.550/điểm là hợp lý (6.342 + `ecAdd`
+150 chia đều), nhưng số điểm và số sigma vẫn là ước tính bottom-up. Band ±25% giữ nguyên,
+và **spike S1 vẫn phải chạy**.
 
 ---
 
