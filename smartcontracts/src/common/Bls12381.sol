@@ -41,6 +41,22 @@ library Bls12381 {
     uint256 internal constant G2_BYTES = 256;
     uint256 internal constant PAIR_BYTES = G1_BYTES + G2_BYTES; // 384
 
+    /// @notice Điểm sinh của G2 đã lấy đối, mã hoá 256 byte theo EIP-2537.
+    /// @dev **Xuất xứ, vì đây đúng là loại hằng số không được gõ từ trí nhớ:** sinh bằng
+    ///      `py_ecc.optimized_bls12_381.neg(G2)`, rồi **xác nhận độc lập bằng chính chain**
+    ///      — một chữ ký BLS thật verify qua `PAIRING_CHECK` với hằng số này trả về 1, và
+    ///      trả 0 khi đổi thông điệp. Hằng số sai thì phép kiểm dương tính đã không qua.
+    ///      Toạ độ Fp2 xếp `c0` TRƯỚC `c1`, mỗi Fp là 64 byte (16 byte 0 ở đầu).
+    bytes internal constant NEG_G2_GENERATOR =
+        hex"00000000000000000000000000000000024aa2b2f08f0a91260805272dc51051"
+        hex"c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"
+        hex"0000000000000000000000000000000013e02b6052719f607dacd3a088274f65"
+        hex"596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e"
+        hex"000000000000000000000000000000000d1b3cc2c7027888be51d9ef691d77bc"
+        hex"b679afda66c73f17f9ee3837a55024f78c71363275a75d75d86bab79f74782aa"
+        hex"0000000000000000000000000000000013fa4d4a0ad8b1ce186ed5061789213d"
+        hex"993923066dddaf1040bc3ff59f825c78df74f2d75467e25e0f55f8a00fa030ed";
+
     error PrecompileFailed(address at);
     error BadLength(uint256 got, uint256 want);
     error NotSupportedOnThisChain();
@@ -115,5 +131,12 @@ library Bls12381 {
         if (pubkeyG2.length != G2_BYTES) revert BadLength(pubkeyG2.length, G2_BYTES);
         if (negG2Generator.length != G2_BYTES) revert BadLength(negG2Generator.length, G2_BYTES);
         return pairingCheck(bytes.concat(sigG1, negG2Generator, hashedMsgG1, pubkeyG2));
+    }
+
+    /// @notice Như `verifyMinSig` nhưng dùng sẵn `NEG_G2_GENERATOR`.
+    function verifyMinSig(bytes memory hashedMsgG1, bytes memory pubkeyG2, bytes memory sigG1)
+        internal view returns (bool)
+    {
+        return verifyMinSig(NEG_G2_GENERATOR, hashedMsgG1, pubkeyG2, sigG1);
     }
 }
