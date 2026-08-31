@@ -11,7 +11,7 @@
 | **Token BẮT BUỘC gọi `assertAuthorized`** | Không phải tuỳ chọn | Nếu không, lớp authKey chỉ là trang trí: biết `x` là đủ chi tiêu. Xem §2.4.2 — đây là lỗ hổng lớn nhất của bản nháp trước |
 | Multisig mặc định | k-of-n ECDSA qua `ecrecover` (3.000 gas/chữ ký + ~1.040 calldata) | Nhàm chán, rẻ, không crypto mới |
 | Threshold Schnorr | **FROST** (t-of-n), **không phải MuSig2** (n-of-n) | Bản nháp trước lẫn hai khái niệm. MuSig2 chỉ dùng khi thật sự cần n-of-n |
-| BLS | BLS12-381 (EIP-2537) biến thể **min-signature-size** (sig∈G1, pk∈G2), probe runtime | Hash-to-G1 rẻ hơn hash-to-G2 ~37k gas/verify; bn254 BLS chỉ private chain và chỉ khi không còn lựa chọn |
+| BLS | BLS12-381 (EIP-2537) biến thể **min-signature-size** (sig∈G1, pk∈G2), probe runtime | Hash-to-G1 rẻ hơn hash-to-G2 ~37k gas/verify. **[ĐO 2026-08-31 trên chain 9000]** pairing k=2 = **103.959** gas, verify min-sig đầy đủ ≈ **120k** — khớp ước tính ~118k ở §2.5.2. Và pairing BLS12-381 **rẻ hơn** pairing bn254 (114.091), nên `BLS_BN254` mất luôn lý do tồn tại trừ khi chain không có EIP-2537 |
 | FALCON on-chain | **Không triển khai được hôm nay**, nhưng **không phải vì tiền** | Ước tính sửa lại: ~0,6M–2,5M gas (bản nháp trước nói 2M–10M, **quá cao**). Trên Gnosis đó là ~$0,003. Rào cản thật: không có verifier được audit + DoS surface, không phải chi phí |
 | PQ thực dụng nếu bắt buộc on-chain | **SLH-DSA-SHA2-128s** (~0,4–0,8M gas, dùng precompile SHA-256 `0x02`) | Bản nháp trước bỏ qua hoàn toàn. Hash-only, không cần NTT, không cần SHAKE trong Solidity |
 | PQ mặc định | Commitment on-chain + verify off-chain; native precompile trên **private chain** trước | Đúng quyết định khoá số 5 |
