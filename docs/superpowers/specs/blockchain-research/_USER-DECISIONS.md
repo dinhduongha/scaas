@@ -2501,9 +2501,8 @@ struct MetaTransaction {
     uint256 batch;          // nonce chiều 1
     uint256 nonce;          // nonce chiều 2
     uint256 validUntil;
-    uint32  mode;           // điều khiển ĐÚNG HAI trường dưới
+    uint32  mode;           // hai nửa byte: cờ ràng buộc + cách tính phí
     address relayer;
-    FeeMode feeMode;
     uint256 fee;
     address feeRecipient;
 }
@@ -2513,9 +2512,17 @@ struct MetaTransaction {
 |---|---|
 | **Bỏ `feeToken`** | Phí trả bằng **chính token này**. Token khác nằm ngoài contract này và contract này không cầm allowance của nó |
 | **Bỏ `innerGasLimit`** | Nó chỉ có nghĩa với forwarder có nuốt lỗi. Không forwarder ⇒ không có kịch bản nó chặn. Lý do đầy đủ ở §04.1 |
-| **Giữ `mode`** | Hai bit: `RESTRICT_RELAYER` (0x01), `RESTRICT_FEE_RECIPIENT` (0x02). Canonical zeroing giữ nguyên (§04.4) |
+| **Giữ `mode`, chia hai nửa byte** | Nửa đầu (bit 0–3) = **cờ** ràng buộc: `RESTRICT_RELAYER` 0x01, `RESTRICT_FEE_RECIPIENT` 0x02. Canonical zeroing giữ nguyên (§04.4) |
+| **Bỏ trường `feeMode`, gộp vào `mode`** | Nửa sau (bit 4–7) = **giá trị liệt kê** cách tính phí: `NONE` 0x00, `PERCENT` 0x10, `FIXED` 0x20. Một cờ ba giá trị không đáng một word riêng trong struct hash khi `mode` còn 30 bit trống. `FeeMode` **vẫn là kiểu chuẩn tắc** của `FeePolicy` — bỏ trường, không bỏ khái niệm |
 | **Không forwarder** | Xem §24.2 |
 | **Không `op`/`args`** | Tường minh: `to`/`value`/`data`. Token chỉ làm hai việc — chuyển công khai và chuyển bảo mật Zether |
+
+**Một chi tiết của nửa byte sau đáng ghi, vì nó là chỗ dễ viết sai:** hai nửa có **bản chất khác nhau**.
+Nửa đầu là cờ (độc lập, `mode & FLAG`), nửa sau là giá trị liệt kê (loại trừ nhau, mask + shift). Viết
+`if (mode & MODE_FEE_PERCENT)` là bug — `MODE_FEE_FIXED = 0x20` không chứa bit `0x10`, nhưng một giá trị
+tương lai `0x30` thì có. Và `validateMode` phải kiểm **hai** thứ: bit lạ ở nửa đầu, **và** giá trị > 2 ở
+nửa sau. `0x30` là bit hợp lệ nhưng giá trị vô nghĩa; bỏ qua nó hôm nay là khoá chết ngữ nghĩa của nó
+ngày mai bằng những chữ ký đã phát hành.
 
 ### 24.2 Không forwarder, và lý do là triết lý chứ không phải kỹ thuật
 

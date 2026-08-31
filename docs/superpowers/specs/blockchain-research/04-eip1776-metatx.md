@@ -66,10 +66,9 @@ struct MetaTransaction {
     uint256 batch;          // nonce chiều 1 — luồng độc lập
     uint256 nonce;          // nonce chiều 2 — thứ tự trong luồng
     uint256 validUntil;     // hạn, giây epoch
-    uint32  mode;           // bitmask — điều khiển ĐÚNG HAI trường dưới. Xem §04.4
+    uint32  mode;           // hai nửa byte: cờ ràng buộc + cách tính phí. Xem §04.4
     address relayer;        // chỉ ràng buộc khi mode & MODE_RESTRICT_RELAYER
-    FeeMode feeMode;        // NONE | PERCENT | FIXED
-    uint256 fee;            // ppm nếu PERCENT, tuyệt đối nếu FIXED
+    uint256 fee;            // ppm nếu PERCENT, tuyệt đối nếu FIXED, bỏ qua nếu NONE
     address feeRecipient;   // chỉ ràng buộc khi mode & MODE_RESTRICT_FEE_RECIPIENT
 }
 ```
@@ -85,6 +84,12 @@ Hai thứ struct này phục vụ, và chỉ hai:
 | Chuyển token công khai | `to`, `value` |
 | Chuyển bảo mật Zether | `data` mang `(payload, proof)`; `value = 0` |
 
+#### `feeMode` — bỏ khỏi struct, gộp vào `mode`
+
+Nó là một cờ ba giá trị nói *"phí tính theo giá trị hay theo tỉ lệ"*. Một trường `uint8` riêng cho ba
+giá trị là lãng phí một word trong struct hash, trong khi `mode` đã có sẵn 30 bit trống. Gộp vào **nửa
+byte sau** của `mode` (bit 4–7). Đặc tả ở §04.4.
+
 #### `feeToken` — bỏ
 
 Bản 1 thêm `feeToken` để giải bài toán *"không relayer mở nào chấp nhận điểm thưởng làm phí"*.
@@ -98,9 +103,9 @@ Ba đường thay thế, không đường nào cần một trường trong struc
 
 | Cần gì | Cách làm |
 |---|---|
-| Luồng loyalty không trả được phí bằng điểm | `feeMode = NONE`, issuer trợ cấp relayer ngoài envelope (`_USER-DECISIONS.md` §21.5: `fee = 0` với `feeRecipient` lạ là **hợp lệ và không hiếm**) |
+| Luồng loyalty không trả được phí bằng điểm | `MODE_FEE_NONE`, issuer trợ cấp relayer ngoài envelope (`_USER-DECISIONS.md` §21.5: `fee = 0` với `feeRecipient` lạ là **hợp lệ và không hiếm**) |
 | Muốn trả phí bằng USDC cho thao tác trên Z-POINT | Hai giao dịch. Không phải việc của token |
-| Relayer cần biết trước có được trả không | `feeMode` + `fee` đã trong struct, đọc được từ mesh |
+| Relayer cần biết trước có được trả không | Nửa byte phí trong `mode` + `fee` đã trong struct, đọc được từ mesh |
 
 #### `innerGasLimit` — bỏ, và đây là lý do đầy đủ
 
@@ -373,12 +378,48 @@ $1.66 và phải chặn bằng `MODE_RESTRICT_RELAYER` + hợp đồng SLA.
 
 `mode` là bitmask `uint32`, và nó chỉ nói về **`relayer` và `feeRecipient`** — không gì khác.
 
+```
+bit:  7 6 5 4 | 3 2 1 0
+      └──┬──┘   └──┬──┘
+    cách tính    cờ ràng buộc
+       phí       relayer / feeRecipient
+```
+
 ```solidity
 uint32 constant MODE_OPEN                   = 0x0000_0000;  // không phải một bit, là "không bit nào"
+
+// --- nửa byte ĐẦU: cờ, bật được cùng lúc ---
 uint32 constant MODE_RESTRICT_RELAYER       = 0x0000_0001;
 uint32 constant MODE_RESTRICT_FEE_RECIPIENT = 0x0000_0002;
-uint32 constant MODE_KNOWN_MASK             = 0x0000_0003;
+uint32 constant MODE_FLAGS_MASK             = 0x0000_000F;
+
+// --- nửa byte SAU: giá trị liệt kê, loại trừ nhau ---
+uint32 constant MODE_FEE_MASK               = 0x0000_00F0;
+uint32 constant MODE_FEE_SHIFT              = 4;
+uint32 constant MODE_FEE_NONE               = 0x0000_0000;
+uint32 constant MODE_FEE_PERCENT            = 0x0000_0010;
+uint32 constant MODE_FEE_FIXED              = 0x0000_0020;
+
+uint32 constant MODE_KNOWN_MASK             = 0x0000_00F3;
 ```
+
+**Hai nửa byte có bản chất khác nhau, và đó không phải chi tiết vụn.** Nửa đầu là **cờ** — độc lập, bật
+được cùng lúc, đọc bằng `mode & FLAG`. Nửa sau là **giá trị liệt kê** — ba chế độ loại trừ nhau, đọc
+bằng mask + shift. Viết `if (mode & MODE_FEE_PERCENT)` là một bug: `MODE_FEE_FIXED = 0x20` không chứa
+bit `0x10`, nhưng một giá trị tương lai `0x30` thì có, và nó sẽ lọt.
+
+```solidity
+function feeModeOf(uint32 mode) internal pure returns (FeeMode) {
+    uint32 v = (mode & MODE_FEE_MASK) >> MODE_FEE_SHIFT;
+    if (v == 0) return FeeMode.NONE;
+    if (v == 1) return FeeMode.PERCENT;
+    if (v == 2) return FeeMode.FIXED;
+    revert ModeFeeInvalid(mode);
+}
+```
+
+`FeeMode` **vẫn là kiểu chuẩn tắc** của tầng phí (`FeePolicy.compute`, `requireConfidentialSafe` không
+đổi một dòng). Cái bỏ đi là **một trường riêng trong struct**, không phải khái niệm.
 
 `MODE_RESTRICT_BOTH = 0x03` giữ nguyên nghĩa (`0x01 | 0x02`) nhưng **không** nên là một hằng riêng trong
 `.sol` — nó là một tổ hợp, không phải một chế độ. Để nó trong `.sol` là mời người ta viết
@@ -390,7 +431,7 @@ thêm bit.
 | Bit cũ | Số phận |
 |---|---|
 | `MODE_REQUIRE_SUCCESS = 0x04` | **Chết** cùng forwarder — không còn inner call để chọn bubble hay nuốt lỗi (§04.1b) |
-| `MODE_METERED_FEE = 0x08` | **Chết** — thay bằng `feeMode`, một trường `uint8` đọc được, không phải một bit |
+| `MODE_METERED_FEE = 0x08` | **Chết** — cách tính phí giờ là nửa byte sau, ba giá trị rõ ràng thay cho một bit mơ hồ |
 | `MODE_APPEND_SENDER = 0x10` | **Chết** cùng forwarder — ERC-2771 suffix chỉ có nghĩa khi gọi contract khác |
 
 `uint32` giữ nguyên dù chỉ dùng 2 bit: tốn **0 gas** thêm (ABI pad cả `uint8` lẫn `uint32` về 32 byte
@@ -434,8 +475,19 @@ relayer sửa là chữ ký chết.
    `MODE_REQUIRE_SUCCESS`; §5.12 lại xin mask `0x0F` trong khi §04 khai `0x1F`. Vì `mode` nằm **trong**
    digest, va chạm kiểu này **không gây lỗi biên dịch** — nó gây ra hai cách hiểu cho cùng một chữ ký.
    Bảng ở đầu mục này là **nguồn sự thật duy nhất**; section khác tham chiếu, không tự cấp phát.
-3. **Bit lạ phải bị từ chối**: `require(mode & ~MODE_KNOWN_MASK == 0)`, revert `MetaTxUnknownMode`. Chấp
-   nhận bit không hiểu nghĩa là khoá chết ngữ nghĩa tương lai của bit đó.
+3. **Bit lạ VÀ giá trị lạ đều phải bị từ chối** — hai kiểm tra khác nhau vì hai nửa byte khác bản chất:
+
+   ```solidity
+   function validateMode(uint32 mode) internal pure {
+       if (mode & ~MODE_KNOWN_MASK != 0) revert ModeUnknownBits(mode);  // nua dau: bit la
+       feeModeOf(mode);                                                 // nua sau: gia tri > 2
+   }
+   ```
+
+   Nửa sau là chỗ dễ bỏ sót: `0x30` là **bit hợp lệ** (nằm trong `MODE_KNOWN_MASK`) nhưng **giá trị vô
+   nghĩa**. Chỉ kiểm mask là để nó lọt, và khi ai đó muốn gán nghĩa cho `0x30` ở phiên bản sau thì đã có
+   những chữ ký mang giá trị đó với ngữ nghĩa "không xác định" đang lưu hành. Gọi ở **bước 3** của
+   §04.6.1, trước verify chữ ký — 0 gas cho rác.
 
 #### Trạng thái mâu thuẫn: `RESTRICT_RELAYER` với `relayer = address(0)`
 
@@ -536,7 +588,7 @@ contract để gọi. Lỗ hổng biến mất cùng cơ chế sinh ra nó — �
 ```
 1. relayer      (0 gas)   — mode & RESTRICT_RELAYER == 0, hoặc m.relayer == msg.sender
 2. validUntil   (0 gas)   — block.timestamp <= m.validUntil
-3. mode hợp lệ  (0 gas)   — mode & ~MODE_KNOWN_MASK == 0
+3. mode hợp lệ  (0 gas)   — validateMode: bit lạ (nửa đầu) VÀ giá trị phí lạ (nửa sau)
 4. nonce        (1 sload) — metaNonce[from][batch] == m.nonce
 5. chữ ký       (~3k)     — trên digest đã canon (§04.4); ECDSA hoặc ERC-1271
                             staticcall{gas: 50_000}
@@ -629,10 +681,17 @@ hai nút thắt khác nhau.
 pragma solidity ^0.8.20;   // KHÔNG đòi Cancun: chain 9000 chạy pre-London, xem §04.6.3
 
 library MetaTxLib {
+    // bit 3..0 = cờ ràng buộc; bit 7..4 = cách tính phí. Xem §04.4
     uint32 constant MODE_OPEN                   = 0x0000_0000;
     uint32 constant MODE_RESTRICT_RELAYER       = 0x0000_0001;
     uint32 constant MODE_RESTRICT_FEE_RECIPIENT = 0x0000_0002;
-    uint32 constant MODE_KNOWN_MASK             = 0x0000_0003;
+    uint32 constant MODE_FLAGS_MASK             = 0x0000_000F;
+    uint32 constant MODE_FEE_MASK               = 0x0000_00F0;
+    uint32 constant MODE_FEE_SHIFT              = 4;
+    uint32 constant MODE_FEE_NONE               = 0x0000_0000;
+    uint32 constant MODE_FEE_PERCENT            = 0x0000_0010;
+    uint32 constant MODE_FEE_FIXED              = 0x0000_0020;
+    uint32 constant MODE_KNOWN_MASK             = 0x0000_00F3;
 
     struct MetaTransaction {
         address from;
@@ -644,10 +703,14 @@ library MetaTxLib {
         uint256 validUntil;
         uint32  mode;
         address relayer;
-        FeeMode feeMode;
         uint256 fee;
         address feeRecipient;
     }
+
+    // Cách tính phí nằm ở nửa byte sau của mode. FeeMode vẫn là kiểu của FeePolicy.
+    function feeModeOf(uint32 mode) internal pure returns (FeeMode);
+    // Từ chối bit lạ (nửa đầu) VÀ giá trị lạ (nửa sau). Gọi ở bước 3, §04.6.1.
+    function validateMode(uint32 mode) internal pure;
 
     // Chuẩn hoá hai trường do relayer điền, TRƯỚC khi băm. Quy tắc này phải giống
     // hệt nhau ở verifier Solidity, SDK client và builder Odoo — §04.4.
@@ -658,7 +721,7 @@ library MetaTxLib {
 
     bytes32 constant METATX_TYPEHASH = keccak256(
         "MetaTransaction(address from,address to,uint256 value,bytes data,uint256 batch,"
-        "uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint8 feeMode,"
+        "uint256 nonce,uint256 validUntil,uint32 mode,address relayer,"
         "uint256 fee,address feeRecipient)"
     );
 
@@ -668,7 +731,7 @@ library MetaTxLib {
             METATX_TYPEHASH, m.from, m.to, m.value,
             keccak256(m.data),                      // <-- keccak(data), BẮT BUỘC
             m.batch, m.nonce, m.validUntil, m.mode,
-            r, uint8(m.feeMode), m.fee, f
+            r, m.fee, f
         ));
     }
 }
@@ -686,7 +749,8 @@ interface IERC20MetaTx is IERC20 {
     error MetaTxBadNonce(uint256 expected, uint256 got);
     error MetaTxBadSignature();
     error MetaTxUnauthorizedRelayer(address allowed, address caller);
-    error MetaTxUnknownMode(uint32 mode);
+    error ModeUnknownBits(uint32 mode);
+    error ModeFeeInvalid(uint32 mode);
     error MetaTxInsufficientForFee(uint256 needed, uint256 available);
 
     function metaNonce(address from, uint256 batch) external view returns (uint256);
@@ -711,7 +775,7 @@ Bốn điểm đã đổi so với bản 1, mỗi cái nối về một mục:
 | Bỏ `feeToken`, `innerGasLimit`, `tokenContract` | Không forwarder; phí bằng chính token; `verifyingContract` đã là token | §04.1, §04.1b |
 | `pragma ^0.8.24` → `^0.8.20`, bỏ transient storage | Chain 9000 chạy **pre-London** — không `TSTORE`, không `PUSH0` | §04.6.3 |
 | `event` bỏ `success`, thêm `feeRecipient`/`fee` đã resolve | Không còn nhánh "thành công một nửa"; indexer cần biết phí thực trả về đâu | §04.6.2 |
-| `mode` mask `0x1F` → `0x03` | Ba bit chết cùng forwarder | §04.4 |
+| `mode` mask `0x1F` → `0xF3`, bỏ trường `feeMode` | Ba bit chết cùng forwarder; cách tính phí dời vào nửa byte sau | §04.4 |
 
 `metaTxDigest` là `view` và **public có chủ đích**: mesh cần validate-before-gossip, SDK cần kiểm chéo
 digest trước khi gửi. Nó không lộ gì — digest tính được từ dữ liệu công khai.
@@ -726,7 +790,7 @@ từ `/policy` của node (`_USER-DECISIONS.md` §21.3). Một `chainId` sai là
 ```python
 # dms_blockchain/lib/eip1776.py  — thuần Python, KHÔNG import odoo
 def build_and_sign(token_addr, chain_id, to, value, data, batch, nonce,
-                   valid_until, mode, relayer, fee_mode, fee, fee_recipient, signer):
+                   valid_until, mode, relayer, fee, fee_recipient, signer):
     # 1. Domain: verifyingContract LÀ CHÍNH TOKEN. Không có forwarder (§04.1b).
     domain = {'name': TOKEN_NAME, 'version': '1',
               'chainId': chain_id, 'verifyingContract': token_addr}
@@ -736,16 +800,18 @@ def build_and_sign(token_addr, chain_id, to, value, data, batch, nonce,
     if (mode & MODE_RESTRICT_RELAYER) and relayer == ZERO:
         raise ValueError('RESTRICT_RELAYER cần một địa chỉ relayer thật')
     if (mode & ~MODE_KNOWN_MASK):
-        raise ValueError('bit mode lạ: contract sẽ revert MetaTxUnknownMode')
+        raise ValueError('bit mode lạ: contract sẽ revert ModeUnknownBits')
+    if ((mode & MODE_FEE_MASK) >> MODE_FEE_SHIFT) > 2:
+        raise ValueError('nửa byte phí lạ: contract sẽ revert ModeFeeInvalid')
 
     # 3. FeeMode PERCENT bị CẤM trên token bảo mật: fee = v*p với cả hai vế công khai
     #    CHÍNH LÀ số tiền. §12.3.7. Kiểm ở client để lỗi hiện sớm, contract kiểm lại.
-    if is_confidential(token_addr) and fee_mode == FeeMode.PERCENT:
+    if is_confidential(token_addr) and (mode & MODE_FEE_MASK) == MODE_FEE_PERCENT:
         raise ValueError('PERCENT fee làm lộ số tiền trên token bảo mật')
 
     m = MetaTransaction(from_=signer.address, to=to, value=value, data=data,
                         batch=batch, nonce=nonce, valid_until=valid_until,
-                        mode=mode, relayer=relayer, fee_mode=fee_mode,
+                        mode=mode, relayer=relayer,
                         fee=fee, fee_recipient=fee_recipient)
 
     # 4. canon() TRƯỚC khi băm — cùng quy tắc với Solidity (§04.4).
@@ -1036,8 +1102,8 @@ biểu diễn dưới dạng một bài test chạy được.
 
 | # | Kiểm chứng | Công cụ | Fail nghĩa là |
 |---|---|---|---|
-| 1 | `metatx_v1.json`: ≥ 24 vector (mỗi `mode` × `data` rỗng/dài × `relayer` wildcard/cụ thể × `feeMode` × `validUntil` biên) cho ra digest khớp giữa `eip1776.py` và `hashStruct`, **và quy tắc `canon` khớp cả ba nơi** | pytest + `forge script` trên anvil | Client và contract không cùng một digest ⇒ 100% chữ ký fail |
-| 2 | Fuzz: mọi `mode & ~MODE_KNOWN_MASK != 0` ⇒ revert `MetaTxUnknownMode`, và **ở bước 3, trước khi verify chữ ký** | foundry fuzz 50k run | Bit lạ được chấp nhận ⇒ ngữ nghĩa tương lai bị khoá; verify chữ ký trước là 3k gas cho rác |
+| 1 | `metatx_v1.json`: ≥ 24 vector (mỗi tổ hợp cờ × ba giá trị nửa byte phí × `data` rỗng/dài × `relayer` wildcard/cụ thể × `validUntil` biên) cho ra digest khớp giữa `eip1776.py` và `hashStruct`, **và quy tắc `canon` khớp cả ba nơi** | pytest + `forge script` trên anvil | Client và contract không cùng một digest ⇒ 100% chữ ký fail |
+| 2 | Fuzz `uint32 mode`: bit ngoài `MODE_KNOWN_MASK` ⇒ `ModeUnknownBits`; nửa byte phí > 2 ⇒ `ModeFeeInvalid`. Cả hai **ở bước 3, trước khi verify chữ ký** | foundry fuzz 50k run | Bit lạ hoặc giá trị lạ được chấp nhận ⇒ ngữ nghĩa tương lai bị khoá bởi chữ ký đã phát hành; verify chữ ký trước là 3k gas cho rác |
 | 3 | Cross-mode: chữ ký MODE_OPEN không verify được khi submit với `mode = 0x01` và ngược lại | foundry | Cross-mode replay |
 | 4 | Malleability: `(v, r, n-s)` bị reject | foundry | Dedupe theo chữ ký sai |
 | 5 | Return-bomb: target trả 1 MB ⇒ tx dùng < 300k gas tổng | foundry, đo `gasleft()` | Gas griefing |
