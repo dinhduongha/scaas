@@ -1206,6 +1206,62 @@ bắt buộc.
 
 ## C8. EIP-1776
 
+> **[BẢN 3 — `_USER-DECISIONS.md` §24 GHI ĐÈ toàn bộ mục C8, C7.4 và C7.5.]**
+>
+> Quyết định của user: **không có forwarder**, và lý do là triết lý chứ không phải kỹ thuật —
+> *"những contract mà không support gasless là sai triết lý; nếu đã lỡ phát hành thì wrap sang
+> MetaTx."* Mọi token tự hiện thực meta-transaction (native mixin), nên `verifyingContract`
+> **luôn là chính token contract** và không tồn tại lời gọi `CALL` tới contract lạ.
+>
+> Nguồn chuẩn tắc của struct bây giờ là **code**: `smartcontracts/src/common/MetaTxLib.sol`,
+> ghim bởi `test_metaTxTypehashIsPinned`. Bảng dưới đây nói cái gì trong C8/C7 còn hiệu lực.
+>
+> | Mục canon | Trạng thái |
+> |---|---|
+> | C8.1 struct | **Thay** — bỏ `tokenContract`, `feeToken`, `innerGasLimit`; đổi `amount`→`value`, `expiry`→`validUntil`, `batchId`/`batchNonce`→`batch`/`nonce` |
+> | C8.2 bảng `mode` | **Thay** — còn 2 cờ (`0x01`, `0x02`) ở nửa byte đầu, cộng **nửa byte sau** cho cách tính phí. `MODE_KNOWN_MASK = 0xF3` |
+> | C8.3 ngữ nghĩa thất bại | **Thay** — không còn bubble-vs-swallow. Kiểm đủ **trước** khi thu phí ⇒ *"phí đã thu ⟺ thao tác đã xảy ra"*. `_CRITIQUES.md` contradiction-2 đóng vì hết đối tượng |
+> | C8.4 expiry | **Giữ nguyên** — đổi tên trường thành `validUntil`, ngữ nghĩa không đổi |
+> | C8.5 63/64, return-bomb, allowance | **Chết** — cả ba chặn hệ quả của `CALL` tới contract lạ |
+> | C7.4 `innerGasLimit`/`maxInnerGas`/`requiredOuterGas` | **Chết** — thay bằng bảng gas tĩnh phía relayer (§04.10) |
+> | C7.1–C7.3 dẫn số gas Zether | **Giữ nguyên** — chúng nói về chi phí *thi hành*, không về phong bì. **Và đã kiểm trên chain 9000: `ecMul` = 6.342 gas, đúng giá EIP-1108** |
+>
+> Struct chuẩn tắc:
+>
+> ```solidity
+> struct MetaTransaction {
+>     address from; address to; uint256 value; bytes data;
+>     uint256 batch; uint256 nonce; uint256 validUntil;
+>     uint32  mode; address relayer;
+>     uint256 fee; address feeRecipient;
+> }
+> ```
+>
+> Bảng `mode` chuẩn tắc — **hai nửa byte, hai bản chất khác nhau**:
+>
+> | Bit | Hằng | Nghĩa |
+> |---|---|---|
+> | 0 | `MODE_RESTRICT_RELAYER = 0x01` | **cờ** — ràng buộc `relayer` |
+> | 1 | `MODE_RESTRICT_FEE_RECIPIENT = 0x02` | **cờ** — ràng buộc `feeRecipient` |
+> | 4–7 | `MODE_FEE_NONE 0x00` / `PERCENT 0x10` / `FIXED 0x20` | **giá trị liệt kê** — cách tính phí |
+> | | `MODE_FLAGS_MASK = 0x0F`, `MODE_FEE_MASK = 0xF0`, `MODE_KNOWN_MASK = 0xF3` | |
+>
+> Nửa đầu đọc bằng `mode & FLAG`; nửa sau bằng mask + shift. `if (mode & MODE_FEE_PERCENT)` là
+> **bug**: `MODE_FEE_FIXED = 0x20` không chứa bit `0x10`, nhưng một giá trị tương lai `0x30` thì
+> có. Và `validateMode` phải kiểm **hai** thứ — bit lạ ở nửa đầu, **và** giá trị > 2 ở nửa sau;
+> `0x30` là bit hợp lệ nhưng giá trị vô nghĩa, bỏ qua nó hôm nay là khoá chết ngữ nghĩa của nó
+> ngày mai bằng những chữ ký đã phát hành.
+>
+> Ba bit đã chết: `MODE_REQUIRE_SUCCESS 0x04` (không còn inner call), `MODE_METERED_FEE 0x08`
+> (thay bằng nửa byte phí), `MODE_APPEND_SENDER 0x10` (không có target). Tranh chấp cấp bit giữa
+> §04.4 / §05.3.3 / §5.12 — mà C8.2 từng phải phân xử — **đóng theo**.
+>
+> **Đính chính một khẳng định của bản trước:** có chỗ nói bitmask tạo *cross-mode replay*. **Sai.**
+> Canonical zeroing với `mode` **trong** hash cho `(OPEN)` và `(RESTRICT, relayer=0)` hai digest
+> khác nhau — không va chạm. Lý do bỏ bitmask là dư thừa, trạng thái mâu thuẫn biểu diễn được,
+> quy tắc canonical phải khớp ba nơi, và bit đã va chạm thật giữa các section. Xem §04.4.
+
+
 ### C8.1. Struct — chuẩn tắc
 
 ```solidity

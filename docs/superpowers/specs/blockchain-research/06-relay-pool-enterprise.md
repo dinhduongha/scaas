@@ -348,9 +348,17 @@ Hàng SUI đáng chú ý vì nó là chuỗi duy nhất mà **pool gas coin thay
 - Head-of-line blocking ở tầng meta-tx: nếu `batchNonce=5` fail vĩnh viễn, 6..n của cùng `batchId` treo. Chính sách: **mỗi intent độc lập dùng một `batchId` ngẫu nhiên 128-bit với `batchNonce=0`**; chỉ dùng chuỗi tuần tự khi nghiệp vụ thật sự có thứ tự (deposit → transfer → settle). Job trong một `batchId` tuần tự được đánh dấu `chain_group_key`; một job fail thì cả group về `blocked` chứ không retry lẻ tẻ.
 - **[MỚI] Kiểm tra `meta_nonce` phải ghim block.** Đọc `meta_nonce` tại block N rồi broadcast ở N+3, một tx khác của cùng user có thể đã tiêu nó. Ghi `meta_nonce_block` vào job; nếu `head - meta_nonce_block > 3` thì đọc lại. Trên thực tế gọi `meta_nonce` **trong chính `eth_call` của sim gate** (một multicall) để không tốn thêm round-trip.
 
-Lợi ích phụ của wildcard `relayer == address(0)`: chữ ký người dùng không ràng buộc `relayer`, nên **bất kỳ EOA nào trong pool cũng nộp được**. Sharding K EOA cho ta K đường ống song song mà không động tới payload. Đây là lợi thế thật sự của EIP-1776 so với ERC-2771 (bị ràng vào một TrustedForwarder) trong bối cảnh relay pool.
+Lợi ích phụ của **chế độ mở** (`mode & MODE_RESTRICT_RELAYER == 0`, và `canon()` ép `relayer` về
+`address(0)` trước khi băm — `_USER-DECISIONS.md` §24): chữ ký người dùng không ràng buộc `relayer`,
+nên **bất kỳ EOA nào trong pool cũng nộp được**. Sharding K EOA cho ta K đường ống song song mà không động tới payload. Đây là lợi thế thật sự của EIP-1776 so với ERC-2771 (bị ràng vào một TrustedForwarder) trong bối cảnh relay pool.
 
-Và nó là **điều kiện kỹ thuật để pool khoá tồn tại** (`_USER-DECISIONS.md` §21.5). Nếu intent nêu tên relayer trong digest, mỗi lần đổi khoá là một lần xin lại chữ ký của mọi người dùng — pool khoá sẽ không khả thi. Hai quyết định được đưa ra vì hai lý do khác nhau (chống cross-mode replay; chống nút thắt nonce) và chúng khớp nhau.
+Và nó là **điều kiện kỹ thuật để pool khoá tồn tại** (`_USER-DECISIONS.md` §21.5). Nếu intent nêu tên relayer trong digest, mỗi lần đổi khoá là một lần xin lại chữ ký của mọi người dùng — pool khoá sẽ không khả thi.
+
+> **[BẢN 4]** Câu trước đây ở đây nói hai quyết định khớp nhau vì một cái "chống cross-mode replay".
+> **Không có cross-mode replay để chống** — `mode` nằm trong digest nên hai chế độ vốn đã cho hai
+> digest. Điều kiện thật cho pool khoá chỉ có một, và nó vẫn đứng: **`MODE_RESTRICT_RELAYER` phải là
+> tuỳ chọn của người ký, và mặc định phải là tắt.** Ai bật nó thì tự bỏ khả năng dùng pool — đó là
+> đánh đổi hợp lệ, không phải lỗi thiết kế.
 
 ---
 
@@ -1391,14 +1399,14 @@ Kiểm tra cuối cùng, bắt buộc, không thể bỏ: **chạy pool trên te
 | 12 | EIP-196 định giá `ecAdd`/`ecMul` | Gán cho EIP-196 | **EIP-1108** mới là cái hạ xuống 150/6.000; EIP-196 gốc là 500/40.000 |
 | 13 | Gas Zether | 2,0–2,5M | 3,5M (n=64+fee) / **6,6M (n=128+fee)**; note bỏ sót ba range statement của cơ chế fee |
 | 14 | Note "180–250k gas" | "chỉ đúng cho vài ecAdd/ecMul" | Chính xác hơn: **đó là con số của Groth16**, không phải Bulletproofs. Hai thứ trong note mâu thuẫn nhau |
-| 15 | Velocity limit | `INCRBYFLOAT`, kiểm tra riêng | Lua nguyên tử, micro-USD số nguyên, reserve + settle + janitor refund |
+| 15 | Velocity limit | `INCRBYFLOAT`, kiểm tra riêng | ~~Lua nguyên tử~~ → **[BẢN 3]** một transaction Postgres (§06.4.3); micro-USD số nguyên, reserve + settle + janitor refund |
 | 16 | `balance_native` | `fields.Float(digits=(24,8))` | Mâu thuẫn §10.4.1 → `Char` base units + `Float` chỉ để hiển thị |
 | 17 | `runway_hours` | `required=True` rồi phải cảnh giác NULL | Bỏ `required=True`; quy tắc "gán ở mọi nhánh" vẫn giữ |
 | 18 | Idempotency `origin_ref` | Nói "idempotent" không nói bằng gì | Partial unique index `_unique_origin` |
 | 19 | `witness_depth` | Hằng số 12 block | Theo chain; và lệch một lần không được eject ngay |
 | 20 | Kiểm tra RPC | 3 lớp | 4 lớp, thêm **canary `eth_call`** — 3 lớp cũ không bắt được state sai |
-| 21 | Batch executor | Chỉ nói `try/catch` | Thêm EIP-150 63/64 guard, fee-on-failure, và cách sim một batch |
-| 22 | Backpressure | Không có | `max_inflight = 16` (cơ sở: `txpool.accountslots`), `inflight_full` trong Lua |
+| 21 | Batch executor | Chỉ nói `try/catch` | ~~EIP-150 63/64 guard, fee-on-failure~~ → **[BẢN 4] hết đối tượng**: không còn inner `CALL` (§24). Còn lại: cách sim một batch |
+| 22 | Backpressure | Không có | `max_inflight = 16` (cơ sở: `txpool.accountslots`); **[BẢN 3]** `inflight_full` đếm trong actor, không phải Lua |
 | 23 | Tenderly | Ở hot path | **Ra khỏi hot path** — chi phí 720k đơn vị/tháng; hot path dùng node của mình |
 | 24 | Lưu trữ | Không nhắc | §06.10.3; raw tx không nằm trên record |
 | 25 | Reorg | Không nhắc trong nonce manager | `latest < confirmed` → `reorged`, không lùi `next` |

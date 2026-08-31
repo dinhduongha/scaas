@@ -14,6 +14,24 @@
 > `web`, và (tuỳ chọn) `bus`. Phần hạch toán chạm `account.move` nằm trong bridge addon riêng
 > `dms_blockchain_account`, không nằm trong core.
 >
+> **Bản 4 — `mode` quay lại, `feeMode` biến mất vào trong nó.** `_USER-DECISIONS.md` §24 chốt struct
+> cuối cùng (code chuẩn tắc: `smartcontracts/src/common/MetaTxLib.sol`). Ba hệ quả cho section này,
+> áp dụng ở **mọi** chỗ bên dưới còn nói theo bản 2/bản 3:
+>
+> 1. **`mode: uint32` có mặt trong struct và trong digest**, với hai nửa byte hai bản chất: nửa đầu
+>    là **cờ** (`0x01` ràng buộc `relayer`, `0x02` ràng buộc `feeRecipient`), nửa sau là **giá trị
+>    liệt kê** cho cách tính phí (`0x00` NONE / `0x10` PERCENT / `0x20` FIXED). `MODE_KNOWN_MASK = 0xF3`.
+> 2. **Không còn trường `feeMode` riêng.** Mọi chỗ dưới đây viết `"feeMode": 2` phải đọc là
+>    `"mode": 32` (`0x20`). Lập luận "feeMode phải nằm trong digest" **vẫn đúng và vẫn được thoả** —
+>    vì `mode` nằm trong digest.
+> 3. **`/policy` công bố lại `mode_known_mask`** theo từng `verifying_contract`. Đoạn ở §5.6 tuyên bố
+>    nghĩa vụ đó "chết cùng bitmask" là **sai từ bản 4 trở đi**; xem đính chính tại chỗ.
+>
+> Và một **đính chính thẳng**: mấy chỗ dưới đây nói bitmask gây *cross-mode replay*. **Sai.** Canonical
+> zeroing với `mode` **bên trong** hash cho `(OPEN)` và `(RESTRICT, relayer=0)` hai digest **khác nhau**.
+> Lý do thật để bỏ bitmask ở bản 2 là dư thừa và va chạm cấp bit giữa các section, không phải replay.
+> Xem `04-eip1776-metatx.md` §04.4.
+>
 > **Ràng buộc đọc:** section này không định nghĩa lại struct `MetaTransaction` (§04), không định
 > nghĩa lại mật mã học Zether (§03), không định nghĩa lại relay pool nội bộ (§06), không định nghĩa
 > lại data model chung (§10). Nơi nào con số của section này khác các section đó, section này **sai**
@@ -45,10 +63,10 @@ Field: `blockchain.chain.chain_profile = fields.Selection([('private','Private/P
 `blockchain.chain`**, không phải model riêng (§10.3 đã bác bỏ `blockchain.chain.profile`). Mọi đoạn
 code kinh tế học dưới đây đều guard bằng `if chain.chain_profile == 'public'`.
 
-Hai dòng của bảng đã đổi so với bản 2. `mode` bitmask bị bỏ hoàn toàn — `_USER-DECISIONS.md` §5 chốt
-**wildcard `relayer == address(0)`** thay cho bitmask, vì bitmask đòi đổi nội dung digest theo mode
-và đó là cross-mode replay. `MODE_RESTRICT_RELAYER` ở cột private giờ chỉ có nghĩa "điền một địa chỉ
-relayer cụ thể vào struct thay vì để `address(0)`" — cùng hiệu quả, không cần bit nào.
+Hai dòng của bảng đã đổi so với bản 2. **[BẢN 4]** `MODE_RESTRICT_RELAYER = 0x01` ở cột private
+mang đúng nghĩa đen của nó: bit bật **và** `relayer` điền một địa chỉ cụ thể. Hai thứ đi cùng nhau —
+bit bật mà `relayer == address(0)` là ràng buộc "chỉ địa chỉ 0 được relay", tức là khoá chết intent;
+node phải bắt trường hợp đó ở tầng sanity (§5.9) chứ contract không bắt hộ.
 
 **Chỉ triển khai profile `public` khi đã có ít nhất 1 relayer bên thứ ba thật.** Trước đó, viết code
 để nó *có thể* bật, đừng bật.
@@ -354,10 +372,13 @@ Ba tính chất miễn phí từ lựa chọn này:
 3. `relayer` và `feeRecipient` là **wildcard `address(0)`** ở chế độ mở, nên intent_id ổn định bất kể
    ai relay. Đúng cái muốn.
 
-   Bản 2 diễn đạt điều này là "canonical zeroing của §04.4 ở `MODE_OPEN`". Cách diễn đạt đó đã lỗi:
-   `_USER-DECISIONS.md` §5 bỏ bitmask và dùng wildcard, nên **không có việc zeroing theo mode nữa** —
-   `relayer` đơn giản *là* `address(0)` và nó nằm trong digest như mọi trường khác. Kết quả giống
-   nhau; cơ chế đơn giản hơn hẳn, và nó xoá luôn nguy cơ cross-mode replay mà bitmask tạo ra.
+   **[BẢN 4]** Canonical zeroing của §04.4 **quay lại**: `hashStruct` gọi `canon()`, và `canon()`
+   đặt `relayer = address(0)` khi cờ `MODE_RESTRICT_RELAYER` tắt, bất kể client điền gì. Kết quả cho
+   `intent_id` **vẫn ổn định** — mạnh hơn wildcard thuần, vì một client điền rác vào `relayer` ở chế
+   độ mở không còn tạo ra một digest thứ hai cho cùng một ý định. Câu của bản 3 nói zeroing "xoá nguy
+   cơ cross-mode replay mà bitmask tạo ra" là **sai ở cả hai vế**: bitmask không tạo ra nguy cơ đó
+   (digest của `OPEN` và của `RESTRICT, relayer=0` vốn đã khác nhau vì `mode` nằm trong hash), và
+   zeroing không phải thứ để xoá nó.
 
 **Điểm quan trọng nhất của mục này, và nó vừa nặng thêm:** định dạng ở đây là **spec cho hai bản cài
 đặt** (`_USER-DECISIONS.md` §21.3), không phải mô tả một bản. Nên nó cần ba thứ mà bản 2 không có:
@@ -382,11 +403,10 @@ Thiếu (2), hai bản sẽ lệch trong vài tháng mà không ai biết cho t�
   "verifying_contract": "0xF17…",
   "meta_tx": {
     "from": "0xA1…", "to": "0xB2…", "tokenContract": "0xC3…",
-    "amount": "0", "data": "0xa9059cbb…",
-    "batchId": "7412…", "batchNonce": "0",
-    "feeMode": 2, "fee": "5000000000000000", "feeRecipient": "0x0…0",
-    "expiry": 1756500900,
-    "innerGasLimit": 400000,
+    "value": "0", "data": "0xa9059cbb…",
+    "batch": "7412…", "nonce": "0",
+    "mode": 32, "fee": "5000000000000000", "feeRecipient": "0x0…0",
+    "validUntil": 1756500900,
     "relayer": "0x0…0"
   },
   "signature": "0x…65 bytes… (r‖s‖v, low-s)",
@@ -408,10 +428,14 @@ Thiếu (2), hai bản sẽ lệch trong vài tháng mà không ai biết cho t�
 }
 ```
 
-Hai đổi so với bản 2 trong `meta_tx`: bỏ `mode` (bitmask đã loại), và thêm `feeMode` (`FeePolicy`
-enum: `0 = NONE, 1 = PERCENT, 2 = FIXED`). `feeMode` **nằm trong digest** — nếu không, relayer đổi
-cách diễn giải `fee` từ tuyệt đối sang ppm và người ký trả sai số tiền. Với intent Zether,
-`feeMode` bắt buộc là `NONE` hoặc `FIXED`; `PERCENT` bị contract từ chối (`FeePolicy.requireConfidentialSafe`).
+**[BẢN 4]** `meta_tx` mang một trường `mode` (`uint32`) và **không** có trường `feeMode`. Cách tính
+phí là **nửa byte sau** của `mode`: `0x00 = NONE`, `0x10 = PERCENT`, `0x20 = FIXED`. Ví dụ trên
+`"mode": 32` nghĩa là FIXED, không ràng buộc relayer, không ràng buộc feeRecipient.
+
+Lập luận của bản 3 vẫn nguyên giá trị và nay được thoả bằng chính `mode`: cách tính phí **phải nằm
+trong digest** — nếu không, relayer đổi diễn giải `fee` từ tuyệt đối sang ppm và người ký trả sai số
+tiền. Với intent Zether, phí bắt buộc là `NONE` hoặc `FIXED`; `PERCENT` bị contract từ chối
+(`FeePolicy.requireConfidentialSafe`) vì số tiền là ciphertext, không nhân tỉ lệ được.
 
 Bốn bổ sung, và tại sao từng cái là bắt buộc chứ không phải trang trí:
 
@@ -452,13 +476,15 @@ Quy tắc versioning (ghi vào `/intents/v1/policy`):
 Node từ chối `spec` có major không biết với `400 UNSUPPORTED_SPEC` và trả về danh sách major mình nói
 được. Không bao giờ "cố gắng đoán".
 
-**Một ngoại lệ mà bản 2 ghi và giờ đã hết hiệu lực:** bản 2 viết rằng thêm một `mode` bit là thay đổi
-schema đối với *contract*, vì §04.4 bắt buộc `require(m.mode & ~MODE_KNOWN_MASK == 0)`, nên `/policy`
-phải công bố `mode_known_mask` theo từng `verifying_contract`. **Toàn bộ đoạn đó chết cùng bitmask**
-(`_USER-DECISIONS.md` §5). Không có `mode`, không có mask, không có đợt revert hàng loạt khi nâng cấp
-contract không đều.
+**Một ngoại lệ mà bản 3 tuyên bố đã chết, và bản 4 phục hồi:** thêm một `mode` bit là thay đổi
+schema đối với *contract*, vì §04.4 bắt buộc `validateMode` từ chối bit lạ. Bản 3 viết rằng nghĩa vụ
+công bố `mode_known_mask` "chết cùng bitmask". **`mode` đã quay lại (`_USER-DECISIONS.md` §24), nên
+nghĩa vụ đó quay lại nguyên vẹn:** `/policy` **phải** công bố `mode_known_mask` theo từng
+`verifying_contract`, hôm nay là `0xF3`.
 
-Cái thay thế nó, và nhẹ hơn hẳn: `/policy` công bố `fee_modes_supported` theo từng
+Và nó không chỉ là bit lạ ở nửa đầu. Nửa sau là **giá trị**, nên một `mode = 0x30` lọt qua mọi phép
+kiểm mask nhưng là giá trị phí không tồn tại — contract cũ revert, contract mới có thể không. `/policy`
+vì thế công bố **hai** thứ: `mode_known_mask` cho nửa đầu, và `fee_modes_supported` cho nửa sau, theo từng
 `verifying_contract`, vì một token Zether chỉ nhận `NONE`/`FIXED`. Relayer từ chối trước khi simulate.
 
 ---
@@ -468,15 +494,20 @@ Cái thay thế nó, và nhẹ hơn hẳn: `/policy` công bố `fee_modes_suppo
 Công thức hiển nhiên:
 
 ```
-cost_native  = (gas_intrinsic + innerGasLimit_charged) * effective_gas_price
+cost_native  = gas_used_estimate * effective_gas_price
 revenue_nat  = metaTx.fee * FX(rewardToken -> native) + sponsor_quote
 relay if:      revenue_nat >= cost_native * (1 + margin)     # margin mac dinh 0.30
 ```
 
 Bản 1 viết `gas_limit_sim * effective_gas_price`. Đó là **ước lượng sai phía an toàn ngược**: relayer
-trả gas theo `gasUsed` thực, không theo `gas_limit`, **nhưng** phải *có đủ* số dư để đặt `gas` =
-`innerGasLimit + FLOOR_GAS` (§04.6). Hai con số khác nhau: cái thứ nhất là chi phí, cái thứ hai là
-vốn lưu động. Một relayer với 5 xDAI không thể phát 200 tx song song mỗi tx đặt `gas = 400_000` dù
+trả gas theo `gasUsed` thực, không theo `gas_limit`, **nhưng** phải *có đủ* số dư để đặt `gas` bằng
+`gas_limit` mình chọn. Hai con số khác nhau: cái thứ nhất là chi phí, cái thứ hai là vốn lưu động.
+
+> **[BẢN 3]** `innerGasLimit` không còn trong struct (`_USER-DECISIONS.md` §24) — không còn inner
+> call nên không còn phong bì gas trong chữ ký. `gas_limit` bây giờ là **quyết định của relayer**,
+> lấy từ **bảng gas tĩnh theo selector** (§04.10) cộng biên, chứ không phải một trường người dùng ký.
+> Điều này *làm mạnh thêm* lập luận vốn lưu động dưới đây, không làm yếu: relayer bây giờ tự chịu
+> trách nhiệm chọn đúng, và chọn thừa thì tự khoá vốn của chính mình. Một relayer với 5 xDAI không thể phát 200 tx song song mỗi tx đặt `gas = 400_000` dù
 tổng `gasUsed` chỉ là 30% — đây là lý do thực tế khiến relayer nhỏ không scale được, và nó không nằm
 ở đâu trong bản 1.
 
@@ -635,9 +666,16 @@ phải cao hơn**. Với tỷ lệ inner-fail quan sát được `p`, biên lợ
 → `margin' = 0,63`. Node phải đo `p` theo `(to, selector)` và công bố nó; nếu không, relayer sẽ tự đo
 và tự đặt floor, và các relayer sẽ lệch nhau.
 
-> **Bản 3:** bản 2 gọi hành vi này bằng bit `MODE_REQUIRE_SUCCESS (0x04)`. Bitmask đã bị loại
-> (`_USER-DECISIONS.md` §5), nên nó không còn là một bit trong `mode` mà là một **thuộc tính của
-> contract đích**: contract quyết định nó bubble hay swallow, và relayer đọc điều đó từ `/policy`
+> **[BẢN 4] — cả mục fee floor theo `require_success` ở trên đã hết đối tượng.** Không còn inner
+> `CALL` (`_USER-DECISIONS.md` §24), nên không còn cặp bubble/swallow, không còn `p` = tỷ lệ
+> inner-fail, và không còn `risk = 1.5`. Floor quay về bộ **đôi** `(chain_id, token)`. Phần toán
+> `margin' = (1 + margin)/(1 - p) - 1` vẫn đúng như một công thức, chỉ là `p` bây giờ đo **tỷ lệ tx
+> revert toàn phần** (nonce không tăng, relayer mất gas, không thu được gì) — nhỏ hơn hẳn, vì
+> contract kiểm đủ **trước** khi thu phí thay vì kiểm sau khi gọi ra ngoài.
+>
+> **Bản 3:** bản 2 gọi hành vi này bằng bit `MODE_REQUIRE_SUCCESS (0x04)`. Bit đó **chết hẳn** (không
+> phải "bitmask bị loại" — bitmask còn, xem [BẢN 4] ở đầu file; cái chết là *inner call*). Bubble hay
+> swallow nay là một **thuộc tính của contract đích**: contract quyết định nó bubble hay swallow, và relayer đọc điều đó từ `/policy`
 > theo `(verifying_contract, selector)`. Cùng một hệ quả kinh tế, không còn một trường trong digest
 > để va chạm.
 >
@@ -728,8 +766,9 @@ tính bí mật.
 Với intent mở, payload đã đầy đủ và tự uỷ quyền. Bất kỳ ai cũng `msg.sender` được. Cái gọi là
 "front-run" ở đây là:
 
-- `to`, `data`, `amount`, `fee`, `feeMode`, `expiry`, `batchId`, `batchNonce`, `innerGasLimit` **đều
-  nằm trong digest** → không sửa được một byte.
+- `to`, `value`, `data`, `fee`, `mode`, `validUntil`, `batch`, `nonce` **đều nằm trong digest** →
+  không sửa được một byte. (`_USER-DECISIONS.md` §24: `feeToken` và `innerGasLimit` không còn tồn
+  tại; cách tính phí nằm ở **nửa byte sau** của `mode`.)
 - `relayer` và `feeRecipient` là **wildcard `address(0)`** → kẻ "cướp" chỉ thay đổi được *ai được trả
   tiền*, và nó đang trả cho chính nó bằng cách chịu gas.
 - Kết quả on-chain mà user nhận được là **byte-identical** bất kể ai submit.
@@ -1038,8 +1077,10 @@ Trên mesh có một lời giải đơn giản hơn nhiều cho cùng bài toán
 (`_USER-DECISIONS.md` §21.4). Intent nào có MEV thì đừng gossip nó — đưa vào private pool và để một
 relayer được chỉ định lấy. Đó là mô hình private mempool, đã được chứng minh trên Ethereum, và nó
 không tốn thêm một block nào.
-**Loai bo. Ghi vao spec la co the them sau bang `mode` bit `0x10`** (khong phai `0x08` nhu ban 1
-viet — `0x08` da bi `MODE_METERED_FEE` lay o §5.3.3) **neu them intent type co MEV.**
+**Loại bỏ.** Bản 2 ghi là "có thể thêm sau bằng `mode` bit `0x10`". **[BẢN 4] không còn chỗ đó**:
+`0x10` nay là `MODE_FEE_PERCENT` ở nửa byte phí, và nửa byte cờ chỉ còn `0x04`/`0x08` trống. Nếu
+sau này thật sự cần, nó lấy `0x04` — nhưng cấp bit là việc của §04.4, không phải của section này,
+và bài toán MEV đã có private pool giải rồi nên đừng cấp.
 
 **(d) Priority by stake ngoai lottery.** Khong can. Stake da vao lottery weight o (a). Them mot co
 che uu tien thu hai la chong cheo.
@@ -1104,7 +1145,7 @@ Hàng rào theo thứ tự, rẻ trước:
 |---|---|---|---|---|
 | 0 | Rate limit theo IP (`60 req/min`), body cap 32 KB | Cần botnet | ~0 | **nginx `limit_req`**, không phải Odoo |
 | 1 | Rate limit theo `meta_tx.from` (`10 intent/phút`, `100/giờ`) | Cần nhiều địa chỉ | 1 Redis INCR | Redis (không phải biến module) |
-| 2 | Sanity offline: `expiry` trong tương lai và `<= max_expiry`, `fee >= fee_floor(chain, token, require_success)`, `to` trong allowlist, `tokenContract` trong allowlist, chữ ký recover ra đúng `from`, `innerGasLimit <= chain.max_inner_gas` | ~0 | ~1 ms | Python thuần |
+| 2 | Sanity offline: `expiry` trong tương lai và `<= max_expiry`, `fee >= fee_floor(chain, token, fee_mode)`, `to` trong allowlist, chữ ký recover ra đúng `from`, `innerGasLimit <= chain.max_inner_gas` | ~0 | ~1 ms | Python thuần |
 | 3 | **Gate ai được simulate**: `from` phải (a) có `nonce > 0` on-chain, HOẶC (b) có `sponsor.policy_id` hợp lệ, HOẶC (c) **JWT hợp lệ từ `bamboo_token_auth`**, HOẶC (d) kèm PoW hashcash 20 bit | (d) ≈ 1M keccak ≈ **0,3–1 s CPU** | ~0,3 ms verify | Python + Redis |
 | 4 | `eth_call` simulate; drop nếu revert | — | 15–150 ms | RPC pool |
 | 5 | Chia sẻ ban list giữa các node qua `/intents/v1/peers` (feed ký) | — | ~0 | cron |
@@ -1191,7 +1232,7 @@ Câu hỏi đúng phải hỏi trước: **relayer thực sự có thể làm g�
 | Kiểm duyệt (nhận intent, không relay, không báo) | Có | Trễ đến khi có node khác nhặt sau `W` | Không — mesh tự re-publish |
 | Submit tx biết chắc sẽ revert để đốt subsidy | Có | **Chỉ khi subsidy trả theo *lần thử*** | **Không — sửa thiết kế: subsidy chỉ trả khi inclusion thành công** |
 | Claim subsidy cho intent mình không relay | **Không** — pool kiểm `msg.sender == relayer` trong chính tx | 0 | Không |
-| **Cấp `gas` thấp cố ý để inner call OOG rồi vẫn ăn fee** (swallow mode) | **Không** — §04.6 có `require(gasleft() > innerGasLimit/63)` sau `call` | 0 | Không — đã chặn on-chain |
+| ~~**Cấp `gas` thấp cố ý để inner call OOG rồi vẫn ăn fee**~~ (swallow mode) | **Hết đối tượng** — [BẢN 3] không còn inner `CALL`, không còn 63/64 | 0 | Không — đã chặn on-chain |
 | **Đọc intent trên bus rồi không relay, chỉ để thu thập dữ liệu thương mại** | **Có** | Rò rỉ thông tin (§5.4.5) | **Không slashing** — chặn bằng quyền truy cập (`peers_allowed`, private pool), không bằng tiền |
 | **Rút `dailyCap` của sponsorship pool trước đối thủ** | Có | Đối thủ mất gas một tx | Không — sửa thiết kế: per-relayer sub-cap (§5.7) |
 | **Chuyển tiếp rác để cày điểm forward** | Có | Băng thông của peer | Không — chấm theo **forward có ích** (§5.4.4b) làm nó vô giá trị |
@@ -1802,12 +1843,12 @@ Section này đã tự sửa theo §03/§04/§10. Những điều đi **ngược
 
 | Section | Hiện tại | Phải sửa thành |
 |---|---|---|
-| §04.4 | `mode` bitmask với `MODE_KNOWN_MASK`, `MODE_RESTRICT_RELAYER`, `MODE_REQUIRE_SUCCESS` | **Xoá toàn bộ bitmask.** `_USER-DECISIONS.md` §5 chốt wildcard `relayer == address(0)`; hành vi bubble/swallow là thuộc tính của contract đích, không phải một bit trong digest |
+| ~~§04.4~~ **ĐÃ GIẢI QUYẾT** | `mode` bitmask | **Xoá toàn bộ bitmask.** `_USER-DECISIONS.md` §5 chốt wildcard `relayer == address(0)`; hành vi bubble/swallow là thuộc tính của contract đích, không phải một bit trong digest |
 | §04.4 | `feeRecipient` chỉ nhận một địa chỉ cụ thể | Thêm quy ước **`address(0)` = trả cho `msg.sender`** như một tiện ích cho người gửi không biết ai sẽ relay. Không phải điều kiện sống còn: `feeRecipient` cố định là cấu hình tự nhiên của relayer có pool khoá, và relayer công bố nó ở `/policy` (`_USER-DECISIONS.md` §21.5) |
-| §04.4 | Struct `MetaTransaction` không có `feeMode` | Thêm `feeMode` **vào digest**; nếu không, relayer đổi cách diễn giải `fee` từ tuyệt đối sang ppm (§5.2) |
+| ~~§04.4~~ **ĐÃ GIẢI QUYẾT** | Struct không có `feeMode` | Cách tính phí nay ở **nửa byte sau của `mode`** (§04.4), và `mode` vốn đã trong digest. Yêu cầu cấp một bit riêng ở §5.12 **rút lại**. Chi tiết cũ: relayer đổi diễn giải `fee` từ tuyệt đối sang ppm (§5.2) |
 | §10.4.5 | `metatx_state` thiếu `queued`, `broadcast`, `superseded`, `done`, `reverted` | Dùng state machine hợp nhất ở §5.8.1 (11 trạng thái) |
 | §10.4.5 | `mode_flags` | Xoá cột. Thay bằng `fee_mode` + `pool_visibility` (§5.8.2) |
-| §10.4.5 | thiếu `inner_gas_limit`, `sig_kind`, `from_schnorr_address`, `bus_seq`, `beacon_*`, `hop_count`, `pool_visibility`, `never_public` | Thêm (danh sách ở §5.8.2) |
+| §10.4.5 | thiếu `sig_kind`, `from_schnorr_address`, `bus_seq`, `beacon_*`, `hop_count`, `pool_visibility`, `never_public` | Thêm (danh sách ở §5.8.2) |
 | §10.4.5 | không có model cho khoá ký của relayer | Thêm `blockchain.relayer.submitter` (§21.5). Thiếu nó thì cap, lottery và đối soát gas đều đếm sai |
 | §04.10 | Ngân sách gas Zether "342k–422k" mâu thuẫn với §03.3 "~1,79 M" | Ghi rõ: 342k–422k **chỉ** với native precompile hoặc Groth16; 1,79 M với `BulletproofsVerifier.sol` |
 | §06 | Nonce manager mô tả cho relayer nội bộ | Ghi rõ nó **không** áp dụng cho relayer bên thứ ba — họ tự quản nonce của họ. Nhưng **`KeyPool` thì dùng chung** (§21.5): cùng interface, khác nơi giữ khoá |

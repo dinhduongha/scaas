@@ -32,7 +32,7 @@ Liệt kê đầy đủ, vì mỗi cái là một chỗ kế hoạch triển kha
 
 | # | Giả định ngầm | Sự thật | Xử ở đâu |
 |---|---|---|---|
-| 1 | Có sẵn một service `confidential-signer` chạy được, ai đó vận hành nó | Nó là **một sản phẩm riêng**: deploy, HA, monitoring, cert lifecycle, on-call. Không phải một file `.py` | §07.1b |
+| 1 | Có sẵn một service ký chạy được, ai đó vận hành nó | Nó là **một sản phẩm riêng**: deploy, HA, monitoring, cert lifecycle, on-call. Không phải một file nguồn. Từ [BẢN 3] nó là **hai vai** của `bamboo-node` — custody broker và key oracle (§23.2) | §07.1b |
 | 2 | Gọi signer là đồng bộ và rẻ | MPC SaaS p50 **300 ms – 3 s** (§06.6). Gọi đồng bộ trong HTTP worker của Odoo = cạn worker pool ở 6–20 request đồng thời | §07.1b |
 | 3 | `caps` do signer báo là đáng tin | Nó tự khai qua mTLS. Không có attestation ràng buộc thì một signer bị đánh tráo khai `kind='enclave'` và không ai biết | §07.1, §07.9 |
 | 4 | Một provider cho một key là đủ mô hình hóa | Thiếu **binding money-flow → (auth provider, conf provider, policy)**. Locked #6 nói "chọn lúc deploy" — phải có model cho *cái được chọn*, không chỉ cho *các lựa chọn* | §07.12 `blockchain.custody.policy` |
@@ -52,46 +52,90 @@ Liệt kê đầy đủ, vì mỗi cái là một chỗ kế hoạch triển kha
 
 ### 07.1. `ICustodyProvider` — tập thao tác
 
-Interface sống ở service `confidential-signer`, **không** trong addon. Addon Odoo chỉ giữ metadata và gọi qua mTLS. Thuần Python, không `import odoo`, test được ngoài Odoo.
+> **[BẢN 3 — đổi ngôn ngữ và tách tên. `_USER-DECISIONS.md` §23.2 và §23.6.]**
+>
+> Cái tên `confidential-signer` của bản nháp trước gánh **hai** việc có ranh giới tin cậy khác nhau,
+> và chính vì gánh hai việc mà không ai đọc spec trả lời được "nó để làm gì". Tách hẳn:
+>
+> | Tên mới | Chạy bằng | Giữ cái gì | Nhóm hàm dưới đây |
+> |---|---|---|---|
+> | **custody broker** — `bamboo-node --role=custody` | Rust, tiến trình riêng, mTLS | **Không giữ vật liệu khoá.** Nó *môi giới*: đẩy mọi thao tác xuống HSM/KMS/MPC SaaS và áp policy | **NHÓM A** + **NHÓM C** |
+> | **key oracle** — `bamboo-node --role=oracle` | Rust, **trong enclave**, chỉ bật khi Zether bật | **Giữ `x`** — và chỉ vì không thứ gì khác giữ được (§07.2) | **NHÓM B** + **NHÓM B'** |
+>
+> Cùng một binary, hai `--role`. Vì sao tiến trình riêng chứ không phải một thư viện trong Odoo:
+> `_USER-DECISIONS.md` §23.5. Vì sao `x` không nằm chung với làn relay: §23.2 — làn relay parse byte
+> của người lạ, và ba cargo-fuzz target của §14 nằm trên đúng parser đó.
+>
+> Ngôn ngữ là **Rust**, không phải Python. **Ngữ nghĩa từng hàm giữ nguyên** — bản Python bên dưới
+> từng là đặc tả duy nhất, nên nó được dịch chứ không bị viết lại. Bốn lập luận (a)–(d) ngay sau
+> interface áp dụng y nguyên.
+>
+> Việc còn nợ, không giả vờ là đã xong: **`kind = 'custodial'` không nằm gọn trong bảng trên.** Nó
+> làm được cả NHÓM B lẫn NHÓM C, tức là nó là cả hai vai cùng lúc, ở nhà cung cấp thứ ba. Đó là hình
+> dạng đúng của nó (ta không kiểm soát ranh giới bên trong họ), nhưng nghĩa là bảng vai chỉ mô tả
+> **triển khai của ta**, không mô tả mọi `kind`.
 
-```python
-# /home/dockers/odoo19/confidential-signer/custody/base.py
-from typing import Protocol
+Interface sống ở **custody broker** / **key oracle**, **không** trong addon. Addon Odoo chỉ giữ
+metadata và gọi qua mTLS. Không `import odoo`, test được ngoài Odoo.
 
-PROTOCOL_VERSION = "custody/1"   # bump khi doi chu ky bat ky ham nao; client tu choi neu lech
+```rust
+// bamboo-node/src/custody/mod.rs
+pub const PROTOCOL_VERSION: &str = "custody/1";  // bump khi đổi chữ ký bất kỳ hàm nào;
+                                                 // client từ chối nếu lệch
 
-class ICustodyProvider(Protocol):
-    kind: str            # hsm | kms | mpc | tee_saas | enclave | custodial | on_device | smart_account
-    caps: frozenset[str] # tap thao tac thuc su lam duoc; gate moi dispatch
-    policy_bundle_id: str    # hash cua SigningPolicy dang hieu luc, ky boi governance
+pub trait CustodyProvider {
+    fn kind(&self) -> Kind;          // Hsm|Kms|Mpc|TeeSaas|Enclave|Custodial|OnDevice|SmartAccount
+    fn caps(&self) -> &CapSet;       // tập thao tác thực sự làm được; gate mọi dispatch
+    fn policy_bundle_id(&self) -> &str;  // hash của SigningPolicy đang hiệu lực, ký bởi governance
 
-    # --- NHOM A: uy quyen duoc cho signer tu xa (khoa khong bao gio roi boundary) ---
-    def create_account(self, tenant: str, purpose: str, scheme: str) -> "AccountHandle": ...
-    def public_key(self, h) -> bytes: ...
-    def sign_digest_secp256k1(self, h, digest32: bytes, idem: str) -> tuple[int, bytes, bytes]: ...
-    def sign_digest_ed25519(self, h, msg: bytes, idem: str) -> bytes: ...
-    def sign_raw_tx(self, h, unsigned_payload: bytes, caip2: str, idem: str) -> bytes: ...
-    def attest(self, h, nonce32: bytes) -> "Attestation": ...
-    def rotate_auth(self, h, new_scheme: str, new_material_hash: bytes) -> "RotationTicket": ...
+    // --- NHÓM A (custody broker): uỷ quyền được cho signer từ xa.
+    //     Khoá không bao giờ rời boundary của HSM/KMS/MPC ---
+    fn create_account(&self, tenant: &str, purpose: &str, scheme: Scheme)
+        -> Result<AccountHandle>;
+    fn public_key(&self, h: &AccountHandle) -> Result<Vec<u8>>;
+    fn sign_digest_secp256k1(&self, h: &AccountHandle, digest32: [u8; 32], idem: &str)
+        -> Result<(u8, [u8; 32], [u8; 32])>;                       // (v, r, s)
+    fn sign_digest_ed25519(&self, h: &AccountHandle, msg: &[u8], idem: &str) -> Result<Vec<u8>>;
+    fn sign_raw_tx(&self, h: &AccountHandle, unsigned: &[u8], caip2: &str, idem: &str)
+        -> Result<Vec<u8>>;
+    fn attest(&self, h: &AccountHandle, nonce32: [u8; 32]) -> Result<Attestation>;
+    fn rotate_auth(&self, h: &AccountHandle, new_scheme: Scheme, new_material_hash: [u8; 32])
+        -> Result<RotationTicket>;
 
-    # --- NHOM B: hat nhan phu thuoc x. KHONG uy quyen duoc cho HSM/KMS/MPC SaaS,
-    #     NHUNG uy quyen duoc cho enclave hoac threshold shard (xem §07.2b) ---
-    def zk_nonce_commit(self, h, bases: list[bytes], ctx32: bytes) -> "NonceCommitment": ...
-    def zk_mul_by_x(self, h, points: list[bytes], ctx32: bytes) -> list[bytes]: ...
-    def zk_response(self, h, nonce_id: str, challenge: bytes) -> bytes: ...
-    def sign_schnorr_bn254(self, h, digest32: bytes) -> bytes: ...
-    def elgamal_decrypt(self, h, C: bytes, D: bytes, onchain_witness: "ChainWitness") -> int: ...
+    // --- NHÓM B (key oracle): hạt nhân phụ thuộc x. KHÔNG uỷ quyền được cho
+    //     HSM/KMS/MPC SaaS, NHƯNG uỷ quyền được cho enclave hoặc threshold shard (§07.2b) ---
+    fn zk_nonce_commit(&self, h: &AccountHandle, bases: &[Point], ctx32: [u8; 32])
+        -> Result<NonceCommitment>;
+    fn zk_mul_by_x(&self, h: &AccountHandle, points: &[Point], ctx32: [u8; 32])
+        -> Result<Vec<Point>>;
+    fn zk_response(&self, h: &AccountHandle, nonce_id: &str, challenge: Scalar) -> Result<Scalar>;
+    fn sign_schnorr_bn254(&self, h: &AccountHandle, digest32: [u8; 32]) -> Result<Vec<u8>>;
+    fn elgamal_decrypt(&self, h: &AccountHandle, c: Point, d: Point, w: &ChainWitness)
+        -> Result<u64>;
 
-    # --- NHOM B': prover day du. Chi enclave / on_device / custodial ---
-    def zether_prove_transfer(self, h, stmt: "TransferStatement", wit: "TransferWitness") -> bytes: ...
-    def zether_prove_withdraw(self, h, stmt, wit) -> bytes: ...
-    def zether_prove_migrate(self, h, from_addr: bytes, to_pk: bytes, wit) -> bytes: ...
+    // --- NHÓM B' (key oracle, cấu hình đầy đủ): prover trọn vẹn.
+    //     Chỉ enclave / on_device / custodial ---
+    fn zether_prove_transfer(&self, h: &AccountHandle, stmt: &TransferStatement,
+                             wit: &TransferWitness) -> Result<Vec<u8>>;
+    fn zether_prove_withdraw(&self, h: &AccountHandle, stmt: &WithdrawStatement,
+                             wit: &WithdrawWitness) -> Result<Vec<u8>>;
+    fn zether_prove_migrate(&self, h: &AccountHandle, from_addr: Address, to_pk: Point,
+                            wit: &MigrateWitness) -> Result<Vec<u8>>;
 
-    # --- NHOM C: vong doi. Moi ham o day deu la thao tac dac quyen (xem duoi) ---
-    def wrap_export(self, h, kek_ref: str, quorum: "QuorumTicket") -> bytes: ...
-    def import_wrapped(self, tenant: str, blob: bytes, kek_ref: str) -> "AccountHandle": ...
-    def destroy(self, h, reason: str, zero_balance_proof: bytes | None) -> None: ...
+    // --- NHÓM C (custody broker): vòng đời.
+    //     Mọi hàm ở đây đều là thao tác đặc quyền (xem dưới) ---
+    fn wrap_export(&self, h: &AccountHandle, kek_ref: &str, q: &QuorumTicket) -> Result<Vec<u8>>;
+    fn import_wrapped(&self, tenant: &str, blob: &[u8], kek_ref: &str) -> Result<AccountHandle>;
+    fn destroy(&self, h: &AccountHandle, reason: &str, zero_balance_proof: Option<&[u8]>)
+        -> Result<()>;
+}
 ```
+
+**Một điều Rust cho không mà Python không cho, và nó đáng nhắc:** trait này chia được thành **hai**
+trait — `AuthCustody` (NHÓM A + C) và `ConfCustody` (NHÓM B + B') — và khi đó `bamboo-node --role=custody`
+**không compile được** một hiện thực chạm `x`. Ranh giới của §07.0 kết luận 2 (hai trục độc lập) thành
+ranh giới của trình biên dịch, chứ không còn là một dòng chú thích. Bảng `caps` bên dưới vẫn cần, vì nó
+lọc trong **một** trục (một `hsm` và một `enclave` đều impl `AuthCustody` nhưng khác nhau ở `wrap_export`).
 
 Bốn thay đổi so với bản nháp trước, mỗi cái vì một lý do cụ thể:
 
@@ -105,13 +149,17 @@ Bốn thay đổi so với bản nháp trước, mỗi cái vì một lý do c�
 
 `caps` là hợp đồng thật, không phải trang trí. Dispatcher **fail-closed** ở cả hai đầu:
 
-```python
-class CustodyUnsupported(Exception): ...
+```rust
+#[derive(Debug, thiserror::Error)]
+#[error("{kind:?} không làm được {op}")]
+pub struct CustodyUnsupported { pub kind: Kind, pub op: &'static str }
 
-def call(provider: ICustodyProvider, op: str, *a, **kw):
-    if op not in provider.caps:
-        raise CustodyUnsupported(f"{provider.kind} khong lam duoc {op}")
-    return getattr(provider, op)(*a, **kw)
+/// Gọi trước MỌI thao tác. Rust không có getattr, nên gate là một `require`
+/// đặt ở đầu mỗi hàm của impl — kém tiện hơn dispatcher động, nhưng nó
+/// hiện ra trong code review thay vì ẩn trong một lớp dispatch.
+pub fn require(p: &dyn CustodyProvider, op: &'static str) -> Result<(), CustodyUnsupported> {
+    if p.caps().has(op) { Ok(()) } else { Err(CustodyUnsupported { kind: p.kind(), op }) }
+}
 ```
 
 Điều này để tránh đúng một lỗi: một deployment cấu hình `conf_custody = 'kms'`, mọi thứ xanh cho tới khi ai đó bấm "chuyển tiền bảo mật" lần đầu trên production. `caps` khiến nó gãy **lúc validate cấu hình**, không phải lúc chuyển tiền. Phía Odoo cũng kiểm tra `caps_csv` trước khi cho `state = 'active'`, nhưng bản Odoo chỉ là cache — signer là nguồn thẩm quyền và kiểm lại lần nữa.
@@ -142,7 +190,7 @@ Bản nháp trước vẽ `endpoint_url` rồi đi tiếp. Đây là phần thi�
 ```
 policy + allowlist (trong signer)      2 ms
 sim (2 RPC round-trip)               120 ms
-lease nonce (Redis Lua)                1 ms
+lease nonce (actor mpsc, in-proc)   <0,1 ms   <-- KHÔNG Redis, KHÔNG Lua (§23.3)
 mTLS handshake (nếu không keep-alive) 40 ms   <-- phải keep-alive, nếu không cộng vào mọi call
 sign (MPC SaaS)                      800 ms   <-- 76% ngân sách
 serialize + broadcast                 80 ms
@@ -762,16 +810,21 @@ Nguyên tắc chi phối, và nó là điều dễ làm sai nhất trong cả se
 
 > **Odoo không bao giờ được là nguồn thẩm quyền quyết định khóa nào thuộc tenant nào.** Một lỗi record rule, một domain viết sai, một chỗ `sudo()` thừa, hay một SQL injection sẽ trở thành "ký được bằng khóa của công ty khác". Ràng buộc phải nằm **ở phía provider**, và signer service phải **tự dẫn xuất lại** đường dẫn khóa từ tenant đã xác thực bằng mTLS, rồi **từ chối** mọi `signer_ref` không nằm dưới đường dẫn đó.
 
-```python
-# confidential-signer/authz.py
-import re
-_REF = re.compile(r'^blockchain/[0-9a-f-]{36}/[a-z0-9_]+/[A-Za-z0-9_-]{1,64}$')
+```rust
+// bamboo-node/src/custody/authz.rs   (chạy ở cả --role=custody lẫn --role=oracle)
+static REF: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^blockchain/[0-9a-f-]{36}/[a-z0-9_]+/[A-Za-z0-9_-]{1,64}$").unwrap()
+});
 
-def resolve(tenant_uuid: str, signer_ref: str) -> str:
-    prefix = f"blockchain/{tenant_uuid}/"
-    if not _REF.match(signer_ref) or not signer_ref.startswith(prefix):
-        raise CustodyForbidden("signer_ref ngoai pham vi tenant")   # audit + alert, khong chi tu choi
-    return signer_ref
+/// `tenant_uuid` LUÔN đến từ client cert mTLS, không bao giờ từ body.
+pub fn resolve<'a>(tenant_uuid: &str, signer_ref: &'a str) -> Result<&'a str, CustodyForbidden> {
+    let prefix = format!("blockchain/{tenant_uuid}/");
+    if !REF.is_match(signer_ref) || !signer_ref.starts_with(&prefix) {
+        // audit + alert, không chỉ từ chối
+        return Err(CustodyForbidden::OutOfTenantScope);
+    }
+    Ok(signer_ref)
+}
 ```
 
 `tenant_uuid` lấy từ **client cert mTLS** (`subject.CN` hoặc một SAN URI `urn:tenant:<uuid>`), không lấy từ body request. Đây là điểm khác biệt sống còn: Odoo *nói* nó là công ty nào không quan trọng; cert *chứng minh* nó là công ty nào.
@@ -1015,7 +1068,7 @@ contract, hoặc chi từ treasury.
 **Điểm quan trọng nhất, và là chỗ §07.1b nói quá:** custody **không phải một feature flag mà là một slot
 cắm được, và cái cắm vào có thể rất nhỏ.**
 
-§07.1b viết *"`confidential-signer` là một sản phẩm riêng: deploy, HA, monitoring, cert lifecycle,
+§07.1b viết *"custody broker + key oracle là một sản phẩm riêng: deploy, HA, monitoring, cert lifecycle,
 on-call. Không phải một file `.py`."* Câu đó **đúng cho `enclave` và `hsm`**, và **sai cho `kms`**:
 `kind = 'kms'` là một lời gọi AWS SDK từ chính tiến trình đang chạy — không có dịch vụ nào để vận hành,
 không có cert nào để xoay, không có ai phải on-call.
@@ -1223,7 +1276,7 @@ Cron một dòng, không `fields.` inline (bẫy §5.4 của CLAUDE.md). Lưu ý
 Layout service:
 
 ```
-/home/dockers/odoo19/confidential-signer/          # tien trinh rieng, mTLS, KHONG trong Odoo worker
+bamboo-node --role=custody | --role=oracle         # tien trinh rieng, mTLS, KHONG trong Odoo worker
     custody/base.py            # ICustodyProvider (§07.1)
     custody/pkcs11.py  custody/awskms.py  custody/mpc_fireblocks.py
     custody/tee_turnkey.py     custody/enclave.py   custody/custodial.py
@@ -1331,7 +1384,7 @@ Nhóm theo cái nó bảo vệ, vì một checklist phẳng thì không ai chạ
 7. **Enclave dùng nền nào, và dữ liệu ở đâu?** AWS Nitro (cưỡng chế bằng KMS attestation, có sẵn cơ chế, dữ liệu ở Singapore) hay AMD SEV-SNP tự vận hành tại VN (chủ quyền dữ liệu, nhưng phải tự xây chuỗi attestation, +4–8 tuần, +$60–90k capex). Ràng buộc NĐ 13/2023 về chuyển dữ liệu xuyên biên giới có thể loại bỏ lựa chọn đầu. **Phải xác nhận trước khi viết `custody/enclave.py`** — hai đường không dùng chung code attestation.
 8. **Ngưỡng giá trị nào bắt buộc `auth_custody = 'hsm'` thay vì `enclave` cho relayer?** §06.6 mục 3 nói cần người duyệt về compliance. Đề xuất: mọi khóa có thể mint, pause, hoặc nâng cấp contract dùng HSM không có ngoại lệ; relayer EOA dùng enclave với runway trần 4 giờ (§06.5).
 9. **Bảo hiểm custody: có mua không, và ở đâu?** Nếu bật custodial hoặc t-of-n có platform, MiCA (nếu bán sang EU) bắt bồi thường khi mất khóa. Thị trường bảo hiểm crypto custody tồn tại nhưng phí cao và loại trừ nhiều. Cần một báo giá thật trước khi định giá dịch vụ, không phải sau.
-10. **Ai vận hành `confidential-signer` on-call 24/7?** Nó là một hệ thống trên đường tiền với SLA khác hẳn Odoo. Nếu câu trả lời là "cùng đội vận hành Odoo", thì phải chấp nhận `on_device` làm mặc định cho mọi thứ có thể, để signer down không dừng luồng nào của người dùng cuối.
+10. **Ai vận hành custody broker và key oracle on-call 24/7?** Nó là một hệ thống trên đường tiền với SLA khác hẳn Odoo. Nếu câu trả lời là "cùng đội vận hành Odoo", thì phải chấp nhận `on_device` làm mặc định cho mọi thứ có thể, để signer down không dừng luồng nào của người dùng cuối.
 
 ---
 

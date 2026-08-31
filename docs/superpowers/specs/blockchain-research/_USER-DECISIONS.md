@@ -2308,7 +2308,9 @@ chính mình là thứ dễ bị bỏ; một spec là hợp đồng với ngư�
 2. §12.0.2 phải vẽ lại theo **ranh giới quyền** chứ không theo ranh giới tiến trình, kèm bảng ở §23.4.
    Và sơ đồ của nó phải bỏ mũi tên `relay-pool → confidential-signer` (§23.2).
 3. Bảng năng lực của §21.4 và bảng vai ở §23.3 phải hợp nhất — hiện là hai cách nói về cùng một cấu hình.
-4. §07.1 phải đổi ngôn ngữ sang Rust và tách tên theo §23.2, giữ nguyên ngữ nghĩa từng hàm.
+4. ~~§07.1 phải đổi ngôn ngữ sang Rust và tách tên theo §23.2~~ — **đã làm** (§24.4).
+
+2 và 4 đã trả; **3 còn nợ**. Xem bảng ở §24.4 cho trạng thái đầy đủ.
 
 ### 23.10 Zether Signer ghi vào đâu
 
@@ -2552,9 +2554,22 @@ phí, và sau điểm đó thao tác không thể fail. Bất biến trở thàn
 không try/catch, không mode nào. contradiction-2 **đóng vì hết đối tượng**, và contradiction-3 (va chạm
 bit `mode` giữa §04/§05.3.3/§5.12) đóng theo bảng cấp phát bit ở §04.4 làm nguồn sự thật duy nhất.
 
-### 24.4 Nợ để lại
+### 24.4 Nợ để lại — **đã trả, 2026-08-31**
 
-`12-threat-model.md` §12.2 liệt kê bốn "lỗ hổng kinh điển của meta-transaction". **Ba trong bốn** —
-return-bomb, 63/64 griefing, allowance drain — không còn đối tượng. `00-CANON.md` §C21 và bảng sở hữu
-artefact phải đồng bộ struct. `05-open-relayer-network.md` §5.3.1 và §5.12 phải bỏ yêu cầu cấp bit
-`mode` riêng.
+| Món nợ | Trạng thái |
+|---|---|
+| `12-threat-model.md` §12.2: ba trong bốn "lỗ hổng kinh điển" hết đối tượng (return-bomb, 63/64 griefing, allowance drain) | **xong** — §12.2 ghi rõ từng cái chết vì lý do gì |
+| `12-threat-model.md` §12.0.2 vẽ lại theo ranh giới **quyền** thay vì ranh giới tiến trình (§23.9 mục 2) | **xong** — bảng 4 bất biến + bảng "ba mũi tên đã xoá" |
+| `00-CANON.md` §C8 đồng bộ struct và bảng `mode` | **xong** — khối `[BẢN 3]` ghi đè ở đầu §C8, kèm bảng mục nào còn hiệu lực |
+| `05-open-relayer-network.md` bỏ yêu cầu cấp bit `mode` riêng | **xong** — khối `[BẢN 4]` ở đầu file, sửa tại chỗ §5.2, §5.5, §5.6, §5.7, §5.9, §5.11, §5.12 |
+| `07-custody-providers.md` §07.1 sang Rust, tách tên broker/oracle (§23.9 mục 4) | **xong** — trait `CustodyProvider`, bảng hai vai, `authz.rs` |
+| `06-relay-pool-enterprise.md`: còn dấu vết forwarder / 63-64 / Lua | **xong** — §06.1 và bảng delta §06.11 |
+
+**Còn nợ thật, chưa làm:**
+
+1. **~920 dòng tiếng Việt không dấu trong code block** rải trên ~20 file. User hoãn có chủ ý.
+2. **Bảng năng lực §21.4 và bảng vai §23.3 phải hợp nhất** (§23.9 mục 3) — hiện là hai cách nói về
+   cùng một cấu hình. Chưa làm vì hợp nhất chúng là quyết định về *hình dạng cấu hình*, không phải
+   một phép sửa văn bản.
+3. **Tám bảng ngân sách gas trong `00-CANON.md` §C7** vẫn tính theo phong bì `innerGasLimit`. Khối
+   `[BẢN 3]` ở §C8 tuyên bố chúng hết đối tượng chứ **không** tính lại — số mới phải đo, không suy ra.

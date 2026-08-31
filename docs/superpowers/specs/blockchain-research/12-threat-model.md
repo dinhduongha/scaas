@@ -21,35 +21,74 @@ Bản nháp trước dùng cả mười giả định này mà không phát bi�
 | G9 | Supply chain chỉ là toolchain contract | **Thiếu một nửa** | Client SDK (npm/pypi) cầm `x` — backdoor ở đó lấy khoá trực tiếp | Thêm A13 |
 | G10 | Bulletproofs an toàn vì đã có bài báo | Bài báo an toàn, **triển khai thì không** | Fiat-Shamir yếu = proof giả | 12.3.2 |
 
-#### 12.0.2. Ranh giới tin cậy theo process (thiếu hoàn toàn ở bản nháp)
+#### 12.0.2. Ranh giới TIN CẬY — vẽ theo QUYỀN, không theo tiến trình
 
-Mô hình đe doạ phải vẽ theo **process**, không theo module, vì một lỗ hổng chỉ vượt được ranh giới process qua một giao diện có thể liệt kê được.
+> **[BẢN 3 — `_USER-DECISIONS.md` §23.]** Bản trước vẽ mô hình đe doạ **theo tiến trình**, và ba
+> trong bốn bất biến của nó dựa vào việc `relay-pool`, `chain-indexer` và `intent-hub` là ba tiến
+> trình khác nhau. §23.3 gộp chúng thành **một binary Rust**, nên nếu chỉ đổi sơ đồ mà không đổi
+> cách cưỡng chế thì A11 (chiếm indexer) lập tức bằng A10 (chiếm relay worker).
+>
+> Cái thay thế **mạnh hơn** cái nó thay: ranh giới do **Postgres** cưỡng chế, không do sơ đồ.
 
 ```
-[ Browser / Mobile ]                     tin cay: 0
+[ Browser / Mobile ]                       tin cay: 0
         | JWT bamboo_token_auth, call_kw + /json/2
         v
-[ Odoo worker ]         <-- A4/A6 song o day. KHONG bao gio giu private key.
-        | outbox table (Postgres), KHONG phai HTTP  (§08.2b)
+[ Odoo worker ]           <-- A4/A6 song o day. KHONG BAO GIO giu vat lieu khoa.
+        | bang outbox trong Postgres, KHONG phai HTTP (§08.2b, §06.0.1)
         v
-[ relay-pool worker ]   <-- A10. Giu nonce lease (Redis), goi signer, broadcast.
-        | mTLS + tenant_uuid trong client cert
-        v
-[ confidential-signer ] <-- A5 muon toi day. Enforce policy TRUOC khi ky.
-        | PKCS#11 / KMS Recipient=attestation
-        v
-[ HSM / Nitro Enclave ] <-- bien khoa. A5 khong lay duoc khoa, nhung CO THE lam dung.
-        
-[ indexer ]  --(ghi finalized)-->  [ Postgres ]   <-- A11. Duong ghi `done` duy nhat.
-        ^ 3 RPC provider doc lap (§06.7)          <-- A7
++--------------------------------------------------------------+
+| LAN RELAY   bamboo-node   (MOT binary, nhieu vai)             |
+|                                                               |
+|   [gateway] [mesh] [pool]     <-- A2/A3. Parse byte NGUOI LA. |
+|   [submit]                    <-- A10. Nonce actor + journal. |
+|   [indexer]                   <-- A11. Ghi `finalized`.       |
+|                                                               |
+|   HAI connection Postgres, HAI DB role. Xem bang duoi.        |
+|   KHONG giu vat lieu khoa nao.                                |
++-----------------------------+--------------------------------+
+                              | mTLS + tenant_uuid trong client cert
+                              v
++--------------------------------------------------------------+
+| LAN CUSTODY  bamboo-node --role=custody                       |
+|   NHOM A: sign_digest_secp256k1 / sign_raw_tx / attest        |
+|   <-- A5 muon toi day. Enforce policy TRUOC khi ky.           |
++-----------------------------+--------------------------------+
+                              | vsock.  CHI TON TAI KHI ZETHER BAT.
+                              v
++--------------------------------------------------------------+
+| LAN ORACLE (trong enclave)   bamboo-node --role=oracle        |
+|   ZetherKeyOracle < 300 dong. Giu `x`. Khong parser.          |
+|   <-- bien khoa. A5 khong lay duoc `x`, nhung CO THE lam dung.|
++--------------------------------------------------------------+
+
+        ^ 3 RPC provider doc lap (§06.7)   <-- A7
 ```
 
-Bốn bất biến về ranh giới, mỗi cái là một dòng test:
+##### Bất biến, và cái gì cưỡng chế từng cái
 
-1. **Odoo không bao giờ giữ vật liệu khoá.** Grep gate trong CI: không file nào trong `dms_blockchain/` chứa `eth_keys`, `eth_account`, `coincurve`, `PKCS11`, `boto3.client('kms')`.
-2. **Odoo không gọi trực tiếp signer.** Chỉ `relay-pool` có credential mTLS. Odoo ghi outbox.
-3. **`confidential-signer` không tin `tenant_uuid` do body gửi lên**, chỉ tin cái trong client cert (§07.11).
-4. **Indexer không có quyền ghi bảng nghiệp vụ nào ngoài `blockchain.chain.event`, `blockchain.chain.effect`, `blockchain.transaction`.** DB role riêng, `GRANT` hẹp. Nếu indexer bị chiếm mà vẫn ghi được `account.move` thì ranh giới là giả.
+| # | Bất biến | Trước: cưỡng chế bởi | **Bây giờ: cưỡng chế bởi** |
+|---|---|---|---|
+| 1 | Odoo không giữ vật liệu khoá | quy ước + grep gate CI | **không đổi** — grep gate: không file nào trong `dms_blockchain/` chứa `eth_keys`, `eth_account`, `coincurve`, `PKCS11`, `boto3.client('kms')` |
+| 2 | Odoo không gọi thẳng signer | chỉ `relay-pool` có cert mTLS | **không đổi** — chỉ làn relay có cert. Odoo ghi outbox |
+| 3 | Signer không tin `tenant_uuid` trong body | tiến trình riêng + mTLS | **không đổi** — làn custody **vẫn** là tiến trình riêng (§23.5) |
+| 4 | **Indexer chỉ ghi ba bảng của nó** | **ranh giới tiến trình** | **DB role.** Vai `indexer` mở connection bằng role `bamboo_indexer` với `GRANT INSERT/UPDATE` chỉ trên `blockchain_chain_event`, `blockchain_chain_effect`, `blockchain_transaction`. Vai `submit` dùng role khác |
+
+Bất biến 4 là cái duy nhất thật sự đổi, và nó **mạnh lên**. Trước: một sơ đồ nói rằng indexer chạy
+riêng, và không có gì chặn ai đó gọi thẳng. Bây giờ: Postgres từ chối `INSERT` vào
+`blockchain_settlement` từ connection của indexer, bất kể code làm gì.
+
+**Quy tắc rút ra, và nó nên là một dòng test:** mỗi vai khai báo tập quyền DB của nó, và binary
+**từ chối khởi động** nếu một vai được cấp quyền ngoài tập đó. Gộp tiến trình được; gộp quyền thì
+không.
+
+##### Ba mũi tên đã bị xoá khỏi sơ đồ cũ
+
+| Mũi tên cũ | Vì sao sai |
+|---|---|
+| `relay-pool → confidential-signer` để lấy `x` | **Node relayer không bao giờ cần `x`** (§23.2). Nó chỉ xin ký **vỏ tx** bằng `authKey`. Sơ đồ cũ làm người đọc tưởng ngược lại, và đó là nguồn gốc của câu hỏi "signer để làm gì" khó trả lời |
+| `Redis` giữ nonce lease | Không còn Redis (§23.1). Nonce là biến trong một task `tokio` sở hữu duy nhất, journal ở Postgres |
+| `intent-hub` là một tiến trình | Là vai `mesh` trong cùng binary |
 
 #### 12.0.3. Bảng đối thủ (mở rộng từ 8 lên 13)
 
@@ -145,6 +184,17 @@ Xếp theo `likelihood × impact`, và cột cuối là thứ quyết định ng
 
 ### 12.2. Meta-transaction (EIP-1776)
 
+> **[BẢN 3 — `_USER-DECISIONS.md` §24.]** Token tự hiện thực meta-transaction (native mixin);
+> **không có forwarder**, không `to`/`data` tuỳ ý tới contract lạ, không `innerGasLimit`, không
+> `feeToken`, không swallow mode. Ba lỗ hổng kinh điển của meta-transaction — return-bomb,
+> 63/64 griefing, allowance drain — **mất đối tượng**; bảng đầy đủ ở `04-eip1776-metatx.md` §04.9
+> (15 dòng xuống 6). Giữ tên chúng lại: một lỗ hổng biến mất vì cơ chế sinh ra nó biến mất là
+> thông tin, không phải chỗ trống.
+>
+> Đồng thời `mode` **vẫn còn** (§04.4) — nó điều khiển `relayer` và `feeRecipient`, cộng nửa byte
+> sau cho cách tính phí. Bản trước của mục này có chỗ nói `mode` đã chết; sai.
+
+
 - **Replay cross-chain / cross-contract / cross-mode.** EIP-712 domain `{name, version, chainId, verifyingContract}` chặn hai cái đầu. Cái thứ ba chặn bằng việc `mode` nằm **trong** struct được hash (§04.4); bỏ `mode` ra là MODE_OPEN và MODE_RESTRICT_* với `relayer = 0` trùng digest. Domain separator phải tính lại khi `block.chainid` đổi (hard fork): dùng `EIP712` của OpenZeppelin (nó cache theo `address(this)` + `chainid` và tự tính lại), **không** hard-code separator vào `immutable`.
 - **Digest injectivity — chỗ bản nháp chỉ nói một nửa.** Chặn replay chưa đủ; còn phải chặn **hai struct khác nhau cho ra cùng digest**. Lỗi kinh điển: `bytes data` không được `keccak256` trước khi đưa vào `abi.encode` của struct hash, khiến `("ab","c")` và `("a","bc")` trùng digest. Không fuzz nào tìm ra (xác suất 0), solver tìm ra trong vài giây. Bắt buộc property `check_digest_injective` bằng `halmos` (§14.9) — đây là property đáng giá nhất trong cả bộ formal.
 - **Canonical zeroing.** Chữ "hoặc" trong note ("không bao gồm, **hoặc** hash với `address(0)`") là lỗi spec: hai cách cho hai digest. Chốt `_canon()` (§04.4), verifier tự chuẩn hoá, không bao giờ hash `m.relayer` thô. Một type string, hai giá trị canonical — không được tạo `TYPEHASH` thứ hai cho MODE_OPEN.
@@ -152,10 +202,10 @@ Xếp theo `likelihood × impact`, và cột cuối là thứ quyết định ng
 - **EIP-1271 là stateful, và đó là một cửa sổ tấn công.** Với smart account, `isValidSignature` có thể trả `true` lúc simulate và `false` lúc inclusion (đổi owner, revoke session key). Relayer mất gas, user mất 0 — đúng phía chịu, nhưng phải (a) `expiry` ngắn, (b) re-simulate tại block mục tiêu, (c) hub không trả bounty cho relayer trong trường hợp này. Ngược lại: một account có thể trả `true` **sau** khi đã revoke nếu implementation cache — không phải lỗi của ta, nhưng phải có trong danh sách kiểm tra khi allowlist một loại smart account.
 - **EIP-7702 phá vỡ một giả định cũ.** Sau Pectra, một EOA **có thể có code**. Mọi kiểm tra dạng `require(from.code.length == 0)` hoặc `msg.sender == tx.origin` đều không còn nghĩa. Nếu contract nào trong `smartcontracts/` dùng một trong hai mẫu này thì phải bỏ. Grep gate CI.
 - **Expiry bypass.** Validator lệch timestamp ±12s không đáng kể. Rủi ro thật là `expiry` quá dài: một metaTx ký với expiry 15 phút (con số trong note §10.3) cho relayer quyền giữ nó như một **free option**, broadcast khi có lợi cho relayer. Chốt theo §04.5: **60s cho Zether** (không phải 20s — epoch đã bị loại bởi owner-exclusive rollover), 120s cho call có đọc state, 300s cho ERC-20 transfer thường, 900s cho anchor/log. Check `expiry` phải nằm **trước** `nonce++` và trước thu fee: relayer trễ hạn thì revert, nonce không tiêu, fee không trả.
-- **Thứ tự check là một quyết định kinh tế, không phải phong cách.** `mode` và `expiry` tốn **0 gas**; `nonce` tốn 2,100 (cold SLOAD); chữ ký tốn ~3,000. Kiểm cái miễn phí trước. Bản nháp đặt `nonce` trước `expiry` — sai thứ tự.
-- **Relayer griefing.** Bảng đầy đủ ở §04.9. Ba mục phải có trong contract: `innerGasLimit` trong digest (thiếu nó là lỗ hổng GSN v1); `MAX_RETURN_BYTES = 1024` với `out = 0` trong `call` để chặn return bomb (memory bậc hai) — chi phí còn lại **98 gas**; `require(gasleft() >= g + g/63 + FLOOR_GAS)` **trước** inner call và hậu kiểm trong nhánh `!success` để chặn relayer cố tình cấp thiếu gas.
-- **User griefing ngược lại relayer** (note không nhắc): user ký `innerGasLimit = 20,000,000`, relayer phải dự trữ gas đó để bid. Hai lớp: `targets[to].maxInnerGas` **on-chain** (không chỉ hub) và hub reject `innerGasLimit > 3,200,000` cho Zether / `> 1,500,000` cho phần còn lại, định giá bid theo `gasUsed` mô phỏng chứ không theo `innerGasLimit`.
-- **Rút `approve` sau khi publish** (§5.5, bản nháp 12 bỏ sót): attacker publish 100 intent hợp lệ, chờ relayer broadcast, rồi `approve(forwarder, 0)` trong cùng block. 100 tx revert, attacker mất **một** tx. Tỷ lệ 100:1. Biện pháp: `hints.allowance_ok` kiểm ở tầng 4; `origin_grief_score` theo `meta_tx.from` (3 lần revert/24h ⇒ ép PoW + `max_inflight = 1`); đường bản chất là `permit`/Permit2 để allowance nằm **trong** tx.
+- **Thứ tự check là một quyết định kinh tế, không phải phong cách.** `relayer`, `validUntil` và `mode` tốn **0 gas**; `nonce` tốn 2.100 (cold SLOAD); chữ ký ~3.000. Kiểm cái miễn phí trước. Bản nháp đặt `nonce` trước `expiry` — sai thứ tự. Thứ tự chốt ở §04.6.1, và bước 3 (`validateMode`) phải kiểm **cả** bit lạ ở nửa byte đầu **và** giá trị phí lạ ở nửa byte sau.
+- ~~**Relayer griefing** qua `innerGasLimit` / return-bomb / 63-64.~~ **Cả ba mất đối tượng.** Chúng chặn hệ quả của một opcode `CALL` tới contract lạ; không có `CALL` thì không có frame ngoài sống sót sau khi frame trong OOG, không có returndata của người lạ để bomb, và không có gas nào để giới hạn. Lý do đầy đủ ở §04.1. Bảng còn lại ở §04.9: 15 dòng xuống 6.
+- **User griefing ngược lại relayer — CÒN, và là vector chính còn lại.** Không còn qua `innerGasLimit` (không có trường đó), mà qua việc **cố ý làm thao tác fail**. Hệ quả: cả tx revert, relayer mất gas, user mất 0 và **không lợi gì**. Chặn ở tầng vận hành: simulation gate bắt gần hết, phần còn lại vào `origin_grief_score` (§05.5). Với Zether nó đắt — proof rác đốt ~1,79 M gas **trước** revert — nên thứ tự fail-fast của §12.1 là bắt buộc chứ không phải tối ưu.
+- ~~**Rút `approve` sau khi publish.**~~ **Mất đối tượng**: token trừ số dư nội bộ, không cầm allowance của ai. Nhưng **hình dạng** của tấn công còn — đổi thành *rút số dư sau khi publish*: attacker publish 100 intent hợp lệ rồi chuyển sạch số dư trong cùng block. Tỷ lệ thiệt hại vẫn 100:1, và biện pháp vẫn nguyên: `origin_grief_score` theo `m.from` (3 lần revert/24h ⇒ ép PoW + `max_inflight = 1`). Cái mất đi là *đường bản chất* — `permit`/Permit2 không cứu được, vì vấn đề không còn là allowance.
 - **Cross-lane reordering.** `batchNonce` chỉ bảo đảm thứ tự **trong một lane**. Nếu Odoo đặt `escrow` và `settle` ở hai `batchId` khác nhau, relayer được phép đảo thứ tự. Quy tắc cứng phía Odoo (§15.2.1): mọi chuỗi phụ thuộc phải dùng **cùng một** `batchId` được dẫn xuất tất định từ `origin_key`; `_build_metatx` raise khi phát hiện một `origin_ref` sinh ra hai lane.
 - **Lane exhaustion.** `batchId` là `uint256` ngẫu nhiên ⇒ không hết. Nhưng một lane **kẹt** (nonce đã cấp, tx không bao giờ lên chuỗi) khoá vĩnh viễn mọi giao dịch phụ thuộc. Phải có `lane_epoch++` (§04.3) và `bumpBatchNonce` on-chain; thiếu nó thì một tx treo làm chết cả chuỗi settlement và không ai gỡ được.
 ### 12.3. Zether
