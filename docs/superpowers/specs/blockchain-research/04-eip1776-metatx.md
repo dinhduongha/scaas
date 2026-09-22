@@ -45,7 +45,7 @@ sau chỉ đúng khi các dòng dưới đây được giữ.
 | A4 | `amount` và `fee` cùng một token là chấp nhận được | **Chỉ đúng một phần** — loyalty point không trả được relayer | 04.1 |
 | A5 | `uint8 mode` đủ chỗ | **Sai** — §05.3.3 đã xin `0x04` cho `MODE_METERED_FEE`, va chạm với `MODE_REQUIRE_SUCCESS` | 04.4 |
 | A6 | Zether inner call tốn ~250k gas | **Sai một bậc độ lớn** — con số đúng là 2.0M–3.2M | 04.10 |
-| A7 | Zether proof gắn với epoch nên expiry ≤ 1 epoch | **Không còn đúng** sau quyết định owner-exclusive rollover ở §03.5 | 04.5 |
+| A7 | Zether proof gắn với epoch nên expiry ≤ 1 epoch | **Không còn đúng** sau khi §03.5 bỏ epoch và thay bằng `accSeq`. **[BẢN 5, 2026-09-03]** ràng buộc thay thế **không** phải owner-exclusive mà là `expiry` ngắn + single-flight + pre-broadcast check `accSeq` | 04.5 |
 | A8 | Forwarder UUPS upgradeable | **Mâu thuẫn với §12.1** — upgradeable + allowance = rug vector | 04.2 |
 
 Ba giả định còn lại vẫn đứng và được giữ nguyên: EIP-712 digest là khoá idempotency duy nhất;
@@ -523,6 +523,13 @@ rollover**: `acc[from]` chỉ đổi trong transaction do chính `from` khởi t
 thuộc `zetherNonce`, không phụ thuộc epoch, và rủi ro revert do trôi epoch **bằng 0**. Ràng buộc
 thật còn lại là §05.4.3 single-flight: chỉ một Zether intent bay cho mỗi `schnorrAddress`.
 
+**[BẢN 5, 2026-09-03]** **Vế "rủi ro revert bằng 0" chỉ còn đúng cho tài khoản `OWNER_ONLY`.** Với mặc
+định `PUBLIC` (§C5 [BẢN 5]), `accSeq` bump được bởi bên thứ ba — nhưng **chỉ sau một credit
+thật** — nên proof đang bay vẫn chết được. Kết luận về `expiry` **không đổi** (nó không còn bị
+epoch ràng buộc), nhưng lý do đổi: cái giữ tỷ lệ revert thấp bây giờ là **`expiry` ngắn (60 s) +
+single-flight theo `schnorr_address` + pre-broadcast check `accSeq == provedAccSeq` tại block đã
+ghim**, không phải quyền độc quyền của chủ tài khoản.
+
 | Loại inner call | expiry đề xuất | Ràng buộc thật |
 |---|---|---|
 | Anchor hash, ghi log, redeem loyalty point | 900s | chỉ chống delayed-replay; không có state đọc |
@@ -922,7 +929,9 @@ chỗ enforce, dùng cả ba:
 **Epoch: bản nháp đề xuất `targetEpoch`, §03.5 đã làm nó thừa.** Bản nháp viết "Bổ sung
 `uint64 targetEpoch` vào struct và `require(currentEpoch() == td.targetEpoch)`". Với
 **owner-exclusive rollover** (§03.5) thì `acc[from]` chỉ đổi trong tx của chính `from`, proof chỉ
-phụ thuộc `zetherNonce`, và `targetEpoch` không có gì để bind. **Bỏ.** Nếu vì lý do audit mật mã
+phụ thuộc `zetherNonce`, và `targetEpoch` không có gì để bind. **Bỏ.** (**[BẢN 5, 2026-09-03]** `accSeq` thay
+epoch ở cả hai chế độ `RollOverMode`, nên `targetEpoch` vẫn không có gì để bind — kết luận giữ
+nguyên, chỉ lý do hẹp lại.) Nếu vì lý do audit mật mã
 mà §03.5 bị bác và quay lại epoch-based rollover, thì `targetEpoch` quay lại **và** `expiry` của
 Zether phải tụt về ≤ 1 epoch — hai thứ đi cùng nhau, ghi vào `open_questions`.
 
@@ -1134,8 +1143,45 @@ Xem `open_questions` trong manifest. Ba điểm chặn thật, theo thứ tự p
    3,450 gas (precompile RIP-7212) đến 330,000 gas (verifier P-256 thuần Solidity) là chênh **hai
    bậc**, và nó cộng thẳng vào `requiredOuterGas` của **mọi** metaTx. Phải hỏi provider custody đã
    chọn, không đoán.
-3. **§03.5 owner-exclusive rollover có được reviewer mật mã chấp nhận không.** Nếu không, `expiry`
+3. **§03.5 `accSeq` + nhánh `OWNER_ONLY` có được reviewer mật mã chấp nhận không.** (**[BẢN 5, 2026-09-03]** phạm vi câu hỏi đổi: mặc định đã là `PUBLIC`, gần paper FC 2020 hơn.) Nếu không, `expiry`
    Zether tụt về ≤ 1 epoch, `targetEpoch` quay lại struct `EncryptedTransfer`, và tỷ lệ revert do
    trôi epoch trở thành một bài toán phải giải. Hai thứ này đi cùng nhau và cả hai đều nằm trong
    `expiry` — nên envelope không đổi struct, chỉ đổi hằng số. Đó là lý do không nên đưa
    `targetEpoch` vào `MetaTransaction`.
+
+---
+
+## 04.15. Cập Nhật Chuẩn Tắc V3: Phân Hóa Hai Luồng MetaTx & Linh Hoạt Chi Trả Phí
+
+*(Chi tiết đầy đủ xem `SYNTHESIS_ENTERPRISE_BLOCKCHAIN_V3.md` §2 và `ai-enterprise-blockchain-architecture.md` §4.8–§4.9)*
+
+### 04.15.1. Hai Luồng Thực Thi Meta-Transaction Tối Ưu
+1. **Luồng 1: Fast-Path Token Functions (`mtxPay`, `transferConfidential`, `fund`, `burn`):**
+   - Nhận trực tiếp các tham số có kiểu rõ ràng (typed arguments), không bọc dynamic calldata.
+   - Tiết kiệm ~4,200 gas do không tốn phí giải mã ABI decode động trong EVM.
+   - Hàm `mtxPay` nhận `bytes32 payId` và phát sự kiện `Payment(sender, recipient, amount, feeAmount, feeRecipient, payId)` cho phép ERP Odoo tự động gạch nợ hóa đơn `account.move` tức thì (1-1 reconciliation).
+2. **Luồng 2: Generic Calldata Execution (`executeMetaTransaction`):**
+   - Nhận `bytes calldata data` cho các tương tác tùy ý composable (bỏ phiếu DAO, nộp cọc thầu kín sealed-bid, tương tác DEX). Tốn thêm 4.2k–8k gas decode calldata.
+
+### 04.15.2. Tính Linh Hoạt Chi Trả Phí Relayer
+1. **Bên Nhận Trả Phí (`feePaidByRecipient = true`):**
+   - Người gửi chuyển chính xác $N$ token theo hợp đồng thương mại; Relayer thu phí $F$ token từ số tiền chuyển; Người nhận nhận thực tế $N - F$ token. Người gửi không phải tự tính cộng dồn phí vào lệnh chuyển.
+2. **Chính Sách Trợ Cấp Phí Gas Inbound Của Doanh Nghiệp (Inbound BaaS Gas Subsidy):**
+   - Doanh nghiệp vận hành Relayer tài trợ 100% gas (`fee = 0`) cho các giao dịch chuyển tiền B2B inbound vào ví của doanh nghiệp nếu giá trị giao dịch vượt ngưỡng tối thiểu (ví dụ: $\text{amount} \ge 10 \text{ USD}$).
+
+### 04.15.3. Mô Hình Bên Nhận Tự Làm Relayer (Recipient Self-Relaying / P2P Direct Settlement)
+- **Bản chất:** Trong giao dịch P2P giữa hai cá nhân hoặc hai đối tác (A chuyển token cho B), Bên gửi A ký EIP-712 offline với `feeAmount = 0` (hoặc `FEE_MODE_NONE`) và `relayer = address(0)` (wildcard relayer).
+- **Thực thi:** Bản ký được gửi trực tiếp cho B (qua QR code, BLE, chat P2P). Bên nhận B dùng chính ví của mình nộp transaction lên chuỗi (`msg.sender == B`) gọi `mtxPay(...)` và tự trả native gas cho mạng lưới.
+- **Kết quả:** B nhận trọn vẹn $N$ token, không mất phí token, không phụ thuộc vào bất kỳ hạ tầng Open Relayer nào của bên thứ ba, kháng kiểm duyệt và bảo mật tuyệt đối.
+
+### 04.15.4. Chuẩn Hóa API Direct Inbound Đa Chuỗi & Đa Hợp Đồng (Enterprise Multi-Chain Inbound API)
+- **Chuẩn hóa Endpoint Inbound:** Doanh nghiệp công khai API `POST /api/v1/blockchain/inbound-meta-tx` (hoặc `/api/v1/blockchain/{chainId}/inbound-meta-tx`) tiếp nhận payload ký EIP-712 trực tiếp, yêu cầu khai báo rõ `chainId` và `tokenContract`.
+- **Ràng buộc EIP-712 Domain Separator:** Mỗi cặp `(chainId, tokenContract)` sở hữu một `DOMAIN_SEPARATOR` riêng biệt. Chữ ký ký trên một chuỗi EVM (ví dụ Gnosis `chainId: 100`) bị cấm tuyệt đối và không thể phát lại trên chuỗi EVM khác (ví dụ Celo `chainId: 42220` hoặc Chain 9000).
+- **Hàng Đợi Gom Lô Phân Vùng:** Hàng đợi gom lô chia tách theo `(chainId, tokenContract)` để bảo đảm tính nguyên tử của phương thức `tokenContract.batchMtxPay(payments[])`. Worker rút ví hot từ `KeyPool(chainId)` để thanh toán native gas, tiết kiệm 40%–60% gas và tự động gạch nợ đa sổ kế toán ERP sau finality.
+
+### 04.15.5. Chuẩn Hóa Endpoint URL & Adapters Cho Hệ Sinh Thái Non-EVM (SUI, TON, HBAR, Soroban, Cosmos)
+- **Cấu trúc URL chuẩn:** `POST /api/v1/blockchain/{ecosystem}/{network_or_chain_id}/inbound-{tx_type}`
+- **SUI Network:** `POST /api/v1/blockchain/sui/{network}/inbound-sponsored-tx` (Move PTB Base64 BCS `txBytes` + `userSignature`, pre-flight `sui_devInspectTransactionBlock`, nạp gas object từ `KeyPool(sui)`).
+- **TON Network:** `POST /api/v1/blockchain/ton/{network}/inbound-boc` (Bag-of-Cells `boc`, parsing Cell tree, trích xuất `payId` 32-byte forward payload, nạp gas nanoTON từ `KeyPool(ton)` và nộp `sendBoc`).
+- **Unified Smart Router:** `POST /api/v1/blockchain/inbound-tx` với headers `X-Ecosystem` và `X-Network`.
+

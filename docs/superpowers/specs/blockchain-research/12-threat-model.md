@@ -558,7 +558,7 @@ Nghĩa là: một đối thủ có động cơ cạnh tranh có thể **đẩy c
 | Phase | Phạm vi | Ai làm | Thời lượng | Ước tính chi phí | Gate |
 |---|---|---|---|---|---|
 | A | Slither, Halmos trên `MetaTxLib`/`Bn254`/`Bls12381`/`PegController`, Echidna + `forge` invariant 50k run | Nội bộ | CI, mỗi PR | 0 | Fail = fail build |
-| B | **Mật mã học**: transcript, Bulletproof verifier, sigma protocol, **sinh nonce/randomness (12.3.1)**, biến thể *owner-exclusive rollover* (đây là thay đổi tầng giao thức, **không** được quyết bằng suy luận trong tài liệu) | Hãng chuyên ZK (ZKSecurity / Least Authority / Veridise / ABDK) | 3–4 tuần | **$60k–120k** | Không deploy có giá trị thật nếu chưa đóng |
+| B | **Mật mã học**: transcript, Bulletproof verifier, sigma protocol, **sinh nonce/randomness (12.3.1)**, biến thể *`accSeq` + nhánh `OWNER_ONLY`* và đường lui *verifier chấp nhận `accSeq` cũ khi phần chênh chỉ gồm credit* (**[BẢN 5, 2026-09-03]**; đây là thay đổi tầng giao thức, **không** được quyết bằng suy luận trong tài liệu) | Hãng chuyên ZK (ZKSecurity / Least Authority / Veridise / ABDK) | 3–4 tuần | **$60k–120k** | Không deploy có giá trị thật nếu chưa đóng |
 | **B2** | **Precompile native + consensus integration** cho private chain (12.1.1) | Hãng có năng lực Go/C# + crypto | 2 tuần | **$30k–60k** | Chỉ bắt buộc khi bật private profile |
 | C | Factory, token, peg, registry, forwarder, batcher, `WithdrawLimiter` | Hãng audit EVM tuyến 1–2 | 2–3 tuần | **$40k–80k** | Như trên |
 | C2 | Certora trên `MetaTxForwarder` + `WrappedToken` (§14.9) | Certora / nội bộ có license | 1–2 tuần | $15k–30k | Trước mainnet có tiền thật |

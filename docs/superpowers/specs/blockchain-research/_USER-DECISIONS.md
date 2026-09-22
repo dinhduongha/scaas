@@ -2622,3 +2622,81 @@ bì trừ chữ ký.
 2. **§C7.2 dòng Bulletproofs và toàn bộ §C7.3 vẫn là phép dẫn.** Không có verifier Zether nào được
    viết nên không có gì để đo. Đo được phần nào thì đã đo (giá precompile trên chain 9000: `ecMul`
    6.342). **Spike S1 vẫn phải chạy** — xem §C7.6 mục cuối.
+
+---
+
+## 25. `rollOver`: permissionless là MẶC ĐỊNH, `OWNER_ONLY` là opt-in theo tài khoản
+
+**Ngày:** 2026-09-03. **Người chốt:** user, hai bước trong cùng một phiên.
+
+**Bước 1 —** *"chốt rollOver permissionless, tức dùng `IZetherToken.rollOverPublic()`"*.
+**Bước 2 —** *"có thể support cả hai: `rollOverPublic()` và accSeq + rollOver có chữ ký được
+không?"* → *"chốt, mặc định PUBLIC, OWNER_ONLY opt-in cho R3/R4"*.
+
+### Cái bị lật
+
+Canon §C5.2 bản 1–4 chốt **owner-signed cho mọi tài khoản** và đóng §14.13(17) / §14.15 Q8 bằng
+câu *"không permissionless"*. Câu đó chết. Mâu thuẫn giữa canon và `IZetherToken.rollOverPublic()`
+(vốn được thêm theo yêu cầu *"thêm hàm để không gửi gì cũng có thể rollOver"*) đóng lại **theo
+hướng của code**, không theo hướng của canon.
+
+### Vì sao "cả hai" là một câu hỏi hợp lệ, và câu trả lời không tầm thường
+
+Tính chất mà owner-signed mua là tính chất của **tập hợp mọi đường làm `accSeq` tiến**, không
+phải của một hàm. Hai hàm cùng bump một counter trên **cùng một tài khoản** ⇒ cửa có khoá mua
+**0 an toàn** và vẫn phải audit. Phát biểu lại **per-account** thì cả hai cùng sống được:
+
+> `accSeq[a]` tiến được mà không cần `a` đồng ý **⟺** `mode[a] == PUBLIC`.
+
+### Chốt
+
+| | |
+|---|---|
+| Cờ | `enum RollOverMode { PUBLIC, OWNER_ONLY }`, per `(account, token)`, 1 bit |
+| Đặt ở đâu | lúc `register`, **chỉ chủ đổi được** (`setRollOverMode`, có chữ ký) |
+| Mặc định | **`PUBLIC`** |
+| `OWNER_ONLY` gán cho | **mọi tài khoản Zether phục vụ luồng R3/R4** (treasury, B2B payout, off-ramp) — Odoo gán theo `risk_class`, không phải người dùng chọn trong UI |
+| Entry point | `rollOverPublic` / `rollOverBatch` (không chữ ký) · `rollOverSigned` (bắt buộc cho `OWNER_ONLY`, thông điệp mang `validUntilBlock`) |
+
+**Bốn ràng buộc bắt buộc cho nhánh `PUBLIC`** (thiếu chúng thì canon bản 1 đúng khi bác
+permissionless): (1) **no-op khi `pendingSeq[a] == lastRolledPendingSeq[a]`**, không revert;
+(2) một bump/tài khoản/block; (3) `transferConfidential`/`withdraw` tuyệt đối không tự gộp;
+(4) client + pool: single-flight theo `schnorr_address`, `expiry` 60 s, pre-broadcast check
+`accSeq == provedAccSeq`, **huỷ thay vì speed-up**, `origin_grief_score`.
+
+Quy tắc (1) là thứ gánh cả quyết định: nó ép kẻ grief **nạp tiền thật cho nạn nhân** trước mỗi
+lần thử, tức quy `PUBLIC` về đúng con grief-bằng-1-xu vốn **không xoá được ở bất kỳ thiết kế
+nào**. `PUBLIC` không thêm một lớp grief mới.
+
+**Cờ phải có trong `v1`:** token bất biến (EIP-1167 clone, `implementation()` không setter).
+Thêm `OWNER_ONLY` sau = deploy version mới + di cư người dùng. Một bit và một nhánh `if` bây giờ.
+
+**Không cần crypto stack mới:** đường verify theo `authScheme` đã bắt buộc tồn tại (§02.4.2 bất
+biến an ninh #1), `rollOverSigned` dùng lại nó.
+
+### Cái được và cái mất, không giấu vế nào
+
+`PUBLIC` xoá hẳn **tấn công giữ blob** (§03.5.4) — không ký thì không có blob để giữ, nên
+`validUntilBlock` và quy tắc ví chỉ còn áp cho `OWNER_ONLY`. Nó cũng làm `rollOverBatch` thành
+một lượt quét thật của indexer (+70 k gas/tài khoản, không signer trong vòng lặp) và bỏ yêu cầu
+*"job rollOver mang chữ ký do custody ký"* của §C5.3. Đổi lại: proof đang bay của tài khoản
+`PUBLIC` **chết được** bởi bên thứ ba sau một credit thật — mất **thời gian prove**, không mất
+tiền, escrow không suy suyển.
+
+### Đường lui, và nó KHÔNG phải epoch
+
+Nếu grief thành vấn đề diện rộng: cho verifier **chấp nhận `accSeq` cũ khi phần chênh chỉ gồm
+credit** (credit chỉ làm số dư tăng ⇒ `b' = b − fee − v ≥ 0` không yếu đi). Thay đổi cấp giao
+thức ⇒ vào **phạm vi hợp đồng review mật mã D8** cùng với nhánh `OWNER_ONLY`. Escape hatch tức
+thời cho một tài khoản cụ thể là `setRollOverMode(OWNER_ONLY)` — một giao dịch.
+
+### Đã áp vào tài liệu
+
+| File | Đã sửa |
+|---|---|
+| `00-CANON.md` | §C5 khối **[BẢN 5]** ghi đè; C5.1 câu mở, bảng slot C5.2, biến thể C5.2, hai hàng C5.3 (§10.7 cron, §06), khung C5.4, hàng §03 của C20, D8 của C21 |
+| `03-zether-crypto.md` | A11; §3.5.3 viết lại với khối [BẢN 5]; QT3 của §3.5.4; bảng slot; ba entry point + `setRollOverMode`; §3.5.5 hàng grief; U3; S3 |
+| `04-eip1776-metatx.md` | A7; lập luận `expiry` §04.5 và §04.10; open question 3 |
+| `06`, `10`, `11`, `12`, `15` | hàng R4 của pool; cron `_cron_zether_rollover_request`; bảng nguồn `accSeq` của indexer; phạm vi audit B; câu "chỉ chủ" của đối soát |
+| `14-contracts-repo-testing.md` | **I18 viết lại thành ba invariant** (bump phải có pending mới · no-op không revert · `OWNER_ONLY` từ chối đường public) + test batch trộn; đóng §14.13(17) và §14.15 Q8 |
+| `SRS/ai/ai-enterprise-blockchain-architecture.md` | §5.5 mục 2, bảng delta §5.4, §3 anti-replay + bảng R-class, §6.2 |

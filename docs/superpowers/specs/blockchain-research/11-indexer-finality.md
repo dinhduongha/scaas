@@ -593,7 +593,7 @@ Với (2), các sequence có thật trên stack này — cập nhật theo §03 
 | Meta-tx (§04) | `meta_nonce(from, batchId)` | contract, mỗi lần execute | 2D nonce: **các `batchId` khác nhau song song, không so sánh được với nhau** |
 | Zether outgoing (§03) | `zetherNonce(from)` | contract, mỗi `transferConfidential`/`withdraw` | Đơn điệu tăng, một luồng duy nhất mỗi account |
 | Zether incoming (§03.5.4) | `pendingSeq(to)` | contract, mỗi lần có tiền vào `pending` | Đây là thứ quyết định thứ tự tiền **vào**, và bản nháp bỏ sót |
-| Zether rollover (§03.5.4) | `accSeq(a)` | chỉ `rollOver(a)`, có chữ ký chủ tài khoản | Một `accSeq` mới nghĩa là mọi proof pin `accSeq` cũ đã hết hạn |
+| Zether rollover (§03.5.4) | `accSeq(a)` | `rollOver(a)` — **[BẢN 5, 2026-09-03]** bất kỳ ai nếu `mode[a] == PUBLIC` (mặc định), chỉ chủ nếu `OWNER_ONLY` | Một `accSeq` mới nghĩa là mọi proof pin `accSeq` cũ đã hết hạn |
 
 Khi (2) áp dụng, effect mang `seq_key` và `seq_number`:
 

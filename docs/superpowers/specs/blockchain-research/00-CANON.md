@@ -53,7 +53,7 @@ của `transferConfidential` → §C7.2. Cần biết addon nào depends gì →
 | Trục custody + lớp rủi ro R1–R4 | `07-custody-providers.md` | §C15 |
 | Compliance profile × use case | `13-legal-vn.md` | §C16 |
 | Private chain: client, genesis, DR | `08-chain-adapters.md` §08.10 | §C17 |
-| Phạm vi: cái gì KHÔNG làm trong 24 tháng đầu | `16-decomposition-roadmap.md` §16.0.3 | §C18 |
+| Phạm vi: cái gì KHÔNG làm | `16-decomposition-roadmap.md` §16.0.3 | §C18 |
 
 ---
 
@@ -292,8 +292,8 @@ standalone. Đây cùng lớp lỗi với odoo-conventions-14
 3. **`dms_blockchain_acquirer` và `dms_blockchain_mandate` bị xoá.** M2 (acquirer)
    là một adapter bên trong `dms_blockchain_payment`, không phải một addon.
    M7–M10 và M18–M19 (mandate, streaming, escrow, voucher, payment channel) ra
-   khỏi phạm vi 24 tháng đầu (§C18) — chúng cần contract chưa ai scope và M9
-   cần một vòng audit riêng $25–40 k.
+   khỏi phạm vi (§C18) — chúng cần contract chưa ai scope và M9 cần một vòng
+   audit riêng $25–40 k.
 
 **`depends` của core, giải thích từng phần tử:**
 
@@ -427,12 +427,80 @@ Mỗi service: một workflow CI riêng, một `/healthz` (liveness) + `/readyz`
 
 ## C5. Mô hình trạng thái Zether — epoch đã chết, `accSeq` thắng
 
+> **[BẢN 5 — user chốt 2026-09-03. GHI ĐÈ phần "ai được gọi `rollOver`" của C5.1, C5.2,
+> C5.3 và C5.4. Mọi thứ khác của C5 giữ nguyên.]**
+>
+> **`rollOver` là permissionless theo mặc định; `OWNER_ONLY` là opt-in theo tài khoản.**
+> Bản 1–4 chốt owner-signed cho **mọi** tài khoản và đóng §14.13(17)/§14.15 Q8 bằng câu
+> *"không permissionless"*. Câu đó **bị thay thế**.
+>
+> Cơ chế: một cờ per `(account, token)`, đặt lúc register, **chỉ chủ đổi được**:
+>
+> ```solidity
+> enum RollOverMode { PUBLIC, OWNER_ONLY }   // 1 bit, pack vào slot đã có
+>
+> function rollOverPublic(bytes32 acct) external;                  // revert nếu OWNER_ONLY
+> function rollOverBatch(bytes32[] calldata accts) external;       // bỏ qua phần tử OWNER_ONLY
+> function rollOverSigned(bytes32 acct, uint64 expectedPendingSeq,
+>                         uint64 validUntilBlock, bytes calldata sig) external;
+> function setRollOverMode(bytes32 acct, RollOverMode m, bytes calldata sig) external;
+> ```
+>
+> **Bất biến viết lại, và nó là per-account chứ không còn toàn cục:**
+> *"`accSeq[a]` tiến được mà không cần `a` đồng ý ⟺ `mode[a] == PUBLIC`."*
+>
+> **Mặc định `PUBLIC`. `OWNER_ONLY` gán theo lớp rủi ro: mọi tài khoản Zether phục vụ luồng
+> R3/R4 (treasury, B2B payout, off-ramp) đăng ký ở `OWNER_ONLY`** — §C15.2 sở hữu phép gán
+> này, không phải người dùng cuối chọn trong UI.
+>
+> | | `PUBLIC` (mặc định) | `OWNER_ONLY` (R3/R4) |
+> |---|---|---|
+> | Tài khoản chỉ nhận rồi im lặng | **không kẹt** — bên thứ ba dọn `pending` | **kẹt** nếu chủ offline |
+> | Grief *dust-credit → rollOver* | có, bị chặn bằng quy tắc (1) dưới đây | **không** |
+> | Grief *giữ blob đã ký, front-run* (C5.1) | **không có blob để giữ** | **có** ⇒ `validUntilBlock` bắt buộc + quy tắc ví |
+> | `rollOverBatch` | 1 tx, không chữ ký | N chữ ký, cần signer trong vòng lặp |
+>
+> **Bốn ràng buộc bắt buộc ở tầng contract cho nhánh `PUBLIC`** — không có chúng thì
+> permissionless là một DoS miễn phí, và C5.1 bản 1 đúng khi bác nó:
+>
+> 1. **No-op khi không có gì để gộp.** Chỉ bump `accSeq` khi
+>    `pendingSeq[a] > lastRolledPendingSeq[a]`; ngược lại trả về im lặng, **không revert**.
+>    Đây là quy tắc gánh cả quyết định: nó ép kẻ grief **phải nạp tiền thật cho nạn nhân**
+>    trước mỗi lần. Mà grief-bằng-1-xu là con đã tồn tại sẵn (C5.1 điểm b) **bất kể** ai
+>    được gọi `rollOver` — nên `PUBLIC` **không thêm một lớp grief mới, nó gộp vào lớp có sẵn**.
+>    Con số ~30 k gas ở C5.1 điểm (c) vì thế không còn mô tả một tấn công **rẻ**: nó cộng
+>    thêm một khoản credit thật cho mỗi lần thử.
+> 2. **Một bump cho mỗi tài khoản mỗi block** — hệ quả tự nhiên của (1).
+> 3. **`transferConfidential` và `withdraw`/`burn` tuyệt đối không tự gộp `pending`** — quy
+>    tắc QT1 của §3.5.4 giữ nguyên và bây giờ quan trọng hơn.
+> 4. **Client và relay pool:** single-flight khoá theo `zether.from_schnorr`; `expiry` 60 s;
+>    pre-broadcast check `accSeq == provedAccSeq` đọc tại block đã ghim; **huỷ thay vì
+>    speed-up** khi lệch; `origin_grief_score` cho nguồn liên tục làm revert.
+>
+> **Vì sao cờ phải có trong `v1`:** token bất biến (EIP-1167 clone, không setter cho
+> `implementation`). "Thêm `OWNER_ONLY` sau" = deploy token version mới + di cư người dùng.
+> Một bit và một nhánh `if` bây giờ; **không tồn tại** sau này.
+>
+> **Không cần crypto mới cho nhánh `OWNER_ONLY`:** đường verify theo `authScheme` đã bắt
+> buộc tồn tại (§02.4.2 bất biến an ninh #1), `rollOverSigned` dùng lại nó với digest
+> `H(chainId, address(this), "ZETHER_ROLLOVER_V1", acct, accSeq[acct], expectedPendingSeq,
+> validUntilBlock)`.
+>
+> **Hai biến thể "hỗ trợ cả hai" KHÔNG hợp lệ, viết ra để không ai hiện thực:** (a) hai hàm
+> cùng bump `accSeq` trên **cùng một tài khoản** mà không có cờ — tính chất mà owner-signed
+> mua là tính chất của **tập hợp mọi đường đi**, nên một cửa không khoá xoá nó, và cửa có
+> khoá khi đó mua **0 an toàn** trong khi vẫn phải audit; (b) đường permissionless gộp
+> `pending` mà **không** bump `accSeq` — nó làm `acc` trôi khỏi thứ proof đang chứng minh,
+> và chỉ đứng vững nếu verifier chấp nhận drift **chỉ-credit**, tức nó **là** đường lui của
+> C5.4 chứ không phải một lựa chọn độc lập.
+
 ### C5.1. Quyết định
 
 **Epoch không tồn tại trong thiết kế này.** `acc` và `pending` là hai slot tách
 rời; `transferConfidential` và `withdraw` không bao giờ tự gộp; `pending → acc`
-chỉ xảy ra trong `rollOver()` mang chữ ký Schnorr của chủ tài khoản; `accSeq`
-được băm vào Fiat-Shamir transcript và contract `require(accSeq == provedAccSeq)`.
+chỉ xảy ra trong `rollOver()`; `accSeq` được băm vào Fiat-Shamir transcript và
+contract `require(accSeq == provedAccSeq)`. **[BẢN 5]** ai được gọi `rollOver` là
+**tham số per-account** (`RollOverMode`, mặc định `PUBLIC`) — xem khối ghi đè ở đầu §C5.
 
 **Vì sao trên mặt kỹ thuật:** epoch tồn tại để đóng băng `acc` cho proof của
 người gửi sống sót. Nó mua điều đó bằng ba cái giá mà `accSeq` không phải trả:
@@ -478,7 +546,7 @@ chạm được một blob đã bị bên thứ ba bắt giữ.
 |---|---|---|---|
 | `acc[a]` | `(C, D)` | chỉ tx được `a` uỷ quyền | nguồn của mọi proof |
 | `pending[a]` | `(C, D)` | bất kỳ ai (credit) | nơi tiền đến nằm chờ |
-| `accSeq[a]` | `uint64` | chỉ `rollOver(a)` | **vào Fiat-Shamir**; `require(accSeq == provedAccSeq)` |
+| `accSeq[a]` | `uint64` | `rollOver(a)` — **[BẢN 5]** bất kỳ ai nếu `mode[a] == PUBLIC`, chỉ chủ nếu `OWNER_ONLY` | **vào Fiat-Shamir**; `require(accSeq == provedAccSeq)` |
 | `pendingSeq[a]` | `uint64` | mỗi credit | client biết có tiền mới |
 | `zetherNonce[a]` | `uint64` | mỗi debit thành công | anti-replay của proof |
 
@@ -487,13 +555,15 @@ Tổng slot mỗi (account, token): `acc` (C,D) = **4 slot**, `pending` (C,D) =
 `rollOver` ghi 10 trong số đó. Con số "5 SSTORE" của §3.5.4 là nguồn của cả hai
 sai số ở §C7.3, và bảng này là bản chuẩn tắc để dẫn lại.
 
-`rollOver` biến thể **A (Schnorr, mặc định)**: không cần EOA gắn với tài khoản,
-tương thích custody MPC/smart-account (locked #6). Thông điệp ký **bắt buộc
-gồm `validUntilBlock`** (§C5.1). Biến thể B (`rollOverByController`) chỉ cho
-profile custodial, cùng trường hạn.
-`rollOver` **relay được** (bọc trong `metaTx.data`) và **batch được**
-(`rollOverBatch`, mỗi phần tử một chữ ký), nhưng **không permissionless**.
-Đóng luôn §14.13(17) và §14.15 Q8: câu trả lời là *không permissionless*.
+**[BẢN 5]** Ba entry point, và cờ `RollOverMode` quyết định cái nào chạy được:
+`rollOverPublic` / `rollOverBatch` (mặc định, không chữ ký, **no-op khi `pending`
+rỗng**) và `rollOverSigned` (bắt buộc cho `OWNER_ONLY`, thông điệp **phải gồm
+`validUntilBlock`**, không cần EOA gắn với tài khoản nên tương thích custody
+MPC/smart-account — locked #6). Biến thể `rollOverByController` chỉ cho profile
+custodial, cùng trường hạn.
+`rollOver` **relay được** (bọc trong `metaTx.data`) và **batch được**.
+§14.13(17) và §14.15 Q8 đóng lại với câu trả lời mới: **permissionless theo mặc
+định, `OWNER_ONLY` cho R3/R4** — không phải *"không permissionless"* như bản 1–4.
 
 ### C5.3. Hệ quả bắt buộc, theo từng nơi
 
@@ -501,16 +571,21 @@ profile custodial, cùng trường hạn.
 |---|---|---|
 | Struct meta-tx (§04.10) | `targetEpoch` | — |
 | Envelope intent bus (§5.2) | `zether.target_epoch` | `zether.acc_seq`, `zether.pending_seq`; single-flight khoá theo `zether.from_schnorr` |
-| §06 relay pool | `zether_target_epoch`, `zether_epoch_deadline_block`, state `epoch_expired`, metric `relay_zether_epoch_miss_total`, chính sách "cancel thay vì speed-up khi hết epoch" | pre-broadcast check `accSeq == provedAccSeq` đọc tại block đã ghim; single-flight theo `schnorr_address` |
+| §06 relay pool | `zether_target_epoch`, `zether_epoch_deadline_block`, state `epoch_expired`, metric `relay_zether_epoch_miss_total`, chính sách "cancel thay vì speed-up khi hết epoch" | pre-broadcast check `accSeq == provedAccSeq` đọc tại block đã ghim; single-flight theo `schnorr_address`; **[BẢN 5]** giữ chính sách **huỷ thay vì speed-up** khi `accSeq` lệch, và một metric `relay_zether_accseq_miss_total` thay cho metric epoch cũ |
 | `blockchain.zether.entry` (§10.4.7) | `epoch_number` (đang `required=True`, tức một cột NOT NULL không có nguồn giá trị) và `_order = 'epoch_number desc, id desc'` | `acc_seq` (Integer, index), `pending_seq` (Integer), `_order = 'id desc'` |
-| §10.7 cron | `_cron_zether_rollover` dạng Odoo tự gọi | `_cron_zether_rollover_request` chỉ **tạo** một `blockchain.relay.job` mang chữ ký Schnorr do custody ký; **Odoo không bao giờ giữ `x`** (§3.9.5) |
+| §10.7 cron | `_cron_zether_rollover` dạng Odoo tự gọi | `_cron_zether_rollover_request` chỉ **tạo** một `blockchain.relay.job`. **[BẢN 5]** với tài khoản `PUBLIC` job **không mang chữ ký nào** (đường rẻ, batch được); chỉ tài khoản `OWNER_ONLY` mới cần blob do custody ký. **Odoo không bao giờ giữ `x`** ở cả hai đường (§3.9.5) |
 | §5.4.3, §09.9, §09.10b | trần 3,456 tx/ngày/address, độ trễ "25 s epoch + 160 s" | trần **17,280 tx/ngày/address** trên Gnosis (1 tx/block, block 5 s); độ trễ Zether = prove + relay + finality, không có thành phần epoch |
 | §15.5.5, §03.5 | mọi phát biểu "300 người nhận cùng một epoch" | chi phí batch cộng thêm một `rollOver` cho mỗi tài khoản nhận: **+70 k gas/phần tử khi batch** ở trạng thái ổn định, **+186 k cho lần rollOver đầu tiên của một tài khoản mới** (§C7.3). **Không** phải 49 k |
 
 ### C5.4. Đường lui, viết đúng một lần
 
-Owner-signed `rollOver` là một sai lệch cấp giao thức so với paper FC 2020 và
-nó **chưa có chữ ký của một nhà mật mã** (§3.11.1 U3). Nếu review bác bỏ, năm
+**[BẢN 5] đọc mục này với một sửa đổi về phạm vi.** Nhánh mặc định bây giờ là
+`PUBLIC`, tức **gần paper FC 2020 hơn** bản 1–4 (rollOver permissionless, idempotent).
+Cái còn là sai lệch cấp giao thức là **nhánh `OWNER_ONLY`** và việc ghim `accSeq` vào
+transcript, và nó vẫn **chưa có chữ ký của một nhà mật mã** (§3.11.1 U3). Cộng thêm một
+hạng mục review mới: **đường lui "verifier chấp nhận `accSeq` cũ khi phần chênh chỉ gồm
+credit"** — nếu nó đứng vững thì grief *dust-credit → rollOver* bị đóng ở tầng giao thức
+và cờ `OWNER_ONLY` thành tuỳ chọn thuần tuý chính sách. Nếu review bác bỏ **cả hai**, năm
 section revert **cùng nhau**, và đây là toàn bộ nội dung của việc revert:
 
 > Epoch quay lại. `targetEpoch` quay lại `EncryptedTransfer` và quay lại
@@ -563,7 +638,7 @@ Lý do bản 1 đưa ra cho Baby Jubjub — giữ đường Groth16 ~215 k gas v
 chi phí **verify SNARK**, chỉ thành hiện thực nếu profile Groth16 public ship,
 mà §3.3.9 đánh dấu *"ship sau"*, tức **không phải trong pha Gnosis-first mà toàn
 bộ bảng gas được viết cho**. Nó không mua được gì ở M0–P10 và nó giết Zether trên
-public. Chấp nhận **mất đường Groth16** trong 24 tháng đầu.
+public. Chấp nhận **mất đường Groth16** cho tới khi có một đích public buộc phải dùng nó.
 
 **G1 chưa đóng, và bây giờ nó có một ứng viên mạnh hơn cả `bn254`.** §C7.2 dẫn
 BLS12-381 với `BLS12_G1MSM` batched: rẻ hơn BN254 **và** bảo mật cao hơn. Gate G1
@@ -2588,8 +2663,8 @@ biến động).
 toán **on-chain** — ví người dùng cuối quét một URI và ký — mà §C18 đã descope
 ứng dụng ví và mặt POS, và §C16 chốt `ENDUSER_PAY` chạy hình thái **M12/M1**
 (chain ghi nhận, VietQR/thẻ thu tiền). Không luồng nào còn lại render chúng, nên
-giữ lại là hai cột chết trên bảng nóng nhất của lớp payment. Nếu ví on-chain
-quay lại sau 24 tháng thì chúng quay lại cùng nó.
+giữ lại là hai cột chết trên bảng nóng nhất của lớp payment. Nếu ví on-chain quay lại phạm vi
+thì chúng quay lại cùng nó.
 
 Interface handler: mọi method là **`_on_observation` / `_on_final` / `_on_reorg`
 private**; facade public duy nhất là `payment_request_open(...)` và nó **không
@@ -3135,7 +3210,7 @@ không bề mặt RPC, không dòng nào trong registry**.
 
 Chốt: **agent dùng đúng đường custody như người dùng** (`blockchain.custody.key`
 + `blockchain.approval.policy` + lớp rủi ro R1–R4 ở trên). `blockchain.session.key`
-**không được tạo trong 24 tháng đầu**, và ngôn ngữ session key được gỡ khỏi
+**không được tạo**, và ngôn ngữ session key được gỡ khỏi
 phần agent của note. Lý do: một bề mặt cấp khoá thứ hai là một thứ thứ hai phải
 audit, và §07.9 đã chỉ ra điều quyết định — **FIPS L3 chống TRÍCH XUẤT khoá,
 không chống LẠM DỤNG khoá**; thứ thật sự giới hạn một agent là
@@ -3318,9 +3393,14 @@ DoD của P18.
 
 ---
 
-## C18. Phạm vi — cái gì KHÔNG làm trong 24 tháng đầu
+## C18. Phạm vi — cái gì KHÔNG làm
 
-Viết ra để không ai lập kế hoạch dựa vào nó.
+Viết ra để không ai lập kế hoạch dựa vào nó. **Phạm vi không còn được đóng khung
+theo một cửa sổ thời gian.** Một hạng mục ra khỏi phạm vi vì một lý do đứng được
+— chưa ai scope contract, không có consumer, ngưỡng khối lượng chưa tới, một bề
+mặt thứ hai phải audit — chứ không vì nó rơi ngoài 24 tháng. Khi lý do mất hiệu
+lực thì hạng mục quay lại, và đó là một quyết định có người ký, không phải một
+mốc lịch.
 
 | Ra khỏi phạm vi | Vì sao | Thay thế |
 |---|---|---|
@@ -3329,12 +3409,29 @@ Viết ra để không ai lập kế hoạch dựa vào nó.
 | Ứng dụng ví người dùng cuối và mặt POS/merchant | không section nào sở hữu; +10–20 ew và một bộ kỹ năng mobile/POS không có trong ma trận §16.5.1 | `ENDUSER_PAY` = M12/M1: chain ghi nhận, VietQR/thẻ thu tiền (§C16) |
 | `blockchain.session.key` | §C15.3 | cùng đường custody + `SigningPolicyService` |
 | Basket / multi-leg peg | 3 leg × uptime 99.5% = 98.5% tổng, ~5.5 ngày/năm không mint được (§1.7.6) | `profileMask` của `BASKET_PEG` để `0x00` |
-| Projection `vec` (vector hoá source/ABI/audit report) | không có consumer trong 24 tháng | — |
+| Projection `vec` (vector hoá source/ABI/audit report) | không có consumer | — |
 | Projection `ekg` (đồ thị tri thức on-chain) | Odoo đã có liên kết tương đương | `partner_id`, `origin_model`/`origin_id`, `counterparty_id` |
 | `proc` Tool Gateway cho agent gọi contract | agent đi qua RPC surface bình thường (§C14.2) | — |
 | `olap` ClickHouse | ngưỡng ở Year 3, không phải Year 1 (§C1.2) | BRIN + cron archival hằng tháng (**không** partition, §C1.2) |
 | `eip681_uri` / `wc_uri` trên `blockchain.payment.request` | chỉ tồn tại cho ví on-chain của người dùng cuối, vốn đã descope ở hàng trên | — (§C10.9) |
-| 5 hệ sinh thái ngoài EVM (HBAR/TON/SUI/Soroban/CosmWasm) | locked #4: **thiết kế trên giấy** | P17, 3 ew, tài liệu + ánh xạ interface, **không code** |
+
+**Sáu hệ sinh thái CHAIN nằm TRONG phạm vi, ngay từ đầu** (quyết định của user, 2026-09-04 — gỡ vế *"năm hệ ngoài EVM chỉ là thiết kế trên giấy"*; vế **thứ tự triển khai EVM trước, Gnosis rồi Celo** giữ nguyên).
+EVM (chain nội bộ 9000, Gnosis, Celo), HBAR, TON, SUI, Soroban XLM và CosmWasm
+đều là đích hợp lệ; không hệ nào bị hoãn sang một giai đoạn sau. Thứ quyết định
+một chuỗi có được gọi hay không là **cổng bật chuỗi** — finality đã đo,
+`finality_quorum` trên endpoint độc lập, adapter đã đăng ký, phê duyệt egress —
+tức một điều kiện kỹ thuật, không phải một mốc thời gian; chuỗi chưa qua cổng thì
+`state = 'draft'` và bị chặn mặc định.
+
+**Hệ quả ngân sách, phải nói ra thay vì để im:** bản trước định giá năm hệ ngoài
+EVM ở **P17, 3 ew, tài liệu + ánh xạ interface, không code**. Con số đó chỉ đúng
+với một phạm vi paper-only. Với phạm vi hiện tại, chi phí đưa mỗi hệ lên mức có
+contract — adapter, contract tương đương trên mô hình lập trình của chuỗi đó,
+vòng audit riêng, đo finality, vận hành node — **chưa được ước lượng lại**, và
+§C19 vẫn đang cộng theo con số cũ. Đây là một **hạng mục mở cần người ký**: hoặc
+ước lượng lại §C19 theo thứ tự triển khai các chuỗi, hoặc chốt rằng chuỗi nào
+được bật theo thứ tự nào. Không được tiêu con số 135–141 ew như thể nó đã bao
+gồm phần này.
 
 **Ánh xạ projection của note sang thực tại** (để người đọc note không giả định
 chúng nằm trong phạm vi): `raw.blockchain_*_landing` → `blockchain.chain.event`
@@ -3351,6 +3448,12 @@ không phải hạng mục công việc bổ sung.
 
 Các mảnh chi phí đang nằm rải ở sáu section với sáu đơn vị và chưa bao giờ được
 cộng lại hay đặt cạnh một lợi ích.
+
+> [!WARNING]
+> **§C19 chưa tính chi phí của phạm vi 6 chuỗi.** Toàn bộ phần cộng dưới đây được
+> tính khi năm hệ ngoài EVM còn ở mức paper-only (P17, 3 ew). §C18 đã đưa cả sáu
+> vào phạm vi; phần chênh **chưa được ước lượng lại**. Đừng trình con số 135–141
+> ew như một tổng đã đầy đủ cho tới khi có một ước lượng mới có người ký.
 
 **Baseline đã trừ phần descope, và bản 1 thì chưa.** Con số 135–141 ew của bản 1
 được tính **trước** §C18, rồi mang nguyên sang §C19 mà không trừ gì. Phần trừ:
@@ -3399,7 +3502,7 @@ Mỗi section phải áp những mục dưới đây trước khi được coi l
 |---|---|
 | `01-token-factory.md` | Bỏ `RANGE_BITS = 64` đơn lẻ và `decimals = 2` (§C6.2); `maxSupply` viết theo `n_b`. Xoá `foundry.toml` ở §1.14.1, trỏ §14.2 (§C17.2). Genesis: `gasLimit` 50 M, `cancunTime: 0`, giữ 24,576 (§C17.2); tính lại 45 tx/s. Finality Gnosis 240 s, không 12.8 phút (§C9.2). §1.15 **giữ** archetype loyalty = `ZTokenOpen` trên Gnosis và thêm cột `compliance_profile` × chain; biện minh ngoại lệ freeze chép từ §C16. **Xoá luôn quy tắc dust của §1.8.1/§1.8.2** — chúng được dẫn từ `decimals = 2`, mà §C6.2 đã bỏ; dẫn lại theo `decimals = 0` + `scale_exponent` hoặc bỏ hẳn nếu dust không còn tồn tại ở 1 đơn vị ledger = 1 ₫. Đường `smartcontracts/` theo §C4. Regex uint256 (§C11.4). |
 | `02-account-registry.md` | Curve-parametric, subgroup check khi cofactor ≠ 1, đổi tên enum `*_BN254`, **gỡ `BLS` khỏi enum scheme** và thêm `require` cấm mọi scheme công bố phần tử G2 trên tài khoản giữ số dư Zether (§C6.1). Seed `curve_profile = 'bn254'`, không `babyjubjub`. Xoá `blockchain.chain.profile`, `profile_id` → `chain_id` (§C9.1). Xoá `custody_model`/`secret_ref`, dùng `custody_key_id` (§C10.2). Giữ `C_audit` dạng shared-`s` và ghi rõ nó là bản chuẩn tắc (§C6.5). Thiết kế **trọn vẹn luồng onboarding gasless `register`** (ai mint và ký `RegistrationInvite`, relayer nào mang, vòng đời record, UI khi pending, xử lý khi fail) — hiện §2.1.6 và §3.11.1 U6 đá trách nhiệm cho nhau và nó chặn giao dịch **đầu tiên** của cả hai use case. Quyết định và ước lượng ở **§C21 D14** (+6 ew, pha P04, 10,000 outlet × ~95 k gas = ~0.95 G gas ≈ $1,900–5,700 trên Gnosis); §02 viết thiết kế, **không** tự chọn kiến trúc. |
-| `03-zether-crypto.md` | Xoá biến thể auditor `s_a`/`D_aud` ở §3.4.8; thêm `C_aud` vào struct §3.2.5; sửa danh sách validation §3.1.6 (§C6.5). Sửa `_final_nonce_uniq` sang `models.UniqueIndex`, xoá `init()` và câu "Odoo 19 không có API cho partial unique index" (§C11.2). Gộp `blockchain.zether.transfer` vào `blockchain.zether.entry` (§C10.7). §3.9.4 dùng `_inherit`, bỏ `_name`. Finality Gnosis 240 s ở §3.9.5. Xoá `smartcontracts/geth-precompile/` ở §3.9.1 (§C17.1). Ghi §C5.4 là đường lui duy nhất. Thêm `validUntilBlock` vào thông điệp Schnorr của `rollOver` (§C5.1). Thêm biến thể `proofSystemId` **`ZTX_V1_RELAYED`** với `digest_hash` trong transcript (§C6.6). Sửa §3.3.9: lý do không Pippenger là **tỷ giá `ecAdd`/`ecMul`**, không phải thiếu precompile (§C7.1). Sửa §3.5.4: `rollOver` ghi **10 slot**, không 5 (§C7.3). Sửa §3.11.1 U4: Baby Jubjub là **~125 bit**, không ~100. |
+| `03-zether-crypto.md` | Xoá biến thể auditor `s_a`/`D_aud` ở §3.4.8; thêm `C_aud` vào struct §3.2.5; sửa danh sách validation §3.1.6 (§C6.5). Sửa `_final_nonce_uniq` sang `models.UniqueIndex`, xoá `init()` và câu "Odoo 19 không có API cho partial unique index" (§C11.2). Gộp `blockchain.zether.transfer` vào `blockchain.zether.entry` (§C10.7). §3.9.4 dùng `_inherit`, bỏ `_name`. Finality Gnosis 240 s ở §3.9.5. Xoá `smartcontracts/geth-precompile/` ở §3.9.1 (§C17.1). Ghi §C5.4 là đường lui duy nhất. **[BẢN 5]** viết lại §3.5.3–§3.5.5 theo cờ `RollOverMode`: `PUBLIC` mặc định (no-op khi `pending` rỗng), `OWNER_ONLY` opt-in cho R3/R4 với `validUntilBlock` **bắt buộc** trong thông điệp Schnorr; sửa hàng "Grief bằng cách gọi rollOver" của bảng §3.5.5 và mục U3/S3 theo phạm vi review mới (§C5.4). Thêm biến thể `proofSystemId` **`ZTX_V1_RELAYED`** với `digest_hash` trong transcript (§C6.6). Sửa §3.3.9: lý do không Pippenger là **tỷ giá `ecAdd`/`ecMul`**, không phải thiếu precompile (§C7.1). Sửa §3.5.4: `rollOver` ghi **10 slot**, không 5 (§C7.3). Sửa §3.11.1 U4: Baby Jubjub là **~125 bit**, không ~100. |
 | `04-eip1776-metatx.md` | Xoá sentinel `lane_slot`, dùng `models.UniqueIndex` (§C11.2). Thay `innerGasLimit`/`maxInnerGas`/`requiredOuterGas` bằng §C7.4. Thêm `TargetPolicy.requireSuccess` và ghi quy tắc §C8.3 làm bản chuẩn tắc. Đổi `metatx_digest` → `digest_hash` ở §04.12. Thêm bảng mặc định theo `compliance_profile` (§C16). |
 | `05-open-relayer-network.md` | Xoá `zether.target_epoch` khỏi envelope, thêm `acc_seq`/`pending_seq` (§C5.3). Dựng lại §5.1.1 theo `expiry = 60 s`, **`W = 3 s`, poll 1 Hz** — đã chốt, không còn là câu hỏi (§C8.4). Dẫn lại sàn phí §5.3.3 với `p = 0` cho profile restricted (§C6.6). Xoá bảng chi phí 342 k–422 k (§C7.5). Xoá ba dòng cũ ở §5.12 (mask `0x0F`, `0x10` commit-reveal). Chuyển `_unique_statement_period` và `_check_fee_base` sang `blockchain.relayer.statement` và định nghĩa model đó (§C10.5). `net_display` → `digits=(38, 18)`; regex uint256 (§C11.4). Thay `init()` bằng `models.UniqueIndex`. Mục tiêu Phase 0 theo §C16. Thêm một dòng đầu section: §03 và §04 là thượng nguồn, §05 **không dẫn lại con số nào**. |
 | `06-relay-pool-enterprise.md` | Xoá toàn bộ máy móc epoch (§C5.3). Xoá Redis Stream dispatch (§C13). Xoá `default='public'` và **xoá luôn khai báo lại field `chain_profile`** (§C9.1). Xoá bảng gas tự dẫn và mô hình ba range statement (§C7.5, §C6.3). `max_gas_per_tx` = 3,000,000 (§C7.4). Hai partial index sang `models.UniqueIndex`; §06.11 kiểm `pg_indexes` (§C10.8). Gộp `blockchain.relay.job` theo §C10.8, **đổi `origin_ref` → `origin_key`** và khoá thành `UNIQUE(company_id, origin_producer, origin_key)` (§C2.6). `chain_state` gồm `signed_orphan` (§C10.8). Xoá `size=`; xoá `default=` trên `runway_hours`. Đóng §06.12.3 theo §C8.3. |
@@ -3438,7 +3541,7 @@ cũng không thực thi được nếu không có danh sách.
 | **D5** | **Bug bounty float** $300 k ring-fenced | tài chính | mainnet public | ring-fence trước khi mở public, không phải trước private | — |
 | **D6** | **Giấy phép và pháp nhân VN** (P19, 80–400 triệu ₫) | pháp chế + ban giám đốc | **P22/P23 ở hình thái thanh toán** | khởi động P19 ở S0 — lead time pháp lý dài hơn lead time kỹ thuật | `compliance_profile = 'vn_conservative'` giữ nguyên |
 | **D7** | **Cấu hình custody**: C ($107/tháng) hay A/B ($2,900–9,750/tháng) | CFO + CISO | **P07 và P11** | C cho loyalty-only; A/B **bắt buộc** khi bật B2B | `blockchain.custody.provider` `state='draft'` |
-| **D8** | **Hợp đồng review mật mã `rollOver`** (2–3 tuần trả tiền, vào S0) | CTO | nếu bác ⇒ **năm section revert cùng nhau** (§C5.4, +6 ew) | ký ở S0, không để tới audit phase B | `epoch` **không** được cài lại tạm |
+| **D8** | **Hợp đồng review mật mã `rollOver`** (2–3 tuần trả tiền, vào S0). **[BẢN 5]** phạm vi mới: nhánh `OWNER_ONLY`, việc ghim `accSeq` vào transcript, **và** đường lui *verifier chấp nhận `accSeq` cũ khi phần chênh chỉ gồm credit* | CTO | nếu bác cả hai ⇒ **năm section revert cùng nhau** (§C5.4, +6 ew) | ký ở S0, không để tới audit phase B | `epoch` **không** được cài lại tạm; mặc định chạy `PUBLIC` |
 | **D9** | **Số dư điểm thưởng có cần bảo mật không?** | nghiệp vụ marketing | nếu "có" ⇒ loyalty rời Gnosis, `memoAud` và dòng Z-POINT quay lại | **không** — số dư điểm không phải bí mật thương mại (§C1.4) | `Z-POINT.is_confidential = False` |
 | **D10** | **Chain và archetype của loyalty**: Gnosis + `ZTokenOpen` (ngoại lệ freeze) hay Besu private + `ZTokenPermissioned` | pháp chế duyệt biện minh ngoại lệ freeze | **P21**, và §C1.2 hàng bốn + §C1.4 + §C19 | Gnosis + `ZTokenOpen` với biện minh ba điểm của §C16 | `blockchain.token` của Z-POINT `deploy_state='draft'` |
 | **D11** | **Bootstrap relayer bên thứ ba** $30 k / 6 tháng | ngân sách | P05, và mọi thứ dựa vào nhiều hơn một relayer | duyệt cùng D4 | `blockchain.relayer` chỉ có `kind='internal'` |
@@ -3456,3 +3559,49 @@ Không ai được "tạm chọn" một trong số chúng trong code. Chỗ nào
 để chạy tiếp, đặt nó vào seed data với `state = 'draft'` và một constraint chặn
 `enabled` — đó là khuôn mẫu §C9.2 đã dựng, và cột cuối bảng trên nói rõ giá trị
 giữ chỗ cho từng dòng.
+
+---
+
+## C22. Chuẩn Tắc Nâng Cấp V3.0 (Canon Addendum V3.0)
+
+*Căn cứ theo tài liệu tổng hợp `SYNTHESIS_ENTERPRISE_BLOCKCHAIN_V3.md` và các đặc tả sản xuất `ai-enterprise-blockchain-architecture.md` (v3.3) / `ai-enterprise-blockchain-integration.md` (v2.3) / `ai-enterprise-dimensions-expansion.md` (v2.9):*
+
+### C22.1. Quản trị Nonce Ngoài Relayer: Multi-Wallet KeyPool là Chuẩn Sản Xuất
+- **Quy tắc chuẩn tắc:** Relayer duy trì một bể gồm $N$ ví hot độc lập (`relayer_1`, ..., `relayer_N`). Bộ điều phối phân bổ lệnh theo Round-Robin hoặc Least-in-flight. Vì mỗi ví sở hữu chuỗi EVM nonce riêng biệt, các worker song song **không bao giờ dẫm chân lên nhau**.
+- **Treasury Auto-Refill:** Mỗi ví hot chỉ lưu trữ lượng gas đủ chạy 4 giờ (`low_watermark`, $50 USD). Khi chạm ngưỡng, Treasury Signer (HSM FIPS 140-3 L3 / MultiSig 2-of-3) tự động ký lệnh nạp gas với trần `auto_refill_cap_usd` ($500 USD) và guard `max_pending_refill = 1`.
+- **Tùy chọn phụ trợ:** Redis Lease kèm Generation Fencing chỉ kích hoạt khi bị bắt buộc dùng chung 1 ví duy nhất.
+
+### C22.2. Phân Hóa Hai Luồng Meta-Transaction
+- **Fast-Path Token Functions (`mtxPay`, `transferConfidential`, `fund`, `burn`):** Nhận trực tiếp typed arguments, tiết kiệm ~4,200 gas so với calldata decode động, phát ra sự kiện `Payment(sender, recipient, amount, feeAmount, feeRecipient, payId)` phục vụ gạch nợ tự động ERP 1-1 trong `account.move`.
+- **Generic Calldata Path (`executeMetaTransaction`):** Nhận `bytes calldata data` cho các tương tác hợp đồng đa năng composable (quản trị, đấu thầu, DEX swap), chịu chi phí decode 4.2k–8k gas.
+
+### C22.3. Phân Loại Kiểm Soát Token & Can Thiệp Tư Pháp
+- **Uncontrolled Tokens:** Bất biến, không backdoor, không có Admin can thiệp số dư.
+- **Controlled / Regulated Tokens (`IRegulatedToken`):** CBDC, Security Tokens hỗ trợ `freezeAccount`, `unfreezeAccount`, `judicialForceTransfer`, `courtOrderBurn`. Mọi lệnh can thiệp **bắt buộc mang tham số `bytes32 courtRulingId`** và chỉ được kích hoạt qua **Multi-Sig Quorum 3-of-5** (Pháp chế, CFO, Kiểm toán nội bộ, Cơ quan quản lý).
+
+### C22.4. Ứng Dụng Token Mở Rộng
+- **Vesting Streaming Vaults (`IVestingVault`):** Quỹ rút token định kỳ theo block streaming hoặc cliff cho lương/nhà thầu/ESOP, rút qua meta-tx gasless.
+- **Security Tokens & DEX (`ISecurityToken`):** Cổ phiếu/trái phiếu số hóa giao dịch trên sàn nội bộ có sự giám sát của Nhà nước với hàm `checkTransferCompliant`.
+- **Open Asset Tokenization Suite:** Wizard trong Odoo cấu hình phát hành token mới trên Open Factory Pattern chia sẻ chung bytecode logic.
+
+### C22.5. Linh Hoạt Phí Relayer
+- **Bên nhận trả phí (`feePaidByRecipient = true`):** Bên gửi chuyển đúng $N$ token; Relayer thu phí $F$; Bên nhận nhận $N - F$.
+- **Trợ cấp phí Inbound BaaS:** Doanh nghiệp vận hành Relayer tài trợ gas (`fee = 0`) cho các giao dịch chuyển tiền B2B inbound vào ví công ty với giá trị > $10 USD.
+
+### C22.6. Giao Thức Đấu Thầu Phong Bao Kín (Sealed-Bid Tender `ISealedBidTender`)
+- Đấu thầu mua sắm 2 pha: Commit hash $H(\text{price} \parallel \text{salt} \parallel \text{bidder})$ kèm ký quỹ cọc Escrow $\implies$ Reveal mở thầu công khai $\implies$ Quyết toán chọn thầu tự động và **hoàn cọc 100% tự động cho toàn bộ bên trượt thầu**. Bên không mở thầu bị tịch thu tiền cọc (slash).
+
+### C22.7. Bên Nhận Tự Vận Hành Relayer & Chuẩn Hóa API Direct Inbound Đa Chuỗi / Đa Hợp Đồng
+- **Bên Nhận Tự Làm Relayer (Recipient Self-Relaying / P2P Direct Settlement):** Bên gửi A ký EIP-712 offline với `feeAmount = 0` và `relayer = address(0)`. Bản ký chuyển cho Bên nhận B qua QR/chat. Bên nhận B làm `msg.sender` nộp `mtxPay(...)` on-chain, tự trả native gas, nhận nguyên vẹn 100% tiền chuyển và thu 0 token phí. Độc lập 100%, kháng kiểm duyệt, không phụ thuộc bên thứ ba.
+- **Chuẩn Hóa Inbound Direct-Relay API Đa Chuỗi (`chainId`) & Đa Hợp Đồng (`tokenContract`):**
+  * Doanh nghiệp công khai endpoint `POST /api/v1/blockchain/inbound-meta-tx` (hoặc URI theo chain `/api/v1/blockchain/{chainId}/inbound-meta-tx`), tiếp nhận payload ký EIP-712 chứa tường minh `chainId` (ví dụ: 9000, 100, 42220, 42161, 8453) và `tokenContract`.
+  * Tái lập Dynamic Domain Separator theo từng cặp `(chainId, tokenContract)` để chống triệt để tấn công cross-chain/cross-contract replay.
+  * Hàng đợi gom lô phân vùng cách ly: `inbound:queue:{chainId}:{tokenContract}` (không gom lẫn lộn giữa các chuỗi hoặc hợp đồng khác nhau).
+  * Điều phối cụm ví hot nạp native gas độc lập `KeyPool(chainId)` nộp giao dịch gom lô `batchMtxPay(payments[])`, tiết kiệm 40%–60% gas và tự động gạch nợ đa sổ nhật ký kế toán `account.journal` trong Odoo ERP sau Finality Gate.
+
+### C22.8. Chuẩn Hóa Endpoint URL & Adapters Cho Hệ Sinh Thái Non-EVM (SUI & TON Inbound APIs)
+- **Cấu trúc URL phân cấp hệ sinh thái:** `POST /api/v1/blockchain/{ecosystem}/{network_or_chain_id}/inbound-{tx_type}`
+- **SUI Network Inbound:** `POST /api/v1/blockchain/sui/{network}/inbound-sponsored-tx`. Nhận Move PTB Base64 BCS `txBytes` + `userSignature`, pre-flight simulation `sui_devInspectTransactionBlock`, gắn Sui Gas Coin từ `KeyPool(sui)` và ký `sponsorSignature` (Dual-Signer pattern).
+- **TON Network Inbound:** `POST /api/v1/blockchain/ton/{network}/inbound-boc`. Nhận Base64 Bag-of-Cells `boc`, parsing Cell tree, xác thực chuyển Jetton và `payId` 32-byte forward payload, nộp toncenter RPC `sendBoc` với nanoTON tài trợ từ `KeyPool(ton)`.
+- **Cổng Hợp Nhất (Unified Smart Router):** `POST /api/v1/blockchain/inbound-tx` với HTTP headers `X-Ecosystem` và `X-Network`.
+

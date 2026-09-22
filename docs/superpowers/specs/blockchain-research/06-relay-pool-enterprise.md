@@ -766,7 +766,7 @@ Note nói "R1/R2 bị đình chỉ, giữ R3". Bảng lớp đầy đủ, và c�
 
 `rollOver()` và `extend_ttl` bị xếp nhầm vào "bảo trì định kỳ" là một bẫy. Throttle `rollOver` làm đóng băng số dư khả dụng của **mọi** người dùng Zether; throttle `extend_ttl` trên Soroban làm **mất state contract** khi TTL hết. Chúng là R4.
 
-Với `rollOver` có một sắc thái mà `_USER-DECISIONS.md` §13.3 làm rõ: trong code Zether thật, `rollOver` là `internal` và **được gọi ngầm** ở đầu mọi thao tác chạm tài khoản, nên nó không phải một job riêng để mà throttle. Cái cần xếp R4 là hàm **`rollOverPublic`/`rollOverBatch`** (§01) — thứ tồn tại để một tài khoản nhận tiền rồi im lặng vẫn được dọn pending. Nó hiếm, rẻ, và chặn nó là để tiền kẹt.
+Với `rollOver` có một sắc thái mà `_USER-DECISIONS.md` §13.3 làm rõ: trong code Zether thật, `rollOver` là `internal` và **được gọi ngầm** ở đầu mọi thao tác chạm tài khoản, nên nó không phải một job riêng để mà throttle. Cái cần xếp R4 là hàm **`rollOverPublic`/`rollOverBatch`** (§01) — thứ tồn tại để một tài khoản nhận tiền rồi im lặng vẫn được dọn pending. Nó hiếm, rẻ, và chặn nó là để tiền kẹt. **[BẢN 5, 2026-09-03]** `rollOverPublic` là **đường mặc định** của mọi tài khoản; tài khoản `OWNER_ONLY` (R3/R4, §C5 [BẢN 5]) đi qua `rollOverSigned` và job của nó mang một blob do custody ký — hai đường khác nhau về giá batch, cùng một lớp rủi ro.
 
 **[MỚI]** Thêm hai mục vào R4 mà bản nháp đầu bỏ sót: gap-filler (throttle nó = để nguyên lỗ thủng = chặn toàn bộ account) và replacement của một job R3 **đã broadcast** (throttle nó = để tiền treo giữa đường). Quy tắc tổng quát: **không bao giờ throttle một hành động mà mục đích là gỡ kẹt một hành động trước đó.** Breaker chặn *đầu vào*, không chặn *lối thoát*.
 
@@ -1422,7 +1422,31 @@ Kiểm tra cuối cùng, bắt buộc, không thể bỏ: **chạy pool trên te
 | 30 | Custody | Hai tầng: HSM (treasury) / enclave (relayer hot) | Ba tầng — thêm **khoá file** cho node mesh cá nhân. Chấp nhận được **chỉ vì** ba ràng buộc của `_USER-DECISIONS.md` §21.5 (float nhỏ, không phải `feeRecipient`, không role nào) |
 | 31 | Chain private | Giả định Besu QBFT, gasLimit 200M, block 2s, finality 1 block | **Nethermind + Clique, một signer, 16,7M gas, block 5s, chạy trước London** (§01.1.16). Không EIP-1559 → không type-2 tx, không `base_fee`, không spike breaker. Clique **không** có instant finality |
 | 32 | `mode` bitmask | `MODE_RESTRICT_RELAYER`, `MODE_OPEN` | Bitmask bị loại (`_USER-DECISIONS.md` §5). Wildcard `relayer == address(0)`, và đó **là điều kiện để pool khoá tồn tại** (§06.1.8) |
-| 33 | Alert | Năm alert page người | Sáu — thêm `relay_key_pool_available == 0`. Mất hết khoá là mất dịch vụ, và nó xảy ra âm thầm vì mỗi khoá kẹt lẻ chỉ là một ticket |
-| 34 | §06.12 mục 3 (`meta_nonce`) | Ba lựa chọn, nghiêng (c) | Nghiêng (c) rõ hơn: chọn (b) buộc phải điền tên relayer cho mọi thứ có giá trị, tức **mất luôn khả năng xoay khoá** |
-| 35 | §06.12 mục 6 (Bulletproofs vs Groth16) | "Phải chốt trước khi viết contract" | Trên factory mở, hai verifier là hai entry catalogue cùng tồn tại. Câu hỏi còn lại là **audit cái nào trước** — ngân sách, không phải kiến trúc |
 | 36 | §06.12 mục 10 (ai là validator) | Câu hỏi mở hoàn toàn | Có một phần đáp án, và nó không dễ chịu: **một signer**. Câu hỏi đổi từ "chọn client nào" thành "khi nào thêm signer thứ hai" |
+
+---
+
+## 06.15. [BẢN 3] Chuẩn Tắc Nâng Cấp V3: Multi-Wallet KeyPool là Chuẩn Sản Xuất & Tùy Chọn Redis Fencing
+
+*(Chi tiết đầy đủ xem `SYNTHESIS_ENTERPRISE_BLOCKCHAIN_V3.md` §2 và `ai-enterprise-blockchain-architecture.md` §5.3)*
+
+### 06.15.1. Mô Hình Khuyến Nghị Chuẩn Sản Xuất: Mạng Lưới Ví Relayer Đa Điểm (Multi-Wallet KeyPool)
+- **Kiến trúc cốt lõi:** Thay vì cố gắng chia sẻ một ví duy nhất cho nhiều worker dẫn đến tranh chấp lock Redis, Relayer duy trì một bể gồm $N$ ví hot độc lập (`relayer_1`, ..., `relayer_N`).
+- **Phân bổ không khóa (Lock-Free):** Bộ điều phối phân bổ lệnh theo Round-Robin hoặc Least-in-flight. Do mỗi ví sở hữu một chuỗi EVM nonce độc lập trên chuỗi, **các worker song song không bao giờ dẫm chân lên nhau**.
+- **Cơ chế Treasury Signer tự động nạp vốn (Auto-Refill):**
+  * Mỗi ví hot chỉ lưu trữ lượng gas đủ chạy trong 4 giờ (`low_watermark`, $50 USD).
+  * Khi số dư chạm ngưỡng, Treasury Signer (HSM FIPS 140-3 L3 / ví lạnh Multi-Sig 2-of-3) tự động ký lệnh nạp native gas với trần `auto_refill_cap_usd` ($500 USD) và guard `max_pending_refill = 1`.
+
+### 06.15.2. Mô Hình Tùy Chọn Phụ Trợ: Redis Lease Kèm Generation Fencing
+- Chỉ kích hoạt khi bị giới hạn hạ tầng hoặc đối tác chỉ cấp một địa chỉ ví relayer duy nhất.
+- Sử dụng Redis Lease có thời hạn ngắn (TTL 5s) và Generation Fencing Token tăng đơn điệu để triệt tiêu nguy cơ Zombie Worker gửi trùng nonce làm hỏng chuỗi giao dịch.
+
+### 06.15.3. Doanh Nghiệp Tự Vận Hành Inbound Relayer Đa Chuỗi & Gom Lô Giao Dịch (Enterprise Multi-Chain Inbound Batch Settlement)
+- **Kiến trúc tiếp nhận trực tiếp:** Doanh nghiệp cung cấp API nội bộ `POST /api/v1/blockchain/inbound-meta-tx` (hoặc `/api/v1/blockchain/{chainId}/inbound-meta-tx`) tiếp nhận chữ ký EIP-712 trực tiếp từ khách hàng và đại lý, hỗ trợ tường minh tham số `chainId` và `tokenContract`.
+- **Hàng Đợi Gom Lô Cách Ly Theo `(chainId, tokenContract)`:**
+  * Do mỗi chuỗi EVM và mỗi hợp đồng token có state và bytecode riêng, hệ thống tuyệt đối không gom chung giao dịch khác chain hay khác token vào một batch.
+  * Hàng đợi gom lô được phân vùng theo khóa: `inbound:queue:{chainId}:{tokenContract}` (Batch Window 3–5 giây, Max 50 items).
+- **Điều Phối Ví Theo Chuỗi `KeyPool(chainId)`:**
+  * Mỗi chuỗi EVM có cụm ví hot riêng chứa native gas của chuỗi đó (xDAI cho Gnosis, CELO cho Celo, ETH cho Base/Arbitrum, coin nội bộ cho Chain 9000).
+  * Worker chuyên trách chuỗi rút ví khả dụng từ `KeyPool(chainId)` để phát lệnh `tokenContract.batchMtxPay(payments[])`.
+  * Tiết kiệm 40%–60% gas tổng thể, loại trừ 100% rủi ro va chạm nonce giữa các worker. Sau Finality Gate, Odoo Projector tự động đối chiếu các `payId` và thực thi gạch nợ hóa đơn hàng loạt vào đúng Sổ nhật ký kế toán tương ứng.

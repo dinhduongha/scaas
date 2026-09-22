@@ -1442,6 +1442,22 @@ odoo -d test_no_dms -i dms_blockchain --stop-after-init --test-enable
 
 Lệnh 6 kiểm bất biến của token bằng cách quét bytecode tìm selector `upgradeTo(address)` = `0x3659cfe6` và `upgradeToAndCall(address,bytes)` = `0x4f1ef286`. Một clone EIP-1167 là 45 byte và không thể chứa chúng — nên lệnh này gần như luôn pass, và đó chính là lý do chạy nó: nó phát hiện ngày mà ai đó vô tình deploy một proxy khác dưới cùng một quy trình.
 
-Lệnh 8 chặn cái bẫy đã thật sự xảy ra trên chain 9000: genesis khai `pragueBlock: 0`, chain chạy trước London, không log một dòng cảnh báo nào (1.16, `TRAPS.md`). Cách duy nhất phát hiện là hỏi chain chứ không đọc file cấu hình.
-
 Lệnh 9 vẫn là lệnh quan trọng nhất trong section này: khoá quyết định #7 (`dms_blockchain` độc lập) là thứ dễ vi phạm nhất và dễ phát hiện nhất, và nó chỉ được đảm bảo bởi một lệnh chạy trong CI, không bởi một dòng trong tài liệu này.
+
+---
+
+## 1.17. Cập Nhật Chuẩn Tắc V3: Phân Loại Kiểm Soát Token & Open Asset Tokenization Suite
+
+*(Chi tiết đầy đủ xem `SYNTHESIS_ENTERPRISE_BLOCKCHAIN_V3.md` §2 và `ai-enterprise-blockchain-architecture.md` §3.5–§3.7)*
+
+### 1.17.1. Phân Loại Kiểm Soát Cấp Giao Thức (Token Control Classification)
+Hợp đồng do Open Factory triển khai được phân thành 2 nhóm kiểm soát độc lập:
+1. **Token Không Kiểm Soát (Uncontrolled / Permissionless Tokens):**
+   - Mã nguồn bất biến hoàn toàn, không có backdoor, không chủ sở hữu có quyền đóng băng hay can thiệp số dư (ví dụ: utility token, wrapped native coins).
+2. **Token Có Kiểm Soát Pháp Lý (Controlled / Regulated Tokens — `IRegulatedToken`):**
+   - Dành cho Tiền kỹ thuật số Ngân hàng Trung ương (CBDC), Stablecoin pháp định tuân thủ, Cổ phiếu/Trái phiếu số hóa doanh nghiệp.
+   - Hỗ trợ các hàm can thiệp tư pháp: `freezeAccount(address, bytes32 courtRulingId)`, `unfreezeAccount(address, bytes32 courtRulingId)`, `judicialForceTransfer(address from, address to, uint256 amount, bytes32 courtRulingId)`, `courtOrderBurn(address, uint256 amount, bytes32 courtRulingId)`.
+   - **Chốt chặn an toàn:** Bắt buộc có tham số `bytes32 courtRulingId` trỏ về bản án của Tòa án và thực thi qua **Multi-Sig Quorum 3-of-5** (Pháp chế, CFO, Kiểm toán nội bộ, Cơ quan quản lý).
+
+### 1.17.2. Bộ Công Cụ Token Hóa Mở (Open Asset Tokenization Suite)
+Cung cấp Configurator Wizard trực tiếp trong Odoo 19 cho phép doanh nghiệp tự do phát hành các loại tài sản số, tài sản ảo và RWA trên nền tảng `IOpenFactory` dùng chung logic bytecode, đảm bảo phân lập dữ liệu tuyệt đối và tiết kiệm 95% chi phí triển khai.

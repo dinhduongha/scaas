@@ -1111,7 +1111,9 @@ chất ta cần, không cần partial index.
 
 **[SỬA §15 v1] `epoch` đã biến mất khỏi thiết kế.** Bản nháp nói "epoch rollOver" và "300 người nhận đều nhận được
 trong cùng một epoch". §03.5.4 đã bỏ hoàn toàn mô hình epoch và thay bằng `accSeq` — một đại lượng không phụ thuộc
-thời gian, chỉ đổi khi chính chủ gọi `rollOver`. Hệ quả cho đối soát: không còn "epoch boundary" nào để đợi; thay
+thời gian, chỉ đổi khi `rollOver` chạy (**[BẢN 5, 2026-09-03]** bất kỳ ai gọi được với tài khoản `PUBLIC`; tài
+khoản treasury của luồng R3/R4 đăng ký `OWNER_ONLY` nên với **chính các tài khoản mà §15 đối soát**
+thì vế "chỉ chủ" vẫn đúng). Hệ quả cho đối soát: không còn "epoch boundary" nào để đợi; thay
 vào đó, đối soát phải đọc **cả** `accSeq` và `pendingSeq` (`viewAccounts`, §03.6) và báo `zether_sum_mismatch` khi
 `g^{Σv_da_rollOver} != C_acc · D_acc^{−x}`. Tiền nằm trong `pending` **không** là drift — nó là tiền chưa rollOver,
 và báo cáo phải thể hiện nó thành một cột riêng chứ không trộn vào số dư.
@@ -1556,7 +1558,22 @@ Mỗi mục phải xanh trước khi gọi section này là xong. Mục có SQL 
 | §15 v1 chunk 150 | "9M gas" | 4,521,000 gas/chunk | **đã sửa ở đây** |
 | §15 v1 epoch Zether | còn nói về epoch rollOver | `accSeq`, theo §03.5.4 | **đã sửa ở đây** |
 | §15 v1 model DMS | `dms.trade.settlement.line` + `payout_state` | `dms.trade.settlement` + `state`/`settled_external` | **đã sửa ở đây** |
-| §15 v1 lane 2D nonce | suy từ `origin_key` của settlement | suy từ đơn vị vận chuyển (chunk khi có batch) | **đã sửa ở đây** |
-| **[BẢN 3]** `token_symbol` làm khoá | §15 v1 truyền `token_symbol` vào `_submit` | `token_id`; ký hiệu không định danh được token trong factory mở (A11) | **đã sửa ở đây** |
 | **[BẢN 3]** Chain private | §15 v1 giả định QBFT, instant finality | Nethermind + Clique, một signer, pre-London, reorg được | **đã sửa ở đây** |
 | §11.5 dependency | `depends: ['base', 'bamboo_idempotency']` | phải khớp `__manifest__` của §10.1 (`['base', 'mail']`) — **một trong hai sai** | §10 hoặc §11 |
+
+---
+
+## 15.12. Cập Nhật Chuẩn Tắc V3: Giao Thức Đấu Thầu Phong Bao Kín & Quỹ Dòng Tiền Vesting Streaming
+
+*(Chi tiết đầy đủ xem `SYNTHESIS_ENTERPRISE_BLOCKCHAIN_V3.md` §2 và `ai-enterprise-blockchain-architecture.md` §3.6, Chapter 10)*
+
+### 15.12.1. Giao Thức Đấu Thầu Phong Bao Kín (Sealed-Bid Tender — `ISealedBidTender`)
+Để tự động hóa và bảo mật quy trình Mua sắm Doanh nghiệp (Procure-to-Pay), loại trừ thông đồng và chậm trễ hoàn tiền ký quỹ:
+1. **Pha 1 (Commit):** Nhà thầu nộp tiền cọc escrow vào hợp đồng (`deposit >= minDeposit`) và gửi cam kết giá thầu kín:
+   $$\text{bidCommitment} = \text{keccak256}(\text{abi.encodePacked}(\text{price}, \text{salt}, \text{bidder}))$$
+2. **Pha 2 (Reveal):** Khi hết hạn nộp thầu, các bên nộp `(price, salt)` để mở thầu công khai.
+3. **Pha 3 (Quyết toán & Hoàn cọc 100%):** Hợp đồng xác định nhà thầu thắng cuộc để tạo Purchase Order trong Odoo ERP. **Hợp đồng tự động mở lệnh hoàn trả 100% tiền cọc cho toàn bộ nhà thầu trượt thầu** (`withdrawDeposit()`), không giữ cọc và không cần nhân sự kế toán duyệt thủ công. Nhà thầu cố tình không mở thầu bị tịch thu tiền cọc (slash).
+
+### 15.12.2. Quỹ Dòng Tiền Rút Định Kỳ (Vesting Streaming Vaults — `IVestingVault`)
+- Tự động hóa giải ngân liên tục theo dòng thời gian thực (block-by-block streaming hoặc các mốc cliff) cho hợp đồng lao động, thưởng cổ phiếu ESOP hoặc nghiệm thu thầu theo tiến độ.
+- Người thụ hưởng rút tiền bất kỳ lúc nào qua Meta-Tx hoàn toàn gasless. Doanh nghiệp có thể cấu hình tính năng thu hồi (Revoke) để hoàn trả phần token chưa mở khóa về ngân quỹ công ty.

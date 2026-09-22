@@ -22,7 +22,7 @@ Bản nháp trước ngầm định 14 thứ mà không viết ra. Một impleme
 | A8 | Có thể đọc lại **toàn bộ** log `ConfidentialTransfer` từ block genesis | RPC công cộng cap `eth_getLogs` ở 10k log / 2k block; node non-archive prune log ⇒ recovery gãy | 3.2.6 |
 | A9 | `fee` là public scalar và relayer nhận fee **ở dạng thanh khoản** | Nếu fee vào số dư mã hoá, relayer phải `withdraw` để tiêu ⇒ lộ số, tốn gas, phá kinh tế relayer | 3.4.3 |
 | A10 | `feeRecipient` **không** nằm trong Fiat-Shamir challenge (để `MODE_OPEN` hoạt động) | Nếu nằm trong challenge, `MODE_OPEN` chết; nếu không nằm, mọi relayer copy được calldata ⇒ đua fee | 3.4.4 |
-| A11 | Rollover chỉ đổi `acc` khi chính chủ cho phép | Bản nháp nói `rollOver` permissionless **và** owner-exclusive cùng lúc — mâu thuẫn, xem 3.5.3 | 3.5.3 |
+| A11 | Rollover đổi `acc` theo **cờ per-account** `RollOverMode` | **[BẢN 5, 2026-09-03]** Mâu thuẫn permissionless-vs-owner-exclusive đóng lại bằng một cờ: `PUBLIC` mặc định, `OWNER_ONLY` opt-in cho R3/R4. Xem 3.5.3 | 3.5.3 |
 | A12 | Verifier Solidity chứa được toàn bộ vector generator trong bytecode | `2·n·m` điểm × 64 B; cấu hình 128/128 = **32,768 B > EIP-170 (24,576 B)** ⇒ không deploy được | 3.3.5 |
 | A13 | Điểm trong calldata truyền **uncompressed** | Compressed rẻ hơn 32 B nhưng tốn 1,349 gas/điểm để decompress on-chain ⇒ đắt hơn 2.6× | 3.3.4 |
 | A14 | Kiểm toán viên/cơ quan thuế chỉ cần thấy **đồ thị**, không cần thấy **số tiền** | Sai với kiểm toán BCTC và với thuế VN; Zether nguyên bản **không có** cơ chế nào cho việc này | 3.4.6 |
@@ -734,7 +734,27 @@ Note cũng nêu sai **lý do** có epoch: *"nhiều giao dịch chuyển tiền 
 
 Nếu cần đồng thời: dùng **pool nhiều `schnorrAddress`** (một per settlement worker / per fund) — đúng tinh thần `batchId` 2D-nonce của EIP-1776, nhưng ở tầng Zether. Định lượng: prove 0.3 s (server-side, xem 3.8) ⇒ một `schnorrAddress` cho **~3 tx/s nếu prove là nút cổ chai, hoặc 1 tx / block time nếu chain là nút cổ chai**. Trên Gnosis (5 s block): **1 tx / 5 s / account = 17,280/ngày**. Cần 5,000/ngày ⇒ một account là đủ. Cần 100,000/ngày ⇒ tối thiểu 6 account, đề xuất 16 để có biên. Đưa `settlement_account_pool_size` thành tham số cấu hình, mặc định 4.
 
-#### 3.5.3. Bản nháp tự mâu thuẫn: `rollOver` không thể vừa permissionless vừa owner-exclusive
+#### 3.5.3. `rollOver`: permissionless vừa owner-exclusive — không trên cùng một tài khoản, nhưng có trên cùng một contract
+
+> **[BẢN 5 — user chốt 2026-09-03.]** Kết luận cũ của mục này (*"hai câu loại trừ nhau,
+> chọn owner-exclusive"*) **đúng khi và chỉ khi bất biến được phát biểu toàn cục**. Tính
+> chất mà owner-exclusive mua là tính chất của **tập hợp mọi đường làm `accSeq` tiến**, nên
+> hai hàm cùng bump một counter trên **cùng một tài khoản** thì cửa có khoá mua 0 an toàn.
+> Phát biểu lại **per-account** thì cả hai cùng tồn tại được, và bất biến vẫn kiểm được:
+>
+> > `accSeq[a]` tiến được mà không cần `a` đồng ý **⟺** `mode[a] == PUBLIC`.
+>
+> **Mặc định `PUBLIC`** — nó giải nút *"tài khoản chỉ nhận rồi im lặng bị kẹt"* và trả lại
+> đúng ngữ nghĩa idempotent/permissionless của `anonymous-zether` mô tả ở §3.5.2.
+> **`OWNER_ONLY` là opt-in, gán theo lớp rủi ro R3/R4** (treasury, B2B payout, off-ramp).
+>
+> Con grief mà mục này mô tả (~30k gas, lặp vô hạn) **bị chặn bằng một quy tắc contract,
+> không bằng chữ ký**: `rollOverPublic` **no-op khi `pendingSeq[a] == lastRolledPendingSeq[a]`**
+> ⇒ kẻ tấn công phải **nạp một khoản tiền thật cho nạn nhân** trước mỗi lần thử. Đó chính là
+> grief-bằng-1-xu ở đoạn kế tiếp — con **đã tồn tại sẵn bất kể ai gọi `rollOver`** — nên
+> `PUBLIC` không thêm một lớp grief mới, nó gộp vào lớp có sẵn. Xem `00-CANON.md` §C5 [BẢN 5]
+> để có đủ bốn ràng buộc bắt buộc.
+
 
 Bản nháp đề xuất "owner-exclusive rollover" — `pending → acc` chỉ xảy ra trong transaction do chính chủ khởi tạo — rồi ở cuối lại viết *"`rollOver(bytes32[] calldata)` nhận mảng, permissionless"*. **Hai câu này loại trừ nhau**, và nếu implement theo câu thứ hai thì toàn bộ lợi ích của câu thứ nhất biến mất:
 
@@ -754,10 +774,14 @@ QT1.  `acc` và `pending` là hai slot tách biệt. transferConfidential và wi
 QT2.  Mọi credit đến (transfer từ người khác, và cả deposit) chỉ cộng vào `pending`.
       pending[to] += C_out  (2 ecAdd). Đồng thời pendingSeq[to]++.
 
-QT3.  `pending -> acc` chỉ xảy ra trong hàm rollOver(), và rollOver PHẢI được
-      chính chủ uỷ quyền (Schnorr signature hoặc controller EOA).
-      rollOver không có ZK proof, không thể fail vì lý do mật mã.
-      Nó set accSeq[a] = pendingSeq[a].
+QT3.  `pending -> acc` chỉ xảy ra trong hàm rollOver().
+      [BAN 5] Ai goi duoc no la tham so per-account:
+        mode[a] == PUBLIC     -> bat ky ai (rollOverPublic / rollOverBatch),
+                                 NO-OP khi pendingSeq[a] == lastRolledPendingSeq[a]
+        mode[a] == OWNER_ONLY -> chi chu (Schnorr signature hoac controller EOA),
+                                 thong diep BAT BUOC mang validUntilBlock
+      rollOver khong co ZK proof, khong the fail vi ly do mat ma.
+      No set accSeq[a] = pendingSeq[a].
 ```
 
 Trạng thái mỗi tài khoản mỗi token:
@@ -766,13 +790,26 @@ Trạng thái mỗi tài khoản mỗi token:
 |---|---|---|---|
 | `acc[a]` | `(C, D)` | chỉ tx được `a` uỷ quyền | nguồn của mọi proof |
 | `pending[a]` | `(C, D)` | bất kỳ ai (credit) | nơi tiền đến nằm chờ |
-| `accSeq[a]` | `uint64` | chỉ `rollOver(a)` | **được băm vào Fiat-Shamir**; contract `require(accSeq == provedAccSeq)` |
+| `accSeq[a]` | `uint64` | `rollOver(a)` — **[BẢN 5]** bất kỳ ai nếu `mode[a] == PUBLIC`, chỉ chủ nếu `OWNER_ONLY` | **được băm vào Fiat-Shamir**; contract `require(accSeq == provedAccSeq)` |
 | `pendingSeq[a]` | `uint64` | mỗi credit | client dùng để biết có tiền mới |
 | `zetherNonce[a]` | `uint64` | mỗi debit thành công | anti-replay của proof |
 
-Vì `accSeq` chỉ đổi khi chính chủ rollOver, **không ai grief được proof đang bay**. Đây là điều mà "owner-exclusive rollover" muốn đạt được nhưng cơ chế của bản nháp không đạt.
+Vì `accSeq` chỉ đổi khi `rollOver` chạy, proof đang bay chỉ chết khi có người bump được `accSeq`. Với `mode == OWNER_ONLY` thì **không ai ngoài chủ làm được** — đây là điều mà "owner-exclusive rollover" muốn đạt được nhưng cơ chế của bản nháp không đạt. **[BẢN 5]** với `mode == PUBLIC` (mặc định) thì bất kỳ ai bump được, nhưng **chỉ sau khi nạp tiền thật cho nạn nhân** (quy tắc no-op), nên chi phí grief bằng đúng chi phí grief-bằng-1-xu vốn không xoá được.
 
-Chữ ký uỷ quyền cho rollOver — hai biến thể, chọn ở deploy:
+Ba entry point. **[BẢN 5]** cờ `RollOverMode` quyết định cái nào chạy được cho một tài khoản; cờ đặt lúc register, **chỉ chủ đổi được**, và **phải có trong `v1`** vì token bất biến (thêm sau = deploy version mới + di cư người dùng):
+
+```solidity
+enum RollOverMode { PUBLIC, OWNER_ONLY }   // 1 bit, pack vao slot da co
+
+// Duong MAC DINH: khong chu ky. Revert neu mode[acct] == OWNER_ONLY.
+// NO-OP (khong revert, khong bump accSeq) khi pendingSeq[acct] == lastRolledPendingSeq[acct].
+function rollOverPublic(bytes32 acct) external;                 // ~20k gas khi co viec, ~2k khi no-op
+function rollOverBatch(bytes32[] calldata accts) external;      // bo qua phan tu OWNER_ONLY, khong revert ca lo
+
+function setRollOverMode(bytes32 acct, RollOverMode m, bytes calldata sig) external;  // chi chu
+```
+
+Đường có chữ ký — **bắt buộc cho `OWNER_ONLY`**, và vẫn dùng được bởi chủ của tài khoản `PUBLIC`:
 
 ```solidity
 // Biến thể A: Schnorr, không cần EOA, gasless được, tương thích custody MPC/HSM
@@ -822,9 +859,9 @@ Và một hệ quả cho §21/§22: một `rollOver` đã ký nằm trong pool c
 nên `expiry` của intent bọc nó phải **không dài hơn** `validUntilBlock` quy ra thời gian. Node từ chối
 intent nào vi phạm — đây là một dòng trong thang hàng rào L2 của §22.3, không phải một kiểm tra riêng.
 
-**Mặc định: biến thể A** — nó không đòi hỏi tài khoản Zether phải gắn với một EOA, điều bắt buộc nếu custody là MPC hoặc smart-account/passkey (quyết định đã chốt số 6). Biến thể B là tối ưu cho profile custodial.
+**Trong hai biến thể có chữ ký, mặc định là A** — nó không đòi hỏi tài khoản Zether phải gắn với một EOA, điều bắt buộc nếu custody là MPC hoặc smart-account/passkey (quyết định đã chốt số 6). Biến thể B là tối ưu cho profile custodial. **[BẢN 5]** cả hai chỉ là đường của `OWNER_ONLY`; mặc định của hệ thống là `rollOverPublic`, và nó **không cần crypto stack riêng** vì không có chữ ký nào để verify.
 
-`rollOver` **relay được**: nó là một lời gọi contract bình thường, bọc trong `metaTx.data` như mọi thứ khác, và **batch được**: `rollOverBatch(bytes32[] accts, uint64[] seqs, Sig[] sigs)` — mỗi phần tử vẫn cần chữ ký của chủ nó, nên batch chỉ hữu ích khi một pháp nhân sở hữu nhiều account (đúng trường hợp settlement pool ở 3.5.2). Trả lời trực tiếp cho brief: **"can it be batched or relayer-driven" — được cả hai, nhưng không permissionless.**
+`rollOver` **relay được**: nó là một lời gọi contract bình thường, bọc trong `metaTx.data` như mọi thứ khác, và **batch được**. **[BẢN 5]** hai hình batch, và chúng khác nhau về giá: `rollOverBatch(bytes32[] accts)` cho tài khoản `PUBLIC` — **không chữ ký nào**, nên một indexer quét ra danh sách tài khoản có `pending` cũ và dọn một lượt (+70 k gas/tài khoản, §C7.3); `rollOverBatch(bytes32[] accts, uint64[] seqs, Sig[] sigs)` cho tài khoản `OWNER_ONLY` — mỗi phần tử một chữ ký, nên chỉ hữu ích khi một pháp nhân sở hữu nhiều account (settlement pool ở 3.5.2). Trả lời trực tiếp cho brief: **"can it be batched or relayer-driven" — được cả hai, và permissionless là mặc định trừ tài khoản đăng ký `OWNER_ONLY`.**
 
 #### 3.5.5. So sánh ba thiết kế
 
@@ -833,7 +870,7 @@ intent nào vi phạm — đây là một dòng trong thang hàng rào L2 của 
 | `acc[a]` bị đổi bởi | bất kỳ ai chạm vào `a` | tx của `a` — nhưng nội dung phụ thuộc `pending` của người khác | **chỉ `rollOver(a)` do `a` uỷ quyền** |
 | Proof phụ thuộc epoch | **có** → phải pin `provedEpoch` | không, nhưng phụ thuộc `pending` | **không** — chỉ `zetherNonce` + `accSeq` |
 | Grief bằng cách gửi 1 xu | **có** (đổi acc) | **có** (đổi kết quả gộp) | **không** |
-| Grief bằng cách gọi rollOver | có | **có nếu permissionless** | **không** — cần chữ ký chủ |
+| Grief bằng cách gọi rollOver | có | **có nếu permissionless** | **[BẢN 5]** `OWNER_ONLY`: **không** — cần chữ ký chủ. `PUBLIC`: chỉ sau khi kẻ tấn công **nạp tiền thật** (no-op khi `pending` rỗng), tức quy về đúng cột grief-bằng-1-xu |
 | Xác suất revert do race | ~40% (tính ở dưới) | trung bình | **~0** |
 | Tiền có kẹt được không | không | không | **không** |
 | Số tx để tiêu tiền vừa nhận | 1 | 1 | **2** (rollOver + transfer) hoặc 1 nếu đã rollOver sẵn |
@@ -1477,7 +1514,7 @@ Ba kết luận từ bảng này:
 |---|---|---|---|
 | U1 | **Mất `x` = mất tiền vĩnh viễn.** Không rollOver được, không tiêu được, không giải mã được. ERC-20 tương ứng khoá trong escrow mãi mãi ⇒ lỗ hổng kế toán. | **Không có giải pháp trong giao thức.** | (a) MPC custody (quyết định 6 đã cho phép) — shard `x`, khôi phục được; (b) private profile: issuer giữ một share recovery, có timelock 30 ngày + thông báo công khai; (c) public non-custodial: **chấp nhận mất**, ghi vào ToS. |
 | U2 | **Blacklist underlying đóng băng toàn bộ pool** (3.7.4). | Không có mitigation kỹ thuật. | Tránh USDC/USDT làm underlying; chia pool; `emergencyRevealWithdraw` sau 90 ngày pause. |
-| U3 | **Owner-signed rollOver chưa được kiểm chứng với chứng minh an toàn của paper FC 2020.** Tôi tin nó đúng khi N = 2 và nonce đơn điệu (epoch-tag tồn tại để phục vụ anonymity set, thứ ta đã bỏ), nhưng đây là thay đổi ở tầng giao thức. | **Cần reviewer mật mã xác nhận**, không quyết bằng suy luận trong tài liệu này. | Thuê một audit mật mã 2–3 tuần cho riêng phần này, **trước** khi viết Solidity. |
+| U3 | **[BẢN 5] phạm vi thu hẹp: nhánh mặc định `PUBLIC` gần paper FC 2020 hơn (permissionless, idempotent); cái cần review là nhánh `OWNER_ONLY`, việc ghim `accSeq` vào transcript, và đường lui "verifier chấp nhận `accSeq` cũ khi phần chênh chỉ gồm credit" (§C5.4).** Owner-signed rollOver chưa được kiểm chứng với chứng minh an toàn của paper FC 2020. Tôi tin nó đúng khi N = 2 và nonce đơn điệu (epoch-tag tồn tại để phục vụ anonymity set, thứ ta đã bỏ), nhưng đây là thay đổi ở tầng giao thức. | **Cần reviewer mật mã xác nhận**, không quyết bằng suy luận trong tài liệu này. | Thuê một audit mật mã 2–3 tuần cho riêng phần này, **trước** khi viết Solidity. |
 | U4 | **Không có > 100 bit bảo mật với chi phí verify chấp nhận được trên EVM.** BN254/Baby Jubjub ~100 bit; BLS12-381 ~126 bit nhưng gas ×2 và Groth16-in-BLS đắt hơn nhiều. | Đánh đổi chưa có lời giải đẹp. | Private chain (native precompile ⇒ chọn curve nào cũng được) + hoãn quyết định cho public. |
 | U5 | **Rò rỉ thống kê qua deposit/withdraw công khai** (3.7.3) trên đồ thị hình cây. | Giảm thiểu được, không xoá được. | Netting, float thường trực, rút theo lịch, ≥ 3 counterparty. |
 | U6 | **Người nhận chưa register thì không nhận được tiền.** Rào cản lớn cho loyalty tới người tiêu dùng. | Có đường vòng, chưa chốt. | Counterfactual registration: dẫn xuất `schnorrAddress` từ passkey, ai cũng submit hộ PoP signature được, gasless, ở lần chạm đầu tiên. Cần thiết kế ở §02. |
@@ -1498,7 +1535,7 @@ Ba kết luận từ bảng này:
 ```
 S1  Chốt curve (câu hỏi 2) + chốt Zether có dùng cho loyalty không (câu hỏi 1)
 S2  Rust core: prover + verifier tham chiếu + testvectors     [không có Solidity nào ở bước này]
-S3  Audit mật mã cho owner-signed rollOver (U3) + Sigma-Bullets linkage
+S3  Audit mật mã cho accSeq + nhánh OWNER_ONLY + drift chỉ-credit (U3) + Sigma-Bullets linkage
 S4  Solidity: Registry, Token, BulletproofsVerifier, Generators (SSTORE2)
     + toàn bộ 8 file test ở 3.9.1
 S5  Private chain QBFT + native precompile (nếu câu hỏi 4 = có)

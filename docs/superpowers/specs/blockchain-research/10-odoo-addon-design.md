@@ -1844,7 +1844,7 @@ Mọi body nằm trong method của model; XML dùng **một** dòng (eval conte
 | Metatx expiry sweep | 5 phút | `model._cron_expire_metatx()` | `blockchain.metatx` |
 | Approval expiry | 10 phút | `model._cron_expire_approvals()` | `blockchain.approval.request` |
 | Relayer nonce/balance reconcile | 5 phút | `model._cron_relay_reconcile()` (§06) | `blockchain.relayer.account` |
-| Zether epoch rollOver | 1 phút | `model._cron_zether_rollover()` | `blockchain.zether.account` |
+| Zether rollOver (`accSeq`, **không** epoch) | 1 phút | `model._cron_zether_rollover_request()` — chỉ **tạo** `blockchain.relay.job`; **[BẢN 5, 2026-09-03]** job cho tài khoản `PUBLIC` **không mang chữ ký** và batch được, chỉ `OWNER_ONLY` mới cần blob do custody ký | `blockchain.zether.account` |
 | RPC endpoint health probe | 2 phút | `model._cron_probe_endpoints()` | `blockchain.rpc.endpoint` |
 | Custody probe + rotation due | 1 giờ | `model._cron_custody_probe()` (§07) | `blockchain.custody.provider` |
 | Registry reconcile | 1 giờ | `model._cron_reconcile_registry()` (§02) | `blockchain.zether.account` |

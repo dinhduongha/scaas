@@ -379,7 +379,7 @@ contract SupplyInvariant is StdInvariant, Test {
 | I15 | `Σ` ciphertext toàn hệ bảo toàn qua `transferConfidential` (cộng đồng hình) | `ZetherTokenBase` | Tạo tiền mã hoá từ hư không |
 | **I16** | `keccak256(bytecode(ZetherTokenOpen))` **không chứa** selector `recoverAccount`; `methodIdentifiers` không liệt kê nó | build gate | Backdoor lọt vào public profile |
 | **I17** | Mọi hàm public của `ZetherTokenOpen` và `ZetherTokenRecoverable` **trừ** `recoverAccount` cho **cùng kết quả** trên cùng input | `ProfileParityBase` | Hai profile phân kỳ âm thầm; private ít test hơn public |
-| **I18** | `rollOver(x)` do bên thứ ba gọi **không** làm proof đang bay của `x` invalid, hoặc `rollOver` không permissionless | `ZetherTokenBase` | Griefing 30k gas (§03.4.4) lặp vô hạn, miễn phí |
+| **I18** | **[BẢN 5]** `accSeq[x]` chỉ tăng khi `pendingSeq[x]` đã tăng kể từ lần roll trước; `rollOverPublic(x)` trên `pending` rỗng là **no-op không revert**; và nó **revert** khi `mode[x] == OWNER_ONLY` | `ZetherTokenBase` | Griefing rỗng ~30k gas (§03.4.4) lặp vô hạn, miễn phí |
 | **I19** | Storage slot của mọi biến trong `v<N>` khớp `v<N-1>` cho các biến trùng tên; slot mới chỉ được **thêm vào cuối** | `storage-layouts/` | Upgrade ghi đè số dư |
 | **I20** | `fee` được chuyển **trước** inner call trong mọi đường thực thi (đo bằng thứ tự event) | `MetaTxForwarder` | Xem I7 |
 | **I21** | Tổng `escrow` của `SponsorshipPool` ≥ tổng cam kết chưa chi | `SponsorshipPool` (§05) | Relayer relay xong không được trả |
@@ -398,17 +398,46 @@ Hai cách sửa, phải chọn một **trước khi viết contract**:
 
 **I7 là invariant đáng giá nhất trong bảng** và cũng là thứ dễ mất nhất khi refactor: một `try/catch` bọc inner call mà quên revert nhánh fail sẽ khiến relayer trả gas cho một tx không trả phí. Fee phải được chuyển **trước** inner call (I20), và invariant phải chạy với `RevertingTarget`, `ReentrantTarget`, `GasGriefTarget`, `Returns64KBTarget` trong bộ target của handler. `Returns64KBTarget` là mock bản nháp thiếu: một target trả về 64 KB returndata làm forwarder tốn ~2M gas chỉ để copy memory nếu nó không dùng `ExcessivelySafeCall` — đó là cách rẻ nhất để làm cạn ví relayer, và nó không phải lý thuyết.
 
-**I18 chưa có ở bản nháp và nó là lỗ hổng kinh tế, không phải lỗ hổng kế toán.** §03.4.4 đã tính: `rollOver(victim)` permissionless tốn ~30k gas (≈ $0.00006 trên Gnosis) và làm proof đang bay của nạn nhân revert, nạn nhân mất phí relayer và phải prove lại (0.5–1.25 s trên Android). Tỉ lệ chi phí tấn công/thiệt hại là ~1:1000. Invariant viết được:
+**I18 chưa có ở bản nháp và nó là lỗ hổng kinh tế, không phải lỗ hổng kế toán.** §03.4.4 đã tính: `rollOver(victim)` permissionless **không có điều kiện** tốn ~30k gas (≈ $0.00006 trên Gnosis) và làm proof đang bay của nạn nhân revert, nạn nhân mất phí relayer và phải prove lại (0.5–1.25 s trên Android). Tỉ lệ chi phí tấn công/thiệt hại là ~1:1000.
+
+**[BẢN 5, 2026-09-03] — invariant đổi hình, không đổi mục đích.** `rollOver` bây giờ permissionless theo mặc định (`RollOverMode.PUBLIC`), nên "cấm bên thứ ba gọi" **không còn là điều được kiểm**. Thứ chặn grief là **điều kiện bump**: một lần bump `accSeq` phải *mua* được bằng một credit thật cho nạn nhân. Ba mệnh đề, và cả ba phải fail được:
 
 ```solidity
-function invariant_rollover_cannot_grief() public {
-    (bytes32[2] memory C, bytes32[2] memory D) = zether.getEncryptedBalance(handler.victim());
+// 1. Bump phai duoc "mua" bang mot credit that: pendingSeq phai tang truoc.
+function invariant_accseq_bump_requires_new_pending() public {
+    bytes32 v = handler.victim();
+    uint64 accBefore = zether.accSeq(v);
+    uint64 pendBefore = zether.pendingSeq(v);
     vm.prank(handler.attacker());
-    try zether.rollOver(handler.victim()) { } catch { return; }   // không permissionless: OK
-    (bytes32[2] memory C2,) = zether.getEncryptedBalance(handler.victim());
-    assertEq(C[0], C2[0], "rollOver boi ben thu ba doi acc cua nan nhan");
+    try zether.rollOverPublic(v) {} catch { return; }
+    if (zether.accSeq(v) != accBefore) {
+        assertGt(pendBefore, zether.lastRolledPendingSeq0(), "accSeq tang ma khong co pending moi");
+    }
+}
+
+// 2. Pending rong => NO-OP, khong revert, acc va accSeq khong doi.
+//    Revert o day cung sai: no bien mot cron don dep thanh mot cron gay loi.
+function invariant_rollover_empty_is_noop() public {
+    bytes32 v = handler.idleAccount();                 // khong co credit moi
+    (bytes32[2] memory C,) = zether.getEncryptedBalance(v);
+    uint64 accBefore = zether.accSeq(v);
+    vm.prank(handler.attacker());
+    zether.rollOverPublic(v);                          // KHONG duoc revert
+    (bytes32[2] memory C2,) = zether.getEncryptedBalance(v);
+    assertEq(C[0], C2[0], "no-op ma van doi acc");
+    assertEq(zether.accSeq(v), accBefore, "no-op ma van bump accSeq");
+}
+
+// 3. Tai khoan OWNER_ONLY: duong permissionless dong hoan toan.
+function invariant_owner_only_rejects_public_path() public {
+    bytes32 t = handler.treasuryOwnerOnly();
+    vm.prank(handler.attacker());
+    vm.expectRevert();
+    zether.rollOverPublic(t);
 }
 ```
+
+Cộng một test cho `rollOverBatch`: một lô trộn tài khoản `PUBLIC` và `OWNER_ONLY` phải **bỏ qua** phần tử `OWNER_ONLY` chứ **không revert cả lô** — revert cả lô biến một tài khoản treasury thành một cách chặn việc dọn dẹp của mọi tài khoản khác.
 
 `fail_on_revert = false` là đúng cho suite này, nhưng nó phải đi cùng `invariant_handler_actually_did_work` ở trên. Không có cặp đó, `fail_on_revert = false` biến toàn bộ §14.4 thành trang trí.
 
@@ -1202,7 +1231,7 @@ Kiểm mạnh nhất và rẻ nhất: với mỗi selector trong ABI, `eth_call`
 14. **[MỚI] `via_ir = true` được §01.14.1 gọi là bắt buộc ("struct 12 field ⇒ stack too deep nếu không bật").** Không đúng với `struct calldata` đọc trực tiếp field. Và nó có giá: build ×6–13, `forge coverage` hỏng ⇒ gate coverage 90% ở §01.14.2 và §14.14 là gate chết. Xem §14.2b.
 15. **[MỚI] `bytecode_hash = "none"` được §01.14.1 gọi là BẮT BUỘC cho tính tái lập.** Không đúng: Foundry dùng đường dẫn tương đối, metadata đã deterministic khi đã ghim solc/settings/submodule. Cái giá thật là **mất Sourcify full match**. Xem §14.2, và determinism gate thay thế nó.
 16. **[MỚI] I11 của bản nháp sai vì `IZetherToken is IERC20`.** `blockchain.md` §10.5.3 nguyên tắc 3 cho contract vừa là ERC-20 công khai vừa giữ escrow bảo mật ⇒ `underlying.balanceOf(token)` đổi qua 4 đường, không phải 2. Xem I11' §14.4.
-17. **[MỚI] Không section nào nói `rollOver` có permissionless hay không.** §03.4.4 tính được chi phí griefing (~30k gas) nhưng interface trong `blockchain.md` §10.5.3 (`function rollOver(bytes32 schnorrAddress) external`) **không có** kiểm quyền và nhận địa chỉ của người khác làm tham số ⇒ mặc định là permissionless ⇒ griefing miễn phí. Invariant I18 là chỗ chuyện này bị bắt; quyết định thiết kế phải nằm ở §03 hoặc §07.
+17. ~~**Không section nào nói `rollOver` có permissionless hay không.**~~ **ĐÃ ĐÓNG — [BẢN 5, 2026-09-03].** Câu trả lời: **permissionless theo mặc định**, với cờ per-account `RollOverMode` và `OWNER_ONLY` opt-in cho R3/R4; grief bị chặn bằng quy tắc **no-op khi `pending` rỗng** chứ không bằng kiểm quyền. Nguồn chuẩn tắc: `00-CANON.md` §C5 [BẢN 5] và §03.5.3–§03.5.4. I18 đã viết lại theo ba mệnh đề ở §14.4.
 
 ---
 
@@ -1275,7 +1304,7 @@ Sáu câu đầu giữ từ bản nháp; sáu câu sau là mới và mỗi câu 
 5. **Mutation score 80% là gate cứng hay chỉ báo cáo?** Cứng thì phải chấp nhận nightly đỏ trong 4–6 tuần đầu.
 6. **`relayer-ref/` phát hành công khai (Apache-2.0) hay chỉ nội bộ?** Mở nguồn là **điều kiện cần** để có Open Relayer thứ ba, mà đó lại là toàn bộ luận điểm của EIP-1776. Câu hỏi kèm theo, phải trả lời cùng lúc: **licence của `src/`**. Đề xuất cụ thể: `src/*/interfaces/**` + `relayer-ref/` + `crates/zether-core` (phần verifier) **Apache-2.0**; `src/zether/`, `src/peg/` **BUSL-1.1 với change date +24 tháng**. Lý do: relayer bên thứ ba cần verify được proof và encode được intent (⇒ interface và verifier phải mở), nhưng không cần fork toàn bộ token stack ngày đầu.
 7. **[MỚI] `ZetherToken` có kế thừa `IERC20` không?** (§14.4, I11 vs I11'.) `blockchain.md` §10.5.3 nói có; hệ quả là hai kế toán trên một số dư và một invariant khó hơn hẳn. **Khuyến nghị: không** — tách `WrappedToken` công khai khỏi `ZetherToken` bảo mật. Quyết định này phải chốt **trước khi viết contract**, không sửa được sau khi có số dư thật.
-8. **[MỚI] `rollOver` permissionless hay không?** (§14.13(17).) Permissionless ⇒ griefing 30k gas, lặp vô hạn. Không permissionless ⇒ ai gọi hộ những tài khoản không hoạt động, và ai trả gas cho việc đó? Cả hai đều có chi phí; phải chọn một và viết I18 tương ứng.
+8. ~~**`rollOver` permissionless hay không?**~~ **ĐÃ CHỐT 2026-09-03 — cả hai, theo cờ per-account.** `PUBLIC` mặc định (ai gọi cũng được, no-op khi `pending` rỗng, batch không chữ ký — giải đúng câu "ai gọi hộ tài khoản không hoạt động"), `OWNER_ONLY` opt-in cho R3/R4 (không grief được, đổi lại kẹt nếu chủ offline). Cờ **phải có trong `v1`** vì token bất biến. I18 đã viết lại tương ứng (§14.4).
 9. **[MỚI] Curve của ElGamal: Baby Jubjub hay BN254 G1?** (§14.13(13).) §03 khuyến nghị dứt khoát Baby Jubjub. Chọn sai ⇒ ngày muốn đi Groth16 phải đổi curve, và đổi curve nghĩa là **giải mã lại toàn bộ số dư để mã hoá lại**, tức là lộ hết. Đây là quyết định một chiều, cần chốt trước contract đầu tiên.
 10. **[MỚI] Native precompile Zether: wave 1 hay wave 2, và trên client nào?** (§14.13(9).) Wave 1 không có precompile ⇒ 13 tx/s trên Besu, đủ cho B2B settlement khởi động. Có precompile ⇒ ~500 tx/s nhưng là consensus change, phải tự maintain một fork client, và cần thêm hai job differential (1↔4, 3↔4). **Khuyến nghị: wave 2**, giữ `IZetherVerifier` để đường này không bị khoá.
 11. **[MỚI] Runner CI: 2 vCPU hay 4 vCPU?** (Giả định A1.) Chênh lệch $200/tháng và chênh lệch 20 phút wall-clock mỗi PR. Với đội 4 người, 20 phút × 60 PR/tháng = 20 giờ chờ/tháng. Con số đó tự trả lời câu hỏi, nhưng ngân sách CI thường thuộc người khác.
