@@ -704,17 +704,16 @@ pub fn external_message(to: &Addr, init: Option<Arc<Cell>>, body: Arc<Cell>) -> 
     b.bit(true).reference(body).end()
 }
 
-/// Signed W5R1 external message ⇒ (BOC, TEP-467 normalized hash used as the tx id).
+/// Signed W5R1 external message ⇒ (BOC, message hash). The hash is the tx id: TON Center indexes the
+/// inbound message of the lane wallet's transaction under it, and we always send these exact bytes.
 pub fn w5_transfer(w5: &W5, signer: &dyn Signer, seqno: u32, valid_until: u32, to: &Addr, value: u128, body: Arc<Cell>) -> Result<(Vec<u8>, [u8; 32])> {
     let signing = w5.signing(seqno, valid_until, internal_message(to, value, body)?)?;
     let to_sign = signing.clone().end()?.hash();
     let sig = signer.sign(&to_sign)?;
     let w5body = signing.bytes(&sig).end()?;
-    let me = w5.address()?;
     let init = if seqno == 0 { Some(w5.state_init()?) } else { None };
-    let ext = external_message(&me, init, w5body.clone())?;
-    let norm = external_message(&me, None, w5body)?;
-    Ok((boc_serialize(&ext), norm.hash()))
+    let ext = external_message(&w5.address()?, init, w5body)?;
+    Ok((boc_serialize(&ext), ext.hash()))
 }
 
 // ---------------------------------------------------------------------- events
@@ -1083,8 +1082,8 @@ impl ChainAdapter for TonAdapter {
         let signer = self.signers.get(lane).ok_or_else(|| anyhow!("no lane {lane}"))?;
         // The lane tx expires with the subject's payload (review S14): a stuck tx never pins the seqno.
         let vu = u32::try_from(built.valid_until).unwrap_or(u32::MAX);
-        let (raw, norm) = w5_transfer(w5, signer, sequence as u32, vu, &to, value, body)?;
-        Ok(Signed { job_id: built.job_id, tx_id: hex0x(&norm), raw, valid_until: built.valid_until, sequence })
+        let (raw, id) = w5_transfer(w5, signer, sequence as u32, vu, &to, value, body)?;
+        Ok(Signed { job_id: built.job_id, tx_id: hex0x(&id), raw, valid_until: built.valid_until, sequence })
     }
 
     async fn submit(&self, signed: &Signed) -> Result<()> {
@@ -1283,9 +1282,9 @@ mod tests {
         let body = cell(&v, "/signed_op/boc");
         let value: u128 = s(&v, "/lane_w5/value").parse().unwrap();
         assert_eq!(hex0x(&internal_message(&to, value, body.clone()).unwrap().hash()), s(&v, "/lane_w5/relaxed_hash"));
-        let (boc, norm) = w5_transfer(&w5, &signer, 0, 1_800_000_300, &to, value, body).unwrap();
+        let (boc, id) = w5_transfer(&w5, &signer, 0, 1_800_000_300, &to, value, body).unwrap();
         assert_eq!(hex0x(&boc_parse(&boc).unwrap().hash()), s(&v, "/lane_w5/ext_hash"));
-        assert_eq!(hex0x(&norm), s(&v, "/lane_w5/norm_hash"));
+        assert_eq!(hex0x(&id), s(&v, "/lane_w5/ext_hash"));
     }
 
     #[test]

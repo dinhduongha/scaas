@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "scripts": {
     "build": "tact --config tact.config.json",
-    "test": "npm run build && jest"
+    "test": "npm run build && jest",
+    "shim": "tsc -p tsconfig.shim.json && node build/shim/shim/server.js"
   },
   "devDependencies": {
     "@tact-lang/compiler": "1.6.13",
