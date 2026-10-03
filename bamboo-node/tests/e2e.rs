@@ -110,6 +110,8 @@ struct FakeOdoo {
     ingested: Vec<Value>,
     indexed_block: u64,
     tokens: Vec<String>,
+    receiving: Vec<Value>,
+    balance_reports: Vec<Value>,
 }
 
 async fn fake(
@@ -123,7 +125,12 @@ async fn fake(
             "evm_chain_number": body["evm_chain_number"], "finality_mode": "depth", "finality_depth": 0,
             "finality_quorum": 1, "indexed_block": o.indexed_block,
             "tokens": o.tokens.iter().map(|t| json!({"address": t, "decimals": 6})).collect::<Vec<_>>(),
-            "journal_max_nonce": null, "inflight": []}),
+            "journal_max_nonce": null, "inflight": [], "receiving_addresses": o.receiving}),
+        ("blockchain.chain", "balance_report") => {
+            let stale = body["height"].as_u64() != Some(o.indexed_block);
+            o.balance_reports.push(body.clone());
+            json!({"stale": stale, "mismatch": 0})
+        }
         ("blockchain.relay.job", "relay_poll") => json!(std::mem::take(&mut o.jobs)),
         ("blockchain.relay.job", "relay_claim") => {
             for id in body["job_ids"].as_array().unwrap() {
@@ -177,6 +184,7 @@ fn chain_cfg(chain_id: u64, rpc: &str, dex: Option<Address>) -> ChainCfg {
         stuck_after_secs: 60,
         max_gas_per_tx: 3_000_000,
         max_fee_cap_gwei: 500,
+        ..Default::default()
     }
 }
 
@@ -207,7 +215,7 @@ fn sign(signer: &PrivateKeySigner, chain_id: u64, token: Address, m: &MetaTransa
 #[ignore]
 async fn outbox_payment_reaches_chain_and_comes_back_final() {
     let chain_id = 31901;
-    let (_anvil, rpc) = start_anvil(chain_id, 18601).await;
+    let (_anvil, rpc) = start_anvil(chain_id, 31901).await;
     let payer = small_key(0xA11CE);
     let dep = deploy(&rpc, chain_id, payer.address());
     let token: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();
@@ -231,7 +239,11 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
         feeRecipient: Address::ZERO,
     };
     let signature = sign(&payer, chain_id, token, &m);
-    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
+    let state = Arc::new(Mutex::new(FakeOdoo {
+        tokens: vec![format!("{token:#x}")],
+        receiving: vec![json!({"token": format!("{token:#x}"), "address": format!("{shop:#x}")})],
+        ..Default::default()
+    }));
     state.lock().unwrap().jobs.push(json!({
         "id": 1, "token": format!("{token:#x}"), "digest": "0x", "signature": signature,
         "metatx": WireMetaTx::from_sol(&m)}));
@@ -269,6 +281,24 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     let exe = ingested.iter().find(|e| e["event"] == "MetaTransactionExecuted").expect("executed ingested");
     let d = Domain { name: "Bamboo MetaToken".into(), version: "1".into(), chain_id, verifying_contract: token };
     assert_eq!(exe["digest"], format!("{:#x}", digest(&d, &m)));
+    // Drift A (R56): the ERC-20 Transfer to the receiving wallet rides along with the same tx hash, so
+    // Odoo can see it is matched by the PaymentSettled.
+    let tr = ingested.iter().find(|e| e["event"] == "Transfer").expect("Transfer to the receiving wallet");
+    assert_eq!((&tr["tx_hash"], &tr["to"]), (&pay["tx_hash"], &json!(format!("{shop:#x}"))));
+    // Drift C: balance at exactly the indexed height.
+    assert!(bamboo_node::drift::step(&ichain, &odoo, "evm:31901").await.unwrap());
+    let rep = state.lock().unwrap().balance_reports.last().cloned().unwrap();
+    assert_eq!(rep["height"].as_u64(), Some(state.lock().unwrap().indexed_block));
+    assert_eq!(rep["balances"][0]["balance"], "250000000");
+    // R55: a lane under its balance floor takes no new work.
+    let mut poor = cfg.clone();
+    poor.breaker.min_relayer_balance = Some(u128::MAX / 2);
+    let mut s2 = Submitter::start(Chain::with_signer(&poor, key(RELAYER)).unwrap(), odoo.clone(), poor, "e2e-2".into())
+        .await
+        .unwrap();
+    assert!(s2.accepting(), "no sample yet: nothing known, nothing tripped");
+    s2.sample().await;
+    assert!(!s2.accepting(), "balance floor");
 
     // Replay of the same signed job: simulation refuses it (nonce consumed) -> dead, no gas spent.
     state.lock().unwrap().jobs.push(json!({
@@ -305,7 +335,7 @@ fn trade_leg(seller: &PrivateKeySigner, _sell: Address, value: u64, buy: Address
 async fn dex_orders_match_through_the_gateway() {
     let _ = tracing_subscriber::fmt().with_env_filter("info").try_init();
     let chain_id = 31902;
-    let (_anvil, rpc) = start_anvil(chain_id, 18602).await;
+    let (_anvil, rpc) = start_anvil(chain_id, 31902).await;
     let alice = small_key(0xA11CE);
     let bob = small_key(0xB0B);
     let dep = deploy(&rpc, chain_id, alice.address());
@@ -429,7 +459,7 @@ async fn evm_adapter_runs_the_generic_lane_runner_on_two_mnemonic_lanes() {
     use bamboo_node::signer::LocalSigner;
 
     let chain_id = 31903;
-    let (_anvil, rpc) = start_anvil(chain_id, 18603).await;
+    let (_anvil, rpc) = start_anvil(chain_id, 31903).await;
     let payer = small_key(0xB0B);
     let dep = deploy(&rpc, chain_id, payer.address());
     let token: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();

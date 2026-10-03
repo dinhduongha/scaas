@@ -14,7 +14,9 @@ use std::time::Duration;
 use anyhow::{anyhow, bail, Context, Result};
 use bamboo_node::adapter::{index_runner, lane_runner};
 use bamboo_node::signer::Signer;
-use bamboo_node::{adapters, chain, config, dex, gateway, gwauth, indexer, keys, odoo, submit};
+use bamboo_node::admin::{ChainProbe, LaneProbe};
+use bamboo_node::breaker::Breaker;
+use bamboo_node::{admin, adapters, chain, config, dex, drift, gateway, gwauth, indexer, keys, odoo, submit};
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
@@ -86,23 +88,28 @@ async fn main() -> Result<()> {
     }
     let node_id = std::env::var("BAMBOO_NODE_ID").unwrap_or_else(|_| "bamboo-node".into());
     let mut gw_chains = HashMap::new();
+    let mut probes = Vec::new();
     let mut set: JoinSet<Result<()>> = JoinSet::new();
 
     for (cc, signers) in cfg.chains.iter().zip(lane_signers) {
         let poll = Duration::from_millis(cc.poll_ms);
         let tokens = Arc::new(RwLock::new(Vec::new()));
+        let mut probe_lanes = Vec::new();
         if !cc.is_evm() {
             let adapter = adapters::build(cc, &signers)?;
             if cfg.modules.submit {
                 let relay = odoo::Odoo::new(&cfg.odoo, &cfg.odoo.relay_api_key_env)?;
                 for lane in 0..signers.len() {
                     let (a, o, w) = (adapter.clone(), relay.clone(), format!("{node_id}#{}", cc.lanes[lane]));
+                    let k = Arc::new(Mutex::new(Breaker::new(cc.breaker.clone())));
+                    probe_lanes.push(LaneProbe { lane: adapter.lanes()[lane].address.clone(), breaker: k.clone() });
                     set.spawn(async move {
-                        lane_runner(a, o, lane, w, poll).await;
+                        lane_runner(a, o, lane, w, poll, k).await;
                         Err(anyhow!("lane loop ended"))
                     });
                 }
             }
+            probes.push(ChainProbe { key: cc.chain_key(), adapter: adapter.clone(), max_lag: cc.max_index_lag, lanes: probe_lanes });
             if cfg.modules.indexer {
                 let idx = odoo::Odoo::new(&cfg.odoo, &cfg.odoo.indexer_api_key_env)?;
                 let a = adapter.clone();
@@ -132,6 +139,7 @@ async fn main() -> Result<()> {
                 }
                 let worker = format!("{node_id}#{}", cc.lanes[lane]);
                 let s = submit::Submitter::start(c, relay.clone(), cc.clone(), worker).await?;
+                probe_lanes.push(LaneProbe { lane: format!("{:#x}", s.address()), breaker: s.breaker() });
                 set.spawn(async move {
                     submit::run(s, rx, poll).await;
                     Err(anyhow!("submit loop ended"))
@@ -154,12 +162,20 @@ async fn main() -> Result<()> {
         }
         if cfg.modules.indexer {
             let idx = odoo::Odoo::new(&cfg.odoo, &cfg.odoo.indexer_api_key_env)?;
-            let c = shared.clone();
+            let (c, o) = (shared.clone(), idx.clone());
             set.spawn(async move {
                 indexer::run(c, idx, poll).await;
                 Err(anyhow!("indexer loop ended"))
             });
+            let (c, key) = (shared.clone(), cc.chain_key());
+            set.spawn(async move {
+                drift::run(c, o, key).await;
+                Err(anyhow!("drift loop ended"))
+            });
         }
+        let probe_chain = chain::Chain::connect_lanes(cc, &signers[..1])?;
+        let probe = adapters::evm::EvmAdapter::new(cc, probe_chain, tokens.clone())?;
+        probes.push(ChainProbe { key: cc.chain_key(), adapter: Arc::new(probe), max_lag: cc.max_index_lag, lanes: probe_lanes });
         if let Some(tx) = first_tx {
             gw_chains.insert(
                 num,
@@ -179,6 +195,22 @@ async fn main() -> Result<()> {
         set.spawn(async move {
             axum::serve(listener, app).await?;
             Err(anyhow!("gateway stopped"))
+        });
+    }
+    if !cfg.modules.admin_bind.is_empty() {
+        let key_env = if cfg.modules.indexer { &cfg.odoo.indexer_api_key_env } else { &cfg.odoo.relay_api_key_env };
+        let o = odoo::Odoo::new(&cfg.odoo, key_env)?;
+        let snap = Arc::new(RwLock::new(admin::Snapshot::default()));
+        let listener = tokio::net::TcpListener::bind(&cfg.modules.admin_bind).await?;
+        info!(bind = %cfg.modules.admin_bind, "admin listening (/healthz /readyz /metrics)");
+        let app = admin::router(snap.clone());
+        set.spawn(async move {
+            admin::refresh_loop(probes, o, snap).await;
+            Err(anyhow!("admin refresh ended"))
+        });
+        set.spawn(async move {
+            axum::serve(listener, app).await?;
+            Err(anyhow!("admin server stopped"))
         });
     }
     // Bất kỳ task nào dừng là một sự cố: báo và thoát để supervisor khởi động lại (review P8).

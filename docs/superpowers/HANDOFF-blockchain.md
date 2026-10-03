@@ -33,6 +33,7 @@ Nguồn: gap analysis `/.superpowers/blockchain-gap-analysis.md` (GA), spec roun
 | #12 | Quy trình xoá dữ liệu cá nhân `payer_address ↔ partner` (trung lập thị trường) | I§1.3 |
 | #13 | Zether (verifier, registry, `rollOverSigned`), mesh libp2p, regulated token, tender, vesting, Celo CIP-64 / `l1_batch` | A§7–§10 |
 | #14 | `cancelMetaNonce` cho người dùng, QR tự relay/e-cheque, QR EIP-681 | canon M11 |
+| #15 | Drift A/C cho họ không phải EVM (adapter cần `balanceOf` + event chuyển khoản tới ví nhận); CI cho suite bridge cần repo `bamboo_idempotency` (biến `BAMBOO_IDEMPOTENCY_REPO`) | R56, R52 |
 
 ## 3. Hợp nhất với `feat/territory-document-tier` (coordinator làm)
 

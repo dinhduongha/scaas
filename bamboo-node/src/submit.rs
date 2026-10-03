@@ -4,6 +4,7 @@
 //! bỏ thì nonce của nó được lấp bằng tx 0-value tự chuyển. `final` của job KHÔNG đến từ đây mà từ
 //! indexer (`MetaTransactionExecuted`), nên một meta-tx được người khác thực thi vẫn thành `final`.
 use std::collections::{BTreeMap, VecDeque};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use alloy::primitives::{Address, Bytes, B256};
@@ -14,12 +15,15 @@ use tokio::sync::mpsc;
 use tracing::{info, warn};
 
 use crate::abi::IMetaToken;
+use crate::breaker::Breaker;
 use crate::chain::{Chain, SimError};
 use crate::config::ChainCfg;
 use crate::nonce::{bump, plan, Inflight};
 use crate::odoo::{Job, Odoo, Report};
 
 const GAP_FILL_GAS: u64 = 21_000;
+/// Nhịp lấy mẫu base fee + số dư lane cho cầu dao (R55).
+const SAMPLE_EVERY: Duration = Duration::from_secs(15);
 
 /// Một việc cần lên chain: job outbox Odoo (`job_id`) hoặc việc của gateway (`None`).
 #[derive(Debug, Clone)]
@@ -67,6 +71,9 @@ pub struct Submitter {
     inflight: BTreeMap<u64, Sent>,
     /// Việc chưa ghi được journal `signed` vào Odoo: chưa gửi, thử lại vòng sau (review I5).
     retry: VecDeque<Work>,
+    breaker: Arc<Mutex<Breaker>>,
+    sampled: Option<Instant>,
+    tripped: Option<&'static str>,
 }
 
 impl Submitter {
@@ -82,7 +89,19 @@ impl Submitter {
             .map(|j| Inflight { job_id: j.job_id, nonce: j.nonce, state: j.state.clone() })
             .collect();
         let p = plan(pending, nc.journal_max_nonce, &jobs);
-        let mut me = Self { chain, odoo, cfg, node_id, next: p.next, inflight: BTreeMap::new(), retry: VecDeque::new() };
+        let breaker = Arc::new(Mutex::new(Breaker::new(cfg.breaker.clone())));
+        let mut me = Self {
+            chain,
+            odoo,
+            cfg,
+            node_id,
+            next: p.next,
+            inflight: BTreeMap::new(),
+            retry: VecDeque::new(),
+            breaker,
+            sampled: None,
+            tripped: None,
+        };
         for n in &p.gap_fill {
             me.gap_fill(*n).await?;
         }
@@ -102,6 +121,54 @@ impl Submitter {
 
     pub fn address(&self) -> Address {
         self.chain.address()
+    }
+
+    /// Cầu dao của lane này (đọc bởi cổng quản trị cho `/metrics`).
+    pub fn breaker(&self) -> Arc<Mutex<Breaker>> {
+        self.breaker.clone()
+    }
+
+    /// Lấy mẫu base fee + số dư (tối đa mỗi `SAMPLE_EVERY`). Lỗi RPC: giữ mẫu cũ, không nhảy cầu dao.
+    pub async fn sample(&mut self) {
+        if self.sampled.is_some_and(|t| t.elapsed() < SAMPLE_EVERY) {
+            return;
+        }
+        self.sampled = Some(Instant::now());
+        let base = match self.chain.primary().get_block_by_number(alloy::eips::BlockNumberOrTag::Latest).await {
+            Ok(b) => b.and_then(|b| b.header.base_fee_per_gas),
+            Err(e) => {
+                warn!("breaker sample (block): {e:#}");
+                None
+            }
+        };
+        let bal = match self.chain.primary().get_balance(self.chain.address()).await {
+            Ok(b) => Some(b.saturating_to::<u128>()),
+            Err(e) => {
+                warn!("breaker sample (balance): {e:#}");
+                None
+            }
+        };
+        if let Ok(mut k) = self.breaker.lock() {
+            if let Some(f) = base {
+                k.base_fee(now(), f.into());
+            }
+            if let Some(b) = bal {
+                k.balance(b);
+            }
+        }
+    }
+
+    /// Cầu dao đang mở ⇒ không nhận việc mới (vẫn theo dõi/thay thế tx đã ký). Log khi đổi trạng thái.
+    pub fn accepting(&mut self) -> bool {
+        let open = self.breaker.lock().map(|mut k| k.open(now())).unwrap_or(None);
+        if open != self.tripped {
+            match open {
+                Some(b) => warn!(chain = self.cfg.evm_chain_number, lane = %self.node_id, breaker = b, "circuit breaker open: new work paused"),
+                None => info!(chain = self.cfg.evm_chain_number, lane = %self.node_id, "circuit breakers closed"),
+            }
+            self.tripped = open;
+        }
+        open.is_none()
     }
 
     async fn report(&self, job: i64, state: &str, hash: Option<B256>, nonce: Option<u64>, err: Option<String>) -> bool {
@@ -211,6 +278,10 @@ impl Submitter {
             let Some(s) = self.inflight.get(&n) else { continue };
             match self.chain.primary().get_transaction_receipt(s.hash).await {
                 Ok(Some(rc)) => {
+                    let paid = u128::from(rc.gas_used).saturating_mul(rc.effective_gas_price);
+                    if let Ok(mut k) = self.breaker.lock() {
+                        k.spend(now(), paid);
+                    }
                     let s = self.inflight.remove(&n).expect("present");
                     if let Some(id) = s.work.and_then(|w| w.job_id) {
                         let st = if rc.status() { "mined" } else { "reverted" };
@@ -310,15 +381,20 @@ impl Submitter {
 
 pub async fn run(mut s: Submitter, mut rx: mpsc::Receiver<Work>, poll: Duration) {
     loop {
-        s.drain_retry().await;
-        s.poll_outbox().await;
-        while let Ok(w) = rx.try_recv() {
-            s.submit(w).await;
+        s.sample().await;
+        // Cầu dao mở: job Odoo nằm yên `queued`, việc gateway đợi trong kênh (đầy ⇒ gateway trả 503).
+        let accepting = s.accepting();
+        if accepting {
+            s.drain_retry().await;
+            s.poll_outbox().await;
+            while let Ok(w) = rx.try_recv() {
+                s.submit(w).await;
+            }
         }
         s.track().await;
         tokio::select! {
             _ = tokio::time::sleep(poll) => {}
-            Some(w) = rx.recv() => s.submit(w).await,
+            Some(w) = rx.recv(), if accepting => s.submit(w).await,
         }
     }
 }

@@ -41,14 +41,14 @@ Files: `dms_blockchain/models/blockchain_token.py` (`journal_id` company_depende
 
 ### Task A5: drift A + C (R56)
 Files: node `indexer.rs` (Transfer logs to receiving wallets), `odoo.rs` (`balance_report`), new `drift.rs` (hourly balanceOf at final height); Odoo `blockchain_chain_event` (`unmatched_inbound`), new `blockchain_balance_snapshot.py`, `node_config` gains `receiving_addresses`, tests.
-- [ ] Tests (Odoo): Transfer in same tx as PaymentSettled ⇒ matched; lone Transfer ⇒ unmatched + attention; balance report equal to GL ⇒ `ok`, different ⇒ `mismatch` + activity.
-- [ ] Tests (node): Transfer decoding filters by `to ∈ receiving`; drift loop posts at final height.
-- [ ] Commit `feat(blockchain): drift checks — unmatched inbound transfers and balance vs GL`.
+- [x] Tests (Odoo): Transfer in same tx as PaymentSettled ⇒ matched; lone Transfer ⇒ unmatched + attention; balance report equal to GL ⇒ `ok`, different ⇒ `mismatch` + activity.
+- [x] Tests (node): Transfer decoding filters by `to ∈ receiving`; drift loop posts at final height.
+- [x] Commit `feat(blockchain): drift checks — unmatched inbound transfers and balance vs GL`.
 
 ### Task A6: admin server /healthz /readyz /metrics (R51)
 Files: node `admin.rs`, `config.rs` (`admin_bind`, `max_index_lag`), `main.rs`; Odoo `blockchain_chain.relay_stats`.
-- [ ] Tests: readiness false when an RPC fails / Odoo fails / lag > bound (unit with fakes); metrics text format golden; Odoo `relay_stats` counts by state + attention, service-only.
-- [ ] Commit `feat(node): admin port with readiness and Prometheus metrics`.
+- [x] Tests: readiness false when an RPC fails / Odoo fails / lag > bound (unit with fakes); metrics text format golden; Odoo `relay_stats` counts by state + attention, service-only.
+- [x] Commit `feat(node): admin port with readiness and Prometheus metrics`.
 
 ### Task A7: gateway auth + proptest (R54)
 Files: node `gateway.rs`, `config.rs`, dev-dep `proptest`.
@@ -57,10 +57,17 @@ Files: node `gateway.rs`, `config.rs`, dev-dep `proptest`.
 
 ### Task A8: circuit breakers (R55)
 Files: node `breaker.rs`, `submit.rs` (check before taking new work), `config.rs`.
-- [ ] Tests: spike ratio trips/clears; hourly budget 90 % warn / 100 % trip / window roll; balance floor per lane; tripped breaker still lets `track()` run.
-- [ ] Commit `feat(node): gas circuit breakers`.
+- [x] Tests: spike ratio trips/clears; hourly budget 90 % warn / 100 % trip / window roll; balance floor per lane; tripped breaker still lets `track()` run.
+- [x] Commit `feat(node): gas circuit breakers`.
 
 ### Task A9: CI (R52)
 Files: `.github/workflows/blockchain-ci.yml`.
-- [ ] Validate YAML parses; job steps mirror local commands.
-- [ ] Commit `ci(blockchain): forge, cargo and Odoo blockchain suites`.
+- [x] Validate YAML parses; job steps mirror local commands.
+- [x] Commit `ci(blockchain): forge, cargo and Odoo blockchain suites`.
+
+## Ghi chú triển khai (S1, round 3)
+- A5: chỉ `Transfer` KHÔNG cùng tx với `PaymentSettled` mới được lưu (cùng khối ⇒ cùng lô ingest); `balance_report`
+  chỉ nhận đúng `height == indexed_block` (khác ⇒ `stale`, node đọc lại sau 20 s); activity chỉ khi lệch **hai lần
+  liên tiếp** (`is_persistent`) vì `account.payment` sinh sau `_set_done` qua post-processing.
+- A6+A8 và A5 nằm chung một commit (main.rs/config.rs đan xen); A9 commit riêng.
+- R55 "< 20 % sàn": hiểu là số dư < 120 % sàn ⇒ cảnh báo (R1-1).

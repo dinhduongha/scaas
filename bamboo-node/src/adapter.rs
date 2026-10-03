@@ -2,7 +2,7 @@
 //! thay thế, gap-fill) nhưng cũng cài trait; các họ khác chạy `lane_runner` — mỗi lane MỘT tx đang bay,
 //! song song giữa các lane (R62: sequence của relayer không thành khoá toàn cục, chủ thể không có
 //! sequence trong đường đi — R30).
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::Result;
@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 use tracing::{info, warn};
 
+use crate::breaker::Breaker;
 use crate::chain::SimError;
 use crate::finality::next_range;
 use crate::odoo::{Job, Odoo, Report};
@@ -99,6 +100,14 @@ pub trait ChainAdapter: Send + Sync {
     /// Event chuẩn hoá cho `chain_event_ingest` trong [from, to]; hash và địa chỉ đã ở dạng chuẩn
     /// (hash `0x`+64 hex; địa chỉ theo họ — R61).
     async fn events(&self, from: u64, to: u64) -> Result<Vec<Value>>;
+    /// Số dư coin gas của lane (đơn vị nhỏ nhất) cho cầu dao sàn số dư (R55). `None` = chưa hỗ trợ.
+    async fn lane_balance(&self, _lane: usize) -> Result<Option<u128>> {
+        Ok(None)
+    }
+    /// Phí thực trả của tx đã vào khối (đơn vị nhỏ nhất) cho ngân sách gas theo giờ (R55).
+    async fn tx_fee(&self, _tx_id: &str) -> Result<Option<u128>> {
+        Ok(None)
+    }
 }
 
 const STATUS_POLL: Duration = Duration::from_millis(500);
@@ -119,11 +128,40 @@ fn rep(job: i64, state: &str) -> Report {
 }
 
 /// Một lane: claim → build/simulate → sign → journal `signed` → submit → theo dõi tới mined/reverted.
-pub async fn lane_runner(adapter: Arc<dyn ChainAdapter>, odoo: Odoo, lane: usize, worker: String, poll: Duration) {
+/// Cầu dao (R55) chỉ chặn việc claim job MỚI; job đang bay của lane được `lane_step` theo dõi tới cùng.
+pub async fn lane_runner(
+    adapter: Arc<dyn ChainAdapter>,
+    odoo: Odoo,
+    lane: usize,
+    worker: String,
+    poll: Duration,
+    breaker: Arc<Mutex<Breaker>>,
+) {
     let key = adapter.chain_key().to_string();
     info!(chain = %key, lane, address = %adapter.lanes()[lane].address, "lane ready");
+    let (mut tripped, mut sampled) = (None, None::<std::time::Instant>);
     loop {
-        match lane_step(adapter.as_ref(), &odoo, lane, &worker).await {
+        if sampled.is_none_or(|t| t.elapsed() >= Duration::from_secs(15)) {
+            sampled = Some(std::time::Instant::now());
+            match adapter.lane_balance(lane).await {
+                Ok(Some(b)) => breaker.lock().map(|mut k| k.balance(b)).unwrap_or(()),
+                Ok(None) => {}
+                Err(e) => warn!(chain = %key, lane, "lane balance: {e:#}"),
+            }
+        }
+        let open = breaker.lock().map(|mut k| k.open(now())).unwrap_or(None);
+        if open != tripped {
+            match open {
+                Some(b) => warn!(chain = %key, lane, breaker = b, "circuit breaker open: new work paused"),
+                None => info!(chain = %key, lane, "circuit breakers closed"),
+            }
+            tripped = open;
+        }
+        if open.is_some() {
+            tokio::time::sleep(poll).await;
+            continue;
+        }
+        match lane_step_metered(adapter.as_ref(), &odoo, lane, &worker, Some(&breaker)).await {
             Ok(true) => continue,
             Ok(false) => {}
             Err(e) => warn!(chain = %key, lane, "lane: {e:#}"),
@@ -134,6 +172,17 @@ pub async fn lane_runner(adapter: Arc<dyn ChainAdapter>, odoo: Odoo, lane: usize
 
 /// `true` = đã xử lý một job (đi tiếp ngay).
 pub async fn lane_step(adapter: &dyn ChainAdapter, odoo: &Odoo, lane: usize, worker: &str) -> Result<bool> {
+    lane_step_metered(adapter, odoo, lane, worker, None).await
+}
+
+/// `lane_step` + ghi phí thực trả của tx đã vào khối vào ngân sách gas của lane.
+pub async fn lane_step_metered(
+    adapter: &dyn ChainAdapter,
+    odoo: &Odoo,
+    lane: usize,
+    worker: &str,
+    breaker: Option<&Mutex<Breaker>>,
+) -> Result<bool> {
     let jobs = odoo.relay_poll_ref(adapter.chain_key().into(), 5).await?;
     let mut job = None;
     for j in jobs {
@@ -169,6 +218,11 @@ pub async fn lane_step(adapter: &dyn ChainAdapter, odoo: &Odoo, lane: usize, wor
     loop {
         match adapter.tx_status(&signed.tx_id).await {
             Ok(TxStatus::Mined { .. }) => {
+                if let (Some(k), Ok(Some(fee))) = (breaker, adapter.tx_fee(&signed.tx_id).await) {
+                    if let Ok(mut k) = k.lock() {
+                        k.spend(now(), fee);
+                    }
+                }
                 report(odoo, rep(job.id, "mined")).await;
                 return Ok(true);
             }

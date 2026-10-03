@@ -47,6 +47,23 @@ pub struct NodeConfig {
     pub journal_max_nonce: Option<u64>,
     #[serde(default)]
     pub inflight: Vec<InflightJob>,
+    /// Ví nhận đã duyệt (drift R56). Chuỗi theo dạng chuẩn của họ mạng — EVM tự parse.
+    #[serde(default)]
+    pub receiving_addresses: Vec<Receiving>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Receiving {
+    pub token: String,
+    pub address: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct BalanceReport {
+    #[serde(default)]
+    pub stale: bool,
+    #[serde(default)]
+    pub mismatch: u64,
 }
 
 impl NodeConfig {
@@ -178,6 +195,16 @@ impl Odoo {
     pub async fn relay_report(&self, r: &Report) -> Result<()> {
         let _: Value = self.call("blockchain.relay.job", "relay_report", serde_json::to_value(r)?).await?;
         Ok(())
+    }
+
+    /// Drift C (R56): số dư ví nhận tại `height` (= cursor đã index). `stale` = cursor đã đi tiếp, đọc lại.
+    pub async fn balance_report(&self, chain_key: &str, height: u64, balances: &[Value]) -> Result<BalanceReport> {
+        self.call(
+            "blockchain.chain",
+            "balance_report",
+            json!({"chain_key": chain_key, "height": height, "balances": balances}),
+        )
+        .await
     }
 
     pub async fn ingest(&self, chain: u64, from: u64, to: u64, hash: &str, events: &[Value]) -> Result<IngestResult> {

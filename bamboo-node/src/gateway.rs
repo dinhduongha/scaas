@@ -89,8 +89,10 @@ fn sim_reply(e: SimError) -> Reply {
 }
 
 async fn enqueue(c: &GwChain, w: Work, status: &str) -> Reply {
-    if c.tx.send(w).await.is_err() {
-        return (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error": "submit stopped"})));
+    // try_send: lane đứng (cầu dao mở, R55) ⇒ kênh đầy ⇒ 503 ngay, không treo request.
+    if let Err(e) = c.tx.try_send(w) {
+        let why = if matches!(e, mpsc::error::TrySendError::Full(_)) { "submit busy" } else { "submit stopped" };
+        return (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error": why})));
     }
     (StatusCode::ACCEPTED, Json(json!({"status": status})))
 }

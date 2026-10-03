@@ -153,4 +153,18 @@ impl ChainAdapter for EvmAdapter {
         ]);
         Ok(self.chains[0].primary().get_logs(&f).await?.iter().filter_map(encode_event).collect())
     }
+
+    async fn lane_balance(&self, lane: usize) -> Result<Option<u128>> {
+        let c = self.lane(lane)?;
+        Ok(Some(c.primary().get_balance(c.address()).await?.saturating_to()))
+    }
+
+    async fn tx_fee(&self, tx_id: &str) -> Result<Option<u128>> {
+        let hash: B256 = tx_id.parse()?;
+        Ok(self.chains[0]
+            .primary()
+            .get_transaction_receipt(hash)
+            .await?
+            .map(|rc| u128::from(rc.gas_used).saturating_mul(rc.effective_gas_price)))
+    }
 }

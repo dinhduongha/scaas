@@ -21,6 +21,7 @@ sol! {
             uint256 nonce, bytes32 digest, address feeRecipient, uint256 fee);
         event PaymentSettled(address indexed from, address indexed to, uint256 amount, uint256 feeAmount,
             address feeRecipient, bytes32 indexed entryRef);
+        event Transfer(address indexed from, address indexed to, uint256 value);
         error MetaTxExpired(uint256 validUntil, uint256 nowTs);
         error MetaTxBadNonce(uint256 expected, uint256 got);
         error MetaTxBadSignature();

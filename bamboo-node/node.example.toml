@@ -18,6 +18,7 @@ gateway_bind = "127.0.0.1:8547"                  # behind a reverse proxy (per-I
 #       ts "." nonce "." METHOD " " path?query "\n" body)); 300 s skew, nonce single-use.
 # gateway_auth = "hmac"
 # gateway_secret_env = "BAMBOO_GATEWAY_SECRET"   # >= 16 bytes
+admin_bind = "127.0.0.1:9108"                    # /healthz /readyz /metrics (R51); "" disables
 
 # One 24-word BIP-39 mnemonic for every lane that has no private_key of its own (R60).
 # Lanes derive per family by SLIP-44: evm m/44'/60'/0'/0/i, hedera m/44'/3030'/0'/0/i,
@@ -41,3 +42,7 @@ poll_ms = 1000
 stuck_after_secs = 60
 max_gas_per_tx = 3000000
 max_fee_cap_gwei = 500
+max_index_lag = 100                              # /readyz fails when final head - indexed > this
+# Gas circuit breakers (R55), per lane; they pause NEW work only, signed txs are still tracked/replaced.
+# Amounts in the gas coin's smallest unit (wei); strings for values above 2^63.
+breaker = { spike_ratio = 3.0, gas_budget_per_hour = "50000000000000000", min_relayer_balance = "100000000000000000" }

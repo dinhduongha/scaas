@@ -2,7 +2,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use alloy::primitives::Address;
+use alloy::primitives::{Address, B256};
 use alloy::providers::Provider;
 use alloy::rpc::types::{Filter, Log};
 use alloy::sol_types::SolEvent;
@@ -36,6 +36,12 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         v["fee"] = json!(e.feeAmount.to_string());
         v["fee_recipient"] = json!(format!("{:#x}", e.feeRecipient));
         v["entry_ref"] = json!(format!("{:#x}", e.entryRef));
+    } else if topic0 == IMetaToken::Transfer::SIGNATURE_HASH {
+        let e = log.log_decode::<IMetaToken::Transfer>().ok()?.inner.data;
+        v["event"] = json!("Transfer");
+        v["from"] = json!(format!("{:#x}", e.from));
+        v["to"] = json!(format!("{:#x}", e.to));
+        v["amount"] = json!(e.value.to_string());
     } else if topic0 == IMetaToken::MetaTransactionExecuted::SIGNATURE_HASH {
         let e = log.log_decode::<IMetaToken::MetaTransactionExecuted>().ok()?.inner.data;
         v["event"] = json!("MetaTransactionExecuted");
@@ -50,6 +56,24 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         return None;
     }
     Some(v)
+}
+
+/// Cặp (token, ví nhận) đã duyệt; Odoo gửi dạng chuẩn, cặp nào không parse được thì bỏ.
+pub fn receiving_pairs(nc: &crate::odoo::NodeConfig) -> Vec<(Address, Address)> {
+    nc.receiving_addresses
+        .iter()
+        .filter_map(|r| Some((r.token.parse().ok()?, r.address.parse().ok()?)))
+        .collect()
+}
+
+/// Drift A (R56): chỉ giữ `Transfer` của đúng token tới đúng ví nhận của token đó.
+pub fn inbound(events: Vec<Value>, pairs: &[(Address, Address)]) -> Vec<Value> {
+    let key = |v: &Value, k: &str| v[k].as_str().and_then(|s| s.parse::<Address>().ok());
+    events
+        .into_iter()
+        .filter(|v| v["event"] == "Transfer")
+        .filter(|v| matches!((key(v, "contract"), key(v, "to")), (Some(c), Some(t)) if pairs.contains(&(c, t))))
+        .collect()
 }
 
 pub async fn run(chain: Arc<Chain>, odoo: Odoo, poll: Duration) {
@@ -90,6 +114,20 @@ pub async fn step(chain: &Chain, odoo: &Odoo) -> anyhow::Result<bool> {
         ]);
         chain.primary().get_logs(&f).await?.iter().filter_map(encode_event).collect()
     };
+    let mut events = events;
+    let pairs = receiving_pairs(&nc);
+    if !pairs.is_empty() {
+        let tokens: Vec<Address> = pairs.iter().map(|p| p.0).collect();
+        let wallets: Vec<B256> = pairs.iter().map(|p| p.1.into_word()).collect();
+        let f = Filter::new()
+            .from_block(from)
+            .to_block(to)
+            .address(tokens)
+            .event_signature(IMetaToken::Transfer::SIGNATURE_HASH)
+            .topic2(wallets);
+        let logs = chain.primary().get_logs(&f).await?;
+        events.extend(inbound(logs.iter().filter_map(encode_event).collect(), &pairs));
+    }
     let r = odoo.ingest(chain.number, from, to, &format!("{hash:#x}"), &events).await?;
     info!(chain = chain.number, from, to, created = r.created, "ingested");
     Ok(r.indexed_block >= to)
@@ -144,6 +182,27 @@ mod tests {
         assert_eq!(v["event"], "MetaTransactionExecuted");
         assert_eq!(v["digest"], format!("{:#x}", B256::repeat_byte(5)));
         assert_eq!(v["batch"], "7");
+    }
+
+    #[test]
+    fn transfers_are_kept_only_to_the_receiving_wallet_of_that_token() {
+        let (token, shop) = (Address::repeat_byte(9), Address::repeat_byte(0x5a));
+        let ev = |to: Address| {
+            let t = IMetaToken::Transfer { from: Address::repeat_byte(7), to, value: U256::from(5u64) };
+            encode_event(&log_of(t.encode_log_data())).unwrap()
+        };
+        let v = ev(shop);
+        assert_eq!((v["event"].as_str(), v["amount"].as_str()), (Some("Transfer"), Some("5")));
+        assert_eq!(v["to"], format!("{shop:#x}"));
+        let kept = inbound(vec![ev(shop), ev(Address::repeat_byte(1))], &[(token, shop)]);
+        assert_eq!(kept.len(), 1);
+        assert!(inbound(vec![ev(shop)], &[(Address::repeat_byte(8), shop)]).is_empty(), "other token's wallet");
+        let nc: crate::odoo::NodeConfig = serde_json::from_value(json!({
+            "finality_mode": "depth", "finality_depth": 1, "finality_quorum": 1, "indexed_block": 0,
+            "journal_max_nonce": null, "tokens": [],
+            "receiving_addresses": [{"token": format!("{token:#x}"), "address": format!("{shop:#x}")},
+                                    {"token": "CABC", "address": "GXYZ"}]})).unwrap();
+        assert_eq!(receiving_pairs(&nc), vec![(token, shop)], "non-EVM forms are skipped, not fatal");
     }
 
     #[test]

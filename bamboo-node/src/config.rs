@@ -48,6 +48,9 @@ pub struct Modules {
     pub gateway_auth: String,
     #[serde(default)]
     pub gateway_secret_env: Option<String>,
+    /// Cổng quản trị `/healthz` `/readyz` `/metrics`, tách khỏi gateway (R51). Chuỗi rỗng = tắt.
+    #[serde(default = "default_admin_bind")]
+    pub admin_bind: String,
 }
 
 impl Default for Modules {
@@ -59,6 +62,7 @@ impl Default for Modules {
             gateway_bind: default_bind(),
             gateway_auth: auth_none(),
             gateway_secret_env: None,
+            admin_bind: default_admin_bind(),
         }
     }
 }
@@ -108,6 +112,66 @@ pub struct ChainCfg {
     pub max_gas_per_tx: u64,
     #[serde(default = "default_fee_cap")]
     pub max_fee_cap_gwei: u64,
+    /// Cầu dao gas (R55).
+    #[serde(default)]
+    pub breaker: BreakerCfg,
+    /// `/readyz` đỏ khi `đỉnh final − indexed_block` vượt ngưỡng này (R51).
+    #[serde(default = "default_max_lag")]
+    pub max_index_lag: u64,
+}
+
+/// R55. Số tiền theo đơn vị nhỏ nhất của coin gas: số nguyên TOML hoặc chuỗi (vượt i64).
+#[derive(Debug, Clone, Deserialize)]
+pub struct BreakerCfg {
+    /// Base fee hiện tại > `spike_ratio` × trung bình 1 h ⇒ ngưng nhận job mới (EVM). 0 = tắt.
+    #[serde(default = "default_spike")]
+    pub spike_ratio: f64,
+    #[serde(default, deserialize_with = "amount")]
+    pub gas_budget_per_hour: Option<u128>,
+    #[serde(default, deserialize_with = "amount")]
+    pub min_relayer_balance: Option<u128>,
+}
+
+impl Default for BreakerCfg {
+    fn default() -> Self {
+        Self { spike_ratio: default_spike(), gas_budget_per_hour: None, min_relayer_balance: None }
+    }
+}
+
+fn amount<'de, D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Option<u128>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum A {
+        N(u64),
+        S(String),
+    }
+    match A::deserialize(d)? {
+        A::N(n) => Ok(Some(n.into())),
+        A::S(s) => s.trim().parse().map(Some).map_err(serde::de::Error::custom),
+    }
+}
+
+impl Default for ChainCfg {
+    fn default() -> Self {
+        Self {
+            family: evm(),
+            network: None,
+            evm_chain_number: 0,
+            rpc_urls: vec![],
+            signer_key_env: String::new(),
+            private_key: None,
+            lanes: lane0(),
+            params: Default::default(),
+            finality: default_finality(),
+            dex: None,
+            poll_ms: default_poll(),
+            stuck_after_secs: default_stuck(),
+            max_gas_per_tx: default_max_gas(),
+            max_fee_cap_gwei: default_fee_cap(),
+            breaker: BreakerCfg::default(),
+            max_index_lag: default_max_lag(),
+        }
+    }
 }
 
 fn yes() -> bool {
@@ -142,6 +206,15 @@ fn default_max_gas() -> u64 {
 }
 fn default_fee_cap() -> u64 {
     500
+}
+fn default_spike() -> f64 {
+    3.0
+}
+fn default_max_lag() -> u64 {
+    100
+}
+fn default_admin_bind() -> String {
+    "127.0.0.1:9108".into()
 }
 
 impl Config {
@@ -312,6 +385,21 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         c.validate().unwrap();
         let c: Config = toml::from_str(&OK.replace("[[chains]]", "[modules]\ngateway = true\n[[chains]]")).unwrap();
         c.validate().unwrap();  // loopback default bind may stay open
+    }
+
+    #[test]
+    fn breaker_amounts_accept_integers_and_big_strings() {
+        let raw = OK.replace("finality =", "breaker = { gas_budget_per_hour = 5000, min_relayer_balance = \"100000000000000000000\" }\nfinality =");
+        let c: Config = toml::from_str(&raw).unwrap();
+        let b = &c.chains[0].breaker;
+        assert_eq!(b.gas_budget_per_hour, Some(5000));
+        assert_eq!(b.min_relayer_balance, Some(100_000_000_000_000_000_000));
+        assert_eq!(b.spike_ratio, 3.0);
+        let c: Config = toml::from_str(OK).unwrap();
+        assert_eq!(c.chains[0].breaker.min_relayer_balance, None);
+        assert_eq!(c.chains[0].max_index_lag, 100);
+        assert_eq!(c.modules.admin_bind, "127.0.0.1:9108");
+        assert!(toml::from_str::<Config>(&OK.replace("finality =", "breaker = { gas_budget_per_hour = \"x\" }\nfinality =")).is_err());
     }
 
     #[test]

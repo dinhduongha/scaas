@@ -119,6 +119,10 @@ Theo chain, trong node (bộ nhớ, đặt lại khi khởi động):
   `blockchain.balance.snapshot` và so **tổng** số dư mọi ví nhận đã duyệt của (công ty, token) với **số dư GL** của
   journal token của công ty đó (đổi về đơn vị cơ sở; review S16 — quét sang ví lạnh phải hạch toán thì hết lệch). Lệch
   ≠ 0 ⇒ `drift_state = 'mismatch'` + activity cho người duyệt ví. Không tự sửa sổ.
+- Triển khai (S1): báo cáo chỉ được so khi `height` = cursor đã index (khác ⇒ `stale`, node đọc lại); sổ = các dòng
+  posted của journal token trên tài khoản ngân hàng + mọi tài khoản outstanding mà payment của journal đã dùng;
+  activity khi lệch kéo dài hai ảnh chụp liên tiếp (một lần lệch là độ trễ post-processing của `payment`).
+  Họ không phải EVM: chưa có drift (adapter chưa có `balanceOf`/Transfer) — ghi ở HANDOFF.
 
 ### A.9 Seam cho nhánh territory + đổi tên "Host" (GA 2.3#13, #14, §2.4) — R57
 
