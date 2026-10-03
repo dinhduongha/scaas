@@ -164,6 +164,12 @@ def bls_non_subgroup():
         x += 1
 
 
+def bn254_g2_pubkey(sk):
+    """[sk]G2 trên bn254, thứ tự EIP-197: x_im, x_re, y_im, y_re."""
+    x, y = bn.normalize(bn.multiply(bn.G2, sk))
+    return be(int(x.coeffs[1])) + be(int(x.coeffs[0])) + be(int(y.coeffs[1])) + be(int(y.coeffs[0]))
+
+
 def dump(name, obj):
     with open(os.path.join(HERE, name), "w") as f:
         json.dump(obj, f, indent=1)
@@ -177,5 +183,6 @@ if __name__ == "__main__":
     msg = keccak(b"bamboo zether schnorr kat")
     dump("schnorr_bn254.json", schnorr("bn254", 0x1234567890abcdef, 0xfeedface, msg))
     dump("schnorr_bls12381.json", schnorr("bls12381", 0x1234567890abcdef, 0xfeedface, msg))
-    dump("curve_misc.json", {"blsNonSubgroup": hx(bls_non_subgroup())})
+    dump("curve_misc.json", {"blsNonSubgroup": hx(bls_non_subgroup()),
+                             "bn254G2Sk": hx(be(0xB15B254)), "bn254G2Pk": hx(bn254_g2_pubkey(0xB15B254))})
     print("ok")
