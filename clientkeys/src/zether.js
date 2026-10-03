@@ -160,7 +160,7 @@ export function popMessage(curve, registry, Y, account) {
   const acct = fromHex(account);
   if (reg.length !== 20 || acct.length !== 20) throw new Error('registry and account are addresses');
   const y = fromHex(Y);
-  curveOf(curve);
+  if (y.length !== 2 * curveOf(curve).coordLen) throw new Error('wrong point length');
   return keccak_256(concatBytes(reg, y, acct));
 }
 

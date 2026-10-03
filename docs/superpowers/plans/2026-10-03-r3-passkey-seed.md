@@ -32,6 +32,13 @@ DB `dms_test_chain_4` / 8924, anvil 31940–31949.
   mỗi lúc. `reverted` không tiêu nonce (receipt hỏng ⇒ không `mined`).
 - **RS4-8** Vault seed: khoá dữ liệu ngẫu nhiên (DEK) mã hoá seed bằng AES-GCM (IV 12 byte mới mỗi lần); DEK bọc
   bằng PIN qua scrypt (salt 16 byte, N=2^15, r=8, p=1) **luôn có**, và thêm phong bì PRF khi passkey hỗ trợ.
+- **RS4-9** Khoá Zether conf (R33) dẫn xuất **trong `clientkeys` bằng JS** (`@noble/curves` bn254 + BLS12-381,
+  `@noble/hashes` HKDF), không cần wasm của S3 chỉ để đăng ký: EIP-2333 đúng cho BLS12-381
+  (`m/12381/<coin>/<acct>/7`), biến thể bn254 salt `BAMBOO-ZETHER-BN254-v1` (`m/254/…`), `Y`, `UA`, PoP Schnorr
+  ràng account chủ thể. Khớp từng byte với `zether-prover` (S3): vector `r33_keys.json`, `schnorr_*.json` chép
+  nguyên văn vào `clientkeys/test/vectors/` + 4 vector EIP-2333 công bố. Nonce Schnorr hedged
+  `sha512(x ‖ msg ‖ CSPRNG) mod r` (khác cách S3 nhưng chỉ cần verify chéo; với `k` cố định thì trùng byte).
+  Entry lười riêng `zether-keys.js` để bundle seed không phình. `x` niêm phong bằng vault như seed.
 
 ## Task
 
@@ -42,7 +49,10 @@ DB `dms_test_chain_4` / 8924, anvil 31940–31949.
    (RS4-8), backup show-once; bundle esbuild ⇒ `dms_blockchain_bridge/static/lib/clientkeys/`.
 3. Odoo: `blockchain.subject.account` (+ key), deploy job, payer = account, submit `contract`, add-key owner call.
 4. Portal: chọn signer EIP-6963 | passkey | seed (nạp lười), tour authenticator giả + seed giả.
-5. Review agy (plan + diff), full suites, báo cáo.
+5. Khoá Zether conf R33 trong `clientkeys` (RS4-9), vector S3.
+6. Review agy (plan + diff), full suites, báo cáo.
+
+Trạng thái: 1–5 xong (commit e402f11, ec46749, 37eaaf6, 6371055, e186bbb).
 
 ## Review log
 
