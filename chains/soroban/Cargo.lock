@@ -182,6 +182,7 @@ dependencies = [
 name = "bamboo-dex"
 version = "0.1.0"
 dependencies = [
+ "bamboo-token",
  "soroban-sdk",
 ]
 
