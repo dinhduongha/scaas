@@ -13,6 +13,11 @@ submit = true
 indexer = true
 gateway = true
 gateway_bind = "127.0.0.1:8547"                  # behind a reverse proxy (per-IP rate limit there)
+# gateway_auth = "none" is refused on a non-loopback bind (R54). bearer: "Authorization: Bearer <secret>".
+# hmac: X-Bamboo-Timestamp, X-Bamboo-Nonce, X-Bamboo-Signature = hex(HMAC-SHA256(secret,
+#       ts "." nonce "." METHOD " " path?query "\n" body)); 300 s skew, nonce single-use.
+# gateway_auth = "hmac"
+# gateway_secret_env = "BAMBOO_GATEWAY_SECRET"   # >= 16 bytes
 
 # One 24-word BIP-39 mnemonic for every lane that has no private_key of its own (R60).
 # Lanes derive per family by SLIP-44: evm m/44'/60'/0'/0/i, hedera m/44'/3030'/0'/0/i,

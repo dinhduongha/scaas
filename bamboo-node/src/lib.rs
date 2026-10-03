@@ -7,6 +7,7 @@ pub mod config;
 pub mod dex;
 pub mod finality;
 pub mod gateway;
+pub mod gwauth;
 pub mod indexer;
 pub mod keys;
 pub mod metatx;

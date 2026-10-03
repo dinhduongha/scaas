@@ -43,11 +43,23 @@ pub struct Modules {
     pub gateway: bool,
     #[serde(default = "default_bind")]
     pub gateway_bind: String,
+    /// `none` (chỉ khi bind loopback) | `bearer` | `hmac` (R54).
+    #[serde(default = "auth_none")]
+    pub gateway_auth: String,
+    #[serde(default)]
+    pub gateway_secret_env: Option<String>,
 }
 
 impl Default for Modules {
     fn default() -> Self {
-        Self { submit: true, indexer: true, gateway: false, gateway_bind: default_bind() }
+        Self {
+            submit: true,
+            indexer: true,
+            gateway: false,
+            gateway_bind: default_bind(),
+            gateway_auth: auth_none(),
+            gateway_secret_env: None,
+        }
     }
 }
 
@@ -101,6 +113,9 @@ pub struct ChainCfg {
 fn yes() -> bool {
     true
 }
+fn auth_none() -> String {
+    "none".into()
+}
 fn evm() -> String {
     "evm".into()
 }
@@ -140,6 +155,16 @@ impl Config {
     pub fn validate(&self) -> Result<()> {
         if self.chains.is_empty() {
             bail!("no [[chains]]");
+        }
+        if self.modules.gateway && self.modules.gateway_auth == "none" {
+            let host = self.modules.gateway_bind.rsplit_once(':').map(|(h, _)| h).unwrap_or("");
+            let loopback = matches!(host, "127.0.0.1" | "localhost" | "[::1]" | "::1");
+            if !loopback {
+                bail!("gateway on {} without authentication: set gateway_auth = bearer|hmac", self.modules.gateway_bind);
+            }
+        }
+        if self.modules.gateway_auth != "none" && self.modules.gateway_secret_env.is_none() {
+            bail!("gateway_auth {} needs gateway_secret_env", self.modules.gateway_auth);
         }
         let mut seen = std::collections::HashSet::new();
         for c in &self.chains {
@@ -276,6 +301,17 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         assert!(c.validate().is_err(), "no key at all");
         let c: Config = toml::from_str(&OK.replace("evm_chain_number = 9000\n", "")).unwrap();
         assert!(c.validate().is_err(), "evm needs a chain id");
+    }
+
+    #[test]
+    fn open_gateway_must_be_authenticated() {
+        let raw = OK.replace("[[chains]]", "[modules]\ngateway = true\ngateway_bind = \"0.0.0.0:8547\"\n[[chains]]");
+        let c: Config = toml::from_str(&raw).unwrap();
+        assert!(c.validate().is_err());
+        let c: Config = toml::from_str(&raw.replace("gateway = true", "gateway = true\ngateway_auth = \"hmac\"\ngateway_secret_env = \"S\"")).unwrap();
+        c.validate().unwrap();
+        let c: Config = toml::from_str(&OK.replace("[[chains]]", "[modules]\ngateway = true\n[[chains]]")).unwrap();
+        c.validate().unwrap();  // loopback default bind may stay open
     }
 
     #[test]

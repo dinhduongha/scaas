@@ -20,24 +20,24 @@
 
 ### Task A1: custody `env:` dev-only, OpenSSL signing (R50)
 Files: `dms_blockchain/lib/custody.py`, `models/blockchain_chain.py` (`is_dev_chain`), `models/blockchain_paying_wallet.py`, tests `tests/test_custody.py`.
-- [ ] Tests: without `dms_blockchain.allow_dev_custody` ⇒ `custody.address('env:X')` raises; with flag but wallet on non-dev chain ⇒ approve and `_sign_digest` raise; with both ⇒ signature recovers to address, s ≤ n/2; adapter signs via `cryptography` (assert the pure-Python `sign` is not called — patch it to raise).
-- [ ] Impl: `custody.register` unchanged; `EnvAdapter` registered lazily by `custody.dev_adapter(env)` check; `_sign_digest` passes chain dev flag.
-- [ ] Commit `feat(blockchain): env custody is dev-only and signs through OpenSSL`.
+- [x] Tests: without `dms_blockchain.allow_dev_custody` ⇒ `custody.address('env:X')` raises; with flag but wallet on non-dev chain ⇒ approve and `_sign_digest` raise; with both ⇒ signature recovers to address, s ≤ n/2; adapter signs via `cryptography` (assert the pure-Python `sign` is not called — patch it to raise).
+- [x] Impl: `custody.register` unchanged; `EnvAdapter` registered lazily by `custody.dev_adapter(env)` check; `_sign_digest` passes chain dev flag.
+- [x] Commit `feat(blockchain): env custody is dev-only and signs through OpenSSL`.
 
 ### Task A2: pause stops submission only (R53)
 Files: `models/blockchain_chain.py` (state `halted`, `_for_indexing`, `_for_submission`), `blockchain_relay_job.relay_poll`, `blockchain_chain_event.chain_event_ingest`; node `submit.rs` treats a refused poll as idle.
-- [ ] Tests: paused ⇒ `relay_poll` == [], `node_config` OK, ingest OK; halted ⇒ ingest refused; draft ⇒ all refused.
-- [ ] Commit `feat(blockchain): pausing a chain stops submission, not indexing`.
+- [x] Tests: paused ⇒ `relay_poll` == [], `node_config` OK, ingest OK; halted ⇒ ingest refused; draft ⇒ all refused.
+- [x] Commit `feat(blockchain): pausing a chain stops submission, not indexing`.
 
 ### Task A3: seams + platform company (R57, GA 2.3 #13/#14)
 Files: `dms_blockchain/models/blockchain_receiving_wallet.py`, bridge `dms_portal_api.py`, `sale_order.py`, tests.
-- [ ] Tests: provider lookup/offered/start/staff note all use `_dms_chain_receiving_company` (patch it to another company ⇒ every path follows); platform company reads new param, falls back to old param and main company.
-- [ ] Commit `refactor(blockchain): one receiving-company seam, "platform company" naming`.
+- [x] Tests: provider lookup/offered/start/staff note all use `_dms_chain_receiving_company` (patch it to another company ⇒ every path follows); platform company reads new param, falls back to old param and main company.
+- [x] Commit `refactor(blockchain): one receiving-company seam, "platform company" naming`.
 
 ### Task A4: journal per (company, token) (R56)
 Files: `dms_blockchain/models/blockchain_token.py` (`journal_id` company_dependent), `dms_blockchain_payment/models/payment_transaction.py` (`_create_payment` journal override + method line ensured), views, tests.
-- [ ] Tests: token journal set ⇒ `account.payment.journal_id` == token journal, invoice reconciled; unset ⇒ provider journal.
-- [ ] Commit `feat(blockchain): payments post to the token's journal of the receiving company`.
+- [x] Tests: token journal set ⇒ `account.payment.journal_id` == token journal, invoice reconciled; unset ⇒ provider journal.
+- [x] Commit `feat(blockchain): payments post to the token's journal of the receiving company`.
 
 ### Task A5: drift A + C (R56)
 Files: node `indexer.rs` (Transfer logs to receiving wallets), `odoo.rs` (`balance_report`), new `drift.rs` (hourly balanceOf at final height); Odoo `blockchain_chain_event` (`unmatched_inbound`), new `blockchain_balance_snapshot.py`, `node_config` gains `receiving_addresses`, tests.
@@ -52,8 +52,8 @@ Files: node `admin.rs`, `config.rs` (`admin_bind`, `max_index_lag`), `main.rs`; 
 
 ### Task A7: gateway auth + proptest (R54)
 Files: node `gateway.rs`, `config.rs`, dev-dep `proptest`.
-- [ ] Tests: bearer ok/wrong/missing; hmac ok/stale/wrong; `none` + `0.0.0.0` bind ⇒ config error; proptest: arbitrary JSON bodies never panic `WireMetaTx::to_sol`/handlers' parsers.
-- [ ] Commit `feat(node): gateway authentication and fuzzed decoders`.
+- [x] Tests: bearer ok/wrong/missing; hmac ok/stale/wrong; `none` + `0.0.0.0` bind ⇒ config error; proptest: arbitrary JSON bodies never panic `WireMetaTx::to_sol`/handlers' parsers.
+- [x] Commit `feat(node): gateway authentication and fuzzed decoders`.
 
 ### Task A8: circuit breakers (R55)
 Files: node `breaker.rs`, `submit.rs` (check before taking new work), `config.rs`.

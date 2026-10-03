@@ -1,5 +1,5 @@
-//! Mô-đun `gateway`: relayer mở (SRS §4.9.4). Không xác thực; giới hạn kích thước và đồng thời
-//! (mỗi request tốn một `eth_call`). Đặt sau reverse proxy cho rate-limit theo IP.
+//! Mô-đun `gateway`: relayer mở (SRS §4.9.4). Xác thực là lớp bọc ngoài (`gwauth`, R54); ở đây chỉ giới hạn
+//! kích thước và đồng thời (mỗi request tốn một `eth_call`). Đặt sau reverse proxy cho rate-limit theo IP.
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 

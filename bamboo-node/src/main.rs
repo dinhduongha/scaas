@@ -14,7 +14,7 @@ use std::time::Duration;
 use anyhow::{anyhow, bail, Context, Result};
 use bamboo_node::adapter::{index_runner, lane_runner};
 use bamboo_node::signer::Signer;
-use bamboo_node::{adapters, chain, config, dex, gateway, indexer, keys, odoo, submit};
+use bamboo_node::{adapters, chain, config, dex, gateway, gwauth, indexer, keys, odoo, submit};
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
@@ -168,7 +168,12 @@ async fn main() -> Result<()> {
         }
     }
     if cfg.modules.gateway {
-        let app = gateway::router(gateway::AppState { chains: Arc::new(gw_chains) });
+        let secret = match &cfg.modules.gateway_secret_env {
+            Some(v) => Some(std::env::var(v).with_context(|| format!("environment variable {v} is not set"))?.into_bytes()),
+            None => None,
+        };
+        let auth = gwauth::Auth::from_mode(&cfg.modules.gateway_auth, secret)?;
+        let app = gwauth::wrap(gateway::router(gateway::AppState { chains: Arc::new(gw_chains) }), auth);
         let listener = tokio::net::TcpListener::bind(&cfg.modules.gateway_bind).await?;
         info!(bind = %cfg.modules.gateway_bind, "gateway listening");
         set.spawn(async move {
