@@ -172,6 +172,7 @@ struct MetaOp {
 }
 
 struct TradeParams {
+    tokenIn: Address;
     tokenOut: Address;
     minOut: Int;
     counterparty: Address?;
@@ -211,6 +212,7 @@ fun parseMetaOp(c: Cell): MetaOp {
 
 fun parseTradeParams(c: Cell): TradeParams {
     let s = c.beginParse();
+    let tokenIn = s.loadAddress();
     let tokenOut = s.loadAddress();
     let minOut = s.loadUint(128);
     let counterparty: Address? = null;
@@ -221,7 +223,7 @@ fun parseTradeParams(c: Cell): TradeParams {
     }
     let maxFeePpm = s.loadUint(32);
     s.endParse();
-    return TradeParams { tokenOut, minOut, counterparty, maxFeePpm };
+    return TradeParams { tokenIn, tokenOut, minOut, counterparty, maxFeePpm };
 }
 
 /// Global id of the network (config param 19), the network half of the signing domain (R10-4).
@@ -302,13 +304,14 @@ fun b64urlChar(v: Int): Int {
 
 /// base64url (no padding) of a 32-byte value: 43 characters.
 fun b64url32(x: Int): Slice {
-    let v = x << 2; // 258 bits = 43 sextets
+    // 256 bits padded to 258 = 43 sextets; never shift left (Int is 257-bit signed).
     let b = beginCell();
     let i = 42;
-    while (i >= 0) {
-        b = b.storeUint(b64urlChar((v >> (i * 6)) & 63), 8);
+    while (i > 0) {
+        b = b.storeUint(b64urlChar((x >> (i * 6 - 2)) & 63), 8);
         i -= 1;
     }
+    b = b.storeUint(b64urlChar((x & 15) << 2), 8);
     return b.asSlice();
 }
 

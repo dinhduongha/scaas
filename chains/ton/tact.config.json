@@ -1,6 +1,8 @@
 {
   "$schema": "http://raw.githubusercontent.com/tact-lang/tact/main/src/config/configSchema.json",
   "projects": [
-    { "name": "jetton", "path": "./contracts/jetton.tact", "output": "./build/jetton", "options": { "debug": false } }
+    { "name": "jetton", "path": "./contracts/jetton.tact", "output": "./build/jetton" },
+    { "name": "mandate", "path": "./contracts/mandate.tact", "output": "./build/mandate" },
+    { "name": "dex", "path": "./contracts/dex.tact", "output": "./build/dex" }
   ]
 }

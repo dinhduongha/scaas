@@ -175,6 +175,8 @@ describe('BambooJettonWallet meta-tx (R30, R67)', () => {
         expect((await aw.getGetPasskey())!.hash().equals(rec.hash())).toBe(true);
 
         const fields = { op: OP.pay, network, amount: 30n, nonce: 0n, validUntil: 1_800_000_600, contract: aw.address, from: alice.address, to: bob.address, payRef: randomU256(), lane: randomU256(), extra: 0n };
+        // Grind the lane until the digest has its top bit set: base64url must not overflow 257-bit Int.
+        while (metaOpCell(fields).hash()[0] < 0x80) fields.lane = randomU256();
         const op = metaOpCell(fields);
         const send = (auth: any) => aw.send(relayer.getSender(), { value: toNano('0.2') }, { $$type: 'SignedOp', op, auth, params: null, stateInit: null, responseDestination: relayer.address, forwardTon: 0n, matchWith: 0n });
         // wrong origin, missing UV, wrong digest, long client data (two suffix cells) — then the good one
