@@ -132,7 +132,8 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
         IZetherVerifier v = IZetherVerifier(verifier_);
         uint256 p = v.g1EncodedBytes();
         if (
-            underlying_.code.length == 0 || reg.code.length == 0 || scale == 0 || maxShielded == 0
+            underlying_.code.length == 0 || underlying_ == address(this) || reg.code.length == 0 || scale == 0
+                || maxShielded == 0
                 || maxShielded > MAX_TOTAL_SHIELDED || fee >= VALUE_BOUND
                 || (aud.length != 0 && (aud.length != p || !v.isValidPoint(aud) || _isO(aud)))
         ) revert BadInit();

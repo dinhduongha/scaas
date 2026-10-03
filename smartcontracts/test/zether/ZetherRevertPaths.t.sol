@@ -195,6 +195,10 @@ contract ZetherRevertPathsTest is ZetherFixture {
             vm.expectRevert(ZetherToken.BadInit.selector);
             factory.createZetherToken(1, address(usd), address(ver), bad[i], bytes32(i + 100));
         }
+        // underlying = chính clone sắp sinh (địa chỉ đoán trước được, đã có code lúc initialize)
+        address self_ = factory.predictAddress(address(impl), address(this), "self");
+        vm.expectRevert(ZetherToken.BadInit.selector);
+        factory.createZetherToken(1, self_, address(ver), abi.encode("Z", "Z", address(reg), uint256(1), uint256(1) << 40, uint256(0), bytes("")), "self");
         // initialize ngoài chain dev (deploy tay, vòng qua factory flag)
         address c = Clones.clone(address(impl));
         vm.chainId(1);
