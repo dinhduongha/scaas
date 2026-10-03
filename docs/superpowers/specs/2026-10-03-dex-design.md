@@ -154,8 +154,9 @@ Solidity tốn hàng trăm nghìn gas (review D11); relayer đã simulate trư�
 - **R26:** DEX là spender duy nhất. Người dùng `approve` **không gas** qua op meta-tx mới của `MetaToken`:
   `data = approve(address spender,uint256 amount)` (68 byte, selector-tagged như `pay`/`trade`); bước 6 kiểm
   `m.value == 0`, `m.to == spender`, spender là contract (`_isContract`, 7702 = EOA ⇒ từ chối); bước 8
-  `_approve(from, spender, amount)` thay vì transfer. Phí relayer của chính meta-tx approve theo mode hiện có
-  (`FIXED` bằng token đó; `PERCENT` trên `value = 0` ra 0). `transferFrom` chỉ do contract gọi — DEX là contract.
+  `_approve(from, spender, amount)` thay vì transfer. Phí relayer của chính meta-tx approve luôn bằng 0: trần
+  `FeePolicy` tính trên `value = 0` (`PERCENT` ra 0, `FIXED` > 0 revert `FeeExceedsCap`) — relayer tài trợ
+  approve (một lần mỗi token); test `test_approveOpRelayerFeeIsCappedToZero`. `transferFrom` chỉ do contract gọi — DEX là contract.
 - **R30:** DEX không đọc/ghi `metaNonce` của token. Lệnh dùng `filled`/`minNonce` của DEX; `approve` dùng lane
   ngẫu nhiên riêng (`keccak("bamboo.dex.approve" ‖ rand)`, nonce 0). Hệ quả kiểm bằng test: lệnh DEX treo/huỷ
   không chặn một `pay`, `pay`/`cancelMetaNonce` không vô hiệu lệnh DEX.
@@ -390,3 +391,15 @@ Sổ, matcher, Odoo, gateway **dùng chung** (không phụ thuộc EVM ngoài đ
 | D24 | low | Đã có (`FeeModeInvalid`) | Không đổi |
 
 Grok: giới hạn quota (`free Grok Build usage limit`) — lần 1 của luồng S5.
+
+### Review implementation (diff `71f3ffb..HEAD`), 2026-10-03
+
+agy: quota (429) lúc chạy, chạy lại sau reset. Grok: hết hạn mức free. Codex: hết credit. Reviewer Claude độc lập: 5 finding.
+
+| # | Sev | Kết luận | Xử lý |
+|---|---|---|---|
+| I1 | low | Đúng về spec: approve meta-tx `FIXED` > 0 revert vì trần tính trên `value = 0` (đã có test cố ý) | Sửa spec: phí relayer của approve luôn 0 |
+| I2 | high | Đúng: lệnh `taker != 0` hoặc `maxFeePpm` < phí thị trường, hay thiếu phí relayer, nằm đầu sổ làm mọi cặp fail và lệnh lành bị từ chối | `admit` từ chối lệnh riêng tư + trần phí thấp; matcher bỏ qua maker có trần dưới phí (phí tăng sau); `funded` tính cả phí relayer |
+| I3 | high | Đúng: sync kẹt mãi khi một bên hỏng / lệnh đã đóng ở Odoo; huỷ chờ mất khi commit lỗi | `dex_sync` gửi null cho lệnh đã đóng; khôi phục chỉ lệnh `funded`; cặp khớp lại fail ⇒ không trả về hai bên đó, vẫn ack (≤ `MAX_ROUNDS`); huỷ chờ trả lại hàng đợi khi commit lỗi |
+| I4 | low | Đúng: huỷ off-chain nhận chữ ký high-s mà contract bỏ qua | `valid_sig` từ chối high-s |
+| I5 | med | Đúng: `_cron_expire` của job ghi `dead` thẳng, bỏ qua hook | Hook chuyển sang `write` của relay job |

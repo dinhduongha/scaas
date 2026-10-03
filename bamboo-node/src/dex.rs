@@ -556,7 +556,15 @@ impl Book {
         if o.feeMode > 2 || (o.feeMode == 1 && U256::from(MAX_FEE_PPM) < o.fee) {
             bail!("bad relayer fee");
         }
+        // Lệnh riêng tư hay trần phí dưới phí thị trường nằm trong sổ sẽ làm mọi cặp khớp với nó fail
+        // (review I2): sổ công khai chỉ nhận lệnh khớp được với bất kỳ ai, ở cả vai maker lẫn taker.
+        if o.taker != Address::ZERO {
+            bail!("order.taker must be zero on the public book");
+        }
         let Some(m) = self.market(o) else { bail!("no market for this pair") };
+        if m.fee_on && o.maxFeePpm < m.maker_fee_ppm.max(m.taker_fee_ppm) {
+            bail!("maxFeePpm below the market fee");
+        }
         let min = uint(&m.min_base_amount)?;
         let base_amt = if o.sellToken == m.base { o.sellAmount } else { o.buyAmount };
         if base_amt < min {
@@ -604,14 +612,17 @@ impl Book {
         let market_id = mb.cfg.id;
         let opposite = if t.order.sellToken == mb.cfg.base { &mut mb.bids } else { &mut mb.asks };
         let fok = t.order.flags & FLAG_FOK != 0;
+        // Phí thị trường có thể tăng sau khi lệnh vào sổ: không phát cặp contract sẽ `FeeAboveSigned`.
+        let (fee_on, maker_ppm, taker_ppm) = (mb.cfg.fee_on, mb.cfg.maker_fee_ppm, mb.cfg.taker_fee_ppm);
+        let taker_fee_ok = !fee_on || t.order.maxFeePpm >= taker_ppm;
         let mut i = 0;
-        while i < opposite.len() && !t.remaining.is_zero() {
+        while taker_fee_ok && i < opposite.len() && !t.remaining.is_zero() {
             let r = &opposite[i];
             if !crosses(&r.order, &t.order) {
                 break; // sắp theo giá: sau đây chỉ tệ hơn
             }
-            if r.order.maker == t.order.maker {
-                i += 1; // self-trade prevention (review D21)
+            if r.order.maker == t.order.maker || (fee_on && r.order.maxFeePpm < maker_ppm) {
+                i += 1; // self-trade prevention (review D21) / trần phí đã ký dưới phí maker
                 continue;
             }
             let (rs, rb) = (U512::from(r.order.sellAmount), U512::from(r.order.buyAmount));
@@ -1006,6 +1017,38 @@ mod tests {
         assert!(b2.admit(B256::ZERO, &ask(1, 5, 10, 1), U256::from(5), U256::from(99), U256::ZERO, RELAYER, NOW).is_err());
         assert!(b2.admit(B256::ZERO, &bid(1, 50, 5, 1), U256::from(50), U256::from(99), U256::ZERO, RELAYER, NOW).is_err());
         b2.admit(B256::ZERO, &bid(1, 50, 10, 1), U256::from(50), U256::from(99), U256::ZERO, RELAYER, NOW).unwrap();
+    }
+
+    #[test]
+    fn poison_orders_never_block_the_book() {
+        // review I2: a private order or a fee cap below the market fee would fail every pair it joins
+        let mut m = market();
+        (m.fee_on, m.maker_fee_ppm, m.taker_fee_ppm) = (true, 1_000, 2_000);
+        let mut b = Book::new(vec![m]);
+        let ok = |b: &Book, x: &Order| b.admit(hash_of(x), x, x.sellAmount, U256::from(1_000), U256::ZERO, RELAYER, NOW);
+        let mut x = ask(1, 100, 200, 1);
+        x.maxFeePpm = 1_999;
+        assert!(ok(&b, &x).is_err(), "cap below the taker fee");
+        x.maxFeePpm = 2_000;
+        ok(&b, &x).unwrap();
+        x.taker = Address::repeat_byte(9);
+        assert!(ok(&b, &x).is_err(), "private order");
+        // a resting order whose cap fell under a raised fee is skipped, the next one trades
+        let mut cheap = ask(1, 100, 100, 2);
+        cheap.maxFeePpm = 500;
+        put(&mut b, cheap);
+        let mut fair = ask(2, 100, 200, 3);
+        fair.maxFeePpm = 2_000;
+        put(&mut b, fair.clone());
+        let mut t = bid(3, 200, 100, 4);
+        t.maxFeePpm = 2_000;
+        let p = put(&mut b, t.clone());
+        assert_eq!(p.fills.len(), 1);
+        assert_eq!(p.fills[0].maker.hash, hash_of(&fair));
+        // a taker whose cap is under the taker fee never matches
+        let mut low = bid(4, 200, 100, 5);
+        low.maxFeePpm = 1_000;
+        assert!(put(&mut b, low).fills.is_empty());
     }
 
     #[test]

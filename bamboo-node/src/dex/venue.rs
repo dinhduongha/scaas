@@ -21,7 +21,7 @@ use tracing::{info, warn};
 
 use super::{
     cancel_digest, domain, hex_bytes, hex_of, invalidate_digest, order_hash, pair, Book, CancelReq, IOrderBookDex,
-    MarketCfg, Order, PlannedFill, Resting, Row, WireOrder, FLAG_FOK, FLAG_IOC, ST_OK,
+    MarketCfg, Order, PlannedFill, Resting, Row, WireOrder, FLAG_FOK, FLAG_IOC, ST_OK, relayer_fee,
 };
 use crate::chain::{classify, Chain, SimError};
 use crate::finality::{next_range, quorum_ok, safe_head, Mode};
@@ -91,8 +91,9 @@ struct LoadReply {
 #[derive(Debug, Deserialize)]
 struct FailedTrade {
     tag: String,
-    maker: Row,
-    taker: Row,
+    /// None: lệnh đã đóng ở Odoo (huỷ/hết hạn/invalid) — không bao giờ trả về sổ (review I3).
+    maker: Option<Row>,
+    taker: Option<Row>,
     maker_fill: String,
     taker_fill: String,
 }
@@ -252,6 +253,10 @@ impl Venue {
     async fn valid_sig(&self, signer: Address, digest: B256, sig: &Bytes) -> bool {
         if sig.len() == 65 {
             if let Ok(s) = Signature::try_from(sig.as_ref()) {
+                // High-s: contract `tryRecover` từ chối ⇒ `cancel` bỏ qua im lặng (review I4).
+                if s.normalize_s().is_some() {
+                    return false;
+                }
                 if s.recover_address_from_prehash(&digest).ok() == Some(signer) {
                     return true;
                 }
@@ -312,7 +317,7 @@ impl Venue {
             for f in failed {
                 let m = &f.maker;
                 let healthy = match self.check(&m.order, &m.sig).await {
-                    Ok(mc) => mc.status == ST_OK && mc.fundable >= m.remaining,
+                    Ok(mc) => funded(&m.order, m.remaining, &mc),
                     Err(e) => return Err(down(e)),
                 };
                 if healthy {
@@ -520,46 +525,56 @@ impl Venue {
         let mut book = self.book.lock().await;
         book.purge(now());
         let mut commit = Commit::default();
-        let mut next = book.clone();
-        let mut fills: Vec<PlannedFill> = vec![];
-        let mut touched: Vec<(i64, Resting)> = vec![];
-        for ft in &sr.failed {
-            for (row, fill) in [(&ft.maker, &ft.maker_fill), (&ft.taker, &ft.taker_fill)] {
-                let r = row.resting()?;
-                let fill = crate::metatx::uint(fill)?;
-                if r.order.flags & (FLAG_IOC | FLAG_FOK) != 0 || r.order.expiry < U256::from(now()) {
-                    continue;
+        // Khớp lại; cặp không simulate được ⇒ hai bên của nó không được trả về trong vòng này
+        // (vẫn ack): không bao giờ kẹt cả chain vì một lệnh hỏng (review I3).
+        // ponytail: bỏ cả bên khoẻ của cặp hỏng; đo trước khi tách từng bên.
+        let mut skip: Vec<B256> = vec![];
+        let (mut next, mut fills, mut touched);
+        let (mut round, mut give_up) = (0, false);
+        loop {
+            next = book.clone();
+            fills = Vec::<PlannedFill>::new();
+            touched = Vec::<(i64, Resting)>::new();
+            for ft in &sr.failed {
+                for (row, fill) in [(&ft.maker, &ft.maker_fill), (&ft.taker, &ft.taker_fill)] {
+                    let Some(row) = row else { continue };
+                    let r = row.resting()?;
+                    let fill = crate::metatx::uint(fill)?;
+                    if give_up
+                        || skip.contains(&r.hash)
+                        || r.order.flags & (FLAG_IOC | FLAG_FOK) != 0
+                        || r.order.expiry < U256::from(now())
+                    {
+                        continue;
+                    }
+                    let in_book = next.get(r.hash).map(|x| x.remaining).unwrap_or_default();
+                    let c = self.check(&r.order, &r.sig).await?;
+                    let add = fill.min(c.remaining.saturating_sub(in_book));
+                    let Some(market_id) = next.market(&r.order).map(|m| m.id) else { continue };
+                    if add.is_zero() || !funded(&r.order, in_book + add, &c) {
+                        continue;
+                    }
+                    // Đi lại qua matcher: hai bên cùng khoẻ thì khớp lại, không để sổ chéo.
+                    fills.extend(next.restore(r.clone(), add).fills);
+                    touched.push((market_id, r));
                 }
-                let c = self.check(&r.order, &r.sig).await?;
-                if c.status != ST_OK {
-                    continue;
-                }
-                let in_book = next.get(r.hash).map(|x| x.remaining).unwrap_or_default();
-                let add = fill.min(c.remaining.saturating_sub(in_book));
-                let Some(market_id) = next.market(&r.order).map(|m| m.id) else { continue };
-                if add.is_zero() {
-                    continue;
-                }
-                // Đi lại qua matcher: hai bên cùng khoẻ thì khớp lại, không để sổ chéo.
-                fills.extend(next.restore(r.clone(), add).fills);
-                touched.push((market_id, r));
             }
-            commit.acks.push(ft.tag.clone());
-        }
-        if !fills.is_empty() {
+            if fills.is_empty() {
+                break;
+            }
             let ok = self.simulate(&fills).await.map_err(|e| anyhow!("re-match simulation: {e}"))?;
-            if ok.iter().any(|x| !x) {
-                // ponytail: một cặp khớp lại fail ⇒ hoãn cả vòng (không ack); vòng sau `checkOrder`
-                // loại bên hỏng. Gỡ từng cặp nếu điều này xảy ra thường xuyên.
-                warn!(chain = self.chain.number, "re-matched fills do not simulate; retrying next round");
-                return Ok(());
+            let bad: Vec<B256> =
+                fills.iter().zip(&ok).filter(|(_, ok)| !**ok).flat_map(|(f, _)| [f.maker.hash, f.taker.hash]).collect();
+            if bad.is_empty() {
+                break;
             }
-            self.add_fills(&mut commit, &next, &fills);
+            warn!(chain = self.chain.number, n = bad.len() / 2, "re-matched fills do not simulate; not restoring them");
+            skip.extend(bad);
+            round += 1;
+            give_up = round >= MAX_ROUNDS; // vòng cuối không trả gì về: ack, không kẹt
         }
-        for (market_id, r) in &touched {
-            let now_r = next.get(r.hash).cloned().unwrap_or_else(|| Resting { remaining: U256::ZERO, ..r.clone() });
-            commit.order(*market_id, &now_r, state_of(&now_r));
-        }
+        commit.acks.extend(sr.failed.iter().map(|ft| ft.tag.clone()));
+        self.add_fills(&mut commit, &next, &fills);
         let pending: Vec<(i64, CancelReq)> =
             self.cancels.lock().map(|mut q| std::mem::take(&mut q.pending)).unwrap_or_default();
         for chunk in pending.chunks(CANCEL_BATCH) {
@@ -571,7 +586,14 @@ impl Venue {
                 "valid_until": valid_until.to_string(), "tags": [],
             }));
         }
-        self.commit_or_reload(&mut book, next, commit).await.map_err(|e| anyhow!("{e}"))
+        let res = self.commit_or_reload(&mut book, next, commit).await;
+        if res.is_err() && !pending.is_empty() {
+            // Không mất huỷ on-chain khi Odoo lỗi; gửi trùng thì `origin_key` + `cancel` no-op chặn.
+            if let Ok(mut q) = self.cancels.lock() {
+                q.pending.extend(pending);
+            }
+        }
+        res.map_err(|e| anyhow!("{e}"))
     }
 
     /// Một vòng watcher: log DEX trong vùng final ⇒ `dex_fill_ingest` ⇒ gỡ lệnh bị đóng on-chain.
@@ -735,6 +757,14 @@ pub fn revert_name(data: &[u8]) -> String {
     }
 }
 
+/// Lệnh nghỉ còn settle được `remaining`: OK on-chain và đủ số dư/allowance kể cả phí relayer
+/// (review I2/I3: thiếu 1 wei phí cũng làm mọi cặp với nó fail).
+fn funded(o: &Order, remaining: U256, c: &IOrderBookDex::checkOrderReturn) -> bool {
+    let (ft, fee) = relayer_fee(o, remaining);
+    let own = if ft == o.sellToken { fee } else { U256::ZERO };
+    c.status == ST_OK && c.fundable >= remaining + own && (ft == o.sellToken || c.feeFundable >= fee)
+}
+
 /// Log DEX ⇒ JSON đúng khoá `dex_fill_ingest` đọc. None = không phải event ta theo dõi / log pending.
 pub fn encode_event(log: &Log) -> Option<Value> {
     let mut v = json!({
@@ -794,6 +824,42 @@ pub fn encode_event(log: &Log) -> Option<Value> {
 mod tests {
     use super::*;
     use alloy::primitives::LogData;
+
+    #[test]
+    fn funded_counts_the_relayer_fee_in_either_token() {
+        let c = |status, fundable: u64, fee: u64| IOrderBookDex::checkOrderReturn {
+            h: B256::ZERO,
+            status,
+            remaining: U256::from(100),
+            fundable: U256::from(fundable),
+            feeFundable: U256::from(fee),
+        };
+        let mut o = Order {
+            maker: Address::ZERO,
+            taker: Address::ZERO,
+            sellToken: Address::repeat_byte(1),
+            buyToken: Address::repeat_byte(3),
+            sellAmount: U256::from(100),
+            buyAmount: U256::from(100),
+            nonce: U256::ZERO,
+            expiry: U256::ZERO,
+            maxFeePpm: 0,
+            flags: 0,
+            relayer: Address::ZERO,
+            feeMode: 0,
+            fee: U256::ZERO,
+            feeToken: Address::ZERO,
+            feeRecipient: Address::ZERO,
+        };
+        o.feeMode = 2; // FIXED 5, paid in the sell token
+        o.fee = U256::from(5);
+        assert!(funded(&o, U256::from(100), &c(ST_OK, 105, 0)));
+        assert!(!funded(&o, U256::from(100), &c(ST_OK, 104, 0)), "1 wei short of the fee");
+        assert!(!funded(&o, U256::from(100), &c(ST_OK + 1, 1_000, 0)));
+        o.feeToken = Address::repeat_byte(2); // separate fee token
+        assert!(funded(&o, U256::from(100), &c(ST_OK, 100, 5)));
+        assert!(!funded(&o, U256::from(100), &c(ST_OK, 100, 4)));
+    }
 
     fn log_of(data: LogData) -> Log {
         Log {
