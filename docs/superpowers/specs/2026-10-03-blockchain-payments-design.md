@@ -666,7 +666,8 @@ Bốn plan, theo thứ tự phụ thuộc: (1) contracts + DEX, (2) relayer, (3)
   ngoài) — phản hồi tức thì cho người dùng, và là bản thứ ba của digest được khoá bằng KAT;
   `pycryptodome` có trong container nhưng không phải dependency của Odoo — nếu sai: chữ ký
   ERC-1271 (ví hợp đồng) không khôi phục được ⇒ lưu `signature_verified = False` và để simulation
-  của node quyết.
+  của node quyết — trừ chữ ký dài đúng 65 byte, vốn phải khôi phục đúng ví (review I8): ví hợp đồng
+  trả chữ ký 65 byte sẽ bị từ chối.
 - **R14** Portal UI = nút + JS thuần gọi facade; không tích hợp form thanh toán chuẩn — CLAUDE.md §6
   (mọi logic ở method model); form chuẩn cần JS payment-form riêng — nếu sai: checkout website chưa
   có nút `chain`.
@@ -738,9 +739,34 @@ Bốn plan, theo thứ tự phụ thuộc: (1) contracts + DEX, (2) relayer, (3)
 | P14 | low | Đúng | Nhận: handler có wrapper phí-chuyển (74521c9) |
 | P15 | low | Đúng | Nhận: nạp danh sách token đồng bộ trước khi mở gateway |
 
+### Antigravity (agy) — review IMPLEMENTATION (diff nhánh), 2026-10-03 — 13 finding
+
+| # | Sev | Kết luận (đã đối chiếu code) | Xử lý |
+|---|---|---|---|
+| I1 | crit | **Đúng.** Đổi số phải trả huỷ tx/request cũ mà không chờ typed data cũ hết hạn; `_accept_signature` không kiểm `request_state` ⇒ tiền về tx đã huỷ | Nhận: request phải `open/partial`, tx phải `draft/pending` (8ace895) |
+| I2 | high | Đúng: `feeRecipient` do client điền (DEX) lọt qua, settle revert, lệnh nghỉ bị đánh bật | Nhận: ghi đè vô điều kiện khi không ràng buộc (4e8b383) |
+| I3 | high | Đúng: receipt có thể đến trước báo `broadcast` | Nhận: `signed → mined/reverted` |
+| I4 | high | Đúng: thay thế bị từ chối vẫn đổi hash theo dõi | Nhận |
+| I5 | high | Đúng: `report` nuốt lỗi nên vẫn gửi khi journal `signed` chưa ghi | Nhận: không journal thì không gửi, hàng đợi thử lại |
+| I6 | high | Đúng: tx `done` chưa post-process thì `amount_residual` còn nguyên ⇒ mở được lần trả thứ hai | Nhận: chặn `start` và ẩn nút khi còn tx `done/authorized` chưa post-process |
+| I7 | high | Đúng | Nhận: simulate cả `settle` trước khi lệnh rời sổ; fail ⇒ trả lệnh về |
+| I8 | med | Đúng (chữ ký 65 byte rác lọt vào outbox) | Nhận: 65 byte phải khôi phục đúng ví; R13 hẹp lại tương ứng |
+| I9 | med | Đúng | Nhận: `partial` cũng hết hạn, kèm `needs_attention` |
+| I10 | med | Đúng | Nhận: ở trần phí thì chờ, không gửi lại |
+| I11 | med | Đúng | Nhận: nút chỉ hiện khi còn phải trả |
+| I12 | low | Đúng: fake Odoo nhận mọi chuyển trạng thái | Nhận: fake áp đúng bảng `TRANSITIONS` |
+| I13 | low | Đúng | Nhận (cùng sửa với I7) |
+
+Tự review (trước agy): sổ lệnh DEX không có trần ⇒ làm đầy bộ nhớ gần như miễn phí — trần
+10.000 lệnh nghỉ (471e7a6). Bug do test bắt khi viết: verifier không có code thoát `try/catch`
+(af06a69); SQL thô không flush làm CAS claim "thắng" hai lần (c60a12f); provider thiếu
+`module_id` nên `account_payment` không tạo payment method (f799fd9); tx không có `operation`
+nên `account_payment` không gạch nợ hoá đơn (751936b — cùng lỗi tiềm ẩn ở
+`dms_portal.dms_portal_payment_start`, chưa sửa vì ngoài phạm vi).
+
 ### Grok
-Lần 1 (2026-10-03): `free Grok Build usage limit` — không in giờ reset. Đã hẹn chạy lại nền sau
-~55 phút; kết quả sẽ ghi vào đây.
+Lần 1 (2026-10-03): `free Grok Build usage limit` — không in giờ reset. Lần 2 (+~55 phút) và
+lần 3 (+~1 giờ nữa): vẫn giới hạn. Lần 4 hẹn sau ~1 giờ, với prompt review implementation.
 
 ### Codex
 Hết credit (theo owner) — không chạy.
