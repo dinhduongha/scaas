@@ -1,0 +1,3 @@
+[resolver]
+# Pick dependency versions whose MSRV this toolchain meets (rustc 1.90 here).
+incompatible-rust-versions = "fallback"
