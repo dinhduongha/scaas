@@ -30,6 +30,29 @@ test('EIP-712 digest of the typed data Odoo issues = MetaTx KAT (MetaTxKat.t.sol
   assert.equal(hex(hashTypedData(td)), k.digest);
 });
 
+test('OwnerCall typed data (as Odoo issues it) hashes to the digest pinned in SubjectAccount.t.sol', () => {
+  const td = {
+    types: {
+      EIP712Domain: [{ name: 'name', type: 'string' }, { name: 'version', type: 'string' },
+        { name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' }],
+      OwnerCall: [{ name: 'data', type: 'bytes' }, { name: 'nonce', type: 'uint256' }, { name: 'validUntil', type: 'uint256' }],
+    },
+    primaryType: 'OwnerCall',
+    domain: { name: 'Bamboo SubjectAccount', version: '1', chainId: 31337, verifyingContract: '0x' + '00'.repeat(18) + 'acc0' },
+    message: { data: '0x1234', nonce: '3', validUntil: '1800000000' },
+  };
+  assert.equal(hex(hashTypedData(td)), '0x24bb1dae4c38217e81cff2a57e2c7b461830c462e83cf6184e0d4714cf625610');
+});
+
+test('passkey keyId = keccak(abi.encode(SubjectKey)) as cast computes it', async () => {
+  const { passkeySubjectKey, keyId } = await import('../src/evm.js');
+  const key = passkeySubjectKey({
+    x: fromHex('6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296'),
+    y: fromHex('4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5'),
+    rpId: 'pay.example.com', origin: 'https://pay.example.com' });
+  assert.equal(hex(keyId(key)), '0xe01e0b8f122754973202cd330eb728c9d9b19f4f31bbe7e33d012e745be6f631');
+});
+
 test('SubjectAccount CREATE2: salt and clone address match the forge-pinned vector', () => {
   const v = read('subject_account_create2.json');
   const addr = evmAddress(secp256k1.getPublicKey(fromHex(v.seedPrivateKey.slice(2).padStart(64, '0')), false));

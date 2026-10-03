@@ -567,6 +567,19 @@ contract SubjectAccountTest is WebAuthnSoft {
         assertEq(fac.predict(k, GUARDIAN), Clones.predictDeterministicAddress(fac.IMPLEMENTATION(), s, address(fac)));
     }
 
+    /// Ghim digest `OwnerCall` mà Odoo (`_owner_call_digest`) và clientkeys (`hashTypedData` của typed
+    /// data Odoo phát) cũng phải ra: account ở 0x…ACC0, chain 31337, data 0x1234, nonce 3, hạn 1.8e9.
+    function test_pinned_owner_call_digest() public {
+        address at = address(0xACC0);
+        vm.etch(at, address(acct).code);
+        bytes32 d = SubjectAccount(payable(at)).ownerCallDigest(hex"1234", 3, 1_800_000_000);
+        emit log_named_bytes32("ownerCallDigest", d);
+        assertEq(block.chainid, 31337);
+        assertEq(d, OWNER_CALL_PIN);
+    }
+
+    bytes32 internal constant OWNER_CALL_PIN = 0x24bb1dae4c38217e81cff2a57e2c7b461830c462e83cf6184e0d4714cf625610;
+
     // ------------------------------------------------------------------ gas
 
     function _gasPay(bytes32 ref) internal returns (uint256 used) {
