@@ -34,6 +34,9 @@ pub struct InflightJob {
 #[derive(Debug, Clone, Deserialize)]
 pub struct NodeConfig {
     pub evm_chain_number: u64,
+    /// `active` | `paused` (R53: paused = indexing continues, nothing new is submitted).
+    #[serde(default)]
+    pub state: Option<String>,
     pub finality_mode: String,
     pub finality_depth: u64,
     pub finality_quorum: usize,
@@ -42,6 +45,17 @@ pub struct NodeConfig {
     pub journal_max_nonce: Option<u64>,
     #[serde(default)]
     pub inflight: Vec<InflightJob>,
+}
+
+impl NodeConfig {
+    /// Token list the open gateway may accept: none while the chain is paused (R53).
+    pub fn submittable_tokens(&self) -> Vec<Address> {
+        if self.state.as_deref().unwrap_or("active") == "active" {
+            self.tokens.iter().map(|t| t.address).collect()
+        } else {
+            Vec::new()
+        }
+    }
 }
 
 /// Một job outbox. `kind = "metatx"`: `token`/`signature`/`metatx` có mặt. `kind = "call"`:
@@ -186,6 +200,18 @@ mod tests {
         let w = crate::submit::work_from_job(&job).unwrap();
         assert_eq!(w.data.as_ref(), &[0xde, 0xad, 0xbe, 0xef]);
         assert_eq!(w.valid_until, 1_800_000_300);
+    }
+
+    #[test]
+    fn paused_chain_serves_no_tokens_to_the_gateway() {
+        let mk = |state: &str| -> NodeConfig {
+            serde_json::from_value(json!({"evm_chain_number": 1, "state": state, "finality_mode": "depth",
+                "finality_depth": 1, "finality_quorum": 1, "indexed_block": 0, "journal_max_nonce": null,
+                "tokens": [{"address": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd", "decimals": 6}]}))
+            .unwrap()
+        };
+        assert_eq!(mk("active").submittable_tokens().len(), 1);
+        assert!(mk("paused").submittable_tokens().is_empty());
     }
 
     #[test]

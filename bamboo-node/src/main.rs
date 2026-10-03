@@ -43,7 +43,7 @@ async fn main() -> Result<()> {
             // Danh sách token NẠP TRƯỚC khi gateway mở (review P15), rồi làm mới mỗi 30 s.
             let nc = relay.node_config(cc.evm_chain_number, None).await?;
             if let Ok(mut w) = tokens.write() {
-                *w = nc.tokens.iter().map(|t| t.address).collect();
+                *w = nc.submittable_tokens();
             }
             let s = submit::Submitter::start(chain::Chain::connect(cc)?, relay.clone(), cc.clone(), node_id.clone())
                 .await?;
@@ -58,7 +58,7 @@ async fn main() -> Result<()> {
                     match n.node_config(num, None).await {
                         Ok(nc) => {
                             if let Ok(mut w) = t.write() {
-                                *w = nc.tokens.iter().map(|x| x.address).collect();
+                                *w = nc.submittable_tokens();
                             }
                         }
                         Err(e) => warn!(chain = num, "token refresh: {e:#}"),
