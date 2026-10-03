@@ -1,0 +1,7 @@
+from=wasm1r5v5srda7xfth3hn2s26txvrcrntldju3hkw75
+to=wasm1xvenxvenxvenxvenxvenxvenxvenxvenkz5vxp
+contract=wasm1g3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zqn0lflt
+payload={"amount":"1000","contract":"wasm1g3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zqn0lflt","domain":"bamboo.metaop.v1","extra":"","from":"wasm1r5v5srda7xfth3hn2s26txvrcrntldju3hkw75","lane":"1111111111111111111111111111111111111111111111111111111111111111","network":"bamboo-1","nonce":0,"op":"pay","pay_ref":"2222222222222222222222222222222222222222222222222222222222222222","relayer":"","to":"wasm1xvenxvenxvenxvenxvenxvenxvenxvenkz5vxp","valid_until":2000000000}
+digest=e9ce621f85e6efbebf377dfcbf8db84b22ddd69f739466be318f7783ec2b5bda
+doc_sha256=f85af550a62123c416b9a8651e67d54c9e4379c38aa3754ca3740e83fb7ba367
+sig=8S4sUTE1fOD6Vk/elk5nOwsd/pla6+CERx3siF9VUOwNeSdhv5iwqI09fvSEJJUm+BEzDaDcRkzYrBxHqSpL4A==
