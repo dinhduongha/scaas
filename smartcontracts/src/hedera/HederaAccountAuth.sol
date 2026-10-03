@@ -15,10 +15,14 @@ pragma solidity ^0.8.20;
 library HederaAccountAuth {
     address internal constant HAS = address(0x16a);
     bytes4 internal constant IS_AUTHORIZED_RAW = 0xb2a31da4; // isAuthorizedRaw(address,bytes,bytes)
+    /// @dev Phí thật = phí `ecrecover` (3 000). Khi từ chối (tài khoản lạ, khoá phức hợp) system contract trả về
+    ///      với TOÀN BỘ gas còn lại của frame bị tính (`reversionWith(rce, frame.getRemainingGas())`): trần này giữ
+    ///      cho một chữ ký xấu lọt qua mô phỏng (đua đổi khoá) không đốt hết gas của tx relayer.
+    uint256 internal constant HAS_GAS = 100_000;
 
     function isAuthorizedRaw(address account, bytes32 digest, bytes calldata sig) internal returns (bool) {
         (bool ok, bytes memory ret) =
-            HAS.call(abi.encodeWithSelector(IS_AUTHORIZED_RAW, account, abi.encodePacked(digest), sig));
+            HAS.call{gas: HAS_GAS}(abi.encodeWithSelector(IS_AUTHORIZED_RAW, account, abi.encodePacked(digest), sig));
         return ok && ret.length == 32 && uint256(bytes32(ret)) == 1;
     }
 

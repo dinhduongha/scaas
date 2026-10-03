@@ -76,6 +76,9 @@ Hành vi precompile (đọc mã `IsAuthorizedRawCall.java`, hiero-consensus-node
   `false`. Vì `ERC20MetaTx._requireValidSignature` là `view`, `HederaMetaToken` gọi qua con trỏ hàm ép kiểu `view`
   (`HederaAccountAuth.asView`) — an toàn vì chỗ gọi duy nhất là `executeMetaTransaction` (không view) và 0x16a không
   ghi state, không gọi ngược. Mock forge ghi storage nên cũng HALT khi bị STATICCALL (test chặn quay lại).
+  Gas của lời gọi bị chặn 100 000: khi từ chối (tài khoản lạ, khoá phức hợp) system contract tính **toàn bộ** gas
+  còn lại của frame (`reversionWith(rce, frame.getRemainingGas())`); trần giữ cho chữ ký xấu lọt mô phỏng không đốt
+  hết gas tx của relayer (phí thật 3 000).
 - Không phải tài khoản ECDSA long-zero: nhánh EC của precompile từ chối địa chỉ long-zero; tài khoản ECDSA luôn
   dùng alias `0x…` (đường `ecrecover`).
 
@@ -168,6 +171,12 @@ Hedera **không có mempool**: Relay chuyển tx tới một consensus node; tx 
 - **Kết quả (2026-10-03):** forge 24 test Hedera + 157 toàn bộ xanh; Odoo `dms_blockchain` 118 test (4 Hedera) xanh trên
   `dms_test_chain_6`; Rust 9 test adapter (gồm proptest 2 × 2 000 ca) + e2e `e2e_hedera` xanh (anvil 298, cổng 31960);
   connector `node --test` 4 xanh — chữ ký ed25519 của node:crypto trùng byte với Python trên vector chung.
+- **Smoke trên EVM Hedera thật, không cần tài khoản/HBAR** (`script/hedera/HederaSmoke.sol` +
+  `testnet_smoke.py`): constructor chạy như initcode qua `eth_call` trên Relay testnet (mirror-node web3 chạy đúng
+  thư viện EVM + system contract của services). Kết quả 2026-10-03: deploy `OpenFactory` + `HederaMetaToken` + clone
+  chạy (TSTORE/MCOPY có), thanh toán meta-tx ECDSA ⇒ `ok`, shop nhận 100; chữ ký ED25519 sai cho tài khoản ED25519 có
+  thật `0.0.6000019` qua 0x16a thật ⇒ `MetaTxBadSignature`; tài khoản không tồn tại ⇒ `MetaTxBadSignature`;
+  `EXTCODESIZE` của EOA = 0 (phân nhánh `_isContract` đúng); 0x16a trả lời CALL, HALT với STATICCALL (R6-6).
 - **Khoảng trống:** `hedera-local-node` (nay là `solo`, cần ≥ 8 GB RAM, nhiều container) không chạy trên máy dùng
   chung 10 luồng. Anvil khác Hedera ở: có mempool, không có precompile 0x16a/0x167 thật, không thu 80 % gas. Đường
   dương HIP-632 chưa thử trên mạng thật. Việc cần làm khi có tài khoản testnet: deploy `HederaMetaToken`, thanh toán
