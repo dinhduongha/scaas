@@ -30,8 +30,8 @@ không trên token: một chữ ký cho cả hai token của cặp, ví hiển t
 Order(address maker,address taker,address sellToken,address buyToken,uint256 sellAmount,uint256 buyAmount,
       uint256 nonce,uint256 expiry,uint32 maxFeePpm,uint8 flags,address relayer,uint8 feeMode,uint256 fee,
       address feeToken,address feeRecipient)
-CancelOrder(bytes32 orderHash,uint256 validUntil)
-InvalidateNonces(address maker,uint256 minNonce,uint256 validUntil)
+CancelOrder(bytes32 orderHash)
+InvalidateNonces(address maker,uint256 minNonce)
 ```
 
 | Trường | Nghĩa |
@@ -42,7 +42,7 @@ InvalidateNonces(address maker,uint256 minNonce,uint256 validUntil)
 | `nonce` | duy nhất theo maker; lệnh hợp lệ khi `nonce >= minNonce[maker]` (huỷ hàng loạt). Client dùng `unix_ms·2^20 + random20` |
 | `expiry` | hạn ký, giây epoch; `block.timestamp <= expiry` |
 | `maxFeePpm` | phí DEX tối đa người ký chấp nhận (vai nào cũng vậy). Phí thị trường > `maxFeePpm` ⇒ cặp revert. Nâng phí **không** chạm lệnh đã ký |
-| `flags` | bit0 `FOK`, bit1 `IOC`; bit lạ ⇒ revert (như `validateMode`) |
+| `flags` | bit0 `FOK`, bit1 `IOC`; bit lạ hoặc cả hai cùng bật ⇒ revert (như `validateMode`; review D17) |
 | `relayer` | 0 = relayer nào cũng nộp được; khác 0 = chỉ `msg.sender` này (R10) |
 | `feeMode`, `fee`, `feeToken`, `feeRecipient` | phí **relayer** (§1.5) |
 
@@ -55,7 +55,10 @@ Không có `lane/batch` của token ở đây: DEX tự giữ không gian nonce 
 relayer đặt, chỉ được echo trong event (khoá trade ở Odoo).
 
 Mỗi cặp chạy trong `try this.settleOne(m, msg.sender)` (external, chỉ `msg.sender == address(this)`): **nguyên tử
-từng cặp** — cặp fail revert riêng phần của nó, emit `MatchFailed(ref, reason)`, các cặp khác vẫn chạy.
+từng cặp** — cặp fail revert riêng phần của nó, emit `MatchFailed(ref, reason)`, các cặp khác vẫn chạy. **Không cặp
+nào qua ⇒ cả tx revert `NothingSettled`**: simulate của relayer bắt được trước khi tốn gas (review D10). Sau vòng
+lặp, mọi lệnh `IOC` vừa khớp được **đóng phần còn lại** (`filled = sellAmount`, emit `OrderCancelled`): IOC nghĩa là
+"chỉ trong tx này", kể cả khi nó khớp nhiều maker trong cùng batch (review D3).
 `settle` có `nonReentrant` (transient); `settleOne` không có guard nhưng chỉ chính DEX gọi được. Relayer thật được
 truyền vào `settleOne` làm tham số: trong lời gọi tự thân `msg.sender == DEX`, và mặc định phí relayer về
 `msg.sender` sẽ kẹt phí trong DEX — chính là `FeeWouldStick` (§1.5).
@@ -82,8 +85,8 @@ Kiểm (mỗi lệnh, rồi cả cặp), **trước** mọi chuyển tiền:
 | M / T | người nhận phí relayer | phí relayer của từng lệnh (§1.5), chỉ khi > 0 |
 
 Phí DEX tính trên phần **nhận** của bên chịu phí (không cần thêm số dư), làm tròn xuống (lợi cho người dùng).
-Tổng mỗi token bảo toàn chính xác: người trả mất đúng `fill`, phần còn lại chia cho người nhận + người thu phí; DEX
-không giữ gì ⇒ **không dust**. Thị trường tắt phí ⇒ ppm coi như 0 ⇒ không có lệnh chuyển phí nào (không phải "phí
+Tổng mỗi token bảo toàn chính xác: người trả mất đúng `fill` (+ phí relayer của chính lệnh đó, **cộng thêm** — §1.5,
+review D1), phần còn lại chia cho người nhận + người thu phí; DEX không giữ gì ⇒ **không dust**. Thị trường tắt phí ⇒ ppm coi như 0 ⇒ không có lệnh chuyển phí nào (không phải "phí
 0 được chuyển").
 
 7. `emit OrderFilled(ref, hash, owner, Fill)` cho **mỗi** bên (`Fill` = struct: sellToken, sold, buyToken,
@@ -96,11 +99,15 @@ giới hạn giống contract (§3.3).
 
 ### 1.3 Huỷ on-chain (meta-tx — người dùng không cần gas)
 
-- `cancel(Order o, uint256 validUntil, bytes sig)`: chữ ký `CancelOrder(hash(o), validUntil)` của `o.maker` ⇒
-  `filled[h] = o.sellAmount` (đóng vĩnh viễn: lệnh đã huỷ **không bao giờ** settle được, kể cả bởi relayer khác
-  đang giữ bản ký). Phát lại vô hại (idempotent); có `validUntil` cho đồng bộ quy tắc "mọi chữ ký có hạn".
-- `invalidateNonces(maker, minNonce, validUntil, sig)`: `minNonce` phải **tăng** ⇒ phát lại bị từ chối;
-  vô hiệu mọi lệnh `nonce < minNonce` (huỷ tất cả).
+- `cancel(CancelReq[] reqs)` với `CancelReq = {Order order; bytes sig}`: chữ ký `CancelOrder(hash(o))` của
+  `o.maker` ⇒ `filled[h] = o.sellAmount` (đóng vĩnh viễn: lệnh đã huỷ **không bao giờ** settle được, kể cả bởi
+  relayer khác đang giữ bản ký). Gom nhiều lệnh một tx (review D14); mục chữ ký sai hoặc đã đóng bị bỏ qua (không
+  revert cả lô, không event). Phát lại là no-op.
+- `invalidateNonces(maker, minNonce, sig)`: `minNonce` phải **tăng** và `<= 2^128` ⇒ phát lại bị từ chối, một chữ
+  ký nhầm `2^256−1` không khoá vĩnh viễn địa chỉ (review D23); vô hiệu mọi lệnh `nonce < minNonce`.
+- **RS5-10 — chữ ký huỷ không có hạn** (ngoại lệ có chủ ý của "mọi chữ ký có hạn"): huỷ chỉ đi một chiều có lợi cho
+  người ký và phát lại là no-op; một `validUntil` chỉ tạo cửa sổ "đã gỡ khỏi sổ off-chain mà job huỷ on-chain hết
+  hạn ⇒ lệnh vẫn settle được tới `expiry`" (review D4).
 
 ### 1.4 Thị trường, phí DEX, quyền admin — **RS5-1**
 
@@ -127,12 +134,20 @@ Dùng đúng `FeeMode` (`NONE/PERCENT/FIXED`) và `FeePolicy` có sẵn; mỗi l
 Người nhận: `feeRecipient` nếu khác 0, ngược lại relayer đã nộp tx (`sender`). `FeeWouldStick` giữ nguyên: người
 nhận ∈ {0, DEX} ⇒ revert (không thể bằng 0 sau khi resolve, nhưng `feeRecipient = DEX` thì có).
 
+Phí relayer **cộng thêm** vào phần giao (không trừ vào `fill`); intake đòi `fundable >= remaining + phí relayer còn
+lại` khi trả bằng `sellToken`, và `feeFundable >= phí còn lại` khi trả bằng token phí riêng. Token phí riêng không có
+trần 1 % (không so được hai token khác nhau mà không có oracle): người ký thấy và ký đúng con số tuyệt đối (review
+D12, nhận một phần).
+
 ### 1.6 Hàm đọc cho intake
 
 `checkOrder(Order o, bytes sig) view returns (bytes32 hash, uint8 status, uint256 remaining, uint256 fundable,
 uint256 feeFundable)`: `status` ∈ `OK, EXPIRED, NONCE_INVALID, BAD_SIG, CLOSED, BAD_FLAGS, NOT_LISTED`;
 `fundable = min(balanceOf, allowance(DEX))` trên `sellToken`, `feeFundable` tương tự trên token phí relayer. Một
 `eth_call` cho mọi kiểm ở cửa (chữ ký kể cả ERC-1271, số dư, allowance, đóng/huỷ, nonce).
+
+ERC-1271 gọi qua `SignatureChecker` **không** trần gas (khác `ERC20MetaTx` 50k): xác minh passkey P-256 bằng
+Solidity tốn hàng trăm nghìn gas (review D11); relayer đã simulate trước khi gửi.
 
 ### 1.7 R26 và R30
 
@@ -176,10 +191,14 @@ Vòng đời trong node:
    đúng thứ tự giá-thời gian (`seq` là thời gian).
 2. **Đặt lệnh:** kiểm cửa (§3.4) ⇒ khớp trên **bản sao** sổ ⇒ simulate `settle` ⇒ cặp fail trong simulate:
    `checkOrder` hai bên, lệnh hỏng bị loại (persist `invalid`), thử lại (≤ 3 vòng) ⇒ `dex_book_commit` (lệnh +
-   trade + job) ⇒ thành công mới thay sổ trong bộ nhớ. Commit lỗi ⇒ sổ không đổi, trả 503.
+   trade + job) ⇒ thành công mới thay sổ trong bộ nhớ. Commit lỗi (kể cả timeout: Odoo có thể ĐÃ commit) ⇒ **nạp
+   lại toàn bộ sổ từ Odoo** rồi trả 503 — Odoo là sự thật, không đoán (review D20). `trade_ref` UNIQUE chặn ghi đôi.
 3. **Trade fail** (job `dead/reverted`, hay event final `MatchFailed`): Odoo đặt trade `failed`. Vòng `dex_sync` của
-   node (mỗi `poll`) lấy trade fail chưa xử lý ⇒ với từng lệnh: còn hợp lệ on-chain (`checkOrder`) thì
-   `remaining += fill` (trả lại đúng chỗ theo `seq` cũ), không thì loại ⇒ commit + ack.
+   node (mỗi `poll`) lấy trade fail chưa xử lý ⇒ với từng lệnh: lệnh IOC/FOK **không bao giờ** trả về sổ (chúng
+   không nghỉ; review D5); lệnh thường còn hợp lệ on-chain (`checkOrder`) thì `remaining += fill` (trả lại đúng chỗ
+   theo `seq` cũ), không thì loại ⇒ commit + ack.
+   Lệnh bị huỷ on-chain (kể cả qua relayer khác) đến qua event final `OrderCancelled/NoncesInvalidated` (§3.6) ⇒ gỡ
+   khỏi sổ (review D13).
 4. **Final:** watcher DEX (§3.6) gửi `OrderFilled/Matched/MatchFailed` vùng final ⇒ trade `settled` ⇒ hạch toán.
 
 ---
@@ -201,7 +220,9 @@ Mỗi phía một `Vec` sắp theo (giá tốt nhất, `seq` tăng). `seq` cấp
 
 Lệnh tới `O` đi qua phía đối diện theo thứ tự; với lệnh nghỉ `R` (maker) còn `R.rem`:
 `x = min(R.rem, floor(O.rem · R.sell / R.buy))`, `y = ceil(x · R.buy / R.sell)`; `x = 0` ⇒ dừng; kiểm
-`limits_ok(R, O, x, y)` **giống hệt** contract (§1.2 bước 3–4, kể cả FOK); không qua ⇒ dừng ở R (dust).
+`limits_ok(R, O, x, y)` **giống hệt** contract (§1.2 bước 3–4, kể cả FOK); không qua (làm tròn trần đẩy `y` vượt
+giới hạn của O ở lượng rất nhỏ) ⇒ dừng ở R, phần lẻ nghỉ lại — không bao giờ phát một cặp contract sẽ từ chối
+(review D2). Lệnh nghỉ cùng maker bị **bỏ qua** (self-trade prevention, contract cũng từ chối; review D21).
 
 - **GTC limit:** phần còn lại nghỉ trong sổ.
 - **IOC:** khớp được bao nhiêu thì khớp, phần còn lại huỷ (không nghỉ). Cờ IOC **không** kiểm on-chain (contract
@@ -215,10 +236,17 @@ Lệnh tới `O` đi qua phía đối diện theo thứ tự; với lệnh ngh�
 ### 3.4 Chặn spam ở cửa
 
 Body ≤ 64 KiB (có sẵn); lượng `0 < amount < 2^128`; `expiry ∈ (now+5 s, now+30 ngày]`; tối thiểu theo thị trường
-(`min_base_amount` trên phía base); tối đa `MAX_OPEN_PER_MAKER = 50` lệnh mở mỗi maker mỗi chain; trần toàn sổ
-`MAX_RESTING = 10 000`; hash trùng ⇒ từ chối; `relayer ∉ {0, ví relayer này}` ⇒ từ chối; `checkOrder` phải `OK` với
-`fundable >= remaining` và đủ phí relayer. Huỷ on-chain (tốn gas relayer) chỉ cho lệnh đang có trong sổ; huỷ-hết
-chỉ khi maker còn ≥ 1 lệnh mở — mỗi lần tốn gas phải đi kèm một lệnh đã qua kiểm tiền.
+(`min_base_amount`: ask so `sellAmount`, bid so `buyAmount` — review D22); tối đa `MAX_OPEN_PER_MAKER = 50` lệnh mở
+mỗi maker mỗi chain; trần toàn sổ `MAX_RESTING = 10 000`; hash trùng ⇒ từ chối; `checkOrder` phải `OK`.
+
+- **Cam kết cộng dồn (review D6):** Σ `remaining` (+ phí relayer bằng `sellToken`) của mọi lệnh mở cùng
+  (maker, sellToken) **cộng lệnh mới** phải `<= fundable`. Không thì một số dư 100 đặt được 50 lệnh 100.
+- **RS5-9 — `relayer` phải là ví relayer này:** lệnh `relayer = 0` bị từ chối ở cửa. Lệnh công khai trong sổ mà ai
+  cũng settle được thì kẻ quan sát mempool chèn được cặp của chính nó ở giá xấu nhất trong giới hạn người dùng (MEV),
+  và relayer khác settle lại phần IOC/lệnh đã huỷ off-chain. Contract vẫn cho `relayer = 0` (relayer mở, SRS §4.9.4).
+- **Huỷ on-chain** (tốn gas relayer, review D14): chỉ cho lệnh đang có trong sổ; gom vào **một** `cancel(...)` mỗi
+  vòng `poll` (≤ 50 lệnh); mỗi maker tối đa 20 huỷ on-chain mỗi giờ — vượt trần vẫn gỡ khỏi sổ ngay (relayer này
+  là relayer duy nhất settle được nó, RS5-9) nhưng không tốn gas. Huỷ-hết chỉ khi maker còn ≥ 1 lệnh mở.
 
 ### 3.5 Gateway (`/v1/dex/*`)
 
@@ -228,7 +256,7 @@ chỉ khi maker còn ≥ 1 lệnh mở — mỗi lần tốn gas phải đi kèm
 | `POST /v1/dex/cancel` `{chain, orderHash, validUntil, signature}` | chữ ký `CancelOrder` ⇒ bỏ khỏi sổ **ngay** + job on-chain `cancel` |
 | `POST /v1/dex/cancel-all` `{chain, maker, minNonce, validUntil, signature}` | `InvalidateNonces` ⇒ bỏ mọi lệnh `nonce < minNonce` + job on-chain |
 | `GET /v1/dex/markets?chain` | thị trường + phí |
-| `GET /v1/dex/depth?chain&market&levels` | mức giá gộp hai phía |
+| `GET /v1/dex/depth?chain&market&levels` | mức giá gộp hai phía; giá là chuỗi thập phân đã quy đổi theo `decimals` hai token, không bao giờ chia nguyên thô (review D16) |
 | `GET /v1/dex/trades?chain&market` | khớp gần nhất (vòng 200 trong bộ nhớ; lịch sử ở Odoo) |
 | `GET /v1/dex/ticker?chain&market` | giá cuối, bid/ask tốt nhất, khối lượng trong vòng nhớ |
 | `GET /v1/dex/orders?chain&maker` | lệnh mở của một ví |
@@ -240,7 +268,9 @@ ngoài cùng, không cần biết route DEX. Không WebSocket (**RS5-5**): `axum
 ### 3.6 Watcher DEX final
 
 Một task riêng mỗi chain: cùng `finality::{safe_head, next_range, quorum_ok}`, **cursor riêng**
-(`blockchain.chain.dex_indexed_block`), đọc log của địa chỉ DEX, gửi `dex_fill_ingest` bằng **API key indexer**.
+(`blockchain.chain.dex_indexed_block`), đọc log của địa chỉ DEX (`OrderFilled`, `Matched`, `MatchFailed`,
+`OrderCancelled`, `NoncesInvalidated`), gửi `dex_fill_ingest` bằng **API key indexer**, rồi gỡ khỏi sổ mọi lệnh bị
+đóng on-chain. `settled` là trạng thái cuối: một `MatchFailed` đến sau không lật nó.
 Cursor riêng là R30 ở tầng vận hành: DEX ingest lỗi không bao giờ chặn chốt thanh toán và ngược lại; và không
 sửa `indexer.rs` của lead.
 
@@ -253,8 +283,8 @@ sửa `indexer.rs` của lead.
 | Model | Trường chính |
 |---|---|
 | `blockchain.chain` (inherit) | `dex_address`, `dex_indexed_block` (chỉ watcher ghi) |
-| `blockchain.dex.market` | `company_id` (công ty vận hành), `chain_id`, `base_token_id`, `quote_token_id`, `fee_on`, `maker_fee_ppm`, `taker_fee_ppm` (CHECK 0..10 000), `fee_wallet_id` (ví nhận đã duyệt của công ty), `min_base_amount`, `income_account_id`, `relayer_expense_account_id`, `journal_id` (dự phòng khi token chưa có journal), `active`; UNIQUE (chain, base, quote) |
-| `blockchain.dex.order` | `market_id`, `order_hash` (UNIQUE theo chain), `maker_address`, `side` (bid/ask), lượng (Char uint, CHECK), `remaining_base`, `nonce`, `expiry_ts`, `flags`, `max_fee_ppm`, phí relayer, `signature_hex`, `order_json`, `seq`, `order_state` (open/partial/filled/cancelled/expired/invalid) |
+| `blockchain.dex.market` | `company_id` (công ty vận hành), `chain_id`, `base_token_id`, `quote_token_id`, `fee_on`, `maker_fee_ppm`, `taker_fee_ppm` (CHECK 0..10 000), `fee_recipient_address` (phải có ví nhận đã duyệt của công ty cho **cả hai** token), `min_base_amount`, `income_account_id`, `relayer_expense_account_id`, `journal_id` (dự phòng khi token chưa có journal), `active`; UNIQUE không thứ tự (chain, LEAST, GREATEST) — trùng khoá on-chain (review D19) |
+| `blockchain.dex.order` | `market_id`, `order_hash` (UNIQUE theo chain), `maker_address`, `side` (bid/ask), lượng (Char uint, CHECK), `remaining_sell` (đơn vị `sellToken`, như `filled` on-chain — review D9), `nonce`, `expiry_ts`, `flags`, `max_fee_ppm`, phí relayer, `signature_hex`, `order_json`, `seq`, `order_state` (open/partial/filled/cancelled/expired/invalid) |
 | `blockchain.dex.trade` | `trade_ref` (UNIQUE), `market_id`, `maker_order_id`, `taker_order_id`, `maker_fill_base`, `taker_fill_base`, phí dự kiến/thực tế, `relay_job_id`, `trade_state` (pending/settled/failed), `restored` (node đã xử lý fail), `tx_hash`, `block_number`, `move_ids` |
 
 RPC (public, `check_service`): `dex_markets`, `dex_book_load`, `dex_book_commit`, `dex_sync` (relay_worker);
@@ -262,7 +292,9 @@ RPC (public, `check_service`): `dex_markets`, `dex_book_load`, `dex_book_commit`
 
 **Hạch toán (khi trade `settled`, tức event final):** seam `blockchain.token._dex_journal(company)` — trả
 `journal_id` company-dependent của token nếu trường đó tồn tại (lead thêm, R56) và có giá trị, ngược lại
-`market.journal_id`. Số tiền = `base / 10**decimals` theo `currency_id` của token (neo 1:1, R17).
+`market.journal_id`. Mỗi khoản phí hạch toán theo **token của chính nó** (phí maker bằng token maker nhận, phí taker
+bằng token taker nhận, phí relayer bằng token phí của lệnh): journal, `decimals` và `currency_id` (neo 1:1, R17) của
+token đó (review D7).
 - **Phí DEX thu** (ví nhận phí là của công ty vận hành): Nợ TK mặc định journal token / Có `income_account_id`.
 - **Phí relayer chi** (người trả là `blockchain.paying.wallet` đã duyệt của một công ty): Nợ
   `relayer_expense_account_id` / Có TK mặc định journal token của công ty đó.
@@ -315,3 +347,40 @@ Sổ, matcher, Odoo, gateway **dùng chung** (không phụ thuộc EVM ngoài đ
 - **RS5-6** Phí DEX trên phần nhận, làm tròn xuống; phí relayer FIXED pro-rata làm tròn xuống.
 - **RS5-7** `MetaTxDex` giữ làm legacy (không route); `OrderBookDex` là DEX của gateway.
 - **RS5-8** Watcher DEX có cursor riêng và gửi bằng key indexer; không sửa `indexer.rs`.
+- **RS5-9** Book chỉ nhận lệnh `relayer = ví relayer này` (chống MEV, chống settle lại phần đã huỷ off-chain).
+- **RS5-10** Chữ ký huỷ (`CancelOrder`, `InvalidateNonces`) không có hạn — một chiều, phát lại no-op.
+
+---
+
+## 8. Review log
+
+### Antigravity (agy) — review thiết kế, 2026-10-03 — 24 finding (đối chiếu từng cái)
+
+| # | Sev | Kết luận | Xử lý |
+|---|---|---|---|
+| D1 | crit | Đúng (mô tả mâu thuẫn): phí relayer cộng thêm, không trừ vào fill | Nhận: §1.2/§1.5 ghi rõ; intake đòi `fundable >= remaining + phí` |
+| D2 | crit | Một phần: thiết kế đã kiểm `limits_ok` y hệt contract nên không gửi cặp bị revert; phần lẻ nghỉ lại | Nhận phần ghi rõ; từ chối "revert on-chain" |
+| D3 | crit | Đúng (nếu relayer khác giữ lệnh) | Nhận: IOC đóng phần còn lại cuối tx; cộng RS5-9 |
+| D4 | crit | Đúng: job huỷ hết hạn ⇒ lệnh đã gỡ vẫn settle được | Nhận: bỏ `validUntil` khỏi chữ ký huỷ (RS5-10) |
+| D5 | crit | Đúng | Nhận: IOC/FOK không bao giờ trả về sổ |
+| D6 | crit | Đúng | Nhận: cam kết cộng dồn theo (maker, sellToken) |
+| D7 | crit | Đúng về cách viết (mỗi phí một token) | Nhận: §4 ghi rõ |
+| D8 | crit | **Sai so với yêu cầu owner**: owner yêu cầu hạch toán *chi phí* phí relayer (công ty giao dịch bằng ví trả của mình); relayer thu phí là luồng khác | Từ chối; giữ "phí relayer chi" |
+| D9 | crit | Đúng (tên/đơn vị) | Nhận: `remaining_sell` |
+| D10 | high | Đúng | Nhận: `NothingSettled` |
+| D11 | high | Đúng về `ERC20MetaTx`; DEX vốn không trần gas | Ghi rõ §1.6 |
+| D12 | high | Một phần: token phí riêng là con số tuyệt đối đã ký; không thêm oracle | Ghi rõ §1.5; từ chối hạn chế |
+| D13 | high | Đúng về watcher (contract đã có event) | Nhận: watcher ingest + gỡ khỏi sổ |
+| D14 | high | Đúng | Nhận: gom huỷ một tx + trần mỗi maker |
+| D15 | high | **Sai**: cặp đã khớp là giao dịch đã chốt lúc lệnh còn sống (như mọi sàn); huỷ chỉ áp phần còn lại. Nếu tx huỷ vào block trước, cặp đó `MatchFailed` và đối ứng được trả về sổ — kết quả an toàn | Từ chối |
+| D16 | high | Đúng cho hiển thị (khớp lệnh vốn so bằng nhân chéo) | Nhận: giá hiển thị thập phân đã quy đổi |
+| D17 | high | Đúng | Nhận: `flags == 3` bị từ chối |
+| D18 | high | Một phần: relayer chọn vai, nhưng phí bị chặn bởi `maxFeePpm` từng bên đã ký; book gán vai theo thời gian; RS5-9 chỉ relayer này nộp được | Từ chối thay đổi contract |
+| D19 | med | Đúng | Nhận: UNIQUE không thứ tự |
+| D20 | med | Đúng | Nhận: lỗi commit ⇒ nạp lại từ Odoo |
+| D21 | med | Đúng | Nhận: bỏ qua lệnh cùng maker |
+| D22 | med | Đúng | Nhận |
+| D23 | low | Đúng | Nhận: trần `2^128` |
+| D24 | low | Đã có (`FeeModeInvalid`) | Không đổi |
+
+Grok: giới hạn quota (`free Grok Build usage limit`) — lần 1 của luồng S5.
