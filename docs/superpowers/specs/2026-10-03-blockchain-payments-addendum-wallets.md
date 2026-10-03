@@ -222,8 +222,30 @@ Lần 1 chạm quota (`Resets in 13m18s`), hẹn chạy lại nền sau 14 phút
 | W22 | low | Không khai thác được | Từ chối: `execute` chỉ owner; `payUnderMandate` theo CEI (`refUsed`, hạn mức ghi trước lời gọi ngoài) |
 | W23 | low | Ngoài phạm vi | Từ chối: 1271 on-chain có forge test; node simulate calldata y nguyên; calldata/digest Python khoá bằng vector forge |
 
+### Antigravity (agy) — review IMPLEMENTATION đợt 2 (diff 21487ef..), 2026-10-03 — 16 finding
+
+| # | Sev | Kết luận (đã đối chiếu code) | Xử lý |
+|---|---|---|---|
+| X1 | crit | **Đúng**: guard bốn mắt mở bằng một khoá context — client RPC tự đặt context | Nhận: bỏ cờ context; `_four_eyes_set` đi vòng guard bằng `super()`; test thử ba khoá context |
+| X2 | crit | Đúng: kill không chạm tới lần trả đã xếp hàng | Nhận: kill huỷ job `queued/nonce_leased`, hết hạn request, huỷ tx; job đã ký/broadcast thì ghi chatter (không thu hồi được) |
+| X3 | crit | Đúng: indexer chốt request trước khi node báo receipt ⇒ job `call` kẹt `mined` | Nhận: báo `mined` khi request đã `final` ⇒ job `final/success`; test đúng thứ tự đó |
+| X4 | high | Test khẳng định job còn `queued` sau khi settle — kịch bản không có thật | Nhận: test đi qua claim/signed/settle/mined |
+| X5 | high | Đúng: `_chain_status` không thấy job `call` | Nhận: `req._jobs()` |
+| X6 | high | Đúng (có từ đợt 1) | Nhận: `reverted` ⇒ `business_state = failed` cho mọi loại job |
+| X7 | high | Đúng: request auto-pay hết hạn sau 24 h ⇒ hạn mức và retry treo cả ngày | Nhận: request auto-pay hết hạn sau 1 h |
+| X8 | high | Không sai trong thực tế (`failure_note` luôn đi cùng `transaction_id = False`) | Viết lại điều kiện cho rõ |
+| X9 | high | Đúng | Nhận: ví trả kiểm định dạng + địa chỉ đốt/token/relayer |
+| X10 | high | **Sai**: Odoo 19 dịch đường many2one thành subquery `IN`, không INNER JOIN | Từ chối: `test_expired_call_job_dies_before_relay` chứng minh job `call` hết hạn được |
+| X11 | high | Đúng: operator ghi `request_state` qua RPC | Nhận: `request_state`, `issued_valid_until`, `expiry_datetime` chỉ code server (sudo) ghi |
+| X12 | med | Rủi ro hiệu năng, không crash (`create_date` luôn có sau create) | Nhận: tính hạn mức bằng search |
+| X13 | med | Đúng theo seam territory | Nhận: provider của công ty nhận |
+| X14 | med | Đúng (một số ví chỉ có `off`) | Nhận |
+| X15 | med | Sai: `chain_relayer_address` đã bị constraint định dạng chặn khoảng trắng | Từ chối |
+| X16 | low | Có cách khác: owner ký một lời gọi no-op (`setPayee` cùng giá trị) để đốt nonce | Từ chối |
+
 ### Grok
 Lần 4 và 5 (prompt review implementation đợt 1): vẫn `free Grok Build usage limit`, không in giờ reset.
+Đợt 2 (prompt implementation đợt 2): lần 1 vẫn giới hạn; đã hẹn chạy lại nền sau ~1 giờ.
 
 ### Codex
 Không chạy — hết credit (owner).
