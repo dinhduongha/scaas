@@ -330,22 +330,14 @@ impl Venue {
         }
 
         let market_id = book.market(&o).map(|m| m.id).ok_or_else(|| bad("no market"))?;
-        for f in &placed.fills {
-            let mk = trial.get(f.maker.hash).cloned().unwrap_or_else(|| Resting { remaining: U256::ZERO, ..f.maker.clone() });
-            commit.order(f.market_id, &mk, state_of(&mk));
-            commit.trades.push(json!({
-                "tag": format!("{:#x}", f.tag), "market_id": f.market_id,
-                "maker_hash": format!("{:#x}", f.maker.hash), "taker_hash": format!("{h:#x}"),
-                "maker_fill": f.maker_fill.to_string(), "taker_fill": f.taker_fill.to_string(),
-            }));
-        }
+        self.add_fills(&mut commit, &trial, &placed.fills);
         let filled_here: U256 = placed.fills.iter().map(|f| f.taker_fill).sum();
         let taker_after = Resting {
             hash: h,
             order: o.clone(),
             sig: sig.clone(),
             remaining: c.remaining - filled_here,
-            seq: placed.rested.as_ref().map(|r| r.seq).unwrap_or_default(),
+            seq: placed.seq,
         };
         let taker_state = match (&placed.rested, placed.dropped.is_zero()) {
             (Some(_), _) => state_of(&taker_after),
@@ -353,9 +345,6 @@ impl Venue {
             (None, false) => "cancelled", // IOC/FOK: phần còn lại huỷ, không nghỉ
         };
         commit.order(market_id, &taker_after, taker_state);
-        if !placed.fills.is_empty() {
-            commit.jobs.push(self.settle_job(market_id, &placed.fills));
-        }
         self.commit_or_reload(&mut book, trial, commit).await?;
         drop(book);
 
@@ -380,6 +369,21 @@ impl Venue {
             fills,
             remaining: placed.rested.map(|r| r.remaining).unwrap_or_default().to_string(),
         })
+    }
+
+    /// Lệnh maker sau khớp + trade + MỘT job `settle` cho cả lô (nguyên tử từng cặp on-chain).
+    fn add_fills(&self, commit: &mut Commit, after: &Book, fills: &[PlannedFill]) {
+        let Some(first) = fills.first() else { return };
+        for f in fills {
+            let mk = after.get(f.maker.hash).cloned().unwrap_or_else(|| Resting { remaining: U256::ZERO, ..f.maker.clone() });
+            commit.order(f.market_id, &mk, state_of(&mk));
+            commit.trades.push(json!({
+                "tag": format!("{:#x}", f.tag), "market_id": f.market_id,
+                "maker_hash": format!("{:#x}", f.maker.hash), "taker_hash": format!("{:#x}", f.taker.hash),
+                "maker_fill": f.maker_fill.to_string(), "taker_fill": f.taker_fill.to_string(),
+            }));
+        }
+        commit.jobs.push(self.settle_job(first.market_id, fills));
     }
 
     fn settle_job(&self, market_id: i64, fills: &[PlannedFill]) -> Value {
@@ -517,6 +521,8 @@ impl Venue {
         book.purge(now());
         let mut commit = Commit::default();
         let mut next = book.clone();
+        let mut fills: Vec<PlannedFill> = vec![];
+        let mut touched: Vec<(i64, Resting)> = vec![];
         for ft in &sr.failed {
             for (row, fill) in [(&ft.maker, &ft.maker_fill), (&ft.taker, &ft.taker_fill)] {
                 let r = row.resting()?;
@@ -530,15 +536,29 @@ impl Venue {
                 }
                 let in_book = next.get(r.hash).map(|x| x.remaining).unwrap_or_default();
                 let add = fill.min(c.remaining.saturating_sub(in_book));
+                let Some(market_id) = next.market(&r.order).map(|m| m.id) else { continue };
                 if add.is_zero() {
                     continue;
                 }
-                next.restore(r.clone(), add);
-                if let (Some(now_r), Some(m)) = (next.get(r.hash), next.market(&r.order)) {
-                    commit.order(m.id, now_r, state_of(now_r));
-                }
+                // Đi lại qua matcher: hai bên cùng khoẻ thì khớp lại, không để sổ chéo.
+                fills.extend(next.restore(r.clone(), add).fills);
+                touched.push((market_id, r));
             }
             commit.acks.push(ft.tag.clone());
+        }
+        if !fills.is_empty() {
+            let ok = self.simulate(&fills).await.map_err(|e| anyhow!("re-match simulation: {e}"))?;
+            if ok.iter().any(|x| !x) {
+                // ponytail: một cặp khớp lại fail ⇒ hoãn cả vòng (không ack); vòng sau `checkOrder`
+                // loại bên hỏng. Gỡ từng cặp nếu điều này xảy ra thường xuyên.
+                warn!(chain = self.chain.number, "re-matched fills do not simulate; retrying next round");
+                return Ok(());
+            }
+            self.add_fills(&mut commit, &next, &fills);
+        }
+        for (market_id, r) in &touched {
+            let now_r = next.get(r.hash).cloned().unwrap_or_else(|| Resting { remaining: U256::ZERO, ..r.clone() });
+            commit.order(*market_id, &now_r, state_of(&now_r));
         }
         let pending: Vec<(i64, CancelReq)> =
             self.cancels.lock().map(|mut q| std::mem::take(&mut q.pending)).unwrap_or_default();

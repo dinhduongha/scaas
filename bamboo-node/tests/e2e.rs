@@ -123,6 +123,7 @@ struct FakeOdoo {
     dex_indexed: u64,
     next_job: i64,
     fail_commits: u32,
+    failed: Vec<Value>,
 }
 
 async fn fake(
@@ -190,7 +191,7 @@ async fn fake(
             }
             json!({"ok": true})
         }
-        ("blockchain.dex.trade", "dex_sync") => json!({"failed": []}),
+        ("blockchain.dex.trade", "dex_sync") => json!({"failed": std::mem::take(&mut o.failed)}),
         ("blockchain.dex.trade", "dex_cursor") => json!({"indexed_block": o.dex_indexed}),
         ("blockchain.dex.trade", "dex_fill_ingest") => {
             o.dex_indexed = body["to_block"].as_u64().unwrap();
@@ -507,4 +508,32 @@ async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
     let filled_alice = ev.iter().find(|e| e["event"] == "OrderFilled" && e["order_hash"] == format!("{ask_hash:#x}")).unwrap();
     assert_eq!(filled_alice["dex_fee"], "80000");
     assert_eq!(state.lock().unwrap().dex_trades.len(), 1);
+
+    // 8. A settle job that dies: Odoo marks its trade failed, sync hands both healthy sides back,
+    //    and they trade again as a NEW trade (no crossed book, no tag collision).
+    let ask3 = order(&alice, token_a, 10_000_000, token_b, 20_000_000, 7, relayer.address());
+    let bid3 = order(&bob, token_b, 20_000_000, token_a, 10_000_000, 8, relayer.address());
+    assert_eq!(place(ask3.clone(), &alice).await.1["status"], "resting");
+    assert_eq!(place(bid3.clone(), &bob).await.1["status"], "filled");
+    let dead_tag = {
+        let mut o = state.lock().unwrap();
+        o.jobs.clear(); // the settle job never reaches the chain
+        let t = o.dex_trades.last().unwrap().clone();
+        let row = |h: B256| {
+            let r = o.orders[&format!("{h:#x}")].clone();
+            json!({"order_hash": r["order_hash"], "order": r["order"], "signature": r["signature"],
+                   "remaining": r["remaining"], "seq": r["seq"]})
+        };
+        let f = json!({"tag": t["tag"], "maker": row(order_hash(&d, &ask3)), "taker": row(order_hash(&d, &bid3)),
+                       "maker_fill": t["maker_fill"], "taker_fill": t["taker_fill"]});
+        o.failed.push(f);
+        t["tag"].clone()
+    };
+    venue.sync_once().await.unwrap();
+    let last = state.lock().unwrap().dex_trades.last().unwrap().clone();
+    assert_ne!(last["tag"], dead_tag);
+    assert!(venue.rows().await.is_empty(), "both sides traded again; nothing rests crossed");
+    drain(&mut s, &mut rx).await;
+    assert_eq!(balance(&rpc, token_b, alice.address()).await, U256::from(79_920_000u64 + 20_000_000 - 20_000));
+    assert_eq!(balance(&rpc, token_a, bob.address()).await, U256::from(39_920_000u64 + 10_000_000 - 20_000));
 }

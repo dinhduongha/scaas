@@ -290,6 +290,8 @@ pub struct Placement {
     pub rested: Option<Resting>,
     /// Phần còn lại bị bỏ (IOC/FOK) — không bao giờ nghỉ.
     pub dropped: U256,
+    /// `seq` (ưu tiên thời gian) cấp cho lệnh này, nghỉ hay không.
+    pub seq: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -355,19 +357,29 @@ pub fn relayer_fee(o: &Order, sold: U256) -> (Address, U256) {
     }
 }
 
-/// Tag duy nhất cho một cặp: hai lệnh + lượng maker đã khớp trước đó.
-fn tag(maker: &Resting, taker: &Resting) -> B256 {
-    let mut b = Vec::with_capacity(96);
+/// Tag duy nhất cho một cặp. Hai lệnh + lượng đã khớp KHÔNG đủ: một cặp fail rồi được trả về sổ
+/// khớp lại đúng như cũ, và Odoo coi tag trùng là phát lại. Muối ngẫu nhiên mỗi tiến trình + bộ đếm.
+fn tag(maker: &Resting, taker: &Resting, salt: u64, n: u64) -> B256 {
+    let mut b = Vec::with_capacity(112);
     b.extend_from_slice(maker.hash.as_slice());
     b.extend_from_slice(taker.hash.as_slice());
     b.extend_from_slice(&maker.filled().to_be_bytes::<32>());
+    b.extend_from_slice(&salt.to_be_bytes());
+    b.extend_from_slice(&n.to_be_bytes());
     keccak256(b)
+}
+
+fn random_u64() -> u64 {
+    use std::hash::{BuildHasher, Hasher};
+    std::collections::hash_map::RandomState::new().build_hasher().finish()
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct Book {
     markets: HashMap<(Address, Address), MarketBook>,
     next_seq: u64,
+    salt: u64,
+    fills_made: u64,
 }
 
 impl Book {
@@ -376,7 +388,7 @@ impl Book {
             .into_iter()
             .map(|cfg| (pair(cfg.base, cfg.quote), MarketBook { cfg, asks: vec![], bids: vec![] }))
             .collect();
-        Self { markets, next_seq: 1 }
+        Self { markets, next_seq: 1, salt: random_u64(), fills_made: 0 }
     }
 
     /// Dựng lại từ hàng Odoo: chèn theo `seq` tăng nên cùng giá vẫn giữ thứ tự thời gian.
@@ -475,14 +487,16 @@ impl Book {
         None
     }
 
-    /// Trả `fill` về một lệnh sau khi cặp của nó fail on-chain (§2 bước 3). IOC/FOK không bao giờ
-    /// nghỉ nên không bao giờ được trả (review D5).
-    pub fn restore(&mut self, mut r: Resting, fill: U256) {
+    /// Trả `fill` về một lệnh sau khi cặp của nó fail on-chain (§2 bước 3), giữ `seq` cũ. Đi lại
+    /// qua matcher, không chèn thẳng: nếu cả hai bên cùng được trả thì chèn thẳng để lại một sổ
+    /// chéo (bid >= ask nằm yên). IOC/FOK không bao giờ nghỉ nên không bao giờ được trả (review D5).
+    pub fn restore(&mut self, r: Resting, fill: U256) -> Placement {
         if r.order.flags & (FLAG_IOC | FLAG_FOK) != 0 {
-            return;
+            return Placement { dropped: fill, seq: r.seq, ..Default::default() };
         }
-        r.remaining = fill;
-        self.insert(r);
+        let current = self.remove(r.hash).map(|x| x.remaining).unwrap_or_default();
+        let remaining = (current + fill).min(r.order.sellAmount);
+        self.matching(Resting { remaining, ..r })
     }
 
     /// Bỏ lệnh hết hạn; trả hash đã bỏ.
@@ -578,8 +592,11 @@ impl Book {
     pub fn place(&mut self, hash: B256, order: Order, sig: Bytes, remaining: U256) -> Placement {
         let seq = self.next_seq;
         self.next_seq += 1;
-        let mut t = Resting { hash, order, sig, remaining, seq };
-        let mut out = Placement::default();
+        self.matching(Resting { hash, order, sig, remaining, seq })
+    }
+
+    fn matching(&mut self, mut t: Resting) -> Placement {
+        let mut out = Placement { seq: t.seq, ..Default::default() };
         let Some(mb) = self.markets.get_mut(&pair(t.order.sellToken, t.order.buyToken)) else {
             out.dropped = t.remaining;
             return out;
@@ -613,8 +630,9 @@ impl Book {
                 }
                 break; // phần lẻ do làm tròn: nghỉ lại, không phát cặp contract sẽ từ chối
             }
+            self.fills_made += 1;
             let fill = PlannedFill {
-                tag: tag(r, &t),
+                tag: tag(r, &t, self.salt, self.fills_made),
                 market_id,
                 maker: r.clone(),
                 taker: t.clone(),
@@ -913,9 +931,10 @@ mod tests {
         assert_eq!(c.rows(), rows);
         assert_eq!(c.depth(1, 10), b.depth(1, 10));
         // the restarted book matches exactly like the original
+        let strip = |p: Placement| p.fills.into_iter().map(|f| (f.maker, f.taker, f.maker_fill, f.taker_fill)).collect::<Vec<_>>();
         let pb = put(&mut b, bid(6, 30, 10, 1));
         let pc = put(&mut c, bid(6, 30, 10, 1));
-        assert_eq!(pb.fills, pc.fills);
+        assert_eq!(strip(pb), strip(pc));
     }
 
     #[test]
@@ -925,12 +944,27 @@ mod tests {
         let p = put(&mut b, bid(2, 20, 10, 1));
         assert!(b.is_empty());
         let f = &p.fills[0];
-        b.restore(f.maker.clone(), f.maker_fill);
+        assert!(b.restore(f.maker.clone(), f.maker_fill).fills.is_empty());
         assert_eq!(b.open_of(Address::repeat_byte(1))[0].remaining, U256::from(10));
+        assert_eq!(b.open_of(Address::repeat_byte(1))[0].seq, f.maker.seq, "time priority kept");
         let mut ioc = f.taker.clone();
         ioc.order.flags = FLAG_IOC;
         b.restore(ioc, f.taker_fill);
         assert!(b.open_of(Address::repeat_byte(2)).is_empty());
+    }
+
+    #[test]
+    fn restoring_both_sides_rematches_instead_of_leaving_a_crossed_book() {
+        let mut b = Book::new(vec![market()]);
+        put(&mut b, ask(1, 10, 20, 1));
+        let p = put(&mut b, bid(2, 20, 10, 1));
+        let f = p.fills[0].clone();
+        assert!(b.restore(f.maker.clone(), f.maker_fill).fills.is_empty());
+        let again = b.restore(f.taker.clone(), f.taker_fill);
+        assert_eq!(again.fills.len(), 1, "the two healthy sides trade again");
+        assert_eq!((again.fills[0].maker_fill, again.fills[0].taker_fill), (f.maker_fill, f.taker_fill));
+        assert_ne!(again.fills[0].tag, f.tag, "a re-match is a new trade, not a replay");
+        assert!(b.is_empty());
     }
 
     #[test]
