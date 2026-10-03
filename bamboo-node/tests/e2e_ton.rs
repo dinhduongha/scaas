@@ -159,6 +159,7 @@ fn subject(seed: u8, global_id: i32) -> Subject {
 }
 
 /// MetaOp v1 pay (Odoo `fam_ton.metaop_cell`) + the connector's signature JSON.
+#[allow(clippy::too_many_arguments)]
 fn signed_pay(s: &Subject, global_id: i32, contract: &Addr, to: &Addr, amount: u128, lane: [u8; 32], pay_ref: [u8; 32], job: i64) -> Value {
     let valid_until = now() + 600;
     let op = Builder::new()
