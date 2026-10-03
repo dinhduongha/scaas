@@ -4,6 +4,7 @@
 //! UNAUDITED — NOT FOR PRODUCTION FUNDS.
 
 pub mod abi;
+pub mod api;
 pub mod bulletproofs;
 pub mod curve;
 pub mod elgamal;
@@ -12,6 +13,9 @@ pub mod keys;
 pub mod nonce;
 pub mod schnorr;
 pub mod transcript;
+pub mod vectors;
+#[cfg(target_arch = "wasm32")]
+pub mod wasm;
 pub mod zether;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
