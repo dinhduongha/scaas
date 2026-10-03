@@ -95,7 +95,7 @@ abstract contract ERC20MetaTx is ERC20, EIP712, IERC20MetaTx {
         if (feeAmount != 0) _transfer(m.from, feeRecipient, feeAmount);
 
         // --- 8. thực thi ---
-        _executeOp(m);
+        _executeOp(m, feeAmount, feeRecipient);
 
         // --- 9. nonce++ và emit ---
         unchecked { _metaNonce[m.from][m.batch] = expected + 1; }
@@ -131,8 +131,9 @@ abstract contract ERC20MetaTx is ERC20, EIP712, IERC20MetaTx {
         if (m.data.length != 0) revert MetaTxUnknownMode(m.mode);
     }
 
-    /// @dev Bước 8. Không được fail — mọi điều kiện đã kiểm ở `_checkOp`.
-    function _executeOp(MetaTxLib.MetaTransaction calldata m) internal virtual {
+    /// @dev Bước 8. Không được fail — mọi điều kiện đã kiểm ở `_checkOp`. Nhận phí đã
+    ///      thu để op nào cần báo phí trong event (`pay`) không phải tính lại.
+    function _executeOp(MetaTxLib.MetaTransaction calldata m, uint256, address) internal virtual {
         _transfer(m.from, m.to, m.value);
     }
 }
