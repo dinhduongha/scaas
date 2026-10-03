@@ -66,7 +66,8 @@ Verifier **tự tính** generator trong constructor (không hard-code), ghi blob
 
 Danh sách: `Hb` (blinding Pedersen, nhãn `"h"`), `U` (inner-product, nhãn `"U"`), `G_i` (nhãn `"G"`), `H_i`
 (nhãn `"H"`), `i = 0..63`. Bulletproof `n=32` dùng **tiền tố** `G_0..G_31`, `H_0..H_31` của cùng vector.
-`h` và `U` dùng `index = 0`.
+`h` và `U` dùng `index = 0`. **Phân biệt hoa/thường:** `Hb` là `"h"` (0x68), `H_i` là `"H"` (0x48) —
+dùng `"H"` cho `Hb` thì `Hb == H_0` và mọi proof hỏng.
 
 **Blob** (thứ tự cố định): `Hb ‖ U ‖ G_0 … G_63 ‖ H_0 … H_63` = 130 điểm (bn254 8,320 B; BLS 16,640 B).
 
@@ -304,6 +305,9 @@ Mọi challenge `y, z, x, w, u_j, c` phải `≠ 0`. Mọi scalar trong proof `<
 
 Điểm theo §2 (P byte), scalar 32 byte BE. Không có trường độ dài, không có challenge.
 
+Trong `BP(n)` mọi điểm đứng trước mọi scalar; thứ tự hấp thụ của transcript (§8) **khác** thứ tự byte
+(`τ_x ‖ μ ‖ t̂` được hấp thụ trước `L_1 ‖ R_1`) — verifier đọc theo offset, không đọc tuần tự.
+
 ```
 BP(n) = A ‖ S ‖ T1 ‖ T2 ‖ L_1 ‖ R_1 ‖ … ‖ L_k ‖ R_k ‖ τ_x ‖ μ ‖ t̂ ‖ a ‖ b        ((4+2k)P + 160)
 
@@ -344,6 +348,18 @@ phủ `m.data`; binding phủ danh tính phong bì `(from, batch, nonce, …)`. 
 - Khác token / khác chain ⇒ header lệch ⇒ revert.
 - Phát lại sau khi chạy ⇒ `sendCounter`/`accSeq`/nonce phong bì đã tiến ⇒ revert.
 
+**Lời gọi thẳng** (`msg.sender` tự trả gas, statement `ZTX_V1_DIRECT`, `envelopeBinding = 0`):
+
+```
+transferConfidential(bytes payload, bytes proof, bytes authSig, bytes32 beneficiary,
+                     FeeMode outerFeeMode, uint256 outerFee, address outerFeeRecipient) returns (bytes32 entryRef)
+burn(bytes payload, uint256 amount, address recipient, bytes32 beneficiary, bytes proof, bytes authSig)
+```
+
+`authSig` có mặt ở **cả hai** đường: lời gọi thẳng không phải lối tắt quanh `auth_custody` (§11).
+`burn`: `0 < amount ≤ maxDecryptableShielded` (≤ 2^54) kiểm **trước** khi dựng statement — cùng với `fee < 2^32`
+nó bảo đảm `amount + fee < r`, không có bí danh mod `r`.
+
 **Op trong phong bì** (`m.data = op ‖ abi.encode(...)`, `m.to = address(0)`, `m.value = 0`):
 - `OP_ZTRANSFER = bytes4(keccak256("zetherTransfer(bytes,bytes,bytes,bytes32)"))`,
   args `(bytes payload, bytes proof, bytes authSig, bytes32 beneficiary)`.
@@ -357,8 +373,9 @@ phủ `m.data`; binding phủ danh tính phong bì `(from, batch, nonce, …)`. 
 - *Ngoài:* trả bằng số dư ERC-20 **công khai** của token này (`wrap`/`unwrap` underlying 1:1). Op Zether chỉ nhận
   `FeeMode.NONE` hoặc `FIXED` — `PERCENT` bị `FeePolicy.requireConfidentialSafe` chặn; `FIXED` là tuyệt đối
   (không trần 1% vì số tiền ẩn — RS2-6). Chuyển ERC-20 thường (data rỗng) giữ nguyên `FeePolicy.compute`.
-Thứ tự pipeline giữ §04.6.1: relayer → hạn → mode → nonce → chữ ký → **kiểm đủ (gồm verify proof)** → thu phí ngoài
-→ thực thi → nonce++.
+Thứ tự pipeline giữ §04.6.1, rẻ trước đắt sau: relayer → hạn → mode → nonce → chữ ký → **số dư công khai đủ trả
+phí ngoài** → kiểm op rẻ (`accSeq`, `sendCounter`, đăng ký, độ dài) → **verify proof** → thu phí ngoài → thực thi →
+nonce++. Phong bì không đủ phí revert trước mọi precompile.
 
 `entryRef = keccak256(abi.encode(keccak256("BAMBOO-ZETHER-ENTRY-V1"), chainid, token, fromUA, sendCounter))`
 (`sendCounter` trước khi tăng).
@@ -383,7 +400,9 @@ verify:          z < r, R ≠ O, Y ≠ O, e ≠ 0, [z]G − R − [e]Y == O
 `≠ O`, trong subgroup; `UA = keccak256(encodedY)` chưa tồn tại.
 
 `c = keccak256(abi.encodePacked(registry, encodedY, msg.sender))` (SRS §7.5 nguyên văn; R33: `account` =
-`msg.sender` = account chủ thể). `popSignature = abi.encode(bytes schnorrPop, bytes authPop)`:
+`msg.sender` = account chủ thể). Vì `c` trói `msg.sender`, `register` **không relay bởi bên thứ ba được**: chủ thể tự
+gọi bằng EOA hoặc smart account của mình (relayer, nếu có, trả gas ở tầng account đó). Không có replay chéo chain:
+phát lại cần chính `msg.sender` ấy và cho ra đúng bản ghi đó. `popSignature = abi.encode(bytes schnorrPop, bytes authPop)`:
 - `schnorrPop` = Schnorr §11.1 bằng `x` trên `c` (chống rogue key cho khoá ElGamal).
 - `authPop` = chứng minh nắm khoá uỷ quyền, cũng trên `c` (bảng dưới).
 
@@ -398,6 +417,8 @@ verify:          z < r, R ≠ O, Y ≠ O, e ≠ 0, [z]G − R − [e]Y == O
 | 6 | PQ_COMMITMENT | `abi.encode(bytes32 pqCommitmentHash)` | như 0 (verify PQ off-chain, on-chain giữ cam kết) | rỗng |
 | 7 | SMART_ACCOUNT_1271 | `abi.encode(address account)` | bytes cho `isValidSignature(digest, sig)` | `isValidSignature(c, authPop)` |
 
+- ECDSA_MULTISIG: `0 < threshold ≤ len(owners)`, owners khác 0, tăng nghiêm ngặt — kiểm lúc `register`. Chữ ký
+  ECDSA trên **digest thô** (không tiền tố EIP-191), low-s, sắp theo địa chỉ người ký tăng dần (`MultiSig.sol`).
 - bn254 G2 (EIP-197): `x_im ‖ x_re ‖ y_im ‖ y_re`. `H(m)` cho BLS_BN254 = `mapToG1("BAMBOO-BLS-BN254-SIG-V1" ‖ m)`,
   PoP dùng `"BAMBOO-BLS-BN254-POP-V1"`.
 - BLS_12381: `HashToCurve.hashToG1(m, DST)`, `DST_SIG = "BAMBOO-AUTH-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_SIG_"`,
@@ -422,6 +443,9 @@ e = hashToScalar(keccak256("BAMBOO-ZETHER-DISCLOSE-V1" ‖ be32(chainid) ‖ tok
 kiểm:  [z]G − A1 − [e]K == O    và    [z]D_out − A2 − [e](M − [amount]G) == O
        (K, M) = (Y_t, C_out) cho RECEIVER_X, (Y_a, C_aud) cho AUDITOR
 ```
+
+Kiểm thêm: `amount < 2^n_v` (nếu không, `amount + r` cũng "đúng" vì `[amount]G` chỉ phụ thuộc `amount mod r`),
+`z < r`, `e ≠ 0`; `A1`, `A2` vào cùng MSM (subgroup check trên BLS12-381).
 
 `verifyTransferAmount` là view (miễn phí); `attestTransferAmount` emit `AmountAttested`. Auditor đọc được **đúng**
 các `C_aud` (mỗi transfer một cái), không đọc được `acc`/`pending` của ai (mã hoá bằng khoá chủ). Khoá auditor đặt
@@ -486,4 +510,17 @@ hoặc revert.
 
 ## 17. Review log
 
-(điền sau self-review và agy review)
+### agy — review đặc tả bản 1 (2026-10-03), 10 finding
+
+| # | Sev | Kết luận | Xử lý |
+|---|---|---|---|
+| 1 | crit | **Sai một nửa**: reviewer đọc stub `IZetherToken` cũ. Thiết kế đã có `authSig` ở lời gọi thẳng | Ghi rõ ABI lời gọi thẳng (§10); giữ `ZTX_V1_DIRECT` |
+| 2 | high | Đúng (thứ tự) | Kiểm số dư phí ngoài trước verify proof (§10) |
+| 3 | high | Đúng là `register` không relay được; đó là hệ quả của SRS (c trói msg.sender) | Ghi rõ: chủ thể tự gọi (§11.2) |
+| 4 | high | Đúng | Kiểm `threshold`/owners lúc đăng ký; ghi digest thô (§11.2) |
+| 5 | high | Đúng | `0 < amount ≤ maxDecryptableShielded` trước statement (§10) |
+| 6 | med | **Sai**: phát lại cần chính `msg.sender`, kết quả y hệt | Từ chối; giữ công thức SRS nguyên văn |
+| 7 | med | Đúng phần `amount < 2^n_v` (bí danh mod r), `z < r` | Thêm (§12); subgroup đã ngầm qua MSM |
+| 8 | med | Đã có (§6, E6) | Không đổi |
+| 9 | low | Đúng (dễ đọc nhầm) | Ghi chú §9 |
+| 10 | low | Đúng | Ghi chú §3 |
