@@ -1,17 +1,57 @@
-//! bamboo-node --config node.toml
+//! bamboo-node --config node.toml            chạy các mô-đun bật trong config
+//! bamboo-node addresses --config node.toml  in địa chỉ lane dẫn xuất rồi thoát
+//! bamboo-node keystore new --kind <mnemonic|secp256k1|ed25519> --out <dir> --name <file>
+//!     (bí mật đọc từ stdin, passphrase từ $BAMBOO_KEYSTORE_PASSPHRASE)
 //!
-//! Một binary, mô-đun bật bằng config (`_USER-DECISIONS` §23.3). Mỗi chain: một task `submit`
-//! sở hữu nonce vỏ, một task `indexer`, và (tuỳ chọn) gateway HTTP chung.
+//! Một binary, mô-đun bật bằng config (`_USER-DECISIONS` §23.3). Mỗi chain EVM: một `submit` mỗi lane
+//! (R62), một `indexer`, và (tuỳ chọn) gateway HTTP chung. Họ khác: `lane_runner` mỗi lane + `index_runner`.
 use std::collections::HashMap;
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
-use anyhow::{anyhow, bail, Result};
-use bamboo_node::{chain, config, dex, gateway, indexer, odoo, submit};
+use anyhow::{anyhow, bail, Context, Result};
+use bamboo_node::adapter::{index_runner, lane_runner};
+use bamboo_node::signer::Signer;
+use bamboo_node::{adapters, chain, config, dex, gateway, indexer, keys, odoo, submit};
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
+
+fn arg(args: &[String], name: &str) -> Option<String> {
+    args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned()
+}
+
+fn lane_label(cc: &config::ChainCfg, s: &bamboo_node::signer::LocalSigner) -> String {
+    match cc.family.as_str() {
+        "evm" | "hedera" => s.address_hex(),
+        _ => format!("pk:{}", alloy::hex::encode(s.public_key())),
+    }
+}
+
+fn keystore_new(args: &[String]) -> Result<()> {
+    let kind = arg(args, "--kind").ok_or_else(|| anyhow!("--kind mnemonic|secp256k1|ed25519"))?;
+    let out = PathBuf::from(arg(args, "--out").ok_or_else(|| anyhow!("--out <dir>"))?);
+    let name = arg(args, "--name").ok_or_else(|| anyhow!("--name <file>"))?;
+    let mut secret = zeroize::Zeroizing::new(String::new());
+    std::io::stdin().read_to_string(&mut secret)?;
+    let pass = zeroize::Zeroizing::new(std::env::var("BAMBOO_KEYSTORE_PASSPHRASE").context("BAMBOO_KEYSTORE_PASSPHRASE")?);
+    let bytes: zeroize::Zeroizing<Vec<u8>> = match kind.as_str() {
+        "mnemonic" => {
+            keys::Seed::from_phrase(secret.trim().as_bytes(), None)?; // checksum + 24 words before writing
+            zeroize::Zeroizing::new(secret.trim().as_bytes().to_vec())
+        }
+        "secp256k1" | "ed25519" => zeroize::Zeroizing::new(secret.trim().as_bytes().to_vec()),
+        other => bail!("unknown kind {other}"),
+    };
+    if kind != "mnemonic" {
+        keys::parse_raw_key(&bytes)?;
+    }
+    keys::write_keystore(&out, &name, &bytes, pass.as_bytes())?;
+    println!("wrote {}", out.join(&name).display());
+    Ok(())
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -21,11 +61,26 @@ async fn main() -> Result<()> {
         )
         .init();
     let args: Vec<String> = std::env::args().collect();
-    let path = match args.iter().position(|a| a == "--config") {
-        Some(i) if i + 1 < args.len() => PathBuf::from(&args[i + 1]),
-        _ => bail!("usage: bamboo-node --config node.toml"),
-    };
+    if args.get(1).map(String::as_str) == Some("keystore") && args.get(2).map(String::as_str) == Some("new") {
+        return keystore_new(&args);
+    }
+    let path = PathBuf::from(arg(&args, "--config").ok_or_else(|| anyhow!("usage: bamboo-node [addresses] --config node.toml"))?);
     let cfg = config::Config::load(&path)?;
+    // Chỉ địa chỉ được in, không bao giờ bí mật (R60).
+    let mut lane_signers = Vec::new();
+    for cc in &cfg.chains {
+        let signers = cfg.lane_signers(cc).with_context(|| format!("keys of {}", cc.chain_key()))?;
+        for (s, i) in signers.iter().zip(&cc.lanes) {
+            info!(chain = %cc.chain_key(), lane = i, address = %lane_label(cc, s), "relayer lane");
+            if args.get(1).map(String::as_str) == Some("addresses") {
+                println!("{}\tlane {i}\t{}", cc.chain_key(), lane_label(cc, s));
+            }
+        }
+        lane_signers.push(signers);
+    }
+    if args.get(1).map(String::as_str) == Some("addresses") {
+        return Ok(());
+    }
     if cfg.modules.gateway && !cfg.modules.submit {
         bail!("gateway needs the submit module");
     }
@@ -33,32 +88,63 @@ async fn main() -> Result<()> {
     let mut gw_chains = HashMap::new();
     let mut set: JoinSet<Result<()>> = JoinSet::new();
 
-    for cc in &cfg.chains {
+    for (cc, signers) in cfg.chains.iter().zip(lane_signers) {
         let poll = Duration::from_millis(cc.poll_ms);
-        let (tx, rx) = mpsc::channel::<submit::Work>(256);
         let tokens = Arc::new(RwLock::new(Vec::new()));
-        let shared = Arc::new(chain::Chain::connect(cc)?);
+        if !cc.is_evm() {
+            let adapter = adapters::build(cc, &signers)?;
+            if cfg.modules.submit {
+                let relay = odoo::Odoo::new(&cfg.odoo, &cfg.odoo.relay_api_key_env)?;
+                for lane in 0..signers.len() {
+                    let (a, o, w) = (adapter.clone(), relay.clone(), format!("{node_id}#{}", cc.lanes[lane]));
+                    set.spawn(async move {
+                        lane_runner(a, o, lane, w, poll).await;
+                        Err(anyhow!("lane loop ended"))
+                    });
+                }
+            }
+            if cfg.modules.indexer {
+                let idx = odoo::Odoo::new(&cfg.odoo, &cfg.odoo.indexer_api_key_env)?;
+                let a = adapter.clone();
+                set.spawn(async move {
+                    index_runner(a, idx, poll).await;
+                    Err(anyhow!("indexer loop ended"))
+                });
+            }
+            continue;
+        }
+        let num = cc.evm_chain_number;
+        let mut lanes = chain::Chain::connect_lanes(cc, &signers)?;
+        let shared = Arc::new(lanes.remove(0));
+        let mut first_tx = None;
         if cfg.modules.submit {
             let relay = odoo::Odoo::new(&cfg.odoo, &cfg.odoo.relay_api_key_env)?;
             // Danh sách token NẠP TRƯỚC khi gateway mở (review P15), rồi làm mới mỗi 30 s.
-            let nc = relay.node_config(cc.evm_chain_number, None).await?;
+            let nc = relay.node_config(num, None).await?;
             if let Ok(mut w) = tokens.write() {
-                *w = nc.tokens.iter().map(|t| t.address).collect();
+                *w = nc.submittable_tokens();
             }
-            let s = submit::Submitter::start(chain::Chain::connect(cc)?, relay.clone(), cc.clone(), node_id.clone())
-                .await?;
-            set.spawn(async move {
-                submit::run(s, rx, poll).await;
-                Err(anyhow!("submit loop ended"))
-            });
-            let (t, n, num) = (tokens.clone(), relay, cc.evm_chain_number);
+            let all = std::iter::once(chain::Chain::connect_lanes(cc, &signers[..1])?.remove(0)).chain(lanes);
+            for (lane, c) in all.enumerate() {
+                let (tx, rx) = mpsc::channel::<submit::Work>(256);
+                if first_tx.is_none() {
+                    first_tx = Some(tx);
+                }
+                let worker = format!("{node_id}#{}", cc.lanes[lane]);
+                let s = submit::Submitter::start(c, relay.clone(), cc.clone(), worker).await?;
+                set.spawn(async move {
+                    submit::run(s, rx, poll).await;
+                    Err(anyhow!("submit loop ended"))
+                });
+            }
+            let (t, n) = (tokens.clone(), relay);
             set.spawn(async move {
                 loop {
                     tokio::time::sleep(Duration::from_secs(30)).await;
                     match n.node_config(num, None).await {
                         Ok(nc) => {
                             if let Ok(mut w) = t.write() {
-                                *w = nc.tokens.iter().map(|x| x.address).collect();
+                                *w = nc.submittable_tokens();
                             }
                         }
                         Err(e) => warn!(chain = num, "token refresh: {e:#}"),
@@ -74,25 +160,31 @@ async fn main() -> Result<()> {
                 Err(anyhow!("indexer loop ended"))
             });
         }
-        // DEX (R35): sổ lệnh bền ở Odoo + watcher riêng; cần gateway (intake) và submit (settle qua outbox).
-        let venue = match cc.dex {
-            Some(addr) if cfg.modules.gateway && cfg.modules.submit => {
-                let relay = odoo::Odoo::new(&cfg.odoo, &cfg.odoo.relay_api_key_env)?;
-                let idx = match cfg.modules.indexer {
-                    true => Some(odoo::Odoo::new(&cfg.odoo, &cfg.odoo.indexer_api_key_env)?),
-                    false => None,
-                };
-                let v = dex::venue::Venue::start(shared.clone(), relay, idx, addr).await?;
-                let lv = v.clone();
-                set.spawn(async move {
-                    lv.run_loops(poll).await;
-                    Err(anyhow!("dex loop ended"))
-                });
-                Some(v)
-            }
-            _ => None,
-        };
-        gw_chains.insert(cc.evm_chain_number, gateway::GwChain { chain: shared, tx, tokens, dex: venue });
+        if let Some(tx) = first_tx {
+            // DEX (R35): sổ lệnh bền ở Odoo + watcher riêng; settle qua outbox. Lệnh khoá `relayer` =
+            // ví lane 0 (RS5-9) mà job outbox chưa ghim được lane (RS5-11) ⇒ DEX chỉ chạy một lane.
+            let venue = match cc.dex {
+                Some(addr) if cfg.modules.gateway => {
+                    if cc.lanes.len() > 1 {
+                        bail!("chain {num}: the DEX needs a single relayer lane (RS5-11)");
+                    }
+                    let relay = odoo::Odoo::new(&cfg.odoo, &cfg.odoo.relay_api_key_env)?;
+                    let idx = match cfg.modules.indexer {
+                        true => Some(odoo::Odoo::new(&cfg.odoo, &cfg.odoo.indexer_api_key_env)?),
+                        false => None,
+                    };
+                    let v = dex::venue::Venue::start(shared.clone(), relay, idx, addr).await?;
+                    let lv = v.clone();
+                    set.spawn(async move {
+                        lv.run_loops(poll).await;
+                        Err(anyhow!("dex loop ended"))
+                    });
+                    Some(v)
+                }
+                _ => None,
+            };
+            gw_chains.insert(num, gateway::GwChain { chain: shared, tx, tokens, dex: venue });
+        }
     }
     if cfg.modules.gateway {
         let app = gateway::router(gateway::AppState { chains: Arc::new(gw_chains) });

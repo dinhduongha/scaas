@@ -142,8 +142,10 @@ abstract contract ERC20MetaTx is ERC20, EIP712, IERC20MetaTx {
     ///      chứ không bằng độ dài chữ ký — một smart account hoàn toàn có thể trả về một
     ///      blob 65 byte, và đoán theo độ dài thì nó bị verify nhầm bằng `ecrecover`. EOA uỷ
     ///      quyền EIP-7702 đi đường ECDSA: khoá của nó vẫn ký được (R26, review W3).
+    /// @dev `virtual`: một mạng có cách xác thực tài khoản riêng (Hedera HIP-632 cho khoá ED25519 —
+    ///      R63) ghi đè ở implementation của mạng đó; thứ tự 9 bước không đổi.
     function _requireValidSignature(address from, bytes32 digest, bytes calldata sig)
-        internal view
+        internal view virtual
     {
         if (!_isContract(from)) {
             (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(digest, sig);

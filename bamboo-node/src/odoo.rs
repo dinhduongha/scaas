@@ -33,7 +33,12 @@ pub struct InflightJob {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct NodeConfig {
-    pub evm_chain_number: u64,
+    /// Số EIP-155 (EVM/Hedera) hoặc khoá `family:network` — không ai đọc, chỉ để log.
+    #[serde(default)]
+    pub evm_chain_number: Value,
+    /// `active` | `paused` (R53: paused = indexing continues, nothing new is submitted).
+    #[serde(default)]
+    pub state: Option<String>,
     pub finality_mode: String,
     pub finality_depth: u64,
     pub finality_quorum: usize,
@@ -42,6 +47,17 @@ pub struct NodeConfig {
     pub journal_max_nonce: Option<u64>,
     #[serde(default)]
     pub inflight: Vec<InflightJob>,
+}
+
+impl NodeConfig {
+    /// Token list the open gateway may accept: none while the chain is paused (R53).
+    pub fn submittable_tokens(&self) -> Vec<Address> {
+        if self.state.as_deref().unwrap_or("active") == "active" {
+            self.tokens.iter().map(|t| t.address).collect()
+        } else {
+            Vec::new()
+        }
+    }
 }
 
 /// Một job outbox. `kind = "metatx"`: `token`/`signature`/`metatx` có mặt. `kind = "call"`:
@@ -59,6 +75,11 @@ pub struct Job {
     pub metatx: Option<WireMetaTx>,
     #[serde(default)]
     pub call: Option<WireCall>,
+    /// `metatx` | `call` | `signed_op` (họ không phải EVM: payload ký + chữ ký + khoá công khai, adapter tự đọc).
+    #[serde(default)]
+    pub kind: Option<String>,
+    #[serde(default)]
+    pub op: Option<Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -125,14 +146,27 @@ impl Odoo {
     }
 
     pub async fn node_config(&self, chain: u64, relayer: Option<Address>) -> Result<NodeConfig> {
+        self.node_config_ref(json!(chain), relayer.map(|r| format!("{r:#x}")), None).await
+    }
+
+    /// `chain` = số EIP-155 (EVM) hoặc khoá `family:network` (R61). `worker` lọc job đã claim mà
+    /// chưa ký về đúng lane đã claim (nhiều lane cùng chain).
+    pub async fn node_config_ref(&self, chain: Value, relayer: Option<String>, worker: Option<String>) -> Result<NodeConfig> {
         let mut body = json!({"evm_chain_number": chain});
         if let Some(r) = relayer {
-            body["relayer_address"] = json!(format!("{r:#x}"));
+            body["relayer_address"] = json!(r);
+        }
+        if let Some(w) = worker {
+            body["worker"] = json!(w);
         }
         self.call("blockchain.chain", "node_config", body).await
     }
 
     pub async fn relay_poll(&self, chain: u64, limit: u32) -> Result<Vec<Job>> {
+        self.relay_poll_ref(json!(chain), limit).await
+    }
+
+    pub async fn relay_poll_ref(&self, chain: Value, limit: u32) -> Result<Vec<Job>> {
         self.call("blockchain.relay.job", "relay_poll", json!({"evm_chain_number": chain, "limit": limit}))
             .await
     }
@@ -147,6 +181,10 @@ impl Odoo {
     }
 
     pub async fn ingest(&self, chain: u64, from: u64, to: u64, hash: &str, events: &[Value]) -> Result<IngestResult> {
+        self.ingest_ref(json!(chain), from, to, hash, events).await
+    }
+
+    pub async fn ingest_ref(&self, chain: Value, from: u64, to: u64, hash: &str, events: &[Value]) -> Result<IngestResult> {
         self.call(
             "blockchain.chain.event",
             "chain_event_ingest",
@@ -186,6 +224,18 @@ mod tests {
         let w = crate::submit::work_from_job(&job).unwrap();
         assert_eq!(w.data.as_ref(), &[0xde, 0xad, 0xbe, 0xef]);
         assert_eq!(w.valid_until, 1_800_000_300);
+    }
+
+    #[test]
+    fn paused_chain_serves_no_tokens_to_the_gateway() {
+        let mk = |state: &str| -> NodeConfig {
+            serde_json::from_value(json!({"evm_chain_number": 1, "state": state, "finality_mode": "depth",
+                "finality_depth": 1, "finality_quorum": 1, "indexed_block": 0, "journal_max_nonce": null,
+                "tokens": [{"address": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd", "decimals": 6}]}))
+            .unwrap()
+        };
+        assert_eq!(mk("active").submittable_tokens().len(), 1);
+        assert!(mk("paused").submittable_tokens().is_empty());
     }
 
     #[test]

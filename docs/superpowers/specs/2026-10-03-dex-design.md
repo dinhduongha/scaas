@@ -352,6 +352,9 @@ Sổ, matcher, Odoo, gateway **dùng chung** (không phụ thuộc EVM ngoài đ
 - **RS5-8** Watcher DEX có cursor riêng và gửi bằng key indexer; không sửa `indexer.rs`.
 - **RS5-9** Book chỉ nhận lệnh `relayer = ví relayer này` (chống MEV, chống settle lại phần đã huỷ off-chain).
 - **RS5-10** Chữ ký huỷ (`CancelOrder`, `InvalidateNonces`) không có hạn — một chiều, phát lại no-op.
+- **RS5-11** Chain có `dex` chỉ chạy một lane relayer: lệnh khoá `relayer` = ví lane 0 (RS5-9) mà job outbox
+  chưa ghim được lane (R62), nên lane khác claim job settle sẽ `WrongRelayer`. Node từ chối khởi động khi
+  `lanes` > 1. Gỡ khi outbox có claim theo signer bắt buộc (cần S1).
 
 ---
 

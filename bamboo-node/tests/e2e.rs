@@ -213,9 +213,14 @@ async fn start_fake(state: Arc<Mutex<FakeOdoo>>) -> SocketAddr {
 
 fn chain_cfg(chain_id: u64, rpc: &str, dex: Option<Address>) -> ChainCfg {
     ChainCfg {
+        family: "evm".into(),
+        network: None,
         evm_chain_number: chain_id,
         rpc_urls: vec![rpc.to_string()],
         signer_key_env: String::new(),
+        private_key: None,
+        lanes: vec![0],
+        params: Default::default(),
         finality: FinalityCfg { mode: "depth".into(), depth: 0, quorum: 1 },
         dex,
         poll_ms: 200,
@@ -536,4 +541,86 @@ async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
     drain(&mut s, &mut rx).await;
     assert_eq!(balance(&rpc, token_b, alice.address()).await, U256::from(79_920_000u64 + 20_000_000 - 20_000));
     assert_eq!(balance(&rpc, token_a, bob.address()).await, U256::from(39_920_000u64 + 10_000_000 - 20_000));
+}
+
+fn pay_job(payer: &PrivateKeySigner, chain_id: u64, token: Address, id: i64, tag: &[u8]) -> Value {
+    let entry_ref = keccak256(tag);
+    let mut data = keccak256(b"pay(bytes32)")[..4].to_vec();
+    data.extend_from_slice(entry_ref.as_slice());
+    let m = MetaTransaction {
+        from: payer.address(),
+        to: Address::repeat_byte(0x5e),
+        value: U256::from(1_000u64),
+        data: data.into(),
+        batch: U256::from_be_bytes(entry_ref.0),
+        nonce: U256::ZERO,
+        validUntil: U256::from(now() + 300),
+        mode: 0,
+        relayer: Address::ZERO,
+        fee: U256::ZERO,
+        feeRecipient: Address::ZERO,
+    };
+    json!({"id": id, "token": format!("{token:#x}"), "digest": "0x",
+           "signature": sign(payer, chain_id, token, &m), "metatx": WireMetaTx::from_sol(&m)})
+}
+
+/// R58/R62: the same EVM chain driven through the generic `ChainAdapter` + `lane_step` +
+/// `index_step` path, with TWO relayer lanes derived from a 24-word mnemonic: each lane signs with
+/// its own key, both payments land, the indexer ingests both.
+#[tokio::test]
+#[ignore]
+async fn evm_adapter_runs_the_generic_lane_runner_on_two_mnemonic_lanes() {
+    use bamboo_node::adapter::{index_step, lane_step, ChainAdapter};
+    use bamboo_node::adapters::evm::EvmAdapter;
+    use bamboo_node::keys::{lane_secret, Seed};
+    use bamboo_node::signer::LocalSigner;
+
+    let chain_id = 31903;
+    let (_anvil, rpc) = start_anvil(chain_id, 18603).await;
+    let payer = small_key(0xB0B);
+    let dep = deploy(&rpc, chain_id, payer.address());
+    let token: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();
+    let art = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
+               abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
+    let seed = Seed::from_phrase(art.as_bytes(), None).unwrap();
+    let signers: Vec<LocalSigner> = (0..2)
+        .map(|i| {
+            let (c, k) = lane_secret(&seed, "evm", i).unwrap();
+            LocalSigner::new(c, &k).unwrap()
+        })
+        .collect();
+    let p = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
+    for s in &signers {
+        let _: Value = p.raw_request("anvil_setBalance".into(), (s.address_hex(), "0xde0b6b3a7640000")).await.unwrap();
+    }
+    let mut cfg = chain_cfg(chain_id, &rpc, None);
+    cfg.lanes = vec![0, 1];
+    let chains = Chain::connect_lanes(&cfg, &signers).unwrap();
+    let adapter = EvmAdapter::new(&cfg, chains, Arc::new(RwLock::new(vec![token]))).unwrap();
+    assert_eq!(adapter.lanes().len(), 2);
+
+    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
+    let odoo = odoo_at(start_fake(state.clone()).await);
+    state.lock().unwrap().jobs.push(pay_job(&payer, chain_id, token, 11, b"generic-1"));
+    assert!(lane_step(&adapter, &odoo, 0, "e2e#0").await.unwrap());
+    state.lock().unwrap().jobs.push(pay_job(&payer, chain_id, token, 12, b"generic-2"));
+    assert!(lane_step(&adapter, &odoo, 1, "e2e#1").await.unwrap());
+    assert!(!lane_step(&adapter, &odoo, 1, "e2e#1").await.unwrap(), "nothing left");
+
+    let reports = state.lock().unwrap().reports.clone();
+    let states: Vec<(i64, String)> = reports.iter()
+        .map(|r| (r["job_id"].as_i64().unwrap(), r["chain_state"].as_str().unwrap().to_string())).collect();
+    for id in [11, 12] {
+        let seq: Vec<&str> = states.iter().filter(|(j, _)| *j == id).map(|(_, s)| s.as_str()).collect();
+        assert_eq!(seq, vec!["signed", "broadcast", "mined"], "{reports:?}");
+    }
+    let signed_by: std::collections::HashSet<String> = reports.iter()
+        .filter(|r| r["chain_state"] == "signed").map(|r| r["signer_address"].as_str().unwrap().to_string()).collect();
+    assert_eq!(signed_by, signers.iter().map(|s| s.address_hex()).collect());
+    assert!(state.lock().unwrap().refused.is_empty());
+    assert_eq!(balance(&rpc, token, Address::repeat_byte(0x5e)).await, U256::from(2_000u64));
+
+    while index_step(&adapter, &odoo).await.unwrap() {}
+    let settled = state.lock().unwrap().ingested.iter().filter(|e| e["event"] == "PaymentSettled").count();
+    assert_eq!(settled, 2);
 }
