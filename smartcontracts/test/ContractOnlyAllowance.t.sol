@@ -5,6 +5,7 @@ import {Fixtures} from "./helpers/Fixtures.sol";
 import {Puller, ConstructorPuller} from "./helpers/WalletMocks.sol";
 import {MetaToken} from "../src/metatx/MetaToken.sol";
 import {IERC20MetaTx} from "../src/metatx/IERC20MetaTx.sol";
+import {MetaTxLib} from "../src/common/MetaTxLib.sol";
 
 /// R26: allowance chỉ tồn tại giữa hợp đồng. EOA không bao giờ là spender, và chỉ hợp đồng
 /// gọi được `transferFrom`. EOA đã uỷ quyền EIP-7702 vẫn là EOA; hợp đồng đang chạy
@@ -67,6 +68,22 @@ contract ContractOnlyAllowanceTest is Fixtures {
         vm.prank(bob);
         vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.CallerNotContract.selector, bob));
         t.transferFrom(alice, bob, 0);
+    }
+
+    /// Một EOA uỷ quyền 7702 vẫn trả bằng chữ ký ECDSA của chính khoá nó, dù delegate của
+    /// nó không hiện thực ERC-1271 (review W3).
+    function test_7702_delegated_eoa_pays_with_its_own_key() public {
+        uint256 pk = 0x7702;
+        address eoa = vm.addr(pk);
+        t.transfer(eoa, 100);
+        vm.etch(eoa, abi.encodePacked(hex"ef0100", address(puller)));
+        bytes32 ref = keccak256("7702");
+        MetaTxLib.MetaTransaction memory m =
+            _mt(eoa, bob, 40, _payData(ref), uint256(ref), MetaTxLib.MODE_RESTRICT_RELAYER);
+        bytes memory sig = _sign(pk, t, m);
+        vm.prank(relayer);
+        t.executeMetaTransaction(m, sig);
+        assertEq(t.balanceOf(bob), 40);
     }
 
     function test_23_byte_contract_that_is_not_a_designator_is_a_contract() public {

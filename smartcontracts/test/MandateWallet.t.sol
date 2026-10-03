@@ -114,6 +114,19 @@ contract MandateWalletTest is Fixtures {
         _payExpect(npp, 10, keccak256("x"), abi.encodeWithSelector(MandateWallet.NoMandate.selector));
     }
 
+    function test_mandate_parameters_are_validated() public {
+        vm.startPrank(vm.addr(ownerPk));
+        vm.expectRevert(MandateWallet.BadMandate.selector);
+        w.setMandate(address(t), delegate, 1_000, 2_500, 0, uint64(block.timestamp + 1 days));
+        vm.expectRevert(MandateWallet.BadMandate.selector);
+        w.setMandate(address(t), delegate, 3_000, 2_500, 1 days, uint64(block.timestamp + 1 days));
+        vm.expectRevert(MandateWallet.BadMandate.selector);
+        w.setMandate(address(t), address(0), 1_000, 2_500, 1 days, uint64(block.timestamp + 1 days));
+        vm.stopPrank();
+        vm.expectRevert(MandateWallet.ZeroOwner.selector);
+        new MandateWallet(address(0));
+    }
+
     function test_stranger_cannot_revoke_or_configure() public {
         uint256 vu = block.timestamp + 300;
         bytes memory bad = _sig(0xBAD, w.revokeDigest(address(t), vu));

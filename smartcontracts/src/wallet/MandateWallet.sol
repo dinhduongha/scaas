@@ -57,6 +57,9 @@ contract MandateWallet is EIP712, IERC1271 {
     error BadSignature();
     error BadNonce();
     error CallFailed(bytes reason);
+    error ZeroOwner();
+    error BadMandate();
+    error PayFailed();
 
     modifier onlyOwner() {
         if (msg.sender != owner && msg.sender != address(this)) revert NotOwner();
@@ -64,6 +67,7 @@ contract MandateWallet is EIP712, IERC1271 {
     }
 
     constructor(address owner_) EIP712("Bamboo MandateWallet", "1") {
+        if (owner_ == address(0)) revert ZeroOwner();
         owner = owner_;
     }
 
@@ -71,6 +75,9 @@ contract MandateWallet is EIP712, IERC1271 {
 
     function setMandate(address token, address delegate, uint128 maxPerPayment, uint128 maxPerPeriod,
                         uint64 periodSeconds, uint64 expiry) external onlyOwner {
+        // periodSeconds == 0 sẽ reset hạn mức kỳ ở MỌI lần trả (review W5).
+        if (delegate == address(0) || periodSeconds == 0 || maxPerPayment == 0
+            || maxPerPayment > maxPerPeriod) revert BadMandate();
         mandates[token] = Mandate(delegate, expiry, periodSeconds, uint64(block.timestamp),
                                   maxPerPayment, maxPerPeriod, 0);
         emit MandateSet(token, delegate, maxPerPayment, maxPerPeriod, periodSeconds, expiry);
@@ -131,7 +138,9 @@ contract MandateWallet is EIP712, IERC1271 {
         if (spent > md.maxPerPeriod) revert OverPeriodCap(spent, md.maxPerPeriod);
         md.spentInPeriod = uint128(spent);
         refUsed[entryRef] = true;
-        IERC20Payment(token).payWithFee(payee, amount, FeeMode.NONE, 0, address(0), entryRef);
+        if (!IERC20Payment(token).payWithFee(payee, amount, FeeMode.NONE, 0, address(0), entryRef)) {
+            revert PayFailed();
+        }
         emit PaidUnderMandate(token, payee, amount, entryRef);
     }
 

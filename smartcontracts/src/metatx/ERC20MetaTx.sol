@@ -138,13 +138,14 @@ abstract contract ERC20MetaTx is ERC20, EIP712, IERC20MetaTx {
         return true;
     }
 
-    /// @dev Hai đường: EOA (65 byte, low-s) và ERC-1271. Phân biệt bằng `from.code.length`
+    /// @dev Hai đường: EOA (65 byte, low-s) và ERC-1271. Phân biệt bằng `_isContract(from)`
     ///      chứ không bằng độ dài chữ ký — một smart account hoàn toàn có thể trả về một
-    ///      blob 65 byte, và đoán theo độ dài thì nó bị verify nhầm bằng `ecrecover`.
+    ///      blob 65 byte, và đoán theo độ dài thì nó bị verify nhầm bằng `ecrecover`. EOA uỷ
+    ///      quyền EIP-7702 đi đường ECDSA: khoá của nó vẫn ký được (R26, review W3).
     function _requireValidSignature(address from, bytes32 digest, bytes calldata sig)
         internal view
     {
-        if (from.code.length == 0) {
+        if (!_isContract(from)) {
             (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(digest, sig);
             if (err != ECDSA.RecoverError.NoError || rec != from) revert MetaTxBadSignature();
         } else {
