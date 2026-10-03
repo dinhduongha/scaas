@@ -1,0 +1,7 @@
+# Coin thử cho e2e (bamboo-node/tests/e2e_sui.rs): coin type thứ hai cho test anti-lock.
+[package]
+name = "demo_coin"
+edition = "2024"
+license = "Apache-2.0"
+
+[dependencies]
