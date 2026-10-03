@@ -251,6 +251,9 @@ Test bắt buộc mỗi mạng (**anti-lock**): chủ thể ký thao tác X trê
 
 ## C. Passkey (SRS nguyên tắc 6, §1.1 hệ quả 2–3) — R31
 
+Cơ sở: `2026-10-03-blockchain-infrastructure-service.md` (blockchain là dịch vụ hạ tầng — client ký; bản trong repo
+của SRS nguyên tắc 6 và §1.1). R31 và R32 thực hiện hệ quả 1–3 của tài liệu đó.
+
 - **Định dạng:** WebAuthn assertion `{authenticatorData, clientDataJSON, r, s}` trên P-256. Challenge trong
   `clientDataJSON` = base64url(**digest thao tác**) (EIP-712 trên EVM; digest typed của từng mạng). Verifier kiểm:
   `type == "webauthn.get"`, challenge đúng, `rpIdHash` (32 byte đầu authenticatorData) = SHA-256(rpId) đã đăng
