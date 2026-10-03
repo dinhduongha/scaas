@@ -14,7 +14,7 @@ use crate::ZError;
 pub type G<C> = Projective<C>;
 pub type Fr<C> = <C as CurveConfig>::ScalarField;
 
-pub trait ZCurve: SWCurveConfig<BaseField = <Self as ZCurve>::Fq> + Send + Sync + 'static {
+pub trait ZCurve: SWCurveConfig<BaseField = <Self as ZCurve>::Fq> + Clone + PartialEq + Eq {
     type Fq: PrimeField;
     /// `"bn254"` / `"bls12_381"`.
     const NAME: &'static str;
@@ -24,6 +24,17 @@ pub trait ZCurve: SWCurveConfig<BaseField = <Self as ZCurve>::Fq> + Send + Sync 
     const KEYGEN_SALT: &'static [u8];
     /// First path component of the R33 tree (`m/<root>/<coin>/<account>/<use>`).
     const PATH_ROOT: u32;
+    /// Preimage of `proofSystemId` (zether-design §2).
+    const PROOF_SYSTEM_LABEL: &'static [u8];
+    /// NUMS generator `gen(label, index)` (zether-design §3).
+    fn gen(label: &[u8], index: u32) -> G<Self>;
+}
+
+fn gen_msg(label: &[u8], index: u32) -> Vec<u8> {
+    let mut m = vec![label.len() as u8];
+    m.extend_from_slice(label);
+    m.extend_from_slice(&index.to_be_bytes());
+    m
 }
 
 impl ZCurve for ark_bn254::g1::Config {
@@ -32,6 +43,25 @@ impl ZCurve for ark_bn254::g1::Config {
     const COORD_LEN: usize = 32;
     const KEYGEN_SALT: &'static [u8] = b"BAMBOO-ZETHER-BN254-v1";
     const PATH_ROOT: u32 = 254;
+    const PROOF_SYSTEM_LABEL: &'static [u8] = b"bamboo/zether/sigma-bullets/bn254/n32-n64/v1";
+
+    /// Try-and-increment, even `y` (zether-design §3.1).
+    fn gen(label: &[u8], index: u32) -> G<Self> {
+        use ark_ff::Field;
+        let mut prefix = b"BAMBOO-ZETHER-GEN-BN254-V1".to_vec();
+        prefix.extend_from_slice(&gen_msg(label, index));
+        for ctr in 0u32.. {
+            let mut buf = prefix.clone();
+            buf.extend_from_slice(&ctr.to_be_bytes());
+            let x = ark_bn254::Fq::from_be_bytes_mod_order(&keccak256(&buf));
+            let rhs = x * x * x + ark_bn254::Fq::from(3u64);
+            if let Some(y) = rhs.sqrt() {
+                let y = if y.into_bigint().is_odd() { -y } else { y };
+                return Affine::<Self>::new(x, y).into();
+            }
+        }
+        unreachable!()
+    }
 }
 
 impl ZCurve for ark_bls12_381::g1::Config {
@@ -40,6 +70,25 @@ impl ZCurve for ark_bls12_381::g1::Config {
     const COORD_LEN: usize = 64;
     const KEYGEN_SALT: &'static [u8] = b"BLS-SIG-KEYGEN-SALT-";
     const PATH_ROOT: u32 = 12381;
+    const PROOF_SYSTEM_LABEL: &'static [u8] = b"bamboo/zether/sigma-bullets/bls12-381/n32-n64/v1";
+
+    /// RFC 9380 `BLS12381G1_XMD:SHA-256_SSWU_RO_` (zether-design §3.2).
+    fn gen(label: &[u8], index: u32) -> G<Self> {
+        hash_to_g1_bls(&gen_msg(label, index), b"BAMBOO-ZETHER-GEN-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_")
+    }
+}
+
+/// RFC 9380 hash_to_curve, suite `BLS12381G1_XMD:SHA-256_SSWU_RO_`.
+pub fn hash_to_g1_bls(msg: &[u8], dst: &[u8]) -> G<Bls12381> {
+    use ark_ec::hashing::{curve_maps::wb::WBMap, map_to_curve_hasher::MapToCurveBasedHasher, HashToCurve};
+    use ark_ff::field_hashers::DefaultFieldHasher;
+    let h = MapToCurveBasedHasher::<G<Bls12381>, DefaultFieldHasher<sha2::Sha256, 128>, WBMap<Bls12381>>::new(dst)
+        .expect("valid DST");
+    h.hash(msg).expect("hash_to_curve").into()
+}
+
+pub fn proof_system_id<C: ZCurve>() -> [u8; 32] {
+    keccak256(C::PROOF_SYSTEM_LABEL)
 }
 
 pub type Bn254 = ark_bn254::g1::Config;
@@ -169,6 +218,33 @@ mod tests {
         // EIP-2537: top 16 bytes of each 64-byte coordinate are zero.
         let e = encode_point::<Bls12381>(&generator::<Bls12381>());
         assert!(e[..16].iter().all(|&b| b == 0) && e[64..80].iter().all(|&b| b == 0));
+    }
+
+    /// RFC 9380 Appendix J.9.1 (BLS12381G1_XMD:SHA-256_SSWU_RO_).
+    #[test]
+    fn rfc9380_bls12_381_g1_vectors() {
+        let dst = b"QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_";
+        for (msg, x, y) in [
+            ("", "052926add2207b76ca4fa57a8734416c8dc95e24501772c814278700eed6d1e4e8cf62d9c09db0fac349612b759e79a1",
+             "08ba738453bfed09cb546dbb0783dbb3a5f1f566ed67bb6be0e8c67e2e81a4cc68ee29813bb7994998f3eae0c9c6a265"),
+            ("abc", "03567bc5ef9c690c2ab2ecdf6a96ef1c139cc0b2f284dca0a9a7943388a49a3aee664ba5379a7655d3c68900be2f6903",
+             "0b9c15f3fe6e5cf4211f346271d7b01c8f3b28be689c8429c85b67af215533311f0b8dfaaa154fa6b88176c229f2885d"),
+        ] {
+            let e = encode_point::<Bls12381>(&hash_to_g1_bls(msg.as_bytes(), dst));
+            assert_eq!(hex::encode(&e[16..64]), x);
+            assert_eq!(hex::encode(&e[80..128]), y);
+        }
+    }
+
+    #[test]
+    fn bn254_gen_even_y_and_distinct() {
+        let a = <Bn254 as ZCurve>::gen(b"G", 0);
+        let b = <Bn254 as ZCurve>::gen(b"G", 1);
+        let h = <Bn254 as ZCurve>::gen(b"h", 0);
+        assert!(a != b && a != h && a != generator::<Bn254>());
+        let e = encode_point::<Bn254>(&a);
+        assert_eq!(e[63] & 1, 0);
+        decode_point::<Bn254>(&e).unwrap();
     }
 
     #[test]

@@ -14,11 +14,18 @@ pub const DECRYPT_BOUND_BITS: u32 = 40;
 pub const DECRYPT_BOUND: u64 = 1 << DECRYPT_BOUND_BITS;
 const BABY: u64 = 1 << (DECRYPT_BOUND_BITS / 2);
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub struct Ciphertext<C: ZCurve> {
     pub c: G<C>,
     pub d: G<C>,
 }
+
+impl<C: ZCurve> Clone for Ciphertext<C> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<C: ZCurve> Copy for Ciphertext<C> {}
 
 impl<C: ZCurve> Ciphertext<C> {
     pub fn zero() -> Self {

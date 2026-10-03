@@ -3,9 +3,12 @@
 //!
 //! UNAUDITED — NOT FOR PRODUCTION FUNDS.
 
+pub mod bulletproofs;
 pub mod curve;
 pub mod elgamal;
 pub mod keys;
+pub mod nonce;
+pub mod transcript;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ZError {
@@ -17,4 +20,12 @@ pub enum ZError {
     BadSeed(&'static str),
     #[error("plaintext outside [0, 2^40): decryption bound exceeded (negative or too large)")]
     DecryptBound,
+    #[error("witness out of range")]
+    OutOfRange,
+    #[error("malformed proof: {0}")]
+    BadProof(&'static str),
+    #[error("bad statement: {0}")]
+    BadStatement(&'static str),
+    #[error("verification failed: {0}")]
+    Verify(&'static str),
 }
