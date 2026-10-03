@@ -4,7 +4,10 @@ pragma solidity ^0.8.20;
 /// @title Selective disclosure: chứng minh "tôi đã gửi ĐÚNG số tiền này, trong ĐÚNG
 ///        giao dịch này" mà không công khai gì khác.
 ///
-/// @notice Yêu cầu gốc của user: *"Kèm thêm thông tin để nếu cần, có thể chứng minh:
+/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Hiện thực: `ZetherToken`; định dạng `opening` và
+///         challenge Chaum-Pedersen: `2026-10-03-zether-design.md` §12.
+///
+///         Yêu cầu gốc của user: *"Kèm thêm thông tin để nếu cần, có thể chứng minh:
 ///         Tôi đã gửi đúng số tiền amount, và đây là bằng chứng."*
 ///
 /// **Không dùng `hash(amount ‖ random)`.** Nó là một cam kết TÁCH RỜI khỏi giao dịch:

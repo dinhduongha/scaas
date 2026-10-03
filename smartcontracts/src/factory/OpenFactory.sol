@@ -5,6 +5,7 @@ import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IOpenFactory} from "../common/IOpenFactory.sol";
 import {IFactoryToken} from "./IFactoryToken.sol";
 import {IZetherVerifier} from "../zether/IZetherVerifier.sol";
+import {ZetherSafety} from "../zether/ZetherSafety.sol";
 
 /// @title Factory mở — hiện thực `IOpenFactory`. Đọc docstring của interface trước.
 /// @notice Catalogue là DANH MỤC, không phải cổng: `registrar` chỉ thêm được version
@@ -27,7 +28,14 @@ contract OpenFactory is IOpenFactory {
     mapping(address => mapping(address => address[])) private _wrappers;
     mapping(address => address[]) private _byUnderlying;
 
+    /// @notice Cổng Zether của owner (R34, RS2-1): **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Mặc định tắt;
+    ///         chỉ bật được trên chain dev (`ZetherSafety`), và tạo token Zether kiểm lại cả hai mỗi lần.
+    bool public zetherEnabled;
+
+    event ZetherEnabled(bool enabled);
+
     error NotRegistrar();
+    error ZetherDisabled();
 
     constructor(address registrar_) {
         registrar = registrar_;
@@ -51,6 +59,13 @@ contract OpenFactory is IOpenFactory {
         _impl[kind][version] = implementation;
         if (version > _latest[kind]) _latest[kind] = version;
         emit ImplementationRegistered(kind, version, implementation, msg.sender);
+    }
+
+    /// @notice Bật/tắt tạo token Zether. Bật revert `ZetherNotDevChain` ngoài allowlist dev; tắt luôn được.
+    function setZetherEnabled(bool on) external onlyRegistrar {
+        if (on) ZetherSafety.requireDevChain();
+        zetherEnabled = on;
+        emit ZetherEnabled(on);
     }
 
     function deprecate(TokenKind kind, uint64 version, string calldata reason) external onlyRegistrar {
@@ -87,6 +102,7 @@ contract OpenFactory is IOpenFactory {
         bytes calldata initData,
         bytes32 salt
     ) external returns (address) {
+        _requireZether();
         address impl = _registered(TokenKind.ZETHER, version);
         _checkVerifier(verifier);
         return _create(TokenKind.ZETHER, version, impl, underlying, verifier, initData, salt);
@@ -101,7 +117,10 @@ contract OpenFactory is IOpenFactory {
         bytes32 salt
     ) external returns (address) {
         if (implementation.code.length == 0) revert ImplementationNotAContract(implementation);
-        if (kind == TokenKind.ZETHER) _checkVerifier(verifier);
+        if (kind == TokenKind.ZETHER) {
+            _requireZether();
+            _checkVerifier(verifier);
+        }
         return _create(kind, 0, implementation, underlying, verifier, initData, salt);
     }
 
@@ -148,6 +167,11 @@ contract OpenFactory is IOpenFactory {
     function _registered(TokenKind kind, uint64 version) private view returns (address impl) {
         impl = _impl[kind][version];
         if (impl == address(0)) revert VersionUnknown(kind, version);
+    }
+
+    function _requireZether() private view {
+        if (!zetherEnabled) revert ZetherDisabled();
+        ZetherSafety.requireDevChain(); // cờ bật trên một chain dev rồi chain đổi id (fork) vẫn không lọt
     }
 
     /// @dev Precompile vắng mặt không revert — nó trả rỗng. Hỏi verifier trước khi có

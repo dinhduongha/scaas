@@ -118,6 +118,7 @@ contract OpenFactoryTest is Fixtures {
 
     function test_zetherNeedsAVerifier() public {
         MockZetherImpl z = new MockZetherImpl(address(factory));
+        _enableZether();
         vm.prank(registrar);
         factory.registerImplementation(ZETHER, 1, address(z));
         vm.expectRevert(IOpenFactory.VerifierRequiredForZether.selector);
@@ -127,6 +128,7 @@ contract OpenFactoryTest is Fixtures {
     function test_zetherRefusesAVerifierThisChainCannotRun() public {
         MockZetherImpl z = new MockZetherImpl(address(factory));
         UnsupportedVerifier bad = new UnsupportedVerifier();
+        _enableZether();
         vm.prank(registrar);
         factory.registerImplementation(ZETHER, 1, address(z));
         vm.expectRevert(abi.encodeWithSelector(
@@ -136,6 +138,7 @@ contract OpenFactoryTest is Fixtures {
 
     function test_zetherVerifierWithNoCodeIsRefused() public {
         MockZetherImpl z = new MockZetherImpl(address(factory));
+        _enableZether();
         vm.prank(registrar);
         factory.registerImplementation(ZETHER, 1, address(z));
         vm.expectRevert(abi.encodeWithSelector(
@@ -146,9 +149,15 @@ contract OpenFactoryTest is Fixtures {
     function test_zetherWithSupportedVerifier() public {
         MockZetherImpl z = new MockZetherImpl(address(factory));
         SupportedVerifier ok = new SupportedVerifier();
+        _enableZether();
         vm.prank(registrar);
         factory.registerImplementation(ZETHER, 1, address(z));
         address t = factory.createZetherToken(1, address(0), address(ok), "", bytes32("z"));
         assertEq(MockZetherImpl(t).verifier(), address(ok));
+    }
+
+    function _enableZether() internal {
+        vm.prank(registrar);
+        factory.setZetherEnabled(true);
     }
 }
