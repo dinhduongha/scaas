@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
@@ -102,6 +103,38 @@ abstract contract ERC20MetaTx is ERC20, EIP712, IERC20MetaTx {
         emit MetaTransactionExecuted(
             m.from, msg.sender, m.batch, m.nonce, digest, feeRecipient, feeAmount
         );
+        return true;
+    }
+
+    // ------------------------------------------------------------------ allowance (R26)
+
+    /// @notice Spender phải là hợp đồng. Phishing kiểu "approve vô hạn cho một ví lạ" không
+    ///         còn đường: không EOA nào giữ được allowance (SRS kiến trúc §3.2).
+    function approve(address spender, uint256 value) public virtual override(ERC20, IERC20) returns (bool) {
+        if (!_isContract(spender)) revert SpenderNotContract(spender);
+        return super.approve(spender, value);
+    }
+
+    /// @notice Chỉ hợp đồng tiêu được allowance. Kiểm TRƯỚC allowance, nên một EOA nhận lỗi
+    ///         này kể cả khi `value == 0`.
+    function transferFrom(address from, address to, uint256 value)
+        public virtual override(ERC20, IERC20) returns (bool)
+    {
+        if (!_isContract(msg.sender)) revert CallerNotContract(msg.sender);
+        return super.transferFrom(from, to, value);
+    }
+
+    /// @dev Không phải hợp đồng nếu: code rỗng (EOA — hoặc hợp đồng ĐANG chạy constructor:
+    ///      nó không được approve hay tiêu allowance từ constructor của chính mình), hoặc code
+    ///      đúng là designator EIP-7702 `0xef0100‖address` (23 byte): khoá riêng của EOA vẫn ký
+    ///      được mọi thứ, nên nó vẫn là EOA.
+    function _isContract(address a) internal view returns (bool) {
+        uint256 len = a.code.length;
+        if (len == 0) return false;
+        if (len == 23) {
+            bytes memory c = a.code;
+            if (c[0] == 0xef && c[1] == 0x01 && c[2] == 0x00) return false;
+        }
         return true;
     }
 

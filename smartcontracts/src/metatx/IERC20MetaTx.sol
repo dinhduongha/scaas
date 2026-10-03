@@ -35,6 +35,11 @@ interface IERC20MetaTx is IERC20 {
     error MetaTxUnauthorizedRelayer(address allowed, address caller);
     error MetaTxUnknownMode(uint32 mode);
     error MetaTxInsufficientForFee(uint256 needed, uint256 available);
+    /// @notice R26: allowance chỉ giữa hợp đồng. `approve` cho một spender không phải hợp
+    ///         đồng (EOA, EOA uỷ quyền EIP-7702, hợp đồng chưa deploy xong) bị từ chối.
+    error SpenderNotContract(address spender);
+    /// @notice R26: chỉ hợp đồng gọi được `transferFrom`.
+    error CallerNotContract(address caller);
 
     /// @notice Nonce kế tiếp của `(from, batch)`. Client đọc cái này để ký.
     /// @dev 2D: batch nào kẹt thì chỉ kẹt batch đó.
