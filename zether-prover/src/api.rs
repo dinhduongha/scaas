@@ -57,6 +57,10 @@ fn num(v: &Value, k: &str) -> R<u64> {
     }
 }
 
+fn num32(v: &Value, k: &str) -> R<u32> {
+    u32::try_from(num(v, k)?).map_err(|_| format!("`{k}` must fit in u32"))
+}
+
 fn opt_num(v: &Value, k: &str) -> R<u64> {
     if v.get(k).is_none_or(|x| x.is_null()) {
         Ok(0)
@@ -82,7 +86,7 @@ fn key<C: ZCurve>(v: &Value) -> R<ZetherKey<C>> {
     } else {
         bytes(k, "seed")?
     };
-    ZetherKey::conf(&seed, num(k, "coin")? as u32, num(k, "account")? as u32).map_err(e)
+    ZetherKey::conf(&seed, num32(k, "coin")?, num32(k, "account")?).map_err(e)
 }
 
 fn ct<C: ZCurve>(v: &Value, k: &str) -> R<Ciphertext<C>> {
@@ -219,7 +223,7 @@ fn meta(v: &Value) -> R<MetaTx> {
         batch: fixed(m, "batch")?,
         nonce: num(m, "nonce")?,
         valid_until: num(m, "validUntil")?,
-        mode: num(m, "mode")? as u32,
+        mode: num32(m, "mode")?,
         relayer: opt_fixed(m, "relayer")?,
         fee: opt_num(m, "fee")? as u128,
         fee_recipient: opt_fixed(m, "feeRecipient")?,
@@ -263,7 +267,7 @@ fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
         }
         "fundCalldata" => {
             let mut d = envelope::selector("fund(bytes,uint256)").to_vec();
-            d.extend(abi::encode(&[Tok::Bytes(bytes(v, "Y")?), Tok::Word(abi::u256(num(v, "amount")?))]));
+            d.extend(abi::encode(&[Tok::Bytes(encode_point::<C>(&point::<C>(v, "Y")?)), Tok::Word(abi::u256(num(v, "amount")?))]));
             Ok(json!({"calldata": hx(&d)}))
         }
         _ => Err(format!("unknown command `{cmd}`")),

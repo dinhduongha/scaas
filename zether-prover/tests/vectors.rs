@@ -60,4 +60,9 @@ fn api_roundtrip_mnemonic_keygen_prove_decrypt() {
         assert_eq!(pop["UA"], a["UA"]);
     }
     assert!(zether_prover::api::call("keygen", r#"{"curve":"secp256k1","key":{"x":"0x01"}}"#).is_err());
+    // 2^32 + 60 must not silently alias coin 60.
+    let wide = json!({"curve": "bn254", "key": {"mnemonic": mnemonic, "coin": 4294967356u64, "account": 0}});
+    assert!(zether_prover::api::call("keygen", &wide.to_string()).is_err());
+    let bad_y = json!({"curve": "bn254", "Y": "0x".to_string() + &"11".repeat(64), "amount": 1});
+    assert!(zether_prover::api::call("fundCalldata", &bad_y.to_string()).is_err());
 }
