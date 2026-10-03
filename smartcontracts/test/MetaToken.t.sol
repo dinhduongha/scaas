@@ -223,4 +223,48 @@ contract MetaTokenTest is Fixtures {
         assertEq(tok.balanceOf(shop), value);
         assertEq(tok.balanceOf(relayer), fee);
     }
+
+    // ---- Task 3: wrapper ----
+
+    function test_wrapperTakesDecimalsFromUnderlyingAndRefusesMint() public {
+        MockERC20 usdc = new MockERC20("USD Coin", "USDC", 6);
+        MetaToken w = _wrapper(address(this), address(usdc), "wUSDC");
+        assertEq(w.decimals(), 6);
+        assertEq(w.minter(), address(0));
+        bytes memory bad = abi.encode("x", "x", uint8(0), uint256(1), address(0));
+        vm.expectRevert(MetaToken.WrapperHasNoMint.selector);
+        factory.createMetaToken(1, address(usdc), bad, bytes32("bad"));
+    }
+
+    function test_wrapAndUnwrapRoundTrip() public {
+        MockERC20 usdc = new MockERC20("USD Coin", "USDC", 6);
+        MetaToken w = _wrapper(address(this), address(usdc), "wUSDC");
+        usdc.mint(alice, 100e6);
+        vm.startPrank(alice);
+        usdc.approve(address(w), 100e6);
+        assertEq(w.wrap(100e6), 100e6);
+        w.unwrap(40e6, shop);
+        vm.stopPrank();
+        assertEq(w.balanceOf(alice), 60e6);
+        assertEq(usdc.balanceOf(shop), 40e6);
+        assertEq(usdc.balanceOf(address(w)), w.totalSupply());
+    }
+
+    function test_wrapMintsWhatActuallyArrived() public {
+        FeeOnTransferERC20 fot = new FeeOnTransferERC20();
+        MetaToken w = _wrapper(address(this), address(fot), "wFEE");
+        fot.mint(alice, 1000);
+        vm.startPrank(alice);
+        fot.approve(address(w), 1000);
+        uint256 minted = w.wrap(1000);
+        vm.stopPrank();
+        assertEq(minted, 990);
+        assertEq(w.balanceOf(alice), 990);
+        assertGe(fot.balanceOf(address(w)), w.totalSupply());
+    }
+
+    function test_wrapOnStandaloneReverts() public {
+        vm.expectRevert(MetaToken.NotAWrapper.selector);
+        tok.wrap(1);
+    }
 }

@@ -2,6 +2,8 @@
 pragma solidity ^0.8.20;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ERC20MetaTx} from "./ERC20MetaTx.sol";
 import {IFactoryToken} from "../factory/IFactoryToken.sol";
@@ -20,6 +22,8 @@ import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 ///
 ///         Không owner, không pause, không upgrade: token tự do (SRS §3.5.1).
 contract MetaToken is ERC20MetaTx, IERC20Payment, IFactoryToken {
+    using SafeERC20 for IERC20;
+
     /// @dev Op là `data` có tag selector, nằm TRONG struct đã ghim — không typehash thứ
     ///      hai, ví hiển thị một loại giao dịch (ruling R2).
     bytes4 public constant OP_PAY = bytes4(keccak256("pay(bytes32)"));
@@ -46,6 +50,7 @@ contract MetaToken is ERC20MetaTx, IERC20Payment, IFactoryToken {
     error MetaTxUnknownOp(bytes4 op);
     error PayToZero();
     error TradeLegNotRestricted();
+    error NotAWrapper();
 
     /// @dev Constructor chạy MỘT lần, trên implementation. Immutable của nó đúng cho mọi
     ///      clone; storage của nó thì không — nên khoá luôn implementation để không ai
@@ -100,6 +105,24 @@ contract MetaToken is ERC20MetaTx, IERC20Payment, IFactoryToken {
     function mint(address to, uint256 amount) external {
         if (minter == address(0) || msg.sender != minter) revert NotMinter();
         _mint(to, amount);
+    }
+
+    /// @notice Tầng 2. Mint đúng phần THỰC nhận (token phí-chuyển), để
+    ///         `underlying.balanceOf(this) >= totalSupply` không bao giờ vỡ.
+    function wrap(uint256 amount) external nonReentrant returns (uint256 minted) {
+        address u = underlying;
+        if (u == address(0)) revert NotAWrapper();
+        uint256 before = IERC20(u).balanceOf(address(this));
+        IERC20(u).safeTransferFrom(msg.sender, address(this), amount);
+        minted = IERC20(u).balanceOf(address(this)) - before;
+        _mint(msg.sender, minted);
+    }
+
+    function unwrap(uint256 amount, address recipient) external nonReentrant {
+        address u = underlying;
+        if (u == address(0)) revert NotAWrapper();
+        _burn(msg.sender, amount);
+        IERC20(u).safeTransfer(recipient, amount);
     }
 
     /// @dev Bước 6. Mọi thứ fail được thì fail ở đây, TRƯỚC khi thu phí.
