@@ -186,8 +186,11 @@ contract OpenFactory is IOpenFactory {
         // CÙNG hàm với CREATE2: không có khe nào để front-run initialize().
         IFactoryToken(token).initialize(msg.sender, underlying, verifier, version, initData);
         _info[token] = Info({creator: msg.sender, kind: kind, version: version, exists: true});
-        _wrappers[msg.sender][underlying].push(token);
-        _byUnderlying[underlying].push(token);
+        // Tầng 1 (underlying 0) không phải wrapper của gì cả: không vào sổ wrapper.
+        if (underlying != address(0)) {
+            _wrappers[msg.sender][underlying].push(token);
+            _byUnderlying[underlying].push(token);
+        }
         emit TokenDeployed(token, msg.sender, underlying, kind, version, impl, verifier);
     }
 }

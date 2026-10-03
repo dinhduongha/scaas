@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import {Test} from "forge-std/Test.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
-import {MockERC20} from "./helpers/Mocks.sol";
+import {MockERC20, FeeOnTransferERC20} from "./helpers/Mocks.sol";
 import {MetaToken} from "../src/metatx/MetaToken.sol";
 import {MetaTxDex} from "../src/dex/MetaTxDex.sol";
 import {MetaTxLib} from "../src/common/MetaTxLib.sol";
@@ -16,13 +16,33 @@ contract Handler is Test {
     MetaToken public tB;
     MetaToken public wrapped;
     MockERC20 public usdc;
+    MetaToken public fotWrapped;
+    FeeOnTransferERC20 public fot;
     MetaTxDex public dex;
     uint256[3] public pks = [uint256(0xA1), 0xB2, 0xC3];
     uint256 public batchSeq;
     uint256 public settled;
 
-    constructor(MetaToken a, MetaToken b, MetaToken w, MockERC20 u, MetaTxDex d) {
-        tA = a; tB = b; wrapped = w; usdc = u; dex = d;
+    constructor(MetaToken a, MetaToken b, MetaToken w, MockERC20 u, MetaTxDex d,
+                MetaToken fw, FeeOnTransferERC20 f) {
+        tA = a; tB = b; wrapped = w; usdc = u; dex = d; fotWrapped = fw; fot = f;
+    }
+
+    function wrapFot(uint256 who, uint256 v) external {
+        address w = actor(who);
+        v = bound(v, 0, 1_000 ether);
+        fot.mint(w, v);
+        vm.startPrank(w);
+        fot.approve(address(fotWrapped), v);
+        fotWrapped.wrap(v);
+        vm.stopPrank();
+    }
+
+    function unwrapFot(uint256 who, uint256 v) external {
+        address w = actor(who);
+        v = bound(v, 0, fotWrapped.balanceOf(w));
+        vm.prank(w);
+        fotWrapped.unwrap(v, w);
     }
 
     function actor(uint256 i) public view returns (address) { return vm.addr(pks[i % 3]); }
@@ -87,6 +107,8 @@ contract InvariantsTest is StdInvariant, Fixtures {
     MetaToken w;
     MockERC20 usdc;
     MetaTxDex dex;
+    FeeOnTransferERC20 fot;
+    MetaToken fw;
 
     function setUp() public {
         vm.warp(1_800_000_000);
@@ -96,7 +118,9 @@ contract InvariantsTest is StdInvariant, Fixtures {
         tA = _standalone(address(this), "AAA", 18, 3_000 ether, address(0));
         tB = _standalone(address(this), "BBB", 18, 3_000 ether, address(0));
         w = _wrapper(address(this), address(usdc), "wUSDC");
-        h = new Handler(tA, tB, w, usdc, dex);
+        fot = new FeeOnTransferERC20();
+        fw = _wrapper(address(this), address(fot), "wFEE");
+        h = new Handler(tA, tB, w, usdc, dex, fw, fot);
         for (uint256 i; i < 3; ++i) {
             tA.transfer(h.actor(i), 1_000 ether);
             tB.transfer(h.actor(i), 1_000 ether);
@@ -112,6 +136,10 @@ contract InvariantsTest is StdInvariant, Fixtures {
 
     function invariant_wrapperIsFullyReserved() public view {
         assertGe(usdc.balanceOf(address(w)), w.totalSupply());
+    }
+
+    function invariant_feeOnTransferWrapperIsFullyReserved() public view {
+        assertGe(fot.balanceOf(address(fw)), fw.totalSupply());
     }
 
     function invariant_dexHoldsNothing() public view {

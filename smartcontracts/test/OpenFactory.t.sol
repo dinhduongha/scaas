@@ -93,6 +93,12 @@ contract OpenFactoryTest is Fixtures {
         assertEq(factory.deployedFor(address(dai), 2), b1);
     }
 
+    function test_standaloneTokensAreNotWrappers() public {
+        factory.createMetaToken(1, address(0), init, bytes32("s"));
+        assertEq(factory.getWrapper(address(this), address(0)), address(0));
+        assertEq(factory.deployCountFor(address(0)), 0);
+    }
+
     function test_createUnregisteredIsVersionZero() public {
         address t = factory.createUnregistered(META, address(impl), address(0), address(0), init, bytes32("u"));
         (, uint64 v) = factory.versionOf(t);
