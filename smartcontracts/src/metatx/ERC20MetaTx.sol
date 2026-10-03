@@ -149,7 +149,7 @@ abstract contract ERC20MetaTx is ERC20, EIP712, IERC20MetaTx {
             (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(digest, sig);
             if (err != ECDSA.RecoverError.NoError || rec != from) revert MetaTxBadSignature();
         } else {
-            (bool ok, bytes memory ret) = from.staticcall{gas: 50_000}(
+            (bool ok, bytes memory ret) = from.staticcall{gas: 400_000}(
                 abi.encodeCall(IERC1271.isValidSignature, (digest, sig))
             );
             if (!ok || ret.length != 32 ||

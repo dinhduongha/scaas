@@ -1,0 +1,10 @@
+{
+  "note": "Fixed factory/implementation addresses (any). first key = SECP256K1(vm.addr(0x5EED)), guardian 0x...6A2D. Pinned by SubjectAccount.t.sol test_pinned_create2_vector; the same numbers are checked by Odoo (blockchain.subject.account) and clientkeys.",
+  "deployer": "0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496",
+  "factory": "0x7544c919C95986C97C93fb0F7e95286bb25E9591",
+  "implementation": "0xa919244A0b93635Efc9942A8863108d0d2354FA1",
+  "seedPrivateKey": "0x5eed",
+  "guardian": "0x0000000000000000000000000000000000006A2D",
+  "salt": "0x38578a35be68ec1a8ef8de88a7df8d8ce1d54e3a9a6a979e19d61f5a497a1956",
+  "account": "0x6395d2b970a69eb54996207494cc4Ec92732310e"
+}
