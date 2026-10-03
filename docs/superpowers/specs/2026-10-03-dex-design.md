@@ -195,8 +195,11 @@ Vòng đời trong node:
    lại toàn bộ sổ từ Odoo** rồi trả 503 — Odoo là sự thật, không đoán (review D20). `trade_ref` UNIQUE chặn ghi đôi.
 3. **Trade fail** (job `dead/reverted`, hay event final `MatchFailed`): Odoo đặt trade `failed`. Vòng `dex_sync` của
    node (mỗi `poll`) lấy trade fail chưa xử lý ⇒ với từng lệnh: lệnh IOC/FOK **không bao giờ** trả về sổ (chúng
-   không nghỉ; review D5); lệnh thường còn hợp lệ on-chain (`checkOrder`) thì `remaining += fill` (trả lại đúng chỗ
-   theo `seq` cũ), không thì loại ⇒ commit + ack.
+   không nghỉ; review D5); lệnh thường còn hợp lệ on-chain (`checkOrder`) thì được trả `fill` và **đi lại qua
+   matcher** với `seq` cũ (giữ ưu tiên thời gian) — không chèn thẳng: nếu cả hai bên cùng khoẻ (job chết vì lý do
+   của relayer), chèn thẳng để lại một sổ chéo (bid ≥ ask nằm yên); qua matcher thì chúng khớp lại thành một trade
+   **mới** (tag có muối ngẫu nhiên mỗi tiến trình + bộ đếm, không trùng tag cũ mà Odoo coi là phát lại), simulate
+   rồi commit cùng ack. Không thì loại ⇒ commit + ack.
    Lệnh bị huỷ on-chain (kể cả qua relayer khác) đến qua event final `OrderCancelled/NoncesInvalidated` (§3.6) ⇒ gỡ
    khỏi sổ (review D13).
 4. **Final:** watcher DEX (§3.6) gửi `OrderFilled/Matched/MatchFailed` vùng final ⇒ trade `settled` ⇒ hạch toán.
