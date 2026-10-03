@@ -33,7 +33,9 @@ pub struct InflightJob {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct NodeConfig {
-    pub evm_chain_number: u64,
+    /// Số EIP-155 (EVM/Hedera) hoặc khoá `family:network` — không ai đọc, chỉ để log.
+    #[serde(default)]
+    pub evm_chain_number: Value,
     /// `active` | `paused` (R53: paused = indexing continues, nothing new is submitted).
     #[serde(default)]
     pub state: Option<String>,
@@ -73,6 +75,11 @@ pub struct Job {
     pub metatx: Option<WireMetaTx>,
     #[serde(default)]
     pub call: Option<WireCall>,
+    /// `metatx` | `call` | `signed_op` (họ không phải EVM: payload ký + chữ ký + khoá công khai, adapter tự đọc).
+    #[serde(default)]
+    pub kind: Option<String>,
+    #[serde(default)]
+    pub op: Option<Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -139,14 +146,27 @@ impl Odoo {
     }
 
     pub async fn node_config(&self, chain: u64, relayer: Option<Address>) -> Result<NodeConfig> {
+        self.node_config_ref(json!(chain), relayer.map(|r| format!("{r:#x}")), None).await
+    }
+
+    /// `chain` = số EIP-155 (EVM) hoặc khoá `family:network` (R61). `worker` lọc job đã claim mà
+    /// chưa ký về đúng lane đã claim (nhiều lane cùng chain).
+    pub async fn node_config_ref(&self, chain: Value, relayer: Option<String>, worker: Option<String>) -> Result<NodeConfig> {
         let mut body = json!({"evm_chain_number": chain});
         if let Some(r) = relayer {
-            body["relayer_address"] = json!(format!("{r:#x}"));
+            body["relayer_address"] = json!(r);
+        }
+        if let Some(w) = worker {
+            body["worker"] = json!(w);
         }
         self.call("blockchain.chain", "node_config", body).await
     }
 
     pub async fn relay_poll(&self, chain: u64, limit: u32) -> Result<Vec<Job>> {
+        self.relay_poll_ref(json!(chain), limit).await
+    }
+
+    pub async fn relay_poll_ref(&self, chain: Value, limit: u32) -> Result<Vec<Job>> {
         self.call("blockchain.relay.job", "relay_poll", json!({"evm_chain_number": chain, "limit": limit}))
             .await
     }
@@ -161,6 +181,10 @@ impl Odoo {
     }
 
     pub async fn ingest(&self, chain: u64, from: u64, to: u64, hash: &str, events: &[Value]) -> Result<IngestResult> {
+        self.ingest_ref(json!(chain), from, to, hash, events).await
+    }
+
+    pub async fn ingest_ref(&self, chain: Value, from: u64, to: u64, hash: &str, events: &[Value]) -> Result<IngestResult> {
         self.call(
             "blockchain.chain.event",
             "chain_event_ingest",

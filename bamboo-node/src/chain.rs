@@ -8,7 +8,7 @@ use alloy::providers::{DynProvider, Provider, ProviderBuilder};
 use alloy::rpc::types::TransactionRequest;
 use alloy::signers::local::PrivateKeySigner;
 use alloy::transports::TransportError;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 
 use crate::abi::decode_revert;
 use crate::config::ChainCfg;
@@ -53,10 +53,9 @@ pub struct Chain {
 }
 
 impl Chain {
-    pub fn connect(cfg: &ChainCfg) -> Result<Self> {
-        let key = std::env::var(&cfg.signer_key_env).with_context(|| format!("env {} not set", cfg.signer_key_env))?;
-        let signer: PrivateKeySigner = key.trim().parse().map_err(|e| anyhow!("signer key: {e}"))?;
-        Self::with_signer(cfg, signer)
+    /// Một `Chain` mỗi lane (R62): cùng RPC, khoá khác nhau.
+    pub fn connect_lanes(cfg: &ChainCfg, signers: &[crate::signer::LocalSigner]) -> Result<Vec<Self>> {
+        signers.iter().map(|s| Self::with_signer(cfg, s.evm()?)).collect()
     }
 
     pub fn with_signer(cfg: &ChainCfg, signer: PrivateKeySigner) -> Result<Self> {

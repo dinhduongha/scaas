@@ -71,7 +71,10 @@ pub struct Submitter {
 
 impl Submitter {
     pub async fn start(chain: Chain, odoo: Odoo, cfg: ChainCfg, node_id: String) -> Result<Self> {
-        let nc = odoo.node_config(cfg.evm_chain_number, Some(chain.address())).await?;
+        // `worker` lọc job đã claim mà chưa ký về đúng lane này (nhiều lane cùng chain — R62).
+        let nc = odoo
+            .node_config_ref(serde_json::json!(cfg.evm_chain_number), Some(format!("{:#x}", chain.address())), Some(node_id.clone()))
+            .await?;
         let pending = chain.pending_nonce().await?;
         let jobs: Vec<Inflight> = nc
             .inflight
