@@ -272,7 +272,7 @@ async fn sui_payments_relay_finalize_and_never_lock_each_other() {
     let p = publish(&deployer, &dep, root_dir).await;
     let pkg = published(&p);
     let (root, cap) = (created(&p, "::meta::Root"), created(&p, "::meta::AdminCap"));
-    let d = publish(&deployer, &dep, &format!("{root_dir}/examples/demo_coin")).await;
+    let d = publish(&deployer, &dep, &format!("{root_dir}/demo_coin")).await;
     let demo_pkg = published(&d);
     let treasury = created(&d, "TreasuryCap");
     let demo_t = format!("{demo_pkg}::demo::DEMO");
