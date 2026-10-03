@@ -38,7 +38,7 @@ Hợp nhất với nhánh territory: **không** làm ở nhánh này (coordinato
 
 ## A. Blocker production và khoảng trống SRS làm ngay (GA §2.1, §2.2 #4/#6/#7, §2.3 #12/#13/#14)
 
-### A.1 Custody `env:` chỉ cho dev/test (GA 2.1#1) — R33
+### A.1 Custody `env:` chỉ cho dev/test (GA 2.1#1) — R34
 
 - Adapter `env:` **không còn tự đăng ký**. Chỉ đăng ký khi `ir.config_parameter`
   `dms_blockchain.allow_dev_custody` = `1`, **và** chỉ ký cho ví trên chain có `is_dev_chain = True`. Ví
@@ -51,7 +51,7 @@ Hợp nhất với nhánh territory: **không** làm ở nhánh này (coordinato
 
 ### A.2 Khoá relayer — xem §B.3 (GA 2.1#2)
 
-### A.3 Giám sát (GA 2.1#3, 2.3#12) — R34
+### A.3 Giám sát (GA 2.1#3, 2.3#12) — R35
 
 - Node mở **cổng quản trị riêng** (`[modules] admin_bind`, mặc định `127.0.0.1:9108`), tách khỏi gateway công khai:
   - `GET /healthz` — tiến trình sống.
@@ -64,7 +64,7 @@ Hợp nhất với nhánh territory: **không** làm ở nhánh này (coordinato
     `bamboo_drift_alerts{chain}`.
 - Số liệu Odoo đến từ method dịch vụ mới `blockchain.chain.relay_stats(chain_key)` (đọc, nhóm relay/indexer).
 
-### A.4 CI (GA 2.1#4) — R35
+### A.4 CI (GA 2.1#4) — R36
 
 `.github/workflows/blockchain-ci.yml`, chạy trên PR/push chạm `smartcontracts/**`, `bamboo-node/**`,
 `dms_blockchain*/**`: (a) forge (foundry-toolchain, `lib/` cài bằng `forge install` theo tag đã ghim:
@@ -75,14 +75,14 @@ dms_portal, dms_blockchain_bridge` với `--test-tags`, rồi `-u` hai lần; (d
 sẵn chromium? Không có ⇒ job Odoo cài `chromium` bằng apt **trong runner** (CI là hệ thống tạm, không phải máy
 owner).
 
-### A.5 Tạm dừng chỉ chặn gửi (GA 2.1#7) — R36
+### A.5 Tạm dừng chỉ chặn gửi (GA 2.1#7) — R37
 
 `blockchain.chain.state`: `draft | active | paused | halted`.
 - `paused`: `relay_poll` trả rỗng, gateway từ chối, **indexer và `chain_event_ingest` tiếp tục**
   (`node_config` phục vụ cả `paused`). Khách đã trả tiền vẫn được ghi nhận.
 - `halted`: dừng cả indexing (sự cố chain/reorg cần người); `draft`: chưa bật.
 
-### A.6 Xác thực gateway + fuzz parser (GA 2.1#8) — R37
+### A.6 Xác thực gateway + fuzz parser (GA 2.1#8) — R38
 
 - `[modules] gateway_auth = "none" | "bearer" | "hmac"`; `gateway_secret_env`. `bearer`: `Authorization:
   Bearer <secret>` so sánh constant-time. `hmac`: `X-Bamboo-Timestamp` + `X-Bamboo-Signature =
@@ -91,7 +91,7 @@ owner).
 - `proptest` (dev-dependency) cho mọi decoder đầu vào không tin cậy: `WireMetaTx::to_sol`, body gateway,
   payload job, decoder của từng adapter mới (BCS/XDR/protobuf/BOC). Bất biến: không panic, lỗi là `Err`.
 
-### A.7 Cầu dao gas (GA 2.2#4) — R38
+### A.7 Cầu dao gas (GA 2.2#4) — R39
 
 Theo chain, trong node (bộ nhớ, đặt lại khi khởi động):
 - **Base-fee spike** (EVM): trung bình trượt 1 h của `baseFeePerGas`; nếu base fee hiện tại > `spike_ratio` (mặc
@@ -102,7 +102,7 @@ Theo chain, trong node (bộ nhớ, đặt lại khi khởi động):
 - Cầu dao **không bao giờ** chặn indexing hay theo dõi tx đã gửi (SRS A§6.8). Mạng không phải EVM dùng ngân sách
   + sàn số dư (không có base fee kiểu EIP-1559).
 
-### A.8 Một journal mỗi (chain, token) + kiểm drift (GA 2.2#6, #7) — R39
+### A.8 Một journal mỗi (chain, token) + kiểm drift (GA 2.2#6, #7) — R40
 
 - `blockchain.token.journal_id` **company-dependent** (mỗi công ty chọn một journal ngân hàng cho mỗi token). Khi
   có, `payment.transaction` của provider `chain` hạch toán `account.payment` vào journal đó (dòng payment method
@@ -116,7 +116,7 @@ Theo chain, trong node (bộ nhớ, đặt lại khi khởi động):
   `blockchain.balance.snapshot` và so với **số dư GL** của journal token của công ty đó (đổi về đơn vị cơ sở). Lệch
   ≠ 0 ⇒ `drift_state = 'mismatch'` + activity cho người duyệt ví. Không tự sửa sổ.
 
-### A.9 Seam cho nhánh territory + đổi tên "Host" (GA 2.3#13, #14, §2.4) — R40
+### A.9 Seam cho nhánh territory + đổi tên "Host" (GA 2.3#13, #14, §2.4) — R41
 
 - **Một** method công ty nhận: `dms.portal.api._dms_chain_receiving_company(order)`; mọi lookup provider, ví nhận,
   ghi chú nhân viên đi qua nó (sửa GA 2.3#13: `_dms_chain_offered`, `_dms_chain_start`, `sale_order`).
@@ -136,7 +136,7 @@ ngày, ≥2 RPC độc lập, và mọi mục GA 2.2 không làm ở round này 
 
 ## B. Abstraction adapter, signer, khoá relayer
 
-### B.1 `ChainAdapter` (bamboo-node) — R41
+### B.1 `ChainAdapter` (bamboo-node) — R42
 
 ```rust
 pub enum Family { Evm, Hedera, Sui, Soroban, Cosmos, Ton }
@@ -165,7 +165,7 @@ pub trait ChainAdapter: Send + Sync {
   amount, fee, fee_recipient, entry_ref}` với địa chỉ ở **dạng chuẩn của họ** (§D.0). `chain_event_ingest` nhận
   `chain_key`.
 
-### B.2 `Signer` — R42
+### B.2 `Signer` — R43
 
 ```rust
 pub enum Curve { Secp256k1, Ed25519 }
@@ -178,7 +178,7 @@ pub trait Signer: Send + Sync {
 `LocalSigner` (secp256k1 qua k256 của alloy, ed25519 qua `ed25519-dalek`). **Seam KMS/remote:** trait là chỗ
 cắm; không cài adapter KMS ở round này (HANDOFF).
 
-### B.3 Cấu hình khoá relayer — R43
+### B.3 Cấu hình khoá relayer — R44
 
 ```toml
 [keys]
@@ -212,7 +212,7 @@ lanes = [0, 1, 2, 3]                            # account index theo BIP-44/SLIP
 - Test: vector BIP-39 (Trezor, passphrase "TREZOR"), SLIP-10 ed25519 (test vector 1), SEP-0005, BIP-32/BIP-44
   secp256k1 (mnemonic "abandon…art" ⇒ địa chỉ MetaMask đã công bố).
 
-### B.4 Odoo: họ mạng, địa chỉ, payload ký — R44
+### B.4 Odoo: họ mạng, địa chỉ, payload ký — R45
 
 - `blockchain.chain`: `family` (`evm|hedera|sui|soroban|cosmos|ton`), `network_key` (EVM/Hedera: chain id;
   Sui: `mainnet|testnet|devnet|localnet`; Stellar: `pubnet|testnet|standalone`; Cosmos: chain-id;
@@ -234,7 +234,7 @@ lanes = [0, 1, 2, 3]                            # account index theo BIP-44/SLIP
   định dạng) và, nếu là ed25519 của ví thường, kiểm thật bằng ed25519 thuần Python (RFC 8032, KAT). Phần còn lại
   do mô phỏng của node phân xử (như R27). Job `kind = 'signed_op'`.
 
-### B.5 Tránh head-of-line theo adapter — R45
+### B.5 Tránh head-of-line theo adapter — R46
 
 | Họ | Ai gửi tx | Thứ tự phía relayer | Vì sao một tx kẹt không khoá nơi khác |
 |---|---|---|---|
@@ -306,6 +306,31 @@ của SRS nguyên tắc 6 và §1.1). R31 và R32 thực hiện hệ quả 1–3
   chữ ký = `abi.encode(keyIndex, payload)`; batch Merkle cho cả hai kiểu.
 - Test e2e: thêm khoá thứ hai (seed khi đã có passkey) rồi ký bằng từng khoá.
 
+### C.4 Khoá Zether (bảo mật số dư) từ cùng seed, đường dẫn riêng — R33 (owner: *"Seed word gen key riêng cho zether (key path khác)"*)
+
+- SRS §8.1 tách `auth_custody` (khoá ký) và `conf_custody` (khoá ElGamal `x`): lộ khoá ký không lộ số dư; lộ `x`
+  không uỷ quyền chuyển tiền. Nên `x` có **đường dẫn riêng**, không bao giờ trùng scalar khoá ký nào.
+- BIP-32/SLIP-10 không có bn254 hay BLS12-381 ⇒ dẫn xuất **hardened-only kiểu EIP-2333** (HKDF-SHA256, `r` là bậc
+  của nhóm, tách miền):
+  - **BLS12-381:** đúng EIP-2333 (`derive_master_SK`, `derive_child_SK`, salt `"BLS-SIG-KEYGEN-SALT-"`), đường
+    kiểu EIP-2334 `m/12381/<coin>/<account>/7` — `<use> = 7` dành riêng cho Zether-conf (EIP-2334 dùng 0 =
+    withdrawal, 0/0 = signing; 7 không đụng). `<coin>` = SLIP-44 của mạng (EVM 60).
+  - **bn254:** cùng cấu trúc EIP-2333 với `r` của bn254 và salt **`"BAMBOO-ZETHER-BN254-v1"`**; HKDF-Expand ra
+    **48 byte** (L = ceil(3·ceil(log2 r)/16) = 48) rồi `mod r`, lặp nếu 0 — như EIP-2333. Đường
+    `m/254/<coin>/<account>/7` (gốc 254 để không bao giờ chạm cây 12381).
+  - Khoá phụ thuộc (seed, đường cong, mạng/coin, account). **Không** theo token (một UA mỗi (đường cong, mạng,
+    account) — đúng SRS "đăng ký theo cặp (account, chain)"); đổi đường cong của verifier ⇒ cây khác ⇒ không tái
+    dùng scalar.
+  - Khoá xem/tiết lộ cho kiểm toán (`ITransferDisclosure`): `<use> = 8`, cùng hai cây — chưa dùng (Zether chưa xây).
+- `y = g^x` (G1 của đường cong), `UA = keccak256(encodedY)` (`ZetherTypes.toUA`: bn254 64 byte `x‖y`, BLS12-381
+  128 byte theo EIP-2537). **PoP** (SRS §7.5): Schnorr bằng `x` trên `c = keccak256(registry ‖ encodedY ‖
+  account)` với `account` = account chủ thể (khoá ký) ⇒ ràng PoP vào khoá ký/account.
+- Lưu như seed: chỉ phía client, mã hoá khi nghỉ, không gửi Odoo/relayer.
+- **Phạm vi:** luồng Zether on-chain vẫn hoãn (R1/§11 cho Zether giữ nguyên); round này ship thư viện dẫn xuất,
+  vector, PoP, lưu trữ client.
+- **Test:** vector EIP-2333 công bố (BLS12-381); vector bn254 tự sinh và ghim; cùng seed khác đường ⇒ khoá độc lập;
+  `x` ≠ mọi scalar khoá ký của cùng seed; `y`/UA round-trip; PoP verify.
+
 ---
 
 ## D. Sáu hệ sinh thái
@@ -326,7 +351,7 @@ Ba mảnh on-chain như EVM:
 payRef(32) ‖ lane(32) ‖ nonce(u64) ‖ validUntil(u64, giây) ‖ relayer(tuỳ chọn) ‖ extra(hash 32 của tham số riêng op)`.
 Không phí trên các mạng mới (fee NONE như portal — R10); phí relayer chỉ trên EVM.
 
-### D.1 Hedera (HSCS) — R46
+### D.1 Hedera (HSCS) — R47
 
 - **SRS:** HSCS chạy EVM; tài trợ bằng payer account. Theo R30, đường payer-sponsored (tx tài khoản Hedera của
   chủ thể) **không** làm: nó là đúng loại khoá chủ thể. Dùng lại **toàn bộ** contract Solidity (MetaToken,
@@ -343,7 +368,7 @@ Không phí trên các mạng mới (fee NONE như portal — R10); phí relayer
 - **Test:** forge (precompile 0x16a giả bằng `vm.etch`); e2e trên `hedera-local-node` nếu chạy được (cần ~8 GB
   RAM, nhiều container), nếu không: e2e EVM trên anvil `--chain-id 298` + ghi khoảng trống.
 
-### D.2 Sui (Move) — R47
+### D.2 Sui (Move) — R48
 
 - **Token:** `bamboo::meta::Account<T>` — **shared object một chủ thể** giữ `Balance<T>`, khoá công khai (ed25519 /
   secp256k1 / secp256r1-passkey), bảng lane→nonce. Tạo bằng `open<T>(pubkey, scheme)` (kiểm địa chỉ =
@@ -359,7 +384,7 @@ Không phí trên các mạng mới (fee NONE như portal — R10); phí relayer
   hai chân ký, đúng mô hình EVM (relayer gửi một tx, nguyên tử).
 - **Test:** `sui move test`; e2e trên `sui start --with-faucet` (localnet, binary trong `~/.local/bin`).
 
-### D.3 Stellar Soroban (Rust) — R48
+### D.3 Stellar Soroban (Rust) — R49
 
 - **Meta-tx = Soroban authorization gốc**: auth entry `SorobanAddressCredentials{nonce ngẫu nhiên, hạn ledger}`
   ký bởi chủ thể **đã là** verifier cấp contract với nonce **không tuần tự** (mỗi (địa chỉ, nonce) một lần) và
@@ -372,7 +397,7 @@ Không phí trên các mạng mới (fee NONE như portal — R10); phí relayer
   hai `require_auth_for_args` — đúng mô hình EVM.
 - **Test:** `cargo test` (soroban-sdk testutils); e2e trên `stellar/quickstart` local (docker) qua `stellar` CLI.
 
-### D.4 Cosmos (CosmWasm) — R49
+### D.4 Cosmos (CosmWasm) — R50
 
 - **Token** `bamboo-token` (CW20 + meta-tx): `Relay{op, pubkey, signature, scheme}`. Ký: Keplr/Leap
   `signArbitrary` (ADR-036) trên bytes JSON của `MetaOp`; contract dựng lại sign doc ADR-036, `sha256`,
@@ -385,7 +410,7 @@ Không phí trên các mạng mới (fee NONE như portal — R10); phí relayer
 - **Mandate** (nạp CW20 qua `Receive`), **DEX** hai chân ký đi qua token (chân giới hạn `relayer = to = DEX`).
 - **Test:** `cw-multi-test`; e2e trên `wasmd` (docker `cosmwasm/wasmd`).
 
-### D.5 TON (Tact) — R50
+### D.5 TON (Tact) — R51
 
 - **Ngôn ngữ: Tact** (npm, test bằng `@ton/sandbox`; FunC thấp hơn một bậc không đáng cho phạm vi này).
 - **Token:** Jetton (TEP-74) với **jetton wallet tuỳ biến** giữ thêm `owner_pubkey` và bảng lane/nonce;
@@ -416,22 +441,23 @@ Không phí trên các mạng mới (fee NONE như portal — R10); phí relayer
 - **R30** (owner) Meta-tx cấp contract là đường mặc định trên mọi mạng; sequence của chủ thể không bao giờ là khoá
   thứ tự; tài trợ gốc chỉ cho relayer; nhiều lane relayer. Thay R1.
 - **R31** (owner) Passkey WebAuthn P-256 cho chủ thể portal/mobile; batch Merkle; vòng đời khoá qua account/registry.
+- **R33** (owner) Khoá Zether conf từ seed, đường riêng (EIP-2333 BLS12-381 `m/12381/<coin>/<acct>/7`, bn254 kiểu EIP-2333 salt riêng `m/254/<coin>/<acct>/7`), PoP ràng vào account; Zether on-chain vẫn hoãn.
 - **R32** (owner) Ví seed words phía client (24 từ, không rời thiết bị, AES-GCM bọc bằng PRF/scrypt); account chủ thể nhiều khoá (passkey + seed).
-- **R33** Custody `env:` chỉ dev (cờ + chain dev); ký qua `cryptography` (OpenSSL).
-- **R34** `/readyz` + `/metrics` trên cổng quản trị riêng; số liệu Odoo qua `relay_stats`.
-- **R35** CI blockchain riêng; `lib/` forge cài theo tag ghim.
-- **R36** `paused` chỉ chặn gửi; `halted` chặn cả indexing.
-- **R37** Gateway auth `bearer|hmac`; `none` chỉ trên loopback; proptest cho decoder.
-- **R38** Cầu dao: spike base fee, ngân sách gas theo giờ, sàn số dư lane; không chặn indexing.
-- **R39** Journal theo (công ty, token) company-dependent; drift A (Transfer không khớp) + drift C (số dư vs GL).
-- **R40** Seam công ty nhận/quản trị ví duy nhất; "Host" ⇒ "platform company".
-- **R41** `ChainAdapter`; EVM giữ runner riêng; mạng khác dùng `lane_runner` một-tx-mỗi-lane.
-- **R42** `Signer` secp256k1/ed25519 cục bộ; KMS là seam.
-- **R43** Khoá: khoá thô hoặc mnemonic 24 từ; đường dẫn theo bảng §B.3; keystore Web3 v3 cho cả hai đường cong.
-- **R44** Họ mạng trong Odoo; địa chỉ chuẩn theo họ; `blockchain.signed.op`; Odoo kiểm ed25519, còn lại node mô phỏng.
-- **R45** Bảng tránh head-of-line §B.5 + test anti-lock mỗi mạng.
-- **R46** Hedera = Solidity trên HSCS qua JSON-RPC relay + HIP-632 cho ED25519; không đường payer-sponsored.
-- **R47** Sui = Account<T> shared per chủ thể + personal-message; DEX hai chân.
-- **R48** Soroban = auth gốc làm meta-tx; fee-bump cho lane; DEX hai `require_auth`.
-- **R49** Cosmos = CW20 + ADR-036; không authz; feegrant chỉ là seam.
-- **R50** TON = Tact, jetton wallet tuỳ biến có pubkey + `BindKey`; DEX escrow.
+- **R34** Custody `env:` chỉ dev (cờ + chain dev); ký qua `cryptography` (OpenSSL).
+- **R35** `/readyz` + `/metrics` trên cổng quản trị riêng; số liệu Odoo qua `relay_stats`.
+- **R36** CI blockchain riêng; `lib/` forge cài theo tag ghim.
+- **R37** `paused` chỉ chặn gửi; `halted` chặn cả indexing.
+- **R38** Gateway auth `bearer|hmac`; `none` chỉ trên loopback; proptest cho decoder.
+- **R39** Cầu dao: spike base fee, ngân sách gas theo giờ, sàn số dư lane; không chặn indexing.
+- **R40** Journal theo (công ty, token) company-dependent; drift A (Transfer không khớp) + drift C (số dư vs GL).
+- **R41** Seam công ty nhận/quản trị ví duy nhất; "Host" ⇒ "platform company".
+- **R42** `ChainAdapter`; EVM giữ runner riêng; mạng khác dùng `lane_runner` một-tx-mỗi-lane.
+- **R43** `Signer` secp256k1/ed25519 cục bộ; KMS là seam.
+- **R44** Khoá: khoá thô hoặc mnemonic 24 từ; đường dẫn theo bảng §B.3; keystore Web3 v3 cho cả hai đường cong.
+- **R45** Họ mạng trong Odoo; địa chỉ chuẩn theo họ; `blockchain.signed.op`; Odoo kiểm ed25519, còn lại node mô phỏng.
+- **R46** Bảng tránh head-of-line §B.5 + test anti-lock mỗi mạng.
+- **R47** Hedera = Solidity trên HSCS qua JSON-RPC relay + HIP-632 cho ED25519; không đường payer-sponsored.
+- **R48** Sui = Account<T> shared per chủ thể + personal-message; DEX hai chân.
+- **R49** Soroban = auth gốc làm meta-tx; fee-bump cho lane; DEX hai `require_auth`.
+- **R50** Cosmos = CW20 + ADR-036; không authz; feegrant chỉ là seam.
+- **R51** TON = Tact, jetton wallet tuỳ biến có pubkey + `BindKey`; DEX escrow.
