@@ -39,12 +39,19 @@ struct Sent {
 }
 
 pub fn work_from_job(job: &Job) -> Result<Work> {
-    let m = job.metatx.to_sol()?;
-    let hex = job.signature.strip_prefix("0x").unwrap_or(&job.signature);
-    let sig = alloy::hex::decode(hex)?;
+    if let Some(c) = &job.call {
+        let data = alloy::hex::decode(c.calldata.strip_prefix("0x").unwrap_or(&c.calldata))?;
+        let valid_until = c.valid_until.parse::<u64>()?;
+        return Ok(Work { job_id: Some(job.id), to: c.target, data: data.into(), valid_until });
+    }
+    let (Some(m), Some(token), Some(sig)) = (&job.metatx, job.token, &job.signature) else {
+        anyhow::bail!("job {} has neither a meta-transaction nor a call", job.id);
+    };
+    let m = m.to_sol()?;
+    let sig = alloy::hex::decode(sig.strip_prefix("0x").unwrap_or(sig))?;
     let valid_until = m.validUntil.saturating_to();
     let data = IMetaToken::executeMetaTransactionCall { m, signature: sig.into() }.abi_encode();
-    Ok(Work { job_id: Some(job.id), to: job.token, data: data.into(), valid_until })
+    Ok(Work { job_id: Some(job.id), to: token, data: data.into(), valid_until })
 }
 
 pub fn now() -> u64 {

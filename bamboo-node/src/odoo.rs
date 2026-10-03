@@ -44,13 +44,29 @@ pub struct NodeConfig {
     pub inflight: Vec<InflightJob>,
 }
 
+/// Một job outbox. `kind = "metatx"`: `token`/`signature`/`metatx` có mặt. `kind = "call"`:
+/// chỉ `call` — calldata Odoo đã dựng (MandateWallet, R25), node chỉ gửi.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Job {
     pub id: i64,
-    pub token: Address,
-    pub digest: String,
-    pub signature: String,
-    pub metatx: WireMetaTx,
+    #[serde(default)]
+    pub token: Option<Address>,
+    #[serde(default)]
+    pub digest: Option<String>,
+    #[serde(default)]
+    pub signature: Option<String>,
+    #[serde(default)]
+    pub metatx: Option<WireMetaTx>,
+    #[serde(default)]
+    pub call: Option<WireCall>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct WireCall {
+    pub target: Address,
+    pub calldata: String,
+    #[serde(rename = "validUntil")]
+    pub valid_until: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -158,7 +174,18 @@ mod tests {
                        "fee": "0", "feeRecipient": "0x0000000000000000000000000000000000000000"}}"#;
         let job: Job = serde_json::from_str(raw).unwrap();
         assert_eq!(job.id, 3);
-        assert_eq!(job.metatx.to_sol().unwrap().batch, alloy::primitives::U256::from(7));
+        assert_eq!(job.metatx.unwrap().to_sol().unwrap().batch, alloy::primitives::U256::from(7));
+    }
+
+    #[test]
+    fn call_job_payload_decodes() {
+        let raw = r#"{"id": 9, "kind": "call", "call": {"target": "0xbabababababababababababababababababababa",
+            "calldata": "0xdeadbeef", "validUntil": "1800000300"}}"#;
+        let job: Job = serde_json::from_str(raw).unwrap();
+        assert!(job.metatx.is_none());
+        let w = crate::submit::work_from_job(&job).unwrap();
+        assert_eq!(w.data.as_ref(), &[0xde, 0xad, 0xbe, 0xef]);
+        assert_eq!(w.valid_until, 1_800_000_300);
     }
 
     #[test]
