@@ -87,6 +87,13 @@ impl Book {
         self.orders.retain(|(o, _)| o.live(now));
     }
 
+    /// Trả lệnh về sổ khi cặp khớp không lên chain được (simulate settle fail, hàng đợi đóng).
+    pub fn restore(&mut self, order: Order) {
+        if let Ok(terms) = order.terms() {
+            self.orders.insert(0, (order, terms));
+        }
+    }
+
     pub fn is_full(&self) -> bool {
         self.orders.len() >= MAX_RESTING
     }
@@ -190,6 +197,16 @@ mod tests {
         assert_eq!(book.list(A, B, 10).len(), MAX_RESTING);
         // a crossing order still matches against what rests
         assert!(book.insert(order(2, B, 60, A, 100, 99, Address::ZERO), 10).is_some());
+    }
+
+    #[test]
+    fn a_restored_order_matches_again_first() {
+        let mut book = Book::default();
+        book.insert(order(1, A, 100, B, 50, 99, Address::ZERO), 10);
+        let (rest, _) = book.insert(order(2, B, 60, A, 100, 99, Address::ZERO), 10).unwrap();
+        book.restore(rest);
+        assert_eq!(book.list(A, B, 10).len(), 1);
+        assert!(book.insert(order(3, B, 70, A, 100, 99, Address::ZERO), 10).is_some());
     }
 
     #[test]

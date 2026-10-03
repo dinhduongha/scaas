@@ -88,8 +88,23 @@ fn deploy(rpc: &str, chain_id: u64, holder: Address) -> Value {
     serde_json::from_str(&raw).unwrap()
 }
 
+/// Bản sao bảng chuyển trạng thái của `dms_blockchain` (`blockchain_relay_job.TRANSITIONS`):
+/// fake Odoo từ chối đúng như Odoo thật, để e2e không xanh giả (review I12).
+fn allowed(from: &str, to: &str) -> bool {
+    matches!(
+        (from, to),
+        ("queued", "nonce_leased")
+            | ("nonce_leased", "queued" | "signed" | "dead")
+            | ("signed", "broadcast" | "mined" | "reverted" | "queued" | "dead")
+            | ("broadcast", "mined" | "reverted" | "broadcast" | "queued" | "dead")
+            | ("mined", "reverted")
+    )
+}
+
 #[derive(Default)]
 struct FakeOdoo {
+    states: std::collections::HashMap<i64, String>,
+    refused: Vec<Value>,
     jobs: Vec<Value>,
     reports: Vec<Value>,
     ingested: Vec<Value>,
@@ -110,8 +125,21 @@ async fn fake(
             "tokens": o.tokens.iter().map(|t| json!({"address": t, "decimals": 6})).collect::<Vec<_>>(),
             "journal_max_nonce": null, "inflight": []}),
         ("blockchain.relay.job", "relay_poll") => json!(std::mem::take(&mut o.jobs)),
-        ("blockchain.relay.job", "relay_claim") => body["job_ids"].clone(),
+        ("blockchain.relay.job", "relay_claim") => {
+            for id in body["job_ids"].as_array().unwrap() {
+                o.states.insert(id.as_i64().unwrap(), "nonce_leased".into());
+            }
+            body["job_ids"].clone()
+        }
         ("blockchain.relay.job", "relay_report") => {
+            let id = body["job_id"].as_i64().unwrap();
+            let to = body["chain_state"].as_str().unwrap().to_string();
+            let from = o.states.get(&id).cloned().unwrap_or_else(|| "queued".into());
+            if !allowed(&from, &to) {
+                o.refused.push(body.clone());
+                return Json(json!({"error": format!("Transition {from} -> {to} is not allowed.")}));
+            }
+            o.states.insert(id, to);
             o.reports.push(body.clone());
             json!({"ok": true})
         }
@@ -210,12 +238,19 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
         .await
         .unwrap();
     s.poll_outbox().await;
-    s.track().await;
+    for _ in 0..50 {
+        s.track().await;
+        if s.inflight_count() == 0 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
     assert_eq!(s.inflight_count(), 0, "receipt should be in after automine");
 
     let reports = state.lock().unwrap().reports.clone();
     let states: Vec<&str> = reports.iter().map(|r| r["chain_state"].as_str().unwrap()).collect();
     assert_eq!(states, vec!["signed", "broadcast", "mined"], "{reports:?}");
+    assert!(state.lock().unwrap().refused.is_empty());
     assert!(reports[0]["tx_hash"].as_str().unwrap().starts_with("0x"));
     assert_eq!(reports[0]["outer_nonce"], 0);
     assert_eq!(balance(&rpc, token, shop).await, U256::from(250_000_000u64));
@@ -263,6 +298,7 @@ fn trade_leg(seller: &PrivateKeySigner, _sell: Address, value: u64, buy: Address
 #[tokio::test]
 #[ignore]
 async fn dex_orders_match_through_the_gateway() {
+    let _ = tracing_subscriber::fmt().with_env_filter("info").try_init();
     let chain_id = 31902;
     let (_anvil, rpc) = start_anvil(chain_id, 18602).await;
     let alice = small_key(0xA11CE);
@@ -341,7 +377,13 @@ async fn dex_orders_match_through_the_gateway() {
     while let Ok(w) = rx.try_recv() {
         s.submit(w).await;
     }
-    s.track().await;
+    for _ in 0..50 {
+        s.track().await;
+        if s.inflight_count() == 0 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
     assert_eq!(s.inflight_count(), 0);
     assert_eq!(balance(&rpc, token_b, alice.address()).await, U256::from(60_000_000u64));
     assert_eq!(balance(&rpc, token_a, bob.address()).await, U256::from(100_000_000u64));

@@ -143,9 +143,9 @@ async fn post_order(State(s): State<AppState>, Json(r): Json<SignedReq>) -> Repl
     // viễn; điền địa chỉ relayer (review F10). Đã ràng buộc mà trỏ vào 0/DEX ⇒ từ chối.
     if m.mode & MODE_FEE_MASK != 0 {
         if m.mode & MODE_RESTRICT_FEE_RECIPIENT == 0 {
-            if m.feeRecipient == Address::ZERO {
-                m.feeRecipient = c.chain.address();
-            }
+            // Không ràng buộc ⇒ thuộc về relayer nộp tx: ghi đè vô điều kiện, kể cả khi client
+            // điền sẵn (DEX ⇒ settle chắc chắn revert và đánh bật lệnh nghỉ) (review I2).
+            m.feeRecipient = c.chain.address();
         } else if m.feeRecipient == Address::ZERO || m.feeRecipient == dex {
             return bad("restricted fee recipient would strand the fee in the DEX");
         }
@@ -174,10 +174,25 @@ async fn post_order(State(s): State<AppState>, Json(r): Json<SignedReq>) -> Repl
     };
     let valid_until = rest.m.validUntil.min(inc.m.validUntil).saturating_to();
     let call = IMetaTxDex::settleCall {
-        a: Leg { token: rest.token, m: rest.m, sig: rest.sig },
-        b: Leg { token: inc.token, m: inc.m, sig: inc.sig },
+        a: Leg { token: rest.token, m: rest.m.clone(), sig: rest.sig.clone() },
+        b: Leg { token: inc.token, m: inc.m.clone(), sig: inc.sig.clone() },
     };
-    enqueue(c, Work { job_id: None, to: dex, data: call.abi_encode().into(), valid_until }, "matched").await
+    let data: Bytes = call.abi_encode().into();
+    // Cặp khớp phải qua simulate CẢ settle trước khi rời sổ; fail thì lệnh nghỉ về chỗ cũ
+    // (review I7, I13) — lệnh mới bị từ chối, không ai bị đánh bật.
+    if let Err(e) = c.chain.simulate(dex, data.clone()).await {
+        if let Ok(mut b) = c.book.lock() {
+            b.restore(rest);
+        }
+        return sim_reply(e);
+    }
+    let reply = enqueue(c, Work { job_id: None, to: dex, data, valid_until }, "matched").await;
+    if reply.0 != StatusCode::ACCEPTED {
+        if let Ok(mut b) = c.book.lock() {
+            b.restore(rest);
+        }
+    }
+    reply
 }
 
 async fn get_orders(State(s): State<AppState>, Query(q): Query<BookQuery>) -> Reply {

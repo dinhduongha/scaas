@@ -3,7 +3,7 @@
 //! Bất biến: không bao giờ bỏ một nonce (R18) — tx kẹt được thay thế với phí cao hơn; job phải
 //! bỏ thì nonce của nó được lấp bằng tx 0-value tự chuyển. `final` của job KHÔNG đến từ đây mà từ
 //! indexer (`MetaTransactionExecuted`), nên một meta-tx được người khác thực thi vẫn thành `final`.
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::time::{Duration, Instant};
 
 use alloy::primitives::{Address, Bytes, B256};
@@ -58,6 +58,8 @@ pub struct Submitter {
     node_id: String,
     next: u64,
     inflight: BTreeMap<u64, Sent>,
+    /// Việc chưa ghi được journal `signed` vào Odoo: chưa gửi, thử lại vòng sau (review I5).
+    retry: VecDeque<Work>,
 }
 
 impl Submitter {
@@ -70,12 +72,12 @@ impl Submitter {
             .map(|j| Inflight { job_id: j.job_id, nonce: j.nonce, state: j.state.clone() })
             .collect();
         let p = plan(pending, nc.journal_max_nonce, &jobs);
-        let mut me = Self { chain, odoo, cfg, node_id, next: p.next, inflight: BTreeMap::new() };
+        let mut me = Self { chain, odoo, cfg, node_id, next: p.next, inflight: BTreeMap::new(), retry: VecDeque::new() };
         for n in &p.gap_fill {
             me.gap_fill(*n).await?;
         }
         for id in &p.requeue {
-            me.report(*id, "queued", None, None, Some("requeued at node start".into())).await;
+            let _ = me.report(*id, "queued", None, None, Some("requeued at node start".into())).await;
         }
         for j in nc.inflight.iter().filter(|j| p.track.contains(&j.job_id)) {
             let (Some(n), Some(h)) = (j.nonce, j.tx_hash.as_deref()) else { continue };
@@ -92,7 +94,7 @@ impl Submitter {
         self.chain.address()
     }
 
-    async fn report(&self, job: i64, state: &str, hash: Option<B256>, nonce: Option<u64>, err: Option<String>) {
+    async fn report(&self, job: i64, state: &str, hash: Option<B256>, nonce: Option<u64>, err: Option<String>) -> bool {
         let r = Report {
             job_id: job,
             chain_state: state.into(),
@@ -101,8 +103,12 @@ impl Submitter {
             signer_address: nonce.map(|_| format!("{:#x}", self.chain.address())),
             error: err,
         };
-        if let Err(e) = self.odoo.relay_report(&r).await {
-            warn!(job, state, "relay_report failed: {e:#}");
+        match self.odoo.relay_report(&r).await {
+            Ok(()) => true,
+            Err(e) => {
+                warn!(job, state, "relay_report failed: {e:#}");
+                false
+            }
         }
     }
 
@@ -140,9 +146,13 @@ impl Submitter {
             Ok(x) => x,
             Err(e) => return self.requeue(&w, format!("{e:#}")).await,
         };
-        // Journal TRƯỚC khi gửi (review F5): crash giữa hai bước không dẫn tới ký lại.
+        // Journal TRƯỚC khi gửi (review F5): crash giữa hai bước không dẫn tới ký lại. Không ghi
+        // được journal thì KHÔNG gửi, không tiêu nonce: thử lại vòng sau (review I5).
         if let Some(id) = w.job_id {
-            self.report(id, "signed", Some(hash), Some(nonce), None).await;
+            if !self.report(id, "signed", Some(hash), Some(nonce), None).await {
+                self.retry.push_back(w);
+                return;
+            }
         }
         self.next += 1;
         match self.chain.send_raw(&raw).await {
@@ -175,6 +185,15 @@ impl Submitter {
         self.inflight.len()
     }
 
+    /// Việc đang chờ ghi journal được thử lại trước việc mới.
+    pub async fn drain_retry(&mut self) {
+        for _ in 0..self.retry.len() {
+            if let Some(w) = self.retry.pop_front() {
+                self.submit(w).await;
+            }
+        }
+    }
+
     /// Receipt → mined/reverted; quá hạn → thay thế cùng nonce. Meta-tx hết hạn ⇒ lấp lỗ.
     pub async fn track(&mut self) {
         let nonces: Vec<u64> = self.inflight.keys().copied().collect();
@@ -200,6 +219,15 @@ impl Submitter {
             }
             let cap = u128::from(self.cfg.max_fee_cap_gwei) * 1_000_000_000;
             let fees = (bump(s.fees.0, cap), bump(s.fees.1, cap));
+            if fees.0 <= s.fees.0 {
+                // Ở trần phí: một bản thay thế cùng giá bị node từ chối (underpriced). Chờ,
+                // không spam RPC; vẫn không bỏ nonce (review I10).
+                warn!(nonce = n, "stuck at the fee cap; waiting");
+                if let Some(s) = self.inflight.get_mut(&n) {
+                    s.at = Instant::now();
+                }
+                continue;
+            }
             let live = s.work.as_ref().filter(|w| w.valid_until > now()).cloned();
             let expired_job = match (&s.work, &live) {
                 (Some(w), None) => w.job_id,
@@ -212,18 +240,33 @@ impl Submitter {
             if let Some(id) = expired_job {
                 self.report(id, "dead", None, None, Some("expired while stuck; nonce gap-filled".into())).await;
             }
-            match self.chain.sign(n, to, data, gas, fees).await {
-                Ok((raw, h)) => {
-                    if let Err(e) = self.chain.send_raw(&raw).await {
+            let replaced = match self.chain.sign(n, to, data, gas, fees).await {
+                Ok((raw, h)) => match self.chain.send_raw(&raw).await {
+                    Ok(()) => Some(h),
+                    Err(e) => {
                         warn!(nonce = n, "replace send: {e:#}");
+                        None
                     }
+                },
+                Err(e) => {
+                    warn!(nonce = n, "replace sign: {e:#}");
+                    None
+                }
+            };
+            match replaced {
+                // Chỉ đổi hash đang theo dõi khi bản thay thế THỰC SỰ vào mempool (review I4).
+                Some(h) => {
                     if let Some(id) = live.as_ref().and_then(|w| w.job_id) {
                         self.report(id, "broadcast", Some(h), None, None).await;
                     }
                     self.inflight.insert(n, Sent { work: live, hash: h, gas, fees, at: Instant::now() });
                     info!(nonce = n, "replaced");
                 }
-                Err(e) => warn!(nonce = n, "replace sign: {e:#}"),
+                None => {
+                    if let Some(s) = self.inflight.get_mut(&n) {
+                        s.at = Instant::now();
+                    }
+                }
             }
         }
     }
@@ -247,7 +290,9 @@ impl Submitter {
             }
             match work_from_job(&job) {
                 Ok(w) => self.submit(w).await,
-                Err(e) => self.report(job.id, "dead", None, None, Some(format!("bad payload: {e:#}"))).await,
+                Err(e) => {
+                    let _ = self.report(job.id, "dead", None, None, Some(format!("bad payload: {e:#}"))).await;
+                }
             }
         }
     }
@@ -255,6 +300,7 @@ impl Submitter {
 
 pub async fn run(mut s: Submitter, mut rx: mpsc::Receiver<Work>, poll: Duration) {
     loop {
+        s.drain_retry().await;
         s.poll_outbox().await;
         while let Ok(w) = rx.try_recv() {
             s.submit(w).await;
