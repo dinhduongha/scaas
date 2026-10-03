@@ -106,6 +106,7 @@ fn relayed_and_disclosure<C: ZCurve>() {
     let s_open = open_sender::<C>(&w.s);
     verify_opening(&e, 1234, OpeningKind::SenderS, &s_open).unwrap();
     assert!(verify_opening(&e, 1235, OpeningKind::SenderS, &s_open).is_err());
+    assert!(verify_opening(&e, 1234 + (1 << 32), OpeningKind::SenderS, &s_open).is_err());
     let r_open = open_chaum_pedersen(&e, 1234, OpeningKind::ReceiverX, &to, &mut rng).unwrap();
     verify_opening(&e, 1234, OpeningKind::ReceiverX, &r_open).unwrap();
     assert!(verify_opening(&e, 1233, OpeningKind::ReceiverX, &r_open).is_err());

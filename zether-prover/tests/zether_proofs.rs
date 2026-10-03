@@ -279,7 +279,15 @@ fn burn_suite<C: ZCurve>() {
     // Prover refuses an overdraw.
     let mut h2 = h;
     h2.amount = BAL;
-    assert!(prove_burn(&f.gens, &f.from, h2, f.acc, BAL, &mut rng()).is_err());
+    assert!(prove_burn(&f.gens, &f.from, h2.clone(), f.acc, BAL, &mut rng()).is_err());
+    // amount must be in (0, 2^54] (no mod-r aliasing of amount + fee).
+    h2.amount = 0;
+    h2.fee = 0;
+    h2.beneficiary = [0; 32];
+    assert!(prove_burn(&f.gens, &f.from, h2.clone(), f.acc, BAL, &mut rng()).is_err());
+    let mut s = st.clone();
+    s.header.amount = (1 << 54) + 1;
+    assert!(s.validate().is_err());
 }
 
 #[test]

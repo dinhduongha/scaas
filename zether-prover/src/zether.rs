@@ -20,6 +20,8 @@ use crate::ZError;
 pub const N_V: usize = 32;
 pub const N_B: usize = 64;
 pub const HEADER_LEN: usize = 384;
+/// `MAX_TOTAL_SHIELDED` (§1): ceiling of `maxDecryptableShielded`.
+pub const MAX_TOTAL_SHIELDED: u64 = 1 << 54;
 
 pub fn op_tag_transfer() -> [u8; 32] {
     keccak256(b"BAMBOO-ZETHER-OP-TRANSFER-V1")
@@ -577,6 +579,10 @@ impl<C: ZCurve> BurnStatement<C> {
 
     pub fn validate(&self) -> Result<(), ZError> {
         self.header.check_fee()?;
+        // §10: 0 < amount <= maxDecryptableShielded (<= 2^54) — with fee < 2^32, amount + fee < r.
+        if self.header.amount == 0 || self.header.amount > MAX_TOTAL_SHIELDED {
+            return Err(ZError::BadStatement("burn amount outside (0, 2^54]"));
+        }
         if self.y_f.is_zero() {
             return Err(ZError::BadStatement("Y = O"));
         }

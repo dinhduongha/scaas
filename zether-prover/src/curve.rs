@@ -16,7 +16,7 @@ pub type Fr<C> = <C as CurveConfig>::ScalarField;
 
 pub trait ZCurve: SWCurveConfig<BaseField = <Self as ZCurve>::Fq> + Clone + PartialEq + Eq {
     type Fq: PrimeField;
-    /// `"bn254"` / `"bls12_381"`.
+    /// `"bn254"` / `"bls12381"` (the curve key used in vector files).
     const NAME: &'static str;
     /// Padded byte length of one coordinate on the wire.
     const COORD_LEN: usize;
@@ -66,7 +66,7 @@ impl ZCurve for ark_bn254::g1::Config {
 
 impl ZCurve for ark_bls12_381::g1::Config {
     type Fq = ark_bls12_381::Fq;
-    const NAME: &'static str = "bls12_381";
+    const NAME: &'static str = "bls12381";
     const COORD_LEN: usize = 64;
     const KEYGEN_SALT: &'static [u8] = b"BLS-SIG-KEYGEN-SALT-";
     const PATH_ROOT: u32 = 12381;
