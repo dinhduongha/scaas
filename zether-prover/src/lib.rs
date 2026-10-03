@@ -9,6 +9,7 @@ pub mod elgamal;
 pub mod keys;
 pub mod nonce;
 pub mod transcript;
+pub mod zether;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ZError {
