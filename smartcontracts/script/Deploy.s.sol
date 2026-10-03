@@ -6,6 +6,7 @@ import {OpenFactory} from "../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../src/common/IOpenFactory.sol";
 import {MetaToken} from "../src/metatx/MetaToken.sol";
 import {MetaTxDex} from "../src/dex/MetaTxDex.sol";
+import {OrderBookDex} from "../src/dex/OrderBookDex.sol";
 
 /// forge script script/Deploy.s.sol --rpc-url $RPC --broadcast
 /// env: PRIVATE_KEY (deployer; registrar mặc định), REGISTRAR (tuỳ chọn),
@@ -24,6 +25,8 @@ contract Deploy is Script {
         MetaToken impl = new MetaToken(address(factory));
         if (registrar == deployer) factory.registerImplementation(IOpenFactory.TokenKind.META, 1, address(impl));
         MetaTxDex dex = new MetaTxDex();
+        // R35: admin chỉ `setMarket`; production đặt REGISTRAR là một Safe (RS5-1).
+        OrderBookDex obDex = new OrderBookDex(registrar);
         address demo;
         if (demoSupply != 0 && registrar == deployer) {
             demo = factory.createMetaToken(1, address(0),
@@ -36,6 +39,7 @@ contract Deploy is Script {
         vm.serializeAddress(k, "factory", address(factory));
         vm.serializeAddress(k, "implementation", address(impl));
         vm.serializeAddress(k, "dex", address(dex));
+        vm.serializeAddress(k, "order_book_dex", address(obDex));
         string memory out = vm.serializeAddress(k, "demo_token", demo);
         vm.writeJson(out, string.concat("./deployments/", vm.toString(block.chainid), ".json"));
         console.log(out);

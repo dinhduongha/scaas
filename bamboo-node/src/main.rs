@@ -4,7 +4,7 @@
 //! sở hữu nonce vỏ, một task `indexer`, và (tuỳ chọn) gateway HTTP chung.
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use anyhow::{anyhow, bail, Result};
@@ -74,10 +74,25 @@ async fn main() -> Result<()> {
                 Err(anyhow!("indexer loop ended"))
             });
         }
-        gw_chains.insert(
-            cc.evm_chain_number,
-            gateway::GwChain { chain: shared, tx, tokens, dex: cc.dex, book: Arc::new(Mutex::new(dex::Book::default())) },
-        );
+        // DEX (R35): sổ lệnh bền ở Odoo + watcher riêng; cần gateway (intake) và submit (settle qua outbox).
+        let venue = match cc.dex {
+            Some(addr) if cfg.modules.gateway && cfg.modules.submit => {
+                let relay = odoo::Odoo::new(&cfg.odoo, &cfg.odoo.relay_api_key_env)?;
+                let idx = match cfg.modules.indexer {
+                    true => Some(odoo::Odoo::new(&cfg.odoo, &cfg.odoo.indexer_api_key_env)?),
+                    false => None,
+                };
+                let v = dex::venue::Venue::start(shared.clone(), relay, idx, addr).await?;
+                let lv = v.clone();
+                set.spawn(async move {
+                    lv.run_loops(poll).await;
+                    Err(anyhow!("dex loop ended"))
+                });
+                Some(v)
+            }
+            _ => None,
+        };
+        gw_chains.insert(cc.evm_chain_number, gateway::GwChain { chain: shared, tx, tokens, dex: venue });
     }
     if cfg.modules.gateway {
         let app = gateway::router(gateway::AppState { chains: Arc::new(gw_chains) });

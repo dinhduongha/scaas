@@ -18,7 +18,7 @@ evm_chain_number = 9000
 rpc_urls = ["http://nethermind:8545"]            # >= finality.quorum independent endpoints
 signer_key_env = "BAMBOO_RELAYER_KEY_9000"       # outer-tx key: holds gas only, never user funds
 finality = { mode = "depth", depth = 1, quorum = 1 }
-# dex = "0x..."                                  # MetaTxDex address from smartcontracts/deployments/9000.json
+# dex = "0x..."                                  # OrderBookDex ("order_book_dex" in smartcontracts/deployments/9000.json)
 poll_ms = 1000
 stuck_after_secs = 60
 max_gas_per_tx = 3000000

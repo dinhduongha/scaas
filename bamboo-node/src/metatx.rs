@@ -38,14 +38,14 @@ pub struct Domain {
     pub verifying_contract: Address,
 }
 
-fn addr(s: &str) -> Result<Address> {
+pub(crate) fn addr(s: &str) -> Result<Address> {
     if s.len() != 42 || !s.starts_with("0x") {
         bail!("not an address: {s}");
     }
     Address::from_str(s).map_err(|e| anyhow!("not an address {s}: {e}"))
 }
 
-fn uint(s: &str) -> Result<U256> {
+pub(crate) fn uint(s: &str) -> Result<U256> {
     let canonical = !s.is_empty()
         && s.len() <= 78
         && s.bytes().all(|b| b.is_ascii_digit())

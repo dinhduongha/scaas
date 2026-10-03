@@ -1,7 +1,7 @@
 //! Mô-đun `gateway`: relayer mở (SRS §4.9.4). Không xác thực; giới hạn kích thước và đồng thời
 //! (mỗi request tốn một `eth_call`). Đặt sau reverse proxy cho rate-limit theo IP.
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 
 use alloy::primitives::{Address, Bytes, U256};
 use alloy::sol_types::SolCall;
@@ -14,10 +14,11 @@ use serde_json::{json, Value};
 use tokio::sync::mpsc;
 use tower::limit::GlobalConcurrencyLimitLayer;
 
-use crate::abi::{IMetaToken, IMetaTxDex, Leg};
+use crate::abi::IMetaToken;
 use crate::chain::{Chain, SimError};
-use crate::dex::{Book, Order};
-use crate::metatx::{WireMetaTx, MODE_FEE_MASK, MODE_RESTRICT_FEE_RECIPIENT};
+use crate::dex::venue::{Venue, VenueError};
+use crate::dex::WireOrder;
+use crate::metatx::WireMetaTx;
 use crate::submit::{now, Work};
 
 #[derive(Clone)]
@@ -25,8 +26,8 @@ pub struct GwChain {
     pub chain: Arc<Chain>,
     pub tx: mpsc::Sender<Work>,
     pub tokens: Arc<RwLock<Vec<Address>>>,
-    pub dex: Option<Address>,
-    pub book: Arc<Mutex<Book>>,
+    /// Sổ lệnh + thanh toán của `OrderBookDex` trên chain này (R35); None = chain không có DEX.
+    pub dex: Option<Arc<Venue>>,
 }
 
 #[derive(Clone, Default)]
@@ -43,10 +44,38 @@ pub struct SignedReq {
 }
 
 #[derive(Deserialize)]
-pub struct BookQuery {
+pub struct OrderReq {
     pub chain: u64,
-    pub sell: Address,
-    pub buy: Address,
+    pub order: WireOrder,
+    pub signature: String,
+}
+
+#[derive(Deserialize)]
+pub struct CancelReqBody {
+    pub chain: u64,
+    #[serde(rename = "orderHash")]
+    pub order_hash: alloy::primitives::B256,
+    pub signature: String,
+}
+
+#[derive(Deserialize)]
+pub struct CancelAllReq {
+    pub chain: u64,
+    pub maker: Address,
+    #[serde(rename = "minNonce")]
+    pub min_nonce: String,
+    pub signature: String,
+}
+
+#[derive(Deserialize)]
+pub struct MarketQuery {
+    pub chain: u64,
+    #[serde(default)]
+    pub market: i64,
+    #[serde(default)]
+    pub levels: Option<usize>,
+    #[serde(default)]
+    pub maker: Option<Address>,
 }
 
 type Reply = (StatusCode, Json<Value>);
@@ -59,7 +88,7 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/healthz", get(|| async { "ok" }))
         .route("/v1/metatx", post(post_metatx))
-        .route("/v1/dex/orders", post(post_order).get(get_orders))
+        .merge(dex_routes())
         .layer(DefaultBodyLimit::max(64 * 1024))
         .layer(GlobalConcurrencyLimitLayer::new(32))
         .with_state(state)
@@ -119,97 +148,106 @@ async fn post_metatx(State(s): State<AppState>, Json(r): Json<SignedReq>) -> Rep
     enqueue(c, Work { job_id: None, to: r.token, data, valid_until }, "queued").await
 }
 
-async fn post_order(State(s): State<AppState>, Json(r): Json<SignedReq>) -> Reply {
-    let c = match chain_of(&s, r.chain, r.token) {
-        Ok(c) => c,
-        Err(e) => return e,
-    };
-    let Some(dex) = c.dex else { return bad("no DEX on this chain") };
-    let mut m = match r.m.to_sol() {
-        Ok(m) => m,
-        Err(e) => return bad(e),
-    };
-    let sig = match sig_bytes(&r.signature) {
-        Ok(x) => x,
-        Err(e) => return e,
-    };
-    if m.to != dex || m.relayer != dex {
-        return bad("leg must be routed through this DEX");
-    }
-    if m.validUntil <= U256::from(now()) {
-        return bad("expired");
-    }
-    // Phí không ràng buộc + feeRecipient 0 ⇒ ERC20MetaTx trả phí cho msg.sender = DEX, kẹt vĩnh
-    // viễn; điền địa chỉ relayer (review F10). Đã ràng buộc mà trỏ vào 0/DEX ⇒ từ chối.
-    if m.mode & MODE_FEE_MASK != 0 {
-        if m.mode & MODE_RESTRICT_FEE_RECIPIENT == 0 {
-            // Không ràng buộc ⇒ thuộc về relayer nộp tx: ghi đè vô điều kiện, kể cả khi client
-            // điền sẵn (DEX ⇒ settle chắc chắn revert và đánh bật lệnh nghỉ) (review I2).
-            m.feeRecipient = c.chain.address();
-        } else if m.feeRecipient == Address::ZERO || m.feeRecipient == dex {
-            return bad("restricted fee recipient would strand the fee in the DEX");
-        }
-    }
-    let order = Order { token: r.token, m: m.clone(), sig: sig.clone() };
-    if order.terms().is_err() {
-        return bad("not a trade leg");
-    }
-    let leg_call: Bytes = IMetaToken::executeMetaTransactionCall { m, signature: sig }.abi_encode().into();
-    if let Err(e) = c.chain.simulate_from(dex, r.token, leg_call).await {
-        return sim_reply(e);
-    }
-    let matched = match c.book.lock() {
-        Ok(mut b) => {
-            b.purge(now());
-            b.insert(order, now())
-        }
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "book poisoned"}))),
-    };
-    let Some((rest, inc)) = matched else {
-        let full = c.book.lock().map(|b| b.is_full()).unwrap_or(true);
-        if full {
-            return (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error": "order book full"})));
-        }
-        return (StatusCode::ACCEPTED, Json(json!({"status": "resting"})));
-    };
-    let valid_until = rest.m.validUntil.min(inc.m.validUntil).saturating_to();
-    let call = IMetaTxDex::settleCall {
-        a: Leg { token: rest.token, m: rest.m.clone(), sig: rest.sig.clone() },
-        b: Leg { token: inc.token, m: inc.m.clone(), sig: inc.sig.clone() },
-    };
-    let data: Bytes = call.abi_encode().into();
-    // Cặp khớp phải qua simulate CẢ settle trước khi rời sổ; fail thì lệnh nghỉ về chỗ cũ
-    // (review I7, I13) — lệnh mới bị từ chối, không ai bị đánh bật.
-    if let Err(e) = c.chain.simulate(dex, data.clone()).await {
-        if let Ok(mut b) = c.book.lock() {
-            b.restore(rest);
-        }
-        return sim_reply(e);
-    }
-    let reply = enqueue(c, Work { job_id: None, to: dex, data, valid_until }, "matched").await;
-    if reply.0 != StatusCode::ACCEPTED {
-        if let Ok(mut b) = c.book.lock() {
-            b.restore(rest);
-        }
-    }
-    reply
+// ---------------------------------------------------------------------------------- DEX (R35)
+
+/// Route DEX, gộp vào `router`. Không tự xác thực: lớp auth của gateway (R54) bọc router ngoài cùng.
+pub fn dex_routes() -> Router<AppState> {
+    Router::new()
+        .route("/v1/dex/orders", post(dex_place).get(dex_orders))
+        .route("/v1/dex/cancel", post(dex_cancel))
+        .route("/v1/dex/cancel-all", post(dex_cancel_all))
+        .route("/v1/dex/markets", get(dex_markets))
+        .route("/v1/dex/depth", get(dex_depth))
+        .route("/v1/dex/trades", get(dex_trades))
+        .route("/v1/dex/ticker", get(dex_ticker))
 }
 
-async fn get_orders(State(s): State<AppState>, Query(q): Query<BookQuery>) -> Reply {
-    let Some(c) = s.chains.get(&q.chain) else { return bad("unknown chain") };
-    let list: Vec<Value> = match c.book.lock() {
-        Ok(b) => b
-            .list(q.sell, q.buy, now())
-            .into_iter()
-            .map(|o| {
-                json!({
-                    "token": format!("{:#x}", o.token),
-                    "m": WireMetaTx::from_sol(&o.m),
-                    "signature": format!("0x{}", alloy::hex::encode(&o.sig)),
-                })
-            })
-            .collect(),
-        Err(_) => vec![],
+fn venue(s: &AppState, chain: u64) -> Result<Arc<Venue>, Reply> {
+    s.chains.get(&chain).and_then(|c| c.dex.clone()).ok_or_else(|| bad("no DEX on this chain"))
+}
+
+fn venue_err(e: VenueError) -> Reply {
+    match e {
+        VenueError::Bad(m) => bad(m),
+        VenueError::Unavailable(m) => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error": m}))),
+    }
+}
+
+async fn dex_place(State(s): State<AppState>, Json(r): Json<OrderReq>) -> Reply {
+    let v = match venue(&s, r.chain) {
+        Ok(v) => v,
+        Err(e) => return e,
     };
-    (StatusCode::OK, Json(json!({"orders": list})))
+    match v.place(&r.order, &r.signature).await {
+        Ok(p) => (StatusCode::ACCEPTED, Json(serde_json::to_value(p).unwrap_or_default())),
+        Err(e) => venue_err(e),
+    }
+}
+
+async fn dex_cancel(State(s): State<AppState>, Json(r): Json<CancelReqBody>) -> Reply {
+    let v = match venue(&s, r.chain) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    match v.cancel(r.order_hash, &r.signature).await {
+        Ok(()) => (StatusCode::ACCEPTED, Json(json!({"status": "cancelled"}))),
+        Err(e) => venue_err(e),
+    }
+}
+
+async fn dex_cancel_all(State(s): State<AppState>, Json(r): Json<CancelAllReq>) -> Reply {
+    let v = match venue(&s, r.chain) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let Ok(min) = r.min_nonce.parse::<U256>() else { return bad("minNonce is not a uint256") };
+    match v.cancel_all(r.maker, min, &r.signature).await {
+        Ok(n) => (StatusCode::ACCEPTED, Json(json!({"status": "cancelled", "orders": n}))),
+        Err(e) => venue_err(e),
+    }
+}
+
+async fn dex_markets(State(s): State<AppState>, Query(q): Query<MarketQuery>) -> Reply {
+    match venue(&s, q.chain) {
+        Ok(v) => (StatusCode::OK, Json(json!({"dex": format!("{:#x}", v.dex), "markets": v.markets().await}))),
+        Err(e) => e,
+    }
+}
+
+async fn dex_depth(State(s): State<AppState>, Query(q): Query<MarketQuery>) -> Reply {
+    let v = match venue(&s, q.chain) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    match v.depth(q.market, q.levels.unwrap_or(20).min(200)).await {
+        Some(d) => (StatusCode::OK, Json(d)),
+        None => bad("unknown market"),
+    }
+}
+
+async fn dex_trades(State(s): State<AppState>, Query(q): Query<MarketQuery>) -> Reply {
+    match venue(&s, q.chain) {
+        Ok(v) => (StatusCode::OK, Json(json!({"trades": v.trades(q.market)}))),
+        Err(e) => e,
+    }
+}
+
+async fn dex_ticker(State(s): State<AppState>, Query(q): Query<MarketQuery>) -> Reply {
+    let v = match venue(&s, q.chain) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    match v.ticker(q.market).await {
+        Some(t) => (StatusCode::OK, Json(t)),
+        None => bad("unknown market"),
+    }
+}
+
+async fn dex_orders(State(s): State<AppState>, Query(q): Query<MarketQuery>) -> Reply {
+    let v = match venue(&s, q.chain) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let Some(maker) = q.maker else { return bad("maker is required") };
+    (StatusCode::OK, Json(json!({"orders": v.orders_of(maker).await})))
 }

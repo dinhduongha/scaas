@@ -3,27 +3,31 @@
 //! Cần `anvil` và `forge` trong PATH. Chứng minh trên EVM thật với contract thật:
 //! 1. job outbox (giả Odoo) → simulate → ký → `signed` trước khi gửi → broadcast → receipt →
 //!    indexer gửi `PaymentSettled` + `MetaTransactionExecuted` vùng final;
-//! 2. DEX: hai lệnh qua gateway HTTP → khớp → `settle` on-chain → số dư hoán đổi;
-//!    người ký không có một wei gas nào.
+//! 2. DEX (R35): approve meta-tx qua gateway → lệnh ký EIP-712 qua gateway → khớp một phần →
+//!    job `settle` qua outbox (giả Odoo) → số dư + phí; khởi động lại venue ⇒ sổ còn nguyên; huỷ ⇒
+//!    đóng on-chain; watcher đưa event final về Odoo. Người ký không có một wei gas nào.
 use std::net::SocketAddr;
 use std::process::{Child, Command, Stdio};
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
 use alloy::network::EthereumWallet;
-use alloy::primitives::{keccak256, Address, Bytes, B256, U256};
+use alloy::primitives::{keccak256, Address, B256, U256};
 use alloy::providers::{Provider, ProviderBuilder};
 use alloy::rpc::types::TransactionRequest;
 use alloy::signers::local::PrivateKeySigner;
 use alloy::signers::SignerSync;
 use alloy::sol_types::{SolCall, SolValue};
 use axum::extract::{Path, State};
+use axum::http::StatusCode;
 use axum::routing::post;
 use axum::{Json, Router};
 use bamboo_node::abi::{IMetaToken, IOpenFactory, MetaTransaction};
 use bamboo_node::chain::Chain;
 use bamboo_node::config::{ChainCfg, FinalityCfg, OdooCfg};
-use bamboo_node::dex::{Book, OP_TRADE};
+use bamboo_node::dex::venue::Venue;
+use bamboo_node::dex::{cancel_digest, domain, order_hash, Order, WireOrder};
 use bamboo_node::gateway::{router, AppState, GwChain};
 use bamboo_node::metatx::{digest, Domain, WireMetaTx, MODE_RESTRICT_RELAYER};
 use bamboo_node::odoo::Odoo;
@@ -110,13 +114,22 @@ struct FakeOdoo {
     ingested: Vec<Value>,
     indexed_block: u64,
     tokens: Vec<String>,
+    // --- DEX (dms_blockchain_dex) ---
+    dex: String,
+    markets: Vec<Value>,
+    orders: BTreeMap<String, Value>,
+    dex_trades: Vec<Value>,
+    dex_events: Vec<Value>,
+    dex_indexed: u64,
+    next_job: i64,
+    fail_commits: u32,
 }
 
 async fn fake(
     State(s): State<Arc<Mutex<FakeOdoo>>>,
     Path((model, method)): Path<(String, String)>,
     Json(body): Json<Value>,
-) -> Json<Value> {
+) -> (StatusCode, Json<Value>) {
     let mut o = s.lock().unwrap();
     let out = match (model.as_str(), method.as_str()) {
         ("blockchain.chain", "node_config") => json!({
@@ -137,7 +150,7 @@ async fn fake(
             let from = o.states.get(&id).cloned().unwrap_or_else(|| "queued".into());
             if !allowed(&from, &to) {
                 o.refused.push(body.clone());
-                return Json(json!({"error": format!("Transition {from} -> {to} is not allowed.")}));
+                return (StatusCode::OK, Json(json!({"error": format!("Transition {from} -> {to} is not allowed.")})));
             }
             o.states.insert(id, to);
             o.reports.push(body.clone());
@@ -148,9 +161,45 @@ async fn fake(
             o.ingested.extend(body["events"].as_array().unwrap().iter().cloned());
             json!({"indexed_block": o.indexed_block, "created": 0})
         }
+        ("blockchain.dex.market", "dex_markets") => json!({"dex": o.dex, "markets": o.markets}),
+        ("blockchain.dex.order", "dex_book_load") => {
+            let rows: Vec<Value> = o
+                .orders
+                .values()
+                .filter(|r| r["state"] == "open" || r["state"] == "partial")
+                .map(|r| json!({"order_hash": r["order_hash"], "order": r["order"], "signature": r["signature"],
+                                 "remaining": r["remaining"], "seq": r["seq"]}))
+                .collect();
+            json!({"rows": rows})
+        }
+        ("blockchain.dex.order", "dex_book_commit") => {
+            if o.fail_commits > 0 {
+                o.fail_commits -= 1;
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "db down"})));
+            }
+            for r in body["orders"].as_array().unwrap() {
+                o.orders.insert(r["order_hash"].as_str().unwrap().to_string(), r.clone());
+            }
+            let trades = body["trades"].as_array().unwrap().clone();
+            o.dex_trades.extend(trades);
+            for j in body["jobs"].as_array().unwrap() {
+                o.next_job += 1;
+                let id = 1000 + o.next_job;
+                o.jobs.push(json!({"id": id, "kind": "call", "call": {
+                    "target": j["target"], "calldata": j["calldata"], "validUntil": j["valid_until"]}}));
+            }
+            json!({"ok": true})
+        }
+        ("blockchain.dex.trade", "dex_sync") => json!({"failed": []}),
+        ("blockchain.dex.trade", "dex_cursor") => json!({"indexed_block": o.dex_indexed}),
+        ("blockchain.dex.trade", "dex_fill_ingest") => {
+            o.dex_indexed = body["to_block"].as_u64().unwrap();
+            o.dex_events.extend(body["events"].as_array().unwrap().iter().cloned());
+            json!({"indexed_block": o.dex_indexed})
+        }
         _ => json!({"error": "unexpected"}),
     };
-    Json(out)
+    (StatusCode::OK, Json(out))
 }
 
 async fn start_fake(state: Arc<Mutex<FakeOdoo>>) -> SocketAddr {
@@ -275,108 +324,44 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     assert!(last["error"].as_str().unwrap().contains("MetaTxBadNonce"), "{last}");
 }
 
-fn trade_leg(seller: &PrivateKeySigner, _sell: Address, value: u64, buy: Address, min: u64, dex: Address, batch: u64)
-    -> MetaTransaction
+fn sign_hash(signer: &PrivateKeySigner, h: B256) -> String {
+    format!("0x{}", alloy::hex::encode(signer.sign_hash_sync(&h).unwrap().as_bytes()))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn order(maker: &PrivateKeySigner, sell: Address, sell_amt: u64, buy: Address, buy_amt: u64, nonce: u64, relayer: Address)
+    -> Order
 {
-    let mut data = OP_TRADE.to_vec();
-    data.extend((buy, U256::from(min), Address::ZERO).abi_encode());
-    MetaTransaction {
-        from: seller.address(),
-        to: dex,
-        value: U256::from(value),
-        data: data.into(),
-        batch: U256::from(batch),
-        nonce: U256::ZERO,
-        validUntil: U256::from(now() + 300),
-        mode: MODE_RESTRICT_RELAYER,
-        relayer: dex,
+    Order {
+        maker: maker.address(),
+        taker: Address::ZERO,
+        sellToken: sell,
+        buyToken: buy,
+        sellAmount: U256::from(sell_amt),
+        buyAmount: U256::from(buy_amt),
+        nonce: U256::from(nonce),
+        expiry: U256::from(now() + 600),
+        maxFeePpm: 5_000,
+        flags: 0,
+        relayer,
+        feeMode: 0,
         fee: U256::ZERO,
+        feeToken: Address::ZERO,
         feeRecipient: Address::ZERO,
     }
 }
 
-#[tokio::test]
-#[ignore]
-async fn dex_orders_match_through_the_gateway() {
-    let _ = tracing_subscriber::fmt().with_env_filter("info").try_init();
-    let chain_id = 31902;
-    let (_anvil, rpc) = start_anvil(chain_id, 18602).await;
-    let alice = small_key(0xA11CE);
-    let bob = small_key(0xB0B);
-    let dep = deploy(&rpc, chain_id, alice.address());
-    let token_a: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();
-    let factory: Address = dep["factory"].as_str().unwrap().parse().unwrap();
-    let dex: Address = dep["dex"].as_str().unwrap().parse().unwrap();
+async fn send(rpc: &str, from: &PrivateKeySigner, to: Address, data: Vec<u8>) {
+    let p = ProviderBuilder::new().wallet(EthereumWallet::from(from.clone())).connect_http(rpc.parse().unwrap());
+    let r = p.send_transaction(TransactionRequest::default().to(to).input(data.into())).await.unwrap();
+    assert!(r.get_receipt().await.unwrap().status());
+}
 
-    // Second token, minted to the deployer, then half to bob — plain txs from a funded account.
-    let deployer = key(DEPLOYER);
-    let p = ProviderBuilder::new().wallet(EthereumWallet::from(deployer.clone())).connect_http(rpc.parse().unwrap());
-    let init = ("Token BBB".to_string(), "BBB".to_string(), U256::from(6u8), U256::from(1_000_000_000u64), Address::ZERO).abi_encode_params();
-    let create = IOpenFactory::createMetaTokenCall {
-        version: 1,
-        underlying: Address::ZERO,
-        initData: init.into(),
-        salt: B256::repeat_byte(0xbb),
-    };
-    let out = p.call(TransactionRequest::default().to(factory).input(create.abi_encode().into())).await.unwrap();
-    let token_b = Address::abi_decode(&out).unwrap();
-    p.send_transaction(TransactionRequest::default().to(factory).input(create.abi_encode().into()))
-        .await.unwrap().get_receipt().await.unwrap();
-    let give = IMetaToken::transferCall { to: bob.address(), value: U256::from(500_000_000u64) };
-    p.send_transaction(TransactionRequest::default().to(token_b).input(give.abi_encode().into()))
-        .await.unwrap().get_receipt().await.unwrap();
-
-    let relayer = key(RELAYER);
-    let cfg = chain_cfg(chain_id, &rpc, Some(dex));
-    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token_a:#x}"), format!("{token_b:#x}")], ..Default::default() }));
-    let odoo = odoo_at(start_fake(state.clone()).await);
-    let mut s = Submitter::start(Chain::with_signer(&cfg, relayer.clone()).unwrap(), odoo, cfg.clone(), "e2e".into())
-        .await
-        .unwrap();
-    let (tx, mut rx) = mpsc::channel::<Work>(16);
-    let gw = GwChain {
-        chain: Arc::new(Chain::with_signer(&cfg, relayer).unwrap()),
-        tx,
-        tokens: Arc::new(RwLock::new(vec![token_a, token_b])),
-        dex: Some(dex),
-        book: Arc::new(Mutex::new(Book::default())),
-    };
-    let app = router(AppState { chains: Arc::new([(chain_id, gw)].into_iter().collect()) });
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let gw_addr = listener.local_addr().unwrap();
-    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-
-    let http = reqwest::Client::new();
-    let post = |token: Address, m: MetaTransaction, sig: String| {
-        let http = http.clone();
-        async move {
-            let r = http
-                .post(format!("http://{gw_addr}/v1/dex/orders"))
-                .json(&json!({"chain": chain_id, "token": token, "m": WireMetaTx::from_sol(&m), "signature": sig}))
-                .send()
-                .await
-                .unwrap();
-            let status = r.status();
-            (status, r.json::<Value>().await.unwrap())
-        }
-    };
-    let leg_a = trade_leg(&alice, token_a, 100_000_000, token_b, 50_000_000, dex, 1);
-    let (st, body) = post(token_a, leg_a.clone(), sign(&alice, chain_id, token_a, &leg_a)).await;
-    assert_eq!((st.as_u16(), body["status"].as_str()), (202, Some("resting")), "{body}");
-
-    // A leg that is not routed through the DEX is refused at the door.
-    let mut stray = trade_leg(&bob, token_b, 60_000_000, token_a, 100_000_000, dex, 2);
-    stray.relayer = Address::repeat_byte(1);
-    let (st, _) = post(token_b, stray.clone(), sign(&bob, chain_id, token_b, &stray)).await;
-    assert_eq!(st.as_u16(), 400);
-
-    let leg_b = trade_leg(&bob, token_b, 60_000_000, token_a, 100_000_000, dex, 3);
-    let (st, body) = post(token_b, leg_b.clone(), sign(&bob, chain_id, token_b, &leg_b)).await;
-    assert_eq!((st.as_u16(), body["status"].as_str()), (202, Some("matched")), "{body}");
-
+async fn drain(s: &mut Submitter, rx: &mut mpsc::Receiver<Work>) {
     while let Ok(w) = rx.try_recv() {
         s.submit(w).await;
     }
+    s.poll_outbox().await;
     for _ in 0..50 {
         s.track().await;
         if s.inflight_count() == 0 {
@@ -385,8 +370,141 @@ async fn dex_orders_match_through_the_gateway() {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     assert_eq!(s.inflight_count(), 0);
-    assert_eq!(balance(&rpc, token_b, alice.address()).await, U256::from(60_000_000u64));
-    assert_eq!(balance(&rpc, token_a, bob.address()).await, U256::from(100_000_000u64));
-    assert_eq!(balance(&rpc, token_a, dex).await, U256::ZERO);
-    let _ = Bytes::new();
+}
+
+alloy::sol! {
+    function setMarket(address tokenA, address tokenB, (bool,bool,uint32,uint32,address) m) external;
+    function filled(bytes32 h) external view returns (uint256);
+}
+
+#[tokio::test]
+#[ignore]
+async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
+    let _ = tracing_subscriber::fmt().with_env_filter("info").try_init();
+    let chain_id = 31950; // S5 range
+    let (_anvil, rpc) = start_anvil(chain_id, 18650).await;
+    let alice = small_key(0xA11CE);
+    let bob = small_key(0xB0B);
+    let dep = deploy(&rpc, chain_id, alice.address());
+    let token_a: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();
+    let factory: Address = dep["factory"].as_str().unwrap().parse().unwrap();
+    let dex: Address = dep["order_book_dex"].as_str().unwrap().parse().unwrap();
+
+    // Quote token B, half to bob — plain txs from the funded deployer (= DEX admin).
+    let deployer = key(DEPLOYER);
+    let p = ProviderBuilder::new().wallet(EthereumWallet::from(deployer.clone())).connect_http(rpc.parse().unwrap());
+    let init = ("Token BBB".to_string(), "BBB".to_string(), U256::from(6u8), U256::from(1_000_000_000u64), Address::ZERO).abi_encode_params();
+    let create = IOpenFactory::createMetaTokenCall { version: 1, underlying: Address::ZERO, initData: init.into(), salt: B256::repeat_byte(0xbb) };
+    let out = p.call(TransactionRequest::default().to(factory).input(create.abi_encode().into())).await.unwrap();
+    let token_b = Address::abi_decode(&out).unwrap();
+    send(&rpc, &deployer, factory, create.abi_encode()).await;
+    send(&rpc, &deployer, token_b, IMetaToken::transferCall { to: bob.address(), value: U256::from(500_000_000u64) }.abi_encode()).await;
+    let fee_to = Address::repeat_byte(0xfe);
+    send(&rpc, &deployer, dex, setMarketCall { tokenA: token_a, tokenB: token_b, m: (true, true, 1_000, 2_000, fee_to) }.abi_encode()).await;
+
+    let relayer = key(RELAYER);
+    let cfg = chain_cfg(chain_id, &rpc, Some(dex));
+    let state = Arc::new(Mutex::new(FakeOdoo {
+        tokens: vec![format!("{token_a:#x}"), format!("{token_b:#x}")],
+        dex: format!("{dex:#x}"),
+        markets: vec![json!({"id": 1, "base": format!("{token_a:#x}"), "quote": format!("{token_b:#x}"),
+            "base_decimals": 6, "quote_decimals": 6, "fee_on": true, "maker_fee_ppm": 1000, "taker_fee_ppm": 2000,
+            "fee_recipient": format!("{fee_to:#x}"), "min_base_amount": "1000"})],
+        ..Default::default()
+    }));
+    let odoo = odoo_at(start_fake(state.clone()).await);
+    let mut s = Submitter::start(Chain::with_signer(&cfg, relayer.clone()).unwrap(), odoo.clone(), cfg.clone(), "e2e".into())
+        .await
+        .unwrap();
+    let shared = Arc::new(Chain::with_signer(&cfg, relayer.clone()).unwrap());
+    let venue = Venue::start(shared.clone(), odoo.clone(), Some(odoo.clone()), dex).await.unwrap();
+    let (tx, mut rx) = mpsc::channel::<Work>(16);
+    let gw = GwChain { chain: shared.clone(), tx, tokens: Arc::new(RwLock::new(vec![token_a, token_b])), dex: Some(venue.clone()) };
+    let app = router(AppState { chains: Arc::new([(chain_id, gw)].into_iter().collect()) });
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:18651").await.unwrap();
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let http = reqwest::Client::new();
+    let gw = "http://127.0.0.1:18651";
+    let post = |path: &'static str, body: Value| {
+        let http = http.clone();
+        async move {
+            let r = http.post(format!("{gw}{path}")).json(&body).send().await.unwrap();
+            let st = r.status().as_u16();
+            (st, r.json::<Value>().await.unwrap())
+        }
+    };
+
+    // 1. Gasless approve (MetaToken op, R26/R35) through the open gateway.
+    for (who, token) in [(&alice, token_a), (&bob, token_b)] {
+        let mut data = keccak256(b"approve(address,uint256)")[..4].to_vec();
+        data.extend((dex, U256::MAX).abi_encode_params());
+        let m = MetaTransaction {
+            from: who.address(), to: dex, value: U256::ZERO, data: data.into(),
+            batch: U256::from_be_bytes(keccak256(b"bamboo.dex.approve").0), nonce: U256::ZERO,
+            validUntil: U256::from(now() + 300), mode: MODE_RESTRICT_RELAYER, relayer: relayer.address(),
+            fee: U256::ZERO, feeRecipient: Address::ZERO,
+        };
+        let (st, body) = post("/v1/metatx", json!({"chain": chain_id, "token": token, "m": WireMetaTx::from_sol(&m),
+            "signature": sign(who, chain_id, token, &m)})).await;
+        assert_eq!(st, 202, "{body}");
+    }
+    drain(&mut s, &mut rx).await;
+
+    let d = domain(chain_id, dex);
+    let place = |o: Order, signer: &PrivateKeySigner| {
+        let sig = sign_hash(signer, order_hash(&d, &o));
+        post("/v1/dex/orders", json!({"chain": chain_id, "order": WireOrder::from_sol(&o), "signature": sig}))
+    };
+
+    // 2. Order without the relayer restriction is refused (RS5-9).
+    let (st, _) = place(order(&alice, token_a, 100_000_000, token_b, 200_000_000, 1, Address::ZERO), &alice).await;
+    assert_eq!(st, 400);
+
+    // 3. Ask rests; a smaller bid fills partially against it.
+    let ask = order(&alice, token_a, 100_000_000, token_b, 200_000_000, 2, relayer.address());
+    let ask_hash = order_hash(&d, &ask);
+    let (st, body) = place(ask.clone(), &alice).await;
+    assert_eq!((st, body["status"].as_str()), (202, Some("resting")), "{body}");
+    let bid = order(&bob, token_b, 80_000_000, token_a, 40_000_000, 3, relayer.address());
+    let (st, body) = place(bid, &bob).await;
+    assert_eq!((st, body["status"].as_str()), (202, Some("filled")), "{body}");
+    drain(&mut s, &mut rx).await; // the settle job went through the Odoo outbox
+    // maker fee 0.1 % of 80 B, taker fee 0.2 % of 40 A
+    assert_eq!(balance(&rpc, token_b, alice.address()).await, U256::from(80_000_000u64 - 80_000));
+    assert_eq!(balance(&rpc, token_a, bob.address()).await, U256::from(40_000_000u64 - 80_000));
+    assert_eq!(balance(&rpc, token_b, fee_to).await, U256::from(80_000u64));
+    assert_eq!(balance(&rpc, token_a, fee_to).await, U256::from(80_000u64));
+    assert_eq!(balance(&rpc, token_a, dex).await + balance(&rpc, token_b, dex).await, U256::ZERO);
+
+    // 4. Restart: a fresh venue on the same Odoo has the same book.
+    let before = venue.rows().await;
+    assert_eq!(before.len(), 1);
+    assert_eq!(before[0].remaining, "60000000");
+    let venue2 = Venue::start(shared.clone(), odoo.clone(), Some(odoo.clone()), dex).await.unwrap();
+    assert_eq!(venue2.rows().await, before);
+
+    // 5. A failed commit leaves the book exactly as Odoo has it (review D20).
+    state.lock().unwrap().fail_commits = 1;
+    let (st, _) = place(order(&bob, token_b, 20_000_000, token_a, 10_000_000, 4, relayer.address()), &bob).await;
+    assert_eq!(st, 503);
+    assert_eq!(venue.rows().await, before);
+
+    // 6. Cancel: off the book now, closed on-chain at the next sync — it can never settle.
+    let (st, body) = post("/v1/dex/cancel", json!({"chain": chain_id, "orderHash": format!("{ask_hash:#x}"),
+        "signature": sign_hash(&alice, cancel_digest(&d, ask_hash))})).await;
+    assert_eq!(st, 202, "{body}");
+    assert!(venue.rows().await.is_empty());
+    venue.sync_once().await.unwrap();
+    drain(&mut s, &mut rx).await;
+    let out = p.call(TransactionRequest::default().to(dex).input(filledCall { h: ask_hash }.abi_encode().into())).await.unwrap();
+    assert_eq!(U256::abi_decode(&out).unwrap(), U256::from(100_000_000u64));
+
+    // 7. The watcher brings final DEX events to Odoo with its own cursor.
+    while venue.watch_once().await.unwrap() {}
+    let ev = state.lock().unwrap().dex_events.clone();
+    let names: Vec<&str> = ev.iter().map(|e| e["event"].as_str().unwrap()).collect();
+    assert!(names.contains(&"OrderFilled") && names.contains(&"Matched") && names.contains(&"OrderCancelled"), "{names:?}");
+    let filled_alice = ev.iter().find(|e| e["event"] == "OrderFilled" && e["order_hash"] == format!("{ask_hash:#x}")).unwrap();
+    assert_eq!(filled_alice["dex_fee"], "80000");
+    assert_eq!(state.lock().unwrap().dex_trades.len(), 1);
 }
