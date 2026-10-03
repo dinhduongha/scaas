@@ -234,7 +234,9 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
     {
         if (block.number > validUntilBlock) revert RollOverExpired(validUntilBlock);
         Account storage a = _acct[ua];
-        if (a.pendingSeq != expectedPendingSeq) revert PendingSeqMismatch(a.pendingSeq, expectedPendingSeq);
+        // `≥`, không `==`: credit đến sau khi ký (kể cả transfer v=0 miễn phí của kẻ grief) không được giết
+        // rollOver của chủ. Phát lại vẫn chặn: digest ghim `accSeq`, mọi rollOver thật đều tăng nó.
+        if (a.pendingSeq < expectedPendingSeq) revert PendingSeqMismatch(expectedPendingSeq, a.pendingSeq);
         bytes32 digest = keccak256(abi.encode(
             TAG_ROLLOVER, block.chainid, address(this), ua, a.accSeq, expectedPendingSeq, validUntilBlock
         ));

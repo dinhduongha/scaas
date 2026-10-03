@@ -160,14 +160,22 @@ contract UniversalAccountRegistry is IUniversalAccountRegistry {
             (bytes memory key, uint256 total) = abi.decode(d, (bytes, uint256));
             if (!_bnKey(key) || total == 0) revert InvalidAuthData();
         } else if (s == AuthScheme.BLS_BN254) {
-            if (abi.decode(d, (bytes)).length != 128) revert InvalidAuthData();
+            bytes memory pk = abi.decode(d, (bytes));
+            if (pk.length != 128 || _isZero(pk)) revert InvalidAuthData();
         } else if (s == AuthScheme.BLS_12381) {
-            Bls12381.requireInG2Subgroup(abi.decode(d, (bytes))); // revert nếu sai độ dài / ngoài subgroup
+            // requireInG2Subgroup revert nếu sai độ dài / ngoài subgroup. pk = vô cực làm pairing tầm thường:
+            // chữ ký vô cực qua mọi digest ⇒ "custody BLS" giả, x một mình tiêu được (bất biến #1).
+            if (_isZero(Bls12381.requireInG2Subgroup(abi.decode(d, (bytes))))) revert InvalidAuthData();
         } else if (s == AuthScheme.PQ_COMMITMENT) {
             if (abi.decode(d, (bytes32)) == bytes32(0)) revert InvalidAuthData();
         } else {
             if (abi.decode(d, (address)).code.length == 0) revert InvalidAuthData();
         }
+    }
+
+    /// @dev Mã hoá điểm vô cực của EIP-197/EIP-2537 là toàn 0.
+    function _isZero(bytes memory b) private pure returns (bool) {
+        return keccak256(b) == keccak256(new bytes(b.length));
     }
 
     function _bnKey(bytes memory key) private view returns (bool) {
@@ -190,7 +198,7 @@ contract UniversalAccountRegistry is IUniversalAccountRegistry {
         }
         if (s == AuthScheme.BLS_BN254) return _blsBn254(abi.decode(d, (bytes)), m, sig, pop);
         if (s == AuthScheme.BLS_12381) {
-            if (sig.length != 128) return false;
+            if (sig.length != 128 || _isZero(sig)) return false;
             bytes memory h = HashToCurve.hashToG1(abi.encodePacked(m), pop ? BLS381_DST_POP : BLS381_DST_SIG);
             return Bls12381.verifyMinSig(h, abi.decode(d, (bytes)), sig);
         }

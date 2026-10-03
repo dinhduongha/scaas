@@ -241,6 +241,11 @@ contract UniversalAccountRegistryTest is Test {
         bytes memory yb = ZetherKeys.pub(X, true);
         vm.expectRevert(IR.InvalidAuthData.selector);
         reg.register(yb, AuthScheme.BLS_BN254, abi.encode(new bytes(127)), pop, false);
+        // pk = điểm vô cực: pairing tầm thường, chữ ký vô cực sẽ qua mọi digest
+        vm.expectRevert(IR.InvalidAuthData.selector);
+        reg.register(yb, AuthScheme.BLS_BN254, abi.encode(new bytes(128)), pop, false);
+        vm.expectRevert(IR.InvalidAuthData.selector);
+        reg.register(y, AuthScheme.BLS_12381, abi.encode(new bytes(256)), pop, false);
     }
 
     function _schnorrGroup(AuthScheme s, bytes memory d, uint256 groupSk) internal {
@@ -292,6 +297,8 @@ contract UniversalAccountRegistryTest is Test {
         reg.requireAuthorized(a, M, popSig, true);
         vm.expectRevert(abi.encodeWithSelector(IR.Unauthorized.selector, a));
         reg.requireAuthorized(a, M, hex"00", true);
+        vm.expectRevert(abi.encodeWithSelector(IR.Unauthorized.selector, a)); // chữ ký = vô cực
+        reg.requireAuthorized(a, M, new bytes(128), true);
     }
 
     function test_pqCommitmentAuth() public {

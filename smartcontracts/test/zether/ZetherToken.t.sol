@@ -9,6 +9,7 @@ import {ITransferDisclosure} from "../../src/zether/ITransferDisclosure.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {ZetherTranscript} from "../../src/zether/ZetherTranscript.sol";
 import {ZetherKeys} from "./helpers/ZetherKeys.sol";
+import {IUniversalAccountRegistry as IR} from "../../src/registry/IUniversalAccountRegistry.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {FeeMode, FeePolicy} from "../../src/common/FeePolicy.sol";
 
@@ -146,6 +147,24 @@ abstract contract ZetherTokenSuite is ZetherFixture {
         return abi.encode(u.y, ZetherKeys.schnorr(u.x, d, bls));
     }
 
+    /// Kẻ grief số dư 0 chèn transfer v=0 trước `rollOverSigned`: pendingSeq tiến nhưng rollOver của chủ vẫn
+    /// chạy (gộp luôn credit mới); chữ ký không phát lại được vì `accSeq` đã tiến.
+    function test_rollOverSignedSurvivesFrontRunCredit() public {
+        uint64 until = uint64(block.number + 50);
+        tok.setRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until,
+            _modeSig(alice, ZetherTypes.RollOverMode.OWNER_ONLY, 0, until));
+        _fund(tok, alice, 10);
+        bytes memory rs = _rollSig(alice, 0, 1, until);
+        _direct(tok, _proveTransfer(tok, bob, alice, 0, 0, _none(), 0), _none());
+        assertEq(tok.accountState(alice.ua).pendingSeq, 2);
+        tok.rollOverSigned(alice.ua, 1, until, rs);
+        (uint256 a,) = _bal(alice);
+        assertEq(a, 10);
+        _fund(tok, alice, 5);
+        vm.expectRevert(abi.encodeWithSelector(IR.Unauthorized.selector, alice.ua));
+        tok.rollOverSigned(alice.ua, 1, until, rs);
+    }
+
     function test_setRollOverModeExpired() public {
         uint64 until = uint64(block.number + 5);
         bytes memory sig = _modeSig(alice, ZetherTypes.RollOverMode.OWNER_ONLY, 0, until);
@@ -169,7 +188,7 @@ abstract contract ZetherTokenSuite is ZetherFixture {
         assertEq(tok.accountState(alice.ua).accSeq, 0);
 
         bytes memory rs = _rollSig(alice, 0, 1, until);
-        vm.expectRevert(abi.encodeWithSelector(IZetherToken.PendingSeqMismatch.selector, 1, 2));
+        vm.expectRevert(abi.encodeWithSelector(IZetherToken.PendingSeqMismatch.selector, 2, 1));
         tok.rollOverSigned(alice.ua, 2, until, rs);
         uint256 g0 = gasleft();
         tok.rollOverSigned(alice.ua, 1, until, rs);

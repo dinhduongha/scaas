@@ -155,7 +155,7 @@ sendCounter_f++
 - `PUBLIC`: `rollOverPublic(UA)` / `rollOverBatch(UA[])` không chữ ký. `rollOverBatch` bỏ qua phần tử `OWNER_ONLY`
   và phần tử chưa đăng ký.
 - `OWNER_ONLY`: `rollOverPublic` revert `RollOverOwnerOnly`. Chỉ `rollOverSigned(UA, expectedPendingSeq,
-  validUntilBlock, sig)` — `block.number ≤ validUntilBlock`, `pendingSeq == expectedPendingSeq`, chữ ký theo
+  validUntilBlock, sig)` — `block.number ≤ validUntilBlock`, `pendingSeq ≥ expectedPendingSeq` (RS2-17), chữ ký theo
   `authScheme` (§11) trên
   `keccak256(abi.encode(keccak256("ZETHER_ROLLOVER_V1"), chainid, token, UA, accSeq, expectedPendingSeq, validUntilBlock))`.
 - `rollOverSigned` cũng dùng được cho tài khoản `PUBLIC`.
@@ -165,8 +165,10 @@ sendCounter_f++
 
 **Race (SRS §7.6/§7.7, canon C5):** transfer/burn **không bao giờ** tự gộp pending. Credit đến trong lúc prove chỉ
 đổi `pending` ⇒ proof vẫn sống. Chỉ rollOver đổi `accSeq`; proof dựng trên `accSeq` cũ bị từ chối **trước** verify
-(`StaleAccSeq`, rẻ). Với `OWNER_ONLY` không ai ngoài chủ bump được `accSeq`; với `PUBLIC` kẻ grief phải nạp tiền thật
-trước mỗi lần thử. Quy tắc ví: không giữ rollOver đã ký khi còn transfer đang bay; `validUntilBlock` ngắn (≈50 block).
+(`StaleAccSeq`, rẻ). Với `OWNER_ONLY` không ai ngoài chủ bump được `accSeq`, và credit chèn vào không giết được
+`rollOverSigned` của chủ (RS2-17). Với `PUBLIC` grief **chỉ tốn gas**: một tài khoản đã đăng ký số dư 0 vẫn chứng
+minh được transfer `v = 0` (proof hợp lệ, ẩn số tiền ⇒ không chặn được on-chain) rồi gọi `rollOverPublic` ⇒ ví nào
+cần proof ổn định khi bị nhắm phải chuyển `OWNER_ONLY`. Quy tắc ví: không giữ rollOver đã ký khi còn transfer đang bay; `validUntilBlock` ngắn (≈50 block).
 
 ## 6. Statement (byte layout)
 
@@ -548,6 +550,11 @@ Kill criterion S1 của canon (2.5M) bị vượt ở transfer bn254 (2.75M th�
 - **RS2-16** Cổng gas của precompile: verifier chuyển `gas()` cho precompile (không ghim giá EIP-1108/2537) — một
   điểm sai làm tx tiêu hết gas; relayer phải mô phỏng trước (đã là quy tắc §3.7.7).
 
+- **RS2-17** `rollOverSigned` kiểm `pendingSeq ≥ expectedPendingSeq` (không `==`): transfer `v = 0` miễn phí của
+  kẻ grief không giết được rollOver của chủ `OWNER_ONLY`. Phát lại vẫn chặn vì digest ghim `accSeq` (review S2-R1).
+- **RS2-18** Registry từ chối khoá uỷ quyền BLS = điểm vô cực (BLS_12381 sau G2MSM, BLS_BN254 128 byte 0) và chữ ký
+  BLS12-381 = vô cực — nếu không, pairing tầm thường cho "custody BLS" giả, `x` một mình tiêu được (review S2-R2).
+
 ## 17. Review log
 
 ### agy — review đặc tả bản 1 (2026-10-03), 10 finding
@@ -564,3 +571,10 @@ Kill criterion S1 của canon (2.5M) bị vượt ở transfer bn254 (2.75M th�
 | 8 | med | Đã có (§6, E6) | Không đổi |
 | 9 | low | Đúng (dễ đọc nhầm) | Ghi chú §9 |
 | 10 | low | Đúng | Ghi chú §3 |
+
+### Review nhánh (2026-10-03) — Claude reviewer độc lập (agy hết quota, grok rate-limit)
+
+| # | Sev | Kết luận | Xử lý |
+|---|---|---|---|
+| S2-R1 | med | Đúng (PoC chạy): transfer `v = 0` từ tài khoản số dư 0 tăng `pendingSeq` nạn nhân ⇒ `rollOverSigned` `OWNER_ONLY` revert mãi; §5 nói sai "phải nạp tiền thật" | RS2-17 + sửa §5; test `test_rollOverSignedSurvivesFrontRunCredit` |
+| S2-R2 | low | Đúng (PoC chạy): BLS_12381 đăng ký được với pk = vô cực, chữ ký 0 qua mọi digest | RS2-18; test trong `test_multisigBadAuthDataRejected`, `test_bls12381Auth` |
