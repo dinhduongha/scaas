@@ -156,6 +156,18 @@ contract ZetherKatTest is Test {
         assertEq(G1Bls12381.neg(bls.identity()), bls.identity());
     }
 
+    function test_blsAddNegRejectBadInput() public {
+        bytes memory g = bls.g1MulBase(1);
+        vm.expectRevert(abi.encodeWithSelector(G1Bls12381.BadLength.selector, 127));
+        bls.g1Add(new bytes(127), g);
+        vm.expectRevert(abi.encodeWithSelector(G1Bls12381.BadLength.selector, 127));
+        bls.g1Sub(g, new bytes(127)); // neg
+        bytes memory off = bls.g1MulBase(1);
+        off[127] = off[127] ^ 0x01;
+        vm.expectRevert(G1Bls12381.BadPoint.selector); // G1ADD kiểm on-curve
+        bls.g1Add(off, g);
+    }
+
     function test_emptyMsmRevertsOnBls() public {
         vm.expectRevert(abi.encodeWithSelector(G1Bls12381.BadLength.selector, 0));
         bls.g1Msm("", new uint256[](0));

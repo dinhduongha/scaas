@@ -59,7 +59,12 @@ contract ReentrantERC20 is ERC20 {
 /// |   InvalidPublicKey, InvalidAuthData, Unauthorized | UniversalAccountRegistry.t.sol |
 /// | G1Bn254/G1Bls12381 BadPoint, BadLength | ZetherKat.t.sol + file này |
 /// | Không chạm được (phòng thủ): `GeneratorStoreFailed` (CREATE chỉ fail khi hết gas), `ModexpFailed`
-/// |   (precompile 0x05 có từ Byzantium), `require(ok)` trong `_inv` (cùng lý do). |
+/// |   (precompile 0x05 có từ Byzantium), `require(ok)` trong `_inv` (cùng lý do), `mapToG` hết vòng. |
+///
+/// Theo từng **chỗ** revert (không chỉ từng lỗi): `forge coverage --ir-minimum` + đối chiếu BRDA của mọi dòng
+/// `revert`/`require` trong `src/zether`, `src/registry` — mọi chỗ đều bị chạm trừ 4 chỗ phòng thủ trên và
+/// `G1*.mul` (chỉ prover test dùng, không có trong contract). Khoá reentrancy (assembly) không hiện trong
+/// coverage nhưng trace xác nhận `test_reentrancyBlocked` revert ở `tload`.
 contract ZetherRevertPathsTest is ZetherFixture {
     uint256 constant PK = 0x5EC12E7;
 
@@ -363,5 +368,10 @@ contract ZetherRevertPathsTest is ZetherFixture {
     function test_curveLibBadLength() public {
         vm.expectRevert(abi.encodeWithSelector(G1Bn254.BadLength.selector, 63));
         ver.g1Add(new bytes(63), new bytes(64));
+        bytes memory g = ver.g1MulBase(1);
+        vm.expectRevert(abi.encodeWithSelector(G1Bn254.BadLength.selector, 63));
+        ver.g1Sub(g, new bytes(63)); // neg
+        vm.expectRevert(abi.encodeWithSelector(G1Bn254.BadLength.selector, 128));
+        ver.g1Msm(bytes.concat(g, g), new uint256[](1)); // msm: pts ≠ k·64
     }
 }

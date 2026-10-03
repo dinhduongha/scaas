@@ -146,6 +146,14 @@ abstract contract ZetherTokenSuite is ZetherFixture {
         return abi.encode(u.y, ZetherKeys.schnorr(u.x, d, bls));
     }
 
+    function test_setRollOverModeExpired() public {
+        uint64 until = uint64(block.number + 5);
+        bytes memory sig = _modeSig(alice, ZetherTypes.RollOverMode.OWNER_ONLY, 0, until);
+        vm.roll(until + 1);
+        vm.expectRevert(abi.encodeWithSelector(IZetherToken.RollOverExpired.selector, until));
+        tok.setRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, sig);
+    }
+
     function test_ownerOnlyRollOver() public {
         uint64 until = uint64(block.number + 50);
         bytes memory sig = _modeSig(alice, ZetherTypes.RollOverMode.OWNER_ONLY, 0, until);
@@ -410,6 +418,15 @@ abstract contract ZetherTokenSuite is ZetherFixture {
         _ata(ref, 123, ITransferDisclosure.OpeningKind.RECEIVER_X, rx);
         vm.expectRevert(ITransferDisclosure.OpeningMalformed.selector);
         _ata(ref, 99, ITransferDisclosure.OpeningKind.RECEIVER_X, rx);
+        // opening sai khuôn: s không đủ 32 byte, A1 sai độ dài, z ≥ r
+        vm.expectRevert(ITransferDisclosure.OpeningMalformed.selector);
+        _vta(ref, 123, ITransferDisclosure.OpeningKind.SENDER_S, new bytes(31));
+        (bytes memory a1, bytes memory a2, uint256 z) = abi.decode(rx, (bytes, bytes, uint256));
+        vm.expectRevert(ITransferDisclosure.OpeningMalformed.selector);
+        _vta(ref, 123, ITransferDisclosure.OpeningKind.RECEIVER_X, abi.encode(new bytes(1), a2, z));
+        bytes memory zBig = abi.encode(a1, a2, ver.groupOrder());
+        vm.expectRevert(ITransferDisclosure.OpeningMalformed.selector);
+        _vta(ref, 123, ITransferDisclosure.OpeningKind.RECEIVER_X, zBig);
         (bytes memory ct, bytes memory yTo) = tok.transferCiphertext(ref);
         assertEq(yTo, bob.y);
         assertEq(ct.length, 3 * ver.g1EncodedBytes());

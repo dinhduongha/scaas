@@ -14,7 +14,7 @@ bất biến (bn254 / BLS12-381); `UniversalAccountRegistry` singleton cho khoá
 | 4 | Registry 8 scheme + PoP | `UniversalAccountRegistry.t.sol` | `19e27a5` |
 | 5 | Token + mixin meta-tx + cổng factory | `ZetherToken.t.sol`, `ZetherGate.t.sol`, `ZetherRevertPaths.t.sol` | `eab460a` |
 | 6 | Vector S3 (Rust) trên verifier Solidity | `ZetherS3Vectors.t.sol` | `6442513` |
-| 7 | Gas, coverage, HANDOFF, review nhánh | — | (cuối) |
+| 7 | Gas, coverage từng chỗ revert, HANDOFF, review nhánh | `ZetherRevertPaths.t.sol` (bảng), `ZetherKat.t.sol` | `7b04a13`, `2466e71`, (cuối) |
 
 Chạy: `forge test --match-path 'test/zether/*'` (hoặc `FOUNDRY_PROFILE=zether …`). Sinh lại KAT:
 `python3 test/vectors/zether/kat.py` (cần `py_ecc>=8`).
