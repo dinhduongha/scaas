@@ -718,6 +718,26 @@ Bốn plan, theo thứ tự phụ thuộc: (1) contracts + DEX, (2) relayer, (3)
 | F20 | low | Đúng hướng, sửa tốt hơn đề xuất | Nhận: `valid_until == issued_valid_until` (không cần dung sai) |
 | F21 | low | Đúng | Nhận: kiểm ở `start` |
 
+### Antigravity (agy) — review bốn PLAN, 2026-10-03 — 15 finding
+
+| # | Sev | Kết luận (đã đối chiếu source) | Xử lý |
+|---|---|---|---|
+| P1 | crit | **Sai.** `sale.order.amount_paid` tồn tại trong Odoo 19 (`addons/sale/models/sale_order.py:274`, compute `_compute_amount_paid`) | Bác |
+| P2 | crit | Đúng về plan odoo-core (phần `inflight` chỉ ghi ở plan relayer Task 4) | Đã có trong code (`_inflight`, commit c60a12f) |
+| P3 | crit | Đúng: node báo `dead` từ `broadcast` khi job hết hạn lúc kẹt | Nhận: `signed/broadcast → dead`; `final` vẫn thắng (74521c9) |
+| P4 | high | Đúng về test trong plan (USD 2 chữ số) | Code dùng 12.34 từ đầu (f4bbaf1) |
+| P5 | high | Đúng một phần (thiếu `event_name`) | Nhận (74521c9) |
+| P6 | high | Đúng — cũng bị test bắt khi chạy | Đã sửa (c60a12f) |
+| P7 | high | Đúng: lỗi transport khi simulate bị coi là revert ⇒ job chết | Nhận: chỉ revert có data mới `dead`, còn lại `queued` |
+| P8 | med | Đúng | Nhận: `JoinSet` |
+| P9 | med | Đúng | Nhận (74521c9) |
+| P10 | med | Đúng | Nhận: JS dừng ở trạng thái kết thúc |
+| P11 | med | Đúng | Nhận: `invoice_policy = 'order'` trong fixture |
+| P12 | med | Hợp lý (không chắc `copy()` giữ M2M) | Nhận: fixture gán method tường minh |
+| P13 | low | Đúng về plan | Đã có ảnh (f4bbaf1) |
+| P14 | low | Đúng | Nhận: handler có wrapper phí-chuyển (74521c9) |
+| P15 | low | Đúng | Nhận: nạp danh sách token đồng bộ trước khi mở gateway |
+
 ### Grok
 Lần 1 (2026-10-03): `free Grok Build usage limit` — không in giờ reset. Đã hẹn chạy lại nền sau
 ~55 phút; kết quả sẽ ghi vào đây.
