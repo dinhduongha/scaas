@@ -7,13 +7,21 @@ use crate::adapter::ChainAdapter;
 use crate::config::ChainCfg;
 use crate::signer::LocalSigner;
 
+pub mod cosmos;
 pub mod evm;
 
+/// Adapter giữ signer của nó; `LocalSigner` không `Clone` nên chép khoá bên trong.
+fn own(s: &LocalSigner) -> LocalSigner {
+    match s {
+        LocalSigner::Secp(k) => LocalSigner::Secp(k.clone()),
+        LocalSigner::Ed(k) => LocalSigner::Ed(k.clone()),
+    }
+}
+
 /// Adapter cho một chain KHÔNG chạy runner EVM riêng. Mỗi luồng mạng thêm một nhánh ở đây.
-#[allow(clippy::match_single_binding)] // one arm per network family as streams land
 pub fn build(cfg: &ChainCfg, signers: &[LocalSigner]) -> Result<Arc<dyn ChainAdapter>> {
-    let _ = signers;
     match cfg.family.as_str() {
+        "cosmos" => Ok(Arc::new(cosmos::CosmosAdapter::new(cfg, signers.iter().map(own).collect())?)),
         other => bail!("chain {}: no adapter for family {other} in this build", cfg.chain_key()),
     }
 }
