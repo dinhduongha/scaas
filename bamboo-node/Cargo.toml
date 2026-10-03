@@ -1,0 +1,20 @@
+[package]
+name = "bamboo-node"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+publish = false
+description = "Relay node: Odoo outbox submitter, finality-gated indexer, open meta-tx gateway and DEX matcher"
+
+[dependencies]
+alloy = { version = "1.6", default-features = false, features = ["std", "provider-http", "rpc-types", "signer-local", "sol-types", "contract", "network", "eips", "consensus", "reqwest", "json-rpc"] }
+anyhow = "1"
+axum = "0.8"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+toml = "0.8"
+tower = { version = "0.5", features = ["limit"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
