@@ -1,5 +1,7 @@
 //! cw-multi-test: token meta-tx (adr036 + passkey), anti-lock (R62), allowance R26, mandate R25, DEX R35,
 //! và vector chéo với Odoo (`test_fam_cosmos.py`) và adapter Rust (`adapters/cosmos.rs`).
+// Test helpers mirror the signed-op fields one-to-one; bundling them would hide what each test signs.
+#![allow(clippy::too_many_arguments, clippy::type_complexity)]
 use bamboo_metaop::{adr036_doc, base64url, passkey_account, secp256k1_account, sha256, Auth, MetaOp, DOMAIN};
 use cosmwasm_std::{to_json_vec, StdResult, Addr, Api, Binary, CanonicalAddr, HexBinary, Uint128};
 use cw_multi_test::{App, AppBuilder, AppResponse, BankKeeper, ContractWrapper, Executor, MockApiBech32};

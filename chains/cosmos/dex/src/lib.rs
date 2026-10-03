@@ -51,6 +51,8 @@ pub struct Market {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
+// Deserialized once per execute call; boxing a Leg would only add an allocation.
+#[allow(clippy::large_enum_variant)]
 pub enum ExecuteMsg {
     SetMarket { token_a: String, token_b: String, market: Market },
     Settle { maker: Leg, taker: Leg },
