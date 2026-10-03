@@ -83,6 +83,8 @@ gas (bước 1–9 của §04.6.1). Một implementation duy nhất, hai tầng 
 | Nạp/rút | — | `wrap(amount)` (đo **delta số dư** thật nhận được, mint đúng delta) / `unwrap(amount, recipient)` |
 | Bất biến | `Σ balance == totalSupply` | thêm `underlying.balanceOf(this) >= totalSupply` |
 
+**`initData`** (ABI cố định cho v1): `abi.encode(string name, string symbol, uint8 decimals, uint256 initialSupply, address minter)`. Tầng 2 dùng `name`/`symbol`, bỏ qua `decimals` (đọc từ underlying) và **bắt buộc** `initialSupply == 0 && minter == 0` (`WrapperHasNoMint`).
+
 **Clone-safe** (`01-token-factory.md` §1.3.5, §1.4.3):
 - `constructor(address factory_)` của implementation đặt `FACTORY` và `_SELF` (immutable, đúng cho
   mọi clone) và khoá implementation (`_initialized = true` trên storage của chính nó).
@@ -103,9 +105,9 @@ nào (ruling R2). `_checkOp` (bước 6) kiểm đủ; `_executeOp` (bước 8) 
 | `data` | Kiểm ở bước 6 | Làm ở bước 8 |
 |---|---|---|
 | rỗng | — (số dư đã kiểm) | `transfer(from → to, value)` (giữ nguyên hành vi đã đo) |
-| `pay(bytes32 entryRef)` — đúng 36 byte | `to != 0` | transfer + `emit PaymentSettled(from, to, value, feeAmount, feeRecipient, entryRef)` |
+| `pay(bytes32 entryRef)` — đúng 36 byte (`data.length < 4` ⇒ `MetaTxUnknownOp(0)`, không panic) | `to != 0` | transfer + `emit PaymentSettled(from, to, value, feeAmount, feeRecipient, entryRef)` |
 | `trade(address counterToken, uint256 minCounterValue, address counterparty)` — đúng 100 byte | `mode & MODE_RESTRICT_RELAYER != 0` **và** `to == msg.sender` | transfer `from → msg.sender` (settlement contract) |
-| khác | revert `MetaTxUnknownOp` | — |
+| khác | revert `MetaTxUnknownOp(bytes4)` (error mới, khai trong `MetaToken`; relayer giải mã từ ABI của `MetaToken`) | — |
 
 Để event `PaymentSettled` mang phí thật, `ERC20MetaTx._executeOp` nhận thêm
 `(feeAmount, feeRecipient)` — thay đổi chữ ký hàm internal, không đổi ABI, không đổi digest.
@@ -148,11 +150,12 @@ SRS §3.3 mô tả `settleTrade(makerTx, takerTx, makerSig, takerSig)` với rel
      vào DEX (do `ERC20MetaTx` mặc định `feeRecipient = msg.sender`) và kẹt vĩnh viễn;
   4. gọi `executeMetaTransaction` của **cả hai** token; đo **delta số dư** của DEX trên mỗi token
      phải đúng `m.value` (token lạ/phí-chuyển bị từ chối);
-  5. trả `a.m.value` token A cho `b.m.from`, `b.m.value` token B cho `a.m.from`;
+  5. trả `a.m.value` token A cho `b.m.from`, `b.m.value` token B cho `a.m.from` bằng `SafeERC20.safeTransfer`;
   6. `emit TradeSettled(a.m.from, b.m.from, a.token, b.token, a.m.value, b.m.value)`.
 - Bất kỳ bước nào fail ⇒ cả tx revert ⇒ không chân nào thực thi, không nonce nào tiêu.
 - `ReentrancyGuardTransient`. Không owner, không sweep, không upgrade. **Bất biến:** số dư của DEX
-  trên mọi token không đổi qua một `settle`.
+  trên mọi token **không đổi qua một `settle`** (ai gửi thẳng token vào DEX thì số đó kẹt vĩnh
+  viễn — không có sweep là chủ ý, và bất biến phát biểu theo delta, không theo giá trị tuyệt đối).
 - **Fill-or-kill**: `value` được ký chính xác, nên không có khớp một phần (ruling R3). Phần dư
   giá (`b.m.value > minCounterValue`) thuộc về người bán chân A — nó đã nằm trong chữ ký của B.
 - Phí relayer: mỗi chân có thể trả phí bằng token của chính nó (`FIXED`/`PERCENT`, trần 1%) cho
@@ -196,6 +199,7 @@ dex = "0x…"                                     # MetaTxDex, tuỳ chọn
 poll_ms = 1000
 stuck_after_secs = 60                           # thay thế cùng nonce, fee x1.25
 max_gas_per_tx = 3000000                        # mạch ngắt SRS §6.8
+max_fee_cap_gwei = 500                          # trần phí khi thay thế tx kẹt
 ```
 
 Danh sách token **không** nằm trong config: node đọc nó từ Odoo (`node_config`) — một nguồn sự thật.
@@ -212,15 +216,23 @@ loop mỗi poll_ms:
      sim = eth_call(token.executeMetaTransaction(m, sig), from=relayer, block=latest)
      revert  → odoo.relay_report(job, 'dead', error=decode(revert))  # MetaTxBadNonce, Expired…
      gas > max_gas_per_tx → 'dead'
-     ok → ký EIP-1559 (nonce = next++) → eth_sendRawTransaction
-          → odoo.relay_report(job, 'broadcast', tx_hash, nonce)
+     ok → ký EIP-1559 (nonce = next++) → tx_hash biết TRƯỚC khi gửi
+          → odoo.relay_report(job, 'signed', tx_hash, nonce)        # ghi journal trước
+          → eth_sendRawTransaction → odoo.relay_report(job, 'broadcast')
   theo dõi in-flight: receipt có  → status 0: 'reverted';  status 1: 'mined'
-                      quá stuck_after_secs → gửi lại cùng nonce, maxFee/priority ×1.25 (tối đa 3 lần)
+                      quá stuck_after_secs → thay thế cùng nonce, maxFee/priority ×1.25,
+                      lặp không giới hạn tới trần max_fee_cap; KHÔNG BAO GIỜ bỏ rơi một nonce:
+                      job phải bỏ (meta-tx hết hạn) ⇒ thay bằng tx 0-value tự chuyển cho chính
+                      mình ở đúng nonce đó (gap-filler, SRS §6.8)
 ```
 
-- Khởi động: `next = eth_getTransactionCount(relayer, "pending")`; các job `nonce_leased` /
-  `broadcast` do chính `node_id` claim mà chưa kết thúc được đối soát lại: có `tx_hash` → hỏi
-  receipt; không có → về `queued` qua `relay_report(job, 'queued')`.
+- Khởi động (cold start, `_USER-DECISIONS` §23.1): `next = max(getTransactionCount(pending),
+  journal_max + 1)` với `journal_max` = `outer_nonce` lớn nhất Odoo đã ghi cho địa chỉ relayer
+  trên chain này (`node_config`). Nonce nào trong `[getTransactionCount(pending), journal_max]`
+  không còn tx trong mempool (`eth_getTransactionByHash` của job ghi nonce đó trả null) được lấp
+  bằng gap-filler, và job của nó về `queued` (meta-tx nonce chặn thực thi đôi). Job
+  `nonce_leased` không `tx_hash` → `queued`; job `signed`/`broadcast` có `tx_hash` → hỏi receipt /
+  mempool rồi tiếp tục theo dõi — **không** ký lại (tránh nộp đôi một meta-tx, tốn gas vô ích).
 - Simulation gate là bắt buộc (SRS §5.2, W3B-02 = 0%): không có `eth_call` xanh thì không ký.
 - `final` của job **không** đến từ `submit`: nó đến từ `indexer` (§3.3) khi
   `MetaTransactionExecuted(digest)` qua cổng finality. Nhờ vậy job cũng final đúng khi meta-tx đã
@@ -254,7 +266,14 @@ loop:
 
 ### 3.4 Mô-đun `gateway` — inbound công khai và DEX
 
-HTTP (axum), không xác thực (relayer mở — SRS §4.9.4, §5), giới hạn kích thước body 64 KiB:
+HTTP (axum), không xác thực (relayer mở — SRS §4.9.4, §5), giới hạn body 64 KiB, giới hạn đồng
+thời toàn cục (`tower` `ConcurrencyLimitLayer`, mặc định 32) vì mỗi request tốn một `eth_call`.
+Với chân có phí mà `feeRecipient` **không** bị ràng buộc, gateway điền `feeRecipient = địa chỉ
+relayer` trước khi simulate (nếu để 0, `ERC20MetaTx` trả phí cho `msg.sender` — khi simulate
+`from = dex` thì "qua", tới `settle` lại bị `FeeWouldStick`). Chân `MODE_RESTRICT_FEE_RECIPIENT`
+với `feeRecipient ∈ {0, dex}` bị từ chối ngay. Việc kẻ khác chép calldata `settle` và thay
+`feeRecipient` (khi người ký không ràng buộc) là **theo thiết kế** của relayer mở: ai trả gas thì
+nhận phí; người ký muốn chặn thì bật cờ ràng buộc.
 
 | Route | Việc |
 |---|---|
@@ -273,10 +292,10 @@ Matcher: với lệnh mới L (bán `L.value` A, đòi ≥ `minB` B), quét lệ
 
 | Method (model) | Nhóm | Vào | Ra / tác dụng |
 |---|---|---|---|
-| `node_config` (`blockchain.chain`) | relay_worker hoặc indexer | `evm_chain_number` | chain params, finality, `indexed_block`, token `[{address, decimals}]` |
+| `node_config` (`blockchain.chain`) | relay_worker hoặc indexer | `evm_chain_number, relayer_address?` | chain params, finality, `indexed_block`, token `[{address, decimals}]`, `journal_max_nonce` cho relayer |
 | `relay_poll` (`blockchain.relay.job`) | relay_worker | `evm_chain_number, limit` | job `queued` kèm metatx đầy đủ (struct + signature + token) |
 | `relay_claim` (`blockchain.relay.job`) | relay_worker | `job_ids, worker` | id claim được (CAS `UPDATE … WHERE chain_state='queued' RETURNING id`) |
-| `relay_report` (`blockchain.relay.job`) | relay_worker | `job_id, chain_state, tx_hash?, nonce?, error?` | chuyển trạng thái theo bảng cho phép §4.3 |
+| `relay_report` (`blockchain.relay.job`) | relay_worker | `job_id, chain_state, tx_hash?, outer_nonce?, error?` | chuyển trạng thái theo bảng cho phép §4.3 |
 | `chain_event_ingest` (`blockchain.chain.event`) | indexer | `evm_chain_number, from_block, to_block, to_block_hash, events[]` | ghi event + áp tác dụng + tiến cursor, **một transaction** |
 
 Mọi method kiểm nhóm tường minh (`has_group`), rồi `sudo()` bên trong. Không method nào nhận
@@ -347,10 +366,17 @@ token neo 1:1 để quy đổi đơn hàng), `is_confidential` (luôn False ở 
 `token_id`, `receiving_address`, `relayer_address`, `amount_base`, `amount_settled_base` (compute
 stored từ event `PaymentSettled` khớp token + người nhận), `entry_ref_hex` (32 byte **ngẫu nhiên**,
 ruling R9), `batch_hex` = `keccak256("bamboo.pay.lane" ‖ entry_ref)` (nonce luôn 0),
+`payer_address` (khoá cứng lúc `start` — lane là `(payer, batch)`), `issued_valid_until` (hạn của
+typed data cuối cùng đã phát cho client; `submit` yêu cầu `valid_until` đúng bằng nó),
 `expiry_datetime` (tạo + 1 ngày), `request_state` (`open`/`partial`/`final`/`expired`), `needs_attention` (tiền về khi tx đã huỷ, hoặc trả thừa),
 `res_model`/`res_id` (nguồn), `metatx_ids`, `event_ids`. `UNIQUE(entry_ref_hex)`.
-`_payment_gate()`: `int(amount_settled_base) >= int(amount_base)`; true ⇒ `request_state='final'`
-và gọi hook `_on_paid()` (rỗng ở core, bridge payment override).
+`amount_settled_base` = Σ `value_base` của event `PaymentSettled` có **cùng** `entry_ref_hex`,
+`contract_address == token_id.address` **và** `to_address == receiving_address`.
+`_payment_gate()`: bỏ qua nếu đã `final`; `int(amount_settled_base) >= int(amount_base)` ⇒
+`request_state='final'`, `needs_attention` nếu thừa, rồi gọi hook `_on_paid()` (rỗng ở core,
+payment override) **trong savepoint**: hook raise ⇒ rollback riêng hook, `needs_attention = True`
++ log, và lô ingest vẫn commit — một lỗi nghiệp vụ (kỳ kế toán đóng, credit) không bao giờ được
+làm kẹt cursor của indexer.
 
 ### 4.3 Bảng chuyển trạng thái `relay.job.chain_state`
 
@@ -358,13 +384,15 @@ và gọi hook `_on_paid()` (rỗng ở core, bridge payment override).
 |---|---|---|
 | (tạo) | `queued` | Odoo, cùng transaction với `payment.transaction → pending` |
 | `queued` | `nonce_leased` | `relay_claim` (CAS) |
-| `nonce_leased` | `queued` (node khởi động lại, chưa ký) / `broadcast` / `dead` | `relay_report` |
-| `broadcast` | `mined` / `reverted` / `broadcast` (thay thế, tx_hash mới) | `relay_report` |
+| `nonce_leased` | `queued` (node khởi động lại, chưa ký) / `signed` / `dead` | `relay_report` |
+| `signed` | `broadcast` / `queued` (gap-filled khi cold start) | `relay_report` |
+| `broadcast` | `mined` / `reverted` / `broadcast` (thay thế, tx_hash mới) / `queued` (gap-filled) | `relay_report` |
 | `queued`, `nonce_leased`, `broadcast`, `mined`, `reverted`, `dead` | `final` + `success` | `chain_event_ingest` khi `MetaTransactionExecuted(digest)` |
 | `queued`, `nonce_leased` | `dead` | cron hết hạn (`valid_until` + 10 phút, chưa final) |
 
 `final` là trạng thái hút: không gì rời khỏi nó. `reverted`/`dead` vẫn có thể thành `final` vì
-meta-tx có thể đã được thực thi bởi đường khác — indexer là sự thật.
+meta-tx có thể đã được thực thi bởi đường khác — indexer là sự thật. `business_state`: `dead` ⇒
+`failed`; `final` ⇒ `success` (ghi đè `failed`); mọi trạng thái khác giữ `pending`.
 
 ### 4.4 `dms_blockchain_payment`
 
@@ -375,7 +403,7 @@ meta-tx có thể đã được thực thi bởi đường khác — indexer là
   đổi `amount × 10^decimals` bằng `Decimal`, yêu cầu `token.currency_id == tx.currency_id` — không
   FX, ruling R17), `_chain_typed_data(from_address)`, `_chain_submit(from_address, valid_until,
   signature)`.
-- `blockchain.payment.request._on_paid()` override: tìm tx, `tx._set_done()` (chỉ từ `pending`;
+- `blockchain.payment.request._on_paid()` override: tìm tx; `done` rồi ⇒ không làm gì; `tx._set_done()` (chỉ từ `pending`;
   nếu tx đã `cancel`/`error` thì ghi chú và để operator xử lý — không tự hoàn tiền).
 - Cron hết hạn của core: (a) job `queued`/`nonce_leased` có `valid_until + 10 phút < now` ⇒ `dead`,
   metatx ⇒ `expired`; (b) request `open` quá `expiry_datetime`, **không** chữ ký nào có
@@ -394,8 +422,8 @@ Facade công khai trên `dms.portal.api` (CLAUDE.md §6: entry mỏng + logic pr
 
 | Method | Việc |
 |---|---|
-| `dms_portal_chain_payment_start(order_id, from_address)` | entitlement (`dms_allowed_partner_ids`), đơn chưa huỷ và còn phải trả; **tái dùng** tx `chain` đang `draft/pending` của đơn (cùng request ⇒ cùng lane ⇒ trả tối đa một lần); trả `{reference, chain: {chainId, name, rpcUrl, nativeCurrency}, typed_data}` |
-| `dms_portal_chain_payment_submit(reference, valid_until, signature)` | entitlement qua tx; `now < valid_until <= now + chain_validity_seconds + 60` (client không được kéo dài hạn); dựng lại digest từ request + `from` đã ghi + `valid_until`; ecrecover; tạo `metatx` + `relay.job` (outbox) cùng transaction; trả trạng thái |
+| `dms_portal_chain_payment_start(order_id, from_address)` | entitlement (`dms_allowed_partner_ids`); đơn **đã xác nhận** (`state == 'sale'`, ruling R19); `provider.chain_token_id.currency_id == order.currency_id` (lỗi rõ ràng ngay, ruling R17); số phải trả: hoá đơn `posted` còn nợ của đơn ⇒ `invoice_ids` + Σ`amount_residual`, chưa có hoá đơn ⇒ `sale_order_ids` + `amount_total − amount_paid` (khoản ứng trước); **tái dùng** tx `chain` đang `draft/pending` của đơn khi `from` trùng `payer_address` (cùng lane ⇒ trả tối đa một lần); `from` **khác** ⇒ chỉ được khi `issued_valid_until + 60 s` đã qua (không còn typed data nào ký được), khi đó tx/request cũ bị huỷ và tạo request mới (entryRef mới, lane mới); phát `issued_valid_until = now + chain_validity_seconds`; trả `{reference, chain: {chainId, name, rpcUrl, nativeCurrency}, typed_data}` |
+| `dms_portal_chain_payment_submit(reference, valid_until, signature)` | entitlement qua tx; `valid_until == issued_valid_until` (server chọn hạn, nên không có lệch đồng hồ và client không kéo dài được) và chưa qua; dựng lại digest từ request + `payer_address` + `valid_until`; chữ ký 65 byte khôi phục đúng `payer_address` ⇒ `signature_verified = True`; không khôi phục được (ví hợp đồng ERC-1271) ⇒ nhận với `signature_verified = False`, simulation của node là trọng tài (spam bị chặn bởi entitlement + một job sống cho mỗi request); tạo `metatx` + `relay.job` (outbox) cùng transaction; trả trạng thái |
 | `dms_portal_chain_payment_status(reference)` | `{tx_state, request_state, job_state, tx_hash}` |
 
 Trang `/my/dms/order/<id>`: kế thừa template `dms_portal.portal_order`, thêm nút "Pay on-chain"
@@ -433,7 +461,7 @@ Ví (portal)        Odoo (bridge/payment/core)            bamboo-node           
  │                 │       mode:RESTRICT_RELAYER, relayer,   │                        │
  │                 │       fee:0, feeRecipient:0}            │                        │
  │ signTypedData   │                                          │                        │
- │── signature ───►│ submit: digest, ecrecover==addr,        │                        │
+ │── signature ───►│ submit: digest, ecrecover (§4.5),       │                        │
  │                 │  metatx(signed) + relay.job(queued)      │                        │
  │                 │  tx → pending        [COMMIT]            │                        │
  │                 │◄── relay_poll / relay_claim (CAS) ──────│                        │
@@ -499,12 +527,13 @@ Rust đọc cùng file; đổi typehash là ba test đỏ.
 | Node chết / Odoo chết | job nằm `queued`; chữ ký sống tới `validUntil`; hết hạn ⇒ cron `dead`, request `open` cho phép ký lại cùng lane |
 | Node chết sau broadcast trước `relay_report` | khởi động lại: job `nonce_leased` của mình không `tx_hash` ⇒ về `queued` ⇒ simulate ⇒ nếu đã thực thi thì `MetaTxBadNonce` ⇒ `dead`; indexer vẫn đưa job về `final` từ event |
 | Simulate revert (thiếu số dư, hết hạn, sai chữ ký) | job `dead` + `last_error` giải mã; tx vẫn `pending`; người dùng ký lại sau khi nạp tiền |
-| Tx kẹt mempool | thay thế cùng nonce, phí ×1.25, tối đa 3 lần (SRS tích hợp §5.4) |
+| Tx kẹt mempool | thay thế cùng nonce, phí ×1.25 mỗi `stuck_after_secs`, tới trần `max_fee_cap` (SRS tích hợp §5.4); không bao giờ bỏ nonce — job bỏ ⇒ gap-filler cùng nonce |
 | Tx revert on-chain (đổi state giữa simulate và inclusion) | `reverted`; nonce meta-tx **không** tiêu (bubble, canon §C8.3); có thể claim lại |
 | Reorg trước final | vô hình với Odoo: chỉ vùng final được gửi |
 | Reorg sau final (hard) | ngoài mô hình (Gnosis `finalized`, Clique 1 signer); không tự đảo bút toán — ruling R12 |
 | RPC lệch nhau | quorum không đủ ⇒ indexer đứng, `/readyz` đỏ |
-| Trả thiếu / trả thừa | thiếu: `partial`, tx `pending`; thừa (chỉ có thể nếu nhiều lane): `final` + cờ `overpaid` cho operator hoàn tiền thủ công |
+| Trả thiếu / trả thừa | thiếu: `partial`, tx `pending`; thừa (chỉ có thể nếu nhiều lane): `final` + `needs_attention = True` cho operator hoàn tiền thủ công |
+| Hook nghiệp vụ lỗi khi ingest | savepoint: event + cursor vẫn commit, `needs_attention = True` |
 | DEX: một chân fail | cả `settle` revert, không chân nào thực thi |
 | DEX: khớp một phần | không tồn tại (fill-or-kill, ruling R3) |
 | Hoàn tiền | ngoài tự động: operator chuyển trả bằng ví công ty; tx hoàn tiền Odoo chuẩn |
@@ -559,7 +588,8 @@ Rust đọc cùng file; đổi typehash là ba test đỏ.
 - `dms_blockchain`: keccak/EIP-712/ecrecover == KAT; CHECK/UNIQUE có thật trong `pg_indexes`/
   `pg_constraint`; CAS claim; bảng chuyển trạng thái; ingest: liền mạch, idempotent, cursor; nhóm
   chặn method service; **`/json/2` với API key** cho `relay_poll` và `chain_event_ingest` (HttpCase).
-- `dms_blockchain_payment`: quy đổi số tiền, typed data, submit sai chữ ký ⇒ lỗi, gate ⇒ `_set_done`.
+- `dms_blockchain_payment`: quy đổi số tiền, typed data, submit sai chữ ký ⇒ lỗi, gate ⇒ `_set_done`;
+  hook raise ⇒ ingest vẫn commit + `needs_attention`; ingest lần hai không gọi lại hook.
 - `dms_blockchain_bridge`: **`call_kw` với session portal** và **`/json/2`** cho
   `dms_portal_chain_payment_start/submit/status` (CLAUDE.md §6); IDOR bị chặn; tái dùng lane; đơn
   được xác nhận và `account.payment` được tạo sau ingest.
@@ -614,7 +644,10 @@ Bốn plan, theo thứ tự phụ thuộc: (1) contracts + DEX, (2) relayer, (3)
   phải cài độc lập; `bamboo_idempotency` thêm cột vào **mọi** bảng DB — nếu sai: thêm sau như một
   dependency, khoá tự nhiên vẫn đúng.
 - **R8** Ba addon (`dms_blockchain`, `dms_blockchain_payment`, `dms_blockchain_bridge` cho
-  portal), không `dms_blockchain_account` — `account_payment` chuẩn đã gạch nợ khi tx `done`;
+  portal), không `dms_blockchain_account`. `dms_blockchain_bridge` **tái định hướng** so với canon
+  §C3 (canon: mixin settlement trên `dms.payment.collection`… với `depends ['dms_blockchain','dms']`;
+  ở đây: facade portal với `depends ['dms_blockchain_payment','dms_portal']`); mixin backend chuyển
+  sang pha B2B sau — `account_payment` chuẩn đã gạch nợ khi tx `done`;
   bridge canon (mixin trên `dms.payment.collection`…) chưa có người dùng — nếu sai: thêm addon
   account khi cần FX/đối soát lô.
 - **R9** `entryRef` = 32 byte ngẫu nhiên; lane = `keccak256("bamboo.pay.lane" ‖ entryRef)`, nonce 0 —
@@ -643,6 +676,13 @@ Bốn plan, theo thứ tự phụ thuộc: (1) contracts + DEX, (2) relayer, (3)
   nóng nằm trong tiến trình parse byte lạ; giảm bằng ví relayer chỉ nạp gas tối thiểu.
 - **R16** Hàng đợi gateway và sổ lệnh DEX trong bộ nhớ — mất khi khởi động lại, người dùng gửi lại
   (chữ ký còn hạn) — nếu sai: thêm lưu bền khi có khối lượng.
+- **R18** Không bỏ nonce vỏ: phí tăng tới trần, job bỏ ⇒ gap-filler; cold start theo
+  `max(pending, journal + 1)` (§23.1) cộng lấp lỗ — review F3/F4: một nonce bị bỏ làm tắc mọi tx sau
+  nó; journal không lấp lỗ thì để lại lỗ vĩnh viễn — nếu sai: vài tx 0-value tốn gas tối thiểu.
+- **R19** Portal chỉ trả đơn **đã xác nhận** (`state == 'sale'`) — `sale._post_process` tự
+  `action_confirm` báo giá `draft/sent` khi tx `done`, tức bỏ qua duyệt DMS và `dms_check_credit`
+  (review F2); có hoá đơn thì gạch nợ, chưa có thì là khoản ứng trước — nếu sai: người mua không
+  trả trước được báo giá; mở sau bằng một luồng duyệt riêng.
 - **R17** Không FX: `token.currency_id` phải trùng tiền đơn hàng — quote tỷ giá (canon
   `blockchain.payment.quote`) cần nguồn giá — nếu sai: chỉ token neo đúng tiền đơn mới dùng được.
 
@@ -650,4 +690,35 @@ Bốn plan, theo thứ tự phụ thuộc: (1) contracts + DEX, (2) relayer, (3)
 
 ## 14. Review log
 
-(điền sau review ngoài)
+### Antigravity (agy), 2026-10-03 — 21 finding, đối chiếu từng cái với source
+
+| # | Sev | Kết luận | Xử lý |
+|---|---|---|---|
+| F1 | crit | **Đúng một phần.** `_set_done` chỉ đổi state (post-process chạy ở cron riêng — `sale/models/payment_transaction.py:_post_process`), nhưng hook nào raise vẫn rollback cả lô ingest và kẹt cursor | Nhận: hook trong savepoint, lỗi ⇒ `needs_attention` (§4.2) |
+| F2 | crit | **Đúng.** `sale._post_process` `action_confirm` báo giá `draft/sent` ⇒ bỏ qua duyệt DMS + `dms_check_credit` (`bamboo_dms/models/extends/sale_order_extend.py:484`); không hoá đơn thì không có gì để gạch | Nhận: R19 (chỉ đơn `sale`), hoá đơn posted ⇒ `invoice_ids`, không thì ứng trước (§4.5) |
+| F3 | high | Đúng là lệch `_USER-DECISIONS` §23.1 | Nhận + lấp lỗ (R18) |
+| F4 | high | Đúng: bỏ nonce ⇒ tắc | Nhận: không giới hạn lần thay thế, gap-filler (R18) |
+| F5 | high | Đúng: crash giữa send và report ⇒ ký lại ⇒ nộp đôi | Nhận: trạng thái `signed` ghi `tx_hash`+nonce **trước** khi gửi (§3.2, §4.3) |
+| F6 | high | Đúng: thiếu cột | Nhận: `payer_address` |
+| F7 | high | Đúng: hai ví = hai lane; gateway mở còn là đường nộp thứ hai | Nhận: khoá `payer_address`, đổi ví chỉ sau khi typed data cũ hết hạn ⇒ request mới (§4.5) |
+| F8 | high | Đúng: §5 ghi `ecrecover == addr` mâu thuẫn R13 | Nhận: làm rõ quy tắc ở §4.5 |
+| F9 | high | Đã có trong ý định, chưa viết ra | Nhận: ghi rõ `safeTransfer` |
+| F10 | high | Ý 1 đúng (simulate qua, `settle` trượt) — ý 2 (MEV thay `feeRecipient`) là thiết kế của relayer mở | Nhận ý 1 (gateway điền `feeRecipient`); **bác** ý 2: người ký muốn chặn thì bật `MODE_RESTRICT_FEE_RECIPIENT` |
+| F11 | high | Đúng | Nhận: gate idempotent, hook bỏ qua tx `done` |
+| F12 | med | Đúng (ABI chỉ có trong plan) | Nhận: §2.1 |
+| F13 | med | Đúng về cách phát biểu; test invariant của plan không có handler gửi thẳng nên vẫn đúng | Nhận: phát biểu theo delta |
+| F14 | med | Đúng (câu thiếu `entryRef`) | Nhận |
+| F15 | med | Đúng | Nhận: `dead ⇒ failed`, `final ⇒ success` |
+| F16 | med | Đúng | Nhận: một tên `needs_attention` |
+| F17 | med | Đúng về việc phải khai; khai trong `MetaToken` là đủ (interface `IERC20MetaTx` không đổi) | Nhận |
+| F18 | med | Đúng | Nhận: R8 ghi rõ tái định hướng |
+| F19 | low | Đúng | Nhận một phần: giới hạn đồng thời toàn cục; rate-limit theo IP để cho reverse proxy |
+| F20 | low | Đúng hướng, sửa tốt hơn đề xuất | Nhận: `valid_until == issued_valid_until` (không cần dung sai) |
+| F21 | low | Đúng | Nhận: kiểm ở `start` |
+
+### Grok
+Lần 1 (2026-10-03): `free Grok Build usage limit` — không in giờ reset. Đã hẹn chạy lại nền sau
+~55 phút; kết quả sẽ ghi vào đây.
+
+### Codex
+Hết credit (theo owner) — không chạy.
