@@ -3,11 +3,14 @@
 //!
 //! UNAUDITED — NOT FOR PRODUCTION FUNDS.
 
+pub mod abi;
 pub mod bulletproofs;
 pub mod curve;
 pub mod elgamal;
+pub mod envelope;
 pub mod keys;
 pub mod nonce;
+pub mod schnorr;
 pub mod transcript;
 pub mod zether;
 
