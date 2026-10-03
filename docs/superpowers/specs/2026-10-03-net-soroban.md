@@ -52,10 +52,12 @@ Odoo, contract (test) và adapter Rust tính cùng một giá trị (vector ché
 RPC, nên dùng **mốc** do indexer để lại: mỗi lần `chain_event_ingest` tiến cursor của chain `soroban`, Odoo ghi
 `soroban_anchor_ts` (giờ server) cạnh `indexed_block` (ledger final). Ledger không đóng nhanh hơn 1/giây (SCP), nên
 
-`exp = indexed_block + (valid_until − soroban_anchor_ts) + 16`
+`exp = indexed_block + (valid_until − soroban_anchor_ts) + 17280`
 
-là **cận trên**: không bao giờ hết hạn trước `valid_until` (hạn thật do contract kiểm theo giây). Mốc cũ hơn 7 ngày
-(indexer ngừng) ⇒ từ chối phát (cận trên có thể vượt `max_entry_ttl`). Chain chưa index lần nào ⇒ từ chối phát.
+là **cận trên**: không bao giờ hết hạn trước `valid_until` (hạn thật do contract kiểm theo giây); lề 17 280 ledger phủ
+độ trễ indexer. Mốc chỉ được ghi khi lô ingest **ngắn hơn 1000 ledger** (= node đã bắt kịp đỉnh final; lô bắt kịp sau
+sự cố dài không làm mốc cũ đi kèm giờ mới). Mốc cũ hơn 7 ngày (indexer ngừng) ⇒ từ chối phát (cận trên có thể vượt
+`max_entry_ttl`). Chain chưa index lần nào ⇒ từ chối phát. Vượt cận trên chỉ kéo dài thời gian host giữ nonce.
 
 ## 2. Lược đồ chữ ký chủ thể
 
@@ -73,6 +75,8 @@ là **cận trên**: không bao giờ hết hạn trước `valid_until` (hạn 
   `secp256r1_verify(pk65, sha256(authData ‖ sha256(clientDataJSON)), sig)` (host từ chối high-s — CAP-51).
 - Vòng đời khoá: `add_key`/`remove_key` cần chính account uỷ quyền (một khoá hiện có ký); không bao giờ còn 0 khoá.
   Guardian + trễ khôi phục: **seam** (R8-2) — chưa xây trên Soroban, ghi HANDOFF.
+- R8-8: `__check_auth` không đọc `auth_contexts` — mọi khoá của account được làm mọi việc (kể cả `add_key`); phân
+  quyền theo khoá (passkey chỉ trả ≤ X, seed mới đổi khoá…) là seam.
 - Account phải tồn tại trên ledger trước khi trả (deploy không cần quyền: `__constructor(first_key)`). Chủ thể `G…`
   cũng phải tồn tại (yêu cầu của host).
 
@@ -122,16 +126,20 @@ là **cận trên**: không bao giờ hết hạn trước `valid_until` (hạn 
 - Head-of-line (R62): lane khác chạy tiếp; chủ thể không có sequence trong đường đi (nonce ngẫu nhiên).
 - Finality: SCP — ledger đã đóng là final. `final_head` = `getLatestLedger` (+ quorum: các endpoint khác trả cùng hash
   qua `getLedgers`); `block_hash` qua `getLedgers`.
-- Event: `getEvents` (contract = `params.contracts`, ≤ 5/lọc), chuẩn hoá `{event, contract, block_number = ledger,
+- Event: `getEvents` (contract = `params.contracts`, ≤ 5/lọc — R8-7: `node_config.tokens` của node đang kiểu địa chỉ
+  EVM nên không đọc được `C…`; cần lead đổi `TokenCfg.address` sang chuỗi theo họ), chuẩn hoá `{event, contract, block_number = ledger,
   block_hash, tx_hash, log_index, from, to, amount, entry_ref, digest}` (hash `0x`+64 hex, địa chỉ strkey).
-  `log_index` = chỉ số event trong tx (Soroban: một op mỗi tx).
+  `log_index` = chỉ số event trong tx (Soroban: một op mỗi tx). `getEvents` chỉ phục vụ trong cửa sổ lưu của RPC
+  (quickstart 120 960 ledger): chain mới tạo trong Odoo phải đặt `indexed_block` ≈ ledger hiện tại (vận hành).
 
 ## 5. Odoo (`dms_blockchain/lib/fam_soroban.py`, `models/blockchain_soroban.py`)
 
 - `build_terms(request, valid_until)` ⇒ `payload` (XDR §1), `digest` (§1.1), `contract` = token, `terms` =
   `{network_passphrase, contract, function: "pay", from, preimage_b64, nonce, expiration_ledger}` cho connector.
-- `verify`: `from` = `G…` ⇒ ed25519 thật trên `sha256(payload)` với khoá trong strkey (chữ ký 64 byte hex/base64);
-  `C…` ⇒ chữ ký phải là XDR hex hợp lệ về cấu trúc ⇒ `None`.
+- `verify`: `from` = `G…` ⇒ ed25519 thật trên `sha256(payload)` với khoá master trong strkey (chữ ký 64 byte hex),
+  qua `cryptography` (đã là phụ thuộc của `lib/custody.py` — R50) thay vì ed25519 thuần Python (R8-6); account
+  multisig/đổi signer ⇒ chữ ký master có thể không đủ ngưỡng: node mô phỏng phân xử. `C…` ⇒ chỉ kiểm hex/độ dài ⇒
+  `None`.
 - `blockchain.chain`: `soroban_anchor_ts` (§1.2) cập nhật trong `chain_event_ingest` (override nhỏ trong file mô
   hình của luồng).
 

@@ -18,3 +18,4 @@ bamboo-token = { path = "../token" }
 ed25519-dalek = "2"
 p256 = { version = "0.13", features = ["ecdsa"] }
 sha2 = "0.10"
+bamboo-dex = { path = "../dex" }

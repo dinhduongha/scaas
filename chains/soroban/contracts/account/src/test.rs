@@ -4,7 +4,7 @@ extern crate std;
 use super::*;
 use bamboo_token::{Token, TokenClient};
 use ed25519_dalek::Signer as _;
-use p256::ecdsa::{signature::Signer as _, Signature as P256Sig, SigningKey as P256Key};
+use p256::ecdsa::{Signature as P256Sig, SigningKey as P256Key};
 use sha2::{Digest, Sha256};
 use soroban_sdk::testutils::{Address as _, Ledger};
 use soroban_sdk::xdr::{
@@ -295,4 +295,52 @@ fn adding_a_key_needs_an_existing_key() {
     let s: Val = Signature::Ed25519(0, BytesN::from_array(&t.env, &t.ed.sign(&payload).to_bytes())).into_val(&t.env);
     t.env.set_auths(&[entry(&t.account, 77, 200, inv, ScVal::try_from_val(&t.env, &s).unwrap())]);
     assert_eq!(c.add_key(&key), 1);
+}
+
+// ---------------------------------------------------------------- DEX under real auth (R8-3)
+
+fn ed_entry(env: &Env, account: &Address, key: &ed25519_dalek::SigningKey, inv: SorobanAuthorizedInvocation, nonce: i64) -> SorobanAuthorizationEntry {
+    let payload: [u8; 32] = Sha256::digest(preimage(env, nonce, 200, &inv)).into();
+    let s: Val = Signature::Ed25519(0, BytesN::from_array(env, &key.sign(&payload).to_bytes())).into_val(env);
+    entry(account, nonce, 200, inv, ScVal::try_from_val(env, &s).unwrap())
+}
+
+/// `require_auth_for_args((order,))` khớp auth entry thật của cả hai maker; một auth entry = một lần settle.
+#[test]
+fn dex_settles_on_real_signatures_once_per_signature() {
+    use bamboo_dex::{Dex, DexClient, Market, Order};
+    let t = setup();
+    let e = &t.env;
+    let bob_key = ed25519_dalek::SigningKey::from_bytes(&[8u8; 32]);
+    let bob = e.register(Account, (Key::Ed25519(BytesN::from_array(e, &bob_key.verifying_key().to_bytes())),));
+    let admin = Address::generate(e);
+    let dex = DexClient::new(e, &e.register(Dex, (admin, Address::generate(e))));
+    e.mock_all_auths();
+    t.t2.mint(&bob, &1_000);
+    dex.set_market(&t.t1.address, &t.t2.address, &Market { maker_fee_ppm: 0, taker_fee_ppm: 0, fee_on: false });
+    t.t1.approve(&t.account, &dex.address, &1_000, &1_000);
+    t.t2.approve(&bob, &dex.address, &1_000, &1_000);
+    let ask = Order { maker: t.account.clone(), sell_token: t.t1.address.clone(), sell_amount: 100,
+                      buy_token: t.t2.address.clone(), buy_amount: 200, max_fee_ppm: 0, expiry: NOW + 60, salt: 1 };
+    let bid = Order { maker: bob.clone(), sell_token: t.t2.address.clone(), sell_amount: 300,
+                      buy_token: t.t1.address.clone(), buy_amount: 100, max_fee_ppm: 0, expiry: NOW + 60, salt: 2 };
+    let a = ed_entry(e, &t.account, &t.ed, invocation(e, &dex.address, "settle", (ask.clone(),).into_val(e)), 501);
+    let b = ed_entry(e, &bob, &bob_key, invocation(e, &dex.address, "settle", (bid.clone(),).into_val(e)), 502);
+    e.set_auths(&[a.clone(), b.clone()]);
+    dex.settle(&ask, &bid, &40);
+    assert_eq!((t.t1.balance(&bob), t.t2.balance(&t.account)), (40, 1_080));
+    // Same signatures again: nonces are spent — the maker must re-sign the rest (R8-3).
+    e.set_auths(&[a, b]);
+    assert!(dex.try_settle(&ask, &bid, &40).is_err());
+    // A taker signature over a different order cannot be used for this one.
+    let bid2 = Order { salt: 3, ..bid.clone() };
+    let a2 = ed_entry(e, &t.account, &t.ed, invocation(e, &dex.address, "settle", (ask.clone(),).into_val(e)), 503);
+    let b2 = ed_entry(e, &bob, &bob_key, invocation(e, &dex.address, "settle", (bid2,).into_val(e)), 504);
+    e.set_auths(&[a2.clone(), b2]);
+    assert!(dex.try_settle(&ask, &bid, &40).is_err());
+    // Re-signed copies of the same orders fill the remainder; filled[] still bounds the total.
+    let b3 = ed_entry(e, &bob, &bob_key, invocation(e, &dex.address, "settle", (bid.clone(),).into_val(e)), 505);
+    e.set_auths(&[a2, b3]);
+    dex.settle(&ask, &bid, &60);
+    assert_eq!(dex.filled(&dex.order_hash(&ask)), 100);
 }
