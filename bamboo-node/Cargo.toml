@@ -27,3 +27,6 @@ tower = { version = "0.5", features = ["limit"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 zeroize = "1"
+
+[dev-dependencies]
+proptest = "1"

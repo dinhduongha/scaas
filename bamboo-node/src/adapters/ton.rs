@@ -1,0 +1,1384 @@
+//! TON (R67, spec `docs/superpowers/specs/2026-10-03-net-ton.md`). Lane = ví W5R1 của relayer (seqno riêng,
+//! một external message bay mỗi lane — R62); tx gửi internal message `SignedOp` tới jetton wallet của người trả,
+//! nơi contract kiểm chữ ký chủ thể trên phong bì TON Connect (R30: chủ thể không bao giờ gửi tx).
+//! API: TON Center v3 (`masterchainInfo`, `blocks`, `transactionsByMasterchainBlock`, `transactionsByMessage`,
+//! `message`, `runGetMethod`, `walletInformation`). Cell/BOC tối thiểu ở đây, không thêm crate.
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
+
+use anyhow::{anyhow, bail, Context, Result};
+use async_trait::async_trait;
+use ed25519_dalek::{Signature, VerifyingKey};
+use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
+
+use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Signed, TxStatus};
+use crate::chain::SimError;
+use crate::config::ChainCfg;
+use crate::odoo::Job;
+use crate::signer::{LocalSigner, Signer};
+
+// ====================================================================== cells
+
+/// Ordinary cell (or a level-0 exotic read from a BOC). Hash/depth computed once at construction.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Cell {
+    data: Vec<u8>,
+    bits: usize,
+    refs: Vec<Arc<Cell>>,
+    exotic: bool,
+    hash: [u8; 32],
+    depth: u16,
+}
+
+impl Cell {
+    fn new(data: Vec<u8>, bits: usize, refs: Vec<Arc<Cell>>, exotic: bool) -> Result<Self> {
+        if bits > 1023 || refs.len() > 4 || data.len() != bits.div_ceil(8) {
+            bail!("cell overflow");
+        }
+        let mut c = Cell { data, bits, refs, exotic, hash: [0; 32], depth: 0 };
+        let mut h = Sha256::new();
+        h.update(c.descriptors());
+        h.update(c.padded());
+        for r in &c.refs {
+            h.update(r.depth.to_be_bytes());
+        }
+        for r in &c.refs {
+            h.update(r.hash);
+        }
+        c.hash = h.finalize().into();
+        c.depth = c.refs.iter().map(|r| r.depth + 1).max().unwrap_or(0);
+        Ok(c)
+    }
+
+    pub fn hash(&self) -> [u8; 32] {
+        self.hash
+    }
+
+    pub fn depth(&self) -> u16 {
+        self.depth
+    }
+
+    pub fn refs(&self) -> &[Arc<Cell>] {
+        &self.refs
+    }
+
+    pub fn bit_len(&self) -> usize {
+        self.bits
+    }
+
+    fn descriptors(&self) -> [u8; 2] {
+        [self.refs.len() as u8 + if self.exotic { 8 } else { 0 }, (self.bits / 8 + self.bits.div_ceil(8)) as u8]
+    }
+
+    /// Data with the completion tag (`1` then zeros) when not byte aligned.
+    fn padded(&self) -> Vec<u8> {
+        let mut d = self.data.clone();
+        if !self.bits.is_multiple_of(8) {
+            let last = d.len() - 1;
+            d[last] |= 0x80 >> (self.bits % 8);
+        }
+        d
+    }
+
+    pub fn parser(&self) -> Reader<'_> {
+        Reader { cell: self, pos: 0, refp: 0 }
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct Builder {
+    data: Vec<u8>,
+    bits: usize,
+    refs: Vec<Arc<Cell>>,
+}
+
+impl Builder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn bit(mut self, b: bool) -> Self {
+        if self.bits.is_multiple_of(8) {
+            self.data.push(0);
+        }
+        if b {
+            let last = self.data.len() - 1;
+            self.data[last] |= 0x80 >> (self.bits % 8);
+        }
+        self.bits += 1;
+        self
+    }
+
+    /// Big-endian unsigned, `n ≤ 128` bits.
+    pub fn uint(mut self, v: u128, n: usize) -> Self {
+        for i in (0..n).rev() {
+            self = self.bit(i < 128 && (v >> i) & 1 == 1);
+        }
+        self
+    }
+
+    pub fn int(self, v: i64, n: usize) -> Self {
+        let mask = if n >= 128 { u128::MAX } else { (1u128 << n) - 1 };
+        self.uint((v as i128 as u128) & mask, n)
+    }
+
+    pub fn bytes(mut self, b: &[u8]) -> Self {
+        for byte in b {
+            self = self.uint(*byte as u128, 8);
+        }
+        self
+    }
+
+    /// Copy the remaining bits of a reader.
+    pub fn bits_from(mut self, r: &Reader<'_>) -> Self {
+        for i in r.pos..r.cell.bits {
+            self = self.bit(r.cell.data[i / 8] & (0x80 >> (i % 8)) != 0);
+        }
+        self
+    }
+
+    pub fn addr(self, a: Option<&Addr>) -> Self {
+        match a {
+            None => self.uint(0, 2),
+            Some(a) => self.uint(0b100, 3).int(a.wc as i64, 8).bytes(&a.hash),
+        }
+    }
+
+    /// `Grams` / `VarUInteger 16`.
+    pub fn coins(self, v: u128) -> Self {
+        let len = (128 - v.leading_zeros() as usize).div_ceil(8);
+        self.uint(len as u128, 4).uint(v, len * 8)
+    }
+
+    pub fn reference(mut self, c: Arc<Cell>) -> Self {
+        self.refs.push(c);
+        self
+    }
+
+    pub fn maybe_ref(self, c: Option<Arc<Cell>>) -> Self {
+        match c {
+            Some(c) => self.bit(true).reference(c),
+            None => self.bit(false),
+        }
+    }
+
+    pub fn end(self) -> Result<Arc<Cell>> {
+        Ok(Arc::new(Cell::new(self.data, self.bits, self.refs, false)?))
+    }
+}
+
+pub struct Reader<'a> {
+    cell: &'a Cell,
+    pos: usize,
+    refp: usize,
+}
+
+impl Reader<'_> {
+    pub fn remaining(&self) -> usize {
+        self.cell.bits - self.pos
+    }
+
+    pub fn bit(&mut self) -> Result<bool> {
+        if self.pos >= self.cell.bits {
+            bail!("cell underflow");
+        }
+        let b = self.cell.data[self.pos / 8] & (0x80 >> (self.pos % 8)) != 0;
+        self.pos += 1;
+        Ok(b)
+    }
+
+    pub fn uint(&mut self, n: usize) -> Result<u128> {
+        if n > 128 {
+            bail!("uint wider than 128 bits");
+        }
+        let mut v = 0u128;
+        for _ in 0..n {
+            v = (v << 1) | self.bit()? as u128;
+        }
+        Ok(v)
+    }
+
+    pub fn int(&mut self, n: usize) -> Result<i64> {
+        let v = self.uint(n)? as i128;
+        Ok(if n > 0 && v >> (n - 1) & 1 == 1 { (v - (1i128 << n)) as i64 } else { v as i64 })
+    }
+
+    pub fn bytes(&mut self, n: usize) -> Result<Vec<u8>> {
+        (0..n).map(|_| self.uint(8).map(|v| v as u8)).collect()
+    }
+
+    pub fn b256(&mut self) -> Result<[u8; 32]> {
+        Ok(self.bytes(32)?.try_into().expect("32"))
+    }
+
+    /// `MsgAddress`: `None` = addr_none; only addr_std without anycast is accepted.
+    pub fn addr(&mut self) -> Result<Option<Addr>> {
+        match self.uint(2)? {
+            0 => Ok(None),
+            2 => {
+                if self.bit()? {
+                    bail!("anycast addresses are not supported");
+                }
+                let wc = self.int(8)? as i32;
+                Ok(Some(Addr { wc, hash: self.b256()? }))
+            }
+            _ => bail!("unsupported address kind"),
+        }
+    }
+
+    pub fn coins(&mut self) -> Result<u128> {
+        let len = self.uint(4)? as usize;
+        self.uint(len * 8)
+    }
+
+    pub fn reference(&mut self) -> Result<Arc<Cell>> {
+        let c = self.cell.refs.get(self.refp).cloned().ok_or_else(|| anyhow!("no more refs"))?;
+        self.refp += 1;
+        Ok(c)
+    }
+
+    pub fn end(&self) -> Result<()> {
+        if self.pos != self.cell.bits || self.refp != self.cell.refs.len() {
+            bail!("trailing data in cell");
+        }
+        Ok(())
+    }
+}
+
+/// Single-root BOC (`b5ee9c72`), no index, no CRC.
+pub fn boc_serialize(root: &Arc<Cell>) -> Vec<u8> {
+    // Order: DFS pre-order (de-duplicated), then stable-sorted by the longest distance from the root so every
+    // cell comes after all its parents — the same order @ton/core and fam_ton.py produce for these trees.
+    let mut seen: Vec<Arc<Cell>> = Vec::new();
+    let mut level: HashMap<[u8; 32], usize> = HashMap::new();
+    fn walk(c: &Arc<Cell>, d: usize, seen: &mut Vec<Arc<Cell>>, level: &mut HashMap<[u8; 32], usize>) {
+        match level.get(&c.hash) {
+            Some(l) if *l >= d => return,
+            Some(_) => {}
+            None => seen.push(c.clone()),
+        }
+        level.insert(c.hash, d);
+        for r in &c.refs {
+            walk(r, d + 1, seen, level);
+        }
+    }
+    walk(root, 0, &mut seen, &mut level);
+    seen.sort_by_key(|c| level[&c.hash]);
+    let order: Vec<(usize, Arc<Cell>)> = seen.into_iter().map(|c| (0, c)).collect();
+    let index: HashMap<[u8; 32], usize> = order.iter().enumerate().map(|(i, (_, c))| (c.hash, i)).collect();
+    let size = (usize::BITS - order.len().leading_zeros()).div_ceil(8).max(1) as usize;
+    let mut payload = Vec::new();
+    for (_, c) in &order {
+        payload.extend_from_slice(&c.descriptors());
+        payload.extend_from_slice(&c.padded());
+        for r in &c.refs {
+            payload.extend_from_slice(&index[&r.hash].to_be_bytes()[8 - size..]);
+        }
+    }
+    let off = (usize::BITS - payload.len().leading_zeros()).div_ceil(8).max(1) as usize;
+    let be = |v: usize, n: usize| v.to_be_bytes()[8 - n..].to_vec();
+    let mut out = vec![0xb5, 0xee, 0x9c, 0x72, size as u8, off as u8];
+    out.extend(be(order.len(), size));
+    out.extend(be(1, size));
+    out.extend(be(0, size));
+    out.extend(be(payload.len(), off));
+    out.extend(be(0, size));
+    out.extend(payload);
+    out
+}
+
+/// Parse a BOC (any flags; first root). Cells with a level (pruned/merkle) are refused.
+pub fn boc_parse(data: &[u8]) -> Result<Arc<Cell>> {
+    let mut p = 0usize;
+    let mut take = |n: usize| -> Result<&[u8]> {
+        let s = data.get(p..p + n).ok_or_else(|| anyhow!("BOC truncated"))?;
+        p += n;
+        Ok(s)
+    };
+    if take(4)? != [0xb5, 0xee, 0x9c, 0x72] {
+        bail!("not a BOC");
+    }
+    let flags = take(1)?[0];
+    let (has_idx, size) = (flags & 0x80 != 0, (flags & 7) as usize);
+    let off = take(1)?[0] as usize;
+    if size == 0 || size > 4 || off == 0 || off > 8 {
+        bail!("bad BOC header");
+    }
+    let num = |b: &[u8]| b.iter().fold(0usize, |a, x| (a << 8) | *x as usize);
+    let cells = num(take(size)?);
+    let roots = num(take(size)?);
+    let _absent = num(take(size)?);
+    let _total = num(take(off)?);
+    if roots == 0 || cells == 0 || cells > 4096 {
+        bail!("bad BOC counts");
+    }
+    let root = num(take(size)?);
+    for _ in 1..roots {
+        take(size)?;
+    }
+    if has_idx {
+        take(cells.checked_mul(off).ok_or_else(|| anyhow!("BOC index"))?)?;
+    }
+    let mut raw = Vec::with_capacity(cells);
+    for _ in 0..cells {
+        let d = take(2)?;
+        let (d1, d2) = (d[0], d[1] as usize);
+        if d1 & 0xF0 != 0 {
+            bail!("BOC cells with a level or stored hashes are not supported");
+        }
+        let body = take(d2.div_ceil(2))?.to_vec();
+        let refs: Vec<usize> = (0..(d1 & 7)).map(|_| take(size).map(num)).collect::<Result<_>>()?;
+        if refs.len() > 4 {
+            bail!("too many refs");
+        }
+        raw.push((d2, body, refs, d1 & 8 != 0));
+    }
+    let mut built: Vec<Option<Arc<Cell>>> = vec![None; cells];
+    for i in (0..cells).rev() {
+        let (d2, mut body, refs, exotic) = raw[i].clone();
+        let bits = if d2 % 2 == 1 {
+            let last = *body.last().ok_or_else(|| anyhow!("empty padded cell"))?;
+            if last == 0 {
+                bail!("bad completion tag");
+            }
+            let tz = last.trailing_zeros() as usize;
+            let len = body.len();
+            body[len - 1] &= !(1u8 << tz);
+            (len * 8) - tz - 1
+        } else {
+            body.len() * 8
+        };
+        let children = refs
+            .iter()
+            .map(|&r| if r > i { built[r].clone().ok_or_else(|| anyhow!("bad ref")) } else { Err(anyhow!("BOC ref order")) })
+            .collect::<Result<Vec<_>>>()?;
+        built[i] = Some(Arc::new(Cell::new(body, bits, children, exotic)?));
+    }
+    built.get(root).cloned().flatten().ok_or_else(|| anyhow!("bad BOC root"))
+}
+
+// ====================================================================== base64, addresses
+
+const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+pub fn b64encode(data: &[u8]) -> String {
+    let mut out = String::new();
+    for chunk in data.chunks(3) {
+        let n = chunk.iter().enumerate().fold(0u32, |a, (i, b)| a | (*b as u32) << (16 - 8 * i));
+        for i in 0..4 {
+            if i <= chunk.len() {
+                out.push(B64[(n >> (18 - 6 * i) & 63) as usize] as char);
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
+/// Standard or URL-safe alphabet, padding optional.
+pub fn b64decode(s: &str) -> Result<Vec<u8>> {
+    let mut out = Vec::new();
+    let (mut acc, mut nbits) = (0u32, 0u32);
+    for c in s.trim_end_matches('=').bytes() {
+        let v = match c {
+            b'A'..=b'Z' => c - b'A',
+            b'a'..=b'z' => c - b'a' + 26,
+            b'0'..=b'9' => c - b'0' + 52,
+            b'+' | b'-' => 62,
+            b'/' | b'_' => 63,
+            _ => bail!("not base64"),
+        } as u32;
+        acc = (acc << 6) | v;
+        nbits += 6;
+        if nbits >= 8 {
+            nbits -= 8;
+            out.push((acc >> nbits) as u8);
+            acc &= (1 << nbits) - 1;
+        }
+    }
+    Ok(out)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Addr {
+    pub wc: i32,
+    pub hash: [u8; 32],
+}
+
+impl Addr {
+    /// Raw `wc:hex64` (any case) or user-friendly 48-char base64/base64url.
+    pub fn parse(s: &str) -> Result<Self> {
+        if let Some((wc, h)) = s.split_once(':') {
+            let wc: i32 = wc.parse().context("workchain")?;
+            let hash: [u8; 32] = alloy::hex::decode(h)?.try_into().map_err(|_| anyhow!("address hash length"))?;
+            return Ok(Self { wc, hash });
+        }
+        let raw = b64decode(s)?;
+        if raw.len() != 36 || crate::signer::crc16_xmodem(&raw[..34]) != u16::from_be_bytes([raw[34], raw[35]]) {
+            bail!("bad friendly address");
+        }
+        Ok(Self { wc: raw[1] as i8 as i32, hash: raw[2..34].try_into().expect("32") })
+    }
+
+    /// Canonical form shared with Odoo (`addresses.canonical('ton', …)`).
+    pub fn raw(&self) -> String {
+        format!("{}:{}", self.wc, alloy::hex::encode(self.hash))
+    }
+
+    fn of_state_init(si: &Arc<Cell>) -> Self {
+        Self { wc: 0, hash: si.hash() }
+    }
+}
+
+fn hex0x(b: &[u8]) -> String {
+    format!("0x{}", alloy::hex::encode(b))
+}
+
+fn b32(hex: &str) -> Result<[u8; 32]> {
+    let v = alloy::hex::decode(hex.trim_start_matches("0x"))?;
+    v.try_into().map_err(|_| anyhow!("expected 32 bytes"))
+}
+
+// ====================================================================== protocol (§2, common.tact)
+
+pub const SIGN_DATA_PREFIX: u128 = 0x75569022;
+pub const SCHEMA_CRC: u128 = 0xdc7d499c;
+pub const OP_SIGNED: u128 = 0x5b0a1d01;
+pub const OP_MANDATE_PAY: u128 = 0x5b0a1d10;
+pub const EV_MTE: u128 = 0x9b1c0d01;
+pub const EV_PAID: u128 = 0x9b1c0d02;
+const W5R1_CODE: &str = "b5ee9c7201021401000281000114ff00f4a413f4bcf2c80b01020120020d020148030402dcd020d749c120915b8f6320d70b1f2082106578746ebd21821073696e74bdb0925f03e082106578746eba8eb48020d72101d074d721fa4030fa44f828fa443058bd915be0ed44d0810141d721f4058307f40e6fa1319130e18040d721707fdb3ce03120d749810280b99130e070e2100f020120050c020120060902016e07080019adce76a2684020eb90eb85ffc00019af1df6a2684010eb90eb858fc00201480a0b0017b325fb51341c75c875c2c7e00011b262fb513435c280200019be5f0f6a2684080a0eb90fa02c0102f20e011e20d70b1f82107369676ebaf2e08a7f0f01e68ef0eda2edfb218308d722028308d723208020d721d31fd31fd31fed44d0d200d31f20d31fd3ffd70a000af90140ccf9109a28945f0adb31e1f2c087df02b35007b0f2d0845125baf2e0855036baf2e086f823bbf2d0882292f800de01a47fc8ca00cb1f01cf16c9ed542092f80fde70db3cd81003f6eda2edfb02f404216e926c218e4c0221d73930709421c700b38e2d01d72820761e436c20d749c008f2e09320d74ac002f2e09320d71d06c712c2005230b0f2d089d74cd7393001a4e86c128407bbf2e093d74ac000f2e093ed55e2d20001c000915be0ebd72c08142091709601d72c081c12e25210b1e30f20d74a111213009601fa4001fa44f828fa443058baf2e091ed44d0810141d718f405049d7fc8ca0040048307f453f2e08b8e14038307f45bf2e08c22d70a00216e01b3b0f2d090e2c85003cf1612f400c9ed54007230d72c08248e2d21f2e092d200ed44d0d2005113baf2d08f54503091319c01810140d721d70a00f2e08ee2c8ca0058cf16c9ed5493f2c08de20010935bdb31e1d74cd0";
+const W5R1_HASHES: [&str; 2] = [
+    "20834b7b72b112147e1b2fb457b84e74d1a30f04f737d4f62a668e9552d2b72f",
+    "44b96c52eaa2e18b272629e6e496004d08e0c364c1835a7418b92fb7585a2ed1",
+];
+const V4_V3_HASHES: [&str; 2] = [
+    "feb5ff6820e2ff0d9483e7e0d62c817d846789fb4ae580c878866d959dabd5c0",
+    "84dafa449f98a6987789ba232358072bc0f76dc4524002a5d0918b9a75d2d599",
+];
+
+/// Fields of a `MetaOp` v1 cell the relayer needs (the contract re-checks everything).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MetaOp {
+    pub network: i32,
+    pub op: u8,
+    pub amount: u128,
+    pub nonce: u64,
+    pub valid_until: u64,
+    pub contract: Addr,
+    pub from: Addr,
+    pub to: Addr,
+    pub relayer: Option<Addr>,
+    pub pay_ref: [u8; 32],
+    pub lane: [u8; 32],
+    pub extra: [u8; 32],
+    pub digest: [u8; 32],
+}
+
+pub fn parse_metaop(c: &Arc<Cell>) -> Result<MetaOp> {
+    let mut s = c.parser();
+    if s.bytes(16)? != b"bamboo.metaop.v1" {
+        bail!("not a MetaOp v1");
+    }
+    let network = s.int(32)? as i32;
+    let op = s.uint(8)? as u8;
+    let amount = s.uint(128)?;
+    let nonce = s.uint(64)? as u64;
+    let valid_until = s.uint(64)? as u64;
+    let contract = s.addr()?.ok_or_else(|| anyhow!("MetaOp without contract"))?;
+    let parties = s.reference()?;
+    let refs = s.reference()?;
+    s.end()?;
+    let mut p = parties.parser();
+    let from = p.addr()?.ok_or_else(|| anyhow!("MetaOp without from"))?;
+    let to = p.addr()?.ok_or_else(|| anyhow!("MetaOp without to"))?;
+    let relayer = p.addr()?;
+    p.end()?;
+    let mut r = refs.parser();
+    let (pay_ref, lane, extra) = (r.b256()?, r.b256()?, r.b256()?);
+    r.end()?;
+    Ok(MetaOp { network, op, amount, nonce, valid_until, contract, from, to, relayer, pay_ref, lane, extra, digest: c.hash() })
+}
+
+/// TEP-81 wire form used by TON Connect, as a `storeStringTail` snake (127 bytes per cell).
+pub fn domain_cell(domain: &str) -> Result<Arc<Cell>> {
+    let wire: Vec<u8> = domain.split('.').rev().flat_map(|l| l.bytes().chain(std::iter::once(0))).collect();
+    let mut cell: Option<Arc<Cell>> = None;
+    let chunks: Vec<&[u8]> = if wire.is_empty() { vec![&[]] } else { wire.chunks(127).collect() };
+    for chunk in chunks.iter().rev() {
+        let mut b = Builder::new().bytes(chunk);
+        if let Some(c) = cell {
+            b = b.reference(c);
+        }
+        cell = Some(b.end()?);
+    }
+    Ok(cell.expect("one chunk"))
+}
+
+pub fn envelope_hash(owner: &Addr, timestamp: u64, domain: &str, payload: &Arc<Cell>) -> Result<[u8; 32]> {
+    Ok(Builder::new()
+        .uint(SIGN_DATA_PREFIX, 32)
+        .uint(SCHEMA_CRC, 32)
+        .uint(timestamp as u128, 64)
+        .addr(Some(owner))
+        .reference(domain_cell(domain)?)
+        .reference(payload.clone())
+        .end()?
+        .hash())
+}
+
+/// Owner key from the owner's wallet StateInit (same rule as `pubkeyFromStateInit` in common.tact).
+pub fn pubkey_from_state_init(si: &Arc<Cell>, owner: &Addr) -> Result<[u8; 32]> {
+    if owner.wc != 0 || si.hash() != owner.hash {
+        bail!("StateInit does not belong to {}", owner.raw());
+    }
+    let mut s = si.parser();
+    if s.bit()? || s.bit()? || !s.bit()? {
+        bail!("unexpected StateInit");
+    }
+    let code = s.reference()?;
+    if !s.bit()? {
+        bail!("StateInit without data");
+    }
+    let data = s.reference()?;
+    let mut d = data.parser();
+    let ch = alloy::hex::encode(code.hash());
+    if W5R1_HASHES.contains(&ch.as_str()) {
+        d.uint(65)?;
+    } else if V4_V3_HASHES.contains(&ch.as_str()) {
+        d.uint(64)?;
+    } else {
+        bail!("unknown wallet code {ch}");
+    }
+    d.b256()
+}
+
+/// The connector's signature JSON (`ton.js` / Odoo `fam_ton.parse_signature`).
+#[derive(Debug, Clone)]
+pub enum Auth {
+    TonConnect { signature: [u8; 64], timestamp: u64, domain: String, state_init: Option<Arc<Cell>> },
+    Passkey { r: [u8; 32], s: [u8; 32], authenticator_data: Vec<u8>, client_data_json: String },
+}
+
+pub fn parse_auth(sig: &str) -> Result<Auth> {
+    let v: Value = serde_json::from_str(sig).context("TON signature is not JSON")?;
+    let str_of = |k: &str| v.get(k).and_then(Value::as_str).ok_or_else(|| anyhow!("signature.{k} missing"));
+    match str_of("kind")? {
+        "ton_connect" => {
+            let signature: [u8; 64] =
+                b64decode(str_of("signature")?)?.try_into().map_err(|_| anyhow!("signature must be 64 bytes"))?;
+            let timestamp = v.get("timestamp").and_then(Value::as_u64).ok_or_else(|| anyhow!("signature.timestamp"))?;
+            let domain = str_of("domain")?.to_string();
+            if domain.len() > 255 {
+                bail!("domain too long");
+            }
+            let state_init = match v.get("state_init").and_then(Value::as_str) {
+                Some(s) if !s.is_empty() => Some(boc_parse(&b64decode(s)?)?),
+                _ => None,
+            };
+            Ok(Auth::TonConnect { signature, timestamp, domain, state_init })
+        }
+        "passkey" => Ok(Auth::Passkey {
+            r: b32(str_of("r")?)?,
+            s: b32(str_of("s")?)?,
+            authenticator_data: b64decode(str_of("authenticator_data")?)?,
+            client_data_json: str_of("client_data_json")?.to_string(),
+        }),
+        other => bail!("unknown signature kind {other}"),
+    }
+}
+
+const CDJ_PREFIX: &str = "{\"type\":\"webauthn.get\",\"challenge\":\"";
+
+/// `auth` cell of common.tact (kind 0 / kind 1).
+pub fn auth_cell(auth: &Auth) -> Result<Arc<Cell>> {
+    match auth {
+        Auth::TonConnect { signature, timestamp, domain, .. } => Builder::new()
+            .uint(0, 8)
+            .bytes(signature)
+            .uint(*timestamp as u128, 64)
+            .reference(domain_cell(domain)?)
+            .end(),
+        Auth::Passkey { r, s, authenticator_data, client_data_json } => {
+            if authenticator_data.len() < 37 || authenticator_data.len() > 127 {
+                bail!("authenticator data length");
+            }
+            let suffix = client_data_json
+                .strip_prefix(CDJ_PREFIX)
+                .and_then(|rest| rest.get(43..))
+                .ok_or_else(|| anyhow!("clientDataJSON does not start with the WebAuthn prefix"))?
+                .as_bytes();
+            if suffix.len() > 254 {
+                bail!("clientDataJSON too long");
+            }
+            let mut sc = Builder::new().bytes(&suffix[..suffix.len().min(127)]);
+            if suffix.len() > 127 {
+                sc = sc.reference(Builder::new().bytes(&suffix[127..]).end()?);
+            }
+            Builder::new()
+                .uint(1, 8)
+                .bytes(r)
+                .bytes(s)
+                .reference(Builder::new().bytes(authenticator_data).end()?)
+                .reference(sc.end()?)
+                .end()
+        }
+    }
+}
+
+/// `SignedOp` body exactly as Tact lays it out (trailing fields in a ref cell).
+pub fn signed_op_body(op: &Arc<Cell>, auth: &Arc<Cell>, params: Option<Arc<Cell>>, state_init: Option<Arc<Cell>>, response: &Addr, forward_ton: u128, match_with: [u8; 32]) -> Result<Arc<Cell>> {
+    let tail = Builder::new().maybe_ref(params).maybe_ref(state_init).addr(Some(response)).coins(forward_ton).bytes(&match_with).end()?;
+    Builder::new().uint(OP_SIGNED, 32).reference(op.clone()).reference(auth.clone()).reference(tail).end()
+}
+
+pub fn mandate_pay_body(op: &Arc<Cell>, signature: &[u8; 64], response: &Addr) -> Result<Arc<Cell>> {
+    Builder::new().uint(OP_MANDATE_PAY, 32).reference(op.clone()).bytes(signature).addr(Some(response)).end()
+}
+
+// ---------------------------------------------------------------------- W5R1 (relayer lanes)
+
+pub struct W5 {
+    pub code: Arc<Cell>,
+    pub wallet_id: u32,
+    pub pubkey: [u8; 32],
+}
+
+impl W5 {
+    pub fn new(pubkey: [u8; 32], global_id: i32) -> Result<Self> {
+        Ok(Self { code: boc_parse(&alloy::hex::decode(W5R1_CODE)?)?, wallet_id: (global_id as u32) ^ 0x8000_0000, pubkey })
+    }
+
+    pub fn state_init(&self) -> Result<Arc<Cell>> {
+        let data = Builder::new().bit(true).uint(0, 32).uint(self.wallet_id as u128, 32).bytes(&self.pubkey).bit(false).end()?;
+        Builder::new().uint(0b00110, 5).reference(self.code.clone()).reference(data).end()
+    }
+
+    pub fn address(&self) -> Result<Addr> {
+        Ok(Addr::of_state_init(&self.state_init()?))
+    }
+
+    /// Bytes the lane key signs (hash of the signing cell) and the body builder to append the signature to.
+    fn signing(&self, seqno: u32, valid_until: u32, msg: Arc<Cell>) -> Result<Builder> {
+        let out_list = Builder::new().reference(Builder::new().end()?).uint(0x0ec3c86d, 32).uint(3, 8).reference(msg).end()?;
+        Ok(Builder::new()
+            .uint(0x7369676e, 32)
+            .uint(self.wallet_id as u128, 32)
+            .uint(valid_until as u128, 32)
+            .uint(seqno as u128, 32)
+            .maybe_ref(Some(out_list))
+            .bit(false))
+    }
+}
+
+/// `MessageRelaxed` internal, bounceable, body as a ref (forceRef).
+pub fn internal_message(to: &Addr, value: u128, body: Arc<Cell>) -> Result<Arc<Cell>> {
+    Builder::new()
+        .bit(false) // int_msg_info$0
+        .bit(true) // ihr_disabled
+        .bit(true) // bounce
+        .bit(false) // bounced
+        .addr(None)
+        .addr(Some(to))
+        .coins(value)
+        .bit(false) // no extra currencies
+        .coins(0)
+        .coins(0)
+        .uint(0, 64)
+        .uint(0, 32)
+        .bit(false) // no init
+        .bit(true)
+        .reference(body)
+        .end()
+}
+
+/// External-in message (`init` included only for the first message of an undeployed lane wallet).
+pub fn external_message(to: &Addr, init: Option<Arc<Cell>>, body: Arc<Cell>) -> Result<Arc<Cell>> {
+    let mut b = Builder::new().uint(0b10, 2).addr(None).addr(Some(to)).coins(0);
+    b = match init {
+        Some(i) => b.bit(true).bit(true).reference(i),
+        None => b.bit(false),
+    };
+    b.bit(true).reference(body).end()
+}
+
+/// Signed W5R1 external message ⇒ (BOC, TEP-467 normalized hash used as the tx id).
+pub fn w5_transfer(w5: &W5, signer: &dyn Signer, seqno: u32, valid_until: u32, to: &Addr, value: u128, body: Arc<Cell>) -> Result<(Vec<u8>, [u8; 32])> {
+    let signing = w5.signing(seqno, valid_until, internal_message(to, value, body)?)?;
+    let to_sign = signing.clone().end()?.hash();
+    let sig = signer.sign(&to_sign)?;
+    let w5body = signing.bytes(&sig).end()?;
+    let me = w5.address()?;
+    let init = if seqno == 0 { Some(w5.state_init()?) } else { None };
+    let ext = external_message(&me, init, w5body.clone())?;
+    let norm = external_message(&me, None, w5body)?;
+    Ok((boc_serialize(&ext), norm.hash()))
+}
+
+// ---------------------------------------------------------------------- events
+
+/// One external-out message body of ours, decoded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TonEvent {
+    Executed { master: Addr, from: Addr, digest: [u8; 32] },
+    Paid { from: Addr, to: Addr, amount: u128, pay_ref: [u8; 32] },
+}
+
+pub fn decode_event(body: &Arc<Cell>) -> Result<Option<TonEvent>> {
+    let mut s = body.parser();
+    if s.remaining() < 32 {
+        return Ok(None);
+    }
+    Ok(match s.uint(32)? {
+        EV_MTE => {
+            let master = s.addr()?.ok_or_else(|| anyhow!("event master"))?;
+            let from = s.addr()?.ok_or_else(|| anyhow!("event from"))?;
+            let digest = s.b256()?;
+            s.end()?;
+            Some(TonEvent::Executed { master, from, digest })
+        }
+        EV_PAID => {
+            let from = s.addr()?.ok_or_else(|| anyhow!("event from"))?;
+            let to = s.addr()?.ok_or_else(|| anyhow!("event to"))?;
+            let amount = s.coins()?;
+            let pay_ref = s.b256()?;
+            s.end()?;
+            Some(TonEvent::Paid { from, to, amount, pay_ref })
+        }
+        _ => None,
+    })
+}
+
+// ====================================================================== TON Center v3 client
+
+#[derive(Clone)]
+pub struct Api {
+    http: reqwest::Client,
+    base: String,
+    key: Option<String>,
+}
+
+impl Api {
+    pub fn new(base: &str, key: Option<String>) -> Result<Self> {
+        Ok(Self {
+            http: reqwest::Client::builder().timeout(std::time::Duration::from_secs(20)).build()?,
+            base: base.trim_end_matches('/').to_string(),
+            key,
+        })
+    }
+
+    async fn send(&self, rb: reqwest::RequestBuilder, what: &str) -> Result<Value> {
+        let rb = match &self.key {
+            Some(k) => rb.header("X-API-Key", k),
+            None => rb,
+        };
+        let res = rb.send().await.with_context(|| format!("{what}: transport"))?;
+        let status = res.status();
+        let text = res.text().await?;
+        if !status.is_success() {
+            let head: String = text.chars().take(300).collect();
+            bail!("{what}: HTTP {status}: {head}");
+        }
+        serde_json::from_str(&text).with_context(|| format!("{what}: decode"))
+    }
+
+    pub async fn get(&self, path: &str, query: &[(&str, String)]) -> Result<Value> {
+        self.send(self.http.get(format!("{}/api/v3/{path}", self.base)).query(query), path).await
+    }
+
+    pub async fn post(&self, path: &str, body: Value) -> Result<Value> {
+        self.send(self.http.post(format!("{}/api/v3/{path}", self.base)).json(&body), path).await
+    }
+
+    /// Get-method; numeric results only (`num` entries, `0x…` hex or decimal).
+    pub async fn run_get(&self, addr: &Addr, method: &str, stack: Vec<Value>) -> Result<Vec<Value>> {
+        let v = self.post("runGetMethod", json!({"address": addr.raw(), "method": method, "stack": stack})).await?;
+        let code = v.get("exit_code").and_then(Value::as_i64).unwrap_or(0);
+        if code != 0 {
+            bail!("{method}: exit code {code}");
+        }
+        Ok(v.get("stack").and_then(Value::as_array).cloned().unwrap_or_default())
+    }
+}
+
+pub fn stack_num(v: &Value) -> Result<u128> {
+    let s = v.get("value").and_then(Value::as_str).ok_or_else(|| anyhow!("stack entry without value"))?;
+    let neg = s.starts_with('-');
+    let t = s.trim_start_matches('-');
+    let n = match t.strip_prefix("0x") {
+        Some(h) => u128::from_str_radix(h, 16)?,
+        None => t.parse()?,
+    };
+    if neg && n != 0 {
+        bail!("negative stack number");
+    }
+    Ok(n)
+}
+
+pub fn stack_cell(v: &Value) -> Result<Arc<Cell>> {
+    boc_parse(&b64decode(v.get("value").and_then(Value::as_str).ok_or_else(|| anyhow!("stack entry without value"))?)?)
+}
+
+/// Hash fields of TON Center: base64 (any alphabet) or hex ⇒ 32 bytes.
+pub fn api_hash(v: &Value) -> Result<[u8; 32]> {
+    let s = v.as_str().ok_or_else(|| anyhow!("hash is not a string"))?;
+    let bytes = if s.len() == 64 && s.bytes().all(|c| c.is_ascii_hexdigit()) { alloy::hex::decode(s)? } else { b64decode(s)? };
+    bytes.try_into().map_err(|_| anyhow!("hash is not 32 bytes"))
+}
+
+/// Events of one TON Center transaction, before source authentication: (log_index, emitter, event).
+pub fn tx_events(tx: &Value) -> Result<Vec<(usize, Addr, TonEvent)>> {
+    let account = Addr::parse(tx.get("account").and_then(Value::as_str).ok_or_else(|| anyhow!("tx.account"))?)?;
+    let mut out = Vec::new();
+    let msgs = tx.get("out_msgs").and_then(Value::as_array).cloned().unwrap_or_default();
+    for (i, m) in msgs.iter().enumerate() {
+        if !m.get("destination").is_none_or(Value::is_null) {
+            continue; // internal: not an event
+        }
+        let Some(body) = m.pointer("/message_content/body").and_then(Value::as_str) else { continue };
+        let Ok(cell) = b64decode(body).and_then(|b| boc_parse(&b)) else { continue };
+        if let Ok(Some(ev)) = decode_event(&cell) {
+            out.push((i, account, ev));
+        }
+    }
+    Ok(out)
+}
+
+fn compute_ok(tx: &Value) -> std::result::Result<(), String> {
+    let d = tx.get("description").cloned().unwrap_or(Value::Null);
+    if d.get("aborted").and_then(Value::as_bool).unwrap_or(false) {
+        let code = d.pointer("/compute_ph/exit_code").and_then(Value::as_i64).unwrap_or(-1);
+        return Err(format!("aborted (exit code {code})"));
+    }
+    if d.pointer("/compute_ph/success").and_then(Value::as_bool) == Some(false) {
+        return Err(format!("compute failed (exit code {})", d.pointer("/compute_ph/exit_code").and_then(Value::as_i64).unwrap_or(-1)));
+    }
+    if d.pointer("/action/success").and_then(Value::as_bool) == Some(false) {
+        return Err("action phase failed".into());
+    }
+    Ok(())
+}
+
+// ====================================================================== adapter
+
+pub struct TonAdapter {
+    key: String,
+    lanes: Vec<Lane>,
+    signers: Vec<LocalSigner>,
+    w5: Vec<W5>,
+    api: Api,
+    global_id: i32,
+    masters: Vec<Addr>,
+    mandate_code: Option<[u8; 32]>,
+    attach: u128,
+    forward: u128,
+    /// (master, owner) ⇒ jetton wallet address (`get_wallet_address`, immutable).
+    wallets: RwLock<HashMap<(Addr, Addr), Addr>>,
+}
+
+fn param_str(cfg: &ChainCfg, k: &str) -> Option<String> {
+    cfg.params.get(k).and_then(|v| v.as_str()).map(str::to_string)
+}
+
+fn param_u128(cfg: &ChainCfg, k: &str, default: u128) -> u128 {
+    cfg.params.get(k).and_then(|v| v.as_integer()).map(|v| v as u128).unwrap_or(default)
+}
+
+impl TonAdapter {
+    /// `params`: `global_id` (default by network: `-239`, `-3`; required otherwise), `jetton_masters`
+    /// (raw addresses), `mandate_code_hash` (optional), `attach_nanoton` (default 0.15 TON),
+    /// `forward_nanoton` (default 0), `api_key_env`.
+    pub fn new(cfg: &ChainCfg, signers: &[LocalSigner]) -> Result<Self> {
+        let net = cfg.network.clone().unwrap_or_default();
+        let global_id = match cfg.params.get("global_id").and_then(|v| v.as_integer()) {
+            Some(g) => g as i32,
+            None => net.parse::<i32>().map_err(|_| anyhow!("chain {}: params.global_id is required for {net}", cfg.chain_key()))?,
+        };
+        let masters = cfg
+            .params
+            .get("jetton_masters")
+            .and_then(|v| v.as_array())
+            .map(|a| a.iter().filter_map(|x| x.as_str()).map(Addr::parse).collect::<Result<Vec<_>>>())
+            .transpose()?
+            .unwrap_or_default();
+        let mandate_code = param_str(cfg, "mandate_code_hash").map(|h| b32(&h)).transpose()?;
+        let mut w5 = Vec::new();
+        let mut lanes = Vec::new();
+        for (s, &i) in signers.iter().zip(&cfg.lanes) {
+            let pk: [u8; 32] = s.public_key().try_into().map_err(|_| anyhow!("TON lanes need ed25519 keys"))?;
+            let w = W5::new(pk, global_id)?;
+            lanes.push(Lane { index: i, address: w.address()?.raw() });
+            w5.push(w);
+        }
+        let signers = signers.iter().map(clone_signer).collect::<Result<Vec<_>>>()?;
+        let key = param_str(cfg, "api_key_env").and_then(|e| std::env::var(e).ok());
+        Ok(Self {
+            key: cfg.chain_key(),
+            lanes,
+            signers,
+            w5,
+            api: Api::new(cfg.rpc_urls.first().ok_or_else(|| anyhow!("no rpc_urls"))?, key)?,
+            global_id,
+            masters,
+            mandate_code,
+            attach: param_u128(cfg, "attach_nanoton", 150_000_000),
+            forward: param_u128(cfg, "forward_nanoton", 0),
+            wallets: RwLock::new(HashMap::new()),
+        })
+    }
+
+    pub fn lane_wallet(&self, lane: usize) -> Result<&W5> {
+        self.w5.get(lane).ok_or_else(|| anyhow!("no lane {lane}"))
+    }
+
+    async fn wallet_of(&self, master: &Addr, owner: &Addr) -> Result<Addr> {
+        if let Some(a) = self.wallets.read().ok().and_then(|m| m.get(&(*master, *owner)).copied()) {
+            return Ok(a);
+        }
+        let owner_cell = Builder::new().addr(Some(owner)).end()?;
+        let st = self.api.run_get(master, "get_wallet_address", vec![json!({"type": "slice", "value": b64encode(&boc_serialize(&owner_cell))})]).await?;
+        let cell = stack_cell(st.first().ok_or_else(|| anyhow!("get_wallet_address: empty stack"))?)?;
+        let a = cell.parser().addr()?.ok_or_else(|| anyhow!("get_wallet_address: addr_none"))?;
+        if let Ok(mut m) = self.wallets.write() {
+            m.insert((*master, *owner), a);
+        }
+        Ok(a)
+    }
+
+    /// Normalized event for Odoo, or `None` when the emitter is not one of ours (R10-10).
+    async fn authenticate(&self, emitter: &Addr, ev: &TonEvent, code_hash: Option<[u8; 32]>) -> Result<Option<(Addr, TonEvent)>> {
+        match ev {
+            TonEvent::Executed { master, from, .. } => {
+                if !self.masters.contains(master) {
+                    return Ok(None);
+                }
+                if self.wallet_of(master, from).await? == *emitter {
+                    return Ok(Some((*master, ev.clone())));
+                }
+                // A Mandate emits for itself (`from` = the mandate) or for its owner's withdrawals.
+                if self.mandate_code.is_some() && code_hash == self.mandate_code {
+                    return Ok(Some((*master, ev.clone())));
+                }
+                Ok(None)
+            }
+            TonEvent::Paid { to, .. } => {
+                for m in &self.masters {
+                    if self.wallet_of(m, to).await? == *emitter {
+                        return Ok(Some((*m, ev.clone())));
+                    }
+                }
+                Ok(None)
+            }
+        }
+    }
+
+    async fn tx_by_in_msg(&self, hash: &[u8; 32]) -> Result<Option<Value>> {
+        let v = self.api.get("transactionsByMessage", &[("msg_hash", alloy::hex::encode(hash)), ("direction", "in".into())]).await?;
+        Ok(v.get("transactions").and_then(Value::as_array).and_then(|a| a.first().cloned()))
+    }
+
+    async fn mc_block(&self, seqno: u64) -> Result<String> {
+        let v = self
+            .api
+            .get("blocks", &[("workchain", "-1".into()), ("shard", "8000000000000000".into()), ("seqno", seqno.to_string())])
+            .await?;
+        let b = v.pointer("/blocks/0").ok_or_else(|| anyhow!("no masterchain block {seqno}"))?;
+        Ok(hex0x(&api_hash(b.get("root_hash").unwrap_or(&Value::Null))?))
+    }
+}
+
+/// What `build` hands to `sign`: the target contract and the internal message body.
+fn built_meta(to: &Addr, value: u128) -> Value {
+    json!({"to": to.raw(), "value": value.to_string()})
+}
+
+#[async_trait]
+impl ChainAdapter for TonAdapter {
+    fn family(&self) -> Family {
+        Family::Ton
+    }
+
+    fn chain_key(&self) -> &str {
+        &self.key
+    }
+
+    fn lanes(&self) -> &[Lane] {
+        &self.lanes
+    }
+
+    async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
+        let revert = |e: anyhow::Error| SimError::Revert(format!("{e:#}"));
+        let transport = |e: anyhow::Error| SimError::Transport(format!("{e:#}"));
+        let op = job.op.as_ref().ok_or_else(|| SimError::Revert("not a signed_op job".into()))?;
+        let s = |k: &str| op.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
+        let cell = alloy::hex::decode(s("payload").trim_start_matches("0x")).map_err(|e| revert(e.into())).and_then(|b| boc_parse(&b).map_err(revert))?;
+        let m = parse_metaop(&cell).map_err(revert)?;
+        if hex0x(&m.digest) != s("digest").to_lowercase() {
+            return Err(SimError::Revert("payload does not hash to the job digest".into()));
+        }
+        let contract = Addr::parse(&s("contract")).map_err(revert)?;
+        if contract != m.contract || m.network != self.global_id {
+            return Err(SimError::Revert("payload contract/network does not match the job".into()));
+        }
+        if m.valid_until <= crate::submit::now() {
+            return Err(SimError::Revert("signed payload expired".into()));
+        }
+        let me = self.lane_wallet(lane).and_then(|w| w.address()).map_err(transport)?;
+        if m.relayer.is_some_and(|r| r != me) {
+            return Err(SimError::Revert("payload is bound to another relayer".into()));
+        }
+        let extra = op.get("extra").cloned().unwrap_or(Value::Null);
+        let body = if s("op_kind") == "mandate_pay" {
+            let sig: [u8; 64] = alloy::hex::decode(s("signature").trim_start_matches("0x"))
+                .map_err(|e| revert(e.into()))?
+                .try_into()
+                .map_err(|_| SimError::Revert("delegate signature must be 64 bytes".into()))?;
+            mandate_pay_body(&cell, &sig, &me).map_err(revert)?
+        } else {
+            let auth = parse_auth(&s("signature")).map_err(revert)?;
+            // Simulation by getters (R27): lane/nonce unused, key bound or provable, signature valid.
+            let next = self.api.run_get(&contract, "get_lane_nonce", vec![json!({"type": "num", "value": hex0x(&m.lane)})]).await.map_err(transport)?;
+            let next = next.first().map(stack_num).transpose().map_err(transport)?.unwrap_or(0);
+            if next as u64 != m.nonce && !(m.op == 4 && next as u64 > m.nonce) {
+                return Err(SimError::Revert(format!("lane nonce is {next}, payload has {}", m.nonce)));
+            }
+            if let Auth::TonConnect { signature, timestamp, domain, state_init } = &auth {
+                let bound = self.api.run_get(&contract, "get_owner_pubkey", vec![]).await.map_err(transport)?;
+                let bound = bound.first().and_then(|v| v.get("value")).and_then(Value::as_str).unwrap_or("0x0");
+                let mut pk = left_pad32(bound).map_err(revert)?;
+                if pk == [0; 32] {
+                    let si = state_init.as_ref().ok_or_else(|| SimError::Revert("owner key not bound and no StateInit".into()))?;
+                    pk = pubkey_from_state_init(si, &m.from).map_err(revert)?;
+                }
+                let h = envelope_hash(&m.from, *timestamp, domain, &cell).map_err(revert)?;
+                let vk = VerifyingKey::from_bytes(&pk).map_err(|_| SimError::Revert("bad owner key".into()))?;
+                vk.verify_strict(&h, &Signature::from_bytes(signature)).map_err(|_| SimError::Revert("signature does not verify".into()))?;
+            }
+            let state_init = match &auth {
+                Auth::TonConnect { state_init, .. } => state_init.clone(),
+                Auth::Passkey { .. } => None,
+            };
+            let params = match extra.get("params").and_then(Value::as_str) {
+                Some(p) => Some(boc_parse(&alloy::hex::decode(p.trim_start_matches("0x")).map_err(|e| revert(e.into()))?).map_err(revert)?),
+                None => None,
+            };
+            let match_with = match extra.get("match_with").and_then(Value::as_str) {
+                Some(h) => b32(h).map_err(revert)?,
+                None => [0; 32],
+            };
+            let forward = extra.get("forward_nanoton").and_then(Value::as_u64).map(u128::from).unwrap_or(self.forward);
+            signed_op_body(&cell, &auth_cell(&auth).map_err(revert)?, params, state_init, &me, forward, match_with).map_err(revert)?
+        };
+        let value = self.attach.max(self.forward + 100_000_000);
+        Ok(Built { job_id: job.id, body: boc_serialize(&body), valid_until: m.valid_until, meta: built_meta(&contract, value) })
+    }
+
+    async fn sign(&self, built: Built, lane: usize, sequence: u64) -> Result<Signed> {
+        let to = Addr::parse(built.meta["to"].as_str().unwrap_or_default())?;
+        let value: u128 = built.meta["value"].as_str().unwrap_or("0").parse()?;
+        let body = boc_parse(&built.body)?;
+        let w5 = self.lane_wallet(lane)?;
+        let signer = self.signers.get(lane).ok_or_else(|| anyhow!("no lane {lane}"))?;
+        // The lane tx expires with the subject's payload (review S14): a stuck tx never pins the seqno.
+        let vu = u32::try_from(built.valid_until).unwrap_or(u32::MAX);
+        let (raw, norm) = w5_transfer(w5, signer, sequence as u32, vu, &to, value, body)?;
+        Ok(Signed { job_id: built.job_id, tx_id: hex0x(&norm), raw, valid_until: built.valid_until, sequence })
+    }
+
+    async fn submit(&self, signed: &Signed) -> Result<()> {
+        self.api.post("message", json!({"boc": b64encode(&signed.raw)})).await.map(|_| ())
+    }
+
+    async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
+        let Some(tx) = self.tx_by_in_msg(&b32(tx_id)?).await? else { return Ok(TxStatus::Unknown) };
+        if let Err(why) = compute_ok(&tx) {
+            return Ok(TxStatus::Reverted { reason: format!("lane wallet: {why}") });
+        }
+        let Some(out) = tx.pointer("/out_msgs/0/hash") else {
+            return Ok(TxStatus::Reverted { reason: "lane wallet sent nothing (insufficient TON?)".into() });
+        };
+        let Some(child) = self.tx_by_in_msg(&api_hash(out)?).await? else { return Ok(TxStatus::Pending) };
+        if let Err(why) = compute_ok(&child) {
+            return Ok(TxStatus::Reverted { reason: format!("contract: {why}") });
+        }
+        Ok(TxStatus::Mined { height: child.get("mc_block_seqno").and_then(Value::as_u64).unwrap_or_default() })
+    }
+
+    async fn sequence(&self, lane: usize) -> Result<u64> {
+        let me = self.lane_wallet(lane)?.address()?;
+        let v = self.api.get("walletInformation", &[("address", me.raw()), ("use_v2", "false".into())]).await;
+        Ok(match v {
+            Ok(v) => v.get("seqno").and_then(Value::as_u64).unwrap_or(0),
+            Err(e) if format!("{e:#}").contains("404") => 0, // never deployed
+            Err(e) => return Err(e),
+        })
+    }
+
+    async fn final_head(&self) -> Result<Option<Head>> {
+        // Masterchain blocks are final once committed (BFT).
+        let v = self.api.get("masterchainInfo", &[]).await?;
+        let last = v.get("last").ok_or_else(|| anyhow!("masterchainInfo.last"))?;
+        let height = last.get("seqno").and_then(Value::as_u64).ok_or_else(|| anyhow!("masterchainInfo.last.seqno"))?;
+        Ok(Some(Head { height, hash: hex0x(&api_hash(last.get("root_hash").unwrap_or(&Value::Null))?) }))
+    }
+
+    async fn block_hash(&self, height: u64) -> Result<String> {
+        self.mc_block(height).await
+    }
+
+    async fn events(&self, from: u64, to: u64) -> Result<Vec<Value>> {
+        let mut out = Vec::new();
+        for seqno in from..=to {
+            let mut offset = 0usize;
+            let mut block_hash: Option<String> = None;
+            loop {
+                let v = self
+                    .api
+                    .get("transactionsByMasterchainBlock", &[("seqno", seqno.to_string()), ("limit", "256".into()), ("offset", offset.to_string()), ("sort", "asc".into())])
+                    .await?;
+                let txs = v.get("transactions").and_then(Value::as_array).cloned().unwrap_or_default();
+                for tx in &txs {
+                    let evs = tx_events(tx)?;
+                    if evs.is_empty() {
+                        continue;
+                    }
+                    let code_hash = tx.pointer("/account_state_after/code_hash").and_then(|h| api_hash(h).ok());
+                    let tx_hash = hex0x(&api_hash(tx.get("hash").unwrap_or(&Value::Null))?);
+                    for (log_index, emitter, ev) in evs {
+                        let Some((master, ev)) = self.authenticate(&emitter, &ev, code_hash).await? else { continue };
+                        if block_hash.is_none() {
+                            block_hash = Some(self.mc_block(seqno).await?);
+                        }
+                        let mut e = json!({
+                            "contract": master.raw(), "block_number": seqno, "block_hash": block_hash.clone(),
+                            "tx_hash": tx_hash, "log_index": log_index,
+                        });
+                        match ev {
+                            TonEvent::Executed { from, digest, .. } => {
+                                e["event"] = json!("MetaTransactionExecuted");
+                                e["from"] = json!(from.raw());
+                                e["digest"] = json!(hex0x(&digest));
+                            }
+                            TonEvent::Paid { from, to, amount, pay_ref } => {
+                                e["event"] = json!("PaymentSettled");
+                                e["from"] = json!(from.raw());
+                                e["to"] = json!(to.raw());
+                                e["amount"] = json!(amount.to_string());
+                                e["entry_ref"] = json!(hex0x(&pay_ref));
+                            }
+                        }
+                        out.push(e);
+                    }
+                }
+                if txs.len() < 256 {
+                    break;
+                }
+                offset += txs.len();
+            }
+        }
+        Ok(out)
+    }
+}
+
+fn clone_signer(s: &LocalSigner) -> Result<LocalSigner> {
+    match s {
+        LocalSigner::Ed(k) => Ok(LocalSigner::Ed(k.clone())),
+        LocalSigner::Secp(_) => bail!("TON lanes need ed25519 keys (m/44'/607'/i')"),
+    }
+}
+
+/// Stack numbers come as `0x…` without leading zeros.
+fn left_pad32(v: &str) -> Result<[u8; 32]> {
+    if !v.starts_with("0x") {
+        let n: u128 = v.parse().context("stack number")?;
+        let mut out = [0u8; 32];
+        out[16..].copy_from_slice(&n.to_be_bytes());
+        return Ok(out);
+    }
+    let h = v.trim_start_matches("0x");
+    let h = if h.len() % 2 == 1 { format!("0{h}") } else { h.to_string() };
+    let b = alloy::hex::decode(h)?;
+    if b.len() > 32 {
+        bail!("value wider than 32 bytes");
+    }
+    let mut out = [0u8; 32];
+    out[32 - b.len()..].copy_from_slice(&b);
+    Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::signer::Curve;
+
+    fn vectors() -> Value {
+        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../chains/ton/vectors/ton-vectors.json");
+        serde_json::from_str(&std::fs::read_to_string(p).expect("vectors")).expect("json")
+    }
+
+    fn cell(v: &Value, ptr: &str) -> Arc<Cell> {
+        boc_parse(&alloy::hex::decode(v.pointer(ptr).unwrap().as_str().unwrap()).unwrap()).unwrap()
+    }
+
+    fn s<'a>(v: &'a Value, ptr: &str) -> &'a str {
+        v.pointer(ptr).unwrap().as_str().unwrap()
+    }
+
+    #[test]
+    fn metaop_vector_parses_and_hashes() {
+        let v = vectors();
+        let c = cell(&v, "/metaop/boc");
+        assert_eq!(hex0x(&c.hash()), s(&v, "/metaop/digest"));
+        let m = parse_metaop(&c).unwrap();
+        assert_eq!(m.network, -239);
+        assert_eq!(m.amount, 1_234_567);
+        assert_eq!(m.contract.raw(), s(&v, "/metaop/contract"));
+        assert_eq!(m.from.raw(), s(&v, "/metaop/from"));
+        assert_eq!(m.to.raw(), s(&v, "/metaop/to"));
+        assert_eq!(hex0x(&m.lane), s(&v, "/metaop/lane"));
+        assert_eq!(hex0x(&m.pay_ref), s(&v, "/metaop/pay_ref"));
+        assert!(m.relayer.is_none());
+        // our serializer round-trips; for this tree it is byte-identical to @ton/core
+        assert_eq!(alloy::hex::encode(boc_serialize(&c)), s(&v, "/metaop/boc"));
+    }
+
+    #[test]
+    fn envelope_state_init_and_signature() {
+        let v = vectors();
+        let op = cell(&v, "/metaop/boc");
+        let owner = Addr::parse(s(&v, "/payer_w5/address")).unwrap();
+        assert_eq!(hex0x(&domain_cell(s(&v, "/sign_data/domain")).unwrap().hash()), s(&v, "/sign_data/domain_cell_hash"));
+        let ts = v.pointer("/sign_data/timestamp").unwrap().as_u64().unwrap();
+        let h = envelope_hash(&owner, ts, s(&v, "/sign_data/domain"), &op).unwrap();
+        assert_eq!(hex0x(&h), s(&v, "/sign_data/envelope_hash"));
+        let pk = pubkey_from_state_init(&cell(&v, "/payer_w5/state_init_boc"), &owner).unwrap();
+        assert_eq!(alloy::hex::encode(pk), s(&v, "/sign_data/pubkey"));
+        assert!(pubkey_from_state_init(&cell(&v, "/payer_w5/state_init_boc"), &Addr::parse(s(&v, "/metaop/to")).unwrap()).is_err());
+        let sig: [u8; 64] = alloy::hex::decode(s(&v, "/sign_data/signature")).unwrap().try_into().unwrap();
+        VerifyingKey::from_bytes(&pk).unwrap().verify_strict(&h, &Signature::from_bytes(&sig)).unwrap();
+        // the auth cell the relayer builds from the connector JSON equals the contract test's
+        let json = json!({"kind": "ton_connect", "signature": b64encode(&sig), "timestamp": ts,
+                          "domain": s(&v, "/sign_data/domain"), "state_init": b64encode(&alloy::hex::decode(s(&v, "/payer_w5/state_init_boc")).unwrap())});
+        let auth = parse_auth(&json.to_string()).unwrap();
+        assert_eq!(hex0x(&auth_cell(&auth).unwrap().hash()), s(&v, "/sign_data/auth_cell_hash"));
+        let Auth::TonConnect { state_init, .. } = &auth else { panic!() };
+        // SignedOp body (Tact layout) equals the @ton/core one
+        let lane = Addr::parse(s(&v, "/lane_w5/address")).unwrap();
+        let body = signed_op_body(&op, &auth_cell(&auth).unwrap(), None, state_init.clone(), &lane, 0, [0; 32]).unwrap();
+        assert_eq!(hex0x(&body.hash()), s(&v, "/signed_op/hash"));
+    }
+
+    #[test]
+    fn w5r1_lane_wallet_and_external_message_match_ton_core() {
+        let v = vectors();
+        let seed: [u8; 32] = alloy::hex::decode(s(&v, "/lane_w5/seed")).unwrap().try_into().unwrap();
+        let signer = LocalSigner::new(Curve::Ed25519, &seed).unwrap();
+        assert_eq!(alloy::hex::encode(signer.public_key()), s(&v, "/lane_w5/pubkey"));
+        let w5 = W5::new(signer.public_key().try_into().unwrap(), -239).unwrap();
+        assert_eq!(w5.wallet_id as u64, v.pointer("/lane_w5/wallet_id").unwrap().as_u64().unwrap());
+        assert_eq!(w5.address().unwrap().raw(), s(&v, "/lane_w5/address"));
+        let to = Addr::parse(s(&v, "/jetton/payer_wallet")).unwrap();
+        let body = cell(&v, "/signed_op/boc");
+        let value: u128 = s(&v, "/lane_w5/value").parse().unwrap();
+        assert_eq!(hex0x(&internal_message(&to, value, body.clone()).unwrap().hash()), s(&v, "/lane_w5/relaxed_hash"));
+        let (boc, norm) = w5_transfer(&w5, &signer, 0, 1_800_000_300, &to, value, body).unwrap();
+        assert_eq!(hex0x(&boc_parse(&boc).unwrap().hash()), s(&v, "/lane_w5/ext_hash"));
+        assert_eq!(hex0x(&norm), s(&v, "/lane_w5/norm_hash"));
+    }
+
+    #[test]
+    fn events_decode() {
+        let v = vectors();
+        let Some(TonEvent::Executed { master, from, digest }) = decode_event(&cell(&v, "/events/mte_boc")).unwrap() else { panic!() };
+        assert_eq!(master.raw(), s(&v, "/jetton/master"));
+        assert_eq!(from.raw(), s(&v, "/payer_w5/address"));
+        assert_eq!(hex0x(&digest), s(&v, "/metaop/digest"));
+        let Some(TonEvent::Paid { amount, pay_ref, to, .. }) = decode_event(&cell(&v, "/events/ps_boc")).unwrap() else { panic!() };
+        assert_eq!((amount, hex0x(&pay_ref), to.raw()), (1_234_567, s(&v, "/metaop/pay_ref").to_string(), s(&v, "/metaop/to").to_string()));
+        // a TON Center transaction carrying it as an external-out message
+        let tx = json!({"account": s(&v, "/jetton/payer_wallet").to_uppercase(), "out_msgs": [
+            {"destination": "0:" .to_string() + &"11".repeat(32), "message_content": {"body": b64encode(&alloy::hex::decode(s(&v, "/events/ps_boc")).unwrap())}},
+            {"destination": null, "message_content": {"body": b64encode(&alloy::hex::decode(s(&v, "/events/mte_boc")).unwrap())}}]});
+        let evs = tx_events(&tx).unwrap();
+        assert_eq!(evs.len(), 1);
+        assert_eq!(evs[0].0, 1);
+        assert_eq!(evs[0].1.raw(), s(&v, "/jetton/payer_wallet"));
+    }
+
+    #[test]
+    fn jetton_wallet_code_and_addresses() {
+        let v = vectors();
+        let code = cell(&v, "/jetton/wallet_code_boc");
+        assert_eq!(hex0x(&code.hash()), s(&v, "/jetton/wallet_code_hash"));
+        assert_eq!(code.depth() as u64, v.pointer("/jetton/wallet_code_depth").unwrap().as_u64().unwrap());
+        let f = Addr::parse("EQCD39VS5jcptHL8vMjEXrzGaRcCVYto7HUn4bpAOg8xqB2N").unwrap();
+        assert_eq!(f.raw(), "0:83dfd552e63729b472fcbcc8c45ebcc6691702558b68ec7527e1ba403a0f31a8");
+        assert!(Addr::parse("EQCD39VS5jcptHL8vMjEXrzGaRcCVYto7HUn4bpAOg8xqB2A").is_err());
+    }
+
+    #[test]
+    fn base64_and_stack_helpers() {
+        for n in 0..10 {
+            let d: Vec<u8> = (0..n).collect();
+            assert_eq!(b64decode(&b64encode(&d)).unwrap(), d);
+        }
+        assert_eq!(b64encode(b"foobar"), "Zm9vYmFy");
+        assert_eq!(stack_num(&json!({"type": "num", "value": "0x1f"})).unwrap(), 31);
+        assert_eq!(stack_num(&json!({"type": "num", "value": "7"})).unwrap(), 7);
+        assert_eq!(left_pad32("0x1").unwrap()[31], 1);
+        assert_eq!(api_hash(&json!(b64encode(&[7u8; 32]))).unwrap(), [7u8; 32]);
+    }
+
+    #[test]
+    fn passkey_auth_cell_splits_client_data() {
+        let digest = [0xffu8; 32];
+        let challenge = "_".repeat(43);
+        let cdj = format!("{CDJ_PREFIX}{challenge}\",\"origin\":\"https://pay.example\",\"crossOrigin\":false{}}}", ",\"x\":\"".to_string() + &"y".repeat(120) + "\"");
+        let a = Auth::Passkey { r: [1; 32], s: [2; 32], authenticator_data: vec![0; 37], client_data_json: cdj };
+        let c = auth_cell(&a).unwrap();
+        assert_eq!(c.refs().len(), 2);
+        assert_eq!(c.refs()[1].refs().len(), 1, "long client data spills into a second cell");
+        let _ = digest;
+        assert!(auth_cell(&Auth::Passkey { r: [1; 32], s: [2; 32], authenticator_data: vec![0; 37], client_data_json: "{}".into() }).is_err());
+    }
+
+    mod prop {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            #[test]
+            fn boc_parser_never_panics(data in proptest::collection::vec(any::<u8>(), 0..400)) {
+                let _ = boc_parse(&data);
+                let mut with_magic = vec![0xb5, 0xee, 0x9c, 0x72];
+                with_magic.extend(&data);
+                let _ = boc_parse(&with_magic);
+            }
+
+            #[test]
+            fn cells_round_trip(bits in proptest::collection::vec(any::<bool>(), 0..1023), nrefs in 0usize..4, inner in proptest::collection::vec(any::<u8>(), 0..100)) {
+                let mut b = Builder::new();
+                for x in &bits { b = b.bit(*x); }
+                for i in 0..nrefs { b = b.reference(Builder::new().bytes(&inner).uint(i as u128, 3).end().unwrap()); }
+                let c = b.end().unwrap();
+                let back = boc_parse(&boc_serialize(&c)).unwrap();
+                prop_assert_eq!(back.hash(), c.hash());
+                prop_assert_eq!(back.bit_len(), bits.len());
+            }
+
+            #[test]
+            fn decoders_never_panic(body in proptest::collection::vec(any::<u8>(), 0..127), kind in 0u8..3, s in ".{0,200}") {
+                if let Ok(c) = Builder::new().uint(if kind == 0 { EV_MTE } else { EV_PAID }, 32).bytes(&body).end() {
+                    let _ = decode_event(&c);
+                    let _ = parse_metaop(&c);
+                }
+                let _ = parse_auth(&s);
+                let _ = tx_events(&json!({"account": s, "out_msgs": [{"destination": null, "message_content": {"body": s}}]}));
+                let _ = api_hash(&json!(s));
+                let _ = stack_num(&json!({"value": s}));
+            }
+        }
+    }
+}
