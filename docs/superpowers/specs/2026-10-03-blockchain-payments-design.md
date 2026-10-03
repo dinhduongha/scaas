@@ -292,7 +292,7 @@ Matcher: với lệnh mới L (bán `L.value` A, đòi ≥ `minB` B), quét lệ
 
 | Method (model) | Nhóm | Vào | Ra / tác dụng |
 |---|---|---|---|
-| `node_config` (`blockchain.chain`) | relay_worker hoặc indexer | `evm_chain_number, relayer_address?` | chain params, finality, `indexed_block`, token `[{address, decimals}]`, `journal_max_nonce` cho relayer |
+| `node_config` (`blockchain.chain`) | relay_worker hoặc indexer | `evm_chain_number, relayer_address?` | chain params, finality, `indexed_block`, token `[{address, decimals}]`, `journal_max_nonce` và `inflight` (job `nonce_leased/signed/broadcast` của relayer, kèm payload) cho cold start |
 | `relay_poll` (`blockchain.relay.job`) | relay_worker | `evm_chain_number, limit` | job `queued` kèm metatx đầy đủ (struct + signature + token) |
 | `relay_claim` (`blockchain.relay.job`) | relay_worker | `job_ids, worker` | id claim được (CAS `UPDATE … WHERE chain_state='queued' RETURNING id`) |
 | `relay_report` (`blockchain.relay.job`) | relay_worker | `job_id, chain_state, tx_hash?, outer_nonce?, error?` | chuyển trạng thái theo bảng cho phép §4.3 |
@@ -330,12 +330,10 @@ kiểu dữ liệu.
 **`blockchain.chain`** (`mail.thread`): `name`, `evm_chain_number` (Integer, unique),
 `caip2` (compute stored `eip155:<n>`), `native_currency`, `state` (`draft`/`active`/`paused`),
 `finality_mode` (`depth`/`tag`), `finality_depth`, `finality_quorum` (≥1), `indexed_block`
-(Integer, chỉ indexer ghi), `public_rpc_url` (cho ví: `wallet_addEthereumChain`), `rpc_endpoint_ids`.
-Seed: 9000 (`draft`, depth 1, quorum 1), Gnosis 100 (`draft`, tag, quorum 2), Celo 42220 (`draft`).
-CHECK: chain chỉ `active` khi có ≥ `finality_quorum` endpoint.
-
-**`blockchain.rpc.endpoint`**: `chain_id`, `url`, `sequence`, `active`. Chỉ manager đọc (URL có thể
-mang khoá nhà cung cấp).
+(Integer, chỉ indexer ghi), `public_rpc_url` (cho ví: `wallet_addEthereumChain`; không bao giờ là
+URL có khoá). Seed: 9000 (`draft`, depth 1, quorum 1), Gnosis 100 (`draft`, tag, quorum 2), Celo
+42220 (`draft`). Endpoint RPC **không** nằm trong Odoo (ruling R20): node giữ chúng, và node từ chối
+khởi động khi `rpc_urls < quorum`.
 
 **`blockchain.token`** (`mail.thread`): `chain_id`, `address`, `name`, `symbol`, `decimals`,
 `domain_name` (mặc định `Bamboo MetaToken`), `domain_version` (`1`), `currency_id` (tiền pháp định
@@ -357,7 +355,8 @@ token neo 1:1 để quy đổi đơn hàng), `is_confidential` (luôn False ở 
 `UNIQUE(company_id, origin_producer, origin_key)`. Không cột `state` trần (canon §C2.2).
 
 **`blockchain.chain.event`**: `chain_id`, `company_id` (từ request khớp, có thể rỗng),
-`contract_address`, `event_name` (`MetaTransactionExecuted`/`PaymentSettled`/`TradeSettled`),
+`contract_address`, `event_name` (`MetaTransactionExecuted`/`PaymentSettled` — `TradeSettled` của DEX
+không vào Odoo: không có nghiệp vụ ERP nào đọc nó),
 `block_number`, `block_hash`, `tx_hash`, `log_index`, `from_address`, `to_address`, `value_base`,
 `fee_base`, `entry_ref_hex`, `digest_hash`, `payment_request_id`.
 `UNIQUE(chain_id, tx_hash, log_index)`.
@@ -683,6 +682,9 @@ Bốn plan, theo thứ tự phụ thuộc: (1) contracts + DEX, (2) relayer, (3)
   `action_confirm` báo giá `draft/sent` khi tx `done`, tức bỏ qua duyệt DMS và `dms_check_credit`
   (review F2); có hoá đơn thì gạch nợ, chưa có thì là khoản ứng trước — nếu sai: người mua không
   trả trước được báo giá; mở sau bằng một luồng duyệt riêng.
+- **R20** Endpoint RPC chỉ ở config của node; bỏ `blockchain.rpc.endpoint` khỏi Odoo — Odoo không
+  bao giờ gọi RPC, URL nhà cung cấp thường mang khoá, và hai nơi giữ cùng danh sách là hai sự thật —
+  nếu sai: màn hình sức khoẻ endpoint (canon §C14.3 #4) phải đọc từ `/readyz` của node.
 - **R17** Không FX: `token.currency_id` phải trùng tiền đơn hàng — quote tỷ giá (canon
   `blockchain.payment.quote`) cần nguồn giá — nếu sai: chỉ token neo đúng tiền đơn mới dùng được.
 
