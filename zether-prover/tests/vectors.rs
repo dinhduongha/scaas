@@ -50,6 +50,7 @@ fn api_roundtrip_mnemonic_keygen_prove_decrypt() {
             "sendCounter": 0, "accSeq": 1, "acc": acc, "balance": 5000, "yTo": b["Y"], "amount": 1200,
         }));
         assert!(t.get("witness").is_none(), "secrets must not leave the API unless asked");
+        assert!(t["directCalldata"].as_str().unwrap().starts_with("0x7c947e8e"), "RS2-14 direct selector");
         let ok = call("verifyTransfer", json!({"curve": curve, "statement": t["statement"], "proof": t["proof"]}));
         assert_eq!(ok["ok"], json!(true));
         let d = call("decrypt", json!({"curve": curve, "key": k0, "ct": acc}));

@@ -123,18 +123,10 @@ fn sc<C: ZCurve>(s: &Fr<C>) -> String {
     hx(&encode_scalar::<C>(s))
 }
 
-/// `transferConfidential(bytes,bytes,bytes,bytes32,uint8,uint256,address)` with no outer fee.
+/// `transferConfidential(bytes,bytes,bytes,bytes32)` — direct call has no outer fee (S2 RS2-14).
 fn direct_transfer(payload: &[u8], proof: &[u8], beneficiary: &[u8; 32]) -> Vec<u8> {
-    let mut d = envelope::selector("transferConfidential(bytes,bytes,bytes,bytes32,uint8,uint256,address)").to_vec();
-    d.extend(abi::encode(&[
-        Tok::Bytes(payload.to_vec()),
-        Tok::Bytes(proof.to_vec()),
-        Tok::Bytes(vec![]),
-        Tok::Word(*beneficiary),
-        Tok::Word([0; 32]),
-        Tok::Word([0; 32]),
-        Tok::Word([0; 32]),
-    ]));
+    let mut d = envelope::selector("transferConfidential(bytes,bytes,bytes,bytes32)").to_vec();
+    d.extend_from_slice(&envelope::transfer_data(payload, proof, &[], beneficiary)[4..]);
     d
 }
 

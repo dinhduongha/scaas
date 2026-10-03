@@ -131,3 +131,10 @@ fn relayed_and_disclosure_bn254() {
 fn relayed_and_disclosure_bls12_381() {
     relayed_and_disclosure::<Bls12381>();
 }
+
+#[test]
+fn direct_call_selectors_match_s2_spec() {
+    // zether-design §9 (RS2-14): direct transferConfidential has 4 args, no outer fee.
+    assert_eq!(hex::encode(selector("transferConfidential(bytes,bytes,bytes,bytes32)")), "7c947e8e");
+    assert_eq!(hex::encode(selector("burn(bytes,uint256,address,bytes32,bytes,bytes)")), "8938052e");
+}
