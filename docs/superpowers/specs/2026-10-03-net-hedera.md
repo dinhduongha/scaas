@@ -70,6 +70,12 @@ Hành vi precompile (đọc mã `IsAuthorizedRawCall.java`, hiero-consensus-node
   ⇒ `execution reverted: INVALID_ACCOUNT_ID`. Vậy review S2 (HIP-632 có tồn tại không) đã trả lời: **có**, ở
   mainnet/testnet từ services v0.52. Đường dương (chữ ký đúng ⇒ `true`) chưa thử trên mạng thật vì không có tài
   khoản testnet được cấp tiền — ghi khoảng trống §9.
+- **Phải gọi bằng CALL, không STATICCALL (R6-6).** `IsAuthorizedRawCall` không cài `allowsStaticFrame()` (mặc định
+  `false`, `Call.java`), và `AbstractNativeSystemContract` HALT system contract trong frame tĩnh. Thử trên testnet
+  (initcode qua `eth_call`, 2026-10-03): cùng tham số, STATICCALL ⇒ `ok = false` không dữ liệu; CALL ⇒ `ok = true` +
+  `false`. Vì `ERC20MetaTx._requireValidSignature` là `view`, `HederaMetaToken` gọi qua con trỏ hàm ép kiểu `view`
+  (`HederaAccountAuth.asView`) — an toàn vì chỗ gọi duy nhất là `executeMetaTransaction` (không view) và 0x16a không
+  ghi state, không gọi ngược. Mock forge ghi storage nên cũng HALT khi bị STATICCALL (test chặn quay lại).
 - Không phải tài khoản ECDSA long-zero: nhánh EC của precompile từ chối địa chỉ long-zero; tài khoản ECDSA luôn
   dùng alias `0x…` (đường `ecrecover`).
 
@@ -185,6 +191,8 @@ không phụ thuộc khoá ký.
   kiểm ed25519 ở Odoo, ràng khoá↔tài khoản on-chain).
 - **R6-4** HashPack `signMessage`, khoá ngưỡng/KeyList (`isAuthorized` + `SignatureMap`) = seam.
 - **R6-5** `associateUnderlying()` không cần quyền, idempotent (22/194).
+- **R6-6** Gọi 0x16a bằng CALL (system contract HALT trong frame tĩnh); cần lead bỏ `view` khỏi
+  `ERC20MetaTx._requireValidSignature` để bỏ phép ép kiểu `asView`.
 
 ## 12. Review log
 

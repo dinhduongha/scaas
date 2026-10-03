@@ -23,7 +23,7 @@ contract HederaMetaToken is MetaToken {
 
     function _requireValidSignature(address from, bytes32 digest, bytes calldata sig) internal view override {
         if (sig.length == 64 && !_isContract(from)) {
-            if (!HederaAccountAuth.isAuthorizedRaw(from, digest, sig)) revert MetaTxBadSignature();
+            if (!HederaAccountAuth.asView()(from, digest, sig)) revert MetaTxBadSignature();
             return;
         }
         super._requireValidSignature(from, digest, sig);

@@ -108,6 +108,15 @@ contract HederaMetaTokenTest is HederaFixture {
         _exec(tok, m, sig);
     }
 
+    /// Hedera HALT 0x16a trong frame tĩnh (thử trên testnet): gọi bằng STATICCALL thì không bao giờ được uỷ quyền.
+    function test_precompileHaltsInStaticFrameLikeHedera() public {
+        bytes memory input = abi.encodeWithSelector(bytes4(0xb2a31da4), alice, abi.encodePacked(bytes32(0)), new bytes(64));
+        (bool ok,) = HAS.staticcall(input);
+        assertFalse(ok);
+        (ok,) = HAS.call(input);
+        assertTrue(ok);
+    }
+
     function test_otherKeyIsRejected() public {
         MetaTxLib.MetaTransaction memory m = _pay(alice, shop, 1e6, bytes32(uint256(1)));
         bytes memory sig = _edSign(MALLORY_KEY, tok.metaTxDigest(m));

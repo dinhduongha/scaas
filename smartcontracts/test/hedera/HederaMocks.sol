@@ -8,16 +8,19 @@ pragma solidity ^0.8.20;
 ///         "chữ ký ED 64 byte" là chữ ký compact EIP-2098 trên đúng 32 byte — mock kiểm mạch gọi (đúng tài khoản,
 ///         đúng digest, đúng chữ ký, xử lý revert), còn toán ed25519 thật được Python và Rust kiểm trên
 ///         `test/vectors/hedera_kat.json`.
+///         Như mạng thật, gọi bằng STATICCALL thì HALT (`allowsStaticFrame() == false`): mock ghi một bộ đếm.
 contract MockHederaAccountService {
     mapping(address account => address edKey) public edKey;
+    uint256 public calls;
     mapping(address account => bool) public complexKey;
 
     function setEdKey(address account, address key) external { edKey[account] = key; }
     function setComplexKey(address account) external { complexKey[account] = true; }
 
     function isAuthorizedRaw(address account, bytes calldata messageHash, bytes calldata sig)
-        external view returns (bool)
+        external returns (bool)
     {
+        calls += 1; // SSTORE: halts in a static frame, like the real system contract
         if (sig.length == 64) {
             if (edKey[account] == address(0) && !complexKey[account]) revert("INVALID_ACCOUNT_ID");
             if (complexKey[account]) revert("INVALID_TRANSACTION_BODY");
