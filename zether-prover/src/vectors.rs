@@ -42,7 +42,7 @@ fn transcript_json<C: ZCurve>(t: &Transcript) -> Value {
         "curve": C::NAME,
         "init": h32(&Transcript::new().state()),
         "ops": ops,
-        "states": t.states.iter().map(|s| h32(s)).collect::<Vec<_>>(),
+        "states": t.states.iter().map(h32).collect::<Vec<_>>(),
         "challenges": challenges,
     })
 }

@@ -244,7 +244,7 @@ mod tests {
         assert!(a != b && a != h && a != generator::<Bn254>());
         let e = encode_point::<Bn254>(&a);
         assert_eq!(e[63] & 1, 0);
-        decode_point::<Bn254>(&e).unwrap();
+        assert_eq!(decode_point::<Bn254>(&e).unwrap(), a);
     }
 
     #[test]

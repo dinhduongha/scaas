@@ -220,9 +220,9 @@ fn header_binding<C: ZCurve>() {
     for i in (0..enc.len()).step_by(32) {
         let mut e = enc.clone();
         e[i + 31] ^= 1;
-        match TransferProof::<C>::decode(&e) {
-            Ok(q) => assert!(verify_transfer(&f.gens, &st, &q).is_err(), "bit flip at {i}"),
-            Err(_) => {}
+        // A flip that breaks decoding (non-canonical point/scalar) is a rejection too.
+        if let Ok(q) = TransferProof::<C>::decode(&e) {
+            assert!(verify_transfer(&f.gens, &st, &q).is_err(), "bit flip at {i}");
         }
     }
     // A burn proof can never be read as a transfer and vice versa (opTag in the header).
