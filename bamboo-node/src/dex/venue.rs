@@ -253,11 +253,9 @@ impl Venue {
     async fn valid_sig(&self, signer: Address, digest: B256, sig: &Bytes) -> bool {
         if sig.len() == 65 {
             if let Ok(s) = Signature::try_from(sig.as_ref()) {
-                // High-s: contract `tryRecover` từ chối ⇒ `cancel` bỏ qua im lặng (review I4).
-                if s.normalize_s().is_some() {
-                    return false;
-                }
-                if s.recover_address_from_prehash(&digest).ok() == Some(signer) {
+                // High-s: contract `tryRecover` từ chối ⇒ `cancel` bỏ qua im lặng (review I4). Không trả
+                // false ngay: ví hợp đồng vẫn đi ERC-1271 như contract (phân biệt bằng code, không độ dài).
+                if s.normalize_s().is_none() && s.recover_address_from_prehash(&digest).ok() == Some(signer) {
                     return true;
                 }
             }
@@ -575,6 +573,11 @@ impl Venue {
         }
         commit.acks.extend(sr.failed.iter().map(|ft| ft.tag.clone()));
         self.add_fills(&mut commit, &next, &fills);
+        // Mọi lệnh trả về sổ (kể cả không khớp lại) phải ghi xuống Odoo, nếu không restart sẽ mất nó.
+        for (market_id, r) in &touched {
+            let now_r = next.get(r.hash).cloned().unwrap_or_else(|| Resting { remaining: U256::ZERO, ..r.clone() });
+            commit.order(*market_id, &now_r, state_of(&now_r));
+        }
         let pending: Vec<(i64, CancelReq)> =
             self.cancels.lock().map(|mut q| std::mem::take(&mut q.pending)).unwrap_or_default();
         for chunk in pending.chunks(CANCEL_BATCH) {

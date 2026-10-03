@@ -403,3 +403,5 @@ agy: quota (429) lúc chạy, chạy lại sau reset. Grok: hết hạn mức fr
 | I3 | high | Đúng: sync kẹt mãi khi một bên hỏng / lệnh đã đóng ở Odoo; huỷ chờ mất khi commit lỗi | `dex_sync` gửi null cho lệnh đã đóng; khôi phục chỉ lệnh `funded`; cặp khớp lại fail ⇒ không trả về hai bên đó, vẫn ack (≤ `MAX_ROUNDS`); huỷ chờ trả lại hàng đợi khi commit lỗi |
 | I4 | low | Đúng: huỷ off-chain nhận chữ ký high-s mà contract bỏ qua | `valid_sig` từ chối high-s |
 | I5 | med | Đúng: `_cron_expire` của job ghi `dead` thẳng, bỏ qua hook | Hook chuyển sang `write` của relay job |
+| I6 | high | Tự review lại fix I3: vòng khớp lại mới bỏ mất bước ghi `touched` ⇒ lệnh trả về sổ mà không khớp lại chỉ nằm trong bộ nhớ, Odoo vẫn `filled`, restart là mất | Ghi lại mọi lệnh `touched` vào commit; e2e bước 9 (một bên null) + restart; mutation đã kiểm test bắt được |
+| I7 | low | Tự review fix I4: high-s trả `false` ngay nên ví hợp đồng (contract đi ERC-1271 theo code) ký 65 byte high-s bị node từ chối dù contract nhận | High-s chỉ bỏ qua khôi phục cục bộ, vẫn rơi xuống `isValidSignature`; e2e bước 6 gửi bản high-s ⇒ 400 |

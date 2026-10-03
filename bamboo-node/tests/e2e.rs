@@ -495,7 +495,18 @@ async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
     assert_eq!(st, 503);
     assert_eq!(venue.rows().await, before);
 
-    // 6. Cancel: off the book now, closed on-chain at the next sync — it can never settle.
+    // 6. Cancel: a high-s copy of a valid signature is refused like the contract would (review I4);
+    //    the canonical one takes the order off the book now and closes it on-chain at the next sync.
+    let high_s = {
+        let s = alice.sign_hash_sync(&cancel_digest(&d, ask_hash)).unwrap();
+        let n = U256::from_str_radix("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16).unwrap();
+        let flipped = alloy::primitives::Signature::new(s.r(), n - s.s(), !s.v());
+        format!("0x{}", alloy::hex::encode(flipped.as_bytes()))
+    };
+    let (st, _) = post("/v1/dex/cancel", json!({"chain": chain_id, "orderHash": format!("{ask_hash:#x}"),
+        "signature": high_s})).await;
+    assert_eq!(st, 400);
+    assert_eq!(venue.rows().await, before);
     let (st, body) = post("/v1/dex/cancel", json!({"chain": chain_id, "orderHash": format!("{ask_hash:#x}"),
         "signature": sign_hash(&alice, cancel_digest(&d, ask_hash))})).await;
     assert_eq!(st, 202, "{body}");
@@ -541,6 +552,33 @@ async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
     drain(&mut s, &mut rx).await;
     assert_eq!(balance(&rpc, token_b, alice.address()).await, U256::from(79_920_000u64 + 20_000_000 - 20_000));
     assert_eq!(balance(&rpc, token_a, bob.address()).await, U256::from(39_920_000u64 + 10_000_000 - 20_000));
+
+    // 9. A dead trade whose taker is closed in Odoo (null row, review I3): the maker alone goes back
+    //    to the book AND to Odoo, so a restart still has it.
+    let ask4 = order(&alice, token_a, 10_000_000, token_b, 20_000_000, 9, relayer.address());
+    let bid4 = order(&bob, token_b, 20_000_000, token_a, 10_000_000, 10, relayer.address());
+    let ask4_hash = format!("{:#x}", order_hash(&d, &ask4));
+    assert_eq!(place(ask4.clone(), &alice).await.1["status"], "resting");
+    assert_eq!(place(bid4.clone(), &bob).await.1["status"], "filled");
+    {
+        let mut o = state.lock().unwrap();
+        o.jobs.clear();
+        let t = o.dex_trades.last().unwrap().clone();
+        let r = o.orders[&ask4_hash].clone();
+        assert_eq!(r["state"], "filled");
+        let row = json!({"order_hash": r["order_hash"], "order": r["order"], "signature": r["signature"],
+                         "remaining": r["remaining"], "seq": r["seq"]});
+        o.failed.push(json!({"tag": t["tag"], "maker": row, "taker": null,
+                             "maker_fill": t["maker_fill"], "taker_fill": t["taker_fill"]}));
+    }
+    venue.sync_once().await.unwrap();
+    let rows = venue.rows().await;
+    assert_eq!(rows.len(), 1);
+    assert_eq!((rows[0].order_hash.as_str(), rows[0].remaining.as_str()), (ask4_hash.as_str(), "10000000"));
+    let stored = state.lock().unwrap().orders[&ask4_hash].clone();
+    assert_eq!((stored["state"].as_str(), stored["remaining"].as_str()), (Some("open"), Some("10000000")));
+    let venue3 = Venue::start(shared.clone(), odoo.clone(), Some(odoo.clone()), dex).await.unwrap();
+    assert_eq!(venue3.rows().await, rows);
 }
 
 fn pay_job(payer: &PrivateKeySigner, chain_id: u64, token: Address, id: i64, tag: &[u8]) -> Value {
