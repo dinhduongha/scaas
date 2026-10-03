@@ -38,7 +38,7 @@ pub enum ExecuteMsg {
     Transfer { recipient: String, amount: Uint128 },
     Send { contract: String, amount: Uint128, msg: Binary },
     Mint { recipient: String, amount: Uint128 },
-    /// `info.sender` trả (ví hợp đồng/mandate): `pay_ref` một lần, phát `payment_settled`.
+    /// `info.sender` trả (ví hợp đồng/mandate), phát `payment_settled` mang `pay_ref`.
     Pay { to: String, amount: Uint128, pay_ref: HexBinary },
     /// Meta-tx: `payload` = bytes `MetaOp` chủ thể đã ký (op `pay` | `trade` | `revoke`).
     Relay { payload: Binary, auth: Auth },
@@ -54,7 +54,6 @@ pub enum QueryMsg {
     TokenInfo {},
     Allowance { owner: String, spender: String },
     Nonce { owner: String, lane: HexBinary },
-    Paid { pay_ref: HexBinary },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -80,7 +79,6 @@ const INFO: Item<TokenInfo> = Item::new("info");
 const BALANCES: Map<&Addr, Uint128> = Map::new("bal");
 const ALLOWANCES: Map<(&Addr, &Addr), Uint128> = Map::new("allow");
 const NONCES: Map<(&Addr, &[u8]), u64> = Map::new("nonce");
-const PAID: Map<&[u8], bool> = Map::new("paid");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(deps: DepsMut, _env: Env, _info: MessageInfo, msg: InstantiateMsg) -> StdResult<Response> {
@@ -103,14 +101,13 @@ fn move_funds(store: &mut dyn Storage, from: &Addr, to: &Addr, amount: Uint128) 
     Ok(())
 }
 
+/// `pay_ref` KHÔNG bị khoá toàn cục ở token (như `MetaToken` EVM): ai cũng gọi được `Pay` với một `pay_ref` bất
+/// kỳ, nên khoá "một lần" ở đây cho phép front-run đốt `pay_ref` của người trả. Chống replay là nonce lane;
+/// Odoo cộng các khoản theo `entry_ref` + người nhận (thiếu/thừa ⇒ cần chú ý).
 fn settle(store: &mut dyn Storage, from: &Addr, to: &Addr, amount: Uint128, pay_ref: &[u8]) -> StdResult<Event> {
     if pay_ref.len() != 32 {
         return Err(err("pay_ref is 32 bytes"));
     }
-    if PAID.has(store, pay_ref) {
-        return Err(err("pay_ref already paid"));
-    }
-    PAID.save(store, pay_ref, &true)?;
     move_funds(store, from, to, amount)?;
     Ok(Event::new("payment_settled")
         .add_attribute("from", from)
@@ -243,6 +240,5 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
             let o = deps.api.addr_validate(&owner)?;
             to_json_binary(&NONCES.may_load(deps.storage, (&o, lane.as_slice()))?.unwrap_or(0))
         }
-        QueryMsg::Paid { pay_ref } => to_json_binary(&PAID.has(deps.storage, pay_ref.as_slice())),
     }
 }

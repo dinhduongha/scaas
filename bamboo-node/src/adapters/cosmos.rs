@@ -2,7 +2,7 @@
 //! `MsgExecuteContract{Relay{payload, auth}}` vào `bamboo-token`; chủ thể không gửi tx nào nên không có
 //! sequence chủ thể để kẹt (R30, R62). Sequence của lane đọc từ chain trước mỗi job (review S14).
 //!
-//! Mạng: CometBFT RPC (`rpc_urls[0]`: `status`, `block`, `tx_search`) + REST gateway (`params.rest`:
+//! Mạng: CometBFT RPC (`rpc_urls[0]`: `status`, `block`, `block_results`) + REST gateway (`params.rest`:
 //! account, simulate, broadcast, tx). Protobuf (TxBody/AuthInfo/SignDoc/TxRaw, SIGN_MODE_DIRECT) viết tay:
 //! sáu kiểu, không kéo `cosmrs`.
 use std::collections::HashMap;
@@ -200,7 +200,7 @@ fn hash32(s: &str) -> Option<String> {
     (h.len() == 64 && h.bytes().all(|b| b.is_ascii_hexdigit())).then(|| format!("0x{h}"))
 }
 
-/// Event của một tx (`tx_search` → `tx_result.events`) ⇒ event chuẩn hoá (thiếu `block_hash`, adapter điền).
+/// Event của một tx (`block_results.txs_results[i].events`) ⇒ event chuẩn hoá (thiếu `block_hash`, adapter điền).
 /// Chỉ contract trong `contracts`; tx lỗi (code ≠ 0) không có event.
 pub fn normalize_tx(tx: &Value, contracts: &[String]) -> Vec<Value> {
     let mut out = Vec::new();
@@ -451,33 +451,37 @@ impl ChainAdapter for CosmosAdapter {
         b["block_id"]["hash"].as_str().and_then(hash32).ok_or_else(|| anyhow!("no block {height}"))
     }
 
+    /// Đọc `block_results` từng khối (kết quả ABCI lưu cùng lúc commit), KHÔNG dùng `tx_search`: indexer tx của
+    /// CometBFT chạy bất đồng bộ sau commit, nên khối mới nhất có thể chưa được index ⇒ event lọt mất vĩnh viễn.
+    /// `tx_hash` = sha256(bytes tx trong `block`), chỉ đọc `block` khi khối có event của ta.
     async fn events(&self, from: u64, to: u64) -> Result<Vec<Value>> {
-        if self.contracts.is_empty() {
-            return Ok(vec![]);
-        }
         let mut out = Vec::new();
-        let mut hashes: HashMap<u64, String> = HashMap::new();
-        let mut page = 1;
-        loop {
-            let q = format!("tx_search?query=%22tx.height%3E%3D{from}%20AND%20tx.height%3C%3D{to}%22&page={page}&per_page=100&order_by=%22asc%22");
-            let r = self.rpc(&q).await?;
-            let txs = r["txs"].as_array().cloned().unwrap_or_default();
-            for tx in &txs {
-                for mut e in normalize_tx(tx, &self.contracts) {
-                    let h = e["block_number"].as_u64().unwrap_or(0);
-                    if !hashes.contains_key(&h) {
-                        hashes.insert(h, self.block_hash(h).await?);
-                    }
-                    e["block_hash"] = json!(hashes[&h]);
+        if self.contracts.is_empty() {
+            return Ok(out);
+        }
+        for h in from..=to {
+            let br = self.rpc(&format!("block_results?height={h}")).await?;
+            let results = br["txs_results"].as_array().cloned().unwrap_or_default();
+            let probe = |r: &Value| !normalize_tx(&json!({"hash": "00".repeat(32), "height": h.to_string(), "tx_result": r}), &self.contracts).is_empty();
+            if !results.iter().any(probe) {
+                continue;
+            }
+            let b = self.rpc(&format!("block?height={h}")).await?;
+            let hash = b["block_id"]["hash"].as_str().and_then(hash32).ok_or_else(|| anyhow!("block {h}: no hash"))?;
+            let txs = b["block"]["data"]["txs"].as_array().cloned().unwrap_or_default();
+            if txs.len() != results.len() {
+                bail!("block {h}: {} txs but {} results", txs.len(), results.len());
+            }
+            for (raw, r) in txs.iter().zip(&results) {
+                let bytes = B64.decode(raw.as_str().unwrap_or_default()).context("tx bytes")?;
+                let tx = json!({"hash": alloy::hex::encode(Sha256::digest(&bytes)), "height": h.to_string(), "tx_result": r});
+                for mut e in normalize_tx(&tx, &self.contracts) {
+                    e["block_hash"] = json!(hash);
                     out.push(e);
                 }
             }
-            let total: usize = r["total_count"].as_str().and_then(|t| t.parse().ok()).unwrap_or(0);
-            if txs.is_empty() || page * 100 >= total {
-                return Ok(out);
-            }
-            page += 1;
         }
+        Ok(out)
     }
 }
 

@@ -49,7 +49,8 @@ Sign doc ADR-036 dựng bằng **khuôn byte cố định** (amino JSON đã s�
 
 Ví seed (R32) ký đúng doc này bằng khoá `m/44'/118'/0'/0/i` ⇒ một đường kiểm duy nhất cho secp256k1.
 Passkey: contract kiểm `clientDataJSON` chứa `"type":"webauthn.get"` và đúng chuỗi `"challenge":"<b64url>"`,
-cờ UP của `authData`, chữ ký 64 byte low-s (client chuẩn hoá DER → r‖s, review S5).
+cờ UP của `authData`, chữ ký 64 byte low-s (client chuẩn hoá DER → r‖s, review S5). Khoá passkey bắt buộc dạng
+SEC1 không nén 65 byte (x‖y của khoá COSE) ⇒ một khoá đúng một địa chỉ.
 
 **R9-1 — địa chỉ passkey dẫn xuất.** Cosmos không có tài khoản P-256 gốc. Số dư nằm trong contract token nên một
 "địa chỉ" chỉ là khoá sổ cái: passkey sở hữu địa chỉ `bech32(prefix, sha256("bamboo.passkey.v1"‖pk)[..20])`
@@ -62,9 +63,11 @@ khoá) là seam: cần contract account riêng, không làm ở round này.
 
 - CW20 tối thiểu: `Transfer`, `Send` (hook `Receive` — dùng nạp mandate), `Mint` (minter), query `Balance`,
   `TokenInfo`, `Allowance`, `Nonce{owner, lane}`.
-- `Pay{to, amount, pay_ref}`: `info.sender` trả, `pay_ref` một lần (`PAID[pay_ref]`), phát `payment_settled`.
+- `Pay{to, amount, pay_ref}`: `info.sender` trả, phát `payment_settled`. **`pay_ref` không bị khoá toàn cục ở
+  token** (giống `MetaToken` EVM): khoá "một lần" ở đây cho phép bất kỳ ai `Pay` 1 đơn vị với `pay_ref` của người
+  trả (đọc từ mempool) để đốt nó và làm hỏng khoản thật. Chống replay là nonce lane; Odoo cộng theo `entry_ref`.
 - `Relay{payload, pubkey, signature, scheme, authenticator_data?, client_data_json?}`: kiểm §2–3, rồi theo `op`:
-  - `pay`: chuyển `from → to`, `pay_ref` một lần, phát `payment_settled` + `meta_tx_executed`.
+  - `pay`: chuyển `from → to`, phát `payment_settled` + `meta_tx_executed`.
   - `trade`: như `pay` nhưng **bắt buộc** `relayer == to == info.sender` và `info.sender` là contract (chân DEX).
   - `revoke`: chỉ tiêu nonce (huỷ lệnh/thao tác đã ký trên lane đó), phát `meta_tx_executed`.
 - `IncreaseAllowance`/`DecreaseAllowance`: spender phải là contract (`query_wasm_contract_info` thành công).
@@ -108,8 +111,10 @@ một lần, rồi gọi `token.Pay` ⇒ `payment_settled` mang đúng `pay_ref`
   contract 2 (test anti-lock ở cả contract và e2e). Tx quá hạn bị contract từ chối ⇒ sequence lane không treo.
 - **Phí:** relayer trả bằng native denom của lane. **feegrant** chỉ là seam cho tx chủ thể tự gửi (nạp). **authz
   không dùng** (R66): grantee tài khoản thường vi phạm R26.
-- **Finality:** CometBFT final tức thì ⇒ `final_head` = khối mới nhất có `block_results` (`/status`).
-  `events(from,to)`: `tx_search` theo `tx.height`, lọc contract trong `params.contracts`, chuẩn hoá
+- **Finality:** CometBFT final tức thì ⇒ `final_head` = khối mới nhất (`/status`).
+  `events(from,to)`: `block_results` từng khối (lưu cùng lúc commit; **không** `tx_search` vì indexer tx chạy
+  bất đồng bộ sau commit ⇒ khối mới nhất có thể chưa index, event lọt vĩnh viễn), `block` chỉ khi khối có event của
+  ta (`tx_hash = sha256(tx bytes)`), lọc contract trong `params.contracts`, chuẩn hoá
   `{event, contract, block_number, block_hash, tx_hash, log_index, from, to, amount, entry_ref, digest}`;
   `log_index` = thứ tự event trong tx (`tx_hash` khác nhau giữa tx ⇒ khoá `(tx_hash, log_index)` duy nhất).
 - Cấu hình: `rpc_urls = [CometBFT RPC]`, `params = {rest, prefix, denom, gas_price, contracts}`.
@@ -142,3 +147,18 @@ làm** ở round này (Zether EVM-first).
 - Không quorum nhiều endpoint cho `final_head` (CometBFT BFT final; một RPC tin cậy) — ghi.
 - Passkey dùng địa chỉ dẫn xuất, chưa xoay khoá (R9-1).
 - Mandate qua Odoo (`_enqueue_mandate_payment`) hiện chỉ EVM: contract có, đường Odoo là seam.
+
+## 10. Review log
+
+**Tự review (2026-10-03):**
+
+| # | Kết luận | Xử lý |
+|---|---|---|
+| C1 | Khoá `pay_ref` toàn cục ở token cho phép front-run đốt `pay_ref` (xem §4.1) | Bỏ; test `Pay` cùng `pay_ref` trước relay |
+| C2 | `tx_search` có thể chưa index khối mới nhất ⇒ indexer bỏ sót event | Đọc `block_results` |
+| C3 | Passkey nhận cả khoá nén lẫn không nén ⇒ hai địa chỉ cho một khoá | Chỉ 65 byte |
+| C4 | Mô phỏng dùng thời gian khối cuối: payload hết hạn trong khoảng một khối vẫn qua mô phỏng rồi `reverted` khi vào khối | Chấp nhận (fail-safe, người trả ký lại); e2e dùng hạn đã qua rõ ràng |
+| C5 | wasmvm 3 từ chối bulk-memory mà Rust ≥ 1.87 sinh ra | `build-wasm.sh` hạ tính năng bằng binaryen, kiểm MVP |
+
+**agy:** lần 1 (thiết kế) hết quota (429, "Resets in 1h42m"); review nhánh chạy lại sau giờ reset — kết quả ở báo cáo luồng.
+**Grok:** hết hạn mức miễn phí (một lần thử, ghi nhận).

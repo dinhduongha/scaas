@@ -116,8 +116,11 @@ fn pay_by_signature_moves_funds_and_emits_events_once() {
     let p = to_json_vec(&op(&w.app, &w.t1, "pay", &a, payee.as_str(), 250, 1, 0)).unwrap();
     let auth = w.alice.auth(&p, a.as_str());
     let t1 = w.t1.clone();
+    // Front-run bằng `Pay` trực tiếp cùng `pay_ref` không đốt được khoản của Alice (không khoá pay_ref toàn cục).
+    let grief = bamboo_token::ExecuteMsg::Pay { to: payee.to_string(), amount: Uint128::new(1), pay_ref: HexBinary::from(vec![1 ^ 0x5a; 32]) };
+    w.app.execute_contract(w.bob.addr(&w.app), t1.clone(), &grief, &[]).unwrap();
     let res = relay(&mut w, &t1, &p, auth.clone()).unwrap();
-    assert_eq!(balance(&w.app, &w.t1, payee.as_str()), 250);
+    assert_eq!(balance(&w.app, &w.t1, payee.as_str()), 251);
     assert_eq!(balance(&w.app, &w.t1, a.as_str()), 1_000_000 - 250);
     assert_eq!(attr(&res, "wasm-payment_settled", "pay_ref"), Some(format!("0x{}", "5b".repeat(32))));
     assert_eq!(attr(&res, "wasm-payment_settled", "to").as_deref(), Some(payee.as_str()));
@@ -211,6 +214,10 @@ fn passkey_scheme_pays_from_its_derived_address() {
         authenticator_data: Some(ad.clone().into()),
         client_data_json: Some(cdj.clone()),
     };
+    // Khoá nén (cùng điểm) không được dùng: một khoá chỉ có một địa chỉ.
+    let mut compressed = auth.clone();
+    compressed.pubkey = sk.verifying_key().to_encoded_point(true).as_bytes().to_vec().into();
+    assert!(relay(&mut w, &t1, &p, compressed).unwrap_err().to_string().contains("uncompressed"));
     // Challenge của thao tác khác bị từ chối.
     let mut wrong = auth.clone();
     wrong.client_data_json = Some(cdj.replace("webauthn.get", "webauthn.create"));

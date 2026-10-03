@@ -130,6 +130,10 @@ pub fn verify(api: &dyn Api, env: &Env, payload: &[u8], auth: &Auth) -> StdResul
         "passkey" => {
             let ad = auth.authenticator_data.as_ref().ok_or_else(|| err("passkey: authenticator_data missing"))?;
             let cdj = auth.client_data_json.as_ref().ok_or_else(|| err("passkey: client_data_json missing"))?;
+            // Một khoá = một địa chỉ: chỉ dạng SEC1 không nén 65 byte (khoá COSE x‖y của WebAuthn).
+            if pk.len() != 65 {
+                return Err(err("passkey: uncompressed P-256 public key expected"));
+            }
             if ad.len() < 37 || ad[32] & 0x01 == 0 {
                 return Err(err("passkey: user presence flag not set"));
             }
