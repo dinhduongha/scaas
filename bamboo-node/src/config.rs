@@ -126,6 +126,9 @@ pub struct BreakerCfg {
     /// Base fee hiện tại > `spike_ratio` × trung bình 1 h ⇒ ngưng nhận job mới (EVM). 0 = tắt.
     #[serde(default = "default_spike")]
     pub spike_ratio: f64,
+    /// Dưới mức này (gwei) base fee không bao giờ là "spike": L2 phí gần 0 dao động ×3 là chuyện thường.
+    #[serde(default = "one_u64")]
+    pub spike_min_base_fee_gwei: u64,
     #[serde(default, deserialize_with = "amount")]
     pub gas_budget_per_hour: Option<u128>,
     #[serde(default, deserialize_with = "amount")]
@@ -134,7 +137,7 @@ pub struct BreakerCfg {
 
 impl Default for BreakerCfg {
     fn default() -> Self {
-        Self { spike_ratio: default_spike(), gas_budget_per_hour: None, min_relayer_balance: None }
+        Self { spike_ratio: default_spike(), spike_min_base_fee_gwei: 1, gas_budget_per_hour: None, min_relayer_balance: None }
     }
 }
 
@@ -206,6 +209,9 @@ fn default_max_gas() -> u64 {
 }
 fn default_fee_cap() -> u64 {
     500
+}
+fn one_u64() -> u64 {
+    1
 }
 fn default_spike() -> f64 {
     3.0

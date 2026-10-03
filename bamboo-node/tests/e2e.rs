@@ -375,6 +375,7 @@ async fn dex_orders_match_through_the_gateway() {
         tokens: Arc::new(RwLock::new(vec![token_a, token_b])),
         dex: Some(dex),
         book: Arc::new(Mutex::new(Book::default())),
+        breaker: None,
     };
     let app = router(AppState { chains: Arc::new([(chain_id, gw)].into_iter().collect()) });
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

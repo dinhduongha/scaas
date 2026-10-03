@@ -16,7 +16,7 @@ use bamboo_node::adapter::{index_runner, lane_runner};
 use bamboo_node::signer::Signer;
 use bamboo_node::admin::{ChainProbe, LaneProbe};
 use bamboo_node::breaker::Breaker;
-use bamboo_node::{admin, adapters, chain, config, dex, drift, gateway, gwauth, indexer, keys, odoo, submit};
+use bamboo_node::{admin, adapters, chain, config, dex, gateway, gwauth, indexer, keys, odoo, submit};
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
@@ -123,7 +123,7 @@ async fn main() -> Result<()> {
         let num = cc.evm_chain_number;
         let mut lanes = chain::Chain::connect_lanes(cc, &signers)?;
         let shared = Arc::new(lanes.remove(0));
-        let mut first_tx = None;
+        let (mut first_tx, mut first_breaker) = (None, None);
         if cfg.modules.submit {
             let relay = odoo::Odoo::new(&cfg.odoo, &cfg.odoo.relay_api_key_env)?;
             // Danh sách token NẠP TRƯỚC khi gateway mở (review P15), rồi làm mới mỗi 30 s.
@@ -140,6 +140,9 @@ async fn main() -> Result<()> {
                 let worker = format!("{node_id}#{}", cc.lanes[lane]);
                 let s = submit::Submitter::start(c, relay.clone(), cc.clone(), worker).await?;
                 probe_lanes.push(LaneProbe { lane: format!("{:#x}", s.address()), breaker: s.breaker() });
+                if first_breaker.is_none() {
+                    first_breaker = Some(s.breaker());
+                }
                 set.spawn(async move {
                     submit::run(s, rx, poll).await;
                     Err(anyhow!("submit loop ended"))
@@ -162,15 +165,10 @@ async fn main() -> Result<()> {
         }
         if cfg.modules.indexer {
             let idx = odoo::Odoo::new(&cfg.odoo, &cfg.odoo.indexer_api_key_env)?;
-            let (c, o) = (shared.clone(), idx.clone());
-            set.spawn(async move {
-                indexer::run(c, idx, poll).await;
-                Err(anyhow!("indexer loop ended"))
-            });
             let (c, key) = (shared.clone(), cc.chain_key());
             set.spawn(async move {
-                drift::run(c, o, key).await;
-                Err(anyhow!("drift loop ended"))
+                indexer::run(c, idx, poll, key).await;
+                Err(anyhow!("indexer loop ended"))
             });
         }
         let probe_chain = chain::Chain::connect_lanes(cc, &signers[..1])?;
@@ -179,7 +177,14 @@ async fn main() -> Result<()> {
         if let Some(tx) = first_tx {
             gw_chains.insert(
                 num,
-                gateway::GwChain { chain: shared, tx, tokens, dex: cc.dex, book: Arc::new(Mutex::new(dex::Book::default())) },
+                gateway::GwChain {
+                    chain: shared,
+                    tx,
+                    tokens,
+                    dex: cc.dex,
+                    book: Arc::new(Mutex::new(dex::Book::default())),
+                    breaker: first_breaker,
+                },
             );
         }
     }

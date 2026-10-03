@@ -1,6 +1,5 @@
-//! Drift C (R56, GA 2.2#7): mỗi giờ đọc `balanceOf(ví nhận)` tại đúng khối Odoo đã index (đã final) và báo
+//! Drift C (R56, GA 2.2#7): mỗi giờ (gọi từ vòng `indexer::run`) đọc `balanceOf(ví nhận)` tại đúng khối Odoo đã index (đã final) và báo
 //! `blockchain.chain.balance_report`. Odoo so tổng với số dư sổ của journal token; node không phán xét gì.
-use std::sync::Arc;
 use std::time::Duration;
 
 use alloy::eips::BlockId;
@@ -11,16 +10,14 @@ use alloy::rpc::types::TransactionRequest;
 use alloy::sol_types::SolCall;
 use anyhow::Result;
 use serde_json::{json, Value};
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::abi::IMetaToken;
 use crate::chain::Chain;
 use crate::indexer::receiving_pairs;
 use crate::odoo::Odoo;
 
-const EVERY: Duration = Duration::from_secs(3600);
-const STALE_RETRY: Duration = Duration::from_secs(20);
-const STALE_TRIES: u32 = 10;
+pub const EVERY: Duration = Duration::from_secs(3600);
 
 /// Thân báo cáo cho Odoo — số dư là chuỗi thập phân (uint256 vượt JSON number).
 pub fn report_rows(rows: &[(Address, Address, U256)]) -> Vec<Value> {
@@ -50,20 +47,6 @@ pub async fn step(chain: &Chain, odoo: &Odoo, chain_key: &str) -> Result<bool> {
         info!(chain = chain.number, height, mismatch = r.mismatch, "balance drift reported");
     }
     Ok(!r.stale)
-}
-
-pub async fn run(chain: Arc<Chain>, odoo: Odoo, chain_key: String) {
-    loop {
-        for _ in 0..STALE_TRIES {
-            match step(&chain, &odoo, &chain_key).await {
-                Ok(true) => break,
-                Ok(false) => {}
-                Err(e) => warn!(chain = chain.number, "drift: {e:#}"),
-            }
-            tokio::time::sleep(STALE_RETRY).await;
-        }
-        tokio::time::sleep(EVERY).await;
-    }
 }
 
 #[cfg(test)]

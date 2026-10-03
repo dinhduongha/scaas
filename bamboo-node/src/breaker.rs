@@ -35,7 +35,8 @@ impl Breaker {
             self.fees.pop_front();
         }
         let n = self.fees.len();
-        self.spiking = self.cfg.spike_ratio > 0.0 && n >= MIN_SAMPLES && {
+        let floor = u128::from(self.cfg.spike_min_base_fee_gwei) * 1_000_000_000;
+        self.spiking = self.cfg.spike_ratio > 0.0 && n >= MIN_SAMPLES && fee > floor && {
             let avg = self.fees.iter().map(|(_, f)| *f as f64).sum::<f64>() / n as f64;
             fee as f64 > self.cfg.spike_ratio * avg
         };
@@ -99,7 +100,7 @@ mod tests {
     use super::*;
 
     fn b(spike: f64, budget: Option<u128>, floor: Option<u128>) -> Breaker {
-        Breaker::new(BreakerCfg { spike_ratio: spike, gas_budget_per_hour: budget, min_relayer_balance: floor })
+        Breaker::new(BreakerCfg { spike_ratio: spike, spike_min_base_fee_gwei: 0, gas_budget_per_hour: budget, min_relayer_balance: floor })
     }
 
     #[test]
@@ -134,6 +135,15 @@ mod tests {
         }
         off.base_fee(9, 1_000_000);
         assert_eq!(off.open(9), None, "ratio 0 disables");
+        // below the absolute floor a ×1000 jump is noise (near-zero L2 fees)
+        let mut l2 = Breaker::new(BreakerCfg { spike_min_base_fee_gwei: 1, ..BreakerCfg::default() });
+        for i in 0..5 {
+            l2.base_fee(i, 1_000);
+        }
+        l2.base_fee(9, 1_000_000);
+        assert_eq!(l2.open(9), None);
+        l2.base_fee(10, 50_000_000_000);
+        assert_eq!(l2.open(10), Some("base_fee_spike"));
     }
 
     #[test]

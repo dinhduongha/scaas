@@ -88,7 +88,7 @@ owner).
 - `[modules] gateway_auth = "none" | "bearer" | "hmac"`; `gateway_secret_env`. `bearer`: `Authorization:
   Bearer <secret>` so sánh constant-time. `hmac`: `X-Bamboo-Timestamp` + `X-Bamboo-Signature =
   hex(HMAC-SHA256(secret, ts ‖ "." ‖ nonce ‖ "." ‖ METHOD ‖ " " ‖ path?query ‖ "\n" ‖ body))`, lệch giờ ≤ 300 s,
-  `X-Bamboo-Nonce` (`[A-Za-z0-9_-]{1,64}`) nhớ trong tập TTL 600 s ⇒ không phát lại (review S20); method + đường
+  `X-Bamboo-Nonce` (`[A-Za-z0-9_-]{1,64}`) nhớ tới khi chính timestamp hết hạn (ts + 300 s) ⇒ không phát lại (review S20); method + đường
   dẫn nằm trong chuỗi ký nên chữ ký một route không dùng được cho route khác. Mặc định `none` bị **từ chối** khi bind không
   phải loopback (lỗi cấu hình thì chết sớm).
 - `proptest` (dev-dependency) cho mọi decoder đầu vào không tin cậy: `WireMetaTx::to_sol`, body gateway,

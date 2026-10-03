@@ -76,12 +76,27 @@ pub fn inbound(events: Vec<Value>, pairs: &[(Address, Address)]) -> Vec<Value> {
         .collect()
 }
 
-pub async fn run(chain: Arc<Chain>, odoo: Odoo, poll: Duration) {
+const DRIFT_ERR_BACKOFF: Duration = Duration::from_secs(300);
+
+/// Vòng indexer. Drift C chạy TRONG vòng này, giữa hai bước ingest: cursor đứng yên trong lúc đọc số dư nên
+/// `height == indexed_block` luôn đúng (review S1-2: task riêng đua với indexer và có thể không bao giờ ghi được).
+pub async fn run(chain: Arc<Chain>, odoo: Odoo, poll: Duration, chain_key: String) {
+    let mut drift_due = std::time::Instant::now();
     loop {
         match step(&chain, &odoo).await {
             Ok(true) => continue, // còn tồn đọng: đi tiếp ngay
             Ok(false) => {}
             Err(e) => warn!(chain = chain.number, "indexer: {e:#}"),
+        }
+        if std::time::Instant::now() >= drift_due {
+            match crate::drift::step(&chain, &odoo, &chain_key).await {
+                Ok(true) => drift_due = std::time::Instant::now() + crate::drift::EVERY,
+                Ok(false) => warn!(chain = chain.number, "drift: cursor moved under the balance read; retrying"),
+                Err(e) => {
+                    warn!(chain = chain.number, "drift: {e:#}");
+                    drift_due = std::time::Instant::now() + DRIFT_ERR_BACKOFF; // không dội RPC/Odoo mỗi vòng poll
+                }
+            }
         }
         tokio::time::sleep(poll).await;
     }

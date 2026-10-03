@@ -3,7 +3,7 @@
 //!
 //! - `bearer`: `Authorization: Bearer <secret>`, so sánh constant-time.
 //! - `hmac`: `X-Bamboo-Timestamp` (unix s, lệch ≤ 300 s), `X-Bamboo-Nonce` (1–64 ký tự `[A-Za-z0-9_-]`, nhớ
-//!   600 s ⇒ không phát lại — review S20), `X-Bamboo-Signature = hex(HMAC-SHA256(secret,
+//!   tới khi timestamp hết hạn ⇒ không phát lại — review S20), `X-Bamboo-Signature = hex(HMAC-SHA256(secret,
 //!   ts ‖ "." ‖ nonce ‖ "." ‖ METHOD ‖ " " ‖ path?query ‖ "\n" ‖ body))`. Method + đường dẫn nằm trong chuỗi ký:
 //!   chữ ký cho `/v1/metatx` không dùng được cho route khác. URI không chứa dấu cách/xuống dòng ⇒ không mơ hồ.
 use std::collections::HashMap;
@@ -21,6 +21,9 @@ use crate::submit::now;
 
 const SKEW: u64 = 300;
 const MAX_BODY: usize = 64 * 1024;
+const BODY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+/// Trần đồng thời NGOÀI lớp xác thực: request chưa xác thực cũng không giữ quá chừng này task/bộ đệm.
+const MAX_INFLIGHT: usize = 64;
 
 #[derive(Clone)]
 pub enum Auth {
@@ -85,7 +88,9 @@ pub async fn check(State(auth): State<Auth>, req: Request, next: Next) -> Respon
                 return deny("bad nonce");
             }
             let (parts, body) = req.into_parts();
-            let Ok(bytes) = to_bytes(body, MAX_BODY).await else { return deny("body too large") };
+            let Ok(Ok(bytes)) = tokio::time::timeout(BODY_TIMEOUT, to_bytes(body, MAX_BODY)).await else {
+                return deny("body too large or too slow");
+            };
             let Ok(want) = alloy::hex::decode(sig.trim()) else { return deny("bad signature") };
             let mut mac = <Hmac<Sha256>>::new_from_slice(secret).expect("hmac key");
             mac.update(ts.as_bytes());
@@ -106,16 +111,19 @@ pub async fn check(State(auth): State<Auth>, req: Request, next: Next) -> Respon
                 if s.contains_key(&nonce) {
                     return deny("replayed request");
                 }
-                s.insert(nonce, n + 2 * SKEW);
+                // Nhớ tới khi chính timestamp này hết hạn (review S1-5), không tính từ lúc nhận.
+                s.insert(nonce, t.saturating_add(SKEW + 1));
             }
             next.run(Request::from_parts(parts, Body::from(bytes))).await
         }
     }
 }
 
-/// Bọc router gateway bằng lớp xác thực.
+/// Bọc router gateway bằng lớp xác thực, rồi trần đồng thời ở ngoài cùng (review S1-6).
 pub fn wrap(router: axum::Router, auth: Auth) -> axum::Router {
-    router.layer(axum::middleware::from_fn_with_state(auth, check))
+    router
+        .layer(axum::middleware::from_fn_with_state(auth, check))
+        .layer(tower::limit::GlobalConcurrencyLimitLayer::new(MAX_INFLIGHT))
 }
 
 #[cfg(test)]

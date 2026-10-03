@@ -15,6 +15,7 @@ use tokio::sync::mpsc;
 use tower::limit::GlobalConcurrencyLimitLayer;
 
 use crate::abi::{IMetaToken, IMetaTxDex, Leg};
+use crate::breaker::Breaker;
 use crate::chain::{Chain, SimError};
 use crate::dex::{Book, Order};
 use crate::metatx::{WireMetaTx, MODE_FEE_MASK, MODE_RESTRICT_FEE_RECIPIENT};
@@ -27,6 +28,8 @@ pub struct GwChain {
     pub tokens: Arc<RwLock<Vec<Address>>>,
     pub dex: Option<Address>,
     pub book: Arc<Mutex<Book>>,
+    /// Cầu dao của lane nhận việc gateway (R55): mở ⇒ 503 trước khi mô phỏng, không nhận rồi bỏ rơi.
+    pub breaker: Option<Arc<Mutex<Breaker>>>,
 }
 
 #[derive(Clone, Default)]
@@ -69,6 +72,10 @@ fn chain_of(s: &AppState, id: u64, token: Address) -> Result<&GwChain, Reply> {
     let c = s.chains.get(&id).ok_or_else(|| bad("unknown chain"))?;
     if !c.tokens.read().map(|t| t.contains(&token)).unwrap_or(false) {
         return Err(bad("token not served by this relayer"));
+    }
+    let open = c.breaker.as_ref().and_then(|k| k.lock().ok().and_then(|mut k| k.open(now())));
+    if let Some(b) = open {
+        return Err((StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error": format!("circuit breaker open: {b}")}))));
     }
     Ok(c)
 }
@@ -214,4 +221,42 @@ async fn get_orders(State(s): State<AppState>, Query(q): Query<BookQuery>) -> Re
         Err(_) => vec![],
     };
     (StatusCode::OK, Json(json!({"orders": list})))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::Request;
+    use tower::ServiceExt;
+
+    /// R55 (review S1-7): lane đứng ⇒ gateway trả 503 ngay, không nhận rồi để hết hạn trong kênh.
+    #[tokio::test]
+    async fn open_breaker_refuses_before_simulation() {
+        let cfg = crate::config::ChainCfg { evm_chain_number: 7, rpc_urls: vec!["http://127.0.0.1:9".into()], ..Default::default() };
+        let signer = alloy::signers::local::PrivateKeySigner::random();
+        let token = Address::repeat_byte(0xcd);
+        let mut k = Breaker::new(crate::config::BreakerCfg { min_relayer_balance: Some(10), ..Default::default() });
+        k.balance(1);
+        let (tx, _rx) = mpsc::channel(1);
+        let gw = GwChain {
+            chain: Arc::new(Chain::with_signer(&cfg, signer).unwrap()),
+            tx,
+            tokens: Arc::new(RwLock::new(vec![token])),
+            dex: None,
+            book: Arc::default(),
+            breaker: Some(Arc::new(Mutex::new(k))),
+        };
+        let app = router(AppState { chains: Arc::new([(7, gw)].into_iter().collect()) });
+        let body = json!({"chain": 7, "token": format!("{token:#x}"), "signature": "0x00", "m": {
+            "from": format!("{:#x}", Address::ZERO), "to": format!("{:#x}", Address::ZERO), "value": "1", "data": "0x",
+            "batch": "0", "nonce": "0", "validUntil": "99999999999", "mode": 0, "relayer": format!("{:#x}", Address::ZERO),
+            "fee": "0", "feeRecipient": format!("{:#x}", Address::ZERO)}});
+        let req = Request::builder().method("POST").uri("/v1/metatx").header("content-type", "application/json")
+            .body(Body::from(body.to_string())).unwrap();
+        let r = app.oneshot(req).await.unwrap();
+        assert_eq!(r.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let b = axum::body::to_bytes(r.into_body(), 4096).await.unwrap();
+        assert!(String::from_utf8_lossy(&b).contains("circuit breaker open: balance_floor"), "not the RPC error");
+    }
 }
