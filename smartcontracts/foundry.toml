@@ -11,6 +11,15 @@ remappings = [
   "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
   "forge-std/=lib/forge-std/src/",
 ]
+fs_permissions = [
+  { access = "read-write", path = "./test/vectors" },
+  { access = "read-write", path = "./deployments" },
+]
+
+[invariant]
+runs = 64
+depth = 32
+fail_on_revert = true
 
 # Chain 9000 (Nethermind 1.39.0, private, Clique một signer) — Fusaka + BPO2.
 # [2026-08-31] Trước đây profile này phải là "berlin": genesis khai fork kiểu Geth mà

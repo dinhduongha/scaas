@@ -3,8 +3,18 @@
 Cây hợp đồng của `dms_blockchain`. **Nằm ngoài addon Odoo, ở gốc repo** — hợp đồng
 có vòng đời riêng (audit, deploy, immutability) không trùng vòng đời của một addon.
 
-Chưa có implementation. Đây là **interface đã compile được**, chốt lại những gì đã
-quyết. Implementation đi theo plan.
+Interface đã chốt cộng các implementation đã có (2026-10-03,
+`docs/superpowers/plans/2026-10-03-blockchain-contracts.md`):
+
+| Contract | File | Ghi chú |
+|---|---|---|
+| `MetaToken` v1 (kind META) | `src/metatx/MetaToken.sol` | clone EIP-1167; tầng 1 standalone / tầng 2 wrapper 1:1; op `pay(bytes32)` và `trade(address,uint256,address)` trong `data` của meta-tx |
+| `OpenFactory` | `src/factory/OpenFactory.sol` | hiện thực `IOpenFactory`; salt theo người tạo |
+| `MetaTxDex` | `src/dex/MetaTxDex.sol` | khớp hai chân meta-tx, không allowance, fill-or-kill |
+| Deploy | `script/Deploy.s.sol` | ghi `deployments/<chainid>.json` |
+
+Zether vẫn chỉ là interface. `test/vectors/metatx_kat.json` là vector digest dùng chung với
+Odoo (`dms_blockchain/lib/eip712.py`) và relayer (`bamboo-node`).
 
 ## Mô hình: factory mở
 
