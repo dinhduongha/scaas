@@ -3,64 +3,55 @@ pragma solidity ^0.8.20;
 
 /// @title Verifier ZK — inject bằng địa chỉ, KHÔNG import thẳng vào token.
 ///
-/// @notice Factory mở cho toàn thế giới ⇒ **hệ thống hỗ trợ nhiều curve cùng lúc, và
-///         không ưu tiên cái nào**. Người tạo token truyền địa chỉ verifier họ muốn.
-///         Factory không phán xét, chỉ ghi lại bất biến để ví và indexer tự quyết
-///         có tin hay không.
+/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.**
 ///
-///         Một verifier độc hại (nhận proof giả) chỉ hại đúng những token đã CHỌN nó.
-///         Đó là lý do `verifier()` của token phải công khai và bất biến: nó là thứ
-///         người dùng kiểm được trước khi nạp tiền.
+///         Factory mở cho toàn thế giới ⇒ **hệ thống hỗ trợ nhiều curve cùng lúc, và không ưu tiên cái
+///         nào**. Người tạo token truyền địa chỉ verifier họ muốn; token đã deploy **không đổi được
+///         verifier** (đổi verifier dưới một số dư đang lưu hành là đổi nghĩa mọi ciphertext).
 ///
-///         Token đã deploy **không đổi được verifier**. Không setter, và đó là chủ ý —
-///         đổi verifier dưới chân một số dư đang lưu hành là đổi ý nghĩa của mọi
-///         ciphertext đã tồn tại. Migrate = token mới + bridge.
+///         Ngoài kiểm proof, verifier là **nơi duy nhất biết đường cong**: token (một implementation cho
+///         mọi curve) làm phép cộng đồng hình qua các hàm `g1*` ở đây. Đặc tả byte-exact:
+///         `docs/superpowers/specs/2026-10-03-zether-design.md`.
 interface IZetherVerifier {
-    /// @notice Định danh hệ chứng minh. Khoá cứng bộ ba (curve, mạch, mã hoá điểm).
-    /// @dev Ví/SDK đọc cái này để biết dùng prover backend nào và giải mã payload ra
-    ///      sao. Ví dụ: `keccak256("zether/bulletproofs/bn254/ring2/v1")`.
+    /// @notice Khoá cứng bộ ba (curve, mạch, mã hoá điểm). Nằm trong statement (§6) ⇒ trong transcript.
     function proofSystemId() external pure returns (bytes32);
 
-    /// @notice Tên curve, dạng người đọc được. `"bn254"` | `"bls12-381"`.
+    /// @notice `"bn254"` | `"bls12-381"`.
     function curveName() external pure returns (string memory);
 
-    /// @notice Số byte của một điểm G1 theo mã hoá của verifier này.
-    /// @dev 64 cho bn254, **128** cho BLS12-381 (EIP-2537 pad mỗi Fp thành 64 byte).
-    ///      SDK cần nó để cắt payload; test dùng nó để chặn nhầm curve.
+    /// @notice 64 cho bn254, **128** cho BLS12-381 (EIP-2537 pad mỗi Fp thành 64 byte).
     function g1EncodedBytes() external pure returns (uint256);
 
-    /// @notice Ring size verifier này chấp nhận.
-    /// @dev Gas tỉ lệ theo ring size, nên mọi con số gas phải gắn với một `m` cụ thể.
-    ///      Ring = 2 là lộ danh tính người gửi/nhận; ring lớn là ẩn danh trong đám
-    ///      đông. **Đây là lựa chọn của người tạo token, không phải của protocol** —
-    ///      hai thị trường khác nhau muốn hai thứ khác nhau.
+    /// @notice Luôn 2: lộ danh tính người gửi/nhận (SRS §7.1), không có anonymity set.
     function ringSize() external pure returns (uint256);
 
-    /// @notice Verifier này có chạy được trên chain HIỆN TẠI không?
-    /// @dev Implementation staticcall thử chính precompile nó cần với một vector đã
-    ///      biết và so kết quả. Lý do hàm này tồn tại: một verifier BLS12-381 deploy
-    ///      thành công trên chain không có EIP-2537 — bytecode hợp lệ, constructor
-    ///      chạy xong, địa chỉ có code — rồi **revert ở mọi proof, mãi mãi**.
-    ///      Precompile vắng mặt trả về staticcall thành công với output rỗng, không
-    ///      revert, nên không có triệu chứng nào lúc deploy.
-    ///
-    ///      Factory gọi hàm này trước khi cho ai deploy token, và từ chối nếu false.
-    ///      Đó không phải gác cổng — đó là không để người ta đốt gas vào một cái brick.
+    /// @notice Bậc nhóm `r` (scalar field).
+    function groupOrder() external pure returns (uint256);
+
+    /// @notice Precompile mà verifier cần có thật và trả đúng vector đã biết trên chain này không.
+    /// @dev Precompile vắng mặt trả về staticcall THÀNH CÔNG với output rỗng — không revert, không
+    ///      triệu chứng lúc deploy. Factory gọi hàm này và từ chối nếu false.
     function isSupportedOnThisChain() external view returns (bool);
 
-    /// @notice Kiểm proof chuyển khoản.
-    /// @param payload C[], D, y[], u — mã hoá theo `proofSystemId()`, opaque với contract gọi
-    /// @param epoch   epoch toàn cục lúc verify
-    function verifyTransfer(bytes calldata payload, uint256 epoch, bytes calldata proof)
-        external
-        view
-        returns (bool);
+    /// @notice Kiểm proof chuyển khoản (đặc tả §6–§9). `statement` do token dựng từ storage.
+    /// @dev Verifier KHÔNG kiểm `chainId`/token trong header — đó là việc của token, nó tự dựng
+    ///      header từ `block.chainid`/`address(this)`. Verifier chỉ kiểm `opTag` và `proofSystemId`.
+    function verifyTransfer(bytes calldata statement, bytes calldata proof) external view returns (bool);
 
-    /// @notice Kiểm proof rút tiền ra dạng công khai.
-    function verifyBurn(
-        bytes calldata payload,
-        uint256 epoch,
-        address recipient,
-        bytes calldata proof
-    ) external view returns (bool);
+    /// @notice Kiểm proof rút ra dạng công khai. `amount`, `recipient` nằm trong `statement`.
+    function verifyBurn(bytes calldata statement, bytes calldata proof) external view returns (bool);
+
+    /// @notice Blob generator NUMS `h ‖ U ‖ G_0..G_63 ‖ H_0..H_63` (§3), tính trong constructor.
+    function generators() external view returns (bytes memory);
+
+    // ----------------------------------------------------------- phép nhóm cho token / test
+
+    function identity() external pure returns (bytes memory);
+    function isValidPoint(bytes calldata a) external view returns (bool);
+    function g1Add(bytes calldata a, bytes calldata b) external view returns (bytes memory);
+    function g1Sub(bytes calldata a, bytes calldata b) external view returns (bytes memory);
+    function g1Mul(bytes calldata a, uint256 k) external view returns (bytes memory);
+    function g1MulBase(uint256 k) external view returns (bytes memory);
+    /// @param pts các điểm nối liền; `scalars.length` số hạng.
+    function g1Msm(bytes calldata pts, uint256[] calldata scalars) external view returns (bytes memory);
 }
