@@ -74,7 +74,7 @@ function _isContract(address a) internal view returns (bool) {
 - `RevokeMandate(address token,uint256 validUntil)`
 - `payUnderMandate(address token,address payee,uint256 amount,bytes32 entryRef,uint256 validUntil,bytes sig)` selector tính trong test Python.
 - `revokeWithSig(address token,uint256 validUntil,bytes sig)`
-- owner: `setMandate(token,delegate,maxPerPayment,maxPerPeriod,periodSeconds,expiry)`, `setPayee(token,payee,bool)`, `revoke(token)`, `execute(target,value,data)`; `executeAsOwner(bytes data,uint256 nonce,uint256 validUntil,bytes sig)` (owner ký `OwnerCall(bytes32 dataHash,uint256 nonce,uint256 validUntil)`, gọi `address(this).call(data)`; hàm owner nhận `msg.sender == owner || msg.sender == address(this)`).
+- owner: `setMandate(token,delegate,maxPerPayment,maxPerPeriod,periodSeconds,expiry)`, `setPayee(token,payee,bool)`, `revoke(token)`, `execute(target,value,data)`; `executeAsOwner(bytes data,uint256 nonce,uint256 validUntil,bytes sig)` (owner ký `OwnerCall(bytes data,uint256 nonce,uint256 validUntil)` — `bytes` băm `keccak256(data)` theo EIP-712, gọi `address(this).call(data)`; hàm owner nhận `msg.sender == owner || msg.sender == address(this)`).
 - `isValidSignature(hash,sig)` ⇒ magic khi ECDSA recover == owner.
 
 - [ ] Test: trả trong hạn mức ⇒ `PaymentSettled(wallet→payee, entryRef)`; > maxPerPayment revert; tổng kỳ > maxPerPeriod revert, sang kỳ mới ok; payee không trong danh sách revert; hết `expiry` revert; sau `revoke`/`revokeWithSig` revert; `entryRef` dùng lại revert; chữ ký không phải delegate revert; `validUntil` qua revert; không gọi `approve`/`transferFrom` (đường trả = `payWithFee`); owner trả tay qua meta-tx (1271); `executeAsOwner` đặt mandate gasless.

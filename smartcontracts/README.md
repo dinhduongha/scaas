@@ -11,6 +11,8 @@ Interface đã chốt cộng các implementation đã có (2026-10-03,
 | `MetaToken` v1 (kind META) | `src/metatx/MetaToken.sol` | clone EIP-1167; tầng 1 standalone / tầng 2 wrapper 1:1; op `pay(bytes32)` và `trade(address,uint256,address)` trong `data` của meta-tx |
 | `OpenFactory` | `src/factory/OpenFactory.sol` | hiện thực `IOpenFactory`; salt theo người tạo |
 | `MetaTxDex` | `src/dex/MetaTxDex.sol` | khớp hai chân meta-tx, không allowance, fill-or-kill |
+| Allowance chỉ giữa hợp đồng | `src/metatx/ERC20MetaTx.sol` | `approve` từ chối spender không phải hợp đồng, `transferFrom` từ chối caller không phải hợp đồng; EOA uỷ quyền EIP-7702 (`0xef0100‖addr`) = EOA; hợp đồng đang chạy constructor = EOA (R26) |
+| `MandateWallet` | `src/wallet/MandateWallet.sol` | ví một người trả cho auto-pay delegated: mandate on-chain (hạn mức lần/kỳ, payee, hạn), ERC-1271 cho chủ ví, trả bằng `payWithFee`. Deploy ngoài Odoo: `forge create src/wallet/MandateWallet.sol:MandateWallet --constructor-args <owner>` (R29) |
 | Deploy | `script/Deploy.s.sol` | ghi `deployments/<chainid>.json` |
 
 Zether vẫn chỉ là interface. `test/vectors/metatx_kat.json` là vector digest dùng chung với

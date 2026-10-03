@@ -62,7 +62,7 @@ R4 của spec gốc ("không hiện thực EOA approve lockdown") **bị thay** 
 ## C. Ví NHẬN theo công ty
 
 **Model `blockchain.receiving.wallet`** (core, `mail.thread`, tracking mọi trường): `company_id`,
-`chain_id`, `token_id` (tài sản), `address`, `label`, `wallet_state` (`draft → pending_approval →
+`chain_id`, `token_id` (tài sản), `address`, `label`, `approval_state` (mixin bốn mắt: `draft → pending_approval →
 approved → archived`), `proposed_by_id`, `approved_by_id`, `approved_datetime`, `usable_from`,
 `is_default`.
 
@@ -151,7 +151,7 @@ giá nếu sai: người trả phải nạp tiền vào ví thay vì để trong
 **Auto-pay — `blockchain.autopay.policy`** (`dms_blockchain_payment`, vì cần `account.move` và luồng
 `payment.transaction`): người trả (`partner_id`), ví trả, trigger (`invoice_posted` | `invoice_due`),
 hạn mức theo tiền tệ (`max_per_payment`, `max_per_day`, `max_per_month`), trạng thái bốn mắt
-(`draft → pending_approval → active`, `killed`), `action_kill` (tắt tức thì off-chain; với `delegated` còn
+(`approval_state` của mixin + cờ `policy_killed`), `action_kill` (tắt tức thì off-chain; với `delegated` còn
 xếp job `revokeWithSig` vào outbox).
 
 **Chạy:** cron `_cron_autopay` (body trong method — CLAUDE.md §5.4) tìm hoá đơn khách hàng `posted`,
@@ -160,7 +160,7 @@ còn nợ, của người trả; mỗi (policy, hoá đơn, sự kiện) đúng 
 không thất bại); payee = ví nhận **dùng được** của công ty phát hành hoá đơn, đúng (chain, token) của ví
 trả, chụp vào request. Rồi đi **đúng đường thanh toán tay**: `payment.transaction` (provider `chain`,
 `invoice_ids`, `operation='offline'`) + request + outbox; `custodial` ký meta-tx qua adapter, `delegated`
-ký `PayOrder` và xếp job gọi `MandateWallet.payUnderMandate`. Ký đi qua kiểm tra kiểu
+ký `PayUnderMandate` và xếp job gọi `MandateWallet.payUnderMandate`. Ký đi qua kiểm tra kiểu
 `SigningPolicyService` (token đích, op `pay`, hạn mức, `validUntil ≤ 300 s`). Thất bại ⇒ run `failed` +
 **activity** trên policy — không bao giờ im lặng. Đối soát: tx `done` ⇒ `account_payment` gạch nợ như
 thanh toán tay.
@@ -184,3 +184,46 @@ hộ; mandate on-chain do khách ký), adapter custody production.
   7702 là EOA; hợp đồng trong constructor bị coi là EOA. Thay R4.
 - **R27** `wallet_kind` do trình duyệt báo (`eth_getCode` qua ví): `contract` ⇒ Odoo nhận chữ ký chưa kiểm,
   node simulate là trọng tài. Thu hẹp R13.
+- **R28** `dms_blockchain_payment` phụ thuộc `account_payment` (trước đây `payment`) — auto-pay đọc hoá
+  đơn và giao việc gạch nợ cho `account_payment` — provider `chain` không cài được trên DB không có kế toán.
+- **R29** `MandateWallet` triển khai ngoài Odoo (`forge create … --constructor-args <owner>`), Odoo chỉ ghi
+  địa chỉ — Odoo không gọi RPC và không giữ khoá deploy (R20); factory CREATE2 buộc Odoo tính initcode hash —
+  onboarding ví delegated cần một bước vận hành.
+
+## Review log
+
+### Antigravity (agy) — review addendum + plan, 2026-10-03 — 23 finding
+
+Lần 1 chạm quota (`Resets in 13m18s`), hẹn chạy lại nền sau 14 phút như owner yêu cầu.
+
+| # | Sev | Kết luận (đã đối chiếu code) | Xử lý |
+|---|---|---|---|
+| W1 | crit | Đúng: job `revokeWithSig` không có event thanh toán để chốt | Nhận: job `call` không gắn request ⇒ `mined` = `success`; job trả tiền chốt theo request |
+| W2 | crit | **Đúng**: `readonly=True` không chặn ORM/RPC ⇒ ghi `usable_from` là bỏ qua cooling-off | Nhận: `_FOUR_EYES_MANAGED` — chỉ action ghi được `usable_from`, `is_default` |
+| W3 | high | Đúng: EOA 7702 đi nhánh 1271 trong `_requireValidSignature` | Nhận: dùng `_isContract(from)`; test EOA 7702 trả bằng ECDSA |
+| W4 | high | Một phần: retry tạo request mới khi request cũ còn ký được thì trả hai lần | Thiết kế đã tránh: `action_retry` chỉ cho run `failed`, và run chỉ `failed` khi tx huỷ — tức request đã hết hạn sau `validUntil` + ân hạn, không còn job sống; cùng request thì lane nonce 0 / `refUsed` chặn on-chain |
+| W5 | high | **Đúng**: `periodSeconds == 0` reset hạn mức kỳ mỗi lần | Nhận: `BadMandate` cho period 0, delegate 0, per-payment > per-period |
+| W6 | high | Đúng (rủi ro) | Nhận: tiền tệ policy = tiền tệ token; cron chỉ lấy hoá đơn cùng tiền tệ |
+| W7 | high | Một phần | Từ chối sửa: người gửi phải có entitlement trên đơn (không ẩn danh); chữ ký rác ⇒ simulation fail ⇒ job `dead` ⇒ lane mở lại; buộc ecrecover cho 65 byte phá ví 1271 trả 65 byte (yêu cầu #1) |
+| W8 | high | Đúng | Nhận: payload phân nhánh `kind`; `Job` Rust với trường Option, test giải mã job `call` |
+| W9 | high | Đúng là thiếu cơ chế deploy | Ruling R29 (deploy ngoài Odoo); không thêm factory |
+| W10 | high | Đúng | Nhận: rule công ty cho ví trả, policy, run; Host admin thấy tất cả |
+| W11 | high | Đúng | Nhận: `run_state` compute theo trạng thái tx — tx huỷ ⇒ `failed`, trả lại hạn mức |
+| W12 | high | Đúng | Nhận: sự kiện ví chỉ huỷ trước khi submit |
+| W13 | high | Đúng (ý đồ chưa ghi) | Nhận: `_FROZEN_AFTER_APPROVAL` cho ví trả và policy |
+| W14 | med | Đúng (lỗi chữ trong plan) | Nhận: plan sửa thành `OwnerCall(bytes data,…)` |
+| W15 | med | Đúng | Nhận: `PayFailed` khi `payWithFee` trả false |
+| W16 | med | Không phải lỗi | Từ chối: owner chốt một default mỗi công ty; JS luôn cho chọn khi có nhiều phương án |
+| W17 | med | Đúng | Nhận: `signer_ref` giống khoá bị từ chối trước khi ghi; `env:` chỉ nhận tên biến |
+| W18 | med | Đúng một nửa (`tryRecover` đã chặn) | Nhận: constructor từ chối owner 0 |
+| W19 | med | Đúng | Nhận: `_cron_expire` hiểu `call_valid_until_ts` |
+| W20 | med | Đúng | Nhận: tour đăng ký factory, kiểm hiện/ẩn theo project id |
+| W21 | low | Đúng | Nhận: thống nhất `approval_state` + `policy_killed` |
+| W22 | low | Không khai thác được | Từ chối: `execute` chỉ owner; `payUnderMandate` theo CEI (`refUsed`, hạn mức ghi trước lời gọi ngoài) |
+| W23 | low | Ngoài phạm vi | Từ chối: 1271 on-chain có forge test; node simulate calldata y nguyên; calldata/digest Python khoá bằng vector forge |
+
+### Grok
+Lần 4 và 5 (prompt review implementation đợt 1): vẫn `free Grok Build usage limit`, không in giờ reset.
+
+### Codex
+Không chạy — hết credit (owner).
