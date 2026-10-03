@@ -83,7 +83,8 @@ probe `has_p256_precompile`).
 
 - Lane = tài khoản **ECDSA** secp256k1 (`m/44'/3030'/0'/0/i`, R60) dùng qua **alias EVM**; JSON-RPC Relay chỉ nhận tx
   Ethereum ký ECDSA. Tài khoản lane phải **tồn tại** trên ledger (tạo bằng cách chuyển HBAR tới alias — auto-create
-  HIP-583) — review S22: bước vận hành + adapter từ chối khởi động nếu `eth_getTransactionCount` báo lỗi tài khoản.
+  HIP-583) — review S22: bước vận hành + adapter kiểm số dư lane trước mỗi job; lane số dư 0 (tài khoản chưa có hoặc
+  hết HBAR) ⇒ job về hàng đợi với lỗi rõ ràng, không ký, không gửi.
 - Relayer trả gas bằng HBAR từ lane của nó; chủ thể không cần HBAR, không gửi tx.
 - Phí: Hedera có **giá gas cố định** theo biểu phí (testnet ghi được `eth_gasPrice = 0xca900a7c00` = 870 gwei-tương
   đương; `eth_maxPriorityFeePerGas = 0`; `eth_feeHistory` trả base fee hằng, reward 0). Adapter ký type-2 với
@@ -158,6 +159,9 @@ Hedera **không có mempool**: Relay chuyển tx tới một consensus node; tx 
 - **Rust**: decoder receipt/log/block trên **vector ghi từ Relay testnet thật** (`bamboo-node/tests/vectors/
   hedera_testnet.json`), proptest decoder; e2e `tests/e2e_hedera.rs` (`#[ignore]`) trên anvil `--chain-id 298`: hai lane
   từ mnemonic 24 từ, thanh toán qua `lane_step`, finality qua `index_step`, anti-lock đầu-cuối.
+- **Kết quả (2026-10-03):** forge 24 test Hedera + 157 toàn bộ xanh; Odoo `dms_blockchain` 118 test (4 Hedera) xanh trên
+  `dms_test_chain_6`; Rust 9 test adapter (gồm proptest 2 × 2 000 ca) + e2e `e2e_hedera` xanh (anvil 298, cổng 31960);
+  connector `node --test` 4 xanh — chữ ký ed25519 của node:crypto trùng byte với Python trên vector chung.
 - **Khoảng trống:** `hedera-local-node` (nay là `solo`, cần ≥ 8 GB RAM, nhiều container) không chạy trên máy dùng
   chung 10 luồng. Anvil khác Hedera ở: có mempool, không có precompile 0x16a/0x167 thật, không thu 80 % gas. Đường
   dương HIP-632 chưa thử trên mạng thật. Việc cần làm khi có tài khoản testnet: deploy `HederaMetaToken`, thanh toán
@@ -181,3 +185,20 @@ không phụ thuộc khoá ký.
   kiểm ed25519 ở Odoo, ràng khoá↔tài khoản on-chain).
 - **R6-4** HashPack `signMessage`, khoá ngưỡng/KeyList (`isAuthorized` + `SignatureMap`) = seam.
 - **R6-5** `associateUnderlying()` không cần quyền, idempotent (22/194).
+
+## 12. Review log
+
+### Grok — review thiết kế, 2026-10-03 — 10 finding, 0 nhận
+
+| # | Sev | Nội dung | Kết luận |
+|---|---|---|---|
+| 1, 2, 9 | crit/high | revert của precompile phải thành `false`; nhánh 64 byte/không code; độ dài khác rơi về `ecrecover` | Đã là thiết kế (§3, R6-2); độ dài khác ⇒ `ecrecover` của lớp cha, fail closed. Từ chối |
+| 3, 10 | high/med | `validUntil` phải được kiểm | Đã có: bước 2 của `ERC20MetaTx` + `lane_runner` (hết hạn ⇒ `dead`). Từ chối |
+| 4 | high | Hedera phải chạy một tx/lane, trần gas | Đã là R6-1 + `max_gas_per_tx`. Từ chối |
+| 5 | med | finality/event | Đã là §6. Từ chối |
+| 6 | high | associate HTS với mã 22/194 | Đã là R6-5. Từ chối |
+| 7 | high | ghi đè `executeAsOwner` | **Sai**: hàm không `virtual`; hàm riêng `executeAsOwnerRaw` dùng cùng digest + nonce. Từ chối |
+| 8 | med | Odoo không ràng khoá ↔ tài khoản | Đã ghi (R6-3): `signature_verified = False`, mô phỏng HIP-632 phân xử; thêm cờ on-chain là trùng với `MetaTransactionExecuted`. Từ chối |
+
+### Antigravity (agy)
+Lần 1: hết quota ("Resets in 1h34m") — đã hẹn chạy lại.
