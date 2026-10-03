@@ -19,6 +19,7 @@
     "curve": "bn254",
     "envelopeBinding": "0x3333333333333333333333333333333333333333333333333333333333333333",
     "fee": 300,
+    "includeWitness": true,
     "key": {
       "account": 0,
       "coin": 60,

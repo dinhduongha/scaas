@@ -68,7 +68,7 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
     let acc_j = json!({"C": hx(&encode_point::<C>(&acc.c)), "D": hx(&encode_point::<C>(&acc.d))});
     let base = json!({
         "curve": C::NAME, "key": key_json(0, USE_CONF), "chainId": CHAIN, "token": TOKEN,
-        "sendCounter": 3, "accSeq": 5, "acc": acc_j, "balance": BAL,
+        "sendCounter": 3, "accSeq": 5, "acc": acc_j, "balance": BAL, "includeWitness": true,
     });
     let with = |extra: Value| {
         let mut v = base.clone();

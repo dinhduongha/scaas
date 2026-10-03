@@ -49,6 +49,7 @@ fn api_roundtrip_mnemonic_keygen_prove_decrypt() {
             "curve": curve, "key": k0, "chainId": 31337, "token": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
             "sendCounter": 0, "accSeq": 1, "acc": acc, "balance": 5000, "yTo": b["Y"], "amount": 1200,
         }));
+        assert!(t.get("witness").is_none(), "secrets must not leave the API unless asked");
         let ok = call("verifyTransfer", json!({"curve": curve, "statement": t["statement"], "proof": t["proof"]}));
         assert_eq!(ok["ok"], json!(true));
         let d = call("decrypt", json!({"curve": curve, "key": k0, "ct": acc}));

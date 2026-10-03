@@ -18,6 +18,7 @@
     "chainId": 31337,
     "curve": "bls12381",
     "fee": 0,
+    "includeWitness": true,
     "key": {
       "account": 0,
       "coin": 60,

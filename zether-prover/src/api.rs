@@ -113,6 +113,12 @@ fn header(v: &Value, amount: u64, recipient: [u8; 20]) -> R<Header> {
     })
 }
 
+/// Secrets (x, s, blinding factors) leave the call only when the request asks for them
+/// (`"includeWitness": true`, used for test vectors).
+fn include_witness(v: &Value) -> bool {
+    v.get("includeWitness").and_then(Value::as_bool) == Some(true)
+}
+
 fn sc<C: ZCurve>(s: &Fr<C>) -> String {
     hx(&encode_scalar::<C>(s))
 }
@@ -155,7 +161,7 @@ pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v
     )
     .map_err(e)?;
     let (stmt, proof, payload) = (st.encode(), p.encode(), st.payload());
-    Ok(json!({
+    let mut out = json!({
         "curve": C::NAME,
         "statement": hx(&stmt),
         "proof": hx(&proof),
@@ -164,9 +170,12 @@ pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v
         "entryRef": hx(&schnorr::entry_ref(h.chain_id, &h.token, &k.ua(), h.send_counter)),
         "opData": hx(&envelope::transfer_data(&payload, &proof, &[], &h.beneficiary)),
         "directCalldata": hx(&direct_transfer(&payload, &proof, &h.beneficiary)),
-        "witness": {"x": sc::<C>(&w.x), "v": sc::<C>(&w.v), "s": sc::<C>(&w.s), "b": sc::<C>(&w.b),
-                    "bPrime": sc::<C>(&w.b_prime), "gammaV": sc::<C>(&w.gamma_v), "gammaB": sc::<C>(&w.gamma_b)},
-    }))
+    });
+    if include_witness(v) {
+        out["witness"] = json!({"x": sc::<C>(&w.x), "v": sc::<C>(&w.v), "s": sc::<C>(&w.s), "b": sc::<C>(&w.b),
+            "bPrime": sc::<C>(&w.b_prime), "gammaV": sc::<C>(&w.gamma_v), "gammaB": sc::<C>(&w.gamma_b)});
+    }
+    Ok(out)
 }
 
 pub fn prove_burn_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value, rng: &mut Rn) -> R<Value> {
@@ -177,7 +186,7 @@ pub fn prove_burn_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &V
     let (st, p, w) =
         zether::prove_burn(gens, &k, h.clone(), ct::<C>(v, "acc")?, num(v, "balance")?, rng).map_err(e)?;
     let (stmt, proof, payload) = (st.encode(), p.encode(), st.payload());
-    Ok(json!({
+    let mut out = json!({
         "curve": C::NAME,
         "statement": hx(&stmt),
         "proof": hx(&proof),
@@ -185,9 +194,12 @@ pub fn prove_burn_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &V
         "authDigest": hx(&zether::auth_digest(&stmt)),
         "opData": hx(&envelope::burn_data(&payload, amount, &recipient, &h.beneficiary, &proof, &[])),
         "directCalldata": hx(&direct_burn(&payload, amount, &recipient, &h.beneficiary, &proof)),
-        "witness": {"x": sc::<C>(&w.x), "b": sc::<C>(&w.b), "amount": amount.to_string(),
-                    "bPrime": sc::<C>(&w.b_prime), "gammaB": sc::<C>(&w.gamma_b)},
-    }))
+    });
+    if include_witness(v) {
+        out["witness"] = json!({"x": sc::<C>(&w.x), "b": sc::<C>(&w.b), "amount": amount.to_string(),
+            "bPrime": sc::<C>(&w.b_prime), "gammaB": sc::<C>(&w.gamma_b)});
+    }
+    Ok(out)
 }
 
 fn verify_json<C: ZCurve>(gens: &Gens<C>, v: &Value, burn: bool) -> R<Value> {
