@@ -18,13 +18,14 @@ async function dexSetup(opts: { maker?: number; taker?: number; enabled?: boolea
     const wA = await f.walletOf(A, alice.address);
     const wB = await f.walletOf(B, bob.address);
     /// A signed trade leg: `who` sells `amount` of `tin` for at least `minOut` of `tout`.
-    const leg = (who: Subject, wallet: Address, tin: Address, tout: Address, amount: bigint, minOut: bigint, o: { maxFeePpm?: number; counterparty?: Address | null; matchWith?: bigint; lane?: bigint; validUntil?: number } = {}) => {
+    const leg = (who: Subject, wallet: Address, tin: Address, tout: Address, amount: bigint, minOut: bigint, o: { maxFeePpm?: number; counterparty?: Address | null; matchWith?: bigint; lane?: bigint; validUntil?: number; forwardTon?: bigint } = {}) => {
         const params = tradeParamsCell({ tokenIn: tin, tokenOut: tout, minOut, counterparty: o.counterparty ?? null, maxFeePpm: o.maxFeePpm ?? 3000 });
-        return signedPay(who, { contract: wallet, to: dex.address, amount, network: f.network, op: OP.trade, extra: BigInt('0x' + params.hash().toString('hex')), lane: o.lane ?? randomU256(), validUntil: o.validUntil ?? f.bc.now! + 600 }, { params, matchWith: o.matchWith ?? 0n, forwardTon: toNano('0.2'), responseDestination: f.relayer.address });
+        return signedPay(who, { contract: wallet, to: dex.address, amount, network: f.network, op: OP.trade, extra: BigInt('0x' + params.hash().toString('hex')), lane: o.lane ?? randomU256(), validUntil: o.validUntil ?? f.bc.now! + 600 }, { params, matchWith: o.matchWith ?? 0n, forwardTon: o.forwardTon ?? toNano('0.2'), responseDestination: f.relayer.address });
     };
     const send = (wallet: any, body: any) => wallet.send(f.relayer.getSender(), { value: toNano('0.35') }, body);
     const h = (sp: { digest: Buffer }) => BigInt('0x' + sp.digest.toString('hex'));
-    return { ...f, A, B, alice, bob, dex, wA, wB, leg, send, h };
+    const tonOf = async (a: Address) => (await f.bc.getContract(a)).balance;
+    return { ...f, A, B, alice, bob, dex, wA, wB, leg, send, h, tonOf };
 }
 
 describe('BambooDex escrow (R35 on TON, R10-7)', () => {
@@ -141,6 +142,57 @@ describe('BambooDex escrow (R35 on TON, R10-7)', () => {
         expect(await dex.getGetOrder(h(a))).toBeNull();
         expect(await balanceOf(A, alice.address)).toBe(1_000_000n);
         expect(bob).toBeTruthy();
+    });
+
+    it('a third party cannot overwrite a pre-flight cancel (cancel keyed by order and owner)', async () => {
+        const { bc, relayer, network, A, B, alice, dex, wA, leg, h, balanceOf, mint, walletOf } = await dexSetup();
+        const eve = await subject(9);
+        await mint(A, eve.address, 1n);
+        const wE = await walletOf(A, eve.address);
+        const lane = randomU256();
+        const a = leg(alice, wA.address, A.address, B.address, 700n, 100n, { lane });
+        const rv = signedPay(alice, { contract: wA.address, to: dex.address, amount: 0n, network, op: OP.revoke, lane, extra: h(a) }, { responseDestination: relayer.address });
+        const evil = signedPay(eve, { contract: wE.address, to: dex.address, amount: 0n, network, op: OP.revoke, lane: randomU256(), extra: h(a) }, { responseDestination: relayer.address });
+        const { internal } = require('@ton/sandbox');
+        const i1 = await bc.sendMessageIter(internal({ from: relayer.address, to: wA.address, value: toNano('0.35'), body: (await import('@ton/core')).beginCell().store(require('../build/jetton/jetton_BambooJettonWallet').storeSignedOp(a.body)).endCell() }), { allowParallel: true } as any);
+        await i1.next();
+        await wA.send(relayer.getSender(), { value: toNano('0.35') }, rv.body); // Alice's cancel overtakes her leg
+        await wE.send(relayer.getSender(), { value: toNano('0.35') }, evil.body); // Eve names the same order
+        for await (const _ of i1) { /* deliver the leg */ }
+        expect(await dex.getGetOrder(h(a))).toBeNull();
+        expect(await balanceOf(A, alice.address)).toBe(1_000_000n);
+    });
+
+    it('a bad leg is refunded on its own TON: a leg with dust TON cannot drain the DEX', async () => {
+        const { A, B, alice, dex, wA, leg, send, h, tonOf } = await dexSetup({ enabled: false });
+        const before = await tonOf(dex.address);
+        for (let i = 0; i < 3; i++) {
+            await send(wA, leg(alice, wA.address, A.address, B.address, 1n, 1n, { forwardTon: 1n }).body);
+        }
+        expect(before - (await tonOf(dex.address))).toBeLessThan(toNano('0.01'));
+        const ok = leg(alice, wA.address, A.address, B.address, 1000n, 1n);
+        await send(wA, ok.body);
+        expect(await dex.getGetOrder(h(ok))).toBeNull();
+    });
+
+    it('Match and Refund hand unspent TON back to the caller instead of keeping it', async () => {
+        const { bc, A, B, alice, bob, dex, wA, wB, leg, send, h, tonOf, balanceOf } = await dexSetup();
+        const a = leg(alice, wA.address, A.address, B.address, 500_000n, 499_000n);
+        await send(wA, a.body);
+        const b = leg(bob, wB.address, B.address, A.address, 500_000n, 498_000n);
+        await send(wB, b.body);
+        const stranger = await bc.treasury('stranger');
+        let before = await tonOf(dex.address);
+        await dex.send(stranger.getSender(), { value: toNano('1') }, { $$type: 'Match', a: h(a), b: h(b) });
+        expect(await balanceOf(B, alice.address)).toBe(499_500n);
+        expect((await tonOf(dex.address)) - before).toBeLessThan(toNano('0.01'));
+        const c = leg(alice, wA.address, A.address, B.address, 1000n, 1n);
+        await send(wA, c.body);
+        bc.now = bc.now! + 601;
+        before = await tonOf(dex.address);
+        await dex.send(stranger.getSender(), { value: toNano('1') }, { $$type: 'Refund', orderHash: h(c) });
+        expect(await balanceOf(A, alice.address)).toBe(500_000n);
+        expect((await tonOf(dex.address)) - before).toBeLessThan(toNano('0.01'));
     });
 
     it('fees above 1 % are refused by SetMarket', async () => {

@@ -54,6 +54,11 @@ fun pairKey(x: Address, y: Address): Int {
     return beginCell().storeAddress(y).storeAddress(x).endCell().hash();
 }
 
+/// A pre-flight cancel is keyed by (order, owner): nobody else can overwrite or clear it (review agy #3).
+fun cancelKey(orderHash: Int, owner: Address): Int {
+    return beginCell().storeUint(orderHash, 256).storeAddress(owner).endCell().hash();
+}
+
 struct Leg {
     ok: Bool;
     digest: Int;
@@ -66,7 +71,7 @@ contract BambooDex(
     markets: map<Int as uint256, Market>,
     tokens: map<Address, Bool>,
     orders: map<Int as uint256, Cell>,
-    cancelled: map<Int as uint256, Address>,
+    cancelled: map<Int as uint256, Bool>,
     fees: map<Address, Int as coins>,
 ) {
     receive() {} // deploy / TON top-up
@@ -89,14 +94,14 @@ contract BambooDex(
         }
         let leg = self.parseLeg(master!!, msg);
         if (!leg.ok) {
-            self.payout(master!!, msg.sender, msg.amount, PAYOUT_TON);
+            self.refundLeg(master!!, msg.sender, msg.amount);
             return;
         }
         let o = leg.order!!;
-        let c = self.cancelled.get(leg.digest);
-        if (self.orders.get(leg.digest) != null || (c != null && c!! == o.owner)) {
-            self.cancelled.del(leg.digest);
-            self.payout(master!!, msg.sender, msg.amount, PAYOUT_TON);
+        let ck = cancelKey(leg.digest, o.owner);
+        if (self.orders.get(leg.digest) != null || self.cancelled.get(ck) != null) {
+            self.cancelled.del(ck);
+            self.refundLeg(master!!, msg.sender, msg.amount);
             return;
         }
         self.orders.set(leg.digest, o.toCell());
@@ -112,7 +117,9 @@ contract BambooDex(
     receive(msg: Match) {
         throwUnless(E_VALUE, context().value >= PAYOUT_TON * 2 + MATCH_GAS);
         throwUnless(731, self.canMatch(msg.a, msg.b));
+        self.reserveBalance();
         self.settle(msg.a, msg.b);
+        self.returnExcess();
     }
 
     receive(msg: Refund) {
@@ -122,7 +129,9 @@ contract BambooDex(
         let o = Order.fromCell(c!!);
         throwUnless(733, now() >= o.validUntil);
         self.orders.del(msg.orderHash);
+        self.reserveBalance();
         self.payout(o.tokenIn, o.owner, o.amountIn, PAYOUT_TON);
+        self.returnExcess();
     }
 
     receive(msg: CancelOrder) {
@@ -131,7 +140,7 @@ contract BambooDex(
         let c = self.orders.get(msg.orderHash);
         if (c == null) {
             // The leg may still be in flight (wallet -> our wallet -> us is two hops, the cancel is one).
-            self.cancelled.set(msg.orderHash, msg.owner);
+            self.cancelled.set(cancelKey(msg.orderHash, msg.owner), true);
             return;
         }
         let o = Order.fromCell(c!!);
@@ -256,6 +265,36 @@ contract BambooDex(
             let f = self.fees.get(master);
             self.fees.set(master, (f == null ? 0 : f!!) + amount);
         }
+    }
+
+    /// Keep the DEX's own balance; payouts then spend the caller's TON and `returnExcess` hands back the rest
+    /// (R10-11: unspent gas goes back to the caller, not into the DEX).
+    fun reserveBalance() {
+        nativeReserve(max(myBalance() - context().value, MIN_STORAGE), ReserveAtMost);
+    }
+
+    fun returnExcess() {
+        message(MessageParameters { to: sender(), value: 0, mode: SendRemainingBalance | SendIgnoreErrors, bounce: false, body: JettonExcesses { queryId: 0 }.toCell() });
+    }
+
+    /// A bad or duplicate leg goes back on the TON it came with, never on the DEX's balance (review agy #2):
+    /// a leg sent with too little TON to pay its own refund stays escrowed — that is the sender's loss only.
+    fun refundLeg(master: Address, to: Address, amount: Int) {
+        message(MessageParameters {
+            to: walletAddress(myAddress(), master),
+            value: 0,
+            mode: SendRemainingValue,
+            bounce: true,
+            body: JettonTransfer {
+                queryId: 0,
+                amount,
+                destination: to,
+                responseDestination: to,
+                customPayload: null,
+                forwardTonAmount: 0,
+                forwardPayload: emptyForwardPayload(),
+            }.toCell(),
+        });
     }
 
     /// Jetton transfer out of the DEX's wallet for `master`; TON for gas comes from the DEX balance, which
