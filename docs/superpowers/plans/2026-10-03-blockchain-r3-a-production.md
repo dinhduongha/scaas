@@ -71,3 +71,16 @@ Files: `.github/workflows/blockchain-ci.yml`.
   liên tiếp** (`is_persistent`) vì `account.payment` sinh sau `_set_done` qua post-processing.
 - A6+A8 và A5 nằm chung một commit (main.rs/config.rs đan xen); A9 commit riêng.
 - R55 "< 20 % sàn": hiểu là số dư < 120 % sàn ⇒ cảnh báo (R1-1).
+
+## Review vòng 1 (S1-n) — đã sửa, commits `fix(node): review S1 …` + `fix(blockchain): review S1 …`
+- S1-1 (chấp nhận): `PaymentSettled` có entryRef lạ che mọi `Transfer` cùng tx ⇒ chỉ khớp đúng chân (tx, token,
+  người nhận/phí, số tiền) của `PaymentSettled` có payment request. Mỗi chân che đúng một `Transfer` (Counter): hai lần chuyển giống hệt cùng tx vẫn lộ lần thứ hai.
+- S1-2 (chấp nhận): task drift riêng đua với indexer (cursor chạy ⇒ `stale` mãi) ⇒ drift chạy trong vòng indexer,
+  lỗi ⇒ lùi 5 phút.
+- S1-3 (chấp nhận): tx `done` chưa post-process bị tính là lệch ⇒ cộng `amount_base` của chúng vào số dư sổ.
+- S1-4 (chấp nhận): CI Odoo xanh khi không chạy test nào ⇒ đòi `0 failed, 0 error(s) of N≥1`.
+- S1-5 (chấp nhận): nonce hmac nhớ từ lúc nhận, không tới hạn của timestamp ⇒ nhớ tới `ts + 300 s`.
+- S1-6 (chấp nhận): request chưa xác thực giữ bộ đệm/task không giới hạn ⇒ timeout đọc body 10 s + trần 64 đồng thời.
+- S1-7 (chấp nhận): breaker mở nhưng gateway vẫn nhận job rồi để hết hạn ⇒ 503 trước mô phỏng.
+- Thêm: spike breaker có sàn tuyệt đối `spike_min_base_fee_gwei` (mặc định 1) — L2 phí gần 0 không bị coi là spike;
+  `balance_report` từ chối (token, ví) lặp.
