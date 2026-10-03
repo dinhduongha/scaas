@@ -154,6 +154,9 @@ contract OpenFactory is IOpenFactory {
     ///      ai nạp tiền vào một token bất biến không bao giờ verify được (IOpenFactory).
     function _checkVerifier(address verifier) private view {
         if (verifier == address(0)) revert VerifierRequiredForZether();
+        // Không code ⇒ lời gọi "thành công" với returndata rỗng, và lỗi giải mã nổ ở
+        // frame NÀY — ngoài tầm `catch`. Phải chặn trước.
+        if (verifier.code.length == 0) revert VerifierUnsupportedOnThisChain(verifier, "");
         bool ok;
         try IZetherVerifier(verifier).isSupportedOnThisChain() returns (bool s) { ok = s; } catch {}
         if (ok) return;
