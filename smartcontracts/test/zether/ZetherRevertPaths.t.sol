@@ -26,6 +26,23 @@ contract SlashableERC20 is ERC20 {
     function slash(address from, uint256 v) external { _burn(from, v); }
 }
 
+/// Underlying gọi ngược vào token trong lúc token chuyển tiền ra (ERC-777 / hook độc hại).
+contract ReentrantERC20 is ERC20 {
+    address public target;
+    bytes public payload;
+    constructor() ERC20("Re", "RE") {}
+    function decimals() public pure override returns (uint8) { return 6; }
+    function mint(address to, uint256 v) external { _mint(to, v); }
+    function arm(address t, bytes calldata p) external { target = t; payload = p; }
+    function _update(address from, address to, uint256 v) internal override {
+        super._update(from, to, v);
+        if (target != address(0) && from == target) {
+            (bool ok, bytes memory ret) = target.call(payload);
+            if (!ok) assembly { revert(add(ret, 32), mload(ret)) }
+        }
+    }
+}
+
 /// @notice Danh mục đường revert (yêu cầu coverage của brief). Mỗi lỗi tuỳ biến của contract Zether
 ///         được chạm ít nhất một lần — ở đây, hoặc ở file ghi trong bảng:
 ///
@@ -316,6 +333,27 @@ contract ZetherRevertPathsTest is ZetherFixture {
     function _ecdsa(uint256 pk, bytes32 h) internal pure returns (bytes memory) {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, h);
         return abi.encodePacked(r, s, v);
+    }
+
+    /// Khoá reentrancy theo contract (transient): hook của underlying gọi lại token giữa `unwrap` ⇒ revert.
+    function test_reentrancyBlocked() public {
+        ReentrantERC20 re = new ReentrantERC20();
+        bytes memory init = abi.encode("Z", "Z", address(reg), uint256(1), uint256(1) << 40, uint256(0), bytes(""));
+        ZetherToken z = ZetherToken(factory.createZetherToken(1, address(re), address(ver), init, "re"));
+        re.mint(address(this), 100);
+        re.approve(address(z), 100);
+        z.wrap(100);
+        re.arm(address(z), abi.encodeCall(ZetherToken.rollOverPublic, (alice.ua)));
+        vm.expectRevert(bytes(""));
+        z.unwrap(10, address(this));
+    }
+
+    /// EOA uỷ quyền EIP-7702 (code = 0xef0100‖addr) vẫn là EOA: không giữ allowance (R26).
+    function test_eip7702DelegatedEoaIsNotASpender() public {
+        address eoa = address(0x7702);
+        vm.etch(eoa, abi.encodePacked(hex"ef0100", address(0x1234)));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.SpenderNotContract.selector, eoa));
+        tok.approve(eoa, 1);
     }
 
     function test_curveLibBadLength() public {

@@ -327,6 +327,25 @@ abstract contract ZetherTokenSuite is ZetherFixture {
         assertLt(g0 - gasleft(), 200_000, "fail-fast");
     }
 
+    function test_relayedBurn() public {
+        address payer = _relayedSetup();
+        MetaTxLib.MetaTransaction memory m =
+            _mt(payer, "", 11, MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED, 9);
+        (bytes memory pl, bytes memory pr) = _proveBurn(tok, alice, 60, 500, address(0xB0C), carol.ua, tok.envelopeBinding(m));
+        m.data = abi.encodePacked(tok.OP_ZBURN(), abi.encode(pl, uint256(60), address(0xB0C), ZetherTypes.UA.unwrap(carol.ua), pr, bytes("")));
+        // bóc proof ra gọi thẳng: statement DIRECT ⇒ từ chối
+        vm.expectRevert(IZetherToken.ProofRejected.selector);
+        tok.burn(pl, 60, address(0xB0C), carol.ua, pr, "");
+        bytes memory sig = _sign(PAYER_PK, tok, m);
+        vm.prank(relayer);
+        tok.executeMetaTransaction(m, sig);
+        assertEq(usd.balanceOf(address(0xB0C)), 60 * SCALE);
+        assertEq(tok.balanceOf(relayer), 9);
+        (uint256 a,) = _bal(alice);
+        assertEq(a, 500 - 60 - FEE);
+        _assertConservation(tok, 1100);
+    }
+
     function test_publicMetaTransferStillWorks() public {
         address payer = _relayedSetup();
         MetaTxLib.MetaTransaction memory m = _mt(payer, "", 1, MetaTxLib.MODE_FEE_PERCENT, 10_000);

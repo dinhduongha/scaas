@@ -170,6 +170,23 @@ contract ZetherVerifierTest is Test {
         assertFalse(bls.verifyTransfer(st, pr), "cross-curve");
     }
 
+    /// Auditor bật nhưng C_aud mã hoá số khác C_out: E6 (cùng z_v, z_s) phải bắt — auditor không bị lừa.
+    function test_auditorCiphertextMustMatchValue() public {
+        Case memory k = Case(bls, 1000, 300, 5, true);
+        bytes memory st = _transferStatement(k, k.amount);
+        bytes memory lie = _cts(Case(bls, 1000, 1, 5, true), 1); // C_aud của v = 1
+        uint256 p = 128;
+        for (uint256 i; i < p; ++i) st[384 + 8 * p + i] = lie[3 * p + i];
+        assertFalse(_ok(bls, st, _proveTransfer(k, st, k.amount), true));
+    }
+
+    /// Witness b' sai (E1 đúng khoá, E5 sai số dư) — burn chỉ qua khi `b' = b − amount − fee`.
+    function test_burnWrongBalanceWitnessRejected() public view {
+        bytes memory st = _burnStatement(bn, 1000, 400, 5);
+        bytes memory pr = prover.proveBurn(bn, st, ZetherProver.BurnWitness(XF, 596, 0x99, keccak256("b")));
+        assertFalse(bn.verifyBurn(st, pr));
+    }
+
     function test_auditorOffRequiresIdentityCaud() public {
         Case memory k = Case(bn, 1000, 300, 5, false);
         bytes memory st = _transferStatement(k, k.amount);

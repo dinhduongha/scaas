@@ -351,10 +351,15 @@ phủ `m.data`; binding phủ danh tính phong bì `(from, batch, nonce, …)`. 
 **Lời gọi thẳng** (`msg.sender` tự trả gas, statement `ZTX_V1_DIRECT`, `envelopeBinding = 0`):
 
 ```
-transferConfidential(bytes payload, bytes proof, bytes authSig, bytes32 beneficiary,
-                     FeeMode outerFeeMode, uint256 outerFee, address outerFeeRecipient) returns (bytes32 entryRef)
+transferConfidential(bytes payload, bytes proof, bytes authSig, bytes32 beneficiary) returns (bytes32 entryRef)
+      selector 0x7c947e8e
 burn(bytes payload, uint256 amount, address recipient, bytes32 beneficiary, bytes proof, bytes authSig)
+      selector 0x8938052e
 ```
+
+Lời gọi thẳng **không có phí ngoài** (RS2-14): người gọi tự trả gas; phí ngoài chỉ sống trong phong bì. (Bản 1 có
+7 tham số `…, FeeMode, uint256, address` — bỏ vì không ai cần trả phí cho chính mình, và 7 tham số làm mọi
+contract Solidity gọi vào bị *stack too deep* với legacy codegen.)
 
 `authSig` có mặt ở **cả hai** đường: lời gọi thẳng không phải lối tắt quanh `auth_custody` (§11).
 `burn`: `0 < amount ≤ maxDecryptableShielded` (≤ 2^54) kiểm **trước** khi dựng statement — cùng với `fee < 2^32`
@@ -481,9 +486,38 @@ lúc `initialize`, bất biến (RS2-8).
 S2 kiểm: vector đúng ⇒ `verifyTransfer/verifyBurn == true`; lật một bit bất kỳ của proof/statement ⇒ `false`
 hoặc revert.
 
-## 15. Gas (đo, forge, chain 31337)
+## 15. Gas (đo, forge 1.3.5, EVM Prague, chain 31337)
 
-Điền sau khi đo — xem §15 bản cập nhật.
+Đo bằng `gasleft()` quanh lời gọi trong test (`ZetherVerifier.t.sol`, `ZetherToken.t.sol`,
+`UniversalAccountRegistry.t.sol`, chạy `forge test -vv`): **execution gas, chưa gồm 21,000 intrinsic và calldata**
+(transfer bn254 ≈ 3.7 KB calldata ≈ +50k; BLS ≈ 6.6 KB ≈ +95k). Proof thật (prover test + vector S3).
+
+| Thao tác | bn254 | BLS12-381 | Số SRS/canon (bn254 trừ khi ghi) | Lệch |
+|---|---|---|---|---|
+| `verifyTransfer` (verifier, auditor tắt) | 2,162,249 | 2,411,138 | BP 1,507k + Σ 171k = 1,678k (§3.3.6) | +29% |
+| `verifyTransfer` (auditor bật) | 2,190,479 | 2,453,597 | +27.5k (C6.5) | khớp (+28k / +42k) |
+| `verifyBurn` | 1,329,969 | 1,428,870 | ~1.27M (§3.7.1) | +5% |
+| `transferConfidential` thẳng (auditor, phí trong) | 2,748,019 | 3,400,986 | **1,905,000** (C7.2); BLS ≈1,050,000 | +44%; BLS +224% |
+| `transferConfidential` qua phong bì (+phí ngoài) | 2,818,905 | 3,457,852 | — | phong bì ≈ +71k |
+| `burn` (gồm chuyển underlying) | 1,396,398 | 1,521,199 | ~1.27M | +10% |
+| `fund` (credit đầu / ấm) | 191,360 / 28,591 | 247,307 / 36,832 | — | |
+| `rollOverPublic` (có việc / no-op) | 115,234 / 2,305 | 166,414 / 2,295 | ~66k exec (C7.3) | +75% |
+| `rollOverSigned` (Schnorr) | 133,370 | 197,316 | ~31k (§3.5.4) | ×4 |
+| `register` SELF_SCHNORR | 102,645 | 83,437 | ~105,750 (§2.2.5); BLS ~160k | khớp; BLS rẻ hơn |
+
+Vì sao lệch, để không ai "sửa" sai chỗ:
+- **Verify bn254 +29%:** canon tính 6,550 gas/điểm MSM; thực tế mỗi điểm là `staticcall` 0x07 + 0x06 qua một
+  vòng assembly + chép buffer, cộng ~10 MSM nhỏ của Σ (mỗi cái trả một lần overhead) và transcript keccak trên
+  statement 960 B. Cận dưới không đổi được là 6,150 × 230 điểm ≈ 1.41M.
+- **BLS đắt hơn bn254, không rẻ như canon dẫn:** EIP-2537 bản cuối định giá G1MSM 12,000/cặp × discount, discount
+  sàn **519/1000** ở k ≥ 128 ⇒ ≈ 6,230 gas/điểm — ngang `ecMul` bn254 — trong khi canon giả định discount sâu hơn.
+  Cộng điểm 128 B (gấp đôi bộ nhớ/calldata). Lợi thế của BLS12-381 là **bảo mật** (117–126 bit), không phải gas.
+- **Token thêm ~560k (bn254) trên verify:** lưu bundle tiết lộ `Y_t‖C_out‖D_out‖C_aud` (256 B ≈ 9 slot mới ≈ 200k
+  — cái giá của `transferCiphertext` bản SRS, RS2-15), cập nhật `acc`/`pending` dạng `bytes` trong storage, các
+  lời gọi `g1Add/g1Sub/g1MulBase` sang verifier, `requireAuthorized` của registry.
+- **rollOver:** 4 điểm `bytes` ghi lại + 2 phép cộng qua verifier; canon đếm 10 SSTORE ấm.
+Kill criterion S1 của canon (2.5M) bị vượt ở transfer bn254 (2.75M thẳng): đây là v1 tham chiếu, chưa tối ưu
+(gộp Σ thành một MSM ngẫu nhiên hoá, lưu điểm dạng `bytes32[2]`, bỏ bundle tiết lộ khỏi storage) — ghi ở rủi ro mở.
 
 ## 16. Rulings (S2)
 
@@ -507,6 +541,12 @@ hoặc revert.
 - **RS2-12** `fund`/`rollOver*` là lời gọi thẳng; chỉ transfer/burn có op trong phong bì (rollOverSigned tự mang chữ
   ký nên ai cũng relay được).
 - **RS2-13** Không memo AEAD (SRS §7 không có); client giải mã bằng BSGS trong `DECRYPT_BOUND`.
+- **RS2-14** Lời gọi thẳng `transferConfidential(payload, proof, authSig, beneficiary)` — không có phí ngoài (chỉ
+  phong bì có), khác chữ ký 6 tham số của SRS §9.3.
+- **RS2-15** Bundle tiết lộ lưu trong storage để `transferCiphertext` trả được dữ liệu như SRS §9.4 (≈ +200k gas);
+  token phí-chuyển bị từ chối (`UnsupportedUnderlying`) thay vì mint theo phần thực nhận.
+- **RS2-16** Cổng gas của precompile: verifier chuyển `gas()` cho precompile (không ghim giá EIP-1108/2537) — một
+  điểm sai làm tx tiêu hết gas; relayer phải mô phỏng trước (đã là quy tắc §3.7.7).
 
 ## 17. Review log
 
