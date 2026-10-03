@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test test/",
-    "build": "esbuild src/passkey-signer.js src/seed-signer.js --bundle --splitting --format=esm --minify --target=es2022 --legal-comments=eof --outdir=../dms_blockchain_bridge/static/lib/clientkeys --chunk-names=chunk-[hash]",
+    "build": "esbuild src/passkey-signer.js src/seed-signer.js src/zether-keys.js --bundle --splitting --format=esm --minify --target=es2022 --legal-comments=eof --outdir=../dms_blockchain_bridge/static/lib/clientkeys --chunk-names=chunk-[hash]",
     "vector": "node scripts/webauthn-vector.mjs"
   },
   "dependencies": {

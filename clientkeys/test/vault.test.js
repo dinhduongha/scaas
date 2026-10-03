@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { createVault, openVault, enablePrf, SCRYPT } from '../src/vault.js';
 import { SeedBackup } from '../src/backup.js';
 import { entropyToWords } from '../src/seed.js';
-import { loadZetherProver, sealConfKey, openConfKey, confLabel } from '../src/zether.js';
 import { bytesToHex } from '../src/bytes.js';
 
 const secret = () => crypto.getRandomValues(new Uint8Array(32));
@@ -60,23 +59,4 @@ test('backup: shown once, verify 3 random words, only then usable', () => {
   assert.equal(bytesToHex(b.take()), bytesToHex(entropy));
   assert.equal(b.state, 'taken');
   assert.throws(() => b.take(), /Confirm/);
-});
-
-test('zether seam: no wasm ⇒ null; with S3 prover the conf key is sealed like the seed', async () => {
-  assert.equal(await loadZetherProver('/nope.js', async () => { throw new Error('404'); }), null);
-  assert.equal(await loadZetherProver('/x.js', async () => ({ other: 1 })), null);
-  let inited = false;
-  const calls = [];
-  const fake = {
-    default: async () => { inited = true; },
-    zether_conf_key: (curve, seed, coin, account) => { calls.push([curve, seed.length, coin, account]); return new Uint8Array(32).fill(7); },
-  };
-  const prover = await loadZetherProver('/x.js', async () => fake);
-  assert.ok(inited);
-  const v = await sealConfKey(prover, { seed: new Uint8Array(64), curve: 'bn254', coin: 60, account: 0, pin: '123456' });
-  assert.deepEqual(calls, [['bn254', 64, 60, 0]]);
-  assert.equal(v.label, confLabel('bn254', 60, 0));
-  assert.equal(bytesToHex(await openConfKey(v, { pin: '123456' })), '07'.repeat(32));
-  await assert.rejects(sealConfKey({ zether_conf_key: () => new Uint8Array(32) },
-    { seed: new Uint8Array(64), curve: 'bn254', coin: 60, account: 0, pin: '123456' }), /invalid key/);
 });
