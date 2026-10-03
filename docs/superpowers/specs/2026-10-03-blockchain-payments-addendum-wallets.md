@@ -245,7 +245,7 @@ Lần 1 chạm quota (`Resets in 13m18s`), hẹn chạy lại nền sau 14 phút
 
 ### Grok
 Lần 4 và 5 (prompt review implementation đợt 1): vẫn `free Grok Build usage limit`, không in giờ reset.
-Đợt 2 (prompt implementation đợt 2): lần 1 vẫn giới hạn; đã hẹn chạy lại nền sau ~1 giờ.
+Đợt 2 (prompt implementation đợt 2): lần 1 và lần 2 (+1 giờ) vẫn giới hạn. Tổng cộng 7 lần trong ~9 giờ, không lần nào in giờ reset; review Grok chưa có — cần chạy lại khi tài khoản Grok còn quota.
 
 ### Codex
 Không chạy — hết credit (owner).
