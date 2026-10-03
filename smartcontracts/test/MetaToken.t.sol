@@ -88,4 +88,139 @@ contract MetaTokenTest is Fixtures {
         vm.expectRevert(MetaToken.NotMinter.selector);
         fixedTok.mint(shop, 1);
     }
+
+    // ---- Task 2: ops ----
+
+    bytes32 constant REF = keccak256("order-42");
+    uint256 constant LANE = uint256(keccak256("lane"));
+
+    function _exec(MetaTxLib.MetaTransaction memory m) internal {
+        bytes memory sig = _sign(ALICE_PK, tok, m);
+        vm.prank(relayer);
+        tok.executeMetaTransaction(m, sig);
+    }
+
+    function test_payEmitsPaymentSettled() public {
+        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, 250e6, _payData(REF), LANE,
+            MetaTxLib.MODE_RESTRICT_RELAYER);
+        vm.expectEmit(address(tok));
+        emit IERC20Payment.PaymentSettled(alice, shop, 250e6, 0, relayer, REF);
+        _exec(m);
+        assertEq(tok.balanceOf(shop), 250e6);
+        assertEq(tok.balanceOf(alice), 750e6);
+    }
+
+    function test_payReportsTheFeeActuallyCharged() public {
+        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, 100e6, _payData(REF), LANE,
+            MetaTxLib.MODE_FEE_FIXED);
+        m.fee = 1e6;
+        m.feeRecipient = relayer;
+        vm.expectEmit(address(tok));
+        emit IERC20Payment.PaymentSettled(alice, shop, 100e6, 1e6, relayer, REF);
+        _exec(m);
+        assertEq(tok.balanceOf(relayer), 1e6);
+        assertEq(tok.balanceOf(alice), 899e6);
+    }
+
+    function test_payLaneExecutesAtMostOnce() public {
+        MetaTxLib.MetaTransaction memory m1 = _mt(alice, shop, 10e6, _payData(REF), LANE, 0);
+        MetaTxLib.MetaTransaction memory m2 = _mt(alice, shop, 10e6, _payData(REF), LANE, 0);
+        m2.validUntil = m1.validUntil + 60;            // second signature, same lane
+        bytes memory s2 = _sign(ALICE_PK, tok, m2);
+        _exec(m1);
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.MetaTxBadNonce.selector, 1, 0));
+        tok.executeMetaTransaction(m2, s2);
+        assertEq(tok.balanceOf(shop), 10e6);
+    }
+
+    function test_payAfterExpiryIsRefused() public {
+        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, 1, _payData(REF), LANE, 0);
+        bytes memory sig = _sign(ALICE_PK, tok, m);
+        vm.warp(m.validUntil + 1);
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.MetaTxExpired.selector, m.validUntil, block.timestamp));
+        tok.executeMetaTransaction(m, sig);
+    }
+
+    function test_payToZeroIsRefused() public {
+        MetaTxLib.MetaTransaction memory m = _mt(alice, address(0), 1, _payData(REF), LANE, 0);
+        bytes memory sig = _sign(ALICE_PK, tok, m);
+        vm.prank(relayer);
+        vm.expectRevert(MetaToken.PayToZero.selector);
+        tok.executeMetaTransaction(m, sig);
+    }
+
+    function test_payWithWrongLengthIsUnknownOp() public {
+        bytes memory bad = abi.encodePacked(bytes4(keccak256("pay(bytes32)")), bytes31(0));
+        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, 1, bad, LANE, 0);
+        bytes memory sig = _sign(ALICE_PK, tok, m);
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSelector(MetaToken.MetaTxUnknownOp.selector, bytes4(keccak256("pay(bytes32)"))));
+        tok.executeMetaTransaction(m, sig);
+    }
+
+    function test_shortDataIsUnknownOpNotPanic() public {
+        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, 1, hex"01", LANE, 0);
+        bytes memory sig = _sign(ALICE_PK, tok, m);
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSelector(MetaToken.MetaTxUnknownOp.selector, bytes4(0)));
+        tok.executeMetaTransaction(m, sig);
+    }
+
+    function test_unknownSelectorIsRefused() public {
+        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, 1, hex"deadbeef", LANE, 0);
+        bytes memory sig = _sign(ALICE_PK, tok, m);
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSelector(MetaToken.MetaTxUnknownOp.selector, bytes4(0xdeadbeef)));
+        tok.executeMetaTransaction(m, sig);
+    }
+
+    function test_tradeNeedsRestrictedRelayer() public {
+        MetaTxLib.MetaTransaction memory m = _mt(alice, relayer, 1, _tradeData(address(9), 1, address(0)), LANE, 0);
+        bytes memory sig = _sign(ALICE_PK, tok, m);
+        vm.prank(relayer);
+        vm.expectRevert(MetaToken.TradeLegNotRestricted.selector);
+        tok.executeMetaTransaction(m, sig);
+    }
+
+    function test_tradeProceedsGoOnlyToTheExecutor() public {
+        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, 1, _tradeData(address(9), 1, address(0)), LANE,
+            MetaTxLib.MODE_RESTRICT_RELAYER);
+        bytes memory sig = _sign(ALICE_PK, tok, m);
+        vm.prank(relayer);
+        vm.expectRevert(MetaToken.TradeLegNotRestricted.selector);
+        tok.executeMetaTransaction(m, sig);
+    }
+
+    function test_tradeMovesToExecutor() public {
+        MetaTxLib.MetaTransaction memory m = _mt(alice, relayer, 5e6, _tradeData(address(9), 1, address(0)), LANE,
+            MetaTxLib.MODE_RESTRICT_RELAYER);
+        _exec(m);
+        assertEq(tok.balanceOf(relayer), 5e6);
+    }
+
+    function test_payWithFeeDirectPath() public {
+        vm.prank(alice);
+        vm.expectEmit(address(tok));
+        emit IERC20Payment.PaymentSettled(alice, shop, 100e6, 1e6, relayer, REF);
+        tok.payWithFee(shop, 100e6, FeeMode.FIXED, 1e6, relayer, REF);
+        assertEq(tok.balanceOf(shop), 100e6);
+        assertEq(tok.balanceOf(relayer), 1e6);
+    }
+
+    function testFuzz_payConservesSupply(uint96 value, uint16 feePpm) public {
+        value = uint96(bound(value, 1, 1_000e6));
+        feePpm = uint16(bound(feePpm, 0, 10_000));
+        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, value, _payData(REF), LANE, MetaTxLib.MODE_FEE_PERCENT);
+        m.fee = feePpm;
+        m.feeRecipient = relayer;
+        uint256 fee = uint256(value) * feePpm / 1_000_000;
+        if (uint256(value) + fee > tok.balanceOf(alice)) return;
+        uint256 supply = tok.totalSupply();
+        _exec(m);
+        assertEq(tok.totalSupply(), supply);
+        assertEq(tok.balanceOf(shop), value);
+        assertEq(tok.balanceOf(relayer), fee);
+    }
 }

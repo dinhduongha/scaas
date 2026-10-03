@@ -5,6 +5,9 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ERC20MetaTx} from "./ERC20MetaTx.sol";
 import {IFactoryToken} from "../factory/IFactoryToken.sol";
+import {IERC20Payment} from "./IERC20Payment.sol";
+import {MetaTxLib} from "../common/MetaTxLib.sol";
+import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 
 /// @title MetaToken v1 — implementation của kind META, deploy bằng clone EIP-1167.
 /// @notice Một implementation, hai tầng (SRS §3.1) chọn bằng `underlying`:
@@ -16,7 +19,12 @@ import {IFactoryToken} from "../factory/IFactoryToken.sol";
 ///         `eip712Domain()` (ERC-5267) chứ không đoán.
 ///
 ///         Không owner, không pause, không upgrade: token tự do (SRS §3.5.1).
-contract MetaToken is ERC20MetaTx, IFactoryToken {
+contract MetaToken is ERC20MetaTx, IERC20Payment, IFactoryToken {
+    /// @dev Op là `data` có tag selector, nằm TRONG struct đã ghim — không typehash thứ
+    ///      hai, ví hiển thị một loại giao dịch (ruling R2).
+    bytes4 public constant OP_PAY = bytes4(keccak256("pay(bytes32)"));
+    bytes4 public constant OP_TRADE = bytes4(keccak256("trade(address,uint256,address)"));
+
     address public immutable FACTORY;
     address private immutable _SELF;
 
@@ -35,6 +43,9 @@ contract MetaToken is ERC20MetaTx, IFactoryToken {
     error VerifierNotAllowed();
     error WrapperHasNoMint();
     error NotMinter();
+    error MetaTxUnknownOp(bytes4 op);
+    error PayToZero();
+    error TradeLegNotRestricted();
 
     /// @dev Constructor chạy MỘT lần, trên implementation. Immutable của nó đúng cho mọi
     ///      clone; storage của nó thì không — nên khoá luôn implementation để không ai
@@ -89,5 +100,56 @@ contract MetaToken is ERC20MetaTx, IFactoryToken {
     function mint(address to, uint256 amount) external {
         if (minter == address(0) || msg.sender != minter) revert NotMinter();
         _mint(to, amount);
+    }
+
+    /// @dev Bước 6. Mọi thứ fail được thì fail ở đây, TRƯỚC khi thu phí.
+    function _checkOp(MetaTxLib.MetaTransaction calldata m) internal view override {
+        uint256 len = m.data.length;
+        if (len == 0) return;
+        if (len < 4) revert MetaTxUnknownOp(bytes4(0));
+        bytes4 op = bytes4(m.data[:4]);
+        if (op == OP_PAY) {
+            if (len != 36) revert MetaTxUnknownOp(op);
+            if (m.to == address(0)) revert PayToZero();
+            return;
+        }
+        if (op == OP_TRADE) {
+            if (len != 100) revert MetaTxUnknownOp(op);
+            // Chân lệnh chỉ thực thi được bởi đúng contract khớp lệnh mà người ký đã
+            // chọn, và tiền chỉ đi VÀO chính contract đó. Lệnh bị lộ thì vô dụng với
+            // mọi người khác.
+            if (m.mode & MetaTxLib.MODE_RESTRICT_RELAYER == 0 || m.to != msg.sender) {
+                revert TradeLegNotRestricted();
+            }
+            return;
+        }
+        revert MetaTxUnknownOp(op);
+    }
+
+    /// @dev Bước 8. Ba op cùng một chuyển; chỉ `pay` thêm event đối soát.
+    function _executeOp(MetaTxLib.MetaTransaction calldata m, uint256 feeAmount, address feeRecipient)
+        internal override
+    {
+        _transfer(m.from, m.to, m.value);
+        if (m.data.length == 36 && bytes4(m.data[:4]) == OP_PAY) {
+            emit PaymentSettled(m.from, m.to, m.value, feeAmount, feeRecipient, bytes32(m.data[4:36]));
+        }
+    }
+
+    /// @notice Đường gọi thẳng: `msg.sender` tự trả gas, phí thu THÊM, `amount` nguyên vẹn.
+    function payWithFee(
+        address to,
+        uint256 amount,
+        FeeMode feeMode,
+        uint256 fee,
+        address feeRecipient,
+        bytes32 entryRef
+    ) external returns (bool) {
+        uint256 feeAmount = FeePolicy.compute(feeMode, amount, fee);
+        FeePolicy.validateRecipient(feeMode, feeRecipient);
+        if (feeAmount != 0) _transfer(msg.sender, feeRecipient, feeAmount);
+        _transfer(msg.sender, to, amount);
+        emit PaymentSettled(msg.sender, to, amount, feeAmount, feeRecipient, entryRef);
+        return true;
     }
 }
