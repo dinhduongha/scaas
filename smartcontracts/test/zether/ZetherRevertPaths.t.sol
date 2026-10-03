@@ -16,6 +16,7 @@ import {FeeMode, FeePolicy} from "../../src/common/FeePolicy.sol";
 import {FeeOnTransferERC20} from "../helpers/Mocks.sol";
 import {Mock1271Wallet, Puller} from "../helpers/WalletMocks.sol";
 import {ZetherKeys} from "./helpers/ZetherKeys.sol";
+import {AuthScheme} from "../../src/common/AuthScheme.sol";
 
 /// Underlying có thể bị "rút ngầm" (rebase âm / blacklist trừ dần) — để bất biến escrow có việc làm.
 contract SlashableERC20 is ERC20 {
@@ -278,6 +279,43 @@ contract ZetherRevertPathsTest is ZetherFixture {
         _vta(bytes32("nope"), 1, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(uint256(1)));
         vm.expectRevert(abi.encodeWithSelector(ITransferDisclosure.UnknownEntry.selector, bytes32("nope")));
         tok.transferCiphertext(bytes32("nope"));
+    }
+
+    /// Bất biến an ninh #1 (§11, SRS §8.1): với scheme ≠ SELF_SCHNORR, biết `x` (conf_custody) KHÔNG đủ để
+    ///      chi — cần thêm chữ ký auth_custody trên `authDigest`.
+    function test_confKeyAloneCannotSpendMultisigAccount() public {
+        User memory dave = _multisigUser(0xDA7E, 0x0DD, address(0xD4));
+        _fund(tok, dave, 100);
+        tok.rollOverPublic(dave.ua);
+        Tx memory t = _proveTransfer(tok, dave, bob, 10, 100, _none(), 0);
+        vm.expectRevert(); // proof hợp lệ, nhưng không có chữ ký của chủ multisig
+        tok.transferConfidential(t.payload, t.proof, "", _none());
+        bytes32 authDigest = keccak256(abi.encodePacked(
+            "BAMBOO-ZETHER-AUTH-V1", keccak256(tok.transferStatement(t.payload, _none(), 0))
+        ));
+        bytes[] memory sigs = new bytes[](1);
+        sigs[0] = _ecdsa(0x0DD, authDigest);
+        tok.transferConfidential(t.payload, t.proof, abi.encode(sigs), _none());
+        assertEq(tok.sendCounter(dave.ua), 1);
+    }
+
+    function _multisigUser(uint256 x, uint256 ownerPk, address evm) internal returns (User memory u) {
+        address[] memory owners = new address[](1);
+        owners[0] = vm.addr(ownerPk);
+        u.x = x;
+        u.y = ZetherKeys.pub(x, false);
+        u.evm = evm;
+        bytes32 c = reg.popChallenge(u.y, evm);
+        bytes[] memory pop = new bytes[](1);
+        pop[0] = _ecdsa(ownerPk, c);
+        bytes memory popSig = abi.encode(ZetherKeys.schnorr(x, c, false), abi.encode(pop));
+        vm.prank(evm);
+        u.ua = reg.register(u.y, AuthScheme.ECDSA_MULTISIG, abi.encode(owners, uint256(1)), popSig, false);
+    }
+
+    function _ecdsa(uint256 pk, bytes32 h) internal pure returns (bytes memory) {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, h);
+        return abi.encodePacked(r, s, v);
     }
 
     function test_curveLibBadLength() public {

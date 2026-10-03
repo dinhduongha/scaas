@@ -76,7 +76,7 @@ contract ZetherVerifierTest is Test {
     }
 
     function _ok(IZetherVerifier v, bytes memory st, bytes memory pr, bool transfer) internal view returns (bool) {
-        try this.callVerify(v, st, pr, transfer) returns (bool ok) { return ok; } catch { return false; }
+        try this.callVerify{gas: 20_000_000}(v, st, pr, transfer) returns (bool ok) { return ok; } catch { return false; }
     }
 
     function callVerify(IZetherVerifier v, bytes memory st, bytes memory pr, bool transfer) external view returns (bool) {
