@@ -5,6 +5,10 @@ use anyhow::{bail, Result};
 
 use crate::abi::MetaTransaction;
 
+/// Trần số lệnh nghỉ: lệnh hợp lệ chỉ cần chữ ký và một chút số dư, nên không có trần là
+/// một đường làm đầy bộ nhớ với chi phí gần bằng không.
+pub const MAX_RESTING: usize = 10_000;
+
 /// `bytes4(keccak256("trade(address,uint256,address)"))` = `0x0e32db52`.
 pub const OP_TRADE: [u8; 4] = [0x0e, 0x32, 0xdb, 0x52];
 
@@ -63,6 +67,7 @@ impl Book {
         let hit = self.orders.iter().position(|(r, rt)| r.live(now) && crosses(r, rt, &order, &terms));
         match hit {
             Some(i) => Some((self.orders.remove(i).0, order)),
+            None if self.orders.len() >= MAX_RESTING => None,
             None => {
                 self.orders.push((order, terms));
                 None
@@ -80,6 +85,10 @@ impl Book {
 
     pub fn purge(&mut self, now: u64) {
         self.orders.retain(|(o, _)| o.live(now));
+    }
+
+    pub fn is_full(&self) -> bool {
+        self.orders.len() >= MAX_RESTING
     }
 }
 
@@ -166,6 +175,21 @@ mod tests {
         let mut book = Book::default();
         book.insert(order(1, A, 100, B, 50, 99, Address::ZERO), 10);
         assert!(book.insert(order(1, B, 60, A, 100, 99, Address::ZERO), 10).is_none());
+    }
+
+    #[test]
+    fn a_full_book_rests_nothing_more() {
+        let mut book = Book::default();
+        for i in 0..MAX_RESTING {
+            let mut o = order(1, A, 100, B, 50, 99, Address::ZERO);
+            o.m.batch = U256::from(i);
+            book.insert(o, 10);
+        }
+        assert!(book.is_full());
+        book.insert(order(3, A, 100, B, 50, 99, Address::ZERO), 10);
+        assert_eq!(book.list(A, B, 10).len(), MAX_RESTING);
+        // a crossing order still matches against what rests
+        assert!(book.insert(order(2, B, 60, A, 100, 99, Address::ZERO), 10).is_some());
     }
 
     #[test]

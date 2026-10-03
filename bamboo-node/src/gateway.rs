@@ -166,6 +166,10 @@ async fn post_order(State(s): State<AppState>, Json(r): Json<SignedReq>) -> Repl
         Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "book poisoned"}))),
     };
     let Some((rest, inc)) = matched else {
+        let full = c.book.lock().map(|b| b.is_full()).unwrap_or(true);
+        if full {
+            return (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error": "order book full"})));
+        }
         return (StatusCode::ACCEPTED, Json(json!({"status": "resting"})));
     };
     let valid_until = rest.m.validUntil.min(inc.m.validUntil).saturating_to();
