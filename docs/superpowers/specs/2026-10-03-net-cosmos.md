@@ -114,10 +114,11 @@ một lần, rồi gọi `token.Pay` ⇒ `payment_settled` mang đúng `pay_ref`
 - **Finality:** CometBFT final tức thì ⇒ `final_head` = khối mới nhất (`/status`).
   `events(from,to)`: `block_results` từng khối (lưu cùng lúc commit; **không** `tx_search` vì indexer tx chạy
   bất đồng bộ sau commit ⇒ khối mới nhất có thể chưa index, event lọt vĩnh viễn), `block` chỉ khi khối có event của
-  ta (`tx_hash = sha256(tx bytes)`), lọc contract trong `params.contracts`, chuẩn hoá
+  ta (`tx_hash = sha256(tx bytes)`), lọc theo token Odoo đăng ký (`node_config.tokens`, bech32 — review M1; danh sách rỗng ⇒
+  `index_step` không tiến con trỏ), chuẩn hoá
   `{event, contract, block_number, block_hash, tx_hash, log_index, from, to, amount, entry_ref, digest}`;
   `log_index` = thứ tự event trong tx (`tx_hash` khác nhau giữa tx ⇒ khoá `(tx_hash, log_index)` duy nhất).
-- Cấu hình: `rpc_urls = [CometBFT RPC]`, `params = {rest, prefix, denom, gas_price, contracts}`.
+- Cấu hình: `rpc_urls = [CometBFT RPC]`, `params = {rest, prefix, denom, gas_price}`.
 
 ## 6. Odoo và portal
 

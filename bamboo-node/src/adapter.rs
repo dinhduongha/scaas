@@ -96,9 +96,10 @@ pub trait ChainAdapter: Send + Sync {
     async fn final_head(&self) -> Result<Option<Head>>;
     /// Hash (`0x` + 64 hex) của khối/ledger/checkpoint `height` — đầu cuối vùng báo Odoo.
     async fn block_hash(&self, height: u64) -> Result<String>;
-    /// Event chuẩn hoá cho `chain_event_ingest` trong [from, to]; hash và địa chỉ đã ở dạng chuẩn
-    /// (hash `0x`+64 hex; địa chỉ theo họ — R61).
-    async fn events(&self, from: u64, to: u64) -> Result<Vec<Value>>;
+    /// Event chuẩn hoá cho `chain_event_ingest` trong [from, to], CHỈ của `contracts` (token Odoo đã đăng ký,
+    /// dạng chuẩn của họ — review M1: không danh sách tĩnh trong cấu hình node); hash và địa chỉ đã ở dạng
+    /// chuẩn (hash `0x`+64 hex; địa chỉ theo họ — R61).
+    async fn events(&self, from: u64, to: u64, contracts: &[String]) -> Result<Vec<Value>>;
 }
 
 const STATUS_POLL: Duration = Duration::from_millis(500);
@@ -212,7 +213,12 @@ pub async fn index_step(adapter: &dyn ChainAdapter, odoo: &Odoo) -> Result<bool>
     let nc = odoo.node_config_ref(key.clone(), None, None).await?;
     let Some(head) = adapter.final_head().await? else { return Ok(false) };
     let Some((from, to)) = next_range(nc.indexed_block, head.height, 1000) else { return Ok(false) };
-    let events = adapter.events(from, to).await?;
+    // Không token nào đăng ký: không ai lọc được vùng này ⇒ giữ con trỏ (review M1), đọc lại khi có token.
+    let contracts: Vec<String> = nc.tokens.iter().map(|t| t.address.clone()).collect();
+    if contracts.is_empty() {
+        return Ok(false);
+    }
+    let events = adapter.events(from, to, &contracts).await?;
     let hash = if to == head.height { head.hash.clone() } else { adapter.block_hash(to).await? };
     let r = odoo.ingest_ref(key, from, to, &hash, &events).await?;
     Ok(r.indexed_block >= to && to < head.height)
@@ -226,5 +232,85 @@ mod tests {
     fn families_parse() {
         assert_eq!(Family::parse("sui"), Some(Family::Sui));
         assert_eq!(Family::parse("solana"), None);
+    }
+
+    /// Chỉ `final_head`/`events` được gọi; ghi lại tập contract indexer đưa vào.
+    #[derive(Default)]
+    struct Idx(std::sync::Mutex<Vec<Vec<String>>>);
+
+    #[async_trait]
+    impl ChainAdapter for Idx {
+        fn family(&self) -> Family {
+            Family::Cosmos
+        }
+        fn chain_key(&self) -> &str {
+            "cosmos:t"
+        }
+        fn lanes(&self) -> &[Lane] {
+            &[]
+        }
+        async fn build(&self, _: &Job, _: usize) -> std::result::Result<Built, SimError> {
+            unreachable!()
+        }
+        async fn sign(&self, _: Built, _: usize, _: u64) -> Result<Signed> {
+            unreachable!()
+        }
+        async fn submit(&self, _: &Signed) -> Result<()> {
+            unreachable!()
+        }
+        async fn tx_status(&self, _: &str) -> Result<TxStatus> {
+            unreachable!()
+        }
+        async fn sequence(&self, _: usize) -> Result<u64> {
+            unreachable!()
+        }
+        async fn final_head(&self) -> Result<Option<Head>> {
+            Ok(Some(Head { height: 5, hash: format!("0x{}", "ab".repeat(32)) }))
+        }
+        async fn block_hash(&self, _: u64) -> Result<String> {
+            unreachable!()
+        }
+        async fn events(&self, _: u64, _: u64, contracts: &[String]) -> Result<Vec<Value>> {
+            self.0.lock().unwrap().push(contracts.to_vec());
+            Ok(vec![])
+        }
+    }
+
+    /// Fake Odoo: `node_config` trả `tokens`, đếm số lần ingest.
+    async fn fake_odoo(tokens: Value) -> (Odoo, Arc<std::sync::Mutex<u32>>) {
+        use axum::extract::{Path, State};
+        use axum::Json;
+        type S = (Value, Arc<std::sync::Mutex<u32>>);
+        async fn h(State((tokens, n)): State<S>, Path((_m, method)): Path<(String, String)>, Json(_b): Json<Value>) -> Json<Value> {
+            Json(match method.as_str() {
+                "node_config" => serde_json::json!({"finality_mode": "instant", "finality_depth": 0, "finality_quorum": 1,
+                    "indexed_block": 0, "tokens": tokens, "journal_max_nonce": null}),
+                _ => {
+                    *n.lock().unwrap() += 1;
+                    serde_json::json!({"indexed_block": 5, "created": 0})
+                }
+            })
+        }
+        let n = Arc::new(std::sync::Mutex::new(0));
+        let app = axum::Router::new().route("/json/2/{m}/{method}", axum::routing::post(h)).with_state((tokens, n.clone()));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        let cfg = crate::config::OdooCfg { url, database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
+        (Odoo::with_key(&cfg, "k".into()).unwrap(), n)
+    }
+
+    /// Review H1+M1: tập contract đến từ Odoo (địa chỉ dạng chuẩn của họ, không phải EVM), và khi tập rỗng
+    /// con trỏ KHÔNG tiến — event của token kích hoạt sau vẫn được đọc lại.
+    #[tokio::test]
+    async fn index_step_filters_on_odoo_tokens_and_holds_the_cursor_without_them() {
+        let a = Idx::default();
+        let (odoo, ingests) = fake_odoo(serde_json::json!([])).await;
+        assert!(!index_step(&a, &odoo).await.unwrap());
+        assert_eq!((*ingests.lock().unwrap(), a.0.lock().unwrap().len()), (0, 0), "no contracts => no ingest");
+        let (odoo, ingests) = fake_odoo(serde_json::json!([{"address": "wasm1tok", "decimals": 6}])).await;
+        index_step(&a, &odoo).await.unwrap();
+        assert_eq!(*ingests.lock().unwrap(), 1);
+        assert_eq!(a.0.lock().unwrap().as_slice(), [vec!["wasm1tok".to_string()]]);
     }
 }

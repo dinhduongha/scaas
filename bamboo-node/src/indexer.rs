@@ -80,7 +80,7 @@ pub async fn step(chain: &Chain, odoo: &Odoo) -> anyhow::Result<bool> {
         warn!(chain = chain.number, block = to, "quorum not reached; not advancing");
         return Ok(false);
     }
-    let addrs: Vec<Address> = nc.tokens.iter().map(|t| t.address).collect();
+    let addrs: Vec<Address> = nc.tokens.iter().filter_map(crate::odoo::TokenCfg::evm).collect();
     let events: Vec<Value> = if addrs.is_empty() {
         vec![]
     } else {

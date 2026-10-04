@@ -204,13 +204,16 @@ struct FakeOdoo {
     reports: Vec<Value>,
     ingested: Vec<Value>,
     indexed_block: u64,
+    /// Token đăng ký ở Odoo, dạng bech32 thật (review H1: node_config phải đọc được chúng).
+    tokens: Vec<String>,
 }
 
 async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path<(String, String)>, Json(body): Json<Value>) -> Json<Value> {
     let mut o = s.lock().unwrap();
     let out = match (model.as_str(), method.as_str()) {
         ("blockchain.chain", "node_config") => json!({"evm_chain_number": body["evm_chain_number"], "finality_mode": "instant",
-            "finality_depth": 0, "finality_quorum": 1, "indexed_block": o.indexed_block, "tokens": [],
+            "finality_depth": 0, "finality_quorum": 1, "indexed_block": o.indexed_block,
+            "tokens": o.tokens.iter().map(|t| json!({"address": t, "decimals": 6})).collect::<Vec<_>>(),
             "journal_max_nonce": null, "inflight": []}),
         ("blockchain.relay.job", "relay_poll") => {
             assert_eq!(body["evm_chain_number"], "cosmos:bamboo-1");
@@ -258,13 +261,12 @@ fn odoo_at(addr: SocketAddr) -> Odoo {
     Odoo::with_key(&cfg, "k".into()).unwrap()
 }
 
-fn cfg(contracts: &[&str]) -> ChainCfg {
+fn cfg() -> ChainCfg {
     let mut params = toml::Table::new();
     params.insert("rest".into(), REST.into());
     params.insert("prefix".into(), "wasm".into());
     params.insert("denom".into(), "ustake".into());
     params.insert("gas_price".into(), "0".into());
-    params.insert("contracts".into(), toml::Value::Array(contracts.iter().map(|c| toml::Value::from(*c)).collect()));
     ChainCfg {
         family: "cosmos".into(),
         network: Some(CHAIN.into()),
@@ -313,9 +315,9 @@ async fn cosmos_payment_lanes_finality_and_anti_lock() {
     let t1 = instantiate(&code, &init("TOKA"), "t1").await;
     let t2 = instantiate(&code, &init("TOKB"), "t2").await;
 
-    let state = Arc::new(Mutex::new(FakeOdoo::default()));
+    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![t1.clone(), t2.clone()], ..Default::default() }));
     let odoo = odoo_at(start_fake(state.clone()).await);
-    let adapter = CosmosAdapter::new(&cfg(&[&t1, &t2]), signers).unwrap();
+    let adapter = CosmosAdapter::new(&cfg(), signers).unwrap();
     assert_eq!(adapter.lanes()[1].address, lane_addrs[1]);
 
     // Anti-lock (R62): Alice ký X (token 1) và Y (token 2) cùng lúc; X bị giữ lại.

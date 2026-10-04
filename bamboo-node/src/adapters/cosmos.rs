@@ -260,7 +260,6 @@ pub struct CosmosAdapter {
     max_gas: u64,
     rpc: String,
     rest: String,
-    contracts: Vec<String>,
     lanes: Vec<Lane>,
     signers: Vec<LocalSigner>,
     http: reqwest::Client,
@@ -272,12 +271,6 @@ impl CosmosAdapter {
         let p = |k: &str| cfg.params.get(k).and_then(|v| v.as_str()).map(str::to_string);
         let prefix = p("prefix").ok_or_else(|| anyhow!("chain {}: params.prefix (bech32) is required", cfg.chain_key()))?;
         let rest = p("rest").ok_or_else(|| anyhow!("chain {}: params.rest (REST gateway URL) is required", cfg.chain_key()))?;
-        let contracts = cfg
-            .params
-            .get("contracts")
-            .and_then(|v| v.as_array())
-            .map(|a| a.iter().filter_map(|c| c.as_str().map(str::to_string)).collect())
-            .unwrap_or_default();
         let lanes = signers
             .iter()
             .zip(&cfg.lanes)
@@ -295,7 +288,6 @@ impl CosmosAdapter {
             max_gas: cfg.max_gas_per_tx,
             rpc: cfg.rpc_urls[0].trim_end_matches('/').to_string(),
             rest: rest.trim_end_matches('/').to_string(),
-            contracts,
             lanes,
             signers,
             http: reqwest::Client::builder().timeout(Duration::from_secs(20)).build()?,
@@ -454,15 +446,12 @@ impl ChainAdapter for CosmosAdapter {
     /// Đọc `block_results` từng khối (kết quả ABCI lưu cùng lúc commit), KHÔNG dùng `tx_search`: indexer tx của
     /// CometBFT chạy bất đồng bộ sau commit, nên khối mới nhất có thể chưa được index ⇒ event lọt mất vĩnh viễn.
     /// `tx_hash` = sha256(bytes tx trong `block`), chỉ đọc `block` khi khối có event của ta.
-    async fn events(&self, from: u64, to: u64) -> Result<Vec<Value>> {
+    async fn events(&self, from: u64, to: u64, contracts: &[String]) -> Result<Vec<Value>> {
         let mut out = Vec::new();
-        if self.contracts.is_empty() {
-            return Ok(out);
-        }
         for h in from..=to {
             let br = self.rpc(&format!("block_results?height={h}")).await?;
             let results = br["txs_results"].as_array().cloned().unwrap_or_default();
-            let probe = |r: &Value| !normalize_tx(&json!({"hash": "00".repeat(32), "height": h.to_string(), "tx_result": r}), &self.contracts).is_empty();
+            let probe = |r: &Value| !normalize_tx(&json!({"hash": "00".repeat(32), "height": h.to_string(), "tx_result": r}), contracts).is_empty();
             if !results.iter().any(probe) {
                 continue;
             }
@@ -475,7 +464,7 @@ impl ChainAdapter for CosmosAdapter {
             for (raw, r) in txs.iter().zip(&results) {
                 let bytes = B64.decode(raw.as_str().unwrap_or_default()).context("tx bytes")?;
                 let tx = json!({"hash": alloy::hex::encode(Sha256::digest(&bytes)), "height": h.to_string(), "tx_result": r});
-                for mut e in normalize_tx(&tx, &self.contracts) {
+                for mut e in normalize_tx(&tx, contracts) {
                     e["block_hash"] = json!(hash);
                     out.push(e);
                 }
