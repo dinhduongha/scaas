@@ -6,6 +6,9 @@
 
 In ra FeeStatement (execution/io gas units, storage fee octa) của lần chi đầu (mở Account lười) và lần thứ hai, và
 của một `dex::settle` khớp HAI lệnh ký bằng passkey (trường hợp nặng nhất: hai lần kiểm P-256 trong một tx).
+
+Chặn (review L4): thoát mã 1 nếu execution gas vượt `GUARD` — trần một tx là 9 200; `settle` hai passkey đã dùng ~88 %,
+thêm logic hay Aptos đổi bảng gas là lệnh khớp passkey sẽ `EXECUTION_LIMIT_REACHED` (job `Reverted`, không thử lại).
 """
 import hashlib
 import importlib
@@ -146,3 +149,15 @@ out['dex_settle_two_passkeys'] = fee(r['transaction_hash'])
 if os.environ.get('PROFILE'):
     out['profile'] = pay(F.auth_keys(p_pk)[0], p_pk, passkey_sign, 0x35, profile=True)
 print(json.dumps(out))
+# execution gas units; trần một tx 9 200 (`txn.max_execution_gas`). Nâng ngưỡng phải ghi lý do vào spec §17.
+GUARD = {('dex_settle_two_passkeys',): 8_600, ('passkey', 'next_pay'): 4_300, ('passkey', 'first_pay_opens_account'): 5_200}
+over = []
+for path, limit in GUARD.items():
+    v = out
+    for k in path:
+        v = v[k]
+    if v['execution'] > limit:
+        over.append('%s: execution %d > %d' % ('.'.join(path), v['execution'], limit))
+if over:
+    sys.exit('gas guard: ' + '; '.join(over))
+print('gas guard ok')
