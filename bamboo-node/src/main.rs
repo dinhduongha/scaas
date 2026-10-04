@@ -4,7 +4,7 @@
 //!     (bí mật đọc từ stdin, passphrase từ $BAMBOO_KEYSTORE_PASSPHRASE)
 //!
 //! Một binary, mô-đun bật bằng config (`_USER-DECISIONS` §23.3). Mỗi chain EVM: một `submit` mỗi lane
-//! (R62), một `indexer`, và (tuỳ chọn) gateway HTTP chung. Họ khác: `lane_runner` mỗi lane + `index_runner`.
+//! (R62), một `indexer`, và (tuỳ chọn) gateway HTTP chung. Họ khác và Hedera (R6-1): `lane_runner` mỗi lane + `index_runner`.
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::PathBuf;
@@ -95,7 +95,7 @@ async fn main() -> Result<()> {
         let poll = Duration::from_millis(cc.poll_ms);
         let tokens = Arc::new(RwLock::new(Vec::new()));
         let mut probe_lanes = Vec::new();
-        if !cc.is_evm() {
+        if cc.uses_adapter() {
             let adapter = adapters::build(cc, &signers)?;
             if cfg.modules.submit {
                 let relay = odoo::Odoo::new(&cfg.odoo, &cfg.odoo.relay_api_key_env)?;

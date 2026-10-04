@@ -114,6 +114,8 @@ pub trait ChainAdapter: Send + Sync {
 /// Lỗi `submit` khi mạng TỪ CHỐI tx trước mempool (sequence lệch, thiếu phí, chữ ký sai…): gửi lại cùng bytes
 /// không bao giờ qua, nên runner trả job về hàng đợi để dựng lại với sequence mới thay vì giữ lane tới hạn
 /// payload (review L1). Lỗi khác của `submit` (mạng, mempool đầy) vẫn là thử lại cùng bytes.
+/// `tx_status` cũng trả `Rejected` khi tx đã vào sổ nhưng mạng từ chối mà KHÔNG chạy nó (Hedera `WRONG_NONCE`,
+/// `INSUFFICIENT_PAYER_BALANCE`…): chữ ký chủ thể còn nguyên ⇒ job về hàng đợi, không `reverted` (review M2 S6).
 #[derive(Debug)]
 pub struct Rejected(pub String);
 
@@ -246,6 +248,10 @@ pub async fn lane_step_metered(
                 return Ok(true);
             }
             Ok(TxStatus::Pending) => {}
+            Err(e) if e.downcast_ref::<Rejected>().is_some() => {
+                report(odoo, Report { error: Some(e.to_string()), ..rep(job.id, "queued") }).await;
+                return Ok(true);
+            }
             Ok(TxStatus::Unknown) | Err(_) => {
                 // Hỏi trạng thái TRƯỚC: bị từ chối khi gửi lại có thể vì tx lần trước đã vào khối.
                 if let Some(r) = sent.as_ref().err().and_then(|e| e.downcast_ref::<Rejected>()) {

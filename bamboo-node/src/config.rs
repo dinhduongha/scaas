@@ -259,8 +259,10 @@ impl Config {
                 if c.evm_chain_number == 0 {
                     bail!("chain {key}: evm_chain_number is required for {}", c.family);
                 }
-                if c.finality.mode != "depth" && c.finality.mode != "tag" {
-                    bail!("chain {key}: finality.mode must be depth|tag");
+                // Hedera: aBFT, a record file is final (`instant` = depth 0).
+                let instant = c.family == "hedera" && c.finality.mode == "instant";
+                if c.finality.mode != "depth" && c.finality.mode != "tag" && !instant {
+                    bail!("chain {key}: finality.mode must be depth|tag (hedera: also instant)");
                 }
             } else if c.network.is_none() {
                 bail!("chain {key}: network is required for {}", c.family);
@@ -314,11 +316,18 @@ impl ChainCfg {
         self.family == "evm" || self.family == "hedera"
     }
 
-    /// `evm:9000`, `hedera:296`, `sui:localnet`… — khoá chung với Odoo `blockchain.chain.chain_key`.
+    /// Chạy `adapters::build` + `lane_runner`/`index_runner` thay vì runner EVM pipeline (`submit.rs`).
+    /// Hedera thuộc nhóm này (R6-1: không mempool, một tx bay mỗi lane) dù cấu hình kiểu EVM (`is_evm`).
+    pub fn uses_adapter(&self) -> bool {
+        self.family != "evm"
+    }
+
+    /// `evm:9000`, `hedera:296`, `sui:localnet`… — khoá chung với Odoo `blockchain.chain.chain_key`
+    /// (EVM/Hedera: luôn theo `evm_chain_number`, `network` bị bỏ qua như ở Odoo).
     pub fn chain_key(&self) -> String {
         match &self.network {
-            Some(n) => format!("{}:{n}", self.family),
-            None => format!("{}:{}", self.family, self.evm_chain_number),
+            Some(n) if !self.is_evm() => format!("{}:{n}", self.family),
+            _ => format!("{}:{}", self.family, self.evm_chain_number),
         }
     }
 }

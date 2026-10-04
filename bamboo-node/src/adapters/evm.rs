@@ -55,7 +55,7 @@ impl EvmAdapter {
         })
     }
 
-    fn lane(&self, i: usize) -> Result<&Chain> {
+    pub(crate) fn lane(&self, i: usize) -> Result<&Chain> {
         self.chains.get(i).ok_or_else(|| anyhow!("no lane {i}"))
     }
 }
