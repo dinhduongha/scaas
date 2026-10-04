@@ -10,6 +10,7 @@ use crate::signer::LocalSigner;
 pub mod cosmos;
 pub mod evm;
 pub mod hedera;
+pub mod soroban;
 
 /// Adapter giữ signer của nó; `LocalSigner` không `Clone` nên chép khoá bên trong.
 fn own(s: &LocalSigner) -> LocalSigner {
@@ -24,6 +25,7 @@ pub fn build(cfg: &ChainCfg, signers: &[LocalSigner]) -> Result<Arc<dyn ChainAda
     match cfg.family.as_str() {
         "cosmos" => Ok(Arc::new(cosmos::CosmosAdapter::new(cfg, signers.iter().map(own).collect())?)),
         "hedera" => Ok(Arc::new(hedera::HederaAdapter::from_cfg(cfg, signers)?)),
+        "soroban" => Ok(Arc::new(soroban::SorobanAdapter::new(cfg, signers)?)),
         other => bail!("chain {}: no adapter for family {other} in this build", cfg.chain_key()),
     }
 }
