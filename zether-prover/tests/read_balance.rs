@@ -82,7 +82,8 @@ fn big_balance_cache_spend_and_cli_recovery() {
     let args = ["--curve", "bn254", "--table-bits", "22", "--bound-bits", "45", "--ct", &ct, "--table-file", file.to_str().unwrap()];
     for _ in 0..2 {
         let out = read_balance(&args, &k0).unwrap();
-        assert_eq!(out, json!({"balance": left.to_string(), "accSeq": null, "verified": true}));
+        // review N3: a pasted ciphertext alone is the user's word, neither verified nor refuted.
+        assert_eq!(out, json!({"balance": left.to_string(), "accSeq": null, "verified": null, "source": "pasted"}));
     }
     assert_eq!(std::fs::metadata(&file).unwrap().len(), 15 + (12 << 22));
     // A bound below the balance, out-of-range knobs and a table file of another size are refused.
@@ -108,7 +109,7 @@ fn big_balance_cache_spend_and_cli_recovery() {
     let (url, stub) = rpc_stub(hx(&ret));
     let out = read_balance(&rpc_args(&url).iter().map(String::as_str).collect::<Vec<_>>(), &k0).unwrap();
     // review L5: an RPC can forge any acc for a known Y, so its answer is marked unverified.
-    assert_eq!(out, json!({"balance": left.to_string(), "accSeq": 2, "verified": false}));
+    assert_eq!(out, json!({"balance": left.to_string(), "accSeq": 2, "verified": false, "source": "rpc"}));
     let req = stub.join().unwrap();
     assert!(req.contains(&format!("0x{}{}", hex::encode(selector("accountState(bytes32)")), hex::encode(&ua))), "{req}");
     let x = api("keygen", json!({"curve": "bn254", "key": k0, "revealSecret": true})).unwrap()["x"].as_str().unwrap()[2..].to_string();
@@ -118,7 +119,7 @@ fn big_balance_cache_spend_and_cli_recovery() {
     let mut both = rpc_args(&url);
     both.extend(["--ct".to_string(), ct.clone()]);
     let out = read_balance(&both.iter().map(String::as_str).collect::<Vec<_>>(), &k0).unwrap();
-    assert_eq!(out, json!({"balance": left.to_string(), "accSeq": 2, "verified": true}));
+    assert_eq!(out, json!({"balance": left.to_string(), "accSeq": 2, "verified": true, "source": "rpc+pasted"}));
     stub.join().unwrap();
     let (url, stub) = rpc_stub(hx(&ret));
     let mut lie = rpc_args(&url);

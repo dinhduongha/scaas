@@ -10,14 +10,15 @@
 //! file (`< key.json`); a terminal on stdin is refused so the key is never echoed or left in the
 //! scrollback. It never leaves this process: `--rpc` sends only `eth_call accountState(UA)` (public
 //! data) via `curl`, with the URL and body on curl's stdin (`--config -`), not in argv where `ps` shows
-//! an API key embedded in the URL. Use your own node: the RPC knows `Y` and can forge any `acc`, so an
-//! RPC-only answer is printed `"verified": false`; pass `--ct` from a second source as well and the
-//! CLI requires both to agree (`"verified": true`). A pasted `--ct` alone is what the user vouches for.
+//! an API key embedded in the URL (`-q` first, so `~/.curlrc` is ignored). Use your own node: the RPC
+//! knows `Y` and can forge any `acc`, so an RPC-only answer is `"verified": false, "source": "rpc"`;
+//! with `--ct` from a second source as well both must agree (`"verified": true, "source":
+//! "rpc+pasted"`). A pasted `--ct` alone is the user's own word: `"verified": null, "source": "pasted"`.
 //! `--table-bits` 20–27 (≈ 16 B × 2^bits of RAM; refused when free RAM is short), `--bound-bits`
 //! ≤ 54; worst case 2^(bound − table) giant steps. `--table-file` loads and verifies a saved
 //! baby table (public data), or writes one after generating it. Prints
-//! `{"balance": "<decimal>", "accSeq": n|null, "verified": bool}`; `accSeq` (RPC only) is what the
-//! wallet cache stores.
+//! `{"balance": "<decimal>", "accSeq": n|null, "verified": bool|null, "source": "rpc"|"pasted"|"rpc+pasted"}`;
+//! `accSeq` (RPC only) is what the wallet cache stores.
 
 use std::io::{IsTerminal, Read};
 use std::process::{Command, ExitCode, Stdio};
@@ -99,7 +100,7 @@ fn fetch(rpc: &str, token: &str, ua: &[u8; 32]) -> Result<([Vec<u8>; 4], u64), S
     let body = json!({"jsonrpc": "2.0", "id": 1, "method": "eth_call",
                       "params": [{"to": token, "data": format!("0x{}", hex::encode(data))}, "latest"]});
     let mut child = Command::new("curl")
-        .args(["--config", "-"])
+        .args(["-q", "--config", "-"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
@@ -148,18 +149,19 @@ fn run<C: ZCurve>(a: &Args, key_json: &Value) -> Result<Value, String> {
         }
         None => None,
     };
-    let (ct, acc_seq, verified) = match (pasted, fetched) {
+    let (ct, acc_seq, verified, source) = match (pasted, fetched) {
         (Some(p), Some((f, _))) if p != f => return Err("the RPC's ciphertext differs from --ct".into()),
-        (Some(p), f) => (p, f.map(|f| f.1), true),
-        (None, Some((f, seq))) => (f, Some(seq), false),
+        (Some(p), Some((_, seq))) => (p, Some(seq), Some(true), "rpc+pasted"),
+        (Some(p), None) => (p, None, None, "pasted"),
+        (None, Some((f, seq))) => (f, Some(seq), Some(false), "rpc"),
         (None, None) => unreachable!("parse() requires --ct or --rpc"),
     };
     check_ram(a.table_bits, mem_available()).map_err(|e| e.to_string())?;
     let b = table::<C>(a)?.decrypt(&ct, &k.x, a.bound_bits).map_err(|e| e.to_string())?;
-    if !verified {
+    if verified == Some(false) {
         eprintln!("unverified (RPC): this node chose the ciphertext; check it against your own node or the wallet");
     }
-    Ok(json!({"balance": b.to_string(), "accSeq": acc_seq, "verified": verified}))
+    Ok(json!({"balance": b.to_string(), "accSeq": acc_seq, "verified": verified, "source": source}))
 }
 
 fn main() -> ExitCode {
