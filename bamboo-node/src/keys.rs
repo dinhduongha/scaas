@@ -164,9 +164,28 @@ pub fn lane_path(family: &str, i: u32) -> Result<(Curve, String)> {
     })
 }
 
+/// `lane_path` với coin type SLIP-44 riêng của chain (`[[chains]] coin_type`) thay cấp coin của họ mạng —
+/// Pi Network là họ `soroban` với 314159 thay 148. Coin type phải là chỉ số hardened (< 2^31); họ ed25519
+/// giữ đường SLIP-10 toàn hardened.
+pub fn lane_path_coin(family: &str, i: u32, coin_type: Option<u32>) -> Result<(Curve, String)> {
+    let (curve, path) = lane_path(family, i)?;
+    let Some(coin) = coin_type else { return Ok((curve, path)) };
+    let rest = path.splitn(4, '/').nth(3).unwrap_or_default();
+    let path = format!("m/44'/{coin}'/{rest}");
+    let levels = parse_path(&path)?;
+    if curve == Curve::Ed25519 && levels.iter().any(|l| l & 0x8000_0000 == 0) {
+        bail!("ed25519 (SLIP-10) path must be hardened at every level: {path}");
+    }
+    Ok((curve, path))
+}
+
 /// Khoá 32 byte của lane: từ mnemonic theo bảng, hoặc từ khoá thô (một lane duy nhất).
 pub fn lane_secret(seed: &Seed, family: &str, i: u32) -> Result<(Curve, Zeroizing<[u8; 32]>)> {
-    let (curve, path) = lane_path(family, i)?;
+    lane_secret_coin(seed, family, i, None)
+}
+
+pub fn lane_secret_coin(seed: &Seed, family: &str, i: u32, coin_type: Option<u32>) -> Result<(Curve, Zeroizing<[u8; 32]>)> {
+    let (curve, path) = lane_path_coin(family, i, coin_type)?;
     let key = match curve {
         Curve::Secp256k1 => seed.secp256k1(&path)?,
         Curve::Ed25519 => seed.ed25519(&path)?,
@@ -293,6 +312,25 @@ mod tests {
         let k = s.ed25519("m/44'/148'/0'").unwrap();
         let pk = LocalSigner::new(Curve::Ed25519, &k).unwrap().public_key();
         assert_eq!(crate::signer::stellar_account_strkey(&pk), "GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6");
+    }
+
+    #[test]
+    fn pi_network_is_soroban_with_coin_type_314159() {
+        // bip_utils 2.9.3 `Bip32Slip10Ed25519.FromSeedAndPath(seed, "m/44'/314159'/{0,1}'")`, SEP-0005 test 1 words.
+        let s = Seed::from_words("illness spike retreat truth genius clock brain pass fit cave bargain toe", None).unwrap();
+        let addr = |coin: Option<u32>, i: u32| {
+            let (c, k) = lane_secret_coin(&s, "soroban", i, coin).unwrap();
+            crate::signer::stellar_account_strkey(&LocalSigner::new(c, &k).unwrap().public_key())
+        };
+        assert_eq!(lane_path_coin("soroban", 0, Some(314159)).unwrap().1, "m/44'/314159'/0'");
+        assert_eq!(addr(Some(314159), 0), "GASWRHYE32A5A27TQWNRITIOZKOX7XQ6IVI4WEDGPVGX253D63UW2GJ3");
+        assert_eq!(addr(Some(314159), 1), "GBSIS3JSLARC3D5WXRE3343Y2IMQBKRXHPC672RELHWXVUW4QWCWM2UT");
+        assert_eq!(addr(None, 0), "GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6", "Stellar default unchanged");
+        assert_eq!(addr(Some(148), 1), "GBAW5XGWORWVFE2XTJYDTLDHXTY2Q2MO73HYCGB3XMFMQ562Q2W2GJQX");
+        // the override replaces the coin level only, on every family
+        assert_eq!(lane_path_coin("evm", 2, Some(1)).unwrap().1, "m/44'/1'/0'/0/2");
+        assert_eq!(lane_path_coin("sui", 1, Some(7)).unwrap().1, "m/44'/7'/1'/0'/0'");
+        assert!(lane_path_coin("soroban", 0, Some(0x8000_0000)).is_err(), "not a hardened index");
     }
 
     #[test]
