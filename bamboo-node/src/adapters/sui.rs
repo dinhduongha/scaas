@@ -716,6 +716,11 @@ impl ChainAdapter for SuiAdapter {
         Ok(0) // Sui: không nonce tài khoản (R62).
     }
 
+    /// Journal lane (review M3): tx đã ký trước crash được gửi lại đúng bytes để `recover_lane` thấy nó vào sổ.
+    async fn resend_journaled(&self, lane: usize) -> Result<()> {
+        self.previous_gas(lane).await.map(|_| ())
+    }
+
     async fn final_head(&self) -> Result<Option<Head>> {
         let v = self.rpc("sui_getLatestCheckpointSequenceNumber", json!([])).await?;
         let seq: u64 = v.as_str().and_then(|s| s.parse().ok()).ok_or_else(|| anyhow!("bad checkpoint number"))?;

@@ -109,6 +109,11 @@ pub trait ChainAdapter: Send + Sync {
     async fn tx_fee(&self, _tx_id: &str) -> Result<Option<u128>> {
         Ok(None)
     }
+    /// Khởi động lại (merge TODO b): gửi lại tx của `lane` mà adapter TỰ journal trên đĩa (Sui), để
+    /// `recover_lane` thấy nó vào sổ. Mặc định: họ không journal bytes ⇒ không gì để gửi lại.
+    async fn resend_journaled(&self, _lane: usize) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// Lỗi `submit` khi mạng TỪ CHỐI tx trước mempool (sequence lệch, thiếu phí, chữ ký sai…): gửi lại cùng bytes
@@ -156,6 +161,10 @@ pub async fn lane_runner(
 ) {
     let key = adapter.chain_key().to_string();
     info!(chain = %key, lane, address = %adapter.lanes()[lane].address, "lane ready");
+    while let Err(e) = recover_lane(adapter.as_ref(), &odoo, lane, &worker).await {
+        warn!(chain = %key, lane, "restart recovery: {e:#}");
+        tokio::time::sleep(poll.max(Duration::from_secs(1))).await;
+    }
     let (mut tripped, mut sampled) = (None, None::<std::time::Instant>);
     loop {
         if sampled.is_none_or(|t| t.elapsed() >= Duration::from_secs(15)) {
@@ -184,6 +193,98 @@ pub async fn lane_runner(
             Err(e) => warn!(chain = %key, lane, "lane: {e:#}"),
         }
         tokio::time::sleep(poll).await;
+    }
+}
+
+/// Khởi động lại (merge TODO b): job lane này để lại giữa chừng được chốt TRƯỚC khi nhận việc mới, nếu không
+/// job `signed`/`broadcast` treo mãi và payment request bị chặn qua `_live_job()`. Bytes đã ký mất theo tiến trình
+/// (trừ họ tự journal — `resend_journaled`), nên chỉ còn hỏi `tx_status`: vào sổ ⇒ chốt; từ chối ⇒ hàng đợi;
+/// không thấy ⇒ chờ tới khi slot sequence của nó bị dùng (không bao giờ vào được nữa ⇒ hàng đợi) hoặc payload hết
+/// hạn (`dead` ⇒ payer ký lại). Dựng lại một job mà tx cũ vẫn vào sổ không trả hai lần: contract chặn replay (R30).
+pub async fn recover_lane(adapter: &dyn ChainAdapter, odoo: &Odoo, lane: usize, worker: &str) -> Result<()> {
+    adapter.resend_journaled(lane).await?;
+    let address = adapter.lanes()[lane].address.clone();
+    let nc = odoo.node_config_ref(adapter.chain_key().into(), Some(address), Some(worker.into())).await?;
+    for j in nc.inflight {
+        let Some(tx_id) = j.tx_hash else {
+            // Chưa ký ⇒ chưa gửi gì: journal `signed` luôn có trước lần gửi đầu.
+            report(odoo, Report { error: Some("node restarted before signing".into()), ..rep(j.job_id, "queued") }).await;
+            continue;
+        };
+        info!(chain = %adapter.chain_key(), lane, job = j.job_id, tx = %tx_id, "re-checking in-flight job after restart");
+        let valid_until = j.payload.op.as_ref().and_then(|o| o["valid_until"].as_u64()).unwrap_or(0);
+        let f = InFlight { job: j.job_id, tx_id: &tx_id, valid_until, lane, signed: None, nonce: j.nonce };
+        follow(adapter, odoo, f, Ok(()), None).await;
+    }
+    Ok(())
+}
+
+/// Một tx đang bay. `signed` = bytes còn trong tay (gửi lại được); `None` sau khởi động lại.
+struct InFlight<'a> {
+    job: i64,
+    tx_id: &'a str,
+    valid_until: u64,
+    lane: usize,
+    signed: Option<&'a Signed>,
+    nonce: Option<u64>,
+}
+
+/// Theo dõi tới mined/reverted/queued/dead. `sent` = kết quả lần gửi gần nhất.
+async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut sent: Result<()>, breaker: Option<&Mutex<Breaker>>) {
+    let job = f.job;
+    loop {
+        match adapter.tx_status(f.tx_id).await {
+            Ok(TxStatus::Mined { .. }) => {
+                if let (Some(k), Ok(Some(fee))) = (breaker, adapter.tx_fee(f.tx_id).await) {
+                    if let Ok(mut k) = k.lock() {
+                        k.spend(now(), fee);
+                    }
+                }
+                report(odoo, rep(job, "mined")).await;
+                return;
+            }
+            Ok(TxStatus::Reverted { reason }) => {
+                report(odoo, Report { error: Some(reason), ..rep(job, "reverted") }).await;
+                return;
+            }
+            Ok(TxStatus::Pending) => {}
+            Err(e) if e.downcast_ref::<Rejected>().is_some() => {
+                report(odoo, Report { error: Some(e.to_string()), ..rep(job, "queued") }).await;
+                return;
+            }
+            Ok(TxStatus::Unknown) | Err(_) => {
+                // Hỏi trạng thái TRƯỚC: bị từ chối khi gửi lại có thể vì tx lần trước đã vào khối.
+                if let Some(r) = sent.as_ref().err().and_then(|e| e.downcast_ref::<Rejected>()) {
+                    report(odoo, Report { error: Some(r.to_string()), ..rep(job, "queued") }).await;
+                    return;
+                }
+                if now() > f.valid_until + EXPIRY_GRACE {
+                    // Payload chủ thể đã hết hạn: tx (nếu còn đâu đó) sẽ bị contract từ chối.
+                    report(odoo, Report { error: Some("expired before inclusion".into()), ..rep(job, "dead") }).await;
+                    return;
+                }
+                match f.signed {
+                    Some(signed) if sent.is_err() => {
+                        sent = adapter.submit(signed).await;
+                        if sent.is_ok() {
+                            report(odoo, rep(job, "broadcast")).await;
+                        }
+                    }
+                    Some(_) => {}
+                    None => {
+                        // Không còn bytes: tx chỉ vào được đúng slot sequence của nó. Slot đã bị dùng mà hỏi lại vẫn
+                        // không thấy tx ⇒ nó không bao giờ vào sổ nữa.
+                        let moved = matches!((f.nonce, adapter.sequence(f.lane).await), (Some(n), Ok(s)) if s != n);
+                        if moved && matches!(adapter.tx_status(f.tx_id).await, Ok(TxStatus::Unknown)) {
+                            let why = "lost with a node restart; its lane sequence moved on";
+                            report(odoo, Report { error: Some(why.into()), ..rep(job, "queued") }).await;
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+        tokio::time::sleep(STATUS_POLL).await;
     }
 }
 
@@ -228,51 +329,13 @@ pub async fn lane_step_metered(
         report(odoo, Report { error: Some("journal write failed".into()), ..rep(job.id, "queued") }).await;
         return Ok(true);
     }
-    let mut sent = adapter.submit(&signed).await;
+    let sent = adapter.submit(&signed).await;
     if sent.is_ok() {
         report(odoo, rep(job.id, "broadcast")).await;
     }
-    loop {
-        match adapter.tx_status(&signed.tx_id).await {
-            Ok(TxStatus::Mined { .. }) => {
-                if let (Some(k), Ok(Some(fee))) = (breaker, adapter.tx_fee(&signed.tx_id).await) {
-                    if let Ok(mut k) = k.lock() {
-                        k.spend(now(), fee);
-                    }
-                }
-                report(odoo, rep(job.id, "mined")).await;
-                return Ok(true);
-            }
-            Ok(TxStatus::Reverted { reason }) => {
-                report(odoo, Report { error: Some(reason), ..rep(job.id, "reverted") }).await;
-                return Ok(true);
-            }
-            Ok(TxStatus::Pending) => {}
-            Err(e) if e.downcast_ref::<Rejected>().is_some() => {
-                report(odoo, Report { error: Some(e.to_string()), ..rep(job.id, "queued") }).await;
-                return Ok(true);
-            }
-            Ok(TxStatus::Unknown) | Err(_) => {
-                // Hỏi trạng thái TRƯỚC: bị từ chối khi gửi lại có thể vì tx lần trước đã vào khối.
-                if let Some(r) = sent.as_ref().err().and_then(|e| e.downcast_ref::<Rejected>()) {
-                    report(odoo, Report { error: Some(r.to_string()), ..rep(job.id, "queued") }).await;
-                    return Ok(true);
-                }
-                if now() > signed.valid_until + EXPIRY_GRACE {
-                    // Payload chủ thể đã hết hạn: tx (nếu còn đâu đó) sẽ bị contract từ chối.
-                    report(odoo, Report { error: Some("expired before inclusion".into()), ..rep(job.id, "dead") }).await;
-                    return Ok(true);
-                }
-                if sent.is_err() {
-                    sent = adapter.submit(&signed).await;
-                    if sent.is_ok() {
-                        report(odoo, rep(job.id, "broadcast")).await;
-                    }
-                }
-            }
-        }
-        tokio::time::sleep(STATUS_POLL).await;
-    }
+    let f = InFlight { job: job.id, tx_id: &signed.tx_id, valid_until: signed.valid_until, lane, signed: Some(&signed), nonce: Some(seq) };
+    follow(adapter, odoo, f, sent, breaker).await;
+    Ok(true)
 }
 
 /// Indexer chung cho adapter không phải EVM: đỉnh final → event → `chain_event_ingest`.
@@ -362,6 +425,10 @@ pub(crate) mod tests {
         pub jobs: Vec<Value>,
         pub reports: Vec<Value>,
         pub ingests: u32,
+        /// `node_config.inflight` (Null = []).
+        pub inflight: Value,
+        /// `relay_poll` keeps returning `jobs` instead of draining them.
+        pub repeat: bool,
     }
     pub(crate) type Shared = Arc<std::sync::Mutex<Fake>>;
 
@@ -372,7 +439,9 @@ pub(crate) mod tests {
             let mut o = s.lock().unwrap();
             Json(match method.as_str() {
                 "node_config" => serde_json::json!({"finality_mode": "instant", "finality_depth": 0, "finality_quorum": 1,
-                    "indexed_block": 0, "tokens": o.tokens, "journal_max_nonce": null}),
+                    "indexed_block": 0, "tokens": o.tokens, "journal_max_nonce": null,
+                    "inflight": if o.inflight.is_null() { serde_json::json!([]) } else { o.inflight.clone() }}),
+                "relay_poll" if o.repeat => Value::Array(o.jobs.clone()),
                 "relay_poll" => Value::Array(std::mem::take(&mut o.jobs)),
                 "relay_claim" => b["job_ids"].clone(),
                 "relay_report" => {
@@ -420,5 +489,87 @@ pub(crate) mod tests {
         let states: Vec<&str> = o.reports.iter().filter_map(|r| r["chain_state"].as_str()).collect();
         assert_eq!(states, ["signed", "queued"]);
         assert!(o.reports[1]["error"].as_str().unwrap().contains("sequence mismatch"));
+    }
+
+    /// Adapter giả: trạng thái tx theo tx id, sequence lane = 4, RPC mô phỏng luôn lỗi mạng.
+    #[derive(Default)]
+    struct Scripted {
+        resent: std::sync::atomic::AtomicBool,
+        builds: std::sync::atomic::AtomicU32,
+    }
+
+    #[async_trait]
+    impl ChainAdapter for Scripted {
+        fn family(&self) -> Family {
+            Family::Ton
+        }
+        fn chain_key(&self) -> &str {
+            "ton:t"
+        }
+        fn lanes(&self) -> &[Lane] {
+            static L: std::sync::OnceLock<Vec<Lane>> = std::sync::OnceLock::new();
+            L.get_or_init(|| vec![Lane { index: 0, address: "lane0".into() }])
+        }
+        async fn build(&self, _: &Job, _: usize) -> std::result::Result<Built, SimError> {
+            self.builds.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Err(SimError::Transport("connection refused".into()))
+        }
+        async fn sign(&self, _: Built, _: usize, _: u64) -> Result<Signed> {
+            unreachable!()
+        }
+        async fn submit(&self, _: &Signed) -> Result<()> {
+            unreachable!("recovery has no bytes to send")
+        }
+        async fn tx_status(&self, tx: &str) -> Result<TxStatus> {
+            match tx {
+                "0x0a" => Ok(TxStatus::Mined { height: 1 }),
+                "0x0d" => Err(Rejected("WRONG_NONCE".into()).into()),
+                "0x0e" => Ok(TxStatus::Reverted { reason: "boom".into() }),
+                _ => Ok(TxStatus::Unknown),
+            }
+        }
+        async fn sequence(&self, _: usize) -> Result<u64> {
+            Ok(4)
+        }
+        async fn final_head(&self) -> Result<Option<Head>> {
+            Ok(None)
+        }
+        async fn block_hash(&self, _: u64) -> Result<String> {
+            unreachable!()
+        }
+        async fn events(&self, _: u64, _: u64, _: &[String]) -> Result<Vec<Value>> {
+            unreachable!()
+        }
+        async fn resend_journaled(&self, _: usize) -> Result<()> {
+            self.resent.store(true, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    /// Merge TODO b: sau crash, job lane này để lại `nonce_leased`/`signed`/`broadcast` được chốt TRƯỚC việc mới —
+    /// không job nào treo mãi chặn `_live_job()` của payment request.
+    #[tokio::test]
+    async fn restart_settles_the_lanes_inflight_jobs() {
+        let live = now() + 600;
+        let job = |id: i64, state: &str, tx: Option<&str>, nonce: Option<u64>, vu: u64| serde_json::json!({
+            "job_id": id, "state": state, "tx_hash": tx, "nonce": nonce,
+            "payload": {"id": id, "kind": "signed_op", "op": {"valid_until": vu}}});
+        let inflight = serde_json::json!([
+            job(1, "nonce_leased", None, None, live),          // claimed, never signed ⇒ back to the queue
+            job(2, "broadcast", Some("0x0a"), Some(3), live),  // landed while we were down ⇒ mined
+            job(3, "signed", Some("0x0b"), Some(4), now() - 100), // never seen, payload expired ⇒ dead
+            job(4, "signed", Some("0x0c"), Some(3), live),     // never seen, lane sequence moved on ⇒ never lands ⇒ queued
+            job(5, "broadcast", Some("0x0d"), Some(4), live),  // refused without running ⇒ queued
+            job(6, "broadcast", Some("0x0e"), Some(3), live),  // ran and reverted
+        ]);
+        let (odoo, o) = fake_odoo(Fake { inflight, tokens: serde_json::json!([]), ..Default::default() }).await;
+        let a = Scripted::default();
+        let run = recover_lane(&a, &odoo, 0, "n#0");
+        tokio::time::timeout(Duration::from_secs(10), run).await.expect("recovery hung").unwrap();
+        assert!(a.resent.load(std::sync::atomic::Ordering::SeqCst), "journaled bytes re-sent first");
+        let o = o.lock().unwrap();
+        let got: Vec<(i64, &str)> =
+            o.reports.iter().map(|r| (r["job_id"].as_i64().unwrap(), r["chain_state"].as_str().unwrap())).collect();
+        assert_eq!(got, [(1, "queued"), (2, "mined"), (3, "dead"), (4, "queued"), (5, "queued"), (6, "reverted")]);
     }
 }
