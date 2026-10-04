@@ -19,7 +19,9 @@ contract HederaMetaToken is MetaToken {
 
     error AssociateFailed(int64 responseCode);
 
-    constructor(address factory_) MetaToken(factory_) {}
+    /// @dev Không SubjectAccount trên Hedera (khoá ED25519 của tài khoản đã qua HIP-632 ở trên) ⇒ impl 0: mọi ví
+    ///      hợp đồng giữ trần 50k gas cho ERC-1271 (S4 e1a4a8b).
+    constructor(address factory_) MetaToken(factory_, address(0)) {}
 
     function _requireValidSignature(address from, bytes32 digest, bytes calldata sig) internal view override {
         if (sig.length == 64 && !_isContract(from)) {
