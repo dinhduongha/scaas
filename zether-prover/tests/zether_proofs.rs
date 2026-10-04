@@ -6,7 +6,7 @@ use rand_chacha::rand_core::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use zether_prover::bulletproofs::Gens;
 use zether_prover::curve::{generator, point_len, Bls12381, Bn254, Fr, ZCurve, G};
-use zether_prover::elgamal::{encrypt, BsgsTable, Ciphertext};
+use zether_prover::elgamal::{encrypt, Ciphertext};
 use zether_prover::keys::ZetherKey;
 use zether_prover::zether::*;
 use zether_prover::ZError;
@@ -56,7 +56,7 @@ fn transfer<C: ZCurve>(f: &Fx<C>, h: Header, aud: bool, v: u64) -> (TransferStat
 
 fn valid_and_effects<C: ZCurve>() {
     let f = fx::<C>();
-    let t = BsgsTable::<C>::new();
+    let t = C::bsgs();
     for aud in [true, false] {
         let (st, p, _) = transfer(&f, header(300), aud, 250_000);
         verify_transfer(&f.gens, &st, &p).unwrap();
@@ -253,7 +253,7 @@ fn burn_suite<C: ZCurve>() {
     assert_eq!(st.payload().len(), 64 + point_len::<C>());
     // Effect: acc −= [amount + fee]G.
     let acc2 = Ciphertext { c: st.acc.c - generator::<C>() * Fr::<C>::from(400_300u64), d: st.acc.d };
-    assert_eq!(BsgsTable::<C>::new().decrypt(&acc2, &f.from.x).unwrap(), BAL - 400_300);
+    assert_eq!(C::bsgs().decrypt(&acc2, &f.from.x).unwrap(), BAL - 400_300);
     // Relayer cannot redirect or resize the withdrawal.
     let muts: Vec<fn(&mut Header)> =
         vec![|h| h.recipient[0] ^= 1, |h| h.amount += 1, |h| h.amount -= 1, |h| h.fee += 1, |h| h.send_counter += 1];

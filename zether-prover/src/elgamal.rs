@@ -2,8 +2,6 @@
 //! Decryption recovers `g^b = C · D^{-x}`, then `b` by baby-step giant-step over
 //! `[0, DECRYPT_BOUND)`, `DECRYPT_BOUND = 2^40` (client-only constant, canon §C6.2).
 
-use std::collections::HashMap;
-
 use ark_ec::CurveGroup;
 use ark_ff::{BigInteger, PrimeField, Zero};
 
@@ -53,34 +51,37 @@ pub fn decrypt_point<C: ZCurve>(ct: &Ciphertext<C>, x: &Fr<C>) -> G<C> {
     ct.c - ct.d * x
 }
 
-/// Baby-step table `{g^j : 0 <= j < 2^20}`. Build once per curve and reuse: it costs
-/// 2^20 additions and ~16 MB.
+/// Baby-step table `{g^j : 0 <= j < 2^20}`, a sorted `(x-limb key, j)` array: 2^20 × 16 B =
+/// 16 MiB, built in chunks so no full projective/affine copy is ever held. Costs 2^20
+/// additions: use the per-curve cached one, [`ZCurve::bsgs`].
 pub struct BsgsTable<C: ZCurve> {
-    baby: HashMap<u64, u32>,
+    baby: Vec<(u64, u32)>,
     giant: G<C>, // g^{-2^20}
 }
 
 fn key<C: ZCurve>(p: &ark_ec::short_weierstrass::Affine<C>) -> u64 {
-    // ponytail: 64-bit x-limb key; a baby-table collision (p ~ 2^-24) only costs a miss that the
-    // equality check below turns into a clean "not found", never a wrong value.
+    // 64-bit x-limb key; a colliding key is resolved by the equality check in `dlog`.
     let b = p.x.into_bigint().to_bytes_le();
     u64::from_le_bytes(b[..8].try_into().unwrap()) ^ (p.infinity as u64)
 }
 
 impl<C: ZCurve> BsgsTable<C> {
     pub fn new() -> Self {
+        const CHUNK: usize = 1 << 12;
         let g = generator::<C>();
-        let mut pts = Vec::with_capacity(BABY as usize);
+        let mut baby = Vec::with_capacity(BABY as usize);
+        let mut pts = Vec::with_capacity(CHUNK);
         let mut acc = G::<C>::zero();
-        for _ in 0..BABY {
+        for j in 0..BABY as u32 {
             pts.push(acc);
             acc += g;
+            if pts.len() == CHUNK {
+                let base = j + 1 - CHUNK as u32;
+                baby.extend(G::<C>::normalize_batch(&pts).iter().zip(base..).map(|(p, i)| (key::<C>(p), i)));
+                pts.clear();
+            }
         }
-        let aff = G::<C>::normalize_batch(&pts);
-        let mut baby = HashMap::with_capacity(BABY as usize);
-        for (j, p) in aff.iter().enumerate() {
-            baby.entry(key::<C>(p)).or_insert(j as u32);
-        }
+        baby.sort_unstable();
         Self { baby, giant: -(g * Fr::<C>::from(BABY)) }
     }
 
@@ -90,7 +91,9 @@ impl<C: ZCurve> BsgsTable<C> {
         let mut cur = *target;
         for i in 0..BABY {
             let a = cur.into_affine();
-            if let Some(&j) = self.baby.get(&key::<C>(&a)) {
+            let k = key::<C>(&a);
+            let from = self.baby.partition_point(|e| e.0 < k);
+            for &(_, j) in self.baby[from..].iter().take_while(|e| e.0 == k) {
                 let v = i * BABY + j as u64;
                 if g * Fr::<C>::from(v) == *target {
                     return Ok(v);
@@ -126,7 +129,10 @@ mod tests {
     fn homomorphic<C: ZCurve>() {
         let mut rng = ark_std::test_rng();
         let (x, y) = keypair::<C>(&mut rng);
-        let t = BsgsTable::<C>::new();
+        let t = C::bsgs();
+        // Built once per curve, and the size the doc comment states.
+        assert!(std::ptr::eq(t, C::bsgs()));
+        assert_eq!(std::mem::size_of_val(&t.baby[..]), 16 << 20);
         let a = encrypt(&y, 1_000_000, &Fr::<C>::rand(&mut rng));
         let b = encrypt(&y, 234_567, &Fr::<C>::rand(&mut rng));
         assert_eq!(t.decrypt(&a, &x).unwrap(), 1_000_000);

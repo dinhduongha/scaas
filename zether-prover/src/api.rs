@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 use crate::abi::{self, Tok};
 use crate::bulletproofs::Gens;
 use crate::curve::{decode_point, decode_scalar, encode_point, encode_scalar, Bls12381, Bn254, Fr, ZCurve, G};
-use crate::elgamal::{encrypt, BsgsTable, Ciphertext};
+use crate::elgamal::{encrypt, Ciphertext};
 use crate::envelope::{self, MetaTx};
 use crate::keys::{seed_from_mnemonic, ZetherKey};
 use crate::schnorr;
@@ -250,7 +250,7 @@ fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
         }
         "decrypt" => {
             let k = key::<C>(v)?;
-            let amount = BsgsTable::<C>::new().decrypt(&ct::<C>(v, "ct")?, &k.x).map_err(e)?;
+            let amount = C::bsgs().decrypt(&ct::<C>(v, "ct")?, &k.x).map_err(e)?;
             Ok(json!({"amount": amount}))
         }
         "proveTransfer" => prove_transfer_json::<C, _>(&gens(), v, rng),
