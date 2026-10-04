@@ -40,3 +40,26 @@ BLS12-381 482 ms).
 subgroup, chỉ toàn-0 = vô cực), scalar chặt `< r`, BSGS (va chạm khoá 64 bit chỉ gây "not found", có kiểm bằng),
 biên JSON/wasm (lỗi trả `Err`, không panic; u32 đã chặn ở `3ce225f`). **0 finding.** Rủi ro mở: chưa có review
 ngoài — chạy lại agy khi quota hồi.
+
+## Review opus (external substitute) — folded/rejected (2026-10-04)
+
+Review: `scratchpad/s3-opus-review.md` (Claude Opus, đọc diff `71f3ffb..b86f990`, không chạy code). 0 critical,
+0 high, 1 medium, 4 low. Mỗi finding được kiểm lại bằng test đỏ trước khi sửa.
+
+- **M1 folded** `cf46bed` — passphrase BIP-39 không NFKD. Ghi chú: review nói feature `std` thiếu
+  `unicode-normalization`; thực tế `std → alloc → unicode-normalization` đã bật, lỗi nằm ở việc gọi
+  `parse_normalized`/`to_seed_normalized`. Sửa: `parse` + `to_seed`, feature ghi rõ. Vector: 24 từ
+  `abandon…art` + `"mật khẩu"` (NFC và NFD) = seed của @scure/bip39 và Python `pbkdf2_hmac` trên NFKD.
+- **L1 folded** `cf46bed` — `passphrase` không phải string → lỗi (null/thiếu → `""`).
+- **L2 folded** `1bb9e9f` — bảng BSGS: mảng `(key, j)` sắp xếp, 2^20 × 16 B = 16 MiB (test khẳng định đúng cỡ),
+  dựng theo khối 4096 điểm, cache theo đường cong (`ZCurve::bsgs`, `OnceLock`); va chạm khoá thử hết. Cận 2^40 giữ nguyên.
+- **L3 folded** `fa13d47` — nonce mở Chaum-Pedersen hedge thêm chainId, token, amount, kind (= tiền ảnh challenge
+  trừ A1/A2). Test RNG chết + receiver = auditor: trước sửa A1 trùng (đỏ), sau sửa khác. Vector disclosure tái sinh
+  (chỉ opening đổi; harness forge S2 không đọc file disclosure).
+- **L4 folded** `9d9e075` — zeroize: `ZetherKey` (Zeroize thay dead store), seed BIP-39/seed hex (`Zeroizing`),
+  SK trung gian `derive_path`, `TransferWitness`/`BurnWitness` (Drop), buffer đầu vào nonce. Giới hạn: `Fr` là
+  `Copy`, bản sao trên stack không xoá được (ghi `ponytail:` ở `zether.rs`).
+- **Chỉ số đường dẫn JS (L4 của S4)** sửa ở nhánh S4 (`clientkeys/src/zether.js`), cùng luật với `api.rs num32`.
+
+Suite sau sửa (`9d9e075`): `cargo test --release` 41/41, `cargo clippy --release --all-targets -D warnings` sạch,
+`./wasm-smoke.sh` 16/16 (proveTransfer wasm: bn254 198 ms, BLS12-381 487 ms).
