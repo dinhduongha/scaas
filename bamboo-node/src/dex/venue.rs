@@ -332,7 +332,7 @@ impl Venue {
             }
         }
 
-        let market_id = book.market(&o).map(|m| m.id).ok_or_else(|| bad("no market"))?;
+        let (market_id, base) = book.market(&o).map(|m| (m.id, m.base)).ok_or_else(|| bad("no market"))?;
         self.add_fills(&mut commit, &trial, &placed.fills);
         let filled_here: U256 = placed.fills.iter().map(|f| f.taker_fill).sum();
         let taker_after = Resting {
@@ -359,7 +359,7 @@ impl Venue {
                        "maker_fill": f.maker_fill.to_string(), "taker_fill": f.taker_fill.to_string()})
             })
             .collect();
-        self.remember(&placed.fills, &o);
+        self.remember(&placed.fills, base);
         let status = match (placed.rested.is_some(), placed.fills.is_empty(), placed.dropped.is_zero()) {
             (true, true, _) => "resting",
             (true, false, _) => "partial",
@@ -374,9 +374,8 @@ impl Venue {
         })
     }
 
-    /// Lệnh maker sau khớp + trade + MỘT job `settle` cho cả lô (nguyên tử từng cặp on-chain).
+    /// Lệnh maker sau khớp + trade + một job `settle` mỗi thị trường (nguyên tử từng cặp on-chain).
     fn add_fills(&self, commit: &mut Commit, after: &Book, fills: &[PlannedFill]) {
-        let Some(first) = fills.first() else { return };
         for f in fills {
             let mk = after.get(f.maker.hash).cloned().unwrap_or_else(|| Resting { remaining: U256::ZERO, ..f.maker.clone() });
             commit.order(f.market_id, &mk, state_of(&mk));
@@ -386,22 +385,7 @@ impl Venue {
                 "maker_fill": f.maker_fill.to_string(), "taker_fill": f.taker_fill.to_string(),
             }));
         }
-        commit.jobs.push(self.settle_job(first.market_id, fills));
-    }
-
-    fn settle_job(&self, market_id: i64, fills: &[PlannedFill]) -> Value {
-        let ms = fills.iter().map(PlannedFill::to_match).collect();
-        let valid_until = fills
-            .iter()
-            .flat_map(|f| [f.maker.order.expiry, f.taker.order.expiry])
-            .min()
-            .unwrap_or_default();
-        json!({
-            "kind": "settle", "market_id": market_id, "target": format!("{:#x}", self.dex),
-            "calldata": hex_of(&IOrderBookDex::settleCall { ms }.abi_encode()),
-            "valid_until": valid_until.to_string(),
-            "tags": fills.iter().map(|f| format!("{:#x}", f.tag)).collect::<Vec<_>>(),
-        })
+        commit.jobs.extend(settle_jobs(self.dex, fills));
     }
 
     async fn commit_or_reload(
@@ -439,22 +423,10 @@ impl Venue {
         Ok(())
     }
 
-    fn remember(&self, fills: &[PlannedFill], taker: &Order) {
+    fn remember(&self, fills: &[PlannedFill], base: Address) {
         let Ok(mut t) = self.trades.lock() else { return };
         for f in fills {
-            let book_market = f.market_id;
-            let maker = &f.maker.order;
-            let taker_buys_base = taker.buyToken == maker.sellToken;
-            // maker sells X: if X is base the trade price is takerFill/makerFill (quote per base)
-            let (quote, base) = if taker_buys_base { (f.taker_fill, f.maker_fill) } else { (f.maker_fill, f.taker_fill) };
-            t.push_front(TradeView {
-                market_id: book_market,
-                tag: format!("{:#x}", f.tag),
-                price: format!("{quote}/{base}"),
-                base_amount: base.to_string(),
-                taker_side: if taker_buys_base { "buy" } else { "sell" },
-                at: now(),
-            });
+            t.push_front(trade_view(f, base, now()));
             t.truncate(RECENT_TRADES);
         }
     }
@@ -580,15 +552,7 @@ impl Venue {
         }
         let pending: Vec<(i64, CancelReq)> =
             self.cancels.lock().map(|mut q| std::mem::take(&mut q.pending)).unwrap_or_default();
-        for chunk in pending.chunks(CANCEL_BATCH) {
-            let reqs: Vec<CancelReq> = chunk.iter().map(|(_, r)| r.clone()).collect();
-            let valid_until = reqs.iter().map(|r| r.order.expiry).max().unwrap_or_default();
-            commit.jobs.push(json!({
-                "kind": "cancel", "market_id": chunk[0].0, "target": format!("{:#x}", self.dex),
-                "calldata": hex_of(&IOrderBookDex::cancelCall { reqs }.abi_encode()),
-                "valid_until": valid_until.to_string(), "tags": [],
-            }));
-        }
+        commit.jobs.extend(cancel_jobs(self.dex, &pending));
         let res = self.commit_or_reload(&mut book, next, commit).await;
         if res.is_err() && !pending.is_empty() {
             // Không mất huỷ on-chain khi Odoo lỗi; gửi trùng thì `origin_key` + `cancel` no-op chặn.
@@ -718,6 +682,63 @@ impl Venue {
     pub async fn rows(&self) -> Vec<Row> {
         self.book.lock().await.rows()
     }
+}
+
+/// Một dòng trên băng giao dịch: giá quote/base, lượng base, phía của taker.
+/// Không suy phía từ cặp lệnh: maker luôn bán đúng thứ taker mua, nên chỉ `base` của thị trường phân biệt.
+fn trade_view(f: &PlannedFill, base: Address, at: u64) -> TradeView {
+    let taker_buys_base = f.taker.order.buyToken == base;
+    let (quote, base_amt) = if taker_buys_base { (f.taker_fill, f.maker_fill) } else { (f.maker_fill, f.taker_fill) };
+    TradeView {
+        market_id: f.market_id,
+        tag: format!("{:#x}", f.tag),
+        price: format!("{quote}/{base_amt}"),
+        base_amount: base_amt.to_string(),
+        taker_side: if taker_buys_base { "buy" } else { "sell" },
+        at,
+    }
+}
+
+/// Thứ tự id thị trường, giữ thứ tự trong mỗi thị trường (sort ổn định).
+fn by_market<T: Clone>(items: &[T], market: impl Fn(&T) -> i64) -> Vec<Vec<T>> {
+    let mut v = items.to_vec();
+    v.sort_by_key(&market);
+    v.chunk_by(|a, b| market(a) == market(b)).map(<[T]>::to_vec).collect()
+}
+
+/// Một job mỗi thị trường: Odoo gắn job vào company của thị trường (review agy F3 — lô sync trộn
+/// nhiều thị trường từng gắn trade của company B vào job của company A).
+fn settle_jobs(dex: Address, fills: &[PlannedFill]) -> Vec<Value> {
+    by_market(fills, |f| f.market_id)
+        .into_iter()
+        .map(|fills| {
+            let ms = fills.iter().map(PlannedFill::to_match).collect();
+            let valid_until =
+                fills.iter().flat_map(|f| [f.maker.order.expiry, f.taker.order.expiry]).min().unwrap_or_default();
+            json!({
+                "kind": "settle", "market_id": fills[0].market_id, "target": format!("{dex:#x}"),
+                "calldata": hex_of(&IOrderBookDex::settleCall { ms }.abi_encode()),
+                "valid_until": valid_until.to_string(),
+                "tags": fills.iter().map(|f| format!("{:#x}", f.tag)).collect::<Vec<_>>(),
+            })
+        })
+        .collect()
+}
+
+fn cancel_jobs(dex: Address, pending: &[(i64, CancelReq)]) -> Vec<Value> {
+    by_market(pending, |p| p.0)
+        .iter()
+        .flat_map(|m| m.chunks(CANCEL_BATCH))
+        .map(|chunk| {
+            let reqs: Vec<CancelReq> = chunk.iter().map(|(_, r)| r.clone()).collect();
+            let valid_until = reqs.iter().map(|r| r.order.expiry).max().unwrap_or_default();
+            json!({
+                "kind": "cancel", "market_id": chunk[0].0, "target": format!("{dex:#x}"),
+                "calldata": hex_of(&IOrderBookDex::cancelCall { reqs }.abi_encode()),
+                "valid_until": valid_until.to_string(), "tags": [],
+            })
+        })
+        .collect()
 }
 
 fn sig_bytes(s: &str) -> std::result::Result<Bytes, VenueError> {
@@ -924,5 +945,71 @@ mod tests {
         assert!(!q.allow(m, 1000));
         assert!(q.allow(Address::repeat_byte(2), 1000));
         assert!(q.allow(m, 1000 + 3600));
+    }
+
+    const BASE: Address = Address::repeat_byte(0xaa);
+    const QUOTE: Address = Address::repeat_byte(0xbb);
+
+    fn rest(maker: u8, sell: Address, buy: Address) -> Resting {
+        let order = Order {
+            maker: Address::repeat_byte(maker),
+            taker: Address::ZERO,
+            sellToken: sell,
+            buyToken: buy,
+            sellAmount: U256::from(1000),
+            buyAmount: U256::from(1000),
+            nonce: U256::ZERO,
+            expiry: U256::from(maker),
+            maxFeePpm: 0,
+            flags: 0,
+            relayer: Address::ZERO,
+            feeMode: 0,
+            fee: U256::ZERO,
+            feeToken: Address::ZERO,
+            feeRecipient: Address::ZERO,
+        };
+        Resting { hash: B256::repeat_byte(maker), order, sig: Bytes::new(), remaining: U256::from(1000), seq: 0 }
+    }
+
+    fn fill(market_id: i64, tag: u8, maker: Resting, taker: Resting, maker_fill: u64, taker_fill: u64) -> PlannedFill {
+        PlannedFill {
+            tag: B256::repeat_byte(tag),
+            market_id,
+            maker,
+            taker,
+            maker_fill: U256::from(maker_fill),
+            taker_fill: U256::from(taker_fill),
+        }
+    }
+
+    #[test]
+    fn trade_tape_reads_side_and_price_from_the_market_base() {
+        // taker buys base: maker sells 10 base for 20 quote ⇒ price 20/10, base 10, "buy"
+        let buy = fill(1, 1, rest(1, BASE, QUOTE), rest(2, QUOTE, BASE), 10, 20);
+        let t = trade_view(&buy, BASE, 7);
+        assert_eq!((t.price.as_str(), t.base_amount.as_str(), t.taker_side), ("20/10", "10", "buy"));
+        // taker sells base: maker (bid) sells 20 quote, taker gives 10 base ⇒ same price, "sell"
+        let sell = fill(1, 2, rest(1, QUOTE, BASE), rest(2, BASE, QUOTE), 20, 10);
+        let t = trade_view(&sell, BASE, 7);
+        assert_eq!((t.price.as_str(), t.base_amount.as_str(), t.taker_side), ("20/10", "10", "sell"));
+    }
+
+    #[test]
+    fn settle_and_cancel_jobs_are_one_per_market() {
+        let dex = Address::repeat_byte(0xd);
+        let fills = [
+            fill(1, 1, rest(1, BASE, QUOTE), rest(2, QUOTE, BASE), 10, 20),
+            fill(2, 2, rest(3, BASE, QUOTE), rest(4, QUOTE, BASE), 10, 20),
+            fill(1, 3, rest(5, BASE, QUOTE), rest(6, QUOTE, BASE), 10, 20),
+        ];
+        let jobs = settle_jobs(dex, &fills);
+        let seen: Vec<(i64, usize)> =
+            jobs.iter().map(|j| (j["market_id"].as_i64().unwrap(), j["tags"].as_array().unwrap().len())).collect();
+        assert_eq!(seen, vec![(1, 2), (2, 1)]);
+        let req = |m: u8| CancelReq { order: rest(m, BASE, QUOTE).order, sig: Bytes::new() };
+        let pending = vec![(1, req(1)), (2, req(2)), (1, req(3))];
+        let jobs = cancel_jobs(dex, &pending);
+        let seen: Vec<i64> = jobs.iter().map(|j| j["market_id"].as_i64().unwrap()).collect();
+        assert_eq!(seen, vec![1, 2]);
     }
 }
