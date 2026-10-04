@@ -8,7 +8,7 @@ S7 Sui (`2026-10-03-net-sui.md`). Ruling của luồng đánh số `RS12-n` (lea
 Mã (dự kiến): program Anchor ở `chains/solana/` (program `bamboo`, workspace Cargo riêng), adapter
 `bamboo-node/src/adapters/solana.rs`, e2e `bamboo-node/tests/e2e_solana.rs`, Odoo `dms_blockchain/lib/fam_solana.py` +
 `models/blockchain_solana.py`, portal `dms_blockchain_bridge/static/src/js/connectors/solana.js`. DB `dms_test_chain_12`
-/ 8932, devnet 32020–32029.
+/ 8932, devnet 32020–32049 (OQ4: Agave đòi dải cổng động ≥ 26).
 
 Thứ tự mạng (owner): EVM → Cosmos → Hedera → Soroban → TON → Sui → Aptos → **Solana**. Sản phẩm trung lập thị
 trường: không giả định tài sản, quốc gia hay luật nào; mọi mint SPL Token / Token-2022 mà Odoo đăng ký và qua chính
@@ -239,7 +239,7 @@ sản ⇒ rời nhau; cùng tài sản ⇒ chung token account nguồn (chính l
 
 ## 4. Payload ký `MetaOp` v1 và phong bì chữ ký
 
-### 4.1 Bytes (336 B, cố định, little-endian, không tiền tố độ dài)
+### 4.1 Bytes (337 B, cố định, little-endian, không tiền tố độ dài — bảng cộng ra 337; bản nháp ghi nhầm 336)
 
 | off | len | trường |
 |---|---|---|
@@ -346,7 +346,9 @@ chữ ký thật từ khoá cố định, PDA Account/lane/mandate/fill, ATA) �
 - `Order` (bytes cố định): `domain="bamboo.order.v1", network, market, maker (owner), taker (0 = any), sell mint, buy
   mint, sell_amount u64, buy_amount u64, nonce u64, expiry, max_fee_ppm u32, flags u8 (bit0 FOK, bit1 IOC), relayer`;
   `order_hash = sha256(bytes)`, văn bản ký `"bamboo.order.v1:" ‖ hex(order_hash)`.
-- `settle(pairs: Vec<Pair>)` — **kiểm cả hai chữ ký trong chính tx** (như EVM), mỗi cặp: flags, hạn, `nonce >=
+- `settle(a, b, hash_a, hash_b, fill_a, fill_b, auth_a, auth_b)` — MỘT cặp mỗi instruction (account kiểu Anchor,
+  không `remaining_accounts` tự kiểm); batch = nhiều instruction `settle` trong một tx, nguyên tử theo tx (RS12-12a,
+  đã thực thi). **Kiểm cả hai chữ ký trong chính tx** (như EVM), mỗi cặp: flags, hạn, `nonce >=
   MinNonce`, relayer, taker, khoá ∈ keys của maker/taker, cặp khớp chéo với market, hai bên khác nhau, market bật;
   `fill > 0`, `Fill.filled + fill <= sell_amount`, FOK; giá nhân chéo trên u128; phí ppm ≤ `max_fee_ppm`, trần 10 000 ppm
   kiểm ở `set_market`. Tiền đi token account Account→Account, phí vào vault của market. `fill` do relayer chọn nhưng bị
@@ -568,7 +570,8 @@ lane ngay, token rỗng ⇒ con trỏ đứng yên; chữ ký tự tính = chữ
 lowercase qua `relay_report`; issue → accept → job `signed_op` với `extra.asset`.
 
 **Devnet:** `solana-test-validator --reset --quiet --ledger $SP/solana-ledger --bind-address 127.0.0.1 --rpc-port 32020
---faucet-port 32022 --gossip-port 32023 --dynamic-port-range 32024-32029` (WebSocket tự lấy 32021). Validator cục bộ bật
+--faucet-port 32022 --gossip-port 32023 --dynamic-port-range 32024-32050` (WebSocket tự lấy 32021; Agave 4.3 từ chối
+dải < 26 cổng — OQ4 đã chốt ở §18). Validator cục bộ bật
 mọi feature mặc định — Task 0 kiểm bằng `solana feature status -u http://127.0.0.1:32020` rằng secp256r1 và tx v1 đã bật.
 **Chưa kiểm:** độ rộng tối thiểu của `--dynamic-port-range` (6 cổng có thể không đủ) ⇒ OQ4. Một validator mỗi lúc,
 `free -g` trước; `cargo build-sbf` biên dịch Anchor + Solana crates (nặng RAM) — `CARGO_BUILD_JOBS=2`, không chạy song
@@ -645,7 +648,7 @@ phía client nặng). Không xây ở round này (R34 §5).
 - Passkey: dùng precompile secp256r1 qua introspection; seed ed25519 qua Ed25519 program; Account nhiều khoá + origin +
   guardian, không gạch; toggle "backup key required" mặc định OFF (§3.3).
 - Indexer: danh sách contract từ `node_config`; không tiến con trỏ khi rỗng hoặc vùng chưa final; finality = `finalized`.
-- e2e trên validator cục bộ; DB `dms_test_chain_12` / 8932; cổng 32020–32029. Trung lập thị trường.
+- e2e trên validator cục bộ; DB `dms_test_chain_12` / 8932; cổng 32020–32049 (§18). Trung lập thị trường.
 
 ## 15. Câu hỏi mở
 
@@ -684,12 +687,32 @@ phía client nặng). Không xây ở round này (R34 §5).
 
 ## 17. Review log
 
-(trống — agy/grok/opus chạy ở Task 1 của plan.)
-
 - Self-review: (1) đổi DEX từ "đăng lệnh on-chain trước" sang kiểm chữ ký inline sau khi xác nhận tx v1 4 096 B đã lên
   mainnet — một đường kiểm duy nhất, gần EVM; (2) thay bảng lane trong Account bằng PDA mỗi lane để Account readonly
   (write-lock); (3) phát hiện `_apply_report` lowercase `tx_hash` và `_hex32` của ingest ⇒ `tx_id` hex 64 B + yêu cầu lead
   (L11); (4) chọn durable nonce vì khớp nguyên văn `recover_lane`, ghi phương án dự phòng do cảnh báo deprecate.
+- Self-review khi thực thi: (5) `open(owner)` không cần quyền cho phép bất kỳ ai mở trước id passkey-first
+  `sha256("bamboo.owner.p256" ‖ pk)` bằng một khoá ed25519 ⇒ gạch Account passkey đó. Sửa: `open` đòi chính ví ký; mở hộ
+  không cần vì `relay_pay` đầu tiên mở lười bằng chữ ký của chủ (test `open_needs_the_wallet_signature`). (6) `_lane_address`
+  của Odoo cũng lowercase địa chỉ lane base58 — sửa cùng commit tiên quyết.
+- agy (Gemini, chạy nền trên spec + `adapter.rs`, 2026-10-04 — sau đó hết quota 106 h, không chạy được review nhánh):
+
+| # | Mức | Finding | Xử lý |
+|---|---|---|---|
+| 1 | critical | Restart: tx rơi + nonce không đổi ⇒ lane giữ tới `valid_until`; tx đã vào sổ mà RPC không còn status ⇒ requeue rồi `dead` | **Nhận phần 1**: `resend_journaled` của Solana advance nonce lane một lần lúc khởi động ⇒ bytes cũ không bao giờ vào sổ, `recover_lane` thấy nonce đổi ⇒ `queued` ngay (e2e: job `signed` chưa gửi ⇒ `queued` < 30 s). **Từ chối phần 2**: `getSignatureStatuses(searchTransactionHistory:true)`; RPC không lịch sử ⇒ job `dead` nhưng indexer vẫn chốt request theo event (`final` thắng `dead`), không trả hai lần |
+| 2 | critical | `cancel_signed` không mang hạn lệnh ⇒ prune `Fill` sớm ⇒ lệnh đã huỷ sống lại | Đã tránh khi thực thi: `cancel_signed` nhận **lệnh đầy đủ**, kiểm hash, `Fill.valid_until` = hạn lệnh; prune chỉ sau hạn (test `cancel_even_before_any_fill`) |
+| 3 | high | Mở lười buộc SubjectAccount writable mọi tx | Từ chối: account là `UncheckedAccount` không `mut`; adapter chỉ đánh writable khi Account chưa tồn tại (test write-set + `relay_pay_ix`) |
+| 4 | high | Token-2022 `MemoTransfer` trên ATA người nhận ⇒ revert | Từ chối (đã nêu §3.6): ví nhận do nền tảng quản lý; mô phỏng bắt lỗi trước khi gửi ⇒ job `dead` với lý do rõ, không tốn phí |
+| 5 | high | "Base fee không tính chữ ký precompile" | Từ chối — sai: LiteSVM và validator thật tính 10 000 lamport cho tx 1 chữ ký lane + 1 chữ ký precompile (test `python_signatures_pay…`, e2e) |
+| 6 | high | Thiếu account program cho self-CPI; đích không kiểm ATA | Từ chối: `#[event_cpi]` thêm `event_authority` + `program`; chương trình ATA kiểm dẫn xuất trong `create_idempotent` (test `recipient_and_destination…`) |
+| 7 | medium | Phân trang `getSignaturesForAddress` O(N²) khi bắt kịp; `getFirstAvailableBlock` > `from` | Nhận là rủi ro đã ghi (`ponytail` §6.6, OQ2 → Geyser); con trỏ bắt đầu ở `solana_start_slot` / slot finalized lúc bật nên `from` không bao giờ trước lịch sử của RPC |
+| 8 | medium | Guardian bị lộ không gỡ được khi bật BACKUP_REQUIRED | Đã tránh: `set_guardian(khác)` (thay thế) luôn được; chỉ `set_guardian(None)` làm mất backup bị chặn (test `backup_policy…`) |
+| 9 | medium | revoke vs close mâu thuẫn | Làm rõ khi thực thi: revoke (delegate) chỉ đặt cờ; close (khoá Account) chuyển các token account truyền vào rồi đóng PDA; token account sót vẫn thuộc PDA — mở lại cùng seed rồi close lần nữa |
+| 10 | low | `getBlocks(s−512, s)` rỗng trên cluster rảnh | Nhận: cửa sổ 2 048 slot |
+| 11 | low | `sequence` u64 không chứa đủ 32 byte nonce | Đã thiết kế: `sign` đọc lại nonce account (32 byte) và từ chối nếu 8 byte đầu ≠ `sequence` |
+
+- grok: thử một lần (2026-10-04) — "free Grok Build usage limit" ⇒ không có kết quả.
+- Reviewer độc lập: controller chạy sau báo cáo (theo brief, luồng không tự dispatch subagent).
 
 ## Quyết định của owner (2026-10-04) — thay thế OQ1–OQ4
 
@@ -697,3 +720,45 @@ phía client nặng). Không xây ở round này (R34 §5).
 - **OQ2 (indexer mainnet):** RPC do nhà cung cấp host qua JSON-RPC chuẩn (`getSignaturesForAddress` + `getTransaction`, `finalized`); Geyser là seam cho sau khi tải lớn.
 - **OQ3 (Token-2022):** chặn on-chain mint có transfer hook đang bật, phí chuyển ≠ 0, hoặc NonTransferable; **chấp nhận permanent delegate** (rủi ro thuộc issuer, ghi rõ trong tài liệu và UI).
 - **OQ4 (port validator):** coordinator — kiểm tra ở Task 0; nếu `--dynamic-port-range` 6 cổng không đủ thì dùng 32020–32039 và ghi lại.
+
+## 18. Kết quả Task 0 và thực thi (2026-10-04)
+
+**Phiên bản (user space, không sudo):** Agave **4.3.0** (`solana-release-x86_64-unknown-linux-gnu.tar.bz2`, sha256
+`c97289a8…3611e8` khớp digest của GitHub release) trong `~/.local/share/solana/install/releases/4.3.0`; `cargo build-sbf`
+4.3.0 + platform-tools **v1.57** (rustc 1.95 sbpf); **Anchor 1.2.0** (`anchor-lang`/`anchor-spl` crate, không CLI);
+**LiteSVM 0.17.0** (`precompiles`) — kéo crate Agave 4.3 cần **rustc ≥ 1.97.1** cho test host ⇒ `rustup toolchain install
+1.97.1` + `chains/solana/rust-toolchain.toml` (chỉ workspace này); `@solana/kit` **8.4.0** cục bộ ở `chains/solana/scripts/`.
+
+**"Kiểm khi làm" đã giải:**
+
+| Hạng mục | Kết quả |
+|---|---|
+| secp256r1 + tx v1 (`solana feature status`) | validator cục bộ: mọi feature bật từ epoch 0 (SIMD-0075, SIMD-0385, SIMD-0242). Mainnet: secp256r1 epoch 800, SIMD-0242 epoch 890, **tx v1 epoch 1035**; devnet: tx v1 epoch 1140. Alpenglow (SIMD-0326): **chưa** bật mainnet, đã bật devnet epoch 1167 |
+| LiteSVM có precompile secp256r1? | **Có** (`agave-precompiles` 4.3, feature `enable_secp256r1_precompile` trong bộ mặc định) ⇒ test passkey (vector Python thật, high-S, origin, UV) chạy trong LiteSVM, không cần e2e |
+| Bố cục OCMS v1 | `"\xffsolana offchain" ‖ version 1 ‖ n signer (u8) ‖ pk32×n (sắp tăng) ‖ text UTF-8` (`@solana/offchain-messages` 8.4.0, codec `preamble-v1`); Python = program = connector (vector `OCMS`) |
+| Bố cục message/tx v1 | `0x81 ‖ header(3) ‖ config mask u32 ‖ lifetime 32 ‖ n_ix u8 ‖ n_keys u8 ‖ keys ‖ values (priority u64, CU u32, loaded bytes u32, heap u32 theo bit 0-1/2/3/4) ‖ ix headers (program u8, n_acc u8, len u16) ‖ payloads`; tx = message **rồi** chữ ký. Adapter khớp byte-for-byte với codec kit (`tx_vector.mjs`); thứ tự account là lựa chọn của adapter (kit sắp theo collation chuỗi; validator không đòi) |
+| Durable nonce trong tx v1 trên validator | chạy (e2e): `AdvanceNonceAccount` đầu, lifetime = giá trị nonce |
+| Phí precompile | base fee tính **cả** chữ ký precompile: tx `relay_pay` = 10 000 lamport (LiteSVM và validator thật); 51 580 CU |
+| `--dynamic-port-range` tối thiểu (OQ4) | Agave 4.3 đòi **≥ 26 cổng** (gợi ý `32024-32050`); dải 32020–32039 của owner không đủ ⇒ khối S12 = **32020–32049** (RPC 32020, WS 32021, faucet 32022, gossip 32023, động [32024, 32050)). Cần coordinator ghi nhận |
+| Confidential transfer bật lại? | Có: feature "Re-enables zk-elgamal-proof program" active mainnet epoch 982, devnet 1055 (§10 vẫn ngoài phạm vi) |
+| Vector đường dẫn lane | `solana-keygen pubkey prompt://?full-path=m/44'/501'/{0,1}'/0'` với "abandon … art" = `3Cy3YNTF…aSnx`, `5frqxtii…hcTA` (test `keys::solana_path_matches_solana_keygen`) |
+
+**Lệch so với spec khi thực thi (rulings bổ sung):**
+- **RS12-4a** `open` đòi chữ ký của chính ví (§17 self-review 5).
+- **RS12-11a** Delegate của Mandate chỉ ed25519 (khoá dịch vụ/HSM nền tảng; passkey không chạy trên server). `revoke`
+  (delegate) chỉ đặt cờ; `close` (khoá Account, `"bamboo.mclose.v1" ‖ network ‖ account ‖ mandate ‖ key_nonce ‖
+  valid_until`) chuyển các token account truyền vào về Account rồi đóng PDA.
+- **RS12-12a** `settle` một cặp mỗi instruction; batch = nhiều instruction trong một tx. `cancel_signed` mang lệnh đầy
+  đủ; `invalidate_nonces_signed` ký `"bamboo.minnonce.v1" ‖ network ‖ market ‖ account ‖ min_nonce`. Market một mức
+  `fee_ppm` (không tách maker/taker); `sweep` không cần quyền chuyển mọi token account của Market (gồm vault) về
+  `fee_recipient`.
+- **RS12-9a** Blob passkey: `u16` độ dài authenticatorData là **little-endian**.
+- **RS12-16a** Restart: `resend_journaled` của Solana advance nonce lane (agy #1). Lớp `Rejected`/`Reverted`: lỗi ở
+  instruction precompile/`bamboo` (chỉ số ≥ 1) ⇒ `Reverted`, trừ hết CU; lỗi ở advance nonce/cấp tx ⇒ `Rejected`.
+- **RS12-18a** `block_hash`/`final_head` = block sản xuất cuối ≤ slot trong cửa sổ 2 048 slot; Config đọc ở `confirmed`
+  (bất biến sau `initialize`).
+
+**Chưa kiểm (ghi rủi ro):** API chính xác của `solana:signOffchainMessage` trên ví thật (connector giả định
+`{account, message, version: 1}` ⇒ `[{signedMessage, signature}]` và kiểm `signedMessage` = OCMS kỳ vọng, sai ⇒ từ chối
+trước khi gửi); RPC hosted mainnet (lịch sử `getSignaturesForAddress`, `getTransaction` encoding json của tx v1).
+
