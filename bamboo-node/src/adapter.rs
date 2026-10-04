@@ -102,6 +102,22 @@ pub trait ChainAdapter: Send + Sync {
     async fn events(&self, from: u64, to: u64, contracts: &[String]) -> Result<Vec<Value>>;
 }
 
+/// Lỗi `submit` khi mạng TỪ CHỐI tx trước mempool (sequence lệch, thiếu phí, chữ ký sai…): gửi lại cùng bytes
+/// không bao giờ qua, nên runner trả job về hàng đợi để dựng lại với sequence mới thay vì giữ lane tới hạn
+/// payload (review L1). Lỗi khác của `submit` (mạng, mempool đầy) vẫn là thử lại cùng bytes.
+/// `tx_status` cũng trả `Rejected` khi tx đã vào sổ nhưng mạng từ chối mà KHÔNG chạy nó (Hedera `WRONG_NONCE`,
+/// `INSUFFICIENT_PAYER_BALANCE`…): chữ ký chủ thể còn nguyên ⇒ job về hàng đợi, không `reverted` (review M2 S6).
+#[derive(Debug)]
+pub struct Rejected(pub String);
+
+impl std::fmt::Display for Rejected {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "rejected before mempool: {}", self.0)
+    }
+}
+
+impl std::error::Error for Rejected {}
+
 const STATUS_POLL: Duration = Duration::from_millis(500);
 const EXPIRY_GRACE: u64 = 30;
 
@@ -163,8 +179,8 @@ pub async fn lane_step(adapter: &dyn ChainAdapter, odoo: &Odoo, lane: usize, wor
         report(odoo, Report { error: Some("journal write failed".into()), ..rep(job.id, "queued") }).await;
         return Ok(true);
     }
-    let mut sent = adapter.submit(&signed).await.is_ok();
-    if sent {
+    let mut sent = adapter.submit(&signed).await;
+    if sent.is_ok() {
         report(odoo, rep(job.id, "broadcast")).await;
     }
     loop {
@@ -178,15 +194,24 @@ pub async fn lane_step(adapter: &dyn ChainAdapter, odoo: &Odoo, lane: usize, wor
                 return Ok(true);
             }
             Ok(TxStatus::Pending) => {}
+            Err(e) if e.downcast_ref::<Rejected>().is_some() => {
+                report(odoo, Report { error: Some(e.to_string()), ..rep(job.id, "queued") }).await;
+                return Ok(true);
+            }
             Ok(TxStatus::Unknown) | Err(_) => {
+                // Hỏi trạng thái TRƯỚC: bị từ chối khi gửi lại có thể vì tx lần trước đã vào khối.
+                if let Some(r) = sent.as_ref().err().and_then(|e| e.downcast_ref::<Rejected>()) {
+                    report(odoo, Report { error: Some(r.to_string()), ..rep(job.id, "queued") }).await;
+                    return Ok(true);
+                }
                 if now() > signed.valid_until + EXPIRY_GRACE {
                     // Payload chủ thể đã hết hạn: tx (nếu còn đâu đó) sẽ bị contract từ chối.
                     report(odoo, Report { error: Some("expired before inclusion".into()), ..rep(job.id, "dead") }).await;
                     return Ok(true);
                 }
-                if !sent {
-                    sent = adapter.submit(&signed).await.is_ok();
-                    if sent {
+                if sent.is_err() {
+                    sent = adapter.submit(&signed).await;
+                    if sent.is_ok() {
                         report(odoo, rep(job.id, "broadcast")).await;
                     }
                 }
@@ -234,12 +259,12 @@ mod tests {
         assert_eq!(Family::parse("solana"), None);
     }
 
-    /// Chỉ `final_head`/`events` được gọi; ghi lại tập contract indexer đưa vào.
+    /// Adapter giả: lane luôn bị CheckTx từ chối, indexer ghi lại tập contract được đưa vào.
     #[derive(Default)]
-    struct Idx(std::sync::Mutex<Vec<Vec<String>>>);
+    struct Mock(std::sync::Mutex<Vec<Vec<String>>>);
 
     #[async_trait]
-    impl ChainAdapter for Idx {
+    impl ChainAdapter for Mock {
         fn family(&self) -> Family {
             Family::Cosmos
         }
@@ -247,22 +272,23 @@ mod tests {
             "cosmos:t"
         }
         fn lanes(&self) -> &[Lane] {
-            &[]
+            static L: std::sync::OnceLock<Vec<Lane>> = std::sync::OnceLock::new();
+            L.get_or_init(|| vec![Lane { index: 0, address: "wasm1lane".into() }])
         }
-        async fn build(&self, _: &Job, _: usize) -> std::result::Result<Built, SimError> {
-            unreachable!()
+        async fn build(&self, job: &Job, _: usize) -> std::result::Result<Built, SimError> {
+            Ok(Built { job_id: job.id, body: vec![], valid_until: now() + 600, meta: Value::Null })
         }
-        async fn sign(&self, _: Built, _: usize, _: u64) -> Result<Signed> {
-            unreachable!()
+        async fn sign(&self, b: Built, _: usize, sequence: u64) -> Result<Signed> {
+            Ok(Signed { job_id: b.job_id, tx_id: "0x01".into(), raw: vec![], valid_until: b.valid_until, sequence })
         }
         async fn submit(&self, _: &Signed) -> Result<()> {
-            unreachable!()
+            Err(Rejected("code 32: account sequence mismatch".into()).into())
         }
         async fn tx_status(&self, _: &str) -> Result<TxStatus> {
-            unreachable!()
+            Ok(TxStatus::Unknown)
         }
         async fn sequence(&self, _: usize) -> Result<u64> {
-            unreachable!()
+            Ok(3)
         }
         async fn final_head(&self) -> Result<Option<Head>> {
             Ok(Some(Head { height: 5, hash: format!("0x{}", "ab".repeat(32)) }))
@@ -276,41 +302,69 @@ mod tests {
         }
     }
 
-    /// Fake Odoo: `node_config` trả `tokens`, đếm số lần ingest.
-    async fn fake_odoo(tokens: Value) -> (Odoo, Arc<std::sync::Mutex<u32>>) {
+    #[derive(Default)]
+    struct Fake {
+        tokens: Value,
+        jobs: Vec<Value>,
+        reports: Vec<Value>,
+        ingests: u32,
+    }
+    type Shared = Arc<std::sync::Mutex<Fake>>;
+
+    async fn fake_odoo(fake: Fake) -> (Odoo, Shared) {
         use axum::extract::{Path, State};
         use axum::Json;
-        type S = (Value, Arc<std::sync::Mutex<u32>>);
-        async fn h(State((tokens, n)): State<S>, Path((_m, method)): Path<(String, String)>, Json(_b): Json<Value>) -> Json<Value> {
+        async fn h(State(s): State<Shared>, Path((_m, method)): Path<(String, String)>, Json(b): Json<Value>) -> Json<Value> {
+            let mut o = s.lock().unwrap();
             Json(match method.as_str() {
                 "node_config" => serde_json::json!({"finality_mode": "instant", "finality_depth": 0, "finality_quorum": 1,
-                    "indexed_block": 0, "tokens": tokens, "journal_max_nonce": null}),
+                    "indexed_block": 0, "tokens": o.tokens, "journal_max_nonce": null}),
+                "relay_poll" => Value::Array(std::mem::take(&mut o.jobs)),
+                "relay_claim" => b["job_ids"].clone(),
+                "relay_report" => {
+                    o.reports.push(b);
+                    serde_json::json!({"ok": true})
+                }
                 _ => {
-                    *n.lock().unwrap() += 1;
+                    o.ingests += 1;
                     serde_json::json!({"indexed_block": 5, "created": 0})
                 }
             })
         }
-        let n = Arc::new(std::sync::Mutex::new(0));
-        let app = axum::Router::new().route("/json/2/{m}/{method}", axum::routing::post(h)).with_state((tokens, n.clone()));
+        let s: Shared = Arc::new(std::sync::Mutex::new(fake));
+        let app = axum::Router::new().route("/json/2/{m}/{method}", axum::routing::post(h)).with_state(s.clone());
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
         let cfg = crate::config::OdooCfg { url, database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
-        (Odoo::with_key(&cfg, "k".into()).unwrap(), n)
+        (Odoo::with_key(&cfg, "k".into()).unwrap(), s)
     }
 
     /// Review H1+M1: tập contract đến từ Odoo (địa chỉ dạng chuẩn của họ, không phải EVM), và khi tập rỗng
     /// con trỏ KHÔNG tiến — event của token kích hoạt sau vẫn được đọc lại.
     #[tokio::test]
     async fn index_step_filters_on_odoo_tokens_and_holds_the_cursor_without_them() {
-        let a = Idx::default();
-        let (odoo, ingests) = fake_odoo(serde_json::json!([])).await;
+        let a = Mock::default();
+        let (odoo, o) = fake_odoo(Fake { tokens: serde_json::json!([]), ..Default::default() }).await;
         assert!(!index_step(&a, &odoo).await.unwrap());
-        assert_eq!((*ingests.lock().unwrap(), a.0.lock().unwrap().len()), (0, 0), "no contracts => no ingest");
-        let (odoo, ingests) = fake_odoo(serde_json::json!([{"address": "wasm1tok", "decimals": 6}])).await;
+        assert_eq!((o.lock().unwrap().ingests, a.0.lock().unwrap().len()), (0, 0), "no contracts => no ingest");
+        let (odoo, o) = fake_odoo(Fake { tokens: serde_json::json!([{"address": "wasm1tok", "decimals": 6}]), ..Default::default() }).await;
         index_step(&a, &odoo).await.unwrap();
-        assert_eq!(*ingests.lock().unwrap(), 1);
+        assert_eq!(o.lock().unwrap().ingests, 1);
         assert_eq!(a.0.lock().unwrap().as_slice(), [vec!["wasm1tok".to_string()]]);
+    }
+
+    /// Review L1: CheckTx từ chối vĩnh viễn ⇒ lane nhả ngay, job về hàng đợi kèm lý do (không chờ tới hạn payload).
+    #[tokio::test]
+    async fn rejected_broadcast_releases_the_lane_at_once() {
+        let job = serde_json::json!({"id": 7, "kind": "signed_op", "op": {}});
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![job], ..Default::default() }).await;
+        let mock = Mock::default();
+        let step = lane_step(&mock, &odoo, 0, "n#0");
+        assert!(tokio::time::timeout(Duration::from_secs(5), step).await.expect("lane held").unwrap());
+        let o = o.lock().unwrap();
+        let states: Vec<&str> = o.reports.iter().filter_map(|r| r["chain_state"].as_str()).collect();
+        assert_eq!(states, ["signed", "queued"]);
+        assert!(o.reports[1]["error"].as_str().unwrap().contains("sequence mismatch"));
     }
 }
