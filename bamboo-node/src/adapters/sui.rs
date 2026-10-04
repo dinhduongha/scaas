@@ -786,6 +786,8 @@ mod tests {
     const PAYLOAD: &str = "1062616d626f6f2e6d6574616f702e7631086c6f63616c6e6574d4793a1919a40ebfe5587a3a49fe89bb64c54bd49c75ab2a08ac0d5636706382006a749c33bda66662e3709eea404a27dbb2b27d7a58bc0a1248d12436fb2fae71000000000000000000000000000000000000000000000000000000000000beef6400000000000000000000000000000020010101010101010101010101010101010101010101010101010101010101010120a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a10000000000000000e8030000000000000000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000000";
     const DIGEST: &str = "b1e94f8ff971d3a06b4ef18ac50c0283320db9eeca1171831ce52612d5708799";
     const SIGNATURE: &str = "AEKwatGlEwsMK2lb91bMHMY/KA1dGEh3oqEJBZ0K/X6o3SGonMkOLSBcyNljeDrNj11RBGwPwRhYgxriKwCfmg3Vv0o/zOcXsDiLzCdJ68FIrZlpsj9F7htgX9WHeFdqxA==";
+    const TX_B64: &str = "AAANAEFAQrBq0aUTCwwraVv3Vswcxj8oDV0YSHeioQkFnQr9fqjdIaicyQ4tIFzI2WN4Os2PXVEEbA/BGFiDGuIrAJ+aDQABAAABAAEB1Hk6GRmkDr/lWHo6Sf6Ju2TFS9ScdasqCKwNVjZwY4IDAAAAAAAAAAEAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL7vABBkAAAAAAAAAAAAAAAAAAAAACEgAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAISChoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoQAIAAAAAAAAAAAACOgDAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAhIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABgEAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAsEYXV0aANuZXcAAwEAAAEBAAECAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACwRtZXRhCXJlbGF5X3BheQEHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIDc3VpA1NVSQALAQMAAQQAAQUAAQYAAQcAAQgAAQkAAQoAAQsAAgAAAQwAHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4BqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqoHAAAAAAAAACAHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBx4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4e6AMAAAAAAACAhB4AAAAAAAA=";
+    const TX_DIGEST: &str = "0x09e162aa79d60ca6da57387ace50103998c2394d55e793d57527de0368838ecb";
     const ALICE: &str = "0x6a749c33bda66662e3709eea404a27dbb2b27d7a58bc0a1248d12436fb2fae71";
 
     #[test]
@@ -886,6 +888,21 @@ mod tests {
         assert_eq!((a.package, a.type_package), (parse_addr("0xb").unwrap(), parse_addr("0xb").unwrap()));
         let a = SuiAdapter::new(&cfg(", type_package = \"0xa\""), &k).unwrap();
         assert_eq!((a.package, a.type_package), (parse_addr("0xb").unwrap(), parse_addr("0xa").unwrap()));
+    }
+
+    /// Review L4: bytes `TransactionData` của `pay_tx` (vector cố định). Giải độc lập bằng
+    /// `sui keytool decode-or-verify-tx --tx-bytes <TX_B64>` (Sui 1.81): ProgrammableTransaction 13 input
+    /// (3 pure Auth, account shared mutable isv 3, 8 pure, Clock 0x6 shared immutable isv 1), MoveCall
+    /// `0xb::auth::new(Input 0..2)`, MoveCall `0xb::meta::relay_pay<0x2::sui::SUI>(Input 3..11, Result 0, Input 12)`,
+    /// sender = gas owner = lane, gas 0xaa@7, giá 1000, budget 2000000, expiration None.
+    #[test]
+    fn pay_tx_bytes_vector() {
+        let op = MetaOp::decode(&alloy::hex::decode(PAYLOAD).unwrap()).unwrap();
+        let auth = parse_signature(SIGNATURE).unwrap();
+        let gas = ObjRef { id: [0xaa; 32], version: 7, digest: [7u8; 32] };
+        let tx = pay_tx(&parse_addr("0xb").unwrap(), &op, &auth, 3, &type_tag("0x2::sui::SUI").unwrap(), &[0x1e; 32], &gas, 1000, 2_000_000);
+        assert_eq!(B64.encode(&tx), TX_B64);
+        assert_eq!(addr_hex(&tx_digest(&tx)), TX_DIGEST);
     }
 
     // ---------------------------------------------------------------- lane journal (review M3)
