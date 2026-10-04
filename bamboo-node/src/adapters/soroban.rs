@@ -433,13 +433,14 @@ impl ChainAdapter for SorobanAdapter {
         let mut out = Vec::new();
         for chunk in self.contracts.chunks(CONTRACTS_PER_FILTER) {
             let filter = json!([{"type": "contract", "contractIds": chunk}]);
-            let mut params = json!({"startLedger": from, "endLedger": to + 1, "filters": filter, "pagination": {"limit": EVENT_PAGE}});
-            loop {
-                let r = self.rpc("getEvents", params.clone()).await?;
+            let mut cursor: Option<String> = None;
+            'pages: loop {
+                let r = self.rpc("getEvents", events_params(&filter, from, to, cursor.as_deref())).await?;
                 let evs = r["events"].as_array().cloned().unwrap_or_default();
                 for ev in &evs {
+                    // Thứ tự ledger tăng dần; trang theo cursor chạy tới đỉnh ⇒ qua `to` là hết phần của ta.
                     if ev["ledger"].as_u64().is_some_and(|l| l > to) {
-                        continue;
+                        break 'pages;
                     }
                     if let Some(mut e) = decode_event(ev) {
                         e["block_hash"] = json!(self.block_hash(e["block_number"].as_u64().unwrap_or_default()).await?);
@@ -447,15 +448,22 @@ impl ChainAdapter for SorobanAdapter {
                     }
                 }
                 match r["cursor"].as_str() {
-                    Some(c) if evs.len() as u64 == EVENT_PAGE => {
-                        params = json!({"filters": filter, "pagination": {"cursor": c, "limit": EVENT_PAGE}, "endLedger": to + 1});
-                    }
+                    Some(c) if evs.len() as u64 == EVENT_PAGE => cursor = Some(c.to_owned()),
                     _ => break,
                 }
             }
         }
         out.sort_by_key(|e| (e["block_number"].as_u64(), e["tx_hash"].as_str().map(str::to_owned), e["log_index"].as_u64()));
         Ok(out)
+    }
+}
+
+/// Trang `getEvents`: trang sau chỉ mang cursor — stellar-rpc từ chối khoảng ledger kèm cursor
+/// (`GetEventsRequest.Valid`: "ledger ranges and cursor cannot both be set").
+fn events_params(filter: &Value, from: u64, to: u64, cursor: Option<&str>) -> Value {
+    match cursor {
+        None => json!({"startLedger": from, "endLedger": to + 1, "filters": filter, "pagination": {"limit": EVENT_PAGE}}),
+        Some(c) => json!({"filters": filter, "pagination": {"cursor": c, "limit": EVENT_PAGE}}),
     }
 }
 
@@ -540,5 +548,16 @@ mod tests {
             p[i % n] = b;
             let _ = host_call(&network_id(NETWORK), &op(&hex(&p), &"ab".repeat(64)));
         }
+    }
+
+    #[test]
+    fn event_pages_after_the_first_carry_only_the_cursor() {
+        let f = json!([{"type": "contract", "contractIds": [CONTRACT]}]);
+        let first = events_params(&f, 10, 20, None);
+        assert_eq!((first["startLedger"].as_u64(), first["endLedger"].as_u64()), (Some(10), Some(21)));
+        // stellar-rpc GetEventsRequest.Valid: "ledger ranges and cursor cannot both be set".
+        let next = events_params(&f, 10, 20, Some("0000000042-0000000001"));
+        assert_eq!(next["pagination"]["cursor"], "0000000042-0000000001");
+        assert!(next.get("startLedger").is_none() && next.get("endLedger").is_none(), "{next}");
     }
 }
