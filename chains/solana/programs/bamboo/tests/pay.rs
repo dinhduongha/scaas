@@ -195,6 +195,21 @@ fn recipient_and_destination_are_bound_to_the_signed_to() {
     assert_eq!(env.balance(&ata(&mallory.pubkey(), &usd, &TOKEN)), 0);
 }
 
+/// Review L5: `to` dán nhầm là token account (hay mint) ⇒ từ chối, không tạo ATA mà không ai ký được; ví chưa có SOL
+/// (chưa tồn tại) và PDA của program khác vẫn nhận được.
+#[test]
+fn a_token_account_or_mint_is_not_a_recipient() {
+    let (mut env, alice, usd) = vector_env();
+    let bob = Ed::new("bob").pubkey();
+    let bob_ata = env.fund(&bob, &usd, TOKEN, 0);
+    expect_err(env.pay(&alice, &usd, TOKEN, &env.args(&bob_ata, 5, 1, 1, 0, 1000)), E::TokenAccountRecipient);
+    expect_err(env.pay(&alice, &usd, TOKEN, &env.args(&usd, 5, 1, 1, 0, 1000)), E::TokenAccountRecipient);
+    ok(env.pay(&alice, &usd, TOKEN, &env.args(&bob, 5, 1, 1, 0, 1000)));
+    let vault = pda(&[b"some-vault"]);
+    ok(env.pay(&alice, &usd, TOKEN, &env.args(&vault, 5, 2, 1, 1, 1000)));
+    assert_eq!(env.balance(&bob_ata), 5);
+}
+
 /// L7: tiền gửi vào token account KHÔNG phải ATA của PDA vẫn chi được; Account chưa mở vẫn nhận được.
 #[test]
 fn any_token_account_of_the_pda_is_spendable() {

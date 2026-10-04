@@ -14,9 +14,10 @@ pub fn mandate_addr(account: &Pubkey, seed: [u8; 32]) -> Pubkey {
 }
 
 impl Env {
-    pub fn mandate_init(&self, owner_account: &Pubkey, seed: [u8; 32], delegate: &Ed, payees: Vec<Pubkey>) -> MandateInit {
+    pub fn mandate_init(&self, owner_account: &Pubkey, seed: [u8; 32], asset: &Pubkey, delegate: &Ed, payees: Vec<Pubkey>) -> MandateInit {
         MandateInit {
             seed,
+            asset: *asset,
             delegate: delegate.key(),
             max_per_payment: 50,
             max_per_period: 80,
@@ -77,14 +78,30 @@ impl Env {
         }
     }
 
-    /// Delegate ký `MetaOp{op: mandate_pay, contract: mandate, from: owner}`.
+    /// Thế hệ của Mandate đang mở (L4); 0 nếu chưa có.
+    pub fn generation(&self, mandate: &Pubkey) -> u64 {
+        self.account::<bamboo::state::Mandate>(mandate).map_or(0, |m| m.generation)
+    }
+
+    /// Delegate ký `MetaOp{op: mandate_pay, contract: mandate, from: owner, nonce: generation hiện tại}`.
     pub fn mandate_pay(&mut self, delegate: &Ed, owner: &Ed, mandate: &Pubkey, mint: &Pubkey, args: &bamboo::PayArgs) -> Res {
+        let args = bamboo::PayArgs { nonce: self.generation(mandate), ..args.clone() };
+        self.mandate_pay_signed(delegate, owner, mandate, mint, &args)
+    }
+
+    /// Như `mandate_pay` nhưng ký đúng `args` (kể cả `nonce`).
+    pub fn mandate_pay_signed(&mut self, delegate: &Ed, owner: &Ed, mandate: &Pubkey, mint: &Pubkey, args: &bamboo::PayArgs) -> Res {
         let dg = self.metaop_digest(mandate, mint, A::OP_MANDATE_PAY, &owner.pk(), args);
         let ix = self.mandate_pay_ix(mandate, mint, TOKEN, args, auth(A::KIND_RAW, 0, 0, 0));
         self.send(&[ed_ix(&[delegate.sign(A::KIND_RAW, A::METAOP_LABEL, &dg)]), ix], &[])
     }
 
     pub fn mandate_revoke(&mut self, signer: &Ed, owner: &Ed, mandate: &Pubkey) -> Res {
+        let g = self.generation(mandate);
+        self.mandate_revoke_gen(signer, owner, mandate, g)
+    }
+
+    pub fn mandate_revoke_gen(&mut self, signer: &Ed, owner: &Ed, mandate: &Pubkey, generation: u64) -> Res {
         let op = bamboo::auth::MetaOp {
             network: self.network,
             contract: mandate.to_bytes(),
@@ -95,7 +112,7 @@ impl Env {
             amount: 0,
             pay_ref: [0; 32],
             lane: [0; 32],
-            nonce: 0,
+            nonce: generation,
             valid_until: 1000,
             relayer: [0; 32],
             extra: [0; 32],

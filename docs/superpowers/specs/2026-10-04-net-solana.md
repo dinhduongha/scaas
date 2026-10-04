@@ -202,9 +202,11 @@ pub struct Key { pub scheme: u8, pub pubkey: [u8; 33], pub rp_id_hash: [u8; 32] 
 - Một lane = một PDA `["lane", account, lane32]`, `init_if_needed`: `next == nonce` rồi tăng; `valid_until` = max của op đã
   dùng lane; `rent_payer` = lane relayer đã trả rent. Odoo phát nonce 0 trên lane ngẫu nhiên theo `entryRef` (R9) ⇒ thực
   tế mỗi request một PDA mới ⇒ **không** account dùng chung giữa hai thao tác.
-- `prune(pdas)` **không cần quyền**: đóng PDA có `valid_until < Clock.unix_timestamp`, lamports về **`rent_payer` lưu
-  trong PDA** (không về người gọi ⇒ không ai cướp rent). An toàn: mọi op dùng lane đó đã hết hạn; lane không lặp lại
-  (R9). Cùng cơ chế cho `MandateRef` và `Fill`.
+- `prune(pdas)` **không cần quyền**: đóng LanePda / `MandateRef` khi `valid_until + PRUNE_DELAY_S < Clock.unix_timestamp`
+  (`PRUNE_DELAY_S` = 30 ngày ≥ `LANE_HORIZON_S` của Odoo — review C1), `Fill` khi `valid_until < now` (hạn nằm trong
+  hash lệnh); lamports về **`rent_payer` lưu trong PDA** (không về người gọi ⇒ không ai cướp rent). An toàn: `valid_until`
+  chỉ là hạn của op ĐÃ CHẠY; Odoo phát lại điều khoản của một request trên CÙNG lane, nonce 0 (5318f20), mọi hạn trong
+  30 ngày kể từ lúc tạo request ⇒ khi PDA bị xoá, mọi op khác đã ký cho request đã hết hạn (không trả hai lần).
 - Chi phí (rent-exempt, refund khi prune): lane PDA ~0,0012 SOL; chưa prune thì tiền nằm đó (§11).
 
 ### 3.5 Bảng ghi/đọc trên đường nóng (L8, L12)
@@ -333,9 +335,11 @@ chữ ký thật từ khoá cố định, PDA Account/lane/mandate/fill, ATA) �
 ### 5.2 Mandate (R25) — RS12-11
 
 - `mandate_open(MandateInit, auth)`: khoá **Account** ký `MandateInit{domain="bamboo.mandate.v1", network, account,
-  mandate, delegate_key (ed25519|P-256), max_per_payment, max_per_period, period_s, expiry, payees ≤ 8, nonce=key_nonce,
+  mandate, asset (mint duy nhất — review M2), delegate_key (ed25519|P-256), max_per_payment, max_per_period, period_s, expiry, payees ≤ 8, nonce=key_nonce,
   valid_until}` ⇒ không tx native của chủ (R30). Cấp vốn = một `pay` thường tới Mandate PDA (`to` = Mandate).
-- `mandate_pay(...)`: delegate ký `MetaOp{op: mandate_pay, contract: mandate}`; hạn mandate, hạn chữ ký, payee, trần
+- `mandate_pay(...)`: delegate ký `MetaOp{op: mandate_pay, contract: mandate, asset = mint của mandate, nonce =
+  generation}` (`generation` = `key_nonce` lúc mở; đóng rồi mở lại cùng seed ⇒ thế hệ mới, op/revoke cũ không chạy —
+  review L4); `to` không được là token account/mint (review L5); hạn mandate, hạn chữ ký, payee, trần
   lần, trần kỳ (so bằng phép trừ — Sui L6), `MandateRef` init (một lần, prunable); event `PaymentSettled` +
   `PaidUnderMandate`.
 - `mandate_revoke_signed` (delegate, `op: revoke` — kill switch platform) / `mandate_close_signed` (khoá Account): chuyển
@@ -623,7 +627,8 @@ phía client nặng). Không xây ở round này (R34 §5).
 - **RS12-4** ≤ 8 khoá (ed25519 / P-256 WebAuthn), ≤ 8 origin, guardian + trễ 2 ngày; add_origin cùng rpId do chính passkey
   ký; `open_passkey` đòi assertion.
 - **RS12-5** Policy `BACKUP_REQUIRED` (bit0, mặc định OFF), chủ tự bật/tắt; backup = ≥ 2 khoá hoặc 1 khoá + guardian.
-- **RS12-6** Lane/nonce = PDA mỗi (account, lane), `prune` không cần quyền sau hạn, rent về `rent_payer`.
+- **RS12-6** Lane/nonce = PDA mỗi (account, lane), `prune` không cần quyền sau `valid_until + PRUNE_DELAY_S` (30 ngày,
+  review C1), rent về `rent_payer`.
 - **RS12-7** SPL Token + Token-2022 qua `token_interface`; abort NonTransferable, transfer hook có program, transfer fee > 0.
 - **RS12-8** Miền = genesis hash lưu ở `Config` (adapter đối chiếu `getGenesisHash` lúc khởi động) + PDA + op + asset.
 - **RS12-9** Văn bản ký `"<domain>:" ‖ hex(sha256)`; ed25519 nhận raw và OCMS v1; passkey challenge = b64url(digest).

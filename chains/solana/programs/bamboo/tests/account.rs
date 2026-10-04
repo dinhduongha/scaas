@@ -289,9 +289,9 @@ fn prune_ix(target: Pubkey, rent_payer: Pubkey) -> Instruction {
     }
 }
 
-/// RS12-6: prune không cần quyền chỉ sau hạn, rent về đúng `rent_payer`; op cũ không chạy lại được.
+/// RS12-6 + review C1: prune không cần quyền, chỉ sau `valid_until + PRUNE_DELAY_S`, rent về đúng `rent_payer`.
 #[test]
-fn prune_returns_rent_to_the_lane_after_expiry_only() {
+fn prune_returns_rent_to_the_lane_after_the_delay_only() {
     let mut env = Env::new();
     let usd = env.mint(TOKEN, 6);
     let alice = Ed::new("alice");
@@ -305,6 +305,11 @@ fn prune_returns_rent_to_the_lane_after_expiry_only() {
     env.svm.airdrop(&stranger.pubkey(), 1_000_000_000).unwrap();
     expect_err(env.send_as(&stranger, &[prune_ix(lane_pda, env.lane.pubkey())], &[]), E::TooEarly);
     env.set_time(901);
+    expect_err(env.send_as(&stranger, &[prune_ix(lane_pda, env.lane.pubkey())], &[]), E::TooEarly);
+    let due = 900 + bamboo::PRUNE_DELAY_S;
+    env.set_time(due);
+    expect_err(env.send_as(&stranger, &[prune_ix(lane_pda, env.lane.pubkey())], &[]), E::TooEarly);
+    env.set_time(due + 1);
     expect_err(env.send_as(&stranger, &[prune_ix(lane_pda, stranger.pubkey())], &[]), E::WrongRentPayer);
     let lane_before = env.lamports(&env.lane.pubkey());
     ok(env.send_as(&stranger, &[prune_ix(lane_pda, env.lane.pubkey())], &[]));
@@ -313,4 +318,33 @@ fn prune_returns_rent_to_the_lane_after_expiry_only() {
     expect_err(env.pay(&alice, &usd, TOKEN, &args), E::Expired);
     // nothing else is prunable
     expect_err(env.send_as(&stranger, &[prune_ix(env.config(), env.lane.pubkey())], &[]), E::NotPrunable);
+}
+
+/// Review C1: Odoo re-issues terms for ONE request on the same lane, nonce 0, with a later `valid_until` (≤ creation +
+/// LANE_HORIZON_S). Only one of the two signed ops can ever run — while the lane PDA lives (BadNonce) and after it is
+/// pruned (op2 expired by then, since PRUNE_DELAY_S ≥ the horizon).
+#[test]
+fn two_signed_ops_for_one_request_pay_once_before_and_after_prune() {
+    assert_eq!(bamboo::PRUNE_DELAY_S, 2_592_000, "must stay >= Odoo LANE_HORIZON_S");
+    let mut env = Env::new();
+    let usd = env.mint(TOKEN, 6);
+    let alice = Ed::new("alice");
+    let src = env.fund(&alice.account(), &usd, TOKEN, 100);
+    let bob = Ed::new("bob").pubkey();
+    let op1 = env.args(&bob, 10, 1, 7, 0, 900);
+    // worst case: op2 issued at the very end of the horizon, measured from op1's own deadline
+    let op2 = env.args(&bob, 10, 1, 7, 0, 900 + bamboo::PRUNE_DELAY_S as u64);
+    ok(env.pay(&alice, &usd, TOKEN, &op1));
+    expect_err(env.pay(&alice, &usd, TOKEN, &op2), E::BadNonce);
+    let lane_pda = pda(&[b"lane", alice.account().as_ref(), &[7; 32]]);
+    let lane = env.lane.pubkey();
+    for t in [901, 900 + bamboo::PRUNE_DELAY_S] {
+        env.set_time(t);
+        expect_err(env.send(&[prune_ix(lane_pda, lane)], &[]), E::TooEarly);
+        expect_err(env.pay(&alice, &usd, TOKEN, &op2), E::BadNonce);
+    }
+    env.set_time(901 + bamboo::PRUNE_DELAY_S);
+    ok(env.send(&[prune_ix(lane_pda, lane)], &[]));
+    expect_err(env.pay(&alice, &usd, TOKEN, &op2), E::Expired);
+    assert_eq!(env.balance(&src), 90, "paid exactly once");
 }

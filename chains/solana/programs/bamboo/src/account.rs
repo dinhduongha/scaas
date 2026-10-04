@@ -180,6 +180,7 @@ pub struct RelayPay<'info> {
 pub fn relay_pay(ctx: Context<RelayPay>, owner: [u8; 32], args: PayArgs, auth: Auth) -> Result<()> {
     let a = &ctx.accounts;
     args.check_common(&a.lane.key())?;
+    util::check_recipient(&a.recipient)?;
     let info = a.subject.to_account_info();
     let subject = if info.data_is_empty() {
         // Mở lười: khoá duy nhất là chính `owner`, nên chỉ chữ ký của nó (khoá 0) mở được.
@@ -419,19 +420,24 @@ pub struct Prune<'info> {
     pub rent_payer: UncheckedAccount<'info>,
 }
 
-/// Không cần quyền: đóng PDA đã quá `valid_until`, rent về đúng `rent_payer` đã lưu (RS12-6). Op cũ không replay được
-/// vì mọi op dùng nó đã hết hạn.
+/// LanePda / MandateRef xoá được chỉ sau `valid_until + PRUNE_DELAY_S` (review C1). `valid_until` chỉ là hạn của op ĐÃ
+/// CHẠY; Odoo phát lại điều khoản của một request trên CÙNG lane, nonce 0 (cùng `pay_ref`), mọi hạn trong
+/// `LANE_HORIZON_S` (= 30 ngày) kể từ lúc tạo request ⇒ khi PDA bị xoá, mọi op khác đã ký cho request đó đã hết hạn (không
+/// trả hai lần). Giảm hằng này phải giảm horizon của Odoo trước. `Fill` không cần: hạn lệnh nằm trong hash.
+pub const PRUNE_DELAY_S: i64 = 2_592_000;
+
+/// Không cần quyền: đóng PDA đã quá hạn xoá, rent về đúng `rent_payer` đã lưu (RS12-6).
 pub fn prune(ctx: Context<Prune>) -> Result<()> {
     let t = &ctx.accounts.target;
-    let (valid_until, payer) = {
+    let (due, payer) = {
         let data = t.try_borrow_data()?;
         let d = data.get(..8).ok_or(BambooError::NotPrunable)?;
         if d == LanePda::DISCRIMINATOR {
             let x = LanePda::try_deserialize(&mut &data[..])?;
-            (x.valid_until, x.rent_payer)
+            (x.valid_until.saturating_add(PRUNE_DELAY_S), x.rent_payer)
         } else if d == MandateRef::DISCRIMINATOR {
             let x = MandateRef::try_deserialize(&mut &data[..])?;
-            (x.valid_until, x.rent_payer)
+            (x.valid_until.saturating_add(PRUNE_DELAY_S), x.rent_payer)
         } else if d == Fill::DISCRIMINATOR {
             let x = Fill::try_deserialize(&mut &data[..])?;
             (x.valid_until, x.rent_payer)
@@ -440,6 +446,6 @@ pub fn prune(ctx: Context<Prune>) -> Result<()> {
         }
     };
     require_keys_eq!(payer, ctx.accounts.rent_payer.key(), BambooError::WrongRentPayer);
-    require!(util::now()? > valid_until, BambooError::TooEarly);
+    require!(util::now()? > due, BambooError::TooEarly);
     util::close(t, &ctx.accounts.rent_payer)
 }

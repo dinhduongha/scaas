@@ -117,6 +117,11 @@ pub struct Mandate {
     pub spent: u64,
     pub revoked: bool,
     pub rent_payer: Pubkey,
+    /// Mint duy nhất mandate trả (review M2): trần/`spent` theo đơn vị của mint này.
+    pub asset: Pubkey,
+    /// `key_nonce` của Account lúc mở (review L4): op của delegate ký `nonce = generation`; mở lại cùng seed ⇒ thế hệ
+    /// mới, op/revoke của thế hệ cũ không chạy.
+    pub generation: u64,
 }
 
 #[account]

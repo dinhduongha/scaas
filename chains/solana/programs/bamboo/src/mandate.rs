@@ -13,6 +13,8 @@ use crate::{BambooError, MetaTransactionExecuted, PaidUnderMandate, PaymentSettl
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, PartialEq, Eq)]
 pub struct MandateInit {
     pub seed: [u8; 32],
+    /// Mint duy nhất mandate trả (review M2).
+    pub asset: Pubkey,
     pub delegate: AuthKey,
     pub max_per_payment: u64,
     pub max_per_period: u64,
@@ -24,14 +26,15 @@ pub struct MandateInit {
 }
 
 impl MandateInit {
-    /// `"bamboo.mandate.v1" ‖ network ‖ account ‖ mandate ‖ scheme ‖ pk33 ‖ rpIdHash ‖ max_per_payment ‖
+    /// `"bamboo.mandate.v1" ‖ network ‖ account ‖ mandate ‖ asset ‖ scheme ‖ pk33 ‖ rpIdHash ‖ max_per_payment ‖
     /// max_per_period ‖ period_s ‖ expiry ‖ u8 n ‖ payees ‖ nonce ‖ valid_until` (LE).
     pub fn bytes(&self, network: &[u8; 32], account: &Pubkey, mandate: &Pubkey) -> Vec<u8> {
-        let mut b = Vec::with_capacity(300 + 32 * self.payees.len());
+        let mut b = Vec::with_capacity(332 + 32 * self.payees.len());
         b.extend_from_slice(MANDATE_LABEL.as_bytes());
         b.extend_from_slice(network);
         b.extend_from_slice(account.as_ref());
         b.extend_from_slice(mandate.as_ref());
+        b.extend_from_slice(self.asset.as_ref());
         b.push(self.delegate.scheme);
         b.extend_from_slice(&self.delegate.pubkey);
         b.extend_from_slice(&self.delegate.rp_id_hash);
@@ -95,6 +98,8 @@ pub fn mandate_open(ctx: Context<MandateOpen>, init: MandateInit, auth: Auth) ->
     m.spent = 0;
     m.revoked = false;
     m.rent_payer = rent_payer;
+    m.asset = init.asset;
+    m.generation = init.nonce;
     Ok(())
 }
 
@@ -131,9 +136,13 @@ pub struct MandatePay<'info> {
 pub fn mandate_pay(ctx: Context<MandatePay>, args: PayArgs, auth: Auth) -> Result<()> {
     let a = &ctx.accounts;
     args.check_common(&a.lane.key())?;
+    util::check_recipient(&a.recipient)?;
     let m = &a.mandate;
     let now = util::now()?;
     require!(!m.revoked, BambooError::Revoked);
+    require_keys_eq!(a.mint.key(), m.asset, BambooError::WrongMint);
+    // L4: op của thế hệ cũ (mandate đã đóng rồi mở lại cùng seed) không chạy.
+    require!(args.nonce == m.generation, BambooError::BadNonce);
     require!(now <= m.expiry, BambooError::Expired);
     let to = Pubkey::new_from_array(args.to);
     require!(m.payees.is_empty() || m.payees.contains(&to), BambooError::PayeeNotAllowed);
@@ -196,7 +205,8 @@ pub struct MandateRevoke<'info> {
     pub instructions: UncheckedAccount<'info>,
 }
 
-/// Kill switch của delegate: `MetaOp{op: revoke, contract: mandate, from: owner}`, mọi trường khác 0 trừ `valid_until`.
+/// Kill switch của delegate: `MetaOp{op: revoke, contract: mandate, from: owner, nonce: generation}`, mọi trường khác 0
+/// trừ `valid_until`.
 pub fn mandate_revoke_signed(ctx: Context<MandateRevoke>, valid_until: u64, auth: Auth) -> Result<()> {
     util::check_deadline(valid_until)?;
     let a = &ctx.accounts;
@@ -211,7 +221,7 @@ pub fn mandate_revoke_signed(ctx: Context<MandateRevoke>, valid_until: u64, auth
         amount: 0,
         pay_ref: [0; 32],
         lane: [0; 32],
-        nonce: 0,
+        nonce: m.generation,
         valid_until,
         relayer: [0; 32],
         extra: [0; 32],

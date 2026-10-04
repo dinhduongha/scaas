@@ -245,4 +245,8 @@ pub enum BambooError {
     Overfill,
     #[msg("fill-or-kill not filled")]
     FillOrKill,
+    #[msg("mandate is for another mint")]
+    WrongMint,
+    #[msg("recipient is a token account or mint, not a wallet")]
+    TokenAccountRecipient,
 }

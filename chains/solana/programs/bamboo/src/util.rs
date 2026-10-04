@@ -118,6 +118,14 @@ pub fn close(target: &AccountInfo, to: &AccountInfo) -> Result<()> {
     Ok(())
 }
 
+/// Review L5: `to` là VÍ; token account / mint (của token program) làm `to` ⇒ ATA có owner là token account, không ai
+/// ký được ⇒ tiền mất. PDA của program khác (vault multisig…) vẫn được.
+pub fn check_recipient(recipient: &AccountInfo) -> Result<()> {
+    let o = recipient.owner;
+    require!(*o != anchor_spl::token::ID && *o != anchor_spl::token_2022::ID, BambooError::TokenAccountRecipient);
+    Ok(())
+}
+
 pub fn now() -> Result<i64> {
     Ok(Clock::get()?.unix_timestamp)
 }

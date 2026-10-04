@@ -37,7 +37,7 @@ fn setup() -> W {
     ok(env.send(&[env.open_ix(&alice.pubkey())], &[&kp]));
     env.fund(&alice.account(), &usd, TOKEN, 1_000);
     env.fund(&alice.account(), &eur, TOKEN, 1_000);
-    let init = env.mandate_init(&alice.account(), [0x0d; 32], &delegate, vec![]);
+    let init = env.mandate_init(&alice.account(), [0x0d; 32], &usd, &delegate, vec![]);
     ok(env.mandate_open(&alice, &init));
     let mandate = mandate_addr(&alice.account(), [0x0d; 32]);
     ok(env.pay(&alice, &usd, TOKEN, &env.args(&mandate, 100, 9, 9, 0, 1000)));
