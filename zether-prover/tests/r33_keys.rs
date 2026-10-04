@@ -160,3 +160,24 @@ fn ua_pubkey_roundtrip() {
     ua_roundtrip::<Bn254>();
     ua_roundtrip::<Bls12381>();
 }
+
+/// BIP-39 salt is `"mnemonic" ‖ NFKD(passphrase)`. The expected seed is what @scure/bip39
+/// `mnemonicToSeedSync` and Python `pbkdf2_hmac` over NFKD both give; NFC and NFD spellings of
+/// the same passphrase must land on it.
+#[test]
+fn bip39_passphrase_is_nfkd_normalized() {
+    let want = "e031dc67ae9c173bf9b1989a53fe05b4da4282e0f4f671aad0e7a7a6cd9e401f\
+                2683914fbbefe9aee48280d2e415f23d5020ffa80284e037f91b4120757ff519";
+    for pass in ["m\u{1ead}t kh\u{1ea9}u", "ma\u{323}\u{302}t kha\u{302}\u{309}u"] {
+        assert_eq!(hex::encode(&seed_from_mnemonic(ABANDON_ART, pass).unwrap()[..]), want, "{pass:?}");
+    }
+    // Same through the JSON API, and a non-string passphrase is an error, not "".
+    let call = |key: serde_json::Value| zether_prover::api::call("keygen", &serde_json::json!({"curve": "bn254", "key": key}).to_string());
+    let by_words = call(serde_json::json!({"mnemonic": ABANDON_ART, "passphrase": "m\u{1ead}t kh\u{1ea9}u", "coin": 60, "account": 0}));
+    let by_seed = call(serde_json::json!({"seed": format!("0x{want}"), "coin": 60, "account": 0}));
+    assert_eq!(by_words.unwrap(), by_seed.unwrap());
+    for bad in [serde_json::json!(1), serde_json::json!({}), serde_json::json!(["x"]), serde_json::json!(true)] {
+        assert!(call(serde_json::json!({"mnemonic": ABANDON_ART, "passphrase": bad, "coin": 60, "account": 0})).is_err());
+    }
+    assert!(call(serde_json::json!({"mnemonic": ABANDON_ART, "passphrase": null, "coin": 60, "account": 0})).is_ok());
+}

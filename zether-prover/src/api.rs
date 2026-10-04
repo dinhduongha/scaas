@@ -79,7 +79,10 @@ fn key<C: ZCurve>(v: &Value) -> R<ZetherKey<C>> {
         return ZetherKey::from_secret(decode_scalar::<C>(&bytes(k, "x")?).map_err(e)?).map_err(e);
     }
     let seed = if k.get("mnemonic").is_some() {
-        let pass = k.get("passphrase").and_then(Value::as_str).unwrap_or("");
+        let pass = match k.get("passphrase") {
+            None | Some(Value::Null) => "",
+            Some(p) => p.as_str().ok_or("passphrase must be a string")?,
+        };
         seed_from_mnemonic(get(k, "mnemonic")?.as_str().ok_or("mnemonic must be a string")?, pass)
             .map_err(e)?
             .to_vec()

@@ -24,7 +24,7 @@ sha2 = "0.10"
 sha3 = "0.10"
 hmac = "0.12"
 hkdf = "0.12"
-bip39 = { version = "2", default-features = false, features = ["std"] }
+bip39 = { version = "2", default-features = false, features = ["std", "unicode-normalization"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
 rand_chacha = "0.3"
 zeroize = "1"
