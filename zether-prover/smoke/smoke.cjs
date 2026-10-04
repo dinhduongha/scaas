@@ -29,6 +29,8 @@ for (const curve of ["bn254", "bls12381"]) {
   assert.equal(call("checkBalance", { curve, key: k0, acc, balance: "50001" }).ok, false);
   // wasm refuses the 2 GiB table (limits §4): only the native zether-read-balance goes to 2^27.
   assert.throws(() => zetherCall("decrypt", JSON.stringify({ curve, key: k0, ct: acc, tableBits: 27 })), /wasm/);
+  // review L4: a browser tab stays at <= 2^24 (256 MiB) unless the caller opts in.
+  assert.throws(() => zetherCall("decrypt", JSON.stringify({ curve, key: k0, ct: acc, tableBits: 25 })), /allowLargeTable/);
   n++;
 
   const t0 = Date.now();

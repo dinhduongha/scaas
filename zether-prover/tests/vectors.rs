@@ -67,6 +67,13 @@ fn api_roundtrip_mnemonic_keygen_prove_decrypt() {
     // 2^32 + 60 must not silently alias coin 60.
     let wide = json!({"curve": "bn254", "key": {"mnemonic": mnemonic, "coin": 4294967356u64, "account": 0}});
     assert!(zether_prover::api::call("keygen", &wide.to_string()).is_err());
+    // review L1: a JSON Number above 2^53 − 1 may already be rounded by the JS caller — refuse it and
+    // require a decimal string; at or below 2^53 − 1 a Number is exact and accepted.
+    let y = call("keygen", json!({"curve": "bn254", "key": {"mnemonic": mnemonic, "coin": 60, "account": 0}}))["Y"].clone();
+    let enc = |amount: Value| zether_prover::api::call("encrypt", &json!({"curve": "bn254", "Y": y, "amount": amount}).to_string());
+    assert!(enc(json!(9007199254740993u64)).unwrap_err().contains("decimal string"));
+    assert!(enc(json!(9007199254740991u64)).is_ok());
+    assert!(enc(json!("9007199254740993")).is_ok());
     let bad_y = json!({"curve": "bn254", "Y": "0x".to_string() + &"11".repeat(64), "amount": 1});
     assert!(zether_prover::api::call("fundCalldata", &bad_y.to_string()).is_err());
 }
