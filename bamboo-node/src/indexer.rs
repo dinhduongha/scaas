@@ -105,6 +105,11 @@ pub async fn run(chain: Arc<Chain>, odoo: Odoo, poll: Duration, chain_key: Strin
 /// Một vòng: đọc cursor + token từ Odoo, tính vùng final, kiểm quorum, gửi. `true` = đã tiến.
 pub async fn step(chain: &Chain, odoo: &Odoo) -> anyhow::Result<bool> {
     let nc = odoo.node_config(chain.number, None).await?;
+    // Không token nào đăng ký: không ai lọc được vùng này ⇒ giữ con trỏ (recipe M1), đọc lại khi có token.
+    let addrs: Vec<Address> = nc.tokens.iter().filter_map(crate::odoo::TokenCfg::evm).collect();
+    if addrs.is_empty() {
+        return Ok(false);
+    }
     let mode = if nc.finality_mode == "tag" { Mode::Tag } else { Mode::Depth(nc.finality_depth) };
     let latest = chain.primary().get_block_number().await?;
     let finalized = if mode == Mode::Tag { chain.finalized_number().await? } else { None };
@@ -119,17 +124,11 @@ pub async fn step(chain: &Chain, odoo: &Odoo) -> anyhow::Result<bool> {
         warn!(chain = chain.number, block = to, "quorum not reached; not advancing");
         return Ok(false);
     }
-    let addrs: Vec<Address> = nc.tokens.iter().filter_map(crate::odoo::TokenCfg::evm).collect();
-    let events: Vec<Value> = if addrs.is_empty() {
-        vec![]
-    } else {
-        let f = Filter::new().from_block(from).to_block(to).address(addrs).event_signature(vec![
-            IMetaToken::PaymentSettled::SIGNATURE_HASH,
-            IMetaToken::MetaTransactionExecuted::SIGNATURE_HASH,
-        ]);
-        chain.primary().get_logs(&f).await?.iter().filter_map(encode_event).collect()
-    };
-    let mut events = events;
+    let f = Filter::new().from_block(from).to_block(to).address(addrs).event_signature(vec![
+        IMetaToken::PaymentSettled::SIGNATURE_HASH,
+        IMetaToken::MetaTransactionExecuted::SIGNATURE_HASH,
+    ]);
+    let mut events: Vec<Value> = chain.primary().get_logs(&f).await?.iter().filter_map(encode_event).collect();
     let pairs = receiving_pairs(&nc);
     if !pairs.is_empty() {
         let tokens: Vec<Address> = pairs.iter().map(|p| p.0).collect();
@@ -235,5 +234,17 @@ mod tests {
         assert!(encode_event(&pending).is_none());
         let foreign = log_of(LogData::new_unchecked(vec![B256::repeat_byte(7)], Default::default()));
         assert!(encode_event(&foreign).is_none());
+    }
+
+    /// Merge TODO a (recipe M1 on the EVM indexer): no registered token ⇒ nobody can filter this range, so the
+    /// cursor stays put (a token activated later still gets its events) and no RPC is spent.
+    #[tokio::test]
+    async fn no_tokens_holds_the_cursor() {
+        use crate::adapter::tests::{fake_odoo, Fake};
+        let (odoo, o) = fake_odoo(Fake { tokens: json!([]), ..Default::default() }).await;
+        let cfg = crate::config::ChainCfg { evm_chain_number: 7, rpc_urls: vec!["http://127.0.0.1:9".into()], ..Default::default() };
+        let chain = Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap();
+        assert!(!step(&chain, &odoo).await.unwrap());
+        assert_eq!(o.lock().unwrap().ingests, 0, "cursor not advanced");
     }
 }

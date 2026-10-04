@@ -304,7 +304,7 @@ pub async fn index_step(adapter: &dyn ChainAdapter, odoo: &Odoo) -> Result<bool>
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     #[test]
@@ -357,15 +357,15 @@ mod tests {
     }
 
     #[derive(Default)]
-    struct Fake {
-        tokens: Value,
-        jobs: Vec<Value>,
-        reports: Vec<Value>,
-        ingests: u32,
+    pub(crate) struct Fake {
+        pub tokens: Value,
+        pub jobs: Vec<Value>,
+        pub reports: Vec<Value>,
+        pub ingests: u32,
     }
-    type Shared = Arc<std::sync::Mutex<Fake>>;
+    pub(crate) type Shared = Arc<std::sync::Mutex<Fake>>;
 
-    async fn fake_odoo(fake: Fake) -> (Odoo, Shared) {
+    pub(crate) async fn fake_odoo(fake: Fake) -> (Odoo, Shared) {
         use axum::extract::{Path, State};
         use axum::Json;
         async fn h(State(s): State<Shared>, Path((_m, method)): Path<(String, String)>, Json(b): Json<Value>) -> Json<Value> {
