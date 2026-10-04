@@ -57,7 +57,7 @@ interface IZetherToken is IERC20MetaTx {
     function maxDecryptableShielded() external view returns (uint256);
     /// @notice Raw unit underlying cho một đơn vị che giấu (RS2-3).
     function shieldScale() external view returns (uint256);
-    /// @notice Phí tầng trong, cố định theo token, `< 2^64` (`2^n_v`). Không bao giờ là hàm của `v`.
+    /// @notice Phí tầng trong, cố định theo token, `< 2^64` (`2^n_v`) và `< maxDecryptableShielded`. Không bao giờ là hàm của `v`.
     function confidentialFee() external view returns (uint256);
     /// @notice Khoá auditor (`ITransferDisclosure.AUDITOR`), rỗng nếu tắt. Bất biến (RS2-8).
     function auditorKey() external view returns (bytes memory);

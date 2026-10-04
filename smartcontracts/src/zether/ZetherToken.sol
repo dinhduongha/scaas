@@ -136,6 +136,8 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
             underlying_.code.length == 0 || underlying_ == address(this) || reg.code.length == 0 || scale == 0
                 || maxShielded == 0
                 || maxShielded > MAX_TOTAL_SHIELDED || fee >= VALUE_BOUND
+                // phí ≥ trần tổng: không số dư nào trả nổi ⇒ mọi transfer có beneficiary không chứng minh được
+                || fee >= maxShielded
                 || (aud.length != 0 && (aud.length != p || !v.isValidPoint(aud) || _isO(aud)))
         ) revert BadInit();
         maxShielded * scale; // tràn ⇒ revert (checked)

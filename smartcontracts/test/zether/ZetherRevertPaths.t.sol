@@ -183,13 +183,21 @@ contract ZetherRevertPathsTest is ZetherFixture {
         z.wrap(1000);
     }
 
-    /// Phí tầng trong `< 2^n_v` với n_v = 64: 2^32 (trước đây bị từ chối) và 2^64 − 1 đều tạo được token.
-    function test_confidentialFeeBoundIsTwoPow64() public {
-        uint256[2] memory ok = [uint256(1) << 32, (uint256(1) << 64) - 1];
+    /// Phí tầng trong `< 2^n_v` (n_v = 64) VÀ `< maxDecryptableShielded` (review I3: phí ≥ trần làm mọi transfer
+    /// có beneficiary không chứng minh được). 2^32 (trước đây bị từ chối) và trần − 1 tạo được; trần, 2^64 − 1 thì không.
+    function test_confidentialFeeBound() public {
+        uint256 max = uint256(1) << 40;
+        uint256[2] memory ok = [uint256(1) << 32, max - 1];
         for (uint256 i; i < ok.length; ++i) {
-            bytes memory init = abi.encode("Z", "Z", address(reg), uint256(1), uint256(1) << 40, ok[i], bytes(""));
+            bytes memory init = abi.encode("Z", "Z", address(reg), uint256(1), max, ok[i], bytes(""));
             ZetherToken z = ZetherToken(factory.createZetherToken(1, address(usd), address(ver), init, bytes32(i + 900)));
             assertEq(z.confidentialFee(), ok[i]);
+        }
+        uint256[2] memory bad = [max, (uint256(1) << 64) - 1];
+        for (uint256 i; i < bad.length; ++i) {
+            bytes memory init = abi.encode("Z", "Z", address(reg), uint256(1), max, bad[i], bytes(""));
+            vm.expectRevert(ZetherToken.BadInit.selector);
+            factory.createZetherToken(1, address(usd), address(ver), init, bytes32(i + 910));
         }
     }
 

@@ -237,7 +237,8 @@ abstract contract ZetherVerifierBase is IZetherVerifier {
         b.p = x.p;
         b.r = x.r;
         b.n = n;
-        b.k = 6; // n = 64 cho cả hai
+        if (n != 64) return (false, x.st); // NV = NB = 64 ⇒ k = 6; n khác là lỗi lập trình, không phải proof
+        b.k = 6;
         b.off = off;
         b.sOff = off + (4 + 2 * b.k) * b.p;
         for (uint256 i; i < 5; ++i) {
