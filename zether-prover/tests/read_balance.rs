@@ -7,7 +7,9 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 
 use serde_json::{json, Value};
+use zether_prover::abi::{self, u256, Tok};
 use zether_prover::api::{call, hx};
+use zether_prover::envelope::selector;
 use zether_prover::curve::{decode_point, encode_point, generator, Bn254, Fr, G};
 use zether_prover::elgamal::Ciphertext;
 use zether_prover::vectors::MNEMONIC;
@@ -92,4 +94,30 @@ fn big_balance_cache_spend_and_cli_recovery() {
     let other = ["--curve", "bn254", "--table-bits", "23", "--bound-bits", "45", "--ct", &ct, "--table-file", file.to_str().unwrap()];
     assert!(read_balance(&other, &k0).unwrap_err().contains("not 2^23"));
     std::fs::remove_dir_all(&dir).unwrap();
+
+    // --rpc: `eth_call accountState(UA)` against a one-shot JSON-RPC stub; only public data goes out.
+    let ua = hex::decode(&a["UA"].as_str().unwrap()[2..]).unwrap();
+    let (c, d) = (encode_point::<Bn254>(&acc2.c), encode_point::<Bn254>(&acc2.d));
+    let mut toks: Vec<Tok> = [c, d, vec![0; 64], vec![0; 64]].into_iter().map(Tok::Bytes).collect();
+    toks.extend([2u64, 3, 1, 0, 0].map(|w| Tok::Word(u256(w))));
+    let mut ret = u256(32).to_vec();
+    ret.extend(abi::encode(&toks));
+    let srv = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", srv.local_addr().unwrap());
+    let stub = std::thread::spawn(move || {
+        let (mut s, _) = srv.accept().unwrap();
+        let mut req = vec![0u8; 8192];
+        let n = std::io::Read::read(&mut s, &mut req).unwrap();
+        let req = String::from_utf8_lossy(&req[..n]).into_owned();
+        let body = json!({"jsonrpc": "2.0", "id": 1, "result": hx(&ret)}).to_string();
+        write!(s, "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}", body.len()).unwrap();
+        req
+    });
+    let out = read_balance(&["--curve", "bn254", "--table-bits", "22", "--bound-bits", "45", "--rpc", &url,
+                             "--token", "0x5fbdb2315678afecb367f032d93f642f64180aa3"], &k0).unwrap();
+    assert_eq!(out, json!({"balance": left.to_string(), "accSeq": 2}));
+    let req = stub.join().unwrap();
+    assert!(req.contains(&format!("0x{}{}", hex::encode(selector("accountState(bytes32)")), hex::encode(&ua))), "{req}");
+    let x = api("keygen", json!({"curve": "bn254", "key": k0, "revealSecret": true})).unwrap()["x"].as_str().unwrap()[2..].to_string();
+    assert!(!req.contains(&x) && !req.contains("abandon"), "no key material in the request");
 }
