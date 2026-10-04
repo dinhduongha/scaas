@@ -46,3 +46,58 @@ max_index_lag = 100                              # /readyz fails when final head
 # Gas circuit breakers (R55), per lane; they pause NEW work only, signed txs are still tracked/replaced.
 # Amounts in the gas coin's smallest unit (wei); strings for values above 2^63.
 breaker = { spike_ratio = 3.0, gas_budget_per_hour = "50000000000000000", min_relayer_balance = "100000000000000000" }
+
+# ---- Other network families (R58): one [[chains]] each; delete the ones you do not run. ----
+# They run the generic lane runner (one tx in flight per lane, `signed` journaled in Odoo before sending,
+# in-flight jobs re-checked on restart). `network` makes the key `family:network`, which must equal
+# Odoo's blockchain.chain.chain_key. Lane addresses to fund: `bamboo-node addresses --config node.toml`.
+
+[[chains]]                                       # Hedera: HSCS through a JSON-RPC relay; nonce lanes like EVM
+family = "hedera"
+evm_chain_number = 296                           # 295 mainnet, 296 testnet, 297 previewnet, 298 local node
+rpc_urls = ["https://testnet.hashio.io/api"]
+lanes = [0, 1]                                   # ECDSA accounts (HIP-583 alias): fund each lane address
+finality = { mode = "instant", quorum = 1 }      # aBFT: a record file is final
+max_gas_per_tx = 3000000
+max_fee_cap_gwei = 2000                         # fixed fee schedule: testnet eth_gasPrice ~870 gwei-equivalent
+
+[[chains]]                                       # Cosmos SDK + CosmWasm
+family = "cosmos"
+network = "bamboo-1"                             # the chain-id: every signature is bound to it
+rpc_urls = ["http://cosmos:26657"]               # CometBFT RPC
+lanes = [0, 1]
+finality = { mode = "instant", quorum = 1 }      # CometBFT: a committed block is final
+max_gas_per_tx = 3000000
+# rest = REST gateway (LCD); prefix = bech32 prefix; gas_price in denom per gas unit (> 0, or zero_fee = true
+# on a zero-fee devnet only).
+params = { rest = "http://cosmos:1317", prefix = "wasm", denom = "ustake", gas_price = "0.025", zero_fee = false }
+
+[[chains]]                                       # Stellar Soroban
+family = "soroban"
+network = "testnet"
+rpc_urls = ["https://soroban-testnet.stellar.org"]
+lanes = [0, 1]
+finality = { mode = "instant", quorum = 1 }      # SCP: a closed ledger is final
+# fee_bump_lane = i: lane i's account pays every lane's fee (CAP-15 fee bump); base_fee in stroops.
+params = { network_passphrase = "Test SDF Network ; September 2015", base_fee = 100 }
+
+[[chains]]                                       # Sui
+family = "sui"
+network = "testnet"
+rpc_urls = ["https://fullnode.testnet.sui.io:443"]
+lanes = [0, 1]
+finality = { mode = "instant", quorum = 1 }      # a certified checkpoint is final
+# package: the bamboo package id (after an upgrade: the NEW id, and type_package = the ORIGINAL id that event
+# types keep). lane_journal (required): a directory that survives restarts; the last signed tx of each lane
+# is kept there and re-sent on start-up so its gas coin is never equivocated.
+params = { package = "0x<package id>", lane_journal = "/var/lib/bamboo/sui-journal", max_gas_budget = 50000000 }
+
+[[chains]]                                       # TON (TON Center v3 API)
+family = "ton"
+network = "testnet"
+rpc_urls = ["https://testnet.toncenter.com"]
+lanes = [0, 1]                                   # W5 wallets: fund each lane address
+finality = { mode = "depth", depth = 0, quorum = 1 }
+# global_id: -239 mainnet, -3 testnet (the MetaOp domain); attach/forward in nanoton; api_key_env names the env
+# var holding the TON Center key (the key itself never goes here).
+params = { global_id = -3, attach_nanoton = 150000000, forward_nanoton = 0, api_key_env = "BAMBOO_TONCENTER_API_KEY" }
