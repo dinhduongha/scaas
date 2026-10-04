@@ -3,6 +3,7 @@
 //! (public amount, §5). The verifier here mirrors the Solidity verifier for tests/vectors.
 
 use ark_ff::{PrimeField, Zero};
+use zeroize::Zeroize;
 use rand_core::{CryptoRng, RngCore};
 use sha2::{Digest, Sha512};
 
@@ -299,6 +300,16 @@ pub struct TransferWitness<C: ZCurve> {
     pub gamma_b: Fr<C>,
 }
 
+// ponytail: Fr is Copy, so stack copies made while proving are not wiped; this clears the
+// long-lived structs. Full coverage needs a non-Copy secret scalar type.
+impl<C: ZCurve> Drop for TransferWitness<C> {
+    fn drop(&mut self) {
+        for f in [&mut self.x, &mut self.v, &mut self.s, &mut self.b, &mut self.b_prime, &mut self.gamma_v, &mut self.gamma_b] {
+            f.zeroize();
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Eq)]
 pub struct TransferProof<C: ZCurve> {
     pub v_v: G<C>,
@@ -371,8 +382,8 @@ impl<C: ZCurve> TransferProof<C> {
     }
 }
 
-fn witness_bytes<C: ZCurve>(ss: &[&Fr<C>], statement: &[u8]) -> Vec<u8> {
-    let mut b = cat_s::<C>(ss);
+fn witness_bytes<C: ZCurve>(ss: &[&Fr<C>], statement: &[u8]) -> zeroize::Zeroizing<Vec<u8>> {
+    let mut b = zeroize::Zeroizing::new(cat_s::<C>(ss));
     b.extend_from_slice(statement);
     b
 }
@@ -596,6 +607,14 @@ pub struct BurnWitness<C: ZCurve> {
     pub b: Fr<C>,
     pub b_prime: Fr<C>,
     pub gamma_b: Fr<C>,
+}
+
+impl<C: ZCurve> Drop for BurnWitness<C> {
+    fn drop(&mut self) {
+        for f in [&mut self.x, &mut self.b, &mut self.b_prime, &mut self.gamma_b] {
+            f.zeroize();
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Eq)]

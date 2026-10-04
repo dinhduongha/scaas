@@ -29,7 +29,7 @@ pub fn sign_with_k<C: ZCurve>(x: &Fr<C>, msg: &[u8; 32], k: &Fr<C>) -> (G<C>, Fr
 
 /// `sig = R ‖ be32(z)`, hedged nonce (`k = H(x ‖ msg ‖ CSPRNG)`).
 pub fn sign<C: ZCurve, R: RngCore + CryptoRng>(key: &ZetherKey<C>, msg: &[u8; 32], rng: &mut R) -> Vec<u8> {
-    let mut secret = encode_scalar::<C>(&key.x).to_vec();
+    let mut secret = zeroize::Zeroizing::new(encode_scalar::<C>(&key.x).to_vec());
     secret.extend_from_slice(msg);
     let k = Nonces::new(&secret, rng).next::<C>();
     let (r, _, z) = sign_with_k(&key.x, msg, &k);

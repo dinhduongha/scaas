@@ -8,6 +8,7 @@
 use ark_ff::{UniformRand, Zero};
 use rand_core::{CryptoRng, OsRng, RngCore};
 use serde_json::{json, Value};
+use zeroize::Zeroizing;
 
 use crate::abi::{self, Tok};
 use crate::bulletproofs::Gens;
@@ -78,7 +79,7 @@ fn key<C: ZCurve>(v: &Value) -> R<ZetherKey<C>> {
     if k.get("x").is_some() {
         return ZetherKey::from_secret(decode_scalar::<C>(&bytes(k, "x")?).map_err(e)?).map_err(e);
     }
-    let seed = if k.get("mnemonic").is_some() {
+    let seed: Zeroizing<Vec<u8>> = Zeroizing::new(if k.get("mnemonic").is_some() {
         let pass = match k.get("passphrase") {
             None | Some(Value::Null) => "",
             Some(p) => p.as_str().ok_or("passphrase must be a string")?,
@@ -88,7 +89,7 @@ fn key<C: ZCurve>(v: &Value) -> R<ZetherKey<C>> {
             .to_vec()
     } else {
         bytes(k, "seed")?
-    };
+    });
     ZetherKey::conf(&seed, num32(k, "coin")?, num32(k, "account")?).map_err(e)
 }
 

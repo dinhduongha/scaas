@@ -48,7 +48,7 @@ fn transcript_json<C: ZCurve>(t: &Transcript) -> Value {
 }
 
 fn seed() -> [u8; 64] {
-    seed_from_mnemonic(MNEMONIC, "").unwrap()
+    *seed_from_mnemonic(MNEMONIC, "").unwrap()
 }
 
 fn key_json(account: u32, key_use: u32) -> Value {
@@ -63,7 +63,7 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
     let gens = Gens::<C>::new();
     let mut rng = ChaCha20Rng::seed_from_u64(0x5a37_4e72);
     let (from, to) = (conf::<C>(0), conf::<C>(1));
-    let aud = ZetherKey::<C>::conf(&seed_from_mnemonic(MNEMONIC, "auditor").unwrap(), 60, 0).unwrap();
+    let aud = ZetherKey::<C>::conf(&seed_from_mnemonic(MNEMONIC, "auditor").unwrap()[..], 60, 0).unwrap();
     let acc = encrypt(&from.y, BAL, &Fr::<C>::from(0x1234_5678_9abc_def0u64));
     let acc_j = json!({"C": hx(&encode_point::<C>(&acc.c)), "D": hx(&encode_point::<C>(&acc.d))});
     let base = json!({

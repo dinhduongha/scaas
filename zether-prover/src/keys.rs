@@ -10,7 +10,7 @@
 use ark_ff::{PrimeField, Zero};
 use hkdf::Hkdf;
 use sha2::{Digest, Sha256};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::curve::{encode_point, encode_scalar, generator, ua_of, Fr, ZCurve, G};
 use crate::ZError;
@@ -78,19 +78,21 @@ pub fn derive_child_sk<C: ZCurve>(parent: &Fr<C>, index: u32) -> Fr<C> {
 pub fn derive_path<C: ZCurve>(seed: &[u8], path: &[u32]) -> Result<Fr<C>, ZError> {
     let mut sk = derive_master_sk::<C>(seed)?;
     for &i in path {
-        sk = derive_child_sk::<C>(&sk, i);
+        let child = derive_child_sk::<C>(&sk, i);
+        sk.zeroize();
+        sk = child;
     }
     Ok(sk)
 }
 
 /// BIP-39 seed (64 B) from a 24-word English mnemonic (R32). Checksum is verified; mnemonic and
 /// passphrase are NFKD-normalized as BIP-39 requires (same seed as @scure/bip39).
-pub fn seed_from_mnemonic(words: &str, passphrase: &str) -> Result<[u8; 64], ZError> {
+pub fn seed_from_mnemonic(words: &str, passphrase: &str) -> Result<Zeroizing<[u8; 64]>, ZError> {
     let m = bip39::Mnemonic::parse(words).map_err(|_| ZError::BadSeed("invalid BIP-39 mnemonic"))?;
     if m.word_count() != 24 {
         return Err(ZError::BadSeed("R32: mnemonic must have 24 words"));
     }
-    Ok(m.to_seed(passphrase))
+    Ok(Zeroizing::new(m.to_seed(passphrase)))
 }
 
 /// A Zether key pair: `x` and `y = g^x` on G1.
@@ -102,7 +104,7 @@ pub struct ZetherKey<C: ZCurve> {
 
 impl<C: ZCurve> Drop for ZetherKey<C> {
     fn drop(&mut self) {
-        self.x = Fr::<C>::zero();
+        self.x.zeroize();
     }
 }
 

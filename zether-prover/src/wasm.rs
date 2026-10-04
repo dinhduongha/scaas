@@ -1,5 +1,6 @@
 //! WASM bindings: one JSON entry point over [`crate::api::call`] (same commands as the CLI).
-//! Secrets passed in stay in this call's memory; nothing is persisted.
+//! Nothing is persisted; seeds, keys and witnesses are zeroized when the call drops them
+//! (scalar copies on the stack excepted, see `TransferWitness`).
 
 use wasm_bindgen::prelude::*;
 

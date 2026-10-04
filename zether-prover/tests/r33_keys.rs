@@ -24,7 +24,7 @@ fn dec_to_be(d: &str) -> [u8; 32] {
 }
 
 fn seed() -> [u8; 64] {
-    seed_from_mnemonic(ABANDON_ART, "").unwrap()
+    *seed_from_mnemonic(ABANDON_ART, "").unwrap()
 }
 
 #[test]
