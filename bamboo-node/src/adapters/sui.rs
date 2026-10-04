@@ -397,13 +397,35 @@ pub fn normalize(package: &Addr, registries: &[String], ev: &Value, block: u64, 
     Some(out)
 }
 
+/// Event của một lô tx `chunk` (digest base58, checkpoint, hash checkpoint) từ `sui_multiGetTransactionBlocks`.
+/// Mọi tx phải có mặt, đúng thứ tự, có `events`: tx thiếu/bị prune/lỗi ⇒ `Err`, vùng không được chốt (review L5).
+pub fn tx_events(package: &Addr, registries: &[String], chunk: &[(String, u64, String)], r: &Value) -> Result<Vec<Value>> {
+    let blocks = r.as_array().ok_or_else(|| anyhow!("multiGetTransactionBlocks: not a list"))?;
+    if blocks.len() != chunk.len() {
+        bail!("multiGetTransactionBlocks: {} of {} transactions", blocks.len(), chunk.len());
+    }
+    let mut out = Vec::new();
+    for (blk, (d58, seq, ch)) in blocks.iter().zip(chunk) {
+        let events = match (blk["digest"].as_str(), blk["events"].as_array()) {
+            (Some(d), Some(e)) if d == d58 && blk.get("error").is_none() => e,
+            _ => bail!("transaction {d58} not served with its events: {blk}"),
+        };
+        let tx_hash = addr_hex(&bs58::decode(d58).into_vec()?);
+        out.extend(events.iter().filter_map(|ev| normalize(package, registries, ev, *seq, ch, &tx_hash)));
+    }
+    Ok(out)
+}
+
 // ------------------------------------------------------------------ adapter
 
 pub struct SuiAdapter {
     key: String,
     rpcs: Vec<String>,
     http: reqwest::Client,
+    /// Đích lệnh gọi (package mới nhất sau nâng cấp).
     package: Addr,
+    /// Id package GỐC: type của event giữ id này qua mọi lần nâng cấp (review L1).
+    type_package: Addr,
     budget_cap: u64,
     quorum: usize,
     lanes: Vec<Lane>,
@@ -426,6 +448,7 @@ impl SuiAdapter {
             bail!("chain {}: needs rpc_urls and at least one lane", cfg.chain_key());
         }
         let package = parse_addr(param_str(cfg, "package").ok_or_else(|| anyhow!("sui: params.package is required"))?)?;
+        let type_package = param_str(cfg, "type_package").map(parse_addr).transpose()?.unwrap_or(package);
         let budget_cap = cfg.params.get("max_gas_budget").and_then(|v| v.as_integer()).map(|v| v as u64).unwrap_or(DEFAULT_BUDGET);
         let mut own = Vec::new();
         let mut lanes = Vec::new();
@@ -439,6 +462,7 @@ impl SuiAdapter {
             rpcs: cfg.rpc_urls.clone(),
             http: reqwest::Client::builder().timeout(std::time::Duration::from_secs(20)).build()?,
             package,
+            type_package,
             budget_cap,
             quorum: cfg.finality.quorum.max(1),
             lanes,
@@ -655,14 +679,7 @@ impl ChainAdapter for SuiAdapter {
         for chunk in txs.chunks(50) {
             let ids: Vec<&str> = chunk.iter().map(|t| t.0.as_str()).collect();
             let r = self.rpc("sui_multiGetTransactionBlocks", json!([ids, {"showEvents": true}])).await?;
-            for (blk, (d58, seq, ch)) in r.as_array().cloned().unwrap_or_default().iter().zip(chunk) {
-                let tx_hash = addr_hex(&bs58::decode(d58).into_vec()?);
-                for ev in blk["events"].as_array().cloned().unwrap_or_default() {
-                    if let Some(n) = normalize(&self.package, &registries, &ev, *seq, ch, &tx_hash) {
-                        out.push(n);
-                    }
-                }
-            }
+            out.extend(tx_events(&self.type_package, &registries, chunk, &r)?);
         }
         Ok(out)
     }
@@ -741,6 +758,42 @@ mod tests {
         assert_eq!(m["digest"], addr_hex(&[0xb1u8; 32]));
         assert!(normalize(&pkg, regs, &ev("PaymentSettled", "0x9999"), 5, "0xh", "0xt").is_none(), "unregistered registry");
         assert!(normalize(&parse_addr("0xdef").unwrap(), regs, &ev("PaymentSettled", "0x7c95"), 5, "0xh", "0xt").is_none(), "other package");
+    }
+
+    /// Review L5: tx thiếu/bị prune/lỗi trong `sui_multiGetTransactionBlocks` ⇒ lỗi (vùng KHÔNG được chốt).
+    #[test]
+    fn missing_or_pruned_tx_fails_the_range() {
+        let pkg = parse_addr("0xabc").unwrap();
+        let regs = [addr_hex(&parse_addr("0x7c95").unwrap())];
+        let (d1, d2) = (bs58::encode([1u8; 32]).into_string(), bs58::encode([2u8; 32]).into_string());
+        let chunk = vec![(d1.clone(), 5, "0xh".to_string()), (d2.clone(), 5, "0xh".to_string())];
+        let ev = json!({"id": {"eventSeq": "0"}, "type": format!("{}::meta::PaymentSettled", addr_hex(&pkg)),
+                        "parsedJson": {"contract": "0x7c95", "from": "0x1", "to": "0x2", "amount": "1", "pay_ref": vec![1u8; 32]}});
+        let ok = json!([{"digest": d1, "events": [ev]}, {"digest": d2, "events": []}]);
+        assert_eq!(tx_events(&pkg, &regs, &chunk, &ok).unwrap().len(), 1);
+        let short = json!([{"digest": d1, "events": []}]);
+        assert!(tx_events(&pkg, &regs, &chunk, &short).is_err(), "short answer");
+        let pruned = json!([{"digest": d1, "events": []}, {"error": {"code": "notExists", "object_id": d2}}]);
+        assert!(tx_events(&pkg, &regs, &chunk, &pruned).is_err(), "error entry");
+        let no_events = json!([{"digest": d1, "events": []}, {"digest": d2}]);
+        assert!(tx_events(&pkg, &regs, &chunk, &no_events).is_err(), "events not served");
+        let swapped = json!([{"digest": d2, "events": []}, {"digest": d1, "events": []}]);
+        assert!(tx_events(&pkg, &regs, &chunk, &swapped).is_err(), "order differs");
+    }
+
+    /// Review L1: sau nâng cấp, lệnh gọi trỏ package MỚI còn type event giữ id package GỐC.
+    #[test]
+    fn upgraded_package_calls_the_new_id_and_reads_original_types() {
+        let cfg = |extra: &str| -> ChainCfg {
+            toml::from_str(&format!("family = \"sui\"\nnetwork = \"localnet\"\nrpc_urls = [\"http://r\"]\nlanes = [0]\n\
+                                     finality = {{ mode = \"instant\" }}\nparams = {{ package = \"0xb\"{extra} }}"))
+            .unwrap()
+        };
+        let k = [LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()];
+        let a = SuiAdapter::new(&cfg(""), &k).unwrap();
+        assert_eq!((a.package, a.type_package), (parse_addr("0xb").unwrap(), parse_addr("0xb").unwrap()));
+        let a = SuiAdapter::new(&cfg(", type_package = \"0xa\""), &k).unwrap();
+        assert_eq!((a.package, a.type_package), (parse_addr("0xb").unwrap(), parse_addr("0xa").unwrap()));
     }
 
     fn arb_op() -> impl Strategy<Value = MetaOp> {
