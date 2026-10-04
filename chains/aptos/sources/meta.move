@@ -31,6 +31,8 @@ module bamboo::meta {
     const REMOVE_ORIGIN: u8 = 3;
     const SET_GUARDIAN: u8 = 4;
     const CANCEL_RECOVERY: u8 = 5;
+    /// Chỉ là mã hành động trong event của `reset_keys`.
+    const RESET_KEYS: u8 = 6;
     const MAX_KEYS: u64 = 8;
     const MAX_ORIGINS: u64 = 8;
     /// `RECOVERY_DELAY` của `SubjectAccount` EVM: guardian chờ 2 ngày, khoá hiện có / chủ huỷ được.
@@ -510,6 +512,26 @@ module bamboo::meta {
         apply(addr, action, key, origin, guardian);
     }
 
+    /// Đường 2b (review L7): xoay auth key native KHÔNG gỡ khoá đã ở Account (Account chỉ đọc auth key lúc mở). Chủ
+    /// (tx native, ký bằng auth key HIỆN TẠI) thay toàn bộ khoá bằng một khoá trong một tx: khoá cũ (có thể đã lộ) và
+    /// KeyOp đang chờ của chúng hết hiệu lực, khôi phục đang chờ bị huỷ. Origin giữ nguyên (+ `origin` nếu có).
+    public entry fun reset_keys(
+        owner: &signer,
+        scheme: u8,
+        public_key: vector<u8>,
+        rp_id_hash: vector<u8>,
+        origin: vector<u8>,
+    ) acquires Account {
+        let addr = account_of(signer::address_of(owner));
+        assert!(exists<Account>(addr), ENO_ACCOUNT);
+        let acct = &mut Account[addr];
+        acct.keys = vector[];
+        acct.recovery = option::none();
+        add_key(acct, key_of(scheme, public_key, rp_id_hash), origin);
+        event::emit(KeyOpExecuted { account: addr, action: RESET_KEYS, nonce: acct.key_nonce });
+        acct.key_nonce += 1;
+    }
+
     fun apply(addr: address, action: u8, key: Key, origin: vector<u8>, guardian: address) acquires Account {
         let acct = &mut Account[addr];
         if (action == ADD_KEY) {
@@ -585,7 +607,12 @@ module bamboo::meta {
     fun origin_ok(k: &Key, origin: &vector<u8>): bool { k.scheme != auth::webauthn() || !origin.is_empty() }
 
     fun add_key(acct: &mut Account, key: Key, origin: vector<u8>) {
-        assert!(key_valid(&key) && !acct.keys.contains(&key) && acct.keys.length() < MAX_KEYS, EKEY_OP);
+        // Trùng theo public_key, không theo cả Key: `verify_by` lấy entry đầu cùng public_key, nên cùng passkey thêm lại
+        // với rpIdHash khác sẽ không bao giờ kiểm được (review L5).
+        assert!(
+            key_valid(&key) && !acct.keys.any(|k| k.public_key == key.public_key) && acct.keys.length() < MAX_KEYS,
+            EKEY_OP,
+        );
         if (!origin.is_empty() && !acct.origins.contains(&origin)) add_origin(acct, origin);
         acct.keys.push_back(key);
         check_origins(acct);

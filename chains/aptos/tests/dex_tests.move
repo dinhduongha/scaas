@@ -214,6 +214,35 @@ module bamboo::dex_tests {
         dex::sweep(v::market(), v::eur());
     }
 
+    // L6: FA gửi nhầm tới Root, Dex, hoặc market chưa có người nhận phí ⇒ admin gom về địa chỉ chỉ định.
+    #[test(f = @aptos_framework, b = @bamboo)]
+    fun admin_recovers_funds_sent_to_root_dex_and_a_market(f: signer, b: signer) {
+        let (e, _) = ready(&f, &b);
+        fx::mint(e, meta::root(), 1);
+        fx::mint(e, dex::dex_address(), 2);
+        fx::mint(e, v::market(), 3);
+        dex::admin_sweep(&b, meta::root(), v::eur(), FEE);
+        dex::admin_sweep(&b, dex::dex_address(), v::eur(), FEE);
+        dex::admin_sweep(&b, v::market(), v::eur(), FEE);
+        assert!(bal(e, FEE) == 6 && bal(e, meta::root()) == 0 && bal(e, v::market()) == 0, 0);
+    }
+
+    #[test(f = @aptos_framework, b = @bamboo)]
+    #[expected_failure(abort_code = 15, location = bamboo::meta)]
+    fun only_the_admin_sweeps(f: signer, b: signer) {
+        let (e, _) = ready(&f, &b);
+        fx::mint(e, meta::root(), 1);
+        dex::admin_sweep(&account::create_signer_for_test(@0xbad), meta::root(), v::eur(), FEE);
+    }
+
+    // Tiền của người dùng (Account) không bao giờ đi qua đường gom của admin.
+    #[test(f = @aptos_framework, b = @bamboo)]
+    #[expected_failure(abort_code = 15, location = bamboo::dex)]
+    fun admin_cannot_sweep_an_account(f: signer, b: signer) {
+        ready(&f, &b);
+        dex::admin_sweep(&b, v::a_account(), v::eur(), FEE);
+    }
+
     // ANTI-LOCK: X (pay qua Account) bị giữ; Y (huỷ lệnh DEX) qua; rồi X qua.
     #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
     fun withheld_pay_does_not_block_a_dex_cancel(f: signer, b: signer, lane: signer) {

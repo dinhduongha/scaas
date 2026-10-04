@@ -477,6 +477,42 @@ module bamboo::meta_tests {
         assert!(meta::has_key(v::alice(), v::dave_pk()) && meta::has_origin(v::alice(), v::origin()), 0);
     }
 
+    // L5: `verify_by` lấy entry ĐẦU có cùng public_key ⇒ cùng passkey (x, y) thêm lại với rpIdHash khác sẽ không bao
+    // giờ kiểm được: từ chối trùng public_key.
+    #[test(f = @aptos_framework, b = @bamboo)]
+    #[expected_failure(abort_code = 9, location = bamboo::meta)]
+    fun same_passkey_with_another_rp_id_is_refused(f: signer, b: signer) {
+        fx::setup(&f, &b);
+        meta::open(v::alice(), v::alice_pk());
+        let o = account::create_signer_for_test(v::alice());
+        meta::manage_native(&o, 0, 2, v::dave_pk(), v::rp_id_hash(), v::origin(), @0x0);
+        meta::manage_native(&o, 0, 2, v::dave_pk(), x"0000000000000000000000000000000000000000000000000000000000000001",
+            vector[], @0x0);
+    }
+
+    // L7: xoay auth key native KHÔNG gỡ khoá đã ở Account (khoá lộ vẫn tiêu được). Một tx native của chủ (ký bằng auth
+    // key hiện tại) thay TOÀN BỘ khoá: khoá cũ hết hiệu lực ngay, KeyOp đang chờ của chúng cũng vậy.
+    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
+    #[expected_failure(abort_code = 1, location = bamboo::meta)]
+    fun native_reset_drops_every_old_key(f: signer, b: signer, lane: signer) {
+        fx::setup(&f, &b);
+        let e = eur();
+        fx::mint(e, v::a_account(), 1000);
+        meta::open(v::alice(), v::alice_pk());
+        v::a_add_alice2();
+        meta::reset_keys(&account::create_signer_for_test(v::alice()), 0, v::carol_pk(), vector[], vector[]);
+        assert!(meta::key_count(v::alice()) == 1 && meta::has_key(v::alice(), v::carol_pk()), 0);
+        assert!(!meta::has_key(v::alice(), v::alice_pk()) && meta::key_nonce(v::alice()) == 2, 1);
+        v::a_pay_eur_0(&lane, e);
+    }
+
+    #[test(f = @aptos_framework, b = @bamboo)]
+    #[expected_failure(abort_code = 13, location = bamboo::meta)]
+    fun reset_needs_an_account(f: signer, b: signer) {
+        fx::setup(&f, &b);
+        meta::reset_keys(&account::create_signer_for_test(v::alice()), 0, v::carol_pk(), vector[], vector[]);
+    }
+
     // Đường 2: chủ gửi tx native (chủ keyless/passkey gắn khoá seed) — mở Account nếu chưa có.
     #[test(f = @aptos_framework, b = @bamboo)]
     fun native_owner_attaches_a_key(f: signer, b: signer) {

@@ -54,6 +54,8 @@ module bamboo::dex {
     const ENONCE_DOWN: u64 = 13;
     /// Market không có người nhận phí để `sweep` tới.
     const ENO_RECIPIENT: u64 = 14;
+    /// `admin_sweep` chỉ gom từ Root, Dex hoặc một Market.
+    const ENOT_HOLDER: u64 = 15;
 
     struct Dex has key {
         extend: ExtendRef,
@@ -309,6 +311,21 @@ module bamboo::dex {
             primary_fungible_store::transfer(&object::generate_signer_for_extending(&m.extend), meta_obj,
                 m.fees.fee_recipient, bal);
         }
+    }
+
+    /// Review L6: FA gửi nhầm tới Root (`meta::root()`), Dex (`dex_address()`) hoặc một Market (kể cả market chưa có
+    /// người nhận phí) ⇒ admin gom về `to`. Không bao giờ chạm Account/Mandate (tiền của người dùng).
+    public entry fun admin_sweep(admin: &signer, holder: address, asset: address, to: address) {
+        meta::assert_admin(admin);
+        let s = if (holder == meta::root()) meta::root_signer()
+            else if (holder == dex_address()) object::generate_signer_for_extending(&Dex[holder].extend)
+            else {
+                assert!(exists<Market>(holder), ENOT_HOLDER);
+                object::generate_signer_for_extending(&Market[holder].extend)
+            };
+        let a = object::address_to_object<Metadata>(asset);
+        let bal = primary_fungible_store::balance(holder, a);
+        if (bal > 0) primary_fungible_store::transfer(&s, a, to, bal);
     }
 
     #[view]
