@@ -26,7 +26,7 @@ Ký hiệu: nhóm viết **cộng tính**. `[k]P` = nhân vô hướng, `O` = đ
 | `n_b` (range_bits_balance) | **64** | verifier — Bulletproof #2 |
 | BSGS giải mã | client tự cấu hình: `table_bits` 18–27, `bound_bits ≤ 54`; mặc định mobile/wasm 22/44, desktop 24–26/54 (limits D4) | chỉ client; không có trong contract (thay `DECRYPT_BOUND = 2^40`) |
 | `MAX_TOTAL_SHIELDED` | **2^54** | trần của `maxDecryptableShielded` lúc `initialize` (`2^n_b > total·1024`) |
-| `MAX_CONFIDENTIAL_FEE` | `< 2^64` | `confidentialFee` phải `< 2^n_v` |
+| `MAX_CONFIDENTIAL_FEE` | `< 2^64` và `< maxDecryptableShielded` | `confidentialFee` phải `< 2^n_v`; phí ≥ trần tổng làm mọi transfer có beneficiary không chứng minh được (review I3) |
 | Ring size | **2** | lộ danh tính người gửi/nhận (SRS §7.1); không có anonymity set |
 
 `n_b = n_v = 64`: quy tắc SRS §7.3 `n_b − n_v ≥ 24` được nới — an toàn đến từ trần tổng `2^54` và `r > 2^253`,
@@ -522,13 +522,14 @@ Proof thật (prover test + vector S3). Cột "n_v = 32" là số đo trước 2
 | `register` SELF_SCHNORR | 102,645 → **102,659** | 83,437 → **83,440** | ~105,750 (§2.2.5); BLS ~160k | khớp; BLS rẻ hơn |
 
 `n_v` 32 → 64 thêm vào mỗi transfer đúng một vòng IPA và 64 cặp `G_i`/`H_i` trong MSM BP-2 của Bulletproof #1:
-≈ +538k (bn254) / +518k (BLS) execution gas, ≈ +20%/+15% trên `transferConfidential`. Burn không đổi (chỉ có BP#2).
+≈ +538k (bn254) / +519k (BLS) execution gas, ≈ +20%/+15% trên `transferConfidential`. Burn không đổi (chỉ có BP#2).
 Vài trăm gas lệch ở `register`/`rollOverSigned` là bố cục bytecode/bộ nhớ, không phải thay đổi logic.
 
 Vì sao lệch, để không ai "sửa" sai chỗ:
-- **Verify bn254 +29%:** canon tính 6,550 gas/điểm MSM; thực tế mỗi điểm là `staticcall` 0x07 + 0x06 qua một
-  vòng assembly + chép buffer, cộng ~10 MSM nhỏ của Σ (mỗi cái trả một lần overhead) và transcript keccak trên
-  statement 960 B. Cận dưới không đổi được là 6,150 × 230 điểm ≈ 1.41M.
+- **Verify bn254 +61% so canon:** canon tính BP `n_v = 32` và 6,550 gas/điểm MSM; nay hai BP `n = 64` (2 × 144 điểm
+  BP-2 + 2 × 5 BP-1) cộng 32 điểm Σ = 330 điểm. Mỗi điểm là `staticcall` 0x07 + 0x06 qua một vòng assembly + chép
+  buffer, cộng 8 MSM nhỏ của Σ (mỗi cái trả một lần overhead) và transcript keccak trên statement 960 B. Cận dưới
+  không đổi được là 6,150 × 330 điểm ≈ 2.03M (trước `n_v = 64`: 264 điểm ≈ 1.62M).
 - **BLS đắt hơn bn254, không rẻ như canon dẫn:** EIP-2537 bản cuối định giá G1MSM 12,000/cặp × discount, discount
   sàn **519/1000** ở k ≥ 128 ⇒ ≈ 6,230 gas/điểm — ngang `ecMul` bn254 — trong khi canon giả định discount sâu hơn.
   Cộng điểm 128 B (gấp đôi bộ nhớ/calldata). Lợi thế của BLS12-381 là **bảo mật** (117–126 bit), không phải gas.
@@ -598,20 +599,24 @@ nhận đổi gas lấy một giao dịch cho mọi khoản (limits D1): đây l
   luôn chứng minh được (đầy đủ); (b) `v` thực tế không vượt `2^54` dù BP cho tới `2^64`; (c) mọi số dư giải được
   bằng BSGS tới `2^54`. Các chỗ khác có tổng/biên: `δ(y,z)` dùng `2^n − 1 = 2^64 − 1 < r`; tiết lộ §12 nhận
   `amount < 2^64 < r` nên một `[amount]G` chỉ mở được một số; Rust tính `b' = b − v − fee` bằng `u128` có kiểm, JS
-  dùng BigInt. Biên an toàn thật là `r / 2^66 > 2^187`, không phải hiệu 24 bit — khoảng đó chỉ cần khi số dư có thể
-  tới `2^n_b`, điều trần `2^54` đã loại. (Limits §3 viết "tổng hai đại lượng `< 2^65`"; đúng ra là ba đại lượng
-  `b' + v + fee < 2^66` — kết luận không đổi.) **Kết luận: đứng vững trên E1–E8, burn, rollOver, fund và tiết lộ.**
+  dùng BigInt. Chống quấn đến từ `r / 2^66 > 2^187` và đúng với mọi số dư `< r`, không cần trần;
+  trần `2^54` cho tính đầy đủ, chống grief (khoảng 24 bit của SRS chỉ cần khi số dư có thể bị đẩy tới `2^n_b`,
+  điều trần đã loại) và trần BSGS. **Kết luận: đứng vững trên E1–E8, burn, rollOver, fund và tiết lộ.**
   `proofSystemId` đổi sang `…/n64-n64/v1` để proof `n_v = 32` cũ không bao giờ khớp transcript mới.
 - **RS-NV64-2** Giải mã phía client (limits D4/D5, thay hằng `DECRYPT_BOUND`): BSGS `BsgsParams(table_bits 18–27,
   bound_bits ≤ 54)`, bảng baby `16 B × 2^table_bits` là dữ liệu công khai (sinh lại hoặc nạp file rồi kiểm: đúng
   khuôn, sắp xếp, mỗi `j` đúng một lần, 64 mục ngẫu nhiên tính lại); kết quả chỉ trả khi `[v]G == target` nên bảng
   sai chỉ làm trượt, không làm sai. Mặc định wasm/mobile 22/44, desktop 24–26/54 theo RAM; wasm từ chối bảng
-  `2^27` (2 GiB — `Vec` 32-bit không chứa nổi). Cache số dư `{ua, token, accSeq, balance}` trong hộp AES-GCM khoá
+  `2^27` (2 GiB — `Vec` 32-bit không chứa nổi) và dừng ở `2^24` trừ khi gọi với `allowLargeTable`; API native
+  kiểm RAM (review L4). Cache số dư `{ua, token, accSeq, balance}` trong hộp AES-GCM khoá
   dẫn từ `x` (mở được chỉ sau khi mở vault conf), kiểm bằng `check_balance` mỗi lần dùng, cập nhật khi rollOver
-  (`+pending`, BSGS chỉ trên `pending`) và khi tự chi (`−v−fee`); trượt cache mà số dư vượt trần thiết bị ⇒ báo dùng
+  (`+pending`, BSGS chỉ trên `pending`) và khi tự chi (`−v−fee`). `acc` đổi ngoài tầm ví (rollOver công khai của
+  người khác, credit muộn, tự chi chưa ghi): giá trị đã kiểm cuối cùng là mốc, ví BSGS phần chênh (tăng rồi giảm)
+  trong trần thiết bị (review M1). Chỉ khi phần chênh cũng vượt trần ⇒ báo dùng
   `zether-read-balance` (native, `--table-bits` mặc định 24, 20–27, từ chối khi thiếu RAM; đọc `acc` qua RPC
-  `eth_call` hoặc ciphertext dán vào; khoá chỉ qua stdin, không rời máy). API trả số tiền dạng chuỗi thập phân
-  (vượt `2^53` của JS).
+  `eth_call` — URL qua stdin của curl, kết quả ghi `"verified": false` trừ khi khớp `--ct` từ nguồn thứ hai — hoặc
+  ciphertext dán vào; khoá chỉ qua stdin được pipe, terminal bị từ chối, không rời máy). API nhận số `> 2^53 − 1`
+  chỉ dạng chuỗi thập phân và trả số tiền dạng chuỗi (vượt `2^53` của JS).
 
 ## 17. Review log
 

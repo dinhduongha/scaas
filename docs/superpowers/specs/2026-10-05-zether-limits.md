@@ -53,8 +53,10 @@ Quy tắc SRS §7.3 giữ một khoảng 24 bit giữa giá trị chuyển và s
 giá trị đã chứng minh có thể vượt `r` (bậc nhóm) khi cộng/trừ trên ciphertext. Với `n_v = n_b = 64`:
 mọi số dư thật ≤ tổng cung ≤ `maxDecryptableShielded` ≤ 2^54 (contract kiểm khi `fund`), mọi `v`
 được chứng minh < 2^64 nhưng `b' = b − fee − v ≥ 0` được chứng minh < 2^64 cùng lúc, nên `v ≤ b ≤ 2^54`;
-tổng các đại lượng đã chứng minh trong một phương trình (`b' + v + fee`, ba số hạng) < 3·2^64 < 2^66 ≪ r (≈ 2^254 với bn254, ≈ 2^255 với BLS12-381). Khoảng
-an toàn thật đến từ trần tổng 2^54 chứ không từ hiệu `n_b − n_v`. Đã kiểm với từng phương trình E1–E8 (design §7.1), burn, fund,
+tổng các đại lượng đã chứng minh trong một phương trình (`b' + v + fee`, ba số hạng) < 3·2^64 < 2^66 ≪ r (≈ 2^254 với bn254, ≈ 2^255 với BLS12-381).
+Chống quấn mod `r` đến từ chính `3·2^64 ≪ r` (đúng với mọi số dư `< r`); trần tổng 2^54 cho phần còn lại: tính đầy đủ
+(mọi `b'` thật `< 2^64` nên luôn chứng minh được), chống grief (không ai đẩy số dư người khác vượt `2^n_b` — lý do gốc
+của khoảng 24 bit) và trần BSGS. Không cái nào cần hiệu `n_b − n_v`. Đã kiểm với từng phương trình E1–E8 (design §7.1), burn, fund,
 rollOver và tiết lộ: lập luận đứng vững — ruling **RS-NV64-1** (design §16).
 
 ## 4. Giải mã số dư — BSGS cấu hình được
@@ -75,7 +77,8 @@ rollOver và tiết lộ: lập luận đứng vững — ruling **RS-NV64-1** (
 | 27 | ~2 GiB | ~47 s | ~47 s |
 
 - Mặc định: mobile/wasm `table_bits 22, bound_bits 44`; desktop chọn 24–26 theo RAM với `bound_bits 54`;
-  wasm từ chối bảng > 2 GiB; CLI native `zether-read-balance` cho chọn tới 27.
+  wasm từ chối bảng 2^27 (đúng 2 GiB — `Vec` 32-bit không chứa nổi) và mặc định dừng ở 2^24 (256 MiB) trừ khi
+  gọi với `allowLargeTable`; API native từ chối bảng không đủ RAM; CLI native `zether-read-balance` cho chọn tới 27.
 
 ## 5. Cache số dư (trên thiết bị)
 
@@ -84,4 +87,8 @@ rollOver và tiết lộ: lập luận đứng vững — ruling **RS-NV64-1** (
 - Kiểm cache: `[b]G == C − [x]D` trên `acc` hiện tại — một phép nhân điểm, vài ms. Cache sai/cũ bị phát
   hiện ngay, không thể dẫn tới chi sai (prover và contract cùng từ chối proof dựng trên số dư sai).
 - Cập nhật: rollOver ⇒ `b += pending` (BSGS chỉ trên `pending`); tự chi ⇒ `b −= v + fee`.
+- `acc` đổi mà ví không biết (ai cũng gọi được `rollOverPublic`/`rollOverBatch` — `fund(nạn nhân, 1)` +
+  `rollOverPublic` là grief gần như miễn phí; credit đến muộn bị `rollOverSigned` gộp; tự chi chưa ghi): giá trị cuối
+  cùng đã kiểm được giữ làm mốc, ví giải BSGS **phần chênh** `(C − [x]D) − [b_cache]G` (thử tăng rồi giảm) trong trần
+  thiết bị, kiểm lại rồi cập nhật — không cần CLI dù số dư > 2^44 (review M1).
 - Mất cache: số dư ≤ trần BSGS của thiết bị thì tự đọc lại; lớn hơn thì dùng desktop/CLI.
