@@ -25,6 +25,15 @@ contract P256PrecompileStub {
     }
 }
 
+/// ERC-1271 wallet that says "valid" to anything after ~100k gas of work: what a contract payer
+/// could do on-chain after passing the relayer's simulation (review S4-L1).
+contract GasBurner1271 {
+    function isValidSignature(bytes32 d, bytes calldata) external pure returns (bytes4) {
+        for (uint256 i; i < 600; i++) d = keccak256(abi.encode(d, i));
+        return d == bytes32(0) ? bytes4(0) : bytes4(0x1626ba7e);
+    }
+}
+
 /// Authenticator phần mềm trong test: khoá P-256 cố định, authenticatorData/clientDataJSON
 /// đúng định dạng WebAuthn (L3 §5.8.1.1), chữ ký chuẩn hoá low-s như client làm.
 abstract contract WebAuthnSoft is Fixtures {
@@ -102,9 +111,10 @@ contract SubjectAccountTest is WebAuthnSoft {
     bytes4 internal constant MAGIC = IERC1271.isValidSignature.selector;
 
     function setUp() public {
+        fac = new SubjectAccountFactory();
+        subjectImpl = fac.IMPLEMENTATION();
         _deployFactory();
         t = _standalone(address(this), "ZVND", 0, 0, address(this));
-        fac = new SubjectAccountFactory();
         acct = SubjectAccount(payable(fac.deploy(_passkey(PASSKEY), GUARDIAN)));
         t.mint(address(acct), 1000);
     }
@@ -629,6 +639,25 @@ contract SubjectAccountTest is WebAuthnSoft {
         uint256 g = gasleft();
         t.executeMetaTransaction(m, sig);
         emit log_named_uint("executeMetaTransaction pay, seed secp256k1 key", g - gasleft());
+    }
+
+    /// 400k for ERC-1271 only when `from` is a clone of this chain's SubjectAccount implementation;
+    /// any other contract payer keeps 50k (a SubjectAccount passkey check needs > 50k, so the
+    /// passkey pay tests above are the other half of this).
+    function test_1271_gas_400k_only_for_subject_account_clones() public {
+        assertEq(impl.SUBJECT_ACCOUNT_IMPL(), fac.IMPLEMENTATION());
+        address burner = address(new GasBurner1271());
+        address burnerClone = Clones.clone(burner);
+        for (uint256 i; i < 2; i++) {
+            address from = i == 0 ? burner : burnerClone;
+            t.mint(from, 400);
+            (MetaTxLib.MetaTransaction memory m,) = _payment(from, keccak256(abi.encode("burn", i)));
+            vm.prank(relayer);
+            vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
+            t.executeMetaTransaction(m, hex"00");
+        }
+        // The same burner code given 400k would pass: it is the allowance, not the code, that fails.
+        assertEq(GasBurner1271(burner).isValidSignature{gas: 400_000}(bytes32(uint256(1)), ""), MAGIC);
     }
 
     function test_gas_deploy() public {

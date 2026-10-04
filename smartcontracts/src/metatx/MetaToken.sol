@@ -31,6 +31,10 @@ contract MetaToken is ERC20MetaTx, IERC20Payment, IFactoryToken {
 
     address public immutable FACTORY;
     address private immutable _SELF;
+    /// @notice SubjectAccount implementation of this chain (0 = none). Only its EIP-1167 clones get
+    ///         400k gas for ERC-1271 (a passkey check without the P-256 precompile); others 50k.
+    address public immutable SUBJECT_ACCOUNT_IMPL;
+    bytes32 private immutable _SUBJECT_CLONE_CODEHASH;
 
     bool private _initialized;
     string private _tokenName;
@@ -55,9 +59,13 @@ contract MetaToken is ERC20MetaTx, IERC20Payment, IFactoryToken {
     /// @dev Constructor chạy MỘT lần, trên implementation. Immutable của nó đúng cho mọi
     ///      clone; storage của nó thì không — nên khoá luôn implementation để không ai
     ///      `initialize` được chính nó (01-token-factory §1.3.5 mục 1).
-    constructor(address factory_) ERC20("", "") EIP712("Bamboo MetaToken", "1") {
+    constructor(address factory_, address subjectAccountImpl_) ERC20("", "") EIP712("Bamboo MetaToken", "1") {
         FACTORY = factory_;
         _SELF = address(this);
+        SUBJECT_ACCOUNT_IMPL = subjectAccountImpl_;
+        // OZ Clones runtime code (45 bytes): its hash pins "a clone of exactly this implementation".
+        _SUBJECT_CLONE_CODEHASH = subjectAccountImpl_ == address(0) ? bytes32(0) : keccak256(abi.encodePacked(
+            hex"363d3d373d3d3d363d73", subjectAccountImpl_, hex"5af43d82803e903d91602b57fd5bf3"));
         _initialized = true;
     }
 
@@ -123,6 +131,11 @@ contract MetaToken is ERC20MetaTx, IERC20Payment, IFactoryToken {
         if (u == address(0)) revert NotAWrapper();
         _burn(msg.sender, amount);
         IERC20(u).safeTransfer(recipient, amount);
+    }
+
+    function _erc1271Gas(address from) internal view override returns (uint256) {
+        bytes32 h = _SUBJECT_CLONE_CODEHASH;
+        return h != bytes32(0) && from.codehash == h ? 400_000 : 50_000;
     }
 
     /// @dev Bước 6. Mọi thứ fail được thì fail ở đây, TRƯỚC khi thu phí.

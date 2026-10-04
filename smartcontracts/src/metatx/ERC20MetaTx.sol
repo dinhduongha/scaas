@@ -149,7 +149,7 @@ abstract contract ERC20MetaTx is ERC20, EIP712, IERC20MetaTx {
             (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(digest, sig);
             if (err != ECDSA.RecoverError.NoError || rec != from) revert MetaTxBadSignature();
         } else {
-            (bool ok, bytes memory ret) = from.staticcall{gas: 400_000}(
+            (bool ok, bytes memory ret) = from.staticcall{gas: _erc1271Gas(from)}(
                 abi.encodeCall(IERC1271.isValidSignature, (digest, sig))
             );
             if (!ok || ret.length != 32 ||
@@ -157,6 +157,13 @@ abstract contract ERC20MetaTx is ERC20, EIP712, IERC20MetaTx {
                 revert MetaTxBadSignature();
             }
         }
+    }
+
+    /// @dev Gas cho `isValidSignature` của một ví hợp đồng: 50k (đủ cho Safe/ECDSA). Implementation
+    ///      nào biết một loại ví cần hơn (SubjectAccount: P-256 Solidity ~300k) thì ghi đè, chỉ cho
+    ///      đúng code đó — relayer trả gas cho mọi thứ chạy trong lời gọi này (review S4-L1).
+    function _erc1271Gas(address) internal view virtual returns (uint256) {
+        return 50_000;
     }
 
     /// @dev Bước 6 riêng của thao tác. Mặc định: `data` rỗng ⇒ chuyển token thường, và
