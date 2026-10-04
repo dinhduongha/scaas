@@ -10,6 +10,7 @@ use crate::signer::LocalSigner;
 pub mod cosmos;
 pub mod evm;
 pub mod hedera;
+pub mod solana;
 pub mod soroban;
 pub mod sui;
 pub mod ton;
@@ -30,6 +31,7 @@ pub fn build(cfg: &ChainCfg, signers: &[LocalSigner]) -> Result<Arc<dyn ChainAda
         "soroban" => Ok(Arc::new(soroban::SorobanAdapter::new(cfg, signers)?)),
         "ton" => Ok(Arc::new(ton::TonAdapter::new(cfg, signers)?)),
         "sui" => Ok(Arc::new(sui::SuiAdapter::new(cfg, signers)?)),
+        "solana" => Ok(Arc::new(solana::SolanaAdapter::new(cfg, signers)?)),
         other => bail!("chain {}: no adapter for family {other} in this build", cfg.chain_key()),
     }
 }
@@ -49,7 +51,7 @@ mod tests {
         let mut cfg: Config = toml::from_str(include_str!("../../node.example.toml")).unwrap();
         cfg.validate().unwrap();
         let families: BTreeSet<&str> = cfg.chains.iter().map(|c| c.family.as_str()).collect();
-        assert_eq!(families, BTreeSet::from(["cosmos", "evm", "hedera", "soroban", "sui", "ton"]));
+        assert_eq!(families, BTreeSet::from(["cosmos", "evm", "hedera", "solana", "soroban", "sui", "ton"]));
         let words = format!("{}art", "abandon ".repeat(23));
         let seed = Seed::from_words(&words, None).unwrap();
         let dir = std::env::temp_dir().join(format!("example-journal-{}", std::process::id()));

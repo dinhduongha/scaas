@@ -101,3 +101,14 @@ finality = { mode = "depth", depth = 0, quorum = 1 }
 # global_id: -239 mainnet, -3 testnet (the MetaOp domain); attach/forward in nanoton; api_key_env names the env
 # var holding the TON Center key (the key itself never goes here).
 params = { global_id = -3, attach_nanoton = 150000000, forward_nanoton = 0, api_key_env = "BAMBOO_TONCENTER_API_KEY" }
+
+[[chains]]                                       # Solana (bamboo Anchor program)
+family = "solana"
+network = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d"  # the cluster's genesis hash (mainnet-beta here)
+rpc_urls = ["https://api.mainnet-beta.solana.com"]  # needs transaction history (getSignaturesForAddress)
+lanes = [0, 1]                                   # ed25519 m/44'/501'/i'/0': fund each lane address; each lane
+                                                 # creates its durable nonce account on first use
+finality = { mode = "tag", quorum = 1 }          # commitment `finalized`
+# program_id: the bamboo program (replace with your deployment); max_cu caps the compute-unit limit,
+# max_priority_lamports the total priority fee per tx (v1 header), max_loaded_bytes the loaded-account-data limit.
+params = { program_id = "BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d", max_cu = 600000, max_priority_lamports = 2000000 }
