@@ -97,6 +97,18 @@ test('SEP-0005 (published): seed, m/44\'/148\' key, Stellar G/S keys', () => {
   assert.equal(deriveKey(t4, 'stellar', 0).address, 'GDAHPZ2NSYIIHZXM56Y36SBVTV5QKFIZGYMMBHOU53ETUSWTP62B63EQ');
 });
 
+test('Pi Network: Stellar keys at the chain\'s SLIP-44 coin type 314159', () => {
+  // bip_utils 2.9.3 Bip32Slip10Ed25519 at m/44'/314159'/{0,1}' of the SEP-0005 test 1 words.
+  const seed = seedFromWords('illness spike retreat truth genius clock brain pass fit cave bargain toe');
+  const pi = deriveKey(seed, 'stellar', 0, { coinType: 314159 });
+  assert.equal(pi.path, "m/44'/314159'/0'");
+  assert.equal(pi.address, 'GASWRHYE32A5A27TQWNRITIOZKOX7XQ6IVI4WEDGPVGX253D63UW2GJ3');
+  assert.equal(deriveKey(seed, 'stellar', 1, { coinType: 314159 }).address, 'GBSIS3JSLARC3D5WXRE3343Y2IMQBKRXHPC672RELHWXVUW4QWCWM2UT');
+  assert.equal(deriveKey(seed, 'stellar', 0).address, 'GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6');
+  assert.equal(deriveKey(seed, 'stellar', 0, { coinType: null }).path, "m/44'/148'/0'");
+  for (const bad of [-1, 2 ** 31, 1.5, '314159']) assert.throws(() => deriveKey(seed, 'stellar', 0, { coinType: bad }), /coin type/);
+});
+
 test('per-network keys match reference tooling', () => {
   const seed = seedFromEntropy(wordsToEntropy(M));
   const want = {

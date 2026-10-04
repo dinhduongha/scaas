@@ -97,6 +97,9 @@ pub struct ChainCfg {
     /// Account index của các lane dẫn xuất từ `[keys].mnemonic` (R62: nhiều lane, không khoá toàn cục).
     #[serde(default = "lane0")]
     pub lanes: Vec<u32>,
+    /// Coin type SLIP-44 thay mặc định của họ mạng cho các lane mnemonic (Pi Network: `soroban` + 314159).
+    #[serde(default)]
+    pub coin_type: Option<u32>,
     /// Tham số riêng của adapter (package id Sui, passphrase mạng Stellar, prefix bech32…).
     #[serde(default)]
     pub params: toml::Table,
@@ -164,6 +167,7 @@ impl Default for ChainCfg {
             signer_key_env: String::new(),
             private_key: None,
             lanes: lane0(),
+            coin_type: None,
             params: Default::default(),
             finality: default_finality(),
             dex: None,
@@ -251,7 +255,7 @@ impl Config {
             if !seen.insert(key.clone()) {
                 bail!("chain {key} configured twice");
             }
-            keys::lane_path(&c.family, 0).with_context(|| format!("chain {key}"))?;
+            keys::lane_path_coin(&c.family, 0, c.coin_type).with_context(|| format!("chain {key}"))?;
             if c.rpc_urls.is_empty() || c.rpc_urls.len() < c.finality.quorum {
                 bail!("chain {key}: {} rpc_urls < quorum {}", c.rpc_urls.len(), c.finality.quorum);
             }
@@ -273,6 +277,9 @@ impl Config {
             let raw = c.private_key.is_some() || !c.signer_key_env.is_empty();
             if raw && c.lanes.len() > 1 {
                 bail!("chain {key}: a raw private key is one lane; use [keys].mnemonic for several");
+            }
+            if raw && c.coin_type.is_some() {
+                bail!("chain {key}: coin_type applies to [keys].mnemonic lanes, not to a raw private key");
             }
             if !raw && self.keys.is_none() {
                 bail!("chain {key}: no key (private_key, signer_key_env or [keys].mnemonic)");
@@ -304,7 +311,7 @@ impl Config {
         c.lanes
             .iter()
             .map(|&i| {
-                let (curve, key) = keys::lane_secret(&seed, &c.family, i)?;
+                let (curve, key) = keys::lane_secret_coin(&seed, &c.family, i, c.coin_type)?;
                 LocalSigner::new(curve, &key)
             })
             .collect()
@@ -415,6 +422,32 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         assert_eq!(c.chains[0].max_index_lag, 100);
         assert_eq!(c.modules.admin_bind, "127.0.0.1:9108");
         assert!(toml::from_str::<Config>(&OK.replace("finality =", "breaker = { gas_budget_per_hour = \"x\" }\nfinality =")).is_err());
+    }
+
+    #[test]
+    fn pi_chain_lanes_use_the_chain_coin_type() {
+        use crate::signer::Signer;
+        // Soroban family, Pi Network passphrase, SLIP-44 314159 (bip_utils 2.9.3, the 24-word "abandon … art").
+        let raw = format!("{OK}\n[keys]\nmnemonic = {{ env = \"BAMBOO_TEST_MNEMONIC\" }}\n\
+            [[chains]]\nfamily = \"soroban\"\nnetwork = \"pi-testnet\"\nrpc_urls = [\"http://p\"]\nlanes = [0, 1]\n\
+            coin_type = 314159\nparams = {{ network_passphrase = \"Pi Testnet\" }}\n");
+        let c: Config = toml::from_str(&raw).unwrap();
+        c.validate().unwrap();
+        std::env::set_var("BAMBOO_TEST_MNEMONIC", "abandon abandon abandon abandon abandon abandon abandon abandon \
+            abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
+            abandon abandon art");
+        let strkeys: Vec<String> = c.lane_signers(&c.chains[1]).unwrap().iter()
+            .map(|s| crate::signer::stellar_account_strkey(&s.public_key()))
+            .collect();
+        assert_eq!(strkeys, ["GC34MI42VEGPVUDNHHM3FCVAQ2P6I2B4D3NANHXNDPFCWXQRX73S4DOB",
+                             "GAUCCGUGT4FQU2USKSZWZXGGRGIWVA6LTDZLNSIXVR4RZTB6LS7VTI4E"]);
+        let stellar: Config = toml::from_str(&raw.replace("coin_type = 314159\n", "")).unwrap();
+        let s0 = crate::signer::stellar_account_strkey(&stellar.lane_signers(&stellar.chains[1]).unwrap()[0].public_key());
+        assert_eq!(s0, "GB3TCCIC6KLYKM72PX7KA6RNYC2BHC7DQYDMEAAN7PDMUZQD7UKJGSSY", "no coin_type: Stellar 148");
+        let bad: Config = toml::from_str(&raw.replace("314159", "2147483648")).unwrap();
+        assert!(bad.validate().is_err(), "coin type must be a hardened SLIP-44 index");
+        let raw_key: Config = toml::from_str(&OK.replace("signer_key_env", "coin_type = 1\nsigner_key_env")).unwrap();
+        assert!(raw_key.validate().is_err(), "coin_type only applies to mnemonic lanes");
     }
 
     #[test]

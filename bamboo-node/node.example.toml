@@ -23,7 +23,7 @@ admin_bind = "127.0.0.1:9108"                    # /healthz /readyz /metrics (R5
 # One 24-word BIP-39 mnemonic for every lane that has no private_key of its own (R60).
 # Lanes derive per family by SLIP-44: evm m/44'/60'/0'/0/i, hedera m/44'/3030'/0'/0/i,
 # cosmos m/44'/118'/0'/0/i, sui m/44'/784'/i'/0'/0', soroban m/44'/148'/i', ton m/44'/607'/i',
-# aptos m/44'/637'/i'/0'/0'.
+# aptos m/44'/637'/i'/0'/0'. A chain may override the SLIP-44 coin type with `coin_type` (Pi Network: 314159).
 [keys]
 mnemonic = { keystore = "/etc/bamboo/mnemonic.json", passphrase_env = "BAMBOO_KEYSTORE_PASSPHRASE" }
 # mnemonic = { env = "BAMBOO_MNEMONIC" }
@@ -81,6 +81,16 @@ lanes = [0, 1]
 finality = { mode = "instant", quorum = 1 }      # SCP: a closed ledger is final
 # fee_bump_lane = i: lane i's account pays every lane's fee (CAP-15 fee bump); base_fee in stroops.
 params = { network_passphrase = "Test SDF Network ; September 2015", base_fee = 100 }
+
+[[chains]]                                       # Pi Network: Soroban family, Stellar-compatible
+family = "soroban"
+network = "pi-testnet"                           # Odoo network_key; mainnet: "pi-mainnet"
+rpc_urls = ["http://pi-soroban-rpc:8000"]        # your Pi Soroban RPC
+lanes = [0, 1]
+coin_type = 314159                               # lanes m/44'/314159'/i' (SLIP-44 Pi), not Stellar's 148
+finality = { mode = "instant", quorum = 1 }
+# Passphrases are owner-provided — confirm at deploy: testnet "Pi Testnet", mainnet "Pi Network".
+params = { network_passphrase = "Pi Testnet", base_fee = 100 }
 
 [[chains]]                                       # Sui
 family = "sui"

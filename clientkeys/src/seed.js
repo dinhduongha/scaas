@@ -119,11 +119,16 @@ function describe(network, curve, privateKey) {
   return { publicKey: pub };
 }
 
-/** Key `i` of `network` from a BIP-39 seed. Caller wipes `privateKey` after use. */
-export function deriveKey(seed, network, i = 0) {
+/** Key `i` of `network` from a BIP-39 seed. Caller wipes `privateKey` after use. `coinType`: the chain's
+ *  SLIP-44 coin type in place of the network's (Pi Network = `stellar` with 314159); null ⇒ the default. */
+export function deriveKey(seed, network, i = 0, { coinType = null } = {}) {
   const net = NETWORKS[network];
   if (!net) throw new Error(`unknown network ${network}`);
-  const path = net.path(i);
+  let path = net.path(i);
+  if (coinType != null) {
+    if (!Number.isInteger(coinType) || coinType < 0 || coinType >= HARDENED) throw new Error(`bad coin type ${coinType}`);
+    path = path.split('/').map((seg, n) => (n === 2 ? `${coinType}'` : seg)).join('/');
+  }
   let privateKey;
   if (net.curve === 'secp256k1') {
     const node = HDKey.fromMasterSeed(seed).derive(path);
