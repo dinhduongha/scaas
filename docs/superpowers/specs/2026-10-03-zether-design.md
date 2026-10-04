@@ -582,3 +582,4 @@ Kill criterion S1 của canon (2.5M) bị vượt ở transfer bn254 (2.75M th�
 |---|---|---|---|
 | S2-R1 | med | Đúng (PoC chạy): transfer `v = 0` từ tài khoản số dư 0 tăng `pendingSeq` nạn nhân ⇒ `rollOverSigned` `OWNER_ONLY` revert mãi; §5 nói sai "phải nạp tiền thật" | RS2-17 + sửa §5; test `test_rollOverSignedSurvivesFrontRunCredit` |
 | S2-R2 | low | Đúng (PoC chạy): BLS_12381 đăng ký được với pk = vô cực, chữ ký 0 qua mọi digest | RS2-18; test trong `test_multisigBadAuthDataRejected`, `test_bls12381Auth` |
+| S2-R3 | med | Đúng (test đỏ trước khi sửa): sau RS2-17 chữ ký no-op (`expected ≤ lastRolled`) không tăng `accSeq` ⇒ sống tới credit sau, ai cũng ép rollOver `OWNER_ONLY` | RS2-19; test `test_rollOverSignedWithoutNewCreditIsRejected` (`90d0f9d`) |
