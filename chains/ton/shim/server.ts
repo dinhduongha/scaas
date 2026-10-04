@@ -3,7 +3,8 @@
 // external message; every transaction of that message's trace gets that block's seqno.
 //
 //   npm run shim -- --port 32001
-//   GET  /api/v3/masterchainInfo | blocks | transactionsByMasterchainBlock | transactionsByMessage | walletInformation
+//   GET  /api/v3/masterchainInfo | blocks | transactionsByMasterchainBlock | transactionsByMessage | transactions
+//        | walletInformation
 //   POST /api/v3/message | runGetMethod
 //   GET  /shim/state            deployed masters (A, B), global id, wallet code hash/depth
 //   POST /shim/fund {address, nanoton} | /shim/mint {master, to, amount}
@@ -55,6 +56,7 @@ async function main() {
                 out_msgs: [...t.outMessages.values()].map((m: any) => ({
                     hash: b64(msgHash(m)),
                     destination: m.info.type === 'external-out' ? null : m.info.dest.toRawString(),
+                    bounce: m.info.type === 'internal' ? m.info.bounce : false,
                     message_content: { body: b64(m.body.toBoc()) },
                 })),
                 account_state_after: { code_hash: null as string | null },
@@ -92,6 +94,11 @@ async function main() {
             case '/api/v3/transactionsByMessage': {
                 const t = byInMsg.get((q.get('msg_hash') || '').toLowerCase());
                 return [200, { transactions: t ? [await withCode(t)] : [], address_book: {} }];
+            }
+            case '/api/v3/transactions': {
+                const acc = Address.parse(q.get('account')!).toRawString();
+                const all = blocks.flatMap((b) => b.txs).filter((t) => t.account === acc).reverse();
+                return [200, { transactions: await Promise.all(all.slice(0, Number(q.get('limit') || 64)).map(withCode)), address_book: {} }];
             }
             case '/api/v3/message': {
                 const cell = Cell.fromBase64(body.boc);

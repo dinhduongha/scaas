@@ -449,6 +449,12 @@ pub const OP_SIGNED: u128 = 0x5b0a1d01;
 pub const OP_MANDATE_PAY: u128 = 0x5b0a1d10;
 pub const EV_MTE: u128 = 0x9b1c0d01;
 pub const EV_PAID: u128 = 0x9b1c0d02;
+/// Floors the wallet adds under the signed ones (jetton.tact `MIN_LEG_TON`, `CANCEL_TON`).
+const MIN_LEG_TON: u128 = 100_000_000;
+const CANCEL_TON: u128 = 100_000_000;
+const E_NONCE: i64 = 706;
+/// A legit transaction of ours emits at most two events; anything past that is someone's noise (review M3).
+const MAX_EVENTS_PER_TX: usize = 4;
 const W5R1_CODE: &str = "b5ee9c7201021401000281000114ff00f4a413f4bcf2c80b01020120020d020148030402dcd020d749c120915b8f6320d70b1f2082106578746ebd21821073696e74bdb0925f03e082106578746eba8eb48020d72101d074d721fa4030fa44f828fa443058bd915be0ed44d0810141d721f4058307f40e6fa1319130e18040d721707fdb3ce03120d749810280b99130e070e2100f020120050c020120060902016e07080019adce76a2684020eb90eb85ffc00019af1df6a2684010eb90eb858fc00201480a0b0017b325fb51341c75c875c2c7e00011b262fb513435c280200019be5f0f6a2684080a0eb90fa02c0102f20e011e20d70b1f82107369676ebaf2e08a7f0f01e68ef0eda2edfb218308d722028308d723208020d721d31fd31fd31fed44d0d200d31f20d31fd3ffd70a000af90140ccf9109a28945f0adb31e1f2c087df02b35007b0f2d0845125baf2e0855036baf2e086f823bbf2d0882292f800de01a47fc8ca00cb1f01cf16c9ed542092f80fde70db3cd81003f6eda2edfb02f404216e926c218e4c0221d73930709421c700b38e2d01d72820761e436c20d749c008f2e09320d74ac002f2e09320d71d06c712c2005230b0f2d089d74cd7393001a4e86c128407bbf2e093d74ac000f2e093ed55e2d20001c000915be0ebd72c08142091709601d72c081c12e25210b1e30f20d74a111213009601fa4001fa44f828fa443058baf2e091ed44d0810141d718f405049d7fc8ca0040048307f453f2e08b8e14038307f45bf2e08c22d70a00216e01b3b0f2d090e2c85003cf1612f400c9ed54007230d72c08248e2d21f2e092d200ed44d0d2005113baf2d08f54503091319c01810140d721d70a00f2e08ee2c8ca0058cf16c9ed5493f2c08de20010935bdb31e1d74cd0";
 const W5R1_HASHES: [&str; 2] = [
     "20834b7b72b112147e1b2fb457b84e74d1a30f04f737d4f62a668e9552d2b72f",
@@ -500,6 +506,34 @@ pub fn parse_metaop(c: &Arc<Cell>) -> Result<MetaOp> {
     let (pay_ref, lane, extra) = (r.b256()?, r.b256()?, r.b256()?);
     r.end()?;
     Ok(MetaOp { network, op, amount, nonce, valid_until, contract, from, to, relayer, pay_ref, lane, extra, digest: c.hash() })
+}
+
+/// `TradeParams.forwardTon` (common.tact): the forward TON floor the payer signed for a DEX leg.
+pub fn trade_forward_floor(params: &Arc<Cell>) -> Result<u128> {
+    let mut s = params.parser();
+    s.addr()?;
+    s.addr()?;
+    s.uint(128)?;
+    s.addr()?;
+    s.uint(32)?;
+    let f = s.coins()?;
+    s.end()?;
+    Ok(f)
+}
+
+/// Jetton wallet of `owner` for `master` without RPC — `walletInit` of jetton.tact, same as Odoo's
+/// `fam_ton.jetton_wallet_address` (R20). The wallet code is known by hash and depth only.
+pub fn jetton_wallet_address(owner: &Addr, master: &Addr, code_hash: &[u8; 32], code_depth: u16) -> Result<Addr> {
+    let tail = Builder::new().uint(0, 2 + 3 * 32).end()?; // lanes oldLanes rotatedAt laneCount oldCount
+    let data = Builder::new().addr(Some(owner)).addr(Some(master)).uint(0, 4).bytes(&[0; 32]).bit(false).reference(tail).end()?;
+    // StateInit `00110 ^code ^data`: 2 refs, 5 bits + completion tag.
+    let mut h = Sha256::new();
+    h.update([2u8, 1, 0x34]);
+    h.update(code_depth.to_be_bytes());
+    h.update(data.depth().to_be_bytes());
+    h.update(code_hash);
+    h.update(data.hash());
+    Ok(Addr { wc: 0, hash: h.finalize().into() })
 }
 
 /// TEP-81 wire form used by TON Connect, as a `storeStringTail` snake (127 bytes per cell).
@@ -718,6 +752,9 @@ pub fn w5_transfer(w5: &W5, signer: &dyn Signer, seqno: u32, valid_until: u32, t
 
 // ---------------------------------------------------------------------- events
 
+/// A jetton wallet code known by (representation hash, depth): enough to derive every wallet address.
+pub type WalletCode = ([u8; 32], u16);
+
 /// One external-out message body of ours, decoded.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TonEvent {
@@ -840,9 +877,23 @@ pub fn tx_events(tx: &Value) -> Result<Vec<(usize, Addr, TonEvent)>> {
         let Ok(cell) = b64decode(body).and_then(|b| boc_parse(&b)) else { continue };
         if let Ok(Some(ev)) = decode_event(&cell) {
             out.push((i, account, ev));
+            if out.len() == MAX_EVENTS_PER_TX {
+                break;
+            }
         }
     }
     Ok(out)
+}
+
+fn exit_code(tx: &Value) -> Option<i64> {
+    tx.pointer("/description/compute_ph/exit_code").and_then(Value::as_i64)
+}
+
+/// Digest of the MetaOp a lane transaction carried: first ref of both `SignedOp` and `MandatePay`.
+fn carried_digest(out_msg: &Value) -> Option<[u8; 32]> {
+    let body = out_msg.pointer("/message_content/body").and_then(Value::as_str)?;
+    let cell = boc_parse(&b64decode(body).ok()?).ok()?;
+    cell.refs().first().map(|op| op.hash())
 }
 
 fn compute_ok(tx: &Value) -> std::result::Result<(), String> {
@@ -869,11 +920,10 @@ pub struct TonAdapter {
     w5: Vec<W5>,
     api: Api,
     global_id: i32,
-    mandate_code: Option<[u8; 32]>,
     attach: u128,
     forward: u128,
-    /// (master, owner) ⇒ jetton wallet address (`get_wallet_address`, immutable).
-    wallets: RwLock<HashMap<(Addr, Addr), Addr>>,
+    /// master ⇒ its jetton wallet code (hash, depth), `None` = not a jetton master; immutable, one call per master.
+    codes: RwLock<HashMap<Addr, Option<WalletCode>>>,
 }
 
 fn param_str(cfg: &ChainCfg, k: &str) -> Option<String> {
@@ -885,8 +935,8 @@ fn param_u128(cfg: &ChainCfg, k: &str, default: u128) -> u128 {
 }
 
 impl TonAdapter {
-    /// `params`: `global_id` (default by network: `-239`, `-3`; required otherwise), `mandate_code_hash`
-    /// (optional), `attach_nanoton` (default 0.15 TON), `forward_nanoton` (default 0), `api_key_env`.
+    /// `params`: `global_id` (default by network: `-239`, `-3`; required otherwise), `attach_nanoton` (default
+    /// 0.15 TON), `forward_nanoton` (default 0; never below the floor the payer signed), `api_key_env`.
     /// Jetton masters are NOT configured here: they are Odoo's token list (`node_config`, review H1).
     pub fn new(cfg: &ChainCfg, signers: &[LocalSigner]) -> Result<Self> {
         let net = cfg.network.clone().unwrap_or_default();
@@ -894,7 +944,6 @@ impl TonAdapter {
             Some(g) => g as i32,
             None => net.parse::<i32>().map_err(|_| anyhow!("chain {}: params.global_id is required for {net}", cfg.chain_key()))?,
         };
-        let mandate_code = param_str(cfg, "mandate_code_hash").map(|h| b32(&h)).transpose()?;
         let mut w5 = Vec::new();
         let mut lanes = Vec::new();
         for (s, &i) in signers.iter().zip(&cfg.lanes) {
@@ -912,10 +961,9 @@ impl TonAdapter {
             w5,
             api: Api::new(cfg.rpc_urls.first().ok_or_else(|| anyhow!("no rpc_urls"))?, key)?,
             global_id,
-            mandate_code,
             attach: param_u128(cfg, "attach_nanoton", 150_000_000),
             forward: param_u128(cfg, "forward_nanoton", 0),
-            wallets: RwLock::new(HashMap::new()),
+            codes: RwLock::new(HashMap::new()),
         })
     }
 
@@ -923,50 +971,42 @@ impl TonAdapter {
         self.w5.get(lane).ok_or_else(|| anyhow!("no lane {lane}"))
     }
 
-    async fn wallet_of(&self, master: &Addr, owner: &Addr) -> Result<Addr> {
-        if let Some(a) = self.wallets.read().ok().and_then(|m| m.get(&(*master, *owner)).copied()) {
-            return Ok(a);
+    /// Wallet code of a registered master (`get_jetton_data`, cached). A contract that answers with a non-zero
+    /// exit code is not a jetton master (e.g. a Mandate Odoo registered): `None`, never a stall.
+    async fn wallet_code(&self, master: &Addr) -> Result<Option<WalletCode>> {
+        if let Some(c) = self.codes.read().ok().and_then(|m| m.get(master).copied()) {
+            return Ok(c);
         }
-        let owner_cell = Builder::new().addr(Some(owner)).end()?;
-        let st = self.api.run_get(master, "get_wallet_address", vec![json!({"type": "slice", "value": b64encode(&boc_serialize(&owner_cell))})]).await?;
-        let cell = stack_cell(st.first().ok_or_else(|| anyhow!("get_wallet_address: empty stack"))?)?;
-        let a = cell.parser().addr()?.ok_or_else(|| anyhow!("get_wallet_address: addr_none"))?;
-        if let Ok(mut m) = self.wallets.write() {
-            m.insert((*master, *owner), a);
-        }
-        Ok(a)
-    }
-
-    /// Normalized event for Odoo, or `None` when the emitter is not one of ours (R10-10).
-    async fn authenticate(&self, emitter: &Addr, ev: &TonEvent, code_hash: Option<[u8; 32]>, masters: &[Addr]) -> Result<Option<(Addr, TonEvent)>> {
-        match ev {
-            TonEvent::Executed { master, from, .. } => {
-                if !masters.contains(master) {
-                    return Ok(None);
-                }
-                if self.wallet_of(master, from).await? == *emitter {
-                    return Ok(Some((*master, ev.clone())));
-                }
-                // A Mandate emits for itself (`from` = the mandate) or for its owner's withdrawals.
-                if self.mandate_code.is_some() && code_hash == self.mandate_code {
-                    return Ok(Some((*master, ev.clone())));
-                }
-                Ok(None)
+        let v = self.api.post("runGetMethod", json!({"address": master.raw(), "method": "get_jetton_data", "stack": []})).await?;
+        let code = match v.get("exit_code").and_then(Value::as_i64).unwrap_or(0) {
+            0 => {
+                let c = stack_cell(v.pointer("/stack/4").ok_or_else(|| anyhow!("get_jetton_data: no wallet code"))?)?;
+                Some((c.hash(), c.depth()))
             }
-            TonEvent::Paid { to, .. } => {
-                for m in masters {
-                    if self.wallet_of(m, to).await? == *emitter {
-                        return Ok(Some((*m, ev.clone())));
-                    }
-                }
-                Ok(None)
-            }
+            _ => None,
+        };
+        if let Ok(mut m) = self.codes.write() {
+            m.insert(*master, code);
         }
+        Ok(code)
     }
 
     async fn tx_by_in_msg(&self, hash: &[u8; 32]) -> Result<Option<Value>> {
         let v = self.api.get("transactionsByMessage", &[("msg_hash", alloy::hex::encode(hash)), ("direction", "in".into())]).await?;
         Ok(v.get("transactions").and_then(Value::as_array).and_then(|a| a.first().cloned()))
+    }
+
+    /// Masterchain height of the contract's recent transaction that executed `digest`, if any.
+    async fn executed_by_copy(&self, child: &Value, digest: Option<[u8; 32]>) -> Result<Option<u64>> {
+        let (Some(digest), Some(account)) = (digest, child.get("account").and_then(Value::as_str)) else { return Ok(None) };
+        let contract = Addr::parse(account)?;
+        let v = self.api.get("transactions", &[("account", contract.raw()), ("limit", "64".into()), ("sort", "desc".into())]).await?;
+        for tx in v.get("transactions").and_then(Value::as_array).into_iter().flatten() {
+            if compute_ok(tx).is_ok() && tx_events(tx)?.iter().any(|(_, e, ev)| *e == contract && matches!(ev, TonEvent::Executed { digest: d, .. } if *d == digest)) {
+                return Ok(Some(tx.get("mc_block_seqno").and_then(Value::as_u64).unwrap_or_default()));
+            }
+        }
+        Ok(None)
     }
 
     async fn mc_block(&self, seqno: u64) -> Result<String> {
@@ -976,6 +1016,26 @@ impl TonAdapter {
             .await?;
         let b = v.pointer("/blocks/0").ok_or_else(|| anyhow!("no masterchain block {seqno}"))?;
         Ok(hex0x(&api_hash(b.get("root_hash").unwrap_or(&Value::Null))?))
+    }
+}
+
+/// Normalized event for Odoo, or `None` when the emitter is not one of ours (R10-10). No network call: the
+/// emitter must be the wallet `walletInit(owner, master)` derives to (review M3); a Mandate only when Odoo lists
+/// its address (review L10). `masters` = Odoo's contracts with their wallet code (`None`: not a master).
+pub fn authenticate(emitter: &Addr, ev: &TonEvent, masters: &[(Addr, Option<WalletCode>)]) -> Option<(Addr, TonEvent)> {
+    let wallet_of = |master: &Addr, owner: &Addr| {
+        let (_, code) = masters.iter().find(|(m, _)| m == master)?;
+        let (h, d) = (*code)?;
+        jetton_wallet_address(owner, master, &h, d).ok()
+    };
+    match ev {
+        TonEvent::Executed { master, from, .. } => {
+            masters.iter().find(|(m, c)| m == master && c.is_some())?;
+            // A Mandate emits for itself (`from` = the mandate) or for its owner's withdrawals.
+            let registered = masters.iter().any(|(m, code)| m == emitter && code.is_none());
+            (wallet_of(master, from).as_ref() == Some(emitter) || registered).then(|| (*master, ev.clone()))
+        }
+        TonEvent::Paid { to, .. } => masters.iter().map(|(m, _)| m).find(|m| wallet_of(m, to).as_ref() == Some(emitter)).map(|m| (*m, ev.clone())),
     }
 }
 
@@ -1020,6 +1080,7 @@ impl ChainAdapter for TonAdapter {
             return Err(SimError::Revert("payload is bound to another relayer".into()));
         }
         let extra = op.get("extra").cloned().unwrap_or(Value::Null);
+        let mut forward = 0u128;
         let body = if s("op_kind") == "mandate_pay" {
             let sig: [u8; 64] = alloy::hex::decode(s("signature").trim_start_matches("0x"))
                 .map_err(|e| revert(e.into()))?
@@ -1031,7 +1092,8 @@ impl ChainAdapter for TonAdapter {
             // Simulation by getters (R27): lane/nonce unused, key bound or provable, signature valid.
             let next = self.api.run_get(&contract, "get_lane_nonce", vec![json!({"type": "num", "value": hex0x(&m.lane)})]).await.map_err(transport)?;
             let next = next.first().map(stack_num).transpose().map_err(transport)?.unwrap_or(0);
-            if next as u64 != m.nonce && !(m.op == 4 && next as u64 > m.nonce) {
+            let next = next as u64;
+            if next != m.nonce && !(m.op == 4 && next == m.nonce + 1) {
                 return Err(SimError::Revert(format!("lane nonce is {next}, payload has {}", m.nonce)));
             }
             if let Auth::TonConnect { signature, timestamp, domain, state_init } = &auth {
@@ -1058,10 +1120,19 @@ impl ChainAdapter for TonAdapter {
                 Some(h) => b32(h).map_err(revert)?,
                 None => [0; 32],
             };
-            let forward = extra.get("forward_nanoton").and_then(Value::as_u64).map(u128::from).unwrap_or(self.forward);
+            // The payer signed a floor for the forward TON (review H2); the wallet refuses less.
+            let floor = match m.op {
+                1 if m.extra[..16] != [0; 16] => return Err(SimError::Revert("signed forward floor is not a TON amount".into())),
+                1 => u128::from_be_bytes(m.extra[16..].try_into().expect("16")),
+                2 => trade_forward_floor(params.as_ref().ok_or_else(|| SimError::Revert("trade without params".into()))?).map_err(revert)?.max(MIN_LEG_TON),
+                4 if next == m.nonce + 1 => CANCEL_TON,
+                _ => 0,
+            };
+            forward = extra.get("forward_nanoton").and_then(Value::as_u64).map(u128::from).unwrap_or(self.forward).max(floor);
             signed_op_body(&cell, &auth_cell(&auth).map_err(revert)?, params, state_init, &me, forward, match_with).map_err(revert)?
         };
-        let value = self.attach.max(self.forward + 100_000_000);
+        // Sized from THIS job's forward (review L8): the wallet wants 0.05 TON + forward.
+        let value = self.attach.max(forward + 100_000_000);
         Ok(Built { job_id: job.id, body: boc_serialize(&body), valid_until: m.valid_until, meta: built_meta(&contract, value) })
     }
 
@@ -1086,14 +1157,34 @@ impl ChainAdapter for TonAdapter {
         if let Err(why) = compute_ok(&tx) {
             return Ok(TxStatus::Reverted { reason: format!("lane wallet: {why}") });
         }
-        let Some(out) = tx.pointer("/out_msgs/0/hash") else {
+        let Some(out) = tx.pointer("/out_msgs/0") else {
             return Ok(TxStatus::Reverted { reason: "lane wallet sent nothing (insufficient TON?)".into() });
         };
-        let Some(child) = self.tx_by_in_msg(&api_hash(out)?).await? else { return Ok(TxStatus::Pending) };
+        let Some(child) = self.tx_by_in_msg(&api_hash(out.get("hash").unwrap_or(&Value::Null))?).await? else { return Ok(TxStatus::Pending) };
         if let Err(why) = compute_ok(&child) {
+            // Anyone may relay a signed op (`relayer` = addr_none): if a copy got there first, the op ran (review L6).
+            if exit_code(&child) == Some(E_NONCE) {
+                if let Some(height) = self.executed_by_copy(&child, carried_digest(out)).await? {
+                    return Ok(TxStatus::Mined { height });
+                }
+            }
             return Ok(TxStatus::Reverted { reason: format!("contract: {why}") });
         }
-        Ok(TxStatus::Mined { height: child.get("mc_block_seqno").and_then(Value::as_u64).unwrap_or_default() })
+        // Follow the bounceable hops (where the tokens go) to the end: a bounce there sends them back (review L7).
+        let mut last = child;
+        for _ in 0..4 {
+            let Some(next) = last.get("out_msgs").and_then(Value::as_array).and_then(|o| {
+                o.iter().find(|m| m.get("bounce").and_then(Value::as_bool) == Some(true) && !m.get("destination").is_none_or(Value::is_null)).cloned()
+            }) else {
+                break;
+            };
+            let Some(t) = self.tx_by_in_msg(&api_hash(next.get("hash").unwrap_or(&Value::Null))?).await? else { return Ok(TxStatus::Pending) };
+            if let Err(why) = compute_ok(&t) {
+                return Ok(TxStatus::Reverted { reason: format!("{}: {why}", t.get("account").and_then(Value::as_str).unwrap_or("next hop")) });
+            }
+            last = t;
+        }
+        Ok(TxStatus::Mined { height: last.get("mc_block_seqno").and_then(Value::as_u64).unwrap_or_default() })
     }
 
     async fn sequence(&self, lane: usize) -> Result<u64> {
@@ -1121,8 +1212,11 @@ impl ChainAdapter for TonAdapter {
     async fn events(&self, from: u64, to: u64, contracts: &[String]) -> Result<Vec<Value>> {
         // Odoo's token list (raw `0:…`); anything else is not a TON master. None left ⇒ refuse rather than let
         // the cursor pass over blocks nobody filtered (review H1).
-        let masters: Vec<Addr> = contracts.iter().filter_map(|c| Addr::parse(c).ok()).collect();
-        if masters.is_empty() {
+        let mut masters = Vec::new();
+        for c in contracts.iter().filter_map(|c| Addr::parse(c).ok()) {
+            masters.push((c, self.wallet_code(&c).await?));
+        }
+        if !masters.iter().any(|(_, code)| code.is_some()) {
             bail!("node_config lists no TON jetton master");
         }
         let mut out = Vec::new();
@@ -1140,10 +1234,9 @@ impl ChainAdapter for TonAdapter {
                     if evs.is_empty() {
                         continue;
                     }
-                    let code_hash = tx.pointer("/account_state_after/code_hash").and_then(|h| api_hash(h).ok());
                     let tx_hash = hex0x(&api_hash(tx.get("hash").unwrap_or(&Value::Null))?);
                     for (log_index, emitter, ev) in evs {
-                        let Some((master, ev)) = self.authenticate(&emitter, &ev, code_hash, &masters).await? else { continue };
+                        let Some((master, ev)) = authenticate(&emitter, &ev, &masters) else { continue };
                         if block_hash.is_none() {
                             block_hash = Some(self.mc_block(seqno).await?);
                         }
@@ -1338,6 +1431,186 @@ mod tests {
         assert_eq!(c.refs()[1].refs().len(), 1, "long client data spills into a second cell");
         let _ = digest;
         assert!(auth_cell(&Auth::Passkey { r: [1; 32], s: [2; 32], authenticator_data: vec![0; 37], client_data_json: "{}".into() }).is_err());
+    }
+
+    #[test]
+    fn wallet_address_without_rpc_matches_the_contract() {
+        let v = vectors();
+        let code = cell(&v, "/jetton/wallet_code_boc");
+        let (owner, master) = (Addr::parse(s(&v, "/metaop/from")).unwrap(), Addr::parse(s(&v, "/jetton/master")).unwrap());
+        assert_eq!(jetton_wallet_address(&owner, &master, &code.hash(), code.depth()).unwrap().raw(), s(&v, "/jetton/payer_wallet"));
+    }
+
+    /// Review M3 + L10: authentication is local (no RPC per event), a forged emitter, an unregistered master and an
+    /// unregistered Mandate are skipped, and one transaction cannot make us decode more than a handful of events.
+    #[test]
+    fn events_are_authenticated_locally_and_capped() {
+        let v = vectors();
+        let code = cell(&v, "/jetton/wallet_code_boc");
+        let (payer, master) = (Addr::parse(s(&v, "/metaop/from")).unwrap(), Addr::parse(s(&v, "/jetton/master")).unwrap());
+        let wallet = Addr::parse(s(&v, "/jetton/payer_wallet")).unwrap();
+        let mandate = Addr { wc: 0, hash: [0x4d; 32] };
+        let masters = vec![(master, Some((code.hash(), code.depth())))];
+        let exe = TonEvent::Executed { master, from: payer, digest: [1; 32] };
+        assert_eq!(authenticate(&wallet, &exe, &masters), Some((master, exe.clone())));
+        assert_eq!(authenticate(&Addr { wc: 0, hash: [9; 32] }, &exe, &masters), None, "forged emitter");
+        assert_eq!(authenticate(&wallet, &TonEvent::Executed { master: mandate, from: payer, digest: [1; 32] }, &masters), None, "unregistered master");
+        assert_eq!(authenticate(&mandate, &exe, &masters), None, "unregistered mandate");
+        let with_mandate = vec![masters[0], (mandate, None)];
+        assert_eq!(authenticate(&mandate, &exe, &with_mandate), Some((master, exe.clone())));
+        let paid = TonEvent::Paid { from: mandate, to: payer, amount: 5, pay_ref: [2; 32] };
+        assert_eq!(authenticate(&wallet, &paid, &masters), Some((master, paid.clone())));
+        assert_eq!(authenticate(&mandate, &paid, &with_mandate), None, "a Mandate never emits PaymentSettled");
+        let body = b64encode(&alloy::hex::decode(s(&v, "/events/mte_boc")).unwrap());
+        let flood: Vec<Value> = (0..255).map(|_| json!({"destination": null, "message_content": {"body": body}})).collect();
+        assert_eq!(tx_events(&json!({"account": wallet.raw(), "out_msgs": flood})).unwrap().len(), MAX_EVENTS_PER_TX);
+    }
+
+    // ------------------------------------------------------------ a TON Center v3 stand-in for build/tx_status
+
+    #[derive(Default)]
+    struct Fake {
+        getters: HashMap<String, Value>,
+        by_msg: HashMap<String, Value>,
+        by_account: Vec<Value>,
+    }
+
+    async fn fake_api(f: Fake) -> String {
+        use axum::extract::{Path, Query, State};
+        type S = Arc<std::sync::Mutex<Fake>>;
+        async fn h(State(s): State<S>, Path(path): Path<String>, Query(q): Query<HashMap<String, String>>, body: String) -> axum::Json<Value> {
+            let f = s.lock().unwrap();
+            axum::Json(match path.as_str() {
+                "runGetMethod" => {
+                    let b: Value = serde_json::from_str(&body).unwrap();
+                    f.getters.get(b["method"].as_str().unwrap()).cloned().unwrap_or(json!({"exit_code": 11, "stack": []}))
+                }
+                "transactionsByMessage" => json!({"transactions": f.by_msg.get(&q["msg_hash"]).into_iter().collect::<Vec<_>>()}),
+                "transactions" => json!({"transactions": f.by_account}),
+                _ => json!({}),
+            })
+        }
+        let app = axum::Router::new().route("/api/v3/{path}", axum::routing::any(h)).with_state(Arc::new(std::sync::Mutex::new(f)));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        url
+    }
+
+    fn adapter(url: &str) -> TonAdapter {
+        let cfg = ChainCfg {
+            family: "ton".into(),
+            network: Some("-239".into()),
+            evm_chain_number: 0,
+            rpc_urls: vec![url.into()],
+            signer_key_env: String::new(),
+            private_key: None,
+            lanes: vec![0],
+            params: toml::Table::new(),
+            finality: crate::config::FinalityCfg { mode: "depth".into(), depth: 0, quorum: 1 },
+            dex: None,
+            poll_ms: 200,
+            stuck_after_secs: 60,
+            max_gas_per_tx: 0,
+            max_fee_cap_gwei: 0,
+        };
+        TonAdapter::new(&cfg, &[LocalSigner::new(Curve::Ed25519, &[0x11; 32]).unwrap()]).unwrap()
+    }
+
+    fn num(n: u128) -> Value {
+        json!({"exit_code": 0, "stack": [{"type": "num", "value": format!("0x{n:x}")}]})
+    }
+
+    /// The forward TON a built `SignedOp` carries, and the TON the lane attaches.
+    fn forward_and_value(b: &Built) -> (u128, u128) {
+        let body = boc_parse(&b.body).unwrap();
+        let mut t = body.refs()[2].parser();
+        if t.bit().unwrap() {
+            t.reference().unwrap();
+        }
+        if t.bit().unwrap() {
+            t.reference().unwrap();
+        }
+        t.addr().unwrap();
+        (t.coins().unwrap(), b.meta["value"].as_str().unwrap().parse().unwrap())
+    }
+
+    /// Review H2 + L8: the node attaches at least the forward TON the payer signed, a job's own `forward_nanoton`
+    /// when larger, and sizes the lane's TON from that job's forward (not the node default).
+    #[tokio::test]
+    async fn build_attaches_the_signed_forward_floor_and_sizes_value_per_job() {
+        let url = fake_api(Fake { getters: HashMap::from([("get_lane_nonce".into(), num(0)), ("get_owner_pubkey".into(), num(0))]), ..Default::default() }).await;
+        let a = adapter(&url);
+        let key = LocalSigner::new(Curve::Ed25519, &[1; 32]).unwrap();
+        let w5 = W5::new(key.public_key().try_into().unwrap(), -239).unwrap();
+        let (from, contract) = (w5.address().unwrap(), Addr { wc: 0, hash: [0xc0; 32] });
+        let floor: u128 = 300_000_000;
+        let mut extra = [0u8; 32];
+        extra[16..].copy_from_slice(&floor.to_be_bytes());
+        let vu = crate::submit::now() + 600;
+        let op = Builder::new()
+            .bytes(b"bamboo.metaop.v1")
+            .int(-239, 32)
+            .uint(1, 8)
+            .uint(10, 128)
+            .uint(0, 64)
+            .uint(vu as u128, 64)
+            .addr(Some(&contract))
+            .reference(Builder::new().addr(Some(&from)).addr(Some(&Addr { wc: 0, hash: [2; 32] })).addr(None).end().unwrap())
+            .reference(Builder::new().bytes(&[3; 32]).bytes(&[4; 32]).bytes(&extra).end().unwrap())
+            .end()
+            .unwrap();
+        let ts = 1_800_000_000u64;
+        let sig = key.sign(&envelope_hash(&from, ts, "pay.example", &op).unwrap()).unwrap();
+        let signature = json!({"kind": "ton_connect", "signature": b64encode(&sig), "timestamp": ts, "domain": "pay.example",
+                               "state_init": b64encode(&boc_serialize(&w5.state_init().unwrap()))});
+        let job = |extra: Value| -> Job {
+            serde_json::from_value(json!({"id": 1, "kind": "signed_op", "op": {"contract": contract.raw(), "op_kind": "pay",
+                "payload": alloy::hex::encode(boc_serialize(&op)), "signature": signature.to_string(), "digest": hex0x(&op.hash()), "extra": extra}}))
+            .unwrap()
+        };
+        let b = a.build(&job(json!({})), 0).await.unwrap();
+        assert_eq!(forward_and_value(&b), (floor, floor + 100_000_000), "the signed floor, not the node default 0");
+        let b = a.build(&job(json!({"forward_nanoton": 500_000_000u64})), 0).await.unwrap();
+        assert_eq!(forward_and_value(&b), (500_000_000, 600_000_000), "this job's forward sizes the value");
+    }
+
+    /// Review L6 + L7: the lane's tx is followed to the hop that credits the payee (its bounce = not paid), and a
+    /// nonce failure whose op a copy already executed is reported as mined.
+    #[tokio::test]
+    async fn tx_status_follows_the_tokens_and_spots_a_front_run_copy() {
+        let v = vectors();
+        let (lane_tx, h1, h2) = ([0x0au8; 32], [0x01u8; 32], [0x02u8; 32]);
+        let wallet = s(&v, "/jetton/payer_wallet").to_string();
+        let ok = json!({"compute_ph": {"success": true, "exit_code": 0}});
+        let failed = |code: i64| json!({"aborted": true, "compute_ph": {"success": false, "exit_code": code}});
+        let signed_op = b64encode(&alloy::hex::decode(s(&v, "/signed_op/boc")).unwrap());
+        let lane = json!({"account": "0:".to_string() + &"11".repeat(32), "description": ok, "out_msgs": [
+            {"hash": b64encode(&h1), "destination": wallet, "bounce": true, "message_content": {"body": signed_op}}]});
+        let payer = |d: Value| json!({"account": wallet, "description": d, "mc_block_seqno": 5, "out_msgs": [
+            {"hash": b64encode(&h2), "destination": "0:".to_string() + &"22".repeat(32), "bounce": true},
+            {"hash": b64encode(&[3; 32]), "destination": "0:".to_string() + &"11".repeat(32), "bounce": false}]});
+        let payee = |d: Value| json!({"account": "0:".to_string() + &"22".repeat(32), "description": d, "mc_block_seqno": 6, "out_msgs": [
+            {"hash": b64encode(&[4; 32]), "destination": "0:".to_string() + &"33".repeat(32), "bounce": false}]});
+        let id = hex0x(&lane_tx);
+        let at = |m: Vec<(&[u8; 32], Value)>| m.into_iter().map(|(k, t)| (alloy::hex::encode(k), t)).collect::<HashMap<_, _>>();
+
+        let id = id.as_str();
+        let st = |f: Fake| async move { adapter(&fake_api(f).await).tx_status(id).await.unwrap() };
+        let pending = st(Fake { by_msg: at(vec![(&lane_tx, lane.clone()), (&h1, payer(ok.clone()))]), ..Default::default() }).await;
+        assert!(matches!(pending, TxStatus::Pending), "payee hop not seen yet: {pending:?}");
+        let bounced = st(Fake { by_msg: at(vec![(&lane_tx, lane.clone()), (&h1, payer(ok.clone())), (&h2, payee(failed(-14)))]), ..Default::default() }).await;
+        assert!(matches!(bounced, TxStatus::Reverted { .. }), "payee hop bounced: {bounced:?}");
+        let mined = st(Fake { by_msg: at(vec![(&lane_tx, lane.clone()), (&h1, payer(ok.clone())), (&h2, payee(ok.clone()))]), ..Default::default() }).await;
+        assert!(matches!(mined, TxStatus::Mined { height: 6 }), "{mined:?}");
+
+        let mte = b64encode(&alloy::hex::decode(s(&v, "/events/mte_boc")).unwrap());
+        let copy = json!({"account": wallet, "description": ok, "mc_block_seqno": 4, "out_msgs": [{"destination": null, "message_content": {"body": mte}}]});
+        let nonce_used = at(vec![(&lane_tx, lane.clone()), (&h1, payer(failed(E_NONCE)))]);
+        let r = st(Fake { by_msg: nonce_used.clone(), by_account: vec![copy], ..Default::default() }).await;
+        assert!(matches!(r, TxStatus::Mined { height: 4 }), "a copy executed our digest: {r:?}");
+        let r = st(Fake { by_msg: nonce_used, ..Default::default() }).await;
+        assert!(matches!(r, TxStatus::Reverted { .. }), "{r:?}");
     }
 
     mod prop {

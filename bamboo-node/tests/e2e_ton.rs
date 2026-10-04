@@ -297,6 +297,15 @@ async fn ton_payments_lanes_finality_and_anti_lock() {
     assert_eq!(signed4["outer_nonce"], 1);
     assert_eq!(balance(&api, &mb, &shop.addr).await, 300);
 
+    // A job whose forward TON is above the node default sizes its own lane TON (review L8): it pays.
+    let mut fwd = signed_pay(&alice, global_id, &wb, &shop.addr, 20, [9; 32], [0xd4; 32], 5);
+    fwd["op"]["extra"] = json!({"forward_nanoton": 300_000_000u64});
+    state.lock().unwrap().jobs.push(fwd);
+    assert!(lane_step(&adapter, &odoo, 1, "e2e#1").await.unwrap());
+    let last = state.lock().unwrap().reports.last().cloned().unwrap();
+    assert_eq!((last["job_id"].as_i64(), last["chain_state"].as_str()), (Some(5), Some("mined")), "{last}");
+    assert_eq!(balance(&api, &mb, &shop.addr).await, 320);
+
     // Finality: the indexer walks masterchain blocks and reports authenticated events only.
     while index_step(&adapter, &odoo).await.unwrap() {}
     let ingested = state.lock().unwrap().ingested.clone();
@@ -315,6 +324,6 @@ async fn ton_payments_lanes_finality_and_anti_lock() {
             assert!(h.starts_with("0x") && h.len() == 66, "{k}: {h}");
         }
     }
-    assert_eq!(ingested.iter().filter(|e| e["event"] == "MetaTransactionExecuted").count(), 3);
-    assert_eq!(ingested.iter().filter(|e| e["event"] == "PaymentSettled").count(), 3, "mints carry no payRef: no event");
+    assert_eq!(ingested.iter().filter(|e| e["event"] == "MetaTransactionExecuted").count(), 4);
+    assert_eq!(ingested.iter().filter(|e| e["event"] == "PaymentSettled").count(), 4, "mints carry no payRef: no event");
 }
