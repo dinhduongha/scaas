@@ -22,7 +22,8 @@ admin_bind = "127.0.0.1:9108"                    # /healthz /readyz /metrics (R5
 
 # One 24-word BIP-39 mnemonic for every lane that has no private_key of its own (R60).
 # Lanes derive per family by SLIP-44: evm m/44'/60'/0'/0/i, hedera m/44'/3030'/0'/0/i,
-# cosmos m/44'/118'/0'/0/i, sui m/44'/784'/i'/0'/0', soroban m/44'/148'/i', ton m/44'/607'/i'.
+# cosmos m/44'/118'/0'/0/i, sui m/44'/784'/i'/0'/0', soroban m/44'/148'/i', ton m/44'/607'/i',
+# aptos m/44'/637'/i'/0'/0'.
 [keys]
 mnemonic = { keystore = "/etc/bamboo/mnemonic.json", passphrase_env = "BAMBOO_KEYSTORE_PASSPHRASE" }
 # mnemonic = { env = "BAMBOO_MNEMONIC" }
@@ -112,3 +113,14 @@ finality = { mode = "tag", quorum = 1 }          # commitment `finalized`
 # program_id: the bamboo program (replace with your deployment); max_cu caps the compute-unit limit,
 # max_priority_lamports the total priority fee per tx (v1 header), max_loaded_bytes the loaded-account-data limit.
 params = { program_id = "BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d", max_cu = 600000, max_priority_lamports = 2000000 }
+
+[[chains]]                                       # Aptos
+family = "aptos"
+network = "2"                                    # the chain id: 1 mainnet, 2 testnet, 4 localnet
+rpc_urls = ["https://fullnode.testnet.aptoslabs.com/v1"]
+lanes = [0, 1]                                   # ed25519 accounts: fund each lane address with APT
+finality = { mode = "instant", quorum = 1 }      # AptosBFT: a committed block is final
+# package: the bamboo package (object code deployment). indexer_url: Aptos Indexer API (GraphQL) — events are
+# hinted there and re-read from the full node; the cursor never passes what its user_transaction_processor has
+# processed. indexer_api_key_env names the env var holding an API key (optional). tx_ttl_s caps a lane tx's life.
+params = { package = "0x<package address>", indexer_url = "https://api.testnet.aptoslabs.com/v1/graphql", tx_ttl_s = 600, max_gas_amount = 200000 }

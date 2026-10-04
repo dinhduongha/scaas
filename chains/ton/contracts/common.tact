@@ -122,7 +122,7 @@ const TRADE_TAG: Int = 0x626d7472; // "bmtr": forward payload `trade_tag ^MetaOp
 const CANCEL_TAG: Int = 0x626d636c;
 
 // Replay entries live at most two LANE_TTL windows: a MetaOp may not be valid further ahead (review M4).
-const LANE_TTL: Int = 2592000; // 30 days
+const LANE_TTL: Int = 2592000; // 30 days — keep equal to fam_ton.LANE_TTL_S and ≤ Odoo LANE_HORIZON_S
 
 const AUTH_TONCONNECT: Int = 0;
 const AUTH_PASSKEY: Int = 1;
