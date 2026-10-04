@@ -14,7 +14,9 @@ use zeroize::Zeroizing;
 use crate::abi::{self, Tok};
 use crate::bulletproofs::Gens;
 use crate::curve::{decode_point, decode_scalar, encode_point, encode_scalar, Bls12381, Bn254, Fr, ZCurve, G};
-use crate::elgamal::{cached_table, check_balance, check_ram, encrypt, mem_available, BsgsParams, Ciphertext};
+use crate::elgamal::{
+    cached_table, cached_table_bits, check_balance, check_ram, encrypt, mem_available, BsgsParams, Ciphertext,
+};
 
 /// Largest wasm table without `allowLargeTable` (2^24 entries, 256 MiB).
 const WASM_TABLE_BITS_DEFAULT_MAX: u32 = 24;
@@ -284,7 +286,8 @@ fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
                 if p.table_bits > WASM_TABLE_BITS_DEFAULT_MAX && v.get("allowLargeTable") != Some(&Value::Bool(true)) {
                     return Err("tableBits above 24 in wasm needs \"allowLargeTable\": true".into());
                 }
-            } else {
+            } else if cached_table_bits::<C>() != Some(p.table_bits) {
+                // a same-size table already in memory needs nothing more (review N4)
                 check_ram(p.table_bits, mem_available()).map_err(e)?;
             }
             let field = if cmd == "decrypt" { "ct" } else { "pending" };

@@ -163,6 +163,11 @@ pub fn cached_table<C: ZCurve>(table_bits: u32) -> Result<Arc<BsgsTable<C>>, ZEr
     Ok(t)
 }
 
+/// `table_bits` of the table [`cached_table`] currently holds for this curve, if any.
+pub fn cached_table_bits<C: ZCurve>() -> Option<u32> {
+    C::bsgs_slot().lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|t| t.bits)
+}
+
 /// Per-curve storage behind [`cached_table`].
 pub type BsgsSlot<C> = Mutex<Option<Arc<BsgsTable<C>>>>;
 
@@ -321,6 +326,7 @@ mod tests {
         let t = cached_table::<C>(18).unwrap();
         // Cached per curve, and the size `table_bytes` states.
         assert!(Arc::ptr_eq(&t, &cached_table::<C>(18).unwrap()));
+        assert_eq!(cached_table_bits::<C>(), Some(18));
         assert_eq!(std::mem::size_of_val(&t.baby[..]) as u64, table_bytes(18));
         let a = encrypt(&y, 1_000_000, &Fr::<C>::rand(&mut rng));
         let b = encrypt(&y, 234_567, &Fr::<C>::rand(&mut rng));
