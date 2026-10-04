@@ -1057,6 +1057,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "blake2",
+ "bs58",
  "coins-bip32",
  "ed25519-dalek",
  "eth-keystore",

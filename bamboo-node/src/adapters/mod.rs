@@ -11,6 +11,7 @@ pub mod cosmos;
 pub mod evm;
 pub mod hedera;
 pub mod soroban;
+pub mod sui;
 pub mod ton;
 
 /// Adapter giữ signer của nó; `LocalSigner` không `Clone` nên chép khoá bên trong.
@@ -28,6 +29,7 @@ pub fn build(cfg: &ChainCfg, signers: &[LocalSigner]) -> Result<Arc<dyn ChainAda
         "hedera" => Ok(Arc::new(hedera::HederaAdapter::from_cfg(cfg, signers)?)),
         "soroban" => Ok(Arc::new(soroban::SorobanAdapter::new(cfg, signers)?)),
         "ton" => Ok(Arc::new(ton::TonAdapter::new(cfg, signers)?)),
+        "sui" => Ok(Arc::new(sui::SuiAdapter::new(cfg, signers)?)),
         other => bail!("chain {}: no adapter for family {other} in this build", cfg.chain_key()),
     }
 }
