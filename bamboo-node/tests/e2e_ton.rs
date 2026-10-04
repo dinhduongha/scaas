@@ -85,6 +85,7 @@ fn allowed(from: &str, to: &str) -> bool {
 
 #[derive(Default)]
 struct FakeOdoo {
+    tokens: Vec<String>,
     states: std::collections::HashMap<i64, String>,
     refused: Vec<Value>,
     jobs: Vec<Value>,
@@ -96,10 +97,11 @@ struct FakeOdoo {
 async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path<(String, String)>, Json(body): Json<Value>) -> Json<Value> {
     let mut o = s.lock().unwrap();
     let out = match (model.as_str(), method.as_str()) {
-        // TON addresses are not EVM addresses: tokens stay out of node_config (needs from lead, see report).
+        // The real masters, raw `0:…` like `blockchain.chain._node_config` (review H1).
         ("blockchain.chain", "node_config") => json!({
             "evm_chain_number": body["evm_chain_number"], "finality_mode": "depth", "finality_depth": 0,
-            "finality_quorum": 1, "indexed_block": o.indexed_block, "tokens": [], "journal_max_nonce": null, "inflight": []}),
+            "finality_quorum": 1, "indexed_block": o.indexed_block, "journal_max_nonce": null, "inflight": [],
+            "tokens": o.tokens.iter().map(|a| json!({"address": a, "decimals": 9})).collect::<Vec<_>>()}),
         ("blockchain.relay.job", "relay_poll") => json!(std::mem::take(&mut o.jobs)),
         ("blockchain.relay.job", "relay_claim") => {
             for id in body["job_ids"].as_array().unwrap() {
@@ -120,6 +122,10 @@ async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path
             json!({"ok": true})
         }
         ("blockchain.chain.event", "chain_event_ingest") => {
+            // Like `chain_event._decode`: one event from an unregistered contract rolls the whole batch back.
+            if let Some(e) = body["events"].as_array().unwrap().iter().find(|e| !o.tokens.iter().any(|t| e["contract"] == *t)) {
+                return Json(json!({"error": format!("Event from an unregistered contract {}", e["contract"])}));
+            }
             assert_eq!(body["from_block"].as_u64().unwrap(), o.indexed_block + 1, "cursor gap");
             o.indexed_block = body["to_block"].as_u64().unwrap();
             o.ingested.extend(body["events"].as_array().unwrap().iter().cloned());
@@ -219,7 +225,6 @@ async fn ton_payments_lanes_finality_and_anti_lock() {
         .collect();
     let mut params = toml::Table::new();
     params.insert("global_id".into(), toml::Value::Integer(global_id as i64));
-    params.insert("jetton_masters".into(), toml::Value::Array(vec![toml::Value::String(ma.raw()), toml::Value::String(mb.raw())]));
     let cfg = ChainCfg {
         family: "ton".into(),
         network: Some("localnet".into()),
@@ -256,7 +261,7 @@ async fn ton_payments_lanes_finality_and_anti_lock() {
     let x = signed_pay(&alice, global_id, &wa, &shop.addr, 400, lane, [0xa1; 32], 1);
     let y = signed_pay(&alice, global_id, &wb, &shop.addr, 250, lane, [0xb2; 32], 2);
 
-    let state = Arc::new(Mutex::new(FakeOdoo::default()));
+    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![ma.raw(), mb.raw()], ..Default::default() }));
     let odoo = odoo_at(start_fake(state.clone()).await);
 
     // Anti-lock: X is withheld (never queued yet); Y goes through on lane 0.

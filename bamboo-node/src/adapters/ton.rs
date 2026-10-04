@@ -869,7 +869,6 @@ pub struct TonAdapter {
     w5: Vec<W5>,
     api: Api,
     global_id: i32,
-    masters: Vec<Addr>,
     mandate_code: Option<[u8; 32]>,
     attach: u128,
     forward: u128,
@@ -886,22 +885,15 @@ fn param_u128(cfg: &ChainCfg, k: &str, default: u128) -> u128 {
 }
 
 impl TonAdapter {
-    /// `params`: `global_id` (default by network: `-239`, `-3`; required otherwise), `jetton_masters`
-    /// (raw addresses), `mandate_code_hash` (optional), `attach_nanoton` (default 0.15 TON),
-    /// `forward_nanoton` (default 0), `api_key_env`.
+    /// `params`: `global_id` (default by network: `-239`, `-3`; required otherwise), `mandate_code_hash`
+    /// (optional), `attach_nanoton` (default 0.15 TON), `forward_nanoton` (default 0), `api_key_env`.
+    /// Jetton masters are NOT configured here: they are Odoo's token list (`node_config`, review H1).
     pub fn new(cfg: &ChainCfg, signers: &[LocalSigner]) -> Result<Self> {
         let net = cfg.network.clone().unwrap_or_default();
         let global_id = match cfg.params.get("global_id").and_then(|v| v.as_integer()) {
             Some(g) => g as i32,
             None => net.parse::<i32>().map_err(|_| anyhow!("chain {}: params.global_id is required for {net}", cfg.chain_key()))?,
         };
-        let masters = cfg
-            .params
-            .get("jetton_masters")
-            .and_then(|v| v.as_array())
-            .map(|a| a.iter().filter_map(|x| x.as_str()).map(Addr::parse).collect::<Result<Vec<_>>>())
-            .transpose()?
-            .unwrap_or_default();
         let mandate_code = param_str(cfg, "mandate_code_hash").map(|h| b32(&h)).transpose()?;
         let mut w5 = Vec::new();
         let mut lanes = Vec::new();
@@ -920,7 +912,6 @@ impl TonAdapter {
             w5,
             api: Api::new(cfg.rpc_urls.first().ok_or_else(|| anyhow!("no rpc_urls"))?, key)?,
             global_id,
-            masters,
             mandate_code,
             attach: param_u128(cfg, "attach_nanoton", 150_000_000),
             forward: param_u128(cfg, "forward_nanoton", 0),
@@ -947,10 +938,10 @@ impl TonAdapter {
     }
 
     /// Normalized event for Odoo, or `None` when the emitter is not one of ours (R10-10).
-    async fn authenticate(&self, emitter: &Addr, ev: &TonEvent, code_hash: Option<[u8; 32]>) -> Result<Option<(Addr, TonEvent)>> {
+    async fn authenticate(&self, emitter: &Addr, ev: &TonEvent, code_hash: Option<[u8; 32]>, masters: &[Addr]) -> Result<Option<(Addr, TonEvent)>> {
         match ev {
             TonEvent::Executed { master, from, .. } => {
-                if !self.masters.contains(master) {
+                if !masters.contains(master) {
                     return Ok(None);
                 }
                 if self.wallet_of(master, from).await? == *emitter {
@@ -963,7 +954,7 @@ impl TonAdapter {
                 Ok(None)
             }
             TonEvent::Paid { to, .. } => {
-                for m in &self.masters {
+                for m in masters {
                     if self.wallet_of(m, to).await? == *emitter {
                         return Ok(Some((*m, ev.clone())));
                     }
@@ -1127,7 +1118,13 @@ impl ChainAdapter for TonAdapter {
         self.mc_block(height).await
     }
 
-    async fn events(&self, from: u64, to: u64) -> Result<Vec<Value>> {
+    async fn events(&self, from: u64, to: u64, contracts: &[String]) -> Result<Vec<Value>> {
+        // Odoo's token list (raw `0:…`); anything else is not a TON master. None left ⇒ refuse rather than let
+        // the cursor pass over blocks nobody filtered (review H1).
+        let masters: Vec<Addr> = contracts.iter().filter_map(|c| Addr::parse(c).ok()).collect();
+        if masters.is_empty() {
+            bail!("node_config lists no TON jetton master");
+        }
         let mut out = Vec::new();
         for seqno in from..=to {
             let mut offset = 0usize;
@@ -1146,7 +1143,7 @@ impl ChainAdapter for TonAdapter {
                     let code_hash = tx.pointer("/account_state_after/code_hash").and_then(|h| api_hash(h).ok());
                     let tx_hash = hex0x(&api_hash(tx.get("hash").unwrap_or(&Value::Null))?);
                     for (log_index, emitter, ev) in evs {
-                        let Some((master, ev)) = self.authenticate(&emitter, &ev, code_hash).await? else { continue };
+                        let Some((master, ev)) = self.authenticate(&emitter, &ev, code_hash, &masters).await? else { continue };
                         if block_hash.is_none() {
                             block_hash = Some(self.mc_block(seqno).await?);
                         }
