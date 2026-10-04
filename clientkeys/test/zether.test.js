@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   deriveMasterSk, deriveChildSk, deriveConfKey, confPublic, schnorrSign, schnorrVerify, popMessage, zetherPop,
-  sealConfKey, openConfKey, confLabel,
+  sealConfKey, openConfKey, confLabel, CURVES, encodePoint, checkBalance, sealBalanceCache, openBalanceCache,
+  setCachedBalance, cacheAfterDebit, cacheAfterRollOver, readBalance,
 } from '../src/zether.js';
 import { deriveKey, seedFromWords, NETWORKS } from '../src/seed.js';
 import { fromHex, hex } from '../src/bytes.js';
@@ -138,3 +139,82 @@ test('path-index rule == S3 prover (r33_inputs.json)', () => {
   }
   assert.equal(hex(seedFromWords(v.passphrase.mnemonic, v.passphrase.passphrase_nfc)), v.passphrase.seed);
 });
+
+// ------------------------------------------------------------------ balance cache (zether-limits §5)
+
+const mul = (P, k) => (k === 0n ? P.constructor.ZERO : P.multiply(k));
+function enc(curve, Y, b, r) {
+  const { Point } = CURVES[curve];
+  return { C: mul(Point.BASE, b).add(mul(Y, r)), D: mul(Point.BASE, r) };
+}
+const hexCt = (curve, ct) => ({ C: hex(encodePoint(curve, ct.C)), D: hex(encodePoint(curve, ct.D)) });
+
+for (const curve of ['bn254', 'bls12381']) {
+  const { Point } = CURVES[curve];
+  const x = 0x5eed1234n;
+  const Y = Point.BASE.multiply(x);
+  const ua = '0x' + 'aa'.repeat(32);
+  const token = '0x5FbDB2315678afecb367f032d93F642f64180aa3';
+
+  test(`${curve}: checkBalance — one comparison, any size, exact`, () => {
+    const big = (1n << 54n) - 5n; // past Number.MAX_SAFE_INTEGER
+    const acc = hexCt(curve, enc(curve, Y, big, 77n));
+    assert.equal(checkBalance(curve, x, acc, big), true);
+    assert.equal(checkBalance(curve, x, acc, big - 1n), false);
+    assert.equal(checkBalance(curve, x, acc, String(big)), true);
+    assert.equal(checkBalance(curve, x + 1n, acc, big), false);
+    assert.equal(checkBalance(curve, x, acc, -1n), false);
+    const zero = hexCt(curve, { C: Point.ZERO, D: Point.ZERO }); // fresh account (O, O)
+    assert.equal(checkBalance(curve, x, zero, 0n), true);
+    assert.equal(checkBalance(curve, x, zero, 1n), false);
+  });
+
+  test(`${curve}: cache box opens only with x, BigInt survives`, async () => {
+    const entries = { k: { ua, token, accSeq: 3, balance: (1n << 54n) - 1n } };
+    const box = await sealBalanceCache(curve, x, entries);
+    assert.deepEqual(await openBalanceCache(curve, x, box), entries);
+    assert.deepEqual(await openBalanceCache(curve, x + 1n, box), {});
+    assert.deepEqual(await openBalanceCache(curve, x, { ...box, ct: box.ct.slice(0, -2) + 'AA' }), {});
+    assert.deepEqual(await openBalanceCache(curve, x, undefined), {});
+    assert.ok(!JSON.stringify(box).includes(String((1n << 54n) - 1n)), 'balance is not stored in clear');
+  });
+
+  test(`${curve}: balance > 2^44 — device refuses, CLI value validated, debit and rollOver tracked`, async () => {
+    const b0 = (1n << 44n) + (1n << 34n);
+    let acc = enc(curve, Y, b0, 99n);
+    const st = () => ({ ua, token, acc: hexCt(curve, acc), accSeq: 1 });
+    const entries = {};
+    const tooBig = async () => { throw new Error('plaintext outside [0, 2^bound_bits)'); };
+    await assert.rejects(readBalance(curve, x, entries, st(), tooBig), /zether-read-balance/);
+    // The desktop reader's answer is entered — a wrong one is refused.
+    assert.equal(setCachedBalance(curve, x, entries, st(), b0 + 1n), false);
+    assert.equal(setCachedBalance(curve, x, entries, st(), b0), true);
+    assert.deepEqual(await readBalance(curve, x, entries, st(), tooBig), { balance: b0, source: 'cache' });
+    // Own transfer: acc −= (C_deb + [fee]G, D_out), v > 2^32.
+    const v = (1n << 33n) + 7n, fee = 300n, s = 4242n;
+    acc = { C: acc.C.subtract(mul(Point.BASE, v).add(Y.multiply(s))).subtract(mul(Point.BASE, fee)), D: acc.D.subtract(Point.BASE.multiply(s)) };
+    assert.equal(cacheAfterDebit(curve, x, entries, st(), v, fee), true);
+    const b1 = b0 - v - fee;
+    assert.equal((await readBalance(curve, x, entries, st(), tooBig)).balance, b1);
+    // rollOver: acc += pending; the device decrypts only pending.
+    const p = 123_456_789n;
+    acc = { C: acc.C.add(enc(curve, Y, p, 5n).C), D: acc.D.add(enc(curve, Y, p, 5n).D) };
+    assert.equal(cacheAfterRollOver(curve, x, entries, st(), p + 1n), false, 'wrong pending: entry dropped');
+    await assert.rejects(readBalance(curve, x, entries, st(), tooBig), /zether-read-balance/);
+    assert.equal(setCachedBalance(curve, x, entries, st(), b1), false, 'stale value after rollOver refused');
+    assert.equal(setCachedBalance(curve, x, entries, st(), b1 + p), true);
+    assert.equal((await readBalance(curve, x, entries, st(), tooBig)).balance, b1 + p);
+  });
+
+  test(`${curve}: small balance — cache miss falls back to device BSGS and fills the cache`, async () => {
+    const acc = hexCt(curve, enc(curve, Y, 5000n, 3n));
+    const entries = {};
+    const state = { ua, token, acc, accSeq: 2 };
+    let calls = 0;
+    const decrypt = async () => { calls++; return '5000'; };
+    assert.deepEqual(await readBalance(curve, x, entries, state, decrypt), { balance: 5000n, source: 'bsgs' });
+    assert.deepEqual(await readBalance(curve, x, entries, state, decrypt), { balance: 5000n, source: 'cache' });
+    assert.equal(calls, 1);
+    await assert.rejects(readBalance(curve, x, {}, state, async () => '5001'), /does not match/);
+  });
+}
