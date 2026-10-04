@@ -230,6 +230,33 @@ fn eip2333_bn254() -> Value {
     json!(out)
 }
 
+/// R33 input rules as the JSON API applies them, for S4's `clientkeys/src/zether.js` to match:
+/// which path indices are accepted (and the key they give), and the NFKD passphrase rule.
+fn r33_inputs() -> Value {
+    let coins = [
+        json!(0), json!(60), json!(4294967295u64), json!(4294967296u64), json!(-1), json!(1.5), json!("60"),
+        json!("+60"), json!("060"), json!("4294967296"), json!("-1"), json!("6 0"), json!(""), json!(null),
+        json!(true), json!([60]),
+    ];
+    let index_cases: Vec<Value> = coins
+        .into_iter()
+        .map(|coin| {
+            let req = json!({"curve": "bn254", "key": {"seed": hx(&seed()), "coin": coin, "account": 0}});
+            match crate::api::call("keygen", &req.to_string()) {
+                Ok(out) => json!({"coin": coin, "ok": true, "Y": serde_json::from_str::<Value>(&out).unwrap()["Y"]}),
+                Err(_) => json!({"coin": coin, "ok": false}),
+            }
+        })
+        .collect();
+    let pass = "m\u{1ead}t kh\u{1ea9}u";
+    json!({
+        "index_rule": "integer (JSON number or decimal string) in [0, 2^32 - 1]; anything else is an error",
+        "seed": hx(&seed()), "curve": "bn254", "account": 0, "index_cases": index_cases,
+        "passphrase": {"mnemonic": MNEMONIC, "passphrase_nfc": pass,
+                       "seed": hx(&seed_from_mnemonic(MNEMONIC, pass).unwrap()[..])},
+    })
+}
+
 /// All vector files, `(file name, content)`.
 pub fn generate() -> Vec<(String, Value)> {
     let mut files = vec![];
@@ -246,5 +273,6 @@ pub fn generate() -> Vec<(String, Value)> {
             "eip2333_bn254_variant": eip2333_bn254(),
         }),
     ));
+    files.push(("r33_inputs.json".into(), r33_inputs()));
     files
 }
