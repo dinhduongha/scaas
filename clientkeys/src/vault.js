@@ -22,12 +22,13 @@ async function gcm(op, keyBytes, iv, data, aad) {
   return new Uint8Array(out);
 }
 
-async function seal(keyBytes, data, aad) {
+/** AES-256-GCM box `{iv, ct}` (also the Zether balance-cache box, zether.js). */
+export async function seal(keyBytes, data, aad) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   return { iv: b64url(iv), ct: b64url(await gcm('encrypt', keyBytes, iv, data, aad)) };
 }
 
-async function open(keyBytes, box, aad) {
+export async function open(keyBytes, box, aad) {
   try {
     return await gcm('decrypt', keyBytes, fromB64url(box.iv), fromB64url(box.ct), aad);
   } catch {

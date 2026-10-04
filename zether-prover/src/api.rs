@@ -1,6 +1,7 @@
 //! JSON-in / JSON-out surface shared by the CLI and the WASM bindings. Hex is `0x…`, points
 //! and scalars use the wire encodings of zether-design §2, integers are JSON numbers or
-//! decimal strings.
+//! decimal strings on input; amounts on output are decimal strings (balances reach 2^54 and
+//! values 2^64, past JavaScript's 2^53).
 //!
 //! A `key` is `{"x": hex}` or `{"mnemonic": words, "passphrase"?: s, "coin": n, "account": n}`
 //! or `{"seed": hex, "coin": n, "account": n}` (R33, `<use> = 7`).
@@ -13,7 +14,12 @@ use zeroize::Zeroizing;
 use crate::abi::{self, Tok};
 use crate::bulletproofs::Gens;
 use crate::curve::{decode_point, decode_scalar, encode_point, encode_scalar, Bls12381, Bn254, Fr, ZCurve, G};
-use crate::elgamal::{encrypt, Ciphertext};
+use crate::elgamal::{
+    cached_table, cached_table_bits, check_balance, check_ram, encrypt, mem_available, BsgsParams, Ciphertext,
+};
+
+/// Largest wasm table without `allowLargeTable` (2^24 entries, 256 MiB).
+const WASM_TABLE_BITS_DEFAULT_MAX: u32 = 24;
 use crate::envelope::{self, MetaTx};
 use crate::keys::{seed_from_mnemonic, ZetherKey};
 use crate::schnorr;
@@ -50,9 +56,17 @@ fn opt_fixed<const N: usize>(v: &Value, k: &str) -> R<[u8; N]> {
     }
 }
 
+/// JS loses precision above 2^53 − 1 before the request is even built, so a larger JSON Number is
+/// refused rather than trusted (review L1): amounts and balances that big come as decimal strings.
+const MAX_SAFE_JSON_INT: u64 = (1 << 53) - 1;
+
 fn num(v: &Value, k: &str) -> R<u64> {
     match get(v, k)? {
-        Value::Number(n) => n.as_u64().ok_or_else(|| format!("`{k}` must be a u64")),
+        Value::Number(n) => match n.as_u64() {
+            Some(x) if x <= MAX_SAFE_JSON_INT => Ok(x),
+            Some(_) => Err(format!("`{k}` above 2^53 - 1 must be a decimal string")),
+            None => Err(format!("`{k}` must be a u64")),
+        },
         Value::String(s) => s.parse::<u64>().map_err(|_| format!("`{k}` must be a decimal u64")),
         _ => Err(format!("`{k}` must be a number")),
     }
@@ -60,6 +74,14 @@ fn num(v: &Value, k: &str) -> R<u64> {
 
 fn num32(v: &Value, k: &str) -> R<u32> {
     u32::try_from(num(v, k)?).map_err(|_| format!("`{k}` must fit in u32"))
+}
+
+fn opt_bits(v: &Value, k: &str, default: u32) -> R<u32> {
+    if v.get(k).is_none_or(|x| x.is_null()) {
+        Ok(default)
+    } else {
+        num32(v, k)
+    }
 }
 
 fn opt_num(v: &Value, k: &str) -> R<u64> {
@@ -74,10 +96,12 @@ fn point<C: ZCurve>(v: &Value, k: &str) -> R<G<C>> {
     decode_point::<C>(&bytes(v, k)?).map_err(|x| format!("`{k}`: {x}"))
 }
 
-fn key<C: ZCurve>(v: &Value) -> R<ZetherKey<C>> {
+/// The `key` field of a request (see the module doc).
+pub fn key<C: ZCurve>(v: &Value) -> R<ZetherKey<C>> {
     let k = get(v, "key")?;
     if k.get("x").is_some() {
-        return ZetherKey::from_secret(decode_scalar::<C>(&bytes(k, "x")?).map_err(e)?).map_err(e);
+        let x = Zeroizing::new(bytes(k, "x")?);
+        return ZetherKey::from_secret(decode_scalar::<C>(&x).map_err(e)?).map_err(e);
     }
     let seed: Zeroizing<Vec<u8>> = Zeroizing::new(if k.get("mnemonic").is_some() {
         let pass = match k.get("passphrase") {
@@ -249,10 +273,31 @@ fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
             let r = Fr::<C>::rand(rng);
             Ok(ct_json::<C>(&encrypt(&point::<C>(v, "Y")?, num(v, "amount")?, &r)))
         }
-        "decrypt" => {
+        // BSGS on `ct` (zether-limits §4): `tableBits`/`boundBits` default to the target's
+        // (wasm 22/44, native 24–26/54 by RAM). `decryptPending` defaults to 22/44 everywhere.
+        "decrypt" | "decryptPending" => {
             let k = key::<C>(v)?;
-            let amount = C::bsgs().decrypt(&ct::<C>(v, "ct")?, &k.x).map_err(e)?;
-            Ok(json!({"amount": amount}))
+            let d = if cmd == "decrypt" { BsgsParams::for_target() } else { BsgsParams::MOBILE };
+            let p = BsgsParams::new(opt_bits(v, "tableBits", d.table_bits)?, opt_bits(v, "boundBits", d.bound_bits)?)
+                .map_err(e)?;
+            // Review L4: a caller-chosen table must fit. Native checks free RAM; a browser tab stays at
+            // <= 2^24 (256 MiB) unless the caller explicitly opts in with `allowLargeTable`.
+            if cfg!(target_arch = "wasm32") {
+                if p.table_bits > WASM_TABLE_BITS_DEFAULT_MAX && v.get("allowLargeTable") != Some(&Value::Bool(true)) {
+                    return Err("tableBits above 24 in wasm needs \"allowLargeTable\": true".into());
+                }
+            } else if cached_table_bits::<C>() != Some(p.table_bits) {
+                // a same-size table already in memory needs nothing more (review N4)
+                check_ram(p.table_bits, mem_available()).map_err(e)?;
+            }
+            let field = if cmd == "decrypt" { "ct" } else { "pending" };
+            let amount = cached_table::<C>(p.table_bits).map_err(e)?.decrypt(&ct::<C>(v, field)?, &k.x, p.bound_bits);
+            Ok(json!({"amount": amount.map_err(e)?.to_string()}))
+        }
+        // Cache validation (limits §5): `[balance]G == C − [x]D`, no BSGS.
+        "checkBalance" => {
+            let k = key::<C>(v)?;
+            Ok(json!({"ok": check_balance(&ct::<C>(v, "acc")?, &k.x, num(v, "balance")?)}))
         }
         "proveTransfer" => prove_transfer_json::<C, _>(&gens(), v, rng),
         "proveBurn" => prove_burn_json::<C, _>(&gens(), v, rng),

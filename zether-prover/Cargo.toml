@@ -13,6 +13,10 @@ crate-type = ["cdylib", "rlib"]
 name = "zether-cli"
 path = "src/bin/zether-cli.rs"
 
+[[bin]]
+name = "zether-read-balance"
+path = "src/bin/zether-read-balance.rs"
+
 [dependencies]
 ark-ff = "0.5"
 ark-ec = "0.5"
@@ -40,7 +44,7 @@ getrandom = { version = "0.2", features = ["js"] }
 [dev-dependencies]
 bip32 = { version = "0.5", features = ["secp256k1"] }
 
-# arkworks in an unoptimised build makes the 2^40 BSGS test and the 64-bit range proofs crawl.
+# arkworks in an unoptimised build makes the BSGS tests and the 64-bit range proofs crawl.
 [profile.dev]
 opt-level = 2
 [profile.dev.package."*"]

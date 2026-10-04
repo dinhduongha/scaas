@@ -88,7 +88,7 @@ contract ZetherVerifierTest is Test {
     function _honestTransfer(Case memory k) internal {
         bytes memory st = _transferStatement(k, k.amount);
         bytes memory pr = _proveTransfer(k, st, k.amount);
-        assertEq(pr.length, 40 * k.v.g1EncodedBytes() + 512, "wire size");
+        assertEq(pr.length, 42 * k.v.g1EncodedBytes() + 512, "wire size (n_v = n_b = 64)");
         uint256 g0 = gasleft();
         assertTrue(k.v.verifyTransfer(st, pr), "honest proof");
         console2.log(k.v.curveName(), k.auditor ? "transfer+auditor verify gas" : "transfer verify gas", g0 - gasleft());
@@ -99,7 +99,11 @@ contract ZetherVerifierTest is Test {
     function test_transferBls() public { _honestTransfer(Case(bls, 1000, 300, 5, false)); }
     function test_transferBlsAuditor() public { _honestTransfer(Case(bls, 1000, 300, 5, true)); }
     function test_transferWholeBalanceNoFee() public { _honestTransfer(Case(bn, 1000, 1000, 0, true)); }
-    function test_transferMaxValue() public { _honestTransfer(Case(bn, 2 ** 40, 2 ** 32 - 1, 7, false)); }
+    /// n_v = 64 (limits D1): v = 2^64 − 1 và b' = 0 cùng qua — verifier chỉ biết dải đã chứng minh.
+    function test_transferMaxValue() public { _honestTransfer(Case(bn, 2 ** 64 + 6, 2 ** 64 - 1, 7, false)); }
+    function test_transferAbove2pow32Bn254() public { _honestTransfer(Case(bn, 2 ** 54, 2 ** 32 + 5, 7, true)); }
+    function test_transferAbove2pow32Bls() public { _honestTransfer(Case(bls, 2 ** 54, 2 ** 44 + 3, 7, false)); }
+    function test_transferMaxFee() public { _honestTransfer(Case(bn, 2 ** 64, 1, 2 ** 64 - 1, false)); }
 
     function test_transferOverspendRejected() public {
         Case memory k = Case(bn, 1000, 1001, 0, false); // b' = −1 mod r: BP n=64 không chứng minh được
@@ -114,7 +118,7 @@ contract ZetherVerifierTest is Test {
     }
 
     function test_transferValueOutOfRangeRejected() public {
-        Case memory k = Case(bn, 2 ** 40, 2 ** 32, 0, false); // v = 2^32 ∉ [0, 2^32)
+        Case memory k = Case(bn, 2 ** 64 + 10, 2 ** 64, 0, false); // v = 2^64 ∉ [0, 2^64), b' = 10 hợp lệ
         bytes memory st = _transferStatement(k, k.amount);
         assertFalse(_ok(bn, st, _proveTransfer(k, st, k.amount), true));
     }
@@ -131,10 +135,11 @@ contract ZetherVerifierTest is Test {
         bytes memory st = _transferStatement(k, k.amount);
         bytes memory pr = _proveTransfer(k, st, k.amount);
         uint256 p = 64;
-        // một bit ở: V_v, A_bal, z_x, z_gb, BP32 A, BP32 L1, BP32 τ_x, BP64 R6, BP64 b
-        uint256[9] memory offs = [uint256(5), 6 * p + 9, 10 * p + 31, 10 * p + 191, 10 * p + 192 + 40,
-            10 * p + 192 + 4 * p + 3, 10 * p + 192 + 14 * p + 20, 10 * p + 192 + 14 * p + 160 + 15 * p + 1,
-            pr.length - 1];
+        // một bit ở: V_v, A_bal, z_x, z_gb, BP#1 A, BP#1 L1, BP#1 R6, BP#1 τ_x, BP#2 R6, BP#2 b
+        // (n_v = 64: BP#1 = 16P + 160, cùng khuôn BP#2)
+        uint256[10] memory offs = [uint256(5), 6 * p + 9, 10 * p + 31, 10 * p + 191, 10 * p + 192 + 40,
+            10 * p + 192 + 4 * p + 3, 10 * p + 192 + 15 * p + 7, 10 * p + 192 + 16 * p + 20,
+            10 * p + 192 + 16 * p + 160 + 15 * p + 1, pr.length - 1];
         for (uint256 i; i < offs.length; ++i) {
             bytes memory t = bytes.concat(pr);
             t[offs[i]] = bytes1(uint8(t[offs[i]]) ^ 0x01);

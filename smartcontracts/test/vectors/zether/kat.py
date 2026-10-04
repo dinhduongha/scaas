@@ -3,10 +3,12 @@
 
 Chạy (cần py_ecc>=8 cho hash_to_G1): python3 test/vectors/zether/kat.py   (từ smartcontracts/). Ghi generators_*.json, transcript.json,
 schnorr_*.json cạnh file này. Forge test (ZetherKat.t.sol) đọc lại và so từng byte với Solidity.
+`--check`: không ghi gì, so file đã commit với bản sinh lại (exit 1 nếu lệch).
 """
 import hashlib
 import json
 import os
+import sys
 
 from eth_hash.auto import keccak
 from py_ecc import optimized_bn128 as bn
@@ -100,8 +102,8 @@ def generators(curve):
     H = [g("H", i) for i in range(64)]
     blob = h + u + b"".join(G) + b"".join(H)
     psid = keccak(
-        b"bamboo/zether/sigma-bullets/bn254/n32-n64/v1" if curve == "bn254"
-        else b"bamboo/zether/sigma-bullets/bls12-381/n32-n64/v1")
+        b"bamboo/zether/sigma-bullets/bn254/n64-n64/v1" if curve == "bn254"
+        else b"bamboo/zether/sigma-bullets/bls12-381/n64-n64/v1")  # n_v = n_b = 64 (RS-NV64-1)
     return {
         "curve": curve, "proofSystemId": hx(psid), "h": hx(h), "U": hx(u),
         "G": [hx(p) for p in G], "H": [hx(p) for p in H], "blobKeccak": hx(keccak(blob)),
@@ -170,10 +172,20 @@ def bn254_g2_pubkey(sk):
     return be(int(x.coeffs[1])) + be(int(x.coeffs[0])) + be(int(y.coeffs[1])) + be(int(y.coeffs[0]))
 
 
+CHECK = "--check" in sys.argv
+STALE = []
+
+
 def dump(name, obj):
-    with open(os.path.join(HERE, name), "w") as f:
-        json.dump(obj, f, indent=1)
-        f.write("\n")
+    text = json.dumps(obj, indent=1) + "\n"
+    path = os.path.join(HERE, name)
+    if CHECK:
+        with open(path) as f:
+            if f.read() != text:
+                STALE.append(name)
+        return
+    with open(path, "w") as f:
+        f.write(text)
 
 
 if __name__ == "__main__":
@@ -185,4 +197,6 @@ if __name__ == "__main__":
     dump("schnorr_bls12381.json", schnorr("bls12381", 0x1234567890abcdef, 0xfeedface, msg))
     dump("curve_misc.json", {"blsNonSubgroup": hx(bls_non_subgroup()),
                              "bn254G2Sk": hx(be(0xB15B254)), "bn254G2Pk": hx(bn254_g2_pubkey(0xB15B254))})
+    if STALE:
+        sys.exit("stale: " + ", ".join(STALE))
     print("ok")

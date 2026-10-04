@@ -8,8 +8,8 @@ import {G1Bn254, G1Bls12381} from "./ZetherCurves.sol";
 
 /// @title Verifier Σ-Bullets cho Zether, độc lập đường cong (đặc tả §6–§9).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Một Σ-protocol (R1 khoá, R2–R4 ciphertext cùng `s`,
-///         R5 số dư, R9 auditor shared-`s`, liên kết Σ-Bullets) và đúng hai Bulletproof (`n_v = 32`,
-///         `n_b = 64`) trên **một** transcript. Mọi phương trình là một MSM phải bằng `O`; trên BLS12-381
+///         R5 số dư, R9 auditor shared-`s`, liên kết Σ-Bullets) và đúng hai Bulletproof (`n_v = 64`,
+///         `n_b = 64`, ruling RS-NV64-1) trên **một** transcript. Mọi phương trình là một MSM phải bằng `O`; trên BLS12-381
 ///         MSM đi qua 0x0c nên mọi điểm đầu vào được kiểm subgroup ngầm.
 ///
 ///         Generator NUMS tính trong constructor theo §3 rồi ghi vào một data contract (SSTORE2): ai
@@ -17,7 +17,7 @@ import {G1Bn254, G1Bls12381} from "./ZetherCurves.sol";
 abstract contract ZetherVerifierBase is IZetherVerifier {
     bytes32 internal constant OP_TRANSFER = keccak256("BAMBOO-ZETHER-OP-TRANSFER-V1");
     bytes32 internal constant OP_BURN = keccak256("BAMBOO-ZETHER-OP-BURN-V1");
-    uint256 internal constant NV = 32;
+    uint256 internal constant NV = 64; // limits D1 (RS-NV64-1)
     uint256 internal constant NB = 64;
     uint256 internal constant HEADER = 384;
     uint256 internal constant NGEN = 130; // h, U, G_0..63, H_0..63
@@ -94,7 +94,8 @@ abstract contract ZetherVerifierBase is IZetherVerifier {
 
     function verifyTransfer(bytes calldata statement, bytes calldata proof) external view returns (bool) {
         uint256 p = _pointBytes();
-        if (statement.length != HEADER + 9 * p || proof.length != 40 * p + 512) return false;
+        // Σ 10P + 192 ‖ BP(64) 16P + 160 ‖ BP(64) 16P + 160
+        if (statement.length != HEADER + 9 * p || proof.length != 42 * p + 512) return false;
         if (bytes32(statement[0:32]) != OP_TRANSFER || bytes32(statement[32:64]) != proofSystemId()) return false;
         Ctx memory x = _ctx(statement, proof, 10 * p);
         if (x.c == 0 || !_sigmaTransfer(x)) return false;
@@ -102,7 +103,7 @@ abstract contract ZetherVerifierBase is IZetherVerifier {
         bool ok;
         (ok, x.st) = _bulletproof(x, NV, _pf(x, 0), off1);
         if (!ok) return false;
-        (ok, x.st) = _bulletproof(x, NB, _pf(x, 1), off1 + 14 * p + 160);
+        (ok, x.st) = _bulletproof(x, NB, _pf(x, 1), off1 + 16 * p + 160);
         return ok;
     }
 
@@ -236,7 +237,8 @@ abstract contract ZetherVerifierBase is IZetherVerifier {
         b.p = x.p;
         b.r = x.r;
         b.n = n;
-        b.k = n == 32 ? 5 : 6;
+        if (n != 64) return (false, x.st); // NV = NB = 64 ⇒ k = 6; n khác là lỗi lập trình, không phải proof
+        b.k = 6;
         b.off = off;
         b.sOff = off + (4 + 2 * b.k) * b.p;
         for (uint256 i; i < 5; ++i) {
@@ -449,7 +451,7 @@ abstract contract ZetherVerifierBase is IZetherVerifier {
 ///         confidential trên public chain phải được giả định giải mã được trong khoảng 2035–2045.
 contract ZetherVerifierBn254 is ZetherVerifierBase {
     function proofSystemId() public pure override returns (bytes32) {
-        return keccak256("bamboo/zether/sigma-bullets/bn254/n32-n64/v1");
+        return keccak256("bamboo/zether/sigma-bullets/bn254/n64-n64/v1");
     }
 
     function curveName() external pure returns (string memory) { return "bn254"; }
@@ -492,7 +494,7 @@ contract ZetherVerifierBls12381 is ZetherVerifierBase {
     bytes internal constant GEN_DST = "BAMBOO-ZETHER-GEN-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_";
 
     function proofSystemId() public pure override returns (bytes32) {
-        return keccak256("bamboo/zether/sigma-bullets/bls12-381/n32-n64/v1");
+        return keccak256("bamboo/zether/sigma-bullets/bls12-381/n64-n64/v1");
     }
 
     function curveName() external pure returns (string memory) { return "bls12-381"; }

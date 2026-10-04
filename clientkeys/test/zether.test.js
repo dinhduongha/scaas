@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   deriveMasterSk, deriveChildSk, deriveConfKey, confPublic, schnorrSign, schnorrVerify, popMessage, zetherPop,
-  sealConfKey, openConfKey, confLabel,
+  sealConfKey, openConfKey, confLabel, CURVES, encodePoint, decodePoint, checkBalance, sealBalanceCache, openBalanceCache,
+  setCachedBalance, cacheAfterDebit, cacheAfterRollOver, readBalance,
 } from '../src/zether.js';
 import { deriveKey, seedFromWords, NETWORKS } from '../src/seed.js';
 import { fromHex, hex } from '../src/bytes.js';
@@ -138,3 +139,147 @@ test('path-index rule == S3 prover (r33_inputs.json)', () => {
   }
   assert.equal(hex(seedFromWords(v.passphrase.mnemonic, v.passphrase.passphrase_nfc)), v.passphrase.seed);
 });
+
+// ------------------------------------------------------------------ balance cache (zether-limits §5)
+
+const mul = (P, k) => (k === 0n ? P.constructor.ZERO : P.multiply(k));
+function enc(curve, Y, b, r) {
+  const { Point } = CURVES[curve];
+  return { C: mul(Point.BASE, b).add(mul(Y, r)), D: mul(Point.BASE, r) };
+}
+const hexCt = (curve, ct) => ({ C: hex(encodePoint(curve, ct.C)), D: hex(encodePoint(curve, ct.D)) });
+
+/** Stand-in for the prover's device BSGS (bound 2^12 here): decrypts `ct` under the test key or throws. */
+function deviceFor(curve, x) {
+  const { Point } = CURVES[curve];
+  return async (ct) => {
+    const M = decodePoint(curve, fromHex(ct.C)).subtract(mul(decodePoint(curve, fromHex(ct.D)), x));
+    let acc = Point.ZERO;
+    for (let j = 0n; j < 1n << 12n; j++, acc = acc.add(Point.BASE)) if (acc.equals(M)) return String(j);
+    throw new Error('plaintext outside [0, 2^bound_bits)');
+  };
+}
+
+for (const curve of ['bn254', 'bls12381']) {
+  const { Point } = CURVES[curve];
+  const x = 0x5eed1234n;
+  const Y = Point.BASE.multiply(x);
+  const ua = '0x' + 'aa'.repeat(32);
+  const token = '0x5FbDB2315678afecb367f032d93F642f64180aa3';
+  const device = deviceFor(curve, x);
+
+  test(`${curve}: checkBalance — one comparison, any size, exact`, () => {
+    const big = (1n << 54n) - 5n; // past Number.MAX_SAFE_INTEGER
+    const acc = hexCt(curve, enc(curve, Y, big, 77n));
+    assert.equal(checkBalance(curve, x, acc, big), true);
+    assert.equal(checkBalance(curve, x, acc, big - 1n), false);
+    assert.equal(checkBalance(curve, x, acc, String(big)), true);
+    assert.equal(checkBalance(curve, x + 1n, acc, big), false);
+    assert.equal(checkBalance(curve, x, acc, -1n), false);
+    const zero = hexCt(curve, { C: Point.ZERO, D: Point.ZERO }); // fresh account (O, O)
+    assert.equal(checkBalance(curve, x, zero, 0n), true);
+    assert.equal(checkBalance(curve, x, zero, 1n), false);
+  });
+
+  test(`${curve}: cache box opens only with x, BigInt survives`, async () => {
+    const entries = { k: { ua, token, accSeq: 3, balance: (1n << 54n) - 1n } };
+    const box = await sealBalanceCache(curve, x, entries);
+    assert.deepEqual(await openBalanceCache(curve, x, box), entries);
+    assert.deepEqual(await openBalanceCache(curve, x + 1n, box), {});
+    assert.deepEqual(await openBalanceCache(curve, x, { ...box, ct: box.ct.slice(0, -2) + 'AA' }), {});
+    assert.deepEqual(await openBalanceCache(curve, x, undefined), {});
+    assert.ok(!JSON.stringify(box).includes(String((1n << 54n) - 1n)), 'balance is not stored in clear');
+  });
+
+  test(`${curve}: balance > 2^44 — device refuses, CLI value validated, debit and rollOver tracked`, async () => {
+    const b0 = (1n << 44n) + (1n << 34n);
+    let acc = enc(curve, Y, b0, 99n);
+    const st = () => ({ ua, token, acc: hexCt(curve, acc), accSeq: 1 });
+    const entries = {};
+    const tooBig = async () => { throw new Error('plaintext outside [0, 2^bound_bits)'); };
+    await assert.rejects(readBalance(curve, x, entries, st(), tooBig), /zether-read-balance/);
+    // The desktop reader's answer is entered — a wrong one is refused.
+    assert.equal(setCachedBalance(curve, x, entries, st(), b0 + 1n), false);
+    assert.equal(setCachedBalance(curve, x, entries, st(), b0), true);
+    assert.deepEqual(await readBalance(curve, x, entries, st(), tooBig), { balance: b0, source: 'cache' });
+    // Own transfer: acc −= (C_deb + [fee]G, D_out), v > 2^32.
+    const v = (1n << 33n) + 7n, fee = 300n, s = 4242n;
+    acc = { C: acc.C.subtract(mul(Point.BASE, v).add(Y.multiply(s))).subtract(mul(Point.BASE, fee)), D: acc.D.subtract(Point.BASE.multiply(s)) };
+    assert.equal(cacheAfterDebit(curve, x, entries, st(), v, fee), true);
+    const b1 = b0 - v - fee;
+    assert.equal((await readBalance(curve, x, entries, st(), tooBig)).balance, b1);
+    // rollOver: acc += pending; the device decrypts only pending.
+    const p = 1234n;
+    acc = { C: acc.C.add(enc(curve, Y, p, 5n).C), D: acc.D.add(enc(curve, Y, p, 5n).D) };
+    assert.equal(cacheAfterRollOver(curve, x, entries, st(), p + 1n), false, 'wrong pending refused');
+    assert.equal(setCachedBalance(curve, x, entries, st(), b1), false, 'stale value after rollOver refused');
+    // The last checked balance stays as the anchor: the device reads the difference, not the 2^44+ total.
+    assert.deepEqual(await readBalance(curve, x, entries, st(), device), { balance: b1 + p, source: 'delta' });
+    assert.equal((await readBalance(curve, x, entries, st(), tooBig)).balance, b1 + p);
+  });
+
+  // review M1: a rollOver the wallet did not do (rollOverPublic / rollOverBatch by anyone, late credits swept
+  // by rollOverSigned) and a debit it did not record must not strand a > 2^44 balance on the device.
+  test(`${curve}: cached balance > 2^44 survives third-party rollOver griefing and unrecorded debits`, async () => {
+    let b = (1n << 50n) + 77n;
+    let acc = enc(curve, Y, b, 31n);
+    const st = () => ({ ua, token, acc: hexCt(curve, acc), accSeq: 1 });
+    const entries = {};
+    assert.equal(setCachedBalance(curve, x, entries, st(), b), true);
+    for (let i = 0n; i < 3n; i++) { // attacker: fund(victim, 1 + i) then rollOverPublic(victim), repeatedly
+      const credit = enc(curve, Y, 1n + i, 900n + i);
+      acc = { C: acc.C.add(credit.C), D: acc.D.add(credit.D) };
+      b += 1n + i;
+      assert.deepEqual(await readBalance(curve, x, entries, st(), device), { balance: b, source: 'delta' });
+    }
+    // Own transfer the wallet never recorded (v + fee = 502) plus a credit of 100 rolled by someone else.
+    const s = 777n;
+    acc = { C: acc.C.subtract(mul(Point.BASE, 500n).add(Y.multiply(s))).subtract(mul(Point.BASE, 2n)), D: acc.D.subtract(Point.BASE.multiply(s)) };
+    const credit = enc(curve, Y, 100n, 12n);
+    acc = { C: acc.C.add(credit.C), D: acc.D.add(credit.D) };
+    b = b - 502n + 100n;
+    assert.deepEqual(await readBalance(curve, x, entries, st(), device), { balance: b, source: 'delta' });
+    // A change beyond the device bound still sends the user to the CLI, and the anchor is kept.
+    const big = enc(curve, Y, 1n << 40n, 13n);
+    acc = { C: acc.C.add(big.C), D: acc.D.add(big.D) };
+    await assert.rejects(readBalance(curve, x, entries, st(), device), /zether-read-balance/);
+    assert.equal(Object.values(entries)[0].balance, b);
+  });
+
+  // review N2: a backend/RPC knows Y and can forge an `acc` for any balance; an older accSeq must never
+  // become the anchor, or a lie within the device bound would replace a real > 2^44 balance.
+  test(`${curve}: accSeq is monotonic — a forged lower-seq acc does not move the anchor`, async () => {
+    const b = (1n << 50n) + 5n;
+    const entries = {};
+    assert.equal(setCachedBalance(curve, x, entries, { ua, token, acc: hexCt(curve, enc(curve, Y, b, 4n)), accSeq: 5 }, b), true);
+    const forged = { ua, token, acc: hexCt(curve, enc(curve, Y, b + 10n, 8n)), accSeq: 3 };
+    assert.equal(setCachedBalance(curve, x, entries, forged, b + 10n), false);
+    await assert.rejects(readBalance(curve, x, entries, forged, device), /accSeq/);
+    assert.equal(Object.values(entries)[0].balance, b);
+    assert.equal(Object.values(entries)[0].accSeq, 5);
+    // Same or higher seq is fine (debits do not bump accSeq; rollOvers do).
+    const later = { ua, token, acc: hexCt(curve, enc(curve, Y, b + 10n, 8n)), accSeq: 6 };
+    assert.deepEqual(await readBalance(curve, x, entries, later, device), { balance: b + 10n, source: 'delta' });
+  });
+
+  // review N1 (not applied): the last try, BSGS on acc itself, still hits when a big anchor was spent down
+  // elsewhere (same seed on another device, or the CLI) — the difference is then beyond the bound both ways.
+  test(`${curve}: big anchor, balance spent down elsewhere — full device BSGS still recovers it`, async () => {
+    const entries = {};
+    assert.equal(setCachedBalance(curve, x, entries, { ua, token, acc: hexCt(curve, enc(curve, Y, 1n << 50n, 4n)), accSeq: 1 }, 1n << 50n), true);
+    const now = { ua, token, acc: hexCt(curve, enc(curve, Y, 1000n, 9n)), accSeq: 1 };
+    assert.deepEqual(await readBalance(curve, x, entries, now, device), { balance: 1000n, source: 'bsgs' });
+  });
+
+  test(`${curve}: small balance — cache miss falls back to device BSGS and fills the cache`, async () => {
+    const acc = hexCt(curve, enc(curve, Y, 5000n, 3n));
+    const entries = {};
+    const state = { ua, token, acc, accSeq: 2 };
+    let calls = 0;
+    const decrypt = async () => { calls++; return '5000'; };
+    assert.deepEqual(await readBalance(curve, x, entries, state, decrypt), { balance: 5000n, source: 'bsgs' });
+    assert.deepEqual(await readBalance(curve, x, entries, state, decrypt), { balance: 5000n, source: 'cache' });
+    assert.equal(calls, 1);
+    await assert.rejects(readBalance(curve, x, {}, state, async () => '5001'), /does not match/);
+  });
+}

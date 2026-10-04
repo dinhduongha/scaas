@@ -17,6 +17,7 @@ contract ZetherProver {
         bytes gens;
         bytes g;
         bytes32 seed;
+        uint256 rid; // nhãn nonce của Bulletproof đang dựng (hai BP cùng n = 64 phải khác nonce)
     }
 
     struct TransferWitness {
@@ -82,7 +83,10 @@ contract ZetherProver {
         bytes memory zs = _responses(e.r, c, k, [w.x, w.v, w.s, w.bPrime, w.gammaV, w.gammaB]);
         bytes memory bp1;
         bytes memory bp2;
-        (bp1, st) = _proveRange(e, st, 32, w.v, w.gammaV);
+        // n_v = n_b = 64 (limits D1); `e.rid` tách nonce của hai Bulletproof (cùng n thì cùng nhãn).
+        e.rid = 32;
+        (bp1, st) = _proveRange(e, st, 64, w.v, w.gammaV);
+        e.rid = 64;
         (bp2, st) = _proveRange(e, st, 64, w.bPrime, w.gammaB);
         return bytes.concat(commits, zs, bp1, bp2);
     }
@@ -141,6 +145,7 @@ contract ZetherProver {
         (st, c) = T.challenge(st, "sigma.c", e.r);
         bytes memory zs = _responses(e.r, c, k, [w.x, w.bPrime, w.gammaB, 0, 0, 0]);
         bytes memory bp;
+        e.rid = 64;
         (bp, st) = _proveRange(e, st, 64, w.bPrime, w.gammaB);
         return bytes.concat(commits, _slice(zs, 0, 96), bp);
     }
@@ -204,6 +209,7 @@ contract ZetherProver {
     }
 
     function _rpInit(Env memory e, uint256 n, uint256 value, uint256 gamma) internal view returns (RP memory q) {
+        uint256 id = e.rid;
         uint256 r = e.r;
         q.n = n;
         q.gamma = gamma;
@@ -214,13 +220,13 @@ contract ZetherProver {
         for (uint256 i; i < n; ++i) {
             q.aL[i] = (value >> i) & 1;
             q.aR[i] = q.aL[i] == 1 ? 0 : r - 1;
-            q.sL[i] = _rand(e, string.concat("sL", _n(n)), i);
-            q.sR[i] = _rand(e, string.concat("sR", _n(n)), i);
+            q.sL[i] = _rand(e, string.concat("sL", _n(id)), i);
+            q.sR[i] = _rand(e, string.concat("sR", _n(id)), i);
         }
-        q.alpha = _rand(e, "alpha", n);
-        q.rho = _rand(e, "rho", n);
-        q.tau1 = _rand(e, "tau1", n);
-        q.tau2 = _rand(e, "tau2", n);
+        q.alpha = _rand(e, "alpha", id);
+        q.rho = _rand(e, "rho", id);
+        q.tau1 = _rand(e, "tau1", id);
+        q.tau2 = _rand(e, "tau2", id);
         q.AS = bytes.concat(_vecCommit(e, q.alpha, q.aL, q.aR), _vecCommit(e, q.rho, q.sL, q.sR));
     }
 

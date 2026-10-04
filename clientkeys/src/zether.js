@@ -12,7 +12,7 @@ import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256, sha512 } from '@noble/hashes/sha2.js';
 import { keccak_256, concatBytes, utf8ToBytes, bytesToHex, fromHex, hex, word, abiEncode, wipe } from './bytes.js';
-import { createVault, openVault } from './vault.js';
+import { createVault, openVault, seal, open } from './vault.js';
 
 export const USE_CONF = 7;
 export const USE_DISCLOSURE = 8;
@@ -200,3 +200,133 @@ export async function sealConfKey({ seed, curve, coin, account, pin, prf }) {
 }
 
 export const openConfKey = openVault;
+
+// ------------------------------------------------------------------ balance cache (zether-limits §5, D5)
+//
+// The prover needs the plaintext balance; BSGS on a phone reads only up to 2^44 (DEVICE_BOUND_BITS),
+// while a balance may reach 2^54. So the wallet keeps `{ua, token, accSeq, balance}` per account on
+// the device: never on-chain, never sent to a server. The box is AES-GCM under a key derived from the
+// conf key `x`, so it opens only after the conf vault is unlocked (same protection as the seed);
+// store it as `confVault.cache`. Every use re-checks it against the on-chain `acc`
+// (`[b]G == C − [x]D`, one comparison): a stale or wrong value is dropped, never spent — the prover
+// and the contract would refuse a proof built on it anyway. Balances are BigInt (they pass 2^53).
+
+export const DEVICE_BOUND_BITS = 44;
+const CACHE_INFO = utf8ToBytes('bamboo-zether-balance-cache-v1');
+
+const pointOf = (curve, h) => decodePoint(curve, fromHex(h));
+const keyOf = ({ ua, token }) => `${String(ua).toLowerCase()}:${String(token).toLowerCase()}`;
+
+/** `[balance]G == C − [x]D` for `acc = {C, D}` (hex points). */
+export function checkBalance(curve, x, acc, balance) {
+  const { Point } = curveOf(curve);
+  const b = BigInt(balance);
+  if (b < 0n || b >= Point.Fn.ORDER) return false;
+  const xs = typeof x === 'bigint' ? x : toInt(x);
+  const D = pointOf(curve, acc.D);
+  const m = pointOf(curve, acc.C).subtract(D.is0() ? D : D.multiply(xs));
+  return m.equals(b === 0n ? Point.ZERO : Point.BASE.multiply(b));
+}
+
+function cacheKey(x) {
+  return hkdf(sha256, typeof x === 'bigint' ? word(x) : x, undefined, CACHE_INFO, 32);
+}
+
+/** Seal the cache entries (`{key: {ua, token, accSeq, balance}}`) under `x`. */
+export async function sealBalanceCache(curve, x, entries) {
+  const k = cacheKey(x);
+  const json = JSON.stringify(entries, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
+  try { return await seal(k, utf8ToBytes(json), `zether-cache:${curve}`); } finally { wipe(k); }
+}
+
+/** Open a box from `sealBalanceCache`; a missing or unreadable box is an empty cache. */
+export async function openBalanceCache(curve, x, box) {
+  if (!box) return {};
+  const k = cacheKey(x);
+  try {
+    const entries = JSON.parse(new TextDecoder().decode(await open(k, box, `zether-cache:${curve}`)));
+    for (const e of Object.values(entries)) e.balance = BigInt(e.balance);
+    return entries;
+  } catch {
+    return {};
+  } finally {
+    wipe(k);
+  }
+}
+
+/** `accSeq` only grows on-chain: an `acc` older than the anchor's is stale or forged (review N2) and may
+ *  never replace it — a backend knowing `Y` can build an `acc` for any balance within the device bound. */
+function staleSeq(entries, state) {
+  const e = entries[keyOf(state)];
+  return !!e && Number(state.accSeq) < e.accSeq;
+}
+
+/**
+ * Record `balance` for `state = {ua, token, acc, accSeq}` (the account's CURRENT on-chain `acc`) only
+ * if it checks. A value that does not check is refused and the previous entry is KEPT: it is the last
+ * balance that checked, the anchor `readBalance` reads differences from. Returns whether it was recorded.
+ */
+export function setCachedBalance(curve, x, entries, state, balance) {
+  const b = BigInt(balance);
+  if (staleSeq(entries, state) || b < 0n || !checkBalance(curve, x, state.acc, b)) return false;
+  entries[keyOf(state)] = { ua: state.ua, token: state.token, accSeq: Number(state.accSeq), balance: b };
+  return true;
+}
+
+/** After our own transfer/burn landed: `b −= v + fee` (v = amount for a burn), checked on the new `acc`. */
+export function cacheAfterDebit(curve, x, entries, state, v, fee = 0n) {
+  const e = entries[keyOf(state)];
+  return !!e && setCachedBalance(curve, x, entries, state, e.balance - BigInt(v) - BigInt(fee));
+}
+
+/** After a rollOver: `b += pending` (`pending` from the prover's `decryptPending`, BSGS ≤ 2^44 on pending only). */
+export function cacheAfterRollOver(curve, x, entries, state, pending) {
+  const e = entries[keyOf(state)];
+  return !!e && setCachedBalance(curve, x, entries, state, e.balance + BigInt(pending));
+}
+
+/**
+ * The spendable balance of `state = {ua, token, acc, accSeq}`:
+ *   1. the cache, when it checks against `acc`;
+ *   2. else, from the last balance that checked, the DIFFERENCE `acc − b_cached` by the device BSGS
+ *      (`decrypt(ct)` → amount, e.g. the prover wasm `decryptPending`, bound 2^44), first as a gain then as
+ *      a loss. This covers rollOvers the wallet did not do (`rollOverPublic`/`rollOverBatch` by anyone —
+ *      `fund(victim, 1)` + `rollOverPublic` is free griefing — and late credits swept by `rollOverSigned`)
+ *      and own debits it did not record (review M1). Each try costs one device BSGS when it misses;
+ *   3. else the device BSGS on `acc` itself (no cache, or a big anchor spent down below the bound elsewhere,
+ *      e.g. the same seed on another device — kept even for a big anchor, review N1).
+ * An `acc` whose `accSeq` is below the anchor's is refused (review N2).
+ * Every answer is re-checked with `checkBalance` before it is cached or returned. Above the device bound
+ * it throws and sends the user to the desktop reader, whose output is entered with `setCachedBalance`.
+ */
+export async function readBalance(curve, x, entries, state, decrypt) {
+  const e = entries[keyOf(state)];
+  if (staleSeq(entries, state)) throw new Error(`acc with accSeq ${state.accSeq} is older than the cached ${e.accSeq}`);
+  if (e && checkBalance(curve, x, state.acc, e.balance)) return { balance: e.balance, source: 'cache' };
+  const tries = [];
+  if (e) {
+    const { Point } = curveOf(curve);
+    const bG = e.balance === 0n ? Point.ZERO : Point.BASE.multiply(e.balance);
+    const C = pointOf(curve, state.acc.C);
+    const D = pointOf(curve, state.acc.D);
+    const ct = (c, d) => ({ C: hex(encodePoint(curve, c)), D: hex(encodePoint(curve, d)) });
+    tries.push(['delta', ct(C.subtract(bG), D), (d) => e.balance + d]); // decrypts to a − b_cached
+    tries.push(['delta', ct(bG.subtract(C), D.negate()), (d) => e.balance - d]); // b_cached − a
+  }
+  tries.push(['bsgs', state.acc, (d) => d]);
+  let decrypted = false;
+  for (const [source, ct, balanceOf] of tries) {
+    let d;
+    try {
+      d = BigInt(await decrypt(ct));
+    } catch {
+      continue;
+    }
+    decrypted = true;
+    const b = balanceOf(d);
+    if (setCachedBalance(curve, x, entries, state, b)) return { balance: b, source };
+  }
+  if (decrypted) throw new Error('decrypted balance does not match acc');
+  throw new Error(`This balance is above what this device can read (2^${DEVICE_BOUND_BITS} units). `
+    + 'Run `zether-read-balance` on a desktop, then enter the balance it prints here.');
+}

@@ -40,9 +40,49 @@ pub fn encode(toks: &[Tok]) -> Vec<u8> {
     head
 }
 
+fn word_at(b: &[u8], at: usize) -> Option<u64> {
+    let w = b.get(at..at.checked_add(32)?)?;
+    if w[..24].iter().any(|&x| x != 0) {
+        return None;
+    }
+    Some(u64::from_be_bytes(w[24..].try_into().unwrap()))
+}
+
+/// Return data of `accountState(bytes32)` (`IZetherToken.AccountState`, a dynamic tuple):
+/// `([accC, accD, pendingC, pendingD], accSeq)`. `None` when malformed.
+pub fn decode_account_state(ret: &[u8]) -> Option<([Vec<u8>; 4], u64)> {
+    // Every word is RPC-controlled: all offset arithmetic is checked (review I6).
+    let base = usize::try_from(word_at(ret, 0)?).ok()?;
+    let field = |i: usize| -> Option<Vec<u8>> {
+        let at = base.checked_add(usize::try_from(word_at(ret, base.checked_add(32 * i)?)?).ok()?)?;
+        let len = usize::try_from(word_at(ret, at)?).ok()?;
+        let start = at.checked_add(32)?;
+        Some(ret.get(start..start.checked_add(len)?)?.to_vec())
+    };
+    Some(([field(0)?, field(1)?, field(2)?, field(3)?], word_at(ret, base.checked_add(128)?)?))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn account_state_roundtrip() {
+        let pts = [vec![1u8; 64], vec![2; 64], vec![3; 64], vec![0; 64]];
+        let mut toks: Vec<Tok> = pts.iter().cloned().map(Tok::Bytes).collect();
+        toks.extend([7u64, 9, 4, 0, 1].map(|w| Tok::Word(u256(w))));
+        let mut ret = u256(32).to_vec();
+        ret.extend(encode(&toks));
+        assert_eq!(decode_account_state(&ret), Some((pts, 7)));
+        assert_eq!(decode_account_state(&ret[..ret.len() - 1]), None);
+        // RPC-controlled words that would overflow an offset or length: None, never a panic (review I6).
+        let mut evil = ret.clone();
+        evil[320 + 24..352].copy_from_slice(&u64::MAX.to_be_bytes()); // length of accC (word 10)
+        assert_eq!(decode_account_state(&evil), None);
+        let mut evil = ret.clone();
+        evil[24..32].copy_from_slice(&(u64::MAX - 8).to_be_bytes()); // tuple offset
+        assert_eq!(decode_account_state(&evil), None);
+    }
 
     #[test]
     fn matches_solidity_layout() {

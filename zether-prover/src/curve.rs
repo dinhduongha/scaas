@@ -9,9 +9,7 @@ use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use ark_ec::{CurveConfig, CurveGroup};
 use ark_ff::{BigInteger, PrimeField, Zero};
 
-use std::sync::OnceLock;
-
-use crate::elgamal::BsgsTable;
+use crate::elgamal::BsgsSlot;
 use crate::ZError;
 
 pub type G<C> = Projective<C>;
@@ -31,8 +29,8 @@ pub trait ZCurve: SWCurveConfig<BaseField = <Self as ZCurve>::Fq> + Clone + Part
     const PROOF_SYSTEM_LABEL: &'static [u8];
     /// NUMS generator `gen(label, index)` (zether-design §3).
     fn gen(label: &[u8], index: u32) -> G<Self>;
-    /// The BSGS decryption table, built on first use and kept for the process (wasm instance).
-    fn bsgs() -> &'static BsgsTable<Self>;
+    /// Storage of the process-wide BSGS table ([`crate::elgamal::cached_table`]).
+    fn bsgs_slot() -> &'static BsgsSlot<Self>;
 }
 
 fn gen_msg(label: &[u8], index: u32) -> Vec<u8> {
@@ -48,11 +46,11 @@ impl ZCurve for ark_bn254::g1::Config {
     const COORD_LEN: usize = 32;
     const KEYGEN_SALT: &'static [u8] = b"BAMBOO-ZETHER-BN254-v1";
     const PATH_ROOT: u32 = 254;
-    const PROOF_SYSTEM_LABEL: &'static [u8] = b"bamboo/zether/sigma-bullets/bn254/n32-n64/v1";
+    const PROOF_SYSTEM_LABEL: &'static [u8] = b"bamboo/zether/sigma-bullets/bn254/n64-n64/v1";
 
-    fn bsgs() -> &'static BsgsTable<Self> {
-        static T: OnceLock<BsgsTable<ark_bn254::g1::Config>> = OnceLock::new();
-        T.get_or_init(BsgsTable::new)
+    fn bsgs_slot() -> &'static BsgsSlot<Self> {
+        static T: BsgsSlot<ark_bn254::g1::Config> = BsgsSlot::new(None);
+        &T
     }
 
     /// Try-and-increment, even `y` (zether-design §3.1).
@@ -80,11 +78,11 @@ impl ZCurve for ark_bls12_381::g1::Config {
     const COORD_LEN: usize = 64;
     const KEYGEN_SALT: &'static [u8] = b"BLS-SIG-KEYGEN-SALT-";
     const PATH_ROOT: u32 = 12381;
-    const PROOF_SYSTEM_LABEL: &'static [u8] = b"bamboo/zether/sigma-bullets/bls12-381/n32-n64/v1";
+    const PROOF_SYSTEM_LABEL: &'static [u8] = b"bamboo/zether/sigma-bullets/bls12-381/n64-n64/v1";
 
-    fn bsgs() -> &'static BsgsTable<Self> {
-        static T: OnceLock<BsgsTable<ark_bls12_381::g1::Config>> = OnceLock::new();
-        T.get_or_init(BsgsTable::new)
+    fn bsgs_slot() -> &'static BsgsSlot<Self> {
+        static T: BsgsSlot<ark_bls12_381::g1::Config> = BsgsSlot::new(None);
+        &T
     }
 
     /// RFC 9380 `BLS12381G1_XMD:SHA-256_SSWU_RO_` (zether-design §3.2).

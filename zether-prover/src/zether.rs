@@ -18,11 +18,19 @@ use crate::nonce::Nonces;
 use crate::transcript::Transcript;
 use crate::ZError;
 
-pub const N_V: usize = 32;
+/// Range of a transferred value (limits D1). `n_v = n_b` relaxes SRS §7.3 `n_b − n_v ≥ 24`;
+/// soundness comes from `MAX_TOTAL_SHIELDED` instead (zether-design ruling RS-NV64-1).
+pub const N_V: usize = 64;
 pub const N_B: usize = 64;
 pub const HEADER_LEN: usize = 384;
 /// `MAX_TOTAL_SHIELDED` (§1): ceiling of `maxDecryptableShielded`.
 pub const MAX_TOTAL_SHIELDED: u64 = 1 << 54;
+
+/// `v < 2^n_v` — the bound on a transfer value, the inner fee and a disclosed amount. With
+/// `n_v = 64` every `u64` is in range; the check keeps the bound in one place.
+pub fn value_in_range(v: u64) -> bool {
+    (v as u128) < 1u128 << N_V
+}
 
 pub fn op_tag_transfer() -> [u8; 32] {
     keccak256(b"BAMBOO-ZETHER-OP-TRANSFER-V1")
@@ -141,7 +149,7 @@ impl Header {
     }
 
     fn check_fee(&self) -> Result<(), ZError> {
-        if self.fee >= 1 << N_V {
+        if !value_in_range(self.fee) {
             return Err(ZError::BadStatement("fee >= 2^n_v"));
         }
         if self.beneficiary == [0u8; 32] && self.fee != 0 {
@@ -348,8 +356,9 @@ impl<C: ZCurve> TransferProof<C> {
         b
     }
 
+    /// Σ `10P + 192` ‖ BP(n_v = 64) `16P + 160` ‖ BP(n_b = 64) `16P + 160`.
     pub fn wire_len() -> usize {
-        40 * point_len::<C>() + 512
+        42 * point_len::<C>() + 512
     }
 
     pub fn decode(b: &[u8]) -> Result<Self, ZError> {
@@ -446,7 +455,7 @@ pub fn prove_transfer_core<C: ZCurve, R: RngCore + CryptoRng>(
     })
 }
 
-/// Native mirror of the on-chain transfer verifier (E1–E8 + BP(32, V_v) + BP(64, V_b)).
+/// Native mirror of the on-chain transfer verifier (E1–E8 + BP(64, V_v) + BP(64, V_b)).
 /// Returns the transcript on success (the byte vectors are cut from it).
 pub fn verify_transfer<C: ZCurve>(
     gens: &Gens<C>,
@@ -501,7 +510,7 @@ pub fn derive_s<C: ZCurve>(x: &Fr<C>, h: &Header, y_to: &G<C>, v: u64) -> Fr<C> 
 /// Build the statement from the sender's state and prove it.
 ///
 /// `acc` is the sender's on-chain `acc` slot and `balance` its plaintext (from BSGS); the
-/// prover refuses when they disagree, when `balance < v + fee`, when `v >= 2^32`, or when the
+/// prover refuses when they disagree, when `balance < v + fee`, or when the
 /// header breaks the token's structural rules.
 #[allow(clippy::too_many_arguments)]
 pub fn prove_transfer<C: ZCurve, R: RngCore + CryptoRng>(
@@ -516,7 +525,7 @@ pub fn prove_transfer<C: ZCurve, R: RngCore + CryptoRng>(
     rng: &mut R,
 ) -> Result<(TransferStatement<C>, TransferProof<C>, TransferWitness<C>), ZError> {
     let g = generator::<C>();
-    if v >= 1 << N_V {
+    if !value_in_range(v) {
         return Err(ZError::OutOfRange);
     }
     if acc.c - acc.d * key.x != g * Fr::<C>::from(balance) {
@@ -590,7 +599,7 @@ impl<C: ZCurve> BurnStatement<C> {
 
     pub fn validate(&self) -> Result<(), ZError> {
         self.header.check_fee()?;
-        // §10: 0 < amount <= maxDecryptableShielded (<= 2^54) — with fee < 2^32, amount + fee < r.
+        // §10: 0 < amount <= maxDecryptableShielded (<= 2^54) — with fee < 2^64, amount + fee < r.
         if self.header.amount == 0 || self.header.amount > MAX_TOTAL_SHIELDED {
             return Err(ZError::BadStatement("burn amount outside (0, 2^54]"));
         }
