@@ -9,7 +9,6 @@ import {ITransferDisclosure} from "../../src/zether/ITransferDisclosure.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {ZetherTranscript} from "../../src/zether/ZetherTranscript.sol";
 import {ZetherKeys} from "./helpers/ZetherKeys.sol";
-import {IUniversalAccountRegistry as IR} from "../../src/registry/IUniversalAccountRegistry.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {FeeMode, FeePolicy} from "../../src/common/FeePolicy.sol";
 
@@ -161,8 +160,26 @@ abstract contract ZetherTokenSuite is ZetherFixture {
         (uint256 a,) = _bal(alice);
         assertEq(a, 10);
         _fund(tok, alice, 5);
-        vm.expectRevert(abi.encodeWithSelector(IR.Unauthorized.selector, alice.ua));
+        // phát lại bị chặn ngay ở cổng credit-mới (1 ≤ lastRolled = 2), trước cả chữ ký (accSeq đã tiến)
+        vm.expectRevert(abi.encodeWithSelector(IZetherToken.PendingSeqMismatch.selector, 1, 3));
         tok.rollOverSigned(alice.ua, 1, until, rs);
+    }
+
+    /// Chữ ký rollOver không nêu credit mới (expected ≤ lastRolled) là no-op nên không tăng `accSeq`; với `≥`
+    /// nó thành vé để bất kỳ ai ép rollOver khi credit sau đến, giết proof đang bay của chủ `OWNER_ONLY`.
+    function test_rollOverSignedWithoutNewCreditIsRejected() public {
+        uint64 until = uint64(block.number + 50);
+        tok.setRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until,
+            _modeSig(alice, ZetherTypes.RollOverMode.OWNER_ONLY, 0, until));
+        _fund(tok, alice, 10);
+        tok.rollOverSigned(alice.ua, 1, until, _rollSig(alice, 0, 1, until));
+        bytes memory stale = _rollSig(alice, 1, 1, until);
+        vm.expectRevert(abi.encodeWithSelector(IZetherToken.PendingSeqMismatch.selector, 1, 1));
+        tok.rollOverSigned(alice.ua, 1, until, stale);
+        _fund(tok, alice, 5);
+        vm.expectRevert(abi.encodeWithSelector(IZetherToken.PendingSeqMismatch.selector, 1, 2));
+        tok.rollOverSigned(alice.ua, 1, until, stale);
+        assertEq(tok.accountState(alice.ua).accSeq, 1);
     }
 
     function test_setRollOverModeExpired() public {

@@ -155,7 +155,7 @@ sendCounter_f++
 - `PUBLIC`: `rollOverPublic(UA)` / `rollOverBatch(UA[])` không chữ ký. `rollOverBatch` bỏ qua phần tử `OWNER_ONLY`
   và phần tử chưa đăng ký.
 - `OWNER_ONLY`: `rollOverPublic` revert `RollOverOwnerOnly`. Chỉ `rollOverSigned(UA, expectedPendingSeq,
-  validUntilBlock, sig)` — `block.number ≤ validUntilBlock`, `pendingSeq ≥ expectedPendingSeq` (RS2-17), chữ ký theo
+  validUntilBlock, sig)` — `block.number ≤ validUntilBlock`, `lastRolledPendingSeq < expectedPendingSeq ≤ pendingSeq` (RS2-17, RS2-19), chữ ký theo
   `authScheme` (§11) trên
   `keccak256(abi.encode(keccak256("ZETHER_ROLLOVER_V1"), chainid, token, UA, accSeq, expectedPendingSeq, validUntilBlock))`.
 - `rollOverSigned` cũng dùng được cho tài khoản `PUBLIC`.
@@ -552,6 +552,10 @@ Kill criterion S1 của canon (2.5M) bị vượt ở transfer bn254 (2.75M th�
 
 - **RS2-17** `rollOverSigned` kiểm `pendingSeq ≥ expectedPendingSeq` (không `==`): transfer `v = 0` miễn phí của
   kẻ grief không giết được rollOver của chủ `OWNER_ONLY`. Phát lại vẫn chặn vì digest ghim `accSeq` (review S2-R1).
+- **RS2-19** `rollOverSigned` còn đòi `expectedPendingSeq > lastRolledPendingSeq`: chữ ký không nêu credit mới là
+  no-op, không tăng `accSeq` ⇒ sau RS2-17 nó sống tới credit kế tiếp và ai cũng dùng nó ép rollOver, giết proof đang
+  bay của chủ. Nay mọi chữ ký được chấp nhận đều làm rollOver thật ⇒ dùng một lần
+  (`test_rollOverSignedWithoutNewCreditIsRejected`).
 - **RS2-18** Registry từ chối khoá uỷ quyền BLS = điểm vô cực (BLS_12381 sau G2MSM, BLS_BN254 128 byte 0) và chữ ký
   BLS12-381 = vô cực — nếu không, pairing tầm thường cho "custody BLS" giả, `x` một mình tiêu được (review S2-R2).
 
