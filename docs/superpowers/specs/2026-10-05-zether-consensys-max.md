@@ -73,8 +73,13 @@ Giải mã = tìm `b` từ `g^b` khi biết `b < bound`. Hai thuật toán:
 - **Pollard kangaroo**: ≈ 2·√bound phép cộng điểm, **bộ nhớ gần như không đổi** (chỉ lưu "distinguished
   points"), song song hoá tốt trên nhiều lõi và trên **GPU**.
 
-Ước tính (số phép cộng điểm bn254; CPU ≈ 0,35 µs/phép/lõi; GPU cao cấp ≈ 2–5 × 10^9 phép/s — ước theo các
-bộ kangaroo GPU công khai trên secp256k1, cùng cỡ trường 256 bit; **phải đo trên phần cứng thật**):
+Ước tính (số phép cộng điểm trên **bn254** — curve Zether dùng; CPU ≈ 0,35 µs/phép/lõi; GPU cao cấp
+≈ 2–5 × 10^9 phép/s). Lưu ý về nguồn số GPU: Zether **không** dùng secp256k1 — ElGamal, Schnorr (PoP,
+`rollOverSigned`), Sigma và Bulletproofs của ta chạy trên bn254 và BLS12-381. secp256k1 chỉ là **mốc đo tốc
+độ**: các bộ kangaroo GPU công khai (viết cho "Bitcoin puzzle") chỉ có số liệu trên curve đó, và phép cộng
+điểm bn254 tốn gần bằng (cùng dạng Weierstrass, trường nguyên tố 256 bit). **BLS12-381** có trường 381 bit ⇒
+mỗi phép chậm hơn ~2–3× ⇒ nhân các thời gian dưới đây ~2–3× cho token trên BLS12-381. **Phải đo trên phần
+cứng thật**:
 
 | Cận | √cận | Desktop 1 lõi | CPU 16 lõi | 1 GPU cao cấp |
 |---|---|---|---|---|
