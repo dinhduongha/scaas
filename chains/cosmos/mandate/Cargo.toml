@@ -1,0 +1,18 @@
+[package]
+name = "bamboo-mandate"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+library = []
+
+[dependencies]
+cosmwasm-std.workspace = true
+cw-storage-plus.workspace = true
+serde.workspace = true
+sha2.workspace = true
+bamboo-metaop.workspace = true

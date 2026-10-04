@@ -18,8 +18,16 @@ pub struct Odoo {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct TokenCfg {
-    pub address: Address,
+    /// Dạng chuẩn của họ mạng (`addresses.canonical`): `0x…` EVM, `wasm1…` Cosmos, … (review H1).
+    pub address: String,
     pub decimals: u8,
+}
+
+impl TokenCfg {
+    /// Chỉ đường EVM: địa chỉ không phải `0x` 20 byte thì không phải token EVM.
+    pub fn evm(&self) -> Option<Address> {
+        self.address.parse().ok()
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -70,7 +78,7 @@ impl NodeConfig {
     /// Token list the open gateway may accept: none while the chain is paused (R53).
     pub fn submittable_tokens(&self) -> Vec<Address> {
         if self.state.as_deref().unwrap_or("active") == "active" {
-            self.tokens.iter().map(|t| t.address).collect()
+            self.tokens.iter().filter_map(TokenCfg::evm).collect()
         } else {
             Vec::new()
         }
@@ -263,6 +271,17 @@ mod tests {
         };
         assert_eq!(mk("active").submittable_tokens().len(), 1);
         assert!(mk("paused").submittable_tokens().is_empty());
+    }
+
+    /// Review H1: Odoo gửi địa chỉ token dạng chuẩn của HỌ (`wasm1…`, `0.0.x`, …); chỉ đường EVM đọc thành `Address`.
+    #[test]
+    fn non_evm_token_addresses_decode() {
+        let nc: NodeConfig = serde_json::from_value(json!({"evm_chain_number": "cosmos:bamboo-1", "finality_mode": "instant",
+            "finality_depth": 0, "finality_quorum": 1, "indexed_block": 0, "journal_max_nonce": null,
+            "tokens": [{"address": "wasm1g3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zqn0lflt", "decimals": 6}]}))
+        .unwrap();
+        assert_eq!(nc.tokens[0].address, "wasm1g3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zqn0lflt");
+        assert!(nc.submittable_tokens().is_empty(), "never an EVM address");
     }
 
     #[test]

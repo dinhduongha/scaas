@@ -142,8 +142,8 @@ impl ChainAdapter for EvmAdapter {
             .ok_or_else(|| anyhow!("no block {height}"))
     }
 
-    async fn events(&self, from: u64, to: u64) -> Result<Vec<Value>> {
-        let addrs: Vec<Address> = self.tokens.read().map(|t| t.clone()).unwrap_or_default();
+    async fn events(&self, from: u64, to: u64, contracts: &[String]) -> Result<Vec<Value>> {
+        let addrs: Vec<Address> = contracts.iter().filter_map(|c| c.parse().ok()).collect();
         if addrs.is_empty() {
             return Ok(vec![]);
         }

@@ -1,0 +1,11 @@
+[package]
+name = "bamboo-metaop"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+cosmwasm-std.workspace = true
+serde.workspace = true
+sha2.workspace = true
+ripemd.workspace = true
