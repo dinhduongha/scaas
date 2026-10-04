@@ -583,3 +583,11 @@ Kill criterion S1 của canon (2.5M) bị vượt ở transfer bn254 (2.75M th�
 | S2-R1 | med | Đúng (PoC chạy): transfer `v = 0` từ tài khoản số dư 0 tăng `pendingSeq` nạn nhân ⇒ `rollOverSigned` `OWNER_ONLY` revert mãi; §5 nói sai "phải nạp tiền thật" | RS2-17 + sửa §5; test `test_rollOverSignedSurvivesFrontRunCredit` |
 | S2-R2 | low | Đúng (PoC chạy): BLS_12381 đăng ký được với pk = vô cực, chữ ký 0 qua mọi digest | RS2-18; test trong `test_multisigBadAuthDataRejected`, `test_bls12381Auth` |
 | S2-R3 | med | Đúng (test đỏ trước khi sửa): sau RS2-17 chữ ký no-op (`expected ≤ lastRolled`) không tăng `accSeq` ⇒ sống tới credit sau, ai cũng ép rollOver `OWNER_ONLY` | RS2-19; test `test_rollOverSignedWithoutNewCreditIsRejected` (`90d0f9d`) |
+
+### Review agy — folded/rejected (nhánh `71f3ffb..90d0f9d`, 2026-10-04)
+
+agy (`--mode plan`, đối chiếu Zether 2020, Bulletproofs 2018, EIP-196/197/2537) chạy trên diff `src/zether`,
+`src/registry`, `OpenFactory.sol`: **0 finding**. Nó tự kiểm và xác nhận: transcript có tiền tố miền + độ dài,
+`hashToScalar` rộng 512 bit, mọi challenge ≠ 0, mọi scalar phản hồi `< r`, `δ(y,z)` đúng BP 2018, subgroup
+BLS12-381 qua G1MSM/G2MSM, cổng `lastRolled < expected ≤ pendingSeq` (RS2-17/19), tách `TAG_DIRECT`/`TAG_RELAYED`,
+R26 (spender/caller là hợp đồng). Không có gì để gộp hay từ chối. Suite: `forge test` 270/270 (zether 138).
