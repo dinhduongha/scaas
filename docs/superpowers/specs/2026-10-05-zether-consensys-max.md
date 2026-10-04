@@ -33,17 +33,25 @@ for (var i = 0; i < bn128.B_MAX; i++) {     // B_MAX = 4294967295
 Range proof gốc: `ZetherVerifier` `m = 64` (= 2 giá trị × 32 bit: số tiền chuyển và số dư còn lại),
 `n = 6` vòng; `BurnVerifier` `m = 32`, `n = 5` vòng — tức mọi giá trị được chứng minh nằm trong `[0, 2^32)`.
 
-## 2. Nó thực sự là gì
+## 2. Nó thực sự là gì: **cận giải mã** (decryption bound)
 
-1. **Trần TỔNG tiền mà cả contract ZSC giữ** (`bTransfer + bTotal <= MAX` khi `fund`), không phải trần
-   một lần chuyển. `bTotal` là tổng mọi số dư bí mật của mọi tài khoản.
-2. **Lý do tồn tại: giải mã số dư.** Số dư lưu dạng ElGamal; client chỉ tính được `g^b`, rồi phải tìm `b`
-   (logarit rời rạc) bằng **vòng lặp vét cạn tuyến tính** từ 0 đến `B_MAX`. Vì mọi số dư ≤ tổng ≤ MAX,
-   chặn tổng ở 2^32 bảo đảm mọi ví luôn đọc được số dư của mình (tối đa ~4,3 tỷ phép cộng điểm).
-3. **Trùng khớp với độ rộng range proof 32 bit**, nên các lệnh `burn`/`transfer` cũng kiểm `≤ MAX` — từ đó
-   comment/thông báo lỗi "amount out of range" khiến người đọc tưởng đây là "số coin tối đa mỗi lần chuyển".
-   Thực chất mỗi lần chuyển bị chặn bởi range proof (2^32) VÀ bởi số dư; MAX là cận usability của giải mã,
-   áp lên tổng.
+Kết luận của nghiên cứu trước (`blockchain-research/03-zether-crypto.md` §3.2.1), giữ nguyên:
+*"`MAX` trong Zether **không phải** tham số của range proof. Nó là **cận giải mã**."*
+
+1. **Cận giải mã.** Số dư lưu dạng ElGamal `(C, D) = (g^b·y^r, g^r)`; chủ tài khoản chỉ tính được
+   `g^b = C·D^{-x}`, rồi phải giải **logarit rời rạc** để lấy `b`. Bài toán này chỉ giải được khi biết trước
+   `b` nằm trong một khoảng nhỏ — `MAX` chính là khoảng đó. Bản gốc giải bằng **vòng lặp vét cạn tuyến tính**
+   `b = 0 … B_MAX` (`utils.readBalance`, `B_MAX = 2^32 − 1`); BSGS/kangaroo làm nhanh hơn (O(√MAX)) nhưng vẫn
+   bị chặn bởi MAX.
+2. **Contract bảo đảm cận đó bằng cách chặn TỔNG.** `fund` kiểm `bTransfer + bTotal <= MAX`, với `bTotal`
+   là tổng mọi số dư bí mật; vì mọi số dư ≤ tổng ≤ MAX nên ví nào cũng đọc được số dư của mình. Đây là cơ
+   chế thực thi, không phải bản chất của hằng số.
+3. **Không phải "số coin tối đa mỗi lần chuyển".** Nó chỉ *trùng giá trị* với độ rộng range proof 32 bit
+   của bản gốc, và `burn`/`transfer` cũng kiểm `≤ MAX` với thông báo "amount out of range" — đó là nguồn
+   của cách hiểu nhầm. Mỗi lần chuyển bị chặn bởi range proof và bởi số dư; MAX là cận để số dư còn
+   **đọc được**.
+4. Hệ quả kèm theo (nghiên cứu §01 / §08): với token 18 decimals, 2^32 − 1 đơn vị chỉ là 4,29e-9 token —
+   và vì là `constant` nên không đặt riêng được cho từng token.
 
 Hệ quả nếu chỉ "tăng MAX" (ví dụ `MAX = 2^128 − 1` như một bản ghi chú cũ đề xuất): contract chấp nhận,
 nhưng vòng lặp giải mã cần tới 2^128 bước — số dư không đọc được, và ví không chi được (prover cần số dư
@@ -55,8 +63,8 @@ dạng rõ). Đây là lỗi `blockchain-research/_MANIFESTS.md` đã bác.
 |---|---|---|
 | Soundness: giá trị chứng minh được của **một lần chuyển** | range proof 32 bit | `n_v = 64` (6 vòng) — mỗi lần chuyển chỉ còn bị chặn bởi số dư |
 | Soundness: **số dư còn lại** sau chi | range proof 32 bit | `n_b = 64` (6 vòng) |
-| **Trần tổng** tiền của token (cái `MAX` thật) | 2^32 (≈ 4,29 tỷ đơn vị) | `MAX_TOTAL_SHIELDED = 2^54` (≈ 18 triệu tỷ ₫ với 1 đơn vị = 1 ₫); mỗi token đặt `maxDecryptableShielded ≤ 2^54` |
-| **Giải mã** số dư ở client | vét cạn tuyến tính tới 2^32 (O(2^32)) | BSGS O(√bound), client tự cấu hình bảng 2^18–2^27, trần dò ≤ 2^54; + cache số dư trên thiết bị (`2026-10-05-zether-limits.md` §4–§5) |
+| Trần tổng tiền của token (cách contract thực thi cận giải mã) | 2^32 (≈ 4,29 tỷ đơn vị) | `MAX_TOTAL_SHIELDED = 2^54` (≈ 18 triệu tỷ ₫ với 1 đơn vị = 1 ₫); mỗi token đặt `maxDecryptableShielded ≤ 2^54` |
+| **Cận giải mã** (cái `MAX` thật) — chủ tài khoản giải log rời rạc số dư | vét cạn tuyến tính tới 2^32 (O(2^32)), thực thi bằng trần tổng 2^32 | BSGS O(√bound), client tự cấu hình bảng 2^18–2^27, trần dò ≤ 2^54; + cache số dư trên thiết bị (`2026-10-05-zether-limits.md` §4–§5) |
 
 ## 4. Có tăng thêm nữa không?
 
