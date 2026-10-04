@@ -1,0 +1,9 @@
+{
+  "name": "bamboo-aptos-vectors",
+  "private": true,
+  "type": "module",
+  "description": "Pins Aptos facts from the official TS SDK (tx hash, lane addresses, passkey auth key). node_modules is not committed.",
+  "dependencies": {
+    "@aptos-labs/ts-sdk": "7.3.0"
+  }
+}
