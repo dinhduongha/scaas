@@ -240,6 +240,35 @@ mod tests {
         assert!(param_tokens(&cfg).is_err());
     }
 
+    /// Review H1/M1: a Hedera chain from `node.toml` (EVM-style: `evm_chain_number`, no `network`, finality
+    /// `instant`) starts, keys as Odoo does (`hedera:<chainId>`) and runs on `HederaAdapter` under the lane
+    /// runner — never the pipelined EVM submitter.
+    #[test]
+    fn config_routes_hedera_through_the_adapter() {
+        let raw = "[odoo]\nurl = \"http://o\"\ndatabase = \"d\"\nrelay_api_key_env = \"R\"\nindexer_api_key_env = \"I\"\n\
+            [[chains]]\nfamily = \"hedera\"\nevm_chain_number = 296\nrpc_urls = [\"http://127.0.0.1:1\"]\n\
+            signer_key_env = \"BAMBOO_TEST_HEDERA_KEY\"\n\
+            finality = { mode = \"instant\" }\n";
+        std::env::set_var("BAMBOO_TEST_HEDERA_KEY", format!("0x{}", "07".repeat(32)));
+        let c: crate::config::Config = toml::from_str(raw).unwrap();
+        c.validate().unwrap();
+        let cc = &c.chains[0];
+        assert!(cc.uses_adapter(), "hedera must not take the EVM submit.rs path");
+        assert_eq!(cc.chain_key(), "hedera:296");
+        let mut with_net = cc.clone();
+        with_net.network = Some("testnet".into());
+        assert_eq!(with_net.chain_key(), "hedera:296", "Odoo keys Hedera by chain id");
+        let a = crate::adapters::build(cc, &c.lane_signers(cc).unwrap()).unwrap();
+        assert_eq!((a.family(), a.chain_key()), (Family::Hedera, "hedera:296"));
+        let evm: crate::config::ChainCfg =
+            toml::from_str("evm_chain_number = 1\nrpc_urls = [\"http://a\"]\nfinality = { mode = \"instant\" }\n").unwrap();
+        assert!(!evm.uses_adapter());
+        let mut bad = c.clone();
+        bad.chains[0] = evm;
+        bad.chains[0].signer_key_env = cc.signer_key_env.clone();
+        assert!(bad.validate().is_err(), "instant is Hedera-only");
+    }
+
     #[test]
     fn refuses_non_hedera_chain_ids() {
         let cfg: ChainCfg = toml::from_str(
