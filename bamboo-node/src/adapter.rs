@@ -24,6 +24,7 @@ pub enum Family {
     Soroban,
     Cosmos,
     Ton,
+    Solana,
 }
 
 impl Family {
@@ -35,6 +36,7 @@ impl Family {
             "soroban" => Self::Soroban,
             "cosmos" => Self::Cosmos,
             "ton" => Self::Ton,
+            "solana" => Self::Solana,
             _ => return None,
         })
     }
@@ -407,7 +409,8 @@ pub(crate) mod tests {
     #[test]
     fn families_parse() {
         assert_eq!(Family::parse("sui"), Some(Family::Sui));
-        assert_eq!(Family::parse("solana"), None);
+        assert_eq!(Family::parse("solana"), Some(Family::Solana));
+        assert_eq!(Family::parse("near"), None);
     }
 
     /// Adapter giả: lane luôn bị CheckTx từ chối, indexer ghi lại tập contract được đưa vào.

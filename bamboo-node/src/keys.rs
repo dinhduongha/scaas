@@ -158,6 +158,9 @@ pub fn lane_path(family: &str, i: u32) -> Result<(Curve, String)> {
         "sui" => (Curve::Ed25519, format!("m/44'/784'/{i}'/0'/0'")),
         "soroban" => (Curve::Ed25519, format!("m/44'/148'/{i}'")),
         "ton" => (Curve::Ed25519, format!("m/44'/607'/{i}'")),
+        // Phantom/Solflare and `solana-keygen prompt://?full-path=`: m/44'/501'/account'/0' (Ledger Live's 3-level
+        // m/44'/501'/i' is not used).
+        "solana" => (Curve::Ed25519, format!("m/44'/501'/{i}'/0'")),
         other => bail!("unknown family {other}"),
     })
 }
@@ -268,6 +271,16 @@ mod tests {
             let mut flagged = vec![0u8];
             flagged.extend_from_slice(&pk);
             assert_eq!(format!("0x{}", hexs(&crate::signer::blake2b256(&flagged))), want);
+        }
+    }
+
+    #[test]
+    fn solana_path_matches_solana_keygen() {
+        // `solana-keygen pubkey "prompt://?full-path=m/44'/501'/{0,1}'/0'"` with "<ART24>" (Agave 4.3.0)
+        let s = Seed::from_phrase(ART24.as_bytes(), None).unwrap();
+        for (i, want) in [(0, "3Cy3YNTFywCmxoxt8n7UH6hg6dLo5uACowX3CFceaSnx"), (1, "5frqxtii9LeGq2bz3dSNokvZcEooF483MzeU24JrhcTA")] {
+            let (c, k) = lane_secret(&s, "solana", i).unwrap();
+            assert_eq!(bs58::encode(LocalSigner::new(c, &k).unwrap().public_key()).into_string(), want);
         }
     }
 
