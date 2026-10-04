@@ -40,6 +40,32 @@ DB `dms_test_chain_4` / 8924, anvil 31940–31949.
   `sha512(x ‖ msg ‖ CSPRNG) mod r` (khác cách S3 nhưng chỉ cần verify chéo; với `k` cố định thì trùng byte).
   Entry lười riêng `zether-keys.js` để bundle seed không phình. `x` niêm phong bằng vault như seed.
 
+- **RS4-10** (review S4-L1) `MetaToken` ghim implementation `SubjectAccount` của chain (tham số constructor,
+  immutable); `ERC20MetaTx._erc1271Gas(from)` mặc định 50k, `MetaToken` cho 400k CHỈ khi `from.codehash` = mã clone
+  EIP-1167 của implementation đó. Ví hợp đồng khác (Safe…) giữ 50k. `Deploy.s.sol` deploy `SubjectAccountFactory`
+  trước token và ghi địa chỉ vào `deployments/<chainid>.json`. **Chạm file ngoài quyền S4** (`MetaToken.sol` của S5,
+  `Deploy.s.sol` + `test/helpers/Fixtures.sol` của S1): commit riêng `e1a4a8b` để lead quyết khi merge.
+- **RS4-11** (S4-H1) User handle WebAuthn **ngẫu nhiên 16 byte mỗi passkey** (không theo đối tác); `excludeCredentials`
+  = passkey còn sống của account (server phục vụ, khoá `failed` không tính); thêm passkey trên máy mới thì mở và đối
+  chiếu cụm từ phê duyệt TRƯỚC `navigator.credentials.create()`. `InvalidStateError` ⇒ "máy này đã có passkey".
+- **RS4-12** (S4-M1) Khoá đầu tiên đăng ký hai bước: `..._register_start` trả challenge HMAC(`database.secret`;
+  user, đối tác, chain, hạn) — không lưu gì, TTL 600 s; khoá mới ký `keccak256("bamboo-subject-key-proof-v1" ‖
+  challenge)` (tách miền: challenge do server chọn không bao giờ là digest của một thao tác). Passkey: assertion kiểm
+  như `_clientDataOk` (bản Python), rpIdHash, UP|UV, chữ ký P-256; khoá seed: `ecrecover`. Origin/rpId lấy từ
+  `dms_blockchain_bridge.passkey_origin`, mặc định `web.base.url` — **không** theo host của request. Ngữ nghĩa
+  "user có entitlement hành động thay đối tác" giữ nguyên.
+- **RS4-13** (S4-M2) Client **không ký typed data của server như nó là**: `checkPayment` dựng lại thao tác `pay`
+  (op `pay(bytes32)`, `value` = số tiền đã hiển thị × 10^`tokenDecimals`, `from` = account, đúng chain, phí 0, hạn
+  ≤ 1 ngày, đúng type) và `checkOwnerCall` (chỉ `addKey(khoá vừa tạo)` trên đúng account/chain, hạn ≤ 1 giờ); khác
+  ⇒ từ chối. Owner call chỉ ký sau form hiển thị account, selector, value 0.
+- **RS4-14** (S4-M3, thay tham số RS4-8) Passphrase mới ≥ 8 ký tự và không chỉ chữ số; scrypt **N=2^17**, r=8, p=1
+  (Node 26: noble 501 ms, native 334 ms; N=2^15 là 131/86 ms). Vault cũ (2^15, PIN 6 số) vẫn mở được và được bọc
+  lại khi mở (PIN yếu ⇒ chọn passphrase mới). Phong bì PRF **mặc định** khi một passkey của account cho PRF; phong
+  bì passphrase vẫn luôn có (SEC-17).
+- **RS4-15** (S4-L2) Vault theo chủ thể: `localStorage["dms_chain_seed_vault:<subject>"]` (`subject` = thẻ mờ
+  theo đối tác từ server); khoá chung cũ đọc một lần rồi chuyển. Thay cụm từ đã lưu phải xác nhận.
+- **RS4-16** (S4-L3) Job deploy chỉ cho account của CHÍNH đối tác của lần trả (`res_model/res_id` của request).
+
 ## Task
 
 1. Contract `src/account/{SubjectAccount,SubjectAccountFactory}.sol` + trần ERC-1271 400k; forge test (vector Base
@@ -95,3 +121,33 @@ DEK ngẫu nhiên, AAD theo nhãn), Odoo (`_dms_chain_order` theo entitlement, r
 **0 finding gộp.** Ghi nhận (không đổi): mọi user có entitlement trên partner đều đăng ký được khoá ĐẦU của account
 partner đó — đúng mô hình "entitlement = hành động thay partner", cần guardian để thu hồi nếu chiếm sai. Rủi ro mở:
 chưa có review ngoài của diff — chạy lại agy khi quota hồi.
+
+## Review opus (external substitute) — folded/rejected (2026-10-04)
+
+Review: `scratchpad/s4-opus-review.md` (Claude Opus, đọc diff, không chạy code): 0 critical, 1 high, 3 medium, 4 low.
+Mỗi finding được kiểm lại trên code trước khi sửa; test viết trước.
+
+- **H1 folded** `9552724` (RS4-11) — handle ngẫu nhiên mỗi passkey, `excludeCredentials`, phê duyệt trước `create()`.
+  Test: node `creationOptions` (handle 16 byte khác nhau, exclude), Odoo `test_context_serves_exclusions_and_no_shared_user_handle`,
+  tour kiểm options của `create`.
+- **M1 folded** `9552724` (RS4-12) — đăng ký hai bước + kiểm origin/rpId/UV/chữ ký; origin theo cấu hình.
+  Test: `test_register_needs_proof_of_the_key_and_its_origin` (sai scheme, sai cổng, sai rpId, thiếu UV, challenge lạ,
+  dời hạn, khoá khác, seed ký sai), `test_register_passkey_uses_the_configured_rp_and_origin`, vector
+  `key_proof_message` ghim chung với clientkeys; tour passkey: create, get (chứng minh), get (trả).
+  Không làm: reset account bởi admin (gợi ý tuỳ chọn của review) — nguyên nhân "khoá đầu hỏng" đã bị chặn ở đăng ký.
+- **M2 folded** `9552724` (RS4-13) — `checkPayment`/`checkOwnerCall` + form xác nhận owner call. Test node: 9 dạng
+  OwnerCall và 11 dạng thanh toán bị từ chối (gồm OwnerCall đội lốt thanh toán, số tiền lớn hơn, op `trade`, phí).
+- **M3 folded** `113adab` + `9552724` (RS4-14) — passphrase ≥ 8 ký tự không chỉ số, scrypt 2^17, bọc lại vault cũ,
+  PRF mặc định. Không làm: khoá thiết bị WebCrypto không-xuất-được trong IndexedDB (phần "additionally" của review,
+  ngoài ruling) — ghi là rủi ro mở.
+- **L1 folded** `e1a4a8b` (RS4-10) — 400k chỉ cho clone SubjectAccount; forge `test_1271_gas_400k_only_for_subject_account_clones`
+  (đỏ khi cho 400k mọi ví, xanh sau sửa). **Needs from S5/S1**: commit chạm `MetaToken.sol`, `Deploy.s.sol`,
+  `test/helpers/Fixtures.sol` (ngoài quyền S4) — lead quyết khi merge.
+- **L2 folded** `9552724` (RS4-15) — vault theo chủ thể, không ghi đè im lặng; tour kiểm khoá `dms_chain_seed_vault:<subject>`.
+- **L3 folded** `9552724` (RS4-16) — `test_deploy_only_for_the_paying_partners_own_account`.
+- **L4 folded** `91b8ee3` — `zether.js` theo đúng luật chỉ số của prover; kiểm chéo bằng `r33_inputs.json` của S3
+  (`0e62494` trên `r3-zether-prover`), kèm seed passphrase NFKD.
+
+Suite sau sửa (`9552724`): `forge test` 181/181 (15 suite); `clientkeys` `npm test` 38/38 (bundle dựng lại khớp từng
+byte); Odoo `dms_blockchain,dms_blockchain_bridge,dms_blockchain_payment` trên `dms_test_chain_4`/8924: 184 test,
+0 failed, 0 error (gồm hai tour passkey/seed).
