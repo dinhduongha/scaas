@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import {
   hashTypedData, secpSubjectKey, accountSalt, predictAccount, accountSignature, merkleBatch, processProof,
-  batchLeaf, evmAddress,
+  batchLeaf, evmAddress, passkeySubjectKey, addKeyCalldata, ownerCallTypedData, checkOwnerCall, checkPayment,
+  keyProofMessage,
 } from '../src/evm.js';
 import { abiEncode, hex, fromHex, keccak_256, utf8ToBytes } from '../src/bytes.js';
 
@@ -81,4 +82,112 @@ test('Merkle batch: every digest proves to the root; foreign digest does not', (
     assert.notEqual(hex(processProof(proofs[0], batchLeaf(keccak_256(utf8ToBytes('x'))))), hex(root));
   }
   assert.throws(() => merkleBatch([new Uint8Array(32)]), /at least two/);
+});
+
+// ------------------------------------------------------------------ review S4-M2: no blind signing
+
+const ACCOUNT = '0x' + 'ac'.repeat(20);
+const NOW = 1_800_000_000;
+const NEW_KEY = secpSubjectKey('0x' + '77'.repeat(20));
+
+/** OwnerCall exactly as Odoo `_owner_call_typed_data` issues it. */
+function odooOwnerCall(data, { account = ACCOUNT, chainId = 31337, nonce = '2', validUntil = String(NOW + 600) } = {}) {
+  return {
+    types: {
+      EIP712Domain: [{ name: 'name', type: 'string' }, { name: 'version', type: 'string' },
+        { name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' }],
+      OwnerCall: [{ name: 'data', type: 'bytes' }, { name: 'nonce', type: 'uint256' }, { name: 'validUntil', type: 'uint256' }],
+    },
+    primaryType: 'OwnerCall',
+    domain: { name: 'Bamboo SubjectAccount', version: '1', chainId, verifyingContract: account },
+    message: { data: hex(data), nonce, validUntil },
+  };
+}
+
+test('OwnerCall: the client signs only addKey(the key it just made) on its own account', () => {
+  const want = { account: ACCOUNT, chainId: 31337, newKey: NEW_KEY, now: NOW };
+  const td = odooOwnerCall(addKeyCalldata(NEW_KEY));
+  assert.equal(hex(checkOwnerCall(td, want)), hex(hashTypedData(td)));
+  assert.equal(hex(hashTypedData(ownerCallTypedData({ account: ACCOUNT, chainId: 31337, data: addKeyCalldata(NEW_KEY),
+    nonce: '2', validUntil: String(NOW + 600) }))), hex(hashTypedData(td)));
+  // addKey(abi.encode(key)): selector of addKey((uint8,bytes32,bytes32,bytes32,bytes32)) + 5 words.
+  assert.equal(hex(addKeyCalldata(NEW_KEY).subarray(0, 4)),
+    hex(keccak_256(utf8ToBytes('addKey((uint8,bytes32,bytes32,bytes32,bytes32))')).subarray(0, 4)));
+  const drain = concatSel('execute(address,uint256,bytes)');
+  const refused = [
+    odooOwnerCall(drain),                                                      // any other call
+    odooOwnerCall(addKeyCalldata(secpSubjectKey('0x' + '66'.repeat(20)))),     // someone else's key
+    odooOwnerCall(addKeyCalldata(NEW_KEY), { account: '0x' + 'bd'.repeat(20) }),
+    odooOwnerCall(addKeyCalldata(NEW_KEY), { chainId: 1 }),
+    odooOwnerCall(addKeyCalldata(NEW_KEY), { validUntil: String(NOW - 1) }),
+    odooOwnerCall(addKeyCalldata(NEW_KEY), { validUntil: String(NOW + 7200) }),
+    odooOwnerCall(addKeyCalldata(NEW_KEY), { nonce: '-1' }),
+    { ...odooOwnerCall(addKeyCalldata(NEW_KEY)), primaryType: 'MetaTransaction' },
+  ];
+  const extra = odooOwnerCall(addKeyCalldata(NEW_KEY));
+  extra.types.OwnerCall.push({ name: 'value', type: 'uint256' });
+  extra.message.value = '1';
+  refused.push(extra);
+  for (const [i, bad] of refused.entries()) assert.throws(() => checkOwnerCall(bad, want), /Refusing to sign/, `case ${i}`);
+  // A passkey key is rebuilt from the server's rpId/origin and the coordinates the device returned.
+  const pk = passkeySubjectKey({ x: new Uint8Array(32).fill(1), y: new Uint8Array(32).fill(2), rpId: 'pay.example.com',
+    origin: 'https://pay.example.com' });
+  checkOwnerCall(odooOwnerCall(addKeyCalldata(pk)), { ...want, newKey: pk });
+});
+
+function concatSel(sig) {
+  return new Uint8Array([...keccak_256(utf8ToBytes(sig)).subarray(0, 4), ...new Uint8Array(96)]);
+}
+
+/** MetaTransaction exactly as Odoo `eip712.typed_data` issues it for a pay. */
+function odooPayment(over = {}, dom = {}) {
+  const k = read('metatx_kat.json');
+  return {
+    types: {
+      EIP712Domain: [{ name: 'name', type: 'string' }, { name: 'version', type: 'string' },
+        { name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' }],
+      MetaTransaction: ['from:address', 'to:address', 'value:uint256', 'data:bytes', 'batch:uint256', 'nonce:uint256',
+        'validUntil:uint256', 'mode:uint32', 'relayer:address', 'fee:uint256', 'feeRecipient:address']
+        .map((s) => ({ name: s.split(':')[0], type: s.split(':')[1] })),
+    },
+    primaryType: 'MetaTransaction',
+    domain: { name: 'Bamboo MetaToken', version: '1', chainId: 31337, verifyingContract: k.verifying_contract, ...dom },
+    message: { from: ACCOUNT, to: '0x' + '5e'.repeat(20), value: '125000500000', data: hex(concatPay()), batch: '7',
+      nonce: '0', validUntil: String(NOW + 300), mode: 1, relayer: '0x' + '02'.repeat(20), fee: '0',
+      feeRecipient: '0x' + '00'.repeat(20), ...over },
+  };
+}
+
+function concatPay() {
+  return new Uint8Array([...keccak_256(utf8ToBytes('pay(bytes32)')).subarray(0, 4), ...new Uint8Array(32).fill(9)]);
+}
+
+test('payment: the client signs only a pay of the amount it showed, from its own account, on its chain', () => {
+  const intent = { account: ACCOUNT, chainId: 31337, amount: 125000.5, decimals: 6, now: NOW };
+  const td = odooPayment();
+  const ok = checkPayment(td, intent);
+  assert.equal(hex(ok.digest), hex(hashTypedData(td)));
+  assert.equal(ok.payee, '0x' + '5e'.repeat(20));
+  checkPayment(odooPayment({ value: '125000000000' }), { ...intent, amount: 125000 });
+  checkPayment(odooPayment({ mode: 0, relayer: '0x' + '00'.repeat(20) }), intent);
+  const refused = [
+    odooOwnerCall(addKeyCalldata(NEW_KEY)),                       // an owner call disguised as a payment
+    odooPayment({ value: '125000500001' }),                       // more than shown
+    odooPayment({ from: '0x' + 'bd'.repeat(20) }),
+    odooPayment({ data: hex(concatSel('trade(address,uint256,address)')) }),
+    odooPayment({ data: '0x' }),
+    odooPayment({ fee: '1' }),
+    odooPayment({ validUntil: String(NOW - 1) }),
+    odooPayment({ validUntil: String(NOW + 8 * 86400) }),
+    odooPayment({}, { chainId: 1 }),
+    odooPayment({}, { verifyingContract: ACCOUNT }),
+  ];
+  for (const [i, bad] of refused.entries()) assert.throws(() => checkPayment(bad, intent), /Refusing to sign/, `case ${i}`);
+  assert.throws(() => checkPayment(td, { ...intent, amount: 1e21 }), /Refusing to sign/);
+});
+
+const KEY_PROOF_ZERO = '0x4c47a35cb6c611715f86338dd30067da995a2494c78f51b492d63dfab5406be7';
+
+test('key proof message = keccak256("bamboo-subject-key-proof-v1" ‖ challenge) (pinned with Odoo)', () => {
+  assert.equal(hex(keyProofMessage(new Uint8Array(32))), KEY_PROOF_ZERO);
 });

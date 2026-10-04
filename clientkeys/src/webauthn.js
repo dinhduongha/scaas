@@ -1,6 +1,6 @@
 // WebAuthn (passkey) helpers for SubjectAccount (R31). Nothing secret: the private key never
 // leaves the authenticator; we only shape options and re-encode what it returns.
-import { abiEncode, fromHex } from './bytes.js';
+import { abiEncode, fromHex, fromB64url } from './bytes.js';
 
 // P-256 group order.
 export const P256_N = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n;
@@ -10,13 +10,22 @@ export function passkeySupported(win = globalThis) {
   return Boolean(win.PublicKeyCredential && win.navigator && win.navigator.credentials);
 }
 
-/** `navigator.credentials.create` options: ES256 only, discoverable, user verification required. */
-export function creationOptions({ rpId, rpName, userId, userName, challenge, prf = true }) {
+/**
+ * `navigator.credentials.create` options: ES256 only, discoverable, user verification required.
+ * The user handle is random per credential: authenticators keep ONE discoverable credential per
+ * (rpId, user handle), so a shared handle makes a new passkey silently replace the old one in a
+ * synced keychain (review S4-H1). `excludeCredentialIds` (the account's live passkeys) makes an
+ * authenticator that already holds one refuse with `InvalidStateError` instead.
+ */
+export function creationOptions({ rpId, rpName, userId, userName, challenge, excludeCredentialIds, prf = true }) {
+  if (userId !== undefined) throw new Error('the user handle is random per passkey; do not pass one');
+  if (!Array.isArray(excludeCredentialIds)) throw new Error('excludeCredentialIds (the account passkeys) is required');
   return {
     publicKey: {
       rp: { id: rpId, name: rpName || rpId },
-      user: { id: userId, name: userName, displayName: userName },
+      user: { id: crypto.getRandomValues(new Uint8Array(16)), name: userName, displayName: userName },
       challenge,
+      excludeCredentials: excludeCredentialIds.map((id) => ({ type: 'public-key', id: typeof id === 'string' ? fromB64url(id) : id })),
       pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
       authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
       attestation: 'none',

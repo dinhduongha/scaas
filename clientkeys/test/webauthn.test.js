@@ -30,7 +30,7 @@ test('DER decode, low-s normalisation and strictness', () => {
 });
 
 test('options builders: ES256, user verification required, challenge = 32-byte digest, PRF opt-in', () => {
-  const c = creationOptions({ rpId: RP, userId: new Uint8Array([1]), userName: 'outlet', challenge: new Uint8Array(32) });
+  const c = creationOptions({ rpId: RP, userName: 'outlet', challenge: new Uint8Array(32), excludeCredentialIds: [] });
   assert.deepEqual(c.publicKey.pubKeyCredParams, [{ type: 'public-key', alg: -7 }]);
   assert.equal(c.publicKey.authenticatorSelection.userVerification, 'required');
   assert.deepEqual(c.publicKey.extensions, { prf: {} });
@@ -68,4 +68,20 @@ test('clientDataJSON shape is what SubjectAccount checks (RS4-2)', async () => {
   const a = await auth.get(new Uint8Array(32).fill(0xab));
   assert.equal(new TextDecoder().decode(a.clientDataJSON),
     `{"type":"webauthn.get","challenge":"${'q6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6s'}","origin":"${ORIGIN}","crossOrigin":false}`);
+});
+
+// Review S4-H1: a discoverable credential is stored per (rpId, user handle). One handle per
+// partner made "add a passkey on this device" REPLACE the account's passkey in a synced keychain.
+test('creationOptions: random 16-byte user handle per credential, account passkeys excluded', () => {
+  const ex = [new Uint8Array([1, 2, 3]), 'AQID'];
+  const a = creationOptions({ rpId: RP, userName: 'outlet', challenge: new Uint8Array(32), excludeCredentialIds: ex });
+  const b = creationOptions({ rpId: RP, userName: 'outlet', challenge: new Uint8Array(32), excludeCredentialIds: ex });
+  assert.equal(a.publicKey.user.id.length, 16);
+  assert.notEqual(bytesToHex(a.publicKey.user.id), bytesToHex(b.publicKey.user.id));
+  assert.deepEqual(a.publicKey.excludeCredentials.map((c) => [c.type, bytesToHex(c.id)]),
+    [['public-key', '010203'], ['public-key', '010203']]);
+  assert.equal(a.publicKey.authenticatorSelection.residentKey, 'required');
+  assert.throws(() => creationOptions({ rpId: RP, userName: 'o', challenge: new Uint8Array(32) }), /excludeCredentialIds/);
+  assert.throws(() => creationOptions({ rpId: RP, userName: 'o', challenge: new Uint8Array(32), userId: new Uint8Array(16),
+    excludeCredentialIds: [] }), /user handle/);
 });

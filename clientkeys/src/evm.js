@@ -115,3 +115,95 @@ export function merkleBatch(digests) {
 export function processProof(proof, leaf) {
   return proof.reduce((acc, p) => nodeHash(acc, p), leaf);
 }
+
+// ------------------------------------------------------------------ what the client agrees to sign (review S4-M2)
+// A passkey prompt shows no payload and a seed key signs silently: the client must never sign the
+// server's typed data as such. It rebuilds what the payer asked for and refuses anything else.
+
+const DOMAIN_TYPE = [{ name: 'name', type: 'string' }, { name: 'version', type: 'string' },
+  { name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' }];
+const OWNER_CALL_TYPES = { EIP712Domain: DOMAIN_TYPE, OwnerCall: [{ name: 'data', type: 'bytes' },
+  { name: 'nonce', type: 'uint256' }, { name: 'validUntil', type: 'uint256' }] };
+const PAY_TYPES = { EIP712Domain: DOMAIN_TYPE, MetaTransaction: ['from:address', 'to:address', 'value:uint256',
+  'data:bytes', 'batch:uint256', 'nonce:uint256', 'validUntil:uint256', 'mode:uint32', 'relayer:address', 'fee:uint256',
+  'feeRecipient:address'].map((s) => ({ name: s.split(':')[0], type: s.split(':')[1] })) };
+export const ADD_KEY_SELECTOR = keccak_256(utf8ToBytes(`addKey(${KEY_TUPLE})`)).subarray(0, 4);
+const OP_PAY = keccak_256(utf8ToBytes('pay(bytes32)')).subarray(0, 4);
+const KEY_PROOF_PREFIX = utf8ToBytes('bamboo-subject-key-proof-v1');
+
+const refuse = (why) => { throw new Error(`Refusing to sign: ${why}.`); };
+const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
+
+function uint(v, what) {
+  const s = String(v ?? '');
+  if (!/^[0-9]+$/.test(s)) refuse(`${what} is not a number`);
+  return BigInt(s);
+}
+
+function digestOf(td) {
+  try { return hashTypedData(td); } catch { return refuse('malformed typed data'); }
+}
+
+function deadline(validUntil, now, max) {
+  const until = uint(validUntil, 'the deadline');
+  if (!(until > BigInt(now) && until <= BigInt(now) + BigInt(max))) refuse('the signing deadline is not near');
+  return until;
+}
+
+/** What a new key signs to prove it is held (Odoo `key_proof_message`); never a server digest as such. */
+export function keyProofMessage(challenge) {
+  return keccak_256(concatBytes(KEY_PROOF_PREFIX, challenge));
+}
+
+export function addKeyCalldata(key) {
+  return concatBytes(ADD_KEY_SELECTOR, abiEncode([KEY_TUPLE], [key]));
+}
+
+export function ownerCallTypedData({ account, chainId, data, nonce, validUntil }) {
+  return {
+    types: OWNER_CALL_TYPES, primaryType: 'OwnerCall',
+    domain: { name: 'Bamboo SubjectAccount', version: '1', chainId: Number(chainId), verifyingContract: account },
+    message: { data: hex(data), nonce: String(nonce), validUntil: String(validUntil) },
+  };
+}
+
+/** The server's OwnerCall must be exactly `addKey(newKey)` on `account`/`chainId`; nonce and a
+ *  near deadline come from the server. Returns the digest to sign, or throws. */
+export function checkOwnerCall(td, { account, chainId, newKey, now = Math.floor(Date.now() / 1000), maxWindow = 3600 }) {
+  const m = (td && td.message) || {};
+  const nonce = uint(m.nonce, 'the nonce');
+  const until = deadline(m.validUntil, now, maxWindow);
+  const mine = digestOf(ownerCallTypedData({ account, chainId, data: addKeyCalldata(newKey), nonce, validUntil: until }));
+  if (hex(digestOf(td)) !== hex(mine)) refuse('this is not the key change you asked for');
+  return mine;
+}
+
+function toBase(amount, decimals) {
+  const s = String(amount);
+  const m = /^([0-9]+)(?:\.([0-9]+))?$/.exec(s);
+  if (!m || (m[2] || '').length > decimals) refuse(`cannot read the amount ${s}`);
+  return BigInt(m[1] + (m[2] || '').padEnd(decimals, '0'));
+}
+
+/** The server's typed data must be a token `pay` of exactly the shown `amount` (in the token's
+ *  `decimals`) from `account` on `chainId`, no fee, near deadline. Returns {digest, payee, token}. */
+export function checkPayment(td, { account, chainId, amount, decimals, now = Math.floor(Date.now() / 1000), maxWindow = 86400 }) {
+  if (!td || td.primaryType !== 'MetaTransaction') refuse('this is not a payment');
+  const m = td.message || {};
+  const d = td.domain || {};
+  if (uint(d.chainId, 'the chain') !== BigInt(chainId)) refuse('wrong network');
+  if (!/^0x[0-9a-fA-F]{40}$/.test(String(d.verifyingContract)) || same(d.verifyingContract, account)) refuse('wrong token');
+  if (!same(m.from, account)) refuse('the payment is not from your account');
+  if (uint(m.value, 'the amount') !== toBase(amount, decimals)) refuse('the amount differs from what you were shown');
+  let data;
+  try { data = fromHex(m.data); } catch { refuse('malformed data'); }
+  if (data.length !== 36 || hex(data.subarray(0, 4)) !== hex(OP_PAY)) refuse('this is not a plain payment');
+  if (uint(m.fee, 'the fee') !== 0n) refuse('the payment carries a fee');
+  if (![0, 1].includes(Number(m.mode))) refuse('unexpected payment mode');
+  deadline(m.validUntil, now, maxWindow);
+  const mine = { types: PAY_TYPES, primaryType: 'MetaTransaction',
+    domain: { name: d.name, version: d.version, chainId: Number(chainId), verifyingContract: d.verifyingContract }, message: m };
+  const digest = digestOf(mine);
+  if (hex(digestOf(td)) !== hex(digest)) refuse('unexpected payment fields');
+  return { digest, payee: m.to, token: d.verifyingContract };
+}
