@@ -24,6 +24,7 @@ pub enum Family {
     Soroban,
     Cosmos,
     Ton,
+    Aptos,
 }
 
 impl Family {
@@ -35,6 +36,7 @@ impl Family {
             "soroban" => Self::Soroban,
             "cosmos" => Self::Cosmos,
             "ton" => Self::Ton,
+            "aptos" => Self::Aptos,
             _ => return None,
         })
     }
@@ -407,6 +409,7 @@ pub(crate) mod tests {
     #[test]
     fn families_parse() {
         assert_eq!(Family::parse("sui"), Some(Family::Sui));
+        assert_eq!(Family::parse("aptos"), Some(Family::Aptos));
         assert_eq!(Family::parse("solana"), None);
     }
 

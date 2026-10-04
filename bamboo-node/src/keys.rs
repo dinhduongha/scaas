@@ -158,6 +158,8 @@ pub fn lane_path(family: &str, i: u32) -> Result<(Curve, String)> {
         "sui" => (Curve::Ed25519, format!("m/44'/784'/{i}'/0'/0'")),
         "soroban" => (Curve::Ed25519, format!("m/44'/148'/{i}'")),
         "ton" => (Curve::Ed25519, format!("m/44'/607'/{i}'")),
+        // aptos-core PR #2073 / TS SDK: m/44'/637'/account'/change'/address_index', account index = lane.
+        "aptos" => (Curve::Ed25519, format!("m/44'/637'/{i}'/0'/0'")),
         other => bail!("unknown family {other}"),
     })
 }
@@ -268,6 +270,19 @@ mod tests {
             let mut flagged = vec![0u8];
             flagged.extend_from_slice(&pk);
             assert_eq!(format!("0x{}", hexs(&crate::signer::blake2b256(&flagged))), want);
+        }
+    }
+
+    #[test]
+    fn aptos_path_matches_the_ts_sdk() {
+        // `Account.fromDerivationPath({path: "m/44'/637'/{0,1}'/0'/0'", mnemonic: ART24})` (@aptos-labs/ts-sdk 7.3.0)
+        let s = Seed::from_phrase(ART24.as_bytes(), None).unwrap();
+        for (i, want) in [
+            (0, "ba489e5562452afe9b4d4b4fdb0a1abcd4ddce7401276675a71715de5d6d16c2"),
+            (1, "5ba5dddd21a18488d2f895b10f463c301bc5ed48cf839312915445d450b596ee"),
+        ] {
+            let (c, k) = lane_secret(&s, "aptos", i).unwrap();
+            assert_eq!(hexs(&LocalSigner::new(c, &k).unwrap().public_key()), want);
         }
     }
 

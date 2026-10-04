@@ -106,6 +106,9 @@ test('per-network keys match reference tooling', () => {
     stellar: ['GC3MMSXBWHL6CPOAVERSJITX7BH76YU252WGLUOM5CJX3E7UCYZBTPJQ', 'GB3MTYFXPBZBUINVG72XR7AQ6P2I32CYSXWNRKJ2PV5H5C7EAM5YYISO'],
     sui: ['0x23ac6c2e0ce236e26a61cee3cf292ea07fac33d4bfff81cefe101bfb7fda35fd',
       '0x40dde4d7c594bc0293ca6d0023edbcd7791026da1ead0f97f4b882229fb02679'],
+    // @aptos-labs/ts-sdk 7.3.0 Account.fromDerivationPath(m/44'/637'/i'/0'/0').accountAddress
+    aptos: ['0xb0405f24b79f5422d7ba552d1805822b77ced7de61d99bb2e98bdc2894c91b23',
+      '0xb722a3cf97b920c693a227d2e3d40c893f7a432776c8a68ba74685b5010df291'],
   };
   for (const [net, addrs] of Object.entries(want)) {
     addrs.forEach((a, i) => assert.equal(deriveKey(seed, net, i).address.toLowerCase(), a.toLowerCase(), `${net} ${i}`));
