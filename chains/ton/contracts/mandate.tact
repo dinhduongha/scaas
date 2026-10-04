@@ -4,6 +4,9 @@
 import "./jetton";
 
 const MANDATE_GAS: Int = ton("0.05");
+// A transfer to our own wallet bounces in the next transaction; 64 in-flight payouts is far more than can be
+// pending at once. ponytail: ring of 64, a bounce older than that restores nothing (the owner can still withdraw).
+const INFLIGHT_RING: Int = 64;
 
 message(0x5b0a1d10) MandatePay {
     op: Cell;
@@ -16,6 +19,14 @@ struct MandateTerms {
     perPeriod: Int as coins;
     periodSeconds: Int as uint32;
     expiresAt: Int as uint64;
+}
+
+/// What a payout took, to undo it if our wallet bounces the transfer (review L9).
+struct Inflight {
+    payRef: Int as uint256; // delegate pays only (0 for the owner's withdrawals)
+    debited: Int as coins;
+    spent: Int as coins;
+    periodStart: Int as uint64;
 }
 
 struct MandateState {
@@ -35,6 +46,8 @@ contract Mandate(
     payees: map<Address, Bool>,
     usedRefs: map<Int as uint256, Bool>,
     lanes: map<Int as uint256, Int as uint64>,
+    payouts: Int as uint64,
+    inflight: map<Int as uint64, Inflight>,
 ) {
     receive() {} // deploy / TON top-up
 
@@ -66,7 +79,7 @@ contract Mandate(
         throwUnless(726, self.usedRefs.get(m.payRef) == null);
         self.usedRefs.set(m.payRef, true);
         self.st.spent += m.amount;
-        self.payOut(m, msg.responseDestination);
+        self.payOut(m, msg.responseDestination, Inflight { payRef: m.payRef, debited: m.amount, spent: m.amount, periodStart: self.st.periodStart });
     }
 
     /// Owner ops: `revoke` (stops the delegate) and `pay` (withdraw to `to`), signed like any MetaOp.
@@ -90,16 +103,37 @@ contract Mandate(
             return;
         }
         throwUnless(E_OP, m.op == OP_PAY);
-        throwUnless(E_BALANCE, m.amount > 0 && self.st.balance >= m.amount);
-        self.payOut(m, msg.responseDestination);
+        // Not capped by the tracked balance: our wallet holds the real one and refuses more. So tokens that reached
+        // the wallet without a notification (a deposit with no forward TON, a payee's bounce) stay withdrawable.
+        throwUnless(E_BALANCE, m.amount > 0);
+        let debited = min(m.amount, self.st.balance);
+        self.payOut(m, msg.responseDestination, Inflight { payRef: 0, debited, spent: 0, periodStart: self.st.periodStart });
     }
 
+    /// Our wallet refused a payout: undo what it took — balance, period spend, and the payRef so the same signed
+    /// payment can run again (review L9).
     bounced(msg: bounced<JettonTransfer>) {
-        self.st.balance += msg.amount;
+        let p = self.inflight.get(msg.queryId);
+        if (p == null) {
+            return;
+        }
+        self.inflight.del(msg.queryId);
+        self.st.balance += p!!.debited;
+        if (p!!.periodStart == self.st.periodStart) {
+            self.st.spent -= min(p!!.spent, self.st.spent);
+        }
+        if (p!!.payRef != 0) {
+            self.usedRefs.del(p!!.payRef);
+        }
     }
 
-    fun payOut(m: MetaOp, response: Address) {
-        self.st.balance -= m.amount;
+    fun payOut(m: MetaOp, response: Address, undo: Inflight) {
+        self.st.balance -= undo.debited;
+        self.payouts += 1;
+        self.inflight.set(self.payouts, undo);
+        if (self.payouts > INFLIGHT_RING) {
+            self.inflight.del(self.payouts - INFLIGHT_RING);
+        }
         nativeReserve(max(myBalance() - context().value, MIN_STORAGE), ReserveAtMost);
         emit(MetaTransactionExecuted { master: self.master, from: m.from, digest: m.digest }.toCell());
         message(MessageParameters {
@@ -108,7 +142,7 @@ contract Mandate(
             mode: SendRemainingBalance,
             bounce: true,
             body: JettonTransfer {
-                queryId: 0,
+                queryId: self.payouts,
                 amount: m.amount,
                 destination: m.to,
                 responseDestination: response,

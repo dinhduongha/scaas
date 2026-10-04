@@ -20,7 +20,8 @@ async function build() {
     const payer = WalletContractV5R1.create({ workchain: 0, publicKey: payerKp.publicKey });
     const payee = Address.parse('0:' + '22'.repeat(32));
     const master = await BambooJettonMaster.fromInit(Address.parse('0:' + '33'.repeat(32)), 0n, beginCell().storeStringTail('A').endCell());
-    const walletInit = await BambooJettonWallet.fromInit(payer.address, master.address, 0n, 0n, null, (await import('@ton/core')).Dictionary.empty());
+    const { Dictionary } = await import('@ton/core');
+    const walletInit = await BambooJettonWallet.fromInit(payer.address, master.address, 0n, 0n, null, Dictionary.empty(), Dictionary.empty(), 0n, 0n, 0n);
     const payerWallet = walletInit.address;
     const fields = {
         network: -239, op: 1, amount: 1_234_567n, nonce: 0n, validUntil: 1_800_000_300,
@@ -32,7 +33,7 @@ async function build() {
     const ts = 1_800_000_000;
     const envelope = signDataCell(payer.address, ts, domain, op);
     const auth = tonConnectAuth(payerKp, payer.address, ts, domain, op);
-    const params = tradeParamsCell({ tokenIn: master.address, tokenOut: payee, minOut: 99n, counterparty: null, maxFeePpm: 3000 });
+    const params = tradeParamsCell({ tokenIn: master.address, tokenOut: payee, minOut: 99n, counterparty: null, maxFeePpm: 3000, forwardTon: toNano('0.2') });
 
     // Relayer lane: W5R1 from a fixed ed25519 seed, external message carrying one SignedOp.
     const laneKp = keyPairFromSeed(Buffer.alloc(32, 0x11));

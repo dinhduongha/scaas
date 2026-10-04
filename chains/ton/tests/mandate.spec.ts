@@ -21,7 +21,7 @@ async function mandateSetup() {
         terms: { $$type: 'MandateTerms', perPayment: 50n, perPeriod: 80n, periodSeconds: BigInt(DAY), expiresAt: BigInt(f.bc.now! + 30 * DAY) },
         ownerPubkey: BigInt('0x' + alice.kp.publicKey.toString('hex')),
         delegatePubkey: BigInt('0x' + delegate.publicKey.toString('hex')),
-    }, payees, Dictionary.empty(), Dictionary.empty()));
+    }, payees, Dictionary.empty(), Dictionary.empty(), 0n, Dictionary.empty()));
     await mandate.send(f.admin.getSender(), { value: toNano('0.1') }, null);
     await f.mint(token, alice.address, 1000n);
     const aw = await f.walletOf(token, alice.address);
@@ -88,5 +88,53 @@ describe('Mandate (R25 on TON)', () => {
         const stranger = await bc.treasury('stranger');
         await mandate.send(stranger.getSender(), { value: toNano('0.1') }, { $$type: 'JettonNotification', queryId: 0n, amount: 1_000_000n, sender: stranger.address, forwardPayload: (await import('@ton/core')).beginCell().storeBit(false).asSlice() });
         expect((await mandate.getGetState()).balance).toBe(200n);
+    });
+
+    it('an under-funded copy of a signed deposit is refused: no deposit is stranded uncounted (review H2)', async () => {
+        const { mandate, alice, network, relayer, token, walletOf, balanceOf, mint } = await mandateSetup();
+        const aw = await walletOf(token, alice.address);
+        const dep = signedPay(alice, { contract: aw.address, to: mandate.address, amount: 100n, network, extra: toNano('0.02') }, { forwardTon: toNano('0.02'), responseDestination: relayer.address });
+        const r = await aw.send(relayer.getSender(), { value: toNano('0.2') }, { ...dep.body, forwardTon: 0n });
+        expect(r.transactions).toHaveTransaction({ to: aw.address, success: false, exitCode: 714 });
+        expect(await balanceOf(token, alice.address)).toBe(800n);
+        expect((await mandate.getGetState()).balance).toBe(200n);
+        await aw.send(relayer.getSender(), { value: toNano('0.2') }, dep.body);
+        expect((await mandate.getGetState()).balance).toBe(300n);
+        expect(await balanceOf(token, mandate.address)).toBe(300n);
+        expect(mint).toBeTruthy();
+    });
+
+    it('the owner withdraws what reached the wallet uncounted; a refused payout is undone (balance, spend, payRef) (review L9)', async () => {
+        const { bc, mandate, alice, bob, network, relayer, token, walletOf, balanceOf, pay, send } = await mandateSetup();
+        // tokens that reach the mandate wallet with no notification (plain transfer, forward 0) are not tracked...
+        const aw = await walletOf(token, alice.address);
+        await aw.send(relayer.getSender(), { value: toNano('0.2') }, signedPay(alice, { contract: aw.address, to: mandate.address, amount: 50n, network }, { responseDestination: relayer.address }).body);
+        expect((await mandate.getGetState()).balance).toBe(200n);
+        expect(await balanceOf(token, mandate.address)).toBe(250n);
+        // ...but the owner can still take them out: the wallet, not st.balance, caps a withdrawal
+        const wd = signedPay(alice, { contract: mandate.address, to: alice.address, amount: 250n, network }, { responseDestination: relayer.address });
+        expect((await mandate.send(relayer.getSender(), { value: toNano('0.2') }, wd.body)).transactions).toHaveTransaction({ to: mandate.address, success: true });
+        expect(await balanceOf(token, alice.address)).toBe(1000n);
+        expect((await mandate.getGetState()).balance).toBe(0n);
+        // asking more than the wallet holds bounces, and the bounce restores exactly what was debited
+        await aw.send(relayer.getSender(), { value: toNano('0.2') }, signedPay(alice, { contract: aw.address, to: mandate.address, amount: 100n, network }, { forwardTon: toNano('0.02'), responseDestination: relayer.address }).body);
+        const over = signedPay(alice, { contract: mandate.address, to: alice.address, amount: 500n, network }, { responseDestination: relayer.address });
+        await mandate.send(relayer.getSender(), { value: toNano('0.2') }, over.body);
+        expect((await mandate.getGetState()).balance).toBe(100n);
+        expect(await balanceOf(token, mandate.address)).toBe(100n);
+        // a delegate payout our wallet refuses (simulated bounce from the mandate wallet) gives back spend and payRef
+        const ref = randomU256();
+        expect((await send(pay(bob.address, 40n, ref).body)).transactions).toHaveTransaction({ to: mandate.address, success: true });
+        const st = await mandate.getGetState();
+        expect([st.balance, st.spent]).toEqual([60n, 40n]);
+        const { internal } = require('@ton/sandbox');
+        const { beginCell } = require('@ton/core');
+        const { storeJettonTransfer } = require('../build/mandate/mandate_Mandate');
+        const payouts = 3n; // queryId = payout counter: two withdrawals, then this pay
+        const bouncedBody = beginCell().storeUint(0xffffffff, 32).store(storeJettonTransfer({ $$type: 'JettonTransfer', queryId: payouts, amount: 40n, destination: bob.address, responseDestination: null, customPayload: null, forwardTonAmount: 0n, forwardPayload: beginCell().storeBit(false).asSlice() })).endCell();
+        await bc.sendMessage(internal({ from: await mandate.getGetWallet(), to: mandate.address, value: toNano('0.01'), bounce: false, bounced: true, body: bouncedBody }));
+        const back = await mandate.getGetState();
+        expect([back.balance, back.spent]).toEqual([100n, 0n]);
+        expect((await send(pay(bob.address, 40n, ref).body)).transactions).toHaveTransaction({ to: mandate.address, success: true });
     });
 });

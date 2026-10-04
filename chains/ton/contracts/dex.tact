@@ -1,6 +1,7 @@
 // Escrow DEX (R35 on TON, R10-7). No atomicity across contracts on TON, so each signed order leg is a
 // jetton transfer into escrow here; a match pays both legs out; unmatched legs are refundable by anyone
 // after expiry (review S8); a signed `revoke` cancels. Fill-or-kill: an order fills completely or not at all.
+// Every leg and cancel arrives as a TEP-74 notification from one of the DEX's own jetton wallets.
 import "./jetton";
 
 const PAYOUT_TON: Int = ton("0.05");
@@ -54,11 +55,6 @@ fun pairKey(x: Address, y: Address): Int {
     return beginCell().storeAddress(y).storeAddress(x).endCell().hash();
 }
 
-/// A pre-flight cancel is keyed by (order, owner): nobody else can overwrite or clear it (review agy #3).
-fun cancelKey(orderHash: Int, owner: Address): Int {
-    return beginCell().storeUint(orderHash, 256).storeAddress(owner).endCell().hash();
-}
-
 struct Leg {
     ok: Bool;
     digest: Int;
@@ -69,10 +65,9 @@ contract BambooDex(
     admin: Address,
     seq: Int as uint64,
     markets: map<Int as uint256, Market>,
-    tokens: map<Address, Bool>,
+    wallets: map<Address, Address>, // our jetton wallet -> its master: O(1) whatever the number of markets
     orders: map<Int as uint256, Cell>,
-    cancelled: map<Int as uint256, Bool>,
-    fees: map<Address, Int as coins>,
+    fees: map<Address, Int as coins>, // fees, plus payouts that bounced (admin-held, returned from the bounce trail)
 ) {
     receive() {} // deploy / TON top-up
 
@@ -80,30 +75,30 @@ contract BambooDex(
         throwUnless(E_SENDER, sender() == self.admin);
         throwUnless(E_PARAMS, msg.makerPpm <= MAX_FEE_PPM && msg.takerPpm <= MAX_FEE_PPM);
         self.markets.set(pairKey(msg.a, msg.b), Market { enabled: msg.enabled, makerPpm: msg.makerPpm, takerPpm: msg.takerPpm });
-        self.tokens.set(msg.a, true);
-        self.tokens.set(msg.b, true);
+        self.wallets.set(walletAddress(myAddress(), msg.a), msg.a);
+        self.wallets.set(walletAddress(myAddress(), msg.b), msg.b);
         cashback(sender());
     }
 
     /// A leg arrives through the DEX's own jetton wallet. Never throw here: the tokens are already ours —
     /// anything wrong is refunded instead.
     receive(msg: JettonNotification) {
-        let master = self.masterOf(sender());
+        let master = self.wallets.get(sender());
         if (master == null) {
             return; // not one of our wallets: nothing was credited to us
         }
+        let body = forwardBody(msg.forwardPayload);
+        if (body.bits() == 32 + 256 && body.refs() == 0 && body.preloadUint(32) == CANCEL_TAG) {
+            body.skipBits(32);
+            self.cancel(master!!, msg.sender, body.loadUint(256));
+            return;
+        }
         let leg = self.parseLeg(master!!, msg);
-        if (!leg.ok) {
+        if (!leg.ok || self.orders.get(leg.digest) != null) {
             self.refundLeg(master!!, msg.sender, msg.amount);
             return;
         }
         let o = leg.order!!;
-        let ck = cancelKey(leg.digest, o.owner);
-        if (self.orders.get(leg.digest) != null || self.cancelled.get(ck) != null) {
-            self.cancelled.del(ck);
-            self.refundLeg(master!!, msg.sender, msg.amount);
-            return;
-        }
         self.orders.set(leg.digest, o.toCell());
         self.seq += 1;
         let hint = forwardBody(msg.forwardPayload);
@@ -111,6 +106,32 @@ contract BambooDex(
         let matchWith = hint.loadUint(256);
         if (matchWith != 0 && context().value >= PAYOUT_TON * 2 + MATCH_GAS && self.canMatch(matchWith, leg.digest)) {
             self.settle(matchWith, leg.digest);
+        }
+    }
+
+    /// The owner's signed `revoke`, sent as a zero-amount transfer of the order's token after its leg: on the same
+    /// path (owner wallet -> our wallet -> us) TON delivers it after the leg, so an unknown order is one that is
+    /// gone (matched, refunded) or never came — nothing to remember (review L11). The wallet sends it with at
+    /// least CANCEL_TON, which pays the payout.
+    fun cancel(master: Address, owner: Address, orderHash: Int) {
+        let c = self.orders.get(orderHash);
+        if (c == null) {
+            return;
+        }
+        let o = Order.fromCell(c!!);
+        if (o.owner != owner || o.tokenIn != master || context().value < PAYOUT_TON + MATCH_GAS) {
+            return;
+        }
+        self.orders.del(orderHash);
+        self.payout(o.tokenIn, o.owner, o.amountIn, PAYOUT_TON);
+    }
+
+    /// A payout or refund the DEX's own wallet refused: keep the tokens on record instead of losing them
+    /// (review L14). Only our wallets' bounces count.
+    bounced(msg: bounced<JettonTransfer>) {
+        let master = self.wallets.get(sender());
+        if (master != null) {
+            self.addFee(master!!, msg.amount);
         }
     }
 
@@ -134,22 +155,6 @@ contract BambooDex(
         self.returnExcess();
     }
 
-    receive(msg: CancelOrder) {
-        throwUnless(E_SENDER, self.tokens.get(msg.master) == true);
-        throwUnless(E_SENDER, sender() == walletAddress(msg.owner, msg.master));
-        let c = self.orders.get(msg.orderHash);
-        if (c == null) {
-            // The leg may still be in flight (wallet -> our wallet -> us is two hops, the cancel is one).
-            self.cancelled.set(cancelKey(msg.orderHash, msg.owner), true);
-            return;
-        }
-        let o = Order.fromCell(c!!);
-        if (o.owner == msg.owner) {
-            self.orders.del(msg.orderHash);
-            self.payout(o.tokenIn, o.owner, o.amountIn, PAYOUT_TON);
-        }
-    }
-
     receive(msg: WithdrawFees) {
         throwUnless(E_SENDER, sender() == self.admin);
         let f = self.fees.get(msg.master);
@@ -159,15 +164,6 @@ contract BambooDex(
     }
 
     // ---------------------------------------------------------------- internals
-
-    fun masterOf(wallet: Address): Address? {
-        foreach (m, _ in self.tokens) {
-            if (walletAddress(myAddress(), m) == wallet) {
-                return m;
-            }
-        }
-        return null;
-    }
 
     fun parseLeg(master: Address, n: JettonNotification): Leg {
         let fail = Leg { ok: false, digest: 0, order: null };
@@ -278,8 +274,11 @@ contract BambooDex(
     }
 
     /// A bad or duplicate leg goes back on the TON it came with, never on the DEX's balance (review agy #2):
-    /// a leg sent with too little TON to pay its own refund stays escrowed — that is the sender's loss only.
+    /// The payer wallet sends a leg with at least MIN_LEG_TON; a refund that still fails bounces into `fees`.
     fun refundLeg(master: Address, to: Address, amount: Int) {
+        if (amount <= 0) {
+            return;
+        }
         message(MessageParameters {
             to: walletAddress(myAddress(), master),
             value: 0,

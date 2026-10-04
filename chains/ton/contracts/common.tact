@@ -62,8 +62,10 @@ message(0xd1735400) TakeWalletAddress {
 // ------------------------------------------------------------------ Bamboo messages
 
 /// Relayer -> payer's jetton wallet (or Mandate owner ops). `op` = MetaOp v1 cell tree,
-/// `auth` = signature envelope. `responseDestination`, `forwardTon`, `matchWith` are the relayer's own
-/// choices (its TON, a DEX matching hint) and are deliberately NOT signed.
+/// `auth` = signature envelope. `responseDestination` and `matchWith` are the relayer's own choices (its TON,
+/// a DEX matching hint). `forwardTon` is the relayer's TON too, but it decides whether a contract recipient
+/// (DEX, Mandate) learns of the tokens, so the payer signs a floor for it and the wallet refuses less
+/// (review H2): `pay` -> `MetaOp.extra`, `trade` -> `TradeParams.forwardTon`.
 message(0x5b0a1d01) SignedOp {
     op: Cell;
     auth: Cell;
@@ -72,13 +74,6 @@ message(0x5b0a1d01) SignedOp {
     responseDestination: Address;
     forwardTon: Int as coins;
     matchWith: Int as uint256;
-}
-
-/// Wallet -> DEX: the owner signed a `revoke` for order `orderHash` (R35 cancel by signed op).
-message(0x5b0a1d02) CancelOrder {
-    orderHash: Int as uint256;
-    owner: Address;
-    master: Address;
 }
 
 message(0x5b0a1d03) Mint {
@@ -122,6 +117,12 @@ const METAOP_SCHEMA_CRC: Int = 0xdc7d499c;
 
 const PAY_TAG: Int = 0x626d7074;   // "bmpt": forward payload `pay_tag pay_ref:uint256`
 const TRADE_TAG: Int = 0x626d7472; // "bmtr": forward payload `trade_tag ^MetaOp ^TradeParams match_with:uint256`
+// "bmcl": forward payload `cancel_tag order:uint256` of a zero-amount transfer. It rides the same jetton path as
+// the order's leg, so TON's per-pair message order delivers it after the leg (review L11: no cancel map).
+const CANCEL_TAG: Int = 0x626d636c;
+
+// Replay entries live at most two LANE_TTL windows: a MetaOp may not be valid further ahead (review M4).
+const LANE_TTL: Int = 2592000; // 30 days
 
 const AUTH_TONCONNECT: Int = 0;
 const AUTH_PASSKEY: Int = 1;
@@ -152,6 +153,7 @@ const E_PARAMS: Int = 713;
 const E_VALUE: Int = 714;
 const E_AUTH: Int = 715;
 const E_SENDER: Int = 716;
+const E_TTL: Int = 717;
 
 // ------------------------------------------------------------------ MetaOp
 
@@ -177,6 +179,7 @@ struct TradeParams {
     minOut: Int;
     counterparty: Address?;
     maxFeePpm: Int;
+    forwardTon: Int; // signed floor for SignedOp.forwardTon (review H2)
 }
 
 fun parseMetaOp(c: Cell): MetaOp {
@@ -222,8 +225,9 @@ fun parseTradeParams(c: Cell): TradeParams {
         counterparty = s.loadAddress();
     }
     let maxFeePpm = s.loadUint(32);
+    let forwardTon = s.loadCoins();
     s.endParse();
-    return TradeParams { tokenIn, tokenOut, minOut, counterparty, maxFeePpm };
+    return TradeParams { tokenIn, tokenOut, minOut, counterparty, maxFeePpm, forwardTon };
 }
 
 /// Global id of the network (config param 19), the network half of the signing domain (R10-4).

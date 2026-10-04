@@ -68,13 +68,14 @@ export function tonConnectAuth(kp: KeyPair, owner: Address, timestamp: number, d
     return beginCell().storeUint(0, 8).storeBuffer(sig).storeUint(timestamp, 64).storeRef(domainCell(domain)).endCell();
 }
 
-export function tradeParamsCell(p: { tokenIn: Address; tokenOut: Address; minOut: bigint; counterparty?: Address | null; maxFeePpm: number }): Cell {
+export function tradeParamsCell(p: { tokenIn: Address; tokenOut: Address; minOut: bigint; counterparty?: Address | null; maxFeePpm: number; forwardTon?: bigint }): Cell {
     return beginCell()
         .storeAddress(p.tokenIn)
         .storeAddress(p.tokenOut)
         .storeUint(p.minOut, 128)
         .storeAddress(p.counterparty ?? null)
         .storeUint(p.maxFeePpm, 32)
+        .storeCoins(p.forwardTon ?? 0n)
         .endCell();
 }
 
