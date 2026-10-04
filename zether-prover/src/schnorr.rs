@@ -122,13 +122,19 @@ pub fn open_sender<C: ZCurve>(s: &Fr<C>) -> Vec<u8> {
     encode_scalar::<C>(s).to_vec()
 }
 
-fn cp_challenge<C: ZCurve>(e: &Entry<C>, amount: u64, kind: OpeningKind, a1: &[u8], a2: &[u8]) -> Fr<C> {
+/// Challenge preimage up to (not including) `A1 ‖ A2`; also the opening nonce's public input.
+fn cp_prefix<C: ZCurve>(e: &Entry<C>, amount: u64, kind: OpeningKind) -> Vec<u8> {
     let mut b = b"BAMBOO-ZETHER-DISCLOSE-V1".to_vec();
     b.extend(abi::u256(e.chain_id));
     b.extend_from_slice(&e.token);
     b.extend_from_slice(&e.entry_ref);
     b.extend(abi::u256(amount));
     b.push(kind as u8);
+    b
+}
+
+fn cp_challenge<C: ZCurve>(e: &Entry<C>, amount: u64, kind: OpeningKind, a1: &[u8], a2: &[u8]) -> Fr<C> {
+    let mut b = cp_prefix(e, amount, kind);
     b.extend_from_slice(a1);
     b.extend_from_slice(a2);
     hash_to_scalar::<C>(&keccak256(&b))
@@ -160,8 +166,10 @@ pub fn open_chaum_pedersen<C: ZCurve, R: RngCore + CryptoRng>(
     if m - generator::<C>() * Fr::<C>::from(amount) != e.d_out * key.x {
         return Err(ZError::BadStatement("amount does not open this ciphertext"));
     }
-    let mut secret = encode_scalar::<C>(&key.x).to_vec();
-    secret.extend_from_slice(&e.entry_ref);
+    // Hedge over everything the challenge covers: with a dead RNG, two kinds (receiver == auditor)
+    // or two amounts must not share `k`.
+    let mut secret = zeroize::Zeroizing::new(encode_scalar::<C>(&key.x).to_vec());
+    secret.extend_from_slice(&cp_prefix(e, amount, kind));
     let k = Nonces::new(&secret, rng).next::<C>();
     let a1 = encode_point::<C>(&(generator::<C>() * k));
     let a2 = encode_point::<C>(&(e.d_out * k));

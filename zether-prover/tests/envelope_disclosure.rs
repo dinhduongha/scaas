@@ -116,11 +116,38 @@ fn relayed_and_disclosure<C: ZCurve>() {
     // A key that does not own the ciphertext cannot open it; a wrong amount is refused.
     assert!(open_chaum_pedersen(&e, 1234, OpeningKind::ReceiverX, &aud, &mut rng).is_err());
     assert!(open_chaum_pedersen(&e, 999, OpeningKind::ReceiverX, &to, &mut rng).is_err());
+    // Receiver is the auditor (Y_a == Y_t, C_aud == C_out) and the RNG is dead: the RECEIVER_X
+    // and AUDITOR openings must still use different nonces, or x = (z1 - z2)/(e1 - e2).
+    let e3 = Entry { y_a: e.y_t, c_aud: e.c_out, ..e };
+    let ro = open_chaum_pedersen(&e3, 1234, OpeningKind::ReceiverX, &to, &mut DeadRng).unwrap();
+    let ao = open_chaum_pedersen(&e3, 1234, OpeningKind::Auditor, &to, &mut DeadRng).unwrap();
+    verify_opening(&e3, 1234, OpeningKind::ReceiverX, &ro).unwrap();
+    verify_opening(&e3, 1234, OpeningKind::Auditor, &ao).unwrap();
+    let a1 = 96 + 32..96 + 32 + 2 * C::COORD_LEN;
+    assert_ne!(ro[a1.clone()], ao[a1], "same nonce across opening kinds");
     // Opening bound to entryRef.
     let mut e2 = e;
     e2.entry_ref[0] ^= 1;
     assert!(verify_opening(&e2, 1234, OpeningKind::ReceiverX, &r_open).is_err());
 }
+
+struct DeadRng;
+impl rand_chacha::rand_core::RngCore for DeadRng {
+    fn next_u32(&mut self) -> u32 {
+        0
+    }
+    fn next_u64(&mut self) -> u64 {
+        0
+    }
+    fn fill_bytes(&mut self, d: &mut [u8]) {
+        d.fill(0)
+    }
+    fn try_fill_bytes(&mut self, d: &mut [u8]) -> Result<(), rand_chacha::rand_core::Error> {
+        d.fill(0);
+        Ok(())
+    }
+}
+impl rand_chacha::rand_core::CryptoRng for DeadRng {}
 
 #[test]
 fn relayed_and_disclosure_bn254() {
