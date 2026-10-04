@@ -11,6 +11,7 @@ pub mod aptos;
 pub mod cosmos;
 pub mod evm;
 pub mod hedera;
+pub mod solana;
 pub mod soroban;
 pub mod sui;
 pub mod ton;
@@ -31,6 +32,7 @@ pub fn build(cfg: &ChainCfg, signers: &[LocalSigner]) -> Result<Arc<dyn ChainAda
         "soroban" => Ok(Arc::new(soroban::SorobanAdapter::new(cfg, signers)?)),
         "ton" => Ok(Arc::new(ton::TonAdapter::new(cfg, signers)?)),
         "sui" => Ok(Arc::new(sui::SuiAdapter::new(cfg, signers)?)),
+        "solana" => Ok(Arc::new(solana::SolanaAdapter::new(cfg, signers)?)),
         "aptos" => Ok(Arc::new(aptos::AptosAdapter::new(cfg, signers)?)),
         other => bail!("chain {}: no adapter for family {other} in this build", cfg.chain_key()),
     }
@@ -45,19 +47,23 @@ mod tests {
     use crate::signer::LocalSigner;
 
     /// Merge TODO f: `node.example.toml` has a working `[[chains]]` for every family — it parses, validates, and
-    /// every adapter builds from it (only the Sui/Aptos package ids and the Sui journal directory are swapped for real ones).
+    /// every adapter builds from it (only the Sui/Aptos package ids, the Solana program id and the Sui journal directory
+    /// are swapped for real ones).
     #[test]
     fn example_config_builds_every_family() {
         let mut cfg: Config = toml::from_str(include_str!("../../node.example.toml")).unwrap();
         cfg.validate().unwrap();
         let families: BTreeSet<&str> = cfg.chains.iter().map(|c| c.family.as_str()).collect();
-        assert_eq!(families, BTreeSet::from(["aptos", "cosmos", "evm", "hedera", "soroban", "sui", "ton"]));
+        assert_eq!(families, BTreeSet::from(["aptos", "cosmos", "evm", "hedera", "solana", "soroban", "sui", "ton"]));
         let words = format!("{}art", "abandon ".repeat(23));
         let seed = Seed::from_words(&words, None).unwrap();
         let dir = std::env::temp_dir().join(format!("example-journal-{}", std::process::id()));
         for c in cfg.chains.iter_mut().filter(|c| c.uses_adapter()) {
             if c.family == "aptos" {
                 c.params.insert("package".into(), "0xb0b".into());
+            }
+            if c.family == "solana" {
+                c.params.insert("program_id".into(), "US517G5965aydkZ46HS38QLi7UQiSojurfbQfKCELFx".into());
             }
             if c.family == "sui" {
                 c.params.insert("package".into(), "0x2".into());

@@ -1,0 +1,4 @@
+# Host tests need the Agave 4.3 crates (LiteSVM 0.17) => rustc >= 1.97.1. `cargo build-sbf` uses its own platform-tools rustc.
+[toolchain]
+channel = "1.97.1"
+profile = "minimal"

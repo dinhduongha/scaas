@@ -158,6 +158,9 @@ pub fn lane_path(family: &str, i: u32) -> Result<(Curve, String)> {
         "sui" => (Curve::Ed25519, format!("m/44'/784'/{i}'/0'/0'")),
         "soroban" => (Curve::Ed25519, format!("m/44'/148'/{i}'")),
         "ton" => (Curve::Ed25519, format!("m/44'/607'/{i}'")),
+        // Phantom/Solflare and `solana-keygen prompt://?full-path=`: m/44'/501'/account'/0' (Ledger Live's 3-level
+        // m/44'/501'/i' is not used).
+        "solana" => (Curve::Ed25519, format!("m/44'/501'/{i}'/0'")),
         // aptos-core PR #2073 / TS SDK: m/44'/637'/account'/change'/address_index', account index = lane.
         "aptos" => (Curve::Ed25519, format!("m/44'/637'/{i}'/0'/0'")),
         other => bail!("unknown family {other}"),
@@ -293,6 +296,16 @@ mod tests {
     }
 
     #[test]
+    fn solana_path_matches_solana_keygen() {
+        // `solana-keygen pubkey "prompt://?full-path=m/44'/501'/{0,1}'/0'"` with "<ART24>" (Agave 4.3.0)
+        let s = Seed::from_phrase(ART24.as_bytes(), None).unwrap();
+        for (i, want) in [(0, "3Cy3YNTFywCmxoxt8n7UH6hg6dLo5uACowX3CFceaSnx"), (1, "5frqxtii9LeGq2bz3dSNokvZcEooF483MzeU24JrhcTA")] {
+            let (c, k) = lane_secret(&s, "solana", i).unwrap();
+            assert_eq!(bs58::encode(LocalSigner::new(c, &k).unwrap().public_key()).into_string(), want);
+        }
+    }
+
+    #[test]
     fn aptos_path_matches_the_ts_sdk() {
         // `Account.fromDerivationPath({path: "m/44'/637'/{0,1}'/0'/0'", mnemonic: ART24})` (@aptos-labs/ts-sdk 7.3.0)
         let s = Seed::from_phrase(ART24.as_bytes(), None).unwrap();
@@ -330,6 +343,7 @@ mod tests {
         // the override replaces the coin level only, on every family
         assert_eq!(lane_path_coin("evm", 2, Some(1)).unwrap().1, "m/44'/1'/0'/0/2");
         assert_eq!(lane_path_coin("sui", 1, Some(7)).unwrap().1, "m/44'/7'/1'/0'/0'");
+        assert_eq!(lane_path_coin("solana", 1, Some(7)).unwrap().1, "m/44'/7'/1'/0'", "ed25519 stays all-hardened");
         assert!(lane_path_coin("soroban", 0, Some(0x8000_0000)).is_err(), "not a hardened index");
     }
 

@@ -1,0 +1,7 @@
+# Program id only (S12 spec §5.5): built with `cargo build-sbf`, tested with LiteSVM in `cargo test` — no anchor CLI.
+# Localnet/test id only: its key is public (review M3). Real deployments: scripts/deploy.sh (keys outside the repo).
+[programs.localnet]
+bamboo = "BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d"
+
+[provider]
+cluster = "http://127.0.0.1:32020"
