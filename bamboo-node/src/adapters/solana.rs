@@ -1368,8 +1368,10 @@ mod tests {
     async fn fake_rpc(fetched: Arc<Mutex<Vec<String>>>) -> String {
         use axum::extract::State;
         use axum::Json;
-        let sig = |i: u8| b58(&[i; 64]);
-        async fn h(State((f, sig)): State<(Arc<Mutex<Vec<String>>>, fn(u8) -> String)>, Json(b): Json<Value>) -> Json<Value> {
+        fn sig(i: u8) -> String {
+            b58(&[i; 64])
+        }
+        async fn h(State(f): State<Arc<Mutex<Vec<String>>>>, Json(b): Json<Value>) -> Json<Value> {
             let p = &b["params"];
             let r = match b["method"].as_str().unwrap_or_default() {
                 "getSignaturesForAddress" => match p[1]["before"].as_str() {
@@ -1389,7 +1391,7 @@ mod tests {
             };
             Json(json!({"jsonrpc": "2.0", "id": 1, "result": r}))
         }
-        let app = axum::Router::new().route("/", axum::routing::post(h)).with_state((fetched, sig as fn(u8) -> String));
+        let app = axum::Router::new().route("/", axum::routing::post(h)).with_state(fetched);
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
