@@ -175,17 +175,29 @@ async fn main() -> Result<()> {
         let probe = adapters::evm::EvmAdapter::new(cc, probe_chain, tokens.clone())?;
         probes.push(ChainProbe { key: cc.chain_key(), adapter: Arc::new(probe), max_lag: cc.max_index_lag, lanes: probe_lanes });
         if let Some(tx) = first_tx {
-            gw_chains.insert(
-                num,
-                gateway::GwChain {
-                    chain: shared,
-                    tx,
-                    tokens,
-                    dex: cc.dex,
-                    book: Arc::new(Mutex::new(dex::Book::default())),
-                    breaker: first_breaker,
-                },
-            );
+            // DEX (R35): sổ lệnh bền ở Odoo + watcher riêng; settle qua outbox. Lệnh khoá `relayer` =
+            // ví lane 0 (RS5-9) mà job outbox chưa ghim được lane (RS5-11) ⇒ DEX chỉ chạy một lane.
+            let venue = match cc.dex {
+                Some(addr) if cfg.modules.gateway => {
+                    if cc.lanes.len() > 1 {
+                        bail!("chain {num}: the DEX needs a single relayer lane (RS5-11)");
+                    }
+                    let relay = odoo::Odoo::new(&cfg.odoo, &cfg.odoo.relay_api_key_env)?;
+                    let idx = match cfg.modules.indexer {
+                        true => Some(odoo::Odoo::new(&cfg.odoo, &cfg.odoo.indexer_api_key_env)?),
+                        false => None,
+                    };
+                    let v = dex::venue::Venue::start(shared.clone(), relay, idx, addr).await?;
+                    let lv = v.clone();
+                    set.spawn(async move {
+                        lv.run_loops(poll).await;
+                        Err(anyhow!("dex loop ended"))
+                    });
+                    Some(v)
+                }
+                _ => None,
+            };
+            gw_chains.insert(num, gateway::GwChain { chain: shared, tx, tokens, dex: venue, breaker: first_breaker });
         }
     }
     if cfg.modules.gateway {

@@ -28,6 +28,9 @@ contract MetaToken is ERC20MetaTx, IERC20Payment, IFactoryToken {
     ///      hai, ví hiển thị một loại giao dịch (ruling R2).
     bytes4 public constant OP_PAY = bytes4(keccak256("pay(bytes32)"));
     bytes4 public constant OP_TRADE = bytes4(keccak256("trade(address,uint256,address)"));
+    /// @dev Cấp allowance không gas (R35): người dùng uỷ quyền cho DEX bằng một meta-tx. Spender
+    ///      phải là contract (R26) — cùng một `_isContract` với `approve()` gọi thẳng.
+    bytes4 public constant OP_APPROVE = bytes4(keccak256("approve(address,uint256)"));
 
     address public immutable FACTORY;
     address private immutable _SELF;
@@ -55,6 +58,8 @@ contract MetaToken is ERC20MetaTx, IERC20Payment, IFactoryToken {
     error PayToZero();
     error TradeLegNotRestricted();
     error NotAWrapper();
+    error ApproveCarriesValue();
+    error ApproveSpenderMismatch();
 
     /// @dev Constructor chạy MỘT lần, trên implementation. Immutable của nó đúng cho mọi
     ///      clone; storage của nó thì không — nên khoá luôn implementation để không ai
@@ -159,13 +164,28 @@ contract MetaToken is ERC20MetaTx, IERC20Payment, IFactoryToken {
             }
             return;
         }
+        if (op == OP_APPROVE) {
+            if (len != 68) revert MetaTxUnknownOp(op);
+            (address spender,) = abi.decode(m.data[4:], (address, uint256));
+            // `value` là lượng CHUYỂN; approve không chuyển gì. `to` phải nêu đúng spender để ví
+            // hiển thị "gửi tới: DEX" khớp với thứ thực sự được uỷ quyền.
+            if (m.value != 0) revert ApproveCarriesValue();
+            if (m.to != spender) revert ApproveSpenderMismatch();
+            if (!_isContract(spender)) revert SpenderNotContract(spender);
+            return;
+        }
         revert MetaTxUnknownOp(op);
     }
 
-    /// @dev Bước 8. Ba op cùng một chuyển; chỉ `pay` thêm event đối soát.
+    /// @dev Bước 8. `approve` đặt allowance; ba op còn lại cùng một chuyển; chỉ `pay` thêm event đối soát.
     function _executeOp(MetaTxLib.MetaTransaction calldata m, uint256 feeAmount, address feeRecipient)
         internal override
     {
+        if (m.data.length == 68 && bytes4(m.data[:4]) == OP_APPROVE) {
+            (address spender, uint256 amount) = abi.decode(m.data[4:], (address, uint256));
+            _approve(m.from, spender, amount);
+            return;
+        }
         _transfer(m.from, m.to, m.value);
         if (m.data.length == 36 && bytes4(m.data[:4]) == OP_PAY) {
             emit PaymentSettled(m.from, m.to, m.value, feeAmount, feeRecipient, bytes32(m.data[4:36]));

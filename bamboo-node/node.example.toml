@@ -37,7 +37,7 @@ rpc_urls = ["http://nethermind:8545"]            # >= finality.quorum independen
 lanes = [0, 1, 2, 3]                             # 4 relayer accounts: hold gas only, never user funds
 # private_key = { env = "BAMBOO_RELAYER_KEY_9000" }   # alternative: one raw key = one lane
 finality = { mode = "depth", depth = 1, quorum = 1 }
-# dex = "0x..."                                  # MetaTxDex address from smartcontracts/deployments/9000.json
+# dex = "0x..."                                  # OrderBookDex ("order_book_dex" in smartcontracts/deployments/9000.json)
 poll_ms = 1000
 stuck_after_secs = 60
 max_gas_per_tx = 3000000
