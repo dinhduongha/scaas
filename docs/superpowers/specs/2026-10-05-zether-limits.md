@@ -30,7 +30,9 @@
 | Rút ra (`burn`) | `0 < amount ≤ maxDecryptableShielded` | ≤ tổng cung | ≤ tổng cung | — | — |
 | Phí confidential | `confidentialFee < 2^n_v` | < 2^32 | < 2^64 | — | — |
 | Số tiền chứng minh được khi tiết lộ | `amount < 2^n_v` | < 2^32 | < 2^64 | — | — |
-| Gas một transfer (bn254, thực thi) | đo | ≈ 2,75M | ≈ 3,2–3,4M (ước tính, phải đo lại và ghi vào design §14) | | |
+| Gas một transfer `transferConfidential` thẳng (thực thi, auditor + phí trong) | đo (design §15) | bn254 2.748.019; BLS12-381 3.400.986 | **bn254 3.286.339; BLS12-381 3.919.760** (đo 2026-10-05, +538k / +519k) | | |
+| Gas `verifyTransfer` (auditor tắt) | đo | bn254 2.162.249; BLS 2.411.138 | **bn254 2.700.151; BLS 2.928.567** | | |
+| Gas `burn` | đo | bn254 1.396.398; BLS 1.521.199 | không đổi (bn254 1.396.358; BLS 1.521.169) | | |
 
 Ví dụ: trả 10 tỷ ₫ — trước: 3 giao dịch (4,29 + 4,29 + 1,42 tỷ), người ngoài thấy 3 giao dịch nên biết khoản
 > 4,29 tỷ; sau: 1 giao dịch, không lộ gì.
@@ -51,9 +53,9 @@ Quy tắc SRS §7.3 giữ một khoảng 24 bit giữa giá trị chuyển và s
 giá trị đã chứng minh có thể vượt `r` (bậc nhóm) khi cộng/trừ trên ciphertext. Với `n_v = n_b = 64`:
 mọi số dư thật ≤ tổng cung ≤ `maxDecryptableShielded` ≤ 2^54 (contract kiểm khi `fund`), mọi `v`
 được chứng minh < 2^64 nhưng `b' = b − fee − v ≥ 0` được chứng minh < 2^64 cùng lúc, nên `v ≤ b ≤ 2^54`;
-tổng của bất kỳ hai đại lượng như vậy < 2^65 ≪ r (≈ 2^254 với bn254, ≈ 2^255 với BLS12-381). Khoảng
-an toàn thật đến từ trần tổng 2^54 chứ không từ hiệu `n_b − n_v`. Implementer phải kiểm lại lập luận
-này với từng phương trình trong design §6 (E1–E8) và ghi ruling RS-NV64-1.
+tổng các đại lượng đã chứng minh trong một phương trình (`b' + v + fee`, ba số hạng) < 3·2^64 < 2^66 ≪ r (≈ 2^254 với bn254, ≈ 2^255 với BLS12-381). Khoảng
+an toàn thật đến từ trần tổng 2^54 chứ không từ hiệu `n_b − n_v`. Đã kiểm với từng phương trình E1–E8 (design §7.1), burn, fund,
+rollOver và tiết lộ: lập luận đứng vững — ruling **RS-NV64-1** (design §16).
 
 ## 4. Giải mã số dư — BSGS cấu hình được
 

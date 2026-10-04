@@ -22,15 +22,17 @@ Ký hiệu: nhóm viết **cộng tính**. `[k]P` = nhân vô hướng, `O` = đ
 
 | Hằng số | Giá trị | Ở đâu |
 |---|---|---|
-| `n_v` (range_bits_value) | **32** | verifier — Bulletproof #1 |
+| `n_v` (range_bits_value) | **64** (limits D1; trước 2026-10-05: 32) | verifier — Bulletproof #1 |
 | `n_b` (range_bits_balance) | **64** | verifier — Bulletproof #2 |
-| `DECRYPT_BOUND` | **2^40** | chỉ client (BSGS); không có trong contract |
+| BSGS giải mã | client tự cấu hình: `table_bits` 18–27, `bound_bits ≤ 54`; mặc định mobile/wasm 22/44, desktop 24–26/54 (limits D4) | chỉ client; không có trong contract (thay `DECRYPT_BOUND = 2^40`) |
 | `MAX_TOTAL_SHIELDED` | **2^54** | trần của `maxDecryptableShielded` lúc `initialize` (`2^n_b > total·1024`) |
-| `MAX_CONFIDENTIAL_FEE` | `< 2^32` | `confidentialFee` phải `< 2^n_v` |
+| `MAX_CONFIDENTIAL_FEE` | `< 2^64` | `confidentialFee` phải `< 2^n_v` |
 | Ring size | **2** | lộ danh tính người gửi/nhận (SRS §7.1); không có anonymity set |
 
-`n_b − n_v = 32 ≥ 24` (SRS §7.3). Số dư của mọi tài khoản `≤ totalShielded ≤ maxDecryptableShielded ≤ 2^54 < 2^64`,
-nên một số dư hợp lệ luôn chứng minh được.
+`n_b = n_v = 64`: quy tắc SRS §7.3 `n_b − n_v ≥ 24` được nới — an toàn đến từ trần tổng `2^54` và `r > 2^253`,
+không từ hiệu `n_b − n_v` (ruling **RS-NV64-1**, §16). Số dư của mọi tài khoản `≤ totalShielded ≤ maxDecryptableShielded
+≤ 2^54 < 2^64`, nên một số dư hợp lệ luôn chứng minh được. Giới hạn đầy đủ (bảng Z-VND / Z-USDT, BSGS, cache số dư):
+`2026-10-05-zether-limits.md`.
 
 **Đơn vị.** `shieldScale` = số raw unit của underlying cho **một** đơn vị che giấu (ruling RS2-3). Ví dụ USDT
 (6 decimals, giữ 2 chữ số) `shieldScale = 10^4`; Z-VND (0 decimals) `shieldScale = 1`. `fund(amount)` nhận `amount`
@@ -47,7 +49,7 @@ nên một số dư hợp lệ luôn chứng minh được.
 | `O` | 64 byte 0 | 128 byte 0 |
 | Scalar | 32 byte BE, **phải `< r`** | 32 byte BE, **phải `< r`** |
 | Precompile | `0x06` add, `0x07` mul (MSM = vòng mul+add) | `0x0b` G1ADD, `0x0c` G1MSM, `0x10` MAP_FP_TO_G1 |
-| `proofSystemId` | `keccak256("bamboo/zether/sigma-bullets/bn254/n32-n64/v1")` | `keccak256("bamboo/zether/sigma-bullets/bls12-381/n32-n64/v1")` |
+| `proofSystemId` | `keccak256("bamboo/zether/sigma-bullets/bn254/n64-n64/v1")` | `keccak256("bamboo/zether/sigma-bullets/bls12-381/n64-n64/v1")` |
 
 **Mã hoá chính tắc là duy nhất.** Toạ độ phải `< p` (precompile từ chối nếu không), BLS phải có `pad16` toàn 0.
 Prover **không bao giờ** xuất điểm không chính tắc; `UA = keccak256(encodedY)` dựa vào điều đó.
@@ -65,7 +67,8 @@ Verifier **tự tính** generator trong constructor (không hard-code), ghi blob
 `extcodecopy` lúc verify). Ai cũng tính lại được từ đặc tả này ⇒ NUMS kiểm chứng được.
 
 Danh sách: `Hb` (blinding Pedersen, nhãn `"h"`), `U` (inner-product, nhãn `"U"`), `G_i` (nhãn `"G"`), `H_i`
-(nhãn `"H"`), `i = 0..63`. Bulletproof `n=32` dùng **tiền tố** `G_0..G_31`, `H_0..H_31` của cùng vector.
+(nhãn `"H"`), `i = 0..63`. Cả hai Bulletproof (`n = 64`) dùng đủ `G_0..G_63`, `H_0..H_63` (thư viện vẫn nhận `n = 32` thì dùng **tiền tố**
+`G_0..G_31`, `H_0..H_31`; không op nào dùng nữa).
 `h` và `U` dùng `index = 0`. **Phân biệt hoa/thường:** `Hb` là `"h"` (0x68), `H_i` là `"H"` (0x48) —
 dùng `"H"` cho `Hb` thì `Hb == H_0` và mọi proof hỏng.
 
@@ -121,7 +124,9 @@ Vector: `transcript.json` (§14).
 ## 5. Trạng thái ElGamal và vòng đời
 
 Khoá: `x ∈ [1, r)`, `Y = [x]G`, `UA = keccak256(encodedY)`. Mã hoá lifted ElGamal: `(C, D) = ([b]G + [ρ]Y, [ρ]G)`.
-Giải mã: `[b]G = C − [x]D`, rồi BSGS trong `DECRYPT_BOUND` (chỉ client).
+Giải mã: `[b]G = C − [x]D`, rồi BSGS cấu hình được (chỉ client, limits §4). Ví giữ số dư trong **cache trên thiết bị** và kiểm
+bằng `[b]G == C − [x]D` thay vì giải lại (limits §5); khi mất cache mà số dư vượt trần BSGS của thiết bị thì dùng
+`zether-read-balance` (native, tới `2^54`).
 
 Trạng thái mỗi `(UA, token)` (SRS §7.6, canon C5):
 
@@ -261,8 +266,9 @@ E8  [z_b]G + [z_gb]Hb − [c]V_b − A_Vb
 
 ## 8. Bulletproofs — đúng hai mệnh đề dải
 
-Transfer: `BP(n=32, V_v)` rồi `BP(n=64, V_b)`, **cùng transcript**, nối tiếp sau `c`. Burn: chỉ `BP(n=64, V_b)`.
-`k = log2(n)` (5 hoặc 6). `y^n = (1, y, …, y^{n-1})`, `2^n = (1, 2, …, 2^{n-1})`.
+Transfer: `BP(n=64, V_v)` rồi `BP(n=64, V_b)` (`n_v = n_b = 64`, RS-NV64-1), **cùng transcript**, nối tiếp sau `c`.
+Burn: chỉ `BP(n=64, V_b)`. `k = log2(n) = 6`. `be4(n)` trong `"bp.AS"` vẫn được hấp thụ, nên hai BP chỉ khác nhau
+ở vị trí trong transcript. `y^n = (1, y, …, y^{n-1})`, `2^n = (1, 2, …, 2^{n-1})`.
 
 ### 8.1 Prover
 
@@ -315,7 +321,7 @@ BP(n) = A ‖ S ‖ T1 ‖ T2 ‖ L_1 ‖ R_1 ‖ … ‖ L_k ‖ R_k ‖ τ_x �
 
 transfer = V_v ‖ V_b ‖ A_y ‖ A_D ‖ A_out ‖ A_deb ‖ A_bal ‖ A_aud ‖ A_Vv ‖ A_Vb
          ‖ z_x ‖ z_v ‖ z_s ‖ z_b ‖ z_gv ‖ z_gb
-         ‖ BP(32) ‖ BP(64)                         = 40P + 512   (bn254 3,072 B; BLS 5,632 B)
+         ‖ BP(64) ‖ BP(64)                         = 42P + 512   (bn254 3,200 B; BLS 5,888 B)
 
 burn     = V_b ‖ A_y ‖ A_bal ‖ A_Vb ‖ z_x ‖ z_b ‖ z_gb ‖ BP(64)
                                                    = 20P + 256   (bn254 1,536 B; BLS 2,816 B)
@@ -364,8 +370,8 @@ Lời gọi thẳng **không có phí ngoài** (RS2-14): người gọi tự tr�
 contract Solidity gọi vào bị *stack too deep* với legacy codegen.)
 
 `authSig` có mặt ở **cả hai** đường: lời gọi thẳng không phải lối tắt quanh `auth_custody` (§11).
-`burn`: `0 < amount ≤ maxDecryptableShielded` (≤ 2^54) kiểm **trước** khi dựng statement — cùng với `fee < 2^32`
-nó bảo đảm `amount + fee < r`, không có bí danh mod `r`.
+`burn`: `0 < amount ≤ maxDecryptableShielded` (≤ 2^54) kiểm **trước** khi dựng statement — cùng với `fee < 2^64`
+nó bảo đảm `amount + fee < 2^65 < r`, không có bí danh mod `r`.
 
 **Op trong phong bì** (`m.data = op ‖ abi.encode(...)`, `m.to = address(0)`, `m.value = 0`):
 - `OP_ZTRANSFER = bytes4(keccak256("zetherTransfer(bytes,bytes,bytes,bytes32)"))`,
@@ -451,8 +457,9 @@ kiểm:  [z]G − A1 − [e]K == O    và    [z]D_out − A2 − [e](M − [amou
        (K, M) = (Y_t, C_out) cho RECEIVER_X, (Y_a, C_aud) cho AUDITOR
 ```
 
-Kiểm thêm: `amount < 2^n_v` (nếu không, `amount + r` cũng "đúng" vì `[amount]G` chỉ phụ thuộc `amount mod r`),
-`z < r`, `e ≠ 0`; `A1`, `A2` vào cùng MSM (subgroup check trên BLS12-381).
+Kiểm thêm: `amount < 2^n_v = 2^64` (nếu không, `amount + r` cũng "đúng" vì `[amount]G` chỉ phụ thuộc `amount mod r`;
+`2^64 < r` nên mỗi `[amount]G` có đúng một `amount` hợp lệ), `z < r`, `e ≠ 0`; `A1`, `A2` vào cùng MSM (subgroup
+check trên BLS12-381). Bundle tiết lộ giữ nguyên 256 B mỗi transfer (limits D6); `be32(amount)` đã đủ chỗ cho 64 bit.
 
 `verifyTransferAmount` là view (miễn phí); `attestTransferAmount` emit `AmountAttested`. Auditor đọc được **đúng**
 các `C_aud` (mỗi transfer một cái), không đọc được `acc`/`pending` của ai (mã hoá bằng khoá chủ). Khoá auditor đặt
@@ -488,24 +495,35 @@ lúc `initialize`, bất biến (RS2-8).
 S2 kiểm: vector đúng ⇒ `verifyTransfer/verifyBurn == true`; lật một bit bất kỳ của proof/statement ⇒ `false`
 hoặc revert.
 
+Từ `n_v = 64` (2026-10-05) vector transfer/disclosure mang số dư `2^44 + 10^6` và khoản `2^33 + 250,000` — vượt trần
+cũ của cả `n_v` lẫn BSGS — nên phía Solidity kiểm chéo đúng vùng giá trị mới. Sinh lại: `zether-cli vectors vectors`
+(prover) và `kat.py` (py_ecc ≥ 8; `kat.py --check` báo file lệch).
+
 ## 15. Gas (đo, forge 1.3.5, EVM Prague, chain 31337)
 
 Đo bằng `gasleft()` quanh lời gọi trong test (`ZetherVerifier.t.sol`, `ZetherToken.t.sol`,
 `UniversalAccountRegistry.t.sol`, chạy `forge test -vv`): **execution gas, chưa gồm 21,000 intrinsic và calldata**
-(transfer bn254 ≈ 3.7 KB calldata ≈ +50k; BLS ≈ 6.6 KB ≈ +95k). Proof thật (prover test + vector S3).
+(transfer bn254 ≈ 3.8 KB calldata ≈ +52k; BLS ≈ 6.9 KB ≈ +99k — proof `n_v = 64` dài thêm 2P = 128 / 256 B).
+Proof thật (prover test + vector S3). Cột "n_v = 32" là số đo trước 2026-10-05 (giữ để so); số hiện hành là cột
+`n_v = 64` (đo lại 2026-10-05, RS-NV64-1). Gas verify không phụ thuộc giá trị (đo trùng nhau cho `v = 300`,
+`v = 2^32 + 5`, `v = 2^64 − 1`).
 
-| Thao tác | bn254 | BLS12-381 | Số SRS/canon (bn254 trừ khi ghi) | Lệch |
+| Thao tác | bn254 n_v=32 → **n_v=64** | BLS12-381 n_v=32 → **n_v=64** | Số SRS/canon (bn254 trừ khi ghi) | Lệch (n_v=64) |
 |---|---|---|---|---|
-| `verifyTransfer` (verifier, auditor tắt) | 2,162,249 | 2,411,138 | BP 1,507k + Σ 171k = 1,678k (§3.3.6) | +29% |
-| `verifyTransfer` (auditor bật) | 2,190,479 | 2,453,597 | +27.5k (C6.5) | khớp (+28k / +42k) |
-| `verifyBurn` | 1,329,969 | 1,428,870 | ~1.27M (§3.7.1) | +5% |
-| `transferConfidential` thẳng (auditor, phí trong) | 2,748,019 | 3,400,986 | **1,905,000** (C7.2); BLS ≈1,050,000 | +44%; BLS +224% |
-| `transferConfidential` qua phong bì (+phí ngoài) | 2,818,905 | 3,457,852 | — | phong bì ≈ +71k |
-| `burn` (gồm chuyển underlying) | 1,396,398 | 1,521,199 | ~1.27M | +10% |
-| `fund` (credit đầu / ấm) | 191,360 / 28,591 | 247,307 / 36,832 | — | |
-| `rollOverPublic` (có việc / no-op) | 115,234 / 2,305 | 166,414 / 2,295 | ~66k exec (C7.3) | +75% |
-| `rollOverSigned` (Schnorr) | 133,370 | 197,316 | ~31k (§3.5.4) | ×4 |
-| `register` SELF_SCHNORR | 102,645 | 83,437 | ~105,750 (§2.2.5); BLS ~160k | khớp; BLS rẻ hơn |
+| `verifyTransfer` (verifier, auditor tắt) | 2,162,249 → **2,700,151** | 2,411,138 → **2,928,567** | BP 1,507k + Σ 171k = 1,678k (§3.3.6) | +61% |
+| `verifyTransfer` (auditor bật) | 2,190,479 → **2,728,409** | 2,453,597 → **2,971,201** | +27.5k (C6.5) | khớp (+28k / +43k) |
+| `verifyBurn` | 1,329,969 → **1,329,957** | 1,428,870 → **1,428,858** | ~1.27M (§3.7.1) | +5% |
+| `transferConfidential` thẳng (auditor, phí trong) | 2,748,019 → **3,286,339** | 3,400,986 → **3,919,760** | **1,905,000** (C7.2); BLS ≈1,050,000 | +73%; BLS +273% |
+| `transferConfidential` qua phong bì (+phí ngoài) | 2,818,905 → **3,357,045** | 3,457,852 → **3,975,916** | — | phong bì ≈ +71k / +56k |
+| `burn` (gồm chuyển underlying) | 1,396,398 → **1,396,358** | 1,521,199 → **1,521,169** | ~1.27M | +10% |
+| `fund` (credit đầu / ấm) | 191,360 / 28,591 | 247,307 / 36,832 | — | không đổi |
+| `rollOverPublic` (có việc / no-op) | 115,234 / 2,305 | 166,414 / 2,295 | ~66k exec (C7.3) | không đổi |
+| `rollOverSigned` (Schnorr) | 133,370 → **133,557** | 197,316 → **197,503** | ~31k (§3.5.4) | ×4 |
+| `register` SELF_SCHNORR | 102,645 → **102,659** | 83,437 → **83,440** | ~105,750 (§2.2.5); BLS ~160k | khớp; BLS rẻ hơn |
+
+`n_v` 32 → 64 thêm vào mỗi transfer đúng một vòng IPA và 64 cặp `G_i`/`H_i` trong MSM BP-2 của Bulletproof #1:
+≈ +538k (bn254) / +518k (BLS) execution gas, ≈ +20%/+15% trên `transferConfidential`. Burn không đổi (chỉ có BP#2).
+Vài trăm gas lệch ở `register`/`rollOverSigned` là bố cục bytecode/bộ nhớ, không phải thay đổi logic.
 
 Vì sao lệch, để không ai "sửa" sai chỗ:
 - **Verify bn254 +29%:** canon tính 6,550 gas/điểm MSM; thực tế mỗi điểm là `staticcall` 0x07 + 0x06 qua một
@@ -518,7 +536,8 @@ Vì sao lệch, để không ai "sửa" sai chỗ:
   — cái giá của `transferCiphertext` bản SRS, RS2-15), cập nhật `acc`/`pending` dạng `bytes` trong storage, các
   lời gọi `g1Add/g1Sub/g1MulBase` sang verifier, `requireAuthorized` của registry.
 - **rollOver:** 4 điểm `bytes` ghi lại + 2 phép cộng qua verifier; canon đếm 10 SSTORE ấm.
-Kill criterion S1 của canon (2.5M) bị vượt ở transfer bn254 (2.75M thẳng): đây là v1 tham chiếu, chưa tối ưu
+Kill criterion S1 của canon (2.5M) bị vượt ở transfer bn254 (3.29M thẳng sau `n_v = 64`; 2.75M trước đó) — owner chấp
+nhận đổi gas lấy một giao dịch cho mọi khoản (limits D1): đây là v1 tham chiếu, chưa tối ưu
 (gộp Σ thành một MSM ngẫu nhiên hoá, lưu điểm dạng `bytes32[2]`, bỏ bundle tiết lộ khỏi storage) — ghi ở rủi ro mở.
 
 ## 16. Rulings (S2)
@@ -542,7 +561,8 @@ Kill criterion S1 của canon (2.5M) bị vượt ở transfer bn254 (2.75M th�
 - **RS2-11** Underlying bắt buộc là ERC-20 (không native, không tự mint) ở v1.
 - **RS2-12** `fund`/`rollOver*` là lời gọi thẳng; chỉ transfer/burn có op trong phong bì (rollOverSigned tự mang chữ
   ký nên ai cũng relay được).
-- **RS2-13** Không memo AEAD (SRS §7 không có); client giải mã bằng BSGS trong `DECRYPT_BOUND`.
+- **RS2-13** Không memo AEAD (SRS §7 không có); client giải mã bằng BSGS. *(Sửa 2026-10-05, RS-NV64-2: hằng
+  `DECRYPT_BOUND = 2^40` bỏ, BSGS cấu hình được + cache số dư trên thiết bị + `zether-read-balance`.)*
 - **RS2-14** Lời gọi thẳng `transferConfidential(payload, proof, authSig, beneficiary)` — không có phí ngoài (chỉ
   phong bì có), khác chữ ký 6 tham số của SRS §9.3.
 - **RS2-15** Bundle tiết lộ lưu trong storage để `transferCiphertext` trả được dữ liệu như SRS §9.4 (≈ +200k gas);
@@ -558,6 +578,40 @@ Kill criterion S1 của canon (2.5M) bị vượt ở transfer bn254 (2.75M th�
   (`test_rollOverSignedWithoutNewCreditIsRejected`).
 - **RS2-18** Registry từ chối khoá uỷ quyền BLS = điểm vô cực (BLS_12381 sau G2MSM, BLS_BN254 128 byte 0) và chữ ký
   BLS12-381 = vô cực — nếu không, pairing tầm thường cho "custody BLS" giả, `x` một mình tiêu được (review S2-R2).
+
+### Rulings n_v = 64 (2026-10-05, `2026-10-05-zether-limits.md`)
+
+- **RS-NV64-1** `n_v = n_b = 64`; SRS §7.3 `n_b − n_v ≥ 24` được nới. **Lập luận, kiểm từng phương trình.**
+  Đặt mọi số mũ ElGamal về đại diện chính tắc trong `[0, r)`; `r > 2^253` (bn254 ≈ 2^253.6, BLS12-381 ≈ 2^254.9).
+  Proof hợp lệ trích được `x, v, s, b', γ_v, γ_b` với `v, b' ∈ [0, 2^64)` (BP#1, BP#2, nối vào Σ qua E7/E8 dùng
+  chung `z_v`, `z_b`). E1: `Y_f = [x]G`. E2: `D_out = [s]G`. E3/E4/E6: `C_out`, `C_deb`, `C_aud` cùng mã hoá `v`
+  với cùng `s` (không có tổng nào). E5: `C_acc − C_deb − [fee]G = [b']G + [x](D_acc − D_out)`; với E4 + E2 cho
+  `C_acc − [x]D_acc = [b' + v + fee]G`. Đây là **tổng duy nhất của các giá trị đã chứng minh** trong transfer:
+  `b' + v + fee < 3·2^64 < 2^66 ≪ r` (fee `< 2^64` do `initialize` kiểm), nên số dư `a` của `acc` bằng
+  `b' + v + fee` **như số nguyên**, không bí danh mod `r` — tức `v + fee ≤ a`, không thể chi quá. Burn (E5 burn):
+  `a = b' + amount + fee`, `amount ≤ 2^54`, `< 2^66` — cùng kết luận; `amount + fee` cũng là số hạng `c·(amount+fee)`
+  verifier tính bằng `addmod` mà không bao giờ quấn. Bất biến số nguyên: tổng mọi số mũ `acc`/`pending` của một token
+  `= totalShielded ≤ maxDecryptableShielded ≤ 2^54` — `fund` cộng đúng `amount` có kiểm trần; transfer chuyển
+  nguyên `v` sang `pending` người nhận, `fee` sang `pending` beneficiary, sender còn đúng `b'`; rollOver cộng hai số
+  `≤ totalShielded`; burn bớt đúng `amount`. Không phép cộng homomorphic nào (`pending += v`, `+= fee`, `acc +=
+  pending`) chạm tới `r` vì mọi số hạng và tổng đều `≤ 2^54`. Hệ quả: (a) mọi số dư thật `≤ 2^54 < 2^64`, nên `b'`
+  luôn chứng minh được (đầy đủ); (b) `v` thực tế không vượt `2^54` dù BP cho tới `2^64`; (c) mọi số dư giải được
+  bằng BSGS tới `2^54`. Các chỗ khác có tổng/biên: `δ(y,z)` dùng `2^n − 1 = 2^64 − 1 < r`; tiết lộ §12 nhận
+  `amount < 2^64 < r` nên một `[amount]G` chỉ mở được một số; Rust tính `b' = b − v − fee` bằng `u128` có kiểm, JS
+  dùng BigInt. Biên an toàn thật là `r / 2^66 > 2^187`, không phải hiệu 24 bit — khoảng đó chỉ cần khi số dư có thể
+  tới `2^n_b`, điều trần `2^54` đã loại. (Limits §3 viết "tổng hai đại lượng `< 2^65`"; đúng ra là ba đại lượng
+  `b' + v + fee < 2^66` — kết luận không đổi.) **Kết luận: đứng vững trên E1–E8, burn, rollOver, fund và tiết lộ.**
+  `proofSystemId` đổi sang `…/n64-n64/v1` để proof `n_v = 32` cũ không bao giờ khớp transcript mới.
+- **RS-NV64-2** Giải mã phía client (limits D4/D5, thay hằng `DECRYPT_BOUND`): BSGS `BsgsParams(table_bits 18–27,
+  bound_bits ≤ 54)`, bảng baby `16 B × 2^table_bits` là dữ liệu công khai (sinh lại hoặc nạp file rồi kiểm: đúng
+  khuôn, sắp xếp, mỗi `j` đúng một lần, 64 mục ngẫu nhiên tính lại); kết quả chỉ trả khi `[v]G == target` nên bảng
+  sai chỉ làm trượt, không làm sai. Mặc định wasm/mobile 22/44, desktop 24–26/54 theo RAM; wasm từ chối bảng
+  `2^27` (2 GiB — `Vec` 32-bit không chứa nổi). Cache số dư `{ua, token, accSeq, balance}` trong hộp AES-GCM khoá
+  dẫn từ `x` (mở được chỉ sau khi mở vault conf), kiểm bằng `check_balance` mỗi lần dùng, cập nhật khi rollOver
+  (`+pending`, BSGS chỉ trên `pending`) và khi tự chi (`−v−fee`); trượt cache mà số dư vượt trần thiết bị ⇒ báo dùng
+  `zether-read-balance` (native, `--table-bits` mặc định 24, 20–27, từ chối khi thiếu RAM; đọc `acc` qua RPC
+  `eth_call` hoặc ciphertext dán vào; khoá chỉ qua stdin, không rời máy). API trả số tiền dạng chuỗi thập phân
+  (vượt `2^53` của JS).
 
 ## 17. Review log
 
