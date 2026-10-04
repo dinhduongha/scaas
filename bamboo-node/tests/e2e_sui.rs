@@ -168,6 +168,8 @@ struct FakeOdoo {
     reports: Vec<Value>,
     ingested: Vec<Value>,
     indexed_block: u64,
+    /// `blockchain.token.address` của chain = id `Registry<T>` thật (review H1/H2: indexer lọc theo đây).
+    tokens: Vec<String>,
 }
 
 async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path<(String, String)>, Json(body): Json<Value>) -> Json<Value> {
@@ -175,7 +177,8 @@ async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path
     let out = match (model.as_str(), method.as_str()) {
         ("blockchain.chain", "node_config") => json!({
             "evm_chain_number": body["evm_chain_number"], "finality_mode": "instant", "finality_depth": 0,
-            "finality_quorum": 1, "indexed_block": o.indexed_block, "tokens": [], "journal_max_nonce": null,
+            "finality_quorum": 1, "indexed_block": o.indexed_block,
+            "tokens": o.tokens.iter().map(|a| json!({"address": a, "decimals": 9})).collect::<Vec<_>>(), "journal_max_nonce": null,
             "inflight": []}),
         ("blockchain.relay.job", "relay_poll") => json!(std::mem::take(&mut o.jobs)),
         ("blockchain.relay.job", "relay_claim") => {
@@ -316,7 +319,6 @@ async fn sui_payments_relay_finalize_and_never_lock_each_other() {
     }
     let mut params = toml::Table::new();
     params.insert("package".into(), toml::Value::String(pkg.clone()));
-    params.insert("registries".into(), toml::Value::Array(vec![toml::Value::String(reg_sui.clone()), toml::Value::String(reg_demo.clone())]));
     let cfg = ChainCfg {
         family: "sui".into(),
         network: Some("localnet".into()),
@@ -336,7 +338,7 @@ async fn sui_payments_relay_finalize_and_never_lock_each_other() {
     let adapter = bamboo_node::adapters::build(&cfg, &signers).unwrap();
     assert_eq!(adapter.chain_key(), "sui:localnet");
 
-    let state = Arc::new(Mutex::new(FakeOdoo::default()));
+    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![reg_sui.clone(), reg_demo.clone()], ..Default::default() }));
     let odoo = odoo_at(start_fake(state.clone()).await);
     let head0 = adapter.final_head().await.unwrap().unwrap().height;
     state.lock().unwrap().indexed_block = head0;

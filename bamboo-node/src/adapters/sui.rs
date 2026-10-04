@@ -404,7 +404,6 @@ pub struct SuiAdapter {
     rpcs: Vec<String>,
     http: reqwest::Client,
     package: Addr,
-    registries: Vec<String>,
     budget_cap: u64,
     quorum: usize,
     lanes: Vec<Lane>,
@@ -427,14 +426,6 @@ impl SuiAdapter {
             bail!("chain {}: needs rpc_urls and at least one lane", cfg.chain_key());
         }
         let package = parse_addr(param_str(cfg, "package").ok_or_else(|| anyhow!("sui: params.package is required"))?)?;
-        let registries = match cfg.params.get("registries") {
-            Some(toml::Value::Array(a)) => a
-                .iter()
-                .map(|v| v.as_str().ok_or_else(|| anyhow!("registries are strings")).and_then(parse_addr).map(|a| addr_hex(&a)))
-                .collect::<Result<Vec<_>>>()?,
-            None => vec![],
-            _ => bail!("sui: params.registries is a list of object ids"),
-        };
         let budget_cap = cfg.params.get("max_gas_budget").and_then(|v| v.as_integer()).map(|v| v as u64).unwrap_or(DEFAULT_BUDGET);
         let mut own = Vec::new();
         let mut lanes = Vec::new();
@@ -448,7 +439,6 @@ impl SuiAdapter {
             rpcs: cfg.rpc_urls.clone(),
             http: reqwest::Client::builder().timeout(std::time::Duration::from_secs(20)).build()?,
             package,
-            registries,
             budget_cap,
             quorum: cfg.finality.quorum.max(1),
             lanes,
@@ -627,9 +617,11 @@ impl ChainAdapter for SuiAdapter {
         self.checkpoint_digest(&self.rpcs[0], height).await
     }
 
+    /// `contracts` = id `Registry<T>` các token Odoo đã đăng ký (review H2: không danh sách tĩnh trong cấu hình node).
     /// `ponytail:` quét mọi tx của checkpoint trong vùng — đổi sang gRPC/GraphQL lọc theo package khi tải lớn.
-    async fn events(&self, from: u64, to: u64) -> Result<Vec<Value>> {
-        if self.registries.is_empty() || from > to {
+    async fn events(&self, from: u64, to: u64, contracts: &[String]) -> Result<Vec<Value>> {
+        let registries: Vec<String> = contracts.iter().filter_map(|c| parse_addr(c).ok()).map(|a| addr_hex(&a)).collect();
+        if registries.is_empty() || from > to {
             return Ok(vec![]);
         }
         let mut txs: Vec<(String, u64, String)> = Vec::new(); // (tx digest b58, checkpoint, checkpoint hash)
@@ -666,7 +658,7 @@ impl ChainAdapter for SuiAdapter {
             for (blk, (d58, seq, ch)) in r.as_array().cloned().unwrap_or_default().iter().zip(chunk) {
                 let tx_hash = addr_hex(&bs58::decode(d58).into_vec()?);
                 for ev in blk["events"].as_array().cloned().unwrap_or_default() {
-                    if let Some(n) = normalize(&self.package, &self.registries, &ev, *seq, ch, &tx_hash) {
+                    if let Some(n) = normalize(&self.package, &registries, &ev, *seq, ch, &tx_hash) {
                         out.push(n);
                     }
                 }
