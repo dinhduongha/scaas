@@ -82,8 +82,7 @@ fn big_balance_cache_spend_and_cli_recovery() {
     let args = ["--curve", "bn254", "--table-bits", "22", "--bound-bits", "45", "--ct", &ct, "--table-file", file.to_str().unwrap()];
     for _ in 0..2 {
         let out = read_balance(&args, &k0).unwrap();
-        assert_eq!(out["balance"], json!(left.to_string()));
-        assert!(out["accSeq"].is_null());
+        assert_eq!(out, json!({"balance": left.to_string(), "accSeq": null, "verified": true}));
     }
     assert_eq!(std::fs::metadata(&file).unwrap().len(), 15 + (12 << 22));
     // A bound below the balance, out-of-range knobs and a table file of another size are refused.
@@ -93,7 +92,6 @@ fn big_balance_cache_spend_and_cli_recovery() {
     assert!(read_balance(&["--curve", "bn254", "--bound-bits", "55", "--ct", &ct], &k0).is_err());
     let other = ["--curve", "bn254", "--table-bits", "23", "--bound-bits", "45", "--ct", &ct, "--table-file", file.to_str().unwrap()];
     assert!(read_balance(&other, &k0).unwrap_err().contains("not 2^23"));
-    std::fs::remove_dir_all(&dir).unwrap();
 
     // --rpc: `eth_call accountState(UA)` against a one-shot JSON-RPC stub; only public data goes out.
     let ua = hex::decode(&a["UA"].as_str().unwrap()[2..]).unwrap();
@@ -102,22 +100,57 @@ fn big_balance_cache_spend_and_cli_recovery() {
     toks.extend([2u64, 3, 1, 0, 0].map(|w| Tok::Word(u256(w))));
     let mut ret = u256(32).to_vec();
     ret.extend(abi::encode(&toks));
-    let srv = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let url = format!("http://{}", srv.local_addr().unwrap());
-    let stub = std::thread::spawn(move || {
-        let (mut s, _) = srv.accept().unwrap();
-        let mut req = vec![0u8; 8192];
-        let n = std::io::Read::read(&mut s, &mut req).unwrap();
-        let req = String::from_utf8_lossy(&req[..n]).into_owned();
-        let body = json!({"jsonrpc": "2.0", "id": 1, "result": hx(&ret)}).to_string();
-        write!(s, "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}", body.len()).unwrap();
-        req
-    });
-    let out = read_balance(&["--curve", "bn254", "--table-bits", "22", "--bound-bits", "45", "--rpc", &url,
-                             "--token", "0x5fbdb2315678afecb367f032d93f642f64180aa3"], &k0).unwrap();
-    assert_eq!(out, json!({"balance": left.to_string(), "accSeq": 2}));
+    let tf = file.to_str().unwrap();
+    let rpc_args = |url: &str| -> Vec<String> {
+        ["--curve", "bn254", "--table-bits", "22", "--bound-bits", "45", "--table-file", tf, "--rpc", url,
+         "--token", "0x5fbdb2315678afecb367f032d93f642f64180aa3"].iter().map(|s| s.to_string()).collect()
+    };
+    let (url, stub) = rpc_stub(hx(&ret));
+    let out = read_balance(&rpc_args(&url).iter().map(String::as_str).collect::<Vec<_>>(), &k0).unwrap();
+    // review L5: an RPC can forge any acc for a known Y, so its answer is marked unverified.
+    assert_eq!(out, json!({"balance": left.to_string(), "accSeq": 2, "verified": false}));
     let req = stub.join().unwrap();
     assert!(req.contains(&format!("0x{}{}", hex::encode(selector("accountState(bytes32)")), hex::encode(&ua))), "{req}");
     let x = api("keygen", json!({"curve": "bn254", "key": k0, "revealSecret": true})).unwrap()["x"].as_str().unwrap()[2..].to_string();
     assert!(!req.contains(&x) && !req.contains("abandon"), "no key material in the request");
+    // RPC + a pasted ciphertext from a second source: verified when they agree, refused when not.
+    let (url, stub) = rpc_stub(hx(&ret));
+    let mut both = rpc_args(&url);
+    both.extend(["--ct".to_string(), ct.clone()]);
+    let out = read_balance(&both.iter().map(String::as_str).collect::<Vec<_>>(), &k0).unwrap();
+    assert_eq!(out, json!({"balance": left.to_string(), "accSeq": 2, "verified": true}));
+    stub.join().unwrap();
+    let (url, stub) = rpc_stub(hx(&ret));
+    let mut lie = rpc_args(&url);
+    lie.extend(["--ct".to_string(), format!("{}:{}", acc["C"].as_str().unwrap(), acc["D"].as_str().unwrap())]);
+    assert!(read_balance(&lie.iter().map(String::as_str).collect::<Vec<_>>(), &k0).unwrap_err().contains("differs"));
+    stub.join().unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// One-shot JSON-RPC stub answering `result`; returns its URL and the request it saw.
+fn rpc_stub(result: String) -> (String, std::thread::JoinHandle<String>) {
+    let srv = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", srv.local_addr().unwrap());
+    let h = std::thread::spawn(move || {
+        let (mut s, _) = srv.accept().unwrap();
+        let mut req = Vec::new();
+        let mut buf = [0u8; 4096];
+        // headers, then the body (content-length) — curl may send them in separate writes
+        loop {
+            let n = std::io::Read::read(&mut s, &mut buf).unwrap();
+            req.extend_from_slice(&buf[..n]);
+            let t = String::from_utf8_lossy(&req).into_owned();
+            if let Some(h) = t.find("\r\n\r\n") {
+                let len = t.lines().find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap()));
+                if n == 0 || req.len() >= h + 4 + len.unwrap_or(0) {
+                    break;
+                }
+            }
+        }
+        let body = json!({"jsonrpc": "2.0", "id": 1, "result": result}).to_string();
+        write!(s, "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}", body.len()).unwrap();
+        String::from_utf8_lossy(&req).into_owned()
+    });
+    (url, h)
 }

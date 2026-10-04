@@ -51,13 +51,15 @@ fn word_at(b: &[u8], at: usize) -> Option<u64> {
 /// Return data of `accountState(bytes32)` (`IZetherToken.AccountState`, a dynamic tuple):
 /// `([accC, accD, pendingC, pendingD], accSeq)`. `None` when malformed.
 pub fn decode_account_state(ret: &[u8]) -> Option<([Vec<u8>; 4], u64)> {
-    let base = word_at(ret, 0)? as usize;
+    // Every word is RPC-controlled: all offset arithmetic is checked (review I6).
+    let base = usize::try_from(word_at(ret, 0)?).ok()?;
     let field = |i: usize| -> Option<Vec<u8>> {
-        let at = base.checked_add(word_at(ret, base + 32 * i)? as usize)?;
-        let len = word_at(ret, at)? as usize;
-        Some(ret.get(at + 32..at + 32 + len)?.to_vec())
+        let at = base.checked_add(usize::try_from(word_at(ret, base.checked_add(32 * i)?)?).ok()?)?;
+        let len = usize::try_from(word_at(ret, at)?).ok()?;
+        let start = at.checked_add(32)?;
+        Some(ret.get(start..start.checked_add(len)?)?.to_vec())
     };
-    Some(([field(0)?, field(1)?, field(2)?, field(3)?], word_at(ret, base + 128)?))
+    Some(([field(0)?, field(1)?, field(2)?, field(3)?], word_at(ret, base.checked_add(128)?)?))
 }
 
 #[cfg(test)]
@@ -73,6 +75,13 @@ mod tests {
         ret.extend(encode(&toks));
         assert_eq!(decode_account_state(&ret), Some((pts, 7)));
         assert_eq!(decode_account_state(&ret[..ret.len() - 1]), None);
+        // RPC-controlled words that would overflow an offset or length: None, never a panic (review I6).
+        let mut evil = ret.clone();
+        evil[320 + 24..352].copy_from_slice(&u64::MAX.to_be_bytes()); // length of accC (word 10)
+        assert_eq!(decode_account_state(&evil), None);
+        let mut evil = ret.clone();
+        evil[24..32].copy_from_slice(&(u64::MAX - 8).to_be_bytes()); // tuple offset
+        assert_eq!(decode_account_state(&evil), None);
     }
 
     #[test]
