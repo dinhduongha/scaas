@@ -2,9 +2,12 @@
 //!
 //! Cần `solana-test-validator` của luồng S12 đang chạy với program nạp ở genesis:
 //! `chains/solana/scripts/devnet.sh up --upgradeable-program BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d
-//! target/deploy/bamboo.so 73VoVWyfxmaWC6gUjsse6xzNTLLoEhazMCcKakXWbebm` (RPC 32020; program id = id test của
-//! localnet, authority = `signer("e2e-upgrade-authority")` — không khoá nào nằm trong repo, review M3). Chứng minh:
-//! 1. hai lane relayer từ mnemonic 24 từ (`m/44'/501'/i'/0'`), airdrop; mỗi lane tự tạo durable nonce account;
+//! target/deploy/bamboo.so 73VoVWyfxmaWC6gUjsse6xzNTLLoEhazMCcKakXWbebm --bpf-program
+//! A4PasPZEK899MesXpT3MSA4ufnpHcyfxjKuxRXmcZnRJ target/deploy/cpi_wrapper.so` (RPC 32020; program id = id test của
+//! localnet, authority = `signer("e2e-upgrade-authority")` — không khoá nào nằm trong repo, review M3; `cpi_wrapper` =
+//! program test bọc `relay_pay` trong CPI, review I1). Chứng minh:
+//! 1. hai lane relayer từ mnemonic 24 từ (`m/44'/501'/i'/0'`), airdrop; mỗi lane tự tạo durable nonce account (địa
+//!    chỉ nonce của lane 1 bị gửi lamports trước — vẫn tạo được, review M1);
 //!    alice (chủ thể) không có SOL, tiền nằm ở ATA của Account PDA của nó (mở lười ở lần trả đầu);
 //! 2. `initialize` với genesis hash thật; mint SPL Token + mint Token-2022; Odoo giả trả mint thật và TỪ CHỐI event
 //!    của mint chưa đăng ký;
@@ -26,7 +29,8 @@ use axum::routing::post;
 use axum::{Json, Router};
 use bamboo_node::adapter::{index_step, lane_step, recover_lane, Built, ChainAdapter, Family, Head, Lane, Rejected, Signed, TxStatus};
 use bamboo_node::adapters::solana::{
-    account_of, ata, b58, discriminator, find_pda, key, message_v1, nonce_account, Budget, Ix, Key, Meta, MetaOp,
+    account_of, ata, auth_ix, b58, discriminator, find_pda, key, message_v1, nonce_account, parse_auth, relay_pay_ix, Budget, Ix, Key,
+    Meta, MetaOp, Pay,
     ATA_PROGRAM, SYSTEM, TOKEN_2022, TOKEN_PROGRAM,
 };
 use bamboo_node::chain::SimError;
@@ -38,6 +42,8 @@ use serde_json::{json, Value};
 
 const RPC: &str = "http://127.0.0.1:32020";
 const PROGRAM: &str = "BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d";
+/// `chains/solana/programs/cpi_wrapper` (test only).
+const WRAPPER: &str = "A4PasPZEK899MesXpT3MSA4ufnpHcyfxjKuxRXmcZnRJ";
 const MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
                         abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 
@@ -410,6 +416,12 @@ async fn solana_payments_relay_finalize_and_never_lock_each_other() {
     let nonce0 = nonce_account(&pk(&signers[0]));
     assert!(!rpc("getAccountInfo", json!([b58(&nonce0), {"commitment": "confirmed"}])).await["value"].is_null());
     assert_eq!(adapter.sequence(0).await.unwrap(), s0, "stable until a tx advances it");
+    // M1: someone squats lane 1's public nonce address with lamports before its first use; creation still works
+    let nonce1 = nonce_account(&pk(&signers[1]));
+    airdrop(&nonce1, 1_000_000).await;
+    adapter.sequence(1).await.unwrap();
+    let n1 = rpc("getAccountInfo", json!([b58(&nonce1), {"commitment": "confirmed", "encoding": "base64"}])).await;
+    assert_eq!(n1["value"]["space"].as_u64(), Some(80), "pre-funded address became the lane's nonce account");
 
     let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![b58(&usd), b58(&eur)], ..Default::default() }));
     let odoo = odoo_at(start_fake(state.clone()).await);
@@ -499,24 +511,41 @@ async fn solana_payments_relay_finalize_and_never_lock_each_other() {
     let (e10, _) = job(10, &network, &alice, &evil, TOKEN_PROGRAM, &shop, 33, 0xaa, 0xaa, vu);
     assert_eq!(run_job(adapter.as_ref(), &odoo, &state, 1, e10).await, ["signed", "broadcast", "mined"]);
 
-    // Finality: index until X, Y, R6-advance and A are reported (finalized lags ~32 slots).
+    // I1: the same relay_pay wrapped in ANOTHER program's CPI (test-only forwarder) is still reported.
+    let (w12, w_digest) = job(12, &network, &alice, &usd, TOKEN_PROGRAM, &shop, 12, 0xcc, 0xcc, vu);
+    let w_op = MetaOp::decode(&alloy::hex::decode(w12["op"]["payload"].as_str().unwrap()).unwrap()).unwrap();
+    let w_auth = parse_auth(w12["op"]["signature"].as_str().unwrap(), w12["op"]["public_key"].as_str().unwrap()).unwrap();
+    let pay = Pay { program, lane: pk(&signers[0]), op: &w_op, auth: &w_auth, token_program: key(TOKEN_PROGRAM).unwrap(), subject_exists: true };
+    let mut inner = relay_pay_ix(&pay);
+    assert_eq!(inner.data[226], 1, "Auth.precompile_ix");
+    inner.data[226] = 0; // no AdvanceNonce here: the precompile is instruction 0
+    let mut accounts = vec![meta(program, false, false)];
+    accounts.extend(inner.accounts);
+    let wrapped = Ix { program: key(WRAPPER).unwrap(), accounts, data: inner.data };
+    let w_sig = send(vec![auth_ix(&w_auth, &w_op.digest()), wrapped], &[&signers[0]]).await;
+    let w_tx = rpc("getTransaction", json!([w_sig, {"commitment": "confirmed", "maxSupportedTransactionVersion": 1}])).await;
+    assert!(w_tx["meta"]["logMessages"].as_array().unwrap().iter().any(|l| l.as_str() == Some(&format!("Program {PROGRAM} invoke [2]"))), "relay_pay ran as a CPI");
+
+    // Finality: index until X, Y, R6-advance, A and the wrapped pay are reported (finalized lags ~32 slots).
     for _ in 0..240 {
         while index_step(adapter.as_ref(), &odoo).await.unwrap() {}
-        if state.lock().unwrap().ingested.iter().filter(|e| e["event"] == "PaymentSettled").count() >= 4 {
+        if state.lock().unwrap().ingested.iter().filter(|e| e["event"] == "PaymentSettled").count() >= 5 {
             break;
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
     let ing = state.lock().unwrap().ingested.clone();
     let settled: Vec<&Value> = ing.iter().filter(|e| e["event"] == "PaymentSettled").collect();
-    assert_eq!(settled.len(), 4, "X, Y, 61, A — not EVIL: {ing:#?}");
+    assert_eq!(settled.len(), 5, "X, Y, 61, A, wrapped — not EVIL: {ing:#?}");
+    let pay_w = settled.iter().find(|e| e["entry_ref"] == json!(format!("0x{}", "cc".repeat(32)))).expect("wrapped pay settled");
+    assert_eq!(pay_w["amount"].as_str(), Some("12"));
     let pay_x = settled.iter().find(|e| e["entry_ref"] == json!(format!("0x{}", "11".repeat(32)))).expect("X settled");
     assert_eq!((pay_x["contract"].as_str(), pay_x["to"].as_str(), pay_x["amount"].as_str()), (Some(b58(&usd).as_str()), Some(b58(&shop).as_str()), Some("1000")));
     assert_eq!(pay_x["from"], json!(b58(&pk(&alice))));
     assert_eq!(pay_x["tx_hash"], json!(x_id));
     let pay_y = settled.iter().find(|e| e["entry_ref"] == json!(format!("0x{}", "22".repeat(32)))).expect("Y settled");
     assert_eq!(pay_y["contract"], json!(b58(&eur)), "Token-2022 mint");
-    for d in [x_digest, y_digest] {
+    for d in [x_digest, y_digest, w_digest] {
         assert!(ing.iter().any(|e| e["event"] == "MetaTransactionExecuted" && e["digest"] == json!(format!("0x{}", alloy::hex::encode(d)))));
     }
     assert!(ing.iter().all(|e| e["block_hash"].as_str().unwrap().len() == 66 && e["tx_hash"].as_str().unwrap().len() == 130));

@@ -1,0 +1,19 @@
+[package]
+name = "cpi_wrapper"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "TEST ONLY (S12 review I1): forwards its instruction to accounts[0] by CPI; loaded only on the e2e validator"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[features]
+custom-heap = []
+custom-panic = []
+
+[dependencies]
+anchor-lang = { version = "=1.2.0" }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }
