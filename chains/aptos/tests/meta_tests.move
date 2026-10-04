@@ -384,6 +384,10 @@ module bamboo::meta_tests {
 
     // ------------------------------------------------------------------ prune (L10)
 
+    /// `meta::PRUNE_DELAY_S` (30 ngày) — Odoo `LANE_HORIZON_S` không lớn hơn.
+    const PRUNE_DELAY: u64 = 2_592_000;
+    const LANE_A1: vector<u8> = x"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1";
+
     #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
     #[expected_failure(abort_code = 2, location = bamboo::meta)]
     fun pruned_lane_cannot_replay(f: signer, b: signer, lane: signer) {
@@ -392,12 +396,44 @@ module bamboo::meta_tests {
         fx::mint(e, v::a_account(), 1000);
         v::a_pay_eur_short(&lane, e);   // valid_until 150
         v::a_pay_eur_0(&lane, e);       // valid_until 1000, lane a1
-        set_now(200);
+        set_now(150 + PRUNE_DELAY + 1);
         let short = x"a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8";
         let live = x"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1";
         meta::prune(v::alice(), vector[short, live]);
         assert!(meta::lane_nonce(v::alice(), short) == 0 && meta::lane_nonce(v::alice(), live) == 1, 0);
         v::a_pay_eur_short(&lane, e);   // expired ⇒ 2
+    }
+
+    // M2: hai op đã ký cho MỘT request (Odoo phát lại điều khoản: cùng lane, nonce 0, hạn 1000 rồi 1300). Chỉ một
+    // chạy được: op kia trượt nonce khi lane còn; `prune` chờ hết hạn + PRUNE_DELAY nên lúc lane mất thì op kia hết hạn.
+    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
+    #[expected_failure(abort_code = 4, location = bamboo::meta)]
+    fun reissued_op_cannot_run_while_the_lane_is_kept(f: signer, b: signer, lane: signer) {
+        fx::setup(&f, &b);
+        let e = eur();
+        fx::mint(e, v::a_account(), 1000);
+        v::a_pay_eur_0(&lane, e);
+        set_now(1001);                  // op đã chạy hết hạn; op phát lại (1300) còn hạn
+        meta::prune(v::alice(), vector[LANE_A1]);
+        set_now(1200);
+        assert!(meta::lane_nonce(v::alice(), LANE_A1) == 1 && bal(e, BEEF) == 100, 0);
+        v::a_pay_eur_0_reissued(&lane, e);
+    }
+
+    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
+    #[expected_failure(abort_code = 2, location = bamboo::meta)]
+    fun reissued_op_is_dead_once_the_lane_is_pruned(f: signer, b: signer, lane: signer) {
+        fx::setup(&f, &b);
+        let e = eur();
+        fx::mint(e, v::a_account(), 1000);
+        v::a_pay_eur_0(&lane, e);
+        set_now(1000 + PRUNE_DELAY);    // ranh giới: chưa xoá
+        meta::prune(v::alice(), vector[LANE_A1]);
+        assert!(meta::lane_nonce(v::alice(), LANE_A1) == 1, 0);
+        set_now(1000 + PRUNE_DELAY + 1);
+        meta::prune(v::alice(), vector[LANE_A1]);
+        assert!(meta::lane_nonce(v::alice(), LANE_A1) == 0, 1);
+        v::a_pay_eur_0_reissued(&lane, e);
     }
 
     // ------------------------------------------------------------------ vòng đời khoá (RS11-3)

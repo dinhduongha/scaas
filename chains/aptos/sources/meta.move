@@ -35,6 +35,10 @@ module bamboo::meta {
     const MAX_ORIGINS: u64 = 8;
     /// `RECOVERY_DELAY` của `SubjectAccount` EVM: guardian chờ 2 ngày, khoá hiện có / chủ huỷ được.
     const RECOVERY_DELAY_S: u64 = 172_800;
+    /// `prune` chỉ xoá lane/pay_ref sau `valid_until + PRUNE_DELAY_S` (review M2). Odoo phát mọi `valid_until` của
+    /// một request trong `LANE_HORIZON_S` (= 30 ngày) kể từ lúc tạo request ⇒ khi lane bị xoá, mọi op khác đã ký cho
+    /// request đó đều đã hết hạn (không trả hai lần). Giảm hằng này phải giảm horizon của Odoo trước.
+    const PRUNE_DELAY_S: u64 = 2_592_000;
 
     /// Chữ ký không hợp lệ với account và payload này.
     const EBAD_SIGNATURE: u64 = 1;
@@ -343,16 +347,22 @@ module bamboo::meta {
         digest
     }
 
-    /// Không cần quyền (RS11-4): xoá lane đã hết hạn — mọi op từng dùng nó đã hết hạn nên không replay được; Odoo
-    /// không phát lại lane. Phí lưu trữ hoàn cho người gửi tx (động cơ dọn — L10).
+    /// Không cần quyền (RS11-4): xoá lane khi `valid_until + PRUNE_DELAY_S < now`. `valid_until` chỉ là hạn của các op
+    /// ĐÃ CHẠY; op ký khác trên cùng lane (Odoo phát lại điều khoản) có hạn ≤ hạn đầu + horizon của Odoo ≤ mốc xoá
+    /// (review M2). Phí lưu trữ hoàn cho người gửi tx (động cơ dọn — L10).
     public entry fun prune(owner: address, lanes: vector<vector<u8>>) acquires Account {
         let acct = &mut Account[account_of(owner)];
         let now = timestamp::now_seconds();
         lanes.for_each(|k| {
-            if (acct.lanes.contains(k) && acct.lanes.borrow(k).valid_until < now) {
+            if (acct.lanes.contains(k) && prunable(acct.lanes.borrow(k).valid_until, now)) {
                 acct.lanes.remove(k);
             }
         });
+    }
+
+    /// Lane / pay_ref có hạn `valid_until` xoá được lúc `now` (u64: `valid_until` do người ký chọn, không tràn).
+    package fun prunable(valid_until: u64, now: u64): bool {
+        now > PRUNE_DELAY_S && valid_until < now - PRUNE_DELAY_S
     }
 
     // ------------------------------------------------------------------ package (mandate, dex)

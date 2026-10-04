@@ -229,12 +229,12 @@ module bamboo::mandate {
         }
     }
 
-    /// Không cần quyền (L10): xoá `pay_ref` có op đã hết hạn — op đó không replay được nữa.
+    /// Không cần quyền (L10): xoá `pay_ref` sau hạn op + `PRUNE_DELAY_S` (cùng quy tắc lane của `meta`, review M2).
     public entry fun prune(mandate: address, refs: vector<vector<u8>>) {
         let m = &mut Mandate[mandate];
         let now = timestamp::now_seconds();
         refs.for_each(|r| {
-            if (m.refs.contains(r) && *m.refs.borrow(r) < now) {
+            if (m.refs.contains(r) && meta::prunable(*m.refs.borrow(r), now)) {
                 m.refs.remove(r);
             }
         });

@@ -171,6 +171,8 @@ const('origin', ORIGIN.encode())
 x_payload, x_digest, x_sig, x_env = pay('a_pay_eur_0', alice, EUR, 100, 1, 0xa1, 0)
 const('a_pay_eur_0_digest', x_digest)
 pay('a_pay_eur_1', alice, EUR, 50, 2, 0xa1, 1)
+# M2: Odoo phát lại điều khoản CÙNG request (cùng pay_ref, lane, nonce 0) với hạn mới — hai op đã ký cho một request
+pay('a_pay_eur_0_reissued', alice, EUR, 100, 1, 0xa1, 0, valid_until=1300)
 pay('a_pay_usd_0', alice, USD, 70, 3, 0xa2, 0)
 pay('a_pay_eur_relayer', alice, EUR, 10, 4, 0xa3, 0, relayer=RELAYER)
 pay('a_pay_eur_reordered', alice, EUR, 10, 5, 0xa4, 0, style='reordered')
@@ -237,13 +239,13 @@ def mandate_open(name, signer, max_pay=100, max_period=150, period=600, expiry=5
         h(signer.pk), h(sig), h(env)))
 
 
-def mandate_pay(name, asset, amount, ref, to=BEEF, signer=delegate):
+def mandate_pay(name, asset, amount, ref, to=BEEF, signer=delegate, valid_until=VU):
     pay_ref = bytes([ref]) * 32
     payload = F.metaop_bytes(CHAIN, MANDATE, asset, F.OP_MANDATE_PAY, alice.address, to, amount, pay_ref, pay_ref, 0,
-                             VU)
+                             valid_until)
     sig, env = signer.sign(F.LABEL, F.digest(payload), pay_ref)
     fn(name, 'lane: &signer, asset: Object<Metadata>', 'mandate::pay(lane, %s, asset, %s, %d, %s, %d, @0x0, %s, %s, %s)' % (
-        a(MANDATE), a(to), amount, h(pay_ref), VU, h(signer.pk), h(sig), h(env)))
+        a(MANDATE), a(to), amount, h(pay_ref), valid_until, h(signer.pk), h(sig), h(env)))
 
 
 def mandate_revoke(name, signer):
@@ -257,6 +259,7 @@ pay('a_pay_eur_to_mandate', alice, EUR, 200, 14, 0xad, 0, to=MANDATE)
 mandate_open('m_open', alice)
 mandate_open('m_open_by_mallory', mallory)
 mandate_pay('m_pay_60_r1', EUR, 60, 0x61)
+mandate_pay('m_pay_60_r1_reissued', EUR, 60, 0x61, valid_until=1300)
 mandate_pay('m_pay_60_r2', EUR, 60, 0x62)
 mandate_pay('m_pay_60_r3', EUR, 60, 0x63)
 mandate_pay('m_pay_101', EUR, 101, 0x64)

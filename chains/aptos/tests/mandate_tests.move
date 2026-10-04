@@ -136,9 +136,24 @@ module bamboo::mandate_tests {
         v::m_pay_60_r1(&lane, e);
         mandate::prune(v::mandate(), vector[R1]);
         assert!(mandate::ref_used(v::mandate(), R1), 0);
+        set_now(1000 + 2_592_000);      // hết hạn nhưng chưa qua PRUNE_DELAY (M2)
+        mandate::prune(v::mandate(), vector[R1]);
+        assert!(mandate::ref_used(v::mandate(), R1), 1);
+        set_now(1000 + 2_592_000 + 1);
+        mandate::prune(v::mandate(), vector[R1]);
+        assert!(!mandate::ref_used(v::mandate(), R1), 2);
+    }
+
+    // M2: delegate ký hai op cho cùng pay_ref (hạn 1000 rồi 1300): op thứ hai trượt khi ref còn giữ.
+    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
+    #[expected_failure(abort_code = 7, location = bamboo::mandate)]
+    fun reissued_mandate_op_cannot_pay_twice(f: signer, b: signer, lane: signer) {
+        let e = ready(&f, &b, &lane);
+        v::m_pay_60_r1(&lane, e);
         set_now(1001);
         mandate::prune(v::mandate(), vector[R1]);
-        assert!(!mandate::ref_used(v::mandate(), R1), 1);
+        set_now(1200);
+        v::m_pay_60_r1_reissued(&lane, e);
     }
 
     // ANTI-LOCK: chủ thể ký X (pay qua Account) và Y (mandate::pay); X bị giữ; Y qua; rồi X qua.
