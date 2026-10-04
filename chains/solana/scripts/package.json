@@ -1,0 +1,9 @@
+{
+  "name": "bamboo-solana-vectors",
+  "private": true,
+  "type": "module",
+  "description": "Pins the hand-written Solana bytes (tx v1, offchain message v1) to @solana/kit. Vector generation only.",
+  "dependencies": {
+    "@solana/kit": "8.4.0"
+  }
+}
