@@ -114,13 +114,13 @@ test('conf key is apart from signing keys: other path/curve/account ⇒ other x;
 
 test('x is sealed at rest like the seed; only Y/UA come back', async () => {
   const seed = seedFromWords(R33.mnemonic);
-  const { vault, Y, UA } = await sealConfKey({ seed, curve: 'bn254', coin: 60, account: 0, pin: '123456' });
+  const { vault, Y, UA } = await sealConfKey({ seed, curve: 'bn254', coin: 60, account: 0, pin: 'river-otter-7' });
   assert.equal(Y, R33.bn254.keys[0].Y);
   assert.equal(UA, R33.bn254.keys[0].UA);
   assert.equal(vault.label, confLabel('bn254', 60, 0));
   assert.ok(!JSON.stringify(vault).includes(R33.bn254.keys[0].x.slice(2)));
-  assert.equal(hex(await openConfKey(vault, { pin: '123456' })), R33.bn254.keys[0].x);
-  await assert.rejects(openConfKey(vault, { pin: '654321' }), /Wrong PIN/);
+  assert.equal(hex(await openConfKey(vault, { pin: 'river-otter-7' })), R33.bn254.keys[0].x);
+  await assert.rejects(openConfKey(vault, { pin: 'river-otter-8' }), /Wrong PIN/);
 });
 
 // S3 `vectors/r33_inputs.json` (copied verbatim): the prover's JSON API accepts a path index only as
