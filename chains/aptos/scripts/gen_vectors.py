@@ -31,6 +31,7 @@ ROOT = F.root_of(BAMBOO)
 DEX = F.dex_of(ROOT)
 EUR = F.object_address('0xcafe', b'EUR')
 USD = F.object_address('0xcafe', b'USD')
+GBP = F.object_address('0xcafe', b'GBP')
 HOOK = F.object_address('0xcafe', b'HOOK')    # FA có hook withdraw (dispatchable, AIP-73)
 APT = '0xa'                                    # FA cặp của coin APT (AIP-63)
 BEEF = '0xbeef'
@@ -153,6 +154,7 @@ addr_const('dex', DEX)
 addr_const('eur', EUR)
 addr_const('usd', USD)
 addr_const('hook', HOOK)
+addr_const('gbp', GBP)
 addr_const('a_account', F.account_of(ROOT, alice.address))
 addr_const('b_account', F.account_of(ROOT, bob.address))
 addr_const('c_account', F.account_of(ROOT, carol.address))
@@ -214,7 +216,7 @@ MANDATE = F.mandate_of(ROOT, alice.address, M_SEED)
 addr_const('mandate', MANDATE)
 
 
-def mandate_open(name, signer, max_pay=100, max_period=150, period=3600, expiry=5000, payees=(BEEF,)):
+def mandate_open(name, signer, max_pay=100, max_period=150, period=600, expiry=5000, payees=(BEEF,)):
     dg = F.sha3(F.vec(b'bamboo.mandate.v1') + bytes([CHAIN]) + F.addr(F.account_of(ROOT, alice.address))
                 + F.addr(MANDATE) + F.vec(M_SEED) + F.vec(delegate.pk) + max_pay.to_bytes(8, 'little')
                 + max_period.to_bytes(8, 'little') + period.to_bytes(8, 'little') + expiry.to_bytes(8, 'little')
@@ -241,6 +243,7 @@ def mandate_revoke(name, signer):
         a(MANDATE), VU, h(signer.pk), h(sig), h(env)))
 
 
+pay('a_pay_eur_to_mandate', alice, EUR, 200, 14, 0xad, 0, to=MANDATE)
 mandate_open('m_open', alice)
 mandate_open('m_open_by_mallory', mallory)
 mandate_pay('m_pay_60_r1', EUR, 60, 0x61)
@@ -276,10 +279,10 @@ def order_bytes(maker, sell, buy, sell_amount, buy_amount, nonce, expiry=VU, max
 
 
 def order(name, maker, *args, signer=None, **kw):
-    """(order bytes, pk, sig, env) — trả về tuple Move."""
+    """[order bytes, pk, sig, env]."""
     b = order_bytes(maker, *args, **kw)
     sig, env = (signer or maker).sign('bamboo.order.v1', F.sha3(b))
-    out.append('public fun %s(): (vector<u8>, vector<u8>, vector<u8>, vector<u8>) { (%s, %s, %s, %s) }%s' % (
+    out.append('public fun %s(): vector<vector<u8>> { vector[%s, %s, %s, %s] }%s' % (
         name, h(b), h((signer or maker).pk), h(sig), h(env), '  // p256' if (signer or maker).kind != 'ed25519' else ''))
     return b
 
@@ -311,6 +314,11 @@ def invalidate(name, maker, min_nonce):
         a(MARKET), a(maker.address), min_nonce, h(maker.pk), h(sig), h(env)))
 
 
+# Market thứ hai (EUR/GBP): min_nonce/filled/huỷ của market này không đụng market kia.
+MARKET2 = F.market_of(DEX, EUR, GBP)
+addr_const('market2', MARKET2)
+order('o2_alice_sell_eur', alice, EUR, GBP, 100, 200, 1, market=MARKET2)
+order('o2_carol_sell_gbp', carol, GBP, EUR, 200, 100, 1, market=MARKET2)
 cancel('cancel_o_alice_sell_eur', alice, o_a)
 invalidate('alice_min_nonce_2', alice, 2)
 
