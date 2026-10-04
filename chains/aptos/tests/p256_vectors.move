@@ -312,6 +312,12 @@ module bamboo::p256_vectors {
     fun w3c_webauthn_es256() {
         check(0, w3c_pk(), x"9801a6b84c521a9f35a3851ca4c99094a4ecdb5784a51cbd702ea16524fe80f4", w3c_sig_low_s(), true);
         check(0, w3c_pk(), x"9801a6b84c521a9f35a3851ca4c99094a4ecdb5784a51cbd702ea16524fe80f4", w3c_sig_high_s(), false);
+        // a cached table (Account keys keep one) verifies the same; off-curve / malformed keys have none
+        let t = p256::table(&w3c_pk());
+        assert!(t.length() == 16 && p256::verify_with(&t, &x"9801a6b84c521a9f35a3851ca4c99094a4ecdb5784a51cbd702ea16524fe80f4", &w3c_sig_low_s()), 1);
+        assert!(!p256::verify_with(&t, &x"0000000000000000000000000000000000000000000000000000000000000000", &w3c_sig_low_s()), 2);
+        assert!(p256::table(&x"041cf27f25da591208a4239c2e324f104f585525479a29edeedd830f48e77aeae559e4b7da6c0106e206ce390c93ab98a15a5ec3887e57f0cc2bece803b920c422").is_empty(), 3);
+        assert!(p256::table(&x"051cf27f25da591208a4239c2e324f104f585525479a29edeedd830f48e77aeae559e4b7da6c0106e206ce390c93ab98a15a5ec3887e57f0cc2bece803b920c423").is_empty() && p256::table(&x"04").is_empty(), 4);
     }
 
     // clientkeys software authenticator (smartcontracts/test/vectors/webauthn_soft.json), low-s normalised.

@@ -139,6 +139,12 @@ def main():
         '    fun w3c_webauthn_es256() {',
         '        check(0, w3c_pk(), %s, w3c_sig_low_s(), true);' % h(msg_hash),
         '        check(0, w3c_pk(), %s, w3c_sig_high_s(), false);' % h(msg_hash),
+        '        // a cached table (Account keys keep one) verifies the same; off-curve / malformed keys have none',
+        '        let t = p256::table(&w3c_pk());',
+        '        assert!(t.length() == 16 && p256::verify_with(&t, &%s, &w3c_sig_low_s()), 1);' % h(msg_hash),
+        '        assert!(!p256::verify_with(&t, &%s, &w3c_sig_low_s()), 2);' % h(bytes(32)),
+        '        assert!(p256::table(&%s).is_empty(), 3);' % h(pk[:-1] + bytes([pk[-1] ^ 1])),
+        '        assert!(p256::table(&%s).is_empty() && p256::table(&x"04").is_empty(), 4);' % h(b'\x05' + pk[1:]),
         '    }',
     ]
     spk = b'\x04' + bytes.fromhex(soft['qx'][2:].rjust(64, '0') + soft['qy'][2:].rjust(64, '0'))

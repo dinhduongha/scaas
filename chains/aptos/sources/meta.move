@@ -17,6 +17,7 @@ module bamboo::meta {
     use aptos_framework::primary_fungible_store;
     use aptos_framework::timestamp;
     use bamboo::auth;
+    use bamboo::p256;
 
     const DOMAIN: vector<u8> = b"bamboo.metaop.v1";
     const KEYOP_DOMAIN: vector<u8> = b"bamboo.keyop.v1";
@@ -72,11 +73,13 @@ module bamboo::meta {
         extend: ExtendRef,
     }
 
-    /// `scheme` 0 = ed25519 (32 byte), 2 = WebAuthn P-256 (65 byte, `rp_id_hash` 32 byte).
+    /// `scheme` 0 = ed25519 (32 byte), 2 = WebAuthn P-256 (65 byte, `rp_id_hash` 32 byte, `table` = `p256::table`
+    /// tính một lần lúc đăng ký — mỗi chữ ký passkey sau đó rẻ hơn ~400 gas; rỗng với ed25519).
     struct Key has copy, drop, store {
         scheme: u8,
         public_key: vector<u8>,
         rp_id_hash: vector<u8>,
+        table: vector<u256>,
     }
 
     struct Recovery has copy, drop, store {
@@ -207,7 +210,7 @@ module bamboo::meta {
     public entry fun open(owner: address, public_key: vector<u8>) acquires Root {
         assert!(auth::scheme_of(&public_key) == auth::ed25519(), EFIRST_KEY);
         assert!(auth::proves(&account::get_authentication_key(owner), &public_key), EFIRST_KEY);
-        create_account(owner, Key { scheme: auth::ed25519(), public_key, rp_id_hash: vector[] }, vector[]);
+        create_account(owner, key_of(auth::ed25519(), public_key, vector[]), vector[]);
     }
 
     fun create_account(owner: address, key: Key, origin: vector<u8>): address acquires Root {
@@ -237,7 +240,7 @@ module bamboo::meta {
         assert!(auth::proves(&account::get_authentication_key(owner), public_key), EFIRST_KEY);
         let scheme = auth::scheme_of(public_key);
         let (rp, origin) = if (scheme == auth::webauthn()) auth::webauthn_origin(envelope) else (vector[], vector[]);
-        create_account(owner, Key { scheme, public_key: *public_key, rp_id_hash: rp }, origin);
+        create_account(owner, key_of(scheme, *public_key, rp), origin);
     }
 
     // ------------------------------------------------------------------ pay
@@ -330,7 +333,7 @@ module bamboo::meta {
             assert!(auth::proves(&account::get_authentication_key(owner), &public_key), EFIRST_KEY);
             let (rp, origin) = auth::webauthn_origin(&envelope);
             assert!(
-                auth::verify(&public_key, DOMAIN, &digest, &sig, &envelope, &rp, &vector[origin], chain_id::get()),
+                auth::verify(&public_key, DOMAIN, &digest, &sig, &envelope, &rp, &vector[origin], &vector[], chain_id::get()),
                 EBAD_SIGNATURE,
             );
             assert!(nonce == 0, EBAD_NONCE);
@@ -396,7 +399,7 @@ module bamboo::meta {
     ): bool {
         let (found, i) = acct.keys.find(|k| k.public_key == *public_key);
         found && auth::verify(public_key, label, digest, sig, envelope, &acct.keys[i].rp_id_hash, &acct.origins,
-            chain_id::get())
+            &acct.keys[i].table, chain_id::get())
     }
 
     /// Khoá của account `addr` ký `digest` — cho `mandate`/`dex`.
@@ -470,7 +473,7 @@ module bamboo::meta {
         assert!(exists<Account>(addr), ENO_ACCOUNT);
         let digest = keyop_digest(owner, action, scheme, public_key, rp_id_hash, origin, guardian, valid_until);
         assert!(verify_by(&Account[addr], &signer_key, KEYOP_DOMAIN, &digest, &sig, &envelope), EBAD_SIGNATURE);
-        apply(addr, action, Key { scheme, public_key, rp_id_hash }, origin, guardian);
+        apply(addr, action, key_of(scheme, public_key, rp_id_hash), origin, guardian);
     }
 
     /// Đường 2: chính chủ gửi tx native. Chủ thể có tài khoản Aptos passkey/keyless/MultiKey (khoá không dẫn ra được
@@ -487,7 +490,7 @@ module bamboo::meta {
     ) acquires Root, Account {
         let o = signer::address_of(owner);
         let addr = account_of(o);
-        let key = Key { scheme, public_key, rp_id_hash };
+        let key = key_of(scheme, public_key, rp_id_hash);
         if (!exists<Account>(addr)) {
             assert!(action == ADD_KEY && key_valid(&key) && origin_ok(&key, &origin), EKEY_OP);
             create_account(o, key, origin);
@@ -537,7 +540,7 @@ module bamboo::meta {
         let addr = account_of(owner);
         let acct = &mut Account[addr];
         assert!(acct.guardian != @0x0 && signer::address_of(guardian) == acct.guardian, ENOT_GUARDIAN);
-        let key = Key { scheme, public_key, rp_id_hash };
+        let key = key_of(scheme, public_key, rp_id_hash);
         assert!(key_valid(&key) && origin_ok(&key, &origin), EKEY_OP);
         let ready_at = timestamp::now_seconds() + RECOVERY_DELAY_S;
         acct.recovery = option::some(Recovery { key, origin, ready_at });
@@ -555,9 +558,15 @@ module bamboo::meta {
         event::emit(Recovered { account: addr, guardian: acct.guardian });
     }
 
+    /// Khoá passkey kèm bảng `p256::table` (rỗng nếu khoá không nằm trên đường cong ⇒ `key_valid` từ chối).
+    fun key_of(scheme: u8, public_key: vector<u8>, rp_id_hash: vector<u8>): Key {
+        let table = if (scheme == auth::webauthn()) p256::table(&public_key) else vector[];
+        Key { scheme, public_key, rp_id_hash, table }
+    }
+
     fun key_valid(k: &Key): bool {
         let s = auth::scheme_of(&k.public_key);
-        s == k.scheme && (s == auth::ed25519() || s == auth::webauthn())
+        s == k.scheme && (s == auth::ed25519() || (s == auth::webauthn() && !k.table.is_empty()))
             && k.rp_id_hash.length() == (if (s == auth::webauthn()) 32 else 0)
     }
 

@@ -177,7 +177,7 @@ module bamboo::mandate {
         let digest = meta::check(&op, lane);
         assert!(
             public_key == m.delegate_key
-                && auth::verify(&public_key, METAOP_LABEL, &digest, &sig, &envelope, &vector[], &vector[], chain_id::get()),
+                && auth::verify(&public_key, METAOP_LABEL, &digest, &sig, &envelope, &vector[], &vector[], &vector[], chain_id::get()),
             EBAD_SIGNATURE,
         );
         // So bằng phép trừ (Sui L6): `now ≥ period_start`, `spent ≤ max_per_period` ⇒ không tràn.
@@ -209,7 +209,7 @@ module bamboo::mandate {
         let op = meta::new_op(mandate, @0x0, OP_REVOKE, m.owner, @0x0, 0, zero32(), zero32(), 0, valid_until, @0x0, zero32());
         let digest = meta::check(&op, lane);
         let by_delegate = public_key == m.delegate_key
-            && auth::verify(&public_key, METAOP_LABEL, &digest, &sig, &envelope, &vector[], &vector[], chain_id::get());
+            && auth::verify(&public_key, METAOP_LABEL, &digest, &sig, &envelope, &vector[], &vector[], &vector[], chain_id::get());
         assert!(
             by_delegate || meta::verify_signed(meta::account_of(m.owner), &public_key, METAOP_LABEL, &digest, &sig, &envelope),
             EBAD_SIGNATURE,

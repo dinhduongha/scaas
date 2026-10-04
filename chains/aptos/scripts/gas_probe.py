@@ -4,7 +4,8 @@
 
     gas_probe.py <localnet dir>     (sau devnet.sh up && publish; tạo FA BUSD của testfa nếu chưa có)
 
-In ra FeeStatement (execution/io gas units, storage fee octa) của lần chi đầu (mở Account lười) và lần thứ hai.
+In ra FeeStatement (execution/io gas units, storage fee octa) của lần chi đầu (mở Account lười) và lần thứ hai, và
+của một `dex::settle` khớp HAI lệnh ký bằng passkey (trường hợp nặng nhất: hai lần kiểm P-256 trong một tx).
 """
 import hashlib
 import importlib
@@ -53,7 +54,7 @@ def fee(tx_hash):
             'storage_octa': int(d['storage_fee_octas'])}
 
 
-def pay(owner, pk, sign, ref):
+def pay(owner, pk, sign, ref, profile=False):
     account = F.account_of(ROOT, owner)
     mint(account, 1000)
     pay_ref, lane = bytes([ref]) * 32, bytes([ref ^ 0xff]) * 32
@@ -69,6 +70,8 @@ def pay(owner, pk, sign, ref):
         {'type': 'hex', 'value': '0x' + env.hex()}]}
     path = os.path.join(D, 'gas-%02x.json' % ref)
     json.dump(spec, open(path, 'w'))
+    if profile:   # mô phỏng cục bộ có profiler gas (báo cáo HTML ở cli/gas-profiling/)
+        return run(['--json-file', path, '--max-gas', '2000000', '--profile-gas'])
     r = run(['--json-file', path, '--max-gas', '2000000'])
     assert r['success'], r
     return fee(r['transaction_hash'])
@@ -87,11 +90,12 @@ p = ec.derive_private_key(int.from_bytes(hashlib.sha256(b'gas-passkey').digest()
 p_pk = p.public_key().public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
 
 
-def passkey_sign(dg, _lane):
+def passkey_sign(dg, _lane, key=None):
+    key = key or p
     ad = hashlib.sha256(b'pay.bamboo.test').digest() + b'\x05' + bytes(4)
     cd = json.dumps({'type': 'webauthn.get', 'challenge': F._b64url(dg).decode(), 'origin': 'https://pay.bamboo.test'},
                     separators=(',', ':')).encode()
-    r, s = utils.decode_dss_signature(p.sign(ad + hashlib.sha256(cd).digest(), ec.ECDSA(hashes.SHA256())))
+    r, s = utils.decode_dss_signature(key.sign(ad + hashlib.sha256(cd).digest(), ec.ECDSA(hashes.SHA256())))
     return r.to_bytes(32, 'big') + min(s, N - s).to_bytes(32, 'big'), F.webauthn_envelope(ad, cd)
 
 
@@ -103,4 +107,42 @@ out = {}
 for name, pk, sign, refs in (('ed25519', ed_pk, ed_sign, (0x31, 0x33)), ('passkey', p_pk, passkey_sign, (0x32, 0x34))):
     owner = F.auth_keys(pk)[0]
     out[name] = {'first_pay_opens_account': pay(owner, pk, sign, refs[0]), 'next_pay': pay(owner, pk, sign, refs[1])}
+# DEX: hai chủ passkey (A đã mở ở trên; B mở bằng một pay), market BUSD/BEUR, settle hai lệnh passkey.
+p2 = ec.derive_private_key(int.from_bytes(hashlib.sha256(b'gas-passkey-2').digest(), 'big') % N, ec.SECP256R1())
+p2_pk = p2.public_key().public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
+a_owner, b_owner = F.auth_keys(p_pk)[0], F.auth_keys(p2_pk)[0]
+pay(b_owner, p2_pk, lambda dg, lane: passkey_sign(dg, lane, p2), 0x36)
+run(['--function-id', DEPLOYER + '::coin::create', '--args', 'hex:42455552'])
+BEUR = F.object_address(DEPLOYER, b'BEUR')
+run(['--function-id', DEPLOYER + '::coin::mint', '--args', 'hex:42455552', 'address:' + F.account_of(ROOT, b_owner), 'u64:1000'])
+mint(F.account_of(ROOT, a_owner), 1000)
+DEX = F.dex_of(ROOT)
+MARKET = F.market_of(DEX, BUSD, BEUR)
+run(['--function-id', PKG + '::dex::create_dex'])
+run(['--function-id', PKG + '::dex::list_market', '--args', 'address:' + BUSD, 'address:' + BEUR, 'bool:true',
+     'bool:false', 'u32:0', 'u32:0', 'address:0x0'])
+expiry = int(time.time()) + 300
+
+
+def order(maker, sell, buy, sell_amount, buy_amount, nonce):
+    return (F.vec(b'bamboo.order.v1') + bytes([4]) + F.addr(MARKET) + F.addr(maker) + F.addr('0x0') + F.addr(sell)
+            + F.addr(buy) + sell_amount.to_bytes(8, 'little') + buy_amount.to_bytes(8, 'little')
+            + nonce.to_bytes(16, 'little') + expiry.to_bytes(8, 'little') + (10000).to_bytes(4, 'little') + b'\x00'
+            + F.addr('0x0'))
+
+
+mo, to_ = order(a_owner, BUSD, BEUR, 100, 100, 1), order(b_owner, BEUR, BUSD, 100, 100, 1)
+msig, menv = passkey_sign(F.sha3(mo), None, p)
+tsig, tenv = passkey_sign(F.sha3(to_), None, p2)
+hx = lambda b: {'type': 'hex', 'value': '0x' + b.hex()}  # noqa: E731
+spec = {'function_id': PKG + '::dex::settle', 'type_args': [], 'args': [
+    {'type': 'address', 'value': MARKET}, hx(mo), hx(p_pk), hx(msig), hx(menv), hx(to_), hx(p2_pk), hx(tsig), hx(tenv),
+    {'type': 'u64', 'value': '100'}, {'type': 'u64', 'value': '100'}, hx(b'gas-probe')]}
+path = os.path.join(D, 'gas-settle.json')
+json.dump(spec, open(path, 'w'))
+r = run(['--json-file', path, '--max-gas', '2000000'])
+assert r['success'], r
+out['dex_settle_two_passkeys'] = fee(r['transaction_hash'])
+if os.environ.get('PROFILE'):
+    out['profile'] = pay(F.auth_keys(p_pk)[0], p_pk, passkey_sign, 0x35, profile=True)
 print(json.dumps(out))

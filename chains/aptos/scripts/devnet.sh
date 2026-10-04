@@ -42,7 +42,7 @@ publish() {
     'import json,sys; print(json.load(sys.stdin)["Result"]["deployer"]["account"])')"
   echo "$deployer" > "$DIR/deployer.txt"
   deploy() {
-    ( cd "$CFG" && aptos move deploy-object --package-dir "$HERE" --address-name bamboo --profile deployer \
+    ( cd "$CFG" && aptos move deploy-object --package-dir "$HERE" --address-name bamboo --profile deployer --included-artifacts none \
         --assume-yes --skip-fetch-latest-git-deps 2>&1 ) | tee -a "$DIR/deploy.log" \
       | python3 -c 'import re,sys; t=sys.stdin.read(); m=re.findall(r"Code was successfully deployed to object address (0x[0-9a-fA-F]+)", t); print(m[-1] if m else "")'
   }

@@ -61,7 +61,8 @@ module bamboo::auth {
         out
     }
 
-    /// Một chữ ký của khoá `pk` trên `digest`. `rp_id_hash`/`origins` chỉ dùng cho WebAuthn.
+    /// Một chữ ký của khoá `pk` trên `digest`. `rp_id_hash`/`origins`/`table` chỉ dùng cho WebAuthn; `table` =
+    /// `p256::table(pk)` lưu lúc đăng ký khoá (rỗng ⇒ tính tại chỗ).
     public fun verify(
         pk: &vector<u8>,
         label: vector<u8>,
@@ -70,6 +71,7 @@ module bamboo::auth {
         envelope: &vector<u8>,
         rp_id_hash: &vector<u8>,
         origins: &vector<vector<u8>>,
+        table: &vector<u256>,
         chain_id: u8,
     ): bool {
         if (sig.length() != 64 || digest.length() != 32) return false;
@@ -100,7 +102,7 @@ module bamboo::auth {
         if (origin.is_empty() || !origins.contains(&origin)) return false;
         let msg = ad;
         msg.append(sha2_256(cd));
-        p256::verify(pk, &sha2_256(msg), sig)
+        if (table.is_empty()) p256::verify(pk, &sha2_256(msg), sig) else p256::verify_with(table, &sha2_256(msg), sig)
     }
 
     /// Phong bì `aptos:signMessage` (spec §4.2). Không phụ thuộc thứ tự dòng.
