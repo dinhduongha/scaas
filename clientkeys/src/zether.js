@@ -256,16 +256,14 @@ export async function openBalanceCache(curve, x, box) {
 
 /**
  * Record `balance` for `state = {ua, token, acc, accSeq}` (the account's CURRENT on-chain `acc`) only
- * if it checks; otherwise drop the entry. Returns whether it was recorded.
+ * if it checks. A value that does not check is refused and the previous entry is KEPT: it is the last
+ * balance that checked, the anchor `readBalance` reads differences from. Returns whether it was recorded.
  */
 export function setCachedBalance(curve, x, entries, state, balance) {
   const b = BigInt(balance);
-  if (b >= 0n && checkBalance(curve, x, state.acc, b)) {
-    entries[keyOf(state)] = { ua: state.ua, token: state.token, accSeq: Number(state.accSeq), balance: b };
-    return true;
-  }
-  delete entries[keyOf(state)];
-  return false;
+  if (b < 0n || !checkBalance(curve, x, state.acc, b)) return false;
+  entries[keyOf(state)] = { ua: state.ua, token: state.token, accSeq: Number(state.accSeq), balance: b };
+  return true;
 }
 
 /** After our own transfer/burn landed: `b −= v + fee` (v = amount for a burn), checked on the new `acc`. */
@@ -281,21 +279,44 @@ export function cacheAfterRollOver(curve, x, entries, state, pending) {
 }
 
 /**
- * The spendable balance of `state = {ua, token, acc, accSeq}`: the cache when it checks, else the
- * device BSGS (`decrypt(acc)` → amount, e.g. the prover wasm `decrypt`, bound 2^44), which then fills
- * the cache. Above the device bound it throws and sends the user to the desktop reader; its output is
- * entered with `setCachedBalance` (checked like everything else).
+ * The spendable balance of `state = {ua, token, acc, accSeq}`:
+ *   1. the cache, when it checks against `acc`;
+ *   2. else, from the last balance that checked, the DIFFERENCE `acc − b_cached` by the device BSGS
+ *      (`decrypt(ct)` → amount, e.g. the prover wasm `decryptPending`, bound 2^44), first as a gain then as
+ *      a loss. This covers rollOvers the wallet did not do (`rollOverPublic`/`rollOverBatch` by anyone —
+ *      `fund(victim, 1)` + `rollOverPublic` is free griefing — and late credits swept by `rollOverSigned`)
+ *      and own debits it did not record (review M1). Each try costs one device BSGS when it misses;
+ *   3. else the device BSGS on `acc` itself (no cache, or a balance below the bound).
+ * Every answer is re-checked with `checkBalance` before it is cached or returned. Above the device bound
+ * it throws and sends the user to the desktop reader, whose output is entered with `setCachedBalance`.
  */
 export async function readBalance(curve, x, entries, state, decrypt) {
   const e = entries[keyOf(state)];
   if (e && checkBalance(curve, x, state.acc, e.balance)) return { balance: e.balance, source: 'cache' };
-  let b;
-  try {
-    b = BigInt(await decrypt(state.acc));
-  } catch (cause) {
-    throw new Error(`This balance is above what this device can read (2^${DEVICE_BOUND_BITS} units). `
-      + 'Run `zether-read-balance` on a desktop, then enter the balance it prints here.', { cause });
+  const tries = [];
+  if (e) {
+    const { Point } = curveOf(curve);
+    const bG = e.balance === 0n ? Point.ZERO : Point.BASE.multiply(e.balance);
+    const C = pointOf(curve, state.acc.C);
+    const D = pointOf(curve, state.acc.D);
+    const ct = (c, d) => ({ C: hex(encodePoint(curve, c)), D: hex(encodePoint(curve, d)) });
+    tries.push(['delta', ct(C.subtract(bG), D), (d) => e.balance + d]); // decrypts to a − b_cached
+    tries.push(['delta', ct(bG.subtract(C), D.negate()), (d) => e.balance - d]); // b_cached − a
   }
-  if (!setCachedBalance(curve, x, entries, state, b)) throw new Error('decrypted balance does not match acc');
-  return { balance: b, source: 'bsgs' };
+  tries.push(['bsgs', state.acc, (d) => d]);
+  let decrypted = false;
+  for (const [source, ct, balanceOf] of tries) {
+    let d;
+    try {
+      d = BigInt(await decrypt(ct));
+    } catch {
+      continue;
+    }
+    decrypted = true;
+    const b = balanceOf(d);
+    if (setCachedBalance(curve, x, entries, state, b)) return { balance: b, source };
+  }
+  if (decrypted) throw new Error('decrypted balance does not match acc');
+  throw new Error(`This balance is above what this device can read (2^${DEVICE_BOUND_BITS} units). `
+    + 'Run `zether-read-balance` on a desktop, then enter the balance it prints here.');
 }
