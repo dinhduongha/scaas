@@ -66,7 +66,43 @@ dạng rõ). Đây là lỗi `blockchain-research/_MANIFESTS.md` đã bác.
 | Trần tổng tiền của token (cách contract thực thi cận giải mã) | 2^32 (≈ 4,29 tỷ đơn vị) | `MAX_TOTAL_SHIELDED = 2^54` (≈ 18 triệu tỷ ₫ với 1 đơn vị = 1 ₫); mỗi token đặt `maxDecryptableShielded ≤ 2^54` |
 | **Cận giải mã** (cái `MAX` thật) — chủ tài khoản giải log rời rạc số dư | vét cạn tuyến tính tới 2^32 (O(2^32)), thực thi bằng trần tổng 2^32 | BSGS O(√bound), client tự cấu hình bảng 2^18–2^27, trần dò ≤ 2^54; + cache số dư trên thiết bị (`2026-10-05-zether-limits.md` §4–§5) |
 
-## 4. Có tăng thêm nữa không?
+## 4. Nâng cận giải mã lên 2^60, 2^64 — và với GPU
+
+Giải mã = tìm `b` từ `g^b` khi biết `b < bound`. Hai thuật toán:
+- **BSGS**: O(√bound) phép cộng điểm, cần bảng; đánh đổi bộ nhớ ↔ thời gian (`2026-10-05-zether-limits.md` §4).
+- **Pollard kangaroo**: ≈ 2·√bound phép cộng điểm, **bộ nhớ gần như không đổi** (chỉ lưu "distinguished
+  points"), song song hoá tốt trên nhiều lõi và trên **GPU**.
+
+Ước tính (số phép cộng điểm bn254; CPU ≈ 0,35 µs/phép/lõi; GPU cao cấp ≈ 2–5 × 10^9 phép/s — ước theo các
+bộ kangaroo GPU công khai trên secp256k1, cùng cỡ trường 256 bit; **phải đo trên phần cứng thật**):
+
+| Cận | √cận | Desktop 1 lõi | CPU 16 lõi | 1 GPU cao cấp |
+|---|---|---|---|---|
+| 2^54 | 1,3e8 | ~1–6 phút (BSGS bảng 2^24–2^27) | ~5–20 s | < 0,1 s |
+| 2^60 | 1,1e9 | ~12 phút | ~45 s | ~0,5–1 s |
+| 2^64 | 4,3e9 | ~50 phút | ~3 phút | ~2–4 s |
+| 2^72 | 6,9e10 | ~13 giờ | ~50 phút | ~30–70 s |
+| 2^80 | 1,1e12 | ~9 ngày | ~14 giờ | ~7–18 phút |
+
+**Kết luận về khả năng tính:** với CPU nhiều lõi, 2^60 khả thi; với GPU, **2^64 dễ dàng, 2^72 vẫn dùng được**.
+Riêng về giải mã thì không còn là rào cản.
+
+**Nhưng cận giải mã không phải ràng buộc duy nhất của tổng cung — muốn tổng > 2^54 phải xử lý cả ba:**
+1. **Soundness (`n_b`)**: canon giữ `2^n_b > tổng × 1024` (khoảng an toàn 10 bit) với `n_b = 64` ⇒ tổng ≤ 2^54.
+   Lên 2^60/2^64 cần: (a) `n_b = 128` — range proof số dư 7 vòng, gas transfer tăng ~65–70% (ước tính); hoặc
+   (b) nới hệ số 1024 bằng một ruling có lập luận từng phương trình (như RS-NV64-1) — chưa phân tích, không
+   mặc định an toàn.
+2. **Mobile**: điện thoại không có GPU dùng được cho việc này; ví mobile vẫn dùng cache + BSGS nhỏ, và chỉ
+   cần dò lớn khi mất cache.
+3. **Thuê/ dùng chung GPU làm lộ số dư**: phép dò chỉ cần `g^b` (tính tại máy từ khoá bí mật), nên có thể giao
+   việc dò cho một máy GPU khác **mà không lộ khoá** — nhưng máy đó **biết được số dư `b`**. Chỉ giao cho máy
+   thuộc quyền chủ tài khoản (GPU nội bộ của doanh nghiệp), không giao cho dịch vụ bên ngoài.
+
+**Khuyến nghị:** giữ tổng 2^54 cho v1. Nếu một token cần tổng lớn hơn (ví dụ VND quy mô quốc gia), mở một
+thay đổi riêng: tổng 2^60–2^64 + `n_b = 128` (hoặc ruling nới hệ số) + công cụ kangaroo GPU nội bộ; đo gas và
+thời gian trên phần cứng thật trước khi chốt. Phương án thay thế không đổi crypto: nhiều **series**.
+
+## 5. Có tăng thêm nữa không?
 
 Đã tăng: tổng 2^32 → **2^54** (×4,2 triệu), một lần chuyển 2^32 → **giới hạn bởi số dư**, giải mã tuyến tính
 → BSGS. **Không đề xuất tăng tổng vượt 2^54**, vì hai ràng buộc cùng lúc:
