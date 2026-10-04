@@ -28,6 +28,7 @@ impl Nonces {
         Self { seed: h.finalize().into(), ctr: 0 }
     }
 
+    #[allow(clippy::should_implement_trait)] // generic over the curve per call: not an Iterator
     pub fn next<C: ZCurve>(&mut self) -> Fr<C> {
         self.ctr += 1;
         let mut h = Sha512::new();

@@ -3,6 +3,9 @@
 //!
 //! UNAUDITED — NOT FOR PRODUCTION FUNDS.
 
+// (statement, proof, witness) tuples are the API shape; a type alias per curve adds nothing.
+#![allow(clippy::type_complexity)]
+
 pub mod abi;
 pub mod api;
 pub mod bulletproofs;
