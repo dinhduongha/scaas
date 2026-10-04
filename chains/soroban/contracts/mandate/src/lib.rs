@@ -174,11 +174,11 @@ impl MandateWallet {
         if env.storage().persistent().has(&rk) {
             panic_with_error!(&env, Error::RefAlreadyPaid);
         }
-        if now >= m.period_start + m.period_seconds {
+        if now >= m.period_start.saturating_add(m.period_seconds) {
             m.period_start = now;
             m.spent_in_period = 0;
         }
-        let spent = m.spent_in_period + amount;
+        let spent = m.spent_in_period.saturating_add(amount);
         if spent > m.max_per_period {
             panic_with_error!(&env, Error::OverPeriodCap);
         }

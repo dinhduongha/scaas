@@ -87,3 +87,14 @@ fn bad_mandates_are_refused_and_owner_withdraws() {
     assert_eq!(e.auths()[0].0, t.owner);
     assert_eq!((t.token.balance(&t.owner), t.token.balance(&t.w.address)), (400, 600));
 }
+
+#[test]
+fn unbounded_period_never_overflows() {
+    let t = setup();
+    let e = &t.env;
+    t.w.set_mandate(&t.token.address, &t.delegate, &100, &150, &u64::MAX, &(NOW + 86_400));
+    t.w.pay_under_mandate(&t.token.address, &t.payee, &100, &r(e, 1), &(NOW + 60));
+    e.ledger().with_mut(|l| l.timestamp = NOW + 80_000);
+    let err = |res: Result<Result<(), _>, Result<soroban_sdk::Error, _>>| res.err().unwrap().unwrap();
+    assert_eq!(err(t.w.try_pay_under_mandate(&t.token.address, &t.payee, &60, &r(e, 2), &(NOW + 80_060))), Error::OverPeriodCap.into());
+}

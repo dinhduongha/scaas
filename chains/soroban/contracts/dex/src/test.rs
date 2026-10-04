@@ -142,3 +142,34 @@ fn unknown_market_is_refused() {
     bid.sell_token = other;
     assert_eq!(code(t.dex.try_settle(&ask, &bid, &1)), Error::UnknownMarket.into());
 }
+
+#[test]
+fn taker_must_name_a_positive_price() {
+    let t = setup(false);
+    let mut bid = t.bid(1_000, 3, 0);
+    bid.buy_amount = 0;
+    assert_eq!(code(t.dex.try_settle(&t.ask(1_000, 0), &bid, &10)), Error::BadAmount.into());
+}
+
+#[test]
+fn same_token_order_cannot_match_itself() {
+    let t = setup(false);
+    t.dex.set_market(&t.a.address, &t.a.address, &Market { maker_fee_ppm: 0, taker_fee_ppm: 0, fee_on: false });
+    let mut o = t.ask(1_000, 0);
+    o.buy_token = t.a.address.clone();
+    o.buy_amount = 1_000;
+    assert_eq!(code(t.dex.try_settle(&o, &o, &600)), Error::TokenMismatch.into());
+}
+
+#[test]
+fn eighteen_decimal_amounts_do_not_overflow() {
+    let t = setup(false);
+    let e18: i128 = 1_000_000_000_000_000_000;
+    t.a.mint(&t.alice, &(1_000 * e18));
+    t.b.mint(&t.bob, &(3_000 * e18));
+    t.a.approve(&t.alice, &t.dex.address, &(1_000 * e18), &1_000);
+    t.b.approve(&t.bob, &t.dex.address, &(3_000 * e18), &1_000);
+    // 100 A × 200 B at 18 decimals: the i128 product 1e20 × 2e20 overflows.
+    t.dex.settle(&t.ask(100 * e18, 0), &t.bid(100 * e18, 3, 0), &(100 * e18));
+    assert_eq!(t.b.balance(&t.alice), 200 * e18);
+}

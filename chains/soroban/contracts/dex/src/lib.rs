@@ -8,7 +8,7 @@
 #![no_std]
 use soroban_sdk::{
     contract, contractclient, contracterror, contractevent, contractimpl, contracttype, panic_with_error,
-    xdr::ToXdr, Address, BytesN, Env, IntoVal,
+    xdr::ToXdr, Address, BytesN, Env, IntoVal, I256,
 };
 
 const DAY: u32 = 17_280;
@@ -151,20 +151,25 @@ impl Dex {
     /// `maker_fill` = lượng `maker.sell_token` maker bán trong lần khớp này. Taker trả theo giá của maker
     /// (làm tròn lên — maker không bao giờ nhận dưới giới hạn), và phải nhận ít nhất giá của chính taker.
     pub fn settle(env: Env, maker: Order, taker: Order, maker_fill: i128) {
-        maker.maker.require_auth_for_args((maker.clone(),).into_val(&env));
-        taker.maker.require_auth_for_args((taker.clone(),).into_val(&env));
-        if maker.sell_token != taker.buy_token || maker.buy_token != taker.sell_token {
+        // Cùng token ⇒ một lệnh có thể khớp chính nó (mh == th) và ghi đè `filled`.
+        if maker.sell_token != taker.buy_token || maker.buy_token != taker.sell_token || maker.sell_token == maker.buy_token {
             panic_with_error!(&env, Error::TokenMismatch);
         }
+        maker.maker.require_auth_for_args((maker.clone(),).into_val(&env));
+        taker.maker.require_auth_for_args((taker.clone(),).into_val(&env));
         let now = env.ledger().timestamp();
         if now > maker.expiry || now > taker.expiry {
             panic_with_error!(&env, Error::Expired);
         }
-        if maker_fill <= 0 || maker.sell_amount <= 0 || maker.buy_amount <= 0 || taker.sell_amount <= 0 {
+        if maker_fill <= 0 || maker.sell_amount <= 0 || maker.buy_amount <= 0 || taker.sell_amount <= 0 || taker.buy_amount <= 0 {
             panic_with_error!(&env, Error::BadAmount);
         }
-        let taker_fill = (maker_fill * maker.buy_amount + maker.sell_amount - 1) / maker.sell_amount;
-        if maker_fill * taker.sell_amount < taker_fill * taker.buy_amount {
+        // Tích hai lượng 18 số lẻ vượt i128 ⇒ nhân trong I256 của host.
+        let w = |v: i128| I256::from_i128(&env, v);
+        let taker_fill = w(maker_fill).mul(&w(maker.buy_amount)).add(&w(maker.sell_amount - 1)).div(&w(maker.sell_amount))
+            .to_i128()
+            .unwrap_or_else(|| panic_with_error!(&env, Error::BadAmount));
+        if w(maker_fill).mul(&w(taker.sell_amount)) < w(taker_fill).mul(&w(taker.buy_amount)) {
             panic_with_error!(&env, Error::PriceLimit);
         }
         let (mh, th) = (order_hash(&env, &maker), order_hash(&env, &taker));
