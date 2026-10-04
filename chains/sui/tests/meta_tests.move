@@ -222,3 +222,150 @@ fun base64url_matches_rfc4648() {
     assert!(auth::base64url(&b"fooba") == b"Zm9vYmE");
     assert!(auth::base64url(&x"fbff") == b"-_8");
 }
+
+// ------------------------------------------------------------------ vòng đời khoá (review M1), receive (M2)
+
+const GUARDIAN: address = @0x9a;
+const ANDROID: vector<u8> = b"android:apk-key-hash:Kq4X0bWx4mSs2N3uTjRL8tqxHH4m-sPGxBtcIu7b3QM";
+
+fun manage(sc: &mut Scenario, owner: address, action: u8, scheme: u8, pk: vector<u8>, origin: vector<u8>, guardian: address, a: Auth) {
+    let mut acct = fx::acct<SUI>(sc, owner);
+    let clock = fx::clock_at(sc, 0);
+    meta::manage(&mut acct, action, scheme, pk, vector[], origin, guardian, 1000, a, &clock);
+    clock.destroy_for_testing();
+    ts::return_shared(acct);
+    let s = sc.ctx().sender();
+    sc.next_tx(s);
+}
+
+fun as_guardian(sc: &mut Scenario, start: bool, now: u64) {
+    sc.next_tx(GUARDIAN);
+    let mut acct = fx::acct<SUI>(sc, v::alice());
+    let clock = fx::clock_at(sc, now);
+    if (start) meta::start_recovery(&mut acct, 1, v::alice3_pk(), vector[], vector[], &clock, sc.ctx())
+    else meta::finish_recovery(&mut acct, &clock, sc.ctx());
+    clock.destroy_for_testing();
+    ts::return_shared(acct);
+    sc.next_tx(@0x7e1);
+}
+
+/// Xoay khoá: alice thêm alice2, alice2 xoá alice; alice2 ký được, chữ ký của khoá cũ thì không.
+#[test]
+fun rotate_key_keeps_the_account() {
+    let mut sc = funded();
+    manage(&mut sc, v::alice(), 0, 0, v::alice2_pk(), vector[], @0x0, v::k_a_add_a2());
+    manage(&mut sc, v::alice(), 1, 0, v::alice_pk(), vector[], @0x0, v::k_a2_rm_a());
+    let a = fx::acct<SUI>(&mut sc, v::alice());
+    assert!(meta::key_count(&a) == 1 && meta::key_nonce(&a) == 2);
+    ts::return_shared(a);
+    sc.next_tx(@0x7e1);
+    pay<SUI>(&mut sc, v::alice(), 100, 1, 0xa1, 0, @0x0, v::a2_pay_sui(), 0);
+    assert!(fx::held<SUI>(&mut sc, BEEF) == 100);
+    sc.end();
+}
+
+#[test, expected_failure(abort_code = meta::EBadSignature)]
+fun removed_key_no_longer_signs() {
+    let mut sc = funded();
+    manage(&mut sc, v::alice(), 0, 0, v::alice2_pk(), vector[], @0x0, v::k_a_add_a2());
+    manage(&mut sc, v::alice(), 1, 0, v::alice_pk(), vector[], @0x0, v::k_a2_rm_a());
+    pay<SUI>(&mut sc, v::alice(), 100, 1, 0xa1, 0, @0x0, v::a_pay_sui_0(), 0);
+    sc.end();
+}
+
+#[test, expected_failure(abort_code = meta::EBadSignature)]
+fun key_op_is_not_replayed() {
+    let mut sc = funded();
+    manage(&mut sc, v::alice(), 0, 0, v::alice2_pk(), vector[], @0x0, v::k_a_add_a2());
+    manage(&mut sc, v::alice(), 0, 0, v::alice2_pk(), vector[], @0x0, v::k_a_add_a2());
+    sc.end();
+}
+
+#[test, expected_failure(abort_code = meta::ELastKey)]
+fun last_key_cannot_be_removed() {
+    let mut sc = funded();
+    manage(&mut sc, v::alice(), 1, 0, v::alice_pk(), vector[], @0x0, v::k_a_rm_a());
+    sc.end();
+}
+
+/// Origin mới (app Android) thêm bằng chữ ký passkey từ origin cũ; sau đó assertion từ Android ký được.
+#[test]
+fun passkey_origin_is_added_by_the_key() {
+    let mut sc = funded();
+    manage(&mut sc, v::dave(), 2, 0, vector[], ANDROID, @0x0, v::k_d_add_android());
+    let a = fx::acct<SUI>(&mut sc, v::dave());
+    assert!(meta::has_origin(&a, ANDROID) && meta::has_origin(&a, b"https://pay.bamboo.test"));
+    ts::return_shared(a);
+    sc.next_tx(@0x7e1);
+    pay<SUI>(&mut sc, v::dave(), 100, 7, 0xd1, 0, @0x0, v::d_pay_sui_android(), 0);
+    sc.end();
+}
+
+#[test, expected_failure(abort_code = meta::EBadSignature)]
+fun passkey_from_an_unlisted_origin_is_refused() {
+    let mut sc = funded();
+    pay<SUI>(&mut sc, v::dave(), 100, 7, 0xd1, 0, @0x0, v::d_pay_sui_android(), 0);
+    sc.end();
+}
+
+#[test, expected_failure(abort_code = meta::ELastKey)]
+fun passkey_account_keeps_one_origin() {
+    let mut sc = funded();
+    manage(&mut sc, v::dave(), 3, 0, vector[], b"https://pay.bamboo.test", @0x0, v::k_d_rm_origin());
+    sc.end();
+}
+
+/// Guardian khôi phục sau `RECOVERY_DELAY` (2 ngày, như `SubjectAccount` EVM): khoá mới ký được.
+#[test]
+fun guardian_recovers_after_the_delay() {
+    let mut sc = funded();
+    manage(&mut sc, v::alice(), 4, 0, vector[], vector[], GUARDIAN, v::k_a_guardian());
+    as_guardian(&mut sc, true, 0);
+    as_guardian(&mut sc, false, 172_800);
+    pay<SUI>(&mut sc, v::alice(), 100, 1, 0xa1, 0, @0x0, v::a3_pay_sui(), 0);
+    sc.end();
+}
+
+#[test, expected_failure(abort_code = meta::ERecovery)]
+fun recovery_waits_for_the_delay() {
+    let mut sc = funded();
+    manage(&mut sc, v::alice(), 4, 0, vector[], vector[], GUARDIAN, v::k_a_guardian());
+    as_guardian(&mut sc, true, 0);
+    as_guardian(&mut sc, false, 172_799);
+    sc.end();
+}
+
+#[test, expected_failure(abort_code = meta::ERecovery)]
+fun a_key_cancels_the_recovery() {
+    let mut sc = funded();
+    manage(&mut sc, v::alice(), 4, 0, vector[], vector[], GUARDIAN, v::k_a_guardian());
+    as_guardian(&mut sc, true, 0);
+    manage(&mut sc, v::alice(), 5, 0, vector[], vector[], @0x0, v::k_a_cancel());
+    as_guardian(&mut sc, false, 172_800);
+    sc.end();
+}
+
+#[test, expected_failure(abort_code = meta::ENotGuardian)]
+fun only_the_guardian_recovers() {
+    let mut sc = funded();
+    as_guardian(&mut sc, true, 0);   // chưa đặt guardian
+    sc.end();
+}
+
+/// Coin gửi thẳng tới id account (transfer-to-object) ⇒ kéo vào số dư; coin khác loại ⇒ chuyển cho chủ.
+#[test]
+fun coins_sent_to_the_account_id_are_not_stuck() {
+    let mut sc = funded();
+    transfer::public_transfer(sui::coin::mint_for_testing<SUI>(5, sc.ctx()), v::a_sui_account());
+    transfer::public_transfer(sui::coin::mint_for_testing<EUR>(7, sc.ctx()), v::a_sui_account());
+    sc.next_tx(@0x7e1);
+    let mut a = fx::acct<SUI>(&mut sc, v::alice());
+    let id = object::id(&a);
+    meta::receive(&mut a, ts::most_recent_receiving_ticket<sui::coin::Coin<SUI>>(&id));
+    meta::forward(&mut a, ts::most_recent_receiving_ticket<sui::coin::Coin<EUR>>(&id));
+    assert!(meta::balance(&a) == 1005);
+    ts::return_shared(a);
+    sc.next_tx(@0x7e1);
+    assert!(fx::held<EUR>(&mut sc, v::alice()) == 7);
+    sc.end();
+}

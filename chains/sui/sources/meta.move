@@ -14,11 +14,24 @@ use sui::derived_object;
 use sui::event;
 use sui::hash::blake2b256;
 use sui::table::{Self, Table};
+use sui::transfer::Receiving;
 
 const DOMAIN: vector<u8> = b"bamboo.metaop.v1";
 const OPEN_DOMAIN: vector<u8> = b"bamboo.open.v1";
+const KEYOP_DOMAIN: vector<u8> = b"bamboo.keyop.v1";
 const OP_PAY: u8 = 0;
 const U64_MAX: u128 = 0xffffffffffffffff;
+/// Vòng đời khoá (round-3 §C "Vòng đời khoá", §C.3): thao tác `manage` ký bởi một khoá hiện có.
+const ADD_KEY: u8 = 0;
+const REMOVE_KEY: u8 = 1;
+const ADD_ORIGIN: u8 = 2;
+const REMOVE_ORIGIN: u8 = 3;
+const SET_GUARDIAN: u8 = 4;
+const CANCEL_RECOVERY: u8 = 5;
+const MAX_KEYS: u64 = 8;
+const MAX_ORIGINS: u64 = 8;
+/// `RECOVERY_DELAY` của `SubjectAccount` EVM (round-3 §C): guardian chờ 2 ngày, khoá hiện có huỷ được.
+const RECOVERY_DELAY_S: u64 = 172_800;
 
 #[error]
 const ENetwork: vector<u8> = b"Network is set once and must not be empty.";
@@ -40,6 +53,14 @@ const EBadField: vector<u8> = b"pay_ref, lane and extra are 32 bytes.";
 const EBadAmount: vector<u8> = b"Amount must be in (0, u64::MAX].";
 #[error]
 const EInsufficient: vector<u8> = b"Account balance too low.";
+#[error]
+const EKeyOp: vector<u8> = b"Bad key operation (unknown action, key, origin, duplicate or limit).";
+#[error]
+const ELastKey: vector<u8> = b"An account never drops to zero keys (or a passkey to zero origins).";
+#[error]
+const ENotGuardian: vector<u8> = b"Only the account guardian may do this.";
+#[error]
+const ERecovery: vector<u8> = b"No recovery pending, or its delay has not passed.";
 
 public struct AdminCap has key { id: UID }
 
@@ -54,17 +75,48 @@ public struct Registry<phantom T> has key {
     network: vector<u8>,
 }
 
+/// Một khoá được uỷ quyền. `rp_id_hash` chỉ cho passkey (cờ 6), rỗng với khoá khác.
+public struct Key has copy, drop, store {
+    scheme: u8,
+    public_key: vector<u8>,
+    rp_id_hash: vector<u8>,
+}
+
+public struct Recovery has copy, drop, store {
+    key: Key,
+    origin: vector<u8>,
+    eta: u64,
+}
+
+/// `owner` = địa chỉ của khoá ĐẦU TIÊN (id derived theo nó, không đổi); `keys` là các khoá ký được hiện tại
+/// (review M1: thêm/xoay/xoá bằng chữ ký một khoá hiện có, guardian khôi phục sau trễ — round-3 §C, §C.3).
 public struct Account<phantom T> has key {
     id: UID,
     registry: ID,
     network: vector<u8>,
     owner: address,
+    keys: vector<Key>,
+    origins: vector<vector<u8>>,
+    guardian: address,
+    recovery: Option<Recovery>,
+    key_nonce: u64,
+    balance: Balance<T>,
+    lanes: Table<vector<u8>, u64>,
+}
+
+/// Thao tác vòng đời khoá, ký personal-message bởi một khoá hiện có. `nonce` = `key_nonce` của account.
+public struct KeyOp has copy, drop {
+    domain: vector<u8>,
+    network: vector<u8>,
+    account: address,
+    action: u8,
     scheme: u8,
     public_key: vector<u8>,
     rp_id_hash: vector<u8>,
     origin: vector<u8>,
-    balance: Balance<T>,
-    lanes: Table<vector<u8>, u64>,
+    guardian: address,
+    nonce: u64,
+    valid_until: u64,
 }
 
 /// Payload ký `MetaOp` v1 (round-3 §D.0). Ví ký `personal_digest(bcs(MetaOp))`.
@@ -89,6 +141,12 @@ public struct RegistryCreated has copy, drop { registry: ID, coin_type: std::asc
 public struct AccountOpened has copy, drop { registry: ID, account: ID, owner: address, scheme: u8 }
 
 public struct Deposited has copy, drop { registry: ID, account: ID, amount: u64 }
+
+public struct KeyOpExecuted has copy, drop { account: ID, action: u8, nonce: u64 }
+
+public struct RecoveryStarted has copy, drop { account: ID, guardian: address, eta: u64 }
+
+public struct Recovered has copy, drop { account: ID, guardian: address }
 
 /// `contract` = registry (token của Odoo); `target` = object đã kiểm chữ ký (account / mandate).
 public struct MetaTransactionExecuted has copy, drop {
@@ -140,7 +198,7 @@ public fun open<T>(registry: &mut Registry<T>, scheme: u8, public_key: vector<u8
 public fun open_passkey<T>(registry: &mut Registry<T>, public_key: vector<u8>, a: Auth, ctx: &mut TxContext) {
     let challenge = open_challenge(registry, &public_key);
     let (rp, origin) = (auth::rp_id_hash_of(&a), auth::origin_of(&a));
-    assert!(auth::verify(auth::passkey(), &public_key, &rp, &origin, &challenge, &a), EBadSignature);
+    assert!(auth::verify(auth::passkey(), &public_key, &rp, &vector[origin], &challenge, &a), EBadSignature);
     open_inner(registry, auth::passkey(), public_key, rp, origin, ctx)
 }
 
@@ -168,10 +226,11 @@ fun open_inner<T>(
         registry: reg,
         network: registry.network,
         owner,
-        scheme,
-        public_key,
-        rp_id_hash,
-        origin,
+        keys: vector[Key { scheme, public_key, rp_id_hash }],
+        origins: if (origin.is_empty()) vector[] else vector[origin],
+        guardian: @0x0,
+        recovery: option::none(),
+        key_nonce: 0,
         balance: sui::balance::zero(),
         lanes: table::new(ctx),
     });
@@ -186,6 +245,19 @@ public fun deposit<T>(account: &mut Account<T>, c: Coin<T>) {
     let amount = c.value();
     account.balance.join(c.into_balance());
     event::emit(Deposited { registry: account.registry, account: object::id(account), amount });
+}
+
+/// Coin<T> gửi thẳng tới id account (transfer-to-object, vd. ví nhận/người nhận phí là account) ⇒ ai cũng kéo
+/// được vào số dư (review M2: không coin nào kẹt ở id object).
+public fun receive<T>(account: &mut Account<T>, r: Receiving<Coin<T>>) {
+    let c = transfer::public_receive(&mut account.id, r);
+    deposit(account, c)
+}
+
+/// Object khác loại gửi nhầm tới id account ⇒ chuyển cho `owner` (địa chỉ ví Sui của khoá đầu tiên).
+/// `ponytail:` chủ đã mất khoá đầu thì nhận ở ví đó vẫn kẹt — mở `Account<U>` rồi `deposit` thủ công nếu cần.
+public fun forward<T, O: key + store>(account: &mut Account<T>, r: Receiving<O>) {
+    transfer::public_transfer(transfer::public_receive(&mut account.id, r), account.owner)
 }
 
 /// Meta-tx `pay`: network/contract/from lấy từ chính account — relayer chỉ đưa phần còn lại, và mọi
@@ -249,8 +321,11 @@ public(package) fun check(op: &MetaOp, clock: &Clock, ctx: &TxContext): vector<u
 
 public fun op_digest(op: &MetaOp): vector<u8> { auth::personal_digest(bcs::to_bytes(op)) }
 
+/// Một khoá bất kỳ của account ký được `digest` (≤ `MAX_KEYS`; passkey chỉ thử khi chữ ký có phần WebAuthn).
 public(package) fun verify_by<T>(account: &Account<T>, digest: &vector<u8>, a: &Auth): bool {
-    auth::verify(account.scheme, &account.public_key, &account.rp_id_hash, &account.origin, digest, a)
+    let web = auth::is_webauthn(a);
+    account.keys.any!(|k| (k.scheme == auth::passkey()) == web
+        && auth::verify(k.scheme, &k.public_key, &k.rp_id_hash, &account.origins, digest, a))
 }
 
 public(package) fun amount_u64(amount: u128): u64 {
@@ -273,6 +348,121 @@ public(package) fun emit_settled(contract: ID, from: address, to: address, amoun
     event::emit(PaymentSettled { contract, from, to, amount, pay_ref });
 }
 
+// ------------------------------------------------------------------ vòng đời khoá (review M1)
+
+public fun keyop_digest<T>(
+    account: &Account<T>,
+    action: u8,
+    scheme: u8,
+    public_key: vector<u8>,
+    rp_id_hash: vector<u8>,
+    origin: vector<u8>,
+    guardian: address,
+    valid_until: u64,
+): vector<u8> {
+    let op = KeyOp {
+        domain: KEYOP_DOMAIN, network: account.network, account: object::id_address(account), action, scheme,
+        public_key, rp_id_hash, origin, guardian, nonce: account.key_nonce, valid_until,
+    };
+    auth::personal_digest(bcs::to_bytes(&op))
+}
+
+/// Thêm/xoá khoá, thêm/xoá origin WebAuthn, đặt guardian, huỷ khôi phục — ký bởi MỘT khoá hiện có, ai nộp cũng
+/// được (relayer hay chủ thể). Không bao giờ còn 0 khoá; account còn passkey thì không còn 0 origin.
+public fun manage<T>(
+    account: &mut Account<T>,
+    action: u8,
+    scheme: u8,
+    public_key: vector<u8>,
+    rp_id_hash: vector<u8>,
+    origin: vector<u8>,
+    guardian: address,
+    valid_until: u64,
+    a: Auth,
+    clock: &Clock,
+) {
+    assert!(clock.timestamp_ms() / 1000 <= valid_until, EExpired);
+    let digest = keyop_digest(account, action, scheme, public_key, rp_id_hash, origin, guardian, valid_until);
+    assert!(verify_by(account, &digest, &a), EBadSignature);
+    let key = Key { scheme, public_key, rp_id_hash };
+    if (action == ADD_KEY) {
+        add_key(account, key, origin);
+    } else if (action == REMOVE_KEY) {
+        let (found, i) = account.keys.index_of(&key);
+        assert!(found, EKeyOp);
+        assert!(account.keys.length() > 1, ELastKey);
+        account.keys.remove(i);
+        check_origins(account);
+    } else if (action == ADD_ORIGIN) {
+        add_origin(account, origin);
+    } else if (action == REMOVE_ORIGIN) {
+        let (found, i) = account.origins.index_of(&origin);
+        assert!(found, EKeyOp);
+        account.origins.remove(i);
+        check_origins(account);
+    } else if (action == SET_GUARDIAN) {
+        account.guardian = guardian;
+        account.recovery = option::none();
+    } else {
+        assert!(action == CANCEL_RECOVERY && account.recovery.is_some(), EKeyOp);
+        account.recovery = option::none();
+    };
+    event::emit(KeyOpExecuted { account: object::id(account), action, nonce: account.key_nonce });
+    account.key_nonce = account.key_nonce + 1;
+}
+
+/// Guardian (tx native của chính guardian) đề xuất một khoá mới; có hiệu lực sau `RECOVERY_DELAY_S` nếu không
+/// khoá hiện có nào huỷ (`manage(CANCEL_RECOVERY)`). Đề xuất mới thay đề xuất cũ.
+public fun start_recovery<T>(
+    account: &mut Account<T>,
+    scheme: u8,
+    public_key: vector<u8>,
+    rp_id_hash: vector<u8>,
+    origin: vector<u8>,
+    clock: &Clock,
+    ctx: &TxContext,
+) {
+    assert!(account.guardian != @0x0 && ctx.sender() == account.guardian, ENotGuardian);
+    let key = Key { scheme, public_key, rp_id_hash };
+    assert!(key_valid(&key), EKeyOp);
+    let eta = clock.timestamp_ms() / 1000 + RECOVERY_DELAY_S;
+    account.recovery = option::some(Recovery { key, origin, eta });
+    event::emit(RecoveryStarted { account: object::id(account), guardian: account.guardian, eta });
+}
+
+public fun finish_recovery<T>(account: &mut Account<T>, clock: &Clock, ctx: &TxContext) {
+    assert!(account.guardian != @0x0 && ctx.sender() == account.guardian, ENotGuardian);
+    assert!(account.recovery.is_some() && clock.timestamp_ms() / 1000 >= account.recovery.borrow().eta, ERecovery);
+    let Recovery { key, origin, eta: _ } = account.recovery.extract();
+    add_key(account, key, origin);
+    account.key_nonce = account.key_nonce + 1; // chữ ký vòng đời đang chờ (của khoá cũ) hết hiệu lực
+    event::emit(Recovered { account: object::id(account), guardian: account.guardian });
+}
+
+fun key_valid(k: &Key): bool {
+    auth::key_ok(k.scheme, &k.public_key) && (k.rp_id_hash.length() == if (k.scheme == auth::passkey()) 32 else 0)
+}
+
+fun add_key<T>(account: &mut Account<T>, key: Key, origin: vector<u8>) {
+    assert!(key_valid(&key) && !account.keys.contains(&key) && account.keys.length() < MAX_KEYS, EKeyOp);
+    if (!origin.is_empty() && !account.origins.contains(&origin)) add_origin(account, origin);
+    account.keys.push_back(key);
+    check_origins(account);
+}
+
+fun add_origin<T>(account: &mut Account<T>, origin: vector<u8>) {
+    assert!(
+        !origin.is_empty() && origin.length() <= 256 && !origin.contains(&34) && !account.origins.contains(&origin)
+            && account.origins.length() < MAX_ORIGINS,
+        EKeyOp,
+    );
+    account.origins.push_back(origin);
+}
+
+fun check_origins<T>(account: &Account<T>) {
+    assert!(!account.origins.is_empty() || !account.keys.any!(|k| k.scheme == auth::passkey()), ELastKey);
+}
+
 // ------------------------------------------------------------------ views
 
 public fun owner<T>(a: &Account<T>): address { a.owner }
@@ -284,6 +474,12 @@ public fun registry_id<T>(a: &Account<T>): ID { a.registry }
 public fun network<T>(r: &Registry<T>): vector<u8> { r.network }
 
 public fun root_network(r: &Root): vector<u8> { r.network }
+
+public fun key_count<T>(a: &Account<T>): u64 { a.keys.length() }
+
+public fun has_origin<T>(a: &Account<T>, origin: vector<u8>): bool { a.origins.contains(&origin) }
+
+public fun key_nonce<T>(a: &Account<T>): u64 { a.key_nonce }
 
 public fun lane_nonce<T>(a: &Account<T>, lane: vector<u8>): u64 {
     if (a.lanes.contains(lane)) *a.lanes.borrow(lane) else 0

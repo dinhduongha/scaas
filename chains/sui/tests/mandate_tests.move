@@ -142,3 +142,36 @@ fun owner_withdraws_and_revokes() {
     assert!(fx::held<SUI>(&mut sc, v::alice()) == 100);
     sc.end();
 }
+
+/// Review L6: trần kỳ/độ dài kỳ gần u64::MAX và mandate tạo lúc clock > 0 — không tràn số.
+#[test]
+fun extreme_limits_do_not_overflow() {
+    let mut sc = fx::setup_accounts();
+    sc.next_tx(v::alice());
+    let r = sc.take_shared<Registry<SUI>>();
+    let clock = fx::clock_at(&mut sc, 5);
+    let max = 0xffffffffffffffff;
+    let c = coin::mint_for_testing<SUI>(500, sc.ctx());
+    mandate::create(&r, c, 0, v::delegate_pk(), max, max, max, 1000, vector[@0xbeef], &clock, sc.ctx());
+    clock.destroy_for_testing();
+    ts::return_shared(r);
+    sc.next_tx(@0x7e1);
+    pay(&mut sc, 40, 0x61, v::m_pay_1(), 5);
+    pay(&mut sc, 40, 0x62, v::m_pay_2(), 10);
+    assert!(fx::held<SUI>(&mut sc, @0xbeef) == 80);
+    sc.end();
+}
+
+/// Review M2: coin gửi thẳng tới id mandate ⇒ kéo vào số dư.
+#[test]
+fun coins_sent_to_the_mandate_id_are_not_stuck() {
+    let mut sc = setup();
+    let id = ts::most_recent_id_shared<Mandate<SUI>>().destroy_some();
+    transfer::public_transfer(coin::mint_for_testing<SUI>(5, sc.ctx()), id.to_address());
+    sc.next_tx(@0x7e1);
+    let mut m = sc.take_shared<Mandate<SUI>>();
+    mandate::receive(&mut m, ts::most_recent_receiving_ticket<coin::Coin<SUI>>(&id));
+    assert!(mandate::balance(&m) == 505);
+    ts::return_shared(m);
+    sc.end();
+}

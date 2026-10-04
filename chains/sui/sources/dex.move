@@ -2,6 +2,9 @@
 /// overfill, phí DEX ppm theo thị trường (bật/tắt, trần 1 %, ≤ `max_fee_ppm` trong lệnh), huỷ bằng chữ
 /// ký. Tiền đi account→account trong cùng tx; DEX không giữ gì. Nonce/`filled` của riêng DEX (R30).
 /// Sai khác (RS7-4): lô = nhiều `settle` trong một PTB, nguyên tử cả lô; không phí relayer.
+/// Mỗi thị trường là MỘT shared object riêng (`Market`, derived từ `Dex` theo cặp type — review M4): settle,
+/// huỷ, `min_nonce` của thị trường này không đi qua object của thị trường khác, nên một thị trường nóng
+/// (giới hạn tx mỗi shared object mỗi commit của Sui) không chặn thị trường khác. `Dex` chỉ admin chạm.
 module bamboo::dex;
 
 use bamboo::auth::{Self, Auth};
@@ -10,6 +13,7 @@ use std::bcs;
 use std::type_name;
 use sui::clock::Clock;
 use sui::coin;
+use sui::derived_object;
 use sui::event;
 use sui::table::{Self, Table};
 
@@ -26,7 +30,7 @@ const ENoNetwork: vector<u8> = b"Root network is not set yet.";
 #[error]
 const EBadFee: vector<u8> = b"Fee above 1% or fee recipient missing.";
 #[error]
-const EBadOrder: vector<u8> = b"Order is not for this DEX/network or has bad flags.";
+const EBadOrder: vector<u8> = b"Order is not for this market/network or has bad flags.";
 #[error]
 const EExpired: vector<u8> = b"Order expired.";
 #[error]
@@ -52,7 +56,13 @@ const EFeeAboveSigned: vector<u8> = b"Market fee above the order's max_fee_ppm."
 #[error]
 const ENonceDown: vector<u8> = b"min_nonce only increases.";
 
-public struct Market has copy, drop, store {
+/// Cha của mọi `Market` (một market mỗi cặp type, do chain ép qua derived object).
+public struct Dex has key {
+    id: UID,
+    network: vector<u8>,
+}
+
+public struct Fees has copy, drop, store {
     listed: bool,
     fee_on: bool,
     maker_ppm: u32,
@@ -60,19 +70,22 @@ public struct Market has copy, drop, store {
     fee_recipient: address,
 }
 
-public struct Dex has key {
+/// Một thị trường: phí + `filled`/`min_nonce` của các lệnh trên nó.
+public struct Market has key {
     id: UID,
     network: vector<u8>,
+    key: vector<u8>,
+    fees: Fees,
     filled: Table<vector<u8>, u64>,
     min_nonce: Table<address, u128>,
-    markets: Table<vector<u8>, Market>,
 }
 
 /// Lệnh ký (BCS, personal-message). `sell_type`/`buy_type` = ASCII của `type_name::with_defining_ids`.
+/// `market` = id object `Market` của cặp.
 public struct Order has copy, drop {
     domain: vector<u8>,
     network: vector<u8>,
-    dex: address,
+    market: address,
     maker: address,
     taker: address,
     sell_type: vector<u8>,
@@ -86,12 +99,13 @@ public struct Order has copy, drop {
     relayer: address,
 }
 
-public struct Cancel has copy, drop { domain: vector<u8>, network: vector<u8>, dex: address, order_hash: vector<u8> }
+public struct Cancel has copy, drop { domain: vector<u8>, network: vector<u8>, market: address, order_hash: vector<u8> }
 
+/// `min_nonce` theo (maker, market).
 public struct InvalidateNonces has copy, drop {
     domain: vector<u8>,
     network: vector<u8>,
-    dex: address,
+    market: address,
     maker: address,
     min_nonce: u128,
 }
@@ -113,26 +127,44 @@ public struct Matched has copy, drop { ref: vector<u8>, maker_hash: vector<u8>, 
 
 public struct OrderCancelled has copy, drop { order_hash: vector<u8>, maker: address }
 
-public struct NoncesInvalidated has copy, drop { maker: address, min_nonce: u128 }
+public struct NoncesInvalidated has copy, drop { market: ID, maker: address, min_nonce: u128 }
 
-public struct MarketSet has copy, drop { key: vector<u8>, market: Market }
+public struct MarketSet has copy, drop { market: ID, key: vector<u8>, fees: Fees }
 
 public fun create(_: &AdminCap, root: &Root, ctx: &mut TxContext) {
     let network = meta::root_network(root);
     assert!(!network.is_empty(), ENoNetwork);
-    transfer::share_object(Dex {
-        id: object::new(ctx),
-        network,
-        filled: table::new(ctx),
-        min_nonce: table::new(ctx),
-        markets: table::new(ctx),
-    });
+    transfer::share_object(Dex { id: object::new(ctx), network });
 }
 
-/// Admin làm đúng một việc: niêm yết/tắt thị trường và đặt phí (DEX design RS5-1).
-public fun set_market<A, B>(
-    _: &AdminCap,
+/// Mở thị trường cho cặp {A, B} (một lần — lần hai chain từ chối). Admin làm đúng một việc: niêm yết/tắt và
+/// đặt phí (DEX design RS5-1).
+public fun list_market<A, B>(
+    cap: &AdminCap,
     dex: &mut Dex,
+    listed: bool,
+    fee_on: bool,
+    maker_ppm: u32,
+    taker_ppm: u32,
+    fee_recipient: address,
+    ctx: &mut TxContext,
+) {
+    let key = market_key(type_bytes<A>(), type_bytes<B>());
+    let mut m = Market {
+        id: derived_object::claim(&mut dex.id, key),
+        network: dex.network,
+        key,
+        fees: Fees { listed: false, fee_on: false, maker_ppm: 0, taker_ppm: 0, fee_recipient: @0x0 },
+        filled: table::new(ctx),
+        min_nonce: table::new(ctx),
+    };
+    set_market(cap, &mut m, listed, fee_on, maker_ppm, taker_ppm, fee_recipient);
+    transfer::share_object(m);
+}
+
+public fun set_market(
+    _: &AdminCap,
+    market: &mut Market,
     listed: bool,
     fee_on: bool,
     maker_ppm: u32,
@@ -141,17 +173,20 @@ public fun set_market<A, B>(
 ) {
     assert!(maker_ppm <= MAX_FEE_PPM && taker_ppm <= MAX_FEE_PPM, EBadFee);
     if (fee_on && (maker_ppm > 0 || taker_ppm > 0)) {
-        assert!(fee_recipient != @0x0 && fee_recipient != object::id_address(dex), EBadFee);
+        assert!(fee_recipient != @0x0 && fee_recipient != object::id_address(market), EBadFee);
     };
-    let key = market_key(type_bytes<A>(), type_bytes<B>());
-    let m = Market { listed, fee_on, maker_ppm, taker_ppm, fee_recipient };
-    if (dex.markets.contains(key)) *dex.markets.borrow_mut(key) = m else dex.markets.add(key, m);
-    event::emit(MarketSet { key, market: m });
+    market.fees = Fees { listed, fee_on, maker_ppm, taker_ppm, fee_recipient };
+    event::emit(MarketSet { market: object::id(market), key: market.key, fees: market.fees });
+}
+
+/// Id `Market` của cặp {A, B} — tính offline (ký lệnh không cần đọc chain).
+public fun market_address<A, B>(dex: &Dex): address {
+    derived_object::derive_address(object::id(dex), market_key(type_bytes<A>(), type_bytes<B>()))
 }
 
 public fun new_order(
     network: vector<u8>,
-    dex: address,
+    market: address,
     maker: address,
     taker: address,
     sell_type: vector<u8>,
@@ -165,7 +200,7 @@ public fun new_order(
     relayer: address,
 ): Order {
     Order {
-        domain: ORDER_DOMAIN, network, dex, maker, taker, sell_type, buy_type, sell_amount, buy_amount,
+        domain: ORDER_DOMAIN, network, market, maker, taker, sell_type, buy_type, sell_amount, buy_amount,
         nonce, expiry, max_fee_ppm, flags, relayer,
     }
 }
@@ -174,7 +209,7 @@ public fun order_hash(o: &Order): vector<u8> { auth::personal_digest(bcs::to_byt
 
 /// Một cặp. Maker bán A lấy B; taker bán B lấy A. Bốn account: (maker: A bán, B nhận), (taker: B bán, A nhận).
 public fun settle<A, B>(
-    dex: &mut Dex,
+    market: &mut Market,
     maker_sell: &mut Account<A>,
     maker_buy: &mut Account<B>,
     taker_sell: &mut Account<B>,
@@ -197,15 +232,14 @@ public fun settle<A, B>(
             && maker.maker != taker.maker,
         EAccounts,
     );
-    let mh = check_order(dex, &maker, &maker_auth, maker_sell, taker.maker, clock, ctx);
-    let th = check_order(dex, &taker, &taker_auth, taker_sell, maker.maker, clock, ctx);
-    let key = market_key(ta, tb);
-    assert!(dex.markets.contains(key), ENotListed);
-    let mkt = *dex.markets.borrow(key);
+    assert!(market.key == market_key(ta, tb), EPair);
+    let mkt = market.fees;
     assert!(mkt.listed, ENotListed);
+    let mh = check_order(market, &maker, &maker_auth, maker_sell, taker.maker, clock, ctx);
+    let th = check_order(market, &taker, &taker_auth, taker_sell, maker.maker, clock, ctx);
 
-    let m_total = fill(dex, &maker, mh, maker_fill);
-    let t_total = fill(dex, &taker, th, taker_fill);
+    let m_total = fill(market, &maker, mh, maker_fill);
+    let t_total = fill(market, &taker, th, taker_fill);
     // Giá giới hạn của CẢ HAI, nhân chéo (u64·u64 vừa u128 — không tràn).
     assert!((taker_fill as u128) * (maker.sell_amount as u128) >= (maker_fill as u128) * (maker.buy_amount as u128), EPrice);
     assert!((maker_fill as u128) * (taker.sell_amount as u128) >= (taker_fill as u128) * (taker.buy_amount as u128), EPrice);
@@ -238,37 +272,37 @@ public fun settle<A, B>(
 
 /// Đóng vĩnh viễn một lệnh (chữ ký `Cancel` của maker). Chữ ký sai / đã đóng ⇒ `false`, không abort,
 /// để một PTB huỷ nhiều lệnh không đổ cả lô. Không hạn (RS5-10): huỷ chỉ có lợi cho người ký.
-public fun cancel<X>(dex: &mut Dex, account: &Account<X>, order: Order, a: Auth): bool {
+public fun cancel<X>(market: &mut Market, account: &Account<X>, order: Order, a: Auth): bool {
     let h = order_hash(&order);
-    if (meta::owner(account) != order.maker || order.dex != object::id_address(dex)) return false;
-    let msg = Cancel { domain: CANCEL_DOMAIN, network: dex.network, dex: object::id_address(dex), order_hash: h };
+    if (meta::owner(account) != order.maker || order.market != object::id_address(market)) return false;
+    let msg = Cancel { domain: CANCEL_DOMAIN, network: market.network, market: object::id_address(market), order_hash: h };
     if (!meta::verify_by(account, &auth::personal_digest(bcs::to_bytes(&msg)), &a)) return false;
-    let done = if (dex.filled.contains(h)) dex.filled.remove(h) else 0;
-    dex.filled.add(h, order.sell_amount);
+    let done = if (market.filled.contains(h)) market.filled.remove(h) else 0;
+    market.filled.add(h, order.sell_amount);
     if (done >= order.sell_amount) return false;
     event::emit(OrderCancelled { order_hash: h, maker: order.maker });
     true
 }
 
-/// Vô hiệu mọi lệnh `nonce < min_nonce` của maker. Tăng nghiêm ngặt ⇒ phát lại vô hại.
-public fun invalidate_nonces<X>(dex: &mut Dex, account: &Account<X>, min_nonce: u128, a: Auth) {
+/// Vô hiệu mọi lệnh `nonce < min_nonce` của maker trên thị trường này. Tăng nghiêm ngặt ⇒ phát lại vô hại.
+public fun invalidate_nonces<X>(market: &mut Market, account: &Account<X>, min_nonce: u128, a: Auth) {
     let maker = meta::owner(account);
     let msg = InvalidateNonces {
-        domain: NONCES_DOMAIN, network: dex.network, dex: object::id_address(dex), maker, min_nonce,
+        domain: NONCES_DOMAIN, network: market.network, market: object::id_address(market), maker, min_nonce,
     };
     assert!(meta::verify_by(account, &auth::personal_digest(bcs::to_bytes(&msg)), &a), EBadSignature);
-    let cur = if (dex.min_nonce.contains(maker)) dex.min_nonce.remove(maker) else 0;
+    let cur = if (market.min_nonce.contains(maker)) market.min_nonce.remove(maker) else 0;
     assert!(min_nonce > cur, ENonceDown);
-    dex.min_nonce.add(maker, min_nonce);
-    event::emit(NoncesInvalidated { maker, min_nonce });
+    market.min_nonce.add(maker, min_nonce);
+    event::emit(NoncesInvalidated { market: object::id(market), maker, min_nonce });
 }
 
-public fun filled(dex: &Dex, h: vector<u8>): u64 { if (dex.filled.contains(h)) *dex.filled.borrow(h) else 0 }
+public fun filled(market: &Market, h: vector<u8>): u64 { if (market.filled.contains(h)) *market.filled.borrow(h) else 0 }
 
 public fun type_bytes<T>(): vector<u8> { type_name::with_defining_ids<T>().into_string().into_bytes() }
 
 fun check_order<X>(
-    dex: &Dex,
+    market: &Market,
     o: &Order,
     a: &Auth,
     signer_account: &Account<X>,
@@ -277,12 +311,12 @@ fun check_order<X>(
     ctx: &TxContext,
 ): vector<u8> {
     assert!(
-        o.domain == ORDER_DOMAIN && o.network == dex.network && o.dex == object::id_address(dex)
+        o.domain == ORDER_DOMAIN && o.network == market.network && o.market == object::id_address(market)
             && o.flags & 0xfc == 0 && o.flags != FOK | IOC,
         EBadOrder,
     );
     assert!(clock.timestamp_ms() / 1000 <= o.expiry, EExpired);
-    let min = if (dex.min_nonce.contains(o.maker)) *dex.min_nonce.borrow(o.maker) else 0;
+    let min = if (market.min_nonce.contains(o.maker)) *market.min_nonce.borrow(o.maker) else 0;
     assert!(o.nonce >= min, ENonce);
     assert!(o.relayer == @0x0 || o.relayer == ctx.sender(), ERelayer);
     assert!(o.taker == @0x0 || o.taker == counterparty, ETaker);
@@ -292,12 +326,12 @@ fun check_order<X>(
 }
 
 /// Ghi `filled` (không bao giờ vượt `sell_amount`); FOK = một lần đủ; IOC đóng phần còn lại.
-fun fill(dex: &mut Dex, o: &Order, h: vector<u8>, amount: u64): u64 {
-    let before = if (dex.filled.contains(h)) dex.filled.remove(h) else 0;
+fun fill(market: &mut Market, o: &Order, h: vector<u8>, amount: u64): u64 {
+    let before = if (market.filled.contains(h)) market.filled.remove(h) else 0;
     assert!(amount > 0 && before + amount <= o.sell_amount, EFill);
     if (o.flags & FOK != 0) assert!(before == 0 && amount == o.sell_amount, EFill);
     let total = before + amount;
-    dex.filled.add(h, if (o.flags & IOC != 0) o.sell_amount else total);
+    market.filled.add(h, if (o.flags & IOC != 0) o.sell_amount else total);
     total
 }
 

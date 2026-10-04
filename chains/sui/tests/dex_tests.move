@@ -2,7 +2,7 @@
 module bamboo::dex_tests;
 
 use bamboo::auth::Auth;
-use bamboo::dex::{Self, Dex, Order};
+use bamboo::dex::{Self, Market, Order};
 use bamboo::fixtures::{Self as fx, EUR};
 use bamboo::meta::{Self, Account, AdminCap};
 use bamboo::vectors as v;
@@ -11,7 +11,7 @@ use sui::test_scenario::{Self as ts, Scenario};
 
 const FEE: address = @0xfee;
 
-fun dex_addr(_: &mut Scenario): address { ts::most_recent_id_shared<Dex>().destroy_some().to_address() }
+fun dex_addr(_: &mut Scenario): address { ts::most_recent_id_shared<Market>().destroy_some().to_address() }
 
 /// Lệnh y như `gen_vectors.py` đã ký (hạn 1000 s, không relayer, taker tự do).
 fun o_a(sc: &mut Scenario): Order {
@@ -26,11 +26,11 @@ fun o_b(sc: &mut Scenario, buy: u64, nonce: u128, flags: u8, max_fee: u32): Orde
 
 fun market(sc: &mut Scenario, listed: bool, fee_on: bool, maker_ppm: u32, taker_ppm: u32) {
     sc.next_tx(fx::admin());
-    let mut d = sc.take_shared<Dex>();
+    let mut m = sc.take_shared<Market>();
     let cap = sc.take_from_sender<AdminCap>();
-    dex::set_market<EUR, SUI>(&cap, &mut d, listed, fee_on, maker_ppm, taker_ppm, FEE);
+    dex::set_market(&cap, &mut m, listed, fee_on, maker_ppm, taker_ppm, FEE);
     sc.return_to_sender(cap);
-    ts::return_shared(d);
+    ts::return_shared(m);
     sc.next_tx(@0x7e1);
 }
 
@@ -38,12 +38,12 @@ fun setup(): Scenario {
     let mut sc = fx::setup_accounts();
     fx::fund<SUI>(&mut sc, v::alice(), 1000);
     fx::fund<EUR>(&mut sc, v::bob(), 1000);
-    market(&mut sc, true, false, 0, 0);
+    fx::list_eur_sui(&mut sc);
     sc
 }
 
 fun settle(sc: &mut Scenario, mo: Order, ma: Auth, to: Order, ta: Auth, mf: u64, tf: u64, now: u64) {
-    let mut d = sc.take_shared<Dex>();
+    let mut d = sc.take_shared<Market>();
     let mut ms: Account<SUI> = fx::acct(sc, v::alice());
     let mut mb: Account<EUR> = fx::acct(sc, v::alice());
     let mut ts_: Account<EUR> = fx::acct(sc, v::bob());
@@ -84,7 +84,7 @@ fun partial_fill_at_the_limit_price_moves_both_legs() {
     settle(&mut sc, a, v::o_a(), b, v::o_b(), 500, 1000, 0);
     assert!(bal<SUI>(&mut sc, v::alice()) == 500 && bal<EUR>(&mut sc, v::alice()) == 1000);
     assert!(bal<SUI>(&mut sc, v::bob()) == 500 && bal<EUR>(&mut sc, v::bob()) == 0);
-    let d = sc.take_shared<Dex>();
+    let d = sc.take_shared<Market>();
     assert!(dex::filled(&d, v::o_a_hash()) == 500 && dex::filled(&d, v::o_b_hash()) == 1000);
     ts::return_shared(d);
     sc.end();
@@ -137,7 +137,7 @@ fun ioc_closes_the_rest() {
     let mut sc = setup();
     let (a, b) = (o_a(&mut sc), o_b(&mut sc, 500, 3, 2, 3000));
     settle(&mut sc, a, v::o_a(), b, v::o_b_ioc(), 250, 500, 0);
-    let d = sc.take_shared<Dex>();
+    let d = sc.take_shared<Market>();
     assert!(dex::filled(&d, dex::order_hash(&b)) == 1000);
     ts::return_shared(d);
     sc.next_tx(@0x7e1);
@@ -212,7 +212,7 @@ fun order_signature_binds_every_field() {
 fun cancelled_order_never_settles() {
     let mut sc = setup();
     let (a, b) = (o_a(&mut sc), o_b(&mut sc, 500, 1, 0, 3000));
-    let mut d = sc.take_shared<Dex>();
+    let mut d = sc.take_shared<Market>();
     let acct: Account<SUI> = fx::acct(&mut sc, v::alice());
     assert!(dex::cancel(&mut d, &acct, a, v::cancel_o_a()));
     assert!(!dex::cancel(&mut d, &acct, a, v::cancel_o_a()));   // phát lại: no-op
@@ -227,7 +227,7 @@ fun cancelled_order_never_settles() {
 #[test, expected_failure(abort_code = dex::ENonce)]
 fun invalidated_nonce_never_settles() {
     let mut sc = setup();
-    let mut d = sc.take_shared<Dex>();
+    let mut d = sc.take_shared<Market>();
     let acct: Account<EUR> = fx::acct(&mut sc, v::alice());
     dex::invalidate_nonces(&mut d, &acct, 2, v::nonces_a_2());
     ts::return_shared(acct);
@@ -241,7 +241,7 @@ fun invalidated_nonce_never_settles() {
 #[test, expected_failure(abort_code = dex::ENonceDown)]
 fun min_nonce_only_increases() {
     let mut sc = setup();
-    let mut d = sc.take_shared<Dex>();
+    let mut d = sc.take_shared<Market>();
     let acct: Account<EUR> = fx::acct(&mut sc, v::alice());
     dex::invalidate_nonces(&mut d, &acct, 2, v::nonces_a_2());
     dex::invalidate_nonces(&mut d, &acct, 2, v::nonces_a_2());
@@ -265,5 +265,53 @@ fun anti_lock_dex_and_payment_are_independent() {
     assert!(meta::balance(&acct) == 400);
     clock.destroy_for_testing();
     ts::return_shared(acct);
+    sc.end();
+}
+
+/// Review M4: mỗi cặp một `Market` riêng — lệnh của cặp này không settle trên market khác, và `min_nonce`
+/// đặt ở market khác không chạm market này.
+#[test, expected_failure(abort_code = dex::EPair)]
+fun orders_settle_only_on_their_own_market() {
+    let mut sc = setup();
+    fx::list<fx::USD, SUI>(&mut sc);
+    let (a, b) = (o_a(&mut sc), o_b(&mut sc, 500, 1, 0, 3000));
+    settle(&mut sc, a, v::o_a(), b, v::o_b(), 500, 1000, 0);   // market gần nhất = USD/SUI
+    sc.end();
+}
+
+#[test]
+fun nonce_invalidation_is_scoped_to_its_market() {
+    let mut sc = setup();
+    let eur = ts::most_recent_id_shared<Market>().destroy_some();
+    fx::list<fx::USD, SUI>(&mut sc);
+    let mut usd = sc.take_shared<Market>();
+    let acct: Account<SUI> = fx::acct(&mut sc, v::alice());
+    dex::invalidate_nonces(&mut usd, &acct, 2, v::nonces_a_2_usd());
+    ts::return_shared(acct);
+    ts::return_shared(usd);
+    sc.next_tx(@0x7e1);
+    let a = dex::new_order(b"localnet", eur.to_address(), v::alice(), @0x0, dex::type_bytes<SUI>(), dex::type_bytes<EUR>(), 1000, 2000, 1, 1000, 3000, 0, @0x0);
+    let b = dex::new_order(b"localnet", eur.to_address(), v::bob(), @0x0, dex::type_bytes<EUR>(), dex::type_bytes<SUI>(), 1000, 500, 1, 1000, 3000, 0, @0x0);
+    let mut m = sc.take_shared_by_id<Market>(eur);
+    let mut ms: Account<SUI> = fx::acct(&mut sc, v::alice());
+    let mut mb: Account<EUR> = fx::acct(&mut sc, v::alice());
+    let mut ts_: Account<EUR> = fx::acct(&mut sc, v::bob());
+    let mut tb: Account<SUI> = fx::acct(&mut sc, v::bob());
+    let clock = fx::clock_at(&mut sc, 0);
+    dex::settle(&mut m, &mut ms, &mut mb, &mut ts_, &mut tb, a, v::o_a(), b, v::o_b(), 500, 1000, b"r1", &clock, sc.ctx());
+    assert!(dex::filled(&m, v::o_a_hash()) == 500);
+    clock.destroy_for_testing();
+    ts::return_shared(m);
+    ts::return_shared(ms);
+    ts::return_shared(mb);
+    ts::return_shared(ts_);
+    ts::return_shared(tb);
+    sc.end();
+}
+
+#[test, expected_failure(abort_code = sui::derived_object::EObjectAlreadyExists)]
+fun one_market_per_pair() {
+    let mut sc = setup();
+    fx::list<SUI, EUR>(&mut sc);   // cùng cặp, đảo thứ tự
     sc.end();
 }

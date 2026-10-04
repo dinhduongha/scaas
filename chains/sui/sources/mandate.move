@@ -11,6 +11,7 @@ use sui::clock::Clock;
 use sui::coin::{Self, Coin};
 use sui::event;
 use sui::table::{Self, Table};
+use sui::transfer::Receiving;
 use sui::vec_set::{Self, VecSet};
 
 const OP_MANDATE_PAY: u8 = 2;
@@ -107,6 +108,17 @@ public fun create<T>(
 
 public fun deposit<T>(m: &mut Mandate<T>, c: Coin<T>) { m.balance.join(c.into_balance()); }
 
+/// Coin<T> gửi thẳng tới id mandate (transfer-to-object) ⇒ ai cũng kéo được vào số dư (review M2).
+public fun receive<T>(m: &mut Mandate<T>, r: Receiving<Coin<T>>) {
+    let c = transfer::public_receive(&mut m.id, r);
+    deposit(m, c)
+}
+
+/// Object khác loại gửi nhầm tới id mandate ⇒ chuyển cho chủ (ví native của chủ).
+public fun forward<T, O: key + store>(m: &mut Mandate<T>, r: Receiving<O>) {
+    transfer::public_transfer(transfer::public_receive(&mut m.id, r), m.owner)
+}
+
 public fun withdraw<T>(m: &mut Mandate<T>, amount: u64, ctx: &mut TxContext) {
     assert!(ctx.sender() == m.owner, ENotOwner);
     assert!(m.balance.value() >= amount, EInsufficient);
@@ -151,11 +163,12 @@ public fun pay<T>(
     );
     let digest = meta::check(&op, clock, ctx);
     assert!(auth::verify(m.delegate_scheme, &m.delegate_key, &vector[], &vector[], &digest, &a), EBadSignature);
-    if (now >= m.period_start + m.period) {
+    // Không cộng gần u64::MAX (review L6): `now ≥ period_start` (Clock đơn điệu), `spent ≤ max_per_period`.
+    if (now - m.period_start >= m.period) {
         m.period_start = now;
         m.spent_in_period = 0;
     };
-    assert!(m.spent_in_period + amt <= m.max_per_period, EOverPeriodCap);
+    assert!(amt <= m.max_per_period - m.spent_in_period, EOverPeriodCap);
     m.spent_in_period = m.spent_in_period + amt;
     m.refs.add(pay_ref, true);
     assert!(m.balance.value() >= amt, EInsufficient);

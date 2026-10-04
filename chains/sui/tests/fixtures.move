@@ -13,6 +13,8 @@ use sui::test_scenario::{Self as ts, Scenario};
 
 public struct EUR has drop {}
 
+public struct USD has drop {}
+
 const ADMIN: address = @0xad;
 
 public fun admin(): address { ADMIN }
@@ -49,6 +51,19 @@ public fun setup_accounts(): Scenario {
     ts::return_shared(b);
     sc.next_tx(ADMIN);
     sc
+}
+
+/// Thị trường EUR/SUI (niêm yết, phí tắt). Trả ở đầu tx kế (sender @0x7e1).
+public fun list_eur_sui(sc: &mut Scenario) { list<EUR, SUI>(sc) }
+
+public fun list<A, B>(sc: &mut Scenario) {
+    sc.next_tx(ADMIN);
+    let mut d = sc.take_shared<Dex>();
+    let cap = sc.take_from_sender<AdminCap>();
+    dex::list_market<A, B>(&cap, &mut d, true, false, 0, 0, @0xfee, sc.ctx());
+    sc.return_to_sender(cap);
+    ts::return_shared(d);
+    sc.next_tx(@0x7e1);
 }
 
 public fun acct<T>(sc: &mut Scenario, owner: address): Account<T> {
@@ -91,6 +106,8 @@ fun print_ids() {
     ts::return_shared(root);
     let d = sc.take_shared<Dex>();
     std::debug::print(&object::id(&d));
+    std::debug::print(&dex::market_address<EUR, SUI>(&d));
+    std::debug::print(&dex::market_address<USD, SUI>(&d));
     ts::return_shared(d);
     let a = sc.take_shared<Registry<SUI>>();
     std::debug::print(&object::id(&a));

@@ -55,12 +55,13 @@ public fun personal_digest(msg: vector<u8>): vector<u8> {
     blake2b256(&b)
 }
 
-/// `rp_id_hash`/`origin` chỉ dùng cho passkey (đã đăng ký lúc mở account).
+/// `rp_id_hash`/`origins` chỉ dùng cho passkey: origin của assertion phải nằm trong `origins` (danh sách của
+/// account, sửa được bằng chữ ký một khoá hiện có — review M1).
 public fun verify(
     scheme: u8,
     pk: &vector<u8>,
     rp_id_hash: &vector<u8>,
-    origin: &vector<u8>,
+    origins: &vector<vector<u8>>,
     digest: &vector<u8>,
     a: &Auth,
 ): bool {
@@ -72,15 +73,15 @@ public fun verify(
     if (scheme == SECP256R1) {
         return low_s(&a.sig, R1_HALF_N) && ecdsa_r1::secp256r1_verify(&a.sig, pk, digest, SHA256)
     };
-    webauthn_ok(pk, rp_id_hash, origin, digest, a)
+    webauthn_ok(pk, rp_id_hash, origins, digest, a)
 }
 
-/// Assertion WebAuthn (round-3 §C): type, challenge = base64url(digest), origin, rpIdHash, UP+UV, low-s,
-/// P-256 trên `sha256(authenticatorData ‖ sha256(clientDataJSON))`.
-fun webauthn_ok(pk: &vector<u8>, rp_id_hash: &vector<u8>, origin: &vector<u8>, digest: &vector<u8>, a: &Auth): bool {
+/// Assertion WebAuthn (round-3 §C): type, challenge = base64url(digest), origin ∈ `origins`, rpIdHash, UP+UV,
+/// low-s, P-256 trên `sha256(authenticatorData ‖ sha256(clientDataJSON))`.
+fun webauthn_ok(pk: &vector<u8>, rp_id_hash: &vector<u8>, origins: &vector<vector<u8>>, digest: &vector<u8>, a: &Auth): bool {
     let ad = &a.authenticator_data;
     let cd = &a.client_data_json;
-    if (ad.length() < 37 || rp_id_hash.length() != 32 || origin.is_empty()) return false;
+    if (ad.length() < 37 || rp_id_hash.length() != 32) return false;
     let mut i = 0;
     while (i < 32) {
         if (ad[i] != rp_id_hash[i]) return false;
@@ -92,15 +93,16 @@ fun webauthn_ok(pk: &vector<u8>, rp_id_hash: &vector<u8>, origin: &vector<u8>, d
     ch.append(base64url(digest));
     ch.push_back(34);
     if (!contains(cd, &ch)) return false;
-    let mut o = b"\"origin\":\"";
-    o.append(*origin);
-    o.push_back(34);
-    if (!contains(cd, &o)) return false;
+    let origin = origin_of(a);
+    if (origin.is_empty() || !origins.contains(&origin)) return false;
     if (!low_s(&a.sig, R1_HALF_N)) return false;
     let mut msg = *ad;
     msg.append(sha2_256(*cd));
     ecdsa_r1::secp256r1_verify(&a.sig, pk, &msg, SHA256)
 }
+
+/// Lá chữ ký có phần WebAuthn (passkey) hay không — chọn khoá cần thử.
+public fun is_webauthn(a: &Auth): bool { !a.authenticator_data.is_empty() }
 
 /// Origin trong `clientDataJSON` của một assertion (dùng lúc đăng ký passkey). Rỗng nếu không có.
 public fun origin_of(a: &Auth): vector<u8> {
