@@ -326,6 +326,9 @@ async fn cosmos_payment_lanes_finality_and_anti_lock() {
     state.lock().unwrap().jobs.push(y);
     assert!(lane_step(&adapter, &odoo, 0, "n#0").await.unwrap());
     assert_eq!(states(&state, 2), ["signed", "broadcast", "mined"]);
+    let y_tx = state.lock().unwrap().reports.iter().find_map(|r| (r["job_id"] == 2).then(|| r["tx_hash"].as_str()).flatten().map(str::to_string)).unwrap();
+    let get_tx = reqwest::get(format!("{REST}/cosmos/tx/v1beta1/txs/{}", y_tx.trim_start_matches("0x").to_uppercase())).await.unwrap();
+    assert_ne!(get_tx.status().as_u16(), 200, "indexer off: `mined` came from the block scan");
     assert_eq!(balance(&t2, &payee).await, 222);
     assert_eq!(balance(&t1, &payee).await, 0, "X still withheld");
     state.lock().unwrap().jobs.push(x);
