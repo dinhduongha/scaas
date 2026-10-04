@@ -14,7 +14,12 @@ bất biến (bn254 / BLS12-381); `UniversalAccountRegistry` singleton cho khoá
 | 4 | Registry 8 scheme + PoP | `UniversalAccountRegistry.t.sol` | `19e27a5` |
 | 5 | Token + mixin meta-tx + cổng factory | `ZetherToken.t.sol`, `ZetherGate.t.sol`, `ZetherRevertPaths.t.sol` | `eab460a` |
 | 6 | Vector S3 (Rust) trên verifier Solidity | `ZetherS3Vectors.t.sol` | `6442513` |
-| 7 | Gas, coverage từng chỗ revert, HANDOFF, review nhánh | `ZetherRevertPaths.t.sol` (bảng), `ZetherKat.t.sol` | `7b04a13`, `2466e71`, (cuối) |
+| 7 | Gas, coverage từng chỗ revert, HANDOFF, review nhánh | `ZetherRevertPaths.t.sol` (bảng), `ZetherKat.t.sol` | `7b04a13`, `2466e71`, `0d7183f`, `011d655`, `90d0f9d`, `9d3fc37` |
 
 Chạy: `forge test --match-path 'test/zether/*'` (hoặc `FOUNDRY_PROFILE=zether …`). Sinh lại KAT:
 `python3 test/vectors/zether/kat.py` (cần `py_ecc>=8`).
+
+## Review agy — folded/rejected
+
+Review nhánh bằng agy (2026-10-04): 0 finding — không có gì gộp/từ chối. Chi tiết + review Claude trước đó
+(S2-R1..R3) ở §17 của `specs/2026-10-03-zether-design.md`. Suite cuối: `forge test` 270/270 (zether 138/138).
