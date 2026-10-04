@@ -697,7 +697,7 @@ impl SolanaAdapter {
                     bail!("RPC genesis {} is not the configured network {}", b58(&g), b58(&self.network));
                 }
                 let config = find_pda(&[b"config"], &self.program).0;
-                let (data, owner) = self.account_data(&config, "finalized").await?.ok_or_else(|| anyhow!("program Config not initialized"))?;
+                let (data, owner) = self.account_data(&config, "confirmed").await?.ok_or_else(|| anyhow!("program Config not initialized"))?;
                 if owner != self.program || data.get(40..72) != Some(&self.network[..]) {
                     bail!("program Config.network is not {}", b58(&self.network));
                 }
