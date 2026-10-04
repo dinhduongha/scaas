@@ -76,3 +76,22 @@ agy chạy `--mode plan` nhưng **đã ghi đè file plan này** (đã khôi ph�
 | SEC-14 deploy làm hết hạn thanh toán | Một phần: điều kiện là `mined`, không `final` | Nhận như vậy |
 | SEC-15 nonce đếm DB | `reverted` ≠ `mined` nên không lệch vì revert; lệch khi ai đó gọi ngoài Odoo ⇒ owner-call hỏng `BadNonce`, không mất tiền | Từ chối; ghi rủi ro |
 | SEC-16, SEC-17 | Đúng | Nhận (RS4-8) |
+
+### Review DIFF nhánh + suite cuối (2026-10-04)
+
+Suite trên `a667550`: `forge test` 180/180 (15 suite); `clientkeys` `node --test` 31/31; bundle esbuild dựng lại
+khớp từng byte với `dms_blockchain_bridge/static/lib/clientkeys/`; Odoo `dms_blockchain,dms_blockchain_bridge,
+dms_blockchain_payment` trên `dms_test_chain_4`/8924: 179 test, 0 failed, 0 error.
+
+## Review agy — folded/rejected
+
+**Chưa có review agy của DIFF** (review trên chỉ là PLAN). agy hết quota (`RESOURCE_EXHAUSTED`, "Resets in
+120h9m" tính từ 2026-10-04); grok bị bộ phân loại quyền chặn trong phiên này. Prompt sẵn (chạy trên BẢN SAO plan):
+`scratchpad/s4-review-prompt.md` (phiên a9570aaa). Thay thế tạm: Claude soát tay — `SubjectAccount` (nonce tăng
+trước call, khoá xoá ⇒ `NONE` ⇒ false, không xoá được khoá cuối, `_clientDataOk` fail-closed, cờ UP+UV, rpIdHash,
+low-s qua OZ `P256`), `derToRS` (DER chặt, chuẩn hoá s), vault (IV 12 byte mới mỗi lần seal, scrypt 2^15/8/1,
+DEK ngẫu nhiên, AAD theo nhãn), Odoo (`_dms_chain_order` theo entitlement, rpId/origin do server quyết,
+`_open` một account mỗi (partner, chain), add-key chỉ một owner-call sống, `prerequisite_job_id` + `_fail_dependents`).
+**0 finding gộp.** Ghi nhận (không đổi): mọi user có entitlement trên partner đều đăng ký được khoá ĐẦU của account
+partner đó — đúng mô hình "entitlement = hành động thay partner", cần guardian để thu hồi nếu chiếm sai. Rủi ro mở:
+chưa có review ngoài của diff — chạy lại agy khi quota hồi.
