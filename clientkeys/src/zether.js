@@ -254,6 +254,13 @@ export async function openBalanceCache(curve, x, box) {
   }
 }
 
+/** `accSeq` only grows on-chain: an `acc` older than the anchor's is stale or forged (review N2) and may
+ *  never replace it — a backend knowing `Y` can build an `acc` for any balance within the device bound. */
+function staleSeq(entries, state) {
+  const e = entries[keyOf(state)];
+  return !!e && Number(state.accSeq) < e.accSeq;
+}
+
 /**
  * Record `balance` for `state = {ua, token, acc, accSeq}` (the account's CURRENT on-chain `acc`) only
  * if it checks. A value that does not check is refused and the previous entry is KEPT: it is the last
@@ -261,7 +268,7 @@ export async function openBalanceCache(curve, x, box) {
  */
 export function setCachedBalance(curve, x, entries, state, balance) {
   const b = BigInt(balance);
-  if (b < 0n || !checkBalance(curve, x, state.acc, b)) return false;
+  if (staleSeq(entries, state) || b < 0n || !checkBalance(curve, x, state.acc, b)) return false;
   entries[keyOf(state)] = { ua: state.ua, token: state.token, accSeq: Number(state.accSeq), balance: b };
   return true;
 }
@@ -286,12 +293,15 @@ export function cacheAfterRollOver(curve, x, entries, state, pending) {
  *      a loss. This covers rollOvers the wallet did not do (`rollOverPublic`/`rollOverBatch` by anyone —
  *      `fund(victim, 1)` + `rollOverPublic` is free griefing — and late credits swept by `rollOverSigned`)
  *      and own debits it did not record (review M1). Each try costs one device BSGS when it misses;
- *   3. else the device BSGS on `acc` itself (no cache, or a balance below the bound).
+ *   3. else the device BSGS on `acc` itself (no cache, or a big anchor spent down below the bound elsewhere,
+ *      e.g. the same seed on another device — kept even for a big anchor, review N1).
+ * An `acc` whose `accSeq` is below the anchor's is refused (review N2).
  * Every answer is re-checked with `checkBalance` before it is cached or returned. Above the device bound
  * it throws and sends the user to the desktop reader, whose output is entered with `setCachedBalance`.
  */
 export async function readBalance(curve, x, entries, state, decrypt) {
   const e = entries[keyOf(state)];
+  if (staleSeq(entries, state)) throw new Error(`acc with accSeq ${state.accSeq} is older than the cached ${e.accSeq}`);
   if (e && checkBalance(curve, x, state.acc, e.balance)) return { balance: e.balance, source: 'cache' };
   const tries = [];
   if (e) {

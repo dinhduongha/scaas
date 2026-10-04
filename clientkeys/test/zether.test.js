@@ -246,6 +246,31 @@ for (const curve of ['bn254', 'bls12381']) {
     assert.equal(Object.values(entries)[0].balance, b);
   });
 
+  // review N2: a backend/RPC knows Y and can forge an `acc` for any balance; an older accSeq must never
+  // become the anchor, or a lie within the device bound would replace a real > 2^44 balance.
+  test(`${curve}: accSeq is monotonic — a forged lower-seq acc does not move the anchor`, async () => {
+    const b = (1n << 50n) + 5n;
+    const entries = {};
+    assert.equal(setCachedBalance(curve, x, entries, { ua, token, acc: hexCt(curve, enc(curve, Y, b, 4n)), accSeq: 5 }, b), true);
+    const forged = { ua, token, acc: hexCt(curve, enc(curve, Y, b + 10n, 8n)), accSeq: 3 };
+    assert.equal(setCachedBalance(curve, x, entries, forged, b + 10n), false);
+    await assert.rejects(readBalance(curve, x, entries, forged, device), /accSeq/);
+    assert.equal(Object.values(entries)[0].balance, b);
+    assert.equal(Object.values(entries)[0].accSeq, 5);
+    // Same or higher seq is fine (debits do not bump accSeq; rollOvers do).
+    const later = { ua, token, acc: hexCt(curve, enc(curve, Y, b + 10n, 8n)), accSeq: 6 };
+    assert.deepEqual(await readBalance(curve, x, entries, later, device), { balance: b + 10n, source: 'delta' });
+  });
+
+  // review N1 (not applied): the last try, BSGS on acc itself, still hits when a big anchor was spent down
+  // elsewhere (same seed on another device, or the CLI) — the difference is then beyond the bound both ways.
+  test(`${curve}: big anchor, balance spent down elsewhere — full device BSGS still recovers it`, async () => {
+    const entries = {};
+    assert.equal(setCachedBalance(curve, x, entries, { ua, token, acc: hexCt(curve, enc(curve, Y, 1n << 50n, 4n)), accSeq: 1 }, 1n << 50n), true);
+    const now = { ua, token, acc: hexCt(curve, enc(curve, Y, 1000n, 9n)), accSeq: 1 };
+    assert.deepEqual(await readBalance(curve, x, entries, now, device), { balance: 1000n, source: 'bsgs' });
+  });
+
   test(`${curve}: small balance — cache miss falls back to device BSGS and fills the cache`, async () => {
     const acc = hexCt(curve, enc(curve, Y, 5000n, 3n));
     const entries = {};
