@@ -7,9 +7,8 @@
 //! - Receipt đọc thô: receipt của Relay mang `revertReason` (mã Hedera như `WRONG_NONCE`, hoặc dữ liệu revert
 //!   ABI) — báo nguyên văn cho Odoo; chưa có ở mirror node ⇒ `Unknown` (runner chờ tới hạn payload).
 //! - Lane phải là tài khoản Hedera đã tồn tại và có HBAR (review S22): lane số dư 0 ⇒ job về hàng đợi.
-//! - Danh sách token lọc event: `params.tokens` (event của contract lạ không bao giờ gửi Odoo).
-use std::sync::{Arc, RwLock};
-
+//! - Danh sách token lọc event: token Odoo đăng ký, lấy từ `node_config` mỗi vòng `index_step` (review H2;
+//!   không danh sách tĩnh trong cấu hình node — event của contract lạ không bao giờ gửi Odoo).
 use alloy::primitives::{Address, U256};
 use alloy::providers::{DynProvider, Provider, ProviderBuilder};
 use anyhow::{anyhow, bail, Result};
@@ -34,30 +33,20 @@ pub struct HederaAdapter {
 }
 
 impl HederaAdapter {
-    pub fn new(cfg: &ChainCfg, chains: Vec<Chain>, tokens: Arc<RwLock<Vec<Address>>>) -> Result<Self> {
+    pub fn new(cfg: &ChainCfg, chains: Vec<Chain>) -> Result<Self> {
         if cfg.family != "hedera" || !CHAIN_IDS.contains(&cfg.evm_chain_number) {
             bail!("chain {}: Hedera needs family=hedera and evm_chain_number 295..298", cfg.chain_key());
         }
         let url = cfg.rpc_urls.first().ok_or_else(|| anyhow!("chain {}: no rpc_urls", cfg.chain_key()))?;
         let rpc = ProviderBuilder::new().disable_recommended_fillers().connect_http(url.parse()?).erased();
         let lane_addrs = chains.iter().map(Chain::address).collect();
-        Ok(Self { inner: EvmAdapter::new(cfg, chains, tokens)?, rpc, lane_addrs })
+        Ok(Self { inner: EvmAdapter::new(cfg, chains, Default::default())?, rpc, lane_addrs })
     }
 
-    /// Từ config: một `Chain` mỗi lane (khoá secp256k1 coin 3030), token từ `params.tokens`.
+    /// Từ config: một `Chain` mỗi lane (khoá secp256k1 coin 3030).
     pub fn from_cfg(cfg: &ChainCfg, signers: &[LocalSigner]) -> Result<Self> {
-        Self::new(cfg, Chain::connect_lanes(cfg, signers)?, Arc::new(RwLock::new(param_tokens(cfg)?)))
+        Self::new(cfg, Chain::connect_lanes(cfg, signers)?)
     }
-}
-
-/// `params.tokens = ["0x…", …]` — địa chỉ token `HederaMetaToken` mà indexer theo dõi.
-pub fn param_tokens(cfg: &ChainCfg) -> Result<Vec<Address>> {
-    let Some(v) = cfg.params.get("tokens") else { return Ok(vec![]) };
-    v.as_array()
-        .ok_or_else(|| anyhow!("params.tokens must be an array"))?
-        .iter()
-        .map(|t| t.as_str().ok_or_else(|| anyhow!("params.tokens: not a string"))?.parse::<Address>().map_err(Into::into))
-        .collect()
 }
 
 /// Receipt thô của Relay → trạng thái. `None` = chưa có (mirror node chưa nhập). Không panic với dữ liệu lạ.
@@ -142,8 +131,8 @@ impl ChainAdapter for HederaAdapter {
         self.inner.block_hash(height).await
     }
 
-    async fn events(&self, from: u64, to: u64) -> Result<Vec<Value>> {
-        self.inner.events(from, to).await
+    async fn events(&self, from: u64, to: u64, contracts: &[String]) -> Result<Vec<Value>> {
+        self.inner.events(from, to, contracts).await
     }
 }
 
@@ -225,19 +214,6 @@ mod tests {
         vk.verify(dg.as_slice(), &Signature::from_bytes(&sig)).expect("ed25519 over the digest");
         // Hedera account 0.0.1234567 ⇒ long-zero `from`.
         assert_eq!(m.from, Address::left_padding_from(&1_234_567u64.to_be_bytes()));
-    }
-
-    #[test]
-    fn params_tokens() {
-        let mut cfg: ChainCfg = toml::from_str(
-            "family = \"hedera\"\nevm_chain_number = 296\nrpc_urls = [\"http://127.0.0.1:7546\"]\n",
-        )
-        .unwrap();
-        assert!(param_tokens(&cfg).unwrap().is_empty());
-        cfg.params.insert("tokens".into(), toml::Value::Array(vec![toml::Value::String(format!("{:#x}", Address::repeat_byte(7)))]));
-        assert_eq!(param_tokens(&cfg).unwrap(), vec![Address::repeat_byte(7)]);
-        cfg.params.insert("tokens".into(), toml::Value::String("0x1".into()));
-        assert!(param_tokens(&cfg).is_err());
     }
 
     /// Review H1/M1: a Hedera chain from `node.toml` (EVM-style: `evm_chain_number`, no `network`, finality

@@ -12,7 +12,7 @@
 //! 5. replaying X is refused by simulation (contract nonce) → dead.
 use std::net::SocketAddr;
 use std::process::{Child, Command, Stdio};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use alloy::network::EthereumWallet;
@@ -26,9 +26,8 @@ use axum::extract::{Path, State};
 use axum::routing::post;
 use axum::{Json, Router};
 use bamboo_node::abi::{IMetaToken, MetaTransaction};
-use bamboo_node::adapter::{index_step, lane_step, ChainAdapter};
-use bamboo_node::adapters::hedera::HederaAdapter;
-use bamboo_node::chain::Chain;
+use bamboo_node::adapter::{index_step, lane_step, Family};
+use bamboo_node::adapters;
 use bamboo_node::config::{ChainCfg, FinalityCfg, OdooCfg};
 use bamboo_node::keys::{lane_secret, Seed};
 use bamboo_node::metatx::{digest, Domain, WireMetaTx};
@@ -117,6 +116,8 @@ struct FakeOdoo {
     reports: Vec<Value>,
     ingested: Vec<Value>,
     indexed_block: u64,
+    /// Token Odoo đăng ký (review H2): địa chỉ thật của hai clone, như `node_config` của Odoo trả.
+    tokens: Vec<String>,
 }
 
 async fn fake(
@@ -128,7 +129,8 @@ async fn fake(
     let out = match (model.as_str(), method.as_str()) {
         ("blockchain.chain", "node_config") => json!({
             "evm_chain_number": CHAIN_ID, "finality_mode": "depth", "finality_depth": 0, "finality_quorum": 1,
-            "indexed_block": o.indexed_block, "tokens": [], "journal_max_nonce": null, "inflight": []}),
+            "indexed_block": o.indexed_block,
+            "tokens": o.tokens.iter().map(|t| json!({"address": t, "decimals": 6})).collect::<Vec<_>>(), "journal_max_nonce": null, "inflight": []}),
         ("blockchain.relay.job", "relay_poll") => json!(std::mem::take(&mut o.jobs)),
         ("blockchain.relay.job", "relay_claim") => {
             for id in body["job_ids"].as_array().unwrap() {
@@ -270,16 +272,19 @@ async fn hedera_native_account_pays_through_two_lanes_and_never_locks_itself() {
         .collect();
     assert_eq!(signers[0].address_hex(), "0x04d0f262432d16cea929f228f5e53df042a7d7c5");
     let cfg = cfg(&rpc);
-    let adapter = HederaAdapter::new(&cfg, Chain::connect_lanes(&cfg, &signers).unwrap(), Arc::new(RwLock::new(vec![t1, t2]))).unwrap();
-    assert_eq!(adapter.chain_key(), "hedera:298");
+    // Built the way the binary builds it (review H1/H2): `adapters::build`, token list only from Odoo.
+    let built = adapters::build(&cfg, &signers).unwrap();
+    let adapter = built.as_ref();
+    assert_eq!((adapter.family(), adapter.chain_key()), (Family::Hedera, "hedera:298"));
 
-    let state = Arc::new(Mutex::new(FakeOdoo::default()));
+    let tokens = vec![format!("{t1:#x}"), format!("{t2:#x}")];
+    let state = Arc::new(Mutex::new(FakeOdoo { tokens, ..Default::default() }));
     let odoo = odoo_at(start_fake(state.clone()).await);
 
     // An unfunded lane does not take the job: back to the queue (Hedera accounts must exist and hold HBAR).
     let (job, m0) = native_pay(&native_key, t1, 20, b"hedera-0");
     state.lock().unwrap().jobs.push(job);
-    assert!(lane_step(&adapter, &odoo, 0, "e2e#0").await.unwrap());
+    assert!(lane_step(adapter, &odoo, 0, "e2e#0").await.unwrap());
     assert_eq!(states_of(&state, 20), ["queued"]);
     let back = state.lock().unwrap().reports.last().cloned().unwrap();
     assert!(back["error"].as_str().unwrap().contains("not a funded Hedera account"), "{back}");
@@ -289,7 +294,7 @@ async fn hedera_native_account_pays_through_two_lanes_and_never_locks_itself() {
     }
     let (job, _) = native_pay(&native_key, t1, 21, b"hedera-0");
     state.lock().unwrap().jobs.push(job);
-    assert!(lane_step(&adapter, &odoo, 0, "e2e#0").await.unwrap());
+    assert!(lane_step(adapter, &odoo, 0, "e2e#0").await.unwrap());
     assert_eq!(states_of(&state, 21), ["signed", "broadcast", "mined"]);
     assert_eq!(balance(&rpc, t1, Address::repeat_byte(0x5e)).await, U256::from(1_000u64));
 
@@ -297,12 +302,12 @@ async fn hedera_native_account_pays_through_two_lanes_and_never_locks_itself() {
     let (x, mx) = native_pay(&native_key, t1, 31, b"hedera-x");
     let (y, my) = native_pay(&native_key, t2, 32, b"hedera-y");
     state.lock().unwrap().jobs.push(y);
-    assert!(lane_step(&adapter, &odoo, 1, "e2e#1").await.unwrap());
+    assert!(lane_step(adapter, &odoo, 1, "e2e#1").await.unwrap());
     assert_eq!(states_of(&state, 32), ["signed", "broadcast", "mined"]);
     assert_eq!(balance(&rpc, t2, Address::repeat_byte(0x5e)).await, U256::from(1_000u64));
     assert_eq!(balance(&rpc, t1, Address::repeat_byte(0x5e)).await, U256::from(1_000u64), "X still withheld");
     state.lock().unwrap().jobs.push(x.clone());
-    assert!(lane_step(&adapter, &odoo, 0, "e2e#0").await.unwrap());
+    assert!(lane_step(adapter, &odoo, 0, "e2e#0").await.unwrap());
     assert_eq!(states_of(&state, 31), ["signed", "broadcast", "mined"]);
     assert_eq!(balance(&rpc, t1, Address::repeat_byte(0x5e)).await, U256::from(2_000u64));
 
@@ -315,14 +320,14 @@ async fn hedera_native_account_pays_through_two_lanes_and_never_locks_itself() {
     let mut replay = x;
     replay["id"] = json!(33);
     state.lock().unwrap().jobs.push(replay);
-    assert!(lane_step(&adapter, &odoo, 1, "e2e#1").await.unwrap());
+    assert!(lane_step(adapter, &odoo, 1, "e2e#1").await.unwrap());
     let last = state.lock().unwrap().reports.last().cloned().unwrap();
     assert_eq!((last["job_id"].as_i64(), last["chain_state"].as_str()), (Some(33), Some("dead")));
     assert!(last["error"].as_str().unwrap().contains("MetaTxBadNonce"), "{last}");
     assert!(state.lock().unwrap().refused.is_empty());
 
     // Finality: three payments, each with the digest the subject signed.
-    while index_step(&adapter, &odoo).await.unwrap() {}
+    while index_step(adapter, &odoo).await.unwrap() {}
     let ingested = state.lock().unwrap().ingested.clone();
     let settled: Vec<&Value> = ingested.iter().filter(|e| e["event"] == "PaymentSettled").collect();
     assert_eq!(settled.len(), 3);
