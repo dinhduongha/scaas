@@ -1,0 +1,1 @@
+{ "extends": "./tsconfig.json", "compilerOptions": { "outDir": "build/shim", "rootDir": "." }, "files": ["shim/server.ts"] }
