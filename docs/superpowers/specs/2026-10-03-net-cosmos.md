@@ -101,11 +101,16 @@ một lần, rồi gọi `token.Pay` ⇒ `payment_settled` mang đúng `pay_ref`
 
 - Lane = tài khoản secp256k1 `m/44'/118'/0'/0/i`, địa chỉ `bech32(prefix, ripemd160(sha256(pk)))`.
 - `build`: đọc `account_number` + sequence **đã commit** (REST `/cosmos/auth/v1beta1/accounts`), dựng
-  `MsgExecuteContract{sender=lane, contract, msg=Relay{…}}`, mô phỏng `/cosmos/tx/v1beta1/simulate`; lỗi ABCI ⇒
-  `Revert` (job chết), lỗi mạng ⇒ `Transport`. Gas = mô phỏng × 1.3; phí = gas × `gas_price` của lane.
+  `MsgExecuteContract{sender=lane, contract, msg=Relay{…}}`, mô phỏng `/cosmos/tx/v1beta1/simulate`; gRPC Unknown(2)/InvalidArgument(3) (contract từ
+  chối, tx hỏng) ⇒ `Revert` (job chết); sequence lệch, Unavailable/Deadline/ResourceExhausted, cổng lỗi ⇒ `Transport`
+  (review L2). Gas = mô phỏng × 1.3; phí = gas × `gas_price` của lane.
 - `sign`: protobuf `TxBody/AuthInfo/SignDoc` (SIGN_MODE_DIRECT), `sha256(SignDoc)`, chữ ký 64 byte low-s.
   Mã hoá protobuf viết tay (vài kiểu, không thêm `cosmrs`).
-- `submit`: `broadcast` SYNC; CheckTx ≠ 0 ⇒ lỗi (runner thử lại tới hạn). `tx_status`: `/cosmos/tx/v1beta1/txs/{hash}`.
+- `submit`: `broadcast` SYNC; 19 (đã trong mempool) ⇒ ok, 20 (mempool đầy) ⇒ gửi lại cùng bytes; mã CheckTx khác
+  (32 sequence, 13 phí, 4 chữ ký, 5 số dư…) ⇒ `Rejected` ⇒ runner trả job `queued` để dựng lại, không giữ lane tới
+  hạn (review L1). Khởi động từ chối `network` rỗng và `gas_price` ≤ 0 trừ `params.zero_fee = true` (devnet).
+- `tx_status`: REST `GetTx` (indexer tx: có thể tắt/trễ) — thấy là chắc; không thấy ⇒ quét `block` +
+  `block_results` từ đỉnh lúc gửi tìm `sha256(tx bytes)` (review M2). e2e chạy devnet `indexer = "null"`.
 - **Head-of-line (R62):** mỗi lane một tx bay; sequence đọc từ chain trước mỗi job; chủ thể không gửi tx nên không
   có sequence chủ thể nào để kẹt; nonce là `(contract, from, lane)` ⇒ thao tác kẹt trên contract 1 không chặn
   contract 2 (test anti-lock ở cả contract và e2e). Tx quá hạn bị contract từ chối ⇒ sequence lane không treo.
@@ -118,7 +123,9 @@ một lần, rồi gọi `token.Pay` ⇒ `payment_settled` mang đúng `pay_ref`
   `index_step` không tiến con trỏ), chuẩn hoá
   `{event, contract, block_number, block_hash, tx_hash, log_index, from, to, amount, entry_ref, digest}`;
   `log_index` = thứ tự event trong tx (`tx_hash` khác nhau giữa tx ⇒ khoá `(tx_hash, log_index)` duy nhất).
-- Cấu hình: `rpc_urls = [CometBFT RPC]`, `params = {rest, prefix, denom, gas_price}`.
+- Cấu hình: `rpc_urls = [CometBFT RPC]`, `params = {rest, prefix, denom, gas_price, zero_fee?}`.
+- Thuộc tính event: CometBFT < 0.38 trả base64 ⇒ phát hiện qua `_contract_address` (wasmd luôn gắn) và giải mã
+  (review L3).
 
 ## 6. Odoo và portal
 

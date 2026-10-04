@@ -17,7 +17,7 @@ use ripemd::Ripemd160;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Signed, TxStatus};
+use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Rejected, Signed, TxStatus};
 use crate::chain::SimError;
 use crate::config::ChainCfg;
 use crate::odoo::Job;
@@ -200,6 +200,56 @@ fn hash32(s: &str) -> Option<String> {
     (h.len() == 64 && h.bytes().all(|b| b.is_ascii_hexdigit())).then(|| format!("0x{h}"))
 }
 
+/// Thuộc tính một event. CometBFT < 0.38 trả khoá/giá trị base64: phát hiện qua `_contract_address` mà wasmd
+/// luôn gắn (contract không đặt được khoá `_…`) — không đoán theo chain (review L3).
+fn attributes(ev: &Value) -> HashMap<String, String> {
+    let pairs = || {
+        ev["attributes"].as_array().into_iter().flatten().filter_map(|a| Some((a["key"].as_str()?, a["value"].as_str().unwrap_or(""))))
+    };
+    let plain: HashMap<String, String> = pairs().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+    if plain.contains_key("_contract_address") {
+        return plain;
+    }
+    let dec = |s: &str| B64.decode(s).ok().and_then(|b| String::from_utf8(b).ok());
+    pairs().filter_map(|(k, v)| Some((dec(k)?, dec(v)?))).collect()
+}
+
+/// gRPC-gateway của `simulate`: lỗi thực thi (contract từ chối, tx hỏng) là Unknown(2)/InvalidArgument(3); còn lại
+/// (Unavailable 14, DeadlineExceeded 4, ResourceExhausted 8, cổng không body…) là đường truyền ⇒ thử lại (review L2).
+fn sim_error(http: u16, v: &Value) -> SimError {
+    let why = v["message"].as_str().map(str::to_string).unwrap_or_else(|| format!("{http} {v}"));
+    match v["code"].as_u64() {
+        Some(2 | 3) if !why.contains("sequence mismatch") => SimError::Revert(why),
+        _ => SimError::Transport(why),
+    }
+}
+
+/// Phản hồi `broadcast` SYNC. 19 = đã có trong mempool/cache (gửi lại sau khi mất phản hồi); 20 = mempool đầy (cùng
+/// bytes có thể qua sau). Mã khác ⇒ CheckTx từ chối, tx không vào mempool ⇒ `Rejected` (review L1).
+fn broadcast_outcome(http: u16, v: &Value) -> Result<()> {
+    let log = || v["tx_response"]["raw_log"].as_str().map(str::to_string).unwrap_or_else(|| v.to_string());
+    match v["tx_response"]["code"].as_u64() {
+        Some(0) if http == 200 => Ok(()),
+        Some(19) => Ok(()),
+        Some(c) if c != 0 && c != 20 => Err(Rejected(format!("CheckTx code {c}: {}", log())).into()),
+        _ => bail!("broadcast: {http} {}", log()),
+    }
+}
+
+/// Trạng thái tx `tx_id` (= sha256 bytes) nếu nó nằm trong khối (`block` + `block_results` của RPC CometBFT).
+pub fn tx_in_block(block: &Value, results: &Value, tx_id: &str) -> Option<TxStatus> {
+    let want = tx_id.trim_start_matches("0x").to_ascii_lowercase();
+    let i = block["block"]["data"]["txs"].as_array()?.iter().position(|t| {
+        B64.decode(t.as_str().unwrap_or_default()).is_ok_and(|b| alloy::hex::encode(Sha256::digest(&b)) == want)
+    })?;
+    let height = block["block"]["header"]["height"].as_str()?.parse().ok()?;
+    let r = results["txs_results"].as_array()?.get(i)?;
+    Some(match r["code"].as_u64().unwrap_or(0) {
+        0 => TxStatus::Mined { height },
+        _ => TxStatus::Reverted { reason: r["log"].as_str().unwrap_or("failed").to_string() },
+    })
+}
+
 /// Event của một tx (`block_results.txs_results[i].events`) ⇒ event chuẩn hoá (thiếu `block_hash`, adapter điền).
 /// Chỉ contract trong `contracts`; tx lỗi (code ≠ 0) không có event.
 pub fn normalize_tx(tx: &Value, contracts: &[String]) -> Vec<Value> {
@@ -220,18 +270,13 @@ pub fn normalize_tx(tx: &Value, contracts: &[String]) -> Vec<Value> {
             Some("wasm-meta_tx_executed") => "MetaTransactionExecuted",
             _ => continue,
         };
-        let mut attrs = HashMap::new();
-        for a in ev["attributes"].as_array().into_iter().flatten() {
-            if let (Some(k), Some(v)) = (a["key"].as_str(), a["value"].as_str()) {
-                attrs.insert(k, v);
-            }
-        }
-        let Some(&contract) = attrs.get("_contract_address") else { continue };
+        let attrs = attributes(ev);
+        let Some(contract) = attrs.get("_contract_address") else { continue };
         if !contracts.iter().any(|c| c == contract) {
             continue;
         }
         let mut e = json!({"event": kind, "contract": contract, "block_number": height, "tx_hash": hash,
-                           "log_index": i, "from": attrs.get("from").copied().unwrap_or_default()});
+                           "log_index": i, "from": attrs.get("from").cloned().unwrap_or_default()});
         if kind == "PaymentSettled" {
             let (Some(to), Some(amount), Some(r)) = (attrs.get("to"), attrs.get("amount"), attrs.get("pay_ref").and_then(|r| hash32(r)))
             else {
@@ -264,6 +309,9 @@ pub struct CosmosAdapter {
     signers: Vec<LocalSigner>,
     http: reqwest::Client,
     account_numbers: Mutex<HashMap<usize, u64>>,
+    /// tx đã gửi ⇒ khối kế tiếp cần quét khi indexer tx không trả lời (review M2).
+    /// ponytail: mục của tx chết hết hạn không bị xoá (vài byte mỗi job), dọn theo `valid_until` nếu cần.
+    scan_from: Mutex<HashMap<String, u64>>,
 }
 
 impl CosmosAdapter {
@@ -279,12 +327,20 @@ impl CosmosAdapter {
         if signers.iter().any(|s| s.curve() != crate::signer::Curve::Secp256k1) {
             bail!("chain {}: cosmos lanes are secp256k1", cfg.chain_key());
         }
+        // Review L1: chain-id rỗng ⇒ mọi chữ ký sai (CheckTx 4); giá gas 0 ⇒ thiếu phí (13) trên chain có min-gas-prices.
+        let chain_id = cfg.network.clone().filter(|n| !n.is_empty());
+        let chain_id = chain_id.ok_or_else(|| anyhow!("chain {}: network (the chain-id) is required", cfg.chain_key()))?;
+        let gas_price: f64 = p("gas_price").unwrap_or_else(|| "0".into()).parse().context("params.gas_price")?;
+        let zero_fee = cfg.params.get("zero_fee").and_then(|v| v.as_bool()) == Some(true);
+        if !zero_fee && (gas_price.is_nan() || gas_price <= 0.0) {
+            bail!("chain {}: params.gas_price must be > 0 (params.zero_fee = true only on a zero-fee devnet)", cfg.chain_key());
+        }
         Ok(Self {
             key: cfg.chain_key(),
-            chain_id: cfg.network.clone().unwrap_or_default(),
+            chain_id,
             prefix,
             denom: p("denom").unwrap_or_else(|| "stake".into()),
-            gas_price: p("gas_price").unwrap_or_else(|| "0".into()).parse().context("params.gas_price")?,
+            gas_price,
             max_gas: cfg.max_gas_per_tx,
             rpc: cfg.rpc_urls[0].trim_end_matches('/').to_string(),
             rest: rest.trim_end_matches('/').to_string(),
@@ -292,6 +348,7 @@ impl CosmosAdapter {
             signers,
             http: reqwest::Client::builder().timeout(Duration::from_secs(20)).build()?,
             account_numbers: Mutex::new(HashMap::new()),
+            scan_from: Mutex::new(HashMap::new()),
         })
     }
 
@@ -366,13 +423,7 @@ impl ChainAdapter for CosmosAdapter {
             .await
             .map_err(|e| SimError::Transport(format!("{e:#}")))?;
         if code != 200 {
-            let why = v["message"].as_str().map(str::to_string).unwrap_or_else(|| format!("{code} {v}"));
-            // Sequence lệch (tx khác của lane vừa vào) hay lỗi cổng: thử lại; còn lại là contract từ chối.
-            return Err(if v["code"].as_u64().is_none() || why.contains("sequence mismatch") {
-                SimError::Transport(why)
-            } else {
-                SimError::Revert(why)
-            });
+            return Err(sim_error(code, &v));
         }
         let used: u64 = v["gas_info"]["gas_used"].as_str().and_then(|g| g.parse().ok()).unwrap_or(0);
         let gas = used + used * 3 / 10 + 10_000;
@@ -398,29 +449,55 @@ impl ChainAdapter for CosmosAdapter {
     }
 
     async fn submit(&self, signed: &Signed) -> Result<()> {
+        // Mốc quét khối cho `tx_status` (tx chỉ vào khối từ đỉnh hiện tại trở đi).
+        if !self.scan_from.lock().is_ok_and(|m| m.contains_key(&signed.tx_id)) {
+            let head = self.final_head().await?.map_or(1, |h| h.height);
+            if let Ok(mut m) = self.scan_from.lock() {
+                m.insert(signed.tx_id.clone(), head);
+            }
+        }
         let body = json!({"tx_bytes": B64.encode(&signed.raw), "mode": "BROADCAST_MODE_SYNC"});
         let (code, v) = self.post(&format!("{}/cosmos/tx/v1beta1/txs", self.rest), &body).await?;
-        match v["tx_response"]["code"].as_u64() {
-            Some(0) if code == 200 => Ok(()),
-            // Đã có trong mempool/cache (gửi lại sau khi mất phản hồi): coi như đã gửi.
-            Some(19) => Ok(()),
-            _ => bail!("broadcast: {code} {}", v["tx_response"]["raw_log"].as_str().map(str::to_string).unwrap_or(v.to_string())),
-        }
+        broadcast_outcome(code, &v)
     }
 
+    /// REST `GetTx` đọc indexer tx của CometBFT — có thể tắt (`indexer = "null"`) hay trễ: thấy là chắc, không thấy
+    /// thì quét `block`/`block_results` (luôn có) từ mốc lúc gửi (review M2). RPC lỗi ⇒ `Err` ⇒ runner thử lại.
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
         let h = tx_id.trim_start_matches("0x").to_ascii_uppercase();
-        let (code, v) = self.get(&format!("{}/cosmos/tx/v1beta1/txs/{h}", self.rest)).await?;
-        if code != 200 {
-            return Ok(TxStatus::Unknown);
+        if let Ok((200, v)) = self.get(&format!("{}/cosmos/tx/v1beta1/txs/{h}", self.rest)).await {
+            let r = &v["tx_response"];
+            let height = r["height"].as_str().and_then(|s| s.parse().ok()).unwrap_or(0);
+            let st = match r["code"].as_u64() {
+                Some(0) => Some(TxStatus::Mined { height }),
+                Some(_) => Some(TxStatus::Reverted { reason: r["raw_log"].as_str().unwrap_or("failed").to_string() }),
+                None => None,
+            };
+            if let Some(st) = st {
+                if let Ok(mut m) = self.scan_from.lock() {
+                    m.remove(tx_id);
+                }
+                return Ok(st);
+            }
         }
-        let r = &v["tx_response"];
-        let height = r["height"].as_str().and_then(|s| s.parse().ok()).unwrap_or(0);
-        Ok(match r["code"].as_u64() {
-            Some(0) => TxStatus::Mined { height },
-            Some(_) => TxStatus::Reverted { reason: r["raw_log"].as_str().unwrap_or("failed").to_string() },
-            None => TxStatus::Unknown,
-        })
+        let Some(from) = self.scan_from.lock().ok().and_then(|m| m.get(tx_id).copied()) else { return Ok(TxStatus::Unknown) };
+        let Some(head) = self.final_head().await? else { return Ok(TxStatus::Unknown) };
+        for height in from..=head.height.min(from + 50) {
+            let b = self.rpc(&format!("block?height={height}")).await?;
+            if b["block"]["data"]["txs"].as_array().is_some_and(|t| !t.is_empty()) {
+                let r = self.rpc(&format!("block_results?height={height}")).await?;
+                if let Some(st) = tx_in_block(&b, &r, tx_id) {
+                    if let Ok(mut m) = self.scan_from.lock() {
+                        m.remove(tx_id);
+                    }
+                    return Ok(st);
+                }
+            }
+            if let Ok(mut m) = self.scan_from.lock() {
+                m.insert(tx_id.to_string(), height + 1);
+            }
+        }
+        Ok(TxStatus::Unknown)
     }
 
     async fn sequence(&self, lane: usize) -> Result<u64> {
@@ -557,6 +634,77 @@ mod tests {
         let mut failed = tx(ev);
         failed["tx_result"]["code"] = json!(5);
         assert!(normalize_tx(&failed, &["wasm1tok".into()]).is_empty());
+    }
+
+    /// Review L2: chỉ lỗi thực thi (gRPC Unknown/InvalidArgument) là `Revert`; lỗi cổng/gRPC thoáng qua thử lại.
+    #[test]
+    fn simulate_errors_are_classified() {
+        let revert = |code: u16, v: Value| matches!(sim_error(code, &v), SimError::Revert(_));
+        assert!(revert(500, json!({"code": 2, "message": "execute wasm contract failed: metaop: expired"})));
+        assert!(revert(400, json!({"code": 3, "message": "tx parse error"})));
+        assert!(!revert(500, json!({"code": 2, "message": "account sequence mismatch, expected 4, got 3"})));
+        for c in [4, 8, 13, 14] {
+            assert!(!revert(503, json!({"code": c, "message": "upstream"})), "grpc {c} is transport");
+        }
+        assert!(!revert(502, Value::Null), "gateway without a body");
+    }
+
+    /// Review L1: CheckTx từ chối ⇒ tx không vào mempool, gửi lại cùng bytes vô ích ⇒ `Rejected`.
+    #[test]
+    fn checktx_rejections_are_not_retried_byte_for_byte() {
+        let r = |code: u64| broadcast_outcome(200, &json!({"tx_response": {"code": code, "raw_log": "x"}}));
+        assert!(r(0).is_ok() && r(19).is_ok());
+        for c in [4, 5, 13, 32] {
+            assert!(r(c).unwrap_err().downcast_ref::<crate::adapter::Rejected>().is_some(), "code {c}");
+        }
+        let full = r(20).unwrap_err();
+        assert!(full.downcast_ref::<crate::adapter::Rejected>().is_none(), "mempool full: same bytes may pass later");
+        assert!(broadcast_outcome(502, &Value::Null).unwrap_err().downcast_ref::<crate::adapter::Rejected>().is_none());
+    }
+
+    fn chain(extra: &str) -> ChainCfg {
+        toml::from_str(&format!(
+            "family = \"cosmos\"\nrpc_urls = [\"http://r\"]\nlanes = [0]\nfinality = {{ mode = \"instant\" }}\n{extra}"
+        ))
+        .unwrap()
+    }
+
+    /// Review L1: chain-id rỗng (chữ ký sai mọi tx) hay giá gas 0 trên chain có phí tối thiểu ⇒ không khởi động.
+    #[test]
+    fn adapter_refuses_unsafe_config() {
+        let k = || vec![LocalSigner::new(crate::signer::Curve::Secp256k1, &[1; 32]).unwrap()];
+        let p = "params = { rest = \"http://x\", prefix = \"wasm\"";
+        assert!(CosmosAdapter::new(&chain(&format!("network = \"c-1\"\n{p}, gas_price = \"0.025\" }}")), k()).is_ok());
+        let err = |cfg: &str| CosmosAdapter::new(&chain(cfg), k()).err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(err(&format!("{p}, gas_price = \"0.025\" }}")).contains("network"));
+        assert!(err(&format!("network = \"c-1\"\n{p} }}")).contains("gas_price"));
+        assert!(err(&format!("network = \"c-1\"\n{p}, gas_price = \"0\" }}")).contains("gas_price"));
+        assert!(CosmosAdapter::new(&chain(&format!("network = \"c-1\"\n{p}, zero_fee = true }}")), k()).is_ok());
+    }
+
+    /// Review L3: CometBFT 0.34 trả khoá/giá trị base64; phát hiện qua `_contract_address`, không theo chain.
+    #[test]
+    fn base64_attributes_are_detected() {
+        let b = |s: &str| B64.encode(s);
+        let ev = json!([{"type": "wasm-payment_settled", "attributes": [
+            {"key": b("_contract_address"), "value": b("wasm1tok"), "index": true}, {"key": b("from"), "value": b("wasm1a")},
+            {"key": b("to"), "value": b("wasm1b")}, {"key": b("amount"), "value": b("5")},
+            {"key": b("pay_ref"), "value": b(&format!("0x{}", "22".repeat(32)))}]}]);
+        let out = normalize_tx(&tx(ev), &["wasm1tok".into()]);
+        assert_eq!(out.len(), 1);
+        assert_eq!((out[0]["from"].as_str(), out[0]["amount"].as_str()), (Some("wasm1a"), Some("5")));
+    }
+
+    /// Review M2: không có indexer tx, tx vẫn được tìm trong `block` + `block_results` theo sha256(bytes).
+    #[test]
+    fn tx_is_found_in_a_block_without_the_indexer() {
+        let (a, b) = (b"tx-a".to_vec(), b"tx-b".to_vec());
+        let block = json!({"block": {"header": {"height": "9"}, "data": {"txs": [B64.encode(&a), B64.encode(&b)]}}});
+        let results = json!({"txs_results": [{"code": 0}, {"code": 5, "log": "out of funds"}]});
+        let id = |t: &[u8]| format!("0x{}", alloy::hex::encode(Sha256::digest(t)));
+        assert_eq!(tx_in_block(&block, &results, &id(&a)), Some(TxStatus::Mined { height: 9 }));
+        assert_eq!(tx_in_block(&block, &results, &id(&b)), Some(TxStatus::Reverted { reason: "out of funds".into() }));
+        assert_eq!(tx_in_block(&block, &results, &id(b"other")), None);
     }
 
     proptest! {

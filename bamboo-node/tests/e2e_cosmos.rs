@@ -5,6 +5,7 @@
 //! Chứng minh: hai lane dẫn xuất từ mnemonic 24 từ; chủ thể chỉ KÝ (không có tài khoản on-chain);
 //! thanh toán qua `lane_step` (mô phỏng → ký → journal → broadcast → mined); payload hết hạn ⇒ `dead`;
 //! anti-lock R62 end-to-end (X giữ lại, Y qua, rồi X qua); `index_step` gửi event final đúng digest/entry_ref.
+//! Devnet TẮT indexer tx (`indexer = "null"`, như nhiều RPC validator): `mined` phải đến từ quét khối (review M2).
 use std::net::SocketAddr;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
@@ -51,6 +52,7 @@ for a in $LANES; do wasmd genesis add-genesis-account $a 1000000000ustake; done
 wasmd genesis gentx validator 250000000ustake --chain-id bamboo-1 --keyring-backend test >/dev/null 2>&1
 wasmd genesis collect-gentxs >/dev/null 2>&1
 sed -i 's/^timeout_commit = .*/timeout_commit = "400ms"/' $C/config.toml
+sed -i 's/^indexer = .*/indexer = "null"/' $C/config.toml
 sed -i '/^\[api\]/,/^\[/ s/^enable = false/enable = true/' $C/app.toml
 sed -i 's#^address = "tcp://localhost:1317"#address = "tcp://0.0.0.0:1317"#' $C/app.toml
 sed -i 's/^minimum-gas-prices = .*/minimum-gas-prices = "0ustake"/' $C/app.toml
@@ -93,48 +95,44 @@ fn wasmd(args: &[&str]) -> Value {
     serde_json::from_slice(&out.stdout).unwrap_or_else(|_| panic!("json from wasmd {args:?}: {}", String::from_utf8_lossy(&out.stdout)))
 }
 
-/// Gửi một tx bằng khoá `deployer` của container và chờ nó vào khối.
-async fn deployer_tx(args: &[&str]) -> Value {
+/// Gửi một tx bằng khoá `deployer` (chỉ CheckTx: không có indexer tx để `q tx`).
+fn deployer_tx(args: &[&str]) {
     let mut a = vec!["tx", "wasm"];
     a.extend_from_slice(args);
     a.extend_from_slice(&["--from", "deployer", "--keyring-backend", "test", "--chain-id", CHAIN, "--gas", "auto",
         "--gas-adjustment", "1.5", "-y"]);
     let r = wasmd(&a);
     assert_eq!(r["code"].as_u64(), Some(0), "{r}");
-    let hash = r["txhash"].as_str().unwrap().to_string();
-    for _ in 0..60 {
-        tokio::time::sleep(Duration::from_millis(500)).await;
-        let out = Command::new("docker").args(["exec", NAME, "wasmd", "q", "tx", &hash, "-o", "json"]).output().unwrap();
-        if out.status.success() {
-            let v: Value = serde_json::from_slice(&out.stdout).unwrap();
-            assert_eq!(v["code"].as_u64(), Some(0), "{v}");
-            return v;
-        }
-    }
-    panic!("tx {hash} not included");
 }
 
-fn event_attr(tx: &Value, ty: &str, key: &str) -> String {
-    tx["events"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|e| e["type"] == ty)
-        .flat_map(|e| e["attributes"].as_array().unwrap())
-        .find(|a| a["key"] == key)
-        .and_then(|a| a["value"].as_str())
-        .unwrap_or_else(|| panic!("{ty}.{key} in {tx}"))
-        .to_string()
+/// Chờ tx vào khối bằng truy vấn TRẠNG THÁI: `list` đổi so với `before` ⇒ trả phần tử mới.
+async fn wait_new(list: impl Fn() -> Vec<String>, before: &[String]) -> String {
+    for _ in 0..60 {
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        if let Some(n) = list().into_iter().find(|x| !before.contains(x)) {
+            return n;
+        }
+    }
+    panic!("deployer tx not included");
+}
+
+fn strings(v: &Value, key: &str, field: Option<&str>) -> Vec<String> {
+    let items = v[key].as_array().cloned().unwrap_or_default();
+    items.iter().filter_map(|i| field.map_or(i, |f| &i[f]).as_str().map(str::to_string)).collect()
 }
 
 async fn store(file: &str) -> String {
-    let tx = deployer_tx(&["store", &format!("/wasm/{file}")]).await;
-    event_attr(&tx, "store_code", "code_id")
+    let codes = || strings(&wasmd(&["q", "wasm", "list-code"]), "code_infos", Some("code_id"));
+    let before = codes();
+    deployer_tx(&["store", &format!("/wasm/{file}")]);
+    wait_new(codes, &before).await
 }
 
 async fn instantiate(code: &str, msg: &Value, label: &str) -> String {
-    let tx = deployer_tx(&["instantiate", code, &msg.to_string(), "--label", label, "--no-admin"]).await;
-    event_attr(&tx, "instantiate", "_contract_address")
+    let list = || strings(&wasmd(&["q", "wasm", "list-contract-by-code", code]), "contracts", None);
+    let before = list();
+    deployer_tx(&["instantiate", code, &msg.to_string(), "--label", label, "--no-admin"]);
+    wait_new(list, &before).await
 }
 
 async fn balance(token: &str, who: &str) -> u128 {
@@ -267,6 +265,7 @@ fn cfg() -> ChainCfg {
     params.insert("prefix".into(), "wasm".into());
     params.insert("denom".into(), "ustake".into());
     params.insert("gas_price".into(), "0".into());
+    params.insert("zero_fee".into(), true.into());
     ChainCfg {
         family: "cosmos".into(),
         network: Some(CHAIN.into()),
