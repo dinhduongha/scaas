@@ -330,7 +330,8 @@ pub fn classify_committed(tx: &Value, height: u64) -> Result<TxStatus> {
         return Ok(TxStatus::Mined { height });
     }
     let vm = tx["vm_status"].as_str().unwrap_or("failure").to_string();
-    if vm.contains("OUT_OF_GAS") || vm.to_ascii_lowercase().contains("out of gas") {
+    // Mô tả abort lấy từ doc comment của module (hook FA dispatchable viết gì cũng được) ⇒ không bao giờ là OOG (I3).
+    if !vm.starts_with("Move abort") && (vm.contains("OUT_OF_GAS") || vm.eq_ignore_ascii_case("out of gas")) {
         return Err(Rejected(vm).into());
     }
     Ok(TxStatus::Reverted { reason: vm })
@@ -551,6 +552,25 @@ impl AptosAdapter {
         self.get_at(base, &format!("/blocks/by_height/{height}")).await?.ok_or_else(|| anyhow!("block {height} not served"))
     }
 
+    /// `path` từ `rest[0]`; `quorum > 1` ⇒ thêm endpoint phải trả cùng `pick` cho tới đủ quorum. Nội dung tx (event,
+    /// thành công, hash) và block chịu cùng quy tắc với hash block ở `final_head` (review L3).
+    async fn agreed(&self, path: &str, pick: fn(&Value) -> Value) -> Result<Value> {
+        let v = self.get(path).await?;
+        if self.quorum > 1 {
+            let want = pick(&v);
+            let mut agree = 1;
+            for url in &self.rest[1..] {
+                if matches!(self.get_at(url, path).await, Ok(Some(o)) if pick(&o) == want) {
+                    agree += 1;
+                }
+            }
+            if agree < self.quorum {
+                bail!("GET {path}: {agree} endpoint(s) agree, quorum is {}", self.quorum);
+            }
+        }
+        Ok(v)
+    }
+
     fn block_hash_of(b: &Value) -> Result<String> {
         bytes_of(&b["block_hash"]).filter(|h| h.len() == 32).map(|h| addr_hex(&h)).ok_or_else(|| anyhow!("bad block hash"))
     }
@@ -719,7 +739,9 @@ impl ChainAdapter for AptosAdapter {
             let (fv, lv, bh) = match blocks.entry(height) {
                 std::collections::hash_map::Entry::Occupied(e) => e.get().clone(),
                 std::collections::hash_map::Entry::Vacant(e) => {
-                    let b = self.block(&self.rest[0], height).await?;
+                    let b = self.agreed(&format!("/blocks/by_height/{height}"), |b| {
+                        json!([b["first_version"], b["last_version"], b["block_hash"]])
+                    }).await?;
                     let (Some(fv), Some(lv)) = (num(&b["first_version"]), num(&b["last_version"])) else {
                         bail!("bad block {height}")
                     };
@@ -729,7 +751,9 @@ impl ChainAdapter for AptosAdapter {
             if version < fv || version > lv {
                 bail!("indexer placed version {version} in block {height} ({fv}..={lv})");
             }
-            let tx = self.get(&format!("/transactions/by_version/{version}")).await?;
+            let tx = self.agreed(&format!("/transactions/by_version/{version}"), |t| {
+                json!([t["type"], t["hash"], t["success"], t["events"]])
+            }).await?;
             if tx["type"].as_str() != Some("user_transaction") {
                 bail!("version {version} is not a user transaction");
             }
@@ -814,6 +838,63 @@ mod tests {
         assert!(matches!(classify_committed(&abort, 9).unwrap(), TxStatus::Reverted { .. }));
         let oog = json!({"success": false, "vm_status": "Out of gas"});
         assert!(classify_committed(&oog, 9).unwrap_err().downcast_ref::<Rejected>().is_some());
+        // I3: abort descriptions come from module doc comments (a dispatchable-FA hook can write anything)
+        let spoof = json!({"success": false, "vm_status": "Move abort in 0xbad::hook: EOOG(0x1): Out of gas, OUT_OF_GAS"});
+        assert!(matches!(classify_committed(&spoof, 9).unwrap(), TxStatus::Reverted { .. }));
+    }
+
+    /// REST + Indexer API giả cho `events`: tx version 101 ở block 5 phát một `PaymentSettled` với `amount` cho trước
+    /// (một endpoint nói dối thì đổi số tiền).
+    async fn fake_aptos(amount: &'static str) -> String {
+        use axum::extract::State;
+        use axum::http::Uri;
+        async fn h(State(amount): State<&'static str>, uri: Uri, body: String) -> axum::Json<Value> {
+            let p = uri.path();
+            axum::Json(if p == "/graphql" && body.contains("processor_status") {
+                json!({"data": {"processor_status": [{"last_success_version": 1000}]}})
+            } else if p == "/graphql" {
+                json!({"data": {"user_transactions": [{"version": 101, "block_height": 5}]}})
+            } else if p.starts_with("/blocks/by_height/") {
+                json!({"block_height": "5", "block_hash": format!("0x{}", "bb".repeat(32)), "first_version": "100",
+                       "last_version": "102"})
+            } else if p == "/transactions/by_version/101" {
+                json!({"type": "user_transaction", "success": true, "hash": format!("0x{}", "cc".repeat(32)), "events": [{
+                    "type": format!("{}::meta::PaymentSettled", addr_hex(&parse_addr("0xb0b").unwrap())),
+                    "data": {"contract": "0xa", "from": "0x1", "to": "0xbeef", "amount": amount,
+                             "pay_ref": format!("0x{}", "01".repeat(32))}}]})
+            } else {
+                panic!("unexpected {p}")
+            })
+        }
+        let app = axum::Router::new().fallback(h).with_state(amount);
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        url
+    }
+
+    fn events_adapter(rest: &[&str], quorum: usize) -> AptosAdapter {
+        let urls: Vec<String> = rest.iter().map(|u| format!("\"{u}\"")).collect();
+        let cfg: ChainCfg = toml::from_str(&format!(
+            "family = \"aptos\"\nnetwork = \"4\"\nrpc_urls = [{}]\nlanes = [0]\nfinality = {{ mode = \"instant\", quorum = {quorum} }}\n\
+             params = {{ package = \"0xb0b\", indexer_url = \"{}/graphql\" }}",
+            urls.join(", "), rest[0]
+        ))
+        .unwrap();
+        AptosAdapter::new(&cfg, &[LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()]).unwrap()
+    }
+
+    // L3: with quorum > 1, event bodies need the same agreement as block hashes — one endpoint cannot invent a payment.
+    #[tokio::test]
+    async fn event_bodies_follow_the_quorum() {
+        let (honest, honest2, liar) = (fake_aptos("100").await, fake_aptos("100").await, fake_aptos("999").await);
+        let tokens = [addr_hex(&parse_addr("0xa").unwrap())];
+        let evs = events_adapter(&[&honest, &honest2], 2).events(5, 5, &tokens).await.unwrap();
+        assert_eq!((evs.len(), evs[0]["amount"].as_str()), (1, Some("100")));
+        assert!(events_adapter(&[&liar, &honest], 2).events(5, 5, &tokens).await.is_err(), "first endpoint lies");
+        assert!(events_adapter(&[&honest, &liar], 2).events(5, 5, &tokens).await.is_err(), "no quorum");
+        let one = events_adapter(&[&liar, &honest], 1).events(5, 5, &tokens).await.unwrap();
+        assert_eq!(one[0]["amount"].as_str(), Some("999"), "quorum 1 trusts the first endpoint (documented)");
     }
 
     #[test]
