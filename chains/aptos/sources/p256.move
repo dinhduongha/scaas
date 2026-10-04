@@ -55,8 +55,9 @@ module bamboo::p256 {
         q_table(qxm, qym)
     }
 
-    /// Kiểm với bảng của `table(pk)` (bảng phải do `table` tính — module gọi giữ nó trong state của mình).
-    public fun verify_with(t: &vector<u256>, hash: &vector<u8>, sig: &vector<u8>): bool {
+    /// Kiểm với bảng của `table(pk)` (bảng phải do `table` tính — module gọi giữ nó trong state của mình). `package`:
+    /// module ngoài truyền bảng không tin cậy sẽ thành "kiểm theo Q mà bảng mã hoá" (review I1).
+    package fun verify_with(t: &vector<u256>, hash: &vector<u8>, sig: &vector<u8>): bool {
         if (t.length() != 16 || hash.length() != 32 || sig.length() != 64) return false;
         let (r, s) = (be(sig, 0), be(sig, 32));
         if (r == 0 || r >= N || s == 0 || s > HALF_N) return false;

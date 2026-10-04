@@ -242,11 +242,12 @@ module bamboo::meta {
 
     /// Lần chi đầu tiên mở account (spec §3.3): khoá ký phải dẫn ra auth key hiện tại của chủ. Passkey: rpIdHash và
     /// origin lấy từ CHÍNH assertion đang được kiểm (chỉ passkey của chủ ký được nó).
-    fun open_lazily(owner: address, public_key: &vector<u8>, envelope: &vector<u8>) acquires Root {
+    /// `table` = bảng P-256 `pay_checked` đã tính khi kiểm chữ ký (không tính lại — review I5).
+    fun open_lazily(owner: address, public_key: &vector<u8>, envelope: &vector<u8>, table: vector<u256>) acquires Root {
         assert!(auth::proves(&account::get_authentication_key(owner), public_key), EFIRST_KEY);
         let scheme = auth::scheme_of(public_key);
         let (rp, origin) = if (scheme == auth::webauthn()) auth::webauthn_origin(envelope) else (vector[], vector[]);
-        create_account(owner, key_of(scheme, *public_key, rp), origin);
+        create_account(owner, Key { scheme, public_key: *public_key, rp_id_hash: rp, table }, origin);
     }
 
     // ------------------------------------------------------------------ pay
@@ -269,10 +270,10 @@ module bamboo::meta {
         sig: vector<u8>,
         envelope: vector<u8>,
     ) acquires Root, Account {
-        let digest = pay_checked(signer::address_of(lane), owner, asset, to, amount, pay_ref, lane_id, nonce,
+        let (digest, table) = pay_checked(signer::address_of(lane), owner, asset, to, amount, pay_ref, lane_id, nonce,
             valid_until, relayer, extra, public_key, sig, envelope);
         let addr = account_of(owner);
-        if (!exists<Account>(addr)) open_lazily(owner, &public_key, &envelope);
+        if (!exists<Account>(addr)) open_lazily(owner, &public_key, &envelope, table);
         let acct = &mut Account[addr];
         let l = acct.lanes.borrow_mut_with_default(lane_id, Lane { next: 0, valid_until: 0 });
         l.next = nonce + 1;
@@ -304,12 +305,14 @@ module bamboo::meta {
         sig: vector<u8>,
         envelope: vector<u8>,
     ): vector<u8> acquires Account {
-        pay_checked(lane, owner, asset, to, amount, pay_ref, lane_id, nonce, valid_until, relayer, extra, public_key, sig,
-            envelope)
+        let (digest, _) = pay_checked(lane, owner, asset, to, amount, pay_ref, lane_id, nonce, valid_until, relayer, extra,
+            public_key, sig, envelope);
+        digest
     }
 
-    /// Miền/hạn/relayer/khoá/phong bì/chữ ký/nonce/số dư của một `pay`. Account chưa có: khoá phải dẫn ra auth key
-    /// hiện tại của chủ (§3.3) và chữ ký kiểm với origin/rpIdHash của chính assertion.
+    /// Miền/hạn/relayer/khoá/phong bì/chữ ký/nonce/số dư của một `pay` ⇒ (digest, bảng P-256 của khoá khi Account chưa
+    /// có — để mở lười không tính lại). Account chưa có: khoá phải dẫn ra auth key hiện tại của chủ (§3.3) và chữ ký
+    /// kiểm với origin/rpIdHash của chính assertion.
     fun pay_checked(
         lane: address,
         owner: address,
@@ -325,28 +328,32 @@ module bamboo::meta {
         public_key: vector<u8>,
         sig: vector<u8>,
         envelope: vector<u8>,
-    ): vector<u8> acquires Account {
+    ): (vector<u8>, vector<u256>) acquires Account {
         let addr = account_of(owner);
         let op = new_op(addr, object::object_address(&asset), OP_PAY, owner, to, amount, pay_ref, lane_id, nonce,
             valid_until, relayer, extra);
         let digest = check_at(&op, lane);
-        if (exists<Account>(addr)) {
+        let table = if (exists<Account>(addr)) {
             let acct = &Account[addr];
             assert!(verify_by(acct, &public_key, DOMAIN, &digest, &sig, &envelope), EBAD_SIGNATURE);
             let next = if (acct.lanes.contains(lane_id)) acct.lanes.borrow(lane_id).next else 0;
             assert!(next == nonce, EBAD_NONCE);
+            vector[]
         } else {
             assert!(auth::proves(&account::get_authentication_key(owner), &public_key), EFIRST_KEY);
             let (rp, origin) = auth::webauthn_origin(&envelope);
             let origins = if (origin.is_empty()) vector[] else vector[origin];   // ed25519: chưa có origin (M1)
+            let table = if (auth::scheme_of(&public_key) == auth::webauthn()) p256::table(&public_key) else vector[];
+            // Passkey: bảng rỗng (khoá không trên đường cong) ⇒ `auth::verify` tự tính lại rồi trả false.
             assert!(
-                auth::verify(&public_key, DOMAIN, &digest, &sig, &envelope, &rp, &origins, &vector[], chain_id::get()),
+                auth::verify(&public_key, DOMAIN, &digest, &sig, &envelope, &rp, &origins, &table, chain_id::get()),
                 EBAD_SIGNATURE,
             );
             assert!(nonce == 0, EBAD_NONCE);
+            table
         };
         assert!(primary_fungible_store::balance(addr, asset) >= amount_u64(amount), EINSUFFICIENT);
-        digest
+        (digest, table)
     }
 
     /// Không cần quyền (RS11-4): xoá lane khi `valid_until + PRUNE_DELAY_S < now`. `valid_until` chỉ là hạn của các op

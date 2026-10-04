@@ -34,4 +34,9 @@ module wrapcheck::wrap {
     public entry fun manage_signed(o: address, v: vector<u8>) {
         bamboo::meta::manage_signed(o, 0, 0, v, v, v, o, 0, v, v, v);
     }
+
+    /// Review I1: kiểm theo bảng do người gọi đưa ⇒ chỉ trong package.
+    public fun verify_with(v: vector<u8>): bool {
+        bamboo::p256::verify_with(&vector[], &v, &v)
+    }
 }
