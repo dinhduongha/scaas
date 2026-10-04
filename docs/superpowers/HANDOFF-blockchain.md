@@ -39,3 +39,18 @@ Nguồn: gap analysis `/.superpowers/blockchain-gap-analysis.md` (GA), spec roun
 
 Seam: `dms.portal.api._dms_chain_receiving_company(order)` (mọi lookup đi qua) và
 `res.users._blockchain_wallet_admin(company)`. Chi tiết: GA §2.4.
+
+## 4. Zether (round 3, luồng S2) — **UNAUDITED — NOT FOR PRODUCTION FUNDS**
+
+Contract `smartcontracts/src/zether/**` (`ZetherToken`, `ZetherMetaTx`, `ZetherVerifierBn254`,
+`ZetherVerifierBls12381`, `ZetherCurves`, `ZetherTranscript`, `ZetherSafety`) và `src/registry/**`
+(`UniversalAccountRegistry`) là hiện thực tham chiếu **chưa audit**. Đặc tả: `specs/2026-10-03-zether-design.md`.
+
+| # | Việc của owner / vận hành | Ghi chú |
+|---|---|---|
+| Z1 | Audit mật mã độc lập (Σ-Bullets, transcript, IPA, registry PoP) **trước khi** bỏ cổng dev | canon C5.4 / §3.4.6 |
+| Z2 | Cổng: `OpenFactory.zetherEnabled` mặc định tắt; chỉ bật được trên chain id 31337/1337 (`ZetherSafety`). Token, verifier, registry cũng từ chối deploy/khởi tạo ngoài allowlist. Thêm chain = sửa `ZetherSafety` + deploy version mới, sau Z1 | RS2-1 |
+| Z3 | Quyết định chain 9000 có phải "dev" không (hiện **không**) | needs owner |
+| Z4 | Chốt curve (gate G1): BLS12-381 an toàn hơn nhưng **không** rẻ hơn bn254 (đo §15 đặc tả) | canon C6.1 |
+| Z5 | Tối ưu gas trước public chain: transfer bn254 2.75M > kill criterion 2.5M | đặc tả §15 |
+| Z6 | Form chain/token Odoo hiển thị cảnh báo UNAUDITED (luồng tích hợp Odoo) | R34 |
