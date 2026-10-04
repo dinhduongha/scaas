@@ -188,6 +188,67 @@ module bamboo::meta_tests {
         v::a_pay_eur_unknown_key(&lane, e);
     }
 
+    // M1: Account có origin ⇒ phong bì ví ed25519 phải khai `application:` ∈ origins. Trang lừa xin ký rồi tự nộp
+    // (không qua Odoo) bị chain từ chối; Account chưa có origin giữ hành vi cũ (đổi origin không gạch Account).
+    fun alice_with_origin(f: &signer, b: &signer): object::Object<Metadata> {
+        fx::setup(f, b);
+        let e = eur();
+        fx::mint(e, v::a_account(), 1000);
+        meta::open(v::alice(), v::alice_pk());
+        meta::manage_native(&account::create_signer_for_test(v::alice()), 2, 0, vector[], vector[], v::origin(), @0x0);
+        e
+    }
+
+    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
+    fun wallet_application_in_the_origins_pays(f: signer, b: signer, lane: signer) {
+        let e = alice_with_origin(&f, &b);
+        v::a_pay_eur_app(&lane, e);
+        assert!(bal(e, BEEF) == 10, 0);
+    }
+
+    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
+    #[expected_failure(abort_code = 1, location = bamboo::meta)]
+    fun foreign_wallet_application_is_refused(f: signer, b: signer, lane: signer) {
+        let e = alice_with_origin(&f, &b);
+        v::a_pay_eur_evil_app(&lane, e);
+    }
+
+    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
+    #[expected_failure(abort_code = 1, location = bamboo::meta)]
+    fun missing_wallet_application_is_refused_once_origins_exist(f: signer, b: signer, lane: signer) {
+        let e = alice_with_origin(&f, &b);
+        v::a_pay_eur_0(&lane, e);
+    }
+
+    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
+    fun account_without_origins_takes_any_application(f: signer, b: signer, lane: signer) {
+        fx::setup(&f, &b);
+        let e = eur();
+        fx::mint(e, v::a_account(), 1000);
+        v::a_pay_eur_evil_app(&lane, e);     // lazy open
+        v::a_pay_eur_app(&lane, e);          // open
+        assert!(bal(e, BEEF) == 20, 0);
+    }
+
+    // L1: assertion WebAuthn trong iframe khác origin (`crossOrigin: true`, hoặc có `topOrigin`) bị từ chối.
+    #[test(f = @aptos_framework, b = @bamboo)]
+    #[expected_failure(abort_code = 1, location = bamboo::meta)]
+    fun passkey_cross_origin_is_refused(f: signer, b: signer) {
+        fx::setup(&f, &b);
+        let e = eur();
+        fx::mint(e, v::d_account(), 1000);
+        v::d_pay_eur_cross_origin_check(@0x1a, e);
+    }
+
+    #[test(f = @aptos_framework, b = @bamboo)]
+    #[expected_failure(abort_code = 1, location = bamboo::meta)]
+    fun passkey_top_origin_is_refused(f: signer, b: signer) {
+        fx::setup(&f, &b);
+        let e = eur();
+        fx::mint(e, v::d_account(), 1000);
+        v::d_pay_eur_top_origin_check(@0x1a, e);
+    }
+
     // ------------------------------------------------------------------ khoá đầu tiên, lược đồ
 
     // Mở lười với khoá không dẫn ra auth key của chủ ⇒ từ chối (kẻ gian không chiếm trước Account).

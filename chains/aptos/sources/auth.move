@@ -2,10 +2,11 @@
 /// - ed25519 (32 byte): ví ký `fullMessage` của Wallet Standard `aptos:signMessage`; `envelope` = `fullMessage`.
 ///   Phong bì parse chặt: dòng đầu `APTOS`; mỗi dòng sau `<khoá>: <giá trị>`, khoá ∈ {address, application, chainId,
 ///   message, nonce}, mỗi khoá tối đa một lần; `message` đúng một lần và bằng `<nhãn>:0x<hex digest>`; `chainId` nếu
-///   có thì bằng chain id on-chain.
+///   có thì bằng chain id on-chain; Account có origin ⇒ `application` bắt buộc và ∈ origins (review M1: trang lừa
+///   xin ký rồi tự nộp thẳng, không qua Odoo).
 /// - WebAuthn P-256 (65 byte `0x04‖x‖y`, AnyPublicKey biến thể 2 của AIP-66): `envelope` = `u16be(len ad) ‖ ad ‖
-///   clientDataJSON`; challenge = base64url(digest), type `webauthn.get`, origin ∈ origins của Account, rpIdHash của
-///   khoá, UP+UV, P-256 low-s (`bamboo::p256`, UNAUDITED) trên `sha256(ad ‖ sha256(clientDataJSON))`.
+///   clientDataJSON`; challenge = base64url(digest), type `webauthn.get`, origin ∈ origins của Account, không
+///   `crossOrigin: true`/`topOrigin` (iframe khác origin — review L1), rpIdHash của khoá, UP+UV, P-256 low-s (`bamboo::p256`, UNAUDITED) trên `sha256(ad ‖ sha256(clientDataJSON))`.
 module bamboo::auth {
     use std::hash::{sha2_256, sha3_256};
     use bamboo::p256;
@@ -77,7 +78,7 @@ module bamboo::auth {
         if (sig.length() != 64 || digest.length() != 32) return false;
         let s = scheme_of(pk);
         if (s == ED25519) {
-            if (!check_envelope(envelope, &expected_message(label, digest), chain_id)) return false;
+            if (!check_envelope(envelope, &expected_message(label, digest), chain_id, origins)) return false;
             return ed25519::signature_verify_strict(
                 &ed25519::new_signature_from_bytes(*sig),
                 &ed25519::new_unvalidated_public_key_from_bytes(*pk),
@@ -93,7 +94,9 @@ module bamboo::auth {
             i += 1;
         };
         if (ad[32] & 5 != 5) return false;
+        // So chuỗi con an toàn: trình duyệt escape `"` trong mọi giá trị chuỗi nên needle không lọt vào giá trị.
         if (!contains(&cd, &b"\"type\":\"webauthn.get\"")) return false;
+        if (contains(&cd, &b"\"crossOrigin\":true") || contains(&cd, &b"\"topOrigin\"")) return false;
         let ch = b"\"challenge\":\"";
         ch.append(base64url(digest));
         ch.push_back(34);
@@ -105,8 +108,9 @@ module bamboo::auth {
         if (table.is_empty()) p256::verify(pk, &sha2_256(msg), sig) else p256::verify_with(table, &sha2_256(msg), sig)
     }
 
-    /// Phong bì `aptos:signMessage` (spec §4.2). Không phụ thuộc thứ tự dòng.
-    public fun check_envelope(full: &vector<u8>, message: &vector<u8>, chain_id: u8): bool {
+    /// Phong bì `aptos:signMessage` (spec §4.2). Không phụ thuộc thứ tự dòng. `origins` khác rỗng ⇒ dòng
+    /// `application` bắt buộc và giá trị ∈ `origins`.
+    public fun check_envelope(full: &vector<u8>, message: &vector<u8>, chain_id: u8, origins: &vector<vector<u8>>): bool {
         let lines = split(full, 10);
         if (lines.length() < 2 || lines[0] != b"APTOS") return false;
         let seen = vector[false, false, false, false, false];
@@ -125,12 +129,13 @@ module bamboo::auth {
                     let value = slice(line, prefix.length(), line.length());
                     if (k == 3 && value != *message) return false;
                     if (k == 2 && value != decimal(chain_id)) return false;
+                    if (k == 1 && !origins.is_empty() && !origins.contains(&value)) return false;
                 } else k += 1;
             };
             if (!found) return false;
             i += 1;
         };
-        seen[3]
+        seen[3] && (origins.is_empty() || seen[1])
     }
 
     /// `(ok, authenticatorData, clientDataJSON)` từ `u16be(len ad) ‖ ad ‖ cd`.
@@ -243,20 +248,25 @@ module bamboo::auth {
     #[test]
     fun envelope_rules() {
         let m = b"bamboo.metaop.v1:0xab";
-        assert!(check_envelope(&b"APTOS\nmessage: bamboo.metaop.v1:0xab\nnonce: 01", &m, 4), 0);
+        assert!(check_envelope(&b"APTOS\nmessage: bamboo.metaop.v1:0xab\nnonce: 01", &m, 4, &vector[]), 0);
         // order does not matter; every known key once
-        assert!(check_envelope(&b"APTOS\nnonce: 01\nchainId: 4\napplication: https://pay.test\nmessage: bamboo.metaop.v1:0xab\naddress: 0x1", &m, 4), 1);
+        assert!(check_envelope(&b"APTOS\nnonce: 01\nchainId: 4\napplication: https://pay.test\nmessage: bamboo.metaop.v1:0xab\naddress: 0x1", &m, 4, &vector[]), 1);
         // a second message line (phishing page asked to sign "...\nmessage: <ours>")
-        assert!(!check_envelope(&b"APTOS\nmessage: hello\nmessage: bamboo.metaop.v1:0xab", &m, 4), 2);
-        assert!(!check_envelope(&b"APTOS\nmessage: bamboo.metaop.v1:0xab\nmessage: bamboo.metaop.v1:0xab", &m, 4), 3);
+        assert!(!check_envelope(&b"APTOS\nmessage: hello\nmessage: bamboo.metaop.v1:0xab", &m, 4, &vector[]), 2);
+        assert!(!check_envelope(&b"APTOS\nmessage: bamboo.metaop.v1:0xab\nmessage: bamboo.metaop.v1:0xab", &m, 4, &vector[]), 3);
         // unknown key, wrong chain, missing message, wrong prefix, trailing newline
-        assert!(!check_envelope(&b"APTOS\nmessage: bamboo.metaop.v1:0xab\nfoo: 1", &m, 4), 4);
-        assert!(!check_envelope(&b"APTOS\nmessage: bamboo.metaop.v1:0xab\nchainId: 1", &m, 4), 5);
-        assert!(!check_envelope(&b"APTOS\nnonce: 1", &m, 4), 6);
-        assert!(!check_envelope(&b"APTOSX\nmessage: bamboo.metaop.v1:0xab", &m, 4), 7);
-        assert!(!check_envelope(&b"APTOS\nmessage: bamboo.metaop.v1:0xab\n", &m, 4), 8);
-        assert!(!check_envelope(&b"APTOS\nmessage: bamboo.metaop.v1:0xabc", &m, 4), 9);
-        assert!(check_envelope(&b"APTOS\nchainId: 132\nmessage: bamboo.metaop.v1:0xab", &m, 132), 10);
+        assert!(!check_envelope(&b"APTOS\nmessage: bamboo.metaop.v1:0xab\nfoo: 1", &m, 4, &vector[]), 4);
+        assert!(!check_envelope(&b"APTOS\nmessage: bamboo.metaop.v1:0xab\nchainId: 1", &m, 4, &vector[]), 5);
+        assert!(!check_envelope(&b"APTOS\nnonce: 1", &m, 4, &vector[]), 6);
+        assert!(!check_envelope(&b"APTOSX\nmessage: bamboo.metaop.v1:0xab", &m, 4, &vector[]), 7);
+        assert!(!check_envelope(&b"APTOS\nmessage: bamboo.metaop.v1:0xab\n", &m, 4, &vector[]), 8);
+        assert!(!check_envelope(&b"APTOS\nmessage: bamboo.metaop.v1:0xabc", &m, 4, &vector[]), 9);
+        assert!(check_envelope(&b"APTOS\nchainId: 132\nmessage: bamboo.metaop.v1:0xab", &m, 132, &vector[]), 10);
+        // origins set: `application` is required and must be one of them
+        let o = vector[b"https://pay.test"];
+        assert!(check_envelope(&b"APTOS\napplication: https://pay.test\nmessage: bamboo.metaop.v1:0xab", &m, 4, &o), 13);
+        assert!(!check_envelope(&b"APTOS\napplication: https://evil.test\nmessage: bamboo.metaop.v1:0xab", &m, 4, &o), 14);
+        assert!(!check_envelope(&b"APTOS\nmessage: bamboo.metaop.v1:0xab", &m, 4, &o), 15);
         assert!(expected_message(b"x", &x"00ff") == b"x:0x00ff", 11);
         assert!(base64url(&x"fbff") == b"-_8", 12);
     }

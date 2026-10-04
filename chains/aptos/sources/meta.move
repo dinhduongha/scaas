@@ -332,8 +332,9 @@ module bamboo::meta {
         } else {
             assert!(auth::proves(&account::get_authentication_key(owner), &public_key), EFIRST_KEY);
             let (rp, origin) = auth::webauthn_origin(&envelope);
+            let origins = if (origin.is_empty()) vector[] else vector[origin];   // ed25519: chưa có origin (M1)
             assert!(
-                auth::verify(&public_key, DOMAIN, &digest, &sig, &envelope, &rp, &vector[origin], &vector[], chain_id::get()),
+                auth::verify(&public_key, DOMAIN, &digest, &sig, &envelope, &rp, &origins, &vector[], chain_id::get()),
                 EBAD_SIGNATURE,
             );
             assert!(nonce == 0, EBAD_NONCE);

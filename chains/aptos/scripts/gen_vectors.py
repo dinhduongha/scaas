@@ -71,6 +71,7 @@ class Key:
             env = {
                 'minimal': F.minimal_envelope(msg, nonce),
                 'app': F.minimal_envelope(msg, nonce, APP),
+                'evil_app': F.minimal_envelope(msg, nonce, 'https://evil.test'),
                 'reordered': 'APTOS\nnonce: %s\nchainId: %d\napplication: %s\nmessage: %s\naddress: %s' % (
                     nonce, CHAIN, APP, msg, self.address),
                 'phish': 'APTOS\nmessage: hello\nmessage: %s\nnonce: %s' % (msg, nonce),
@@ -81,14 +82,16 @@ class Key:
             ok = F.parse_envelope(env, msg, CHAIN) is not None
             assert F.verify_signature(self.pk, digest, sig, env, CHAIN, label=label) == ok
             return sig, env
-        origin, flags = {'minimal': (ORIGIN, 5), 'evil': ('https://evil.test', 5), 'no_uv': (ORIGIN, 1)}[style]
+        origin, flags, more = {'minimal': (ORIGIN, 5, {}), 'evil': ('https://evil.test', 5, {}), 'no_uv': (ORIGIN, 1, {}),
+                               'cross': (ORIGIN, 5, {'crossOrigin': True}),
+                               'top': (ORIGIN, 5, {'topOrigin': 'https://evil.test'})}[style]
         ad = RP_ID_HASH + bytes([flags]) + bytes(4)
         cd = json.dumps({'type': 'webauthn.get', 'challenge': F._b64url(digest).decode(), 'origin': origin,
-                         'crossOrigin': False}, separators=(',', ':')).encode()
+                         'crossOrigin': False, **more}, separators=(',', ':')).encode()
         r, s = utils.decode_dss_signature(self.sk.sign(ad + hashlib.sha256(cd).digest(), ec.ECDSA(hashes.SHA256())))
         sig = r.to_bytes(32, 'big') + min(s, N - s).to_bytes(32, 'big')
         env = F.webauthn_envelope(ad, cd)
-        assert F.verify_signature(self.pk, digest, sig, env, CHAIN) == (flags == 5)
+        assert F.verify_signature(self.pk, digest, sig, env, CHAIN) == (flags == 5 and not more)
         return sig, env
 
 
@@ -184,6 +187,11 @@ pay('d_pay_eur', dave, EUR, 100, 0x41, 0xd1, 0)
 pay('d_pay_eur_1', dave, EUR, 10, 0x42, 0xd1, 1)
 pay('d_pay_eur_evil_origin', dave, EUR, 100, 0x41, 0xd1, 0, style='evil')
 pay('d_pay_eur_no_uv', dave, EUR, 100, 0x41, 0xd1, 0, style='no_uv')
+pay('d_pay_eur_cross_origin', dave, EUR, 100, 0x41, 0xd1, 0, style='cross')
+pay('d_pay_eur_top_origin', dave, EUR, 100, 0x41, 0xd1, 0, style='top')
+# M1: `application:` của ví phải ∈ origins của Account khi Account có origin
+pay('a_pay_eur_app', alice, EUR, 10, 15, 0xae, 0, style='app')
+pay('a_pay_eur_evil_app', alice, EUR, 10, 16, 0xaf, 0, style='evil_app')
 
 
 # ---------------------------------------------------------------- vòng đời khoá
