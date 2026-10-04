@@ -612,10 +612,10 @@ nhận đổi gas lấy một giao dịch cho mọi khoản (limits D1): đây l
   dẫn từ `x` (mở được chỉ sau khi mở vault conf), kiểm bằng `check_balance` mỗi lần dùng, cập nhật khi rollOver
   (`+pending`, BSGS chỉ trên `pending`) và khi tự chi (`−v−fee`). `acc` đổi ngoài tầm ví (rollOver công khai của
   người khác, credit muộn, tự chi chưa ghi): giá trị đã kiểm cuối cùng là mốc, ví BSGS phần chênh (tăng rồi giảm)
-  trong trần thiết bị (review M1). Chỉ khi phần chênh cũng vượt trần ⇒ báo dùng
+  trong trần thiết bị (review M1); `accSeq` chỉ tăng — `acc` có `accSeq` nhỏ hơn mốc bị từ chối (review N2). Chỉ khi phần chênh cũng vượt trần ⇒ báo dùng
   `zether-read-balance` (native, `--table-bits` mặc định 24, 20–27, từ chối khi thiếu RAM; đọc `acc` qua RPC
-  `eth_call` — URL qua stdin của curl, kết quả ghi `"verified": false` trừ khi khớp `--ct` từ nguồn thứ hai — hoặc
-  ciphertext dán vào; khoá chỉ qua stdin được pipe, terminal bị từ chối, không rời máy). API nhận số `> 2^53 − 1`
+  `eth_call` — URL qua stdin của curl (`-q`, bỏ `~/.curlrc`), kết quả `"verified": false` (`"source": "rpc"`), khớp
+  `--ct` từ nguồn thứ hai thì `true` — hoặc chỉ ciphertext dán vào (`"verified": null`, `"source": "pasted"`); khoá chỉ qua stdin được pipe, terminal bị từ chối, không rời máy). API nhận số `> 2^53 − 1`
   chỉ dạng chuỗi thập phân và trả số tiền dạng chuỗi (vượt `2^53` của JS).
 
 ## 17. Review log
