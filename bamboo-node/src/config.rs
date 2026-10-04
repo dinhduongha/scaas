@@ -78,10 +78,10 @@ pub struct FinalityCfg {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ChainCfg {
-    /// `evm` (mặc định) | `hedera` | `sui` | `soroban` | `cosmos` | `ton`.
+    /// `evm` (mặc định) | `hedera` | `sui` | `soroban` | `cosmos` | `ton` | `aptos`.
     #[serde(default = "evm")]
     pub family: String,
-    /// Mạng ngoài EVM: `localnet`, `testnet`, chain-id Cosmos… (khoá `family:network`).
+    /// Mạng ngoài EVM: `localnet`, `testnet`, chain-id Cosmos, chain id Aptos (`1`, `2`, `4`)… (khoá `family:network`).
     #[serde(default)]
     pub network: Option<String>,
     /// EIP-155 chain id (EVM/Hedera); 0 cho họ khác.

@@ -9,6 +9,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha512, sha256 } from '@noble/hashes/sha2.js';
 import { blake2b } from '@noble/hashes/blake2.js';
+import { sha3_256 } from '@noble/hashes/sha3.js';
 import { ripemd160 } from '@noble/hashes/legacy.js';
 import { bech32, base32 } from '@scure/base';
 import { concatBytes, utf8ToBytes, bytesToHex, hex, wipe } from './bytes.js';
@@ -25,6 +26,7 @@ export const NETWORKS = {
   sui: { curve: 'ed25519', path: (i) => `m/44'/784'/${i}'/0'/0'` },
   stellar: { curve: 'ed25519', path: (i) => `m/44'/148'/${i}'` },
   ton: { curve: 'ed25519', path: (i) => `m/44'/607'/${i}'` },
+  aptos: { curve: 'ed25519', path: (i) => `m/44'/637'/${i}'/0'/0'` },
 };
 
 // ------------------------------------------------------------------ BIP-39
@@ -109,6 +111,8 @@ function describe(network, curve, privateKey) {
   const pk = ed25519.getPublicKey(privateKey);
   const pub = bytesToHex(pk);
   if (network === 'sui') return { publicKey: pub, address: hex(blake2b(concatBytes(new Uint8Array([0]), pk), { dkLen: 32 })) };
+  // Aptos legacy Ed25519 auth key = address: sha3_256(pk ‖ 0x00).
+  if (network === 'aptos') return { publicKey: pub, address: hex(sha3_256(concatBytes(pk, new Uint8Array([0])))) };
   if (network === 'stellar') return { publicKey: pub, address: strkey(6 << 3, pk) };
   if (network === 'hedera_ed25519') return { publicKey: pub, publicKeyDer: '302a300506032b6570032100' + pub };
   // TON: public key only. A W5R1 address needs the wallet code cell + BoC hashing — not shipped (recorded).
