@@ -402,6 +402,24 @@ fn dex_cancel_by_signed_revoke_and_no_direct_pull() {
     settle(&mut w2, &d2, m2, t2).unwrap();
 }
 
+/// Anti-lock: token gửi thẳng vào DEX (DEX không giữ số dư giữa các tx) chỉ admin `sweep` ra được.
+#[test]
+fn dex_admin_sweeps_stray_balance() {
+    let mut w = world();
+    let d = dex(&mut w, false);
+    let t1 = w.t1.clone();
+    let a = w.alice.addr(&w.app);
+    let give = bamboo_token::ExecuteMsg::Transfer { recipient: d.addr.to_string(), amount: Uint128::new(77) };
+    w.app.execute_contract(a.clone(), t1.clone(), &give, &[]).unwrap();
+    assert_eq!(balance(&w.app, &t1, d.addr.as_str()), 77);
+    let sweep = bamboo_dex::ExecuteMsg::Sweep { token: t1.to_string(), recipient: a.to_string(), amount: Uint128::new(77) };
+    assert!(w.app.execute_contract(a.clone(), d.addr.clone(), &sweep, &[]).unwrap_err().to_string().contains("unauthorized"));
+    let admin = w.app.api().addr_make("admin");
+    w.app.execute_contract(admin, d.addr.clone(), &sweep, &[]).unwrap();
+    assert_eq!(balance(&w.app, &t1, d.addr.as_str()), 0);
+    assert_eq!(balance(&w.app, &t1, a.as_str()), 1_000_000);
+}
+
 /// Vector chéo: cùng bytes/digest/doc/địa chỉ ở `dms_blockchain/tests/test_fam_cosmos.py` và
 /// `bamboo-node/src/adapters/cosmos.rs` (khoá lane 0 Cosmos của "abandon … art", prefix `wasm`).
 #[test]

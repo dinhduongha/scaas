@@ -56,6 +56,8 @@ pub struct Market {
 pub enum ExecuteMsg {
     SetMarket { token_a: String, token_b: String, market: Market },
     Settle { maker: Leg, taker: Leg },
+    /// Anti-lock: DEX không giữ số dư giữa các tx (lệnh mở chỉ là chữ ký), nên mọi số dư là token gửi nhầm.
+    Sweep { token: String, recipient: String, amount: Uint128 },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -131,6 +133,14 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             let (a, b) = (deps.api.addr_validate(&token_a)?, deps.api.addr_validate(&token_b)?);
             MARKETS.save(deps.storage, pair(a.as_str(), b.as_str()), &market)?;
             Ok(Response::new().add_attribute("action", "set_market"))
+        }
+        ExecuteMsg::Sweep { token, recipient, amount } => {
+            if info.sender != CONFIG.load(deps.storage)?.admin {
+                return Err(err("unauthorized"));
+            }
+            let (token, recipient) = (deps.api.addr_validate(&token)?, deps.api.addr_validate(&recipient)?);
+            let msg = exec(token.as_str(), &TokenMsg::Transfer { recipient: recipient.to_string(), amount })?;
+            Ok(Response::new().add_message(msg).add_attribute("action", "sweep"))
         }
         ExecuteMsg::Settle { maker, taker } => {
             let cfg = CONFIG.load(deps.storage)?;
