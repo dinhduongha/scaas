@@ -122,3 +122,19 @@ test('x is sealed at rest like the seed; only Y/UA come back', async () => {
   assert.equal(hex(await openConfKey(vault, { pin: '123456' })), R33.bn254.keys[0].x);
   await assert.rejects(openConfKey(vault, { pin: '654321' }), /Wrong PIN/);
 });
+
+// S3 `vectors/r33_inputs.json` (copied verbatim): the prover's JSON API accepts a path index only as
+// an integer in [0, 2^32 - 1] (number or decimal string). Same rule here, same key when accepted.
+test('path-index rule == S3 prover (r33_inputs.json)', () => {
+  const v = vec('r33_inputs.json');
+  const seed = fromHex(v.seed);
+  for (const c of v.index_cases) {
+    const run = () => deriveConfKey(seed, { curve: v.curve, coin: c.coin, account: v.account });
+    if (c.ok) assert.equal(run().Y, c.Y, `coin ${JSON.stringify(c.coin)}`);
+    else assert.throws(run, /path index/, `coin ${JSON.stringify(c.coin)}`);
+  }
+  for (const account of [-1, 2 ** 32, 0.5, NaN]) {
+    assert.throws(() => deriveConfKey(seed, { curve: 'bn254', coin: 60, account }), /path index/);
+  }
+  assert.equal(hex(seedFromWords(v.passphrase.mnemonic, v.passphrase.passphrase_nfc)), v.passphrase.seed);
+});

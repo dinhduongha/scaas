@@ -99,14 +99,24 @@ export function confPublic(curve, x) {
   return { Y: hex(Y), UA: hex(keccak_256(Y)) };
 }
 
+/** Same rule as the S3 prover's JSON API (`api.rs num32`): an integer in [0, 2^32 - 1], as a number
+ *  or a decimal string; anything else throws instead of wrapping to another key. */
+function pathIndex(i) {
+  const ok = typeof i === 'number' ? Number.isInteger(i) : typeof i === 'string' && /^\+?[0-9]+$/.test(i);
+  const v = ok ? Number(i) : NaN;
+  if (!(v >= 0 && v <= 0xffffffff)) throw new Error(`bad path index ${JSON.stringify(i)}: need an integer in [0, 2^32 - 1]`);
+  return v;
+}
+
 /**
  * The R33 key `m/<root>/<coin>/<account>/<use>`. Returns `x` as 32 bytes (caller wipes) plus the
  * public `Y`/`UA`.
  */
 export function deriveConfKey(seed, { curve, coin, account, use = USE_CONF }) {
   const { root } = curveOf(curve);
+  const path = [root, coin, account, use].map(pathIndex);
   let sk = deriveMasterSk(curve, seed);
-  for (const i of [root, coin, account, use]) sk = deriveChildSk(curve, sk, i);
+  for (const i of path) sk = deriveChildSk(curve, sk, i);
   return { curve, path: `m/${root}/${coin}/${account}/${use}`, x: word(sk), ...confPublic(curve, sk) };
 }
 
