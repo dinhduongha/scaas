@@ -319,6 +319,9 @@ async fn sui_payments_relay_finalize_and_never_lock_each_other() {
     }
     let mut params = toml::Table::new();
     params.insert("package".into(), toml::Value::String(pkg.clone()));
+    let journal = concat!(env!("CARGO_TARGET_TMPDIR"), "/sui-lane-journal");
+    let _ = std::fs::remove_dir_all(journal);
+    params.insert("lane_journal".into(), toml::Value::String(journal.into()));
     let cfg = ChainCfg {
         family: "sui".into(),
         network: Some("localnet".into()),

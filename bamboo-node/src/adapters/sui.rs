@@ -430,6 +430,19 @@ pub struct SuiAdapter {
     quorum: usize,
     lanes: Vec<Lane>,
     signers: Vec<LocalSigner>,
+    /// Thư mục journal lane (review M3): tx đã ký cuối của mỗi lane, sống qua khởi động lại.
+    journal: std::path::PathBuf,
+}
+
+/// Tx đã ký cuối cùng của một lane, ghi TRƯỚC khi gửi. Khởi động lại: xử lý xong nó rồi mới dựng tx mới trên coin
+/// của nó — không bao giờ ký tx thứ hai trên cùng version gas coin (equivocation khoá coin tới hết epoch).
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Pending {
+    tx: String,
+    sig: String,
+    digest: String,
+    gas: String,
+    gas_version: u64,
 }
 
 struct Work {
@@ -449,6 +462,9 @@ impl SuiAdapter {
         }
         let package = parse_addr(param_str(cfg, "package").ok_or_else(|| anyhow!("sui: params.package is required"))?)?;
         let type_package = param_str(cfg, "type_package").map(parse_addr).transpose()?.unwrap_or(package);
+        let journal = param_str(cfg, "lane_journal")
+            .ok_or_else(|| anyhow!("sui: params.lane_journal (a directory that survives restarts) is required"))?;
+        std::fs::create_dir_all(journal).with_context(|| format!("sui: lane_journal {journal}"))?;
         let budget_cap = cfg.params.get("max_gas_budget").and_then(|v| v.as_integer()).map(|v| v as u64).unwrap_or(DEFAULT_BUDGET);
         let mut own = Vec::new();
         let mut lanes = Vec::new();
@@ -467,7 +483,60 @@ impl SuiAdapter {
             quorum: cfg.finality.quorum.max(1),
             lanes,
             signers: own,
+            journal: journal.into(),
         })
+    }
+
+    fn journal_path(&self, lane: usize) -> std::path::PathBuf {
+        let index = self.lanes.get(lane).map_or(lane as u32, |l| l.index);
+        self.journal.join(format!("{}-lane{index}.json", self.key.replace(|c: char| !c.is_ascii_alphanumeric(), "_")))
+    }
+
+    fn write_pending(&self, lane: usize, p: &Pending) -> Result<()> {
+        use std::io::Write;
+        let path = self.journal_path(lane);
+        let tmp = path.with_extension("tmp");
+        let mut f = std::fs::File::create(&tmp)?;
+        f.write_all(&serde_json::to_vec(p)?)?;
+        f.sync_all()?;
+        std::fs::rename(&tmp, &path)?;
+        Ok(())
+    }
+
+    /// Coin của tx đã ký trước đó mà CHƯA thể dùng lại (`None` = lane sạch). Tx đã vào sổ hoặc coin đã sang version
+    /// khác (tx đó không bao giờ chạy được nữa) ⇒ xoá journal. Còn treo ⇒ gửi lại đúng bytes cũ, giữ coin đó.
+    async fn previous_gas(&self, lane: usize) -> Result<Option<Addr>> {
+        let path = self.journal_path(lane);
+        let p: Pending = match std::fs::read(&path) {
+            Ok(b) => serde_json::from_slice(&b).with_context(|| format!("lane journal {}", path.display()))?,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(e.into()),
+        };
+        let gas = parse_addr(&p.gas)?;
+        let live = match self.tx_status(&p.digest).await? {
+            TxStatus::Mined { .. } | TxStatus::Reverted { .. } => false,
+            TxStatus::Pending => true,
+            TxStatus::Unknown => {
+                let o = self.rpc("sui_getObject", json!([p.gas, {}])).await?;
+                let v = o["data"]["version"].as_str().and_then(|v| v.parse().ok()).or_else(|| o["data"]["version"].as_u64());
+                let live = v == Some(p.gas_version);
+                if live {
+                    if let Err(e) = self.execute(&p.tx, &p.sig).await {
+                        tracing::warn!(chain = %self.key, lane, digest = %p.digest, "re-send of journaled tx: {e:#}");
+                    }
+                }
+                live
+            }
+        };
+        if live {
+            return Ok(Some(gas));
+        }
+        std::fs::remove_file(&path)?;
+        Ok(None)
+    }
+
+    async fn execute(&self, tx_b64: &str, sig_b64: &str) -> Result<()> {
+        self.rpc("sui_executeTransactionBlock", json!([tx_b64, [sig_b64], {"showEffects": true}])).await.map(|_| ())
     }
 
     async fn rpc_at(&self, url: &str, method: &str, params: Value) -> Result<Value> {
@@ -506,12 +575,16 @@ impl SuiAdapter {
     }
 
     /// Coin SUI lớn nhất của lane (đọc lại mỗi job — lane chỉ có một tx bay nên version luôn mới).
-    async fn gas_coin(&self, owner: &Addr) -> Result<(ObjRef, u64)> {
+    /// `skip` = coin của tx cũ còn treo (review M3).
+    async fn gas_coin(&self, owner: &Addr, skip: Option<Addr>) -> Result<(ObjRef, u64)> {
         let r = self.rpc("suix_getCoins", json!([addr_hex(owner), "0x2::sui::SUI", null, 50])).await?;
         let mut best: Option<(ObjRef, u64)> = None;
         for c in r["data"].as_array().cloned().unwrap_or_default() {
             let bal: u64 = c["balance"].as_str().and_then(|s| s.parse().ok()).unwrap_or(0);
             if best.as_ref().is_some_and(|(_, b)| *b >= bal) {
+                continue;
+            }
+            if skip.is_some_and(|g| c["coinObjectId"].as_str().and_then(|i| parse_addr(i).ok()) == Some(g)) {
                 continue;
             }
             let digest: [u8; 32] = bs58::decode(c["digest"].as_str().unwrap_or_default())
@@ -521,7 +594,7 @@ impl SuiAdapter {
             let version = c["version"].as_str().and_then(|s| s.parse().ok()).ok_or_else(|| anyhow!("bad coin version"))?;
             best = Some((ObjRef { id: parse_addr(c["coinObjectId"].as_str().unwrap_or_default())?, version, digest }, bal));
         }
-        best.ok_or_else(|| anyhow!("lane {} has no SUI for gas", addr_hex(owner)))
+        best.ok_or_else(|| anyhow!("lane {} has no usable SUI for gas (previous tx still pending: {skip:?})", addr_hex(owner)))
     }
 
     async fn gas_price(&self) -> Result<u64> {
@@ -564,13 +637,23 @@ impl ChainAdapter for SuiAdapter {
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
         let w = self.work(job).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
         let sender = self.lane_addr(lane).map_err(transport)?;
+        let skip = self.previous_gas(lane).await.map_err(transport)?;
         let isv = self
             .shared_version(&w.op.contract)
             .await
             .map_err(transport)?
             .ok_or_else(|| SimError::Revert(format!("account {} does not exist", addr_hex(&w.op.contract))))?;
         let price = self.gas_price().await.map_err(transport)?;
-        let (gas, balance) = self.gas_coin(&sender).await.map_err(transport)?;
+        let (gas, balance) = match self.gas_coin(&sender, skip).await {
+            Ok(g) => g,
+            Err(e) => {
+                // ponytail: runner trả job về hàng đợi rồi thử ngay — chậm lại khi chỉ chờ tx cũ của lane.
+                if skip.is_some() {
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                }
+                return Err(transport(e));
+            }
+        };
         let cap = self.budget_cap.min(balance);
         let tx = pay_tx(&self.package, &w.op, &w.auth, isv, &w.coin_tag, &sender, &gas, price, cap);
         let dry = self.rpc("sui_dryRunTransactionBlock", json!([B64.encode(&tx)])).await.map_err(transport)?;
@@ -582,7 +665,8 @@ impl ChainAdapter for SuiAdapter {
         let used = cost("computationCost") + cost("storageCost");
         let budget = (used + used / 5).max(price * 1000).min(cap);
         let tx = pay_tx(&self.package, &w.op, &w.auth, isv, &w.coin_tag, &sender, &gas, price, budget);
-        Ok(Built { job_id: job.id, body: tx, valid_until: w.op.valid_until, meta: json!({"budget": budget}) })
+        let meta = json!({"budget": budget, "gas": addr_hex(&gas.id), "gas_version": gas.version});
+        Ok(Built { job_id: job.id, body: tx, valid_until: w.op.valid_until, meta })
     }
 
     async fn sign(&self, built: Built, lane: usize, sequence: u64) -> Result<Signed> {
@@ -592,7 +676,17 @@ impl ChainAdapter for SuiAdapter {
         raw.push(FLAG_ED25519);
         raw.extend_from_slice(&sig);
         raw.extend_from_slice(&s.public_key());
-        Ok(Signed { job_id: built.job_id, tx_id: addr_hex(&tx_digest(&built.body)), raw, valid_until: built.valid_until, sequence })
+        let tx_id = addr_hex(&tx_digest(&built.body));
+        // Journal TRƯỚC khi trả (trước `signed` ở Odoo và trước khi gửi) — review M3.
+        let pending = Pending {
+            tx: B64.encode(&built.body),
+            sig: B64.encode(&raw[built.body.len()..]),
+            digest: tx_id.clone(),
+            gas: built.meta["gas"].as_str().ok_or_else(|| anyhow!("built without gas coin"))?.to_string(),
+            gas_version: built.meta["gas_version"].as_u64().ok_or_else(|| anyhow!("built without gas version"))?,
+        };
+        self.write_pending(lane, &pending).context("lane journal")?;
+        Ok(Signed { job_id: built.job_id, tx_id, raw, valid_until: built.valid_until, sequence })
     }
 
     async fn submit(&self, signed: &Signed) -> Result<()> {
@@ -600,9 +694,7 @@ impl ChainAdapter for SuiAdapter {
             bail!("signed tx too short");
         }
         let (tx, sig) = signed.raw.split_at(signed.raw.len() - LANE_SIG_LEN);
-        self.rpc("sui_executeTransactionBlock", json!([B64.encode(tx), [B64.encode(sig)], {"showEffects": true}]))
-            .await
-            .map(|_| ())
+        self.execute(&B64.encode(tx), &B64.encode(sig)).await
     }
 
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
@@ -786,7 +878,7 @@ mod tests {
     fn upgraded_package_calls_the_new_id_and_reads_original_types() {
         let cfg = |extra: &str| -> ChainCfg {
             toml::from_str(&format!("family = \"sui\"\nnetwork = \"localnet\"\nrpc_urls = [\"http://r\"]\nlanes = [0]\n\
-                                     finality = {{ mode = \"instant\" }}\nparams = {{ package = \"0xb\"{extra} }}"))
+                                     finality = {{ mode = \"instant\" }}\nparams = {{ package = \"0xb\", lane_journal = \"/tmp\"{extra} }}"))
             .unwrap()
         };
         let k = [LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()];
@@ -794,6 +886,137 @@ mod tests {
         assert_eq!((a.package, a.type_package), (parse_addr("0xb").unwrap(), parse_addr("0xb").unwrap()));
         let a = SuiAdapter::new(&cfg(", type_package = \"0xa\""), &k).unwrap();
         assert_eq!((a.package, a.type_package), (parse_addr("0xb").unwrap(), parse_addr("0xa").unwrap()));
+    }
+
+    // ---------------------------------------------------------------- lane journal (review M3)
+
+    /// RPC Sui giả: trạng thái tx đã ghi sổ, version hiện tại của gas coin, danh sách coin; ghi lại tx đã gửi.
+    #[derive(Default)]
+    struct FakeSui {
+        status: Option<&'static str>,
+        gas_version: u64,
+        coins: Vec<(Addr, u64, u64)>,
+        executed: Vec<String>,
+        dry_runs: u32,
+    }
+    type FakeShared = std::sync::Arc<std::sync::Mutex<FakeSui>>;
+
+    async fn fake_sui(f: FakeSui) -> (String, FakeShared) {
+        use axum::extract::State;
+        use axum::Json;
+        async fn h(State(s): State<FakeShared>, Json(b): Json<Value>) -> Json<Value> {
+            let mut f = s.lock().unwrap();
+            let p = &b["params"];
+            let r = match b["method"].as_str().unwrap_or_default() {
+                "sui_getTransactionBlock" => match f.status {
+                    None => return Json(json!({"error": {"code": -32602, "message": "Could not find the referenced transaction"}})),
+                    Some(st) => json!({"checkpoint": "9", "effects": {"status": {"status": st}}}),
+                },
+                "sui_getObject" if p[0] == addr_hex(&[0xaa; 32]) => json!({"data": {"version": f.gas_version.to_string()}}),
+                "sui_getObject" => json!({"data": {"owner": {"Shared": {"initial_shared_version": 3}}}}),
+                "sui_executeTransactionBlock" => {
+                    f.executed.push(p[0].as_str().unwrap().to_string());
+                    json!({"digest": "x"})
+                }
+                "suix_getReferenceGasPrice" => json!("1000"),
+                "suix_getCoins" => json!({"data": f.coins.iter().map(|(id, v, bal)| json!({"coinObjectId": addr_hex(id),
+                    "version": v.to_string(), "digest": bs58::encode([7u8; 32]).into_string(), "balance": bal.to_string()})).collect::<Vec<_>>()}),
+                "sui_dryRunTransactionBlock" => {
+                    f.dry_runs += 1;
+                    json!({"effects": {"status": {"status": "success"}, "gasUsed": {"computationCost": "1000000", "storageCost": "0"}}})
+                }
+                m => panic!("unexpected {m}"),
+            };
+            Json(json!({"jsonrpc": "2.0", "id": 1, "result": r}))
+        }
+        let s: FakeShared = std::sync::Arc::new(std::sync::Mutex::new(f));
+        let app = axum::Router::new().route("/", axum::routing::post(h)).with_state(s.clone());
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        (url, s)
+    }
+
+    fn journal_adapter(url: &str, dir: &std::path::Path) -> SuiAdapter {
+        let cfg: ChainCfg = toml::from_str(&format!(
+            "family = \"sui\"\nnetwork = \"localnet\"\nrpc_urls = [\"{url}\"]\nlanes = [0]\nfinality = {{ mode = \"instant\" }}\n\
+             params = {{ package = \"0xb\", lane_journal = \"{}\" }}",
+            dir.display()
+        ))
+        .unwrap();
+        SuiAdapter::new(&cfg, &[LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()]).unwrap()
+    }
+
+    fn pay_job() -> Job {
+        let op = MetaOp::decode(&alloy::hex::decode(PAYLOAD).unwrap()).unwrap();
+        serde_json::from_value(json!({"id": 1, "kind": "signed_op", "op": {"payload": PAYLOAD, "signature": SIGNATURE,
+            "contract": addr_hex(&op.contract), "extra": {"coin_type": "0x2::sui::SUI"}}}))
+        .unwrap()
+    }
+
+    fn tmp_dir(name: &str) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!("sui-journal-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    /// Gas coin của tx trong `body` (`TransactionData` của `pay_tx`): đuôi = id ‖ version ‖ digest ‖ owner ‖ giá ‖ budget ‖ hạn.
+    fn gas_of(body: &[u8]) -> Addr {
+        body[body.len() - 122..body.len() - 90].try_into().unwrap()
+    }
+
+    /// Ký một tx trên coin 0xaa@7 rồi "chết" trước khi gửi: tx đó nằm trong journal của lane.
+    async fn crash_after_sign(dir: &std::path::Path) -> Vec<u8> {
+        let (url, _f) = fake_sui(FakeSui { coins: vec![([0xaa; 32], 7, 5_000_000_000)], ..Default::default() }).await;
+        let a = journal_adapter(&url, dir);
+        let built = a.build(&pay_job(), 0).await.unwrap();
+        assert_eq!(gas_of(&built.body), [0xaa; 32]);
+        a.sign(built.clone(), 0, 0).await.unwrap();
+        built.body
+    }
+
+    /// Review M3: khởi động lại sau khi ký mà tx cũ chưa thấy trên mạng và coin của nó còn nguyên version ⇒ gửi lại
+    /// ĐÚNG bytes cũ, và tx mới không bao giờ dựng trên coin đó (không equivocation).
+    #[tokio::test]
+    async fn restart_resends_the_journaled_tx_and_never_reuses_its_coin() {
+        let dir = tmp_dir("resend");
+        let old = crash_after_sign(&dir).await;
+        let (url, f) = fake_sui(FakeSui { gas_version: 7, coins: vec![([0xaa; 32], 7, 5_000_000_000), ([0xbb; 32], 2, 1_000_000_000)],
+                                          ..Default::default() }).await;
+        let a = journal_adapter(&url, &dir); // tiến trình mới
+        let built = a.build(&pay_job(), 0).await.unwrap();
+        assert_eq!(f.lock().unwrap().executed, [B64.encode(&old)], "old bytes re-sent first");
+        assert_eq!(gas_of(&built.body), [0xbb; 32], "new tx on another coin");
+        // Coin duy nhất là coin của tx cũ ⇒ chưa dựng gì (thử lại sau), không dry-run.
+        let (url, f) = fake_sui(FakeSui { gas_version: 7, coins: vec![([0xaa; 32], 7, 5_000_000_000)], ..Default::default() }).await;
+        let a = journal_adapter(&url, &dir);
+        assert!(matches!(a.build(&pay_job(), 0).await, Err(SimError::Transport(_))));
+        assert_eq!(f.lock().unwrap().dry_runs, 0);
+    }
+
+    /// Tx cũ đã vào sổ (hay coin đã sang version khác ⇒ tx cũ không bao giờ chạy được) ⇒ xoá journal, coin dùng lại được.
+    #[tokio::test]
+    async fn settled_or_superseded_journal_is_cleared() {
+        for (status, version) in [(Some("success"), 7), (Some("failure"), 7), (None, 8)] {
+            let dir = tmp_dir("clear");
+            crash_after_sign(&dir).await;
+            let (url, f) = fake_sui(FakeSui { status, gas_version: version, coins: vec![([0xaa; 32], 9, 5_000_000_000)], ..Default::default() }).await;
+            let a = journal_adapter(&url, &dir);
+            let built = a.build(&pay_job(), 0).await.unwrap();
+            assert_eq!(gas_of(&built.body), [0xaa; 32], "{status:?}/{version}");
+            assert!(f.lock().unwrap().executed.is_empty());
+            assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0, "journal cleared");
+        }
+    }
+
+    #[test]
+    fn lane_journal_is_required() {
+        let cfg: ChainCfg = toml::from_str("family = \"sui\"\nnetwork = \"localnet\"\nrpc_urls = [\"http://r\"]\nlanes = [0]\n\
+                                            finality = { mode = \"instant\" }\nparams = { package = \"0xb\" }")
+        .unwrap();
+        let k = [LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()];
+        assert!(SuiAdapter::new(&cfg, &k).err().unwrap().to_string().contains("lane_journal"));
     }
 
     fn arb_op() -> impl Strategy<Value = MetaOp> {
