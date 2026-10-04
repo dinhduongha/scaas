@@ -18,6 +18,7 @@ use solana_transaction::Transaction;
 
 #[path = "../vectors.rs"]
 pub mod vectors;
+pub mod flows;
 
 pub const SO: &[u8] = include_bytes!("../../../../target/deploy/bamboo.so");
 pub const NOW: i64 = 500;
