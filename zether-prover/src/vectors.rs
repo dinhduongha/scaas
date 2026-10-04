@@ -20,7 +20,9 @@ pub const MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon aban
 abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 const CHAIN: u64 = 31337;
 const TOKEN: &str = "0x5fbdb2315678afecb367f032d93f642f64180aa3";
-const BAL: u64 = 1_000_000;
+/// > 2^44 and a transfer > 2^32 (limits D1/D5): the Solidity side checks both through these files.
+const BAL: u64 = (1 << 44) + 1_000_000;
+const AMOUNT: u64 = (1 << 33) + 250_000;
 
 fn h32(b: &[u8; 32]) -> String {
     hx(b)
@@ -80,7 +82,7 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
 
     // transfer: auditor on, relayed, inner fee to a beneficiary.
     let req = with(json!({
-        "yTo": hx(&to.encoded_y()), "yAud": hx(&aud.encoded_y()), "amount": 250_000, "fee": 300,
+        "yTo": hx(&to.encoded_y()), "yAud": hx(&aud.encoded_y()), "amount": AMOUNT, "fee": 300,
         "beneficiary": hx(&[0x22; 32]), "envelopeBinding": hx(&[0x33; 32]),
     }));
     let mut tv = prove_transfer_json::<C, _>(&gens, &req, &mut rng).unwrap();
@@ -104,7 +106,7 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
         y_a: st.y_a,
         c_aud: st.c_aud,
     };
-    let amount = 250_000u64;
+    let amount = AMOUNT;
     let openings = [
         (OpeningKind::SenderS, open_sender::<C>(&s)),
         (OpeningKind::ReceiverX, open_chaum_pedersen(&e, amount, OpeningKind::ReceiverX, &to, &mut rng).unwrap()),

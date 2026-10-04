@@ -29,8 +29,10 @@ pub enum ZError {
     BadScalar,
     #[error("bad seed: {0}")]
     BadSeed(&'static str),
-    #[error("plaintext outside [0, 2^40): decryption bound exceeded (negative or too large)")]
+    #[error("plaintext outside [0, 2^bound_bits): negative, or larger than this device's BSGS bound (use zether-read-balance)")]
     DecryptBound,
+    #[error("bsgs: {0}")]
+    Bsgs(&'static str),
     #[error("witness out of range")]
     OutOfRange,
     #[error("malformed proof: {0}")]

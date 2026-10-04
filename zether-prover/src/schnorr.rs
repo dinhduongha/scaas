@@ -157,7 +157,7 @@ pub fn open_chaum_pedersen<C: ZCurve, R: RngCore + CryptoRng>(
     rng: &mut R,
 ) -> Result<Vec<u8>, ZError> {
     let (k_pt, m) = km(e, kind);
-    if amount >= 1 << 32 {
+    if !crate::zether::value_in_range(amount) {
         return Err(ZError::OutOfRange);
     }
     if kind == OpeningKind::SenderS || key.y != k_pt {
@@ -184,7 +184,7 @@ pub fn verify_opening<C: ZCurve>(e: &Entry<C>, amount: u64, kind: OpeningKind, o
     let va = g * Fr::<C>::from(amount);
     let bad = ZError::Verify("disclosure");
     // §12: amount < 2^n_v, else amount + r would "open" too.
-    if amount >= 1 << 32 {
+    if !crate::zether::value_in_range(amount) {
         return Err(bad);
     }
     match kind {

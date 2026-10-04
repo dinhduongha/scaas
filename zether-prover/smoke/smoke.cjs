@@ -24,7 +24,11 @@ for (const curve of ["bn254", "bls12381"]) {
   n++;
 
   const acc = call("encrypt", { curve, Y: from.Y, amount: 50000 });
-  assert.equal(call("decrypt", { curve, key: k0, ct: acc }).amount, 50000);
+  assert.equal(call("decrypt", { curve, key: k0, ct: acc, tableBits: 18, boundBits: 24 }).amount, "50000");
+  assert.equal(call("checkBalance", { curve, key: k0, acc, balance: "50000" }).ok, true);
+  assert.equal(call("checkBalance", { curve, key: k0, acc, balance: "50001" }).ok, false);
+  // wasm refuses the 2 GiB table (limits §4): only the native zether-read-balance goes to 2^27.
+  assert.throws(() => zetherCall("decrypt", JSON.stringify({ curve, key: k0, ct: acc, tableBits: 27 })), /wasm/);
   n++;
 
   const t0 = Date.now();

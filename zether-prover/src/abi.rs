@@ -40,9 +40,40 @@ pub fn encode(toks: &[Tok]) -> Vec<u8> {
     head
 }
 
+fn word_at(b: &[u8], at: usize) -> Option<u64> {
+    let w = b.get(at..at.checked_add(32)?)?;
+    if w[..24].iter().any(|&x| x != 0) {
+        return None;
+    }
+    Some(u64::from_be_bytes(w[24..].try_into().unwrap()))
+}
+
+/// Return data of `accountState(bytes32)` (`IZetherToken.AccountState`, a dynamic tuple):
+/// `([accC, accD, pendingC, pendingD], accSeq)`. `None` when malformed.
+pub fn decode_account_state(ret: &[u8]) -> Option<([Vec<u8>; 4], u64)> {
+    let base = word_at(ret, 0)? as usize;
+    let field = |i: usize| -> Option<Vec<u8>> {
+        let at = base.checked_add(word_at(ret, base + 32 * i)? as usize)?;
+        let len = word_at(ret, at)? as usize;
+        Some(ret.get(at + 32..at + 32 + len)?.to_vec())
+    };
+    Some(([field(0)?, field(1)?, field(2)?, field(3)?], word_at(ret, base + 128)?))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn account_state_roundtrip() {
+        let pts = [vec![1u8; 64], vec![2; 64], vec![3; 64], vec![0; 64]];
+        let mut toks: Vec<Tok> = pts.iter().cloned().map(Tok::Bytes).collect();
+        toks.extend([7u64, 9, 4, 0, 1].map(|w| Tok::Word(u256(w))));
+        let mut ret = u256(32).to_vec();
+        ret.extend(encode(&toks));
+        assert_eq!(decode_account_state(&ret), Some((pts, 7)));
+        assert_eq!(decode_account_state(&ret[..ret.len() - 1]), None);
+    }
 
     #[test]
     fn matches_solidity_layout() {

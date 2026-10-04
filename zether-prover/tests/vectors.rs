@@ -53,8 +53,12 @@ fn api_roundtrip_mnemonic_keygen_prove_decrypt() {
         assert!(t["directCalldata"].as_str().unwrap().starts_with("0x7c947e8e"), "RS2-14 direct selector");
         let ok = call("verifyTransfer", json!({"curve": curve, "statement": t["statement"], "proof": t["proof"]}));
         assert_eq!(ok["ok"], json!(true));
-        let d = call("decrypt", json!({"curve": curve, "key": k0, "ct": acc}));
-        assert_eq!(d["amount"], json!(5000));
+        let d = call("decrypt", json!({"curve": curve, "key": k0, "ct": acc, "tableBits": 18, "boundBits": 20}));
+        assert_eq!(d["amount"], json!("5000"), "amounts leave the API as decimal strings (> 2^53)");
+        let p = call("decryptPending", json!({"curve": curve, "key": k0, "pending": acc, "tableBits": 18, "boundBits": 20}));
+        assert_eq!(p["amount"], json!("5000"));
+        assert_eq!(call("checkBalance", json!({"curve": curve, "key": k0, "acc": acc, "balance": 5000}))["ok"], json!(true));
+        assert_eq!(call("checkBalance", json!({"curve": curve, "key": k1, "acc": acc, "balance": 5000}))["ok"], json!(false));
         let pop = call("pop", json!({"curve": curve, "key": k0, "registry": "0x".to_string() + &"aa".repeat(20),
                                       "account": "0x".to_string() + &"bb".repeat(20)}));
         assert_eq!(pop["UA"], a["UA"]);
