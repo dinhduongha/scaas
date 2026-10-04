@@ -511,6 +511,22 @@ contract OrderBookDexTest is Fixtures {
         assertEq(tF.balanceOf(address(0x5E1)), 3 ether);
     }
 
+    /// review agy F1: `fee * sold` tràn 256 bit dù kết quả vừa — node tính 512 bit, contract phải khớp.
+    function test_relayerFixedFeeProRataDoesNotOverflow() public {
+        MetaToken big = _standalone(address(this), "BIG", 18, 1 << 200, address(0));
+        big.transfer(alice, 1 << 200);
+        vm.prank(alice);
+        big.approve(address(dex), type(uint256).max);
+        OrderBookDex.Order memory ask = _order(alice, tA, 100 ether, tB, 200 ether);
+        ask.feeMode = 2;                                 // FIXED, separate token: no 1 % cap
+        ask.fee = 1 << 199;
+        ask.feeToken = address(big);
+        ask.feeRecipient = address(0x5E1);
+        OrderBookDex.Order memory bid = _order(bob, tB, 200 ether, tA, 100 ether);
+        assertTrue(_settle(_match(ask, ALICE_PK, bid, BOB_PK, 40 ether, 80 ether)));
+        assertEq(big.balanceOf(address(0x5E1)), (uint256(1) << 199) * 2 / 5);
+    }
+
     function test_relayerFeeGuards() public {
         OrderBookDex.Order memory bid = _order(bob, tB, 200 ether, tA, 100 ether);
         OrderBookDex.Order memory ask = _order(alice, tA, 100 ether, tB, 200 ether);

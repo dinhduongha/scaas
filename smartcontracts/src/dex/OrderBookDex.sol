@@ -6,6 +6,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 
@@ -302,7 +303,7 @@ contract OrderBookDex is EIP712, ReentrancyGuardTransient {
             // Trả bằng chính token bán thì chịu trần 1 % của tổng lệnh; token phí riêng thì là
             // con số tuyệt đối người ký đã thấy. Pro-rata, làm tròn xuống ⇒ tổng <= fee.
             if (token == o.sellToken) FeePolicy.compute(FeeMode.FIXED, o.sellAmount, o.fee);
-            amount = o.fee * sold / o.sellAmount;
+            amount = Math.mulDiv(o.fee, sold, o.sellAmount); // 512 bit như node (review agy F1)
         }
         to = o.feeRecipient == address(0) ? sender : o.feeRecipient;
         if (to == address(this)) revert FeeWouldStick();
