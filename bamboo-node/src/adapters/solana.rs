@@ -40,6 +40,14 @@ const DEFAULT_MAX_CU: u32 = 600_000;
 const DEFAULT_MAX_PRIORITY: u64 = 2_000_000;
 const DEFAULT_LOADED_BYTES: u32 = 4 * 1024 * 1024;
 const PAGE: usize = 1000;
+/// Program id của test/localnet — khoá đã công khai (review M3), không bao giờ chạy trên cluster công khai.
+pub const TEST_PROGRAM_ID: &str = "BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d";
+/// Genesis hash của mainnet-beta, devnet, testnet.
+pub const PUBLIC_GENESIS: [&str; 3] = [
+    "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
+    "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+    "4uhcVJyU9pJkvQyS88uRDiswHXSCkY3zQawwpjk2NsNY",
+];
 const REBROADCAST: Duration = Duration::from_secs(2);
 
 pub fn b58(k: &[u8]) -> String {
@@ -636,6 +644,9 @@ impl SolanaAdapter {
         let n = |k: &str, d: u64| cfg.params.get(k).and_then(|v| v.as_integer()).map_or(d, |v| v.max(0) as u64);
         let network = key(cfg.network.as_deref().unwrap_or_default()).context("solana: network must be the genesis hash (base58)")?;
         let program = key(p("program_id").ok_or_else(|| anyhow!("solana: params.program_id is required"))?)?;
+        if b58(&program) == TEST_PROGRAM_ID && PUBLIC_GENESIS.contains(&b58(&network).as_str()) {
+            bail!("solana: {TEST_PROGRAM_ID} is the test-only program id (its key is public); deploy your own (chains/solana/scripts/deploy.sh)");
+        }
         let mut lanes = Vec::new();
         let mut own = Vec::new();
         for (s, &i) in signers.iter().zip(&cfg.lanes) {
@@ -1171,6 +1182,22 @@ mod tests {
         let lazy = Pay { subject_exists: false, ..pay };
         assert!(relay_pay_ix(&lazy).accounts[2].writable);
         assert_eq!(&discriminator("global", "relay_pay"), &relay_pay_ix(&lazy).data[..8]);
+    }
+
+    /// Review M3: the test program id's key is public (it was in the repo) ⇒ refused on mainnet-beta/devnet/testnet.
+    #[test]
+    fn the_test_program_id_is_refused_on_public_clusters() {
+        let cfg = |network: &str, program: &str| {
+            let mut params = toml::Table::new();
+            params.insert("program_id".into(), program.into());
+            ChainCfg { family: "solana".into(), network: Some(network.into()), rpc_urls: vec!["http://rpc".into()], lanes: vec![0], params, ..Default::default() }
+        };
+        for net in PUBLIC_GENESIS {
+            let e = SolanaAdapter::new(&cfg(net, TEST_PROGRAM_ID), &[lane0()]).err().expect("refused");
+            assert!(format!("{e:#}").contains("test-only"), "{e:#}");
+            assert!(SolanaAdapter::new(&cfg(net, ALICE), &[lane0()]).is_ok());
+        }
+        assert!(SolanaAdapter::new(&cfg(NETWORK, TEST_PROGRAM_ID), &[lane0()]).is_ok(), "localnet");
     }
 
     #[test]

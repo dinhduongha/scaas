@@ -110,9 +110,10 @@ rpc_urls = ["https://api.mainnet-beta.solana.com"]  # needs transaction history 
 lanes = [0, 1]                                   # ed25519 m/44'/501'/i'/0': fund each lane address; each lane
                                                  # creates its durable nonce account on first use
 finality = { mode = "tag", quorum = 1 }          # commitment `finalized`
-# program_id: the bamboo program (replace with your deployment); max_cu caps the compute-unit limit,
-# max_priority_lamports the total priority fee per tx (v1 header), max_loaded_bytes the loaded-account-data limit.
-params = { program_id = "BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d", max_cu = 600000, max_priority_lamports = 2000000 }
+# program_id: YOUR bamboo deployment (chains/solana/scripts/deploy.sh — the test id is refused on public clusters);
+# max_cu caps the compute-unit limit, max_priority_lamports the total priority fee per tx (v1 header),
+# max_loaded_bytes the loaded-account-data limit.
+params = { program_id = "<your program id>", max_cu = 600000, max_priority_lamports = 2000000 }
 
 [[chains]]                                       # Aptos
 family = "aptos"

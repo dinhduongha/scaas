@@ -1,8 +1,9 @@
 //! cargo test --test e2e_solana -- --ignored --nocapture
 //!
 //! Cần `solana-test-validator` của luồng S12 đang chạy với program nạp ở genesis:
-//! `chains/solana/scripts/devnet.sh up --upgradeable-program keys/bamboo-dev.json target/deploy/bamboo.so
-//! keys/upgrade-authority-dev.json` (RPC 32020). Chứng minh:
+//! `chains/solana/scripts/devnet.sh up --upgradeable-program BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d
+//! target/deploy/bamboo.so 73VoVWyfxmaWC6gUjsse6xzNTLLoEhazMCcKakXWbebm` (RPC 32020; program id = id test của
+//! localnet, authority = `signer("e2e-upgrade-authority")` — không khoá nào nằm trong repo, review M3). Chứng minh:
 //! 1. hai lane relayer từ mnemonic 24 từ (`m/44'/501'/i'/0'`), airdrop; mỗi lane tự tạo durable nonce account;
 //!    alice (chủ thể) không có SOL, tiền nằm ở ATA của Account PDA của nó (mở lười ở lần trả đầu);
 //! 2. `initialize` với genesis hash thật; mint SPL Token + mint Token-2022; Odoo giả trả mint thật và TỪ CHỐI event
@@ -350,11 +351,6 @@ fn cfg(network: &str) -> ChainCfg {
     }
 }
 
-fn keypair_file(path: &str) -> LocalSigner {
-    let bytes: Vec<u8> = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-    LocalSigner::new(Curve::Ed25519, bytes[..32].try_into().unwrap()).unwrap()
-}
-
 #[tokio::test]
 #[ignore]
 async fn solana_payments_relay_finalize_and_never_lock_each_other() {
@@ -364,7 +360,8 @@ async fn solana_payments_relay_finalize_and_never_lock_each_other() {
     let network = key(&genesis).unwrap();
 
     // initialize: only the upgrade authority set at genesis (`--upgradeable-program … <authority>`).
-    let authority = keypair_file(concat!(env!("CARGO_MANIFEST_DIR"), "/../chains/solana/keys/upgrade-authority-dev.json"));
+    let authority = signer("e2e-upgrade-authority");
+    assert_eq!(b58(&pk(&authority)), "73VoVWyfxmaWC6gUjsse6xzNTLLoEhazMCcKakXWbebm", "the validator's --upgradeable-program authority");
     airdrop(&pk(&authority), 100_000_000_000).await;
     let loader = key("BPFLoaderUpgradeab1e11111111111111111111111").unwrap();
     let mut data = discriminator("global", "initialize").to_vec();

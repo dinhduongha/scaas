@@ -23,7 +23,7 @@ F = importlib.import_module('sollib.fam_solana')
 from cryptography.hazmat.primitives import hashes, serialization  # noqa: E402
 from cryptography.hazmat.primitives.asymmetric import ec, ed25519, utils  # noqa: E402
 
-PROGRAM = 'BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d'     # chains/solana/keys/bamboo-dev.json (chỉ dev)
+PROGRAM = 'BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d'     # TEST_PROGRAM_ID: chỉ test/localnet (khoá đã công khai)
 P256_N = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551
 RP_ID = 'pay.bamboo.test'
 ORIGIN = 'https://pay.bamboo.test'

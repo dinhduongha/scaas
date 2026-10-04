@@ -18,7 +18,16 @@ pub use dex::*;
 pub use mandate::*;
 pub use state::AuthKey;
 
-declare_id!("BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d");
+/// Program id của test/localnet (LiteSVM, e2e, vector). KHOÁ CỦA NÓ ĐÃ CÔNG KHAI (từng nằm trong repo — review M3): ai cũng
+/// deploy được vào id này trên cluster công khai ⇒ CHỈ dùng cho localnet. Bản deploy thật build với
+/// `BAMBOO_PROGRAM_ID=<id của keypair riêng>` qua `scripts/deploy.sh`. Program id khác = miền khác (PDA, event authority,
+/// `Config` do đúng upgrade authority của bản đó tạo).
+pub const TEST_PROGRAM_ID: &str = "BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d";
+
+declare_id!(anchor_lang::solana_program::pubkey::Pubkey::from_str_const(match option_env!("BAMBOO_PROGRAM_ID") {
+    Some(id) => id,
+    None => TEST_PROGRAM_ID,
+}));
 
 #[program]
 pub mod bamboo {

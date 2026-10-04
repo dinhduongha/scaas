@@ -47,7 +47,8 @@ mod tests {
     use crate::signer::LocalSigner;
 
     /// Merge TODO f: `node.example.toml` has a working `[[chains]]` for every family — it parses, validates, and
-    /// every adapter builds from it (only the Sui/Aptos package ids and the Sui journal directory are swapped for real ones).
+    /// every adapter builds from it (only the Sui/Aptos package ids, the Solana program id and the Sui journal directory
+    /// are swapped for real ones).
     #[test]
     fn example_config_builds_every_family() {
         let mut cfg: Config = toml::from_str(include_str!("../../node.example.toml")).unwrap();
@@ -60,6 +61,9 @@ mod tests {
         for c in cfg.chains.iter_mut().filter(|c| c.uses_adapter()) {
             if c.family == "aptos" {
                 c.params.insert("package".into(), "0xb0b".into());
+            }
+            if c.family == "solana" {
+                c.params.insert("program_id".into(), "US517G5965aydkZ46HS38QLi7UQiSojurfbQfKCELFx".into());
             }
             if c.family == "sui" {
                 c.params.insert("package".into(), "0x2".into());
