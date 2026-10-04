@@ -60,6 +60,8 @@ Review: `scratchpad/s3-opus-review.md` (Claude Opus, đọc diff `71f3ffb..b86f9
   SK trung gian `derive_path`, `TransferWitness`/`BurnWitness` (Drop), buffer đầu vào nonce. Giới hạn: `Fr` là
   `Copy`, bản sao trên stack không xoá được (ghi `ponytail:` ở `zether.rs`).
 - **Chỉ số đường dẫn JS (L4 của S4)** sửa ở nhánh S4 (`clientkeys/src/zether.js`), cùng luật với `api.rs num32`.
+  `0e62494` thêm `vectors/r33_inputs.json`: các giá trị `coin` API chấp nhận/từ chối (kèm `Y`) và seed passphrase
+  NFKD — S4 chép nguyên văn và kiểm chéo.
 
 Suite sau sửa (`9d9e075`): `cargo test --release` 41/41, `cargo clippy --release --all-targets -D warnings` sạch,
 `./wasm-smoke.sh` 16/16 (proveTransfer wasm: bn254 198 ms, BLS12-381 487 ms).
