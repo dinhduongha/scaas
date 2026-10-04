@@ -64,8 +64,12 @@ abstract contract ZetherFixture is Test {
     }
 
     function _newToken(bool auditor, bytes32 salt) internal returns (ZetherToken) {
+        return _newToken(auditor, salt, uint256(1) << 40);
+    }
+
+    function _newToken(bool auditor, bytes32 salt, uint256 maxShielded) internal returns (ZetherToken) {
         bytes memory aud = auditor ? ZetherKeys.pub(X_AUD, bls) : bytes("");
-        bytes memory init = abi.encode("Zether USD", "zUSD", address(reg), SCALE, uint256(1) << 40, FEE, aud);
+        bytes memory init = abi.encode("Zether USD", "zUSD", address(reg), SCALE, maxShielded, FEE, aud);
         return ZetherToken(factory.createZetherToken(1, address(usd), address(ver), init, salt));
     }
 
@@ -158,6 +162,14 @@ abstract contract ZetherFixture is Test {
             acc = ver.g1Add(acc, g);
         }
         revert("decrypt: out of range");
+    }
+
+    /// @dev check_balance (limits §5): `[b]G == C − [x]D` — một phép so điểm, chạy với số dư bất kỳ
+    ///      (quét tuyến tính `_decrypt` chỉ dùng được cho số nhỏ).
+    function _holds(ZetherToken t, User memory u, uint256 b, bool acc) internal view returns (bool) {
+        IZetherToken.AccountState memory s = t.accountState(u.ua);
+        (bytes memory c, bytes memory d) = acc ? (s.accC, s.accD) : (s.pendingC, s.pendingD);
+        return keccak256(ver.g1Sub(c, ver.g1Mul(d, u.x))) == keccak256(ver.g1MulBase(b));
     }
 
     function _balances(ZetherToken t, User memory u, uint256 max) internal view returns (uint256 acc, uint256 pend) {

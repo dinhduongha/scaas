@@ -81,7 +81,8 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
     bytes private constant AUTH_TAG = "BAMBOO-ZETHER-AUTH-V1";
     bytes private constant DISCLOSE_TAG = "BAMBOO-ZETHER-DISCLOSE-V1";
     uint256 private constant MAX_TOTAL_SHIELDED = 1 << 54;
-    uint256 private constant VALUE_BOUND = 1 << 32;
+    /// @dev `2^n_v` (n_v = 64, RS-NV64-1): trần của `confidentialFee` và của số tiền tiết lộ.
+    uint256 private constant VALUE_BOUND = 1 << 64;
 
     address public immutable FACTORY;
     address private immutable _SELF;
@@ -407,7 +408,7 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
     function _prepareBurn(bytes calldata payload, BurnArgs memory b) private view returns (Prepared memory pp) {
         uint256 p = _p;
         if (payload.length != 64 + p) revert BadPayload(payload.length);
-        // amount + fee < 2^54 + 2^32 < r: không có bí danh mod r (review agy #5)
+        // amount + fee < 2^54 + 2^64 < r: không có bí danh mod r (review agy #5, RS-NV64-1)
         if (b.amount == 0 || b.amount > maxDecryptableShielded) {
             revert AmountOutOfRange(b.amount, maxDecryptableShielded);
         }

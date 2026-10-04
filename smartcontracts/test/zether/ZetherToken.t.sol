@@ -447,7 +447,7 @@ abstract contract ZetherTokenSuite is ZetherFixture {
         assertTrue(_vta(ref, 123, ITransferDisclosure.OpeningKind.AUDITOR, au));
         // bí danh mod r và vượt n_v bị từ chối
         assertFalse(_vta(ref, 123 + ver.groupOrder(), ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(t.s)));
-        assertFalse(_vta(ref, 1 << 32, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(t.s)));
+        assertFalse(_vta(ref, 1 << 64, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(t.s)));
         // attestation có dấu thời gian
         vm.expectEmit(true, true, false, true, address(tok));
         emit ITransferDisclosure.AmountAttested(ref, 123, ITransferDisclosure.OpeningKind.RECEIVER_X, address(this), block.timestamp);
@@ -466,6 +466,51 @@ abstract contract ZetherTokenSuite is ZetherFixture {
         (bytes memory ct, bytes memory yTo) = tok.transferCiphertext(ref);
         assertEq(yTo, bob.y);
         assertEq(ct.length, 3 * ver.g1EncodedBytes());
+    }
+
+    /// limits D1/D5: một transfer > 2^32 đơn vị, số dư > 2^44 được giữ, chi (cả số dư trong một transfer)
+    /// và rút; tiết lộ một khoản > 2^32 bằng cả ba opening. Số dư kiểm bằng `_holds` (check_balance).
+    function test_largeValuesNv64() public {
+        tok = _newToken(true, "big", uint256(1) << 54);
+        uint256 b0 = (uint256(1) << 44) + 12_345;
+        _fund(tok, alice, b0);
+        tok.rollOverPublic(alice.ua);
+        assertTrue(_holds(tok, alice, b0, true), "acc holds > 2^44");
+        uint256 v = (uint256(1) << 33) + 7;
+        Tx memory t = _proveTransfer(tok, alice, bob, v, b0, carol.ua, 0);
+        uint256 g0 = gasleft();
+        bytes32 ref = _direct(tok, t, carol.ua);
+        console2.log(bls ? "bls12-381" : "bn254", "transferConfidential v > 2^32 (direct, auditor, fee) gas", g0 - gasleft());
+        uint256 b1 = b0 - v - FEE;
+        assertTrue(_holds(tok, alice, b1, true), "sender acc = b - v - fee");
+        assertTrue(_holds(tok, bob, v, false), "receiver pending = v");
+        assertTrue(_holds(tok, carol, FEE, false), "beneficiary pending = fee");
+        _discloseLarge(ref, v, t.s);
+        _spendAllAndBurn(b1, v);
+    }
+
+    /// Tiết lộ khoản > 2^32 bằng cả ba opening (D6: bundle không đổi); ≥ 2^n_v bị từ chối.
+    function _discloseLarge(bytes32 ref, uint256 v, uint256 s) internal view {
+        assertTrue(_vta(ref, v, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(s)));
+        bytes memory rx = _cpOpening(bob.x, ref, v, ITransferDisclosure.OpeningKind.RECEIVER_X);
+        assertTrue(_vta(ref, v, ITransferDisclosure.OpeningKind.RECEIVER_X, rx));
+        assertTrue(_vta(ref, v, ITransferDisclosure.OpeningKind.AUDITOR,
+            _cpOpening(X_AUD, ref, v, ITransferDisclosure.OpeningKind.AUDITOR)));
+        assertFalse(_vta(ref, v - (uint256(1) << 32), ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(s)));
+        assertFalse(_vta(ref, uint256(1) << 64, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(s)));
+    }
+
+    /// Cả số dư còn lại (> 2^44) trong MỘT transfer, rồi người nhận rút hết.
+    function _spendAllAndBurn(uint256 b1, uint256 v) internal {
+        _direct(tok, _proveTransfer(tok, alice, bob, b1, b1, _none(), 0), _none());
+        assertTrue(_holds(tok, alice, 0, true), "sender emptied");
+        tok.rollOverPublic(bob.ua);
+        uint256 bb = v + b1;
+        assertTrue(_holds(tok, bob, bb, true), "receiver acc = v + b1");
+        (bytes memory pl, bytes memory pr) = _proveBurn(tok, bob, bb, bb, address(0xD00D), _none(), 0);
+        tok.burn(pl, bb, address(0xD00D), _none(), pr, "");
+        assertEq(usd.balanceOf(address(0xD00D)), bb * SCALE);
+        assertEq(tok.totalShielded(), FEE, "only carol's fee left shielded");
     }
 
     /// Auditor giải mã ĐÚNG khoản được tiết lộ, không giải mã được số dư của ai.
