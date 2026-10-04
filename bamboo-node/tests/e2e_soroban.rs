@@ -124,15 +124,17 @@ struct FakeOdoo {
     reports: Vec<Value>,
     ingested: Vec<Value>,
     indexed_block: u64,
+    /// Token contract ids registered in Odoo (strkey `C…`) — the indexer must filter on these.
+    tokens: Vec<String>,
 }
 
 async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path<(String, String)>, Json(body): Json<Value>) -> Json<Value> {
     let mut o = s.lock().unwrap();
     let out = match (model.as_str(), method.as_str()) {
-        // Token list empty: the Soroban adapter watches `params.contracts` (TokenCfg is EVM-typed — see report).
         ("blockchain.chain", "node_config") => json!({
             "evm_chain_number": body["evm_chain_number"], "finality_mode": "instant", "finality_depth": 0,
-            "finality_quorum": 1, "indexed_block": o.indexed_block, "tokens": [], "journal_max_nonce": null, "inflight": []}),
+            "finality_quorum": 1, "indexed_block": o.indexed_block,
+            "tokens": o.tokens.iter().map(|t| json!({"address": t, "decimals": 7})).collect::<Vec<_>>(), "journal_max_nonce": null, "inflight": []}),
         ("blockchain.relay.job", "relay_poll") => json!(std::mem::take(&mut o.jobs)),
         ("blockchain.relay.job", "relay_claim") => {
             for id in body["job_ids"].as_array().unwrap() {
@@ -155,6 +157,10 @@ async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path
         ("blockchain.chain.event", "chain_event_ingest") => {
             assert_eq!(body["from_block"].as_u64().unwrap(), o.indexed_block + 1, "cursor gap");
             o.indexed_block = body["to_block"].as_u64().unwrap();
+            // Real ingest rejects events of contracts Odoo has not registered.
+            for e in body["events"].as_array().unwrap() {
+                assert!(o.tokens.iter().any(|t| e["contract"] == json!(t)), "event from unregistered contract: {e}");
+            }
             o.ingested.extend(body["events"].as_array().unwrap().iter().cloned());
             json!({"indexed_block": o.indexed_block, "created": 0})
         }
@@ -176,10 +182,9 @@ fn odoo_at(addr: SocketAddr) -> Odoo {
     Odoo::with_key(&cfg, "k".into()).unwrap()
 }
 
-fn chain_cfg(contracts: &[&str], fee_bump: bool) -> ChainCfg {
+fn chain_cfg(fee_bump: bool) -> ChainCfg {
     let mut params = toml::Table::new();
     params.insert("network_passphrase".into(), NETWORK.into());
-    params.insert("contracts".into(), toml::Value::Array(contracts.iter().map(|c| toml::Value::from(*c)).collect()));
     if fee_bump {
         params.insert("fee_bump_lane".into(), 0.into());
     }
@@ -211,6 +216,7 @@ struct Signed {
     digest: String,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn sign_pay(subject: &LocalSigner, token: &str, to: &str, amount: i128, pay_ref: [u8; 32], nonce: i64, exp: u32, id: i64) -> Signed {
     let from = g(subject);
     let valid_until = now() + 600;
@@ -274,12 +280,12 @@ async fn soroban_payments_anti_lock_fee_bump_and_finality() {
         cli(&["contract", "invoke", "--id", t, "--source-account", &secret(7), "--", "mint", "--to", &g(&subject), "--amount", "1000000"]);
     }
 
-    let state = Arc::new(Mutex::new(FakeOdoo::default()));
+    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![t1.clone(), t2.clone()], ..Default::default() }));
     let start = rpc("getLatestLedger", json!({})).await["sequence"].as_u64().unwrap();
     state.lock().unwrap().indexed_block = start - 1;
     let odoo = odoo_at(start_fake(state.clone()).await);
     let signers = [key(0), key(1)];
-    let adapter = SorobanAdapter::new(&chain_cfg(&[&t1, &t2], false), &signers).unwrap();
+    let adapter = SorobanAdapter::new(&chain_cfg(false), &signers).unwrap();
     assert_eq!(adapter.lanes()[1].address, g(&lane1));
     let seq0 = adapter.sequence(0).await.unwrap();
 
@@ -307,7 +313,7 @@ async fn soroban_payments_anti_lock_fee_bump_and_finality() {
     assert_eq!(adapter.sequence(0).await.unwrap(), seq0 + 1);
 
     // Fee-bump: lane 0 pays for lane 1's tx.
-    let bumped = SorobanAdapter::new(&chain_cfg(&[&t1, &t2], true), &signers).unwrap();
+    let bumped = SorobanAdapter::new(&chain_cfg(true), &signers).unwrap();
     let z = sign_pay(&subject, &t1, &g(&payee), 3_000, [0xC3; 32], 77, exp, 4);
     state.lock().unwrap().jobs.push(z.job.clone());
     assert!(lane_step(&bumped, &odoo, 1, "n#1").await.unwrap());

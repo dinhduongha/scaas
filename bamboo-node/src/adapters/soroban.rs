@@ -22,7 +22,7 @@ use stellar_xdr::{
     TransactionV1Envelope, Uint256, WriteXdr,
 };
 
-use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Signed, TxStatus};
+use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Rejected, Signed, TxStatus};
 use crate::chain::SimError;
 use crate::config::ChainCfg;
 use crate::odoo::Job;
@@ -42,7 +42,6 @@ pub struct SorobanAdapter {
     network_id: [u8; 32],
     signers: Vec<LocalSigner>,
     lanes: Vec<Lane>,
-    contracts: Vec<String>,
     fee_bump: Option<usize>,
     base_fee: u32,
     quorum: usize,
@@ -214,11 +213,6 @@ impl SorobanAdapter {
         for (s, &i) in signers.iter().zip(&cfg.lanes) {
             lanes.push(Lane { index: i, address: stellar_account_strkey(&lane_pk(s)?) });
         }
-        let contracts = p
-            .get("contracts")
-            .and_then(|v| v.as_array())
-            .map(|a| a.iter().filter_map(|c| c.as_str().map(str::to_owned)).collect())
-            .unwrap_or_default();
         let fee_bump = match p.get("fee_bump_lane").and_then(|v| v.as_integer()) {
             Some(i) => Some(cfg.lanes.iter().position(|&l| l as i64 == i).ok_or_else(|| anyhow!("fee_bump_lane {i} is not a lane"))?),
             None => None,
@@ -230,7 +224,6 @@ impl SorobanAdapter {
             network_id: network_id(passphrase),
             signers: signers.iter().map(clone_signer).collect::<Result<_>>()?,
             lanes,
-            contracts,
             fee_bump,
             base_fee: p.get("base_fee").and_then(|v| v.as_integer()).map(|v| v as u32).unwrap_or(DEFAULT_BASE_FEE),
             quorum: cfg.finality.quorum.max(1),
@@ -377,6 +370,9 @@ impl ChainAdapter for SorobanAdapter {
         let r = self.rpc("sendTransaction", json!({"transaction": env.to_xdr_base64(Limits::none())?})).await?;
         match r["status"].as_str() {
             Some("PENDING") | Some("DUPLICATE") => Ok(()),
+            // ERROR = CheckTx-equivalent refusal (bad seq/auth/fee/malformed): the same bytes never pass ⇒ rebuild.
+            // TRY_AGAIN_LATER (queue full) and transport errors stay retryable.
+            Some("ERROR") => Err(Rejected(format!("sendTransaction ERROR: {}", r["errorResultXdr"])).into()),
             other => bail!("sendTransaction {}: {}", other.unwrap_or("?"), r["errorResultXdr"]),
         }
     }
@@ -429,9 +425,9 @@ impl ChainAdapter for SorobanAdapter {
         Ok(h)
     }
 
-    async fn events(&self, from: u64, to: u64) -> Result<Vec<Value>> {
+    async fn events(&self, from: u64, to: u64, contracts: &[String]) -> Result<Vec<Value>> {
         let mut out = Vec::new();
-        for chunk in self.contracts.chunks(CONTRACTS_PER_FILTER) {
+        for chunk in contracts.chunks(CONTRACTS_PER_FILTER) {
             let filter = json!([{"type": "contract", "contractIds": chunk}]);
             let mut cursor: Option<String> = None;
             'pages: loop {
