@@ -119,7 +119,7 @@ helius.dev/blog/solana-passkeys. Task 0 kiểm lại bằng `solana feature stat
 
 | Account | Địa chỉ (PDA của program `bamboo`) | Tạo bởi | Vai |
 |---|---|---|---|
-| program `bamboo` | program id cố định; upgrade authority (production: multisig) | deployer | một id cho lệnh gọi **và** event authority |
+| program `bamboo` | program id = `BAMBOO_PROGRAM_ID` lúc build (mặc định: id test/localnet, khoá đã công khai — review M3); upgrade authority (production: multisig) | deployer (`scripts/deploy.sh`, khoá ngoài repo) | một id cho lệnh gọi **và** event authority; program id khác = miền khác (PDA, event authority, `Config` do đúng upgrade authority của bản đó tạo) |
 | `Config` | `["config"]` | `initialize` (chỉ upgrade authority — kiểm `ProgramData`) | `admin`, `network` = genesis hash của cluster. **Chỉ đọc** trên đường nóng |
 | `SubjectAccount` | `["acct", owner32]` | lười ở `relay_pay` đầu (ed25519) hoặc `open` / `open_passkey` | khoá, origin, guardian, policy; **số dư = token account có owner = PDA này** |
 | `LanePda` | `["lane", account, lane32]` | `relay_pay` / `mandate::open` / KeyOp (init) | `{next u64, valid_until i64, rent_payer}` |
@@ -394,7 +394,8 @@ SubjectAccount/Mandate. `initialize` chỉ upgrade authority (chống front-run 
 - Địa chỉ lane = pk base58. Lane cần SOL. Khởi động in địa chỉ lane (R60).
 - **Durable nonce mỗi lane:** nonce account = `create_with_seed(lane, "bamboo-nonce-v1", SystemProgram)` (địa chỉ tất
   định, không thêm keypair), authority = lane. Thiếu ⇒ adapter tự tạo (một tx setup do chính lane trả) ở lần
-  `sequence(lane)` đầu. `ponytail:` side-effect trong `sequence`, đủ vì chỉ chạy một lần mỗi lane.
+  `sequence(lane)` đầu: `Transfer` (bù tới rent) + `AllocateWithSeed` + `InitializeNonceAccount` — địa chỉ công khai bị
+  gửi lamports trước vẫn tạo được (review M1). `ponytail:` side-effect trong `sequence`, đủ vì chỉ chạy một lần mỗi lane.
 - **Vì sao durable nonce, không recent blockhash:** shared runner (`recover_lane` / `follow`) coi "sequence của lane đổi
   mà tx vẫn không thấy ⇒ tx không bao giờ vào nữa". Với nonce account đó là **đúng nguyên văn**: nonce đổi ⇔ có tx dùng
   nó đã vào sổ (thành công hay lỗi). Với blockhash thì "không bao giờ vào nữa" ⇔ `block_height > lastValidBlockHeight` —
@@ -473,7 +474,8 @@ SubjectAccount/Mandate. `initialize` chỉ upgrade authority (chống front-run 
   trên RPC hosted bất kỳ có lịch sử giao dịch — **không API độc quyền**. Loại: Geyser/Yellowstone (cần chạy node RPC
   riêng + plugin — nặng; là đường nâng cấp mainnet), webhook/"enhanced API" của nhà cung cấp (đẩy, khoá nhà cung cấp,
   tính đầy đủ không kiểm được).
-- **Đầy đủ:** trang cuối mà slot nhỏ nhất vẫn `≥ from` và hết dữ liệu ⇒ kiểm `getFirstAvailableBlock() <= from`, không thì
+- **Đầy đủ:** trang ngắn KHÔNG phải hết lịch sử (RPC hosted giới hạn `limit`) — phân trang tới trang rỗng hoặc slot `< from`
+  (review L2); token Odoo không parse được hết ⇒ `Err` (review L1). Trang rỗng mà slot nhỏ nhất vẫn `≥ from` ⇒ kiểm `getFirstAvailableBlock() <= from`, không thì
   `Err` (RPC đã prune lịch sử). Mọi lỗi ⇒ `Err`, vùng không được chốt (Sui L5). Không bao giờ hỏi slot > `finalized`.
 - **Lọc:** chỉ tx `meta.err = null`; chỉ **inner instruction** có program id = `params.program_id`, account đầu = event
   authority PDA, data bắt đầu bằng tag event-CPI của Anchor (`0xe445a52e51cb9a1d`) + discriminator event; event
