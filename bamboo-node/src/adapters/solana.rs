@@ -353,17 +353,25 @@ pub fn advance_nonce_ix(nonce: &Key, authority: &Key) -> Ix {
     }
 }
 
-/// Tạo nonce account tất định của lane: `CreateAccountWithSeed` + `InitializeNonceAccount(authority = lane)`.
-pub fn create_nonce_ixs(lane: &Key, lamports: u64) -> Vec<Ix> {
+/// Tạo nonce account tất định của lane: `Transfer` (bù tới rent, nếu thiếu) + `AllocateWithSeed(owner System)` +
+/// `InitializeNonceAccount(authority = lane)`. Địa chỉ công khai nên ai cũng gửi lamports trước được; `CreateAccountWithSeed`
+/// sẽ lỗi `AccountAlreadyInUse` mãi, đường này thì không (review M1). `existing` = lamports đang có ở địa chỉ đó.
+pub fn create_nonce_ixs(lane: &Key, rent: u64, existing: u64) -> Vec<Ix> {
     let nonce = nonce_account(lane);
-    let mut d = 3u32.to_le_bytes().to_vec();
+    let mut ixs = Vec::new();
+    let top = rent.saturating_sub(existing);
+    if top > 0 {
+        let mut d = 2u32.to_le_bytes().to_vec();
+        d.extend_from_slice(&top.to_le_bytes());
+        ixs.push(Ix { program: SYSTEM, accounts: vec![m(*lane, true, true), m(nonce, false, true)], data: d });
+    }
+    let mut d = 9u32.to_le_bytes().to_vec();
     d.extend_from_slice(lane);
     d.extend_from_slice(&(NONCE_SEED.len() as u64).to_le_bytes());
     d.extend_from_slice(NONCE_SEED.as_bytes());
-    d.extend_from_slice(&lamports.to_le_bytes());
     d.extend_from_slice(&NONCE_SPACE.to_le_bytes());
     d.extend_from_slice(&SYSTEM);
-    let create = Ix { program: SYSTEM, accounts: vec![m(*lane, true, true), m(nonce, false, true), m(*lane, true, false)], data: d };
+    ixs.push(Ix { program: SYSTEM, accounts: vec![m(nonce, false, true), m(*lane, true, false)], data: d });
     let mut d = 6u32.to_le_bytes().to_vec();
     d.extend_from_slice(lane);
     let init = Ix {
@@ -371,7 +379,8 @@ pub fn create_nonce_ixs(lane: &Key, lamports: u64) -> Vec<Ix> {
         accounts: vec![m(nonce, false, true), m(k(RECENT_BLOCKHASHES), false, false), m(k(RENT_SYSVAR), false, false)],
         data: d,
     };
-    vec![create, init]
+    ixs.push(init);
+    ixs
 }
 
 /// Giới hạn đặt ở header của tx v1 (bắt buộc: bỏ trống = 0 ⇒ tx không chạy).
@@ -495,6 +504,19 @@ pub fn classify_landed(err: &Value, slot: u64) -> Result<TxStatus> {
         Some((_, e)) if BUDGET_ERRORS.contains(&err_name(e).as_str()) => Err(Rejected(err.to_string()).into()),
         Some((i, _)) if i >= 1 => Ok(TxStatus::Reverted { reason: err.to_string() }),
         _ => Err(Rejected(err.to_string()).into()),
+    }
+}
+
+/// Lỗi mô phỏng: lỗi ở precompile/`bamboo` (chỉ số ≥ 1) ⇒ `Revert` (job chết); hết CU, lỗi cấp tx, và lane thiếu
+/// lamports trả rent (lane PDA / Account lười / ATA — System "insufficient lamports", review L3) ⇒ `Transport` (thử lại,
+/// lùi dần, breaker). ponytail: nhận diện qua log của System; tx đã vào sổ với lỗi này vẫn là `Reverted` (hiếm: mô
+/// phỏng chặn trước).
+pub fn classify_sim(err: &Value, logs: &[String]) -> SimError {
+    let text = format!("{err} {}", logs.join(" | "));
+    match instruction_error(err) {
+        Some(_) if logs.iter().any(|l| l.contains("insufficient lamports")) => SimError::Transport(format!("lane short of rent: {text}")),
+        Some((i, e)) if i >= 1 && !BUDGET_ERRORS.contains(&err_name(e).as_str()) => SimError::Revert(text),
+        _ => SimError::Transport(format!("simulation: {text}")),
     }
 }
 
@@ -754,25 +776,35 @@ impl SolanaAdapter {
     async fn nonce(&self, lane: usize) -> Result<[u8; 32]> {
         let lk = self.lane_key(lane)?;
         let addr = nonce_account(&lk);
+        let mut existing = 0;
         if let Some((data, owner)) = self.account_data(&addr, "confirmed").await? {
-            let (value, authority) = parse_nonce(&data)?;
-            if owner != SYSTEM || authority != lk {
+            if owner != SYSTEM {
                 bail!("nonce account {} is not this lane's", b58(&addr));
             }
-            return Ok(value);
+            if !data.is_empty() {
+                let (value, authority) = parse_nonce(&data)?;
+                if authority != lk {
+                    bail!("nonce account {} is not this lane's", b58(&addr));
+                }
+                return Ok(value);
+            }
+            // pre-funded by someone (M1): keep its lamports, allocate in place
+            existing = self.rpc("getBalance", json!([b58(&addr), {"commitment": "confirmed"}])).await?["value"].as_u64().unwrap_or(0);
         }
         let rent = self.rpc("getMinimumBalanceForRentExemption", json!([NONCE_SPACE])).await?.as_u64().ok_or_else(|| anyhow!("bad rent"))?;
         let bh = self.rpc("getLatestBlockhash", json!([{"commitment": "confirmed"}])).await?;
         let bh = key(bh["value"]["blockhash"].as_str().unwrap_or_default())?;
         let budget = Budget { priority_lamports: 0, cu: 10_000, loaded_bytes: 64 * 1024 };
-        let (msg, _) = message_v1(&lk, &bh, &create_nonce_ixs(&lk, rent), &budget)?;
+        let (msg, _) = message_v1(&lk, &bh, &create_nonce_ixs(&lk, rent, existing), &budget)?;
         let tx = wire_v1(&msg, &self.signers[lane].sign(&msg)?);
         tracing::info!(chain = %self.key, lane, nonce = %b58(&addr), "creating the lane's durable nonce account");
         self.send_raw(&tx).await?;
         for _ in 0..60 {
             tokio::time::sleep(Duration::from_millis(500)).await;
             if let Some((data, _)) = self.account_data(&addr, "confirmed").await? {
-                return Ok(parse_nonce(&data)?.0);
+                if !data.is_empty() {
+                    return Ok(parse_nonce(&data)?.0);
+                }
             }
         }
         bail!("nonce account {} not created", b58(&addr))
@@ -864,11 +896,8 @@ impl ChainAdapter for SolanaAdapter {
             .map_err(transport)?;
         let v = &sim["value"];
         if !v["err"].is_null() {
-            let logs = v["logs"].as_array().map(|l| l.iter().filter_map(|x| x.as_str()).collect::<Vec<_>>().join(" | ")).unwrap_or_default();
-            return match instruction_error(&v["err"]) {
-                Some((i, e)) if i >= 1 && !BUDGET_ERRORS.contains(&err_name(e).as_str()) => Err(SimError::Revert(format!("{} {logs}", v["err"]))),
-                _ => Err(SimError::Transport(format!("simulation: {} {logs}", v["err"]))),
-            };
+            let logs: Vec<String> = v["logs"].as_array().into_iter().flatten().filter_map(|x| x.as_str().map(String::from)).collect();
+            return Err(classify_sim(&v["err"], &logs));
         }
         let used = v["unitsConsumed"].as_u64().unwrap_or(self.max_cu as u64);
         let cu = (used + used.div_ceil(5)).clamp(1_000, self.max_cu as u64) as u32;
@@ -988,12 +1017,16 @@ impl ChainAdapter for SolanaAdapter {
         Ok(self.produced_at_or_before(&self.rpcs[0], height).await?.1)
     }
 
-    /// Phân trang lùi `getSignaturesForAddress(program)` (finalized) tới slot < `from`; hết lịch sử mà chưa tới `from`
+    /// Phân trang lùi `getSignaturesForAddress(program)` (finalized) tới slot < `from` hoặc trang rỗng; hết lịch sử mà chưa tới `from`
     /// ⇒ RPC phải còn block từ `from` (`getFirstAvailableBlock`), không thì `Err` (vùng không được chốt).
     /// ponytail: mỗi bước phân trang từ đỉnh xuống `to` — O(độ tụt hậu) khi bắt kịp trên mainnet; nhớ chữ ký biên hoặc
     /// Geyser khi tải cao (owner OQ2).
     async fn events(&self, from: u64, to: u64, contracts: &[String]) -> Result<Vec<Value>> {
         let tokens: Vec<String> = contracts.iter().filter_map(|c| key(c).ok()).map(|k| b58(&k)).collect();
+        if tokens.is_empty() && !contracts.is_empty() {
+            // L1: Ok([]) here would let index_step move the cursor past real events
+            bail!("none of the {} registered tokens is a Solana address", contracts.len());
+        }
         if tokens.is_empty() || from > to {
             return Ok(vec![]);
         }
@@ -1024,7 +1057,8 @@ impl ChainAdapter for SolanaAdapter {
             if reached {
                 break;
             }
-            if page.len() < PAGE {
+            // L2: a short page is NOT the end (providers cap `limit`, bigtable/ledger seams); only an empty page is
+            if page.is_empty() {
                 let first = self.rpc("getFirstAvailableBlock", json!([])).await?.as_u64().unwrap_or(u64::MAX);
                 if first > from {
                     bail!("RPC history starts at slot {first}, after the range start {from}");
@@ -1067,6 +1101,7 @@ impl SolanaAdapter {
 mod tests {
     use super::*;
     use proptest::prelude::*;
+    use std::sync::Arc;
 
     // Vector chéo — cùng giá trị ở chains/solana/programs/bamboo/tests/vectors.rs và dms_blockchain/tests/test_fam_solana.py.
     const PROGRAM: &str = "BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d";
@@ -1285,6 +1320,96 @@ mod tests {
         assert!(tx_events(&program, &[], &tx(1, 2, &event("PaymentSettled", &settled), Value::Null), &bh).unwrap().is_empty(), "unregistered mint");
         assert!(tx_events(&program, &tokens, &tx(1, 2, &event("PaymentSettled", &settled), json!("x")), &bh).unwrap().is_empty(), "failed tx");
         assert!(tx_events(&program, &tokens, &tx(1, 2, &event("PaidUnderMandate", &settled), Value::Null), &bh).unwrap().is_empty(), "Odoo does not ingest it");
+    }
+
+    /// Review M1: the deterministic nonce address may already hold lamports (anyone can send them) — creation tops up
+    /// to rent, then `AllocateWithSeed` + `InitializeNonceAccount` (no `CreateAccountWithSeed`, which fails on a
+    /// funded address).
+    #[test]
+    fn nonce_creation_survives_a_prefunded_address() {
+        let lane = key("3Cy3YNTFywCmxoxt8n7UH6hg6dLo5uACowX3CFceaSnx").unwrap();
+        let nonce = nonce_account(&lane);
+        let fresh = create_nonce_ixs(&lane, 1_447_680, 0);
+        assert_eq!(fresh.len(), 3);
+        assert_eq!(fresh[0].data, [&2u32.to_le_bytes()[..], &1_447_680u64.to_le_bytes()].concat(), "transfer the rent");
+        assert_eq!((fresh[0].accounts[0].key, fresh[0].accounts[1].key), (lane, nonce));
+        let squatted = create_nonce_ixs(&lane, 1_447_680, 1_000_000);
+        assert_eq!(squatted[0].data, [&2u32.to_le_bytes()[..], &447_680u64.to_le_bytes()].concat(), "top up only");
+        let rich = create_nonce_ixs(&lane, 1_447_680, 5_000_000);
+        assert_eq!(rich.len(), 2, "no transfer");
+        let alloc = &rich[0];
+        let mut want = 9u32.to_le_bytes().to_vec();
+        want.extend_from_slice(&lane);
+        want.extend_from_slice(&(NONCE_SEED.len() as u64).to_le_bytes());
+        want.extend_from_slice(NONCE_SEED.as_bytes());
+        want.extend_from_slice(&NONCE_SPACE.to_le_bytes());
+        want.extend_from_slice(&SYSTEM);
+        assert_eq!(alloc.data, want);
+        assert_eq!(alloc.accounts.iter().map(|a| (a.key, a.signer, a.writable)).collect::<Vec<_>>(), vec![(nonce, false, true), (lane, true, false)]);
+        assert_eq!(&rich[1].data[..4], &6u32.to_le_bytes());
+    }
+
+    /// Review L3: a lane short of lamports for rent (lane PDA, lazy Account, ATA) is the relayer's problem ⇒ retry; a
+    /// program error stays a revert.
+    #[test]
+    fn simulation_errors_are_classified() {
+        let ix1 = json!({"InstructionError": [2, {"Custom": 1}]});
+        let logs = |l: &str| vec![l.to_string()];
+        assert!(matches!(classify_sim(&ix1, &logs("Transfer: insufficient lamports 5, need 1447680")), SimError::Transport(_)));
+        assert!(matches!(classify_sim(&ix1, &logs("Program log: Error: insufficient funds")), SimError::Revert(_)));
+        assert!(matches!(classify_sim(&json!({"InstructionError": [2, {"Custom": 6013}]}), &[]), SimError::Revert(_)));
+        assert!(matches!(classify_sim(&json!({"InstructionError": [2, "ComputationalBudgetExceeded"]}), &[]), SimError::Transport(_)));
+        assert!(matches!(classify_sim(&json!({"InstructionError": [0, {"Custom": 1}]}), &[]), SimError::Transport(_)));
+        assert!(matches!(classify_sim(&json!("BlockhashNotFound"), &[]), SimError::Transport(_)));
+    }
+
+    /// Fake JSON-RPC: `getSignaturesForAddress` serves SHORT pages (a provider capping `limit`); records every
+    /// `getTransaction`.
+    async fn fake_rpc(fetched: Arc<Mutex<Vec<String>>>) -> String {
+        use axum::extract::State;
+        use axum::Json;
+        let sig = |i: u8| b58(&[i; 64]);
+        async fn h(State((f, sig)): State<(Arc<Mutex<Vec<String>>>, fn(u8) -> String)>, Json(b): Json<Value>) -> Json<Value> {
+            let p = &b["params"];
+            let r = match b["method"].as_str().unwrap_or_default() {
+                "getSignaturesForAddress" => match p[1]["before"].as_str() {
+                    None => json!([{"slot": 90, "signature": sig(1), "err": null}, {"slot": 80, "signature": sig(2), "err": null}]),
+                    Some(s) if s == sig(2) => json!([{"slot": 60, "signature": sig(3), "err": null}]),
+                    Some(s) if s == sig(3) => json!([{"slot": 5, "signature": sig(4), "err": null}]),
+                    _ => json!([]),
+                },
+                "getTransaction" => {
+                    let s = p[0].as_str().unwrap().to_string();
+                    f.lock().unwrap().push(s.clone());
+                    json!({"slot": 1, "meta": {"err": null, "innerInstructions": []}, "transaction": {"signatures": [s], "message": {"accountKeys": []}}})
+                }
+                "getBlock" => json!({"blockhash": b58(&[2; 32])}),
+                "getFirstAvailableBlock" => json!(0),
+                m => panic!("unexpected {m}"),
+            };
+            Json(json!({"jsonrpc": "2.0", "id": 1, "result": r}))
+        }
+        let app = axum::Router::new().route("/", axum::routing::post(h)).with_state((fetched, sig as fn(u8) -> String));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        url
+    }
+
+    /// Review L2: a short page is not the end of history (paging goes on until an empty page or `from`); L1: Odoo
+    /// tokens that all fail to parse are an error, so the cursor never moves past real events.
+    #[tokio::test]
+    async fn events_page_past_short_pages_and_refuse_unparsable_tokens() {
+        let fetched = Arc::new(Mutex::new(Vec::new()));
+        let url = fake_rpc(fetched.clone()).await;
+        let mut params = toml::Table::new();
+        params.insert("program_id".into(), PROGRAM.into());
+        let cfg = ChainCfg { family: "solana".into(), network: Some(NETWORK.into()), rpc_urls: vec![url], lanes: vec![0], params, ..Default::default() };
+        let a = SolanaAdapter::new(&cfg, &[lane0()]).unwrap();
+        assert!(a.events(10, 100, &[USD.into()]).await.unwrap().is_empty());
+        assert_eq!(*fetched.lock().unwrap(), vec![b58(&[3; 64]), b58(&[2; 64]), b58(&[1; 64])], "slot 60 is on the second page");
+        assert!(a.events(10, 100, &["0xnot-a-mint".into()]).await.is_err());
+        assert!(a.events(10, 100, &[]).await.unwrap().is_empty(), "no tokens at all: index_step holds the cursor");
     }
 
     proptest! {
