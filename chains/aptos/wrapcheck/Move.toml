@@ -1,0 +1,13 @@
+# Kiểm review M3: entry được relay (chữ ký chủ thể, relayer 0x0) KHÔNG gọi được từ module/script khác — gói lại thì
+# indexer (gợi ý theo entry function của tx) không thấy settlement. Package này PHẢI biên dịch lỗi:
+# `scripts/check_entry_visibility.sh`.
+[package]
+name = "wrapcheck"
+version = "1.0.0"
+
+[addresses]
+wrapcheck = "0xbad"
+bamboo = "0xb0b"
+
+[dependencies.bamboo]
+local = ".."

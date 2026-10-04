@@ -206,7 +206,7 @@ module bamboo::dex {
     }
 
     /// Một cặp. Maker bán `maker.sell` lấy `maker.buy`; taker ngược lại. Tiền chảy giữa Account của hai bên.
-    public entry fun settle(
+    package entry fun settle(
         lane: &signer,
         market: address,
         maker_order: vector<u8>,
@@ -267,7 +267,7 @@ module bamboo::dex {
 
     /// Đóng vĩnh viễn một lệnh bằng chữ ký `Cancel` của một khoá Account của maker (ai nộp cũng được). Không hạn
     /// (RS5-10): huỷ chỉ có lợi cho người ký. Đã đóng ⇒ không làm gì.
-    public entry fun cancel_signed(market: address, order: vector<u8>, pk: vector<u8>, sig: vector<u8>, env: vector<u8>) {
+    package entry fun cancel_signed(market: address, order: vector<u8>, pk: vector<u8>, sig: vector<u8>, env: vector<u8>) {
         let o = parse_order(&order);
         assert!(o.market == market, EBAD_ORDER);
         let h = sha3_256(order);
@@ -282,7 +282,7 @@ module bamboo::dex {
     }
 
     /// Vô hiệu mọi lệnh `nonce < min_nonce` của maker trên market NÀY. Tăng nghiêm ngặt ⇒ phát lại vô hại.
-    public entry fun invalidate_nonces_signed(
+    package entry fun invalidate_nonces_signed(
         market: address,
         maker: address,
         min_nonce: u128,

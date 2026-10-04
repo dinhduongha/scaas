@@ -251,7 +251,7 @@ module bamboo::meta {
 
     /// Meta-tx `pay` (spec §5.1). `contract`/`from` dựng từ `owner`, `chain_id` đọc on-chain: relayer không đổi được
     /// trường nào mà chữ ký vẫn qua.
-    public entry fun relay_pay(
+    package entry fun relay_pay(
         lane: &signer,
         owner: address,
         asset: Object<Metadata>,
@@ -466,7 +466,7 @@ module bamboo::meta {
     }
 
     /// Đường 1: một khoá hiện có ký `KeyOp` (relayer hay ai nộp cũng được, không gas cho chủ).
-    public entry fun manage_signed(
+    package entry fun manage_signed(
         owner: address,
         action: u8,
         scheme: u8,

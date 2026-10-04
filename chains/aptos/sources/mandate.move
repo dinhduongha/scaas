@@ -116,7 +116,7 @@ module bamboo::mandate {
     }
 
     /// `period == 0` sẽ reset trần kỳ ở mọi lần trả (review W5 của MandateWallet) ⇒ từ chối.
-    public entry fun open(
+    package entry fun open(
         owner: address,
         seed: vector<u8>,
         delegate_key: vector<u8>,
@@ -151,7 +151,7 @@ module bamboo::mandate {
 
     /// Delegate ký `MetaOp{op: mandate_pay, contract: mandate, from: owner, lane: pay_ref, nonce: 0}`; ai nộp cũng
     /// được (relayer). `pay_ref` một lần là chống replay.
-    public entry fun pay(
+    package entry fun pay(
         lane: &signer,
         mandate: address,
         asset: Object<Metadata>,
@@ -197,7 +197,7 @@ module bamboo::mandate {
     }
 
     /// Thu hồi: delegate (kill switch của platform) HOẶC một khoá Account của chủ ký `MetaOp{op: revoke}`.
-    public entry fun revoke_signed(
+    package entry fun revoke_signed(
         lane: &signer,
         mandate: address,
         valid_until: u64,

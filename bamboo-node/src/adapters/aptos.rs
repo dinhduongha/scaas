@@ -681,8 +681,10 @@ impl ChainAdapter for AptosAdapter {
 
     /// GỢI Ý từ Indexer API: tx người dùng gọi một entry function của package trong vùng block; nội dung (thành công,
     /// hash, event, block) đọc lại từ fullnode. Indexer chưa xử lý hết vùng ⇒ `Err` (vùng không được chốt).
-    /// `ponytail:` tx gói entry của ta trong Move script/module khác không được gợi ý — relayer luôn gọi thẳng entry;
-    /// cần thì thêm gợi ý `fungible_asset_activities` theo `asset_type` (đắt với tài sản đông giao dịch).
+    /// Entry được relay là `package entry` (review M3): script/module khác không gói được, nên tx của ta luôn có entry
+    /// function của package. Indexer API không có bảng `events` để gợi ý theo type. `ponytail:` multisig thực thi
+    /// chỉ-hash vẫn gọi được entry mà không lộ payload (spec §6.6) — cần thì thêm gợi ý `fungible_asset_activities`
+    /// theo `asset_type` (đắt với tài sản đông giao dịch).
     async fn events(&self, from: u64, to: u64, contracts: &[String]) -> Result<Vec<Value>> {
         let tokens: Vec<String> = contracts.iter().filter_map(|c| parse_addr(c).ok()).map(|a| addr_hex(&a)).collect();
         if tokens.is_empty() || from > to {
