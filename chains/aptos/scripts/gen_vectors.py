@@ -137,10 +137,12 @@ def pay(name, key, asset, amount, ref, lane, nonce, valid_until=VU, relayer='0x0
                              relayer)
     dg = F.digest(payload)
     sig, env = signer.sign(F.LABEL, dg, lane_b, style)
-    fn(name, 'lane: &signer, asset: Object<Metadata>',
-       'meta::relay_pay(lane, %s, asset, %s, %d, %s, %s, %d, %d, %s, %s, %s, %s, %s)' % (
-           a(owner), a(to), amount, h(pay_ref), h(lane_b), nonce, valid_until, a(relayer), h(ZERO32), h(signer.pk),
-           h(sig), h(env)), p256=signer.kind != 'ed25519')
+    tail = '%s, asset, %s, %d, %s, %s, %d, %d, %s, %s, %s, %s, %s)' % (
+        a(owner), a(to), amount, h(pay_ref), h(lane_b), nonce, valid_until, a(relayer), h(ZERO32), h(signer.pk), h(sig),
+        h(env))
+    fn(name, 'lane: &signer, asset: Object<Metadata>', 'meta::relay_pay(lane, ' + tail, p256=signer.kind != 'ed25519')
+    out.append('public fun %s_check(lane: address, asset: Object<Metadata>): vector<u8> { meta::pay_check(lane, %s }%s'
+               % (name, tail, '  // p256' if signer.kind != 'ed25519' else ''))
     return payload, dg, sig, env
 
 

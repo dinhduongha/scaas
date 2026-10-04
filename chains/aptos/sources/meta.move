@@ -260,22 +260,83 @@ module bamboo::meta {
         sig: vector<u8>,
         envelope: vector<u8>,
     ) acquires Root, Account {
+        let digest = pay_checked(signer::address_of(lane), owner, asset, to, amount, pay_ref, lane_id, nonce,
+            valid_until, relayer, extra, public_key, sig, envelope);
+        let addr = account_of(owner);
+        if (!exists<Account>(addr)) open_lazily(owner, &public_key, &envelope);
+        let acct = &mut Account[addr];
+        let l = acct.lanes.borrow_mut_with_default(lane_id, Lane { next: 0, valid_until: 0 });
+        l.next = nonce + 1;
+        if (valid_until > l.valid_until) l.valid_until = valid_until;
+        let amt = amount as u64;
+        primary_fungible_store::transfer(&object::generate_signer_for_extending(&acct.extend), asset, to, amt);
+        let asset_addr = object::object_address(&asset);
+        emit_executed(asset_addr, addr, owner, digest, lane_id, nonce);
+        emit_settled(asset_addr, owner, to, amt, pay_ref);
+    }
+
+    #[view]
+    /// Mọi kiểm tra của `relay_pay`, không ghi state; trả digest hoặc abort đúng mã của `relay_pay`. Relayer gọi nó thay
+    /// mô phỏng khi Account chưa mở: REST `simulate` của aptos-node 9.6.0 treo với tx vừa tạo object Account vừa chi
+    /// từ primary store có sẵn của nó (tx thật chạy bình thường — spec §16).
+    public fun pay_check(
+        lane: address,
+        owner: address,
+        asset: Object<Metadata>,
+        to: address,
+        amount: u128,
+        pay_ref: vector<u8>,
+        lane_id: vector<u8>,
+        nonce: u64,
+        valid_until: u64,
+        relayer: address,
+        extra: vector<u8>,
+        public_key: vector<u8>,
+        sig: vector<u8>,
+        envelope: vector<u8>,
+    ): vector<u8> acquires Account {
+        pay_checked(lane, owner, asset, to, amount, pay_ref, lane_id, nonce, valid_until, relayer, extra, public_key, sig,
+            envelope)
+    }
+
+    /// Miền/hạn/relayer/khoá/phong bì/chữ ký/nonce/số dư của một `pay`. Account chưa có: khoá phải dẫn ra auth key
+    /// hiện tại của chủ (§3.3) và chữ ký kiểm với origin/rpIdHash của chính assertion.
+    fun pay_checked(
+        lane: address,
+        owner: address,
+        asset: Object<Metadata>,
+        to: address,
+        amount: u128,
+        pay_ref: vector<u8>,
+        lane_id: vector<u8>,
+        nonce: u64,
+        valid_until: u64,
+        relayer: address,
+        extra: vector<u8>,
+        public_key: vector<u8>,
+        sig: vector<u8>,
+        envelope: vector<u8>,
+    ): vector<u8> acquires Account {
         let addr = account_of(owner);
         let op = new_op(addr, object::object_address(&asset), OP_PAY, owner, to, amount, pay_ref, lane_id, nonce,
             valid_until, relayer, extra);
-        let digest = check(&op, lane);
-        if (!exists<Account>(addr)) open_lazily(owner, &public_key, &envelope);
-        let acct = &mut Account[addr];
-        assert!(verify_by(acct, &public_key, DOMAIN, &digest, &sig, &envelope), EBAD_SIGNATURE);
-        let l = acct.lanes.borrow_mut_with_default(lane_id, Lane { next: 0, valid_until: 0 });
-        assert!(l.next == nonce, EBAD_NONCE);
-        l.next = nonce + 1;
-        if (valid_until > l.valid_until) l.valid_until = valid_until;
-        let amt = amount_u64(amount);
-        assert!(primary_fungible_store::balance(addr, asset) >= amt, EINSUFFICIENT);
-        primary_fungible_store::transfer(&object::generate_signer_for_extending(&acct.extend), asset, to, amt);
-        emit_executed(op.asset, addr, owner, digest, lane_id, nonce);
-        emit_settled(op.asset, owner, to, amt, op.pay_ref);
+        let digest = check_at(&op, lane);
+        if (exists<Account>(addr)) {
+            let acct = &Account[addr];
+            assert!(verify_by(acct, &public_key, DOMAIN, &digest, &sig, &envelope), EBAD_SIGNATURE);
+            let next = if (acct.lanes.contains(lane_id)) acct.lanes.borrow(lane_id).next else 0;
+            assert!(next == nonce, EBAD_NONCE);
+        } else {
+            assert!(auth::proves(&account::get_authentication_key(owner), &public_key), EFIRST_KEY);
+            let (rp, origin) = auth::webauthn_origin(&envelope);
+            assert!(
+                auth::verify(&public_key, DOMAIN, &digest, &sig, &envelope, &rp, &vector[origin], chain_id::get()),
+                EBAD_SIGNATURE,
+            );
+            assert!(nonce == 0, EBAD_NONCE);
+        };
+        assert!(primary_fungible_store::balance(addr, asset) >= amount_u64(amount), EINSUFFICIENT);
+        digest
     }
 
     /// Không cần quyền (RS11-4): xoá lane đã hết hạn — mọi op từng dùng nó đã hết hạn nên không replay được; Odoo
@@ -313,10 +374,12 @@ module bamboo::meta {
     }
 
     /// Độ dài trường, hạn, relayer ⇒ digest của op.
-    package fun check(op: &MetaOp, lane: &signer): vector<u8> {
+    package fun check(op: &MetaOp, lane: &signer): vector<u8> { check_at(op, signer::address_of(lane)) }
+
+    fun check_at(op: &MetaOp, lane: address): vector<u8> {
         assert!(op.pay_ref.length() == 32 && op.lane.length() == 32 && op.extra.length() == 32, EBAD_FIELD);
         assert!(timestamp::now_seconds() <= op.valid_until, EEXPIRED);
-        assert!(op.relayer == @0x0 || op.relayer == signer::address_of(lane), EWRONG_RELAYER);
+        assert!(op.relayer == @0x0 || op.relayer == lane, EWRONG_RELAYER);
         sha3_256(bcs::to_bytes(op))
     }
 

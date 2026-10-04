@@ -43,6 +43,36 @@ module bamboo::meta_tests {
         assert!(bal(e, BEEF) == 150 && bal(e, v::a_account()) == 855, 3);
     }
 
+    // `pay_check` (view, thay mô phỏng khi Account chưa mở): cùng digest, cùng mã abort, không ghi gì.
+    #[test(f = @aptos_framework, b = @bamboo)]
+    fun pay_check_matches_relay_pay_without_writing(f: signer, b: signer) {
+        fx::setup(&f, &b);
+        let e = eur();
+        fx::mint(e, v::a_account(), 1000);
+        assert!(v::a_pay_eur_0_check(@0x1a, e) == v::a_pay_eur_0_digest(), 0);
+        assert!(!meta::exists_at(v::alice()) && bal(e, BEEF) == 0, 1);
+        fx::mint(e, v::d_account(), 1000);
+        assert!(v::d_pay_eur_check(@0x1a, e).length() == 32 && !meta::exists_at(v::dave()), 2);
+    }
+
+    #[test(f = @aptos_framework, b = @bamboo)]
+    #[expected_failure(abort_code = 8, location = bamboo::meta)]
+    fun pay_check_refuses_a_foreign_first_key(f: signer, b: signer) {
+        fx::setup(&f, &b);
+        let e = eur();
+        fx::mint(e, v::a_account(), 1000);
+        v::a_pay_eur_by_mallory_check(@0x1a, e);
+    }
+
+    #[test(f = @aptos_framework, b = @bamboo)]
+    #[expected_failure(abort_code = 1, location = bamboo::meta)]
+    fun pay_check_refuses_a_passkey_without_uv(f: signer, b: signer) {
+        fx::setup(&f, &b);
+        let e = eur();
+        fx::mint(e, v::d_account(), 1000);
+        v::d_pay_eur_no_uv_check(@0x1a, e);
+    }
+
     #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
     #[expected_failure(abort_code = 4, location = bamboo::meta)]
     fun replay_is_refused(f: signer, b: signer, lane: signer) {

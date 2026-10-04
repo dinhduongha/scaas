@@ -1,0 +1,12 @@
+# Chỉ cho e2e localnet: một FA thử do deployer tạo (địa chỉ metadata = create_object_address(deployer, symbol)).
+[package]
+name = "testfa"
+version = "1.0.0"
+
+[addresses]
+testfa = "_"
+
+[dependencies.AptosFramework]
+git = "https://github.com/aptos-labs/aptos-framework.git"
+rev = "4f0d278f806da6d7006f98f43a66f774f07e4d37"
+subdir = "aptos-framework"

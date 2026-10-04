@@ -8,7 +8,6 @@
 /// Quy tắc: khoá 65 byte không nén `0x04‖x‖y` nằm trên đường cong; `0 < r < n`, `0 < s ≤ n/2` (low-s — một chữ
 /// ký một dạng); `hash` 32 byte (SHA-256 của thông điệp, rút gọn mod n). Vector: Wycheproof P1363 + WebAuthn thật.
 module bamboo::p256 {
-    const MAX: u256 = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
     const M128: u256 = 0xffffffffffffffffffffffffffffffff;
 
     const P: u256 = 0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff;
@@ -37,13 +36,13 @@ module bamboo::p256 {
         if (fmul(qym, qym) != rhs) return false;
         let e = be(hash, 0);
         if (e >= N) e -= N;
-        // w = s⁻¹·R (Montgomery mod n, Fermat); u = x·w·R⁻¹ = x·s⁻¹ ở dạng thường.
-        let w = nexp(nmul(s, N_R2), N - 2);
+        // w = s⁻¹·R (Montgomery mod n); u = x·w·R⁻¹ = x·s⁻¹ ở dạng thường.
+        let w = ninv_m(s);
         let (u1, u2) = (nmul(e, w), nmul(r, w));
         let (sx, sy, sz) = madd(GX_M, GY_M, P_ONE, qxm, qym);
         let (gqx, gqy) = (0, 0);
         if (sz != 0) {
-            let zi = fexp(sz, P - 2);
+            let zi = finv(sz);
             let zi2 = fmul(zi, zi);
             gqx = fmul(sx, zi2);
             gqy = fmul(sy, fmul(zi2, zi));
@@ -135,65 +134,73 @@ module bamboo::p256 {
     }
 
     // ------------------------------------------------------------------ trường
+    // Gas (đo trên localnet, `chains/aptos/scripts/gas_probe.py`): một lời gọi hàm tốn hơn cả phép nhân, nên mọi
+    // thứ bên trong `fmul`/`nmul` là `inline` (bản gọi hàm vượt trần execution gas của một tx); `fmul`/`nmul` giữ là
+    // hàm thường để module không vượt 60 KB.
 
     fun fmul(a: u256, b: u256): u256 { mont_mul(a, b, P, P_NEG_INV) }
 
     fun nmul(a: u256, b: u256): u256 { mont_mul(a, b, N, N_NEG_INV) }
 
-    fun fadd(a: u256, b: u256): u256 { if (a >= P - b) a - (P - b) else a + b }
+    inline fun fadd(a: u256, b: u256): u256 { if (a >= P - b) a - (P - b) else a + b }
 
-    fun fsub(a: u256, b: u256): u256 { if (a >= b) a - b else P - (b - a) }
+    inline fun fsub(a: u256, b: u256): u256 { if (a >= b) a - b else P - (b - a) }
 
-    fun fexp(b: u256, e: u256): u256 {
-        let (acc, i) = (P_ONE, 256);
-        while (i > 0) {
-            i -= 1;
-            acc = fmul(acc, acc);
-            if ((e >> (i as u8)) & 1 == 1) acc = fmul(acc, b);
+    /// a⁻¹·R mod p từ a ở dạng Montgomery (a·R): nghịch đảo thường của a·R là a⁻¹·R⁻¹, nhân R³ ⇒ a⁻¹·R.
+    fun finv(a: u256): u256 { fmul(fmul(inv_mod(a, P), P_R2), P_R2) }
+
+    /// a⁻¹·R mod n từ a ở dạng THƯỜNG (Montgomery của a⁻¹ = a⁻¹·R).
+    fun ninv_m(a: u256): u256 { nmul(inv_mod(a, N), N_R2) }
+
+    /// a⁻¹ mod m (m lẻ, 0 < a < m) — Euclid nhị phân; rẻ hơn Fermat ~10 lần về gas.
+    fun inv_mod(a: u256, m: u256): u256 {
+        let (u, v, x1, x2) = (a, m, 1u256, 0u256);
+        while (u != 1 && v != 1) {
+            while (u & 1 == 0) {
+                u >>= 1;
+                x1 = half_mod(x1, m);
+            };
+            while (v & 1 == 0) {
+                v >>= 1;
+                x2 = half_mod(x2, m);
+            };
+            if (u >= v) {
+                u -= v;
+                x1 = if (x1 >= x2) x1 - x2 else m - (x2 - x1);
+            } else {
+                v -= u;
+                x2 = if (x2 >= x1) x2 - x1 else m - (x1 - x2);
+            };
         };
-        acc
+        if (u == 1) x1 else x2
     }
 
-    fun nexp(b: u256, e: u256): u256 {
-        let (acc, i) = (N_ONE, 256);
-        while (i > 0) {
-            i -= 1;
-            acc = nmul(acc, acc);
-            if ((e >> (i as u8)) & 1 == 1) acc = nmul(acc, b);
-        };
-        acc
-    }
+    /// x/2 mod m (m lẻ): x chẵn ⇒ x>>1; lẻ ⇒ (x+m)/2 = (x>>1) + (m>>1) + 1, không tràn.
+    inline fun half_mod(x: u256, m: u256): u256 { if (x & 1 == 0) x >> 1 else (x >> 1) + (m >> 1) + 1 }
 
     /// REDC(a·b) = a·b·2⁻²⁵⁶ mod m với a, b < m, m lẻ, `neg_inv` = −m⁻¹ mod 2²⁵⁶.
-    fun mont_mul(a: u256, b: u256, m: u256, neg_inv: u256): u256 {
+    inline fun mont_mul(a: u256, b: u256, m: u256, neg_inv: u256): u256 {
         let (th, tl) = mul_wide(a, b);
-        let (uh, _) = mul_wide(mul_lo(tl, neg_inv), m);
-        // tl + ul ≡ 0 (mod 2²⁵⁶): có nhớ đúng khi tl ≠ 0. th, uh < m ⇒ th + uh + 1 < 2m.
-        let r = if (tl != 0) th + 1 else th;
-        if (r > MAX - uh) return r - (m - uh);
-        let s = r + uh;
-        if (s >= m) s - m else s
+        let (uh, _ul) = mul_wide(mul_lo(tl, neg_inv), m);
+        // tl + ul ≡ 0 (mod 2²⁵⁶): có nhớ đúng khi tl ≠ 0. th, uh < m ⇒ kết quả < 2m, trừ m tối đa một lần.
+        let s = if (tl != 0) th + 1 else th;
+        if (s >= m - uh) s - (m - uh) else s + uh
     }
 
-    /// Tích đầy đủ 512 bit (hi, lo).
-    fun mul_wide(a: u256, b: u256): (u256, u256) {
+    /// Tích đầy đủ 512 bit (hi, lo) từ bốn tích 128×128 — không nhánh, không tràn.
+    inline fun mul_wide(a: u256, b: u256): (u256, u256) {
         let (a0, a1, b0, b1) = (a & M128, a >> 128, b & M128, b >> 128);
-        let (mid, c1) = add_c(a0 * b1, a1 * b0);
-        let (lo, c2) = add_c(a0 * b0, mid << 128);
-        (a1 * b1 + (mid >> 128) + (c1 << 128) + c2, lo)
+        let (p00, p01, p10) = (a0 * b0, a0 * b1, a1 * b0);
+        let t = (p00 >> 128) + (p01 & M128) + (p10 & M128);
+        (a1 * b1 + (p01 >> 128) + (p10 >> 128) + (t >> 128), (p00 & M128) | ((t & M128) << 128))
     }
 
     /// a·b mod 2²⁵⁶.
-    fun mul_lo(a: u256, b: u256): u256 {
-        let (a0, a1, b0, b1) = (a & M128, a >> 128, b & M128, b >> 128);
-        let cross = ((((a0 * b1) & M128) + ((a1 * b0) & M128)) & M128) << 128;
-        let (lo, _) = add_c(a0 * b0, cross);
-        lo
-    }
-
-    /// (a + b mod 2²⁵⁶, nhớ).
-    fun add_c(a: u256, b: u256): (u256, u256) {
-        if (a > MAX - b) (a - (MAX - b) - 1, 1) else (a + b, 0)
+    inline fun mul_lo(a: u256, b: u256): u256 {
+        let (a0, b0) = (a & M128, b & M128);
+        let p00 = a0 * b0;
+        let t = (p00 >> 128) + ((a0 * (b >> 128)) & M128) + (((a >> 128) * b0) & M128);
+        (p00 & M128) | ((t & M128) << 128)
     }
 
     #[test]
@@ -204,8 +211,10 @@ module bamboo::p256 {
         // (P−1)² ≡ 1
         let pm = fmul(P - 1, P_R2);
         assert!(fmul(fmul(pm, pm), 1) == 1, 2);
-        // inverse: 7 · 7⁻¹ ≡ 1 (mod n)
-        let s = nmul(7, N_R2);
-        assert!(nmul(nmul(s, nexp(s, N - 2)), 1) == 1, 3);
+        // inverses: 7 · 7⁻¹ ≡ 1 (mod n), x · x⁻¹ ≡ 1 (mod p) in Montgomery form
+        assert!(nmul(7, ninv_m(7)) == 1, 3);
+        let xm = fmul(x % P, P_R2);
+        assert!(fmul(fmul(xm, finv(xm)), 1) == 1, 4);
+        assert!(inv_mod(P - 1, P) == P - 1 && inv_mod(1, N) == 1, 5);
     }
 }

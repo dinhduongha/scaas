@@ -468,7 +468,7 @@ impl AptosAdapter {
         self.get_at(&self.rest[0], path).await?.ok_or_else(|| anyhow!("GET {path}: not found"))
     }
 
-    async fn view(&self, function: &str, type_args: &[&str], args: &[String]) -> Result<Value> {
+    async fn view(&self, function: &str, type_args: &[&str], args: &[impl serde::Serialize]) -> Result<Value> {
         let body = json!({"function": function, "type_arguments": type_args, "arguments": args});
         let r = self.http.post(format!("{}/view", self.rest[0])).json(&body).send().await?;
         let status = r.status();
@@ -518,6 +518,27 @@ impl AptosAdapter {
         Ok(Work { op, auth })
     }
 
+    async fn account_exists(&self, owner: &Addr) -> Result<bool> {
+        let v = self.view(&format!("{}::meta::exists_at", addr_hex(&self.package)), &[], &[addr_hex(owner)]).await?;
+        v.as_bool().ok_or_else(|| anyhow!("bad exists_at {v}"))
+    }
+
+    /// `meta::pay_check` (view): abort ⇒ `Revert` (job chết), lỗi khác ⇒ `Transport`.
+    async fn pay_check(&self, lane: &Addr, w: &Work) -> std::result::Result<(), SimError> {
+        let (op, a) = (&w.op, &w.auth);
+        let hx = |b: &[u8]| format!("0x{}", alloy::hex::encode(b));
+        let args = [
+            addr_hex(lane), addr_hex(&op.from), addr_hex(&op.asset), addr_hex(&op.to), op.amount.to_string(),
+            hx(&op.pay_ref), hx(&op.lane), op.nonce.to_string(), op.valid_until.to_string(), addr_hex(&op.relayer),
+            hx(&op.extra), hx(&a.public_key), hx(&a.sig), hx(&a.envelope),
+        ];
+        match self.view(&format!("{}::meta::pay_check", addr_hex(&self.package)), &[], &args).await {
+            Ok(_) => Ok(()),
+            Err(e) if format!("{e:#}").contains("Move abort") => Err(SimError::Revert(format!("{e:#}"))),
+            Err(e) => Err(transport(e)),
+        }
+    }
+
     fn lane_addr(&self, lane: usize) -> Result<Addr> {
         parse_addr(&self.lanes.get(lane).ok_or_else(|| anyhow!("no lane {lane}"))?.address)
     }
@@ -560,6 +581,14 @@ impl ChainAdapter for AptosAdapter {
         let price = self.gas_price().await.map_err(transport)?;
         let payload = relay_pay_payload(&self.package, &w.op, &w.auth);
         let exp = w.op.valid_until.min(now() + self.ttl);
+        if !self.account_exists(&w.op.from).await.map_err(transport)? {
+            // Account chưa mở: `simulate` của aptos-node 9.6.0 treo với tx vừa tạo object vừa chi từ store có sẵn của nó
+            // (tx thật chạy bình thường — spec §16). View `pay_check` chạy đúng mọi kiểm tra của `relay_pay` thay mô
+            // phỏng; gas = trần cấu hình (lần chi đầu gồm phí lưu trữ Account).
+            self.pay_check(&sender, &w).await?;
+            let meta = json!({"max_gas": self.max_gas, "gas_price": price, "expiration": exp});
+            return Ok(Built { job_id: job.id, body: payload, valid_until: w.op.valid_until, meta });
+        }
         let raw = raw_tx(&sender, seq, &payload, self.max_gas, price, exp, self.chain_id);
         let pk = &self.signers[lane].public_key();
         let body = signed_tx(&raw, pk, &[0u8; 64]);
