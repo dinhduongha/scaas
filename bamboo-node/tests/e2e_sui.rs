@@ -5,9 +5,13 @@
 //! 1. publish `chains/sui` + coin thử, mở `Account<SUI>`/`Account<DEMO>` cho alice (alice không có gas);
 //! 2. hai lane relayer từ mnemonic 24 từ (`m/44'/784'/i'/0'/0'`), job `signed_op` (giả Odoo) đi qua
 //!    `lane_step`: dry-run → ký → `signed` trước khi gửi → mined;
-//! 3. ANTI-LOCK: alice ký X (account SUI) và Y (account DEMO); X bị giữ; Y qua; rồi X qua;
+//! 3. ANTI-LOCK đồng thời (review L3): alice ký X (account SUI) và Y (account DEMO); X đã `signed` trên lane 0
+//!    nhưng bị GIỮ chưa gửi; trong lúc đó Y đi hết tới `mined` trên lane 1; rồi X được thả và qua;
 //!    phát lại X ⇒ dry-run từ chối ⇒ `dead`;
-//! 4. `index_step` báo `PaymentSettled` + `MetaTransactionExecuted` (digest = digest đã ký) vùng final.
+//! 4. khởi động lại (review M3): lane 0 ký W rồi "chết" trước khi gửi; tiến trình mới gửi lại đúng bytes W trước
+//!    khi dựng V — W và V đều vào sổ, không equivocation;
+//! 5. `index_step` báo `PaymentSettled` + `MetaTransactionExecuted` (digest = digest đã ký) vùng final, lọc theo
+//!    id `Registry<T>` mà Odoo (giả) trả trong `node_config` (review H1/H2).
 use std::net::SocketAddr;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -16,11 +20,13 @@ use std::time::Duration;
 use axum::extract::{Path, State};
 use axum::routing::post;
 use axum::{Json, Router};
-use bamboo_node::adapter::{index_step, lane_step, ChainAdapter};
+use async_trait::async_trait;
+use bamboo_node::adapter::{index_step, lane_step, Built, ChainAdapter, Family, Head, Lane, Signed, TxStatus};
+use bamboo_node::chain::SimError;
 use bamboo_node::adapters::sui::{addr_hex, lane_address, parse_addr, personal_digest, tx_signing_digest, Addr, MetaOp};
 use bamboo_node::config::{ChainCfg, FinalityCfg, OdooCfg};
 use bamboo_node::keys::{lane_secret, Seed};
-use bamboo_node::odoo::Odoo;
+use bamboo_node::odoo::{Job, Odoo};
 use bamboo_node::signer::{Curve, LocalSigner, Signer};
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine;
@@ -258,6 +264,57 @@ async fn run_job(adapter: &dyn ChainAdapter, odoo: &Odoo, state: &Arc<Mutex<Fake
     reports.iter().filter(|r| r["job_id"] == id).map(|r| r["chain_state"].as_str().unwrap().to_string()).collect()
 }
 
+/// Adapter thật, nhưng `submit` của job `hold` chờ tới khi test thả `gate` (tx đã ký + đã journal `signed`).
+struct Held {
+    inner: Arc<dyn ChainAdapter>,
+    hold: i64,
+    gate: tokio::sync::Semaphore,
+}
+
+#[async_trait]
+impl ChainAdapter for Held {
+    fn family(&self) -> Family {
+        self.inner.family()
+    }
+    fn chain_key(&self) -> &str {
+        self.inner.chain_key()
+    }
+    fn lanes(&self) -> &[Lane] {
+        self.inner.lanes()
+    }
+    async fn build(&self, job: &Job, lane: usize) -> Result<Built, SimError> {
+        self.inner.build(job, lane).await
+    }
+    async fn sign(&self, b: Built, lane: usize, seq: u64) -> anyhow::Result<Signed> {
+        self.inner.sign(b, lane, seq).await
+    }
+    async fn submit(&self, s: &Signed) -> anyhow::Result<()> {
+        if s.job_id == self.hold {
+            self.gate.acquire().await.unwrap().forget();
+        }
+        self.inner.submit(s).await
+    }
+    async fn tx_status(&self, tx: &str) -> anyhow::Result<TxStatus> {
+        self.inner.tx_status(tx).await
+    }
+    async fn sequence(&self, lane: usize) -> anyhow::Result<u64> {
+        self.inner.sequence(lane).await
+    }
+    async fn final_head(&self) -> anyhow::Result<Option<Head>> {
+        self.inner.final_head().await
+    }
+    async fn block_hash(&self, h: u64) -> anyhow::Result<String> {
+        self.inner.block_hash(h).await
+    }
+    async fn events(&self, from: u64, to: u64, contracts: &[String]) -> anyhow::Result<Vec<Value>> {
+        self.inner.events(from, to, contracts).await
+    }
+}
+
+fn states_of(state: &Arc<Mutex<FakeOdoo>>, id: i64) -> Vec<String> {
+    state.lock().unwrap().reports.iter().filter(|r| r["job_id"] == id).map(|r| r["chain_state"].as_str().unwrap().to_string()).collect()
+}
+
 #[tokio::test]
 #[ignore]
 async fn sui_payments_relay_finalize_and_never_lock_each_other() {
@@ -346,28 +403,64 @@ async fn sui_payments_relay_finalize_and_never_lock_each_other() {
     let head0 = adapter.final_head().await.unwrap().unwrap().height;
     state.lock().unwrap().indexed_block = head0;
 
-    // ANTI-LOCK: X (account SUI) ký trước rồi bị giữ; Y (account DEMO) qua lane 1.
+    // ANTI-LOCK đồng thời (review L3): X `signed` trên lane 0 và bị giữ; Y (account DEMO) đi hết trên lane 1.
     let (x, x_digest) = job(1, &alice, &acct_sui, "0x2::sui::SUI", 1000, 0x11, 0xa1);
     let (y, y_digest) = job(2, &alice, &acct_demo, &demo_t, 500, 0x22, 0xa2);
-    assert_eq!(run_job(adapter.as_ref(), &odoo, &state, 1, y).await, ["signed", "broadcast", "mined"]);
-    assert_eq!(run_job(adapter.as_ref(), &odoo, &state, 0, x.clone()).await, ["signed", "broadcast", "mined"]);
+    let held = Held { inner: adapter.clone(), hold: 1, gate: tokio::sync::Semaphore::new(0) };
+    state.lock().unwrap().jobs.push(x.clone());
+    let x_run = lane_step(&held, &odoo, 0, "e2e");
+    let y_run = async {
+        while states_of(&state, 1).last().map(String::as_str) != Some("signed") {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        state.lock().unwrap().jobs.push(y);
+        assert!(lane_step(&held, &odoo, 1, "e2e").await.unwrap());
+        assert_eq!(states_of(&state, 2), ["signed", "broadcast", "mined"], "Y while X is in flight");
+        assert_eq!(states_of(&state, 1), ["signed"], "X still held, unsent");
+        held.gate.add_permits(1);
+    };
+    let (x_done, ()) = tokio::time::timeout(Duration::from_secs(120), async { tokio::join!(x_run, y_run) }).await.expect("lanes stuck");
+    assert!(x_done.unwrap());
+    assert_eq!(states_of(&state, 1), ["signed", "broadcast", "mined"]);
     // Phát lại X: dry-run từ chối (nonce đã dùng) ⇒ dead, không tốn gas.
     let mut replay = x;
     replay["id"] = json!(3);
     assert_eq!(run_job(adapter.as_ref(), &odoo, &state, 0, replay).await, ["dead"]);
     assert!(state.lock().unwrap().refused.is_empty());
 
+    // KHỞI ĐỘNG LẠI (review M3): lane 0 dựng + ký W (journal ghi) rồi tiến trình "chết" trước khi gửi.
+    let (w, _) = job(4, &alice, &acct_sui, "0x2::sui::SUI", 200, 0x44, 0xa4);
+    let w_job: Job = serde_json::from_value(w).unwrap();
+    let built = adapter.build(&w_job, 0).await.unwrap();
+    let w_signed = adapter.sign(built, 0, 0).await.unwrap();
+    drop(adapter);
+    let adapter = bamboo_node::adapters::build(&cfg, &signers).unwrap(); // tiến trình mới, cùng journal
+    assert_eq!(adapter.tx_status(&w_signed.tx_id).await.unwrap(), TxStatus::Unknown, "W never sent");
+    let (v, _) = job(5, &alice, &acct_sui, "0x2::sui::SUI", 300, 0x55, 0xa5);
+    let mut v_states = Vec::new();
+    for _ in 0..10 {
+        v_states = run_job(adapter.as_ref(), &odoo, &state, 0, v.clone()).await;
+        if v_states.last().map(String::as_str) == Some("mined") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    assert_eq!(v_states.last().map(String::as_str), Some("mined"), "V: {v_states:?}");
+    assert!(matches!(adapter.tx_status(&w_signed.tx_id).await.unwrap(), TxStatus::Mined { .. }), "W re-sent from the journal");
+    assert!(state.lock().unwrap().refused.is_empty());
+
     // Final: index tới khi thấy cả hai thanh toán.
     for _ in 0..60 {
         while index_step(adapter.as_ref(), &odoo).await.unwrap() {}
-        if state.lock().unwrap().ingested.iter().filter(|e| e["event"] == "PaymentSettled").count() >= 2 {
+        if state.lock().unwrap().ingested.iter().filter(|e| e["event"] == "PaymentSettled").count() >= 4 {
             break;
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
     let ing = state.lock().unwrap().ingested.clone();
     let shop = addr_hex(&parse_addr(SHOP).unwrap());
-    let pay_x = ing.iter().find(|e| e["event"] == "PaymentSettled" && e["contract"] == reg_sui).expect("X settled");
+    let pay_x = ing.iter().find(|e| e["event"] == "PaymentSettled" && e["entry_ref"] == addr_hex(&[0x11u8; 32])).expect("X settled");
+    assert_eq!(pay_x["contract"], reg_sui);
     assert_eq!((pay_x["to"].as_str(), pay_x["amount"].as_str()), (Some(shop.as_str()), Some("1000")));
     assert_eq!(pay_x["entry_ref"], addr_hex(&[0x11u8; 32]));
     assert_eq!(pay_x["from"], addr_hex(&alice_addr));
