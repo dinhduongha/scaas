@@ -133,6 +133,9 @@ impl std::fmt::Display for Rejected {
 impl std::error::Error for Rejected {}
 
 const STATUS_POLL: Duration = Duration::from_millis(500);
+/// Lùi khi lane lỗi (RPC/Odoo chết): 1 s nhân đôi tới 60 s; một vòng thành công đặt lại (merge TODO c).
+const BACKOFF_MIN: Duration = Duration::from_secs(1);
+const BACKOFF_MAX: Duration = Duration::from_secs(60);
 const EXPIRY_GRACE: u64 = 30;
 
 async fn report(odoo: &Odoo, r: Report) -> bool {
@@ -161,10 +164,13 @@ pub async fn lane_runner(
 ) {
     let key = adapter.chain_key().to_string();
     info!(chain = %key, lane, address = %adapter.lanes()[lane].address, "lane ready");
+    let mut backoff = BACKOFF_MIN;
     while let Err(e) = recover_lane(adapter.as_ref(), &odoo, lane, &worker).await {
         warn!(chain = %key, lane, "restart recovery: {e:#}");
-        tokio::time::sleep(poll.max(Duration::from_secs(1))).await;
+        tokio::time::sleep(backoff).await;
+        backoff = (backoff * 2).min(BACKOFF_MAX);
     }
+    backoff = BACKOFF_MIN;
     let (mut tripped, mut sampled) = (None, None::<std::time::Instant>);
     loop {
         if sampled.is_none_or(|t| t.elapsed() >= Duration::from_secs(15)) {
@@ -187,11 +193,22 @@ pub async fn lane_runner(
             tokio::time::sleep(poll).await;
             continue;
         }
-        match lane_step_metered(adapter.as_ref(), &odoo, lane, &worker, Some(&breaker)).await {
-            Ok(true) => continue,
-            Ok(false) => {}
-            Err(e) => warn!(chain = %key, lane, "lane: {e:#}"),
+        let why = match step_once(adapter.as_ref(), &odoo, lane, &worker, Some(&breaker)).await {
+            Ok(Step::Done) => {
+                backoff = BACKOFF_MIN;
+                continue;
+            }
+            Ok(Step::Idle) => None,
+            Ok(Step::Retry(why)) => Some(why),
+            Err(e) => Some(format!("{e:#}")),
+        };
+        if let Some(why) = why {
+            warn!(chain = %key, lane, retry_in = ?backoff, "lane: {why}");
+            tokio::time::sleep(backoff).await;
+            backoff = (backoff * 2).min(BACKOFF_MAX);
+            continue;
         }
+        backoff = BACKOFF_MIN;
         tokio::time::sleep(poll).await;
     }
 }
@@ -301,6 +318,23 @@ pub async fn lane_step_metered(
     worker: &str,
     breaker: Option<&Mutex<Breaker>>,
 ) -> Result<bool> {
+    Ok(!matches!(step_once(adapter, odoo, lane, worker, breaker).await?, Step::Idle))
+}
+
+/// Kết quả một vòng lane. `Retry` = job đã về hàng đợi vì RPC/Odoo không với tới: runner lùi (merge TODO c).
+enum Step {
+    Idle,
+    Done,
+    Retry(String),
+}
+
+async fn step_once(
+    adapter: &dyn ChainAdapter,
+    odoo: &Odoo,
+    lane: usize,
+    worker: &str,
+    breaker: Option<&Mutex<Breaker>>,
+) -> Result<Step> {
     let jobs = odoo.relay_poll_ref(adapter.chain_key().into(), 5).await?;
     let mut job = None;
     for j in jobs {
@@ -309,16 +343,16 @@ pub async fn lane_step_metered(
             break;
         }
     }
-    let Some(job) = job else { return Ok(false) };
+    let Some(job) = job else { return Ok(Step::Idle) };
     let built = match adapter.build(&job, lane).await {
         Ok(b) => b,
         Err(SimError::Revert(r)) => {
             report(odoo, Report { error: Some(format!("simulation: {r}")), ..rep(job.id, "dead") }).await;
-            return Ok(true);
+            return Ok(Step::Done);
         }
         Err(SimError::Transport(r)) => {
             report(odoo, Report { error: Some(format!("rpc: {r}")), ..rep(job.id, "queued") }).await;
-            return Ok(true);
+            return Ok(Step::Retry(format!("rpc: {r}")));
         }
     };
     let seq = adapter.sequence(lane).await?;
@@ -327,7 +361,7 @@ pub async fn lane_step_metered(
     // Journal TRƯỚC khi gửi (review I5): không ghi được thì không gửi, job về hàng đợi.
     if !report(odoo, Report { tx_hash: Some(signed.tx_id.clone()), outer_nonce: Some(seq), signer_address: Some(signer), ..rep(job.id, "signed") }).await {
         report(odoo, Report { error: Some("journal write failed".into()), ..rep(job.id, "queued") }).await;
-        return Ok(true);
+        return Ok(Step::Retry("journal write failed".into()));
     }
     let sent = adapter.submit(&signed).await;
     if sent.is_ok() {
@@ -335,7 +369,7 @@ pub async fn lane_step_metered(
     }
     let f = InFlight { job: job.id, tx_id: &signed.tx_id, valid_until: signed.valid_until, lane, signed: Some(&signed), nonce: Some(seq) };
     follow(adapter, odoo, f, sent, breaker).await;
-    Ok(true)
+    Ok(Step::Done)
 }
 
 /// Indexer chung cho adapter không phải EVM: đỉnh final → event → `chain_event_ingest`.
@@ -571,5 +605,19 @@ pub(crate) mod tests {
         let got: Vec<(i64, &str)> =
             o.reports.iter().map(|r| (r["job_id"].as_i64().unwrap(), r["chain_state"].as_str().unwrap())).collect();
         assert_eq!(got, [(1, "queued"), (2, "mined"), (3, "dead"), (4, "queued"), (5, "queued"), (6, "reverted")]);
+    }
+
+    /// Merge TODO c: RPC chết ⇒ job về hàng đợi rồi lane LÙI dần (mũ, có trần), không quay vòng claim/build.
+    #[tokio::test]
+    async fn transport_errors_back_off() {
+        let job = serde_json::json!({"id": 9, "kind": "signed_op", "op": {}});
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![job], repeat: true, tokens: serde_json::json!([]), ..Default::default() }).await;
+        let a = Arc::new(Scripted::default());
+        let k = Arc::new(Mutex::new(Breaker::new(crate::config::BreakerCfg::default())));
+        let run = lane_runner(a.clone(), odoo, 0, "n#0".into(), Duration::from_millis(10), k);
+        let _ = tokio::time::timeout(Duration::from_millis(2500), run).await;
+        let n = a.builds.load(std::sync::atomic::Ordering::SeqCst);
+        assert!((1..=3).contains(&n), "{n} builds in 2.5 s");
+        assert!(o.lock().unwrap().reports.iter().all(|r| r["chain_state"] == "queued"));
     }
 }
