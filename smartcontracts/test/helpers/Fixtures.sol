@@ -12,10 +12,12 @@ abstract contract Fixtures is Test {
     MetaToken internal impl;
     address internal registrar = address(0xF00D);
     address internal relayer = address(0xBEEF);
+    /// SubjectAccount implementation whose clones get the 400k ERC-1271 allowance (0 = none).
+    address internal subjectImpl;
 
     function _deployFactory() internal {
         factory = new OpenFactory(registrar);
-        impl = new MetaToken(address(factory));
+        impl = new MetaToken(address(factory), subjectImpl);
         vm.prank(registrar);
         factory.registerImplementation(IOpenFactory.TokenKind.META, 1, address(impl));
     }

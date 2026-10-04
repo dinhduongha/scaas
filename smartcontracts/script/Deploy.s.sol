@@ -6,6 +6,7 @@ import {OpenFactory} from "../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../src/common/IOpenFactory.sol";
 import {MetaToken} from "../src/metatx/MetaToken.sol";
 import {MetaTxDex} from "../src/dex/MetaTxDex.sol";
+import {SubjectAccountFactory} from "../src/account/SubjectAccountFactory.sol";
 
 /// forge script script/Deploy.s.sol --rpc-url $RPC --broadcast
 /// env: PRIVATE_KEY (deployer; registrar mặc định), REGISTRAR (tuỳ chọn),
@@ -21,7 +22,8 @@ contract Deploy is Script {
 
         vm.startBroadcast(pk);
         OpenFactory factory = new OpenFactory(registrar);
-        MetaToken impl = new MetaToken(address(factory));
+        SubjectAccountFactory accounts = new SubjectAccountFactory();
+        MetaToken impl = new MetaToken(address(factory), accounts.IMPLEMENTATION());
         if (registrar == deployer) factory.registerImplementation(IOpenFactory.TokenKind.META, 1, address(impl));
         MetaTxDex dex = new MetaTxDex();
         address demo;
@@ -36,6 +38,8 @@ contract Deploy is Script {
         vm.serializeAddress(k, "factory", address(factory));
         vm.serializeAddress(k, "implementation", address(impl));
         vm.serializeAddress(k, "dex", address(dex));
+        vm.serializeAddress(k, "subject_account_factory", address(accounts));
+        vm.serializeAddress(k, "subject_account_implementation", accounts.IMPLEMENTATION());
         string memory out = vm.serializeAddress(k, "demo_token", demo);
         vm.writeJson(out, string.concat("./deployments/", vm.toString(block.chainid), ".json"));
         console.log(out);
