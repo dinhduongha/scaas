@@ -89,7 +89,7 @@ fn cli(args: &[&str]) -> String {
 }
 
 fn wasm(name: &str) -> String {
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../chains/soroban");
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/soroban");
     let st = Command::new("cargo")
         .current_dir(dir)
         .args(["build", "--target", "wasm32v1-none", "--release", "-p", &format!("bamboo-{name}")])

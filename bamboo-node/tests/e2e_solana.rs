@@ -1,7 +1,7 @@
 //! cargo test --test e2e_solana -- --ignored --nocapture
 //!
 //! Cần `solana-test-validator` của luồng S12 đang chạy với program nạp ở genesis:
-//! `chains/solana/scripts/devnet.sh up --upgradeable-program BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d
+//! `smartcontracts/solana/scripts/devnet.sh up --upgradeable-program BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d
 //! target/deploy/bamboo.so 73VoVWyfxmaWC6gUjsse6xzNTLLoEhazMCcKakXWbebm --bpf-program
 //! A4PasPZEK899MesXpT3MSA4ufnpHcyfxjKuxRXmcZnRJ target/deploy/cpi_wrapper.so` (RPC 32020; program id = id test của
 //! localnet, authority = `signer("e2e-upgrade-authority")` — không khoá nào nằm trong repo, review M3; `cpi_wrapper` =
@@ -42,7 +42,7 @@ use serde_json::{json, Value};
 
 const RPC: &str = "http://127.0.0.1:32020";
 const PROGRAM: &str = "BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d";
-/// `chains/solana/programs/cpi_wrapper` (test only).
+/// `smartcontracts/solana/programs/cpi_wrapper` (test only).
 const WRAPPER: &str = "A4PasPZEK899MesXpT3MSA4ufnpHcyfxjKuxRXmcZnRJ";
 const MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
                         abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";

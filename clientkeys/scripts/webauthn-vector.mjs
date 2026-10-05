@@ -1,4 +1,4 @@
-// Generates smartcontracts/test/vectors/webauthn_soft.json: a WebAuthn assertion from the software
+// Generates smartcontracts/evm/test/vectors/webauthn_soft.json: a WebAuthn assertion from the software
 // authenticator (Node WebCrypto P-256, fixed key, DER signature) pushed through the SAME client path
 // the portal uses (derToRS + low-s, encodeAssertion, accountSignature). We retry until WebCrypto
 // returns a HIGH-s DER signature, so the forge test proves the normalised form verifies on-chain.
@@ -32,6 +32,6 @@ const out = {
   signatureDer: hex(a.signature), derWasHighS: true,
   signature: hex(accountSignature(0, [], encodeAssertion(a))),
 };
-const path = new URL('../../smartcontracts/test/vectors/webauthn_soft.json', import.meta.url);
+const path = new URL('../../smartcontracts/evm/test/vectors/webauthn_soft.json', import.meta.url);
 writeFileSync(path, JSON.stringify(out, null, 2) + '\n');
 console.log('wrote', path.pathname);

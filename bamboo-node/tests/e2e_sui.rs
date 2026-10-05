@@ -2,7 +2,7 @@
 //!
 //! Cần `sui` (1.81+) trong PATH. Localnet thật: `sui start --force-regenesis` (RPC 31970, faucet 31971 —
 //! dải cổng của luồng S7). Chứng minh:
-//! 1. publish `chains/sui` + coin thử, mở `Account<SUI>`/`Account<DEMO>` cho alice (alice không có gas);
+//! 1. publish `smartcontracts/move/sui` + coin thử, mở `Account<SUI>`/`Account<DEMO>` cho alice (alice không có gas);
 //! 2. hai lane relayer từ mnemonic 24 từ (`m/44'/784'/i'/0'/0'`), job `signed_op` (giả Odoo) đi qua
 //!    `lane_step`: dry-run → ký → `signed` trước khi gửi → mined;
 //! 3. ANTI-LOCK đồng thời (review L3): alice ký X (account SUI) và Y (account DEMO); X đã `signed` trên lane 0
@@ -320,7 +320,7 @@ fn states_of(state: &Arc<Mutex<FakeOdoo>>, id: i64) -> Vec<String> {
 async fn sui_payments_relay_finalize_and_never_lock_each_other() {
     let _ = tracing_subscriber::fmt().with_env_filter("warn").try_init();
     let _net = start_localnet().await;
-    let root_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../chains/sui");
+    let root_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/move/sui");
 
     // Deployer (môi trường) và alice (chủ thể: KHÔNG bao giờ có gas).
     let deployer = LocalSigner::new(Curve::Ed25519, &sha256(b"deployer")).unwrap();

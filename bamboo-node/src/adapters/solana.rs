@@ -667,7 +667,7 @@ impl SolanaAdapter {
         let network = key(cfg.network.as_deref().unwrap_or_default()).context("solana: network must be the genesis hash (base58)")?;
         let program = key(p("program_id").ok_or_else(|| anyhow!("solana: params.program_id is required"))?)?;
         if b58(&program) == TEST_PROGRAM_ID && PUBLIC_GENESIS.contains(&b58(&network).as_str()) {
-            bail!("solana: {TEST_PROGRAM_ID} is the test-only program id (its key is public); deploy your own (chains/solana/scripts/deploy.sh)");
+            bail!("solana: {TEST_PROGRAM_ID} is the test-only program id (its key is public); deploy your own (smartcontracts/solana/scripts/deploy.sh)");
         }
         let mut lanes = Vec::new();
         let mut own = Vec::new();
@@ -1115,7 +1115,7 @@ mod tests {
     use proptest::prelude::*;
     use std::sync::Arc;
 
-    // Vector chéo — cùng giá trị ở chains/solana/programs/bamboo/tests/vectors.rs và dms_blockchain/tests/test_fam_solana.py.
+    // Vector chéo — cùng giá trị ở smartcontracts/solana/programs/bamboo/tests/vectors.rs và dms_blockchain/tests/test_fam_solana.py.
     const PROGRAM: &str = "BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d";
     const NETWORK: &str = "9Bjy32z5orwpyvcJehikjj76VQtVLtc7WdCmTyN3FsWY";
     const ALICE: &str = "FPP21sbqhr2LPjSnJkw5NBetPubeFG4PsQFBxHj8noTq";
@@ -1138,7 +1138,7 @@ mod tests {
         "00008278a07e2a5e0c47ab6b2c9e0287af6c9eedf30159108af21c66884b0a763f313fa1a4638e1b04d99085479a7238521f58a99ea303",
         "3b7a0a8f9bc9edeb1f9d08",
     );
-    // @solana/kit 8.4.0 (`chains/solana/scripts/tx_vector.mjs`): lane = ed25519 seed sha256("lane0"), nonce value 0x42…,
+    // @solana/kit 8.4.0 (`smartcontracts/solana/scripts/tx_vector.mjs`): lane = ed25519 seed sha256("lane0"), nonce value 0x42…,
     // instructions AdvanceNonceAccount ‖ Ed25519 precompile ‖ bamboo::relay_pay of the vector payload, CU 200 000,
     // priority 5 000 lamports, loaded bytes 4 MiB.
     const TX_V1: &str = concat!(

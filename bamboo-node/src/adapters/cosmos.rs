@@ -571,7 +571,7 @@ mod tests {
     use super::*;
     use proptest::prelude::*;
 
-    /// Vector chéo: cùng khoá/địa chỉ/digest như `chains/cosmos/tests/tests/vector.txt` và `test_fam_cosmos.py`.
+    /// Vector chéo: cùng khoá/địa chỉ/digest như `smartcontracts/cosmos/tests/tests/vector.txt` và `test_fam_cosmos.py`.
     #[test]
     fn cross_implementation_vector() {
         let seed = crate::keys::Seed::from_words(
@@ -585,7 +585,7 @@ mod tests {
         assert_eq!(account_address("wasm", &s.public_key()), "wasm1r5v5srda7xfth3hn2s26txvrcrntldju3hkw75");
         assert_eq!(bech32("wasm", &[0x33; 20]), "wasm1xvenxvenxvenxvenxvenxvenxvenxvenkz5vxp");
         assert_eq!(bech32("wasm", &[0x44; 32]), "wasm1g3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zqn0lflt");
-        let vector = include_str!("../../../chains/cosmos/tests/tests/vector.txt");
+        let vector = include_str!("../../../smartcontracts/cosmos/tests/tests/vector.txt");
         let line = |k: &str| vector.lines().find_map(|l| l.strip_prefix(&format!("{k}="))).unwrap().to_string();
         let payload = line("payload");
         assert_eq!(alloy::hex::encode(Sha256::digest(payload.as_bytes())), line("digest"));

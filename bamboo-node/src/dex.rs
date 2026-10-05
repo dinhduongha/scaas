@@ -795,7 +795,7 @@ mod tests {
 
     #[test]
     fn kat_hashes_match_forge() {
-        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/test/vectors/dex_kat.json");
+        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/evm/test/vectors/dex_kat.json");
         let k: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
         let s = |f: &str| k[f].as_str().unwrap().to_string();
         let a = |f: &str| Address::from_str(&s(f)).unwrap();

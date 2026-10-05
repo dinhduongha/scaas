@@ -1,7 +1,7 @@
 //! cargo test --test e2e_ton -- --ignored --nocapture
 //!
 //! TON adapter end to end against a TON Center v3 endpoint: by default the sandbox shim
-//! (`chains/ton/shim`, real TVM + our compiled contracts, fake blocks; needs `npm ci` + `npx tact` there),
+//! (`smartcontracts/ton/shim`, real TVM + our compiled contracts, fake blocks; needs `npm ci` + `npx tact` there),
 //! or `TON_E2E_API=http://…` for MyLocalTon (then also `TON_E2E_STATE` = JSON like `/shim/state` and a
 //! funded faucet — not automated here). Proves: two lanes from a 24-word mnemonic, payments through
 //! `lane_step` signed only by the subject (W5R1 lane pays gas), finality through `index_step`, the
@@ -43,9 +43,9 @@ async fn start_shim(port: u16) -> (Option<Shim>, String) {
     if let Ok(url) = std::env::var("TON_E2E_API") {
         return (None, url);
     }
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../chains/ton");
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/ton");
     let ok = Command::new("npx").current_dir(dir).args(["tsc", "-p", "tsconfig.shim.json"]).status().expect("npx in PATH");
-    assert!(ok.success(), "shim build failed (run `npm ci && npx tact --config tact.config.json` in chains/ton)");
+    assert!(ok.success(), "shim build failed (run `npm ci && npx tact --config tact.config.json` in smartcontracts/ton)");
     let child = Command::new("node")
         .current_dir(dir)
         .args(["build/shim/shim/server.js", "--port", &port.to_string()])
