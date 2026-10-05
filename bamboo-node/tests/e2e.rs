@@ -77,7 +77,7 @@ async fn start_anvil(chain_id: u64, port: u16) -> (Anvil, String) {
 
 /// Deploy factory + implementation + DEX + token demo (một nửa cung cho `holder`).
 fn deploy(rpc: &str, chain_id: u64, holder: Address) -> Value {
-    let sc = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts");
+    let sc = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/evm");
     let status = Command::new("forge")
         .current_dir(sc)
         .args(["script", "script/Deploy.s.sol", "--rpc-url", rpc, "--broadcast", "--silent"])

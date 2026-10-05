@@ -139,7 +139,7 @@ mod tests {
     use super::*;
 
     fn kat() -> serde_json::Value {
-        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/test/vectors/metatx_kat.json");
+        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/evm/test/vectors/metatx_kat.json");
         serde_json::from_str(&std::fs::read_to_string(p).expect("KAT file")).expect("KAT json")
     }
 

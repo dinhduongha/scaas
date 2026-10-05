@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Độc lập với Solidity: sinh vector KAT cho đặc tả 2026-10-03-zether-design.md §3, §4, §11.1.
 
-Chạy (cần py_ecc>=8 cho hash_to_G1): python3 test/vectors/zether/kat.py   (từ smartcontracts/). Ghi generators_*.json, transcript.json,
+Chạy (cần py_ecc>=8 cho hash_to_G1): python3 test/vectors/zether/kat.py   (từ smartcontracts/evm/). Ghi generators_*.json, transcript.json,
 schnorr_*.json cạnh file này. Forge test (ZetherKat.t.sol) đọc lại và so từng byte với Solidity.
 `--check`: không ghi gì, so file đã commit với bản sinh lại (exit 1 nếu lệch).
 """

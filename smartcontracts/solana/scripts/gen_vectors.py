@@ -3,7 +3,7 @@
 passkey WebAuthn P-256 phần mềm, ECDSA tất định RFC 6979, low-S), PDA Account/lane/Mandate/Market/Fill, ATA cả hai
 token program — do `dms_blockchain/lib/fam_solana.py` dựng. Vector chéo Python = program = adapter Rust.
 
-    python3 chains/solana/scripts/gen_vectors.py [--check]
+    python3 smartcontracts/solana/scripts/gen_vectors.py [--check]
 """
 import hashlib
 import importlib
@@ -108,7 +108,7 @@ VECTORS = [
 
 
 def render():
-    lines = ['//! Sinh bởi `chains/solana/scripts/gen_vectors.py` — đừng sửa tay. Khoá = sha256(tên); network = sha256(',
+    lines = ['//! Sinh bởi `smartcontracts/solana/scripts/gen_vectors.py` — đừng sửa tay. Khoá = sha256(tên); network = sha256(',
              '//! "bamboo.solana.test-genesis"); payload: Alice trả Bob 100 USD, pay_ref 01…, lane a1…, nonce 0, hạn 1000.',
              '#![allow(dead_code)]', '']
     for name, value in VECTORS:

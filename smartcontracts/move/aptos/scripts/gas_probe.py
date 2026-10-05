@@ -22,7 +22,7 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 _pkg = types.ModuleType('aptlib')
-_pkg.__path__ = [os.path.join(HERE, '..', '..', '..', 'dms_blockchain', 'lib')]
+_pkg.__path__ = [os.path.join(HERE, '..', '..', '..', '..', 'dms_blockchain', 'lib')]
 sys.modules['aptlib'] = _pkg
 F = importlib.import_module('aptlib.fam_aptos')
 

@@ -1,4 +1,4 @@
-//! ABI — chép chữ ký từ `smartcontracts/src`, không suy luận. Sai một `indexed` là sai topic.
+//! ABI — chép chữ ký từ `smartcontracts/evm/src`, không suy luận. Sai một `indexed` là sai topic.
 use alloy::sol;
 use alloy::sol_types::SolInterface;
 

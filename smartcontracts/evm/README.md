@@ -1,6 +1,6 @@
-# smartcontracts
+# smartcontracts/evm
 
-Cây hợp đồng của `dms_blockchain`. **Nằm ngoài addon Odoo, ở gốc repo** — hợp đồng
+Cây hợp đồng của `dms_blockchain`. **Nằm ngoài addon Odoo, ở `smartcontracts/evm/` (họ EVM; các họ khác ở `smartcontracts/<family>/`)** — hợp đồng
 có vòng đời riêng (audit, deploy, immutability) không trùng vòng đời của một addon.
 
 Interface đã chốt cộng các implementation đã có (2026-10-03,

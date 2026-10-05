@@ -112,7 +112,7 @@ const OP_REVOKE: Int = 4;
 const OP_SET_KEY: Int = 5;
 
 const SIGN_DATA_PREFIX: Int = 0x75569022;
-// crc32 of METAOP_SCHEMA (chains/ton/tests/vectors.ts checks it against the TL-B string).
+// crc32 of METAOP_SCHEMA (smartcontracts/ton/tests/vectors.ts checks it against the TL-B string).
 const METAOP_SCHEMA_CRC: Int = 0xdc7d499c;
 
 const PAY_TAG: Int = 0x626d7074;   // "bmpt": forward payload `pay_tag pay_ref:uint256`

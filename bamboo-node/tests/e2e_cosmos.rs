@@ -1,6 +1,6 @@
 //! cargo test --test e2e_cosmos -- --ignored --nocapture
 //!
-//! Cần docker + image `cosmwasm/wasmd:v0.61.15` và wasm đã build: `chains/cosmos/build-wasm.sh` (cần `wasm-opt`).
+//! Cần docker + image `cosmwasm/wasmd:v0.61.15` và wasm đã build: `smartcontracts/cosmos/build-wasm.sh` (cần `wasm-opt`).
 //! Devnet một node, chain-id `bamboo-1`, CometBFT RPC 127.0.0.1:31990, REST 127.0.0.1:31991 (S9).
 //! Chứng minh: hai lane dẫn xuất từ mnemonic 24 từ; chủ thể chỉ KÝ (không có tài khoản on-chain);
 //! thanh toán qua `lane_step` (mô phỏng → ký → journal → broadcast → mined); payload hết hạn ⇒ `dead`;
@@ -65,7 +65,7 @@ fn now() -> u64 {
 
 async fn start(lanes: &[String]) -> Devnet {
     let _ = Command::new("docker").args(["rm", "-f", NAME]).output();
-    let wasm = concat!(env!("CARGO_MANIFEST_DIR"), "/../chains/cosmos/artifacts");
+    let wasm = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/cosmos/artifacts");
     let st = Command::new("docker")
         .args(["run", "-d", "--rm", "--name", NAME, "-p", "127.0.0.1:31990:26657", "-p", "127.0.0.1:31991:1317"])
         .args(["-v", &format!("{wasm}:/wasm:ro"), "-e", &format!("LANES={}", lanes.join(" "))])

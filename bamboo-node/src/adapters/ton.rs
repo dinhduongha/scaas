@@ -1317,7 +1317,7 @@ mod tests {
     use crate::signer::Curve;
 
     fn vectors() -> Value {
-        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../chains/ton/vectors/ton-vectors.json");
+        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/ton/vectors/ton-vectors.json");
         serde_json::from_str(&std::fs::read_to_string(p).expect("vectors")).expect("json")
     }
 

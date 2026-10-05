@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Sinh `test/vectors/hedera_kat.json` — vector chung Hedera (R63).
 
-python3 test/hedera/gen_hedera_kat.py   (từ thư mục smartcontracts/)
+python3 test/hedera/gen_hedera_kat.py   (từ thư mục smartcontracts/evm/)
 
 Digest EIP-712 tính bằng chính `dms_blockchain/lib/eip712.py` (bản Odoo dùng thật); chữ ký ed25519 RFC 8032 trên
 32 byte digest (đúng phép mà HIP-632 `isAuthorizedRaw` kiểm), khoá từ seed cố định. `HederaKat.t.sol` kiểm digest
@@ -15,7 +15,7 @@ import sys
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, '..', '..', '..', 'dms_blockchain'))
+sys.path.insert(0, os.path.join(HERE, '..', '..', '..', '..', 'dms_blockchain'))
 from lib import eip712  # noqa: E402
 
 # Địa chỉ clone mà HederaKat.t.sol deploy (chainId 296, factory đầu tiên của test contract, salt keccak("HBUSD")).

@@ -1,7 +1,7 @@
 // Pins the lane transaction of `meta::relay_pay` with the official TS SDK (@aptos-labs/ts-sdk, see package.json):
 // BCS RawTransaction, the lane's signing message, SignedTransaction and the transaction hash. The Rust adapter test
 // (adapters/aptos.rs `tx_matches_the_ts_sdk`) builds the same transaction from the cross vector and must match.
-//   cd chains/aptos/scripts && npm ci && node tx_vector.mjs
+//   cd smartcontracts/move/aptos/scripts && npm ci && node tx_vector.mjs
 import {
   Account, AccountAddress, ChainId, EntryFunction, MoveVector, RawTransaction, SimpleTransaction,
   TransactionPayloadEntryFunction, U128, U64, generateSignedTransaction, generateSigningMessageForTransaction,

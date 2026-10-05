@@ -1,6 +1,6 @@
 //! cargo test --test e2e_aptos -- --ignored --nocapture
 //!
-//! Cần localnet Aptos đã chạy và đã publish: `chains/aptos/scripts/devnet.sh up && … publish` (REST 32010, faucet
+//! Cần localnet Aptos đã chạy và đã publish: `smartcontracts/move/aptos/scripts/devnet.sh up && … publish` (REST 32010, faucet
 //! 32011, Indexer API 32015 — dải cổng của luồng S11; thư mục `$APTOS_LOCALNET_DIR`). Chứng minh:
 //! 1. hai lane relayer từ mnemonic 24 từ (`m/44'/637'/i'/0'/0'`), nạp từ faucet; alice (chủ thể) không có APT;
 //! 2. FA thử thật (`testfa`); Odoo giả trả địa chỉ metadata thật và TỪ CHỐI event của token chưa đăng ký;

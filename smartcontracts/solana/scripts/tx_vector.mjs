@@ -2,7 +2,7 @@
 // codec của kit, ký bằng khoá lane qua kit, tx trên dây bằng getTransactionEncoder (message trước, chữ ký sau).
 // Thứ tự account (fee payer, signer ghi/đọc, ghi/đọc; trong nhóm theo lần xuất hiện đầu) là lựa chọn của adapter —
 // validator không đòi thứ tự; e2e đối chiếu chữ ký với RPC.
-//   cd chains/solana/scripts && npm i && node tx_vector.mjs
+//   cd smartcontracts/solana/scripts && npm i && node tx_vector.mjs
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import {

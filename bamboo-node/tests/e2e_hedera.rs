@@ -1,7 +1,7 @@
 //! cargo test --test e2e_hedera -- --ignored --nocapture
 //!
 //! Hedera (R63) end to end on a LOCAL devnet stand-in: anvil `--chain-id 298` (Hedera localnet id) with the
-//! HIP-632 precompile 0x16a replaced by `MockHederaAccountService` (smartcontracts/test/hedera/HederaMocks.sol).
+//! HIP-632 precompile 0x16a replaced by `MockHederaAccountService` (smartcontracts/evm/test/hedera/HederaMocks.sol).
 //! hedera-local-node / solo (≥ 8 GB, many containers) does not run on the shared machine — gap recorded in
 //! docs/superpowers/specs/2026-10-03-net-hedera.md §9. Proven here through the real `HederaAdapter`:
 //! 1. two relayer lanes from a 24-word mnemonic (`m/44'/3030'/0'/0/i`), each with its own key;
@@ -54,7 +54,7 @@ fn now() -> u64 {
 }
 
 fn sc() -> &'static str {
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts")
+    concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/evm")
 }
 
 async fn start_anvil() -> (Anvil, String) {

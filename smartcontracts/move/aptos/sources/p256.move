@@ -210,7 +210,7 @@ module bamboo::p256 {
     }
 
     // ------------------------------------------------------------------ trường
-    // Gas (đo trên localnet, `chains/aptos/scripts/gas_probe.py`): một lời gọi hàm tốn hơn cả phép nhân, nên mọi
+    // Gas (đo trên localnet, `smartcontracts/move/aptos/scripts/gas_probe.py`): một lời gọi hàm tốn hơn cả phép nhân, nên mọi
     // thứ bên trong `fmul`/`nmul` là `inline` (bản gọi hàm vượt trần execution gas của một tx); `fmul`/`nmul` giữ là
     // hàm thường để module không vượt 60 KB.
 

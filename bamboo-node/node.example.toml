@@ -38,7 +38,7 @@ rpc_urls = ["http://nethermind:8545"]            # >= finality.quorum independen
 lanes = [0, 1, 2, 3]                             # 4 relayer accounts: hold gas only, never user funds
 # private_key = { env = "BAMBOO_RELAYER_KEY_9000" }   # alternative: one raw key = one lane
 finality = { mode = "depth", depth = 1, quorum = 1 }
-# dex = "0x..."                                  # OrderBookDex ("order_book_dex" in smartcontracts/deployments/9000.json)
+# dex = "0x..."                                  # OrderBookDex ("order_book_dex" in smartcontracts/evm/deployments/9000.json)
 # fee_recipient = "0x..."                        # cold wallet for fees of gateway meta-txs that leave feeRecipient
                                                  # unbound (R84); never a lane key. Unset: the fee goes to the sending lane.
 poll_ms = 1000
@@ -122,7 +122,7 @@ rpc_urls = ["https://api.mainnet-beta.solana.com"]  # needs transaction history 
 lanes = [0, 1]                                   # ed25519 m/44'/501'/i'/0': fund each lane address; each lane
                                                  # creates its durable nonce account on first use
 finality = { mode = "tag", quorum = 1 }          # commitment `finalized`
-# program_id: YOUR bamboo deployment (chains/solana/scripts/deploy.sh — the test id is refused on public clusters);
+# program_id: YOUR bamboo deployment (smartcontracts/solana/scripts/deploy.sh — the test id is refused on public clusters);
 # max_cu caps the compute-unit limit, max_priority_lamports the total priority fee per tx (v1 header),
 # max_loaded_bytes the loaded-account-data limit.
 params = { program_id = "<your program id>", max_cu = 600000, max_priority_lamports = 2000000 }

@@ -42,7 +42,7 @@ Seam: `dms.portal.api._dms_chain_receiving_company(order)` (mọi lookup đi qua
 
 ## 4. Zether (round 3, luồng S2) — **UNAUDITED — NOT FOR PRODUCTION FUNDS**
 
-Contract `smartcontracts/src/zether/**` (`ZetherToken`, `ZetherMetaTx`, `ZetherVerifierBn254`,
+Contract `smartcontracts/evm/src/zether/**` (`ZetherToken`, `ZetherMetaTx`, `ZetherVerifierBn254`,
 `ZetherVerifierBls12381`, `ZetherCurves`, `ZetherTranscript`, `ZetherSafety`) và `src/registry/**`
 (`UniversalAccountRegistry`) là hiện thực tham chiếu **chưa audit**. Đặc tả: `specs/2026-10-03-zether-design.md`.
 

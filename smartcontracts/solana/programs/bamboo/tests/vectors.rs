@@ -1,4 +1,4 @@
-//! Sinh bởi `chains/solana/scripts/gen_vectors.py` — đừng sửa tay. Khoá = sha256(tên); network = sha256(
+//! Sinh bởi `smartcontracts/solana/scripts/gen_vectors.py` — đừng sửa tay. Khoá = sha256(tên); network = sha256(
 //! "bamboo.solana.test-genesis"); payload: Alice trả Bob 100 USD, pay_ref 01…, lane a1…, nonce 0, hạn 1000.
 #![allow(dead_code)]
 

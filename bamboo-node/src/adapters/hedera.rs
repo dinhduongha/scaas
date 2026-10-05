@@ -220,7 +220,7 @@ mod tests {
     use serde_json::json;
 
     const RELAY: &str = include_str!("../../tests/vectors/hedera_testnet.json");
-    const KAT: &str = include_str!("../../../smartcontracts/test/vectors/hedera_kat.json");
+    const KAT: &str = include_str!("../../../smartcontracts/evm/test/vectors/hedera_kat.json");
 
     fn relay() -> Value {
         serde_json::from_str(RELAY).unwrap()
