@@ -44,7 +44,9 @@ Endpoint RPC **chỉ** nằm ở đây (ruling R20) và phải ≥ `finality.quo
   hết hạn ⇒ nonce được lấp bằng tx 0-value tự chuyển.
 - `signed` (tx_hash + nonce) được ghi vào Odoo **trước** khi gửi; khởi động lại không ký lại.
 - Job chỉ `final` khi indexer thấy `MetaTransactionExecuted(digest)` trong vùng final.
-- Hàng đợi `/v1/metatx` nằm trong bộ nhớ (R16): khởi động lại thì người ký gửi lại.
+- Hàng đợi `/v1/metatx` nằm trong bộ nhớ (R16): khởi động lại thì người ký gửi lại. Trường không ràng buộc
+  bị chuẩn hoá trước mô phỏng (R84): `feeRecipient` ⇒ `[[chains]] fee_recipient` (không đặt ⇒ 0, phí về lane gửi),
+  `relayer` ⇒ 0; giá trị client gửi cho chúng không bao giờ lên chain.
 - Sổ lệnh DEX (`OrderBookDex`, R35) lưu ở Odoo (`dms_blockchain_dex`, RS5-2): mỗi thay đổi là một
   `dex_book_commit`; settle đi qua outbox như mọi job; khởi động lại nạp lại sổ. Bật bằng `dex = "0x…"`
   (địa chỉ `order_book_dex` trong `deployments/<chain>.json`) + `gateway` + `submit`; watcher event final

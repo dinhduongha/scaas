@@ -39,6 +39,8 @@ lanes = [0, 1, 2, 3]                             # 4 relayer accounts: hold gas 
 # private_key = { env = "BAMBOO_RELAYER_KEY_9000" }   # alternative: one raw key = one lane
 finality = { mode = "depth", depth = 1, quorum = 1 }
 # dex = "0x..."                                  # OrderBookDex ("order_book_dex" in smartcontracts/deployments/9000.json)
+# fee_recipient = "0x..."                        # cold wallet for fees of gateway meta-txs that leave feeRecipient
+                                                 # unbound (R84); never a lane key. Unset: the fee goes to the sending lane.
 poll_ms = 1000
 stuck_after_secs = 60
 max_gas_per_tx = 3000000

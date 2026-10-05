@@ -19,7 +19,7 @@ use crate::breaker::Breaker;
 use crate::chain::{Chain, SimError};
 use crate::dex::venue::{Venue, VenueError};
 use crate::dex::WireOrder;
-use crate::metatx::WireMetaTx;
+use crate::metatx::{normalize, WireMetaTx};
 use crate::submit::{now, Work};
 
 #[derive(Clone)]
@@ -31,6 +31,8 @@ pub struct GwChain {
     pub dex: Option<Arc<Venue>>,
     /// Cầu dao của lane nhận việc gateway (R55): mở ⇒ 503 trước khi mô phỏng, không nhận rồi bỏ rơi.
     pub breaker: Option<Arc<Mutex<Breaker>>>,
+    /// `[[chains]] fee_recipient` (R84): đích của phí khi người ký không ràng buộc `feeRecipient`.
+    pub fee_recipient: Option<Address>,
 }
 
 #[derive(Clone, Default)]
@@ -133,28 +135,32 @@ async fn enqueue(c: &GwChain, w: Work, status: &str) -> Reply {
     (StatusCode::ACCEPTED, Json(json!({"status": status})))
 }
 
+/// Nơi duy nhất dựng `Work` từ request; chuẩn hoá R84 ở đây, trước mô phỏng.
+fn work_of(r: SignedReq, fee_recipient: Option<Address>) -> Result<Work, Reply> {
+    let mut m = r.m.to_sol().map_err(bad)?;
+    normalize(&mut m, fee_recipient);
+    let sig = sig_bytes(&r.signature)?;
+    if m.validUntil <= U256::from(now()) {
+        return Err(bad("expired"));
+    }
+    let valid_until = m.validUntil.saturating_to();
+    let data: Bytes = IMetaToken::executeMetaTransactionCall { m, signature: sig }.abi_encode().into();
+    Ok(Work { job_id: None, to: r.token, data, valid_until })
+}
+
 async fn post_metatx(State(s): State<AppState>, Json(r): Json<SignedReq>) -> Reply {
     let c = match chain_of(&s, r.chain, r.token) {
         Ok(c) => c,
         Err(e) => return e,
     };
-    let m = match r.m.to_sol() {
-        Ok(m) => m,
-        Err(e) => return bad(e),
-    };
-    let sig = match sig_bytes(&r.signature) {
-        Ok(x) => x,
+    let w = match work_of(r, c.fee_recipient) {
+        Ok(w) => w,
         Err(e) => return e,
     };
-    if m.validUntil <= U256::from(now()) {
-        return bad("expired");
-    }
-    let valid_until = m.validUntil.saturating_to();
-    let data: Bytes = IMetaToken::executeMetaTransactionCall { m, signature: sig }.abi_encode().into();
-    if let Err(e) = c.chain.simulate(r.token, data.clone()).await {
+    if let Err(e) = c.chain.simulate(w.to, w.data.clone()).await {
         return sim_reply(e);
     }
-    enqueue(c, Work { job_id: None, to: r.token, data, valid_until }, "queued").await
+    enqueue(c, w, "queued").await
 }
 
 // ---------------------------------------------------------------------------------- DEX (R35)
@@ -266,6 +272,7 @@ mod tests {
     use super::*;
     use axum::body::Body;
     use axum::http::Request;
+    use crate::metatx::MetaTransaction;
     use tower::ServiceExt;
 
     /// R55 (review S1-7): lane đứng ⇒ gateway trả 503 ngay, không nhận rồi để hết hạn trong kênh.
@@ -283,6 +290,7 @@ mod tests {
             tokens: Arc::new(RwLock::new(vec![token])),
             dex: None,
             breaker: Some(Arc::new(Mutex::new(k))),
+            fee_recipient: None,
         };
         let app = router(AppState { chains: Arc::new([(7, gw)].into_iter().collect()) });
         let body = json!({"chain": 7, "token": format!("{token:#x}"), "signature": "0x00", "m": {
@@ -295,5 +303,48 @@ mod tests {
         assert_eq!(r.status(), StatusCode::SERVICE_UNAVAILABLE);
         let b = axum::body::to_bytes(r.into_body(), 4096).await.unwrap();
         assert!(String::from_utf8_lossy(&b).contains("circuit breaker open: balance_floor"), "not the RPC error");
+    }
+
+    fn req(mode: u32) -> SignedReq {
+        let m = WireMetaTx {
+            from: format!("{:#x}", Address::repeat_byte(0xab)),
+            to: format!("{:#x}", Address::repeat_byte(0x01)),
+            value: "1000000".into(),
+            data: "0x".into(),
+            batch: "7".into(),
+            nonce: "0".into(),
+            valid_until: "99999999999".into(),
+            mode,
+            relayer: format!("{:#x}", Address::repeat_byte(0x66)),
+            fee: "1000".into(),
+            fee_recipient: format!("{:#x}", Address::repeat_byte(0x77)),
+        };
+        SignedReq { chain: 7, token: Address::repeat_byte(0xcd), m, signature: format!("0x{}", "11".repeat(65)) }
+    }
+
+    fn sent(w: &Work) -> MetaTransaction {
+        IMetaToken::executeMetaTransactionCall::abi_decode(&w.data).unwrap().m
+    }
+
+    /// R84 (review C1): bit tắt ⇒ giá trị trên dây không được ký, ai cũng ghi đè được ⇒ không bao giờ gửi nó.
+    #[test]
+    fn unbound_fee_recipient_and_relayer_are_normalized() {
+        let d = crate::metatx::Domain { name: "T".into(), version: "1".into(), chain_id: 7, verifying_contract: Address::repeat_byte(0xcd) };
+        let ours = Address::repeat_byte(0x99);
+        let r = req(0x20);
+        let wire = r.m.to_sol().unwrap();
+        let m = sent(&work_of(r, Some(ours)).unwrap());
+        assert_eq!((m.feeRecipient, m.relayer), (ours, Address::ZERO));
+        assert_eq!(crate::metatx::digest(&d, &m), crate::metatx::digest(&d, &wire));
+        let m = sent(&work_of(req(0x20), None).unwrap());
+        assert_eq!((m.feeRecipient, m.relayer), (Address::ZERO, Address::ZERO), "unset ⇒ the contract pays msg.sender");
+    }
+
+    #[test]
+    fn bound_fields_are_untouched() {
+        let mode = crate::metatx::MODE_RESTRICT_RELAYER | crate::metatx::MODE_RESTRICT_FEE_RECIPIENT | 0x20;
+        let r = req(mode);
+        let wire = r.m.to_sol().unwrap();
+        assert_eq!(sent(&work_of(r, Some(Address::repeat_byte(0x99))).unwrap()), wire);
     }
 }

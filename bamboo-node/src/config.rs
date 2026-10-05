@@ -108,6 +108,10 @@ pub struct ChainCfg {
     pub finality: FinalityCfg,
     #[serde(default)]
     pub dex: Option<Address>,
+    /// Ví lạnh nhận phí của meta-tx không ràng buộc `feeRecipient` (R84, EVM/Hedera); không phải khoá lane.
+    /// Không đặt ⇒ ghi 0: contract trả phí cho `msg.sender` (lane gửi).
+    #[serde(default)]
+    pub fee_recipient: Option<Address>,
     #[serde(default = "default_poll")]
     pub poll_ms: u64,
     #[serde(default = "default_stuck")]
@@ -172,6 +176,7 @@ impl Default for ChainCfg {
             params: Default::default(),
             finality: default_finality(),
             dex: None,
+            fee_recipient: None,
             poll_ms: default_poll(),
             stuck_after_secs: default_stuck(),
             max_gas_per_tx: default_max_gas(),

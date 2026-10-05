@@ -455,7 +455,8 @@ async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
     let shared = Arc::new(Chain::with_signer(&cfg, relayer.clone()).unwrap());
     let venue = Venue::start(shared.clone(), odoo.clone(), Some(odoo.clone()), dex).await.unwrap();
     let (tx, mut rx) = mpsc::channel::<Work>(16);
-    let gw = GwChain { chain: shared.clone(), tx, tokens: Arc::new(RwLock::new(vec![token_a, token_b])), dex: Some(venue.clone()), breaker: None };
+    let fee_wallet = Address::repeat_byte(0xfa);
+    let gw = GwChain { chain: shared.clone(), tx, tokens: Arc::new(RwLock::new(vec![token_a, token_b])), dex: Some(venue.clone()), breaker: None, fee_recipient: Some(fee_wallet) };
     let app = router(AppState { chains: Arc::new([(chain_id, gw)].into_iter().collect()) });
     let listener = tokio::net::TcpListener::bind("127.0.0.1:18651").await.unwrap();
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -485,6 +486,21 @@ async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
         assert_eq!(st, 202, "{body}");
     }
     drain(&mut s, &mut rx).await;
+
+    // 1b. R84 (review C1): `feeRecipient`/`relayer` of an open-mode intent are not signed, so a client can put
+    //     anything there; the fee still lands in our configured wallet.
+    let thief = Address::repeat_byte(0x7e);
+    let m = MetaTransaction {
+        from: alice.address(), to: Address::repeat_byte(0x5e), value: U256::from(1_000_000u64), data: Default::default(),
+        batch: U256::from_be_bytes(keccak256(b"e2e.r84").0), nonce: U256::ZERO, validUntil: U256::from(now() + 300),
+        mode: 0x20, // FIXED fee, neither relayer nor fee recipient bound
+        relayer: thief, fee: U256::from(1_000u64), feeRecipient: thief,
+    };
+    let (st, body) = post("/v1/metatx", json!({"chain": chain_id, "token": token_a, "m": WireMetaTx::from_sol(&m),
+        "signature": sign(&alice, chain_id, token_a, &m)})).await;
+    assert_eq!(st, 202, "{body}");
+    drain(&mut s, &mut rx).await;
+    assert_eq!((balance(&rpc, token_a, fee_wallet).await, balance(&rpc, token_a, thief).await), (U256::from(1_000u64), U256::ZERO));
 
     let d = domain(chain_id, dex);
     let place = |o: Order, signer: &PrivateKeySigner| {

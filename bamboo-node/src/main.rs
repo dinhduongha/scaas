@@ -197,7 +197,7 @@ async fn main() -> Result<()> {
                 }
                 _ => None,
             };
-            gw_chains.insert(num, gateway::GwChain { chain: shared, tx, tokens, dex: venue, breaker: first_breaker });
+            gw_chains.insert(num, gateway::GwChain { chain: shared, tx, tokens, dex: venue, breaker: first_breaker, fee_recipient: cc.fee_recipient });
         }
     }
     if cfg.modules.gateway {
