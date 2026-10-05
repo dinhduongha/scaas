@@ -20,7 +20,7 @@ use crate::chain::{Chain, SimError};
 use crate::dex::venue::{Venue, VenueError};
 use crate::dex::WireOrder;
 use crate::metatx::{normalize, WireMetaTx};
-use crate::submit::{now, Work};
+use crate::submit::{now, MetaRef, Work};
 
 #[derive(Clone)]
 pub struct GwChain {
@@ -144,8 +144,9 @@ fn work_of(r: SignedReq, fee_recipient: Option<Address>) -> Result<Work, Reply> 
         return Err(bad("expired"));
     }
     let valid_until = m.validUntil.saturating_to();
+    let meta = Some(MetaRef::of(r.token, &m, None));
     let data: Bytes = IMetaToken::executeMetaTransactionCall { m, signature: sig }.abi_encode().into();
-    Ok(Work { job_id: None, to: r.token, data, valid_until })
+    Ok(Work { job_id: None, to: r.token, data, valid_until, meta })
 }
 
 async fn post_metatx(State(s): State<AppState>, Json(r): Json<SignedReq>) -> Reply {
@@ -153,12 +154,21 @@ async fn post_metatx(State(s): State<AppState>, Json(r): Json<SignedReq>) -> Rep
         Ok(c) => c,
         Err(e) => return e,
     };
-    let w = match work_of(r, c.fee_recipient) {
+    let mut w = match work_of(r, c.fee_recipient) {
         Ok(w) => w,
         Err(e) => return e,
     };
     if let Err(e) = c.chain.simulate(w.to, w.data.clone()).await {
         return sim_reply(e);
+    }
+    // G2: digest thật của token ⇒ cùng một intent gửi hai lần không thành hai tx vỏ (tập in-flight của chain).
+    let m = match IMetaToken::executeMetaTransactionCall::abi_decode(&w.data) {
+        Ok(c) => c.m,
+        Err(e) => return bad(e),
+    };
+    match c.chain.meta_digest(w.to, m).await {
+        Ok(d) => w.meta = w.meta.map(|r| MetaRef { digest: Some(d), ..r }),
+        Err(e) => return sim_reply(SimError::Transport(format!("metaTxDigest: {e:#}"))),
     }
     enqueue(c, w, "queued").await
 }

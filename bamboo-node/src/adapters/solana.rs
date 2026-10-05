@@ -872,6 +872,18 @@ impl ChainAdapter for SolanaAdapter {
         &self.lanes
     }
 
+    /// R80: `pay` ⇒ `LanePda.next` (8 byte sau discriminator; chưa tạo hoặc đã dọn = 0) so với nonce đã ký.
+    async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
+        let Ok(w) = self.work(job) else { return Ok(None) };
+        let pda = find_pda(&[b"lane", &w.op.contract, &w.op.lane], &self.program).0;
+        let next = match self.account_data(&pda, "confirmed").await? {
+            None => 0,
+            Some((d, owner)) if owner == self.program && d.len() >= 16 => u64::from_le_bytes(d[8..16].try_into().expect("8")),
+            Some(_) => bail!("lane PDA {} is not this program's", b58(&pda)),
+        };
+        Ok(Some(next > w.op.nonce))
+    }
+
     /// Dựng + mô phỏng (`sigVerify:false`, nonce thật). Lỗi ở precompile/`bamboo` ⇒ `Revert` (job chết); còn lại
     /// (RPC, nonce vừa đổi, lane thiếu phí, cấu hình lệch miền) ⇒ `Transport` (thử lại, lùi dần).
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {

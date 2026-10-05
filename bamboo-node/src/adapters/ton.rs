@@ -1058,6 +1058,20 @@ impl ChainAdapter for TonAdapter {
         &self.lanes
     }
 
+    /// R80: `pay` (op 1) ⇒ getter `get_lane_nonce` của ví người trả so với nonce đã ký. Revoke (`next == nonce + 1`
+    /// là còn chờ) và mandate không trả lời (review M6).
+    async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
+        let Some(op) = job.op.as_ref().filter(|o| o["op_kind"] == "pay") else { return Ok(None) };
+        let s = |k: &str| op.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
+        let m = parse_metaop(&boc_parse(&alloy::hex::decode(s("payload").trim_start_matches("0x"))?)?)?;
+        if m.op != 1 {
+            return Ok(None);
+        }
+        let next = self.api.run_get(&Addr::parse(&s("contract"))?, "get_lane_nonce", vec![json!({"type": "num", "value": hex0x(&m.lane)})]).await?;
+        let next = next.first().map(stack_num).transpose()?.unwrap_or(0) as u64;
+        Ok(Some(next > m.nonce))
+    }
+
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
         let revert = |e: anyhow::Error| SimError::Revert(format!("{e:#}"));
         let transport = |e: anyhow::Error| SimError::Transport(format!("{e:#}"));
@@ -1574,6 +1588,30 @@ mod tests {
         assert_eq!(forward_and_value(&b), (floor, floor + 100_000_000), "the signed floor, not the node default 0");
         let b = a.build(&job(json!({"forward_nanoton": 500_000_000u64})), 0).await.unwrap();
         assert_eq!(forward_and_value(&b), (500_000_000, 600_000_000), "this job's forward sizes the value");
+    }
+
+    /// R80 + review M6: only `pay` (op 1) answers from `get_lane_nonce`; revoke and mandate ops are unknown (None).
+    #[tokio::test]
+    async fn op_consumed_reads_the_lane_nonce_for_pay_only() {
+        let contract = Addr { wc: 0, hash: [0xc0; 32] };
+        let op = |code: u128| {
+            Builder::new().bytes(b"bamboo.metaop.v1").int(-239, 32).uint(code, 8).uint(10, 128).uint(5, 64).uint(1 << 40, 64)
+                .addr(Some(&contract))
+                .reference(Builder::new().addr(Some(&Addr { wc: 0, hash: [1; 32] })).addr(Some(&Addr { wc: 0, hash: [2; 32] })).addr(None).end().unwrap())
+                .reference(Builder::new().bytes(&[3; 32]).bytes(&[4; 32]).bytes(&[0; 32]).end().unwrap())
+                .end()
+                .unwrap()
+        };
+        let job = |kind: &str, code: u128| -> Job {
+            serde_json::from_value(json!({"id": 1, "kind": "signed_op", "op": {"contract": contract.raw(), "op_kind": kind,
+                "payload": alloy::hex::encode(boc_serialize(&op(code)))}})).unwrap()
+        };
+        for (next, want) in [(6, Some(true)), (5, Some(false))] {
+            let a = adapter(&fake_api(Fake { getters: HashMap::from([("get_lane_nonce".into(), num(next))]), ..Default::default() }).await);
+            assert_eq!(a.op_consumed(&job("pay", 1)).await.unwrap(), want, "next {next}");
+            assert_eq!(a.op_consumed(&job("pay", 4)).await.unwrap(), None, "revoke");
+            assert_eq!(a.op_consumed(&job("mandate_pay", 1)).await.unwrap(), None);
+        }
     }
 
     /// Review L6 + L7: the lane's tx is followed to the hop that credits the payee (its bounce = not paid), and a

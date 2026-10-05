@@ -179,7 +179,10 @@ async fn readyz(State(snap): State<Arc<RwLock<Snapshot>>>) -> impl IntoResponse 
 }
 
 async fn metrics(State(snap): State<Arc<RwLock<Snapshot>>>) -> impl IntoResponse {
-    let body = snap.read().map(|s| s.metrics.clone()).unwrap_or_default();
+    let mut body = snap.read().map(|s| s.metrics.clone()).unwrap_or_default();
+    let n = crate::submit::BUMP_SKIPPED_CONSUMED.load(std::sync::atomic::Ordering::Relaxed);
+    let name = "bamboo_submit_bump_skipped_consumed_total";
+    let _ = writeln!(body, "# HELP {name} Stuck meta-txs not bumped because their nonce was consumed (R80).\n# TYPE {name} counter\n{name} {n}");
     ([(header::CONTENT_TYPE, "text/plain; version=0.0.4")], body)
 }
 

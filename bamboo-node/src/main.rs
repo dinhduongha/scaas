@@ -95,16 +95,19 @@ async fn main() -> Result<()> {
         let poll = Duration::from_millis(cc.poll_ms);
         let tokens = Arc::new(RwLock::new(Vec::new()));
         let mut probe_lanes = Vec::new();
+        // G2 (§8.4): MỘT tập digest in-flight mỗi chain, chung cho mọi lane.
+        let digests = submit::InflightSet::default();
         if cc.uses_adapter() {
             let adapter = adapters::build(cc, &signers)?;
             if cfg.modules.submit {
                 let relay = odoo::Odoo::new(&cfg.odoo, &cfg.odoo.relay_api_key_env)?;
                 for lane in 0..signers.len() {
                     let (a, o, w) = (adapter.clone(), relay.clone(), format!("{node_id}#{}", cc.lanes[lane]));
+                    let d = digests.clone();
                     let k = Arc::new(Mutex::new(Breaker::new(cc.breaker.clone())));
                     probe_lanes.push(LaneProbe { lane: adapter.lanes()[lane].address.clone(), breaker: k.clone() });
                     set.spawn(async move {
-                        lane_runner(a, o, lane, w, poll, k).await;
+                        lane_runner(a, o, lane, w, poll, k, d).await;
                         Err(anyhow!("lane loop ended"))
                     });
                 }
@@ -138,7 +141,7 @@ async fn main() -> Result<()> {
                     first_tx = Some(tx);
                 }
                 let worker = format!("{node_id}#{}", cc.lanes[lane]);
-                let s = submit::Submitter::start(c, relay.clone(), cc.clone(), worker).await?;
+                let s = submit::Submitter::start(c, relay.clone(), cc.clone(), worker, digests.clone()).await?;
                 probe_lanes.push(LaneProbe { lane: format!("{:#x}", s.address()), breaker: s.breaker() });
                 if first_breaker.is_none() {
                     first_breaker = Some(s.breaker());

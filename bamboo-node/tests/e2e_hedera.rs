@@ -101,9 +101,9 @@ fn allowed(from: &str, to: &str) -> bool {
     matches!(
         (from, to),
         ("queued", "nonce_leased")
-            | ("nonce_leased", "queued" | "signed" | "dead")
-            | ("signed", "broadcast" | "mined" | "reverted" | "queued" | "dead")
-            | ("broadcast", "mined" | "reverted" | "broadcast" | "queued" | "dead")
+            | ("nonce_leased", "queued" | "signed" | "dead" | "consumed")
+            | ("signed", "broadcast" | "mined" | "reverted" | "queued" | "dead" | "consumed")
+            | ("broadcast", "mined" | "reverted" | "broadcast" | "queued" | "dead" | "consumed")
             | ("mined", "reverted")
     )
 }
@@ -317,14 +317,13 @@ async fn hedera_native_account_pays_through_two_lanes_and_never_locks_itself() {
         .filter(|r| r["chain_state"] == "signed").map(|r| r["signer_address"].as_str().unwrap().to_string()).collect();
     assert_eq!(signed_by, signers.iter().map(|s| s.address_hex()).collect());
 
-    // Replay of X: the token's lane nonce is spent, simulation refuses → dead, nothing sent.
+    // Replay of X: the token's lane nonce is spent, simulation refuses → `consumed` (R80, metaNonce), nothing sent.
     let mut replay = x;
     replay["id"] = json!(33);
     state.lock().unwrap().jobs.push(replay);
     assert!(lane_step(adapter, &odoo, 1, "e2e#1").await.unwrap());
     let last = state.lock().unwrap().reports.last().cloned().unwrap();
-    assert_eq!((last["job_id"].as_i64(), last["chain_state"].as_str()), (Some(33), Some("dead")));
-    assert!(last["error"].as_str().unwrap().contains("MetaTxBadNonce"), "{last}");
+    assert_eq!((last["job_id"].as_i64(), last["chain_state"].as_str()), (Some(33), Some("consumed")), "{last}");
     assert!(state.lock().unwrap().refused.is_empty());
 
     // Finality: three payments, each with the digest the subject signed.
