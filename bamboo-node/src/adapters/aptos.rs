@@ -590,6 +590,18 @@ impl ChainAdapter for AptosAdapter {
         &self.lanes
     }
 
+    /// R80: `pay` ⇒ view `meta::lane_nonce(from, lane)` (Account chưa mở ⇒ chưa gì bị tiêu thụ).
+    async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
+        let Ok(w) = self.work(job) else { return Ok(None) };
+        if !self.account_exists(&w.op.from).await? {
+            return Ok(Some(false));
+        }
+        let lane = format!("0x{}", alloy::hex::encode(&w.op.lane));
+        let v = self.view(&format!("{}::meta::lane_nonce", addr_hex(&self.package)), &[], &[addr_hex(&w.op.from), lane]).await?;
+        let next = num(&v).ok_or_else(|| anyhow!("bad lane_nonce {v}"))?;
+        Ok(Some(next > w.op.nonce))
+    }
+
     /// Mô phỏng với chữ ký toàn số 0 (API từ chối mô phỏng tx có chữ ký hợp lệ). Abort ⇒ `Revert` (job chết).
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
         let w = self.work(job).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;

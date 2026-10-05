@@ -159,9 +159,9 @@ fn allowed(from: &str, to: &str) -> bool {
     matches!(
         (from, to),
         ("queued", "nonce_leased")
-            | ("nonce_leased", "queued" | "signed" | "dead")
-            | ("signed", "broadcast" | "mined" | "reverted" | "queued" | "dead")
-            | ("broadcast", "mined" | "reverted" | "broadcast" | "queued" | "dead")
+            | ("nonce_leased", "queued" | "signed" | "dead" | "consumed")
+            | ("signed", "broadcast" | "mined" | "reverted" | "queued" | "dead" | "consumed")
+            | ("broadcast", "mined" | "reverted" | "broadcast" | "queued" | "dead" | "consumed")
             | ("mined", "reverted")
     )
 }
@@ -423,10 +423,10 @@ async fn sui_payments_relay_finalize_and_never_lock_each_other() {
     let (x_done, ()) = tokio::time::timeout(Duration::from_secs(120), async { tokio::join!(x_run, y_run) }).await.expect("lanes stuck");
     assert!(x_done.unwrap());
     assert_eq!(states_of(&state, 1), ["signed", "broadcast", "mined"]);
-    // Phát lại X: dry-run từ chối (nonce đã dùng) ⇒ dead, không tốn gas.
+    // Phát lại X: dry-run từ chối, nonce đã dùng ⇒ `consumed` (R80), không tốn gas.
     let mut replay = x;
     replay["id"] = json!(3);
-    assert_eq!(run_job(adapter.as_ref(), &odoo, &state, 0, replay).await, ["dead"]);
+    assert_eq!(run_job(adapter.as_ref(), &odoo, &state, 0, replay).await, ["consumed"]);
     assert!(state.lock().unwrap().refused.is_empty());
 
     // KHỞI ĐỘNG LẠI (review M3): lane 0 dựng + ký W (journal ghi) rồi tiến trình "chết" trước khi gửi.

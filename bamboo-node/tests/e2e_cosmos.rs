@@ -187,9 +187,9 @@ fn allowed(from: &str, to: &str) -> bool {
     matches!(
         (from, to),
         ("queued", "nonce_leased")
-            | ("nonce_leased", "queued" | "signed" | "dead")
-            | ("signed", "broadcast" | "mined" | "reverted" | "queued" | "dead")
-            | ("broadcast", "mined" | "reverted" | "broadcast" | "queued" | "dead")
+            | ("nonce_leased", "queued" | "signed" | "dead" | "consumed")
+            | ("signed", "broadcast" | "mined" | "reverted" | "queued" | "dead" | "consumed")
+            | ("broadcast", "mined" | "reverted" | "broadcast" | "queued" | "dead" | "consumed")
             | ("mined", "reverted")
     )
 }
@@ -345,11 +345,11 @@ async fn cosmos_payment_lanes_finality_and_anti_lock() {
     assert_eq!(states(&state, 3), ["dead"]);
     let why = state.lock().unwrap().reports.last().unwrap()["error"].as_str().unwrap().to_string();
     assert!(why.contains("expired"), "{why}");
-    // Replay của Y (nonce đã tiêu) cũng chết ở mô phỏng.
+    // Replay của Y: mô phỏng từ chối, nonce đã tiêu ⇒ `consumed` (R80), không `dead`.
     let (y_again, _) = alice.job(4, &t2, &payee, 222, 2, vu);
     state.lock().unwrap().jobs.push(y_again);
     assert!(lane_step(&adapter, &odoo, 1, "n#1").await.unwrap());
-    assert_eq!(states(&state, 4), ["dead"]);
+    assert_eq!(states(&state, 4), ["consumed"]);
 
     // Finality: indexer đưa event của vùng đã commit vào Odoo, đúng digest/entry_ref.
     for _ in 0..20 {

@@ -634,6 +634,23 @@ impl ChainAdapter for SuiAdapter {
         &self.lanes
     }
 
+    /// R80: `pay` ⇒ `Account.lanes[lane]` (Table, dynamic field; vắng = 0) so với nonce đã ký.
+    async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
+        let Ok(w) = self.work(job) else { return Ok(None) };
+        let a = self.rpc("sui_getObject", json!([addr_hex(&w.op.contract), {"showContent": true}])).await?;
+        let table = a["data"]["content"]["fields"]["lanes"]["fields"]["id"]["id"]
+            .as_str()
+            .ok_or_else(|| anyhow!("account {} has no lanes table", addr_hex(&w.op.contract)))?;
+        let f = self.rpc("suix_getDynamicFieldObject", json!([table, {"type": "vector<u8>", "value": w.op.lane}])).await?;
+        if f["error"]["code"] == "dynamicFieldNotFound" {
+            return Ok(Some(false));
+        }
+        let next = str_or_num(&f["data"]["content"]["fields"]["value"])
+            .and_then(|v| v.parse::<u64>().ok())
+            .ok_or_else(|| anyhow!("bad lane nonce {f}"))?;
+        Ok(Some(next > w.op.nonce))
+    }
+
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
         let w = self.work(job).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
         let sender = self.lane_addr(lane).map_err(transport)?;

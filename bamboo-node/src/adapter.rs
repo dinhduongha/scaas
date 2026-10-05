@@ -14,7 +14,7 @@ use crate::breaker::Breaker;
 use crate::chain::SimError;
 use crate::finality::next_range;
 use crate::odoo::{Job, Odoo, Report};
-use crate::submit::now;
+use crate::submit::{job_digest, now, InflightSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Family {
@@ -118,6 +118,12 @@ pub trait ChainAdapter: Send + Sync {
     async fn resend_journaled(&self, _lane: usize) -> Result<()> {
         Ok(())
     }
+    /// R80: `Some(true)` ⇔ nonce lane của chủ thể đã qua nonce của op (ai đó đã dùng nó). `Ok(None)` = không biết
+    /// ⇒ không bao giờ dừng job vì nó: mọi loại op mà replay guard không phải nonce lane (review M6). v1 chỉ trả lời
+    /// cho `pay` (và meta-tx Hedera qua `metaNonce`). Lỗi RPC ⇒ `Err`: không gửi lại vòng này (fail closed).
+    async fn op_consumed(&self, _job: &Job) -> Result<Option<bool>> {
+        Ok(None)
+    }
 }
 
 /// Lỗi `submit` khi mạng TỪ CHỐI tx trước mempool (sequence lệch, thiếu phí, chữ ký sai…): gửi lại cùng bytes
@@ -165,6 +171,7 @@ pub async fn lane_runner(
     worker: String,
     poll: Duration,
     breaker: Arc<Mutex<Breaker>>,
+    inflight: InflightSet,
 ) {
     let key = adapter.chain_key().to_string();
     info!(chain = %key, lane, address = %adapter.lanes()[lane].address, "lane ready");
@@ -197,7 +204,7 @@ pub async fn lane_runner(
             tokio::time::sleep(poll).await;
             continue;
         }
-        let why = match step_once(adapter.as_ref(), &odoo, lane, &worker, Some(&breaker)).await {
+        let why = match step_once(adapter.as_ref(), &odoo, lane, &worker, Some(&breaker), &inflight).await {
             Ok(Step::Done) => {
                 backoff = BACKOFF_MIN;
                 continue;
@@ -234,7 +241,7 @@ pub async fn recover_lane(adapter: &dyn ChainAdapter, odoo: &Odoo, lane: usize, 
         };
         info!(chain = %adapter.chain_key(), lane, job = j.job_id, tx = %tx_id, "re-checking in-flight job after restart");
         let valid_until = j.payload.op.as_ref().and_then(|o| o["valid_until"].as_u64()).unwrap_or(0);
-        let f = InFlight { job: j.job_id, tx_id: &tx_id, valid_until, lane, signed: None, nonce: j.nonce };
+        let f = InFlight { job: &j.payload, tx_id: &tx_id, valid_until, lane, signed: None, nonce: j.nonce };
         follow(adapter, odoo, f, Ok(()), None).await;
     }
     Ok(())
@@ -242,7 +249,7 @@ pub async fn recover_lane(adapter: &dyn ChainAdapter, odoo: &Odoo, lane: usize, 
 
 /// Một tx đang bay. `signed` = bytes còn trong tay (gửi lại được); `None` sau khởi động lại.
 struct InFlight<'a> {
-    job: i64,
+    job: &'a Job,
     tx_id: &'a str,
     valid_until: u64,
     lane: usize,
@@ -250,9 +257,12 @@ struct InFlight<'a> {
     nonce: Option<u64>,
 }
 
-/// Theo dõi tới mined/reverted/queued/dead. `sent` = kết quả lần gửi gần nhất.
+/// Theo dõi tới mined/reverted/consumed/queued/dead. `sent` = kết quả lần gửi gần nhất.
+/// R80: revert ⇒ kiểm `op_consumed` trước (review H3); trước MỖI lần gửi lại cũng vậy. Đã tiêu thụ ⇒ báo `consumed`
+/// một lần, thôi gửi lại, vẫn giữ lane theo dõi tx tới trạng thái cuối hoặc hết hạn (không báo gì thêm ngoài `mined`).
 async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut sent: Result<()>, breaker: Option<&Mutex<Breaker>>) {
-    let job = f.job;
+    let job = f.job.id;
+    let mut consumed = false;
     loop {
         match adapter.tx_status(f.tx_id).await {
             Ok(TxStatus::Mined { .. }) => {
@@ -264,33 +274,54 @@ async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut se
                 report(odoo, rep(job, "mined")).await;
                 return;
             }
-            Ok(TxStatus::Reverted { reason }) => {
-                report(odoo, Report { error: Some(reason), ..rep(job, "reverted") }).await;
-                return;
-            }
+            Ok(TxStatus::Reverted { .. }) if consumed => return,
+            Ok(TxStatus::Reverted { reason }) => match adapter.op_consumed(f.job).await {
+                Ok(Some(true)) => {
+                    report(odoo, Report { error: Some(format!("unknown; ours reverted: {reason}")), ..rep(job, "consumed") }).await;
+                    return;
+                }
+                Ok(_) => {
+                    report(odoo, Report { error: Some(reason), ..rep(job, "reverted") }).await;
+                    return;
+                }
+                Err(e) => warn!(chain = %adapter.chain_key(), job, "reverted, op_consumed unreadable; retry: {e:#}"),
+            },
             Ok(TxStatus::Pending) => {}
             Err(e) if e.downcast_ref::<Rejected>().is_some() => {
-                report(odoo, Report { error: Some(e.to_string()), ..rep(job, "queued") }).await;
+                if !consumed {
+                    report(odoo, Report { error: Some(e.to_string()), ..rep(job, "queued") }).await;
+                }
                 return;
             }
             Ok(TxStatus::Unknown) | Err(_) => {
                 // Hỏi trạng thái TRƯỚC: bị từ chối khi gửi lại có thể vì tx lần trước đã vào khối.
                 if let Some(r) = sent.as_ref().err().and_then(|e| e.downcast_ref::<Rejected>()) {
-                    report(odoo, Report { error: Some(r.to_string()), ..rep(job, "queued") }).await;
+                    if !consumed {
+                        report(odoo, Report { error: Some(r.to_string()), ..rep(job, "queued") }).await;
+                    }
                     return;
                 }
                 if now() > f.valid_until + EXPIRY_GRACE {
                     // Payload chủ thể đã hết hạn: tx (nếu còn đâu đó) sẽ bị contract từ chối.
-                    report(odoo, Report { error: Some("expired before inclusion".into()), ..rep(job, "dead") }).await;
+                    if !consumed {
+                        report(odoo, Report { error: Some("expired before inclusion".into()), ..rep(job, "dead") }).await;
+                    }
                     return;
                 }
                 match f.signed {
-                    Some(signed) if sent.is_err() => {
-                        sent = adapter.submit(signed).await;
-                        if sent.is_ok() {
-                            report(odoo, rep(job, "broadcast")).await;
+                    Some(signed) if sent.is_err() && !consumed => match adapter.op_consumed(f.job).await {
+                        Ok(Some(true)) => {
+                            consumed = true;
+                            report(odoo, Report { error: Some("unknown".into()), ..rep(job, "consumed") }).await;
                         }
-                    }
+                        Ok(_) => {
+                            sent = adapter.submit(signed).await;
+                            if sent.is_ok() {
+                                report(odoo, rep(job, "broadcast")).await;
+                            }
+                        }
+                        Err(e) => warn!(chain = %adapter.chain_key(), job, "op_consumed: {e:#}; no resend this round"),
+                    },
                     Some(_) => {}
                     None => {
                         // Không còn bytes: tx chỉ vào được đúng slot sequence của nó. Slot đã bị dùng mà hỏi lại vẫn
@@ -322,7 +353,7 @@ pub async fn lane_step_metered(
     worker: &str,
     breaker: Option<&Mutex<Breaker>>,
 ) -> Result<bool> {
-    Ok(!matches!(step_once(adapter, odoo, lane, worker, breaker).await?, Step::Idle))
+    Ok(!matches!(step_once(adapter, odoo, lane, worker, breaker, &InflightSet::default()).await?, Step::Idle))
 }
 
 /// Kết quả một vòng lane. `Retry` = job đã về hàng đợi vì RPC/Odoo không với tới: runner lùi (merge TODO c).
@@ -338,20 +369,43 @@ async fn step_once(
     lane: usize,
     worker: &str,
     breaker: Option<&Mutex<Breaker>>,
+    inflight: &InflightSet,
 ) -> Result<Step> {
     let jobs = odoo.relay_poll_ref(adapter.chain_key().into(), 5).await?;
     let mut job = None;
     for j in jobs {
+        // N2: digest đang bay ở lane/đường khác ⇒ bỏ qua TRƯỚC claim (không claim, không báo).
+        if job_digest(&j).is_some_and(|d| inflight.contains(&d)) {
+            continue;
+        }
         if odoo.relay_claim(&[j.id], worker).await?.contains(&j.id) {
             job = Some(j);
             break;
         }
     }
     let Some(job) = job else { return Ok(Step::Idle) };
+    // G2: giữ digest tới khi `follow` xong (guard rơi ở mọi lối ra của hàm này).
+    let _guard = match job_digest(&job).map(|d| inflight.try_acquire(d)) {
+        Some(None) => {
+            report(odoo, Report { error: Some("in flight on another path".into()), ..rep(job.id, "queued") }).await;
+            return Ok(Step::Done);
+        }
+        Some(g) => g,
+        None => None,
+    };
     let built = match adapter.build(&job, lane).await {
         Ok(b) => b,
         Err(SimError::Revert(r)) => {
-            report(odoo, Report { error: Some(format!("simulation: {r}")), ..rep(job.id, "dead") }).await;
+            // R80: op đã bị tiêu thụ (relayer khác đưa lên trước) ⇒ `consumed`, không `dead`.
+            let (state, error) = match adapter.op_consumed(&job).await {
+                Ok(Some(true)) => ("consumed", "unknown".to_string()),
+                Ok(_) => ("dead", format!("simulation: {r}")),
+                Err(e) => {
+                    report(odoo, Report { error: Some(format!("op_consumed: {e:#}")), ..rep(job.id, "queued") }).await;
+                    return Ok(Step::Retry(format!("op_consumed: {e:#}")));
+                }
+            };
+            report(odoo, Report { error: Some(error), ..rep(job.id, state) }).await;
             return Ok(Step::Done);
         }
         Err(SimError::Transport(r)) => {
@@ -371,7 +425,7 @@ async fn step_once(
     if sent.is_ok() {
         report(odoo, rep(job.id, "broadcast")).await;
     }
-    let f = InFlight { job: job.id, tx_id: &signed.tx_id, valid_until: signed.valid_until, lane, signed: Some(&signed), nonce: Some(seq) };
+    let f = InFlight { job: &job, tx_id: &signed.tx_id, valid_until: signed.valid_until, lane, signed: Some(&signed), nonce: Some(seq) };
     follow(adapter, odoo, f, sent, breaker).await;
     Ok(Step::Done)
 }
@@ -469,6 +523,7 @@ pub(crate) mod tests {
         pub inflight: Value,
         /// `relay_poll` keeps returning `jobs` instead of draining them.
         pub repeat: bool,
+        pub claims: u32,
     }
     pub(crate) type Shared = Arc<std::sync::Mutex<Fake>>;
 
@@ -483,7 +538,10 @@ pub(crate) mod tests {
                     "inflight": if o.inflight.is_null() { serde_json::json!([]) } else { o.inflight.clone() }}),
                 "relay_poll" if o.repeat => Value::Array(o.jobs.clone()),
                 "relay_poll" => Value::Array(std::mem::take(&mut o.jobs)),
-                "relay_claim" => b["job_ids"].clone(),
+                "relay_claim" => {
+                    o.claims += 1;
+                    b["job_ids"].clone()
+                }
                 "relay_report" => {
                     o.reports.push(b);
                     serde_json::json!({"ok": true})
@@ -620,10 +678,139 @@ pub(crate) mod tests {
         let (odoo, o) = fake_odoo(Fake { jobs: vec![job], repeat: true, tokens: serde_json::json!([]), ..Default::default() }).await;
         let a = Arc::new(Scripted::default());
         let k = Arc::new(Mutex::new(Breaker::new(crate::config::BreakerCfg::default())));
-        let run = lane_runner(a.clone(), odoo, 0, "n#0".into(), Duration::from_millis(10), k);
+        let run = lane_runner(a.clone(), odoo, 0, "n#0".into(), Duration::from_millis(10), k, InflightSet::default());
         let _ = tokio::time::timeout(Duration::from_millis(2500), run).await;
         let n = a.builds.load(std::sync::atomic::Ordering::SeqCst);
         assert!((1..=3).contains(&n), "{n} builds in 2.5 s");
         assert!(o.lock().unwrap().reports.iter().all(|r| r["chain_state"] == "queued"));
     }
+
+    /// Adapter giả cho R80: build/gửi/trạng thái theo kịch bản, `op_consumed` cố định.
+    struct Racy {
+        build_revert: bool,
+        consumed: Option<bool>,
+        /// Kết quả `submit` lần lượt (`true` = vào mempool); hết ⇒ lỗi mạng.
+        sends: std::sync::Mutex<std::collections::VecDeque<bool>>,
+        /// `tx_status` lần lượt; phần tử cuối lặp lại.
+        statuses: std::sync::Mutex<std::collections::VecDeque<TxStatus>>,
+        submits: std::sync::atomic::AtomicU32,
+    }
+
+    fn racy(build_revert: bool, consumed: Option<bool>, sends: &[bool], statuses: &[TxStatus]) -> Racy {
+        Racy {
+            build_revert,
+            consumed,
+            sends: std::sync::Mutex::new(sends.iter().copied().collect()),
+            statuses: std::sync::Mutex::new(statuses.iter().cloned().collect()),
+            submits: Default::default(),
+        }
+    }
+
+    #[async_trait]
+    impl ChainAdapter for Racy {
+        fn family(&self) -> Family {
+            Family::Sui
+        }
+        fn chain_key(&self) -> &str {
+            "sui:t"
+        }
+        fn lanes(&self) -> &[Lane] {
+            static L: std::sync::OnceLock<Vec<Lane>> = std::sync::OnceLock::new();
+            L.get_or_init(|| vec![Lane { index: 0, address: "0xlane".into() }])
+        }
+        async fn build(&self, job: &Job, _: usize) -> std::result::Result<Built, SimError> {
+            if self.build_revert {
+                return Err(SimError::Revert("lane nonce already used".into()));
+            }
+            Ok(Built { job_id: job.id, body: vec![], valid_until: now() + 600, meta: Value::Null })
+        }
+        async fn sign(&self, b: Built, _: usize, sequence: u64) -> Result<Signed> {
+            Ok(Signed { job_id: b.job_id, tx_id: "0x0f".into(), raw: vec![], valid_until: b.valid_until, sequence })
+        }
+        async fn submit(&self, _: &Signed) -> Result<()> {
+            self.submits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            match self.sends.lock().unwrap().pop_front() {
+                Some(true) => Ok(()),
+                _ => Err(anyhow::anyhow!("timeout")),
+            }
+        }
+        async fn tx_status(&self, _: &str) -> Result<TxStatus> {
+            let mut q = self.statuses.lock().unwrap();
+            Ok(if q.len() > 1 { q.pop_front().unwrap() } else { q[0].clone() })
+        }
+        async fn sequence(&self, _: usize) -> Result<u64> {
+            Ok(0)
+        }
+        async fn final_head(&self) -> Result<Option<Head>> {
+            Ok(None)
+        }
+        async fn block_hash(&self, _: u64) -> Result<String> {
+            unreachable!()
+        }
+        async fn events(&self, _: u64, _: u64, _: &[String]) -> Result<Vec<Value>> {
+            unreachable!()
+        }
+        async fn op_consumed(&self, _: &Job) -> Result<Option<bool>> {
+            Ok(self.consumed)
+        }
+    }
+
+    const DIGEST: &str = "0x7777777777777777777777777777777777777777777777777777777777777777";
+
+    async fn race(a: &Racy, inflight: &InflightSet) -> (Vec<String>, Shared) {
+        let job = serde_json::json!({"id": 5, "kind": "signed_op", "op": {"op_kind": "pay", "digest": DIGEST}});
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![job], tokens: serde_json::json!([]), ..Default::default() }).await;
+        let step = step_once(a, &odoo, 0, "n#0", None, inflight);
+        tokio::time::timeout(Duration::from_secs(10), step).await.expect("lane held").unwrap();
+        let states = o.lock().unwrap().reports.iter().map(|r| r["chain_state"].as_str().unwrap().to_string()).collect();
+        (states, o)
+    }
+
+    /// R80 (§8.4 `follow`): đã tiêu thụ trước lần gửi lại ⇒ `consumed`, KHÔNG gửi lại, vẫn theo tx tới trạng thái cuối
+    /// rồi mới nhả lane (và không báo `reverted` cho revert của chính nó).
+    #[tokio::test]
+    async fn consumed_before_resend_stops_resending_and_releases_the_lane_at_the_end() {
+        let a = racy(false, Some(true), &[], &[TxStatus::Unknown, TxStatus::Unknown, TxStatus::Reverted { reason: "nonce".into() }]);
+        let set = InflightSet::default();
+        let (states, _) = race(&a, &set).await;
+        assert_eq!(states, ["signed", "consumed"]);
+        assert_eq!(a.submits.load(std::sync::atomic::Ordering::SeqCst), 1, "never resent");
+        assert!(!set.contains(&DIGEST.parse().unwrap()), "digest released with the lane");
+    }
+
+    /// Review H3: tx của ta revert vì người khác đã dùng nonce ⇒ `consumed`, không `reverted` (Odoo: failed + dependents).
+    #[tokio::test]
+    async fn reverted_status_of_a_consumed_op_reports_consumed() {
+        let a = racy(false, Some(true), &[true], &[TxStatus::Reverted { reason: "nonce".into() }]);
+        assert_eq!(race(&a, &InflightSet::default()).await.0, ["signed", "broadcast", "consumed"]);
+    }
+
+    /// Review M6: `op_consumed = None` (op không có nonce lane) không bao giờ dừng job: vẫn gửi lại, revert vẫn `reverted`.
+    #[tokio::test]
+    async fn unknown_consumption_never_stops_a_job() {
+        let a = racy(false, None, &[false, true], &[TxStatus::Unknown, TxStatus::Mined { height: 1 }]);
+        assert_eq!(race(&a, &InflightSet::default()).await.0, ["signed", "broadcast", "mined"]);
+        assert_eq!(a.submits.load(std::sync::atomic::Ordering::SeqCst), 2);
+        let a = racy(false, None, &[true], &[TxStatus::Reverted { reason: "boom".into() }]);
+        assert_eq!(race(&a, &InflightSet::default()).await.0, ["signed", "broadcast", "reverted"]);
+    }
+
+    /// R80 (§8.4 `step_once`): mô phỏng revert vì op đã bị tiêu thụ ⇒ `consumed`, không `dead`.
+    #[tokio::test]
+    async fn simulation_revert_of_a_consumed_op_reports_consumed() {
+        assert_eq!(race(&racy(true, Some(true), &[], &[TxStatus::Unknown]), &InflightSet::default()).await.0, ["consumed"]);
+        assert_eq!(race(&racy(true, Some(false), &[], &[TxStatus::Unknown]), &InflightSet::default()).await.0, ["dead"]);
+    }
+
+    /// Review N2: digest đang bay ở đường khác ⇒ job bị bỏ qua TRƯỚC `relay_claim` (không claim, không báo).
+    #[tokio::test]
+    async fn a_job_whose_digest_is_in_flight_is_skipped_before_claim() {
+        let set = InflightSet::default();
+        let _held = set.try_acquire(DIGEST.parse().unwrap()).unwrap();
+        let a = racy(false, None, &[true], &[TxStatus::Mined { height: 1 }]);
+        let (states, o) = race(&a, &set).await;
+        assert!(states.is_empty(), "{states:?}");
+        assert_eq!(o.lock().unwrap().claims, 0);
+    }
 }
+

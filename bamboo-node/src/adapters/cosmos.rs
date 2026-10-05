@@ -410,6 +410,21 @@ impl ChainAdapter for CosmosAdapter {
         &self.lanes
     }
 
+    /// R80: `pay` ⇒ `QueryMsg::Nonce {owner, lane}` (`NONCES[(from, lane)]` của token) so với nonce đã ký.
+    async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
+        let Some(op) = job.op.as_ref().filter(|o| o["op_kind"] == "pay") else { return Ok(None) };
+        let payload: Value = serde_json::from_slice(&hex_arg(op["payload"].as_str().unwrap_or_default())?)?;
+        let (Some(nonce), Some(contract)) = (payload["nonce"].as_u64(), op["contract"].as_str()) else { return Ok(None) };
+        if payload["op"] != "pay" {
+            return Ok(None);
+        }
+        let q = json!({"nonce": {"owner": payload["from"], "lane": payload["lane"]}});
+        let q = base64::engine::general_purpose::URL_SAFE.encode(q.to_string());
+        let (code, v) = self.get(&format!("{}/cosmwasm/wasm/v1/contract/{contract}/smart/{q}", self.rest)).await?;
+        let next = v["data"].as_u64().filter(|_| code == 200).ok_or_else(|| anyhow!("nonce query: {code} {v}"))?;
+        Ok(Some(next > nonce))
+    }
+
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
         let op = job.op.as_ref().ok_or_else(|| SimError::Revert("job has no op".into()))?;
         let (contract, msg, valid_until) = relay_msg(op).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;

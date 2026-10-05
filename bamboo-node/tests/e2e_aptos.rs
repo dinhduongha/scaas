@@ -92,9 +92,9 @@ fn allowed(from: &str, to: &str) -> bool {
     matches!(
         (from, to),
         ("queued", "nonce_leased")
-            | ("nonce_leased", "queued" | "signed" | "dead")
-            | ("signed", "broadcast" | "mined" | "reverted" | "queued" | "dead")
-            | ("broadcast", "mined" | "reverted" | "broadcast" | "queued" | "dead")
+            | ("nonce_leased", "queued" | "signed" | "dead" | "consumed")
+            | ("signed", "broadcast" | "mined" | "reverted" | "queued" | "dead" | "consumed")
+            | ("broadcast", "mined" | "reverted" | "broadcast" | "queued" | "dead" | "consumed")
             | ("mined", "reverted")
     )
 }
@@ -354,10 +354,10 @@ async fn aptos_payments_relay_finalize_and_never_lock_each_other() {
     let x_tx = get(&format!("/transactions/by_hash/{}", x_hash.as_str().unwrap())).await;
     assert_eq!(x_tx["hash"], x_hash);
     assert_eq!(x_tx["success"], true);
-    // Phát lại X: mô phỏng abort (nonce lane đã dùng) ⇒ dead, không tốn gas.
+    // Phát lại X: mô phỏng abort, nonce lane đã dùng ⇒ `consumed` (R80: có thể relayer khác đã đưa lên), không tốn gas.
     let mut replay = x;
     replay["id"] = json!(3);
-    assert_eq!(run_job(adapter.as_ref(), &odoo, &state, 0, replay).await, ["dead"]);
+    assert_eq!(run_job(adapter.as_ref(), &odoo, &state, 0, replay).await, ["consumed"]);
 
     // REJECTED: ký với sequence cũ ⇒ REST từ chối trước mempool.
     let (r6, _) = job(6, &alice, &pkg_a, &busd, 10, 0x66, 0xa6, vu);

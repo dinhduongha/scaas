@@ -148,6 +148,12 @@ impl ChainAdapter for HederaAdapter {
         self.inner.lanes()
     }
 
+    /// R80: meta-tx ⇒ `metaNonce(from, batch)` (mọi op của meta-tx dùng chung nonce này); job `call` ⇒ không biết.
+    async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
+        let Some(m) = work_from_job(job).ok().and_then(|w| w.meta) else { return Ok(None) };
+        Ok(Some(self.inner.lane(0)?.meta_nonce(m.token, m.from, m.batch).await? > m.nonce))
+    }
+
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
         let w = work_from_job(job).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
         if now() > w.valid_until {
@@ -275,6 +281,8 @@ mod tests {
         balance: &'static str,
         receipt: Value,
         send_error: Option<Value>,
+        /// `eth_call` trả về word này (mô phỏng bỏ qua nó; `metaNonce` đọc nó).
+        meta_nonce: u64,
         sent: Vec<String>,
         jobs: Vec<Value>,
         reports: Vec<Value>,
@@ -288,7 +296,7 @@ mod tests {
         let ok = |r: Value| json!({"jsonrpc": "2.0", "id": id, "result": r});
         axum::Json(match b["method"].as_str().unwrap_or_default() {
             "eth_getBalance" => ok(json!(n.balance)),
-            "eth_call" => ok(json!("0x")),
+            "eth_call" => ok(json!(format!("0x{:064x}", n.meta_nonce))),
             "eth_estimateGas" => ok(json!("0x186a0")),
             "eth_gasPrice" => ok(json!(format!("0x{GAS_PRICE:x}"))),
             "eth_getTransactionCount" => ok(json!("0x7")),
@@ -375,6 +383,13 @@ mod tests {
     async fn contract_revert_stays_terminal() {
         let net = Net { balance: "0x1", receipt: receipt("0x0", "CONTRACT_REVERT_EXECUTED"), ..Default::default() };
         assert_eq!(step(net, now() + 600).await.0, ["signed", "broadcast", "reverted"]);
+    }
+
+    /// R80/H3: revert vì relayer khác đã dùng nonce chủ thể (`metaNonce` đã qua) ⇒ `consumed`, không `reverted`.
+    #[tokio::test]
+    async fn revert_after_a_lost_race_is_consumed() {
+        let net = Net { balance: "0x1", receipt: receipt("0x0", "CONTRACT_REVERT_EXECUTED"), meta_nonce: 1, ..Default::default() };
+        assert_eq!(step(net, now() + 600).await.0, ["signed", "broadcast", "consumed"]);
     }
 
     /// Precheck từ chối khi gửi ⇒ lane nhả ngay, job về hàng đợi; trùng = tx đã vào ⇒ theo dõi tới mined.

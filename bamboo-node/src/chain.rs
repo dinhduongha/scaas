@@ -3,14 +3,15 @@
 use alloy::eips::eip2718::Encodable2718;
 use alloy::eips::BlockNumberOrTag;
 use alloy::network::{EthereumWallet, TransactionBuilder};
-use alloy::primitives::{Address, Bytes, B256};
+use alloy::primitives::{Address, Bytes, B256, U256};
 use alloy::providers::{DynProvider, Provider, ProviderBuilder};
-use alloy::rpc::types::TransactionRequest;
+use alloy::rpc::types::{Filter, TransactionRequest};
+use alloy::sol_types::{SolCall, SolEvent};
 use alloy::signers::local::PrivateKeySigner;
 use alloy::transports::TransportError;
 use anyhow::{anyhow, Result};
 
-use crate::abi::decode_revert;
+use crate::abi::{decode_revert, IMetaToken, MetaTransaction};
 use crate::config::ChainCfg;
 
 /// Simulation fail vì hợp đồng revert (vĩnh viễn với state này) hay vì đường truyền (tạm thời).
@@ -102,6 +103,45 @@ impl Chain {
 
     pub async fn pending_nonce(&self) -> Result<u64> {
         Ok(self.primary().get_transaction_count(self.address).pending().await?)
+    }
+
+    /// Số tx của lane ĐÃ vào khối (`latest`), khác `pending_nonce`: nonce vỏ `n` đã bị dùng ⇔ `nonce_at() > n` (R80).
+    pub async fn nonce_at(&self) -> Result<u64> {
+        Ok(self.primary().get_transaction_count(self.address).latest().await?)
+    }
+
+    async fn view<C: SolCall>(&self, to: Address, call: C) -> Result<C::Return> {
+        let tx = TransactionRequest::default().with_to(to).with_input(call.abi_encode());
+        Ok(C::abi_decode_returns(&self.primary().call(tx).await?)?)
+    }
+
+    /// `metaNonce(from, batch)` của token: nonce chủ thể kế tiếp (R80).
+    pub async fn meta_nonce(&self, token: Address, from: Address, batch: U256) -> Result<U256> {
+        self.view(token, IMetaToken::metaNonceCall { from, batch }).await
+    }
+
+    /// `metaTxDigest(m)` — đúng digest token phát trong `MetaTransactionExecuted` (R78).
+    pub async fn meta_digest(&self, token: Address, m: MetaTransaction) -> Result<B256> {
+        self.view(token, IMetaToken::metaTxDigestCall { m }).await
+    }
+
+    /// `MetaTransactionExecuted` của `(from, batch, nonce)` trong `lookback` khối gần nhất ⇒ `(digest, relayer)` (§8.5).
+    pub async fn meta_executed(&self, token: Address, from: Address, batch: U256, nonce: U256, lookback: u64) -> Result<Option<(B256, Address)>> {
+        let latest = self.primary().get_block_number().await?;
+        let filter = Filter::new()
+            .address(token)
+            .event_signature(IMetaToken::MetaTransactionExecuted::SIGNATURE_HASH)
+            .topic1(from.into_word())
+            .topic3(B256::from(batch))
+            .from_block(latest.saturating_sub(lookback))
+            .to_block(latest);
+        for log in self.primary().get_logs(&filter).await? {
+            let Ok(e) = log.log_decode::<IMetaToken::MetaTransactionExecuted>().map(|l| l.inner.data) else { continue };
+            if e.nonce == nonce {
+                return Ok(Some((e.digest, e.relayer)));
+            }
+        }
+        Ok(None)
     }
 
     /// Ký EIP-1559; trả bytes thô và hash — hash biết TRƯỚC khi gửi (journal, review F5).

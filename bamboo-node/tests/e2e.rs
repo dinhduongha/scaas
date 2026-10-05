@@ -31,7 +31,7 @@ use bamboo_node::dex::{cancel_digest, domain, order_hash, Order, WireOrder};
 use bamboo_node::gateway::{router, AppState, GwChain};
 use bamboo_node::metatx::{digest, Domain, WireMetaTx, MODE_RESTRICT_RELAYER};
 use bamboo_node::odoo::Odoo;
-use bamboo_node::submit::{Submitter, Work};
+use bamboo_node::submit::{work_from_job, Submitter, Work, BUMP_SKIPPED_CONSUMED};
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
@@ -98,9 +98,9 @@ fn allowed(from: &str, to: &str) -> bool {
     matches!(
         (from, to),
         ("queued", "nonce_leased")
-            | ("nonce_leased", "queued" | "signed" | "dead")
-            | ("signed", "broadcast" | "mined" | "reverted" | "queued" | "dead")
-            | ("broadcast", "mined" | "reverted" | "broadcast" | "queued" | "dead")
+            | ("nonce_leased", "queued" | "signed" | "dead" | "consumed")
+            | ("signed", "broadcast" | "mined" | "reverted" | "queued" | "dead" | "consumed")
+            | ("broadcast", "mined" | "reverted" | "broadcast" | "queued" | "dead" | "consumed")
             | ("mined", "reverted")
     )
 }
@@ -301,7 +301,7 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     let odoo = odoo_at(addr);
     let cfg = chain_cfg(chain_id, &rpc, None);
 
-    let mut s = Submitter::start(Chain::with_signer(&cfg, relayer.clone()).unwrap(), odoo.clone(), cfg.clone(), "e2e".into())
+    let mut s = Submitter::start(Chain::with_signer(&cfg, relayer.clone()).unwrap(), odoo.clone(), cfg.clone(), "e2e".into(), Default::default())
         .await
         .unwrap();
     s.poll_outbox().await;
@@ -343,21 +343,21 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     // R55: a lane under its balance floor takes no new work.
     let mut poor = cfg.clone();
     poor.breaker.min_relayer_balance = Some(u128::MAX / 2);
-    let mut s2 = Submitter::start(Chain::with_signer(&poor, key(RELAYER)).unwrap(), odoo.clone(), poor, "e2e-2".into())
+    let mut s2 = Submitter::start(Chain::with_signer(&poor, key(RELAYER)).unwrap(), odoo.clone(), poor, "e2e-2".into(), Default::default())
         .await
         .unwrap();
     assert!(s2.accepting(), "no sample yet: nothing known, nothing tripped");
     s2.sample().await;
     assert!(!s2.accepting(), "balance floor");
 
-    // Replay of the same signed job: simulation refuses it (nonce consumed) -> dead, no gas spent.
+    // Replay of the same signed job: simulation refuses it, but the subject nonce is spent by this very intent (R80)
+    // -> `consumed` (classified from the MetaTransactionExecuted log: our lane landed it), never `dead`; no gas spent.
     state.lock().unwrap().jobs.push(json!({
-        "id": 2, "token": format!("{token:#x}"), "digest": "0x", "signature": sign(&payer, chain_id, token, &m),
+        "id": 2, "token": format!("{token:#x}"), "digest": format!("{:#x}", digest(&d, &m)), "signature": sign(&payer, chain_id, token, &m),
         "metatx": WireMetaTx::from_sol(&m)}));
     s.poll_outbox().await;
     let last = state.lock().unwrap().reports.last().cloned().unwrap();
-    assert_eq!(last["chain_state"], "dead");
-    assert!(last["error"].as_str().unwrap().contains("MetaTxBadNonce"), "{last}");
+    assert_eq!((last["job_id"].as_i64(), last["chain_state"].as_str(), last["error"].as_str()), (Some(2), Some("consumed"), Some("landed")), "{last}");
 }
 
 fn sign_hash(signer: &PrivateKeySigner, h: B256) -> String {
@@ -449,13 +449,14 @@ async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
         ..Default::default()
     }));
     let odoo = odoo_at(start_fake(state.clone()).await);
-    let mut s = Submitter::start(Chain::with_signer(&cfg, relayer.clone()).unwrap(), odoo.clone(), cfg.clone(), "e2e".into())
+    let mut s = Submitter::start(Chain::with_signer(&cfg, relayer.clone()).unwrap(), odoo.clone(), cfg.clone(), "e2e".into(), Default::default())
         .await
         .unwrap();
     let shared = Arc::new(Chain::with_signer(&cfg, relayer.clone()).unwrap());
     let venue = Venue::start(shared.clone(), odoo.clone(), Some(odoo.clone()), dex).await.unwrap();
     let (tx, mut rx) = mpsc::channel::<Work>(16);
-    let gw = GwChain { chain: shared.clone(), tx, tokens: Arc::new(RwLock::new(vec![token_a, token_b])), dex: Some(venue.clone()), breaker: None };
+    let fee_wallet = Address::repeat_byte(0xfa);
+    let gw = GwChain { chain: shared.clone(), tx, tokens: Arc::new(RwLock::new(vec![token_a, token_b])), dex: Some(venue.clone()), breaker: None, fee_recipient: Some(fee_wallet) };
     let app = router(AppState { chains: Arc::new([(chain_id, gw)].into_iter().collect()) });
     let listener = tokio::net::TcpListener::bind("127.0.0.1:18651").await.unwrap();
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -485,6 +486,21 @@ async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
         assert_eq!(st, 202, "{body}");
     }
     drain(&mut s, &mut rx).await;
+
+    // 1b. R84 (review C1): `feeRecipient`/`relayer` of an open-mode intent are not signed, so a client can put
+    //     anything there; the fee still lands in our configured wallet.
+    let thief = Address::repeat_byte(0x7e);
+    let m = MetaTransaction {
+        from: alice.address(), to: Address::repeat_byte(0x5e), value: U256::from(1_000_000u64), data: Default::default(),
+        batch: U256::from_be_bytes(keccak256(b"e2e.r84").0), nonce: U256::ZERO, validUntil: U256::from(now() + 300),
+        mode: 0x20, // FIXED fee, neither relayer nor fee recipient bound
+        relayer: thief, fee: U256::from(1_000u64), feeRecipient: thief,
+    };
+    let (st, body) = post("/v1/metatx", json!({"chain": chain_id, "token": token_a, "m": WireMetaTx::from_sol(&m),
+        "signature": sign(&alice, chain_id, token_a, &m)})).await;
+    assert_eq!(st, 202, "{body}");
+    drain(&mut s, &mut rx).await;
+    assert_eq!((balance(&rpc, token_a, fee_wallet).await, balance(&rpc, token_a, thief).await), (U256::from(1_000u64), U256::ZERO));
 
     let d = domain(chain_id, dex);
     let place = |o: Order, signer: &PrivateKeySigner| {
@@ -628,8 +644,101 @@ fn pay_job(payer: &PrivateKeySigner, chain_id: u64, token: Address, id: i64, tag
         fee: U256::ZERO,
         feeRecipient: Address::ZERO,
     };
-    json!({"id": id, "token": format!("{token:#x}"), "digest": "0x",
+    let d = Domain { name: "Bamboo MetaToken".into(), version: "1".into(), chain_id, verifying_contract: token };
+    json!({"id": id, "token": format!("{token:#x}"), "digest": format!("{:#x}", digest(&d, &m)),
            "signature": sign(payer, chain_id, token, &m), "metatx": WireMetaTx::from_sol(&m)})
+}
+
+/// R80 (S2, review H3): another relayer lands OUR intent. (1) While our tx is pending (dropped from anvil's pool so the
+/// next block cannot include it — anvil evicts, rather than keeps, a tx under the base fee, review N11): the stuck re-check sees the subject nonce spent, reports `consumed`, never resends the meta-tx and frees the
+/// outer nonce with a gap-filler (R18). (2) Same block, the peer pays more tip: our tx is mined and reverts ⇒ still
+/// `consumed`, never `reverted`. No `dead`/`reverted` for either job; each payment lands exactly once.
+#[tokio::test]
+#[ignore]
+async fn a_peer_landing_our_intent_makes_the_job_consumed_never_dead() {
+    let chain_id = 31904;
+    let (_anvil, rpc) = start_anvil(chain_id, 31904).await;
+    let payer = small_key(0xC0FFEE);
+    let dep = deploy(&rpc, chain_id, payer.address());
+    let token: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();
+    let relayer = key(RELAYER);
+    let p = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
+    let peer = ProviderBuilder::new().wallet(EthereumWallet::from(key(DEPLOYER))).connect_http(rpc.parse().unwrap());
+    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
+    let odoo = odoo_at(start_fake(state.clone()).await);
+    let mut cfg = chain_cfg(chain_id, &rpc, None);
+    cfg.stuck_after_secs = 1;
+    let mut s = Submitter::start(Chain::with_signer(&cfg, relayer.clone()).unwrap(), odoo, cfg, "e2e".into(), Default::default())
+        .await
+        .unwrap();
+    let _: Value = p.raw_request("evm_setAutomine".into(), (false,)).await.unwrap();
+    let gwei = 1_000_000_000u128;
+    let mine = || async { p.raw_request::<_, Value>("evm_mine".into(), ()).await.unwrap() };
+    let peer_sends = |job: &Value, max_fee: u128, tip: u128| {
+        let w = work_from_job(&serde_json::from_value(job.clone()).unwrap()).unwrap();
+        let tx = TransactionRequest::default().to(w.to).input(w.data.into()).gas_limit(500_000).max_fee_per_gas(max_fee).max_priority_fee_per_gas(tip);
+        let peer = peer.clone();
+        async move { peer.send_transaction(tx).await.unwrap() }
+    };
+    let states = |id: i64| -> Vec<String> {
+        state.lock().unwrap().reports.iter().filter(|r| r["job_id"] == id).map(|r| r["chain_state"].as_str().unwrap().to_string()).collect()
+    };
+    let error = |id: i64| state.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == id).unwrap()["error"].clone();
+
+    // (1) Ours pending, the peer's lands.
+    let j1 = pay_job(&payer, chain_id, token, 41, b"r80-stuck");
+    state.lock().unwrap().jobs.push(j1.clone());
+    s.poll_outbox().await;
+    assert_eq!(states(41), ["signed", "broadcast"]);
+    let ours = state.lock().unwrap().reports.iter().find(|r| r["job_id"] == 41).unwrap()["tx_hash"].clone();
+    let _: Value = p.raw_request("anvil_dropTransaction".into(), (ours,)).await.unwrap();
+    let landed = peer_sends(&j1, 50 * gwei, 2 * gwei).await;
+    mine().await;
+    assert!(landed.get_receipt().await.unwrap().status(), "the peer landed it");
+    let before = BUMP_SKIPPED_CONSUMED.load(std::sync::atomic::Ordering::Relaxed);
+    tokio::time::sleep(Duration::from_millis(1100)).await;
+    s.track().await;
+    assert!(BUMP_SKIPPED_CONSUMED.load(std::sync::atomic::Ordering::Relaxed) > before);
+    assert_eq!(states(41), ["signed", "broadcast", "consumed"]);
+    assert_eq!(error(41), "landed_elsewhere");
+    let pool: Value = p.raw_request("txpool_content".into(), ()).await.unwrap();
+    let ours = pool["pending"].as_object().unwrap().iter().find(|(k, _)| k.eq_ignore_ascii_case(&format!("{:#x}", relayer.address()))).unwrap_or_else(|| panic!("{pool}")).1;
+    let at0 = &ours["0"];
+    assert_eq!((at0["input"].as_str(), at0["to"].as_str().map(str::to_lowercase)), (Some("0x"), Some(format!("{:#x}", relayer.address()))),
+        "outer nonce 0 now carries a gap-filler, never the meta-tx again: {at0}");
+    mine().await;
+    for _ in 0..30 {
+        s.track().await;
+        if s.inflight_count() == 0 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert_eq!(s.inflight_count(), 0, "the gap-filler settles the outer nonce");
+    assert_eq!(p.get_transaction_count(relayer.address()).await.unwrap(), 1, "R18: no outer nonce abandoned");
+
+    // (2) Same block, the peer outbids our tip: our tx is mined and reverts.
+    let j2 = pay_job(&payer, chain_id, token, 42, b"r80-race");
+    state.lock().unwrap().jobs.push(j2.clone());
+    s.poll_outbox().await;
+    assert_eq!(states(42), ["signed", "broadcast"]);
+    let landed = peer_sends(&j2, 50 * gwei, 10 * gwei).await;
+    mine().await;
+    assert!(landed.get_receipt().await.unwrap().status());
+    for _ in 0..30 {
+        s.track().await;
+        if s.inflight_count() == 0 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert_eq!(s.inflight_count(), 0);
+    assert_eq!(states(42), ["signed", "broadcast", "consumed"], "our reverted receipt is not `reverted`");
+    assert_eq!(error(42), "landed_elsewhere");
+    assert_eq!(p.get_transaction_count(relayer.address()).await.unwrap(), 2, "our losing tx was mined (and reverted)");
+
+    assert!(state.lock().unwrap().refused.is_empty(), "{:?}", state.lock().unwrap().refused);
+    assert_eq!(balance(&rpc, token, Address::repeat_byte(0x5e)).await, U256::from(2_000u64), "each payment once");
 }
 
 /// R58/R62: the same EVM chain driven through the generic `ChainAdapter` + `lane_step` +

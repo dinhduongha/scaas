@@ -176,9 +176,9 @@ fn allowed(from: &str, to: &str) -> bool {
     matches!(
         (from, to),
         ("queued", "nonce_leased")
-            | ("nonce_leased", "queued" | "signed" | "dead")
-            | ("signed", "broadcast" | "mined" | "reverted" | "queued" | "dead")
-            | ("broadcast", "mined" | "reverted" | "broadcast" | "queued" | "dead")
+            | ("nonce_leased", "queued" | "signed" | "dead" | "consumed")
+            | ("signed", "broadcast" | "mined" | "reverted" | "queued" | "dead" | "consumed")
+            | ("broadcast", "mined" | "reverted" | "broadcast" | "queued" | "dead" | "consumed")
             | ("mined", "reverted")
     )
 }
@@ -464,10 +464,10 @@ async fn solana_payments_relay_finalize_and_never_lock_each_other() {
     assert_eq!(x_tx["meta"]["fee"].as_u64().unwrap() % 5000, 0);
     println!("relay_pay: fee {} lamports, {} CU", x_tx["meta"]["fee"], x_tx["meta"]["computeUnitsConsumed"]);
     assert_eq!(adapter.tx_fee(&x_id).await.unwrap(), x_tx["meta"]["fee"].as_u64().map(u128::from));
-    // Replay X: the lane PDA nonce is used ⇒ simulation refuses ⇒ dead, nothing paid.
+    // Replay X: the lane PDA nonce is used ⇒ simulation refuses ⇒ `consumed` (R80), nothing paid.
     let mut replay = x;
     replay["id"] = json!(3);
-    assert_eq!(run_job(adapter.as_ref(), &odoo, &state, 0, replay).await, ["dead"]);
+    assert_eq!(run_job(adapter.as_ref(), &odoo, &state, 0, replay).await, ["consumed"]);
 
     // REJECTED: bytes signed over a nonce value that has since advanced.
     let (r6, _) = job(6, &network, &alice, &usd, TOKEN_PROGRAM, &shop, 10, 0x66, 0xa6, vu);

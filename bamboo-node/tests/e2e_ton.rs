@@ -76,9 +76,9 @@ fn allowed(from: &str, to: &str) -> bool {
     matches!(
         (from, to),
         ("queued", "nonce_leased")
-            | ("nonce_leased", "queued" | "signed" | "dead")
-            | ("signed", "broadcast" | "mined" | "reverted" | "queued" | "dead")
-            | ("broadcast", "mined" | "reverted" | "broadcast" | "queued" | "dead")
+            | ("nonce_leased", "queued" | "signed" | "dead" | "consumed")
+            | ("signed", "broadcast" | "mined" | "reverted" | "queued" | "dead" | "consumed")
+            | ("broadcast", "mined" | "reverted" | "broadcast" | "queued" | "dead" | "consumed")
             | ("mined", "reverted")
     )
 }
@@ -282,14 +282,13 @@ async fn ton_payments_lanes_finality_and_anti_lock() {
     assert!(state.lock().unwrap().refused.is_empty());
     assert_eq!(reports[0]["outer_nonce"], 0, "first W5 message deploys the lane wallet (seqno 0)");
 
-    // Replay of Y: the getter simulation sees the lane nonce consumed -> dead, nothing sent.
+    // Replay of Y: the getter simulation sees the lane nonce consumed -> `consumed` (R80), nothing sent.
     let mut replay = y.clone();
     replay["id"] = json!(3);
     state.lock().unwrap().jobs.push(replay);
     assert!(lane_step(&adapter, &odoo, 0, "e2e#0").await.unwrap());
     let last = state.lock().unwrap().reports.last().cloned().unwrap();
-    assert_eq!((last["job_id"].as_i64(), last["chain_state"].as_str()), (Some(3), Some("dead")));
-    assert!(last["error"].as_str().unwrap().contains("lane nonce"), "{last}");
+    assert_eq!((last["job_id"].as_i64(), last["chain_state"].as_str()), (Some(3), Some("consumed")), "{last}");
 
     // A second payment on lane 0 uses seqno 1 (the lane wallet is deployed now).
     state.lock().unwrap().jobs.push(signed_pay(&alice, global_id, &wb, &shop.addr, 50, [8; 32], [0xc3; 32], 4));

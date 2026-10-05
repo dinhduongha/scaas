@@ -119,6 +119,17 @@ pub fn canonical(m: &MetaTransaction) -> MetaTransaction {
     c
 }
 
+/// R84: trường `canonical` xoá về 0 không được ký, ai cũng ghi đè được (`ERC20MetaTx` trả phí cho `feeRecipient`
+/// khác 0) ⇒ không bao giờ gửi giá trị trên dây. `fee_recipient` None ⇒ 0: contract trả cho `msg.sender`. Digest giữ nguyên.
+pub fn normalize(m: &mut MetaTransaction, fee_recipient: Option<Address>) {
+    if m.mode & MODE_RESTRICT_FEE_RECIPIENT == 0 {
+        m.feeRecipient = fee_recipient.unwrap_or(Address::ZERO);
+    }
+    if m.mode & MODE_RESTRICT_RELAYER == 0 {
+        m.relayer = Address::ZERO;
+    }
+}
+
 pub fn digest(domain: &Domain, m: &MetaTransaction) -> B256 {
     canonical(m).eip712_signing_hash(&domain.eip712())
 }
