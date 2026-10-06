@@ -1355,7 +1355,7 @@ then mesh round 4, then PQ Zether). A component spec is required before code.
 ## 9. Keys and signing
 
 > **Account identity, key kinds and one key = one purpose:** [UA](superpowers/specs/2026-10-06-universal-account-design.md)
-> (SPECIFIED). Every non-native key kind derives on its own hardened tree `m/7225'/0'/<account>'/<kind>'/<i>'` and signs
+> (SPECIFIED). Every non-native key kind derives on its own hardened tree `m/7622'/0'/<account>'/<kind>'/<i>'` and signs
 > only kind- and purpose-tagged messages (UA R298–R301); `SubjectAccount` (§9.4) stays as the optional smart account,
 > option (b) (UA R307). Signers and the backup switch: [S4F](superpowers/specs/2026-10-06-signers-followups.md).
 

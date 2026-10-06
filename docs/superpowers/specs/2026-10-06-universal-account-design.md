@@ -1,10 +1,12 @@
 # Universal Account (UA): kind-tagged account identifiers, per-chain registry, per-kind verifiers, optional credentials (component spec F)
 
-Status: draft rev 1, 2026-10-06. Component spec **F**. Short name **UA**. Code at `scaas` `main` 5257f69. **Nothing in
-this spec is built**; the current `UniversalAccountRegistry` (Zether-only) is replaced by it (§12).
+Status: draft rev 1.1, 2026-10-06. Rev 1.1 folds in the owner's answers to §17 (rotation and v3 ledger confirmed; PQ
+kinds and ed25519 enabled on every EVM chain with pure-Solidity verifiers where no precompile exists; BIP-43 purpose
+`7622'`; spec E kind `0x0142` cross-referenced). Component spec **F**. Short name **UA**. Code at `scaas` `main` 36b56b9.
+**Nothing in this spec is built**; the current `UniversalAccountRegistry` (Zether-only) is replaced by it (§12).
 Rulings: **R290–R318** (§2). R150–R172 belong to the app spec, R180–R199 to spec B (TSS), R200–R217 to spec A (AS),
 R230–R247 to spec C (OPS), R250–R268 to spec D (S4F), R270–R289 to spec E (PQ Zether). The owner rulings of
-2026-10-06 (eight items) are folded in and marked `(owner)`; everything else is a decision of this spec.
+2026-10-06 (eight items) and the owner answers of rev 1.1 are folded in and marked `(owner)`; everything else is a decision of this spec.
 
 Requirements and sources:
 
@@ -21,6 +23,7 @@ Requirements and sources:
 | MESH | `specs/2026-10-05-relayer-mesh-design.md`, `2026-10-06-mesh-gossip-amendment.md` | R78, envelope `scaas-intent/1.2`, pre-gossip checks, V4/V6 |
 | APP | `specs/2026-10-06-scaas-app-design.md` | R154, R155, R158, R165, screens 5 and 14, stream A3 |
 | INT | `docs/integration.md` | §10.2 (UA registration flow) |
+| E | `specs/2026-10-06-pq-zether-design.md` | R279–R282 (PQZ precompile, gas, PQ-only `authRef`, kind `0x0142`), §2.4 (ML-DSA/FN-DSA costs) |
 
 Amends (status changes and pointers only; the text of those files is rewritten by the stream named):
 
@@ -141,12 +144,12 @@ Format: **ruling** — why — cost if wrong.
   an ElGamal key is a decryption-adjacent oracle; untagged digests replay across protocols. — None beyond §8.
 - **R299** **`keyHash` is per group, not per kind**: `keccak256(group_tag ‖ canonical_pubkey)` with groups
   `secp256k1` (x-only), `p256` (x), `ed25519`, `bn254-g1`, `bls12381-g1`, `bls12381-g2`, `bn254-g2`, `mldsa44`,
-  `mldsa65`, `fndsa512`. All kinds over the same group share the namespace, so `schnorr-bn254`, `frost-bn254`,
+  `mldsa65`, `fndsa512`, `pqz-mlwe` (spec E R282). All kinds over the same group share the namespace, so `schnorr-bn254`, `frost-bn254`,
   `musig2-bn254` and `zether-bn254` can never register the same point, nor `webauthn-p256` and `p256` the same key. —
   Kind-tagged keyHash would let the same key register under two kinds. — Structures have no keyHash (members do).
 - **R300** **Rules the dual key uses listed by S4F §3:** the EVM seed key `m/44'/60'/0'/0/i` is the EOA only; a
   `SubjectAccount` `SECP256K1` key, every Sui/Aptos/Solana subject-account owner key that is not the native address
-  key, and every derived kind come from the UA tree `m/7225'/0'/<account>'/<kind>'/<i>'` (§8.1). Existing dev
+  key, and every derived kind come from the UA tree `m/7622'/0'/<account>'/<kind>'/<i>'` (§8.1). Existing dev
   accounts rotate (`rotateKey`) at migration (§12). — A key that is both an EOA and an account key is two purposes.
   — One more derivation per role; wallets show the role.
 - **R301** **Tagged message:** every UA signature is over
@@ -158,11 +161,11 @@ Format: **ruling** — why — cost if wrong.
 
 ### 2.4 Functions, balances, verification
 
-- **R302** **No rotation inside a UA; no rotatable policy kind in v1.** A UA is immutable: key data, members and
+- **R302 (owner)** **No rotation inside a UA; no rotatable policy kind in v1.** A UA is immutable: key data, members and
   threshold are in the id. Rotation = new UA + move funds (a transfer, or a confidential transfer to the new Zether
   UA). A stable identity across rotation is `SubjectAccount` (R307) or another native contract account. — Immutable
   records make tokens' view of the registry cacheable and the registry admin-free. — Membership changes of a corporate
-  `msig` require moving funds; owner to confirm (§17 Q1).
+  `msig` require moving funds (confirmed by the owner, rev 1.1).
 - **R303 (owner)** **Each function accepts the kinds it needs** (§5): native-address functions (v1/v2 tokens, DEX,
   mandates) keep accepting native ids only; the new UA-ledger functions on MetaToken v3 accept any registered kind as
   `from` and any native or registered id as `to`; Zether functions accept Zether kinds only, registered first. — No
@@ -174,7 +177,9 @@ Format: **ruling** — why — cost if wrong.
 - **R305** **Zether kinds bind only the encryption key; authorization is an immutable `authRef`.** `zether-bn254` /
   `zether-bls12381` id = `keccak256(keccak256(tag) ‖ Y)`; the record carries `authRef` = `0` (self: the ZK proof is
   the authorization; owner ops are Schnorr by `x` under the Zether tag) or the id of a native account or a registered
-  signing UA. `authRef` may not be a Zether UA; a BLS UA on the same curve as `Y` is refused (canon C6.1). Supersedes
+  signing UA. `authRef` may not be a Zether UA; a BLS UA on the same curve as `Y` is refused (canon C6.1). The PQ Zether kind
+  `pqz-mlwe` (`0x0142`, spec E R282) tightens this: its `authRef` must be an `mldsa*`/`fndsa512` UA or an `msig` whose
+  non-PQ members' weight is below the threshold; `0`, native ids and classical-only kinds are refused (E R281). Supersedes
   `AuthScheme` (8 values) and `link_eth`/`links`. — The token derives the receiver UA from `Y` in the payload with one
   keccak and no lookup; spend authority stays separate from decryption (`survivesEncKeyLeak` for `authRef ≠ 0`). —
   `authRef` cannot rotate (RS2-9 kept); owner to confirm (§17 Q2).
@@ -191,12 +196,12 @@ Format: **ruling** — why — cost if wrong.
   recovery, or compatibility with third-party contracts. It is a native id; it never registers. **Default = UA kinds
   verified directly by our tokens.** — Rotation and recovery are account features, not identifier features. — Two
   ways to hold a passkey; the app offers the default first (§11.3).
-- **R308** **EVM balances of derived UAs live in a separate `bytes32` ledger on MetaToken v3** (`_uaBalance[ua]`), never
+- **R308 (owner)** **EVM balances of derived UAs live in a separate `bytes32` ledger on MetaToken v3** (`_uaBalance[ua]`), never
   in an address projection; native ids in UA-ledger functions read and write the ERC-20 ledger. `totalSupply` covers
   both. Movements that touch the UA ledger emit `UATransfer(bytes32 from, bytes32 to, uint256 value)`; ERC-20
   `Transfer` stays native ↔ native only. — Projecting `bytes32 → address` re-creates the 2^80 collision (R291). — Naive
   ERC-20 indexers do not see UA balances; our indexer does (§11.2).
-- **R309** **The UA-ledger meta-transaction has its own struct and typehash** (`UAMetaTransaction`, `from`/`to` as
+- **R309 (owner)** **The UA-ledger meta-transaction has its own struct and typehash** (`UAMetaTransaction`, `from`/`to` as
   `bytes32`), domain `("SCaaS MetaToken", "3", chainId, clone)`, and the same nine-step pipeline (TW2 §3.2). This is a
   deliberate exception to R140 ("no second typehash"): R140 forbade a second hash of the **same** struct; this is a
   different struct whose `from` cannot be an `address`. — An `address`-typed `from` cannot carry a 32-byte id. —
@@ -216,11 +221,21 @@ Format: **ruling** — why — cost if wrong.
 - **R312** **Migration is breaking, dev chains only** (§12): `UniversalAccountRegistry`, `IUniversalAccountRegistry`
   and `AuthScheme` are deleted; `ZetherTypes.toUA` becomes the tagged derivation; Zether accounts re-register; no data
   migration. — Only dev chains (RS2-1) hold registrations today. — Dev balances are recreated by scripts.
-- **R313** **PQ signing kinds (`mldsa44`, `mldsa65`, `fndsa512`) are enabled per chain only where an on-chain verifier
-  exists** (a native precompile on private/PoA chains first; an audited Solidity verifier on public EVM later). Where
-  none exists the kind cannot register on that chain (PoP needs verification). `PQ_COMMITMENT` ("verify off chain")
-  is retired. — A kind that cannot be verified on chain is not an authorization (RS2-10's "as SELF on chain" was a
-  silent downgrade). — PQ authorization arrives chain by chain; spec E may define a hybrid Zether `authRef`.
+- **R313 (owner)** **PQ signing kinds (`mldsa44`, `mldsa65`, `fndsa512`) and `ed25519` are enabled on every EVM
+  chain.** Verification uses a native precompile where one is probed (chain 9000: `MLDSA65` at `0x…0F10`, spec E R279;
+  any future EIP-8051/8052/8355 address by probe, never by assumption) and a **pure-Solidity verifier** everywhere
+  else. Every check, registration PoP included, completes **in one transaction** within `UA_VERIFY_BUDGET =
+  12,000,000` gas (≈ 70 % of the EIP-7825 per-transaction cap of 16,777,216, leaving room for the token op, calldata
+  and the pipeline). Estimates (spec E §2.4; measured in F9): ML-DSA-65 1.2–8.1 M, ML-DSA-44 lower, FN-DSA-512
+  0.6–2.5 M, ed25519 0.3–1.2 M — all inside the budget. **If a measured verifier exceeds the budget on a chain, the
+  kind is disabled there (verifier address 0: not registrable), never "registrable but unusable"**: a registrable but
+  unusable kind can *receive* and then never spend, locking funds. Multi-transaction verification with stored partial
+  state and chunked verify are rejected (resumable state is a new replay/griefing surface and a second audit target
+  for no gain while the estimates fit). Structures are bounded the same way (§6.2 step 4). `fndsa512` freezes the
+  FIPS 206 draft encoding in the vectors; a final FIPS 206 with a different encoding is a new kind version
+  (`…fndsa512.v2`), never a silent change. `PQ_COMMITMENT` ("verify off chain") is retired. — Owner rev 1.1: PQ and
+  ed25519 everywhere; the budget keeps every authorization a single atomic check. — PQ checks cost real money on
+  public chains (§14.2: an ML-DSA-65 signature is 53–132 k gas of calldata alone, plus 1.2–8.1 M execution).
 - **R314** **Per-family registries share the kind table, the tags, the derivations and one vector file**
   (`smartcontracts/vectors/ua/kinds.json`); each family realises the registry in its own idiom (§6.6). TON has no
   registry in v1: derived keys on TON are bound by the native wallet owner (`set_key`), which is the PoP, and
@@ -259,8 +274,6 @@ Format: **ruling** — why — cost if wrong.
                                                                       └─ per-kind verifier over ua_msg (R301)
  optional: VC (issuer-signed) + VP (signed by the UA, purpose vp) → relying party / ComplianceRegistry attester
 ```
-
-Three things never happen: a UA is never deployed, a record never changes, a key never serves two kinds.
 
 ---
 
@@ -304,7 +317,7 @@ Derived kinds (registered; `d` = key data):
 |---|---|---|---|---|---|---|
 | `0x0100` | `webauthn-p256` | `x ‖ y ‖ rpIdHash ‖ originHash` (128) | `p256` | WebAuthn assertion, challenge = base64url(`ua_msg`) | `P256VERIFY` (EIP-7951/RIP-7212 `0x100`), OZ fallback | EVM → Soroban, Solana, Aptos, Cosmos |
 | `0x0101` | `p256` | `x ‖ y` (64) | `p256` | ECDSA-P256-SHA256 over `ua_msg`, low-s | same | EVM (HSM, secure enclave) |
-| `0x0102` | `ed25519` | `pk` (32) | `ed25519` | Ed25519(`ua_msg`) | Solidity ed25519 (enabled per chain, §7.3) | EVM private chains; native elsewhere |
+| `0x0102` | `ed25519` | `pk` (32) | `ed25519` | Ed25519(`ua_msg`) | Solidity ed25519 incl. SHA-512 (R313) | every EVM chain; native elsewhere |
 | `0x0103` | `bip340` | x-only `pk` (32) | `secp256k1` | BIP-340 over `ua_msg` | `ecrecover` trick + SHA-256 tagged challenge | EVM → Cosmos |
 | `0x0104` | `schnorr-bn254` | `Y` (64) | `bn254-g1` | scaas Schnorr (§7.2) over `ua_msg` | bn254 `0x06/0x07` (existing `_schnorr`) | EVM |
 | `0x0105` | `schnorr-bls12381` | `Y` (128) | `bls12381-g1` | as 0x0104 on BLS12-381 G1 | EIP-2537 G1MSM | EVM (EIP-2537 chains) |
@@ -316,11 +329,12 @@ Derived kinds (registered; `d` = key data):
 | `0x0113` | `frost-bn254` | `groupY (64) ‖ u16 t ‖ u16 n ‖ participantsHash (32)` | `bn254-g1` | one scaas Schnorr by the group | as 0x0104 | EVM |
 | `0x0120` | `msig` | `u16 threshold ‖ u16 count ‖ count × (u16 kind ‖ bytes32 id ‖ u16 weight)`, ids strictly increasing | — | none of its own; every member registered or native | `UAMsigVerifier` (members via their own kinds) | EVM → all |
 | `0x0121` | `bls12381-multi` | `u16 t ‖ u16 count ‖ count × bytes32 memberId` (members kind 0x0106), increasing | — | none; members registered with PoP | G2ADD over signer subset + one pairing | EVM (EIP-2537 chains) |
-| `0x0130` | `mldsa44` | `pk` (1312) | `mldsa44` | ML-DSA-44 sign(`ua_msg`, ctx = `kind_tag`) | precompile / audited verifier only (R313) | private EVM first |
-| `0x0131` | `mldsa65` | `pk` (1952) | `mldsa65` | as 0x0130 | as 0x0130 | private EVM first |
-| `0x0132` | `fndsa512` | `pk` (897) | `fndsa512` | FN-DSA-512 (Falcon) once FIPS 206 is final | as 0x0130 | private EVM first |
+| `0x0130` | `mldsa44` | `pk` (1312) | `mldsa44` | ML-DSA-44 sign(`ua_msg`, ctx = `kind_tag`) | precompile where probed, else pure Solidity (R313) | every EVM chain |
+| `0x0131` | `mldsa65` | `pk` (1952) | `mldsa65` | as 0x0130 | chain 9000 precompile `0x…0F10` (E R279), else Solidity | every EVM chain |
+| `0x0132` | `fndsa512` | `pk` (897) | `fndsa512` | FN-DSA-512 (Falcon), FIPS 206 draft encoding pinned by vectors (R313) | as 0x0130 | every EVM chain |
 | `0x0140` | `zether-bn254` | `Y` (64) | `bn254-g1` | scaas Schnorr by `x` under the **Zether** Schnorr tag (`SCAAS-ZETHER-SCHNORR-V1`) on `ua_msg` | existing Zether Schnorr | EVM |
 | `0x0141` | `zether-bls12381` | `Y` (128) | `bls12381-g1` | as 0x0140 on BLS12-381 | existing | EVM (EIP-2537 chains) |
+| `0x0142` | `pqz-mlwe` (**spec E R282**, §6.1 there) | `pk` (16 384) | `pqz-mlwe` | `R_REG` lattice proof over `uaMessage(0x0142, POP_TAG, popDigest(ua))` | `UAPqzVerifier` → PQZ precompile `0x…0F01` op 3 | chain 9000 only (E R270); `authRef` PQ-only (E R281); `keyPtr` = SSTORE2(pk) |
 
 Validation at registration, all kinds: points valid, on curve, in the prime-order subgroup (G1 BLS12-381, every G2),
 not the identity (RS2-18 kept for every BLS key and signature); `t`/`threshold` non-zero and ≤ total weight or `n`;
@@ -341,7 +355,8 @@ five keys" a fact anyone can check against the id, and makes a changed group a n
 | Agent cluster, MPC custody with Schnorr | `frost-secp256k1` (cheap on EVM) or `frost-bn254` | threshold ECDSA ⇒ native EOA |
 | HSM-held corporate key | `p256` (HSMs do P-256) | native EOA (secp256k1 HSM) |
 | Confidential balances | `zether-*` with `authRef` = one of the above | `authRef = 0` (self) for single holders |
-| Long-lived PQ-ready authority (private chain) | `mldsa65` | `msig` mixing `mldsa65` and `p256` (hybrid) |
+| Long-lived PQ-ready authority | `mldsa65` (any EVM chain; cheapest on chain 9000) | `msig` mixing `mldsa65` and `p256` (hybrid) |
+| PQ confidential balances (chain 9000) | `pqz-mlwe` with `authRef` = `mldsa65` (spec E) | PQ-dominant `msig` (E R281) |
 
 ---
 
@@ -417,9 +432,8 @@ Rules: step 5 of the pipeline is `SigLib`-style ECDSA/1271 over the v3 EIP-712 d
 indexed from, address indexed relayer, uint256 indexed batch, uint256 nonce, bytes32 digest, address feeRecipient,
 uint256 fee)`; its `digest` is the mesh `intent_id` (R316).
 
-Code size: v3 adds the UA path to `MetaTokenBase`; if `--sizes` exceeds 24 576 bytes the named `ua*` wrappers move
-to a `fallback` decoder as TW2 did for `mtxUnwrapWithFee`. Verification code is never inside the token (it lives in
-the registry's verifiers, §7).
+Code size: if `--sizes` exceeds 24 576 bytes the `ua*` wrappers move to a `fallback` decoder (as TW2's
+`mtxUnwrapWithFee`); verification code never lives in the token (§7).
 
 ### 5.4 EVM DEX, mandates, accounts, registry
 
@@ -444,9 +458,8 @@ the registry's verifiers, §7).
 | Cosmos | bech32 `from`; passkey address 20-byte truncation | passkey account = 32-byte UA id (R315); `bip340`/`frost-secp256k1` via an `ua-registry` contract |
 | TON | `MetaOp.from` wallet; jetton-wallet `passkey` bound by `set_key` | native `ton-wallet`; no registry (R314) |
 
-Moving value per family keeps the family's own entry points (`relay_pay`, `Relay{payload, auth}`, `SignedOp`…); F
-changes which owner ids those accounts are keyed by and adds the registry check where an account is opened for a
-derived owner. Order follows the owner's family order (§16).
+Families keep their entry points (`relay_pay`, `Relay{payload, auth}`, `SignedOp`…); F changes the owner ids and adds
+the registry check where an account opens for a derived owner (order §16).
 
 ---
 
@@ -505,17 +518,18 @@ interface IUARegistry {
    `UAAlreadyRegistered`.
 4. Single-key kinds: `kh = keyHashOf(kind, keyData)`; `keyOwner[kh] == 0` here and in the predecessor —
    `UAKeyInUse`. Structures: every member is native or `kindOf(member) == memberKind` and of an allowed member kind —
-   `UAMemberUnknown`.
+   `UAMemberUnknown`; and the worst-case verify gas of a minimal authorizing set — Σ of the `c` most expensive member
+   caps, `c` = number of lightest-weight members needed to reach the threshold — is ≤ `UA_VERIFY_BUDGET` (R313) —
+   `UAKeyData`.
 5. Zether kinds: `authRef` is 0, a native id, or a registered non-Zether UA; a BLS UA on the
-   curve of `Y` is refused — `UAAuthRef`. Other kinds: `authRef == 0`.
+   curve of `Y` is refused; for `pqz-mlwe` only PQ `authRef`s per E R281 — `UAAuthRef`. Other kinds: `authRef == 0`.
 6. PoP: verify `pop` over `uaMessage(kind, POP_TAG, popDigest(ua))` with the kind's verifier (MuSig2/FROST: one group
    signature; structures: **no** PoP of their own — members proved theirs; Zether: Schnorr by `x` under the Zether
    tag, and, when `authRef` is a derived UA, nothing more: the auth UA proved its own key) — `UAPoP`.
 7. Store `Record{kind, uint40(block.timestamp), keyPtr}` (PQ: `keyPtr = SSTORE2.write(keyData)`), `authRef` (Zether
    only, own slot), `keyOwner[kh] = ua`; emit `UARegistered(ua, kind, keyData, authRef)`.
 
-The event carries the full key data, so an indexer (or an auditor with the tx) can rebuild every record without
-reading storage, and the UA id is checkable offline from the event alone (AR §2.1.6 point 2).
+The event carries the full key data: records and ids are rebuildable offline from logs (AR §2.1.6 point 2).
 
 ### 6.3 Storage
 
@@ -590,7 +604,8 @@ registry : keccak(TAG(kind) ‖ keyData) == ua ; kind == record.kind ; verifier[
 | `bls-bn254-minsig` | G1 sig (64) | `mapToG1("SCAAS-UA-BLS-BN254-SIG-V1" ‖ ua_msg)` (POP label for PoP); pairing `0x08` |
 | `msig` | `abi.encode(bytes keyData, MemberSig[] sigs)`, `MemberSig{uint16 index; bytes keyData; bytes sig}` with strictly increasing `index` | for each: member `kind,id` from the structure; native ⇒ ECDSA/1271 over `member_digest`; derived ⇒ `kindOf(id) == kind`, `keccak(TAG ‖ keyData) == id`, verifier over `uaMessage(kind, PURPOSE_MEMBER, member_digest)`; `member_digest = keccak256(ua ‖ ua_msg)`; Σ weight ≥ threshold |
 | `bls12381-multi` | `abi.encode(uint64 bitmap, bytes[] memberPks, bytes aggSig)` | popcount(bitmap) ≥ t; each `memberPks[i]` hashes to the member id; `pk = Σ G2ADD(pk_i)` (safe: members subgroup-checked at registration); one pairing over `ua_msg` |
-| `mldsa*` / `fndsa512` | raw signature | precompile / verifier with `pk` from `keyPtr`; ML-DSA context string = `kind_tag` |
+| `mldsa*` / `fndsa512` | raw signature | precompile if probed, else Solidity verifier, `pk` from `keyPtr` (EXTCODECOPY); ML-DSA context string = `kind_tag` (E §9.3 layout) |
+| `pqz-mlwe` | as spec E §7 | spec E R279–R281: proofs via PQZ precompile; authorization via its PQ `authRef` |
 | `zether-*` (self, owner ops) | `R ‖ z` | ZD §11.1 Schnorr with tag `SCAAS-ZETHER-SCHNORR-V1` over `ua_msg` — never the UA Schnorr tag, so a Zether key never produces a `schnorr-*` signature |
 
 Members of `msig` may be native EOAs, native contracts (Safe, `SubjectAccount`), or registered single-key UAs (incl.
@@ -602,10 +617,11 @@ expressed (owner item 2).
 | Kind | Enabled on | Reason |
 |---|---|---|
 | `webauthn-p256`, `p256` | every EVM chain | precompile `0x100` where present (≈ 3.5–6.9 k gas), OZ Solidity fallback otherwise (measure; R31 already accepts it) |
-| `ed25519` | private EVM chains by default; public chains on request | no precompile; Solidity verify ≈ 0.4–1.2 M gas (estimate) |
+| `ed25519` | every EVM chain (owner, rev 1.1) | no precompile; Solidity verify incl. SHA-512 ≈ 0.3–1.2 M gas (estimate, F9 measures) |
 | `bls12381-*`, `schnorr-bls12381`, `zether-bls12381` | chains where the `CurveCapability` probe passes (returndata compared, AR §2.5.5) | EIP-2537 |
 | `bls-bn254-minsig` | private chains only | ~100-bit pairing security (AR §2.5.1) |
-| PQ | chains with a precompile or audited verifier (R313) | — |
+| `mldsa44/65`, `fndsa512` | every EVM chain (owner, rev 1.1); precompile where probed | Solidity ML-DSA-65 1.2–8.1 M, FN-DSA-512 0.6–2.5 M (estimates) ≤ `UA_VERIFY_BUDGET`; over budget after measurement ⇒ disabled on that chain (R313) |
+| `pqz-mlwe` | chain 9000 only | spec E R270, R279 |
 
 The enabled set is a constructor argument (verifier address 0 = disabled); the chain profile publishes it; clients
 read `kindEnabled` before offering a kind.
@@ -619,16 +635,16 @@ read `kindEnabled` before offering a kind.
 | Use | Path | Curve / scheme |
 |---|---|---|
 | Native account keys | unchanged family paths (S4F §7.1): EVM `m/44'/60'/0'/0/i`, Solana `m/44'/501'/i'/0'`, … | family |
-| Every derived kind and every account-role key | `m/7225'/0'/<account>'/<kindNo>'/<i>'` | BIP-32 (secp256k1, P-256 via SLIP-10 nist256p1), SLIP-10 ed25519 |
-| `SubjectAccount` SECP256K1 key (role of `evm-contract`) | `m/7225'/0'/<account>'/2'/<i>'` | secp256k1 |
-| Non-native subject-account owner keys (Sui/Aptos/Solana/Soroban role keys) | `m/7225'/0'/<account>'/<native kindNo>'/<i>'` | ed25519 |
+| Every derived kind and every account-role key | `m/7622'/0'/<account>'/<kindNo>'/<i>'` | BIP-32 (secp256k1, P-256 via SLIP-10 nist256p1), SLIP-10 ed25519 |
+| `SubjectAccount` SECP256K1 key (role of `evm-contract`) | `m/7622'/0'/<account>'/2'/<i>'` | secp256k1 |
+| Non-native subject-account owner keys (Sui/Aptos/Solana/Soroban role keys) | `m/7622'/0'/<account>'/<native kindNo>'/<i>'` | ed25519 |
 | `schnorr-bn254`, `frost/musig2-bn254` member shares from seed | EIP-2333-style `m/254/0/<account>/<kindNo>` (salt `"SCAAS-UA-BN254-v1"`) | bn254 |
 | `bls12381-minsig`, `schnorr-bls12381` | EIP-2333 `m/12381/0/<account>/<kindNo>` | BLS12-381 |
 | Zether conf key / viewing key | unchanged R33: `m/254|12381/<coin>/<account>/7`, `…/8` | bn254 / BLS12-381 |
 | PQ seeds | `ξ = HKDF-SHA256(ikm = BIP-39 seed, salt = "scaas.ua.pq.v1", info = kind_tag ‖ u32 account ‖ u32 i)` → FIPS 204 `KeyGen_internal(ξ)` / seeded FN-DSA keygen | ML-DSA, FN-DSA |
 | Passkeys | one credential per `rpId` (APP R165); the same credential on several chains is the same kind (`webauthn-p256` or a family's native passkey) — allowed, the challenges are domain-separated digests | P-256 |
 
-`7225'` is the SCaaS BIP-43 purpose for UA trees (owner to confirm the number, §17 Q6); coin level `0'` because a UA
+`7622'` is the SCaaS BIP-43 purpose for UA trees (owner, rev 1.1); coin level `0'` because a UA
 id is chain-independent (one derived key ⇒ the same UA on every chain).
 
 clientkeys API rules (stream F3):
@@ -636,7 +652,7 @@ clientkeys API rules (stream F3):
   `deriveUAKey(seed, {kind, account, index})` whose only signing method is `signUA(purpose, digest)` (builds `ua_msg`
   itself); there is no way to get a raw signature over an arbitrary 32 bytes from a UA key.
 - `deriveUAKey` refuses a `kind` whose curve group equals a native path's curve **and** whose path would equal it
-  (cannot happen with `7225'`, asserted in tests) and refuses the Zether `use` indices 7/8 for non-Zether kinds.
+  (cannot happen with `7622'`, asserted in tests) and refuses the Zether `use` indices 7/8 for non-Zether kinds.
 - `deriveConfKey` stops accepting a free `use` (only 7 and 8).
 - The vault keeps one PRF/PIN wrapping for the seed and the conf key (S4F R259/R262); AAD labels already separate
   them.
@@ -664,8 +680,7 @@ PoP does not override `UAKeyInUse`.
 | `vp` | VC presentation (§9.3) |
 | `vc-anchor` | consent to an on-chain anchor (§9.4) |
 
-A digest is always already domain-separated (chain, contract); the purpose tag separates *uses* of the same key,
-the kind tag separates *kinds*.
+Digests are already chain/contract-separated; purpose tags separate *uses*, kind tags *kinds*.
 
 ### 8.4 Layer 4 — EOAs
 
@@ -786,7 +801,7 @@ period, by DEK destruction (R197).
   clones, TW2 §3.1). Non-EVM equivalents (Sui/Aptos/Solana/Soroban accounts) keep their role likewise.
 - When to offer it: the subject asks for recovery without moving funds, wants one address across key changes, or
   must interact with third-party contracts that only understand `address`.
-- Keys: its `SECP256K1` keys come from the role path `m/7225'/0'/<account>'/2'/<i>'` (R300), never from the EOA
+- Keys: its `SECP256K1` keys come from the role path `m/7622'/0'/<account>'/2'/<i>'` (R300), never from the EOA
   path; its P-256 keys are passkeys (per `rpId`). A passkey that is a `webauthn-p256` UA may **also** be a
   `SubjectAccount` key: same kind, same WebAuthn scheme, digests differ (the account's challenge is the token's
   EIP-712 digest with `from` = the account); allowed.
@@ -935,8 +950,10 @@ move with their family streams.
 | `bls12381-minsig` | 256 + 128 | ~120 k (measured, chain 9000) | ~5 k | 200 k |
 | `msig` k-of-n | 4 + 36n + Σ member | Σ member verifies + ~2 k + 2.6 k per derived member lookup | ~5 k | Σ caps |
 | `bls12381-multi` (k signers) | 4 + 32n + 256k + 128 | ~120 k + 0.6 k·k (G2ADD) | ~5 k | 300 k |
-| `ed25519` | 32 + 64 | ~0.4–1.2 M (no precompile; private chains) | ~5 k | 1.5 M |
-| `mldsa44` | 2 420 sig | precompile-dependent / 1.5–4 M Solidity | ~5 k + EXTCODECOPY ~3 k | per chain |
+| `ed25519` | 32 + 64 | ~0.3–1.2 M (Solidity, SHA-512 dominates) | ~5 k | 1.5 M |
+| `mldsa44` | 2 420 sig | precompile (chain 9000) / ≤ ML-DSA-65 cost in Solidity | ~5 k + EXTCODECOPY ~3 k | `UA_VERIFY_BUDGET` |
+| `mldsa65` | 3 309 sig | 9 k-class precompile / 1.2–8.1 M Solidity (E §2.4) | ~5 k + EXTCODECOPY ~3 k | `UA_VERIFY_BUDGET` |
+| `fndsa512` | ~666 sig | 0.6–2.5 M Solidity (AR §2.6.2) | ~5 k + EXTCODECOPY ~1.5 k | `UA_VERIFY_BUDGET` |
 | `zether-*` | — (proof path) | unchanged (ZD §15) | ~5 k (`kindOf` + `authRef`) | — |
 
 ### 14.2 Registration (execution gas, bn254 base; AR §2.2.5 corrected for the new layout)
@@ -948,12 +965,16 @@ move with their family streams.
 | `bls12381-minsig` | 2 × 22.1 k + G2MSM 22.5 k | ~120 k | ~190 k |
 | `msig` (n members) | 1 × 22.1 k | none (n member lookups, 2.6 k each) | ~30 k + 2.6 k·n + event |
 | `zether-bn254` | record + keyOwner + authRef (if ≠ 0) | ~13 k | ~60–80 k |
-| `mldsa44` | 2 slots + SSTORE2 1 312 B ≈ 0.3 M | precompile / verifier | ~0.35 M + verify |
+| `mldsa44` / `mldsa65` | 2 slots + SSTORE2 1 312 / 1 952 B ≈ 0.3 / 0.43 M | one verify (R313) | ~0.35–0.5 M + verify |
+| `pqz-mlwe` | as spec E §6.3 (SSTORE2 16 KB, ~0.13 M log) | `R_REG` via precompile | spec E §9.4 |
 
-Calldata floor (EIP-7623): binds when execution gas < 24 × non-zero bytes. PQ registrations with a precompile
-(execution small, `pk` 1.3–2.6 KB) and any PQ check are floor-priced at 40 gas/byte: an ML-DSA-44 signature costs
-~97 k gas of calldata alone on a public chain — PQ authorization is a private-chain feature until that changes
-(R313). On private/PoA chains with zero gas price none of this is money.
+Calldata floor (EIP-7623): binds when execution gas < 24 × non-zero bytes. With a precompile (execution small) a
+PQ check is floor-priced at 40 gas/byte: an ML-DSA-65 signature is ~132 k gas of calldata (~53 k at 16 gas/byte when
+a Solidity verifier makes execution dominate). With a Solidity verifier the 1.2–8.1 M execution dominates: on a
+public L1 at 10 gwei and ETH $3 000 that is ≈ $36–240 per ML-DSA-65 check — enabled because the owner wants PQ
+everywhere, and shown to the user before they choose a PQ kind on such a chain. On rollups and Gnosis-class chains
+it is cents; on private/PoA chains with zero gas price it is not money. EIP-7825 (16.78 M per tx) bounds a single
+check, hence `UA_VERIFY_BUDGET` and the structure bound (R313, §6.2).
 
 ### 14.3 Why not cache in tokens (R306)
 
@@ -1010,7 +1031,7 @@ gen_ua_vectors.*`) from independent implementations (noble/`@noble/curves` in JS
 | T-V3-2 | `totalSupply == Σ native + Σ UA` (invariant); `UATransfer` emitted iff a side is derived |
 | T-V3-3 | `to` unregistered ⇒ revert; `approve`/`trade` from derived ⇒ `MetaTxUnknownOp` |
 | T-V3-4 | `--sizes` ≤ 24 576 for every v3 implementation |
-| T-GAS | `UAGas.t.sol` replaces §14 estimates |
+| T-GAS | `UAGas.t.sol` replaces §14 estimates; every enabled kind's worst-case verify ≤ `UA_VERIFY_BUDGET`; a structure over the bound is refused |
 | T-ATT | `UAAttestations`: dual consent, issuer-only revoke, subject withdraw, no admin |
 
 ### 15.3 Off-chain
@@ -1029,7 +1050,7 @@ order (EVM, Cosmos, Hedera, Soroban, TON, Sui, Aptos, Solana).
 | Stream | Content | Depends on | Gate |
 |---|---|---|---|
 | **F0** | kind table libraries (Solidity `UAKinds.sol`, JS `ua.js`, Rust `scaas-ua` crate, Python `ua.py`), vector generator, `vectors/ua/*` | — | all four consumers pass the same vectors |
-| **F1** | EVM `UARegistry` gen 1, verifiers (P-256, WebAuthn, BIP-340, bn254/BLS Schnorr, BLS, ed25519, msig, bls-multi), Zether re-point (§12), zether-prover + clientkeys Zether changes, deletes | F0 | T-REG, T-AUTH, T-ZET green; dev chains redeployed |
+| **F1** | EVM `UARegistry` gen 1, verifiers (P-256, WebAuthn, BIP-340, bn254/BLS Schnorr, BLS, ed25519 (Solidity), msig, bls-multi), Zether re-point (§12), zether-prover + clientkeys Zether changes, deletes | F0 | T-REG, T-AUTH, T-ZET green; dev chains redeployed |
 | **F2** | MetaToken v3 (UA ledger, `UAMetaTransaction`, `ua*` functions) for the three tiers; factory v2 versions; Hedera children | F1 | T-V3, sizes, gas report |
 | **F3** | clientkeys `UAKey`, derivation (§8.1), no-raw-sign API, role path for `SubjectAccount` keys, app screens 5/14 and the approvers wizard (APP A3) | F0 (F1 for registration) | clientkeys tests; app e2e on dev chain |
 | **F4** | VC layer: `UAAttestations` (EVM), VP digest + verification in the shared libraries, evidence-bundle format, attester flow into `ComplianceRegistry` (with AS1) | F1, AS1 | T-ATT; Odoo/app round trip |
@@ -1037,7 +1058,7 @@ order (EVM, Cosmos, Hedera, Soroban, TON, Sui, Aptos, Solana).
 | **F6** | Odoo (parent repo): `blockchain.ua`, address forms, signed ops, portal registration, credentials model | F1, F3 | Odoo tests + `pg_constraint` |
 | **F7** | Cosmos: `ua-registry` contract, 32-byte passkey accounts (R315), `bip340`/FROST-secp | F0 | family tests on vectors |
 | **F8** | Soroban, then TON (no registry; wallet-bound key rules), Sui, Aptos, Solana (passkey owner = UA id, `["ukey", keyHash]`) — one family per change | F0, family streams | family tests on vectors |
-| **F9** | PQ kinds (`mldsa44/65`, `fndsa512`) on the private chain (precompile), registry gen 2 where needed; with spec E | F1, spec E | private-chain e2e |
+| **F9** | PQ kinds (`mldsa44/65`, `fndsa512`): pure-Solidity verifiers for every EVM chain (one audited implementation, vectors shared with the precompile's C core), precompile path on chain 9000, measured gas vs `UA_VERIFY_BUDGET`; `pqz-mlwe` registration hook with spec E. If F9 lands after F1 the PQ kinds arrive as registry gen 2 (§6.5) | F1, spec E | `UAGas.t.sol` under budget; chain-9000 e2e |
 | **F10** | DEX/mandate UA support (§17 Q4/Q5), `OrderBookDex` 1271 gas cap fix | F2 | DEX suite |
 
 ---
@@ -1045,9 +1066,9 @@ order (EVM, Cosmos, Hedera, Soroban, TON, Sui, Aptos, Solana).
 ## 17. Owner to confirm
 
 Decisions taken by this spec on the open design points, each with its default; a different answer changes only the
-rulings named.
+rulings named. **Rev 1.1:** items 1, 6, 9, 11 are answered by the owner (marked); the rest stay open.
 
-1. **Identity vs rotation (R302).** Decided: a UA is immutable (single-key or policy hash); rotation and membership
+1. **Identity vs rotation (R302). — Confirmed by the owner (rev 1.1).** Decided: a UA is immutable (single-key or policy hash); rotation and membership
    changes = new UA + move funds; stable identity = `SubjectAccount` (b). Alternative: a rotatable "policy" kind
    (id = hash of the first policy, current policy in the registry with a timelock) — rejected for v1 because it
    brings back an admin-like mutable record per account.
@@ -1059,16 +1080,18 @@ rulings named.
    UA-ledger allowance model (`uaApprove` to contracts) and `OrderBookDex` v2 with `bytes32 maker`.
 5. **`MandateWallet` with a UA owner/delegate.** Decided: not in v1 (a `MandateWallet` v2 calling
    `requireAuthorized`).
-6. **Derivation purpose number `7225'` and coin level `0'` (§8.1).** Decided: one chain-independent UA tree (same UA
+6. **Derivation purpose and coin level (§8.1). — Owner: purpose `7622'` (rev 1.1).** Decided: one chain-independent UA tree (same UA
    on every chain). Alternative: per-coin trees (unlinkable across chains, different ids per chain).
 7. **Regulated (AS) tokens and UA receivers.** Decided: AS regulated tokens stay native-only; a `bytes32`-keyed
    compliance check would be an AS amendment.
 8. **On-chain registration gate (S6).** Decided: none in v1; sponsorship limits at the node. Alternative: an
    immutable `IRegistrationPolicy` (invite / attested) per registry generation (AR §2.3c).
-9. **ed25519 on public EVM (§7.3).** Decided: disabled by default (≈ 0.4–1.2 M gas); enabled per chain on request.
+9. **ed25519 and PQ kinds on public EVM (§7.3, R313). — Owner: enabled everywhere (rev 1.1)**, pure-Solidity
+   verifiers where no precompile exists, single-transaction checks under `UA_VERIFY_BUDGET`; a kind over budget is
+   disabled on that chain, never registrable-but-unusable.
 10. **PoP chain binding (R295).** Decided: bound to chain and registry (one signature per chain). Alternative:
     chain-independent PoP (one signature registers everywhere; anyone can replicate a registration to other chains).
-11. **Second typehash for v3 (R309).** Decided: `UAMetaTransaction` with its own typehash — an explicit exception to
+11. **Second typehash for v3 (R309). — Confirmed by the owner (rev 1.1).** Decided: `UAMetaTransaction` with its own typehash — an explicit exception to
     R140.
 12. **TON (R314).** Decided: no registry; wallet-bound derived keys; chain-wide keyHash uniqueness not enforced.
 13. **Cosmos 32-byte passkey accounts and Solana passkey owner = UA id (R315).** Decided: yes, at the family
