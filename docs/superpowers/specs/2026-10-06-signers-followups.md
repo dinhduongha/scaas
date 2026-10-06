@@ -689,4 +689,4 @@ Order for one agent: D1 → D3 → D2 → (A0) → D4 → D5 → D6 → D7. D1�
 
 | # | Question | Default if unanswered |
 |---|---|---|
-| Q1 | Soroban and TON have no guardian (seams R8-2, R10-6), so "1 key + guardian" cannot be met there; with the switch ON those users need two keys (TON: the ed25519 key **and** the one passkey). Build the guardian seams, or accept "≥ 2 keys" on those two families? | Accept ≥ 2 keys; no contract work |
+| Q1 | Soroban and TON have no guardian (seams R8-2, R10-6), so "1 key + guardian" cannot be met there; with the switch ON those users need two keys (TON: the ed25519 key **and** the one passkey). Build the guardian seams, or accept "≥ 2 keys" on those two families? | **Decided (owner 2026-10-06): accept ≥ 2 keys on Soroban and TON; no guardian work.** |
