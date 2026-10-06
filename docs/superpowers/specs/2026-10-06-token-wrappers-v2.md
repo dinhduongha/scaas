@@ -3,7 +3,8 @@
 Status: draft rev 1.2, 2026-10-06. Rev 1.1 folded in the owner's answers to the two rev-1 open questions (adjustable
 Multi rates, R147; gasless unwrap, R148). Rev 1.2 folds in independent review 1 (FIX-THEN-GO: H1–H2, M1–M6,
 L1–L13, over-engineering list) and the owner's decision on H1/H2; disposition in §17. Code at `scaas` `main` fc6e3d0 (after the
-`bamboo` → `scaas` rename). Nothing here is built.
+`bamboo` → `scaas` rename). **Build status:** T1–T6 and T8 built (EVM + Hedera contracts, tests, docs); T7 (node,
+Odoo, SDK) open. Implementation notes and deviations: §18.
 Rulings: **R129–R149** (§2). Owner rulings of 2026-10-06 (three tiers, rates as an issuer option, multi-underlying
 with a guardian that can only disable wrap, named functions as thin entry points, requirement trace) are folded in.
 **Naming:** the code rename has landed: v1 is `("SCaaS MetaToken", "1")` with `scaas.pay.lane` and
@@ -897,3 +898,21 @@ three sub-agents, reviews by Claude sub-agents.
 | L12 | One compromised leg drains every leg | **Accepted**: disclosure reworded; guardian submits privately | §8.4 |
 | L13 | `getWrapper` may return a Multi; two events per create | **Accepted**: clients read `versionOf().kind`; only `TieredTokenDeployed` | §9 |
 | OE1–5 | Delete: share cap; per-leg `_pending`; step re-check at execution; R132 on unwrap; `associateUnderlying` | **All done**: one `PendingRate` per token (leg index inside); unwrap has no payee check; association at init | §3.2, §6.2, §10.1, §11 |
+
+---
+
+## 18. Implementation notes (T1–T6)
+
+Where the code differs from the text above, and why. Everything else is as specified.
+
+| # | Spec | Code | Why |
+|---|---|---|---|
+| I1 | `TokenKind` appended in `IOpenFactory` (§9) | `IOpenFactoryV2.TokenKind` (same values) in `src/common/IOpenFactoryV2.sol`; `IOpenFactory.sol` untouched | Appending to the v1 enum changes the bytecode (enum range check) and metadata of `OpenFactory` v1, which would no longer source-verify (R131's reason, applied to the factory) |
+| I2 | `mtxUnwrapWithFee` a normal external function | Decoded by hand in `MetaTokenBase.fallback` (same selector, ABI and checks as the ABI decoder: 13 head words, clean address/`uint32` words, `bytes` in bounds); declared in `IMetaTokenV2UnwrapWithFee`, not in `IMetaTokenV2` | 13 parameters overflow the non-via-IR ABI decoder (`dataEnd` too deep); via-IR would change every v2 artifact and the build cost. Solidity callers (also legacy codegen) cannot ABI-encode 13 values either and build the calldata by hand; Rust/Python clients are unaffected |
+| I3 | `abstract HederaSigMixin is MetaTxCore` (§11) | `library HederaSig` + a 4-line `_requireValidSignature` override in each Hedera child (`src/hedera/HederaV2Lib.sol`, `HederaTokensV2.sol`) | A mixin on `MetaTxCore` forms a diamond with the tier and forces seven unrelated overrides per child |
+| I4 | Errors `WrapDisabledFor`, `DuplicateUnderlying`, `RateDecreaseWithDisabledLeg` listed under `MultiUnderlyingToken`; `UnderlyingCountInvalid` under `SingleUnderlyingToken` | Declared in `SingleUnderlyingToken` (the leg/rate code that raises them lives there; tier 2 cannot reach them) and `UnderlyingCountInvalid` in `MetaTokenBase` (every tier checks its count) | One code path for legs; the ABI of every tier that can raise them contains them |
+| I5 | `tokenKind()` mismatch ⇒ `VersionKindMismatch(kind, got)` | "No answer" reports `got = META`; a wrong entry point reports `expected = META` (v1 path) or `META_NONE` (tiered path) | The error has enum arguments; these are the defined fallbacks |
+| I6 | `executeMetaTransactionWithFee` ≤ generic gas | ≈ 85 gas above the generic path (dispatch position + shape check); every other named function is below | Not worth contorting an alias; recorded in `MetaTxGasV2.t.sol` |
+| I7 | Layout test "compares `forge inspect` output" | Compares the solc `storageLayout` in the build artifact (`extra_output`) with `test/v2/layout/*.json` | Same data without enabling `ffi` in tests |
+| I8 | Renounce makes the rate fixed | `rateAdjustable = false`, `rateAdmin = 0`, pending dropped; the per-leg `adjustable` copy stays set (wrap then reads an empty `_pending`, one extra SLOAD) | Smallest correct change; fixed-at-creation tokens keep the cheap path |
+
