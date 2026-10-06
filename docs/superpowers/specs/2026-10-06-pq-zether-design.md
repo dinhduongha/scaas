@@ -1,6 +1,7 @@
 # Post-quantum Zether on private/PoA chains (component spec E)
 
-Status: draft rev 1, 2026-10-06. Component spec **E**. Short name **PQZ**. Code at `scaas` `main` 28c165c (classical
+Status: draft rev 1.1, 2026-10-06 (owner answers to §17 q1–q3 folded in: licence gate G-LIC, Nethermind-only v1,
+retail WASM prover moved up to E-S6). Component spec **E**. Short name **PQZ**. Code at `scaas` `main` 28c165c (classical
 Zether BUILT on dev chains; nothing of PQZ is built). **UNAUDITED — NOT FOR PRODUCTION FUNDS**, like every Zether
 artifact (R34). Rulings: **R270–R289** (§3). R290–R318 belong to spec F (UA), R250–R268 to spec D (S4F), R230–R247 to spec C (OPS).
 
@@ -162,7 +163,11 @@ that needs AVX-512 cannot run in the node. Hence the portable fork (R278) instea
   RS2-1; adding a chain is a code change with review. **And** every constructor/`initialize` runs the precompile
   self-test (§10.4); a chain without the precompile (every public chain) fails it. `OpenFactory.pqzEnabled`
   defaults to `false`. NatSpec and docs: **UNAUDITED — NOT FOR PRODUCTION FUNDS**. — Owner O3; 9000 is the owner's
-  named target and runs our client. — Classical Z3 (9000 for classical Zether) is unaffected.
+  named target and runs our client. **Release gates before any production or commercial use** (owner, rev 1.1):
+  **G-LIC** patent/licence clearance (LaZer is MIT without an explicit patent grant; LNP22-family techniques come
+  from IBM Research; plus the chosen ML-DSA implementations' licences) **and** Z1 (independent cryptographic audit).
+  Development and research continue without them; nothing deploys outside the allowlist or holds real funds until
+  both are recorded as passed. — Classical Z3 (9000 for classical Zether) is unaffected.
 - **R271** **Encryption = additive-only module-LWE with BFV-style encoding** ("MLWE-BFV-add", §4), implemented in
   `pqz-core`, not taken from an FHE library. CKKS and TFHE rejected (§2.2). — We use Enc/Add/Dec only; a BFV stack
   brings relinearization keys and failure probabilities we must not have. — The owner's "BFV/BGV (RLWE)" is met in
@@ -205,8 +210,9 @@ that needs AVX-512 cannot run in the node. Hence the portable fork (R278) instea
   token stores it at `initialize` and the precompile accepts only ids it implements.
 - **R279** **On-chain verification is a native precompile on chain 9000**: `PQZ` at
   `0x0000000000000000000000000000000000000F01` (first input byte = op) and `MLDSA65` at `…0F10` (EIP-8355 layout plus a
-  context string, §9.3). Off-chain co-processor attestation is rejected on chain 9000 and kept as a seam for EVM chains whose client
-  we do not control (§14). **Determinism and probing:** integer-only code, no threads, no floating point, no CPU-feature-dependent
+  context string, §9.3). **v1 runs only on our Nethermind chain** (owner, rev 1.1). Other
+  private chains (customer-run Besu/geth/reth) get the off-chain co-processor attestation seam later (§9.1, §14);
+  **no client ports in v1**; the co-processor is rejected on chain 9000 itself. **Determinism and probing:** integer-only code, no threads, no floating point, no CPU-feature-dependent
   results, bounded loops (a capped rejection loop that hits its cap ⇒ invalid); any parse error, panic or failed
   check ⇒ output `0x00…00`; gas by formula regardless of validity; activation by `pqzTransitionTimestamp`; contracts
   self-test (§10.4) and the node probes (`has_pqz_precompile`), because a missing transition key looks exactly like
@@ -245,9 +251,14 @@ that needs AVX-512 cannot run in the node. Hence the portable fork (R278) instea
 - **R286** **Limits.** `MAX_TOTAL_SHIELDED = 2^62`; transfer and burn amounts `< 2^64` (8 digits); `confidentialFee <
   2^64`; `shieldScale` as RS2-3. — No BSGS bound any more; 2^62 keeps `b' + v + fee < 2^64` for honest states and
   values in signed 64-bit for clients. — The classical 2^54 rationale (D3, BSGS) does not carry over.
-- **R287** **Prover platforms v1**: native x86-64 (portable/AVX2) and aarch64 — desktops, servers and the
-  organization key oracle of SCaaS §9.1. WASM (`wasm32-wasip1` of `pqz-core`) and mobile are stream E-S8. — B2B
-  treasury on private chains is the target user; phones are not. — Retail PQ is out of v1.
+- **R287** **Prover platforms** (owner, rev 1.1: retail provers come early): native x86-64 (portable/AVX2) and
+  aarch64 for desktops, servers and the organization key oracle (E-S5), then **immediately** the browser/mobile
+  WASM prover (E-S6, §11.5): `pqz-core` compiled freestanding to `wasm32-unknown-unknown` and linked into the
+  `zether-prover` wasm-bindgen module, run in the app's Zether worker under the key-worker rule (app R164, R175),
+  single-threaded, with budgets and a fallback to a **native prover service run by the user** (`pqz-cli serve`).
+  Native iOS/Android libraries are the same aarch64 C build. — Retail on private chains is a near-term use. — WASM
+  lacks a 64×64→128 multiply, so the WASM spike in E-S1 decides the modulus form before E-S2 freezes vectors
+  (§11.5).
 - **R288** **Encryption randomness is derived**, so the sender can re-create it for disclosure:
   `seed_enc = HKDF-SHA256(ikm = pqzKeySeed, salt = "SCAAS-PQZ-ENC-V1", info = be32(chainId) ‖ token(20) ‖ fromUA ‖
   be8(sendCounter) ‖ toUA ‖ be8(v) ‖ be8(b') ‖ u8(auditorOn))`. Message-bound, so a re-proof with another amount at
@@ -393,7 +404,7 @@ PQZ key:     seed32 = HKDF-SHA256(ikm = BIP-39 seed, salt = "scaas.ua.pq.v1",
                                   info = "scaas.ua.pqz-mlwe.v1" ‖ u32(account) ‖ u32(i));   pk = KeyGen(seed32) (§4.2)
 ML-DSA auth: ξ = HKDF-SHA256(ikm = BIP-39 seed, salt = "scaas.ua.pq.v1",
                              info = "scaas.ua.mldsa65.v1" ‖ u32(account) ‖ u32(i));         FIPS 204 KeyGen_internal(ξ)
-hybrid member (p256 / bip340): F's UA tree m/7225'/0'/<account>'/<kindNo>'/<i>'
+hybrid member (p256 / bip340): F's UA tree m/7622'/0'/<account>'/<kindNo>'/<i>'
 ```
 
 Distinct tags in `info` give distinct keys per kind (one key = one purpose, F R298 layer 1); no PQ seed equals a
@@ -621,7 +632,7 @@ invariant #1).
 |---|---|---|---|
 | Solidity LNP22 verifier | `A` expansion with keccak instead of SHAKE ≈ 0.8 M; `A^T z` ≈ 65 k mulmods ≈ 1.5–2 M; commitment checks ≈ 5 M; NTTs, norms, transcript ≈ 1–3 M; plus calldata ⇒ **≈ 10–25 M (estimate)** | public | **No**: at or above the EIP-7825 16.78 M per-transaction cap; a second implementation of the verifier (Solidity + C) doubles audit surface and invites cross-language divergence |
 | **Native precompile (chain 9000)** | ≈ 1–1.5 M for verification (§9.4) + calldata | every full node re-executes | **Chosen** (R279) |
-| Off-chain co-processor (quorum of verifiers signs ML-DSA attestations; contract checks t-of-n) | ≈ 30–60 k verification + calldata | the quorum, not re-verifiable from chain data | Seam for EVM chains we do not run (§14); on chain 9000 the precompile gives the same latency with public verifiability |
+| Off-chain co-processor (quorum of verifiers signs ML-DSA attestations; contract checks t-of-n) | ≈ 30–60 k verification + calldata | the quorum, not re-verifiable from chain data | The later path for customer-run private chains (owner, rev 1.1; §14); rejected on chain 9000, where the precompile gives the same latency with public verifiability |
 | STARK proof of the lattice verifier | multi-M + prover minutes | public, PQ | Disproportionate |
 
 ### 9.2 Precompile `PQZ` (`0x…0F01`)
@@ -750,7 +761,8 @@ what keeps PQZ off chains whose client is not ours.
 
 ### 11.1 `zether-prover` (feature `pq`)
 
-- New modules behind `--features pq` (native targets only; the existing `wasm32-unknown-unknown` build is untouched):
+- New modules behind `--features pq` (native first in E-S5; the `wasm32-unknown-unknown` build gains `pq` in E-S6,
+  §11.5):
   `pq/keys.rs` (§6.2), `pq/mlwe.rs` (thin Rust over `pqz-core` C ABI via `cc` build; plus a pure-Rust reference
   `Enc/Add/Dec` used only in tests to cross-check the C), `pq/statement.rs` (§7.7), `pq/api.rs`
   (`prove_transfer`, `prove_burn`, `prove_refresh`, `prove_register`, `prove_disclosure`, `decrypt`, `rebuild_state`
@@ -764,7 +776,8 @@ what keeps PQZ off chains whose client is not ours.
 
 - F's `deriveUAKey(seed, {kind: 'mldsa65', account, index})` / `signUA('zether-auth', authDigest)` (F stream F3)
   with a vetted JS/WASM ML-DSA package chosen in E-S5; `derivePqzSeed(seed, {account, index})` (§6.2) only to hand
-  the seed to the native prover or the org key oracle — PQZ proving is **not** in JS (R287).
+  the seed to the native prover, the org key oracle or the WASM prover in the Zether worker (§11.5) — PQZ
+  proving is **not** in JS (R287).
 - Vectors: F's `smartcontracts/vectors/ua/kinds.json` gains the `pqz-mlwe` row (seed → pk, UA, keyHash).
 
 ### 11.3 scaas-node (recommendations to operators, OPS R247)
@@ -785,6 +798,54 @@ what keeps PQZ off chains whose client is not ours.
 None in v1: the ERP sees PQZ like classical Zether (amounts known to the ERP from its own documents; attestations
 through `attestTransferAmount`). A later stream may add a `pqz-cli` connector for organizations.
 
+### 11.5 Retail WASM prover (stream E-S6, R287)
+
+**Build target.** `pqz-core` compiled with clang `--target=wasm32-unknown-unknown -O2 -msimd128 -ffreestanding
+-nostdlib` (no libc: the fork's portable path uses no stdio, threads or `malloc`; memory comes from a caller-provided
+arena) and linked by `cc` into `zether-prover --features pq` built with `wasm-bindgen --target web`, as a separate
+lazy module `pqz_bg.wasm` next to the classical one. SIMD128 is a baseline in current browsers; a no-SIMD build is
+kept for the test matrix. Results are bit-identical to the native builds (integer code, fixed `rnd32` vectors §15).
+
+**Worker isolation (app R164, R175).** Proving runs in the app's Zether worker, which also opens the PQZ seed itself
+(`openPqKey` from vault v2), so neither the seed nor the ML-DSA key crosses `postMessage`; the main thread sends
+public inputs (statement parts fetched from logs, amount, recipient) and receives `proof ‖ out`. The ML-DSA signature
+over `authDigest` comes from the **key worker** (`signUA('zether-auth', authDigest)`, F §8.3). Both workers terminate
+on lock, 5 min idle or 5 min hidden. App spec change (listed, applied by the app stream): R164's chain list gains 9000
+for configured PQZ tokens; the CSP already allows `'wasm-unsafe-eval'`.
+
+**Budgets** (p95, per transfer; E-S1 measures a first cut, E-S6 enforces in CI on reference devices):
+
+| Item | Desktop browser | Mid-range phone (2022, 8 GB) | Hard limit |
+|---|---|---|---|
+| Prove `R_TX` | ≤ 5 s | ≤ 15 s | 30 s ⇒ offer the fallback |
+| Peak WASM memory | ≤ 128 MiB | ≤ 128 MiB | 256 MiB (iOS WebKit kills larger tabs) |
+| Module size | ≤ 1.0 MB gzip for `pqz_bg.wasm` (the classical module keeps its 1.2 MB app budget) | same | — |
+| Decrypt + state rebuild from logs | ≤ 200 ms for 64 ciphertexts | ≤ 1 s | — |
+| Upload | ≈ 77 KB per transfer | same | — |
+
+The prover streams commitment-matrix expansion from its seed (no tables beyond `NTT(A)`, 512 KB) and reports
+rejection-sampling rounds to the UI; LNP22 retries make prove time variable, hence p95 budgets. Single-threaded in
+v1: WASM threads need cross-origin isolation (COOP/COEP), which the app does not set.
+
+**Fallback: native prover service run by the user.** `pqz-cli serve` holds the user's PQZ seed (stdin, as §11.1) and
+answers `POST /v1/prove` with the same request/response as the worker. Default bind `127.0.0.1:8547` (a loopback
+origin is a secure context, so the app may call it); CORS limited to the app origin; a pairing token printed at
+start, sent as a bearer header. For a phone, `--listen <lan>` requires `--tls-cert`, and pairing is a QR code with
+the certificate SHA-256 and the token. The service is the user's (or the organization's key oracle), never a
+third party's — a prover learns the balance.
+
+**Parameter and proof-size implications.**
+- Proof bytes and sizes are platform-independent; nothing changes on chain.
+- `q < 2^50` prime needs 64×64→128-bit products, which WASM emulates (≈ 3–4× slower Montgomery steps). If E-S1's WASM
+  measurement misses the phone budget, E-S2 switches `q` to a product of two NTT-friendly primes `q1·q2 ≈ 2^50`,
+  each `< 2^25`, with RNS arithmetic on 32-bit lanes (native `i64` products). §4.3 is unchanged except `Δ = ⌊q/2^22⌋`
+  for the new `q`; MLWE security depends on the size of `q`, not its primality; the HE-table and estimator checks are
+  rerun. This is settled before vectors freeze (a later change is a new `proofSystemId`).
+- The kill criterion (R278, ≤ 96 KB proof) also bounds phone upload and memory; a proof that passes native budgets but
+  not the phone budget keeps native provers and the fallback, and the WASM prover waits.
+- JIT-compiled WASM gives no constant-time guarantee; the code avoids secret-dependent branches and indices, the
+  residual timing risk is stated (T11), and the native service is the choice for high-value treasury keys.
+
 ---
 
 ## 12. Threat model
@@ -803,7 +864,7 @@ through `attestTransferAmount`). A later stream may add a `pqz-cli` connector fo
 | T8 | Rollover grief against in-flight proofs | impossible by construction (R277); > 16 attacker credits rolled past `p` force a re-prove only |
 | T9 | Replay / proof transplant | `sendCounter`, `chainId`, `token`, `registry`, `validUntilBlock`, UAs, fee, beneficiary in the statement; strong FS |
 | T10 | Fiat–Shamir in the QROM for multi-round LNP22 | assumption, stated; parameters follow LaZer's QROM-aware choices; tracked for the audit (Z1) |
-| T11 | Side channels in the prover (timing of sampling, rejection, Gaussian masks) | constant-time CBD; masking sampler constant-time (CDT full-table scan or uniform masks, as the fork's code already does); rejection decisions depend only on public-safe values per LNP22; no secret-indexed tables (software AES bitsliced) |
+| T11 | Side channels in the prover (timing of sampling, rejection, Gaussian masks; WASM JIT gives no constant-time guarantee, §11.5) | constant-time CBD; masking sampler constant-time (CDT full-table scan or uniform masks, as the fork's code already does); rejection decisions depend only on public-safe values per LNP22; no secret-indexed tables (software AES bitsliced) |
 | T12 | Randomness reuse | R288 message-bound derivation; hedged proof masks |
 | T13 | Precompile bug ⇒ consensus split or false accept | single C core shared with prover tests; fuzzing of `pqz_verify` (§15); fail-closed returndata check; deterministic integer code (R279) |
 | T14 | Rogue / stolen public key registration | `R_REG` PoP over F's `popDigest` (chain, registry, UA); keyHash group `pqz-mlwe`; front-running yields the identical record (F R295) |
@@ -826,9 +887,9 @@ through `attestTransferAmount`). A later stream may add a `pqz-cli` connector fo
 | Phase | What runs | HNDL status |
 |---|---|---|
 | H0 (today) | classical Zether on dev chains only (RS2-1); owner gate Z3 decides 9000 | exposed, but no production funds |
-| H1 | PQZ on chain 9000 behind R270 (this spec, after E-S1…E-S6) | amounts PQ-safe from first use |
+| H1 | PQZ on chain 9000 behind R270 (this spec, after E-S1…E-S7), dev and pilot only | amounts PQ-safe from first use |
 | H2 | pilots migrate classical → PQZ (R289): `ZetherToken.burn(amount, ownerAddress)` then `PqzToken.fund(ua, amount)` with `approve(PqzToken)` (spender is a contract, R26) | each migrated amount is public once on chain 9000 |
-| H3 | audit (Z1) | — |
+| H3 | release gates **G-LIC** (licence/patent clearance) and **Z1** (audit), R270 — both before any production or commercial use | — |
 
 No dual-stack ciphertexts (ElGamal ⊕ lattice secret-sharing of every balance) and no cross-system equality proof:
 both would make every transfer carry two proof systems for the benefit of balances that, by gate, do not exist.
@@ -841,7 +902,7 @@ both would make every transfer carry two proof systems for the benefit of balanc
 |---|---|---|
 | **EVM chain 9000** (Nethermind, ours) | **v1** | precompile in our client (R279) |
 | Dev chains 31337 / 1337 | tests only | anvil cannot host the precompile: forge tests mock it (`vm.mockCall` on KAT inputs); e2e on a chain-9000 copy |
-| Other private EVM chains (customer-run Besu, geth, reth) | **not in v1**; seam | needs a port of §10 to that client (reth: `PrecompilesMap`; geth: precompile table patch; Besu: to be researched) or the attestation seam of §9.1 |
+| Other private EVM chains (customer-run Besu, geth, reth) | **not in v1**; later via the co-processor attestation seam (§9.1) | owner, rev 1.1: **no client ports in v1**; the seam needs its own spec (verifier quorum, ML-DSA attestations checked on that chain) |
 | Public EVM (Gnosis, Celo, Ethereum) | **never** without an owner ruling | R270; no precompile; gas |
 | Cosmos SDK private chains | feasible later (Go module calling `libpqz` via cgo) | needs its own spec |
 | Hedera, Soroban, Sui, Aptos, Solana, TON | no | public networks, no custom natives |
@@ -890,7 +951,7 @@ classical `kat.py`).
 - determinism: 10^4 random valid and invalid inputs give identical outputs on portable, AVX2 and aarch64 builds; gas
   equals the formula for every input length;
 - fuzzing: `cargo fuzz`/libFuzzer on `pqz_verify` and on the Solidity decoders (forge invariant tests), ≥ 24 h before
-  E-S7.
+  E-S8.
 
 **Invariant** (forge, with mocked precompile and real `PqzCt`): `Σ_ua decrypted(acc + pending)` (computed off-chain
 by the test harness from the logged ciphertexts and known test keys) `= totalShielded` after every random sequence of
@@ -906,27 +967,31 @@ tests green and a review.
 | Stream | Content | Heavy build? | Depends | Exit criterion |
 |---|---|---|---|---|
 | **E-S0** spike: literature & parameters | read Lether full text, LNP22, LaZer docs; run lattice-estimator for §4.1 and the proof instances; confirm exactness of every norm proof | no | — | `estimator.txt`; §4 confirmed or a parameter ruling |
-| **E-S1** spike: `pqz-core` fork | pin LaZer; portable C99 + AVX2 kernels; software AES; KAT equality vs upstream on an AVX-512 runner; measure a toy `R_REG` and a first `R_TX` on the chain host | yes (C) | E-S0 | proof ≤ 96 KB, verify ≤ 50 ms portable, prove ≤ 3 s desktop (kill criterion R278) |
+| **E-S1** spike: `pqz-core` fork | pin LaZer; portable C99 + AVX2 kernels; software AES; KAT equality vs upstream on an AVX-512 runner; measure a toy `R_REG` and a first `R_TX` on the chain host **and** as freestanding `wasm32` in a desktop and a phone browser (fixes the `q` form, §11.5) | yes (C) | E-S0 | proof ≤ 96 KB, verify ≤ 50 ms portable, prove ≤ 3 s desktop (kill criterion R278) |
 | **E-S2** relations | `R_TX`, `R_BURN`, `R_REG`, `R_DS`, `R_DR` specs, codegen, proof modulus decision, serialization v1, all §15 KATs from C | yes (codegen) | E-S1 | vectors frozen, `proofSystemId` frozen (R278) |
 | **E-S3** Nethermind precompile | plugin vs patch, P/Invoke, gas calibration, image, chainspec key, probes, throwaway chain | yes (.NET image) | E-S2 | §10.3 steps 1–2 pass on a chain-9000 copy |
 | **E-S4** contracts | `PqzSafety`, `UAPqzVerifier`, `UAMldsaVerifier`, `PqzToken`, `PqzCt`, factory flag, forge tests with mocks, e2e on the chain copy | yes (forge) | E-S2 (vectors), E-S3 (e2e), F's registry stream | §15 contract cases + invariant |
 | **E-S5** clients | `zether-prover --features pq`, `pqz-cli`, clientkeys `pq-keys.js`, ML-DSA package choice | yes (cargo) | E-S2 | cross-language vectors green |
-| **E-S6** node | `pqz` profile, probe, `pqz_call` job, limits, rollover keeper | yes (cargo) | E-S4 | e2e: fund → transfer → rollover → burn → disclose through the node |
-| **E-S7** review & audit prep | Claude-subagent reviews (external reviewers out of credit), fuzz 24 h, threat-model walk-through | no | E-S6 | review log in this spec |
-| E-S8 (later) | `wasm32-wasip1` and mobile provers; LaBRADOR aggregation; FN-DSA when FIPS 206 is final | — | owner | — |
+| **E-S6** retail WASM prover | §11.5: freestanding `wasm32` build of `pqz-core`, `zether-prover --features pq` wasm-bindgen module, Zether-worker integration (app R164/R175), budgets in CI on reference devices, `pqz-cli serve` fallback with pairing | yes (cargo + wasm) | E-S5; the E-S1 WASM measurement fixes the `q` form before E-S2 | §11.5 budgets met, or the fallback green and the WASM prover marked "waits" |
+| **E-S7** node | `pqz` profile, probe, `pqz_call` job, limits, rollover keeper | yes (cargo) | E-S4 | e2e: fund → transfer → rollover → burn → disclose through the node |
+| **E-S8** review & audit prep | Claude-subagent reviews (external reviewers out of credit), fuzz 24 h, threat-model walk-through | no | E-S7 | review log in this spec |
+| **G-LIC** licence/patent gate | legal review of LaZer (MIT, no patent grant), LNP22-family IP (IBM Research), ML-DSA and WASM toolchain licences; written clearance | no (legal) | may start any time | **release gate** with Z1: required before any production or commercial use; does not block E-S0–E-S8 |
+| E-S9 (later) | LaBRADOR aggregation; FN-DSA when FIPS 206 is final; co-processor seam for customer-run chains | — | owner | — |
 
-Serial heavy chain: E-S1 → E-S2 → E-S3 → E-S4 → E-S5 → E-S6; E-S0 and reviews run beside them.
+Serial heavy chain: E-S1 (incl. a WASM measurement of a toy relation) → E-S2 → E-S3 → E-S4 → E-S5 → E-S6 → E-S7; E-S0,
+G-LIC and reviews run beside them.
 
 ---
 
-## 17. Open questions (owner)
+## 17. Owner answers (rev 1.1)
 
-1. **Patents and licence diligence.** LaZer is MIT (no explicit patent grant); LNP22-family techniques come from IBM
-   Research. Do we need a legal check before production, as with Zama's TFHE licence? (Does not block E-S0–E-S6.)
-2. **Customer-run private chains.** Is PQZ on private EVM chains we do not operate (Besu/geth/reth) a product goal?
-   If yes, a client port (§14) or the attestation seam (§9.1) needs its own spec.
-3. **Retail PQ.** R287 leaves phones and browsers out of v1. Is there a near-term retail use on private chains that
-   would pull E-S8 forward?
+| # | Question (rev 1) | Owner answer (2026-10-06) | Applied in |
+|---|---|---|---|
+| 1 | Patent/licence check (LaZer MIT without patent grant; LNP22 from IBM Research)? | Required gate **before any production/commercial use**; dev/research continues | R270 (G-LIC), §13 H3, §16 G-LIC |
+| 2 | PQZ on customer-run private chains? | v1 only on our Nethermind chain; others later via the co-processor attestation seam; no client ports in v1 | R279, §9.1, §14, E-S9 |
+| 3 | Retail provers earlier? | Yes: WASM/mobile right after E-S5 | R287, §11.5, E-S6 |
+
+No open questions remain.
 
 ---
 
