@@ -245,7 +245,7 @@ pub fn tx_in_block(block: &Value, results: &Value, tx_id: &str) -> Option<TxStat
     let height = block["block"]["header"]["height"].as_str()?.parse().ok()?;
     let r = results["txs_results"].as_array()?.get(i)?;
     Some(match r["code"].as_u64().unwrap_or(0) {
-        0 => TxStatus::Mined { height },
+        0 => TxStatus::Mined { height, tx_hash: None },
         _ => TxStatus::Reverted { reason: r["log"].as_str().unwrap_or("failed").to_string() },
     })
 }
@@ -484,7 +484,7 @@ impl ChainAdapter for CosmosAdapter {
             let r = &v["tx_response"];
             let height = r["height"].as_str().and_then(|s| s.parse().ok()).unwrap_or(0);
             let st = match r["code"].as_u64() {
-                Some(0) => Some(TxStatus::Mined { height }),
+                Some(0) => Some(TxStatus::Mined { height, tx_hash: None }),
                 Some(_) => Some(TxStatus::Reverted { reason: r["raw_log"].as_str().unwrap_or("failed").to_string() }),
                 None => None,
             };
@@ -717,7 +717,7 @@ mod tests {
         let block = json!({"block": {"header": {"height": "9"}, "data": {"txs": [B64.encode(&a), B64.encode(&b)]}}});
         let results = json!({"txs_results": [{"code": 0}, {"code": 5, "log": "out of funds"}]});
         let id = |t: &[u8]| format!("0x{}", alloy::hex::encode(Sha256::digest(t)));
-        assert_eq!(tx_in_block(&block, &results, &id(&a)), Some(TxStatus::Mined { height: 9 }));
+        assert_eq!(tx_in_block(&block, &results, &id(&a)), Some(TxStatus::Mined { height: 9, tx_hash: None }));
         assert_eq!(tx_in_block(&block, &results, &id(&b)), Some(TxStatus::Reverted { reason: "out of funds".into() }));
         assert_eq!(tx_in_block(&block, &results, &id(b"other")), None);
     }

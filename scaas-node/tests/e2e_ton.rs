@@ -314,6 +314,11 @@ async fn ton_payments_lanes_finality_and_anti_lock() {
         let exe = ingested.iter().find(|e| e["event"] == "MetaTransactionExecuted" && e["digest"] == digest(job)).expect("executed");
         assert_eq!(exe["contract"], master.raw());
         assert_eq!(exe["from"], alice.addr.raw());
+        // Odoo's `final` matches it as ours (mesh S2): the `mined` report carries the event's tx, not the lane message.
+        let mined = state.lock().unwrap().reports.iter().find(|r| r["job_id"] == job["id"] && r["chain_state"] == "mined").cloned().unwrap();
+        assert_eq!(mined["tx_hash"], exe["tx_hash"], "{mined}");
+        let signed = state.lock().unwrap().reports.iter().find(|r| r["job_id"] == job["id"] && r["chain_state"] == "signed").cloned().unwrap();
+        assert_ne!(signed["tx_hash"], exe["tx_hash"], "the signed id is the lane wallet's external message");
         let paid = ingested
             .iter()
             .find(|e| e["event"] == "PaymentSettled" && e["entry_ref"] == format!("0x{}", alloy::hex::encode(pay_ref)))

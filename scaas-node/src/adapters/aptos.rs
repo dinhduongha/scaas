@@ -327,7 +327,7 @@ pub fn classify_submit(status: u16, body: &str) -> Result<()> {
 /// rollback, nonce người trả còn nguyên) ⇒ `Rejected` để job về hàng đợi và dựng lại (L3/L4).
 pub fn classify_committed(tx: &Value, height: u64) -> Result<TxStatus> {
     if tx["success"].as_bool() == Some(true) {
-        return Ok(TxStatus::Mined { height });
+        return Ok(TxStatus::Mined { height, tx_hash: None });
     }
     let vm = tx["vm_status"].as_str().unwrap_or("failure").to_string();
     // Mô tả abort lấy từ doc comment của module (hook FA dispatchable viết gì cũng được) ⇒ không bao giờ là OOG (I3).
@@ -845,7 +845,7 @@ mod tests {
     #[test]
     fn committed_failures_are_classified() {
         let ok = json!({"type": "user_transaction", "success": true, "vm_status": "Executed successfully"});
-        assert_eq!(classify_committed(&ok, 9).unwrap(), TxStatus::Mined { height: 9 });
+        assert_eq!(classify_committed(&ok, 9).unwrap(), TxStatus::Mined { height: 9, tx_hash: None });
         let abort = json!({"success": false, "vm_status": "Move abort in 0xd752::meta: 0x4"});
         assert!(matches!(classify_committed(&abort, 9).unwrap(), TxStatus::Reverted { .. }));
         let oog = json!({"success": false, "vm_status": "Out of gas"});

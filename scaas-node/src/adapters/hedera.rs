@@ -61,7 +61,7 @@ pub fn decode_receipt(rc: &Value) -> Option<TxStatus> {
     }
     let height = rc.get("blockNumber").and_then(Value::as_str).and_then(hex_u64);
     match (rc.get("status").and_then(Value::as_str).and_then(hex_u64), height) {
-        (Some(1), Some(height)) => Some(TxStatus::Mined { height }),
+        (Some(1), Some(height)) => Some(TxStatus::Mined { height, tx_hash: None }),
         (Some(0), _) => Some(TxStatus::Reverted { reason: revert_reason(rc.get("revertReason")) }),
         _ => None, // receipt dở dang: coi như chưa có
     }
@@ -245,7 +245,7 @@ mod tests {
     fn recorded_receipt_decodes() {
         let v = relay();
         let h = hex_u64(v["receipt"]["blockNumber"].as_str().unwrap()).unwrap();
-        assert_eq!(decode_receipt(&v["receipt"]), Some(TxStatus::Mined { height: h }));
+        assert_eq!(decode_receipt(&v["receipt"]), Some(TxStatus::Mined { height: h, tx_hash: None }));
         assert_eq!(decode_receipt(&v["receipt_unknown"]["result"]), None);
     }
 
@@ -499,7 +499,7 @@ mod tests {
         #[test]
         fn mined_only_with_status_one_and_a_height(n in any::<u64>()) {
             let rc = json!({"status": "0x1", "blockNumber": format!("0x{n:x}")});
-            prop_assert_eq!(decode_receipt(&rc), Some(TxStatus::Mined { height: n }));
+            prop_assert_eq!(decode_receipt(&rc), Some(TxStatus::Mined { height: n, tx_hash: None }));
             let rc = json!({"status": "0x2", "blockNumber": format!("0x{n:x}")});
             prop_assert_eq!(decode_receipt(&rc), None);
         }

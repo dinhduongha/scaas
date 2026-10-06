@@ -498,7 +498,7 @@ const BUDGET_ERRORS: &[&str] = &["ComputationalBudgetExceeded", "ProgramFailedTo
 /// lỗi cấp tx ⇒ `Rejected` (mọi thay đổi đã rollback trừ phí + nonce lane; lane PDA người trả còn nguyên ⇒ dựng lại).
 pub fn classify_landed(err: &Value, slot: u64) -> Result<TxStatus> {
     if err.is_null() {
-        return Ok(TxStatus::Mined { height: slot });
+        return Ok(TxStatus::Mined { height: slot, tx_hash: None });
     }
     match instruction_error(err) {
         Some((_, e)) if BUDGET_ERRORS.contains(&err_name(e).as_str()) => Err(Rejected(err.to_string()).into()),
@@ -1268,7 +1268,7 @@ mod tests {
 
     #[test]
     fn landed_and_submit_errors_are_classified() {
-        assert_eq!(classify_landed(&Value::Null, 9).unwrap(), TxStatus::Mined { height: 9 });
+        assert_eq!(classify_landed(&Value::Null, 9).unwrap(), TxStatus::Mined { height: 9, tx_hash: None });
         let custom = json!({"InstructionError": [2, {"Custom": 6013}]});
         assert!(matches!(classify_landed(&custom, 9).unwrap(), TxStatus::Reverted { .. }));
         let token = json!({"InstructionError": [2, {"Custom": 1}]});

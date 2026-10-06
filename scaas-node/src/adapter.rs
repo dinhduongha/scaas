@@ -72,7 +72,10 @@ pub struct Signed {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TxStatus {
     Pending,
-    Mined { height: u64 },
+    /// `tx_hash` = the transaction whose events the indexer reports, when it is not the signed tx id (TON: the
+    /// payer jetton wallet's tx, not the lane wallet's external message) — sent with `mined` so Odoo's `final`
+    /// matches it as ours. `None` = the tx id itself.
+    Mined { height: u64, tx_hash: Option<String> },
     Reverted { reason: String },
     /// Không thấy trên mạng (chưa vào mempool, hoặc đã rơi).
     Unknown,
@@ -265,13 +268,13 @@ async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut se
     let mut consumed = false;
     loop {
         match adapter.tx_status(f.tx_id).await {
-            Ok(TxStatus::Mined { .. }) => {
+            Ok(TxStatus::Mined { tx_hash, .. }) => {
                 if let (Some(k), Ok(Some(fee))) = (breaker, adapter.tx_fee(f.tx_id).await) {
                     if let Ok(mut k) = k.lock() {
                         k.spend(now(), fee);
                     }
                 }
-                report(odoo, rep(job, "mined")).await;
+                report(odoo, Report { tx_hash, ..rep(job, "mined") }).await;
                 return;
             }
             Ok(TxStatus::Reverted { .. }) if consumed => return,
@@ -620,7 +623,7 @@ pub(crate) mod tests {
         }
         async fn tx_status(&self, tx: &str) -> Result<TxStatus> {
             match tx {
-                "0x0a" => Ok(TxStatus::Mined { height: 1 }),
+                "0x0a" => Ok(TxStatus::Mined { height: 1, tx_hash: None }),
                 "0x0d" => Err(Rejected("WRONG_NONCE".into()).into()),
                 "0x0e" => Ok(TxStatus::Reverted { reason: "boom".into() }),
                 _ => Ok(TxStatus::Unknown),
@@ -788,11 +791,26 @@ pub(crate) mod tests {
     /// Review M6: `op_consumed = None` (op không có nonce lane) không bao giờ dừng job: vẫn gửi lại, revert vẫn `reverted`.
     #[tokio::test]
     async fn unknown_consumption_never_stops_a_job() {
-        let a = racy(false, None, &[false, true], &[TxStatus::Unknown, TxStatus::Mined { height: 1 }]);
+        let a = racy(false, None, &[false, true], &[TxStatus::Unknown, TxStatus::Mined { height: 1, tx_hash: None }]);
         assert_eq!(race(&a, &InflightSet::default()).await.0, ["signed", "broadcast", "mined"]);
         assert_eq!(a.submits.load(std::sync::atomic::Ordering::SeqCst), 2);
         let a = racy(false, None, &[true], &[TxStatus::Reverted { reason: "boom".into() }]);
         assert_eq!(race(&a, &InflightSet::default()).await.0, ["signed", "broadcast", "reverted"]);
+    }
+
+    /// TON (mesh S2): `mined` carries the hash the indexer will report (payer wallet tx), so Odoo's `final` sees ours;
+    /// other families send none and Odoo keeps the signed tx id.
+    #[tokio::test]
+    async fn mined_report_carries_the_final_tx_hash_when_the_adapter_has_one() {
+        let h = "0x".to_string() + &"ab".repeat(32);
+        let a = racy(false, None, &[true], &[TxStatus::Mined { height: 1, tx_hash: Some(h.clone()) }]);
+        let (_, o) = race(&a, &InflightSet::default()).await;
+        let mined = o.lock().unwrap().reports.iter().find(|r| r["chain_state"] == "mined").cloned().unwrap();
+        assert_eq!(mined["tx_hash"].as_str(), Some(h.as_str()));
+        let a = racy(false, None, &[true], &[TxStatus::Mined { height: 1, tx_hash: None }]);
+        let (_, o) = race(&a, &InflightSet::default()).await;
+        let mined = o.lock().unwrap().reports.iter().find(|r| r["chain_state"] == "mined").cloned().unwrap();
+        assert!(mined.get("tx_hash").is_none(), "{mined}");
     }
 
     /// R80 (§8.4 `step_once`): mô phỏng revert vì op đã bị tiêu thụ ⇒ `consumed`, không `dead`.
@@ -807,7 +825,7 @@ pub(crate) mod tests {
     async fn a_job_whose_digest_is_in_flight_is_skipped_before_claim() {
         let set = InflightSet::default();
         let _held = set.try_acquire(DIGEST.parse().unwrap()).unwrap();
-        let a = racy(false, None, &[true], &[TxStatus::Mined { height: 1 }]);
+        let a = racy(false, None, &[true], &[TxStatus::Mined { height: 1, tx_hash: None }]);
         let (states, o) = race(&a, &set).await;
         assert!(states.is_empty(), "{states:?}");
         assert_eq!(o.lock().unwrap().claims, 0);
