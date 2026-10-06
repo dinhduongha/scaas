@@ -9,13 +9,17 @@ chữ ký nhưng vẫn đúng.
 """
 import base64
 import hashlib
+import importlib
 import json
 import os
 import sys
+import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, '..', '..', '..', '..', 'dms_blockchain'))
-from lib import fam_sui as F  # noqa: E402
+_pkg = types.ModuleType('dmslib')  # nạp lib mà không chạy lib/__init__ (kéo Odoo)
+_pkg.__path__ = [os.path.join(HERE, '..', '..', '..', '..', '..', 'dms_blockchain', 'lib')]
+sys.modules['dmslib'] = _pkg
+F = importlib.import_module('dmslib.fam_sui')
 
 from cryptography.hazmat.primitives import hashes, serialization  # noqa: E402
 from cryptography.hazmat.primitives.asymmetric import ec, ed25519, utils  # noqa: E402

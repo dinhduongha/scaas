@@ -8,15 +8,19 @@ Digest EIP-712 tính bằng chính `dms_blockchain/lib/eip712.py` (bản Odoo d�
 khớp Solidity; Odoo (`test_hedera.py`) và Rust (`adapters::hedera` tests) kiểm digest + chữ ký.
 """
 import hashlib
+import importlib
 import json
 import os
 import sys
+import types
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, '..', '..', '..', '..', 'dms_blockchain'))
-from lib import eip712  # noqa: E402
+_pkg = types.ModuleType('dmslib')  # nạp lib mà không chạy lib/__init__ (kéo Odoo)
+_pkg.__path__ = [os.path.join(HERE, '..', '..', '..', '..', '..', 'dms_blockchain', 'lib')]
+sys.modules['dmslib'] = _pkg
+eip712 = importlib.import_module('dmslib.eip712')
 
 # Địa chỉ clone mà HederaKat.t.sol deploy (chainId 296, factory đầu tiên của test contract, salt keccak("HBUSD")).
 TOKEN = '0x284f66c17c0e60a8f75903af8f185b0a8d8b770c'

@@ -15,7 +15,7 @@ import sys
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-LIB = os.path.join(HERE, '..', '..', '..', '..', 'dms_blockchain', 'lib')
+LIB = os.path.join(HERE, '..', '..', '..', '..', '..', 'dms_blockchain', 'lib')
 OUT = os.path.join(HERE, '..', 'tests', 'vectors.move')
 _pkg = types.ModuleType('aptlib')
 _pkg.__path__ = [LIB]            # nạp lib mà không chạy lib/__init__ (kéo Odoo)
