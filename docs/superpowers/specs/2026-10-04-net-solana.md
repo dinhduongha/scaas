@@ -5,7 +5,25 @@
 shared contract "Network streams" của `2026-10-03-r3-streams.md`. Mẫu gần nhất: S11 Aptos (`2026-10-04-net-aptos.md`),
 S7 Sui (`2026-10-03-net-sui.md`). Ruling của luồng đánh số `RS12-n` (lead đánh lại khi merge).
 
-Mã (dự kiến): program Anchor ở `chains/solana/` (program `scaas`, workspace Cargo riêng), adapter
+**Trạng thái (rev 1.1, 2026-10-07).** Program + adapter + Odoo BUILT (S12, §18); review Claude 1 (§17) mở 3 luồng sửa
+code NET-SOLANA-FIX1…3 (§13, cuối). **Quy tắc node chung** (mọi family, NI rev 3.7): R340 cầu dao đo mọi tx đã vào sổ
+(phí tx lỗi, value ra, **rent lane trả**), R341 lỗi đã tính phí chỉ dựng lại một lần + `chain.max_attempts`, R342 điểm
+grief theo chủ thể, R343 mesh kiểm chữ ký trước mô phỏng, R344 trường đã ký đọc từ payload, R345 trần value ra, R346
+tiền cọc lane trả (ATA người nhận đóng được ⇒ từ chối), R347 journal adapter (giá trị durable nonce) trong `outer_tx`,
+R348 program bất biến, R349 một khoá custody mỗi family — luồng node NR1…NR5 của NI §17. Các ruling dưới đây **đã bị
+thay** — đọc bản thay trước:
+
+| Ở đây | Bị thay bởi | Nội dung thay |
+|---|---|---|
+| §0 L1, §6.6, §14: "danh sách contract/token từ `node_config`" | NI **R95**, **R324** | Store của node là nguồn cấu hình; tập token theo namespace do client đẩy, rỗng = không token |
+| Luồng job Odoo kéo (`relay_poll`/`relay_claim`) | NI **R87/R89/R101** | Odoo đẩy job vào job API của node; node không gọi Odoo |
+| Đường dẫn `chains/solana/…` | layout `smartcontracts/` | `smartcontracts/solana/…` (đã sửa trong file) |
+| §3.1/§5.4 "upgrade authority (production: multisig)" | **RS12-19** (owner 2026-10-07, NI R348) | Upgrade authority = **None** ngay sau `initialize` |
+| §3.3 owner passkey-first `sha256("scaas.owner.p256" ‖ pk33)` | UA **R315** | Owner = UA id `webauthn-p256` (32 B), chỉ hiển thị dạng URN, **không bao giờ** như địa chỉ Solana (code đổi ở luồng family của UA) |
+| §5.1/§5.2 ATA đích `create_idempotent`, rent do lane trả | **RS12-20**, NI R346 | ATA đích phải có sẵn; node chỉ tạo hộ cho ví nhận đã cấu hình |
+| RS12-16 "hết CU đã vào sổ ⇒ `Rejected`" không giới hạn | **RS12-22**, NI R341 | Một lần dựng lại ở `max_cu`, rồi `reverted` |
+
+Mã (dự kiến): program Anchor ở `smartcontracts/solana/` (program `scaas`, workspace Cargo riêng), adapter
 `scaas-node/src/adapters/solana.rs`, e2e `scaas-node/tests/e2e_solana.rs`, Odoo `dms_blockchain/lib/fam_solana.py` +
 `models/blockchain_solana.py`, portal `dms_blockchain_bridge/static/src/js/connectors/solana.js`. DB `dms_test_chain_12`
 / 8932, devnet 32020–32049 (OQ4: Agave đòi dải cổng động ≥ 26).
@@ -20,16 +38,16 @@ sách extension (§3.6) đều dùng được.
 
 | # | Bài học (review mạng khác) | Ở Solana |
 |---|---|---|
-| L1 | Indexer lấy danh sách contract từ `node_config` dạng chuẩn của họ; danh sách rỗng ⇒ không tiến con trỏ (Cosmos H1/M1, Sui H1/H2, TON 1) | `events(from,to,contracts)` lọc theo `nc.tokens` (địa chỉ mint base58); không có danh sách tĩnh trong `params`; `index_step` chung đã giữ con trỏ; vùng chưa `finalized` không bao giờ được hỏi (§6.6) |
+| L1 | Indexer lấy danh sách contract từ `node_config` dạng chuẩn của họ; danh sách rỗng ⇒ không tiến con trỏ (Cosmos H1/M1, Sui H1/H2, TON 1) | `events(from,to,contracts)` lọc theo `nc.tokens` (địa chỉ mint base58); không có danh sách tĩnh trong `params`; `index_step` chung đã giữ con trỏ; vùng chưa `finalized` không bao giờ được hỏi (§6.6). *Rev 1.1:* danh sách token = tập theo namespace trong store node (NI R95/R324) |
 | L2 | e2e: Odoo giả trả token id thật, từ chối emitter chưa đăng ký (TON 1d, Hedera H2) | Odoo giả trả địa chỉ mint thật vừa tạo; ingest từ chối `contract ∉ tokens`; một bản deploy thứ hai của program (program id khác) phát event giống hệt ⇒ bị bỏ vì indexer chỉ đọc inner instruction của **đúng** program id + event authority PDA (§6.6, §9) |
-| L3 | Số tiền do relayer chọn mà quyết định tiền có đến hay không phải nằm trong chữ ký người trả (TON 2 `forwardTon`) | `pay` không có tham số kiểu đó; fill DEX bị chặn bởi giá/lượng đã ký; compute unit và priority fee do relayer chọn chỉ ảnh hưởng relayer: hết CU ⇒ tx rollback toàn bộ (trừ phí + nonce lane), lane PDA của người trả còn nguyên ⇒ `Rejected` (§6.4) |
-| L4 | Từ chối vĩnh viễn ở submit trả lane ngay (`adapter::Rejected`) (Cosmos L1, Hedera M2) | Bảng lỗi preflight/RPC ⇒ `Rejected`; lỗi hết CU đã vào sổ ⇒ `Rejected` (§6.4) |
+| L3 | Số tiền do relayer chọn mà quyết định tiền có đến hay không phải nằm trong chữ ký người trả (TON 2 `forwardTon`) | `pay` không có tham số kiểu đó; fill DEX bị chặn bởi giá/lượng đã ký; compute unit và priority fee do relayer chọn chỉ ảnh hưởng relayer: hết CU ⇒ tx rollback toàn bộ (trừ phí + nonce lane), lane PDA của người trả còn nguyên ⇒ `Rejected` (§6.4) — nhưng tx đã vào sổ **tính phí lane**: chỉ dựng lại **một** lần ở `max_cu` (RS12-22, review Claude M2) |
+| L4 | Từ chối vĩnh viễn ở submit trả lane ngay (`adapter::Rejected`) (Cosmos L1, Hedera M2) | Bảng lỗi preflight/RPC ⇒ `Rejected`; lỗi hết CU đã vào sổ ⇒ `Rejected` **một lần** rồi `reverted` (§6.4, RS12-22) |
 | L5 | Lane an toàn khi crash: không equivocation, không dùng hai lần một sequence (Sui M3, merge TODO b) | Lane dùng **durable nonce account** riêng: mỗi giá trị nonce chỉ cho **một** tx vào sổ (kể cả tx lỗi vẫn advance nonce); `sequence(lane)` = giá trị nonce ⇒ `recover_lane` chung đúng nguyên văn, không cần journal đĩa (§6.1, §6.5) |
 | L6 | Account nhiều khoá + origin + guardian, không bị "gạch" vì đổi origin (Sui M1) | `SubjectAccount` PDA ≤ 8 khoá (ed25519 / P-256 WebAuthn), ≤ 8 origin, guardian + trễ 2 ngày; thêm origin mới **cùng rpId** được chính passkey đó ký ⇒ đổi domain portal không gạch Account; chính sách "backup key required" (mặc định OFF) (§3.3) |
 | L7 | Coin gửi thẳng tới địa chỉ object/contract phải kéo vào được (Sui M2, Cosmos L4, TON 2/9/14) | Số dư = **token account bất kỳ có owner = Account PDA** (ATA hay không) — không sổ nội bộ; lamports gửi nhầm vào PDA rút được bằng KeyOp; Market/Mandate có `sweep` (§3.2, §5) |
 | L8 | Không object dùng chung tuần tự hoá mọi thị trường (Sui M4) | **Write-lock là khoá thật của Solana** (§2.4): đường nóng chỉ ghi account riêng của thao tác (lane PDA mới, fill PDA của lệnh, ATA của hai bên); `Config`, `Market`, `SubjectAccount` chỉ **đọc** (§3.5) |
 | L9 | Odoo chỉ xác minh chữ ký bằng khoá nó chứng minh được (TON 12, Sui "signer == payer") | `verify` trả `True` chỉ khi pk ed25519 = địa chỉ người trả; passkey / khoá thêm sau ⇒ `None` — mô phỏng của node phân xử (§7) |
-| L10 | Bảng lane/nonce lớn mãi ⇒ phí lưu trữ (TON 4) | Mỗi lane PDA/fill PDA/mref PDA giữ `valid_until` + `rent_payer`; `prune` không cần quyền sau hạn, **rent trả về đúng `rent_payer`** (lane relayer) (§3.4) |
+| L10 | Bảng lane/nonce lớn mãi ⇒ phí lưu trữ (TON 4) | Mỗi lane PDA/fill PDA/mref PDA giữ `valid_until` + `rent_payer`; `prune` không cần quyền sau hạn, **rent trả về đúng `rent_payer`** (lane relayer) (§3.4). *Rev 1.1:* hạn do người ký chọn bị chặn trần on-chain để PDA luôn prune được (RS12-21) |
 | L11 | *(mới, đọc code main)* Odoo chuẩn hoá chuỗi bằng `.lower()` / `_hex32` | Base58 phân biệt hoa-thường; chữ ký tx Solana 64 byte. ⇒ `tx_id` = `0x` + 128 hex (an toàn với `.lower()` của `_apply_report`); ingest cần chấp nhận `tx_hash` 64 byte cho họ `solana` (cần từ lead, §12); địa chỉ không bao giờ đi qua `.lower()` |
 | L12 | *(owner, round này)* R30 trên Solana: khoá thật là account write-lock, không phải sequence | Test bắt buộc thêm: tập account **writable** của hai thao tác khác contract của cùng chủ thể (trừ lane relayer + nonce lane) **rời nhau** (§9) |
 
@@ -37,7 +55,7 @@ sách extension (§3.6) đều dùng được.
 
 ## 1. Phạm vi
 
-Sáu deliverable của shared contract: (1) thiết kế này; (2) program Anchor `chains/solana` — `auth` (introspection
+Sáu deliverable của shared contract: (1) thiết kế này; (2) program Anchor `smartcontracts/solana` — `auth` (introspection
 precompile), `account` (SubjectAccount + pay), `mandate`, `dex`, test LiteSVM kể cả anti-lock và write-set; (3) adapter
 Rust + e2e `solana-test-validator`; (4) `fam_solana` Odoo + vector chéo; (5) connector Wallet Standard
 (`solana:signMessage` / `solana:signOffchainMessage`); (6) báo cáo.
@@ -119,8 +137,8 @@ helius.dev/blog/solana-passkeys. Task 0 kiểm lại bằng `solana feature stat
 
 | Account | Địa chỉ (PDA của program `scaas`) | Tạo bởi | Vai |
 |---|---|---|---|
-| program `scaas` | program id = `SCAAS_PROGRAM_ID` lúc build (mặc định: id test/localnet, khoá đã công khai — review M3); upgrade authority (production: multisig) | deployer (`scripts/deploy.sh`, khoá ngoài repo) | một id cho lệnh gọi **và** event authority; program id khác = miền khác (PDA, event authority, `Config` do đúng upgrade authority của bản đó tạo) |
-| `Config` | `["config"]` | `initialize` (chỉ upgrade authority — kiểm `ProgramData`) | `admin`, `network` = genesis hash của cluster. **Chỉ đọc** trên đường nóng |
+| program `scaas` | program id = `SCAAS_PROGRAM_ID` lúc build (mặc định: id test/localnet, khoá đã công khai — review M3); upgrade authority = **None** sau `initialize` (**RS12-19**, owner 2026-10-07) | deployer (`scripts/deploy.sh`, khoá ngoài repo) | một id cho lệnh gọi **và** event authority; program id khác = miền khác (PDA, event authority, `Config` do đúng upgrade authority của bản đó tạo) |
+| `Config` | `["config"]` | `initialize` (chỉ upgrade authority — kiểm `ProgramData`; chạy **trước** khi bỏ authority, RS12-19) | `admin`, `network` = genesis hash của cluster. **Chỉ đọc** trên đường nóng |
 | `SubjectAccount` | `["acct", owner32]` | lười ở `relay_pay` đầu (ed25519) hoặc `open` / `open_passkey` | khoá, origin, guardian, policy; **số dư = token account có owner = PDA này** |
 | `LanePda` | `["lane", account, lane32]` | `relay_pay` / `mandate::open` / KeyOp (init) | `{next u64, valid_until i64, rent_payer}` |
 | `Mandate` | `["mandate", account, seed32]` | `mandate_open` (ký bởi khoá Account) | như `MandateWallet` R25; số dư = token account có owner = PDA này |
@@ -168,6 +186,10 @@ pub struct Key { pub scheme: u8, pub pubkey: [u8; 33], pub rp_id_hash: [u8; 32] 
 
 - **`owner`**: ed25519 ⇒ chính pk 32 B (= địa chỉ ví Solana). Chủ thể passkey-first ⇒ `owner =
   sha256("scaas.owner.p256" ‖ pk33)` (id, không phải ví). Account tạo `realloc` theo số khoá/origin (rent nhỏ lúc mở).
+  **Bị thay bởi UA R315 (review Claude M3):** owner passkey-first = UA id `webauthn-p256` (32 B), lưu kèm `owner_kind`,
+  **chỉ** hiển thị dạng `urn:scaas:ua:v1:…`. Dạng base58 của id này trông như địa chỉ Solana nhưng không có khoá riêng:
+  SOL/ATA gửi tới đó là mất. Code còn dạng cũ (`account.rs:73-74`, `p256_owner`) tới luồng family của UA; tới lúc đó
+  Odoo/portal/connector **không bao giờ** hiển thị id này như địa chỉ nạp.
 - **Mở:**
   - ed25519: lười trong `relay_pay` đầu tiên (chữ ký hợp lệ từ khoá = `owner`) hoặc `open(owner)` không cần quyền —
     khoá duy nhất là chính `owner` nên mở trước hộ người khác vô hại.
@@ -208,6 +230,14 @@ pub struct Key { pub scheme: u8, pub pubkey: [u8; 33], pub rp_id_hash: [u8; 32] 
   chỉ là hạn của op ĐÃ CHẠY; Odoo phát lại điều khoản của một request trên CÙNG lane, nonce 0 (5318f20), mọi hạn trong
   30 ngày kể từ lúc tạo request ⇒ khi PDA bị xoá, mọi op khác đã ký cho request đã hết hạn (không trả hai lần).
 - Chi phí (rent-exempt, refund khi prune): lane PDA ~0,0012 SOL; chưa prune thì tiền nằm đó (§11).
+- **Trần hạn on-chain (RS12-21, review Claude M1).** `valid_until` của op (LanePda, MandateRef) và `expiry` của lệnh
+  (`Fill` ở `settle`/`cancel_signed`) do người ký chọn; `u64::MAX` làm PDA không bao giờ prune được (`account.rs:204`,
+  `dex.rs:199, 312`) — một chữ ký `cancel_signed` cho hash lệnh bịa khoá một rent `Fill` vĩnh viễn. Program từ chối
+  `valid_until`/`expiry > now + MAX_TTL_S` (31 ngày: trần 30 ngày của sổ DEX + 1 ngày lệch đồng hồ).
+- **Horizon là nghĩa vụ của mọi client ký** (như Aptos RS11-24, review Claude Aptos M2 — cùng mẫu `prune` ở
+  `account.rs:423-450`): kiểm hạn lúc chạy không chứng minh được lúc ký, nên client khác Odoo ký hai op khác nhau trên
+  cùng lane cách nhau > 30 ngày thì op sau chạy được sau `prune`. Connector `solana.js` và `clientkeys` từ chối ký op
+  `valid_until > now + LANE_HORIZON_S` và chỉ phát lại trên một lane trong horizon của op đầu (RS12-24).
 
 ### 3.5 Bảng ghi/đọc trên đường nóng (L8, L12)
 
@@ -314,7 +344,7 @@ Introspection*) không áp dụng vì ta so **nguyên văn** pk + message, khôn
 | Rust adapter | chỉ decode payload job (proptest) + vector | `sha2` (đã là dependency) | không dựng — dựng ix precompile từ blob | không (mô phỏng phân xử) |
 | JS connector | dùng `terms.text` của Odoo | — | kiểm `signedMessage` trả về đúng `T`/OCMS trước khi gửi | — |
 
-Vector chéo: `chains/solana/scripts/gen_vectors.py` sinh `programs/scaas/tests/vectors.rs` (payload, digest, T, OCMS,
+Vector chéo: `smartcontracts/solana/scripts/gen_vectors.py` sinh `programs/scaas/tests/vectors.rs` (payload, digest, T, OCMS,
 chữ ký thật từ khoá cố định, PDA Account/lane/mandate/fill, ATA) — Python test và adapter test ghim **cùng** hex.
 
 ---
@@ -324,13 +354,22 @@ chữ ký thật từ khoá cố định, PDA Account/lane/mandate/fill, ATA) �
 ### 5.1 Account + pay
 
 - `relay_pay(to, amount, pay_ref, lane, nonce, valid_until, relayer, extra, auth)` — accounts: lane signer (fee payer),
-  Config, SubjectAccount (init lười), LanePda, nguồn, ATA đích (`create_idempotent` nếu thiếu — rent do lane trả, một lần
-  mỗi (ví, mint)), mint, token program, Instructions sysvar, system/ATA program, event authority. Kiểm miền/hạn/relayer/
+  Config, SubjectAccount (init lười), LanePda, nguồn, ATA đích (~~`create_idempotent` nếu thiếu — rent do lane trả, một lần
+  mỗi (ví, mint)~~ **phải có sẵn** — RS12-20), mint, token program, Instructions sysvar, system/ATA program, event authority. Kiểm miền/hạn/relayer/
   lane/khoá/phong bì/policy; `amount > 0`; chính sách extension (§3.6); `transfer_checked`; `emit_cpi!`
   `MetaTransactionExecuted{contract: mint, account, from, digest, lane, nonce}` rồi `PaymentSettled{contract: mint,
   from, to, amount, pay_ref}`.
 - `open`, `open_passkey`, `manage_signed`, `start_recovery` / `finish_recovery`, `prune` — §3.3, §3.4.
 - `sweep` không cần: số dư là token account của PDA (§3.2).
+- **ATA đích do lane trả là lỗ rút tiền (RS12-20, review Claude H1).** Chủ ATA đóng được nó (`CloseAccount`) khi số dư
+  0 và lấy ~0,00204 SOL rent (Token-2022 có extension: nhiều hơn); `to` do người ký chọn. Vòng: SubjectAccount giữ 1
+  đơn vị; ký `pay(1, to = W)`; lane tạo ATA(W); W chuyển đơn vị về SubjectAccount, đóng ATA(W), nhận rent; lặp — lời
+  ≈ 0,002 SOL mỗi vòng, chỉ dừng ở `min_relayer_balance` (cầu dao giờ chỉ thấy phí, `adapter.rs:270-276`). Đường Odoo
+  an toàn (`to` = ví nhận do Odoo cố định); mesh v1 (`pay` Solana) và job API thì không. Sửa: program **không** tạo ATA
+  đích trong `relay_pay`/`mandate_pay` (đích = `InterfaceAccount<TokenAccount>` có `owner == to`, `mint == mint`); node
+  (NI R346) thêm một instruction `create_idempotent` do lane trả **chỉ** khi `to` là ví nhận đã cấu hình (namespace/token,
+  NI R95), không thì job `422 DEPOSIT_NOT_ALLOWED` (NI R346); rent lane trả nạp vào cầu dao (R340). Lấy rent từ lamports của
+  SubjectAccount (đề xuất thứ hai của review) bị loại: chủ thể gasless không có SOL.
 
 ### 5.2 Mandate (R25) — RS12-11
 
@@ -341,7 +380,7 @@ chữ ký thật từ khoá cố định, PDA Account/lane/mandate/fill, ATA) �
   generation}` (`generation` = `key_nonce` lúc mở; đóng rồi mở lại cùng seed ⇒ thế hệ mới, op/revoke cũ không chạy —
   review L4); `to` không được là token account/mint (review L5); hạn mandate, hạn chữ ký, payee, trần
   lần, trần kỳ (so bằng phép trừ — Sui L6), `MandateRef` init (một lần, prunable); event `PaymentSettled` +
-  `PaidUnderMandate`.
+  `PaidUnderMandate`. ATA payee **phải có sẵn** (RS12-20; vòng rút rent như `relay_pay` với `payees` = ví kẻ tấn công).
 - `mandate_revoke_signed` (delegate, `op: revoke` — kill switch platform) / `mandate_close_signed` (khoá Account): chuyển
   mọi token account của Mandate về ATA của Account, đóng PDA (rent về `rent_payer`). Rút được sau revoke/hết hạn.
 
@@ -365,12 +404,19 @@ chữ ký thật từ khoá cố định, PDA Account/lane/mandate/fill, ATA) �
   tăng nghiêm ngặt. Chỉ chạm market đó.
 - `sweep(market, mint)` không cần quyền: mọi thứ gửi nhầm vào token account của Market ngoài vault phí ⇒ `fee_recipient`.
 - **Lệch so với EVM:** (1) vault phí theo market (account ghi chung của market — `ponytail:` tách N vault khi một market
-  chạm trần 12M CU/block); (2) không phí relayer (§D.0); (3) ATA phía nhận được `create_idempotent`, rent do lane trả.
+  chạm trần 12M CU/block); (2) không phí relayer (§D.0); (3) ATA phía nhận được `create_idempotent`, rent do lane trả. *(Rev 1.1:)* ATA đích của
+  `settle` có owner = SubjectAccount PDA (`dex.rs:252-254`), vault phí owner = Market (`:264-265`); program không có
+  đường `CloseAccount` ⇒ không ai thu lại rent: không phải vòng rút tiền, chỉ là chi phí một lần mỗi (PDA, mint) —
+  đo bằng R340, chặn bằng R346 (c) `max_deposit_per_job`.
 
 ### 5.4 Admin
 
 `Config.admin` (production: multisig). Chỉ admin: `list_market`, `set_market` (phí, bật/tắt). Admin **không** chạm
-SubjectAccount/Mandate. `initialize` chỉ upgrade authority (chống front-run init).
+SubjectAccount/Mandate. `initialize` chỉ upgrade authority (chống front-run init). **RS12-19 (owner 2026-10-07):**
+deploy → `initialize` (ký bởi upgrade authority) → `solana program set-upgrade-authority <id> --final` (authority
+None) → kiểm `ProgramData.upgrade_authority_address == None` **và** `Config` tồn tại; sai ⇒ `scripts/deploy.sh` thoát 1
+(cổng deploy). Bỏ authority trước `initialize` ⇒ program không bao giờ khởi tạo được ⇒ deploy lại id mới. Admin của
+`Config` (multisig) vẫn chạy `list_market`/`set_market`. Sửa lỗi = deploy program id mới (miền mới).
 
 ### 5.5 Vì sao Anchor (không native/Pinocchio) — RS12-13
 
@@ -417,7 +463,7 @@ SubjectAccount/Mandate. `initialize` chỉ upgrade authority (chống front-run 
   Anchor `sha256("global:<name>")[..8]`), chữ ký lane. Crate đã có: `ed25519-dalek` (ký + kiểm off-curve cho PDA qua
   `VerifyingKey::from_bytes`), `sha2`, `bs58`, `base64` — **không thêm crate**.
 - `tx_id` = `0x` + hex(chữ ký lane 64 B) — tính trước khi gửi để journal `signed`; đổi sang base58 khi gọi RPC.
-- Vector: message v1 + chữ ký ghim từ `@solana/kit` ≥ 8.0 (`npm i` cục bộ trong `chains/solana/scripts/`, script
+- Vector: message v1 + chữ ký ghim từ `@solana/kit` ≥ 8.0 (`npm i` cục bộ trong `smartcontracts/solana/scripts/`, script
   `tx_vector.mjs`, không commit `node_modules`); e2e đối chiếu chữ ký RPC trả về.
 - Tx của Odoo không bao giờ quá `valid_until`: program tự từ chối op hết hạn (Clock), nonce không có hạn riêng.
 
@@ -428,7 +474,9 @@ SubjectAccount/Mandate. `initialize` chỉ upgrade authority (chống front-run 
 - `cu_limit = ceil(unitsConsumed × 1.2)`, trần `params.max_cu`; priority fee (tổng lamport, v1) = `cu_limit ×
   p75(getRecentPrioritizationFees(writable accounts))/10^6`, trần `params.max_priority_lamports`. Nhờ §2.4 các account
   writable của ta ít tranh chấp ⇒ phí cục bộ thấp.
-- `lane_balance` = `getBalance(lane)`; `tx_fee` = `meta.fee` của `getTransaction`.
+- `lane_balance` = `getBalance(lane)`; `tx_fee` = `meta.fee` của `getTransaction`. *(Rev 1.1, NI R340:)* `tx_cost` cho
+  **mọi** tx đã vào sổ (kể cả lỗi) = `meta.fee` + rent lane trả = giảm `preBalances − postBalances` của lane trừ `fee`
+  (âm khi `prune` hoàn rent).
 - `sequence(lane)` = 8 byte đầu của giá trị nonce (commitment `confirmed`) đọc LE, `& 0x7FFF_FFFF_FFFF_FFFF` (cột
   `outer_nonce` là `int8`). `sign` đọc lại nonce account và từ chối nếu không khớp `sequence` (lỗi thường, thử lại).
 
@@ -449,6 +497,22 @@ SubjectAccount/Mandate. `initialize` chỉ upgrade authority (chống front-run 
   - `ComputationalBudgetExceeded` / `ProgramFailedToComplete` / `InsufficientFundsForRent` ⇒ `Err(Rejected)`: mọi thay
     đổi đã rollback trừ phí và nonce lane; lane PDA người trả còn nguyên ⇒ job về hàng đợi, dựng lại (L3/L4).
 - Lane chuyển job tiếp khi `confirmed` (optimistic confirmation); finality cho Odoo đi qua indexer `finalized` (§6.6).
+
+**Bảng lớp lỗi Solana (NI R341; RS12-22, review Claude M2).** Nay `classify_landed` (`solana.rs:496-507`) đưa hết CU và
+mọi lỗi ở instruction 0 / cấp tx về `Rejected` ⇒ `queued` không giới hạn; mỗi tx vào sổ tốn base fee + priority fee
+(tới `max_priority_lamports`, mặc định 2 000 000), và chủ thể lái được chênh CU giữa mô phỏng và tx thật (CU limit =
+`used × 1.2`, `solana.rs:914-915`). Thay bằng:
+
+| Kết quả | Lớp R341 | Hành động |
+|---|---|---|
+| Preflight/RPC từ chối (danh sách trên) | không vào sổ | `queued` (như nay) |
+| 429/5xx/timeout | vận chuyển | gửi lại cùng bytes |
+| Vào sổ, `InstructionError(i ≥ 1, …)` không phải hết CU | tính phí | `reverted` (R80 trước); đếm R342 |
+| Vào sổ, `ComputationalBudgetExceeded`/`ProgramFailedToComplete`, CU limit < `max_cu` | tính phí | **một** lần `queued`, lần dựng sau đặt CU = `max_cu` (meta `cu_retry`) |
+| Như trên ở `max_cu`, hoặc lần hai | tính phí | `reverted` "compute exhausted at cap"; đếm R342 |
+| Vào sổ, lỗi instruction 0 (AdvanceNonce) / cấp tx (`InsufficientFundsForRent` của lane) | tính phí, do phía lane | một lần `queued` (nonce đã advance ⇒ tx mới), không đếm R342; vẫn tính `max_attempts` |
+
+Test: Rust phân loại trên JSON ghi lại (mỗi dòng); LiteSVM: CU dưới mức ⇒ một lần thử ở `max_cu` rồi `reverted`.
 
 ### 6.5 Crash-safe (L5) — RS12-17
 
@@ -567,7 +631,8 @@ Python; phân loại `Rejected`/`Reverted`/hết CU trên JSON ghi lại; event 
 trang `getSignaturesForAddress` thiếu lịch sử ⇒ `Err`.
 
 **e2e `tests/e2e_solana.rs` (`#[ignore]`, `solana-test-validator`):** hai lane từ mnemonic 24 từ, airdrop, nonce account
-tự tạo, program nạp sẵn ở genesis (`--upgradeable-program`), `initialize` với genesis hash thật, tạo mint SPL + một mint
+tự tạo, program nạp sẵn ở genesis (`--upgradeable-program`), `initialize` với genesis hash thật, rồi bỏ upgrade authority
+(RS12-19 — node từ chối program còn nâng cấp được, NI R348), tạo mint SPL + một mint
 Token-2022, Odoo giả trả mint thật + từ chối mint lạ, thanh toán qua `lane_step`, final qua `index_step`, anti-lock đồng
 thời (X `signed` giữ lane 0, Y `mined` lane 1), restart giữa chừng (`recover_lane`), `Rejected` (nonce đã advance) trả
 lane ngay, token rỗng ⇒ con trỏ đứng yên; chữ ký tự tính = chữ ký RPC.
@@ -595,7 +660,14 @@ phía client nặng). Không xây ở round này (R34 §5).
 
 - Durable nonce có thể bị deprecate (SIMD discussion #415) ⇒ phương án §6.1.
 - Rent bị khoá trong lane/mref/fill PDA tới khi `prune` (~0,0012 SOL mỗi thao tác); node chưa tự crank `prune` — seam
-  (HANDOFF): script/cron gọi `prune` theo `rent_payer` = lane. Rent ATA người nhận tạo hộ không thu lại được.
+  (HANDOFF): script/cron gọi `prune` theo `rent_payer` = lane. ~~Rent ATA người nhận tạo hộ không thu lại được.~~ *(Rev
+  1.1:)* rent ATA người nhận tạo hộ thu được — **bởi người nhận** (review Claude H1) ⇒ RS12-20. Rent không bao giờ hoàn:
+  SubjectAccount mở lười (`account.rs:189`, không đường đóng), phần lớn thêm khi KeyOp (`util::grow` do lane trả,
+  `account.rs:365`; chặn bởi ≤ 8 khoá + ≤ 8 origin, không co lại ⇒ một lần mỗi Account), `MinNonce` (`dex.rs:327`), ATA
+  DEX của PDA và vault — mỗi cái tính vào R340 và chặn bởi R346 (c)/R342 ở node.
+- Origin liên quan (review Claude L2): `add_origin` bằng assertion nhận mọi origin trình duyệt cho phép với rpId, kể cả
+  related origins mà chủ rpId công bố ở `/.well-known/webauthn` ⇒ công bố file đó là **quyết định an ninh tài khoản**
+  (vận hành, không phải cấu hình web thường).
 - Người nhận nóng: mọi thanh toán tới cùng một ví ghi chung ATA đó (12M CU/block).
 - Clock Solana lệch so với giờ thật (§6.5) — at-most-once do lane PDA giữ.
 - Mint có transfer hook / transfer fee: không dùng được (OQ3). Issuer có permanent delegate / freeze / pause: rủi ro
@@ -642,10 +714,49 @@ phía client nặng). Không xây ở round này (R34 §5).
 - **RS12-14** Lane = ed25519 `m/44'/501'/{i}'/0'`, durable nonce account `create_with_seed(lane,"scaas-nonce-v1")`,
   `sequence` = nonce, một tx bay.
 - **RS12-15** Tx v1 viết tay, không `solana-sdk`, không crate mới; vector từ `@solana/kit`.
-- **RS12-16** Bảng `Rejected`; hết CU / thiếu rent đã vào sổ ⇒ `Rejected`; lỗi của `scaas` ⇒ `Reverted`; tự rebroadcast.
-- **RS12-17** Không journal đĩa; durable nonce + `recover_lane` chung đủ.
+- **RS12-16** Bảng `Rejected`; ~~hết CU / thiếu rent đã vào sổ ⇒ `Rejected`~~ *(thay bởi RS12-22)*; lỗi của `scaas` ⇒
+  `Reverted`; tự rebroadcast.
+- **RS12-17** Không journal đĩa; durable nonce + `recover_lane` chung đủ. *(Rev 1.1: khớp NI R347 — không có journal
+  cục bộ nào cần dời vào `outer_tx`; giá trị nonce lúc ký nằm trong `outer_nonce`.)*
 - **RS12-18** Finality `finalized`, cursor = slot; indexer JSON-RPC chuẩn (`getSignaturesForAddress` + `getTransaction`),
   event qua `emit_cpi!`, lọc program id + event authority + `nc.tokens`; thiếu lịch sử ⇒ lỗi.
+
+### Rulings rev 1.1 — review Claude 1 (2026-10-07)
+
+- **RS12-19** (owner 2026-10-07; NI R348) **Program bất biến lúc deploy** (§5.4): `deploy.sh` = deploy → `initialize` →
+  `set-upgrade-authority --final` → kiểm `ProgramData.upgrade_authority_address == None` và `Config` tồn tại, sai ⇒ thoát
+  1. Node từ chối kích hoạt chain có program còn authority (`halted`, `PROGRAM_UPGRADEABLE`, NR5). e2e bỏ authority sau
+  `initialize`. Test: e2e — node khởi động với program còn authority ⇒ chain `halted`; sau `--final` ⇒ `active`.
+- **RS12-20** (H1; NI R340, R346) ATA đích của `relay_pay`/`mandate_pay` phải có sẵn (program không tạo); node chỉ thêm
+  `create_idempotent` do lane trả cho ví nhận đã cấu hình, còn lại `422 DEPOSIT_NOT_ALLOWED` (NI R346); rent lane trả nạp
+  cầu dao. Test LiteSVM: `relay_pay` tới ATA chưa có ⇒ lỗi `DestinationMissing`; tới ATA có ⇒ chạy, lane không mất rent.
+  Test Rust: đích chưa có + `to` không cấu hình ⇒ `422`; `to` cấu hình ⇒ tx có instruction tạo ATA; vòng H1 (pay →
+  close → pay) không tạo ATA lần hai trên tiền lane.
+- **RS12-21** (M1) Trần hạn on-chain `MAX_TTL_S` = 31 ngày cho `valid_until` (LanePda, MandateRef) và `expiry` của lệnh
+  (`Fill` ở `settle`/`cancel_signed`); `expiry` của Mandate không đổi (PDA Mandate có `rent_payer`, đóng được). Rent không hoàn (SubjectAccount mở lười, grow KeyOp có trần theo Account, `MinNonce`, ATA
+  DEX) giữ lane trả — chủ thể gasless — nhưng đo (R340) và chặn theo job (R346 c) + theo chủ thể (R342). Test LiteSVM:
+  `cancel_signed` với `expiry = u64::MAX` ⇒ lỗi; `relay_pay` `valid_until = now + 32 ngày` ⇒ lỗi; mọi PDA lane tạo ra
+  đều `prune` được ≤ `MAX_TTL_S + PRUNE_DELAY_S` sau khi tạo.
+- **RS12-22** (M2; NI R341) Bảng lớp lỗi §6.4: hết CU dựng lại **một** lần ở `max_cu`, rồi `reverted`; lỗi phía lane
+  một lần, không đếm grief. Test ở §6.4.
+- **RS12-23** (L1) `auth::passkey` từ chối `"crossOrigin":true` và mọi `"topOrigin"` (như Aptos `auth.move:99`). Test
+  LiteSVM với vector assertion có hai trường đó ⇒ `BadWebAuthn`.
+- **RS12-24** (từ Aptos M2) Horizon lane là nghĩa vụ của mọi client ký (§3.4); connector `solana.js` + `clientkeys` từ
+  chối ký op `valid_until > now + LANE_HORIZON_S`. Test JS.
+- **RS12-25** (L3; NI R343) Mesh/gateway kiểm chữ ký Solana cục bộ trước mô phỏng: ed25519 (`ed25519-dalek` đã có) trên
+  văn bản raw/OCMS với `from` là khoá (khoá 0) hoặc khoá ∈ `SubjectAccount.keys` (một lần đọc account có cache); passkey
+  bằng `p256` trên `authData ‖ sha256(cdj)`. Luồng NI NR3.
+- L2 (related origins) là ghi chú vận hành §11, không code.
+
+**Luồng code** (owner: không sửa code trong pha spec):
+
+| Luồng | Lớp | Nội dung | Ruling | Sau |
+|---|---|---|---|---|
+| **NET-SOLANA-FIX1** | Program `account.rs`, `mandate.rs`, `dex.rs`, `auth.rs`, `util.rs`; `scripts/deploy.sh` | Đích ATA phải có sẵn; `MAX_TTL_S`; `crossOrigin`/`topOrigin`; deploy → initialize → `--final` + cổng kiểm; LiteSVM tests; deploy program id mới | RS12-19, 20, 21, 23 | — (node phần R348 ở NR5) |
+| **NET-SOLANA-FIX2** | Node `adapters/solana.rs` (+ e2e) | Bảng lớp lỗi + một lần `cu_retry`; `tx_cost` gồm rent; tạo ATA chỉ cho ví nhận cấu hình, còn lại `422`; e2e bỏ authority; tests | RS12-20 (node), RS12-22 | NI NR1, NR2 |
+| **NET-SOLANA-FIX3** | Connector `solana.js`, `clientkeys` | Từ chối ký op quá `LANE_HORIZON_S`; không hiển thị owner passkey như địa chỉ (tới UA R315); test JS | RS12-24, M3 | — |
+
+Đổi owner passkey sang UA id (R315) thuộc luồng family của UA, không ở đây. Mesh (RS12-25) đi trong NI NR3.
 
 ## 14. Quyết định owner áp cho luồng này (đã có, 2026-10-04)
 
@@ -654,7 +765,9 @@ phía client nặng). Không xây ở round này (R34 §5).
 - Lane relayer: ed25519 từ cùng mnemonic 24 từ, coin 501 (§6.1).
 - Passkey: dùng precompile secp256r1 qua introspection; seed ed25519 qua Ed25519 program; Account nhiều khoá + origin +
   guardian, không gạch; toggle "backup key required" mặc định OFF (§3.3).
-- Indexer: danh sách contract từ `node_config`; không tiến con trỏ khi rỗng hoặc vùng chưa final; finality = `finalized`.
+- Indexer: danh sách contract từ `node_config` *(rev 1.1: từ store node — NI R95/R324)*; không tiến con trỏ khi rỗng hoặc
+  vùng chưa final; finality = `finalized`.
+- *(2026-10-07)* Program **bất biến** lúc deploy: upgrade authority None (RS12-19, NI R348).
 - e2e trên validator cục bộ; DB `dms_test_chain_12` / 8932; cổng 32020–32049 (§18). Trung lập thị trường.
 
 ## 15. Câu hỏi mở
@@ -721,6 +834,22 @@ phía client nặng). Không xây ở round này (R34 §5).
 - grok: thử một lần (2026-10-04) — "free Grok Build usage limit" ⇒ không có kết quả.
 - Reviewer độc lập: controller chạy sau báo cáo (theo brief, luồng không tự dispatch subagent).
 
+### Claude review disposition — review 1 (2026-10-07, `docs/reviews/specs/2026-10-04-net-solana-claude-review-1.md`)
+
+Verdict của review: FIX-THEN-GO, 0 Critical. Đối chiếu từng finding với code (file:line) trước khi nhận: **7 nhận,
+0 từ chối** (2 nhận có chỉnh: H1, M1); thêm X1 từ review Aptos (cùng mẫu code).
+
+| # | Sev | Kiểm với code | Kết luận | Xử lý |
+|---|---|---|---|---|
+| H1 | high | `relay_pay` tạo ATA đích, payer = lane (`account.rs:210-218`, `util.rs:55-73`); `mandate_pay` như vậy (`mandate.rs:170-178`); cầu dao chỉ thấy phí `Mined` (`adapter.rs:270-276`) | Đúng cho `relay_pay`/`mandate_pay`; chỉnh: ATA của `settle` có owner = SubjectAccount PDA (`dex.rs:252-254`), vault owner = Market (`:264-265`), program không có `CloseAccount` ⇒ không thu lại được, không phải vòng rút ⇒ xếp vào M1. Rent từ lamports SubjectAccount bị loại (chủ thể gasless) | RS12-20, §5.1–5.3; NI R340, R346; NET-SOLANA-FIX1/2 |
+| M1 | med | Mở lười payer = lane (`account.rs:189`); `grow` payer = lane (`:365`), chỉ lớn lên, trần 8 khoá + 8 origin; `MinNonce` `init_if_needed` không đóng (`dex.rs:327`); `Fill.valid_until = order.expiry` (`dex.rs:199, 312`); LanePda `valid_until` do người ký chọn (`account.rs:204`); `prune` chỉ LanePda/MandateRef/Fill (`account.rs:430-450`) | Đúng; chỉnh: grow KeyOp có trần theo Account (không theo chữ ký) — giữ lane trả, đo và chặn ở node | RS12-21, §3.4, §11; NET-SOLANA-FIX1 |
+| M2 | med | `classify_landed` hết CU + instruction 0 + cấp tx ⇒ `Rejected` (`solana.rs:496-507`); CU = `used × 1.2` (`:914-915`); `DEFAULT_MAX_PRIORITY` 2 000 000 (`:40`); không trần lần thử | Đúng | RS12-22, §6.4; NI R341; NET-SOLANA-FIX2 |
+| M3 | med | SCaaS.md:1170 ghi `MetaOp` 337 B; code `MetaOp::LEN = 336` (`auth.rs:64`), spec §4.1 336; owner passkey `p256_owner` (`account.rs:73-74`) vs UA R315; `node_config`, `chains/solana` | Đúng (SCaaS.md do owner đồng bộ — không sửa ở đây) | Bảng "bị thay", §3.3, đường dẫn; NET-SOLANA-FIX3 (hiển thị) |
+| L1 | low | `auth::passkey` không kiểm `crossOrigin`/`topOrigin` (`auth.rs:175-193`); Aptos có (`auth.move:99`) | Đúng | RS12-23; NET-SOLANA-FIX1 |
+| L2 | low | `add_origin` cùng rpId (§3.3) | Đúng (theo thiết kế) | §11 ghi chú vận hành |
+| L3 | low | `solana_op` không kiểm chữ ký (`mesh/digest.rs:281-291`) | Đúng | RS12-25; NI R343 (NR3) |
+| X1 | med | Từ review Aptos M2: `prune` không quyền sau `valid_until + 30 d` (`account.rs:423-450`), `check_deadline` chỉ kiểm hạn (`util.rs:134-138`) | Đúng (cùng mẫu) | RS12-24, §3.4; NET-SOLANA-FIX3 |
+
 ## Quyết định của owner (2026-10-04) — thay thế OQ1–OQ4
 
 - **OQ1 (backup key):** chính sách "bắt buộc khoá dự phòng" = ≥2 khoá HOẶC 1 khoá + guardian; là **bit tuỳ chọn, mặc định TẮT** (owner: "chỉ là option bật/tắt"); cùng ngữ nghĩa với follow-up S4.
@@ -734,7 +863,7 @@ phía client nặng). Không xây ở round này (R34 §5).
 `c97289a8…3611e8` khớp digest của GitHub release) trong `~/.local/share/solana/install/releases/4.3.0`; `cargo build-sbf`
 4.3.0 + platform-tools **v1.57** (rustc 1.95 sbpf); **Anchor 1.2.0** (`anchor-lang`/`anchor-spl` crate, không CLI);
 **LiteSVM 0.17.0** (`precompiles`) — kéo crate Agave 4.3 cần **rustc ≥ 1.97.1** cho test host ⇒ `rustup toolchain install
-1.97.1` + `chains/solana/rust-toolchain.toml` (chỉ workspace này); `@solana/kit` **8.4.0** cục bộ ở `chains/solana/scripts/`.
+1.97.1` + `smartcontracts/solana/rust-toolchain.toml` (chỉ workspace này); `@solana/kit` **8.4.0** cục bộ ở `smartcontracts/solana/scripts/`.
 
 **"Kiểm khi làm" đã giải:**
 
@@ -769,3 +898,9 @@ phía client nặng). Không xây ở round này (R34 §5).
 `{account, message, version: 1}` ⇒ `[{signedMessage, signature}]` và kiểm `signedMessage` = OCMS kỳ vọng, sai ⇒ từ chối
 trước khi gửi); RPC hosted mainnet (lịch sử `getSignaturesForAddress`, `getTransaction` encoding json của tx v1).
 
+## 19. Lịch sử bản
+
+| Rev | Ngày | Thay đổi |
+|---|---|---|
+| 1.0 | 2026-10-04 | Bản đầu S12: RS12-1…18; self-review; review agy 1–11; quyết định owner OQ1–OQ4; Task 0 + thực thi RS12-4a…18a (§17–§18) |
+| 1.1 | 2026-10-07 | Gộp review Claude 1 (H1, M1–M3, L1–L3) + X1 (Aptos M2): bảng "bị thay" (NI R95/R324, R87/R101, UA R315, `smartcontracts/`), owner 2026-10-07 program bất biến (RS12-19, NI R348); RS12-19…25; bảng lớp lỗi §6.4 (NI R341); tham chiếu NI R340–R349; luồng NET-SOLANA-FIX1…3 |
