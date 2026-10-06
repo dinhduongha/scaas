@@ -1,7 +1,7 @@
 # Amendment A2 to the round-4 relayer mesh — gossip P2P for the nodes
 
-Status: draft rev 2, 2026-10-06 — review 1 (FIX-THEN-GO) and the owner answers folded in; disposition §20. Repo `scaas` (`custom-addons/bamboo-dms/scaas`) at `main` 02a71f3.
-Rulings: **R112–R127** (§2), continuing R70–R86 (MESH) and R87–R111 (NI incl. Amendment A1).
+Status: draft rev 2.1, 2026-10-06 — review 1 (FIX-THEN-GO) and the owner answers folded in (disposition §20); rev 2.1: DEX homes auto-trusted (R128). Repo `scaas` (`custom-addons/bamboo-dms/scaas`) at `main` 02a71f3.
+Rulings: **R112–R128** (§2), continuing R70–R86 (MESH) and R87–R111 (NI incl. Amendment A1).
 Owner inputs folded in (all 2026-10-06):
 
 1. **Gossip is required in round 4, alongside the HTTP pull bus** (amends R70).
@@ -86,6 +86,7 @@ Format of PD §13: **ruling — why — cost if wrong.** "Arbitrary" = a number 
 | **R125** | **Anti-entropy** `/scaas/sync/1` (libp2p request-response, JSON codec): `intents` (stored gossip-eligible rows, cursor = store `seq`), `announces`, `book` (one market, one home/claimant, after `home_seq`). Items are the same signed objects and go through the same validator (without gossip forwarding). Triggered on first contact and on reconnection (≤ 1 per peer per 60 s, ≤ 3 peers at once) and by book-head mismatch; served ≤ 1 full `intents`/`announces` sync per peer per 60 s within a global sync egress budget of 2 MiB/s. | gossipsub only caches ~6 heartbeats; the pull bus's cursor catch-up (MESH E10) must exist on the open mesh too. | — |
 | **R126** | **Crates and budget** (§15): `libp2p` **0.56.x** pinned, `default-features = false`, features of §15.1; `rustls` with `aws_lc_rs` + `prefer-post-quantum`; reqwest switched to its no-provider rustls feature. Gossip subsystem budget: ≤ 64 MiB added RSS at 50 peers, < 5 % of one core at 200 msg/s validated. | Owner: the node runs small; the box runs one heavy job at a time. | — |
 | **R127** | **Admin API and observability** (§13): `/v1/admin/gossip/*` routes in NI §7.3, gossip columns on `chain`/policy/`dex_market`, `scaas_gossip_*` metrics, app screens Peers/Topics/Announces/Bans. Bootstrap, listen addrs, external addrs, direct peers and the key stay toml-only (NI R95). | Same split as NI: dial targets and secrets in toml, behaviour in the store. | — |
+| **R128** | (owner, rev 2.1) **DEX homes become trusted automatically** after `dex_trust_min_settles = 20` **credited settles** in a `dex_trust_window = 14 d` involving ≥ `dex_trust_min_counterparties = 5` distinct maker/taker addresses (§11.7, all three **arbitrary**); admins may pre-trust or block (block wins). Credited = settle tx whose `msg.sender` is the home's proved relayer, fills of orders the home published in a signed `book` ≥ 60 s before the settle block, counterparties not linked to the home's lanes, no self-trades. Any proven misbehaviour (signed home state contradicted by chain and not corrected; settles failing on order limits) demotes for 30 d. Before trust a home is listed only on request, flagged untrusted, with short routed expiries. | Owner: same model as R121, with H2-style anti-farming. Credit comes only from chain facts the home cannot fabricate for free (its own relayer paid gas, real counterparties, liquidity visible beforehand). | A determined farmer with 5 funded EOAs and 20 cheap settles in 14 days gains trust; bounded by demotion and short expiries. `# ponytail: counterparty-count heuristic; add funding-graph analysis if farming shows up.` |
 
 ---
 
@@ -420,7 +421,7 @@ Unit test (G1): the score after 1 and 2 Rejects per topic kind, for a fresh and 
 | RPC: V8 freshness / hint reads / DEX `checkOrder` | 50/s / 10/s / 20/s per chain, separate budgets, 4 concurrent each | V8: Accept; hints: Ignore; checkOrder: defer |
 | sync serving | ≤ 1 full `intents`/`announces` per peer per 60 s; `book` pages 2/s per peer; ≤ 3 concurrent; global egress 2 MiB/s | refused |
 | gossip ingest into the store | 200 rows/s global | Accept without storing + metric |
-| caps | `gossip_max_rows` 100 000 (`may_submit` rows only, evict lowest effective fee then oldest); replica orders 100 000 total, ≤ 10 000 per DEX-trusted home, **0 for untrusted homes**; unbound orders ≤ 1 000 per claimant; announces 5 000 admitted in priority order connected/bus/trusted/track record, untrusted ≤ 4 per /24 (/48), LRU-evicted | as above |
+| caps | `gossip_max_rows` 100 000 (`may_submit` rows only, evict lowest effective fee then oldest); replica orders 100 000 total, ≤ 10 000 per DEX-trusted home, ≤ 500 per untrusted home and 5 000 for all untrusted homes together (needed to count their settles, §11.7); unbound orders ≤ 1 000 per claimant; announces 5 000 admitted in priority order connected/bus/trusted/track record, untrusted ≤ 4 per /24 (/48), LRU-evicted | as above |
 
 ### 7.4 Connections and DHT
 
@@ -512,7 +513,11 @@ CREATE TABLE gossip_peer_stat (peer_id BLOB NOT NULL, day BIGINT NOT NULL, assig
   landed BIGINT NOT NULL DEFAULT 0, missed BIGINT NOT NULL DEFAULT 0, violations BIGINT NOT NULL DEFAULT 0,
   false_hints BIGINT NOT NULL DEFAULT 0, invalid BIGINT NOT NULL DEFAULT 0, PRIMARY KEY (peer_id, day));
 CREATE TABLE gossip_trusted (peer_id BLOB PRIMARY KEY, label TEXT NOT NULL, assign INTEGER NOT NULL DEFAULT 1,
-  dex INTEGER NOT NULL DEFAULT 0);                                  -- dex = 1: replicate/advertise as a DEX home
+  dex INTEGER NOT NULL DEFAULT 0 CHECK (dex IN (-1, 0, 1)));        -- DEX home: 1 pre-trusted, 0 automatic, -1 blocked
+CREATE TABLE dex_home_credit (home BLOB NOT NULL, chain_key TEXT NOT NULL, tx_hash TEXT NOT NULL,
+  ref BLOB NOT NULL, maker TEXT NOT NULL, taker TEXT NOT NULL, block BIGINT NOT NULL, at BIGINT NOT NULL,
+  PRIMARY KEY (chain_key, tx_hash, ref));                           -- credited settles (§11.7), pruned after the window
+CREATE TABLE dex_home_state (home BLOB PRIMARY KEY, trusted_at BIGINT, demoted_until BIGINT, reason TEXT);
 CREATE TABLE gossip_ban (peer_id BLOB PRIMARY KEY, until_ms BIGINT, reason TEXT NOT NULL, actor TEXT NOT NULL,
   created_at BIGINT NOT NULL);                                      -- until_ms NULL = until lifted
 CREATE TABLE dex_replica (order_hash BLOB PRIMARY KEY, chain_key TEXT NOT NULL, dex TEXT NOT NULL,
@@ -616,10 +621,10 @@ fills.
 - **Home** of a home-bound order = the node that alone proved the order's `relayer` (DEX §1.1) in its live announce
   (§10.3). Only the home holds it in its `Venue` (NI §12.1 `dex_order`) and matches/settles it. RS5-9 stays the
   default: our venue accepts bound orders only for our relayer (`dex.rs` l.552–554).
-- **DEX-trusted homes**: we replicate and advertise only homes with `gossip_trusted.dex = 1` (admin). Other homes'
-  `book`/`head` are forwarded (Ignore `UNTRUSTED_HOME` for storage purposes: Accept-forward, not stored) and never
-  listed to wallets: a taker who signs an order bound to an untrusted home gives that home a free option until
-  expiry (H3).
+- **DEX-trusted homes** (R128, §11.7): admin pre-trusted (`gossip_trusted.dex = 1`) or automatically trusted, and
+  not blocked (`dex = -1`) or demoted. Untrusted homes are replicated only within their small caps (§7.3; beyond them
+  `UNTRUSTED_HOME`: forwarded, not stored) so their settles can be credited, and are never shown to wallets by
+  default: a taker who signs an order bound to an untrusted home gives that home a free option until expiry (H3).
 - **Claimant** of an unbound order (`relayer = 0`, market `unbound = 1`) = the node that won the deterministic claim
   (§11.6); every node may later match it.
 - **Replica** = `dex_replica` rows for orders we do not hold as home. Bound replicas are read-only; unbound replicas
@@ -682,11 +687,15 @@ goes backwards.
 
 - Only the home matches (DEX §3.3 unchanged) and settles (settle `job` in `~dex`, NI R105).
 - Gateway `GET /v1/dex/depth?…&scope=network` aggregates our book and **DEX-trusted** replicas per home (levels
-  tagged with `home`, `trusted: true` and the home's gateway URL from the announce); `GET /v1/dex/homes?chain&market`
-  lists trusted homes with their relayer addresses. A wallet that wants a replica's liquidity signs a taker order
-  with `relayer =` that home's relayer and `expiry ≤ now + 300 s` (the gateway refuses longer ones for another home),
-  and posts it to that home's gateway directly (preferred: not visible on gossip before matching) or to any gateway,
-  which publishes `route_order`.
+  tagged with `home`, `trusted` and the home's gateway URL from the announce); `GET /v1/dex/homes?chain&market`
+  lists trusted homes with their relayer addresses. `&include_untrusted=1` adds untrusted homes, tagged
+  `trusted: false` with their credit progress. A wallet that wants a replica's liquidity signs a taker order with
+  `relayer =` that home's relayer and posts it to that home's gateway directly (preferred: not visible on gossip
+  before matching) or to any gateway, which publishes `route_order`.
+- **Routed expiries** (taker order bound to another home): trusted home — default and max 300 s; untrusted home —
+  default 60 s, max 120 s (**arbitrary**); the gateway refuses longer ones. Wallet UI requirement: before signing for
+  an untrusted home, show a blocking warning "this venue is not yet trusted; it holds a free option on your order
+  until it expires (≤ 2 min)".
 - A firm quote exists only at the home; replica depth is indicative (lag ≤ gossip latency, ≤ 30 s after a missed
   update via `head`).
 
@@ -717,6 +726,34 @@ goes backwards.
    or expires; with `feeRecipient = 0` the relayer fee goes to whoever settles. The claim window binds only honest
    nodes.
 7. Fees, `maxFeePpm`, partial fills and price checks are the contract's (DEX §1.2–§1.5), unchanged.
+
+### 11.7 DEX home trust (R128)
+
+Inputs come from our DEX watcher (DEX §3.6: `Matched`, `OrderFilled`, `MatchFailed`) plus one
+`eth_getTransactionByHash` per settle tx of a candidate home (within the `checkOrder`-class RPC budget, §7.3).
+
+- **Credited settle** (one row per settled pair `ref` in `dex_home_credit`), all of:
+  1. the settle tx's `from` (= `msg.sender`) is a relayer address that **only** this home proves (§10.3; a shared
+     lane credits nobody);
+  2. the maker order of the pair appeared in a valid home-signed `book` we received ≥ 60 s before the settle block
+     (liquidity was visible to the network before it was hit);
+  3. neither maker nor taker is one of the home's proved lane/relayer addresses, and maker ≠ taker (the contract
+     already refuses `M.maker == T.maker`);
+  4. the pair settled (not `MatchFailed`) and the block is final.
+- **Trusted** when, inside the window: credited settles ≥ 20 **and** distinct counterparty addresses (makers ∪ takers
+  of credited pairs) ≥ 5. Re-evaluated hourly and on each credit; trust lapses when the window no longer satisfies the
+  rule (no permanent trust from history alone).
+- **Demotion** (30 d, counters cleared, `dex_home_state.demoted_until`, metric + audit), on proof only:
+  1. a home-signed `book` contradicted by the chain at finality — `home_closed = 0` for an order the chain shows
+     closed, or `home_filled` below the chain's final `filledTotal` — and not corrected by a higher `home_seq` within
+     120 s;
+  2. ≥ 3 `MatchFailed` in 24 h on settle txs sent by the home's relayer whose reason is a limit violation (price,
+     overfill, FOK, expiry, nonce, `maxFeePpm`): matching outside order limits;
+  3. two valid home-signed `book`s with the same `home_seq` and different content (equivocation).
+  An admin block (`dex = -1`) overrides everything; an admin pre-trust (`dex = 1`) skips the counters but not
+  demotion by proof.
+- Not provable, and therefore bounded rather than detected: a home that sits on a crossing routed taker (free
+  option). Short routed expiries (§11.5) bound it.
 
 ## 12. Private-scope isolation — proof sketch
 
@@ -758,7 +795,8 @@ Each step is a unit test (§16.1) and E-G5 (§16.2) is the end-to-end check.
 | `GET /v1/admin/gossip/peers` — per peer: PeerId, carrier (quic/tcp), PQ (bool), score + P1…P7 components, app score, announce version, landed/missed 7 d, connected since, banned | viewer | — |
 | `GET /v1/admin/gossip/announces[/{peer_id}]` | viewer | — |
 | `PUT /v1/admin/gossip/peers/{peer_id}/ban` `{until_ms?, reason}`, `DELETE …/ban` | operator | hot (disconnect now) |
-| `GET/PUT/DELETE /v1/admin/gossip/trusted[/{peer_id}]` (`assign`, `dex`) | viewer / admin / admin | hot |
+| `GET/PUT/DELETE /v1/admin/gossip/trusted[/{peer_id}]` (`assign`; `dex` = 1 pre-trust / 0 automatic / −1 block) | viewer / admin / admin | hot |
+| `GET /v1/admin/dex/homes` (trust state, credited settles, counterparties, demotions) | viewer | — |
 | `PATCH /v1/admin/chains/{key}` — `gossip`, `exclusive_ms` (refused: `gossip = 1` on a private chain) | admin | hot |
 | `PATCH /v1/admin/mesh/policy/{id}` — `gossip`; `PATCH /v1/admin/dex/markets/{id}` — `gossip`, `unbound` | admin | hot |
 | `PATCH /v1/admin/mesh/peers/{id}` — `multiaddr` (bus over QUIC) | admin | hot |
@@ -809,7 +847,8 @@ Per-peer details stay in the admin API (no per-peer metric labels on the open me
 | S4 | **Replay / byte variants** | canonical payloads (one msg-id per message); `seen_intent` with TTL `valid_until`; announce `version` monotone; hint 10 s dedup and "intent known" gate |
 | F1 | **Front-running via gossip visibility** | meta-tx outcome is fixed by the signer (G1, §05 §5.4.1); confidentiality: private chains never gossiped, companies opt in with `bus_scope = public` (§8.4), large B2B values belong on Zether or the bus (§05 §5.4.5 rule 2). Exclusivity binds only spec-following nodes: a bot may submit inside the window, and with an unbound `feeRecipient` R84 sends the fee to whoever submits — R121 does not protect the assignee's fee. DEX bound: resting orders are public by nature; taker orders posted directly to the home are not gossiped; `route_order` exposes a taker before matching (limit price + short expiry bound it). DEX unbound: anyone may settle within the maker's limit until the on-chain cancel is mined (§11.6 point 6) |
 | B1 | **Book spoofing** | `book` requires the signer's key in the message and, for bound orders, the home's sole PoP of the order's relayer; maker EIP-712 signatures checked; ERC-1271 orders only via the home/claimant; only DEX-trusted homes replicated and advertised; firm quotes only at the home; chain events override |
-| B2 | **Free option via an attacker venue** | wallets are shown only DEX-trusted homes; routed taker orders ≤ 300 s expiry |
+| B2 | **Free option via an attacker venue** | wallets are shown DEX-trusted homes by default; untrusted homes only on request, with a blocking warning and ≤ 120 s routed expiry; auto-trust needs chain-credited settles (R128); demotion on proof |
+| B4 | **DEX trust farming** | credit only for settles sent by the home's own sole relayer, of orders visible ≥ 60 s in its signed book, with ≥ 5 counterparties not linked to its lanes, no self-trades; window 14 d; demotion 30 d on proof (§11.7) |
 | B3 | **Unbound claim races** | deterministic claimant (`claim_rank`) after a 2 s grace; fills published only at `mined`; on-chain `filled` arbitrates |
 | H1 | **Hint poisoning / hint floods** | hints never change state (R122); verified by the R80 read; signer gate (credited or trusted); separate RPC budget; false hints judged only at finality on a found receipt |
 | A1 | **Announce replay / rollback; announce-cap filling** | strictly increasing `version`, `expires_at`; priority admission (connected/bus/trusted/track record), untrusted ≤ 4 per /24 |
@@ -877,7 +916,7 @@ Heavy runs one at a time (MESH §13). In-process tests use one tokio runtime, lo
   exclusive to `hub.id` or to a non-eligible peer ⇒ `exclusive_until = NULL` (H1); violation ⇒ P5 only.
 - `gossip/dex`: merge commutativity/idempotence (proptest over update orders ⇒ equal replicas and equal `head`
   digest); restore at higher `home_seq`; `home_seq` after store restore > before; spoofed `book` (bad key ⇒ Reject;
-  not the sole prover ⇒ Ignore); untrusted home ⇒ forwarded, not stored, not listed (H3); unbound claimant tie-break
+  not the sole prover ⇒ Ignore); untrusted home ⇒ stored within its small cap, not listed by default, listed `trusted: false` with `include_untrusted=1`; R128 credit rules: settle from a non-sole or foreign relayer, order not seen in a book ≥ 60 s earlier, counterparty = home lane ⇒ no credit; 20 credited / 5 counterparties ⇒ trusted; each demotion proof ⇒ demoted 30 d; admin block wins over auto-trust; routed expiry caps 300 s / 120 s (H3); unbound claimant tie-break
   identical over permuted arrival orders within the grace, late candidate ignored (C2); unbound IOC/FOK refused at
   intake; unbound fills published only at `mined`.
 - `transport/pq`: HTTPS bus negotiates X25519MLKEM768 (rustls `negotiated_key_exchange_group`); classical-only
@@ -903,7 +942,7 @@ Heavy runs one at a time (MESH §13). In-process tests use one tokio runtime, lo
 | E-G6b | **Re-origination**: sybil S re-originates A's public intent with an exclusive to itself, flooding first | honest nodes do not wait (`exclusive_until = NULL`); H lands within one block of A's own schedule |
 | E-G7 | **Hints**: B lands, C has the intent `pooled` with `may_submit` after exclusivity | C publishes no tx; C's row `consumed/landed_elsewhere` from its own read; a forged hint from uncredited M changes nothing, costs no RPC read |
 | E-G8 | **DEX across homes**: maker order rests at trusted home A; taker signs bound to A and posts to B's gateway (`route_order`) | A matches and settles once; B and C replicas show the fill and the close; B never attempts a settle |
-| E-G9 | **Book spoofing / untrusted home**: M publishes `book` for an order bound to A's relayer; untrusted home U publishes its own book | M's ⇒ Ignored, replicas unchanged; U's forwarded, not stored, not in `/v1/dex/homes` |
+| E-G9 | **Book spoofing / untrusted home**: M publishes `book` for an order bound to A's relayer; untrusted home U publishes its own book, then settles 20 trades with 5 independent counterparties | M's ⇒ Ignored, replicas unchanged; U not in `/v1/dex/homes` until the 20th final credited settle, then listed trusted; U then publishes a `book` the chain contradicts ⇒ demoted after 120 s |
 | E-G10 | **Restart**: kill B during sync; restart | announces/replica reload from store; resync completes; no duplicate job rows; B's `home_seq` continues upward |
 | E-G11 | **Unbound order, two takers**: market `unbound = 1`; maker order posted to A and C; after `claim_ms` B and C each hold a crossing bound taker | both nodes agree on the claimant; at most the remaining size fills on chain; the losing pair fails `MatchFailed`, its taker restored; no node showed a fill before `mined` |
 | E-G12 | **Unbound cancel**: maker cancels at A; B and a raw EOA try to settle it before the on-chain cancel mines | A and B stop matching at once; A's cancel tx is sent at once; in the 1-block-wait variant the cancel lands first and the EOA's settle reverts; the wallet shows "final when mined" |
@@ -924,7 +963,7 @@ Current order (NI §17): S3 → P1 → P2 → P2b → P3 → P4 → P5 → P6 �
 | S6′ | adds `may_gossip` hook points (publish queue drained by G1; no-op without it) |
 | **G1 — libp2p core** (new) | swarm task, QUIC (V1 resolved) + TCP/Noise, Kademlia, identify, ping, connection limits, address filter, bans, gossipsub config/scoring, intent topic validator + publish, `/scaas/sync/1` intents, `/scaas/bus/1.2` over QUIC, admin routes §13.1 + metrics. Gate `cargo test` (in-process multi-node unit tests) |
 | **G2 — announce, exclusivity, hints** (new) | §8.3, §9, §10; `gossip_*` stats; E-G6/E-G7 in-process. Gate `cargo test` |
-| **G3 — DEX book gossip** (new; needs P7) | §11 incl. **relayer-unbound orders** (§11.6: claim, grace, on-chain-only cancel, publish-at-mined), DEX-trusted homes, gateway `scope=network`, `/v1/dex/homes`, `dex_market.unbound`. Gate `cargo test` + DEX e2e alone |
+| **G3 — DEX book gossip** (new; needs P7) | §11 incl. **relayer-unbound orders** (§11.6: claim, grace, on-chain-only cancel, publish-at-mined), DEX-trusted homes with R128 auto-trust (§11.7), gateway `scope=network`, `/v1/dex/homes`, `dex_market.unbound`. Gate `cargo test` + DEX e2e alone |
 | **S7″** (e2e) | MESH E1–E12 (both bus carriers) + E-G1…E-G10. Gate `cargo build --release` then `cargo test --test e2e_mesh --test e2e_gossip -- --ignored`, nothing else running |
 | S8″ | spec corrections incl. §18.3 |
 
@@ -1015,12 +1054,10 @@ Answers to rev 1's questions, folded into the body:
 4. **QUIC offers only X25519MLKEM768: accepted.** A third-party node without ML-KEM joins only over TCP+Noise and
    receives public open-mesh data only (R114).
 
-Open:
+5. **DEX home trust (rev 2.1): automatic** after N verified settles, admin may block or pre-trust; anti-farming and
+   demotion as H2; wallets warned and routed expiries short before trust (R128, §11.5, §11.7).
 
-1. **DEX home trust** (§11.1, review H3): the spec replicates and advertises only admin-listed DEX homes
-   (`gossip_trusted.dex`), because a wallet that signs for an attacker's home hands it a free option until expiry.
-   Should DEX homes also become trusted automatically (like R121, e.g. after N settled trades verified on chain), or
-   stay admin-only?
+Open: none.
 
 ---
 
@@ -1035,7 +1072,7 @@ owner ruling; its mitigations applied).
 | C2 | Owner ruling 2 not folded; cancelled/IOC unbound orders settleable by anyone | fixed: §1.2, R124, §11.6 normative (unbound GTC only; deterministic claimant + grace; on-chain-only cancel; publish at `mined`; maker disclosure); `dex_market.unbound`; DDL; tests | §1.2, R124, §8.4, §11, E-G11, E-G12 |
 | H1 | Sybil re-origination self-assigns exclusivity | fixed: receiver honours `exclusive` only for assignees in its own eligible set, `≠ hub.id` | R121, §8.3, E-G6b |
 | H2 | Automatic trust farmable (shared lanes, self-dealt landings) | fixed (automatic trust kept): shared lane credits nobody; no credit for self-originated intents; ≥ 3 `from`; auto-trusted ≤ 1 slot in 3, out after 1 miss | R121, §8.3, §10.3 |
-| H3 | Untrusted DEX homes fill caps and are advertised to wallets | fixed: DEX-trusted homes only (`gossip_trusted.dex`); untrusted cap 0 (forward only); `trusted` label; routed taker expiry ≤ 300 s. Open question §19 | §7.3, §11.1, §11.5 |
+| H3 | Untrusted DEX homes fill caps and are advertised to wallets | fixed: wallets see DEX-trusted homes by default; untrusted caps 500/home, 5 000 total; `trusted` label; routed expiry 300 s trusted / 120 s untrusted; rev 2.1 owner answer: automatic trust R128 with anti-farming and demotion | R128, §7.3, §11.1, §11.5, §11.7 |
 | H4 | V8 drops pipelined nonces | fixed: window `n_s ≤ nonce ≤ n_s + 16`; balance advisory | §6 V8 |
 | H5 | Bus over QUIC vs TCP connection; gossip ban cuts the bus | fixed: TCP denied for bus-table peers at establishment; puller QUIC-only; bus peers never auto-banned | §5.4, §7.2, §12 |
 | M1 | Store-only dedup; replays and byte variants exhaust buckets | fixed: `seen_intent`; canonical bytes; buckets charged once per `intent_id`; hop stored 1; rate before parse | §5.2, §6 |
