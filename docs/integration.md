@@ -1,9 +1,10 @@
 # SCaaS Integration Guide — ERPs and applications
 
-**Status:** normative, 2026-10-06. Companion of [`SCaaS.md`](SCaaS.md) (the system specification; its §0
-precedence applies here). Status tags as in SCaaS.md: **BUILT**, **SPECIFIED** (link), **PLANNED**.
+**Status:** normative, 2026-10-07. Companion of [`SCaaS.md`](SCaaS.md) (the system specification; its §0
+precedence and component spec register apply here). Status tags as in SCaaS.md: **BUILT**, **SPECIFIED** (link), **PLANNED**.
 
-This guide describes integration under the **current model** (owner rulings 2026-10-06, NI R87–R111): the ERP or
+This guide describes integration under the **current model** (owner rulings 2026-10-06, NI rev 3.4 R87–R111,
+R320–R321): the ERP or
 application is a **client** of `scaas-node`. It keeps its own transactional outbox, **pushes** jobs to the node's job
 API, and **polls** two feeds (`/v1/jobs`, `/v1/events`) to learn job states and finalized chain facts. The node never
 calls the client. The node's store is the configuration authority.
@@ -75,6 +76,12 @@ Rules every client must follow:
 One namespace per client database is the default; several legal entities may share it, distinguished by
 `origin.scope`.
 
+**API keys are for external server-side clients only** (NI R92, R106, R109): the ERP backend or another service
+holds the key in its secret store. Never embed one in a browser, mobile or desktop app or an extension — client apps
+sign user actions with `clientkeys` and submit through the gateway (§8, §14), and read namespace data through their
+own backend. API keys never reach the admin API; admin access is a built-in user or OIDC login, and config
+automation (CI, Terraform, scripts) uses OIDC client credentials or the host CLI.
+
 ### 2.1 Request signing (HMAC, R92)
 
 ```
@@ -99,7 +106,7 @@ def signed(method, url_path, body_bytes, key_id, secret_hex):
 ```
 
 A shared KAT (`scaas-node/tests/api/hmac_kat.json`) pins the byte layout; clients must test against it. Unknown key
-and bad signature both return `401 UNAUTHORIZED`. Machine keys never work on the admin listener (R109). Rotation:
+and bad signature both return `401 UNAUTHORIZED`. API keys never work on the admin listener (R109). Rotation:
 `POST /v1/admin/keys/{id}/rotate` (generation + 1; the old secret dies immediately).
 
 ---
@@ -130,7 +137,7 @@ and bad signature both return `401 UNAUTHORIZED`. Machine keys never work on the
 | `origin.key` | Natural key of the business event (e.g. the payment `entryRef`, `invoice:42:attempt:1`) |
 | `origin.generation` | `0` initially; `+1` on an operator requeue of a dead job |
 | `client_ref` | Echoed in feeds; for the client's own lookup |
-| `kind` | `metatx` (EVM meta-tx), `signed_op` (non-EVM `MetaOp` or Soroban auth payload), `call` (calldata to a contract, needs `allow_call`) |
+| `kind` | `metatx` (EVM meta-tx), `signed_op` (non-EVM `MetaOp` or Soroban auth payload), `call` (calldata to a contract, needs `allow_call`); planned `ua_metatx` (UA) and `pqz_call` (PQZ, private chain) |
 | `payload.digest` / `op.digest` | Optional; if present must equal the node's digest |
 | `bus.scope` | `restricted` (company lanes only; default), `open` (admitted peers after the window), `public` (also the open mesh; A2) |
 
@@ -141,6 +148,8 @@ Payload by kind:
 | `metatx` | `{token, signature, metatx: {11 fields of MetaTransaction}}`; `uint256` as decimal strings; addresses lowercase |
 | `signed_op` | `{op: {op_kind: "pay", payload: "0x<exact signed bytes>", signature, public_key, auth_kind: "wallet"|"passkey", extra: {…native params}}}`; `from`, lane, nonce, `valid_until`, relayer are decoded from `payload` |
 | `call` | `{call: {target, calldata, validUntil}}` — e.g. `MandateWallet.payUnderMandate(...)`, `SubjectAccountFactory.deploy(...)`; the signature lives inside the calldata |
+| `ua_metatx` (SPECIFIED, UA F5) | MetaToken v3 `UAMetaTransaction` with `from: bytes32` and its `auth`; same lifecycle as `metatx` (UA §11.2) |
+| `pqz_call` (SPECIFIED, PQZ §11.3; private chain only) | `{chain, contract, selector ∈ {pqzTransfer, pqzBurn, rollOver, fund}, calldata}` to a configured PQZ token |
 
 ### 3.2 Accept checks (in order; no RPC)
 
@@ -346,6 +355,7 @@ items or 3 s; batching is invisible to the client except that several jobs share
 | Pattern | How the client integrates | Status |
 |---|---|---|
 | Enterprise inbound gateway | Partners/agents post signed EVM meta-txs to the company node: `POST /v1/metatx {chain, token, m, signature}` (gateway auth `bearer`/`hmac` for partners; `none` only on loopback behind a proxy). The client sees results on its events feed by `entryRef`/`to` | **BUILT** |
+| Gateway discovery and other families | `GET /v1/gateway` lists served chains, tokens, fee recipient and DEX policy; Hedera intents use `POST /v1/metatx` (64-byte HIP-632 signatures allowed); the six non-EVM families use `POST /v1/ops {chain, op}`; UA intents `POST /v1/ua-metatx`; errors follow the stable contract `{error, code, detail, revert_data?}` (NI §5.5, APP R178) | **SPECIFIED** (N1, N2, N4) |
 | Non-EVM inbound | The client builds the `MetaOp`, the payer signs, the client pushes `signed_op` jobs | **BUILT** (via Odoo outbox); job API **SPECIFIED** |
 | Payee self-relay ("e-cheque") | Payer signs offline with fee 0 and relayer unbound or bound to the payee's address; the payee (or its node) submits; ERP books from `PaymentSettled` exactly as usual | contract **BUILT**; QR (EIP-681-style payload) tooling **PLANNED** |
 | Gas sponsorship policy | Node policy rows: e.g. "to wallet W, value ≥ X ⇒ fee 0, gas to account Y"; the client books gas from the job's receipt data | **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §B1; cost fields on the jobs feed, §B1.4) |
@@ -359,21 +369,24 @@ contract-level payload of the family (SCaaS.md §7).
 
 ## 9. Sealed-bid tender in procurement (SPECIFIED, [TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §A)
 
-Contract: SCaaS.md §10 / [TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §A.3. Client flow (detail and deviations in [TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §A.5: the commit is one token `pay`
-intent with the deposit; reveal and withdraw need no signature):
+Contract: SCaaS.md §10 / [TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §A.3. Client flow
+(summary of TSS §A.5, which is normative): the commit is the deposit token's own `pay` intent; reveal, withdraw and
+settle need no signature and can be run by any keeper.
 
 | # | Buyer ERP | Bidder | Chain |
 |---|---|---|---|
-| 1 | Create tender document; `documentRef = keccak256(canonical tender docs)`; `createTender(config)` via a `call` job from the buyer's account | — | `TenderCreated` |
-| 2 | Publish tender id, deadlines, deposit token and amount | Generates `salt` (32 random bytes), computes `commitment = keccak256(abi.encode(tenderId, price, salt, bidder, chainId, tender))`, stores `(price, salt)` in its secret store | — |
-| 3 | — | Signs the commit op (gasless meta-tx); deposit `minDeposit` pulled by the tender contract | `BidSubmitted` |
-| 4 | Shows commitments count only | After `commitDeadline`: signs `revealBid(tenderId, price, salt)` | `BidRevealed` |
-| 5 | After `revealDeadline`: `settleTender` (anyone after `awardDeadline`) | — | `TenderSettled(winner, price)` |
-| 6 | On the finalized event: create the purchase order for the winner; record deposits | Losers sign `withdrawDeposit` (100 % back) | `DepositRefunded` / `DepositSlashed` |
-| 7 | Bond release on contract signature / delivery | — | `BondReleased` / `BondClaimed` |
+| 1 | Tender record; documents canonicalized, `documentRef` = salted commitment; config (deposit token, `minDeposit`, deadlines, public reserve, `minBidders`, bond policy, `slashSink`, allowlist root, `dqWindow`, `maxDisqualifications`, `forfeitClasses`); `createTender(config)` via a `call` job from the buyer's account | — | `TenderCreated` |
+| 2 | Publish tender id, deadlines, deposit terms, eligibility proofs; a sponsored portal path may be offered, never as the bidders' only path | Generates `salt` (32 random bytes), computes `commitment = keccak256(abi.encode(BID_TAG, chainId, tender, tenderId, bidder, price, salt))`, stores `(price, salt)` in its secret store | — |
+| 3 | Watches the commit count only; may cancel until `commitDeadline` (all deposits refund) | Signs one `pay` intent of `minDeposit` to the tender (`data = pay(depositRef)`, relayer bound to the tender); anyone submits `commitBid` | `BidCommitted` / `TenderCancelled` |
+| 4 | — | After `commitDeadline`: `revealBid(tenderId, bidder, price, salt)` by the bidder or any keeper (no signature) | `BidRevealed` |
+| 5 | Inside `dqWindow`: due diligence on the leader; if it fails, `disqualifyWinner(reasonRef, class)` (leader only, only while a next valid bid exists); then `settleTender` (buyer after reveals, anyone after the window) | — | `BidDisqualified`, `TenderSettled` |
+| 6 | On the **finalized** `TenderSettled`: purchase order to the winner; keeper jobs `withdrawDeposit(tenderId, bidder)` for every bid | Refunds arrive without any signature | `DepositRefunded` / `DepositSlashed` |
+| 7 | Bond: `releaseBond` on contract signature/delivery, or `claimBond(reasonRef)` | — | `BondReleased` / `BondClaimed` |
+| 8 | Supplier invoice paid with a **fresh random `entryRef`** (§5.1), never derived from `tenderId` | — | `PaymentSettled` |
 
 ERP constraints: the ERP never sees prices before reveal; the PO is created only from the finalized `TenderSettled`;
-non-revealers are flagged from `DepositSlashed`.
+non-revealers are flagged from `DepositSlashed`; the bidder reconciles its deposit as a payment (`entryRef =
+depositRef`).
 
 ---
 
@@ -385,71 +398,101 @@ non-revealers are flagged from `DepositSlashed`.
   `SubjectAccountFactory.predict(firstKey, guardian)`; the client enqueues a `call` job `deploy(firstKey, guardian)`
   **before** the subject's first payment (deploy is permissionless and idempotent). Key changes go through
   `executeAsOwner` signed by an existing key (client builds `OwnerCall(bytes data,uint256 nonce,uint256
-  validUntil)`).
+  validUntil)`). Under UA it is **option (b)**: the optional smart account for subjects who want recovery without
+  moving funds or one address across key changes (UA R307); its seed keys come from the role path
+  `m/7622'/0'/<account>'/2'/<i>'`, never the EOA path (UA R300, S4F R269).
 - Non-EVM: open the subject's account object (`meta::open`/`open_passkey` on Sui/Aptos, `open`/`open_passkey` on
   Solana, `BindKey` on TON, custom account on Soroban).
 
-### 10.2 Universal Account registration (BUILT on dev chains; production after audit)
+### 10.2 Universal Account registration (SPECIFIED, [UA](superpowers/specs/2026-10-06-universal-account-design.md) rev 1.3 §12.3)
 
-1. Client derives the confidential key `x` on the device (seed path `m/254|12381/<coin>/<account>/7`), computes
-   `encodedY`, `UA = keccak256(encodedY)`.
-2. Reads `popChallenge(encodedY, account)` = `keccak256(abi.encodePacked(registry, encodedY, account))` where
-   `account` is the subject's EOA or smart account that will call `register`.
-3. Produces `schnorrPop` (Schnorr by `x` over the challenge, `zetherPop` in clientkeys) and `authPop` per scheme
-   (multisig signatures, FROST/MuSig2 group Schnorr, BLS PoP, or ERC-1271 over the challenge).
-4. The **subject's account** calls `register(encodedY, scheme, authData, abi.encode(schnorrPop, authPop), linkEVM)`
-   (not relayable by a third party because the challenge binds `msg.sender`; a smart account may be relayed at its
-   own layer).
-5. On the finalized `AccountRegistered(ua, scheme, linkedEVM, authData)` event the client updates its party record:
-   `ua`, linked address, scheme, `registered = true`.
+Replaces the Zether-only flow of the built `UniversalAccountRegistry` (`UA = keccak256(encodedY)`, PoP bound to
+`msg.sender`, `AuthScheme`, `linkEVM`), which stays on dev chains until UA stream F1 deletes it (UA R312).
 
-Scheme choice: staff/outlets → `SMART_ACCOUNT_1271` (passkey account) or `SELF_SCHNORR`; boards and finance →
-`ECDSA_MULTISIG`; agent clusters → `FROST_BN254`; never BLS on the same curve as the Zether key.
+**Native accounts are never registered** (UA R294): an EVM EOA or contract account (incl. `SubjectAccount`, Safe),
+Hedera native accounts, Solana, Stellar/Pi `G…`, Soroban `C…`, Aptos, Sui and Cosmos native accounts, TON wallets.
+They sign as today. Every **derived** kind (passkey `webauthn-p256`, `p256`, `ed25519`, `bip340`, Schnorr/BLS,
+MuSig2/FROST, `msig`, ML-DSA/FN-DSA, `zether-*`, `pqz-mlwe`) registers once on each chain where it is used:
+
+1. The client derives the key for the kind on its own path (`m/7622'/0'/<account>'/<kindNo>'/<i>'`; Zether conf keys
+   keep `m/254|12381/<coin>/<account>/7`; passkeys are one credential per `rpId`), builds the canonical `keyData`,
+   computes `ua = keccak256(keccak256("scaas.ua.<kind>.v1") ‖ keyData)` and checks `ua >> 160 ≠ 0`.
+2. It reads `popDigest(ua, authRef)` from the registry, or computes it —
+   `keccak256(POP_TAG ‖ keccak256(chain_key) ‖ registry_id ‖ ua ‖ authRef)` binds chain, registry, UA and
+   `authRef`, **not the caller** (UA R295) — and signs `uaMessage(kind, POP_TAG, popDigest)` with the kind's signer
+   (`UAKey.signUA("pop", …)`; MuSig2/FROST: a group signing session plus the KeyAgg hints or the DKG transcript).
+   For a Zether kind with `authRef ≠ 0` the authority also signs `authPop` (purpose `authref`; a native authority
+   signs the EIP-712 `UAAuth`). `authRef = 0` for every non-Zether kind.
+3. **Anyone** submits `register(kind, keyData, pop, authRef, authPop)`: the subject self-paid, a relayer `call` job,
+   or the node gateway `POST /v1/ua/register {chain, kind, keyData, pop, authRef}` (gasless; NI §5.5, R320).
+   Front-running yields the identical record or a revert.
+4. On the finalized `UARegistered` event the client reads `recordOf(ua)` — kind **and** `authRef` equal what it
+   asked for — and only then marks the account usable on that chain.
+
+Kind choice (UA §4.4): staff/outlets with a phone → `webauthn-p256` UA (or `SubjectAccount` when they want recovery);
+extension-wallet users → native EOA; boards and finance → `msig` over members' passkey UAs and/or EOAs (each member
+confirms its listing off chain; membership is not consent); agent clusters and Schnorr MPC → `frost-*` (shown with
+its attestation-only caveats); HSM keys → `p256`; confidential balances → `zether-*` with `authRef` one of the above;
+PQ authority → `mldsa65`; PQZ on the private chain → `pqz-mlwe` with a PQ `authRef`. The registry refuses the same
+public key under a second kind (`UAKeyInUse`) and a BLS `authRef` on the same curve as the Zether key.
 
 ### 10.3 Identity sync rules
 
-- The party ↔ address/UA mapping lives only in the client (erasable, SCaaS.md §11).
+- The party ↔ address/UA mapping lives only in the client (erasable, SCaaS.md §11). In Odoo: `blockchain.ua`
+  (kind, canonical id, key data, per-chain registrations), linked to partners only in the client store (UA R318).
+- Canonical UA form everywhere: lower-case hex; a value whose top 96 bits are zero is the 20-byte native id. On
+  non-EVM families a derived id is shown only as `urn:scaas:ua:v1:<kind>:<hex32>`, never as a native address (UA
+  R291, R315).
 - Receiving wallets are approved with four-eyes and become usable after a cooling-off period (24 h in the Odoo
   example, R22); push them to the node watch list.
-- One UA per (curve, network, account) — never per token. A new key is a new UA (no rotation).
+- A UA is the same on every chain (chain-independent id) but registered per chain; never per token. No rotation
+  inside a UA: a new key is a new UA plus a transfer (UA R302); a stable address across key changes is
+  `SubjectAccount`.
+- EVM balances of derived UAs exist only on MetaToken v3 clones (`bytes32` ledger, events `UATransfer`,
+  `UAMetaTransactionExecuted`); v1/v2 tokens accept native ids only (UA R303, R308).
 
 ---
 
-## 11. Regulated-token compliance flow (PLANNED)
+## 11. Regulated-token compliance flow (SPECIFIED, [AS](superpowers/specs/2026-10-06-asset-suite-design.md) §3)
 
 ```
-authority ruling ──► issuer legal/compliance verifies, computes courtRulingId = keccak256(canonical ruling id)
-        ──► client creates an intervention request (freeze / unfreeze / force transfer / burn) with the ruling document
-            stored off chain
-        ──► quorum members sign the multisig transaction (≥ 3-of-5) on their devices
-        ──► client pushes a `call` job from the quorum contract (namespace with allow_call)
-        ──► finalized AccountFrozen / AccountUnfrozen / JudicialTransferExecuted / CourtOrderedBurn
-        ──► client books the effect (e.g. reclassify the frozen balance; post the forced transfer) and links the
-            ruling document to the event
+authority order ──► issuer legal/compliance verifies; orderId = keccak256(canonical order id), document hash off chain
+        ──► compliance contract (multisig) records the order {subject, beneficiary, maxAmount, freezeUntil}
+        ──► issuer contract (multisig) freezes the subject, then force-transfers ≤ maxAmount to the beneficiary
+            (members sign on their devices; the client pushes `call` jobs from a namespace with allow_call)
+        ──► finalized freeze / order / forced-transfer / pause events
+        ──► client books the effect (reclassify the frozen balance, post the forced transfer) and links the order
+            document to the event
 ```
 
-Rules: never an EOA authority; the ruling id is mandatory; frozen accounts still receive; every intervention event is
-reconciled to exactly one approved request (unmatched intervention events ⇒ incident). Securities: transfers call
-`checkTransferCompliant`; the client keeps KYC/accreditation data off chain and only pushes attester flags to the
-registry extension (SCaaS.md §14.5).
+Rules (AS R202–R206): `issuer` and `compliance` are contracts, never EOAs; a forced transfer needs a live order record
+and moves only from the frozen subject to the recorded beneficiary; there is no court-ordered burn (a burn is a
+forced transfer to a beneficiary that burns or unwraps); frozen accounts still receive; issuer-only freezes ≤ 30
+days; pauses ≤ 7 days with a 7-day cooldown, and fee-less unwraps are never paused. Every intervention event is
+reconciled to exactly one approved request (unmatched intervention events ⇒ incident). Eligibility: the token pins a
+`ComplianceRegistry` and a `requiredFlags` mask; only receivers are checked; the client keeps KYC/accreditation data
+off chain and only an attester pushes flags (no personal data on chain; optional VC layer, UA R310).
 
 ---
 
 ## 12. Asset-suite configuration
 
 Creating a token is a subject-signed (or treasury-multisig) factory call pushed as a `call` job, or sent directly by
-the creator's wallet.
+the creator's wallet. Templates are off-chain presets mapping to one factory call plus optional action contracts
+(AS R213).
 
-| Template | Call | Client configuration |
-|---|---|---|
-| Loyalty points (tier 1) | `createMetaToken(1, address(0), abi.encode(name, symbol, decimals, initialSupply, minter), salt)` | `minter` = the issuer's mint contract or multisig; earn rules in the ERP trigger `mint` jobs; fee 0 |
-| Internal 1:1 money (tier 2) | `createMetaToken(1, underlying, abi.encode(name, symbol, 0, 0, address(0)), salt)` | Journal per (company, token) for accounting; wrap/unwrap by holders |
-| Confidential money | `createZetherToken(1, underlying, verifier, abi.encode(name, symbol, registry, shieldScale, maxDecryptableShielded, confidentialFee, auditorKey), salt)` | dev chains only until audit; curve decision; auditor key custody |
-| Basket, vesting, controlled, NFT | — | **PLANNED** (SCaaS.md §4) |
+| Template | Call | Client configuration | Status |
+|---|---|---|---|
+| Loyalty points (tier 1) | `createMetaToken(1, address(0), abi.encode(name, symbol, decimals, initialSupply, minter), salt)` or v2 `createTiered(META_NONE, …)` | `minter` = the issuer's mint contract or multisig; earn rules in the ERP trigger `mint` jobs; fee 0 | **BUILT** |
+| Internal 1:1 money (tier 2) | `createMetaToken(1, underlying, abi.encode(name, symbol, 0, 0, address(0)), salt)` | Journal per (company, token) for accounting; wrap/unwrap by holders | **BUILT** |
+| Wrapper with a rate, multi-underlying (tiers 2/3, v2) | `createTiered(kind, version, underlyings[], initData, salt)`, kind `META_SINGLE` or `META_MULTI` | rates fixed or adjustable (contract `rateAdmin`), guardian for multi; TW2 §4–§8 | **BUILT** (contracts; node/Odoo fields TW2 T7) |
+| Confidential money | `createZetherToken(1, underlying, verifier, abi.encode(name, symbol, registry, shieldScale, maxDecryptableShielded, confidentialFee, auditorKey), salt)` | dev chains only until audit; curve decision; auditor key custody | **BUILT** (dev chains) |
+| Regulated tokens (kinds 5–7), vesting (`VestingGrant`), distributions, `ExchangeOffer` | `createTiered(META_*_REG, …)`; counterfactual clones via `predict*` | issuer/compliance contracts, `ComplianceRegistry`, `termsHash` disclosure | **SPECIFIED** (AS) |
+| NFT kinds | — | — | **PLANNED** |
 
-After creation: read `predictAddress` before, verify `isDeployedHere`, `creatorOf`, `versionOf` after; register the
-token on the node (`POST /v1/admin/chains/{key}/tokens`) and in the client (`PUT /v1/tokens/{chain}`), record the
-EIP-712 domain from `eip712Domain()`.
+After creation: read `predictAddress` before, verify `isDeployedHere`, `creatorOf`, `versionOf` after (decoders know
+kinds 0–7); register the token on the node (`POST /v1/admin/chains/{key}/tokens`) and in the client
+(`PUT /v1/tokens/{chain}`), record the EIP-712 domain from `eip712Domain()`.
 
 ---
 
@@ -473,19 +516,38 @@ Client UX rules:
 3. Batch related operations under one passkey assertion (Merkle root).
 4. Never send mnemonics, `x`, PRF outputs or PINs to any server; tokens and keys live in memory or the encrypted vault.
 5. Non-EVM connectors (Wallet Standard for Sui/Aptos, Keplr/Leap `signArbitrary`, Freighter, TON Connect) are loaded
-   lazily per chosen network. Solana, Soroban and Aptos seed signers in clientkeys are **PLANNED**.
+   lazily per chosen network.
+6. One key = one purpose: native keys keep their family paths (EVM `m/44'/60'/0'/0/i` is the EOA only); every UA
+   kind and every account-role key comes from `m/7622'/0'/<account>'/<kindNo>'/<i>'` and signs only through
+   `UAKey.signUA(purpose, digest)` — there is no raw "sign these 32 bytes" for a UA key (UA R298–R301).
+
+Specified next ([S4F](superpowers/specs/2026-10-06-signers-followups.md) rev 1.1, UA F3): vault v2 under a
+non-extractable device key; scrypt `N = 2^17` for every new passphrase envelope (R259); Soroban, Aptos and Solana
+seed and passkey signers built by clientkeys `fam/*` and one `wallets/*` connector implementation (R263–R267); role
+keys for subject accounts (R269); the "backup key required" switch, default OFF, which never blocks an exit
+(R250–R254); `ua.js` (`deriveUAKey`, `UAKey.signUA`, `uaOf`, `popDigest`) and MuSig2/FROST signing sessions.
 
 ---
 
 ## 14. The app (`scaas/app/`, SPECIFIED)
 
-Design: [app spec](superpowers/specs/2026-10-06-scaas-app-design.md) (R150–R179).
+Design: [APP](superpowers/specs/2026-10-06-scaas-app-design.md) rev 1.2 (R150–R179).
 
-React + Vite console and dApp: wallets (passkey, seed vault, extension wallets, dev key), payments, DEX book, Zether,
-contracts, node admin. Chain features work without login; node admin requires a built-in login (session token) or
+React + Vite console and dApp over **all seven families** behind one adapter interface: EVM (Gnosis 100, Celo 42220,
+the private chain 7622, anvil 31337), Hedera 295–298, Cosmos, Soroban (Stellar, Pi), Aptos, Sui, TON, Solana.
+Wallets: the UA default (`webauthn-p256` UA registered gaslessly through `POST /v1/ua/register`), `SubjectAccount`
+option (b), the seed vault in a key worker, extension wallets, dev key in dev builds only. Payments, wrap/unwrap,
+token creation, DEX book, contracts. Zether screens run on dev chains 31337/1337 with a configured `ZetherToken`,
+and on the private chain 7622 for configured **PQZ tokens** (PQZ §11.5; prover in the Zether worker). Chain id 7622
+was formerly 9000; migration pending (stream CHAINID).
+
+Submission: through a node gateway (`/v1/metatx` for EVM and Hedera, `/v1/ops` for the six non-EVM families,
+`/v1/ua-metatx` for UA intents) or self-paid. The app holds **no API key**, no gateway secret and no RPC provider
+key (R152; NI R109). Chain features work without login; node admin requires a built-in login (session token) or
 OIDC (Authorization Code + PKCE S256, tokens in memory only); the UI hides actions the token's roles cannot perform
-(the node enforces). Screens for gossip: Peers, Topics, Announces, Bans, Trusted list (A2 §13.2). ERPs may embed or
-link the app for wallet setup instead of building their own signer UI.
+(the node enforces). Console screens include external-client API keys (managed by `key_custodian`), admin users,
+audit, and gossip (Peers, Topics, Announces, Bans, Trusted list, A2 §13.2). ERPs may embed or link the app for
+wallet setup instead of building their own signer UI.
 
 ---
 
@@ -627,7 +689,8 @@ event) (UNIQUE) → same request + outbox path as manual payments. Custodial wal
 - [ ] Outbox row written in the same transaction as the business change; no network call inside it.
 - [ ] Typed data built server-side; amount and `validUntil` chosen by the server; `entryRef` random.
 - [ ] Signature shape verified before push; never store subject secrets.
-- [ ] HMAC client passes the shared KAT; clock synced (NTP).
+- [ ] HMAC client passes the shared KAT; clock synced (NTP); the API key lives only in the server-side secret store
+      (never in a browser, mobile or desktop app or extension).
 - [ ] Idempotency tuple stable across retries; generation bumped only by operator requeue.
 - [ ] `push_attempted` committed before HTTP; permanent vs transient errors distinguished; 409 never ⇒ dead.
 - [ ] Both feeds polled with overlap; cursors persisted with `store_id`, `incarnation`, `restore_epoch`; continuity

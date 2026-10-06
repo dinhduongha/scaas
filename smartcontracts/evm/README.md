@@ -15,7 +15,9 @@ Interface đã chốt cộng các implementation đã có (2026-10-03,
 | `MandateWallet` | `src/wallet/MandateWallet.sol` | ví một người trả cho auto-pay delegated: mandate on-chain (hạn mức lần/kỳ, payee, hạn), ERC-1271 cho chủ ví, trả bằng `payWithFee`. Deploy ngoài Odoo: `forge create src/wallet/MandateWallet.sol:MandateWallet --constructor-args <owner>` (R29) |
 | Deploy | `script/Deploy.s.sol` | ghi `deployments/<chainid>.json` |
 
-Zether vẫn chỉ là interface. `test/vectors/metatx_kat.json` là vector digest dùng chung với
+Zether is built (`src/zether/`: `ZetherToken`, `ZetherMetaTx`, `ZetherVerifierBn254`, `ZetherVerifierBls12381`;
+`src/registry/UniversalAccountRegistry.sol`), unaudited and gated to dev chains 31337/1337 (`ZetherSafety`,
+RS2-1); see `docs/SCaaS.md` §8. `test/vectors/metatx_kat.json` là vector digest dùng chung với
 Odoo (`dms_blockchain/lib/eip712.py`) và relayer (`scaas-node`).
 
 ## Mô hình: factory mở
@@ -96,9 +98,9 @@ Zether token tự động gọi được qua relayer, không cần đường ri�
 ## Chạy
 
 ```bash
-forge build                              # profile default (evm cancun)
+forge build                              # profile default (forge's default EVM)
 forge test
-FOUNDRY_PROFILE=private9000 forge build  # evm berlin — xem bảng dưới
+FOUNDRY_PROFILE=private9000 forge build  # evm prague — see the table below
 ```
 
 `lib/` không commit (`.gitignore`). Dựng lại:
@@ -112,7 +114,7 @@ forge install OpenZeppelin/openzeppelin-contracts   # cần v5.2+
 
 | Profile | EVM | Lý do |
 |---|---|---|
-| `private9000` | **berlin** | Chain Nethermind private chạy **trước London**. Genesis khai `londonBlock: 0`/`pragueBlock: 0` nhưng Nethermind dùng chainspec riêng và **bỏ qua key kiểu Geth trong im lặng**. Không hạ EVM version thì bytecode sinh ra có `PUSH0` (Shanghai) và chain không hiểu. Xem `TRAPS.md` §"Private chain". |
+| `private9000` | **prague** | Private Nethermind chain (Clique, one signer). Since the 2026-08-31 chainspec fix it runs through Fusaka + BPO2 (PUSH0, TSTORE, EIP-2537 live, base fee 0); it was `berlin` before, when Nethermind silently ignored the Geth-style fork keys. Chain id moves from 9000 to 7622 (owner 2026-10-07, stream CHAINID); the directory and profile names stay until then. See `src/chains/private9000/README.md`, `TRAPS.md` §"Private chain". |
 | `gnosis` | cancun | Có EIP-2537 (đã đo: `0x0b/0x0c/0x0f/0x10` sống) |
 | `celo` | cancun | Như trên |
 
@@ -138,8 +140,10 @@ Cùng lớp lỗi bắt được khi viết lại: `bytes32 indexed reference` t
 1. **EIP-712 thay `personal_sign`.** Ví hiển thị nội dung thay vì 32 byte mù.
 2. **`SignatureValidator.verifySignature2` bị loại** — `ecrecover` thô, không chặn
    malleability `s`. Chưa ai gọi, nhưng là súng đã lên đạn.
-3. **Bỏ `mode` bitmask, dùng wildcard `relayer == address(0)`.** Bitmask đòi đổi nội
-   dung digest theo mode ⇒ cross-mode replay. Wildcard giữ digest cố định.
+3. **The `mode` bitmask is kept** (`common/MetaTxLib.sol`, `supportedModes() = 0xF3`): flags
+   `MODE_RESTRICT_RELAYER`, `MODE_RESTRICT_FEE_RECIPIENT` plus an enumerated fee-mode nibble. `mode` is part of the
+   signed struct, and unbound `relayer`/`feeRecipient` are hashed as `address(0)` (canonical zeroing), so one
+   signature never validates under another mode. See `docs/SCaaS.md` §5.3.
 
 Mẫu số phần trăm thống nhất **ppm (1e6)**, trần cứng **1% = 10.000 ppm**.
 `setTransferFeePerMille` (1e3) bị loại: nó không biểu diễn được 0,05%.
