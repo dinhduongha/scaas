@@ -25,6 +25,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 sha3 = "0.10"
+# Node store (R88/R111): SQLite now, PostgreSQL/MySQL in P1b. No default features: no `any`, no `json`.
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "migrate", "macros"] }
 stellar-xdr = { version = "28", features = ["base64"] }
 tokio = { version = "1", features = ["full"] }
 toml = "0.8"
@@ -32,6 +34,10 @@ tower = { version = "0.5", features = ["limit", "util"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 zeroize = "1"
+
+[features]
+default = ["store-sqlite"]
+store-sqlite = ["sqlx/sqlite"]
 
 [dev-dependencies]
 proptest = "1"

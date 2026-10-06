@@ -1,0 +1,15 @@
+{
+  "_doc": "Node job state machine (NI spec §4). Shared with dms_blockchain/tests/data/ (CI cmp). transitions[from] = allowed targets; late_noop[from] = reported targets that are no-ops (not stored). live = states held by job_live_digest.",
+  "states": ["queued", "leased", "signed", "broadcast", "mined", "reverted", "dead", "consumed", "cancelled"],
+  "live": ["queued", "leased", "signed", "broadcast"],
+  "transitions": {
+    "queued": ["leased", "cancelled", "dead"],
+    "leased": ["queued", "signed", "dead", "consumed", "cancelled"],
+    "signed": ["broadcast", "mined", "reverted", "queued", "dead", "consumed"],
+    "broadcast": ["broadcast", "mined", "reverted", "queued", "dead", "consumed"],
+    "mined": ["reverted"]
+  },
+  "late_noop": {
+    "consumed": ["mined", "reverted", "consumed"]
+  }
+}

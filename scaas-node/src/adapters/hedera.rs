@@ -451,6 +451,7 @@ mod tests {
     #[test]
     fn config_routes_hedera_through_the_adapter() {
         let raw = "[odoo]\nurl = \"http://o\"\ndatabase = \"d\"\nrelay_api_key_env = \"R\"\nindexer_api_key_env = \"I\"\n\
+            [store]\nurl = \"sqlite:///var/lib/scaas/node.db\"\n\
             [[chains]]\nfamily = \"hedera\"\nevm_chain_number = 296\nrpc_urls = [\"http://127.0.0.1:1\"]\n\
             signer_key_env = \"SCAAS_TEST_HEDERA_KEY\"\n\
             finality = { mode = \"instant\" }\n";
