@@ -593,6 +593,12 @@ remaining holders end up backed by the weakest asset. This is the expected behav
   should submit it privately (a private relay or a builder bundle).
 - No re-enable: a mistaken disable is permanent for that leg. Holders lose nothing by it; the issuer creates a new
   token if the leg must come back.
+- **A shortfall on one leg does not stop wrapping into the others** (owner decision 2026-10-06, implementation review
+  L3; R134 unchanged). `wrap(A)` checks only leg A's `balanceOf ≥ reserve`. If leg B loses backing (a blacklist burn,
+  a negative rebase, a confiscation), new deposits into A still mint at par into a pool that is now under-backed, and
+  early exiters through A take the good assets those deposits brought. `disableWrap(B)` does not prevent this. The
+  node/ERP should alert when any leg's `balanceOf < reserve` and the issuer should pause intake by communication; a
+  wallet that shows a Multi token should show the per-leg backing before a wrap.
 
 ### 8.5 Adjustable Multi rates: residual risk (R147)
 
