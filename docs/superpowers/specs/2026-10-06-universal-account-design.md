@@ -1,13 +1,16 @@
 # Universal Account (UA): kind-tagged account identifiers, per-chain registry, per-kind verifiers, optional credentials (component spec F)
 
-Status: draft **rev 1.3**, 2026-10-07. Rev 1.1 folds in the owner's answers to §17 (rotation and v3 ledger confirmed; PQ
+Status: draft **rev 1.4**, 2026-10-07. Rev 1.1 folds in the owner's answers to §17 (rotation and v3 ledger confirmed; PQ
 kinds and ed25519 enabled on every EVM chain with pure-Solidity verifiers where no precompile exists; BIP-43 purpose
 `7622'`; spec E kind `0x0142` cross-referenced). Rev 1.2 accepts every remaining §17 default. **Rev 1.3 applies
 independent review 1** (`docs/reviews/specs/2026-10-06-universal-account-review-1.md`, FIX-THEN-GO: H1–H4, M1–M9,
 L1–L10) and the owner rulings of 2026-10-07 (MuSig2/FROST kinds kept and made checkable; Soroban role `kindNo` 18);
-disposition in §18. Component spec **F**. Short name **UA**. Code at `scaas` `main` 36b56b9.
+disposition in §18. **Rev 1.4 applies the Codex review** (`docs/reviews/specs/2026-10-06-universal-account-codex-review-1.md`,
+FIX-THEN-GO: H1–H2, M1–M2, L1; disposition in §19) and the owner ruling of 2026-10-07 that the private chain id moves
+from 9000 (also Evmos Testnet) to **7622**: wherever rev 1.3 said chain 9000 this spec says chain 7622 (formerly 9000).
+Component spec **F**. Short name **UA**. Code at `scaas` `main` 36b56b9.
 **Nothing in this spec is built**; the current `UniversalAccountRegistry` (Zether-only) is replaced by it (§12).
-Rulings: **R290–R318** (§2). R150–R172 belong to the app spec, R180–R199 to spec B (TSS), R200–R217 to spec A (AS),
+Rulings: **R290–R318, R330–R331** (§2). R150–R172 belong to the app spec, R180–R199 to spec B (TSS), R200–R217 to spec A (AS),
 R230–R247 to spec C (OPS), R250–R268 to spec D (S4F), R270–R289 to spec E (PQ Zether). The owner rulings of
 2026-10-06 (eight items) and the owner answers of rev 1.1 are folded in and marked `(owner)`; everything else is a decision of this spec.
 
@@ -39,9 +42,10 @@ Amends (status changes and pointers only; the text of those files is rewritten b
 | S4F | §3 "existing dual uses for F to rule on" | ruled by R300 (separate derivation for every kind and account role) |
 | S4F | R269 / Q1 role `kindNo` for Soroban `C…` | **ruled** (owner 2026-10-07): 18 (`soroban-contract`), as D's default (§8.1) |
 | S4F | R253 "today only the Cosmos passkey address is unsatisfiable" | pointer: with F, **every single-key derived UA** is unsatisfiable under `requireBackupKey` (D stream rewrites the sentence) |
-| E | R282 PoP "binds chain, registry and UA" | pointer: F's PoP now also binds `authRef`, and the PQ `authRef` co-signs (R295, review H1) |
-| E | R281 "`fndsa512` once F enables it" | satisfied: F enables `fndsa512` with the frozen FIPS 206 draft encoding (R313); R282 "gen-1 kind" holds because chain 9000's gen 1 deploys after F9 (§6.5) |
-| E | R281 hybrid/treasury `authRef` shapes | registrable through per-chain measured caps (R313, §6.2 step 4); the `{mldsa65 ×3} t=2` form fits only where an ML-DSA precompile exists (chain 9000) |
+| E | R282 PoP "binds chain, registry and UA" | pointer: F's PoP now also binds `authRef`, and the PQ `authRef` co-signs (R295, review H1), and the chain's `chain_uid` (R330) |
+| E | R270 / §2.7 "a unique chain id for the private chain … also concerns F's chain-bound PoPs" | **ruled**: owner moves the private chain to 7622 (formerly 9000; E's text follows in its sweep); F does not rely on chain-id uniqueness and binds `chain_uid` (R330, Codex H1) |
+| E | R281 "`fndsa512` once F enables it" | satisfied: F enables `fndsa512` with the frozen FIPS 206 draft encoding (R313); R282 "gen-1 kind" holds because chain 7622's (formerly 9000) gen 1 deploys after F9 (§6.5) |
+| E | R281 hybrid/treasury `authRef` shapes | registrable through per-chain measured caps (R313, §6.2 step 4); the `{mldsa65 ×3} t=2` form fits only where an ML-DSA precompile exists (chain 7622 (formerly 9000)) |
 | APP | R176, §6.2 (passkey origins, H4 de-dup) | passkey id is `x ‖ y ‖ rpIdHash` (no origin, §4.2): one passkey ⇒ one UA per `rpId`, any origin the browser accepts for that `rpId`; R176 "after F1–F3/N4" unchanged |
 | INT | §10.2 | rewritten at stream F1 to the flow in §12.3 |
 
@@ -127,9 +131,10 @@ Format: **ruling** — why — cost if wrong.
   enforced (R295, R299); receiving to an unregistered derived id is refused so a typo reverts instead of burning funds
   (AR §2.1.6). — One registration per chain (bn254 ≈ 75 k gas; §14).
 - **R295** **Proof of possession is kind-tagged and binds chain, registry, UA and `authRef` — not the caller.**
-  `pop_digest = keccak256(POP_TAG ‖ chainKeyHash ‖ registry_id ‖ ua ‖ authRef)` where `POP_TAG =
+  `pop_digest = keccak256(POP_TAG ‖ chainKeyHash ‖ chainUid ‖ registry_id ‖ ua ‖ authRef)` where `POP_TAG =
   keccak256("scaas.ua.purpose.pop.v1")`, `chainKeyHash = keccak256(chain_key)` with `chain_key` the mesh form
   (`evm:<chainid>`, MESH R115) **computed from `block.chainid` in the constructor** (never a constructor string),
+  `chainUid` the chain's immutable unique id (genesis hash, R330; the chain id alone is not unique),
   `registry_id` the 32-byte registry address/id, and `authRef = 0` for every non-Zether kind; then signed as a tagged
   message of the kind (R301). When `authRef ≠ 0` the authority **co-signs**: `register` also requires
   `requireAuthorized(authRef, PURPOSE_AUTHREF, pop_digest, authPop)` (purpose `authref`, §8.3), so nobody can name a
@@ -248,7 +253,8 @@ Format: **ruling** — why — cost if wrong.
   `balanceOf` for native holders (review M5). — Naive ERC-20 indexers see one large `UA_POOL` holder; our indexer
   splits it (§11.2).
 - **R309 (owner)** **The UA-ledger meta-transaction has its own struct and typehash** (`UAMetaTransaction`, `from`/`to` as
-  `bytes32`), domain `("SCaaS MetaToken", "3", chainId, clone)`, and the same nine-step pipeline (TW2 §3.2). This is a
+  `bytes32`), domain `("SCaaS MetaToken", "3", chainId, clone, salt = chainUid)` (the clone copies
+  `registry.chainUid()` at `initialize`, R330), and the same nine-step pipeline (TW2 §3.2). This is a
   deliberate exception to R140 ("no second typehash"): R140 forbade a second hash of the **same** struct; this is a
   different struct whose `from` cannot be an `address`. — An `address`-typed `from` cannot carry a 32-byte id. —
   Clients build two struct shapes (vectors in §15).
@@ -273,13 +279,13 @@ Format: **ruling** — why — cost if wrong.
   and `AuthScheme` are deleted; `ZetherTypes.toUA` becomes the tagged derivation; Zether accounts re-register; no data
   migration. — Only dev chains (RS2-1) hold registrations today. — Dev balances are recreated by scripts.
 - **R313 (owner)** **PQ signing kinds (`mldsa44`, `mldsa65`, `fndsa512`) and `ed25519` are enabled on every EVM
-  chain.** Verification uses a native precompile where one is probed (chain 9000: `MLDSA65` at `0x…0F10`, spec E R279;
+  chain.** Verification uses a native precompile where one is probed (chain 7622 (formerly 9000): `MLDSA65` at `0x…0F10`, spec E R279;
   any future EIP-8051/8052/8355 address by probe, never by assumption) and a **pure-Solidity verifier** everywhere
   else. Every check, registration PoP included, completes **in one transaction** within the chain's
   `UA_VERIFY_BUDGET = min(12,000,000, ⌊0.7 × chain per-transaction gas cap⌋)` (EIP-7825 chains: 12 M ≈ 70 % of
   16,777,216; Hedera, 15 M cap: 10.5 M), a constructor immutable published in the chain profile. **Each kind's
   verify cap is measured per chain** (worst-case accepting and rejecting input, §15.2 T-GAS) and set as a
-  constructor immutable `verifyCap[kind]`, also published: e.g. `mldsa65` ≈ 20 k with the chain-9000 precompile, the
+  constructor immutable `verifyCap[kind]`, also published: e.g. `mldsa65` ≈ 20 k with the chain-7622 (formerly 9000) precompile, the
   measured Solidity worst case elsewhere. Estimates (spec E §2.4; measured in F9): ML-DSA-65 1.2–8.1 M, ML-DSA-44
   lower, FN-DSA-512 0.6–2.5 M, ed25519 0.3–1.2 M. On public chains an enabled kind's measured cap must stay
   ≤ ~50 % of the budget, so a later gas repricing cannot push it over after funds are held (residual §13 S22).
@@ -289,7 +295,7 @@ Format: **ruling** — why — cost if wrong.
   (resumable state is a new replay/griefing surface and a second audit target for no gain while the estimates fit).
   Structures are bounded by the same caps (§6.2 step 4): a hybrid `{mldsa65, p256}` fits everywhere, but a quorum
   of two Solidity-verified PQ members (2 × up to 8.1 M) does not, so spec E's `{mldsa65 ×3} t=2` treasury form is
-  registrable only where an ML-DSA precompile exists (chain 9000). `fndsa512` freezes the
+  registrable only where an ML-DSA precompile exists (chain 7622 (formerly 9000)). `fndsa512` freezes the
   FIPS 206 draft encoding in the vectors; a final FIPS 206 with a different encoding is a new kind version
   (`…fndsa512.v2`), never a silent change. `PQ_COMMITMENT` ("verify off chain") is retired. — Owner rev 1.1: PQ and
   ed25519 everywhere; the budget keeps every authorization a single atomic check. — PQ checks cost real money on
@@ -328,6 +334,36 @@ Format: **ruling** — why — cost if wrong.
 - **R318** **Odoo stores UAs as addresses of a new kind, never derives policy off chain**: `blockchain.ua` (kind,
   canonical id per R291, key data, chain registrations), linked to partners only in the client store (erasable,
   SCaaS §11). — Same rule as every other address. — None.
+
+### 2.6 Codex review rulings (rev 1.4)
+
+- **R330** **A chain is identified by `(chain_key, chain_uid)`, never by its chain id alone.** `chain_uid` (`bytes32`,
+  `≠ 0`) is the chain's genesis block hash as its RPC reports it (EVM, Hedera), a **constructor immutable** of the
+  registry exposed as `chainUid()` and published in the chain profile. It is bound into `pop_digest` (R295), the
+  registry's EIP-712 domain `salt` (`UAAuth`, §6.1), the v3 `UAMetaTransaction` domain `salt` (R309) and the
+  `metatx-cancel` digest (§8.3). Being a constructor argument, it also makes the CREATE2 address (§6.3) differ per
+  chain. The EVM cannot read its own genesis hash after block 256, so the registry cannot *prove* `chain_uid`; what
+  the rule guarantees is that two honest registries on chains sharing a chain id (7622, or any other) never accept
+  each other's PoPs, `UAAuth` or v3 signatures. A replica deployed elsewhere with a copy of our profile's arguments
+  is trusted by nothing of ours: tokens bind the registry address at `initialize`, and the node binds the registry
+  address, its `chainUid()` and the RPC's genesis hash per chain profile and refuses a mismatch (E §11.3's genesis
+  binding). Non-EVM families take the family's genesis or network identifier where the runtime exposes it (e.g.
+  Soroban network id, Solana genesis hash), else a chain-profile constant; each family stream fixes it with vectors.
+  — Spec E §2.7: chain id 9000 is also Evmos Testnet; chain ids are a registry convention, not unique. The owner moved
+  the private chain to 7622 (formerly 9000), but F does not rely on 7622 being unique either (Codex H1). — A chain
+  reset (new genesis) needs a new registry; dev chains redeploy anyway.
+- **R331** **EIP-7702 delegated EOAs are native EOAs whose key stays root; native classification is by code at verify
+  time.** Wherever this spec verifies a native EVM id (`requireAuthorized`, `msig` native members, native `authRef`
+  and its co-sign, v3's native path, §5.3): empty code ⇒ ECDSA low-s by the address; code that is exactly the
+  EIP-7702 designator `0xef0100 ‖ address` (23 bytes) ⇒ ECDSA low-s by the address is accepted, and otherwise ERC-1271
+  on the address (which runs the delegate code) under the 50 k cap; any other code ⇒ ERC-1271 only (50 k; 400 k for
+  `SubjectAccount` clones). A member's stated kind `0x0001`/`0x0002` is a label checked for MEMBER, never the
+  dispatch. — The base key of a 7702 account controls it at protocol level (it can send a transaction itself,
+  re-delegate or clear the delegation), so no signature rule of ours can make it weaker than root; refusing its
+  ECDSA would add no security and break plain 7702 wallets, while the 1271 fallback lets delegated wallets with
+  session keys or passkeys sign. v2's `MetaTxCore._isContract` (7702 ⇒ "not a contract" ⇒ ECDSA only) is sound for
+  the same reason and stays unchanged (R303); it only refuses such wallets' 1271 signatures. — If a future EIP lets
+  a 7702 account disable its base key, ECDSA acceptance for it must follow that EIP's flag (new registry generation).
 
 ---
 
@@ -376,9 +412,9 @@ Native kinds (no registration, no tag-derived id; listed so that structures and 
 
 | No. | Name | Native id | Families | Signature accepted |
 |---|---|---|---|---|
-| `0x0001` | `evm-eoa` | 20-byte address | EVM, Hedera (ECDSA alias) | ECDSA low-s over the EIP-712 digest |
+| `0x0001` | `evm-eoa` | 20-byte address (incl. EIP-7702 delegated) | EVM, Hedera (ECDSA alias) | ECDSA low-s over the EIP-712 digest; 7702-delegated: ECDSA, else ERC-1271 of the delegate (R331) |
 | `0x0002` | `evm-contract` | 20-byte address with code | EVM, Hedera | ERC-1271 `isValidSignature(digest, sig)`, 50 k gas (400 k for `SubjectAccount` clones) |
-| `0x0003` | `hedera-native` | long-zero address `0.0.N` | Hedera | HIP-632 `isAuthorizedRaw` (64-byte ed25519), else as 0x0001/0x0002 |
+| `0x0003` | `hedera-native` | long-zero address `0.0.N` | **Hedera only** (never a member on another EVM chain, MEMBER below) | HIP-632 `isAuthorizedRaw` (64-byte ed25519), else as 0x0001/0x0002 |
 | `0x0010` | `solana-ed25519` | 32-byte pubkey | Solana | ed25519 precompile instruction |
 | `0x0011` | `stellar-account` | 32-byte `G…` pubkey | Soroban (Stellar, Pi) | host `require_auth` |
 | `0x0012` | `soroban-contract` | 32-byte `C…` id | Soroban | `__check_auth` |
@@ -406,11 +442,11 @@ Derived kinds (registered; `d` = key data):
 | `0x0120` | `msig` | `u16 threshold ‖ u16 count ‖ count × (u16 kind ‖ bytes32 id ‖ u16 weight)`, ids strictly increasing | — | none of its own; every member registered or native, kind ∈ MEMBER | inside the registry (members via their own kinds) | EVM → all |
 | `0x0121` | *reserved* (was `bls12381-multi`, cut in rev 1.3) | — | — | — | — | — |
 | `0x0130` | `mldsa44` | `pk` (1312) | `mldsa44` | ML-DSA-44 sign(`ua_msg`, ctx = `kind_tag`) | precompile where probed, else pure Solidity (R313) | every EVM chain |
-| `0x0131` | `mldsa65` | `pk` (1952) | `mldsa65` | as 0x0130 | chain 9000 precompile `0x…0F10` (E R279), else Solidity | every EVM chain |
+| `0x0131` | `mldsa65` | `pk` (1952) | `mldsa65` | as 0x0130 | chain 7622 (formerly 9000) precompile `0x…0F10` (E R279), else Solidity | every EVM chain |
 | `0x0132` | `fndsa512` | `pk` (897) | `fndsa512` | FN-DSA-512 (Falcon), FIPS 206 draft encoding pinned by vectors (R313) | as 0x0130 | every EVM chain |
 | `0x0140` | `zether-bn254` | `Y` (64) | `bn254-g1` | scaas Schnorr by `x` under the **Zether** Schnorr tag (`SCAAS-ZETHER-SCHNORR-V1`) on `ua_msg` | existing Zether Schnorr | EVM |
 | `0x0141` | `zether-bls12381` | `Y` (128) | `bls12381-g1` | as 0x0140 on BLS12-381 | existing | EVM (EIP-2537 chains) |
-| `0x0142` | `pqz-mlwe` (**spec E R282**, §6.1 there) | `pk` (16 384) | `pqz-mlwe` | `R_REG` lattice proof over `uaMessage(0x0142, POP_TAG, popDigest(ua, authRef))` + the `authRef` co-sign (R295) | `UAPqzVerifier` → PQZ precompile `0x…0F01` op 3 | chain 9000 only (E R270); `authRef` PQ-only (E R281); `keyPtr` = SSTORE2(pk) |
+| `0x0142` | `pqz-mlwe` (**spec E R282**, §6.1 there) | `pk` (16 384) | `pqz-mlwe` | `R_REG` lattice proof over `uaMessage(0x0142, POP_TAG, popDigest(ua, authRef))` + the `authRef` co-sign (R295) | `UAPqzVerifier` → PQZ precompile `0x…0F01` op 3 | chain 7622 (formerly 9000) only (E R270); `authRef` PQ-only (E R281); `keyPtr` = SSTORE2(pk) |
 
 Validation at registration, all kinds: **key data must be the unique canonical encoding of its key, else
 `UAKeyData`** (one key ⇒ one id ⇒ one keyHash, R299): coordinates and scalars `<` the field modulus / group order
@@ -436,7 +472,7 @@ creation, so a later origin would still need a new UA.
 |---|---|---|
 | ZETHER | `0x0140`, `0x0141`, `0x0142` | Zether functions only (`requireZetherAuthorized`, `kindOf` in `ZetherToken`) |
 | SIGNING | every derived kind not in ZETHER: single-key `0x0100`–`0x0107`, `0x0110`–`0x0113`, `0x0130`–`0x0132`, and the structure `0x0120` | `requireAuthorized` (native or SIGNING; ZETHER ⇒ `UAUnauthorized`); v3 `from`/`to` (native or registered SIGNING, else `UAKindNotAccepted(kind)`); Zether `authRef` (native or SIGNING; E R281 narrows `pqz-mlwe`) |
-| MEMBER | SIGNING single-key kinds, plus the family's native kinds — on EVM `0x0001`–`0x0003` with `id >> 160 == 0` | `msig` members (`UAMemberUnknown`); no other family's native kind and no structure is ever an EVM member |
+| MEMBER | SIGNING single-key kinds, plus the native kinds the chain profile can verify, all with `id >> 160 == 0` — on EVM `0x0001`–`0x0002`; `0x0003` **only** in a Hedera-profile registry (constructor immutable `hederaNative`, HIP-632) | `msig` members (`UAMemberUnknown`); no other family's native kind, no `hedera-native` outside Hedera (Codex M1) and no structure is ever an EVM member |
 
 ### 4.3 MuSig2 and FROST: what the registry checks (owner 2026-10-07)
 
@@ -491,8 +527,8 @@ WASM in clientkeys). Participant keys come from their own path (`kindNo` 0x0110�
 | Agent cluster, MPC custody with Schnorr | `frost-secp256k1` (cheap on EVM) or `frost-bn254`; shown with §4.3's attestation-only caveats | threshold ECDSA ⇒ native EOA |
 | HSM-held corporate key | `p256` (HSMs do P-256) | native EOA (secp256k1 HSM) |
 | Confidential balances | `zether-*` with `authRef` = one of the above | `authRef = 0` (self) for single holders |
-| Long-lived PQ-ready authority | `mldsa65` (any EVM chain; cheapest on chain 9000) | `msig` mixing `mldsa65` and `p256` (hybrid; fits the caps on every chain, R313) |
-| PQ confidential balances (chain 9000) | `pqz-mlwe` with `authRef` = `mldsa65` (spec E) | PQ-dominant `msig` (E R281; two or more PQ signers only where a PQ precompile exists) |
+| Long-lived PQ-ready authority | `mldsa65` (any EVM chain; cheapest on chain 7622 (formerly 9000)) | `msig` mixing `mldsa65` and `p256` (hybrid; fits the caps on every chain, R313) |
+| PQ confidential balances (chain 7622 (formerly 9000)) | `pqz-mlwe` with `authRef` = `mldsa65` (spec E) | PQ-dominant `msig` (E R281; two or more PQ signers only where a PQ precompile exists) |
 
 ---
 
@@ -560,8 +596,8 @@ struct UAMetaTransaction {
 | `transferToUA(bytes32 to, uint256 amount)` | — | sender N | registered SIGNING (emits `Transfer(sender, UA_POOL)` + `UATransfer`) |
 | views `balanceOfUA(bytes32)`, `uaNonce(bytes32, batch)`, `uaDigest(m)`, `registry()` | — | — | — |
 
-Rules: step 5 of the pipeline is `SigLib`-style ECDSA/1271 over the v3 EIP-712 digest when `from` is a native id
-(`from >> 160 == 0`), else `registry.requireAuthorized(from, PURPOSE_METATX, digest, auth)`. Ops allowed in
+Rules: step 5 of the pipeline is ECDSA/1271 over the v3 EIP-712 digest when `from` is a native id
+(`from >> 160 == 0`), classified per R331 (a 7702-delegated `from`: ECDSA, else 1271 — not v2's `_isContract` rule), else `registry.requireAuthorized(from, PURPOSE_METATX, digest, auth)`. Ops allowed in
 `m.data`: empty (transfer), `pay(bytes32)`, `unwrap(…)`; **`approve` and `trade` are refused in every `ua*`
 function, for native `from` too** (`MetaTxUnknownOp`; natives use the v2 address-typed path; a UA-ledger allowance
 model waits for DEX v2, §17 Q4). v3 **keeps the v2 address-typed entry points** (`executeMetaTransaction`,
@@ -629,6 +665,8 @@ interface IUARegistry {
     function kindEnabled(uint16 kind) external view returns (bool);
     function verifyCap(uint16 kind) external view returns (uint64);          // measured per chain (R313)
     function verifyBudget() external view returns (uint64);                  // UA_VERIFY_BUDGET of this chain (R313)
+    function chainUid() external view returns (bytes32);                     // genesis hash, constructor immutable (R330)
+    function hederaNative() external view returns (bool);                    // Hedera profile: 0x0003 ∈ MEMBER (§4.2)
     function uaOf(uint16 kind, bytes calldata keyData) external pure returns (bytes32);
     function keyHashOf(uint16 kind, bytes calldata keyData) external pure returns (bytes32);   // 0 for structures
     function popDigest(bytes32 ua, bytes32 authRef) external view returns (bytes32);          // R295
@@ -649,6 +687,7 @@ interface IUARegistry {
     /// Reverts UAUnauthorized unless `auth` authorizes `digest` for `ua` under `purposeTag`.
     /// Native ids (ua >> 160 == 0): ECDSA low-s (EOA) or ERC-1271 (50 k cap; 400 k for SubjectAccount clones, by the
     ///   immutable clone codehash) over uaAuthDigest(ua, purposeTag, digest) — never over the raw digest.
+    ///   Classified by code at call time (R331): empty ⇒ ECDSA; 7702 designator ⇒ ECDSA, else 1271; other ⇒ 1271.
     /// Derived SIGNING: auth = abi.encode(bytes keyData, bytes sig); keyData empty for stored kinds.
     /// ZETHER or unregistered: UAUnauthorized.
     function requireAuthorized(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes calldata auth) external view;
@@ -658,13 +697,16 @@ interface IUARegistry {
     function requireZetherAuthorized(bytes32 ua, bytes32 digest, bytes calldata auth, bool zkCovered) external view;
 }
 // UAAuth typehash = keccak256("UAAuth(bytes32 ua,bytes32 purpose,bytes32 digest)")
-// domain          = EIP712Domain("SCaaS UARegistry", "<generation, decimal>", block.chainid, address(this))
+// domain          = EIP712Domain("SCaaS UARegistry", "<generation, decimal>", block.chainid, address(this),
+//                                bytes32 salt = chainUid)                 // ERC-5267 fields = 0x1f (R330)
 ```
 
 The `UAAuth` wrapper is what every native signer behind the registry signs: `msig` native members
 (`UAAuth(memberId, PURPOSE_MEMBER, member_digest)`), a native Zether `authRef`, and a native `authRef`'s co-sign
 (`PURPOSE_AUTHREF`). Wallets display it as typed data with its purpose; ERC-7739-style 1271 wallets rehash under the
-registry's `eip712Domain()`. The v3 token's own native path keeps its `UAMetaTransaction` typed data (§5.3).
+registry's `eip712Domain()`. The domain's `salt` is the chain's `chain_uid` (R330): clientkeys refuses to sign a
+`UAAuth` (or a v3 `UAMetaTransaction`) whose `salt` differs from the chain profile's `chain_uid`, the app shows it,
+and the vectors (§15.1) pin it. The v3 token's own native path keeps its `UAMetaTransaction` typed data (§5.3).
 
 ### 6.2 `register` steps (cheap first)
 
@@ -673,7 +715,8 @@ registry's `eip712Domain()`. The v3 token's own native path keeps its `UAMetaTra
 3. `ua = uaOf(kind, keyData)`; `ua >> 160 ≠ 0` — `UAIdInNativeSpace`; not registered here or in the predecessor —
    `UAAlreadyRegistered`.
 4. Single-key kinds: `kh = keyHashOf(kind, keyData)`; `keyOwner[kh] == 0` here and in the predecessor —
-   `UAKeyInUse`. Structures: every member's kind ∈ MEMBER and the member is native or `kindOf(member) == memberKind`
+   `UAKeyInUse`. Structures: every member's kind ∈ MEMBER of this registry's profile (`0x0003` only if
+   `hederaNative()`) and the member is native or `kindOf(member) == memberKind`
    (here or in the predecessor) — `UAMemberUnknown`; and the worst-case verify gas of a minimal authorizing set — Σ of
    the `c` largest member `verifyCap`s plus a fixed per-member overhead, `c` = number of lightest-weight members
    needed to reach the threshold — is ≤ `verifyBudget()` — `UAKeyData`. The bound is sound because verification stops
@@ -704,13 +747,14 @@ mapping(bytes32 ua      => Record)  _records;     // slot: kind (16) | registere
 mapping(bytes32 ua      => bytes32) _authRef;     // Zether kinds only
 mapping(bytes32 keyHash => bytes32) _keyOwner;    // single-key kinds
 immutable: generation, predecessor, chainKeyHash (= keccak256("evm:" ‖ decimal(block.chainid)), computed in the
-           constructor), per-kind verifier addresses (0 = disabled), per-kind verifyCap, verifyBudget,
-           SubjectAccount clone codehash (1271 cap), EIP-712 domain separator
+           constructor), chainUid (constructor argument, ≠ 0, R330), hederaNative, per-kind verifier addresses
+           (0 = disabled), per-kind verifyCap, verifyBudget, SubjectAccount clone codehash (1271 cap),
+           EIP-712 domain separator (incl. salt = chainUid)
 ```
 
 No owner, no setter, no `payable`, no token balances (invariant test). Deployed by CREATE2 from a fixed salt per
-generation; constructor arguments (verifier set, caps, budget) differ per chain and are published in the chain
-profile, so the address is predictable from the profile.
+generation; constructor arguments (chain uid, verifier set, caps, budget) differ per chain and are published in the
+chain profile, so the address is predictable from the profile and differs between two chains sharing a chain id.
 
 ### 6.4 Verifiers
 
@@ -742,7 +786,7 @@ overlap (review M2):
 - **Structures (`msig`) may be re-enabled in gen 2**: a structure record is a pure function of its key data (no
   keyHash, no `authRef`), so the same id registered in both generations is the same record. A gen-1 `msig` can only
   name gen-1 members; an `msig` with a gen-2 member registers in gen 2.
-- **Chain 9000's gen 1 deploys after F9**, with the PQ signing kinds and `pqz-mlwe` together, so `pqz-mlwe`'s PQ
+- **Chain 7622's (formerly 9000) gen 1 deploys after F9**, with the PQ signing kinds and `pqz-mlwe` together, so `pqz-mlwe`'s PQ
   `authRef` is visible to it (E R282 "gen-1 kind" holds). On other chains PQ signing kinds may arrive as gen 2
   (their groups are new).
 
@@ -753,7 +797,7 @@ version pointing to gen 2. Gen 2 sees gen-1 records, so nobody re-registers.
 
 | Family | Where the records live | keyHash uniqueness | Notes |
 |---|---|---|---|
-| Hedera | the EVM registry, unchanged | yes | HSCS has the bn254 precompiles; EIP-2537 per probe; budget 10.5 M (15 M cap, R313) |
+| Hedera | the EVM registry with `hederaNative = true` (`0x0003` members via HIP-632) | yes | HSCS has the bn254 precompiles; EIP-2537 per probe; budget 10.5 M (15 M cap, R313) |
 | Cosmos | `ua-registry` CosmWasm contract; tokens query it (`WasmQuery::Smart`) | yes | software keccak; secp256k1/P-256 host verify; derived ids shown as URN, never the account HRP (R315) |
 | Soroban | persistent entries in the `scaas-account` factory (`UA(ua)`, `KEY(keyHash)`), TTL extended by the node like other persistent state | yes | `secp256r1_verify`, `ed25519_verify` host functions |
 | Sui | `Registry<T>`: `Table<vector<u8>, address>` for `key_owner`; account objects keyed by UA | yes | native verify functions |
@@ -775,7 +819,7 @@ digest   = the operation's domain-separated digest (EIP-712 v3 metatx; Zether au
 ua_msg   = keccak256(MSG_TAG ‖ TAG(kind) ‖ purposeTag ‖ digest)                           (R301)
 registry : kind = record.kind ∈ SIGNING ; keccak(TAG(kind) ‖ keyData) == ua (or vk from keyPtr) ;
            verifier[kind].verify(keyData | vk, ua_msg, sig)   — capped staticcall, fails closed (§6.2)
-native   : ECDSA / 1271 over uaAuthDigest(ua, purposeTag, digest)                         (§6.1)
+native   : ECDSA / 1271 over uaAuthDigest(ua, purposeTag, digest), classified by code (R331) (§6.1)
 ```
 
 ### 7.2 Per kind
@@ -810,7 +854,7 @@ expressed (owner item 2).
 | `bls12381-*`, `schnorr-bls12381`, `zether-bls12381` | chains where the `CurveCapability` probe passes (returndata compared, AR §2.5.5) | EIP-2537 |
 | `bls-bn254-minsig` | private chains only | ~100-bit pairing security (AR §2.5.1) |
 | `mldsa44/65`, `fndsa512` | every EVM chain (owner, rev 1.1); precompile where probed | Solidity ML-DSA-65 1.2–8.1 M, FN-DSA-512 0.6–2.5 M (estimates); measured cap ≤ ~50 % of the chain's `UA_VERIFY_BUDGET` on public chains, else disabled on that chain (R313) |
-| `pqz-mlwe` | chain 9000 only | spec E R270, R279 |
+| `pqz-mlwe` | chain 7622 (formerly 9000) only | spec E R270, R279 |
 
 The enabled set, each kind's measured `verifyCap` and the chain's `verifyBudget` are constructor arguments
 (verifier address 0 = disabled); the chain profile publishes them; clients read `kindEnabled` and the caps before
@@ -871,7 +915,7 @@ has one canonical form here.
 | `pop` | `popDigest(ua, authRef)` (R295) |
 | `authref` | `popDigest(ua, authRef)`, signed by the authority `authRef` (consent to authorize that Zether `ua`, R295) |
 | `metatx` | v3 EIP-712 digest of `UAMetaTransaction` |
-| `metatx-cancel` | `keccak256(abi.encode(CANCEL_TAG, chainid, token, ua, batch, validUntil))` — derived `ua` only (natives use `cancelMetaNonce`, §5.3) |
+| `metatx-cancel` | `keccak256(abi.encode(CANCEL_TAG, chainid, chainUid, token, ua, batch, validUntil))` (R330) — derived `ua` only (natives use `cancelMetaNonce`, §5.3) |
 | `member` | `keccak256(structureUA ‖ ua_msg_of_structure)` (native members: inside `UAAuth`, §6.1) |
 | `zether-auth` | ZD `authDigest` |
 | `zether-owner` | ZD rollOver/mode digests |
@@ -909,7 +953,11 @@ someone's EOA key (EVM exposes no nonce/key mapping); layer 1 prevents it for ou
 W3C VC Data Model 2.0. Securing: **SD-JWT VC** (selective disclosure, salted claim digests) as the default.
 `bbs-2023` stays an option (§17 Q14) **only with anonymous holder binding and per-verifier pseudonyms** (the W3C
 Data Integrity BBS pseudonym feature): such a presentation discloses neither `credentialSubject.id` nor a
-UA-signed proof, so the R311 binding below is not used for it. Until that feature is a final W3C/IETF text with an
+UA-signed proof, so the R311 binding below is not used for it. Its presentation header must carry the relying
+party's `aud` and `nonce`, but it proves only "a holder of a credential bound to this pseudonym presented it", not
+"this account presented it": **a bbs presentation is never accepted where the legal-recourse evidence trail (§9.7)
+applies** — those workflows require the R311 binding (SD-JWT VC + `scaas-ua` KB-JWT, `nonce` = deal reference /
+`intent_id`) (Codex M2). Until that feature is a final W3C/IETF text with an
 implementation in our libraries, bbs is not offered: a bbs presentation bound to the stable UA (the same id on every
 chain, §17 Q6) would be linkable anyway. Status: W3C Bitstring Status List (or IETF Token Status List); `validUntil`
 on every credential. `credentialSubject.id`: `did:pkh:<caip10>` for native accounts (e.g.
@@ -984,7 +1032,7 @@ For a trade where company A relied on a counterparty's credential, the relying p
 | Item | Proves |
 |---|---|
 | VC (issuer-signed) and its status at the time | who the issuer says the subject is |
-| VP signed by the counterparty's account, `nonce` = deal reference / `intent_id` | the key holder of that account presented it for this deal |
+| VP signed by the counterparty's account (R311 KB-JWT; a bbs pseudonymous presentation does not qualify, §9.2), `nonce` = deal reference / `intent_id` | the key holder of that account presented it for this deal |
 | finalized tx hash + `intent_id` + event (`UAMetaTransactionExecuted`, `PaymentSettled`, …) | the account performed the on-chain act |
 | `UARegistered` event (derived UAs) | the key data behind the id, and when it was registered |
 | trust-list version and verification log | what A checked and when |
@@ -1107,7 +1155,8 @@ spec screens 5/14. Not used by deploy scripts, scaas-node, Odoo Python or non-EV
 ### 12.3 New registration flow (replaces INT §10.2)
 
 1. Client derives the key for the kind (§8.1), builds `keyData`, computes `ua` and checks `ua >> 160 ≠ 0`.
-2. Reads `popDigest(ua, authRef)` (or computes it: chain key, registry address and `authRef` are known) and signs
+2. Reads `popDigest(ua, authRef)` (or computes it: chain key, `chain_uid` from the chain profile — checked equal to
+   `chainUid()` — registry address and `authRef` are known) and signs
    `uaMessage(kind, POP_TAG, popDigest)` with the kind's signer (`UAKey.signUA("pop", …)`; MuSig2/FROST: a group
    signing session, plus the KeyAgg hints or the DKG transcript). Zether with `authRef ≠ 0`: the authority signs
    `authPop` (purpose `authref`; native authority: EIP-712 `UAAuth`).
@@ -1153,6 +1202,10 @@ move with their family streams.
 | S23 | Raw-hash signing by EOAs (`eth_sign` drain) | native signers behind the registry sign EIP-712 `UAAuth` only (§6.1); `uaCancelNonce` derived-only | none on our paths |
 | S24 | Native send to a derived id on non-EVM (keyless address) | derived ids shown only as URN, never in the chain's address format (R315) | a user who converts the URN by hand |
 | S25 | Membership shown as consent | app rules §11.3; MuSig2 PoP proves participation | `msig`/FROST groups found on chain without member confirmations |
+| S26 | Chain-id collision (7622 or any id shared by two networks): PoP, `UAAuth` or v3 signature replayed to a same-address registry/token there | `chain_uid` (genesis hash) in `pop_digest`, both EIP-712 domain salts, the cancel digest and the CREATE2 init code (R330); node binds registry, `chainUid()` and genesis hash per profile | a replica built from a copy of our profile on a colliding chain can copy our records; nothing of ours trusts it |
+| S27 | EIP-7702 delegated EOA: delegate policy bypassed by the base key | none needed: the base key is root at protocol level (R331); ECDSA accepted, 1271 fallback for delegated wallets | a 7702 wallet's own policy binds only signatures that go through its delegate |
+| S28 | Foreign-family native member (`hedera-native` on a non-Hedera EVM chain) | MEMBER per chain profile; `0x0003` only where `hederaNative()` (§4.2, Codex M1) | — |
+| S29 | Forwarded/brokered BBS presentation as legal evidence | bbs never accepted where §9.7 applies; KB-JWT bound to the account and `intent_id` (§9.2, Codex M2) | — |
 
 ---
 
@@ -1175,11 +1228,11 @@ T-GAS), published in the chain profile.
 | `frost-secp256k1` | 65 (stored `Y`) | ~10 k (`expand_message_xmd` SHA-256 + `MODEXP` + `ecrecover`) | ~5 k + EXTCODECOPY ~2.6 k | 50 k |
 | `schnorr-bn254` | 64 + 96 | ~13 k (measured `_schnorr`) | ~5 k | 50 k |
 | `musig2-bn254`, `frost-bn254` | 96 (stored) | as `schnorr-bn254` | ~5 k + EXTCODECOPY ~2.6 k | 50 k |
-| `bls12381-minsig` | 256 + 128 | ~120 k (measured, chain 9000) | ~5 k | 200 k |
+| `bls12381-minsig` | 256 + 128 | ~120 k (measured, chain 7622 (formerly 9000)) | ~5 k | 200 k |
 | `msig` k-of-n | 4 + 36n + Σ member | Σ member verifies (≤ `c` members, stop at threshold) + ~2 k; stored-kind members + EXTCODECOPY | ~5 k | Σ of the `c` largest member caps ≤ `verifyBudget` |
 | `ed25519` | 32 + 64 | ~0.3–1.2 M (Solidity, SHA-512 dominates) | ~5 k | 1.5 M |
-| `mldsa44` | 2 420 sig | precompile (chain 9000) / ≤ ML-DSA-65 cost in Solidity | ~5 k + EXTCODECOPY ~3 k | measured; ≈ 20 k with a precompile |
-| `mldsa65` | 3 309 sig | 9 k-class precompile / 1.2–8.1 M Solidity (E §2.4) | ~5 k + EXTCODECOPY ~3 k | measured: ≈ 20 k (chain 9000), Solidity worst case elsewhere (≤ 50 % of budget on public chains) |
+| `mldsa44` | 2 420 sig | precompile (chain 7622 (formerly 9000)) / ≤ ML-DSA-65 cost in Solidity | ~5 k + EXTCODECOPY ~3 k | measured; ≈ 20 k with a precompile |
+| `mldsa65` | 3 309 sig | 9 k-class precompile / 1.2–8.1 M Solidity (E §2.4) | ~5 k + EXTCODECOPY ~3 k | measured: ≈ 20 k (chain 7622 (formerly 9000)), Solidity worst case elsewhere (≤ 50 % of budget on public chains) |
 | `fndsa512` | ~666 sig | 0.6–2.5 M Solidity (AR §2.6.2) | ~5 k + EXTCODECOPY ~1.5 k | measured, as `mldsa65` |
 | `zether-*` | — (proof path) | unchanged (ZD §15) | ~5 k (`kindOf` + `authRef`) | — |
 
@@ -1221,27 +1274,31 @@ after ~9 uses per (token, UA). Not worth the extra state in v1; immutable record
 `kinds.json` — for **every** kind in §4.2 (including native rows for member refs):
 
 - `kind`, `tag`, `TAG(kind)`, `keyData` (hex), expected `ua`, `keyHash` (group + hash);
-- `chain_key`, `registry_id`, `authRef`, expected `popDigest`, `ua_msg` for `pop`, a PoP signature and its validity
+- `chain_key`, `chain_uid`, `registry_id`, `authRef`, expected `popDigest`, `ua_msg` for `pop`, a PoP signature and its validity
   (deterministic: Ed25519; BIP-340 with zero `aux_rand`; scaas Schnorr with a fixed nonce; BLS (deterministic);
   P-256 RFC 6979; WebAuthn with a fixed authenticatorData/clientDataJSON; ML-DSA deterministic variant; FN-DSA fixed
   seed);
 - purpose vectors: `purposeTag` and `ua_msg` (with `MSG_TAG`) for every purpose tag of §8.3 over a fixed digest;
 - negatives: same point under two kinds ⇒ two ids and one `UAKeyInUse`; a synthetic id with zero top 96 bits ⇒
   `UAIdInNativeSpace` (constructed by asserting the check on a fabricated id); wrong-tag PoP; PoP for another chain
-  or registry; PoP for another `authRef`; unsorted / duplicate structure members; threshold 0 or > weight; BLS
+  or registry; **PoP for two `evm:7622` chains with different `chain_uid`** (each refused by the other, R330); PoP
+  for another `authRef`; unsorted / duplicate structure members; threshold 0 or > weight; BLS
   infinity; small-order ed25519 key; high-s P-256/ECDSA; **non-canonical encodings**: ed25519 `y ≥ p` and `x = 0`
   with the sign bit set, bn254/BLS coordinates `≥ p`, P-256 `x ≥ p`, secp256k1 prefix ∉ {02, 03}, FN-DSA
   coefficient `≥ q`.
 
 `structures.json` — `msig` with mixed members (EOA, `SubjectAccount`, `webauthn-p256`, `bip340`, `mldsa44`) and the
-member digests; **`UAAuth` typed data and digests** for native members, native `authRef` and `authPop` (§6.1);
-members ∉ MEMBER (Zether, structure, foreign native kind, top-96-nonzero native) as negatives.
+member digests; **`UAAuth` typed data and digests** for native members, native `authRef` and `authPop` (§6.1),
+with the domain `salt` = `chain_uid` (and the same struct under another `chain_uid` as a negative);
+members ∉ MEMBER (Zether, structure, foreign native kind, `hedera-native` in a non-Hedera profile,
+top-96-nonzero native) as negatives.
 
 `groups.json` — MuSig2: BIP-327 KeyAgg/sign vectors, KeyAgg hints, a registered group and its PoP; the bn254 port.
 FROST: RFC 9591 Appendix E.5 FROST(secp256k1, SHA-256) vectors, DKG transcripts with PoKs from the ZF
 `frost-secp256k1` crate, a bad PoK, `Y ≠ Σ C_i0`; the FROST(bn254, keccak256) ciphersuite's vectors.
 
-`metatx3.json` — `UAMetaTransaction` typed data, digests and auth blobs per kind (v3 KAT, like `MetaTxKat`).
+`metatx3.json` — `UAMetaTransaction` typed data (domain `salt` = `chain_uid`), digests and auth blobs per kind (v3
+KAT, like `MetaTxKat`).
 
 `derivation.json` — seed → per-kind keys for §8.1 paths (BIP-39 test mnemonic), including the role paths of R300 and
 the PQ HKDF.
@@ -1263,13 +1320,15 @@ such in the vector files and the audit scope.
 | T-REG-2 | every negative vector reverts with its error |
 | T-REG-3 | the same `register` calldata from two senders ⇒ identical storage diff (R295) |
 | T-REG-3b | the same `pop` with a different `authRef` ⇒ `UAPoP`; a valid `pop` for `authRef` without the authority's `authPop` ⇒ `UAUnauthorized(authRef)`; non-Zether with `authRef ≠ 0` or non-empty `authPop` ⇒ `UAAuthRef` |
-| T-REG-4 | gen-2 registry sees gen-1 records; `UAKeyInUse` across generations; gen 2 refuses (`UAKindDisabled`) every kind or keyHash group gen 1 enables, so registering in gen 1 after gen 2 for a shared group is impossible by construction; `msig` re-enabled in gen 2 gives an identical record; chain-9000 `pqz-mlwe` with an `mldsa65` `authRef` in gen 1 |
+| T-REG-4 | gen-2 registry sees gen-1 records; `UAKeyInUse` across generations; gen 2 refuses (`UAKindDisabled`) every kind or keyHash group gen 1 enables, so registering in gen 1 after gen 2 for a shared group is impossible by construction; `msig` re-enabled in gen 2 gives an identical record; chain-7622 (formerly 9000) `pqz-mlwe` with an `mldsa65` `authRef` in gen 1 |
 | T-REG-5 | invariants: registry balance 0, no record ever changes, `uaOf(record.keyData) == ua` |
 | T-REG-6 | MuSig2: wrong `Q`, a bad hint, unsorted keys ⇒ `UAKeyData`/`UAPoP`; FROST: one bad PoK, `Y ≠ Σ C_i0`, a commitment vector of the wrong length ⇒ refused; the M1 attack (own key as `Q` with the board's list) ⇒ refused |
 | T-AUTH-1 | `requireAuthorized` per kind × purpose; wrong purpose fails; wrong kind's tag fails |
 | T-AUTH-1b | a Zether UA (any `authRef`) via `requireAuthorized` ⇒ `UAUnauthorized` |
 | T-AUTH-2 | `msig` threshold/weights, duplicate member, unregistered member, nested structure, member ∉ MEMBER refused; a `MemberSig` after the threshold ⇒ `UAUnauthorized` |
-| T-AUTH-3 | native paths: EOA low-s over `UAAuth` (a raw-digest signature fails), 1271 gas caps incl. the `SubjectAccount` codehash in the registry, ERC-7739 wallet against `eip712Domain()` |
+| T-AUTH-3 | native paths: EOA low-s over `UAAuth` (a raw-digest signature fails), 1271 gas caps incl. the `SubjectAccount` codehash in the registry, ERC-7739 wallet against `eip712Domain()` (incl. `salt`); **EIP-7702 delegated accounts** (R331), in the registry and v3's native path: ECDSA by the base key passes; a 1271 signature through a delegate that implements it passes within 50 k; a delegate without 1271, a wrong magic value, a reverting or gas-exhausting delegate ⇒ fail; a designator-length code that is not `0xef0100…` is treated as a contract (1271 only) |
+| T-CHAIN | two registries with the same `block.chainid` and different `chainUid` (and v3 clones bound to them): a PoP, a native `UAAuth` and a v3 signature from one fail on the other; `eip712Domain()` returns `fields = 0x1f` and `salt = chainUid`; the constructor refuses `chainUid = 0` (R330) |
+| T-MEMBER | an `msig` with a `hedera-native` member registers in a `hederaNative` registry and is refused (`UAMemberUnknown`) in every other profile (Codex M1) |
 | T-AUTH-4 | 63/64 starvation and out-of-gas inside every capped verifier `staticcall` ⇒ the check reverts, never passes; malformed/short returndata ⇒ revert |
 | T-FROST | RFC 9591 vectors pass `UAFrostSecp256k1Verifier`; the same signatures fail the BIP-340 verifier and vice versa |
 | T-FUZZ | **differential fuzzing** of the pure-Solidity ML-DSA-44/65, FN-DSA-512 and ed25519 (incl. SHA-512) verifiers against at least one independent implementation (e.g. the precompile's C core / `pqcrystals`, `ed25519-dalek` strict): accept/reject parity on mutated signatures, keys and messages; run before each generation is deployed (a permissive verifier is permanent, S15) |
@@ -1279,7 +1338,7 @@ such in the vector files and the audit scope.
 | T-V3-3 | `to` unregistered ⇒ revert; `approve`/`trade` in any `ua*` function, native or derived `from` ⇒ `MetaTxUnknownOp`; `FeeRecipientIsPayee` with a padded `feeRecipient` |
 | T-V3-3b | `to` = a Zether UA (`zether-*`, `pqz-mlwe`) ⇒ `UAKindNotAccepted`; `to` = `UA_POOL` ⇒ `UAPoolNotPayable`; `uaCancelNonce` with a native `ua` ⇒ refused |
 | T-V3-4 | `--sizes` ≤ 24 576 for every v3 implementation |
-| T-GAS | `UAGas.t.sol` replaces §14 estimates and produces each chain profile's `verifyCap`s; every enabled kind's worst-case verify ≤ its cap ≤ `verifyBudget` (public chains ≤ ~50 %); register spec E's two default `authRef` shapes (`{mldsa65, p256} t=2`, `{mldsa65 ×3} t=2`) on chain 9000 and the hybrid on a precompile-less chain; the PQ treasury on a precompile-less chain is refused; a structure over the bound is refused |
+| T-GAS | `UAGas.t.sol` replaces §14 estimates and produces each chain profile's `verifyCap`s; every enabled kind's worst-case verify ≤ its cap ≤ `verifyBudget` (public chains ≤ ~50 %); register spec E's two default `authRef` shapes (`{mldsa65, p256} t=2`, `{mldsa65 ×3} t=2`) on chain 7622 (formerly 9000) and the hybrid on a precompile-less chain; the PQ treasury on a precompile-less chain is refused; a structure over the bound is refused |
 
 ### 15.3 Off-chain
 
@@ -1301,15 +1360,15 @@ order (EVM, Cosmos, Hedera, Soroban, TON, Sui, Aptos, Solana).
 | Stream | Content | Depends on | Gate |
 |---|---|---|---|
 | **F0** | kind table libraries (Solidity `UAKinds.sol`, JS `ua.js`, Rust `scaas-ua` crate, Python `ua.py`) incl. closed sets, canonical encodings, `UAAuth`; vector generator, `vectors/ua/*` incl. `groups.json` | — | all four consumers pass the same vectors |
-| **F1** | EVM `UARegistry` gen 1 (chain 9000: deployed after F9, §6.5), verifiers (P-256, WebAuthn, BIP-340, MuSig2 KeyAgg, FROST(secp256k1) RFC 9591 + DKG check, bn254/BLS Schnorr incl. MuSig2/FROST-bn254, BLS, ed25519 (Solidity), msig), Zether re-point (§12), zether-prover + clientkeys Zether changes, deletes | F0 | T-REG, T-AUTH, T-FROST, T-FUZZ (ed25519), T-ZET green; dev chains redeployed |
+| **F1** | EVM `UARegistry` gen 1 (chain 7622 (formerly 9000): deployed after F9, §6.5), verifiers (P-256, WebAuthn, BIP-340, MuSig2 KeyAgg, FROST(secp256k1) RFC 9591 + DKG check, bn254/BLS Schnorr incl. MuSig2/FROST-bn254, BLS, ed25519 (Solidity), msig), `chainUid`/`hederaNative` profile immutables and 7702 classification (R330, R331), Zether re-point (§12), zether-prover + clientkeys Zether changes, deletes | F0 | T-REG, T-AUTH, T-CHAIN, T-MEMBER, T-FROST, T-FUZZ (ed25519), T-ZET green; dev chains redeployed |
 | **F2** | MetaToken v3 (UA ledger, `UAMetaTransaction`, `ua*` functions) for the three tiers; factory v2 versions; Hedera children | F1 | T-V3, sizes, gas report |
 | **F3** | clientkeys `UAKey`, derivation (§8.1), no-raw-sign API, role path for `SubjectAccount` keys, **BIP-327 MuSig2 and RFC 9591 FROST signers** (incl. DKG; bn254 port/ciphersuite), app screens 5/14, the approvers wizard with member confirmations (APP A3), URN display | F0 (F1 for registration) | clientkeys tests on BIP-327 / RFC 9591 / `groups.json`; app e2e on dev chain |
 | **F4** | VC layer (no contract in v1, §9.4): KB-JWT `scaas-ua` signing and verification in the shared libraries, evidence-bundle format, DEK-encrypted relying-party attachments, attester flow into `ComplianceRegistry` (with AS1) | F1, AS1 | Odoo/app round trip |
-| **F5** | node: `scaas-intent/1.3` `evm.ua_meta_tx` (UA bodies only), native verification of every single-key kind and structures, canonical ids, `ua_metatx` jobs, indexer events incl. `UA_POOL` pairing, config | F0, F2 | mesh e2e on dev chains incl. a 1.2 node in the mesh |
+| **F5** | node: `scaas-intent/1.3` `evm.ua_meta_tx` (UA bodies only), native verification of every single-key kind and structures, canonical ids, `ua_metatx` jobs, indexer events incl. `UA_POOL` pairing, config incl. the per-profile binding of registry address, `chainUid()` and the RPC's genesis hash (R330) | F0, F2 | mesh e2e on dev chains incl. a 1.2 node in the mesh |
 | **F6** | Odoo (parent repo): `blockchain.ua`, address forms, signed ops, portal registration, credentials model | F1, F3 | Odoo tests + `pg_constraint` |
 | **F7** | Cosmos: `ua-registry` contract, 32-byte passkey owners shown as URN (R315), `owner_kind`, `bip340`/MuSig2/FROST-secp | F0 | family tests on vectors |
 | **F8** | Soroban (role `kindNo` 18), then TON (no registry; `set_key` with key signature), Sui, Aptos, Solana (passkey owner = UA id, `owner_kind`, `["ukey", keyHash]`) — one family per change | F0, family streams | family tests on vectors |
-| **F9** | PQ kinds (`mldsa44/65`, `fndsa512`): pure-Solidity verifiers for every EVM chain (one audited implementation, vectors shared with the precompile's C core), precompile path on chain 9000, measured per-chain caps (R313); `pqz-mlwe` registration hook with spec E. Chain 9000's gen 1 waits for F9; on other chains PQ kinds landing after F1 arrive as registry gen 2 (§6.5) | F0, spec E | `UAGas.t.sol` caps; T-FUZZ (ML-DSA, FN-DSA); chain-9000 e2e |
+| **F9** | PQ kinds (`mldsa44/65`, `fndsa512`): pure-Solidity verifiers for every EVM chain (one audited implementation, vectors shared with the precompile's C core), precompile path on chain 7622 (formerly 9000), measured per-chain caps (R313); `pqz-mlwe` registration hook with spec E. Chain 7622's (formerly 9000) gen 1 waits for F9; on other chains PQ kinds landing after F1 arrive as registry gen 2 (§6.5) | F0, spec E | `UAGas.t.sol` caps; T-FUZZ (ML-DSA, FN-DSA); chain-7622 (formerly 9000) e2e |
 | **F10** | DEX/mandate UA support (§17 Q4/Q5), `OrderBookDex` 1271 gas cap fix | F2 | DEX suite |
 
 ---
@@ -1320,7 +1379,8 @@ Decisions taken by this spec on the open design points, each with its default; a
 rulings named. **Rev 1.1:** items 1, 6, 9, 11 are answered by the owner (marked). **Rev 1.2 (owner 2026-10-06): all remaining defaults (2, 3, 4, 5, 7, 8, 10, 12, 13, 14) accepted as decided** — no open items remain. **Rev 1.3:** no new
 questions; review fixes sharpen Q3 (MuSig2/FROST defences now checked on chain, owner 2026-10-07), Q13 (derived ids
 shown as URN, never as a native address) and Q14 (bbs gated on per-verifier pseudonyms) without changing the
-decisions.
+decisions. **Rev 1.4:** no new questions; the Codex fixes sharpen Q10 (`chain_uid`) and Q14 (bbs not accepted for
+legal-recourse evidence) without changing the decisions.
 
 1. **Identity vs rotation (R302). — Confirmed by the owner (rev 1.1).** Decided: a UA is immutable (single-key or policy hash); rotation and membership
    changes = new UA + move funds; stable identity = `SubjectAccount` (b). Alternative: a rotatable "policy" kind
@@ -1344,7 +1404,8 @@ decisions.
 9. **ed25519 and PQ kinds on public EVM (§7.3, R313). — Owner: enabled everywhere (rev 1.1)**, pure-Solidity
    verifiers where no precompile exists, single-transaction checks under `UA_VERIFY_BUDGET`; a kind over budget is
    disabled on that chain, never registrable-but-unusable.
-10. **PoP chain binding (R295).** Decided: bound to chain and registry (one signature per chain). Alternative:
+10. **PoP chain binding (R295).** Decided: bound to chain (`chain_key` **and** `chain_uid`, R330, rev 1.4) and registry
+    (one signature per chain). Alternative:
     chain-independent PoP (one signature registers everywhere; anyone can replicate a registration to other chains).
 11. **Second typehash for v3 (R309). — Confirmed by the owner (rev 1.1).** Decided: `UAMetaTransaction` with its own typehash — an explicit exception to
     R140.
@@ -1369,7 +1430,7 @@ ruling keeps something the review proposed to cut.
 | H3 | PQ cap = budget makes hybrid/PQ `msig` unregistrable | fixed: per-chain, per-kind measured `verifyCap` constructor immutables published in the profile; sum check kept; PQ treasury stated as precompile-only; T-GAS registers E's shapes | R313, §6.1–§6.3, §7.3, §14.1, T-GAS, Amends (E) |
 | H4 | Raw-digest native signatures (`eth_sign`), purpose ignored | fixed: EIP-712 `UAAuth(ua, purpose, digest)` under `("SCaaS UARegistry", gen, chainId, registry)` + `eip712Domain()` for every native signer behind the registry; `uaCancelNonce` restricted to derived `ua`; `UAAuth` vectors | R301, §5.2, §5.3, §6.1, §7.1, §7.2, §8.3, §8.4, §15.1, S23 |
 | M1 | MuSig2/FROST kinds carry unverifiable data; collapse into `bip340`/`schnorr-bn254` | **owner override (2026-10-07): kinds kept**, made sound instead: BIP-327 KeyAgg recomputed on chain from the registered list (hint points via `ecrecover`), FROST group key = Σ PoK-proven DKG commitments checked on chain, one aggregate PoP each; attestation-only list; RFC 9591 FROST signatures verified by an RFC 9591 verifier (FROST(secp256k1, SHA-256); FROST(bn254, keccak256) defined) with RFC/BIP vectors; BIP-327 and RFC 9591 signers in F3; app display rules (also for `msig` membership ≠ consent) | R296, §4.2, §4.3, §6.2 step 6, §7.2, §8.1, §11.3, §14, §15, F1/F3, S3, S25 |
-| M2 | Generations break uniqueness; `pqz-mlwe` unregistrable if F9 after F1 | fixed: gen 2 enables only kinds and keyHash groups absent from every predecessor's enabled set (structures may repeat: identical records); chain 9000's gen 1 deploys after F9; T-REG-4 extended | §6.5, F1, F9, Amends (E), T-REG-4 |
+| M2 | Generations break uniqueness; `pqz-mlwe` unregistrable if F9 after F1 | fixed: gen 2 enables only kinds and keyHash groups absent from every predecessor's enabled set (structures may repeat: identical records); chain 7622's (formerly 9000) gen 1 deploys after F9; T-REG-4 extended | §6.5, F1, F9, Amends (E), T-REG-4 |
 | M3 | `originHash` in the id ⇒ one origin per passkey forever | fixed, decided **`rpId` only** (`x ‖ y ‖ rpIdHash`); a sorted origins root was rejected because origins would still be frozen at creation; residual and deployment rule recorded | §4.2, §7.2, S9, Amends (APP) |
 | M4 | Node intake, envelope skew, non-canonical `from`, `from_kind` | fixed: native verification of every single-key kind and structures (only 1271 simulated); 1.3 only for `evm.ua_meta_tx`, old nodes Ignore per R118 on the named topic; canonical ids; `from_kind` dropped | R291, R316, R317, §11.1, §15.3 |
 | M5 | Cross-ledger moves without ERC-20 `Transfer` | fixed: `UA_POOL` sentinel sub-ledger with `Transfer(sender, UA_POOL)` / `Transfer(UA_POOL, to)`; v2 entry points kept and sharing the nonce map; `approve`/`trade` refused in `ua*` for native `from` too; padded `FeeRecipientIsPayee` | R308, §5.3, §11.2, S21, T-V3-1/2/3 |
@@ -1391,3 +1452,24 @@ ruling keeps something the review proposed to cut.
 Counts: 23 findings — **20 fixed as proposed** (H1–H4, M2–M6, M8, M9, L1–L9), **2 fixed in part** (M7, L10),
 **1 owner override with an alternative fix** (M1), **0 rejected**. Owner rulings of 2026-10-07 recorded: MuSig2/FROST
 kept and made checkable (R296, §4.3); Soroban `scaas-account` role keys use `kindNo` 18 (R300, §8.1).
+
+---
+
+## 19. Codex review disposition (rev 1.3 → rev 1.4)
+
+Source: `docs/reviews/specs/2026-10-06-universal-account-codex-review-1.md` (FIX-THEN-GO). Each finding was checked
+against this spec, spec E and the code at `main`; one premise (H2's "bypass") is verified wrong and gets an
+alternative rule, the rest are applied as proposed. The owner ruling of 2026-10-07 (private chain id 9000 → 7622,
+9000 being Evmos Testnet) is folded in throughout.
+
+| # | Finding | Verified | Disposition | Where |
+|---|---|---|---|---|
+| H1 | PoP and native `UAAuth` bind `evm:<chainid>` only; same-chain-id networks replay them | **yes**: R295 / §6.3 bound `chainKeyHash` + registry address only; E §2.7 records 9000 = Evmos Testnet and E R270 names F's PoPs; derived-UA v3 signatures had the same gap (the v3 domain had no chain uid) | **fixed as proposed**, extended to every digest F defines: `chain_uid` (genesis hash, constructor immutable, `chainUid()`) in `pop_digest`, the registry EIP-712 `salt`, the v3 `UAMetaTransaction` `salt` and the `metatx-cancel` digest; it also separates CREATE2 addresses. Limit stated: the EVM cannot prove its genesis hash, so a replica built from a copy of our profile is possible but trusted by nothing of ours (tokens bind the registry, the node binds registry + `chainUid()` + genesis hash). Vectors for two `evm:7622` chains | R295, **R330**, R309, §6.1, §6.3, §8.3, §12.3, S26, §15.1, T-CHAIN, F1, F5, Q10, Amends (E) |
+| H2 | EIP-7702 delegated EOAs bypass their delegate's policy if UA code inherits v2's "7702 is not a contract" | **in part**: `MetaTxCore._isContract` (`smartcontracts/evm/src/metatx/MetaTxCore.sol:123-131`) does classify the designator as not a contract and `_requireValidSignature` (`:135-148`) then uses ECDSA only, and F did not pin a rule. **The attack premise is wrong**: a 7702 account's base key is root at protocol level (it can transact directly, re-delegate or clear the delegation), so a stolen base key drains it whatever our contracts accept; neither "1271 only" nor "reject 7702" adds security | **fixed with an alternative rule**: classification by code at verify time; 7702 designator ⇒ ECDSA by the base key, else ERC-1271 through the delegate (50 k cap), so delegated wallets' session-key/passkey signatures work; other code ⇒ 1271 only; member kind labels never dispatch. v2 unchanged (sound, R303). T-AUTH-3 7702 cases added as asked | **R331**, §4.2 (0x0001), §5.3, §6.1, §7.1, S27, T-AUTH-3 |
+| M1 | `hedera-native` (0x0003) admitted as an `msig` member on non-Hedera EVM chains | **yes**: MEMBER listed `0x0001`–`0x0003` for every EVM chain; HIP-632 exists only on Hedera | **fixed as proposed**: MEMBER is per chain profile; `0x0003` only where the registry's `hederaNative` immutable is set; negative vectors and T-MEMBER | §4.2 (0x0003, MEMBER), §6.1, §6.2 step 4, §6.3, §6.6, S28, §15.1, T-MEMBER |
+| M2 | BBS anonymous holder binding contradicts the §9.7 evidence model | **yes**: §9.2 allowed bbs presentations with no account-signed proof; §9.7 relied on an account-signed VP | **fixed as proposed** (the reviewer's second option): bbs presentations carry `aud`/`nonce` but are never accepted where §9.7 applies; legal-recourse workflows require the R311 KB-JWT with `nonce` = deal reference / `intent_id` | §9.2, §9.7, S29, Q14 note |
+| L1 | `UAAuth` domain comment omits the ERC-5267 `salt` | **yes**: `eip712Domain()` returns `salt` but the domain listed four fields | **fixed as proposed**: domain `salt = chainUid`, `fields = 0x1f`; clientkeys checks the salt against the chain profile before signing; vectors pin it | §6.1, §15.1, T-CHAIN, T-AUTH-3 |
+
+Counts: 5 findings — **4 fixed as proposed** (H1, M1, M2, L1), **1 fixed with an alternative rule** after its attack
+premise was verified wrong (H2), **0 rejected**. New rulings: R330 (chain uid), R331 (EIP-7702 / native
+classification). Owner rulings unchanged; owner ruling recorded: private chain id 7622 (formerly 9000).
