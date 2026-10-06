@@ -24,7 +24,7 @@ Contracts: TW2 T1–T8 after its review (three tiers, rates, multi-underlying, n
 
 App: `app/` (React + Vite) after the node APIs — spec → plan → impl.
 
-Fixes: TON `mined` report must carry the payer jetton-wallet tx hash (in progress, branch fix/ton-tx-hash).
+Fixes: TON `mined` report carries the payer jetton-wallet tx hash ✅ (merged). Residual: a `final` from the indexer before the node's `mined` still flags `landed_elsewhere` (informational) — Odoo could accept a late `mined` on `final` and clear it.
 
 Queued: S4 follow-ups (backup-key toggle, device-bound vault, Sui `fam_sui.verify`, Soroban/Aptos/Solana signers, `chain_pay.js`), Zether portal balance cache, post-quantum Zether (BFV/BGV).
 
