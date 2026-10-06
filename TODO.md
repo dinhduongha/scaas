@@ -18,7 +18,7 @@ Ordered by what blocks what (updated 2026-10-06 late). The Odoo side lives in ba
 
 ### 1. Streams (one heavy build at a time)
 
-Node: S3 ✅ → **P1** store v2 SQLite (in progress) → P2 job API + client API keys + built-in admin auth/CLI → P3 submit/lanes from the store → P4 indexer + `/v1/events` → P5 Odoo client → P6 push e2e + cutover runbook → [owner cutover] → P2b OIDC + full admin routes + CORS → P1b PostgreSQL/MySQL → P7 DEX in store → S1b′ → S5 → S6′ → G1 libp2p core + QUIC/PQ → G2 announce/exclusivity/hints → G3 DEX book gossip (home-bound + relayer-unbound) → S7″ e2e → P9 remove pull path → S8″ doc corrections.
+Node: S3 ✅ → P1 ✅ store v2 SQLite (`[store]` now required in node.toml; spec fixes owed: SQLite reports columns not constraint names, job API default bind 8547 collides with gateway) → P2 job API + client API keys + built-in admin auth/CLI → P3 submit/lanes from the store → P4 indexer + `/v1/events` → P5 Odoo client → P6 push e2e + cutover runbook → [owner cutover] → P2b OIDC + full admin routes + CORS → P1b PostgreSQL/MySQL → P7 DEX in store → S1b′ → S5 → S6′ → G1 libp2p core + QUIC/PQ → G2 announce/exclusivity/hints → G3 DEX book gossip (home-bound + relayer-unbound) → S7″ e2e → P9 remove pull path → S8″ doc corrections.
 
 Contracts: TW2 T1–T8 after its review (three tiers, rates, multi-underlying, named mtx functions, gasless unwrap, factory v2, Hedera child).
 
