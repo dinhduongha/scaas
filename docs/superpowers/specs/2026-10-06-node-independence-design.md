@@ -1,7 +1,8 @@
 # Node independence — Odoo becomes a client of `scaas-node` (design amendment)
 
-Status: draft rev 3.2, 2026-10-06 (review 1 folded in, §19; admin-auth ruling, its 3.1/3.2 clarifications and the scaas
-rename folded in). Code at
+Status: draft rev 3.3, 2026-10-06 (review 1 folded in, §19; admin-auth ruling, its 3.1/3.2 clarifications and the scaas
+rename folded in; rev 3.3: corrections proven by the P1 code and its review, and the owner ruling on mesh peer URLs,
+§19.3). Code at
 `bamboo-dms` `main` 90a5b17 (mesh S0, S1a, S2 merged); the blockchain stack now lives in repo `scaas`
 (`scaas/smartcontracts`, `scaas/docs`, `scaas/app`, and the node).
 **Naming (owner, approved rename):** the node is `scaas-node` (crate, binary, directory `scaas/scaas-node/` — today
@@ -12,7 +13,8 @@ still `scaas/scaas-node/` until the rename stream lands; file:line citations ref
 Rulings: **R87–R111** (§2; R111 = Amendment A1, end of file), continuing the round-4 mesh spec (R70–R86).
 Owner rulings folded in: "invert Odoo ↔ node", "OIDC for the node admin API and the React app", "SQLite/PostgreSQL/
 MySQL storage backends, storage only", "node admin auth as simple as possible: built-in users, API keys, optional OIDC;
-roles kept" (all 2026-10-06).
+roles kept", "mesh peer URLs are editable through the admin API, admin role only, audited, with an SSRF guard" (all
+2026-10-06).
 
 Amends:
 
@@ -75,7 +77,7 @@ The node is an Odoo worker. Every durable fact it relies on lives in Odoo and is
 |---|---|
 | Node calling Odoo for anything (webhooks, callbacks) | R87. Latency: cron re-trigger (R101). |
 | Two nodes owning jobs of one `(company, chain)`, or HA on a shared database | R97, R111. Failover = restore the store on another host. §18.3. |
-| Uploading lane keys, RPC URLs, database URLs, the master key or OIDC issuers through the admin API | R95: secrets and dial targets stay in `node.toml`/keystores (PD R20 spirit). |
+| Uploading lane keys, RPC URLs, database URLs, the master key or OIDC issuers through the admin API | R95: secrets and dial targets stay in `node.toml`/keystores (PD R20 spirit). The one exception is `mesh_peer.url` (owner, 2026-10-06; R95, §7.3). |
 | Opaque-token introspection (RFC 7662), DPoP, mTLS-bound tokens | R106: JWT access tokens only; follow-up. |
 | Admin credentials (sessions, OIDC) on the job API; API keys on admin routes; API keys in client-side apps | R109: external clients keep HMAC API keys server-side; config automation uses OIDC client credentials or the host CLI. |
 | The React app itself | Requirements only (§7.7); built in its own plan. |
@@ -98,7 +100,7 @@ Format of PD §13: **ruling — why — cost if wrong.**
 | **R92** | **Machine credentials** = R54 `hmac` (signing string `gwauth.rs:5-8`) + header `X-Scaas-Key: <key_id>`. Each key belongs to one namespace, scopes `submit` and/or `read`. Secret = `HMAC-SHA256(master_key, "scaas-api-key/1" ‖ 0x00 ‖ key_id ‖ 0x00 ‖ u32be(generation))`; the store keeps **no secret**. `master_key` is a `SecretSource` in toml. | R54 is implemented and fuzzed; HMAC binds method, path and body and blocks replay (`gwauth.rs:108-116`). Stealing the store yields no credential. | Rotating `master_key` revokes every machine key at once. A restore can resurrect a revoked key (§14 T19). |
 | **R93** | **Change feeds**: `GET /v1/jobs?cursor=` (job state changes) and `GET /v1/events?cursor=` (index ranges, balances, DEX items). `seq` from the store's counter row (R111), filtered per namespace; every page carries `store_id`, `incarnation`, `restore_epoch`, `head_seq`; client rule = MESH §5.2 overlap; `wait ≤ 25 s` long-poll for clients that want it (Odoo uses `wait=0`, R101). Cursor older than retention ⇒ `410 CURSOR_EXPIRED`. | Same cursor discipline as the mesh bus; head/incarnation make a rewound store detectable (review H2). | — |
 | **R94** | **Event feed items are today's ingest arguments, unchanged**: `kind = range` = `{chain_key, from_block, to_block, to_block_hash, events}` as `chain_event_ingest` receives them (`blockchain_chain_event.py:79`). Drift C = `kind = balances` items written right after their range. | Odoo's decode/apply code is reused; the R56 race fix (`indexer.rs:81-82`) becomes a feed ordering property. | — |
-| **R95** | **Config authority = the node store.** `node.toml` bootstraps: entries absent from the store are imported; present ones are not overwritten (drift warning + gauge). Toml-only: lane keys/mnemonic, `rpc_urls`, `[store] url`, `master_key`, OIDC issuers, binds, `[api.admin_auth]` modes and session parameters. Hot (≤ 2 s): chain state, tokens, fee_recipient, breaker, policy, peers, namespaces, keys, watch lists, namespace token subsets, DEX markets. Restart: lane index list, finality, family params. **Token subsets per namespace are client state** (`PUT /v1/tokens/{chain}`), intersected with the node registry. | Owner: "toml bootstraps; admin API mutations persist". Secrets and dial targets in toml keep R20 and remove admin-API SSRF. Client-pushed token subsets keep Odoo's and the node's token lists in agreement (review H9). | Operators edit toml for keys, RPC, DB; the app for the rest. |
+| **R95** | **Config authority = the node store.** `node.toml` bootstraps: entries absent from the store are imported; present ones are not overwritten (drift warning + gauge). Toml-only: lane keys/mnemonic, `rpc_urls`, `[store] url`, `master_key`, OIDC issuers, binds, `[api.admin_auth]` modes and session parameters. Hot (≤ 2 s): chain state, tokens, fee_recipient, breaker, policy, peers, namespaces, keys, watch lists, namespace token subsets, DEX markets. Restart: lane index list, finality, family params. **Token subsets per namespace are client state** (`PUT /v1/tokens/{chain}`), intersected with the node registry. **Exception (owner, 2026-10-06): `mesh_peer.url`** (mesh dial targets) **is editable through the admin API**: `admin` role only, audited (R110), behind the SSRF guard of §7.3. | Owner: "toml bootstraps; admin API mutations persist". Secrets and dial targets in toml keep R20 and remove admin-API SSRF; partners change often enough that peer URLs are managed in the app, so the one admin-editable dial target carries its own guard. Client-pushed token subsets keep Odoo's and the node's token lists in agreement (review H9). | Operators edit toml for keys, RPC, DB; the app for the rest. |
 | **R96** | **Finality, pause and the index cursor move to the node**: Odoo's `finality_*`, `indexed_block` (as a source) and `state` stop being node inputs. Node chain `state ∈ active|paused|halted` keeps R53. Odoo keeps its `state` as a **push gate**. | PD R11 says finality is the node's decision; today the node reads it from Odoo (`indexer.rs:113`). | Two pause switches; the stricter wins. |
 | **R97** | **Durability replaces SKIP LOCKED**: claim = CAS `queued → leased` inside the single owner process (R88). **Two nodes for one company** only on **different chains**: `UNIQUE(company_id, chain_id)` on `blockchain.node.route`, one event source node per chain. Same lane keys in two stores is forbidden and detected heuristically on sequence families (§9.4). | Each accepted job is owned by exactly one store; reassigning needs a release protocol nobody needs yet. | No hot failover for one `(company, chain)` (§18.3). |
 | **R98** | **Cancel is a node CAS, by uid or by origin.** `POST /v1/jobs/{uid}/cancel` or `POST /v1/jobs/cancel {origin}` succeeds from `queued`/`leased` only if the job was **never published on the bus**; otherwise `409 TOO_LATE` with `state` and `published`. A published, still-queued job is put on local hold (never leased by us) but reported `TOO_LATE` because peers may land it. Cancel by origin with no job writes a `cancelled` tombstone, so a late push of that key returns `created:false, state:cancelled`. Odoo kills a job locally only if `push_attempted` is false (C1). | The Odoo veto (§1.1) disappears with the Odoo journal; the node CAS gives the same guarantee for our lanes (one SQLite/DB transaction each, one winner). Publication hands the intent to peers (MESH R74). | During a node outage a kill switch waits for the node; the window is ≤ the job's `valid_until` (autopay: `MAX_SIGNING_WINDOW = 300 s`, `blockchain_autopay.py:12`); `lease_hold_after_start_secs` (15 s) lets queued cancels land first after a restart. |
@@ -138,12 +140,12 @@ Format of PD §13: **ruling — why — cost if wrong.**
 | Listener | Config | Auth | Routes |
 |---|---|---|---|
 | gateway | `[modules] gateway_bind` | R54 none/bearer/hmac (single secret, unchanged) | `/v1/metatx`, `/v1/intents/{id}`, `/v1/dex/*` |
-| **job API** (new) | `[api] bind` (default `127.0.0.1:8547`) | R92 HMAC per key | `/v1/info`, `/v1/jobs*`, `/v1/events`, `/v1/watch/*`, `/v1/tokens/*` |
+| **job API** (new) | `[api] bind` (default `127.0.0.1:8548`; `127.0.0.1:8547` is the gateway default, `127.0.0.1:9108` the admin default) | R92 HMAC per key | `/v1/info`, `/v1/jobs*`, `/v1/events`, `/v1/watch/*`, `/v1/tokens/*` |
 | admin | `[modules] admin_bind` (`config.rs:51-52`) | open: `/healthz`, `/readyz`, `/metrics` (R51), `/v1/admin/login`; R106 credentials: other `/v1/admin/*` | §7.3 |
 | mesh | `[mesh] bind` | mTLS (MESH §5.1) | `/v1/mesh/*` |
 
-Non-loopback `[api] bind` or `admin_bind` requires TLS in front (doc); `Config::validate` refuses `modes = []` and an
-`oidc` mode without an issuer. `gwauth.rs:23` `MAX_BODY` (64 KiB) becomes a
+Non-loopback `[api] bind` or `admin_bind` requires TLS in front (doc); `Config::validate` refuses `modes = []`, an
+`oidc` mode without an issuer, and two enabled listeners on one port (same host, or either on the wildcard address). `gwauth.rs:23` `MAX_BODY` (64 KiB) becomes a
 per-listener parameter: gateway 64 KiB, job API 1 MiB.
 
 ---
@@ -178,7 +180,7 @@ CREATE TABLE api_key (
 CREATE TABLE watch (namespace TEXT NOT NULL, chain_key TEXT NOT NULL, token TEXT NOT NULL, address TEXT NOT NULL,
   PRIMARY KEY (namespace, chain_key, token, address));            -- receiving wallets (drift A/C, R56)
 
--- configuration (R95); secrets and dial targets are NOT here
+-- configuration (R95); secrets and dial targets are NOT here (exception: mesh_peer.url, R95, §7.3)
 CREATE TABLE chain (
   chain_key TEXT PRIMARY KEY, family TEXT NOT NULL,
   state TEXT NOT NULL CHECK (state IN ('active', 'paused', 'halted')),
@@ -205,7 +207,9 @@ CREATE TABLE job (
   kind            TEXT NOT NULL CHECK (kind IN ('metatx', 'call', 'signed_op', 'tombstone')),
   digest          BLOB,                                           -- node-computed (R89); NULL for call/tombstone
   payload         BLOB,                                           -- NULL only for kind = 'tombstone'
-  payload_hash    BLOB,                                           -- JCS SHA-256 (R91)
+  payload_hash    BLOB,                                           -- JCS SHA-256 (R91); NULL only for tombstone
+  -- CHECK ((digest IS NULL) = (kind IN ('call', 'tombstone'))): job_live_digest skips NULL, so a digest-bearing
+  -- kind without its digest would bypass durable G2. CHECK ((payload_hash IS NULL) = (kind = 'tombstone')).
   valid_until     BIGINT NOT NULL,
   lane_hint       TEXT,                                           -- R102
   bus_scope       TEXT NOT NULL DEFAULT 'restricted' CHECK (bus_scope IN ('restricted', 'open')),
@@ -356,8 +360,11 @@ Accept checks, in order (no RPC; simulation stays at lease time):
    payload, so a retry hashes identically.
 8. In one transaction: `SELECT … FOR UPDATE` by the idempotency tuple (all generations) — existing same generation:
    same hash ⇒ return it (`created: false`); tombstone ⇒ `created:false, state:cancelled`; different hash ⇒
-   `409 IDEMPOTENCY_MISMATCH {uid}`; lower generation non-terminal ⇒ `409 PREVIOUS_GENERATION_LIVE {uid}`; then
-   `INSERT`. A unique violation is classified **by constraint name** (per backend, A1): `job_live_digest` ⇒
+   `409 IDEMPOTENCY_MISMATCH {uid}`; a higher generation present ⇒ `409 SUPERSEDED {uid}` (a stale push, e.g.
+   after its own generation was purged); `valid_until` passed ⇒ `422 EXPIRED` again inside the transaction (a purged
+   key is never re-accepted, §4); lower generation non-terminal ⇒ `409 PREVIOUS_GENERATION_LIVE {uid}`; then
+   `INSERT`. A unique violation is classified **by constraint** (per backend, A1.3: the constraint or index name, or
+   on SQLite the column list): `job_live_digest` ⇒
    `409 DUPLICATE_DIGEST`; `job_origin` (lost race) ⇒ re-run the SELECT. Live count ≥ `max_live_jobs` ⇒
    `429 QUOTA`. Deadlock/serialization failure ⇒ retry the transaction (≤ 3).
 
@@ -395,8 +402,9 @@ earlier items can still reach the right state (§10.4).
 - **Continuity checks (R110)**: `store_id` or `restore_epoch` changed ⇒ halt; `head_seq < stored cursor` ⇒ halt;
   `incarnation` changed (a restart) ⇒ read `cursor = last_seq − 1, limit = 1` and compare with the stored
   `(seq, uid, state)`; different or missing (not `410`) ⇒ halt; equal ⇒ accept the new incarnation.
-- Retention: `job_event`/`feed_item` older than `feed_retention_secs` (7 d) are deleted; a cursor below the oldest
-  retained `seq − 1` ⇒ `410 CURSOR_EXPIRED`. Recovery: jobs — `GET /v1/jobs/{uid}` for each non-terminal pushed job,
+- Retention: `job_event`/`feed_item` older than `feed_retention_secs` (7 d) are deleted; the same purge transaction
+  raises `meta('<table>_floor')` to the highest purged `seq` (never lowered); `cursor < floor` ⇒ `410 CURSOR_EXPIRED`
+  (an empty table with `head_seq > 0` cannot tell "expired" from "nothing new"). Recovery: jobs — `GET /v1/jobs/{uid}` for each non-terminal pushed job,
   then `cursor = -1`; events — reset to 0 (idempotent by block range, §10.4 straddle rule).
 
 ### 5.4 Errors and limits
@@ -407,7 +415,7 @@ earlier items can still reach the right state (§10.4).
 | 401 | `UNAUTHORIZED` | missing/unknown key, bad signature, stale timestamp, replayed nonce |
 | 403 | `FORBIDDEN`, `CHAIN_NOT_GRANTED`, `CALL_NOT_ALLOWED` | scope, grant, R103 |
 | 404 | `NOT_FOUND` | job of another namespace or unknown |
-| 409 | `IDEMPOTENCY_MISMATCH`, `PREVIOUS_GENERATION_LIVE` (both with `uid`), `DUPLICATE_DIGEST`, `TOO_LATE` (with `state`, `published`), `CHAIN_HALTED` | §5.2 |
+| 409 | `IDEMPOTENCY_MISMATCH`, `PREVIOUS_GENERATION_LIVE`, `SUPERSEDED` (all with `uid`), `DUPLICATE_DIGEST`, `TOO_LATE` (with `state`, `published`), `CHAIN_HALTED` | §5.2 |
 | 410 | `CURSOR_EXPIRED` | §5.3 |
 | 413 | `TOO_LARGE` | body > 1 MiB |
 | 422 | `BAD_PAYLOAD`, `UNKNOWN_CHAIN`, `UNKNOWN_TOKEN`, `EXPIRED`, `VALID_TOO_LONG`, `RELAYER_NOT_OURS` | per item |
@@ -468,7 +476,7 @@ item and advances `chain_index` in one transaction; no token registered ⇒ the 
 
 ```toml
 [api]
-bind = "127.0.0.1:8547"                       # job API (R92)
+bind = "127.0.0.1:8548"                       # job API (R92); never the port of gateway_bind / admin_bind
 master_key = { env = "SCAAS_API_MASTER_KEY" } # ≥ 32 bytes; SecretSource like [keys]; also keys session tokens
 admin_cors_origins = ["https://app.example.com"]
 lease_hold_after_start_secs = 15              # R98
@@ -610,7 +618,21 @@ scaas-node key revoke k_3f9a0c1d2e4b5a6c --config node.toml
 
 `POST /v1/admin/keys` returns `{"key_id", "secret": "<64 hex>", "namespace", "scopes"}` **once**. Write validation
 reuses the rules being superseded: MESH §10.2 (R86 `submit` only on registered contracts, `pool_visibility` vs profile
-R76, peer `url` = `https://host[:port]`, pin = 64 lowercase hex).
+R76, pin = 64 lowercase hex). Policy `contract` and token addresses are stored in the family's canonical form
+(`addresses.canonical`, KAT `tests/api/addresses.json`); policy selectors in lowercase hex.
+
+**Mesh peer URL (owner ruling 2026-10-06, R95 exception).** `mesh_peer.url` is a dial target that the admin API may
+create and change (`POST`/`PATCH /v1/admin/mesh/peers`): **`admin` role only** (never `operator`), every change audited
+with before/after (R110), and an **SSRF guard** applied at write and again at every dial (DNS rebinding):
+- scheme `https://` or `quic://` only; `host[:port]`, no userinfo, path, query or fragment; no redirects followed;
+- the literal address, or every address the host resolves to, is refused when it is loopback (`127.0.0.0/8`, `::1`),
+  unspecified, link-local (`169.254.0.0/16`, `fe80::/10`), a cloud metadata endpoint (`169.254.169.254`,
+  `fd00:ec2::254`, `100.100.100.200`, and the rest of `169.254.0.0/16`), multicast or broadcast — always, even with
+  `allow_private`;
+- private ranges (`10/8`, `172.16/12`, `192.168/16`, `100.64/10`, `fc00::/7`) only when the admin explicitly allows them
+  **for that peer** (`mesh_peer.allow_private`, default 0, itself an audited admin change).
+P2 adds the column and the write-time check on the bootstrap routes; P2b serves the full `mesh/peers` route with the
+dial-time check. Toml `[[mesh.peers]]` stays `https://` only until then.
 
 ### 7.4 CORS (admin listener only)
 
@@ -654,9 +676,14 @@ stale session epoch — body never says which);
 
 ## 8. Configuration authority and bootstrap (R95)
 
-Start: load toml → open store (migrate, take owner lock, bump fencing epoch, new incarnation) → **import** toml entries
+Start: load toml → open store (it must exist: a new node runs `scaas-node store init` once, which creates the file
+0600 and refuses an existing one; a missing file refuses to start, so an unmounted volume or a typo'd url never becomes a
+fresh store with a new `store_id`; migrate, take owner lock on the canonical path, bump fencing epoch, new incarnation)
+→ **import** toml entries
 absent from the store (`[[chains]]` + tokens + lanes, `[[mesh.peers]]`, `[[mesh.policy]]`, `[[namespaces]]`) →
-build runtime. Differing toml values set `toml_drift`. `rpc_urls`, keys, `params`, `coin_type`, `[store] url` always
+build runtime. Differing toml values set `scaas_config_toml_drift` and a warning. Until runtime reads the store
+(P3/P4) every consumer still reads toml, so the warning says toml is used for now and the store value takes effect when
+runtime reads the store. `rpc_urls`, keys, `params`, `coin_type`, `[store] url` always
 come from toml.
 
 Runtime snapshot: `tokio::sync::watch::Sender<Arc<ConfigSnapshot>>`, rebuilt after every admin commit (and every 30 s
@@ -1070,7 +1097,7 @@ Pause every market of the chain, wait for `pending` trades to settle or fail on 
 | # | Threat | Mitigation |
 |---|---|---|
 | T1 | **SSRF from Odoo** (node `url` pointed at an internal service) | `blockchain.node` writable by `base.group_system` only; https (http only loopback/dev); no userinfo/path/query; no redirects; response cap; error detail truncated and stored as text |
-| T2 | **SSRF from the node** | dial targets toml-only (`rpc_urls`, issuers, `[store] url`); mesh peer URL validated; JWKS: issuer allowlist, https, exact scheme/host/port, no redirects, 64 KiB, 5 s; unknown `iss` never fetches |
+| T2 | **SSRF from the node** | dial targets toml-only (`rpc_urls`, issuers, `[store] url`); mesh peer URLs admin-editable (owner, R95 exception) behind the §7.3 guard: `admin` only, audited, https/quic only, no loopback/link-local/metadata, private ranges only by per-peer opt-in, checked at write and at dial; JWKS: issuer allowlist, https, exact scheme/host/port, no redirects, 64 KiB, 5 s; unknown `iss` never fetches |
 | T3 | **Machine credential leak** | secret in `ir.config_parameter` (system only); HMAC sends no secret; scopes + namespace bound; expiry; rotate = `generation + 1`; revoke hot (≤ 2 s) |
 | T4 | **Replay** | HMAC ±300 s + nonce cache per key; job POST idempotent (R91); feeds read-only. OIDC: short TTL, `iat` required, `aud` bound, TLS only, no cookies |
 | T5 | **Store / backup leak** | no secrets in the store (R92); payloads hold payer, payee, amounts — file mode 0600 / DB grants, encrypted backups (doc) |
@@ -1136,7 +1163,8 @@ Heavy runs one at a time (owner rule, OOM cap).
 
 - `store.rs` (contract suite, run per backend, A1): migrations; second owner refused; **fencing**: a stale owner's
   journal transaction aborts; state machine = `transitions.json`; `job_event` atomic with the CAS; `job_live_digest`;
-  idempotency incl. tombstone and generations; unique violations classified by constraint name; purge never deletes an
+  idempotency incl. tombstone and generations; unique violations classified by constraint (name, or the SQLite column
+  list); `transition` never enters `cancelled`; journal fields only on their transitions; purge never deletes an
   unexpired origin; lease vs cancel race; published-job cancel ⇒ hold + `TOO_LATE`; tri-state `transition` (`Moved`
   after cancel, `Moved{signed, own hash}` proceeds, injected commit-outcome-unknown ⇒ re-read); `lane.journal_max`
   monotonic with out-of-order writes; byte-exact keys (`'0xAB' != '0xab'`, base58 case); nonces as i64.
@@ -1210,7 +1238,7 @@ Ordered streams for **one agent at a time**. "Gate" = the stream's heavy command
 - Files: `Cargo.toml` (`sqlx` with `store-sqlite` default feature), `src/store/{mod,sqlite}.rs` (backend trait, schema
   §4 + A1 §A1.3 SQLite DDL, owner lock + fencing epoch, counter rows, tri-state CAS, janitor), `migrations/sqlite/`,
   `src/config.rs` (`[api]`, `[store]`, bootstrap lists, `[odoo]` as `Option` + `// legacy(R104)`), `src/main.rs`,
-  `src/bin` CLI `store restored`, `node.example.toml`.
+  CLI `store init` and `store restored` (in `src/main.rs`), `node.example.toml`.
 - Gate: `cargo test`. Done: reopen keeps `seq`/`store_id`; second process refused; fencing test green.
 
 **P2 — Job API, machine keys, built-in admin auth**
@@ -1385,6 +1413,21 @@ rotated and revoked by `key_custodian` admins via the admin API, the app or the 
 routes. Admin authentication is built-in users or OIDC only; the rev-3 admin API keys (table, `scaas_ak1.` tokens,
 routes, CLI subcommand, tests, threat row) are removed.
 
+### 19.3 P1 code review (rev 3.3)
+
+The P1 code and its review (`p1/code-review.md`, F1–F15, all fixed on `fix/node-p1-review`) proved these spec
+statements wrong or incomplete; corrected in place:
+
+| Was | Now |
+|---|---|
+| A1.3: SQLite classifies unique violations by "constraint name from the error message" | SQLite reports the column list only; the backend maps it back (§5.2 step 8, A1.3) |
+| §3, §7.1: `[api] bind` default `127.0.0.1:8547` (= gateway default) | `127.0.0.1:8548`; binds sharing a port refused |
+| R95: every dial target toml-only | owner ruling: `mesh_peer.url` admin-editable, `admin` only, audited, SSRF guard (§7.3, T2) |
+| §5.2 step 8: no answer for a stale lower generation or an expired key inside the transaction | `409 SUPERSEDED`, `422 EXPIRED` |
+| §5.3: "cursor below the oldest retained `seq − 1`" (unknowable once a feed table is empty) | `meta('<table>_floor')` written by the purge |
+| §8: store opened (created implicitly) at start | `scaas-node store init` creates; a missing store refuses to start |
+| §4: `digest`/`payload_hash` nullability only in comments | `CHECK`s tie them to `kind` |
+
 ---
 
 ## Amendment A1 (owner, 2026-10-06): storage backends — R111 (rev 2, review H4/H5/H6/M10 applied)
@@ -1435,7 +1478,7 @@ the same logical schema (§4) and the same semantics as R88. Multi-node HA on a 
 | `seq`/`uid` | `seq_counter` row incremented in the same transaction (no `AUTOINCREMENT`/`SERIAL`/`AUTO_INCREMENT`), so cursor semantics are identical everywhere | same | same |
 | `job_live_digest` | partial UNIQUE index | partial UNIQUE index | generated column `live_digest BINARY(32) AS (IF(state IN ('queued','leased','signed','broadcast'), digest, NULL)) STORED` + `UNIQUE (chain_key, live_digest)` |
 | `CHECK` | enforced | enforced | enforced (8.0.16+); minimum version 8.0.16 |
-| unique-violation classification | constraint name from the error message | `constraint_name` of the error | index name in error 1062 |
+| unique-violation classification | the column list of `UNIQUE constraint failed: job.chain_key, job.digest` (SQLite reports columns, never the constraint or index name), mapped back to the DDL name by the backend; a classifier test pins the mapping, since a future unique index ending in the same columns would be misread | `constraint_name` of the error | index name in error 1062 |
 
 Every query compares bytes; the contract suite asserts `'0xAB' != '0xab'` and base58 case on every backend.
 Migrations: `sqlx::migrate!` with `migrations/{sqlite,postgres,mysql}/`; a DDL-equivalence test introspects the three
