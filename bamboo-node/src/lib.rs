@@ -13,6 +13,7 @@ pub mod gateway;
 pub mod gwauth;
 pub mod indexer;
 pub mod keys;
+pub mod mesh;
 pub mod metatx;
 pub mod nonce;
 pub mod odoo;
