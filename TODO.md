@@ -20,3 +20,11 @@ Ordered by what blocks what (2026-10-06). The Odoo side lives in bamboo-dms (`dm
 8. [ ] TON: report the payer jetton-wallet tx hash with `mined` (false `landed_elsewhere`).
 9. [ ] Still queued: S4 follow-ups (backup-key toggle, device-bound vault, Sui `fam_sui.verify`, Soroban/Aptos/Solana signers, `chain_pay.js`), Zether portal balance cache, post-quantum Zether.
 
+
+### Doc/code inconsistencies found while writing docs/SCaaS.md (2026-10-06)
+- [ ] `smartcontracts/evm/README.md`: says the mode bitmask was removed (code keeps it) and Zether is "interface only" (it is built).
+- [ ] `private9000` profile: READMEs say berlin, `foundry.toml` says prague.
+- [ ] Seed-vault scrypt cost: round-3 R32 says N=2^15, clientkeys uses 2^17 — owner to pick; align spec or code.
+- [ ] MESH §3.4 still says `ring`; R114 (A2) moved to aws-lc-rs — S8′ doc corrections.
+- [ ] NI default job API bind `127.0.0.1:8547` collides with the gateway default bind — pick another port in the spec.
+- [ ] Owner review of PLANNED material filled from the SRS in docs/SCaaS.md (W3B SLOs, RACI, tender interface, backup-key toggle, P2P 7-step flow).
