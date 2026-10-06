@@ -38,7 +38,7 @@ When two sources disagree, the higher one wins:
 2. **This document** (`SCaaS.md`) and `integration.md`.
 3. **Component specs** in `docs/superpowers/specs/` (payments design R1–R20, wallets addendum R21–R29, round 3
    R30–R67, Zether design RS2-*, Zether limits RS-NV64-*, DEX RS5-*, per-family net specs, relayer mesh R70–R86,
-   node independence R87–R111, mesh gossip amendment A2 R112–R127). For a detail this document does not state,
+   node independence R87–R111, mesh gossip amendment A2 R112–R127, token wrappers v2 [TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) R129–R146). For a detail this document does not state,
    the component spec is normative.
 4. **Code** — pinned behaviour (typehashes, KAT vectors, conformance vectors) is normative for byte formats; a
    difference between code and an owner ruling is a bug in the code, not in the ruling.
@@ -61,13 +61,9 @@ Superseded positions that readers of older material will meet:
 | `bamboo-*` names (`bamboo-node`, `bamboo-intent/1.2`, `bamboo.pay.lane`, `BAMBOO_*`) | `scaas-*` names everywhere (`scaas-node`, `scaas-intent/1.2`, `scaas.pay.lane`, `SCAAS_*`) | R115, NI header |
 | Country-specific data-protection law named in the protocol | Market-neutral: data-protection regimes are handled generically (GDPR-class) | owner |
 
-**Naming note (transitional).** The rename `bamboo` → `scaas` is approved and in progress (another stream renames
-code in worktrees). This document uses the new names. In the code at the time of writing the node directory is
-still `bamboo-node/`, metrics are `bamboo_*`, env vars `BAMBOO_*`, headers `X-Bamboo-*`, and on-chain domain tags
-are `bamboo.*` / `"Bamboo MetaToken"` / `BAMBOO-ZETHER-*`. On-chain tags change derivations and signatures, so
-their rename ships as a new contract version under its own owner-reviewed plan (NI §18.1); until then **the
-deployed strings are the `bamboo.*` ones** and clients must use what the deployed contract reports
-(`eip712Domain()`).
+**Naming note.** The `scaas` rename has landed in code: node `scaas-node/`, env `SCAAS_*`, metrics
+`scaas_*`, headers `X-Scaas-*`, EIP-712 domains `"SCaaS …"`, tags `scaas.*` / `SCAAS-ZETHER-*` / `scaas/zether/…`.
+Clients still read the domain a deployed contract reports (`eip712Domain()`) rather than assuming a string.
 
 ### 0.2 Glossary
 
@@ -252,13 +248,13 @@ mandates (`MandateWallet.payUnderMandate`); generic saga orchestration **PLANNED
 |---|---|---|---|
 | EVM contracts | `smartcontracts/evm/` (Foundry; `src/{common,metatx,factory,dex,wallet,account,registry,zether,hedera,chains}`) | Meta-tx tokens, open factory, DEX, mandate wallet, subject (passkey) account, Zether, account registry; profiles `private9000` (Prague), `zether` (Prague), `gnosis`, `celo` (Cancun) | **BUILT** |
 | Hedera contracts | `smartcontracts/evm/src/hedera/` | `HederaMetaToken` (HIP-632 `isAuthorizedRaw` for ED25519 accounts) on HSCS | **BUILT** |
-| Cosmos contracts | `smartcontracts/cosmos/` (CosmWasm workspace) | `bamboo-token` (CW20 + meta-op), `bamboo-mandate`, `bamboo-dex`, shared `bamboo-metaop` | **BUILT** |
+| Cosmos contracts | `smartcontracts/cosmos/` (CosmWasm workspace) | `scaas-token` (CW20 + meta-op), `scaas-mandate`, `scaas-dex`, shared `scaas-metaop` | **BUILT** |
 | Soroban contracts | `smartcontracts/soroban/` | SEP-41 token + `pay`, mandate, DEX; native auth as meta-tx (Stellar and Pi) | **BUILT** |
-| Move contracts | `smartcontracts/move/{aptos,sui}/` | Package `bamboo`: `meta` (per-subject Account + lanes), mandate, DEX | **BUILT** |
+| Move contracts | `smartcontracts/move/{aptos,sui}/` | Package `scaas`: `meta` (per-subject Account + lanes), mandate, DEX | **BUILT** |
 | TON contracts | `smartcontracts/ton/` (Tact) | Jetton master/wallet with pubkey + lanes (`SignedTransfer`), mandate, escrow DEX | **BUILT** |
-| Solana program | `smartcontracts/solana/` (Anchor) | Program `bamboo`: SubjectAccount PDA, `LanePda`, mandate, DEX | **BUILT** |
+| Solana program | `smartcontracts/solana/` (Anchor) | Program `scaas`: SubjectAccount PDA, `LanePda`, mandate, DEX | **BUILT** |
 | Build/test scripts | `smartcontracts/scripts/{build,test,deploy,devnet}.sh <family>`; `scripts/capped` | One entry point per family; heavy runs capped at 4 GB, one at a time | **BUILT** |
-| `scaas-node` | `bamboo-node/` → `scaas-node/` (rename in progress) | Rust relayer: gateway, submit lanes, indexer, drift, DEX venue, admin; mesh envelope library | **BUILT** (Odoo-pulled job source); store/job API/admin auth **SPECIFIED** ([NI](superpowers/specs/2026-10-06-node-independence-design.md)); mesh transports **SPECIFIED** ([MESH](superpowers/specs/2026-10-05-relayer-mesh-design.md), [A2](superpowers/specs/2026-10-06-mesh-gossip-amendment.md)) |
+| `scaas-node` | `scaas-node/` | Rust relayer: gateway, submit lanes, indexer, drift, DEX venue, admin; mesh envelope library | **BUILT** (Odoo-pulled job source); store/job API/admin auth **SPECIFIED** ([NI](superpowers/specs/2026-10-06-node-independence-design.md)); mesh transports **SPECIFIED** ([MESH](superpowers/specs/2026-10-05-relayer-mesh-design.md), [A2](superpowers/specs/2026-10-06-mesh-gossip-amendment.md)) |
 | Node store | (in `scaas-node`) | Jobs, feeds, config authority, credentials, audit, DEX book, mesh tables; SQLite/PostgreSQL/MySQL | **SPECIFIED** (NI §4, A1/R111) |
 | `zether-prover` | `zether-prover/` (Rust, `cdylib`+`rlib`, WASM) | Keygen (EIP-2333 paths), ElGamal, Σ + Bulletproofs (n=64), disclosure openings, BSGS, `zether-cli`, `zether-read-balance` | **BUILT** (unaudited) |
 | `clientkeys` | `clientkeys/` (ESM, `@noble`/`@scure`) | Passkey signer, 24-word seed vault, Zether conf keys and balance cache; bundle vendored into `dms_blockchain_bridge/static/lib/clientkeys` | **BUILT** (EVM-centric; Soroban/Aptos/Solana signers queued) |
@@ -358,8 +354,13 @@ deferred (NI §18.3).
 IERC20
  └── IERC20MetaTx                         base: every token is gasless (§5)
       ├── IERC20Payment                   public payment: payWithFee, PaymentSettled(entryRef)
-      │    └── MetaToken v1 (kind META)   tier 1 standalone / tier 2 single-underlying wrapper   BUILT
-      │         └── HederaMetaToken       + HIP-632 ED25519 signatures, HTS association          BUILT
+      │    ├── MetaToken v1 (kind META)   tier 1 standalone / tier 2 single-underlying wrapper   BUILT
+      │    │    └── HederaMetaToken       + HIP-632 ED25519 signatures, HTS association          BUILT
+      │    └── MetaTokenBase v2           + mtxTransfer/…WithFee/mtxPay/mtxBatch (§5.8)          SPECIFIED (TW2)
+      │         ├── NoUnderlyingToken     (kind META_NONE)   tier 1
+      │         └── SingleUnderlyingToken (kind META_SINGLE) tier 2, rate (num/den), reserve
+      │              └── MultiUnderlyingToken (kind META_MULTI) tier 3, 2–8 underlyings, guardian
+      │         (+ Hedera children of each v2 tier)
       ├── IZetherToken + ITransferDisclosure
       │    └── ZetherToken v1 (kind ZETHER, dev chains only)                                    BUILT (unaudited)
       └── IRegulatedToken                 controlled class (court orders, CBDC)                PLANNED
@@ -372,13 +373,24 @@ the same envelope (owner decision, canon). Non-EVM families implement the same r
 
 | Tier | Contract | `underlying` | Supply rule | Invariant | Status |
 |---|---|---|---|---|---|
-| 1 Standalone (loyalty, internal units, access tokens) | `MetaToken` | `address(0)` | `initialSupply` minted to `creator` at init; `mint(to, v)` by `minter` only (`minter = 0` ⇒ fixed supply) | `Σ balances == totalSupply` | **BUILT** (`burn` for tier 1 needs v2 — HANDOFF GA 2.2 #1) |
-| 2 Single-underlying wrapper | `MetaToken` | ERC-20 address | Only via `wrap(amount)` (mints the **measured balance delta** received) / `unwrap(amount, recipient)`; `initialSupply == 0 && minter == 0` (`WrapperHasNoMint`) | `underlying.balanceOf(this) ≥ totalSupply` (fuzz invariant) | **BUILT** at 1:1; ratio `r ≠ 1` **PLANNED** (needs v2) |
-| 3 Multi-underlying basket | `MultiUnderlyingWrappedERC20MetaTx` | `address[] underlyings`, `uint256[] weights` | `depositBasket(amounts)` mints `min_i(ΔReserve_i / w_i)`; `redeemBasket(wrapped)` returns each `w_i · wrapped`; any short leg reverts the whole call | `∀i: reserve_i ≥ totalSupply · w_i` | **PLANNED** |
+| 1 Standalone (loyalty, internal units, access tokens) | v1 `MetaToken`; v2 `NoUnderlyingToken` (`META_NONE`) | `address(0)` | `initialSupply` minted to `creator` at init; `mint(to, v)` by `minter` only (`minter = 0` ⇒ fixed supply); v2 adds holder `burn` and one-way `renounceMinter` (R141) | `Σ balances == totalSupply` | v1 **BUILT**; v2 **SPECIFIED** ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md)) |
+| 2 Single-underlying wrapper | v1 `MetaToken`; v2 `SingleUnderlyingToken` (`META_SINGLE`) | ERC-20 address | Only via `wrap(amount)` (mints `⌊received·num/den⌋` of the **measured** delta) / `unwrap(wrapped, recipient)` (pays `⌊w·den/num⌋`, burns `⌈out·num/den⌉`); v1 is the 1:1 case | v1: `underlying.balanceOf(this) ≥ totalSupply`; v2: `Σ⌊reserve·num/den⌋ ≥ totalSupply` with internal `reserve` (R134) | v1 **BUILT** at 1:1; rates **SPECIFIED** (R133, R135) |
+| 3 Multi-underlying (any-of) | v2 `MultiUnderlyingToken is SingleUnderlyingToken` (`META_MULTI`) | 2–8 ERC-20s, fixed at creation | `wrap(u, amount)` on one chosen leg at that leg's rate; `unwrap(u, wrapped, recipient)` into one chosen leg, bounded by `reserve_u`; guardian may only `disableWrap(u)` (one-way; unwrap stays open) | `Σ_i⌊reserve_i·num_i/den_i⌋ ≥ totalSupply` (pooled; no per-leg invariant) | **SPECIFIED** (R136) |
 
-`initData` (v1, fixed ABI): `abi.encode(string name, string symbol, uint8 decimals, uint256 initialSupply, address
-minter)`; tier 2 ignores `decimals` (reads the underlying's). Fee-on-transfer and rebasing underlyings are refused
-or measured by delta; Zether refuses fee-on-transfer underlyings (`UnsupportedUnderlying`, RS2-15).
+**Conversion rates (v2, R133/R135).** `(num, den)` per underlying, `uint96`, wrapped raw units per underlying raw
+unit; every output rounds in the contract's favour; zero outputs revert. The issuer chooses at creation: **fixed**
+(default, no setter) or **adjustable** by a `rateAdmin` contract through a timelock (default 7 days, [2, 30] days),
+≤ `maxRateStepBps` per step (default 1 %, ≤ 10 %), executable by anyone within a 7-day grace; a change that lowers
+collateral executes only if the invariant still holds; balances never rebase; the admin can renounce, not transfer.
+Decimals are display only (issuer's choice; human rate = `num/den × 10^(D − d_i)`). A multi-underlying token
+concentrates on its weakest underlying during a depeg (good legs drain first); `disableWrap` stops inflow, not exits
+([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §8.4).
+
+`initData`: v1 `abi.encode(string name, string symbol, uint8 decimals, uint256 initialSupply, address minter)` (tier
+2 ignores `decimals`); v2 per kind in [TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §4, §5.1, §8.1. Fee-on-transfer underlyings are measured on the way in
+and must transfer exactly on the way out; rebasing underlyings are unsupported (a negative rebase stops wrap, exits
+stay first-come); Zether refuses fee-on-transfer underlyings (`UnsupportedUnderlying`, RS2-15). Weighted baskets
+(proportional redemption) are not planned (research §1.7.6).
 
 ### 4.3 Open factory and EIP-1167 clones (BUILT)
 
@@ -397,13 +409,18 @@ or measured by delta; Zether refuses fee-on-transfer underlyings (`UnsupportedUn
   in the constructor (T9, T10).
 - **Zether gate**: `zetherEnabled` default `false`; enabling and creating Zether tokens revert outside chain ids
   31337/1337 (`ZetherSafety`, RS2-1).
+- **Factory v2** (R130, [TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §9, SPECIFIED): a new `OpenFactory` deployment (v1's enum cannot decode new kinds);
+  `TokenKind` appends `META_NONE`, `META_SINGLE`, `META_MULTI`; `createTiered(kind, version, underlyings[], initData,
+  salt)` / `createTieredUnregistered`; registration checks the implementation's `tokenKind()`; every underlying is
+  indexed for provenance. v1 tokens stay on factory v1. The only token-level powers in v2 are creation-time and
+  public: an adjustable-rate `rateAdmin` and the multi-underlying `guardian` (R142).
 - **Registrar** is an EOA by default (deployer); it must become a multisig before mainnet (HANDOFF O2). Its only
   powers are `registerImplementation`, `deprecate`, `setZetherEnabled`.
 
-EIP-712 domains: name per implementation (`"Bamboo MetaToken"`, `"Bamboo ZetherToken"`, `"Bamboo MandateWallet"`,
-`"Bamboo SubjectAccount"`, `"Bamboo OrderBookDex"`), version `"1"`, `chainId`, `verifyingContract` = the clone
-itself. All clones share the name; replay safety comes from `verifyingContract` (R5). Clients read
-`eip712Domain()` (ERC-5267). The `scaas` rename of these strings is a new implementation version (§0.1).
+EIP-712 domains: name per implementation (`"SCaaS MetaToken"`, `"SCaaS ZetherToken"`, `"SCaaS MandateWallet"`,
+`"SCaaS SubjectAccount"`, `"SCaaS OrderBookDex"`), version `"1"` (`"2"` for the v2 tiers, R131), `chainId`,
+`verifyingContract` = the clone itself. All clones share the name; replay safety comes from `verifyingContract`
+(R5). Clients read `eip712Domain()` (ERC-5267).
 
 ### 4.4 Allowance lockdown invariant (BUILT, R26)
 
@@ -435,7 +452,7 @@ family:
 | | Permissionless (uncontrolled) | Controlled / regulated |
 |---|---|---|
 | Contract | `MetaToken`, `ZetherToken` clones | `IRegulatedToken` implementations (separate kind in the factory catalogue) |
-| Admin powers | None: no owner, pause, blacklist, freeze, confiscation, arbitrary mint | Freeze, unfreeze, forced transfer, court-ordered burn — **only** with a ruling reference and a multisig quorum |
+| Admin powers | None: no owner, pause, blacklist, freeze, confiscation, arbitrary mint (v2 exceptions, chosen at creation and public: an adjustable-rate `rateAdmin` and the multi-underlying `guardian`, R142) | Freeze, unfreeze, forced transfer, court-ordered burn — **only** with a ruling reference and a multisig quorum |
 | Use | Loyalty, internal units, B2B settlement tokens, wrapped stablecoins | Central-bank digital currency, licensed stablecoins, digital securities and bonds, real-world-asset claims |
 | Guarantee | "Your key, your funds": neither the issuer nor the factory can touch balances | Due-process intervention, permanently evidenced on chain |
 | Status | **BUILT** | **PLANNED** |
@@ -506,8 +523,9 @@ A configuration wizard (in `app/` and any ERP) on top of `IOpenFactory`. Templat
 |---|---|---|---|
 | Loyalty / rewards | `createMetaToken(1, 0, initData, salt)` | name, symbol, decimals, `minter` = issuer's mint contract or treasury multisig, fee 0 | **BUILT** |
 | Internal 1:1 money | `createMetaToken(1, underlying, …)` | underlying stablecoin; wrap/unwrap through the clone | **BUILT** |
+| Wrapper with a rate | `createTiered(META_SINGLE, …)` | underlying, `num/den`, fixed or adjustable (admin, delay, step) | **SPECIFIED** (TW2) |
 | Confidential money | `createZetherToken(1, underlying, verifier, initData, salt)` | `registry`, `shieldScale`, `maxDecryptableShielded ≤ 2^54`, `confidentialFee`, auditor key | **BUILT** (dev chains only) |
-| Basket | tier 3 | underlyings, weights | **PLANNED** |
+| Multi-underlying money (e.g. xDAI/USDC/USDT) | `createTiered(META_MULTI, …)` | 2–8 underlyings, per-leg rates, guardian | **SPECIFIED** (TW2) |
 | Vesting / streaming | `VestingVault` | cliff, duration, interval, revocability | **PLANNED** |
 | Controlled / security / bond | `IRegulatedToken` kind | quorum members, compliance registry, coupon schedule | **PLANNED** |
 | Non-fungible in-app assets (ERC-721/1155 with meta-tx) | new kinds | — | **PLANNED** |
@@ -595,8 +613,8 @@ the gateway (stream S0); all origins SPECIFIED (R100).
 | Generic | `executeMetaTransaction(m, signature)` with an op in `m.data` | Every subject-signed token operation; composable ops | **BUILT** |
 | Payment op | `data = pay(bytes32 entryRef)` (exactly 36 bytes, `to ≠ 0`) through the generic path | Invoice/order payment with a reconciliation reference; emits `PaymentSettled(from, to, amount, feeAmount, feeRecipient, entryRef)` | **BUILT** (R2) |
 | Direct payment | `payWithFee(to, amount, feeMode, fee, feeRecipient, entryRef)` — `msg.sender` pays gas; fee charged on top | Contract wallets (MandateWallet), self-submitted payments | **BUILT** |
-| Fast path `mtxPay` | dedicated function with typed parameters and its own typehash (§5.8) | ~4.2 k gas saving per payment; batching | **PLANNED** |
-| Batch fast path `batchMtxPay(Payment[])` | one call, many payments of one token on one chain | 40–60 % gas saving at 10–50 items | **PLANNED** |
+| Named entry points (v2) | `mtxTransfer`, `mtxTransferWithFee`, `executeMetaTransactionWithFee`, `mtxPay(…, payId, …)` — build the same struct, same digest (§5.8) | Typed ABI for wallets/explorers; on-chain pay lane | **SPECIFIED** (R138, R139) |
+| Batch (v2) | `mtxBatch(MetaTransaction[], bytes[])`, atomic | Saves ≈ 23.6 k gas per item after the first (intrinsic + cold access) | **SPECIFIED** (R140) |
 | Zether ops | `OP_ZTRANSFER`, `OP_ZBURN` inside the envelope (§8.8) | Confidential transfer/burn | **BUILT** (dev chains) |
 
 Op table of `MetaToken` (`_checkOp` at step 6 must not fail later at step 8):
@@ -616,7 +634,7 @@ it. Independent lanes remove head-of-line blocking between agents and between bu
 
 | Lane derivation | Rule | Status |
 |---|---|---|
-| Payment request | `batch = keccak256("bamboo.pay.lane" ‖ entryRef)`, `nonce = 0` (renamed `scaas.pay.lane` with the next contract version) ⇒ each request is payable at most once and the client can build typed data without reading the chain | **BUILT** (R9) |
+| Payment request | `batch = keccak256("scaas.pay.lane" ‖ entryRef)`, `nonce = 0` ⇒ each request is payable at most once and the client can build typed data without reading the chain; v2 `mtxPay` derives the same lane on chain (`payLane(payId)`) | **BUILT** (R9); on-chain derivation **SPECIFIED** (R139) |
 | Agent × purpose | `batch = uint256(keccak256(agentId ‖ purpose))` (e.g. procurement settlement, logistics milestones, payout distribution, treasury rebalance), sequential nonce inside | **SPECIFIED** here (client convention) |
 | Non-EVM | `(subject, lane: bytes32) → nonce: u64` in the subject's account object/wallet/PDA (§7) | **BUILT** |
 
@@ -628,7 +646,7 @@ contract 2 (R62).
 ### 5.6 Cheap-first execution pipeline (BUILT; the SRS "8 steps" are steps 1–8 below, step 9 is the nonce increment and event)
 
 `executeMetaTransaction` (not payable), reentrancy guard in transient storage
-(`keccak256("bamboo.metatx.reentrancy.v1")`):
+(`keccak256("scaas.metatx.reentrancy.v1")`; v2: `…reentrancy.v2`):
 
 | Step | Check / action | Cost class | Error |
 |---|---|---|---|
@@ -669,35 +687,32 @@ Envelope overhead ≈ 17.5 k gas; collecting a fee ≈ +8.3 k gas.
   `fee ≤ amount × MAX_FEE_PPM / 10^6` (FIXED is also capped at 1 % of `value` for public tokens). Over the cap ⇒
   `FeeExceedsCap(feeAmount, cap)`.
 - `validateRecipient`: non-NONE needs a non-zero recipient (`FeeRecipientRequired`).
+- **Fee never to the payee** (owner, R132; v2, SPECIFIED): for the transfer and `pay` ops and `payWithFee`, a non-zero
+  fee whose resolved recipient equals `to` reverts `FeeRecipientIsPayee` (bound or relayer-default). v1 lacks the check.
 - `requireConfidentialSafe`: `PERCENT` on any confidential op ⇒ `PercentFeeForbiddenOnConfidential` (a percentage
   fee would reveal the hidden amount). Zether outer fees are `NONE` or `FIXED`, and `FIXED` there is **not** capped at
   1 % because the amount is hidden (RS2-6).
 - DEX fees are separate: per-market maker/taker ppm ≤ 10 000, bounded by the order's signed `maxFeePpm`.
 
-### 5.8 Proposed fast path `mtxPay` (PLANNED)
+### 5.8 Named meta-tx functions (SPECIFIED, [TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §7)
 
-Kept compatible with the built `pay` op so both paths emit the same event and reconcile identically. Normative for
-the future implementation:
+Owner ruling (R138–R140): thin entry points in the v2 `MetaTokenBase` (every tier) that build a `MetaTransaction`
+and run the same nine steps. **No second typehash**: the earlier proposal here (`PAY_TYPEHASH`, `batchMtxPay` with a
+partial-success bitmap) is withdrawn.
 
-```solidity
-// typehash (new; the generic MetaTransaction typehash is untouched)
-bytes32 constant PAY_TYPEHASH = keccak256(
-  "Pay(address from,address to,uint256 amount,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,"
-  "uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+| Function | Struct built | Mode shape (else `MtxModeShape`) |
+|---|---|---|
+| `mtxTransfer(from, to, amount, batch, nonce, validUntil, mode, relayer, sig)` | `data = ""`, `fee = 0`, `feeRecipient = 0` | only `MODE_RESTRICT_RELAYER` may be set |
+| `mtxTransferWithFee(…, mode, relayer, fee, feeRecipient, sig)` | `data = ""` | fee `PERCENT`/`FIXED`, `MODE_RESTRICT_FEE_RECIPIENT` set, `feeRecipient ≠ 0` |
+| `executeMetaTransactionWithFee(m, sig)` | `m` (any op) | fee mode ≠ `NONE` (recipient bound or relayer-default) |
+| `mtxPay(from, to, amount, payId, validUntil, mode, relayer, fee, feeRecipient, sig)` | `data = pay(payId)`, `batch = payLane(payId)`, `nonce = 0` | any valid mode |
+| `mtxBatch(MetaTransaction[] ms, bytes[] sigs)` | each item | per item; atomic (one failure reverts all) |
 
-function mtxPay(address from, address to, uint256 amount, bytes32 entryRef, uint256 batch, uint256 nonce,
-                uint256 validUntil, uint32 mode, address relayer, uint256 fee, address feeRecipient,
-                bytes calldata signature) external returns (bool);
-struct Payment { address from; address to; uint256 amount; bytes32 entryRef; uint256 batch; uint256 nonce;
-                 uint256 validUntil; uint32 mode; address relayer; uint256 fee; address feeRecipient; bytes signature; }
-function batchMtxPay(Payment[] calldata payments) external returns (uint256 settledBitmap);
-```
-
-Rules: same 9-step order, same 2D nonce space as `executeMetaTransaction` (one lane cannot be consumed twice
-through two paths), same canonical zeroing, emits `PaymentSettled(…, entryRef)` and `MetaTransactionExecuted`.
-`batchMtxPay` is per contract and per chain (never mixes tokens or chains); each item is atomic on its own
-(failed items are reported in the bitmap and do not consume their nonce); a batch with zero successes reverts.
-Node batching: queue key `(chain_key, token)`, flush at 50 items or 3 s.
+`payId` is the R9 `entryRef`; `payLane(p) = uint256(keccak256("scaas.pay.lane" ‖ p))`, the lane clients already
+derive. A named call and `executeMetaTransaction` with the same struct have the **same digest, events and nonce**: a
+signature works on either path and is consumed once; KATs stay valid. The names add a typed ABI, shape guards and
+the on-chain pay lane, and save only calldata (R2's ≈ 4 k gas figure assumed a shorter typehash and does not apply).
+The node batches per `(chain_key, token)` only items bound to its own lane (flush at 50 items or 3 s).
 
 ### 5.9 Payer flexibility
 
@@ -814,7 +829,7 @@ Per lane, in memory, sampled every 15 s; open breakers stop **new** work only.
 | `balance_floor` | lane balance < `min_relayer_balance` | warn below 120 % of the floor |
 | structural | simulated gas > `max_gas_per_tx` ⇒ job `dead` | 3 000 000 |
 
-Metric `scaas_breaker_open{chain,lane,breaker}` (today `bamboo_breaker_open`); manual reset
+Metric `scaas_breaker_open{chain,lane,breaker}`; manual reset
 `POST /v1/admin/chains/{key}/breaker/reset` (operator, SPECIFIED).
 
 ### 6.5 Simulation gate (BUILT)
@@ -971,8 +986,7 @@ used only so that a **relayer** pays, never so that the subject's account sequen
 the same three roles: token with `pay` + meta-op, mandate, DEX — plus a multi-key subject account where the chain
 needs one.
 
-**`MetaOp` v1** (non-EVM; family encoding, every field mandatory): `domain = "bamboo.metaop.v1"` (renamed
-`scaas.metaop.v1` with the next contract versions) ‖ `network` ‖ `contract` ‖ `op` (`pay | trade | mandate_pay |
+**`MetaOp` v1** (non-EVM; family encoding, every field mandatory): `domain = "scaas.metaop.v1"` ‖ `network` ‖ `contract` ‖ `op` (`pay | trade | mandate_pay |
 revoke`) ‖ `from` ‖ `to` ‖ `amount` ‖ `payRef` (32) ‖ `lane` (32) ‖ `nonce` (u64) ‖ `validUntil` (u64 seconds) ‖
 `relayer` (optional) ‖ `extra` (hash of op-specific parameters). No relayer fee field on non-EVM (fee NONE, R10/R75).
 
@@ -1024,9 +1038,9 @@ keystore) or a raw `private_key` (one lane); `scaas-node addresses` prints every
 
 ### 7.3 Cosmos (CosmWasm)
 
-- Contracts: `bamboo-token` (minimal CW20 + `Pay{to, amount, pay_ref}` + `Relay{payload, auth}` with ops `pay`,
-  `trade`, `revoke`; `QueryMsg::Nonce{owner, lane}`), `bamboo-mandate` (CW20 `Receive`, `PayUnderMandate`, `Revoke`,
-  `Withdraw`), `bamboo-dex` (`SetMarket`, `Settle{maker, taker}`, fill-or-kill); `bamboo-metaop` library.
+- Contracts: `scaas-token` (minimal CW20 + `Pay{to, amount, pay_ref}` + `Relay{payload, auth}` with ops `pay`,
+  `trade`, `revoke`; `QueryMsg::Nonce{owner, lane}`), `scaas-mandate` (CW20 `Receive`, `PayUnderMandate`, `Revoke`,
+  `Withdraw`), `scaas-dex` (`SetMarket`, `Settle{maker, taker}`, fill-or-kill); `scaas-metaop` library.
 - Signed payload: JSON `MetaOp` with sorted keys, `deny_unknown_fields`; ADR-036 sign doc built from a fixed byte
   template with `chain_id: ""`; the domain lives in the payload (`network == env.block.chain_id`, `contract ==
   env.contract.address`); address = bech32(ripemd160(sha256(pk))) must equal `from`.
@@ -1043,7 +1057,7 @@ keystore) or a raw `private_key` (one lane); `scaas-node addresses` prints every
 - Contracts: token (SEP-41 + `pay(from, to, amount, pay_ref, valid_until)`, one-shot `pay_ref`, `approve` only to
   contract spenders), custom account (P-256 WebAuthn + ed25519 keys, Merkle batching; guardian recovery is a stub),
   mandate, DEX (`settle(maker, taker, maker_fill)` with two `require_auth_for_args`).
-- Op digest (for indexing and the job API): `sha256(XDR(Vec[Symbol("bamboo_metaop_v1"), network_id, contract,
+- Op digest (for indexing and the job API): `sha256(XDR(Vec[Symbol("scaas_metaop_v1"), network_id, contract,
   Symbol(fn), Vec(args)]))`.
 - The subject `G…` account must exist on the ledger. Pi Network = the Soroban family with network passphrase "Pi
   Testnet"/"Pi Network" and SLIP-44 314159 (owner to confirm passphrases at deploy).
@@ -1053,8 +1067,8 @@ keystore) or a raw `private_key` (one lane); `scaas-node addresses` prints every
 
 ### 7.5 Move — Aptos and Sui
 
-**Aptos** (package `bamboo`, `upgrade_policy = compatible`): one `Account` object per owner (derived from Root
-`b"bamboo.root"`) holding primary fungible-asset stores for every asset; `MetaOp{domain, chain_id, contract, asset,
+**Aptos** (package `scaas`, `upgrade_policy = compatible`): one `Account` object per owner (derived from Root
+`b"scaas.root"`) holding primary fungible-asset stores for every asset; `MetaOp{domain, chain_id, contract, asset,
 op, from, to, amount: u128, pay_ref, lane, nonce: u64, valid_until: u64, relayer, extra}`, digest
 `sha3_256(bcs(MetaOp))`; `package entry relay_pay(lane, owner, asset, …)` prevents other modules from wrapping
 relayed entries (`check_entry_visibility.sh`); key management with up to 8 keys and 8 origins, guardian recovery
@@ -1062,7 +1076,7 @@ after 172 800 s; pure-Move P-256 verifier (unaudited). Native **fee-payer (AIP-3
 kept as a seam for passkey/keyless subjects only; the relayer lane uses sequence-number transactions and pays.
 Finality: committed block (AptosBFT), cursor bounded by the Indexer API's processed version.
 
-**Sui** (package `bamboo`): shared `Account<T>` per (subject, coin type) registered in `Registry<T>` (a second
+**Sui** (package `scaas`): shared `Account<T>` per (subject, coin type) registered in `Registry<T>` (a second
 `open` is refused, so nobody can create a decoy account); subject signs `signPersonalMessage(BCS(MetaOp))`, Move
 recomputes `blake2b256([3,0,0] ‖ bcs(vector<u8>))` and verifies ed25519 / secp256k1 (SHA-256) / secp256r1 /
 passkey. Relayer lane sends a **PTB** calling `meta::relay_pay<T>`; each lane has its own gas coin and one tx in
@@ -1089,7 +1103,7 @@ atomic; several settles batch in one PTB. Finality: certified checkpoint.
 
 ### 7.7 Solana
 
-- Anchor program `bamboo`: SubjectAccount PDA owns the token accounts; `LanePda{next}` seeded `["lane", subject,
+- Anchor program `scaas`: SubjectAccount PDA owns the token accounts; `LanePda{next}` seeded `["lane", subject,
   lane]` (prunable after `valid_until`); `MetaOp` fixed 337 bytes, digest `sha256(MetaOp)`; the subject signs
   `"<domain>:" ‖ hex(sha256(MetaOp))` as raw ed25519, Solana off-chain message (`\xffsolana offchain`) or passkey;
   the program verifies by inspecting the Ed25519/Secp256r1 precompile instruction in the same transaction.
@@ -1136,7 +1150,7 @@ Lifted ElGamal on G1: key `x ∈ [1, r)`, `Y = [x]G`; balance `(C, D) = ([b]G + 
 ciphertexts; decryption `[b]G = C − [x]D` then discrete log by client-side BSGS. Proofs: one Σ-protocol (sender
 knows `x`, the three ciphertexts encrypt the same `v` with the same `s`, the remaining balance relation) plus
 **exactly two Bulletproof range statements** — `v ∈ [0, 2^{n_v})` and `b' = b − fee − v ∈ [0, 2^{n_b})` — in **one**
-Fiat-Shamir transcript (`init = keccak256("BAMBOO-ZETHER-TRANSCRIPT-V1")`, statement absorbed first: strong
+Fiat-Shamir transcript (`init = keccak256("SCAAS-ZETHER-TRANSCRIPT-V1")`, statement absorbed first: strong
 Fiat-Shamir). NUMS generators computed in the verifier constructor and stored with SSTORE2 (130 points: `h`, `U`,
 `G_0..63`, `H_0..63`).
 
@@ -1146,7 +1160,7 @@ Fiat-Shamir). NUMS generators computed in the verifier constructor and stored wi
 | Precompiles | `0x06` add, `0x07` mul | `0x0b` G1ADD, `0x0c` G1MSM (subgroup check), `0x10` map |
 | Security | ~100 bit | ~117–126 bit |
 | Chains | any EVM since Byzantium | Prague (EIP-2537) |
-| `proofSystemId` | `keccak256("bamboo/zether/sigma-bullets/bn254/n64-n64/v1")` | `keccak256("bamboo/zether/sigma-bullets/bls12-381/n64-n64/v1")` |
+| `proofSystemId` | `keccak256("scaas/zether/sigma-bullets/bn254/n64-n64/v1")` | `keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v1")` |
 
 Both curves are supported; the token creator chooses the verifier. BLS12-381 buys security, **not** gas (measured:
 it is more expensive; the earlier "45–60 % cheaper" claim is wrong).
@@ -1227,7 +1241,7 @@ Eight account kinds (`enum AuthScheme`, values 0–4 frozen), six verifier paths
 
 FROST and MuSig2 share one Schnorr verification path (`z·G == R + c·P`, O(1) gas regardless of signer count). BLS on
 the same curve as the ElGamal key is rejected because publishing `[x]G2` makes DDH decidable on G1. BLS keys at
-infinity are rejected (RS2-18). Authorization digest `keccak256("BAMBOO-ZETHER-AUTH-V1" ‖ keccak256(statement))`:
+infinity are rejected (RS2-18). Authorization digest `keccak256("SCAAS-ZETHER-AUTH-V1" ‖ keccak256(statement))`:
 every transfer and burn needs **both** the proof (knowledge of `x`) **and** the scheme signature, so a leaked `x`
 of a non-`SELF_SCHNORR` account is a read-only breach (`survivesEncKeyLeak`).
 
@@ -1239,9 +1253,9 @@ fixed per token (`confidentialFee`). Outer fee: paid from the token's **public**
 
 ### 8.8 Replay protection and envelope binding
 
-1. **Envelope:** 2D nonce, `validUntil`, EIP-712 signature (domain `("Bamboo ZetherToken", "1", chainId, token)`).
+1. **Envelope:** 2D nonce, `validUntil`, EIP-712 signature (domain `("SCaaS ZetherToken", "1", chainId, token)`).
 2. **State:** `accSeq` and `sendCounter` in the statement, compared with storage before verification.
-3. **Binding:** `envelopeBinding = keccak256(abi.encode(keccak256("BAMBOO-ZETHER-ENVELOPE-V1"), chainid, token,
+3. **Binding:** `envelopeBinding = keccak256(abi.encode(keccak256("SCAAS-ZETHER-ENVELOPE-V1"), chainid, token,
    from, to, value, batch, nonce, validUntil, mode, canonRelayer, fee, canonFeeRecipient))` is part of the statement
    (`ZTX_V1_RELAYED`); direct calls use `ZTX_V1_DIRECT` with binding 0. Stripping a proof out of its envelope, moving
    it to another envelope, token or chain, or replaying it after execution all change the transcript and revert.
@@ -1250,7 +1264,7 @@ Envelope ops: `OP_ZTRANSFER = bytes4(keccak256("zetherTransfer(bytes,bytes,bytes
 bytes4(keccak256("zetherBurn(bytes,uint256,address,bytes32,bytes,bytes)"))`, with `m.to = 0`, `m.value = 0`.
 Direct calls: `transferConfidential(payload, proof, authSig, beneficiary) returns (bytes32 entryRef)` and
 `burn(payload, amount, recipient, beneficiary, proof, authSig)` (no outer fee). `entryRef =
-keccak256(abi.encode(keccak256("BAMBOO-ZETHER-ENTRY-V1"), chainid, token, fromUA, sendCounter))`.
+keccak256(abi.encode(keccak256("SCAAS-ZETHER-ENTRY-V1"), chainid, token, fromUA, sendCounter))`.
 
 ### 8.9 Disclosure (`ITransferDisclosure`, BUILT)
 
@@ -1263,7 +1277,7 @@ openings, all kept:
 | `RECEIVER_X` | `abi.encode(A1, A2, z)` (Chaum-Pedersen) | `log_G(Y_to) == log_{D_out}(C_out − [amount]G)` |
 | `AUDITOR` | as `RECEIVER_X` with the token's immutable auditor key and `C_aud` | same |
 
-Challenge `e = hashToScalar(keccak256("BAMBOO-ZETHER-DISCLOSE-V1" ‖ chainid ‖ token ‖ entryRef ‖ be32(amount) ‖
+Challenge `e = hashToScalar(keccak256("SCAAS-ZETHER-DISCLOSE-V1" ‖ chainid ‖ token ‖ entryRef ‖ be32(amount) ‖
 kind ‖ A1 ‖ A2))`; `amount < 2^64`, `z < r`, `e ≠ 0`. `verifyTransferAmount` is a free view; `attestTransferAmount`
 emits `AmountAttested(entryRef, amount, kind, attestedBy, timestamp)`; `transferCiphertext(entryRef)` returns the
 ciphertext and recipient key. The auditor reads exactly the per-transfer `C_aud`, never anyone's `acc`/`pending`.
@@ -1273,7 +1287,7 @@ chain, token, from UA and the **on-chain** `sendCounter`); reusing a counter wou
 ### 8.10 Keys
 
 Confidential key `x` is derived from the same 24-word seed on a separate path (R33): BLS12-381 EIP-2333
-`m/12381/<coin>/<account>/7`; bn254 EIP-2333-style with salt `"BAMBOO-ZETHER-BN254-v1"` on `m/254/<coin>/<account>/7`;
+`m/12381/<coin>/<account>/7`; bn254 EIP-2333-style with salt `"SCAAS-ZETHER-BN254-v1"` on `m/254/<coin>/<account>/7`;
 `<use> = 8` reserved for viewing/disclosure keys. `x` never equals a signing scalar of the same seed, never leaves
 the device (clientkeys `sealConfKey`).
 
@@ -1388,8 +1402,8 @@ show the mode and the recovery delay.
 - One mnemonic (24 words, BIP-39 checksum, optional BIP-39 passphrase) for every lane without its own key; per-chain
   `lanes = [account indexes]`; paths per family as in §7; `coin_type` override per chain.
 - Sources (`SecretSource`): `{env}`, `{file}` (refused unless mode 0600/0400), `{keystore, passphrase_env}` (Web3 Secret
-  Storage v3: scrypt + AES-128-CTR + keccak MAC, extended with `"bamboo": {"kind": "secp256k1" | "ed25519" |
-  "mnemonic"}`, renamed `"scaas"` by the rename stream). Secrets are never logged; start-up prints only addresses.
+  Storage v3: scrypt + AES-128-CTR + keccak MAC; `scaas-node keystore new --kind mnemonic|secp256k1|ed25519` checks
+  the secret before writing, the kind is an operator label and is not stored). Secrets are never logged; start-up prints only addresses.
 - `Signer` trait (`curve()`, `public_key()`, `sign(msg)` → 65-byte low-s `r‖s‖v` or 64-byte ed25519) with
   `LocalSigner`; **KMS/HSM signers are a seam** (O7; required on public chains for production).
 - Lanes hold gas only; funding from treasury and balance monitoring (`scaas_relayer_balance{chain,lane}`) are
@@ -1615,7 +1629,7 @@ Writes credential rows and the audit log directly (no owner lock needed; never t
 
 ```
 scaas-node --config node.toml                                   # run
-scaas-node addresses --config node.toml                         # print lane addresses (BUILT as bamboo-node)
+scaas-node addresses --config node.toml                         # print lane addresses (BUILT)
 scaas-node keystore new --kind mnemonic|secp256k1|ed25519 --out DIR --name FILE   # BUILT
 scaas-node mesh-id --config node.toml                           # peer_id, PeerId, SPKI pin
 scaas-node admin create NAME --role admin --role key_custodian  # password from stdin, twice
@@ -1661,7 +1675,7 @@ Status: `addresses`, `keystore new` **BUILT**; the rest **SPECIFIED**.
 Additional operational SLOs (research §06.8): jobs final without manual intervention ≥ 99.5 %/month; outer-nonce gap
 age = 0 for 99.9 % of the time; signed-but-orphaned transactions = 0.
 
-**Metrics (BUILT today, `bamboo_*` → `scaas_*`):** `relay_jobs{chain,state}`, `payment_requests_attention{chain}`,
+**Metrics (BUILT, prefix `scaas_`):** `relay_jobs{chain,state}`, `payment_requests_attention{chain}`,
 `indexer_lag_blocks{chain}`, `relayer_balance{chain,lane}`, `breaker_open{chain,lane,breaker}`,
 `drift_alerts{chain}`, `submit_bump_skipped_consumed_total`. SPECIFIED additions: job API, feed, store owner,
 admin, audit, OIDC, lane-foreign-nonce (NI §15), mesh (MESH §12) and gossip/TLS (A2 §13.3) metrics.
@@ -1765,6 +1779,7 @@ domains on the contract itself, lane nonces, contract-only allowances, no proxy 
 ```solidity
 interface IOpenFactory {
     enum TokenKind { META, ZETHER }   // future kinds (REGULATED, MIGRATION) append; values never reused
+                                      // factory v2 (TW2, SPECIFIED): META_NONE = 2, META_SINGLE = 3, META_MULTI = 4
 
     event ImplementationRegistered(TokenKind indexed kind, uint64 indexed version, address indexed implementation, address registrar);
     event ImplementationDeprecated(TokenKind indexed kind, uint64 indexed version, string reason);
@@ -1809,6 +1824,23 @@ interface IOpenFactory {
 Differences from the SRS draft: adds `isDeprecated`, `getWrapperCount/At`, `deployedFor`, the events/errors above
 and `setZetherEnabled`; `predictAddress` is per `(implementation, creator, salt)`.
 
+**Factory v2 — SPECIFIED** ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §9; a new deployment, all functions above kept):
+
+```solidity
+function createTiered(TokenKind kind, uint64 version, address[] calldata underlyings,
+                      bytes calldata initData, bytes32 salt) external returns (address token);
+function createTieredUnregistered(TokenKind kind, address implementation, address[] calldata underlyings,
+                                  bytes calldata initData, bytes32 salt) external returns (address token); // version 0
+event TieredTokenDeployed(address indexed token, address indexed creator, TokenKind kind, uint64 version,
+                          address implementation, address[] underlyings);
+error UnderlyingCountInvalid(uint256 n);          // META_NONE 0, META_SINGLE 1, META_MULTI 2..8
+// registerImplementation checks impl.tokenKind() for the new kinds (VersionKindMismatch)
+interface IFactoryTokenV2 {
+    function tokenKind() external pure returns (TokenKind);
+    function initialize(address creator, address[] calldata underlyings, uint64 version, bytes calldata initData) external;
+}
+```
+
 ### 14.2 `IERC20MetaTx` and `IERC20Payment` — BUILT (`src/metatx/`)
 
 ```solidity
@@ -1845,7 +1877,47 @@ interface IERC20Payment is IERC20MetaTx {
 bytes4(keccak256("trade(address,uint256,address)"))`, `OP_APPROVE = bytes4(keccak256("approve(address,uint256)"))`;
 `mint`, `wrap`, `unwrap`; provenance getters; errors `MetaTxUnknownOp(bytes4)`, `PayToZero`,
 `TradeLegNotRestricted`, `WrapperHasNoMint`, `NotMinter`, `NotAWrapper`, `ApproveCarriesValue`,
-`ApproveSpenderMismatch`. Fast path `mtxPay`/`batchMtxPay`: proposed in §5.8 (PLANNED).
+`ApproveSpenderMismatch`.
+
+**v2 additions — SPECIFIED** ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §3, §5–§8, §10.2): domain `("SCaaS MetaToken", "2", chainId, clone)`, same
+`MetaTransaction` typehash.
+
+```solidity
+// MetaTxCore / MetaTokenBase (all tiers)
+event MetaNonceCancelled(address indexed from, uint256 indexed batch, uint256 newNonce);
+error FeeRecipientIsPayee();  error MtxModeShape(uint32 mode);  error MtxBatchEmpty();  error MtxBatchLengthMismatch();
+function mtxTransfer(address from, address to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil,
+                     uint32 mode, address relayer, bytes calldata signature) external returns (bool);
+function mtxTransferWithFee(address from, address to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil,
+                            uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata signature)
+    external returns (bool);
+function executeMetaTransactionWithFee(MetaTxLib.MetaTransaction calldata m, bytes calldata signature) external returns (bool);
+function mtxPay(address from, address to, uint256 amount, bytes32 payId, uint256 validUntil, uint32 mode,
+                address relayer, uint256 fee, address feeRecipient, bytes calldata signature) external returns (bool);
+function mtxBatch(MetaTxLib.MetaTransaction[] calldata ms, bytes[] calldata signatures) external returns (bool);
+function payLane(bytes32 payId) external view returns (uint256);
+// NoUnderlyingToken
+function mint(address to, uint256 amount) external;  function burn(uint256 amount) external;  function renounceMinter() external;
+// SingleUnderlyingToken (MultiUnderlyingToken overrides the single-asset ABI to revert UnderlyingRequired)
+function wrap(uint256 amount) external returns (uint256 minted);
+function unwrap(uint256 wrapped, address recipient) external returns (uint256 out);
+function addReserve(address underlying, uint256 amount) external;
+function proposeRate(address underlying, uint96 num, uint96 den) external;   // rateAdmin; RateFixed if fixed
+function cancelRate(address underlying) external;                            // rateAdmin
+function executeRate(address underlying) external;                           // anyone, eta ≤ now ≤ eta + 7 days
+function renounceRateAdmin() external;
+function underlyings() external view returns (address[] memory);
+function legOf(address u) external view returns (uint96 num, uint96 den, uint256 reserve, uint8 decimals, bool wrapEnabled);
+function collateralValue() external view returns (uint256);                  // Σ⌊reserve_i·num_i/den_i⌋ ≥ totalSupply
+// MultiUnderlyingToken
+function wrap(address underlying, uint256 amount) external returns (uint256 minted);
+function unwrap(address underlying, uint256 wrapped, address recipient) external returns (uint256 out, uint256 burned);
+function disableWrap(address underlying, bytes32 reason) external;           // guardian, one-way
+function renounceGuardian() external;
+```
+
+Events `Wrapped`, `Unwrapped`, `ReserveAdded`, `RateChangeProposed`, `RateChangeCancelled`, `RateChanged`,
+`RateAdminRenounced`, `MinterRenounced`, `WrapDisabled`, `GuardianRenounced` and the error list: [TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §10.2.
 
 ### 14.3 `IZetherToken` — BUILT (`src/zether/IZetherToken.sol`)
 
@@ -2084,11 +2156,12 @@ Order of streams per `TODO.md` and NI §17 / A2 §17 (one heavy stream at a time
 | 17 | S7″ | Multi-node e2e (MESH E1–E12 on both bus carriers + E-G1…E-G10) | G3 | **SPECIFIED** |
 | 18 | P9 | Remove the pull path (`odoo.rs`, `[odoo]`, legacy Odoo service methods) after ≥ 14 days all-push | S7″ or calendar | **SPECIFIED** |
 | 19 | S8″ | Spec corrections across older specs | P9 | **SPECIFIED** |
-| 20 | Rename | `bamboo` → `scaas` in code, metrics, env, headers; on-chain tags in a new contract version | owner plan | in progress |
+| 20 | Rename | `scaas` names in code, metrics, env, headers and on-chain tags | owner plan | **BUILT** (code); older component specs still cite old names |
 | 21 | app | React + Vite console/dApp (EVM + meta-tx families first; passkey/seed vault, extension wallets, dev key; OIDC only for node admin) | node APIs | **PLANNED** |
 | 22 | Queued | TON payer tx hash on `mined`; backup-key toggle, device-bound vault, Sui `fam_sui.verify`, Soroban/Aptos/Solana signers in clientkeys; Zether portal balance cache | — | **PLANNED** |
-| 23 | Product features | `mtxPay`/`batchMtxPay`, tier-2 ratio and tier-1 burn (v2), tier-3 basket, receiver-pays, sponsorship policy, KeyPool auto-refill, outbound treasury payouts, anchoring (Merkle/HCS), crypto-shredding tooling, W3B SLOs/OTel/FinOps, controlled tokens, tender, vesting, managed DEX, asset suite wizard, Celo `l1_batch`, Hedera HCS/scheduled tx | — | **PLANNED** |
+| 23 | Product features | receiver-pays, sponsorship policy, KeyPool auto-refill, outbound treasury payouts, anchoring (Merkle/HCS), crypto-shredding tooling, W3B SLOs/OTel/FinOps, controlled tokens, tender, vesting, managed DEX, asset suite wizard, Celo `l1_batch`, Hedera HCS/scheduled tx | — | **PLANNED** |
 | 24 | Post-quantum Zether | BFV/BGV confidential balances on private/PoA chains | mesh round 4 | **PLANNED** |
+| 25 | TW2 T1–T8 | Token wrappers v2: `MetaTxCore` + named functions, three tiers, rates, multi-underlying, factory v2, Hedera children, invariant suite, node/Odoo fields ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §15) | owner review of TW2 | **SPECIFIED** |
 | — | Owner/operator steps | O1 audit of every contract family; O2 registrar multisig; O3 real deployments; O4 7-day finality evidence + ≥ 2 RPCs; O5 reverse-proxy rate limits; O6/O7 KMS/HSM custody and lane signers; O8 lane funding; O9 land-gate decision; O10 subject-account onboarding; Z1–Z6 Zether gates | — | open |
 
 ### 15.2 Open questions for the owner
@@ -2101,9 +2174,10 @@ Order of streams per `TODO.md` and NI §17 / A2 §17 (one heavy stream at a time
 4. **Assignment trust on the open mesh:** `assign_min_landed = 3` in 7 days, or admin trust only.
 5. **QUIC PQ-only:** accept that classical-only third-party nodes join only over TCP+Noise.
 6. **Chain 9000 as a Zether dev chain** (Z3) and the **curve** policy for production Zether tokens (Z4).
-7. **`scaas.*` on-chain tag rename**: timing and whether v1 contracts with `bamboo.*` tags remain supported
-   indefinitely by clients (this document assumes yes: clients read the deployed domain).
-8. **Fast path `mtxPay`**: build it (≈ 4 k gas/payment, batching) or keep the `pay` op only (R2).
+7. **Adjustable rates on multi-underlying tokens** ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §13 q1): TW2 reads "rates fixed at creation" as "set at
+   creation" and allows the timelocked option (default off); the literal reading (Multi rates immutable) is safer.
+8. **Gasless wrap/unwrap** ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §13 q2): add an `unwrap` meta-tx op in v2 (step 8 would call the underlying) or
+   leave exits to direct calls and contract wallets.
 9. **Receiver-pays** two-signature op design and whether it belongs in v2 of `MetaToken`.
 10. **Controlled tokens**: quorum composition defaults and whether `IRegulatedToken` is a factory kind or a separate
     factory.
@@ -2123,8 +2197,10 @@ Order of streams per `TODO.md` and NI §17 / A2 §17 (one heavy stream at a time
 | Private profile | Mesh off, single internal hub, round robin | Admitted private peers over a PQ bus, origin-only serving | R76, R85, R113 |
 | Ecosystems | Six ecosystems | Family taxonomy; Soroban = Stellar + Pi; Move = Aptos + Sui; Solana added; Soroban not on the mesh v1 | owner, R77 |
 | EOA approve lockdown | Block EOA **callers** of `approve` (`msg.sender == tx.origin && extcodesize == 0`) | Block EOA **spenders** and EOA callers of `transferFrom`; EIP-7702 designators are EOAs | R26 |
-| Fast path | `mtxPay(sender, …, payId, …)` and `batchMtxPay` exist | Not built; payments use the `pay(bytes32 entryRef)` op and `payWithFee`; `mtxPay` PLANNED | R2, code |
-| `payId` derivation | `keccak256(companyId ‖ moveId ‖ amount ‖ ephemeralSalt)` | `entryRef` = 32 random bytes; lane = `keccak256("bamboo.pay.lane" ‖ entryRef)` | R9 |
+| Fast path | `mtxPay(sender, …, payId, …)` and `batchMtxPay` exist with their own typehash | v1: `pay(bytes32 entryRef)` op and `payWithFee`; v2: named `mtxPay`/`mtxBatch` as thin entry points over the one pinned typehash (SPECIFIED) | R2, R138–R140 |
+| Tier 3 | Weighted basket (`depositBasket`/`redeemBasket`, all legs at once) | Any-of multi-underlying: wrap/unwrap one chosen leg, pooled reserve, guardian disables wrap only | R136 |
+| Fee recipient | Relayer or any address | Never the payee (`FeeRecipientIsPayee`, v2) | R132 |
+| `payId` derivation | `keccak256(companyId ‖ moveId ‖ amount ‖ ephemeralSalt)` | `entryRef` = 32 random bytes; lane = `keccak256("scaas.pay.lane" ‖ entryRef)`; `payId` of the v2 `mtxPay` **is** `entryRef` and v2 derives the lane on chain (`payLane`) | R9, R139 |
 | Event name | `Payment(sender, recipient, amount, fee, feeRecipient, payId)` | `PaymentSettled(from, to, amount, feeAmount, feeRecipient, entryRef)` | code |
 | `cancelMetaNonce` event | `MetaNonceCancelled` emitted | No event in the built code | code |
 | Pipeline | 8 steps | 9 steps (nonce++ and emit separate; `_checkOp` at step 6) | code |

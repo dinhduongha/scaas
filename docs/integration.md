@@ -268,7 +268,7 @@ wallets.
 
 ```
 entryRef = 32 bytes from a CSPRNG                     # carries no information; unlinkable by construction
-batch    = keccak256("bamboo.pay.lane" ‖ entryRef)    # lane of this request ("scaas.pay.lane" in the next version)
+batch    = keccak256("scaas.pay.lane" ‖ entryRef)     # lane of this request (v2 tokens: payLane(entryRef) on chain)
 nonce    = 0
 ```
 
@@ -530,7 +530,7 @@ portal user           Odoo                                   node               
                      entitlement; order confirmed (state = 'sale');
                      token currency == order currency (no FX);
                      amount = posted invoices' residual, or order total − paid (advance);
-                     request: entryRef random, lane = keccak("bamboo.pay.lane" ‖ entryRef), nonce 0,
+                     request: entryRef random, lane = keccak("scaas.pay.lane" ‖ entryRef), nonce 0,
                      issued_valid_until = now + validity
  ◄── typed data ──── {to: receiving wallet, value, data: pay(entryRef), mode: RESTRICT_RELAYER, relayer: company lane, fee 0}
  eth_signTypedData_v4 / passkey
