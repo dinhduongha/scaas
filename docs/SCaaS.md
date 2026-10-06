@@ -91,7 +91,7 @@ Clients still read the domain a deployed contract reports (`eip712Domain()`) rat
 | **`entryRef` / `payId`** | 32-byte reference carried by a payment op and emitted in `PaymentSettled`; links an on-chain payment to a business document. Current rule: 32 random bytes (R9). `payId` is the SRS name of the same field. |
 | **Finality gate** | The rule that decides when a block range is final: `depth` (n confirmations), `tag` (`finalized`), or `instant` (BFT families), plus a quorum of independent RPC endpoints returning the same hash (R11, §6.6). |
 | **Consumed** | Job state: the subject nonce of the intent moved past the intent's nonce through a transaction this node did not land (or not yet attributed). Never a failure by itself (R80, S1a). |
-| **UA** | Universal Account: `keccak256(encodedY)` of a confidential (ElGamal) public key, registered with proof of possession (§8.6). |
+| **UA** | Universal Account: an account identifier derived from key data, like an EOA generalised to every signature scheme — the native address for a chain's native accounts, else `keccak256(keccak256(kind_tag) ‖ key_data)` (32 bytes, kind-tagged), registered per chain with proof of possession ([UA](superpowers/specs/2026-10-06-universal-account-design.md) R290–R294). Today's built registry is the Zether-only `keccak256(encodedY)` form (§8.6), superseded by UA. |
 | **Mandate** | An on-chain spending authorization held by a subject's wallet contract (`MandateWallet`): delegate, per-payment and per-period caps, payees, expiry, revocation (R25). |
 
 ---
@@ -1241,6 +1241,12 @@ silent no-op — anti-DoS). Two modes (`enum RollOverMode { PUBLIC, OWNER_ONLY }
 
 ### 8.6 Universal Account registry (BUILT, dev chains)
 
+> **Superseded (SPECIFIED, [UA](superpowers/specs/2026-10-06-universal-account-design.md), R290–R318).** The registry below
+> becomes the general `UARegistry` (kind-tagged 32-byte ids for every non-native kind, PoP bound to chain + registry +
+> UA, one key = one purpose); Zether UAs become `keccak256(keccak256("scaas.ua.zether-<curve>.v1") ‖ Y)` with an
+> immutable `authRef` replacing `AuthScheme`/`link_eth` (UA §12, breaking, dev chains only). This section describes
+> the code as built until stream F1 lands.
+
 `UA = keccak256(encodedY)` (64 or 128 bytes ⇒ curve; one UA per (curve, network, account) — never per token; the
 same person has distinct UAs on two curves, never merged). `register(encodedY, authScheme, authData, popSignature,
 linkEVM)`:
@@ -1344,6 +1350,11 @@ then mesh round 4, then PQ Zether). A component spec is required before code.
 ---
 
 ## 9. Keys and signing
+
+> **Account identity, key kinds and one key = one purpose:** [UA](superpowers/specs/2026-10-06-universal-account-design.md)
+> (SPECIFIED). Every non-native key kind derives on its own hardened tree `m/7225'/0'/<account>'/<kind>'/<i>'` and signs
+> only kind- and purpose-tagged messages (UA R298–R301); `SubjectAccount` (§9.4) stays as the optional smart account,
+> option (b) (UA R307). Signers and the backup switch: [S4F](superpowers/specs/2026-10-06-signers-followups.md).
 
 ### 9.1 Two custody axes
 
