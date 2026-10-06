@@ -1,34 +1,44 @@
 # Signers and wallet follow-ups (S4): backup-key switch, device-bound vault, Sui key verification, non-EVM signers, portal connectors (component spec D)
 
-Status: draft rev 1, 2026-10-06. Component spec **D**. Short name **S4F**. Code at `scaas` `main` 28c165c
-(clientkeys 1.0.0: passkey + seed vault + Zether keys BUILT, EVM-only family encoders); parent repo `bamboo-dms`
-read for the Odoo side (`dms_blockchain/lib/fam_*.py`, `dms_blockchain_bridge/static/src/js/**`). **Nothing in this
-spec is built.**
-Rulings: **R250–R268** (§2). R150–R172 belong to the app spec, R180–R199 to spec B (TSS), R200–R217 to spec A (AS),
-R230–R245 to spec C (OPS).
-Owner items folded in: the S4 follow-up queue of 2026-10-04/05 (backup-key switch default OFF, device-bound vault, Sui
-`fam_sui.verify` for added/recovered keys, Soroban/Aptos/Solana seed + passkey signers, `chain_pay.js` connectors),
-market neutrality, and the announced spec **F "Universal Account"** (§3: what stays here, what moves there).
+Status: draft **rev 1.1**, 2026-10-06. Rev 1.1 applies independent review 1 (FIX-THEN-GO: H1–H3, M1–M8, L1–L7;
+disposition in §12). It also folds in spec F rev 1.2 (R300 role paths, one key = one purpose) and the app spec rev 1.2
+(H4 de-duplication, the per-family split of D4/D5, D7 after A10–A14). Component spec **D**. Short name **S4F**.
+
+Code at `scaas` `main` 28c165c: clientkeys 1.0.0 has passkey + seed vault + Zether keys BUILT and EVM-only family
+encoders. The parent repo `bamboo-dms` was read for the Odoo side (`dms_blockchain/lib/fam_*.py`,
+`dms_blockchain_bridge/static/src/js/**`). **Nothing in this spec is built.**
+
+Rulings: **R250–R269** (§2). Other specs: R150–R179 app, R180–R199 spec B (TSS), R200–R217 spec A (AS),
+R230–R247 spec C (OPS), R270–R289 spec E, R290–R318 spec F (UA).
+
+Owner rulings folded in:
+- the S4 follow-up queue of 2026-10-04/05: backup-key switch, default OFF, a toggle only; device-bound vault; Sui
+  `fam_sui.verify` for added and recovered keys; Soroban/Aptos/Solana seed + passkey signers; `chain_pay.js`
+  connectors with one implementation;
+- Soroban and TON satisfy the backup rule with **≥ 2 keys** (they have no guardian);
+- market neutrality;
+- spec F: R300 role paths and one key = one purpose (§3).
 
 Requirements and sources:
 
 | Short | File | Section |
 |---|---|---|
-| SCaaS | `docs/SCaaS.md` | §9.3–§9.5 (passkeys, subject accounts, backup toggle PLANNED, seed vault, Solana path PLANNED) |
+| SCaaS | `docs/SCaaS.md` | §9.2 (exits never throttled), §9.3–§9.5 |
 | R3 | `specs/2026-10-03-blockchain-round3-design.md` | §C.1–C.4, R31–R33 |
-| RS4 | `plans/2026-10-03-r3-passkey-seed.md` | RS4-1…RS4-16 (vault, key proof, client-side checks) |
-| ADW | `specs/2026-10-03-blockchain-payments-addendum-wallets.md` | §B (EIP-6963, WalletConnect seam R21), R27 |
-| APP | `specs/2026-10-06-scaas-app-design.md` | R154 (client builds every byte), R155 (signers), R165 (origin-bound passkeys), §5.2, §6.2, streams A0, A3, A16 |
-| NET | `specs/2026-10-03-net-{sui,soroban,cosmos,ton}.md`, `2026-10-04-net-{aptos,solana}.md` | Sui §2–§3 (KeyOp, RS7-3), Soroban §3 (R8-2 guardian seam), Aptos L9/RS11-3/RS11-14, Solana L9/RS12-4/RS12-5 |
+| RS4 | `plans/2026-10-03-r3-passkey-seed.md` | RS4-1…RS4-16 |
+| ADW | `specs/2026-10-03-blockchain-payments-addendum-wallets.md` | §B, R21, R27 |
+| APP | `specs/2026-10-06-scaas-app-design.md` rev 1.2 | R154, R155, R165 (H4), R175 (key worker), R176, §6.2–§6.4, §15, §17 |
+| UA | `specs/2026-10-06-universal-account-design.md` rev 1.2 | R298, R300, §8.1, §8.3 (`keyop` purpose), §10, §11.4, §12, §16 F3 |
+| NET | `specs/2026-10-03-net-{sui,soroban,cosmos,ton}.md`, `2026-10-04-net-{aptos,solana}.md` | Sui §2–§3 (RS7-3), Soroban §3 (R8-2), Aptos L9/RS11-3/RS11-14, Solana L9/RS12-4/RS12-5 |
 
-Amends (status changes only; text in those files is not rewritten here):
+Amends (status changes only):
 
 | Short | File | How |
 |---|---|---|
-| SCaaS | `docs/SCaaS.md` §9.4, §9.5 | backup toggle and Solana path: PLANNED → SPECIFIED, link here. The §9.4 mode list (`passkey_prf`, `seed_verified`, `guardian_only`, `device_bound`) and its "device_bound refused" hard rule are **replaced** by R250–R253 |
-| R3 | round-3 design R32 | scrypt `N = 2^15` is superseded by RS4-14 / R259 (`N = 2^17`) — closes the SCaaS §15.3 contradiction row |
-| NET Solana | RS12-5 "semantics must match S4 when S4 settles" | settled: same predicate (R251); the on-chain bit stays opt-in per account (R252) |
-| APP | A0, A3, A16, R155 | A16's content for Sui, Solana, Soroban, Aptos is §8 here; A3's vault UI uses vault v2 (§5); extension signers import clientkeys `wallets/*` (R266) |
+| SCaaS | `docs/SCaaS.md` §9.4, §9.5 | the backup toggle and the Solana path go from PLANNED to SPECIFIED, with a link here. The §9.4 mode list is **replaced** by R250–R254 |
+| R3 | round-3 design R32 | scrypt `N = 2^15` is superseded by RS4-14 / R259 (`N = 2^17`); this closes the SCaaS §15.3 contradiction row |
+| NET Solana | RS12-5 | the predicate is settled (R251). The on-chain bit stays opt-in, and it counts keys without de-duplication (§4.6) |
+| APP | R155, R165, R176, §15 | adopted as written: H4 de-dup and the `msig` rule (R251); streams D4-<f>/D5-<f>/D5-evm (§10) |
 
 ---
 
@@ -36,201 +46,252 @@ Amends (status changes only; text in those files is not rewritten here):
 
 ### 1.1 In scope
 
-1. A deployment switch "backup key required" (default OFF), its predicate, where it is enforced, and per-family
-   applicability (§4).
-2. Vault v2: the seed/Zether vault bound to the device by a non-extractable WebCrypto key in IndexedDB; threat model,
-   migration, recovery (§5).
-3. The scrypt cost: one number, stated (§5.6).
-4. Sui: `fam_sui.verify` for keys added by `KeyOp` or by guardian recovery; KeyOp encoding in Python and JS; vectors
-   (§6).
-5. Seed signers for Soroban (Stellar, Pi), Aptos and Solana: derivation paths and the envelope each one signs (§7).
-6. Passkey signers for non-EVM families: per-family availability and envelope (§8) — the content of app stream A16.
-7. Portal payment connectors for every family and their single implementation shared with the app (§9).
+1. A deployment switch "backup key required" (default OFF): its predicate, the flows, and where it is enforced (§4).
+2. Vault v2, bound to the device by a non-extractable WebCrypto key: threat model, migration, recovery (§5).
+3. One scrypt cost, with the mobile failure mode handled (§5.6).
+4. Sui `fam_sui.verify` for added and recovered keys, the KeyOp encoding in Python and JS, and vectors (§6).
+5. Role keys (`deriveRoleKey`, F R300 path), and seed signers for Soroban, Aptos and Solana (§7).
+6. Non-EVM passkey signers. This is the content of APP A16 = D7 (§8).
+7. Portal connectors for every family, as one implementation shared with the app (§9).
 
 ### 1.2 Non-goals
 
 | Not here | Why / where |
 |---|---|
-| Account identity, registration, kind-tagged 32-byte ids, one-key-one-purpose registry, VC/eKYC attestations | Spec F "Universal Account" (§3) |
-| New contract code on any family (a backup bit on EVM/Sui/Aptos, a Soroban/TON guardian) | Owner: "only a switch, not a hard rule"; contract changes need audit O1 on every family (R252). Soroban/TON guardian stays a seam (Q1) |
-| KMS/HSM custody, `SigningPolicyService`, FROST/MuSig2 signers | SCaaS §9.1, §9.2, §9.7 (PLANNED, O6/O7) |
+| UA ids, the registry, kind tags, `UAKey`/`signUA`, VC/eKYC | Spec F (F0–F4). D's `deriveRoleKey` is the plain derivation that F3 wraps |
+| New contract code (a backup bit on EVM/Sui/Aptos, Soroban/TON guardians, Soroban duplicate-key check) | Owner: the switch is only a toggle; Soroban/TON use ≥ 2 keys. Client de-dup covers duplicates (R251) |
+| KMS/HSM, `SigningPolicyService`, FROST/MuSig2 signers | SCaaS §9.1, §9.2, §9.7 |
 | WalletConnect / TON Connect HTTP bridge | R21 seam; APP §1.2 |
-| Odoo mirrors of non-EVM key sets | R20 (no RPC in family libs); the node's simulation arbitrates (R27) |
-| Argon2id for the passphrase | No WebCrypto primitive; would add a wasm dependency for no measured need (R259) |
-| Moving a vault between devices (export/import of the encrypted blob) | The recovery phrase is the transfer format (R258) |
+| Odoo mirrors of non-EVM key sets | R20; node simulation arbitrates (R27) |
+| Argon2id | No WebCrypto primitive; a wasm dependency without a measured need |
+| Vault export between devices; showing the phrase again | R258: the phrase on paper is the transfer format |
 
 ---
 
 ## 2. Rulings
 
-Format: **ruling** — why — cost if wrong.
+Format: **ruling**. Why. Cost if wrong.
 
 ### 2.1 Backup-key switch (owner item 1)
 
-- **R250** **"Backup key required" is one boolean deployment switch, default OFF**, one per onboarding surface: app
-  `config.json` `policy.requireBackupKey` (validator §4.3 of APP: boolean, default `false`), Odoo system parameter
-  `dms_blockchain.require_backup_key` (`ir.config_parameter`, absent = OFF), and an argument to the clientkeys policy
-  helper (clientkeys reads no configuration). It is **not** a per-account mode: the SCaaS §9.4 mode list
-  (`passkey_prf`, `seed_verified`, `guardian_only`, `device_bound`) and its "device_bound is refused for any
-  value-bearing flow" rule are dropped. — Owner: "only a switch". A mode enum duplicated what the chain already knows
-  (keys, guardian). — A deployment that needs different rules per company adds a company field later; nothing here
-  depends on the global scope.
-- **R251** **Predicate (same as Solana `has_backup`, RS12-5):** an account **has a backup** ⇔ it holds ≥ 2 active keys,
-  or exactly 1 active key and a guardian. "Active" = on chain now (a key being added does not count until its
-  owner call / KeyOp is final). A seed-derived key always counts as "written down": `SeedBackup.take()` hands entropy
-  to the vault only after the 3-word check (`backup.js`), and an imported phrase was typed by its holder. Two passkeys
-  count as two keys even if they sync through one password manager (R254 warns). — One predicate in three languages
-  (vectors §4.6); the chain view is the only view every client shares. — A user with two passkeys in one keychain is
-  "backed up" by the rule and not in fact; the warning is the mitigation.
+- **R250** **"Backup key required" is one boolean deployment switch, default OFF.** It exists once per onboarding
+  surface:
+  - app `config.json` `policy.requireBackupKey`;
+  - Odoo `ir.config_parameter` `dms_blockchain.require_backup_key` (absent = OFF);
+  - an argument to the clientkeys helper (clientkeys reads no configuration).
+
+  The SCaaS §9.4 per-account mode list and its "device_bound refused" rule are dropped.
+  Why: owner, "only a switch". Cost if wrong: per-company rules later need a company field.
+- **R251** **Predicate: an account has a backup iff it holds ≥ 2 distinct active keys, or exactly 1 and an
+  independent guardian.**
+  - **Distinct** means the canonical public keys differ (UA §8.2): P-256 `x`, secp256k1 address (EVM `SECP256K1`
+    keys are addresses) or x-only, ed25519 `pk`. One credential on two origins counts **once** (APP H4). So does a
+    Soroban key added twice, or a Sui key under two `rp_id_hash` values.
+  - **Active** means final on chain.
+  - **Independent guardian**: the guardian is neither the account itself nor the native address of any key in the
+    set. Native addresses: EVM key address; Sui `blake2b(flag ‖ pk)`; Aptos auth keys; Solana pk; and so on.
+  - **`msig` UA** (APP R176): backed up iff `Σweights − max(weight) ≥ threshold`.
+  - A seed key counts as "written down". Only phrases that passed the 3-word check (`SeedBackup`) or were typed in by
+    their holder reach a key.
+
+  Why: duplicates and self-guardians are exactly the false "backed up" state the switch exists to prevent. Cost if
+  wrong: two passkeys in one password manager still count as two (R254 warns).
 - **R252** **Enforcement is in clients and issuers, never in contracts or node intake.** With the switch ON:
-  (a) clients (the app, the portal `subject_signers.js`, any clientkeys consumer through `backupStatus`, §4.3) refuse
-  to sign a value operation (pay, transfer, unwrap, DEX order, mandate open, Zether transfer/fund) from a subject
-  account without backup, and hide its receive address / QR / "fund your meta account" action; (b) issuers refuse to
-  issue terms that pay **from or to** a subject account they can check (Odoo: EVM/Hedera `blockchain.subject.account`
-  mirror, §4.4); (c) operations that create a backup (add key, add passkey origin, set guardian) are always allowed;
-  operations that would destroy it (remove key, set guardian to none) are refused. The node gateway and `/v1/ops`
-  do not check. Solana's built on-chain `POLICY_BACKUP_REQUIRED` stays as built: per account, set by the owner key
-  with `KeyOp set_policy`, hard; clients offer "make this permanent on chain" on Solana only and never set it
-  automatically. — The switch protects the user from losing funds, it is not a security control: bypassing it with a
-  custom client harms only that user. The node cannot know that a seed was written down and would need a state read
-  per intake on six families; a contract bit on every family costs an audit. — A third-party client ignores the switch
-  (by design).
-- **R253** **Exits are never blocked; unsatisfiable kinds get exits only.** Where the account kind cannot reach the
-  predicate (§4.5: today only the Cosmos passkey-derived address), the client allows only "move the whole balance
-  out" with a warning. On satisfiable kinds with the
-  switch ON, the only offered actions are the backup flows (add seed key / add passkey / set guardian) — the one key
-  the user holds can always sign them, so nobody is stuck. Native single-key accounts (EVM EOA, Stellar `G…`, Cosmos
-  secp256k1 address, Solana wallet, Aptos native, Sui native address, Hedera native) are **outside** the predicate:
-  a seed-vault key is backed up by construction (R251); an extension wallet's own backup is the wallet's business;
-  a **passkey-only native** account (Sui flag-6 address used without `Account<T>`, Cosmos R9-1 address) is not
-  offered while the switch is ON. — SCaaS §9.2: "rescue/exit operations are never throttled". — None.
-- **R254** **Warnings, both switch states, non-blocking.** At passkey creation the client reads the authenticatorData
-  flags **BE** (bit 3, backup eligible) and **BS** (bit 4, backed up) and keeps them in the key's client-side metadata
-  (portal: the key row's label data; app: IndexedDB key metadata). A BE = 0 passkey is labelled "this device only";
-  an account whose keys are all passkeys of one `rpId` shows "these passkeys may live in the same password manager";
-  an account with one key and no guardian shows "no backup" with the add-backup action. — The flags are the only
-  signal a browser gives about sync; the chain cannot see them. — Authenticators that misreport BE/BS mislabel a
-  key; counting is unaffected.
+  1. **Value ops are refused** from a subject account without backup: pay, transfer, unwrap, DEX order, mandate
+     open, Zether transfer/fund. Its receive address, QR and "fund your meta account" are hidden.
+  2. **Issuers refuse to issue terms** that pay from or to an account they can check. Today that is only Odoo with
+     EVM/Hedera mirrors (§4.4).
+  3. **Key operations stay open.** Add key, set guardian and add origin are always allowed. Add origin never creates
+     a backup. **Remove key and clear guardian are always allowed**, with a warning. Afterwards the account may be
+     in the no-backup state (§4.7). Revoking a stolen key or a hostile guardian is never blocked.
+
+  The node does not check. Solana's built `POLICY_BACKUP_REQUIRED` stays per account and owner-set. Clients offer
+  "make this permanent on chain" on Solana only, never automatically.
+  Why: the switch protects users from loss and is not a security control. Cost if wrong: a third-party client
+  ignores it, by design.
+- **R253** **Exits are never blocked, in any state** (SCaaS §9.2). "Move the whole balance out" (with a warning) is
+  allowed:
+  - on a satisfiable account without backup (funded before the switch or after a key removal), next to the backup
+    flows;
+  - on an **unsatisfiable** account, as the only value op. Unsatisfiable kinds: Cosmos passkey-derived address,
+    passkey-only native address (Sui flag 6 without `Account<T>`), single-key derived UA (APP R176).
+
+  Native single-key accounts with a seed-vault or extension key are outside the predicate: an EOA, `G…`, Cosmos
+  secp256k1, Solana or Aptos wallet, Sui address, Hedera native. Unsatisfiable kinds are not offered at creation
+  while the switch is ON.
+  Why: rescue is never throttled. Cost if wrong: none.
+- **R254** **Warnings, non-blocking, in both switch states.**
+  - BE/BS (authenticatorData bits 3 and 4) are read from each creation and assertion and cached client-side only.
+    Nothing is stored in Odoo.
+  - A BE = 0 passkey is labelled "this device only (as reported)".
+  - "These passkeys may share one password manager" is shown when ≥ 2 passkeys of one `rpId` all report BS = 1.
+  - "No backup" is shown with the add-backup action.
+
+  Why: the flags are the only sync signal and are self-reported (`attestation: 'none'`). Cost if wrong: a
+  misreporting authenticator mislabels a key; counting is unaffected.
 
 ### 2.2 Device-bound vault (owner item 2) and scrypt
 
-- **R255** **Vault v2 = an outer AES-256-GCM layer under a per-origin non-extractable device key**, around the
-  unchanged v1 vault (DEK, passphrase envelope, optional PRF envelope). The device key is a WebCrypto `AES-GCM` 256
-  `CryptoKey` generated with `extractable: false`, usages `encrypt`/`decrypt`, stored by structured clone in
-  IndexedDB. Default ON for new vaults where IndexedDB and `CryptoKey` cloning work (feature probe at creation); else
-  a v1 vault with a one-line notice. Applies to every vault label (`seed`, `zether-conf:…`). — Reuses all of v1;
-  one wrap function and one unwrap. — None beyond §5.3.
-- **R256** **Device binding does not relax anything.** The passphrase policy (8+ characters, not only digits) and the
-  scrypt cost stay. Browser WebCrypto keys are **not hardware-backed**: Chromium and Firefox write the key bytes into
-  the profile's IndexedDB files; "non-extractable" only stops page JavaScript from reading them. The gain is narrow
-  and real: a vault blob that leaks **without** the profile's IndexedDB (storage dump, log, support export, a file
-  sync of one store) cannot be attacked offline at all. Hardware binding exists only through the PRF envelope of a
-  BE = 0 passkey (the secret stays in the authenticator); clients prefer such a passkey for PRF when one exists. — A
-  short PIN "because the vault is device-bound" would be brute-forced from a copied profile. — None.
-- **R257** **Vault and device key live in one IndexedDB database** (`scaas-clientkeys`, store `kv`) so storage eviction
-  removes both together; `navigator.storage.persist()` is requested at vault creation and a refusal is shown.
-  Portal vaults in `localStorage["dms_chain_seed_vault:<subject>"]` move into IndexedDB on the next successful unlock
-  (same moment as `rewrapPin`), then the `localStorage` entry is removed. v1 vaults stay readable forever. — Split
-  storage (blob in `localStorage`, key in IndexedDB) can evict one and keep the other: a vault that can never open.
-  — One more migration path in `subject_signers.js`.
-- **R258** **Recovery after device loss is the recovery phrase**, re-imported on the new device (same derived keys ⇒
-  no on-chain action; a new device key wraps a new vault), or another key / guardian recovery on chain (`addKey`,
-  `start_recovery`). No vault export. Clearing the site's data equals losing the device; the create flow says so
-  before writing a device-bound vault. Zether: `x` is re-derived from the phrase; the balance cache is rebuilt
-  (limits §5). — The phrase is already verified at creation and is the only format that survives every browser. —
-  A user who skipped writing the phrase down and has no second key loses access (unchanged from today).
-- **R259** **scrypt `N = 2^17, r = 8, p = 1` (128 MiB) for every new passphrase envelope** — RS4-14 supersedes
-  round-3 R32's `N = 2^15` and its rationale (review S23, mobile hangs): `scryptAsync` yields to the event loop, and
-  the passphrase is the fallback unlock (PRF envelope default, RS4-14), so the cost is paid rarely. `N = 2^15`
-  vaults keep opening and are re-wrapped after a successful open (`needsRewrap`). If allocation fails at creation
-  (`RangeError`), the client stops with "this device cannot create a passphrase vault" and writes nothing weaker.
-  — One number in code, plan and SCaaS. — Very low-memory phones cannot create a passphrase vault in the browser; they
-  can still import a phrase into an extension wallet.
+- **R255** **Vault v2 is an outer AES-256-GCM layer under a per-origin non-extractable device key**, wrapped around
+  the unchanged v1 vault (DEK, passphrase envelope, optional PRF envelope).
+  - The device key is WebCrypto `AES-GCM` 256, `extractable: false`, kept as a structured clone in IndexedDB.
+  - It is the default for new vaults where the IndexedDB/`CryptoKey` probe passes; otherwise a v1 vault is written,
+    with a notice.
+  - It applies to every label (`seed`, `zether-conf:…`).
+  - `kid` exists only for a future format bump; there is no key rotation flow.
+
+  Why: all of v1 is reused. Cost if wrong: see §5.3.
+- **R256** **Device binding relaxes nothing.** The passphrase policy and scrypt stay.
+  - WebCrypto keys are **not hardware-backed** on Chromium and Firefox: the key bytes sit in the profile's IndexedDB
+    files. Safari wraps them under a Keychain key, which is stronger.
+  - The gain is narrow: a blob that leaks **without** the profile's IndexedDB cannot be attacked offline.
+  - PRF from a passkey reported as not synced (BE = 0) is preferred. It is still not "hardware-bound": the PRF output
+    reaches page JS, so a script running during one unlock gets a permanent unwrap key for that blob. v2 still
+    demands the device key on top.
+
+  Why: honest claims. Cost if wrong: none.
+- **R257** **Storage and migration.** The vault and the device key share one IndexedDB database (`scaas-clientkeys`,
+  store `kv`), so eviction removes both together.
+  - **Precedence:** if `vault:<id>` exists in IndexedDB it wins, and migration never `put`s over an existing
+    `vault:<id>`.
+  - A migrated portal `localStorage` vault is **replaced by a tombstone** `{"v":2,"moved":"indexeddb"}`, not deleted.
+    Old cached portal code then fails with "Unknown vault version." instead of offering "create a new phrase".
+  - The post-write check is `openDevice(readBack)` deep-equal to the in-memory v1 object. That is AES-GCM only: no
+    second scrypt and no second unlock.
+  - `navigator.storage.persist()` is requested at creation. A refusal is shown once per device.
+
+  Why: no rollback to a stale weaker blob, no silent new seed, no second 128 MiB KDF. Cost if wrong: one more
+  migration path in `subject_signers.js`.
+- **R258** **Recovery after device loss is the recovery phrase**, re-imported on the new device (same keys, a new
+  device key and vault). The alternative is another key or guardian recovery on chain. There is no vault export.
+  - Clearing the site's data, or Safari ITP's 7-day script-storage eviction, equals losing the device. The create
+    flow says so.
+  - **The phrase is never shown again**, by any flow. A user who lost the paper creates a new backup key (§4.7) and
+    removes the old one.
+
+  Why: a re-reveal path would undermine R251's "written down". Cost if wrong: a lost paper means a key rotation.
+- **R259** **scrypt `N = 2^17, r = 8, p = 1` (128 MiB) for every new passphrase envelope.** RS4-14 supersedes
+  round-3 R32 (`N = 2^15`).
+  - The passphrase is the fallback unlock (PRF is the default), and `scryptAsync` yields to the event loop.
+  - The failure on low-memory phones is an **allocation error or a renderer kill**. A thrown error at creation
+    stops the flow with "this device cannot create a passphrase vault", and nothing weaker is written.
+  - The `N = 2^15` → `2^17` re-wrap runs **after the payment is submitted**, never inside the unlock that precedes it.
+    It is guarded by a marker `rewrap-attempt:<id> = N` written before the attempt. If the marker is present on the
+    next load, the re-wrap is skipped (no crash loop). The same marker is used in the app's key worker (APP R175).
+  - On open, a pin envelope outside `N ∈ {2^15, 2^16, 2^17}, r = 8, p = 1` is refused.
+
+  Why: one number in code, plan and SCaaS, and no device is locked out by its own upgrade. Cost if wrong: very
+  low-memory phones use a paper backup (§4.7) or an extension wallet.
 
 ### 2.3 Sui key verification (owner item 3)
 
-- **R260** **`fam_sui.verify` follows L9 like Aptos and Solana:** `False` only for a malformed signature or one that is
-  invalid under the key it carries; `True` when `blake2b256(flag ‖ pk)` = the payer address; **`None`** when the
-  signature is valid but the key is not the payer's own (a key added by `KeyOp ADD_KEY` or by `finish_recovery`) — the
-  node's simulation arbitrates key membership (R27). The passkey path also refuses `"crossOrigin":true` and
-  `"topOrigin"` as `fam_aptos.verify_signature` does. `request.payer_address` stays the `Account<T>` **owner** (the
-  first key's address, from which the account id derives); a client signing with an added key sends the owner as
-  `from_address` and its own key as `public_key`. — Today a payment signed by an added or recovered key is rejected
-  in Odoo with "not from the wallet that started this payment" although the chain would accept it (`a2_pay_sui`,
-  `a3_pay_sui` vectors). — A valid signature by a non-member key is queued and dies in simulation (one dead job per
-  request; `_live_job` blocks a second until then).
-- **R261** **KeyOp is encoded in Python and JS, byte-identical to Move `keyop_digest`:** `fam_sui.keyop_bytes(...)` /
-  `keyop_digest(...)` and clientkeys `fam/sui.js` `keyOpBytes` / `keyOpDigest` / `verifyKeyOp(keys, …)` (local check
-  before submit, APP R158). Odoo issues no Sui KeyOps (it has no Sui key mirror); clients build them from what the
-  user asked for and nothing else (RS4-13 generalised). — One encoding, two languages, one vector file. — None.
-- **R262** **One generator run feeds every language:** `gen_vectors.py --json <path>` writes
-  `smartcontracts/move/sui/vectors/sui_vectors.json` in the same run that prints `tests/vectors.move` (ECDSA
-  signatures are random per run, so two runs would disagree). Odoo `test_fam_sui.py` and clientkeys
-  `test/fam_sui.test.js` read the JSON. — Today the cross-language vector is a comment in `vectors.move`. — None.
+- **R260** **`fam_sui.verify` follows L9, like Aptos and Solana:**
+  - `False` for a malformed signature or one invalid under its own key;
+  - `True` when `blake2b256(flag ‖ pk)` = the payer address. This means "the payer's own key", **not** "will pass":
+    an owner key removed by KeyOp still returns `True`;
+  - `None` for a valid signature by any other key (added by `KeyOp ADD_KEY` or by `finish_recovery`). The node's
+    simulation decides (R27).
 
-### 2.4 Non-EVM seed and passkey signers (owner item 4)
+  The passkey path also refuses `"crossOrigin":true` and `"topOrigin"`. `request.payer_address` stays the
+  `Account<T>` owner.
+  Why: today Odoo rejects payments the chain accepts (`a2_pay_sui`, `a3_pay_sui`). Settlement is driven only by chain
+  events, so `None` can never mark anything paid. Cost if wrong: a valid signature from a non-member key queues one
+  dead job per request, which needs portal access to the order.
+- **R261** **KeyOp is encoded in Python and JS, byte-identical to Move `keyop_digest`**, with the domain as a
+  parameter. F §8.3 replaces `scaas.keyop.v1` by a version bump.
+  - Python: `fam_sui.keyop_bytes/keyop_digest`.
+  - JS: clientkeys `fam/sui.js` `keyOpBytes/keyOpDigest/verifyKeyOp`. The JS check covers membership, `op.nonce ==
+    key_nonce`, `op.account`, `op.network`, the `valid_until` window and, for passkeys, origin ∈ `account.origins`.
 
-- **R263** **Seed signers sign the family's own envelope, built by clientkeys `fam/*` (APP R154), never a server digest
-  as such:** Soroban `G…` = ed25519 over `sha256(HashIdPreimage::SorobanAuthorization XDR)` (and the transaction
-  envelope hash when self-paid); Soroban `C…` (`scaas-account`) = `Ed25519{key_id, signature}` over the
-  `signature_payload`; Aptos = ed25519 over the AIP-62 `fullMessage` the client builds and checks with the same strict
-  rules as `fam_aptos.parse_envelope`; Solana = ed25519 over the off-chain message v1 bytes (kind 1, `0xff ‖ "solana
-  offchain" ‖ …`), never kind 0 (raw text) for the seed signer. Paths: Stellar `m/44'/148'/i'`, Pi the same with coin
-  type 314159, Aptos `m/44'/637'/i'/0'/0'`, Solana `m/44'/501'/i'/0'` (added by APP A0; R155). — The seed signs
-  silently; only bytes the client derived from what the user asked for are safe to sign. Kind 1 adds the off-chain
-  prefix, so the signed bytes can never parse as a transaction message. — Wallet-compatibility: kind 0 stays accepted
-  on chain for extension wallets that lack `signOffchainMessage`.
-- **R264** **Non-EVM passkeys reuse one WebAuthn ceremony** (`creationOptions`, `requestOptions`, `derToRS`,
-  `publicKeyFromSpki`) **plus one encoder per family** (§8.2): Sui flag-6 serialized signature (pk 33 B), Solana
-  `passkey_blob` (pk 33 B, Secp256r1 precompile), Soroban `WebAuthn{…}` ScVal (pk 65 B, CAP-51 host function), Aptos
-  WebAuthn blob (pk 65 B, pure-Move `scaas::p256`, UNAUDITED — shown as such in the UI). Order of delivery: Sui →
-  Solana → Soroban → Aptos. Cosmos and TON passkeys are not in this round. — Verification maturity decides the order
-  (native scheme → precompile → host function → unaudited Move). Cosmos has no multi-key account (a passkey-only
-  address fails R251 forever); TON binds one passkey per wallet through `set_key`. — Cosmos/TON users use the seed
-  vault or an extension wallet.
-- **R265** **Passkey challenge = base64url (no padding) of the family's op digest** (Sui personal-message digest,
-  Soroban `signature_payload`, Aptos `sha3_256(MetaOp)`, Solana `sha256(MetaOp)`), the same rule as R31; the
-  family "open" challenges (`blake2b256("scaas.open.v1" ‖ registry ‖ pk33)` on Sui, `sha256("scaas.open.v1" ‖
-  program_id ‖ pk33)` on Solana, Soroban constructor, Aptos first-key rule) are built by clientkeys `fam/*`. Passkeys
-  stay origin-bound (APP R165). — One rule for every verifier. — None.
+  Odoo issues no Sui KeyOps; clients build them from what the user asked for (RS4-13).
+  Why: one encoding, local check before submit (APP R158). Cost if wrong: none.
+- **R262** **One generator run feeds every language.** `gen_vectors.py --json` writes
+  `smartcontracts/move/sui/vectors/sui_vectors.json` in the same run as `tests/vectors.move`, because ECDSA signatures
+  are random per run. The JSON carries `sha256(vectors.move)`; Odoo and clientkeys tests compare it to the file
+  (partial regeneration fails). `scaas-node/src/adapters/sui.rs` pins only the deterministic ed25519 `a_pay_sui_0`
+  vector and is unaffected.
+  Why: today the cross-language vector is a comment. Cost if wrong: none.
+
+### 2.4 Role keys and non-EVM signers (owner item 4, F R300)
+
+- **R263** **Seed signers sign the family's own envelope, built and checked by clientkeys `fam/*`**, never a server
+  digest as such:
+  - Soroban `G…`: ed25519 over `sha256(HashIdPreimage::SorobanAuthorization)`. Soroban `C…`: `Ed25519{key_id,
+    signature}` over `signature_payload`.
+  - Aptos: ed25519 over the client-built AIP-62 `fullMessage`.
+  - Solana: off-chain message v1 (kind 1) only. Kind 0 is for extension wallets only (APP R155).
+
+  Native paths: Stellar `m/44'/148'/i'`, Pi with coin type 314159, Aptos `m/44'/637'/i'/0'/0'`, Solana
+  `m/44'/501'/i'/0'` (APP A0-evm adds `NETWORKS.solana`).
+  Why: the seed signs silently. Cost if wrong: none.
+- **R264** **Non-EVM passkeys reuse one WebAuthn ceremony plus one encoder per family** (§8.2): Sui flag 6, Solana
+  `passkey_blob` (precompile), Soroban `WebAuthn{…}` (CAP-51), Aptos blob (pure-Move `scaas::p256`, UNAUDITED, shown
+  as such). Order: Sui → Solana → Soroban → Aptos, after A10–A14. Cosmos and TON passkeys are not in this round.
+  Why: verifier maturity. Cost if wrong: Cosmos/TON users use seed or extension.
+- **R265** **Passkey challenge = base64url (no padding) of the family's op digest**, the same rule as R31. The open
+  challenges (Sui `scaas.open.v1`, Solana `scaas.open.v1`, Soroban constructor, Aptos first-key rule) are built by
+  `fam/*`. Passkeys stay origin-bound (APP R165).
+  Why: one rule. Cost if wrong: none.
+- **R269** **Every seed key added to a subject account is a role key; a backup seed key lives on paper only.**
+  - `deriveRoleKey(seed, {kindNo, account, i})` derives `m/7622'/0'/<account>'/<kindNo>'/<i>'` (F §8.1; all hardened;
+    BIP-32 for secp256k1, SLIP-10 for ed25519). It is plain derivation. F3 wraps it in `UAKey` without changing the
+    path.
+  - `kindNo` is the F kind number of the account the key serves: EVM/Hedera `SubjectAccount` = 2; Solana 16;
+    Soroban `C…` 18 (Q1); Aptos 19; Sui 20.
+  - The **native** path is used only for a native account and for the owner/first key of a Sui/Aptos/Solana account
+    derived from the user's own native address (F R300). Every other key added by a seed is a role key: backup,
+    added device, passkey-first account's seed key, Soroban `C…` key. `m/44'/60'/0'/0/i` is the EOA only.
+  - **Backup flow (review M4):** generate a phrase, show it once, run the 3-word check, derive the role key, sign
+    `addKey`/KeyOp with the existing key, then `abandon()`. **Nothing is stored** unless the user asks to keep it on
+    this device. No scrypt runs, so low-memory phones can comply.
+  - Existing dev accounts whose SECP256K1 key is the EOA key rotate at F §12 migration.
+
+  Why: F R300 (owner) rules dual use out. A backup in the same browser profile as the primary key is not a backup.
+  Cost if wrong: one derivation per role; wallets show the role.
 
 ### 2.5 Connectors (owner item 5)
 
-- **R266** **One connector implementation:** the wallet glue in `bamboo-dms/dms_blockchain_bridge/static/src/js/
-  connectors/*.js` (Wallet Standard discovery, Keplr/Leap, Freighter, TON JS bridge, Hedera signer seam, and their
-  checks of what the wallet reports as signed) moves to clientkeys `src/wallets/<family>.js` (pure ESM, `window`
-  injected for tests), built as lazy entries next to `passkey-signer.js`; the portal loads them with `import()` and
-  the app's `src/signers/extension/*` imports the same modules. The portal IIFE copies and their tests are deleted
-  in the same change. — Owner: one implementation; today the connectors are unit-tested but **not wired**: they are
-  not in the asset bundle and nothing reads `window.dmsChainConnectors` (§9.1). — clientkeys grows a browser-glue
-  layer next to its crypto.
-- **R267** **`chain_pay.js` dispatches by family** and checks every family's terms before any signer runs:
-  `dms_portal_chain_payment_options` adds `family` and `network`; `evm` and Hedera ECDSA keep today's path; other
-  families lazy-load `wallets/<family>.js` (extension) or the seed signer's family path (§7); the start/submit RPCs
-  stay as they are (start already returns `{family, valid_until, payload_hex, digest, …terms}`, submit already
-  takes `public_key`). Before signing, the client rebuilds the payload from the terms and the amount it showed with
-  `fam/<family>.js` and refuses a mismatch — RS4-13 extended from EVM seed/passkey to every signer and family. — An
-  extension wallet that shows hex gives the user nothing to check; the rebuild is cheap. — A terms change on the
-  Odoo side must land with the matching `fam/*.js` change (shared KATs catch it).
+- **R266** **One connector implementation.** The wallet glue in
+  `bamboo-dms/dms_blockchain_bridge/static/src/js/connectors/*.js` and the EIP-6963 part of `chain_pay.js` move to
+  clientkeys `src/wallets/<family>.js` and `wallets/evm.js` (pure ESM, `win` injected).
+  - They are built as **per-family esbuild entries** `wallets-<family>.js` and `fam-<family>.js`, so they have stable
+    names for `import()`.
+  - The portal and the app's `src/signers/extension/*` import the same modules. The portal IIFEs and their tests are
+    deleted in the same change.
+
+  Why: owner; today the connectors are tested but not wired (§9.1). Cost if wrong: clientkeys gains browser glue.
+- **R267** **Check, then sign exactly what was checked.**
+  - `fam.checkTerms(start, shown)` rebuilds the payload with `fam/<family>.js` and returns a frozen `checked` object
+    `{ payload, walletInput, signingBytes }`.
+  - Wallet `sign()` and `signFamily` accept **only** `checked`, never `start`.
+  - Must-check lists are in §7.3. They cover EVM (existing `checkPayment`), Sui, Solana, Aptos and Soroban in D4/D5.
+    Cosmos, TON and Hedera ED25519 get the generic list (payload rebuilt == `payload_hex`, `from`, chain/network,
+    contract, amount) in their D5-<f>.
+  - **Portal limitation:** `shown` comes from the same Odoo response as the terms, so in the portal the check is
+    internal consistency (bytes ⇔ displayed fields), not protection from a malicious issuer. In the app, `shown` is
+    the user's own input.
+
+  Why: closes the gap between checking `payload_hex` and signing `text`. Cost if wrong: a terms change must land with
+  its `fam/*.js` change (shared KATs catch it).
 
 ### 2.6 Compatibility with spec F
 
-- **R268** **S4F adds no account id, no registry, no key kind.** Key metadata stays keyed by each family's existing key
-  encoding; the backup predicate takes "the account's active key set and guardian" as input, so when F lands it is
-  evaluated over F's per-account key set; "native single-key ⇒ outside the predicate" (R253) maps to F's unregistered
-  native kinds. — Keeps D and F independent. — None.
+- **R268** **S4F adds no account id, registry or key kind.** The predicate takes "active key set + guardian" and
+  works unchanged over F's sets (F §10). "Native single-key ⇒ outside" maps to F's unregistered native kinds.
+  `deriveRoleKey` is F §8.1's path.
+  Why: D and F stay independent. Cost if wrong: none.
 
 ---
 
-## 3. Spec F "Universal Account": what stays, what moves
+## 3. Spec F: what is ruled, what stays
 
-| Topic | S4F (here) | Moves to F |
-|---|---|---|
-| Account identity | Family-native derivations as built: EVM CREATE2 salt `keccak(abi.encode(firstKey, guardian))`; Sui `derive_address(registry, owner)`, owner = `blake2b(flag ‖ pk)`; Aptos `create_object_address(root, "acct" ‖ owner)`; Solana PDA `["acct", owner32]` with passkey-first owner `sha256("scaas.owner.p256" ‖ pk33)`; Cosmos passkey address `bech32(sha256("scaas.passkey.v1" ‖ pk)[..20])` | UA id `H(kind_tag ‖ key data)`, 32-byte kind-tagged ids (no 20-byte truncation sharing the address space), registration rules per kind |
-| Which accounts the backup predicate covers | Subject (multi-key) accounts; native single-key accounts outside (R253) | "Native single-key = unregistered kind" is F's taxonomy; the predicate is re-pointed, not changed |
-| One key = one purpose | Already true across families and Zether (distinct SLIP-44 coin types, Zether trees `m/12381/…/7`, `m/254/…/7`); passkeys are per `rpId` | Registry refusing a pubkey under a second kind; hardened per-kind derivation. **Existing dual uses for F to rule on:** the EVM seed key `m/44'/60'/0'/0/i` is both an EOA (self-paid gas, APP §6.2 `sendTx`) and a `SubjectAccount` `SECP256K1` key; Sui/Aptos/Solana seed keys are both a native address and the `Account` owner key |
-| Tagged signing | KeyOp/open domains per family (`scaas.keyop.v1`, `scaas.open.v1`, `scaas-subject-key-proof-v1`) unchanged | A cross-family tag scheme, if F defines one, replaces these by version bump |
-| Attestations (VC/eKYC) | none | all |
+| Topic | Status |
+|---|---|
+| Dual key uses | **Ruled by F R300** and applied by R269: the EOA path is EOA-only; subject-account keys and non-native owner keys come from the `m/7622'` role tree |
+| Account identity | Family derivations as built (EVM CREATE2 salt, Sui `derive_address`, Aptos object address, Solana PDA, Cosmos R9-1). UA ids are F |
+| Backup predicate scope | D (R251), applied to F's key sets unchanged (F §10) |
+| Tagged signing | KeyOp/open domains unchanged now; F §8.3 `keyop` purpose bumps the version (R261 parameterized) |
+| Attestations | F only |
 
 ---
 
@@ -238,88 +299,117 @@ Format: **ruling** — why — cost if wrong.
 
 ### 4.1 States a client shows
 
-| Switch | Account | Value ops | Receive / fund | Key ops |
-|---|---|---|---|---|
-| OFF | any | allowed | shown | all; "no backup" warning (R254) |
-| ON | subject, has backup | allowed | shown | all except those that would break the predicate |
-| ON | subject, no backup, satisfiable | refused: "Add a backup key first" | hidden | add key, add origin, set guardian |
-| ON | subject, unsatisfiable (§4.5) | exit only (whole balance out, warning) | hidden | as the kind allows |
-| ON | native single-key (seed vault or extension) | allowed | shown | n/a |
-| ON | native passkey-only (Sui flag-6 without `Account<T>`, Cosmos R9-1) | not offered at creation; an existing one: exit only | hidden | — |
+| Switch | Account | Value ops | Exit | Receive / fund | Key ops |
+|---|---|---|---|---|---|
+| OFF | any | allowed | allowed | shown | all; "no backup" warning (R254) |
+| ON | subject, has backup | allowed | allowed | shown | all; removals warn when they break the backup |
+| ON | subject, no backup, satisfiable | refused: "Add a backup key first" | allowed | hidden | all; add-backup offered first |
+| ON | unsatisfiable (R253) | refused | allowed (only value op) | hidden | as the kind allows |
+| ON | native single-key (seed vault or extension) | allowed | allowed | shown | n/a |
 
 ### 4.2 Reading the key set (clients)
 
-| Family | Read | Active keys | Guardian |
+| Family | Read | Active keys (then de-dup, R251) | Guardian |
 |---|---|---|---|
-| EVM, Hedera | `SubjectAccount.keyCount()`, `keyAt(i)`, `guardian()` (`eth_call`) | `keyCount` | `guardian() != 0x0` |
-| Sui | `Account<T>` object fields `keys`, `guardian` (`sui_getObject`, `showContent`) | `keys.length` | `guardian != @0x0` |
-| Aptos | `Account` resource of the object (view or `getAccountResource`) | `keys.length` | `option::is_some(guardian)` |
-| Solana | `SubjectAccount` PDA (Borsh, §3.3 net-solana) | `keys.len()` | `guardian.is_some()`; also `policy & 1` |
-| Soroban | `scaas-account` key list (contract view) | count | none (R8-2 seam) |
-| TON | jetton wallet get-methods `pubkey`, `passkey` | `(pubkey ≠ none) + (passkey ≠ none)` | none |
+| EVM, Hedera | `nextKeyIndex()`, `keyAt(i)` for `i ∈ [0, nextKeyIndex)`, skipping `kind == NONE` (slots are sparse after `removeKey`); `guardian()` | non-NONE slots | `guardian() != 0x0` |
+| Sui | `Account<T>` fields `keys`, `guardian` (`sui_getObject`) | `keys` | `guardian != @0x0` |
+| Aptos | `Account` resource | `keys` | `option::is_some(guardian)` |
+| Solana | `SubjectAccount` PDA (Borsh) | `keys` | `guardian`; also `policy & 1` |
+| Soroban | `scaas-account` key map | values (no duplicate check on chain) | none (R8-2) |
+| TON | jetton wallet `pubkey`, `passkey` | the bound ones | none |
 
-A pending key (EVM key row `pending`, a KeyOp not yet final) does not count. Clients re-read after any key change
-reaches finality. No caching across sessions.
+Pending keys do not count. Clients re-read after any key change reaches finality, and cache nothing across sessions.
 
 ### 4.3 clientkeys interface (`src/backup-policy.js`, exported from both signer entries)
 
 ```js
-/** account: { kind: 'subject' | 'native', satisfiable: boolean, keys: Array<{scheme, be?, bs?, rpId?}>,
- *             guardian: string | null }   — keys = ACTIVE keys only (§4.2). */
-export function hasBackup(account) { /* keys.length >= 2 || (keys.length === 1 && !!guardian) */ }
-
-/** Returns { ok, reason: null | 'NO_BACKUP' | 'UNSATISFIABLE' | 'NATIVE_PASSKEY',
- *            allow: { value, receive, exit, addKey, removeKey, setGuardian, clearGuardian },
- *            warnings: Array<'NO_BACKUP' | 'SAME_KEYCHAIN' | 'DEVICE_ONLY'> }.  `required` = the switch. */
-export function backupStatus(account, { required }) { … }
-
-/** authenticatorData flags: { up, uv, be, bs } (bits 0, 2, 3, 4). */
-export function passkeyFlags(authenticatorData) { … }
+/** account: { kind: 'subject' | 'native' | 'msig', satisfiable: boolean, address: string,
+ *   keys: Array<{ scheme, pub }>,   // ACTIVE keys; pub = canonical public key hex (R251): P-256 x, secp256k1
+ *                                   // address or x-only, ed25519 pk
+ *   nativeAddresses: string[],      // native address of each key (guardian independence)
+ *   guardian: string | null, msig?: { threshold, weights: number[] } } */
+export function hasBackup(account)            // distinct pubs ≥ 2, or 1 + independent guardian, or the msig rule
+export function backupStatus(account, { required }) /* → { ok, reason: null | 'NO_BACKUP' | 'UNSATISFIABLE',
+    allow: { value, receive, exit: true, addKey: true, setGuardian: true, addOrigin: true,
+             removeKey: true, clearGuardian: true },
+    warnings: Array<'NO_BACKUP' | 'SAME_KEYCHAIN' | 'DEVICE_ONLY' | 'BREAKS_BACKUP'> } */
+export function passkeyFlags(authenticatorData) // → { up, uv, be, bs } (bits 0, 2, 3, 4)
+export function deriveRoleKey(seed, { kindNo, account, i }) // R269; caller wipes privateKey
 ```
 
-`checkPayment` / family `checkTerms` (R267) do not call `backupStatus` themselves; the signer UI calls it first and
-the signer refuses when `allow.value` is false. Remove-key and clear-guardian owner calls are checked against
-`hasBackup(after)`.
+`BREAKS_BACKUP` is set on a planned removal when `hasBackup(after)` is false. The signer UI calls `backupStatus`
+first, and the signer refuses a value op when `allow.value` is false.
 
 ### 4.4 Odoo (portal, EVM and Hedera)
 
-- Parameter `dms_blockchain.require_backup_key` (`ir.config_parameter`, `'1'`/`'True'` = ON).
-- `blockchain.subject.account._dms_has_backup()` (private): active key rows (`key_state == 'active'`) ≥ 2, or 1 and
-  `guardian_address != ZERO_ADDRESS`. `guardian_address` is the creation value (CREATE2 input); a later `setGuardian`
-  is not mirrored — accepted, the switch is soft (R252).
+- Parameter `dms_blockchain.require_backup_key` (`'1'`/`'True'` = ON).
+- `blockchain.subject.account._dms_has_backup()` (private): distinct active key rows, de-duplicated by
+  `(public_x)` for passkeys and `evm_address` for seed keys. Then ≥ 2, or 1 with
+  `guardian_address ∉ {ZERO_ADDRESS, account address, any key's evm_address}`.
+- Known blind spots (accepted, the switch is soft):
+  - `guardian_address` is the CREATE2 input, so a later `setGuardian` is not mirrored;
+  - removals done outside the portal are not mirrored, and `key_state` has no "removed" state. Odoo over-counts in
+    that case.
 - `dms_portal_chain_payment_start` raises `UserError("Add a backup key to your account first.")` when ON and the
-  paying subject account has no backup; any future Odoo flow that pays **to** a subject account (refunds, payouts)
-  applies the same check.
-- `subject_signers.js`: with ON (served in the subject context the portal already fetches), after the first key the
-  flow goes straight to "add a backup" (seed if the first key was a passkey, passkey if it was a seed, or "ask your
-  administrator for a guardian"), before the first payment.
-- Non-EVM families: Odoo cannot check (R20); client enforcement only.
+  paying account has no backup. Any future Odoo flow paying **to** a subject account applies the same check.
+- `subject_signers.js` with ON: after the first key, the flow goes to "add a backup" (§4.7) before the first payment.
+  New seed keys use the role path (R269); the key row still stores the address in `evm_address`.
+- Non-EVM families: client enforcement only (R20).
 
 ### 4.5 Per-family applicability
 
-| Family | Subject account kind | Max keys | Guardian | Predicate satisfiable | On-chain bit | Odoo checks |
+| Family | Subject account | Max keys | Guardian | Satisfiable by | On-chain bit | Odoo checks |
 |---|---|---|---|---|---|---|
-| EVM | `SubjectAccount` (ERC-1271) | unbounded (`keyCount`) | yes | yes | no | yes |
-| Hedera | `SubjectAccount` on HSCS | as EVM | yes | yes | no | yes |
-| Sui | `Account<T>` | 8 | yes | yes | no | no |
-| Aptos | `Account` object | 8 | yes | yes | no | no |
-| Solana | `SubjectAccount` PDA | 8 | yes | yes | `POLICY_BACKUP_REQUIRED` (built, opt-in) | no |
-| Soroban | `scaas-account` `C…` | multi | seam (R8-2) | yes, by ≥ 2 keys only | no | no |
-| TON | `ScaasJettonWallet` (`pubkey` + one `passkey`) | 2 | seam | yes, by both keys | no | no |
-| Cosmos | none (native address; multi-key is a seam) | 1 | no | seed: n/a (native); passkey-only: **no** | no | no |
+| EVM, Hedera | `SubjectAccount` | unbounded | yes | 2 keys or key + guardian | no | yes |
+| Sui | `Account<T>` | 8 | yes | as EVM | no | no |
+| Aptos | `Account` object | 8 | yes | as EVM | no | no |
+| Solana | `SubjectAccount` PDA | 8 | yes | as EVM | opt-in (no de-dup) | no |
+| Soroban | `scaas-account` `C…` | multi | no (R8-2) | **≥ 2 distinct keys** (owner) | no | no |
+| TON | `ScaasJettonWallet` | 2 (`pubkey` + one passkey) | no | **both keys** (owner) | no | no |
+| Cosmos | none (native; multi-key seam) | 1 | no | seed: native; passkey-only: **unsatisfiable** | no | no |
 
 ### 4.6 Tests and vectors
 
-- `clientkeys/test/vectors/backup_policy.json`: rows `{keys: [...], guardian, kind, satisfiable, required}` →
-  `{ok, reason, allow}` covering 0/1/2/8 keys, guardian set/unset, native, native passkey, unsatisfiable, both switch
-  states, remove-key and clear-guardian transitions. Read by: clientkeys `backup-policy.test.js`; Odoo
-  `test_backup_policy.py` (the EVM rows through `_dms_has_backup` on fixture rows); the Solana program's Rust unit
-  test of `has_backup` (`include_str!` of the same file, `kind == "subject"` rows).
-- `passkeyFlags` against the software authenticator (`test/softauthn.js`) with BE/BS set and clear.
-- Odoo: start refused when ON and 1 key + no guardian; allowed after a second active key; allowed when OFF; a
-  `pending` key does not count.
-- Portal tour (passkey + fake authenticator): switch ON ⇒ first payment blocked, add seed key, pay.
-- App (stream A3 e2e): receive hidden, value refused, add-key allowed, exit-only on an unsatisfiable fixture.
+`clientkeys/test/vectors/backup_policy.json`. Each row is `{name, families, account, required}` mapped to
+`{has_backup, ok, reason, allow, solana_onchain?}`. Rows cover:
+- 0/1/2/8 keys;
+- guardian set, unset, equal to own key, equal to the account;
+- same passkey on two origins ⇒ 1;
+- Soroban same key twice ⇒ 1;
+- Sui same pk under two `rp_id_hash` ⇒ 1;
+- `msig` weights (APP R176);
+- native, unsatisfiable;
+- remove-key and clear-guardian **allowed** and yielding `NO_BACKUP`;
+- exit allowed in every row;
+- both switch states.
+
+Consumers:
+- clientkeys `backup-policy.test.js` (all rows);
+- Odoo `test_backup_policy.py` (EVM rows through `_dms_has_backup`);
+- Solana Rust `has_backup` unit test (rows with `solana_onchain`). Where on-chain no-de-dup differs, it is pinned as
+  `solana_onchain` ≠ `has_backup`.
+
+Other tests:
+- `deriveRoleKey`: path string, and **role key ≠ native key** for the same seed on every family. When F0 lands,
+  F `derivation.json` R300 rows must match.
+- `passkeyFlags` against `test/softauthn.js` with BE/BS set and clear.
+- Odoo: start refused (ON, 1 key, no guardian); start refused with guardian = own key; allowed after a second
+  distinct key; allowed when OFF; a pending key does not count.
+- Portal tour (fake authenticator), switch ON: payment blocked → paper backup flow (§4.7) → pay; then remove the
+  passkey → value refused, exit offered.
+- App e2e: inside APP A3.
+
+### 4.7 Backup and revocation flows
+
+- **Add a backup:**
+  - seed primary ⇒ add a passkey;
+  - passkey primary ⇒ paper seed key (R269: phrase, 3-word check, role key, `addKey`/KeyOp, store nothing);
+  - or ask the operator for a guardian (EVM/Sui/Aptos/Solana).
+- **Revoke:**
+  - EVM offers `rotateKey(index, newKey)` (one owner call: add, then remove) as the default when replacing a key;
+  - elsewhere "add new key, then remove";
+  - plain remove and clear-guardian are always possible (R252), with `BREAKS_BACKUP` shown.
+- **Lost paper:** create a new paper key, then remove the old one (R258).
 
 ---
 
@@ -336,78 +426,88 @@ v2 wraps it:
 { "v": 2, "label": "seed", "kid": "device-v1", "iv": "<b64url, 12 B>", "ct": "<b64url>" }
 ```
 
-- `ct = AES-256-GCM(deviceKey, iv, utf8(JSON.stringify(v1)), aad = "<label>|device|<kid>")`; fresh IV per seal.
-- `label` is duplicated outside so a swapped blob fails both the outer AAD and the inner v1 AAD.
-- The inner v1 keeps its own envelopes: the device key is required **in addition** to the passphrase or PRF.
+- `ct = AES-256-GCM(deviceKey, iv, utf8(JSON.stringify(v1)), aad = "<label>|device|<kid>")`, with a fresh IV per seal.
+- `label` is repeated outside, so a swapped blob fails the outer AAD and the inner v1 AAD.
+- The device key is required **in addition** to the passphrase or PRF.
+- Portal tombstone (R257): `{ "v": 2, "moved": "indexeddb" }`. `openDevice` rejects it.
 
 ### 5.2 Storage and interface
 
-IndexedDB database `scaas-clientkeys`, version 1, object store `kv` (out-of-line keys):
+IndexedDB `scaas-clientkeys` v1, store `kv`:
 
 | Key | Value |
 |---|---|
-| `device-key:v1` | the `CryptoKey` (structured clone; `extractable: false`) |
-| `vault:<id>` | a v2 (or, on fallback, v1) vault object. Portal `<id>` = `dms_chain_seed_vault:<subject>` (RS4-15); app `<id>` = `seed:<account label>`; Zether `zether-conf:<curve>:<coin>:<account>` |
+| `device-key:v1` | the `CryptoKey` (`extractable: false`) |
+| `vault:<id>` | v2 (or v1 on fallback). Portal `<id>` = `dms_chain_seed_vault:<subject>`; app `seed:<account label>`; Zether `zether-conf:<curve>:<coin>:<account>` |
+| `rewrap-attempt:<id>` | `N` being attempted (R259) |
+| `persist-notice` | `true` once the refusal notice was shown |
 
-New module `src/device.js` (exported from `seed-signer.js` and `zether-keys.js`):
+`src/device.js` (exported from `seed-signer.js` and `zether-keys.js`; used inside the app key worker, APP R175):
 
 ```js
-export async function openStore(indexedDB = globalThis.indexedDB)   // → { get(k), put(k, v), del(k) }, or null
-export async function deviceKey(store)                               // get, or generate + put, the device key
-export async function sealDevice(vaultV1, key)                       // → v2
-export async function openDevice(vaultV2, key)                       // → v1 (memory only)
-export function needsBinding(stored)                                 // stored.v === 1
+export async function openStore(indexedDB = globalThis.indexedDB) // → { get, put, del } or null (probe fails)
+export async function deviceKey(store)                             // get, or generate + put
+export async function sealDevice(vaultV1, key)                     // → v2
+export async function openDevice(vaultV2, key)                     // → v1, memory only; tombstone ⇒ throws
+export function needsBinding(stored)                               // stored.v === 1
 ```
 
-`openStore` returns `null` when IndexedDB or `CryptoKey` cloning is unavailable (probe: put and get a throwaway
-key); callers fall back to v1 (R255). Every call is wrapped in try/catch by the caller; a storage error never
-loses the vault in memory before the user has seen the phrase.
+`vault.js` `dekFrom` gains the R259 bounds check on stored `N, r, p`.
 
 ### 5.3 Threat model
 
 | Threat | v1 today | v2 | Control that actually helps |
 |---|---|---|---|
-| XSS while the page is open | reads the blob, can phish the passphrase or wait for unlock, exfiltrates the blob for offline scrypt | same: the device key is a decrypt oracle for any script on the origin | CSP, no third-party scripts, lazy signer chunks (APP R166) |
-| Blob leaked alone (storage dump, log, support export, one-store file sync, a browser extension reading `localStorage` only) | offline scrypt attack on the passphrase | **useless**: needs the device key from the same profile's IndexedDB | R255 |
-| Browser profile copy (both stores) | offline scrypt attack | same: the key bytes are in the copied IndexedDB files (not hardware-backed, R256) | passphrase strength, scrypt `2^17`; OS disk encryption |
+| Same-origin script: XSS, **or a browser extension with host access** (content scripts reach IndexedDB and `crypto.subtle`) | reads the blob, phishes the passphrase or waits for unlock | same: the device key is a decrypt oracle | CSP, no third-party scripts, key worker (APP R166, R175) |
+| **Portal origin TCB**: Odoo website designer HTML/JS and every module's frontend assets run on the portal origin | as XSS | as XSS | deployment note: serve payments from a dedicated payment subdomain with only the payment bundle |
+| Blob leaked alone (storage dump, log, support export, one-store file sync) | offline scrypt attack | **useless** without the profile's IndexedDB | R255 |
+| Browser profile copy (both stores) | offline scrypt attack | same on Chromium/Firefox (key bytes in the copy); Safari: Keychain-wrapped | passphrase strength, scrypt `2^17`, OS disk encryption |
 | Stolen disk, no OS encryption | as profile copy | as profile copy | OS full-disk encryption |
-| Stolen device, locked | passphrase or PRF (+ UV) needed | same | — |
-| Stolen device, unlocked browser | passphrase or PRF needed | same | idle lock (APP §6.2: 5 min) |
+| Stolen device, locked / unlocked browser | passphrase or PRF + UV | same | idle lock (APP §6.3: 5 min) |
 | PRF from a synced passkey + leaked blob | opens anywhere the passkey syncs | needs the device key too | R255 |
-| PRF from a BE = 0 passkey | hardware-bound | hardware-bound | R256 (prefer such a passkey) |
-| Device lost or site data cleared | phrase re-import | phrase re-import; the old blob can never open | R258 |
+| PRF output captured by a script during one unlock | permanent unwrap key for that blob | still needs the device key (same origin ⇒ available to that script) | as XSS row |
+| Device lost, site data cleared, Safari ITP 7-day eviction | phrase re-import | phrase re-import; the blob never opens again | R258, `persist()` |
 
 ### 5.4 Migration
 
-1. New vault: `createVault` (v1) → `sealDevice` → `put('vault:<id>')`; `navigator.storage.persist()`.
-2. Existing v1 in IndexedDB (app) or `localStorage` (portal, including the legacy bare key `dms_chain_seed_vault`
-   handled by RS4-15): after a successful `openVault`, in the same step as `rewrapPin` when `needsRewrap`: seal v2,
-   `put`, read back and open once (decrypt check), **then** delete the `localStorage` entry. Any failure keeps the old
-   entry.
-3. Opening a v2 vault: `openDevice` → v1 → `openVault(v1, unlock)`. A missing device key with a present v2 blob is
-   "this vault belongs to a cleared browser profile": the UI offers phrase import only.
-4. No downgrade path from v2 to v1 is written; `openDevice` output never leaves memory.
+1. **New vault:** `createVault` (v1) → `sealDevice` → `put('vault:<id>')` → `openDevice(get(...))` deep-equals v1 →
+   done.
+2. **Existing v1** (app IndexedDB, or portal `localStorage` including the RS4-15 legacy key):
+   1. after a successful `openVault`, check whether `vault:<id>` already exists. If it does, it wins: open that one
+      and only write the tombstone;
+   2. otherwise seal v2 and `put` it;
+   3. read it back with `openDevice` and compare (no scrypt);
+   4. **then** write the `localStorage` tombstone.
+
+   A failure at step 2 or 3 keeps the `localStorage` entry as it is. The `N = 2^15` re-wrap is a separate step after
+   the payment is submitted (R259).
+3. **Opening:** IndexedDB `vault:<id>` first. Then `localStorage` (v1 ⇒ migrate; tombstone ⇒ "this vault moved;
+   reload"). A v2 blob without the device key means a cleared profile: phrase import only.
+4. No downgrade from v2 to v1 is written. `openDevice` output never leaves memory.
 
 ### 5.5 Tests
 
-- Round trip v1 → v2 → v1 with an in-memory store (`Map`; Node 26 has WebCrypto but no IndexedDB).
-- Tamper outer `ct`, swap `label`, swap `kid`, wrong device key (second generated key): each fails with the vault
-  error, nothing returned.
-- `deviceKey` returns the same key on the second call; the key's `extractable` is `false` and
-  `crypto.subtle.exportKey` rejects.
-- Fixture `test/vectors/vault_v2_fixture.json`: a committed v2 blob plus the raw device-key bytes, imported in the test
-  with `extractable: false`; opens to a known entropy — pins the format against accidental change.
-- `openStore` returns `null` under a stub `indexedDB` that throws on `put` of a `CryptoKey`; the caller writes v1.
-- Portal tour: legacy `localStorage` vault unlocks, becomes `vault:<id>` v2 in IndexedDB, the `localStorage` entry is
-  gone; second unlock opens v2.
-- `bundle.test.js` (committed bundle == fresh esbuild output) covers the new module.
+- Round trip v1 → v2 → v1 with an in-memory store (Node 26 has WebCrypto, no IndexedDB).
+- Tamper outer `ct`, swap `label`, swap `kid`, wrong device key, tombstone: each fails, nothing returned.
+- `deviceKey` is stable across calls; `extractable === false`; `exportKey` rejects.
+- `test/vectors/vault_v2_fixture.json`: a committed v2 blob plus raw device-key bytes (imported with `extractable:
+  false`) opens to known entropy.
+- `openStore` returns `null` under a stub `indexedDB` that throws on a `CryptoKey` `put`; the caller writes v1.
+- Migration failure paths (stubbed store): put fails, read-back mismatch, tombstone write fails, both copies
+  present (IndexedDB wins, no overwrite), stale v1 next to a newer v2.
+- R259: a KDF that throws at creation returns no vault; marker present ⇒ re-wrap skipped; out-of-bounds `N`/`r`/`p`
+  refused on open; `2^15` vault still opens.
+- **Real browsers:** one Playwright run of create → reload → unlock → migrate on Chromium, Firefox and WebKit
+  (structured-clone `CryptoKey` in IndexedDB is not exercised by the `Map` store).
+- Portal tour: a legacy `localStorage` vault unlocks, becomes v2 in IndexedDB, and leaves a tombstone; the second
+  unlock opens v2.
+- `bundle.test.js` covers the new module.
 
 ### 5.6 scrypt
 
-`SCRYPT = { N: 2^17, r: 8, p: 1, dkLen: 32 }` stays (R259). The SCaaS §15.3 contradiction row ("round-3 design R32 says
-`N = 2^15`") is resolved by this spec in favour of the code. Test `vault.test.js` already pins both the new
-parameters and the re-wrap of a `2^15` vault; add one test that a `RangeError` from the KDF at creation propagates
-and no vault is returned.
+`SCRYPT = { N: 2^17, r: 8, p: 1, dkLen: 32 }` stays (R259). The SCaaS §15.3 row ("round-3 R32 says `N = 2^15`") is
+resolved in favour of the code. `vault.test.js` already pins the parameters and the re-wrap; §5.5 adds the failure,
+marker and bounds tests.
 
 ---
 
@@ -415,22 +515,23 @@ and no vault is returned.
 
 ### 6.1 Facts (code at 28c165c / parent repo)
 
-- `Account<T>` id = `derive_address(registry, owner)`; `owner` = the first key's address, never changes; `keys` ≤ 8;
-  `manage(KeyOp…)` signed by any current key adds/removes keys and origins, sets the guardian, cancels recovery;
-  guardian `start_recovery(key)` → `finish_recovery` after 172 800 s adds the key (net-sui §3, RS7-3).
-- `MetaOp.from` = owner; `relay_pay` accepts a signature from any key in `keys` (`a2_pay_sui`: added ed25519 key;
-  `a3_pay_sui`: recovered secp256k1 key — both pass `sui move test`).
-- `fam_sui.verify` returns `False` unless `address_of(flag, pk) == request.payer_address` — so Odoo rejects exactly the
-  payments R260 must accept. Aptos and Solana already return `None` in that case (their L9).
+- `Account<T>` id = `derive_address(registry, owner)`, where `owner` is the first key's address and never changes.
+- `keys` holds ≤ 8 keys. `manage(KeyOp…)` is signed by any current key and does one action per call: add or remove
+  a key, add or remove an origin, set the guardian, cancel a recovery.
+- Recovery: the guardian calls `start_recovery(key)`, then `finish_recovery` after 172 800 s.
+- `MetaOp.from` = owner. `relay_pay` accepts any key in `keys`. `a2_pay_sui` (an added ed25519 key) and `a3_pay_sui`
+  (a recovered secp256k1 key) pass `sui move test`.
+- `fam_sui.verify` returns `False` unless `address_of(flag, pk) == payer` (the R260 bug).
 
-### 6.2 Python changes (`dms_blockchain/lib/fam_sui.py`, parent repo)
+### 6.2 Python (`dms_blockchain/lib/fam_sui.py`, parent repo)
 
 ```python
 ADD_KEY, REMOVE_KEY, ADD_ORIGIN, REMOVE_ORIGIN, SET_GUARDIAN, CANCEL_RECOVERY = range(6)
-KEYOP_DOMAIN = b'scaas.keyop.v1'
+KEYOP_DOMAIN = b'scaas.keyop.v1'          # F §8.3 bumps it; callers pass `domain`
 
-def keyop_bytes(network, account, action, scheme, public_key, rp_id_hash, origin, guardian, nonce, valid_until):
-    return (_vec(KEYOP_DOMAIN) + _vec(network.encode()) + addr(account) + bytes([action, scheme])
+def keyop_bytes(network, account, action, scheme, public_key, rp_id_hash, origin, guardian, nonce, valid_until,
+                domain=KEYOP_DOMAIN):
+    return (_vec(domain) + _vec(network.encode()) + addr(account) + bytes([action, scheme])
             + _vec(public_key) + _vec(rp_id_hash) + _vec(origin.encode()) + addr(guardian)
             + nonce.to_bytes(8, 'little') + valid_until.to_bytes(8, 'little'))
 
@@ -445,248 +546,267 @@ def verify(request, payload, signature, public_key):
         return False
     if not verify_digest(flag, pk, personal_digest(payload), sig, ad, cd):
         return False
-    return True if own else None          # L9: added/recovered key ⇒ the node's simulation decides (R27)
+    return True if own else None          # L9: other keys ⇒ node simulation decides (R27)
 ```
 
-`verify_digest` (passkey branch) adds: refuse `b'"crossOrigin":true'` and `b'"topOrigin"'` in `client_data_json`.
-`gen_vectors.py` imports `keyop_bytes` instead of its private copy.
+`verify_digest`'s passkey branch also refuses `b'"crossOrigin":true'` and `b'"topOrigin"'`. `gen_vectors.py` imports
+`keyop_bytes` in place of its private copy. `signature_verified = False` for `None`, as for Aptos and Solana.
 
-Odoo flow: `blockchain.signed.op.signature_verified = False` for `None` (as today for Aptos/Solana); the portal
-message for a `False` stays "The signature is invalid or not from the wallet that started this payment."
+**Reach (review M7).** In the portal, a non-EVM signer pays with the **owner key only**: the portal sends
+`signer.from` and has no chain reads, and a Sui `Account<T>` has no reverse index from key to account. Added keys pay
+through the app (find-my-account, APP §6.4). They can pay through the portal once the vault stores
+`{family, account, owner, key_index}` next to the phrase (D5-sui, optional).
 
-### 6.3 JS (`clientkeys/src/fam/sui.js`, with APP A0)
+### 6.3 JS (`clientkeys/src/fam/sui.js`, A0-sui)
 
-`metaOpBytes`, `personalDigest`, `deriveAccount`, `addressOf(flag, pk)`, `parseSignature`, `serializeSignature(flag,
-sig, pk)`, `serializePasskey(ad, cd, sig, pk33)` (§8.2), `keyOpBytes`, `keyOpDigest`, and
-`verifyKeyOp(account, op, signature)` — checks that the signature verifies under one of `account.keys` (read §4.2)
-and that `op.nonce == account.key_nonce`, before the client submits `manage` self-paid or via `/v1/ops`.
+`metaOpBytes`, `personalDigest`, `deriveAccount`, `addressOf`, `parseSignature`, `serializeSignature`,
+`serializePasskey` (§8.2), `keyOpBytes(…, {domain})`, `keyOpDigest`, and `verifyKeyOp(account, op, signature, {now})`
+with the R261 checks.
 
 ### 6.4 Vectors and tests
 
-- `gen_vectors.py --json smartcontracts/move/sui/vectors/sui_vectors.json` (R262). Entries: every `pay` and `keyop`
-  vector with `{name, signer {flag, pk}, owner, account, payload_hex | keyop fields, digest, signature_b64}` and
-  `{expect_odoo: true | null | false}`.
+- `sui_vectors.json` (R262): every `pay` and `keyop` vector as `{name, signer {flag, pk}, owner, account,
+  payload_hex | keyop fields, digest, signature_b64, expect_odoo: true | null | false}`, plus
+  `vectors_move_sha256`.
 - Odoo `test_fam_sui.py`:
-  `test_added_key_signature_is_left_to_the_node` (`a2_pay_sui` ⇒ `None`),
-  `test_recovered_key_signature_is_left_to_the_node` (`a3_pay_sui` ⇒ `None`),
-  `test_flipped_byte_from_added_key_is_refused` (⇒ `False`),
-  `test_own_key_still_verified` (`a_pay_sui_0` ⇒ `True`),
-  `test_passkey_cross_origin_refused`,
-  `test_keyop_bytes_match_move` (every `k_*` vector), and the existing
-  `test_signature_from_another_wallet_is_refused` is narrowed to "invalid under its own key" (a valid signature from
-  another key is now `None`).
-- clientkeys `fam_sui.test.js`: same JSON — `keyOpDigest` equals every `k_*` digest; `verifyKeyOp` true for the
-  vector signer on the right nonce, false on a wrong nonce, a non-member key, a flipped byte.
-- `sui move test` unchanged (vectors regenerated by the same run).
+  - `test_added_key_signature_is_left_to_the_node` (`a2_pay_sui` ⇒ `None`);
+  - `test_recovered_key_signature_is_left_to_the_node` (`a3_pay_sui` ⇒ `None`);
+  - `test_flipped_byte_from_added_key_is_refused` (`False`);
+  - `test_own_key_still_verified`;
+  - `test_passkey_cross_origin_refused`;
+  - `test_keyop_bytes_match_move` (every `k_*`);
+  - `test_vectors_file_matches_move` (sha256);
+  - `test_signature_from_another_wallet_is_refused` narrowed to "invalid under its own key".
+- clientkeys `fam_sui.test.js`:
+  - `keyOpDigest` matches every `k_*` vector;
+  - `verifyKeyOp` is true for the right signer and nonce, and false for: wrong nonce, non-member key, flipped byte,
+    wrong account, wrong network, expired, foreign origin.
+- `sui move test` unchanged; the vectors are regenerated in the same run.
 
 ---
 
-## 7. Seed signers: Soroban, Aptos, Solana
+## 7. Role keys and seed signers
 
-### 7.1 Matrix (all families, for reference)
+### 7.1 Matrix
 
-| Family | `NETWORKS` key | Path | Curve | Address / key id | Seed signer signs | Status |
-|---|---|---|---|---|---|---|
-| EVM | `evm` | `m/44'/60'/0'/0/i` | secp256k1 | keccak address | EIP-712 digest | BUILT |
-| Hedera ECDSA | `hedera_ecdsa` | `m/44'/3030'/0'/0/i` | secp256k1 | EVM alias | EIP-712 digest | BUILT |
-| Hedera ED25519 | `hedera_ed25519` | `m/44'/3030'/0'/0'/i'` | ed25519 | `0.0.N` (mirror) | raw ed25519 over EIP-712 digest (HIP-632) | BUILT |
-| Cosmos | `cosmos` | `m/44'/118'/0'/0/i` | secp256k1 | bech32 ripemd160(sha256) | ADR-036 doc (`fam/cosmos.js`, A0) | key BUILT, envelope A0 |
-| Sui | `sui` | `m/44'/784'/i'/0'/0'` | ed25519 | `blake2b(0x00 ‖ pk)` | personal-message digest, flag 0 serialized | key BUILT, envelope A0 |
-| TON | `ton` | `m/44'/607'/i'` | ed25519 | pubkey (wallet `BindKey`) | MetaOp cell hash (`fam/ton.js`, A0) | key BUILT, envelope A0 |
-| **Soroban** (Stellar) | `stellar` | `m/44'/148'/i'` (SEP-0005) | ed25519 | `G…` StrKey | `G…`: sha256(auth-entry preimage); `C…`: `Ed25519{key_id, signature}` over `signature_payload` | key BUILT; **R263** |
-| **Soroban** (Pi) | `stellar` + `coinType 314159` | `m/44'/314159'/i'` | ed25519 | `G…` | as Stellar, Pi network passphrase | key BUILT; **R263** |
-| **Aptos** | `aptos` | `m/44'/637'/i'/0'/0'` | ed25519 | `sha3_256(pk ‖ 0x00)` (legacy auth key) | AIP-62 `fullMessage` (client-built) | key BUILT; **R263** |
-| **Solana** | `solana` (A0) | `m/44'/501'/i'/0'` | ed25519 | base58 pk | OCMS v1 bytes (kind 1) | **R263** + A0 |
+"Adds to a subject account" names the key a seed contributes when it is not the account's native owner (R269).
 
-TON keys from `m/44'/607'/i'` remain importable only as "BIP-39/Ledger path" (SCaaS §9.5).
+| Family | `NETWORKS` key | Native path | Curve | Native address | Adds to a subject account | Seed signer signs | Status |
+|---|---|---|---|---|---|---|---|
+| EVM | `evm` | `m/44'/60'/0'/0/i` (EOA only) | secp256k1 | keccak address | role `m/7622'/0'/a'/2'/i'` (SECP256K1 key) | EIP-712 digest | native BUILT; role **R269** |
+| Hedera ECDSA | `hedera_ecdsa` | `m/44'/3030'/0'/0/i` | secp256k1 | EVM alias | role `…/2'/i'` (HSCS `SubjectAccount`) | EIP-712 digest | as EVM |
+| Hedera ED25519 | `hedera_ed25519` | `m/44'/3030'/0'/0'/i'` | ed25519 | `0.0.N` | — | raw ed25519 over EIP-712 digest (HIP-632) | BUILT |
+| Cosmos | `cosmos` | `m/44'/118'/0'/0/i` | secp256k1 | bech32 | — (no subject account) | ADR-036 doc | key BUILT; envelope A0-cosmos |
+| Sui | `sui` | `m/44'/784'/i'/0'/0'` | ed25519 | `blake2b(0x00 ‖ pk)` | native if owner; else role `…/20'/i'` | personal-message digest, flag 0 | key BUILT; envelope A0-sui |
+| TON | `ton` | `m/44'/607'/i'` | ed25519 | pubkey (`BindKey`) | — (wallet-bound; F8 rules TON) | MetaOp cell hash | key BUILT; envelope A0-ton |
+| Soroban Stellar | `stellar` | `m/44'/148'/i'` | ed25519 | `G…` | role `…/18'/i'` (`C…` key, Q1) | `G…`: sha256(auth preimage); `C…`: `Ed25519{key_id, sig}` | **D4-soroban** |
+| Soroban Pi | `stellar` + 314159 | `m/44'/314159'/i'` | ed25519 | `G…` | as Stellar | as Stellar, Pi passphrase | **D4-soroban** |
+| Aptos | `aptos` | `m/44'/637'/i'/0'/0'` | ed25519 | `sha3_256(pk ‖ 0x00)` | native if owner; else role `…/19'/i'` | AIP-62 `fullMessage` | **D4-aptos** |
+| Solana | `solana` | `m/44'/501'/i'/0'` | ed25519 | base58 pk | native if owner; else role `…/16'/i'` | OCMS v1 (kind 1) | **D4-solana** |
 
-### 7.2 Interface (`src/fam/<family>.js`, consumed by the seed signer)
+`a` = the user's account number (F `<account>`). TON keys from `m/44'/607'/i'` stay "BIP-39/Ledger path" imports.
+
+### 7.2 Interface (`src/fam/<family>.js`, consumed by the seed signer and wallets)
 
 ```js
-// Every family module exports:
-export function checkTerms(terms, shown)  // rebuild payload from terms + what the UI showed; throws "Refusing to sign: …"
-export function signingInput(terms, key)  // → { bytes, kind }  exactly what the key signs (envelope, preimage hash, OCMS)
-export function packSignature(terms, key, sig) // → { signature, publicKey } in the submit format Odoo / /v1/ops expect
+export function checkTerms(terms, shown)       // → frozen { payload, walletInput, signingBytes }, or throws
+                                               //   "Refusing to sign: …"
+export function packSignature(checked, key, sig) // → { signature, publicKey } in the submit format
 ```
 
-Seed signer (`seed-signer.js` additions): `signFamily(key, family, terms, shown)` =
-`checkTerms` → `signingInput` → `ed25519.sign` / `secp256k1` (`signDigest` for 32-byte inputs) → `packSignature`.
-`shown` = `{ amount, decimals, payee, account }` as rendered.
+The seed signer's `signFamily(key, family, checked)` signs `checked.signingBytes` (ed25519; secp256k1 `signDigest`
+for 32-byte inputs) and packs the result. A wallet passes `checked.walletInput` to the wallet API, then compares what
+the wallet reports as signed against `checked.signingBytes` (as the connectors do today).
 
-Per family:
+| Family | `signingBytes` (seed) | `packSignature` |
+|---|---|---|
+| Soroban `G…` | `sha256(XDR(HashIdPreimage::SorobanAuthorization{network_id, nonce, signature_expiration_ledger, invocation}))`. A self-paid envelope hash is signed only via the adapter's `buildSelfPaid` | 64-byte hex; `publicKey` = `G…` StrKey |
+| Soroban `C…` | `signature_payload` (32 B) | XDR hex of `Signature::Ed25519{key_id, signature}` |
+| Aptos | UTF-8 `fullMessage` built by the client (`application`, `chainId`, `message = "scaas.metaop.v1:0x<digest>"`, `nonce = <lane hex>`), self-checked with the JS port of `parse_envelope` | `sig64 ‖ fullMessage` hex; pk hex |
+| Solana | `0xff ‖ "solana offchain" ‖ 0x01 ‖ 0x01 ‖ pk32 ‖ "scaas.metaop.v1:" ‖ hex(digest)` | `[1, key_index] ‖ sig64` hex (key index 0 for the owner, R260 reach); pk hex |
 
-- **Soroban `G…`:** `signingInput` = `sha256(XDR(HashIdPreimage::SorobanAuthorization{network_id, nonce,
-  signature_expiration_ledger, invocation}))` from `fam/soroban.js` (port of `fam_soroban.py`, A0); `packSignature` =
-  hex of the 64-byte signature, `publicKey` = the `G…` StrKey (Odoo `fam_soroban.verify` accepts StrKey or hex).
-  Self-paid: the transaction envelope hash `sha256(network_id ‖ ENVELOPE_TYPE_TX ‖ tx XDR)` is signed only through
-  the adapter's `buildSelfPaid` (APP §5.1), never through `signFamily`.
-- **Soroban `C…`:** `signingInput` = the 32-byte `signature_payload`; `packSignature` = XDR hex of ScVal
-  `Signature::Ed25519{key_id, signature}` with `key_id` as the account stores it (vector from the account contract
-  tests, §7.3).
-- **Aptos:** `signingInput` = UTF-8 of `"APTOS\n"` + the envelope lines the client builds (`application` from config
-  / Odoo `aptos_application`, `chainId`, `message = "scaas.metaop.v1:0x<digest>"`, `nonce = <lane hex>`) in the order
-  `parse_envelope` accepts; the client runs the JS port of `parse_envelope` on its own output before signing.
-  `packSignature` = `sig64 ‖ fullMessage` hex, `publicKey` = 32-byte pk hex.
-- **Solana:** `signingInput` = `0xff ‖ "solana offchain" ‖ 0x01 ‖ 0x01 ‖ pk32 ‖ T` with
-  `T = "scaas.metaop.v1:" ‖ hex(digest)` (the exact `expected` bytes of today's connector, OCMS v1);
-  `packSignature` = `[1, 0] ‖ sig64` hex (kind 1, key index 0 for the first key; the account's index for an added
-  key), `publicKey` = pk hex.
+### 7.3 Must-check lists (`checkTerms`, R267)
 
-### 7.3 Vectors and tests
+| Family | Checks before anything is signed |
+|---|---|
+| EVM / Hedera ECDSA | existing `checkPayment` / `checkOwnerCall` (RS4-13) |
+| Sui | `message_b64 == payload_hex`; payload decodes to `op == PAY`, `from == owner`, `to`, `amount == shown`, `relayer == 0x0`, `extra == 0³²`, `valid_until` within the window; `contract == deriveAccount(registry, from)`; `network == config` |
+| Solana | `text == "scaas.metaop.v1:" + hex(sha256(payload))`; payload fields as Sui (op, from, to, amount, asset, lane, window); `account == PDA(["acct", owner])`; `network` = configured genesis |
+| Aptos | payload fields (op, from, to, amount, asset, window); `account == account_of(root, owner)`; `message` = digest text; `application == location.origin` (portal: the configured `aptos_application`); `chainId`; `nonce == lane` |
+| Soroban | decode the invocation: contract = token, function, args (from, to, amount); `network_id` = configured passphrase hash; `signature_expiration_ledger` ≤ current + window |
+| Cosmos, TON, Hedera ED25519 (D5-<f>) | payload rebuilt from terms == `payload_hex`; `from`; chain/network; contract; amount |
 
-- `clientkeys/test/vectors/solana_derivation.json`: the BIP-39 test mnemonic (`abandon ×11 about`, empty passphrase)
-  → pk and base58 address for `i = 0, 1, 2` at `m/44'/501'/i'/0'`, produced with `solana-keygen` (`prompt://?key=i/0`)
-  and confirmed by an independent SLIP-10 implementation before commit; `deriveKey(seed, 'solana', i)` must match.
-- Stellar/Pi: existing SEP-0005 and Pi tests (`seed.test.js`) stay.
-- `fam_soroban.json`, `fam_aptos.json`, `fam_solana.json` (exported by A0 from the Python tests): plus, for this spec,
-  per family one **seed-signed** vector — fixed seed, path, terms → `signingInput` bytes, signature, packed submit
-  value — asserted in JS and re-verified in Python by `fam_<family>.verify` (expect `True` for the owner key).
-- Soroban `C…`: one `Ed25519` ScVal vector exported from `smartcontracts/soroban/contracts/account` tests
-  (`cargo test`, real `set_auths`), asserted byte for byte by `packSignature`.
-- Refusals: each `checkTerms` refuses a different amount, payee, account, network/chain id, token/asset, a payload
-  with a fee/relayer the UI did not show, and malformed terms (≥ 6 cases per family, as `evm.test.js` does for EVM).
+### 7.4 Vectors and tests
+
+- `solana_derivation.json`: BIP-39 test mnemonic → pk/address for `i = 0, 1, 2` at `m/44'/501'/i'/0'`, from
+  `solana-keygen` (`prompt://?key=i/0`) and confirmed by an independent SLIP-10 implementation before commit.
+- `role_keys.json`: the same mnemonic → `deriveRoleKey` for `kindNo ∈ {2, 16, 18, 19, 20}`, `account ∈ {0, 1}`,
+  `i ∈ {0, 1}`; each differs from every native key of that seed. F0 `derivation.json` must agree.
+- Per family (D4-<f>): one **seed-signed** vector: fixed seed and path, terms → `checked`, signature, packed value.
+  It is asserted in JS and re-verified in Python by `fam_<f>.verify` (owner key ⇒ `True`).
+- Soroban `C…`: one `Ed25519` ScVal vector from the account contract's `cargo test` (real `set_auths`), compared byte
+  for byte.
+- Refusals: every row of §7.3 has a failing case per family.
+- Wallet tests: `sign()` throws when given anything but a `checked` object.
 
 ---
 
-## 8. Passkey signers on non-EVM families (A16 content)
+## 8. Passkey signers on non-EVM families (A16 = D7)
 
-### 8.1 Availability matrix
+### 8.1 Availability
 
-| Family | On-chain P-256 | Account that stores the passkey | pk encoding | Origin binding | Status |
+| Family | On-chain P-256 | Account | pk | Origin binding | Status |
 |---|---|---|---|---|---|
-| EVM | RIP-7212 `0x100` or OZ Solidity P-256 | `SubjectAccount` | `(x, y)` + `rpIdHash`, `keccak(origin)` | per key | BUILT |
-| Hedera | as EVM (HSCS) | `SubjectAccount` | as EVM | per key | BUILT (app A3) |
-| Sui | native `secp256r1_verify`, Sui passkey flag 6 | `Account<T>` (`open_passkey`) | 33 B compressed | `origins` ≤ 8 | contract BUILT; **client R264 #1** |
-| Solana | precompile `Secp256r1SigVerify1111…` (SIMD-0075), low-S enforced, ≤ 8 sigs/ix | `SubjectAccount` PDA (`open_passkey`) | 33 B compressed | `origins` ≤ 8, same-rpId add rule | contract BUILT; **client #2** |
-| Soroban | host `secp256r1_verify` (CAP-51), high-s rejected by host | `scaas-account` `C…` | 65 B uncompressed | per key | contract BUILT; **client #3** |
-| Aptos | none native in Move; pure-Move `scaas::p256` (UNAUDITED, ≈ 4 100 execution gas/sig) | `Account` object; passkey-first auth key `sha3_256(0x02 ‖ 0x41 ‖ pk65 ‖ 0x02)` | 65 B uncompressed | `origins` | contract BUILT (unaudited); **client #4** |
-| Cosmos | cosmwasm-std 2.1 `secp256r1_verify` | none (R9-1 derived address only) | 33 B | none | not this round (R264) |
-| TON | TVM `P256_CHKSIGNS` | `ScaasJettonWallet` (one passkey via `set_key`) | 33 B + `rpIdHash` + `originPrefix` | origin prefix | not this round (R264) |
+| EVM, Hedera | RIP-7212 `0x100` or OZ Solidity | `SubjectAccount` | `(x, y)` + `rpIdHash`, `keccak(origin)` | per key | BUILT |
+| Sui | native `secp256r1_verify`, flag 6 | `Account<T>` (`open_passkey`) | 33 B | `origins` ≤ 8 | contract BUILT; **D7 #1** |
+| Solana | precompile `Secp256r1SigVerify1111…` (SIMD-0075), low-S, ≤ 8/ix | PDA (`open_passkey`) | 33 B | `origins` ≤ 8, same-rpId rule | contract BUILT; **#2** |
+| Soroban | host `secp256r1_verify` (CAP-51) | `scaas-account` `C…` | 65 B | per key | contract BUILT; **#3** |
+| Aptos | pure-Move `scaas::p256` (UNAUDITED, ≈ 4 100 gas/sig) | `Account` object | 65 B | `origins` | contract BUILT (unaudited); **#4** |
+| Cosmos | cosmwasm `secp256r1_verify` | none (R9-1 only) | 33 B | none | not this round |
+| TON | TVM `P256_CHKSIGNS` | jetton wallet, one passkey | 33 B + `rpIdHash` + `originPrefix` | prefix | not this round |
 
 ### 8.2 Encoders (`src/fam/<family>.js`)
 
-| Family | Open (first key) | Pay signature format | Submit `public_key` |
+| Family | Open (first key) | Pay signature | Submit `public_key` |
 |---|---|---|---|
-| Sui | assertion over `blake2b256("scaas.open.v1" ‖ registry ‖ pk33)`; `open_passkey(registry, pk33, auth)` | base64 `0x06 ‖ uleb(len ad) ad ‖ uleb(len cd) cd ‖ uleb(98) (0x02 ‖ r‖s ‖ pk33)` (`fam_sui.parse_signature`) | — (in the signature) |
-| Solana | assertion over `sha256("scaas.open.v1" ‖ program_id ‖ pk33)`; owner `sha256("scaas.owner.p256" ‖ pk33)` | `[2, key_index] ‖ r‖s ‖ u16le(len ad) ‖ ad ‖ cd` (`fam_solana.passkey_blob`), plus the precompile instruction in the outer tx (relayer or self-paid) | pk33 hex |
-| Soroban | constructor `__constructor(first_key)` with the passkey key (deploy needs no auth) | ScVal `Signature::WebAuthn{key_id, authenticator_data, client_data_json, signature (r‖s low-s), proof}` XDR | — |
-| Aptos | first-key rule net-aptos §3 (RS11-14) | `r‖s ‖ u16be(len ad) ‖ ad ‖ cd` (`fam_aptos` docstring) | pk65 hex |
+| Sui | assertion over `blake2b256("scaas.open.v1" ‖ registry ‖ pk33)`; `open_passkey` | base64 `0x06 ‖ uleb ad ‖ uleb cd ‖ uleb(98) (0x02 ‖ r‖s ‖ pk33)` | — |
+| Solana | assertion over `sha256("scaas.open.v1" ‖ program_id ‖ pk33)`; owner `sha256("scaas.owner.p256" ‖ pk33)` | `[2, key_index] ‖ r‖s ‖ u16le(len ad) ‖ ad ‖ cd` + precompile ix | pk33 hex |
+| Soroban | `__constructor(first_key)` (no auth) | `Signature::WebAuthn{key_id, authenticator_data, client_data_json, signature, proof}` XDR | — |
+| Aptos | first-key rule RS11-14 | `r‖s ‖ u16be(len ad) ‖ ad ‖ cd` | pk65 hex |
 
-`r‖s` always comes from `derToRS` (strict DER, low-s normalised). `pk33` = SEC1 compression of `(x, y)` from
-`publicKeyFromSpki`; `pk65` = `0x04 ‖ x ‖ y`. Merkle batching (one assertion for many ops) stays EVM-only; the
-other families sign one op per assertion (net-sui §2.2 seam).
+`r‖s` comes from `derToRS` (strict DER, low-s). `pk33` is the SEC1 compression of `publicKeyFromSpki`; `pk65` is
+`0x04 ‖ x ‖ y`. Merkle batching stays EVM-only.
 
 ### 8.3 Tests
 
-- Per family, the existing chain test vectors made with the software authenticator (Sui `gen_vectors.py` `d_*`,
-  Solana/Soroban/Aptos test suites) are re-encoded by `fam/*.js` from their `(authenticatorData, clientDataJSON, DER
-  signature, SPKI)` inputs and must match the chain-side bytes; the chain tests are the second language.
-- JS-side refusals: wrong challenge, missing UV, high-s input normalised, cross-origin assertion refused, wrong pk
-  length.
-- Python: `fam_sui.verify` / `fam_solana.verify` / `fam_aptos.verify` on the new client-encoded vectors give the L9
-  answer (`True` for passkey-first owner on Sui/Aptos, `None` on Solana passkey per its L9, `None` on Soroban `C…`).
-- Per-family e2e in APP A11 (Sui), A14 (Solana), A10 (Soroban), A12 (Aptos) with a virtual authenticator
-  (Playwright `WebAuthn.addVirtualAuthenticator`).
+- The chain-side software-authenticator vectors (Sui `d_*`, Solana/Soroban/Aptos suites) are re-encoded by `fam/*`
+  from `(authenticatorData, clientDataJSON, DER, SPKI)` and must match the chain bytes.
+- **Cross-family separation:** one test asserts that every family's pay and open challenge preimages are pairwise
+  prefix-distinct (the same credential may serve several chains, F §8.1).
+- JS refusals: wrong challenge, missing UV, high-s normalised, cross-origin, wrong pk length.
+- Python L9 answers on the client-encoded vectors.
+- e2e with a virtual authenticator inside A11/A14/A10/A12, then D7.
 
 ---
 
 ## 9. Portal connectors (`chain_pay.js`) and the shared implementation
 
-### 9.1 Today (parent repo, read)
+### 9.1 Today (parent repo)
 
 | Piece | State |
 |---|---|
-| `chain_pay.js` | EVM only: EIP-6963 discovery, EIP-1193 fallback, WalletConnect factory seam (R21), `eth_signTypedData_v4`, `eth_getCode` kind (R27), submit + poll; reads `start.typed_data.message.validUntil`, which a family start does not have |
-| `subject_signers.js` | passkey + seed for EVM `SubjectAccount` (clientkeys bundle via `import()`) |
-| `connectors/{aptos,cosmos,hedera,solana,soroban,sui,ton}.js` | IIFEs registering `window.dmsChainConnectors.<family>`; each has a node test in `static/tests/connectors/` |
-| `__manifest__.py` assets | only `chain_pay.js` + `subject_signers.js`; **no connector is bundled**, nothing reads `dmsChainConnectors` |
-| `dms_portal_chain_payment_options` | no `family` field |
-| `dms_portal_chain_payment_start` / `_submit` | family-ready: start returns `{family, valid_until, payload_hex, digest, …terms}`; submit takes `public_key` |
-
-So non-EVM portal payments are server-ready and client-unwired.
+| `chain_pay.js` | EVM only (EIP-6963, EIP-1193 fallback, WalletConnect seam, `eth_signTypedData_v4`, R27 kind). It reads `start.typed_data.message.validUntil`, which a family start lacks |
+| `subject_signers.js` | passkey + seed for EVM `SubjectAccount`, using the EOA path (R269 changes this) |
+| `connectors/*.js` | seven IIFEs on `window.dmsChainConnectors`, node-tested; **not in the asset bundle, read by nothing** |
+| Odoo start/submit | already family-ready (`{family, valid_until, payload_hex, digest, …terms}`; `public_key`) |
 
 ### 9.2 Target layout (clientkeys)
 
 ```
-clientkeys/src/
-  fam/<family>.js        encoders + checkTerms/signingInput/packSignature (A0 + §7, §8)
-  wallets/<family>.js    extension glue moved from the portal connectors (R266)
-  wallets/evm.js         EIP-6963 discovery + walletKind (moved from chain_pay.js; the app's eip6963 signer uses it)
-  wallet-signer.js       new lazy entry: re-exports wallets/* by family (one chunk per family via splitting)
+src/fam/<family>.js       encoders + checkTerms/packSignature      → entry fam-<family>.js
+src/wallets/<family>.js   extension glue (moved, R266)              → entry wallets-<family>.js
+src/wallets/evm.js        EIP-6963 discovery + walletKind (moved)   → entry wallets-evm.js
 ```
 
-Wallet module interface (same as the portal connectors today, made explicit):
+`package.json` `build` lists every entry explicitly (same `--splitting`, same out dir). Shared code goes to
+`chunk-[hash].js`, and the entry names stay stable for `import()`. `bundle.test.js` keeps the byte-identical check.
+
+Wallet interface:
 
 ```js
-export function create(win = globalThis) {          // injected window ⇒ node tests without a browser
-  return {
-    family, label,
-    available(): boolean, wallets(): string[],
-    connect(name?): Promise<{ address, publicKey }>,
-    sign(terms): Promise<{ signature, publicKey }>,  // checks what the wallet reports as signed (as today)
-  };
+export function create(win = globalThis) {
+  return { family, label, available(), wallets(),
+           connect(name?) /* → { address, publicKey } */,
+           sign(checked) /* → { signature, publicKey }; only a checkTerms result */ };
 }
 ```
-
-Build: `package.json` `build` adds `src/wallet-signer.js` to the esbuild entry list (same `--splitting`, same out
-dir `dms_blockchain_bridge/static/lib/clientkeys/`); `bundle.test.js` keeps the byte-identical check. The app
-imports the same modules from the workspace (`../clientkeys`, APP §3.2).
 
 ### 9.3 `chain_pay.js` flow
 
 ```
-options = dms_portal_chain_payment_options(order)            // + family, network
-signer  = family in {evm, hedera(ECDSA)} ? today's chooser
-        : choose among [wallets/<family> extension(s), seed vault (subject_signers family path)]
-start   = dms_portal_chain_payment_start(order, signer.from, wallet_id)
-fam     = await import('…/fam-<family>.js');  fam.checkTerms(start, shown)     // R267, every signer
-{signature, publicKey} = await signer.sign(start)
+options = dms_portal_chain_payment_options(order)              // + family, network
+signer  = family ∈ {evm, hedera ECDSA} ? today's chooser (wallets-evm.js)
+        : choose among [wallets-<family>.js wallet(s), seed vault family path]
+start   = dms_portal_chain_payment_start(order, signer.from, wallet_id)   // owner key only (§6.2)
+checked = (await import('…/fam-<family>.js')).checkTerms(start, shown)    // R267
+{signature, publicKey} = await signer.sign(checked)
 validUntil = start.typed_data ? start.typed_data.message.validUntil : start.valid_until
 status  = dms_portal_chain_payment_submit(start.reference, validUntil, signature, kind, publicKey)
 ```
 
-`shown` = the amount, currency and payee text the portal displayed for the option. Polling, terminal failures and
-wallet-switch guards stay as they are (the guard applies to EIP-1193 only; Wallet Standard accounts are re-checked at
-`sign`).
-
-Odoo changes (parent repo): options add `'family': w.chain_id.family, 'network': w.chain_id.network_key`; nothing else
-server-side. Hedera ED25519 native accounts keep the `window.dmsHederaSigner` seam (APP §1.2: HashPack prefixes
-messages) and the seed vault path.
+`shown` is the amount, currency and payee text the portal displayed (internal consistency only, R267). Polling,
+terminal failures and the EIP-1193 switch guard stay. Odoo adds `'family'` and `'network'` to the options and changes
+nothing else. Hedera ED25519 keeps the `window.dmsHederaSigner` seam and the seed path.
 
 ### 9.4 Tests
 
-- The seven connector node tests move to `clientkeys/test/wallets/*.test.js` unchanged in substance (fake wallets,
-  `vm` realm replaced by an injected `win`); the portal copies are deleted.
-- `chain_pay` unit (node, injected `window`): family dispatch picks the right module; `checkTerms` refusal stops
-  before `sign`; `validUntil` from `start.valid_until`.
-- Odoo: `test_options_carry_family_and_network`.
-- Portal tours: Sui (fake Wallet Standard wallet with `sui:signPersonalMessage` over a fixed ed25519 key) and Solana
-  (fake `solana:signOffchainMessage`) end to end to `signed_op` queued; one seed-vault tour on Aptos (fake
-  authenticator not needed). One heavy Odoo test run at a time.
+- The connector node tests move to `clientkeys/test/wallets/*.test.js` with an injected `win`; the portal copies are
+  deleted.
+- `chain_pay` unit (injected `window`): dispatch, `checkTerms` refusal stops before `sign`, `validUntil` from
+  `start.valid_until`.
+- Odoo `test_options_carry_family_and_network`.
+- Tours, one heavy Odoo run at a time:
+  - Sui and Solana: fake Wallet Standard wallets end to end to `signed_op` queued;
+  - Aptos: one seed-vault tour.
 
 ---
 
 ## 10. Streams
 
-One agent at a time; at most one heavy build or Odoo test run at a time on this box. Each stream ends with its gate
-green and a line in `TODO.md`. Parent-repo changes (Odoo, portal) are separate commits in `bamboo-dms`.
+At most one agent at a time; at most one heavy build or Odoo run at a time. The order follows APP §15. Parent-repo
+changes are separate `bamboo-dms` commits.
 
 | Stream | Content | Repo | Depends on | Gate |
 |---|---|---|---|---|
-| **D1** policy | `backup-policy.js` (`hasBackup`, `backupStatus`, `passkeyFlags`), `backup_policy.json`, scrypt `RangeError` test, Solana Rust test reading the JSON | scaas | — | `npm test` (clientkeys), `cargo test` (solana program unit) |
-| **D2** vault v2 | `device.js`, v2 seal/open, fixture, `seed-signer`/`zether-keys` exports; portal migration in `subject_signers.js` (`localStorage` → IndexedDB) | scaas + bamboo-dms | — | `npm test` + bundle check; portal seed tour |
-| **D3** Sui verify | `fam_sui` L9 `verify`, `keyop_bytes/digest`, passkey cross-origin refusal; `gen_vectors.py --json`; Odoo tests | bamboo-dms + scaas (vectors) | — | Odoo `test_fam_sui`; `sui move test` |
-| **D4** non-EVM seed signers | `signFamily`; Soroban/Aptos/Solana `checkTerms`/`signingInput`/`packSignature`; `solana_derivation.json`; seed-signed vectors re-verified in Python | scaas | APP **A0** (`fam/*` ports, `NETWORKS.solana`) | `npm test`; Python vector re-verify |
-| **D5** connectors | `wallets/*` move, `wallet-signer.js` entry, `chain_pay.js` family dispatch + `checkTerms`, options `family`/`network`, manifest unchanged (lazy `import()`), tours | scaas + bamboo-dms | A0, D4 | `npm test`; Odoo tests + Sui/Solana/Aptos tours |
-| **D6** switch wiring | Odoo parameter, `_dms_has_backup`, start refusal, portal add-backup flow; app `policy.requireBackupKey` + gating (inside APP A3) | bamboo-dms (+ app via A3) | D1 | Odoo tests + passkey tour with switch ON |
-| **D7** = APP A16 | non-EVM passkeys: Sui → Solana → Soroban → Aptos encoders (§8.2) and flows | scaas (+ app) | A0, D4; APP A11/A14/A10/A12 for the e2e of each family | per-family vectors + e2e |
+| **D1** policy + role keys | `backup-policy.js` (`hasBackup` with de-dup and independence, `backupStatus`, `passkeyFlags`), `deriveRoleKey`, `backup_policy.json`, `role_keys.json`, Solana Rust `has_backup` test | scaas | — | `npm test`; `cargo test` (solana unit) |
+| **D3** Sui verify | `fam_sui` L9, `keyop_bytes(domain)`, cross-origin refusal; `gen_vectors.py --json` + sha256; Odoo tests | bamboo-dms + scaas | — | Odoo `test_fam_sui`; `sui move test` |
+| **D2** vault v2 | `device.js`, v2, tombstone, precedence, re-wrap marker and bounds, fixture; portal migration | scaas + bamboo-dms | — | `npm test` + bundle; Playwright 3-browser vault run; portal tour |
+| **D5-evm** | `wallets/evm.js` moved, `wallets-evm.js` entry; `chain_pay.js` uses it | scaas + bamboo-dms | A0-evm | `npm test`; Odoo EVM tour |
+| **D6** switch | Odoo parameter, `_dms_has_backup`, start refusal, portal paper-backup flow and role-key adds (R269); app part inside A3 | bamboo-dms (+ app) | D1 (role key), D2 | Odoo tests + passkey tour, switch ON |
+| **D4-<f>** | seed signer `signFamily` + `checkTerms`/`packSignature` + seed-signed vector for Soroban, Aptos, Solana | scaas | A0-<f> | `npm test`; Python re-verify |
+| **D5-<f>** | `wallets/<f>.js` moved + `checkTerms` for Cosmos/TON/Hedera ED25519; `chain_pay.js` family dispatch (first family adds it); options `family`/`network` | scaas + bamboo-dms | A0-<f>; D4-<f> for Soroban/Aptos/Solana | `npm test`; family tour (Sui, Solana, Aptos) |
+| **D7** = A16 | non-EVM passkeys Sui → Solana → Soroban → Aptos (§8.2) | scaas (+ app) | A11, A14, A10, A12 | per-family vectors + e2e |
 
-Order for one agent: D1 → D3 → D2 → (A0) → D4 → D5 → D6 → D7. D1–D3 need nothing from the app streams.
+Order: D1 → D3 → D2 → A0-evm → D5-evm → … → A3 (D6) → … per family A9–A14 (A0-<f> → D4-<f> → D5-<f>) … → D7.
+
+Edges to F:
+- D1's `deriveRoleKey` must agree with F0 `derivation.json` R300 rows;
+- F3 wraps it in `UAKey` (path unchanged);
+- F §8.3's `keyop` purpose is a version bump of the domain parameter in D3;
+- F §12 rotates dev accounts whose SECP256K1 key is the EOA key.
 
 ---
 
-## 11. Open questions (owner)
+## 11. Open questions
 
-| # | Question | Default if unanswered |
+| # | Question | Default |
 |---|---|---|
-| Q1 | Soroban and TON have no guardian (seams R8-2, R10-6), so "1 key + guardian" cannot be met there; with the switch ON those users need two keys (TON: the ed25519 key **and** the one passkey). Build the guardian seams, or accept "≥ 2 keys" on those two families? | **Decided (owner 2026-10-06): accept ≥ 2 keys on Soroban and TON; no guardian work.** |
+| Q1 | (for F) The role-path `kindNo` for keys of a Soroban `scaas-account` `C…`. F §8.1 says "native kindNo": is that `soroban-contract` 0x0012 (18, by analogy with EVM `SubjectAccount` = `evm-contract` 2) or `stellar-account` 0x0011 (17)? | 18 |
+
+---
+
+## 12. Review disposition (review 1, rev 1 → rev 1.1)
+
+| # | Finding | Disposition | Where |
+|---|---|---|---|
+| H1 | Not reconciled with F R300; D6 mints dual-use keys | fixed: `deriveRoleKey` in D1; every added seed key is a role key; role column; role ≠ native vector; F edges | R269, §3, §4.3, §7.1, §7.4, §10 |
+| H2 | Switch blocks revoking a stolen key / hostile guardian | fixed: remove key and clear guardian always allowed, with warning; `rotateKey` default on EVM | R252(3), §4.1, §4.3, §4.7, §4.6 rows |
+| H3 | Duplicates and self-guardians count as backup; H4 not folded | fixed: distinct canonical keys, independent guardian, `msig` rule, add-origin moved, Odoo de-dup, JSON rows | R251, R252(3), §4.3, §4.4, §4.6 |
+| M1 | Exit not allowed on satisfiable no-backup accounts | fixed: exit in every state | R253, §4.1, §4.3 |
+| M2 | Migration precedence, rollback, delete, double scrypt | fixed: IndexedDB wins, no overwrite, tombstone, AES-only check, failure tests | R257, §5.4, §5.5 |
+| M3 | Mobile OOM kill, re-wrap crash loop, unbounded `N` | fixed: "allocation or crash", marker, re-wrap after submit, bounds | R259, §5.2, §5.5 |
+| M4 | Backup seed key need not live on the device | accepted (no owner ruling broken; vault v2 still applies to stored vaults) | R269, §4.7 |
+| M5 | Threat model honesty | fixed: extensions in the XSS row, portal-origin TCB row, "as reported", PRF capture row, Safari/ITP | R256, R258, §5.3 |
+| M6 | Check-then-sign gap; must-check lists; portal `shown`; families | fixed: `checked` only, per-family lists, limitation stated, Cosmos/TON/Hedera ED25519 in D5-<f> | R267, §7.2, §7.3, §9 |
+| M7 | Added-key payments unreachable from the portal; `verifyKeyOp` too thin | fixed: owner key only in portal (stated), optional stored account; `verifyKeyOp` checks account, network, window, origin | R260, R261, §6.2, §6.4 |
+| M8 | Streams diverge from APP §15 | fixed: D5-evm, D4-<f>, D5-<f>, D7 after A10–A14, F edges | §10 |
+| L1 | No stable entry names | fixed: explicit per-family entries | R266, §9.2 |
+| L2 | Sparse EVM key slots; mirror blind spots | fixed | §4.2, §4.4 |
+| L3 | `True` ≠ member; dead-job cost | fixed in text. Optional Sui origin check **declined**: Sui chains have no configured portal origin field (Aptos has `aptos_application`), and adding a model field for a low, portal-gated risk is not worth it | R260 |
+| L4 | Vector files | fixed: `has_backup` + `families` + `solana_onchain`; `vectors_move_sha256`; Rust adapter pins only deterministic ed25519 (checked) | R262, §4.6, §6.4 |
+| L5 | Real-browser and failure paths | fixed: Playwright Chromium/Firefox/WebKit, M2/M3 tests, challenge-separation test | §5.5, §8.3 |
+| L6 | Noise | fixed: reasons merged, `SAME_KEYCHAIN` only if all BS = 1, BE/BS client-only, `kid` format-bump only, persist notice once | R254, R255, R257, §4.3 |
+| L7 | Seed re-reveal | fixed: never re-shown; lost paper ⇒ new key + remove old | R258, §4.7 |
+
+Totals: 18 findings (3 H, 8 M, 7 L): 17 fixed or accepted in full; L3 accepted with its optional part declined; none
+rejected.
