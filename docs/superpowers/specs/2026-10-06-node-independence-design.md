@@ -1181,3 +1181,34 @@ before S5 so the mesh never wires to legacy code.
 - Audit retention and export.
 - Per-key IP allowlists.
 - Signed feed pages (useful only with a second verifier; T7).
+
+---
+
+## Amendment A1 (owner, 2026-10-06): storage backends
+
+**R111 — the node store runs on SQLite, PostgreSQL or MySQL; the backend is storage only.** One `[store]` key
+selects it (`url = "sqlite:///var/lib/bamboo/node.db"`, `postgres://…`, `mysql://…`); every backend carries the same
+schema and the same semantics as R88. Specifically:
+
+- **Single owner stays (R88/R97).** A backend never turns into shared state between nodes. The exclusive owner lock
+  is backend-native: `flock` on the SQLite file; `pg_try_advisory_lock(hashtext('bamboo-node:' || store_id))` held
+  on a dedicated session for PostgreSQL; `GET_LOCK('bamboo-node:<store_id>', 0)` on a dedicated connection for
+  MySQL. Failing to take it refuses to start. Losing the lock session (connection drop) stops submission at once
+  and re-takes the lock before resuming — the session, not a TTL, is the fence.
+- **Multi-node HA on a shared database is NOT in scope** (owner: "chỉ là backend lưu trữ"); it stays in §18.3.
+- **Schema portability:** integers for nonces/sequences as `BIGINT`/`TEXT` (uint64 beyond 2^63 as decimal text, as
+  the journal already does), timestamps as integer milliseconds, JSON as `TEXT`, no backend-specific types,
+  partial indexes (R89 live-digest UNIQUE) emulated on MySQL with a generated nullable column + plain UNIQUE.
+  `bus_seq`/cursors from an explicit counter row, not `AUTOINCREMENT`/`SERIAL`, so cursor semantics (R93, overlap,
+  `store_id`) are identical everywhere.
+- **Transactions:** every journal step that R88 orders (journal-before-broadcast, CAS claims) is one transaction at
+  `SERIALIZABLE` (PG) / `REPEATABLE READ` + `SELECT … FOR UPDATE` (MySQL) / `BEGIN IMMEDIATE` (SQLite); a
+  serialization failure retries the step, never skips it.
+- **Driver:** `sqlx` with the three drivers behind cargo features (`store-sqlite` default, `store-postgres`,
+  `store-mysql`); migrations embedded (`sqlx::migrate!`) per backend directory. `rusqlite` (mesh R71) is replaced.
+- **Secrets:** a database URL with a password is toml/env-only (R95), never stored in the node's config tables nor
+  returned by the admin API.
+- **Tests:** the store contract suite runs against all three (SQLite in-process; PostgreSQL and MySQL in docker,
+  marked `--ignored`), including lock-loss and serialization-retry cases.
+- **Stream:** folded into **P1** (store v2): backend trait + SQLite first, then PostgreSQL, then MySQL, each green on
+  the contract suite before the next.

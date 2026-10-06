@@ -1,0 +1,60 @@
+# R52 (GA 2.1#4): contracts and the relay node. Mirrors the local commands:
+#   smartcontracts/evm: forge test; FOUNDRY_PROFILE=private9000 forge build
+#   bamboo-node:    cargo test; cargo clippy --all-targets -- -D warnings; cargo test --test e2e -- --ignored
+name: scaas-ci
+
+on:
+  pull_request:
+    paths: ['smartcontracts/**', 'bamboo-node/**', '.github/workflows/ci.yml']
+  push:
+    branches: [main]
+    paths: ['smartcontracts/**', 'bamboo-node/**', '.github/workflows/ci.yml']
+
+env:
+  OZ_TAG: v5.2.0
+  FORGE_STD_TAG: v1.16.2
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: smartcontracts/evm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+      # lib/ is not committed: install the pinned tags (no submodule bookkeeping).
+      - name: Libraries at pinned tags
+        run: |
+          forge install --no-git foundry-rs/forge-std@${FORGE_STD_TAG}
+          forge install --no-git OpenZeppelin/openzeppelin-contracts@${OZ_TAG}
+      - name: forge test (default profile)
+        run: forge test
+      - name: forge build (private9000 profile)
+        run: FOUNDRY_PROFILE=private9000 forge build
+
+  node:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: bamboo-node
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: bamboo-node
+      - uses: foundry-rs/foundry-toolchain@v1
+      - name: Contract libraries for the e2e deploy script
+        working-directory: smartcontracts/evm
+        run: |
+          forge install --no-git foundry-rs/forge-std@${FORGE_STD_TAG}
+          forge install --no-git OpenZeppelin/openzeppelin-contracts@${OZ_TAG}
+      - name: clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: unit + proptest
+        run: cargo test
+      - name: e2e on anvil
+        run: cargo test --test e2e -- --ignored --test-threads=1
