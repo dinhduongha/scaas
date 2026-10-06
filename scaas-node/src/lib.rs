@@ -18,4 +18,5 @@ pub mod metatx;
 pub mod nonce;
 pub mod odoo;
 pub mod signer;
+pub mod store;
 pub mod submit;
