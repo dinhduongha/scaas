@@ -181,10 +181,15 @@ abstract contract MetaTokenBase is MetaTxCore, IMetaTokenV2, IFactoryTokenV2 {
     }
 
     /// @notice `mtxUnwrapWithFee(address,address,uint256,address,uint256,uint256,uint256,uint256,uint32,address,
-    ///         uint256,address,bytes)` (`IMetaTokenV2UnwrapWithFee`). Mọi selector khác revert rỗng, như khi không
-    ///         có fallback.
-    fallback(bytes calldata) external nonReentrant returns (bytes memory) {
+    ///         uint256,address,bytes)` (`IMetaTokenV2UnwrapWithFee`). Mọi selector khác revert rỗng TRƯỚC khi chạm
+    ///         guard: TSTORE trong một STATICCALL là halt đốt hết gas, nên một hợp đồng dò `nonces()`/`owner()` bằng
+    ///         staticcall phải nhận một revert rẻ như khi không có fallback (review L1).
+    fallback(bytes calldata) external returns (bytes memory) {
         if (msg.sig != MTX_UNWRAP_WITH_FEE) revert();
+        return _mtxUnwrapWithFee();
+    }
+
+    function _mtxUnwrapWithFee() private nonReentrant returns (bytes memory) {
         uint32 mode;
         address feeRecipient;
         bytes calldata signature = msg.data[0:0];
@@ -290,7 +295,11 @@ abstract contract MetaTokenBase is MetaTxCore, IMetaTokenV2, IFactoryTokenV2 {
     function _checkOp(MetaTxLib.MetaTransaction memory m) internal view override {
         bytes memory d = m.data;
         uint256 len = d.length;
-        if (len == 0) return;
+        // Transfer tới 0 fail ở ĐÂY, không ở bước 8 (review L2); cùng lỗi OZ mà `_transfer` sẽ ném.
+        if (len == 0) {
+            if (m.to == address(0)) revert ERC20InvalidReceiver(address(0));
+            return;
+        }
         if (len < 4) revert MetaTxUnknownOp(bytes4(0));
         bytes4 op = _op(d);
         if (op == OP_PAY) {

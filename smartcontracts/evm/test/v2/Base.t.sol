@@ -163,6 +163,21 @@ contract BaseTest is V2Fixture {
             abi.encodeWithSelector(MetaTokenBase.MetaTxUnknownOp.selector, bytes4(keccak256("pay(bytes32)"))));
     }
 
+    /// Review L2: transfer tới 0 fail ở bước 6 (như v1 fail ở bước 8, cùng lỗi), không bao giờ sau khi thu phí.
+    function test_transferToZeroFailsAtStepSix() public {
+        _expectExecRevert(_mt(alice, address(0), 1, "", 1, RR),
+            abi.encodeWithSignature("ERC20InvalidReceiver(address)", address(0)));
+    }
+
+    /// Review L1: STATICCALL tới một selector lạ (ví dụ `nonces(address)` của ai đó dò EIP-2612) revert rẻ, không
+    /// đốt hết gas vì TSTORE của guard trong frame tĩnh.
+    function test_unknownSelectorStaticcallRevertsCheaply() public view {
+        uint256 g0 = gasleft();
+        (bool ok,) = address(t).staticcall{gas: 200_000}(abi.encodeWithSignature("nonces(address)", alice));
+        assertFalse(ok);
+        assertLt(g0 - gasleft(), 20_000);
+    }
+
     function test_tradeLegNeedsRestrictedRelayerAndGoesToIt() public {
         bytes memory d = abi.encodeWithSelector(bytes4(keccak256("trade(address,uint256,address)")),
             address(1), uint256(1), address(0));

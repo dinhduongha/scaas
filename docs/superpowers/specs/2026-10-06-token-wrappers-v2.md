@@ -915,4 +915,11 @@ Where the code differs from the text above, and why. Everything else is as speci
 | I6 | `executeMetaTransactionWithFee` ≤ generic gas | ≈ 85 gas above the generic path (dispatch position + shape check); every other named function is below | Not worth contorting an alias; recorded in `MetaTxGasV2.t.sol` |
 | I7 | Layout test "compares `forge inspect` output" | Compares the solc `storageLayout` in the build artifact (`extra_output`) with `test/v2/layout/*.json` | Same data without enabling `ffi` in tests |
 | I8 | Renounce makes the rate fixed | `rateAdjustable = false`, `rateAdmin = 0`, pending dropped; the per-leg `adjustable` copy stays set (wrap then reads an empty `_pending`, one extra SLOAD) | Smallest correct change; fixed-at-creation tokens keep the cheap path |
+| I9 | (review 2, L1/L2) | `fallback` checks the selector before the reentrancy guard (a TSTORE in a STATICCALL halts and burns the caller's gas); a plain transfer to `address(0)` fails at step 6 with OZ's `ERC20InvalidReceiver` instead of at step 8 | §3.2 "step 8 must not fail"; integrators probe unknown selectors with `staticcall` |
+
+**Open for the owner (review 2, L3):** in a Multi token, `wrap` on leg A checks `balanceOf ≥ reserve` only on leg A
+(R134 is per leg). If leg B has a shortfall (blacklist burn, negative rebase), new deposits on A still mint at par into
+a pool whose real backing is below supply, and early exiters through A take them; `disableWrap(B)` does not stop it.
+Options: check every leg on Multi `wrap`/`addReserve` (≤ 8 `balanceOf`, as `executeRate` already does), or state it
+in the §8.4 disclosure. Not changed in code (it would amend R134).
 
