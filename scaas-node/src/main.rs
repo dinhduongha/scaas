@@ -1,5 +1,6 @@
 //! scaas-node --config node.toml            chạy các mô-đun bật trong config
 //! scaas-node addresses --config node.toml  in địa chỉ lane dẫn xuất rồi thoát
+//! scaas-node store restored --config node.toml  bắt buộc sau mỗi lần restore store: restore_epoch + 1 (R110)
 //! scaas-node keystore new --kind <mnemonic|secp256k1|ed25519> --out <dir> --name <file>
 //!     (bí mật đọc từ stdin, passphrase từ $SCAAS_KEYSTORE_PASSPHRASE)
 //!
@@ -16,13 +17,37 @@ use scaas_node::adapter::{index_runner, lane_runner};
 use scaas_node::signer::Signer;
 use scaas_node::admin::{ChainProbe, LaneProbe};
 use scaas_node::breaker::Breaker;
-use scaas_node::{admin, adapters, chain, config, dex, gateway, gwauth, indexer, keys, odoo, submit};
+use scaas_node::{admin, adapters, chain, config, dex, gateway, gwauth, indexer, keys, odoo, store, submit};
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
 
 fn arg(args: &[String], name: &str) -> Option<String> {
     args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned()
+}
+
+// legacy(R104): every module still runs on the Odoo pull path until P3/P4. `relay` picks the API key.
+fn legacy(cfg: &config::Config, relay: bool) -> Result<odoo::Odoo> {
+    let o = cfg.odoo.as_ref().context("[odoo] is required on the legacy path (R104)")?;
+    odoo::Odoo::new(o, if relay { &o.relay_api_key_env } else { &o.indexer_api_key_env })
+}
+
+/// `store restored`: chạy khi node DỪNG (lấy owner lock), ghi audit `cli:<uid>`.
+async fn store_restored(cfg: &config::Config) -> Result<()> {
+    use std::os::unix::fs::MetadataExt;
+    let uid = std::fs::metadata("/proc/self").map(|m| m.uid().to_string()).unwrap_or_else(|_| "unknown".into());
+    let st = store::open(&cfg.store.url, &format!("cli:{uid}")).await.context("open the store (stop the node first)")?;
+    let e = store::AuditEntry {
+        actor_kind: "cli".into(),
+        sub: Some(uid),
+        method: "CLI".into(),
+        route: "store restored".into(),
+        request_id: format!("cli-{}", std::process::id()),
+        ..Default::default()
+    };
+    let n = st.mark_restored(&e, store::now_ms()).await?;
+    println!("store {}: restore_epoch = {n}", st.identity().store_id);
+    Ok(())
 }
 
 fn lane_label(cc: &config::ChainCfg, s: &scaas_node::signer::LocalSigner) -> String {
@@ -66,8 +91,12 @@ async fn main() -> Result<()> {
     if args.get(1).map(String::as_str) == Some("keystore") && args.get(2).map(String::as_str) == Some("new") {
         return keystore_new(&args);
     }
-    let path = PathBuf::from(arg(&args, "--config").ok_or_else(|| anyhow!("usage: scaas-node [addresses] --config node.toml"))?);
+    let path = PathBuf::from(arg(&args, "--config")
+        .ok_or_else(|| anyhow!("usage: scaas-node [addresses | store restored] --config node.toml"))?);
     let cfg = config::Config::load(&path)?;
+    if args.get(1).map(String::as_str) == Some("store") && args.get(2).map(String::as_str) == Some("restored") {
+        return store_restored(&cfg).await;
+    }
     // Chỉ địa chỉ được in, không bao giờ bí mật (R60).
     let mut lane_signers = Vec::new();
     for cc in &cfg.chains {
@@ -87,9 +116,33 @@ async fn main() -> Result<()> {
         bail!("gateway needs the submit module");
     }
     let node_id = std::env::var("SCAAS_NODE_ID").unwrap_or_else(|_| "scaas-node".into());
+    // Store v2 (R88): owner lock + fencing epoch, then the R95 bootstrap of the toml lists. A second process on
+    // the same store refuses to start here.
+    let st = store::open(&cfg.store.url, &format!("{node_id}:{}", std::process::id())).await.context("open the store")?;
+    let id = st.identity().clone();
+    info!(store_id = %id.store_id, incarnation = %id.incarnation, epoch = id.epoch, restore_epoch = id.restore_epoch, "store open");
+    let labels: Vec<Vec<String>> = cfg.chains.iter().zip(&lane_signers)
+        .map(|(cc, ss)| ss.iter().map(|s| lane_label(cc, s)).collect())
+        .collect();
+    let boot = store::bootstrap(st.as_ref(), &cfg.boot_set(&labels), store::now_ms()).await.context("store bootstrap")?;
+    for k in &boot.imported {
+        info!(entry = %k, "bootstrap: imported from node.toml");
+    }
+    for k in &boot.drift {
+        warn!(entry = %k, "node.toml differs from the store; the store wins (R95)");
+    }
+    match store::verify_audit(&st.audit_log().await?) {
+        Ok(head) => info!(head = %alloy::hex::encode(head), "audit chain head"),
+        Err(seq) => error!(seq, "audit chain broken (R110)"),
+    }
     let mut gw_chains = HashMap::new();
     let mut probes = Vec::new();
     let mut set: JoinSet<Result<()>> = JoinSet::new();
+    let (janitor, job_ret, feed_ret) = (st.clone(), cfg.store.job_retention_secs as i64, cfg.store.feed_retention_secs as i64);
+    set.spawn(async move {
+        store::janitor(janitor, Duration::from_secs(60), job_ret, feed_ret).await;
+        Err(anyhow!("store janitor ended"))
+    });
 
     for (cc, signers) in cfg.chains.iter().zip(lane_signers) {
         let poll = Duration::from_millis(cc.poll_ms);
@@ -100,7 +153,7 @@ async fn main() -> Result<()> {
         if cc.uses_adapter() {
             let adapter = adapters::build(cc, &signers)?;
             if cfg.modules.submit {
-                let relay = odoo::Odoo::new(&cfg.odoo, &cfg.odoo.relay_api_key_env)?;
+                let relay = legacy(&cfg, true)?;
                 for lane in 0..signers.len() {
                     let (a, o, w) = (adapter.clone(), relay.clone(), format!("{node_id}#{}", cc.lanes[lane]));
                     let d = digests.clone();
@@ -114,7 +167,7 @@ async fn main() -> Result<()> {
             }
             probes.push(ChainProbe { key: cc.chain_key(), adapter: adapter.clone(), max_lag: cc.max_index_lag, lanes: probe_lanes });
             if cfg.modules.indexer {
-                let idx = odoo::Odoo::new(&cfg.odoo, &cfg.odoo.indexer_api_key_env)?;
+                let idx = legacy(&cfg, false)?;
                 let a = adapter.clone();
                 set.spawn(async move {
                     index_runner(a, idx, poll).await;
@@ -128,7 +181,7 @@ async fn main() -> Result<()> {
         let shared = Arc::new(lanes.remove(0));
         let (mut first_tx, mut first_breaker) = (None, None);
         if cfg.modules.submit {
-            let relay = odoo::Odoo::new(&cfg.odoo, &cfg.odoo.relay_api_key_env)?;
+            let relay = legacy(&cfg, true)?;
             // Danh sách token NẠP TRƯỚC khi gateway mở (review P15), rồi làm mới mỗi 30 s.
             let nc = relay.node_config(num, None).await?;
             if let Ok(mut w) = tokens.write() {
@@ -167,7 +220,7 @@ async fn main() -> Result<()> {
             });
         }
         if cfg.modules.indexer {
-            let idx = odoo::Odoo::new(&cfg.odoo, &cfg.odoo.indexer_api_key_env)?;
+            let idx = legacy(&cfg, false)?;
             let (c, key) = (shared.clone(), cc.chain_key());
             set.spawn(async move {
                 indexer::run(c, idx, poll, key).await;
@@ -185,9 +238,9 @@ async fn main() -> Result<()> {
                     if cc.lanes.len() > 1 {
                         bail!("chain {num}: the DEX needs a single relayer lane (RS5-11)");
                     }
-                    let relay = odoo::Odoo::new(&cfg.odoo, &cfg.odoo.relay_api_key_env)?;
+                    let relay = legacy(&cfg, true)?;
                     let idx = match cfg.modules.indexer {
-                        true => Some(odoo::Odoo::new(&cfg.odoo, &cfg.odoo.indexer_api_key_env)?),
+                        true => Some(legacy(&cfg, false)?),
                         false => None,
                     };
                     let v = dex::venue::Venue::start(shared.clone(), relay, idx, addr).await?;
@@ -218,8 +271,7 @@ async fn main() -> Result<()> {
         });
     }
     if !cfg.modules.admin_bind.is_empty() {
-        let key_env = if cfg.modules.indexer { &cfg.odoo.indexer_api_key_env } else { &cfg.odoo.relay_api_key_env };
-        let o = odoo::Odoo::new(&cfg.odoo, key_env)?;
+        let o = legacy(&cfg, !cfg.modules.indexer)?;
         let snap = Arc::new(RwLock::new(admin::Snapshot::default()));
         let listener = tokio::net::TcpListener::bind(&cfg.modules.admin_bind).await?;
         info!(bind = %cfg.modules.admin_bind, "admin listening (/healthz /readyz /metrics)");

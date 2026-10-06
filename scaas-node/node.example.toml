@@ -1,7 +1,55 @@
 # scaas-node --config node.toml
 # scaas-node addresses --config node.toml      # print every lane address, then exit
+# scaas-node store restored --config node.toml # MANDATORY after restoring the store from a backup (node stopped)
 # Secrets are NEVER in this file: only where to read them (env var, 0600 file, or encrypted keystore).
 
+# Node store (R88/R111): jobs, journal, configuration, audit. One process owns it (lock file <db>.lock); a second
+# scaas-node on the same store refuses to start. The store is the configuration authority (R95): at start the
+# entries below that are absent from the store are imported; present ones are NOT overwritten (a warning says
+# which differ). Keys, rpc_urls, params, coin_type and this url always come from this file.
+[store]
+url = "sqlite:///var/lib/scaas/node.db"          # file mode 0600; PostgreSQL/MySQL arrive later
+# job_retention_secs = 2592000                   # terminal jobs kept 30 d (and never before their payload expired)
+# feed_retention_secs = 604800                   # job/event feed rows kept 7 d
+
+# Job API for external clients (Odoo, other ERPs) and admin login. Served from a later release; read now.
+[api]
+bind = "127.0.0.1:8546"                          # must differ from gateway_bind when both run
+# master_key = { env = "SCAAS_API_MASTER_KEY" }  # >= 32 bytes; derives every client API key secret (R92)
+# admin_cors_origins = ["https://app.example.com"]
+# lease_hold_after_start_secs = 15
+# [api.admin_auth]
+# modes = ["builtin"]                            # built-in users (scaas-node admin create …); "oidc" later
+
+# Tenants (R90). Imported once; afterwards managed in the store.
+# [[namespaces]]
+# name = "odoo-prod"
+# chains = ["evm:9000"]
+# allow_call = true                              # mandates / subject accounts need call jobs (R103)
+
+# Mesh partners and acceptance policy (MESH §3.2), imported once like namespaces. The bus itself comes later.
+# [[mesh.peers]]
+# name = "partner-a"
+# url = "https://a.example.net:8550"
+# spki_sha256 = "<64 lowercase hex>"
+# class = "private"                              # open | private (private: chains required)
+# chains = ["evm:9000"]
+# [[mesh.policy]]
+# chain = "evm:9000"
+# contract = "0x..."                             # or "*" (never with submit = true)
+# selector = "*"
+# support = "full"                               # none | forward_only | full
+# submit = true
+# pool_visibility = "open"                       # open | private | none
+
+# Open-mesh gossip (parsed and checked now; networking comes later).
+# [identity]
+# key = { file = "/etc/scaas/node.key" }         # Ed25519 PKCS#8 PEM
+# [gossip]
+# enabled = false
+# listen = ["/ip4/0.0.0.0/udp/4001/quic-v1", "/ip4/0.0.0.0/tcp/4001"]
+
+# legacy(R104): the Odoo pull path. Required while submit/indexer/admin run on it.
 [odoo]
 url = "http://odoo:8069"
 database = "odoo19"
@@ -41,6 +89,10 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
 # dex = "0x..."                                  # OrderBookDex ("order_book_dex" in smartcontracts/evm/deployments/9000.json)
 # fee_recipient = "0x..."                        # cold wallet for fees of gateway meta-txs that leave feeRecipient
                                                  # unbound (R84); never a lane key. Unset: the fee goes to the sending lane.
+# tokens = [{ address = "0x...", decimals = 6 }] # registered tokens, imported into the store (R95, MESH R86)
+# profile = "private"                            # public | private (MESH R76); a private chain never gossips
+# gossip = false                                 # open-mesh gossip for this chain (public only)
+# exclusive_ms = 7000
 poll_ms = 1000
 stuck_after_secs = 60
 max_gas_per_tx = 3000000

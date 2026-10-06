@@ -16,19 +16,7 @@ pub struct Odoo {
     key: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct TokenCfg {
-    /// Dạng chuẩn của họ mạng (`addresses.canonical`): `0x…` EVM, `wasm1…` Cosmos, … (review H1).
-    pub address: String,
-    pub decimals: u8,
-}
-
-impl TokenCfg {
-    /// Chỉ đường EVM: địa chỉ không phải `0x` 20 byte thì không phải token EVM.
-    pub fn evm(&self) -> Option<Address> {
-        self.address.parse().ok()
-    }
-}
+pub use crate::config::TokenCfg;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct InflightJob {
