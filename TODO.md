@@ -7,7 +7,7 @@ Max 3 agents, one heavy build at a time (`scripts/capped`). The Odoo side lives 
 
 - [x] S4F (signers) rev 1.1 — review fixes (9695051). Open for the UA fold: kindNo for keys of a Soroban `scaas-account` `C…` — default 18 (`soroban-contract` 0x0012) vs 17 (`stellar-account`).
 - [ ] PQZ review → fold fixes: review in `docs/reviews/specs/2026-10-06-pq-zether-review-1.md` (FIX-THEN-GO; 4 High: params ~109/99-bit core-SVP, `fund`-dust K_MAX lock-out, LaZer GMP/MPFR/HEXL ⇒ rewrite + LGPL, `abort()` in precompile halts chain).
-- [ ] UA review → fold fixes (review was in flight; if lost, re-run the review).
+- [ ] UA review → fold fixes: review in `docs/reviews/specs/2026-10-06-universal-account-review-1.md` (FIX-THEN-GO; 4 High: PoP must bind `authRef` (front-run freezes Zether), closed kind sets per role (v3 `to` → Zether UA locks funds), PQ/hybrid msig unregistrable under the 12M budget, native signers sign raw digests → EIP-712 `UAAuth` wrapper). **Owner decision needed on M1**: the review proposes collapsing the MuSig2/FROST kinds into `bip340`/`schnorr-bn254` (MPC still works via one aggregate key) — MPC kinds were an owner request. Also the S4F kindNo question above.
 - [ ] **NI consolidation**: fold every addition other specs listed for node-independence — `GET /v1/gateway`, gateway
       CORS + error contract, `POST /v1/ops` (app §9.6 N2), `POST /v1/ua-metatx`, `POST /v1/ua/register` (N4), Hedera
       64-byte sigs on `/v1/metatx`, denylist (`deny_subject`, OPS R246), `sponsor_policy`/`sponsor_usage` + job cost
