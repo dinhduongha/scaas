@@ -356,11 +356,11 @@ IERC20
       ├── IERC20Payment                   public payment: payWithFee, PaymentSettled(entryRef)
       │    ├── MetaToken v1 (kind META)   tier 1 standalone / tier 2 single-underlying wrapper   BUILT
       │    │    └── HederaMetaToken       + HIP-632 ED25519 signatures, HTS association          BUILT
-      │    └── MetaTokenBase v2           + mtxTransfer/…WithFee/mtxPay/mtxBatch (§5.8)          SPECIFIED (TW2)
+      │    └── MetaTokenBase v2           + mtxTransfer/…WithFee/mtxPay/mtxBatch (§5.8)          BUILT (TW2 T1–T6)
       │         ├── NoUnderlyingToken     (kind META_NONE)   tier 1
       │         └── SingleUnderlyingToken (kind META_SINGLE) tier 2, rate (num/den), reserve
       │              └── MultiUnderlyingToken (kind META_MULTI) tier 3, 2–8 underlyings, guardian
-      │         (+ Hedera children of each v2 tier)
+      │         (+ Hedera children of each v2 tier: HederaNo/Single/MultiUnderlyingToken)         BUILT
       ├── IZetherToken + ITransferDisclosure
       │    └── ZetherToken v1 (kind ZETHER, dev chains only)                                    BUILT (unaudited)
       └── IRegulatedToken                 controlled class (court orders, CBDC)                PLANNED
@@ -373,9 +373,9 @@ the same envelope (owner decision, canon). Non-EVM families implement the same r
 
 | Tier | Contract | `underlying` | Supply rule | Invariant | Status |
 |---|---|---|---|---|---|
-| 1 Standalone (loyalty, internal units, access tokens) | v1 `MetaToken`; v2 `NoUnderlyingToken` (`META_NONE`) | `address(0)` | `initialSupply` minted to `creator` at init; `mint(to, v)` by `minter` only (`minter = 0` ⇒ fixed supply); v2 adds holder `burn` and one-way `renounceMinter` (R141) | `Σ balances == totalSupply` | v1 **BUILT**; v2 **SPECIFIED** ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md)) |
-| 2 Single-underlying wrapper | v1 `MetaToken`; v2 `SingleUnderlyingToken` (`META_SINGLE`) | ERC-20 address | Only via `wrap(amount)` (mints `⌊received·num/den⌋` of the **measured** delta) / `unwrap(wrapped, recipient)` (pays `⌊w·den/num⌋`, burns `⌈out·num/den⌉`); v1 is the 1:1 case | v1: `underlying.balanceOf(this) ≥ totalSupply`; v2: `Σ⌊reserve·num/den⌋ ≥ totalSupply` with internal `reserve` (R134) | v1 **BUILT** at 1:1; rates **SPECIFIED** (R133, R135) |
-| 3 Multi-underlying (any-of) | v2 `MultiUnderlyingToken is SingleUnderlyingToken` (`META_MULTI`) | 2–8 ERC-20s, fixed at creation | `wrap(u, amount)` on one chosen leg at that leg's rate; `unwrap(u, wrapped, recipient)` into one chosen leg, bounded by `reserve_u`; guardian may only `disableWrap(u)` (one-way; unwrap stays open) | `Σ_i⌊reserve_i·num_i/den_i⌋ ≥ totalSupply` (pooled; no per-leg invariant) | **SPECIFIED** (R136) |
+| 1 Standalone (loyalty, internal units, access tokens) | v1 `MetaToken`; v2 `NoUnderlyingToken` (`META_NONE`) | `address(0)` | `initialSupply` minted to `creator` at init; `mint(to, v)` by `minter` only (`minter = 0` ⇒ fixed supply); v2 adds holder `burn` and one-way `renounceMinter` (R141) | `Σ balances == totalSupply` | v1 and v2 **BUILT** ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md)) |
+| 2 Single-underlying wrapper | v1 `MetaToken`; v2 `SingleUnderlyingToken` (`META_SINGLE`) | ERC-20 address | Only via `wrap(amount)` (mints `⌊received·num/den⌋` of the **measured** delta) / `unwrap(wrapped, recipient)` (pays `⌊w·den/num⌋`, burns `⌈out·num/den⌉`); v1 is the 1:1 case | v1: `underlying.balanceOf(this) ≥ totalSupply`; v2: `Σ⌊reserve·num/den⌋ ≥ totalSupply` with internal `reserve` (R134) | v1 **BUILT** at 1:1; v2 with rates **BUILT** (R133, R135) |
+| 3 Multi-underlying (any-of) | v2 `MultiUnderlyingToken is SingleUnderlyingToken` (`META_MULTI`) | 2–8 ERC-20s, fixed at creation | `wrap(u, amount)` on one chosen leg at that leg's rate; `unwrap(u, wrapped, recipient)` into one chosen leg, bounded by `reserve_u`; guardian may only `disableWrap(u)` (one-way; unwrap stays open) | `Σ_i⌊reserve_i·num_i/den_i⌋ ≥ totalSupply` (pooled; no per-leg invariant) | **BUILT** (R136, v2) |
 
 **Conversion rates (v2, R133/R135).** `(num, den)` per underlying, `uint96`, wrapped raw units per underlying raw
 unit; every output rounds in the contract's favour; zero outputs revert. The issuer chooses at creation: **fixed**
@@ -418,8 +418,9 @@ stay first-come); Zether refuses fee-on-transfer underlyings (`UnsupportedUnderl
   in the constructor (T9, T10).
 - **Zether gate**: `zetherEnabled` default `false`; enabling and creating Zether tokens revert outside chain ids
   31337/1337 (`ZetherSafety`, RS2-1).
-- **Factory v2** (R130, [TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §9, SPECIFIED): a new `OpenFactory` deployment (v1's enum cannot decode new kinds);
-  `TokenKind` appends `META_NONE`, `META_SINGLE`, `META_MULTI`; `createTiered(kind, version, underlyings[], initData,
+- **Factory v2** (R130, [TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §9, **BUILT**: `src/factory/OpenFactoryV2.sol`): a new deployment (v1's enum cannot
+  decode new kinds); `IOpenFactoryV2.TokenKind` appends `META_NONE`, `META_SINGLE`, `META_MULTI` (`IOpenFactory.sol`
+  stays frozen with v1 so the deployed v1 factory remains source-verifiable); `createTiered(kind, version, underlyings[], initData,
   salt)` / `createTieredUnregistered`; registration checks the implementation's `tokenKind()`; every underlying is
   indexed for provenance. v1 tokens stay on factory v1. The only token-level powers in v2 are creation-time and
   public: an adjustable-rate `rateAdmin` and the multi-underlying `guardian` (R142).
@@ -622,8 +623,8 @@ the gateway (stream S0); all origins SPECIFIED (R100).
 | Generic | `executeMetaTransaction(m, signature)` with an op in `m.data` | Every subject-signed token operation; composable ops | **BUILT** |
 | Payment op | `data = pay(bytes32 entryRef)` (exactly 36 bytes, `to ≠ 0`) through the generic path | Invoice/order payment with a reconciliation reference; emits `PaymentSettled(from, to, amount, feeAmount, feeRecipient, entryRef)` | **BUILT** (R2) |
 | Direct payment | `payWithFee(to, amount, feeMode, fee, feeRecipient, entryRef)` — `msg.sender` pays gas; fee charged on top | Contract wallets (MandateWallet), self-submitted payments | **BUILT** |
-| Named entry points (v2) | `mtxTransfer`, `mtxTransferWithFee`, `executeMetaTransactionWithFee`, `mtxPay(…, payId, …)`, `mtxUnwrap`, `mtxUnwrapWithFee` — build the same struct, same digest (§5.8) | Typed ABI for wallets/explorers; on-chain pay lane | **SPECIFIED** (R138, R139) |
-| Batch (v2) | `mtxBatch(MetaTransaction[], bytes[])`, atomic | Saves ≈ 23.6 k gas per item after the first (intrinsic + cold access) | **SPECIFIED** (R140) |
+| Named entry points (v2) | `mtxTransfer`, `mtxTransferWithFee`, `executeMetaTransactionWithFee`, `mtxPay(…, payId, …)`, `mtxUnwrap`, `mtxUnwrapWithFee` — build the same struct, same digest (§5.8) | Typed ABI for wallets/explorers; on-chain pay lane | **BUILT** (R138, R139; `mtxUnwrapWithFee` is decoded in the token's `fallback`, ABI `IMetaTokenV2UnwrapWithFee`) |
+| Batch (v2) | `mtxBatch(MetaTransaction[], bytes[])`, atomic | Saves the 21 000 intrinsic gas per item after the first (TW2 §10.3, L3) | **BUILT** (R140); node batching **SPECIFIED** (TW2 §7.5) |
 | Zether ops | `OP_ZTRANSFER`, `OP_ZBURN` inside the envelope (§8.8) | Confidential transfer/burn | **BUILT** (dev chains) |
 
 Op table of `MetaToken` (`_checkOp` at step 6 must not fail later at step 8):
@@ -634,7 +635,7 @@ Op table of `MetaToken` (`_checkOp` at step 6 must not fail later at step 8):
 | `pay(bytes32 entryRef)` | 36 | `to ≠ 0` (`PayToZero`) | transfer + `PaymentSettled` with the real fee |
 | `trade(address counterToken, uint256 minCounterValue, address counterparty)` | 100 | `MODE_RESTRICT_RELAYER` set **and** `to == msg.sender` (`TradeLegNotRestricted`) | transfer `from → msg.sender` (the settlement contract) |
 | `approve(address spender, uint256 amount)` | 68 | `value == 0`, `to == spender`, spender is a contract | set allowance |
-| `unwrap(address underlying, address recipient, uint256 minOut)` (v2 wrapper tiers, SPECIFIED, R148) | 100 | leg known, `to == recipient ∉ {0, token}`, `minOut ≤ out ≤ reserve`, `out > 0` | burn `⌈out·q⌉`, debit reserve, then transfer `out` of the underlying (exact amount); only this transfer may revert after step 7, and it reverts the whole tx |
+| `unwrap(address underlying, address recipient, uint256 minOut)` (v2 wrapper tiers, BUILT, R148) | 100 | leg known, `to == recipient ∉ {0, token}`, `minOut ≤ out ≤ reserve`, `out > 0` | burn `⌈out·q⌉`, debit reserve, then transfer `out` of the underlying (exact amount); only this transfer may revert after step 7, and it reverts the whole tx |
 | other | — | `MetaTxUnknownOp(bytes4)`; `< 4` bytes ⇒ `MetaTxUnknownOp(0)` | — |
 
 ### 5.5 2D nonces and batch lanes (BUILT)
@@ -697,14 +698,14 @@ Envelope overhead ≈ 17.5 k gas; collecting a fee ≈ +8.3 k gas.
   `fee ≤ amount × MAX_FEE_PPM / 10^6` (FIXED is also capped at 1 % of `value` for public tokens). Over the cap ⇒
   `FeeExceedsCap(feeAmount, cap)`.
 - `validateRecipient`: non-NONE needs a non-zero recipient (`FeeRecipientRequired`).
-- **Fee never to the payee** (owner, R132; v2, SPECIFIED): for the transfer and `pay` ops and `payWithFee`, a non-zero
+- **Fee never to the payee** (owner, R132; v2, **BUILT**): for the transfer and `pay` ops and `payWithFee`, a non-zero
   fee whose resolved recipient equals `to` reverts `FeeRecipientIsPayee` (bound or relayer-default). v1 lacks the check.
 - `requireConfidentialSafe`: `PERCENT` on any confidential op ⇒ `PercentFeeForbiddenOnConfidential` (a percentage
   fee would reveal the hidden amount). Zether outer fees are `NONE` or `FIXED`, and `FIXED` there is **not** capped at
   1 % because the amount is hidden (RS2-6).
 - DEX fees are separate: per-market maker/taker ppm ≤ 10 000, bounded by the order's signed `maxFeePpm`.
 
-### 5.8 Named meta-tx functions (SPECIFIED, [TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §7)
+### 5.8 Named meta-tx functions (BUILT, [TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §7; node batching SPECIFIED)
 
 Owner ruling (R138–R140): thin entry points in the v2 `MetaTokenBase` (every tier) that build a `MetaTransaction`
 and run the same nine steps. **No second typehash**: the earlier proposal here (`PAY_TYPEHASH`, `batchMtxPay` with a
@@ -723,7 +724,12 @@ partial-success bitmap) is withdrawn.
 derive. A named call and `executeMetaTransaction` with the same struct have the **same digest, events and nonce**: a
 signature works on either path and is consumed once; KATs stay valid. The names add a typed ABI, shape guards and
 the on-chain pay lane, and save only calldata (R2's ≈ 4 k gas figure assumed a shorter typehash and does not apply).
-The node batches per `(chain_key, token)` only items bound to its own lane (flush at 50 items or 3 s).
+The node batches per `(chain_key, token)` only items bound to its own lane (flush at 50 items or 3 s; SPECIFIED,
+TW2 T7). Measured (`test/v2/MetaTxGasV2.t.sol`, clones, warm lane): `mtxTransfer` ≈ 660 gas and `mtxPay` ≈ 140 gas
+below the generic path, `mtxTransferWithFee` ≈ 200 below, `executeMetaTransactionWithFee` ≈ 85 above (dispatch + shape
+check); the v2 generic path is ≈ 2.2–3.9 k below v1 on every row. `mtxUnwrapWithFee` has 13 parameters, more than the
+non-via-IR ABI decoder holds: the token decodes it in `fallback` (same selector and ABI; interface
+`IMetaTokenV2UnwrapWithFee`), and Solidity callers build its calldata by hand.
 
 ### 5.9 Payer flexibility
 
@@ -1790,7 +1796,8 @@ domains on the contract itself, lane nonces, contract-only allowances, no proxy 
 ```solidity
 interface IOpenFactory {
     enum TokenKind { META, ZETHER }   // future kinds (REGULATED, MIGRATION) append; values never reused
-                                      // factory v2 (TW2, SPECIFIED): META_NONE = 2, META_SINGLE = 3, META_MULTI = 4
+                                      // factory v2 (TW2, BUILT): IOpenFactoryV2.TokenKind adds META_NONE = 2,
+                                      // META_SINGLE = 3, META_MULTI = 4; this file stays frozen with v1
 
     event ImplementationRegistered(TokenKind indexed kind, uint64 indexed version, address indexed implementation, address registrar);
     event ImplementationDeprecated(TokenKind indexed kind, uint64 indexed version, string reason);
@@ -1835,7 +1842,7 @@ interface IOpenFactory {
 Differences from the SRS draft: adds `isDeprecated`, `getWrapperCount/At`, `deployedFor`, the events/errors above
 and `setZetherEnabled`; `predictAddress` is per `(implementation, creator, salt)`.
 
-**Factory v2 — SPECIFIED** ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §9; a new deployment, all functions above kept):
+**Factory v2 — BUILT** (`src/common/IOpenFactoryV2.sol`, `src/factory/OpenFactoryV2.sol`; [TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §9; a new deployment, all functions above kept):
 
 ```solidity
 function createTiered(TokenKind kind, uint64 version, address[] calldata underlyings,
@@ -1890,7 +1897,7 @@ bytes4(keccak256("trade(address,uint256,address)"))`, `OP_APPROVE = bytes4(kecca
 `TradeLegNotRestricted`, `WrapperHasNoMint`, `NotMinter`, `NotAWrapper`, `ApproveCarriesValue`,
 `ApproveSpenderMismatch`.
 
-**v2 additions — SPECIFIED** ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §3, §5–§8, §10.2): domain `("SCaaS MetaToken", "2", chainId, clone)`, same
+**v2 additions — BUILT** (`src/metatx/{MetaTxCore,MetaTokenBase,IMetaTokenV2,NoUnderlyingToken,SingleUnderlyingToken,MultiUnderlyingToken}.sol`, `src/hedera/HederaTokensV2.sol`; [TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §3, §5–§8, §10.2): domain `("SCaaS MetaToken", "2", chainId, clone)`, same
 `MetaTransaction` typehash.
 
 ```solidity
@@ -2183,7 +2190,7 @@ Order of streams per `TODO.md` and NI §17 / A2 §17 (one heavy stream at a time
 | 22 | Queued | TON payer tx hash on `mined`; backup-key toggle, device-bound vault, Sui `fam_sui.verify`, Soroban/Aptos/Solana signers in clientkeys; Zether portal balance cache | — | **PLANNED** |
 | 23 | Product features | receiver-pays, sponsorship policy, KeyPool auto-refill, outbound treasury payouts, anchoring (Merkle/HCS), crypto-shredding tooling, W3B SLOs/OTel/FinOps, controlled tokens, tender, vesting, managed DEX, asset suite wizard, Celo `l1_batch`, Hedera HCS/scheduled tx | — | **PLANNED** |
 | 24 | Post-quantum Zether | BFV/BGV confidential balances on private/PoA chains | mesh round 4 | **PLANNED** |
-| 25 | TW2 T1–T8 | Token wrappers v2: `MetaTxCore` + named functions, three tiers, rates, multi-underlying (adjustable legs, admin-only execute, all-leg wrap pause), gasless unwrap op with `minOut`, factory v2, Hedera children, invariant suite, node/Odoo fields ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §15) | owner review of TW2 | **SPECIFIED** |
+| 25 | TW2 T1–T8 | Token wrappers v2: `MetaTxCore` + named functions, three tiers, rates, multi-underlying (adjustable legs, admin-only execute, all-leg wrap pause), gasless unwrap op with `minOut`, factory v2, Hedera children, invariant suite, node/Odoo fields ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §15) | owner review of TW2 | contracts T1–T6 **BUILT** (EVM + Hedera); T7 node/Odoo/SDK **SPECIFIED** |
 | — | Owner/operator steps | O1 audit of every contract family; O2 registrar multisig; O3 real deployments; O4 7-day finality evidence + ≥ 2 RPCs; O5 reverse-proxy rate limits; O6/O7 KMS/HSM custody and lane signers; O8 lane funding; O9 land-gate decision; O10 subject-account onboarding; Z1–Z6 Zether gates | — | open |
 
 ### 15.2 Open questions for the owner
@@ -2215,7 +2222,7 @@ Order of streams per `TODO.md` and NI §17 / A2 §17 (one heavy stream at a time
 | Private profile | Mesh off, single internal hub, round robin | Admitted private peers over a PQ bus, origin-only serving | R76, R85, R113 |
 | Ecosystems | Six ecosystems | Family taxonomy; Soroban = Stellar + Pi; Move = Aptos + Sui; Solana added; Soroban not on the mesh v1 | owner, R77 |
 | EOA approve lockdown | Block EOA **callers** of `approve` (`msg.sender == tx.origin && extcodesize == 0`) | Block EOA **spenders** and EOA callers of `transferFrom`; EIP-7702 designators are EOAs | R26 |
-| Fast path | `mtxPay(sender, …, payId, …)` and `batchMtxPay` exist with their own typehash | v1: `pay(bytes32 entryRef)` op and `payWithFee`; v2: named `mtxPay`/`mtxBatch` as thin entry points over the one pinned typehash (SPECIFIED) | R2, R138–R140 |
+| Fast path | `mtxPay(sender, …, payId, …)` and `batchMtxPay` exist with their own typehash | v1: `pay(bytes32 entryRef)` op and `payWithFee`; v2: named `mtxPay`/`mtxBatch` as thin entry points over the one pinned typehash (BUILT) | R2, R138–R140 |
 | Tier 3 | Weighted basket (`depositBasket`/`redeemBasket`, all legs at once) | Any-of multi-underlying: wrap/unwrap one chosen leg, pooled reserve, guardian disables wrap only | R136 |
 | Fee recipient | Relayer or any address | Never the payee (`FeeRecipientIsPayee`, v2) | R132 |
 | `payId` derivation | `keccak256(companyId ‖ moveId ‖ amount ‖ ephemeralSalt)` | `entryRef` = 32 random bytes; lane = `keccak256("scaas.pay.lane" ‖ entryRef)`; `payId` of the v2 `mtxPay` **is** `entryRef` and v2 derives the lane on chain (`payLane`) | R9, R139 |

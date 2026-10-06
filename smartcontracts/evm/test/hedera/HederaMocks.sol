@@ -55,4 +55,39 @@ contract MockHts {
         associated[account][token] = true;
         return 22;
     }
+
+    // ---- v2 (TW2 §11): `isToken` + `getTokenCustomFees`, cấu hình được để thử từng nhánh fail-closed.
+
+    struct FixedFee { int64 amount; address tokenId; bool useHbarsForPayment; bool useCurrentTokenForPayment; address feeCollector; }
+    struct FractionalFee { int64 numerator; int64 denominator; int64 minimumAmount; int64 maximumAmount; bool netOfTransfers; address feeCollector; }
+    struct RoyaltyFee { int64 numerator; int64 denominator; int64 amount; address tokenId; bool useHbarsForPayment; address feeCollector; }
+
+    enum Fees { None, Fixed, Fractional, Royalty, Malformed }
+
+    mapping(address => bool) public hts;
+    mapping(address => int64) public isTokenRc;
+    mapping(address => int64) public feesRc;
+    mapping(address => Fees) public fees;
+
+    function setHts(address t, bool on) external { hts[t] = on; }
+    function setIsTokenRc(address t, int64 rc) external { isTokenRc[t] = rc; }
+    function setFeesRc(address t, int64 rc) external { feesRc[t] = rc; }
+    function setFees(address t, Fees f) external { fees[t] = f; }
+
+    function isToken(address t) external view returns (int64, bool) {
+        return (isTokenRc[t] == 0 ? int64(22) : isTokenRc[t], hts[t]);
+    }
+
+    function getTokenCustomFees(address t)
+        external view returns (int64, FixedFee[] memory f, FractionalFee[] memory fr, RoyaltyFee[] memory r)
+    {
+        Fees k = fees[t];
+        if (k == Fees.Malformed) {
+            assembly { mstore(0, 22) return(0, 64) }
+        }
+        if (k == Fees.Fixed) f = new FixedFee[](1);
+        if (k == Fees.Fractional) fr = new FractionalFee[](1);
+        if (k == Fees.Royalty) r = new RoyaltyFee[](1);
+        return (feesRc[t] == 0 ? int64(22) : feesRc[t], f, fr, r);
+    }
 }

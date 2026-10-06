@@ -330,11 +330,13 @@ side and the buyer only signs (step 3) — this is the BUILT portal flow (§15).
 |---|---|---|
 | `executeMetaTransaction` with `data = pay(entryRef)` | Every relayed payment; emits `PaymentSettled` | **BUILT** |
 | `payWithFee(to, amount, feeMode, fee, feeRecipient, entryRef)` | Contract wallets and payers submitting themselves | **BUILT** |
-| `mtxPay(...)` | Typed fast path (~4 k gas less) with its own typehash (SCaaS.md §5.8) | **PLANNED** |
-| `batchMtxPay(Payment[])` | 10–50 payments of one token per transaction; 40–60 % gas saving | **PLANNED** |
+| v2 `mtxPay(from, to, amount, payId, validUntil, mode, relayer, fee, feeRecipient, sig)` | Typed entry point over the SAME struct and typehash; lane `payLane(payId)` derived on chain, `nonce = 0`; same digest, so one signature works on either path ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §7) | **BUILT** (contracts); node use **SPECIFIED** (TW2 T7) |
+| v2 `mtxBatch(MetaTransaction[], bytes[])` | Several intents of one token in one outer transaction, atomic (one failing item reverts all; R140 withdrew the partial-success `batchMtxPay` and its second typehash) | **BUILT** (contracts); node batching **SPECIFIED** (TW2 §7.5) |
 
-Client contract for the future fast path: same `entryRef`, same lanes (a request lane can be consumed by either path,
-never both), same event — so reconciliation code does not change. The node batches per `(chain_key, token)` at 50
+Client contract: same `entryRef`, same lanes (a request lane can be consumed by either path, never both), same
+`PaymentSettled` — so reconciliation code does not change; a second `PaymentSettled` for one `entryRef` (possible via
+`payWithFee` or another lane) is a reconciliation exception, never a second payment (R139). The node batches per
+`(chain_key, token)` only items bound to its own lane, at 50
 items or 3 s; batching is invisible to the client except that several jobs share one `tx_hash`.
 
 ---
