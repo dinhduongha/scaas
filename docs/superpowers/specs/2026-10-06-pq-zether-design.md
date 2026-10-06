@@ -879,8 +879,11 @@ pattern with F's shared nonce map) gives `PqzToken`:
 | Binding tag | `SCAAS-PQZ-ENVELOPE-V1` | `SCAAS-PQZ-UA-ENVELOPE-V1` |
 
 Plus F R308's `transferToUA(bytes32, uint256)`, `balanceOfUA(bytes32)`, `UA_POOL` and `UATransfer`, so a PQ UA can
-hold the public fee float. No `mtxBatch`/`uaBatch` and no `pay`/`unwrap` ops: a PQZ op is ≈ 3 M gas and ≈ 80 KB,
-and exits go through `burn` or a public transfer to a native id.
+hold the public fee float. Same surface as `ZetherToken` (owner check 2026-10-07): **`wrap`/`unwrap` exist as direct calls** exactly as
+classical (`ZetherToken.sol:189-200`), and the envelope ops are the confidential ones — as classical, whose
+`_executeOp` carries only `zetherTransfer`/`zetherBurn` (`ZetherToken.sol:447-455`). The **gasless exit is the
+envelope `burn`**, which pays the underlying straight to `recipient` (classical `ZetherToken.sol:406`), so no envelope
+`unwrap` op is needed. No `mtxBatch`/`uaBatch` and no `pay` op: a PQZ op is ≈ 3 M gas and ≈ 80 KB.
 
 **Ops in `m.data`.** `data` empty ⇒ plain public transfer `from → to` with the full `FeePolicy` (incl. `PERCENT`,
 1 % cap) and v2's `FeeRecipientIsPayee` check, as every meta token. Otherwise `m.to = 0` and `m.value = 0` (else
