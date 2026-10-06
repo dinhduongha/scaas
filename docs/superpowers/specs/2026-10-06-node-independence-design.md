@@ -1,6 +1,7 @@
 # Node independence — Odoo becomes a client of `scaas-node` (design amendment)
 
-Status: draft rev 3, 2026-10-06 (review 1 folded in, §19; admin-auth ruling and scaas rename folded in). Code at
+Status: draft rev 3.1, 2026-10-06 (review 1 folded in, §19; admin-auth ruling, its 3.1 clarification and the scaas
+rename folded in). Code at
 `bamboo-dms` `main` 90a5b17 (mesh S0, S1a, S2 merged); the blockchain stack now lives in repo `scaas`
 (`scaas/smartcontracts`, `scaas/docs`, `scaas/app`, and the node).
 **Naming (owner, approved rename):** the node is `scaas-node` (crate, binary, directory `scaas/scaas-node/` — today
@@ -62,7 +63,7 @@ The node is an Odoo worker. Every durable fact it relies on lives in Odoo and is
    ranges, configuration, key metadata, audit log, DEX book (R88, R89, R105).
 4. **Multi-tenancy without companies**: namespaces and per-namespace machine credentials (R90–R92).
 5. **Admin API** for configuration, used by operators and the React+Vite app (`scaas/app/`), authenticated by
-   built-in users, admin API keys or optional OIDC, with roles (R106–R110).
+   built-in users or optional OIDC, with roles (R106–R110). API keys are for external clients only (R92).
 6. **Migration**: per-chain feature flag, transitional binary that runs both paths, one-step removal (R104).
 7. Every safety property already built is preserved (§9): R80/S2 consumption checks, the in-flight digest set,
    journal-before-broadcast, `plan()` restart, `consumed` semantics (S1a), no double broadcast, journaled nonces.
@@ -76,7 +77,7 @@ The node is an Odoo worker. Every durable fact it relies on lives in Odoo and is
 | Two nodes owning jobs of one `(company, chain)`, or HA on a shared database | R97, R111. Failover = restore the store on another host. §18.3. |
 | Uploading lane keys, RPC URLs, database URLs, the master key or OIDC issuers through the admin API | R95: secrets and dial targets stay in `node.toml`/keystores (PD R20 spirit). |
 | Opaque-token introspection (RFC 7662), DPoP, mTLS-bound tokens | R106: JWT access tokens only; follow-up. |
-| Admin credentials (sessions, admin keys, OIDC) on the job API | R109: machines keep HMAC keys; automation that needs *config* uses an admin API key or an IdP client-credentials token on the admin API. |
+| Admin credentials (sessions, OIDC) on the job API; API keys on admin routes | R109: external clients keep HMAC API keys; automation that needs *config* uses a built-in user or an IdP client-credentials token. |
 | The React app itself | Requirements only (§7.7); built in its own plan. |
 | Re-importing in-flight Odoo jobs into the store | R104: legacy in-flight jobs drain on the legacy path. |
 | Odoo-side copies of node metrics | Prometheus on the node (MESH §12 already). |
@@ -108,12 +109,12 @@ Format of PD §13: **ruling — why — cost if wrong.**
 | **R103** | **`call` jobs are a namespace capability** (`allow_call`, default `false`; `true` for the Odoo namespace created at migration: mandates and subject accounts need it, `blockchain_autopay.py:101-113`, `blockchain_subject_account.py:180-195`). | A `call` job makes our lane call any contract; with several tenants this must be granted. | — |
 | **R104** | (decision on "flag or hard cut") **Per-chain feature flag, then one-step removal.** `blockchain.chain.node_transport ∈ pull|push` (default `pull`). A transitional node runs both paths in one process (legacy pull for `pull` chains, store for `push` chains; same lane, same nonce counter, one `lane.journal_max`). Legacy in-flight jobs drain on the legacy path. After §11.4, stream **P9** deletes `odoo.rs`, `[odoo]`, the flag and the Odoo service methods in one release. **Hard cut rejected**: the in-flight journal is in Odoo; a hard cut means importing it (a one-off path that can double-sign) or a stop-the-world drain (≥ one `valid_until` window per chain, payers re-sign), with no rollback. | Owner asked to decide and justify. | ~1 stream of transitional code (`// legacy(R104)`), deleted in P9. |
 | **R105** | **DEX book moves to the store** (`dex_market`, `dex_order`, `dex_trade`); markets are admin config; settle/cancel/invalidate are `job` rows in `~dex`; Odoo's `blockchain.dex.order/trade` become seq-guarded mirrors fed by `dex_*` items, kept for accounting (`_book_fees`, `dex_trade.py:203`). A DEX chain cuts over with its markets paused. Supersedes RS5-2 and the `dex_sync`/`restored` loop. | The venue is the book's only writer (`dex/venue.rs:1`); persisting it next to its settle jobs makes "matched but no job" impossible locally (the RS5-2 goal). | DEX cutover needs a short market pause. |
-| **R106** | (owner, rev 3) **Admin authentication = three modes, any combination enabled** (`[api.admin_auth] modes`, default `["builtin", "api_key"]`): (1) **built-in users** in the store (`admin_user`: name + Argon2id PHC hash + roles), login issues a short-lived node-signed session token (§7.2); (2) **admin API keys** (`admin_key`: random 256-bit secret, only its SHA-256 in the store, roles, expiry); (3) **OIDC** (optional, below). The token prefix selects the verifier (`scaas_s1.` session, `scaas_ak1.` admin key, otherwise a JWT when `oidc` is on). | Owner: "as simple as possible"; a node works with no IdP. | Built-in mode makes the node a password store (Argon2id, lockout, §14 T21). |
+| **R106** | (owner, rev 3.1) **Admin authentication = two modes** (`[api.admin_auth] modes`, default `["builtin"]`): (1) **built-in users** in the store (`admin_user`: name + Argon2id PHC hash + roles), login issues a short-lived node-signed session token (§7.2); (2) **OIDC** (optional, below). The token prefix selects the verifier (`scaas_s1.` session, otherwise a JWT when `oidc` is on). **"API key" means only the R92 credentials of external clients** (Odoo and other ERPs/services): namespace-scoped, `submit`/`read` on the job and event API, never admin. | Owner: "as simple as possible"; a node works with no IdP. | Built-in mode makes the node a password store (Argon2id, lockout, §14 T21). |
 | **R106a** | **OIDC mode** validates JWT access tokens (§7.1): discovery with exact `issuer`, JWKS cached by `(iss, kid)` with rotation, `iss` exact, `aud` contains the node audience, `exp` and `iat` required, 60 s skew, lifetime cap; algs RS256/ES256/EdDSA per issuer, JWK `kty/crv/alg` must match; `none`, `HS*`, `jku/x5u/jwk/x5c/crit` rejected; no redirects. Generic IdP (ABP AuthServer `addons/bamboo_abp_auth`, role claim `role`; Keycloak; others). **Several issuers allowed**, selected by exact `iss`; unknown `iss` never causes a fetch. | Owner. Several issuers cover IdP migration and a separate machine IdP at no cost. Verification on `ring` (in `Cargo.lock`, direct dep per MESH §3.4); no JWT crate. | An IdP that only issues opaque tokens cannot be used (follow-up). |
-| **R107** | (owner, kept) **Roles**: `viewer` ⊂ `operator` ⊂ `admin`, plus `key_custodian` (not implied by `admin`). **Every admin credential carries roles**: built-in users and admin API keys store them; OIDC maps a configurable claim per issuer (scope-based mapping only for machine tokens: `sub == client_id`/`azp`, or `machine_only`). Managing credentials (admin users, admin keys, machine keys) needs `key_custodian`, and a caller can only grant roles it holds itself (no escalation: minting an `admin` key needs `admin` + `key_custodian`). Route table §7.3. | Separates look / run / configure / mint credentials; scopes are client permissions, not user roles (review M11). | One person doing everything holds all four roles. |
-| **R108** | (owner, rev 3) **Bootstrap and break-glass = the host CLI**, which writes credential rows straight into the store: `scaas-node admin create <name> --role … --config node.toml` (password from stdin), `admin passwd`, `admin disable`, `admin key create --role …` (prints the key once), `key create --namespace … --scopes …` (machine key). The CLI may run while the node runs: it touches only `admin_user`, `admin_key`, `api_key`, `namespace` and `audit_log` (actor `cli:<uid>`), never jobs, so it needs no owner lock or fencing. **The Unix-socket break-glass of rev 2 is removed.** | Host access (to `node.toml` and the store) is already the root of trust; one CLI is simpler than a second listener. | Recovery when every admin is locked out needs shell access to the host. |
-| **R109** | **Machine credentials never reach admin routes, admin credentials never reach the job API**: HMAC is verified only on the job-API listener; the admin router accepts only session tokens, admin keys and (when enabled) OIDC tokens. Automation needing config uses an admin API key or an IdP client-credentials token, each with a role. | Structural separation instead of a grant table. | — |
-| **R110** | **Audit and store loss**: every admin mutation appends a hash-chained `audit_log` row (actor `user:<name>`, `key:<key_id>`, `oidc:<iss>|<sub>` or `cli:<uid>`, roles, route, target, before/after, result) in the same transaction as the change. Odoo halts sync for a node (`needs_attention`) when `store_id` or `restore_epoch` changes, when `head_seq < cursor`, or when after an `incarnation` change the item at its cursor differs from the one it applied (§5.3). Re-pushing to a recreated or restored store is an operator action (`action_acknowledge_store_change`). | A recreated or rewound store has no record of signed jobs; blind re-push can re-sign intents whose old outer txs are still in a mempool (G1 keeps funds safe, gas is lost). | One manual step after disk loss or restore. |
+| **R107** | (owner, kept) **Roles**: `viewer` ⊂ `operator` ⊂ `admin`, plus `key_custodian` (not implied by `admin`). **Every admin credential carries roles**: built-in users store them; OIDC maps a configurable claim per issuer (scope-based mapping only for machine tokens: `sub == client_id`/`azp`, or `machine_only`). Creating, rotating and revoking **external-client API keys** (R92) and managing built-in admin users needs `key_custodian` (admin API, app or host CLI); a caller can only grant user roles it holds itself (no escalation: creating an `admin` user needs `admin` + `key_custodian`). Route table §7.3. | Separates look / run / configure / mint credentials; scopes are client permissions, not user roles (review M11). | One person doing everything holds all four roles. |
+| **R108** | (owner, rev 3) **Bootstrap and break-glass = the host CLI**, which writes credential rows straight into the store: `scaas-node admin create <name> --role … --config node.toml` (password from stdin), `admin passwd`, `admin disable`, `key create|rotate|revoke` (external-client API key, R92; the secret is printed once). The CLI may run while the node runs: it touches only `admin_user`, `api_key`, `namespace` and `audit_log` (actor `cli:<uid>`), never jobs, so it needs no owner lock or fencing. **The Unix-socket break-glass of rev 2 is removed.** | Host access (to `node.toml` and the store) is already the root of trust; one CLI is simpler than a second listener. | Recovery when every admin is locked out needs shell access to the host. |
+| **R109** | **API keys never reach admin routes, admin credentials never reach the job API**: HMAC API keys are verified only on the job-API listener; the admin router accepts only built-in session tokens and (when enabled) OIDC tokens. Automation needing config uses a built-in user or an IdP client-credentials token, each with a role. | Structural separation instead of a grant table. | — |
+| **R110** | **Audit and store loss**: every admin mutation appends a hash-chained `audit_log` row (actor `user:<name>`, `oidc:<iss>|<sub>` or `cli:<uid>`, roles, route, target, before/after, result) in the same transaction as the change. Odoo halts sync for a node (`needs_attention`) when `store_id` or `restore_epoch` changes, when `head_seq < cursor`, or when after an `incarnation` change the item at its cursor differs from the one it applied (§5.3). Re-pushing to a recreated or restored store is an operator action (`action_acknowledge_store_change`). | A recreated or rewound store has no record of signed jobs; blind re-push can re-sign intents whose old outer txs are still in a mempool (G1 keeps funds safe, gas is lost). | One manual step after disk loss or restore. |
 | **R111** | (owner, Amendment A1) **SQLite, PostgreSQL or MySQL, storage only** — corrected by review H4/H5/H6/M10; normative text at the end of this file. | Owner. | — |
 
 ---
@@ -124,7 +125,6 @@ Format of PD §13: **ruling — why — cost if wrong.**
                  OIDC IdP (optional: ABP / Keycloak / …)
                         │ access token (JWT)
  React+Vite app ────────┼─ login / session / JWT ─► admin API (admin_bind, CORS) ┐
- automation ──── admin API key (scaas_ak1.) ──────► admin API               │
  host shell ──── scaas-node admin … (CLI writes the store, R108)            │
  Prometheus ────────────────────────────► /healthz /readyz /metrics         │  scaas-node
                                                                             │   ├ store (R88/R111)
@@ -251,15 +251,10 @@ CREATE TABLE admin_user (
   session_epoch INTEGER NOT NULL DEFAULT 0,                       -- +1 on logout-all, password change, disable, role change
   failed_logins INTEGER NOT NULL DEFAULT 0, locked_until BIGINT,
   created_by TEXT NOT NULL, created_at BIGINT NOT NULL, last_login_at BIGINT);
-CREATE TABLE admin_key (
-  key_id TEXT PRIMARY KEY,                                        -- 'ak_' + 16 hex
-  secret_sha256 BLOB NOT NULL,                                    -- SHA-256 of the 32-byte random secret
-  roles TEXT NOT NULL, state TEXT NOT NULL CHECK (state IN ('active', 'revoked')),
-  label TEXT, expires_at BIGINT, last_used_at BIGINT, created_by TEXT NOT NULL, created_at BIGINT NOT NULL);
 
 -- admin audit (R110)
 CREATE TABLE audit_log (seq BIGINT PRIMARY KEY, at BIGINT NOT NULL,
-  actor_kind TEXT NOT NULL CHECK (actor_kind IN ('user', 'key', 'oidc', 'cli', 'bootstrap')),
+  actor_kind TEXT NOT NULL CHECK (actor_kind IN ('user', 'oidc', 'cli', 'bootstrap')),
   iss TEXT, sub TEXT, roles TEXT NOT NULL, method TEXT NOT NULL, route TEXT NOT NULL, target TEXT,
   before TEXT, after TEXT, result INTEGER NOT NULL, request_id TEXT NOT NULL,
   prev_hash BLOB NOT NULL, row_hash BLOB NOT NULL);               -- row_hash = sha256(prev_hash ‖ canonical row)
@@ -479,7 +474,7 @@ admin_cors_origins = ["https://app.example.com"]
 lease_hold_after_start_secs = 15              # R98
 
 [api.admin_auth]
-modes = ["builtin", "api_key"]                # any of builtin | api_key | oidc; [] refused
+modes = ["builtin"]                           # builtin and/or oidc; [] refused
 session_ttl_secs = 900                        # built-in session token lifetime
 session_max_age_secs = 43200                  # refresh allowed until login + this
 login_max_failures = 10                       # then locked for login_lock_secs
@@ -510,10 +505,9 @@ mode is enabled:
 | Prefix | Verifier | Caller |
 |---|---|---|
 | `scaas_s1.` | built-in session (§7.2) | `user:<name>`, roles of the user row |
-| `scaas_ak1.` | admin key: `key_id` lookup, `ct_eq(sha256(secret), secret_sha256)`, active, not expired | `key:<key_id>`, roles of the key row |
 | three base64url segments | OIDC (below) | `oidc:<iss>|<sub>`, mapped roles |
 
-Anything else ⇒ `401`. Machine HMAC keys are never looked at here (R109).
+Anything else ⇒ `401`. API keys (R92) are never looked at here (R109).
 
 **OIDC (R106a).** `Config::validate` refuses `audience ∈ client_ids` (an ID token of the app would otherwise be accepted as an access
 token) and `role_claim = "scope"` unless `machine_only = true` or the mapping is marked `scope_for_machines = true`.
@@ -542,7 +536,7 @@ every `jwks_refresh_secs`, `GET {issuer}/.well-known/openid-configuration`; its 
 keep the last good set for `jwks_max_stale_secs`, then the issuer fails closed. Removed keys disappear on the next
 successful refresh. `# ponytail: hand-rolled JWS verify over ring (3 algs); a JWT crate if a fourth alg or JWE is needed.`
 
-### 7.2 Built-in users, admin keys and the CLI (R106, R108)
+### 7.2 Built-in users and the CLI (R106, R108)
 
 - **Password hashing**: Argon2id (`argon2` crate, RustCrypto — the one new dependency of this section), PHC string,
   parameters m = 19 MiB, t = 2, p = 1 (OWASP minimum), stored per row so they can be raised later; verification is
@@ -556,16 +550,17 @@ successful refresh. `# ponytail: hand-rolled JWS verify over ring (3 algs); a JW
   `exp > now`, the user is active and `ep == session_epoch` and `roles` equal the row's (one indexed read per request).
   `POST /v1/admin/session/refresh` returns a new token while `now < auth_time + session_max_age_secs`.
   `POST /v1/admin/logout` increments `session_epoch` (logs out every session of that user — simple and sufficient).
-- **Admin API keys**: `scaas_ak1.<key_id>.<base64url(32 random bytes)>`, shown once; created by the CLI or
-  `POST /v1/admin/admin-keys` (`key_custodian`, roles ⊆ caller's, R107); revoke is hot.
+- **External-client API keys** (R92) are managed by `key_custodian` users through `/v1/admin/keys` (§7.3), the app,
+  or the CLI; the secret is shown once; rotate = `generation + 1`; revoke is hot. They authenticate nothing here.
 - **CLI (R108)**, run on the host as the service user, writes the store directly (credential tables + audit only):
 
 ```bash
 scaas-node admin create alice --role admin --role key_custodian --config node.toml   # password from stdin, twice
 scaas-node admin passwd alice --config node.toml
 scaas-node admin disable alice --config node.toml
-scaas-node admin key create --role operator --label ci --config node.toml            # prints scaas_ak1.… once
-scaas-node key create --namespace odoo-prod --scopes "submit read" --config node.toml  # machine key (R92)
+scaas-node key create --namespace odoo-prod --scopes "submit read" --config node.toml  # API key for Odoo (R92)
+scaas-node key rotate k_3f9a0c1d2e4b5a6c --config node.toml
+scaas-node key revoke k_3f9a0c1d2e4b5a6c --config node.toml
 ```
 
   Every CLI action is audited (`actor_kind = 'cli'`, uid) and counted in `scaas_admin_cli_total`.
@@ -587,10 +582,10 @@ scaas-node key create --namespace odoo-prod --scopes "submit read" --config node
 | `GET/POST/PATCH /v1/admin/namespaces[/{name}]` (grants, `allow_call`, quota, state) | viewer / admin | hot |
 | `POST /v1/admin/login` (no auth), `POST /v1/admin/session/refresh`, `POST /v1/admin/logout` | — / any role | — |
 | `GET /v1/admin/me` (caller, roles, expiry) | any role | — |
-| `GET /v1/admin/users`, `GET /v1/admin/admin-keys` (metadata only) | viewer | — |
-| `POST/PATCH/DELETE /v1/admin/users[/{name}]` (create, roles, disable, reset password), `POST/DELETE /v1/admin/admin-keys[/{id}]` — roles granted ⊆ caller's | key_custodian | hot |
+| `GET /v1/admin/users` (metadata only) | viewer | — |
+| `POST/PATCH/DELETE /v1/admin/users[/{name}]` (create, roles, disable, reset password) — roles granted ⊆ caller's | key_custodian | hot |
 | `POST /v1/admin/users/{self}/password` (own password; bumps `session_epoch`) | any role | hot |
-| `GET /v1/admin/keys` (machine keys, metadata only) | viewer | — |
+| `GET /v1/admin/keys` (external-client API keys, metadata only) | viewer | — |
 | `POST /v1/admin/keys`, `POST …/{id}/rotate`, `DELETE …/{id}` | key_custodian | hot |
 | `GET/POST/PATCH/DELETE /v1/admin/mesh/peers`; `PUT …/{id}/state` | viewer / admin; operator | hot |
 | `GET/POST/PATCH/DELETE /v1/admin/mesh/policy` | viewer / admin | hot |
@@ -628,7 +623,8 @@ stale session epoch — body never says which);
 ### 7.7 React+Vite app (`scaas/app/`) requirements
 
 - Login screen offers the modes the node enables (`GET /v1/admin/auth-modes`, no auth: `{"builtin": true,
-  "oidc": [{"issuer", "client_id", "audience"}]}`); admin API keys are for automation, not entered in the app.
+  "oidc": [{"issuer", "client_id", "audience"}]}`). A `key_custodian` can create/rotate/revoke external-client API
+  keys from the app (secret shown once).
 - Built-in: username + password ⇒ session token; refresh before `expires_at`; logout calls `/v1/admin/logout`.
 - OIDC: public client, Authorization Code + PKCE `S256`, no client secret, exact redirect URIs, `state` + `nonce`.
 - Tokens (session or OIDC) in memory only (never `localStorage`/`sessionStorage`).
@@ -1076,8 +1072,8 @@ Pause every market of the chain, wait for `pending` trades to settle or fail on 
 | T17 | **Client context forging server-only fields** | `SERVER_ONLY` on every new field of `blockchain.relay.job`, `blockchain.node`, `blockchain.node.route`, DEX mirrors; no context key consulted |
 | T18 | **Copied Odoo database pushing to production** (staging restore) | `neutralize.sql` deletes node secrets and sets chains `pull`; push/sync refuse when `database.uuid` or `web.base.url` differs from `bound_*` |
 | T19 | **Restore resurrects revoked keys / rewinds journal** | mandatory `store restored` CLI ⇒ `restore_epoch` ⇒ Odoo halts (R110); runbook: re-revoke or rotate `master_key` after a restore |
-| T21 | **Password guessing / credential stuffing on built-in login** | Argon2id (m=19 MiB, t=2), per-name and per-address rate limits, lockout after 10 failures, uniform `401` + dummy hash for unknown names, passwords ≥ 12 chars; OIDC or keys-only for deployments that want no node passwords (`modes` without `builtin`) |
-| T22 | **Stolen session token / admin key** | session 15 min, revocable by `session_epoch` (logout, password change, disable); admin keys: only SHA-256 stored, expiry, hot revoke, roles ⊆ creator's; bearer over TLS only, no cookies |
+| T21 | **Password guessing / credential stuffing on built-in login** | Argon2id (m=19 MiB, t=2), per-name and per-address rate limits, lockout after 10 failures, uniform `401` + dummy hash for unknown names, passwords ≥ 12 chars; OIDC-only for deployments that want no node passwords (`modes = ["oidc"]`) |
+| T22 | **Stolen session token** | session 15 min, revocable by `session_epoch` (logout, password change, disable); bearer over TLS only, no cookies |
 | T20 | **Two owners on one store / one key set** | owner lock + fencing epoch (A1); §9.4 heuristic for keys |
 
 ---
@@ -1136,11 +1132,11 @@ Heavy runs one at a time (owner rule, OOM cap).
   token, `audience ∈ client_ids` config refused, role mapping (`role` string/array, `realm_access.roles`).
 - `admin_auth.rs`: Argon2id hash/verify round trip; login ok/bad/unknown (same status and comparable timing via
   dummy hash)/locked/disabled; session MAC, expiry, refresh window, `session_epoch` revocation, role change ⇒ old
-  token rejected; admin key format, hash compare, revoke, expiry; dispatch by prefix with each mode off; roles ⊆
-  caller's on create; CLI writes while the node holds the owner lock.
-- `admin.rs`: route × role matrix for all three credential kinds; CORS preflight; audit row before/after + actor +
+  token rejected; dispatch by prefix with each mode off; roles ⊆ caller's on user create; API key
+  create/rotate/revoke by `key_custodian` only (403 for `admin` alone); CLI writes while the node holds the owner lock.
+- `admin.rs`: route × role matrix for both admin credential kinds; CORS preflight; audit row before/after + actor +
   hash chain, secrets masked; HMAC key on the admin listener ⇒ 401;
-  session/admin key on the job API ⇒ 401 (R109); `LANE_BUSY`.
+  session or OIDC token on the job API ⇒ 401 (R109); `LANE_BUSY`.
 - `submit.rs`/`adapter.rs`: S2 tests rewritten on a temp store; `plan()` from `lane.journal_max`; `leased` mapped to
   `nonce_leased`; `lane_hint`; §9.4 heuristic; gateway job digest present.
 - `config.rs`: bootstrap import, drift, toml-only fields refused by the API, `[odoo]` accepted (transitional) /
@@ -1175,7 +1171,7 @@ constraints (CLAUDE.md §5.2).
   transitional run with a fake Odoo on the legacy path for one chain and the store path for another, same lane (shared
   nonce counter, `journal_max` bumped by legacy `signed`); store indexer running on a `pull` chain then switched.
 - `tests/e2e_oidc.rs`: in-test mock issuer (discovery + JWKS + EdDSA/RS256 minting): admin flows per role, rotation
-  mid-run, issuer down ⇒ cached keys ⇒ fail closed after max stale; built-in login and admin key against the same
+  mid-run, issuer down ⇒ cached keys ⇒ fail closed after max stale; built-in login and OIDC against the same
   routes; OIDC off ⇒ JWTs refused.
 - `tests/e2e_store_backends.rs` (`--ignored`, docker PG + MySQL, A1): contract suite + lock loss (kill the lock
   session) ⇒ fencing stops journaling ⇒ second owner takes over without a double broadcast.
@@ -1201,8 +1197,8 @@ Ordered streams for **one agent at a time**. "Gate" = the stream's heavy command
 
 **P2 — Job API, machine keys, built-in admin auth**
 - Files: `src/gwauth.rs` (`HmacKeys`, per-listener caps), `src/jobs_api.rs` (§5), `src/job.rs` (`Job` from
-  `odoo.rs`, JCS), `src/admin_auth.rs` (built-in users, sessions, admin keys, prefix dispatch, roles), `src/cli.rs`
-  (`admin …`, `key create`, `store restored`), bootstrap admin routes (users, admin keys, machine keys, namespaces,
+  `odoo.rs`, JCS), `src/admin_auth.rs` (built-in users, sessions, prefix dispatch, roles), `src/cli.rs`
+  (`admin …`, `key create|rotate|revoke`, `store restored`), bootstrap admin routes (users, API keys, namespaces,
   chains/tokens read), `Cargo.toml` (`argon2`), `src/main.rs`, `tests/api/*.json`.
 - Gate: `cargo test`.
 
@@ -1234,7 +1230,7 @@ Ordered streams for **one agent at a time**. "Gate" = the stream's heavy command
 
 **P2b — OIDC, full admin route table, audit chain export, CORS** (after P6, review M12)
 - Files: `src/oidc.rs`, `src/admin.rs` (router split), `src/admin_api.rs`, `Cargo.toml` (`ring` direct, `tower-http`
-  `cors`). P2 already ships built-in users, admin keys and the bootstrap routes; P2b adds the OIDC mode, the rest of
+  `cors`). P2 already ships built-in users, API-key management and the bootstrap routes; P2b adds the OIDC mode, the rest of
   §7.3 and the app-facing CORS.
 - Gate: `cargo test` then `cargo test --test e2e_oidc -- --ignored`.
 
@@ -1354,14 +1350,19 @@ Odoo long-poll dropped (M3); `namespace_token` kept only as client-pushed state 
 
 | Was (rev 2) | Now (rev 3) |
 |---|---|
-| R106 — admin API = OIDC resource server only | **R106** = three admin auth modes (built-in users with Argon2id + node-signed sessions; admin API keys hashed in the store; optional OIDC). The OIDC validation hardening of rev 2 is kept unchanged as **R106a**. |
-| R107 — four roles, OIDC claim mapping | **R107** kept (owner correction: viewer ⊂ operator ⊂ admin, plus `key_custodian`, `admin` ⇏ `key_custodian`); now every credential kind carries roles; credential creation needs `key_custodian` and roles ⊆ the caller's. |
-| R108 — Unix-socket break-glass | **R108** = host CLI (`scaas-node admin create/passwd/disable`, `admin key create`, `key create`); the socket, `admin_socket`, `SO_PEERCRED` and the break-glass metric are removed. |
-| R109 — machine keys never reach config routes | **R109** kept and made symmetric: admin credentials never reach the job API. |
-| R110 actor `socket:<uid>` | actors `user:`, `key:`, `oidc:`, `cli:` |
+| R106 — admin API = OIDC resource server only | **R106** (rev 3.1) = two admin auth modes (built-in users with Argon2id + node-signed sessions; optional OIDC). Rev 3's "admin API keys" (`admin_key`, `scaas_ak1.`) are removed: "API key" means the R92 external-client keys only. The OIDC validation hardening of rev 2 is kept unchanged as **R106a**. |
+| R107 — four roles, OIDC claim mapping | **R107** kept (owner correction: viewer ⊂ operator ⊂ admin, plus `key_custodian`, `admin` ⇏ `key_custodian`); built-in users and OIDC tokens carry roles; managing admin users and external-client API keys needs `key_custodian`, user roles granted ⊆ the caller's |
+| R108 — Unix-socket break-glass | **R108** = host CLI (`scaas-node admin create/passwd/disable`, `key create/rotate/revoke`); the socket, `admin_socket`, `SO_PEERCRED` and the break-glass metric are removed. |
+| R109 — machine keys never reach config routes | **R109** kept (API keys never reach admin routes) and made symmetric: admin credentials never reach the job API. |
+| R110 actor `socket:<uid>` | actors `user:`, `oidc:`, `cli:` |
 | names `bamboo-node`, `BAMBOO_*`, `bamboo_*`, `X-Bamboo-*`, `bamboo.*` tags | `scaas-node`, `SCAAS_*`, `scaas_*`, `X-Scaas-*`, `scaas.*` (approved rename; on-chain domain tags change in the rename stream, §18.1) |
 
 §18.2 item 1 (`admin` does not imply `key_custodian`) is confirmed by the owner.
+
+**Rev 3.1 (owner clarification):** "API key" = credentials of external clients such as Odoo (R92), created,
+rotated and revoked by `key_custodian` admins via the admin API, the app or the host CLI, and never accepted on admin
+routes. Admin authentication is built-in users or OIDC only; the rev-3 admin API keys (table, `scaas_ak1.` tokens,
+routes, CLI subcommand, tests, threat row) are removed.
 
 ---
 
