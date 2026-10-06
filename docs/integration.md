@@ -348,8 +348,8 @@ items or 3 s; batching is invisible to the client except that several jobs share
 | Enterprise inbound gateway | Partners/agents post signed EVM meta-txs to the company node: `POST /v1/metatx {chain, token, m, signature}` (gateway auth `bearer`/`hmac` for partners; `none` only on loopback behind a proxy). The client sees results on its events feed by `entryRef`/`to` | **BUILT** |
 | Non-EVM inbound | The client builds the `MetaOp`, the payer signs, the client pushes `signed_op` jobs | **BUILT** (via Odoo outbox); job API **SPECIFIED** |
 | Payee self-relay ("e-cheque") | Payer signs offline with fee 0 and relayer unbound or bound to the payee's address; the payee (or its node) submits; ERP books from `PaymentSettled` exactly as usual | contract **BUILT**; QR (EIP-681-style payload) tooling **PLANNED** |
-| Gas sponsorship policy | Node policy rows: e.g. "to wallet W, value ≥ X ⇒ fee 0, gas to account Y"; the client books gas from the job's receipt data | **PLANNED** |
-| Receiver pays fee | Two signatures (payer's `pay`, payee's fee authorization); booked as payment N and fee F | **PLANNED** |
+| Gas sponsorship policy | Node policy rows: e.g. "to wallet W, value ≥ X ⇒ fee 0, gas to account Y"; the client books gas from the job's receipt data | **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §B1; cost fields on the jobs feed, §B1.4) |
+| Receiver pays fee | Two signatures (payer's `pay`, payee's fee authorization); booked as payment N and fee F | **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §B2; job field `receiver_fee`, event `ReceiverFeePaid`) |
 
 Never accept raw subject-signed native transactions (Sui `txBytes`, TON BOC from the subject wallet, Stellar
 envelopes) as the integration format: they order operations by the subject's account sequence (R30). Always use the
@@ -357,9 +357,10 @@ contract-level payload of the family (SCaaS.md §7).
 
 ---
 
-## 9. Sealed-bid tender in procurement (PLANNED)
+## 9. Sealed-bid tender in procurement (SPECIFIED, [TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §A)
 
-Contract: SCaaS.md §10 / §14.7. Client flow:
+Contract: SCaaS.md §10 / [TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §A.3. Client flow (detail and deviations in [TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §A.5: the commit is one token `pay`
+intent with the deposit; reveal and withdraw need no signature):
 
 | # | Buyer ERP | Bidder | Chain |
 |---|---|---|---|

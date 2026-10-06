@@ -10,7 +10,7 @@ rulings are cited by id (`R9`, `RS2-6`, `R114` …) and remain authoritative for
 [1 Positioning](#1-positioning) · [2 Service model](#2-service-model) · [3 Architecture](#3-architecture) ·
 [4 Token system](#4-token-system) · [5 Meta-transaction layer](#5-meta-transaction-layer) ·
 [6 Relayer network](#6-relayer-network) · [7 Families](#7-families) · [8 Zether](#8-zether--confidential-amounts) ·
-[9 Keys and signing](#9-keys-and-signing) · [10 Sealed-bid tender](#10-sealed-bid-tender-planned) ·
+[9 Keys and signing](#9-keys-and-signing) · [10 Sealed-bid tender](#10-sealed-bid-tender-specified) ·
 [11 Data protection](#11-data-protection) · [12 Node API](#12-node-api-surface) · [13 Operations](#13-operations) ·
 [14 Interfaces](#14-canonical-interfaces) · [15 Roadmap and open questions](#15-roadmap-open-questions-recorded-contradictions)
 
@@ -738,8 +738,8 @@ non-via-IR ABI decoder holds: the token decodes it in `fallback` (same selector 
 | Sponsored (company relayer) | Subject signs with `MODE_FEE_NONE` + `MODE_RESTRICT_RELAYER` = company lane | Company (OPEX) | **BUILT** (portal default, R10) |
 | Fee in token | `MODE_FEE_PERCENT`/`FIXED`, fee ≤ 1 % to `feeRecipient` | Relayer, reimbursed in token | **BUILT** |
 | **Payee self-relay / direct settlement** | Payer signs offline (`fee = 0`, relayer unbound or bound to the payee); hands the signature to the payee by QR, NFC, message or file; the payee's wallet submits it, paying gas itself; `PaymentSettled` identical. The signature is an expiring electronic cheque (`validUntil`) | Payee | **BUILT** on contract level (any `msg.sender` may submit an unbound intent); QR/EIP-681 tooling and user `cancelMetaNonce` UI **PLANNED** (HANDOFF #14) |
-| **Receiver pays the fee** | Payer signs `pay` of `N`; payee co-signs a fee authorization (`fee`, `feeRecipient`) from its own balance; relayer submits both in one transaction (payer sends `N`, payee receives `N`, pays `fee`) | Relayer, reimbursed by payee | **PLANNED** (needs a two-signature op; HANDOFF GA 2.2 #8) |
-| Gas sponsorship policy | Node policy: e.g. "inbound to wallet W, value ≥ X ⇒ accept with fee 0, book gas to account Y" | Sponsor (contract outside the chain) | **PLANNED** |
+| **Receiver pays the fee** | Payer signs `pay` of `N`; payee co-signs a fee authorization (`fee`, `feeRecipient`) from its own balance; relayer submits both in one transaction (payer sends `N`, payee receives `N`, pays `fee`) | Relayer, reimbursed by payee | **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §B2: `mtxPayReceiverFee`, payee co-signs `ReceiverFee` over the payer digest; R192–R193) |
+| Gas sponsorship policy | Node policy: e.g. "inbound to wallet W, value ≥ X ⇒ accept with fee 0, book gas to account Y" | Sponsor (contract outside the chain) | **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §B1, R189–R191); on-chain `SponsorshipPool` PLANNED-later (§B3) |
 | `fee = 0` B2B | Company relayer, `MODE_FEE_NONE`; gas is OPEX | Company | **BUILT** |
 | Enterprise inbound gateway | Partners post signed intents to the company's gateway (`POST /v1/metatx`); the company relays with its lanes | Company | **BUILT** (EVM door A) |
 
@@ -984,13 +984,14 @@ Consequences (normative):
 
 1. Relayers are run by parties with aligned business interest (issuer, distributors, partners, the payee), not by a
    fee market. The only in-protocol reward is the intent's own `fee`/`feeRecipient` (R75): no sponsorship pool, no
-   forwarder pay, no stake.
+   forwarder pay, no stake. (The opt-in `SponsorshipPool` of [TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §B3 is an application contract, not a mesh reward;
+   R75 unchanged, R194.)
 2. **B2B default `fee = 0`** (`MODE_FEE_NONE` + `MODE_RESTRICT_RELAYER` to the company relayer, R10): gas is an
    operating expense of the company relayer, booked per transaction (§13.2). `MODE_FEE_NONE` is also the cheapest mode
    (≈ 8 300 gas less than a fee-taking meta-tx).
 3. Payee-side relaying (§5.9) removes relayer dependence entirely for incoming payments.
 4. Sponsorship policy (gas subsidy for qualifying inbound payments, e.g. "inbound to wallet W ≥ X currency units ⇒
-   fee 0, booked to account Y") is a node policy row, never a contract feature. Status **PLANNED** (HANDOFF GA 2.2 #8).
+   fee 0, booked to account Y") is a node policy row, never a contract feature. Status **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §B1).
 5. Metric W3B-06 (relayer fee spread) may be negative by design.
 
 ---
@@ -1439,10 +1440,11 @@ show the mode and the recovery delay.
 
 ---
 
-## 10. Sealed-bid tender (PLANNED)
+## 10. Sealed-bid tender (SPECIFIED)
 
-No code and no component spec exist; this section is the contract a future component spec must satisfy or
-explicitly amend. Sources: SRS architecture §10 and §9.7, research synthesis "mechanism 8", canon §C22.6, settlement
+Component spec: [TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §A (R180–R188), authoritative for detail; no code. Where it differs from the text below (deposit
+and commitment in one token `pay` intent, permissionless reveal/withdraw, cancel until `commitDeadline`,
+`minBidders`, no `awardDeadline`, per-bid payout routing) the spec wins. Sources: SRS architecture §10 and §9.7, research synthesis "mechanism 8", canon §C22.6, settlement
 note §15.12.1. Detail added here (timing, deposits, penalties, events, meta-tx paths) is new and normative.
 
 ### 10.1 Problem
@@ -1545,7 +1547,7 @@ processor agreements):
 4. **Logs carry no payloads** (MESH §9 rule 5; NI §15).
 5. **Private chains and private bus scope** for data that must not reach third parties (§1.4).
 
-### 11.2 Crypto-shredding with ephemeral salts (PLANNED, HANDOFF GA 2.2 #12)
+### 11.2 Crypto-shredding with ephemeral salts (SPECIFIED, [TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §C; tooling not built)
 
 For anchored records (§2.2) that may contain or derive from personal data:
 
@@ -1712,7 +1714,7 @@ outside this store, issuer failed closed, no gossip peer for 5 min (informationa
 - **Unit cost:** gas of every finalized job is converted to the deployment's reporting currency at the transaction
   time and allocated to the business document (`entryRef` → invoice/order). PLANNED (HANDOFF GA 2.2 #10).
 - **Budgets:** per lane `gas_budget_per_hour`; per namespace `max_live_jobs`; sponsorship budgets per policy row
-  (PLANNED).
+  (SPECIFIED, [TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §B1).
 - **Float:** each lane holds gas float for ~50 transactions; refill from treasury when below 30 % of target; the
   `balance_floor` breaker stops a lane at the floor. Auto-refill is PLANNED; today an operator refills (O8).
 - **Indicative fixed costs** (research canon §C19, not re-estimated for all families): infrastructure ≈ $480–830 per
@@ -2081,7 +2083,7 @@ interface IRegulatedToken is IERC20Payment {
 Rules: §4.5. Meta-tx execution from a frozen `from` reverts at step 6 (`AccountIsFrozen`); credits to frozen
 accounts succeed. `courtRulingId == 0` ⇒ `RulingRequired`.
 
-### 14.7 `ISealedBidTender` — PLANNED (proposed)
+### 14.7 `ISealedBidTender` — SPECIFIED (superseded by [TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §A.3; sketch kept for history)
 
 ```solidity
 interface ISealedBidTender {
@@ -2190,7 +2192,7 @@ Order of streams per `TODO.md` and NI §17 / A2 §17 (one heavy stream at a time
 | 20 | Rename | `scaas` names in code, metrics, env, headers and on-chain tags | owner plan | **BUILT** (code); older component specs still cite old names |
 | 21 | app | React + Vite console/dApp (EVM + meta-tx families first; passkey/seed vault, extension wallets, dev key; OIDC only for node admin) | node APIs | **PLANNED** |
 | 22 | Queued | TON payer tx hash on `mined`; backup-key toggle, device-bound vault, Sui `fam_sui.verify`, Soroban/Aptos/Solana signers in clientkeys; Zether portal balance cache | — | **PLANNED** |
-| 23 | Product features | receiver-pays, sponsorship policy, KeyPool auto-refill, outbound treasury payouts, anchoring (Merkle/HCS), crypto-shredding tooling, W3B SLOs/OTel/FinOps, controlled tokens, tender, vesting, managed DEX, asset suite wizard, Celo `l1_batch`, Hedera HCS/scheduled tx | — | **PLANNED**; controlled tokens, vesting, managed DEX, asset suite **SPECIFIED** ([AS](superpowers/specs/2026-10-06-asset-suite-design.md)) |
+| 23 | Product features | receiver-pays, sponsorship policy, KeyPool auto-refill, outbound treasury payouts, anchoring (Merkle/HCS), crypto-shredding tooling, W3B SLOs/OTel/FinOps, controlled tokens, tender, vesting, managed DEX, asset suite wizard, Celo `l1_batch`, Hedera HCS/scheduled tx | — | **PLANNED**; controlled tokens, vesting, managed DEX, asset suite **SPECIFIED** ([AS](superpowers/specs/2026-10-06-asset-suite-design.md)); receiver-pays, sponsorship policy, tender, crypto-shredding **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md)) |
 | 24 | Post-quantum Zether | BFV/BGV confidential balances on private/PoA chains | mesh round 4 | **PLANNED** |
 | 25 | TW2 T1–T8 | Token wrappers v2: `MetaTxCore` + named functions, three tiers, rates, multi-underlying (adjustable legs, admin-only execute, all-leg wrap pause), gasless unwrap op with `minOut`, factory v2, Hedera children, invariant suite, node/Odoo fields ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §15) | owner review of TW2 | contracts T1–T6 **BUILT** (EVM + Hedera); T7 node/Odoo/SDK **SPECIFIED** |
 | — | Owner/operator steps | O1 audit of every contract family; O2 registrar multisig; O3 real deployments; O4 7-day finality evidence + ≥ 2 RPCs; O5 reverse-proxy rate limits; O6/O7 KMS/HSM custody and lane signers; O8 lane funding; O9 land-gate decision; O10 subject-account onboarding; Z1–Z6 Zether gates | — | open |
