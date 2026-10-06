@@ -1,11 +1,14 @@
 # Operations: SLOs, telemetry, FinOps, RACI, incident response and disaster recovery (component spec C)
 
-Status: draft rev 1, 2026-10-06. Component spec **C**. Short name **OPS**. Code at `scaas` `main` 5f1d327 (node store
+Status: draft rev 1.1, 2026-10-06 (owner answers to §14 q1–q3 and the operator-independence statement folded in). Component spec **C**. Short name **OPS**. Code at `scaas` `main` 5f1d327 (node store
 P1 built; job API, admin API, mesh bus, gossip SPECIFIED). **Nothing in this spec is built** except the metrics marked
 BUILT in §4.2.
-Rulings: **R230–R245** (§2). R150–R172 belong to the app spec, R180–R199 to spec B (TSS), R200–R216 to spec A (AS).
+Rulings: **R230–R247** (§2). R150–R172 belong to the app spec, R180–R199 to spec B (TSS), R200–R216 to spec A (AS).
 Owner ruling of 2026-10-06 folded in: **the spec proposes default numbers with reasons; every number is owner to
-approve.** Market-neutral: no jurisdiction-specific law; amounts in neutral units; "reporting currency" means the
+approve.** Owner, rev 1.1: **"SCaaS means the smart contracts themselves are the API services that run the
+business services."** The node is infrastructure anyone can run to reach those contract services (submit, index,
+relay), not the product; **how a node operates — its policies — is up to whoever runs it** (R247). Everything in
+this spec is therefore a recommendation to node operators, never a network-wide rule. Market-neutral: no jurisdiction-specific law; amounts in neutral units; "reporting currency" means the
 deployment's own.
 
 **OA** marks a default number proposed by this spec (reason next to it); **owner to approve**. Changing an OA number
@@ -16,7 +19,7 @@ Amends (status changes only; text in those files is not rewritten here):
 | Short | File | How |
 |---|---|---|
 | SCaaS | `docs/SCaaS.md` | §13.1 W3B-01…06, trace contract; §13.2 unit cost; §13.3–§13.5: PLANNED → SPECIFIED, link here. §13 tables stay as the summary; this spec is the normative detail |
-| NI | `specs/2026-10-06-node-independence-design.md` rev 3.3 | §15 metrics extended (§4.3); `job` gains `trace_id` (R236); `usage_day` and `watch_pin` tables (R238, R235); CLI `lane accept-nonce` (R241); admin routes `…/tokens/{addr}/pins`, `…/watch`, `/v1/admin/usage` (§4.4) |
+| NI | `specs/2026-10-06-node-independence-design.md` rev 3.3 | `deny_subject` table, intake check on every door (§5.2 step after decode, gateway, mesh L3, DEX intake, `/v1/ops`), `403 SUBJECT_DENIED`, deny routes and metrics (R246, §4.5); §15 metrics extended (§4.3); `job` gains `trace_id` (R236); `usage_day` and `watch_pin` tables (R238, R235); CLI `lane accept-nonce` (R241); admin routes `…/tokens/{addr}/pins`, `…/watch`, `/v1/admin/usage` (§4.4) |
 | MESH, A2 | relayer-mesh rev 3, gossip amendment rev 2.1 | metric `scaas_mesh_propagation_seconds` added; names of MESH §12 and A2 §13.3 unchanged |
 | TSS | tender-sponsorship-shredding rev 1.1 | job cost columns (§B1.2) are written for **every** job, not only sponsored ones (R238) |
 | TW2, AS | token wrappers v2 rev 1.2, asset suite rev 1 | "node/ERP should alert" items (TW2 §6.6, §8.4; AS §3.10, §9.1) become the node ops watch (R235) |
@@ -37,10 +40,10 @@ DR drills; capacity limits for the reference hardware class.
 - High availability for one `(company, chain)` (R97, NI §18.3 stays deferred). DR here is restore, not failover.
 - Automatic lane refill from a treasury (SCaaS §13.2 "auto-refill" stays PLANNED; runway alerts replace it in v1).
 - A price oracle in the node (TSS R189 unchanged). FinOps conversion uses an operator-supplied price file.
-- Contractual SLAs with service credits (open question §14 q2). The targets here are internal objectives.
+- Contractual SLAs or service credits (owner, rev 1.1): every target is an internal objective of whoever runs a node.
 - Telemetry from the app (`scaas/app`). The app sends nothing; W3B-05 is a release benchmark (R233).
 
-### 1.3 Severities (R232)
+### 1.3 Severities (R232; recommended, each operator routes its own)
 
 | Sev | Meaning | Routing | Acknowledge within (OA) | Why |
 |---|---|---|---|---|
@@ -61,10 +64,11 @@ Format: **ruling — reason — cost if wrong.**
   by index (`"0"`, `"1"`…), because `rpc_urls` may embed provider API keys. — R51 already hand-writes the format
   (golden test); a histogram is ~30 lines; one dependency less on a box with an OOM rule. — If wrong: a crate swap
   keeps every name.
-- **R231** **SLOs, alerts and dashboards are evaluated outside the node**: Prometheus recording rules + Alertmanager
-  on infrastructure that is neither the node's host nor the ERP's, plus an external dead-man's switch fed by an
-  always-firing `Watchdog`. The node exports raw series only. Rule file, Alertmanager example and dashboards live in
-  `scaas/ops/` and are the normative copy of §5. — Research §12.11: monitoring on the monitored host is switched off
+- **R231** **SLOs, alerts and dashboards are evaluated outside the node, by whoever runs it** (owner: customer-run
+  nodes are monitored by the customer): Prometheus recording rules + Alertmanager on infrastructure that is neither
+  the node's host nor the ERP's, plus an external dead-man's switch fed by an always-firing `Watchdog`. The node
+  exports raw series only. SCaaS ships the rule file, Alertmanager example and dashboards in `scaas/ops/` as the
+  recommended copy of §5; operators adopt, change or replace them. — Research §12.11: monitoring on the monitored host is switched off
   by whoever owns that host; absence of signal must page. — If wrong: one more host per deployment.
 - **R232** **Three severities** (§1.3); P1 = exactly the `scaas-p1` group of §5.1; everything else P2/P3. — Pages
   that do not mean "integrity or outage" train people to ignore pages. — If wrong: an alert moves one group.
@@ -153,6 +157,22 @@ Format: **ruling — reason — cost if wrong.**
   defects. Evidence first (§10.0); never auto-cancel held or signed jobs (a broadcast tx can still land); never
   rewind silently; customer communication from prepared templates. — Research §12.10; SCaaS §13.4 timing kept. — If
   wrong: escalation path in §9.2.
+- **R246** (owner) **Subject denylist at node intake — the operator's choice.** An admin-managed list (§4.5): the
+  node refuses to relay or serve jobs whose subject, payer or recipient is listed; each entry carries the order
+  reference and the SHA-256 of the order document; every change is audited. It has **no on-chain effect**: on a
+  permissionless token the listed party can still use the contract through other operators or by self-submission;
+  this node just won't serve. Mesh intents with a listed party are *Ignored* (local policy, never a peer fault) and
+  not forwarded. — A regulator's order binds the operator it is addressed to, and the operator needs a precise,
+  evidenced, reversible lever instead of suspending a namespace or unregistering a token. — If wrong: the list is
+  empty by default and costs one set lookup per intake.
+- **R247** (owner) **Operators are independent; this spec is a set of recommendations.** Anyone can run `scaas-node`
+  (it doubles as a relayer). Each operator sets its own acceptance, fee, sponsorship, denylist, gossip and peer
+  policy, and its own SLOs, alerting and monitoring; nothing in §3, §5, §11 or §12 binds another operator or the
+  network. Protocol guarantees — contract rules, subject signatures, nonces, expiry — hold on chain whatever any
+  operator does; a refusing or slow operator costs liveness only, countered by other operators or self-submission
+  (SCaaS §1.2). The `scaas/ops` bundle and every OA default are recommendations, not obligations. SLOs are internal
+  objectives of whoever runs the node: no contractual SLA, no service credits. — Owner: "SCaaS means the smart
+  contracts themselves are the API services that run the business services." — If wrong: nothing on chain changes.
 
 ---
 
@@ -160,7 +180,7 @@ Format: **ruling — reason — cost if wrong.**
 
 ### 3.1 Component SLOs
 
-Window: 30 days rolling unless stated. "Budget" = allowed bad fraction of the window.
+Recommended internal objectives for whoever runs a node (R247); no SLA. Window: 30 days rolling unless stated. "Budget" = allowed bad fraction of the window.
 
 | Component | SLI (series, §4) | Target (OA) | Reason | Budget / 30 d |
 |---|---|---|---|---|
@@ -319,6 +339,35 @@ metrics.
 | `scaas-node lane accept-nonce …` | R241 |
 | `scaas-node index reset --chain <key> --to <block> --confirm <block>` | R242 (c); node stopped |
 
+### 4.5 Subject denylist (R246, operator's choice)
+
+```sql
+CREATE TABLE deny_subject (
+  id            BIGINT PRIMARY KEY,                -- counter row 'deny_subject'
+  chain_key     TEXT NOT NULL,                     -- a chain key or '*'
+  address       TEXT NOT NULL,                     -- family canonical form (addresses.canonical)
+  order_ref     TEXT NOT NULL,                     -- the order's own reference
+  document_hash BLOB NOT NULL,                     -- SHA-256 of the order document (kept by the operator, not the node)
+  state         TEXT NOT NULL CHECK (state IN ('active', 'lifted')),
+  valid_until   BIGINT,                            -- NULL = until lifted; past ⇒ no longer matches
+  created_by TEXT NOT NULL, created_at BIGINT NOT NULL, lifted_by TEXT, lifted_at BIGINT, lift_ref TEXT);
+CREATE INDEX deny_subject_addr ON deny_subject (address, chain_key);
+```
+
+- **Parties checked** at intake on every door (job API, gateway, mesh, DEX, `/v1/ops`): meta-tx `m.from`, `m.to`;
+  family op signer and payee; DEX maker (taker at match); `call` jobs: target and the addresses the node decodes for
+  known selectors. Match ⇒ `403 SUBJECT_DENIED` (no order detail in the body); mesh ⇒ Ignore, not forwarded; DEX ⇒
+  order refused, resting orders of the maker dropped (a cancel item on the feed).
+- **When an entry is added:** matching never-published `queued`/`leased` jobs ⇒ `dead`, `error = SUBJECT_DENIED`;
+  published ones ⇒ `hold = 1`; `signed`/`broadcast` jobs continue (the signed tx can land anyway, N3). The events
+  feed is not filtered (chain facts the clients need for their books).
+- **Routes:** `GET /v1/admin/deny[?address=]` (operator: addresses are sensitive); `POST /v1/admin/deny`
+  `{chain_key, address, order_ref, document_sha256, valid_until?}` and `POST /v1/admin/deny/{id}/lift {lift_ref}`
+  (admin); before/after audited (R110); hot ≤ 2 s (in-memory set). Lifted/expired rows kept 400 d (OA), then purged.
+- **Metrics:** `scaas_deny_entries{chain}` (active, `chain="*"` for all-chain entries), `scaas_deny_refused_total{chain,
+  door}` (`api`, `gateway`, `mesh`, `dex`, `ops`), `scaas_deny_changes_total{action}` (`add`, `lift`, `expire`). No
+  address label; refusal logs carry `deny_id` and the job/intent id, never the address.
+
 ---
 
 ## 5. Alerts, routing, dashboards
@@ -409,6 +458,7 @@ groups:
   - {alert: ScaasFeeRecipientChanged, expr: 'increase(scaas_fee_recipient_changed_total[10m]) > 0', labels: {severity: P2, runbook: rb-10-compromised-admin}}
   - {alert: ScaasAdminLoginFailures, expr: 'sum(increase(scaas_admin_login_total{result=~"bad|locked"}[10m])) > 20', labels: {severity: P2, runbook: rb-10-compromised-admin}}
   - {alert: ScaasSponsorBudgetExhausted, expr: 'scaas_sponsor_budget_remaining_ratio == 0', labels: {severity: P2, runbook: rb-14-runway}}
+  - {alert: ScaasDenylistChanged, expr: 'increase(scaas_deny_changes_total{action!="expire"}[10m]) > 0', labels: {severity: P2, runbook: rb-13-regulator-order}}
   - {alert: ScaasGossipIsolated, expr: 'sum(scaas_gossip_peers) == 0', for: 10m, labels: {severity: P2, runbook: rb-17-gossip-degraded}}
 - name: scaas-p3
   rules:
@@ -581,18 +631,23 @@ Per-business-document allocation (`entryRef` → invoice) stays with the client 
 
 ## 9. RACI (R239)
 
+SCaaS means the smart contracts themselves are the API services that run the business services; the node is
+infrastructure anyone can run to reach them. **Operating, monitoring and paging a node is accountable to whoever runs
+that node** (customer, partner, third party, or the SCaaS team for its own nodes); the SCaaS team ships software,
+contracts and the recommended `scaas/ops` bundle (R231, R247).
+
 ### 9.1 Roles
 
 | Role | Who | Holds | Cannot |
 |---|---|---|---|
-| **Node operator** (NO) | the organisation running `scaas-node` and its on-call | host, `node.toml`, lane keystore passphrase, admin roles `viewer`/`operator`/`admin` | mint client credentials (needs `key_custodian`) |
+| **Node operator** (NO) | whoever runs `scaas-node` (independent; sets its node's policies) and its on-call; accountable for that node's operation, monitoring and paging | host, `node.toml`, lane keystore passphrase, admin roles `viewer`/`operator`/`admin` | mint client credentials (needs `key_custodian`) |
 | **key_custodian** (KC) | named person(s) in the operator organisation, not the `admin` holder in production | `key_custodian` role; `master_key` and lane-mnemonic secret custody (Shamir shares or KMS) | change chain config (unless also `admin`) |
 | **Issuer** (IS) | token creator / asset issuer | on-chain `issuer` of `*_REG` tokens; chooses guardian and rateAdmin; holder disclosures | move funds without a compliance record (AS A1) |
 | **Compliance** (CO) | issuer's compliance function | on-chain `compliance` (records orders); client-side `compliance_officer` (erasure, TSS §C.4) | execute orders (AS A2) |
 | **Guardian** (GU) | issuer's on-call key | Multi `disableWrap` only (TW2 R136) | re-enable, mint, move funds |
 | **rateAdmin** (RA) | a multisig/timelock contract (TW2 R135) | propose/cancel/execute rate, renounce | act within `rateDelay`, exceed `maxRateStepBps` |
 | **ERP admin** (EA) | system administrator of the client ERP | API key entry, push/sync crons, `action_switch_to_push`, `action_acknowledge_store_change`, DB neutralisation | node configuration (R109) |
-| **Owner / SCaaS team** (OW) | product owner and SCaaS engineering | releases, specs, default parameters, factory registrar multisig (O2), audits (O1) | operate a customer's node or keys |
+| **Owner / SCaaS team** (OW) | product owner and SCaaS engineering | contracts, releases, specs, recommended defaults and the `scaas/ops` bundle, factory registrar multisig (O2), audits (O1) | operate, monitor or set policy for another operator's node; hold its keys |
 
 Organisational functions of SCaaS §13.3 (security, legal, finance) sit inside these roles: the node operator's and
 issuer's security and finance owners act as A where marked.
@@ -619,7 +674,7 @@ R responsible · A accountable · C consulted · I informed · — not involved.
 | Token registration on a node / code-hash re-pin | A/R | — | C | — | — | — | I | — |
 | `fee_recipient` change | A/R | C (second person) | — | — | — | — | — | — |
 | Sponsorship policy and budget | R | — | C | — | — | — | C | — |
-| Chain enablement `draft → active` (O4) | R | — | — | — | — | — | I | A |
+| Chain enablement `draft → active` on a node (O4 evidence) | A/R | — | — | — | — | — | I | C (publishes evidence) |
 | Mesh peer admission, URL change | A/R | — | — | — | — | — | — | I |
 | Gossip ban / trust | A/R | — | — | — | — | — | — | I |
 | Cutover per chain (`action_switch_to_push`) | C (preconditions §11.2 NI) | — | — | — | — | — | A/R | C |
@@ -627,15 +682,18 @@ R responsible · A accountable · C consulted · I informed · — not involved.
 | Store restore (node side) | A/R | R (re-revoke / rotate) | I | — | — | — | I | C |
 | Restore acknowledgement and re-push (client) | C | — | — | — | — | — | A/R | — |
 | Regulator order on a regulated token | I | — | R (freeze, execute) | A/R (record) | — | — | I | — |
-| Regulator order on a permissionless token | R (stop relaying, §14 q1) | — | I | A | — | — | C | C |
+| Regulator order on a permissionless token (denylist, R246) | A/R (order addressed to it) | — | I | C | — | — | I | I |
+| Subject denylist add / lift | A/R | — | I | C (own token) | — | — | I | — |
+| Node policies (acceptance, fees, sponsorship, gossip, peers) | A/R | — | C (own tokens) | — | — | — | C | — |
 | Erasure request (client data) | I | — | — | A/R | — | — | R | — |
 | Incident: node / store / chain / lane | A/R (commander) | C | I | — | — | — | I | C |
 | Incident: token (backing, depeg, code hash, forced transfer) | R (watch, evidence) | — | A (commander) | R | R | C | I | C |
-| Incident: software defect in a release | R | — | I | — | — | — | I | A |
+| Incident: software defect in a release | A/R (own node: roll back) | — | I | — | — | — | I | A/R (fix, release) |
 | Post-mortem | R | C | C | C | — | — | C | A (defects) / C |
 | Release upgrade of the node | A/R | — | — | — | — | — | I | C |
 | DR drill | A/R | R (shares, keys) | — | — | — | — | R (ack drill) | I |
-| Alert rules and dashboards (`scaas/ops/`) | R (thresholds per deployment) | — | — | — | — | — | — | A (defaults) |
+| Monitoring, alert routing and paging of a node | A/R | — | — | — | — | — | I | — |
+| Recommended rules and dashboards (`scaas/ops/`) | C (adopts or changes) | — | — | — | — | — | — | A/R |
 
 Human approval stays mandatory where SCaaS §13.3 says so (land gate, confidentiality horizon, budgets, factory
 implementations, controlled-token interventions).
@@ -822,9 +880,12 @@ Regulated token (`*_REG`, AS §3.5):
 4. `OrderRecorded` without a matching internal record (P2 `ScaasWatchedEvent`) ⇒ compliance key compromise (AS A2):
    CO revokes the record, rotates the multisig signer, IS refuses execution.
 
-Permissionless token: no on-chain power exists by design (SCaaS §4.5). The operator can only stop relaying: suspend
-the namespace concerned, unregister the token, or (if adopted, §14 q1) deny the subject address; legal answers the
-order with that limit stated.
+Permissionless token: no on-chain power exists by design (SCaaS §4.5); the order binds the operator it is addressed
+to, not the network. After its legal validates the order, the operator lists the party (R246):
+`adm POST /v1/admin/deny -d '{"chain_key":"*","address":"0x…","order_ref":"…","document_sha256":"<64 hex>"}'`;
+lift with `adm POST /v1/admin/deny/$ID/lift -d '{"lift_ref":"…"}'`. Other operators and self-submission still reach
+the contract; legal answers the order with that limit stated. `ScaasDenylistChanged` (P2) is verified against the
+operator's order register.
 
 #### RB-14 runway
 1. `scaas-node addresses --config $CFG` lists lane addresses; fund from treasury to the float target (~50 tx,
@@ -973,26 +1034,22 @@ Above the rated load: a second node on **different chains** (R97), not a bigger 
 | OP5 | Integrity and DR tooling | `lane accept-nonce`, `index reset` (+ the Odoo cursor-reset action), final-hash recheck, audit-chain verification, backup scripts per backend, restore runbook rehearsal | NI P3/P4; PG/MySQL parts after P1b | **SPECIFIED** (SQLite parts before the first production cutover, P6) |
 | OP6 | Ops bundle | `scaas/ops/prometheus/scaas-rules.yml` (§5.1), Alertmanager example, nine Grafana dashboards, promtool rule tests | OP1 | **SPECIFIED** |
 | OP7 | OTLP export | cargo feature `otel`, spans of §6 | OP2 | PLANNED |
+| OP8 | Subject denylist | `deny_subject`, intake checks per door as each door lands, admin routes, metrics, hold/dead on add | NI P2/P3 | **SPECIFIED** |
 
 Order: OP2 (small, any time after P2) → OP1 with P3/P4 → OP5 SQLite part and OP6 before P6 cutover → OP4 with SP1
-→ OP3 after TW2 T7 → OP5 PG/MySQL with P1b → OP7. Heavy builds and the OP1 load test run one at a time.
+→ OP3 after TW2 T7 → OP5 PG/MySQL with P1b → OP7; OP8 with P3. Heavy builds and the OP1 load test run one at a time.
 
 Tests: renderer golden tests extended per new family (as `metrics_text_format_golden`); promtool `test rules` with
 synthetic series for every alert of §5.1; `revert_streak` boundary (2 vs 3 in 15 min, `race` excluded);
 `usage_day` upsert under concurrent terminal transitions and decimal sums; `accept-nonce` refuses without quorum
 agreement or with a wrong `--confirm`; final-hash recheck on a forked devnet; audit verification detects a single
-edited row; log redaction test (no payload/address/amount/secret field in any line of an e2e run, grep-based).
+edited row; denylist: each party position per door, `*` vs chain entries, expiry, add-time hold/dead, no
+address in logs or labels; log redaction test (no payload/address/amount/secret field in any line of an e2e run, grep-based).
 
 ---
 
 ## 14. Open questions (owner)
 
-1. **Subject denylist for permissionless tokens.** A regulator may order an operator to stop relaying for an
-   address. Today the only levers are namespace suspension and token unregistration (both coarse). Add an
-   admin-managed `deny_subject (chain_key, address, ref, until)` checked at accept on every door, or keep the coarse
-   levers and state the limit?
-2. **SLA.** Stay internal objectives (this spec), or turn some rows of §3.1 into a contractual SLA with credits for
-   managed deployments (which then needs SCaaS-side monitoring of customer nodes)?
-3. **Who hosts monitoring for customer-run nodes**: the customer (telemetry never leaves its infrastructure) or the
-   SCaaS team as a managed service (R231 needs an off-host Prometheus either way; §9.2 marks NO as accountable and
-   would change to OW for managed nodes)?
+None open. Owner answers (rev 1.1): q1 subject denylist **yes**, at node intake, operator's choice (R246); q2 SLOs
+stay **internal objectives**, no SLA or credits (R247); q3 customer-run nodes are **monitored by the customer**,
+SCaaS ships the `scaas/ops` bundle (R231, §9).

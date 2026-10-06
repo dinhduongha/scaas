@@ -100,13 +100,20 @@ Clients still read the domain a deployed contract reports (`eip712Domain()`) rat
 
 ### 1.1 What SCaaS is
 
-SCaaS is a **foundational infrastructure service for write authority and value**, used by ERPs, portals, mobile
-apps and AI agents the way they use a database or object storage. It is made of:
+**SCaaS means the smart contracts themselves are the API services that run the business services** (owner).
+Payments, mandates, tokens and wrappers, the DEX, tenders, vesting, distributions and confidential transfers are
+contract functions (§4, §5, §7, §8, §10): immutable code per network family, deployed as EIP-1167 clones from an open
+factory on EVM and as equivalent modules/programs elsewhere, that checks the subject's signature, nonce, expiry and
+limits on every call. ERPs, portals, mobile apps and AI agents call them the way they call any API. The contracts
+are the product; everything else is a way to reach them:
 
-- **immutable contracts** per network family (§4, §5, §7, §8, §10), deployed as EIP-1167 clones from an open factory
-  on EVM and as equivalent modules/programs elsewhere;
-- **`scaas-node`**, a relayer and indexer that pays gas for subject-signed intents, journals every submission,
-  waits for finality and serves finalized facts back (§3, §6);
+- **`scaas-node`**: infrastructure, not the product. **Anyone can run it**; it doubles as a relayer: it submits
+  subject-signed intents and pays their gas, journals every submission, indexes, waits for finality and serves
+  finalized facts back (§3, §6). How a node operates is up to whoever runs it: each operator sets its own
+  acceptance, fee, sponsorship, denylist, gossip and peer policies and its own SLOs and monitoring. Operators are
+  independent, and the protocol guarantees (contract rules, signatures, nonces) do not depend on any of them; the
+  defaults and the `scaas/ops` bundle are recommendations ([OPS](superpowers/specs/2026-10-06-operations-design.md)
+  R247);
 - **client-side signers** (`clientkeys`: passkey, 24-word seed vault; extension wallets) so that the subject signs
   on its own device (§9);
 - **`zether-prover`** for confidential amounts (§8);
@@ -117,7 +124,8 @@ SCaaS does not depend on any ERP. Odoo (addons `dms_blockchain*` in the `bamboo-
 
 ### 1.2 Authority model: SCaaS vs IaaS vs BaaS
 
-The difference is **who signs a valuable write**.
+The difference is **who signs a valuable write**. In IaaS and BaaS the service is the operator's server; in SCaaS
+the service is the contract, and a node only carries signed writes to it and reads facts back.
 
 | Criterion | IaaS (AWS EC2, Google Compute Engine) — the app issues JWTs, the server signs | BaaS (Supabase) — Supabase Auth issues JWTs, the server signs; Postgres RLS | SCaaS — the client signs every valuable create/update |
 |---|---|---|---|
@@ -158,6 +166,7 @@ Design consequences (normative):
 | A database replacement | Business data stays in the client's system of record; only commitments, settlements and the minimum identity linkage go on chain (§2.2) |
 | An upgradeable platform | No proxy upgrade on any contract that holds value; new behaviour = new version + voluntary migration (§4.3) |
 | A token gatekeeper | The factory is open; provenance replaces allowlists (§4.3). Controlled tokens are a separate, explicit class (§4.5) |
+| A hosted node service | The node is infrastructure anyone can run; operators are independent, set their own policies and can only refuse or delay, never forge (§1.1, §1.2) |
 | A single-ERP product | Odoo is one client; any ERP integrates through the same job API (R87, `integration.md`) |
 | A market maker or profit-seeking relayer market | Relayer economics are cost recovery between parties with aligned interests; fee = 0 is the B2B default (§6.9) |
 
