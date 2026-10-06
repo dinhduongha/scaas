@@ -1392,7 +1392,7 @@ mandate path enforces caps on chain (§4.7).
   `encodeAssertion = abi.encode(authenticatorData, clientDataJSON, r, s)`, `merkleBatch`, `accountSignature =
   abi.encode(keyIndex, bytes32[] proof, sig)`.
 
-### 9.4 Subject accounts, guardians, recovery, backup (BUILT; backup toggle PLANNED)
+### 9.4 Subject accounts, guardians, recovery, backup (BUILT; backup toggle SPECIFIED, [S4F](superpowers/specs/2026-10-06-signers-followups.md))
 
 `SubjectAccount` (EVM; equivalents per family): multiple authorized keys (`P256_WEBAUTHN(x, y, rpIdHash,
 originHash)`, `SECP256K1(address)`), never zero keys (`LastKey`); `addKey`/`removeKey`/`rotateKey`/`setGuardian`
@@ -1405,7 +1405,7 @@ payment.
 Seed and passkey back each other up: the seed-derived key is the natural recovery key when a passkey is lost and
 vice versa.
 
-**Backup-key toggle (PLANNED):** a per-account setting `backup_mode ∈ {passkey_prf (default), seed_verified,
+**Backup-key toggle (SPECIFIED, [S4F](superpowers/specs/2026-10-06-signers-followups.md) R250–R254, which replace this mode list):** a per-account setting `backup_mode ∈ {passkey_prf (default), seed_verified,
 guardian_only, device_bound}`. `device_bound` (no backup) is refused for any value-bearing flow (estimated loss
 3–8 %/year vs 0.05–0.2 % with PRF backup, canon §C15.1); switching modes is an owner call on the account; clients
 show the mode and the recovery delay.
@@ -1419,7 +1419,7 @@ show the mode and the recovery delay.
   limits. Mnemonic and keys never leave the device.
 - Derivation (`clientkeys` `NETWORKS`): EVM `m/44'/60'/0'/0/i`; Cosmos `m/44'/118'/0'/0/i`; Hedera ECDSA
   `m/44'/3030'/0'/0/i`, Hedera ED25519 `m/44'/3030'/0'/0'/i'`; Sui `m/44'/784'/i'/0'/0'`; Stellar `m/44'/148'/i'`
-  (Pi: coin 314159); TON `m/44'/607'/i'`; Aptos `m/44'/637'/i'/0'/0'`. Solana `m/44'/501'/i'/0'` **PLANNED** in
+  (Pi: coin 314159); TON `m/44'/607'/i'`; Aptos `m/44'/637'/i'/0'/0'`. Solana `m/44'/501'/i'/0'` **SPECIFIED** ([S4F](superpowers/specs/2026-10-06-signers-followups.md) R263) in
   clientkeys. TON keys from these paths are importable into TON wallets as "BIP-39/Ledger path", not as native TON
   mnemonics.
 - Zether conf keys from the same seed on separate paths (§8.10).
