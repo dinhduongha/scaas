@@ -1,16 +1,17 @@
 # Node independence — Odoo becomes a client of `scaas-node` (design amendment)
 
-Status: draft rev 3.3, 2026-10-06 (review 1 folded in, §19; admin-auth ruling, its 3.1/3.2 clarifications and the scaas
-rename folded in; rev 3.3: corrections proven by the P1 code and its review, and the owner ruling on mesh peer URLs,
-§19.3). Code at
-`bamboo-dms` `main` 90a5b17 (mesh S0, S1a, S2 merged); the blockchain stack now lives in repo `scaas`
-(`scaas/smartcontracts`, `scaas/docs`, `scaas/app`, and the node).
+Status: draft rev 3.4, 2026-10-06. Rev 3.4 consolidates every node addition the other component specs assigned to NI
+(APP §9.6, OPS rev 1.2, TSS rev 1.2, F current rev, AS rev 1.1, TW2 rev 1.2; spec D assigns none): **NI is the single
+normative place for node routes, tables and config**; the source specs keep the reasons. Table and source list: §20.
+Earlier: review 1 (§19.1), admin-auth rulings and the rename (§19.2), P1 code corrections and mesh peer URLs (§19.3).
+Node P1 is built (`scaas` `main`); the blockchain stack lives in repo `scaas` (`smartcontracts`, `docs`, `app`, node).
 **Naming (owner, approved rename):** the node is `scaas-node` (crate, binary, directory `scaas/scaas-node/` — today
 still `scaas/scaas-node/` until the rename stream lands; file:line citations refer to the current files); env vars
 `SCAAS_*`; metrics `scaas_*` (incl. the R51 ones); HTTP headers `X-Scaas-*` (R54); signer/domain tags
 `scaas.*`/`scaas-*`. Odoo addon and repo names
 (`dms_blockchain*`, `bamboo-dms`, `bamboo_abp_auth`) are unchanged.
-Rulings: **R87–R111** (§2; R111 = Amendment A1, end of file), continuing the round-4 mesh spec (R70–R86).
+Rulings: **R87–R111** (§2; R111 = Amendment A1, end of file), continuing the round-4 mesh spec (R70–R86); rev 3.4
+adds **R320–R321**.
 Owner rulings folded in: "invert Odoo ↔ node", "OIDC for the node admin API and the React app", "SQLite/PostgreSQL/
 MySQL storage backends, storage only", "node admin auth as simple as possible: built-in users, API keys, optional OIDC;
 roles kept", "mesh peer URLs are editable through the admin API, admin role only, audited, with an SSRF guard" (all
@@ -22,7 +23,7 @@ Amends:
 |---|---|---|
 | PD | `scaas/docs/superpowers/specs/2026-10-03-blockchain-payments-design.md` | R6, R16 superseded; R11, R20, R51, R53, R54, R56 amended (§2, §18.1) |
 | R3D | `scaas/docs/superpowers/specs/2026-10-03-blockchain-round3-design.md` | R51, R53, R55, R56, R58 delivery paths amended (§9, §10) |
-| MESH | `scaas/docs/superpowers/specs/2026-10-05-relayer-mesh-design.md` | sections listed in §13.1 superseded; streams in §13.2 changed; envelope id is now `scaas-intent/1.2` |
+| MESH | `scaas/docs/superpowers/specs/2026-10-05-relayer-mesh-design.md` | sections listed in §13.1 superseded; streams in §13.2 changed; envelope id is now `scaas-intent/1.2` (`1.3` adds the UA body, F R316) |
 | node | `scaas/scaas-node/` | file:line citations `submit.rs:…` etc. are under `src/` |
 | Odoo | `bamboo-dms/dms_blockchain*/` | unchanged location |
 
@@ -70,6 +71,9 @@ The node is an Odoo worker. Every durable fact it relies on lives in Odoo and is
 7. Every safety property already built is preserved (§9): R80/S2 consumption checks, the in-flight digest set,
    journal-before-broadcast, `plan()` restart, `consumed` semantics (S1a), no double broadcast, journaled nonces.
    Two gaps of today close: gateway work becomes journaled and digest-guarded (§1.1), bound jobs go to their lane.
+8. **Rev 3.4 additions** (§20): gateway capability, CORS, error contract, `/v1/ops`, UA routes and app serving (APP);
+   denylist, FinOps, restore and integrity tooling (OPS); sponsorship, receiver-pays, chain contracts (TSS); UA jobs
+   and records (F); planned AS7, TW2 T7 and N3 work.
 
 ### 1.3 Non-goals
 
@@ -95,12 +99,12 @@ Format of PD §13: **ruling — why — cost if wrong.**
 | **R87** | (owner) **The node is independent of Odoo.** It never connects to Odoo; Odoo is one client among others. Supersedes **PD R6** and the MESH R71 clause "R6 unchanged: … Odoo stays control plane". The node's control plane is its own admin API (§7). | Owner. One product, many ERPs; every node is "standalone" (MESH §3.3 generalised). | Odoo learns state by polling (R101 bounds it). |
 | **R88** | **One store, always on**, opened by every node (not only with `[mesh]`); backend per R111. It holds jobs, job events, index ranges, config, key metadata, audit, DEX book and the mesh tables. **One owner process per store**, enforced by a backend-native owner lock **and a fencing epoch** checked in every journal transaction (R111). Supersedes **PD R16** entirely (gateway queue and DEX book in memory). | The journal must be local to keep journal-before-broadcast without an Odoo hop; one writer gives commit-ordered `seq` (MESH R71 argument). | A lost store loses jobs; R110 makes recovery operator-confirmed. |
 | **R89** | **One journal, node-computed digests**: every local submission — job API, gateway door A, mesh scheduler, DEX settle — is a `job` row; mesh `intent` rows reference `job_uid` instead of carrying `lane_label/outer_nonce/tx_hash`. `job.digest` is **derived by the node** from the decoded payload with the S3 library (MESH §4.4 per family; Soroban: SHA-256 of the `HashIdPreimage` the payload carries); a client `digest` that differs ⇒ `422 BAD_PAYLOAD`. A unique live-digest index (`(chain_key, digest)` over live states; emulated on MySQL, R111) makes G2 durable across namespaces and restarts. | Two journals mean two `plan()` inputs and two outcome sinks (MESH §8.4, §8.6). A client-supplied digest (today `submit.rs:93-96`) would let one tenant squat another's intent or bypass G2 on a multi-tenant API (review H7). | Mesh intent states `submitting/broadcast/landed` become derived from the job (§13.1). S3 must precede P2. |
-| **R90** | **Namespaces**: the node's tenant unit (`[a-z0-9-]{3,40}`; names starting `~` reserved: `~gateway`, `~mesh`, `~dex`). Granted chains; token subset pushed by the client (R95). No notion of company. Odoo maps companies to a node endpoint + namespace credential (`blockchain.node.route`). | Owner: "the node doesn't know companies". | A namespace shared by several companies sees their combined feed; Odoo routes by origin. |
+| **R90** | **Namespaces**: the node's tenant unit (`[a-z0-9-]{3,40}`; names starting `~` reserved: `~gateway`, `~mesh`, `~dex`, and `~lane` — a booking label only, for gap-fillers of adopted nonces, never a job namespace, OPS §8.1). Granted chains; token subset pushed by the client (R95). No notion of company. Odoo maps companies to a node endpoint + namespace credential (`blockchain.node.route`). | Owner: "the node doesn't know companies". | A namespace shared by several companies sees their combined feed; Odoo routes by origin. |
 | **R91** | **Idempotency key** = `(namespace, origin.scope, origin.producer, origin.key, origin.generation)`, plus `payload_hash` = SHA-256 of **RFC 8785 (JCS)** of the parsed `payload`, **computed by the node** (shared KAT). Same key + same hash ⇒ `200` with the job's current snapshot; different hash ⇒ `409 IDEMPOTENCY_MISMATCH` carrying the existing `uid`; lower generation live ⇒ `409 PREVIOUS_GENERATION_LIVE` with its `uid`. `generation` increments on operator requeue. A cancel by origin may create a **tombstone** under the key (R98). Odoo sends `scope = "<database.uuid>:<company_id>"`, matching `UNIQUE(company_id, origin_producer, origin_key)` (`blockchain_relay_job.py:99-101`). | Retries never duplicate (owner). JCS makes the hash independent of key order and whitespace. A mismatch means "the node holds a job under this key", never "dead" (review H8). | A module upgrade that changes `_payload()` values flags `needs_attention` on re-push; nothing is lost. |
 | **R92** | **Machine credentials** = R54 `hmac` (signing string `gwauth.rs:5-8`) + header `X-Scaas-Key: <key_id>`. Each key belongs to one namespace, scopes `submit` and/or `read`. Secret = `HMAC-SHA256(master_key, "scaas-api-key/1" ‖ 0x00 ‖ key_id ‖ 0x00 ‖ u32be(generation))`; the store keeps **no secret**. `master_key` is a `SecretSource` in toml. | R54 is implemented and fuzzed; HMAC binds method, path and body and blocks replay (`gwauth.rs:108-116`). Stealing the store yields no credential. | Rotating `master_key` revokes every machine key at once. A restore can resurrect a revoked key (§14 T19). |
 | **R93** | **Change feeds**: `GET /v1/jobs?cursor=` (job state changes) and `GET /v1/events?cursor=` (index ranges, balances, DEX items). `seq` from the store's counter row (R111), filtered per namespace; every page carries `store_id`, `incarnation`, `restore_epoch`, `head_seq`; client rule = MESH §5.2 overlap; `wait ≤ 25 s` long-poll for clients that want it (Odoo uses `wait=0`, R101). Cursor older than retention ⇒ `410 CURSOR_EXPIRED`. | Same cursor discipline as the mesh bus; head/incarnation make a rewound store detectable (review H2). | — |
 | **R94** | **Event feed items are today's ingest arguments, unchanged**: `kind = range` = `{chain_key, from_block, to_block, to_block_hash, events}` as `chain_event_ingest` receives them (`blockchain_chain_event.py:79`). Drift C = `kind = balances` items written right after their range. | Odoo's decode/apply code is reused; the R56 race fix (`indexer.rs:81-82`) becomes a feed ordering property. | — |
-| **R95** | **Config authority = the node store.** `node.toml` bootstraps: entries absent from the store are imported; present ones are not overwritten (drift warning + gauge). Toml-only: lane keys/mnemonic, `rpc_urls`, `[store] url`, `master_key`, OIDC issuers, binds, `[api.admin_auth]` modes and session parameters. Hot (≤ 2 s): chain state, tokens, fee_recipient, breaker, policy, peers, namespaces, keys, watch lists, namespace token subsets, DEX markets. Restart: lane index list, finality, family params. **Token subsets per namespace are client state** (`PUT /v1/tokens/{chain}`), intersected with the node registry. **Exception (owner, 2026-10-06): `mesh_peer.url`** (mesh dial targets) **is editable through the admin API**: `admin` role only, audited (R110), behind the SSRF guard of §7.3. | Owner: "toml bootstraps; admin API mutations persist". Secrets and dial targets in toml keep R20 and remove admin-API SSRF; partners change often enough that peer URLs are managed in the app, so the one admin-editable dial target carries its own guard. Client-pushed token subsets keep Odoo's and the node's token lists in agreement (review H9). | Operators edit toml for keys, RPC, DB; the app for the rest. |
+| **R95** | **Config authority = the node store.** `node.toml` bootstraps: entries absent from the store are imported; present ones are not overwritten (drift warning + gauge). Toml-only: lane keys/mnemonic, `rpc_urls`, `[store] url`, `master_key`, OIDC issuers, binds (incl. `metrics_bind`), CORS origin lists, `[app]`, `[log]`, `[api.admin_auth]` modes and session parameters. Hot (≤ 2 s): chain state, tokens (incl. `active`, `features`), fee_recipient, breaker, `max_valid_for_secs`, policy, peers, namespaces, keys, watch lists, namespace token subsets, DEX markets, deny list, sponsor policies, chain contracts. Restart: lane index list, finality, family params, `ua_registry`. **Token subsets per namespace are client state** (`PUT /v1/tokens/{chain}`), intersected with the node registry. **Exception (owner, 2026-10-06): `mesh_peer.url`** (mesh dial targets) **is editable through the admin API**: `admin` role only, audited (R110), behind the SSRF guard of §7.3. | Owner: "toml bootstraps; admin API mutations persist". Secrets and dial targets in toml keep R20 and remove admin-API SSRF; partners change often enough that peer URLs are managed in the app, so the one admin-editable dial target carries its own guard. Client-pushed token subsets keep Odoo's and the node's token lists in agreement (review H9). | Operators edit toml for keys, RPC, DB; the app for the rest. |
 | **R96** | **Finality, pause and the index cursor move to the node**: Odoo's `finality_*`, `indexed_block` (as a source) and `state` stop being node inputs. Node chain `state ∈ active|paused|halted` keeps R53. Odoo keeps its `state` as a **push gate**. | PD R11 says finality is the node's decision; today the node reads it from Odoo (`indexer.rs:113`). | Two pause switches; the stricter wins. |
 | **R97** | **Durability replaces SKIP LOCKED**: claim = CAS `queued → leased` inside the single owner process (R88). **Two nodes for one company** only on **different chains**: `UNIQUE(company_id, chain_id)` on `blockchain.node.route`, one event source node per chain. Same lane keys in two stores is forbidden and detected heuristically on sequence families (§9.4). | Each accepted job is owned by exactly one store; reassigning needs a release protocol nobody needs yet. | No hot failover for one `(company, chain)` (§18.3). |
 | **R98** | **Cancel is a node CAS, by uid or by origin.** `POST /v1/jobs/{uid}/cancel` or `POST /v1/jobs/cancel {origin}` succeeds from `queued`/`leased` only if the job was **never published on the bus**; otherwise `409 TOO_LATE` with `state` and `published`. A published, still-queued job is put on local hold (never leased by us) but reported `TOO_LATE` because peers may land it. Cancel by origin with no job writes a `cancelled` tombstone, so a late push of that key returns `created:false, state:cancelled`. Odoo kills a job locally only if `push_attempted` is false (C1). | The Odoo veto (§1.1) disappears with the Odoo journal; the node CAS gives the same guarantee for our lanes (one SQLite/DB transaction each, one winner). Publication hands the intent to peers (MESH R74). | During a node outage a kill switch waits for the node; the window is ≤ the job's `valid_until` (autopay: `MAX_SIGNING_WINDOW = 300 s`, `blockchain_autopay.py:12`); `lease_hold_after_start_secs` (15 s) lets queued cancels land first after a restart. |
@@ -108,7 +112,7 @@ Format of PD §13: **ruling — why — cost if wrong.**
 | **R100** | **R84 normalization applies to every origin**, including job-API jobs (MESH §8.4's Odoo exception dropped). | The job API is multi-tenant; normalization touches only unbound fields, so Odoo-built jobs are unchanged in effect. | — |
 | **R101** | **Odoo side**: outbox unchanged; `ir.cron` "push" and "sync", bodies in model methods (CLAUDE.md §5.4). Push: one batch (≤ 50) per transaction, re-triggered after commit of every new job (`ir.cron._trigger()`). Sync: fixed 1-minute interval **plus** `_trigger(now + 10 s)` while pushed jobs are live; feed reads use `wait=0` (no cron thread is held). Server-only fields on every new field of `blockchain.relay.job` **and** `blockchain.node` follow `SERVER_ONLY` (`blockchain_relay_job.py:27-29, 79-86`). | Latency without a node→Odoo call; no context-key switches (project rule); default `max_cron_threads = 2` must not be starved (review M3). | Job states reach Odoo ≤ ~10 s after the node while jobs are live, ≤ 1 min otherwise. |
 | **R102** | **Relayer-bound jobs are pinned to their lane**: a meta-tx with `MODE_RESTRICT_RELAYER` (or a family op that binds the relayer) gets `lane_hint`; only that lane leases it; a relayer that is none of the chain's lanes ⇒ `422 RELAYER_NOT_OURS`. | Today any lane claims any job (`submit.rs:540-568`); a bound job claimed by the wrong lane reverts in simulation; the DEX avoids it only by refusing multiple lanes (`main.rs:181-186`). | — |
-| **R103** | **`call` jobs are a namespace capability** (`allow_call`, default `false`; `true` for the Odoo namespace created at migration: mandates and subject accounts need it, `blockchain_autopay.py:101-113`, `blockchain_subject_account.py:180-195`). | A `call` job makes our lane call any contract; with several tenants this must be granted. | — |
+| **R103** | **`call` jobs are a namespace capability** (`allow_call`, default `false`; `true` for the Odoo namespace created at migration: mandates and subject accounts need it, `blockchain_autopay.py:101-113`, `blockchain_subject_account.py:180-195`). **Precondition** (OPS §11.2): a target qualifies only if it enforces its own replay protection (`MandateWallet` `refUsed[entryRef]`, idempotent account deploy, DEX fills consumed), because a `call` job has no node digest and no subject nonce. `~gateway` `call` jobs: R320. | A `call` job makes our lane call any contract; with several tenants this must be granted. After a restore a re-pushed `call` could otherwise execute twice. | — |
 | **R104** | (decision on "flag or hard cut") **Per-chain feature flag, then one-step removal.** `blockchain.chain.node_transport ∈ pull|push` (default `pull`). A transitional node runs both paths in one process (legacy pull for `pull` chains, store for `push` chains; same lane, same nonce counter, one `lane.journal_max`). Legacy in-flight jobs drain on the legacy path. After §11.4, stream **P9** deletes `odoo.rs`, `[odoo]`, the flag and the Odoo service methods in one release. **Hard cut rejected**: the in-flight journal is in Odoo; a hard cut means importing it (a one-off path that can double-sign) or a stop-the-world drain (≥ one `valid_until` window per chain, payers re-sign), with no rollback. | Owner asked to decide and justify. | ~1 stream of transitional code (`// legacy(R104)`), deleted in P9. |
 | **R105** | **DEX book moves to the store** (`dex_market`, `dex_order`, `dex_trade`); markets are admin config; settle/cancel/invalidate are `job` rows in `~dex`; Odoo's `blockchain.dex.order/trade` become seq-guarded mirrors fed by `dex_*` items, kept for accounting (`_book_fees`, `dex_trade.py:203`). A DEX chain cuts over with its markets paused. Supersedes RS5-2 and the `dex_sync`/`restored` loop. | The venue is the book's only writer (`dex/venue.rs:1`); persisting it next to its settle jobs makes "matched but no job" impossible locally (the RS5-2 goal). | DEX cutover needs a short market pause. |
 | **R106** | (owner, rev 3.1) **Admin authentication = two modes** (`[api.admin_auth] modes`, default `["builtin"]`): (1) **built-in users** in the store (`admin_user`: name + Argon2id PHC hash + roles), login issues a short-lived node-signed session token (§7.2); (2) **OIDC** (optional, below). The token prefix selects the verifier (`scaas_s1.` session, otherwise a JWT when `oidc` is on). **"API key" means only the R92 credentials of external clients** (Odoo and other ERPs/services): namespace-scoped, `submit`/`read` on the job and event API, never admin, and **server-side only** (never in browser/mobile/desktop apps or extensions, §7.1). Config automation: OIDC client credentials or the host CLI (R109). | Owner: "as simple as possible"; a node works with no IdP. | Built-in mode makes the node a password store (Argon2id, lockout, §14 T21). |
@@ -118,6 +122,8 @@ Format of PD §13: **ruling — why — cost if wrong.**
 | **R109** | **API keys never reach admin routes, nor client-side apps; admin credentials never reach the job API**: HMAC API keys are verified only on the job-API listener; the admin router accepts only built-in session tokens and (when enabled) OIDC tokens. **Config automation (CI, Terraform, scripts) has exactly two paths**: an IdP service account using OIDC client credentials whose token carries `operator`/`admin` (audited by `iss`/`sub`), or the host CLI (R108) on nodes without an IdP — never a built-in user's password and never an API key. **API keys are server-side only**: never embedded in browser, mobile or desktop apps or extensions; client apps sign user actions with `clientkeys` through the gateway and read namespace data through their own backend (§7.1). | Structural separation instead of a grant table. | — |
 | **R110** | **Audit and store loss**: every admin mutation appends a hash-chained `audit_log` row (actor `user:<name>`, `oidc:<iss>|<sub>` or `cli:<uid>`, roles, route, target, before/after, result) in the same transaction as the change. Odoo halts sync for a node (`needs_attention`) when `store_id` or `restore_epoch` changes, when `head_seq < cursor`, or when after an `incarnation` change the item at its cursor differs from the one it applied (§5.3). Re-pushing to a recreated or restored store is an operator action (`action_acknowledge_store_change`). | A recreated or rewound store has no record of signed jobs; blind re-push can re-sign intents whose old outer txs are still in a mempool (G1 keeps funds safe, gas is lost). | One manual step after disk loss or restore. |
 | **R111** | (owner, Amendment A1) **SQLite, PostgreSQL or MySQL, storage only** — corrected by review H4/H5/H6/M10; normative text at the end of this file. | Owner. | — |
+| **R320** | (rev 3.4) **Gateway `call` jobs exist only for UA registration.** `POST /v1/ua/register` (N4, §5.5) is the one gateway route that creates a `call` job in `~gateway`: target = the chain's `chain.ua_registry`, function `register`, calldata built by the node from the checked body. It is a gateway capability, not an `allow_call` grant; R103 is unchanged for namespaces. `job_live_call` (§4) dedupes retries. | APP §9.6.3 ("gateway capability, not a namespace grant") contradicts R103 as written; restricting the target and function keeps R103's reason. | Sponsored registration spam: per-chain quota (F §17 Q8) and TSS sponsor budgets. |
+| **R321** | (rev 3.4, planned TW2 T7) **A batch is several jobs journaled together.** `mtxBatch` groups `metatx` jobs of one `(chain_key, token)` whose relayer is bound to the submitting lane (TW2 §7.5). One `leased → signed` transaction journals every item with the same `lane_label`, `outer_nonce`, `tx_hash` and bumps `lane.journal_max` once; each item keeps its own digest (G2), state and `job_event`. A failing batch is re-simulated and resubmitted without the failing item (`dead` with its decoded reason). Measured cost is split evenly over the items (remainder to the lowest `uid`), so `usage_day` sums to the fee paid. **Never batched**: unwrap ops (TW2 §7.6), `receiver_fee` jobs (TSS §B2.5), `call` jobs, sponsored jobs (their cap is per tx, TSS R190). Flush: 50 items or 3 s (SCaaS §5.8). | One journal transaction per outer tx keeps journal-before-broadcast and `plan()` unchanged. | Batched jobs wait ≤ 3 s. |
 
 ---
 
@@ -127,26 +133,41 @@ Format of PD §13: **ruling — why — cost if wrong.**
                  OIDC IdP (optional: ABP / Keycloak / …)
                         │ access token (JWT)
  React+Vite app ────────┼─ login / session / JWT ─► admin API (admin_bind, CORS) ┐
- host shell ──── scaas-node admin … (CLI writes the store, R108)            │
- Prometheus ────────────────────────────► /healthz /readyz /metrics         │  scaas-node
+   (node-served: same origin, [app] files + CSP on admin_bind, APP §13.2)   │
+ host shell ──── scaas-node admin|key|store|lane|index|report … (CLIs)      │
+ Prometheus ────────────► /healthz /readyz /metrics (metrics_bind, OPS R230)│  scaas-node
                                                                             │   ├ store (R88/R111)
  Odoo  (outbox = blockchain.relay.job)                                      │   ├ submit / lane_runner
    cron push ── HMAC key ─► POST /v1/jobs, cancel, PUT watch/tokens (bind)  │   ├ indexer → feed
    cron sync ── HMAC key ─► GET /v1/jobs?cursor=  GET /v1/events?cursor=    │   ├ gateway (door A)
- third parties ────────────► gateway POST /v1/metatx  (R54, unchanged)     │   ├ mesh (MESH)
- mesh peers ── mTLS ───────► /v1/mesh/*  (MESH R72, unchanged)             ┘   └ dex venue
+ wallets, apps, third parties ─► gateway /v1/gateway /v1/metatx /v1/ops     │   ├ mesh (MESH)
+                                  /v1/ua-* /v1/dex/*  (R54, CORS, §5.5)     │   └ dex venue
+ mesh peers ── mTLS ───────► /v1/mesh/*  (MESH R72, unchanged)             ┘
 ```
 
 | Listener | Config | Auth | Routes |
 |---|---|---|---|
-| gateway | `[modules] gateway_bind` | R54 none/bearer/hmac (single secret, unchanged) | `/v1/metatx`, `/v1/intents/{id}`, `/v1/dex/*` |
-| **job API** (new) | `[api] bind` (default `127.0.0.1:8548`; `127.0.0.1:8547` is the gateway default, `127.0.0.1:9108` the admin default) | R92 HMAC per key | `/v1/info`, `/v1/jobs*`, `/v1/events`, `/v1/watch/*`, `/v1/tokens/*` |
-| admin | `[modules] admin_bind` (`config.rs:51-52`) | open: `/healthz`, `/readyz`, `/metrics` (R51), `/v1/admin/login`; R106 credentials: other `/v1/admin/*` | §7.3 |
+| gateway | `[modules] gateway_bind` | R54 none/bearer/hmac (single secret, unchanged) | §5.5: `/v1/gateway`, `/v1/metatx`, `/v1/ops`, `/v1/ua-metatx`, `/v1/ua/register`, `/v1/intents/{id}`, `/v1/dex/*` |
+| **job API** (new) | `[api] bind` (default `127.0.0.1:8548`; `127.0.0.1:8547` is the gateway default, `127.0.0.1:9108` the admin default) | R92 HMAC per key | `/v1/info`, `/v1/jobs*`, `/v1/events`, `/v1/watch/*`, `/v1/tokens/*`; planned AS7 `/v1/snapshots*` |
+| admin | `[modules] admin_bind` (`config.rs:51-52`) | open: `/healthz`, `/readyz`, `/metrics` (R51), `/v1/admin/login`, `/v1/admin/auth-modes`, app files (`[app]`); R106 credentials: other `/v1/admin/*` | §7.3 |
+| metrics (opt.) | `[modules] metrics_bind` (default `""` = served on `admin_bind`) | none | only `/metrics`, `/readyz`, `/healthz` (OPS R230) |
 | mesh | `[mesh] bind` | mTLS (MESH §5.1) | `/v1/mesh/*` |
 
 Non-loopback `[api] bind` or `admin_bind` requires TLS in front (doc); `Config::validate` refuses `modes = []`, an
-`oidc` mode without an issuer, and two enabled listeners on one port (same host, or either on the wildcard address). `gwauth.rs:23` `MAX_BODY` (64 KiB) becomes a
-per-listener parameter: gateway 64 KiB, job API 1 MiB.
+`oidc` mode without an issuer, two enabled listeners on one port (same host, or either on the wildcard address),
+`[app] enabled` without `dir/index.html`, and more than the OPS R244 caps (16 chains, 8 lanes per chain, 32 namespaces,
+64 tokens per chain, 256 watched wrapper legs; admin routes answer `422 LIMIT`). `gwauth.rs:23` `MAX_BODY` (64 KiB)
+becomes a per-listener parameter: gateway 64 KiB, job API 1 MiB.
+
+**Toml sections added in rev 3.4** (toml-only, R95, except the bootstrap list, which R95 imports into the store):
+
+| Key | Meaning | Source |
+|---|---|---|
+| `[modules] gateway_cors_origins = []` | exact origins (no `*`, no reflection); `GET, POST`; header `Content-Type`; no credentials; `max_age = 600` | APP §9.6.1 |
+| `[modules] metrics_bind = ""` | separate monitoring listener, above | OPS R230 |
+| `[app] enabled = false, dir, config, extra_connect_src = []` | serve the built app on the admin listener only (APP R160); `config` served as `/config.json`, validated at start; a changed file sets `pending_restart` | APP §13.2 |
+| `[log] format = "text" \| "json"` | JSON lines in production; fields and redaction OPS §7 | OPS R237 |
+| `[[sponsorship.policies]]` | bootstrap rows of `sponsor_policy` (import if absent, R95) | TSS §B1.5 |
 
 ---
 
@@ -264,8 +285,79 @@ CREATE TABLE audit_log (seq BIGINT PRIMARY KEY, at BIGINT NOT NULL,
   prev_hash BLOB NOT NULL, row_hash BLOB NOT NULL);               -- row_hash = sha256(prev_hash ‖ canonical row)
 ```
 
+**Rev 3.4 additions** (§20). Each implementing stream (§17) ships one numbered migration per backend directory
+(`schema_version` + 1); counter rows `deny_subject`, `sponsor_policy` join `seq_counter`.
+
+```sql
+-- chain, token, job columns
+ALTER TABLE chain ADD COLUMN max_valid_for_secs INTEGER NOT NULL DEFAULT 3600;  -- §5.2 step 5, /v1/gateway, mesh accept
+ALTER TABLE chain ADD COLUMN ua_registry TEXT;  ALTER TABLE chain ADD COLUMN ua_registry_gen INTEGER;  -- F §11.2; NULL = no UA routes
+ALTER TABLE token ADD COLUMN kind TEXT NOT NULL DEFAULT 'meta' CHECK (kind IN ('meta', 'zether', 'meta_none',
+  'meta_single', 'meta_multi', 'meta_none_reg', 'meta_single_reg', 'meta_multi_reg'));  -- versionOf().kind 0–7 (TW2 §14, AS §9.1)
+ALTER TABLE token ADD COLUMN features TEXT NOT NULL DEFAULT '';  -- space-separated: 'receiver_fee' (TSS §B2.5), 'ua' (v3: registry() ≠ 0, F)
+ALTER TABLE job ADD COLUMN trace_id TEXT;                -- 32 hex from W3C traceparent, else generated (OPS R236)
+ALTER TABLE job ADD COLUMN call_hash BLOB;               -- kind = call: keccak256(target ‖ calldata); set by code on every new call job
+ALTER TABLE job ADD COLUMN sponsor_policy_id BIGINT;  ALTER TABLE job ADD COLUMN sponsor_reserved TEXT;
+ALTER TABLE job ADD COLUMN sponsor_day TEXT;  -- TSS §B1.2: NULL policy = booked to the namespace; reserved amount, 'd:YYYY-MM-DD'
+ALTER TABLE job ADD COLUMN gas_used BIGINT;  ALTER TABLE job ADD COLUMN gas_price TEXT;
+ALTER TABLE job ADD COLUMN cost_native TEXT;  -- every job at mined/reverted (OPS R238; per family TSS §B1.2), smallest native unit
+CREATE UNIQUE INDEX job_live_call ON job (chain_key, call_hash)
+  WHERE call_hash IS NOT NULL AND state IN ('queued', 'leased', 'signed', 'broadcast');   -- ⇒ 409 DUPLICATE_CALL
+-- job.kind gains 'ua_metatx' (F §11.2; digest-bearing: digest = uaDigest): CHECK rebuilt by the F5 migration
+-- planned AS7: token.reg_cache TEXT (controls, roles, compliance registry; AS §9.1) and the snapshot builder's table
+
+-- subject denylist (OPS R246, §4.5)
+CREATE TABLE deny_subject (id BIGINT PRIMARY KEY, chain_key TEXT NOT NULL,      -- a chain key or '*'
+  address TEXT NOT NULL, order_ref TEXT NOT NULL, document_hash BLOB NOT NULL,  -- canonical address; SHA-256 of the order
+  state TEXT NOT NULL CHECK (state IN ('active', 'lifted')), valid_until BIGINT, -- NULL = until lifted
+  created_by TEXT NOT NULL, created_at BIGINT NOT NULL, lifted_by TEXT, lifted_at BIGINT, lift_ref TEXT);
+CREATE INDEX deny_subject_addr ON deny_subject (address, chain_key);            -- lifted/expired rows kept 400 d
+
+-- integrity and FinOps (OPS R233, R241, §8.2)
+CREATE TABLE breaker_latch (chain_key TEXT NOT NULL, breaker TEXT NOT NULL, opened_at BIGINT NOT NULL,
+  reason TEXT NOT NULL, PRIMARY KEY (chain_key, breaker));                      -- re-read at start; cleared only by breaker/reset
+CREATE TABLE lane_adopted (chain_key TEXT NOT NULL, lane_label TEXT NOT NULL, nonce BIGINT NOT NULL,
+  tx_hash TEXT, adopted_at BIGINT NOT NULL, PRIMARY KEY (chain_key, lane_label, nonce));   -- deleted once latest passes
+CREATE TABLE usage_day (day TEXT NOT NULL, chain_key TEXT NOT NULL,            -- 'YYYY-MM-DD' UTC; purged after 400 d
+  namespace TEXT NOT NULL, token TEXT NOT NULL,          -- namespace incl. '~gateway' '~mesh' '~dex' '~lane'; token = contract, call target or ''
+  sponsor_policy TEXT NOT NULL DEFAULT '',               -- policy name, '' = none
+  jobs_mined BIGINT NOT NULL DEFAULT 0, jobs_reverted BIGINT NOT NULL DEFAULT 0, jobs_consumed BIGINT NOT NULL DEFAULT 0,
+  jobs_expired BIGINT NOT NULL DEFAULT 0, gas_used BIGINT NOT NULL DEFAULT 0,
+  cost_native TEXT NOT NULL DEFAULT '0', fee_earned TEXT NOT NULL DEFAULT '0',   -- decimal, summed in code
+  PRIMARY KEY (day, chain_key, namespace, token, sponsor_policy));       -- upserted in the terminal-transition transaction
+
+-- gas sponsorship (TSS §B1.2) and registered non-token contracts (TSS §A.6)
+CREATE TABLE sponsor_policy (id BIGINT PRIMARY KEY, name TEXT NOT NULL UNIQUE,  -- [a-z0-9._-]{3,64}
+  state TEXT NOT NULL CHECK (state IN ('active', 'paused')), priority INTEGER NOT NULL DEFAULT 100,
+  namespace TEXT NOT NULL, chain_key TEXT NOT NULL,      -- namespace, '~gateway', '~mesh' or '*'
+  job_kind TEXT NOT NULL CHECK (job_kind IN ('metatx', 'signed_op', 'call', '*')),
+  contract TEXT NOT NULL, selector TEXT NOT NULL,        -- canonical or '*'; EVM '0x'+8 hex | '0x' | '*', non-EVM 'pay' | '*'
+  receiver TEXT, min_value TEXT NOT NULL DEFAULT '0',    -- uint256 decimal, token base units
+  account TEXT NOT NULL,                                 -- opaque booking label, no personal data
+  max_cost_per_tx TEXT NOT NULL, budget_per_day TEXT NOT NULL,   -- smallest native unit
+  max_tx_per_hour INTEGER NOT NULL, max_tx_per_payer_hour INTEGER NOT NULL,
+  on_exhausted TEXT NOT NULL CHECK (on_exhausted IN ('reject', 'unsponsored')),
+  valid_from BIGINT, valid_to BIGINT, created_by TEXT NOT NULL, created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL);
+CREATE INDEX sponsor_policy_match ON sponsor_policy (chain_key, state, priority, id);
+CREATE TABLE sponsor_usage (policy_id BIGINT NOT NULL,
+  bucket TEXT NOT NULL,                                  -- 'd:2026-10-06' | 'h:2026-10-06T14' | 'p:<payer>:2026-10-06T14'
+  tx_count BIGINT NOT NULL DEFAULT 0, cost_spent TEXT NOT NULL DEFAULT '0', cost_reserved TEXT NOT NULL DEFAULT '0',
+  PRIMARY KEY (policy_id, bucket));                      -- hour/payer buckets pruned after 48 h, day buckets after 400 d
+CREATE TABLE chain_contract (chain_key TEXT NOT NULL, address TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('tender', 'sponsorship_pool')), PRIMARY KEY (chain_key, address));
+```
+
+Per-backend notes (A1.3 unchanged): new address/name/bucket columns are byte-exact keys (MySQL lengths: addresses,
+`contract`, `receiver`, `token` 128; `name`, `sponsor_policy` 64; `bucket` 160; `day` 10; `breaker` 40; `order_ref`,
+`lift_ref` 256); `call_hash`, `document_hash` = `BLOB`/`bytea`/`BINARY(32)`; amounts are decimal text, never ordered or
+aggregated in SQL; MySQL emulates `job_live_call` as `job_live_digest` (generated `live_call_hash` + `UNIQUE (chain_key,
+live_call_hash)`); SQLite's column list `job.chain_key, job.call_hash` maps to `DUPLICATE_CALL` (classifier test).
+Upserts of `usage_day`/`sponsor_usage` lock their rows (`INSERT … ON CONFLICT DO NOTHING`, `SELECT … FOR UPDATE`;
+SQLite: the single writer); restart recomputes `sponsor_usage.cost_reserved` from live jobs (TSS §B1.3).
+
 `restore_epoch` (in `meta`) is incremented by the CLI `scaas-node store restored --config node.toml`, mandatory after
-any restore (runbook). `incarnation` is a random 16-byte hex written at every open.
+any restore (runbook); the same audited transaction **sets every chain `paused`** and runs the retention purge
+(OPS R240), so nothing is leased before clients reconcile. `incarnation` is a random 16-byte hex written at every open.
 
 Mesh tables (MESH §6) change as R89 says: `intent.source` gains `'job'` and loses `'outbox'`; `odoo_job_id` →
 `job_uid`; `lane_label`, `outer_nonce`, `tx_hash` dropped (read from the job). DEX tables: §12.
@@ -281,7 +373,8 @@ Odoo's `TRANSITIONS`/`LATE_NOOP` (`blockchain_relay_job.py:20-26`); both sides r
 | `queued` (`hold = 0`, past `lease_hold_after_start_secs`) | `leased` (`lane_label`, `claim_block`, `attempt_count+1`) | lane scheduler (replaces `relay_claim`) |
 | `queued`, `leased` (never published) | `cancelled` | cancel (R98) |
 | `queued` (published) | `queued` + `hold = 1` | cancel ⇒ `409 TOO_LATE, published: true` |
-| `queued`, `leased` | `dead` | expiry before submit; `bad payload` |
+| `queued`, `leased` | `dead` | expiry before submit; `bad payload`; at lease `SUBJECT_DENIED` (OPS §4.5), `SPONSOR_TX_CAP`/`SPONSOR_RATE` (TSS §B1.3) |
+| `queued`, `leased` | `dead` (never published) or `hold = 1` (published) | deny entry added (OPS §4.5) |
 | `leased` | `queued` | transient (simulate/fee/RPC), restart before signing, in flight on another path |
 | `leased` | `signed` (`outer_nonce`, `tx_hash`, signer; `lane.journal_max` bumped) | **journal, before send** |
 | `leased`, `signed`, `broadcast` | `consumed` | R80 classification |
@@ -326,16 +419,15 @@ and bad signature both answer `401 UNAUTHORIZED`. `MAX_INFLIGHT` (64) still boun
 | `GET /v1/jobs?cursor=&limit=&wait=` | read | jobs change feed |
 | `GET /v1/events?cursor=&limit=&wait=` | read | events feed |
 | `GET/PUT /v1/watch/{chain_key}` | read / submit | namespace's receiving wallets (full replace) |
-| `GET/PUT /v1/tokens/{chain_key}` | read / submit | namespace's token subset (full replace; ∩ node registry; unknown ones listed in the response as `missing`) |
+| `GET/PUT /v1/tokens/{chain_key}` | read / submit | namespace's token subset (full replace; ∩ node registry incl. `chain_contract` rows, TSS §A.6; unknown ones listed in the response as `missing`) |
+| planned AS7: `POST /v1/snapshots {chain, token, block, policy}` → `{id}`; `GET /v1/snapshots/{id}` → `{state, root, total, leaf_count, policy_hash}`; `GET …/{id}/leaves`; `GET …/{id}/proof?account=` | submit / read | deterministic Merkle snapshot of a token at a final block (AS §5.4), namespace-scoped |
 
 `POST /v1/jobs`:
 
 ```json
 {"jobs": [{
   "origin": {"scope": "6f1c…:1", "producer": "blockchain.payment.request", "key": "0x8d…", "generation": 0},
-  "client_ref": "odoo:1234",
-  "chain_key": "evm:9000",
-  "kind": "metatx",
+  "client_ref": "odoo:1234", "chain_key": "evm:9000", "kind": "metatx",
   "payload": {"token": "0x…", "digest": "0x…", "signature": "0x…",
               "metatx": {"from": "0x…", "to": "0x…", "value": "100", "data": "0x", "batch": "7", "nonce": "0",
                          "validUntil": "1790000300", "mode": 1, "relayer": "0x…", "fee": "0",
@@ -345,19 +437,30 @@ and bad signature both answer `401 UNAUTHORIZED`. `MAX_INFLIGHT` (64) still boun
 
 `payload` is **exactly** today's `_payload()` (`blockchain_relay_job.py:160-187`) without `id`, so `odoo::Job`
 (`odoo.rs:90-108`) moves to `job.rs` with `id` = `uid`, and `work_from_job` / every adapter `build(&Job, …)` are
-unchanged. `payload.digest` / `op.digest` are optional; when present they must equal the node's digest.
+unchanged. `payload.digest` / `op.digest` are optional; when present they must equal the node's digest. Rev 3.4:
+`kind = metatx` may carry `receiver_fee: {fee, feeRecipient, validUntil, signature}` (TSS §B2.5); `kind = ua_metatx`
+carries `{token, m: WireUAMetaTransaction, auth}` with 32-byte `from`, idempotency on `(chain, token, from, batch,
+nonce)` (F §11.2); a W3C `traceparent` header applies to every item of the batch (OPS R236).
 
-Accept checks, in order (no RPC; simulation stays at lease time):
+Accept checks, in order (no RPC except a cached UA record read, §9.1; simulation stays at lease time):
 
 1. scope `submit`; namespace active; `chain_key` granted ⇒ else `403 CHAIN_NOT_GRANTED`.
 2. payload decodes (`work_from_job` for EVM, family op parse otherwise); node computes `digest` (R89) and
    `payload_hash` (JCS, R91); client digest differs ⇒ `422 BAD_PAYLOAD`.
 3. token registered + active and in the namespace subset ⇒ `422 UNKNOWN_TOKEN` (MESH R86 for every origin).
 4. `kind = call` requires `allow_call` ⇒ `403 CALL_NOT_ALLOWED`.
-5. `now < valid_until ≤ now + max_valid_for_secs` ⇒ `422 EXPIRED` / `VALID_TOO_LONG`.
+5. `now < valid_until ≤ now + chain.max_valid_for_secs` ⇒ `422 EXPIRED` / `VALID_TOO_LONG`.
 6. relayer bound ⇒ a lane of this chain ⇒ `lane_hint`, else `422 RELAYER_NOT_OURS` (R102).
 7. R100 normalization (unbound `feeRecipient`/`relayer`) of the stored work; `payload_hash` is over the client's
    payload, so a retry hashes identically.
+   - 7a. Kind rules: `receiver_fee` needs `token.features ∋ receiver_fee` (`422 FEATURE_UNSUPPORTED`), sets
+     `valid_until = min(m.validUntil, receiver_fee.validUntil)` and `bus.scope = restricted` (TSS §B2.5);
+     `ua_metatx` needs `token.features ∋ ua` and a registered `from` (`422 UA_NOT_REGISTERED`, record cache §9.1);
+     `call` computes `call_hash`.
+   - 7b. Denylist: any listed party (OPS §4.5: `m.from`, `m.to`, op signer/payee, decoded `call` addresses) ⇒
+     `403 SUBJECT_DENIED`, no order detail.
+   - 7c. Sponsorship match on job data only (TSS §B1.3); on `~gateway`/`~mesh` a matched metatx/op needs a valid
+     local payer signature (`422 BAD_SIGNATURE`).
 8. In one transaction: `SELECT … FOR UPDATE` by the idempotency tuple (all generations) — existing same generation:
    same hash ⇒ return it (`created: false`); tombstone ⇒ `created:false, state:cancelled`; different hash ⇒
    `409 IDEMPOTENCY_MISMATCH {uid}`; a higher generation present ⇒ `409 SUPERSEDED {uid}` (a stale push, e.g.
@@ -365,8 +468,10 @@ Accept checks, in order (no RPC; simulation stays at lease time):
    key is never re-accepted, §4); lower generation non-terminal ⇒ `409 PREVIOUS_GENERATION_LIVE {uid}`; then
    `INSERT`. A unique violation is classified **by constraint** (per backend, A1.3: the constraint or index name, or
    on SQLite the column list): `job_live_digest` ⇒
-   `409 DUPLICATE_DIGEST`; `job_origin` (lost race) ⇒ re-run the SELECT. Live count ≥ `max_live_jobs` ⇒
-   `429 QUOTA`. Deadlock/serialization failure ⇒ retry the transaction (≤ 3).
+   `409 DUPLICATE_DIGEST`; `job_live_call` ⇒ `409 DUPLICATE_CALL`; `job_origin` (lost race) ⇒ re-run the SELECT.
+   Live count ≥ `max_live_jobs` ⇒ `429 QUOTA`. A matched sponsor policy is admitted in this transaction (bucket
+   locks, reservation; `429 SPONSOR_BUDGET {policy}` or unsponsored per `on_exhausted`). Deadlock/serialization
+   failure ⇒ retry the transaction (≤ 3).
 
 Response `200` for a well-formed batch; each accepted item carries its **current snapshot** (C1):
 
@@ -381,16 +486,14 @@ Paused chain: accepted, waits `queued` (R53). Halted: `409 CHAIN_HALTED`.
 `GET /v1/jobs?cursor=901&limit=200`:
 
 ```json
-{"store_id": "32 hex", "incarnation": "32 hex", "restore_epoch": 0, "head_seq": 950,
- "items": [{"seq": 902, "uid": 17, "client_ref": "odoo:1234",
-            "origin": {"scope": "6f1c…:1", "producer": "blockchain.payment.request", "key": "0x8d…", "generation": 0},
-            "state": "signed", "tx_hash": "0x…", "outer_nonce": 42, "signer": "0x…", "error": null,
-            "at": 1790000000123}],
- "next": 902}
+{"store_id": "32 hex", "incarnation": "32 hex", "restore_epoch": 0, "head_seq": 950, "next": 902,
+ "items": [{"seq": 902, "uid": 17, "client_ref": "odoo:1234", "origin": {"scope": "6f1c…:1", "producer": "…", "key": "0x8d…",
+            "generation": 0}, "state": "signed", "tx_hash": "0x…", "outer_nonce": 42, "signer": "0x…", "error": null, "at": 1790000000123}]}
 ```
 
 Each item is a **snapshot** of the job after that transition (state + journal fields), so a client that missed
-earlier items can still reach the right state (§10.4).
+earlier items can still reach the right state (§10.4). Rev 3.4: every item carries `trace_id`; `mined`/`reverted`
+items add `gas_used`, `gas_price`, `cost_native` and `sponsor: {policy, account} | null` (TSS §B1.4, OPS R238).
 
 ### 5.3 Cursor semantics (both feeds)
 
@@ -413,14 +516,36 @@ earlier items can still reach the right state (§10.4).
 |---|---|---|
 | 400 | `BAD_REQUEST` | malformed JSON, batch > 50, `limit`/`wait` out of range |
 | 401 | `UNAUTHORIZED` | missing/unknown key, bad signature, stale timestamp, replayed nonce |
-| 403 | `FORBIDDEN`, `CHAIN_NOT_GRANTED`, `CALL_NOT_ALLOWED` | scope, grant, R103 |
+| 403 | `FORBIDDEN`, `CHAIN_NOT_GRANTED`, `CALL_NOT_ALLOWED`, `SUBJECT_DENIED` | scope, grant, R103, OPS §4.5 |
 | 404 | `NOT_FOUND` | job of another namespace or unknown |
-| 409 | `IDEMPOTENCY_MISMATCH`, `PREVIOUS_GENERATION_LIVE`, `SUPERSEDED` (all with `uid`), `DUPLICATE_DIGEST`, `TOO_LATE` (with `state`, `published`), `CHAIN_HALTED` | §5.2 |
+| 409 | `IDEMPOTENCY_MISMATCH`, `PREVIOUS_GENERATION_LIVE`, `SUPERSEDED` (all with `uid`), `DUPLICATE_DIGEST`, `DUPLICATE_CALL`, `TOO_LATE` (with `state`, `published`), `CHAIN_HALTED` | §5.2 |
 | 410 | `CURSOR_EXPIRED` | §5.3 |
 | 413 | `TOO_LARGE` | body > 1 MiB |
-| 422 | `BAD_PAYLOAD`, `UNKNOWN_CHAIN`, `UNKNOWN_TOKEN`, `EXPIRED`, `VALID_TOO_LONG`, `RELAYER_NOT_OURS` | per item |
-| 429 | `RATE_LIMITED`, `QUOTA` | per key: POST 20 rps (burst 40), GET 10 rps; `Retry-After` |
+| 422 | `BAD_PAYLOAD`, `UNKNOWN_CHAIN`, `UNKNOWN_TOKEN`, `EXPIRED`, `VALID_TOO_LONG`, `RELAYER_NOT_OURS`, `FEATURE_UNSUPPORTED`, `UA_NOT_REGISTERED`, `BAD_SIGNATURE` | per item |
+| 429 | `RATE_LIMITED`, `QUOTA`, `SPONSOR_BUDGET` | per key: POST 20 rps (burst 40), GET 10 rps; `Retry-After` |
 | 503 | `NOT_READY`, `STORE_FULL`, `NOT_OWNER` | store not open; `max_rows`; fencing lost (A1) |
+
+### 5.5 Gateway (door A) routes (APP §9.6: N1, N2, N4)
+
+Every gateway route keeps R54 auth, the 64 KiB cap, `gateway_cors_origins` (§3) and the **stable error contract**
+(APP R178): `{"error": "<CODE>", "code": "<CODE>", "detail": "<≤ 300 chars>", "revert_data": "0x…"?}` (`error` keeps
+the code for old clients). Codes: `UNKNOWN_CHAIN`, `TOKEN_NOT_SERVED`, `BREAKER_OPEN`, `SUBMIT_BUSY`, `EXPIRED`,
+`BAD_SIGNATURE`, `BAD_PAYLOAD`, `RELAYER_NOT_OURS`, `SIMULATION_REVERT` (raw revert data), `RPC_UNAVAILABLE`,
+`QUOTA`, `SUBJECT_DENIED`, `SPONSOR_BUDGET`, the UA and managed-market codes below. Unlike the job API, gateway doors
+simulate before INSERT (as today); an accepted item is a `~gateway` job (origin key = node digest = `intent_id`,
+§9.1, rules 3, 6 and 7a–7c of §5.2 apply) answered `202 {"status": "queued", "intent_id"}`.
+
+| Route | Stream | Body / answer | Accept checks, in order |
+|---|---|---|---|
+| `GET /v1/gateway` | N1 | `{"api": 1, "chains": [{chain, chain_key, family, routes, tokens, fee_recipient, breaker_open, max_valid_for_secs, dex?: {address, relayer, markets: [{id, min_base_amount}], relayer_fee_policy: {modes, max_ppm}, max_open_per_maker, min_ttl_secs, max_ttl_secs}}]}`; `chain` numeric for EVM/Hedera, `chain_key` always; `routes` ⊆ `metatx, ops, ua-metatx, ua-register, dex` | — |
+| `POST /v1/metatx {chain, token, m, signature}` | today; Hedera N2 | as today; on Hedera chains (295–298) `sig_bytes` may be 64 bytes (HIP-632 ED25519), elsewhere 65–2048 | as today |
+| `POST /v1/ops {chain, op}` | N2 (after P3) | `op` = the job API `signed_op` payload without `id` | chain served (`UNKNOWN_CHAIN`); `op.family` = the chain's (`BAD_PAYLOAD`); decode + node digest, client digest equal (`BAD_PAYLOAD`); token/asset registered (`TOKEN_NOT_SERVED`); expiry (`EXPIRED`); family signature verify where the node has one (`BAD_SIGNATURE`; L9 `None` goes on to simulation); bound relayer is a lane (`RELAYER_NOT_OURS`); simulation (`SIMULATION_REVERT`); INSERT `signed_op`. Soroban never published on the mesh (R77); TON `attach_nanoton` is the node's |
+| `POST /v1/ua-metatx {chain, token, m: WireUAMetaTransaction, auth}` | N4 (after F1/F2, with F5) | `ua_metatx` job | token `features ∋ ua`; `from >> 160 ≠ 0` ⇒ registry record (§9.1 cache, `UA_NOT_REGISTERED`); cheap kinds verified locally (F R317); node computes `uaDigest` |
+| `POST /v1/ua/register {chain, kind, keyData, pop, authRef}` | N4 | `call` job to `chain.ua_registry` (R320) | id recomputed, `>> 160 ≠ 0`; not registered (`UA_ALREADY_REGISTERED`, `UA_KEY_IN_USE`); PoP verified for cheap kinds; per-chain registration quota (F §17 Q8) |
+| `GET /v1/intents/{id}` | today | the `~gateway` job | — |
+| `POST /v1/dex/orders`, `…/cancel`, `…/cancel-all`; `GET /v1/dex/{markets,depth,trades,ticker,orders}` | today (§12.3); N3 non-EVM books planned (after P7/G3) | unchanged | planned AS7 managed markets (AS §8.2): `NOT_ELIGIBLE {reason}`, `UNBOUND_FORBIDDEN`, `FEE_FORBIDDEN`, `PAUSED`, `ATTESTATION_SHORTER`; mesh `route_order` ⇒ `MANAGED_LOCAL` |
+
+N2 depends on P3: before it the gateway's in-memory `mpsc` feeds only the EVM submitter.
 
 ---
 
@@ -449,6 +574,17 @@ Adapters already emit one normalized event object (`adapter.rs:104-107`); the fe
 Common keys: `event`, `contract`, `block_number`, `block_hash`, `tx_hash`, `log_index`, `from`, `to`, `amount`, `fee`,
 `fee_recipient` (families with relayer fees), `entry_ref` (`PaymentSettled`), `digest` (`MetaTransactionExecuted`).
 Addresses canonical per family (R61); Odoo validates them in `_decode` (`blockchain_chain_event.py:106-137`).
+
+**Events added in rev 3.4** (same object, same filters): TW2 T7 `Wrapped`, `Unwrapped`, `ReserveAdded`,
+`RateChangeProposed`, `RateChanged`, `RateChangeCancelled`, `RateAdminRenounced`, `WrapDisabled`, `GuardianRenounced`,
+`MinterRenounced`, `MetaNonceCancelled`, factory `TieredTokenDeployed` (kinds 0–7), `ImplementationRegistered`,
+`ImplementationDeprecated` (TW2 §10.2, OPS §4.3); TSS `ReceiverFeePaid` and the tender events of `chain_contract`
+rows (TSS §A.6, §B2.5); F5 `UATransfer`, `UAMetaTransactionExecuted`, `UARegistered` (with key data), balances per
+32-byte id (F §11.2); planned AS7 `OrderRecorded`, `OrderRevoked`, `AccountFrozen`, `AccountUnfrozen`,
+`ForcedTransfer`, `Paused`, `Unpaused`, `ControlsDisabled`, `RoleRenounced`, `Attested`, `AttesterSet`,
+`GrantCreated`, `Released`, `Revoked`, `RevocationRenounced`, `MilestoneApproved`, `ExcessSwept`,
+`DistributionCreated`, `Claimed`, `Cancelled`, `Swept`, `OfferCreated`, `Exchanged`, `Closed`, `Rescued` (AS §9.1).
+Decoders for a new kind ship before the first such token is created (AS R200).
 
 Serve-time filter per namespace (stored item is chain-wide): drop `Transfer` not to one of the namespace's `watch`
 pairs; drop events whose `contract` is outside the namespace token subset. **A range item is always served**, even
@@ -517,19 +653,12 @@ mode is enabled:
 
 Anything else ⇒ `401`. API keys (R92) are never looked at here (R109).
 
-**Config automation (CI, Terraform, scripts) has exactly two paths** (rev 3.2): (1) **OIDC client credentials** — a
-service account in the IdP whose access token carries `operator` or `admin` (via `role_claim`, or `scope` on a
-`machine_only` issuer); it is validated and audited by `iss`/`sub` like any OIDC admin; (2) **the host CLI** (R108) for
-nodes without an IdP. There are no admin API keys, and a built-in user's password is not an automation credential.
-
-**Client API keys are for server-side integrations only** (rev 3.2, hard rule). An R92 key is never embedded in a
-browser, mobile or desktop app or an extension. Client-side apps (`scaas/app`, mobile):
-- authenticate the user's on-chain actions by the user's own signatures (`clientkeys`: passkey, seed, wallet) through the
-  gateway door (`POST /v1/metatx`, R54), never through the job API;
-- use built-in or OIDC login for node admin screens (§7.7);
-- read namespace job/event data only through their own backend, which holds the API key server-side.
-The admin listener's CORS allowlist never applies to the job API, which sends no CORS headers (§5), so a browser cannot
-call it cross-origin even with a leaked key.
+**Config automation** (R109, rev 3.2): OIDC client credentials (an IdP service account whose token carries
+`operator`/`admin` via `role_claim`, or `scope` on a `machine_only` issuer; audited by `iss`/`sub`) or the host CLI
+(R108); never admin API keys or a built-in user's password. **Client API keys are server-side only** (hard rule): never
+in a browser, mobile or desktop app or extension; client apps sign user actions with `clientkeys` through the gateway
+(§5.5), use built-in/OIDC login for admin screens, and read namespace data through their own backend. The job API sends
+no CORS headers (§5), so a browser cannot call it cross-origin even with a leaked key.
 
 **OIDC (R106a).** `Config::validate` refuses `audience ∈ client_ids` (an ID token of the app would otherwise be accepted as an access
 token) and `role_claim = "scope"` unless `machine_only = true` or the mapping is marked `scope_for_machines = true`.
@@ -586,6 +715,21 @@ scaas-node key revoke k_3f9a0c1d2e4b5a6c --config node.toml
 ```
 
   Every CLI action is audited (`actor_kind = 'cli'`, uid) and counted in `scaas_admin_cli_total`.
+- **Maintenance CLIs** (rev 3.4; node stopped, owner lock taken, epoch + 1, audited — R108's lock-free rule covers
+  only the credential CLIs above); read-only ones take no lock:
+
+```bash
+scaas-node store init|restored --config node.toml       # restored: restore_epoch + 1, every chain paused, purge (OPS R240)
+scaas-node lane accept-nonce --chain <key> --lane <label> [--confirm <n>] --config node.toml     # OPS R241
+scaas-node index reset --chain <key> --to <block> --confirm <block> --config node.toml          # OPS R242 (c)
+scaas-node addresses [--chain <key> --labels] --config node.toml                               # read-only
+scaas-node report usage --from <day> --to <day> [--prices prices.csv] [--format csv|json]      # read-only, OPS §8.3
+scaas-node snapshot verify <file>                       # planned AS7: recompute a root from chain, store not trusted
+```
+
+  `accept-nonce` (behaviour OPS R241): max `pending` over every endpoint, refuses unless `pending − 1 >
+  lane.journal_max`, lists `[journal_max + 1, pending)` with digest match, needs `--confirm = pending − 1`, then sets
+  `lane.journal_max` and writes `lane_adopted`; adopted nonces are tracked like journaled ones.
 
 ### 7.3 Routes and authorization (R107)
 
@@ -593,15 +737,19 @@ scaas-node key revoke k_3f9a0c1d2e4b5a6c --config node.toml
 |---|---|---|
 | `GET /v1/admin/info` (version, store_id, incarnation, owner epoch, `pending_restart`, toml drift) | viewer | — |
 | `GET /v1/admin/chains[/{key}]` (rpc URLs shown as host only) | viewer | — |
-| `PATCH /v1/admin/chains/{key}` — `poll_ms`, `stuck_after_secs`, `max_gas_per_tx`, `max_fee_cap_gwei`, `max_index_lag`, `breaker`, `profile` | admin | hot |
-| `PATCH /v1/admin/chains/{key}` — `finality_*`, `index_from` (only while `chain_index` is empty) | admin | restart |
-| `PUT /v1/admin/chains/{key}/state` | operator | hot |
+| `PATCH /v1/admin/chains/{key}` — `poll_ms`, `stuck_after_secs`, `max_gas_per_tx`, `max_fee_cap_gwei`, `max_index_lag`, `max_valid_for_secs`, `breaker` (JSON merge patch, RFC 7396: absent keys kept), `profile` | admin | hot |
+| `PATCH /v1/admin/chains/{key}` — `finality_*`, `index_from` (only while `chain_index` is empty), `ua_registry`, `ua_registry_gen` | admin | restart |
+| `PUT /v1/admin/chains/{key}/state` `{"state": "active\|paused\|halted", "reason"}` (reason audited) | operator | hot |
 | `PUT /v1/admin/chains/{key}/fee_recipient` | admin | hot (metric `scaas_fee_recipient_changed_total`) |
-| `POST /v1/admin/chains/{key}/breaker/reset` | operator | hot |
-| `GET/POST/DELETE /v1/admin/chains/{key}/tokens` | viewer / admin / admin | hot |
+| `POST /v1/admin/chains/{key}/breaker/reset` `{"lane": "<label>\|*", "breaker": "<name>\|*"}`; also clears `breaker_latch` | operator | hot |
+| `GET/POST/DELETE /v1/admin/chains/{key}/tokens` (`POST` sets `decimals`, `kind`, `features`; `DELETE` also stops indexing, so runbooks pause instead, OPS RB-12) | viewer / admin / admin | hot |
+| `PATCH /v1/admin/chains/{key}/tokens/{address}` `{active: bool}` — `false` refuses intake on every door, keeps indexing | admin | hot |
+| `GET/POST/DELETE /v1/admin/chains/{key}/contracts` (`chain_contract`, TSS §A.6) | viewer / admin / admin | hot |
+| `GET /v1/admin/chains/{key}/watch` (leg backing ratios, last watched events; OP3) | viewer | — |
 | `GET /v1/admin/chains/{key}/lanes` (address, balance, breaker, journal_max) | viewer | — |
 | `PUT /v1/admin/chains/{key}/lanes` (account indexes) — `409 LANE_BUSY` while a removed lane has `leased/signed/broadcast` rows | admin | restart |
 | `GET/POST/PATCH /v1/admin/namespaces[/{name}]` (grants, `allow_call`, quota, state) | viewer / admin | hot |
+| `GET /v1/admin/auth-modes` (no auth: `{"builtin": bool, "oidc": [{issuer, client_id, audience}]}`) | — | — |
 | `POST /v1/admin/login` (no auth), `POST /v1/admin/session/refresh`, `POST /v1/admin/logout` | — / any role | — |
 | `GET /v1/admin/me` (caller, roles, expiry) | any role | — |
 | `GET /v1/admin/users` (metadata only) | viewer | — |
@@ -615,11 +763,18 @@ scaas-node key revoke k_3f9a0c1d2e4b5a6c --config node.toml
 | `GET /v1/admin/jobs?namespace=&state=&chain=` (no payload, no counterparties) | viewer | — |
 | `POST /v1/admin/jobs/{uid}/cancel` | operator | — |
 | `GET /v1/admin/audit?since=` (with chain head) | viewer | — |
+| `GET /v1/admin/deny[?address=]`; `POST /v1/admin/deny {chain_key, address, order_ref, document_sha256, valid_until?}`; `POST …/deny/{id}/lift {lift_ref}` (OPS §4.5) | operator; admin; admin | hot |
+| `GET /v1/admin/sponsorship/policies[/{id}]`; `POST`, `PATCH …/{id}`, `DELETE …/{id}` (`409 POLICY_BUSY` while live jobs reference it); `PUT …/{id}/state` | viewer; admin; operator | hot |
+| `GET /v1/admin/sponsorship/usage?policy=&since=&bucket=day\|hour` (TSS §B1.5) | viewer | — |
+| `GET /v1/admin/usage?from=&to=&chain=&namespace=` (`usage_day` rows, no conversion, OPS §8.3) | viewer | — |
 
 `POST /v1/admin/keys` returns `{"key_id", "secret": "<64 hex>", "namespace", "scopes"}` **once**. Write validation
 reuses the rules being superseded: MESH §10.2 (R86 `submit` only on registered contracts, `pool_visibility` vs profile
 R76, pin = 64 lowercase hex). Policy `contract` and token addresses are stored in the family's canonical form
-(`addresses.canonical`, KAT `tests/api/addresses.json`); policy selectors in lowercase hex.
+(`addresses.canonical`, KAT `tests/api/addresses.json`); policy selectors in lowercase hex. Sponsor policies follow
+TSS §B1.5 (`contract = '*'` ⇒ `min_value = '0'`; `call` ⇒ no `receiver`; `~gateway`/`~mesh` need a concrete
+`contract` and `min_value > 0` or a `receiver`; a `PATCH` never changes live reservations). Deny rows mirror to the
+log with the address as `***` (OPS R237).
 
 **Mesh peer URL (owner ruling 2026-10-06, R95 exception).** `mesh_peer.url` is a dial target that the admin API may
 create and change (`POST`/`PATCH /v1/admin/mesh/peers`): **`admin` role only** (never `operator`), every change audited
@@ -644,8 +799,10 @@ Health/metrics are not CORS-enabled. No cookies are ever set or read.
 
 Mutation handler: `before = SELECT …`, the change, `after = SELECT …`, `audit_log` INSERT with
 `prev_hash` = previous `row_hash`, all in one transaction; a failed write is audited with `result = <status>` in its
-own transaction. The chain head is exported as `scaas_audit_head_info{hash}` and logged at every start, so a rewrite
-needs the logs too. No secrets in before/after (`password_hash`, `secret_sha256` are written as `"***"`).
+own transaction. The chain head is exported as `scaas_audit_head_seq` (OPS §4.2; the hash is logged, not a label) and
+logged at every start, so a rewrite needs the logs too. Every row is also mirrored as a `warn` log event
+(`event = "audit"`, OPS R237) for the off-host replay after a restore (R240); the chain is verified from the first row at
+start and every 24 h (`scaas_audit_chain_ok`, `/readyz` reason `audit chain broken`, OPS R242 (b)). No secrets in before/after (`password_hash`, `secret_sha256` are written as `"***"`).
 Logins (success and failure) and CLI actions are audited too. `request_id` echoed as `X-Request-Id`.
 `# ponytail: audit kept forever; add a retention knob when it grows.`
 
@@ -656,21 +813,26 @@ stale session epoch — body never says which);
 `403 NO_ROLE`/`FORBIDDEN`; `404`; `409 CONFLICT`/`LANE_BUSY`; `422 INVALID`; `429` (10 rps per `sub`);
 `503 IDP_UNAVAILABLE`.
 
-### 7.7 React+Vite app (`scaas/app/`) requirements
+### 7.7 React+Vite app (`scaas/app/`) and app serving
 
-- Login screen offers the modes the node enables (`GET /v1/admin/auth-modes`, no auth: `{"builtin": true,
-  "oidc": [{"issuer", "client_id", "audience"}]}`). A `key_custodian` can create/rotate/revoke external-client API
-  keys from the app (secret shown once).
-- The app never holds an R92 API key (§7.1 hard rule): user actions are signed with `clientkeys` and sent through
-  the gateway; namespace job/event data, if shown, comes from a backend that holds the key.
-- Built-in: username + password ⇒ session token; refresh before `expires_at`; logout calls `/v1/admin/logout`.
-- OIDC: public client, Authorization Code + PKCE `S256`, no client secret, exact redirect URIs, `state` + `nonce`.
-- Tokens (session or OIDC) in memory only (never `localStorage`/`sessionStorage`).
-- OIDC renewal: refresh-token rotation when the IdP issues refresh tokens to public clients; otherwise silent renew with
-  `prompt=none`; on failure, interactive login. Logout via `end_session_endpoint`, drop in-memory tokens.
-- Requests to the admin API with `Authorization: Bearer`, no cookies; audience = the node's `audience`.
-- Chain-only features (wallet, payments, DEX via the gateway) work without login; login gates only node admin screens.
-- UI hides actions the token's roles cannot perform (the node enforces).
+The client side is normative in APP (R150–R179, §9); it keeps every rev-3.2 rule: no R92 key in the app (§7.1), user
+actions signed with `clientkeys` through the gateway, admin tokens in memory only (APP R162 refines: only the OIDC
+redirect state `{issuer, code_verifier, state, nonce, returnRoute}` sits in `sessionStorage`, ≤ 10 min), PKCE `S256`
+public client, roles gate the UI only (the node enforces). Node obligations: `GET /v1/admin/auth-modes` (§7.3), admin
+CORS for the static mode (§7.4), the gateway routes and error contract (§5.5), and **app serving** (N1, APP §13.2,
+R160) on the admin listener only, when `[app] enabled`:
+
+| Path | Serves |
+|---|---|
+| `GET\|HEAD /`, `/index.html` | `Cache-Control: no-cache` |
+| `/assets/{file}` (`[A-Za-z0-9._-]+`) | immutable; `.wasm` = `application/wasm` |
+| `GET /config.json` | the `[app] config` file, `no-store` |
+| any other non-`/v1/`, non-health path | `404` |
+
+Every app response carries the APP §10.1 headers (CSP with Trusted Types, COOP/CORP, `nosniff`, `no-referrer`,
+Permissions-Policy); `connect-src` is computed at start from the served `config.json` and `extra_connect_src`.
+`tower-http` `ServeDir` + a header layer; metric `scaas_app_requests_total{path_class}`. Node-served mode is same-origin
+(`nodes[].admin = "self"`), so it needs no admin CORS; operators tunnel to `localhost` on a loopback `admin_bind`.
 
 ---
 
@@ -689,7 +851,8 @@ come from toml.
 Runtime snapshot: `tokio::sync::watch::Sender<Arc<ConfigSnapshot>>`, rebuilt after every admin commit (and every 30 s
 as a guard). Consumers that refresh from Odoo today read it: gateway tokens (`main.rs:131-167`), EVM/Hedera/TON/Solana
 token filters (`adapters/evm.rs:31`, `hedera.rs:14-15`, `ton.rs:940`), indexer tokens and finality
-(`indexer.rs:106-117`, `adapter.rs:445-450`), drift pairs (`drift.rs:31-33`), breaker, chain state, mesh peers/policy.
+(`indexer.rs:106-117`, `adapter.rs:445-450`), drift pairs (`drift.rs:31-33`), breaker, chain state, mesh peers/policy;
+rev 3.4: the deny set, sponsor policies, `chain_contract` rows, token `kind`/`features`/`active` (every door).
 
 ---
 
@@ -707,7 +870,13 @@ token filters (`adapters/evm.rs:31`, `hedera.rs:14-15`, `ton.rs:940`), indexer t
 | Gateway: unjournaled `Work`, digest `None`, in-memory `mpsc` (`gateway.rs:139-150`, `main.rs:139-153`) | Gateway INSERTs a job in `~gateway` (origin key = `intent_id`, node-computed digest) and fires the chain's `Notify`; `GET /v1/intents/{id}` reads it. **Safety gain**: door A becomes journaled and G2-guarded. |
 | `index_step`/`indexer::step` call `ingest` and read the cursor from Odoo (`adapter.rs:443-458`, `indexer.rs:106-118`) | Cursor from `chain_index`; one transaction writes `feed_item(range)` + advances `chain_index`. Runs for **every** chain in the transitional binary, `pull` ones included. |
 | Drift: `node_config.indexed_block` + `balance_report` (`drift.rs:30-50`) | `chain_index` + `feed_item(balances)` inside the indexer loop. |
-| `/readyz` via `relay_stats` (`admin.rs:125-153`) | store open + owner + RPC head + lag; `scaas_relay_jobs` from the store; `attention`/`drift_alerts` leave the node. |
+| `/readyz` via `relay_stats` (`admin.rs:125-153`) | store open + owner + RPC head + lag; `scaas_relay_jobs` from the store; `attention`/`drift_alerts` leave the node. **Per chain** (OPS M2): `200` iff node-scope ready (store open and owned, audit chain ok, ≥ 1 chain ready = `scaas_node_ready`); body `{"ready", "reasons": [...], "chains": {"<key>": {"ready", "reasons"}}}` (= `scaas_chain_ready`). The indexer re-reads the hash at `indexed_block` from ≥ quorum endpoints at start and every 600 s; a mismatch holds that chain (`finality violated at <block>`, OPS R242 (a)). |
+
+**UA record cache** (F §11.1, R317; F5): per chain, `recordOf(from)` is read once from `chain.ua_registry`; records are
+immutable, so hits stay in memory with no expiry and misses for 60 s; cheap kinds (webauthn-p256, p256, ed25519,
+bip340, schnorr-bn254) are verified with the shared Rust kind library (F0), the rest by simulation. No store table.
+**Unwrap jobs** (TW2 §7.6, T7): full outer simulation, re-simulated before signing; a post-simulation revert is
+terminal with its decoded reason and counts toward `origin_grief_score` unless recipient-independent; never batched.
 
 ### 9.2 Safety properties — where each now lives
 
@@ -722,6 +891,8 @@ token filters (`adapters/evm.rs:31`, `hedera.rs:14-15`, `ton.rs:940`), indexer t
 | Journaled nonces (G4) | `job.outer_nonce` + `lane.journal_max`; `intent` no longer journals (R89). |
 | R53 pause, R55 breaker | Block `poll_store` as they block `poll_outbox` (`submit.rs:574-583`); Odoo state blocks push. |
 | R84/R100 normalization | Job API accept, gateway, mesh work builders. |
+| Denylist (OPS R246) | intake on every door and again at lease (a job requeued from `signed` is re-checked). |
+| Restore (OPS R240–R241) | `store restored` pauses every chain; `lane accept-nonce` adopts chain-ahead nonces without lowering `journal_max`. |
 
 ### 9.3 Durability vs `SKIP LOCKED` (R97)
 
@@ -784,7 +955,11 @@ that also stamps `bound_db_uuid`/`bound_base_url`; the record shows `secret_set`
 or `http` only for loopback or with `dms_blockchain.allow_plain_node_url = '1'` (dev); no userinfo/path/query/fragment.
 `action_acknowledge_store_change()` (group system, posts before/after in chatter) is the only way to accept a new
 `store_id`/`restore_epoch` and clear `needs_attention`; it resets cursors and marks this node's non-terminal pushed jobs
-`push_state = 'local'` for re-push (R110).
+`push_state = 'local'` for re-push (R110). Rev 3.4 (OPS R240): it also posts `POST /v1/jobs/cancel {origin}` for every
+job Odoo holds `dead`/cancelled whose node snapshot is live, before re-push. `action_reset_event_cursor(block)` on
+`blockchain.chain` (group system, chatter) moves the chain's event cursor to the block given to the node's `index reset
+--to` (OPS R242 (c)), before the node restarts; re-delivered events are absorbed by the `(chain_key, tx_hash, log_index)`
+dedup (OPS RB-06).
 
 `blockchain.chain` gains `node_transport = Selection([('pull', 'Pulled by node (legacy)'), ('push', 'Pushed to node')],
 default='pull', required=True, tracking=True)` (R104, deleted in P9) and `event_node_id = Many2one('blockchain.node')`.
@@ -846,10 +1021,12 @@ def _cron_node_push(self, batch=50, rounds=4):
 - `_apply_push_result`: accepted ⇒ `push_state='sent'`, `node_id`, `node_job_uid`, then **apply the returned snapshot**
   through `_apply_node_snapshot` (§10.4) — a re-push after a rollback catches up immediately. Permanent item errors
   (`BAD_PAYLOAD`, `UNKNOWN_TOKEN`, `EXPIRED`, `VALID_TOO_LONG`, `RELAYER_NOT_OURS`, `CALL_NOT_ALLOWED`,
-  `CHAIN_NOT_GRANTED`) ⇒ `dead`/`failed` with `last_error` and `_fail_dependents()` (the node holds no job for them).
+  `CHAIN_NOT_GRANTED`; rev 3.4: `SUBJECT_DENIED`, `FEATURE_UNSUPPORTED`, `UA_NOT_REGISTERED`, `BAD_SIGNATURE`) ⇒
+  `dead`/`failed` with `last_error` and `_fail_dependents()` (the node holds no job for them).
   `IDEMPOTENCY_MISMATCH` / `PREVIOUS_GENERATION_LIVE` ⇒ `push_state='attention'`, `node_job_uid` from the 409 body,
   `needs_attention` on the node, then `GET /v1/jobs/{uid}` and apply that snapshot; **never `dead`** (review H8).
-  `DUPLICATE_DIGEST` ⇒ stays `local`, `last_error`. Transport/`429`/`503` ⇒ stays `local`.
+  `DUPLICATE_DIGEST`, `DUPLICATE_CALL` ⇒ stay `local`, `last_error`. Transport/`429` (incl. `SPONSOR_BUDGET`)/`503` ⇒
+  stays `local`.
 - HTTP after commit of the marker holds no row lock across the call except the batch's own rows, whose other writers
   (`_node_cancel`, `_fail_dependents`) lock with `FOR UPDATE` and wait ≤ one batch timeout.
 
@@ -1049,33 +1226,24 @@ Pause every market of the chain, wait for `pending` trades to settle or fail on 
 
 ### 13.1 MESH sections superseded or amended
 
-| MESH section | Status | Replacement |
-|---|---|---|
-| §1.1 item 3 ("authoritative in Odoo … delivered to the node") | superseded | R99 |
-| §1.1 item 7 (per-company scope via Odoo outbox publication) | amended | setting in Odoo, delivered per job (R99); publication by the node |
-| §2 **R71** "R6 unchanged … Odoo stays control plane", "(the DEX book stays as is)", "When `[mesh]` is on", `rusqlite` | superseded | R87, R88, R105, R111 (`sqlx`) |
-| §2 **R73** last sentence (publication by Odoo `mesh_publish_claim`) | amended | node publishes `bus_scope = open` jobs still `queued` after `private_window_secs`, sets `published_at` |
-| §2 **R74** "the origin keeps processing them through the Odoo outbox" | amended | "through its job store" |
-| §2 **R79** | **superseded entirely** | R95, R99 |
-| §2 **R83** "one fake Odoo" | superseded | fake job-API client (§16.4) |
-| §2 **R86** "Odoo `node_config.tokens` … Odoo forbids `submit` on `*`" | amended | node `token` table; admin API validation |
-| §3.1 shapes table ("no `[odoo]`", "indexer refused without `[odoo]`") | superseded | every shape is Odoo-free |
-| §3.2 "`[odoo]` becomes optional", "standalone only" annotations | superseded | toml bootstraps every node (R95) |
-| **§3.3 Standalone mode** | **superseded entirely** | one mode |
-| §3.4 `rusqlite` row | superseded | R111 `sqlx` |
-| §5.3 `NOT_READY` "`[odoo]` present and `mesh_config` never fetched" | superseded | store not open / not owner |
-| §6 `intent.source 'outbox'`, `odoo_job_id`, journal columns, "Odoo-path outcome sink" rows, `AUTOINCREMENT` | amended | R89, A1 counter row |
-| §8.1 row `outbox` and the DUPLICATE flip paragraph | amended | `source = 'job'`, `job_uid` |
-| §8.3 "try_send Work … to the lane channel" | amended | INSERT job in `~mesh` (R89) |
-| §8.4 `Origin::Odoo`, "Odoo path avoids churn", sink `relay_report`, R84 Odoo exception | amended | `Origin::Job(uid)`; skip-before-lease in `poll_store`; tri-state `transition`; R100 |
-| §8.6 `journal_max = max(Odoo journal_max_nonce, …)` | amended | `lane.journal_max` (§9.2) |
-| §8.7 G2 "Odoo `relay_claim` admit one Work per path" | amended | store CAS + `job_live_digest` + node-computed digest |
-| **§10 Odoo side** — §10.1, §10.2, §10.5, §10.6 | **superseded** | node `chain.profile`; policy/peers in node store; node-internal publication |
-| §10.3 (S1a, done) | kept | — |
-| §10.4 company setting | kept (S1b′), delivered per job | R99 |
-| §12 `/readyz` `mesh_config` reason; "Odoo `relay_stats` counts jobs" | amended | store counts |
-| §13.3 fake Odoo; §13.4 mesh-model Odoo tests | amended | fake client; Odoo keeps S1a tests + §16.3 |
-| §15.4 row "Node → Odoo channel … R6" | superseded | R87 |
+- **Superseded:** §1.1 item 3 (R99); §2 R71 "R6 unchanged … Odoo stays control plane", "(the DEX book stays as is)",
+  "When `[mesh]` is on", `rusqlite` (R87, R88, R105, R111 `sqlx`); **R79 entirely** (R95, R99); R83 "one fake Odoo"
+  (fake job-API client, §16.4); §3.1 shapes table (every shape is Odoo-free); §3.2 "`[odoo]` becomes optional",
+  "standalone only" (toml bootstraps every node, R95); **§3.3 Standalone mode entirely** (one mode); §3.4 `rusqlite`
+  (R111); §5.3 `NOT_READY` "`[odoo]` present and `mesh_config` never fetched" (store not open / not owner);
+  **§10.1, §10.2, §10.5, §10.6** (node `chain.profile`, policy/peers in the node store, node-internal publication);
+  §15.4 row "Node → Odoo channel … R6" (R87).
+- **Amended:** §1.1 item 7 (setting in Odoo, delivered per job, R99; publication by the node); R73 last sentence (the
+  node publishes `bus_scope = open` jobs still `queued` after `private_window_secs`, sets `published_at`); R74
+  "through the Odoo outbox" → "through its job store"; R86 (node `token` table, admin API validation); §6
+  `intent.source 'outbox'`, `odoo_job_id`, journal columns, Odoo-path sink rows, `AUTOINCREMENT` (R89, A1 counter
+  row); §8.1 `outbox` row and DUPLICATE flip (`source = 'job'`, `job_uid`); §8.3 "try_send Work" (INSERT job in
+  `~mesh`, R89); §8.4 `Origin::Odoo`, "Odoo path avoids churn", sink `relay_report`, R84 Odoo exception
+  (`Origin::Job(uid)`, skip-before-lease in `poll_store`, tri-state `transition`, R100); §8.6 `journal_max = max(…)`
+  (`lane.journal_max`, §9.2); §8.7 G2 via `relay_claim` (store CAS + `job_live_digest` + node digest); §12 `/readyz`
+  `mesh_config` reason and `relay_stats` counts (store counts); §13.3 fake Odoo, §13.4 mesh-model Odoo tests (fake
+  client; Odoo keeps S1a tests + §16.3).
+- **Kept:** §10.3 (S1a, done); §10.4 company setting (S1b′, delivered per job, R99).
 
 ### 13.2 Mesh streams
 
@@ -1089,6 +1257,11 @@ Pause every market of the chain, wait for `pending` trades to settle or fail on 
 | S6 pipeline integration | changed (S6′) | scheduler INSERTs jobs; node-internal publisher over `job` rows with `bus_scope = open` |
 | S7 multi-node e2e | changed (S7′) | jobs enter through the job API; no fake Odoo |
 | S8 spec corrections | extended (S8′) | adds §18.1 |
+
+Rev 3.4 (F R316–R317, stream F5): `scaas-intent/1.3` adds the EVM body `evm.ua_meta_tx = {token, m, auth, from_kind}`
+(`sig_kind` `ua`, `intent_id = uaDigest(m)`) with pre-gossip UA checks (§9.1 cache); 1.2 peers refuse 1.3 envelopes.
+Mesh intents with a denylisted party are Ignored and not forwarded (OPS R246); managed markets are home-bound and not
+gossiped by default (AS §8.3, A2 R124).
 
 ---
 
@@ -1120,6 +1293,9 @@ Pause every market of the chain, wait for `pending` trades to settle or fail on 
 | T24 | **Automation credential sprawl** | only OIDC client credentials (short-lived, IdP-managed, audited by `iss`/`sub`) or the host CLI; no admin API keys or shared admin passwords in CI |
 | T22 | **Stolen session token** | session 15 min, revocable by `session_epoch` (logout, password change, disable); bearer over TLS only, no cookies |
 | T20 | **Two owners on one store / one key set** | owner lock + fencing epoch (A1); §9.4 heuristic for keys |
+| T25 | **Gas drain through sponsored public doors** | explicit, concrete `~gateway`/`~mesh` policies only; local payer signature; budget, hourly and per-payer caps; max chargeable fee ≤ reservation at lease (TSS §B1.7) |
+| T26 | **Admin-listener app files as an attack surface** | served only with `[app] enabled`, static paths only, APP §10.1 CSP + Trusted Types, never on gateway/job/mesh listeners (R160) |
+| T27 | **Restore re-executes stopped work; denylist misuse** | chains start paused, client cancels before resume (OPS R240); deny add/lift `admin`, audited with order hash, address masked in logs (OPS R246) |
 
 ---
 
@@ -1140,15 +1316,23 @@ Node `/metrics` additions (R51 renderer, `admin.rs:72`):
 | `scaas_admin_mutations_total` | counter | `route`, `actor_kind`, `result` |
 | `scaas_admin_cli_total` | counter | `action` |
 | `scaas_admin_login_total` | counter | `result` (`ok`, `bad`, `locked`) |
-| `scaas_audit_head_info` | gauge (=1) | `hash` |
-| `scaas_oidc_rejections_total` | counter | `issuer`, `reason` |
+| `scaas_audit_head_seq` (was `scaas_audit_head_info{hash}`, OPS §4.2) | gauge | — |
+| `scaas_oidc_rejections_total` | counter | `issuer` (index, OPS R230), `reason` |
 | `scaas_oidc_jwks_refresh_total` | counter | `issuer`, `result` |
 | `scaas_fee_recipient_changed_total` | counter | `chain` |
-| `scaas_lane_foreign_nonce_total` | counter | `chain`, `lane` |
+| `scaas_lane_foreign_nonce_total`; `scaas_lane_foreign_nonce` (0/1, latched until the lane leases) | counter; gauge | `chain`, `lane` |
 | `scaas_config_toml_drift` | gauge | — |
+| `scaas_app_requests_total` | counter | `path_class` (APP §13.2) |
+| `scaas_sponsor_jobs_total`, `scaas_sponsor_cost_spent`, `scaas_sponsor_budget_remaining_ratio`, `scaas_sponsor_reserved` | counter, gauges | `policy`, `chain`, `result` (TSS §B1.6; no payer label) |
+| `scaas_deny_entries`; `scaas_deny_refused_total`; `scaas_deny_changes_total` | gauge; counters | `chain`; `chain`, `door`; `action` (OPS §4.5) |
+
+**Plus every series of OPS §4.3** (names, types, labels and buckets normative there): build/process/snapshot, node and
+chain readiness, job terminal outcomes and stages, simulation, submit, lane, RPC, indexer progress and finality,
+audit chain, HTTP, store, mesh propagation, ops watch and FinOps series. R230 label allowlist and pre-emission at 0
+apply to every series of this table too; `revert_streak` is a breaker of `scaas_breaker_open` (OPS R233).
 
 `/readyz` reasons: store not open or not owner; final head missing; index lag; lane used outside the store; issuer
-failed closed. Logs: no payloads, tokens or HMAC headers.
+failed closed; `finality violated at <block>`; `audit chain broken` (per chain or node scope, §9.1). Logs: no payloads, tokens or HMAC headers.
 
 Odoo: `blockchain.node` form shows cursors, incarnation, last sync, last error, dropped-event counter,
 `needs_attention`; job views show `push_state`, `node_job_uid`.
@@ -1224,85 +1408,60 @@ constraints (CLAUDE.md §5.2).
 - `scripts/e2e_odoo_node.sh` (manual / nightly): real Odoo test DB + node + anvil: portal payment → push → mined →
   final; flip one chain `pull → push` with an in-flight legacy job.
 
+### 16.5 Rev 3.4 additions (each in the gate of its stream, §17)
+
+- Store: new tables on every backend + DDL equivalence; `DUPLICATE_CALL` classification; concurrent `usage_day` /
+  `sponsor_usage` upserts and decimal sums; `breaker_latch` across restart; `store restored` pauses and purges, and a
+  job cancelled after the backup point is never leased; `accept-nonce` refusals (OPS §13) and gap-filler; `index reset`.
+- Gateway: `/v1/gateway` schema; R178 golden on every route; CORS preflight; `/v1/ops` accept order per family;
+  64-byte signatures only on Hedera; UA routes (miss cached 60 s, `UA_KEY_IN_USE`, R320 target); app headers byte-exact.
+- Accept/lease: denylist per party, door and lease re-check (no address in logs, labels, audit mirror); TSS §B1.7 list;
+  `receiver_fee` rules; `traceparent` → `trace_id`; cost fields per family; golden metrics with pre-emitted zeros;
+  `/readyz` per-chain body. Odoo (P5): acknowledgement cancels, cursor reset.
+- Planned: R321 batch journal and cost split, unwrap terminal reverts (T7); kinds 0–7, managed-market codes,
+  `merkle_dist_vectors.json` (AS7).
+
 ---
 
 ## 17. Work breakdown
 
-Ordered streams for **one agent at a time**. "Gate" = the stream's heavy command; run it alone.
+Ordered streams for **one agent at a time**. "Gate" = the stream's heavy command; run it alone. Paths are under
+`scaas-node/` unless an Odoo addon is named. Rev 3.4 streams (source-spec name) implement the NI parts listed; their
+content and full gates live in the source spec.
 
-**S3 — Envelope, digests, hub signature, vectors** (MESH, pure library; first because P2 derives digests from it)
-- As MESH §14 S3, plus the Soroban preimage digest and a `digest_of(job)` entry point for every family.
-- Gate: `cargo test --lib --test mesh_vectors`.
+| Stream | Scope (files) | Gate | Done / after |
+|---|---|---|---|
+| **S3** envelope, digests, hubsig, vectors (MESH; pure library) | MESH §14 S3 + Soroban preimage digest + `digest_of(job)` per family | `cargo test --lib --test mesh_vectors` | first: P2 derives digests from it |
+| **P1** store v2 on SQLite + config (replaces MESH S4; **built**) | `Cargo.toml` (`sqlx`, `store-sqlite`), `src/store/{mod,sqlite}.rs` (trait, §4 + A1.3 DDL, owner lock + fencing, counters, tri-state CAS, janitor), `migrations/sqlite/`, `src/config.rs` (`[api]`, `[store]`, bootstrap lists, `[odoo]` `Option` + `// legacy(R104)`), `src/main.rs` (`store init`, `store restored`), `node.example.toml` | `cargo test` | reopen keeps `seq`/`store_id`; second process refused; fencing green |
+| **P2** job API, machine keys, built-in admin auth | `src/gwauth.rs` (`HmacKeys`, per-listener caps), `src/jobs_api.rs` (§5), `src/job.rs` (`Job`, JCS), `src/admin_auth.rs`, `src/cli.rs` (`admin …`, `key …`), bootstrap admin routes (users, keys, namespaces, chains/tokens read, `auth-modes`), `argon2`, `tests/api/*.json` | `cargo test` | — |
+| **OP2** (OPS) | `[log] format`, `traceparent` → `job.trace_id`, audit `warn` mirror | `cargo test` | with P2 |
+| **N1** (APP) | `/v1/gateway`, gateway CORS, R178 error contract, `[app]` serving + CSP | `cargo test` + APP `node-served` e2e | any time; early (APP A2 needs it) |
+| **P3** submit and lanes from the store (safety-critical) | `src/submit.rs` (`poll_store`, tri-state `transition`, store ∪ legacy start, fail-closed, `lane_hint`), `src/adapter.rs`, `src/nonce.rs`, `src/gateway.rs` (`~gateway` jobs, digest, `/v1/intents/{id}`), `src/odoo.rs` (legacy bump, `node_transport`), `src/metatx.rs` (R100) | `cargo test`, `e2e -- --ignored`, `e2e_push` job cases | no `dead`/`reverted` for a consumed job; no double broadcast on restart; R18 tests unchanged |
+| **OP1**, **OP8** (OPS) | OPS series, `metrics_bind`, `revert_streak` + `breaker_latch`, per-chain `/readyz`, finality recheck; `deny_subject`, intake + lease checks on every door, metrics (deny routes with P2b) | `cargo test` (+ OP1 load test, alone) | with P3/P4 |
+| **P4** indexer and events feed | `src/indexer.rs`, `src/adapter.rs` (`index_step`), `src/drift.rs`, `src/jobs_api.rs` (`/v1/events`, `/v1/watch`, `/v1/tokens`) | `cargo test`, `e2e.rs` + `e2e_cosmos.rs` (alone) | — |
+| **P5** Odoo client (`dms_blockchain`, `dms_blockchain_payment`) | `models/blockchain_{node,relay_job,subject_account,chain,chain_event}.py`, `lib/node_client.py`, `lib/fields.py`, `data/ir_cron.xml`, `data/neutralize.sql`, security, views, `blockchain_autopay.py`, `tests/test_node_client.py`, `tests/data/*.json` | Odoo tests of both addons | incl. OP5's acknowledgement cancels and cursor reset |
+| **OP5** (OPS, SQLite part) | `store restored` pause + purge, `lane accept-nonce` + `lane_adopted`, `index reset`, audit verification, token `active` route, `addresses --labels` | `cargo test` | before P6; PG/MySQL part with P1b |
+| **P6** e2e push + cutover rehearsal | `tests/e2e_push.rs`, `scripts/e2e_odoo_node.sh`, `README.md` (job API, migration, restore runbook) | `cargo build --release`, `e2e_push -- --ignored`, then the script (alone) | **owner cutover per chain on SQLite (testnet first) may start** |
+| **P2b** OIDC, full §7.3, audit export, CORS (after P6, M12) | `src/oidc.rs`, `src/admin.rs` (router split), `src/admin_api.rs`, `ring` direct, `tower-http` `cors` | `cargo test`, `e2e_oidc -- --ignored` | — |
+| **N2** (APP) | `/v1/ops`, Hedera 64-byte signatures on `/v1/metatx` | `cargo test` + Cosmos `wasmd` e2e | P3, N1 |
+| **SP1 + OP4** (TSS, OPS) | sponsor tables, sponsor + cost columns, `job_live_call`, accept/lease/end hooks, feed cost fields, `usage_day`, `report usage`, sponsorship and usage routes, metrics | `cargo test` + PG/MySQL concurrency cases | P3, P2b |
+| **TB3**, **RP2** (TSS) | `chain_contract` + route, tender events; `receiver_fee`, `token.features`, `ReceiverFeePaid` | TSS gates | P2–P5 (RP2 after RP1) |
+| **T7** (TW2) | `token.kind`, `payLane`, TW2 events, R321 batching, unwrap rules, `entryRef` (§18.2) | `cargo test` (token table, normaliser) | P3, P4 |
+| **OP3** (OPS) | leg backing, watched events, `…/watch` route | `cargo test` | T7 (AS events with AS7) |
+| **P1b** PostgreSQL and MySQL (A1) | `src/store/{postgres,mysql}.rs`, `migrations/{postgres,mysql}/`, `tests/e2e_store_backends.rs`, features; every rev-3.4 migration on both | `cargo test --features store-postgres,store-mysql`, `e2e_store_backends -- --ignored` (docker, alone) | contract suite + DDL equivalence on all three; PG/MySQL cutover allowed |
+| **P7** DEX on the store (R105) | `src/dex/venue.rs`, `src/dex.rs`, DEX tables, `src/admin_api.rs` (markets), `dms_blockchain_dex/models/*` | `cargo test` + DEX e2e (alone), Odoo `dms_blockchain_dex` | — |
+| **S1b′** | Odoo company bus scope (MESH §10.4) + `bus` in `_push_item()` | Odoo tests | — |
+| **S5**, **S6′**, **S7′** | mesh as MESH §14 with §13.2 changes | MESH gates | — |
+| **F5**, **N4** (F, APP) | `ua_metatx`, `chain.ua_registry*`, record cache, `scaas-intent/1.3`, UA events; `/v1/ua-metatx`, `/v1/ua/register` (R320) | mesh e2e on dev chains | F0, F2 (N4: F1, F5) |
+| **AS7** (AS) | kinds 5–7 decoders before the first `*_REG` create, AS events, intake rules (AS §3.8), `token.reg_cache`, snapshot builder + API + CLI + vectors, managed markets (gossip part after P7/G3) | node `cargo test` (never beside forge) | AS1, AS4, P4 |
+| **P9** removal (R104), after §11.4 | delete `src/odoo.rs`, legacy blocks, `OdooCfg`, `fake_odoo`; Odoo §10.7 deletions, post-migration, pre-migration abort on `pull` | `cargo test` + `e2e_push`; Odoo suites | `grep -r json/2 scaas-node/src` empty |
+| **S8′** | spec corrections (§18.1), after owner approval | — | — |
+| PLANNED: **N3**, **OP7**, **PL1** | non-EVM DEX books (after P7/G3, N2); OTLP `otel` feature; SponsorshipPool `call` routing | — | — |
 
-**P1 — Store v2 on SQLite and configuration** (replaces MESH S4)
-- Files: `Cargo.toml` (`sqlx` with `store-sqlite` default feature), `src/store/{mod,sqlite}.rs` (backend trait, schema
-  §4 + A1 §A1.3 SQLite DDL, owner lock + fencing epoch, counter rows, tri-state CAS, janitor), `migrations/sqlite/`,
-  `src/config.rs` (`[api]`, `[store]`, bootstrap lists, `[odoo]` as `Option` + `// legacy(R104)`), `src/main.rs`,
-  CLI `store init` and `store restored` (in `src/main.rs`), `node.example.toml`.
-- Gate: `cargo test`. Done: reopen keeps `seq`/`store_id`; second process refused; fencing test green.
-
-**P2 — Job API, machine keys, built-in admin auth**
-- Files: `src/gwauth.rs` (`HmacKeys`, per-listener caps), `src/jobs_api.rs` (§5), `src/job.rs` (`Job` from
-  `odoo.rs`, JCS), `src/admin_auth.rs` (built-in users, sessions, prefix dispatch, roles), `src/cli.rs`
-  (`admin …`, `key create|rotate|revoke`, `store restored`), bootstrap admin routes (users, API keys, namespaces,
-  chains/tokens read), `Cargo.toml` (`argon2`), `src/main.rs`, `tests/api/*.json`.
-- Gate: `cargo test`.
-
-**P3 — Submit and lanes from the store** (safety-critical)
-- Files: `src/submit.rs` (`poll_store`, tri-state `transition`, `start` from store ∪ legacy with fail-closed,
-  `lane_hint`), `src/adapter.rs` (`lane_runner`/`step_once`/`follow`/`recover_lane`), `src/nonce.rs` (journal_max,
-  `leased` mapping), `src/gateway.rs` (job INSERT in `~gateway`, digest, `GET /v1/intents/{id}`), `src/odoo.rs`
-  (legacy: journal_max bump, `node_transport`), `src/metatx.rs` (R100 at accept).
-- Gate: `cargo test` then `cargo test --test e2e -- --ignored` and `e2e_push` job cases.
-- Done: no `dead`/`reverted` for a consumed job; no double broadcast on restart; R18 tests unchanged.
-
-**P4 — Indexer and events feed**
-- Files: `src/indexer.rs`, `src/adapter.rs` (`index_step`), `src/drift.rs`, `src/jobs_api.rs` (`/v1/events`,
-  `/v1/watch`, `/v1/tokens`).
-- Gate: `cargo test` then `e2e.rs` + `e2e_cosmos.rs` (alone).
-
-**P5 — Odoo client** (`dms_blockchain`, `dms_blockchain_payment`)
-- Files: `models/blockchain_node.py`, `models/blockchain_relay_job.py`, `models/blockchain_subject_account.py`
-  (`table=` pass-through), `models/blockchain_chain.py`, `models/blockchain_chain_event.py`, `lib/node_client.py`,
-  `lib/fields.py`, `data/ir_cron.xml`, `data/neutralize.sql`, `security/…`, `views/…`,
-  `dms_blockchain_payment/models/blockchain_autopay.py`, `tests/test_node_client.py`, `tests/data/*.json`, manifest.
-- Gate: Odoo test run of `dms_blockchain`, `dms_blockchain_payment`.
-
-**P6 — e2e push + cutover rehearsal**
-- Files: `tests/e2e_push.rs`, `scripts/e2e_odoo_node.sh`, `scaas/scaas-node/README.md` (job API, migration and
-  restore runbook).
-- Gate: `cargo build --release` then `cargo test --test e2e_push -- --ignored`; then the script (alone).
-- **Owner cutover per chain on SQLite (testnet first) may start here** — bootstrap uses the CLI and P2's admin routes.
-
-**P2b — OIDC, full admin route table, audit chain export, CORS** (after P6, review M12)
-- Files: `src/oidc.rs`, `src/admin.rs` (router split), `src/admin_api.rs`, `Cargo.toml` (`ring` direct, `tower-http`
-  `cors`). P2 already ships built-in users, API-key management and the bootstrap routes; P2b adds the OIDC mode, the rest of
-  §7.3 and the app-facing CORS.
-- Gate: `cargo test` then `cargo test --test e2e_oidc -- --ignored`.
-
-**P1b — PostgreSQL and MySQL backends** (A1)
-- Files: `src/store/{postgres,mysql}.rs`, `migrations/{postgres,mysql}/`, `tests/e2e_store_backends.rs`, cargo features.
-- Gate: `cargo test --features store-postgres,store-mysql` then `e2e_store_backends -- --ignored` (docker, alone).
-- Done: contract suite and DDL-equivalence green on all three; cutover on PG/MySQL allowed after this.
-
-**P7 — DEX on the store** (R105)
-- Files: `src/dex/venue.rs`, `src/dex.rs`, store DEX tables (all backends), `src/admin_api.rs` (markets),
-  `dms_blockchain_dex/models/*`, tests.
-- Gate: `cargo test` + DEX e2e in `e2e.rs` (alone), then Odoo `dms_blockchain_dex` tests.
-
-**S1b′** — Odoo company bus scope (MESH §10.4) + `bus` in `_push_item()`. Gate: Odoo tests.
-
-**S5**, **S6′**, **S7′** — mesh as MESH §14 with §13.2 changes.
-
-**P9 — Removal** (R104), only after §11.4. Node: delete `src/odoo.rs`, legacy blocks, `OdooCfg`, `fake_odoo`; Odoo:
-§10.7 deletions, post-migration, pre-migration abort if a chain is `pull`. Gate: `cargo test` + `e2e_push`; Odoo
-suites. Done: `grep -r json/2 scaas/scaas-node/src` is empty.
-
-**S8′** — spec corrections (§18.1), after owner approval.
-
-Order: **S3 → P1 → P2 → P3 → P4 → P5 → P6 → [owner cutover, SQLite] → P2b → P1b → P7 → S1b′ → S5 → S6′ → S7′ → P9 →
-S8′.** P9 is gated by the calendar criterion of §11.4; if the proof window ends before S5, run P9 first so the mesh
-never wires to legacy code.
+Order: **S3 → P1 → P2 (+OP2) → N1 → P3 (+OP1, OP8) → P4 → P5 → OP5 (SQLite) → P6 → [owner cutover, SQLite] → P2b →
+N2 → SP1 + OP4 → TB3 → RP2 → T7 → OP3 → P1b (+OP5 PG/MySQL) → P7 → S1b′ → S5 → S6′ → S7′ → F5 → N4 → AS7 → P9 →
+S8′.** Heavy gates one at a time. P9 is gated by the calendar criterion of §11.4; if the proof window ends before S5,
+run P9 first so the mesh never wires to legacy code.
 
 ---
 
@@ -1325,15 +1484,19 @@ never wires to legacy code.
 | `scaas/scaas-node/README.md` | operating invariants | job API, admin auth modes and CLI bootstrap, migration and restore runbook (P6). |
 | everything | names | rename stream: node `scaas-node`, env `SCAAS_*`, metrics `scaas_*`, R54 headers `X-Scaas-*`, signer/domain tags `scaas.*` (e.g. PD R9 `scaas.pay.lane`) — the last one changes on-chain derivations and needs its own owner-reviewed plan. |
 | `odoo.rs:1` module doc | | deleted with the file in P9. |
+| APP §17, OPS/TSS "Amends NI" rows, F §11.2, AS §9.1, TW2 §14 | NI items | done in rev 3.4 (§20); those specs may point here. |
 
 ### 18.2 Interpretations to confirm with the owner
 
-1. ~~`admin` does not imply `key_custodian` (R107)~~ — confirmed by the owner (§19.2).
-2. Odoo's namespace gets `allow_call = true` at migration (R103).
-3. A paused node chain accepts jobs and holds them (R53 reading).
-4. Several companies may share one namespace via `origin.scope` (R90/R91); default = one namespace per database.
-5. Payment status latency ≤ ~10 s while jobs are live, ≤ 1 min otherwise (R101).
-6. A cancel of a published job reports "already sent" and keeps the request open (R98).
+1. Odoo's namespace gets `allow_call = true` at migration (R103).
+2. A paused node chain accepts jobs and holds them (R53 reading).
+3. Several companies may share one namespace via `origin.scope` (R90/R91); default = one namespace per database.
+4. Payment status latency ≤ ~10 s while jobs are live, ≤ 1 min otherwise (R101).
+5. A cancel of a published job reports "already sent" and keeps the request open (R98).
+6. TW2 T7 `entryRef` handling: TW2 R139 makes the first `PaymentSettled` per `entryRef` the payment and later ones
+   reconciliation exceptions; whether the node flags repeats on the feed or leaves it to clients is fixed in T7.
+7. Names chosen here where a source gave none: `chain.max_valid_for_secs`, `token.features` value `ua`,
+   `token.reg_cache`, `action_reset_event_cursor`, the `/readyz` body (§4, §9.1, §10.1); R320/R321 are spec rulings.
 
 ### 18.3 Deferred
 
@@ -1349,84 +1512,79 @@ never wires to legacy code.
 
 ### 19.1 Review 1 (`spec-review-1.md`, verdict FIX-THEN-GO)
 
-| # | Finding | Disposition |
-|---|---|---|
-| C1 | Rollback after node accept: local kill, lost states, stuck jobs | **fixed** — `push_attempted` committed before HTTP; accept returns snapshot; adopt-by-origin + ladder snapshot apply (`FEED_TRANSITIONS`); cancel by origin with tombstone (R91, R98, §5.2, §10.3–10.5) |
-| H1 | Cancel of a bus-published job | **fixed** — `published_at`, `hold`, `409 TOO_LATE published` (R98, §4) |
-| H2 | Restore with same `store_id` undetected | **fixed** — `head_seq`, `incarnation`, `restore_epoch` + mandatory CLI, continuity checks (R93, R110, §5.3) |
-| H3 | Binary journal transition loops / commit outcome unknown | **fixed** — tri-state `transition`, idempotent CAS on own hash, re-read on unknown (§9.1) |
-| H4 | PG/MySQL lock is not a fence | **fixed** — fencing epoch in every journal transaction, 2 s lock poll, PgBouncer refusal, 64-bit key (A1) |
-| H5 | MySQL collation, TEXT keys, non-portable DDL | **fixed** — byte-exact per-backend DDL, `VARBINARY`/`utf8mb4_bin`, SELECT-FOR-UPDATE accept, constraint-name classification, deadlock retry (A1, §5.2) |
-| H6 | Nonce as TEXT; `max()` over purgeable rows | **fixed** — `BIGINT` nonces, i64 bound, monotonic `lane.journal_max` in the journal transaction (§4, A1) |
-| H7 | Client-supplied digest drives G2 | **fixed** — node-computed digest via S3; S3 moved before P2 (R89, §17) |
-| H8 | `IDEMPOTENCY_MISMATCH` treated as dead; canonical JSON undefined | **fixed** — JCS node-computed hash; `attention` + fetch by uid, never dead (R91, §10.3) |
-| H9 | Token registry divergence stalls ingest | **fixed** — drop+count unknown contracts; `PUT /v1/tokens`; switch precondition (R95, §10.4, §11.2) |
-| H10 | Copied DB pushes to production | **fixed** — `neutralize.sql`, `bound_db_uuid`/`bound_base_url` check, T18 (§10.1) |
-| M1 | Kill switch window during node outage | **fixed** — window documented in R98; cancels retried first; `lease_hold_after_start_secs` |
-| M2 | Row locks across HTTP; invalid pseudo-code | **fixed** — one batch per transaction, re-checked lock, `grouped()` (§10.3) |
-| M3 | Long-poll ties up cron threads; events starve | **fixed** — Odoo `wait=0`, fixed 1-min interval + re-trigger (R101, §10.4) |
-| M4 | `blockchain.node` server-only fields writable | **fixed** — `SERVER_ONLY`, `action_acknowledge_store_change`, `BigInteger` (§10.1) |
-| M5 | Late no-ops after `final`; duplicated dead side effects | **fixed** — `FEED_LATE_NOOP`, everything through `_apply_report(table=)` (§10.4) |
-| M6 | DEX mirrors regress on overlap | **fixed** — `node_seq` guard, terminal no-op, poison rule (§12.2) |
-| M7 | Stale `journal_floor` in transition | **fixed** — `lane.journal_max` bumped on each legacy `signed`; start fails closed (§9.1, §11.2) |
-| M8 | Company without route stalls | **fixed** — create raises; precondition covers wallet companies (§10.1, §11.2) |
-| M9 | Lane change orphans live jobs | **fixed** — `409 LANE_BUSY` (§7.3) |
-| M10 | A1 contradicts base spec (AUTOINCREMENT, user_version, pool) | **fixed** — counter rows, `sqlx::migrate!`, SQLite `max_connections = 1` + `BEGIN IMMEDIATE` via `begin_with`, DDL-equivalence test (§4, A1) |
-| M11 | OIDC details (scope, iat, cache key, aud/client, redirects) | **fixed** — R107 machine-only scope, `iat` required, `(iss, kid)`, JWK alg, `audience ∉ client_ids`, `typ`, no redirects, exact host (§7.1) |
-| M12 | Stream sequencing | **fixed** — order changed only: P2b after P6, P1b after P2b (§17) |
-| L1 | umask race, peer uid | **fixed in rev 2, then moot** — rev 3 removes the socket (owner ruling, §19.2) |
-| L2 | Audit integrity | **fixed** — hash chain + exported head (§4, §7.5) |
-| L3 | Revoked keys after restore | **fixed** — T19 + runbook |
-| L4 | `last_used_at` write per request | **fixed** — in memory, flushed every 60 s (§4) |
-| L5 | §9.4 heuristic families | **fixed** — sequence families only (§9.4) |
-| L6 | `MAX_BODY` 64 KiB vs 1 MiB | **fixed** — per-listener cap (§3) |
-| L7 | Manager ACL vs system-only fields | **fixed** — `blockchain.node` system-only write; managers read + routes (§10.8) |
-| L8 | Store indexer on `pull` chains | **fixed** — runs for every chain; e2e covers the switch (§9.1, §16.4) |
-| L9 | Watch latency | **fixed** — wallet approval / token activation trigger sync (§10.4) |
-| L10 | `leased` vs `"nonce_leased"` in `plan()` | **fixed** — mapped at `store.inflight` (§9.1) |
-| — | R102 evidence (`main.rs:181-186` is the workaround) | **fixed** — cites `submit.rs:540-568` (R102, §1.1) |
-| — | `jobs_cursor` int4 | **fixed** — `BigInteger` (§10.1) |
-| — | Gateway door A not journaled today | **fixed** — stated as a safety gain; also digest `None` today (`gateway.rs:147`) (§1.1, §9.1) |
-
-Counts: 1 critical, 10 high, 12 medium, 10 low, 3 accuracy notes — **36 fixed, 0 rejected**. Ponytail notes accepted:
-Odoo long-poll dropped (M3); `namespace_token` kept only as client-pushed state (R95); multi-issuer OIDC and
-`cursor_overlap` kept as cheap.
+36 findings (C1, H1–H10, M1–M12, L1–L10, 3 accuracy notes), **all fixed, 0 rejected**; the per-finding table is in
+rev 3.3 (git history). Main landings: C1 §10.3–10.5; H1 R98; H2 R93/R110/§5.3; H3 §9.1; H4–H6, M10 A1; H7 R89; H8 R91;
+H9 R95/§10.4; H10 §10.1; M12 §17. Ponytail notes accepted: Odoo long-poll dropped; `namespace_token` only as
+client-pushed state; multi-issuer OIDC and cursor overlap kept as cheap.
 
 ### 19.2 Owner rulings folded into rev 3 (admin auth, rename)
 
-| Was (rev 2) | Now (rev 3) |
-|---|---|
-| R106 — admin API = OIDC resource server only | **R106** (rev 3.1) = two admin auth modes (built-in users with Argon2id + node-signed sessions; optional OIDC). Rev 3's "admin API keys" (`admin_key`, `scaas_ak1.`) are removed: "API key" means the R92 external-client keys only. The OIDC validation hardening of rev 2 is kept unchanged as **R106a**. |
-| R107 — four roles, OIDC claim mapping | **R107** kept (owner correction: viewer ⊂ operator ⊂ admin, plus `key_custodian`, `admin` ⇏ `key_custodian`); built-in users and OIDC tokens carry roles; managing admin users and external-client API keys needs `key_custodian`, user roles granted ⊆ the caller's |
-| R108 — Unix-socket break-glass | **R108** = host CLI (`scaas-node admin create/passwd/disable`, `key create/rotate/revoke`); the socket, `admin_socket`, `SO_PEERCRED` and the break-glass metric are removed. |
-| R109 — machine keys never reach config routes | **R109** kept (API keys never reach admin routes) and made symmetric: admin credentials never reach the job API. |
-| R110 actor `socket:<uid>` | actors `user:`, `oidc:`, `cli:` |
-| old names (renamed 2026-10-06) | `scaas-node`, `SCAAS_*`, `scaas_*`, `X-Scaas-*`, `scaas.*` (approved rename; on-chain domain tags change in the rename stream, §18.1) |
-
-§18.2 item 1 (`admin` does not imply `key_custodian`) is confirmed by the owner.
-
-**Rev 3.2 (owner clarification):** config automation = OIDC client credentials or the host CLI only; client API keys
-are server-side only and never embedded in browser/mobile/desktop apps or extensions (§7.1, T23, T24).
-
-**Rev 3.1 (owner clarification):** "API key" = credentials of external clients such as Odoo (R92), created,
-rotated and revoked by `key_custodian` admins via the admin API, the app or the host CLI, and never accepted on admin
-routes. Admin authentication is built-in users or OIDC only; the rev-3 admin API keys (table, `scaas_ak1.` tokens,
-routes, CLI subcommand, tests, threat row) are removed.
+R106 = built-in users + optional OIDC (rev 3's admin API keys `scaas_ak1.` removed; "API key" = R92 external-client
+keys only; rev 2's OIDC hardening kept as R106a); R107 roles kept, `admin` ⇏ `key_custodian` (owner-confirmed);
+R108 = host CLI (Unix socket removed); R109 symmetric; R110 actors `user:`/`oidc:`/`cli:`; rename to `scaas-*`.
+Rev 3.2: automation = OIDC client credentials or the CLI; client API keys server-side only (§7.1, T23, T24).
 
 ### 19.3 P1 code review (rev 3.3)
 
-The P1 code and its review (`p1/code-review.md`, F1–F15, all fixed on `fix/node-p1-review`) proved these spec
-statements wrong or incomplete; corrected in place:
+The P1 code and its review (`p1/code-review.md`, F1–F15, fixed on `fix/node-p1-review`) corrected in place: SQLite
+classifies unique violations by column list (§5.2 step 8, A1.3); `[api] bind` default `127.0.0.1:8548`, shared ports
+refused; `mesh_peer.url` admin-editable under the SSRF guard (owner; R95, §7.3, T2); `409 SUPERSEDED` and in-transaction
+`422 EXPIRED` (§5.2); `meta('<table>_floor')` for `410` (§5.3); `store init` creates, a missing store refuses to start
+(§8); `CHECK`s tie `digest`/`payload_hash` to `kind` (§4).
 
-| Was | Now |
-|---|---|
-| A1.3: SQLite classifies unique violations by "constraint name from the error message" | SQLite reports the column list only; the backend maps it back (§5.2 step 8, A1.3) |
-| §3, §7.1: `[api] bind` default `127.0.0.1:8547` (= gateway default) | `127.0.0.1:8548`; binds sharing a port refused |
-| R95: every dial target toml-only | owner ruling: `mesh_peer.url` admin-editable, `admin` only, audited, SSRF guard (§7.3, T2) |
-| §5.2 step 8: no answer for a stale lower generation or an expired key inside the transaction | `409 SUPERSEDED`, `422 EXPIRED` |
-| §5.3: "cursor below the oldest retained `seq − 1`" (unknowable once a feed table is empty) | `meta('<table>_floor')` written by the purge |
-| §8: store opened (created implicitly) at start | `scaas-node store init` creates; a missing store refuses to start |
-| §4: `digest`/`payload_hash` nullability only in comments | `CHECK`s tie them to `kind` |
+---
+
+## 20. Additions consolidated in rev 3.4
+
+Sources: **APP** `2026-10-06-scaas-app-design.md` rev 1.1; **OPS** `2026-10-06-operations-design.md` rev 1.2;
+**TSS** `2026-10-06-tender-sponsorship-shredding.md` rev 1.2; **F** `2026-10-06-universal-account-design.md` (current
+rev; names referenced, internals stay in F); **D** `2026-10-06-signers-followups.md`; **AS**
+`2026-10-06-asset-suite-design.md` rev 1.1; **TW2** `2026-10-06-token-wrappers-v2.md` rev 1.2 (its §18 notes I1–I9 hold
+no node item; T7 is in its §15). Status SPECIFIED unless marked planned.
+
+| Item | Source | NI place | Stream |
+|---|---|---|---|
+| `GET /v1/gateway`; `gateway_cors_origins`; error contract `{error, code, detail, revert_data}` | APP §9.6.1, R159, R178 | §3, §5.5 | N1 |
+| App serving on the admin listener + CSP (`[app]`, `scaas_app_requests_total`) | APP §13.2, §10.1, R160 | §3, §7.7, §15 | N1 |
+| `GET /v1/admin/auth-modes` in the route table and open routes | APP §17 (L6) | §3, §7.3 | P2 |
+| `POST /v1/ops` (`signed_op` payload, accept order); Hedera 64-byte HIP-632 signatures on `/v1/metatx`, Hedera only | APP §9.6.2, R156 | §5.5 | N2 |
+| `POST /v1/ua-metatx`, `POST /v1/ua/register` | APP §9.6.3 | §5.5, R320 | N4 |
+| Non-EVM DEX books (planned) | APP §15 N3, §16 Q2 | §5.5, §17 | N3 |
+| `deny_subject`, deny routes, intake and lease-time checks (R246) | OPS §4.5 | §4, §5.2 (7b), §7.3, §9.2 | OP8 |
+| `usage_day`, `GET /v1/admin/usage`, `report usage`; cost columns on every job | OPS R238, §8.2–8.3 | §4, §5.2, §7.2–7.3 | OP4 |
+| `job.trace_id`, `traceparent` intake; `[log] format`, audit `warn` mirror | OPS R236, R237 | §3, §4, §5.2, §7.5 | OP2 |
+| `breaker_latch`, `metrics_bind`, per-chain readiness, finality recheck, label caps | OPS R230, R233, R242 (a), R244, §4.3 (M2) | §3, §4, §9.1, §15 | OP1 |
+| `store restored` pause + purge; security re-apply from the audit mirror (H1); acknowledgement cancels | OPS R240 | §4, §7.2, §7.5, §10.1 | OP5, P5 |
+| `lane_adopted` + `lane accept-nonce`; `index reset` + Odoo cursor reset; audit verification | OPS R241, R242 (b, c) | §4, §7.2, §7.5, §10.1 | OP5 |
+| Token intake pause `PATCH …/tokens/{addr} {active}`; chain `breaker` merge patch; state/reset bodies | OPS §4.4, §10.0 | §7.3 | OP5, OP1 |
+| `allow_call` replay precondition | OPS §11.2 (M11) | R103 | P2 |
+| Metric renames (`scaas_audit_head_seq`, issuer index, latched foreign nonce) and §4.3 series | OPS §4.2–4.3 | §15 | OP1 |
+| `sponsor_policy`, `sponsor_usage`; job `sponsor_policy_id`, `sponsor_reserved`, `sponsor_day`; sponsorship routes, metrics, local signature check | TSS §B1.2–B1.6, R189–R191 | §4, §5.2, §7.3, §15 | SP1 |
+| `job_live_call` (`call_hash`, `409 DUPLICATE_CALL`) | TSS §B1.2–B1.3 | §4, §5.2 | SP1 |
+| `chain_contract`, `…/contracts` routes, tender events, `PUT /v1/tokens` accepts contracts | TSS §A.6 | §4, §5.2, §6, §7.3 | TB3 |
+| `receiver_fee` payload field, `token.features`, `ReceiverFeePaid` | TSS §B2.5 | §4, §5.2, §6 | RP2 |
+| `ua_metatx` job kind, `chain.ua_registry`/`ua_registry_gen`, UA events | F §11.2 | §4, §5.2, §6 | F5 |
+| UA record cache; mesh `scaas-intent/1.3` `evm.ua_meta_tx` | F §11.1, R316, R317 | §9.1, §13.2 | F5 |
+| Nothing assigned to the node | D R252 (node intake never checks backups), R260 (simulation arbitrates `None`, R27) | — | — |
+| Events, token kinds 5–7, `token.reg_cache`, intake and managed-market rules, snapshot API + CLI (planned) | AS §3.8, §5.4, §8.2–8.3, §9.1, R200 | §4, §5.2, §5.5, §6, §7.2 | AS7 |
+| `token.kind`, `payLane`, TW2 events, `mtxBatch` batching, unwrap rules, `entryRef` (planned) | TW2 §7.3–7.6, §10.2, §14, §15 T7 | §4, §6, §9.1, R321, §18.2 | T7 |
+
+**Conflicts between sources, resolved here:**
+
+| # | Conflict | Resolution |
+|---|---|---|
+| X1 | APP N4 makes `/v1/ua/register` a `~gateway` `call` job "not a namespace grant"; R103 makes `call` a namespace capability | R320: gateway `call` jobs only to `chain.ua_registry` `register`; R103 unchanged |
+| X2 | NI `scaas_audit_head_info{hash}` vs OPS `scaas_audit_head_seq` | OPS (one series; hash logged) |
+| X3 | Gateway codes (`TOKEN_NOT_SERVED`, `EXPIRED` for too long) vs job API (`UNKNOWN_TOKEN`, `VALID_TOO_LONG`) | per-listener code sets over the same checks (§5.4 vs §5.5) |
+| X4 | Job API accept does no RPC (§5.2) vs `/v1/ops` simulating at accept (APP) | gateway doors simulate before INSERT as today; job API at lease |
+| X5 | TSS cost columns for sponsorship vs OPS "every job" | every job (OPS R238); sponsorship reads them |
+| X6 | `max_valid_for_secs` used by NI, APP, TSS, OPS without a home (mesh: one global param) | `chain.max_valid_for_secs`, default 3600, hot |
+| X7 | TW2 and AS each extend the token kind | one `token.kind` CHECK = `versionOf().kind` 0–7 (incl. `zether`) |
+| X8 | R108 "CLI needs no owner lock" vs OPS CLIs that write lanes and the index | credential CLIs lock-free; maintenance CLIs: node stopped, owner lock, epoch + 1 |
+| X9 | NI §7.7 "no `sessionStorage`" vs APP R162 OIDC redirect state there | tokens never; only the ≤ 10 min redirect state |
+| X10 | OPS books gap-fillers to `~lane`, not reserved in R90 | `~lane` reserved, booking label only |
+| X11 | TW2 batching vs one job = one tx; separate TW2/TSS never-batch lists | R321: journal per outer tx; lists merged, plus sponsored jobs |
+| X12 | NI token `DELETE` vs OPS M1 (delete drops events) | both kept; `{active: false}` is the intake pause |
 
 ---
 
