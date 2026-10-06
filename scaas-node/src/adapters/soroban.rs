@@ -380,7 +380,7 @@ impl ChainAdapter for SorobanAdapter {
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
         let r = self.rpc("getTransaction", json!({"hash": tx_id.trim_start_matches("0x")})).await?;
         Ok(match r["status"].as_str() {
-            Some("SUCCESS") => TxStatus::Mined { height: r["ledger"].as_u64().unwrap_or_default() },
+            Some("SUCCESS") => TxStatus::Mined { height: r["ledger"].as_u64().unwrap_or_default(), tx_hash: None },
             Some("FAILED") => TxStatus::Reverted { reason: format!("tx failed: {}", r["resultXdr"].as_str().unwrap_or("")) },
             _ => TxStatus::Unknown,
         })

@@ -723,7 +723,7 @@ impl ChainAdapter for SuiAdapter {
         };
         let height = r["checkpoint"].as_str().and_then(|s| s.parse().ok()).or_else(|| r["checkpoint"].as_u64());
         Ok(match (r["effects"]["status"]["status"].as_str(), height) {
-            (Some("success"), Some(h)) => TxStatus::Mined { height: h },
+            (Some("success"), Some(h)) => TxStatus::Mined { height: h, tx_hash: None },
             (Some("failure"), _) => TxStatus::Reverted { reason: r["effects"]["status"]["error"].as_str().unwrap_or("failure").into() },
             _ => TxStatus::Pending,
         })

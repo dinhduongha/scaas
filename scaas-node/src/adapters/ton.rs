@@ -1179,11 +1179,14 @@ impl ChainAdapter for TonAdapter {
             // Anyone may relay a signed op (`relayer` = addr_none): if a copy got there first, the op ran (review L6).
             if exit_code(&child) == Some(E_NONCE) {
                 if let Some(height) = self.executed_by_copy(&child, carried_digest(out)).await? {
-                    return Ok(TxStatus::Mined { height });
+                    // Not our tx: Odoo keeps ours and flags `landed_elsewhere`.
+                    return Ok(TxStatus::Mined { height, tx_hash: None });
                 }
             }
             return Ok(TxStatus::Reverted { reason: format!("contract: {why}") });
         }
+        // The payer's wallet (or Mandate) emits `MetaTransactionExecuted`: its tx is the hash the indexer reports.
+        let tx_hash = api_hash(child.get("hash").unwrap_or(&Value::Null)).ok().map(|h| hex0x(&h));
         // Follow the bounceable hops (where the tokens go) to the end: a bounce there sends them back (review L7).
         let mut last = child;
         for _ in 0..4 {
@@ -1198,7 +1201,7 @@ impl ChainAdapter for TonAdapter {
             }
             last = t;
         }
-        Ok(TxStatus::Mined { height: last.get("mc_block_seqno").and_then(Value::as_u64).unwrap_or_default() })
+        Ok(TxStatus::Mined { height: last.get("mc_block_seqno").and_then(Value::as_u64).unwrap_or_default(), tx_hash })
     }
 
     async fn sequence(&self, lane: usize) -> Result<u64> {
@@ -1626,7 +1629,8 @@ mod tests {
         let signed_op = b64encode(&alloy::hex::decode(s(&v, "/signed_op/boc")).unwrap());
         let lane = json!({"account": "0:".to_string() + &"11".repeat(32), "description": ok, "out_msgs": [
             {"hash": b64encode(&h1), "destination": wallet, "bounce": true, "message_content": {"body": signed_op}}]});
-        let payer = |d: Value| json!({"account": wallet, "description": d, "mc_block_seqno": 5, "out_msgs": [
+        let payer_tx = [0x0bu8; 32];
+        let payer = |d: Value| json!({"account": wallet, "hash": b64encode(&payer_tx), "description": d, "mc_block_seqno": 5, "out_msgs": [
             {"hash": b64encode(&h2), "destination": "0:".to_string() + &"22".repeat(32), "bounce": true},
             {"hash": b64encode(&[3; 32]), "destination": "0:".to_string() + &"11".repeat(32), "bounce": false}]});
         let payee = |d: Value| json!({"account": "0:".to_string() + &"22".repeat(32), "description": d, "mc_block_seqno": 6, "out_msgs": [
@@ -1641,13 +1645,14 @@ mod tests {
         let bounced = st(Fake { by_msg: at(vec![(&lane_tx, lane.clone()), (&h1, payer(ok.clone())), (&h2, payee(failed(-14)))]), ..Default::default() }).await;
         assert!(matches!(bounced, TxStatus::Reverted { .. }), "payee hop bounced: {bounced:?}");
         let mined = st(Fake { by_msg: at(vec![(&lane_tx, lane.clone()), (&h1, payer(ok.clone())), (&h2, payee(ok.clone()))]), ..Default::default() }).await;
-        assert!(matches!(mined, TxStatus::Mined { height: 6 }), "{mined:?}");
+        // The tx id is the lane wallet's external message; Odoo hears of the payer wallet's tx (it emits the event).
+        assert_eq!(mined, TxStatus::Mined { height: 6, tx_hash: Some(hex0x(&payer_tx)) });
 
         let mte = b64encode(&alloy::hex::decode(s(&v, "/events/mte_boc")).unwrap());
         let copy = json!({"account": wallet, "description": ok, "mc_block_seqno": 4, "out_msgs": [{"destination": null, "message_content": {"body": mte}}]});
         let nonce_used = at(vec![(&lane_tx, lane.clone()), (&h1, payer(failed(E_NONCE)))]);
         let r = st(Fake { by_msg: nonce_used.clone(), by_account: vec![copy], ..Default::default() }).await;
-        assert!(matches!(r, TxStatus::Mined { height: 4 }), "a copy executed our digest: {r:?}");
+        assert_eq!(r, TxStatus::Mined { height: 4, tx_hash: None }, "a copy executed our digest: not our tx");
         let r = st(Fake { by_msg: nonce_used, ..Default::default() }).await;
         assert!(matches!(r, TxStatus::Reverted { .. }), "{r:?}");
     }
