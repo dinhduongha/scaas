@@ -477,7 +477,9 @@ Client UX rules:
 
 ---
 
-## 14. The app (`scaas/app/`, PLANNED)
+## 14. The app (`scaas/app/`, SPECIFIED)
+
+Design: [app spec](superpowers/specs/2026-10-06-scaas-app-design.md) (R150–R179).
 
 React + Vite console and dApp: wallets (passkey, seed vault, extension wallets, dev key), payments, DEX book, Zether,
 contracts, node admin. Chain features work without login; node admin requires a built-in login (session token) or

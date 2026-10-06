@@ -267,7 +267,7 @@ mandates (`MandateWallet.payUnderMandate`); generic saga orchestration **PLANNED
 | Node store | (in `scaas-node`) | Jobs, feeds, config authority, credentials, audit, DEX book, mesh tables; SQLite/PostgreSQL/MySQL | **SPECIFIED** (NI §4, A1/R111) |
 | `zether-prover` | `zether-prover/` (Rust, `cdylib`+`rlib`, WASM) | Keygen (EIP-2333 paths), ElGamal, Σ + Bulletproofs (n=64), disclosure openings, BSGS, `zether-cli`, `zether-read-balance` | **BUILT** (unaudited) |
 | `clientkeys` | `clientkeys/` (ESM, `@noble`/`@scure`) | Passkey signer, 24-word seed vault, Zether conf keys and balance cache; bundle vendored into `dms_blockchain_bridge/static/lib/clientkeys` | **BUILT** (EVM-centric; Soroban/Aptos/Solana signers queued) |
-| `app/` | `scaas/app/` (React + Vite) | Console and dApp: contracts, wallets, DEX book, Zether, node admin (built-in login or OIDC) | **PLANNED** (requirements NI §7.7, A2 §13.2) |
+| `app/` | `scaas/app/` (React + Vite) | Console and dApp: contracts, wallets, DEX book, Zether, node admin (built-in login or OIDC) | **SPECIFIED** ([app spec](superpowers/specs/2026-10-06-scaas-app-design.md); requirements NI §7.7, A2 §13.2) |
 | Odoo client | `bamboo-dms/dms_blockchain`, `dms_blockchain_payment`, `dms_blockchain_bridge`, `dms_blockchain_dex` | One ERP client: outbox, payment provider `chain`, portal facade, DEX accounting | **BUILT** (pull model); push client **SPECIFIED** (NI §10) |
 | CI | `.github/workflows/ci.yml` (`scaas-ci`) | forge test (pinned OZ v5.2.0, forge-std v1.16.2), `private9000` build, cargo clippy `-D warnings`, cargo test, EVM e2e on anvil | **BUILT**; CI for prover, clientkeys and non-EVM e2e **PLANNED** |
 
