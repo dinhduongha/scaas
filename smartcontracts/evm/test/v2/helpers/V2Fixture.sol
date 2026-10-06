@@ -8,6 +8,7 @@ import {IOpenFactoryV2} from "../../../src/common/IOpenFactoryV2.sol";
 import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 import {NoUnderlyingToken} from "../../../src/metatx/NoUnderlyingToken.sol";
 import {SingleUnderlyingToken} from "../../../src/metatx/SingleUnderlyingToken.sol";
+import {MultiUnderlyingToken} from "../../../src/metatx/MultiUnderlyingToken.sol";
 
 /// Tầng tối thiểu trên `MetaTokenBase` cho test của T1: `initData = (name, symbol, decimals, supply)`.
 contract BaseHarness is MetaTokenBase {
@@ -85,6 +86,21 @@ abstract contract V2Fixture is Test {
         address[] memory us = new address[](1);
         us[0] = u;
         return SingleUnderlyingToken(_clone(singleImpl, address(this), us, _singleInit(dec, num, den, cfg)));
+    }
+
+    address internal multiImpl;
+
+    function _multiInit(uint256[] memory nums, uint256[] memory dens, SingleUnderlyingToken.RateConfig memory cfg,
+        address guardian) internal pure returns (bytes memory)
+    {
+        return abi.encode("Any USD", "aUSD", uint8(18), nums, dens, cfg, guardian);
+    }
+
+    function _multi(address[] memory us, uint256[] memory nums, uint256[] memory dens,
+        SingleUnderlyingToken.RateConfig memory cfg, address guardian) internal returns (MultiUnderlyingToken)
+    {
+        if (multiImpl == address(0)) multiImpl = address(new MultiUnderlyingToken(address(this), address(0)));
+        return MultiUnderlyingToken(_clone(multiImpl, address(this), us, _multiInit(nums, dens, cfg, guardian)));
     }
 
     function _mt(address from, address to, uint256 value, bytes memory data, uint256 batch, uint32 mode)
