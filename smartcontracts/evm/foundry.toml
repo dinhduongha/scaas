@@ -11,9 +11,13 @@ remappings = [
   "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
   "forge-std/=lib/forge-std/src/",
 ]
+# storageLayout in the artifacts: `test/v2/Layout.t.sol` pins it against `test/v2/layout/*.json` (TW2 §10.1).
+extra_output = ["storageLayout"]
 fs_permissions = [
   { access = "read-write", path = "./test/vectors" },
   { access = "read-write", path = "./deployments" },
+  { access = "read", path = "./test/v2/layout" },
+  { access = "read", path = "./out" },
 ]
 
 [invariant]
