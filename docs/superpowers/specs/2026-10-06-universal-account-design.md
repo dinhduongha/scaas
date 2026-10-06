@@ -1066,7 +1066,7 @@ order (EVM, Cosmos, Hedera, Soroban, TON, Sui, Aptos, Solana).
 ## 17. Owner to confirm
 
 Decisions taken by this spec on the open design points, each with its default; a different answer changes only the
-rulings named. **Rev 1.1:** items 1, 6, 9, 11 are answered by the owner (marked); the rest stay open.
+rulings named. **Rev 1.1:** items 1, 6, 9, 11 are answered by the owner (marked). **Rev 1.2 (owner 2026-10-06): all remaining defaults (2, 3, 4, 5, 7, 8, 10, 12, 13, 14) accepted as decided** — no open items remain.
 
 1. **Identity vs rotation (R302). — Confirmed by the owner (rev 1.1).** Decided: a UA is immutable (single-key or policy hash); rotation and membership
    changes = new UA + move funds; stable identity = `SubjectAccount` (b). Alternative: a rotatable "policy" kind
