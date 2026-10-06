@@ -1653,10 +1653,12 @@ scaas-node admin create NAME --role admin --role key_custodian  # password from 
 scaas-node admin passwd NAME | admin disable NAME
 scaas-node admin key create --role operator --label ci          # prints scaas_ak1.… once
 scaas-node key create --namespace odoo-prod --scopes "submit read"   # machine key
+scaas-node store init                                           # once per new node: creates the store (0600)
 scaas-node store restored                                       # mandatory after any restore: restore_epoch + 1
 ```
 
-Status: `addresses`, `keystore new` **BUILT**; the rest **SPECIFIED**.
+Status: `addresses`, `keystore new`, `store init`, `store restored` **BUILT**; the rest **SPECIFIED**. The node never
+creates its store at start: a missing store file (unmounted volume, typo'd `[store] url`) refuses to start.
 
 ### 12.5 Admin authentication details (SPECIFIED, R106/R106a)
 

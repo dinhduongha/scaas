@@ -1,6 +1,8 @@
 //! Backend SQLite (A1.2): một kết nối, WAL, `synchronous = FULL`, transaction `BEGIN IMMEDIATE` (mọi writer xếp
 //! hàng trên khoá ghi của file); owner lock = `flock` trên `<db>.lock` (thay `locking_mode = EXCLUSIVE`).
 use std::fs::File;
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -12,12 +14,17 @@ use super::*;
 
 const LIVE_SQL: &str = "('queued', 'leased', 'signed', 'broadcast')";
 const RESERVED: [&str; 3] = ["~gateway", "~mesh", "~dex"];
+/// Feed tables with a purge floor in `meta('<table>_floor')`.
+const FEEDS: [&str; 2] = ["job_event", "feed_item"];
 
 pub struct SqliteStore {
     pub(crate) pool: SqlitePool,
     id: Identity,
     /// Giữ `flock` suốt đời process; thả = mất quyền chủ.
     _lock: File,
+    lock_path: PathBuf,
+    /// `(dev, ino)` của file khoá đang giữ: file bị xoá/thay ⇒ process khác khoá được file mới (A1.1).
+    lock_id: (u64, u64),
     #[cfg(test)]
     commit_unknown: std::sync::atomic::AtomicBool,
 }
@@ -27,21 +34,46 @@ fn hex16() -> String {
 }
 
 impl SqliteStore {
+    /// Store có sẵn. File vắng mặt ⇒ từ chối (review F5): volume chưa mount hay url gõ sai không bao giờ âm thầm
+    /// thành một store trống mới (store_id mới, mất journal và G2).
     pub async fn open(url: &str, owner: &str) -> Result<Self> {
+        Self::open_with(url, owner, false).await
+    }
+
+    /// `scaas-node store init`: tạo store MỚI (file 0600); file đã có ⇒ từ chối.
+    pub async fn create(url: &str, owner: &str) -> Result<Self> {
+        Self::open_with(url, owner, true).await
+    }
+
+    async fn open_with(url: &str, owner: &str, create: bool) -> Result<Self> {
         if url.contains(":memory:") || url.contains("mode=memory") {
             return Err(StoreError::Invalid("an in-memory store has no owner lock".into()));
         }
         let opts = SqliteConnectOptions::from_str(url)?
-            .create_if_missing(true)
+            .create_if_missing(false)
             .journal_mode(SqliteJournalMode::Wal)
             .synchronous(SqliteSynchronous::Full)
             .foreign_keys(true)
             .busy_timeout(Duration::from_secs(5));
-        let mut lock_path = opts.get_filename().as_os_str().to_owned();
+        let file = opts.get_filename().to_path_buf();
+        let io = |p: &std::path::Path, e: std::io::Error| StoreError::Invalid(format!("{}: {e}", p.display()));
+        if create {
+            // -wal/-shm inherit the database file's mode (SQLite unix VFS).
+            File::options().write(true).create_new(true).mode(0o600).open(&file).map_err(|e| io(&file, e))?;
+        } else if !file.exists() {
+            return Err(StoreError::Invalid(format!(
+                "store {} not found; run `scaas-node store init --config <node.toml>` for a new node", file.display())));
+        }
+        // One lock file per database file, whatever path names it (a symlink is the same store).
+        let file = std::fs::canonicalize(&file).map_err(|e| io(&file, e))?;
+        let opts = opts.filename(&file);
+        let mut lock_path = file.into_os_string();
         lock_path.push(".lock");
-        let lock = File::options().read(true).write(true).create(true).truncate(false).open(&lock_path)
-            .map_err(|e| StoreError::Invalid(format!("{}: {e}", lock_path.to_string_lossy())))?;
-        lock.try_lock().map_err(|e| StoreError::Owned(format!("{}: {e}", lock_path.to_string_lossy())))?;
+        let lock_path = PathBuf::from(lock_path);
+        let lock = File::options().read(true).write(true).create(true).truncate(false).mode(0o600).open(&lock_path)
+            .map_err(|e| io(&lock_path, e))?;
+        lock.try_lock().map_err(|e| StoreError::Owned(format!("{}: {e}", lock_path.display())))?;
+        let lock_id = lock.metadata().map(|m| (m.dev(), m.ino())).map_err(|e| io(&lock_path, e))?;
         let pool = SqlitePoolOptions::new().max_connections(1).connect_with(opts).await?;
         sqlx::migrate!("migrations/sqlite").run(&pool).await?;
         let now = now_ms();
@@ -67,6 +99,8 @@ impl SqliteStore {
             pool,
             id: Identity { store_id, incarnation, epoch, restore_epoch },
             _lock: lock,
+            lock_path,
+            lock_id,
             #[cfg(test)]
             commit_unknown: Default::default(),
         })
@@ -94,10 +128,11 @@ impl SqliteStore {
 
     async fn transition_tx(&self, uid: i64, from: State, to: State, f: &Fields, now: i64) -> Result<Transition> {
         let mut tx = self.begin().await?;
-        let row: Option<(String, Option<String>, bool, Option<String>)> =
-            sqlx::query_as("SELECT state, tx_hash, hold, lane_hint FROM job WHERE uid = ?")
+        type Row = (String, Option<String>, bool, Option<String>, Option<String>, String);
+        let row: Option<Row> =
+            sqlx::query_as("SELECT state, tx_hash, hold, lane_hint, lane_label, chain_key FROM job WHERE uid = ?")
                 .bind(uid).fetch_optional(&mut *tx).await?;
-        let (state, tx_hash, hold, hint) = row.ok_or(StoreError::NotFound)?;
+        let (state, tx_hash, hold, hint, leased_by, chain_key) = row.ok_or(StoreError::NotFound)?;
         let state = State::try_from(state).map_err(StoreError::Invalid)?;
         let moved = Transition::Moved { state, tx_hash };
         if late_noop(from, to) || state != from {
@@ -106,6 +141,16 @@ impl SqliteStore {
         let lane = if to == Leased { f.lane_label.as_deref() } else { None };
         if to == Leased && (hold || hint.is_some_and(|h| Some(h.as_str()) != lane)) {
             return Ok(moved);
+        }
+        if to == Leased {
+            let known: Option<i64> = sqlx::query_scalar("SELECT 1 FROM lane WHERE chain_key = ? AND label = ?")
+                .bind(&chain_key).bind(lane).fetch_optional(&mut *tx).await?;
+            if known.is_none() {
+                return Err(StoreError::Invalid(format!("lane {chain_key}/{} is not in the store", lane.unwrap_or(""))));
+            }
+        }
+        if to == Signed && f.lane_label.is_some() && f.lane_label != leased_by {
+            return Err(StoreError::Invalid(format!("job {uid} is leased by {}, not by this lane", leased_by.unwrap_or_default())));
         }
         let n = sqlx::query(
             "UPDATE job SET state = ?1, updated_at = ?2,
@@ -122,7 +167,8 @@ impl SqliteStore {
         if n == 0 {
             return Ok(moved);
         }
-        if let (Some(nonce), false) = (f.outer_nonce, to == Queued) {
+        if let Some(nonce) = f.outer_nonce {
+            // check_transition: a nonce arrives only with `signed`.
             let n = sqlx::query("UPDATE lane SET journal_max = MAX(COALESCE(journal_max, ?1), ?1) \
                                  WHERE (chain_key, label) = (SELECT chain_key, lane_label FROM job WHERE uid = ?2)")
                 .bind(nonce).bind(uid).execute(&mut *tx).await?.rows_affected();
@@ -152,6 +198,14 @@ impl SqliteStore {
         if let Some(r) = rows.iter().find(|r| r.generation == j.origin.generation) {
             let same = r.kind == "tombstone" || r.payload_hash.as_deref() == Some(&j.payload_hash[..]);
             return Ok(Some(if same { Accept::Existing(r.clone()) } else { Accept::IdempotencyMismatch { uid: r.uid } }));
+        }
+        // rows are ordered by generation DESC: the first one above ours is the newest.
+        if let Some(r) = rows.iter().find(|r| r.generation > j.origin.generation) {
+            return Ok(Some(Accept::Superseded { uid: r.uid }));
+        }
+        // §4: a purged origin key is never re-accepted because its payload has expired.
+        if j.valid_until.saturating_mul(1000) <= now {
+            return Ok(Some(Accept::Expired));
         }
         if let Some(r) = rows.iter().find(|r| r.generation < j.origin.generation && r.state.is_live()) {
             return Ok(Some(Accept::PreviousGenerationLive { uid: r.uid }));
@@ -286,15 +340,7 @@ impl Backend for SqliteStore {
     }
 
     async fn transition(&self, uid: i64, from: State, to: State, f: &Fields, now_ms: i64) -> Result<Transition> {
-        if !allowed(from, to) && !late_noop(from, to) {
-            return Err(StoreError::Illegal { from, to });
-        }
-        if to == Leased && f.lane_label.is_none() {
-            return Err(StoreError::Invalid("a lease names its lane".into()));
-        }
-        if to == Signed && (f.outer_nonce.is_none() || f.tx_hash.is_none()) {
-            return Err(StoreError::Invalid("signed needs outer_nonce and tx_hash".into()));
-        }
+        check_transition(from, to, f)?;
         match self.transition_tx(uid, from, to, f, now_ms).await {
             Err(StoreError::Db(e)) => Ok(Transition::Unknown(e.to_string())),
             other => other,
@@ -372,13 +418,39 @@ impl Backend for SqliteStore {
         let mut tx = self.begin().await?;
         let n = sqlx::query(&format!(
             "DELETE FROM job WHERE state NOT IN {LIVE_SQL} AND updated_at < ? AND valid_until < ?"))
-            .bind(now_ms - job_retention_secs * 1000).bind(now_ms / 1000 - 86_400)
+            .bind(now_ms.saturating_sub(job_retention_secs.saturating_mul(1000))).bind(now_ms / 1000 - 86_400)
             .execute(&mut *tx).await?.rows_affected();
-        let feed = now_ms - feed_retention_secs * 1000;
-        sqlx::query("DELETE FROM job_event WHERE at < ?").bind(feed).execute(&mut *tx).await?;
-        sqlx::query("DELETE FROM feed_item WHERE at < ?").bind(feed).execute(&mut *tx).await?;
+        let feed = now_ms.saturating_sub(feed_retention_secs.saturating_mul(1000));
+        for table in FEEDS {
+            // R93: the floor (highest purged seq) tells `410 CURSOR_EXPIRED` from "nothing new"; it never falls.
+            sqlx::query(&format!(
+                "UPDATE meta SET value = CAST(MAX(CAST(value AS INTEGER), \
+                   COALESCE((SELECT max(seq) FROM {table} WHERE at < ?1), 0)) AS TEXT) WHERE name = '{table}_floor'"))
+                .bind(feed).execute(&mut *tx).await?;
+            sqlx::query(&format!("DELETE FROM {table} WHERE at < ?")).bind(feed).execute(&mut *tx).await?;
+        }
         tx.commit().await?;
         Ok(n)
+    }
+
+    async fn purge_floor(&self, feed: &str) -> Result<i64> {
+        if !FEEDS.contains(&feed) {
+            return Err(StoreError::Invalid(format!("unknown feed {feed}")));
+        }
+        Ok(sqlx::query_scalar("SELECT CAST(value AS INTEGER) FROM meta WHERE name = ?").bind(format!("{feed}_floor"))
+            .fetch_one(&self.pool).await?)
+    }
+
+    async fn check_owner(&self) -> Result<()> {
+        let held = std::fs::metadata(&self.lock_path).is_ok_and(|m| (m.dev(), m.ino()) == self.lock_id);
+        if !held {
+            return Err(StoreError::Owned(format!("{}: the lock file was removed or replaced", self.lock_path.display())));
+        }
+        let epoch: i64 = sqlx::query_scalar("SELECT epoch FROM store_owner WHERE id = 1").fetch_one(&self.pool).await?;
+        if epoch != self.id.epoch {
+            return Err(StoreError::NotOwner);
+        }
+        Ok(())
     }
 
     async fn append_audit(&self, entry: &AuditEntry, now_ms: i64) -> Result<AuditRow> {
@@ -398,6 +470,9 @@ impl Backend for SqliteStore {
             "UPDATE meta SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT) WHERE name = 'restore_epoch' RETURNING value")
             .fetch_one(&mut *tx).await?;
         let n: i64 = v.parse().map_err(|_| StoreError::Invalid(format!("meta restore_epoch {v}")))?;
+        // A pre-restore process can never share an epoch with the post-restore owner (the epoch rewound with
+        // the restore): jump past every counter value a stale process could hold.
+        sqlx::query("UPDATE store_owner SET epoch = MAX(epoch + 1, ?) WHERE id = 1").bind(now_ms).execute(&mut *tx).await?;
         let e = AuditEntry { before: Some(format!("{{\"restore_epoch\":{}}}", n - 1)),
                              after: Some(format!("{{\"restore_epoch\":{n}}}")), ..entry.clone() };
         audit_in(&mut tx, &e, now_ms).await?;

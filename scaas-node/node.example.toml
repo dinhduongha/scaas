@@ -1,5 +1,6 @@
 # scaas-node --config node.toml
 # scaas-node addresses --config node.toml      # print every lane address, then exit
+# scaas-node store init --config node.toml     # once, for a NEW node: creates the store (the node never does)
 # scaas-node store restored --config node.toml # MANDATORY after restoring the store from a backup (node stopped)
 # Secrets are NEVER in this file: only where to read them (env var, 0600 file, or encrypted keystore).
 
@@ -8,13 +9,14 @@
 # entries below that are absent from the store are imported; present ones are NOT overwritten (a warning says
 # which differ). Keys, rpc_urls, params, coin_type and this url always come from this file.
 [store]
-url = "sqlite:///var/lib/scaas/node.db"          # file mode 0600; PostgreSQL/MySQL arrive later
+url = "sqlite:///var/lib/scaas/node.db"          # created 0600 by `store init`; missing ⇒ the node refuses to start
+                                                 # (an unmounted volume never becomes a fresh, empty store)
 # job_retention_secs = 2592000                   # terminal jobs kept 30 d (and never before their payload expired)
 # feed_retention_secs = 604800                   # job/event feed rows kept 7 d
 
 # Job API for external clients (Odoo, other ERPs) and admin login. Served from a later release; read now.
 [api]
-bind = "127.0.0.1:8546"                          # must differ from gateway_bind when both run
+bind = "127.0.0.1:8548"                          # default; never the port of gateway_bind or admin_bind (checked)
 # master_key = { env = "SCAAS_API_MASTER_KEY" }  # >= 32 bytes; derives every client API key secret (R92)
 # admin_cors_origins = ["https://app.example.com"]
 # lease_hold_after_start_secs = 15

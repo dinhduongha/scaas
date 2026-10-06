@@ -1,13 +1,17 @@
 -- Node store v2, SQLite dialect (NI spec §4, A1 §A1.3, gossip amendment §8.4).
 -- STRICT tables: a BLOB column never silently holds TEXT, so every key/hash compares byte-exact (A1).
 -- No AUTOINCREMENT anywhere: seq/uid come from seq_counter in the same transaction (A1.3).
+-- FOREIGN KEYs only where cheap and always true (PRAGMA foreign_keys = ON per connection); none on job.chain_key
+-- (a tombstone carries '').
 
 -- store identity and ownership (R88, R93, R110, R111)
-CREATE TABLE meta (name TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;            -- schema_version, store_id, restore_epoch
+-- schema_version, store_id, restore_epoch, <feed>_floor = highest purged seq (R93: cursor < floor ⇒ 410)
+CREATE TABLE meta (name TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE store_owner (id INTEGER PRIMARY KEY CHECK (id = 1), epoch INTEGER NOT NULL,
   incarnation TEXT NOT NULL, owner TEXT NOT NULL, since INTEGER NOT NULL) STRICT;
 CREATE TABLE seq_counter (name TEXT PRIMARY KEY, value INTEGER NOT NULL) STRICT;
-INSERT INTO meta (name, value) VALUES ('schema_version', '2'), ('restore_epoch', '0');
+INSERT INTO meta (name, value) VALUES ('schema_version', '2'), ('restore_epoch', '0'), ('job_event_floor', '0'),
+  ('feed_item_floor', '0');
 INSERT INTO store_owner (id, epoch, incarnation, owner, since) VALUES (1, 0, '', '', 0);
 INSERT INTO seq_counter (name, value) VALUES ('job', 0), ('job_event', 0), ('feed_item', 0), ('audit', 0), ('intent', 0);
 
@@ -18,19 +22,19 @@ CREATE TABLE namespace (
   allow_call    INTEGER NOT NULL DEFAULT 0,
   max_live_jobs INTEGER NOT NULL DEFAULT 10000,
   created_at    INTEGER NOT NULL, updated_at INTEGER NOT NULL) STRICT;
-CREATE TABLE namespace_chain (namespace TEXT NOT NULL, chain_key TEXT NOT NULL,
+CREATE TABLE namespace_chain (namespace TEXT NOT NULL REFERENCES namespace (name), chain_key TEXT NOT NULL,
   PRIMARY KEY (namespace, chain_key)) STRICT;
-CREATE TABLE namespace_token (namespace TEXT NOT NULL, chain_key TEXT NOT NULL, token TEXT NOT NULL,
-  PRIMARY KEY (namespace, chain_key, token)) STRICT;
+CREATE TABLE namespace_token (namespace TEXT NOT NULL REFERENCES namespace (name), chain_key TEXT NOT NULL,
+  token TEXT NOT NULL, PRIMARY KEY (namespace, chain_key, token)) STRICT;
 CREATE TABLE api_key (
   key_id      TEXT PRIMARY KEY,
-  namespace   TEXT NOT NULL,
+  namespace   TEXT NOT NULL REFERENCES namespace (name),
   scopes      TEXT NOT NULL CHECK (scopes IN ('submit', 'read', 'submit read')),
   generation  INTEGER NOT NULL DEFAULT 0,
   state       TEXT NOT NULL CHECK (state IN ('active', 'revoked')),
   label TEXT, expires_at INTEGER, last_used_at INTEGER,
   created_by  TEXT NOT NULL, created_at INTEGER NOT NULL) STRICT;
-CREATE TABLE watch (namespace TEXT NOT NULL, chain_key TEXT NOT NULL, token TEXT NOT NULL, address TEXT NOT NULL,
+CREATE TABLE watch (namespace TEXT NOT NULL REFERENCES namespace (name), chain_key TEXT NOT NULL, token TEXT NOT NULL, address TEXT NOT NULL,
   PRIMARY KEY (namespace, chain_key, token, address)) STRICT;
 
 -- configuration (R95); secrets and dial targets are NOT here
@@ -46,9 +50,9 @@ CREATE TABLE chain (
   gossip INTEGER NOT NULL DEFAULT 0 CHECK (gossip = 0 OR profile = 'public'),      -- gossip §8.4: private ⇒ 0
   exclusive_ms INTEGER NOT NULL DEFAULT 7000,
   updated_at INTEGER NOT NULL) STRICT;
-CREATE TABLE token (chain_key TEXT NOT NULL, address TEXT NOT NULL, decimals INTEGER NOT NULL,
+CREATE TABLE token (chain_key TEXT NOT NULL REFERENCES chain (chain_key), address TEXT NOT NULL, decimals INTEGER NOT NULL,
   active INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (chain_key, address)) STRICT;
-CREATE TABLE lane (chain_key TEXT NOT NULL, label TEXT NOT NULL, account_index INTEGER NOT NULL,
+CREATE TABLE lane (chain_key TEXT NOT NULL REFERENCES chain (chain_key), label TEXT NOT NULL, account_index INTEGER NOT NULL,
   journal_max INTEGER,                                            -- monotonic, bumped in the journal transaction
   PRIMARY KEY (chain_key, label)) STRICT;
 -- mesh peers and policy (R99: node store tables; MESH R79 superseded). chains = space-separated chain keys.
@@ -71,15 +75,18 @@ CREATE TABLE mesh_policy (
 -- jobs (R89, R91)
 CREATE TABLE job (
   uid             INTEGER PRIMARY KEY,
-  namespace       TEXT NOT NULL,
+  namespace       TEXT NOT NULL REFERENCES namespace (name),
   origin_scope    TEXT NOT NULL, origin_producer TEXT NOT NULL, origin_key TEXT NOT NULL,
   generation      INTEGER NOT NULL DEFAULT 0,
   client_ref      TEXT,
   chain_key       TEXT NOT NULL,
   kind            TEXT NOT NULL CHECK (kind IN ('metatx', 'call', 'signed_op', 'tombstone')),
-  digest          BLOB CHECK (digest IS NULL OR length(digest) = 32),
+  -- G2 is durable only if every digest-bearing kind carries its digest (job_live_digest skips NULL)
+  digest          BLOB CHECK (digest IS NULL OR length(digest) = 32)
+                  CHECK ((digest IS NULL) = (kind IN ('call', 'tombstone'))),
   payload         BLOB CHECK ((payload IS NULL) = (kind = 'tombstone')),
-  payload_hash    BLOB CHECK (payload_hash IS NULL OR length(payload_hash) = 32),
+  payload_hash    BLOB CHECK (payload_hash IS NULL OR length(payload_hash) = 32)
+                  CHECK ((payload_hash IS NULL) = (kind = 'tombstone')),
   valid_until     INTEGER NOT NULL,
   lane_hint       TEXT,
   bus_scope       TEXT NOT NULL DEFAULT 'restricted' CHECK (bus_scope IN ('restricted', 'open', 'public')),

@@ -58,7 +58,8 @@ pub struct StoreCfg {
 /// `[api]` (NI §7.1). Job API và đăng nhập admin chạy từ P2; P1 chỉ đọc và kiểm.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ApiCfg {
-    #[serde(default = "default_bind")]
+    /// Cổng riêng: không trùng `gateway_bind` (8547) hay `admin_bind` (9108) mặc định (review F12).
+    #[serde(default = "default_api_bind")]
     pub bind: String,
     #[serde(default)]
     pub master_key: Option<SecretSource>,
@@ -402,6 +403,9 @@ fn one() -> usize {
 fn default_bind() -> String {
     "127.0.0.1:8547".into()
 }
+fn default_api_bind() -> String {
+    "127.0.0.1:8548".into()
+}
 fn default_poll() -> u64 {
     1000
 }
@@ -532,6 +536,9 @@ impl Config {
             if c.gossip && c.profile == "private" {
                 bail!("chain {key}: a private chain never gossips (MESH §9 rule 3)");
             }
+            for t in &c.tokens {
+                c.canonical(&t.address).with_context(|| format!("chain {key}: token {}", t.address))?;
+            }
         }
         self.validate_store_sections(&seen)
     }
@@ -545,6 +552,26 @@ impl Config {
         }
         if !self.store.url.starts_with("sqlite:") {
             bail!("[store] url: only sqlite: is built (PostgreSQL/MySQL arrive in P1b)");
+        }
+        const TEN_YEARS: u64 = 10 * 365 * 86_400;
+        for (name, v) in [("job_retention_secs", self.store.job_retention_secs),
+                          ("feed_retention_secs", self.store.feed_retention_secs)] {
+            if v > TEN_YEARS {
+                bail!("[store] {name} = {v}: at most 10 years ({TEN_YEARS})");
+            }
+        }
+        // P2 serves [api]; refuse a clash now rather than at the first bind.
+        let mut binds = vec![("[api] bind", self.api.bind.as_str())];
+        if self.modules.gateway {
+            binds.push(("[modules] gateway_bind", self.modules.gateway_bind.as_str()));
+        }
+        if !self.modules.admin_bind.is_empty() {
+            binds.push(("[modules] admin_bind", self.modules.admin_bind.as_str()));
+        }
+        for (i, (an, a)) in binds.iter().enumerate() {
+            if let Some((bn, b)) = binds[i + 1..].iter().find(|(_, b)| same_port(a, b)) {
+                bail!("{an} {a} collides with {bn} {b}");
+            }
         }
         let a = &self.api.admin_auth;
         if a.modes.is_empty() {
@@ -609,6 +636,11 @@ impl Config {
             if p.contract == "*" && p.submit {
                 bail!("{at}: never contract = \"*\" with submit = true (MESH R86)");
             }
+            // The mesh compares the family's canonical form byte-exact: a checksummed or short spelling would be
+            // a row that never matches, and a deny would fall through to `(*, *)` (review F2).
+            if let Some(c) = self.chains.iter().find(|c| c.chain_key() == p.chain).filter(|_| p.contract != "*") {
+                c.canonical(&p.contract).with_context(|| format!("{at}: contract"))?;
+            }
             let sel = p.selector.as_str();
             let hex8 = sel.len() == 10 && sel.starts_with("0x") && sel[2..].bytes().all(|b| b.is_ascii_hexdigit());
             if !(hex8 || matches!(sel, "*" | "0x" | "pay")) {
@@ -661,11 +693,9 @@ impl Config {
                 exclusive_ms: c.exclusive_ms as i64,
             });
             for t in &c.tokens {
-                // EVM: one spelling (lowercase hex), so byte-exact keys never split one token in two.
-                let address = match (c.is_evm(), t.evm()) {
-                    (true, Some(a)) => format!("{a:#x}"),
-                    _ => t.address.clone(),
-                };
+                // One spelling per family (Odoo `addresses.canonical`), so byte-exact keys never split one token
+                // in two and R95 client token subsets match. `validate` refused anything that does not parse.
+                let address = c.canonical(&t.address).unwrap_or_else(|_| t.address.clone());
                 set.tokens.push(store::TokenRow { chain_key: key.clone(), address, decimals: t.decimals.into(), active: true });
             }
             for (label, &i) in labels.iter().zip(&c.lanes) {
@@ -685,10 +715,16 @@ impl Config {
                                             class: p.class.clone(), chains: p.chains.join(" ") });
         }
         for p in self.mesh.iter().flat_map(|m| &m.policy) {
+            // `as i64` above: TOML integers are i64, so a u64 read from toml never exceeds i64::MAX.
+            let chain = self.chains.iter().find(|c| c.chain_key() == p.chain);
+            let contract = match (p.contract.as_str(), chain) {
+                ("*", _) | (_, None) => p.contract.clone(),
+                (v, Some(c)) => c.canonical(v).unwrap_or_else(|_| p.contract.clone()),
+            };
             set.policy.push(store::PolicyRow {
                 chain_key: p.chain.clone(),
-                contract: p.contract.clone(),
-                selector: p.selector.clone(),
+                contract,
+                selector: p.selector.to_ascii_lowercase(), // hex as `hex0x` writes it; `*`, `0x`, `pay` unchanged
                 support: p.support.clone(),
                 submit: p.submit,
                 pool_visibility: p.pool_visibility.clone(),
@@ -730,7 +766,22 @@ impl Config {
     }
 }
 
+/// Two listeners on one port: same host, or either on the wildcard address.
+fn same_port(a: &str, b: &str) -> bool {
+    match (a.parse::<std::net::SocketAddr>(), b.parse::<std::net::SocketAddr>()) {
+        (Ok(x), Ok(y)) => x.port() == y.port() && (x.ip() == y.ip() || x.ip().is_unspecified() || y.ip().is_unspecified()),
+        _ => a == b,
+    }
+}
+
 impl ChainCfg {
+    /// Dạng chuẩn của một địa chỉ trên chain này (`addresses::canonical`, như Odoo `canonical_for_chain`).
+    pub fn canonical(&self, value: &str) -> Result<String> {
+        let prefix = self.params.get("prefix").and_then(|v| v.as_str());
+        let ton_testnet = (self.family == "ton").then_some(()).and(self.network.as_deref()).map(|n| n == "-3");
+        crate::addresses::canonical(&self.family, value, prefix, ton_testnet)
+    }
+
     pub fn is_evm(&self) -> bool {
         self.family == "evm" || self.family == "hedera"
     }
@@ -891,7 +942,7 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         assert!(bad(&OK.replace("sqlite:///var/lib/scaas/node.db", "postgres://u@h/db")), "P1b");
         let c: Config = toml::from_str(OK).unwrap();
         assert_eq!((c.store.job_retention_secs, c.store.feed_retention_secs), (30 * 86_400, 7 * 86_400));
-        assert_eq!((c.api.bind.as_str(), c.api.lease_hold_after_start_secs), ("127.0.0.1:8547", 15));
+        assert_eq!((c.api.bind.as_str(), c.api.lease_hold_after_start_secs), ("127.0.0.1:8548", 15));
         assert_eq!(c.api.admin_auth.modes, ["builtin"]);
         assert_eq!((c.api.admin_auth.session_ttl_secs, c.api.admin_auth.login_max_failures), (900, 10));
         assert!(!c.gossip.enabled && c.transport.quic && c.identity.is_none());
@@ -910,6 +961,8 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         c.validate().unwrap();
         assert_eq!(c.api.bind, "127.0.0.1:8600");
     }
+
+    const C0: &str = "0x00000000000000000000000000000000000000c0";
 
     #[test]
     fn bootstrap_lists_are_validated() {
@@ -930,13 +983,14 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         assert!(bad(&peer("class = \"open\"").replace(&"9f".repeat(32), &"9F".repeat(32))));
         let pol = |t: &str| format!("{OK}\n[[mesh.policy]]\nchain = \"evm:9000\"\nsupport = \"full\"\n\
                                      pool_visibility = \"open\"\n{t}\n");
-        toml::from_str::<Config>(&pol("contract = \"0xC0\"\nselector = \"0x12345678\"\nsubmit = true")).unwrap()
+        toml::from_str::<Config>(&pol(&format!("contract = \"{C0}\"\nselector = \"0x12345678\"\nsubmit = true"))).unwrap()
             .validate().unwrap();
         toml::from_str::<Config>(&pol("contract = \"*\"\nselector = \"*\"")).unwrap().validate().unwrap();
         assert!(bad(&pol("contract = \"*\"\nselector = \"*\"\nsubmit = true")), "MESH R86");
-        assert!(bad(&pol("contract = \"0xC0\"\nselector = \"0x1234\"")));
-        assert!(bad(&pol("contract = \"0xC0\"\nselector = \"*\"\nmin_fee = \"1e3\"")));
-        assert!(bad(&pol("contract = \"0xC0\"\nselector = \"*\"\ngossip = true")), "private chain");
+        assert!(bad(&pol(&format!("contract = \"{C0}\"\nselector = \"0x1234\""))));
+        assert!(bad(&pol(&format!("contract = \"{C0}\"\nselector = \"*\"\nmin_fee = \"1e3\""))));
+        assert!(bad(&pol(&format!("contract = \"{C0}\"\nselector = \"*\"\ngossip = true"))), "private chain");
+        assert!(bad(&pol("contract = \"0xC0\"\nselector = \"*\"")), "not an address of the chain's family");
     }
 
     #[test]
@@ -955,7 +1009,7 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
 
     #[test]
     fn boot_set_maps_toml_to_store_rows() {
-        let raw = OK.replace("finality =", "tokens = [{ address = \"0xCdCdCdCdCdCdCdCdCdCdCdCdCdCdCdCdCdCdCdCd\", decimals = 6 }]\n\
+        let raw = OK.replace("finality =", "tokens = [{ address = \"0xCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCD\", decimals = 6 }]\n\
             breaker = { gas_budget_per_hour = \"100000000000000000000\" }\nfinality =")
             + "\n[[namespaces]]\nname = \"odoo\"\nchains = [\"evm:9000\", \"evm:9000\"]\n";
         let c: Config = toml::from_str(&raw).unwrap();
@@ -971,6 +1025,53 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         assert_eq!(b["gas_budget_per_hour"], "100000000000000000000", "u128 amounts as decimal text");
         let back: BreakerCfg = serde_json::from_value(b).unwrap();
         assert_eq!(back.gas_budget_per_hour, Some(100_000_000_000_000_000_000));
+    }
+
+    #[test]
+    fn addresses_and_selectors_take_one_spelling() {
+        let ck = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"; // EIP-55, pasted from an explorer
+        let low = "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed";
+        let hedera = "[[chains]]\nfamily = \"hedera\"\nevm_chain_number = 296\nrpc_urls = [\"http://h\"]\n\
+                      signer_key_env = \"K\"\nfinality = { mode = \"instant\" }\n\
+                      tokens = [{ address = \"0.0.1234\", decimals = 6 }]\n";
+        let raw = OK.replace("finality =", &format!("tokens = [{{ address = \"{ck}\", decimals = 6 }}]\nfinality ="))
+            + hedera
+            + &format!("[[mesh.policy]]\nchain = \"evm:9000\"\ncontract = \"{ck}\"\nselector = \"0xA9059CBB\"\n\
+                        support = \"none\"\npool_visibility = \"none\"\n\
+                        [[mesh.policy]]\nchain = \"evm:9000\"\ncontract = \"*\"\nselector = \"*\"\n\
+                        support = \"full\"\npool_visibility = \"open\"\n");
+        let c: Config = toml::from_str(&raw).unwrap();
+        c.validate().unwrap();
+        let set = c.boot_set(&[vec!["0xaa".into()], vec!["0xbb".into()]]);
+        assert_eq!(set.tokens[0].address, low);
+        assert_eq!(set.tokens[1].address, "0x00000000000000000000000000000000000004d2", "Hedera 0.0.N = long-zero");
+        assert_eq!((set.policy[0].contract.as_str(), set.policy[0].selector.as_str()), (low, "0xa9059cbb"));
+        let rows: Vec<crate::mesh::accept::PolicyRow> = serde_json::from_value(serde_json::to_value(&set.policy).unwrap()).unwrap();
+        let hit = crate::mesh::accept::lookup(&rows, "evm:9000", low, "0xa9059cbb");
+        assert_eq!(hit.map(|r| r.support), Some(crate::mesh::accept::Support::None),
+                   "the deny row matches; no fall-through to (*, *)");
+        assert!(bad(&raw.replace(ck, "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAeD")), "bad EIP-55 checksum (Odoo refuses it)");
+        assert!(bad(&raw.replace("0.0.1234", "0.1.1234")));
+    }
+
+    #[test]
+    fn listener_binds_never_collide() {
+        let with = |t: &str| OK.replace("[[chains]]", &format!("{t}\n[[chains]]"));
+        toml::from_str::<Config>(&with("[modules]\ngateway = true")).unwrap().validate().unwrap(); // distinct defaults
+        assert!(bad(&with("[api]\nbind = \"127.0.0.1:9108\"")), "admin_bind");
+        assert!(bad(&with("[api]\nbind = \"127.0.0.1:8547\"\n[modules]\ngateway = true")), "gateway_bind");
+        assert!(bad(&with("[api]\nbind = \"0.0.0.0:8547\"\n[modules]\ngateway = true")), "the wildcard takes the port");
+        assert!(bad(&with("[modules]\ngateway = true\ngateway_bind = \"127.0.0.1:9108\"")), "gateway vs admin");
+        toml::from_str::<Config>(&with("[api]\nbind = \"127.0.0.1:8547\"")).unwrap().validate().unwrap(); // gateway off
+        toml::from_str::<Config>(&with("[api]\nbind = \"127.0.0.2:9108\"")).unwrap().validate().unwrap(); // other host
+    }
+
+    #[test]
+    fn retention_is_bounded() {
+        assert!(bad(&OK.replace("[store]\n", "[store]\njob_retention_secs = 999999999999\n")));
+        assert!(bad(&OK.replace("[store]\n", "[store]\nfeed_retention_secs = 999999999999\n")));
+        toml::from_str::<Config>(&OK.replace("[store]\n", "[store]\njob_retention_secs = 315360000\n")).unwrap()
+            .validate().unwrap();
     }
 
 }
