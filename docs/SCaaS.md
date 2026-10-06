@@ -1243,7 +1243,7 @@ silent no-op — anti-DoS). Two modes (`enum RollOverMode { PUBLIC, OWNER_ONLY }
 
 > **Superseded (SPECIFIED, [UA](superpowers/specs/2026-10-06-universal-account-design.md), R290–R318).** The registry below
 > becomes the general `UARegistry` (kind-tagged 32-byte ids for every non-native kind, PoP bound to chain + registry +
-> UA, one key = one purpose); Zether UAs become `keccak256(keccak256("scaas.ua.zether-<curve>.v1") ‖ Y)` with an
+> UA + `authRef`, one key = one purpose; rev 1.3); Zether UAs become `keccak256(keccak256("scaas.ua.zether-<curve>.v1") ‖ Y)` with an
 > immutable `authRef` replacing `AuthScheme`/`link_eth` (UA §12, breaking, dev chains only). This section describes
 > the code as built until stream F1 lands.
 
