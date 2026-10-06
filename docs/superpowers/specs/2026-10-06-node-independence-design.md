@@ -1,6 +1,6 @@
 # Node independence — Odoo becomes a client of `scaas-node` (design amendment)
 
-Status: draft rev 3.1, 2026-10-06 (review 1 folded in, §19; admin-auth ruling, its 3.1 clarification and the scaas
+Status: draft rev 3.2, 2026-10-06 (review 1 folded in, §19; admin-auth ruling, its 3.1/3.2 clarifications and the scaas
 rename folded in). Code at
 `bamboo-dms` `main` 90a5b17 (mesh S0, S1a, S2 merged); the blockchain stack now lives in repo `scaas`
 (`scaas/smartcontracts`, `scaas/docs`, `scaas/app`, and the node).
@@ -509,6 +509,20 @@ mode is enabled:
 
 Anything else ⇒ `401`. API keys (R92) are never looked at here (R109).
 
+**Config automation (CI, Terraform, scripts) has exactly two paths** (rev 3.2): (1) **OIDC client credentials** — a
+service account in the IdP whose access token carries `operator` or `admin` (via `role_claim`, or `scope` on a
+`machine_only` issuer); it is validated and audited by `iss`/`sub` like any OIDC admin; (2) **the host CLI** (R108) for
+nodes without an IdP. There are no admin API keys, and a built-in user's password is not an automation credential.
+
+**Client API keys are for server-side integrations only** (rev 3.2, hard rule). An R92 key is never embedded in a
+browser, mobile or desktop app or an extension. Client-side apps (`scaas/app`, mobile):
+- authenticate the user's on-chain actions by the user's own signatures (`clientkeys`: passkey, seed, wallet) through the
+  gateway door (`POST /v1/metatx`, R54), never through the job API;
+- use built-in or OIDC login for node admin screens (§7.7);
+- read namespace job/event data only through their own backend, which holds the API key server-side.
+The admin listener's CORS allowlist never applies to the job API, which sends no CORS headers (§5), so a browser cannot
+call it cross-origin even with a leaked key.
+
 **OIDC (R106a).** `Config::validate` refuses `audience ∈ client_ids` (an ID token of the app would otherwise be accepted as an access
 token) and `role_claim = "scope"` unless `machine_only = true` or the mapping is marked `scope_for_machines = true`.
 
@@ -625,6 +639,8 @@ stale session epoch — body never says which);
 - Login screen offers the modes the node enables (`GET /v1/admin/auth-modes`, no auth: `{"builtin": true,
   "oidc": [{"issuer", "client_id", "audience"}]}`). A `key_custodian` can create/rotate/revoke external-client API
   keys from the app (secret shown once).
+- The app never holds an R92 API key (§7.1 hard rule): user actions are signed with `clientkeys` and sent through
+  the gateway; namespace job/event data, if shown, comes from a backend that holds the key.
 - Built-in: username + password ⇒ session token; refresh before `expires_at`; logout calls `/v1/admin/logout`.
 - OIDC: public client, Authorization Code + PKCE `S256`, no client secret, exact redirect URIs, `state` + `nonce`.
 - Tokens (session or OIDC) in memory only (never `localStorage`/`sessionStorage`).
@@ -1073,6 +1089,8 @@ Pause every market of the chain, wait for `pending` trades to settle or fail on 
 | T18 | **Copied Odoo database pushing to production** (staging restore) | `neutralize.sql` deletes node secrets and sets chains `pull`; push/sync refuse when `database.uuid` or `web.base.url` differs from `bound_*` |
 | T19 | **Restore resurrects revoked keys / rewinds journal** | mandatory `store restored` CLI ⇒ `restore_epoch` ⇒ Odoo halts (R110); runbook: re-revoke or rotate `master_key` after a restore |
 | T21 | **Password guessing / credential stuffing on built-in login** | Argon2id (m=19 MiB, t=2), per-name and per-address rate limits, lockout after 10 failures, uniform `401` + dummy hash for unknown names, passwords ≥ 12 chars; OIDC-only for deployments that want no node passwords (`modes = ["oidc"]`) |
+| T23 | **Client API key embedded in a client-side app** (extracted from a bundle, APK or extension ⇒ full `submit`/`read` of the namespace) | hard rule §7.1: server-side only; client apps sign user actions themselves (`clientkeys`) via the gateway and read feeds through their own backend; job API has no CORS; per-key rate limits and quotas bound the damage; revoke/rotate by `key_custodian` is hot |
+| T24 | **Automation credential sprawl** | only OIDC client credentials (short-lived, IdP-managed, audited by `iss`/`sub`) or the host CLI; no admin API keys or shared admin passwords in CI |
 | T22 | **Stolen session token** | session 15 min, revocable by `session_epoch` (logout, password change, disable); bearer over TLS only, no cookies |
 | T20 | **Two owners on one store / one key set** | owner lock + fencing epoch (A1); §9.4 heuristic for keys |
 
@@ -1358,6 +1376,9 @@ Odoo long-poll dropped (M3); `namespace_token` kept only as client-pushed state 
 | names `bamboo-node`, `BAMBOO_*`, `bamboo_*`, `X-Bamboo-*`, `bamboo.*` tags | `scaas-node`, `SCAAS_*`, `scaas_*`, `X-Scaas-*`, `scaas.*` (approved rename; on-chain domain tags change in the rename stream, §18.1) |
 
 §18.2 item 1 (`admin` does not imply `key_custodian`) is confirmed by the owner.
+
+**Rev 3.2 (owner clarification):** config automation = OIDC client credentials or the host CLI only; client API keys
+are server-side only and never embedded in browser/mobile/desktop apps or extensions (§7.1, T23, T24).
 
 **Rev 3.1 (owner clarification):** "API key" = credentials of external clients such as Odoo (R92), created,
 rotated and revoked by `key_custodian` admins via the admin API, the app or the host CLI, and never accepted on admin
