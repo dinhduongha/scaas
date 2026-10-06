@@ -1,8 +1,9 @@
 # Sealed-bid tender, gas sponsorship and receiver-pays, crypto-shredding (component spec B)
 
-Status: draft rev 1.2, 2026-10-06. Rev 1.1 folds in the owner's answers to the two rev-1 open questions
+Status: draft rev 1.3, 2026-10-07. Rev 1.1 folds in the owner's answers to the two rev-1 open questions
 (post-reveal disqualification, R185; receiver-pays stays v2-only, R193); rev 1.2 folds in independent review 1
-(FIX-THEN-GO; disposition in §10). Code at `scaas` `main` 97ba59e.
+(FIX-THEN-GO; disposition in §10); rev 1.3 folds in the Codex review (FIX-THEN-GO; H1–H2, M1–M2, L1; disposition in
+§11) and aligns with NI rev 3.5 (R320, R325) and UA rev 1.4. Code verified at `scaas` `main` 9e27d35.
 **Nothing in this spec is built.**
 Rulings: **R180–R199** (§2). R150–R172 belong to the app spec, R200–R216 to the asset-suite spec (AS). Owner rulings of 2026-10-06 folded in:
 (1) sealed-bid tender = commit–reveal + deposit, gasless bidders, procurement integration, EVM + Hedera first;
@@ -15,7 +16,7 @@ Amends:
 |---|---|---|
 | SCaaS | `docs/SCaaS.md` | §5.9 (receiver pays, sponsorship), §6 consequences 1 and 4, §10 (tender), §11.2 (shredding), §13.2 (budgets), §14.7, §15.1 row 23: status → SPECIFIED, link here. §10 and §14.7 are superseded where this spec differs (R182, R185 and §A.3) |
 | INT | `docs/integration.md` | §8 (sponsorship, receiver pays), §9 (tender): status → SPECIFIED, link here |
-| NI | `2026-10-06-node-independence-design.md` rev 3.3 | additions only: tables `sponsor_policy`, `sponsor_usage`, `chain_contract`; job columns `sponsor_policy_id`, `sponsor_reserved`, `sponsor_day`, `call_hash`, `gas_used`, `gas_price`, `cost_native`; live-call dedupe index; local signature check for sponsored public-door jobs; admin routes §B1.5; job payload field `receiver_fee` (§B2.5) |
+| NI | `2026-10-06-node-independence-design.md` rev 3.5 | additions only: tables `sponsor_policy`, `sponsor_usage`, `chain_contract`; job columns `sponsor_policy_id`, `sponsor_reserved`, `sponsor_day`, `call_hash`, `gas_used`, `gas_price`, `cost_native`; live-call dedupe index (per namespace, R325); local signature check for sponsored public-door jobs; admin routes §B1.5; job payload field `receiver_fee` (§B2.5). **Rev 1.3 additions for NI to fold** (all in NI §4/§5.2/§7.3, nothing removed): job column `sponsor_hour`; policy column `min_valid_secs`; `sponsor_usage.tx_count` counted at accept and released on a pre-broadcast end, so `SPONSOR_RATE` becomes an accept `429` and leaves the lease `dead` reasons (NI §4 state table); new accept `429 SPONSOR_TOO_SHORT` and admin `422 POLICY_INVALID` (`fallback_to_namespace`); `409 DUPLICATE_CALL` carries the live job's `uid`; a `~gateway` `call` policy is valid for the R320 UA registration target only (NI §7.3 sentence on TSS §B1.5); feed field `sponsor_fallback` |
 | TW2 | `2026-10-06-token-wrappers-v2.md` | one named function added to `MetaTokenBase` (`mtxPayReceiverFee`, R192), shipped as a new implementation version per tier; `_execute` returns the digest (no behaviour change) |
 | MESH | `2026-10-05-relayer-mesh-design.md` | R75 **not amended**; its scope is clarified by R194 |
 
@@ -119,6 +120,11 @@ Format: **ruling — why — cost if wrong.**
 - **R188** **Families: EVM and Hedera first** (the same bytecode on HSCS: the tender verifies no signature, so no
   Hedera child is needed; HIP-632 bidders are handled by the deposit token). Cosmos, Soroban, Sui, Aptos, TON,
   Solana are PLANNED with the native designs of §A.10.
+  **Prerequisite: EIP-1153 (`TLOAD`/`TSTORE`)** for the tender's and PL1's reentrancy guard (rev 1.3, Codex M2). It
+  is not a new requirement: every deposit token already needs it (`MetaTxCore.nonReentrant`, `MetaTxCore.sol:38-44`,
+  inherited by the v2 tiers and the Hedera children; `ERC20MetaTx.sol:35-41` for v1), so a chain without it cannot
+  hold an eligible deposit token. The deploy script probes `TSTORE` and refuses the chain; no storage-guard fallback
+  (it would be dead code on every chain that passes R186).
 
 ### 2.2 Gas sponsorship (node)
 
@@ -129,6 +135,16 @@ Format: **ruling — why — cost if wrong.**
   `min_fee` floor is waived for matching jobs). — Owner: node-level sponsorship first; one mechanism serves inbound
   subsidies ("to wallet W, value ≥ X ⇒ fee 0, gas to account Y", SCaaS §6) and tenant cost control. — If wrong:
   policies are data; nothing on chain depends on them.
+  **Client namespaces: `unsponsored` means "booked to the namespace"** (rev 1.3, Codex H1). The node pays gas for every
+  client job and books unmatched jobs to the namespace (`sponsor_policy_id NULL`, NI `usage_day.sponsor_policy = ''`),
+  which is the tenant's own billed spend; a fallback is that and nothing more, and is marked (`sponsor_fallback`,
+  §B1.4; metric `result="unsponsored"`), never booked to the sponsor account. A policy is therefore a cap on the
+  **sponsor account** in every case, and a cap on a **tenant's** spend only with `on_exhausted = reject` on a policy
+  that covers the tenant's jobs (e.g. `contract = '*'`, `selector = '*'`). The admin API refuses `unsponsored` on a
+  client-namespace policy unless the request sets `fallback_to_namespace: true` (stored in the audit row), so the
+  fallback is a recorded decision. — The finding's "silently spends lane gas" is the namespace's default for any
+  unmatched job; what was missing is the statement and the mark. — If wrong: a tenant cap becomes a namespace column
+  (NI), not a policy flag.
   **Value thresholds are token base units per (chain, token).** Conversion from a reporting currency is the
   client's business (it pushes new rows when its rates change). — The node holds no prices and no oracle. — If
   wrong: a stale threshold sponsors slightly more or less.
@@ -138,7 +154,13 @@ Format: **ruling — why — cost if wrong.**
   and stores the reserved amount and day on the job; the reservation is replaced by the measured cost, booked to that
   same day, at `mined`/`reverted`. A sponsored transaction is built so that its maximum chargeable fee (`gas_limit ×
   max_fee_cap` on EVM, fee bumps included) is `≤ max_cost_per_tx`, so measured ≤ reserved and a day's spend never
-  exceeds its budget. Rate counters are incremented at lease, after simulation (review M2). `on_exhausted ∈ {reject,
+  exceeds its budget. **Rate counters are taken at accept with the reservation** (rev 1.3, Codex H2; was "at lease"
+  per review M2): the job stores `sponsor_hour`, the hour and payer-hour `tx_count` are checked and incremented in the
+  same transaction as the day reservation, and a job that ends before broadcast releases all three. Otherwise one
+  payer could reserve a whole day's budget with jobs that never reach lease. Review M2's concern (unverified jobs
+  burn caps) is met by the local signature check on public doors, and by the release: a garbage job holds a count only
+  until it dies at lease. A sponsored job needs `valid_until ≥ now + p.min_valid_secs` (default 120) at accept, or it
+  is not sponsored (`on_exhausted` decides), so near-expiry jobs cannot cycle reservations. `on_exhausted ∈ {reject,
   unsponsored}`. — Arithmetic at accept, measurement at the end; no oracle. — If wrong: a too-low cap leaves some
   sponsored jobs `dead` (`SPONSOR_TX_CAP`); the client re-pushes them unsponsored.
 - **R191** **Admin routes and audit** (§B1.5): create/patch/delete `admin`, state `operator`, read `viewer`; every
@@ -205,7 +227,8 @@ Format: **ruling — why — cost if wrong.**
   master data are not encrypted** (that would turn relational, searchable wallet and accounting fields into
   ciphertext with blind indexes — unreasonable for v1): deleted live at once, gone from backups at backup expiry, both
   tiers. Restores replay an erasure log kept **outside** the restored database (random ticket + `HMAC(log_key,
-  subject_id)`, `log_key` with the KEK). — Deleting rows alone leaves them in backups; a plain hash of a sequential
+  subject_id)` + itemized tombstones keyed by `HMAC(log_key, model ‖ id)`, rev 1.3; `log_key` with the KEK):
+  tombstones first, then the current retention logic (§C.4). — Deleting rows alone leaves them in backups; a plain hash of a sequential
   id is reversible. Refines SCaaS §11.2.
 - **R198** **References carry no personal data and are not derived from business identifiers**: `entryRef`/`payId`
   random (R9); `documentRef`, `reasonRef`, bond/claim references are salted commitments (R196); `depositRef` is
@@ -387,7 +410,7 @@ mapping(uint256 => Tender) tenders;     // Tender = TenderConfig (≈ 7 slots pa
                                         //          address[3] top (sorted, head = leader)   (≈ 12 slots)
 mapping(uint256 => mapping(address => Bid)) bids;   // 2 slots: commitment | price, seq, status, valid, forfeit
 uint256 nextTenderId;                   // starts at 1
-// transient reentrancy guard keccak256("scaas.tender.reentrancy.v1") on every state-changing function
+// transient reentrancy guard keccak256("scaas.tender.reentrancy.v1") on every state-changing function (EIP-1153, R188)
 ```
 
 No bidder list: ERPs enumerate bids from `BidCommitted` events. `createTender` checks (`BadConfig`): R186 token
@@ -431,6 +454,10 @@ The payment `entryRef` is never derived from `tenderId` (R198, INT §5.1).
    works: the intent binds the tender, not a lane).
 4. After `commitDeadline`: submit `revealBid` (no signature) through the independent path, or hand `(price, salt)` to
    the portal **and** verify `BidRevealed` before `revealDeadline − margin`, falling back to the independent path.
+   The independent path is a namespace other than the portal's (a node door or own wallet): live-call dedupe is per
+   namespace (NI R325), so a portal's queued, paused or under-capped copy of the same reveal never blocks it (Codex
+   M1). On its own namespace a `409 DUPLICATE_CALL {uid}` names the bidder's own live job: follow it, or cancel it
+   (never published) and re-push.
 5. After settlement: refund arrives through any keeper's `withdrawDeposit`; the bidder's ERP books it from
    `DepositRefunded` (the outgoing deposit was booked from its own `PaymentSettled(entryRef = depositRef)`).
 
@@ -454,7 +481,7 @@ output (deterministic). Never an ECDSA/WebAuthn signature as entropy unless the 
 |---|---|
 | Node store | `chain_contract (chain_key, address, kind CHECK (kind IN ('tender', 'sponsorship_pool')), PRIMARY KEY (chain_key, address))`; admin `GET/POST/DELETE /v1/admin/chains/{key}/contracts` (viewer / admin / admin, audited) |
 | Node indexer | indexes events of `chain_contract` rows like token events; `range` items carry them; a namespace receives them when the contract is in its token subset (`PUT /v1/tokens/{chain}` accepts registered contracts) |
-| Node submit | `call` jobs to a registered tender: simulation as usual; no batching; live duplicates refused (§B1.3); `commitBid` jobs pass R86 because the inner token is registered |
+| Node submit | `call` jobs to a registered tender: simulation as usual; no batching; live duplicates in the same namespace refused with the live `uid` (§B1.3, NI R325); `commitBid` jobs pass R86 because the inner token is registered |
 | Odoo (`dms_blockchain*`, example) | model `blockchain.tender` (config, state, `tender_id`, `chain_id`, links to RFQ/PO), `blockchain.tender.bid` (own bids: commitment, encrypted `(price, salt)`, status) with `SERVER_ONLY` secret fields (NI R101); producers `blockchain.tender` / `blockchain.tender.bid` on outbox jobs; handlers for the ten events; PO creation only from the finalized `TenderSettled`; the H1 path check before signing |
 | App | bidder view: compute commitment and salt in the client (`clientkeys`), sign the deposit intent, reveal reminder at `commitDeadline` |
 
@@ -529,14 +556,14 @@ in `top`, `top` truncation at `k`; settle by buyer inside the window closes it; 
 settle. Invariant fuzz (random bidders, prices, reveals, disqualifications, timing): I1–I7. KATs (`tests/kat/
 tender.json`, Python and TypeScript builders): `commitmentOf`, `depositRef`, the deposit `pay` data. Hedera (TB2):
 same bytecode on HSCS with a 64-byte ED25519 deposit intent (HIP-632 on the token). Gas snapshot including an
-ERC-1271 bidder.
+ERC-1271 bidder. Deploy script: `TSTORE` probe refuses a chain without EIP-1153 (R188).
 
 ### A.10 Families
 
 | Family | Status | Design notes |
 |---|---|---|
 | EVM | **SPECIFIED** (TB1) | this section |
-| Hedera | **SPECIFIED** (TB2) | same bytecode on HSCS (no child: the tender checks no signature); deposit token = Hedera v2 meta token; gas limit tight (HSCS charges ≥ 80 % of the limit) |
+| Hedera | **SPECIFIED** (TB2) | same bytecode on HSCS (no child: the tender checks no signature); deposit token = Hedera v2 meta token; gas limit tight (HSCS charges ≥ 80 % of the limit); EIP-1153 as for the Hedera token children (R188) |
 | Cosmos (CosmWasm) | PLANNED | contract holds the deposit; commit = the meta token's signed `Relay` op with a `pay` memo = `depositRef`, executed by the tender via submessage; commitment over `(chain_id, contract, tender, bidder, price, salt)` with SHA-256 |
 | Soroban | PLANNED | `require_auth` entries of the bidder for `commit_bid` (deposit = SAC/token `transfer` sub-invocation in the same auth tree); reveal/withdraw permissionless |
 | Sui / Aptos | PLANNED | tender object / resource; deposit coin moved by the relayer-submitted PTB / entry function under the bidder's signed op; time from `Clock` / `timestamp` |
@@ -551,8 +578,9 @@ ERC-1271 bidder.
 
 The node already pays gas for every job it lands. A policy decides **which account that gas is booked to, how much
 of it is allowed, and whether a fee floor is waived** (R189). Matching and the budget reservation happen at accept
-on job data only (plus a local signature check on public doors); rate counts and the fee cap at lease; booking at the
-end. The result is stored on the job (`sponsor_policy_id`, `sponsor_reserved`, `sponsor_day`). The client keeps booking from finalized events plus the new
+on job data only (plus a local signature check on public doors), with the rate counts (rev 1.3); the fee cap at
+lease; booking at the end. The result is stored on the job (`sponsor_policy_id`, `sponsor_reserved`, `sponsor_day`,
+`sponsor_hour`). The client keeps booking from finalized events plus the new
 cost fields on the jobs feed.
 
 ### B1.2 Store (additions to NI §4)
@@ -575,12 +603,13 @@ CREATE TABLE sponsor_policy (
   budget_per_day  TEXT NOT NULL,                      -- smallest native unit, UTC day
   max_tx_per_hour INTEGER NOT NULL, max_tx_per_payer_hour INTEGER NOT NULL,   -- payer per §B1.3; 0 = no per-payer cap
   on_exhausted    TEXT NOT NULL CHECK (on_exhausted IN ('reject', 'unsponsored')),
+  min_valid_secs  INTEGER NOT NULL DEFAULT 120,       -- rev 1.3: sponsored only if valid_until ≥ now + this (R190)
   valid_from BIGINT, valid_to BIGINT, created_by TEXT NOT NULL, created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL);
 CREATE INDEX sponsor_policy_match ON sponsor_policy (chain_key, state, priority, id);
 
 CREATE TABLE sponsor_usage (                          -- buckets: day (cost), hour (tx), payer-hour (tx)
   policy_id BIGINT NOT NULL, bucket TEXT NOT NULL,    -- 'd:2026-10-06' | 'h:2026-10-06T14' | 'p:<payer>:2026-10-06T14'
-  tx_count BIGINT NOT NULL DEFAULT 0,
+  tx_count BIGINT NOT NULL DEFAULT 0,                 -- jobs admitted in the hour (rev 1.3: at accept; −1 on a pre-broadcast end)
   cost_spent TEXT NOT NULL DEFAULT '0',               -- measured (decimal, arbitrary precision in code)
   cost_reserved TEXT NOT NULL DEFAULT '0',            -- Σ job.sponsor_reserved of live jobs of this day
   PRIMARY KEY (policy_id, bucket));                   -- hour/payer buckets pruned after 48 h, day buckets after 400 d
@@ -589,9 +618,10 @@ CREATE TABLE sponsor_usage (                          -- buckets: day (cost), ho
 ALTER TABLE job ADD COLUMN sponsor_policy_id BIGINT;  -- NULL = booked to the namespace
 ALTER TABLE job ADD COLUMN sponsor_reserved TEXT;     -- amount reserved at accept (released/booked exactly)
 ALTER TABLE job ADD COLUMN sponsor_day TEXT;          -- 'd:YYYY-MM-DD' of the reservation; cost books to this day
+ALTER TABLE job ADD COLUMN sponsor_hour TEXT;         -- rev 1.3: 'YYYY-MM-DDTHH' of the reservation; its counts are released here
 ALTER TABLE job ADD COLUMN call_hash BLOB;            -- kind = call: keccak256(target ‖ calldata); else NULL
-CREATE UNIQUE INDEX job_live_call ON job (chain_key, call_hash)
-  WHERE call_hash IS NOT NULL AND state IN ('queued', 'leased', 'signed', 'broadcast');   -- ⇒ 409 DUPLICATE_CALL
+CREATE UNIQUE INDEX job_live_call ON job (namespace, chain_key, call_hash)   -- per namespace (NI R325)
+  WHERE call_hash IS NOT NULL AND state IN ('queued', 'leased', 'signed', 'broadcast');   -- ⇒ 409 DUPLICATE_CALL {uid}
 ALTER TABLE job ADD COLUMN gas_used BIGINT;           -- or the family's resource figure
 ALTER TABLE job ADD COLUMN gas_price TEXT;            -- effective price, smallest native unit per gas (EVM/Hedera)
 ALTER TABLE job ADD COLUMN cost_native TEXT;          -- total fee paid by the lane, smallest native unit
@@ -615,27 +645,37 @@ match(job) -> Option<policy>:                                  -- accept, after 
 admit(job, p):                                                 -- accept, inside the step-8 transaction
   public door (~gateway, ~mesh) ∧ metatx/signed_op ⇒ verify the payer signature locally (ECDSA secp256k1, Ed25519,
       P-256: no RPC); contract (ERC-1271) payers are not sponsored on public doors; bad signature ⇒ 422 BAD_SIGNATURE
+  job.valid_until < now + p.min_valid_secs ⇒ ¬ok (TOO_SHORT)                       -- rev 1.3, Codex H2
   lock bucket rows: INSERT … ON CONFLICT DO NOTHING, then SELECT … FOR UPDATE (day, hour, payer-hour; SQLite: the
       single writer suffices)
-  ok = day.cost_spent + day.cost_reserved + p.max_cost_per_tx ≤ p.budget_per_day ∧ hour/payer-hour counts below caps
-  ok         ⇒ job.sponsor_policy_id = p.id, sponsor_reserved = p.max_cost_per_tx, sponsor_day = today;
-               day.cost_reserved += sponsor_reserved                  (counts are NOT incremented here)
-  ¬ok, reject      ⇒ 429 SPONSOR_BUDGET {policy: p.name}
-  ¬ok, unsponsored ⇒ no sponsor; the door's normal fee floor applies
+  ok = day.cost_spent + day.cost_reserved + p.max_cost_per_tx ≤ p.budget_per_day        (BUDGET)
+     ∧ hour.tx_count < p.max_tx_per_hour ∧ (p.max_tx_per_payer_hour = 0 ∨ payer-hour.tx_count < it)   (RATE)
+  ok         ⇒ job.sponsor_policy_id = p.id, sponsor_reserved = p.max_cost_per_tx, sponsor_day = today,
+               sponsor_hour = this hour; day.cost_reserved += sponsor_reserved;
+               day/hour/payer-hour tx_count += 1                      (rev 1.3: counts taken here, Codex H2)
+  ¬ok, reject      ⇒ 429 SPONSOR_BUDGET | SPONSOR_RATE | SPONSOR_TOO_SHORT {policy: p.name}
+  ¬ok, unsponsored ⇒ no sponsor, sponsor_fallback = p.name; the door's normal fee floor applies
+                     (client namespace: booked to the namespace, R189)
 no match ⇒ no sponsor; the door's normal fee floor applies
 lease (after simulation succeeds):
   max chargeable fee of the tx as built (EVM: gas_limit × max_fee_cap) > job.sponsor_reserved ⇒ dead SPONSOR_TX_CAP
-  re-check and increment hour/payer-hour/day tx_count under the same locks; over a cap ⇒ dead SPONSOR_RATE
   fee bumps of a stuck tx stop at gas_limit × price = sponsor_reserved
 end (mined/reverted): day(sponsor_day).cost_reserved −= sponsor_reserved; cost_spent += cost_native
-end (dead/consumed-before-broadcast/cancelled): release only; lost races after broadcast book their measured cost
-startup: cost_reserved recomputed as Σ sponsor_reserved of live jobs per sponsor_day
+end (dead/consumed-before-broadcast/cancelled): release the reservation and the three tx_count (buckets of
+     sponsor_day/sponsor_hour, payer_of(job)), in the terminal transaction; lost races after broadcast book their
+     measured cost and keep their counts
+startup: cost_reserved recomputed as Σ sponsor_reserved of live jobs per sponsor_day (tx_count is transactional)
 ```
 
 Payer (`payer_of`) for per-payer caps: `m.from` / op signer for metatx/signed_op; for `call` jobs to a registered
 tender, `m.from` decoded from `commitBid` and the `bidder` argument of `revealBid`/`withdrawDeposit`; any other `call`
-has no payer and its policy must set `max_tx_per_payer_hour = 0`. Live `call` jobs with the same target and calldata
-are refused (`job_live_call`), so a retried reveal or refund cannot be broadcast twice.
+has no payer and its policy must set `max_tx_per_payer_hour = 0`. Live `call` jobs of one namespace with the same
+target and calldata are refused (`job_live_call`, per namespace, NI R325), so a retried reveal or refund cannot be
+broadcast twice from one tenant; the `409 DUPLICATE_CALL` body carries the live job's `uid` (same namespace, so it
+leaks nothing) and the client follows that job, or cancels it before publication and re-pushes. Two namespaces may
+each hold the same tender call; the tender refuses the second (the bid is no longer `COMMITTED`, or already `DONE`):
+simulation makes it `dead`, a lost race after broadcast books as `reverted`. Dedupe stays on live states rather than
+signed ones (Codex M1 alternative): two queued copies in one namespace would otherwise both broadcast.
 
 Fee floor per door: client namespaces — none (jobs are accepted as today); `~gateway` and `~mesh` — the MESH §7
 `min_fee` of the matching mesh policy row, compared with the effective fee (R86). A sponsored job's floor is 0. A
@@ -645,7 +685,8 @@ policy never makes a job acceptable that NI §5.2 or MESH §7.2 would refuse for
 ### B1.4 Jobs feed and client booking
 
 Job feed items in states `mined`, `reverted` (and the final snapshot) add `gas_used`, `gas_price`, `cost_native`,
-`sponsor: {policy, account} | null`. Clients book `cost_native` (converted at transaction time to the reporting
+`sponsor: {policy, account} | null`, and `sponsor_fallback: <policy name> | null` (a policy matched but was exhausted
+and `on_exhausted = unsponsored`, R189). Clients book `cost_native` (converted at transaction time to the reporting
 currency) to the business document of the job (SCaaS §13.2 FinOps) and, when `sponsor` is set, to the sponsor
 account named by `account` (e.g. "inbound subsidy, customer programme Y"). The node never receives fiat values.
 
@@ -662,13 +703,17 @@ account named by `account` (e.g. "inbound subsidy, customer programme Y"). The n
 Write validation: canonical addresses (`addresses.canonical`), lowercase selectors, `contract = '*'` ⇒
 `min_value = '0'`, `job_kind = call` ⇒ `receiver IS NULL ∧ min_value = '0'` (and `max_tx_per_payer_hour = 0` unless
 the target is a registered tender), policies on `~gateway`/`~mesh` need a concrete `contract` and (`min_value > 0` or
-a `receiver`), every uint256 field parses, `namespace` exists or is reserved/`*`. A `PATCH` never changes the
+a `receiver`) — except the one `~gateway` `call` shape NI R320 creates: `contract = chain.ua_registry`, `selector` =
+`register`, `max_tx_per_payer_hour = 0` (UA S6 sponsored registration; budget and hourly cap bound it), every uint256
+field parses, `namespace` exists or is reserved/`*`, `30 ≤ min_valid_secs ≤ chain.max_valid_for_secs`, and
+`on_exhausted = unsponsored` on a client namespace (or `*`) only with `fallback_to_namespace: true` in the request
+(R189; recorded in the audit row) ⇒ else `422 POLICY_INVALID`. A `PATCH` never changes the
 reservation of live jobs (they keep `sponsor_reserved`). Every mutation is an `audit_log` row with before/after (R110). Bootstrap from
 `node.toml` `[[sponsorship.policies]]` follows R95 (import if absent, never overwrite).
 
 ### B1.6 Metrics
 
-`scaas_sponsor_jobs_total{policy,chain,result="admitted|rejected_budget|rejected_rate|unsponsored|tx_cap|bad_sig"}`,
+`scaas_sponsor_jobs_total{policy,chain,result="admitted|rejected_budget|rejected_rate|rejected_too_short|unsponsored|tx_cap|bad_sig"}`,
 `scaas_sponsor_cost_spent{policy,chain}` (gauge, current UTC day, native smallest unit as float),
 `scaas_sponsor_budget_remaining_ratio{policy}`, `scaas_sponsor_reserved{policy}`. No payer labels (cardinality,
 and payers are pseudonymous personal data, SCaaS §11.1).
@@ -678,8 +723,11 @@ and payers are pseudonymous personal data, SCaaS §11.1).
 | Threat | Defence |
 |---|---|
 | Gas drain through a public door with fee 0 | `~gateway`/`~mesh` need an explicit, concrete policy (`*` namespace does not match them; `min_value > 0` or `receiver`); budget, hourly and per-payer caps |
-| Garbage-signature jobs burn rate caps or forge per-payer keys | local signature check before sponsoring on public doors; counts incremented only after simulation |
-| Duplicate `call` jobs (retried reveal/refund) both broadcast and the loser's revert is booked | `job_live_call` unique index |
+| Garbage-signature jobs burn rate caps or forge per-payer keys | local signature check before sponsoring on public doors; a job that dies before broadcast releases its counts (rev 1.3) |
+| Reservation starvation: one payer reserves the day budget with jobs that never reach lease (Codex H2) | hour and payer-hour counts taken at accept with the reservation; `min_valid_secs` refuses near-expiry jobs |
+| Exhausted client-namespace policy with `unsponsored` spends gas unseen (Codex H1) | booked to the namespace, marked `sponsor_fallback`; `unsponsored` on a client namespace needs an explicit, audited `fallback_to_namespace`; tenant caps use `reject` (R189) |
+| Another namespace's queued copy of a reveal blocks the bidder (Codex M1) | dedupe per namespace (NI R325); `DUPLICATE_CALL` names the own live `uid` |
+| Duplicate `call` jobs (retried reveal/refund) both broadcast and the loser's revert is booked | `job_live_call` unique index (per namespace) |
 | Concurrent accepts lose bucket updates (MySQL REPEATABLE READ) | bucket rows locked `FOR UPDATE` in the step-8 transaction |
 | Farming an inbound subsidy ("≥ X to wallet W") | the farmer pays ≥ X to W per sponsored tx; per-payer cap |
 | Simulation-passes-then-reverts griefing | measured cost counts against the budget; MESH `origin_grief_score` applies to `~mesh` |
@@ -689,9 +737,15 @@ and payers are pseudonymous personal data, SCaaS §11.1).
 
 Tests (SP1): matching precedence and every wildcard rule; `'*'` vs reserved namespaces; budget boundary (exactly
 equal admits); hour and payer-hour caps; `reject` vs `unsponsored`; reservation release on each terminal state;
-restart recomputes reservations; lease-time `SPONSOR_TX_CAP` and `SPONSOR_RATE`; day rollover (reserved D, mined
-D+1 books to D); `PATCH` of `max_cost_per_tx` while jobs are live; a job `dead` before broadcast consumes no rate
-cap; bad-signature and ERC-1271 jobs on public doors; duplicate `call` jobs ⇒ `DUPLICATE_CALL`; concurrent accepts on
+restart recomputes reservations; lease-time `SPONSOR_TX_CAP`; day rollover (reserved D, mined D+1 books to D) and hour
+rollover (counts released to `sponsor_hour`); `PATCH` of `max_cost_per_tx` while jobs are live; a job `dead` before
+broadcast releases its counts; **one payer cannot reserve beyond `max_tx_per_payer_hour × max_cost_per_tx`** and
+queued jobs count toward `max_tx_per_hour` (Codex H2); `valid_until < now + min_valid_secs` ⇒ `SPONSOR_TOO_SHORT` /
+unsponsored; **an exhausted client-namespace policy with `unsponsored` books to the namespace, sets
+`sponsor_fallback`, never touches the sponsor account; the write without `fallback_to_namespace` ⇒ `422`** (Codex
+H1); the `~gateway` UA-registration policy accepted, any other `~gateway` `call` policy refused; bad-signature and
+ERC-1271 jobs on public doors; duplicate `call` jobs in one namespace ⇒ `DUPLICATE_CALL {uid}`, the same call in two
+namespaces accepted in both (Codex M1); concurrent accepts on
 PostgreSQL and MySQL; feed fields per family (EVM, Hedera, one non-EVM); admin route roles and audit rows; toml import
 precedence.
 
@@ -818,7 +872,7 @@ Rev 1.2 keeps only the rule (R194) and the constraints PL1 must meet (review O3)
 funded by a sponsor in native coin, scoped to one registered token (R186 provenance), optional receiver, selector and
 minimum value; `settle(program, m, sig)` executes the intent (fee `NONE`) and pays `msg.sender` the R194 refund;
 per-payer daily cap; withdrawals after `withdrawDelay`; events for funding, withdrawal and each sponsored intent;
-transient reentrancy guard. Open design points for PL1: the Hedera formula (HSCS charges ≥ 80 % of the gas limit), the
+transient reentrancy guard (EIP-1153 prerequisite as R188). Open design points for PL1: the Hedera formula (HSCS charges ≥ 80 % of the gas limit), the
 block-producer caveat of R194, and node routing (a `call` job to `settle` on a registered `sponsorship_pool`
 contract, §A.6; not carried by the mesh).
 
@@ -891,9 +945,18 @@ erase_subject(party_id, reason) -> {ticket, erased: […], refused: [{model, id,
        else              ⇒ delete its shred record (encrypted salt + payload) and any plaintext copy
   3. delete the off-chain mapping (approved wallet records ↔ party) unless refused in 2
   4. no record left under retention ⇒ destroy the subject's DEK (Tier A) / delete it (Tier B)
-  5. nothing to send to the node or chain (R195); node payloads age out within job_retention_secs (30 d)
+  5. append the ticket's tombstones (rev 1.3, Codex L1), in the transaction's commit order:
+       {ticket, deleted: [{model, item, fields?}]         -- shred records, mapping rows, plaintext fields deleted
+        refused: [{model, item, legal_basis, retain_until}], dek: destroyed | deleted | kept, scheduled_at?}
+     item = HMAC(log_key, model ‖ id), never the id itself (the log must not link a ticket to a record id);
+     model and field names only, never values
+  6. nothing to send to the node or chain (R195); node payloads age out within job_retention_secs (30 d)
+  scheduled erasures at retain_until run steps 2–5 for that record and append their own tombstones to the ticket
 restore(backup):
-  before reopening, replay every ticket in the external log newer than the backup (both tiers)
+  before reopening, for every ticket newer than the backup (both tiers): (a) apply its tombstones exactly — find each
+  item by recomputing HMAC(log_key, model ‖ id) over the restored rows of that model, delete the listed rows and
+  fields, restore the refusal schedule; (b) then re-run steps 2–4 with the restored retention data, so
+  a record that became erasable since is erased and one deleted live never comes back with an old retain_until
 ```
 
 Retention conflicts (accounting, anti-money-laundering, contract duties) refuse until `retain_until`; surplus
@@ -930,8 +993,9 @@ the opening of SCaaS §8.9. The independent verifier CLI (SCaaS §11.3, PLANNED)
 
 KATs for every format of §C.2 (Python, TypeScript, Solidity view helper) in `tests/kat/commitments.json`; JCS
 edge cases (Unicode, numbers); erasure procedure: retained vs erasable records, multi-subject refusal, DEK
-destruction makes a Tier A backup's salts and payloads unreadable, log contains no derivable id, restoring an old
-database backup then replaying the external log re-erases; CI calldata-type guard of SCaaS §11.1 (allow `address`, `bool`, `uint*`,
+destruction makes a Tier A backup's salts and payloads unreadable, log contains no derivable id and no values,
+restoring an old database backup then replaying the external log re-erases — including a partial erasure (surplus
+plaintext deleted around a retained record) where the backup holds an older `retain_until`/`legal_basis` (Codex L1); CI calldata-type guard of SCaaS §11.1 (allow `address`, `bool`, `uint*`,
 `int*`, `bytes32`, `bytes32[]`; deny `string`/`bytes` except declared proof/signature/meta-tx fields) applied to the
 tender, `mtxPayReceiverFee` and the pool.
 
@@ -998,3 +1062,23 @@ All findings applied, none found wrong; H4 partly as allowed (payloads under the
 | O3 | Trim the Pool | Accepted; block-producer caveat added | R194, §B3 |
 | O4 | Defer field-level salts | Accepted | R196, §C.2, §C.5 |
 | O5 | Separate the HOLD bond | **Rejected on merit**: a standard procurement instrument; separating it needs a second winner deposit and a missing escrow; its discretion is declared at creation and stated | R187, §A.7.2 |
+
+## 11. Codex review disposition (rev 1.3)
+
+Review `docs/reviews/specs/2026-10-06-tender-sponsorship-codex-review-1.md`, verdict FIX-THEN-GO, 0 critical, 2 high,
+2 medium, 1 low. Each finding checked against this spec, NI rev 3.5 and the code it cites. Owner rulings unchanged
+(commit–reveal + deposit, buyer disqualification with reason and evidence inside the window, node-level sponsorship
+first and the pool later, receiver-pays v2-only, client-held salts). 3 applied as proposed, 2 applied with a variant
+where part of the finding did not hold; none rejected outright.
+
+| # | Finding | Verified | Disposition | Where |
+|---|---|---|---|---|
+| H1 | `on_exhausted = unsponsored` bypasses the budget on client namespaces | **partly**: the sponsor account's budget is never exceeded, and an unmatched client job is already booked to the namespace (NI `usage_day`, `sponsor_policy = ''`), so nothing escapes accounting; true that the policy was presented as a tenant cost control it cannot be with `unsponsored`, and that the fallback was unmarked | **Applied with variant**: `unsponsored` on a client namespace = booked to the namespace, marked `sponsor_fallback`, allowed only with an explicit audited `fallback_to_namespace`; tenant caps need `reject`; test added. No namespace gas-budget column (that would be NI; noted as the if-wrong path) | R189, §B1.3–B1.7 |
+| H2 | Rate caps at lease let one payer reserve the whole day budget | yes: admission reserved without counting, counts at lease, pre-broadcast ends released only the reservation | **Applied**: hour/payer-hour/day counts taken at accept with the reservation (`sponsor_hour` on the job), released on a pre-broadcast end; `min_valid_secs` (default 120) for sponsored jobs; `SPONSOR_RATE` moves from lease `dead` to accept `429`. Review-1 M2's concern stays met by the public-door signature check and the release | R190, §B1.1–B1.3, §B1.6–B1.7, Amends NI |
+| M1 | `job_live_call` turns tender calls into a liveness lock | **partly**: since NI rev 3.5 (R325) dedupe is per namespace, so a portal's or operator's copy never blocks the bidder's independent path; within one namespace the duplicate is the tenant's own job | **Applied with variant**: index and text per namespace; `409 DUPLICATE_CALL` returns the live `uid` to follow or cancel; bidder step 4 requires the independent path to be another namespace. "Dedupe only signed calls" rejected: two queued copies in one namespace would both broadcast and the loser's revert would be booked | §A.5.2, §A.6, §B1.2–B1.3, §B1.7 |
+| M2 | Transient guard assumes EIP-1153; Hedera "same bytecode" | **partly**: correct that the spec did not say so, but every eligible deposit token already needs it (`MetaTxCore.sol:38-44` for v2 and the Hedera children, `ERC20MetaTx.sol:35-41` for v1), so the tender adds no new chain requirement | **Applied**: EIP-1153 stated as a prerequisite for TB1/TB2/PL1, deploy-time `TSTORE` probe. Storage-guard fallback rejected: no chain that passes R186 lacks EIP-1153 | R188, §A.4, §A.9, §A.10, §B3 |
+| L1 | Erasure log replay cannot reproduce partial erasure | yes: the log held only ticket + subject HMAC | **Applied**: itemized tombstones (deleted rows/fields, refusals with `retain_until`, DEK state, schedule), items keyed by `HMAC(log_key, model ‖ id)` so the log links no ticket to a record id; replay tombstones first, then current retention; test added | R197, §C.4, §C.7 |
+
+Consistency fixes found while verifying (not in the review): `~gateway` `call` policies were impossible under §B1.5
+(`call` ⇒ `min_value = 0` and no `receiver`) although NI R320 and UA S6 rely on TSS budgets for sponsored UA
+registration — one allowed shape added (§B1.5, NI §7.3 to follow); NI reference moved from rev 3.3 to rev 3.5.
