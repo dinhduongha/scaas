@@ -294,11 +294,11 @@ Một trong những đóng góp xuất sắc nhất của bộ đặc tả là s
 
 ## 7. SO SÁNH ĐỐI CHIẾU TOÀN DIỆN VỚI CÁC HỆ THỐNG TRÊN THẾ GIỚI (WORLD-CLASS BENCHMARK)
 
-Bảng so sánh đối chiếu kiến trúc của Bamboo DMS Blockchain với 6 hệ thống/chuẩn mực công nghệ hàng đầu thế giới:
+Bảng so sánh đối chiếu kiến trúc của SCaaS với 6 hệ thống/chuẩn mực công nghệ hàng đầu thế giới:
 
 ```
 +----------------------------------------------------------------------------------------------------------------------------------------------------+
-| Tiêu chí So sánh       | Bamboo DMS Blockchain         | Tornado Cash / Railgun      | Aztec Network (Aztec 2.0)  | ERC-4337 + Biconomy/Pimlico  | Monero / Zcash (L1)       |
+| Tiêu chí So sánh       | SCaaS         | Tornado Cash / Railgun      | Aztec Network (Aztec 2.0)  | ERC-4337 + Biconomy/Pimlico  | Monero / Zcash (L1)       |
 +------------------------+-------------------------------+-----------------------------+----------------------------+------------------------------+---------------------------+
 | 1. Mô hình Ẩn danh &   | Basic Zether (N=2):           | Shielded Pool / Mixer:      | Private L2 Rollup:         | Public Account Abstraction:  | Shielded UTXO / RingCT:   |
 |    Bảo mật Dữ liệu     | Ẩn số tiền (Confidential),    | Ẩn hoàn toàn đồ thị         | Ẩn cả người gửi, người     | Không bảo mật số dư/dữ liệu  | Ẩn danh toàn bộ mạng lưới |
@@ -325,7 +325,7 @@ Bảng so sánh đối chiếu kiến trúc của Bamboo DMS Blockchain với 6 
 ### 7.1. Phân tích So sánh Chuyên sâu
 
 #### A. So sánh với Aztec Network & Railgun (Privacy Tech)
-- **Ưu thế của SCaaS:** Aztec đòi hỏi toàn bộ hệ sinh thái phải viết lại hợp đồng thông minh trên ngôn ngữ riêng (Noir / Cairo) và phụ thuộc vào hạ tầng Sequencer/Prover Rollup phức tạp. Railgun triển khai Shielded Pool trên EVM nhưng chi phí gas rất đắt (~2.5M - 3.5M gas) và vẫn bị nghi ngờ về mặt AML. Bamboo DMS Blockchain chọn Basic Zether ($N=2$) chạy trực tiếp trên EVM tiêu chuẩn, kết hợp cam kết kiểm toán $C_{audit}$ giúp doanh nghiệp chứng minh tính hợp pháp của dòng tiền trước cơ quan thuế bất kỳ lúc nào.
+- **Ưu thế của SCaaS:** Aztec đòi hỏi toàn bộ hệ sinh thái phải viết lại hợp đồng thông minh trên ngôn ngữ riêng (Noir / Cairo) và phụ thuộc vào hạ tầng Sequencer/Prover Rollup phức tạp. Railgun triển khai Shielded Pool trên EVM nhưng chi phí gas rất đắt (~2.5M - 3.5M gas) và vẫn bị nghi ngờ về mặt AML. SCaaS chọn Basic Zether ($N=2$) chạy trực tiếp trên EVM tiêu chuẩn, kết hợp cam kết kiểm toán $C_{audit}$ giúp doanh nghiệp chứng minh tính hợp pháp của dòng tiền trước cơ quan thuế bất kỳ lúc nào.
 - **Đánh đổi:** SCaaS chấp nhận lộ đồ thị giao dịch (ai chuyển cho ai, tần suất giao dịch) để đổi lấy tính tuân thủ pháp lý và chi phí gas hợp lý.
 
 #### B. So sánh với ERC-4337 & Biconomy (Account Abstraction)

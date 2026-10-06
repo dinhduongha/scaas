@@ -1201,7 +1201,7 @@
           "sig": "cb24324db85c0de445395b14beb7e9af9654f9c6e07517d3ba4d69ea5a75b781cfc117043d61b1ae12d52075c01218ecdb2bf46686fdb0e5b86034156806d608"
         },
         "intent_id": "0x6eb5014b0e544806e8ea7a71b23d6090018a91c2f0c836d0b47867553cadd86b",
-        "spec": "bamboo-intent/1.2",
+        "spec": "legacy-intent/1.2",
         "visibility": "open"
       },
       "expect": {

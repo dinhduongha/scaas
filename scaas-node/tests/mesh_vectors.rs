@@ -467,7 +467,7 @@ fn regenerate() {
     cases.push(case("15a_spec_1_1", with(e1.clone(), "spec", json!("scaas-intent/1.1")), reject("UNSUPPORTED_SPEC")));
     cases.push(case("15b_spec_2_0", with(e1.clone(), "spec", json!("scaas-intent/2.0")), reject("UNSUPPORTED_SPEC")));
     // Tên cũ của bản nháp spec: không có node nào từng nói nó.
-    cases.push(case("15c_spec_old_name", with(e1.clone(), "spec", json!("bamboo-intent/1.2")), reject("UNSUPPORTED_SPEC")));
+    cases.push(case("15c_spec_old_name", with(e1.clone(), "spec", json!("legacy-intent/1.2")), reject("UNSUPPORTED_SPEC")));
     cases.push(case("16_unknown_top_level_field", with(e1.clone(), "x_future", json!({"anything": [1, 2]})),
         json!({"accept": true, "may_submit": true})));
     cases.push(case("17_hop_limit", with(e1.clone(), "hop_count", json!(4)), reject("HOP_LIMIT")));

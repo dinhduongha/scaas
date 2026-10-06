@@ -1,6 +1,6 @@
 # SCaaS — SmartContract as a Service
 
-SCaaS, the blockchain stack behind Bamboo DMS: on-chain code, the relayer node, signers and provers.
+SCaaS, a SmartContract-as-a-Service stack: on-chain code, the relayer node, signers and provers.
 It does not depend on Odoo; the Odoo addons (`dms_blockchain*`, in the bamboo-dms repo) are one client.
 
 | Path | What |

@@ -6,8 +6,8 @@ rename folded in). Code at
 (`scaas/smartcontracts`, `scaas/docs`, `scaas/app`, and the node).
 **Naming (owner, approved rename):** the node is `scaas-node` (crate, binary, directory `scaas/scaas-node/` — today
 still `scaas/scaas-node/` until the rename stream lands; file:line citations refer to the current files); env vars
-`SCAAS_*` (were `BAMBOO_*`); metrics `scaas_*` (were `bamboo_*`, incl. the R51 ones); HTTP headers `X-Scaas-*` (were
-`X-Bamboo-*`, R54); signer/domain tags `scaas.*`/`scaas-*` (were `bamboo.*`). Odoo addon and repo names
+`SCAAS_*`; metrics `scaas_*` (incl. the R51 ones); HTTP headers `X-Scaas-*` (R54); signer/domain tags
+`scaas.*`/`scaas-*`. Odoo addon and repo names
 (`dms_blockchain*`, `bamboo-dms`, `bamboo_abp_auth`) are unchanged.
 Rulings: **R87–R111** (§2; R111 = Amendment A1, end of file), continuing the round-4 mesh spec (R70–R86).
 Owner rulings folded in: "invert Odoo ↔ node", "OIDC for the node admin API and the React app", "SQLite/PostgreSQL/
@@ -1295,7 +1295,7 @@ never wires to legacy code.
 | MESH | §13.1 rows | as listed; envelope id `scaas-intent/1.2`. |
 | `blockchain_security.xml` l.35, canon §C14.1 "two service keys" | | replaced by per-namespace key scopes. |
 | `scaas/scaas-node/README.md` | operating invariants | job API, admin auth modes and CLI bootstrap, migration and restore runbook (P6). |
-| everything | names | rename stream: `bamboo-node` → `scaas-node`, `BAMBOO_*` → `SCAAS_*`, `bamboo_*` metrics → `scaas_*`, R54 headers `X-Bamboo-*` → `X-Scaas-*`, signer/domain tags `bamboo.*` (e.g. PD R9 `bamboo.pay.lane`) → `scaas.*` — the last one changes on-chain derivations and needs its own owner-reviewed plan. |
+| everything | names | rename stream: node `scaas-node`, env `SCAAS_*`, metrics `scaas_*`, R54 headers `X-Scaas-*`, signer/domain tags `scaas.*` (e.g. PD R9 `scaas.pay.lane`) — the last one changes on-chain derivations and needs its own owner-reviewed plan. |
 | `odoo.rs:1` module doc | | deleted with the file in P9. |
 
 ### 18.2 Interpretations to confirm with the owner
@@ -1373,7 +1373,7 @@ Odoo long-poll dropped (M3); `namespace_token` kept only as client-pushed state 
 | R108 — Unix-socket break-glass | **R108** = host CLI (`scaas-node admin create/passwd/disable`, `key create/rotate/revoke`); the socket, `admin_socket`, `SO_PEERCRED` and the break-glass metric are removed. |
 | R109 — machine keys never reach config routes | **R109** kept (API keys never reach admin routes) and made symmetric: admin credentials never reach the job API. |
 | R110 actor `socket:<uid>` | actors `user:`, `oidc:`, `cli:` |
-| names `bamboo-node`, `BAMBOO_*`, `bamboo_*`, `X-Bamboo-*`, `bamboo.*` tags | `scaas-node`, `SCAAS_*`, `scaas_*`, `X-Scaas-*`, `scaas.*` (approved rename; on-chain domain tags change in the rename stream, §18.1) |
+| old names (renamed 2026-10-06) | `scaas-node`, `SCAAS_*`, `scaas_*`, `X-Scaas-*`, `scaas.*` (approved rename; on-chain domain tags change in the rename stream, §18.1) |
 
 §18.2 item 1 (`admin` does not imply `key_custodian`) is confirmed by the owner.
 

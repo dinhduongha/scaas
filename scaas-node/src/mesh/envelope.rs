@@ -148,7 +148,7 @@ mod tests {
     #[test]
     fn spec_versions() {
         for (s, ok) in [("scaas-intent/1.2", true), ("scaas-intent/1.3", true), ("scaas-intent/1.10", true),
-                        ("scaas-intent/1.1", false), ("scaas-intent/2.0", false), ("bamboo-intent/1.2", false),
+                        ("scaas-intent/1.1", false), ("scaas-intent/2.0", false), ("legacy-intent/1.2", false),
                         ("scaas-intent/1", false), ("scaas-intent/1.x", false)] {
             assert_eq!(spec_ok(s), ok, "{s}");
         }
