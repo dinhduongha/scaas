@@ -1,31 +1,45 @@
 # TODO — scaas
 
-Ordered by what blocks what (2026-10-06 shutdown). Owner rule: **finish all specs before app code**.
+Ordered by what blocks what (shutdown 2026-10-07). Owner rule: **finish all specs before app code**.
 Max 3 agents, one heavy build at a time (`scripts/capped`). The Odoo side lives in bamboo-dms (`dms_blockchain*`).
 
-## 0. Finish the spec phase (≈ 6 items)
+## 0. Finish the spec phase (5 items left)
 
-- [x] S4F (signers) rev 1.1 — review fixes (9695051). Open for the UA fold: kindNo for keys of a Soroban `scaas-account` `C…` — default 18 (`soroban-contract` 0x0012) vs 17 (`stellar-account`).
-- [x] PQZ review → folded (rev 1.2, 07f43dc). Was: review in `docs/reviews/specs/2026-10-06-pq-zether-review-1.md` (FIX-THEN-GO; 4 High: params ~109/99-bit core-SVP, `fund`-dust K_MAX lock-out, LaZer GMP/MPFR/HEXL ⇒ rewrite + LGPL, `abort()` in precompile halts chain).
-- [x] UA review → folded (rev 1.3, 55cfb4f; MuSig2/FROST kept). Was: review in `docs/reviews/specs/2026-10-06-universal-account-review-1.md` (FIX-THEN-GO; 4 High: PoP must bind `authRef` (front-run freezes Zether), closed kind sets per role (v3 `to` → Zether UA locks funds), PQ/hybrid msig unregistrable under the 12M budget, native signers sign raw digests → EIP-712 `UAAuth` wrapper). **Owner decision needed on M1**: the review proposes collapsing the MuSig2/FROST kinds into `bip340`/`schnorr-bn254` (MPC still works via one aggregate key) — MPC kinds were an owner request. Also the S4F kindNo question above.
-- [x] **NI consolidation** (rev 3.4, c8c28df): fold every addition other specs listed for node-independence — `GET /v1/gateway`, gateway
-      CORS + error contract, `POST /v1/ops` (app §9.6 N2), `POST /v1/ua-metatx`, `POST /v1/ua/register` (N4), Hedera
-      64-byte sigs on `/v1/metatx`, denylist (`deny_subject`, OPS R246), `sponsor_policy`/`sponsor_usage` + job cost
-      columns (spec B), `chain_contract`, `receiver_fee` payload + `token.features`, `usage_day`, `job.trace_id`,
-      `lane_adopted`, `breaker_latch`, `[modules] metrics_bind`, store-restore pause (OPS H1), non-EVM DEX books (N3).
-- [ ] **SCaaS.md / integration.md clean-up**: remove the ~9 admin-API-key mentions (`scaas_ak1.`), rewrite
-      integration §10.2 (UA registration, spec F §12.3), roadmap §15 rows (S4F row 22, scrypt row in §15.3), app
-      chain list gains 9000 for PQZ (PQZ §11.5), D/F amendments listed in app §17.
-- [ ] Doc inconsistencies: `smartcontracts/evm/README.md` (mode bitmask kept, Zether built), `private9000` README says
-      pre-London (chain runs through Fusaka), `wasm-smoke.sh` needs `--target web`, node default `max_gas_per_tx` 3M
-      rejects classical Zether transfers (3.36M).
+Done 2026-10-07: every spec reviewed — Codex on PQZ/UA/NI/B, Claude on the 16 older specs — and every review
+folded (dispositions inside each spec; review files in `docs/reviews/specs/`, git-ignored). Owner rulings today:
+chainId 9000 → **7622**; `PqzToken` implements `IERC20MetaTx` (PQZ rev 1.4 R284); Move/Solana (and Cosmos
+`--no-admin`) programs **immutable at deploy** (round3 CR-R3-11, NI R348).
 
-- [ ] **ChainId 9000 → 7622** (owner 2026-10-07; 9000 is Evmos Testnet): sweep every spec/doc mention (PQZ gate, F chain 9000 rows, OPS, NI, TRAPS, READMEs), then a code/infra stream: dev-chain genesis reset, rename `smartcontracts/evm/src/chains/private9000` + foundry profile, node + Odoo chain records, genesis-hash binding.
-- [ ] Codex reviews of every spec (`codex exec -m gpt-5.5`, outputs in `docs/reviews/specs/*-codex-review-1.md`), then fold.
+- [ ] **Sync `docs/SCaaS.md` + `docs/integration.md`** with the latest folds — collect every "Amends"/"amendments"
+      table in: NI rev 3.7 (R340–R349), PQZ rev 1.4 (R284 meta-tx, register row still says 1.2), round3 rev 1.2,
+      payments rev 1.1, wallets addendum, signing-formats, infra rev 1.2, DEX rev 1.1, Zether rev 1.1, net-* rev 1.1/1.2.
+      Known SCaaS.md errors: §7.7 Solana `MetaOp` is 336 B not 337; §7.6 TON TODO #8 done, `BindKey` doesn't exist
+      (stateInit in `SignedOp`, R10-5); §7.4 Soroban nonce is `sha256("scaas.soroban.nonce"‖entryRef‖validUntil)`, `pay_ref`
+      lock per `(from, pay_ref)` (R8-9), DEX needs relayer binding (R8-10); §7.2 `associateUnderlying()` superseded
+      (R6-8, TW2 R144); §7.5 add lane-horizon client obligation (RS7-11, RS11-24, RS12-24) + Aptos multisig-wrap risk;
+      §1.2/§1.3 immutability now true by ruling; admin-exception list; outbox rules into integration.md.
+- [ ] Cross-spec nits: DEX RS5-15 "relayer 0 = open" needs a note — no open form on Soroban (net-soroban R8-10);
+      merge PAY-FIX6 into DX-FIX3 (same 1271 cap); PAY-FIX7 (DEX fee-per-fill round-up) needs a DEX ruling;
+      spec B's NI-amends row should list `job.sponsor_fallback`.
+- [ ] **Codex reviews still owed** (credit ran out after 4): AS, TW2, app, OPS, S4F, mesh, A2, SCaaS.md, integration.md.
+      All already have a Claude review. Run with `codex exec -m gpt-5.5 -s read-only -C <scaas> -o <out.md> "<prompt>"`
+      (default `gpt-6.1-sol` is rejected for a ChatGPT account); outputs `docs/reviews/specs/*-codex-review-1.md`; fold.
+- [ ] **ChainId 9000 → 7622** remaining: specs not yet swept (mesh, A2, TW2, app, OPS, S4F, AS), `AuthScheme.sol:7`
+      comment, TRAPS.md heading; then code/infra stream CHAINID (genesis reset, rename `private9000` dir + foundry
+      profile, node + Odoo chain records, `chain_uid` = genesis hash).
+- [ ] Doc nits: `wasm-smoke.sh` needs `--target web`; node default `max_gas_per_tx` 3M < classical Zether transfer 3.36M
+      (Zether rev 1.1 says ≥ 4.2M on Zether chains).
 
 ## 1. Code streams (after §0)
 
-Suggested first wave: **NI P2 → P3** (money-safety core), **UA F0 → F1** (many specs depend on it), **app A1 + A0-evm**.
+**Fix first (bugs found in BUILT code by the 2026-10-07 reviews):**
+1. **NET-TON-FIX1** (BLOCK: unbounded forward TON drains a lane — no job API/mesh/gateway path may reach a TON lane until the node half lands), NET-TON-FIX2…4.
+2. Node money safety: **NR1** breaker meters fees/value/deposits + attempt cap + grief score (R340–R342), **NR2** payload-sourced fields, value-out cap, deposit rule (R344–R346), NR3 mesh sig verify (R343, before S5), NR4 journals → `outer_tx` (R347), NR5 immutable-program check + one custody key per family (R348–R349).
+3. **PAY-FIX1** Odoo outbox ACL + immutable job fields, **PAY-FIX2** node `call` target/selector table, PAY-FIX3 event-set quorum, PAY-FIX4 gateway intake, PAY-FIX5 idempotent signed report; ADW-FIX1–4.
+4. DEX: DX-FIX1–5 (dust maker freeze, poison fee token, 1271 gas cap, non-EVM relayer binding).
+5. Per family: R3-FIX1–15 (Cosmos passkey v2, WebAuthn vectors, event quorum, Soroban `pay_ref`, Solana build-time network, Sui `Keys`, guardians, TON domain, **R3-FIX15 immutable deploy + gate + redeploy**), WSF-FIX1–2, NET-{COSMOS,SUI,HEDERA,SOROBAN,APTOS,SOLANA}-FIXn (specs' "Luồng code" tables), ZF-FIX1–3.
+
+Then the first feature wave: **NI P2 → P3** (money-safety core), **UA F0 → F1** (many specs depend on it), **app A1 + A0-evm**.
 
 | Area | Streams (spec) |
 |---|---|
