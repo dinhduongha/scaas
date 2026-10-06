@@ -1,6 +1,8 @@
 # Sealed-bid tender, gas sponsorship and receiver-pays, crypto-shredding (component spec B)
 
-Status: draft rev 1, 2026-10-06. Code at `scaas` `main` 97ba59e. **Nothing in this spec is built.**
+Status: draft rev 1.1, 2026-10-06. Rev 1.1 folds in the owner's answers to the two rev-1 open questions
+(post-reveal disqualification, R185; receiver-pays stays v2-only, R193). Code at `scaas` `main` 97ba59e.
+**Nothing in this spec is built.**
 Rulings: **R180–R199** (§2). R150–R172 belong to the app spec, R200–R216 to the asset-suite spec (AS). Owner rulings of 2026-10-06 folded in:
 (1) sealed-bid tender = commit–reveal + deposit, gasless bidders, procurement integration, EVM + Hedera first;
 (2) gas sponsorship **and** receiver-pays: node policy first, receiver co-signed fee, an on-chain `SponsorshipPool` as a
@@ -108,11 +110,21 @@ Format: **ruling — why — cost if wrong.**
   state `FAILED` (no winner), valid revealers refunded, non-revealers forfeit. — Before the deadline prices are
   hidden, so a cancel cannot be price-informed; the buyer may legitimately react to the commit count. Amends SCaaS
   §10.3 ("only before the first commitment"). — If wrong: bidders lose gas only (sponsored, §B1).
-  **Settlement is permissionless after `revealDeadline`; no `awardDeadline`.** The best bid is tracked during
-  reveals (O(1) settle); `settleTender` only freezes it and emits `TenderSettled`; `withdrawDeposit` settles lazily.
-  — The winner is a pure function of the reveals (I4), so a buyer award window adds no decision, only a delay on
-  refunds. Removes SCaaS §10.5 row "buyer never settles". — If wrong: post-reveal disqualification needs a design
-  (§9 Q1).
+  **Award window and disqualification** (owner, rev 1.1). The leader (best valid bid: price by `rule`, then `seq`)
+  is tracked during reveals. After `revealDeadline` an award window of `dqWindow` seconds opens (fixed at creation,
+  `≤ 7 d`, ERP default 72 h, `0` = no disqualification). Inside it the buyer may `disqualifyWinner` **the current
+  leader only**, with a non-zero `reasonRef` (salted commitment of the disqualification document, R198) and a
+  violation class; the next valid, non-disqualified bid by the same ordering becomes leader. The disqualified
+  deposit refunds in full, unless the class is one of the `forfeitClasses` the tender declared at creation (bitmask
+  of up to 8 classes defined in the tender documents, e.g. "forged bid documents") — then it goes to `slashSink`.
+  At most `maxDisqualifications ≤ 2` per tender. Every disqualification emits `BidDisqualified` (bidder, reason,
+  class, forfeit, new leader). `minBidders` counts valid reveals **including** disqualified ones (it measures
+  competition); no candidate left ⇒ `FAILED`. **Settlement:** the buyer may `settleTender` any time after
+  `revealDeadline` (it closes the window); anyone may after `revealDeadline + dqWindow`; `withdrawDeposit` settles
+  lazily. No `awardDeadline`. — Procurement must be able to pass over a winner that fails due diligence; the
+  leader-only rule, the short window, the public reason and the cap bound the buyer's discretion to the top
+  `maxDisqualifications + 1` valid bids (§A.7.2). Removes SCaaS §10.5 row "buyer never settles". — If wrong: a
+  tender that wants no discretion sets `dqWindow = 0` (settlement then permissionless right after the reveals).
 - **R186** **Deposit token** = a token deployed by the configured factory v1 (`META`) or factory v2 (`META_NONE`,
   `META_SINGLE`, `META_MULTI`) through a **registered, non-deprecated** implementation (unregistered clones and Zether
   kinds refused), checked at `createTender`. The tender also checks the balance delta equals `minDeposit`. — Bidders
@@ -171,8 +183,8 @@ Format: **ruling — why — cost if wrong.**
   **Availability:** v2 tokens of the next implementation version of each tier (EVM and Hedera children);
   older v2 clones and v1 lack it (clones are immutable). Not in `mtxBatch`. Node jobs carrying `receiver_fee` are
   `bus.scope = restricted` (the mesh envelope has no slot for the co-signature). — Smallest change that is atomic
-  and allowance-free; production registration (O3) has not happened, so the version bump costs nothing. — If wrong:
-  a router contract with a capped payee allowance would cover v1 tokens.
+  and allowance-free; production registration (O3) has not happened, so the version bump costs nothing. **Decided
+  (owner, rev 1.1): v2-only, no v1 router.** — If wrong: v1 issuers migrate to v2 to offer receiver-pays.
 
 ### 2.4 SponsorshipPool and R75
 
@@ -224,11 +236,13 @@ permissionless steps.
 
 ```
 createTender ─► OPEN ──commitDeadline──► (REVEAL) ──revealDeadline──► (AWARDABLE) ─settle─► SETTLED | FAILED
-                │ commitBid / replaceBid   │ revealBid                    (derived from time)   │ withdrawDeposit
-                └ cancelTender (buyer, now ≤ commitDeadline) ─► CANCELLED ─ withdrawDeposit ─┘ releaseBond / claimBond
+                │ commitBid / replaceBid   │ revealBid                    │ disqualifyWinner   │ withdrawDeposit
+                │                                                         │ (buyer, ≤ dqWindow) │ releaseBond / claimBond
+                └ cancelTender (buyer, now ≤ commitDeadline) ─► CANCELLED ─ withdrawDeposit
 ```
 
-Stored states: `OPEN`, `SETTLED`, `FAILED`, `CANCELLED`; `REVEAL` and `AWARDABLE` are derived from `block.timestamp`.
+Stored states: `OPEN`, `SETTLED`, `FAILED`, `CANCELLED`; `REVEAL` and `AWARDABLE` (the award window
+`(revealDeadline, revealDeadline + dqWindow]`, then until someone settles) are derived from `block.timestamp`.
 
 ### A.2 Rules
 
@@ -236,18 +250,18 @@ Stored states: `OPEN`, `SETTLED`, `FAILED`, `CANCELLED`; `REVEAL` and `AWARDABLE
 
 1. Tender exists and stored state `OPEN`; `bidder = m.from`; `bidder ∉ {buyer, slashSink}`; eligibility proof
    valid when `eligibilityRoot ≠ 0` (OpenZeppelin `MerkleProof`, leaf `keccak256(bytes.concat(keccak256(abi.encode(
-   bidder))))`); bidder has no bid.
+   bidder))))`); bidder has no bid; `bidderList.length < MAX_BIDS` (256) else `TooManyBids`.
 2. Intent shape (`BadDepositIntent(code)`): `m.to == address(this)`, `m.value == minDeposit`,
    `m.data == abi.encodePacked(bytes4(keccak256("pay(bytes32)")), depositRef(tenderId, commitment))`,
    `feeModeOf(m.mode) == NONE`, `m.mode & MODE_RESTRICT_RELAYER != 0`, `m.relayer == address(this)`.
-3. Effects: bid `{commitment, seq = nextSeq++, status = COMMITTED}`, `commits++`.
+3. Effects: bid `{commitment, seq = nextSeq++, status = COMMITTED}`, `commits++`, `bidderList.push(bidder)`.
 4. Interaction: `b0 = balanceOf(this)`; `IERC20MetaTx(token).executeMetaTransaction(m, sig)` (reverts propagate);
    `balanceOf(this) − b0 == minDeposit` else `DepositNotReceived`.
 5. Emit `BidCommitted(tenderId, bidder, commitment, seq)`.
 
 The batch/nonce of `m` is the bidder's choice; clients SHOULD use `payLane(depositRef)`, nonce 0 (R9 convention).
 
-#### A.2.2 Replace, reveal, settle
+#### A.2.2 Replace, reveal, disqualify, settle
 
 - `replaceBid(tenderId, bidder, newCommitment, validUntil, sig)`: `now ≤ commitDeadline`, `now ≤ validUntil`, bid
   `COMMITTED`; sig over `ReplaceBid(uint256 tenderId,address bidder,bytes32 newCommitment,uint32 replaceNonce,uint256
@@ -259,13 +273,22 @@ The batch/nonce of `m` is the bidder's choice; clients SHOULD use `payLane(depos
   maxPrice)`. Stores `price`, status `REVEALED`, `valid`; if valid: `validReveals++` and compare with the best
   (`LOWEST_PRICE`: lower wins; `HIGHEST_PRICE`: higher wins; equal ⇒ lower `seq`). Emits `BidRevealed(tenderId,
   bidder, price, valid)`.
-- `settleTender(tenderId)`: `now > revealDeadline`, state `OPEN`; `validReveals ≥ minBidders` ⇒ `SETTLED` with
-  `winner = best` else `FAILED`; emits `TenderSettled(tenderId, winner, price, validReveals, commits)` (`winner = 0`
-  when `FAILED`). Idempotence: a second call reverts `WrongPhase`.
+- `disqualifyWinner(tenderId, reasonRef, violationClass)`: buyer only; state `OPEN`; `revealDeadline < now ≤
+  revealDeadline + dqWindow` else `DisqualifyClosed`; `dqCount < maxDisqualifications` else `DisqualifyCapReached`;
+  a leader exists else `NoBid`; `reasonRef ≠ 0`; `violationClass == 0` (no violation) or `1 ≤ violationClass ≤ 8`
+  with bit `violationClass − 1` set in `forfeitClasses`, else `ViolationClassNotDeclared`. Effects: leader's bid
+  status `DISQUALIFIED`, `forfeit = (violationClass ≠ 0)`, `dqCount++`; new leader = best bid over `bidderList`
+  with status `REVEALED ∧ valid` (same ordering as reveals: price by `rule`, then lower `seq`), or none. Emits
+  `BidDisqualified(tenderId, bidder, reasonRef, violationClass, forfeit, newLeader)`. The scan is O(bids ≤ 256).
+- `settleTender(tenderId)`: state `OPEN`; caller is the buyer and `now > revealDeadline`, or anyone and `now >
+  revealDeadline + dqWindow`. `validReveals ≥ minBidders ∧ leader exists` ⇒ `SETTLED` with `winner = leader`,
+  else `FAILED`; emits `TenderSettled(tenderId, winner, price, validReveals, commits)` (`winner = 0` when `FAILED`;
+  `validReveals` includes disqualified bids). Idempotence: a second call reverts `WrongPhase`.
 
 #### A.2.3 Payout routing (`withdrawDeposit(tenderId, bidder)`, permissionless, once per bid)
 
-Settles first if `now > revealDeadline` and still `OPEN`; otherwise requires `SETTLED`, `FAILED` or `CANCELLED`.
+Settles first if `now > revealDeadline + dqWindow` and still `OPEN`; otherwise requires `SETTLED`, `FAILED` or
+`CANCELLED` — except a `DISQUALIFIED` bid, which pays out at once (it can never lead again).
 
 | Tender state | Bid | Destination | Event |
 |---|---|---|---|
@@ -274,6 +297,8 @@ Settles first if `now > revealDeadline` and still `OPEN`; otherwise requires `SE
 | `SETTLED` | winner, `RETURN_ON_AWARD` | bidder | `DepositRefunded` |
 | `SETTLED` | winner, `HOLD_UNTIL_RELEASE` | revert `BondHeld` (use `releaseBond`/`claimBond`) | — |
 | `SETTLED`/`FAILED` | not revealed, or revealed invalid | `slashSink` | `DepositSlashed` |
+| any (after disqualification) | `DISQUALIFIED`, `forfeit = false` | bidder | `DepositRefunded` |
+| any (after disqualification) | `DISQUALIFIED`, `forfeit = true` (declared class) | `slashSink` | `DepositSlashed` |
 
 Bid status becomes `DONE` before the token transfer (CEI). `releaseBond(tenderId)`: buyer at any time after settle,
 anyone after `bondReleaseTime` ⇒ winner (`BondReleased`). `claimBond(tenderId, reasonRef)`: buyer, `HOLD`, `now <
@@ -281,11 +306,14 @@ bondReleaseTime` ⇒ `slashSink` (`BondClaimed`). Payouts use the token's plain 
 
 #### A.2.4 Invariants
 
-- **I1** Every bidder of a cancelled tender, and every valid non-winning revealer, receives exactly `minDeposit`,
-  through a permissionless call, with no expiry.
+- **I1** Every bidder of a cancelled tender, every valid non-winning revealer and every bidder disqualified without
+  a declared violation class receives exactly `minDeposit`, through a permissionless call, with no expiry.
 - **I2** For every token: `balanceOf(tender) ≥ Σ minDeposit over bids with status ≠ DONE`.
 - **I3** Before `revealDeadline` no price is derivable from chain data (salt secret and uniformly random).
-- **I4** Winner = f(valid reveals, rule, seq); no party chooses it.
+- **I4** Winner = the best valid, non-disqualified bid by (rule, seq); the buyer's only influence is removing the
+  current leader inside the award window, at most `maxDisqualifications` times, each with a public `reasonRef`.
+- **I7** A deposit is forfeited only for non-reveal, invalid reveal, a declared violation class, or a HOLD bond
+  claim — never by an undeclared reason.
 - **I5** `settle` happens once; a bid pays out once (status `DONE`).
 - **I6** No deposit enters the tender except through `commitBid` (relayer bound to the tender, R180).
 
@@ -296,7 +324,7 @@ interface ISealedBidTender {
     enum State { NONE, OPEN, REVEAL, AWARDABLE, SETTLED, FAILED, CANCELLED }   // REVEAL/AWARDABLE derived
     enum Rule { LOWEST_PRICE, HIGHEST_PRICE }
     enum BondPolicy { RETURN_ON_AWARD, HOLD_UNTIL_RELEASE }
-    enum BidStatus { NONE, COMMITTED, REVEALED, DONE }
+    enum BidStatus { NONE, COMMITTED, REVEALED, DISQUALIFIED, DONE }
 
     struct TenderConfig {
         address depositToken; uint128 minDeposit;
@@ -304,17 +332,23 @@ interface ISealedBidTender {
         Rule rule; uint128 minPrice; uint128 maxPrice;      // inclusive; maxPrice 0 = unbounded (R184)
         uint32 minBidders;                                  // >= 1 (R185)
         BondPolicy bondPolicy; uint64 bondReleaseTime;      // HOLD only; else 0
+        uint32 dqWindow;                                    // award window after revealDeadline, <= 7 d; 0 = off (R185)
+        uint8 maxDisqualifications;                         // <= MAX_DISQUALIFICATIONS = 2
+        uint8 forfeitClasses;                               // bitmask of declared violation classes 1..8
         address slashSink;                                  // R183
         bytes32 eligibilityRoot;                            // 0 = open
         bytes32 documentRef;                                // salted commitment of the tender documents (R198)
     }
-    struct Bid { bytes32 commitment; uint128 price; uint64 seq; uint32 replaceNonce; BidStatus status; bool valid; }
+    struct Bid { bytes32 commitment; uint128 price; uint64 seq; uint32 replaceNonce; BidStatus status; bool valid;
+                 bool forfeit; }
 
     event TenderCreated(uint256 indexed tenderId, address indexed buyer, bytes32 documentRef, TenderConfig config);
     event TenderCancelled(uint256 indexed tenderId, bytes32 reasonRef);
     event BidCommitted(uint256 indexed tenderId, address indexed bidder, bytes32 commitment, uint64 seq);
     event BidReplaced(uint256 indexed tenderId, address indexed bidder, bytes32 commitment, uint64 seq);
     event BidRevealed(uint256 indexed tenderId, address indexed bidder, uint256 price, bool valid);
+    event BidDisqualified(uint256 indexed tenderId, address indexed bidder, bytes32 reasonRef, uint8 violationClass,
+                          bool forfeit, address newLeader);
     event TenderSettled(uint256 indexed tenderId, address indexed winner, uint256 price, uint32 validReveals,
                         uint32 commits);
     event DepositRefunded(uint256 indexed tenderId, address indexed bidder, uint256 amount);
@@ -322,7 +356,8 @@ interface ISealedBidTender {
     event BondReleased(uint256 indexed tenderId, address indexed winner, uint256 amount);
     event BondClaimed(uint256 indexed tenderId, bytes32 reasonRef, uint256 amount);
 
-    error BadConfig(uint8 code);            // 1 token, 2 deposit, 3 windows, 4 bounds, 5 minBidders, 6 bond, 7 sink
+    error BadConfig(uint8 code);            // 1 token, 2 deposit, 3 windows, 4 bounds, 5 minBidders, 6 bond, 7 sink,
+                                            // 8 disqualification params
     error WrongPhase(State state);
     error NotBuyer();
     error NotEligible(address bidder);
@@ -332,6 +367,10 @@ interface ISealedBidTender {
     error BadDepositIntent(uint8 code);     // 1 to, 2 value, 3 data, 4 fee mode, 5 relayer binding
     error DepositNotReceived(uint256 expected, uint256 got);
     error CommitmentMismatch();
+    error TooManyBids();
+    error DisqualifyClosed();
+    error DisqualifyCapReached();
+    error ViolationClassNotDeclared(uint8 violationClass);
     error BondHeld();
     error BondNotHeld();
     error SignatureExpired();
@@ -344,7 +383,8 @@ interface ISealedBidTender {
     function replaceBid(uint256 tenderId, address bidder, bytes32 newCommitment, uint256 validUntil,
                         bytes calldata sig) external;                                     // anyone, bidder-signed
     function revealBid(uint256 tenderId, address bidder, uint128 price, bytes32 salt) external;   // anyone, R182
-    function settleTender(uint256 tenderId) external;                                     // anyone, R185
+    function disqualifyWinner(uint256 tenderId, bytes32 reasonRef, uint8 violationClass) external;  // buyer, R185
+    function settleTender(uint256 tenderId) external;                 // buyer after reveals; anyone after the window
     function withdrawDeposit(uint256 tenderId, address bidder) external;                  // anyone, §A.2.3
     function releaseBond(uint256 tenderId) external;
     function claimBond(uint256 tenderId, bytes32 reasonRef) external;                     // buyer, HOLD
@@ -362,16 +402,18 @@ interface ISealedBidTender {
 ```
 
 Differences from SCaaS §14.7: deposit via the token's pay intent (R180), `commitBid` instead of
-`submitBidCommitment`, reveal/withdraw take `bidder` and no signature (R182), no `awardDeadline` (R185),
-`minBidders` and `FAILED` (R185), `replaceBid`, per-bid `withdrawDeposit` routing to bidder or sink, `uint128` prices.
+`submitBidCommitment`, reveal/withdraw take `bidder` and no signature (R182), no `awardDeadline` but a buyer
+disqualification window (R185), `minBidders` and `FAILED` (R185), `replaceBid`, per-bid `withdrawDeposit` routing to
+bidder or sink, `uint128` prices, at most 256 bids per tender.
 
 ### A.4 Storage
 
 ```
 mapping(uint256 => Tender) tenders;     // Tender = TenderConfig (7 slots packed) + buyer, State, best (address),
                                         //          bestPrice uint128, bestSeq uint64, commits/validReveals uint32,
-                                        //          nextSeq uint64, createdAt uint64   (≈ 10 slots)
-mapping(uint256 => mapping(address => Bid)) bids;   // 2 slots: commitment | price, seq, replaceNonce, status, valid
+                                        //          nextSeq uint64, createdAt uint64, dqCount uint8   (≈ 11 slots)
+mapping(uint256 => mapping(address => Bid)) bids;   // 2 slots: commitment | price, seq, replaceNonce, status, valid, forfeit
+mapping(uint256 => address[]) bidderList;           // commit order; ≤ MAX_BIDS = 256 (disqualification scan)
 uint256 nextTenderId;                   // starts at 1
 // transient reentrancy guard keccak256("scaas.tender.reentrancy.v1") on every state-changing function
 ```
@@ -379,7 +421,8 @@ uint256 nextTenderId;                   // starts at 1
 `createTender` checks (`BadConfig`): R186 token acceptance (`isDeployedHere`, `versionOf`, `implementationOf ≠ 0`,
 `!isDeprecated`, kind in the META set); `minDeposit > 0`; `now < commitDeadline ≤ now + 365 d`; reveal window in
 `[1 h, 30 d]`; `maxPrice == 0 ∨ minPrice ≤ maxPrice`; `minBidders ≥ 1`; HOLD ⇒ `revealDeadline < bondReleaseTime ≤
-revealDeadline + 730 d`, RETURN ⇒ `bondReleaseTime == 0`; `slashSink ∉ {0, this}`.
+revealDeadline + 730 d`, RETURN ⇒ `bondReleaseTime == 0`; `slashSink ∉ {0, this}`; `dqWindow ≤ 7 d`,
+`maxDisqualifications ≤ 2`, `dqWindow == 0 ⇒ maxDisqualifications == 0 ∧ forfeitClasses == 0`.
 
 ### A.5 Flows
 
@@ -387,11 +430,12 @@ revealDeadline + 730 d`, RETURN ⇒ `bondReleaseTime == 0`; `slashSink ∉ {0, t
 
 | # | ERP | Chain |
 |---|---|---|
-| 1 | Tender record linked to the RFQ; documents canonicalized (JCS), `documentRef` = salted commitment (§C.2); deposit token, `minDeposit`, deadlines, reserve, `minBidders`, bond policy, `slashSink`, allowlist root | — |
+| 1 | Tender record linked to the RFQ; documents canonicalized (JCS), `documentRef` = salted commitment (§C.2); deposit token, `minDeposit`, deadlines, reserve, `minBidders`, bond policy, `slashSink`, allowlist root, `dqWindow`, `maxDisqualifications`, `forfeitClasses` (each class defined in the documents) | — |
 | 2 | `call` job: `createTender(config)` from the buyer account (namespace `allow_call`, R103) | `TenderCreated` (`tenderId` from the event) |
 | 3 | Publishes tender id, deadlines, deposit terms, eligibility proofs to invited bidders; sponsorship policy for its tender contract (§B1) | — |
 | 4 | Watches commits (count only); may cancel until `commitDeadline` | `BidCommitted`, `TenderCancelled` |
-| 5 | After `revealDeadline`: `call` job `settleTender` (or any keeper) | `TenderSettled` |
+| 5 | Inside the award window: due diligence on the leader; if it fails, `disqualifyWinner(reasonRef, class)` with the reason document committed (§C.2) and retained for audit and dispute | `BidDisqualified` |
+| 5b | Then `settleTender` (buyer early, or any keeper after the window) | `TenderSettled` |
 | 6 | On the **finalized** `TenderSettled`: PO to the winner; non-revealers = committed set − revealed set; keeper jobs `withdrawDeposit` for every bid (refunds and forfeits) | `DepositRefunded`, `DepositSlashed` |
 | 7 | Bond: `releaseBond` on contract signature/delivery, or `claimBond(reasonRef)` | `BondReleased`/`BondClaimed` |
 | 8 | Supplier invoice paid with `mtxPay` and a **fresh random `entryRef`** (R9); the link tender ↔ PO ↔ invoice ↔ `entryRef` stays off chain | `PaymentSettled` |
@@ -452,7 +496,11 @@ deterministic (passkeys are not). The salt is never sent to anyone before `commi
 | Buyer reads prices early | impossible from chain data (I3); a portal that receives `(price, salt)` early is a client bug — the bidder never sends it before `commitDeadline` |
 | Buyer's portal withholds a handed-over reveal | bidder verifies `BidRevealed`, re-submits elsewhere (R182) |
 | Buyer aborts after seeing prices | no cancel after `commitDeadline` (R185); remaining abort = a buyer sybil winning (A.7.2) or refusing the PO off chain |
-| Buyer never settles / withholds refunds | settle and withdraw are permissionless (R185, R182) |
+| Buyer never settles / withholds refunds | settle and withdraw are permissionless after the window (R185, R182) |
+| Buyer cherry-picks the winner by disqualifying | leader only, inside `dqWindow`, cap `maxDisqualifications ≤ 2`, each with a public `reasonRef` and event; residual risk §A.7.2 |
+| Buyer seizes deposits with false violation claims | only classes declared at creation forfeit; reason committed on chain and openable in a dispute; at most 2 deposits; residual risk §A.7.2 |
+| Disqualification turns a tender `FAILED` | only by exhausting candidates (`minBidders` counts disqualified reveals) |
+| Unbounded scan gas | `MAX_BIDS = 256` per tender |
 | Deposits locked by extreme windows | R187 caps |
 | Commit spam | each commit costs `minDeposit` (refunded only if revealed validly) + allowlist |
 | Replacement replay (A→B→A flip) | `replaceNonce` in the signed struct |
@@ -465,6 +513,12 @@ deterministic (passkeys are not). The salt is never sent to anyone before `commi
 - A buyer can commit and reveal through a sybil identity; if the sybil wins, the tender ends without a real award
   (the sybil's deposit is refunded as winner). This is equivalent to the buyer refusing to sign the PO, which no
   contract can prevent. The award on chain is evidence of a fair procedure, not an enforcement of the purchase.
+- **Residual buyer discretion (disqualification).** Within the award window the buyer can pass over the best
+  `maxDisqualifications` (≤ 2) valid bids, so in effect choose among the top three. With a declared violation class
+  it also forfeits those deposits to `slashSink` — an incentive to allege violations when the sink is the buyer's
+  own organization. The contract cannot judge whether a reason is true: it only makes every use public, bounded and
+  bound to a committed document that the bidder can contest off chain. Tenders that want no discretion set
+  `dqWindow = 0`; bidders that distrust the buyer can demand a neutral `slashSink` or `forfeitClasses = 0`.
 - Bidder identities are public at commit (addresses), prices at reveal, forever (R198).
 
 ### A.8 Gas (estimates, to be measured in TB1)
@@ -472,9 +526,10 @@ deterministic (passkeys are not). The salt is never sent to anyone before `commi
 | Call | Estimate | Notes |
 |---|---|---|
 | `createTender` | 230–260 k | ~10 new slots + event with config |
-| `commitBid` | 120–150 k | token meta-tx with first-use lane (~52 k) + 2 bid slots (44 k) + checks, Merkle proof ~1.5 k/level |
+| `commitBid` | 145–175 k | token meta-tx with first-use lane (~52 k) + 2 bid slots (44 k) + `bidderList` push (~25 k) + checks, Merkle proof ~1.5 k/level |
 | `replaceBid` | 15–25 k | 1 slot update + signature |
 | `revealBid` | 20–35 k | keccak + 1 slot update + best update |
+| `disqualifyWinner` | 30 k + ~2.6 k per bid | status write + scan of `bidderList` (cold reads); ≤ ~700 k at 256 bids |
 | `settleTender` | 8–15 k | state write + event |
 | `withdrawDeposit` | 30–45 k | status write + token transfer (cold recipient adds ~20 k) |
 
@@ -485,8 +540,13 @@ deprecated token refused; Zether refused; eligibility proof valid/invalid; buyer
 stale nonce and expired signature; ERC-1271 bidder (`SubjectAccount`); reveal mismatch, out-of-range reveal,
 reveal outside the window; ties broken by `seq` (including after replacement); both rules; `minBidders` ⇒
 `FAILED`; cancel before/after `commitDeadline`; every routing row of §A.2.3 and double withdraw; bond release by
-buyer, by anyone after `bondReleaseTime`, claim before it. Invariant fuzz (handler with random bidders, prices,
-reveals, timing): I1, I2, I4, I5, I6. Differential: `commitmentOf` vs the Python and TypeScript client builders
+buyer, by anyone after `bondReleaseTime`, claim before it. Disqualification: outside the window (before
+`revealDeadline`, after `revealDeadline + dqWindow`), non-buyer, `dqWindow = 0`, cap reached, zero `reasonRef`,
+undeclared class, class 0 ⇒ refund, declared class ⇒ forfeit; next leader correct for both rules, with ties
+(lower `seq`), skipping invalid and disqualified bids; disqualifying the last candidate ⇒ `FAILED`; `minBidders`
+counted with disqualified bids; settle by buyer inside the window closes it (later disqualify reverts); disqualified
+bid withdrawable before settle; `TooManyBids` at 257; scan gas at 256 bids. Invariant fuzz (handler with random
+bidders, prices, reveals, disqualifications, timing): I1, I2, I4, I5, I6, I7. Differential: `commitmentOf` vs the Python and TypeScript client builders
 (KAT file `tests/kat/tender.json`). Hedera child: HIP-632 `ReplaceBid` for an ED25519 account. Gas snapshot.
 
 ### A.10 Families
@@ -930,15 +990,9 @@ NI P3 lands, then TB3/RP2/SP2, PL1 last.
 
 ## 9. Open questions
 
-1. **Post-reveal disqualification.** v1 has no on-chain way to pass over a winner that fails due diligence and
-   award the runner-up (R185: no buyer discretion; the buyer simply issues no PO, and with `HOLD_UNTIL_RELEASE` may
-   claim the bond). If procurement needs a runner-up award, the contract must keep the ranking or accept a
-   buyer-signed disqualification with a published reason — which reintroduces buyer discretion. Needed in v1?
-2. **Receiver-pays on v1 tokens.** R193 leaves v1 out. If issuers keep v1 tokens in production, a router contract
-   with a capped payee allowance (R26-compatible: the spender is a contract) would cover them. Wanted?
+None open. Decided by the owner in rev 1.1:
 
-## 10. Changes to other documents (made with this spec)
-
-- SCaaS §5.9 rows "Receiver pays the fee" and "Gas sponsorship policy", §6 consequences 1 and 4, §10 header and
-  intro, §11.2 header, §13.2 budgets, §14.7 header, §15.1 row 23: status SPECIFIED with a link here.
-- INT §8 rows "Gas sponsorship policy" and "Receiver pays fee", §9 header: status SPECIFIED with a link here.
+1. **Post-reveal disqualification:** yes — leader only, inside a short award window fixed at creation, with an
+   on-chain `reasonRef`; refund in full unless a violation class declared at creation applies (then forfeit to
+   `slashSink`); at most two per tender; residual discretion stated (R185, §A.2.2, §A.7.2).
+2. **Receiver-pays on v1 tokens:** no; v2-only, no v1 router (R193).

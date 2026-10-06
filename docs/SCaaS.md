@@ -1444,7 +1444,7 @@ show the mode and the recovery delay.
 
 Component spec: [TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §A (R180–R188), authoritative for detail; no code. Where it differs from the text below (deposit
 and commitment in one token `pay` intent, permissionless reveal/withdraw, cancel until `commitDeadline`,
-`minBidders`, no `awardDeadline`, per-bid payout routing) the spec wins. Sources: SRS architecture §10 and §9.7, research synthesis "mechanism 8", canon §C22.6, settlement
+`minBidders`, no `awardDeadline`, a bounded buyer disqualification window, per-bid payout routing) the spec wins. Sources: SRS architecture §10 and §9.7, research synthesis "mechanism 8", canon §C22.6, settlement
 note §15.12.1. Detail added here (timing, deposits, penalties, events, meta-tx paths) is new and normative.
 
 ### 10.1 Problem
