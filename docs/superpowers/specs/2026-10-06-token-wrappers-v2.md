@@ -413,8 +413,6 @@ Consequences, stated for issuers and holders:
 6. Rounding never favours the caller (R133), so repeated wrap/unwrap cycles cannot extract value at any rate.
 7. Nobody can wrap at a rate that is about to change: wrap is paused on every leg for the whole window, while holders
    keep the unwrap exit at the current rate (`minOut` protects intents that land late).
-8. On Multi, a per-leg change shifts value between holders who exit through different legs and toward arbitrageurs
-   if the new rate is off market (R147, §8.5).
 
 ### 6.4 Decimals (R137)
 
@@ -615,8 +613,7 @@ Stated plainly for issuers and holders (this text goes into the wizard and walle
    denies new wraps (never exits) and is visible on chain.
 5. **Recommendation:** keep Multi rates fixed (the default). If an issuer needs adjustable legs, the `rateAdmin`
    should be a multisig behind a timelock that only re-pegs legs toward their market value; wallets show the rate
-   admin and every pending change.
-6. All of §8.4 still applies.
+   admin and every pending change. All of §8.4 still applies.
 
 ---
 
@@ -678,8 +675,9 @@ implementation. Intended order (OZ 5.2, non-namespaced):
 | 15 | `MultiUnderlyingToken` | `guardian` |
 
 ```solidity
-struct Leg { address token; uint8 decimals; bool wrapEnabled; bool adjustable;   // slot a (copy of the flag: a fixed-rate
-             uint96 num; uint96 den;                                              //   wrap reads nothing else)
+struct Leg { address token; uint8 decimals; bool wrapEnabled; bool adjustable;   // slot a (adjustable copied here so a
+                                                                                  //   fixed-rate wrap reads no config)
+             uint96 num; uint96 den;                                              // slot b
              uint256 reserve; }                                                   // slot c
 struct PendingRate { uint8 leg; uint96 num; uint96 den; uint56 eta; }           // one slot; eta == 0 ⇒ none
 ```
@@ -694,13 +692,15 @@ Immutables (implementation): `FACTORY`, `_SELF`, `SUBJECT_ACCOUNT_IMPL`, `_SUBJE
 | `MetaTxCore` | `MetaTransactionExecuted` (v1), `MetaNonceCancelled(address indexed from, uint256 indexed batch, uint256 newNonce)` | v1 `MetaTx*`, `SpenderNotContract`, `CallerNotContract`, `FeeRecipientIsPayee()` |
 | `MetaTokenBase` | `PaymentSettled` (v1) | v1 op errors, `UnwrapRecipientMismatch()`, `MtxModeShape(uint32 mode)`, `MtxBatchEmpty()`, `MtxBatchLengthMismatch()`, `NotFactory()`, `AlreadyInitialized()` |
 | `NoUnderlyingToken` | `MinterRenounced()` | `NotMinter()` |
-| `SingleUnderlyingToken` | `Wrapped(address indexed account, address indexed underlying, uint256 underlyingIn, uint256 minted)`, `Unwrapped(address indexed account, address indexed underlying, address recipient, uint256 burned, uint256 underlyingOut)`, `ReserveAdded(address indexed from, address indexed underlying, uint256 amount)`, `RateChangeProposed(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen, uint64 eta)`, `RateChangeCancelled(address indexed underlying)`, `RateChanged(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen)`, `RateAdminRenounced()` | `UnderlyingInvalid(address)`, `DecimalsUnreadable(address)`, `UnderlyingCountInvalid(uint256)`, `RateInvalid(uint256,uint256)`, `RateConfigInvalid()`, `RateAdminNotContract(address)`, `WrapTooSmall()`, `UnwrapTooSmall()`, `UnwrapToZero()`, `InsufficientReserve(address,uint256,uint256)`, `ReserveShortfall(address,uint256,uint256)`, `UnderlyingTransferMismatch(address,uint256,uint256)`, `UnknownUnderlying(address)`, `RateFixed()`, `NotRateAdmin()`, `RateChangePending(address)`, `NoRateChangePending(address)`, `RateChangeNotReady(uint64)`, `RateChangeExpired(uint64)`, `RateStepTooLarge()`, `RateChangeUndercollateralized(uint256,uint256)`, `WrapPausedForRateChange(address)` |
-| `MultiUnderlyingToken` | `WrapDisabled(address indexed underlying, address indexed guardian, bytes32 reason)`, `GuardianRenounced()` | `DuplicateUnderlying(address)`, `WrapDisabledFor(address)`, `UnderlyingRequired()`, `NotGuardian()`, `RateDecreaseWithDisabledLeg()`, `LegShareExceeded(uint256 shareBps, uint256 cap)` |
-| `OpenFactory` v2 | `TieredTokenDeployed(address indexed token, address indexed creator, TokenKind kind, uint64 version, address implementation, address[] underlyings)` | `UnderlyingCountInvalid(uint256)` (+ v1 errors) |
+| `SingleUnderlyingToken` | `Wrapped(address indexed account, address indexed underlying, uint256 underlyingIn, uint256 minted)`, `Unwrapped(address indexed account, address indexed underlying, address recipient, uint256 burned, uint256 underlyingOut)`, `ReserveAdded(address indexed from, address indexed underlying, uint256 amount)`, `RateChangeProposed(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen, uint64 eta)`, `RateChangeCancelled(address indexed underlying)`, `RateChanged(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen)`, `RateAdminRenounced()` | `UnderlyingInvalid(address)`, `DecimalsUnreadable(address)`, `UnderlyingCountInvalid(uint256)`, `RateInvalid(uint256,uint256)`, `RateConfigInvalid()`, `RateAdminNotContract(address)`, `WrapTooSmall()`, `UnwrapTooSmall()`, `UnwrapBelowMin(uint256 out, uint256 minOut)`, `UnwrapRecipientInvalid(address)`, `InsufficientReserve(address,uint256,uint256)`, `ReserveShortfall(address,uint256,uint256)`, `UnderlyingTransferMismatch(address,uint256,uint256)`, `UnknownUnderlying(address)`, `RateFixed()`, `NotRateAdmin()`, `RateChangePending()`, `NoRateChangePending()`, `RateChangeNotReady(uint64)`, `RateChangeExpired(uint64)`, `RateStepTooLarge()`, `RateChangeUndercollateralized(uint256,uint256)`, `WrapPausedForRateChange(address)` |
+| `MultiUnderlyingToken` | `WrapDisabled(address indexed underlying, address indexed guardian, bytes32 reason)`, `GuardianRenounced()` | `DuplicateUnderlying(address)`, `WrapDisabledFor(address)`, `UnderlyingRequired()`, `NotGuardian()`, `RateDecreaseWithDisabledLeg()` |
+| Hedera children | — | `HtsQueryFailed(address u, int64 responseCode)`, `AssociateFailed(int64)` (v1) |
+| `OpenFactoryV2` | `TieredTokenDeployed(address indexed token, address indexed creator, TokenKind kind, uint64 version, address implementation, address[] underlyings)` | `UnderlyingCountInvalid(uint256)`, `ImplementationFactoryMismatch(address)` (+ v1 errors) |
 
 The node's event normaliser (SCaaS §7.8) adds `Wrapped`, `Unwrapped`, `ReserveAdded`, `RateChange*`, `WrapDisabled`,
-`MetaNonceCancelled`; `PaymentSettled` and `MetaTransactionExecuted` are unchanged, so payment reconciliation needs no
-change. The R148 unwrap op emits the same `Unwrapped` as a direct unwrap, plus `MetaTransactionExecuted`.
+`MetaNonceCancelled`, `TieredTokenDeployed`; `PaymentSettled` and `MetaTransactionExecuted` are unchanged, so payment
+reconciliation needs no change. The R148 unwrap op emits the same `Unwrapped` as a direct unwrap, plus
+`MetaTransactionExecuted`.
 
 ### 10.3 Gas notes (estimates; measured numbers replace them in `MetaTxGas.t.sol` v2)
 
@@ -708,14 +708,20 @@ change. The R148 unwrap op emits the same `Unwrapped` as a direct unwrap, plus `
   R132 comparison (< 100 gas). Budget: every row of the v1 gas table (SCaaS §5.6) within **+300 gas** on the generic
   path; the named functions equal or below the generic path.
 - `mtxPay` adds one `keccak256` of 46 bytes (~40 gas) and saves the dynamic `data` and two words of calldata.
-- `mtxBatch` saves the 21 000 intrinsic gas and the cold token access (2 600) per item after the first, i.e. ≈ 23.6 k
-  per item before calldata; the first use of a lane (+17 k) is unchanged.
-- Wrap/unwrap: three cold leg slots (6 300) + reserve SSTORE + two `balanceOf` calls on the underlying + the
-  transfer; Multi adds one `_legIndex` SLOAD; adjustable tokens add one `_pending` SLOAD (2 100, R147 c). Rate
-  functions are rare and unoptimised; a Multi `executeRate` reads every leg (≤ 8 × 2 cold slots) for `C'`.
+- `mtxBatch` saves the 21 000 intrinsic gas per item after the first, plus warm re-reads of shared slots (the fee
+  recipient's balance, the relayer's own lane state), minus the ABI overhead of `MetaTransaction[]`/`bytes[]`. The
+  token address itself is pre-warmed in a single transaction too (EIP-2929 `tx.to`), so there is no cold-account
+  saving (review L3). The first use of a lane (+17 k) is unchanged.
+- Wrap/unwrap: leg slots a–c (6 300 cold) + reserve SSTORE + one `balanceOf` before and one after the transfer + the
+  transfer itself. No length SLOAD (legs are a mapping), and fixed-rate tokens read no rate-config slot (the
+  `adjustable` flag lives in leg slot a); adjustable tokens add one `_pending` SLOAD (2 100). Multi adds one
+  `_legIndex` SLOAD. Rate functions are rare: a Multi `executeRate` reads every leg (≤ 8 × 3 cold slots) plus one
+  `balanceOf` per leg.
 - Gasless unwrap (R148): envelope (≈ 35 k warm lane, SCaaS §5.6) + fee if any (≈ 8 k) + leg reads, burn and reserve
-  write (≈ 15 k) + the underlying's `transfer` and two `balanceOf` (≈ 30–40 k for a plain ERC-20, more for proxied
-  stablecoins) ⇒ ≈ 85–100 k execution gas, measured per underlying mock in `MetaTxGas` v2.
+  write (≈ 15 k) + the underlying's `transfer` and two `balanceOf` (≈ 30–40 k for a plain ERC-20). For a proxied
+  stablecoin and a fresh recipient add its 0 → non-zero balance SSTORE (+20 k), the cold implementation hop (+2.6 k)
+  and blacklist reads (+4.2 k): expect **≈ 110–130 k** for USDC to a new address, ≈ 85–100 k for a plain token to an
+  existing holder.
 - Size: CI fails if any implementation exceeds 24 576 bytes (`forge build --sizes`); if Multi does, the rate
   timelock moves into a linked external library (clone → implementation → library delegatecall keeps the clone's
   storage).
@@ -726,33 +732,41 @@ Unit (forge, `test/v2/`):
 
 | Area | Tests |
 |---|---|
-| Base | typehash still pinned (`test_metaTxTypehashIsPinned` unchanged); v2 domain KAT `test/vectors/metatx_v2_kat.json` (same struct as `metatx_kat.json`, same `struct_hash`, new digest) checked by Solidity, node, Odoo `lib/eip712.py`; `MetaNonceCancelled`; R26 on all three tiers; ERC-1271 400 k only for SubjectAccount clones |
-| Fees | percent on `value`, fee on top, 1 % cap PERCENT and FIXED; `FeeRecipientIsPayee` for transfer, `pay`, `payWithFee`, bound and relayer-default; not raised for `trade`/`approve` |
-| Unwrap op | equivalence with `mtxUnwrap`/`mtxUnwrapWithFee`; fee in wrapped units before burn; `UnwrapRecipientMismatch`; `FeeRecipientIsPayee` for the recipient; underlying revert (blacklist mock) reverts fee and nonce; sender-pays FoT ⇒ `UnderlyingTransferMismatch`; reentrant underlying (ERC-777 mock) blocked by the guard; `MetaTxUnknownOp` on tier 1; works on a disabled leg and during a pending rate change |
-| Named | each equivalence of §7.1 (same digest, same events); a signature consumed by a named call fails on the generic path and vice versa; every `MtxModeShape` case; `mtxPay` lane equals `payLane`; second `mtxPay` of a `payId` reverts `MetaTxBadNonce`; `mtxBatch` atomic (one bad item reverts all), length mismatch, empty |
+| Base | typehash still pinned (`test_metaTxTypehashIsPinned` unchanged); v2 domain KAT `test/vectors/metatx_v2_kat.json` (same struct as `metatx_kat.json`, same `struct_hash`, new digest) plus an `mtxpay` vector with `batch = payLane(payId)`, `nonce = 0` and an `mtxunwrap` vector, all checked by Solidity, node and Odoo `lib/eip712.py` (`lane_batch` already equals `payLane`); `MetaNonceCancelled`; R26 on all three tiers; ERC-1271 400 k only for SubjectAccount clones; an op whose address word has dirty upper bits ⇒ `MetaTxUnknownOp` |
+| Fees | percent on `value`, fee on top, 1 % cap PERCENT and FIXED; `FeeRecipientIsPayee` for transfer, `pay`, `payWithFee`, bound and relayer-default; not raised for `trade`/`approve`/`unwrap` |
+| Unwrap op | equivalence with `mtxUnwrap`/`mtxUnwrapWithFee`; fee in wrapped units before burn; `UnwrapRecipientMismatch`; `UnwrapRecipientInvalid` for 0 and `address(this)` at step 6; `UnwrapBelowMin`; underlying revert (blacklist mock) reverts fee and nonce; sender-pays FoT ⇒ `UnderlyingTransferMismatch`; ERC-777 mock whose hook calls `cancelMetaNonce` and `transfer` mid-unwrap (nonce already written, state consistent); `MetaTxUnknownOp` on tier 1; works on a disabled leg and during a pending rate change |
+| Named | `testFuzz_namedDigestEqualsGeneric` over random struct fields for every named function; a signature consumed by a named call fails on the generic path and vice versa; every `MtxModeShape` case; a no-fee struct signed with a leftover `fee ≠ 0` fails through `mtxTransfer` (L5); `mtxPay` lane equals `payLane`; second `mtxPay` of a `payId` reverts `MetaTxBadNonce`; `payWithFee` with the same `entryRef` still emits `PaymentSettled` (documents R139's per-path limit); `mtxBatch` atomic (one bad item reverts all), length mismatch, empty |
 | Tier 1 | init mint to creator, `mint`/`NotMinter`, `renounceMinter`, `burn`, fixed supply with `minter = 0` |
-| Tier 2 | rate 1:1 equals v1 behaviour; rounding down on wrap/unwrap; `burned = ⌈out·q⌉`; `WrapTooSmall`/`UnwrapTooSmall`; FoT inbound measured; sender-pays FoT reverts `UnderlyingTransferMismatch`; donation not counted; `ReserveShortfall` after a negative-rebase mock stops wrap and not unwrap; `addReserve`; decimals snapshot; init refusals |
-| Rates | fixed ⇒ `RateFixed`; propose/cancel/execute; delay and grace bounds; step bound both directions at the exact edge; decrease refused without collateral, accepted after `addReserve`; renounce drops pending; non-admin refused; EOA admin refused at init; wrap paused while pending, reopens on execute/cancel/expiry, unwrap and `addReserve` open |
-| Tier 3 | 2–8 legs, duplicates, zero; per-leg reserves; unwrap bounded by `reserve_i`; guardian disable one-way and idempotence error; unwrap open on a disabled leg; `addReserve` refused on it; `RateDecreaseWithDisabledLeg`; adjustable Multi: `LegShareExceeded` at the exact cap, `maxLegShareBps` bounds per n, decrease needs no share check; inherited single-asset ABI reverts |
-| Factory v2 | kind ⇒ count; `VersionKindMismatch`; append-only catalogue; `createTieredUnregistered` version 0; salt scoped by creator; every underlying indexed; `TieredTokenDeployed` |
+| Tier 2 | rate 1:1 equals v1 behaviour; rounding down on wrap/unwrap; `burned = ⌈out·q⌉`; `previewWrap` `used`; `WrapTooSmall`/`UnwrapTooSmall`/`UnwrapBelowMin`; v1 two-argument `unwrap` = `minOut 0`; FoT inbound measured; sender-pays FoT reverts `UnderlyingTransferMismatch`; donation not counted; `ReserveShortfall` after a negative-rebase mock stops wrap and not unwrap; `addReserve`; decimals snapshot; init refusals |
+| Rates | fixed ⇒ `RateFixed`; propose/cancel/execute; only the admin executes (`NotRateAdmin` for anyone else); delay and window bounds; expired change counts as none for `proposeRate`, `pendingRate()` and the pause; step bound both directions at the exact edge; decrease refused without collateral, accepted after `addReserve`; execute refused with `ReserveShortfall` when any leg's balance is below its reserve (M1: shock, then decrease); `collateralValue` saturates and `executeRate` exits early on a huge leg (L1); renounce drops pending; EOA admin refused at init; wrap paused on **every** leg while anything is pending, reopens on execute/cancel/expiry, unwrap and `addReserve` open |
+| Tier 3 | 2–8 legs, duplicates, zero; per-leg reserves; unwrap bounded by `reserve_i`; guardian disable one-way and idempotence error; unwrap open on a disabled leg; `addReserve` refused on it; `RateDecreaseWithDisabledLeg`; the H1 scenario (pending decrease on leg `i`, flash-wrap of leg `j`) reverts `WrapPausedForRateChange` and a third-party `executeRate` reverts `NotRateAdmin`; inherited single-asset ABI reverts |
+| Factory v2 | kind ⇒ count; v1 entry points refuse the new kinds and `createTiered*` refuse `META`/`ZETHER`; `VersionKindMismatch`; `ImplementationFactoryMismatch`; append-only catalogue; `createTieredUnregistered` version 0; salt scoped by creator; every underlying indexed; exactly one `TieredTokenDeployed` |
 | Layout | `test_storageLayoutIsPinned` per implementation |
-| Hedera | HIP-632 path on each tier (mocked precompile, as `test/hedera/` today); `associateUnderlying(u)` per leg; HTS custom-fee refusal |
+| Hedera | HIP-632 path on each tier (mocked precompile, as `test/hedera/` today); association at init; fail-closed custom-fee check: `isToken` rc ≠ SUCCESS, `getTokenCustomFees` rc ≠ SUCCESS, and a non-empty fee list each refuse the underlying |
 
-Invariant / fuzz (`test/v2/WrapperInvariant.t.sol`, `[invariant] runs = 64, depth = 32, fail_on_revert = true` as
-today, with handlers that bound inputs so expected reverts do not count as failures):
+Invariant / fuzz (`test/v2/WrapperInvariant*.t.sol`, `[invariant] runs = 64, depth = 32, fail_on_revert = true` as
+today, with handlers that bound inputs so expected reverts do not count as failures). One invariant contract per rate
+setup: `1:1`, `10¹²:1`, `1:10⁴`, `(2⁹⁶−1):1`, `1:(2⁹⁶−1)`, `3:7`.
 
-- Handlers: wrap / unwrap (direct and R148 op) / `addReserve` on random legs with random actors; plain donations; FoT and plain
-  underlyings; meta-tx transfers with fees; propose / warp / execute / cancel rate changes with random targets;
-  guardian disables; negative-rebase shocks on a mock leg.
-- Invariants: `collateralValue() ≥ totalSupply()`; `Σ balances == totalSupply()`; `balanceOf_i ≥ reserve_i` for
-  well-behaved legs; every executed rate change satisfied the step bound and waited `rateDelay`; a disabled leg is
-  never re-enabled; no wrapped unit is minted without reserve growth; no wrap succeeds on a leg with a pending change;
-  every executed raise on a Multi leg left that leg's share ≤ `maxLegShareBps`.
-- Fuzz: `testFuzz_wrapUnwrapNeverProfits(amount, num, den)` — a wrap then full unwrap never returns more underlying
-  than went in; `testFuzz_stepBoundExact(num, den, num', den', bps)` against a reference in 512-bit arithmetic;
+- Handlers: wrap / unwrap (direct and R148 op) / `addReserve` on random legs with random actors; plain donations; FoT
+  and plain underlyings; meta-tx transfers with fees; propose / cancel / execute rate changes; `warpToEta`, which
+  jumps exactly to `eta` or to `eta + 7 days`; guardian disables; negative-rebase shocks on a mock leg; a ghost
+  attacker that trades only through wrap/unwrap.
+- Invariants:
+  - `collateralValue() ≥ totalSupply()` and `Σ balances == totalSupply()`;
+  - **slack never decreases**: `C − S` (ghost of the previous value) is non-decreasing across every handler call
+    except a rate execution;
+  - per-leg conservation: `Σ received_i + Σ addReserve_i − Σ out_i == reserve_i`; `balanceOf_i ≥ reserve_i` for
+    well-behaved legs;
+  - **profit oracle**: the ghost attacker's holdings valued at nominal par never increase over a sequence that
+    contains no rate execution (catches the H1 class);
+  - every executed rate change satisfied the step bound, waited `rateDelay` and was sent by the admin; no wrap
+    succeeds while a change is pending; a disabled leg is never re-enabled.
+- Fuzz: `testFuzz_wrapUnwrapNeverProfits(amount, num, den)`; cross-leg `testFuzz_wrapIUnwrapJNeverProfitsAtPar`;
+  `testFuzz_stepBoundExact(num, den, num', den', bps)` against a reference in 512-bit arithmetic;
   `testFuzz_feeConservesSupply` (v1 test ported).
 
-Cross-family vectors: `test/vectors/wrap_rate_vectors.json` — `(num, den, in) → minted` and
+Cross-family vectors: `test/vectors/wrap_rate_vectors.json` — `(num, den, in) → (minted, used)` and
 `(num, den, w) → (out, burned)` incl. edge cases (`2^96 − 1`, `den = 1`, zero outputs), written by
 `test_writeRateVectors` and later replayed by the Cosmos, Soroban and TON wrappers (R145). `metatx_v2_kat.json` is
 EVM/Hedera only.
@@ -763,10 +777,18 @@ EVM/Hedera only.
 
 `HederaNoUnderlyingToken`, `HederaSingleUnderlyingToken`, `HederaMultiUnderlyingToken` each inherit their tier and an
 abstract `HederaSigMixin is MetaTxCore` that overrides `_requireValidSignature` exactly as `HederaMetaToken` does
-(64-byte signature from an account without code ⇒ HIP-632 `isAuthorizedRaw`). Wrapper tiers add
-`associateUnderlying(address u)` (permissionless, idempotent, any leg) and at `initialize` read
-`getTokenCustomFees(u)` from the HTS precompile `0x167` for HTS underlyings: any custom fee ⇒ `UnderlyingInvalid(u)`
-(a fee schedule key can still add one later — disclosure §6.6). Domain, ABI, events and tests are the EVM ones.
+(64-byte signature from an account without code ⇒ HIP-632 `isAuthorizedRaw`). Wrapper tiers check every underlying
+in `initialize`, **fail-closed**, through the HTS precompile `0x167`:
+
+1. `isToken(u)` → `(rc, isHts)`; `rc ≠ SUCCESS` ⇒ `HtsQueryFailed(u, rc)`.
+2. If `isHts`: `getTokenCustomFees(u)` with `rc ≠ SUCCESS` or an undecodable result ⇒ `HtsQueryFailed(u, rc)`; any
+   fixed, fractional or royalty fee entry ⇒ `UnderlyingInvalid(u)`.
+3. If `isHts`: `associateToken(this, u)`; anything but SUCCESS or `TOKEN_ALREADY_ASSOCIATED_TO_ACCOUNT` ⇒
+   `AssociateFailed(rc)`. There is no separate `associateUnderlying` function: a token whose legs cannot be associated
+   is never born.
+
+A fee-schedule key can still add a fee later. It is not refused on chain (major HTS stablecoins may carry one); the
+wizard and wallets read `getTokenKey(u, FEE_SCHEDULE)` and warn (§6.6). Domain, ABI, events and tests are the EVM ones.
 
 ---
 
@@ -788,8 +810,7 @@ follow §6 and §8 verbatim.
 
 ## 13. Open questions (owner)
 
-None. The two rev-1 questions were answered on 2026-10-06: adjustable Multi rates allowed with guards (R147); gasless
-unwrap added (R148), gasless wrap PLANNED (R149).
+None. The rev-1 questions were answered on 2026-10-06 (R147, R148, R149).
 
 ---
 
@@ -816,11 +837,11 @@ three sub-agents, reviews by Claude sub-agents.
 |---|---|---|
 | T1 | `MetaTxCore` (memory pipeline, R132, `MetaNonceCancelled`), `MetaTokenBase` (ops, `payWithFee`, named functions incl. `mtxUnwrap*` stubs routed to the tier hook, `mtxBatch`, `payLane`), `metatx_v2_kat.json` | `test/v2/Base*.t.sol`, v1 tests untouched and green |
 | T2 | `NoUnderlyingToken`, `SingleUnderlyingToken` (legs, reserve, rates, timelock, wrap pause, R148 unwrap op), `wrap_rate_vectors.json` | `test/v2/Tier*.t.sol`, `Rates.t.sol`, `UnwrapOp.t.sol` |
-| T3 | `MultiUnderlyingToken` (legs 2–8, guardian, adjustable-rate share cap) | `test/v2/Multi.t.sol` |
+| T3 | `MultiUnderlyingToken` (legs 2–8, guardian, all-leg wrap pause) | `test/v2/Multi.t.sol` |
 | T4 | `OpenFactory` v2, `IFactoryTokenV2`, `Deploy.s.sol` | `test/v2/FactoryV2.t.sol`, sizes ≤ 24 576 |
-| T5 | Hedera children + mixin | `test/hedera/*V2*.t.sol` |
+| T5 | Hedera children + mixin (fail-closed HTS checks, association at init) | `test/hedera/*V2*.t.sol` |
 | T6 | Invariant suite, layout pins, gas table v2 | `WrapperInvariant.t.sol`, `MetaTxGas` v2 vs v1 budget |
-| T7 | Node (`kind`, `payLane`, new events, batching rule §7.5, unwrap jobs §7.6), Odoo fields, SDK typed ABIs | node `cargo test` for the token table and normaliser; Odoo unit tests |
+| T7 | Node (`kind`, `payLane`, new events, batching rule §7.5, unwrap jobs and the narrowed grief exemption §7.6, `entryRef` dedupe), Odoo fields, SDK typed ABIs | node `cargo test` for the token table and normaliser; Odoo unit tests |
 | T8 | Docs: SCaaS §4/§5/§14 statuses to BUILT, `integration.md` | — |
 
 ---
@@ -834,7 +855,7 @@ three sub-agents, reviews by Claude sub-agents.
 | 416 | The contract must be a wrapper of an ERC-20 | **BUILT** (1:1) | `MetaToken` v1 tier 2; v2 `SingleUnderlyingToken` (§5) | Gasless unwrap added (owner 2026-10-06, R148); gasless wrap PLANNED (R149) |
 | 641 | Disable approve/revoke for EOAs; only smart-contract accounts | **BUILT** | `ERC20MetaTx.approve`/`transferFrom` (SCaaS §4.4); inherited by v2 | R4 first rejected it; **R26** (owner) reinstated it as "spender must be a contract, only contracts call `transferFrom`", EIP-7702 designators count as EOAs; no `increaseAllowance`, no `permit` |
 | 850 | Factory to create many wrappers for many ERC-20s | **BUILT** | `OpenFactory` (EIP-1167 clones, catalogue, per-creator wrappers); v2 §9 | Open factory, no upgrades, versioned implementations (IOpenFactory header) |
-| 1116 | Wrappers with different conversion rates | **SPECIFIED** here | R133, R135, R147, §6 | Issuer chooses fixed or adjustable at creation, also per Multi leg with share cap and wrap pause (owner 2026-10-06) |
+| 1116 | Wrappers with different conversion rates | **SPECIFIED** here | R133, R135, R147, §6 | Issuer chooses fixed or adjustable at creation, also per Multi leg; admin-only execution, all-leg wrap pause, `minOut` (owner 2026-10-06, rev 1.2) |
 | 1408 | An `mtxTransfer` function | **SPECIFIED** here | R138, §7.1 | Thin entry point over the pinned struct, no own `Transfer` typehash |
 | 1726 | Add the wrapper contract address against replay | **BUILT** | domain `verifyingContract` = the clone (R5) | Domain field, not a struct field |
 | 2055 | A wrapper with several underlyings (xDAI or USDC or USDT) | **SPECIFIED** here | R136, §8 | Owner add/remove dropped: set fixed at creation; guardian may only disable wrap; leg rates optionally adjustable with R147 guards (owner 2026-10-06) |
@@ -845,5 +866,34 @@ three sub-agents, reviews by Claude sub-agents.
 | 4145 | `MultiUnderlying` is a child of the single wrapper | **SPECIFIED** here | R129 | — |
 | 4667 | `mtxTransferWithFee` in the parent; add `executeMetaTransactionWithFee` | **SPECIFIED** here | R138 (`MetaTokenBase`, all tiers) | Fee to relayer (default) or third party (bound) |
 | 5296 | Fee in `executeMetaTransactionWithFee` based on the sender's amount | **BUILT** | `FeePolicy.compute(…, m.value, …)`, fee on top | No `data` decoding needed: the amount is `m.value` |
-| — | (owner answers 2026-10-06) Adjustable Multi rates with guards; gasless unwrap via a meta-tx op and `mtxUnwrap`/`mtxUnwrapWithFee`; wrap via permit optional | **SPECIFIED** here (unwrap, guards); **PLANNED** (permit wrap) | R147, R148, R149; §5.3, §7.6, §7.7, §8.5 | — |
+| — | (owner answers 2026-10-06, rev 1.1/1.2) Adjustable Multi rates with admin-only execution, all-leg wrap pause and `minOut`; gasless unwrap via a meta-tx op and `mtxUnwrap`/`mtxUnwrapWithFee`; wrap via permit optional | **SPECIFIED** here (unwrap, guards); **PLANNED** (permit wrap) | R147, R148, R149; §5.3, §7.6, §7.7, §8.5 | — |
 | 5867 | Three types parent/child (none, single, multi); factory creates all three; an inheriting class with `mtxPay` and a sender-supplied `payId` | **SPECIFIED** here | R129, R130, R139 | `payId` = `entryRef` (R9), lane derived on chain; event is `PaymentSettled`, not `Payment`; no second typehash (R140); tier 1 gains `burn` (R141) |
+
+---
+
+## 17. Review disposition (independent review 1 of rev 1.1, FIX-THEN-GO)
+
+| # | Finding | Disposition | Where |
+|---|---|---|---|
+| H1 | Per-leg Multi rate changes are MEV-extractable in both directions; leg-only pause and permissionless execute allow a flash bundle | **Accepted, owner variant**: per-leg adjustable rates kept (not a global scale); only the `rateAdmin` executes; any pending change pauses wrap on **all** legs; `minOut` on unwrap; the value shift that remains is stated plainly | R135, R147, §6.2, §6.3 items 5, 7, §8.5 |
+| H2 | Share cap can be flash-bypassed or tripped | **Accepted**: share cap deleted (`maxLegShareBps`, `legShareBps`, `LegShareExceeded`, the RateConfig field) | R147, §5.1, §10 |
+| M1 | `executeRate` counts phantom reserve | **Accepted**: every leg must have `balanceOf ≥ reserve` at execution (`ReserveShortfall`) | §6.2, §10.4 |
+| M2 | "Pays at most once, enforced by the contract" is false | **Accepted**: reworded to "once through `mtxPay`"; reconcilers dedupe on `entryRef`; test documents `payWithFee` | R139, §7.3, §10.4 |
+| M3 | Grief exemption ignores signer-controlled recipient | **Accepted**: exemption only for recipient-independent reverts (reproduced with the lane address as recipient) | §7.6 |
+| M4 | Unwrap without `minOut` | **Accepted** (owner): op `unwrap(address,address,uint256)`, `mtxUnwrap*` and direct overloads take `minOut`; v1 two-argument `unwrap` = `minOut 0` | R148, §5.2, §5.3, §7.1, §8.2 |
+| M5 | HTS fee detection must fail closed | **Accepted**: `isToken` / `getTokenCustomFees` non-SUCCESS ⇒ refuse; fee-schedule key warned off chain, not refused | R144, §11 |
+| M6 | Invariant suite blind to H1/H2/M1 | **Accepted**: slack-never-decreases, per-leg conservation, profit oracle, `warpToEta`, per-rate setups, digest fuzz, cross-leg fuzz, M1 shock case, recipient = self, ERC-777 hook | §10.4 |
+| L1 | `collateralValue` overflow DoS | **Accepted**: early exit in `executeRate`, saturating view | §5.4, §6.2 |
+| L2 | Wrap dust up to one wrapped unit | **Accepted**: `previewWrap` returns `used`; UI rounds; bound stated | R133, §6.4 |
+| L3 | Gas claims | **Accepted**: legs as mapping, `adjustable` in leg slot a, one `balanceOf` before the pull, no cold-token saving in batches, 110–130 k for USDC unwrap | §5.2, §10.1, §10.3 |
+| L4 | v2 KAT cannot reuse the v1 struct for `mtxPay` | **Accepted**: `mtxpay` and `mtxunwrap` vectors | §10.4 |
+| L5 | `fee` not canonicalised under NONE | **Accepted**: clients MUST sign `fee = 0`; test | §7.1, §10.4 |
+| L6 | Dirty address bits in `mload` decoding | **Accepted**: `MetaTxUnknownOp` | §3.1, §10.4 |
+| L7 | Recipient = self; nonce after external call | **Accepted**: refused at step 6; nonce written at step 7 for every op | R148, §3.1, §3.2, §5.3 |
+| L8 | Pending-state semantics, dead re-check, item-5 contradiction | **Accepted**: expiry defined everywhere; step re-check removed; item 5 rewritten (admin-only execute) | §6.2, §6.3 |
+| L9 | Factory checks | **Accepted**: `factory()` check at registration, kind ⇔ entry point, v1 `OpenFactory.sol` frozen, v2 in a new file | §9 |
+| L10 | Admin "contract" ≠ multisig; worst case at bounds | **Accepted** | R135, §6.3 items 2, 4 |
+| L11 | `associateUnderlying` restriction | **Superseded** by over-engineering 5: association happens in `initialize`, fail-closed; the function is deleted | §11 |
+| L12 | One compromised leg drains every leg | **Accepted**: disclosure reworded; guardian submits privately | §8.4 |
+| L13 | `getWrapper` may return a Multi; two events per create | **Accepted**: clients read `versionOf().kind`; only `TieredTokenDeployed` | §9 |
+| OE1–5 | Delete: share cap; per-leg `_pending`; step re-check at execution; R132 on unwrap; `associateUnderlying` | **All done**: one `PendingRate` per token (leg index inside); unwrap has no payee check; association at init | §3.2, §6.2, §10.1, §11 |

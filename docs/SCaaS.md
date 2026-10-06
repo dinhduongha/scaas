@@ -379,14 +379,18 @@ the same envelope (owner decision, canon). Non-EVM families implement the same r
 
 **Conversion rates (v2, R133/R135).** `(num, den)` per underlying, `uint96`, wrapped raw units per underlying raw
 unit; every output rounds in the contract's favour; zero outputs revert. The issuer chooses at creation: **fixed**
-(default, no setter) or **adjustable** by a `rateAdmin` contract through a timelock (default 7 days, [2, 30] days),
-≤ `maxRateStepBps` per step (default 1 %, ≤ 10 %), executable by anyone within a 7-day grace; a change that lowers
-collateral executes only if the invariant still holds; balances never rebase; the admin can renounce, not transfer;
-wrap into a leg with a pending change is paused (unwrap stays open). Multi-underlying legs may be adjustable too
-(default off, R147): a raise of one leg's rate also needs that leg's redeemable share `≤ maxLegShareBps` after the
-change, because an overvalued leg drains the others ({TW} §8.5 residual risk). **Gasless unwrap** (R148): meta-tx op
-`unwrap(address underlying, address recipient)` (`value` = wrapped units, fee in wrapped units before the burn; burn
-and reserve debit before the underlying transfer, exact-amount check) and `mtxUnwrap`/`mtxUnwrapWithFee`; gasless wrap
+(default, no setter) or **adjustable** by a `rateAdmin` (has code; should be a multisig/timelock) through a timelock
+(default 7 days, [2, 30] days), ≤ `maxRateStepBps` per step (default 1 %, ≤ 10 %), **executed only by the
+`rateAdmin`** within a 7-day window; one pending change per token, and while it is pending **wrap is paused on every
+leg** (unwrap stays open, with `minOut`); execution requires real balances `≥` reserves on every leg and the
+invariant afterwards; balances never rebase; the admin can renounce, not transfer. Multi-underlying legs may be
+adjustable too (default off, R147). Residual risk, stated plainly: a per-leg change still shifts value between
+holders who exit through different legs (an off-market leg is an arbitrage from the next transaction on); the
+guards remove the front-run and the third-party same-transaction drain, not that shift. Fixed rates, or a
+multisig/timelocked `rateAdmin` that only re-pegs toward market, are recommended ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §8.5). **Gasless unwrap**
+(R148): meta-tx op `unwrap(address underlying, address recipient, uint256 minOut)` (`value` = wrapped units, fee in
+wrapped units before the burn; burn and reserve debit before the underlying transfer, exact-amount check) and
+`mtxUnwrap`/`mtxUnwrapWithFee`; gasless wrap
 via EIP-2612/Permit2 is PLANNED (R149). Decimals are display only (issuer's choice; human rate = `num/den × 10^(D − d_i)`). A multi-underlying token
 concentrates on its weakest underlying during a depeg (good legs drain first); `disableWrap` stops inflow, not exits
 ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §8.4).
@@ -630,7 +634,7 @@ Op table of `MetaToken` (`_checkOp` at step 6 must not fail later at step 8):
 | `pay(bytes32 entryRef)` | 36 | `to ≠ 0` (`PayToZero`) | transfer + `PaymentSettled` with the real fee |
 | `trade(address counterToken, uint256 minCounterValue, address counterparty)` | 100 | `MODE_RESTRICT_RELAYER` set **and** `to == msg.sender` (`TradeLegNotRestricted`) | transfer `from → msg.sender` (the settlement contract) |
 | `approve(address spender, uint256 amount)` | 68 | `value == 0`, `to == spender`, spender is a contract | set allowance |
-| `unwrap(address underlying, address recipient)` (v2 wrapper tiers, SPECIFIED, R148) | 68 | leg known, `to == recipient ≠ 0`, `0 < out ≤ reserve`, fee recipient ≠ recipient | burn `⌈out·q⌉`, debit reserve, then transfer `out` of the underlying (exact amount); only this transfer may revert after step 7, and it reverts the whole tx |
+| `unwrap(address underlying, address recipient, uint256 minOut)` (v2 wrapper tiers, SPECIFIED, R148) | 100 | leg known, `to == recipient ∉ {0, token}`, `minOut ≤ out ≤ reserve`, `out > 0` | burn `⌈out·q⌉`, debit reserve, then transfer `out` of the underlying (exact amount); only this transfer may revert after step 7, and it reverts the whole tx |
 | other | — | `MetaTxUnknownOp(bytes4)`; `< 4` bytes ⇒ `MetaTxUnknownOp(0)` | — |
 
 ### 5.5 2D nonces and batch lanes (BUILT)
@@ -712,7 +716,7 @@ partial-success bitmap) is withdrawn.
 | `mtxTransferWithFee(…, mode, relayer, fee, feeRecipient, sig)` | `data = ""` | fee `PERCENT`/`FIXED`, `MODE_RESTRICT_FEE_RECIPIENT` set, `feeRecipient ≠ 0` |
 | `executeMetaTransactionWithFee(m, sig)` | `m` (any op) | fee mode ≠ `NONE` (recipient bound or relayer-default) |
 | `mtxPay(from, to, amount, payId, validUntil, mode, relayer, fee, feeRecipient, sig)` | `data = pay(payId)`, `batch = payLane(payId)`, `nonce = 0` | any valid mode |
-| `mtxUnwrap(from, underlying, wrapped, recipient, batch, nonce, validUntil, mode, relayer, sig)` / `mtxUnwrapWithFee(…, fee, feeRecipient, sig)` | `to = recipient`, `value = wrapped`, `data = unwrap(underlying, recipient)` | as `mtxTransfer` / `mtxTransferWithFee` |
+| `mtxUnwrap(from, underlying, wrapped, recipient, minOut, batch, nonce, validUntil, mode, relayer, sig)` / `mtxUnwrapWithFee(…, fee, feeRecipient, sig)` | `to = recipient`, `value = wrapped`, `data = unwrap(underlying, recipient, minOut)` | as `mtxTransfer` / `mtxTransferWithFee` |
 | `mtxBatch(MetaTransaction[] ms, bytes[] sigs)` | each item | per item; atomic (one failure reverts all); the node never batches unwrap items |
 
 `payId` is the R9 `entryRef`; `payLane(p) = uint256(keccak256("scaas.pay.lane" ‖ p))`, the lane clients already
@@ -1841,7 +1845,7 @@ function createTieredUnregistered(TokenKind kind, address implementation, addres
 event TieredTokenDeployed(address indexed token, address indexed creator, TokenKind kind, uint64 version,
                           address implementation, address[] underlyings);
 error UnderlyingCountInvalid(uint256 n);          // META_NONE 0, META_SINGLE 1, META_MULTI 2..8
-// registerImplementation checks impl.tokenKind() for the new kinds (VersionKindMismatch)
+// registerImplementation checks impl.tokenKind() (VersionKindMismatch) and impl.factory() == this for the new kinds
 interface IFactoryTokenV2 {
     function tokenKind() external pure returns (TokenKind);
     function initialize(address creator, address[] calldata underlyings, uint64 version, bytes calldata initData) external;
@@ -1904,31 +1908,34 @@ function mtxPay(address from, address to, uint256 amount, bytes32 payId, uint256
                 address relayer, uint256 fee, address feeRecipient, bytes calldata signature) external returns (bool);
 function mtxBatch(MetaTxLib.MetaTransaction[] calldata ms, bytes[] calldata signatures) external returns (bool);
 function payLane(bytes32 payId) external view returns (uint256);
-function mtxUnwrap(address from, address underlying, uint256 wrapped, address recipient, uint256 batch, uint256 nonce,
-                   uint256 validUntil, uint32 mode, address relayer, bytes calldata signature) external returns (bool);
-function mtxUnwrapWithFee(address from, address underlying, uint256 wrapped, address recipient, uint256 batch,
-                          uint256 nonce, uint256 validUntil, uint32 mode, address relayer, uint256 fee,
+function mtxUnwrap(address from, address underlying, uint256 wrapped, address recipient, uint256 minOut, uint256 batch,
+                   uint256 nonce, uint256 validUntil, uint32 mode, address relayer, bytes calldata signature)
+    external returns (bool);
+function mtxUnwrapWithFee(address from, address underlying, uint256 wrapped, address recipient, uint256 minOut,
+                          uint256 batch, uint256 nonce, uint256 validUntil, uint32 mode, address relayer, uint256 fee,
                           address feeRecipient, bytes calldata signature) external returns (bool);
-// op OP_UNWRAP = bytes4(keccak256("unwrap(address,address)")) on wrapper tiers; MetaTxUnknownOp on NoUnderlyingToken
+// op OP_UNWRAP = bytes4(keccak256("unwrap(address,address,uint256)")) on wrapper tiers; MetaTxUnknownOp on NoUnderlyingToken
 // NoUnderlyingToken
 function mint(address to, uint256 amount) external;  function burn(uint256 amount) external;  function renounceMinter() external;
 // SingleUnderlyingToken (MultiUnderlyingToken overrides the single-asset ABI to revert UnderlyingRequired)
 function wrap(uint256 amount) external returns (uint256 minted);
-function unwrap(uint256 wrapped, address recipient) external returns (uint256 out);
+function unwrap(uint256 wrapped, address recipient) external returns (uint256 out);                   // minOut = 0 (v1 ABI)
+function unwrap(uint256 wrapped, address recipient, uint256 minOut) external returns (uint256 out);
 function addReserve(address underlying, uint256 amount) external;
-function proposeRate(address underlying, uint96 num, uint96 den) external;   // rateAdmin; RateFixed if fixed
-function cancelRate(address underlying) external;                            // rateAdmin
-function executeRate(address underlying) external;                           // anyone, eta ≤ now ≤ eta + 7 days
+function proposeRate(address underlying, uint96 num, uint96 den) external;   // rateAdmin; one pending per token; RateFixed if fixed
+function cancelRate() external;                                              // rateAdmin
+function executeRate() external;                                             // rateAdmin only, eta ≤ now ≤ eta + 7 days
 function renounceRateAdmin() external;
 function underlyings() external view returns (address[] memory);
 function legOf(address u) external view returns (uint96 num, uint96 den, uint256 reserve, uint8 decimals, bool wrapEnabled);
 function collateralValue() external view returns (uint256);                  // Σ⌊reserve_i·num_i/den_i⌋ ≥ totalSupply
 // MultiUnderlyingToken
 function wrap(address underlying, uint256 amount) external returns (uint256 minted);
-function unwrap(address underlying, uint256 wrapped, address recipient) external returns (uint256 out, uint256 burned);
+function unwrap(address underlying, uint256 wrapped, address recipient, uint256 minOut)
+    external returns (uint256 out, uint256 burned);
 function disableWrap(address underlying, bytes32 reason) external;           // guardian, one-way
 function renounceGuardian() external;
-// errors: WrapPausedForRateChange(address), LegShareExceeded(uint256 shareBps, uint256 cap)
+// errors: WrapPausedForRateChange(address), UnwrapBelowMin(uint256 out, uint256 minOut), UnwrapRecipientInvalid(address)
 ```
 
 Events `Wrapped`, `Unwrapped`, `ReserveAdded`, `RateChangeProposed`, `RateChangeCancelled`, `RateChanged`,
@@ -2176,7 +2183,7 @@ Order of streams per `TODO.md` and NI §17 / A2 §17 (one heavy stream at a time
 | 22 | Queued | TON payer tx hash on `mined`; backup-key toggle, device-bound vault, Sui `fam_sui.verify`, Soroban/Aptos/Solana signers in clientkeys; Zether portal balance cache | — | **PLANNED** |
 | 23 | Product features | receiver-pays, sponsorship policy, KeyPool auto-refill, outbound treasury payouts, anchoring (Merkle/HCS), crypto-shredding tooling, W3B SLOs/OTel/FinOps, controlled tokens, tender, vesting, managed DEX, asset suite wizard, Celo `l1_batch`, Hedera HCS/scheduled tx | — | **PLANNED** |
 | 24 | Post-quantum Zether | BFV/BGV confidential balances on private/PoA chains | mesh round 4 | **PLANNED** |
-| 25 | TW2 T1–T8 | Token wrappers v2: `MetaTxCore` + named functions, three tiers, rates, multi-underlying (adjustable legs with share cap), gasless unwrap op, factory v2, Hedera children, invariant suite, node/Odoo fields ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §15) | owner review of TW2 | **SPECIFIED** |
+| 25 | TW2 T1–T8 | Token wrappers v2: `MetaTxCore` + named functions, three tiers, rates, multi-underlying (adjustable legs, admin-only execute, all-leg wrap pause), gasless unwrap op with `minOut`, factory v2, Hedera children, invariant suite, node/Odoo fields ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §15) | owner review of TW2 | **SPECIFIED** |
 | — | Owner/operator steps | O1 audit of every contract family; O2 registrar multisig; O3 real deployments; O4 7-day finality evidence + ≥ 2 RPCs; O5 reverse-proxy rate limits; O6/O7 KMS/HSM custody and lane signers; O8 lane funding; O9 land-gate decision; O10 subject-account onboarding; Z1–Z6 Zether gates | — | open |
 
 ### 15.2 Open questions for the owner
