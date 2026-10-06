@@ -2,6 +2,12 @@
 
 Below is the verified, specification-level answer for all five ecosystems based on official specifications, improvement proposals, and core node implementations:
 
+> **Rev 1.1 (2026-10-07) — Claude review 1 folded** (section "Claude review 1" at the end: rulings CR-WSF-1…2,
+> streams WSF-FIX1…2, signing-domain table, passkey grammar pointer, superseded statements). This note is research
+> (precedence 5, SCaaS §0.1). "Five ecosystems" is stale: there are eight families (owner 2026-10-06); Aptos
+> (`aptos:signMessage`, AIP-62) and Solana (raw/OCMS + precompile introspection) are built
+> (`move/aptos/sources/auth.move`, `solana/programs/scaas/src/auth.rs`) and summarised at the end.
+
 ---
 
 ### 1. Hedera HIP-632: `IHederaAccountService` Precompile (`0x16a`)
@@ -43,6 +49,8 @@ function isAuthorized(
     }
     ```
 * **Gas Cost:** Hardcoded to **3,000 gas** (`HederaGasCalculatorImpl.getEdSignatureVerificationSystemContractGasCost()` delegates to Besu's `getEcrecPrecompiledContractGasCost()`).
+  *(Claude review L1: a **rejected** call charges the frame's remaining gas, so the code caps the CALL at 100 000
+  gas — `hedera/HederaAccountAuth.sol:18-21`. Budget 100 k, not 3 k.)*
 
 #### ECDSA (secp256k1) Keys
 * **Signature format:** **65 bytes** (`[r (32), s (32), v (1)]`). Recovery ID `v` is stripped internally before verification against the account's registered key.
@@ -117,6 +125,10 @@ Verified in `wallets-v2.json`:
 * **Tonhub** (`tonhub`): supports `['text', 'binary', 'cell']`.
 
 #### Smart Contract Verification (FunC)
+
+*(Superseded: the implementation is Tact, `CHKSIGNU` over the same cell (`ton/contracts/common.tact:252-272`); passkey
+via `P256_CHKSIGNS`. The `domain` and `timestamp` this layout signs must also be **checked** on chain — Claude
+review M1 → R3D CR-R3-7.)*
 ```func
 () verify_cell_sign_data(cell payload_cell, int schema_crc, int timestamp, slice user_addr, cell domain_cell, slice signature, int public_key) impure {
     cell signed_cell = begin_cell()
@@ -226,6 +238,10 @@ All JSON keys at all depths must be strictly sorted alphabetically without white
   ```
 
 #### CosmWasm Verification
+
+*(Claude review L4: the snippet does not normalise `s`; the built passkey path calls `secp256r1_verify` without a
+low-s check (`cosmos/metaop/src/lib.rs:147`). Malleability only (digest identity does not depend on the signature);
+fixed with the passkey v2 rework, R3D CR-R3-1.)*
 ```rust
 use cosmwasm_std::{Deps, StdResult, VerificationError};
 use sha2::{Digest, Sha256};
@@ -294,3 +310,119 @@ Where `HashIdPreimage` contains `HashIdPreimageSorobanAuthorization`:
      * Returns `None` if the address does not exist on-chain.
   2. **`Address::to_string(&self) -> String`**:
      Returns the StrKey string format (`C...` for contract addresses, `G...` for account addresses).
+
+---
+
+## Claude review 1 (2026-10-07) — disposition (rev 1.1)
+
+Source: `docs/reviews/specs/round3-wallet-signing-formats-claude-review-1.md` (verdict FIX-THEN-GO). Findings
+re-checked against the code on 2026-10-07 (`scaas` 991d835). Owner rule: docs only — code bugs become rulings
+(fix + tests) and streams. Ruling ids `CR-WSF-n` are local to this note; several findings are ruled in the round-3
+design (R3D §H) because the note is research and the rule belongs to the design.
+
+### Disposition
+
+| # | Sev | Verified against code | Disposition |
+|---|---|---|---|
+| Conformance (HIP-632, TON cell, Sui intent, ADR-036, Soroban) | — | Confirmed as listed in the review (`HederaAccountAuth.sol:15-37`, `common.tact:252-262`, `move/sui/sources/auth.move:52-75`, `cosmos/metaop/src/lib.rs:74-81`). | No action |
+| H1 | high | Confirmed: Solana signs `"scaas.metaop.v1:" ‖ hex(sha256(MetaOp))` raw or as OCMS (`solana/programs/scaas/src/auth.rs:90-112,208-216`); Sui signs BCS through `signPersonalMessage` (`move/sui/sources/meta.move:322`); neither binds an application. Aptos binds `application ∈ origins` (`move/aptos/sources/auth.move:111-139`) because AIP-62 wallets write that line; Solana `signMessage` and Sui `signPersonalMessage` wallets attest no origin in the signed bytes. | **Accepted** → CR-WSF-1; WSF-FIX1, WSF-FIX2 |
+| M1 | med | Confirmed (`common.tact:264-272`, `jetton.tact:202-206`). | **Accepted** → R3D CR-R3-7 (stream R3-FIX11) |
+| M2 | med | Confirmed: verifiers diverge (Cosmos: no rpIdHash/origin/UV; Sui/Soroban/TON/Solana ignore `crossOrigin`). | **Accepted** → R3D CR-R3-1 (one grammar + `webauthn_kat.json`; R3-FIX1, R3-FIX2); passkey pointer below |
+| M3 | med | Confirmed: only raw ED25519 over the EIP-712 digest is accepted (`HederaMetaToken.sol:26-32`, `HederaV2Lib.sol:13-17`); HIP-820 `hedera_signMessage` prefixes the message, which `isAuthorizedRaw` (32-byte message only) cannot verify. | **Accepted** → CR-WSF-2 (wallet requirement stated; R63 "natively" corrected in R3D §D.1) |
+| M4 | med | Confirmed: the network comes from the runtime everywhere except Solana (`solana/programs/scaas/src/account.rs:28-34`). | **Accepted** → table below; Solana fix R3D CR-R3-4 (R3-FIX6) |
+| L1 | low | Confirmed (`HederaAccountAuth.sol:18-21`). | **Accepted**: inline note §1 |
+| L2 | low | `hedera-local-node` deprecated (Sept 2024) for `solo`; R3D §D.1 planned e2e on it. | **Accepted**: R3D §D.1 note |
+| L3 | low | Confirmed: Aptos/Solana built; clientkeys signs only EVM/seed digests today (`clientkeys/src/seed.js:146-151`; non-EVM signers SPECIFIED in S4F). | **Accepted**: summary below |
+| L4 | low | Confirmed (`cosmos/metaop/src/lib.rs:147`). | **Accepted** → R3D CR-R3-1 (low-s on Cosmos); inline note |
+| Stale table (2 rows) | — | Confirmed. | **Accepted**: table below |
+
+Rejected: none. Counts: 1 high, 4 medium, 4 low, 1 table — 10 accepted, 0 rejected.
+
+### Rulings
+
+- **CR-WSF-1** **Solana and Sui wallet-key signatures: no blind blobs; origin binding through the passkey path or an
+  opt-in account policy** (H1). On-chain *application* binding of a wallet's `signMessage`/`signPersonalMessage` is
+  **not possible** on Solana and Sui: unlike AIP-62 (`application:` line written by the wallet) and WebAuthn
+  (`origin` written by the browser), these wallets put no requesting origin into the signed bytes, so any line a
+  contract checks could be written by the phishing page itself. The rule is therefore:
+  (1) **Readable payload, rebuilt on chain.** The signed bytes are UTF-8 text that the contract re-renders from the
+  `MetaOp` and compares byte for byte: `SCaaS <op>` / `Amount: <decimal> <symbol>` / `To: <address>` /
+  `Network: <id>` / `Valid until: <unix>` / `Ref: <hex>` / `Digest: <hex>` (Solana as OCMS v1 restricted UTF-8,
+  `\xffsolana offchain` envelope; Sui as a UTF-8 personal message, not BCS). Decimals and symbol come from the
+  token/config object on chain. A wallet then shows what is paid, so the wallet path is as safe as signing a wallet
+  transaction on that page.
+  (2) **Origin-bound path by default.** Portal/app flows on Solana and Sui offer the passkey key first (origin and
+  rpIdHash checked on chain, R3D CR-R3-1).
+  (3) **Opt-in on-chain binding.** An account policy bit `POLICY_PASSKEY_FOR_VALUE` (Solana `SubjectAccount.policy`,
+  `account.rs:254`; Sui `Keys.policy`, R3D CR-R3-5), set by a KeyOp, makes value ops (`pay`, `trade`, mandate
+  setup) require a passkey signature; wallet keys then authorise key operations only.
+  Residual risk (SCaaS §7.5/§7.7 amendment): a user who approves a readable "pay X to Y" message on a phishing
+  page has authorised it, as with any wallet transaction. — Tests: Solana LiteSVM / Sui Move tests — the readable
+  text verifies, a hex-only text is refused, a text whose amount/to differs from the `MetaOp` is refused; with the
+  policy bit a wallet-key `pay` is refused and a passkey `pay` passes.
+- **CR-WSF-2** **Hedera ED25519 subjects need a raw signer** (M3). The contracts accept raw ED25519 over the 32-byte
+  EIP-712 digest only; HashPack/WalletConnect `hedera_signMessage` (HIP-820 prefix) cannot be verified by
+  `isAuthorizedRaw`, so those wallets cannot sign SCaaS meta-transactions for ED25519 accounts. Supported signers:
+  clientkeys seed (`m/44'/3030'/0'/0'/i'`) raw signing, or an ECDSA-alias account. HIP-632 `isAuthorized` with a
+  HIP-820 message is a follow-up investigation, not a stream. A `MandateWallet` owned by an ED25519 account pays
+  through `executeAsOwnerRaw` (addendum CR-ADW-2). Doc only.
+
+### Signing-domain inputs per family (review M4)
+
+| Family | Network in the signed payload comes from | Contract/app binding |
+|---|---|---|
+| EVM (incl. Hedera) | `block.chainid` (runtime) + `verifyingContract`; UA R330 adds `chain_uid` | EIP-712 domain |
+| Aptos | `chain_id::get()` (runtime) | AIP-62 `application ∈ origins` |
+| Sui | per-network object ids (`Config`, `Account`) | none (CR-WSF-1) |
+| Soroban | `network_id` (host preimage) | host auth preimage (contract + function + args) |
+| Cosmos | `env.block.chain_id` (runtime), `env.contract.address` | ADR-036 doc (`chain_id: ""`, domain in payload) |
+| TON | config 19 global id, master/wallet addresses | signData `domain` — checked on chain after CR-R3-7 |
+| Solana | **today an admin `initialize(network)` argument** → build-time genesis hash (R3D CR-R3-4) | none (CR-WSF-1) |
+
+**Operator invariant until R3-FIX6 lands:** never reuse a Solana program id across clusters; the node's RS12-8
+check (RPC genesis == configured network == `Config.network`) must stay on.
+
+### Passkey format (review M2)
+
+The note documents wallet formats only. The passkey (WebAuthn) format and its single `clientDataJSON` grammar for
+every family are normative in R3D §C and **CR-R3-1**, with the shared vectors `smartcontracts/test/vectors/webauthn_kat.json`.
+
+### Aptos and Solana (review L3)
+
+- **Aptos** `aptos:signMessage` (AIP-62): `APTOS\n` + `address`, `application`, `chainId`, `message`, `nonce`
+  lines; the verifier is order-independent, requires `message` = the op text, `chainId` = runtime chain id, and
+  `application ∈ origins` when the account has origins (`move/aptos/sources/auth.move:111-139`).
+- **Solana**: `KIND_RAW` (text `"<label>:" ‖ hex(digest)`) or `KIND_OCMS` (`\xffsolana offchain` ‖ v1 ‖ 1 signer ‖
+  pk ‖ text), verified by introspecting the Ed25519/secp256r1 precompile instruction (`auth.rs:90-112,197-216`).
+  Text becomes readable under CR-WSF-1.
+
+### Superseded / stale statements
+
+| Note says | Current |
+|---|---|
+| Five ecosystems | eight families incl. Aptos and Solana (owner 2026-10-06) |
+| TON FunC verification snippet | Tact implementation, `CHKSIGNU` over the same cell (`common.tact:265-272`); passkey via `P256_CHKSIGNS` |
+| HIP-632 costs 3 000 gas | 100 000 gas cap per call (`HederaAccountAuth.sol:18-21`) |
+| `hedera-local-node` as the local tool | `solo` |
+
+### Amendments needed in other specs (recorded; owner syncs)
+
+| Spec | Amendment |
+|---|---|
+| SCaaS.md | §7.5 (Sui) and §7.7 (Solana): readable on-chain-rebuilt message, passkey-first, `POLICY_PASSKEY_FOR_VALUE`, residual risk (CR-WSF-1); §7.2 Hedera: ED25519 needs a raw signer (CR-WSF-2). |
+| net-solana, net-sui | CR-WSF-1 message format and policy bit. |
+| S4F | clientkeys non-EVM signers render the CR-WSF-1 text. |
+
+### Code streams (new; for TODO)
+
+| Stream | Scope | Ruling |
+|---|---|---|
+| **WSF-FIX1** | Solana program: readable OCMS text rebuilt from `MetaOp`, `POLICY_PASSKEY_FOR_VALUE`; clientkeys/app render the same text; tests | CR-WSF-1 |
+| **WSF-FIX2** | Sui: readable UTF-8 personal message rebuilt from `MetaOp`, `Keys.policy` bit (after R3-FIX7); tests | CR-WSF-1 |
+
+### Revision history
+
+| Rev | Date | Change |
+|---|---|---|
+| 1.0 | 2026-10-03 | agy research note (five ecosystems) |
+| 1.1 | 2026-10-07 | Claude review 1 folded: 10 findings accepted, 0 rejected; rulings CR-WSF-1…2; streams WSF-FIX1…2; signing-domain table; stale statements marked |

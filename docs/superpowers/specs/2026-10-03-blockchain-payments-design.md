@@ -1,6 +1,8 @@
 # Thanh toán on-chain bằng meta-transaction — Thiết kế
 
-**Ngày:** 2026-10-03 · **Trạng thái:** đã duyệt nội bộ, chờ review ngoài
+**Ngày:** 2026-10-03 · **Trạng thái:** đã duyệt nội bộ, chờ review ngoài · **Rev 1.1 (2026-10-07):** Claude
+review 1 folded (§15: rulings CR-PD-1…6, streams PAY-FIX1…7, superseded-rulings table §15.3); the private chain is
+7622 (formerly 9000).
 **Nguồn:** `ai-enterprise-blockchain-architecture.md` v3.3, `ai-enterprise-blockchain-integration.md` v2.5,
 `smartcontracts/**`, `docs/superpowers/specs/blockchain-research/00-CANON.md`, `_USER-DECISIONS.md`.
 
@@ -49,7 +51,7 @@ y nguyên khi ba addon vắng mặt.
                                                       +------------------┬-------------------+
                                                                          │ JSON-RPC (≥1 endpoint/chain)
                                                       +------------------▼-------------------+
-                                                      | EVM: chain 9000 (Nethermind, Prague) |
+                                                      | EVM: chain 7622 (formerly 9000)      |
                                                       |  OpenFactory · MetaToken clones ·    |
                                                       |  MetaTxDex                           |
                                                       +--------------------------------------+
@@ -166,7 +168,8 @@ SRS §3.3 mô tả `settleTrade(makerTx, takerTx, makerSig, takerSig)` với rel
 `script/Deploy.s.sol` (forge script, đọc `PRIVATE_KEY`, `REGISTRAR`): deploy `OpenFactory`,
 `MetaToken` implementation (constructor nhận địa chỉ factory), `registerImplementation(META, 1)`,
 `MetaTxDex`; tuỳ chọn tạo một token demo tầng 1. In địa chỉ ra JSON để seed Odoo và config node.
-Chain 9000 dùng profile `private9000`; test tích hợp dùng `anvil --chain-id 9000 --hardfork prague`.
+Chain 7622 (formerly 9000) dùng profile `private9000` (tên profile và `--chain-id` của test đổi cùng stream
+migration của owner); test tích hợp dùng `anvil --chain-id 9000 --hardfork prague`.
 
 ---
 
@@ -191,9 +194,9 @@ indexer = true
 gateway = true            # bind 127.0.0.1:8545x — đặt sau reverse proxy
 
 [[chains]]
-evm_chain_number = 9000
-rpc_urls = ["http://nethermind:8545"]          # >= finality.quorum endpoint độc lập
-signer_key_env = "SCAAS_RELAYER_KEY_9000"     # authKey vỏ tx — xem §6
+evm_chain_number = 7622                        # formerly 9000 (CR-PD-6)
+rpc_urls = ["http://nethermind:8545"]          # >= finality.quorum endpoint độc lập; logs đọc từ đủ quorum (CR-PD-2)
+signer_key_env = "SCAAS_RELAYER_KEY_7622"     # authKey vỏ tx — xem §6
 finality = { mode = "depth", depth = 1, quorum = 1 }   # 'depth' | 'tag'
 dex = "0x…"                                     # MetaTxDex, tuỳ chọn
 poll_ms = 1000
@@ -238,6 +241,11 @@ loop mỗi poll_ms:
   `MetaTransactionExecuted(digest)` qua cổng finality. Nhờ vậy job cũng final đúng khi meta-tx đã
   được người khác thực thi (MODE_OPEN, tự-relay của bên nhận).
 - Hàng đợi riêng của gateway (§3.4) đi qua cùng task, cùng nonce, cùng simulation gate.
+- **CR-PD-5 (Claude review M3):** `relay_report(signed)` là idempotent cho cùng `(tx_hash, outer_nonce)`; báo cáo
+  lỗi (ví dụ timeout sau khi Odoo đã commit) ⇒ work giữ nguyên `(raw, hash, n)` đã ký và báo lại đúng giá trị đó
+  trước khi gửi; nonce `n` không được giao cho job khác trong lúc chờ.
+- **CR-PD-1 (Claude review H1):** job `call` chỉ được ký khi selector + đích khớp bảng của CR-PD-1 (§15.2), không
+  bao giờ khi đích là token đã đăng ký; ngược lại `dead` với `CALL_TARGET_REFUSED`, trước simulation.
 
 ### 3.3 Mô-đun `indexer` — finality gate
 
@@ -262,7 +270,13 @@ loop:
   đường nào biến một log chưa final thành `_set_done` (canon §C10.9: flow gắn
   `payment.transaction` dùng ngưỡng hard).
 - Seed từng chain: `finality_mode`/`finality_depth`/`finality_quorum` lấy từ `blockchain.chain`
-  (Odoo là nguồn), node config chỉ là mặc định khi Odoo chưa khai.
+  (Odoo là nguồn), node config chỉ là mặc định khi Odoo chưa khai. *(Superseded: NI R95/R96 — node store là
+  nguồn cấu hình, §15.3.)*
+- **CR-PD-2 (Claude review H2) — quorum trên event, không chỉ trên một block hash.** Pseudo-code trên chỉ so
+  `hash_to` và đọc `finalized` + mọi log từ endpoint chính: một RPC gian dựng được `PaymentSettled` giả (nó thấy
+  `entryRef` qua chính `eth_call` simulate của node). Từ rev 1.1: logs của mỗi vùng đọc từ ≥ `quorum` endpoint và
+  phải là **cùng một tập** đã chuẩn hoá; `finalized`/`latest` lấy **min** trên quorum; lệch ⇒ không ingest, cảnh
+  báo, `/readyz` đỏ. `quorum = 1` = tin một nhà cung cấp, node báo rõ (§15.2).
 
 ### 3.4 Mô-đun `gateway` — inbound công khai và DEX
 
@@ -281,6 +295,12 @@ nhận phí; người ký muốn chặn thì bật cờ ràng buộc.
 | `POST /v1/dex/orders` `{chain, leg}` | leg phải là `trade(...)` với `relayer == to == dex`, chưa hết hạn; simulate **từng chân** bằng `eth_call` với `from = dex` (token chỉ cho DEX thực thi, và `eth_call` cho phép đặt `from` tuỳ ý mà không cần chữ ký) — bắt chữ ký sai, thiếu số dư, nonce đã tiêu ngay ở cửa; đưa vào sổ, chạy matcher |
 | `GET /v1/dex/orders?chain&sell&buy` | đọc sổ |
 | `GET /healthz` | sống; `GET /readyz` — RPC và Odoo trả lời |
+
+**CR-PD-3 (Claude review M1):** Door A không phải vòi gas miễn phí — `value == 0` bị từ chối ở cửa, sàn
+`min_fee` của cửa `~gateway` (TSS R189) áp dụng (policy tài trợ miễn sàn và giới hạn ngân sách), profile `public`
+từ chối intent phí 0 không có policy tài trợ, giới hạn theo `from` (§15.2). **Claude review L5:** job của gateway
+không có journal Odoo (`submit.rs` chỉ journal khi có `job_id`) — chấp nhận theo R16; SCaaS N2 "BUILT" chỉ đúng cho
+job Odoo cho tới NI R105.
 
 Matcher: với lệnh mới L (bán `L.value` A, đòi ≥ `minB` B), quét lệnh nghỉ R của cặp ngược theo FIFO,
 điều kiện `R.value >= L.minB && L.value >= R.minA` và `counterparty` khớp; simulate
@@ -331,7 +351,7 @@ kiểu dữ liệu.
 `caip2` (compute stored `eip155:<n>`), `native_currency`, `state` (`draft`/`active`/`paused`),
 `finality_mode` (`depth`/`tag`), `finality_depth`, `finality_quorum` (≥1), `indexed_block`
 (Integer, chỉ indexer ghi), `public_rpc_url` (cho ví: `wallet_addEthereumChain`; không bao giờ là
-URL có khoá). Seed: 9000 (`draft`, depth 1, quorum 1), Gnosis 100 (`draft`, tag, quorum 2), Celo
+URL có khoá). Seed: 7622 (formerly 9000) (`draft`, depth 1, quorum 1), Gnosis 100 (`draft`, tag, quorum 2), Celo
 42220 (`draft`). Endpoint RPC **không** nằm trong Odoo (ruling R20): node giữ chúng, và node từ chối
 khởi động khi `rpc_urls < quorum`.
 
@@ -349,10 +369,16 @@ token neo 1:1 để quy đổi đơn hàng), `is_confidential` (luôn False ở 
 `UNIQUE(chain_id, digest_hash)`. Ghi sau khi `signed` bị chặn ở `write` trừ các cột trạng thái.
 
 **`blockchain.relay.job`** — outbox (canon §C10.8): `company_id`, `chain_id`, `metatx_id`,
-`origin_producer`, `origin_key`, `chain_state` (`queued`, `nonce_leased`, `broadcast`, `mined`,
-`final`, `reverted`, `dead`), `business_state` (`pending`/`success`/`failed`), `claimed_by`,
-`claimed_datetime`, `tx_hash`, `outer_nonce`, `attempt_count`, `last_error`.
+`origin_producer`, `origin_key`, `chain_state` (`queued`, `nonce_leased`, `signed`, `broadcast`, `mined`,
+`final`, `reverted`, `dead`, `consumed` — MESH R80; review L1), `business_state` (`pending`/`success`/`failed`),
+`claimed_by`, `claimed_datetime`, `tx_hash`, `outer_nonce`, `attempt_count`, `last_error`; từ addendum §D thêm
+`job_kind` (`metatx`/`call`/`signed_op`), `target_address`, `calldata_hex`, `call_valid_until_ts`,
+`payment_request_id`, `signed_op_id`, `prerequisite_job_id`, `subject_account_id`.
 `UNIQUE(company_id, origin_producer, origin_key)`. Không cột `state` trần (canon §C2.2).
+**Bất biến sau `create` (CR-PD-1):** `company_id`, `chain_id`, `job_kind`, `metatx_id`, `signed_op_id`,
+`target_address`, `calldata_hex`, `call_valid_until_ts`, `payment_request_id`, `subject_account_id`,
+`origin_producer`, `origin_key` — `write` raise với mọi env, kể cả `sudo`; `prerequisite_job_id` chỉ được đặt một
+lần từ rỗng khi job còn `queued` (`blockchain_subject_account.py:493`). Đổi lời gọi = job mới.
 
 **`blockchain.chain.event`**: `chain_id`, `company_id` (từ request khớp, có thể rỗng),
 `contract_address`, `event_name` (`MetaTransactionExecuted`/`PaymentSettled` — `TradeSettled` của DEX
@@ -383,11 +409,16 @@ làm kẹt cursor của indexer.
 |---|---|---|
 | (tạo) | `queued` | Odoo, cùng transaction với `payment.transaction → pending` |
 | `queued` | `nonce_leased` | `relay_claim` (CAS) |
-| `nonce_leased` | `queued` (node khởi động lại, chưa ký) / `signed` / `dead` | `relay_report` |
-| `signed` | `broadcast` / `queued` (gap-filled khi cold start) | `relay_report` |
-| `broadcast` | `mined` / `reverted` / `broadcast` (thay thế, tx_hash mới) / `queued` (gap-filled) | `relay_report` |
-| `queued`, `nonce_leased`, `broadcast`, `mined`, `reverted`, `dead` | `final` + `success` | `chain_event_ingest` khi `MetaTransactionExecuted(digest)` |
-| `queued`, `nonce_leased` | `dead` | cron hết hạn (`valid_until` + 10 phút, chưa final) |
+| `nonce_leased` | `queued` (node khởi động lại, chưa ký) / `signed` / `dead` / `consumed` | `relay_report` |
+| `signed` | `broadcast` / `mined` / `reverted` (receipt đến trước báo `broadcast`, I3) / `queued` (gap-filled khi cold start) / `dead` (P3) / `consumed` | `relay_report` |
+| `signed` | `signed` cùng `(tx_hash, outer_nonce, signer)` = no-op thành công; khác giá trị = lỗi (CR-PD-5) | `relay_report` |
+| `broadcast` | `mined` / `reverted` / `broadcast` (thay thế, tx_hash mới) / `queued` (gap-filled) / `dead` / `consumed` | `relay_report` |
+| `mined` | `reverted` | `relay_report` |
+| `consumed` | `mined`/`reverted`/`consumed` = no-op muộn | `relay_report` (`LATE_NOOP`) |
+| `queued`, `nonce_leased`, `signed`, `broadcast`, `mined`, `reverted`, `dead`, `consumed` | `final` + `success` | `chain_event_ingest` khi `MetaTransactionExecuted(digest)` |
+| `queued`, `nonce_leased`, `consumed` | `dead` | cron hết hạn (`valid_until` + 10 phút, chưa final) |
+
+Bảng khớp `TRANSITIONS`/`LATE_NOOP` trong `dms_blockchain/models/blockchain_relay_job.py:20-26` (Claude review L1).
 
 `final` là trạng thái hút: không gì rời khỏi nó. `reverted`/`dead` vẫn có thể thành `final` vì
 meta-tx có thể đã được thực thi bởi đường khác — indexer là sự thật. `business_state`: `dead` ⇒
@@ -435,7 +466,7 @@ khi provider `chain` đang bật; JS thuần (`web.assets_frontend`): `eth_reque
 | XML id | Được |
 |---|---|
 | `group_blockchain_viewer` | đọc chain, token, event, request, job của công ty mình |
-| `group_blockchain_operator` | + đọc metatx, đưa job `dead` về `queued` (`action_requeue`) |
+| `group_blockchain_operator` | + đọc metatx, đọc job (**không** ACL ghi trên `blockchain.relay.job`), đưa job `dead`/`reverted` về `queued` qua `action_requeue` (kiểm `has_group` tường minh rồi `sudo()` bên trong) — CR-PD-1 |
 | `group_blockchain_manager` | CRUD chain, endpoint, token; implied operator |
 | `group_blockchain_relay_worker` | service: `relay_poll/claim/report`, `node_config` |
 | `group_blockchain_indexer` | service: `chain_event_ingest`, `node_config` |
@@ -478,10 +509,14 @@ Ví (portal)        Odoo (bridge/payment/core)            scaas-node            
 
 Đảm bảo, theo thứ tự quan trọng:
 1. **Không ghi nhận trước finality**: `_set_done` chỉ từ `chain_event_ingest`, chỉ log trong vùng
-   final, chỉ khi tổng `PaymentSettled` khớp (token, người nhận, `entryRef`) ≥ số phải trả.
+   final, chỉ khi tổng `PaymentSettled` khớp (token, người nhận, `entryRef`) ≥ số phải trả. Log chỉ được tin khi
+   đủ `quorum` endpoint độc lập trả **cùng tập log** cho vùng đó (CR-PD-2); `quorum = 1` nghĩa là tin một nhà cung
+   cấp RPC, và Odoo luôn tin feed của node mình (SCaaS §3.5).
 2. **Trả tối đa một lần cho mỗi request**: mọi chữ ký của một request dùng chung lane
    `(from, batch)` nonce 0, nên chain chỉ thực thi được một. Đổi ví (`from` khác) là lane khác —
-   vì vậy `start` từ chối đổi `from` khi request đã có chữ ký chưa hết hạn.
+   vì vậy `start` từ chối đổi `from` khi request đã có chữ ký chưa hết hạn. **Có điều kiện (CR-PD-4):** trên họ
+   xoá lane đã dùng (TON, Aptos, Solana) đảm bảo chỉ đúng khi mọi chữ ký trên lane có
+   `validUntil ≤ lần phát đầu + H` (H = 30 ngày, `LANE_HORIZON_S`) — quy tắc giao thức, không chỉ hằng số Odoo.
 3. **Số tiền do server định**: `value` lấy từ tx (= đơn hàng); client không gửi số tiền nào.
 4. **Relayer không chạm tiền**: nó chỉ thực thi đúng thứ đã ký; `to`, `value`, `data` nằm trong
    digest; phí 0.
@@ -512,10 +547,12 @@ Rust đọc cùng file; đổi typehash là ba test đỏ.
   chuyển `from → to` đã ký; phí = 0 cho luồng portal. DEX không giữ số dư giữa các tx.
 - **Replay**: domain gồm `chainId` + `verifyingContract`; nonce 2D tiêu khi thực thi; `validUntil`
   (300 s); `cancelMetaNonce(batch)` cho người ký rút lại.
-- **Odoo không giữ khoá nào** (canon §C11.7) và không gọi chain.
+- **Odoo không giữ khoá nào** (canon §C11.7) và không gọi chain. *(Superseded một phần: addendum §D/R50 — khoá
+  custody `env:` chỉ-dev nằm trong tiến trình Odoo, §15.3.)*
 - **Fee mode**: portal = `NONE` + `MODE_RESTRICT_RELAYER` (công ty trả gas; chỉ relayer của công ty
   nộp được). Gateway mở chấp nhận mọi mode hợp lệ; node có thể từ chối phí dưới ngưỡng (mặc định
-  nhận phí 0 cho token trong danh sách — chính sách B2B `fee = 0`, SRS §5.2).
+  nhận phí 0 cho token trong danh sách — chính sách B2B `fee = 0`, SRS §5.2). **CR-PD-3:** phí 0 ở Door A chỉ
+  mặc định trên profile `private`; profile `public` cần policy tài trợ; `value == 0` luôn bị từ chối.
 
 ---
 
@@ -561,6 +598,9 @@ Rust đọc cùng file; đổi typehash là ba test đỏ.
 | T16 | Signature malleability | OZ `ECDSA.tryRecover` (low-s) on-chain; Python từ chối `s > n/2` |
 | T17 | Wrapper rút quá dự trữ | invariant `reserve >= totalSupply` (fuzz invariant) |
 | T18 | Rò dữ liệu cá nhân on-chain | on-chain chỉ có địa chỉ ví, số tiền, `entryRef` ngẫu nhiên — không tên, không mã đơn |
+| T19 | Một RPC gian dựng `PaymentSettled` giả (biết `entryRef` qua simulate của node) hoặc khai `finalized` sai | quorum trên **tập log** + min `finalized`/`latest` trên quorum (CR-PD-2) |
+| T20 | Operator (hoặc phiên bị chiếm) sửa job `call` thành `token.transfer(attacker, …)` ký bởi lane | không ACL ghi cho operator, trường job bất biến, bảng selector/đích ở node (CR-PD-1) |
+| T21 | Spam meta-tx phí 0, `value 0` từ khoá mới ⇒ đốt gas lane, kích cầu dao R55 | từ chối `value 0`, sàn `min_fee`/policy tài trợ, giới hạn theo `from` (CR-PD-3) |
 
 ---
 
@@ -617,24 +657,24 @@ Bốn plan, theo thứ tự phụ thuộc: (1) contracts + DEX, (2) relayer, (3)
 
 Định dạng: **Ruling: <cái gì> — <vì sao> — <giá nếu sai>.**
 
-- **R1** Chỉ EVM, chỉ META token; Zether/non-EVM/mesh ngoài phạm vi — SRS §2 tự ghi verifier
+- **R1** *(Superseded → R30, R34, owner family taxonomy 2026-10-06; §15.3.)* Chỉ EVM, chỉ META token; Zether/non-EVM/mesh ngoài phạm vi — SRS §2 tự ghi verifier
   Bulletproofs "chưa viết mã", non-EVM "thiết kế trên giấy"; portal cần đúng một đường thanh toán
   công khai — nếu sai: các phần đó thành plan sau, không phải làm lại phần này (factory đã nhận
   kind ZETHER).
-- **R2** Op thanh toán đi qua `executeMetaTransaction` với `data = pay(bytes32)`, không thêm
+- **R2** *(Cost clause superseded → R138–R140: `mtxPay` built in v2, SCaaS §5.8; §15.3.)* Op thanh toán đi qua `executeMetaTransaction` với `data = pay(bytes32)`, không thêm
   `mtxPay` — struct ghim là nguồn #1, một typehash duy nhất, ví hiển thị một loại giao dịch; SRS
   `mtxPay` là tầng 3 — nếu sai: ~4k gas/tx so với fast-path và chưa có `batchMtxPay`; thêm sau
   không phá chữ ký đã phát hành.
-- **R3** DEX = settle hai chân meta-tx đi qua DEX, fill-or-kill, không allowance, không AMM —
+- **R3** *(Superseded → R35 `OrderBookDex`: partial fills, IOC/FOK, persisted book; `MetaTxDex` legacy; §15.3.)* DEX = settle hai chân meta-tx đi qua DEX, fill-or-kill, không allowance, không AMM —
   giữ "không CALL lạ trong token, không allowance" (canon §C8.5) và SRS §3.3 — nếu sai: thiếu
   khớp một phần; cần sổ trạng thái lệnh on-chain để thêm.
-- **R4** Không hiện thực EOA approve lockdown (SRS §3.2) — README `smartcontracts` (nguồn #1) đã
+- **R4** *(Superseded → R26, addendum A; §15.3.)* Không hiện thực EOA approve lockdown (SRS §3.2) — README `smartcontracts` (nguồn #1) đã
   bỏ `isEOA` vì không quyết định đúng được sau EIP-7702; DEX không cần allowance nên không mất gì —
   nếu sai: có thể thêm vào v2 implementation, không ảnh hưởng v1.
 - **R5** Domain EIP-712 của clone = tên/version của implementation + `verifyingContract` = clone —
   OZ `EIP712` immutable; an toàn replay đến từ `verifyingContract`; Odoo lưu `domain_name/version` —
   nếu sai: ví hiển thị "SCaaS MetaToken" thay vì tên token.
-- **R6** `scaas-node` nói với Odoo chỉ qua `/json/2` (đọc + ghi), claim = CAS qua RPC, không
+- **R6** *(Superseded → NI R87/R97/R101: push job API, node never calls the ERP; pull is still the built path; §15.3.)* `scaas-node` nói với Odoo chỉ qua `/json/2` (đọc + ghi), claim = CAS qua RPC, không
   Postgres trực tiếp — canon §C13 claim bằng `FOR UPDATE SKIP LOCKED` rồi ghi qua `/json/2` trên
   **cùng dòng** là tự khoá (worker giữ row lock chờ HTTP, Odoo chờ row lock); `_USER-DECISIONS`
   §23 một tiến trình nên SKIP LOCKED không còn cần — nếu sai: tải poll lên Odoo (1 Hz/chain, chấp
@@ -649,20 +689,21 @@ Bốn plan, theo thứ tự phụ thuộc: (1) contracts + DEX, (2) relayer, (3)
   sang pha B2B sau — `account_payment` chuẩn đã gạch nợ khi tx `done`;
   bridge canon (mixin trên `dms.payment.collection`…) chưa có người dùng — nếu sai: thêm addon
   account khi cần FX/đối soát lô.
-- **R9** `entryRef` = 32 byte ngẫu nhiên; lane = `keccak256("scaas.pay.lane" ‖ entryRef)`, nonce 0 —
+- **R9** *(Amended → CR-PD-4: pay-once holds under the issuance horizon H on lane-pruning families.)* `entryRef` = 32 byte ngẫu nhiên; lane = `keccak256("scaas.pay.lane" ‖ entryRef)`, nonce 0 —
   ngẫu nhiên không liên kết được ngay từ cấu tạo (tốt hơn hash có salt); lane cố định cho request
   cho phép Odoo dựng typed data không cần đọc chain và bảo đảm trả tối đa một lần — nếu sai: lần
   dùng lane đầu tốn +17k gas (đo ở `MetaTxGas`), chấp nhận.
-- **R10** Portal: phí `NONE` + `MODE_RESTRICT_RELAYER` về relayer công ty — canon §C8.3 mặc định
+- **R10** *(Note, infra-service review M5: R10 trades payer self-submission for front-run safety; payee self-relay, SCaaS §5.9, stays available.)* Portal: phí `NONE` + `MODE_RESTRICT_RELAYER` về relayer công ty — canon §C8.3 mặc định
   restrict cho luồng tiền; SRS §5.2 B2B `fee = 0` — nếu sai: relayer công ty chết thì người dùng
   không tự nộp được; chữ ký hết hạn sau 300 s nên chỉ là chậm, không mất.
-- **R11** Finality do node quyết, Odoo chỉ nhận vùng final: `depth` (chain 9000: 1) hoặc `tag`
+- **R11** *(Amended: NI R96 moves finality to the node store; CR-PD-2 — quorum over event sets.)* Finality do
+  node quyết, Odoo chỉ nhận vùng final: `depth` (chain 7622 (formerly 9000): 1) hoặc `tag`
   (`finalized`) + quorum endpoint — canon §C10.9 flow gắn `payment.transaction` dùng ngưỡng hard —
   nếu sai: độ trễ ghi nhận = độ sâu final của chain (Gnosis ~3 phút).
 - **R12** Không xử lý reorg sau hard finality — Gnosis `finalized` và Clique một signer không
   reorg trong mô hình; dispute canon cần `blockchain.settlement` — nếu sai: bút toán đã ghi cần
   đảo tay.
-- **R13** Odoo tự kiểm chữ ký (keccak-256 + secp256k1 ecrecover thuần Python, không thư viện
+- **R13** *(Narrowed → R27 `wallet_kind`; §15.3.)* Odoo tự kiểm chữ ký (keccak-256 + secp256k1 ecrecover thuần Python, không thư viện
   ngoài) — phản hồi tức thì cho người dùng, và là bản thứ ba của digest được khoá bằng KAT;
   `pycryptodome` có trong container nhưng không phải dependency của Odoo — nếu sai: chữ ký
   ERC-1271 (ví hợp đồng) không khôi phục được ⇒ lưu `signature_verified = False` và để simulation
@@ -674,7 +715,7 @@ Bốn plan, theo thứ tự phụ thuộc: (1) contracts + DEX, (2) relayer, (3)
 - **R15** Khoá vỏ tx trong node qua trait `Signer` với bản `LocalSigner` (env/file) — custody
   broker/KMS là một làn riêng chưa có (`_USER-DECISIONS` §23.5); trait giữ chỗ cắm — nếu sai: khoá
   nóng nằm trong tiến trình parse byte lạ; giảm bằng ví relayer chỉ nạp gas tối thiểu.
-- **R16** Hàng đợi gateway và sổ lệnh DEX trong bộ nhớ — mất khi khởi động lại, người dùng gửi lại
+- **R16** *(Superseded → R35 book in Odoo, NI R105 store-backed; §15.3.)* Hàng đợi gateway và sổ lệnh DEX trong bộ nhớ — mất khi khởi động lại, người dùng gửi lại
   (chữ ký còn hạn) — nếu sai: thêm lưu bền khi có khối lượng.
 - **R18** Không bỏ nonce vỏ: phí tăng tới trần, job bỏ ⇒ gap-filler; cold start theo
   `max(pending, journal + 1)` (§23.1) cộng lấp lỗ — review F3/F4: một nonce bị bỏ làm tắc mọi tx sau
@@ -683,7 +724,7 @@ Bốn plan, theo thứ tự phụ thuộc: (1) contracts + DEX, (2) relayer, (3)
   `action_confirm` báo giá `draft/sent` khi tx `done`, tức bỏ qua duyệt DMS và `dms_check_credit`
   (review F2); có hoá đơn thì gạch nợ, chưa có thì là khoản ứng trước — nếu sai: người mua không
   trả trước được báo giá; mở sau bằng một luồng duyệt riêng.
-- **R20** Endpoint RPC chỉ ở config của node; bỏ `blockchain.rpc.endpoint` khỏi Odoo — Odoo không
+- **R20** *(Amended: NI R95 — RPC URLs stay toml-only; config authority otherwise the node store.)* Endpoint RPC chỉ ở config của node; bỏ `blockchain.rpc.endpoint` khỏi Odoo — Odoo không
   bao giờ gọi RPC, URL nhà cung cấp thường mang khoá, và hai nơi giữ cùng danh sách là hai sự thật —
   nếu sai: màn hình sức khoẻ endpoint (canon §C14.3 #4) phải đọc từ `/readyz` của node.
 - **R17** Không FX: `token.currency_id` phải trùng tiền đơn hàng — quote tỷ giá (canon
@@ -770,3 +811,162 @@ lần 3 (+~1 giờ nữa): vẫn giới hạn. Lần 4 hẹn sau ~1 giờ, với
 
 ### Codex
 Hết credit (theo owner) — không chạy.
+
+---
+
+## 15. Claude review 1 (2026-10-07) — disposition (rev 1.1)
+
+Source: `docs/reviews/specs/2026-10-03-blockchain-payments-design-claude-review-1.md` (verdict FIX-THEN-GO).
+Every finding was re-checked against the cited code on 2026-10-07 (`scaas` `main` 991d835; `bamboo-dms` `main`
+b724c91). **Owner rule for this phase: docs only** — each code bug becomes a ruling with its fix and tests (§15.2)
+and a code stream (§15.5); nothing is built in this revision. Ruling ids `CR-PD-n` are local to this spec so they
+cannot collide with the global R-numbers other streams are allocating.
+
+### 15.1 Claude review disposition
+
+| # | Sev | Verified against code | Disposition |
+|---|---|---|---|
+| H1 | high | Confirmed. Operator ACL `1,1,0,0` (`dms_blockchain/security/ir.model.access.csv:7`); `write` filters only `SERVER_ONLY` (`blockchain_relay_job.py:79-86`); `_check_kind` checks presence only (`:88-97`); `_payload` ships target + calldata (`:169-172`); the node signs `job.call` as-is (`scaas-node/src/submit.rs:108-113`), no target/selector check in `submit.rs`/`adapter.rs`. Lanes hold value: unbound `feeRecipient` pays `msg.sender` (`ERC20MetaTx.sol:87`, `MetaTxCore.sol:90`, `OrderBookDex.sol:308`; node normalises to 0, `metatx.rs:124-131`); dev `PRIVATE_KEY` = registrar / `OrderBookDex` admin (`script/Deploy.s.sol:23-37`). NI rev 3.6 R103 grants `call` per namespace (`allow_call`) and `chain_contract` knows only `tender`/`sponsorship_pool` — no per-target rule exists anywhere. | **Accepted** → CR-PD-1; PAY-FIX1, PAY-FIX2; NI amendment §15.4 |
+| H2 | high | Confirmed. `finalized` from the primary only (`chain.rs:168-176`, `indexer.rs:115`); quorum compares `block(to).hash` only (`indexer.rs:118-126`, `finality.rs:24-26`); both `get_logs` on the primary (`indexer.rs:131,142`); Odoo format-checks the hashes only (`blockchain_chain_event.py:79-103`). | **Accepted** → CR-PD-2; PAY-FIX3 (EVM/Hedera); other families: R3D CR-R3-2 |
+| M1 | med | Confirmed. `post_metatx` checks token, expiry, simulation and digest only (`gateway.rs:152-174`). The `~gateway` `min_fee` floor (TSS R189, MESH §7) is SPECIFIED, not built. | **Accepted** → CR-PD-3; PAY-FIX4 |
+| M2 | med | Confirmed. Lane state is pruned on TON (`ton/contracts/jetton.tact:291-321`), Aptos (`move/aptos/sources/meta.move:40,374`) and Solana (`solana/programs/scaas/src/account.rs:425-452`); TON's `validUntil ≤ now + LANE_TTL` (`jetton.tact:207`) is relative to execution, not lane creation; Odoo bounds issuance with `LANE_HORIZON_S` (`blockchain_payment_request.py:22-26,152-153`). Prune delays equal the 30-day horizon today, so Odoo-issued terms are safe. | **Accepted** → CR-PD-4 (R9, §5 guarantee 2 amended); tests in R3D stream R3-FIX12 |
+| M3 | med | Confirmed. A failed `report('signed')` re-queues the work without consuming `n` (`submit.rs:311-316`); the next job is signed at the same `n`; `signed → signed` is not in `TRANSITIONS` (`blockchain_relay_job.py:20-25`). | **Accepted** → CR-PD-5; PAY-FIX5 |
+| L1 | low | Confirmed (`blockchain_relay_job.py:20-26`). | **Accepted**: §4.2 state list and §4.3 table rewritten |
+| L2 | low | Confirmed (`wallet/MandateWallet.sol:148-154`). | **Accepted** → addendum CR-ADW-1, stream ADW-FIX1 |
+| L3 | low | Confirmed: `_validSig` uses uncapped `SignatureChecker.isValidERC1271SignatureNow` (`dex/OrderBookDex.sol:381-386`). | **Accepted**; ruling belongs to the DEX spec (recorded §15.4); stream PAY-FIX6 |
+| L4 | low | Confirmed: per-fill fee `fill * feePpm / PPM` floors (`OrderBookDex.sol:216-217`). | **Accepted**; ruling belongs to the DEX spec (§15.4); stream PAY-FIX7 |
+| L5 | low | Confirmed: journal only when `w.job_id` is set (`submit.rs:311-316`). | **Accepted** (doc): §3.4 note |
+| L6 | low | Confirmed: §1, §2.4, §3.1, §4.2, R11 said 9000. | **Accepted** → CR-PD-6; text now says 7622 (formerly 9000) |
+| Superseded table (15 rows) | — | Spot-checked: R28 (`dms_blockchain_payment/__manifest__.py:9`), R84 normalisation (`metatx.rs:124-131`), `mtxPay` built (`metatx/MetaTokenBase.sol:152`), platform company (`blockchain_receiving_wallet.py:9-10`). | **Accepted**: §15.3 + inline markers in §3.3, §7, §13 |
+
+Rejected: none. Counts: 2 high, 3 medium, 6 low, 1 table — 12 accepted, 0 rejected.
+
+### 15.2 Rulings
+
+- **CR-PD-1** **Outbox `call` jobs are locked in Odoo and allowlisted by the node** (H1; addendum H1).
+  (a) `group_blockchain_operator` loses write on `blockchain.relay.job` (ACL `1,0,0,0`); `action_requeue` checks
+  `has_group('dms_blockchain.group_blockchain_operator')` explicitly, then keeps its `sudo()` write
+  (`blockchain_relay_job.py:249-262`) — it is a public method, so the group check is what stops other readers.
+  (b) The fields listed in §4.2 are immutable after `create`: `write` raises for every env, `sudo` included
+  (pattern: `blockchain.metatx` `_MUTABLE`, `blockchain_metatx.py:10,65`); `prerequisite_job_id` may be set once,
+  from empty, while the job is `queued`. No context-key switch (project rule). A different call is a new job.
+  (c) The node executes a `call` job only if its 4-byte selector is in the table below **and** the target meets the
+  row's rule; **never** when the target is a registered token of the chain (any kind), the token factory, or a
+  contract in which a lane key holds a role; call jobs carry no native value. Refused ⇒ legacy pull: `dead` with
+  `CALL_TARGET_REFUSED`, before simulation; NI push: `403 CALL_TARGET_REFUSED` at accept, next to step 4
+  (`allow_call` stays necessary, no longer sufficient — NI amendment §15.4).
+
+  | Selector | Target rule | Producer today |
+  |---|---|---|
+  | `SubjectAccountFactory.deploy((uint8,bytes32,bytes32,bytes32,bytes32),address)` | the chain's account factory (`chain_contract.kind = account_factory`) | `blockchain_subject_account.py:178-196` |
+  | `SubjectAccount.executeAsOwner(bytes,uint256,uint256,bytes)` | runtime code = EIP-1167 clone of that factory's `IMPLEMENTATION` (checked at lease, cached) | `blockchain_subject_account.py:422` |
+  | `MandateWallet.payUnderMandate`, `revokeWithSig`, `executeAsOwner`; `HederaMandateWallet.executeAsOwnerRaw` | any address that is not a registered token (self-authenticating: the target checks the delegate/owner signature) | `blockchain_payment_request.py:240-255`, `dms_blockchain_payment/models/blockchain_autopay.py:101-113` |
+  | `OrderBookDex.settle` / `cancel` / `invalidateNonces` | the chain's DEX | `dms_blockchain_dex/models/dex_trade.py:85-99` |
+  | `UniversalAccountRegistry.register` | `chain.ua_registry`, `~gateway` only (NI R320) | node |
+
+  Why: addendum §D made the node a blind signer for Odoo-built calldata; one operator session (or a stolen one)
+  became an arbitrary transaction from a lane that holds fee income and, on dev deployments, admin roles. (a)+(b)
+  close the Odoo path; (c) closes every client path, because NI R103 grants `call` per namespace, not per target.
+  Selector matching suffices outside the token/role set: a lane's authority is only `msg.sender` of the direct
+  call, never of calls the target makes. — Cost if wrong: a new call shape needs a table row (node release).
+  Tests: Odoo — operator `write` on any job field ⇒ `AccessError`; `sudo().write` of each immutable field ⇒ error;
+  `prerequisite_job_id` set once from empty passes, a second change fails; operator `action_requeue` still works,
+  a viewer calling it over RPC fails. Node — call to a registered token, an unknown selector, a DEX selector on a
+  non-DEX target, `executeAsOwner` on a non-clone ⇒ refused; calldata vectors exported by each Odoo producer test ⇒
+  accepted.
+
+- **CR-PD-2** **Finality authenticates the events, not one block hash** (H2). Per range the indexer reads the logs
+  from ≥ `quorum` independent endpoints and requires the **same normalised set** (sorted
+  `(block_number, block_hash, tx_hash, log_index, address, topics, data)`); `tag` mode takes `finalized` = minimum
+  over the quorum, `depth` mode takes `latest` = minimum over the quorum; any disagreement ⇒ no ingest, `warn`,
+  `/readyz` red (§8 "RPC lệch nhau"). `quorum = 1` is single-provider trust: allowed, reported at startup and as
+  gauge `scaas_finality_quorum{chain}`. Receipt proofs (`eth_getBlockReceipts` against `receiptsRoot`) may replace
+  the set comparison where providers serve them; not required. Residual trust: Odoo trusts its node's feed (SCaaS
+  §3.5, NI T7). The same rule for every family is CR-R3-2 (R3D). — Why: the primary sees every pending payment
+  through the node's own `eth_call`/`eth_estimateGas` and can fabricate `PaymentSettled` at a real token address.
+  — Cost: `quorum ×` `eth_getLogs` per range. Tests: mock providers — the primary injects a fabricated log, drops a
+  real one, or reports `finalized = latest` ⇒ nothing ingested / minimum used; honest providers ⇒ ingest identical
+  to today.
+
+- **CR-PD-3** **Door A is not a free gas faucet** (M1). At intake (`gateway.rs` `post_metatx`): (a) a
+  `transfer`/`pay` op with `value == 0` ⇒ `422 ZERO_VALUE`; (b) the `~gateway` door applies its `min_fee` floor to
+  the effective fee (TSS R189, MESH §7); a matching sponsor policy waives it and caps the spend with its budget;
+  (c) defaults: `profile = private` keeps fee 0 (B2B, SRS §5.2, §7 here); `profile = public` refuses fee-0 Door A
+  intents unless a sponsor policy matches; (d) a per-`from` token bucket (default 60 per hour, in memory) on top of
+  the reverse-proxy per-IP limit (F19). The R55 hourly gas budget can then not be filled by unsponsored fee-0
+  traffic on public chains. — Cost if wrong: public fee-0 payers need a sponsor policy row. Tests: zero value
+  refused; fee 0 on a public chain refused without a policy, accepted and booked with one; the 61st intent from one
+  `from` within an hour refused.
+
+- **CR-PD-4** **Pay-once is conditional and is a protocol rule** (M2; amends R9 and §5 guarantee 2). "At most once
+  per request" holds iff every signature issued on a pay lane has `validUntil ≤ t_first_issue + H`
+  (`H = LANE_HORIZON = 30 d`) **and** every family that prunes lane state keeps an executed lane for ≥ H after the
+  executed op's `validUntil` (TON two `LANE_TTL` generations, Aptos/Solana `PRUNE_DELAY_S`). Both hold in the code
+  today. The issuer obligation moves from an Odoo constant to SCaaS §5.5 (amendment §15.4); a node chain on a
+  pruning family must have `max_valid_for_secs ≤ H` (config check). Issuers that sign terms on a lane beyond H get
+  no pay-once guarantee. — Cost: none for Odoo-issued terms. Tests: R3D stream R3-FIX12 (constants pinned equal,
+  node config refusal).
+
+- **CR-PD-5** **The `signed` journal report is idempotent** (M3). Odoo: `relay_report(job, 'signed', tx_hash, n)`
+  on a job already `signed` with the same `(tx_hash, outer_nonce, signer_address)` succeeds with no change; other
+  values ⇒ error. Node: when the report fails, the work keeps its signed `(raw, hash, n)`; the retry re-reports
+  those values before anything else; success ⇒ consume `n`, broadcast; `n` is not given to another job while the
+  retry is pending. — Why: a timeout after Odoo committed wedged the job until expiry and journaled two jobs at one
+  nonce. Tests: fake Odoo commits, then times out ⇒ the retried report succeeds, one broadcast, the next job gets
+  `n + 1`.
+
+- **CR-PD-6** **The private reference chain is 7622 (formerly 9000)** (L6; owner 2026-10-07 — 9000 is also Evmos
+  Testnet). Replay protection is only as good as the chain id; UA R330 adds `chain_uid`. Doc only; the migration
+  (profile `private9000`, seeds, env var names, KAT) is the owner's pending stream.
+
+### 15.3 Superseded rulings and statements
+
+| PD text | Superseded by |
+|---|---|
+| R1 EVM-only, META-only; Zether/non-EVM out | R30 (round 3), R34 (Zether built, dev chains), owner family taxonomy 2026-10-06 |
+| R2 "~4 k gas" cost of no `mtxPay` | R138–R140 (`mtxPay` built in v2; SCaaS §5.8) |
+| R3 fill-or-kill, no partial fills; `/v1/dex/orders {chain, leg}` over `MetaTxDex` | R35 `OrderBookDex` (partial, IOC/FOK, persisted book); `MetaTxDex` is legacy |
+| R4 no EOA approve lockdown | R26 (addendum A) |
+| R6 node ↔ Odoo only over `/json/2`, Odoo-held outbox claimed by the node | NI R87/R97/R101 (push job API, node never calls the ERP) — pull is still the built path |
+| §3.1/§3.3 "Odoo is the source" of token list and finality params; R11 seeding | NI R95/R96/R99 (node store is config authority) |
+| R9 unconditional pay-once | CR-PD-4 (horizon rule) |
+| R11 quorum on one block hash | CR-PD-2 (quorum over event sets) |
+| R13 a 65-byte signature must recover / Odoo verifies | narrowed by R27 (`wallet_kind`) |
+| R16 in-memory gateway queue and DEX book | R35 (book in Odoo), NI R105 (store-backed) |
+| R20 RPC endpoints only in node config | kept, restated by NI R95 (toml-only list) |
+| §3.4 gateway fills unbound `feeRecipient` with the relayer address | R84/R100: `chains.fee_recipient` or 0 (code follows R84, `metatx.rs:124-131`) |
+| §4.1 `dms_blockchain_payment` depends `payment` | R28 (`account_payment`) |
+| §4.2 address `CHECK '^0x…'` on every column | R61 (family-aware Python check) |
+| §4.4 provider holds `chain_token_id`, `chain_receiving_address` | addendum §C (receiving wallets, four eyes, cooling-off) |
+| §4.6 operator may write jobs (built ACL) | CR-PD-1 (read-only, requeue via sudo method) |
+| §7 "Odoo giữ không khoá nào" | addendum §D / R50: dev-only `env:` custody keys live in the Odoo process |
+| chain 9000 | 7622 (formerly 9000), owner 2026-10-07 (CR-PD-6) |
+
+### 15.4 Amendments needed in other specs (recorded here; the owner syncs them)
+
+| Spec | Amendment |
+|---|---|
+| NI rev 3.6 | R103 / §5.2 step 4: `allow_call` is necessary, not sufficient — add the CR-PD-1 call table and `403 CALL_TARGET_REFUSED` (also re-checked at lease); `chain_contract.kind` gains `account_factory` (and `dex` if it is not a chain field). §9 indexer and T7: event-set quorum, `scaas_finality_quorum` (CR-PD-2). §5.2 `~gateway`: `ZERO_VALUE`, per-`from` bucket, public-profile fee-0 rule (CR-PD-3). Pruning families: `max_valid_for_secs ≤ LANE_HORIZON` (CR-PD-4). |
+| SCaaS.md | §3.5 "Node ↔ chain": finality gate = event-set quorum, single-provider trust stated; §5.5: pay-lane issuance horizon H as a protocol rule; §6 Door A intake rules; chain 7622 (formerly 9000) wherever 9000 remains. |
+| integration.md | Odoo outbox: immutable job fields, operator read-only (CR-PD-1). |
+| DEX spec | `OrderBookDex._validSig`: cap the ERC-1271 call like `MetaToken._erc1271Gas` (400 k for `SubjectAccount` clones by codehash, 50 k otherwise) — L3; the venue fee per fill rounds **up** (`Math.mulDiv(…, Math.Rounding.Ceil)`) when the market fee is on, and the node matcher mirrors it — L4. |
+| TSS rev 1.3 | R189 door table: the `~gateway` default floor per profile (CR-PD-3). |
+
+### 15.5 Code streams (new; for TODO)
+
+| Stream | Scope | Ruling |
+|---|---|---|
+| **PAY-FIX1** | Odoo `dms_blockchain`: operator ACL read-only on `blockchain.relay.job`; `action_requeue` group check; immutable job fields (incl. `dms_blockchain_dex`, subject-account extensions); tests of CR-PD-1 (a)(b) | CR-PD-1 |
+| **PAY-FIX2** | `scaas-node`: `call` selector/target table in `work_from_job` (legacy pull) and at NI accept; refusal code; tests with producer vectors | CR-PD-1 (c) |
+| **PAY-FIX3** | `scaas-node` EVM/Hedera indexer: event-set quorum, min `finalized`/`latest`, quorum gauge; lying-provider tests | CR-PD-2 |
+| **PAY-FIX4** | `scaas-node` gateway Door A: `ZERO_VALUE`, `min_fee`/sponsor floor, public fee-0 rule, per-`from` bucket; tests | CR-PD-3 |
+| **PAY-FIX5** | Odoo `_apply_report` idempotent `signed`; node retry keeps `(raw, hash, n)`; timeout-after-commit test | CR-PD-5 |
+| **PAY-FIX6** | `OrderBookDex` ERC-1271 gas cap (after the DEX spec ruling) | review L3 |
+| **PAY-FIX7** | `OrderBookDex` fee rounds up per fill + node matcher (after the DEX spec ruling) | review L4 |
+
+### 15.6 Revision history
+
+| Rev | Date | Change |
+|---|---|---|
+| 1.0 | 2026-10-03 | Initial design; agy reviews of design, plans and implementation (§14) |
+| 1.1 | 2026-10-07 | Claude review 1 folded: 12 findings accepted, 0 rejected; rulings CR-PD-1…6; streams PAY-FIX1…7; superseded-rulings table (§15.3); amendments for NI, SCaaS.md, integration.md, DEX, TSS recorded (§15.4); chain 7622 (formerly 9000) |
