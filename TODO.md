@@ -5,8 +5,8 @@ Max 3 agents, one heavy build at a time (`scripts/capped`). The Odoo side lives 
 
 ## 0. Finish the spec phase (≈ 6 items)
 
-- [ ] S4F (signers) rev 1.1 — review fixes (was in flight at shutdown; check `git log` for "signers spec rev 1.1").
-- [ ] PQZ review → fold fixes (review was in flight; if lost, re-run the review).
+- [x] S4F (signers) rev 1.1 — review fixes (9695051). Open for the UA fold: kindNo for keys of a Soroban `scaas-account` `C…` — default 18 (`soroban-contract` 0x0012) vs 17 (`stellar-account`).
+- [ ] PQZ review → fold fixes: review in `docs/reviews/specs/2026-10-06-pq-zether-review-1.md` (FIX-THEN-GO; 4 High: params ~109/99-bit core-SVP, `fund`-dust K_MAX lock-out, LaZer GMP/MPFR/HEXL ⇒ rewrite + LGPL, `abort()` in precompile halts chain).
 - [ ] UA review → fold fixes (review was in flight; if lost, re-run the review).
 - [ ] **NI consolidation**: fold every addition other specs listed for node-independence — `GET /v1/gateway`, gateway
       CORS + error contract, `POST /v1/ops` (app §9.6 N2), `POST /v1/ua-metatx`, `POST /v1/ua/register` (N4), Hedera
