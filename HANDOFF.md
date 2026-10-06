@@ -36,7 +36,7 @@ vectors from `scaas/…`.
 | `2026-10-06-pq-zether-design.md` (PQZ) | R270–R289 | 1.1 | review in flight at shutdown |
 | `2026-10-06-universal-account-design.md` (UA) | R290–R318 | 1.2 (all owner items closed) | review in flight at shutdown |
 
-Reviews: `docs/superpowers/specs/reviews/`. Owner decisions are recorded inside each spec (owner-answers tables).
+Reviews (local, git-ignored): `docs/reviews/specs/`. Owner decisions are recorded inside each spec (owner-answers tables).
 
 ### Key owner rulings this session (details in the specs)
 
