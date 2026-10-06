@@ -121,7 +121,7 @@ flowchart TB
     P2P_POOL -->|Consume Subsidized Intents| OPEN_RELAYER_2
     NONCE_MGR -->|Dispatch Dedicated Tasks| ENT_RELAYER
 
-    OPEN_RELAYER_1 -->|Broadcast EIP-1776 Tx (Pay Native Gas, Claim Token Fee)| BC_EVM
+    OPEN_RELAYER_1 -->|"Broadcast EIP-1776 Tx (Pay Native Gas, Claim Token Fee)"| BC_EVM
     OPEN_RELAYER_2 -->|Broadcast Sponsored Tx| BC_HBAR & BC_TON
     ENT_RELAYER -->|Broadcast Multi-Chain Paymaster / FeeGrant Tx| BC_SUI & BC_SOROBAN & BC_COSMOS
 
