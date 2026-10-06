@@ -1329,7 +1329,10 @@ the device (clientkeys `sealConfKey`).
 Zether is EVM-only in v1 (BN254 or BLS12-381 precompiles). Non-EVM families: feasibility notes only. Zether intents
 are not carried on the mesh (`W = 0` and single-flight per sender need their own design).
 
-### 8.12 Post-quantum Zether on private/PoA chains (PLANNED)
+### 8.12 Post-quantum Zether on private/PoA chains (SPECIFIED)
+
+Spec: [PQ Zether design](superpowers/specs/2026-10-06-pq-zether-design.md) (component spec E, R270–R293); it
+supersedes the sketch below where they differ.
 
 Goal: confidential balances whose confidentiality survives a quantum adversary, on private/PoA chains where gas is
 free and validators are known (lattice ciphertexts and proofs are far too large for public-chain gas).
