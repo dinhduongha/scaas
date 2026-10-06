@@ -6,9 +6,9 @@ Max 3 agents, one heavy build at a time (`scripts/capped`). The Odoo side lives 
 ## 0. Finish the spec phase (≈ 6 items)
 
 - [x] S4F (signers) rev 1.1 — review fixes (9695051). Open for the UA fold: kindNo for keys of a Soroban `scaas-account` `C…` — default 18 (`soroban-contract` 0x0012) vs 17 (`stellar-account`).
-- [ ] PQZ review → fold fixes: review in `docs/reviews/specs/2026-10-06-pq-zether-review-1.md` (FIX-THEN-GO; 4 High: params ~109/99-bit core-SVP, `fund`-dust K_MAX lock-out, LaZer GMP/MPFR/HEXL ⇒ rewrite + LGPL, `abort()` in precompile halts chain).
-- [ ] UA review → fold fixes: review in `docs/reviews/specs/2026-10-06-universal-account-review-1.md` (FIX-THEN-GO; 4 High: PoP must bind `authRef` (front-run freezes Zether), closed kind sets per role (v3 `to` → Zether UA locks funds), PQ/hybrid msig unregistrable under the 12M budget, native signers sign raw digests → EIP-712 `UAAuth` wrapper). **Owner decision needed on M1**: the review proposes collapsing the MuSig2/FROST kinds into `bip340`/`schnorr-bn254` (MPC still works via one aggregate key) — MPC kinds were an owner request. Also the S4F kindNo question above.
-- [ ] **NI consolidation**: fold every addition other specs listed for node-independence — `GET /v1/gateway`, gateway
+- [x] PQZ review → folded (rev 1.2, 07f43dc). Was: review in `docs/reviews/specs/2026-10-06-pq-zether-review-1.md` (FIX-THEN-GO; 4 High: params ~109/99-bit core-SVP, `fund`-dust K_MAX lock-out, LaZer GMP/MPFR/HEXL ⇒ rewrite + LGPL, `abort()` in precompile halts chain).
+- [x] UA review → folded (rev 1.3, 55cfb4f; MuSig2/FROST kept). Was: review in `docs/reviews/specs/2026-10-06-universal-account-review-1.md` (FIX-THEN-GO; 4 High: PoP must bind `authRef` (front-run freezes Zether), closed kind sets per role (v3 `to` → Zether UA locks funds), PQ/hybrid msig unregistrable under the 12M budget, native signers sign raw digests → EIP-712 `UAAuth` wrapper). **Owner decision needed on M1**: the review proposes collapsing the MuSig2/FROST kinds into `bip340`/`schnorr-bn254` (MPC still works via one aggregate key) — MPC kinds were an owner request. Also the S4F kindNo question above.
+- [x] **NI consolidation** (rev 3.4, c8c28df): fold every addition other specs listed for node-independence — `GET /v1/gateway`, gateway
       CORS + error contract, `POST /v1/ops` (app §9.6 N2), `POST /v1/ua-metatx`, `POST /v1/ua/register` (N4), Hedera
       64-byte sigs on `/v1/metatx`, denylist (`deny_subject`, OPS R246), `sponsor_policy`/`sponsor_usage` + job cost
       columns (spec B), `chain_contract`, `receiver_fee` payload + `token.features`, `usage_day`, `job.trace_id`,
@@ -19,6 +19,9 @@ Max 3 agents, one heavy build at a time (`scripts/capped`). The Odoo side lives 
 - [ ] Doc inconsistencies: `smartcontracts/evm/README.md` (mode bitmask kept, Zether built), `private9000` README says
       pre-London (chain runs through Fusaka), `wasm-smoke.sh` needs `--target web`, node default `max_gas_per_tx` 3M
       rejects classical Zether transfers (3.36M).
+
+- [ ] **ChainId 9000 → 7622** (owner 2026-10-07; 9000 is Evmos Testnet): sweep every spec/doc mention (PQZ gate, F chain 9000 rows, OPS, NI, TRAPS, READMEs), then a code/infra stream: dev-chain genesis reset, rename `smartcontracts/evm/src/chains/private9000` + foundry profile, node + Odoo chain records, genesis-hash binding.
+- [ ] Codex reviews of every spec (`codex exec -m gpt-5.5`, outputs in `docs/reviews/specs/*-codex-review-1.md`), then fold.
 
 ## 1. Code streams (after §0)
 
