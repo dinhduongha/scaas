@@ -1,25 +1,32 @@
 # TODO — scaas
 
-Ordered by what blocks what (2026-10-06). The Odoo side lives in bamboo-dms (`dms_blockchain*`).
+Ordered by what blocks what (updated 2026-10-06 late). The Odoo side lives in bamboo-dms (`dms_blockchain*`).
+
+### Specs (all committed on main)
+
+| Spec | Rulings | State |
+|---|---|---|
+| `docs/SCaaS.md` + `docs/integration.md` | precedence, system | written; owner review of PLANNED material pending |
+| `specs/2026-10-05-relayer-mesh-design.md` | R70–R86 | rev 3, reviewed ×2 |
+| `specs/2026-10-06-node-independence-design.md` | R87–R111 | rev 3.2, reviewed (36 findings fixed) |
+| `specs/2026-10-06-mesh-gossip-amendment.md` (A2) | R112–R128 | rev 2.1, reviewed (32 fixed) |
+| `specs/2026-10-06-token-wrappers-v2.md` (TW2) | R129–R149 | rev 1.1, review in progress |
 
 ### 0. First
-- [ ] Owner: review `docs/superpowers/specs/2026-10-06-node-independence-design.md` (R87–R111) and confirm its §18.2.
-- [ ] Independent Claude review of that spec.
-- [ ] Deferred tests after the split: `smartcontracts/scripts/test.sh all`, scaas-node `cargo test` + clippy + e2e (needs `smartcontracts/evm/lib`, `smartcontracts/evm/deployments/`).
+- [ ] Owner: confirm node-independence §18.2 interpretations.
+- [ ] Redeploy every dev/test contract (domain tags renamed to `scaas.*`); fix DB rows `blockchain.token.domain_name` ("Bamboo MetaToken") and Cosmos `network_key` (`bamboo-1`) after redeploy; operators rename env `BAMBOO_*` → `SCAAS_*`.
 
-### 1. Streams
+### 1. Streams (one heavy build at a time)
 
+Node: S3 ✅ → **P1** store v2 SQLite (in progress) → P2 job API + client API keys + built-in admin auth/CLI → P3 submit/lanes from the store → P4 indexer + `/v1/events` → P5 Odoo client → P6 push e2e + cutover runbook → [owner cutover] → P2b OIDC + full admin routes + CORS → P1b PostgreSQL/MySQL → P7 DEX in store → S1b′ → S5 → S6′ → G1 libp2p core + QUIC/PQ → G2 announce/exclusivity/hints → G3 DEX book gossip (home-bound + relayer-unbound) → S7″ e2e → P9 remove pull path → S8″ doc corrections.
 
-1. [ ] **S3** envelope library + 32 conformance vectors (mesh spec §4; pure library).
-2. [ ] **P1** node store v2 + config authority (replaces mesh S4); SQLite → PostgreSQL → MySQL backends (R111).
-3. [ ] **P2** job API + HMAC machine keys; **P2b** admin API + OIDC + Unix-socket break-glass + audit + CORS.
-4. [ ] **P3** submit + lanes from the store (safety-critical); **P4** indexer + `/v1/events`.
-5. [ ] **P5** Odoo client (push cron + sync cron); **P6** push e2e + cutover runbook → owner cuts over chain by chain (testnet first).
-6. [ ] **P7** DEX book into the node store; **S1b′** company bus scope; **S5** mTLS bus; **S6′** mesh pipeline; **S7′** mesh e2e; **P9** remove the pull path; **S8′** doc corrections (mesh spec §15.1).
-7. [ ] **React + Vite app** `app/` after the node APIs (spec → plan → impl). EVM + meta-tx families; passkey/seed vault, extension wallets, dev key; OIDC only for node admin.
-8. [ ] TON: report the payer jetton-wallet tx hash with `mined` (false `landed_elsewhere`).
-9. [ ] Still queued: S4 follow-ups (backup-key toggle, device-bound vault, Sui `fam_sui.verify`, Soroban/Aptos/Solana signers, `chain_pay.js`), Zether portal balance cache, post-quantum Zether.
+Contracts: TW2 T1–T8 after its review (three tiers, rates, multi-underlying, named mtx functions, gasless unwrap, factory v2, Hedera child).
 
+App: `app/` (React + Vite) after the node APIs — spec → plan → impl.
+
+Fixes: TON `mined` report must carry the payer jetton-wallet tx hash (in progress, branch fix/ton-tx-hash).
+
+Queued: S4 follow-ups (backup-key toggle, device-bound vault, Sui `fam_sui.verify`, Soroban/Aptos/Solana signers, `chain_pay.js`), Zether portal balance cache, post-quantum Zether (BFV/BGV).
 
 ### Doc/code inconsistencies found while writing docs/SCaaS.md (2026-10-06)
 - [ ] `smartcontracts/evm/README.md`: says the mode bitmask was removed (code keeps it) and Zether is "interface only" (it is built).
