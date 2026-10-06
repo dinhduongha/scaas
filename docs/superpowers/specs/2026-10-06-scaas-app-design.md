@@ -1,6 +1,6 @@
 # SCaaS app (`scaas/app/`) — console and dApp (design)
 
-Status: draft rev 1, 2026-10-06. Code at `scaas` `main` 9737ef3 (TW2 T1–T6/T8 built; node store P1 built; job API,
+Status: draft rev 1.1, 2026-10-06 (rev 1.1: owner answers to Q1–Q3 folded in, §16). Code at `scaas` `main` 9737ef3 (TW2 T1–T6/T8 built; node store P1 built; job API,
 admin API and admin auth SPECIFIED, not built). Rulings: **R150–R172** (§2), continuing R129–R149 (TW2).
 Owner decisions of 2026-10-06 (purpose, seven families at once, signers, no Odoo, UI kit, i18n, two deployment modes)
 are folded in.
@@ -74,7 +74,7 @@ Format: **ruling — why — cost if wrong.**
 | **R153** | **Family adapters:** one TypeScript interface (§5.1), seven implementations; `hedera` is the EVM adapter plus a Hedera override module (signature scheme, mirror node, HTS checks). An adapter is lazy-loaded when a chain of its family is first selected; its `features` set drives every screen (matrix §7). | Owner: all seven families at once; family SDKs are the bulk of the bytes (§14). | — |
 | **R154** | **The app builds every byte it asks a user to sign** and never accepts a payload, digest or typed data from a node or any remote party. Family encoders (MetaOp bytes, digests, sign envelopes, PDA/object/address derivations) are ported from `dms_blockchain/lib/fam_*.py` into **clientkeys `src/fam/*.js`** (pure ESM, no I/O), KAT-locked against the existing vectors (§12.1), and shared by the app and any future portal bundle. | The portal connectors sign server-built terms (Odoo); without Odoo the client is the only party left to build them, and a display that is not derived from the signed bytes is a phishing surface. Putting encoders in clientkeys reuses its test harness and keeps one JS implementation. | clientkeys grows from EVM-centric to all families (≈ 1.5 k lines of ports). |
 | **R155** | **Signers:** clientkeys passkey (SubjectAccount, ERC-1271, on EVM and Hedera), clientkeys seed vault (every family; Solana path `m/44'/501'/i'/0'` added to `NETWORKS`; Pi = `stellar` with `coinType 314159`), extension wallets per family (§6.3), and a **dev key** that exists only in development builds (R166, §10.4). | Owner list; R31–R33 (keys never leave the device). | — |
-| **R156** | **Two submission paths.** (1) **Gateway**: `POST /v1/metatx` / `/v1/dex/*` on a node whose gateway serves the chain and token (`GET /v1/gateway`, R159). Today the gateway serves the **EVM family only** (`main.rs` builds `GwChain` only for non-adapter chains — not Hedera, not non-EVM). (2) **Self-paid**: any gas-holding account the user controls submits the signed envelope itself — the same call a lane would make (`executeMetaTransaction`/named `mtx*` on EVM v2, `Relay` on Cosmos, `relay_pay` PTB on Sui, `relay_pay` entry on Aptos, `SignedOp` on TON, `relay_pay` + precompile instruction on Solana, the auth entry in the user's own transaction on Soroban). When the signer **is** the submitting EOA on EVM, the app calls the direct function (`transfer`, `payWithFee`, `unwrap`) and asks for no meta-tx signature at all. | Owner: gateway OR self-paid. Self-paid makes every family usable with no node; the direct-call rule avoids a pointless second signature. | Non-EVM and Hedera users have no relayed path until the node exposes a door A for them (open question Q1). |
+| **R156** | **Two submission paths.** (1) **Gateway**: `POST /v1/metatx` / `/v1/dex/*` on a node whose gateway serves the chain and token (`GET /v1/gateway`, R159). Today the gateway serves the **EVM family only** (`main.rs` builds `GwChain` only for non-adapter chains — not Hedera, not non-EVM); **owner (Q1, rev 1.1): node stream N2 adds `POST /v1/ops`** — the signed op of each meta-tx family (Hedera and the six non-EVM families), simulated and submitted through the family `lane_runner` — and the app uses it for gasless flows on all seven families. (2) **Self-paid**: any gas-holding account the user controls submits the signed envelope itself — the same call a lane would make (`executeMetaTransaction`/named `mtx*` on EVM v2, `Relay` on Cosmos, `relay_pay` PTB on Sui, `relay_pay` entry on Aptos, `SignedOp` on TON, `relay_pay` + precompile instruction on Solana, the auth entry in the user's own transaction on Soroban). When the signer **is** the submitting EOA on EVM, the app calls the direct function (`transfer`, `payWithFee`, `unwrap`) and asks for no meta-tx signature at all. | Owner: gateway OR self-paid. Self-paid makes every family usable with no node; the direct-call rule avoids a pointless second signature. | Until N2 lands, Hedera and non-EVM users have the self-paid path only; the adapter interface already has `submitGateway?`. |
 | **R157** | **Intent status = chain truth.** A gateway `202 queued` is shown as "accepted by relayer", never as done. Done = the intent's nonce consumed (`metaNonce(from, batch) > nonce` on EVM; family lane read elsewhere), plus `PaymentSettled(entryRef)` / `MetaTransactionExecuted(digest)` when present; expired = `validUntil` passed with the nonce unconsumed. `GET /v1/intents/{id}` (NI, SPECIFIED) is used for progress when the node returns an `intent_id`. | The node is trusted for liveness, not truth (SCaaS §3.5); G1 makes the nonce the arbiter. | One extra RPC read per poll. |
 | **R158** | **Signing review is the app's own rendering of the exact bytes** (§10.5): decoded fields, token metadata from chain reads, warnings; signatures are verified locally (ecrecover / ERC-1271 `eth_call` / ed25519 / secp256k1 / P-256) before anything is sent; a `verifyingContract`/`contract` that is neither in `config.json` nor `isDeployedHere` on a configured factory is refused (dev builds: overridable). Default validity windows: transfers/pay ≤ 15 min, unwrap ≤ 15 min, DEX orders ≤ 30 d (venue cap `MAX_TTL_SECS`). | Extension wallets show EIP-712 well, others show hex; the app is the only place a user sees the same decoded view for every family. | Users of a non-configured token must add it to `config.json` (or use a dev build). |
 | **R159** | **Node-side additions (stream N1, in `scaas-node`):** (a) `GET /v1/gateway` on the gateway listener: per served chain `{chain, tokens[], fee_recipient, breaker_open, dex: {address, relayer, markets_url} | null}` — today a client cannot learn the served token list, the R84 fee recipient, or the DEX relayer it must bind orders to (`dex.rs:553` only says so in an error); (b) `[modules] gateway_cors_origins` with the NI §7.4 rules (exact origins, no `*`, no credentials, `GET, POST`, headers `Content-Type`); (c) `[app]` static serving + CSP on the admin listener (§13.2). | The app cannot sign a bound DEX order or show the fee recipient without (a); a browser on another origin cannot reach the gateway without (b). | ~200 lines of Rust; the app degrades without them (§9.1). |
@@ -85,12 +85,12 @@ Format: **ruling — why — cost if wrong.**
 | **R164** | **Zether in a Web Worker** running `zether-prover` built with `wasm-bindgen --target web` (the current `wasm-smoke.sh` builds `--target nodejs`). The key handed to the WASM is `{x}` from clientkeys `openConfKey`, never the mnemonic. BSGS defaults `tableBits 22, boundBits 44`; `allowLargeTable` (≤ 2^26) only by explicit user choice. Balance comes from the vault cache (`readBalance`/`checkBalance`), BSGS only on `pending` or the delta (limits §5). Zether screens appear only on chains with a ZetherToken in `config.json` **and** chain id 31337/1337 (`ZetherSafety.requireDevChain`). | Prove takes seconds; the main thread must stay responsive (research 03 §5.1). `x` never leaves the device (R33). | — |
 | **R165** | **Passkeys are bound to one origin.** `config.json` `passkey.rpId` (registrable suffix of the app origin) and the WebAuthn `origin` are part of the SubjectAccount key (`passkeySubjectKey({x, y, rpId, origin})`). A user who opens a second deployment (static vs node-served, another host) must add a key for that origin from the first one (`addKey`, `checkOwnerCall`). The app shows the bound origin on every passkey account. | Not obvious to operators: two deployment modes are two origins. | One extra "add this device/origin" flow. |
 | **R166** | **Supply chain:** exact versions only (`save-exact`), committed `package-lock.json`, `npm ci --ignore-scripts` (`.npmrc`), the dependency allowlist of §10.3 (anything else needs a ruling), no runtime CDN, no analytics, no remote fonts, `npm audit signatures` in CI. Development-only code (dev key, test wallets) is reachable only behind `import.meta.env.DEV` and CI fails if the production `dist/` contains its markers (§10.4). | The bundle signs money movements; every dependency is code with signing access. | Upgrades are deliberate PRs. |
-| **R167** | **i18n:** `react-i18next`, English default, Vietnamese complete at release; every user-visible string keyed; amounts and dates formatted with `Intl` from `bigint` (never `Number`); node error codes map to `errors.node.<CODE>`. Risk disclosures (TW2 §8.4, §8.5; Zether "unaudited, dev chains only") are translated verbatim and the English text is shown beside a translation until the owner approves it (Q3). | Owner: EN + VI, default EN. A mistranslated risk disclosure is worse than none. | — |
+| **R167** | **i18n:** `react-i18next`, English default, Vietnamese complete at release; every user-visible string keyed; amounts and dates formatted with `Intl` from `bigint` (never `Number`); node error codes map to `errors.node.<CODE>`. Risk disclosures (TW2 §8.4, §8.5; Zether "unaudited, dev chains only") are translated verbatim and the English original is shown beside the Vietnamese translation until the owner approves the translation (owner, Q3). | Owner: EN + VI, default EN. A mistranslated risk disclosure is worse than none. | — |
 | **R168** | **Role gating is UI only** (NI §7.7): `viewer ⊂ operator ⊂ admin`, `key_custodian` separate; roles from `GET /v1/admin/me`; actions the token cannot perform are hidden; a `403` re-reads `me`. Role grants offered in the users screen are ⊆ the caller's roles (R107). | The node enforces; the UI must not invite failing actions. | — |
 | **R169** | **`rateAdmin` must be a contract** (TW2 §5.1, R26 `_isContract`), so `proposeRate`/`cancelRate`/`executeRate`/`renounceRateAdmin` are offered as **calldata to submit through that contract** (copy + EIP-681-style link), never sent from the user's EOA. Guardian actions (`disableWrap`, `renounceGuardian`) are sent directly (any address may be guardian). | Sending from an EOA always reverts. | — |
 | **R170** | **The app dials only URLs from `config.json`** (RPCs, gateways, admin URLs) and OIDC endpoints discovered from an issuer the node lists. DEX home gateway URLs learned from `/v1/dex/homes` are dialed only for DEX-trusted homes; an untrusted home needs an explicit per-session opt-in with the A2 B2 warning. Every dialed URL is `https://` (http only for `localhost`/`127.0.0.1` in dev builds), no userinfo. | A browser can reach intranet hosts; network-learned URLs are attacker-chosen (A2 X1). | Untrusted homes are one click further away. |
 | **R171** | **Metrics and topic rates are same-origin features.** The metrics screen parses `/metrics` (Prometheus text) only when the admin API is same-origin (node-served mode or a proxy); in static cross-origin mode it shows a configured `metricsDashboardUrl` link. Topics show mesh size/peers from `GET /v1/admin/gossip`; msgs/s columns need metrics. | `/metrics` is deliberately not CORS-enabled (NI §7.4). | Static deployments have a thinner topics screen. |
-| **R172** | **Non-EVM DEX is shown as unavailable.** Cosmos, Soroban, Move, TON and Solana DEX contracts are built, but the only off-chain book is the EVM `OrderBookDex` venue (`dex/venue.rs`); without a book there is nothing to view or match. | Facts from code. | Q2. |
+| **R172** | **Non-EVM DEX is shown as "unavailable" until the node has a book for it.** Cosmos, Soroban, Move, TON and Solana DEX contracts are built, but the only off-chain book is the EVM `OrderBookDex` venue (`dex/venue.rs`). **Owner (Q2, rev 1.1): non-EVM DEX order books come to the node after EVM** (planned node stream N3, per-family settlement adapters, DEX §5); the app's `dex` module is family-generic over the gateway `/v1/dex/*` routes, so each family's DEX screen turns on when `GET /v1/gateway` reports a `dex` for that chain. | Facts from code; owner. | — |
 
 ---
 
@@ -262,7 +262,7 @@ interface FamilyAdapter {
   buildIntent(p: IntentParams): Promise<Intent>;  // bytes/typed data + digest + DisplayModel; pure after reads
   signRequest(i: Intent): SignRequest;            // what a signer must sign (§6.1)
   verify(i: Intent, s: Signature): Promise<boolean>;   // local check before sending (R158)
-  submitGateway?(node: NodeCfg, i: Intent, s: Signature): Promise<{ intentId?: string }>;  // R156 (EVM today)
+  submitGateway?(node: NodeCfg, i: Intent, s: Signature): Promise<{ intentId?: string }>;  // R156: /v1/metatx (EVM), /v1/ops (N2)
   buildSelfPaid(i: Intent, s: Signature, payer: SignerAccount): Promise<UnsignedTx>;
   send(tx: UnsignedTx, by: Signer): Promise<TxId>;
   intentStatus(i: Intent): Promise<'pending' | 'done' | 'expired'>;               // R157
@@ -381,16 +381,16 @@ available (reason in the cell or below).
 
 | Feature | EVM | Hedera | Cosmos | Soroban | Sui | Aptos | TON | Solana |
 |---|---|---|---|---|---|---|---|---|
-| Meta-op transfer / pay | G + S | S (no gateway, R156) | S | S | S | S | S | S |
+| Meta-op transfer / pay | G + S | S; G after N2 | S; G after N2 | S; G after N2 | S; G after N2 | S; G after N2 | S; G after N2 | S; G after N2 |
 | Fund meta account (`deposit`) | n/a (balance is the token) | n/a | n/a | n/a | ✓ `Account<T>` | ✓ Account store | n/a (jetton wallet) | ✓ PDA token account |
 | Enable a coin type for meta-ops | — | — | — | — | ✓ `new_registry<T>` (anyone, once per T) | n/a (any FA) | — | n/a (any mint) |
 | Create token, factory v1 (`META`, wrap or mint) | ✓ | ✓ (`HederaMetaToken` impl registered in that chain's factory; `Deploy.s.sol` registers only the EVM ones) | — PLANNED | — PLANNED | n/a | n/a | — PLANNED | n/a |
 | Create tiered token, factory v2 (NONE/SINGLE/MULTI, fixed/adjustable, guardian, rateAdmin) | ✓ | ✓ (Hedera children, TW2 §11) | — (R145) | — | — | — | — | — |
 | Wrap an existing token into a meta-tx token | ✓ (v1 `createMetaToken` with underlying, v2 `META_SINGLE`/`META_MULTI`) | ✓ (ERC-20 or HTS underlying) | — PLANNED | — PLANNED | ≈ enable coin type | n/a | — PLANNED (highest value, TW2 §12) | n/a |
 | Wrap / unwrap / addReserve (direct) | ✓ | ✓ | — | — | — | — | — | — |
-| Gasless unwrap `mtxUnwrap` | G + S | S | — | — | — | — | — | — |
+| Gasless unwrap `mtxUnwrap` | G + S | S; G after N2 | — | — | — | — | — | — |
 | Rate admin / guardian (R169) | ✓ | ✓ | — | — | — | — | — | — |
-| DEX book view, place, cancel, cancel-all | G (venue) ; on-chain cancel S | — (R172) | — (R172) | — | — | — | — | — |
+| DEX book view, place, cancel, cancel-all | G (venue) ; on-chain cancel S | unavailable until N3 (R172) | unavailable until N3 | unavailable until N3 | unavailable until N3 | unavailable until N3 | unavailable until N3 | unavailable until N3 |
 | Zether | ✓ dev chains 31337/1337 only (R164) | — | — | — | — | — | — | — |
 | Passkey signer | ✓ SubjectAccount | ✓ SubjectAccount on HSCS (net-hedera §3; OZ P-256 fallback without `0x100`) | — A16 | — A16 | — A16 | — A16 | — A16 | — A16 |
 | Seed vault signer | ✓ | ✓ ECDSA + ED25519 | ✓ | ✓ (Pi coin 314159) | ✓ | ✓ | ✓ | ✓ (path added, R155) |
@@ -422,7 +422,7 @@ available (reason in the cell or below).
 | 9 | Rate & guardian (`#/token/:chain/:token/admin`) | as 6 | guardian `disableWrap`/`renounceGuardian` direct; rate ops as calldata (R169) | wallet tx | EVM, Hedera |
 | 10 | Sui coin type enable (`#/sui/:chain/enable`) | `Registry<T>` existence (derived id) | `new_registry<T>` self-paid | wallet tx | Sui |
 | 11 | Fund meta account (`#/deposit/:chain/:asset`) | owned coins / FA / SPL balances | transfer into `Account<T>` / Account store / PDA ATA | wallet tx | Sui, Aptos, Solana |
-| 12 | DEX markets (`#/dex/:chain`) | gateway `GET /v1/dex/markets` (+ `dex.relayer` from `/v1/gateway`), on-chain `markets(key)` cross-check | — | — | EVM |
+| 12 | DEX markets (`#/dex/:chain`) | gateway `GET /v1/dex/markets` (+ `dex.relayer` from `/v1/gateway`), on-chain `markets(key)` cross-check | — | — | EVM; others after N3 ("unavailable" until then) |
 | 13 | DEX market (`#/dex/:chain/:market`) | `depth` (poll 2 s visible / paused hidden), `trades`, `ticker`, `orders?maker=`; `depth?scope=network` + `/v1/dex/homes` when the node supports A2 G3 (feature-probed); trusted label, untrusted opt-in (R170) | place `POST /v1/dex/orders`; cancel `POST /v1/dex/cancel`; cancel-all `POST /v1/dex/cancel-all`; on-chain `cancel([…])`/`invalidateNonces` self-paid; unbound orders (`relayer = 0`, market `unbound`): "cancel final when mined" state | `eip712` (DEX domain) | EVM |
 | 14 | Zether (`#/zether/:chain/:token`) | `registered(UA)`, account state (`acc`, `pending`, seqs, mode), cache, BSGS (worker) | register (`UniversalAccountRegistry.register`, self-paid only: the PoP binds `msg.sender`), `approve` + `fund(Y, amount)`, transfer (prove → `OP_ZTRANSFER` envelope via gateway, or direct `transferConfidential`), withdraw (`OP_ZBURN` / `burn`), `rollOverPublic` / `rollOverSigned` | Schnorr PoP (WASM), `eip712` envelope | EVM dev |
 | 15 | Settings (`#/settings`) | — | locale, theme, dev key (DEV), per-chain RPC override (session only) | — | — |
@@ -486,6 +486,7 @@ available (reason in the cell or below).
 |---|---|---|
 | `GET /v1/gateway` (R159a) | — | capability probe, cached 30 s; absent (404) ⇒ assume EVM chains in config served with unknown tokens: a `400 token not served` reply disables the gateway path for that token for the session |
 | `POST /v1/metatx` | `{chain: <evm chain id number>, token, m: WireMetaTx (decimal strings, camelCase), signature: 0x…}` | `202 {"status":"queued"}`; `400 simulation: <reason>` shown decoded; `503` breaker/RPC ⇒ offer self-paid |
+| `POST /v1/ops` (N2) | `{chain: <chain_key>, op: <the family's signed op>, signature}` — `op` is the payload the family `lane_runner` already submits (job kind `signed_op`); exact schema fixed by N2 and added to NI | Hedera + six non-EVM families; same replies as `/v1/metatx` |
 | `GET /v1/intents/{id}` | — | when the node returns `intent_id` (NI, SPECIFIED) |
 | `POST /v1/dex/orders` | `{chain, order: WireOrder, signature}` | `202 {hash, status, fills[]}` |
 | `POST /v1/dex/cancel` | `{chain, orderHash, signature}` | `202 cancelled` (book) + on-chain job |
@@ -761,27 +762,32 @@ ends with its gate green and a short note in `TODO.md`.
 | **A6** Zether | worker, WASM web build, register/fund/balance/transfer/burn/rollOver, cache | A3 (vault) | `zether` |
 | **A7** console core | admin client, built-in auth, OIDC (`oauth4webapi`), roles, overview, chains/tokens/lanes, namespaces, jobs, keys, users, audit; mock node + mock IdP | A1 (real node: P2 built-in, P2b OIDC) | `console` |
 | **A8** console mesh | peers, policy, gossip screens, DEX markets/homes, metrics | A7 (real node: P2b + A2 G1–G3) | `console` |
-| **A9** Cosmos | adapter, Keplr/Leap, seed, self-paid | A2 | `cosmos` |
-| **A10** Soroban | adapter (Stellar + Pi), Freighter, seed | A2 | `soroban` |
-| **A11** Sui | adapter, Wallet Standard, enable coin type, deposit | A2 | `sui` |
-| **A12** Aptos | adapter, AIP-62, deposit | A2 | `aptos` |
-| **A13** TON | adapter, JS bridge, BindKey status, SignedOp | A2 | `ton` |
-| **A14** Solana | adapter, Wallet Standard, deposit | A2 | `solana` |
+| **N2** node door A for all families | `scaas-node`: `POST /v1/ops` on the gateway listener for Hedera, Cosmos, Soroban, Sui, Aptos, TON, Solana — decode the family signed op, R84-style normalization of unbound fields, simulate, journal as a `signed_op` job in `~gateway`, submit via the family `lane_runner`; `GET /v1/gateway` lists these chains; must also be written into NI (§5.2/§9.1/§12.3) | node P3 (lanes from the store); N1 | `cargo test` + one non-EVM e2e (Cosmos `wasmd`) |
+| **A9** Cosmos | adapter, Keplr/Leap, seed, self-paid; gateway via `/v1/ops` | A2, N2 | `cosmos` |
+| **A10** Soroban | adapter (Stellar + Pi), Freighter, seed; `/v1/ops` | A2, N2 | `soroban` |
+| **A11** Sui | adapter, Wallet Standard, enable coin type, deposit; `/v1/ops` | A2, N2 | `sui` |
+| **A12** Aptos | adapter, AIP-62, deposit; `/v1/ops` | A2, N2 | `aptos` |
+| **A13** TON | adapter, JS bridge, BindKey status, SignedOp; `/v1/ops` | A2, N2 | `ton` |
+| **A14** Solana | adapter, Wallet Standard, deposit; `/v1/ops` | A2, N2 | `solana` |
+| **N3** node non-EVM DEX books (PLANNED) | `scaas-node`: venue settlement adapters for Cosmos, Soroban, Sui, Aptos, TON (escrow), Solana (DEX §5 invariants), `/v1/dex/*` keyed by `chain_key`; after the EVM DEX streams (P7, G3); must also be written into NI §12 | P7, N2 | `cargo test` + per-family DEX e2e |
+| **A17** non-EVM DEX screens (PLANNED) | turn on the generic DEX screens per family as N3 lands (family Order encoders in clientkeys) | N3, A9–A14 | per-family DEX e2e |
 | **A15** release | Vietnamese completion, keyboard pass, budget ratchet, `app/README` (deploy both modes, IdP redirect URIs, CSP), SCaaS.md/integration.md status updates | all above | full CI + nightly suites once |
 | **A16** non-EVM passkeys (later) | P-256 envelopes per family in clientkeys (`open_passkey`, custom accounts) | A9–A14 | per-family e2e |
 
-Order for one agent: A0 → A1 → A2 → N1 → A3 → A4 → A5 → A6 → A7 → A9 → A10 → A11 → A12 → A13 → A14 → A8 → A15. A7/A8
+Order for one agent: A0 → A1 → A2 → N1 → A3 → A4 → A5 → A6 → A7 → **N2** → A9 → A10 → A11 → A12 → A13 → A14 → A8 → A15; later A16, and N3 → A17 after the EVM DEX node streams. A7/A8
 real-node e2e wait for the node streams (P2, P2b, G3 per TODO.md); until then they run against the mock node.
 
 ---
 
-## 16. Open questions (owner)
+## 16. Owner answers (rev 1.1, 2026-10-06)
 
-| # | Question | Default if unanswered |
+| # | Question | Answer |
 |---|---|---|
-| Q1 | **Relayed submission for non-EVM and Hedera.** The gateway serves only the EVM family (`main.rs`); MESH §15.3 defers a non-EVM door A (`POST /v1/ops`). Schedule a door A for Hedera and the six non-EVM families in the node streams, so app users without native gas can be relayed? | Self-paid only for those families (R156); the adapter interface already has `submitGateway?`. |
-| Q2 | **Non-EVM DEX.** The contracts exist on all families, but no node book/venue does. Schedule a per-family settlement adapter for the venue (DEX §5), or keep DEX EVM-only? | EVM-only (R172). |
-| Q3 | **Who approves the Vietnamese risk disclosures** (TW2 §8.4/§8.5, Zether unaudited)? | Vietnamese shown with the English original beside it (R167). |
+| Q1 | Relayed submission for Hedera and the six non-EVM families? | **Yes**: node `POST /v1/ops` (stream N2, before the non-EVM app streams); the app uses it for gasless flows on all seven families (R156). To be added to NI later. |
+| Q2 | Non-EVM DEX order books in the node? | **Yes, after EVM** (planned stream N3, then A17); the app shows "unavailable" until then (R172). |
+| Q3 | Who approves the Vietnamese risk disclosures? | The owner; until approved, the English original is shown beside the Vietnamese translation (R167). |
+
+No open questions remain.
 
 ---
 
@@ -791,5 +797,6 @@ real-node e2e wait for the node streams (P2, P2b, G3 per TODO.md); until then th
 - `docs/SCaaS.md` §3.1 `app/` row and `docs/integration.md` §14: point to this spec; "EVM + meta-tx families first"
   (SCaaS §15.1 row 21) is superseded by "all seven families" (owner 2026-10-06).
 - NI §7.4/§7.7: add the gateway CORS allowlist and `GET /v1/gateway` (R159), and the `[app]` block (§13.2).
+- NI §5.2/§9.1/§12.3 and SCaaS §12.3: add `POST /v1/ops` (N2, owner Q1); NI §12 and DEX §5: non-EVM venue books (N3, owner Q2).
 - `clientkeys` description in SCaaS §3.1: "EVM-centric" becomes "all families" after A0.
 - `zether-prover/wasm-smoke.sh`: add the `--target web` build used by the app (A0).
