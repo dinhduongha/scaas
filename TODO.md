@@ -16,7 +16,7 @@ Ordered by what blocks what (2026-10-06). The Odoo side lives in bamboo-dms (`dm
 4. [ ] **P3** submit + lanes from the store (safety-critical); **P4** indexer + `/v1/events`.
 5. [ ] **P5** Odoo client (push cron + sync cron); **P6** push e2e + cutover runbook → owner cuts over chain by chain (testnet first).
 6. [ ] **P7** DEX book into the node store; **S1b′** company bus scope; **S5** mTLS bus; **S6′** mesh pipeline; **S7′** mesh e2e; **P9** remove the pull path; **S8′** doc corrections (mesh spec §15.1).
-7. [ ] **React + Vite app** `smartcontracts/app/` after the node APIs (spec → plan → impl). EVM + meta-tx families; passkey/seed vault, extension wallets, dev key; OIDC only for node admin.
+7. [ ] **React + Vite app** `app/` after the node APIs (spec → plan → impl). EVM + meta-tx families; passkey/seed vault, extension wallets, dev key; OIDC only for node admin.
 8. [ ] TON: report the payer jetton-wallet tx hash with `mined` (false `landed_elsewhere`).
 9. [ ] Still queued: S4 follow-ups (backup-key toggle, device-bound vault, Sui `fam_sui.verify`, Soroban/Aptos/Solana signers, `chain_pay.js`), Zether portal balance cache, post-quantum Zether.
 

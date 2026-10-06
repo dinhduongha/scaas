@@ -50,7 +50,7 @@ The node is an Odoo worker. Every durable fact it relies on lives in Odoo and is
 3. **Store** = mesh R71 SQLite, extended and always on: jobs, job events, chain index ranges, configuration, key
    metadata, audit log, DEX book (R88, R89, R105).
 4. **Multi-tenancy without companies**: namespaces and per-namespace machine credentials (R90–R92).
-5. **Admin API** for configuration, used by operators and the upcoming React+Vite app (`smartcontracts/app/`), with
+5. **Admin API** for configuration, used by operators and the upcoming React+Vite app (`app/`), with
    **OIDC** login (R106–R110).
 6. **Migration**: per-chain feature flag, transitional binary that runs both paths, one-step removal (R104).
 7. Every safety property already built is preserved (§9): R80/S2 consumption checks, the in-flight digest set,
@@ -553,7 +553,7 @@ config rows only (the store holds no secret). `request_id` is echoed as `X-Reque
 `403 NO_ROLE`/`FORBIDDEN`; `404`; `409 CONFLICT` (constraint, e.g. `submit` on `*`); `422 INVALID` with field; `429`
 (10 rps per `sub`); `503 IDP_UNAVAILABLE` (issuer failed closed).
 
-### 7.7 React+Vite app (`smartcontracts/app/`) requirements
+### 7.7 React+Vite app (`app/`) requirements
 
 - Public OIDC client: Authorization Code + PKCE `S256`, no client secret, exact redirect URIs, `state` + `nonce`.
 - Tokens in memory only (e.g. `oidc-client-ts` with an in-memory store; never `localStorage`/`sessionStorage`).
