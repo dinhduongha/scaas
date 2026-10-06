@@ -38,7 +38,7 @@ When two sources disagree, the higher one wins:
 2. **This document** (`SCaaS.md`) and `integration.md`.
 3. **Component specs** in `docs/superpowers/specs/` (payments design R1–R20, wallets addendum R21–R29, round 3
    R30–R67, Zether design RS2-*, Zether limits RS-NV64-*, DEX RS5-*, per-family net specs, relayer mesh R70–R86,
-   node independence R87–R111, mesh gossip amendment A2 R112–R127, token wrappers v2 [TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) R129–R146). For a detail this document does not state,
+   node independence R87–R111, mesh gossip amendment A2 R112–R127, token wrappers v2 [TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) R129–R149). For a detail this document does not state,
    the component spec is normative.
 4. **Code** — pinned behaviour (typehashes, KAT vectors, conformance vectors) is normative for byte formats; a
    difference between code and an owner ruling is a bug in the code, not in the ruling.
@@ -381,8 +381,13 @@ the same envelope (owner decision, canon). Non-EVM families implement the same r
 unit; every output rounds in the contract's favour; zero outputs revert. The issuer chooses at creation: **fixed**
 (default, no setter) or **adjustable** by a `rateAdmin` contract through a timelock (default 7 days, [2, 30] days),
 ≤ `maxRateStepBps` per step (default 1 %, ≤ 10 %), executable by anyone within a 7-day grace; a change that lowers
-collateral executes only if the invariant still holds; balances never rebase; the admin can renounce, not transfer.
-Decimals are display only (issuer's choice; human rate = `num/den × 10^(D − d_i)`). A multi-underlying token
+collateral executes only if the invariant still holds; balances never rebase; the admin can renounce, not transfer;
+wrap into a leg with a pending change is paused (unwrap stays open). Multi-underlying legs may be adjustable too
+(default off, R147): a raise of one leg's rate also needs that leg's redeemable share `≤ maxLegShareBps` after the
+change, because an overvalued leg drains the others ({TW} §8.5 residual risk). **Gasless unwrap** (R148): meta-tx op
+`unwrap(address underlying, address recipient)` (`value` = wrapped units, fee in wrapped units before the burn; burn
+and reserve debit before the underlying transfer, exact-amount check) and `mtxUnwrap`/`mtxUnwrapWithFee`; gasless wrap
+via EIP-2612/Permit2 is PLANNED (R149). Decimals are display only (issuer's choice; human rate = `num/den × 10^(D − d_i)`). A multi-underlying token
 concentrates on its weakest underlying during a depeg (good legs drain first); `disableWrap` stops inflow, not exits
 ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §8.4).
 
@@ -613,7 +618,7 @@ the gateway (stream S0); all origins SPECIFIED (R100).
 | Generic | `executeMetaTransaction(m, signature)` with an op in `m.data` | Every subject-signed token operation; composable ops | **BUILT** |
 | Payment op | `data = pay(bytes32 entryRef)` (exactly 36 bytes, `to ≠ 0`) through the generic path | Invoice/order payment with a reconciliation reference; emits `PaymentSettled(from, to, amount, feeAmount, feeRecipient, entryRef)` | **BUILT** (R2) |
 | Direct payment | `payWithFee(to, amount, feeMode, fee, feeRecipient, entryRef)` — `msg.sender` pays gas; fee charged on top | Contract wallets (MandateWallet), self-submitted payments | **BUILT** |
-| Named entry points (v2) | `mtxTransfer`, `mtxTransferWithFee`, `executeMetaTransactionWithFee`, `mtxPay(…, payId, …)` — build the same struct, same digest (§5.8) | Typed ABI for wallets/explorers; on-chain pay lane | **SPECIFIED** (R138, R139) |
+| Named entry points (v2) | `mtxTransfer`, `mtxTransferWithFee`, `executeMetaTransactionWithFee`, `mtxPay(…, payId, …)`, `mtxUnwrap`, `mtxUnwrapWithFee` — build the same struct, same digest (§5.8) | Typed ABI for wallets/explorers; on-chain pay lane | **SPECIFIED** (R138, R139) |
 | Batch (v2) | `mtxBatch(MetaTransaction[], bytes[])`, atomic | Saves ≈ 23.6 k gas per item after the first (intrinsic + cold access) | **SPECIFIED** (R140) |
 | Zether ops | `OP_ZTRANSFER`, `OP_ZBURN` inside the envelope (§8.8) | Confidential transfer/burn | **BUILT** (dev chains) |
 
@@ -625,6 +630,7 @@ Op table of `MetaToken` (`_checkOp` at step 6 must not fail later at step 8):
 | `pay(bytes32 entryRef)` | 36 | `to ≠ 0` (`PayToZero`) | transfer + `PaymentSettled` with the real fee |
 | `trade(address counterToken, uint256 minCounterValue, address counterparty)` | 100 | `MODE_RESTRICT_RELAYER` set **and** `to == msg.sender` (`TradeLegNotRestricted`) | transfer `from → msg.sender` (the settlement contract) |
 | `approve(address spender, uint256 amount)` | 68 | `value == 0`, `to == spender`, spender is a contract | set allowance |
+| `unwrap(address underlying, address recipient)` (v2 wrapper tiers, SPECIFIED, R148) | 68 | leg known, `to == recipient ≠ 0`, `0 < out ≤ reserve`, fee recipient ≠ recipient | burn `⌈out·q⌉`, debit reserve, then transfer `out` of the underlying (exact amount); only this transfer may revert after step 7, and it reverts the whole tx |
 | other | — | `MetaTxUnknownOp(bytes4)`; `< 4` bytes ⇒ `MetaTxUnknownOp(0)` | — |
 
 ### 5.5 2D nonces and batch lanes (BUILT)
@@ -706,7 +712,8 @@ partial-success bitmap) is withdrawn.
 | `mtxTransferWithFee(…, mode, relayer, fee, feeRecipient, sig)` | `data = ""` | fee `PERCENT`/`FIXED`, `MODE_RESTRICT_FEE_RECIPIENT` set, `feeRecipient ≠ 0` |
 | `executeMetaTransactionWithFee(m, sig)` | `m` (any op) | fee mode ≠ `NONE` (recipient bound or relayer-default) |
 | `mtxPay(from, to, amount, payId, validUntil, mode, relayer, fee, feeRecipient, sig)` | `data = pay(payId)`, `batch = payLane(payId)`, `nonce = 0` | any valid mode |
-| `mtxBatch(MetaTransaction[] ms, bytes[] sigs)` | each item | per item; atomic (one failure reverts all) |
+| `mtxUnwrap(from, underlying, wrapped, recipient, batch, nonce, validUntil, mode, relayer, sig)` / `mtxUnwrapWithFee(…, fee, feeRecipient, sig)` | `to = recipient`, `value = wrapped`, `data = unwrap(underlying, recipient)` | as `mtxTransfer` / `mtxTransferWithFee` |
+| `mtxBatch(MetaTransaction[] ms, bytes[] sigs)` | each item | per item; atomic (one failure reverts all); the node never batches unwrap items |
 
 `payId` is the R9 `entryRef`; `payLane(p) = uint256(keccak256("scaas.pay.lane" ‖ p))`, the lane clients already
 derive. A named call and `executeMetaTransaction` with the same struct have the **same digest, events and nonce**: a
@@ -1886,6 +1893,7 @@ bytes4(keccak256("trade(address,uint256,address)"))`, `OP_APPROVE = bytes4(kecca
 // MetaTxCore / MetaTokenBase (all tiers)
 event MetaNonceCancelled(address indexed from, uint256 indexed batch, uint256 newNonce);
 error FeeRecipientIsPayee();  error MtxModeShape(uint32 mode);  error MtxBatchEmpty();  error MtxBatchLengthMismatch();
+error UnwrapRecipientMismatch();
 function mtxTransfer(address from, address to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil,
                      uint32 mode, address relayer, bytes calldata signature) external returns (bool);
 function mtxTransferWithFee(address from, address to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil,
@@ -1896,6 +1904,12 @@ function mtxPay(address from, address to, uint256 amount, bytes32 payId, uint256
                 address relayer, uint256 fee, address feeRecipient, bytes calldata signature) external returns (bool);
 function mtxBatch(MetaTxLib.MetaTransaction[] calldata ms, bytes[] calldata signatures) external returns (bool);
 function payLane(bytes32 payId) external view returns (uint256);
+function mtxUnwrap(address from, address underlying, uint256 wrapped, address recipient, uint256 batch, uint256 nonce,
+                   uint256 validUntil, uint32 mode, address relayer, bytes calldata signature) external returns (bool);
+function mtxUnwrapWithFee(address from, address underlying, uint256 wrapped, address recipient, uint256 batch,
+                          uint256 nonce, uint256 validUntil, uint32 mode, address relayer, uint256 fee,
+                          address feeRecipient, bytes calldata signature) external returns (bool);
+// op OP_UNWRAP = bytes4(keccak256("unwrap(address,address)")) on wrapper tiers; MetaTxUnknownOp on NoUnderlyingToken
 // NoUnderlyingToken
 function mint(address to, uint256 amount) external;  function burn(uint256 amount) external;  function renounceMinter() external;
 // SingleUnderlyingToken (MultiUnderlyingToken overrides the single-asset ABI to revert UnderlyingRequired)
@@ -1914,6 +1928,7 @@ function wrap(address underlying, uint256 amount) external returns (uint256 mint
 function unwrap(address underlying, uint256 wrapped, address recipient) external returns (uint256 out, uint256 burned);
 function disableWrap(address underlying, bytes32 reason) external;           // guardian, one-way
 function renounceGuardian() external;
+// errors: WrapPausedForRateChange(address), LegShareExceeded(uint256 shareBps, uint256 cap)
 ```
 
 Events `Wrapped`, `Unwrapped`, `ReserveAdded`, `RateChangeProposed`, `RateChangeCancelled`, `RateChanged`,
@@ -2161,7 +2176,7 @@ Order of streams per `TODO.md` and NI §17 / A2 §17 (one heavy stream at a time
 | 22 | Queued | TON payer tx hash on `mined`; backup-key toggle, device-bound vault, Sui `fam_sui.verify`, Soroban/Aptos/Solana signers in clientkeys; Zether portal balance cache | — | **PLANNED** |
 | 23 | Product features | receiver-pays, sponsorship policy, KeyPool auto-refill, outbound treasury payouts, anchoring (Merkle/HCS), crypto-shredding tooling, W3B SLOs/OTel/FinOps, controlled tokens, tender, vesting, managed DEX, asset suite wizard, Celo `l1_batch`, Hedera HCS/scheduled tx | — | **PLANNED** |
 | 24 | Post-quantum Zether | BFV/BGV confidential balances on private/PoA chains | mesh round 4 | **PLANNED** |
-| 25 | TW2 T1–T8 | Token wrappers v2: `MetaTxCore` + named functions, three tiers, rates, multi-underlying, factory v2, Hedera children, invariant suite, node/Odoo fields ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §15) | owner review of TW2 | **SPECIFIED** |
+| 25 | TW2 T1–T8 | Token wrappers v2: `MetaTxCore` + named functions, three tiers, rates, multi-underlying (adjustable legs with share cap), gasless unwrap op, factory v2, Hedera children, invariant suite, node/Odoo fields ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §15) | owner review of TW2 | **SPECIFIED** |
 | — | Owner/operator steps | O1 audit of every contract family; O2 registrar multisig; O3 real deployments; O4 7-day finality evidence + ≥ 2 RPCs; O5 reverse-proxy rate limits; O6/O7 KMS/HSM custody and lane signers; O8 lane funding; O9 land-gate decision; O10 subject-account onboarding; Z1–Z6 Zether gates | — | open |
 
 ### 15.2 Open questions for the owner
@@ -2174,17 +2189,13 @@ Order of streams per `TODO.md` and NI §17 / A2 §17 (one heavy stream at a time
 4. **Assignment trust on the open mesh:** `assign_min_landed = 3` in 7 days, or admin trust only.
 5. **QUIC PQ-only:** accept that classical-only third-party nodes join only over TCP+Noise.
 6. **Chain 9000 as a Zether dev chain** (Z3) and the **curve** policy for production Zether tokens (Z4).
-7. **Adjustable rates on multi-underlying tokens** ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §13 q1): TW2 reads "rates fixed at creation" as "set at
-   creation" and allows the timelocked option (default off); the literal reading (Multi rates immutable) is safer.
-8. **Gasless wrap/unwrap** ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §13 q2): add an `unwrap` meta-tx op in v2 (step 8 would call the underlying) or
-   leave exits to direct calls and contract wallets.
-9. **Receiver-pays** two-signature op design and whether it belongs in v2 of `MetaToken`.
-10. **Controlled tokens**: quorum composition defaults and whether `IRegulatedToken` is a factory kind or a separate
+7. **Receiver-pays** two-signature op design and whether it belongs in v2 of `MetaToken`.
+8. **Controlled tokens**: quorum composition defaults and whether `IRegulatedToken` is a factory kind or a separate
     factory.
-11. **Tender** parameters (minimum reveal window, slash sink default, bond policy default).
-12. **Soroban on the mesh**: accept the host auth nonce as the consumption signal (would qualify Soroban) or keep it
+9. **Tender** parameters (minimum reveal window, slash sink default, bond policy default).
+10. **Soroban on the mesh**: accept the host auth nonce as the consumption signal (would qualify Soroban) or keep it
     job-API only.
-13. **Second event source** to bound a compromised node's ability to fake `/v1/events` (NI §18.3).
+11. **Second event source** to bound a compromised node's ability to fake `/v1/events` (NI §18.3).
 
 ### 15.3 Contradictions between the SRS drafts and rulings/code (resolved here in favour of rulings/code)
 
