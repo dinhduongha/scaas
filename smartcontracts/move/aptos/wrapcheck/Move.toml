@@ -7,7 +7,7 @@ version = "1.0.0"
 
 [addresses]
 wrapcheck = "0xbad"
-bamboo = "0xb0b"
+scaas = "0xb0b"
 
-[dependencies.bamboo]
+[dependencies.scaas]
 local = ".."

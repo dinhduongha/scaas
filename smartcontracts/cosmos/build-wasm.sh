@@ -6,12 +6,12 @@ set -e
 cd "$(dirname "$0")"
 mkdir -p artifacts
 for c in token mandate dex; do
-  cargo build --release --lib --target wasm32-unknown-unknown -p "bamboo-$c"
+  cargo build --release --lib --target wasm32-unknown-unknown -p "scaas-$c"
   wasm-opt -Os --enable-bulk-memory --enable-sign-ext --enable-mutable-globals --enable-nontrapping-float-to-int \
     --enable-reference-types --enable-multivalue \
     --llvm-memory-copy-fill-lowering --signext-lowering --llvm-nontrapping-fptoint-lowering \
     --strip-target-features --strip-debug \
-    "target/wasm32-unknown-unknown/release/bamboo_$c.wasm" -o "artifacts/bamboo_$c.wasm"
-  wasm-opt --mvp-features --enable-mutable-globals "artifacts/bamboo_$c.wasm" -o /dev/null
+    "target/wasm32-unknown-unknown/release/scaas_$c.wasm" -o "artifacts/scaas_$c.wasm"
+  wasm-opt --mvp-features --enable-mutable-globals "artifacts/scaas_$c.wasm" -o /dev/null
 done
 sha256sum artifacts/*.wasm

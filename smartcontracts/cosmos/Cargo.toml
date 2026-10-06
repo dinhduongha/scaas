@@ -8,7 +8,7 @@ cw-storage-plus = "3.0"
 serde = { version = "1", default-features = false, features = ["derive"] }
 sha2 = "0.10"
 ripemd = "0.1"
-bamboo-metaop = { path = "metaop" }
+scaas-metaop = { path = "metaop" }
 
 [profile.release]
 opt-level = "z"

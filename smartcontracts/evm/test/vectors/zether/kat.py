@@ -20,7 +20,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 BN_P = 21888242871839275222246405745257275088696311157297823662689037894645226208583
 BN_R = 21888242871839275222246405745257275088548364400416034343698204186575808495617
 BLS_R = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001
-GEN_DST = b"BAMBOO-ZETHER-GEN-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_"
+GEN_DST = b"SCAAS-ZETHER-GEN-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_"
 
 
 def be(x, n=32):
@@ -54,7 +54,7 @@ def hash_to_scalar(seed, r):
 
 
 def t_init():
-    return keccak(b"BAMBOO-ZETHER-TRANSCRIPT-V1")
+    return keccak(b"SCAAS-ZETHER-TRANSCRIPT-V1")
 
 
 def t_absorb(st, label, data):
@@ -88,7 +88,7 @@ def gen_msg(label, index):
 
 
 def gen_bn(label, index):
-    return map_to_g1_bn(b"BAMBOO-ZETHER-GEN-BN254-V1" + gen_msg(label, index))
+    return map_to_g1_bn(b"SCAAS-ZETHER-GEN-BN254-V1" + gen_msg(label, index))
 
 
 def gen_bls(label, index):
@@ -102,8 +102,8 @@ def generators(curve):
     H = [g("H", i) for i in range(64)]
     blob = h + u + b"".join(G) + b"".join(H)
     psid = keccak(
-        b"bamboo/zether/sigma-bullets/bn254/n64-n64/v1" if curve == "bn254"
-        else b"bamboo/zether/sigma-bullets/bls12-381/n64-n64/v1")  # n_v = n_b = 64 (RS-NV64-1)
+        b"scaas/zether/sigma-bullets/bn254/n64-n64/v1" if curve == "bn254"
+        else b"scaas/zether/sigma-bullets/bls12-381/n64-n64/v1")  # n_v = n_b = 64 (RS-NV64-1)
     return {
         "curve": curve, "proofSystemId": hx(psid), "h": hx(h), "U": hx(u),
         "G": [hx(p) for p in G], "H": [hx(p) for p in H], "blobKeccak": hx(keccak(blob)),
@@ -118,7 +118,7 @@ def schnorr(curve, x, k, msg32):
         r, enc, mul, G = BLS_R, enc_bls, bls.multiply, bls.G1
     Y = enc(mul(G, x))
     R = enc(mul(G, k))
-    e = hash_to_scalar(keccak(b"BAMBOO-ZETHER-SCHNORR-V1" + R + Y + msg32), r)
+    e = hash_to_scalar(keccak(b"SCAAS-ZETHER-SCHNORR-V1" + R + Y + msg32), r)
     z = (k + e * x) % r
     return {"x": hx(be(x)), "Y": hx(Y), "msg": hx(msg32), "k": hx(be(k)), "R": hx(R),
             "e": hx(be(e)), "z": hx(be(z)), "sig": hx(R + be(z))}
@@ -146,7 +146,7 @@ def transcript_cases():
                 chals.append(hx(be(c)))
             states.append(hx(st))
         cases.append({"curve": curve, "init": hx(t_init()), "ops": ops, "states": states, "challenges": chals})
-    seeds = [bytes(32), b"\xff" * 32, keccak(b"bamboo")]
+    seeds = [bytes(32), b"\xff" * 32, keccak(b"scaas")]
     h2s = [{"seed": hx(s), "bn254": hx(be(hash_to_scalar(s, BN_R))),
             "bls12381": hx(be(hash_to_scalar(s, BLS_R)))} for s in seeds]
     return {"cases": cases, "hashToScalar": h2s}
@@ -192,7 +192,7 @@ if __name__ == "__main__":
     dump("generators_bn254.json", generators("bn254"))
     dump("generators_bls12381.json", generators("bls12381"))
     dump("transcript.json", transcript_cases())
-    msg = keccak(b"bamboo zether schnorr kat")
+    msg = keccak(b"scaas zether schnorr kat")
     dump("schnorr_bn254.json", schnorr("bn254", 0x1234567890abcdef, 0xfeedface, msg))
     dump("schnorr_bls12381.json", schnorr("bls12381", 0x1234567890abcdef, 0xfeedface, msg))
     dump("curve_misc.json", {"blsNonSubgroup": hx(bls_non_subgroup()),

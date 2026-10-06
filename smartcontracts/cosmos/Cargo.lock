@@ -168,66 +168,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
-name = "bamboo-cosmos-tests"
-version = "0.1.0"
-dependencies = [
- "bamboo-dex",
- "bamboo-mandate",
- "bamboo-metaop",
- "bamboo-token",
- "cosmwasm-std",
- "cw-multi-test",
- "k256",
- "p256",
- "ripemd",
- "serde_json",
- "sha2",
-]
-
-[[package]]
-name = "bamboo-dex"
-version = "0.1.0"
-dependencies = [
- "bamboo-metaop",
- "cosmwasm-std",
- "cw-storage-plus",
- "serde",
- "sha2",
-]
-
-[[package]]
-name = "bamboo-mandate"
-version = "0.1.0"
-dependencies = [
- "bamboo-metaop",
- "cosmwasm-std",
- "cw-storage-plus",
- "serde",
- "sha2",
-]
-
-[[package]]
-name = "bamboo-metaop"
-version = "0.1.0"
-dependencies = [
- "cosmwasm-std",
- "ripemd",
- "serde",
- "sha2",
-]
-
-[[package]]
-name = "bamboo-token"
-version = "0.1.0"
-dependencies = [
- "bamboo-metaop",
- "cosmwasm-std",
- "cw-storage-plus",
- "serde",
- "sha2",
-]
-
-[[package]]
 name = "base16ct"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1161,6 +1101,66 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92"
 dependencies = [
  "semver",
+]
+
+[[package]]
+name = "scaas-cosmos-tests"
+version = "0.1.0"
+dependencies = [
+ "cosmwasm-std",
+ "cw-multi-test",
+ "k256",
+ "p256",
+ "ripemd",
+ "scaas-dex",
+ "scaas-mandate",
+ "scaas-metaop",
+ "scaas-token",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "scaas-dex"
+version = "0.1.0"
+dependencies = [
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "scaas-metaop",
+ "serde",
+ "sha2",
+]
+
+[[package]]
+name = "scaas-mandate"
+version = "0.1.0"
+dependencies = [
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "scaas-metaop",
+ "serde",
+ "sha2",
+]
+
+[[package]]
+name = "scaas-metaop"
+version = "0.1.0"
+dependencies = [
+ "cosmwasm-std",
+ "ripemd",
+ "serde",
+ "sha2",
+]
+
+[[package]]
+name = "scaas-token"
+version = "0.1.0"
+dependencies = [
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "scaas-metaop",
+ "serde",
+ "sha2",
 ]
 
 [[package]]

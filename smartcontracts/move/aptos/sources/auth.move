@@ -6,10 +6,10 @@
 ///   xin ký rồi tự nộp thẳng, không qua Odoo).
 /// - WebAuthn P-256 (65 byte `0x04‖x‖y`, AnyPublicKey biến thể 2 của AIP-66): `envelope` = `u16be(len ad) ‖ ad ‖
 ///   clientDataJSON`; challenge = base64url(digest), type `webauthn.get`, origin ∈ origins của Account, không
-///   `crossOrigin: true`/`topOrigin` (iframe khác origin — review L1), rpIdHash của khoá, UP+UV, P-256 low-s (`bamboo::p256`, UNAUDITED) trên `sha256(ad ‖ sha256(clientDataJSON))`.
-module bamboo::auth {
+///   `crossOrigin: true`/`topOrigin` (iframe khác origin — review L1), rpIdHash của khoá, UP+UV, P-256 low-s (`scaas::p256`, UNAUDITED) trên `sha256(ad ‖ sha256(clientDataJSON))`.
+module scaas::auth {
     use std::hash::{sha2_256, sha3_256};
-    use bamboo::p256;
+    use scaas::p256;
     use aptos_std::ed25519;
 
     const ED25519: u8 = 0;
@@ -247,26 +247,26 @@ module bamboo::auth {
 
     #[test]
     fun envelope_rules() {
-        let m = b"bamboo.metaop.v1:0xab";
-        assert!(check_envelope(&b"APTOS\nmessage: bamboo.metaop.v1:0xab\nnonce: 01", &m, 4, &vector[]), 0);
+        let m = b"scaas.metaop.v1:0xab";
+        assert!(check_envelope(&b"APTOS\nmessage: scaas.metaop.v1:0xab\nnonce: 01", &m, 4, &vector[]), 0);
         // order does not matter; every known key once
-        assert!(check_envelope(&b"APTOS\nnonce: 01\nchainId: 4\napplication: https://pay.test\nmessage: bamboo.metaop.v1:0xab\naddress: 0x1", &m, 4, &vector[]), 1);
+        assert!(check_envelope(&b"APTOS\nnonce: 01\nchainId: 4\napplication: https://pay.test\nmessage: scaas.metaop.v1:0xab\naddress: 0x1", &m, 4, &vector[]), 1);
         // a second message line (phishing page asked to sign "...\nmessage: <ours>")
-        assert!(!check_envelope(&b"APTOS\nmessage: hello\nmessage: bamboo.metaop.v1:0xab", &m, 4, &vector[]), 2);
-        assert!(!check_envelope(&b"APTOS\nmessage: bamboo.metaop.v1:0xab\nmessage: bamboo.metaop.v1:0xab", &m, 4, &vector[]), 3);
+        assert!(!check_envelope(&b"APTOS\nmessage: hello\nmessage: scaas.metaop.v1:0xab", &m, 4, &vector[]), 2);
+        assert!(!check_envelope(&b"APTOS\nmessage: scaas.metaop.v1:0xab\nmessage: scaas.metaop.v1:0xab", &m, 4, &vector[]), 3);
         // unknown key, wrong chain, missing message, wrong prefix, trailing newline
-        assert!(!check_envelope(&b"APTOS\nmessage: bamboo.metaop.v1:0xab\nfoo: 1", &m, 4, &vector[]), 4);
-        assert!(!check_envelope(&b"APTOS\nmessage: bamboo.metaop.v1:0xab\nchainId: 1", &m, 4, &vector[]), 5);
+        assert!(!check_envelope(&b"APTOS\nmessage: scaas.metaop.v1:0xab\nfoo: 1", &m, 4, &vector[]), 4);
+        assert!(!check_envelope(&b"APTOS\nmessage: scaas.metaop.v1:0xab\nchainId: 1", &m, 4, &vector[]), 5);
         assert!(!check_envelope(&b"APTOS\nnonce: 1", &m, 4, &vector[]), 6);
-        assert!(!check_envelope(&b"APTOSX\nmessage: bamboo.metaop.v1:0xab", &m, 4, &vector[]), 7);
-        assert!(!check_envelope(&b"APTOS\nmessage: bamboo.metaop.v1:0xab\n", &m, 4, &vector[]), 8);
-        assert!(!check_envelope(&b"APTOS\nmessage: bamboo.metaop.v1:0xabc", &m, 4, &vector[]), 9);
-        assert!(check_envelope(&b"APTOS\nchainId: 132\nmessage: bamboo.metaop.v1:0xab", &m, 132, &vector[]), 10);
+        assert!(!check_envelope(&b"APTOSX\nmessage: scaas.metaop.v1:0xab", &m, 4, &vector[]), 7);
+        assert!(!check_envelope(&b"APTOS\nmessage: scaas.metaop.v1:0xab\n", &m, 4, &vector[]), 8);
+        assert!(!check_envelope(&b"APTOS\nmessage: scaas.metaop.v1:0xabc", &m, 4, &vector[]), 9);
+        assert!(check_envelope(&b"APTOS\nchainId: 132\nmessage: scaas.metaop.v1:0xab", &m, 132, &vector[]), 10);
         // origins set: `application` is required and must be one of them
         let o = vector[b"https://pay.test"];
-        assert!(check_envelope(&b"APTOS\napplication: https://pay.test\nmessage: bamboo.metaop.v1:0xab", &m, 4, &o), 13);
-        assert!(!check_envelope(&b"APTOS\napplication: https://evil.test\nmessage: bamboo.metaop.v1:0xab", &m, 4, &o), 14);
-        assert!(!check_envelope(&b"APTOS\nmessage: bamboo.metaop.v1:0xab", &m, 4, &o), 15);
+        assert!(check_envelope(&b"APTOS\napplication: https://pay.test\nmessage: scaas.metaop.v1:0xab", &m, 4, &o), 13);
+        assert!(!check_envelope(&b"APTOS\napplication: https://evil.test\nmessage: scaas.metaop.v1:0xab", &m, 4, &o), 14);
+        assert!(!check_envelope(&b"APTOS\nmessage: scaas.metaop.v1:0xab", &m, 4, &o), 15);
         assert!(expected_message(b"x", &x"00ff") == b"x:0x00ff", 11);
         assert!(base64url(&x"fbff") == b"-_8", 12);
     }

@@ -70,16 +70,16 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
     bytes4 public constant OP_ZTRANSFER = bytes4(keccak256("zetherTransfer(bytes,bytes,bytes,bytes32)"));
     bytes4 public constant OP_ZBURN = bytes4(keccak256("zetherBurn(bytes,uint256,address,bytes32,bytes,bytes)"));
 
-    bytes32 private constant OP_TRANSFER = keccak256("BAMBOO-ZETHER-OP-TRANSFER-V1");
-    bytes32 private constant OP_BURN = keccak256("BAMBOO-ZETHER-OP-BURN-V1");
+    bytes32 private constant OP_TRANSFER = keccak256("SCAAS-ZETHER-OP-TRANSFER-V1");
+    bytes32 private constant OP_BURN = keccak256("SCAAS-ZETHER-OP-BURN-V1");
     bytes32 private constant TAG_DIRECT = keccak256("ZTX_V1_DIRECT");
     bytes32 private constant TAG_RELAYED = keccak256("ZTX_V1_RELAYED");
-    bytes32 private constant TAG_ENVELOPE = keccak256("BAMBOO-ZETHER-ENVELOPE-V1");
-    bytes32 private constant TAG_ENTRY = keccak256("BAMBOO-ZETHER-ENTRY-V1");
+    bytes32 private constant TAG_ENVELOPE = keccak256("SCAAS-ZETHER-ENVELOPE-V1");
+    bytes32 private constant TAG_ENTRY = keccak256("SCAAS-ZETHER-ENTRY-V1");
     bytes32 private constant TAG_ROLLOVER = keccak256("ZETHER_ROLLOVER_V1");
     bytes32 private constant TAG_SET_MODE = keccak256("ZETHER_SET_ROLLOVER_MODE_V1");
-    bytes private constant AUTH_TAG = "BAMBOO-ZETHER-AUTH-V1";
-    bytes private constant DISCLOSE_TAG = "BAMBOO-ZETHER-DISCLOSE-V1";
+    bytes private constant AUTH_TAG = "SCAAS-ZETHER-AUTH-V1";
+    bytes private constant DISCLOSE_TAG = "SCAAS-ZETHER-DISCLOSE-V1";
     uint256 private constant MAX_TOTAL_SHIELDED = 1 << 54;
     /// @dev `2^n_v` (n_v = 64, RS-NV64-1): trần của `confidentialFee` và của số tiền tiết lộ.
     uint256 private constant VALUE_BOUND = 1 << 64;
@@ -113,7 +113,7 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
     error AlreadyInitialized();
     error BadInit();
 
-    constructor(address factory_) ERC20("", "") EIP712("Bamboo ZetherToken", "1") {
+    constructor(address factory_) ERC20("", "") EIP712("SCaaS ZetherToken", "1") {
         FACTORY = factory_;
         _SELF = address(this);
         _initialized = true;

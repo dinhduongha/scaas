@@ -1,4 +1,4 @@
-//! `bamboo-token` — CW20 tối thiểu + meta-tx cấp contract (R30, R66).
+//! `scaas-token` — CW20 tối thiểu + meta-tx cấp contract (R30, R66).
 //! Số dư nằm trong contract; chủ thể chỉ KÝ `MetaOp`, relayer gửi tx từ lane của nó. Lane/nonce riêng
 //! contract (`NONCES[(from, lane)]`) ⇒ thao tác kẹt ở contract khác không bao giờ chặn contract này.
 //! Allowance chỉ cho spender là contract, `TransferFrom` chỉ khi người gọi là contract (R26).
@@ -11,7 +11,7 @@ use cosmwasm_std::{
 use cw_storage_plus::{Item, Map};
 use serde::{Deserialize, Serialize};
 
-use bamboo_metaop::{err, verify, Auth, Cw20ReceiveMsg, ReceiverExecuteMsg};
+use scaas_metaop::{err, verify, Auth, Cw20ReceiveMsg, ReceiverExecuteMsg};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]

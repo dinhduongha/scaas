@@ -27,10 +27,10 @@ abstract contract ERC20MetaTx is ERC20, EIP712, IERC20MetaTx {
 
     /// @dev Guard theo CONTRACT, không theo hàm (§04.6.3). Transient storage: chain
     ///      9000 đã có Cancun/Prague sau khi sửa chainspec, Gnosis và Celo cũng vậy.
-    /// keccak256("bamboo.metatx.reentrancy.v1") — hằng số phải viết thẳng số:
+    /// keccak256("scaas.metatx.reentrancy.v1") — hằng số phải viết thẳng số:
     /// inline assembly của solc 0.8 không nhận một constant tính bằng keccak256().
     bytes32 private constant _REENTRANCY_SLOT =
-        0xfadfe27b5cbfdbb32eee3737cf0fe576eeec89aee56cef334a86b4e2c362b8b6;
+        0x27c50dd30ecb71eab142d768eee7a467a52b3c225acce12341323902fcd7aa51;
 
     modifier nonReentrant() {
         assembly ("memory-safe") {

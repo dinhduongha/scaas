@@ -1,4 +1,4 @@
-// Bamboo jetton (TEP-74) with contract-level meta-transactions in the wallet (R67, R30).
+// SCaaS jetton (TEP-74) with contract-level meta-transactions in the wallet (R67, R30).
 import "./common";
 
 const MIN_STORAGE: Int = ton("0.01");
@@ -29,14 +29,14 @@ struct JettonWalletData {
 /// StateInit of `owner`'s wallet for `master`: the single derivation every party uses (master, sibling
 /// wallets, DEX, Mandate, Odoo, relayer). Changing the wallet's parameters changes every address.
 fun walletInit(owner: Address, master: Address): StateInit {
-    return initOf BambooJettonWallet(owner, master, 0, 0, null, emptyMap(), emptyMap(), 0, 0, 0);
+    return initOf ScaasJettonWallet(owner, master, 0, 0, null, emptyMap(), emptyMap(), 0, 0, 0);
 }
 
 fun walletAddress(owner: Address, master: Address): Address {
     return contractAddress(walletInit(owner, master));
 }
 
-contract BambooJettonMaster(
+contract ScaasJettonMaster(
     admin: Address,
     totalSupply: Int as coins,
     content: Cell,
@@ -109,7 +109,7 @@ contract BambooJettonMaster(
     }
 }
 
-contract BambooJettonWallet(
+contract ScaasJettonWallet(
     owner: Address,
     master: Address,
     balance: Int as coins,

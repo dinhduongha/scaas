@@ -15,7 +15,7 @@ import {HashToCurve} from "../src/common/HashToCurve.sol";
 ///     forge test --fork-url http://127.0.0.1:8545 --match-contract BlsKat
 contract BlsKatTest is Test {
     bytes constant DST = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
-    bytes constant MSG = "bamboo";
+    bytes constant MSG = "bamboo"; // message of the external py_ecc KAT (verified on chain 9000), not a tag
 
     bytes constant HM =
         hex"000000000000000000000000000000000a8420a64f75971be4bccf69a1adcec1"

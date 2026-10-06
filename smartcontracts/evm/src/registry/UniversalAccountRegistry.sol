@@ -33,11 +33,11 @@ contract UniversalAccountRegistry is IUniversalAccountRegistry {
         bytes authData;
     }
 
-    bytes private constant SCHNORR_TAG = "BAMBOO-ZETHER-SCHNORR-V1"; // ASCII thô, 24 byte (§11.1)
-    bytes private constant BLS_BN254_SIG = "BAMBOO-BLS-BN254-SIG-V1";
-    bytes private constant BLS_BN254_POP = "BAMBOO-BLS-BN254-POP-V1";
-    bytes private constant BLS381_DST_SIG = "BAMBOO-AUTH-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_SIG_";
-    bytes private constant BLS381_DST_POP = "BAMBOO-AUTH-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_";
+    bytes private constant SCHNORR_TAG = "SCAAS-ZETHER-SCHNORR-V1"; // ASCII thô, 23 byte (§11.1)
+    bytes private constant BLS_BN254_SIG = "SCAAS-BLS-BN254-SIG-V1";
+    bytes private constant BLS_BN254_POP = "SCAAS-BLS-BN254-POP-V1";
+    bytes private constant BLS381_DST_SIG = "SCAAS-AUTH-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_SIG_";
+    bytes private constant BLS381_DST_POP = "SCAAS-AUTH-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_";
     /// bn254 G2 generator, thứ tự EIP-197: x_im, x_re, y_im, y_re.
     bytes private constant BN254_G2 = abi.encodePacked(
         uint256(11559732032986387107991004021392285783925812861821192530917403151452391805634),

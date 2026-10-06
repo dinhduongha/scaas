@@ -69,7 +69,7 @@ function _isContract(address a) internal view returns (bool) {
 **Files:** Create `smartcontracts/src/wallet/MandateWallet.sol`, `test/MandateWallet.t.sol`.
 
 **Interfaces (Produces, dùng ở T7/T8/T11):**
-- domain EIP-712 `("Bamboo MandateWallet","1",chainId,wallet)`
+- domain EIP-712 `("SCaaS MandateWallet","1",chainId,wallet)`
 - `PayUnderMandate(address token,address payee,uint256 amount,bytes32 entryRef,uint256 validUntil)`
 - `RevokeMandate(address token,uint256 validUntil)`
 - `payUnderMandate(address token,address payee,uint256 amount,bytes32 entryRef,uint256 validUntil,bytes sig)` selector tính trong test Python.
@@ -143,7 +143,7 @@ function _isContract(address a) internal view returns (bool) {
 
 ### Task 11: node job `call`
 
-**Files:** `bamboo-node/src/odoo.rs` (`Job.metatx` Option, `Job.call` Option), `src/submit.rs` (`work_from_job`), unit test.
+**Files:** `scaas-node/src/odoo.rs` (`Job.metatx` Option, `Job.call` Option), `src/submit.rs` (`work_from_job`), unit test.
 - [ ] Commit `feat(node): relay plain contract calls from the outbox`.
 
 ### Task 12: review + full suites

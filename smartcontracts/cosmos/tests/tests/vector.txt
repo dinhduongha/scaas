@@ -1,7 +1,7 @@
 from=wasm1r5v5srda7xfth3hn2s26txvrcrntldju3hkw75
 to=wasm1xvenxvenxvenxvenxvenxvenxvenxvenkz5vxp
 contract=wasm1g3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zqn0lflt
-payload={"amount":"1000","contract":"wasm1g3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zqn0lflt","domain":"bamboo.metaop.v1","extra":"","from":"wasm1r5v5srda7xfth3hn2s26txvrcrntldju3hkw75","lane":"1111111111111111111111111111111111111111111111111111111111111111","network":"bamboo-1","nonce":0,"op":"pay","pay_ref":"2222222222222222222222222222222222222222222222222222222222222222","relayer":"","to":"wasm1xvenxvenxvenxvenxvenxvenxvenxvenkz5vxp","valid_until":2000000000}
-digest=e9ce621f85e6efbebf377dfcbf8db84b22ddd69f739466be318f7783ec2b5bda
-doc_sha256=f85af550a62123c416b9a8651e67d54c9e4379c38aa3754ca3740e83fb7ba367
-sig=8S4sUTE1fOD6Vk/elk5nOwsd/pla6+CERx3siF9VUOwNeSdhv5iwqI09fvSEJJUm+BEzDaDcRkzYrBxHqSpL4A==
+payload={"amount":"1000","contract":"wasm1g3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zqn0lflt","domain":"scaas.metaop.v1","extra":"","from":"wasm1r5v5srda7xfth3hn2s26txvrcrntldju3hkw75","lane":"1111111111111111111111111111111111111111111111111111111111111111","network":"scaas-1","nonce":0,"op":"pay","pay_ref":"2222222222222222222222222222222222222222222222222222222222222222","relayer":"","to":"wasm1xvenxvenxvenxvenxvenxvenxvenxvenkz5vxp","valid_until":2000000000}
+digest=42a059030fddc512dafac824352497ef2d2a97fe426c00b7eb9960b3f7d62831
+doc_sha256=0838f3c5ae45ccd436feb2960d39df0cba4b54252b2d24457410cc0a0122170f
+sig=bnFynDb3etgy3RysEUXatcouBH6FzYCsrMiK6H01Bvc6i/X/fMpV/1NdEVandZ2PWvpmgIv5XLLHmZ1JX8D3nQ==

@@ -2,7 +2,7 @@
 //! statement, the Sigma commitments and both Bulletproofs (research §3.4.6/§3.4.7).
 //!
 //! ```text
-//! init():               st = keccak256("BAMBOO-ZETHER-TRANSCRIPT-V1")
+//! init():               st = keccak256("SCAAS-ZETHER-TRANSCRIPT-V1")
 //! absorb(label, data):  st = keccak256(st ‖ 0x00 ‖ u8(len(label)) ‖ label ‖ be4(len(data)) ‖ data)
 //! challenge(label):     st = keccak256(st ‖ 0x01 ‖ u8(len(label)) ‖ label); return hashToScalar(st)
 //! hashToScalar(seed) = (keccak256(seed ‖ 0x02) · 2^256 + keccak256(seed ‖ 0x03)) mod r
@@ -44,7 +44,7 @@ impl Default for Transcript {
 
 impl Transcript {
     pub fn new() -> Self {
-        Self { st: keccak256(b"BAMBOO-ZETHER-TRANSCRIPT-V1"), ops: vec![], states: vec![] }
+        Self { st: keccak256(b"SCAAS-ZETHER-TRANSCRIPT-V1"), ops: vec![], states: vec![] }
     }
 
     fn step(&mut self, kind: u8, label: &str, data: Option<&[u8]>) {
@@ -89,7 +89,7 @@ mod tests {
     fn layout_matches_spec_by_hand() {
         let mut t = Transcript::new();
         t.absorb("statement", &[0xab, 0xcd]);
-        let mut pre = keccak256(b"BAMBOO-ZETHER-TRANSCRIPT-V1").to_vec();
+        let mut pre = keccak256(b"SCAAS-ZETHER-TRANSCRIPT-V1").to_vec();
         pre.extend_from_slice(&[0x00, 9]);
         pre.extend_from_slice(b"statement");
         pre.extend_from_slice(&[0, 0, 0, 2, 0xab, 0xcd]);

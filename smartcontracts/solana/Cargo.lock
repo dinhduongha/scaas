@@ -635,27 +635,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
-name = "bamboo"
-version = "0.1.0"
-dependencies = [
- "anchor-lang",
- "anchor-spl",
- "ed25519-dalek 2.2.0",
- "litesvm",
- "p256",
- "sha2 0.10.9",
- "solana-account",
- "solana-clock 3.2.1",
- "solana-instructions-sysvar 3.0.1",
- "solana-keypair",
- "solana-message",
- "solana-sha256-hasher",
- "solana-signer",
- "solana-system-interface 3.3.0",
- "solana-transaction",
-]
-
-[[package]]
 name = "base16ct"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2481,6 +2460,27 @@ name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
+
+[[package]]
+name = "scaas"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "anchor-spl",
+ "ed25519-dalek 2.2.0",
+ "litesvm",
+ "p256",
+ "sha2 0.10.9",
+ "solana-account",
+ "solana-clock 3.2.1",
+ "solana-instructions-sysvar 3.0.1",
+ "solana-keypair",
+ "solana-message",
+ "solana-sha256-hasher",
+ "solana-signer",
+ "solana-system-interface 3.3.0",
+ "solana-transaction",
+]
 
 [[package]]
 name = "scopeguard"

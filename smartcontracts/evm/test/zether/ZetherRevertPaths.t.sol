@@ -335,7 +335,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         vm.expectRevert(); // proof hợp lệ, nhưng không có chữ ký của chủ multisig
         tok.transferConfidential(t.payload, t.proof, "", _none());
         bytes32 authDigest = keccak256(abi.encodePacked(
-            "BAMBOO-ZETHER-AUTH-V1", keccak256(tok.transferStatement(t.payload, _none(), 0))
+            "SCAAS-ZETHER-AUTH-V1", keccak256(tok.transferStatement(t.payload, _none(), 0))
         ));
         bytes[] memory sigs = new bytes[](1);
         sigs[0] = _ecdsa(0x0DD, authDigest);

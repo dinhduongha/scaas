@@ -411,7 +411,7 @@ abstract contract ZetherTokenSuite is ZetherFixture {
         uint256 k = uint256(keccak256(abi.encode("cp", x, ref))) % r;
         bytes memory a1a2 = bytes.concat(ver.g1MulBase(k), ver.g1Mul(_dOut(ref), k));
         uint256 e = ZetherTranscript.hashToScalar(keccak256(bytes.concat(
-            abi.encodePacked("BAMBOO-ZETHER-DISCLOSE-V1", block.chainid, address(tok)),
+            abi.encodePacked("SCAAS-ZETHER-DISCLOSE-V1", block.chainid, address(tok)),
             abi.encodePacked(ref, amount, uint8(kind), a1a2)
         )), r);
         uint256 p = ver.g1EncodedBytes();

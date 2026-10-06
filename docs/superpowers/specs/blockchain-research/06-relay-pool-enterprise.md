@@ -30,7 +30,7 @@ Quyết định kiến trúc đầu tiên, và note gốc không nói rõ: **vò
 | Thành phần | Chạy ở đâu | Lý do |
 |---|---|---|
 | Control plane: chain config, policy, relayer account, job record, audit, breaker state | Odoo 19 addon `dms_blockchain` | Cần ACL, record rule, view, multi-company, audit trail |
-| Hot loop: cấp nonce, xin ký, broadcast, theo dõi receipt, replace | `bamboo-node` vai `submit` (Rust) | Odoo worker là sync/blocking, `ir.cron` tối thiểu 1 phút và chạy trong transaction dài; một tx treo sẽ giữ lock hàng row |
+| Hot loop: cấp nonce, xin ký, broadcast, theo dõi receipt, replace | `scaas-node` vai `submit` (Rust) | Odoo worker là sync/blocking, `ir.cron` tối thiểu 1 phút và chạy trong transaction dài; một tx treo sẽ giữ lock hàng row |
 | State nonce | **Bộ nhớ tiến trình** (một task sở hữu duy nhất) + **journal Postgres** | Không có state chia sẻ giữa các tiến trình ⇒ không cần store phân tán |
 | Vật liệu khoá | **Không nằm ở đây.** Làn custody giữ (`_USER-DECISIONS.md` §23.2) | Làn relay parse byte của người lạ; khoá không được cùng address space |
 | Cron Odoo | Chỉ reconcile + janitor, mỗi 1–5 phút | XML gọi đúng một dòng: `model._cron_relay_reconcile()` |
@@ -53,7 +53,7 @@ custom-addons/bamboo-dms/dms_blockchain/          # addon Odoo (control plane)
     models/blockchain_target_policy.py
     data/ir_cron.xml
 
-bamboo-node/                                      # MOT binary Rust (`_USER-DECISIONS.md` §23.3)
+scaas-node/                                      # MOT binary Rust (`_USER-DECISIONS.md` §23.3)
     src/roles/{gateway,mesh,pool,submit,indexer}.rs
     src/roles/{custody,oracle}.rs                 # lan khac, xem `_USER-DECISIONS.md` §23.2
     src/chain/{evm,sui,soroban,cosmwasm,ton,hedera}.rs
@@ -1004,7 +1004,7 @@ Moi EOA: gioi han boi (a) sign serial, (b) txpool.accountslots = 16
 => Voi enclave: K = ceil(7 / 3,2) = 3 EOA. Lay K = 6 (2x headroom + cach ly HOL).
 => Voi MPC:     tran he thong = 10 tx/s bat ke K. Phai batch.
 
-[BAN 3] Khong con "worker process" nao de dem: MOT tien trinh bamboo-node giu ca K khoa,
+[BAN 3] Khong con "worker process" nao de dem: MOT tien trinh scaas-node giu ca K khoa,
 moi khoa mot task tokio. K=6 la sau task, khong phai sau tien trinh.
 Postgres:  ~4 write/job. O 100 job/s va gom theo lo = ~2-5 commit/s. Khong dang ke.
 Bo nho:    state nonce mot khoa < 4 KB. K=6 tren 3 chain = ~72 KB. Khong dang ke.

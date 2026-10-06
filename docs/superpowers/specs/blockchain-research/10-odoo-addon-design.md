@@ -52,7 +52,7 @@ sai rằng nó cần DMS. Nhưng cái giá của việc đổi tên **sau khi de
 | Phương án | Chi phí đổi tên sau deploy | Đánh giá |
 |---|---|---|
 | **A. Giữ `dms_blockchain`** (khuyến nghị) | 0 | `dms` đọc như vendor prefix, đúng như module chính tên là `dms` chứ không phải `bamboo_dms`. Sửa nhận thức bằng `'name'` + `'category'` trong manifest, không bằng thư mục |
-| B. Đổi thành `bamboo_chain` / `chain_settlement` | Phải làm **trước** khi cài lần đầu. Sau đó cần migration script rewrite `ir_module_module.name`, `ir_module_module_dependency.name`, và cột `module` của **mọi** dòng `ir_model_data`. Đổi tên `_name` model còn kéo theo rename bảng PostgreSQL | Chỉ làm nếu quyết ngay hôm nay |
+| B. Đổi thành `scaas_chain` / `chain_settlement` | Phải làm **trước** khi cài lần đầu. Sau đó cần migration script rewrite `ir_module_module.name`, `ir_module_module_dependency.name`, và cột `module` của **mọi** dòng `ir_model_data`. Đổi tên `_name` model còn kéo theo rename bảng PostgreSQL | Chỉ làm nếu quyết ngay hôm nay |
 | C. Giữ `dms_blockchain` + thêm shim module rỗng tên trung tính | 2 module để bảo trì, 1 trong số đó không làm gì | Không |
 
 **Định lượng chi phí của B** (ước tính, cơ sở: đếm model/ACL/rule/view dự kiến của chính section này):
@@ -76,7 +76,7 @@ Install it on a bare Odoo and it stays inert until an administrator enables a ch
     'category': 'Accounting/Blockchain',
     'version': '19.0.1.0.0',
     'license': 'LGPL-3',
-    'author': 'Bamboo',
+    'author': 'SCaaS',
     'depends': ['base', 'mail'],          # KHONG 'dms', KHONG 'account', KHONG 'payment'
     'external_dependencies': {},          # xem ghi chu duoi
     'application': True,

@@ -1,14 +1,14 @@
 #[test_only]
-module bamboo::meta_tests {
+module scaas::meta_tests {
     use aptos_framework::account;
     use aptos_framework::aptos_coin::{Self, AptosCoin};
     use aptos_framework::coin;
     use aptos_framework::fungible_asset::Metadata;
     use aptos_framework::object;
-    use bamboo::fixtures::{Self as fx, bal, set_now};
-    use bamboo::hooked_fa;
-    use bamboo::meta;
-    use bamboo::vectors as v;
+    use scaas::fixtures::{Self as fx, bal, set_now};
+    use scaas::hooked_fa;
+    use scaas::meta;
+    use scaas::vectors as v;
 
     const BEEF: address = @0xbeef;
 
@@ -16,7 +16,7 @@ module bamboo::meta_tests {
 
     // ------------------------------------------------------------------ địa chỉ: Move = Python
 
-    #[test(f = @aptos_framework, b = @bamboo)]
+    #[test(f = @aptos_framework, b = @scaas)]
     fun derived_addresses_match_python(f: signer, b: signer) {
         fx::setup(&f, &b);
         assert!(meta::root() == v::root(), 0);
@@ -28,7 +28,7 @@ module bamboo::meta_tests {
     // ------------------------------------------------------------------ pay
 
     // L7: FA gửi thẳng tới địa chỉ Account TRƯỚC khi Account tồn tại chi được; lần chi đầu mở Account (lười).
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
     fun pay_opens_lazily_and_spends_funds_sent_before(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -44,7 +44,7 @@ module bamboo::meta_tests {
     }
 
     // `pay_check` (view, thay mô phỏng khi Account chưa mở): cùng digest, cùng mã abort, không ghi gì.
-    #[test(f = @aptos_framework, b = @bamboo)]
+    #[test(f = @aptos_framework, b = @scaas)]
     fun pay_check_matches_relay_pay_without_writing(f: signer, b: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -55,8 +55,8 @@ module bamboo::meta_tests {
         assert!(v::d_pay_eur_check(@0x1a, e).length() == 32 && !meta::exists_at(v::dave()), 2);
     }
 
-    #[test(f = @aptos_framework, b = @bamboo)]
-    #[expected_failure(abort_code = 8, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas)]
+    #[expected_failure(abort_code = 8, location = scaas::meta)]
     fun pay_check_refuses_a_foreign_first_key(f: signer, b: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -64,8 +64,8 @@ module bamboo::meta_tests {
         v::a_pay_eur_by_mallory_check(@0x1a, e);
     }
 
-    #[test(f = @aptos_framework, b = @bamboo)]
-    #[expected_failure(abort_code = 1, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas)]
+    #[expected_failure(abort_code = 1, location = scaas::meta)]
     fun pay_check_refuses_a_passkey_without_uv(f: signer, b: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -73,8 +73,8 @@ module bamboo::meta_tests {
         v::d_pay_eur_no_uv_check(@0x1a, e);
     }
 
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
-    #[expected_failure(abort_code = 4, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 4, location = scaas::meta)]
     fun replay_is_refused(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -83,8 +83,8 @@ module bamboo::meta_tests {
         v::a_pay_eur_0(&lane, e);
     }
 
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
-    #[expected_failure(abort_code = 4, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 4, location = scaas::meta)]
     fun nonce_must_be_next(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -92,8 +92,8 @@ module bamboo::meta_tests {
         v::a_pay_eur_1(&lane, e);
     }
 
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
-    #[expected_failure(abort_code = 2, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 2, location = scaas::meta)]
     fun expired_is_refused(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -103,8 +103,8 @@ module bamboo::meta_tests {
     }
 
     // Miền: tài sản khác với tài sản đã ký.
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
-    #[expected_failure(abort_code = 1, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 1, location = scaas::meta)]
     fun other_asset_is_refused(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let u = fx::asset(b"USD");
@@ -113,8 +113,8 @@ module bamboo::meta_tests {
     }
 
     // Miền: chain id đọc on-chain (mainnet 1) ≠ chain đã ký (4).
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
-    #[expected_failure(abort_code = 1, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 1, location = scaas::meta)]
     fun other_chain_is_refused(f: signer, b: signer, lane: signer) {
         fx::setup_chain(&f, &b, 1);
         let e = eur();
@@ -122,7 +122,7 @@ module bamboo::meta_tests {
         v::a_pay_eur_0(&lane, e);
     }
 
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x7e1)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x7e1)]
     fun bound_relayer_may_submit(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -131,8 +131,8 @@ module bamboo::meta_tests {
         assert!(bal(e, BEEF) == 10, 0);
     }
 
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
-    #[expected_failure(abort_code = 3, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 3, location = scaas::meta)]
     fun other_relayer_is_refused(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -140,8 +140,8 @@ module bamboo::meta_tests {
         v::a_pay_eur_relayer(&lane, e);
     }
 
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
-    #[expected_failure(abort_code = 7, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 7, location = scaas::meta)]
     fun insufficient_balance(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -151,7 +151,7 @@ module bamboo::meta_tests {
 
     // ------------------------------------------------------------------ phong bì signMessage (§4.2)
 
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
     fun envelope_line_order_does_not_matter(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -161,8 +161,8 @@ module bamboo::meta_tests {
     }
 
     // Trang lừa xin ký "hello\nmessage: <ours>" ⇒ hai dòng `message` ⇒ từ chối dù chữ ký ed25519 đúng.
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
-    #[expected_failure(abort_code = 1, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 1, location = scaas::meta)]
     fun second_message_line_is_refused(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -170,8 +170,8 @@ module bamboo::meta_tests {
         v::a_pay_eur_phish(&lane, e);
     }
 
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
-    #[expected_failure(abort_code = 1, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 1, location = scaas::meta)]
     fun envelope_chain_id_must_match(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -179,8 +179,8 @@ module bamboo::meta_tests {
         v::a_pay_eur_chain1(&lane, e);
     }
 
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
-    #[expected_failure(abort_code = 1, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 1, location = scaas::meta)]
     fun envelope_unknown_key_is_refused(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -199,28 +199,28 @@ module bamboo::meta_tests {
         e
     }
 
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
     fun wallet_application_in_the_origins_pays(f: signer, b: signer, lane: signer) {
         let e = alice_with_origin(&f, &b);
         v::a_pay_eur_app(&lane, e);
         assert!(bal(e, BEEF) == 10, 0);
     }
 
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
-    #[expected_failure(abort_code = 1, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 1, location = scaas::meta)]
     fun foreign_wallet_application_is_refused(f: signer, b: signer, lane: signer) {
         let e = alice_with_origin(&f, &b);
         v::a_pay_eur_evil_app(&lane, e);
     }
 
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
-    #[expected_failure(abort_code = 1, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 1, location = scaas::meta)]
     fun missing_wallet_application_is_refused_once_origins_exist(f: signer, b: signer, lane: signer) {
         let e = alice_with_origin(&f, &b);
         v::a_pay_eur_0(&lane, e);
     }
 
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
     fun account_without_origins_takes_any_application(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -231,8 +231,8 @@ module bamboo::meta_tests {
     }
 
     // L1: assertion WebAuthn trong iframe khác origin (`crossOrigin: true`, hoặc có `topOrigin`) bị từ chối.
-    #[test(f = @aptos_framework, b = @bamboo)]
-    #[expected_failure(abort_code = 1, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas)]
+    #[expected_failure(abort_code = 1, location = scaas::meta)]
     fun passkey_cross_origin_is_refused(f: signer, b: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -240,8 +240,8 @@ module bamboo::meta_tests {
         v::d_pay_eur_cross_origin_check(@0x1a, e);
     }
 
-    #[test(f = @aptos_framework, b = @bamboo)]
-    #[expected_failure(abort_code = 1, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas)]
+    #[expected_failure(abort_code = 1, location = scaas::meta)]
     fun passkey_top_origin_is_refused(f: signer, b: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -252,8 +252,8 @@ module bamboo::meta_tests {
     // ------------------------------------------------------------------ khoá đầu tiên, lược đồ
 
     // Mở lười với khoá không dẫn ra auth key của chủ ⇒ từ chối (kẻ gian không chiếm trước Account).
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
-    #[expected_failure(abort_code = 8, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 8, location = scaas::meta)]
     fun lazy_open_with_a_foreign_key_is_refused(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -262,8 +262,8 @@ module bamboo::meta_tests {
     }
 
     // Account đã có: khoá không thuộc Account ⇒ từ chối.
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
-    #[expected_failure(abort_code = 1, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 1, location = scaas::meta)]
     fun key_outside_the_account_is_refused(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -273,7 +273,7 @@ module bamboo::meta_tests {
     }
 
     // Tài khoản stateless (không resource `0x1::account::Account`, AIP-115) và tài khoản thường đều mở được.
-    #[test(f = @aptos_framework, b = @bamboo)]
+    #[test(f = @aptos_framework, b = @scaas)]
     fun explicit_open_stateless_and_with_resource(f: signer, b: signer) {
         fx::setup(&f, &b);
         // alice never got a 0x1::account::Account resource: stateless (get_authentication_key = bcs(addr))
@@ -284,15 +284,15 @@ module bamboo::meta_tests {
         assert!(meta::has_key(v::carol(), v::carol_pk()), 2);
     }
 
-    #[test(f = @aptos_framework, b = @bamboo)]
-    #[expected_failure(abort_code = 8, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas)]
+    #[expected_failure(abort_code = 8, location = scaas::meta)]
     fun explicit_open_with_a_foreign_key_is_refused(f: signer, b: signer) {
         fx::setup(&f, &b);
         meta::open(v::alice(), v::mallory_pk());
     }
 
-    #[test(f = @aptos_framework, b = @bamboo)]
-    #[expected_failure(abort_code = 16, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas)]
+    #[expected_failure(abort_code = 16, location = scaas::meta)]
     fun one_account_per_owner(f: signer, b: signer) {
         fx::setup(&f, &b);
         meta::open(v::alice(), v::alice_pk());
@@ -300,7 +300,7 @@ module bamboo::meta_tests {
     }
 
     // Chủ có địa chỉ SingleKey ed25519 (AIP-55).
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
     fun single_key_owner_pays(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -311,7 +311,7 @@ module bamboo::meta_tests {
 
     // ------------------------------------------------------------------ passkey (WebAuthn P-256 trong Move)
 
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
     fun passkey_owner_pays_and_origin_is_recorded(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -322,8 +322,8 @@ module bamboo::meta_tests {
         assert!(bal(e, BEEF) == 110, 1);
     }
 
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
-    #[expected_failure(abort_code = 1, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 1, location = scaas::meta)]
     fun passkey_evil_origin_after_open(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -332,8 +332,8 @@ module bamboo::meta_tests {
         v::d_pay_eur_evil_origin(&lane, e);
     }
 
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
-    #[expected_failure(abort_code = 1, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 1, location = scaas::meta)]
     fun passkey_without_user_verification_is_refused(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -344,7 +344,7 @@ module bamboo::meta_tests {
     // ------------------------------------------------------------------ tài sản: coin cặp FA, dispatchable
 
     // L7: coin APT cũ gửi bằng `coin::deposit` tới địa chỉ Account rơi vào FA cặp (0xa) ⇒ chi được.
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
     fun paired_coin_sent_to_the_account_is_spendable(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let (burn, mint) = aptos_coin::initialize_for_test(&f);
@@ -357,7 +357,7 @@ module bamboo::meta_tests {
     }
 
     // `relay_pay` chuyển qua `primary_fungible_store::transfer` ⇒ hook withdraw của FA dispatchable chạy.
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
     fun dispatchable_asset_hook_runs(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let hk = hooked_fa::create(&f, &b);
@@ -370,7 +370,7 @@ module bamboo::meta_tests {
     // ------------------------------------------------------------------ anti-lock
 
     // Chủ thể ký X (EUR, lane a1) và Y (USD, lane a2) trên CÙNG Account; X bị giữ; Y qua; rồi X qua.
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
     fun withheld_op_does_not_block_another_lane_or_asset(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let (e, u) = (eur(), fx::asset(b"USD"));
@@ -388,8 +388,8 @@ module bamboo::meta_tests {
     const PRUNE_DELAY: u64 = 2_592_000;
     const LANE_A1: vector<u8> = x"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1";
 
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
-    #[expected_failure(abort_code = 2, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 2, location = scaas::meta)]
     fun pruned_lane_cannot_replay(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -406,8 +406,8 @@ module bamboo::meta_tests {
 
     // M2: hai op đã ký cho MỘT request (Odoo phát lại điều khoản: cùng lane, nonce 0, hạn 1000 rồi 1300). Chỉ một
     // chạy được: op kia trượt nonce khi lane còn; `prune` chờ hết hạn + PRUNE_DELAY nên lúc lane mất thì op kia hết hạn.
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
-    #[expected_failure(abort_code = 4, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 4, location = scaas::meta)]
     fun reissued_op_cannot_run_while_the_lane_is_kept(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -420,8 +420,8 @@ module bamboo::meta_tests {
         v::a_pay_eur_0_reissued(&lane, e);
     }
 
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
-    #[expected_failure(abort_code = 2, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 2, location = scaas::meta)]
     fun reissued_op_is_dead_once_the_lane_is_pruned(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -438,7 +438,7 @@ module bamboo::meta_tests {
 
     // ------------------------------------------------------------------ vòng đời khoá (RS11-3)
 
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
     fun added_key_pays_and_rotation_keeps_the_account(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -451,16 +451,16 @@ module bamboo::meta_tests {
         assert!(bal(e, BEEF) == 20, 1);
     }
 
-    #[test(f = @aptos_framework, b = @bamboo)]
-    #[expected_failure(abort_code = 10, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas)]
+    #[expected_failure(abort_code = 10, location = scaas::meta)]
     fun last_key_stays(f: signer, b: signer) {
         fx::setup(&f, &b);
         meta::open(v::alice(), v::alice_pk());
         v::a_remove_alice_last();
     }
 
-    #[test(f = @aptos_framework, b = @bamboo)]
-    #[expected_failure(abort_code = 1, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas)]
+    #[expected_failure(abort_code = 1, location = scaas::meta)]
     fun keyop_replay_is_refused(f: signer, b: signer) {
         fx::setup(&f, &b);
         meta::open(v::alice(), v::alice_pk());
@@ -469,7 +469,7 @@ module bamboo::meta_tests {
     }
 
     // Thêm passkey vào Account ed25519 (cùng origin của nó) bằng chữ ký khoá hiện có.
-    #[test(f = @aptos_framework, b = @bamboo)]
+    #[test(f = @aptos_framework, b = @scaas)]
     fun passkey_key_can_be_added(f: signer, b: signer) {
         fx::setup(&f, &b);
         meta::open(v::alice(), v::alice_pk());
@@ -479,8 +479,8 @@ module bamboo::meta_tests {
 
     // L5: `verify_by` lấy entry ĐẦU có cùng public_key ⇒ cùng passkey (x, y) thêm lại với rpIdHash khác sẽ không bao
     // giờ kiểm được: từ chối trùng public_key.
-    #[test(f = @aptos_framework, b = @bamboo)]
-    #[expected_failure(abort_code = 9, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas)]
+    #[expected_failure(abort_code = 9, location = scaas::meta)]
     fun same_passkey_with_another_rp_id_is_refused(f: signer, b: signer) {
         fx::setup(&f, &b);
         meta::open(v::alice(), v::alice_pk());
@@ -492,8 +492,8 @@ module bamboo::meta_tests {
 
     // L7: xoay auth key native KHÔNG gỡ khoá đã ở Account (khoá lộ vẫn tiêu được). Một tx native của chủ (ký bằng auth
     // key hiện tại) thay TOÀN BỘ khoá: khoá cũ hết hiệu lực ngay, KeyOp đang chờ của chúng cũng vậy.
-    #[test(f = @aptos_framework, b = @bamboo, lane = @0x1a)]
-    #[expected_failure(abort_code = 1, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 1, location = scaas::meta)]
     fun native_reset_drops_every_old_key(f: signer, b: signer, lane: signer) {
         fx::setup(&f, &b);
         let e = eur();
@@ -506,15 +506,15 @@ module bamboo::meta_tests {
         v::a_pay_eur_0(&lane, e);
     }
 
-    #[test(f = @aptos_framework, b = @bamboo)]
-    #[expected_failure(abort_code = 13, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas)]
+    #[expected_failure(abort_code = 13, location = scaas::meta)]
     fun reset_needs_an_account(f: signer, b: signer) {
         fx::setup(&f, &b);
         meta::reset_keys(&account::create_signer_for_test(v::alice()), 0, v::carol_pk(), vector[], vector[]);
     }
 
     // Đường 2: chủ gửi tx native (chủ keyless/passkey gắn khoá seed) — mở Account nếu chưa có.
-    #[test(f = @aptos_framework, b = @bamboo)]
+    #[test(f = @aptos_framework, b = @scaas)]
     fun native_owner_attaches_a_key(f: signer, b: signer) {
         fx::setup(&f, &b);
         let mallory_owned = account::create_signer_for_test(@0x5ee1);
@@ -524,7 +524,7 @@ module bamboo::meta_tests {
         assert!(meta::guardian(@0x5ee1) == @0x9a, 1);
     }
 
-    #[test(f = @aptos_framework, b = @bamboo)]
+    #[test(f = @aptos_framework, b = @scaas)]
     fun guardian_recovers_after_the_delay(f: signer, b: signer) {
         fx::setup(&f, &b);
         meta::open(v::alice(), v::alice_pk());
@@ -537,8 +537,8 @@ module bamboo::meta_tests {
         assert!(meta::has_key(v::alice(), v::mallory_pk()), 0);
     }
 
-    #[test(f = @aptos_framework, b = @bamboo)]
-    #[expected_failure(abort_code = 12, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas)]
+    #[expected_failure(abort_code = 12, location = scaas::meta)]
     fun recovery_waits_for_the_delay(f: signer, b: signer) {
         fx::setup(&f, &b);
         meta::open(v::alice(), v::alice_pk());
@@ -550,8 +550,8 @@ module bamboo::meta_tests {
         meta::finish_recovery(&g, v::alice());
     }
 
-    #[test(f = @aptos_framework, b = @bamboo)]
-    #[expected_failure(abort_code = 12, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas)]
+    #[expected_failure(abort_code = 12, location = scaas::meta)]
     fun existing_key_cancels_recovery(f: signer, b: signer) {
         fx::setup(&f, &b);
         meta::open(v::alice(), v::alice_pk());
@@ -564,8 +564,8 @@ module bamboo::meta_tests {
         meta::finish_recovery(&g, v::alice());
     }
 
-    #[test(f = @aptos_framework, b = @bamboo)]
-    #[expected_failure(abort_code = 11, location = bamboo::meta)]
+    #[test(f = @aptos_framework, b = @scaas)]
+    #[expected_failure(abort_code = 11, location = scaas::meta)]
     fun only_the_guardian_recovers(f: signer, b: signer) {
         fx::setup(&f, &b);
         meta::open(v::alice(), v::alice_pk());

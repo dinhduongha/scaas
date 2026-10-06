@@ -558,7 +558,7 @@ contract OrderBookDexTest is Fixtures {
         // gasless approve via the MetaToken op, signed by the wallet owner, checked through 1271
         MetaTxLib.MetaTransaction memory m = _mt(address(w), address(dex), 0,
             abi.encodeWithSelector(bytes4(keccak256("approve(address,uint256)")), address(dex), 100 ether),
-            uint256(keccak256("bamboo.dex.approve")), MetaTxLib.MODE_RESTRICT_RELAYER);
+            uint256(keccak256("scaas.dex.approve")), MetaTxLib.MODE_RESTRICT_RELAYER);
         bytes memory asig = _sign(CAROL_PK, tA, m);
         vm.prank(relayer);
         tA.executeMetaTransaction(m, asig);
@@ -674,7 +674,7 @@ contract OrderBookDexTest is Fixtures {
         });
         bytes32 domainSep = keccak256(abi.encode(
             keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-            keccak256("Bamboo OrderBookDex"), keccak256("1"), uint256(9000), address(d)));
+            keccak256("SCaaS OrderBookDex"), keccak256("1"), uint256(9000), address(d)));
         bytes32 h = keccak256(abi.encodePacked(hex"1901", domainSep, keccak256(abi.encode(d.ORDER_TYPEHASH(), o))));
         assertEq(h, d.orderHash(o));
         string memory k = "dexkat";

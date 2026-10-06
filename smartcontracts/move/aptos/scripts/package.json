@@ -1,5 +1,5 @@
 {
-  "name": "bamboo-aptos-vectors",
+  "name": "scaas-aptos-vectors",
   "private": true,
   "type": "module",
   "description": "Pins Aptos facts from the official TS SDK (tx hash, lane addresses, passkey auth key). node_modules is not committed.",

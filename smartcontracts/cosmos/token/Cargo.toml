@@ -1,5 +1,5 @@
 [package]
-name = "bamboo-token"
+name = "scaas-token"
 version = "0.1.0"
 edition = "2021"
 publish = false
@@ -15,4 +15,4 @@ cosmwasm-std.workspace = true
 cw-storage-plus.workspace = true
 serde.workspace = true
 sha2.workspace = true
-bamboo-metaop.workspace = true
+scaas-metaop.workspace = true

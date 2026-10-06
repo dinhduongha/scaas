@@ -1,4 +1,4 @@
-// Ghim tx v1 viết tay của adapter (bamboo-node/src/adapters/solana.rs) vào @solana/kit 8.4.0: message v1 encode bằng
+// Ghim tx v1 viết tay của adapter (scaas-node/src/adapters/solana.rs) vào @solana/kit 8.4.0: message v1 encode bằng
 // codec của kit, ký bằng khoá lane qua kit, tx trên dây bằng getTransactionEncoder (message trước, chữ ký sau).
 // Thứ tự account (fee payer, signer ghi/đọc, ghi/đọc; trong nhóm theo lần xuất hiện đầu) là lựa chọn của adapter —
 // validator không đòi thứ tự; e2e đối chiếu chữ ký với RPC.
@@ -12,7 +12,7 @@ import {
 } from '@solana/kit';
 
 const PROGRAM = 'BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d';
-const V = Object.fromEntries([...readFileSync(new URL('../programs/bamboo/tests/vectors.rs', import.meta.url), 'utf8')
+const V = Object.fromEntries([...readFileSync(new URL('../programs/scaas/tests/vectors.rs', import.meta.url), 'utf8')
     .matchAll(/pub const (\w+): &str = "(.*)";/g)].map(m => [m[1], m[2]]));
 const PAYLOAD = V.PAYLOAD;
 const SIG = V.SIG_RAW;
@@ -28,18 +28,18 @@ const pda = async (seeds, program) => (await getProgramDerivedAddress({ programA
 
 const p = Buffer.from(PAYLOAD, 'hex');
 const f = (o, n) => p.subarray(o, o + n);
-const [from, to, asset] = [f(113, 32), f(145, 32), f(80, 32)];
-const amount = p.readBigUInt64LE(177);
-const [payRef, laneId, nonce, validUntil, relayer, extra] = [f(193, 32), f(225, 32), f(257, 8), f(265, 8), f(273, 32), f(305, 32)];
+const [from, to, asset] = [f(112, 32), f(144, 32), f(79, 32)];
+const amount = p.readBigUInt64LE(176);
+const [payRef, laneId, nonce, validUntil, relayer, extra] = [f(192, 32), f(224, 32), f(256, 8), f(264, 8), f(272, 32), f(304, 32)];
 const digest = sha(p);
-const text = Buffer.from('bamboo.metaop.v1:' + digest.toString('hex'));
+const text = Buffer.from('scaas.metaop.v1:' + digest.toString('hex'));
 
 const kp = await createKeyPairFromPrivateKeyBytes(sha('lane0'));
 const lane = await getAddressFromPublicKey(kp.publicKey);
 const SYSTEM = '11111111111111111111111111111111';
 const TOKEN = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
 const ATA = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL';
-const nonceAcct = await createAddressWithSeed({ baseAddress: lane, programAddress: SYSTEM, seed: 'bamboo-nonce-v1' });
+const nonceAcct = await createAddressWithSeed({ baseAddress: lane, programAddress: SYSTEM, seed: 'scaas-nonce-v1' });
 const subject = await pda([Buffer.from('acct'), from], PROGRAM);
 const ataOf = (owner, mint) => pda([enc.encode(owner), enc.encode(TOKEN), enc.encode(mint)], ATA);
 
@@ -47,7 +47,7 @@ const ataOf = (owner, mint) => pda([enc.encode(owner), enc.encode(TOKEN), enc.en
 const pk = from;
 const pre = Buffer.concat([Buffer.from([1, 0]), u16(16 + 32), u16(0xffff), u16(16), u16(0xffff), u16(16 + 32 + 64),
     u16(text.length), u16(0xffff), pk, Buffer.from(SIG, 'hex'), text]);
-// instruction 2: bamboo::relay_pay(owner, PayArgs, Auth{kind 0, key 0, precompile 1, sig 0, cdj []})
+// instruction 2: scaas::relay_pay(owner, PayArgs, Auth{kind 0, key 0, precompile 1, sig 0, cdj []})
 const data = Buffer.concat([sha('global:relay_pay').subarray(0, 8), from, to, u64(amount), payRef, laneId, nonce, validUntil,
     relayer, extra, Buffer.from([0, 0, 1, 0]), u32(0)]);
 const W = (a, s = false) => ({ a, s, w: true }), R = (a, s = false) => ({ a, s, w: false });

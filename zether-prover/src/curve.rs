@@ -44,9 +44,9 @@ impl ZCurve for ark_bn254::g1::Config {
     type Fq = ark_bn254::Fq;
     const NAME: &'static str = "bn254";
     const COORD_LEN: usize = 32;
-    const KEYGEN_SALT: &'static [u8] = b"BAMBOO-ZETHER-BN254-v1";
+    const KEYGEN_SALT: &'static [u8] = b"SCAAS-ZETHER-BN254-v1";
     const PATH_ROOT: u32 = 254;
-    const PROOF_SYSTEM_LABEL: &'static [u8] = b"bamboo/zether/sigma-bullets/bn254/n64-n64/v1";
+    const PROOF_SYSTEM_LABEL: &'static [u8] = b"scaas/zether/sigma-bullets/bn254/n64-n64/v1";
 
     fn bsgs_slot() -> &'static BsgsSlot<Self> {
         static T: BsgsSlot<ark_bn254::g1::Config> = BsgsSlot::new(None);
@@ -56,7 +56,7 @@ impl ZCurve for ark_bn254::g1::Config {
     /// Try-and-increment, even `y` (zether-design §3.1).
     fn gen(label: &[u8], index: u32) -> G<Self> {
         use ark_ff::Field;
-        let mut prefix = b"BAMBOO-ZETHER-GEN-BN254-V1".to_vec();
+        let mut prefix = b"SCAAS-ZETHER-GEN-BN254-V1".to_vec();
         prefix.extend_from_slice(&gen_msg(label, index));
         for ctr in 0u32.. {
             let mut buf = prefix.clone();
@@ -78,7 +78,7 @@ impl ZCurve for ark_bls12_381::g1::Config {
     const COORD_LEN: usize = 64;
     const KEYGEN_SALT: &'static [u8] = b"BLS-SIG-KEYGEN-SALT-";
     const PATH_ROOT: u32 = 12381;
-    const PROOF_SYSTEM_LABEL: &'static [u8] = b"bamboo/zether/sigma-bullets/bls12-381/n64-n64/v1";
+    const PROOF_SYSTEM_LABEL: &'static [u8] = b"scaas/zether/sigma-bullets/bls12-381/n64-n64/v1";
 
     fn bsgs_slot() -> &'static BsgsSlot<Self> {
         static T: BsgsSlot<ark_bls12_381::g1::Config> = BsgsSlot::new(None);
@@ -87,7 +87,7 @@ impl ZCurve for ark_bls12_381::g1::Config {
 
     /// RFC 9380 `BLS12381G1_XMD:SHA-256_SSWU_RO_` (zether-design §3.2).
     fn gen(label: &[u8], index: u32) -> G<Self> {
-        hash_to_g1_bls(&gen_msg(label, index), b"BAMBOO-ZETHER-GEN-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_")
+        hash_to_g1_bls(&gen_msg(label, index), b"SCAAS-ZETHER-GEN-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_")
     }
 }
 

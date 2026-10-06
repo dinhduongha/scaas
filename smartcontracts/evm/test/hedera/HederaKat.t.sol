@@ -30,7 +30,7 @@ contract HederaKatTest is HederaFixture {
             relayer: j.readAddress(".relayer"), fee: 0, feeRecipient: address(0)
         });
         assertEq(m.data, abi.encodeWithSelector(bytes4(keccak256("pay(bytes32)")), ref));
-        assertEq(m.batch, uint256(keccak256(abi.encodePacked("bamboo.pay.lane", ref))));
+        assertEq(m.batch, uint256(keccak256(abi.encodePacked("scaas.pay.lane", ref))));
         assertEq(tok.metaTxDigest(m), j.readBytes32(".digest"));
         assertEq(j.readBytes(".ed25519_signature").length, 64);
     }

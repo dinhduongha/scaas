@@ -15,8 +15,8 @@ import {G1Bn254, G1Bls12381} from "./ZetherCurves.sol";
 ///         Generator NUMS tính trong constructor theo §3 rồi ghi vào một data contract (SSTORE2): ai
 ///         cũng tính lại được, không có hằng số nào để tin.
 abstract contract ZetherVerifierBase is IZetherVerifier {
-    bytes32 internal constant OP_TRANSFER = keccak256("BAMBOO-ZETHER-OP-TRANSFER-V1");
-    bytes32 internal constant OP_BURN = keccak256("BAMBOO-ZETHER-OP-BURN-V1");
+    bytes32 internal constant OP_TRANSFER = keccak256("SCAAS-ZETHER-OP-TRANSFER-V1");
+    bytes32 internal constant OP_BURN = keccak256("SCAAS-ZETHER-OP-BURN-V1");
     uint256 internal constant NV = 64; // limits D1 (RS-NV64-1)
     uint256 internal constant NB = 64;
     uint256 internal constant HEADER = 384;
@@ -451,7 +451,7 @@ abstract contract ZetherVerifierBase is IZetherVerifier {
 ///         confidential trên public chain phải được giả định giải mã được trong khoảng 2035–2045.
 contract ZetherVerifierBn254 is ZetherVerifierBase {
     function proofSystemId() public pure override returns (bytes32) {
-        return keccak256("bamboo/zether/sigma-bullets/bn254/n64-n64/v1");
+        return keccak256("scaas/zether/sigma-bullets/bn254/n64-n64/v1");
     }
 
     function curveName() external pure returns (string memory) { return "bn254"; }
@@ -472,7 +472,7 @@ contract ZetherVerifierBn254 is ZetherVerifierBase {
     function _base() internal pure override returns (bytes memory) { return G1Bn254.generator(); }
 
     function _gen(string memory label, uint32 index) internal view override returns (bytes memory) {
-        return G1Bn254.mapToG1(abi.encodePacked("BAMBOO-ZETHER-GEN-BN254-V1", _genMsg(label, index)));
+        return G1Bn254.mapToG1(abi.encodePacked("SCAAS-ZETHER-GEN-BN254-V1", _genMsg(label, index)));
     }
 
     function _msm(bytes memory pts, uint256[] memory sc) internal view override returns (bytes memory) {
@@ -491,10 +491,10 @@ contract ZetherVerifierBn254 is ZetherVerifierBase {
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** 117–126 bit; điểm 128 byte; subgroup check nằm
 ///         trong mọi G1MSM.
 contract ZetherVerifierBls12381 is ZetherVerifierBase {
-    bytes internal constant GEN_DST = "BAMBOO-ZETHER-GEN-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_";
+    bytes internal constant GEN_DST = "SCAAS-ZETHER-GEN-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_";
 
     function proofSystemId() public pure override returns (bytes32) {
-        return keccak256("bamboo/zether/sigma-bullets/bls12-381/n64-n64/v1");
+        return keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v1");
     }
 
     function curveName() external pure returns (string memory) { return "bls12-381"; }

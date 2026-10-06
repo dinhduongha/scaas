@@ -3,8 +3,8 @@
 // 340 distinct cases; expected = Wycheproof valid AND low-s (OpenSSL re-checked every case);
 // tcId 10000+k = low-s form (r, n-s) of high-s case k; 20001+ = crafted edge cases (see `crafted`).
 #[test_only]
-module bamboo::p256_vectors {
-    use bamboo::p256;
+module scaas::p256_vectors {
+    use scaas::p256;
 
     /// (tcId, public key, sha256(msg), r‖s, expected)
     fun check(tc: u64, pk: vector<u8>, hash: vector<u8>, sig: vector<u8>, want: bool) {
@@ -426,6 +426,6 @@ module bamboo::p256_vectors {
     // clientkeys software authenticator (smartcontracts/evm/test/vectors/webauthn_soft.json), low-s normalised.
     #[test]
     fun clientkeys_soft_authenticator() {
-        check(0, x"0467dab5788e9add9122015a634c3a97ab4b7c1864e0e1903d10e4ecb8d5ed2a306e604716d9bfded5411a29ea2ba8dbd1fa803ffa9e37865af4bea39c1cb12e8c", x"e7d0136c87398f2da54e64808b801d4d7183311e61b0563b564c0fc138d5cde2", x"ab6de9454949a6c158862c2237878f5e15f9c79c0c4db16d6f8b90109fb2943e1ae2c27edfecdb7a0cc9fbd4ecc84aa99fc7467021d2f3a84e2b0a62e52bec90", true);
+        check(0, x"045382bba2af937766459a6ff088f1d6f11cb4ba907299ffabfe98b515d292d0682067d580352c594e10cd52bc98e2c1f14f6e049f73aa56a628870aa603ac776c", x"799e90ff7e2c9845f2267d6c019a47bc6fcb82438f8604abe4f6b0c9e828974e", x"b613593c36de337007dbd2d995715b2e9c17ded6fae4e3db8787e73b8b04e18617198b223ff12e96f92235ac0e922ea29c3c6e95742bfa0db5def4609aab8546", true);
     }
 }

@@ -3,7 +3,7 @@
 > Ghi lại theo yêu cầu owner (2026-10-05). Nguồn đã đọc: `anonymous-zether/packages/protocol/contracts/ZSC.sol`
 > (ba fork trên máy: cnxtech, libby, iquerejeta — giống nhau ở phần này), `ZetherVerifier.sol`,
 > `BurnVerifier.sol`, `packages/anonymous.js/src/utils/{utils,bn128}.js`. Liên quan:
-> `2026-10-05-zether-limits.md` (giới hạn của bản Bamboo), `blockchain-research/01-token-factory.md` §1.8.3,
+> `2026-10-05-zether-limits.md` (giới hạn của bản SCaaS), `blockchain-research/01-token-factory.md` §1.8.3,
 > `blockchain-research/03-zether-crypto.md`.
 
 ## 1. Code gốc
@@ -57,9 +57,9 @@ Hệ quả nếu chỉ "tăng MAX" (ví dụ `MAX = 2^128 − 1` như một bả
 nhưng vòng lặp giải mã cần tới 2^128 bước — số dư không đọc được, và ví không chi được (prover cần số dư
 dạng rõ). Đây là lỗi `blockchain-research/_MANIFESTS.md` đã bác.
 
-## 3. Bản Bamboo tách MAX thành ba đại lượng độc lập
+## 3. Bản SCaaS tách MAX thành ba đại lượng độc lập
 
-| Vai trò của MAX gốc | ConsenSys | Bamboo (sau quyết định 2026-10-05) |
+| Vai trò của MAX gốc | ConsenSys | SCaaS (sau quyết định 2026-10-05) |
 |---|---|---|
 | Soundness: giá trị chứng minh được của **một lần chuyển** | range proof 32 bit | `n_v = 64` (6 vòng) — mỗi lần chuyển chỉ còn bị chặn bởi số dư |
 | Soundness: **số dư còn lại** sau chi | range proof 32 bit | `n_b = 64` (6 vòng) |

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Deploy the bamboo program with keys that live OUTSIDE the repository (review M3).
+# Deploy the scaas program with keys that live OUTSIDE the repository (review M3).
 #
 # usage: deploy.sh <cluster-url> <program-keypair.json> <upgrade-authority-keypair.json>
 #   A missing keypair file is generated (solana-keygen new). Keys under the repository (any worktree) are refused.
-#   The program is built with BAMBOO_PROGRAM_ID = the program keypair's pubkey into target/deploy-<id>/ (the default
-#   target/deploy/bamboo.so stays the test-id build that LiteSVM and the e2e load).
+#   The program is built with SCAAS_PROGRAM_ID = the program keypair's pubkey into target/deploy-<id>/ (the default
+#   target/deploy/scaas.so stays the test-id build that LiteSVM and the e2e load).
 #   The test-only id BDo6exf… and the old dev authority GoTdL8T… had their keys committed: they are COMPROMISED and
 #   refused anywhere but a local validator (127.0.0.1 / localhost).
 # After deploy: call `initialize(network = genesis hash, admin)` signed by the upgrade authority (only it can create
@@ -27,7 +27,7 @@ for kp in "$PROG_KP" "$AUTH_KP"; do
 done
 PID="$(solana-keygen pubkey "$PROG_KP")"
 OUT="$HERE/target/deploy-$PID"
-BAMBOO_PROGRAM_ID="$PID" cargo build-sbf --manifest-path "$HERE/programs/bamboo/Cargo.toml" --sbf-out-dir "$OUT"
+SCAAS_PROGRAM_ID="$PID" cargo build-sbf --manifest-path "$HERE/programs/scaas/Cargo.toml" --sbf-out-dir "$OUT"
 solana program deploy --url "$URL" --keypair "$AUTH_KP" --upgrade-authority "$AUTH_KP" --program-id "$PROG_KP" \
-  "$OUT/bamboo.so"
+  "$OUT/scaas.so"
 echo "deployed $PID on $URL; next: initialize(network = genesis hash, admin) signed by $(solana-keygen pubkey "$AUTH_KP")"

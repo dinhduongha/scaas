@@ -126,7 +126,7 @@ Giả định A6 là nguy hiểm nhất trong bảng vì nó làm một invarian
 │   ├── eip1776_digest_v1.neg.json # digest phải KHÁC (field bị đổi, dynamic bytes bị splice)
 │   ├── schnorr_pop_v1.json
 │   └── intent_v1.json             # §05, dùng chung với relayer-ref
-├── relayer-ref/                   # TypeScript, ~400 dòng, Docker image bamboo/relayer (§05)
+├── relayer-ref/                   # TypeScript, ~400 dòng, Docker image scaas/relayer (§05)
 ├── devnet/
 │   ├── docker-compose.ci.yml      # anvil + besu-qbft (+ blockscout tuỳ chọn)
 │   ├── besu/{genesis.qbft.json,config.toml,permissions_config.toml}

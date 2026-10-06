@@ -226,7 +226,7 @@ Một trong những đóng góp xuất sắc nhất của bộ đặc tả là s
 | **4. Nuốt lỗi khi có Chuyển tiền (Principal Loss)** | Trong chế độ nuốt lỗi (Swallow mode), forwarder chuyển `amount` trước, inner call lỗi, tx vẫn success $\rightarrow$ Mất tiền gốc vô lý. | Enforce bất biến on-chain: `require(m.amount == 0 || (m.mode & MODE_REQUIRE_SUCCESS) != 0)`. Mọi luồng có chuyển tiền gốc bắt buộc phải bubble revert. |
 
 ### 4.3. Mạng lưới Mesh Relayer Mở (0x-Mesh Model)
-- **Định tuyến thay vì Lọc bỏ:** Không giống 0x-Mesh truyền thống (gossip mọi thứ gây lãng phí băng thông), mạng lưới của Bamboo áp dụng **Acceptance Policy**. Một node không nhận xử lý intent vẫn đóng vai trò chuyển tiếp (forwarding router) dựa trên trường `to` và `tokenContract`.
+- **Định tuyến thay vì Lọc bỏ:** Không giống 0x-Mesh truyền thống (gossip mọi thứ gây lãng phí băng thông), mạng lưới của SCaaS áp dụng **Acceptance Policy**. Một node không nhận xử lý intent vẫn đóng vai trò chuyển tiếp (forwarding router) dựa trên trường `to` và `tokenContract`.
 - **Xử lý Giao dịch Phí Bằng Không (`fee = 0`):** Mạng mở vẫn chấp nhận các giao dịch `fee = 0` nếu chúng thuộc về các Smart Contract đối tác được bảo trợ (Sponsorship / Escrow off-chain) mà không làm tắc nghẽn mempool tự do.
 
 ---
@@ -325,15 +325,15 @@ Bảng so sánh đối chiếu kiến trúc của Bamboo DMS Blockchain với 6 
 ### 7.1. Phân tích So sánh Chuyên sâu
 
 #### A. So sánh với Aztec Network & Railgun (Privacy Tech)
-- **Ưu thế của Bamboo:** Aztec đòi hỏi toàn bộ hệ sinh thái phải viết lại hợp đồng thông minh trên ngôn ngữ riêng (Noir / Cairo) và phụ thuộc vào hạ tầng Sequencer/Prover Rollup phức tạp. Railgun triển khai Shielded Pool trên EVM nhưng chi phí gas rất đắt (~2.5M - 3.5M gas) và vẫn bị nghi ngờ về mặt AML. Bamboo DMS Blockchain chọn Basic Zether ($N=2$) chạy trực tiếp trên EVM tiêu chuẩn, kết hợp cam kết kiểm toán $C_{audit}$ giúp doanh nghiệp chứng minh tính hợp pháp của dòng tiền trước cơ quan thuế bất kỳ lúc nào.
-- **Đánh đổi:** Bamboo chấp nhận lộ đồ thị giao dịch (ai chuyển cho ai, tần suất giao dịch) để đổi lấy tính tuân thủ pháp lý và chi phí gas hợp lý.
+- **Ưu thế của SCaaS:** Aztec đòi hỏi toàn bộ hệ sinh thái phải viết lại hợp đồng thông minh trên ngôn ngữ riêng (Noir / Cairo) và phụ thuộc vào hạ tầng Sequencer/Prover Rollup phức tạp. Railgun triển khai Shielded Pool trên EVM nhưng chi phí gas rất đắt (~2.5M - 3.5M gas) và vẫn bị nghi ngờ về mặt AML. Bamboo DMS Blockchain chọn Basic Zether ($N=2$) chạy trực tiếp trên EVM tiêu chuẩn, kết hợp cam kết kiểm toán $C_{audit}$ giúp doanh nghiệp chứng minh tính hợp pháp của dòng tiền trước cơ quan thuế bất kỳ lúc nào.
+- **Đánh đổi:** SCaaS chấp nhận lộ đồ thị giao dịch (ai chuyển cho ai, tần suất giao dịch) để đổi lấy tính tuân thủ pháp lý và chi phí gas hợp lý.
 
 #### B. So sánh với ERC-4337 & Biconomy (Account Abstraction)
-- **Ưu thế của Bamboo:** ERC-4337 yêu cầu một hạ tầng Bundler riêng biệt, hợp đồng `EntryPoint` tập trung (điểm nghẽn tiềm tàng về phí) và chi phí gas overhead khá cao cho mỗi UserOperation (~40k - 80k gas phụ trội). EIP-1776 Native Mixin của Bamboo nhúng thẳng logic meta-transaction vào token, sử dụng 2D Nonce Lanes loại bỏ hoàn toàn hiện tượng nghẽn Nonce tuần tự, và kết nối thẳng với mạng lưới Mesh P2P.
+- **Ưu thế của SCaaS:** ERC-4337 yêu cầu một hạ tầng Bundler riêng biệt, hợp đồng `EntryPoint` tập trung (điểm nghẽn tiềm tàng về phí) và chi phí gas overhead khá cao cho mỗi UserOperation (~40k - 80k gas phụ trội). EIP-1776 Native Mixin của SCaaS nhúng thẳng logic meta-transaction vào token, sử dụng 2D Nonce Lanes loại bỏ hoàn toàn hiện tượng nghẽn Nonce tuần tự, và kết nối thẳng với mạng lưới Mesh P2P.
 - **Đánh đổi:** ERC-4337 là chuẩn chung được Ethereum Foundation công nhận rộng rãi, trong khi EIP-1776 là chuẩn tùy biến của hệ thống đòi hỏi client SDK riêng.
 
 #### C. So sánh với 0x-Mesh / CoW Protocol (Intent Routing)
-- **Ưu thế của Bamboo:** 0x-Mesh truyền phát mù quáng mọi order dẫn đến lãng phí tài nguyên mạng. Bamboo áp dụng **Acceptance Policy Routing** tại từng node mạng, cho phép phân luồng intent theo chain và xử lý mượt mà các giao dịch đối tác phí bằng không (`fee = 0`).
+- **Ưu thế của SCaaS:** 0x-Mesh truyền phát mù quáng mọi order dẫn đến lãng phí tài nguyên mạng. SCaaS áp dụng **Acceptance Policy Routing** tại từng node mạng, cho phép phân luồng intent theo chain và xử lý mượt mà các giao dịch đối tác phí bằng không (`fee = 0`).
 
 ---
 

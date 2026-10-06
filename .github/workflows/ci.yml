@@ -1,14 +1,14 @@
 # R52 (GA 2.1#4): contracts and the relay node. Mirrors the local commands:
 #   smartcontracts/evm: forge test; FOUNDRY_PROFILE=private9000 forge build
-#   bamboo-node:    cargo test; cargo clippy --all-targets -- -D warnings; cargo test --test e2e -- --ignored
+#   scaas-node:    cargo test; cargo clippy --all-targets -- -D warnings; cargo test --test e2e -- --ignored
 name: scaas-ci
 
 on:
   pull_request:
-    paths: ['smartcontracts/**', 'bamboo-node/**', '.github/workflows/ci.yml']
+    paths: ['smartcontracts/**', 'scaas-node/**', '.github/workflows/ci.yml']
   push:
     branches: [main]
-    paths: ['smartcontracts/**', 'bamboo-node/**', '.github/workflows/ci.yml']
+    paths: ['smartcontracts/**', 'scaas-node/**', '.github/workflows/ci.yml']
 
 env:
   OZ_TAG: v5.2.0
@@ -37,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: bamboo-node
+        working-directory: scaas-node
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -45,7 +45,7 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: bamboo-node
+          workspaces: scaas-node
       - uses: foundry-rs/foundry-toolchain@v1
       - name: Contract libraries for the e2e deploy script
         working-directory: smartcontracts/evm

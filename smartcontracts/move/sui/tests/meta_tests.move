@@ -1,10 +1,10 @@
 #[test_only]
-module bamboo::meta_tests;
+module scaas::meta_tests;
 
-use bamboo::auth::{Self, Auth};
-use bamboo::fixtures::{Self as fx, EUR};
-use bamboo::meta::{Self, Account, AdminCap, Registry, Root};
-use bamboo::vectors as v;
+use scaas::auth::{Self, Auth};
+use scaas::fixtures::{Self as fx, EUR};
+use scaas::meta::{Self, Account, AdminCap, Registry, Root};
+use scaas::vectors as v;
 use sui::sui::SUI;
 use sui::test_scenario::{Self as ts, Scenario};
 
@@ -294,7 +294,7 @@ fun passkey_origin_is_added_by_the_key() {
     let mut sc = funded();
     manage(&mut sc, v::dave(), 2, 0, vector[], ANDROID, @0x0, v::k_d_add_android());
     let a = fx::acct<SUI>(&mut sc, v::dave());
-    assert!(meta::has_origin(&a, ANDROID) && meta::has_origin(&a, b"https://pay.bamboo.test"));
+    assert!(meta::has_origin(&a, ANDROID) && meta::has_origin(&a, b"https://pay.scaas.test"));
     ts::return_shared(a);
     sc.next_tx(@0x7e1);
     pay<SUI>(&mut sc, v::dave(), 100, 7, 0xd1, 0, @0x0, v::d_pay_sui_android(), 0);
@@ -311,7 +311,7 @@ fun passkey_from_an_unlisted_origin_is_refused() {
 #[test, expected_failure(abort_code = meta::ELastKey)]
 fun passkey_account_keeps_one_origin() {
     let mut sc = funded();
-    manage(&mut sc, v::dave(), 3, 0, vector[], b"https://pay.bamboo.test", @0x0, v::k_d_rm_origin());
+    manage(&mut sc, v::dave(), 3, 0, vector[], b"https://pay.scaas.test", @0x0, v::k_d_rm_origin());
     sc.end();
 }
 

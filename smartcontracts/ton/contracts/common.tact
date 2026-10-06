@@ -59,7 +59,7 @@ message(0xd1735400) TakeWalletAddress {
     ownerAddress: Cell?;
 }
 
-// ------------------------------------------------------------------ Bamboo messages
+// ------------------------------------------------------------------ SCaaS messages
 
 /// Relayer -> payer's jetton wallet (or Mandate owner ops). `op` = MetaOp v1 cell tree,
 /// `auth` = signature envelope. `responseDestination` and `matchWith` are the relayer's own choices (its TON,
@@ -104,7 +104,7 @@ message(0x9b1c0d03) TradeSettled {
 
 // ------------------------------------------------------------------ constants
 
-const METAOP_DOMAIN: Int = 0x62616d626f6f2e6d6574616f702e7631; // "bamboo.metaop.v1"
+const METAOP_DOMAIN: Int = 0x73636161732e6d6574616f702e7631; // "scaas.metaop.v1" (120 bits)
 const OP_PAY: Int = 1;
 const OP_TRADE: Int = 2;
 const OP_MANDATE_PAY: Int = 3;
@@ -113,7 +113,7 @@ const OP_SET_KEY: Int = 5;
 
 const SIGN_DATA_PREFIX: Int = 0x75569022;
 // crc32 of METAOP_SCHEMA (smartcontracts/ton/tests/vectors.ts checks it against the TL-B string).
-const METAOP_SCHEMA_CRC: Int = 0xdc7d499c;
+const METAOP_SCHEMA_CRC: Int = 0x45ba8d70;
 
 const PAY_TAG: Int = 0x626d7074;   // "bmpt": forward payload `pay_tag pay_ref:uint256`
 const TRADE_TAG: Int = 0x626d7472; // "bmtr": forward payload `trade_tag ^MetaOp ^TradeParams match_with:uint256`
@@ -184,7 +184,7 @@ struct TradeParams {
 
 fun parseMetaOp(c: Cell): MetaOp {
     let s = c.beginParse();
-    throwUnless(E_DOMAIN, s.loadUint(128) == METAOP_DOMAIN);
+    throwUnless(E_DOMAIN, s.loadUint(120) == METAOP_DOMAIN);
     let network = s.loadInt(32);
     let op = s.loadUint(8);
     let amount = s.loadUint(128);

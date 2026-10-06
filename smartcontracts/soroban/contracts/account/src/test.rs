@@ -2,7 +2,7 @@
 extern crate std;
 
 use super::*;
-use bamboo_token::{Token, TokenClient};
+use scaas_token::{Token, TokenClient};
 use ed25519_dalek::Signer as _;
 use p256::ecdsa::{Signature as P256Sig, SigningKey as P256Key};
 use sha2::{Digest, Sha256};
@@ -38,7 +38,7 @@ fn setup() -> T {
     let account = env.register(Account, (Key::Ed25519(pk),));
     let admin = Address::generate(&env);
     let mk = |env: &Env| {
-        let id = env.register(Token, (admin.clone(), 7u32, SStr::from_str(env, "Bamboo"), SStr::from_str(env, "BMB")));
+        let id = env.register(Token, (admin.clone(), 7u32, SStr::from_str(env, "SCaaS"), SStr::from_str(env, "BMB")));
         TokenClient::new(env, &id)
     };
     let (t1, t2) = (mk(&env), mk(&env));
@@ -308,7 +308,7 @@ fn ed_entry(env: &Env, account: &Address, key: &ed25519_dalek::SigningKey, inv: 
 /// `require_auth_for_args((order,))` khớp auth entry thật của cả hai maker; một auth entry = một lần settle.
 #[test]
 fn dex_settles_on_real_signatures_once_per_signature() {
-    use bamboo_dex::{Dex, DexClient, Market, Order};
+    use scaas_dex::{Dex, DexClient, Market, Order};
     let t = setup();
     let e = &t.env;
     let bob_key = ed25519_dalek::SigningKey::from_bytes(&[8u8; 32]);

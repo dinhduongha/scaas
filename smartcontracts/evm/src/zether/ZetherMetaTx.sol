@@ -24,8 +24,8 @@ abstract contract ZetherMetaTx is ERC20, EIP712, IERC20MetaTx {
 
     mapping(address => mapping(uint256 => uint256)) private _metaNonce;
 
-    /// keccak256("bamboo.zether.reentrancy.v1")
-    bytes32 private constant _REENTRANCY_SLOT = 0xa73f17296da172ccd9136a64b9aedac35ef11178f5eb8a7528ac795588137027;
+    /// keccak256("scaas.zether.reentrancy.v1")
+    bytes32 private constant _REENTRANCY_SLOT = 0xdab132193f21f496e0f9f835d2fe97c7fe2ea3245c0beb12d8008784b59ee140;
 
     modifier nonReentrant() {
         assembly ("memory-safe") {

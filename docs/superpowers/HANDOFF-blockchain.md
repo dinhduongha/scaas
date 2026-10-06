@@ -13,7 +13,7 @@ Nguồn: gap analysis `/.superpowers/blockchain-gap-analysis.md` (GA), spec roun
 | O5 | Rate limit theo IP ở reverse proxy trước gateway mở | GA 2.1#9 |
 | O6 | Adapter custody production (KMS/HSM/broker) cho ví custodial/delegated; `env:` chỉ dev (R50) | GA 2.1#1, R50 |
 | O7 | Signer KMS/HSM cho khoá relayer (seam `Signer`, R59) trên chain công khai | GA 2.1#2 |
-| O8 | Nạp và theo dõi số dư lane relayer từ treasury (metric `bamboo_relayer_balance`) | GA H6, N4 |
+| O8 | Nạp và theo dõi số dư lane relayer từ treasury (metric `scaas_relayer_balance`) | GA H6, N4 |
 | O9 | Quyết định DPIA / CI gate cho Land vào ERP | SRS deltas #11 |
 | O10 | `MandateWallet`/account chủ thể: quy trình onboarding (deploy ngoài Odoo, R29) | R29 |
 | O11 | Mỗi NPP thu on-chain cần provider `chain` + journal + ví nhận đã duyệt (sau khi hợp nhất territory) | GA 2.4#4 |

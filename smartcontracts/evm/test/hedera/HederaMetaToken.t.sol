@@ -59,7 +59,7 @@ abstract contract HederaFixture is Test {
         return MetaTxLib.MetaTransaction({
             from: from, to: to, value: value,
             data: abi.encodeWithSelector(bytes4(keccak256("pay(bytes32)")), ref),
-            batch: uint256(keccak256(abi.encodePacked("bamboo.pay.lane", ref))), nonce: 0,
+            batch: uint256(keccak256(abi.encodePacked("scaas.pay.lane", ref))), nonce: 0,
             validUntil: block.timestamp + 300, mode: R, relayer: relayer, fee: 0, feeRecipient: address(0)
         });
     }

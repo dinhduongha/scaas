@@ -1,4 +1,4 @@
-//! `bamboo-mandate` — ví uỷ thác như `MandateWallet` EVM (R25): tiền nằm trong contract, khoá delegate
+//! `scaas-mandate` — ví uỷ thác như `MandateWallet` EVM (R25): tiền nằm trong contract, khoá delegate
 //! (secp256k1, custody) ký từng khoản; hạn mức mỗi lần + mỗi kỳ, danh sách payee, hạn, thu hồi, mỗi `pay_ref`
 //! một lần. Khoản chi đi qua `token.Pay` ⇒ token phát `payment_settled` mang đúng `pay_ref`.
 #[cfg(not(feature = "library"))]
@@ -10,9 +10,9 @@ use cosmwasm_std::{
 use cw_storage_plus::{Item, Map};
 use serde::{Deserialize, Serialize};
 
-use bamboo_metaop::{err, sha256};
+use scaas_metaop::{err, sha256};
 
-pub const DOMAIN: &str = "bamboo.mandate.v1";
+pub const DOMAIN: &str = "scaas.mandate.v1";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -30,7 +30,7 @@ pub struct InstantiateMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum ExecuteMsg {
-    Receive(bamboo_metaop::Cw20ReceiveMsg),
+    Receive(scaas_metaop::Cw20ReceiveMsg),
     PayUnderMandate { to: String, amount: Uint128, pay_ref: HexBinary, valid_until: u64, signature: Binary },
     Revoke {},
     Withdraw { amount: Uint128 },
@@ -68,7 +68,7 @@ pub struct MandatePay {
     pub valid_until: u64,
 }
 
-/// Hai lời gọi token mà mandate cần (khớp `bamboo_token::ExecuteMsg`; không phụ thuộc crate token để
+/// Hai lời gọi token mà mandate cần (khớp `scaas_token::ExecuteMsg`; không phụ thuộc crate token để
 /// không hợp nhất feature `library` khi build wasm).
 #[derive(Serialize)]
 #[serde(rename_all = "snake_case")]

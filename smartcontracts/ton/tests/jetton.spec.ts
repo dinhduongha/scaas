@@ -5,7 +5,7 @@ import { domainCell, metaOpCell, newPasskey, OP, passkeyAuth, passkeyRecord, ran
 
 const E = { domain: 701, network: 702, contract: 703, from: 704, expired: 705, nonce: 706, relayer: 707, sig: 708, noKey: 709, stateInit: 710, balance: 711, params: 713, value: 714, auth: 715, sender: 716, ttl: 717 };
 
-describe('BambooJettonWallet meta-tx (R30, R67)', () => {
+describe('ScaasJettonWallet meta-tx (R30, R67)', () => {
     it('sandbox global id is what MetaOp.network must carry', async () => {
         const { bc } = await setup();
         expect(globalIdOf(bc)).toBe(-239);
@@ -162,7 +162,7 @@ describe('BambooJettonWallet meta-tx (R30, R67)', () => {
         expect((await bobReal.send(mallory.getSender(), { value: toNano('0.1') }, forged)).transactions).toHaveTransaction({ to: bobReal.address, success: false, exitCode: E.sender });
         const fw = await walletOf(fake, alice.address);
         const { internal } = require('@ton/sandbox');
-        const { storeJettonTransferInternal } = require('../build/jetton/jetton_BambooJettonWallet');
+        const { storeJettonTransferInternal } = require('../build/jetton/jetton_ScaasJettonWallet');
         const r = await bc.sendMessage(internal({ from: fw.address, to: bobReal.address, value: toNano('0.1'), body: beginCell().store(storeJettonTransferInternal(forged)).endCell() }));
         expect(r.transactions).toHaveTransaction({ to: bobReal.address, success: false, exitCode: E.sender });
         expect(await balanceOf(real, bob.address)).toBe(1n);
@@ -176,7 +176,7 @@ describe('BambooJettonWallet meta-tx (R30, R67)', () => {
         await mint(token, alice.address, 100n);
         const aw = await walletOf(token, alice.address);
         const pk = newPasskey();
-        const rec = passkeyRecord(pk.compressed, 'pay.bamboo.example', 'https://pay.bamboo.example');
+        const rec = passkeyRecord(pk.compressed, 'pay.scaas.example', 'https://pay.scaas.example');
         const setKey = signedPay(alice, { contract: aw.address, to: alice.address, amount: 0n, network, op: OP.set_key, extra: BigInt('0x' + rec.hash().toString('hex')) }, { params: rec, responseDestination: relayer.address });
         expect((await aw.send(relayer.getSender(), { value: toNano('0.15') }, setKey.body)).transactions).toHaveTransaction({ to: aw.address, success: true });
         expect((await aw.getGetPasskey())!.hash().equals(rec.hash())).toBe(true);
@@ -189,23 +189,23 @@ describe('BambooJettonWallet meta-tx (R30, R67)', () => {
             return metaOpCell(f);
         };
         const low = withTopBit(false);
-        const rl = await aw.send(relayer.getSender(), { value: toNano('0.2') }, { $$type: 'SignedOp', op: low, auth: passkeyAuth(pk.privateKey, 'pay.bamboo.example', 'https://pay.bamboo.example', low.hash()), params: null, stateInit: null, responseDestination: relayer.address, forwardTon: 0n, matchWith: 0n });
+        const rl = await aw.send(relayer.getSender(), { value: toNano('0.2') }, { $$type: 'SignedOp', op: low, auth: passkeyAuth(pk.privateKey, 'pay.scaas.example', 'https://pay.scaas.example', low.hash()), params: null, stateInit: null, responseDestination: relayer.address, forwardTon: 0n, matchWith: 0n });
         expect(rl.transactions).toHaveTransaction({ to: aw.address, success: true });
         expect(await balanceOf(token, bob.address)).toBe(30n);
         const op = withTopBit(true);
         const send = (auth: any) => aw.send(relayer.getSender(), { value: toNano('0.2') }, { $$type: 'SignedOp', op, auth, params: null, stateInit: null, responseDestination: relayer.address, forwardTon: 0n, matchWith: 0n });
         // wrong origin, missing UV, wrong digest, long client data (two suffix cells) — then the good one
-        expect((await send(passkeyAuth(pk.privateKey, 'pay.bamboo.example', 'https://evil.example', op.hash()))).transactions).toHaveTransaction({ to: aw.address, exitCode: E.sig });
-        expect((await send(passkeyAuth(pk.privateKey, 'pay.bamboo.example', 'https://pay.bamboo.example', op.hash(), 0x01))).transactions).toHaveTransaction({ to: aw.address, exitCode: E.sig });
-        expect((await send(passkeyAuth(pk.privateKey, 'pay.bamboo.example', 'https://pay.bamboo.example', Buffer.alloc(32, 1)))).transactions).toHaveTransaction({ to: aw.address, exitCode: E.sig });
+        expect((await send(passkeyAuth(pk.privateKey, 'pay.scaas.example', 'https://evil.example', op.hash()))).transactions).toHaveTransaction({ to: aw.address, exitCode: E.sig });
+        expect((await send(passkeyAuth(pk.privateKey, 'pay.scaas.example', 'https://pay.scaas.example', op.hash(), 0x01))).transactions).toHaveTransaction({ to: aw.address, exitCode: E.sig });
+        expect((await send(passkeyAuth(pk.privateKey, 'pay.scaas.example', 'https://pay.scaas.example', Buffer.alloc(32, 1)))).transactions).toHaveTransaction({ to: aw.address, exitCode: E.sig });
         const long = ',"other_keys_can_be_added_here":"do not compare clientDataJSON against a template. See https://goo.gl/yabPex"';
-        const r = await send(passkeyAuth(pk.privateKey, 'pay.bamboo.example', 'https://pay.bamboo.example', op.hash(), 0x05, long));
+        const r = await send(passkeyAuth(pk.privateKey, 'pay.scaas.example', 'https://pay.scaas.example', op.hash(), 0x05, long));
         expect(r.transactions).toHaveTransaction({ to: aw.address, success: true });
         expect(await balanceOf(token, bob.address)).toBe(60n);
 
         // a passkey cannot change keys
         const rm = metaOpCell({ ...fields, op: OP.set_key, to: alice.address, amount: 0n, lane: randomU256() });
-        const r2 = await aw.send(relayer.getSender(), { value: toNano('0.2') }, { $$type: 'SignedOp', op: rm, auth: passkeyAuth(pk.privateKey, 'pay.bamboo.example', 'https://pay.bamboo.example', rm.hash()), params: null, stateInit: null, responseDestination: relayer.address, forwardTon: 0n, matchWith: 0n });
+        const r2 = await aw.send(relayer.getSender(), { value: toNano('0.2') }, { $$type: 'SignedOp', op: rm, auth: passkeyAuth(pk.privateKey, 'pay.scaas.example', 'https://pay.scaas.example', rm.hash()), params: null, stateInit: null, responseDestination: relayer.address, forwardTon: 0n, matchWith: 0n });
         expect(r2.transactions).toHaveTransaction({ to: aw.address, exitCode: E.auth });
     });
 
@@ -219,7 +219,7 @@ describe('BambooJettonWallet meta-tx (R30, R67)', () => {
         const sp = signedPay(alice, { contract: aw.address, to: bob.address, amount: 10n, network }, { domain: 'other.example', ts: 1_700_000_000, responseDestination: relayer.address });
         expect((await aw.send(relayer.getSender(), { value: toNano('0.15') }, sp.body)).transactions).toHaveTransaction({ to: aw.address, success: true });
         expect(await balanceOf(token, bob.address)).toBe(10n);
-        expect(DOMAIN).toBe('pay.bamboo.example');
+        expect(DOMAIN).toBe('pay.scaas.example');
     });
 
     it('a long-idle, heavily used wallet keeps its jettons: lanes are pruned and storage is reserved (review M4)', async () => {

@@ -49,7 +49,7 @@ không từ hiệu `n_b − n_v` (ruling **RS-NV64-1**, §16). Số dư của m�
 | `O` | 64 byte 0 | 128 byte 0 |
 | Scalar | 32 byte BE, **phải `< r`** | 32 byte BE, **phải `< r`** |
 | Precompile | `0x06` add, `0x07` mul (MSM = vòng mul+add) | `0x0b` G1ADD, `0x0c` G1MSM, `0x10` MAP_FP_TO_G1 |
-| `proofSystemId` | `keccak256("bamboo/zether/sigma-bullets/bn254/n64-n64/v1")` | `keccak256("bamboo/zether/sigma-bullets/bls12-381/n64-n64/v1")` |
+| `proofSystemId` | `keccak256("scaas/zether/sigma-bullets/bn254/n64-n64/v1")` | `keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v1")` |
 
 **Mã hoá chính tắc là duy nhất.** Toạ độ phải `< p` (precompile từ chối nếu không), BLS phải có `pad16` toàn 0.
 Prover **không bao giờ** xuất điểm không chính tắc; `UA = keccak256(encodedY)` dựa vào điều đó.
@@ -77,7 +77,7 @@ dùng `"H"` cho `Hb` thì `Hb == H_0` và mọi proof hỏng.
 ### 3.1 bn254 — try-and-increment
 
 ```
-msg(label, index) = "BAMBOO-ZETHER-GEN-BN254-V1" ‖ u8(len(label)) ‖ label ‖ be4(index)
+msg(label, index) = "SCAAS-ZETHER-GEN-BN254-V1" ‖ u8(len(label)) ‖ label ‖ be4(index)
 mapToG1(prefix):
   for ctr = 0, 1, 2, …:
     x   = uint256(keccak256(prefix ‖ be4(ctr))) mod p
@@ -93,7 +93,7 @@ gen(label, index) = mapToG1(msg(label, index))
 
 `gen(label, index) = hash_to_curve(msg, DST)`, suite **`BLS12381G1_XMD:SHA-256_SSWU_RO_`**, với
 `msg = u8(len(label)) ‖ label ‖ be4(index)` và
-`DST = "BAMBOO-ZETHER-GEN-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_"`.
+`DST = "SCAAS-ZETHER-GEN-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_"`.
 (Solidity: `HashToCurve.hashToG1` — `expand_message_xmd` + `MAP_FP_TO_G1` ×2 + G1ADD; arkworks:
 `MapToCurveBasedHasher<G1Projective, DefaultFieldHasher<Sha256,128>, WBMap<g1::Config>>`.)
 
@@ -109,7 +109,7 @@ hashToScalar(seed: bytes32) = ( uint256(keccak256(seed ‖ 0x02)) · 2^256
 Transcript (keccak, trạng thái một `bytes32 st`):
 
 ```
-init():               st = keccak256("BAMBOO-ZETHER-TRANSCRIPT-V1")
+init():               st = keccak256("SCAAS-ZETHER-TRANSCRIPT-V1")
 absorb(label, data):  st = keccak256(st ‖ 0x00 ‖ u8(len(label)) ‖ label ‖ be4(len(data)) ‖ data)
 challenge(label):     st = keccak256(st ‖ 0x01 ‖ u8(len(label)) ‖ label)
                       return hashToScalar(st)          // == 0 ⇒ proof bị từ chối
@@ -183,7 +183,7 @@ Header (384 byte, chung cho mọi op):
 
 | Offset | Len | Trường |
 |---|---|---|
-| 0 | 32 | `opTag` — transfer: `keccak256("BAMBOO-ZETHER-OP-TRANSFER-V1")`, burn: `keccak256("BAMBOO-ZETHER-OP-BURN-V1")` |
+| 0 | 32 | `opTag` — transfer: `keccak256("SCAAS-ZETHER-OP-TRANSFER-V1")`, burn: `keccak256("SCAAS-ZETHER-OP-BURN-V1")` |
 | 32 | 32 | `proofSystemId` (§2) |
 | 64 | 32 | `chainId` |
 | 96 | 32 | địa chỉ token (12 byte 0 ‖ 20 byte) |
@@ -338,13 +338,13 @@ burn payload     = be32(provedAccSeq) ‖ be32(provedSendCounter) ‖ Y_f       
 
 Ba tầng:
 1. **Phong bì:** 2D nonce `(from, batch) → nonce`, `validUntil`, chữ ký EIP-712 (`MetaTxLib.METATX_TYPEHASH`,
-   domain `("Bamboo ZetherToken", "1", chainId, token)`), lane ngẫu nhiên theo `entryRef` (R9) do client chọn.
+   domain `("SCaaS ZetherToken", "1", chainId, token)`), lane ngẫu nhiên theo `entryRef` (R9) do client chọn.
 2. **Trạng thái:** `accSeq`, `sendCounter` trong statement; token so với storage **trước** verify.
 3. **Ràng phong bì:** `bindingTag`/`envelopeBinding` trong statement.
 
 ```
 envelopeBinding = keccak256(abi.encode(
-    keccak256("BAMBOO-ZETHER-ENVELOPE-V1"), chainid, token,
+    keccak256("SCAAS-ZETHER-ENVELOPE-V1"), chainid, token,
     m.from, m.to, m.value, m.batch, m.nonce, m.validUntil, m.mode,
     canonRelayer, m.fee, canonFeeRecipient))        // canon* theo MetaTxLib.canon
 ```
@@ -390,19 +390,19 @@ Thứ tự pipeline giữ §04.6.1, rẻ trước đắt sau: relayer → hạn 
 phí ngoài** → kiểm op rẻ (`accSeq`, `sendCounter`, đăng ký, độ dài) → **verify proof** → thu phí ngoài → thực thi →
 nonce++. Phong bì không đủ phí revert trước mọi precompile.
 
-`entryRef = keccak256(abi.encode(keccak256("BAMBOO-ZETHER-ENTRY-V1"), chainid, token, fromUA, sendCounter))`
+`entryRef = keccak256(abi.encode(keccak256("SCAAS-ZETHER-ENTRY-V1"), chainid, token, fromUA, sendCounter))`
 (`sendCounter` trước khi tăng).
 
 ## 11. Uỷ quyền và registry (SRS §7.5, §8.3; bất biến an ninh #1 §02.4.2)
 
 Transfer/burn xác thực **hai** thứ: proof (biết `x`) **và** chữ ký `authSig` theo `authScheme` của tài khoản gửi trên
-`authDigest = keccak256("BAMBOO-ZETHER-AUTH-V1" ‖ keccak256(statement))`. Lộ `x` của tài khoản không phải
+`authDigest = keccak256("SCAAS-ZETHER-AUTH-V1" ‖ keccak256(statement))`. Lộ `x` của tài khoản không phải
 `SELF_SCHNORR`/`PQ_COMMITMENT` chỉ là read-only breach.
 
 ### 11.1 Schnorr (mọi curve)
 
 ```
-sign(x, msg32):  k hedged;  R = [k]G;  e = hashToScalar(keccak256("BAMBOO-ZETHER-SCHNORR-V1" ‖ R ‖ Y ‖ msg32))
+sign(x, msg32):  k hedged;  R = [k]G;  e = hashToScalar(keccak256("SCAAS-ZETHER-SCHNORR-V1" ‖ R ‖ Y ‖ msg32))
                  z = k + e·x mod r;   sig = R ‖ be32(z)                    (P + 32 byte)
 verify:          z < r, R ≠ O, Y ≠ O, e ≠ 0, [z]G − R − [e]Y == O
 ```
@@ -432,10 +432,10 @@ phát lại cần chính `msg.sender` ấy và cho ra đúng bản ghi đó. `po
 
 - ECDSA_MULTISIG: `0 < threshold ≤ len(owners)`, owners khác 0, tăng nghiêm ngặt — kiểm lúc `register`. Chữ ký
   ECDSA trên **digest thô** (không tiền tố EIP-191), low-s, sắp theo địa chỉ người ký tăng dần (`MultiSig.sol`).
-- bn254 G2 (EIP-197): `x_im ‖ x_re ‖ y_im ‖ y_re`. `H(m)` cho BLS_BN254 = `mapToG1("BAMBOO-BLS-BN254-SIG-V1" ‖ m)`,
-  PoP dùng `"BAMBOO-BLS-BN254-POP-V1"`.
-- BLS_12381: `HashToCurve.hashToG1(m, DST)`, `DST_SIG = "BAMBOO-AUTH-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_SIG_"`,
-  `DST_POP = "BAMBOO-AUTH-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_"`; pk qua `G2MSM` k=1 (subgroup).
+- bn254 G2 (EIP-197): `x_im ‖ x_re ‖ y_im ‖ y_re`. `H(m)` cho BLS_BN254 = `mapToG1("SCAAS-BLS-BN254-SIG-V1" ‖ m)`,
+  PoP dùng `"SCAAS-BLS-BN254-POP-V1"`.
+- BLS_12381: `HashToCurve.hashToG1(m, DST)`, `DST_SIG = "SCAAS-AUTH-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_SIG_"`,
+  `DST_POP = "SCAAS-AUTH-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_"`; pk qua `G2MSM` k=1 (subgroup).
 - **BLS cùng curve với khoá ElGamal bị cấm** (canon C6.1: công bố `[x]G2` phá DDH): `BLS_BN254` với `Y` 64 byte và
   `BLS_12381` với `Y` 128 byte ⇒ `UnauthorizedScheme`.
 - `linkEVM`: `links[msg.sender] = UA`, `link_eth[UA] = msg.sender`; `msg.sender` đã liên kết ⇒ `EVMAlreadyLinked`.
@@ -451,7 +451,7 @@ Token lưu theo `entryRef`: `Y_t ‖ C_out ‖ D_out ‖ C_aud`. `opening` theo 
 - `AUDITOR`: như `RECEIVER_X` với `Y_a`, `C_aud`.
 
 ```
-e = hashToScalar(keccak256("BAMBOO-ZETHER-DISCLOSE-V1" ‖ be32(chainid) ‖ token(20) ‖ entryRef ‖ be32(amount)
+e = hashToScalar(keccak256("SCAAS-ZETHER-DISCLOSE-V1" ‖ be32(chainid) ‖ token(20) ‖ entryRef ‖ be32(amount)
                            ‖ u8(kind) ‖ A1 ‖ A2))
 kiểm:  [z]G − A1 − [e]K == O    và    [z]D_out − A2 − [e](M − [amount]G) == O
        (K, M) = (Y_t, C_out) cho RECEIVER_X, (Y_a, C_aud) cho AUDITOR

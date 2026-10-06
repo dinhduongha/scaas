@@ -10,11 +10,11 @@ import { derToRS, encodeAssertion, publicKeyFromSpki } from '../src/webauthn.js'
 import { accountSignature } from '../src/evm.js';
 import { hex, b64url, keccak_256, utf8ToBytes } from '../src/bytes.js';
 
-const d = keccak_256(utf8ToBytes('bamboo clientkeys webauthn vector key'));
+const d = keccak_256(utf8ToBytes('scaas clientkeys webauthn vector key'));
 const pub = p256.getPublicKey(d, false);
 const jwk = { kty: 'EC', crv: 'P-256', d: b64url(d), x: b64url(pub.subarray(1, 33)), y: b64url(pub.subarray(33)), ext: true };
-const rpId = 'portal.bamboo.test';
-const origin = 'https://portal.bamboo.test';
+const rpId = 'portal.scaas.test';
+const origin = 'https://portal.scaas.test';
 const auth = await softAuthenticator({ rpId, origin, jwk });
 const { x, y } = publicKeyFromSpki(auth.spki);
 const challenge = keccak_256(utf8ToBytes('MetaTransaction digest stand-in'));

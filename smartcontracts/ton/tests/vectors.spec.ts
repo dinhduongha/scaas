@@ -1,13 +1,13 @@
 // Cross-implementation vectors (deliverable 4): the SAME bytes/digests computed here (@ton/core, the
-// reference) must come out of dms_blockchain/lib/fam_ton.py and bamboo-node/src/adapters/ton.rs.
+// reference) must come out of dms_blockchain/lib/fam_ton.py and scaas-node/src/adapters/ton.rs.
 // UPDATE_VECTORS=1 npx jest tests/vectors.spec.ts rewrites vectors/ton-vectors.json.
 import { Address, beginCell, Cell, external, internal, storeMessage, storeMessageRelaxed, toNano } from '@ton/core';
 import { keyPairFromSeed, sign } from '@ton/crypto';
 import { WalletContractV5R1 } from '@ton/ton';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { BambooJettonWallet, storeMetaTransactionExecuted, storePaymentSettled, storeSignedOp } from '../build/jetton/jetton_BambooJettonWallet';
-import { BambooJettonMaster } from '../build/jetton/jetton_BambooJettonMaster';
+import { ScaasJettonWallet, storeMetaTransactionExecuted, storePaymentSettled, storeSignedOp } from '../build/jetton/jetton_ScaasJettonWallet';
+import { ScaasJettonMaster } from '../build/jetton/jetton_ScaasJettonMaster';
 import { domainCell, metaOpCell, METAOP_SCHEMA, SCHEMA_CRC, signDataCell, stateInitCell, tonConnectAuth, tradeParamsCell } from './helpers';
 
 const FILE = join(__dirname, '..', 'vectors', 'ton-vectors.json');
@@ -19,9 +19,9 @@ async function build() {
     const payerKp = keyPairFromSeed(Buffer.alloc(32, 1));
     const payer = WalletContractV5R1.create({ workchain: 0, publicKey: payerKp.publicKey });
     const payee = Address.parse('0:' + '22'.repeat(32));
-    const master = await BambooJettonMaster.fromInit(Address.parse('0:' + '33'.repeat(32)), 0n, beginCell().storeStringTail('A').endCell());
+    const master = await ScaasJettonMaster.fromInit(Address.parse('0:' + '33'.repeat(32)), 0n, beginCell().storeStringTail('A').endCell());
     const { Dictionary } = await import('@ton/core');
-    const walletInit = await BambooJettonWallet.fromInit(payer.address, master.address, 0n, 0n, null, Dictionary.empty(), Dictionary.empty(), 0n, 0n, 0n);
+    const walletInit = await ScaasJettonWallet.fromInit(payer.address, master.address, 0n, 0n, null, Dictionary.empty(), Dictionary.empty(), 0n, 0n, 0n);
     const payerWallet = walletInit.address;
     const fields = {
         network: -239, op: 1, amount: 1_234_567n, nonce: 0n, validUntil: 1_800_000_300,
@@ -29,7 +29,7 @@ async function build() {
         payRef: BigInt('0x' + 'ab'.repeat(32)), lane: BigInt('0x' + 'cd'.repeat(32)), extra: 0n,
     };
     const op = metaOpCell(fields);
-    const domain = 'pay.bamboo.example';
+    const domain = 'pay.scaas.example';
     const ts = 1_800_000_000;
     const envelope = signDataCell(payer.address, ts, domain, op);
     const auth = tonConnectAuth(payerKp, payer.address, ts, domain, op);

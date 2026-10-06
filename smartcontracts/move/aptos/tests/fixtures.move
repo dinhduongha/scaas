@@ -1,7 +1,7 @@
 #[test_only]
 /// Môi trường test: chain id 4 (localnet), giờ = 100 s, tài khoản stateless bật (AIP-115), FA thử do 0xcafe tạo
 /// (địa chỉ metadata = `create_object_address(0xcafe, tên)` — gen_vectors.py tính cùng công thức).
-module bamboo::fixtures {
+module scaas::fixtures {
     use std::features;
     use std::option;
     use std::string;
@@ -11,7 +11,7 @@ module bamboo::fixtures {
     use aptos_framework::object::{Self, Object};
     use aptos_framework::primary_fungible_store;
     use aptos_framework::timestamp;
-    use bamboo::meta;
+    use scaas::meta;
 
     struct Mint has key { r: MintRef }
 

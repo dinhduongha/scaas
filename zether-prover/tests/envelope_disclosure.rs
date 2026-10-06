@@ -32,8 +32,8 @@ fn mtx() -> MetaTx {
 #[test]
 fn envelope_matches_cast() {
     let m = mtx();
-    assert_eq!(hex::encode(envelope_binding(31337, &TOK, &m)), "b0aeeef968fc66aa8d86051f2dd52314ef6da7f6d63140a03c7f424eb3eec4b2");
-    assert_eq!(hex::encode(digest(31337, &TOK, &m)), "2406e667e3c3c66f9bfab8999395c9e9b1655f3d56fb7a42d0fb1429076be283");
+    assert_eq!(hex::encode(envelope_binding(31337, &TOK, &m)), "4d183691f11a44b9d055aaed42a4b26d9c7b4de5b72619c6ad1f83c5675a83aa");
+    assert_eq!(hex::encode(digest(31337, &TOK, &m)), "63cc8309bee1be82025aa9f74b24113d13d2b1c3a2dfbe8003521b246d89087d");
     // data is outside the binding, inside the digest.
     let mut m2 = m.clone();
     m2.data = vec![1];
@@ -54,7 +54,7 @@ fn envelope_matches_cast() {
     );
     assert_eq!(
         hex::encode(entry_ref(31337, &TOK, &[0x55; 32], 3)),
-        "6552874bc08a5e69d48f02326e94754e2f2fa8a33f36af66395a0ebba405eedc"
+        "77b2ecc949e3ee4236bb158750916d10eaa531605fe2f3dbe790b26ee11c1643"
     );
 }
 

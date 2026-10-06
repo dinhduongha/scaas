@@ -1,4 +1,4 @@
-# Relayer `bamboo-node` Implementation Plan
+# Relayer `scaas-node` Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -34,7 +34,7 @@
 
 | File | Responsibility |
 |---|---|
-| `bamboo-node/Cargo.toml`, `node.example.toml`, `README.md` | crate, sample config, run notes |
+| `scaas-node/Cargo.toml`, `node.example.toml`, `README.md` | crate, sample config, run notes |
 | `src/main.rs` | CLI, spawn modules per chain |
 | `src/config.rs` | TOML config + validation |
 | `src/abi.rs` | `sol!` bindings, revert decoding |
@@ -54,7 +54,7 @@
 ### Task 1: Crate, config, ABI, canonical digest (KAT)
 
 **Files:**
-- Create: `bamboo-node/Cargo.toml`, `bamboo-node/.gitignore` (`target/`), `src/main.rs` (stub `fn main(){}` + `mod`s), `src/config.rs`, `src/abi.rs`, `src/metatx.rs`
+- Create: `scaas-node/Cargo.toml`, `scaas-node/.gitignore` (`target/`), `src/main.rs` (stub `fn main(){}` + `mod`s), `src/config.rs`, `src/abi.rs`, `src/metatx.rs`
 
 **Interfaces:**
 - Produces: `config::Config::load(path) -> anyhow::Result<Config>` with `odoo: OdooCfg{url,database,relay_api_key_env,indexer_api_key_env}`, `modules: Modules{submit,indexer,gateway,gateway_bind}`, `chains: Vec<ChainCfg{evm_chain_number,rpc_urls,signer_key_env,finality:FinalityCfg{mode,depth,quorum},dex,poll_ms,stuck_after_secs,max_gas_per_tx,max_fee_cap_gwei}>`; `abi::{MetaTransaction, IMetaToken, IMetaTxDex, decode_revert(&[u8]) -> String}`; `metatx::{WireMetaTx, Domain, canonical(&MetaTransaction)->MetaTransaction, digest(&Domain,&MetaTransaction)->B256, WireMetaTx::to_sol()->Result<MetaTransaction>}`.
@@ -115,7 +115,7 @@ mod tests {
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `cd bamboo-node && cargo test metatx`
+Run: `cd scaas-node && cargo test metatx`
 Expected: compile error (`WireMetaTx` not found).
 
 - [ ] **Step 3: Implement**
@@ -124,7 +124,7 @@ Expected: compile error (`WireMetaTx` not found).
 
 ```toml
 [package]
-name = "bamboo-node"
+name = "scaas-node"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.88"
@@ -323,7 +323,7 @@ impl Domain {
 
     #[cfg(test)]
     pub fn default_for_test() -> Self {
-        Self { name: "Bamboo MetaToken".into(), version: "1".into(), chain_id: 9000,
+        Self { name: "SCaaS MetaToken".into(), version: "1".into(), chain_id: 9000,
                verifying_contract: Address::repeat_byte(0xcd) }
     }
 }
@@ -492,21 +492,21 @@ fn main() {}
 
 - [ ] **Step 4: Run to verify it passes**
 
-Run: `cd bamboo-node && cargo test`
+Run: `cd scaas-node && cargo test`
 Expected: 5 tests PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add bamboo-node
-git commit -m "feat(node): bamboo-node crate - config, ABI and canonical digest locked to the KAT"
+git add scaas-node
+git commit -m "feat(node): scaas-node crate - config, ABI and canonical digest locked to the KAT"
 ```
 
 ---
 
 ### Task 2: Finality gate (pure)
 
-**Files:** Create `bamboo-node/src/finality.rs`; Modify `src/main.rs` (`mod finality;`).
+**Files:** Create `scaas-node/src/finality.rs`; Modify `src/main.rs` (`mod finality;`).
 
 **Interfaces:**
 - Produces: `enum Mode { Depth(u64), Tag }`; `safe_head(mode: &Mode, latest: u64, finalized: Option<u64>) -> Option<u64>`; `next_range(cursor: u64, safe: u64, max_span: u64) -> Option<(u64, u64)>`; `quorum_ok(primary: B256, others: &[Option<B256>], quorum: usize) -> bool`.
@@ -552,7 +552,7 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run** `cd bamboo-node && cargo test finality` → FAIL (unresolved names).
+- [ ] **Step 2: Run** `cd scaas-node && cargo test finality` → FAIL (unresolved names).
 
 - [ ] **Step 3: Implement** (top of `finality.rs`):
 
@@ -586,13 +586,13 @@ pub fn quorum_ok(primary: B256, others: &[Option<B256>], quorum: usize) -> bool 
 ```
 
 - [ ] **Step 4: Run** `cargo test finality` → PASS.
-- [ ] **Step 5: Commit** `git add bamboo-node && git commit -m "feat(node): pure finality gate - depth/tag safe head, contiguous ranges, RPC quorum"`
+- [ ] **Step 5: Commit** `git add scaas-node && git commit -m "feat(node): pure finality gate - depth/tag safe head, contiguous ranges, RPC quorum"`
 
 ---
 
 ### Task 3: DEX order book + matcher (pure)
 
-**Files:** Create `bamboo-node/src/dex.rs`; Modify `main.rs`.
+**Files:** Create `scaas-node/src/dex.rs`; Modify `main.rs`.
 
 **Interfaces:**
 - Consumes: `abi::{MetaTransaction}`, `metatx::{MODE_RESTRICT_RELAYER}`.
@@ -783,7 +783,7 @@ Also add to the tests module (`cast sig 'trade(address,uint256,address)'` = `0x0
 
 ### Task 4: Nonce plan + fee bump (pure)
 
-**Files:** Create `bamboo-node/src/nonce.rs`; Modify `main.rs`.
+**Files:** Create `scaas-node/src/nonce.rs`; Modify `main.rs`.
 
 **Interfaces:**
 - Produces: `struct Inflight { job_id: i64, nonce: u64, state: String }`; `struct Plan { next: u64, gap_fill: Vec<u64>, requeue: Vec<i64>, track: Vec<i64> }`; `plan(pending: u64, journal_max: Option<u64>, inflight: &[Inflight]) -> Plan`; `bump(fee: u128, cap: u128) -> u128`.
@@ -896,7 +896,7 @@ and a test in `test_relay_job.py` asserting a `signed` job appears in `inflight`
 
 ### Task 5: Odoo client + chain context + submit loop
 
-**Files:** Create `bamboo-node/src/odoo.rs`, `src/chain.rs`, `src/submit.rs`; Modify `main.rs`.
+**Files:** Create `scaas-node/src/odoo.rs`, `src/chain.rs`, `src/submit.rs`; Modify `main.rs`.
 
 **Interfaces:**
 - Consumes: Tasks 1, 4.
@@ -1376,7 +1376,7 @@ fn _u256(v: u64) -> U256 { U256::from(v) }
 
 (Delete the `_u256` helper if `U256` ends up unused; it only exists to keep the import set obvious to a reader of the plan.)
 
-- [ ] **Step 2: Build** `cd bamboo-node && cargo build` → compiles (warnings for unused `indexer/gateway` modules are fine at this step). Unit tests stay green: `cargo test`.
+- [ ] **Step 2: Build** `cd scaas-node && cargo build` → compiles (warnings for unused `indexer/gateway` modules are fine at this step). Unit tests stay green: `cargo test`.
 - [ ] **Step 3: Commit** `git commit -m "feat(node): json/2 client, chain context and outbox submitter that never abandons a nonce"`
 
 (The submit loop's behaviour is proven in Task 8's end-to-end test; mocking alloy's provider for unit tests would test the mock.)
@@ -1385,7 +1385,7 @@ fn _u256(v: u64) -> U256 { U256::from(v) }
 
 ### Task 6: Indexer loop + gateway
 
-**Files:** Create `bamboo-node/src/indexer.rs`, `src/gateway.rs`; Modify `main.rs`.
+**Files:** Create `scaas-node/src/indexer.rs`, `src/gateway.rs`; Modify `main.rs`.
 
 **Interfaces:**
 - Produces: `indexer::run(chain: Arc<Chain>, odoo: Odoo, poll: Duration)`; `indexer::encode_event(&Log) -> Option<serde_json::Value>`; `gateway::AppState { chains: HashMap<u64, GwChain> }`, `GwChain { chain: Arc<Chain>, tx: mpsc::Sender<Work>, tokens: Arc<RwLock<Vec<Address>>>, dex: Option<Address>, book: Arc<Mutex<Book>> }`, `gateway::router(state) -> axum::Router`, request bodies `MetaTxReq { chain: u64, token: Address, m: WireMetaTx, signature: String }`, `OrderReq { chain: u64, token: Address, m: WireMetaTx, signature: String }`.
@@ -1695,7 +1695,7 @@ Settle reverts after a match (state moved between simulation and inclusion) surf
 
 ### Task 7: `main.rs` wiring, sample config, README
 
-**Files:** Modify `bamboo-node/src/main.rs`; Create `bamboo-node/node.example.toml`, `bamboo-node/README.md`.
+**Files:** Modify `scaas-node/src/main.rs`; Create `scaas-node/node.example.toml`, `scaas-node/README.md`.
 
 - [ ] **Step 1: Implement** `main.rs`:
 
@@ -1728,10 +1728,10 @@ async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let path = match args.iter().position(|a| a == "--config") {
         Some(i) if i + 1 < args.len() => PathBuf::from(&args[i + 1]),
-        _ => bail!("usage: bamboo-node --config node.toml"),
+        _ => bail!("usage: scaas-node --config node.toml"),
     };
     let cfg = config::Config::load(&path)?;
-    let node_id = std::env::var("BAMBOO_NODE_ID").unwrap_or_else(|_| "bamboo-node".into());
+    let node_id = std::env::var("SCAAS_NODE_ID").unwrap_or_else(|_| "scaas-node".into());
     let mut gw_chains = HashMap::new();
     let mut tasks = Vec::new();
 
@@ -1782,7 +1782,7 @@ async fn main() -> Result<()> {
 
 `node.example.toml`: the TOML of spec §3.1 with `[modules] submit = true, indexer = true, gateway = true, gateway_bind = "127.0.0.1:8547"`.
 
-`README.md` (Vietnamese): build (`cargo build --release`), env vars (`BAMBOO_RELAY_API_KEY`, `BAMBOO_INDEXER_API_KEY`, `BAMBOO_RELAYER_KEY_9000`, `BAMBOO_NODE_ID`), creating the two Odoo service users + API keys (Settings → Users; groups "Blockchain Relay Worker (service)" / "Blockchain Indexer (service)"; Account Security → New API Key), running against chain 9000, and the e2e test command.
+`README.md` (Vietnamese): build (`cargo build --release`), env vars (`SCAAS_RELAY_API_KEY`, `SCAAS_INDEXER_API_KEY`, `SCAAS_RELAYER_KEY_9000`, `SCAAS_NODE_ID`), creating the two Odoo service users + API keys (Settings → Users; groups "Blockchain Relay Worker (service)" / "Blockchain Indexer (service)"; Account Security → New API Key), running against chain 9000, and the e2e test command.
 
 - [ ] **Step 2: Build** `cargo build && cargo clippy -- -D warnings` (fix lints) → OK.
 - [ ] **Step 3: Commit** `git commit -m "feat(node): wire submit, indexer and gateway into one binary"`
@@ -1791,7 +1791,7 @@ async fn main() -> Result<()> {
 
 ### Task 8: End-to-end test on anvil + real contracts + fake Odoo
 
-**Files:** Create `bamboo-node/tests/e2e.rs`. Modify `Cargo.toml` (`[lib]` so the test can use the crate: add `src/lib.rs` re-exporting modules and make `main.rs` use `bamboo_node::*`).
+**Files:** Create `scaas-node/tests/e2e.rs`. Modify `Cargo.toml` (`[lib]` so the test can use the crate: add `src/lib.rs` re-exporting modules and make `main.rs` use `scaas_node::*`).
 
 **Interfaces:**
 - Consumes: everything; `smartcontracts/script/Deploy.s.sol` (`deployments/9000.json`).
@@ -1816,9 +1816,9 @@ use alloy::sol_types::{SolCall, SolValue};
 use axum::extract::{Path, State};
 use axum::routing::post;
 use axum::{Json, Router};
-use bamboo_node::abi::{IMetaToken, MetaTransaction};
-use bamboo_node::config::{ChainCfg, FinalityCfg, OdooCfg};
-use bamboo_node::metatx::{digest, Domain, WireMetaTx, MODE_RESTRICT_RELAYER};
+use scaas_node::abi::{IMetaToken, MetaTransaction};
+use scaas_node::config::{ChainCfg, FinalityCfg, OdooCfg};
+use scaas_node::metatx::{digest, Domain, WireMetaTx, MODE_RESTRICT_RELAYER};
 use serde_json::{json, Value};
 
 const DEPLOYER: &str = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
@@ -1892,7 +1892,7 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
         batch: U256::from_be_bytes(keccak256(b"lane").0), nonce: U256::ZERO, validUntil: U256::from(now + 300),
         mode: MODE_RESTRICT_RELAYER, relayer: relayer.address(), fee: U256::ZERO, feeRecipient: Address::ZERO,
     };
-    let domain = Domain { name: "Bamboo MetaToken".into(), version: "1".into(), chain_id: 9000, verifying_contract: token };
+    let domain = Domain { name: "SCaaS MetaToken".into(), version: "1".into(), chain_id: 9000, verifying_contract: token };
     let d = digest(&domain, &m);
     let sig = payer.sign_hash_sync(&d).unwrap().as_bytes();
     let state = Arc::new(Mutex::new(FakeOdoo { token: format!("{token:#x}"), ..Default::default() }));
@@ -1911,9 +1911,9 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     };
     let ocfg = OdooCfg { url: format!("http://{addr}"), database: "t".into(), relay_api_key_env: String::new(),
                          indexer_api_key_env: String::new() };
-    let odoo = bamboo_node::odoo::Odoo::with_key(&ocfg, "k".into());
-    let chain = bamboo_node::chain::Chain::with_signer(&ccfg, relayer.clone()).unwrap();
-    let mut s = bamboo_node::submit::Submitter::start(chain, odoo.clone(), ccfg.clone(), "e2e".into()).await.unwrap();
+    let odoo = scaas_node::odoo::Odoo::with_key(&ocfg, "k".into());
+    let chain = scaas_node::chain::Chain::with_signer(&ccfg, relayer.clone()).unwrap();
+    let mut s = scaas_node::submit::Submitter::start(chain, odoo.clone(), ccfg.clone(), "e2e".into()).await.unwrap();
     s.poll_outbox().await;
     tokio::time::sleep(Duration::from_millis(500)).await;
     s.track().await;
@@ -1928,8 +1928,8 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     assert_eq!(U256::abi_decode(&out).unwrap(), U256::from(250_000_000u64));
 
     // Indexer: one step sends the finalized PaymentSettled + MetaTransactionExecuted.
-    let ichain = bamboo_node::chain::Chain::with_signer(&ccfg, relayer).unwrap();
-    assert!(bamboo_node::indexer::step(&ichain, &odoo).await.unwrap());
+    let ichain = scaas_node::chain::Chain::with_signer(&ccfg, relayer).unwrap();
+    assert!(scaas_node::indexer::step(&ichain, &odoo).await.unwrap());
     let ingested = state.lock().unwrap().ingested.clone();
     let names: Vec<&str> = ingested.iter().map(|e| e["event"].as_str().unwrap()).collect();
     assert!(names.contains(&"PaymentSettled") && names.contains(&"MetaTransactionExecuted"), "{ingested:?}");
@@ -1942,7 +1942,7 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
 
 A second test `dex_orders_match_through_the_gateway` in the same file: deploy, create a second token `BBB` via `forge create`-free path (call `OpenFactory.createMetaToken` with the deployer through alloy), fund alice/bob, start a `gateway::router` with a `GwChain` whose `tx` feeds a `Submitter` driven in the test loop, POST two crossing orders with `reqwest`, run `poll_outbox`/drain/`track`, and assert balances swapped. (Write it with the same helpers; the order JSON is `{"chain": 9000, "token": "<addr>", "m": <WireMetaTx>, "signature": "0x…"}`.)
 
-- [ ] **Step 2: Run** `cd bamboo-node && cargo test --test e2e -- --ignored --nocapture`
+- [ ] **Step 2: Run** `cd scaas-node && cargo test --test e2e -- --ignored --nocapture`
 Expected: both PASS.
 - [ ] **Step 3: Commit** `git commit -m "test(node): end-to-end on anvil - outbox payment and DEX match against the real contracts"`
 

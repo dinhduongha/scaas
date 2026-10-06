@@ -1,7 +1,7 @@
 extern crate std;
 
 use super::*;
-use bamboo_token::{Token, TokenClient};
+use scaas_token::{Token, TokenClient};
 use soroban_sdk::testutils::{Address as _, Ledger};
 use soroban_sdk::String;
 

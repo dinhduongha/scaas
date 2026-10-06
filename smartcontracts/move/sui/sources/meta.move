@@ -2,9 +2,9 @@
 /// derived từ `Registry<T>` theo địa chỉ chủ ⇒ id tính offline, một account mỗi chủ × coin type).
 /// Chủ thể chỉ KÝ `MetaOp`; relayer gửi tx từ lane của chính nó. Không sequence của chủ thể, không
 /// allowance: số dư chỉ đổi qua `relay_pay` (chữ ký chủ) hoặc `take`/`put` của module cùng package.
-module bamboo::meta;
+module scaas::meta;
 
-use bamboo::auth::{Self, Auth};
+use scaas::auth::{Self, Auth};
 use std::bcs;
 use std::type_name;
 use sui::balance::Balance;
@@ -16,9 +16,9 @@ use sui::hash::blake2b256;
 use sui::table::{Self, Table};
 use sui::transfer::Receiving;
 
-const DOMAIN: vector<u8> = b"bamboo.metaop.v1";
-const OPEN_DOMAIN: vector<u8> = b"bamboo.open.v1";
-const KEYOP_DOMAIN: vector<u8> = b"bamboo.keyop.v1";
+const DOMAIN: vector<u8> = b"scaas.metaop.v1";
+const OPEN_DOMAIN: vector<u8> = b"scaas.open.v1";
+const KEYOP_DOMAIN: vector<u8> = b"scaas.keyop.v1";
 const OP_PAY: u8 = 0;
 const U64_MAX: u128 = 0xffffffffffffffff;
 /// Vòng đời khoá (round-3 §C "Vòng đời khoá", §C.3): thao tác `manage` ký bởi một khoá hiện có.

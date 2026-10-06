@@ -13,7 +13,7 @@ import { utf8ToBytes, b64url, fromB64url, wipe } from './bytes.js';
 
 export const SCRYPT = Object.freeze({ N: 2 ** 17, r: 8, p: 1, dkLen: 32 });
 const VERSION = 1;
-const PRF_INFO = utf8ToBytes('bamboo-clientkeys-vault-v1/prf');
+const PRF_INFO = utf8ToBytes('scaas-clientkeys-vault-v1/prf');
 
 async function gcm(op, keyBytes, iv, data, aad) {
   const key = await crypto.subtle.importKey('raw', keyBytes, 'AES-GCM', false, [op]);

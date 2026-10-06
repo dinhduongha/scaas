@@ -1,11 +1,11 @@
 #[test_only]
-module bamboo::dex_tests;
+module scaas::dex_tests;
 
-use bamboo::auth::Auth;
-use bamboo::dex::{Self, Market, Order};
-use bamboo::fixtures::{Self as fx, EUR};
-use bamboo::meta::{Self, Account, AdminCap};
-use bamboo::vectors as v;
+use scaas::auth::Auth;
+use scaas::dex::{Self, Market, Order};
+use scaas::fixtures::{Self as fx, EUR};
+use scaas::meta::{Self, Account, AdminCap};
+use scaas::vectors as v;
 use sui::sui::SUI;
 use sui::test_scenario::{Self as ts, Scenario};
 

@@ -2,7 +2,7 @@
 //! và vector chéo với Odoo (`test_fam_cosmos.py`) và adapter Rust (`adapters/cosmos.rs`).
 // Test helpers mirror the signed-op fields one-to-one; bundling them would hide what each test signs.
 #![allow(clippy::too_many_arguments, clippy::type_complexity)]
-use bamboo_metaop::{adr036_doc, base64url, passkey_account, secp256k1_account, sha256, Auth, MetaOp, DOMAIN};
+use scaas_metaop::{adr036_doc, base64url, passkey_account, secp256k1_account, sha256, Auth, MetaOp, DOMAIN};
 use cosmwasm_std::{to_json_vec, StdResult, Addr, Api, Binary, CanonicalAddr, HexBinary, Uint128};
 use cw_multi_test::{App, AppBuilder, AppResponse, BankKeeper, ContractWrapper, Executor, MockApiBech32};
 use k256::ecdsa::signature::hazmat::PrehashSigner;
@@ -57,8 +57,8 @@ fn op(app: &TApp, contract: &Addr, kind: &str, from: &Addr, to: &str, amount: u1
     }
 }
 
-fn relay_msg(payload: &[u8], auth: Auth) -> bamboo_token::ExecuteMsg {
-    bamboo_token::ExecuteMsg::Relay { payload: payload.to_vec().into(), auth }
+fn relay_msg(payload: &[u8], auth: Auth) -> scaas_token::ExecuteMsg {
+    scaas_token::ExecuteMsg::Relay { payload: payload.to_vec().into(), auth }
 }
 
 struct World {
@@ -71,13 +71,13 @@ struct World {
 }
 
 fn token(app: &mut TApp, code: u64, admin: &Addr, sym: &str, holders: &[(&Addr, u128)]) -> Addr {
-    let init = bamboo_token::InstantiateMsg {
+    let init = scaas_token::InstantiateMsg {
         name: sym.into(),
         symbol: sym.into(),
         decimals: 6,
         initial_balances: holders
             .iter()
-            .map(|(a, n)| bamboo_token::Balance { address: a.to_string(), amount: Uint128::new(*n) })
+            .map(|(a, n)| scaas_token::Balance { address: a.to_string(), amount: Uint128::new(*n) })
             .collect(),
         minter: Some(admin.to_string()),
     };
@@ -86,7 +86,7 @@ fn token(app: &mut TApp, code: u64, admin: &Addr, sym: &str, holders: &[(&Addr, 
 
 fn world() -> World {
     let mut app = app();
-    let code = app.store_code(Box::new(ContractWrapper::new(bamboo_token::execute, bamboo_token::instantiate, bamboo_token::query)));
+    let code = app.store_code(Box::new(ContractWrapper::new(scaas_token::execute, scaas_token::instantiate, scaas_token::query)));
     let admin = app.api().addr_make("admin");
     let relayer = app.api().addr_make("relayer");
     let (alice, bob) = (K1::new(7), K1::new(9));
@@ -97,8 +97,8 @@ fn world() -> World {
 }
 
 fn balance(app: &TApp, token: &Addr, who: &str) -> u128 {
-    let r: bamboo_token::BalanceResponse =
-        app.wrap().query_wasm_smart(token, &bamboo_token::QueryMsg::Balance { address: who.into() }).unwrap();
+    let r: scaas_token::BalanceResponse =
+        app.wrap().query_wasm_smart(token, &scaas_token::QueryMsg::Balance { address: who.into() }).unwrap();
     r.balance.u128()
 }
 
@@ -119,7 +119,7 @@ fn pay_by_signature_moves_funds_and_emits_events_once() {
     let auth = w.alice.auth(&p, a.as_str());
     let t1 = w.t1.clone();
     // Front-run bằng `Pay` trực tiếp cùng `pay_ref` không đốt được khoản của Alice (không khoá pay_ref toàn cục).
-    let grief = bamboo_token::ExecuteMsg::Pay { to: payee.to_string(), amount: Uint128::new(1), pay_ref: HexBinary::from(vec![1 ^ 0x5a; 32]) };
+    let grief = scaas_token::ExecuteMsg::Pay { to: payee.to_string(), amount: Uint128::new(1), pay_ref: HexBinary::from(vec![1 ^ 0x5a; 32]) };
     w.app.execute_contract(w.bob.addr(&w.app), t1.clone(), &grief, &[]).unwrap();
     let res = relay(&mut w, &t1, &p, auth.clone()).unwrap();
     assert_eq!(balance(&w.app, &w.t1, payee.as_str()), 251);
@@ -140,7 +140,7 @@ fn domain_expiry_relayer_and_key_binding_are_enforced() {
         ("another network", Box::new(|o| o.network = "other-1".into())),
         ("another contract", Box::new(move |o| o.contract = t2.to_string())),
         ("expired", Box::new(|o| o.valid_until = 1)),
-        ("domain", Box::new(|o| o.domain = "bamboo.metaop.v0".into())),
+        ("domain", Box::new(|o| o.domain = "scaas.metaop.v0".into())),
         ("another relayer", Box::new(|o| o.relayer = "wasm1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqcjxgyj".into())),
     ];
     for (why, f) in cases {
@@ -198,7 +198,7 @@ fn passkey_scheme_pays_from_its_derived_address() {
     let admin = w.app.api().addr_make("admin");
     let t1 = w.t1.clone();
     w.app
-        .execute_contract(admin, t1.clone(), &bamboo_token::ExecuteMsg::Mint { recipient: from.to_string(), amount: Uint128::new(100) }, &[])
+        .execute_contract(admin, t1.clone(), &scaas_token::ExecuteMsg::Mint { recipient: from.to_string(), amount: Uint128::new(100) }, &[])
         .unwrap();
     let payee = w.app.api().addr_make("payee").to_string();
     let p = to_json_vec(&op(&w.app, &t1, "pay", &from, &payee, 40, 7, 0)).unwrap();
@@ -229,7 +229,7 @@ fn passkey_scheme_pays_from_its_derived_address() {
 }
 
 fn mandate_code(app: &mut TApp) -> u64 {
-    app.store_code(Box::new(ContractWrapper::new(bamboo_mandate::execute, bamboo_mandate::instantiate, bamboo_mandate::query)))
+    app.store_code(Box::new(ContractWrapper::new(scaas_mandate::execute, scaas_mandate::instantiate, scaas_mandate::query)))
 }
 
 #[test]
@@ -238,12 +238,12 @@ fn allowance_only_to_contracts_and_transfer_from_only_by_contracts() {
     let a = w.alice.addr(&w.app);
     let t1 = w.t1.clone();
     let user = w.app.api().addr_make("user");
-    let incr = |s: &Addr| bamboo_token::ExecuteMsg::IncreaseAllowance { spender: s.to_string(), amount: Uint128::new(5) };
+    let incr = |s: &Addr| scaas_token::ExecuteMsg::IncreaseAllowance { spender: s.to_string(), amount: Uint128::new(5) };
     assert!(w.app.execute_contract(a.clone(), t1.clone(), &incr(&user), &[]).is_err());
     // Spender là contract (t2): được phép; nó kéo được tiền, tài khoản thường thì không.
     let t2 = w.t2.clone();
     w.app.execute_contract(a.clone(), t1.clone(), &incr(&t2), &[]).unwrap();
-    let pull = bamboo_token::ExecuteMsg::TransferFrom { owner: a.to_string(), recipient: user.to_string(), amount: Uint128::new(5) };
+    let pull = scaas_token::ExecuteMsg::TransferFrom { owner: a.to_string(), recipient: user.to_string(), amount: Uint128::new(5) };
     assert!(w.app.execute_contract(user.clone(), t1.clone(), &pull, &[]).is_err());
     w.app.execute_contract(t2.clone(), t1.clone(), &pull, &[]).unwrap();
     assert_eq!(balance(&w.app, &t1, user.as_str()), 5);
@@ -259,7 +259,7 @@ fn mandate_caps_payees_refs_expiry_and_revoke() {
     let payee = w.app.api().addr_make("payee");
     let now = w.app.block_info().time.seconds();
     let t1 = w.t1.clone();
-    let init = bamboo_mandate::InstantiateMsg {
+    let init = scaas_mandate::InstantiateMsg {
         owner: owner.to_string(),
         token: t1.to_string(),
         delegate_pubkey: delegate.pk().into(),
@@ -270,21 +270,21 @@ fn mandate_caps_payees_refs_expiry_and_revoke() {
         expires_at: now + 200_000,
     };
     let m = w.app.instantiate_contract(code, owner.clone(), &init, &[], "mandate", None).unwrap();
-    let send = bamboo_token::ExecuteMsg::Send { contract: m.to_string(), amount: Uint128::new(1000), msg: Binary::default() };
+    let send = scaas_token::ExecuteMsg::Send { contract: m.to_string(), amount: Uint128::new(1000), msg: Binary::default() };
     w.app.execute_contract(owner.clone(), t1.clone(), &send, &[]).unwrap();
     let chain = w.app.block_info().chain_id;
     let pay = |w: &mut World, to: &Addr, amount: u128, r: u8, key: &K1| {
-        let msg = bamboo_mandate::MandatePay {
+        let msg = scaas_mandate::MandatePay {
             amount: Uint128::new(amount),
             contract: m.to_string(),
-            domain: bamboo_mandate::DOMAIN.into(),
+            domain: scaas_mandate::DOMAIN.into(),
             network: chain.clone(),
             pay_ref: HexBinary::from(vec![r; 32]),
             to: to.to_string(),
             valid_until: w.app.block_info().time.seconds() + 60,
         };
         let sig = key.sign_hash(&sha256(&to_json_vec(&msg).unwrap()));
-        let x = bamboo_mandate::ExecuteMsg::PayUnderMandate {
+        let x = scaas_mandate::ExecuteMsg::PayUnderMandate {
             to: to.to_string(),
             amount: Uint128::new(amount),
             pay_ref: msg.pay_ref,
@@ -306,7 +306,7 @@ fn mandate_caps_payees_refs_expiry_and_revoke() {
     w.app.update_block(|b| b.time = b.time.plus_seconds(86_400));
     pay(&mut w, &payee, 10, 7, &delegate).unwrap();
     // Thu hồi: chỉ owner; sau đó không chi được nữa.
-    let rv = bamboo_mandate::ExecuteMsg::Revoke {};
+    let rv = scaas_mandate::ExecuteMsg::Revoke {};
     let r = w.relayer.clone();
     assert!(w.app.execute_contract(r, m.clone(), &rv, &[]).is_err());
     w.app.execute_contract(owner, m.clone(), &rv, &[]).unwrap();
@@ -319,22 +319,22 @@ struct Dex {
 }
 
 fn dex(w: &mut World, fee_on: bool) -> Dex {
-    let code = w.app.store_code(Box::new(ContractWrapper::new(bamboo_dex::execute, bamboo_dex::instantiate, bamboo_dex::query)));
+    let code = w.app.store_code(Box::new(ContractWrapper::new(scaas_dex::execute, scaas_dex::instantiate, scaas_dex::query)));
     let admin = w.app.api().addr_make("admin");
     let fees = w.app.api().addr_make("fees");
-    let init = bamboo_dex::InstantiateMsg { admin: admin.to_string(), fee_recipient: fees.to_string() };
+    let init = scaas_dex::InstantiateMsg { admin: admin.to_string(), fee_recipient: fees.to_string() };
     let addr = w.app.instantiate_contract(code, admin.clone(), &init, &[], "dex", None).unwrap();
-    let mk = bamboo_dex::ExecuteMsg::SetMarket {
+    let mk = scaas_dex::ExecuteMsg::SetMarket {
         token_a: w.t2.to_string(),
         token_b: w.t1.to_string(),
-        market: bamboo_dex::Market { fee_on, maker_ppm: 1_000, taker_ppm: 2_000 },
+        market: scaas_dex::Market { fee_on, maker_ppm: 1_000, taker_ppm: 2_000 },
     };
     w.app.execute_contract(admin, addr.clone(), &mk, &[]).unwrap();
     Dex { addr, fees }
 }
 
-fn leg(w: &World, d: &Dex, key: &K1, sell: &Addr, amount: u128, buy: &Addr, min: u128, max_fee: u32, lane: u8) -> bamboo_dex::Leg {
-    let params = to_json_vec(&bamboo_dex::OrderParams {
+fn leg(w: &World, d: &Dex, key: &K1, sell: &Addr, amount: u128, buy: &Addr, min: u128, max_fee: u32, lane: u8) -> scaas_dex::Leg {
+    let params = to_json_vec(&scaas_dex::OrderParams {
         buy_amount_min: Uint128::new(min),
         buy_token: buy.to_string(),
         dex: d.addr.to_string(),
@@ -346,12 +346,12 @@ fn leg(w: &World, d: &Dex, key: &K1, sell: &Addr, amount: u128, buy: &Addr, min:
     o.relayer = d.addr.to_string();
     o.extra = HexBinary::from(sha256(&params)).to_hex();
     let payload = to_json_vec(&o).unwrap();
-    bamboo_dex::Leg { auth: key.auth(&payload, from.as_str()), payload: payload.into(), params: params.into() }
+    scaas_dex::Leg { auth: key.auth(&payload, from.as_str()), payload: payload.into(), params: params.into() }
 }
 
-fn settle(w: &mut World, d: &Dex, maker: bamboo_dex::Leg, taker: bamboo_dex::Leg) -> StdResult<AppResponse> {
+fn settle(w: &mut World, d: &Dex, maker: scaas_dex::Leg, taker: scaas_dex::Leg) -> StdResult<AppResponse> {
     let r = w.relayer.clone();
-    w.app.execute_contract(r, d.addr.clone(), &bamboo_dex::ExecuteMsg::Settle { maker, taker }, &[])
+    w.app.execute_contract(r, d.addr.clone(), &scaas_dex::ExecuteMsg::Settle { maker, taker }, &[])
 }
 
 #[test]
@@ -409,10 +409,10 @@ fn dex_admin_sweeps_stray_balance() {
     let d = dex(&mut w, false);
     let t1 = w.t1.clone();
     let a = w.alice.addr(&w.app);
-    let give = bamboo_token::ExecuteMsg::Transfer { recipient: d.addr.to_string(), amount: Uint128::new(77) };
+    let give = scaas_token::ExecuteMsg::Transfer { recipient: d.addr.to_string(), amount: Uint128::new(77) };
     w.app.execute_contract(a.clone(), t1.clone(), &give, &[]).unwrap();
     assert_eq!(balance(&w.app, &t1, d.addr.as_str()), 77);
-    let sweep = bamboo_dex::ExecuteMsg::Sweep { token: t1.to_string(), recipient: a.to_string(), amount: Uint128::new(77) };
+    let sweep = scaas_dex::ExecuteMsg::Sweep { token: t1.to_string(), recipient: a.to_string(), amount: Uint128::new(77) };
     assert!(w.app.execute_contract(a.clone(), d.addr.clone(), &sweep, &[]).unwrap_err().to_string().contains("unauthorized"));
     let admin = w.app.api().addr_make("admin");
     w.app.execute_contract(admin, d.addr.clone(), &sweep, &[]).unwrap();
@@ -421,7 +421,7 @@ fn dex_admin_sweeps_stray_balance() {
 }
 
 /// Vector chéo: cùng bytes/digest/doc/địa chỉ ở `dms_blockchain/tests/test_fam_cosmos.py` và
-/// `bamboo-node/src/adapters/cosmos.rs` (khoá lane 0 Cosmos của "abandon … art", prefix `wasm`).
+/// `scaas-node/src/adapters/cosmos.rs` (khoá lane 0 Cosmos của "abandon … art", prefix `wasm`).
 #[test]
 fn cross_implementation_vector() {
     let api = MockApiBech32::new("wasm");
@@ -442,7 +442,7 @@ fn cross_implementation_vector() {
         extra: String::new(),
         from: from.to_string(),
         lane: HexBinary::from(vec![0x11; 32]),
-        network: "bamboo-1".into(),
+        network: "scaas-1".into(),
         nonce: 0,
         op: "pay".into(),
         pay_ref: HexBinary::from(vec![0x22; 32]),

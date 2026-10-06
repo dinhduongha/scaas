@@ -1,0 +1,37 @@
+[package]
+name = "scaas-node"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+publish = false
+description = "Relay node: Odoo outbox submitter, finality-gated indexer, open meta-tx gateway and DEX matcher"
+
+[dependencies]
+alloy = { version = "1.6", default-features = false, features = ["std", "provider-http", "rpc-types", "signer-local", "signer-mnemonic", "signer-keystore", "sol-types", "contract", "network", "eips", "consensus", "reqwest", "json-rpc"] }
+anyhow = "1"
+async-trait = "0.1"
+axum = "0.8"
+base64 = "0.22"
+blake2 = "0.10"
+bs58 = "0.5"
+coins-bip32 = "0.12"
+ed25519-dalek = "2"
+eth-keystore = "0.5"
+hmac = "0.12"
+rand = "0.8"
+ripemd = "0.1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+sha3 = "0.10"
+stellar-xdr = { version = "28", features = ["base64"] }
+tokio = { version = "1", features = ["full"] }
+toml = "0.8"
+tower = { version = "0.5", features = ["limit", "util"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+zeroize = "1"
+
+[dev-dependencies]
+proptest = "1"

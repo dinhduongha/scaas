@@ -18,7 +18,7 @@ Một lát cắt dọc **chạy thật được**, từ contract tới màn hìn
 1. **Contract** (Foundry, `smartcontracts/`): implementation `MetaToken` v1 (clone EIP-1167, tầng
    1 standalone + tầng 2 wrapper 1:1), `OpenFactory` hiện thực `IOpenFactory`, và `MetaTxDex` —
    sàn khớp lệnh nguyên tử P2P (SRS §3.3) không dùng allowance.
-2. **Relayer** `bamboo-node` (Rust, một binary — `_USER-DECISIONS` §23): mô-đun `submit`
+2. **Relayer** `scaas-node` (Rust, một binary — `_USER-DECISIONS` §23): mô-đun `submit`
    (outbox Odoo → simulate → ký vỏ tx → broadcast), `indexer` (log → finality gate + quorum RPC →
    Odoo), `gateway` (HTTP: nhận meta-tx đã ký từ bất kỳ ai, sổ lệnh DEX + matcher).
 3. **Odoo** (ba addon tuỳ chọn): `dms_blockchain` (control plane), `dms_blockchain_payment`
@@ -38,7 +38,7 @@ y nguyên khi ba addon vắng mặt.
    │ call_kw dms.portal.api.*  ▲ typed data                   │ POST /v1/metatx, /v1/dex/orders
    ▼                          │                               ▼
 +-----------------------------------------------+     +--------------------------------------+
-| Odoo 19                                       |     | bamboo-node  (Rust, một binary)      |
+| Odoo 19                                       |     | scaas-node  (Rust, một binary)      |
 |  dms_blockchain_bridge  (portal facade)       |     |  [gateway] HTTP: inbound meta-tx,    |
 |  dms_blockchain_payment (provider 'chain')    |     |            sổ lệnh DEX + matcher     |
 |  dms_blockchain (chain, token, metatx,        |     |  [submit]  poll job → simulate →     |
@@ -92,7 +92,7 @@ gas (bước 1–9 của §04.6.1). Một implementation duy nhất, hai tầng 
   một lần, `verifier == 0` (kind META). Factory gọi nó **trong cùng hàm** với `CREATE2`.
 - `name()`, `symbol()`, `decimals()` override để đọc storage của clone.
 - **EIP-712 domain**: OZ `EIP712` giữ `name`/`version` dạng immutable, nên mọi clone của v1 có
-  domain `name = "Bamboo MetaToken"`, `version = "1"`, `chainId`, `verifyingContract = clone`.
+  domain `name = "SCaaS MetaToken"`, `version = "1"`, `chainId`, `verifyingContract = clone`.
   Không có replay chéo token vì `verifyingContract` khác nhau. Client đọc domain qua
   `eip712Domain()` (ERC-5267); Odoo lưu `domain_name`/`domain_version` trên `blockchain.token`
   (SRS tích hợp §2.6). Ruling R5.
@@ -170,9 +170,9 @@ Chain 9000 dùng profile `private9000`; test tích hợp dùng `anvil --chain-id
 
 ---
 
-## 3. Relayer `bamboo-node`
+## 3. Relayer `scaas-node`
 
-Một crate Rust ở gốc repo (`bamboo-node/`), cạnh `smartcontracts/`. `tokio`, `alloy` (provider,
+Một crate Rust ở gốc repo (`scaas-node/`), cạnh `smartcontracts/`. `tokio`, `alloy` (provider,
 `sol!`, EIP-712, signer), `axum`, `reqwest`, `serde`, `toml`. Một binary, mô-đun bật bằng config
 (`_USER-DECISIONS` §23.3). **Không Redis, không Lua, không Postgres trực tiếp** (ruling R6).
 
@@ -182,8 +182,8 @@ Một crate Rust ở gốc repo (`bamboo-node/`), cạnh `smartcontracts/`. `tok
 [odoo]
 url = "http://odoo:8069"
 database = "odoo19"
-relay_api_key_env = "BAMBOO_RELAY_API_KEY"     # user trong group_blockchain_relay_worker
-indexer_api_key_env = "BAMBOO_INDEXER_API_KEY" # user trong group_blockchain_indexer
+relay_api_key_env = "SCAAS_RELAY_API_KEY"     # user trong group_blockchain_relay_worker
+indexer_api_key_env = "SCAAS_INDEXER_API_KEY" # user trong group_blockchain_indexer
 
 [modules]
 submit = true
@@ -193,7 +193,7 @@ gateway = true            # bind 127.0.0.1:8545x — đặt sau reverse proxy
 [[chains]]
 evm_chain_number = 9000
 rpc_urls = ["http://nethermind:8545"]          # >= finality.quorum endpoint độc lập
-signer_key_env = "BAMBOO_RELAYER_KEY_9000"     # authKey vỏ tx — xem §6
+signer_key_env = "SCAAS_RELAYER_KEY_9000"     # authKey vỏ tx — xem §6
 finality = { mode = "depth", depth = 1, quorum = 1 }   # 'depth' | 'tag'
 dex = "0x…"                                     # MetaTxDex, tuỳ chọn
 poll_ms = 1000
@@ -336,7 +336,7 @@ URL có khoá). Seed: 9000 (`draft`, depth 1, quorum 1), Gnosis 100 (`draft`, ta
 khởi động khi `rpc_urls < quorum`.
 
 **`blockchain.token`** (`mail.thread`): `chain_id`, `address`, `name`, `symbol`, `decimals`,
-`domain_name` (mặc định `Bamboo MetaToken`), `domain_version` (`1`), `currency_id` (tiền pháp định
+`domain_name` (mặc định `SCaaS MetaToken`), `domain_version` (`1`), `currency_id` (tiền pháp định
 token neo 1:1 để quy đổi đơn hàng), `is_confidential` (luôn False ở đây), `active`.
 `UNIQUE(chain_id, address)`.
 
@@ -364,7 +364,7 @@ không vào Odoo: không có nghiệp vụ ERP nào đọc nó),
 **`blockchain.payment.request`** (canon §C10.9, thu gọn): `request_uuid`, `company_id`, `chain_id`,
 `token_id`, `receiving_address`, `relayer_address`, `amount_base`, `amount_settled_base` (compute
 stored từ event `PaymentSettled` khớp token + người nhận), `entry_ref_hex` (32 byte **ngẫu nhiên**,
-ruling R9), `batch_hex` = `keccak256("bamboo.pay.lane" ‖ entry_ref)` (nonce luôn 0),
+ruling R9), `batch_hex` = `keccak256("scaas.pay.lane" ‖ entry_ref)` (nonce luôn 0),
 `payer_address` (khoá cứng lúc `start` — lane là `(payer, batch)`), `issued_valid_until` (hạn của
 typed data cuối cùng đã phát cho client; `submit` yêu cầu `valid_until` đúng bằng nó),
 `expiry_datetime` (tạo + 1 ngày), `request_state` (`open`/`partial`/`final`/`expired`), `needs_attention` (tiền về khi tx đã huỷ, hoặc trả thừa),
@@ -450,7 +450,7 @@ kiểm entitlement.
 ## 5. Luồng end-to-end: portal trả đơn hàng
 
 ```
-Ví (portal)        Odoo (bridge/payment/core)            bamboo-node              Chain
+Ví (portal)        Odoo (bridge/payment/core)            scaas-node              Chain
  │ connect, addr ─►│ start(order, addr):                     │                        │
  │                 │  tx(chain, sale_order_ids) + request    │                        │
  │                 │  ref32 ngẫu nhiên, lane=keccak(ref32)    │                        │
@@ -491,7 +491,7 @@ Ví (portal)        Odoo (bridge/payment/core)            bamboo-node           
 ## 6. Typed data và digest — một quy tắc, bốn nơi
 
 `MetaTxLib.hashStruct` (Solidity) là chuẩn. Ba bản sao phải khớp từng byte: `lib/eip712.py`
-(Odoo), `bamboo-node` (alloy `sol!` struct), và typed data JSON gửi cho ví (ví tự băm). Quy tắc
+(Odoo), `scaas-node` (alloy `sol!` struct), và typed data JSON gửi cho ví (ví tự băm). Quy tắc
 canonical zeroing (`relayer`/`feeRecipient` = 0 khi cờ tắt) áp ở cả ba bản. Khoá chéo bằng một
 **vector KAT** trong `smartcontracts/test/vectors/metatx_kat.json` sinh từ forge
 (`vm.writeJson`): domain, struct, `structHash`, digest, và chữ ký của khoá `0xA11CE`. Test Python và
@@ -633,8 +633,8 @@ Bốn plan, theo thứ tự phụ thuộc: (1) contracts + DEX, (2) relayer, (3)
   nếu sai: có thể thêm vào v2 implementation, không ảnh hưởng v1.
 - **R5** Domain EIP-712 của clone = tên/version của implementation + `verifyingContract` = clone —
   OZ `EIP712` immutable; an toàn replay đến từ `verifyingContract`; Odoo lưu `domain_name/version` —
-  nếu sai: ví hiển thị "Bamboo MetaToken" thay vì tên token.
-- **R6** `bamboo-node` nói với Odoo chỉ qua `/json/2` (đọc + ghi), claim = CAS qua RPC, không
+  nếu sai: ví hiển thị "SCaaS MetaToken" thay vì tên token.
+- **R6** `scaas-node` nói với Odoo chỉ qua `/json/2` (đọc + ghi), claim = CAS qua RPC, không
   Postgres trực tiếp — canon §C13 claim bằng `FOR UPDATE SKIP LOCKED` rồi ghi qua `/json/2` trên
   **cùng dòng** là tự khoá (worker giữ row lock chờ HTTP, Odoo chờ row lock); `_USER-DECISIONS`
   §23 một tiến trình nên SKIP LOCKED không còn cần — nếu sai: tải poll lên Odoo (1 Hz/chain, chấp
@@ -649,7 +649,7 @@ Bốn plan, theo thứ tự phụ thuộc: (1) contracts + DEX, (2) relayer, (3)
   sang pha B2B sau — `account_payment` chuẩn đã gạch nợ khi tx `done`;
   bridge canon (mixin trên `dms.payment.collection`…) chưa có người dùng — nếu sai: thêm addon
   account khi cần FX/đối soát lô.
-- **R9** `entryRef` = 32 byte ngẫu nhiên; lane = `keccak256("bamboo.pay.lane" ‖ entryRef)`, nonce 0 —
+- **R9** `entryRef` = 32 byte ngẫu nhiên; lane = `keccak256("scaas.pay.lane" ‖ entryRef)`, nonce 0 —
   ngẫu nhiên không liên kết được ngay từ cấu tạo (tốt hơn hash có salt); lane cố định cho request
   cho phép Odoo dựng typed data không cần đọc chain và bảo đảm trả tối đa một lần — nếu sai: lần
   dùng lane đầu tốn +17k gas (đo ở `MetaTxGas`), chấp nhận.

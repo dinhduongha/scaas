@@ -1,10 +1,10 @@
 import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
 import { Address, beginCell, Cell, toNano } from '@ton/core';
-import { BambooJettonMaster } from '../build/jetton/jetton_BambooJettonMaster';
-import { BambooJettonWallet, loadMetaTransactionExecuted, loadPaymentSettled } from '../build/jetton/jetton_BambooJettonWallet';
+import { ScaasJettonMaster } from '../build/jetton/jetton_ScaasJettonMaster';
+import { ScaasJettonWallet, loadMetaTransactionExecuted, loadPaymentSettled } from '../build/jetton/jetton_ScaasJettonWallet';
 import { metaOpCell, MetaOpFields, OP, randomU256, subject, tonConnectAuth } from './helpers';
 
-export const DOMAIN = 'pay.bamboo.example';
+export const DOMAIN = 'pay.scaas.example';
 
 export async function setup() {
     const bc = await Blockchain.create();
@@ -13,17 +13,17 @@ export async function setup() {
     const relayer = await bc.treasury('relayer');
     const network = globalIdOf(bc);
     async function newToken(tag: string) {
-        const master = bc.openContract(await BambooJettonMaster.fromInit(admin.address, 0n, beginCell().storeStringTail(tag).endCell()));
+        const master = bc.openContract(await ScaasJettonMaster.fromInit(admin.address, 0n, beginCell().storeStringTail(tag).endCell()));
         await master.send(admin.getSender(), { value: toNano('0.1') }, { $$type: 'Mint', queryId: 0n, to: admin.address, amount: 1n, responseDestination: admin.address });
         return master;
     }
-    async function mint(master: SandboxContract<BambooJettonMaster>, to: Address, amount: bigint) {
+    async function mint(master: SandboxContract<ScaasJettonMaster>, to: Address, amount: bigint) {
         await master.send(admin.getSender(), { value: toNano('0.1') }, { $$type: 'Mint', queryId: 0n, to, amount, responseDestination: admin.address });
     }
-    async function walletOf(master: SandboxContract<BambooJettonMaster>, owner: Address) {
-        return bc.openContract(BambooJettonWallet.fromAddress(await master.getGetWalletAddress(owner)));
+    async function walletOf(master: SandboxContract<ScaasJettonMaster>, owner: Address) {
+        return bc.openContract(ScaasJettonWallet.fromAddress(await master.getGetWalletAddress(owner)));
     }
-    async function balanceOf(master: SandboxContract<BambooJettonMaster>, owner: Address) {
+    async function balanceOf(master: SandboxContract<ScaasJettonMaster>, owner: Address) {
         const w = await walletOf(master, owner);
         const st = await bc.getContract(w.address);
         if (st.accountState?.type !== 'active') return 0n;

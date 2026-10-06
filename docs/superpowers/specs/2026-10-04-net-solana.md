@@ -5,8 +5,8 @@
 shared contract "Network streams" của `2026-10-03-r3-streams.md`. Mẫu gần nhất: S11 Aptos (`2026-10-04-net-aptos.md`),
 S7 Sui (`2026-10-03-net-sui.md`). Ruling của luồng đánh số `RS12-n` (lead đánh lại khi merge).
 
-Mã (dự kiến): program Anchor ở `chains/solana/` (program `bamboo`, workspace Cargo riêng), adapter
-`bamboo-node/src/adapters/solana.rs`, e2e `bamboo-node/tests/e2e_solana.rs`, Odoo `dms_blockchain/lib/fam_solana.py` +
+Mã (dự kiến): program Anchor ở `chains/solana/` (program `scaas`, workspace Cargo riêng), adapter
+`scaas-node/src/adapters/solana.rs`, e2e `scaas-node/tests/e2e_solana.rs`, Odoo `dms_blockchain/lib/fam_solana.py` +
 `models/blockchain_solana.py`, portal `dms_blockchain_bridge/static/src/js/connectors/solana.js`. DB `dms_test_chain_12`
 / 8932, devnet 32020–32049 (OQ4: Agave đòi dải cổng động ≥ 26).
 
@@ -113,13 +113,13 @@ helius.dev/blog/solana-passkeys. Task 0 kiểm lại bằng `solana feature stat
 
 ---
 
-## 3. Account on-chain (`bamboo` program)
+## 3. Account on-chain (`scaas` program)
 
 ### 3.1 Bảng account
 
-| Account | Địa chỉ (PDA của program `bamboo`) | Tạo bởi | Vai |
+| Account | Địa chỉ (PDA của program `scaas`) | Tạo bởi | Vai |
 |---|---|---|---|
-| program `bamboo` | program id = `BAMBOO_PROGRAM_ID` lúc build (mặc định: id test/localnet, khoá đã công khai — review M3); upgrade authority (production: multisig) | deployer (`scripts/deploy.sh`, khoá ngoài repo) | một id cho lệnh gọi **và** event authority; program id khác = miền khác (PDA, event authority, `Config` do đúng upgrade authority của bản đó tạo) |
+| program `scaas` | program id = `SCAAS_PROGRAM_ID` lúc build (mặc định: id test/localnet, khoá đã công khai — review M3); upgrade authority (production: multisig) | deployer (`scripts/deploy.sh`, khoá ngoài repo) | một id cho lệnh gọi **và** event authority; program id khác = miền khác (PDA, event authority, `Config` do đúng upgrade authority của bản đó tạo) |
 | `Config` | `["config"]` | `initialize` (chỉ upgrade authority — kiểm `ProgramData`) | `admin`, `network` = genesis hash của cluster. **Chỉ đọc** trên đường nóng |
 | `SubjectAccount` | `["acct", owner32]` | lười ở `relay_pay` đầu (ed25519) hoặc `open` / `open_passkey` | khoá, origin, guardian, policy; **số dư = token account có owner = PDA này** |
 | `LanePda` | `["lane", account, lane32]` | `relay_pay` / `mandate::open` / KeyOp (init) | `{next u64, valid_until i64, rent_payer}` |
@@ -167,15 +167,15 @@ pub struct Key { pub scheme: u8, pub pubkey: [u8; 33], pub rp_id_hash: [u8; 32] 
 ```
 
 - **`owner`**: ed25519 ⇒ chính pk 32 B (= địa chỉ ví Solana). Chủ thể passkey-first ⇒ `owner =
-  sha256("bamboo.owner.p256" ‖ pk33)` (id, không phải ví). Account tạo `realloc` theo số khoá/origin (rent nhỏ lúc mở).
+  sha256("scaas.owner.p256" ‖ pk33)` (id, không phải ví). Account tạo `realloc` theo số khoá/origin (rent nhỏ lúc mở).
 - **Mở:**
   - ed25519: lười trong `relay_pay` đầu tiên (chữ ký hợp lệ từ khoá = `owner`) hoặc `open(owner)` không cần quyền —
     khoá duy nhất là chính `owner` nên mở trước hộ người khác vô hại.
-  - P-256: `open_passkey(pk33, assertion)` với challenge `sha256("bamboo.open.v1" ‖ program_id ‖ pk33)`;
+  - P-256: `open_passkey(pk33, assertion)` với challenge `sha256("scaas.open.v1" ‖ program_id ‖ pk33)`;
     `rp_id_hash` = 32 byte đầu authenticatorData, `origin` đọc từ clientDataJSON **của chính assertion** (bài học
     RS7-2: không ai mở trước được Account với origin sai).
 - **Quản trị:**
-  1. `manage_signed(KeyOp, auth)` — `KeyOp{domain="bamboo.keyop.v1", network, account, action, key, origin, guardian,
+  1. `manage_signed(KeyOp, auth)` — `KeyOp{domain="scaas.keyop.v1", network, account, action, key, origin, guardian,
      policy, to, nonce=key_nonce, valid_until}` ký bởi **một khoá hiện có**; `action` ∈ {add_key, remove_key,
      add_origin, remove_origin, set_guardian, cancel_recovery, set_policy, withdraw_lamports}; relayer gửi.
   2. guardian (tx native, ký bằng khoá Solana của guardian) `start_recovery(new_key)`; `finish_recovery` sau
@@ -241,24 +241,24 @@ sản ⇒ rời nhau; cùng tài sản ⇒ chung token account nguồn (chính l
 
 ## 4. Payload ký `MetaOp` v1 và phong bì chữ ký
 
-### 4.1 Bytes (337 B, cố định, little-endian, không tiền tố độ dài — bảng cộng ra 337; bản nháp ghi nhầm 336)
+### 4.1 Bytes (336 B, cố định, little-endian, không tiền tố độ dài — bảng cộng ra 336; tag 15 byte từ khi đổi tên scaas)
 
 | off | len | trường |
 |---|---|---|
-| 0 | 16 | `"bamboo.metaop.v1"` |
-| 16 | 32 | `network` = genesis hash của cluster (đọc từ `Config.network`) |
-| 48 | 32 | `contract` = SubjectAccount PDA (pay) / Mandate PDA (mandate_pay, revoke) |
-| 80 | 32 | `asset` = mint |
-| 112 | 1 | `op`: 0 pay · 1 trade (dành chỗ) · 2 mandate_pay · 3 revoke |
-| 113 | 32 | `from` = owner |
-| 145 | 32 | `to` = ví nhận (owner của ATA đích; revoke: 32 byte 0) |
-| 177 | 16 | `amount` u128 (≤ u64::MAX — Odoo từ chối lớn hơn) |
-| 193 | 32 | `pay_ref` (entryRef) |
-| 225 | 32 | `lane` |
-| 257 | 8 | `nonce` u64 |
-| 265 | 8 | `valid_until` u64 giây unix, so với `Clock.unix_timestamp` |
-| 273 | 32 | `relayer` (0 = lane nào cũng nộp; khác 0 = đúng fee payer) |
-| 305 | 32 | `extra` = H(tham số riêng op) hoặc 0 |
+| 0 | 15 | `"scaas.metaop.v1"` |
+| 15 | 32 | `network` = genesis hash của cluster (đọc từ `Config.network`) |
+| 47 | 32 | `contract` = SubjectAccount PDA (pay) / Mandate PDA (mandate_pay, revoke) |
+| 79 | 32 | `asset` = mint |
+| 111 | 1 | `op`: 0 pay · 1 trade (dành chỗ) · 2 mandate_pay · 3 revoke |
+| 112 | 32 | `from` = owner |
+| 144 | 32 | `to` = ví nhận (owner của ATA đích; revoke: 32 byte 0) |
+| 176 | 16 | `amount` u128 (≤ u64::MAX — Odoo từ chối lớn hơn) |
+| 192 | 32 | `pay_ref` (entryRef) |
+| 224 | 32 | `lane` |
+| 256 | 8 | `nonce` u64 |
+| 264 | 8 | `valid_until` u64 giây unix, so với `Clock.unix_timestamp` |
+| 272 | 32 | `relayer` (0 = lane nào cũng nộp; khác 0 = đúng fee payer) |
+| 304 | 32 | `extra` = H(tham số riêng op) hoặc 0 |
 
 - **`digest = sha256(bytes)`** (syscall `sol_sha256` rẻ; trùng hàm băm của WebAuthn) — khoá thao tác trong
   `MetaTransactionExecuted.digest`, Odoo chốt `blockchain.signed.op` theo nó.
@@ -273,11 +273,11 @@ sản ⇒ rời nhau; cùng tài sản ⇒ chung token account nguồn (chính l
 
 ### 4.2 Văn bản được ký và phong bì — RS12-9
 
-- Văn bản `T = "bamboo.metaop.v1:" ‖ hex(digest)` (81 byte ASCII, hex chữ thường). Lệnh DEX: `"bamboo.order.v1:"…`,
-  huỷ: `"bamboo.cancel.v1:"…`, KeyOp: `"bamboo.keyop.v1:"…`, mandate: `"bamboo.mandate.v1:"…`.
+- Văn bản `T = "scaas.metaop.v1:" ‖ hex(digest)` (80 byte ASCII, hex chữ thường). Lệnh DEX: `"scaas.order.v1:"…`,
+  huỷ: `"scaas.cancel.v1:"…`, KeyOp: `"scaas.keyop.v1:"…`, mandate: `"scaas.mandate.v1:"…`.
 - **ed25519 — hai phong bì, program nhận cả hai**, so khớp **nguyên văn** message trong precompile:
   - `kind 0` raw — `solana:signMessage(T)`: message = `T`. Không nhầm được với tx: byte đầu `'b'` = 0x62 sẽ là header
-    legacy đòi 98 chữ ký (v0 bắt đầu 0x80, v1 0x81) — không bao giờ parse thành tx hợp lệ với 81 byte.
+    legacy đòi 98 chữ ký (v0 bắt đầu 0x80, v1 0x81) — không bao giờ parse thành tx hợp lệ với 80 byte.
   - `kind 1` off-chain message (OCMS v1) — `solana:signOffchainMessage`: message = `"\xffsolana offchain"` ‖ version 1 ‖
     số signer = 1 ‖ pk32 ‖ `T` (bố cục byte chính xác ghim bằng vector từ `@solana/kit` ở Task 0). Đây là định dạng ví
     cứng (Ledger/Trezor) ký; tài liệu Solana khuyên dùng khi ví hỗ trợ, nếu không thì raw.
@@ -314,7 +314,7 @@ Introspection*) không áp dụng vì ta so **nguyên văn** pk + message, khôn
 | Rust adapter | chỉ decode payload job (proptest) + vector | `sha2` (đã là dependency) | không dựng — dựng ix precompile từ blob | không (mô phỏng phân xử) |
 | JS connector | dùng `terms.text` của Odoo | — | kiểm `signedMessage` trả về đúng `T`/OCMS trước khi gửi | — |
 
-Vector chéo: `chains/solana/scripts/gen_vectors.py` sinh `programs/bamboo/tests/vectors.rs` (payload, digest, T, OCMS,
+Vector chéo: `chains/solana/scripts/gen_vectors.py` sinh `programs/scaas/tests/vectors.rs` (payload, digest, T, OCMS,
 chữ ký thật từ khoá cố định, PDA Account/lane/mandate/fill, ATA) — Python test và adapter test ghim **cùng** hex.
 
 ---
@@ -334,7 +334,7 @@ chữ ký thật từ khoá cố định, PDA Account/lane/mandate/fill, ATA) �
 
 ### 5.2 Mandate (R25) — RS12-11
 
-- `mandate_open(MandateInit, auth)`: khoá **Account** ký `MandateInit{domain="bamboo.mandate.v1", network, account,
+- `mandate_open(MandateInit, auth)`: khoá **Account** ký `MandateInit{domain="scaas.mandate.v1", network, account,
   mandate, asset (mint duy nhất — review M2), delegate_key (ed25519|P-256), max_per_payment, max_per_period, period_s, expiry, payees ≤ 8, nonce=key_nonce,
   valid_until}` ⇒ không tx native của chủ (R30). Cấp vốn = một `pay` thường tới Mandate PDA (`to` = Mandate).
 - `mandate_pay(...)`: delegate ký `MetaOp{op: mandate_pay, contract: mandate, asset = mint của mandate, nonce =
@@ -347,9 +347,9 @@ chữ ký thật từ khoá cố định, PDA Account/lane/mandate/fill, ATA) �
 
 ### 5.3 DEX (R35) — RS12-12
 
-- `Order` (bytes cố định): `domain="bamboo.order.v1", network, market, maker (owner), taker (0 = any), sell mint, buy
+- `Order` (bytes cố định): `domain="scaas.order.v1", network, market, maker (owner), taker (0 = any), sell mint, buy
   mint, sell_amount u64, buy_amount u64, nonce u64, expiry, max_fee_ppm u32, flags u8 (bit0 FOK, bit1 IOC), relayer`;
-  `order_hash = sha256(bytes)`, văn bản ký `"bamboo.order.v1:" ‖ hex(order_hash)`.
+  `order_hash = sha256(bytes)`, văn bản ký `"scaas.order.v1:" ‖ hex(order_hash)`.
 - `settle(a, b, hash_a, hash_b, fill_a, fill_b, auth_a, auth_b)` — MỘT cặp mỗi instruction (account kiểu Anchor,
   không `remaining_accounts` tự kiểm); batch = nhiều instruction `settle` trong một tx, nguyên tử theo tx (RS12-12a,
   đã thực thi). **Kiểm cả hai chữ ký trong chính tx** (như EVM), mỗi cặp: flags, hạn, `nonce >=
@@ -360,7 +360,7 @@ chữ ký thật từ khoá cố định, PDA Account/lane/mandate/fill, ATA) �
   trong chính `settle`.
 - **Batch:** nhiều cặp mỗi tx, giới hạn bởi tx v1 (4 096 B, ≤ 64 account inline) và CU (1,4M) — thực tế 2–3 cặp; nguyên
   tử theo tx.
-- Huỷ: `cancel_signed` (`Cancel{domain="bamboo.cancel.v1", network, market, order_hash}`) ⇒ `Fill.filled = sell_amount`
+- Huỷ: `cancel_signed` (`Cancel{domain="scaas.cancel.v1", network, market, order_hash}`) ⇒ `Fill.filled = sell_amount`
   (tạo Fill nếu chưa có — lệnh chưa từng khớp vẫn không bao giờ settle được); `invalidate_nonces_signed` ⇒ `MinNonce`
   tăng nghiêm ngặt. Chỉ chạm market đó.
 - `sweep(market, mint)` không cần quyền: mọi thứ gửi nhầm vào token account của Market ngoài vault phí ⇒ `fee_recipient`.
@@ -392,7 +392,7 @@ SubjectAccount/Mandate. `initialize` chỉ upgrade authority (chống front-run 
   `solana-keygen … prompt://?full-path=m/44'/501'/0'/0'`; ví thứ hai của Phantom là `m/44'/501'/1'/0'`. (Ledger Live
   dùng `m/44'/501'/i'` ba cấp — không chọn.) Cần một dòng ở `keys.rs::lane_path` (lead) — §12.
 - Địa chỉ lane = pk base58. Lane cần SOL. Khởi động in địa chỉ lane (R60).
-- **Durable nonce mỗi lane:** nonce account = `create_with_seed(lane, "bamboo-nonce-v1", SystemProgram)` (địa chỉ tất
+- **Durable nonce mỗi lane:** nonce account = `create_with_seed(lane, "scaas-nonce-v1", SystemProgram)` (địa chỉ tất
   định, không thêm keypair), authority = lane. Thiếu ⇒ adapter tự tạo (một tx setup do chính lane trả) ở lần
   `sequence(lane)` đầu: `Transfer` (bù tới rent) + `AllocateWithSeed` + `InitializeNonceAccount` — địa chỉ công khai bị
   gửi lamports trước vẫn tạo được (review M1). `ponytail:` side-effect trong `sequence`, đủ vì chỉ chạy một lần mỗi lane.
@@ -413,7 +413,7 @@ SubjectAccount/Mandate. `initialize` chỉ upgrade authority (chống front-run 
   `encoding: "base64"` (base58 vẫn trần 1 232 B). Lý do v1: tx passkey (clientDataJSON của Chrome có thể kèm trường
   `other_keys_can_be_added_here` dài ~110 B) và `settle` hai chân vượt 1 232 B của v0/legacy.
 - Viết tay (không crate `solana-sdk` — cây phụ thuộc lớn, rủi ro OOM khi build trên máy chung; như RS11-7): header,
-  config, địa chỉ, lifetime, instruction (`AdvanceNonceAccount` đầu tiên, precompile, `bamboo::*` với discriminator
+  config, địa chỉ, lifetime, instruction (`AdvanceNonceAccount` đầu tiên, precompile, `scaas::*` với discriminator
   Anchor `sha256("global:<name>")[..8]`), chữ ký lane. Crate đã có: `ed25519-dalek` (ký + kiểm off-curve cho PDA qua
   `VerifyingKey::from_bytes`), `sha2`, `bs58`, `base64` — **không thêm crate**.
 - `tx_id` = `0x` + hex(chữ ký lane 64 B) — tính trước khi gửi để journal `signed`; đổi sang base58 khi gọi RPC.
@@ -424,7 +424,7 @@ SubjectAccount/Mandate. `initialize` chỉ upgrade authority (chống front-run 
 ### 6.3 Mô phỏng, phí, số dư (R55)
 
 - `simulateTransaction(tx, {sigVerify:false, replaceRecentBlockhash:false, commitment:"confirmed"})`: `err` do program
-  `bamboo` (custom error) ⇒ `SimError::Revert` (job chết); lỗi HTTP/5xx/429 ⇒ `Transport`.
+  `scaas` (custom error) ⇒ `SimError::Revert` (job chết); lỗi HTTP/5xx/429 ⇒ `Transport`.
 - `cu_limit = ceil(unitsConsumed × 1.2)`, trần `params.max_cu`; priority fee (tổng lamport, v1) = `cu_limit ×
   p75(getRecentPrioritizationFees(writable accounts))/10^6`, trần `params.max_priority_lamports`. Nhờ §2.4 các account
   writable của ta ít tranh chấp ⇒ phí cục bộ thấp.
@@ -444,7 +444,7 @@ SubjectAccount/Mandate. `initialize` chỉ upgrade authority (chống front-run 
   task riêng khi cần nhiều RPC song song.
 - `tx_status`: `getSignatureStatuses([sig], {searchTransactionHistory:true})`:
   - `null` ⇒ `Unknown`; chỉ `processed` ⇒ `Pending`; `confirmed`/`finalized` + `err=null` ⇒ `Mined{height: slot}`;
-  - `InstructionError(i, Custom(_))` với `i` = instruction `bamboo` (kể cả lỗi token program trong CPI) ⇒
+  - `InstructionError(i, Custom(_))` với `i` = instruction `scaas` (kể cả lỗi token program trong CPI) ⇒
     `Reverted` (op sai/đã dùng/thiếu số dư);
   - `ComputationalBudgetExceeded` / `ProgramFailedToComplete` / `InsufficientFundsForRent` ⇒ `Err(Rejected)`: mọi thay
     đổi đã rollback trừ phí và nonce lane; lane PDA người trả còn nguyên ⇒ job về hàng đợi, dựng lại (L3/L4).
@@ -639,10 +639,10 @@ phía client nặng). Không xây ở round này (R34 §5).
 - **RS12-11** Mandate mở bằng chữ ký khoá Account; `pay_ref` một lần bằng PDA `mref` prunable.
 - **RS12-12** DEX: kiểm cả hai chữ ký trong `settle`; `Fill` PDA mỗi lệnh; vault phí theo market; huỷ tạo/đóng `Fill`.
 - **RS12-13** Anchor 1.x, `cargo build-sbf` + LiteSVM; không Anchor v2 alpha, không native.
-- **RS12-14** Lane = ed25519 `m/44'/501'/{i}'/0'`, durable nonce account `create_with_seed(lane,"bamboo-nonce-v1")`,
+- **RS12-14** Lane = ed25519 `m/44'/501'/{i}'/0'`, durable nonce account `create_with_seed(lane,"scaas-nonce-v1")`,
   `sequence` = nonce, một tx bay.
 - **RS12-15** Tx v1 viết tay, không `solana-sdk`, không crate mới; vector từ `@solana/kit`.
-- **RS12-16** Bảng `Rejected`; hết CU / thiếu rent đã vào sổ ⇒ `Rejected`; lỗi của `bamboo` ⇒ `Reverted`; tự rebroadcast.
+- **RS12-16** Bảng `Rejected`; hết CU / thiếu rent đã vào sổ ⇒ `Rejected`; lỗi của `scaas` ⇒ `Reverted`; tự rebroadcast.
 - **RS12-17** Không journal đĩa; durable nonce + `recover_lane` chung đủ.
 - **RS12-18** Finality `finalized`, cursor = slot; indexer JSON-RPC chuẩn (`getSignaturesForAddress` + `getTransaction`),
   event qua `emit_cpi!`, lọc program id + event authority + `nc.tokens`; thiếu lịch sử ⇒ lỗi.
@@ -699,7 +699,7 @@ phía client nặng). Không xây ở round này (R34 §5).
   (write-lock); (3) phát hiện `_apply_report` lowercase `tx_hash` và `_hex32` của ingest ⇒ `tx_id` hex 64 B + yêu cầu lead
   (L11); (4) chọn durable nonce vì khớp nguyên văn `recover_lane`, ghi phương án dự phòng do cảnh báo deprecate.
 - Self-review khi thực thi: (5) `open(owner)` không cần quyền cho phép bất kỳ ai mở trước id passkey-first
-  `sha256("bamboo.owner.p256" ‖ pk)` bằng một khoá ed25519 ⇒ gạch Account passkey đó. Sửa: `open` đòi chính ví ký; mở hộ
+  `sha256("scaas.owner.p256" ‖ pk)` bằng một khoá ed25519 ⇒ gạch Account passkey đó. Sửa: `open` đòi chính ví ký; mở hộ
   không cần vì `relay_pay` đầu tiên mở lười bằng chữ ký của chủ (test `open_needs_the_wallet_signature`). (6) `_lane_address`
   của Odoo cũng lowercase địa chỉ lane base58 — sửa cùng commit tiên quyết.
 - agy (Gemini, chạy nền trên spec + `adapter.rs`, 2026-10-04 — sau đó hết quota 106 h, không chạy được review nhánh):
@@ -753,15 +753,15 @@ phía client nặng). Không xây ở round này (R34 §5).
 **Lệch so với spec khi thực thi (rulings bổ sung):**
 - **RS12-4a** `open` đòi chữ ký của chính ví (§17 self-review 5).
 - **RS12-11a** Delegate của Mandate chỉ ed25519 (khoá dịch vụ/HSM nền tảng; passkey không chạy trên server). `revoke`
-  (delegate) chỉ đặt cờ; `close` (khoá Account, `"bamboo.mclose.v1" ‖ network ‖ account ‖ mandate ‖ key_nonce ‖
+  (delegate) chỉ đặt cờ; `close` (khoá Account, `"scaas.mclose.v1" ‖ network ‖ account ‖ mandate ‖ key_nonce ‖
   valid_until`) chuyển các token account truyền vào về Account rồi đóng PDA.
 - **RS12-12a** `settle` một cặp mỗi instruction; batch = nhiều instruction trong một tx. `cancel_signed` mang lệnh đầy
-  đủ; `invalidate_nonces_signed` ký `"bamboo.minnonce.v1" ‖ network ‖ market ‖ account ‖ min_nonce`. Market một mức
+  đủ; `invalidate_nonces_signed` ký `"scaas.minnonce.v1" ‖ network ‖ market ‖ account ‖ min_nonce`. Market một mức
   `fee_ppm` (không tách maker/taker); `sweep` không cần quyền chuyển mọi token account của Market (gồm vault) về
   `fee_recipient`.
 - **RS12-9a** Blob passkey: `u16` độ dài authenticatorData là **little-endian**.
 - **RS12-16a** Restart: `resend_journaled` của Solana advance nonce lane (agy #1). Lớp `Rejected`/`Reverted`: lỗi ở
-  instruction precompile/`bamboo` (chỉ số ≥ 1) ⇒ `Reverted`, trừ hết CU; lỗi ở advance nonce/cấp tx ⇒ `Rejected`.
+  instruction precompile/`scaas` (chỉ số ≥ 1) ⇒ `Reverted`, trừ hết CU; lỗi ở advance nonce/cấp tx ⇒ `Rejected`.
 - **RS12-18a** `block_hash`/`final_head` = block sản xuất cuối ≤ slot trong cửa sổ 2 048 slot; Config đọc ở `confirmed`
   (bất biến sau `initialize`).
 

@@ -15,7 +15,7 @@ Sources are cited inline. Short forms:
 | §10 | `docs/superpowers/specs/blockchain-research/10-odoo-addon-design.md` |
 | PD | `docs/superpowers/specs/2026-10-03-blockchain-payments-design.md` |
 | R3D | `docs/superpowers/specs/2026-10-03-blockchain-round3-design.md` |
-| node | `bamboo-node/` |
+| node | `scaas-node/` |
 
 ---
 
@@ -26,9 +26,9 @@ Sources are cited inline. Short forms:
 0. **A live bug fixed first, independent of the mesh** (stream S0, R84): the gateway `POST /v1/metatx` forwards the
    client's `feeRecipient`/`relayer` unchanged; when the signer left them unbound, the client can route our relayer's
    fee to itself while we pay gas.
-1. A **federated intent bus** between `bamboo-node` processes: admitted peers pull each other's intents over HTTPS
+1. A **federated intent bus** between `scaas-node` processes: admitted peers pull each other's intents over HTTPS
    with mutual TLS (R70, R72). Each node keeps its intents in a node-local SQLite store with a `bus_seq` cursor (R71).
-2. A **transport-neutral envelope** `bamboo-intent/1.2` for every qualifying family (R77, R81), with conformance
+2. A **transport-neutral envelope** `scaas-intent/1.2` for every qualifying family (R77, R81), with conformance
    vectors (UD §21.3 point 2).
 3. **Acceptance policy** as one lookup table, authoritative in Odoo (`blockchain.target.policy`), delivered to the node,
    evaluated before any RPC (UD §21.4, §22.4; R79). Submission only on registered tokens (R86).
@@ -68,7 +68,7 @@ Format of PD §13: **ruling — why — cost if wrong.**
 | # | Ruling | Why | Cost if wrong |
 |---|---|---|---|
 | **R70** | (owner) Transport v1 = **federated HTTP pull bus** between admitted peers: each node serves `GET /v1/mesh/intents` and pulls its peers'. No push, no publish/claim/receipt routes between peers. The envelope (§4) and store state machine (§6) are transport-neutral; libp2p can be added later as a second transport. UD §22.2 door C and §23.6 must be corrected (§15, list only). | Owner. Pull gives catch-up after downtime (cursor), and puts the export filter for private intents in one server-side function (§9). §05 §5.1 numbers: 1 Hz poll adds ≤ 1 s on a 5 s chain. | Latency ≤ (poll + lag) per hop, ≤ 6 s at 4 hops. Fine for EVM `validUntil` 300 s; wrong for Zether (out). |
-| **R71** | (owner) Intent store = **node-local SQLite file** (`rusqlite`, bundled), owned by `bamboo-node`. `bus_seq` = `INTEGER PRIMARY KEY AUTOINCREMENT`; a random `store_id` names the file and is sent with every page so a peer whose store was recreated is detected (cursor reset). R6 unchanged: the node never touches Postgres; Odoo stays control plane. When `[mesh]` is on, gateway meta-tx intents are written to the store before `202` — this supersedes R16 for `/v1/metatx` (the DEX book stays as is). | Owner. One writer process ⇒ rowids are assigned in commit order, so the §05 §5.1.2 bug 3 (seq allocated before commit) cannot happen. | A lost disk loses pooled intents and the mesh outer-nonce journal; signers re-send, cold start falls back to `pending` (§8.6). |
+| **R71** | (owner) Intent store = **node-local SQLite file** (`rusqlite`, bundled), owned by `scaas-node`. `bus_seq` = `INTEGER PRIMARY KEY AUTOINCREMENT`; a random `store_id` names the file and is sent with every page so a peer whose store was recreated is detected (cursor reset). R6 unchanged: the node never touches Postgres; Odoo stays control plane. When `[mesh]` is on, gateway meta-tx intents are written to the store before `202` — this supersedes R16 for `/v1/metatx` (the DEX book stays as is). | Owner. One writer process ⇒ rowids are assigned in commit order, so the §05 §5.1.2 bug 3 (seq allocated before commit) cannot happen. | A lost disk loses pooled intents and the mesh outer-nonce journal; signers re-send, cold start falls back to `pending` (§8.6). |
 | **R72** | (owner) Peer identity = **TLS 1.3 mutual auth with self-signed X.509 certs; trust = SPKI SHA-256 pin per peer row; no CA.** Key type **Ed25519**. The same key signs `hub.sig` and is the `pubkey` in `/v1/mesh/policy`. `peer_id` = SHA-256 of the DER SubjectPublicKeyInfo. Admission is checked at the handshake **and** on every request. | Ed25519, P-256 and RSA are all valid TLS 1.3 cert keys in `rustls`+`ring`; Ed25519 is chosen because its signatures are deterministic (the vectors need fixed `hub.sig` bytes, §4.6), it is already the node's ed25519 signer (`ed25519-dalek`), and keys are 32 bytes. secp256k1 is not a TLS signature scheme, so the relayer lane keys cannot double as peer keys. | An HSM that only does P-256 cannot hold this key. |
 | **R73** | (owner) **Bus scope is a per-company setting** `res.company.blockchain_bus_scope`: `restricted` (default) keeps R10 — the portal pins `MODE_RESTRICT_RELAYER` to the company relayer and **no outbox job of the company ever reaches the bus**. `open`: the portal signs with `relayer = 0`; a still-`queued` relayer-unbound job is published on the bus after `blockchain_bus_private_window_secs` (default 120 s). | Owner. 120 s, not UD §22.7's 300 s: with ERC-20 `validUntil` 300 s a 300 s window never opens (UD §22.10.2). | A company that opts in exposes payer, payee, amount and timing to admitted peers of the matching class (§05 §5.4.5). |
 | **R74** | (owner) **Exclusivity**: the origin node signs `exclusive{relayer_id, until}` in `hub.sig`, choosing `relayer_id` round-robin over the eligible set = admitted active peers that advertise `submit` for `(chain, contract)` and may see the intent, **plus the origin itself when it can submit** (owner-confirmed). After `until` any admitted peer may submit, after a deterministic per-node jitter. **Own outbox jobs are never assigned to a peer**: they are published without `exclusive`, and the origin keeps processing them through the Odoo outbox (SLA). Only still-`queued` outbox jobs are published (owner-confirmed). | Owner. Deterministic assignment needs no round-trip (§05 §5.4.4a); round-robin replaces the lottery that §05 §5.0 already switches off for permissioned sets. | `exclusive` is a courtesy, not a lock (UD §22.5). A peer that ignores it causes at most one reverted outer tx per loser (§8.7). |
@@ -78,9 +78,9 @@ Format of PD §13: **ruling — why — cost if wrong.**
 | **R78** | (owner) `intent_id` **is** the digest the contract emits in `MetaTransactionExecuted.digest`: EIP-712 `_hashTypedDataV4(hashStruct(m))` on EVM (`smartcontracts/src/common/MetaTxLib.sol`), the family digest otherwise (§4.4). It equals `blockchain.metatx.digest_hash` / `blockchain.signed.op.digest_hash`. Dedup is by `intent_id`. | §05 §5.2. UD §22.8 point 2 ("dedup by digest, not intent_id") assumed a sender-chosen id; with id = digest the two are one value. | — |
 | **R79** | (owner) Acceptance policy is **authoritative in Odoo** (`blockchain.target.policy`), fetched by the node through `blockchain.mesh.peer.mesh_config`. `node.toml` `[[mesh.policy]]` / `[[mesh.peers]]` are used **only when `[odoo]` is absent** (standalone node, §3.3). With `[odoo]` present the mesh stays closed until the first successful fetch (fail closed). | Owner; UD §22.4 (one table, not two); §06 §06.3.3 (same concept). | Odoo down at node start ⇒ no mesh until it comes back; submit/indexer unaffected. |
 | **R80** | **Consumption check before every bump and every resend, and after every reverted receipt/status** (fix of `submit.rs` `track()`/receipt handling and `adapter.rs` `step_once`/`follow()`): if the subject nonce moved past the intent's nonce, never bump or resend the meta-tx, report `consumed` instead of `reverted`/`dead`; on EVM free the outer nonce with a gap-filler (R18). A failed consumption read **fails closed**: no bump this round, retry next round. Odoo gets a non-terminal `chain_state = 'consumed'`; a job is never `dead`/`failed` because someone else landed it. `_mark_executed` sets `landed_elsewhere`. One per-chain in-flight digest set prevents our node from holding two live outer txs for one intent. | UD §22.8 point 1: bumping a tx that must revert pays twice. Today `track()` bumps blindly, a lost race reports `reverted` (business `failed`, `_fail_dependents`), and Odoo only learns at finality. | One `eth_call` per stuck tx per `stuck_after_secs` (60 s) and per reverted receipt. |
-| **R81** | Wire spec string **`bamboo-intent/1.2`**. JSON on the wire. `hub.sig` covers a fixed binary message (§4.5) that includes `body_hash` = SHA-256 of the canonical JSON of the family body. The paper drafts 1.0/1.1 (§05 §5.2) were never implemented by any node and are void: receivers reject `1.0`/`1.1` and any other major with `UNSUPPORTED_SPEC`. | 1.1's `hub_sig_payload` used `address(relayer_id)` and a lottery `beacon`; R72/R74 change both, which §05's own rule makes a breaking change. `body_hash` stops forwarders swapping signature, `sig_kind` or native params (review H1). | — |
+| **R81** | Wire spec string **`scaas-intent/1.2`**. JSON on the wire. `hub.sig` covers a fixed binary message (§4.5) that includes `body_hash` = SHA-256 of the canonical JSON of the family body. The paper drafts 1.0/1.1 (§05 §5.2) were never implemented by any node and are void: receivers reject `1.0`/`1.1` and any other major with `UNSUPPORTED_SPEC`. | 1.1's `hub_sig_payload` used `address(relayer_id)` and a lottery `beacon`; R72/R74 change both, which §05's own rule makes a breaking change. `body_hash` stops forwarders swapping signature, `sig_kind` or native params (review H1). | — |
 | **R82** | Numbers: `MAX_HOPS = 4`, `cursor_overlap = 200`, `publish_lag_ms = 500` (from UD §22.2, §05 §5.1.2 — **arbitrary**, UD §22.10.1); `exclusive_ms = 10 000` (**arbitrary**; replaces §05's 3 s, which assumed push gossip); `post_exclusive_jitter_ms = 2000`, `max_valid_for_secs = 3600`, `private_window_secs = 120`, `poll_ms = 1000`, page 200 rows / 1 MiB, handshake timeout 5 s, connection age 300 s (**arbitrary**). All are config. | Docs where they exist; otherwise the smallest values that cover one pull hop + simulate + one 5 s block. | Re-tune after a real multi-site run. |
-| **R83** | (owner) Test topology: N `bamboo-node` processes from one binary with different configs + one anvil + one fake Odoo (axum, as `tests/e2e.rs` already does), plus one Odoo-side suite. Callback subject registry and ban-list sharing are out of v1. | UD §21.3 point 3: two processes of one binary catch wire-format errors; the vectors catch the rest. | Spec-reading errors of a second implementation are only caught by the vectors (§4.6). |
+| **R83** | (owner) Test topology: N `scaas-node` processes from one binary with different configs + one anvil + one fake Odoo (axum, as `tests/e2e.rs` already does), plus one Odoo-side suite. Callback subject registry and ban-list sharing are out of v1. | UD §21.3 point 3: two processes of one binary catch wire-format errors; the vectors catch the rest. | Spec-reading errors of a second implementation are only caught by the vectors (§4.6). |
 | **R84** | **The submitter normalizes the fields `canon()` zeroes** before building any meta-tx it did not get from Odoo: `MODE_RESTRICT_FEE_RECIPIENT` off ⇒ `feeRecipient := chains.fee_recipient` (our cold wallet) or `0` (contract pays `msg.sender`); `MODE_RESTRICT_RELAYER` off ⇒ `relayer := 0`. Wire values of unbound fields are never submitted. Applies to the gateway today (S0) and to mesh work. | `ERC20MetaTx.sol` l.87 pays `m.feeRecipient` whenever it is non-zero, but the digest zeroes it when unbound (`MetaTxLib.canon`). Without this, a client or forwarder takes the fee while we pay gas. `intent_id` is unchanged. | — |
 | **R85** | **Private-visibility rows are served only by their origin** (stored `source != 'peer'`). Every private recipient must be admitted by the origin directly. | Review H5: otherwise a correct private peer re-serves to peers *it* trusts, outside the origin's allowlist (owner ruling 7: "allowlisted private peers"). | Private liveness depends on the origin being up. |
 | **R86** | **`may_submit` requires `token_of(intent)` to be a registered token** (Odoo `node_config.tokens` of an active chain, or `[[chains]] tokens` standalone); Odoo forbids `submit` on `contract = '*'`. `token_of` = `contract` on EVM/Hedera/Cosmos; on Sui/Aptos/TON/Solana, where `contract` is the payer's own account, it is the token named in the payload or body, and the node checks that `contract` is that payer's account derived from it (§4.4). The policy `contract` column holds `token_of`. Fee checks use the **effective** fee as `FeePolicy.compute` (NONE ⇒ 0, PERCENT ⇒ `value × fee / 10^6`, FIXED ⇒ `fee`). | Review H4: otherwise a peer feeds attacker-deployed token clones with worthless fees that simulate fine (gas drain), and a NONE-mode intent with a huge `fee` field passes `min_fee`. Gateway and Odoo paths already gate on registered tokens (`gateway.rs` `chain_of`). | Partners must register their tokens in our Odoo before we submit for them. |
@@ -126,9 +126,9 @@ tokens = ["0x…"]                  # new; standalone only (R86). With [odoo] th
 
 [mesh]
 bind = "0.0.0.0:8550"             # mTLS only; there is no plaintext mode
-cert = "/etc/bamboo/mesh.crt"     # self-signed X.509 (PEM) holding the Ed25519 key below
-key = { file = "/etc/bamboo/mesh.key" }   # PKCS#8 PEM (48-byte Ed25519 PrivateKeyInfo), SecretSource like [keys]
-store = "/var/lib/bamboo/mesh.sqlite"
+cert = "/etc/scaas/mesh.crt"     # self-signed X.509 (PEM) holding the Ed25519 key below
+key = { file = "/etc/scaas/mesh.key" }   # PKCS#8 PEM (48-byte Ed25519 PrivateKeyInfo), SecretSource like [keys]
+store = "/var/lib/scaas/mesh.sqlite"
 poll_ms = 1000
 max_hops = 4
 cursor_overlap = 200
@@ -167,16 +167,16 @@ min_fee = "0"                     # uint256 decimal, smallest token unit, compar
 fee_recipient_allow = "any"       # any | self_or_zero — only meaningful when the intent binds feeRecipient
 ```
 
-Key generation, documented in `bamboo-node/README.md` (no new crate for it):
+Key generation, documented in `scaas-node/README.md` (no new crate for it):
 
 ```bash
 openssl genpkey -algorithm ed25519 -out mesh.key
-openssl req -new -x509 -key mesh.key -out mesh.crt -days 3650 -subj "/CN=bamboo-node"
+openssl req -new -x509 -key mesh.key -out mesh.crt -days 3650 -subj "/CN=scaas-node"
 # peer_id = SPKI pin to give to partners:
 openssl x509 -in mesh.crt -pubkey -noout | openssl pkey -pubin -outform DER | openssl dgst -sha256 -r
 ```
 
-Also printed by `bamboo-node mesh-id --config node.toml` (new subcommand next to `addresses`, `main.rs`).
+Also printed by `scaas-node mesh-id --config node.toml` (new subcommand next to `addresses`, `main.rs`).
 
 ### 3.3 Standalone mode (no `[odoo]`)
 
@@ -194,7 +194,7 @@ Also printed by `bamboo-node mesh-id --config node.toml` (new subcommand next to
 Adapters that read tokens from `node_config` take the toml list instead. Standalone nodes run no indexer, so their
 outcomes come from the submit path only (receipts + consumption checks).
 
-### 3.4 Dependencies (`bamboo-node/Cargo.toml`)
+### 3.4 Dependencies (`scaas-node/Cargo.toml`)
 
 | Crate | Status | Use |
 |---|---|---|
@@ -208,7 +208,7 @@ No `axum-server`, no `rcgen`, no `x509-parser`.
 
 ---
 
-## 4. Envelope `bamboo-intent/1.2`
+## 4. Envelope `scaas-intent/1.2`
 
 ### 4.1 Family qualification (R77)
 
@@ -220,7 +220,7 @@ No `axum-server`, no `rcgen`, no `x509-parser`.
 | Sui | `personal_digest(bcs(MetaOp))` (`chains/sui/sources/meta.move` l.322) | `Account<T>.lanes: Table<lane, u64>`, `next == nonce` (l.104, l.285–287) | `lane_nonce<T>(account, lane)` (l.484) | **yes** |
 | Aptos | `sha3_256(bcs(MetaOp))` (`chains/aptos/sources/meta.move` l.114) | `Account.lanes: Table<lane, Lane{next}>` (l.110, l.278–279) | `#[view] lane_nonce(owner, lane)` (l.666) | **yes** |
 | TON | `MetaOp` cell digest checked and emitted in `MetaTransactionExecuted` (`chains/ton/contracts/jetton.tact` l.233) | jetton wallet `lanes: map<uint256, uint64>`, `next == m.nonce` (l.121, l.226–230; revoke: `next == nonce + 1`, l.229) | getter `get_lane_nonce(lane)` (l.359) | **yes** (`pay`; lanes rotate every `LANE_TTL` — a check after `valid_until` is meaningless, expiry decides, §8.5) |
-| Solana | `sha256(MetaOp)` (`chains/solana/programs/bamboo/src/account.rs` l.197; `lib.rs` l.125) | `LanePda{next}` seeded `["lane", subject, lane]`, `lp.next == args.nonce` (account.rs l.159–161, l.202) | read the `LanePda` account | **yes** (`pay`; lane PDA prunable after `valid_until`) |
+| Solana | `sha256(MetaOp)` (`chains/solana/programs/scaas/src/account.rs` l.197; `lib.rs` l.125) | `LanePda{next}` seeded `["lane", subject, lane]`, `lp.next == args.nonce` (account.rs l.159–161, l.202) | read the `LanePda` account | **yes** (`pay`; lane PDA prunable after `valid_until`) |
 | Soroban | `op_digest` = sha256(XDR) emitted by the token (`chains/soroban/contracts/token/src/lib.rs` l.102) | **none in our contract**: replay protection is the host's `SorobanAddressCredentials` nonce (random, not sequential, R65); our contract only has a global one-shot `pay_ref` (l.203–206) | `ref_used(pay_ref)` only | **no** |
 
 ### 4.2 Wire encoding
@@ -234,7 +234,7 @@ No `axum-server`, no `rcgen`, no `x509-parser`.
 - Addresses: the family's canonical form (`dms_blockchain/lib/addresses.py`, R61): lowercase `0x` 20 bytes on
   EVM/Hedera, bech32 on Cosmos, `0x` + 64 hex on Sui/Aptos, raw `wc:hex` on TON, base58 on Solana.
 - `chain_key` = `family:network` exactly as `blockchain.chain.chain_key` and `ChainCfg::chain_key()` (`evm:100`,
-  `hedera:296`, `cosmos:bamboo-1`, `sui:localnet`, `aptos:4`, `ton:-239`, `solana:<genesis base58>`). Not CAIP-2:
+  `hedera:296`, `cosmos:scaas-1`, `sui:localnet`, `aptos:4`, `ton:-239`, `solana:<genesis base58>`). Not CAIP-2:
   the node and Odoo already key on `chain_key` (R61); CAIP-2 stays a display field in Odoo.
 - **Canonical body JSON** (for `body_hash` only): the `evm` or `op` object serialized with object keys sorted
   bytewise, no whitespace, no floats (integers must fit `i64`), every string printable ASCII `0x20–0x7e` (all values
@@ -246,14 +246,14 @@ No `axum-server`, no `rcgen`, no `x509-parser`.
 
 ```json
 {
-  "spec": "bamboo-intent/1.2",
+  "spec": "scaas-intent/1.2",
   "intent_id": "0x9f3c…64 hex",
   "chain_key": "evm:100",
   "family": "evm",
   "contract": "0xf17…",
   "visibility": "open",
   "evm": {
-    "domain": {"name": "Bamboo MetaToken", "version": "1"},
+    "domain": {"name": "SCaaS MetaToken", "version": "1"},
     "meta_tx": {"from": "0xa1…", "to": "0xb2…", "value": "100", "data": "0x…", "batch": "7412…",
                 "nonce": "0", "validUntil": "1756500900", "mode": 32, "relayer": "0x00…00",
                 "fee": "5000", "feeRecipient": "0x00…00"},
@@ -268,12 +268,12 @@ No `axum-server`, no `rcgen`, no `x509-parser`.
 
 | Field | Req | Meaning |
 |---|---|---|
-| `spec` | yes | `bamboo-intent/1.2` |
+| `spec` | yes | `scaas-intent/1.2` |
 | `intent_id` | yes | R78; recomputed by every receiver (§4.4) |
 | `chain_key`, `family` | yes | `family` must equal the prefix of `chain_key`; `soroban` ⇒ `FAMILY_NOT_SUPPORTED` |
 | `contract` | yes | EVM: the token = EIP-712 `verifyingContract` (MetaTxLib header: no forwarder). Others: the contract that verifies the op. |
 | `visibility` | yes | `open` \| `private`, as set by the origin; receivers apply the stricter of this and their own policy (§9) |
-| `evm` | iff `family ∈ {evm, hedera}` | `meta_tx` = `WireMetaTx` (`bamboo-node/src/metatx.rs`, camelCase, 11 fields of `MetaTxLib.MetaTransaction`); `domain` = EIP-712 `name`/`version` of the token (R5: implementation name/version on clones); `sig_kind` `eoa` (65 bytes, low-s) or `erc1271` (contract wallet, no local recover). The origin writes **zeros** in unbound `relayer`/`feeRecipient` (R84). |
+| `evm` | iff `family ∈ {evm, hedera}` | `meta_tx` = `WireMetaTx` (`scaas-node/src/metatx.rs`, camelCase, 11 fields of `MetaTxLib.MetaTransaction`); `domain` = EIP-712 `name`/`version` of the token (R5: implementation name/version on clones); `sig_kind` `eoa` (65 bytes, low-s) or `erc1271` (contract wallet, no local recover). The origin writes **zeros** in unbound `relayer`/`feeRecipient` (R84). |
 | `op` | iff other families | the `op` object of a `signed_op` relay job (`blockchain.relay.job._payload`): `op_kind` (`pay` in v1), `payload` (hex of the exact signed bytes), `signature`, `public_key`, `auth_kind`, `extra` (native params for building the tx). `from`, `valid_until`, lane, nonce and relayer are **not** taken from the clear JSON: receivers decode them from `payload` (§4.4). `contract` is lifted to the top level. |
 | `hub.id` | yes | origin `peer_id` = SHA-256(SPKI DER) |
 | `hub.pubkey` | yes | raw 32-byte Ed25519 key; receivers check `sha256(SPKI_ED25519_PREFIX ‖ pubkey) == hub.id`, with `SPKI_ED25519_PREFIX = 302a300506032b6570032100` |
@@ -295,9 +295,9 @@ property of the serving node), `published_at` at top level (now signed inside `h
 | `sui` | `blake2b256([3,0,0] ‖ bcs(vector<u8>(payload)))` | `adapters/sui.rs` `MetaOp::decode` (l.136) | `meta.move` `op_digest`, `adapters/sui.rs` `personal_digest`, `lib/fam_sui.py` |
 | `aptos` | `sha3_256(payload)` | `adapters/aptos.rs` `MetaOp::decode` (l.149) | `meta.move`, `lib/fam_aptos.py` `digest` |
 | `ton` | representation hash of the `MetaOp` cell tree carried in `payload` (BOC) | `adapters/ton.rs` `boc_parse` + `parse_metaop` (l.486) | `jetton.tact`, `adapters/ton.rs`, `lib/fam_ton.py` |
-| `solana` | `sha256(payload)` (337-byte `MetaOp`) | `adapters/solana.rs` `MetaOp::decode` (l.154) | `account.rs` `digest()`, `adapters/solana.rs`, `lib/fam_solana.py` `digest` |
+| `solana` | `sha256(payload)` (336-byte `MetaOp`) | `adapters/solana.rs` `MetaOp::decode` (l.154) | `account.rs` `digest()`, `adapters/solana.rs`, `lib/fam_solana.py` `digest` |
 
-New Rust module `bamboo-node/src/mesh/digest.rs`: `pub fn decode(env: &Envelope) -> Result<Decoded>` returning
+New Rust module `scaas-node/src/mesh/digest.rs`: `pub fn decode(env: &Envelope) -> Result<Decoded>` returning
 `{intent_id, from, lane, nonce, valid_until, relayer, fee_effective, selector, token}` by calling the existing helpers
 and decoders above (`metatx::digest`, the adapters' `MetaOp::decode`/`parse_metaop`, `sha2`/`sha3`). No new family
 encoder. One new decoder: Cosmos has none in `adapters/cosmos.rs` (the contract parses the JSON), so `digest.rs` adds
@@ -328,7 +328,7 @@ copy can still be ingested.
 ### 4.5 `hub.sig` message
 
 ```
-hub_msg =  "bamboo-hub/v1"                 13 bytes ASCII, domain tag
+hub_msg =  "scaas-hub/v1"                 13 bytes ASCII, domain tag
          ‖ u8(len(chain_key)) ‖ chain_key  ASCII
          ‖ intent_id                       32 bytes
          ‖ body_hash                       32 bytes = sha256(canonical body JSON, §4.2)
@@ -348,12 +348,12 @@ first-seen-wins dedup, the `exclusive_ms` clamp and failed-row deletion bound th
 
 ### 4.6 Conformance vectors
 
-Ship `bamboo-node/tests/vectors/mesh-envelope-v1.2.json` and a byte-identical copy at
+Ship `scaas-node/tests/vectors/mesh-envelope-v1.2.json` and a byte-identical copy at
 `dms_blockchain/tests/data/mesh-envelope-v1.2.json` (CI guard: `cmp` of the two files in the blockchain workflow,
 R52). Generated by `cargo test --test mesh_vectors -- --ignored regenerate`; checked by the non-ignored test.
 
 ```json
-{"spec": "bamboo-intent/1.2",
+{"spec": "scaas-intent/1.2",
  "hub_key_seed": "01…32 bytes hex",          // Ed25519 seed of the test origin; peer_id derived
  "now": 1800000000, "fee_recipient": "0x…",  // our cold wallet for R84 cases
  "tokens": {"evm:100": ["0x…"], "sui:localnet": ["0x…registry"], …},   // registered tokens per chain
@@ -382,7 +382,7 @@ code is given):
    `may_submit = true` **computed** from the file's `tokens` map and a full/submit policy on `token_of` (R86, N1).
    Each of 10–13 has a twin whose `contract` is another payer's account ⇒ `may_submit = false`.
 14. Soroban op ⇒ `FAMILY_NOT_SUPPORTED`.
-15. `spec = "bamboo-intent/1.1"` and `"bamboo-intent/2.0"` ⇒ `UNSUPPORTED_SPEC`.
+15. `spec = "scaas-intent/1.1"` and `"scaas-intent/2.0"` ⇒ `UNSUPPORTED_SPEC`.
 16. Unknown extra top-level field ⇒ accepted, ignored.
 17. `hop_count = 4` arriving ⇒ `HOP_LIMIT` (stored would be 5 > `MAX_HOPS`).
 18. `validUntil = now + 3601` ⇒ `VALID_TOO_LONG`; `validUntil = now + 10` (inside skew) ⇒ `EXPIRED`.
@@ -444,7 +444,7 @@ What this node accepts and how it serves, filtered for the caller (an `open` pee
 Callers cache it 60 s.
 
 ```json
-{"spec": ["bamboo-intent/1.2"], "peer_id": "64 hex", "pubkey": "64 hex", "store_id": "32 hex",
+{"spec": ["scaas-intent/1.2"], "peer_id": "64 hex", "pubkey": "64 hex", "store_id": "32 hex",
  "max_hops": 4, "cursor_overlap": 200, "publish_lag_ms": 500, "exclusive_ms": 10000, "page_max": 200,
  "chains": [{"chain_key": "evm:100", "submit": true, "fee_recipient": "0x…",
              "contracts": [{"contract": "0x…", "selector": "*", "min_fee": "0",
@@ -739,7 +739,7 @@ finds nothing.
 
 ### 8.4 Submit path changes (shared with the Odoo outbox path)
 
-`bamboo-node/src/submit.rs`:
+`scaas-node/src/submit.rs`:
 
 ```rust
 pub enum Origin { Odoo(i64), Mesh([u8; 32]), Gateway([u8; 32]) }   // Gateway = door A without mesh (no store)
@@ -822,7 +822,7 @@ existing logic: live ⇒ bump the meta-tx; expired ⇒ gap-filler + dead
 At the fee cap the existing wait branch (`submit.rs` l.301–311) also applies to the gap-filler: a same-fee
 replacement is rejected as underpriced, so the consumed meta-tx is simply left to mine and revert (cost ≈ 24–30 k gas).
 
-`bamboo-node/src/adapter.rs` (non-EVM lane runner, and Hedera):
+`scaas-node/src/adapter.rs` (non-EVM lane runner, and Hedera):
 
 - `ChainAdapter` gains `async fn op_consumed(&self, job: &Job) -> Result<Option<bool>>` (default `Ok(None)`), taking
   the `Job` so Hedera (`metatx` jobs) is served too. `Some(true)` iff the lane nonce has moved past the op's nonce;
@@ -883,7 +883,7 @@ Best effort (not enforceable; bounded):
 
 - **B1** — During `exclusive`, only the assignee submits **if every admitted peer honors it**. A peer that ignores it
   is detectable after the fact (its outer tx lands or reverts inside another peer's window; metric
-  `bamboo_mesh_exclusive_violations_total`) and is handled by suspending its peer row.
+  `scaas_mesh_exclusive_violations_total`) and is handled by suspending its peer row.
 - **B2** — After `until`, several eligible peers may submit; jitter spreads them over `post_exclusive_jitter_ms`, but a
   chain with 5 s blocks will still see overlaps. Each loser pays one reverted outer tx: the token checks the nonce
   before the signature (`ERC20MetaTx` steps 1–4), about 24–30 k gas on EVM (§05 §5.4.2).
@@ -1158,21 +1158,21 @@ the only mesh counters in v1 (no Odoo copy).
 
 | Metric | Type | Labels |
 |---|---|---|
-| `bamboo_mesh_ingest_total` | counter | `chain`, `source` (gateway\|outbox\|peer), `result` (accepted\|duplicate\|`<CODE>`) |
-| `bamboo_mesh_store_rows` | gauge | `state` |
-| `bamboo_mesh_peer_up` | gauge | `peer` (name) — last pull succeeded |
-| `bamboo_mesh_peer_last_pull_seconds` | gauge | `peer` |
-| `bamboo_mesh_peer_cursor_resets_total` | counter | `peer` (store_id changed) |
-| `bamboo_mesh_served_total` | counter | `peer`, `route` |
-| `bamboo_mesh_rate_limited_total` | counter | `peer`, `direction` (in\|out) |
-| `bamboo_mesh_outcome_total` | counter | `chain`, `outcome` (landed\|landed_elsewhere\|superseded\|consumed_unknown\|failed\|expired) |
-| `bamboo_mesh_exclusive_violations_total` | counter | `peer` |
-| `bamboo_mesh_private_from_open_total` | counter | `peer` |
-| `bamboo_submit_bump_skipped_consumed_total` | counter | `chain`, `lane` (R80; also for the Odoo path) |
-| `bamboo_submit_inflight_dup_total` | counter | `chain` (a path found the digest already in flight, G2) |
+| `scaas_mesh_ingest_total` | counter | `chain`, `source` (gateway\|outbox\|peer), `result` (accepted\|duplicate\|`<CODE>`) |
+| `scaas_mesh_store_rows` | gauge | `state` |
+| `scaas_mesh_peer_up` | gauge | `peer` (name) — last pull succeeded |
+| `scaas_mesh_peer_last_pull_seconds` | gauge | `peer` |
+| `scaas_mesh_peer_cursor_resets_total` | counter | `peer` (store_id changed) |
+| `scaas_mesh_served_total` | counter | `peer`, `route` |
+| `scaas_mesh_rate_limited_total` | counter | `peer`, `direction` (in\|out) |
+| `scaas_mesh_outcome_total` | counter | `chain`, `outcome` (landed\|landed_elsewhere\|superseded\|consumed_unknown\|failed\|expired) |
+| `scaas_mesh_exclusive_violations_total` | counter | `peer` |
+| `scaas_mesh_private_from_open_total` | counter | `peer` |
+| `scaas_submit_bump_skipped_consumed_total` | counter | `chain`, `lane` (R80; also for the Odoo path) |
+| `scaas_submit_inflight_dup_total` | counter | `chain` (a path found the digest already in flight, G2) |
 
 `/readyz` adds a reason when `[mesh]` is on and the store is not open, or `mesh_config` was never fetched.
-Odoo `relay_stats` already counts jobs by state, so `consumed` appears in `bamboo_relay_jobs` without change.
+Odoo `relay_stats` already counts jobs by state, so `consumed` appears in `scaas_relay_jobs` without change.
 
 ---
 
@@ -1222,7 +1222,7 @@ Heavy runs (cargo e2e, Odoo tests) are one at a time (owner rule, OOM cap).
 ### 13.3 Multi-node e2e (`tests/e2e_mesh.rs`, `--ignored`, anvil + forge + fake Odoo)
 
 Topology: one anvil, contracts deployed as in `tests/e2e.rs`; nodes A, B, C started as **separate processes** of the
-built binary (`env!("CARGO_BIN_EXE_bamboo-node")`) with generated configs and temp SQLite files; self-signed Ed25519
+built binary (`env!("CARGO_BIN_EXE_scaas-node")`) with generated configs and temp SQLite files; self-signed Ed25519
 certs generated by the test with `openssl` (skip with a clear message if absent). Fake Odoo (axum) serves
 `mesh_config`, `relay_poll`/`claim`/`report`, `mesh_publish_claim`, `node_config`, records calls.
 Each scenario asserts chain state (balances, `metaNonce`) and store/Odoo states.
@@ -1277,7 +1277,7 @@ S1b (`test_mesh.py`, `test_mesh_vectors.py`):
 Ordered streams for one agent at a time. "Gate" = the heavy command of the stream; run it alone.
 
 **S0 — Gateway fee-recipient/relayer binding fix** (live bug, independent of the mesh; R84)
-- Files: `bamboo-node/src/metatx.rs` (`normalize()`), `src/gateway.rs` (`post_metatx`: normalize before simulate),
+- Files: `scaas-node/src/metatx.rs` (`normalize()`), `src/gateway.rs` (`post_metatx`: normalize before simulate),
   `src/config.rs` (`[[chains]] fee_recipient`), `node.example.toml`, `tests/e2e.rs` (assert the fee of an open-mode
   intent with a foreign `feeRecipient` lands in our wallet / the lane).
 - Tests: §13.1 `gateway.rs` cases; one e2e assertion.
@@ -1292,7 +1292,7 @@ Ordered streams for one agent at a time. "Gate" = the heavy command of the strea
 - Done: suite green; existing blockchain tests green.
 
 **S2 — R80 fix on the existing relayer** (no mesh code)
-- Files: `bamboo-node/src/submit.rs` (`Origin`, `MetaRef`, `Sent.hashes`, `Inflight` set, `track()`, reverted-receipt
+- Files: `scaas-node/src/submit.rs` (`Origin`, `MetaRef`, `Sent.hashes`, `Inflight` set, `track()`, reverted-receipt
   and simulate-revert classification, outcomes for every origin), `src/chain.rs` (`nonce_at`), `src/abi.rs`
   (`metaNonce`, `metaTxDigest`, event filter if missing), `src/adapter.rs` (`op_consumed(&Job)`, `step_once`,
   `follow`, `Origin` in `Built`/`Signed`), `src/adapters/{cosmos,sui,aptos,ton,solana,hedera}.rs` (`op_consumed`),
@@ -1300,7 +1300,7 @@ Ordered streams for one agent at a time. "Gate" = the heavy command of the strea
 - Tests: §13.1 `submit.rs`/`adapter.rs` cases; single-node e2e "peer lands while we are pending" (anvil automine off,
   second EOA sends the same meta-tx) and "our tx reverts after a lost race ⇒ consumed".
 - Gate: `cargo test` then `cargo test --test e2e -- --ignored`.
-- Done: no `relay_report('dead'|'reverted')` for a consumed job in any test; `bamboo_submit_bump_skipped_consumed_total`
+- Done: no `relay_report('dead'|'reverted')` for a consumed job in any test; `scaas_submit_bump_skipped_consumed_total`
   > 0 in the e2e; R18 invariant tests unchanged. Depends on S1a.
 
 **S3 — Envelope, decoding, hub signature, vectors** (pure library)
@@ -1349,7 +1349,7 @@ Ordered streams for one agent at a time. "Gate" = the heavy command of the strea
 - Done: unit tests green; manual run of two nodes on anvil lands one gateway intent through the other.
 
 **S7 — Multi-node e2e and docs in code**
-- Files: `tests/e2e_mesh.rs` (E1–E12), `bamboo-node/README.md` (mesh section, key generation, R16 line updated),
+- Files: `tests/e2e_mesh.rs` (E1–E12), `scaas-node/README.md` (mesh section, key generation, R16 line updated),
   `node.example.toml` (`[mesh]` commented example).
 - Gate: `cargo build --release` then `cargo test --test e2e_mesh -- --ignored` (spawns 3–4 node processes; nothing
   else running).
@@ -1368,18 +1368,18 @@ before any mesh code; S3 is a pure library and can be done any time after S0.
 
 | File | Where | Edit |
 |---|---|---|
-| UD | §22.2 table, row **C. Mesh** | "Đường": `gossipsub v1.1 topic bamboo/intent/<caip2>/v1` → `HTTP pull bus GET /v1/mesh/intents giữa peer đã duyệt (R70)`; "Xác thực": `Chữ ký peer libp2p + peer score` → `mTLS, SPKI ghim theo dòng peer (R72)`; "Rate limit ở đâu": → `token bucket theo peer trong tiến trình (peer_rps, peer_intents_per_sec)`. Add a note: libp2p là transport thứ hai về sau, cùng envelope. |
+| UD | §22.2 table, row **C. Mesh** | "Đường": `gossipsub v1.1 topic scaas/intent/<caip2>/v1` → `HTTP pull bus GET /v1/mesh/intents giữa peer đã duyệt (R70)`; "Xác thực": `Chữ ký peer libp2p + peer score` → `mTLS, SPKI ghim theo dòng peer (R72)`; "Rate limit ở đâu": → `token bucket theo peer trong tiến trình (peer_rps, peer_intents_per_sec)`. Add a note: libp2p là transport thứ hai về sau, cùng envelope. |
 | UD | §22.2 rule 3 | keep `MAX_HOPS = 4`; add "do nút nhận tăng khi lưu; nút không phục vụ dòng đã ở MAX_HOPS; intent private không được chuyển tiếp (R85)". |
 | UD | §23.6 diagram | `[mesh]     libp2p gossipsub` → `[mesh]     HTTP pull bus, mTLS ghim SPKI (R70, R72)`; add line `[store]    SQLite: intent + bus_seq (R71)`; `[pool]     open / private` → `(pool = store của mesh, §21.4 mục 2)`. |
 | UD | §23.3 table, module `mesh` | "ingest `gossip` hoặc `pull`" → "ingest `pull` (HTTP bus, R70)". |
 | UD | §21.4 shapes table | "Pool thuần … Ingest gossip" → "pull"; "Private relayer … kéo từ private pool" unchanged. |
 | UD | §22.6 `profitable()` | `intent.fee` → effective fee (R86); add R84 normalization of unbound `feeRecipient`. |
 | §05 | §5.0 table rows "Intent bus", "Kênh mạng", "Soft-exclusivity lottery" | public: `Mesh libp2p, gossipsub v1.1` → `Bus HTTP liên bang, peer đã duyệt (R70)`; private: `1 hub nội bộ, không federation` → `peer private do origin duyệt, mTLS (R76, R85)`; lottery → `round-robin do origin ký (R74)`. |
-| §05 | §5.1 boxed conclusion and §5.1.2 | mark libp2p as deferred (R70); routes table: remove `/claim`, `/receipt`, `/publish`, `/peers`, `/pending` summary mode; bus served by `bamboo-node`, not an Odoo controller (UD §23.8); point to this spec §5. |
-| §05 | §5.2 envelope | replace 1.1 by `bamboo-intent/1.2` (this spec §4), state 1.0/1.1 void (R81). |
+| §05 | §5.1 boxed conclusion and §5.1.2 | mark libp2p as deferred (R70); routes table: remove `/claim`, `/receipt`, `/publish`, `/peers`, `/pending` summary mode; bus served by `scaas-node`, not an Odoo controller (UD §23.8); point to this spec §5. |
+| §05 | §5.2 envelope | replace 1.1 by `scaas-intent/1.2` (this spec §4), state 1.0/1.1 void (R81). |
 | §06 | §06.0.2 field definition | `default='public'` → `default='private'` (R76). |
 | PD | §3.4 / R16 | `/v1/metatx` normalizes unbound fields (R84); with `[mesh]` on, intents are durable in the mesh store (R71). |
-| `bamboo-node/README.md` | "Bất biến vận hành", R16 line | same as PD (done in S0/S7, code-adjacent doc). |
+| `scaas-node/README.md` | "Bất biến vận hành", R16 line | same as PD (done in S0/S7, code-adjacent doc). |
 
 ### 15.2 Interpretations (confirmed by the owner, 2026-10-05)
 
@@ -1425,7 +1425,7 @@ before any mesh code; S3 is a pure library and can be done any time after S0.
 | Per-`from` rate limit in Redis | §05 §5.5 tier 1 | per-peer in-process buckets | single process (UD §23.1); no Redis (UD §23.7) |
 | Gateway queue durability | PD R16 (in memory) | store-backed when `[mesh]` on (R71) | ruling 2 provides the store |
 | Gateway fee recipient | PD §3.4 says the gateway fills `feeRecipient` for DEX legs; `/v1/metatx` passes it through | normalize on every non-Odoo path (R84) | live bug (S0) |
-| Bus host | §05 §5.1.2 (Odoo controller `intent_bus.py`) | `bamboo-node` | UD §23.8: Odoo is control plane, no gossip/pool |
+| Bus host | §05 §5.1.2 (Odoo controller `intent_bus.py`) | `scaas-node` | UD §23.8: Odoo is control plane, no gossip/pool |
 | Target policy shape | §06 §06.3.3 (company, risk columns) vs UD §22.4 (routing columns) | UD §22.4 columns, no company | one table; risk columns have no v1 consumer |
 | Third-party relayer registry | §10 §10.4.5 `blockchain.relayer` by address | `blockchain.mesh.peer` by SPKI | R72 |
 

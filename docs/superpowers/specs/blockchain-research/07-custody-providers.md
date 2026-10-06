@@ -32,7 +32,7 @@ Liệt kê đầy đủ, vì mỗi cái là một chỗ kế hoạch triển kha
 
 | # | Giả định ngầm | Sự thật | Xử ở đâu |
 |---|---|---|---|
-| 1 | Có sẵn một service ký chạy được, ai đó vận hành nó | Nó là **một sản phẩm riêng**: deploy, HA, monitoring, cert lifecycle, on-call. Không phải một file nguồn. Từ [BẢN 3] nó là **hai vai** của `bamboo-node` — custody broker và key oracle (§23.2) | §07.1b |
+| 1 | Có sẵn một service ký chạy được, ai đó vận hành nó | Nó là **một sản phẩm riêng**: deploy, HA, monitoring, cert lifecycle, on-call. Không phải một file nguồn. Từ [BẢN 3] nó là **hai vai** của `scaas-node` — custody broker và key oracle (§23.2) | §07.1b |
 | 2 | Gọi signer là đồng bộ và rẻ | MPC SaaS p50 **300 ms – 3 s** (§06.6). Gọi đồng bộ trong HTTP worker của Odoo = cạn worker pool ở 6–20 request đồng thời | §07.1b |
 | 3 | `caps` do signer báo là đáng tin | Nó tự khai qua mTLS. Không có attestation ràng buộc thì một signer bị đánh tráo khai `kind='enclave'` và không ai biết | §07.1, §07.9 |
 | 4 | Một provider cho một key là đủ mô hình hóa | Thiếu **binding money-flow → (auth provider, conf provider, policy)**. Locked #6 nói "chọn lúc deploy" — phải có model cho *cái được chọn*, không chỉ cho *các lựa chọn* | §07.12 `blockchain.custody.policy` |
@@ -59,8 +59,8 @@ Liệt kê đầy đủ, vì mỗi cái là một chỗ kế hoạch triển kha
 >
 > | Tên mới | Chạy bằng | Giữ cái gì | Nhóm hàm dưới đây |
 > |---|---|---|---|
-> | **custody broker** — `bamboo-node --role=custody` | Rust, tiến trình riêng, mTLS | **Không giữ vật liệu khoá.** Nó *môi giới*: đẩy mọi thao tác xuống HSM/KMS/MPC SaaS và áp policy | **NHÓM A** + **NHÓM C** |
-> | **key oracle** — `bamboo-node --role=oracle` | Rust, **trong enclave**, chỉ bật khi Zether bật | **Giữ `x`** — và chỉ vì không thứ gì khác giữ được (§07.2) | **NHÓM B** + **NHÓM B'** |
+> | **custody broker** — `scaas-node --role=custody` | Rust, tiến trình riêng, mTLS | **Không giữ vật liệu khoá.** Nó *môi giới*: đẩy mọi thao tác xuống HSM/KMS/MPC SaaS và áp policy | **NHÓM A** + **NHÓM C** |
+> | **key oracle** — `scaas-node --role=oracle` | Rust, **trong enclave**, chỉ bật khi Zether bật | **Giữ `x`** — và chỉ vì không thứ gì khác giữ được (§07.2) | **NHÓM B** + **NHÓM B'** |
 >
 > Cùng một binary, hai `--role`. Vì sao tiến trình riêng chứ không phải một thư viện trong Odoo:
 > `_USER-DECISIONS.md` §23.5. Vì sao `x` không nằm chung với làn relay: §23.2 — làn relay parse byte
@@ -79,7 +79,7 @@ Interface sống ở **custody broker** / **key oracle**, **không** trong addon
 metadata và gọi qua mTLS. Không `import odoo`, test được ngoài Odoo.
 
 ```rust
-// bamboo-node/src/custody/mod.rs
+// scaas-node/src/custody/mod.rs
 pub const PROTOCOL_VERSION: &str = "custody/1";  // bump khi đổi chữ ký bất kỳ hàm nào;
                                                  // client từ chối nếu lệch
 
@@ -132,7 +132,7 @@ pub trait CustodyProvider {
 ```
 
 **Một điều Rust cho không mà Python không cho, và nó đáng nhắc:** trait này chia được thành **hai**
-trait — `AuthCustody` (NHÓM A + C) và `ConfCustody` (NHÓM B + B') — và khi đó `bamboo-node --role=custody`
+trait — `AuthCustody` (NHÓM A + C) và `ConfCustody` (NHÓM B + B') — và khi đó `scaas-node --role=custody`
 **không compile được** một hiện thực chạm `x`. Ranh giới của §07.0 kết luận 2 (hai trục độc lập) thành
 ranh giới của trình biên dịch, chứ không còn là một dòng chú thích. Bảng `caps` bên dưới vẫn cần, vì nó
 lọc trong **một** trục (một `hsm` và một `enclave` đều impl `AuthCustody` nhưng khác nhau ở `wrap_export`).
@@ -811,7 +811,7 @@ Nguyên tắc chi phối, và nó là điều dễ làm sai nhất trong cả se
 > **Odoo không bao giờ được là nguồn thẩm quyền quyết định khóa nào thuộc tenant nào.** Một lỗi record rule, một domain viết sai, một chỗ `sudo()` thừa, hay một SQL injection sẽ trở thành "ký được bằng khóa của công ty khác". Ràng buộc phải nằm **ở phía provider**, và signer service phải **tự dẫn xuất lại** đường dẫn khóa từ tenant đã xác thực bằng mTLS, rồi **từ chối** mọi `signer_ref` không nằm dưới đường dẫn đó.
 
 ```rust
-// bamboo-node/src/custody/authz.rs   (chạy ở cả --role=custody lẫn --role=oracle)
+// scaas-node/src/custody/authz.rs   (chạy ở cả --role=custody lẫn --role=oracle)
 static REF: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^blockchain/[0-9a-f-]{36}/[a-z0-9_]+/[A-Za-z0-9_-]{1,64}$").unwrap()
 });
@@ -1276,7 +1276,7 @@ Cron một dòng, không `fields.` inline (bẫy §5.4 của CLAUDE.md). Lưu ý
 Layout service:
 
 ```
-bamboo-node --role=custody | --role=oracle         # tien trinh rieng, mTLS, KHONG trong Odoo worker
+scaas-node --role=custody | --role=oracle         # tien trinh rieng, mTLS, KHONG trong Odoo worker
     custody/base.py            # ICustodyProvider (§07.1)
     custody/pkcs11.py  custody/awskms.py  custody/mpc_fireblocks.py
     custody/tee_turnkey.py     custody/enclave.py   custody/custodial.py

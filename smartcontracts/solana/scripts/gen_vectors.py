@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sinh `programs/bamboo/tests/vectors.rs`: khoá cố định, payload/digest/văn bản/OCMS, chữ ký THẬT (ed25519 raw + OCMS,
+"""Sinh `programs/scaas/tests/vectors.rs`: khoá cố định, payload/digest/văn bản/OCMS, chữ ký THẬT (ed25519 raw + OCMS,
 passkey WebAuthn P-256 phần mềm, ECDSA tất định RFC 6979, low-S), PDA Account/lane/Mandate/Market/Fill, ATA cả hai
 token program — do `dms_blockchain/lib/fam_solana.py` dựng. Vector chéo Python = program = adapter Rust.
 
@@ -14,7 +14,7 @@ import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LIB = os.path.join(HERE, '..', '..', '..', '..', 'dms_blockchain', 'lib')
-OUT = os.path.join(HERE, '..', 'programs', 'bamboo', 'tests', 'vectors.rs')
+OUT = os.path.join(HERE, '..', 'programs', 'scaas', 'tests', 'vectors.rs')
 _pkg = types.ModuleType('sollib')
 _pkg.__path__ = [LIB]            # nạp lib mà không chạy lib/__init__ (kéo Odoo)
 sys.modules['sollib'] = _pkg
@@ -25,8 +25,8 @@ from cryptography.hazmat.primitives.asymmetric import ec, ed25519, utils  # noqa
 
 PROGRAM = 'BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d'     # TEST_PROGRAM_ID: chỉ test/localnet (khoá đã công khai)
 P256_N = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551
-RP_ID = 'pay.bamboo.test'
-ORIGIN = 'https://pay.bamboo.test'
+RP_ID = 'pay.scaas.test'
+ORIGIN = 'https://pay.scaas.test'
 
 
 def seed(name):
@@ -47,7 +47,7 @@ def b58(b):
     return F.b58encode(b)
 
 
-NETWORK = b58(seed('bamboo.solana.test-genesis'))
+NETWORK = b58(seed('scaas.solana.test-genesis'))
 ALICE_SK, ALICE = ed('alice')
 BOB_SK, BOB = ed('bob')
 DELEGATE_SK, DELEGATE = ed('delegate')
@@ -83,7 +83,7 @@ def webauthn(sk, challenge, origin=ORIGIN, flags=5):
 
 DAVE_PAYLOAD = F.metaop_bytes(NETWORK, DAVE_ACCOUNT, USD, F.OP_PAY, DAVE_OWNER, BOB, 100, PAY_REF, LANE_ID, 0, VU)
 DAVE_AD, DAVE_CDJ, DAVE_SIG = webauthn(DAVE_SK, F.digest(DAVE_PAYLOAD))
-OPEN_CHALLENGE = hashlib.sha256(b'bamboo.open.v1' + F.key32(PROGRAM) + DAVE).digest()
+OPEN_CHALLENGE = hashlib.sha256(b'scaas.open.v1' + F.key32(PROGRAM) + DAVE).digest()
 OPEN_AD, OPEN_CDJ, OPEN_SIG = webauthn(DAVE_SK, OPEN_CHALLENGE)
 
 VECTORS = [
@@ -109,7 +109,7 @@ VECTORS = [
 
 def render():
     lines = ['//! Sinh bởi `smartcontracts/solana/scripts/gen_vectors.py` — đừng sửa tay. Khoá = sha256(tên); network = sha256(',
-             '//! "bamboo.solana.test-genesis"); payload: Alice trả Bob 100 USD, pay_ref 01…, lane a1…, nonce 0, hạn 1000.',
+             '//! "scaas.solana.test-genesis"); payload: Alice trả Bob 100 USD, pay_ref 01…, lane a1…, nonce 0, hạn 1000.',
              '#![allow(dead_code)]', '']
     for name, value in VECTORS:
         lines.append('pub const %s: &str = %s;' % (name, json.dumps(value)))

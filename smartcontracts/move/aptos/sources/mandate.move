@@ -2,7 +2,7 @@
 /// (L7: mọi FA gửi tới đều được tính); khoá `delegate` (custody của platform) chỉ tiêu được trong giới hạn chủ đặt —
 /// trần mỗi lần, trần mỗi kỳ, payee, hạn, mỗi `pay_ref` một lần — kiểm on-chain. Chủ MỞ mandate bằng chữ ký khoá
 /// Account (không tx native, không sequence của chủ — R30); cấp vốn = một `pay` thường tới địa chỉ Mandate.
-module bamboo::mandate {
+module scaas::mandate {
     use std::bcs;
     use std::hash::sha3_256;
     use aptos_std::table::{Self, Table};
@@ -12,11 +12,11 @@ module bamboo::mandate {
     use aptos_framework::object::{Self, ExtendRef, Object};
     use aptos_framework::primary_fungible_store;
     use aptos_framework::timestamp;
-    use bamboo::auth;
-    use bamboo::meta;
+    use scaas::auth;
+    use scaas::meta;
 
-    const DOMAIN: vector<u8> = b"bamboo.mandate.v1";
-    const METAOP_LABEL: vector<u8> = b"bamboo.metaop.v1";
+    const DOMAIN: vector<u8> = b"scaas.mandate.v1";
+    const METAOP_LABEL: vector<u8> = b"scaas.metaop.v1";
     const OP_MANDATE_PAY: u8 = 2;
     const OP_REVOKE: u8 = 3;
 

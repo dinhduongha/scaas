@@ -1,5 +1,5 @@
 // TON Center API v3 subset over @ton/sandbox (real TVM, fake blocks) — the e2e devnet stand-in for
-// bamboo-node's TON adapter when MyLocalTon cannot run (spec §11). One "masterchain block" per accepted
+// scaas-node's TON adapter when MyLocalTon cannot run (spec §11). One "masterchain block" per accepted
 // external message; every transaction of that message's trace gets that block's seqno.
 //
 //   npm run shim -- --port 32001
@@ -12,7 +12,7 @@ import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
 import { Address, beginCell, Cell, loadMessage, storeMessage, toNano, TupleItem, Dictionary } from '@ton/core';
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { createHash } from 'crypto';
-import { BambooJettonMaster } from '../build/jetton/jetton_BambooJettonMaster';
+import { ScaasJettonMaster } from '../build/jetton/jetton_ScaasJettonMaster';
 
 type Tx = Record<string, unknown>;
 
@@ -24,9 +24,9 @@ async function main() {
     const bc = await Blockchain.create();
     const admin: SandboxContract<TreasuryContract> = await bc.treasury('admin');
     const funder = await bc.treasury('funder', { balance: toNano('1000000') });
-    const masters: Record<string, SandboxContract<BambooJettonMaster>> = {};
+    const masters: Record<string, SandboxContract<ScaasJettonMaster>> = {};
     for (const tag of ['A', 'B']) {
-        const m = bc.openContract(await BambooJettonMaster.fromInit(admin.address, 0n, beginCell().storeStringTail(tag).endCell()));
+        const m = bc.openContract(await ScaasJettonMaster.fromInit(admin.address, 0n, beginCell().storeStringTail(tag).endCell()));
         await m.send(admin.getSender(), { value: toNano('0.1') }, { $$type: 'Mint', queryId: 0n, to: admin.address, amount: 1n, responseDestination: admin.address });
         masters[tag] = m;
     }

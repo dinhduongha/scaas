@@ -9,8 +9,8 @@ import {ZetherProver} from "./helpers/ZetherProver.sol";
 /// @notice Verifier đứng một mình: proof đúng qua, mọi thay đổi một bit / một trường / một witness sai
 ///         đều bị từ chối. Statement dựng tay theo §6 (token dựng y hệt — xem ZetherToken.t.sol).
 contract ZetherVerifierTest is Test {
-    bytes32 constant OP_T = keccak256("BAMBOO-ZETHER-OP-TRANSFER-V1");
-    bytes32 constant OP_B = keccak256("BAMBOO-ZETHER-OP-BURN-V1");
+    bytes32 constant OP_T = keccak256("SCAAS-ZETHER-OP-TRANSFER-V1");
+    bytes32 constant OP_B = keccak256("SCAAS-ZETHER-OP-BURN-V1");
     bytes32 constant DIRECT = keccak256("ZTX_V1_DIRECT");
 
     ZetherVerifierBn254 bn;

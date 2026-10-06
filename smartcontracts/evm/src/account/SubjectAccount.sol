@@ -86,7 +86,7 @@ contract SubjectAccount is EIP712, IERC1271 {
     }
 
     /// @dev Chạy MỘT lần trên implementation (do factory deploy). Khoá luôn implementation.
-    constructor() EIP712("Bamboo SubjectAccount", "1") {
+    constructor() EIP712("SCaaS SubjectAccount", "1") {
         FACTORY = msg.sender;
         _initialized = true;
     }

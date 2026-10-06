@@ -5,10 +5,10 @@
 /// Mỗi thị trường là MỘT shared object riêng (`Market`, derived từ `Dex` theo cặp type — review M4): settle,
 /// huỷ, `min_nonce` của thị trường này không đi qua object của thị trường khác, nên một thị trường nóng
 /// (giới hạn tx mỗi shared object mỗi commit của Sui) không chặn thị trường khác. `Dex` chỉ admin chạm.
-module bamboo::dex;
+module scaas::dex;
 
-use bamboo::auth::{Self, Auth};
-use bamboo::meta::{Self, Account, AdminCap, Root};
+use scaas::auth::{Self, Auth};
+use scaas::meta::{Self, Account, AdminCap, Root};
 use std::bcs;
 use std::type_name;
 use sui::clock::Clock;
@@ -17,9 +17,9 @@ use sui::derived_object;
 use sui::event;
 use sui::table::{Self, Table};
 
-const ORDER_DOMAIN: vector<u8> = b"bamboo.order.v1";
-const CANCEL_DOMAIN: vector<u8> = b"bamboo.cancel.v1";
-const NONCES_DOMAIN: vector<u8> = b"bamboo.nonces.v1";
+const ORDER_DOMAIN: vector<u8> = b"scaas.order.v1";
+const CANCEL_DOMAIN: vector<u8> = b"scaas.cancel.v1";
+const NONCES_DOMAIN: vector<u8> = b"scaas.nonces.v1";
 const FOK: u8 = 1;
 const IOC: u8 = 2;
 const MAX_FEE_PPM: u32 = 10_000;

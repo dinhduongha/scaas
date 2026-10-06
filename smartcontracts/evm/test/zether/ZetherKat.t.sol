@@ -94,7 +94,7 @@ contract ZetherKatTest is Test {
         bytes memory R = j.readBytes(".R");
         assertEq(v.g1MulBase(x), Y, "Y = [x]G");
         assertEq(v.g1MulBase(uint256(j.readBytes32(".k"))), R, "R = [k]G");
-        uint256 e = T.hashToScalar(keccak256(abi.encodePacked("BAMBOO-ZETHER-SCHNORR-V1", R, Y, j.readBytes32(".msg"))), v.groupOrder());
+        uint256 e = T.hashToScalar(keccak256(abi.encodePacked("SCAAS-ZETHER-SCHNORR-V1", R, Y, j.readBytes32(".msg"))), v.groupOrder());
         assertEq(e, uint256(j.readBytes32(".e")), "e");
         // [z]G == R + [e]Y
         assertEq(v.g1MulBase(uint256(j.readBytes32(".z"))), v.g1Add(R, v.g1Mul(Y, e)), "schnorr eq");

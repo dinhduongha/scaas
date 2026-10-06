@@ -4,7 +4,7 @@
 
     python3 smartcontracts/move/aptos/scripts/gen_p256_vectors.py [--check]
 
-Kỳ vọng của mỗi vector = Wycheproof `valid` VÀ s ≤ n/2 (bamboo::p256 từ chối high-s). OpenSSL (`cryptography`)
+Kỳ vọng của mỗi vector = Wycheproof `valid` VÀ s ≤ n/2 (scaas::p256 từ chối high-s). OpenSSL (`cryptography`)
 kiểm lại từng kết quả Wycheproof trước khi ghi. Mỗi vector high-s còn được ghi thêm dạng low-s `(r, n−s)` (tcId +
 10000, kỳ vọng = OpenSSL trên dạng đó): không thì 70 ca biên của Wycheproof chỉ chạm phép từ chối high-s (review M4).
 Thêm các ca dựng tay (tcId 20001…): nhánh so `r + n` cả hai chiều, `u1·G + u2·Q = ∞`, nhân đôi điểm trong vòng Strauss.
@@ -198,8 +198,8 @@ def main():
         '// %d distinct cases; expected = Wycheproof valid AND low-s (OpenSSL re-checked every case);' % len(cases),
         '// tcId 10000+k = low-s form (r, n-s) of high-s case k; 20001+ = crafted edge cases (see `crafted`).',
         '#[test_only]',
-        'module bamboo::p256_vectors {',
-        '    use bamboo::p256;',
+        'module scaas::p256_vectors {',
+        '    use scaas::p256;',
         '',
         '    /// (tcId, public key, sha256(msg), r‖s, expected)',
         '    fun check(tc: u64, pk: vector<u8>, hash: vector<u8>, sig: vector<u8>, want: bool) {',

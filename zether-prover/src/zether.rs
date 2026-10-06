@@ -33,10 +33,10 @@ pub fn value_in_range(v: u64) -> bool {
 }
 
 pub fn op_tag_transfer() -> [u8; 32] {
-    keccak256(b"BAMBOO-ZETHER-OP-TRANSFER-V1")
+    keccak256(b"SCAAS-ZETHER-OP-TRANSFER-V1")
 }
 pub fn op_tag_burn() -> [u8; 32] {
-    keccak256(b"BAMBOO-ZETHER-OP-BURN-V1")
+    keccak256(b"SCAAS-ZETHER-OP-BURN-V1")
 }
 
 /// `bindingTag` + `envelopeBinding` (§6, §10).
@@ -207,9 +207,9 @@ fn is_zero_msm<C: ZCurve>(bases: &[G<C>], scalars: &[Fr<C>], what: &'static str)
     }
 }
 
-/// `keccak256("BAMBOO-ZETHER-AUTH-V1" ‖ keccak256(statement))` — what `authSig` signs (§11).
+/// `keccak256("SCAAS-ZETHER-AUTH-V1" ‖ keccak256(statement))` — what `authSig` signs (§11).
 pub fn auth_digest(statement: &[u8]) -> [u8; 32] {
-    let mut b = b"BAMBOO-ZETHER-AUTH-V1".to_vec();
+    let mut b = b"SCAAS-ZETHER-AUTH-V1".to_vec();
     b.extend_from_slice(&keccak256(statement));
     keccak256(&b)
 }
@@ -497,7 +497,7 @@ pub fn verify_transfer<C: ZCurve>(
 /// the same ciphertexts, and two different transfers never share `s` (which would leak `v1 - v2`).
 pub fn derive_s<C: ZCurve>(x: &Fr<C>, h: &Header, y_to: &G<C>, v: u64) -> Fr<C> {
     let mut d = Sha512::new();
-    d.update(b"BAMBOO-ZETHER-S-V1");
+    d.update(b"SCAAS-ZETHER-S-V1");
     d.update(encode_scalar::<C>(x));
     d.update(h.chain_id.to_be_bytes());
     d.update(h.token);

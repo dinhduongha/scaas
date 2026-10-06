@@ -66,7 +66,7 @@ contract MandateWallet is EIP712, IERC1271 {
         _;
     }
 
-    constructor(address owner_) EIP712("Bamboo MandateWallet", "1") {
+    constructor(address owner_) EIP712("SCaaS MandateWallet", "1") {
         if (owner_ == address(0)) revert ZeroOwner();
         owner = owner_;
     }

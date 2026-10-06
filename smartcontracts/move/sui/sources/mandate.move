@@ -2,10 +2,10 @@
 /// platform) chỉ tiêu được trong giới hạn chủ đặt — trần mỗi lần, trần mỗi kỳ, payee, hạn, mỗi `pay_ref`
 /// một lần — kiểm ở đây, on-chain. Thao tác của chủ là tx native: trên Sui chủ thể không có sequence
 /// tài khoản, nên tx của chủ không khoá contract nào khác (R30).
-module bamboo::mandate;
+module scaas::mandate;
 
-use bamboo::auth::{Self, Auth};
-use bamboo::meta::{Self, Registry};
+use scaas::auth::{Self, Auth};
+use scaas::meta::{Self, Registry};
 use sui::balance::Balance;
 use sui::clock::Clock;
 use sui::coin::{Self, Coin};

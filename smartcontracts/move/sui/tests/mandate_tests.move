@@ -1,10 +1,10 @@
 #[test_only]
-module bamboo::mandate_tests;
+module scaas::mandate_tests;
 
-use bamboo::fixtures::{Self as fx};
-use bamboo::mandate::{Self, Mandate};
-use bamboo::meta::Registry;
-use bamboo::vectors as v;
+use scaas::fixtures::{Self as fx};
+use scaas::mandate::{Self, Mandate};
+use scaas::meta::Registry;
+use scaas::vectors as v;
 use sui::coin;
 use sui::sui::SUI;
 use sui::test_scenario as ts;
@@ -25,7 +25,7 @@ fun setup(): ts::Scenario {
 
 fun ref(b: u8): vector<u8> { vector::tabulate!(32, |_| b) }
 
-fun pay(sc: &mut ts::Scenario, amount: u128, r: u8, a: bamboo::auth::Auth, now: u64) {
+fun pay(sc: &mut ts::Scenario, amount: u128, r: u8, a: scaas::auth::Auth, now: u64) {
     let mut m = sc.take_shared<Mandate<SUI>>();
     let clock = fx::clock_at(sc, now);
     mandate::pay(&mut m, @0xbeef, amount, ref(r), 1000, @0x0, a, &clock, sc.ctx());

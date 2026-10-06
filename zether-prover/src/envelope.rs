@@ -1,5 +1,5 @@
 //! Meta-tx envelope for Zether ops (zether-design §10): `envelopeBinding`, the EIP-712
-//! digest the subject signs (`MetaTxLib`, domain `("Bamboo ZetherToken", "1", chainId, token)`),
+//! digest the subject signs (`MetaTxLib`, domain `("SCaaS ZetherToken", "1", chainId, token)`),
 //! and the op calldata carried in `m.data`.
 //!
 //! Relayed flow: build `m` without data → `binding = envelope_binding(m)` → prove with
@@ -72,7 +72,7 @@ pub fn domain_separator(chain_id: u64, token: &[u8; 20]) -> [u8; 32] {
     keccak256(
         &[
             keccak256(b"EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-            keccak256(b"Bamboo ZetherToken"),
+            keccak256(b"SCaaS ZetherToken"),
             keccak256(b"1"),
             abi::u256(chain_id),
             abi::addr(token),
@@ -94,7 +94,7 @@ pub fn envelope_binding(chain_id: u64, token: &[u8; 20], m: &MetaTx) -> [u8; 32]
     let (r, f) = m.canon();
     keccak256(
         &[
-            keccak256(b"BAMBOO-ZETHER-ENVELOPE-V1"),
+            keccak256(b"SCAAS-ZETHER-ENVELOPE-V1"),
             abi::u256(chain_id),
             abi::addr(token),
             abi::addr(&m.from),

@@ -15,7 +15,7 @@ import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 /// @notice Một implementation, hai tầng (SRS §3.1) chọn bằng `underlying`:
 ///         `0` ⇒ tầng 1 standalone (cung do `minter`), khác `0` ⇒ tầng 2 wrapper 1:1.
 ///
-///         Domain EIP-712 của mọi clone là `("Bamboo MetaToken", "1", chainId, clone)`:
+///         Domain EIP-712 của mọi clone là `("SCaaS MetaToken", "1", chainId, clone)`:
 ///         OZ `EIP712` giữ tên/version dạng immutable của implementation, và an toàn
 ///         replay đến từ `verifyingContract`, không từ tên (ruling R5). Client đọc
 ///         `eip712Domain()` (ERC-5267) chứ không đoán.
@@ -64,7 +64,7 @@ contract MetaToken is ERC20MetaTx, IERC20Payment, IFactoryToken {
     /// @dev Constructor chạy MỘT lần, trên implementation. Immutable của nó đúng cho mọi
     ///      clone; storage của nó thì không — nên khoá luôn implementation để không ai
     ///      `initialize` được chính nó (01-token-factory §1.3.5 mục 1).
-    constructor(address factory_, address subjectAccountImpl_) ERC20("", "") EIP712("Bamboo MetaToken", "1") {
+    constructor(address factory_, address subjectAccountImpl_) ERC20("", "") EIP712("SCaaS MetaToken", "1") {
         FACTORY = factory_;
         _SELF = address(this);
         SUBJECT_ACCOUNT_IMPL = subjectAccountImpl_;

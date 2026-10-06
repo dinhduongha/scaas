@@ -1,13 +1,13 @@
 [package]
-name = "bamboo"
+name = "scaas"
 version = "1.0.0"
 upgrade_policy = "compatible"
 
 [addresses]
-bamboo = "_"
+scaas = "_"
 
 [dev-addresses]
-bamboo = "0xb0b"
+scaas = "0xb0b"
 
 # Ghim commit (đỉnh nhánh `mainnet` của aptos-framework 2026-10-02) — bản sao nhỏ của aptos-core/aptos-move/framework.
 [dependencies.AptosFramework]

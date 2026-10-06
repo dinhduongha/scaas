@@ -32,7 +32,7 @@ contract Deploy is Script {
         address demo;
         if (demoSupply != 0 && registrar == deployer) {
             demo = factory.createMetaToken(1, address(0),
-                abi.encode("Bamboo Demo USD", "bUSD", uint8(6), demoSupply, deployer), bytes32("demo"));
+                abi.encode("SCaaS Demo USD", "bUSD", uint8(6), demoSupply, deployer), bytes32("demo"));
             if (demoHolder != deployer) MetaToken(demo).transfer(demoHolder, demoSupply / 2);
         }
         vm.stopBroadcast();

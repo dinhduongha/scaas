@@ -35,11 +35,11 @@ MANDATE = '0xbfd1d3ac3d6c37f03afe4d7c244e677f9b01fcbff79dae3394640a7944e5f5ab'
 NET = 'localnet'
 SUI_T = b'0000000000000000000000000000000000000000000000000000000000000002::sui::SUI'
 EUR_T = b'0000000000000000000000000000000000000000000000000000000000000000::fixtures::EUR'
-ORIGIN = 'https://pay.bamboo.test'
+ORIGIN = 'https://pay.scaas.test'
 ANDROID = 'android:apk-key-hash:Kq4X0bWx4mSs2N3uTjRL8tqxHH4m-sPGxBtcIu7b3QM'
 GUARDIAN = '0x9a'
 ADD_KEY, REMOVE_KEY, ADD_ORIGIN, REMOVE_ORIGIN, SET_GUARDIAN, CANCEL_RECOVERY = range(6)
-RP_ID_HASH = hashlib.sha256(b'pay.bamboo.test').digest()
+RP_ID_HASH = hashlib.sha256(b'pay.scaas.test').digest()
 N = {ec.SECP256K1: 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141,
      ec.SECP256R1: 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551}
 
@@ -145,14 +145,14 @@ pay('c_pay_sui', carol, REG_SUI, 100, 6, 0xc1, 0)
 pay('d_pay_sui', dave, REG_SUI, 100, 7, 0xd1, 0)
 pay('d_pay_sui_evil_origin', dave, REG_SUI, 100, 7, 0xd1, 0, origin='https://evil.test')
 pay('d_pay_sui_no_uv', dave, REG_SUI, 100, 7, 0xd1, 0, flags=1)
-open_ch = F.blake2b256(b'bamboo.open.v1' + F.addr(REG_SUI) + dave.pk)
+open_ch = F.blake2b256(b'scaas.open.v1' + F.addr(REG_SUI) + dave.pk)
 auth_const('d_open', dave, open_ch)
 
 
 # Vòng đời khoá (review M1): `meta::KeyOp`, ký bởi một khoá hiện có của account.
 def keyop(name, signer, owner, action, nonce, scheme=0, pk=b'', rp=b'', origin='', guardian='0x0', **kw):
     account = F.derive_account(REG_SUI, owner.address)
-    b = (F._vec(b'bamboo.keyop.v1') + F._vec(NET.encode()) + F.addr(account) + bytes([action, scheme]) + F._vec(pk)
+    b = (F._vec(b'scaas.keyop.v1') + F._vec(NET.encode()) + F.addr(account) + bytes([action, scheme]) + F._vec(pk)
          + F._vec(rp) + F._vec(origin.encode()) + F.addr(guardian) + nonce.to_bytes(8, 'little')
          + (1000).to_bytes(8, 'little'))
     auth_const(name, signer, F.personal_digest(b), **kw)
@@ -180,7 +180,7 @@ auth_const('m_revoke', delegate, F.personal_digest(p))
 
 
 def order(maker, sell_t, buy_t, sell, buy, nonce, flags=0, max_fee=3000, expiry=1000, taker='0x0'):
-    b = (F._vec(b'bamboo.order.v1') + F._vec(NET.encode()) + F.addr(MARKET) + F.addr(maker.address) + F.addr(taker)
+    b = (F._vec(b'scaas.order.v1') + F._vec(NET.encode()) + F.addr(MARKET) + F.addr(maker.address) + F.addr(taker)
          + F._vec(sell_t) + F._vec(buy_t) + sell.to_bytes(8, 'little') + buy.to_bytes(8, 'little')
          + nonce.to_bytes(16, 'little') + expiry.to_bytes(8, 'little') + max_fee.to_bytes(4, 'little')
          + bytes([flags]) + F.addr('0x0'))
@@ -199,10 +199,10 @@ for name, args in orders.items():
     d = order(*args)
     const(name + '_hash', d)
     auth_const(name, args[0], d)
-cancel = F._vec(b'bamboo.cancel.v1') + F._vec(NET.encode()) + F.addr(MARKET) + F._vec(order(*orders['o_a']))
+cancel = F._vec(b'scaas.cancel.v1') + F._vec(NET.encode()) + F.addr(MARKET) + F._vec(order(*orders['o_a']))
 auth_const('cancel_o_a', alice, F.personal_digest(cancel))
 for name, market in (('nonces_a_2', MARKET), ('nonces_a_2_usd', MARKET_USD)):
-    nonces = (F._vec(b'bamboo.nonces.v1') + F._vec(NET.encode()) + F.addr(market) + F.addr(alice.address)
+    nonces = (F._vec(b'scaas.nonces.v1') + F._vec(NET.encode()) + F.addr(market) + F.addr(alice.address)
               + (2).to_bytes(16, 'little'))
     auth_const(name, alice, F.personal_digest(nonces))
 
@@ -211,5 +211,5 @@ print('// Cross-implementation vector (also pinned in Rust and Odoo tests):')
 print('//   a_pay_sui_0 payload = %s' % x_payload.hex())
 print('//   a_pay_sui_0 digest  = %s' % x_digest.hex())
 print('//   a_pay_sui_0 signature (Sui serialized) = %s' % x_ser)
-print('#[test_only]\nmodule bamboo::vectors;\n\nuse bamboo::auth::{Self, Auth};\n')
+print('#[test_only]\nmodule scaas::vectors;\n\nuse scaas::auth::{Self, Auth};\n')
 print('\n'.join(out))

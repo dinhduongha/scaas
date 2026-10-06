@@ -1,4 +1,4 @@
-//! `bamboo-dex` — thanh toán hai chân ký (R35 trên CosmWasm). Mỗi lệnh là một `MetaOp` `op="trade"` trên token
+//! `scaas-dex` — thanh toán hai chân ký (R35 trên CosmWasm). Mỗi lệnh là một `MetaOp` `op="trade"` trên token
 //! bán (`to = relayer = DEX`, `extra = sha256(params)`) + `params` nguyên văn. DEX kiểm giới hạn giá, phí
 //! ppm của thị trường (≤ 1 %, ≤ `max_fee_ppm` đã ký), `FILLED[digest]`; token kiểm chữ ký/nonce/hạn khi DEX
 //! chuyển tiếp hai chân. Mọi thông điệp trong MỘT tx ⇒ nguyên tử. Fill-or-kill (R9-2).
@@ -12,7 +12,7 @@ use cosmwasm_std::{
 use cw_storage_plus::{Item, Map};
 use serde::{Deserialize, Serialize};
 
-use bamboo_metaop::{err, sha256, Auth, MetaOp};
+use scaas_metaop::{err, sha256, Auth, MetaOp};
 
 pub const MAX_FEE_PPM: u32 = 10_000;
 

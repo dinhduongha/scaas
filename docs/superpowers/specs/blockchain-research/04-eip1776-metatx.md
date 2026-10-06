@@ -237,7 +237,7 @@ Và một chỗ bản 1 hiểu sai kiến trúc: nó viết *"Zether là inner c
 ```solidity
 bytes32 constant DOMAIN_TYPEHASH = keccak256(
   "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
-// name = "BambooMetaTx", version = "1"
+// name = "ScaasMetaTx", version = "1"
 ```
 
 | Trường | Chặn được gì | Vì sao load-bearing **ở kiến trúc này cụ thể** |
@@ -296,7 +296,7 @@ cho mỗi cặp `(from, batchId)`**. Nó **không** xoá được ba thứ:
 ```python
 # Song song, one-shot: dẫn xuất tất định từ bản ghi nghiệp vụ. Không cần registry tập trung,
 # hai worker Odoo cùng dựng lại được một batchId giống nhau cho cùng một record.
-LANE_DOMAIN = b'bamboo.metatx.lane.v1'
+LANE_DOMAIN = b'scaas.metatx.lane.v1'
 batch_id = int.from_bytes(keccak(
     encode(['bytes32', 'bytes32', 'string', 'uint64', 'uint32'],
            [keccak(LANE_DOMAIN), db_uuid, 'dms.trade.settlement', rec_id, lane_epoch])),

@@ -55,7 +55,7 @@ contract ZetherS3VectorsTest is Test {
             assertFalse(_ok(v, _flip(st, fields[k]), pr, transfer), "tampered statement accepted");
         }
         // authDigest §11 khớp đặc tả
-        assertEq(keccak256(abi.encodePacked("BAMBOO-ZETHER-AUTH-V1", keccak256(st))), j.readBytes32(".authDigest"));
+        assertEq(keccak256(abi.encodePacked("SCAAS-ZETHER-AUTH-V1", keccak256(st))), j.readBytes32(".authDigest"));
     }
 
     function test_s3TransferBn254() public view { _checkProof("transfer_bn254.json", true); }
@@ -71,7 +71,7 @@ contract ZetherS3VectorsTest is Test {
         bytes memory st = j.readBytes(".statement");
         (bytes32 op, bytes32 psid, uint256 chainId, address token, bytes32 tag, bytes32 binding) =
             abi.decode(_head(st, 0), (bytes32, bytes32, uint256, address, bytes32, bytes32));
-        assertEq(op, keccak256("BAMBOO-ZETHER-OP-TRANSFER-V1"));
+        assertEq(op, keccak256("SCAAS-ZETHER-OP-TRANSFER-V1"));
         assertEq(psid, bn.proofSystemId());
         assertEq(chainId, j.readUint(".request.chainId"));
         assertEq(token, j.readAddress(".request.token"));
@@ -92,7 +92,7 @@ contract ZetherS3VectorsTest is Test {
         bytes memory yf = new bytes(64);
         for (uint256 i; i < 64; ++i) yf[i] = st[384 + i];
         assertEq(
-            keccak256(abi.encode(keccak256("BAMBOO-ZETHER-ENTRY-V1"), j.readUint(".request.chainId"),
+            keccak256(abi.encode(keccak256("SCAAS-ZETHER-ENTRY-V1"), j.readUint(".request.chainId"),
                 j.readAddress(".request.token"), keccak256(yf), sc)),
             j.readBytes32(".entryRef")
         );
@@ -158,7 +158,7 @@ contract ZetherS3VectorsTest is Test {
 
     function _e(IZetherVerifier v, string memory j, string memory c, bytes memory a1a2) internal view returns (uint256) {
         return T.hashToScalar(keccak256(bytes.concat(
-            abi.encodePacked("BAMBOO-ZETHER-DISCLOSE-V1", j.readUint(string.concat(c, ".chainId")),
+            abi.encodePacked("SCAAS-ZETHER-DISCLOSE-V1", j.readUint(string.concat(c, ".chainId")),
                 j.readAddress(string.concat(c, ".token"))),
             abi.encodePacked(j.readBytes32(string.concat(c, ".entryRef")), j.readUint(string.concat(c, ".amount")),
                 uint8(j.readUint(string.concat(c, ".kind"))), a1a2)
@@ -175,7 +175,7 @@ contract ZetherS3VectorsTest is Test {
             string memory j = vm.readFile(string.concat(DIR, files[i]));
             bytes memory y = j.readBytes(".Y");
             bytes memory r = j.readBytes(".R");
-            uint256 e = T.hashToScalar(keccak256(abi.encodePacked("BAMBOO-ZETHER-SCHNORR-V1", r, y, j.readBytes32(".msg"))), vs[i].groupOrder());
+            uint256 e = T.hashToScalar(keccak256(abi.encodePacked("SCAAS-ZETHER-SCHNORR-V1", r, y, j.readBytes32(".msg"))), vs[i].groupOrder());
             assertEq(e, j.readUint(".e"));
             assertEq(vs[i].g1MulBase(j.readUint(".z")), vs[i].g1Add(r, vs[i].g1Mul(y, e)));
         }

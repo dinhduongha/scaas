@@ -97,11 +97,11 @@ pub struct Burn {
 }
 
 /// Digest thao tác (`MetaOp` v1 trên Soroban): sha256(XDR của
-/// `Vec[Symbol("bamboo_metaop_v1"), BytesN32(network_id), Address(contract), Symbol(fn), Vec(args)]`).
+/// `Vec[Symbol("scaas_metaop_v1"), BytesN32(network_id), Address(contract), Symbol(fn), Vec(args)]`).
 /// Python (`fam_soroban.op_digest`) và adapter Rust tính cùng giá trị — vector chéo trong test.
 pub fn op_digest(env: &Env, function: &str, args: soroban_sdk::Vec<soroban_sdk::Val>) -> BytesN<32> {
     let v = (
-        Symbol::new(env, "bamboo_metaop_v1"),
+        Symbol::new(env, "scaas_metaop_v1"),
         env.ledger().network_id(),
         env.current_contract_address(),
         Symbol::new(env, function),

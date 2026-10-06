@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Đo gas của `meta::relay_pay` trên localnet: chủ ed25519 (ví) và chủ passkey (WebAuthn P-256 kiểm bằng
-`bamboo::p256` — UNAUDITED). Ghi file `--json-file` cho `aptos move run` rồi chạy nó bằng profile deployer.
+`scaas::p256` — UNAUDITED). Ghi file `--json-file` cho `aptos move run` rồi chạy nó bằng profile deployer.
 
     gas_probe.py <localnet dir>     (sau devnet.sh up && publish; tạo FA BUSD của testfa nếu chưa có)
 
@@ -95,8 +95,8 @@ p_pk = p.public_key().public_bytes(serialization.Encoding.X962, serialization.Pu
 
 def passkey_sign(dg, _lane, key=None):
     key = key or p
-    ad = hashlib.sha256(b'pay.bamboo.test').digest() + b'\x05' + bytes(4)
-    cd = json.dumps({'type': 'webauthn.get', 'challenge': F._b64url(dg).decode(), 'origin': 'https://pay.bamboo.test'},
+    ad = hashlib.sha256(b'pay.scaas.test').digest() + b'\x05' + bytes(4)
+    cd = json.dumps({'type': 'webauthn.get', 'challenge': F._b64url(dg).decode(), 'origin': 'https://pay.scaas.test'},
                     separators=(',', ':')).encode()
     r, s = utils.decode_dss_signature(key.sign(ad + hashlib.sha256(cd).digest(), ec.ECDSA(hashes.SHA256())))
     return r.to_bytes(32, 'big') + min(s, N - s).to_bytes(32, 'big'), F.webauthn_envelope(ad, cd)
@@ -128,7 +128,7 @@ expiry = int(time.time()) + 300
 
 
 def order(maker, sell, buy, sell_amount, buy_amount, nonce):
-    return (F.vec(b'bamboo.order.v1') + bytes([4]) + F.addr(MARKET) + F.addr(maker) + F.addr('0x0') + F.addr(sell)
+    return (F.vec(b'scaas.order.v1') + bytes([4]) + F.addr(MARKET) + F.addr(maker) + F.addr('0x0') + F.addr(sell)
             + F.addr(buy) + sell_amount.to_bytes(8, 'little') + buy_amount.to_bytes(8, 'little')
             + nonce.to_bytes(16, 'little') + expiry.to_bytes(8, 'little') + (10000).to_bytes(4, 'little') + b'\x00'
             + F.addr('0x0'))

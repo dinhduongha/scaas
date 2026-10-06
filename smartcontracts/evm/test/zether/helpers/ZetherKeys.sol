@@ -16,7 +16,7 @@ library ZetherKeys {
         bytes memory y = pub(x, bls);
         bytes memory rPt = pub(k, bls);
         uint256 e = ZetherTranscript.hashToScalar(
-            keccak256(abi.encodePacked("BAMBOO-ZETHER-SCHNORR-V1", rPt, y, m)), r
+            keccak256(abi.encodePacked("SCAAS-ZETHER-SCHNORR-V1", rPt, y, m)), r
         );
         return abi.encodePacked(rPt, addmod(k, mulmod(e, x, r), r));
     }

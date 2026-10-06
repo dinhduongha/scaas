@@ -29,9 +29,9 @@ contract DeployHedera is Script {
         address demo2;
         if (demoSupply != 0 && registrar == deployer) {
             demo = factory.createMetaToken(1, address(0),
-                abi.encode("Bamboo Demo USD", "bUSD", uint8(6), demoSupply, deployer), bytes32("demo"));
+                abi.encode("SCaaS Demo USD", "bUSD", uint8(6), demoSupply, deployer), bytes32("demo"));
             demo2 = factory.createMetaToken(1, address(0),
-                abi.encode("Bamboo Demo Points", "bPTS", uint8(6), demoSupply, deployer), bytes32("demo2"));
+                abi.encode("SCaaS Demo Points", "bPTS", uint8(6), demoSupply, deployer), bytes32("demo2"));
             if (demoHolder != deployer) {
                 MetaToken(demo).transfer(demoHolder, demoSupply / 2);
                 MetaToken(demo2).transfer(demoHolder, demoSupply / 2);

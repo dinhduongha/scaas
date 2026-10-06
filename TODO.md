@@ -5,7 +5,7 @@ Ordered by what blocks what (2026-10-06). The Odoo side lives in bamboo-dms (`dm
 ### 0. First
 - [ ] Owner: review `docs/superpowers/specs/2026-10-06-node-independence-design.md` (R87–R111) and confirm its §18.2.
 - [ ] Independent Claude review of that spec.
-- [ ] Deferred tests after the split: `smartcontracts/scripts/test.sh all`, bamboo-node `cargo test` + clippy + e2e (needs `smartcontracts/evm/lib`, `smartcontracts/evm/deployments/`).
+- [ ] Deferred tests after the split: `smartcontracts/scripts/test.sh all`, scaas-node `cargo test` + clippy + e2e (needs `smartcontracts/evm/lib`, `smartcontracts/evm/deployments/`).
 
 ### 1. Streams
 

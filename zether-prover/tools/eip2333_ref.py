@@ -33,7 +33,7 @@ def path(seed, comps, salt0, r):
     return sk
 
 if __name__ == "__main__":
-    BLS = (b"BLS-SIG-KEYGEN-SALT-", R_BLS); BN = (b"BAMBOO-ZETHER-BN254-v1", R_BN)
+    BLS = (b"BLS-SIG-KEYGEN-SALT-", R_BLS); BN = (b"SCAAS-ZETHER-BN254-v1", R_BN)
     # sanity: published EIP-2333 case 0
     s0 = bytes.fromhex("c55257c360c07c72029aebc1b53c05ed0362ada38ead3e3e9efa3708e53495531f09a6987599d18264c1e1c92f2cf141630c7a3c4ab7c81b2f001698e7463b04")
     assert path(s0, [0], *BLS) == 20397789859736650942317412262472558107875392172444076792671091975210932703118

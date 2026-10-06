@@ -273,9 +273,9 @@ contract UniversalAccountRegistryTest is Test {
         bytes memory d = abi.encode(j.readBytes(".bn254G2Pk"));
         bytes memory y = ZetherKeys.pub(X, true); // khoá ElGamal ở BLS12-381: khác curve ⇒ được phép
         bytes32 c = reg.popChallenge(y, address(this));
-        bytes memory popSig = G1Bn254.mul(G1Bn254.mapToG1(abi.encodePacked("BAMBOO-BLS-BN254-POP-V1", c)), sk);
+        bytes memory popSig = G1Bn254.mul(G1Bn254.mapToG1(abi.encodePacked("SCAAS-BLS-BN254-POP-V1", c)), sk);
         ZetherTypes.UA a = reg.register(y, AuthScheme.BLS_BN254, d, abi.encode(ZetherKeys.schnorr(X, c, true), popSig), false);
-        bytes memory sig = G1Bn254.mul(G1Bn254.mapToG1(abi.encodePacked("BAMBOO-BLS-BN254-SIG-V1", M)), sk);
+        bytes memory sig = G1Bn254.mul(G1Bn254.mapToG1(abi.encodePacked("SCAAS-BLS-BN254-SIG-V1", M)), sk);
         reg.requireAuthorized(a, M, sig, true);
         vm.expectRevert(abi.encodeWithSelector(IR.Unauthorized.selector, a)); // PoP không dùng làm chữ ký được
         reg.requireAuthorized(a, c, popSig, true);
@@ -289,9 +289,9 @@ contract UniversalAccountRegistryTest is Test {
         bytes memory d = abi.encode(pk);
         bytes memory y = ZetherKeys.pub(X, false); // khoá ElGamal bn254: khác curve
         bytes32 c = reg.popChallenge(y, address(this));
-        bytes memory popSig = G1Bls12381.mul(HashToCurve.hashToG1(abi.encodePacked(c), "BAMBOO-AUTH-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_"), sk);
+        bytes memory popSig = G1Bls12381.mul(HashToCurve.hashToG1(abi.encodePacked(c), "SCAAS-AUTH-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_"), sk);
         ZetherTypes.UA a = reg.register(y, AuthScheme.BLS_12381, d, abi.encode(ZetherKeys.schnorr(X, c, false), popSig), false);
-        bytes memory sig = G1Bls12381.mul(HashToCurve.hashToG1(abi.encodePacked(M), "BAMBOO-AUTH-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_SIG_"), sk);
+        bytes memory sig = G1Bls12381.mul(HashToCurve.hashToG1(abi.encodePacked(M), "SCAAS-AUTH-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_SIG_"), sk);
         reg.requireAuthorized(a, M, sig, true);
         vm.expectRevert(abi.encodeWithSelector(IR.Unauthorized.selector, a));
         reg.requireAuthorized(a, M, popSig, true);

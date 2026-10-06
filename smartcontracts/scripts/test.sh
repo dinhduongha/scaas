@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run one on-chain family's local test suite (or all) with its native tool. Heavy: wrap in scripts/capped.
 # usage: test.sh <evm|aptos|sui|soroban|cosmos|ton|solana|all>
-# Localnet e2e tests live in bamboo-node (cargo test --test e2e_<family> -- --ignored), not here.
+# Localnet e2e tests live in scaas-node (cargo test --test e2e_<family> -- --ignored), not here.
 set -euo pipefail
 SC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FAMILIES="evm aptos sui soroban cosmos ton solana"
@@ -15,7 +15,7 @@ run() {
     soroban) (cd "$SC/soroban" && cargo test) ;;
     cosmos)  (cd "$SC/cosmos" && cargo test) ;;
     ton)     (cd "$SC/ton" && { [ -d node_modules ] || npm ci; } && npm test) ;;
-    # LiteSVM loads target/deploy/bamboo.so, so the SBF build comes first.
+    # LiteSVM loads target/deploy/scaas.so, so the SBF build comes first.
     solana)  "$SC/scripts/build.sh" solana && (cd "$SC/solana" && cargo test) ;;
     *) echo "unknown family '$1' (one of: $FAMILIES all)" >&2; exit 2 ;;
   esac

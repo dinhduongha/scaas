@@ -19,7 +19,7 @@ contract MetaTxKatTest is Fixtures {
         uint256 pk = 0xA11CE;
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
             from: vm.addr(pk), to: address(0x5409), value: 250e6,
-            data: _payData(bytes32(uint256(0x42))), batch: uint256(keccak256("bamboo.pay.lane")),
+            data: _payData(bytes32(uint256(0x42))), batch: uint256(keccak256("scaas.pay.lane")),
             nonce: 0, validUntil: 1_800_000_300, mode: MetaTxLib.MODE_RESTRICT_RELAYER,
             relayer: relayer, fee: 0,
             feeRecipient: address(0xFEE)        // flag off -> canonical-zeroed in the hash
@@ -27,13 +27,13 @@ contract MetaTxKatTest is Fixtures {
         bytes32 structHash = m.hashStruct();
         bytes32 domainSep = keccak256(abi.encode(
             keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-            keccak256("Bamboo MetaToken"), keccak256("1"), uint256(9000), address(tok)));
+            keccak256("SCaaS MetaToken"), keccak256("1"), uint256(9000), address(tok)));
         bytes32 digest = keccak256(abi.encodePacked(hex"1901", domainSep, structHash));
         assertEq(digest, tok.metaTxDigest(m));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, digest);
 
         string memory k = "kat";
-        vm.serializeString(k, "domain_name", "Bamboo MetaToken");
+        vm.serializeString(k, "domain_name", "SCaaS MetaToken");
         vm.serializeString(k, "domain_version", "1");
         vm.serializeString(k, "chain_id", "9000");
         vm.serializeString(k, "verifying_contract", vm.toString(address(tok)));

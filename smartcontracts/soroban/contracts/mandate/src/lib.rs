@@ -76,7 +76,7 @@ pub struct PaidUnderMandate {
     pub pay_ref: BytesN<32>,
 }
 
-/// Phần của `bamboo-token` mandate gọi.
+/// Phần của `scaas-token` mandate gọi.
 #[contractclient(name = "PayTokenClient")]
 pub trait PayToken {
     fn pay(env: Env, from: Address, to: Address, amount: i128, pay_ref: BytesN<32>, valid_until: u64);

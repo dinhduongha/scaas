@@ -6,8 +6,8 @@ Ruling của luồng đánh số `R9-n` (lead đánh số lại khi hợp nhất
 ## 1. Phạm vi
 
 Ba contract CosmWasm trong `chains/cosmos/` (workspace Rust riêng, `cosmwasm-std` 3, test bằng
-`cw-multi-test` 3): `bamboo-token`, `bamboo-mandate`, `bamboo-dex`; crate `bamboo-metaop` dùng chung (payload,
-kiểm chữ ký). Adapter `bamboo-node/src/adapters/cosmos.rs`, module Odoo `dms_blockchain/lib/fam_cosmos.py`,
+`cw-multi-test` 3): `scaas-token`, `scaas-mandate`, `scaas-dex`; crate `scaas-metaop` dùng chung (payload,
+kiểm chữ ký). Adapter `scaas-node/src/adapters/cosmos.rs`, module Odoo `dms_blockchain/lib/fam_cosmos.py`,
 connector portal `connectors/cosmos.js`. Devnet: `cosmwasm/wasmd:v0.61.15` (wasmvm 3), cổng 31990–31999.
 
 ## 2. Payload ký `MetaOp` v1 (R30, §D.0)
@@ -15,7 +15,7 @@ connector portal `connectors/cosmos.js`. Devnet: `cosmwasm/wasmd:v0.61.15` (wasm
 Bytes chủ thể ký là **JSON chính tắc** (khoá sắp xếp, không khoảng trắng, mọi trường bắt buộc):
 
 ```json
-{"amount":"1000","contract":"wasm1…token","domain":"bamboo.metaop.v1","extra":"","from":"wasm1…payer",
+{"amount":"1000","contract":"wasm1…token","domain":"scaas.metaop.v1","extra":"","from":"wasm1…payer",
  "lane":"<64 hex>","network":"<chain-id>","nonce":0,"op":"pay","pay_ref":"<64 hex>","relayer":"",
  "to":"wasm1…payee","valid_until":1790000000}
 ```
@@ -26,7 +26,7 @@ Bytes chủ thể ký là **JSON chính tắc** (khoá sắp xếp, không kho�
 - **Contract nhận nguyên bytes** (`Relay{payload: Binary, …}`), không dựng lại JSON: chữ ký phủ đúng bytes contract
   đọc nên không có lớp chính tắc hoá thứ hai để lệch. Parse chặt (`deny_unknown_fields`, serde từ chối khoá trùng).
 - **Miền** nằm trong payload (review S7: ADR-036 có `chain_id: ""`): `network == env.block.chain_id`,
-  `contract == env.contract.address`, `domain == "bamboo.metaop.v1"`. Payload của contract/mạng khác bị từ chối.
+  `contract == env.contract.address`, `domain == "scaas.metaop.v1"`. Payload của contract/mạng khác bị từ chối.
 - **Digest** = `sha256(payload)` — phát trong event `meta_tx_executed`, Odoo chốt `blockchain.signed.op` theo nó.
 - **Lane/nonce riêng contract** (R9 + R30): `NONCES[(from, lane)]` bắt đầu 0, mỗi op đúng nonce hiện hành rồi
   tăng. Odoo dùng lane ngẫu nhiên theo request (`batch_hex`), nonce 0 ⇒ mỗi request một lane, chain thực thi tối
@@ -38,7 +38,7 @@ Bytes chủ thể ký là **JSON chính tắc** (khoá sắp xếp, không kho�
 | `scheme` | Ai | Thông điệp được ký | Kiểm on-chain | Ràng địa chỉ |
 |---|---|---|---|---|
 | `adr036` | Keplr/Leap `signArbitrary`; ví seed của ta (R32) | sign doc ADR-036 quanh `payload` | `sha256(doc)`, `secp256k1_verify` | `bech32(prefix, ripemd160(sha256(pk33))) == from` |
-| `passkey` | WebAuthn P-256 (R31) | `authData ‖ sha256(clientDataJSON)`, `challenge = base64url(digest)` | `secp256r1_verify(sha256(...))` | `from == bech32(prefix, sha256("bamboo.passkey.v1" ‖ pk)[..20])` |
+| `passkey` | WebAuthn P-256 (R31) | `authData ‖ sha256(clientDataJSON)`, `challenge = base64url(digest)` | `secp256r1_verify(sha256(...))` | `from == bech32(prefix, sha256("scaas.passkey.v1" ‖ pk)[..20])` |
 
 Sign doc ADR-036 dựng bằng **khuôn byte cố định** (amino JSON đã sắp khoá, không khoảng trắng):
 
@@ -53,13 +53,13 @@ cờ UP của `authData`, chữ ký 64 byte low-s (client chuẩn hoá DER → r
 SEC1 không nén 65 byte (x‖y của khoá COSE) ⇒ một khoá đúng một địa chỉ.
 
 **R9-1 — địa chỉ passkey dẫn xuất.** Cosmos không có tài khoản P-256 gốc. Số dư nằm trong contract token nên một
-"địa chỉ" chỉ là khoá sổ cái: passkey sở hữu địa chỉ `bech32(prefix, sha256("bamboo.passkey.v1"‖pk)[..20])`
+"địa chỉ" chỉ là khoá sổ cái: passkey sở hữu địa chỉ `bech32(prefix, sha256("scaas.passkey.v1"‖pk)[..20])`
 (tiền tố miền ⇒ không trùng không gian `ripemd160(sha256(pk))` của secp256k1). Account nhiều khoá (C.3, xoay
 khoá) là seam: cần contract account riêng, không làm ở round này.
 
 ## 4. Contract
 
-### 4.1 `bamboo-token` (CW20 + meta-tx)
+### 4.1 `scaas-token` (CW20 + meta-tx)
 
 - CW20 tối thiểu: `Transfer`, `Send` (hook `Receive` — dùng nạp mandate), `Mint` (minter), query `Balance`,
   `TokenInfo`, `Allowance`, `Nonce{owner, lane}`.
@@ -74,16 +74,16 @@ khoá) là seam: cần contract account riêng, không làm ở round này.
   `TransferFrom`: `info.sender` phải là contract **và** có allowance (R26).
 - Event (`wasm-<type>`): `payment_settled{from,to,amount,pay_ref}`, `meta_tx_executed{from,digest,lane,nonce}`.
 
-### 4.2 `bamboo-mandate` (R25)
+### 4.2 `scaas-mandate` (R25)
 
 Một instance mỗi ví uỷ thác: `owner`, `token`, `delegate_pubkey` (secp256k1 33 byte), `max_per_payment`,
 `max_per_period`, `period_secs`, `payees`, `expires_at`. Nạp: CW20 `Send` → `Receive` (chỉ đúng token).
 `PayUnderMandate{to, amount, pay_ref, valid_until, signature}`: delegate ký `sha256` của JSON chính tắc
-`{"amount","contract","domain":"bamboo.mandate.v1","network","pay_ref","to","valid_until"}`; contract kiểm
+`{"amount","contract","domain":"scaas.mandate.v1","network","pay_ref","to","valid_until"}`; contract kiểm
 chưa thu hồi, chưa hết hạn mandate/chữ ký, payee hợp lệ, hạn mức lần/kỳ (kỳ cố định theo `period_secs`), `pay_ref`
 một lần, rồi gọi `token.Pay` ⇒ `payment_settled` mang đúng `pay_ref`. `Revoke`, `Withdraw` chỉ owner.
 
-### 4.3 `bamboo-dex` (R35, hai chân ký đi qua token)
+### 4.3 `scaas-dex` (R35, hai chân ký đi qua token)
 
 - Lệnh = một `MetaOp` `op="trade"` trên token bán (`to = relayer = DEX`, `amount` = số bán, `extra =
   sha256(params)`) + `params` JSON nguyên văn: `{"buy_amount_min","buy_token","dex","max_fee_ppm"}`.

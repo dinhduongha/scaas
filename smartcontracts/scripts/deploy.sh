@@ -5,9 +5,9 @@
 #                            DEMO_HOLDER?; FOUNDRY_PROFILE=private9000|gnosis|celo picks the EVM version.
 #                            Writes evm/deployments/<chainid>.json.
 #   hedera  <relay-url>      same, script/hedera/DeployHedera.s.sol --slow (writes deployments/hedera-<chainid>.json)
-#   aptos   <cli-profile>    aptos move deploy-object --address-name bamboo
+#   aptos   <cli-profile>    aptos move deploy-object --address-name scaas
 #   sui     <client-env>     sui client --client.env <env> publish
-#   soroban <network> <contract>   stellar contract deploy of bamboo_<contract>.wasm (build.sh soroban first); STELLAR_BIN overrides the CLI
+#   soroban <network> <contract>   stellar contract deploy of scaas_<contract>.wasm (build.sh soroban first); STELLAR_BIN overrides the CLI
 #   solana  <cluster-url> <program-keypair> <upgrade-authority-keypair>   solana/scripts/deploy.sh
 set -euo pipefail
 SC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -15,10 +15,10 @@ FAMILY="${1:?usage: $0 <family> <network> [args…]}"; NET="${2:?network}"; shif
 case "$FAMILY" in
   evm)     cd "$SC/evm" && exec forge script script/Deploy.s.sol --rpc-url "$NET" --broadcast "$@" ;;
   hedera)  cd "$SC/evm" && exec forge script script/hedera/DeployHedera.s.sol --rpc-url "$NET" --broadcast --slow "$@" ;;
-  aptos)   exec aptos move deploy-object --package-dir "$SC/move/aptos" --address-name bamboo --profile "$NET" "$@" ;;
+  aptos)   exec aptos move deploy-object --package-dir "$SC/move/aptos" --address-name scaas --profile "$NET" "$@" ;;
   sui)     exec sui client --client.env "$NET" publish "$@" "$SC/move/sui" ;;
   soroban) C="${1:?contract (token|mandate|dex|account)}"; shift
-           exec "${STELLAR_BIN:-stellar}" contract deploy --network "$NET" --wasm "$SC/soroban/target/wasm32v1-none/release/bamboo_$C.wasm" "$@" ;;
+           exec "${STELLAR_BIN:-stellar}" contract deploy --network "$NET" --wasm "$SC/soroban/target/wasm32v1-none/release/scaas_$C.wasm" "$@" ;;
   solana)  exec "$SC/solana/scripts/deploy.sh" "$NET" "$@" ;;
   cosmos|ton) echo "$FAMILY: no deploy tooling in this repo yet (build artifacts: build.sh $FAMILY)" >&2; exit 2 ;;
   *) echo "unknown family '$FAMILY'" >&2; exit 2 ;;

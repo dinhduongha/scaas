@@ -1,0 +1,139 @@
+# scaas-node --config node.toml
+# scaas-node addresses --config node.toml      # print every lane address, then exit
+# Secrets are NEVER in this file: only where to read them (env var, 0600 file, or encrypted keystore).
+
+[odoo]
+url = "http://odoo:8069"
+database = "odoo19"
+relay_api_key_env = "SCAAS_RELAY_API_KEY"       # user in "Blockchain Relay Worker (service)"
+indexer_api_key_env = "SCAAS_INDEXER_API_KEY"   # user in "Blockchain Indexer (service)"
+
+[modules]
+submit = true
+indexer = true
+gateway = true
+gateway_bind = "127.0.0.1:8547"                  # behind a reverse proxy (per-IP rate limit there)
+# gateway_auth = "none" is refused on a non-loopback bind (R54). bearer: "Authorization: Bearer <secret>".
+# hmac: X-SCaaS-Timestamp, X-SCaaS-Nonce, X-SCaaS-Signature = hex(HMAC-SHA256(secret,
+#       ts "." nonce "." METHOD " " path?query "\n" body)); 300 s skew, nonce single-use.
+# gateway_auth = "hmac"
+# gateway_secret_env = "SCAAS_GATEWAY_SECRET"   # >= 16 bytes
+admin_bind = "127.0.0.1:9108"                    # /healthz /readyz /metrics (R51); "" disables
+
+# One 24-word BIP-39 mnemonic for every lane that has no private_key of its own (R60).
+# Lanes derive per family by SLIP-44: evm m/44'/60'/0'/0/i, hedera m/44'/3030'/0'/0/i,
+# cosmos m/44'/118'/0'/0/i, sui m/44'/784'/i'/0'/0', soroban m/44'/148'/i', ton m/44'/607'/i',
+# aptos m/44'/637'/i'/0'/0'. A chain may override the SLIP-44 coin type with `coin_type` (Pi Network: 314159).
+[keys]
+mnemonic = { keystore = "/etc/scaas/mnemonic.json", passphrase_env = "SCAAS_KEYSTORE_PASSPHRASE" }
+# mnemonic = { env = "SCAAS_MNEMONIC" }
+# mnemonic = { file = "/run/secrets/scaas-mnemonic" }       # must be 0600 or 0400
+# bip39_passphrase_env = "SCAAS_BIP39_PASSPHRASE"
+# Create the keystore:  scaas-node keystore new --kind mnemonic --out /etc/scaas --name mnemonic.json < words.txt
+
+[[chains]]
+family = "evm"
+evm_chain_number = 9000
+rpc_urls = ["http://nethermind:8545"]            # >= finality.quorum independent endpoints
+lanes = [0, 1, 2, 3]                             # 4 relayer accounts: hold gas only, never user funds
+# private_key = { env = "SCAAS_RELAYER_KEY_9000" }   # alternative: one raw key = one lane
+finality = { mode = "depth", depth = 1, quorum = 1 }
+# dex = "0x..."                                  # OrderBookDex ("order_book_dex" in smartcontracts/evm/deployments/9000.json)
+# fee_recipient = "0x..."                        # cold wallet for fees of gateway meta-txs that leave feeRecipient
+                                                 # unbound (R84); never a lane key. Unset: the fee goes to the sending lane.
+poll_ms = 1000
+stuck_after_secs = 60
+max_gas_per_tx = 3000000
+max_fee_cap_gwei = 500
+max_index_lag = 100                              # /readyz fails when final head - indexed > this
+# Gas circuit breakers (R55), per lane; they pause NEW work only, signed txs are still tracked/replaced.
+# Amounts in the gas coin's smallest unit (wei); strings for values above 2^63.
+breaker = { spike_ratio = 3.0, gas_budget_per_hour = "50000000000000000", min_relayer_balance = "100000000000000000" }
+
+# ---- Other network families (R58): one [[chains]] each; delete the ones you do not run. ----
+# They run the generic lane runner (one tx in flight per lane, `signed` journaled in Odoo before sending,
+# in-flight jobs re-checked on restart). `network` makes the key `family:network`, which must equal
+# Odoo's blockchain.chain.chain_key. Lane addresses to fund: `scaas-node addresses --config node.toml`.
+
+[[chains]]                                       # Hedera: HSCS through a JSON-RPC relay; nonce lanes like EVM
+family = "hedera"
+evm_chain_number = 296                           # 295 mainnet, 296 testnet, 297 previewnet, 298 local node
+rpc_urls = ["https://testnet.hashio.io/api"]
+lanes = [0, 1]                                   # ECDSA accounts (HIP-583 alias): fund each lane address
+finality = { mode = "instant", quorum = 1 }      # aBFT: a record file is final
+max_gas_per_tx = 3000000
+max_fee_cap_gwei = 2000                         # fixed fee schedule: testnet eth_gasPrice ~870 gwei-equivalent
+
+[[chains]]                                       # Cosmos SDK + CosmWasm
+family = "cosmos"
+network = "scaas-1"                             # the chain-id: every signature is bound to it
+rpc_urls = ["http://cosmos:26657"]               # CometBFT RPC
+lanes = [0, 1]
+finality = { mode = "instant", quorum = 1 }      # CometBFT: a committed block is final
+max_gas_per_tx = 3000000
+# rest = REST gateway (LCD); prefix = bech32 prefix; gas_price in denom per gas unit (> 0, or zero_fee = true
+# on a zero-fee devnet only).
+params = { rest = "http://cosmos:1317", prefix = "wasm", denom = "ustake", gas_price = "0.025", zero_fee = false }
+
+[[chains]]                                       # Stellar Soroban
+family = "soroban"
+network = "testnet"
+rpc_urls = ["https://soroban-testnet.stellar.org"]
+lanes = [0, 1]
+finality = { mode = "instant", quorum = 1 }      # SCP: a closed ledger is final
+# fee_bump_lane = i: lane i's account pays every lane's fee (CAP-15 fee bump); base_fee in stroops.
+params = { network_passphrase = "Test SDF Network ; September 2015", base_fee = 100 }
+
+[[chains]]                                       # Pi Network: Soroban family, Stellar-compatible
+family = "soroban"
+network = "pi-testnet"                           # Odoo network_key; mainnet: "pi-mainnet"
+rpc_urls = ["http://pi-soroban-rpc:8000"]        # your Pi Soroban RPC
+lanes = [0, 1]
+coin_type = 314159                               # lanes m/44'/314159'/i' (SLIP-44 Pi), not Stellar's 148
+finality = { mode = "instant", quorum = 1 }
+# Passphrases are owner-provided — confirm at deploy: testnet "Pi Testnet", mainnet "Pi Network".
+params = { network_passphrase = "Pi Testnet", base_fee = 100 }
+
+[[chains]]                                       # Sui
+family = "sui"
+network = "testnet"
+rpc_urls = ["https://fullnode.testnet.sui.io:443"]
+lanes = [0, 1]
+finality = { mode = "instant", quorum = 1 }      # a certified checkpoint is final
+# package: the scaas package id (after an upgrade: the NEW id, and type_package = the ORIGINAL id that event
+# types keep). lane_journal (required): a directory that survives restarts; the last signed tx of each lane
+# is kept there and re-sent on start-up so its gas coin is never equivocated.
+params = { package = "0x<package id>", lane_journal = "/var/lib/scaas/sui-journal", max_gas_budget = 50000000 }
+
+[[chains]]                                       # TON (TON Center v3 API)
+family = "ton"
+network = "testnet"
+rpc_urls = ["https://testnet.toncenter.com"]
+lanes = [0, 1]                                   # W5 wallets: fund each lane address
+finality = { mode = "depth", depth = 0, quorum = 1 }
+# global_id: -239 mainnet, -3 testnet (the MetaOp domain); attach/forward in nanoton; api_key_env names the env
+# var holding the TON Center key (the key itself never goes here).
+params = { global_id = -3, attach_nanoton = 150000000, forward_nanoton = 0, api_key_env = "SCAAS_TONCENTER_API_KEY" }
+
+[[chains]]                                       # Solana (scaas Anchor program)
+family = "solana"
+network = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d"  # the cluster's genesis hash (mainnet-beta here)
+rpc_urls = ["https://api.mainnet-beta.solana.com"]  # needs transaction history (getSignaturesForAddress)
+lanes = [0, 1]                                   # ed25519 m/44'/501'/i'/0': fund each lane address; each lane
+                                                 # creates its durable nonce account on first use
+finality = { mode = "tag", quorum = 1 }          # commitment `finalized`
+# program_id: YOUR scaas deployment (smartcontracts/solana/scripts/deploy.sh — the test id is refused on public clusters);
+# max_cu caps the compute-unit limit, max_priority_lamports the total priority fee per tx (v1 header),
+# max_loaded_bytes the loaded-account-data limit.
+params = { program_id = "<your program id>", max_cu = 600000, max_priority_lamports = 2000000 }
+
+[[chains]]                                       # Aptos
+family = "aptos"
+network = "2"                                    # the chain id: 1 mainnet, 2 testnet, 4 localnet
+rpc_urls = ["https://fullnode.testnet.aptoslabs.com/v1"]
+lanes = [0, 1]                                   # ed25519 accounts: fund each lane address with APT
+finality = { mode = "instant", quorum = 1 }      # AptosBFT: a committed block is final
+# package: the scaas package (object code deployment). indexer_url: Aptos Indexer API (GraphQL) — events are
+# hinted there and re-read from the full node; the cursor never passes what its user_transaction_processor has
+# processed. indexer_api_key_env names the env var holding an API key (optional). tx_ttl_s caps a lane tx's life.
+params = { package = "0x<package address>", indexer_url = "https://api.testnet.aptoslabs.com/v1/graphql", tx_ttl_s = 600, max_gas_amount = 200000 }

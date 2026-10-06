@@ -17,7 +17,7 @@ const NOW: u64 = 1_800_000_000;
 /// Vector chéo (Python `test_fam_soroban`, adapter Rust): pay(FROM, TO, 12345, 0x11×32, 1_800_000_300),
 /// nonce 42, hạn ledger 1000.
 pub const VEC_PREIMAGE_SHA256: &str = "0a2127bfdc94f6062f0ec27f6db966ae719dafaca90bc537666eab606b901103";
-pub const VEC_DIGEST: &str = "f139c7370f61e89454576f261dadca37127da46a9b9bc8ce650d6e47485f96ad";
+pub const VEC_DIGEST: &str = "0bb4e9123b86f99303e03cfd8aacb1eecd3b8ccb10d572907e1228a715369b00";
 
 fn sha256(b: &[u8]) -> [u8; 32] {
     let env = Env::default();
@@ -36,7 +36,7 @@ fn setup() -> (Env, TokenClient<'static>, Address) {
     let id = env.register_at(
         &Address::from_str(&env, CONTRACT),
         Token,
-        (admin.clone(), 7u32, String::from_str(&env, "Bamboo"), String::from_str(&env, "BMB")),
+        (admin.clone(), 7u32, String::from_str(&env, "SCaaS"), String::from_str(&env, "BMB")),
     );
     (env.clone(), TokenClient::new(&env, &id), admin)
 }

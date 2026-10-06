@@ -64,7 +64,7 @@ contract MetaTokenTest is Fixtures {
 
     function test_domainIsImplementationNameAndCloneAddress() public view {
         (, string memory n, string memory v, uint256 cid, address vc,,) = tok.eip712Domain();
-        assertEq(n, "Bamboo MetaToken");
+        assertEq(n, "SCaaS MetaToken");
         assertEq(v, "1");
         assertEq(cid, block.chainid);
         assertEq(vc, address(tok));

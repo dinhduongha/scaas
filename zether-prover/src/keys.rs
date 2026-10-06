@@ -1,7 +1,7 @@
 //! R33: the Zether conf key `x` comes from the subject's BIP-39 seed on its own tree.
 //!
 //! * BLS12-381: EIP-2333 exactly, path `m/12381/<coin>/<account>/<use>`.
-//! * bn254: the same EIP-2333 construction with bn254's `r` and salt `"BAMBOO-ZETHER-BN254-v1"`,
+//! * bn254: the same EIP-2333 construction with bn254's `r` and salt `"SCAAS-ZETHER-BN254-v1"`,
 //!   path `m/254/<coin>/<account>/<use>`.
 //!
 //! `<use> = 7` is the Zether conf key, `8` is reserved for disclosure/viewing keys. Neither tree

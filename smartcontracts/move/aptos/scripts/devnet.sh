@@ -2,14 +2,14 @@
 # Localnet Aptos cho e2e của S11 (cổng 32010–32019, spec §9):
 #   REST 32010 · faucet 32011 · ready 32012 · txn stream 32013 · postgres 32014 · Indexer API (Hasura) 32015
 #   devnet.sh up        — `aptos node run-localnet --with-indexer-api` (Docker: postgres + hasura), chờ ready
-#   devnet.sh publish   — tạo profile deployer (faucet), `deploy-object` package bamboo + một bản SAO, publish testfa
+#   devnet.sh publish   — tạo profile deployer (faucet), `deploy-object` package scaas + một bản SAO, publish testfa
 #   devnet.sh down      — dừng localnet và container của nó
-# Thư mục trạng thái: $APTOS_LOCALNET_DIR (mặc định /tmp/bamboo-aptos-localnet). Địa chỉ ghi vào đó:
-#   package.txt (bamboo), copy.txt (bản sao phát event giả — L2), deployer.txt (testfa = deployer).
+# Thư mục trạng thái: $APTOS_LOCALNET_DIR (mặc định /tmp/scaas-aptos-localnet). Địa chỉ ghi vào đó:
+#   package.txt (scaas), copy.txt (bản sao phát event giả — L2), deployer.txt (testfa = deployer).
 # Chạy dưới `capped` cùng với e2e (một việc nặng mỗi lúc); `pgrep -f run-localnet` rỗng sau `down`.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DIR="${APTOS_LOCALNET_DIR:-/tmp/bamboo-aptos-localnet}"
+DIR="${APTOS_LOCALNET_DIR:-/tmp/scaas-aptos-localnet}"
 REST=32010 FAUCET=32011 READY=32012 STREAM=32013 PG=32014 GQL=32015
 CFG="$DIR/cli"   # thư mục .aptos/config.yaml của deployer
 
@@ -42,7 +42,7 @@ publish() {
     'import json,sys; print(json.load(sys.stdin)["Result"]["deployer"]["account"])')"
   echo "$deployer" > "$DIR/deployer.txt"
   deploy() {
-    ( cd "$CFG" && aptos move deploy-object --package-dir "$HERE" --address-name bamboo --profile deployer --included-artifacts none \
+    ( cd "$CFG" && aptos move deploy-object --package-dir "$HERE" --address-name scaas --profile deployer --included-artifacts none \
         --assume-yes --skip-fetch-latest-git-deps 2>&1 ) | tee -a "$DIR/deploy.log" \
       | python3 -c 'import re,sys; t=sys.stdin.read(); m=re.findall(r"Code was successfully deployed to object address (0x[0-9a-fA-F]+)", t); print(m[-1] if m else "")'
   }
@@ -54,7 +54,7 @@ publish() {
   ( cd "$CFG" && aptos move publish --package-dir "$HERE/testfa" --named-addresses "testfa=$deployer" \
       --profile deployer --assume-yes --skip-fetch-latest-git-deps > "$DIR/testfa.log" 2>&1 ) \
     || { tail -40 "$DIR/testfa.log"; exit 1; }
-  echo "bamboo $pkg, copy $copy, testfa $deployer"
+  echo "scaas $pkg, copy $copy, testfa $deployer"
 }
 
 down() {

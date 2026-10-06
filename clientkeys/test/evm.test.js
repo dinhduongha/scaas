@@ -39,10 +39,10 @@ test('OwnerCall typed data (as Odoo issues it) hashes to the digest pinned in Su
       OwnerCall: [{ name: 'data', type: 'bytes' }, { name: 'nonce', type: 'uint256' }, { name: 'validUntil', type: 'uint256' }],
     },
     primaryType: 'OwnerCall',
-    domain: { name: 'Bamboo SubjectAccount', version: '1', chainId: 31337, verifyingContract: '0x' + '00'.repeat(18) + 'acc0' },
+    domain: { name: 'SCaaS SubjectAccount', version: '1', chainId: 31337, verifyingContract: '0x' + '00'.repeat(18) + 'acc0' },
     message: { data: '0x1234', nonce: '3', validUntil: '1800000000' },
   };
-  assert.equal(hex(hashTypedData(td)), '0x24bb1dae4c38217e81cff2a57e2c7b461830c462e83cf6184e0d4714cf625610');
+  assert.equal(hex(hashTypedData(td)), '0xcb4f8a0d408df2dc182b5e27404206cffebb38f25930b952979fb368425931e6');
 });
 
 test('passkey keyId = keccak(abi.encode(SubjectKey)) as cast computes it', async () => {
@@ -99,7 +99,7 @@ function odooOwnerCall(data, { account = ACCOUNT, chainId = 31337, nonce = '2', 
       OwnerCall: [{ name: 'data', type: 'bytes' }, { name: 'nonce', type: 'uint256' }, { name: 'validUntil', type: 'uint256' }],
     },
     primaryType: 'OwnerCall',
-    domain: { name: 'Bamboo SubjectAccount', version: '1', chainId, verifyingContract: account },
+    domain: { name: 'SCaaS SubjectAccount', version: '1', chainId, verifyingContract: account },
     message: { data: hex(data), nonce, validUntil },
   };
 }
@@ -151,7 +151,7 @@ function odooPayment(over = {}, dom = {}) {
         .map((s) => ({ name: s.split(':')[0], type: s.split(':')[1] })),
     },
     primaryType: 'MetaTransaction',
-    domain: { name: 'Bamboo MetaToken', version: '1', chainId: 31337, verifyingContract: k.verifying_contract, ...dom },
+    domain: { name: 'SCaaS MetaToken', version: '1', chainId: 31337, verifyingContract: k.verifying_contract, ...dom },
     message: { from: ACCOUNT, to: '0x' + '5e'.repeat(20), value: '125000500000', data: hex(concatPay()), batch: '7',
       nonce: '0', validUntil: String(NOW + 300), mode: 1, relayer: '0x' + '02'.repeat(20), fee: '0',
       feeRecipient: '0x' + '00'.repeat(20), ...over },
@@ -186,8 +186,8 @@ test('payment: the client signs only a pay of the amount it showed, from its own
   assert.throws(() => checkPayment(td, { ...intent, amount: 1e21 }), /Refusing to sign/);
 });
 
-const KEY_PROOF_ZERO = '0x4c47a35cb6c611715f86338dd30067da995a2494c78f51b492d63dfab5406be7';
+const KEY_PROOF_ZERO = '0xfa7987471ecf88572865d4f53880fda17e67fadcae78beb98eb39504833f66de';
 
-test('key proof message = keccak256("bamboo-subject-key-proof-v1" ‖ challenge) (pinned with Odoo)', () => {
+test('key proof message = keccak256("scaas-subject-key-proof-v1" ‖ challenge) (pinned with Odoo)', () => {
   assert.equal(hex(keyProofMessage(new Uint8Array(32))), KEY_PROOF_ZERO);
 });

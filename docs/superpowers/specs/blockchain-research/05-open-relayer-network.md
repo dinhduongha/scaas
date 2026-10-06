@@ -290,7 +290,7 @@ hợp phải sửa.
 1. **`/claim` không có auth.** Bất kỳ ai cũng claim được mọi intent và không bao giờ relay → khoá
    toàn bộ lottery trong `W` giây, miễn phí, lặp lại vô hạn. Reputation chỉ phạt *sau khi* có danh
    tính; danh tính vô danh thì miễn phí. **Fix:** `claim` yêu cầu header
-   `X-Relayer-Sig: <secp256k1 sig>` trên `keccak256("bamboo-claim/1" ‖ intent_id ‖ hub_id ‖ ts)`,
+   `X-Relayer-Sig: <secp256k1 sig>` trên `keccak256("scaas-claim/1" ‖ intent_id ‖ hub_id ‖ ts)`,
    `|now - ts| <= 30 s`, và địa chỉ recover ra phải có trong `blockchain.relayer.address`
    với `allowlist_state in ('probation','allowed')`. Relayer chưa đăng ký **vẫn relay được** — chỉ là
    không claim được, tức phải đợi hết `W`. Đó là một động cơ đăng ký đúng mực.
@@ -396,7 +396,7 @@ Thiếu (2), hai bản sẽ lệch trong vài tháng mà không ai biết cho t�
 
 ```json
 {
-  "spec": "bamboo-intent/1.1",
+  "spec": "scaas-intent/1.1",
   "intent_id": "0x9f3c…",
   "chain_id": 100,
   "chain_profile": "public",
@@ -424,7 +424,7 @@ Thiếu (2), hai bản sẽ lệch trong vài tháng mà không ai biết cho t�
   "hop_count": 0,
   "published_at": 1756500012,
   "bus_seq": 8814023,
-  "hub": { "id": "hub.bamboo.vn", "sig": "0x…" }
+  "hub": { "id": "hub.scaas.vn", "sig": "0x…" }
 }
 ```
 
@@ -449,7 +449,7 @@ Bốn bổ sung, và tại sao từng cái là bắt buộc chứ không phải 
 
 ```
 hub_sig_payload = keccak256(
-    "bamboo-hub/1" ‖ hub_id ‖ intent_id ‖ uint64(published_at)
+    "scaas-hub/1" ‖ hub_id ‖ intent_id ‖ uint64(published_at)
                    ‖ uint64(beacon.block) ‖ beacon.hash
                    ‖ address(exclusive.relayer_id) ‖ uint64(exclusive.until))
 ```
@@ -470,7 +470,7 @@ Quy tắc versioning (ghi vào `/intents/v1/policy`):
 | Loại thay đổi | Hành động |
 |---|---|
 | Thêm field optional | Minor bump (`1.0` → `1.1`). Receiver **phải ignore field lạ** — không reject. |
-| Đổi ý nghĩa field, xoá field, đổi cách tính `intent_id` | Major bump (`bamboo-intent/2.0`) và **route mới** `/intents/v2/*` + **topic gossipsub mới**. Hai phiên bản chạy song song >= 90 ngày. |
+| Đổi ý nghĩa field, xoá field, đổi cách tính `intent_id` | Major bump (`scaas-intent/2.0`) và **route mới** `/intents/v2/*` + **topic gossipsub mới**. Hai phiên bản chạy song song >= 90 ngày. |
 | Thêm chain | Không bump. Chúng là data, không phải schema. `policy` liệt kê giá trị hợp lệ. |
 
 Node từ chối `spec` có major không biết với `400 UNSUPPORTED_SPEC` và trả về danh sách major mình nói
@@ -1608,8 +1608,8 @@ dạng chữ ký**, không phải về **phạm vi mạng**.
 Deliverable: `relayer-ref/` (ngoài addon, theo quyết định #9) — một Docker image chạy bằng:
 
 ```
-docker run -e RPC_URL=… -e HUB_URL=https://hub.bamboo.vn \
-           -e PRIVATE_KEY_FILE=/run/secrets/k -e MIN_MARGIN=0.30 bamboo/relayer:1
+docker run -e RPC_URL=… -e HUB_URL=https://hub.scaas.vn \
+           -e PRIVATE_KEY_FILE=/run/secrets/k -e MIN_MARGIN=0.30 scaas/relayer:1
 ```
 
 **Sửa so với bản 1:** bản 1 ước "~300–500 dòng TypeScript: poll, simulate, so sánh margin, claim, gửi
@@ -1754,7 +1754,7 @@ năm.
 | Chỗ chưa đủ trong `blockchain.md` | Giải quyết chọn trong section này |
 |---|---|
 | "p2p gossip / mempool" không được định nghĩa | **Mesh libp2p + gossipsub v1.1** (`_USER-DECISIONS.md` §6), với gateway HTTP làm lớp bootstrap và làm đường cho client nhẹ. Bản 2 loại p2p; bản 3 lật lại, xem §5.1 |
-| Không có định dạng thông điệp, không có versioning | `bamboo-intent/1.1`; `intent_id` = EIP-712 digest = `digest_hash`; quy tắc major/minor; **spec + conformance vectors dùng chung cho hai bản cài đặt** (§5.2) |
+| Không có định dạng thông điệp, không có versioning | `scaas-intent/1.1`; `intent_id` = EIP-712 digest = `digest_hash`; quy tắc major/minor; **spec + conformance vectors dùng chung cho hai bản cài đặt** (§5.2) |
 | "Relayer quét mempool, chạy estimateGas, khi lợi nhuận dương thì nộp" — bỏ qua nguồn FX | 3 nguồn FX xếp hạng; enterprise token dùng `redemptionRate` **cộng với `redeem()` và `redeemableBalance()`** chứ không phải một con số treo (§5.3.3) |
 | Không nói ai chịu rủi ro khi gas price chạy | Relayer chịu, cửa sổ 5 s; node công bố fee floor **theo (chain, token, require_success)** với công thức đúng đơn vị (§5.3.3) |
 | ZKP verify "180k–250k gas" | Sai 7–15 lần; đó là con số Groth16. Bulletproofs 32/64 = ~1,79 M (§03.3). Báo giá relayer phải đọc `proofSystemId()` (§5.3.2) |

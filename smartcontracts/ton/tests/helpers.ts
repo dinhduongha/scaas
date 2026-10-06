@@ -1,5 +1,5 @@
 // Off-chain builders shared by the tests and by the vector generator: the exact bytes Odoo
-// (dms_blockchain/lib/fam_ton.py) and the relayer (bamboo-node/src/adapters/ton.rs) must produce.
+// (dms_blockchain/lib/fam_ton.py) and the relayer (scaas-node/src/adapters/ton.rs) must produce.
 import { Address, beginCell, Builder, Cell, storeStateInit, StateInit } from '@ton/core';
 import { KeyPair, keyPairFromSeed, sign } from '@ton/crypto';
 import { WalletContractV5R1 } from '@ton/ton';
@@ -7,7 +7,7 @@ import { createHash, createSign, generateKeyPairSync, KeyObject } from 'crypto';
 import { crc32 } from 'zlib';
 
 export const METAOP_SCHEMA =
-    'metaop$_ domain:bits128 network:int32 op:uint8 amount:uint128 nonce:uint64 valid_until:uint64 ' +
+    'metaop$_ domain:bits120 network:int32 op:uint8 amount:uint128 nonce:uint64 valid_until:uint64 ' +
     'contract:MsgAddress parties:^[ from:MsgAddress to:MsgAddress relayer:MsgAddress ] ' +
     'refs:^[ pay_ref:bits256 lane:bits256 extra:bits256 ] = MetaOp;';
 export const SCHEMA_CRC = crc32(Buffer.from(METAOP_SCHEMA)) >>> 0;
@@ -31,7 +31,7 @@ export interface MetaOpFields {
 
 export function metaOpCell(f: MetaOpFields): Cell {
     return beginCell()
-        .storeBuffer(Buffer.from('bamboo.metaop.v1'))
+        .storeBuffer(Buffer.from('scaas.metaop.v1'))
         .storeInt(f.network, 32)
         .storeUint(f.op, 8)
         .storeUint(f.amount, 128)

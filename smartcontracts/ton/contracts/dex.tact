@@ -61,7 +61,7 @@ struct Leg {
     order: Order?;
 }
 
-contract BambooDex(
+contract ScaasDex(
     admin: Address,
     seq: Int as uint64,
     markets: map<Int as uint256, Market>,

@@ -1,5 +1,5 @@
 {
-  "name": "bamboo-solana-vectors",
+  "name": "scaas-solana-vectors",
   "private": true,
   "type": "module",
   "description": "Pins the hand-written Solana bytes (tx v1, offchain message v1) to @solana/kit. Vector generation only.",

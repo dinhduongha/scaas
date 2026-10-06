@@ -1,4 +1,4 @@
-//! TEST ONLY (S12 review I1): một program khác bọc lệnh gọi `bamboo` trong CPI — instruction data chuyển nguyên cho
+//! TEST ONLY (S12 review I1): một program khác bọc lệnh gọi `scaas` trong CPI — instruction data chuyển nguyên cho
 //! `accounts[0]`, kèm `accounts[1..]` giữ nguyên cờ signer/writable. e2e chứng minh indexer vẫn thấy event của
 //! `relay_pay` khi nó không phải instruction cấp tx. Chỉ nạp trên validator e2e (`--bpf-program`), không deploy.
 use anchor_lang::solana_program::account_info::AccountInfo;

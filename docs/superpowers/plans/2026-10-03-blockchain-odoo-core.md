@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Two optional addons — `dms_blockchain` (chains, tokens, signed meta-tx, relay outbox, finalized chain events, payment requests, service RPC for `bamboo-node`) and `dms_blockchain_payment` (`payment.provider` code `chain` wired to the payment gate).
+**Goal:** Two optional addons — `dms_blockchain` (chains, tokens, signed meta-tx, relay outbox, finalized chain events, payment requests, service RPC for `scaas-node`) and `dms_blockchain_payment` (`payment.provider` code `chain` wired to the payment gate).
 
-**Architecture:** Odoo is the control plane: it never holds key material and never calls a chain. It writes one outbox row (`blockchain.relay.job`) in the same transaction as the business change; `bamboo-node` drains it over `/json/2` and reports back; only finalized events (`chain_event_ingest`) can move a payment to `done`.
+**Architecture:** Odoo is the control plane: it never holds key material and never calls a chain. It writes one outbox row (`blockchain.relay.job`) in the same transaction as the business change; `scaas-node` drains it over `/json/2` and reports back; only finalized events (`chain_event_ingest`) can move a payment to `done`.
 
 **Tech Stack:** Odoo 19 Community, Python 3.12, no third-party Python dependency (keccak-256 and secp256k1 are pure Python in `dms_blockchain/lib`).
 
@@ -19,7 +19,7 @@
 - Public RPC methods: name without `_`, no `@api.private`, explicit group check first; logic in a `_private` method; never accept `company_id`/`allowed_company_ids` from a client (CLAUDE.md §6).
 - `dms_blockchain` depends only on `base`, `mail`; `dms_blockchain_payment` on `dms_blockchain`, `payment`. Neither is a dependency of `bamboo_dms` or `dms_portal`.
 - `MODE_KNOWN_MASK = 0xF3`, `MODE_RESTRICT_RELAYER = 0x01`, `MODE_RESTRICT_FEE_RECIPIENT = 0x02`, fee nibble `0x00/0x10/0x20` — copied from `MetaTxLib.sol`.
-- `OP_PAY = keccak256("pay(bytes32)")[:4]`; lane `batch = int(keccak256(b"bamboo.pay.lane" + entry_ref))`; nonce always 0; EIP-712 domain name `"Bamboo MetaToken"` version `"1"`.
+- `OP_PAY = keccak256("pay(bytes32)")[:4]`; lane `batch = int(keccak256(b"scaas.pay.lane" + entry_ref))`; nonce always 0; EIP-712 domain name `"SCaaS MetaToken"` version `"1"`.
 - Tests run on DB `dms_test_chain`, HTTP port 8920, worktree addons path first (see "Running the Odoo tests" below). Never `dms_test`/`odoo19`, never port 8899, never two runs at once.
 
 ## Running the Odoo tests
@@ -179,7 +179,7 @@ class TestEip712(BaseCase):
         self.assertEqual(eip712.pay_data(ref), eip712.OP_PAY + ref)
         self.assertEqual(eip712.OP_PAY, keccak256(b'pay(bytes32)')[:4])
         self.assertEqual(eip712.lane_batch(ref),
-                         int.from_bytes(keccak256(b'bamboo.pay.lane' + ref), 'big'))
+                         int.from_bytes(keccak256(b'scaas.pay.lane' + ref), 'big'))
 
     def test_address_normalisation(self):
         self.assertEqual(eip712.norm_address('0xABCDEF0000000000000000000000000000000001'),
@@ -234,13 +234,13 @@ Expected: `ImportError`/`ModuleNotFoundError` for `..lib.eip712` (or 'dms_blockc
 
 ```python
 {
-    'name': 'Bamboo Blockchain - Control Plane',
+    'name': 'SCaaS Blockchain - Control Plane',
     'version': '19.0.1.0.0',
     'license': 'LGPL-3',
     'category': 'Accounting/Payment',
     'summary': 'Chains, tokens, signed meta-transactions, relay outbox, finalized chain events',
     'description': """
-        Odoo is the control plane of bamboo-node: it decides, writes an outbox
+        Odoo is the control plane of scaas-node: it decides, writes an outbox
         row, and reads finalized results. It holds no key and calls no chain.
         Optional: bamboo_dms installs and runs without it.
     """,
@@ -497,7 +497,7 @@ def pay_data(entry_ref):
 
 
 def lane_batch(entry_ref):
-    return int.from_bytes(keccak256(b'bamboo.pay.lane' + entry_ref), 'big')
+    return int.from_bytes(keccak256(b'scaas.pay.lane' + entry_ref), 'big')
 ```
 
 `dms_blockchain/lib/__init__.py`: empty docstring only. `dms_blockchain/tests/__init__.py`: `from . import test_eip712`.
@@ -548,7 +548,7 @@ class ChainCase(TransactionCase):
             'name': 'Test 9001', 'evm_chain_number': 9001, 'state': 'active'})
         cls.usd = cls.env.ref('base.USD')
         cls.token = cls.env['blockchain.token'].create({
-            'chain_id': cls.chain.id, 'address': '0x' + 'CD' * 20, 'name': 'Bamboo USD',
+            'chain_id': cls.chain.id, 'address': '0x' + 'CD' * 20, 'name': 'SCaaS USD',
             'symbol': 'bUSD', 'decimals': 6, 'currency_id': cls.usd.id})
         Users = cls.env['res.users'].with_context(no_reset_password=True)
         cls.relay_user = Users.create({
@@ -767,7 +767,7 @@ class BlockchainToken(models.Model):
     name = fields.Char(required=True)
     symbol = fields.Char(required=True)
     decimals = fields.Integer(required=True)
-    domain_name = fields.Char(required=True, default='Bamboo MetaToken')
+    domain_name = fields.Char(required=True, default='SCaaS MetaToken')
     domain_version = fields.Char(required=True, default='1')
     currency_id = fields.Many2one(
         'res.currency', required=True,
@@ -2311,7 +2311,7 @@ Expected: error — module `dms_blockchain_payment` not found.
 
 ```python
 {
-    'name': 'Bamboo Blockchain - Payment Provider',
+    'name': 'SCaaS Blockchain - Payment Provider',
     'version': '19.0.1.0.0',
     'license': 'LGPL-3',
     'category': 'Accounting/Payment Providers',

@@ -4,7 +4,7 @@
 /// Mỗi cặp là MỘT `Market` (named object derived từ `Dex` theo cặp — L8): settle/huỷ/`min_nonce` của market này không
 /// chạm state của market khác. Lệch so với EVM: entry function không nhận struct ⇒ lệnh đi dạng BCS và một cặp mỗi tx
 /// (lô = nhiều tx trên nhiều lane, nguyên tử từng cặp); không phí relayer; IOC đóng phần còn lại trong `settle`.
-module bamboo::dex {
+module scaas::dex {
     use std::bcs;
     use std::hash::sha3_256;
     use std::signer;
@@ -16,11 +16,11 @@ module bamboo::dex {
     use aptos_framework::object::{Self, ExtendRef};
     use aptos_framework::primary_fungible_store;
     use aptos_framework::timestamp;
-    use bamboo::meta;
+    use scaas::meta;
 
-    const ORDER_DOMAIN: vector<u8> = b"bamboo.order.v1";
-    const CANCEL_DOMAIN: vector<u8> = b"bamboo.cancel.v1";
-    const NONCES_DOMAIN: vector<u8> = b"bamboo.nonces.v1";
+    const ORDER_DOMAIN: vector<u8> = b"scaas.order.v1";
+    const CANCEL_DOMAIN: vector<u8> = b"scaas.cancel.v1";
+    const NONCES_DOMAIN: vector<u8> = b"scaas.nonces.v1";
     const FOK: u8 = 1;
     const IOC: u8 = 2;
     const MAX_FEE_PPM: u32 = 10_000;
@@ -79,7 +79,7 @@ module bamboo::dex {
         extend: ExtendRef,
     }
 
-    /// Lệnh ký (BCS). Hash = `sha3_256(bcs(Order))`, ký qua phong bì với nhãn `bamboo.order.v1` (hoặc challenge
+    /// Lệnh ký (BCS). Hash = `sha3_256(bcs(Order))`, ký qua phong bì với nhãn `scaas.order.v1` (hoặc challenge
     /// passkey = hash).
     struct Order has copy, drop {
         domain: vector<u8>,

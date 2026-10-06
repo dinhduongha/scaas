@@ -1,13 +1,13 @@
 {
-  "name": "@bamboo/clientkeys",
+  "name": "@scaas/clientkeys",
   "version": "1.0.0",
   "private": true,
-  "description": "Client-side keys for Bamboo chain payments: passkey (WebAuthn) and BIP-39 seed wallet. Secrets never leave the device.",
+  "description": "Client-side keys for SCaaS chain payments: passkey (WebAuthn) and BIP-39 seed wallet. Secrets never leave the device.",
   "license": "LGPL-3.0",
   "type": "module",
   "scripts": {
     "test": "node --test test/",
-    "build": "esbuild src/passkey-signer.js src/seed-signer.js src/zether-keys.js --bundle --splitting --format=esm --minify --target=es2022 --legal-comments=eof --outdir=../dms_blockchain_bridge/static/lib/clientkeys --chunk-names=chunk-[hash]",
+    "build": "esbuild src/passkey-signer.js src/seed-signer.js src/zether-keys.js --bundle --splitting --format=esm --minify --target=es2022 --legal-comments=eof --outdir=../../dms_blockchain_bridge/static/lib/clientkeys --chunk-names=chunk-[hash]",
     "vector": "node scripts/webauthn-vector.mjs"
   },
   "dependencies": {

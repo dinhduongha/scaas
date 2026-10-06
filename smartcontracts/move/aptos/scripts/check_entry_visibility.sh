@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Review M3: mọi entry được relay của bamboo phải là `package entry` (chỉ tx gọi thẳng; không script/module khác gói
+# Review M3: mọi entry được relay của scaas phải là `package entry` (chỉ tx gọi thẳng; không script/module khác gói
 # lại). `wrapcheck/` gói từng hàm ⇒ biên dịch PHẢI lỗi và lỗi phải nêu đủ từng hàm (và `p256::verify_with` — review I1). Chạy dưới `capped`.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

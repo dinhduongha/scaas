@@ -85,7 +85,7 @@ class ChainPortalCase(PortalCatalogCase):
             'name': 'Portal 9002', 'evm_chain_number': 9002, 'state': 'active',
             'public_rpc_url': 'http://localhost:8545'})
         self.token = self.env['blockchain.token'].sudo().create({
-            'chain_id': self.chain.id, 'address': '0x' + 'cd' * 20, 'name': 'Bamboo Local',
+            'chain_id': self.chain.id, 'address': '0x' + 'cd' * 20, 'name': 'SCaaS Local',
             'symbol': 'bLOC', 'decimals': 6, 'currency_id': self.dist.currency_id.id})
         self.provider = self.env.ref('dms_blockchain_payment.payment_provider_chain').sudo().copy({
             'name': 'Chain (dist)', 'company_id': self.dist.id})
@@ -225,7 +225,7 @@ Expected: error — module `dms_blockchain_bridge` not found / methods missing.
 
 ```python
 {
-    'name': 'Bamboo Blockchain - DMS Portal bridge',
+    'name': 'SCaaS Blockchain - DMS Portal bridge',
     'version': '19.0.1.0.0',
     'license': 'LGPL-3',
     'category': 'Accounting/Payment Providers',

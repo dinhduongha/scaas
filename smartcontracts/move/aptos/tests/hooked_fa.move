@@ -1,7 +1,7 @@
 #[test_only]
 /// FA dispatchable (AIP-73) có hook withdraw đếm số lần gọi: chứng minh `primary_fungible_store::transfer` mà
 /// `relay_pay` dùng đi QUA hook của tài sản (spec §3.2, plan Task 2).
-module bamboo::hooked_fa {
+module scaas::hooked_fa {
     use std::features;
     use std::option;
     use std::string;
@@ -14,7 +14,7 @@ module bamboo::hooked_fa {
 
     struct Calls has key { withdraws: u64, mint: MintRef }
 
-    /// Tạo FA `HOOK` (0xcafe, như fixtures::asset) với hook withdraw của module này. `b` = signer của @bamboo.
+    /// Tạo FA `HOOK` (0xcafe, như fixtures::asset) với hook withdraw của module này. `b` = signer của @scaas.
     public fun create(fx: &signer, b: &signer): Object<Metadata> {
         features::change_feature_flags_for_testing(fx, vector[features::get_function_value_dispatch_feature()], vector[]);
         let creator = account::create_signer_for_test(@0xcafe);

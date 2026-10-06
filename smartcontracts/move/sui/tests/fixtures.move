@@ -1,11 +1,11 @@
 /// Bối cảnh chung của mọi test: cùng chuỗi tx ⇒ cùng id object ⇒ vector chữ ký (`vectors.move`,
 /// sinh bởi `scripts/gen_vectors.py`) khớp.
 #[test_only]
-module bamboo::fixtures;
+module scaas::fixtures;
 
-use bamboo::dex::{Self, Dex};
-use bamboo::meta::{Self, Account, AdminCap, Registry, Root};
-use bamboo::vectors as v;
+use scaas::dex::{Self, Dex};
+use scaas::meta::{Self, Account, AdminCap, Registry, Root};
+use scaas::vectors as v;
 use sui::clock::{Self, Clock};
 use sui::coin::{Self, Coin};
 use sui::sui::SUI;

@@ -588,7 +588,7 @@ contract SubjectAccountTest is WebAuthnSoft {
         assertEq(d, OWNER_CALL_PIN);
     }
 
-    bytes32 internal constant OWNER_CALL_PIN = 0x24bb1dae4c38217e81cff2a57e2c7b461830c462e83cf6184e0d4714cf625610;
+    bytes32 internal constant OWNER_CALL_PIN = 0xcb4f8a0d408df2dc182b5e27404206cffebb38f25930b952979fb368425931e6;
 
     // ------------------------------------------------------------------ gas
 

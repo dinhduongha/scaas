@@ -10,7 +10,7 @@
 /// dưới một nửa trần execution gas, để một lệnh DEX khớp hai passkey vừa một tx.
 /// Quy tắc: khoá 65 byte không nén `0x04‖x‖y` nằm trên đường cong; `0 < r < n`, `0 < s ≤ n/2` (low-s — một chữ
 /// ký một dạng); `hash` 32 byte (SHA-256 của thông điệp, rút gọn mod n). Vector: Wycheproof P1363 + WebAuthn thật.
-module bamboo::p256 {
+module scaas::p256 {
     const M128: u256 = 0xffffffffffffffffffffffffffffffff;
 
     const P: u256 = 0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff;

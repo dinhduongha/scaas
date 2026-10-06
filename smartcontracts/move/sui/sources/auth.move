@@ -1,6 +1,6 @@
 /// Chữ ký của chủ thể trên một digest 32 byte (R30/R31). Cờ lược đồ = cờ Sui, nên địa chỉ của
 /// chủ thể = `blake2b256(flag ‖ pk)` giống hệt địa chỉ ví Sui của cùng khoá.
-module bamboo::auth;
+module scaas::auth;
 
 use std::bcs;
 use std::hash::sha2_256;

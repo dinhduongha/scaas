@@ -207,7 +207,7 @@ as a fallback, when `head < cursor`).
   checks `m.op == 4 && next == m.nonce + 1`). A pending revoke would read as "consumed" and stop being resent, so the
   cancel never lands.
 - Solana: `mandate_revoke_signed` uses the mandate *generation* as the nonce, not the lane PDA
-  (`chains/solana/programs/bamboo/src/mandate.rs:208-231`).
+  (`chains/solana/programs/scaas/src/mandate.rs:208-231`).
 
 The S2 fix also applies these checks to Odoo jobs of every op kind, so the damage is not limited to the mesh.
 

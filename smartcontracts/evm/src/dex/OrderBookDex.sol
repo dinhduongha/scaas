@@ -134,7 +134,7 @@ contract OrderBookDex is EIP712, ReentrancyGuardTransient {
     error NonceNotIncreasing();
     error NothingSettled();
 
-    constructor(address admin_) EIP712("Bamboo OrderBookDex", "1") {
+    constructor(address admin_) EIP712("SCaaS OrderBookDex", "1") {
         admin = admin_;
     }
 

@@ -34,7 +34,7 @@ DB `dms_test_chain_4` / 8924, anvil 31940–31949.
   bằng PIN qua scrypt (salt 16 byte, N=2^15, r=8, p=1) **luôn có**, và thêm phong bì PRF khi passkey hỗ trợ.
 - **RS4-9** Khoá Zether conf (R33) dẫn xuất **trong `clientkeys` bằng JS** (`@noble/curves` bn254 + BLS12-381,
   `@noble/hashes` HKDF), không cần wasm của S3 chỉ để đăng ký: EIP-2333 đúng cho BLS12-381
-  (`m/12381/<coin>/<acct>/7`), biến thể bn254 salt `BAMBOO-ZETHER-BN254-v1` (`m/254/…`), `Y`, `UA`, PoP Schnorr
+  (`m/12381/<coin>/<acct>/7`), biến thể bn254 salt `SCAAS-ZETHER-BN254-v1` (`m/254/…`), `Y`, `UA`, PoP Schnorr
   ràng account chủ thể. Khớp từng byte với `zether-prover` (S3): vector `r33_keys.json`, `schnorr_*.json` chép
   nguyên văn vào `clientkeys/test/vectors/` + 4 vector EIP-2333 công bố. Nonce Schnorr hedged
   `sha512(x ‖ msg ‖ CSPRNG) mod r` (khác cách S3 nhưng chỉ cần verify chéo; với `k` cố định thì trùng byte).
@@ -49,7 +49,7 @@ DB `dms_test_chain_4` / 8924, anvil 31940–31949.
   = passkey còn sống của account (server phục vụ, khoá `failed` không tính); thêm passkey trên máy mới thì mở và đối
   chiếu cụm từ phê duyệt TRƯỚC `navigator.credentials.create()`. `InvalidStateError` ⇒ "máy này đã có passkey".
 - **RS4-12** (S4-M1) Khoá đầu tiên đăng ký hai bước: `..._register_start` trả challenge HMAC(`database.secret`;
-  user, đối tác, chain, hạn) — không lưu gì, TTL 600 s; khoá mới ký `keccak256("bamboo-subject-key-proof-v1" ‖
+  user, đối tác, chain, hạn) — không lưu gì, TTL 600 s; khoá mới ký `keccak256("scaas-subject-key-proof-v1" ‖
   challenge)` (tách miền: challenge do server chọn không bao giờ là digest của một thao tác). Passkey: assertion kiểm
   như `_clientDataOk` (bản Python), rpIdHash, UP|UV, chữ ký P-256; khoá seed: `ecrecover`. Origin/rpId lấy từ
   `dms_blockchain_bridge.passkey_origin`, mặc định `web.base.url` — **không** theo host của request. Ngữ nghĩa

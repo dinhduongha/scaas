@@ -1341,7 +1341,7 @@ nó có bẫy định tuyến — gossipsub v1.1 lo phần chống lụt, không
 > **[SỬA §23.8]** Bản đầu của mục này chốt **hai** bản cài đặt song song — A Rust standalone và B Odoo
 > addon. §23.3 gộp tầng daemon thành một binary Rust, và điều đó xoá lý do tồn tại của B. Viết lại.
 
-| | **Node** — `bamboo-node` (Rust) | **Control plane** — addon Odoo |
+| | **Node** — `scaas-node` (Rust) | **Control plane** — addon Odoo |
 |---|---|---|
 | Là gì | tiến trình mạng: gateway, mesh, pool, submit, indexer | ERP quyết định chi tiền và đọc kết quả |
 | Phụ thuộc | **không có Odoo, không có addon** | chạy trong Odoo |
@@ -1354,7 +1354,7 @@ nó có bẫy định tuyến — gossipsub v1.1 lo phần chống lụt, không
 Lý do bản đầu đưa ra cho B — *"một site DMS đã có Odoo, bắt họ vận hành thêm một tiến trình Rust là chi
 phí không đổi lấy gì"* — đúng khi lựa chọn là "thêm bốn daemon hai ngôn ngữ". Sau §23.3 lựa chọn là
 **một binary tĩnh**, và cái giá của việc giữ B thì không hề giảm: hai bản cài đặt của cùng một giao thức
-gossip là đúng chỗ lỗi bất đồng thuận sinh ra (§21.3). Một site DMS chạy `bamboo-node` như chạy bất kỳ
+gossip là đúng chỗ lỗi bất đồng thuận sinh ra (§21.3). Một site DMS chạy `scaas-node` như chạy bất kỳ
 daemon nào khác — nginx, redis, postgres đã có sẵn ở đó rồi.
 
 Điều **không** đổi: mạng vẫn mở thật. Bất kỳ ai cũng chạy được node mà không cần Odoo — đó vẫn là điều
@@ -1751,7 +1751,7 @@ chắc chắn revert — xem §22.8.
 |---|---|---|---|---|
 | **A. RPC gateway** | `POST /v1/intents`, hoặc `call_kw`/`json/2` với bản Odoo | JWT (§CLAUDE.md §6) hoặc API key, hoặc **mở** nếu node muốn | Cao khi có JWT, thấp nhất khi mở | nginx `limit_req` theo IP, **không** trong process (§05.5 tầng 0) |
 | **B. Queue nội bộ** | Bảng outbox trong cùng DB, hoặc Redis stream | Không cần — cùng biên tin cậy | Cao nhất; **bỏ qua L0–L1** | không cần |
-| **C. Mesh** | gossipsub v1.1 topic `bamboo/intent/<caip2>/v1` | Chữ ký peer libp2p + peer score | Trung bình, và **giảm dần theo `hop_count`** | peer scoring của gossipsub, cộng trần intent/giây/peer |
+| **C. Mesh** | gossipsub v1.1 topic `scaas/intent/<caip2>/v1` | Chữ ký peer libp2p + peer score | Trung bình, và **giảm dần theo `hop_count`** | peer scoring của gossipsub, cộng trần intent/giây/peer |
 
 Ba quy tắc cứng:
 
@@ -2084,7 +2084,7 @@ Một relayer nhận một intent **đã ký, đã kèm chứng minh** từ ngư
 Nếu relayer cần `x` thì Zether vô nghĩa: người relay sẽ đọc được mọi số tiền họ chuyển tiếp. Việc relayer
 mù hoàn toàn về nội dung là **tính chất**, không phải hạn chế.
 
-Nên với vai `submit` của `bamboo-node`, khoá duy nhất nó chạm là `authKey` — và cái đó KMS/HSM giữ được
+Nên với vai `submit` của `scaas-node`, khoá duy nhất nó chạm là `authKey` — và cái đó KMS/HSM giữ được
 bình thường. **Cấu hình META-only không có `x` nào tồn tại trong hệ thống.**
 
 #### Vậy vì sao lại cần `x` ở phía server?
@@ -2102,23 +2102,23 @@ bài toán **relay** (§06/§21). Hai luồng khác nhau:
 ```
 Người dùng cuối gửi tiền Zether:
    thiết bị của họ giữ x  ->  dựng proof trên máy họ  ->  intent đã ký
-   ->  bamboo-node [gateway/mesh]  ->  [submit] ký vỏ tx bằng authKey  ->  chain
+   ->  scaas-node [gateway/mesh]  ->  [submit] ký vỏ tx bằng authKey  ->  chain
    (không có x nào ở phía server)
 
 Công ty gửi tiền Zether (treasury payout):
    Odoo quyet dinh chi  ->  outbox
    ->  custody: dung proof bang x cua treasury   <-- CHO NAY, va chi cho nay
-   ->  intent đã ký  ->  bamboo-node [submit]  ->  chain
+   ->  intent đã ký  ->  scaas-node [submit]  ->  chain
 ```
 
-#### Vì sao `x` phải ở một tiến trình riêng, không nằm trong `bamboo-node`
+#### Vì sao `x` phải ở một tiến trình riêng, không nằm trong `scaas-node`
 
 Ba lý do, xếp theo sức nặng:
 
 1. **Nó không thuộc về đó.** `x` của treasury là tài sản của pháp nhân, thuộc luồng custody do Odoo điều
-   khiển. `bamboo-node` là hạ tầng mạng; một node relayer thuần (§21.4 vai "pool thuần") không có `x`
+   khiển. `scaas-node` là hạ tầng mạng; một node relayer thuần (§21.4 vai "pool thuần") không có `x`
    nào cả và vẫn chạy đúng.
-2. **`bamboo-node` parse byte của người lạ.** §14 bắt buộc ba cargo-fuzz target trên parser intent vì
+2. **`scaas-node` parse byte của người lạ.** §14 bắt buộc ba cargo-fuzz target trên parser intent vì
    *một `panic!` là DoS toàn mạng bằng một gói tin 200 byte*. Một lỗi bộ nhớ trong parser mà cùng address
    space với `x` là mất sạch mọi tài khoản mà tiến trình đó phục vụ. Đây là khác biệt giữa "node bị
    crash" và "treasury bị rút cạn".
@@ -2152,9 +2152,9 @@ có Zether thì phần đó không tồn tại.**
 ### 23.3 Quyết định: MỘT codebase, MỘT binary, vai chọn bằng config
 
 ```
-bamboo-node --config node.toml                  # tang relay: gateway/mesh/pool/submit/indexer
-bamboo-node --role=custody --config cust.toml   # tang custody: broker khoa. CUNG binary.
-bamboo-node --role=oracle  --config orac.toml   # trong enclave, CHI khi Zether bat
+scaas-node --config node.toml                  # tang relay: gateway/mesh/pool/submit/indexer
+scaas-node --role=custody --config cust.toml   # tang custody: broker khoa. CUNG binary.
+scaas-node --role=oracle  --config orac.toml   # trong enclave, CHI khi Zether bat
 ```
 
 Bốn "dịch vụ" cũ của tầng daemon trở thành **năm mô-đun trong một binary**, nối vào đúng ba trục
@@ -2183,9 +2183,9 @@ config chỉ có tập mô-đun cộng ma trận `chains:`. Không có `--preset
 
 Một binary, không phải một tiến trình bắt buộc. Ba làn triển khai:
 
-1. **Làn relay** — `bamboo-node`. Nói chuyện với chuỗi, parse byte của người lạ, **không giữ vật liệu
+1. **Làn relay** — `scaas-node`. Nói chuyện với chuỗi, parse byte của người lạ, **không giữ vật liệu
    khoá nào**. Muốn ký vỏ tx thì *hỏi* làn custody.
-2. **Làn custody** — `bamboo-node --role=custody`. Giữ/môi giới khoá. NHÓM A đẩy xuống KMS/HSM/MPC.
+2. **Làn custody** — `scaas-node --role=custody`. Giữ/môi giới khoá. NHÓM A đẩy xuống KMS/HSM/MPC.
    Với cấu hình META-only, làn này mỏng: một lớp bọc quanh KMS cộng cache idempotency.
 3. **Làn oracle** — chỉ tồn tại khi Zether bật, chạy trong enclave, giao diện hai hàm qua vsock.
 
@@ -2220,7 +2220,7 @@ Ranh giới phải được dựng lại bằng thứ khác, và có sẵn thứ
 
 | Bất biến §12.0.2 | Trước: ranh giới tiến trình | Sau: ranh giới gì |
 |---|---|---|
-| Indexer chỉ ghi 3 bảng của nó | tiến trình riêng | **DB role riêng**. Vai `indexer` mở connection bằng `bamboo_indexer` với `GRANT` hẹp; vai `submit` dùng connection khác. Cùng binary, hai connection pool, hai role. Mạnh hơn ranh giới tiến trình cũ vì nó do Postgres cưỡng chế chứ không do sơ đồ. |
+| Indexer chỉ ghi 3 bảng của nó | tiến trình riêng | **DB role riêng**. Vai `indexer` mở connection bằng `scaas_indexer` với `GRANT` hẹp; vai `submit` dùng connection khác. Cùng binary, hai connection pool, hai role. Mạnh hơn ranh giới tiến trình cũ vì nó do Postgres cưỡng chế chứ không do sơ đồ. |
 | Odoo không giữ vật liệu khoá | tiến trình riêng | không đổi — Odoo vẫn là tiến trình khác, và grep gate CI của §12.0.2 vẫn chạy |
 | Signer không tin body | tiến trình riêng + mTLS | không đổi — signer **vẫn** là tiến trình riêng (§23.5) |
 | Odoo không gọi thẳng chain | outbox trong Postgres | không đổi |
@@ -2268,8 +2268,8 @@ Cái **không** còn là ranh giới tiến trình: `indexer` vs `submit`. Chún
                    |  FOR UPDATE SKIP LOCKED)        | (thao tac treasury)
                    v                                 v
 +----------------------------------------+  +----------------------------------+
-|  LAN RELAY   bamboo-node               |  |  LAN CUSTODY                     |
-|                                        |  |  bamboo-node --role=custody      |
+|  LAN RELAY   scaas-node               |  |  LAN CUSTODY                     |
+|                                        |  |  scaas-node --role=custody      |
 |   [gateway]  RPC cho client            |  |                                  |
 |   [mesh]     libp2p gossipsub          |  |  NHOM A: sign_digest_secp256k1,  |
 |   [pool]     open / private            |  |          sign_raw_tx, attest     |
@@ -2283,7 +2283,7 @@ Cái **không** còn là ranh giới tiến trình: `indexer` vs `submit`. Chún
 |  Khong Redis. Khong Lua.               |                  v
 +----------------------------------------+  +----------------------------------+
                                              |  LAN ORACLE (trong enclave)      |
-                                             |  bamboo-node --role=oracle       |
+                                             |  scaas-node --role=oracle       |
                                              |  ZetherKeyOracle < 300 dong      |
                                              |  Giu x. Ba ham. Khong parser.    |
                                              +----------------------------------+
@@ -2298,7 +2298,7 @@ giao diện đếm được bằng đầu ngón tay.**
 
 | Chết | Ở đâu | Thay bằng |
 |---|---|---|
-| `relay-pool` như một dịch vụ Python | §06 toàn bộ tiêu đề, §08.2b, sơ đồ §12.0.2 | vai `submit` + `pool` trong `bamboo-node` |
+| `relay-pool` như một dịch vụ Python | §06 toàn bộ tiêu đề, §08.2b, sơ đồ §12.0.2 | vai `submit` + `pool` trong `scaas-node` |
 | Redis làm store nonce | §06.1 | bộ nhớ tiến trình + journal Postgres |
 | Lua script nguyên tử | §06.1.4, §06.4.3 (velocity limit) | task sở hữu duy nhất; velocity limit là một transaction Postgres |
 | Fencing token, ownership lease, consistent hash shard, `gen` | §06.1.3–06.1.5 | — (bài toán không còn) |
@@ -2365,7 +2365,7 @@ Hai nghĩa, trả lời cả hai.
 | Hạt nhân `ZetherKeyOracle` (< 300 dòng, cái gì vào enclave) | `07-custody-providers.md` §07.2b | xong |
 | Cấu hình custody theo money flow | `07-custody-providers.md`, model `blockchain.custody.policy` | xong |
 | Đường Odoo gọi tới nó | `10-odoo-addon-design.md` — chỉ giữ `signer_ref`, gọi qua mTLS | xong |
-| Mã nguồn | `bamboo-node/src/roles/oracle.rs` (§23.3) | chưa viết |
+| Mã nguồn | `scaas-node/src/roles/oracle.rs` (§23.3) | chưa viết |
 
 Nói ngắn: **`07-custody-providers.md` là nhà của nó.** `_USER-DECISIONS.md` chỉ ghi quyết định, không
 phải đặc tả — đừng đi tìm chi tiết interface ở đó.

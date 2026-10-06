@@ -13,7 +13,7 @@ Ruling của luồng đánh số `RS5-n` (lead đánh lại số khi merge).
 |---|---|---|
 | Contract | `OrderBookDex` (`src/dex/OrderBookDex.sol`): kiểm hai lệnh EIP-712 (ECDSA/ERC-1271), giới hạn giá, `filled[orderHash]`, khớp một phần, batch nguyên tử từng cặp, `transferFrom` trực tiếp người→người (DEX không giữ tiền), phí DEX theo thị trường (bật/tắt, ppm maker/taker, trần 1 %), phí relayer theo `FeeMode` có sẵn, huỷ on-chain bằng chữ ký | `MetaTxDex` (R3: fill-or-kill, không allowance) **giữ nguyên làm legacy**, không còn route gateway |
 | Token | `MetaToken`: op meta-tx `approve(address spender,uint256)` — spender phải là contract (R26) | — |
-| Node | `bamboo-node/src/dex.rs`: sổ lệnh theo thị trường, ưu tiên giá-thời gian, limit + IOC/FOK, khớp một phần; lưu bền **ở Odoo qua `/json/2`**; settle qua outbox `call` job; watcher event final riêng của DEX | sổ trong bộ nhớ (R16) |
+| Node | `scaas-node/src/dex.rs`: sổ lệnh theo thị trường, ưu tiên giá-thời gian, limit + IOC/FOK, khớp một phần; lưu bền **ở Odoo qua `/json/2`**; settle qua outbox `call` job; watcher event final riêng của DEX | sổ trong bộ nhớ (R16) |
 | Gateway | `/v1/dex/*`: đặt lệnh, huỷ, huỷ-hết, markets, depth, trades, ticker, lệnh của một ví | `POST/GET /v1/dex/orders` kiểu chân meta-tx |
 | Odoo | addon `dms_blockchain_dex`: cấu hình thị trường, sổ/khớp chỉ đọc, hạch toán phí DEX (thu) + phí relayer (chi) qua journal (công ty, token) | — |
 
@@ -23,7 +23,7 @@ Ruling của luồng đánh số `RS5-n` (lead đánh lại số khi merge).
 
 ### 1.1 Lệnh ký (EIP-712)
 
-Domain: `name = "Bamboo OrderBookDex"`, `version = "1"`, `chainId`, `verifyingContract = DEX`. Lệnh ký **trên DEX**,
+Domain: `name = "SCaaS OrderBookDex"`, `version = "1"`, `chainId`, `verifyingContract = DEX`. Lệnh ký **trên DEX**,
 không trên token: một chữ ký cho cả hai token của cặp, ví hiển thị một loại lệnh.
 
 ```
@@ -158,7 +158,7 @@ Solidity tốn hàng trăm nghìn gas (review D11); relayer đã simulate trư�
   `FeePolicy` tính trên `value = 0` (`PERCENT` ra 0, `FIXED` > 0 revert `FeeExceedsCap`) — relayer tài trợ
   approve (một lần mỗi token); test `test_approveOpRelayerFeeIsCappedToZero`. `transferFrom` chỉ do contract gọi — DEX là contract.
 - **R30:** DEX không đọc/ghi `metaNonce` của token. Lệnh dùng `filled`/`minNonce` của DEX; `approve` dùng lane
-  ngẫu nhiên riêng (`keccak("bamboo.dex.approve" ‖ rand)`, nonce 0). Hệ quả kiểm bằng test: lệnh DEX treo/huỷ
+  ngẫu nhiên riêng (`keccak("scaas.dex.approve" ‖ rand)`, nonce 0). Hệ quả kiểm bằng test: lệnh DEX treo/huỷ
   không chặn một `pay`, `pay`/`cancelMetaNonce` không vô hiệu lệnh DEX.
 
 ### 1.8 Bất biến (test)
@@ -207,7 +207,7 @@ Vòng đời trong node:
 
 ---
 
-## 3. Node (`bamboo-node/src/dex.rs`)
+## 3. Node (`scaas-node/src/dex.rs`)
 
 ### 3.1 Thị trường & phía
 

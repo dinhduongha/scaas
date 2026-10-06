@@ -11,7 +11,7 @@ use crate::transcript::hash_to_scalar;
 use crate::ZError;
 
 fn challenge<C: ZCurve>(r: &G<C>, y: &G<C>, msg: &[u8; 32]) -> Fr<C> {
-    let mut b = b"BAMBOO-ZETHER-SCHNORR-V1".to_vec();
+    let mut b = b"SCAAS-ZETHER-SCHNORR-V1".to_vec();
     b.extend(encode_point::<C>(r));
     b.extend(encode_point::<C>(y));
     b.extend_from_slice(msg);
@@ -97,10 +97,10 @@ pub enum OpeningKind {
     Auditor = 2,
 }
 
-/// `entryRef = keccak256(abi.encode(keccak256("BAMBOO-ZETHER-ENTRY-V1"), chainid, token, fromUA, sendCounter))`.
+/// `entryRef = keccak256(abi.encode(keccak256("SCAAS-ZETHER-ENTRY-V1"), chainid, token, fromUA, sendCounter))`.
 pub fn entry_ref(chain_id: u64, token: &[u8; 20], from_ua: &[u8; 32], send_counter: u64) -> [u8; 32] {
     keccak256(
-        &[keccak256(b"BAMBOO-ZETHER-ENTRY-V1"), abi::u256(chain_id), abi::addr(token), *from_ua, abi::u256(send_counter)]
+        &[keccak256(b"SCAAS-ZETHER-ENTRY-V1"), abi::u256(chain_id), abi::addr(token), *from_ua, abi::u256(send_counter)]
             .concat(),
     )
 }
@@ -124,7 +124,7 @@ pub fn open_sender<C: ZCurve>(s: &Fr<C>) -> Vec<u8> {
 
 /// Challenge preimage up to (not including) `A1 ‖ A2`; also the opening nonce's public input.
 fn cp_prefix<C: ZCurve>(e: &Entry<C>, amount: u64, kind: OpeningKind) -> Vec<u8> {
-    let mut b = b"BAMBOO-ZETHER-DISCLOSE-V1".to_vec();
+    let mut b = b"SCAAS-ZETHER-DISCLOSE-V1".to_vec();
     b.extend(abi::u256(e.chain_id));
     b.extend_from_slice(&e.token);
     b.extend_from_slice(&e.entry_ref);

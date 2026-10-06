@@ -1,5 +1,5 @@
 [package]
-name = "bamboo-account"
+name = "scaas-account"
 version = "0.1.0"
 edition = "2021"
 rust-version.workspace = true
@@ -14,8 +14,8 @@ soroban-sdk = { workspace = true }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
-bamboo-token = { path = "../token" }
+scaas-token = { path = "../token" }
 ed25519-dalek = "2"
 p256 = { version = "0.13", features = ["ecdsa"] }
 sha2 = "0.10"
-bamboo-dex = { path = "../dex" }
+scaas-dex = { path = "../dex" }

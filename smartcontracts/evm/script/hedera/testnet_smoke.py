@@ -22,7 +22,7 @@ BAD_SIGNATURE = '0x0bdf5a6b'                                # MetaTxBadSignature
 
 def rpc(method, params):
     req = urllib.request.Request(RELAY, json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': method, 'params': params}).encode(),
-                                 {'content-type': 'application/json', 'user-agent': 'bamboo-smoke'})
+                                 {'content-type': 'application/json', 'user-agent': 'scaas-smoke'})
     try:
         out = json.load(urllib.request.urlopen(req, timeout=60))
     except urllib.error.HTTPError as exc:

@@ -17,7 +17,7 @@
 - No upgrade path anywhere: no proxy other than EIP-1167 clones, no owner, no pause, no sweep.
 - No `CALL` to a foreign contract inside a token's meta-tx path (canon §C8.5).
 - Fee denominator ppm, hard cap 1% (`FeePolicy`, unchanged).
-- EIP-712 domain of every v1 clone: name `"Bamboo MetaToken"`, version `"1"`, `verifyingContract = clone`.
+- EIP-712 domain of every v1 clone: name `"SCaaS MetaToken"`, version `"1"`, `verifyingContract = clone`.
 - Op selectors: `OP_PAY = bytes4(keccak256("pay(bytes32)"))`, `OP_TRADE = bytes4(keccak256("trade(address,uint256,address)"))`.
 - Comments in the style of the surrounding code (Vietnamese prose, English identifiers).
 
@@ -248,7 +248,7 @@ contract MetaTokenTest is Fixtures {
 
     function test_domainIsImplementationNameAndCloneAddress() public view {
         (, string memory n, string memory v, uint256 cid, address vc,,) = tok.eip712Domain();
-        assertEq(n, "Bamboo MetaToken");
+        assertEq(n, "SCaaS MetaToken");
         assertEq(v, "1");
         assertEq(cid, block.chainid);
         assertEq(vc, address(tok));
@@ -355,7 +355,7 @@ contract MetaToken is ERC20MetaTx, IFactoryToken {
     /// @dev Constructor chạy MỘT lần, trên implementation. Immutable của nó đúng cho mọi
     ///      clone; storage của nó thì không — nên khoá luôn implementation để không ai
     ///      `initialize` được chính nó (01-token-factory §1.3.5 mục 1).
-    constructor(address factory_) ERC20("", "") EIP712("Bamboo MetaToken", "1") {
+    constructor(address factory_) ERC20("", "") EIP712("SCaaS MetaToken", "1") {
         FACTORY = factory_;
         _SELF = address(this);
         _initialized = true;
@@ -1614,7 +1614,7 @@ contract MetaTxKatTest is Fixtures {
         uint256 pk = 0xA11CE;
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
             from: vm.addr(pk), to: address(0x5409), value: 250e6,
-            data: _payData(bytes32(uint256(0x42))), batch: uint256(keccak256("bamboo.pay.lane")),
+            data: _payData(bytes32(uint256(0x42))), batch: uint256(keccak256("scaas.pay.lane")),
             nonce: 0, validUntil: 1_800_000_300, mode: MetaTxLib.MODE_RESTRICT_RELAYER,
             relayer: relayer, fee: 0,
             feeRecipient: address(0xFEE)        // flag off -> canonical-zeroed in the hash
@@ -1622,13 +1622,13 @@ contract MetaTxKatTest is Fixtures {
         bytes32 structHash = m.hashStruct();
         bytes32 domainSep = keccak256(abi.encode(
             keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-            keccak256("Bamboo MetaToken"), keccak256("1"), uint256(9000), address(tok)));
+            keccak256("SCaaS MetaToken"), keccak256("1"), uint256(9000), address(tok)));
         bytes32 digest = keccak256(abi.encodePacked(hex"1901", domainSep, structHash));
         assertEq(digest, tok.metaTxDigest(m));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, digest);
 
         string memory k = "kat";
-        vm.serializeString(k, "domain_name", "Bamboo MetaToken");
+        vm.serializeString(k, "domain_name", "SCaaS MetaToken");
         vm.serializeString(k, "domain_version", "1");
         vm.serializeString(k, "chain_id", "9000");
         vm.serializeString(k, "verifying_contract", vm.toString(address(tok)));
@@ -1702,7 +1702,7 @@ contract Deploy is Script {
         address demo;
         if (demoSupply != 0 && registrar == deployer) {
             demo = factory.createMetaToken(1, address(0),
-                abi.encode("Bamboo Demo USD", "bUSD", uint8(6), demoSupply, deployer), bytes32("demo"));
+                abi.encode("SCaaS Demo USD", "bUSD", uint8(6), demoSupply, deployer), bytes32("demo"));
             if (demoHolder != deployer) MetaToken(demo).transfer(demoHolder, demoSupply / 2);
         }
         vm.stopBroadcast();

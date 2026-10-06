@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:executing-plans. Steps use `- [ ]`.
 
 **Goal:** close GA §2.1 blockers #1,#3,#4,#7,#8 and GA §2.2 #4,#6,#7, §2.3 #12,#13,#14.
-**Architecture:** Odoo side in `dms_blockchain` / `dms_blockchain_payment` / bridge; node side in `bamboo-node` (new `admin.rs`, `breaker.rs`, gateway auth); CI workflow.
+**Architecture:** Odoo side in `dms_blockchain` / `dms_blockchain_payment` / bridge; node side in `scaas-node` (new `admin.rs`, `breaker.rs`, gateway auth); CI workflow.
 **Spec:** `docs/superpowers/specs/2026-10-03-blockchain-round3-design.md` §A (rulings R50–R57).
 
 ## Global Constraints

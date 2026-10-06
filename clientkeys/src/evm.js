@@ -129,7 +129,7 @@ const PAY_TYPES = { EIP712Domain: DOMAIN_TYPE, MetaTransaction: ['from:address',
   'feeRecipient:address'].map((s) => ({ name: s.split(':')[0], type: s.split(':')[1] })) };
 export const ADD_KEY_SELECTOR = keccak_256(utf8ToBytes(`addKey(${KEY_TUPLE})`)).subarray(0, 4);
 const OP_PAY = keccak_256(utf8ToBytes('pay(bytes32)')).subarray(0, 4);
-const KEY_PROOF_PREFIX = utf8ToBytes('bamboo-subject-key-proof-v1');
+const KEY_PROOF_PREFIX = utf8ToBytes('scaas-subject-key-proof-v1');
 
 const refuse = (why) => { throw new Error(`Refusing to sign: ${why}.`); };
 const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
@@ -162,7 +162,7 @@ export function addKeyCalldata(key) {
 export function ownerCallTypedData({ account, chainId, data, nonce, validUntil }) {
   return {
     types: OWNER_CALL_TYPES, primaryType: 'OwnerCall',
-    domain: { name: 'Bamboo SubjectAccount', version: '1', chainId: Number(chainId), verifyingContract: account },
+    domain: { name: 'SCaaS SubjectAccount', version: '1', chainId: Number(chainId), verifyingContract: account },
     message: { data: hex(data), nonce: String(nonce), validUntil: String(validUntil) },
   };
 }

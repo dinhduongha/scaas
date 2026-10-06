@@ -26,8 +26,8 @@ contract MandateWalletKatTest is Test {
         bytes memory payCall = abi.encodeCall(
             MandateWallet.payUnderMandate, (TOKEN, PAYEE, 123456789, REF, 1800000300, sig));
         bytes memory revCall = abi.encodeCall(MandateWallet.revokeWithSig, (TOKEN, 1800000300, sig));
-        assertEq(pay, 0xe89e9bc4ea5f6fee32509317f2e846cd1fb578c95e79a03e2309cc92b11ef6a4);
-        assertEq(rev, 0x82ec5bdfb5fe113c73a007f228c53b49a913a10f69e1cbb8f60e40c9712e1c77);
+        assertEq(pay, 0x84a9b08e144c1d8ef32556b3c18daa54c3b80225e969fbea25013fd3c1829714);
+        assertEq(rev, 0x25cddfdc906335b069539b4ab795750c5c973edf32d2df03e5eaac3147bd3678);
         assertEq(keccak256(payCall), 0x9e6b33e38a11bbd8cf6c3ce48e59dd02e13e132ecfb50fcb78398e1b3da83f26);
         assertEq(keccak256(revCall), 0x68dca3e85f0fb2edb37ed5b012b3bef205b259f4eee8d2c967e498613290e0fe);
     }

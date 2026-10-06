@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const committed = fileURLToPath(new URL('../../dms_blockchain_bridge/static/lib/clientkeys/', import.meta.url));
+const committed = fileURLToPath(new URL('../../../dms_blockchain_bridge/static/lib/clientkeys/', import.meta.url));
 
 test('committed bundle == fresh esbuild output', () => {
   const out = mkdtempSync(join(tmpdir(), 'clientkeys-'));

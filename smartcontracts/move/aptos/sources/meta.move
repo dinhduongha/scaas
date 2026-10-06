@@ -3,7 +3,7 @@
 /// của CHÍNH địa chỉ Account (RS11-2): không sổ nội bộ, mọi FA gửi tới đều chi được. Chủ thể chỉ KÝ `MetaOp`; relayer
 /// gửi tx từ lane của nó và tự trả phí. Không sequence của chủ thể, không allowance: tiền chỉ ra qua `relay_pay` (chữ
 /// ký chủ) hoặc signer của Account mà chỉ module cùng package (`mandate`, `dex`) xin được.
-module bamboo::meta {
+module scaas::meta {
     use std::bcs;
     use std::hash::sha3_256;
     use std::option::{Self, Option};
@@ -16,12 +16,12 @@ module bamboo::meta {
     use aptos_framework::object::{Self, ExtendRef, Object, ObjectCore};
     use aptos_framework::primary_fungible_store;
     use aptos_framework::timestamp;
-    use bamboo::auth;
-    use bamboo::p256;
+    use scaas::auth;
+    use scaas::p256;
 
-    const DOMAIN: vector<u8> = b"bamboo.metaop.v1";
-    const KEYOP_DOMAIN: vector<u8> = b"bamboo.keyop.v1";
-    const ROOT_SEED: vector<u8> = b"bamboo.root";
+    const DOMAIN: vector<u8> = b"scaas.metaop.v1";
+    const KEYOP_DOMAIN: vector<u8> = b"scaas.keyop.v1";
+    const ROOT_SEED: vector<u8> = b"scaas.root";
     const OP_PAY: u8 = 0;
     const U64_MAX: u128 = 0xffffffffffffffff;
     /// Vòng đời khoá (round-3 §C): `manage_*`.
@@ -111,7 +111,7 @@ module bamboo::meta {
         extend: ExtendRef,
     }
 
-    /// Payload ký v1 (spec §4.1, 310 byte BCS). `digest = sha3_256(bcs(MetaOp))`.
+    /// Payload ký v1 (spec §4.1, 309 byte BCS). `digest = sha3_256(bcs(MetaOp))`.
     struct MetaOp has copy, drop {
         domain: vector<u8>,
         chain_id: u8,
@@ -185,7 +185,7 @@ module bamboo::meta {
     // ------------------------------------------------------------------ địa chỉ (cùng công thức Odoo/relayer)
 
     #[view]
-    public fun root(): address { object::create_object_address(&@bamboo, ROOT_SEED) }
+    public fun root(): address { object::create_object_address(&@scaas, ROOT_SEED) }
 
     #[view]
     public fun account_of(owner: address): address {
@@ -203,9 +203,9 @@ module bamboo::meta {
     /// publish ở tài khoản thường ⇒ admin = chính địa chỉ đó.
     package fun assert_admin(s: &signer) {
         let a = signer::address_of(s);
-        let ok = if (object::is_object(@bamboo)) {
-            object::is_owner(object::address_to_object<ObjectCore>(@bamboo), a)
-        } else a == @bamboo;
+        let ok = if (object::is_object(@scaas)) {
+            object::is_owner(object::address_to_object<ObjectCore>(@scaas), a)
+        } else a == @scaas;
         assert!(ok, ENOT_ADMIN);
     }
 

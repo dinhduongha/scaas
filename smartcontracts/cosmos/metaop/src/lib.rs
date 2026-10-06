@@ -6,8 +6,8 @@ use ripemd::Ripemd160;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-pub const DOMAIN: &str = "bamboo.metaop.v1";
-pub const PASSKEY_TAG: &[u8] = b"bamboo.passkey.v1";
+pub const DOMAIN: &str = "scaas.metaop.v1";
+pub const PASSKEY_TAG: &[u8] = b"scaas.passkey.v1";
 
 /// Trường theo thứ tự chữ cái ⇒ `to_json_vec` cho ra đúng dạng chính tắc (khoá sắp xếp, không khoảng trắng).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -85,7 +85,7 @@ pub fn secp256k1_account(pk: &[u8]) -> Vec<u8> {
     Ripemd160::digest(sha256(pk)).to_vec()
 }
 
-/// Địa chỉ dẫn xuất của passkey (R9-1): sha256("bamboo.passkey.v1" ‖ pk)[..20].
+/// Địa chỉ dẫn xuất của passkey (R9-1): sha256("scaas.passkey.v1" ‖ pk)[..20].
 pub fn passkey_account(pk: &[u8]) -> Vec<u8> {
     let mut h = Sha256::new();
     h.update(PASSKEY_TAG);

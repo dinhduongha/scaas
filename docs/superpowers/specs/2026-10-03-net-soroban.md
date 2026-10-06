@@ -15,7 +15,7 @@ Payload chủ thể ký (bytes XDR chính xác, Odoo dựng không RPC — R20):
 HashIdPreimage {
   type = ENVELOPE_TYPE_SOROBAN_AUTHORIZATION (9)
   network_id                = sha256(network_passphrase)          -- tách mạng
-  nonce                     = i64(sha256("bamboo.soroban.nonce" ‖ entryRef ‖ validUntil_be64)[0..8])
+  nonce                     = i64(sha256("scaas.soroban.nonce" ‖ entryRef ‖ validUntil_be64)[0..8])
   signature_expiration_ledger = u32 (ước lượng trên, §1.2)
   invocation = { contract_fn: { contract_address = token (C…), function_name = "pay",
                                 args = [Address from, Address to, I128 amount, BytesN<32> pay_ref, U64 valid_until] },
@@ -39,7 +39,7 @@ Host không cho contract biết hash chữ ký, nên contract tự tính **diges
 `MetaTransactionExecuted`:
 
 ```
-digest = sha256( ScVal::Vec[ Symbol("bamboo_metaop_v1"), BytesN<32>(network_id), Address(contract),
+digest = sha256( ScVal::Vec[ Symbol("scaas_metaop_v1"), BytesN<32>(network_id), Address(contract),
                              Symbol(function_name), Vec(args) ].to_xdr() )
 ```
 
@@ -64,9 +64,9 @@ sự cố dài không làm mốc cũ đi kèm giờ mới). Mốc cũ hơn 7 ng�
 | Kiểu `from` | Ai ký | Chữ ký trong auth entry | Odoo kiểm |
 |---|---|---|---|
 | `G…` (ví Freighter, ví seed R32 `m/44'/148'/i'`) | khoá ed25519 của account (host kiểm ngưỡng/signer) | `Vec[Map{public_key: Bytes32, signature: Bytes64}]` (relayer dựng từ 64 byte) | ed25519 thật (`cryptography`) với khoá master trong strkey |
-| `C…` = `bamboo-account` (account chủ thể nhiều khoá — R31/R32) | passkey P-256 WebAuthn hoặc khoá ed25519 từ seed | ScVal `Signature` của account (XDR hex, relayer chèn nguyên văn) | không (`None`) — mô phỏng của node phân xử (R27) |
+| `C…` = `scaas-account` (account chủ thể nhiều khoá — R31/R32) | passkey P-256 WebAuthn hoặc khoá ed25519 từ seed | ScVal `Signature` của account (XDR hex, relayer chèn nguyên văn) | không (`None`) — mô phỏng của node phân xử (R27) |
 
-`bamboo-account.__check_auth(signature_payload, Signature, contexts)`:
+`scaas-account.__check_auth(signature_payload, Signature, contexts)`:
 - `Ed25519{key_id, signature}`: `ed25519_verify(pk, signature_payload, sig)`.
 - `WebAuthn{key_id, authenticator_data, client_data_json, signature(r‖s, low-s), proof}`: challenge =
   `signature_payload` nếu `proof` rỗng, ngược lại gốc Merkle sha256 của lá `sha256(sha256(0x00 ‖ payload))` với cặp
@@ -82,22 +82,22 @@ sự cố dài không làm mốc cũ đi kèm giờ mới). Mốc cũ hơn 7 ng�
 
 ## 3. Contract (`chains/soroban/`, soroban-sdk 25.3.0, Rust 1.90)
 
-- **`bamboo-token`** — SEP-41 (`balance`, `transfer`, `transfer_from`, `approve`, `allowance`, `burn`,
+- **`scaas-token`** — SEP-41 (`balance`, `transfer`, `transfer_from`, `approve`, `allowance`, `burn`,
   `burn_from`, `decimals`, `name`, `symbol`) + `mint` (admin) + `pay(from, to, amount, pay_ref, valid_until)`:
   `from.require_auth()`, hạn, `pay_ref` một lần, phát `PaymentSettled{from,to | amount,pay_ref}` và
   `MetaTransactionExecuted{from | digest}`. **`approve` chỉ cho spender là contract** (`executable()` = Wasm hoặc
   StellarAsset) — R26. Không phí (R10 trên mạng mới). Storage: số dư/allowance/`pay_ref` persistent, gia hạn TTL.
-- **`bamboo-mandate`** (như `MandateWallet` R25): một owner; tiền nằm trong contract; theo token: delegate, hạn mức
+- **`scaas-mandate`** (như `MandateWallet` R25): một owner; tiền nằm trong contract; theo token: delegate, hạn mức
   lần/kỳ, kỳ, hạn dùng, payee cho phép; `pay_under_mandate(token, payee, amount, pay_ref, valid_until)` —
   `delegate.require_auth()` rồi `token.pay(self, payee, …)` (cùng `PaymentSettled` ⇒ Odoo đối soát như thanh toán
   tay); `pay_ref` một lần; `revoke(token, by)` bởi owner **hoặc** delegate (kill switch); `withdraw` của owner.
   Owner gasless tự nhiên: auth gốc của owner qua relayer (không cần `executeAsOwner`).
-- **`bamboo-dex`** `settle(maker, taker, maker_fill)` (R35): `require_auth_for_args((order,))` cho **cả hai** lệnh;
+- **`scaas-dex`** `settle(maker, taker, maker_fill)` (R35): `require_auth_for_args((order,))` cho **cả hai** lệnh;
   giới hạn giá của cả hai (giá maker; taker nhận ít nhất giá của mình); `filled[order_hash]` không overfill; phí ppm
   maker/taker theo thị trường (cặp token sắp xếp), bật/tắt, trần 1 % (10 000 ppm) và ≤ `max_fee_ppm` trong lệnh ký;
   token đi bằng `transfer_from` với DEX là spender (allowance chỉ cho contract — R26); `cancel(order)` do maker uỷ
   quyền đặt `filled = sell_amount` ⇒ lệnh huỷ không bao giờ settle. `order_hash = sha256(order.to_xdr())`.
-- **`bamboo-account`** — §2.
+- **`scaas-account`** — §2.
 
 ### Lệch so với EVM (R8-3, R8-4)
 
@@ -109,7 +109,7 @@ sự cố dài không làm mốc cũ đi kèm giờ mới). Mốc cũ hơn 7 ng�
   Adapter hỗ trợ `extra.auth = [{from, payload, signature, public_key}]` bổ sung (cùng quy tắc), nên matcher (S5)
   chỉ cần xếp job với hai chữ ký. Sổ lệnh/matcher Soroban: seam cho S5.
 
-## 4. Relayer (adapter `bamboo-node/src/adapters/soroban.rs`)
+## 4. Relayer (adapter `scaas-node/src/adapters/soroban.rs`)
 
 - Lane = account `G…` dẫn xuất `m/44'/148'/i'` (SEP-0005), mỗi lane một tx bay (`lane_runner`), sequence đọc **đã
   commit** (`getLedgerEntries` account) — tx dùng `seq+1`, `time_bounds.max_time = valid_until` (review S14): tx chưa

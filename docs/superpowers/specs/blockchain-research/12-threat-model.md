@@ -38,7 +38,7 @@ Bản nháp trước dùng cả mười giả định này mà không phát bi�
         | bang outbox trong Postgres, KHONG phai HTTP (§08.2b, §06.0.1)
         v
 +--------------------------------------------------------------+
-| LAN RELAY   bamboo-node   (MOT binary, nhieu vai)             |
+| LAN RELAY   scaas-node   (MOT binary, nhieu vai)             |
 |                                                               |
 |   [gateway] [mesh] [pool]     <-- A2/A3. Parse byte NGUOI LA. |
 |   [submit]                    <-- A10. Nonce actor + journal. |
@@ -50,14 +50,14 @@ Bản nháp trước dùng cả mười giả định này mà không phát bi�
                               | mTLS + tenant_uuid trong client cert
                               v
 +--------------------------------------------------------------+
-| LAN CUSTODY  bamboo-node --role=custody                       |
+| LAN CUSTODY  scaas-node --role=custody                       |
 |   NHOM A: sign_digest_secp256k1 / sign_raw_tx / attest        |
 |   <-- A5 muon toi day. Enforce policy TRUOC khi ky.           |
 +-----------------------------+--------------------------------+
                               | vsock.  CHI TON TAI KHI ZETHER BAT.
                               v
 +--------------------------------------------------------------+
-| LAN ORACLE (trong enclave)   bamboo-node --role=oracle        |
+| LAN ORACLE (trong enclave)   scaas-node --role=oracle        |
 |   ZetherKeyOracle < 300 dong. Giu `x`. Khong parser.          |
 |   <-- bien khoa. A5 khong lay duoc `x`, nhung CO THE lam dung.|
 +--------------------------------------------------------------+
@@ -72,7 +72,7 @@ Bản nháp trước dùng cả mười giả định này mà không phát bi�
 | 1 | Odoo không giữ vật liệu khoá | quy ước + grep gate CI | **không đổi** — grep gate: không file nào trong `dms_blockchain/` chứa `eth_keys`, `eth_account`, `coincurve`, `PKCS11`, `boto3.client('kms')` |
 | 2 | Odoo không gọi thẳng signer | chỉ `relay-pool` có cert mTLS | **không đổi** — chỉ làn relay có cert. Odoo ghi outbox |
 | 3 | Signer không tin `tenant_uuid` trong body | tiến trình riêng + mTLS | **không đổi** — làn custody **vẫn** là tiến trình riêng (§23.5) |
-| 4 | **Indexer chỉ ghi ba bảng của nó** | **ranh giới tiến trình** | **DB role.** Vai `indexer` mở connection bằng role `bamboo_indexer` với `GRANT INSERT/UPDATE` chỉ trên `blockchain_chain_event`, `blockchain_chain_effect`, `blockchain_transaction`. Vai `submit` dùng role khác |
+| 4 | **Indexer chỉ ghi ba bảng của nó** | **ranh giới tiến trình** | **DB role.** Vai `indexer` mở connection bằng role `scaas_indexer` với `GRANT INSERT/UPDATE` chỉ trên `blockchain_chain_event`, `blockchain_chain_effect`, `blockchain_transaction`. Vai `submit` dùng role khác |
 
 Bất biến 4 là cái duy nhất thật sự đổi, và nó **mạnh lên**. Trước: một sơ đồ nói rằng indexer chạy
 riêng, và không có gì chặn ai đó gọi thẳng. Bây giờ: Postgres từ chối `INSERT` vào
@@ -106,7 +106,7 @@ không.
 | **A10** | **Kẻ chiếm `relay-pool` worker** | Nonce lease, chọn tx nào broadcast, đọc calldata trước khi lên chuỗi | Khoá; policy của signer | Signer policy là lớp cuối, không phải relay-pool |
 | **A11** | **Kẻ chiếm indexer (hoặc chỉ ghi được bảng của nó)** | Đặt `finalized` cho một tx không tồn tại ⇒ Odoo `_set_done` ⇒ giao hàng | Ghi lên chuỗi | DB role hẹp + xác nhận 2 provider + hash check |
 | **A12** | **Validator set của private chain** (chính ta, hoặc một nhà thầu) | Rewind, kiểm duyệt, đổi genesis, đổi precompile | Khoá của user | Anchor head hash sang HCS (§11.3), 4-eyes trên binary |
-| **A13** | **Supply chain client SDK** (npm `@bamboo/zether-sdk`, pypi) | Đọc `x` trong RAM của client, đổi `recipient` trước khi ký | — | 12.3.6 |
+| **A13** | **Supply chain client SDK** (npm `@scaas/zether-sdk`, pypi) | Đọc `x` trong RAM của client, đổi `recipient` trước khi ký | — | 12.3.6 |
 
 #### 12.0.4. Tài sản, xếp theo thiệt hại giảm dần, kèm giá trị quy ước
 
@@ -333,7 +333,7 @@ Nó giải mã được mọi giao dịch có `C_audit`, **cả lịch sử**, v
 
 #### 12.3.10. Client SDK (A13) — vector mà bản nháp bỏ hoàn toàn
 
-`x` sống trong RAM của client. Kẻ chèn được một dòng vào `@bamboo/zether-sdk` hoặc vào một dependency của nó lấy được `x` của **mọi** người dùng, không cần chạm chain, không chạm Odoo, không chạm HSM. Đó là đường rẻ nhất trong cả mô hình này.
+`x` sống trong RAM của client. Kẻ chèn được một dòng vào `@scaas/zether-sdk` hoặc vào một dependency của nó lấy được `x` của **mọi** người dùng, không cần chạm chain, không chạm Odoo, không chạm HSM. Đó là đường rẻ nhất trong cả mô hình này.
 
 | Biện pháp | Cụ thể |
 |---|---|

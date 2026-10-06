@@ -25,7 +25,7 @@ eip712 = importlib.import_module('dmslib.eip712')
 # Địa chỉ clone mà HederaKat.t.sol deploy (chainId 296, factory đầu tiên của test contract, salt keccak("HBUSD")).
 TOKEN = '0x284f66c17c0e60a8f75903af8f185b0a8d8b770c'
 ACCOUNT_NUM = 1_234_567                                   # 0.0.1234567
-SEED = hashlib.sha256(b'bamboo.hedera.kat.v1').digest()
+SEED = hashlib.sha256(b'scaas.hedera.kat.v1').digest()
 
 ref = bytes(31) + b'\x42'
 m = {
@@ -34,7 +34,7 @@ m = {
     'valid_until': 1_800_000_300, 'mode': eip712.MODE_RESTRICT_RELAYER,
     'relayer': '0x' + '00' * 18 + 'beef', 'fee': 0, 'fee_recipient': eip712.ZERO_ADDRESS,
 }
-domain = {'name': 'Bamboo MetaToken', 'version': '1', 'chain_id': 296, 'verifying_contract': TOKEN}
+domain = {'name': 'SCaaS MetaToken', 'version': '1', 'chain_id': 296, 'verifying_contract': TOKEN}
 digest = eip712.digest(domain, m)
 sk = Ed25519PrivateKey.from_private_bytes(SEED)
 pk = sk.public_key().public_bytes_raw()

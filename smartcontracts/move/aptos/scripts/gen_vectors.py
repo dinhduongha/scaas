@@ -25,9 +25,9 @@ F = importlib.import_module('aptlib.fam_aptos')
 from cryptography.hazmat.primitives import hashes, serialization  # noqa: E402
 from cryptography.hazmat.primitives.asymmetric import ec, ed25519, utils  # noqa: E402
 
-BAMBOO = '0xb0b'
+SCAAS = '0xb0b'
 CHAIN = 4
-ROOT = F.root_of(BAMBOO)
+ROOT = F.root_of(SCAAS)
 DEX = F.dex_of(ROOT)
 EUR = F.object_address('0xcafe', b'EUR')
 USD = F.object_address('0xcafe', b'USD')
@@ -37,9 +37,9 @@ APT = '0xa'                                    # FA cặp của coin APT (AIP-63
 BEEF = '0xbeef'
 RELAYER = '0x7e1'
 VU = 1000
-ORIGIN = 'https://pay.bamboo.test'
-RP_ID_HASH = hashlib.sha256(b'pay.bamboo.test').digest()
-APP = 'https://pay.bamboo.test'
+ORIGIN = 'https://pay.scaas.test'
+RP_ID_HASH = hashlib.sha256(b'pay.scaas.test').digest()
+APP = 'https://pay.scaas.test'
 ZERO32 = bytes(32)
 N = F.P256_N
 out = []
@@ -199,14 +199,14 @@ pay('a_pay_eur_evil_app', alice, EUR, 10, 16, 0xaf, 0, style='evil_app')
 # ---------------------------------------------------------------- vòng đời khoá
 def keyop_digest(owner, action, nonce, scheme=0, pk=b'', rp=b'', origin=b'', guardian_='0x0', valid_until=VU):
     account = F.account_of(ROOT, owner)
-    return F.sha3(F.vec(b'bamboo.keyop.v1') + bytes([CHAIN]) + F.addr(account) + bytes([action, scheme]) + F.vec(pk)
+    return F.sha3(F.vec(b'scaas.keyop.v1') + bytes([CHAIN]) + F.addr(account) + bytes([action, scheme]) + F.vec(pk)
                   + F.vec(rp) + F.vec(origin) + F.addr(guardian_) + nonce.to_bytes(8, 'little')
                   + valid_until.to_bytes(8, 'little'))
 
 
 def keyop(name, signer, owner, action, nonce, scheme=0, pk=b'', rp=b'', origin=b'', guardian_='0x0'):
     dg = keyop_digest(owner, action, nonce, scheme, pk, rp, origin, guardian_)
-    sig, env = signer.sign('bamboo.keyop.v1', dg)
+    sig, env = signer.sign('scaas.keyop.v1', dg)
     fn(name, '', 'meta::manage_signed(%s, %d, %d, %s, %s, %s, %s, %d, %s, %s, %s)' % (
         a(owner), action, scheme, h(pk), h(rp), h(origin), a(guardian_), VU, h(signer.pk), h(sig), h(env)),
        p256=signer.kind != 'ed25519')
@@ -229,11 +229,11 @@ addr_const('mandate', MANDATE)
 
 
 def mandate_open(name, signer, max_pay=100, max_period=150, period=600, expiry=5000, payees=(BEEF,)):
-    dg = F.sha3(F.vec(b'bamboo.mandate.v1') + bytes([CHAIN]) + F.addr(F.account_of(ROOT, alice.address))
+    dg = F.sha3(F.vec(b'scaas.mandate.v1') + bytes([CHAIN]) + F.addr(F.account_of(ROOT, alice.address))
                 + F.addr(MANDATE) + F.vec(M_SEED) + F.vec(delegate.pk) + max_pay.to_bytes(8, 'little')
                 + max_period.to_bytes(8, 'little') + period.to_bytes(8, 'little') + expiry.to_bytes(8, 'little')
                 + F.uleb128(len(payees)) + b''.join(F.addr(p) for p in payees) + VU.to_bytes(8, 'little'))
-    sig, env = signer.sign('bamboo.mandate.v1', dg)
+    sig, env = signer.sign('scaas.mandate.v1', dg)
     fn(name, '', 'mandate::open(%s, %s, %s, %d, %d, %d, %d, %s, %d, %s, %s, %s)' % (
         a(alice.address), h(M_SEED), h(delegate.pk), max_pay, max_period, period, expiry, vecaddr(payees), VU,
         h(signer.pk), h(sig), h(env)))
@@ -285,7 +285,7 @@ FOK, IOC = 1, 2
 
 def order_bytes(maker, sell, buy, sell_amount, buy_amount, nonce, expiry=VU, max_fee=10_000, flags=0, taker='0x0',
                 relayer='0x0', market=MARKET):
-    return (F.vec(b'bamboo.order.v1') + bytes([CHAIN]) + F.addr(market) + F.addr(maker.address) + F.addr(taker)
+    return (F.vec(b'scaas.order.v1') + bytes([CHAIN]) + F.addr(market) + F.addr(maker.address) + F.addr(taker)
             + F.addr(sell) + F.addr(buy) + sell_amount.to_bytes(8, 'little') + buy_amount.to_bytes(8, 'little')
             + nonce.to_bytes(16, 'little') + expiry.to_bytes(8, 'little') + max_fee.to_bytes(4, 'little')
             + bytes([flags]) + F.addr(relayer))
@@ -294,7 +294,7 @@ def order_bytes(maker, sell, buy, sell_amount, buy_amount, nonce, expiry=VU, max
 def order(name, maker, *args, signer=None, **kw):
     """[order bytes, pk, sig, env]."""
     b = order_bytes(maker, *args, **kw)
-    sig, env = (signer or maker).sign('bamboo.order.v1', F.sha3(b))
+    sig, env = (signer or maker).sign('scaas.order.v1', F.sha3(b))
     out.append('public fun %s(): vector<vector<u8>> { vector[%s, %s, %s, %s] }%s' % (
         name, h(b), h((signer or maker).pk), h(sig), h(env), '  // p256' if (signer or maker).kind != 'ed25519' else ''))
     return b
@@ -314,15 +314,15 @@ order('o_alice_by_mallory', alice, EUR, USD, 100, 200, 8, signer=mallory)
 
 
 def cancel(name, maker, ob):
-    dg = F.sha3(F.vec(b'bamboo.cancel.v1') + bytes([CHAIN]) + F.addr(MARKET) + F.vec(F.sha3(ob)))
-    sig, env = maker.sign('bamboo.cancel.v1', dg)
+    dg = F.sha3(F.vec(b'scaas.cancel.v1') + bytes([CHAIN]) + F.addr(MARKET) + F.vec(F.sha3(ob)))
+    sig, env = maker.sign('scaas.cancel.v1', dg)
     fn(name, '', 'dex::cancel_signed(%s, %s, %s, %s, %s)' % (a(MARKET), h(ob), h(maker.pk), h(sig), h(env)))
 
 
 def invalidate(name, maker, min_nonce):
-    dg = F.sha3(F.vec(b'bamboo.nonces.v1') + bytes([CHAIN]) + F.addr(MARKET) + F.addr(maker.address)
+    dg = F.sha3(F.vec(b'scaas.nonces.v1') + bytes([CHAIN]) + F.addr(MARKET) + F.addr(maker.address)
                 + min_nonce.to_bytes(16, 'little'))
-    sig, env = maker.sign('bamboo.nonces.v1', dg)
+    sig, env = maker.sign('scaas.nonces.v1', dg)
     fn(name, '', 'dex::invalidate_nonces_signed(%s, %s, %d, %s, %s, %s)' % (
         a(MARKET), a(maker.address), min_nonce, h(maker.pk), h(sig), h(env)))
 
@@ -345,12 +345,12 @@ def main():
         '//   a_pay_eur_0 signature blob = %s' % (x_sig + x_env).hex(),
         '//   root = %s, a_account = %s' % (ROOT, F.account_of(ROOT, alice.address)),
         '#[test_only]',
-        'module bamboo::vectors {',
+        'module scaas::vectors {',
         '    use aptos_framework::fungible_asset::Metadata;',
         '    use aptos_framework::object::Object;',
-        '    use bamboo::dex;',
-        '    use bamboo::mandate;',
-        '    use bamboo::meta;',
+        '    use scaas::dex;',
+        '    use scaas::mandate;',
+        '    use scaas::meta;',
         '',
     ]
     text = '\n'.join(head + ['    ' + line for line in out] + ['}']) + '\n'

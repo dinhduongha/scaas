@@ -40,7 +40,7 @@ Toàn bộ phân tích pháp lý bên dưới chỉ đúng khi các giả địn
 | A2 | Cả brand lẫn distributor đều là **người cư trú** theo Pháp lệnh Ngoại hối | Hạn chế ngoại hối chỉ ràng buộc giao dịch **giữa người cư trú**. Một bên không cư trú làm đổi hoàn toàn kết luận §13.1 về stablecoin USD |
 | A3 | Chain public = dữ liệu rời khỏi lãnh thổ VN | Trên chain permissioned với **toàn bộ node đặt tại VN**, lập luận "chuyển dữ liệu xuyên biên giới" biến mất. Nhưng khi đó **sơ đồ node là một hồ sơ tuân thủ**, phải được ghi và duy trì |
 | A4 | Chủ outlet là **cá nhân / hộ kinh doanh**, không phải doanh nghiệp | Đúng với ~90% kênh GT ở VN (ước tính theo thực tế ngành phân phối). Nghĩa là `owner_partner_id` trên `blockchain.account` **gần như luôn là dữ liệu cá nhân**, và phần thưởng cho họ là thu nhập cá nhân, không phải chiết khấu doanh nghiệp |
-| A5 | Nhà cung cấp phần mềm (Bamboo) **không** là bên phát hành token | Nếu vendor mint hộ khách hàng, vendor bước thẳng vào chữ "cung ứng" của NĐ 88. Xem §13.3.1 |
+| A5 | Nhà cung cấp phần mềm (SCaaS) **không** là bên phát hành token | Nếu vendor mint hộ khách hàng, vendor bước thẳng vào chữ "cung ứng" của NĐ 88. Xem §13.3.1 |
 | A6 | Deployment **không** giữ khoá hộ bên thứ ba | Ngay khi `custody_mode='custodial'` xuất hiện trên một `blockchain.account` có `role='user'`, khả năng bị coi là VASP tăng vọt. Xem §13.4 |
 | A7 | Chỉ có **một** issuer trong một deployment | Nhiều issuer trên cùng registry biến registry thành hạ tầng dùng chung cho bên thứ ba — một dịch vụ, không phải một công cụ nội bộ |
 | A8 | Rủi ro pháp lý = tiền phạt | Sai và nguy hiểm. Rủi ro thật nặng hơn: ngân hàng từ chối xử lý chân fiat, cơ quan thuế loại chi phí khi tính thuế TNDN, đối tác có giấy phép bị thanh tra vì hợp tác với ta, và rủi ro hình sự ở §13.1 |
@@ -662,11 +662,11 @@ Xung đột cốt lõi: **quyền xoá dữ liệu** và **quyền rút lại s�
 
 Câu hỏi đầu tiên của bất kỳ hồ sơ dữ liệu nào, và bản nháp không hỏi. NĐ 13/2023 phân biệt **Bên Kiểm soát dữ liệu**, **Bên Xử lý dữ liệu**, và **Bên Kiểm soát và xử lý**. Với `dms_blockchain`:
 
-| Kịch bản | Bamboo là | Khách hàng là |
+| Kịch bản | SCaaS là | Khách hàng là |
 |---|---|---|
 | Khách tự host Odoo, tự vận hành node | Không phải bên nào (chỉ bán phần mềm) | Bên Kiểm soát và xử lý |
-| Bamboo host SaaS cho khách | **Bên Xử lý** | Bên Kiểm soát |
-| Bamboo vận hành relayer/indexer dùng chung nhiều khách | **Bên Xử lý** cho từng khách, và nếu tự quyết định mục đích xử lý thì thành **Bên Kiểm soát** | Bên Kiểm soát |
+| SCaaS host SaaS cho khách | **Bên Xử lý** | Bên Kiểm soát |
+| SCaaS vận hành relayer/indexer dùng chung nhiều khách | **Bên Xử lý** cho từng khách, và nếu tự quyết định mục đích xử lý thì thành **Bên Kiểm soát** | Bên Kiểm soát |
 
 Hệ quả cụ thể, làm ngay: kịch bản 2 và 3 **bắt buộc có hợp đồng xử lý dữ liệu (DPA)** giữa hai bên. Một điều khoản trong hợp đồng SaaS, không phải một dòng code — nhưng nó là điều kiện tiên quyết để bán SaaS, nên nó thuộc backlog chứ không thuộc "sau này".
 
@@ -784,7 +784,7 @@ Một câu hỏi mở tốn gấp ba một câu hỏi có phạm vi. Gói cần 
 4. Với giả định A4 (chủ outlet là hộ kinh doanh): một khoản thưởng theo doanh số trả bằng điểm là **trúng thưởng**, **chiết khấu thương mại**, hay **hàng khuyến mại**? Ba đầu thuế khác nhau (§13.7.2).
 5. **Doanh nghiệp VN mua native gas (xDAI/CELO) như thế nào cho hợp pháp và có chứng từ?** Nếu không có câu trả lời, public-chain deployment bằng pháp nhân VN là không khả thi (§13.4.4).
 6. Trả phí cho một relayer không xác định danh tính — nghĩa vụ khấu trừ thuế nhà thầu xử lý ra sao? (§13.4.5)
-7. Ở kịch bản SaaS, Bamboo là Bên Xử lý hay Bên Kiểm soát, và DPA cần những điều khoản nào? (§13.7.3)
+7. Ở kịch bản SaaS, SCaaS là Bên Xử lý hay Bên Kiểm soát, và DPA cần những điều khoản nào? (§13.7.3)
 
 #### 13.9.3. Quyết định kinh doanh / kỹ thuật cần một người ký tên
 

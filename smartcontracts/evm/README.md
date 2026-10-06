@@ -16,7 +16,7 @@ Interface đã chốt cộng các implementation đã có (2026-10-03,
 | Deploy | `script/Deploy.s.sol` | ghi `deployments/<chainid>.json` |
 
 Zether vẫn chỉ là interface. `test/vectors/metatx_kat.json` là vector digest dùng chung với
-Odoo (`dms_blockchain/lib/eip712.py`) và relayer (`bamboo-node`).
+Odoo (`dms_blockchain/lib/eip712.py`) và relayer (`scaas-node`).
 
 ## Mô hình: factory mở
 

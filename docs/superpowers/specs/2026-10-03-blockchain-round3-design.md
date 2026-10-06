@@ -59,15 +59,15 @@ Hợp nhất với nhánh territory: **không** làm ở nhánh này (coordinato
   - `GET /readyz` — trả ngay từ **trạng thái đệm** do một task nền cập nhật mỗi 10 s (review S19); 200 chỉ khi: mỗi chain có ≥ `finality.quorum` RPC trả lời trong 3 s; Odoo trả lời
     (`relay_stats`); độ trễ indexer `head_final − indexed ≤ max_index_lag` (cấu hình theo chain). Ngược lại 503 kèm
     JSON lý do. Không có gateway vẫn có `/readyz` (sửa GA 2.3#12).
-  - `GET /metrics` — văn bản Prometheus, viết tay (không thêm crate): `bamboo_relay_jobs{chain,state}` (gồm
-    `dead`), `bamboo_payment_requests_attention{chain}`, `bamboo_indexer_lag_blocks{chain}`,
-    `bamboo_relayer_balance{chain,lane}` (đơn vị nhỏ nhất của coin gas), `bamboo_breaker_open{chain,breaker}`,
-    `bamboo_drift_alerts{chain}`.
+  - `GET /metrics` — văn bản Prometheus, viết tay (không thêm crate): `scaas_relay_jobs{chain,state}` (gồm
+    `dead`), `scaas_payment_requests_attention{chain}`, `scaas_indexer_lag_blocks{chain}`,
+    `scaas_relayer_balance{chain,lane}` (đơn vị nhỏ nhất của coin gas), `scaas_breaker_open{chain,breaker}`,
+    `scaas_drift_alerts{chain}`.
 - Số liệu Odoo đến từ method dịch vụ mới `blockchain.chain.relay_stats(chain_key)` (đọc, nhóm relay/indexer).
 
 ### A.4 CI (GA 2.1#4) — R52
 
-`.github/workflows/blockchain-ci.yml`, chạy trên PR/push chạm `smartcontracts/**`, `bamboo-node/**`,
+`.github/workflows/blockchain-ci.yml`, chạy trên PR/push chạm `smartcontracts/**`, `scaas-node/**`,
 `dms_blockchain*/**`: (a) forge (foundry-toolchain, `lib/` cài bằng `forge install` theo tag đã ghim:
 OpenZeppelin `v5.2.0`, forge-std `v1.16.2` — vì `lib/` không commit), hai profile; (b) cargo test + clippy
 `-D warnings` + e2e anvil; (c) Odoo `odoo:19` + postgres: cài `dms_blockchain, dms_blockchain_payment,
@@ -86,9 +86,9 @@ owner).
 ### A.6 Xác thực gateway + fuzz parser (GA 2.1#8) — R54
 
 - `[modules] gateway_auth = "none" | "bearer" | "hmac"`; `gateway_secret_env`. `bearer`: `Authorization:
-  Bearer <secret>` so sánh constant-time. `hmac`: `X-Bamboo-Timestamp` + `X-Bamboo-Signature =
+  Bearer <secret>` so sánh constant-time. `hmac`: `X-SCaaS-Timestamp` + `X-SCaaS-Signature =
   hex(HMAC-SHA256(secret, ts ‖ "." ‖ nonce ‖ "." ‖ METHOD ‖ " " ‖ path?query ‖ "\n" ‖ body))`, lệch giờ ≤ 300 s,
-  `X-Bamboo-Nonce` (`[A-Za-z0-9_-]{1,64}`) nhớ tới khi chính timestamp hết hạn (ts + 300 s) ⇒ không phát lại (review S20); method + đường
+  `X-SCaaS-Nonce` (`[A-Za-z0-9_-]{1,64}`) nhớ tới khi chính timestamp hết hạn (ts + 300 s) ⇒ không phát lại (review S20); method + đường
   dẫn nằm trong chuỗi ký nên chữ ký một route không dùng được cho route khác. Mặc định `none` bị **từ chối** khi bind không
   phải loopback (lỗi cấu hình thì chết sớm).
 - `proptest` (dev-dependency) cho mọi decoder đầu vào không tin cậy: `WireMetaTx::to_sol`, body gateway,
@@ -144,7 +144,7 @@ ngày, ≥2 RPC độc lập, và mọi mục GA 2.2 không làm ở round này 
 
 ## B. Abstraction adapter, signer, khoá relayer
 
-### B.1 `ChainAdapter` (bamboo-node) — R58
+### B.1 `ChainAdapter` (scaas-node) — R58
 
 ```rust
 pub enum Family { Evm, Hedera, Sui, Soroban, Cosmos, Ton }
@@ -190,9 +190,9 @@ cắm; không cài adapter KMS ở round này (HANDOFF).
 
 ```toml
 [keys]
-mnemonic = { env = "BAMBOO_MNEMONIC" }          # hoặc { file = "/run/secrets/mnemonic" } (0600)
-                                                # hoặc { keystore = "/etc/bamboo/m.json", passphrase_env = "…" }
-bip39_passphrase_env = "BAMBOO_BIP39_PASSPHRASE" # tuỳ chọn
+mnemonic = { env = "SCAAS_MNEMONIC" }          # hoặc { file = "/run/secrets/mnemonic" } (0600)
+                                                # hoặc { keystore = "/etc/scaas/m.json", passphrase_env = "…" }
+bip39_passphrase_env = "SCAAS_BIP39_PASSPHRASE" # tuỳ chọn
 [[chains]]
 family = "sui"; network = "localnet"
 lanes = [0, 1, 2, 3]                            # account index theo BIP-44/SLIP-44
@@ -213,10 +213,10 @@ lanes = [0, 1, 2, 3]                            # account index theo BIP-44/SLIP
 
 - Nguồn: file (từ chối nếu quyền không phải 0600/0400), biến môi trường, keystore mã hoá. Keystore: **Web3 Secret
   Storage v3** (scrypt + AES-128-CTR, MAC keccak) cho **cả hai** đường cong — bí mật 32 byte (khoá secp256k1 hoặc
-  seed ed25519) hoặc mnemonic (UTF-8); thêm trường `"bamboo": {"kind": "secp256k1"|"ed25519"|"mnemonic"}`.
-  CLI: `bamboo-node keystore new --kind … --out …` (đọc bí mật từ stdin, passphrase từ env).
+  seed ed25519) hoặc mnemonic (UTF-8); thêm trường `"scaas": {"kind": "secp256k1"|"ed25519"|"mnemonic"}`.
+  CLI: `scaas-node keystore new --kind … --out …` (đọc bí mật từ stdin, passphrase từ env).
 - Không bao giờ log/ghi file cấu hình bí mật; khởi động in **chỉ địa chỉ** dẫn xuất của từng lane.
-  `bamboo-node addresses --config` in địa chỉ rồi thoát.
+  `scaas-node addresses --config` in địa chỉ rồi thoát.
 - Test: vector BIP-39 (Trezor, passphrase "TREZOR"), SLIP-10 ed25519 (test vector 1), SEP-0005, BIP-32/BIP-44
   secp256k1 (mnemonic "abandon…art" ⇒ địa chỉ MetaMask đã công bố).
 
@@ -333,7 +333,7 @@ của SRS nguyên tắc 6 và §1.1). R31 và R32 thực hiện hệ quả 1–3
   - **BLS12-381:** đúng EIP-2333 (`derive_master_SK`, `derive_child_SK`, salt `"BLS-SIG-KEYGEN-SALT-"`), đường
     kiểu EIP-2334 `m/12381/<coin>/<account>/7` — `<use> = 7` dành riêng cho Zether-conf (EIP-2334 dùng 0 =
     withdrawal, 0/0 = signing; 7 không đụng). `<coin>` = SLIP-44 của mạng (EVM 60).
-  - **bn254:** cùng cấu trúc EIP-2333 với `r` của bn254 và salt **`"BAMBOO-ZETHER-BN254-v1"`**; HKDF-Expand ra
+  - **bn254:** cùng cấu trúc EIP-2333 với `r` của bn254 và salt **`"SCAAS-ZETHER-BN254-v1"`**; HKDF-Expand ra
     **48 byte** (L = ceil(3·ceil(log2 r)/16) = 48) rồi `mod r`, lặp nếu 0 — như EIP-2333. Đường
     `m/254/<coin>/<account>/7` (gốc 254 để không bao giờ chạm cây 12381).
   - Khoá phụ thuộc (seed, đường cong, mạng/coin, account). **Không** theo token (một UA mỗi (đường cong, mạng,
@@ -369,7 +369,7 @@ Ba mảnh on-chain như EVM:
 3. **DEX:** hai chân ký, fill-or-kill, không allowance cho tài khoản thường (đúng mô hình EVM) — trừ TON (§D.5).
 
 **Payload chuẩn `MetaOp` v1** (mã hoá theo họ, mọi trường bắt buộc):
-`domain="bamboo.metaop.v1" ‖ network ‖ contract ‖ op(pay|trade|mandate_pay|revoke) ‖ from ‖ to ‖ amount(u128) ‖
+`domain="scaas.metaop.v1" ‖ network ‖ contract ‖ op(pay|trade|mandate_pay|revoke) ‖ from ‖ to ‖ amount(u128) ‖
 payRef(32) ‖ lane(32) ‖ nonce(u64) ‖ validUntil(u64, giây) ‖ relayer(tuỳ chọn) ‖ extra(hash 32 của tham số riêng op)`.
 Không phí trên các mạng mới (fee NONE như portal — R10); phí relayer chỉ trên EVM. Op `trade`: tham số riêng
 (token đối ứng, số tối thiểu, đối tác) đi **nguyên văn** cạnh `MetaOp` và `extra = H(tham số)` (review S28).
@@ -393,7 +393,7 @@ Không phí trên các mạng mới (fee NONE như portal — R10); phí relayer
 
 ### D.2 Sui (Move) — R64
 
-- **Token:** `bamboo::meta::Account<T>` — **shared object một chủ thể** giữ `Balance<T>`, khoá công khai (ed25519 /
+- **Token:** `scaas::meta::Account<T>` — **shared object một chủ thể** giữ `Balance<T>`, khoá công khai (ed25519 /
   secp256k1 / secp256r1-passkey), bảng lane→nonce. Tạo bằng `open<T>(pubkey, scheme)` (kiểm địa chỉ =
   blake2b256(flag‖pk)), nạp bằng `deposit` (ai cũng nạp được). Shared object per chủ thể ⇒ tranh chấp chỉ trong
   phạm vi một chủ thể. Coin owned **không** chi được bởi người khác trên Sui, nên số dư phải nằm trong object
@@ -424,7 +424,7 @@ Không phí trên các mạng mới (fee NONE như portal — R10); phí relayer
 
 ### D.4 Cosmos (CosmWasm) — R66
 
-- **Token** `bamboo-token` (CW20 + meta-tx): `Relay{op, pubkey, signature, scheme}`. Ký: Keplr/Leap
+- **Token** `scaas-token` (CW20 + meta-tx): `Relay{op, pubkey, signature, scheme}`. Ký: Keplr/Leap
   `signArbitrary` (ADR-036) trên bytes JSON của `MetaOp`; contract dựng lại sign doc ADR-036, `sha256`,
   `secp256k1_verify`, địa chỉ = bech32(ripemd160(sha256(pk))) phải bằng `from`; passkey: `secp256r1_verify` với bộ giải
   WebAuthn riêng (không qua ADR-036). Sign doc ADR-036 dựng bằng **khuôn byte cố định** (khoá đã sắp, không khoảng

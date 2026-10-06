@@ -1,7 +1,7 @@
 // R33: the Zether confidentiality key `x` from the SAME seed on its own tree (design §C.4), apart
 // from every BIP-32/SLIP-10 signing key:
 //   - BLS12-381: EIP-2333 exactly, path `m/12381/<coin>/<account>/<use>`;
-//   - bn254: the same EIP-2333 construction with bn254's `r` and salt "BAMBOO-ZETHER-BN254-v1",
+//   - bn254: the same EIP-2333 construction with bn254's `r` and salt "SCAAS-ZETHER-BN254-v1",
 //     path `m/254/<coin>/<account>/<use>`.
 // `<use>` 7 = conf key, 8 = disclosure (reserved). Byte-for-byte the same as S3's
 // `zether-prover/src/keys.rs` + `schnorr.rs` (pinned by test/vectors/r33_keys.json and schnorr_*.json),
@@ -19,7 +19,7 @@ export const USE_DISCLOSURE = 8;
 const L = 48; // ceil(3 * ceil(log2 r) / 16) for both curves
 
 export const CURVES = {
-  bn254: { Point: bn254.G1.Point, root: 254, salt: 'BAMBOO-ZETHER-BN254-v1', coordLen: 32 },
+  bn254: { Point: bn254.G1.Point, root: 254, salt: 'SCAAS-ZETHER-BN254-v1', coordLen: 32 },
   bls12381: { Point: bls12_381.G1.Point, root: 12381, salt: 'BLS-SIG-KEYGEN-SALT-', coordLen: 64 },
 };
 
@@ -129,7 +129,7 @@ function hashToScalar(curve, seed32) {
 }
 
 function challenge(curve, R, Y, msg) {
-  return hashToScalar(curve, keccak_256(concatBytes(utf8ToBytes('BAMBOO-ZETHER-SCHNORR-V1'),
+  return hashToScalar(curve, keccak_256(concatBytes(utf8ToBytes('SCAAS-ZETHER-SCHNORR-V1'),
                                                     encodePoint(curve, R), encodePoint(curve, Y), msg)));
 }
 
@@ -212,7 +212,7 @@ export const openConfKey = openVault;
 // and the contract would refuse a proof built on it anyway. Balances are BigInt (they pass 2^53).
 
 export const DEVICE_BOUND_BITS = 44;
-const CACHE_INFO = utf8ToBytes('bamboo-zether-balance-cache-v1');
+const CACHE_INFO = utf8ToBytes('scaas-zether-balance-cache-v1');
 
 const pointOf = (curve, h) => decodePoint(curve, fromHex(h));
 const keyOf = ({ ua, token }) => `${String(ua).toLowerCase()}:${String(token).toLowerCase()}`;

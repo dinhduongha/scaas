@@ -14,7 +14,7 @@ Hedera Smart Contract Service chạy EVM (Besu) nên **dùng lại nguyên** b�
 | Xác thực tài khoản | thư viện gọi `isAuthorizedRaw` bằng `CALL` (R6-6; gas chặn 100 000), revert/rác ⇒ `false` | `smartcontracts/src/hedera/HederaAccountAuth.sol` |
 | Mandate | `HederaMandateWallet is MandateWallet`: thêm `executeAsOwnerRaw` cho owner là tài khoản ED25519 | `smartcontracts/src/hedera/HederaMandateWallet.sol` |
 | DEX | không đổi — mỗi chân là meta-tx trên token, nên chân ký ED25519 tự đi qua `HederaMetaToken` | — |
-| Relayer | `adapters/hedera.rs`: adapter EVM trỏ vào **Hedera JSON-RPC Relay**, chạy dưới `lane_runner` (một tx bay mỗi lane), phí `eth_gasPrice × 1.2`, priority 0 | `bamboo-node/src/adapters/hedera.rs` |
+| Relayer | `adapters/hedera.rs`: adapter EVM trỏ vào **Hedera JSON-RPC Relay**, chạy dưới `lane_runner` (một tx bay mỗi lane), phí `eth_gasPrice × 1.2`, priority 0 | `scaas-node/src/adapters/hedera.rs` |
 | Odoo | người trả `0.0.N` (địa chỉ long-zero) ⇒ đường khoá gốc ED25519: phát digest, nhận chữ ký 64 byte + khoá công khai, kiểm ed25519 | `dms_blockchain/lib/fam_hedera.py`, `models/blockchain_hedera.py` |
 | Portal | connector ký digest bằng khoá ED25519 (seam cho ví seed / HashPack) | `dms_blockchain_bridge/static/src/js/connectors/hedera.js` |
 
@@ -27,7 +27,7 @@ HCS (nhật ký kiểm toán) và scheduled transaction: ngoài phạm vi thanh 
 
 | MetaOp v1 | EIP-712 (`MetaToken`) |
 |---|---|
-| `domain="bamboo.metaop.v1"` | `EIP712Domain{name:"Bamboo MetaToken", version:"1"}` |
+| `domain="scaas.metaop.v1"` | `EIP712Domain{name:"SCaaS MetaToken", version:"1"}` |
 | `network` | `chainId` = 295 mainnet / 296 testnet / 297 previewnet / 298 localnet |
 | `contract` | `verifyingContract` = clone token |
 | `op` | `data` = `pay(bytes32)` ‖ payRef (op `trade` = `trade(address,uint256,address)`) |
@@ -185,7 +185,7 @@ Hedera **không có mempool**: Relay chuyển tx tới một consensus node; tx 
   HTS 0x167 giả. Test: ED25519 pay, chữ ký sai/khoá khác/tài khoản lạ, ECDSA vẫn chạy, ERC-1271 vẫn chạy, DEX chân
   ED25519, mandate owner ED25519, associate, **anti-lock** (X ở token 1 bị giữ, Y ở token 2 chạy, rồi X chạy), vector
   KAT chung.
-- **Rust**: decoder receipt/log/block trên **vector ghi từ Relay testnet thật** (`bamboo-node/tests/vectors/
+- **Rust**: decoder receipt/log/block trên **vector ghi từ Relay testnet thật** (`scaas-node/tests/vectors/
   hedera_testnet.json`), proptest decoder; e2e `tests/e2e_hedera.rs` (`#[ignore]`) trên anvil `--chain-id 298`: hai lane
   từ mnemonic 24 từ, thanh toán qua `lane_step`, finality qua `index_step`, anti-lock đầu-cuối.
 - **Kết quả (2026-10-03):** forge 24 test Hedera + 157 toàn bộ xanh; Odoo `dms_blockchain` 118 test (4 Hedera) xanh trên

@@ -7,7 +7,7 @@ pragma solidity ^0.8.20;
 ///         thông điệp khác nhau cho cùng một trạng thái (`"AB"‖"C"` ≠ `"A"‖"BC"`).
 library ZetherTranscript {
     function init() internal pure returns (bytes32) {
-        return keccak256("BAMBOO-ZETHER-TRANSCRIPT-V1");
+        return keccak256("SCAAS-ZETHER-TRANSCRIPT-V1");
     }
 
     function absorb(bytes32 st, string memory label, bytes memory data) internal pure returns (bytes32) {

@@ -1,6 +1,6 @@
 import { Address, Dictionary, toNano } from '@ton/core';
 import '@ton/test-utils';
-import { BambooDex } from '../build/dex/dex_BambooDex';
+import { ScaasDex } from '../build/dex/dex_ScaasDex';
 import { setup, signedPay, Subject } from './fixture';
 import { OP, randomU256, subject, tradeParamsCell } from './helpers';
 
@@ -10,7 +10,7 @@ async function dexSetup(opts: { maker?: number; taker?: number; enabled?: boolea
     const B = await f.newToken('B');
     const alice = await subject(1);
     const bob = await subject(2);
-    const dex = f.bc.openContract(await BambooDex.fromInit(f.admin.address, 0n, Dictionary.empty(), Dictionary.empty(), Dictionary.empty(), Dictionary.empty()));
+    const dex = f.bc.openContract(await ScaasDex.fromInit(f.admin.address, 0n, Dictionary.empty(), Dictionary.empty(), Dictionary.empty(), Dictionary.empty()));
     await dex.send(f.admin.getSender(), { value: toNano('1') }, null);
     await dex.send(f.admin.getSender(), { value: toNano('0.05') }, { $$type: 'SetMarket', a: A.address, b: B.address, enabled: opts.enabled ?? true, makerPpm: BigInt(opts.maker ?? 1000), takerPpm: BigInt(opts.taker ?? 2000) });
     await f.mint(A, alice.address, 1_000_000n);
@@ -29,7 +29,7 @@ async function dexSetup(opts: { maker?: number; taker?: number; enabled?: boolea
     return { ...f, A, B, alice, bob, dex, wA, wB, leg, send, h, tonOf };
 }
 
-describe('BambooDex escrow (R35 on TON, R10-7)', () => {
+describe('ScaasDex escrow (R35 on TON, R10-7)', () => {
     it('two signed legs settle with maker/taker fees; fees accrue; nobody needs an allowance', async () => {
         const { A, B, alice, bob, dex, wA, wB, leg, send, h, balanceOf } = await dexSetup();
         const a = leg(alice, wA.address, A.address, B.address, 1_000_000n, 990_000n);
@@ -146,7 +146,7 @@ describe('BambooDex escrow (R35 on TON, R10-7)', () => {
         const { bc, admin, A, dex } = await dexSetup();
         const { internal } = require('@ton/sandbox');
         const { beginCell } = require('@ton/core');
-        const { storeJettonTransfer } = require('../build/dex/dex_BambooDex');
+        const { storeJettonTransfer } = require('../build/dex/dex_ScaasDex');
         const body = beginCell().storeUint(0xffffffff, 32).store(storeJettonTransfer({ $$type: 'JettonTransfer', queryId: 0n, amount: 123n, destination: admin.address, responseDestination: null, customPayload: null, forwardTonAmount: 0n, forwardPayload: beginCell().storeBit(false).asSlice() })).endCell();
         const dexWalletA = await A.getGetWalletAddress(dex.address);
         await bc.sendMessage(internal({ from: dexWalletA, to: dex.address, value: toNano('0.01'), bounce: false, bounced: true, body }));
