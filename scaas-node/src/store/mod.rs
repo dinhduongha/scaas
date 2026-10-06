@@ -16,13 +16,27 @@ mod tests;
 
 pub type Store = Arc<dyn Backend>;
 
-/// Mở store theo scheme của `[store] url`: lấy owner lock, migrate, tăng fencing epoch, incarnation mới.
+/// Mở store CÓ SẴN theo scheme của `[store] url`: lấy owner lock, migrate, tăng fencing epoch, incarnation mới.
+/// Store vắng mặt ⇒ lỗi (review F5); store mới chỉ qua `create` (`scaas-node store init`).
 pub async fn open(url: &str, owner: &str) -> Result<Store> {
+    open_with(url, owner, false).await
+}
+
+/// `scaas-node store init`: tạo store mới; store đã có ⇒ lỗi.
+pub async fn create(url: &str, owner: &str) -> Result<Store> {
+    open_with(url, owner, true).await
+}
+
+async fn open_with(url: &str, owner: &str, create: bool) -> Result<Store> {
     #[cfg(feature = "store-sqlite")]
     if url.starts_with("sqlite:") {
-        return Ok(Arc::new(sqlite::SqliteStore::open(url, owner).await?));
+        let s = match create {
+            true => sqlite::SqliteStore::create(url, owner).await?,
+            false => sqlite::SqliteStore::open(url, owner).await?,
+        };
+        return Ok(Arc::new(s));
     }
-    let _ = owner;
+    let _ = (owner, create);
     Err(StoreError::Invalid(format!("unsupported store url scheme: {}", url.split(':').next().unwrap_or(""))))
 }
 
@@ -143,6 +157,31 @@ pub fn late_noop(from: State, to: State) -> bool {
     in_table(LATE_NOOP, from, to)
 }
 
+/// Kiểm thuần trước mọi CAS `transition`, chung cho mọi backend.
+/// - `Cancelled` chỉ qua `cancel`/`cancel_by_origin` (R98: đã publish ⇒ hold + TOO_LATE, không bao giờ huỷ); cặp
+///   vẫn nằm trong `TRANSITIONS` để khớp `transitions.json`.
+/// - `outer_nonce` chỉ đi với `signed` (nó nâng `lane.journal_max`); `tx_hash` chỉ với `signed` và `broadcast`
+///   (thay thế).
+pub fn check_transition(from: State, to: State, f: &Fields) -> Result<()> {
+    if to == Cancelled || !(allowed(from, to) || late_noop(from, to)) {
+        return Err(StoreError::Illegal { from, to });
+    }
+    let refuse = |m: &str| Err(StoreError::Invalid(format!("{} -> {}: {m}", from.as_str(), to.as_str())));
+    if to == Leased && f.lane_label.is_none() {
+        return refuse("a lease names its lane");
+    }
+    if to == Signed && (f.outer_nonce.is_none() || f.tx_hash.is_none()) {
+        return refuse("signed needs outer_nonce and tx_hash");
+    }
+    if to != Signed && f.outer_nonce.is_some() {
+        return refuse("outer_nonce is journaled only on signed");
+    }
+    if !matches!(to, Signed | Broadcast) && f.tx_hash.is_some() {
+        return refuse("tx_hash is journaled only on signed or broadcast");
+    }
+    Ok(())
+}
+
 // ------------------------------------------------------------------ jobs
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -216,12 +255,17 @@ pub enum Accept {
     Existing(JobRow),
     IdempotencyMismatch { uid: i64 },
     PreviousGenerationLive { uid: i64 },
+    /// Có generation cao hơn dưới cùng khoá (`409 SUPERSEDED`): một push cũ, không bao giờ tạo lại.
+    Superseded { uid: i64 },
+    /// `valid_until` đã qua (`422 EXPIRED`): khoá đã purge không bao giờ được nhận lại (§4).
+    Expired,
     DuplicateDigest,
     Quota,
 }
 
-/// Trường đi kèm một chuyển trạng thái. `lane_label`/`claim_block` chỉ dùng cho `leased`;
-/// `outer_nonce` + `tx_hash` bắt buộc cho `signed`. Về `queued` xoá các trường journal.
+/// Trường đi kèm một chuyển trạng thái. `lane_label`/`claim_block` ghi ở `leased` (lane phải có trong store);
+/// `lane_label` ở `signed` phải là lane đã lease. `outer_nonce` + `tx_hash` bắt buộc cho `signed` (nonce chỉ ở đó;
+/// `tx_hash` thêm ở `broadcast` thay thế), xem `check_transition`. Về `queued` xoá các trường journal.
 #[derive(Debug, Clone, Default)]
 pub struct Fields {
     pub lane_label: Option<String>,
@@ -456,7 +500,7 @@ pub struct ConfigSet {
 pub struct BootReport {
     /// `chain:evm:9000`, `token:evm:9000/0x…`… đã import.
     pub imported: Vec<String>,
-    /// Có trong store và khác toml: store thắng (R95), chỉ cảnh báo.
+    /// Có trong store và khác toml: không ghi đè (R95), chỉ cảnh báo + gauge `scaas_config_toml_drift`.
     pub drift: Vec<String>,
 }
 
@@ -564,7 +608,8 @@ pub trait Backend: Send + Sync {
     async fn accept(&self, job: &NewJob, now_ms: i64) -> Result<Accept>;
 
     /// CAS `from → to` + `job_event` + `job.last_seq` + `lane.journal_max` + fencing, một transaction.
-    /// `queued → leased` cần `hold = 0` và `lane_hint` rỗng hoặc bằng `fields.lane_label`.
+    /// Trước hết `check_transition` (không bao giờ vào `cancelled`). `queued → leased` cần `hold = 0`, `lane_hint`
+    /// rỗng hoặc bằng `fields.lane_label`, và lane có trong store.
     /// Lỗi DB ⇒ `Transition::Unknown` (người gọi đọc lại dòng); `NotOwner`/`Illegal`/`NotFound` là `Err`.
     async fn transition(&self, uid: i64, from: State, to: State, fields: &Fields, now_ms: i64) -> Result<Transition>;
 
@@ -592,6 +637,12 @@ pub trait Backend: Send + Sync {
     /// `job_event`/`feed_item` cũ hơn `feed_retention`. Trả số dòng job đã xoá.
     async fn purge(&self, now_ms: i64, job_retention_secs: i64, feed_retention_secs: i64) -> Result<u64>;
 
+    /// `seq` cao nhất đã purge của `job_event`/`feed_item` (0 = chưa purge gì). R93: `cursor < floor` ⇒ `410`.
+    async fn purge_floor(&self, feed: &str) -> Result<i64>;
+
+    /// Kiểm rẻ A1.1 (≤ 2 s): file khoá vẫn là file đang giữ (`Owned` nếu không) và epoch vẫn của ta (`NotOwner`).
+    async fn check_owner(&self) -> Result<()>;
+
     async fn append_audit(&self, entry: &AuditEntry, now_ms: i64) -> Result<AuditRow>;
 
     async fn audit_log(&self) -> Result<Vec<AuditRow>>;
@@ -609,14 +660,32 @@ pub fn now_ms() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
 
-/// Janitor (mỗi 60 s ở `main.rs`).
-pub async fn janitor(store: Store, every: Duration, job_retention_secs: i64, feed_retention_secs: i64) {
+/// Janitor: `check_owner` mỗi `check_every` (A1.1, 2 s ở `main.rs`), purge mỗi `purge_every` (60 s). Mất quyền
+/// chủ (`NotOwner`, `Owned`) là lỗi chết: trả `Err`, `main` thoát, supervisor khởi động lại — process bị fence
+/// không chạy tiếp các đường legacy. Lỗi DB khác chỉ cảnh báo.
+pub async fn janitor(store: Store, check_every: Duration, purge_every: Duration, job_retention_secs: i64,
+                     feed_retention_secs: i64) -> Result<()> {
+    let fatal = |e: StoreError| match e {
+        StoreError::NotOwner | StoreError::Owned(_) => Err(e),
+        e => {
+            tracing::warn!("store janitor: {e}");
+            Ok(())
+        }
+    };
+    let mut last_purge = tokio::time::Instant::now();
     loop {
-        tokio::time::sleep(every).await;
+        tokio::time::sleep(check_every).await;
+        if let Err(e) = store.check_owner().await {
+            fatal(e)?;
+        }
+        if last_purge.elapsed() < purge_every {
+            continue;
+        }
+        last_purge = tokio::time::Instant::now();
         match store.purge(now_ms(), job_retention_secs, feed_retention_secs).await {
             Ok(n) if n > 0 => tracing::info!(purged = n, "store janitor"),
             Ok(_) => {}
-            Err(e) => tracing::warn!("store janitor: {e}"),
+            Err(e) => fatal(e)?,
         }
     }
 }

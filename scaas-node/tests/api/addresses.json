@@ -1,0 +1,230 @@
+{
+ "source": "dms_blockchain/lib/addresses.py canonical()",
+ "cases": [
+  {
+   "family": "evm",
+   "value": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+   "ok": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+  },
+  {
+   "family": "evm",
+   "value": "0xCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCD",
+   "ok": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+  },
+  {
+   "family": "evm",
+   "value": "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
+   "ok": "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed"
+  },
+  {
+   "family": "evm",
+   "value": "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAeD",
+   "err": "bad EIP-55 checksum: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAeD'"
+  },
+  {
+   "family": "evm",
+   "value": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+   "err": "not an EVM address: '0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd'"
+  },
+  {
+   "family": "evm",
+   "value": "  0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed ",
+   "ok": "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed"
+  },
+  {
+   "family": "evm",
+   "value": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+   "err": "not an EVM address: 'cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd'"
+  },
+  {
+   "family": "evm",
+   "value": "0Xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+   "err": "not an EVM address: '0Xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd'"
+  },
+  {
+   "family": "evm",
+   "value": "",
+   "err": "empty address"
+  },
+  {
+   "family": "hedera",
+   "value": "0.0.1234",
+   "ok": "0x00000000000000000000000000000000000004d2"
+  },
+  {
+   "family": "hedera",
+   "value": "0.0.18446744073709551615",
+   "err": "not an EVM address: '0.0.18446744073709551615'"
+  },
+  {
+   "family": "hedera",
+   "value": "0.0.18446744073709551616",
+   "err": "not an EVM address: '0.0.18446744073709551616'"
+  },
+  {
+   "family": "hedera",
+   "value": "0.1.5",
+   "err": "not an EVM address: '0.1.5'"
+  },
+  {
+   "family": "hedera",
+   "value": "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
+   "ok": "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed"
+  },
+  {
+   "family": "sui",
+   "value": "0x2",
+   "ok": "0x0000000000000000000000000000000000000000000000000000000000000002"
+  },
+  {
+   "family": "sui",
+   "value": "0xABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB",
+   "ok": "0xabababababababababababababababababababababababababababababababab"
+  },
+  {
+   "family": "sui",
+   "value": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "err": "not a Sui address: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'"
+  },
+  {
+   "family": "sui",
+   "value": "2",
+   "err": "not a Sui address: '2'"
+  },
+  {
+   "family": "aptos",
+   "value": "0x1",
+   "ok": "0x0000000000000000000000000000000000000000000000000000000000000001"
+  },
+  {
+   "family": "aptos",
+   "value": "0xA",
+   "ok": "0x000000000000000000000000000000000000000000000000000000000000000a"
+  },
+  {
+   "family": "soroban",
+   "value": "GAAACAQDAQCQMBYIBEFAWDANBYHRAEISCMKBKFQXDAMRUGY4DUPB7JZX",
+   "ok": "GAAACAQDAQCQMBYIBEFAWDANBYHRAEISCMKBKFQXDAMRUGY4DUPB7JZX"
+  },
+  {
+   "family": "soroban",
+   "value": "CADQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQP5KR",
+   "ok": "CADQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQP5KR"
+  },
+  {
+   "family": "soroban",
+   "value": "gaaacaqdaqcqmbyibefawdanbyhraeiscmkbkfqxdamrugy4dupb7jzx",
+   "err": "not base32"
+  },
+  {
+   "family": "soroban",
+   "value": "MAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABEO2",
+   "err": "only G\u2026 account or C\u2026 contract strkeys"
+  },
+  {
+   "family": "soroban",
+   "value": "GAAACAQDAQCQMBYIBEFAWDANBYHRAEISCMKBKFQXDAMRUGY4DUPB7JZA",
+   "err": "strkey checksum"
+  },
+  {
+   "family": "cosmos",
+   "value": "wasm1qqqsyqcyq5rqwzqfpg9scrgwpugpzysnf2q0cj",
+   "bech32_prefix": "wasm",
+   "ok": "wasm1qqqsyqcyq5rqwzqfpg9scrgwpugpzysnf2q0cj"
+  },
+  {
+   "family": "cosmos",
+   "value": "WASM1PYYSJZGFPYYSJZGFPYYSJZGFPYYSJZGFPYYSJZGFPYYSJZGFPYYSEPV5JX",
+   "ok": "wasm1pyysjzgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfpyysepv5jx"
+  },
+  {
+   "family": "cosmos",
+   "value": "wasm1qqqsyqcyq5rqwzqfpg9scrgwpugpzysnf2q0cj",
+   "bech32_prefix": "osmo",
+   "err": "bech32 prefix 'wasm', expected 'osmo'"
+  },
+  {
+   "family": "cosmos",
+   "value": "wasm1qqqsyqcyq5rqwzqfpg9scrgwpugpzysnf2q0cq",
+   "err": "bech32 checksum"
+  },
+  {
+   "family": "cosmos",
+   "value": "wasm1QQQSYQCYQ5RQWZQFPG9SCRGWPUGPZYSNF2Q0CJ",
+   "err": "mixed-case bech32"
+  },
+  {
+   "family": "cosmos",
+   "value": "wasm1qqqqqqqqqqqqqqqqrqc4zq",
+   "err": "cosmos address is 20 (account) or 32 (contract) bytes"
+  },
+  {
+   "family": "ton",
+   "value": "0:ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB",
+   "ok": "0:abababababababababababababababababababababababababababababababab"
+  },
+  {
+   "family": "ton",
+   "value": "-1:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+   "ok": "-1:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+  },
+  {
+   "family": "ton",
+   "value": "007:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+   "ok": "7:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+  },
+  {
+   "family": "ton",
+   "value": "EQCrq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq8Uk",
+   "ok": "0:abababababababababababababababababababababababababababababababab"
+  },
+  {
+   "family": "ton",
+   "value": "EQCrq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq8Uk",
+   "testnet": false,
+   "ok": "0:abababababababababababababababababababababababababababababababab"
+  },
+  {
+   "family": "ton",
+   "value": "EQCrq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq8Uk",
+   "testnet": true,
+   "err": "TON address network flag does not match the chain"
+  },
+  {
+   "family": "ton",
+   "value": "0f8BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAdTk",
+   "testnet": true,
+   "ok": "-1:0101010101010101010101010101010101010101010101010101010101010101"
+  },
+  {
+   "family": "ton",
+   "value": "EQCrq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq8AA",
+   "err": "TON address checksum"
+  },
+  {
+   "family": "ton",
+   "value": "0:ababababababababababababababababababababababababababababababab",
+   "err": "Incorrect padding"
+  },
+  {
+   "family": "solana",
+   "value": "4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi",
+   "ok": "4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi"
+  },
+  {
+   "family": "solana",
+   "value": "tVojvhToWjQ8Xvo4UPx2Xz9eRy7auyYMmZBjc2XfN",
+   "err": "a Solana address is base58 of 32 bytes"
+  },
+  {
+   "family": "solana",
+   "value": "4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi0",
+   "err": "not base58: '0'"
+  },
+  {
+   "family": "bitcoin",
+   "value": "1abc",
+   "err": "unknown network family 'bitcoin'"
+  }
+ ]
+}

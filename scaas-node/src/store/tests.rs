@@ -6,10 +6,29 @@ use super::*;
 const LANE: &str = "0x00000000000000000000000000000000000000aa";
 const CHAIN: &str = "evm:9000";
 
-fn tmp_url() -> String {
+/// A store directory of its own, removed on drop (review F15). `url` names a file that does not exist yet.
+struct Tmp {
+    dir: std::path::PathBuf,
+    url: String,
+}
+
+impl Tmp {
+    fn db(&self) -> std::path::PathBuf {
+        self.dir.join("node.db")
+    }
+}
+
+impl Drop for Tmp {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+fn tmp() -> Tmp {
     let dir = std::env::temp_dir().join(format!("scaas-store-{}-{:016x}", std::process::id(), rand::random::<u64>()));
     std::fs::create_dir_all(&dir).unwrap();
-    format!("sqlite://{}", dir.join("node.db").display())
+    let url = format!("sqlite://{}", dir.join("node.db").display());
+    Tmp { dir, url }
 }
 
 fn chain(key: &str) -> ChainRow {
@@ -50,7 +69,7 @@ fn base_set() -> ConfigSet {
 }
 
 async fn open_seeded(url: &str) -> SqliteStore {
-    let s = SqliteStore::open(url, "test").await.unwrap();
+    let s = SqliteStore::create(url, "test").await.unwrap();
     bootstrap(&s, &base_set(), 1).await.unwrap();
     s
 }
@@ -97,8 +116,9 @@ async fn leased_job(s: &dyn Backend, key: &str, digest: u8) -> JobRow {
 
 #[tokio::test]
 async fn migrations_create_identity_and_counters() {
-    let url = tmp_url();
-    let s = SqliteStore::open(&url, "test").await.unwrap();
+    let t = tmp();
+    let url = t.url.clone();
+    let s = SqliteStore::create(&url, "test").await.unwrap();
     let id = s.identity().clone();
     assert_eq!(id.store_id.len(), 32);
     assert!(id.store_id.chars().all(|c| c.is_ascii_hexdigit()));
@@ -119,7 +139,8 @@ async fn migrations_create_identity_and_counters() {
 
 #[tokio::test]
 async fn reopen_keeps_seq_and_store_id() {
-    let url = tmp_url();
+    let t = tmp();
+    let url = t.url.clone();
     let s = open_seeded(&url).await;
     let first = created(&s, &new_job("a", 1)).await;
     let id1 = s.identity().clone();
@@ -138,8 +159,9 @@ async fn reopen_keeps_seq_and_store_id() {
 
 #[tokio::test]
 async fn second_owner_is_refused() {
-    let url = tmp_url();
-    let _a = SqliteStore::open(&url, "a").await.unwrap();
+    let t = tmp();
+    let url = t.url.clone();
+    let _a = SqliteStore::create(&url, "a").await.unwrap();
     match SqliteStore::open(&url, "b").await {
         Err(StoreError::Owned(_)) => {}
         other => panic!("expected Owned, got {:?}", other.map(|_| ())),
@@ -149,7 +171,8 @@ async fn second_owner_is_refused() {
 
 #[tokio::test]
 async fn stale_owner_cannot_journal() {
-    let url = tmp_url();
+    let t = tmp();
+    let url = t.url.clone();
     let a = open_seeded(&url).await;
     let j = leased_job(&a, "a", 1).await;
     a.drop_lock_for_test(); // the lock is lost without A noticing
@@ -160,9 +183,84 @@ async fn stale_owner_cannot_journal() {
     assert!(matches!(a.cancel(j.uid, 12).await, Err(StoreError::NotOwner)));
     assert!(matches!(a.append_audit(&audit("x"), 12).await, Err(StoreError::NotOwner)));
     assert!(matches!(a.bump_journal_max(CHAIN, LANE, 9).await, Err(StoreError::NotOwner)));
+    let q = created(&b, &new_job("q", 3)).await;
+    assert!(matches!(a.publish(q.uid, 12).await, Err(StoreError::NotOwner)));
+    assert!(matches!(a.purge(i64::MAX / 2, 0, 0).await, Err(StoreError::NotOwner)));
+    let mut more = base_set();
+    more.chains.push(chain("evm:7"));
+    assert!(matches!(bootstrap(&a, &more, 12).await, Err(StoreError::NotOwner)), "import");
+    assert!(matches!(a.cancel_by_origin("odoo", &new_job("z", 4).origin, 4_000_000_000, 12).await, Err(StoreError::NotOwner)));
+    assert!(matches!(a.mark_restored(&audit("r"), 12).await, Err(StoreError::NotOwner)));
+    assert!(matches!(a.check_owner().await, Err(StoreError::NotOwner)), "the cheap A1.1 check sees it too");
+    b.check_owner().await.unwrap();
+    assert_eq!(b.job(q.uid).await.unwrap().unwrap().published_at, None);
+    assert_eq!(b.identity().restore_epoch, 0);
+    assert!(b.load_config().await.unwrap().chains.iter().all(|c| c.chain_key != "evm:7"));
     assert_eq!(b.job(j.uid).await.unwrap().unwrap().state, Leased, "nothing journaled by the stale owner");
     assert_eq!(b.journal_max(CHAIN, LANE).await.unwrap(), None);
     assert!(matches!(b.transition(j.uid, Leased, Signed, &signed(5, "0x01"), 12).await.unwrap(), Transition::Ok { .. }));
+}
+
+#[tokio::test]
+async fn a_missing_store_is_never_created_implicitly() {
+    let t = tmp();
+    match SqliteStore::open(&t.url, "t").await {
+        Err(StoreError::Invalid(m)) => assert!(m.contains("store init"), "{m}"),
+        other => panic!("expected Invalid, got {:?}", other.map(|_| ())),
+    }
+    assert!(!t.db().exists(), "a typo'd or unmounted path creates nothing");
+    let s = SqliteStore::create(&t.url, "t").await.unwrap();
+    drop(s);
+    assert!(SqliteStore::create(&t.url, "t").await.is_err(), "init never reuses an existing store");
+    SqliteStore::open(&t.url, "t").await.unwrap();
+}
+
+#[tokio::test]
+async fn the_store_files_are_private() {
+    use std::os::unix::fs::PermissionsExt;
+    let t = tmp();
+    let s = open_seeded(&t.url).await;
+    created(&s, &new_job("a", 1)).await;
+    let mode = |suffix: &str| {
+        let p = format!("{}{suffix}", t.db().display());
+        std::fs::metadata(&p).map(|m| m.permissions().mode() & 0o777).unwrap_or_else(|e| panic!("{p}: {e}"))
+    };
+    for suffix in ["", "-wal", "-shm", ".lock"] {
+        assert_eq!(mode(suffix), 0o600, "node.db{suffix}");
+    }
+}
+
+#[tokio::test]
+async fn a_symlinked_path_is_the_same_store() {
+    let t = tmp();
+    let _a = SqliteStore::create(&t.url, "a").await.unwrap();
+    std::os::unix::fs::symlink(t.db(), t.dir.join("link.db")).unwrap();
+    let link = format!("sqlite://{}", t.dir.join("link.db").display());
+    match SqliteStore::open(&link, "b").await {
+        Err(StoreError::Owned(_)) => {}
+        other => panic!("expected Owned through the symlink, got {:?}", other.map(|_| ())),
+    }
+}
+
+#[tokio::test]
+async fn a_replaced_lock_file_is_lost_ownership() {
+    let t = tmp();
+    let a = SqliteStore::create(&t.url, "a").await.unwrap();
+    a.check_owner().await.unwrap();
+    std::fs::remove_file(format!("{}.lock", t.db().display())).unwrap();
+    assert!(matches!(a.check_owner().await, Err(StoreError::Owned(_))), "a second process could lock a new file");
+}
+
+#[tokio::test]
+async fn janitor_exits_when_fenced_out() {
+    let t = tmp();
+    let a = Arc::new(open_seeded(&t.url).await);
+    a.drop_lock_for_test();
+    let _b = SqliteStore::open(&t.url, "b").await.unwrap();
+    let ms = Duration::from_millis(10);
+    let r = tokio::time::timeout(Duration::from_secs(5), janitor(a.clone() as Store, ms, ms, 1, 1)).await
+        .expect("the janitor returns instead of warning forever");
+    assert!(matches!(r, Err(StoreError::NotOwner)), "{r:?}");
 }
 
 #[tokio::test]
@@ -193,7 +291,8 @@ fn state_machine_matches_the_vector_file() {
 
 #[tokio::test]
 async fn illegal_transitions_are_refused_and_late_noop_writes_nothing() {
-    let s = open_seeded(&tmp_url()).await;
+    let t = tmp();
+    let s = open_seeded(&t.url).await;
     let j = created(&s, &new_job("a", 1)).await;
     assert!(matches!(s.transition(j.uid, Queued, Signed, &signed(1, "0x01"), 11).await,
                      Err(StoreError::Illegal { from: Queued, to: Signed })));
@@ -211,8 +310,48 @@ async fn illegal_transitions_are_refused_and_late_noop_writes_nothing() {
 }
 
 #[tokio::test]
+async fn only_cancel_reaches_cancelled() {
+    let t = tmp();
+    let s = open_seeded(&t.url).await;
+    let j = created(&s, &new_job("a", 1)).await;
+    assert!(s.publish(j.uid, 11).await.unwrap());
+    assert!(matches!(s.transition(j.uid, Queued, Cancelled, &Fields::default(), 12).await,
+                     Err(StoreError::Illegal { from: Queued, to: Cancelled })), "R98: published ⇒ hold + TOO_LATE");
+    assert_eq!(s.job(j.uid).await.unwrap().unwrap().state, Queued);
+    let k = leased_job(&s, "b", 2).await;
+    assert!(matches!(s.transition(k.uid, Leased, Cancelled, &Fields::default(), 12).await, Err(StoreError::Illegal { .. })));
+    assert!(allowed(Queued, Cancelled) && allowed(Leased, Cancelled), "the pairs stay in the table (transitions.json)");
+}
+
+#[tokio::test]
+async fn journal_fields_only_on_their_transitions() {
+    let t = tmp();
+    let s = open_seeded(&t.url).await;
+    let j = leased_job(&s, "a", 1).await;
+    let nonce = Fields { outer_nonce: Some(99), ..Default::default() };
+    let hash = Fields { tx_hash: Some("0x99".into()), ..Default::default() };
+    for (to, f) in [(Dead, &nonce), (Consumed, &nonce), (Dead, &hash), (Queued, &hash)] {
+        assert!(matches!(s.transition(j.uid, Leased, to, f, 12).await, Err(StoreError::Invalid(_))), "{to:?} {f:?}");
+    }
+    let other_lane = Fields { lane_label: Some("0xBB".into()), ..signed(1, "0x01") };
+    assert!(matches!(s.transition(j.uid, Leased, Signed, &other_lane, 12).await, Err(StoreError::Invalid(_))),
+            "signed by a lane that did not lease it");
+    assert_eq!((s.job(j.uid).await.unwrap().unwrap().state, s.journal_max(CHAIN, LANE).await.unwrap()), (Leased, None));
+    let own_lane = Fields { lane_label: Some(LANE.into()), ..signed(1, "0x01") };
+    assert!(matches!(s.transition(j.uid, Leased, Signed, &own_lane, 12).await.unwrap(), Transition::Ok { .. }));
+    assert!(matches!(s.transition(j.uid, Signed, Broadcast, &nonce, 13).await, Err(StoreError::Invalid(_))));
+    s.transition(j.uid, Signed, Broadcast, &Fields::default(), 13).await.unwrap();
+    assert!(matches!(s.transition(j.uid, Broadcast, Broadcast, &Fields { outer_nonce: Some(99), ..signed(99, "0x02") }, 14)
+                     .await, Err(StoreError::Invalid(_))), "a replacement keeps its nonce");
+    assert!(matches!(s.transition(j.uid, Broadcast, Broadcast, &Fields { tx_hash: Some("0x02".into()), ..Default::default() }, 14)
+                     .await.unwrap(), Transition::Ok { .. }));
+    assert_eq!(s.journal_max(CHAIN, LANE).await.unwrap(), Some(1), "never raised by a stray nonce");
+}
+
+#[tokio::test]
 async fn every_transition_writes_one_event_atomically() {
-    let s = open_seeded(&tmp_url()).await;
+    let t = tmp();
+    let s = open_seeded(&t.url).await;
     let j = created(&s, &new_job("a", 1)).await;
     let ladder = [
         (Queued, Leased, lease(LANE)),
@@ -248,7 +387,8 @@ async fn every_transition_writes_one_event_atomically() {
 
 #[tokio::test]
 async fn requeue_clears_the_journal_fields_but_not_journal_max() {
-    let s = open_seeded(&tmp_url()).await;
+    let t = tmp();
+    let s = open_seeded(&t.url).await;
     let j = leased_job(&s, "a", 1).await;
     s.transition(j.uid, Leased, Signed, &signed(8, "0x08"), 12).await.unwrap();
     s.transition(j.uid, Signed, Queued, &Fields { error: Some("dropped".into()), ..Default::default() }, 13).await.unwrap();
@@ -262,7 +402,8 @@ async fn requeue_clears_the_journal_fields_but_not_journal_max() {
 
 #[tokio::test]
 async fn transition_tri_state() {
-    let s = open_seeded(&tmp_url()).await;
+    let t = tmp();
+    let s = open_seeded(&t.url).await;
     // Moved after a cancel: the lane must drop the work and keep its nonce.
     let j = leased_job(&s, "a", 1).await;
     assert!(matches!(s.cancel(j.uid, 12).await.unwrap(), Cancel::Cancelled(_)));
@@ -286,20 +427,22 @@ async fn transition_tri_state() {
 
 #[tokio::test]
 async fn signed_requires_nonce_hash_and_a_known_lane() {
-    let s = open_seeded(&tmp_url()).await;
+    let t = tmp();
+    let s = open_seeded(&t.url).await;
     let j = leased_job(&s, "a", 1).await;
     assert!(matches!(s.transition(j.uid, Leased, Signed, &Fields::default(), 12).await, Err(StoreError::Invalid(_))));
     let k = created(&s, &new_job("b", 2)).await;
-    s.transition(k.uid, Queued, Leased, &lease("0xNOTALANE"), 12).await.unwrap();
-    assert!(matches!(s.transition(k.uid, Leased, Signed, &signed(1, "0x01"), 12).await, Err(StoreError::Invalid(_))));
-    assert_eq!(s.job(k.uid).await.unwrap().unwrap().state, Leased, "rolled back");
+    assert!(matches!(s.transition(k.uid, Queued, Leased, &lease("0xNOTALANE"), 12).await, Err(StoreError::Invalid(_))),
+            "an unknown lane is refused at lease time, not at signed");
+    assert_eq!(s.job(k.uid).await.unwrap().unwrap().state, Queued, "rolled back");
 }
 
 // ------------------------------------------------------------------ journal_max, nonces, bytes
 
 #[tokio::test]
 async fn journal_max_is_monotonic_with_out_of_order_writes() {
-    let s = open_seeded(&tmp_url()).await;
+    let t = tmp();
+    let s = open_seeded(&t.url).await;
     let a = leased_job(&s, "a", 1).await;
     let b = leased_job(&s, "b", 2).await;
     s.transition(a.uid, Leased, Signed, &signed(5, "0x05"), 12).await.unwrap();
@@ -315,7 +458,8 @@ async fn journal_max_is_monotonic_with_out_of_order_writes() {
 
 #[tokio::test]
 async fn nonces_are_i64() {
-    let s = open_seeded(&tmp_url()).await;
+    let t = tmp();
+    let s = open_seeded(&t.url).await;
     let stellar = (5_000_000i64 << 32) + 7; // ledger << 32
     let j = leased_job(&s, "a", 1).await;
     s.transition(j.uid, Leased, Signed, &signed(stellar, "h1"), 12).await.unwrap();
@@ -326,7 +470,8 @@ async fn nonces_are_i64() {
 
 #[tokio::test]
 async fn keys_compare_byte_exact() {
-    let s = open_seeded(&tmp_url()).await;
+    let t = tmp();
+    let s = open_seeded(&t.url).await;
     let mut set = base_set();
     set.tokens.push(TokenRow { chain_key: CHAIN.into(), address: "0xab".into(), decimals: 6, active: true });
     set.lanes.push(LaneRow { chain_key: CHAIN.into(), label: "0xbb".into(), account_index: 2, journal_max: None });
@@ -344,7 +489,8 @@ async fn keys_compare_byte_exact() {
 
 #[tokio::test]
 async fn idempotency_key_and_payload_hash() {
-    let s = open_seeded(&tmp_url()).await;
+    let t = tmp();
+    let s = open_seeded(&t.url).await;
     let j = new_job("k", 1);
     let first = created(&s, &j).await;
     let head = s.head_seq("job_event").await.unwrap();
@@ -369,8 +515,47 @@ async fn idempotency_key_and_payload_hash() {
 }
 
 #[tokio::test]
+async fn accept_refuses_expired_payloads_and_stale_generations() {
+    let t = tmp();
+    let s = open_seeded(&t.url).await;
+    let mut j = new_job("x", 1);
+    j.valid_until = 100;
+    assert_eq!(s.accept(&j, 100_000).await.unwrap(), Accept::Expired, "valid_until is unix s, now is ms");
+    assert_eq!(s.head_seq("job").await.unwrap(), 0, "nothing written");
+    let row = match s.accept(&j, 99_999).await.unwrap() { Accept::Created(r) => r, other => panic!("{other:?}") };
+    assert_eq!(s.accept(&j, 200_000).await.unwrap(), Accept::Existing(row), "a retry of a stored job still answers");
+    let mut g1 = new_job("y", 2);
+    g1.origin.generation = 1;
+    let r1 = created(&s, &g1).await;
+    s.transition(r1.uid, Queued, Dead, &Fields::default(), 12).await.unwrap();
+    let g0 = new_job("y", 3);
+    assert_eq!(s.accept(&g0, 13).await.unwrap(), Accept::Superseded { uid: r1.uid }, "generation 0 after 1");
+}
+
+#[tokio::test]
+async fn digest_and_payload_hash_follow_the_kind() {
+    let t = tmp();
+    let s = open_seeded(&t.url).await;
+    for (kind, digest) in [("metatx", None), ("signed_op", None), ("call", Some([5; 32]))] {
+        let mut j = new_job(kind, 5);
+        j.kind = kind.into();
+        j.digest = digest;
+        assert!(s.accept(&j, 11).await.is_err(), "{kind} with digest {digest:?}");
+    }
+    assert_eq!(s.head_seq("job").await.unwrap(), 0, "rolled back");
+    let raw = |kind: &str, hash: &str| format!(
+        "INSERT INTO job (uid, namespace, origin_scope, origin_producer, origin_key, chain_key, kind, digest, payload, \
+         payload_hash, valid_until, state, created_at, updated_at) VALUES (900, 'odoo', 's', 'p', 'k', '', '{kind}', NULL, \
+         {}, {hash}, 1, 'cancelled', 1, 1)", if kind == "tombstone" { "NULL" } else { "x'00'" });
+    assert!(sqlx::query(&raw("call", "NULL")).execute(&s.pool).await.is_err(), "call without payload_hash");
+    assert!(sqlx::query(&raw("tombstone", "zeroblob(32)")).execute(&s.pool).await.is_err(), "tombstone with one");
+    sqlx::query(&raw("tombstone", "NULL")).execute(&s.pool).await.unwrap();
+}
+
+#[tokio::test]
 async fn cancel_by_origin_without_a_job_writes_a_tombstone() {
-    let s = open_seeded(&tmp_url()).await;
+    let t = tmp();
+    let s = open_seeded(&t.url).await;
     let j = new_job("t", 1);
     let Cancel::Cancelled(t) = s.cancel_by_origin("odoo", &j.origin, 4_000_000_000, 10).await.unwrap() else { panic!() };
     assert_eq!((t.kind.as_str(), t.state, t.payload.clone()), ("tombstone", Cancelled, None));
@@ -387,7 +572,8 @@ async fn cancel_by_origin_without_a_job_writes_a_tombstone() {
 
 #[tokio::test]
 async fn live_digest_is_unique_per_chain() {
-    let s = open_seeded(&tmp_url()).await;
+    let t = tmp();
+    let s = open_seeded(&t.url).await;
     let a = created(&s, &new_job("a", 1)).await;
     let mut squat = new_job("b", 1); // other origin, same digest
     squat.payload_hash = [2; 32];
@@ -412,7 +598,8 @@ async fn live_digest_is_unique_per_chain() {
 
 #[tokio::test]
 async fn unique_violations_are_classified_by_constraint_name() {
-    let s = open_seeded(&tmp_url()).await;
+    let t = tmp();
+    let s = open_seeded(&t.url).await;
     let j = created(&s, &new_job("a", 1)).await;
     let dup = |uid: i64, key: &str, digest: Vec<u8>| {
         sqlx::query("INSERT INTO job (uid, namespace, origin_scope, origin_producer, origin_key, generation, chain_key, \
@@ -431,7 +618,8 @@ async fn unique_violations_are_classified_by_constraint_name() {
 
 #[tokio::test]
 async fn quota_counts_live_jobs_of_the_namespace() {
-    let s = open_seeded(&tmp_url()).await;
+    let t = tmp();
+    let s = open_seeded(&t.url).await;
     let mut set = base_set();
     set.namespaces = vec![NamespaceRow { name: "tiny".into(), state: "active".into(), allow_call: false,
                                          max_live_jobs: 1, chains: vec![CHAIN.into()] }];
@@ -453,7 +641,8 @@ async fn quota_counts_live_jobs_of_the_namespace() {
 
 #[tokio::test]
 async fn lease_respects_hold_and_lane_hint() {
-    let s = open_seeded(&tmp_url()).await;
+    let t = tmp();
+    let s = open_seeded(&t.url).await;
     let mut j = new_job("a", 1);
     j.lane_hint = Some("0xBB".into());
     let row = created(&s, &j).await;
@@ -466,7 +655,8 @@ async fn lease_respects_hold_and_lane_hint() {
 
 #[tokio::test]
 async fn cancel_of_a_published_job_holds_it_and_is_too_late() {
-    let s = open_seeded(&tmp_url()).await;
+    let t = tmp();
+    let s = open_seeded(&t.url).await;
     let j = created(&s, &new_job("a", 1)).await;
     assert!(s.publish(j.uid, 11).await.unwrap());
     assert_eq!(s.cancel(j.uid, 12).await.unwrap(), Cancel::TooLate { state: Queued, published: true });
@@ -485,7 +675,8 @@ async fn cancel_of_a_published_job_holds_it_and_is_too_late() {
 #[tokio::test]
 async fn lease_and_cancel_race_has_one_winner() {
     for _ in 0..20 {
-        let s: Store = Arc::new(open_seeded(&tmp_url()).await);
+        let t = tmp();
+        let s: Store = Arc::new(open_seeded(&t.url).await);
         let j = created(s.as_ref(), &new_job("a", 1)).await;
         let (s1, s2) = (s.clone(), s.clone());
         let lease_t = tokio::spawn(async move { s1.transition(j.uid, Queued, Leased, &lease(LANE), 11).await.unwrap() });
@@ -502,7 +693,8 @@ async fn lease_and_cancel_race_has_one_winner() {
 
 #[tokio::test]
 async fn purge_never_deletes_an_unexpired_origin() {
-    let s = open_seeded(&tmp_url()).await;
+    let t = tmp();
+    let s = open_seeded(&t.url).await;
     let day = 86_400_000i64;
     let mut old = new_job("old", 1);
     old.valid_until = 1_000; // long expired
@@ -513,12 +705,20 @@ async fn purge_never_deletes_an_unexpired_origin() {
         s.transition(uid, Queued, Dead, &Fields::default(), 20).await.unwrap();
     }
     let now = 40 * day;
+    let head = s.head_seq("job_event").await.unwrap();
     assert_eq!(s.purge(now, 30 * 86_400, 7 * 86_400).await.unwrap(), 1);
     assert!(s.job(a.uid).await.unwrap().is_none(), "terminal + old + expired");
     assert!(s.job(b.uid).await.unwrap().is_some(), "its payload has not expired: the key stays taken");
     assert!(s.job(c.uid).await.unwrap().is_some(), "live rows are never purged");
     assert!(s.job_events(0, 100).await.unwrap().is_empty(), "feed rows older than feed retention");
     assert_eq!(s.accept(&new_job("live", 2), now).await.unwrap(), Accept::Existing(s.job(b.uid).await.unwrap().unwrap()));
+    assert_eq!(s.accept(&old, now).await.unwrap(), Accept::Expired, "a purged origin is never re-accepted");
+    // R93: the purge floor tells "cursor expired" from "nothing new"
+    assert_eq!(s.purge_floor("job_event").await.unwrap(), head, "every event up to the head was purged");
+    assert_eq!(s.purge_floor("feed_item").await.unwrap(), 0);
+    assert!(matches!(s.accept(&new_job("later", 4), now).await.unwrap(), Accept::Created(_)));
+    s.purge(now, 30 * 86_400, 7 * 86_400).await.unwrap();
+    assert_eq!(s.purge_floor("job_event").await.unwrap(), head, "a newer row is not purged; the floor never falls");
 }
 
 // ------------------------------------------------------------------ audit chain (R110)
@@ -541,7 +741,8 @@ fn audit(target: &str) -> AuditEntry {
 
 #[tokio::test]
 async fn audit_rows_form_a_hash_chain() {
-    let s = SqliteStore::open(&tmp_url(), "t").await.unwrap();
+    let t = tmp();
+    let s = SqliteStore::create(&t.url, "t").await.unwrap();
     let r1 = s.append_audit(&audit("evm:1"), 1).await.unwrap();
     let r2 = s.append_audit(&audit("evm:2"), 2).await.unwrap();
     assert_eq!(r1.prev_hash, vec![0; 32]);
@@ -554,15 +755,28 @@ async fn audit_rows_form_a_hash_chain() {
 }
 
 #[tokio::test]
+async fn a_deleted_middle_audit_row_breaks_the_chain() {
+    let t = tmp();
+    let s = SqliteStore::create(&t.url, "t").await.unwrap();
+    let _r1 = s.append_audit(&audit("evm:1"), 1).await.unwrap();
+    let r2 = s.append_audit(&audit("evm:2"), 2).await.unwrap();
+    let r3 = s.append_audit(&audit("evm:3"), 3).await.unwrap();
+    sqlx::query("DELETE FROM audit_log WHERE seq = ?").bind(r2.seq).execute(&s.pool).await.unwrap();
+    assert_eq!(verify_audit(&s.audit_log().await.unwrap()), Err(r3.seq));
+}
+
+#[tokio::test]
 async fn store_restored_bumps_restore_epoch_and_is_audited() {
-    let url = tmp_url();
-    let s = SqliteStore::open(&url, "cli:1000").await.unwrap();
+    let t = tmp();
+    let url = t.url.clone();
+    let s = SqliteStore::create(&url, "cli:1000").await.unwrap();
     let e = AuditEntry { actor_kind: "cli".into(), sub: Some("1000".into()), method: "CLI".into(),
                          route: "store restored".into(), result: 0, request_id: "cli".into(), ..Default::default() };
     assert_eq!(s.mark_restored(&e, 5).await.unwrap(), 1);
     drop(s);
     let s = SqliteStore::open(&url, "node").await.unwrap();
     assert_eq!(s.identity().restore_epoch, 1);
+    assert_eq!(s.identity().epoch, 6, "the fencing epoch jumps to max(epoch + 1, now_ms = 5), then + 1 at open");
     let log = s.audit_log().await.unwrap();
     assert_eq!((log[0].actor_kind.as_str(), log[0].route.as_str()), ("cli", "store restored"));
 }
@@ -571,7 +785,8 @@ async fn store_restored_bumps_restore_epoch_and_is_audited() {
 
 #[tokio::test]
 async fn bootstrap_imports_absent_entries_and_reports_drift() {
-    let s = SqliteStore::open(&tmp_url(), "t").await.unwrap();
+    let t = tmp();
+    let s = SqliteStore::create(&t.url, "t").await.unwrap();
     let r = bootstrap(&s, &base_set(), 1).await.unwrap();
     assert_eq!(r.imported.len(), 6);
     assert!(r.drift.is_empty());
@@ -605,7 +820,8 @@ async fn bootstrap_imports_absent_entries_and_reports_drift() {
 
 #[tokio::test]
 async fn bootstrap_imports_mesh_peers_and_policy() {
-    let s = SqliteStore::open(&tmp_url(), "t").await.unwrap();
+    let t = tmp();
+    let s = SqliteStore::create(&t.url, "t").await.unwrap();
     let mut set = base_set();
     set.peers = vec![PeerRow { name: "partner-a".into(), url: "https://a.example.net:8550".into(),
                                spki_sha256: "9f".repeat(32), class: "private".into(), chains: "evm:100".into() }];
@@ -624,4 +840,17 @@ async fn bootstrap_imports_mesh_peers_and_policy() {
                                   support: "full".into(), submit: true, pool_visibility: "open".into(),
                                   min_fee: "0".into(), fee_recipient_allow: "any".into(), gossip: false }];
     assert!(bootstrap(&s, &bad, 2).await.is_err(), "contract '*' with submit is refused by the store (R86)");
+    // foreign keys (review F11)
+    let orphan = |f: &dyn Fn(&mut ConfigSet)| {
+        let mut x = ConfigSet::default();
+        f(&mut x);
+        x
+    };
+    let token = orphan(&|x| x.tokens.push(TokenRow { chain_key: "evm:404".into(), address: "0x01".into(), decimals: 6, active: true }));
+    let lane = orphan(&|x| x.lanes.push(LaneRow { chain_key: "evm:404".into(), label: "0x01".into(), account_index: 0, journal_max: None }));
+    for set in [token, lane] {
+        assert!(bootstrap(&s, &set, 3).await.is_err(), "a row of an unknown chain: {set:?}");
+    }
+    assert!(sqlx::query("INSERT INTO api_key (key_id, namespace, scopes, state, created_by, created_at) \
+                         VALUES ('k1', 'nobody', 'read', 'active', 't', 1)").execute(&s.pool).await.is_err());
 }

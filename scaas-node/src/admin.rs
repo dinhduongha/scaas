@@ -178,11 +178,17 @@ async fn readyz(State(snap): State<Arc<RwLock<Snapshot>>>) -> impl IntoResponse 
     (code, Json(json!({"ready": s.ready, "reasons": reasons})))
 }
 
+/// Số mục node.toml khác store lúc bootstrap (R95, §8); `main` đặt sau bootstrap.
+pub static TOML_DRIFT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 async fn metrics(State(snap): State<Arc<RwLock<Snapshot>>>) -> impl IntoResponse {
     let mut body = snap.read().map(|s| s.metrics.clone()).unwrap_or_default();
     let n = crate::submit::BUMP_SKIPPED_CONSUMED.load(std::sync::atomic::Ordering::Relaxed);
     let name = "scaas_submit_bump_skipped_consumed_total";
     let _ = writeln!(body, "# HELP {name} Stuck meta-txs not bumped because their nonce was consumed (R80).\n# TYPE {name} counter\n{name} {n}");
+    let n = TOML_DRIFT.load(std::sync::atomic::Ordering::Relaxed);
+    let name = "scaas_config_toml_drift";
+    let _ = writeln!(body, "# HELP {name} node.toml entries that differ from the store at start (R95).\n# TYPE {name} gauge\n{name} {n}");
     ([(header::CONTENT_TYPE, "text/plain; version=0.0.4")], body)
 }
 
@@ -279,5 +285,6 @@ scaas_drift_alerts{chain=\"evm:9000\"} 3
         assert!(r.headers()[header::CONTENT_TYPE].to_str().unwrap().starts_with("text/plain"));
         let body = to_bytes(r.into_body(), 1 << 16).await.unwrap();
         assert!(String::from_utf8_lossy(&body).contains("scaas_breaker_open"));
+        assert!(String::from_utf8_lossy(&body).contains("\n# TYPE scaas_config_toml_drift gauge\nscaas_config_toml_drift "));
     }
 }

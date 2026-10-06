@@ -1,5 +1,6 @@
 //! scaas-node --config node.toml            chạy các mô-đun bật trong config
 //! scaas-node addresses --config node.toml  in địa chỉ lane dẫn xuất rồi thoát
+//! scaas-node store init --config node.toml      tạo store MỚI cho một node mới (node không bao giờ tự tạo store)
 //! scaas-node store restored --config node.toml  bắt buộc sau mỗi lần restore store: restore_epoch + 1 (R110)
 //! scaas-node keystore new --kind <mnemonic|secp256k1|ed25519> --out <dir> --name <file>
 //!     (bí mật đọc từ stdin, passphrase từ $SCAAS_KEYSTORE_PASSPHRASE)
@@ -32,10 +33,21 @@ fn legacy(cfg: &config::Config, relay: bool) -> Result<odoo::Odoo> {
     odoo::Odoo::new(o, if relay { &o.relay_api_key_env } else { &o.indexer_api_key_env })
 }
 
+fn cli_uid() -> String {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata("/proc/self").map(|m| m.uid().to_string()).unwrap_or_else(|_| "unknown".into())
+}
+
+/// `store init`: một store mới (file 0600). Store đã có ⇒ lỗi; khởi động thường không bao giờ tạo store (F5).
+async fn store_init(cfg: &config::Config) -> Result<()> {
+    let st = store::create(&cfg.store.url, &format!("cli:{}", cli_uid())).await.context("store init")?;
+    println!("store {} created", st.identity().store_id);
+    Ok(())
+}
+
 /// `store restored`: chạy khi node DỪNG (lấy owner lock), ghi audit `cli:<uid>`.
 async fn store_restored(cfg: &config::Config) -> Result<()> {
-    use std::os::unix::fs::MetadataExt;
-    let uid = std::fs::metadata("/proc/self").map(|m| m.uid().to_string()).unwrap_or_else(|_| "unknown".into());
+    let uid = cli_uid();
     let st = store::open(&cfg.store.url, &format!("cli:{uid}")).await.context("open the store (stop the node first)")?;
     let e = store::AuditEntry {
         actor_kind: "cli".into(),
@@ -92,10 +104,14 @@ async fn main() -> Result<()> {
         return keystore_new(&args);
     }
     let path = PathBuf::from(arg(&args, "--config")
-        .ok_or_else(|| anyhow!("usage: scaas-node [addresses | store restored] --config node.toml"))?);
+        .ok_or_else(|| anyhow!("usage: scaas-node [addresses | store init | store restored] --config node.toml"))?);
     let cfg = config::Config::load(&path)?;
-    if args.get(1).map(String::as_str) == Some("store") && args.get(2).map(String::as_str) == Some("restored") {
-        return store_restored(&cfg).await;
+    if args.get(1).map(String::as_str) == Some("store") {
+        return match args.get(2).map(String::as_str) {
+            Some("init") => store_init(&cfg).await,
+            Some("restored") => store_restored(&cfg).await,
+            other => bail!("unknown store command {other:?}: init | restored"),
+        };
     }
     // Chỉ địa chỉ được in, không bao giờ bí mật (R60).
     let mut lane_signers = Vec::new();
@@ -128,9 +144,13 @@ async fn main() -> Result<()> {
     for k in &boot.imported {
         info!(entry = %k, "bootstrap: imported from node.toml");
     }
+    // Until runtime reads the store (P3), every consumer still reads node.toml: say so, or an operator who
+    // edits toml is told the store wins while toml actually does, and later the edit silently stops applying.
     for k in &boot.drift {
-        warn!(entry = %k, "node.toml differs from the store; the store wins (R95)");
+        warn!(entry = %k, "node.toml differs from the store; toml is used for now, the store value takes effect \
+                            when runtime reads the store (P3)");
     }
+    admin::TOML_DRIFT.store(boot.drift.len() as u64, std::sync::atomic::Ordering::Relaxed);
     match store::verify_audit(&st.audit_log().await?) {
         Ok(head) => info!(head = %alloy::hex::encode(head), "audit chain head"),
         Err(seq) => error!(seq, "audit chain broken (R110)"),
@@ -138,9 +158,12 @@ async fn main() -> Result<()> {
     let mut gw_chains = HashMap::new();
     let mut probes = Vec::new();
     let mut set: JoinSet<Result<()>> = JoinSet::new();
+    // ≤ 10 y each (validated), so the casts are exact.
     let (janitor, job_ret, feed_ret) = (st.clone(), cfg.store.job_retention_secs as i64, cfg.store.feed_retention_secs as i64);
     set.spawn(async move {
-        store::janitor(janitor, Duration::from_secs(60), job_ret, feed_ret).await;
+        // Fenced out or lock lost ⇒ Err ⇒ the process exits (A1.1); the legacy paths stop with it.
+        store::janitor(janitor, Duration::from_secs(2), Duration::from_secs(60), job_ret, feed_ret).await
+            .context("store ownership lost")?;
         Err(anyhow!("store janitor ended"))
     });
 

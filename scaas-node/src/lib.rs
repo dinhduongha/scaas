@@ -1,5 +1,6 @@
 //! scaas-node — một binary cho tầng daemon (`_USER-DECISIONS` §23).
 pub mod abi;
+pub mod addresses;
 pub mod admin;
 pub mod adapter;
 pub mod adapters;
