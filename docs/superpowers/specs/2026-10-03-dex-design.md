@@ -5,6 +5,16 @@
 
 Ruling của luồng đánh số `RS5-n` (lead đánh lại số khi merge).
 
+**Trạng thái (rev 1.1, 2026-10-07).** Code EVM + node BUILT; review Claude 1 (§8) mở 5 luồng sửa code DX-FIX1…5
+(§7, cuối). Các ruling dưới đây **đã bị thay** bởi spec sau — đọc spec sau trước:
+
+| Ruling ở đây | Bị thay bởi | Nội dung thay |
+|---|---|---|
+| RS5-2 (sổ ở Odoo qua `/json/2`, vòng `dex_sync`/`restored`) — §2 | NI **R105** | Sổ ở store của node (`dex_market/order/trade`); Odoo chỉ là bản soi để hạch toán |
+| §1.6 / D11 "ERC-1271 không trần gas" | UA §5.4 + **F10**; nay **RS5-14** | Trần 50k / 400k (clone `SubjectAccount`), returndata ≤ 32 B |
+| RS5-9 "book chỉ nhận `relayer =` ví này" | mesh-gossip **R124** §11.6 | Mặc định theo thị trường (home-bound); thị trường `unbound` nhận `relayer = 0` (chỉ GTC nghỉ) — mở lại mặt MEV §3.4 cho maker chọn |
+| RS5-11 (một lane) | NI **R102** | Job gắn relayer được ghim lane (`lane_hint`) |
+
 ---
 
 ## 0. Tóm tắt
@@ -103,7 +113,8 @@ giới hạn giống contract (§3.3).
   `o.maker` ⇒ `filled[h] = o.sellAmount` (đóng vĩnh viễn: lệnh đã huỷ **không bao giờ** settle được, kể cả bởi
   relayer khác đang giữ bản ký). Gom nhiều lệnh một tx (review D14); mục chữ ký sai hoặc đã đóng bị bỏ qua (không
   revert cả lô, không event). Phát lại là no-op.
-- `invalidateNonces(maker, minNonce, sig)`: `minNonce` phải **tăng** và `<= 2^128` ⇒ phát lại bị từ chối, một chữ
+- `invalidateNonces(maker, minNonce, sig)`: `minNonce` phải **tăng** và `<= 2^128 − 1` (`type(uint128).max`,
+  `OrderBookDex.sol:89`; nonce là `uint256` nên phía trên vẫn còn chỗ) ⇒ phát lại bị từ chối, một chữ
   ký nhầm `2^256−1` không khoá vĩnh viễn địa chỉ (review D23); vô hiệu mọi lệnh `nonce < minNonce`.
 - **RS5-10 — chữ ký huỷ không có hạn** (ngoại lệ có chủ ý của "mọi chữ ký có hạn"): huỷ chỉ đi một chiều có lợi cho
   người ký và phát lại là no-op; một `validUntil` chỉ tạo cửa sổ "đã gỡ khỏi sổ off-chain mà job huỷ on-chain hết
@@ -142,12 +153,16 @@ D12, nhận một phần).
 ### 1.6 Hàm đọc cho intake
 
 `checkOrder(Order o, bytes sig) view returns (bytes32 hash, uint8 status, uint256 remaining, uint256 fundable,
-uint256 feeFundable)`: `status` ∈ `OK, EXPIRED, NONCE_INVALID, BAD_SIG, CLOSED, BAD_FLAGS, NOT_LISTED`;
+uint256 feeFundable)`: `status` ∈ `OK, BAD_FLAGS, EXPIRED, NONCE_INVALID, BAD_SIG, CLOSED, NOT_LISTED, BAD_FEE`
+(0–7, `OrderBookDex.sol:93-100`; `BAD_FEE` = `feeMode` lạ, `feeRecipient = DEX`, hay vượt trần §1.5);
 `fundable = min(balanceOf, allowance(DEX))` trên `sellToken`, `feeFundable` tương tự trên token phí relayer. Một
 `eth_call` cho mọi kiểm ở cửa (chữ ký kể cả ERC-1271, số dư, allowance, đóng/huỷ, nonce).
 
-ERC-1271 gọi qua `SignatureChecker` **không** trần gas (khác `ERC20MetaTx` 50k): xác minh passkey P-256 bằng
-Solidity tốn hàng trăm nghìn gas (review D11); relayer đã simulate trước khi gửi.
+~~ERC-1271 gọi qua `SignatureChecker` **không** trần gas~~ — **sai, thay bằng RS5-14** (review Claude H3; UA F10).
+Code hiện tại (`OrderBookDex.sol:383-384`) vẫn là `SignatureChecker` không trần: một maker hợp đồng trả đúng dưới
+`eth_call` nhưng đốt gas / trả returndata khổng lồ trong block thật làm sập cả lô `settle` (1/64 gas còn lại không đủ
+cho các cặp sau) và **mọi** lô `cancel` (không có `try`). Đích: trần 50k, 400k cho clone `SubjectAccount` (theo
+codehash, như `MetaToken._erc1271Gas`, `MetaToken.sol:141-143`), returndata chép tối đa 32 B — luồng DX-FIX3.
 
 ### 1.7 R26 và R30
 
@@ -213,6 +228,7 @@ Vòng đời trong node:
 
 Thị trường `(base, quote)` lấy từ Odoo (`dex_markets`), đối chiếu với `markets(key)` on-chain lúc nạp và mỗi 30 s;
 lệch (niêm yết/phí/người nhận) ⇒ thị trường đó **không** được phục vụ + log (drift Odoo ↔ chain).
+*Thực tế (review Claude M2):* chỉ kiểm lúc `Venue::start` (`venue.rs:188-196`); vòng 30 s chưa có — RS5-17, DX-FIX5.
 Lệnh bán `base` = **ask**, giá `buyAmount/sellAmount` (quote/base); lệnh bán `quote` = **bid**, giá
 `sellAmount/buyAmount`. So giá bằng nhân chéo `U256` (lượng ở cửa `< 2^128` ⇒ không tràn).
 
@@ -225,12 +241,17 @@ Mỗi phía một `Vec` sắp theo (giá tốt nhất, `seq` tăng). `seq` cấp
 Lệnh tới `O` đi qua phía đối diện theo thứ tự; với lệnh nghỉ `R` (maker) còn `R.rem`:
 `x = min(R.rem, floor(O.rem · R.sell / R.buy))`, `y = ceil(x · R.buy / R.sell)`; `x = 0` ⇒ dừng; kiểm
 `limits_ok(R, O, x, y)` **giống hệt** contract (§1.2 bước 3–4, kể cả FOK); không qua (làm tròn trần đẩy `y` vượt
-giới hạn của O ở lượng rất nhỏ) ⇒ dừng ở R, phần lẻ nghỉ lại — không bao giờ phát một cặp contract sẽ từ chối
-(review D2). Lệnh nghỉ cùng maker bị **bỏ qua** (self-trade prevention, contract cũng từ chối; review D21).
+giới hạn của O ở lượng rất nhỏ) ⇒ không bao giờ phát một cặp contract sẽ từ chối (review D2). Ai là phần lẻ quyết
+định bước tiếp (**RS5-12**, review Claude H1): `x == R.rem` ⇒ **maker** là dust ⇒ bỏ qua R (`i += 1; continue`),
+khớp tiếp lệnh sâu hơn; còn lại (`x < R.rem`) ⇒ **taker** là dust ⇒ dừng, phần lẻ của O nghỉ lại. Code hiện tại
+`break` ở cả hai (`dex.rs:637-643`) ⇒ một maker dust ở đầu phía chặn mọi taker tới khi hết hạn (≤ 30 ngày) — DX-FIX1.
+Lệnh nghỉ cùng maker bị **bỏ qua** (self-trade prevention, contract cũng từ chối; review D21).
 
 - **GTC limit:** phần còn lại nghỉ trong sổ.
-- **IOC:** khớp được bao nhiêu thì khớp, phần còn lại huỷ (không nghỉ). Cờ IOC **không** kiểm on-chain (contract
-  không biết "ngay") — **RS5-3**: bảo vệ on-chain là `expiry` ngắn; client đặt `expiry` IOC ≤ 60 s.
+- **IOC:** khớp được bao nhiêu thì khớp, phần còn lại huỷ (không nghỉ). **RS5-3 (sửa rev 1.1, review Claude L4):**
+  trên EVM, contract **có** đóng phần còn lại của IOC ở cuối tx `settle` (§1.2, D3; `OrderBookDex.sol:188-198`),
+  kể cả khi khớp nhiều maker; `expiry` ngắn (≤ 60 s) là lớp thứ hai. Sui/Aptos/Solana đóng IOC ở lần khớp **đầu
+  tiên** ⇒ matcher của các mạng đó chỉ cho IOC **một** maker (**RS5-18**, review Claude M3).
 - **FOK — RS5-4:** cờ kiểm **on-chain**: lệnh FOK chỉ settle trong **một** cặp lấp đầy `sellAmount`. Book chỉ khớp
   FOK với một lệnh nghỉ đơn lẻ (đầu tiên theo giá-thời gian) đủ lấp trọn; không có ⇒ huỷ toàn bộ. Không gộp
   nhiều đối ứng cho FOK: "tất cả hoặc không" qua nhiều cặp trong batch nguyên tử-từng-cặp không chứng minh được
@@ -245,9 +266,17 @@ mỗi maker mỗi chain; trần toàn sổ `MAX_RESTING = 10 000`; hash trùng �
 
 - **Cam kết cộng dồn (review D6):** Σ `remaining` (+ phí relayer bằng `sellToken`) của mọi lệnh mở cùng
   (maker, sellToken) **cộng lệnh mới** phải `<= fundable`. Không thì một số dư 100 đặt được 50 lệnh 100.
+  **RS5-16** (review Claude M1): cộng cả phần **đã khớp mà trade chưa `settled`/`failed`** (tiền chưa chuyển nhưng
+  `remaining` đã trừ); hiện `Book::committed` chỉ cộng lệnh nghỉ (`dex.rs:449-462`) — DX-FIX5.
+- **RS5-13 — token phí relayer bị giới hạn** (review Claude H2): `feeToken ∈ {0, sellToken, buyToken}` (hai token
+  của thị trường đã niêm yết); khác ⇒ từ chối ở cửa. Không thì một maker đặt `feeToken` giả (`balanceOf`/`allowance`
+  = 2^255, `transferFrom` luôn revert) qua `checkOrder` với `feeFundable` khổng lồ, và nhánh "maker khoẻ ⇒ lỗi ở lệnh
+  mới" (`venue.rs:317-324`) từ chối mọi taker cắt qua nó — DX-FIX2.
 - **RS5-9 — `relayer` phải là ví relayer này:** lệnh `relayer = 0` bị từ chối ở cửa. Lệnh công khai trong sổ mà ai
   cũng settle được thì kẻ quan sát mempool chèn được cặp của chính nó ở giá xấu nhất trong giới hạn người dùng (MEV),
   và relayer khác settle lại phần IOC/lệnh đã huỷ off-chain. Contract vẫn cho `relayer = 0` (relayer mở, SRS §4.9.4).
+  *Rev 1.1:* nay là mặc định theo thị trường; thị trường `unbound` (mesh-gossip R124 §11.6) nhận `relayer = 0` cho
+  GTC nghỉ — maker tự chấp nhận mặt MEV này.
 - **Huỷ on-chain** (tốn gas relayer, review D14): chỉ cho lệnh đang có trong sổ; gom vào **một** `cancel(...)` mỗi
   vòng `poll` (≤ 50 lệnh); mỗi maker tối đa 20 huỷ on-chain mỗi giờ — vượt trần vẫn gỡ khỏi sổ ngay (relayer này
   là relayer duy nhất settle được nó, RS5-9) nhưng không tốn gas. Huỷ-hết chỉ khi maker còn ≥ 1 lệnh mở.
@@ -325,6 +354,29 @@ Sổ, matcher, Odoo, gateway **dùng chung** (không phụ thuộc EVM ngoài đ
    (R64); Cosmos CW20 `TransferFrom` với allowance cho contract DEX (R66); TON escrow (R67 — ngoại lệ duy nhất có
    giữ tiền tạm, vì jetton không có `transferFrom`).
 5. Event tương đương `OrderFilled/Matched/MatchFailed` để watcher + Odoo dùng nguyên.
+6. **Settle gắn relayer** (**RS5-15**, review Claude H4): lệnh mang `relayer` (0 = mở) và contract kiểm người nộp.
+   Sui (`dex.move:321`), Aptos (`dex.move:382`), Solana (`dex.rs:187`) đã có; **Cosmos** (`Settle` không kiểm
+   `info.sender`, `OrderParams` không có relayer — `cosmos/dex/src/lib.rs:29-34, 145`), **Soroban**
+   (`require_auth_for_args((order,))` chỉ trói lệnh, không trói đối ứng/`maker_fill`/người nộp — `lib.rs:158-159`) và
+   **TON** (`receive(Match)` mở — `dex.tact:138-144`) chưa ⇒ kẻ xem mempool chép auth entry, chen cặp của mình và ăn
+   phần cải thiện giá của taker. Sửa: Cosmos thêm `relayer` vào `OrderParams`, `info.sender == relayer` khi khác rỗng;
+   Soroban thêm `relayer: Address` vào `Order` + `relayer.require_auth()`; TON thêm `relayer` tuỳ chọn vào
+   `TradeParams`, so với `sender()` ở `Match` và đường gợi ý — DX-FIX4.
+7. **`minNonce` có trần** (**RS5-19**, review Claude L1): như D23, `min_nonce < 2^(w−1)` với `w` = độ rộng nonce (Sui/
+   Aptos `u128`, Solana `u64`); hiện ba mạng nhận `u128::MAX`/`u64::MAX` ⇒ một chữ ký nhầm khoá maker khỏi thị trường
+   vĩnh viễn (`sui dex.move:295`, `aptos dex.move:299`, `solana dex.rs:340`) — DX-FIX4.
+
+**Sai khác đã chấp nhận** (ruling của từng mạng; review Claude L2) — adapter, matcher và Odoo phải biết:
+
+| Sai khác | Mạng | Nguồn |
+|---|---|---|
+| Không khớp một phần (lệnh FOK toàn phần) | Cosmos, TON | R9-2, R10-7 |
+| Không có `minNonce` (huỷ hàng loạt) | Cosmos, Soroban, TON | adapter |
+| IOC đóng ở lần khớp đầu (một maker) | Sui, Aptos, Solana | RS5-18 |
+| Một người nhận phí cho cả DEX, không theo thị trường | Cosmos (`InstantiateMsg`), Soroban (`Key::FeeRecipient`) | adapter |
+| Một `fee_ppm`, không tách maker/taker | Solana | `dex.rs:74-97` |
+| Mức nhận tối thiểu tính **sau** phí DEX (EVM: `buyAmount` gross) | Cosmos, TON | adapter |
+| Không kiểm self-trade on-chain (node vẫn bỏ qua, D21) | Cosmos, Soroban | adapter |
 
 ---
 
@@ -336,6 +388,7 @@ Sổ, matcher, Odoo, gateway **dùng chung** (không phụ thuộc EVM ngoài đ
 | cargo | khớp giá-thời gian, một phần, IOC, FOK, giới hạn khớp == contract, snapshot/nạp lại (bền), chặn spam, KAT digest, decode event |
 | e2e (anvil 31950–31959, gateway 18650–18659) | approve meta-tx → hai lệnh qua gateway → khớp một phần → job settle qua outbox → số dư; huỷ ⇒ settle không bao giờ chạy; khởi động lại venue ⇒ sổ còn nguyên |
 | Odoo (`dms_test_chain_5`/8925) | commit/load khứ hồi, quyền service, trade fail khi job dead, ingest ⇒ settled + bút toán phí, phí tắt ⇒ không bút toán, seam journal |
+| Thiếu — thêm ở DX-FIX1…5 (review Claude) | **forge:** maker 1271 đốt gas / bom returndata trong lô `settle` 3 cặp (2 cặp kia vẫn settle) và trong lô `cancel` (mục khác vẫn đóng); clone `SubjectAccount` passkey qua trần 400k; phát lại chữ ký lệnh/huỷ của DEX A trên DEX B (cùng chain) và trên chainId khác phải fail (hiện chỉ có KAT dương, `OrderBookDex.t.sol:667`); invariant §1.8 mở rộng: nhiều ask/bid, phí relayer bảo toàn, IOC đóng, nhiều maker (`OrderBookDexInvariant.t.sol` hiện một ask, không phí relayer, không IOC). **cargo:** maker dust đầu sổ + maker sâu hơn ⇒ taker khớp maker sâu (H1); maker `feeToken` độc + "maker khoẻ, cặp fail" không chặn taker khác lẫn khôi phục (H2); cặp OOG không được khôi phục (H3); quá cam kết khi trade đang chờ (M1); phí thị trường tăng on-chain ⇒ thị trường ngừng phục vụ trong một `poll` (M2); IOC một maker trên family Move/Solana (M3); `Matched` muộn sau khôi phục trừ lại sổ (L5). **Mạng:** bên thứ ba settle trên Cosmos/Soroban/TON phải fail (H4); `min_nonce` vượt trần bị từ chối (L1) |
 
 ---
 
@@ -344,7 +397,9 @@ Sổ, matcher, Odoo, gateway **dùng chung** (không phụ thuộc EVM ngoài đ
 - **RS5-1** Admin immutable (Safe ở production) chỉ `setMarket`; phí đổi được nhưng bị chặn bởi `maxFeePpm` đã ký +
   trần 1 % hằng số; không timelock.
 - **RS5-2** Sổ lệnh lưu ở Odoo qua `/json/2`, node là người ghi duy nhất; settle là outbox `call` job. Thay R16.
-- **RS5-3** IOC chỉ off-chain; bảo vệ on-chain là `expiry` ngắn.
+  *Bị thay bởi NI R105 (sổ ở store của node).*
+- **RS5-3** ~~IOC chỉ off-chain~~ *(sửa rev 1.1)*: EVM đóng phần còn lại của IOC cuối tx `settle` (D3); `expiry`
+  ngắn là lớp thứ hai. Family Move/Solana: RS5-18.
 - **RS5-4** FOK kiểm on-chain = một cặp lấp trọn; book chỉ khớp FOK với một đối ứng. Khớp một phần là mặc định.
   Thay R3.
 - **RS5-5** Không WebSocket; poll.
@@ -352,10 +407,56 @@ Sổ, matcher, Odoo, gateway **dùng chung** (không phụ thuộc EVM ngoài đ
 - **RS5-7** `MetaTxDex` giữ làm legacy (không route); `OrderBookDex` là DEX của gateway.
 - **RS5-8** Watcher DEX có cursor riêng và gửi bằng key indexer; không sửa `indexer.rs`.
 - **RS5-9** Book chỉ nhận lệnh `relayer = ví relayer này` (chống MEV, chống settle lại phần đã huỷ off-chain).
+  *Nay là mặc định theo thị trường; thị trường `unbound` theo mesh-gossip R124 §11.6.*
 - **RS5-10** Chữ ký huỷ (`CancelOrder`, `InvalidateNonces`) không có hạn — một chiều, phát lại no-op.
 - **RS5-11** Chain có `dex` chỉ chạy một lane relayer: lệnh khoá `relayer` = ví lane 0 (RS5-9) mà job outbox
   chưa ghim được lane (R62), nên lane khác claim job settle sẽ `WrongRelayer`. Node từ chối khởi động khi
-  `lanes` > 1. Gỡ khi outbox có claim theo signer bắt buộc (cần S1).
+  `lanes` > 1. Gỡ khi outbox có claim theo signer bắt buộc (cần S1). *Gỡ bởi NI R102 (ghim lane).*
+
+### Rulings rev 1.1 — review Claude 1 (2026-10-07)
+
+- **RS5-12** (H1) Phần lẻ do làm tròn: `x == R.rem` ⇒ maker dust ⇒ bỏ qua R và khớp tiếp; `x < R.rem` ⇒ taker
+  dust ⇒ dừng. Maker có `R.rem · R.buy < R.sell` (không mua nổi 1 đơn vị ở giá của chính nó) bị **gỡ khỏi sổ**
+  (trạng thái `filled`, ghi chú `dust`; on-chain phần còn lại vô giá trị). Test cargo: ask dust đầu sổ + ask sâu hơn
+  ⇒ bid tới khớp ask sâu; dust bị gỡ ở lần chạm đầu.
+- **RS5-13** (H2) `admit` đòi `feeToken ∈ {0, sellToken, buyToken}`. Quy lỗi cặp fail bằng chứng cứ, không đoán:
+  `eth_call settleOne(m, relayer)` với `from = DEX` trả lý do revert — lỗi DEX mang `orderHash`, lỗi token
+  (`SafeERC20FailedOperation(token)`) quy cho bên trả token đó trong cặp (M trả X, T trả Y, mỗi bên trả token phí
+  của mình). Chỉ khi lý do chỉ vào lệnh mới thì 400; chỉ vào maker ⇒ loại maker (`invalid`) và thử lại. Maker fail
+  trong 2 cặp với 2 taker khác nhau ⇒ gỡ. `sync_once` dùng cùng quy lỗi: chỉ bên bị quy lỗi không được trả về (thay
+  `ponytail` "bỏ cả bên khoẻ", `venue.rs:500, 542`). Test: maker `feeToken` độc không chặn maker lành sâu hơn, không
+  chặn khôi phục.
+- **RS5-14** (H3; UA F10; thay §1.6 D11) `_validSig` nhánh hợp đồng: `staticcall` assembly với trần
+  `_erc1271Gas(signer)` = 400k nếu `signer.codehash` = codehash clone `SubjectAccount` (immutable lúc deploy, như
+  `MetaToken`), ngược lại 50k; chép tối đa 32 B returndata; trước lời gọi đòi `gasleft() ≥ cap · 64/63 + dự phòng`,
+  không thì revert cả tx (EIP-150: relayer không được bỏ đói gas để biến chữ ký đúng thành sai). `cancel` không cần
+  `try`: `_validSig` có trần chỉ trả `false` ⇒ mục bị bỏ qua. Node: cặp có lý do OOG (RS5-13) ⇒ lệnh 1271 đó không
+  được khôi phục. Contract là bất biến ⇒ bản sửa là **deploy mới** (chain dev; người dùng `approve` lại spender mới).
+  Test forge như §6 dòng "Thiếu".
+- **RS5-15** (H4) Settle non-EVM gắn relayer (§5 mục 6). Test: bên thứ ba settle trên Cosmos/Soroban/TON fail.
+- **RS5-16** (M1) Cam kết cộng dồn gồm phần đã khớp chưa `settled`/`failed`, theo (maker, token), xoá khi trade
+  xong. Test: số dư 100, ask #1 100 khớp và chờ ⇒ ask #2 100 bị từ chối.
+- **RS5-17** (M2) Đối chiếu `markets(key)` on-chain mỗi vòng `poll` (≤ 30 s); lệch ⇒ ngừng phục vụ thị trường đó
+  (không khớp, không nhận lệnh) tới khi khớp lại. Test: `setMarket` nâng ppm ⇒ thị trường ngừng phục vụ trong một vòng.
+- **RS5-18** (M3) Matcher có cờ theo family `ioc_single_maker` (bật cho Sui/Aptos/Solana) như FOK: IOC chỉ khớp một
+  maker. Bắt buộc trước khi N3 phục vụ sổ non-EVM. Test cargo.
+- **RS5-19** (L1) `min_nonce < 2^(w−1)` trên Sui/Aptos (`w = 128`) và Solana (`w = 64`). Test mỗi mạng.
+- **RS5-20** (L5) `dex_fill_ingest` lật `failed`+`restored` → `settled` (`dex_trade.py:195-198`) thì node trừ
+  lượng đó khỏi sổ ở lần sync kế (trong R105: item `dex_trade` settled muộn ⇒ trừ `remaining` của lệnh đã khôi phục).
+  Test: `Matched` muộn sau khôi phục ⇒ sổ không còn thanh khoản ma.
+
+**Luồng code** (owner: không sửa code trong pha spec; làm sau §0 TODO):
+
+| Luồng | Lớp | Nội dung | Ruling |
+|---|---|---|---|
+| **DX-FIX1** | Node `dex.rs` | Maker dust: bỏ qua + gỡ; test | RS5-12 |
+| **DX-FIX2** | Node `dex.rs`, `dex/venue.rs` | Giới hạn `feeToken`; quy lỗi cặp qua `eth_call settleOne`; gỡ maker sau 2 fail; không khôi phục cặp OOG; tests | RS5-13, RS5-14 (phần node) |
+| **DX-FIX3** | Contract `OrderBookDex.sol` | 1271 có trần + returndata ≤ 32 B + chặn bỏ đói gas; tests forge (1271 trong lô, phát lại chéo DEX/chain, invariant mở rộng); deploy mới | RS5-14 |
+| **DX-FIX4** | Contract Cosmos/Soroban/TON + Sui/Aptos/Solana | Relayer gắn trong lệnh (3 mạng); trần `min_nonce` (3 mạng); tests | RS5-15, RS5-19 |
+| **DX-FIX5** | Node (+ `dms_blockchain_dex`) | Cam kết gồm trade chờ; đối chiếu thị trường mỗi `poll`; `ioc_single_maker`; trừ sổ khi `Matched` muộn; tests | RS5-16, 17, 18, 20 |
+
+DX-FIX1/2/5 sửa đúng file mà NI **P7** (DEX lên store, R105) viết lại: làm trước P7 nếu P7 chưa bắt đầu, không thì
+gộp vào P7 (ruling vẫn áp).
 
 ---
 
@@ -405,3 +506,34 @@ agy: quota (429) lúc chạy, chạy lại sau reset. Grok: hết hạn mức fr
 | I5 | med | Đúng: `_cron_expire` của job ghi `dead` thẳng, bỏ qua hook | Hook chuyển sang `write` của relay job |
 | I6 | high | Tự review lại fix I3: vòng khớp lại mới bỏ mất bước ghi `touched` ⇒ lệnh trả về sổ mà không khớp lại chỉ nằm trong bộ nhớ, Odoo vẫn `filled`, restart là mất | Ghi lại mọi lệnh `touched` vào commit; e2e bước 9 (một bên null) + restart; mutation đã kiểm test bắt được |
 | I7 | low | Tự review fix I4: high-s trả `false` ngay nên ví hợp đồng (contract đi ERC-1271 theo code) ký 65 byte high-s bị node từ chối dù contract nhận | High-s chỉ bỏ qua khôi phục cục bộ, vẫn rơi xuống `isValidSignature`; e2e bước 6 gửi bản high-s ⇒ 400 |
+
+### Claude review disposition — review 1 (2026-10-07, `docs/reviews/specs/2026-10-03-dex-design-claude-review-1.md`)
+
+Verdict của review: FIX-THEN-GO, 0 Critical. Đối chiếu từng finding với code (file:line) trước khi nhận: **16 nhận,
+0 từ chối** (2 nhận có chỉnh cách sửa).
+
+| # | Sev | Kiểm với code | Kết luận | Xử lý |
+|---|---|---|---|---|
+| H1 | high | `dex.rs:634-643` `break` cả khi maker là dust; test `dex.rs:920` chỉ kiểm `limits_ok` | Đúng | RS5-12, §3.3; DX-FIX1 |
+| H2 | high | `venue.rs:317-324` (maker khoẻ ⇒ 400), `funded` tin `feeFundable` (`venue.rs:786-790`), `admit` không giới hạn `feeToken` (`dex.rs:532-592`), phí là `safeTransferFrom` thật (`OrderBookDex.sol:283`); `sync_once` bỏ cả hai bên (`venue.rs:536-542`) | Đúng | RS5-13, §3.4; DX-FIX2 |
+| H3 | high | `OrderBookDex.sol:383-384` `SignatureChecker` không trần, OZ chép toàn bộ returndata; `cancel` không `try` (`:317-325`); một job mỗi thị trường (`venue.rs:711-727`) | Đúng; chỉnh: không cần `try` từng mục trong `cancel` vì `_validSig` có trần chỉ trả `false`; thêm chặn bỏ đói gas (EIP-150) | RS5-14, §1.6; DX-FIX3 (+ phần node ở DX-FIX2) |
+| H4 | high | Cosmos `lib.rs:29-34, 145` không kiểm sender; Soroban `lib.rs:158-159` chỉ trói lệnh; TON `dex.tact:138-144` mở; Sui/Aptos/Solana có kiểm | Đúng (tiềm ẩn tới N3, contract đã BUILT) | RS5-15, §5.6; DX-FIX4 |
+| M1 | med | `Book::committed` chỉ cộng lệnh nghỉ (`dex.rs:449-462`), `fundable` từ chain (`venue.rs:290`) | Đúng | RS5-16; DX-FIX5 |
+| M2 | med | `onchain_matches` chỉ ở `start` (`venue.rs:188-196`), `run_loops` không có (`:620-637`) | Đúng | RS5-17, §3.1; DX-FIX5 |
+| M3 | med | IOC đóng ở lần khớp đầu: Sui `dex.move:334`, Aptos `:395`, Solana `dex.rs:204`; matcher không dừng IOC sau một maker | Đúng (tiềm ẩn tới N3) | RS5-18, §3.3; DX-FIX5 |
+| M4 | med | NI R105/R102, UA §5.4 + F10, mesh-gossip R124 §11.6 có thật; `SCaaS.md:54` chỉ ghi RS5-* | Đúng | Bảng "bị thay" đầu spec; chú thích ở RS5-2/9/11, §1.6 |
+| L1 | low | Sui `dex.move:294-296`, Aptos `:299-300`, Solana `dex.rs:340` không trần; EVM là `2^128 − 1` (`:89`) | Đúng | RS5-19, §1.3 sửa số; DX-FIX4 |
+| L2 | low | Cosmos/TON FOK (R9-2/R10-7); không `min_nonce` ở Cosmos/Soroban/TON; người nhận phí một DEX (Cosmos `InstantiateMsg`, Soroban `Key::FeeRecipient`); Solana một `fee_ppm`; không kiểm self-trade ở Cosmos/Soroban | Đúng | Bảng sai khác §5 |
+| L3 | low | `ST_BAD_FEE = 7` (`OrderBookDex.sol:100`, `351-362`) | Đúng | §1.6 |
+| L4 | low | §3.3/RS5-3 mâu thuẫn §1.2/D3; code đóng IOC (`:188-198`) | Đúng | RS5-3 sửa, §3.3 |
+| L5 | low | `dex_trade.py:195-198` lật `failed`→`settled` khi `Matched` muộn | Đúng (on-chain an toàn; sổ có thanh khoản ma, tốn gas) | RS5-20; DX-FIX5 |
+| T1 | test | Phát lại chéo DEX/chain: chỉ KAT dương (`OrderBookDex.t.sol:667`) | Đúng | §6 "Thiếu"; DX-FIX3 |
+| T2 | test | Invariant §1.8: `OrderBookDexInvariant.t.sol` một ask, không phí relayer, không IOC, không nhiều maker | Đúng | §6; DX-FIX3 |
+| T3 | test | Test cho H1–H4, M1–M3 không có | Đúng | §6; theo từng luồng |
+
+## 9. Lịch sử bản
+
+| Rev | Ngày | Thay đổi |
+|---|---|---|
+| 1.0 | 2026-10-03 | Bản đầu (S5): RS5-1…11; review agy D1–D24, review implementation I1–I7 |
+| 1.1 | 2026-10-07 | Gộp review Claude 1: bảng "bị thay" (R105, F10, R124, R102); RS5-3 sửa; RS5-12…20; bảng sai khác non-EVM §5; test thiếu §6; luồng code DX-FIX1…5 |

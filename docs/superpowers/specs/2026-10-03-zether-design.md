@@ -3,6 +3,13 @@
 **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Mọi contract trong `smartcontracts/src/zether/**` và
 `src/registry/**` chỉ tạo được trên chain dev (§13). Không audit bên thứ ba thì không giữ tiền thật.
 
+**Trạng thái (rev 1.1, 2026-10-07):**
+- **§11 (registry, `AuthScheme`, `links`/`link_eth`, PoP trói `msg.sender`, "register không relay được") bị thay** bởi
+  UA spec F rev 1.4 §4/§6/§12 (R290, R291, R295, R305, R312) khi F1 xong; tới lúc đó §11 mô tả code đang chạy.
+- Chain riêng **9000 → 7622** (owner 2026-10-07; UA/PQZ rev 1.4, SCaaS §7.1). Cổng cổ điển vẫn `{31337, 1337}`.
+- Đường dẫn: mọi `smartcontracts/src/…`, `smartcontracts/test/…` trong spec này nay nằm dưới `smartcontracts/evm/`.
+- Review Claude 1 (§17) mở luồng code ZF-FIX1…3 (§16, cuối).
+
 **Ngày:** 2026-10-03 · **Owner:** R34 (*"Làm cả zether luôn … phải full code"*, *"làm cả test zether"*).
 **Nguồn:** SRS `ai-enterprise-blockchain-architecture.md` §7.1–7.7, §8.1, §9.3–9.5; research `03-zether-crypto.md`,
 `02-account-registry.md`, `00-CANON.md` §C5–C6; round 3 §C.4 (R33), §F (R34). Code thắng SRS khi đã có ruling;
@@ -386,6 +393,10 @@ nó bảo đảm `amount + fee < 2^65 < r`, không có bí danh mod `r`.
 - *Ngoài:* trả bằng số dư ERC-20 **công khai** của token này (`wrap`/`unwrap` underlying 1:1). Op Zether chỉ nhận
   `FeeMode.NONE` hoặc `FIXED` — `PERCENT` bị `FeePolicy.requireConfidentialSafe` chặn; `FIXED` là tuyệt đối
   (không trần 1% vì số tiền ẩn — RS2-6). Chuyển ERC-20 thường (data rỗng) giữ nguyên `FeePolicy.compute`.
+Người nhận phí ngoài `= m.feeRecipient` hoặc `msg.sender`; **RS2-24** (review Claude L6): `= address(token)` ⇒
+revert `FeeWouldStick` (như DEX §1.5) — hiện `ZetherMetaTx.sol:74-75` chỉ chặn 0, phí kẹt vĩnh viễn trong số dư
+ERC-20 công khai của chính token. Chữ ký `m.from` hợp đồng: ERC-1271 trần 50k (`ZetherMetaTx.sol:123`) ⇒ clone
+`SubjectAccount` passkey luôn `MetaTxBadSignature` — **RS2-21**.
 Thứ tự pipeline giữ §04.6.1, rẻ trước đắt sau: relayer → hạn → mode → nonce → chữ ký → **số dư công khai đủ trả
 phí ngoài** → kiểm op rẻ (`accSeq`, `sendCounter`, đăng ký, độ dài) → **verify proof** → thu phí ngoài → thực thi →
 nonce++. Phong bì không đủ phí revert trước mọi precompile.
@@ -440,6 +451,17 @@ phát lại cần chính `msg.sender` ấy và cho ra đúng bản ghi đó. `po
   `BLS_12381` với `Y` 128 byte ⇒ `UnauthorizedScheme`.
 - `linkEVM`: `links[msg.sender] = UA`, `link_eth[UA] = msg.sender`; `msg.sender` đã liên kết ⇒ `EVMAlreadyLinked`.
 - Trùng UA ⇒ `AccountAlreadyRegistered`. Không có xoay khoá: đổi khoá = UA mới (RS2-9).
+- **PoP không trói `scheme`/`authData`/`linkEVM`** (review Claude L1; `UniversalAccountRegistry.sol:96`): khi
+  `msg.sender` là hợp đồng dùng chung (multicall/forwarder công khai), kẻ front-run phát lại `schnorrPop` qua chính
+  hợp đồng đó với `SMART_ACCOUNT_1271` trỏ về hợp đồng luôn-đúng của nó ⇒ UA mang authority lạ vĩnh viễn (RS2-9).
+  **RS2-22:** chỉ `register` từ account chỉ mình kiểm soát (EOA, `SubjectAccount`, Safe của mình); không sửa registry
+  này — UA F R295 (PoP trói `authRef`) thay nó ở F1.
+- `SMART_ACCOUNT_1271` gọi `isValidSignature` với trần 50k (`UniversalAccountRegistry.sol:206`) ⇒ `SubjectAccount`
+  passkey (P-256 bằng Solidity trên chain dev không có P256VERIFY) không đăng ký được (`InvalidProofOfPossession`).
+  Fail-closed, không mất tiền. Registry F đã định 400k cho clone `SubjectAccount` (UA §4 `evm-contract`) — RS2-21.
+- `AuthSchemeLib.survivesEncKeyLeak(PQ_COMMITMENT)` trả `true` (`AuthScheme.sol:58-60`) nhưng registry xử lý
+  `PQ_COMMITMENT` y như `SELF_SCHNORR` (`:122-127`, RS2-10): lộ `x` = mất tiền với **cả hai**. Helper chỉ dùng trong
+  `test/AuthScheme.t.sol` và file bị xoá ở F1 (UA §12) ⇒ không sửa code; câu ở đầu §11 là đúng (review Claude L2).
 
 ## 12. Tiết lộ (`ITransferDisclosure`, SRS §9.4)
 
@@ -459,7 +481,10 @@ kiểm:  [z]G − A1 − [e]K == O    và    [z]D_out − A2 − [e](M − [amou
 
 Kiểm thêm: `amount < 2^n_v = 2^64` (nếu không, `amount + r` cũng "đúng" vì `[amount]G` chỉ phụ thuộc `amount mod r`;
 `2^64 < r` nên mỗi `[amount]G` có đúng một `amount` hợp lệ), `z < r`, `e ≠ 0`; `A1`, `A2` vào cùng MSM (subgroup
-check trên BLS12-381). Bundle tiết lộ giữ nguyên 256 B mỗi transfer (limits D6); `be32(amount)` đã đủ chỗ cho 64 bit.
+check trên BLS12-381). Bundle tiết lộ giữ nguyên mỗi transfer (limits D6): **bn254 256 B** (≈ 9 slot, ≈ +200k gas),
+**BLS12-381 512 B** (4 điểm × 128 B, ≈ 17 slot, ≈ +375k gas — ước tính, review Claude L4); `be32(amount)` đã đủ chỗ
+cho 64 bit. NatSpec đầu `ITransferDisclosure.sol:24` ("Chi phí thêm lúc chuyển: bằng không … không thêm gas") sai
+so với RS2-15 — sửa ở ZF-FIX1 (review Claude L3).
 
 `verifyTransferAmount` là view (miễn phí); `attestTransferAmount` emit `AmountAttested`. Auditor đọc được **đúng**
 các `C_aud` (mỗi transfer một cái), không đọc được `acc`/`pending` của ai (mã hoá bằng khoá chủ). Khoá auditor đặt
@@ -473,6 +498,14 @@ lúc `initialize`, bất biến (RS2-8).
 - `ZetherToken.initialize`, constructor của hai verifier và `UniversalAccountRegistry` cũng revert ngoài chain dev
   (deploy tay không vòng qua được).
 - NatSpec mọi contract Zether và HANDOFF: **UNAUDITED — NOT FOR PRODUCTION FUNDS**.
+- **Ghim verifier + registry (RS2-20, review Claude M1, chuẩn tắc):** ví (clientkeys) và node/gateway chỉ nhận một
+  token Zether khi `verifier()` ∈ danh sách verifier **chuẩn** đã công bố của chain và `registry()` == registry chuẩn
+  của chain. Factory không chặn (`_checkVerifier` chỉ đòi có code + `isSupportedOnThisChain()`,
+  `OpenFactory.sol:179-190`; `initialize` chỉ đòi registry có code, `ZetherToken.sol:136`) — đúng "provenance thay
+  cho gatekeeping" (SCaaS §4.3, owner) — nên token v1 qua implementation đã đăng ký vẫn có thể mang verifier giả
+  (trả `true` mọi proof ⇒ `burn` rút sạch escrow) hoặc registry giả (`requireAuthorized` no-op). Ghim theo **địa chỉ**,
+  không theo codehash: verifier nhúng địa chỉ `generatorStore` dạng immutable nên codehash khác theo từng deploy.
+  Hiện `clientkeys/src/zether.js` không đọc `verifier()`/`registry()` — ZF-FIX3.
 
 ## 14. Vector
 
@@ -537,6 +570,10 @@ Vì sao lệch, để không ai "sửa" sai chỗ:
   — cái giá của `transferCiphertext` bản SRS, RS2-15), cập nhật `acc`/`pending` dạng `bytes` trong storage, các
   lời gọi `g1Add/g1Sub/g1MulBase` sang verifier, `requireAuthorized` của registry.
 - **rollOver:** 4 điểm `bytes` ghi lại + 2 phép cộng qua verifier; canon đếm 10 SSTORE ấm.
+**Trần gas của node (review Claude L9):** mặc định `max_gas_per_tx = 3,000,000` (`scaas-node/src/config.rs:415-416`)
+thấp hơn một transfer cổ điển (3.29M thẳng / 3.36M phong bì) ⇒ relay Zether bị node từ chối với cấu hình mặc định;
+chain có Zether phải đặt `max_gas_per_tx` ≥ 4.2M (BLS phong bì 3.98M exec + 21k intrinsic + ≈ 99k calldata ≈ 4.10M).
+
 Kill criterion S1 của canon (2.5M) bị vượt ở transfer bn254 (3.29M thẳng sau `n_v = 64`; 2.75M trước đó) — owner chấp
 nhận đổi gas lấy một giao dịch cho mọi khoản (limits D1): đây là v1 tham chiếu, chưa tối ưu
 (gộp Σ thành một MSM ngẫu nhiên hoá, lưu điểm dạng `bytes32[2]`, bỏ bundle tiết lộ khỏi storage) — ghi ở rủi ro mở.
@@ -544,7 +581,8 @@ nhận đổi gas lấy một giao dịch cho mọi khoản (limits D1): đây l
 ## 16. Rulings (S2)
 
 - **RS2-1** Cổng dev: allowlist cứng `{31337, 1337}`; cờ factory mặc định tắt; kiểm thêm ở `initialize` và constructor
-  verifier/registry. Chain 9000 **không** nằm trong allowlist (cần owner quyết).
+  verifier/registry. Chain 9000 **không** nằm trong allowlist (cần owner quyết). *(Rev 1.1: chain riêng nay là
+  7622; cổng vẫn `{31337, 1337}`; comment "chain 9000" ở `AuthScheme.sol:7` đi theo đợt quét 9000 → 7622 của TODO §0.)*
 - **RS2-2** Epoch bỏ (canon C5): `IZetherVerifier.verifyTransfer/verifyBurn` nhận `statement` đầy đủ thay cho
   `(payload, epoch)`; `simulateAccounts(encodedY, epoch)` thay bằng `accountState(UA)`.
 - **RS2-3** `shieldScale` = raw unit / đơn vị che giấu (theo NatSpec code, không theo cột "2" của bảng SRS §7.3 —
@@ -618,6 +656,37 @@ nhận đổi gas lấy một giao dịch cho mọi khoản (limits D1): đây l
   `--ct` từ nguồn thứ hai thì `true` — hoặc chỉ ciphertext dán vào (`"verified": null`, `"source": "pasted"`); khoá chỉ qua stdin được pipe, terminal bị từ chối, không rời máy). API nhận số `> 2^53 − 1`
   chỉ dạng chuỗi thập phân và trả số tiền dạng chuỗi (vượt `2^53` của JS).
 
+### Rulings rev 1.1 — review Claude 1 (2026-10-07)
+
+- **RS2-20** (M1) Ghim verifier/registry theo địa chỉ chuẩn của chain ở clientkeys và gateway (§13). Factory giữ
+  nguyên (owner: provenance). Test: clientkeys từ chối token có `verifier()`/`registry()` lạ; gateway trả lỗi khi
+  relay op Zether của token không ghim.
+- **RS2-21** (M2) `ZetherMetaTx` dùng cùng luật trần 1271 như `MetaToken`: 400k nếu `m.from.codehash` = codehash
+  clone `SubjectAccount` (immutable lúc `initialize`/deploy), ngược lại 50k. Registry hiện tại **không** sửa: F1 thay
+  nó và đã định 400k (UA §4). Test: phong bì ký bởi `SubjectAccount` passkey thật qua; `test_smartAccount1271Auth`
+  hiện chỉ dùng `Mock1271Wallet` ECDSA.
+- **RS2-22** (L1) PoP của registry hiện tại không trói authority: chỉ `register` từ account chỉ mình kiểm soát
+  (§11.2). Không sửa code; UA R295 thay ở F1.
+- **RS2-23** (M3) Test bắt buộc cho các bất biến chịu lực: (a) invariant/fuzz handler Zether (dùng
+  `test/zether/helpers/ZetherProver.sol`) trên chuỗi ngẫu nhiên fund/transfer/rollOver/burn/wrap/unwrap: Σ số mũ
+  `acc`+`pending` = `totalShielded ≤ maxDecryptableShielded`, escrow `held ≥ totalSupply + totalShielded·shieldScale`
+  (RS-NV64-1); (b) điểm BLS ngoài subgroup đặt trong statement/proof (`C_out`, `D_out`, `A_*`, `L_j`) ⇒
+  `verifyTransfer` false/revert (§2 "subgroup ngầm qua MSM"); (c) `D_out = O` bị từ chối (`ZetherVerifier.sol:170`).
+- **RS2-24** (L6) `ZetherMetaTx`: người nhận phí ngoài `== address(this)` ⇒ `FeeWouldStick`. Test.
+- **RS2-25** (L7) Khoá cache số dư ở client = `chainId:ua:token` (hiện `ua:token`, `clientkeys/src/zether.js:218`);
+  F R330 đổi sang `chain_uid` khi F xong. Test: hai chain cùng địa chỉ token không làm nhau `staleSeq`.
+- **RS2-26** (L8) `schnorrSign(curve, x, msg, k)` bỏ tham số `k` khỏi export công khai; đường `k` cố định chỉ còn ở
+  export test (vector). Test: export công khai không nhận `k`.
+- L2, L3, L4, L5, L9: sửa văn bản (đầu spec, §11.2, §12, §15, RS2-1); L3 sửa NatSpec trong ZF-FIX1.
+
+**Luồng code** (owner: không sửa code trong pha spec):
+
+| Luồng | Lớp | Nội dung | Ruling |
+|---|---|---|---|
+| **ZF-FIX1** | Contract `ZetherMetaTx.sol`, `ITransferDisclosure.sol` | Trần 1271 400k/50k theo codehash; `FeeWouldStick`; sửa NatSpec chi phí tiết lộ; tests (passkey `SubjectAccount`, `feeRecipient = token`) | RS2-21, RS2-24, L3 |
+| **ZF-FIX2** | Contract tests `test/zether/*` | Invariant handler RS-NV64-1; điểm ngoài subgroup trong statement/proof; `D_out = O` | RS2-23 |
+| **ZF-FIX3** | Clients `clientkeys/src/zether.js` + gateway node | Ghim verifier/registry chuẩn; khoá cache có chain id; `schnorrSign` không nhận `k` ở export công khai; tests | RS2-20, RS2-25, RS2-26 |
+
 ## 17. Review log
 
 ### agy — review đặc tả bản 1 (2026-10-03), 10 finding
@@ -650,3 +719,31 @@ agy (`--mode plan`, đối chiếu Zether 2020, Bulletproofs 2018, EIP-196/197/2
 `hashToScalar` rộng 512 bit, mọi challenge ≠ 0, mọi scalar phản hồi `< r`, `δ(y,z)` đúng BP 2018, subgroup
 BLS12-381 qua G1MSM/G2MSM, cổng `lastRolled < expected ≤ pendingSeq` (RS2-17/19), tách `TAG_DIRECT`/`TAG_RELAYED`,
 R26 (spender/caller là hợp đồng). Không có gì để gộp hay từ chối. Suite: `forge test` 270/270 (zether 138).
+
+### Claude review disposition — review 1 (2026-10-07, `docs/reviews/specs/2026-10-03-zether-design-claude-review-1.md`)
+
+Verdict của review: FIX-THEN-GO; lõi mật mã (Σ E1–E8, Bulletproofs, Fiat–Shamir, subgroup, RS-NV64-1, replay,
+tiết lộ) không phá được. Đối chiếu từng finding với code: **12 nhận, 0 từ chối** (2 nhận chỉ ở mức văn bản vì code
+sắp bị F1 xoá/thay).
+
+| # | Sev | Kiểm với code | Kết luận | Xử lý |
+|---|---|---|---|---|
+| M1 | med | `OpenFactory.sol:179-190` chỉ đòi code + `isSupportedOnThisChain()`; `ZetherToken.sol:136` chỉ đòi registry có code; `clientkeys/src/zether.js` không đọc `verifier()`/`registry()` | Đúng | RS2-20, §13; ZF-FIX3 |
+| M2 | med | `UniversalAccountRegistry.sol:206`, `ZetherMetaTx.sol:123` `staticcall{gas: 50_000}`; `MetaToken.sol:141-143` cho 400k | Đúng; registry để F1 (đã định 400k) | RS2-21, §10, §11.2; ZF-FIX1 (chỉ `ZetherMetaTx`) |
+| M3 | med | Không có invariant Zether (`test/Invariants.t.sol`), không test điểm ngoài subgroup trong proof, không test `D_out = O` (check có ở `ZetherVerifier.sol:170`) | Đúng | RS2-23; ZF-FIX2 |
+| L1 | low | `popChallenge` = `keccak(registry ‖ Y ‖ account)` (`UniversalAccountRegistry.sol:96`) | Đúng | RS2-22, §11.2 (văn bản; R295 thay ở F1) |
+| L2 | low | `AuthScheme.sol:58-60` chỉ loại `SELF_SCHNORR`; registry `:122-127` | Đúng; file bị xoá ở F1, helper chỉ dùng trong test | §11.2 văn bản, không luồng code |
+| L3 | low | `ITransferDisclosure.sol:24` "không thêm gas" | Đúng | §12; ZF-FIX1 |
+| L4 | low | BLS 4 × 128 B = 512 B | Đúng | §12 hai curve |
+| L5 | low | `AuthScheme.sol:7` "chain 9000"; UA R290/R291/R295/R305/R312 có thật; code dưới `smartcontracts/evm/` | Đúng | Khối trạng thái đầu spec; RS2-1 chú thích |
+| L6 | low | `ZetherMetaTx.sol:74-75` chỉ chặn 0 | Đúng | RS2-24, §10; ZF-FIX1 |
+| L7 | low | `keyOf = ua:token` (`zether.js:218`) | Đúng (dev) | RS2-25; ZF-FIX3 |
+| L8 | low | `schnorrSign(curve, x, msg, k)` export với `k` (`zether.js:136-147`) | Đúng | RS2-26; ZF-FIX3 |
+| L9 | low | `default_max_gas()` = 3,000,000 (`config.rs:415-416`) | Đúng | §15 |
+
+## 18. Lịch sử bản
+
+| Rev | Ngày | Thay đổi |
+|---|---|---|
+| 1.0 | 2026-10-03 | Bản đầu (S2): RS2-1…19; review agy + review nhánh; RS-NV64-1/2 (2026-10-05) |
+| 1.1 | 2026-10-07 | Gộp review Claude 1: khối trạng thái (§11 bị UA F thay, 9000 → 7622, đường dẫn `evm/`); ghim verifier/registry §13; RS2-20…26; bundle hai curve; trần gas node §15; luồng code ZF-FIX1…3 |

@@ -83,7 +83,7 @@ cứng thật**:
 
 | Cận | √cận | Desktop 1 lõi | CPU 16 lõi | 1 GPU cao cấp |
 |---|---|---|---|---|
-| 2^54 | 1,3e8 | ~1–6 phút (BSGS bảng 2^24–2^27) | ~5–20 s | < 0,1 s |
+| 2^54 | 1,3e8 | ~0,8–6 phút (BSGS bảng 2^27–2^24) | ~5–20 s | < 0,1 s |
 | 2^60 | 1,1e9 | ~12 phút | ~45 s | ~0,5–1 s |
 | 2^64 | 4,3e9 | ~50 phút | ~3 phút | ~2–4 s |
 | 2^72 | 6,9e10 | ~13 giờ | ~50 phút | ~30–70 s |
@@ -93,10 +93,15 @@ cứng thật**:
 Riêng về giải mã thì không còn là rào cản.
 
 **Nhưng cận giải mã không phải ràng buộc duy nhất của tổng cung — muốn tổng > 2^54 phải xử lý cả ba:**
-1. **Soundness (`n_b`)**: canon giữ `2^n_b > tổng × 1024` (khoảng an toàn 10 bit) với `n_b = 64` ⇒ tổng ≤ 2^54.
-   Lên 2^60/2^64 cần: (a) `n_b = 128` — range proof số dư 7 vòng, gas transfer tăng ~65–70% (ước tính); hoặc
-   (b) nới hệ số 1024 bằng một ruling có lập luận từng phương trình (như RS-NV64-1) — chưa phân tích, không
-   mặc định an toàn.
+1. **Soundness không chặn tổng** (RS-NV64-1, design §16; limits §3): E5 cho `a ≡ b' + v + fee (mod r)` với
+   `b' + v + fee < 3·2^64 ≪ r` ⇒ đúng với mọi số dư `< r`. *(Rev 1.1: quy tắc canon "`2^n_b > tổng × 1024`" bị
+   RS-NV64-1 thay — khoảng an toàn đó chỉ cần khi số dư có thể bị đẩy tới `2^n_b`.)* Với `n_b = 64`, tính đầy đủ chỉ
+   cần `tổng ≤ 2^64 − 1` (mọi `b' ≤ a ≤ tổng`); các biên khác của code cũng đứng tới 2^64 (`v < 2^64`,
+   `fee < 2^64`, burn `amount + fee < 2^65 < r`, tiết lộ `amount < 2^64`). Vượt 2^54 (tới `2^64 − 1`) cần một hằng
+   `MAX_TOTAL_SHIELDED` mới (implementation version mới) và kế hoạch giải mã (bảng trên), **không** cần range proof
+   lớn hơn. Chỉ tổng `≥ 2^64` mới cần `n_b = 128`: BP-2 thêm `2·64 + 2 = 130` điểm (144 → 274) × ≈ 8,2k gas/điểm
+   (suy từ `n_v` 32 → 64: +538k cho 66 điểm, design §15) ≈ **+1,06M** ⇒ transfer ≈ **+32 %** (3,29M → ≈ 4,35M);
+   burn cũng có BP#2 nên ≈ +76 % (1,40M → ≈ 2,46M) — ước tính, chưa đo.
 2. **Mobile**: điện thoại không có GPU dùng được cho việc này; ví mobile vẫn dùng cache + BSGS nhỏ, và chỉ
    cần dò lớn khi mất cache.
 3. **Thuê/ dùng chung GPU làm lộ số dư**: phép dò chỉ cần `g^b` (tính tại máy từ khoá bí mật), nên có thể giao
@@ -104,14 +109,36 @@ Riêng về giải mã thì không còn là rào cản.
    thuộc quyền chủ tài khoản (GPU nội bộ của doanh nghiệp), không giao cho dịch vụ bên ngoài.
 
 **Khuyến nghị:** giữ tổng 2^54 cho v1. Nếu một token cần tổng lớn hơn (ví dụ VND quy mô quốc gia), mở một
-thay đổi riêng: tổng 2^60–2^64 + `n_b = 128` (hoặc ruling nới hệ số) + công cụ kangaroo GPU nội bộ; đo gas và
-thời gian trên phần cứng thật trước khi chốt. Phương án thay thế không đổi crypto: nhiều **series**.
+thay đổi riêng: tổng tới `2^64 − 1` = hằng `MAX_TOTAL_SHIELDED` mới (giữ `n_b = 64`) + công cụ kangaroo GPU nội bộ
+(chưa xây — `elgamal.rs` chỉ có BSGS); đo thời gian trên phần cứng thật trước khi chốt. Phương án thay thế không đổi
+crypto: nhiều **series** — nhưng hiện chưa có đường factory nào tạo series liên kết; series thứ hai chỉ là một token
+khác với escrow riêng, **không** hoán đổi được với series đầu.
 
 ## 5. Có tăng thêm nữa không?
 
 Đã tăng: tổng 2^32 → **2^54** (×4,2 triệu), một lần chuyển 2^32 → **giới hạn bởi số dư**, giải mã tuyến tính
-→ BSGS. **Không đề xuất tăng tổng vượt 2^54**, vì hai ràng buộc cùng lúc:
-- soundness: canon giữ `2^n_b > tổng × 1024` (khoảng an toàn 10 bit) với `n_b = 64` ⇒ tổng ≤ 2^54; lên
-  `n_b = 128` thì gas range proof số dư tăng mạnh (~+65–70% một transfer);
-- giải mã: dò tới 2^60 cần ~2^33 bước với bảng 2^27 (~50 phút desktop) — không còn dùng được để khôi phục.
-Cần lớn hơn ⇒ chia token thành nhiều **series** (mỗi series một sổ cái riêng, `01-token-factory.md` §1.8.3).
+→ BSGS. **Không đề xuất tăng tổng vượt 2^54 cho v1**, vì ràng buộc giải mã (soundness thì không chặn — §4 mục 1):
+- giải mã **với client BSGS đang ship**: dò tới 2^60 cần ~2^33 bước với bảng 2^27 (~50 phút desktop một lõi) — không
+  còn dùng được để khôi phục. Kangaroo nhiều lõi/GPU (§4) đưa 2^60 về mức dùng được nhưng chưa xây.
+- tới `2^64 − 1` không cần `n_b = 128`; chỉ `≥ 2^64` mới cần (≈ +32 % gas transfer, §4).
+Cần lớn hơn ⇒ chia token thành nhiều **series** (mỗi series một sổ cái riêng, `01-token-factory.md` §1.8.3) — hiện
+mỗi series là một token riêng, không hoán đổi (§4).
+
+## 6. Claude review disposition — review 1 (2026-10-07, `docs/reviews/specs/2026-10-05-zether-consensys-max-claude-review-1.md`)
+
+Verdict của review: FIX-THEN-GO. Phần về nguồn ConsenSys không kiểm được (repo không trong cây). **4 nhận,
+0 từ chối**, đều là văn bản (không có lỗi code).
+
+| # | Sev | Kiểm | Kết luận | Xử lý |
+|---|---|---|---|---|
+| M1 | med | RS-NV64-1 (design §16) và limits §3 chứng minh soundness đúng với mọi số dư `< r`; BP-2 `n = 64` có 144 điểm (§15), `n = 128` có 274; +538k / 66 điểm ≈ 8,2k/điểm ⇒ +1,06M ≈ +32 % trên 3,29M | Đúng, kể cả số gas | §4 mục 1, §4 khuyến nghị, §5 viết lại; ×1024 đánh dấu bị thay; thêm chi phí burn (+76 %) |
+| L1 | low | §4 kangaroo 16 lõi 2^60 ~45 s vs §5 BSGS một lõi ~50 phút; `elgamal.rs` chỉ có BSGS | Đúng | §5 ghi "client BSGS đang ship" |
+| L2 | low | Bảng 2^27: 2^27 × 0,35 µs ≈ 47 s; 2^24: 2^30 × 0,35 µs ≈ 6 phút | Đúng | §4 "~0,8–6 phút" |
+| L3 | low | Không có đường factory/spec nào tạo series Zether liên kết | Đúng | §4, §5 ghi rõ series = token riêng, không hoán đổi |
+
+## 7. Lịch sử bản
+
+| Rev | Ngày | Thay đổi |
+|---|---|---|
+| 1.0 | 2026-10-05 | Ghi chú theo yêu cầu owner: MAX gốc là cận giải mã; bảng kangaroo/GPU |
+| 1.1 | 2026-10-07 | Gộp review Claude 1: soundness không chặn tổng (RS-NV64-1), ×1024 bị thay, `n_b = 128` ≈ +32 % (không phải 65–70 %), sửa §5/§4 mâu thuẫn, series không hoán đổi |
