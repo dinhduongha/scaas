@@ -54,16 +54,16 @@ When two sources disagree, the higher one wins:
 | DEX | [DEX design](superpowers/specs/2026-10-03-dex-design.md) | — | RS5-* | BUILT (EVM) |
 | net | per-family specs `2026-10-03-net-*.md`, `2026-10-04-net-{aptos,solana}.md` | — | R6-* (Hedera), RS7-* (Sui), R8-* (Soroban), R9-* (Cosmos), R10-* (TON), RS11-* (Aptos), RS12-* (Solana) | BUILT |
 | MESH | [relayer mesh](superpowers/specs/2026-10-05-relayer-mesh-design.md) | 3 | R70–R86 | library BUILT; transports SPECIFIED |
-| NI | [node independence](superpowers/specs/2026-10-06-node-independence-design.md) (single normative place for node routes, tables, config) | 3.4 | R87–R111, R320–R321 | store P1 BUILT; rest SPECIFIED |
+| NI | [node independence](superpowers/specs/2026-10-06-node-independence-design.md) (single normative place for node routes, tables, config) | 3.6 | R87–R111, R320–R328 | store P1 BUILT; rest SPECIFIED |
 | A2 | [mesh gossip amendment](superpowers/specs/2026-10-06-mesh-gossip-amendment.md) | 2.1 | R112–R128 | SPECIFIED |
 | TW2 | [token wrappers v2](superpowers/specs/2026-10-06-token-wrappers-v2.md) | 1.2 | R129–R149 | contracts T1–T6, T8 **BUILT**; T7 SPECIFIED |
 | APP | [app (console + dApp)](superpowers/specs/2026-10-06-scaas-app-design.md) | 1.2 | R150–R179 | SPECIFIED |
-| TSS (B) | [tender, sponsorship, shredding](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) | 1.2 | R180–R199 | SPECIFIED |
+| TSS (B) | [tender, sponsorship, shredding](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) | 1.3 | R180–R199 | SPECIFIED |
 | AS (A) | [asset suite](superpowers/specs/2026-10-06-asset-suite-design.md) | 1.1 | R200–R217 | SPECIFIED |
 | OPS (C) | [operations](superpowers/specs/2026-10-06-operations-design.md) | 1.2 | R230–R247 | SPECIFIED (some metrics BUILT) |
 | S4F (D) | [signers follow-ups](superpowers/specs/2026-10-06-signers-followups.md) | 1.1 | R250–R269 | SPECIFIED |
 | PQZ (E) | [post-quantum Zether](superpowers/specs/2026-10-06-pq-zether-design.md) | 1.2 | R270–R289 | SPECIFIED |
-| UA (F) | [Universal Account](superpowers/specs/2026-10-06-universal-account-design.md) | 1.3 | R290–R318 | SPECIFIED |
+| UA (F) | [Universal Account](superpowers/specs/2026-10-06-universal-account-design.md) | 1.4 | R290–R318, R330–R331 | SPECIFIED |
 
 The owner's SRS drafts (`ai-enterprise-blockchain-architecture.md` v3.3, `ai-enterprise-blockchain-integration.md`
 v2.5, outside this repo) are **reference material, never edited from here**. Where they differ from rulings or code
@@ -111,7 +111,7 @@ Clients still read the domain a deployed contract reports (`eip712Domain()`) rat
 | **`entryRef` / `payId`** | 32-byte reference carried by a payment op and emitted in `PaymentSettled`; links an on-chain payment to a business document. Current rule: 32 random bytes (R9). `payId` is the SRS name of the same field. |
 | **Finality gate** | The rule that decides when a block range is final: `depth` (n confirmations), `tag` (`finalized`), or `instant` (BFT families), plus a quorum of independent RPC endpoints returning the same hash (R11, §6.6). |
 | **Consumed** | Job state: the subject nonce of the intent moved past the intent's nonce through a transaction this node did not land (or not yet attributed). Never a failure by itself (R80, S1a). |
-| **UA** | Universal Account: an account identifier derived from key data, like an EOA generalised to every signature scheme — the native address for a chain's native accounts (never registered), else `keccak256(keccak256(kind_tag) ‖ key_data)` (32 bytes, kind-tagged, top 96 bits non-zero), registered per chain with a proof of possession that binds chain, registry, UA and `authRef` (not the caller, so registration is relayable) ([UA](superpowers/specs/2026-10-06-universal-account-design.md) rev 1.3, R290–R295; summary §9.8). Today's built registry is the Zether-only `keccak256(encodedY)` form (§8.6), superseded by UA. |
+| **UA** | Universal Account: an account identifier derived from key data, like an EOA generalised to every signature scheme — the native address for a chain's native accounts (never registered), else `keccak256(keccak256(kind_tag) ‖ key_data)` (32 bytes, kind-tagged, top 96 bits non-zero), registered per chain with a proof of possession that binds chain (`chain_key` and `chain_uid`, the genesis hash, R330), registry, UA and `authRef` (not the caller, so registration is relayable) ([UA](superpowers/specs/2026-10-06-universal-account-design.md) rev 1.4, R290–R295, R330; summary §9.8). Today's built registry is the Zether-only `keccak256(encodedY)` form (§8.6), superseded by UA. |
 | **Mandate** | An on-chain spending authorization held by a subject's wallet contract (`MandateWallet`): delegate, per-payment and per-period caps, payees, expiry, revocation (R25). |
 
 ---
@@ -284,7 +284,7 @@ mandates (`MandateWallet.payUnderMandate`); generic saga orchestration **PLANNED
 | TON contracts | `smartcontracts/ton/` (Tact) | Jetton master/wallet with pubkey + lanes (`SignedTransfer`), mandate, escrow DEX | **BUILT** |
 | Solana program | `smartcontracts/solana/` (Anchor) | Program `scaas`: SubjectAccount PDA, `LanePda`, mandate, DEX | **BUILT** |
 | Build/test scripts | `smartcontracts/scripts/{build,test,deploy,devnet}.sh <family>`; `scripts/capped` | One entry point per family; heavy runs capped at 4 GB, one at a time | **BUILT** |
-| `scaas-node` | `scaas-node/` | Rust relayer: gateway, submit lanes, indexer, drift, DEX venue, admin; mesh envelope library | **BUILT** (Odoo-pulled job source); store/job API/admin auth/gateway additions **SPECIFIED** ([NI](superpowers/specs/2026-10-06-node-independence-design.md) rev 3.4); mesh transports **SPECIFIED** ([MESH](superpowers/specs/2026-10-05-relayer-mesh-design.md), [A2](superpowers/specs/2026-10-06-mesh-gossip-amendment.md)) |
+| `scaas-node` | `scaas-node/` | Rust relayer: gateway, submit lanes, indexer, drift, DEX venue, admin; mesh envelope library | **BUILT** (Odoo-pulled job source); store/job API/admin auth/gateway additions **SPECIFIED** ([NI](superpowers/specs/2026-10-06-node-independence-design.md) rev 3.6); mesh transports **SPECIFIED** ([MESH](superpowers/specs/2026-10-05-relayer-mesh-design.md), [A2](superpowers/specs/2026-10-06-mesh-gossip-amendment.md)) |
 | Node store | (in `scaas-node`) | Jobs, feeds, config authority, credentials, audit, DEX book, mesh tables; SQLite/PostgreSQL/MySQL | SQLite store P1 **BUILT**; the rest **SPECIFIED** (NI §4, A1/R111) |
 | `zether-prover` | `zether-prover/` (Rust, `cdylib`+`rlib`, WASM) | Keygen (EIP-2333 paths), ElGamal, Σ + Bulletproofs (n=64), disclosure openings, BSGS, `zether-cli`, `zether-read-balance` | **BUILT** (unaudited); PQZ feature `pq`, `pqz-cli` **SPECIFIED** ([PQZ](superpowers/specs/2026-10-06-pq-zether-design.md) §11) |
 | `clientkeys` | `clientkeys/` (ESM, `@noble`/`@scure`) | Passkey signer, 24-word seed vault, Zether conf keys and balance cache; bundle vendored into `dms_blockchain_bridge/static/lib/clientkeys` | **BUILT** (EVM-centric); vault v2, non-EVM signers, `fam/*` and `wallets/*` **SPECIFIED** ([S4F](superpowers/specs/2026-10-06-signers-followups.md)); `UAKey` **SPECIFIED** (UA F3) |
@@ -777,7 +777,7 @@ non-via-IR ABI decoder holds: the token decodes it in `fallback` (same selector 
 | Fee in token | `MODE_FEE_PERCENT`/`FIXED`, fee ≤ 1 % to `feeRecipient` | Relayer, reimbursed in token | **BUILT** |
 | **Payee self-relay / direct settlement** | Payer signs offline (`fee = 0`, relayer unbound or bound to the payee); hands the signature to the payee by QR, NFC, message or file; the payee's wallet submits it, paying gas itself; `PaymentSettled` identical. The signature is an expiring electronic cheque (`validUntil`) | Payee | **BUILT** on contract level (any `msg.sender` may submit an unbound intent); QR/EIP-681 tooling and user `cancelMetaNonce` UI **PLANNED** (HANDOFF #14) |
 | **Receiver pays the fee** | Payer signs `pay` of `N`; payee co-signs a fee authorization (`fee`, `feeRecipient`) from its own balance; relayer submits both in one transaction (payer sends `N`, payee receives `N`, pays `fee`) | Relayer, reimbursed by payee | **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §B2: `mtxPayReceiverFee`, payee co-signs `ReceiverFee` over the payer digest; R192–R193) |
-| Gas sponsorship policy | Node policy: e.g. "inbound to wallet W, value ≥ X ⇒ accept with fee 0, book gas to account Y" | Sponsor (contract outside the chain) | **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §B1, R189–R191); on-chain `SponsorshipPool` PLANNED-later (§B3) |
+| Gas sponsorship policy | Node policy: e.g. "inbound to wallet W, value ≥ X ⇒ accept with fee 0, book gas to account Y" | Sponsor (contract outside the chain) | **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) rev 1.3 §B1, R189–R191; budget and rate counts at accept, NI rev 3.6 §5.2); on-chain `SponsorshipPool` PLANNED-later (§B3) |
 | `fee = 0` B2B | Company relayer, `MODE_FEE_NONE`; gas is OPEX | Company | **BUILT** |
 | Enterprise inbound gateway | Partners post signed intents to the company's gateway (`POST /v1/metatx`); the company relays with its lanes | Company | **BUILT** (EVM door A) |
 
@@ -1279,9 +1279,9 @@ silent no-op — anti-DoS). Two modes (`enum RollOverMode { PUBLIC, OWNER_ONLY }
 
 ### 8.6 Universal Account registry (BUILT, dev chains)
 
-> **Superseded (SPECIFIED, [UA](superpowers/specs/2026-10-06-universal-account-design.md) rev 1.3, R290–R318; summary
-> §9.8).** The registry below becomes the general, admin-free, monotonic `UARegistry` (kind-tagged 32-byte ids for
-> every non-native kind; PoP binds chain + registry + UA + `authRef`, not `msg.sender`, so `register` is relayable;
+> **Superseded (SPECIFIED, [UA](superpowers/specs/2026-10-06-universal-account-design.md) rev 1.4, R290–R318, R330–R331;
+> summary §9.8).** The registry below becomes the general, admin-free, monotonic `UARegistry` (kind-tagged 32-byte ids for
+> every non-native kind; PoP binds chain (incl. `chain_uid`) + registry + UA + `authRef`, not `msg.sender`, so `register` is relayable;
 > one key = one purpose). Zether UAs become `keccak256(keccak256("scaas.ua.zether-<curve>.v1") ‖ Y)` with an
 > immutable `authRef` (0 = self, or a native/SIGNING UA that co-signs the PoP) replacing `AuthScheme` and
 > `links`/`link_eth`. Scheme mapping (UA §12.2): `SELF_SCHNORR` → `authRef = 0`; `ECDSA_MULTISIG` → `msig` of EOA
@@ -1403,7 +1403,7 @@ co-processor seam; public chains never without an owner ruling (PQZ §14). Strea
 ## 9. Keys and signing
 
 > **Account identity, key kinds and one key = one purpose:** [UA](superpowers/specs/2026-10-06-universal-account-design.md)
-> rev 1.3 (SPECIFIED), summarized in §9.8. Signers, vault v2 and the backup switch:
+> rev 1.4 (SPECIFIED), summarized in §9.8. Signers, vault v2 and the backup switch:
 > [S4F](superpowers/specs/2026-10-06-signers-followups.md) rev 1.1 (SPECIFIED).
 
 ### 9.1 Two custody axes
@@ -1517,9 +1517,9 @@ unsatisfiable kinds may only move their balance out. BE/BS flags drive non-block
 | Threshold ECDSA (MPC providers) | not a kind: the output is an ordinary ECDSA signature ⇒ native EOA (UA R296) | — | — |
 | Smart-account policies (Safe, SubjectAccount) | scheme 7; UA: native contract id (never registered) | arbitrary policy via ERC-1271 | **BUILT** |
 
-### 9.8 Universal Account summary (SPECIFIED, [UA](superpowers/specs/2026-10-06-universal-account-design.md) rev 1.3)
+### 9.8 Universal Account summary (SPECIFIED, [UA](superpowers/specs/2026-10-06-universal-account-design.md) rev 1.4)
 
-Short summary; UA R290–R318 and its kind table (§4.2 there) are normative. Nothing is built.
+Short summary; UA R290–R318, R330–R331 and its kind table (§4.2 there) are normative. Nothing is built.
 
 - **Ids** (R290–R293): native kinds use the chain's native id; every derived kind is
   `keccak256(keccak256("scaas.ua.<name>.v1") ‖ keyData)`, 32 bytes, top 96 bits non-zero; one hash (keccak256) in
@@ -1531,11 +1531,21 @@ Short summary; UA R290–R318 and its kind table (§4.2 there) are normative. No
   (`0x0101`–`0x0107`); MuSig2/FROST on secp256k1 and bn254 (`0x0110`–`0x0113`); `msig` `0x0120`; `mldsa44`,
   `mldsa65`, `fndsa512` (`0x0130`–`0x0132`, enabled on every EVM chain with precompile or pure-Solidity verifiers
   within a per-chain gas budget, R313); `zether-bn254`, `zether-bls12381`, `pqz-mlwe` (`0x0140`–`0x0142`). Closed
-  sets ZETHER, SIGNING and MEMBER are enforced where they are named (R303).
+  sets ZETHER, SIGNING and MEMBER are enforced where they are named (R303); MEMBER is per chain profile, so
+  `hedera-native` is an `msig` member only in a registry whose `hederaNative` immutable is set (Hedera, HIP-632).
 - **Registration** (R294–R297): `register(kind, keyData, pop, authRef, authPop)`; PoP over
-  `keccak256(POP_TAG ‖ chainKeyHash ‖ registry_id ‖ ua ‖ authRef)`, never bound to the caller, so anyone may submit
+  `keccak256(POP_TAG ‖ chainKeyHash ‖ chainUid ‖ registry_id ‖ ua ‖ authRef)`, never bound to the caller, so anyone may submit
   it; a non-zero `authRef` co-signs. Rogue-key defences per aggregate kind are checked on chain. The registry is
   monotonic and admin-free (R304); no rotation inside a UA — rotation is a new UA plus a transfer (R302).
+- **Chain identity** (R330): a chain is `(chain_key, chain_uid)`, `chain_uid` = genesis hash (EVM, Hedera; non-EVM: the
+  family's network id or a profile constant), a registry constructor immutable `chainUid()`. It is bound into the PoP
+  digest, the registry's EIP-712 domain `salt` (`UAAuth`), the v3 `UAMetaTransaction` domain `salt` and the
+  `metatx-cancel` digest, so two chains sharing a chain id (7622 or any other) never accept each other's signatures.
+  The node checks registry address, `chainUid()` and the RPC's genesis hash per chain and holds the chain on a
+  mismatch (NI rev 3.6 §9.1); clientkeys refuses a domain `salt` that differs from the profile's `chain_uid`.
+- **EIP-7702** (R331): a delegated EOA stays a native EOA whose key is root; native ids are classified by code at
+  verify time — empty ⇒ ECDSA; 7702 designator ⇒ ECDSA, else ERC-1271 through the delegate; other code ⇒ ERC-1271
+  only. v2's "7702 = EOA, ECDSA only" rule is unchanged (R303).
 - **One key = one purpose** (R298–R301), in four layers: separate hardened derivation per kind and account role on the
   tree `m/7622'/0'/<account>'/<kindNo>'/<i>'` (BIP-43 purpose `7622'`; role `kindNo`: `SubjectAccount` 2, Solana 16,
   Soroban `C…` 18, Aptos 19, Sui 20); registry `keyOwner[keyHash]` per curve group refuses a key under a second kind
@@ -1549,14 +1559,15 @@ Short summary; UA R290–R318 and its kind table (§4.2 there) are normative. No
 - **`SubjectAccount`** is option (b), unchanged (R307, §9.4). Default for a phone user: a `webauthn-p256` UA
   registered gaslessly (`POST /v1/ua/register`, NI R320).
 - **Optional** VC/eKYC layer (R310–R311): never mandatory; contracts see credentials only as `ComplianceRegistry`
-  flags (AS R206).
+  flags (AS R206). BBS presentations are never accepted as legal evidence; legal-recourse workflows require the
+  account-bound KB-JWT with `nonce` = deal reference / `intent_id` (UA §9.2, §9.7).
 - **Migration** (R312): the built Zether registry (§8.6, §14.5) is deleted and replaced at stream F1, dev chains only.
 
 ---
 
 ## 10. Sealed-bid tender (SPECIFIED)
 
-Component spec: [TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) rev 1.2 §A (R180–R188),
+Component spec: [TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) rev 1.3 §A (R180–R188),
 normative; no code. This section is its summary (the earlier text here, with bidder-signed reveals, replacement and
 an `awardDeadline`, is superseded).
 
@@ -1656,7 +1667,7 @@ impact assessment is signed by its compliance and security owners (HANDOFF O9).
 ## 12. Node API surface
 
 All JSON, no cookies, no redirects. Errors are `{"error": "<CODE>", "detail": "<text ≤ 300 chars>"}` (gateway:
-the stable contract `{error, code, detail, revert_data?}`, APP R178). NI rev 3.4 is the single normative place for
+the stable contract `{error, code, detail, revert_data?}`, APP R178). NI rev 3.6 is the single normative place for
 node routes, tables and config. Detail:
 [NI §5–§7](superpowers/specs/2026-10-06-node-independence-design.md), [MESH §5](superpowers/specs/2026-10-05-relayer-mesh-design.md),
 [A2 §5, §13](superpowers/specs/2026-10-06-mesh-gossip-amendment.md). Client usage: `integration.md`.
@@ -1698,14 +1709,14 @@ Keycloak; `scope` only for machine tokens).
 | Route | Listener | Auth / role | Status |
 |---|---|---|---|
 | `POST /v1/metatx` `{chain, token, m, signature}` → `202 {"status":"queued"}` (target adds `intent_id`; Hedera 64-byte HIP-632 signatures, N2) | gateway | R54 | **BUILT** (EVM) |
-| `GET /v1/gateway` (served chains, tokens, fee recipient, DEX policy) | gateway | R54 | **SPECIFIED** (NI §5.5, N1) |
+| `GET /v1/gateway` (served chains incl. `chain_uid` for UA chains, tokens, fee recipient, DEX policy) | gateway | R54 | **SPECIFIED** (NI §5.5, N1) |
 | `POST /v1/ops {chain, op}` (non-EVM `signed_op`) | gateway | R54 | **SPECIFIED** (N2) |
 | `POST /v1/ua-metatx`, `POST /v1/ua/register` (the only gateway `call` job, to `chain.ua_registry`, R320) | gateway | R54 | **SPECIFIED** (N4) |
 | `GET /v1/intents/{intent_id}` (gateway-origin rows only) | gateway | R54 | **SPECIFIED** |
 | `POST /v1/dex/orders`, `GET /v1/dex/orders?maker=`, `POST /v1/dex/cancel`, `POST /v1/dex/cancel-all`, `GET /v1/dex/markets`, `GET /v1/dex/depth` (levels ≤ 200), `GET /v1/dex/trades`, `GET /v1/dex/ticker` | gateway | R54 | **BUILT** |
 | `GET /v1/dex/depth?scope=network`, `GET /v1/dex/homes` | gateway | R54 | **SPECIFIED** (A2 §11.5) |
 | `GET /v1/info` | job API | read | **SPECIFIED** |
-| `POST /v1/jobs` (≤ 50 per batch) | job API | submit | **SPECIFIED** |
+| `POST /v1/jobs` (≤ 50 per batch; sponsorship `429 SPONSOR_BUDGET`/`SPONSOR_RATE`/`SPONSOR_TOO_SHORT`, `409 DUPLICATE_CALL {uid}`) | job API | submit | **SPECIFIED** |
 | `GET /v1/jobs/{uid}` | job API | read | **SPECIFIED** |
 | `POST /v1/jobs/{uid}/cancel`, `POST /v1/jobs/cancel {origin}` | job API | submit | **SPECIFIED** |
 | `GET /v1/jobs?cursor=&limit=&wait=` | job API | read | **SPECIFIED** |
@@ -1803,7 +1814,10 @@ outside this store, issuer failed closed, no gossip peer for 5 min (informationa
 - **Unit cost:** gas of every finalized job is converted to the deployment's reporting currency at the transaction
   time and allocated to the business document (`entryRef` → invoice/order). SPECIFIED ([OPS](superpowers/specs/2026-10-06-operations-design.md) §8).
 - **Budgets:** per lane `gas_budget_per_hour`; per namespace `max_live_jobs`; sponsorship budgets per policy row
-  (SPECIFIED, [TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §B1).
+  (SPECIFIED, [TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) rev 1.3 §B1): day budget and hour /
+  payer-hour counts taken at accept and released if the job ends before broadcast; `min_valid_secs` (default 120);
+  a policy caps a tenant's spend only with `on_exhausted = reject` — `unsponsored` on a client namespace books to the
+  namespace, is marked `sponsor_fallback` on the jobs feed and needs an audited `fallback_to_namespace` (R189).
 - **Float:** each lane holds gas float for ~50 transactions; refill from treasury when below 30 % of target; the
   `balance_floor` breaker stops a lane at the floor. Auto-refill is PLANNED; today an operator refills (O8).
 - **Indicative fixed costs** (research canon §C19, not re-estimated for all families): infrastructure ≈ $480–830 per
@@ -2183,7 +2197,7 @@ code; at most three agents, one heavy build at a time). Revisions and ruling ran
 | 0 | Review | Codex review of every component spec (`docs/reviews/specs/*-codex-review-1.md`), then fold; owner review of NI §18.2; deferred full test runs after the repo split | — | in progress |
 | 1 | S3 / S3′ | Envelope library, digests per family, `hub.sig`, conformance vectors; renames to `scaas-intent/1.2`; gossip message builders + `scaas-gossip-v1.json` | — | envelope **BUILT** (43 cases); gossip vectors open |
 | 2 | P1 | Node store v2 on SQLite + config authority; `[identity]`, `[transport]`, `[gossip]` config parsing | S3 | **BUILT** |
-| 3 | P2 | Job API, HMAC external-client API keys, built-in admin users, host CLI | P1 | **SPECIFIED** (NI rev 3.4) |
+| 3 | P2 | Job API, HMAC external-client API keys, built-in admin users, host CLI | P1 | **SPECIFIED** (NI rev 3.6) |
 | 4 | P3 | Submit and lanes from the store (safety-critical); gateway journaled in `~gateway`; R321 batch journal | P2 | **SPECIFIED** |
 | 5 | P4 | Indexer and `/v1/events`, watch lists, token subsets | P3 | **SPECIFIED** |
 | 6 | P5 | Odoo push/sync client | P4 | **SPECIFIED** |
@@ -2203,13 +2217,13 @@ code; at most three agents, one heavy build at a time). Revisions and ruling ran
 | 20 | Rename | `scaas` names in code, metrics, env, headers and on-chain tags | owner plan | **BUILT** (code); older component specs still cite old names |
 | 21 | app A0–A18, N1–N4 | React + Vite console/dApp over **all seven families** (signers, UA accounts, gateway submission, DEX, Zether, PQZ tokens on the private chain, node admin by built-in login or OIDC); node additions `/v1/gateway`, `/v1/ops`, `/v1/ua-*`, N3 non-EVM DEX books ([APP](superpowers/specs/2026-10-06-scaas-app-design.md) §15) | node APIs, D, F | **SPECIFIED** (APP rev 1.2) |
 | 22 | S4F D1–D7 | Backup switch, vault v2 (device key), scrypt `2^17`, Sui `fam_sui.verify`, Soroban/Aptos/Solana seed and passkey signers, `fam/*` and `wallets/*` connectors, role keys ([S4F](superpowers/specs/2026-10-06-signers-followups.md)) | F §8.1 | **SPECIFIED** (S4F rev 1.1) |
-| 23 | UA F0–F10 | Kind libraries and vectors, EVM `UARegistry` + verifiers + Zether re-point, MetaToken v3, `UAKey` + MuSig2/FROST signers, VC layer, node `scaas-intent/1.3`, Odoo `blockchain.ua`, non-EVM registries, PQ kinds, DEX/mandate support ([UA](superpowers/specs/2026-10-06-universal-account-design.md) §16) | — | **SPECIFIED** (UA rev 1.3) |
+| 23 | UA F0–F10 | Kind libraries and vectors, EVM `UARegistry` + verifiers + Zether re-point, MetaToken v3, `UAKey` + MuSig2/FROST signers, VC layer, node `scaas-intent/1.3`, Odoo `blockchain.ua`, non-EVM registries, PQ kinds, DEX/mandate support ([UA](superpowers/specs/2026-10-06-universal-account-design.md) §16) | — | **SPECIFIED** (UA rev 1.4) |
 | 24 | PQZ E-S0…E-S9, G-LIC | Parameter and `pqz-core` spikes, relations, Nethermind precompile, contracts, clients, retail WASM prover, node, review; licence gate ([PQZ](superpowers/specs/2026-10-06-pq-zether-design.md) §16) | F registry stream | **SPECIFIED** (PQZ rev 1.2) |
 | 25 | TW2 T1–T8 | Token wrappers v2: `MetaTxCore` + named functions, three tiers, rates, multi-underlying (adjustable legs, admin-only execute, all-leg wrap pause), gasless unwrap op with `minOut`, factory v2, Hedera children, invariant suite, node/Odoo fields ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §15) | — | contracts T1–T6, T8 **BUILT** (EVM + Hedera); T7 node/Odoo/SDK **SPECIFIED** |
 | 26 | AS1–AS9 | Regulated module (kinds 5–7), `ComplianceRegistry`, `VestingGrant`, distributions, `ExchangeOffer`, templates, managed markets ([AS](superpowers/specs/2026-10-06-asset-suite-design.md) §13) | TW2 | **SPECIFIED** (AS rev 1.1) |
-| 27 | TB1–TB3, SP1, RP1–RP2, CS1–CS2, PL1 | Tender, sponsorship policy, receiver-pays, crypto-shredding, `SponsorshipPool` (later) ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §8) | NI P3 | **SPECIFIED** (TSS rev 1.2); PL1 PLANNED-later |
+| 27 | TB1–TB3, SP1, RP1–RP2, CS1–CS2, PL1 | Tender, sponsorship policy, receiver-pays, crypto-shredding, `SponsorshipPool` (later) ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §8) | NI P3 | **SPECIFIED** (TSS rev 1.3); PL1 PLANNED-later |
 | 28 | OP1–OP8 | W3B SLOs, telemetry, trace contract, FinOps usage, denylist, runbooks, DR ([OPS](superpowers/specs/2026-10-06-operations-design.md)) | NI P3 | **SPECIFIED** (OPS rev 1.2; some metrics BUILT); OTLP export PLANNED |
-| 29 | CHAINID | Private chain id 9000 → 7622 (owner 2026-10-07): sweep specs and docs, then genesis reset, rename `src/chains/private9000` and the foundry profile, node and Odoo chain records, genesis-hash binding | owner | **PLANNED** |
+| 29 | CHAINID | Private chain id 9000 → 7622 (owner 2026-10-07): sweep specs and docs, then genesis reset, rename `src/chains/private9000` and the foundry profile, node and Odoo chain records, `chain_uid` genesis-hash binding (UA R330, NI §9.1) | owner | **PLANNED** |
 | 30 | Other product features | KeyPool auto-refill, outbound treasury payouts, anchoring (Merkle/HCS), Celo `l1_batch`, Hedera HCS/scheduled tx, TON payer tx hash on `mined`, NFT kinds | — | **PLANNED** |
 | — | Owner/operator steps | O1 audit of every contract family; O2 registrar multisig; O3 real deployments; O4 7-day finality evidence + ≥ 2 RPCs; O5 reverse-proxy rate limits; O6/O7 KMS/HSM custody and lane signers; O8 lane funding; O9 land-gate decision; O10 subject-account onboarding; Z1–Z6 Zether gates; G-LIC (PQZ) | — | open |
 
@@ -2284,5 +2298,5 @@ Contradictions inside this repository found while writing (fixed in their own fi
 | MESH §3.4 | `ring` provider, no `aws-lc-rs` | reversed by R114 for rustls; NI R106a keeps `ring` for JWS verification | open (S8″) |
 | NI §3 / §7.1 (rev ≤ 3.3) | job API `[api] bind` default `127.0.0.1:8547`, same as `gateway_bind` | NI rev 3.4: job API `127.0.0.1:8548`; two listeners on one port refused | resolved |
 | node default `max_gas_per_tx` | 3,000,000 | a classical Zether transfer needs 3.36 M; PQZ needs 16 M on the private chain | open (config) |
-| component specs (PQZ, UA, OPS, NI, TRAPS) | private chain id 9000 | owner 2026-10-07: 7622 | open (stream CHAINID) |
+| component specs (PQZ, UA, OPS, NI, TRAPS) | private chain id 9000 | owner 2026-10-07: 7622; UA rev 1.4, NI rev 3.6 and PQZ rev 1.3 swept | open for the rest (stream CHAINID) |
 | `zether-prover/wasm-smoke.sh` | no `--target web` build | APP R164 runs the prover as a web worker | open (APP §17) |

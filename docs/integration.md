@@ -3,8 +3,8 @@
 **Status:** normative, 2026-10-07. Companion of [`SCaaS.md`](SCaaS.md) (the system specification; its §0
 precedence and component spec register apply here). Status tags as in SCaaS.md: **BUILT**, **SPECIFIED** (link), **PLANNED**.
 
-This guide describes integration under the **current model** (owner rulings 2026-10-06, NI rev 3.4 R87–R111,
-R320–R321): the ERP or
+This guide describes integration under the **current model** (owner rulings 2026-10-06, NI rev 3.6 R87–R111,
+R320–R328; TSS rev 1.3, UA rev 1.4): the ERP or
 application is a **client** of `scaas-node`. It keeps its own transactional outbox, **pushes** jobs to the node's job
 API, and **polls** two feeds (`/v1/jobs`, `/v1/events`) to learn job states and finalized chain facts. The node never
 calls the client. The node's store is the configuration authority.
@@ -160,11 +160,16 @@ Payload by kind:
 4. `kind = call` needs `allow_call` ⇒ `403 CALL_NOT_ALLOWED`.
 5. `now < valid_until ≤ now + 3600` ⇒ `422 EXPIRED` / `VALID_TOO_LONG`.
 6. Bound relayer must be one of the chain's lanes ⇒ `422 RELAYER_NOT_OURS` (else `lane_hint` pins the job).
-7. Normalization of unbound `relayer`/`feeRecipient` (stored work only; `payload_hash` is over the client's payload).
+7. Normalization of unbound `relayer`/`feeRecipient` (stored work only; `payload_hash` is over the client's payload);
+   denylist (`403 SUBJECT_DENIED`); sponsorship match on job data (TSS §B1.3): a matched job needs
+   `valid_until ≥ now + min_valid_secs` (default 120) to be sponsored.
 8. Idempotency (one transaction): same key + same hash ⇒ `created: false` + current snapshot; tombstone ⇒
    `created: false, state: cancelled`; different hash ⇒ `409 IDEMPOTENCY_MISMATCH {uid}`; lower generation still live
-   ⇒ `409 PREVIOUS_GENERATION_LIVE {uid}`; same digest live under another key ⇒ `409 DUPLICATE_DIGEST`; quota ⇒
-   `429 QUOTA`.
+   ⇒ `409 PREVIOUS_GENERATION_LIVE {uid}`; same digest live under another key ⇒ `409 DUPLICATE_DIGEST`; the same `call` (target + calldata) live in
+   this namespace ⇒ `409 DUPLICATE_CALL {uid}` (follow that job or cancel it; other namespaces are not blocked, NI
+   R325); quota ⇒ `429 QUOTA`; a matched sponsor policy reserves its day budget and takes its hour / payer-hour counts
+   here (released if the job ends before broadcast) ⇒ `429 SPONSOR_BUDGET | SPONSOR_RATE | SPONSOR_TOO_SHORT
+   {policy}`, or the job goes unsponsored when the policy says `on_exhausted = unsponsored` (NI rev 3.6 §5.2).
 
 Response `200`:
 
@@ -190,6 +195,7 @@ loop (cron, after each new outbox commit and every minute):
                             → push_state='attention', node_uid from the 409 body, GET /v1/jobs/{uid}, apply it;
                               NEVER mark dead (the node holds a job under this key)
      DUPLICATE_DIGEST       → stay 'local', last_error (another key carries this intent)
+     DUPLICATE_CALL         → stay 'local', last_error with the 409 body's uid (follow that job, or cancel and re-push)
      transport | 429 | 503  → stay 'local' (retry; idempotent)
   COMMIT
 ```
@@ -231,7 +237,9 @@ authoritative cancel.
 ```
 
 Each item is a **snapshot** after one transition (`queued`, `leased`, `signed`, `broadcast`, `mined`, `reverted`,
-`consumed`, `dead`, `cancelled`). `final` never appears here (finality comes from §4.2).
+`consumed`, `dead`, `cancelled`). `final` never appears here (finality comes from §4.2). `mined`/`reverted` items add
+`gas_used`, `gas_price`, `cost_native`, `sponsor: {policy, account} | null` and `sponsor_fallback: <policy> | null`
+(a policy matched but was exhausted and the job was booked to the namespace; TSS §B1.4).
 
 ### 4.2 Events feed
 
@@ -355,10 +363,10 @@ items or 3 s; batching is invisible to the client except that several jobs share
 | Pattern | How the client integrates | Status |
 |---|---|---|
 | Enterprise inbound gateway | Partners/agents post signed EVM meta-txs to the company node: `POST /v1/metatx {chain, token, m, signature}` (gateway auth `bearer`/`hmac` for partners; `none` only on loopback behind a proxy). The client sees results on its events feed by `entryRef`/`to` | **BUILT** |
-| Gateway discovery and other families | `GET /v1/gateway` lists served chains, tokens, fee recipient and DEX policy; Hedera intents use `POST /v1/metatx` (64-byte HIP-632 signatures allowed); the six non-EVM families use `POST /v1/ops {chain, op}`; UA intents `POST /v1/ua-metatx`; errors follow the stable contract `{error, code, detail, revert_data?}` (NI §5.5, APP R178) | **SPECIFIED** (N1, N2, N4) |
+| Gateway discovery and other families | `GET /v1/gateway` lists served chains (with `chain_uid` where a UA registry is configured), tokens, fee recipient and DEX policy; Hedera intents use `POST /v1/metatx` (64-byte HIP-632 signatures allowed); the six non-EVM families use `POST /v1/ops {chain, op}`; UA intents `POST /v1/ua-metatx`; errors follow the stable contract `{error, code, detail, revert_data?}` (NI §5.5, APP R178) | **SPECIFIED** (N1, N2, N4) |
 | Non-EVM inbound | The client builds the `MetaOp`, the payer signs, the client pushes `signed_op` jobs | **BUILT** (via Odoo outbox); job API **SPECIFIED** |
 | Payee self-relay ("e-cheque") | Payer signs offline with fee 0 and relayer unbound or bound to the payee's address; the payee (or its node) submits; ERP books from `PaymentSettled` exactly as usual | contract **BUILT**; QR (EIP-681-style payload) tooling **PLANNED** |
-| Gas sponsorship policy | Node policy rows: e.g. "to wallet W, value ≥ X ⇒ fee 0, gas to account Y"; the client books gas from the job's receipt data | **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §B1; cost fields on the jobs feed, §B1.4) |
+| Gas sponsorship policy | Node policy rows: e.g. "to wallet W, value ≥ X ⇒ fee 0, gas to account Y"; the client books gas from the job's receipt data. A policy caps a tenant's own spend only with `on_exhausted = reject`; with `unsponsored` an exhausted policy books the job to the namespace and marks it `sponsor_fallback` (the admin must set `fallback_to_namespace`, audited) | **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) rev 1.3 §B1; cost fields on the jobs feed, §B1.4) |
 | Receiver pays fee | Two signatures (payer's `pay`, payee's fee authorization); booked as payment N and fee F | **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §B2; job field `receiver_fee`, event `ReceiverFeePaid`) |
 
 Never accept raw subject-signed native transactions (Sui `txBytes`, TON BOC from the subject wallet, Stellar
@@ -378,7 +386,7 @@ settle need no signature and can be run by any keeper.
 | 1 | Tender record; documents canonicalized, `documentRef` = salted commitment; config (deposit token, `minDeposit`, deadlines, public reserve, `minBidders`, bond policy, `slashSink`, allowlist root, `dqWindow`, `maxDisqualifications`, `forfeitClasses`); `createTender(config)` via a `call` job from the buyer's account | — | `TenderCreated` |
 | 2 | Publish tender id, deadlines, deposit terms, eligibility proofs; a sponsored portal path may be offered, never as the bidders' only path | Generates `salt` (32 random bytes), computes `commitment = keccak256(abi.encode(BID_TAG, chainId, tender, tenderId, bidder, price, salt))`, stores `(price, salt)` in its secret store | — |
 | 3 | Watches the commit count only; may cancel until `commitDeadline` (all deposits refund) | Signs one `pay` intent of `minDeposit` to the tender (`data = pay(depositRef)`, relayer bound to the tender); anyone submits `commitBid` | `BidCommitted` / `TenderCancelled` |
-| 4 | — | After `commitDeadline`: `revealBid(tenderId, bidder, price, salt)` by the bidder or any keeper (no signature) | `BidRevealed` |
+| 4 | — | After `commitDeadline`: `revealBid(tenderId, bidder, price, salt)` by the bidder or any keeper (no signature); the bidder's independent path is a namespace other than the portal's (live-call dedupe is per namespace, so a portal copy never blocks it; on its own namespace `409 DUPLICATE_CALL {uid}` names its own live job) | `BidRevealed` |
 | 5 | Inside `dqWindow`: due diligence on the leader; if it fails, `disqualifyWinner(reasonRef, class)` (leader only, only while a next valid bid exists); then `settleTender` (buyer after reveals, anyone after the window) | — | `BidDisqualified`, `TenderSettled` |
 | 6 | On the **finalized** `TenderSettled`: purchase order to the winner; keeper jobs `withdrawDeposit(tenderId, bidder)` for every bid | Refunds arrive without any signature | `DepositRefunded` / `DepositSlashed` |
 | 7 | Bond: `releaseBond` on contract signature/delivery, or `claimBond(reasonRef)` | — | `BondReleased` / `BondClaimed` |
@@ -404,13 +412,13 @@ depositRef`).
 - Non-EVM: open the subject's account object (`meta::open`/`open_passkey` on Sui/Aptos, `open`/`open_passkey` on
   Solana, `BindKey` on TON, custom account on Soroban).
 
-### 10.2 Universal Account registration (SPECIFIED, [UA](superpowers/specs/2026-10-06-universal-account-design.md) rev 1.3 §12.3)
+### 10.2 Universal Account registration (SPECIFIED, [UA](superpowers/specs/2026-10-06-universal-account-design.md) rev 1.4 §12.3)
 
 Replaces the Zether-only flow of the built `UniversalAccountRegistry` (`UA = keccak256(encodedY)`, PoP bound to
 `msg.sender`, `AuthScheme`, `linkEVM`), which stays on dev chains until UA stream F1 deletes it (UA R312).
 
 **Native accounts are never registered** (UA R294): an EVM EOA or contract account (incl. `SubjectAccount`, Safe),
-Hedera native accounts, Solana, Stellar/Pi `G…`, Soroban `C…`, Aptos, Sui and Cosmos native accounts, TON wallets.
+Hedera native accounts (an `msig` member only on Hedera registries, UA §4.2), Solana, Stellar/Pi `G…`, Soroban `C…`, Aptos, Sui and Cosmos native accounts, TON wallets.
 They sign as today. Every **derived** kind (passkey `webauthn-p256`, `p256`, `ed25519`, `bip340`, Schnorr/BLS,
 MuSig2/FROST, `msig`, ML-DSA/FN-DSA, `zether-*`, `pqz-mlwe`) registers once on each chain where it is used:
 
@@ -418,8 +426,11 @@ MuSig2/FROST, `msig`, ML-DSA/FN-DSA, `zether-*`, `pqz-mlwe`) registers once on e
    keep `m/254|12381/<coin>/<account>/7`; passkeys are one credential per `rpId`), builds the canonical `keyData`,
    computes `ua = keccak256(keccak256("scaas.ua.<kind>.v1") ‖ keyData)` and checks `ua >> 160 ≠ 0`.
 2. It reads `popDigest(ua, authRef)` from the registry, or computes it —
-   `keccak256(POP_TAG ‖ keccak256(chain_key) ‖ registry_id ‖ ua ‖ authRef)` binds chain, registry, UA and
-   `authRef`, **not the caller** (UA R295) — and signs `uaMessage(kind, POP_TAG, popDigest)` with the kind's signer
+   `keccak256(POP_TAG ‖ keccak256(chain_key) ‖ chainUid ‖ registry_id ‖ ua ‖ authRef)` binds chain (`chain_key`
+   **and** `chain_uid`, the genesis hash: the chain id alone is not unique, UA R330), registry, UA and
+   `authRef`, **not the caller** (UA R295). `chain_uid` comes from the chain profile (`GET /v1/gateway`) and must
+   equal the registry's `chainUid()`; clientkeys refuses an EIP-712 domain whose `salt` differs from it.
+   The client then signs `uaMessage(kind, POP_TAG, popDigest)` with the kind's signer
    (`UAKey.signUA("pop", …)`; MuSig2/FROST: a group signing session plus the KeyAgg hints or the DKG transcript).
    For a Zether kind with `authRef ≠ 0` the authority also signs `authPop` (purpose `authref`; a native authority
    signs the EIP-712 `UAAuth`). `authRef = 0` for every non-Zether kind.
@@ -450,6 +461,10 @@ public key under a second kind (`UAKeyInUse`) and a BLS `authRef` on the same cu
   `SubjectAccount`.
 - EVM balances of derived UAs exist only on MetaToken v3 clones (`bytes32` ledger, events `UATransfer`,
   `UAMetaTransactionExecuted`); v1/v2 tokens accept native ids only (UA R303, R308).
+- EIP-7702 delegated EOAs are native EOAs (UA R331): their key signs as an EOA everywhere; the UA registry and v3
+  also accept an ERC-1271 signature through the delegate. Never register them.
+- Verifiable credentials stay optional (UA R310–R311). A BBS presentation is never legal evidence: workflows with legal
+  recourse require the account-bound KB-JWT with `nonce` = deal reference / `intent_id` (UA §9.2, §9.7).
 
 ---
 
@@ -511,7 +526,8 @@ Client UX rules:
 
 1. Show the operation in human terms (amount, payee, token, chain, expiry) before invoking the authenticator.
 2. Extension wallets: EIP-6963 discovery (fallback EIP-1193), `wallet_switchEthereumChain`/`wallet_addEthereumChain`,
-   `eth_signTypedData_v4`; ask `eth_getCode` through the wallet to tell `eoa` from `contract`; user rejection (4001) is
+   `eth_signTypedData_v4`; ask `eth_getCode` through the wallet to tell `eoa` from `contract` (a 23-byte `0xef0100…`
+   designator is an EIP-7702 delegated **EOA**, UA R331); user rejection (4001) is
    not an error.
 3. Batch related operations under one passkey assertion (Merkle root).
 4. Never send mnemonics, `x`, PRF outputs or PINs to any server; tokens and keys live in memory or the encrypted vault.
