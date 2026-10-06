@@ -1,4 +1,4 @@
-# scaas — smart contracts as a service
+# SCaaS — SmartContract as a Service
 
 The blockchain half of Bamboo: on-chain code, the relayer node, signers and provers.
 It does not depend on Odoo; the Odoo addons (`dms_blockchain*`, in the bamboo-dms repo) are one client.
