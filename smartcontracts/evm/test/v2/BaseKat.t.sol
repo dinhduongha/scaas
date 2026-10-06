@@ -3,6 +3,8 @@ pragma solidity ^0.8.20;
 
 import {stdJson} from "forge-std/StdJson.sol";
 import {V2Fixture, BaseHarness} from "./helpers/V2Fixture.sol";
+import {MockERC20} from "../helpers/Mocks.sol";
+import {SingleUnderlyingToken} from "../../src/metatx/SingleUnderlyingToken.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
@@ -83,6 +85,29 @@ contract BaseKatTest is V2Fixture {
             vm.parseJsonBytes(pj, ".signature"));
 
         base = vm.serializeString("v2kat", "mtxpay", pj);
+
+        // 3. mtxUnwrap on a 1:1 single-underlying clone (R148)
+        MockERC20 u = new MockERC20("USD Coin", "USDC", 6);
+        SingleUnderlyingToken w = _single(address(u), 6, 1, 1, _fixedRate());
+        u.mint(from, 100e6);
+        vm.startPrank(from);
+        u.approve(address(w), 100e6);
+        w.wrap(100e6);
+        vm.stopPrank();
+        MetaTxLib.MetaTransaction memory x = MetaTxLib.MetaTransaction({
+            from: from, to: address(0x5409), value: 40e6, data: _unwrapData(address(u), address(0x5409), 40e6),
+            batch: 7, nonce: 0, validUntil: 1_800_000_300, mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)
+        });
+        string memory uj = _vector("mtxunwrap", address(w), x);
+        vm.serializeString("mtxunwrap", "underlying", vm.toString(address(u)));
+        uj = vm.serializeString("mtxunwrap", "min_out", vm.toString(uint256(40e6)));
+        vm.expectEmit(address(w));
+        emit IERC20MetaTx.MetaTransactionExecuted(from, relayer, 7, 0, w.metaTxDigest(x), relayer, 0);
+        vm.prank(relayer);
+        w.mtxUnwrap(from, address(u), 40e6, x.to, 40e6, 7, 0, x.validUntil, RR, relayer,
+            vm.parseJsonBytes(uj, ".signature"));
+        assertEq(u.balanceOf(x.to), 40e6);
+        base = vm.serializeString("v2kat", "mtxunwrap", uj);
         vm.writeJson(base, "./test/vectors/metatx_v2_kat.json");
     }
 }

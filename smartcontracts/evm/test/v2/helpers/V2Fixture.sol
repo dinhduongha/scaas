@@ -6,6 +6,8 @@ import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {MetaTokenBase} from "../../../src/metatx/MetaTokenBase.sol";
 import {IOpenFactoryV2} from "../../../src/common/IOpenFactoryV2.sol";
 import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
+import {NoUnderlyingToken} from "../../../src/metatx/NoUnderlyingToken.sol";
+import {SingleUnderlyingToken} from "../../../src/metatx/SingleUnderlyingToken.sol";
 
 /// Tầng tối thiểu trên `MetaTokenBase` cho test của T1: `initData = (name, symbol, decimals, supply)`.
 contract BaseHarness is MetaTokenBase {
@@ -53,6 +55,36 @@ abstract contract V2Fixture is Test {
         BaseHarness impl = new BaseHarness(address(this), address(0));
         return BaseHarness(_clone(address(impl), creator_, new address[](0),
             abi.encode("Harness", "HRN", uint8(6), supply)));
+    }
+
+    address internal noneImpl;
+    address internal singleImpl;
+
+    function _none(address creator_, uint256 supply, address minter) internal returns (NoUnderlyingToken) {
+        if (noneImpl == address(0)) noneImpl = address(new NoUnderlyingToken(address(this), address(0)));
+        return NoUnderlyingToken(_clone(noneImpl, creator_, new address[](0),
+            abi.encode("Points", "PTS", uint8(0), supply, minter)));
+    }
+
+    function _fixedRate() internal pure returns (SingleUnderlyingToken.RateConfig memory c) {}
+
+    function _adjustable(address admin) internal pure returns (SingleUnderlyingToken.RateConfig memory c) {
+        c = SingleUnderlyingToken.RateConfig({adjustable: true, rateAdmin: admin, rateDelay: 7 days, maxRateStepBps: 100});
+    }
+
+    function _singleInit(uint8 dec, uint256 num, uint256 den, SingleUnderlyingToken.RateConfig memory cfg)
+        internal pure returns (bytes memory)
+    {
+        return abi.encode("Wrapped", "WRP", dec, num, den, cfg);
+    }
+
+    function _single(address u, uint8 dec, uint256 num, uint256 den, SingleUnderlyingToken.RateConfig memory cfg)
+        internal returns (SingleUnderlyingToken)
+    {
+        if (singleImpl == address(0)) singleImpl = address(new SingleUnderlyingToken(address(this), address(0)));
+        address[] memory us = new address[](1);
+        us[0] = u;
+        return SingleUnderlyingToken(_clone(singleImpl, address(this), us, _singleInit(dec, num, den, cfg)));
     }
 
     function _mt(address from, address to, uint256 value, bytes memory data, uint256 batch, uint32 mode)

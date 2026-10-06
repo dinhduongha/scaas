@@ -54,6 +54,8 @@ abstract contract MetaTokenBase is MetaTxCore, IMetaTokenV2, IFactoryTokenV2 {
     error MtxModeShape(uint32 mode);
     error MtxBatchEmpty();
     error MtxBatchLengthMismatch();
+    /// @notice Số underlying sai cho tầng (0 / 1 / 2–8).
+    error UnderlyingCountInvalid(uint256 n);
 
     /// @dev Chạy MỘT lần trên implementation; khoá luôn implementation để không ai `initialize` nó.
     constructor(address factory_, address subjectAccountImpl_) ERC20("", "") EIP712("SCaaS MetaToken", "2") {
