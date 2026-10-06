@@ -5,7 +5,7 @@ rename folded in). Code at
 `bamboo-dms` `main` 90a5b17 (mesh S0, S1a, S2 merged); the blockchain stack now lives in repo `scaas`
 (`scaas/smartcontracts`, `scaas/docs`, `scaas/app`, and the node).
 **Naming (owner, approved rename):** the node is `scaas-node` (crate, binary, directory `scaas/scaas-node/` — today
-still `scaas/bamboo-node/` until the rename stream lands; file:line citations refer to the current files); env vars
+still `scaas/scaas-node/` until the rename stream lands; file:line citations refer to the current files); env vars
 `SCAAS_*` (were `BAMBOO_*`); metrics `scaas_*` (were `bamboo_*`, incl. the R51 ones); HTTP headers `X-Scaas-*` (were
 `X-Bamboo-*`, R54); signer/domain tags `scaas.*`/`scaas-*` (were `bamboo.*`). Odoo addon and repo names
 (`dms_blockchain*`, `bamboo-dms`, `bamboo_abp_auth`) are unchanged.
