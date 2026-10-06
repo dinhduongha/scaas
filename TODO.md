@@ -1,37 +1,39 @@
 # TODO — scaas
 
-Ordered by what blocks what (updated 2026-10-06 late). The Odoo side lives in bamboo-dms (`dms_blockchain*`).
+Ordered by what blocks what (2026-10-06 shutdown). Owner rule: **finish all specs before app code**.
+Max 3 agents, one heavy build at a time (`scripts/capped`). The Odoo side lives in bamboo-dms (`dms_blockchain*`).
 
-### Specs (all committed on main)
+## 0. Finish the spec phase (≈ 6 items)
 
-| Spec | Rulings | State |
-|---|---|---|
-| `docs/SCaaS.md` + `docs/integration.md` | precedence, system | written; owner review of PLANNED material pending |
-| `specs/2026-10-05-relayer-mesh-design.md` | R70–R86 | rev 3, reviewed ×2 |
-| `specs/2026-10-06-node-independence-design.md` | R87–R111 | rev 3.2, reviewed (36 findings fixed) |
-| `specs/2026-10-06-mesh-gossip-amendment.md` (A2) | R112–R128 | rev 2.1, reviewed (32 fixed) |
-| `specs/2026-10-06-token-wrappers-v2.md` (TW2) | R129–R149 | rev 1.1, review in progress |
+- [ ] S4F (signers) rev 1.1 — review fixes (was in flight at shutdown; check `git log` for "signers spec rev 1.1").
+- [ ] PQZ review → fold fixes (review was in flight; if lost, re-run the review).
+- [ ] UA review → fold fixes (review was in flight; if lost, re-run the review).
+- [ ] **NI consolidation**: fold every addition other specs listed for node-independence — `GET /v1/gateway`, gateway
+      CORS + error contract, `POST /v1/ops` (app §9.6 N2), `POST /v1/ua-metatx`, `POST /v1/ua/register` (N4), Hedera
+      64-byte sigs on `/v1/metatx`, denylist (`deny_subject`, OPS R246), `sponsor_policy`/`sponsor_usage` + job cost
+      columns (spec B), `chain_contract`, `receiver_fee` payload + `token.features`, `usage_day`, `job.trace_id`,
+      `lane_adopted`, `breaker_latch`, `[modules] metrics_bind`, store-restore pause (OPS H1), non-EVM DEX books (N3).
+- [ ] **SCaaS.md / integration.md clean-up**: remove the ~9 admin-API-key mentions (`scaas_ak1.`), rewrite
+      integration §10.2 (UA registration, spec F §12.3), roadmap §15 rows (S4F row 22, scrypt row in §15.3), app
+      chain list gains 9000 for PQZ (PQZ §11.5), D/F amendments listed in app §17.
+- [ ] Doc inconsistencies: `smartcontracts/evm/README.md` (mode bitmask kept, Zether built), `private9000` README says
+      pre-London (chain runs through Fusaka), `wasm-smoke.sh` needs `--target web`, node default `max_gas_per_tx` 3M
+      rejects classical Zether transfers (3.36M).
 
-### 0. First
-- [ ] Owner: confirm node-independence §18.2 interpretations.
-- [ ] Redeploy every dev/test contract (domain tags renamed to `scaas.*`); fix DB rows `blockchain.token.domain_name` ("Bamboo MetaToken") and Cosmos `network_key` (`bamboo-1`) after redeploy; operators rename env `BAMBOO_*` → `SCAAS_*`.
+## 1. Code streams (after §0)
 
-### 1. Streams (one heavy build at a time)
+Suggested first wave: **NI P2 → P3** (money-safety core), **UA F0 → F1** (many specs depend on it), **app A1 + A0-evm**.
 
-Node: S3 ✅ → P1 ✅ store v2 SQLite (`[store]` now required in node.toml; spec fixes owed: SQLite reports columns not constraint names, job API default bind 8547 collides with gateway) → P2 job API + client API keys + built-in admin auth/CLI → P3 submit/lanes from the store → P4 indexer + `/v1/events` → P5 Odoo client → P6 push e2e + cutover runbook → [owner cutover] → P2b OIDC + full admin routes + CORS → P1b PostgreSQL/MySQL → P7 DEX in store → S1b′ → S5 → S6′ → G1 libp2p core + QUIC/PQ → G2 announce/exclusivity/hints → G3 DEX book gossip (home-bound + relayer-unbound) → S7″ e2e → P9 remove pull path → S8″ doc corrections.
+| Area | Streams (spec) |
+|---|---|
+| Node | P2 job API + client API keys + built-in admin/CLI → P3 submit/lanes from store → P4 indexer + `/v1/events` → P5 Odoo client (bamboo-dms) → P6 push e2e + cutover runbook → [owner cutover] → P2b OIDC + admin routes + CORS → P1b PostgreSQL/MySQL → P7 DEX in store → S1b′ → S5 mTLS bus → S6′ → G1 libp2p/QUIC-PQ → G2 announce/exclusivity/hints → G3 DEX book gossip (home-bound + unbound) → S7″ → P9 remove pull path → S8″ docs. Plus N1/N2/N4 (app §9.6), N3 non-EVM DEX books, OPS OP1–OP8, SP1 sponsorship |
+| Contracts | TW2 T7 (node/Odoo/SDK follow-ups) · AS1–AS9 asset suite · TB1–TB3 tender, RP1–RP2 receiver-pays (RP1 before production registration O3), CS1–CS2 shredding, PL1 pool (later) · UA F0–F10 · PQZ E-S0…E-S9 (spikes first; licence gate G-LIC before production) |
+| Clients | S4F D1–D7 · app A0–A18 (order in app spec §15) |
+| Odoo (bamboo-dms) | P5, UA F6, AS/TB/SP Odoo parts, connectors wiring (S4F finding: non-EVM portal connectors not wired) |
 
-Contracts: TW2 T1–T8 after its review (three tiers, rates, multi-underlying, named mtx functions, gasless unwrap, factory v2, Hedera child).
+## 2. Ops / housekeeping
 
-App: `app/` (React + Vite) after the node APIs — spec → plan → impl.
-
-Fixes: TON `mined` report carries the payer jetton-wallet tx hash ✅ (merged). Residual: a `final` from the indexer before the node's `mined` still flags `landed_elsewhere` (informational) — Odoo could accept a late `mined` on `final` and clear it.
-
-Queued: S4 follow-ups (backup-key toggle, device-bound vault, Sui `fam_sui.verify`, Soroban/Aptos/Solana signers, `chain_pay.js`), Zether portal balance cache, post-quantum Zether (BFV/BGV).
-
-### Doc/code inconsistencies found while writing docs/SCaaS.md (2026-10-06)
-- [ ] `smartcontracts/evm/README.md`: says the mode bitmask was removed (code keeps it) and Zether is "interface only" (it is built).
-- [ ] `private9000` profile: READMEs say berlin, `foundry.toml` says prague.
-- [ ] Seed-vault scrypt cost: round-3 R32 says N=2^15, clientkeys uses 2^17 — owner to pick; align spec or code.
-- [ ] MESH §3.4 still says `ring`; R114 (A2) moved to aws-lc-rs — S8′ doc corrections.
-- [ ] NI default job API bind `127.0.0.1:8547` collides with the gateway default bind — pick another port in the spec.
-- [ ] Owner review of PLANNED material filled from the SRS in docs/SCaaS.md (W3B SLOs, RACI, tender interface, backup-key toggle, P2P 7-step flow).
+- [ ] Redeploy all dev/test contracts (tags renamed); update `blockchain.token.domain_name` / Cosmos `network_key`.
+- [ ] Remove merged worktrees under `.claude/worktrees/`.
+- [ ] Residual TON: a `final` from the indexer before the node's `mined` still flags `landed_elsewhere` (informational).
+- [ ] Queued research: none open beyond the specs above.
