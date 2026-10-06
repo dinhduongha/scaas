@@ -2,7 +2,7 @@
 
 Status: draft rev 1, 2026-10-06. Component spec **E**. Short name **PQZ**. Code at `scaas` `main` 28c165c (classical
 Zether BUILT on dev chains; nothing of PQZ is built). **UNAUDITED — NOT FOR PRODUCTION FUNDS**, like every Zether
-artifact (R34). Rulings: **R270–R293** (§3). R250–R268 belong to spec D (S4F), R230–R247 to spec C (OPS).
+artifact (R34). Rulings: **R270–R289** (§3). R290–R318 belong to spec F (UA), R250–R268 to spec D (S4F), R230–R247 to spec C (OPS).
 
 Owner requirements (2026-10-04/06), all addressed here:
 
@@ -22,7 +22,7 @@ Owner requirements (2026-10-04/06), all addressed here:
 Sources read: [Zether design](2026-10-03-zether-design.md) (byte-exact classical spec), [limits](2026-10-05-zether-limits.md),
 [ConsenSys MAX](2026-10-05-zether-consensys-max.md), `blockchain-research/03-zether-crypto.md` §3.1.3, U7,
 `blockchain-research/02-account-registry.md` §2.6 (FALCON/PQ, HNDL), `docs/SCaaS.md` §6.8, §8, §9,
-`smartcontracts/evm/src/zether/*`, `zether-prover/src/*`, `clientkeys/src/zether.js`, `scaas-node` (`submit.rs`,
+`smartcontracts/evm/src/zether/*`, [spec F](2026-10-06-universal-account-design.md) (UA, R290–R318), `zether-prover/src/*`, `clientkeys/src/zether.js`, `scaas-node` (`submit.rs`,
 `gateway.rs`, `node.example.toml`), parent `TRAPS.md` "Private chain (Nethermind, chainId 9000)" and
 `/home/dockers/mba-chain-nethermind/README-chainspec.md`, `smartcontracts/evm/src/chains/private9000/README.md`.
 External sources in §18.
@@ -45,7 +45,7 @@ module-lattice assumptions:
 | Balance encryption | lifted ElGamal on bn254 / BLS12-381 G1 | additive module-LWE, BFV-style scaling `Δ`, digit-packed plaintext (§4) |
 | Validity proofs | Σ-protocol + 2 Bulletproofs (`n_v = n_b = 64`) | one LNP22 lattice proof per op (§8): key, encryption, decryption and integer-carry relations with exact norms |
 | Verification | Solidity + bn254/BLS precompiles | native precompile on chain 9000 (`0x…0F01`), same C core as the prover (R278, R279) |
-| Authorization | 8 `AuthScheme`s (Schnorr, ECDSA multisig, FROST, MuSig2, BLS, PQ commitment, 1271) | ML-DSA-65 (default), ML-DSA-65 + secp256k1 hybrid, t-of-n ML-DSA-65, via precompile `0x…0F10` (R281) |
+| Authorization | 8 `AuthScheme`s (Schnorr, ECDSA multisig, FROST, MuSig2, BLS, PQ commitment, 1271); F replaces them by `authRef` | F `authRef` = `mldsa65` UA (default) or a PQ-dominant F `msig` (hybrid, t-of-n), verified via precompile `0x…0F10` (R281) |
 | Decryption | BSGS discrete log, device cache, `zether-read-balance` | direct rounding, microseconds, exact; no BSGS, no cache needed (R285) |
 | State | points in storage | ciphertext **hashes** in storage, bytes in calldata + events; public keys in SSTORE2 (R276) |
 | Chains | dev allowlist 31337/1337 | allowlist 31337/1337/**9000** **and** a constructor self-test through the precompile (R270) |
@@ -150,15 +150,15 @@ that needs AVX-512 cannot run in the node. Hence the portable fork (R278) instea
 | Block gas limit | 16,777,216 (Clique signer can move it without reset) | ~5 transfers per block unless raised (R280) |
 | [EIP-7623](https://eips.ethereum.org/EIPS/eip-7623) calldata floor | `10 × tokens`, token = zero byte 1 / non-zero byte 4 ⇒ 40 gas per non-zero byte | dominates PQZ cost once verification is native |
 | [EIP-7934](https://eips.ethereum.org/EIPS/eip-7934) | RLP block ≤ 8,388,608 B | ≥ 100 transfers per block fit |
-| Tx-pool size limit | 128 KiB is the common client default (geth/reth); Nethermind `TxPool.MaxTxSize` to be confirmed in E-S3 | transfers with inline credits exceed it (R290) |
-| Missing transition keys | Nethermind silently ignores unknown keys; `eip1108Transition` was once missing and made `ecMul` 6.4× dearer with no symptom | every PQZ activation is **probed**, never trusted (R291) |
+| Tx-pool size limit | 128 KiB is the common client default (geth/reth); Nethermind `TxPool.MaxTxSize` to be confirmed in E-S3 | transfers with inline credits exceed it (R280) |
+| Missing transition keys | Nethermind silently ignores unknown keys; `eip1108Transition` was once missing and made `ecMul` 6.4× dearer with no symptom | every PQZ activation is **probed**, never trusted (R279) |
 
 ---
 
 ## 3. Rulings
 
-- **R270** **Scope and gate.** PQZ is a separate token class (`PqzToken`, `PqzRegistry`), never an upgrade of
-  `ZetherToken`. `PqzSafety.requireAllowedChain()`: `chainid ∈ {31337, 1337, 9000}` — a hard-coded list, like
+- **R270** **Scope and gate.** PQZ is a separate token class (`PqzToken`, plus kind `0x0142` in spec F's
+  `UARegistry`), never an upgrade of `ZetherToken`. `PqzSafety.requireAllowedChain()`: `chainid ∈ {31337, 1337, 9000}` — a hard-coded list, like
   RS2-1; adding a chain is a code change with review. **And** every constructor/`initialize` runs the precompile
   self-test (§10.4); a chain without the precompile (every public chain) fails it. `OpenFactory.pqzEnabled`
   defaults to `false`. NatSpec and docs: **UNAUDITED — NOT FOR PRODUCTION FUNDS**. — Owner O3; 9000 is the owner's
@@ -175,7 +175,8 @@ that needs AVX-512 cannot run in the node. Hence the portable fork (R278) instea
 - **R273** **Multi-recipient shared randomness.** One `(r, e1)` per operation: the transfer's `u` is shared by the
   receiver's credit, the sender's new balance and the auditor copy; only `v` differs per recipient. — Saves two
   16 KB `u` per transfer (mKEM, §2.3). — Revealing `r` would reveal the sender's new balance, so disclosure never
-  reveals `r` (R283).
+  reveals `r` (R283). The **auditor** is as classical RS2-8: one immutable registered PQZ UA per
+  token, set at `initialize` (or none); it reads exactly the per-transfer `v_a`, never anyone's balance.
 - **R274** **Every debit re-encrypts the remaining balance fresh.** The sender proves that the total ciphertext `T`
   decrypts to `M` with `Σ M_i·256^i = b' + v + fee` (digit-carry relation, §7.4) and publishes a fresh encryption
   of `b'`. No homomorphic subtraction on `acc`. — Resets noise and digit growth at every spend; the classical
@@ -199,25 +200,36 @@ that needs AVX-512 cannot run in the node. Hence the portable fork (R278) instea
   precompile. No Solidity verifier. LaBRADOR/Greyhound deferred to aggregation work. **Kill criterion** (E-S1): if
   the transfer proof exceeds 96 KB or portable verify exceeds 50 ms on the chain host, stop and re-plan with the
   hash-based fallback. — Single implementation; LaZer is MIT and protocol logic stays upstream-shaped. — We own a C
-  fork; upstream fixes are merged by hand.
+  fork; upstream fixes are merged by hand. **Versioning:** `proofSystemId =
+  keccak256("scaas/pqz/lnp22/mlwe-d64k32-q50/v1")`; every parameter, relation or serialization change bumps it; the
+  token stores it at `initialize` and the precompile accepts only ids it implements.
 - **R279** **On-chain verification is a native precompile on chain 9000**: `PQZ` at
-  `0x0000000000000000000000000000000000000F01` (first input byte = op) and `MLDSA65` at `…0F10` with the EIP-8355
-  ABI. Off-chain co-processor attestation is rejected on chain 9000 and kept as a seam for EVM chains whose client
-  we do not control (§14). — §9.1 comparison. — Every node of chain 9000 must run the PQZ client build.
+  `0x0000000000000000000000000000000000000F01` (first input byte = op) and `MLDSA65` at `…0F10` (EIP-8355 layout plus a
+  context string, §9.3). Off-chain co-processor attestation is rejected on chain 9000 and kept as a seam for EVM chains whose client
+  we do not control (§14). **Determinism and probing:** integer-only code, no threads, no floating point, no CPU-feature-dependent
+  results, bounded loops (a capped rejection loop that hits its cap ⇒ invalid); any parse error, panic or failed
+  check ⇒ output `0x00…00`; gas by formula regardless of validity; activation by `pqzTransitionTimestamp`; contracts
+  self-test (§10.4) and the node probes (`has_pqz_precompile`), because a missing transition key looks exactly like
+  an enabled one (TRAPS). — §9.1 comparison. — Every node of chain 9000 must run the PQZ client build.
 - **R280** **Gas.** Precompile prices are deterministic functions of the op and input length, calibrated against
   `ecMul` on the chain host (§9.4), frozen in the chainspec. EIP-7623 and EIP-7825 stay enabled. Operator change:
-  Clique `TargetBlockGasLimit` 100,000,000 on chain 9000 (no data reset). — Keeps gas an honest capacity meter. —
-  ~30 transfers per 5 s block.
-- **R281** **Authorization always uses a separate PQ key**: `MLDSA65` (scheme 1, default), `MLDSA65_SECP256K1`
-  (scheme 2, both signatures required), `MULTI_MLDSA65` (scheme 3, t-of-n). Scheme 0 is invalid (no "proof is the
-  authorization"), 1271 is not offered in v1 (its keys are classical), `FNDSA512` id 4 is **reserved** until FIPS 206
-  is final and a constant-time signer exists. — Owner O8; one key = one purpose: the PQZ key decrypts and proves,
-  the ML-DSA key authorizes. — A leaked PQZ key is a read-only breach (as `survivesEncKeyLeak` today).
-- **R282** **UA kinds and derivation** (§6): kind tags `scaas/pqz-mlwe-d64k32/v1`, `scaas/mldsa65/v1`,
-  `scaas/mldsa65+secp256k1/v1`, `scaas/mldsa65-multi/v1`; `UA = keccak256(u8(len(tag)) ‖ tag ‖ keyData)` until spec
-  F fixes `H` and the framing (F wins; the tag strings and key data are what this spec registers). Hardened-only
-  HMAC-SHA512 tree rooted at `"SCAAS-PQ-v1"`, one subtree per kind. The registry refuses a key already registered
-  under any kind.
+  Clique `TargetBlockGasLimit` 100,000,000 on chain 9000 (no data reset). Node and client limits on chain 9000: Nethermind `TxPool.MaxTxSize` ≥ 1 MiB (or the key E-S3 finds),
+  scaas-node `max_gas_per_tx = 16_000_000`, gateway body limit 1 MiB on the PQZ route only (64 KiB elsewhere) —
+  recommendations to node operators (OPS R247). — Keeps gas an honest capacity meter. — ~30 transfers per 5 s block.
+- **R281** **PQZ authorization is always a separate PQ signing UA** (spec F R305 `authRef`, tightened). A
+  `pqz-mlwe` record's `authRef` must be a registered `mldsa65` / `mldsa44` UA (`fndsa512` once F enables it,
+  FIPS 206), or an F `msig` whose non-PQ members' total weight is **below** its threshold — so no classical-only
+  subset can authorize. That `msig` rule is the hybrid (e.g. `mldsa65` w 1 + `p256` w 1, threshold 2) and the t-of-n
+  ML-DSA form. Refused: `authRef = 0` (self), native ids (EOA/ERC-1271), any classical-only kind
+  (`UAAuthRef`). — Owner O8; one key = one purpose: the PQZ key decrypts and proves, the ML-DSA key authorizes; F R313
+  invites exactly this hybrid. — A leaked PQZ key is a read-only breach (`survivesEncKeyLeak`).
+- **R282** **PQZ UA kind = spec F kind `0x0142` `pqz-mlwe`** (tag `scaas.ua.pqz-mlwe.v1`, `d = pk` 16,384 B, new
+  keyHash group `pqz-mlwe`), a Zether-family kind under F R305 (binds only the encryption key, immutable
+  `authRef`); `UA = keccak256(keccak256(tag) ‖ pk)` (F R290, R292); PoP binds chain, registry and UA, not the caller
+  (F R295); key seed by F §8.1's PQ rule `HKDF-SHA256(BIP-39 seed, "scaas.ua.pq.v1", tag ‖ u32 account ‖ u32 i)`.
+  Signing kinds are F's `mldsa65`/`mldsa44`/`fndsa512`; this spec adds no signing kind. — F owns identity; E adds
+  one row and its verifier. — F's kind table, keyHash group list and vectors gain one row each (applied by F's
+  stream, as a gen-1 kind since F is not built).
 - **R283** **Disclosure by zero-knowledge proof**, never by revealing randomness or noise. `ITransferDisclosure` is
   kept (same three `OpeningKind`s; `opening = bundle ‖ proof`). `transferCiphertext(entryRef)` reverts
   `CiphertextOffState(bundleHash)`; new view `transferCiphertextHash(entryRef)`. — R273 and §2.2 (noise must not
@@ -245,20 +257,6 @@ that needs AVX-512 cannot run in the node. Hence the portable fork (R278) instea
 - **R289** **Migration classical → PQZ** is `ZetherToken.burn` to the owner's address then `PqzToken.fund`; the
   amount is public on chain 9000 once. No cross-system equality proof in v1. — Classical Zether holds no production
   funds (dev-only gate), so only pilots migrate. — §13.
-- **R290** **Node and client limits for chain 9000**: Nethermind `TxPool.MaxTxSize` ≥ 1 MiB (or the equivalent key
-  E-S3 finds); scaas-node `max_gas_per_tx = 16_000_000` on that chain; gateway body limit 1 MiB on the PQZ route
-  only (64 KiB elsewhere unchanged). Recommendations to node operators (OPS R247).
-- **R291** **Precompile determinism and probing.** Integer-only code, no threads, no floating point, no
-  CPU-feature-dependent results, bounded loops (rejection loops capped, cap reached ⇒ invalid), any parse error,
-  panic or failed check ⇒ output `0x00…00`, gas charged by formula regardless of validity. Activation by
-  `pqzTransitionTimestamp`; contracts self-test (§10.4), the node probes (`has_pqz_precompile`) — a missing
-  transition key looks exactly like an enabled one (TRAPS).
-- **R292** **Versioning.** `proofSystemId = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q50/v1")`; every parameter,
-  relation or serialization change bumps it; the token stores it at `initialize` and the precompile accepts only
-  ids it implements.
-- **R293** **Auditor** as classical RS2-8: one immutable PQZ public key per token set at `initialize` (or none),
-  registered with PoP; it reads exactly the per-transfer `v_a`, never anyone's balance.
-
 ---
 
 ## 4. Encryption scheme MLWE-BFV-add
@@ -371,40 +369,38 @@ on aligned 64-bit lanes, and byte 0 of each word is zero (cheap calldata token).
 
 ## 6. Keys, Universal Account kinds and derivation
 
-### 6.1 Kinds (R282)
+### 6.1 Kind (R282, spec F)
 
-| Kind tag | Purpose (one only) | `keyData` | Registered with |
-|---|---|---|---|
-| `scaas/pqz-mlwe-d64k32/v1` | decrypt balances, build PQZ proofs | `pk` (16,384 B) | PoP proof (§7.2) + auth PoP |
-| `scaas/mldsa65/v1` | authorize PQZ ops | FIPS 204 pk (1,952 B) | signature over the PoP challenge |
-| `scaas/mldsa65+secp256k1/v1` | authorize (hybrid) | ML-DSA pk ‖ 20-byte address | both signatures over the challenge |
-| `scaas/mldsa65-multi/v1` | authorize (t-of-n) | `u8(t) ‖ u8(n) ‖ n × 32-byte UA of mldsa65 members, ascending` | `t` member signatures |
-| `scaas/fndsa512/v1` | reserved (R281) | — | — |
+PQZ adds **one** row to F's kind table (§4.2 there) and no signing kind:
 
-`UA = keccak256(u8(len(tag)) ‖ tag ‖ keyData)` — 32 bytes, kind-tagged by construction, disjoint from the classical
-`keccak256(encodedY)` space because no curve encoding starts with a length byte followed by `"scaas/"`. When spec F
-lands, its `H` and framing replace this formula by a version bump; ids already issued stay valid under their kind.
+| No. | Name (tag `scaas.ua.<name>.v1`) | `d` | keyHash group | PoP | Verifier (EVM) | Families |
+|---|---|---|---|---|---|---|
+| `0x0142` | `pqz-mlwe` | `pk` (16,384) | `pqz-mlwe` (new group) | `R_REG` proof over `uaMessage(0x0142, POP_TAG, popDigest(ua))` | `UAPqzVerifier` → precompile `0x…0F01` op 3 | chain 9000 (R270) |
 
-The registry stores, per PQZ UA: `pkPtr` (SSTORE2 address), `authScheme`, `authUA`, `registeredAt`. A key
-(`keccak256(keyData)`) registered under one kind cannot be registered under another (`KeyKindConflict`).
+`UA = keccak256(keccak256("scaas.ua.pqz-mlwe.v1") ‖ pk)` (F R290, R292); `UA >> 160 ≠ 0` (F R291). The record is
+F's `Record{kind, registeredAt, keyPtr}` with `keyPtr = SSTORE2(pk)` (F §6.2 step 7, PQ kinds) plus the immutable
+`authRef`. `pqz-mlwe` is a Zether-family kind in F's sense (R305: binds only the encryption key).
 
-### 6.2 Derivation (hardened only, one subtree per kind)
+Authorization UAs are F kinds (R281): `mldsa65` `0x0131` (default), `mldsa44` `0x0130`, `fndsa512` `0x0132` once F
+enables it, or a PQ-dominant `msig` `0x0120`, e.g. hybrid `{mldsa65 w1, p256 w1}` threshold 2, or treasury
+`{mldsa65 ×3, w1 each}` threshold 2. F's `msig` rules apply (members registered, sorted, one level, `count ≤ 16`);
+R281 adds: Σ weight of members whose kind is not `mldsa*`/`fndsa512` `<` threshold.
+
+### 6.2 Derivation (F §8.1)
 
 ```
-master:   I = HMAC-SHA512(key = "SCAAS-PQ-v1", data = bip39Seed64);  (k, c) = (I[0..32], I[32..64])
-child:    I = HMAC-SHA512(key = c, data = 0x00 ‖ k ‖ be4(index | 0x80000000));  (k, c) = (I[0..32], I[32..64])
-path:     m / kind' / coin' / account' / 0'
-kind':    1' = pqz-mlwe-d64k32,  2' = mldsa65,  3' = secp256k1 half of the hybrid (scalar = k mod n, k ≠ 0),
-          4' = reserved fndsa512
-coin':    SLIP-44 of the family (60' for EVM)
-leaf k:   PQZ: KeyGen(seed32 = k);  ML-DSA-65: ML-DSA.KeyGen_internal(ξ = k) (FIPS 204 §6.1)
+PQZ key:     seed32 = HKDF-SHA256(ikm = BIP-39 seed, salt = "scaas.ua.pq.v1",
+                                  info = "scaas.ua.pqz-mlwe.v1" ‖ u32(account) ‖ u32(i));   pk = KeyGen(seed32) (§4.2)
+ML-DSA auth: ξ = HKDF-SHA256(ikm = BIP-39 seed, salt = "scaas.ua.pq.v1",
+                             info = "scaas.ua.mldsa65.v1" ‖ u32(account) ‖ u32(i));         FIPS 204 KeyGen_internal(ξ)
+hybrid member (p256 / bip340): F's UA tree m/7225'/0'/<account>'/<kindNo>'/<i>'
 ```
 
-The hybrid's secp256k1 key is **not** the EVM wallet key `m/44'/60'/0'/0/i`: one key, one purpose (spec D §3
-records the existing dual uses for F). No tree is shared with BIP-32/SLIP-10/EIP-2333, so no PQ key equals any
-classical scalar of the same seed. Vault: as classical (`sealConfKey` pattern): the BIP-39 seed or the 32-byte leaf
-in the AES-256-GCM vault; organizations put the PQZ leaf in the key oracle (SCaaS §9.1 `conf_custody`) and the
-ML-DSA key in an HSM with FIPS 204 firmware where available (`auth_custody`).
+Distinct tags in `info` give distinct keys per kind (one key = one purpose, F R298 layer 1); no PQ seed equals a
+BIP-32/SLIP-10/EIP-2333 scalar of the same seed, and the classical Zether trees `…/7`, `…/8` are untouched. Vault:
+as classical (`sealConfKey` pattern) — the BIP-39 seed or the 32-byte leaves in the AES-256-GCM vault; organizations
+put the PQZ leaf in the key oracle (SCaaS §9.1 `conf_custody`) and the ML-DSA key in an HSM with FIPS 204 firmware
+where available (`auth_custody`).
 
 ---
 
@@ -427,21 +423,21 @@ Credit cap: a credit reverts `RefreshRequired(ua)` when `accUnits + (pendingCoun
 Token globals: `underlying`, `shieldScale`, `maxShielded ≤ 2^62`, `totalShielded`, `confidentialFee`, `auditorUA`
 (or 0), `registry`, `proofSystemId`.
 
-### 7.2 Register (`PqzRegistry`)
+### 7.2 Register (F's `UARegistry`)
 
-`register(bytes32 kindHash, bytes keyData, uint8 authScheme, bytes authKeyData, bytes popProof, bytes authPop)`
-where `kindHash = keccak256(tag)` must be the PQZ kind, `keyData = pk`.
+`register(0x0142, pk, pop, authRef)` follows F §6.2 step by step; PQZ-specific content of each step:
 
-1. `pk` canonical; UA not registered; `keccak256(pk)` not registered under any kind.
-2. Challenge `c = keccak256("SCAAS-PQZ-POP-V1" ‖ be32(chainId) ‖ registry(20) ‖ msg.sender(20) ‖ UA)`. As
-   classical §11.2, `c` binds `msg.sender`: the subject calls from its own EOA or smart account.
-3. `PQZ(OP_REGISTER, c ‖ pk ‖ popProof) == 1` — relation `R_REG`: `pk = A s + e`, `‖s‖ ≤ 36`, `‖e‖ ≤ 164`.
-4. The auth key is registered in the same call under its kind (or must already be): scheme 1 `MLDSA65(authPk, sig,
-   "SCAAS-PQZ-AUTHPOP-V1" ‖ c)`, scheme 2 additionally `ecrecover` over `keccak256("SCAAS-PQZ-AUTHPOP-V1" ‖ c)` (low-s,
-   raw digest), scheme 3 `t` member signatures, members ascending, each a registered mldsa65 UA.
-5. SSTORE2 `pk` (and the ML-DSA pk); store the record; emit `PqzRegistered(ua, authScheme, authUA, pkPtr)`.
+1. Kind enabled only where the registry generation was deployed with `UAPqzVerifier` (F R293, R313).
+2. Key data: exactly 16,384 bytes, every coefficient `< q` (`UAKeyData`).
+3. Id: `uaOf(0x0142, pk)`, not in the native space, not registered.
+4. `keyHash = keccak256("pqz-mlwe" ‖ pk)` free (`UAKeyInUse`).
+5. `authRef` per R281 (`UAAuthRef`); the auth UA registered first with its own PoP.
+6. PoP: `UAPqzVerifier.verify(pk, message, pop)` = `PQZ(OP_REGISTER, message ‖ pk ‖ pop) == 1` with `message =
+   uaMessage(0x0142, POP_TAG, popDigest(ua))` — relation `R_REG`: `pk = A s + e`, `‖s‖ ≤ 36`, `‖e‖ ≤ 164`, the
+   message absorbed into the statement. It binds chain, registry and UA, not the caller (F R295): anyone may submit.
+7. Store, `keyPtr = SSTORE2(pk)`, emit `UARegistered(ua, 0x0142, pk, authRef)` (16 KB of log data, ≈ 0.13 M gas).
 
-No key rotation (a new key is a new UA, RS2-9); auth rotation is spec F's.
+No rotation (F R302): a new key is a new UA plus a confidential transfer to it.
 
 ### 7.3 Fund
 
@@ -526,7 +522,7 @@ Header (512 bytes):
 | Offset | Field |
 |---|---|
 | 0 | `opTag` — `keccak256("SCAAS-PQZ-OP-TRANSFER-V1")`, `…-BURN-V1` or `…-REFRESH-V1` |
-| 32 | `proofSystemId` (R292) |
+| 32 | `proofSystemId` (R278) |
 | 64 | `chainId` |
 | 96 | `token` (12 zero bytes ‖ address) |
 | 128 | `registry` |
@@ -575,9 +571,13 @@ come from `PqzTransfer` logs. Nothing reveals `r` (which would open `v_f`, the s
 
 ### 7.10 Authorization check
 
-`authSig` by scheme of `fromUA`'s record: 1 `MLDSA65(pk, sig, authDigest)`; 2 that plus `ecrecover`; 3 `abi.encode
-(uint8[] memberIdx, bytes[] sigs)`, strictly ascending indexes, `t` valid. ML-DSA pks read via SSTORE2. Both the
-proof (knowledge of the PQZ key) **and** the signature (the auth key) are required (classical invariant #1).
+`registry.requireZetherAuthorized(fromUA, authDigest, authSig, zkCovered = true)`. Because R281 forbids `authRef =
+0`, this always runs F's `requireAuthorized(authRef, PURPOSE_ZETHER_AUTH, authDigest, authSig)`: `authSig =
+abi.encode(bytes keyData, bytes sig)` with empty `keyData` for stored PQ kinds (F R306), `msig` member signatures in
+F's format. ML-DSA signs `ua_msg = keccak256(TAG(mldsa65) ‖ keccak256("scaas.ua.purpose.zether-auth.v1") ‖
+authDigest)` with `ctx = kind_tag` (F §4.2). F's `zether-auth` purpose covers the PQZ digest, which carries its own
+domain string. Both the proof (knowledge of the PQZ key) **and** the signature (the auth UA) are required (classical
+invariant #1).
 
 ---
 
@@ -605,7 +605,7 @@ proof (knowledge of the PQZ key) **and** the signature (the auth key) are requir
   int pqz_enc(...); int pqz_dec(const uint8_t seed32[32], const uint8_t ct[16448], uint64_t M[8], int64_t noise[8]);
   ```
   `pqz_verify` never allocates more than a compile-time bound, never reads outside its inputs, and returns 0 on any
-  malformed input (R291).
+  malformed input (R279).
 - **Proof serialization v1** = the engine's own (polynomials as packed integers of the generated widths), versioned
   by `proofSystemId`. The contract never parses a proof; only its length is bounded (`MAX_PROOF = 98,304`).
 - **Fiat–Shamir.** Transcript §5. Soundness of multi-round Fiat–Shamir with aborts in the quantum random-oracle model
@@ -642,9 +642,12 @@ The precompile checks `proofSystemId` (header offset 32) against the ids it impl
 
 ### 9.3 Precompile `MLDSA65` (`0x…0F10`)
 
-EIP-8355 ABI: `pk(1952) ‖ sig(3309) ‖ msg`; output `…01`/`…00`. Pure ML-DSA-65, empty context. A private address
-because EIP-8051 and EIP-8355 both claim `0x12/0x13`; if one is adopted and lands in Nethermind, `PqzRegistry`
-points at it in a new version (the address is a constructor argument, checked by self-test). Fallback for chains
+Input `pk(1952) ‖ sig(3309) ‖ u8(len(ctx)) ‖ ctx ‖ msg`, FIPS 204 `ML-DSA.Verify(pk, msg, sig, ctx)` (pure
+ML-DSA); output `…01`/`…00`. This is EIP-8355's layout plus the context field, because F signs with `ctx = kind_tag`
+and EIP-8355 fixes an empty context. A private address because EIP-8051 and EIP-8355 both claim `0x12/0x13`. F's
+`mldsa44`/`mldsa65` verifier for chain 9000 (`UAMldsaVerifier`, an `IUAKindVerifier`) calls it; the address is an
+immutable constructor argument checked by self-test, so a later standard precompile means a new verifier in a new
+registry generation (F §6.5). Fallback for chains
 without it: none in v1 (Solidity ML-DSA at ≈ 1.23 M is possible but out of scope).
 
 ### 9.4 Gas model
@@ -679,7 +682,7 @@ Estimates for a typical transfer (auditor on, no inline credits), **to be replac
 | `rollOver` of 16 credits | ≈ 9.5 M | calldata-bound; amortizes to 0.58 M per credit |
 | `fund` | ≈ 0.08 M | trivial ciphertext, small event; its later rollover costs ≈ 0.16 M (16 KB of zero calldata) |
 | `burn` / `refresh` | ≈ 2.4 M | one recipient, no auditor |
-| `register` | ≈ 5.4 M once | SSTORE2 of a 16 KB pk ≈ 3.3 M, PoP proof calldata ≈ 1.6 M floor |
+| `register` | ≈ 5.5 M once | SSTORE2 of a 16 KB pk ≈ 3.3 M, PoP proof calldata ≈ 1.6 M floor, `UARegistered` log ≈ 0.13 M |
 | Classical reference (measured) | 3.29 M / 3.36 M transfer, 0.115 M rollover | SCaaS §8.4 |
 
 Per received payment PQZ costs ≈ 3.6–3.8 M against classical ≈ 3.4–3.5 M. At the R280 block target (100 M) ≈ 30
@@ -690,7 +693,8 @@ transfers per 5 s block; the per-transaction cap keeps `inline ≤ 16` comfortab
 | Contract | Role | Notes |
 |---|---|---|
 | `PqzSafety` (library) | R270 allowlist + self-test helper | |
-| `PqzRegistry` | §7.2, §7.10 | singleton per chain; immutable; precompile addresses as constructor args |
+| `UAPqzVerifier` | F `IUAKindVerifier` for `0x0142` (§7.2) | stateless; precompile address immutable |
+| `UAMldsaVerifier` | F verifier for `mldsa44`/`mldsa65` on chain 9000 (§9.3) | stateless; used by F's `UARegistry` (built by F's stream) |
 | `PqzToken` | §7.3–§7.9, `ITransferDisclosure` | clone per token via `OpenFactory.createPqzToken` (flag-gated); immutable |
 | `PqzCt` (library) | `add`/`sub` on 64-bit lanes, canonical check, `ctHash` | pure Solidity, no precompile |
 | `Sstore2` | existing pattern (classical generator blob) | reused |
@@ -731,11 +735,11 @@ acceptance (fail closed).
    a valid and a one-bit-flipped transfer vector give 1 / 0; same for `0x…0F10`. Compare with the formula, not
    with "it answered" (the `eip1108` lesson).
 3. Roll the signer and every follower to the image before the timestamp; then repeat step 2 on the live chain.
-4. Raise `TargetBlockGasLimit` (R280) and `TxPool.MaxTxSize` (R290).
+4. Raise `TargetBlockGasLimit` and `TxPool.MaxTxSize` (R280).
 
 ### 10.4 Contract self-test
 
-Constructors of `PqzRegistry` and `PqzToken.initialize` call `OP_SELFTEST` and require the expected hash (a
+Constructors of `UAPqzVerifier`, `UAMldsaVerifier` and `PqzToken.initialize` call `OP_SELFTEST` and require the expected hash (a
 constant compiled into the contract), then call `OP_REGISTER` on a fixed invalid vector and require 0, then
 `MLDSA65` on one valid and one invalid vector. Any mismatch ⇒ `SelfTestFailed`. This, not the allowlist alone, is
 what keeps PQZ off chains whose client is not ours.
@@ -758,10 +762,10 @@ what keeps PQZ off chains whose client is not ours.
 
 ### 11.2 clientkeys
 
-- `src/pq-keys.js`: §6.2 derivation (HMAC-SHA512 via WebCrypto), ML-DSA-65 keygen/sign through a vetted JS/WASM
-  ML-DSA package chosen in E-S5, `sealPqKey` / `openPqKey` on the existing vault; PQZ proving is **not** in JS
-  (R287) — the JS side signs `authDigest` and hands proving to the native prover or the org key oracle.
-- `vectors/pq_keys.json` shared with Rust (same seed ⇒ same leaves, same pks, same UAs).
+- F's `deriveUAKey(seed, {kind: 'mldsa65', account, index})` / `signUA('zether-auth', authDigest)` (F stream F3)
+  with a vetted JS/WASM ML-DSA package chosen in E-S5; `derivePqzSeed(seed, {account, index})` (§6.2) only to hand
+  the seed to the native prover or the org key oracle — PQZ proving is **not** in JS (R287).
+- Vectors: F's `smartcontracts/vectors/ua/kinds.json` gains the `pqz-mlwe` row (seed → pk, UA, keyHash).
 
 ### 11.3 scaas-node (recommendations to operators, OPS R247)
 
@@ -770,7 +774,7 @@ what keeps PQZ off chains whose client is not ours.
 - Job kind `pqz_call` in the NI job API: `{chain, contract, selector ∈ {pqzTransfer, pqzBurn, rollOver, fund},
   calldata}`; contract must be a configured PQZ token; pre-simulation by `eth_estimateGas` (fails ⇒ job rejected, no
   gas spent); `max_gas_per_tx = 16_000_000` on chain 9000 (today's default 3,000,000 already rejects classical
-  Zether transfers at 3.36 M). Gateway body limit 1 MiB on this route only (R290).
+  Zether transfers at 3.36 M). Gateway body limit 1 MiB on this route only (R280).
 - Optional rollover keeper: per configured PQZ token, when an account's unrolled credits ≥ 16 and the chain is idle,
   submit `rollOver` with ciphertexts from logs (anyone may; it is harmless, R277).
 - The node never holds a PQZ secret or an ML-DSA key of a user (as classical: "the node never needs `x`").
@@ -801,10 +805,10 @@ through `attestTransferAmount`). A later stream may add a `pqz-cli` connector fo
 | T10 | Fiat–Shamir in the QROM for multi-round LNP22 | assumption, stated; parameters follow LaZer's QROM-aware choices; tracked for the audit (Z1) |
 | T11 | Side channels in the prover (timing of sampling, rejection, Gaussian masks) | constant-time CBD; masking sampler constant-time (CDT full-table scan or uniform masks, as the fork's code already does); rejection decisions depend only on public-safe values per LNP22; no secret-indexed tables (software AES bitsliced) |
 | T12 | Randomness reuse | R288 message-bound derivation; hedged proof masks |
-| T13 | Precompile bug ⇒ consensus split or false accept | single C core shared with prover tests; fuzzing of `pqz_verify` (§15); fail-closed returndata check; deterministic integer code (R291) |
-| T14 | Rogue / stolen public key registration | PoP bound to `msg.sender` + auth PoP; key-kind conflict check |
+| T13 | Precompile bug ⇒ consensus split or false accept | single C core shared with prover tests; fuzzing of `pqz_verify` (§15); fail-closed returndata check; deterministic integer code (R279) |
+| T14 | Rogue / stolen public key registration | `R_REG` PoP over F's `popDigest` (chain, registry, UA); keyHash group `pqz-mlwe`; front-running yields the identical record (F R295) |
 | T15 | Leaked PQZ key | read-only breach (auth key separate, R281); move funds to a new UA |
-| T16 | Leaked ML-DSA key | cannot spend without the PQZ key's proof; rotation is spec F's |
+| T16 | Leaked ML-DSA key | cannot spend without the PQZ key's proof; no rotation (F R302): move funds to a new UA |
 | T17 | Implementation immaturity (research-grade LaZer, unaudited fork) | UNAUDITED label, allowlist, self-test, owner gate Z1 (independent audit) before any real funds |
 
 ### 12.2 What stays classical (stated, not hidden)
@@ -854,7 +858,7 @@ both would make every transfer carry two proof systems for the benefit of balanc
 | `cbd.json` | SHAKE inputs → CBD(1), CBD(20) samples |
 | `keygen.json` | seed32 → `pk`, `ua`, ctr used; plus a seed forcing ≥ 1 resample (searched offline) |
 | `enc.json` | `seed_enc`, recipients, messages → `u`, `v_j`; `Add`/`Sub`/`Trivial`; `Dec` → `M`, value (noise omitted from public vectors) |
-| `derive.json` | BIP-39 seed → every §6.2 leaf, ML-DSA pk, hybrid address, UAs (shared with clientkeys) |
+| `derive.json` | BIP-39 seed → §6.2 seeds, PQZ pk, ML-DSA pk, UAs, keyHashes (rows also in F's `kinds.json`) |
 | `statement_{transfer,burn,refresh}.json` | inputs → statement bytes, `keccak256(statement)`, `authDigest`, `entryRef` |
 | `proof_{transfer,burn,refresh,register,disclose_*}.json` | statement, proof, `expect: true` (fixed `rnd32`, so byte-exact across backends) |
 | `selftest.json` | the `OP_SELFTEST` hash and the vectors it covers |
@@ -878,8 +882,9 @@ classical `kat.py`).
   = 17`; `p > pendingCount`; `p < floor` (would subtract credits the last debit consumed); credit at `K_MAX + 1`; self-transfer; unregistered receiver; auditor flag mismatch;
 - rollover race: a debit proven at `p`, then `rollOver` of 3 / 16 / 17 credits, then the debit ⇒ ok / ok /
   `InlineTooFar`; then decrypt both accounts and check conservation;
-- registry: PoP replayed by another `msg.sender`; same `pk` under another kind; ML-DSA PoP over the wrong `c`;
-  multi-sig with unsorted or duplicate members;
+- registry: PoP for another chain/registry/UA; same `pk` twice (`UAKeyInUse`); `authRef` = 0, an EOA, a classical
+  `msig` (non-PQ weight ≥ threshold), a Zether UA — all `UAAuthRef`; ML-DSA signature with empty instead of
+  kind-tag context;
 - disclosure: right amount ⇒ true, amount ± 1 ⇒ false, wrong `entryRef`, bundle bytes not matching the hash;
 - precompile absent (call an empty address) ⇒ `ProofRejected` / `SelfTestFailed`;
 - determinism: 10^4 random valid and invalid inputs give identical outputs on portable, AVX2 and aarch64 builds; gas
@@ -902,9 +907,9 @@ tests green and a review.
 |---|---|---|---|---|
 | **E-S0** spike: literature & parameters | read Lether full text, LNP22, LaZer docs; run lattice-estimator for §4.1 and the proof instances; confirm exactness of every norm proof | no | — | `estimator.txt`; §4 confirmed or a parameter ruling |
 | **E-S1** spike: `pqz-core` fork | pin LaZer; portable C99 + AVX2 kernels; software AES; KAT equality vs upstream on an AVX-512 runner; measure a toy `R_REG` and a first `R_TX` on the chain host | yes (C) | E-S0 | proof ≤ 96 KB, verify ≤ 50 ms portable, prove ≤ 3 s desktop (kill criterion R278) |
-| **E-S2** relations | `R_TX`, `R_BURN`, `R_REG`, `R_DS`, `R_DR` specs, codegen, proof modulus decision, serialization v1, all §15 KATs from C | yes (codegen) | E-S1 | vectors frozen, `proofSystemId` frozen (R292) |
+| **E-S2** relations | `R_TX`, `R_BURN`, `R_REG`, `R_DS`, `R_DR` specs, codegen, proof modulus decision, serialization v1, all §15 KATs from C | yes (codegen) | E-S1 | vectors frozen, `proofSystemId` frozen (R278) |
 | **E-S3** Nethermind precompile | plugin vs patch, P/Invoke, gas calibration, image, chainspec key, probes, throwaway chain | yes (.NET image) | E-S2 | §10.3 steps 1–2 pass on a chain-9000 copy |
-| **E-S4** contracts | `PqzSafety`, `PqzRegistry`, `PqzToken`, `PqzCt`, factory flag, forge tests with mocks, e2e on the chain copy | yes (forge) | E-S2 (vectors), E-S3 (e2e) | §15 contract cases + invariant |
+| **E-S4** contracts | `PqzSafety`, `UAPqzVerifier`, `UAMldsaVerifier`, `PqzToken`, `PqzCt`, factory flag, forge tests with mocks, e2e on the chain copy | yes (forge) | E-S2 (vectors), E-S3 (e2e), F's registry stream | §15 contract cases + invariant |
 | **E-S5** clients | `zether-prover --features pq`, `pqz-cli`, clientkeys `pq-keys.js`, ML-DSA package choice | yes (cargo) | E-S2 | cross-language vectors green |
 | **E-S6** node | `pqz` profile, probe, `pqz_call` job, limits, rollover keeper | yes (cargo) | E-S4 | e2e: fund → transfer → rollover → burn → disclose through the node |
 | **E-S7** review & audit prep | Claude-subagent reviews (external reviewers out of credit), fuzz 24 h, threat-model walk-through | no | E-S6 | review log in this spec |

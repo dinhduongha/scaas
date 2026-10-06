@@ -1331,7 +1331,7 @@ are not carried on the mesh (`W = 0` and single-flight per sender need their own
 
 ### 8.12 Post-quantum Zether on private/PoA chains (SPECIFIED)
 
-Spec: [PQ Zether design](superpowers/specs/2026-10-06-pq-zether-design.md) (component spec E, R270–R293); it
+Spec: [PQ Zether design](superpowers/specs/2026-10-06-pq-zether-design.md) (component spec E, R270–R289); it
 supersedes the sketch below where they differ.
 
 Goal: confidential balances whose confidentiality survives a quantum adversary, on private/PoA chains where gas is
