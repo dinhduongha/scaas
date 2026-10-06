@@ -5,8 +5,8 @@
 round này đánh số từ **R50** để không phải đánh số lại khi owner thêm quyết định.
 
 **Rev 1.1 (2026-10-07):** Claude review 1 folded (§H: rulings CR-R3-1…10, streams R3-FIX1…14, superseded-rulings
-table §H.4). **Open owner question Q1** (upgradeability of the Aptos, Sui and Solana programs) is recorded in §H.3
-and **not decided** here. "Sáu hệ sinh thái" is superseded by the owner's family taxonomy of 2026-10-06 (eight
+table §H.4). **Rev 1.2 (2026-10-07): owner ruling CR-R3-11** — the Aptos, Sui and Solana programs are
+**immutable at deploy** ("Bất biến ngay khi deploy", §H.3); this replaces open question Q1 of rev 1.1. "Sáu hệ sinh thái" is superseded by the owner's family taxonomy of 2026-10-06 (eight
 families: EVM incl. Hedera, Aptos, Sui, Soroban, Cosmos, TON, Solana; §H.4).
 
 **Nguồn yêu cầu (owner, qua coordinator, cùng ngày):** (1) relayer + contract + DEX cho Hedera, Sui, Soroban,
@@ -39,9 +39,10 @@ Hợp nhất với nhánh territory: **không** làm ở nhánh này (coordinato
    cho contract/program), không replay, có hạn, hạn mức mandate theo lần/kỳ; bốn mắt và snapshot ví nhận ở Odoo.
 5. **Code thắng SRS** khi đã có ruling (thứ tự ưu tiên của spec gốc). Mâu thuẫn được chốt ở
    `2026-10-03-srs-deltas.md`.
-6. **Open owner question Q1 (Claude review H3):** gói Aptos, Sui và program Solana giữ số dư của mọi chủ thể nhưng
-   hôm nay nâng cấp được bằng một khoá — mâu thuẫn với nguyên tắc 4 ("không ai ngoài chủ thể") và SCaaS §1.2/§1.3.
-   Chưa quyết; phương án và khuyến nghị ở §H.3.
+6. **Bất biến ngay khi deploy (owner, 2026-10-07 — CR-R3-11, Claude review H3):** gói Aptos, Sui và program Solana
+   giữ số dư của mọi chủ thể nên **không nâng cấp được kể từ lúc deploy** (Aptos `upgrade_policy = "immutable"`, Sui
+   `make_immutable` trên UpgradeCap, Solana upgrade authority = None), như contract EVM và SCaaS §1.2/§1.3. Sửa lỗi =
+   deploy phiên bản mới + di chuyển. Hôm nay các deploy dev còn nâng cấp được bằng một khoá — stream R3-FIX15.
 
 ---
 
@@ -602,7 +603,7 @@ needed amendments are recorded in §H.5.
 |---|---|---|---|
 | H1 | high | Confirmed: Cosmos passkey checks only `ad[32] & 0x01`, and `type`/challenge by substring (`cosmos/metaop/src/lib.rs:130-148`); account = `sha256(tag ‖ pk)[..20]` (`:89-94`). Other families check rpIdHash + origin + UP + UV (`SubjectAccount.sol:270-303`, `move/aptos/sources/auth.move:89-108`, `move/sui/sources/auth.move`, `soroban/contracts/account/src/lib.rs`, `ton/contracts/common.tact:325-356`, `solana/programs/scaas/src/auth.rs:175-223`). | **Accepted** → CR-R3-1; R3-FIX1 |
 | H2 | high | Confirmed: events from the primary only on EVM/Hedera (`indexer.rs:131,142`), Sui (`adapters/sui.rs` `rpc` = `rpcs[0]`), Solana (`adapters/solana.rs:710`), Soroban; quorum only on the head hash (`sui.rs:751`, `solana.rs:1014-1025`, `soroban.rs:400-411`); Cosmos `final_head` single endpoint (`adapters/cosmos.rs:522-531`), TON one `masterchainInfo` (`adapters/ton.rs:1217-1223`); `config.rs:505-506` still accepts `quorum > 1` for them. Aptos agrees per transaction across the quorum (`adapters/aptos.rs:555-572`). | **Accepted** → CR-R3-2; R3-FIX3, R3-FIX4 (EVM/Hedera: PAY-FIX3) |
-| H3 | high | Confirmed: Aptos `upgrade_policy = "compatible"` (`move/aptos/Move.toml:4`), `deploy-object` (`move/aptos/scripts/devnet.sh:45`); Sui `sui client publish` keeps the UpgradeCap (`smartcontracts/scripts/deploy.sh:9`); Solana keeps `--upgrade-authority` (`solana/scripts/deploy.sh:10-11,31`). | **Not decided — OPEN OWNER QUESTION Q1** (§H.3), per owner instruction |
+| H3 | high | Confirmed: Aptos `upgrade_policy = "compatible"` (`move/aptos/Move.toml:4`), `deploy-object` (`move/aptos/scripts/devnet.sh:45`); Sui `sui client publish` keeps the UpgradeCap (`smartcontracts/scripts/deploy.sh:9`); Solana keeps `--upgrade-authority` (`solana/scripts/deploy.sh:10-11,31`). | **Accepted — owner ruling CR-R3-11** (immutable at deploy, §H.3; rev 1.2); R3-FIX15 |
 | M1 | med | Confirmed: `crossOrigin` rejected on EVM (`SubjectAccount.sol:288-303`) and Aptos (`auth.move:99`) only; TON accepts anything after the stored origin prefix (`common.tact:349`); Sui, Soroban, Solana (`auth.rs:184-192`) do not look. | **Accepted** → CR-R3-1; R3-FIX2 |
 | M2 | med | Confirmed: `Key::PayRef(pay_ref)` global (`soroban/contracts/token/src/lib.rs:198-216`); `check_amount` accepts 0 (`:113-117`); Cosmos avoided it on purpose (`cosmos/token/src/lib.rs:103-105`). | **Accepted** → CR-R3-3; R3-FIX5 |
 | M3 | med | Confirmed: `initialize(network, admin)` stores any 32 bytes (`solana/programs/scaas/src/account.rs:28-34`). Mitigated for our node only: it compares RPC `getGenesisHash` with the configured network and `Config.network` (RS12-8, `adapters/solana.rs:724-740`); third-party relayers are not bound. | **Accepted** → CR-R3-4; R3-FIX6 |
@@ -619,7 +620,8 @@ needed amendments are recorded in §H.5.
 | L7 | low | SCaaS §9.6: kind is an operator label, not stored. | **Accepted** (doc): §B.3 keystore `"scaas": {"kind"}` superseded (§H.4) |
 | Superseded table (13 rows) | — | Spot-checked: scrypt `N = 2^17` (`clientkeys/src/vault.js:14`), salt (`SubjectAccountFactory.sol:21-23`), 400 k by codehash (`MetaToken.sol:141-144`), lazy bind (`jetton.tact:209-212`). | **Accepted**: §H.4 + inline markers |
 
-Rejected: none. Counts: 3 high (H3 left open), 7 medium, 7 low, 1 table — 17 accepted, 1 open question, 0 rejected.
+Rejected: none. Counts: 3 high, 7 medium, 7 low, 1 table — 18 accepted (H3 by owner ruling CR-R3-11, rev 1.2),
+0 rejected.
 
 ### H.2 Rulings
 
@@ -669,8 +671,8 @@ Rejected: none. Counts: 3 high (H3 left open), 7 medium, 7 low, 1 table — 17 a
   (owner, keys, origins, guardian, recovery, `key_nonce`, policy) is created by the first `open`; every
   `Account<T>` stores its `Keys` id; `verify_by`, `manage` and recovery take `&Keys`; `dex::cancel` and
   `invalidate_nonces` take the maker's `&Keys` (`order.maker == keys.owner`). A struct-layout change is not a
-  `compatible` upgrade, so this is a fresh package publish on dev chains (no production deployment exists;
-  independent of Q1). — Tests: rotate a key on `Keys` ⇒ the old key fails on `Account<USDC>` and `Account<SUI>`
+  `compatible` upgrade, so this is a fresh package publish on dev chains (no production deployment exists), and
+  under CR-R3-11 every publish is a fresh, immutable one anyway. — Tests: rotate a key on `Keys` ⇒ the old key fails on `Account<USDC>` and `Account<SUI>`
   and cannot cancel orders on any market.
 - **CR-R3-6** **Key lifecycle is stated per family; gaps are streams** (M5; infra-service M3). SCaaS §9.4
   "equivalents per family" reads:
@@ -705,9 +707,36 @@ Rejected: none. Counts: 3 high (H3 left open), 7 medium, 7 low, 1 table — 17 a
   EVM ("no owner, no sweep"); tokens sent to it directly are lost as on EVM. Admin keeps `SetMarket` only. —
   Tests: `Sweep` no longer in the message enum; settle/cancel tests unchanged.
 
-### H.3 OPEN OWNER QUESTION Q1 — upgradeability of the Aptos, Sui and Solana programs (review H3)
+### H.3 Owner ruling CR-R3-11 — the Aptos, Sui and Solana programs are immutable at deploy (review H3)
 
-**Not decided in this revision (owner instruction).** Facts, verified: the Aptos package is
+- **CR-R3-11** (owner, 2026-10-07: *"Bất biến ngay khi deploy"*) **Every program that holds subject value is
+  immutable from the moment it is deployed**, as SCaaS §1.2/§1.3 state and as EVM already is (non-upgradeable
+  clones). A bug fix = deploy a new version + voluntary migration (SCaaS §4.3), never an in-place upgrade.
+  - **Aptos:** `Move.toml` `upgrade_policy = "immutable"`; the package registry at the package address reports
+    policy immutable.
+  - **Sui:** `0x2::package::make_immutable(UpgradeCap)` in the same deploy run, right after `sui client publish`;
+    the UpgradeCap object no longer exists.
+  - **Solana:** deploy with a temporary authority, run `initialize` (its `Initialize` accounts require the upgrade
+    authority, `account.rs:16-26`; with CR-R3-4 it no longer takes `network`), then
+    `solana program set-upgrade-authority <id> --final`; `solana program show <id>` reports `Authority: none`.
+    Config cannot be re-created afterwards (PDA `init` + no authority).
+  - **Cosmos** follows from SCaaS §1.3 ("no proxy upgrade on any contract that holds value"): instantiate with
+    `--no-admin` when the instantiation tooling lands. TON and Soroban as built are already immutable.
+  - **Deploy-script gate:** `smartcontracts/scripts/deploy.sh` (aptos, sui) and `solana/scripts/deploy.sh` end with a
+    check that **fails the run (non-zero exit) if the deployed program is still upgradeable** — Aptos registry
+    policy ≠ immutable, Sui UpgradeCap still present, Solana `Authority` ≠ none, Cosmos contract admin ≠ empty.
+    Local test validators are not exempt (the gate is the same everywhere, so tests exercise it).
+  - **Existing dev deployments** (upgradeable, single key) are abandoned and redeployed immutable; chain profiles in
+    the node and Odoo get the new package/program ids (dev funds only).
+  - Why: a held upgrade key lets one server-side key publish a `drain` entry over the stored `ExtendRef`/PDA seeds
+    for every subject on that chain — the IaaS/BaaS failure mode SCaaS exists to remove. — Cost: no hotfix in place;
+    a fix needs a new deployment and migration of balances by their owners.
+  - Tests: each deploy script run against its local network ends green only when the gate passes; a negative test
+    (skip the freeze step) makes the gate fail; Solana `initialize` after `--final` fails.
+  - Stream: **R3-FIX15**.
+
+History (rev 1.1, kept for the record — superseded by CR-R3-11): Q1 was left open with options (a) immutable after
+audit, (b) multisig + timelock, (c) single key for dev with a production gate. Facts, verified: the Aptos package is
 `upgrade_policy = "compatible"` (`move/aptos/Move.toml:4`) published with `deploy-object`, so the code object's
 owner can publish an upgrade, and the package holds the `ExtendRef` of Root and of every subject `Account`; Sui is
 published with `sui client publish` and the UpgradeCap stays with the publisher (`smartcontracts/scripts/deploy.sh:9`),
@@ -725,9 +754,9 @@ ruled "upgrade compatible, multisig in production".
 | **(b) Upgrade authority = multisig + timelock** | Aptos code object owned by a multisig account behind a timelock; Sui UpgradeCap held by a timelocked multisig policy object restricted to compatible upgrades, emitting a public "upgrade scheduled" event; Solana upgrade authority = a multisig with a time lock; the delay (e.g. ≥ 7 days) is public | The key becomes an explicit trust root that SCaaS §1.2/§1.3 and the infra-service table must list; subjects get the delay to exit |
 | **(c) Single key for dev only, production gate** | Keep today's single key on dev chains; the node refuses to activate a non-dev chain whose program authority is a single key (Aptos object owner, Sui UpgradeCap owner, Solana ProgramData authority are read at chain activation), and the deploy scripts refuse public clusters with one | Nothing changes for dev; production cannot start in the unsafe state |
 
-**Recommendation: (b) until the audit, then (a)**; the (c) gate holds in both phases so no public chain runs with a
-single upgrade key. Text to amend after the decision: §0 principle 4, R64, net-aptos/net-sui/net-solana RS11-13,
-SCaaS §1.2/§1.3/§7.5, infra-service table (recorded §H.5). No stream until decided.
+Rev 1.1 recommended (b) until the audit, then (a). **The owner chose immutability at deploy (CR-R3-11)**, which
+also makes the (c) production gate unnecessary: the deploy-script gate refuses an upgradeable result on every
+network. Amended text: §0 principle 6 here; net-aptos/net-sui/net-solana RS11-13 and SCaaS §7.5 recorded in §H.5.
 
 ### H.4 Superseded rulings and statements
 
@@ -748,21 +777,22 @@ SCaaS §1.2/§1.3/§7.5, infra-service table (recorded §H.5). No stream until d
 | §B.5 "anti-lock test mỗi mạng"; Soroban on mesh | MESH R77: Soroban excluded from mesh v1 |
 | §B.3 keystore `"scaas": {"kind": …}` | SCaaS §9.6: the kind is an operator label, not stored |
 | §B.1 trait as written | built trait in `scaas-node/src/adapter.rs` (L6) |
+| net-aptos/net-sui/net-solana RS11-13 "upgrade compatible, multisig in production"; Solana `deploy.sh` "Production: move the upgrade authority to a multisig" | CR-R3-11 (owner): immutable at deploy |
 | §D.1 e2e on `hedera-local-node` | `solo` (deprecated tool, wallet-formats L2) |
 
 ### H.5 Amendments needed in other specs (recorded; owner syncs)
 
 | Spec | Amendment |
 |---|---|
-| SCaaS.md | §1.2/§1.3/§7.5: Q1 outcome (until then, state the open question); §6.6 / §3.5: what the finality gate checks per family (CR-R3-2); §9.3: one WebAuthn grammar + vectors (CR-R3-1); §9.4: lifecycle table (CR-R3-6); §7.3 Cosmos passkey v2, §7.4 Soroban `pay_ref` per `(from, pay_ref)`, §7.5 Sui `Keys`, §7.6 TON domain set and bounced payouts, §7.7 Solana build-time network. |
+| SCaaS.md | §1.2/§1.3 hold as written (CR-R3-11); §7.5/§7.7: "upgrade compatible" → immutable at deploy, fix = new version + migration, deploy gate; §6.6 / §3.5: what the finality gate checks per family (CR-R3-2); §9.3: one WebAuthn grammar + vectors (CR-R3-1); §9.4: lifecycle table (CR-R3-6); §7.3 Cosmos passkey v2, §7.4 Soroban `pay_ref` per `(from, pay_ref)`, §7.5 Sui `Keys`, §7.6 TON domain set and bounced payouts, §7.7 Solana build-time network. |
 | net-cosmos | passkey v2 derivation + grammar; quorum on head and events; `Sweep` removed. |
 | net-soroban | `pay_ref` per `(from, pay_ref)`, `amount > 0`; guardian (R3-FIX8); grammar. |
-| net-sui | `Keys` object (CR-R3-5); grammar; event quorum; RS11-13 per Q1. |
+| net-sui | `Keys` object (CR-R3-5); grammar; event quorum; RS11-13 → `make_immutable` at deploy (CR-R3-11). |
 | net-ton | domain set (CR-R3-7), exact origin, bounced payouts (CR-R3-9); quorum; guardian (R3-FIX10). |
-| net-solana | build-time network = genesis hash, `initialize` without `network`, program-id reuse refusal (CR-R3-4); grammar (`crossOrigin`); event quorum; RS11-13 per Q1. |
-| net-aptos | shared WebAuthn vectors; RS11-13 per Q1. |
+| net-solana | build-time network = genesis hash, `initialize` without `network`, program-id reuse refusal (CR-R3-4); grammar (`crossOrigin`); event quorum; RS11-13 → upgrade authority None after `initialize` (CR-R3-11). |
+| net-aptos | shared WebAuthn vectors; RS11-13 → `upgrade_policy = "immutable"` (CR-R3-11). |
 | net-hedera | none beyond spec gốc CR-PD-2 (event quorum on the EVM path). |
-| NI rev 3.6 | §9 indexer: event-set quorum for every family; Cosmos/TON honour `quorum`; `scaas_finality_quorum`; Q1 gate (option c) at chain activation if chosen. |
+| NI rev 3.6 | §9 indexer: event-set quorum for every family; Cosmos/TON honour `quorum`; `scaas_finality_quorum`; chain profiles carry the redeployed immutable package/program ids (CR-R3-11). |
 | UA | R330 `chain_uid` for Solana = the genesis hash the program is built with (CR-R3-4). |
 
 ### H.6 Code streams (new; for TODO)
@@ -783,6 +813,7 @@ SCaaS §1.2/§1.3/§7.5, infra-service table (recorded §H.5). No stream until d
 | **R3-FIX12** | lane-horizon constants pinned equal in tests; node refuses `max_valid_for_secs > LANE_HORIZON` on pruning families | CR-R3-8 / CR-PD-4 |
 | **R3-FIX13** | TON DEX `payoutOf`, `unclaimed`, `Claim`; `WithdrawFees` fees only; tests | CR-R3-9 |
 | **R3-FIX14** | Cosmos DEX: remove `Sweep` | CR-R3-10 |
+| **R3-FIX15** | Immutable at deploy: Aptos `upgrade_policy = "immutable"`; Sui `make_immutable` in `deploy.sh`; Solana `initialize` then `set-upgrade-authority --final`; Cosmos `--no-admin`; deploy-script gate failing on an upgradeable result (+ negative test); redeploy the existing dev deployments and update node/Odoo chain profiles | CR-R3-11 |
 
 ### H.7 Revision history
 
@@ -790,3 +821,4 @@ SCaaS §1.2/§1.3/§7.5, infra-service table (recorded §H.5). No stream until d
 |---|---|---|
 | 1.0 | 2026-10-03 | Round 3 design R30–R67; agy review S1–S28 (§G) |
 | 1.1 | 2026-10-07 | Claude review 1 folded: 17 findings accepted, 0 rejected, H3 left as **open owner question Q1**; rulings CR-R3-1…10; streams R3-FIX1…14; superseded-rulings table (§H.4); net-*/SCaaS/NI/UA amendments recorded (§H.5) |
+| 1.2 | 2026-10-07 | Owner ruling CR-R3-11: Aptos/Sui/Solana programs immutable at deploy (replaces Q1); deploy-script gate; stream R3-FIX15 (apply + redeploy dev deployments); RS11-13 superseded |

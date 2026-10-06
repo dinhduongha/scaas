@@ -3,8 +3,10 @@
 > Nguồn: SRS `ai-enterprise-blockchain-architecture.md` — nguyên tắc 6 và §1.1 (quyết định của chủ dự án, 2026-10-03). Tham chiếu "nguyên tắc 2/3", "§3.2", "§4.4", "§4.9", "§5.2", "§7" là các mục trong SRS đó.
 >
 > **Rev 1.1 (2026-10-07):** Claude review 1 folded (section "Claude review 1" at the end). Định vị được sửa theo
-> `docs/SCaaS.md` §1.1 (chuẩn tắc, thắng tài liệu này khi lệch). **Câu hỏi mở của owner Q1** (khả năng nâng cấp gói
-> Aptos/Sui/Solana) chưa quyết — các hàng bảng chạm tới nó được đánh dấu "(Q1)".
+> `docs/SCaaS.md` §1.1 (chuẩn tắc, thắng tài liệu này khi lệch).
+>
+> **Rev 1.2 (2026-10-07) — owner ruling:** gói Aptos, Sui và program Solana **bất biến ngay khi deploy** (R3D
+> CR-R3-11), như SCaaS §1.2; thay câu hỏi mở Q1 của rev 1.1. Các hàng bảng chạm tới nó ghi "(CR-R3-11)".
 
 **Blockchain là Dịch vụ Hạ tầng Cơ sở (Blockchain as Foundational Infrastructure Service):**
 - **Smart contract chính là dịch vụ API** chạy nghiệp vụ (SCaaS §1.1, owner): thanh toán, mandate, token và wrapper, DEX, đấu thầu, vesting, phân phối, chuyển khoản bảo mật là các hàm contract — mã theo họ mạng, deploy thành clone EIP-1167 từ factory mở trên EVM và module/program tương đương ở họ khác — kiểm chữ ký, nonce, hạn và hạn mức của chủ thể trên mọi lời gọi. ERP, DMS, portal, mobile, AI agent gọi chúng như gọi một API. **Contract là sản phẩm**, không phải một tính năng gắn vào ERP; SCaaS không phụ thuộc ERP nào (Odoo là một client, R87).
@@ -17,17 +19,17 @@
 | Tiêu chí | **IaaS — AWS EC2 / Google Compute Engine** (ứng dụng tự cấp JWT, server ký) | **BaaS — Supabase** (Supabase Auth cấp JWT, server ký; Postgres RLS) | **Dịch vụ Blockchain** (client ký; passkey ký trên mọi thao tác create/update) |
 |---|---|---|---|
 | **Ai ký thao tác ghi** | Server ứng dụng. Client chỉ cầm JWT do server ký (HS256/RS256); mọi create/update được thực hiện *nhân danh* user bởi server. | Server Supabase Auth ký JWT; PostgREST/Postgres thực thi ghi, RLS đọc `auth.uid()` từ JWT. | **Chính chủ thể**: thiết bị của user ký từng thao tác bằng passkey (WebAuthn, P-256) hoặc ví. Relayer chỉ trả phí gas, **không có khóa của user**. |
-| **Gốc tin cậy (trust root)** | Nhà vận hành ứng dụng + nhà cung cấp cloud (IAM, hypervisor) + bất kỳ ai giữ khóa ký JWT. | Supabase (nhà vận hành) + chủ project giữ JWT secret / `service_role` key. | Secure enclave/authenticator trên thiết bị của user + đồng thuận (consensus) của mạng + mã contract bất biến (nguyên tắc 3). **(Q1)** Hôm nay gói Aptos, Sui và program Solana nâng cấp được bằng một khoá — nếu owner giữ khả năng nâng cấp, khoá nâng cấp (multisig + timelock) là một gốc tin cậy tường minh của họ đó. |
-| **Ai có thể giả mạo thao tác của user** | Bất kỳ ai giữ khóa ký JWT, có quyền ghi DB trực tiếp, hoặc chiếm được server/IAM — có thể ghi *thay* user mà không để lại dấu vết phân biệt được. | Bất kỳ ai giữ JWT secret (tự cấp token cho uid bất kỳ) hoặc `service_role` key (bỏ qua RLS), hoặc có quyền DB của nhà vận hành. | **Không ai** nếu không có khóa riêng của user **(Q1: ngoại trừ người giữ khoá nâng cấp gói Aptos/Sui/Solana chừng nào nó còn)**. Relayer/nhà vận hành chỉ có thể **từ chối hoặc trì hoãn** (censorship/liveness), không thể giả mạo; chống bằng relayer khác, hoặc chủ thể / **bên nhận** tự gửi (SCaaS §5.9). Luồng portal mặc định ràng relayer của công ty (`MODE_RESTRICT_RELAYER`, R10): đổi quyền người trả tự gửi lấy an toàn front-run; bên nhận vẫn tự relay được. |
+| **Gốc tin cậy (trust root)** | Nhà vận hành ứng dụng + nhà cung cấp cloud (IAM, hypervisor) + bất kỳ ai giữ khóa ký JWT. | Supabase (nhà vận hành) + chủ project giữ JWT secret / `service_role` key. | Secure enclave/authenticator trên thiết bị của user + đồng thuận (consensus) của mạng + mã contract bất biến (nguyên tắc 3) — **trên mọi họ, bất biến ngay khi deploy (CR-R3-11, owner)**: Aptos `upgrade_policy = "immutable"`, Sui `make_immutable` trên UpgradeCap, Solana upgrade authority = None, Cosmos không admin; script deploy fail nếu program còn nâng cấp được. Không có khoá nâng cấp nào trong gốc tin cậy. *(Deploy dev hiện có còn nâng cấp được bằng một khoá — chỉ dev, sẽ deploy lại bất biến, stream R3-FIX15.)* |
+| **Ai có thể giả mạo thao tác của user** | Bất kỳ ai giữ khóa ký JWT, có quyền ghi DB trực tiếp, hoặc chiếm được server/IAM — có thể ghi *thay* user mà không để lại dấu vết phân biệt được. | Bất kỳ ai giữ JWT secret (tự cấp token cho uid bất kỳ) hoặc `service_role` key (bỏ qua RLS), hoặc có quyền DB của nhà vận hành. | **Không ai** nếu không có khóa riêng của user — kể cả nhà phát hành gói: không có khoá nâng cấp (CR-R3-11). Relayer/nhà vận hành chỉ có thể **từ chối hoặc trì hoãn** (censorship/liveness), không thể giả mạo; chống bằng relayer khác, hoặc chủ thể / **bên nhận** tự gửi (SCaaS §5.9). Luồng portal mặc định ràng relayer của công ty (`MODE_RESTRICT_RELAYER`, R10): đổi quyền người trả tự gửi lấy an toàn front-run; bên nhận vẫn tự relay được. |
 | **Chống chối bỏ (non-repudiation)** | Không có: log do server ghi, server có thể tạo ra bất kỳ dòng nào. | Không có (cùng lý do). | **Có cho từng thao tác**: chữ ký của user gắn với payload (domain-separated, có nonce + hạn dùng), kiểm chứng công khai mãi mãi. |
 | **Nhật ký kiểm toán** | Log ứng dụng/CloudTrail — do bên vận hành giữ, sửa/xóa được. | Log Postgres/Supabase — do nhà vận hành giữ. | Sổ cái phân tán, chỉ-ghi-thêm, ai cũng đối soát được; ERP là bản sao đọc vào (Land) từ sổ cái **qua node của nó** — xem hàng "Land". |
-| **Thực thi phân quyền** | Code ứng dụng (dễ sót một endpoint). | RLS trong Postgres — tập trung hơn, nhưng `service_role` và lỗi policy vẫn bỏ qua được. | Mã contract kiểm chữ ký + nonce + hạn mức trên **mọi** lời gọi. **Không admin nào chuyển được tiền của chủ thể, ngoại trừ** các quyền có giới hạn hoặc chốt lúc tạo sau: TW2 `rateAdmin`/`guardian` (R142, `SingleUnderlyingToken.sol:261-331`, `MultiUnderlyingToken.sol:86-98`); `OrderBookDex.admin` `setMarket` (phí ≤ 1 %, `OrderBookDex.sol:143-151`); admin token Soroban mint không giới hạn (`soroban/contracts/token/src/lib.rs:188-194`); admin DEX TON `WithdrawFees` (sẽ không còn nhận hoàn tiền bị bounce, R3D CR-R3-9); `Sweep` của DEX Cosmos (bỏ, R3D CR-R3-10); và **(Q1)** khoá nâng cấp gói Aptos/Sui/Solana. SCaaS §4.5 liệt kê TW2 theo cùng cách. |
+| **Thực thi phân quyền** | Code ứng dụng (dễ sót một endpoint). | RLS trong Postgres — tập trung hơn, nhưng `service_role` và lỗi policy vẫn bỏ qua được. | Mã contract kiểm chữ ký + nonce + hạn mức trên **mọi** lời gọi. **Không admin nào chuyển được tiền của chủ thể, ngoại trừ** các quyền có giới hạn hoặc chốt lúc tạo sau: TW2 `rateAdmin`/`guardian` (R142, `SingleUnderlyingToken.sol:261-331`, `MultiUnderlyingToken.sol:86-98`); `OrderBookDex.admin` `setMarket` (phí ≤ 1 %, `OrderBookDex.sol:143-151`); admin token Soroban mint không giới hạn (`soroban/contracts/token/src/lib.rs:188-194`); admin DEX TON `WithdrawFees` (sẽ không còn nhận hoàn tiền bị bounce, R3D CR-R3-9); `Sweep` của DEX Cosmos (bỏ, R3D CR-R3-10); `Config.admin` của program Solana — chỉ tạo thị trường DEX (`dex.rs:58-66`). Không có khoá nâng cấp: mã bất biến ngay khi deploy trên mọi họ (CR-R3-11). SCaaS §4.5 liệt kê TW2 theo cùng cách. |
 | **Thu hồi / đổi khóa** | Dễ: TTL ngắn, deny-list, xoay khóa server. | Dễ: xoay JWT secret, revoke refresh token. | Khó hơn: xoay khóa on-chain (smart account / Account Registry); chính sách khôi phục là công tắc backup (S4F R250–R254). **Theo họ** (R3D CR-R3-6): EVM, Aptos, Solana có xoay + guardian; Sui xoay theo từng coin type tới khi có `Keys` (CR-R3-5); Soroban guardian mới là seam; passkey Cosmos và TON chưa xoay được; EOA thường không bao giờ xoay được. |
 | **Độ trễ & chi phí ghi** | Mili-giây; chi phí compute/DB. | Mili-giây; theo gói dịch vụ. | Theo thời gian finality của mạng (giây); mỗi thao tác ghi tốn gas — do relayer tài trợ (§4.9, §5.2). |
 | **Đọc dữ liệu** | Server phục vụ. | PostgREST + RLS. | **Không ký**: đọc qua feed của node (`/v1/jobs`, `/v1/events`, NI R93/R94 — SPECIFIED; hôm nay Odoo nhận push `chain_event_ingest`), indexer hoặc ERP như dịch vụ thường (JWT/session vẫn dùng cho đọc và workflow ERP). Chỉ thao tác **ghi có giá trị** đi qua chữ ký client. |
 | **Land (ghi nhận vào ERP)** | — | — | ERP tin **node của mình** và, qua node, **quorum RPC**: một sự kiện chỉ được ghi nhận khi ≥ `quorum` nhà cung cấp độc lập trả **cùng tập sự kiện** cho vùng đã final (spec gốc CR-PD-2, R3D CR-R3-2); `quorum = 1` = tin một nhà cung cấp; node bị chiếm có thể nói dối trên `/v1/events` (SCaaS §3.5, NI T7). "Ai cũng kiểm chứng được không cần tin server" đúng cho **chữ ký**, không tự động đúng cho bút toán ERP. |
 | **Riêng tư** | Dữ liệu nằm trong hạ tầng của bên vận hành. | Như trên. | Sổ cái công khai: danh tính hai đầu công khai theo thiết kế (nguyên tắc 2), số tiền/số dư che bằng Zether (§7). |
-| **Hỏng hóc điển hình** | Lộ khóa ký JWT / IAM = giả mạo toàn bộ người dùng. | Lộ JWT secret / `service_role` = giả mạo toàn bộ người dùng, bỏ qua RLS. | Lộ khóa **một** user = chỉ user đó bị ảnh hưởng, giới hạn bởi hạn mức mandate; mất relayer = chậm, không mất tiền. **(Q1)** Lộ khoá nâng cấp gói Aptos/Sui/Solana = mọi chủ thể trên mạng đó — chính kiểu hỏng của IaaS/BaaS, nên Q1 phải được quyết trước production. |
+| **Hỏng hóc điển hình** | Lộ khóa ký JWT / IAM = giả mạo toàn bộ người dùng. | Lộ JWT secret / `service_role` = giả mạo toàn bộ người dùng, bỏ qua RLS. | Lộ khóa **một** user = chỉ user đó bị ảnh hưởng, giới hạn bởi hạn mức mandate; mất relayer = chậm, không mất tiền. Không có khoá nâng cấp nào để lộ (CR-R3-11); lộ khoá admin chỉ chạm tới các quyền có giới hạn ở hàng "Thực thi phân quyền", không chạm số dư chủ thể. |
 
 **Hệ quả thiết kế:**
 
@@ -41,12 +43,17 @@
 
 ---
 
-## Câu hỏi mở của owner Q1 — khả năng nâng cấp gói Aptos, Sui, Solana
+## Owner ruling — bất biến ngay khi deploy (R3D CR-R3-11, 2026-10-07)
 
-**Chưa quyết trong revision này.** Bằng chứng, phương án và khuyến nghị đầy đủ: round-3 design §H.3. Tóm tắt:
-gói Aptos (`upgrade_policy = "compatible"`, `deploy-object`), Sui (UpgradeCap giữ lại) và program Solana (upgrade
-authority giữ lại) giữ số dư của mọi chủ thể và nâng cấp được bằng **một** khoá hôm nay; TON và Soroban bất biến;
-token EVM là clone không nâng cấp.
+Owner: *"Bất biến ngay khi deploy"*. Gói Aptos (`upgrade_policy = "immutable"`), Sui (`make_immutable` trên
+UpgradeCap trong cùng lần deploy) và program Solana (chạy `initialize` rồi `set-upgrade-authority --final`) không
+nâng cấp được kể từ lúc deploy; Cosmos instantiate `--no-admin` (SCaaS §1.3); TON, Soroban, EVM vốn đã bất biến. Sửa
+lỗi = deploy phiên bản mới + di chuyển, như EVM. Script deploy có cổng: **fail nếu program còn nâng cấp được**. Các
+deploy dev hiện có (nâng cấp được bằng một khoá) được deploy lại bất biến — stream R3-FIX15. Chi tiết: round-3
+design §H.3.
+
+*Lịch sử (rev 1.1, đã bị thay):* trước quyết định, Q1 để mở với ba phương án dưới đây; khuyến nghị khi đó là (b)
+rồi (a).
 
 | Phương án | Nội dung |
 |---|---|
@@ -54,7 +61,7 @@ token EVM là clone không nâng cấp.
 | (b) Multisig + timelock | Khoá nâng cấp là multisig có trễ công khai; liệt kê tường minh là gốc tin cậy trong bảng trên và SCaaS §1.2/§1.3 |
 | (c) Một khoá chỉ cho dev, có cổng production | Node/script deploy từ chối mạng không phải dev khi authority là một khoá |
 
-**Khuyến nghị: (b) cho tới khi audit, sau đó (a)**; cổng (c) áp ở cả hai giai đoạn.
+Owner chọn bất biến ngay khi deploy — mạnh hơn (a), không cần (b) hay (c).
 
 ## Claude review 1 (2026-10-07) — disposition (rev 1.1)
 
@@ -65,7 +72,7 @@ addendum). Docs only.
 
 | # | Sev | Verified | Disposition |
 |---|---|---|---|
-| H1 | high | Confirmed: `move/aptos/Move.toml:4`, `smartcontracts/scripts/deploy.sh:9`, `solana/scripts/deploy.sh:10-11,31`; contradicts SCaaS §1.2/§1.3 and this table. | **Not decided — OPEN OWNER QUESTION Q1** (above; R3D §H.3); table rows marked "(Q1)" |
+| H1 | high | Confirmed: `move/aptos/Move.toml:4`, `smartcontracts/scripts/deploy.sh:9`, `solana/scripts/deploy.sh:10-11,31`; contradicts SCaaS §1.2/§1.3 and this table. | **Accepted — owner ruling CR-R3-11** (immutable at deploy, rev 1.2); table rows corrected; stream R3-FIX15 (R3D) |
 | H2 | high | Confirmed: event push trusts the node's primary RPC for logs (`scaas-node/src/indexer.rs:115-142`); Cosmos/TON no quorum (`adapters/cosmos.rs:522`, `adapters/ton.rs:1217`); SCaaS §3.5 states the node trust, this spec did not. | **Accepted**: new "Land" row; event-set quorum ruled in spec gốc CR-PD-2 / R3D CR-R3-2 |
 | M1 | med | Confirmed (`cosmos/metaop/src/lib.rs:130-148`; `crossOrigin` not rejected on Sui/Soroban/TON/Solana). | **Accepted**: consequence 2 note; ruled R3D CR-R3-1 |
 | M2 | med | Confirmed (`SubjectAccount.sol:257`, `soroban/contracts/account/src/lib.rs:136`). | **Accepted**: consequence 3 note (no stream: a feature, not a bug) |
@@ -76,9 +83,9 @@ addendum). Docs only.
 | L2 | low | Confirmed (`ERC20MetaTx.sol:58-60`; pruning, spec gốc CR-PD-4). | **Accepted**: consequence 4 note |
 | L3 | low | Confirmed (R50; call jobs, spec gốc H1). | **Accepted**: consequence 1 note |
 | L4 | low | Confirmed (SCaaS §7.1). | **Accepted**: consequence 2 note; chain 7622 (formerly 9000) |
-| Superseded list | — | SCaaS §1 (positioning), NI R87 (ERP is one client), RS11-13 (upgradeable packages, now Q1), TW2 R142 (creation-time admin roles), S4F R250–R254 (backup switch). | **Accepted**: table below |
+| Superseded list | — | SCaaS §1 (positioning), NI R87 (ERP is one client), RS11-13 (upgradeable packages, superseded by CR-R3-11), TW2 R142 (creation-time admin roles), S4F R250–R254 (backup switch). | **Accepted**: table below |
 
-Rejected: none. Counts: 2 high (H1 left open), 5 medium, 4 low, 1 list — 11 accepted, 1 open question, 0 rejected.
+Rejected: none. Counts: 2 high, 5 medium, 4 low, 1 list — 12 accepted (H1 by owner ruling CR-R3-11, rev 1.2), 0 rejected.
 
 ### Superseded statements
 
@@ -86,19 +93,19 @@ Rejected: none. Counts: 2 high (H1 left open), 5 medium, 4 low, 1 list — 11 ac
 |---|---|
 | Blockchain = shared infrastructure next to compute/DB; relayer belongs to the operator | SCaaS §1.1: the contracts are the product/API; `scaas-node` is infrastructure anyone runs; operators independent; payee self-relay first-class (§5.9) |
 | ERP reads in from the ledger (implicitly trustless) | NI R87 (ERP is one client of its node), SCaaS §3.5 / NI T7 (node trusted for its feed), CR-PD-2 / CR-R3-2 (event-set quorum) |
-| "Mã contract bất biến … không có khóa admin vượt quyền" on every family | RS11-13 (upgradeable Move/Solana packages) — now open question Q1; TW2 R142 and the admin list in the table |
+| "Mã contract bất biến … không có khóa admin vượt quyền" on every family | CR-R3-11 (owner): immutable at deploy on every family, so "mã bất biến" holds; "no admin key" → the bounded admin list in the table (TW2 R142, DEX markets, Soroban mint, Solana `Config.admin`) |
 | "Cần nhiều passkey hoặc guardian" as the recovery policy | S4F R250–R254 backup switch; per-family capability R3D CR-R3-6 |
 
 ### Amendments needed in other specs (recorded; owner syncs)
 
 | Spec | Amendment |
 |---|---|
-| SCaaS.md | §1.2 table: "Land" row and the "(Q1)" qualifiers until Q1 is decided; "no admin key above it" → "no admin can move a subject's funds, except: …" (the list above); §1.3 "An upgradeable platform" row per Q1. |
+| SCaaS.md | §1.2 table: "Land" row; "no admin key above it" → "no admin can move a subject's funds, except: …" (the list above); §1.3 "An upgradeable platform" row holds and gains "immutable at deploy on every family, deploy gate" (CR-R3-11); §7.5/§7.7 "upgrade compatible" removed. |
 
 ### Code streams
 
 None new: every code consequence is a stream of the spec that rules it (PAY-FIX1…3, R3-FIX1…4, R3-FIX7…10,
-R3-FIX13…14).
+R3-FIX13…15).
 
 ### Revision history
 
@@ -106,3 +113,4 @@ R3-FIX13…14).
 |---|---|---|
 | 1.0 | 2026-10-03 | Positioning text from SRS principle 6 / §1.1 |
 | 1.1 | 2026-10-07 | Claude review 1 folded: positioning corrected per SCaaS §1.1; "Land" row; admin-power exceptions; per-family rotation; 11 findings accepted, 0 rejected; H1 recorded as **open owner question Q1** |
+| 1.2 | 2026-10-07 | Owner ruling (R3D CR-R3-11): Aptos/Sui/Solana immutable at deploy; Q1 closed; trust-root, forgery, authorization and failure rows corrected; Solana `Config.admin` added to the admin list |
