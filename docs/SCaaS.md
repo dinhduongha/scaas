@@ -363,7 +363,7 @@ IERC20
       │         (+ Hedera children of each v2 tier: HederaNo/Single/MultiUnderlyingToken)         BUILT
       ├── IZetherToken + ITransferDisclosure
       │    └── ZetherToken v1 (kind ZETHER, dev chains only)                                    BUILT (unaudited)
-      └── IRegulatedToken                 controlled class (court orders, CBDC)                PLANNED
+      └── IRegulatedToken                 controlled class (court orders, CBDC)                SPECIFIED (AS §3)
 ```
 
 Zether is a **child** of the meta-tx layer, not a parallel branch: every confidential token is relayable through
@@ -465,7 +465,7 @@ family:
 | Admin powers | None: no owner, pause, blacklist, freeze, confiscation, arbitrary mint (v2 exceptions, chosen at creation and public: an adjustable-rate `rateAdmin` and the multi-underlying `guardian`, R142) | Freeze, unfreeze, forced transfer, court-ordered burn — **only** with a ruling reference and a multisig quorum |
 | Use | Loyalty, internal units, B2B settlement tokens, wrapped stablecoins | Central-bank digital currency, licensed stablecoins, digital securities and bonds, real-world-asset claims |
 | Guarantee | "Your key, your funds": neither the issuer nor the factory can touch balances | Due-process intervention, permanently evidenced on chain |
-| Status | **BUILT** | **PLANNED** |
+| Status | **BUILT** | **SPECIFIED** ([AS](superpowers/specs/2026-10-06-asset-suite-design.md) §3) |
 
 **Controlled-token rules (normative for the future implementation):**
 
@@ -486,7 +486,7 @@ family:
 
 Proposed interface: §14.6.
 
-### 4.6 Vesting and streaming funds (PLANNED)
+### 4.6 Vesting and streaming funds (SPECIFIED, [AS](superpowers/specs/2026-10-06-asset-suite-design.md) §4)
 
 `VestingVault`: a single contract holding many streams; deposits through the meta-tx `approve` op to the vault
 (contract spender, §4.4) or by direct transfer.
@@ -514,7 +514,7 @@ validUntil)`), then pays through `payWithFee(FeeMode.NONE)` — no allowance. Ki
 or `revokeWithSig` by the delegate (platform revokes immediately through a relayer). Equivalent mandates exist on
 Cosmos, Soroban, Sui, Aptos, TON and Solana.
 
-### 4.8 Equity and bonds on a managed DEX (PLANNED)
+### 4.8 Equity and bonds on a managed DEX (SPECIFIED, [AS](superpowers/specs/2026-10-06-asset-suite-design.md) §5–§8)
 
 - Securities are controlled tokens (§4.5) with transfer compliance; bonds add a coupon schedule
   (`couponDates[]`, `couponRatePpm`, `maturity`) paid by a `CouponPayer` contract funded by the issuer, and principal
@@ -525,7 +525,7 @@ Cosmos, Soroban, Sui, Aptos, TON and Solana.
   off chain, partial fills, IOC/FOK, `filled[orderHash]` and per-market fees capped at 1 % (§10 of
   [DEX](superpowers/specs/2026-10-03-dex-design.md)).
 
-### 4.9 Open Asset Tokenization Suite (PLANNED as a product; primitives BUILT)
+### 4.9 Open Asset Tokenization Suite (SPECIFIED as a product, [AS](superpowers/specs/2026-10-06-asset-suite-design.md); primitives BUILT)
 
 A configuration wizard (in `app/` and any ERP) on top of `IOpenFactory`. Templates:
 
@@ -536,8 +536,8 @@ A configuration wizard (in `app/` and any ERP) on top of `IOpenFactory`. Templat
 | Wrapper with a rate | `createTiered(META_SINGLE, …)` | underlying, `num/den`, fixed or adjustable (admin, delay, step) | **SPECIFIED** (TW2) |
 | Confidential money | `createZetherToken(1, underlying, verifier, initData, salt)` | `registry`, `shieldScale`, `maxDecryptableShielded ≤ 2^54`, `confidentialFee`, auditor key | **BUILT** (dev chains only) |
 | Multi-underlying money (e.g. xDAI/USDC/USDT) | `createTiered(META_MULTI, …)` | 2–8 underlyings, per-leg rates, guardian | **SPECIFIED** (TW2) |
-| Vesting / streaming | `VestingVault` | cliff, duration, interval, revocability | **PLANNED** |
-| Controlled / security / bond | `IRegulatedToken` kind | quorum members, compliance registry, coupon schedule | **PLANNED** |
+| Vesting / streaming | `VestingVault` | cliff, duration, interval, revocability | **SPECIFIED** ([AS](superpowers/specs/2026-10-06-asset-suite-design.md) §4) |
+| Controlled / security / bond | `IRegulatedToken` kind | quorum members, compliance registry, coupon schedule | **SPECIFIED** ([AS](superpowers/specs/2026-10-06-asset-suite-design.md) §3, §7) |
 | Non-fungible in-app assets (ERC-721/1155 with meta-tx) | new kinds | — | **PLANNED** |
 
 Provenance metadata published for every asset: `creator`, `underlying`, `version`, `implementation`, creation block
@@ -2048,7 +2048,7 @@ sync with regulated tokens: `attributes(UA) → (uint64 flags, uint64 validUntil
 `KYC_DONE = 1`, `ACCREDITED = 2`, `SANCTIONS_CLEAR = 4`, set by an attester multisig, read by `IRegulatedToken`
 compliance checks; the registry itself stays free of personal data.
 
-### 14.6 `IRegulatedToken` — PLANNED (proposed)
+### 14.6 `IRegulatedToken` — SPECIFIED ([AS](superpowers/specs/2026-10-06-asset-suite-design.md) §3.3 supersedes this proposal)
 
 ```solidity
 interface IRegulatedToken is IERC20Payment {
@@ -2128,7 +2128,7 @@ interface ISealedBidTender {
 Differences from the SRS draft: no `payable` (token deposits, not native coin), explicit `createTender`, phase state
 `AWARDABLE`, eligibility proof, bond handling, slashing event, and a commitment bound to tender, chain and contract.
 
-### 14.8 `IVestingVault` — PLANNED (proposed)
+### 14.8 `IVestingVault` — SPECIFIED ([AS](superpowers/specs/2026-10-06-asset-suite-design.md) §4.2 supersedes this proposal)
 
 ```solidity
 interface IVestingVault {
@@ -2190,7 +2190,7 @@ Order of streams per `TODO.md` and NI §17 / A2 §17 (one heavy stream at a time
 | 20 | Rename | `scaas` names in code, metrics, env, headers and on-chain tags | owner plan | **BUILT** (code); older component specs still cite old names |
 | 21 | app | React + Vite console/dApp (EVM + meta-tx families first; passkey/seed vault, extension wallets, dev key; OIDC only for node admin) | node APIs | **PLANNED** |
 | 22 | Queued | TON payer tx hash on `mined`; backup-key toggle, device-bound vault, Sui `fam_sui.verify`, Soroban/Aptos/Solana signers in clientkeys; Zether portal balance cache | — | **PLANNED** |
-| 23 | Product features | receiver-pays, sponsorship policy, KeyPool auto-refill, outbound treasury payouts, anchoring (Merkle/HCS), crypto-shredding tooling, W3B SLOs/OTel/FinOps, controlled tokens, tender, vesting, managed DEX, asset suite wizard, Celo `l1_batch`, Hedera HCS/scheduled tx | — | **PLANNED** |
+| 23 | Product features | receiver-pays, sponsorship policy, KeyPool auto-refill, outbound treasury payouts, anchoring (Merkle/HCS), crypto-shredding tooling, W3B SLOs/OTel/FinOps, controlled tokens, tender, vesting, managed DEX, asset suite wizard, Celo `l1_batch`, Hedera HCS/scheduled tx | — | **PLANNED**; controlled tokens, vesting, managed DEX, asset suite **SPECIFIED** ([AS](superpowers/specs/2026-10-06-asset-suite-design.md)) |
 | 24 | Post-quantum Zether | BFV/BGV confidential balances on private/PoA chains | mesh round 4 | **PLANNED** |
 | 25 | TW2 T1–T8 | Token wrappers v2: `MetaTxCore` + named functions, three tiers, rates, multi-underlying (adjustable legs, admin-only execute, all-leg wrap pause), gasless unwrap op with `minOut`, factory v2, Hedera children, invariant suite, node/Odoo fields ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §15) | owner review of TW2 | contracts T1–T6 **BUILT** (EVM + Hedera); T7 node/Odoo/SDK **SPECIFIED** |
 | — | Owner/operator steps | O1 audit of every contract family; O2 registrar multisig; O3 real deployments; O4 7-day finality evidence + ≥ 2 RPCs; O5 reverse-proxy rate limits; O6/O7 KMS/HSM custody and lane signers; O8 lane funding; O9 land-gate decision; O10 subject-account onboarding; Z1–Z6 Zether gates | — | open |
