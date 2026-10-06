@@ -870,3 +870,17 @@ P2b lands first it already compiles `aws-lc-rs`, which only moves the long build
 4. **QUIC PQ-only** (R114): a third-party node without X25519MLKEM768 can then join the open mesh only over
    TCP+Noise. Accept, or allow a classical group on QUIC for open peers (and then inspect the negotiated group
    before serving the bus)?
+
+---
+
+## Owner answers (2026-10-06) to the open questions
+
+1. **Open-mesh opt-in: yes.** `bus_scope` gains a third level: `restricted` (default, R10) < `open` (admitted
+   pull-bus peers) < `public` (also the open gossip mesh). A company must turn `public` on explicitly.
+2. **DEX relayer binding: both, selected by option.** Home-node orders (RS5-9, bound to the home relayer) remain
+   the default; relayer-unbound orders (`relayer = 0`, network-wide liquidity, settle-claim rule of R124) are
+   built in round 4 and enabled per market by a configuration option (and per order only where the market allows
+   it). The settle-claim rule moves from "defined, not built" to G3 scope.
+3. **Exclusive assignment trust: automatic** after 3 verified landings in 7 days (R121), or admin-trusted.
+4. **QUIC offers only the PQ group (X25519MLKEM768): accepted.** A third-party node without ML-KEM joins only over
+   TCP+Noise and receives public open-mesh data only.
