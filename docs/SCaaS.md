@@ -1686,12 +1686,12 @@ creates its store at start: a missing store file (unmounted volume, typo'd `[sto
 
 | Id | Indicator | Definition | Target | On breach | Status |
 |---|---|---|---|---|---|
-| W3B-01 | Meta-tx success rate | intents finalized (incl. `landed_elsewhere`) ÷ intents broadcast, 30 d | ≥ 99.5 % | fail over RPC, check lane balances, page operator | metric inputs **BUILT** (`scaas_relay_jobs{state}`); SLO **PLANNED** |
-| W3B-02 | Simulation zero-revert | broadcast transactions that reverted for a reason simulation would have caught ÷ broadcast; lost races (`consumed`) excluded | **0.00 %** (any occurrence is an incident); research guard: revert rate ≤ 0.5 % per 7 d including races | stop the chain's new work (breaker), investigate contract/simulation drift | gate **BUILT**; metric **PLANNED** |
+| W3B-01 | Meta-tx success rate | intents finalized (incl. `landed_elsewhere`) ÷ intents broadcast, 30 d | ≥ 99.5 % | fail over RPC, check lane balances, page operator | metric inputs **BUILT** (`scaas_relay_jobs{state}`); SLO **SPECIFIED** ([OPS](superpowers/specs/2026-10-06-operations-design.md) §3) |
+| W3B-02 | Simulation zero-revert | broadcast transactions that reverted for a reason simulation would have caught ÷ broadcast; lost races (`consumed`) excluded | **0.00 %** (any occurrence is an incident); research guard: revert rate ≤ 0.5 % per 7 d including races | stop the chain's new work (breaker), investigate contract/simulation drift | gate **BUILT**; metric **SPECIFIED** ([OPS](superpowers/specs/2026-10-06-operations-design.md) R233) |
 | W3B-03 | Gas budget adherence | gas spent ÷ approved budget per lane and window | ≤ 100 % (warn 90 %) | breaker `gas_budget` stops new work; notify finance owner | **BUILT** (R55) |
-| W3B-04 | Finality latency | broadcast → final range delivered, p95 | ≤ chain hard finality + 60 s (Gnosis ≤ 240 s + 60 s; chain 9000 ≤ 15 s) | alert; check RPC quorum and indexer lag | lag gauge **BUILT** (`scaas_indexer_lag_blocks`); histogram **PLANNED** |
-| W3B-05 | Zether proof latency | client proof time + on-chain verification | to be set after measurement on target devices | optimize prover/verifier | **PLANNED** |
-| W3B-06 | Relayer fee spread | fees earned − gas paid, per chain per month | may be negative (fee = 0 B2B) | monthly OPEX review | **PLANNED** |
+| W3B-04 | Finality latency | broadcast → final range delivered, p95 | ≤ chain hard finality + 60 s (Gnosis ≤ 240 s + 60 s; chain 9000 ≤ 15 s) | alert; check RPC quorum and indexer lag | lag gauge **BUILT** (`scaas_indexer_lag_blocks`); histogram **SPECIFIED** ([OPS](superpowers/specs/2026-10-06-operations-design.md) R234) |
+| W3B-05 | Zether proof latency | client proof time + on-chain verification | to be set after measurement on target devices | optimize prover/verifier | **SPECIFIED** as a release benchmark ([OPS](superpowers/specs/2026-10-06-operations-design.md) R233) |
+| W3B-06 | Relayer fee spread | fees earned − gas paid, per chain per month | may be negative (fee = 0 B2B) | monthly OPEX review | **SPECIFIED** ([OPS](superpowers/specs/2026-10-06-operations-design.md) §8.3) |
 
 Additional operational SLOs (research §06.8): jobs final without manual intervention ≥ 99.5 %/month; outer-nonce gap
 age = 0 for 99.9 % of the time; signed-but-orphaned transactions = 0.
@@ -1701,7 +1701,7 @@ age = 0 for 99.9 % of the time; signed-but-orphaned transactions = 0.
 `drift_alerts{chain}`, `submit_bump_skipped_consumed_total`. SPECIFIED additions: job API, feed, store owner,
 admin, audit, OIDC, lane-foreign-nonce (NI §15), mesh (MESH §12) and gossip/TLS (A2 §13.3) metrics.
 
-**Trace contract (PLANNED; OpenTelemetry):** every submission span carries `chain_key`, `lane` (address),
+**Trace contract (SPECIFIED, [OPS](superpowers/specs/2026-10-06-operations-design.md) §6; OTLP export PLANNED):** every submission span carries `chain_key`, `lane` (address),
 `tx_hash`, `gas_used`, `effective_gas_price`, `entry_ref`, `mode`, `batch`/`nonce`, `finality_depth`, `job_uid`,
 `namespace`. No payload data.
 
@@ -1712,7 +1712,7 @@ outside this store, issuer failed closed, no gossip peer for 5 min (informationa
 ### 13.2 FinOps
 
 - **Unit cost:** gas of every finalized job is converted to the deployment's reporting currency at the transaction
-  time and allocated to the business document (`entryRef` → invoice/order). PLANNED (HANDOFF GA 2.2 #10).
+  time and allocated to the business document (`entryRef` → invoice/order). SPECIFIED ([OPS](superpowers/specs/2026-10-06-operations-design.md) §8).
 - **Budgets:** per lane `gas_budget_per_hour`; per namespace `max_live_jobs`; sponsorship budgets per policy row
   (SPECIFIED, [TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §B1).
 - **Float:** each lane holds gas float for ~50 transactions; refill from treasury when below 30 % of target; the
@@ -1722,7 +1722,7 @@ outside this store, issuer failed closed, no gossip peer for 5 min (informationa
   one-off cost (O1).
 - **Break-even** of independent relayers: §6.9.
 
-### 13.3 RACI
+### 13.3 RACI (SPECIFIED, [OPS](superpowers/specs/2026-10-06-operations-design.md) §9)
 
 R = responsible, A = accountable, C = consulted, I = informed.
 
@@ -1743,7 +1743,7 @@ R = responsible, A = accountable, C = consulted, I = informed.
 Human approval is mandatory (never delegated to an agent) for: opening the land gate, the confidentiality horizon,
 credit/gas budgets per agent, registering a new factory implementation, controlled-token interventions.
 
-### 13.4 Incident response runbook
+### 13.4 Incident response runbook (SPECIFIED, [OPS](superpowers/specs/2026-10-06-operations-design.md) §10)
 
 | T | Action | Owner |
 |---|---|---|
@@ -1759,7 +1759,7 @@ credit/gas budgets per agent, registering a new factory implementation, controll
 Contract-level response is limited by design: permissionless tokens have **no pause**. Containment is off-chain
 (stop relaying, pause markets) plus user communication; a controlled token may use its bounded pause (§4.5).
 
-### 13.5 Disaster recovery
+### 13.5 Disaster recovery (SPECIFIED, [OPS](superpowers/specs/2026-10-06-operations-design.md) §11)
 
 | Component | RPO | RTO | Mechanism |
 |---|---|---|---|
@@ -2192,7 +2192,7 @@ Order of streams per `TODO.md` and NI §17 / A2 §17 (one heavy stream at a time
 | 20 | Rename | `scaas` names in code, metrics, env, headers and on-chain tags | owner plan | **BUILT** (code); older component specs still cite old names |
 | 21 | app | React + Vite console/dApp (EVM + meta-tx families first; passkey/seed vault, extension wallets, dev key; OIDC only for node admin) | node APIs | **PLANNED** |
 | 22 | Queued | TON payer tx hash on `mined`; backup-key toggle, device-bound vault, Sui `fam_sui.verify`, Soroban/Aptos/Solana signers in clientkeys; Zether portal balance cache | — | **PLANNED** |
-| 23 | Product features | receiver-pays, sponsorship policy, KeyPool auto-refill, outbound treasury payouts, anchoring (Merkle/HCS), crypto-shredding tooling, W3B SLOs/OTel/FinOps, controlled tokens, tender, vesting, managed DEX, asset suite wizard, Celo `l1_batch`, Hedera HCS/scheduled tx | — | **PLANNED**; controlled tokens, vesting, managed DEX, asset suite **SPECIFIED** ([AS](superpowers/specs/2026-10-06-asset-suite-design.md)); receiver-pays, sponsorship policy, tender, crypto-shredding **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md)) |
+| 23 | Product features | receiver-pays, sponsorship policy, KeyPool auto-refill, outbound treasury payouts, anchoring (Merkle/HCS), crypto-shredding tooling, W3B SLOs/OTel/FinOps, controlled tokens, tender, vesting, managed DEX, asset suite wizard, Celo `l1_batch`, Hedera HCS/scheduled tx | — | **PLANNED**; controlled tokens, vesting, managed DEX, asset suite **SPECIFIED** ([AS](superpowers/specs/2026-10-06-asset-suite-design.md)); receiver-pays, sponsorship policy, tender, crypto-shredding **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md)); W3B SLOs, telemetry, FinOps, RACI, incident/DR **SPECIFIED** ([OPS](superpowers/specs/2026-10-06-operations-design.md); OTLP export PLANNED) |
 | 24 | Post-quantum Zether | BFV/BGV confidential balances on private/PoA chains | mesh round 4 | **PLANNED** |
 | 25 | TW2 T1–T8 | Token wrappers v2: `MetaTxCore` + named functions, three tiers, rates, multi-underlying (adjustable legs, admin-only execute, all-leg wrap pause), gasless unwrap op with `minOut`, factory v2, Hedera children, invariant suite, node/Odoo fields ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §15) | owner review of TW2 | contracts T1–T6 **BUILT** (EVM + Hedera); T7 node/Odoo/SDK **SPECIFIED** |
 | — | Owner/operator steps | O1 audit of every contract family; O2 registrar multisig; O3 real deployments; O4 7-day finality evidence + ≥ 2 RPCs; O5 reverse-proxy rate limits; O6/O7 KMS/HSM custody and lane signers; O8 lane funding; O9 land-gate decision; O10 subject-account onboarding; Z1–Z6 Zether gates | — | open |
