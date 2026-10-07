@@ -20,18 +20,25 @@ builds `extra = 0` and no `forward_nanoton`.
 
 <a id="model"></a>
 
-```
-  Client (ERP / app)                                              scaas-node
-  ┌─────────────────────────────┐                                ┌──────────────────────────────┐
-  │ business tx:                │                                │ job API  (HMAC per key)      │
-  │   document change           │   push cron  POST /v1/jobs ───►│   accept → store (job)       │
-  │   + outbox row  (one COMMIT)│   cancel     POST …/cancel ───►│   lanes: lease → simulate →  │
-  │                             │   PUT /v1/watch, /v1/tokens ──►│   journal → broadcast        │
-  │ sync cron                   │◄── GET /v1/jobs?cursor=  ──────│   job_event feed             │
-  │   apply job snapshots       │◄── GET /v1/events?cursor= ─────│   indexer → feed_item(range) │
-  │   apply finalized ranges    │                                │   finality gate + RPC quorum │
-  └─────────────────────────────┘                                └──────────────────────────────┘
-        ▲ subject signs on device (passkey / seed vault / wallet); the client never holds subject keys
+```mermaid
+flowchart LR
+    DEV["Subject signs on its device<br/>(passkey · seed vault · wallet)"] --> BTX
+    subgraph CL["Client (ERP / app) — never holds subject keys"]
+        BTX["Business tx:<br/>document change + outbox row<br/>(one COMMIT)"]
+        PUSHC["Push cron"]
+        SYNCC["Sync cron:<br/>apply job snapshots,<br/>apply finalized ranges"]
+        BTX --> PUSHC
+    end
+    subgraph ND["scaas-node"]
+        JAPI["Job API (HMAC per key):<br/>accept → store (job)"]
+        LN["Lanes: lease → simulate →<br/>journal → broadcast"]
+        JE["job_event feed"]
+        IX["Indexer → feed_item (range)<br/>finality gate + RPC quorum"]
+        JAPI --> LN --> JE
+    end
+    PUSHC -->|"POST /v1/jobs · POST …/cancel ·<br/>PUT /v1/watch, /v1/tokens"| JAPI
+    JE -->|"GET /v1/jobs?cursor="| SYNCC
+    IX -->|"GET /v1/events?cursor="| SYNCC
 ```
 
 | Client | Node |
@@ -191,7 +198,7 @@ Paused chain: accepted and held `queued`. Halted chain: `409 CHAIN_HALTED`.
 
 **Client push algorithm:**
 
-```
+```text
 loop (cron, after each new outbox commit and every minute):
   rows = SELECT outbox rows WHERE state='queued' AND push_state='local' ... FOR UPDATE SKIP LOCKED LIMIT 50
   UPDATE rows SET push_attempted = true; COMMIT            # marker durable BEFORE any HTTP call
@@ -490,8 +497,9 @@ itself; every other non-EVM check it cannot complete is left to the node's simul
   `pubnet|testnet|standalone`; Cosmos: chain id; TON: `-239|-3|localnet`), `chain_key = family:network_key` (EVM:
   `evm:N`), `is_dev_chain`, `bech32_prefix`, `network_passphrase`; CAIP-2: `eip155:N`, `hedera:mainnet|testnet`,
   `sui:<net>`, `stellar:<pubnet|testnet>`, `cosmos:<chain-id>`, `ton:<-239|-3>`.
-- `parse(family, value, chain)` returns the stored form: EVM EIP-55; Hedera EIP-55 **or** `0.0.N` (⇒ long-zero `0x000…N`), stored
-  as `0x`; Sui `0x` + up to 64 hex, normalised to 64 lower-case; Stellar strkey `G…` (account) / `C…` (contract): base32,
+- `parse(family, value, chain)` returns the stored form: EVM EIP-55; Hedera EIP-55 **or** `0.0.N`, stored
+  as `0x` (a payer's `0.0.N` ⇒ long-zero `0x000…N`; tokens and receiving wallets go through the mirror lookup of the
+  Hedera row below); Sui `0x` + up to 64 hex, normalised to 64 lower-case; Stellar strkey `G…` (account) / `C…` (contract): base32,
   version byte, CRC16-XModem, `M…`/`S…` refused; Cosmos bech32 (BIP-173), HRP = the chain's `bech32_prefix`, 20 (account)
   or 32 bytes (contract); TON raw `wc:hex64` or user-friendly base64/base64url of 48 characters (tag, wc, hash,
   CRC16-XModem; the testnet flag must match the chain), stored raw `wc:hex64`; Aptos `0x` + 64 lower-case hex, short
@@ -781,16 +789,26 @@ key under a second kind (`UAKeyInUse`) and a BLS `authRef` on the same curve as 
 
 <a id="regulated-assets"></a>
 
+```mermaid
+flowchart TB
+    A["1 · Authority order"] --> B["2 · Issuer verifies"]
+    B --> C["3 · Compliance multisig<br/>records the order"]
+    C --> D["4 · Issuer multisig freezes,<br/>then force-transfers"]
+    D --> E["5 · Finalized events"]
+    E --> F["6 · Client books the effect"]
 ```
-authority order ──► issuer legal/compliance verifies; orderId = keccak256(normalised order id), document hash off chain
-        ──► compliance contract (multisig) records the order {subject, beneficiary, maxAmount, freezeUntil}
-        ──► issuer contract (multisig) freezes the subject, then force-transfers ≤ maxAmount to the beneficiary
-            (members sign on their devices; the client pushes `call` jobs from a namespace with allow_call —
-             once the issuer/compliance selectors are call-table rows; until then the multisig submits)
-        ──► finalized freeze / order / forced-transfer / pause events
-        ──► client books the effect (reclassify the frozen balance, post the forced transfer) and links the order
-            document to the event
-```
+
+1. An authority issues an order.
+2. The issuer's legal or compliance team verifies it; `orderId = keccak256(normalised order id)`; the document hash
+   stays off chain.
+3. The compliance contract (multisig) records the order `{subject, beneficiary, maxAmount, freezeUntil}`.
+4. The issuer contract (multisig) freezes the subject, then force-transfers ≤ `maxAmount` to the beneficiary. Members
+   sign on their devices; the client pushes the members' signed `Safe.execTransaction` on the registered role-holder
+   contract as a `call` job from a namespace with `allow_call` — a lane is never `msg.sender` of the privileged call
+   ([NODE-JOB-19](node/job-api.md#NODE-JOB-19)).
+5. The freeze, order, forced-transfer and pause events become final.
+6. The client books the effect (reclassify the frozen balance, post the forced transfer) and links the order document
+   to the event.
 
 Rules ([CTR-AS-03](contracts/asset-suite.md#CTR-AS-03)): `issuer` and `compliance` are contracts, never EOAs; a forced
 transfer needs a live order record and moves only from the frozen subject to the recorded beneficiary; there is no

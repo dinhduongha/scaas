@@ -122,11 +122,17 @@ The single-node relayer that serves all three profiles without a mesh is BUILT; 
 
 **Dual loop: write out (anchor or settle), read in (land).**
 
-```
-  WRITE OUT (anchor / settle)                                     READ IN (land)
-  subject signs ─► client outbox ─► node job API ─► simulate ─►   chain RPC ─► finality gate (depth|tag|instant
-  journal ─► broadcast ─► chain                                     + RPC quorum) ─► normalized events ─►
-                                                                    feed /v1/events ─► client applies ─► ERP book
+```mermaid
+flowchart TB
+    subgraph OUT["1 · Write out (anchor / settle)"]
+        direction LR
+        S["Subject signs"] --> OB["Client outbox"] --> JA["Node job API"] --> SIM["Simulate"] --> JR["Journal"] --> BC["Broadcast"]
+    end
+    subgraph IN["2 · Read in (land)"]
+        direction LR
+        RPC["Chain RPC"] --> FG["Finality gate<br/>depth · tag · instant<br/>+ RPC quorum"] --> NE["Normalized events"] --> FD["Feed /v1/events"] --> CA["Client applies"] --> BK["ERP book"]
+    end
+    BC --> CH[("Chain")] --> RPC
 ```
 
 | | Write out | Read in |
@@ -217,28 +223,53 @@ roles), mesh relayer (submit + mesh), forwarder (mesh only) — every shape is E
 
 ### Topology
 
+```mermaid
+flowchart TB
+    subgraph CALLERS["Callers"]
+        direction LR
+        ADMINS["Admins<br/>app/ · automation · shell"]
+        ERP["ERP / back office<br/>push job · sync job"]
+        PUB["Wallets, app,<br/>partners, agents"]
+        PEER["Admitted peers<br/>and open mesh"]
+    end
+    subgraph NODE["scaas-node"]
+        direction LR
+        AAPI["Admin API"]
+        JAPI["Job API"]
+        GW["Gateway"]
+        MESH["Mesh / gossip"]
+    end
+    STORE[("Store")]
+    LANES["Lanes"]
+    IDX["Indexer"]
+    CHAINS[("Chain RPCs")]
+    ADMINS -->|"JWT / OIDC"| AAPI
+    ERP -->|"HMAC key"| JAPI
+    PUB -->|"public"| GW
+    PEER -->|"mTLS · QUIC · gossip"| MESH
+    AAPI --> STORE
+    JAPI --> STORE
+    GW --> STORE
+    MESH --> STORE
+    STORE --> LANES -->|"submit"| CHAINS
+    CHAINS -->|"index"| IDX --> STORE
 ```
-                         OIDC IdP (optional)                       Prometheus
-                                │ JWT                                   │ scrape
- app/ (React+Vite) ── login/session/JWT ──► admin API ─────────────┐   │
- automation ───────── OIDC client credentials ─► admin API         │   ▼
- host shell ───────── scaas-node admin …  (CLI writes the store)   │  /healthz /readyz /metrics
-                                                                    │
- ERP or back office, server side                                    │        scaas-node
-   outbox ─ push job ─── API key (HMAC) ─► POST /v1/jobs, cancel, PUT /v1/watch, /v1/tokens
-   sync job ──────────── API key (HMAC) ─► GET /v1/jobs?cursor=   GET /v1/events?cursor=
-                                                                    │   ┌──────────────────────────┐
- wallets / app / partners / agents ─► gateway /v1/metatx, /v1/ops,  │   │                          │
-                                       /v1/ua-*, /v1/dex/* ─────────┼──►│ accept → store (job,     │
-                                                                    │   │ job_event, feed_item,    │
- admitted peers ── HTTPS mTLS (X25519MLKEM768) /v1/mesh/* ─────────┼──►│ chain, token, lane,      │
-               └── QUIC /scaas/bus/1.2 ────────────────────────────┤   │ namespace, keys, audit,  │
- open mesh ─────── libp2p gossipsub over QUIC (PQ) or TCP+Noise ────┘   │ dex_*, intent, gossip_*) │
-                                                                        └─────┬───────────┬────────┘
-                                          lanes (submit / lane_runner)        │           │ indexer
-                                                                              ▼           ▲
-                                         EVM · Hedera · Cosmos · Soroban · Aptos · Sui · TON · Solana RPC
-```
+
+| Caller | Enters through | Endpoint or transport | Authentication |
+|---|---|---|---|
+| `app/` (React + Vite) | admin API | login / session | JWT (built-in users, or an optional OIDC IdP) |
+| Automation | admin API | admin endpoints | OIDC client credentials |
+| Host shell | the store directly | `scaas-node admin …` (the CLI writes the store) | host access |
+| ERP or back office, push job (outbox) | job API | `POST /v1/jobs`, cancel, `PUT /v1/watch`, `/v1/tokens` | API key (HMAC) |
+| ERP or back office, sync job | job API | `GET /v1/jobs?cursor=`, `GET /v1/events?cursor=` | API key (HMAC) |
+| Wallets, app, partners, agents | gateway | `/v1/metatx`, `/v1/ops`, `/v1/ua-*`, `/v1/dex/*` | the subject's signature in each intent |
+| Admitted peers | mesh | HTTPS mTLS (X25519MLKEM768) `/v1/mesh/*`; QUIC `/scaas/bus/1.2` | pinned peer keys |
+| Open mesh | gossip | libp2p gossipsub over QUIC (PQ) or TCP+Noise | per-message validation |
+| Prometheus | metrics listener | `/healthz`, `/readyz`, `/metrics` (scrape) | — |
+
+The store holds `job`, `job_event`, `feed_item`, `chain`, `token`, `lane`, `namespace`, keys, audit, `dex_*`,
+`intent` and `gossip_*`; lanes (`submit` / `lane_runner`) send to the EVM, Hedera, Cosmos, Soroban, Aptos, Sui, TON
+and Solana RPCs, and the indexer reads them back.
 
 Transitional (BUILT): today the node pulls work from one ERP and writes indexed ranges back to it; a per-chain switch
 moves each chain to the push model, and the pull path is removed in one step afterwards

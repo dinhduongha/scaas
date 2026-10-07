@@ -309,9 +309,12 @@ IndexedDB database (`scaas-clientkeys`, store `kv`), so eviction removes both to
 | Key | Value |
 |---|---|
 | `device-key:v1` | the `CryptoKey` (`extractable: false`) |
-| `vault:<id>` | v2 (or v1 on fallback); a portal `<id>` = `<portal-prefix>:<subject>`; the app `seed:<account label>`; Zether `zether-conf:<curve>:<coin>:<account>`; PQ Zether `vault:pqz:<account>:<index>` |
+| `vault:<id>` | v2 (or v1 on fallback); a portal `<id>` = `<portal-prefix>:<subject>`, where `<subject>` is an opaque per-partner tag issued by the server; the app `seed:<account label>`; Zether `zether-conf:<curve>:<coin>:<account>`; PQ Zether `vault:pqz:<account>:<index>` |
 | `rewrap-attempt:<id>` | the `N` being attempted |
 | `persist-notice` | `true` once the refusal notice was shown |
+
+Replacing a stored phrase under an existing `vault:<id>` must be confirmed by the user; a vault is never overwritten
+silently.
 
 Precedence: an existing `vault:<id>` in IndexedDB wins, and migration never `put`s over it. A migrated portal
 `localStorage` vault is **replaced by a tombstone** `{ "v": 2, "moved": "indexeddb" }`, not deleted, so old cached portal code

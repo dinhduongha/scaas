@@ -65,9 +65,9 @@ Three supporting services complete the picture:
 
 If a smart chain is infrastructure, it should be judged next to the infrastructure people already use: a **cloud VM**
 (IaaS, e.g. EC2, Compute Engine) and a **hosted backend** (BaaS, e.g. Supabase, Firebase). The chain loses on some
-counts and wins on others; the tables below say which.
+counts and wins on others; the five tables below — a) to e) — say which, and f) sums up.
 
-**Code and data**
+**a) Code and data**
 
 | | Cloud VM (e.g. EC2, Compute Engine) | Hosted backend (e.g. Supabase, Firebase) | Smart chain + SCaaS |
 |---|---|---|---|
@@ -80,7 +80,7 @@ counts and wins on others; the tables below say which.
 
 For computing and storing data, the chain is slower, smaller and dearer. Application data and logic stay where they are.
 
-**Money and billing**
+**b) Money and billing**
 
 | | Cloud VM | Hosted backend | Smart chain + SCaaS |
 |---|---|---|---|
@@ -90,7 +90,7 @@ For computing and storing data, the chain is slower, smaller and dearer. Applica
 
 Only the chain has payment inside the infrastructure itself.
 
-**Operations and reliability**
+**c) Operations and reliability**
 
 | | Cloud VM | Hosted backend | Smart chain + SCaaS |
 |---|---|---|---|
@@ -102,7 +102,7 @@ Only the chain has payment inside the infrastructure itself.
 No single operator controls the service, but the chain is the one dependency that cannot be swapped without a
 migration.
 
-**Who holds the power** — the core difference
+**d) Who holds the power** — the core difference
 
 | | Cloud VM | Hosted backend | Smart chain + SCaaS |
 |---|---|---|---|
@@ -117,7 +117,7 @@ migration.
 This is where the chain wins, and why SCaaS exists. The full comparison, with the bounded admin powers and how the
 ERP trusts finalized events, is in [docs/architecture.md](docs/architecture.md#authority-model).
 
-**Privacy and data**
+**e) Privacy and data**
 
 | | Cloud VM | Hosted backend | Smart chain + SCaaS |
 |---|---|---|---|
@@ -128,7 +128,7 @@ ERP trusts finalized events, is in [docs/architecture.md](docs/architecture.md#a
 Treat whatever goes on a chain as published forever: personal data never goes on chain, only commitments, references
 and amounts ([docs/integration.md](docs/integration.md#data-protection)).
 
-**Which to use for what.** Use the chain for **write authority and value**: every valuable create or update — a
+**f) Which to use for what.** Use the chain for **write authority and value**: every valuable create or update — a
 payment, a trade, a grant of rights, a key registration — carries the subject's signature, and no server ever holds
 a key to sign for a subject. Keep reads, reports and business workflows on ordinary infrastructure with ordinary
 sessions. The chain does not replace the application's database; it replaces the server's power to act for the
