@@ -15,7 +15,8 @@ Status: **BUILT** on the private chain 7622 and anvil; public chains are seeded 
 | Celo | 42220 | `celo` (Cancun) | CELO; fee currencies optional | `l1_batch` (PLANNED) | seeded `draft` |
 
 - **Gnosis Chain (100)** is the recommended public chain for B2B: native gas is xDAI, a stable-value coin, so gas
-  costs are predictable. Hard finality is ~160–240 s, not 12.8 min: the Gnosis beacon chain uses 16 slots × 5 s =
+  costs are predictable in unit, though their size still follows the gas price (the often-quoted < $0.001/tx is not a
+  measurement). Hard finality is ~160–240 s, not 12.8 min: the Gnosis beacon chain uses 16 slots × 5 s =
   80 s per epoch, and finalization takes two epochs (≈ 160 s); the profile records 240 s. The switch from `draft`
   to `enabled` needs a measured p99 of the `latest` → `finalized` gap over 7 days on mainnet. EIP-2537
   (BLS12-381) is live (below).

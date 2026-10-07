@@ -17,7 +17,7 @@ already sit in the contract. ICS-29 relayer fees for IBC are out of scope.
 
 Three contracts in `smartcontracts/cosmos/` (own Rust workspace, `cosmwasm-std` 3, tests with `cw-multi-test` 3):
 `scaas-token`, `scaas-mandate`, `scaas-dex`, plus the shared crate `scaas-metaop` (payload and signature checks).
-Adapter `scaas-node/src/adapters/cosmos.rs`; devnet `cosmwasm/wasmd:v0.61.15` (wasmvm 3), ports 31990–31999. Chains are
+Adapter `scaas-node/src/adapters/cosmos.rs`; devnet `cosmwasm/wasmd:v0.61.15` (wasmvm 3, module `x/wasm`), ports 31990–31999. Chains are
 keyed `cosmos:<chain-id>`.
 
 ## Payload

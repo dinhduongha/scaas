@@ -106,8 +106,8 @@ users, bounded by policy. Checks before any signature:
    never `approve` to an EOA — impossible anyway, [CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)).
 3. Amount ≤ per-call cap; cumulative ≤ hourly and daily caps (velocity, in the signer's own store).
 4. `validUntil − now ≤ 300 s`.
-5. Risk-class routing: R1 (no value), R2 (small value), R3 (above the R2 threshold, treasury or B2B outflow) ⇒
-   maker-checker, R4 (governance/keys) ⇒ a quorum of ≥ 2 approvers distinct from the requester. Rescue/exit operations
+5. Risk-class routing: class 1 (no value), class 2 (small value), class 3 (above the class-2 threshold, treasury or
+   B2B outflow) ⇒ maker-checker, class 4 (governance/keys) ⇒ a quorum of ≥ 2 approvers distinct from the requester. Rescue/exit operations
    are never throttled.
 
 Today an ERP client applies checks 1–4 in process before calling the dev-only environment custody adapter
@@ -589,6 +589,17 @@ SPECIFIED (as built, the portal connectors are seven node-tested scripts that no
 EVM only — EIP-6963, EIP-1193 fallback, the WalletConnect seam, `eth_signTypedData_v4`, the `wallet_kind` hint — and reads
 `start.typed_data.message.validUntil`, which a non-EVM start lacks; the issuer side is already family-ready:
 `{family, valid_until, payload_hex, digest, …terms}` plus `public_key`).
+
+Built entry points (BUILT; load only what the chosen signer needs):
+
+| Entry | Exports (main) | Use |
+|---|---|---|
+| `passkey-signer.js` | `passkeySupported`, `creationOptions` (PRF on), `requestOptions`, `publicKeyFromSpki`, `derToRS`, `encodeAssertion`, `hashTypedData`, `passkeySubjectKey`, `accountSignature`, `merkleBatch`, `checkOwnerCall`, `checkPayment` | create a passkey, sign `challenge = digest`, encode for `SubjectAccount.isValidSignature` |
+| `seed-signer.js` | `normalizeMnemonic`, `wordsToEntropy`, `seedFromEntropy`, `deriveKey`, `signDigest`, `NETWORKS`, `createVault`, `openVault`, `enablePrf`, `rewrapPin`, `SeedBackup`, `wipe` | 24-word vault: generate, back up (3-word challenge), unlock by PRF or PIN, derive per family, sign digests |
+| `zether-keys.js` (`zether.js`) | `deriveConfKey`, `confPublic` (returns the tagged UA once Universal Accounts land), `zetherPop` (signs the new PoP; `popMessage` removed), `sealConfKey`/`openConfKey`, `checkBalance`, cache helpers, `readBalance` | confidential keys and balance cache; proofs via the prover WASM `zetherCall(cmd, json)` (`keygen`, `encrypt`, `decrypt`, `decryptPending`, `checkBalance`, `proveTransfer`, `proveBurn`, `verifyTransfer`, `verifyBurn`, `pop`, `fundCalldata`, `envelope`) |
+
+EVM extension wallets also use `wallet_switchEthereumChain`/`wallet_addEthereumChain`. A UA or role key signs only
+through `UAKey.signUA(purpose, digest)`: there is no raw "sign these 32 bytes" for a UA key.
 
 Per-family connector behaviour (loaded only when the payer chooses that network; no third-party library unless stated):
 EVM/Hedera EIP-6963; Sui and Aptos the Wallet Standard event protocol (`wallet-standard:register-wallet` /

@@ -29,7 +29,7 @@ Non-goals:
 
 | Not in the app | Why / where instead |
 |---|---|
-| Any ERP call | the node is independent of any ERP ([ARCH-POS-05](../decisions.md#ARCH-POS-05)) |
+| Any ERP call | the node is independent of any ERP ([ARCH-POS-05](../architecture.md#ARCH-POS-05)) |
 | A backend of its own; the job API (`/v1/jobs`, `/v1/events`) | a machine key would sit in the bundle ([NODE-ADM-06](../node/admin-auth.md#NODE-ADM-06)) |
 | Admin API keys (`scaas_ak1.`) | the admin API has none |
 | Mandates, tender bidding, vesting, distributions, credential presentation, an "Approvers" wizard beyond the minimum | their own designs; the app shows them only where the availability matrix says so |
@@ -431,7 +431,7 @@ explain.
 | Native wallet | a seed-vault native key or an extension wallet | all | outside the predicate |
 | Zether account | `zether-*` UA, `authRef` chosen from the user's accounts ([CTR-UA-16](../contracts/universal-account.md#CTR-UA-16)) | EVM dev | n/a |
 
-The accounts screen shows, per account, the kind and the key role; the bound origin(s) for passkeys; BE/BS labels ("this
+The accounts screen (`src/features/accounts/`) shows, per account, the kind and the key role; the bound origin(s) for passkeys; BE/BS labels ("this
 device only", "may share one password manager"); the backup state from `backupStatus`.
 
 <a id="passkeys"></a><a id="CLI-APP-14"></a>**CLI-APP-14** — **Passkeys are origin-bound, and backup counting de-duplicates

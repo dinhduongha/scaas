@@ -598,7 +598,7 @@ SDK); `Rejected`/`Reverted`/OOG classification on recorded JSON; end-to-end `tes
 localnet: two lanes from a 24-word mnemonic, publish, a fake job-API client **returning the real metadata address** and
 **refusing an unregistered contract**, payment through `lane_step`, final through `index_step`, concurrent anti-lock (X
 `signed` held on lane 0 while Y `mined` on lane 1), a restart mid-way (`recover_lane` closes the job), `Rejected` (old
-sequence) frees the lane at once, an empty token list keeps the cursor. **Client:** cross vectors client = Move = Rust;
+sequence) frees the lane at once, an empty token list keeps the cursor. **Client** (reference ERP client, its own test database on port 8931): cross vectors client = Move = Rust;
 `verify` returns `True`/`False`/`None` in exactly the three cases; issue → accept → `signed_op` job with `extra.asset`.
 **JS** (`node --test` with a fake wallet): different line orders, a second `message` line, wrong chain id, 33-byte key,
 refusal.

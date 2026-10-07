@@ -656,13 +656,13 @@ then the authority removed (the node refuses a still-upgradeable program), an SP
 client returning the real mints and refusing unknown ones, payment through `lane_step`, final through `index_step`,
 concurrent anti-lock (X `signed` held on lane 0, Y `mined` on lane 1), a restart mid-way (`recover_lane`), `Rejected`
 (nonce advanced) frees the lane at once, an empty token list keeps the cursor; our computed signature = the RPC's.
-**Client:** cross vectors client = program = adapter; `verify` in three branches; PDA/ATA; base58 never lower-cased through
+**Client** (reference ERP client, its own test database on port 8932): cross vectors client = program = adapter; `verify` in three branches; PDA/ATA; base58 never lower-cased through
 status reports; issue → accept → `signed_op` job with `extra.asset`. **JS** (`node --test`, fake wallets): with/without
 OCMS, a wallet returning another message, wrong chain, a key that is not 32 B, refusal.
 
 **Devnet:** `solana-test-validator --reset --quiet --ledger $SP/solana-ledger --bind-address 127.0.0.1 --rpc-port 32020
 --faucet-port 32022 --gossip-port 32023 --dynamic-port-range 32024-32050` (WebSocket takes 32021). Agave 4.3 requires a
-dynamic port range of **≥ 26 ports**, so the block is 32020–32049 (RPC 32020, WS 32021, faucet 32022, gossip 32023,
+dynamic port range of **≥ 26 ports** (the first range 32020–32039 was too small), so the block is 32020–32049 (RPC 32020, WS 32021, faucet 32022, gossip 32023,
 dynamic [32024, 32050)). The local validator enables every feature from epoch 0 (SIMD-0075, SIMD-0385, SIMD-0242;
 `solana feature status -u http://127.0.0.1:32020`); mainnet: secp256r1 epoch 800, SIMD-0242 epoch 890, transaction v1 epoch
 1035. One validator at a time; check free memory (`free -g`) first. The public test program id is refused on public clusters.

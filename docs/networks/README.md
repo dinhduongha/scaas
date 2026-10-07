@@ -52,6 +52,9 @@ per-subject sequential nonce ([NODE-MESH-07](../node/mesh.md#NODE-MESH-07); owne
    lane. SCaaS has no ERC-4337 dependency: the meta-transaction lives in the token contract.
 3. **The relayer is not a new global lock**: every adapter's head-of-line behaviour is in
    [NET-ALL-03](#NET-ALL-03).
+   Every relayer simulates on its own RPCs before signing: EVM and Hedera `eth_call`/`eth_estimateGas` (no vendor fork
+   service such as Tenderly), Sui `sui_devInspectTransactionBlock`, Soroban and Solana `simulateTransaction`, Cosmos
+   `tx/simulate`, Aptos `/v1/transactions/simulate`, TON get-method reads ([NET-TON-17](ton.md#NET-TON-17)).
 4. **Owner invariants hold on every network:** no ordinary account is ever a spender (allowance and delegation go to
    contracts/programs only — [CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)), no replay, every signature
    expires, mandate limits per payment and per period, and the client keeps four-eyes control and a snapshot of its
@@ -140,7 +143,7 @@ nonce, so a signature from a test network or another chain is worthless elsewher
 chain_uid)`, never by its chain id alone.** `chain_uid` (`bytes32`, `≠ 0`) is the chain's genesis block hash as its
 RPC reports it (EVM, Hedera); on EVM it is a **constructor immutable** of the Universal Account registry exposed as
 `chainUid()` and published in the chain profile, and it is bound into the proof-of-possession digest, the registry's
-EIP-712 domain `salt`, the v3 meta-transaction domain `salt` and the cancel digest
+EIP-712 domain `salt`, the v3 meta-transaction domain `salt` and the `metatx-cancel` digest
 ([CTR-UA-07](../contracts/universal-account.md#CTR-UA-07)); being a constructor argument it also makes the CREATE2
 address differ per chain. The EVM cannot read its own genesis hash after block 256, so a registry cannot *prove*
 `chain_uid`; the guarantee is that two honest registries on chains sharing a chain id (7622 or any other) never
@@ -164,7 +167,7 @@ family.** Every passkey verifier checks, in order:
 1. `authenticatorData` ≥ 37 bytes;
 2. `rpIdHash` (its first 32 bytes) equals the stored one (`SHA-256(rpId)`);
 3. flags UP **and** UV;
-4. `clientDataJSON` matches exactly `{"type":"webauthn.get","challenge":"<b64url(digest)>","origin":"` + origin +
+4. `type == "webauthn.get"`: `clientDataJSON` matches exactly `{"type":"webauthn.get","challenge":"<b64url(digest)>","origin":"` + origin +
    `"` followed by either `}` (end of input) or `,"crossOrigin":false` followed by `}` (end) or `,`;
    `crossOrigin: true` and any `topOrigin` are refused, as is any member before `crossOrigin` and any whitespace;
 5. the origin bytes equal a stored origin **exactly** (no prefix match — a prefix rule accepts
@@ -196,7 +199,7 @@ on the root. One biometric prompt for N lines, every line bound to the signed ro
 Verifier primitive per family: EVM and Hedera OpenZeppelin 5.2 `P256.verify` (RIP-7212 / EIP-7951 precompile at
 `0x100` when present — probed per chain as `has_p256_precompile` — else a Solidity verifier of ~200–330 k gas); Sui
 `ecdsa_r1::secp256r1_verify`; Soroban `env.crypto().secp256r1_verify` (CAP-51); Cosmos `secp256r1_verify` of
-cosmwasm-std 2.1+; TON `P256_CHKSIGNS`; Aptos a pure-Move verifier ([NET-APT-14](aptos.md#NET-APT-14)); Solana the
+cosmwasm-std 2.1+; TON `P256_CHKSIGNU/P256_CHKSIGNS` (TVM upgrades of 2023/2024, used through `asm` in Tact); Aptos a pure-Move verifier ([NET-APT-14](aptos.md#NET-APT-14)); Solana the
 secp256r1 precompile through instruction introspection ([NET-SOL-12](solana.md#NET-SOL-12)). Each family's subject
 account or contract stores the passkey; a passkey-signed op takes the same meta-transaction path as any other op of
 that family. Client rules for creating and using passkeys: [CLI-SGN-09](../clients/signers-clientkeys.md#CLI-SGN-09).
