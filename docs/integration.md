@@ -4,7 +4,7 @@
 precedence and component spec register apply here). Status tags as in SCaaS.md: **BUILT**, **SPECIFIED** (link), **PLANNED**.
 
 This guide describes integration under the **current model** (owner rulings 2026-10-06 and 2026-10-07, NI rev 3.7
-R87–R111, R320–R328, R340–R349; PD rev 1.1 CR-PD-1…6; TSS rev 1.3, UA rev 1.4, PQZ rev 1.4): the ERP or
+R87–R111, R320–R328, R340–R349; PD rev 1.2 CR-PD-1…6; TSS rev 1.4, UA rev 1.4, PQZ rev 1.4): the ERP or
 application is a **client** of `scaas-node`. It keeps its own transactional outbox, **pushes** jobs to the node's job
 API, and **polls** two feeds (`/v1/jobs`, `/v1/events`) to learn job states and finalized chain facts. The node never
 calls the client. The node's store is the configuration authority.
@@ -236,7 +236,7 @@ request open until final or expiry; transport error ⇒ `cancel_requested`, retr
 subject can always invalidate its own pending intents with `cancelMetaNonce(batch)` (EVM, direct call) — the
 authoritative cancel.
 
-### 3.5 Outbox rules (PD rev 1.1 CR-PD-1 (a)(b); Odoo stream PAY-FIX1, SPECIFIED)
+### 3.5 Outbox rules (PD rev 1.2 CR-PD-1 (a)(b); Odoo stream PAY-FIX1, SPECIFIED)
 
 A `call` job is a transaction a node lane signs as `msg.sender`; whoever can edit an outbox row can point it anywhere.
 Every client's outbox therefore follows these rules (the Odoo names are the reference implementation):
@@ -428,7 +428,7 @@ items or 3 s; batching is invisible to the client except that several jobs share
 | Gateway discovery and other families | `GET /v1/gateway` lists served chains (with `chain_uid` where a UA registry is configured), tokens, fee recipient and DEX policy; Hedera intents use `POST /v1/metatx` (64-byte HIP-632 signatures allowed); the six non-EVM families use `POST /v1/ops {chain, op}`; UA intents `POST /v1/ua-metatx`; errors follow the stable contract `{error, code, detail, revert_data?}` (NI §5.5, APP R178) | **SPECIFIED** (N1, N2, N4) |
 | Non-EVM inbound | The client builds the `MetaOp`, the payer signs, the client pushes `signed_op` jobs | **BUILT** (via Odoo outbox); job API **SPECIFIED** |
 | Payee self-relay ("e-cheque") | Payer signs offline with fee 0 and relayer unbound or bound to the payee's address; the payee (or its node) submits; ERP books from `PaymentSettled` exactly as usual | contract **BUILT**; QR (EIP-681-style payload) tooling **PLANNED** |
-| Gas sponsorship policy | Node policy rows: e.g. "to wallet W, value ≥ X ⇒ fee 0, gas to account Y"; the client books gas from the job's receipt data. A policy caps a tenant's own spend only with `on_exhausted = reject`; with `unsponsored` an exhausted policy books the job to the namespace and marks it `sponsor_fallback` (the admin must set `fallback_to_namespace`, audited) | **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) rev 1.3 §B1; cost fields on the jobs feed, §B1.4) |
+| Gas sponsorship policy | Node policy rows: e.g. "to wallet W, value ≥ X ⇒ fee 0, gas to account Y"; the client books gas from the job's receipt data. A policy caps a tenant's own spend only with `on_exhausted = reject`; with `unsponsored` an exhausted policy books the job to the namespace and marks it `sponsor_fallback` (the admin must set `fallback_to_namespace`, audited) | **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) rev 1.4 §B1; cost fields on the jobs feed, §B1.4) |
 | Receiver pays fee | Two signatures (payer's `pay`, payee's fee authorization); booked as payment N and fee F | **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §B2; job field `receiver_fee`, event `ReceiverFeePaid`) |
 
 Never accept raw subject-signed native transactions (Sui `txBytes`, TON BOC from the subject wallet, Stellar
@@ -636,7 +636,7 @@ keys for subject accounts (R269); the "backup key required" switch, default OFF,
 
 ## 14. The app (`scaas/app/`, SPECIFIED)
 
-Design: [APP](superpowers/specs/2026-10-06-scaas-app-design.md) rev 1.2 (R150–R179).
+Design: [APP](superpowers/specs/2026-10-06-scaas-app-design.md) rev 1.3 (R150–R179).
 
 React + Vite console and dApp over **all seven families** behind one adapter interface: EVM (Gnosis 100, Celo 42220,
 the private chain 7622, anvil 31337), Hedera 295–298, Cosmos, Soroban (Stellar, Pi), Aptos, Sui, TON, Solana.

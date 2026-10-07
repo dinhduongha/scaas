@@ -51,13 +51,13 @@ When two sources disagree, the higher one wins:
 
 | Short | Spec | Rev | Rulings | Status |
 |---|---|---|---|---|
-| PD | [payments design](superpowers/specs/2026-10-03-blockchain-payments-design.md) | 1.1 | R1–R20, CR-PD-1…6 | BUILT (pull model); fixes PAY-FIX1…7 SPECIFIED |
+| PD | [payments design](superpowers/specs/2026-10-03-blockchain-payments-design.md) | 1.2 | R1–R20, CR-PD-1…6 | BUILT (pull model); fixes PAY-FIX1…5 SPECIFIED (PAY-FIX6/7 merged into DX-FIX3/4) |
 | ADW | [wallets addendum](superpowers/specs/2026-10-03-blockchain-payments-addendum-wallets.md) | 1.1 | R21–R29, CR-ADW-1…4 | BUILT; fixes ADW-FIX1…4 SPECIFIED |
-| R3D | [round 3](superpowers/specs/2026-10-03-blockchain-round3-design.md) | 1.2 | R30–R67, CR-R3-1…11 | BUILT; fixes R3-FIX1…15 SPECIFIED |
+| R3D | [round 3](superpowers/specs/2026-10-03-blockchain-round3-design.md) | 1.3 | R30–R67, CR-R3-1…11 | BUILT; fixes R3-FIX1…15 SPECIFIED |
 | WSF | [wallet signing formats](superpowers/specs/blockchain-research/round3-wallet-signing-formats.md) (research note) | 1.1 | CR-WSF-1…2 | fixes WSF-FIX1…2 SPECIFIED |
 | INFRA | [infrastructure-service positioning](superpowers/specs/2026-10-03-blockchain-infrastructure-service.md) | 1.2 | — (follows §1 here; CR-R3-11) | positioning text |
 | ZD | [Zether design](superpowers/specs/2026-10-03-zether-design.md) rev 1.1, [limits](superpowers/specs/2026-10-05-zether-limits.md) rev 1.1, [ConsenSys `MAX` note](superpowers/specs/2026-10-05-zether-consensys-max.md) rev 1.1 | 1.1 | RS2-1…26, RS-NV64-* | BUILT (dev chains, unaudited); fixes ZF-FIX1…3 SPECIFIED |
-| DEX | [DEX design](superpowers/specs/2026-10-03-dex-design.md) | 1.1 | RS5-1…20 | BUILT (EVM); fixes DX-FIX1…5 SPECIFIED |
+| DEX | [DEX design](superpowers/specs/2026-10-03-dex-design.md) | 1.2 | RS5-1…21 | BUILT (EVM); fixes DX-FIX1…5 SPECIFIED |
 | net-hedera | [Hedera](superpowers/specs/2026-10-03-net-hedera.md) | 1.2 | R6-1…11 | BUILT; NET-HEDERA-FIX1…3 SPECIFIED |
 | net-sui | [Sui](superpowers/specs/2026-10-03-net-sui.md) | 1.1 | RS7-1…14 | BUILT; NET-SUI-FIX1…4 SPECIFIED |
 | net-soroban | [Soroban](superpowers/specs/2026-10-03-net-soroban.md) | 1.1 | R8-1…15 | BUILT; NET-SOROBAN-FIX1…2 SPECIFIED |
@@ -69,10 +69,10 @@ When two sources disagree, the higher one wins:
 | NI | [node independence](superpowers/specs/2026-10-06-node-independence-design.md) (single normative place for node routes, tables, config) | 3.7 | R87–R111, R320–R328, R340–R349 | store P1 BUILT; rest SPECIFIED; node fixes NR1–NR5 SPECIFIED |
 | A2 | [mesh gossip amendment](superpowers/specs/2026-10-06-mesh-gossip-amendment.md) | 2.1 | R112–R128 | SPECIFIED |
 | TW2 | [token wrappers v2](superpowers/specs/2026-10-06-token-wrappers-v2.md) | 1.2 | R129–R149 | contracts T1–T6, T8 **BUILT**; T7 SPECIFIED |
-| APP | [app (console + dApp)](superpowers/specs/2026-10-06-scaas-app-design.md) | 1.2 | R150–R179 | SPECIFIED |
-| TSS (B) | [tender, sponsorship, shredding](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) | 1.3 | R180–R199 | SPECIFIED |
+| APP | [app (console + dApp)](superpowers/specs/2026-10-06-scaas-app-design.md) | 1.3 | R150–R179 | SPECIFIED |
+| TSS (B) | [tender, sponsorship, shredding](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) | 1.4 | R180–R199 | SPECIFIED |
 | AS (A) | [asset suite](superpowers/specs/2026-10-06-asset-suite-design.md) | 1.1 | R200–R217 | SPECIFIED |
-| OPS (C) | [operations](superpowers/specs/2026-10-06-operations-design.md) | 1.2 | R230–R247 | SPECIFIED (some metrics BUILT) |
+| OPS (C) | [operations](superpowers/specs/2026-10-06-operations-design.md) | 1.3 | R230–R247 | SPECIFIED (some metrics BUILT) |
 | S4F (D) | [signers follow-ups](superpowers/specs/2026-10-06-signers-followups.md) | 1.1 | R250–R269 | SPECIFIED |
 | PQZ (E) | [post-quantum Zether](superpowers/specs/2026-10-06-pq-zether-design.md) | 1.4 | R270–R289 (R284 rewritten in rev 1.4) | SPECIFIED |
 | UA (F) | [Universal Account](superpowers/specs/2026-10-06-universal-account-design.md) | 1.4 | R290–R318, R330–R331 | SPECIFIED |
@@ -327,7 +327,7 @@ mandates (`MandateWallet.payUnderMandate`); generic saga orchestration **PLANNED
 | Node store | (in `scaas-node`) | Jobs, feeds, config authority, credentials, audit, DEX book, mesh tables; SQLite/PostgreSQL/MySQL | SQLite store P1 **BUILT**; the rest **SPECIFIED** (NI §4, A1/R111) |
 | `zether-prover` | `zether-prover/` (Rust, `cdylib`+`rlib`, WASM) | Keygen (EIP-2333 paths), ElGamal, Σ + Bulletproofs (n=64), disclosure openings, BSGS, `zether-cli`, `zether-read-balance` | **BUILT** (unaudited); PQZ feature `pq`, `pqz-cli` **SPECIFIED** ([PQZ](superpowers/specs/2026-10-06-pq-zether-design.md) §11) |
 | `clientkeys` | `clientkeys/` (ESM, `@noble`/`@scure`) | Passkey signer, 24-word seed vault, Zether conf keys and balance cache; bundle vendored into `dms_blockchain_bridge/static/lib/clientkeys` | **BUILT** (EVM-centric); vault v2, non-EVM signers, `fam/*` and `wallets/*` **SPECIFIED** ([S4F](superpowers/specs/2026-10-06-signers-followups.md)); `UAKey` **SPECIFIED** (UA F3) |
-| `app/` | `scaas/app/` (React + Vite) | Console and dApp over all seven families: contracts, wallets, DEX book, Zether, node admin (built-in login or OIDC) | **SPECIFIED** ([APP](superpowers/specs/2026-10-06-scaas-app-design.md) rev 1.2; requirements NI §7.7, A2 §13.2) |
+| `app/` | `scaas/app/` (React + Vite) | Console and dApp over all seven families: contracts, wallets, DEX book, Zether, node admin (built-in login or OIDC) | **SPECIFIED** ([APP](superpowers/specs/2026-10-06-scaas-app-design.md) rev 1.3; requirements NI §7.7, A2 §13.2) |
 | Odoo client | `bamboo-dms/dms_blockchain`, `dms_blockchain_payment`, `dms_blockchain_bridge`, `dms_blockchain_dex` | One ERP client: outbox, payment provider `chain`, portal facade, DEX accounting | **BUILT** (pull model); push client **SPECIFIED** (NI §10) |
 | CI | `.github/workflows/ci.yml` (`scaas-ci`) | forge test (pinned OZ v5.2.0, forge-std v1.16.2), `private9000` build, cargo clippy `-D warnings`, cargo test, EVM e2e on anvil | **BUILT**; CI for prover, clientkeys and non-EVM e2e **PLANNED** |
 
@@ -388,7 +388,7 @@ simulate → `metaTxDigest` → lane queue → same submit path.
 
 **F3 — DEX (BUILT):** maker/taker orders signed over the DEX domain → `/v1/dex/orders` → venue book → match →
 settle job (`call`) → `OrderBookDex.settle` → `OrderFilled`/`Matched` → watcher → accounting mirror.
-Venue fixes (SPECIFIED, [DEX](superpowers/specs/2026-10-03-dex-design.md) rev 1.1 RS5-12…20; streams DX-FIX1…5): a
+Venue fixes (SPECIFIED, [DEX](superpowers/specs/2026-10-03-dex-design.md) rev 1.2 RS5-12…21; streams DX-FIX1…5): a
 rounding-dust **maker** is skipped and removed from the book instead of stopping the match (RS5-12); `feeToken ∈ {0,
 sellToken, buyToken}` and pair failures are attributed by evidence (`eth_call settleOne` revert reason), so one poisoned
 maker blocks neither healthier makers nor recovery (RS5-13); ERC-1271 checks capped (RS5-14, §14.9); **non-EVM
@@ -396,7 +396,9 @@ settlement is relayer-bound** — Cosmos, Soroban and TON orders name the settli
 sender (RS5-15; Soroban has no open form, R8-10); committed balance includes matched-but-unsettled fills (RS5-16);
 on-chain `markets(key)` re-checked every poll (≤ 30 s) and a mismatching market stops serving (RS5-17); IOC matches a
 single maker on Sui/Aptos/Solana (`ioc_single_maker`, required before N3, RS5-18); `min_nonce < 2^(w−1)` on
-Sui/Aptos/Solana (RS5-19); a late `Matched` after recovery debits the restored order (RS5-20). The book moves to the
+Sui/Aptos/Solana (RS5-19); a late `Matched` after recovery debits the restored order (RS5-20); the DEX fee per fill rounds **up**
+(`Math.mulDiv(…, Ceil)` when the market fee is on; non-EVM likewise) so splitting an order into dust fills no longer
+evades it, while the relayer fee keeps rounding down (RS5-21; no node matcher change, the node computes no DEX fee). The book moves to the
 node store (NI R105) and relayer-bound jobs are lane-pinned (NI R102).
 
 **F4 — Mesh (SPECIFIED):** origin wraps a bus-eligible intent in `scaas-intent/1.2`, signs `hub.sig`, optionally
@@ -855,7 +857,7 @@ non-via-IR ABI decoder holds: the token decodes it in `fallback` (same selector 
 | Fee in token | `MODE_FEE_PERCENT`/`FIXED`, fee ≤ 1 % to `feeRecipient` | Relayer, reimbursed in token | **BUILT** |
 | **Payee self-relay / direct settlement** | Payer signs offline (`fee = 0`, relayer unbound or bound to the payee); hands the signature to the payee by QR, NFC, message or file; the payee's wallet submits it, paying gas itself; `PaymentSettled` identical. The signature is an expiring electronic cheque (`validUntil`) | Payee | **BUILT** on contract level (any `msg.sender` may submit an unbound intent); QR/EIP-681 tooling and user `cancelMetaNonce` UI **PLANNED** (HANDOFF #14) |
 | **Receiver pays the fee** | Payer signs `pay` of `N`; payee co-signs a fee authorization (`fee`, `feeRecipient`) from its own balance; relayer submits both in one transaction (payer sends `N`, payee receives `N`, pays `fee`) | Relayer, reimbursed by payee | **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §B2: `mtxPayReceiverFee`, payee co-signs `ReceiverFee` over the payer digest; R192–R193) |
-| Gas sponsorship policy | Node policy: e.g. "inbound to wallet W, value ≥ X ⇒ accept with fee 0, book gas to account Y" | Sponsor (contract outside the chain) | **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) rev 1.3 §B1, R189–R191; budget and rate counts at accept, NI rev 3.6 §5.2); on-chain `SponsorshipPool` PLANNED-later (§B3) |
+| Gas sponsorship policy | Node policy: e.g. "inbound to wallet W, value ≥ X ⇒ accept with fee 0, book gas to account Y" | Sponsor (contract outside the chain) | **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) rev 1.4 §B1, R189–R191; budget and rate counts at accept, NI rev 3.6 §5.2); on-chain `SponsorshipPool` PLANNED-later (§B3) |
 | `fee = 0` B2B | Company relayer, `MODE_FEE_NONE`; gas is OPEX | Company | **BUILT** |
 | Enterprise inbound gateway | Partners post signed intents to the company's gateway (`POST /v1/metatx`); the company relays with its lanes | Company | **BUILT** (EVM door A); intake rules that stop Door A being a free gas faucet **SPECIFIED** (CR-PD-3, §6.10) |
 
@@ -1153,7 +1155,7 @@ Consequences (normative):
    fee 0, booked to account Y") is a node policy row, never a contract feature. Status **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §B1).
 5. Metric W3B-06 (relayer fee spread) may be negative by design.
 
-### 6.10 Intake rules for `call` jobs and Door A (SPECIFIED, PD rev 1.1 CR-PD-1, CR-PD-3)
+### 6.10 Intake rules for `call` jobs and Door A (SPECIFIED, PD rev 1.2 CR-PD-1, CR-PD-3)
 
 **`call` target/selector table** (CR-PD-1 (c); streams PAY-FIX2 node, PAY-FIX1 Odoo). A `call` job carries calldata
 the client built; a lane signs it as `msg.sender`. The node executes one only if its 4-byte selector is in the table
@@ -1907,7 +1909,7 @@ Short summary; UA R290–R318, R330–R331 and its kind table (§4.2 there) are 
 
 ## 10. Sealed-bid tender (SPECIFIED)
 
-Component spec: [TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) rev 1.3 §A (R180–R188),
+Component spec: [TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) rev 1.4 §A (R180–R188),
 normative; no code. This section is its summary (the earlier text here, with bidder-signed reveals, replacement and
 an `awardDeadline`, is superseded).
 
@@ -2169,7 +2171,7 @@ upgradeable program (`PROGRAM_UPGRADEABLE`, R348), no gossip peer for 5 min (inf
 - **Unit cost:** gas of every finalized job is converted to the deployment's reporting currency at the transaction
   time and allocated to the business document (`entryRef` → invoice/order). SPECIFIED ([OPS](superpowers/specs/2026-10-06-operations-design.md) §8).
 - **Budgets:** per lane `gas_budget_per_hour`; per namespace `max_live_jobs`; sponsorship budgets per policy row
-  (SPECIFIED, [TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) rev 1.3 §B1): day budget and hour /
+  (SPECIFIED, [TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) rev 1.4 §B1): day budget and hour /
   payer-hour counts taken at accept and released if the job ends before broadcast; `min_valid_secs` (default 120);
   a policy caps a tenant's spend only with `on_exhausted = reject` — `unsponsored` on a client namespace books to the
   namespace, is marked `sponsor_fallback` on the jobs feed and needs an audited `fallback_to_namespace` (R189).
@@ -2571,17 +2573,17 @@ code; at most three agents, one heavy build at a time). Revisions and ruling ran
 | 18 | P9 | Remove the pull path (`odoo.rs`, `[odoo]`, legacy Odoo service methods) after ≥ 14 days all-push | S7″ or calendar | **SPECIFIED** |
 | 19 | S8″ | Spec corrections across older specs | P9 | **SPECIFIED** |
 | 20 | Rename | `scaas` names in code, metrics, env, headers and on-chain tags | owner plan | **BUILT** (code); older component specs still cite old names |
-| 21 | app A0–A18, N1–N4 | React + Vite console/dApp over **all seven families** (signers, UA accounts, gateway submission, DEX, Zether, PQZ tokens on the private chain, node admin by built-in login or OIDC); node additions `/v1/gateway`, `/v1/ops`, `/v1/ua-*`, N3 non-EVM DEX books ([APP](superpowers/specs/2026-10-06-scaas-app-design.md) §15) | node APIs, D, F | **SPECIFIED** (APP rev 1.2) |
+| 21 | app A0–A18, N1–N4 | React + Vite console/dApp over **all seven families** (signers, UA accounts, gateway submission, DEX, Zether, PQZ tokens on the private chain, node admin by built-in login or OIDC); node additions `/v1/gateway`, `/v1/ops`, `/v1/ua-*`, N3 non-EVM DEX books ([APP](superpowers/specs/2026-10-06-scaas-app-design.md) §15) | node APIs, D, F | **SPECIFIED** (APP rev 1.3) |
 | 22 | S4F D1–D7 | Backup switch, vault v2 (device key), scrypt `2^17`, Sui `fam_sui.verify`, Soroban/Aptos/Solana seed and passkey signers, `fam/*` and `wallets/*` connectors, role keys ([S4F](superpowers/specs/2026-10-06-signers-followups.md)) | F §8.1 | **SPECIFIED** (S4F rev 1.1) |
 | 23 | UA F0–F10 | Kind libraries and vectors, EVM `UARegistry` + verifiers + Zether re-point, MetaToken v3, `UAKey` + MuSig2/FROST signers, VC layer, node `scaas-intent/1.3`, Odoo `blockchain.ua`, non-EVM registries, PQ kinds, DEX/mandate support ([UA](superpowers/specs/2026-10-06-universal-account-design.md) §16) | — | **SPECIFIED** (UA rev 1.4) |
-| 24 | PQZ E-S0…E-S9, G-LIC | Parameter and `pqz-core` spikes, relations, Nethermind precompile, contracts, clients, retail WASM prover, node, review; licence gate ([PQZ](superpowers/specs/2026-10-06-pq-zether-design.md) §16) | F registry stream | **SPECIFIED** (PQZ rev 1.2) |
+| 24 | PQZ E-S0…E-S9, G-LIC | Parameter and `pqz-core` spikes, relations, Nethermind precompile, contracts, clients, retail WASM prover, node, review; licence gate ([PQZ](superpowers/specs/2026-10-06-pq-zether-design.md) §16) | F registry stream | **SPECIFIED** (PQZ rev 1.4) |
 | 25 | TW2 T1–T8 | Token wrappers v2: `MetaTxCore` + named functions, three tiers, rates, multi-underlying (adjustable legs, admin-only execute, all-leg wrap pause), gasless unwrap op with `minOut`, factory v2, Hedera children, invariant suite, node/Odoo fields ([TW2](superpowers/specs/2026-10-06-token-wrappers-v2.md) §15) | — | contracts T1–T6, T8 **BUILT** (EVM + Hedera); T7 node/Odoo/SDK **SPECIFIED** |
 | 26 | AS1–AS9 | Regulated module (kinds 5–7), `ComplianceRegistry`, `VestingGrant`, distributions, `ExchangeOffer`, templates, managed markets ([AS](superpowers/specs/2026-10-06-asset-suite-design.md) §13) | TW2 | **SPECIFIED** (AS rev 1.1) |
-| 27 | TB1–TB3, SP1, RP1–RP2, CS1–CS2, PL1 | Tender, sponsorship policy, receiver-pays, crypto-shredding, `SponsorshipPool` (later) ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §8) | NI P3 | **SPECIFIED** (TSS rev 1.3); PL1 PLANNED-later |
-| 28 | OP1–OP8 | W3B SLOs, telemetry, trace contract, FinOps usage, denylist, runbooks, DR ([OPS](superpowers/specs/2026-10-06-operations-design.md)) | NI P3 | **SPECIFIED** (OPS rev 1.2; some metrics BUILT); OTLP export PLANNED |
-| 29 | CHAINID | Private chain id 9000 → 7622 (owner 2026-10-07): sweep the remaining specs (MESH, A2, TW2, APP, OPS, S4F, AS), `AuthScheme.sol:7` comment and the TRAPS.md heading; then genesis reset, rename `src/chains/private9000` and the foundry profile, node and Odoo chain records, `chain_uid` = genesis hash (UA R330, NI §9.1) | owner | specs partly swept (PD, ADW, R3D, ZD, UA, NI, PQZ done); code not yet landed |
+| 27 | TB1–TB3, SP1, RP1–RP2, CS1–CS2, PL1 | Tender, sponsorship policy, receiver-pays, crypto-shredding, `SponsorshipPool` (later) ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §8) | NI P3 | **SPECIFIED** (TSS rev 1.4); PL1 PLANNED-later |
+| 28 | OP1–OP8 | W3B SLOs, telemetry, trace contract, FinOps usage, denylist, runbooks, DR ([OPS](superpowers/specs/2026-10-06-operations-design.md)) | NI P3 | **SPECIFIED** (OPS rev 1.3; some metrics BUILT); OTLP export PLANNED |
+| 29 | CHAINID | Private chain id 9000 → 7622 (owner 2026-10-07): sweep the remaining specs (MESH, A2, TW2, S4F, AS), `AuthScheme.sol:7` comment and the TRAPS.md heading; then genesis reset, rename `src/chains/private9000` and the foundry profile, node and Odoo chain records, `chain_uid` = genesis hash (UA R330, NI §9.1) | owner | specs partly swept (PD, ADW, R3D, ZD, UA, NI, PQZ, OPS, APP done); code not yet landed |
 | 30 | Other product features | KeyPool auto-refill, outbound treasury payouts, anchoring (Merkle/HCS), Celo `l1_batch`, Hedera HCS/scheduled tx, NFT kinds (TON payer tx hash on `mined` is done) | — | **PLANNED** |
-| 31 | DX-FIX1…5 | DEX fixes (§3.4 F3): node DX-FIX1/2/5 fold into P7 if P7 starts first; contract DX-FIX3 (`OrderBookDex` 1271 cap, new deployment; PAY-FIX6 merges into it) and DX-FIX4 (non-EVM relayer binding, `min_nonce` caps) | — | **SPECIFIED** (DEX rev 1.1) |
+| 31 | DX-FIX1…5 | DEX fixes (§3.4 F3): node DX-FIX1/2/5 fold into P7 if P7 starts first; contract DX-FIX3 (`OrderBookDex` 1271 cap + fee round-up, new deployment; absorbs PAY-FIX6 and the EVM part of PAY-FIX7) and DX-FIX4 (non-EVM relayer binding, `min_nonce` caps, fee round-up; absorbs the non-EVM part of PAY-FIX7) | — | **SPECIFIED** (DEX rev 1.2) |
 | 32 | ZF-FIX1…3 | Zether fixes (§8): `ZetherMetaTx` 1271 cap + `FeeWouldStick` + disclosure NatSpec; invariant/subgroup/`D_out = O` tests; verifier/registry pin, chain-keyed cache, `schnorrSign` without `k` | — | **SPECIFIED** (ZD rev 1.1) |
 | — | Owner/operator steps | O1 audit of every contract family; O2 registrar multisig; O3 real deployments; O4 7-day finality evidence + ≥ 2 RPCs; O5 reverse-proxy rate limits; O6/O7 KMS/HSM custody and lane signers; O8 lane funding; O9 land-gate decision; O10 subject-account onboarding; Z1–Z6 Zether gates; G-LIC (PQZ) | — | open |
 
@@ -2600,9 +2602,9 @@ spec phase ends):
 | 3 | **PAY-FIX1** | Odoo: operator read-only on `blockchain.relay.job`, `action_requeue` group check, immutable job fields | PD CR-PD-1 (a)(b) | — |
 | 3 | **PAY-FIX2** | Node `call` target/selector table (pull path and NI accept), `CALL_TARGET_REFUSED` | PD CR-PD-1 (c) | — |
 | 3 | PAY-FIX3…5 | Event-set quorum (EVM/Hedera); Door A intake (`ZERO_VALUE`, floor, public fee-0 rule, per-`from` bucket); idempotent `signed` report | CR-PD-2, CR-PD-3, CR-PD-5 | — |
-| 3 | PAY-FIX6, PAY-FIX7 | `OrderBookDex` 1271 cap (merged into DX-FIX3); DEX fee per fill rounded up + node matcher (needs a DEX ruling) | PD review L3, L4 | PAY-FIX7 waits for the DEX ruling |
+| 3 | ~~PAY-FIX6, PAY-FIX7~~ | merged into DX-FIX3 (1271 cap, RS5-14) and DX-FIX3/4 (fee round-up, RS5-21; no node matcher change) | PD review L3, L4 | — |
 | 3 | ADW-FIX1…4 | `MandateWallet` revoke epoch; Hedera ED25519 `executeAsOwnerRaw` test; role-path seed keys; `checkPayment(expectedToken)` | CR-ADW-1…4 | — |
-| 4 | DX-FIX1…5 | DEX venue and contract fixes (row 31) | RS5-12…20 | — |
+| 4 | DX-FIX1…5 | DEX venue and contract fixes (row 31) | RS5-12…21 | — |
 | 5 | R3-FIX1…14 | Cosmos passkey v2; shared WebAuthn vectors; event quorum (Sui/Solana/Soroban, Cosmos/TON); Soroban `pay_ref`; Solana build-time network; Sui `Keys`; guardians (Soroban, Cosmos, TON); TON domain set; lane-horizon constants; TON DEX bounces; Cosmos `Sweep` removed | CR-R3-1…10 | — |
 | 5 | **R3-FIX15** | Immutable at deploy: Aptos `immutable`, Sui `make_immutable`, Solana `--final` after `initialize`, Cosmos `--no-admin`; deploy-script gate + negative test; redeploy dev deployments; update node/Odoo chain profiles | CR-R3-11 (owner) | — |
 | 5 | WSF-FIX1…2 | Readable on-chain-rebuilt wallet text + `POLICY_PASSKEY_FOR_VALUE` (Solana, Sui after R3-FIX7) | CR-WSF-1 | — |
@@ -2622,8 +2624,6 @@ Still open:
    job-API only.
 4. **Second event source** to bound a compromised node's ability to fake `/v1/events` (NI §18.3).
 5. Every OPS default number marked OA (OPS header: owner to approve).
-6. **DEX venue fee per fill rounding** (PAY-FIX7): round up (`Math.Rounding.Ceil`) when the market fee is on, with the
-   node matcher mirroring it — needs a DEX-spec ruling.
 
 Answered since the previous revision: `bus_scope = public` is a separate opt-in; DEX books carry home-bound and
 relayer-unbound orders per market; exclusive-assignment trust is automatic after 3 verified landings; QUIC offers
@@ -2683,13 +2683,13 @@ Contradictions inside this repository found while writing (fixed in their own fi
 | MESH §3.4 | `ring` provider, no `aws-lc-rs` | reversed by R114 for rustls; NI R106a keeps `ring` for JWS verification | open (S8″) |
 | NI §3 / §7.1 (rev ≤ 3.3) | job API `[api] bind` default `127.0.0.1:8547`, same as `gateway_bind` | NI rev 3.4: job API `127.0.0.1:8548`; two listeners on one port refused | resolved |
 | node default `max_gas_per_tx` | 3,000,000 | a classical Zether transfer needs 3.36 M (Zether chains: set ≥ 4.2 M, ZD rev 1.1 §15); PQZ needs 16 M on the private chain | open (config) |
-| component specs, `AuthScheme.sol:7`, TRAPS.md heading | private chain id 9000 | owner 2026-10-07: 7622; swept in UA rev 1.4, NI rev 3.6+, PQZ rev 1.3+, PD/ADW rev 1.1, R3D rev 1.1+, ZD rev 1.1 | open for MESH, A2, TW2, APP, OPS, S4F, AS, the code comment and TRAPS.md (stream CHAINID) |
+| component specs, `AuthScheme.sol:7`, TRAPS.md heading | private chain id 9000 | owner 2026-10-07: 7622; swept in UA rev 1.4, NI rev 3.6+, PQZ rev 1.3+, PD rev 1.1+, ADW rev 1.1, R3D rev 1.1+, ZD rev 1.1, OPS rev 1.3, APP rev 1.3 | open for MESH, A2, TW2, S4F, AS, the code comment and TRAPS.md (stream CHAINID) |
 | SCaaS.md (before this revision) §7.7, §7.6, §7.4, §7.2, §7.5 | Solana `MetaOp` 337 B; TON "TODO #8" open and a `BindKey` message; Soroban random nonce and one-shot `pay_ref`; Hedera `associateUnderlying()`; Aptos `upgrade_policy = compatible` | 336 B (`MetaOp::LEN`); TODO #8 done, key bound through `SignedOp.stateInit` (R10-5); deterministic nonce, `(from, pay_ref)` (R8-9); association in `initialize` (R6-8, TW2 R144); immutable at deploy (RS11-20) | fixed in this revision |
 | R3D CR-R3-7 vs net-ton R10-14 | TON domain pinned as a per-wallet `domains` set changed by the owner's wallet | `domainHash` in the wallet init data issued by the master; node checks at every door | open: reconcile in NET-TON-FIX3 / R3-FIX11 (both rev 2026-10-07) |
 | R3D CR-R3-9 vs net-ton R10-17 | TON DEX bounced payouts credited per owner (`unclaimed`) + permissionless `Claim` | bounce body is truncated to 256 bits (no destination): `bounced[master]` + evented admin `RefundBounced` | open: reconcile in NET-TON-FIX3 / R3-FIX13 |
-| DEX RS5-15 vs net-soroban R8-10 | "relayer 0 = open" settlement form | Soroban has no open form (`Order.relayer` mandatory) | open: note in DEX spec (cross-spec nit, `TODO.md` §0) |
-| PD PAY-FIX6 vs DEX DX-FIX3 | two streams for the `OrderBookDex` 1271 cap | same fix | open: merge PAY-FIX6 into DX-FIX3 |
+| DEX RS5-15 vs net-soroban R8-10 | "relayer 0 = open" settlement form | Soroban has no open form (`Order.relayer` mandatory) | resolved: DEX rev 1.2 notes it |
+| PD PAY-FIX6/7 vs DEX DX-FIX3/4 | separate streams for the `OrderBookDex` 1271 cap and the DEX fee rounding | same fixes | resolved: merged (PD rev 1.2, DEX rev 1.2 RS5-21) |
 | CR-PD-1 call table vs NI rev 3.7 §5.2 | NI lists no `CALL_TARGET_REFUSED`, no `chain_contract.kind = account_factory` | PD §15.4 amendment | open: NI fold pending; this document is normative meanwhile (§6.10) |
-| TSS rev 1.3 NI-amends row | omits `job.sponsor_fallback` | NI rev 3.6 folded it | open (cross-spec nit) |
+| TSS rev 1.3 NI-amends row | omits `job.sponsor_fallback` | NI rev 3.6 folded it | resolved: TSS rev 1.4 |
 | CR-PD-1 call table vs TSS §A.5, AS §3, `integration.md` §9, §11 | tender calls (`createTender`, `commitBid`, keeper `revealBid`/`withdrawDeposit`/`settleTender`, bonds) and issuer/compliance interventions pushed as `call` jobs | not rows of the call table ⇒ `CALL_TARGET_REFUSED`; the factory is excluded outright | open: add rows (target `chain_contract.kind = tender`, the token's issuer/compliance contracts) in PD/NI, or keep these calls wallet-sent |
 | `zether-prover/wasm-smoke.sh` | no `--target web` build | APP R164 runs the prover as a web worker | open (APP §17) |
