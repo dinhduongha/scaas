@@ -315,7 +315,7 @@ mandates (`MandateWallet.payUnderMandate`); generic saga orchestration **PLANNED
 
 | Component | Path | Role | Status |
 |---|---|---|---|
-| EVM contracts | `smartcontracts/evm/` (Foundry; `src/{common,metatx,factory,dex,wallet,account,registry,zether,hedera,chains}`) | Meta-tx tokens, open factory, DEX, mandate wallet, subject (passkey) account, Zether, account registry; profiles `private9000` (Prague; the private chain, now chain 7622, §7.1), `zether` (Prague), `gnosis`, `celo` (Cancun). UA registry + MetaToken v3 ([UA](superpowers/specs/2026-10-06-universal-account-design.md) F1/F2) and `PqzToken` ([PQZ](superpowers/specs/2026-10-06-pq-zether-design.md) E-S4) **SPECIFIED** | **BUILT** |
+| EVM contracts | `smartcontracts/evm/` (Foundry; `src/{common,metatx,factory,dex,wallet,account,registry,zether,hedera,chains}`) | Meta-tx tokens, open factory, DEX, mandate wallet, subject (passkey) account, Zether, account registry; profiles `private7622` (Prague; the private chain, now chain 7622, §7.1), `zether` (Prague), `gnosis`, `celo` (Cancun). UA registry + MetaToken v3 ([UA](superpowers/specs/2026-10-06-universal-account-design.md) F1/F2) and `PqzToken` ([PQZ](superpowers/specs/2026-10-06-pq-zether-design.md) E-S4) **SPECIFIED** | **BUILT** |
 | Hedera contracts | `smartcontracts/evm/src/hedera/` | `HederaMetaToken` (HIP-632 `isAuthorizedRaw` for ED25519 accounts) on HSCS | **BUILT** |
 | Cosmos contracts | `smartcontracts/cosmos/` (CosmWasm workspace) | `scaas-token` (CW20 + meta-op), `scaas-mandate`, `scaas-dex`, shared `scaas-metaop` | **BUILT** |
 | Soroban contracts | `smartcontracts/soroban/` | SEP-41 token + `pay`, mandate, DEX; native auth as meta-tx (Stellar and Pi) | **BUILT** |
