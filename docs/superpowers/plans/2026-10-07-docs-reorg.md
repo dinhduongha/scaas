@@ -1,5 +1,10 @@
 # Plan: SCaaS docs reorganization (and scaas-node module layout)
 
+> **Owner 2026-10-07 — SCaaS.md:** the current `docs/SCaaS.md` is kept as history for the owner's later
+> reference (`history/SCaaS-2026-10-07.md`, unchanged). A new **`docs/SCaaS-v2.md`** is a short product
+> introduction page only (what SCaaS is, who it is for, what it offers, how to start; links to README /
+> architecture.md); it is not normative and defines no ids. `architecture.md` stays as planned.
+
 
 **Date:** 2026-10-07 · **Status:** PLAN, not executed · **Owner-approved target structure:** see §1.
 **Scope:** `scaas/docs/**` (rewrite), `scaas/scripts/docs_check.py` (new), references outside docs (§5),
@@ -84,6 +89,7 @@ Total current-state text ≈ 15 500 lines + `decisions.md` ≈ 3 000, against 24
 ```
 docs/
   README.md                      map, reading order, precedence, how ids/aliases/history work            ~100
+  SCaaS-v2.md                    short product introduction page (owner 2026-10-07); not normative, no ids  ~150
   architecture.md                what SCaaS is, trust model, positioning, profiles, glossary; links only  ~450   ARCH-POS
   decisions.md                   ruling register + generated alias index (old id → new id)              ~3000
   integration.md                 generic ERP/back-office guide; Odoo as one fenced example              ~950    INT-ERP, INT-ODOO
