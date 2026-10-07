@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 ## 13. Phap ly Viet Nam, CBDC, AML/KYC va Travel Rule
 
 ### 13.0. Giới hạn của chương này (đọc trước khi đọc bất cứ dòng nào bên dưới)

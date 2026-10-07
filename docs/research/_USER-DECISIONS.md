@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 # Quyết định của user + phát hiện từ code thật
 
 Chốt trong phiên brainstorming 2026-08-30. **Đây là nguồn có thẩm quyền cao nhất**,

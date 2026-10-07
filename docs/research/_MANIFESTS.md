@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 # Per-section manifests: key findings, open questions, corrections to blockchain.md
 
 

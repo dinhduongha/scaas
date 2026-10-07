@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 ## 07. Custody pluggable: HSM, MPC, custodial, non-custodial, smart account
 
 ### 07.0. Kết luận trước, lý luận sau

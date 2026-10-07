@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 ## 08. Chain adapter va chain profile: 6 he sinh thai + private chain
 
 > Phần này sở hữu **hai trục**: `chain_family` (adapter nào chạy) và `chain_profile` (public/private). Nonce/sequence leasing, gas breaker, RPC failover và simulation gate đã được đặc tả ở §06 — ở đây chỉ nêu phần **giao diện** mà §06 gọi vào, và những chỗ giao diện đó **buộc phải rò rỉ**.

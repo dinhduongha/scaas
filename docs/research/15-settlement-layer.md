@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 ## 15. Lớp settlement thống nhất và đối soát với kế toán
 
 > Section 10 là canonical về tên model và ACL. Section này **không định nghĩa lại** `blockchain.settlement`; nó

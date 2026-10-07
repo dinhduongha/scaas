@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 ## 04. Meta-Transaction trên token: struct, 2D nonce, thao tác có kiểu
 
 > **[BẢN 3 — viết lại theo `_USER-DECISIONS.md` §24.]** Bản 1 và bản 2 của section này đặc tả một

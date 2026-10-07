@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 # 00. CANON — the settled spine
 
 Tài liệu này là **xương sống chuẩn tắc** của bộ 16 section. Nó không thay thế

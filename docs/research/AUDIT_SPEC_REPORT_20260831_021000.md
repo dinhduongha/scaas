@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 # BÁO CÁO TOÀN DIỆN VỀ ĐẶC TẢ KIẾN TRÚC BLOCKCHAIN
 ## Audit Toàn diện Bộ Tài liệu Blockchain Research: Meta-Transaction, Zether, Mạng Relayer Mở & Lớp Quyết toán ERP Doanh nghiệp
 

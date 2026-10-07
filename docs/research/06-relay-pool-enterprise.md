@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 ## 06. Relay Pool nội bộ: nonce manager, gas circuit breaker, simulation gate
 
 > **Trạng thái bản này:** bản nháp đầu bị rà soát lại theo hướng "hostile review". Những chỗ đã sửa được đánh dấu **[SỬA]**; những chỗ là bổ sung mới đánh dấu **[MỚI]**. Bảy cái sai kỹ thuật trong chính bản nháp đầu đã được gỡ, liệt kê tập trung ở §06.13.

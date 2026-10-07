@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 # Review: `01-token-factory` và toàn bộ cơ chế upgrade
 
 Sau quyết định §20.2 (`_USER-DECISIONS.md`): **không có upgrade cho token đã deploy;

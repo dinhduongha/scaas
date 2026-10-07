@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 ## 16. Chia nho thanh sub-project va thu tu thuc hien
 
 > Phạm vi: biến 15 section thiết kế thành một chuỗi gói việc **ship được độc lập**. Đơn vị ước tính là

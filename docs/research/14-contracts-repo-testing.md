@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 ## 14. Cay smartcontracts/, toolchain va chien luoc kiem thu
 
 > `blockchain.md` không có một dòng nào về repo hợp đồng, toolchain hay kiểm thử. Toàn bộ phần này là bổ sung. Nó cũng là nơi **hoà giải bốn cây thư mục mâu thuẫn** mà §01.14, §02.8.4, §03.9 và §04 đã đưa ra độc lập với nhau, và là nơi **phát hiện ba mâu thuẫn nữa** giữa các section mà không section nào tự thấy được: client private chain (§03 chọn go-quorum, §08.10 chọn Besu), `evm_version` (§01 chọn `cancun`, genesis §08.10 khai `shanghaiTime`), và đường cong ElGamal (§03 khuyến nghị Baby Jubjub, §14.1 bản nháp vẫn liệt kê `CurveBN254/CurveBLS12381`).

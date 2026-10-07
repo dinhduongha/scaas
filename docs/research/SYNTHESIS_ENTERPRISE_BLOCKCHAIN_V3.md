@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 # TỔNG HỢP VÀ NÂNG CẤP KIẾN TRÚC BLOCKCHAIN DOANH NGHIỆP V3.0 (SYNTHESIS V3)
 *Tài liệu chuẩn hóa kiến trúc sản xuất từ nghiên cứu và các quyết định mở rộng*
 **Ngày phát hành:** 2026-09-05  

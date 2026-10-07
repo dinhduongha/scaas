@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 ## 12. Mô hình đe doạ và bảo mật
 
 ### 12.0. Biên tin cậy, đối thủ, và nguyên tắc chủ đạo

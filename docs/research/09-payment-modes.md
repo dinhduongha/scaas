@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 ## 09. Payment API và 5+ chế độ tích hợp, chọn bằng cấu hình
 
 ### 09.0. Nguyên tắc và ranh giới

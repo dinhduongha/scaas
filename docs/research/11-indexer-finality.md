@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 ## 11. Indexer, Finality Gate, reorg va idempotency
 
 Mục này trả lời một câu hỏi duy nhất: **làm sao đưa sự thật on-chain vào Odoo mà không bao giờ ghi sai sổ.** Nguyên tắc kế thừa từ `dms/models/orders/dms_vietqr.py` — *"Quét QR không phải là đã thu tiền"* — dịch sang đây thành: **broadcast không phải là thanh toán, và `included` cũng chưa phải.** `_set_done()` chỉ được gọi sau Finality Gate.

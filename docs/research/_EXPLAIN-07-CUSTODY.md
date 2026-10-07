@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 # Giải thích cơ chế `07-custody-providers.md`
 
 **Viết cho ai:** người cần hiểu §07 làm gì và vì sao, không cần đọc hết 18.400 từ.

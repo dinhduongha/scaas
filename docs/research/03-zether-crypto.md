@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 ## 03. Zether: mat ma hoc, 128-bit range proof, epoch va rollOver
 
 > Phạm vi: lõi thanh toán bảo mật của `dms_blockchain`. Mọi thứ ở đây chạy được với **N = 2** (lộ sender + receiver) — tức là **Basic Zether** của paper FC 2020, **không phải** `anonymous-zether` của ConsenSys. Bỏ anonymity set là quyết định đúng và nó xoá luôn one-out-of-many proof (chi phí verify O(N)); phần còn lại của mục này giả định N = 2 xuyên suốt.

@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 # Grok3_Continued — code blocks
 
 Nguồn: `~/Downloads/Grok3_Continued.html`, 49 block.

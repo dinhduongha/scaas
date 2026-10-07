@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 ## 01. Token Factory, vòng đời Token và cơ chế Peg/Wrap
 
 ### 1.0. Kết luận trước, lý luận sau

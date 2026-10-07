@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 ## 10. Thiết kế addon dms_blockchain: model, ACL, RPC, cấu hình
 
 > **Bản 2 — đã qua review đối kháng.** Bản 1 dùng được về cấu trúc nhưng sai ở sáu chỗ kỹ thuật và

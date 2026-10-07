@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 ## 05. Open Relayer Network: intent pool, kinh tế học, chống front-run
 
 > **Bản 2 — đã qua review đối kháng.** Bản 1 dùng prefix model `dms.blockchain.*`; §10.3 đã chốt

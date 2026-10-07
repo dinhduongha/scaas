@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 ## 02. Singleton Account Registry và các sơ đồ chữ ký
 
 ### 2.0. Kết luận trước, lý luận sau
