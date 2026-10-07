@@ -268,7 +268,7 @@ def example_mask(text):
     return mask
 
 
-C9 = [r'\bSRS\b', r'bamboo', r'\bDMS\b', r'\bNPP\b', r'canon', r'_USER-DECISIONS', r'\bUD §', r'\b(round|vòng) \d',
+C9 = [r'\bSRS\b', r'bamboo', r'\bDMS\b', r'\bNPP\b', r'(?<![`.\w])canon\b', r'_USER-DECISIONS', r'\bUD §', r'\b(round|vòng) \d',
       r'\bspec [A-F]\b', r'\b(PD|ADW|R3D|WSF|INFRA|ZD|NI|MESH|A2|TW2|APP|TSS|AS|OPS|S4F|PQZ)\s*(§|rev\b|R\d)',
       r'\bdms_', r'res\.company', r'\bOdoo\b', r'\bNhóm \d', r'CHƯƠNG', r'§\s*(6\.21|10\.[1-5](\.\d)?|14\.2\.8)\b']
 C9_RE = re.compile('|'.join(f'(?:{x})' for x in C9))
