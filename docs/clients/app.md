@@ -528,6 +528,8 @@ prover (`wasm-bindgen --target web`) and opens the conf vault itself (`openConfK
 keeps `x` and the BSGS table for the session and is terminated on lock, after 5 min idle or 5 min hidden. Defaults
 `tableBits 22, boundBits 44`; `allowLargeTable` only by explicit choice. Zether shows only on chains 31337/1337 with a
 configured ZetherToken ([CTR-ZTH-02](../contracts/zether.md#CTR-ZTH-02); whether chain 7622 joins is an open owner question).
+Post-quantum Zether (PQZ) tokens configured on the private chain 7622 run in the same worker
+([CTR-PQZ-18](../contracts/pq-zether.md#CTR-PQZ-18)).
 
 ### Feature availability
 

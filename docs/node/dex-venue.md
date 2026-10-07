@@ -211,10 +211,6 @@ when mined. In both modes `filled[orderHash]` (no overfill, pair-isolated `Match
 market. Bound liquidity is fragmented per home; unbound makers accept execution by **anyone** (not only nodes) within
 their limit, and an off-chain cancel does not bind until mined.
 
-`OrderBookDex._accept` checks `relayer ∈ {0, sender}` and `filled + fill ≤ sellAmount`, and each pair runs in `try
-settleOne` (`MatchFailed`): **no fill can be settled twice in either mode**; the rules below only keep honest nodes
-from wasting gas and from showing phantom fills.
-
 Roles:
 
 - **Home** of a home-bound order = the node that alone proved the order's `relayer` in its live announce. Only the home

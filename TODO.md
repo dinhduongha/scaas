@@ -13,8 +13,11 @@ chainId 9000 → **7622**; `PqzToken` implements `IERC20MetaTx` (PQZ rev 1.4 R28
 - [ ] **Docs reorg** (plan `docs/superpowers/plans/2026-10-07-docs-reorg.md`): Phases 0–3 done 2026-10-07 — new docs
       from [`docs/README.md`](docs/README.md) (component docs, `docs/decisions.md` register + old-id alias index),
       history frozen in `docs/history/`, research in `docs/research/`, reorg ledgers (id map, fact ledger) in
-      `docs/history/reorg/`, outside references repointed, CI `docs` job. Left: Phase 4 reviewer pass (§6.4) and its fixes;
-      then move the plan to `docs/history/plans/`.
+      `docs/history/reorg/`, outside references repointed, CI `docs` job. Phase 4 reviewer pass done 2026-10-07 (28 findings,
+      fixed; review files `docs/reviews/reorg/`). Left: 10 % second-reviewer sample of `fine` rows; owner decision on
+      NODE-IDX-06 (who flags a repeated `entryRef`); fact `history/blockchain.md:214` (2D nonce + `mode` landed, native
+      per-family sponsorship rejected) gets its target once `docs/blockchain.md` exists; then move the plan to
+      `docs/history/plans/`.
 - [x] ~~**Sync `docs/SCaaS.md` + `docs/integration.md`**~~ (closed by the docs reorg; files now `docs/history/SCaaS-2026-10-07.md`,
       `docs/history/integration-2026-10-07.md`) with the latest folds — collect every "Amends"/"amendments"
       table in: NI rev 3.7 (R340–R349), PQZ rev 1.4 (R284 meta-tx, register row still says 1.2), round3 rev 1.2,
@@ -66,3 +69,11 @@ stream definition (scope, gate, depends) in `docs/history/specs/` — section nu
 - [ ] Remove merged worktrees under `.claude/worktrees/`.
 - [ ] Residual TON: a `final` from the indexer before the node's `mined` still flags `landed_elsewhere` (informational).
 - [ ] Queued research: none open beyond the specs above.
+
+Owner/operator gates from `docs/history/HANDOFF-blockchain.md` §1 (O1–O8 are standing rules in
+[node/runbooks.md#production-gates](docs/node/runbooks.md#production-gates)):
+
+- [ ] O9 — Decide the DPIA / CI gate for landing on-chain payments into the ERP (SRS deltas #11).
+- [ ] O10 — Write the onboarding procedure for `MandateWallet` / subject accounts (deployed outside the ERP, R29).
+- [ ] O11 — Every collecting entity that receives on-chain needs a `chain` payment provider, a journal and an approved
+  receiving wallet (after the territory consolidation; GA 2.4#4).

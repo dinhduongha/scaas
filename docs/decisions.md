@@ -341,7 +341,7 @@ It said: eRP addon is control plane, not a node.
 - old: R20, R95 · status: current · owner: yes · date: 2026-10-06 · normative: node/store.md#NODE-STO-03 · superseded-by: —
 
 **Why.** RPC URLs may embed keys and are dial targets; only the host's config may set them. Config authority is the node store, in the owner's words "toml bootstraps; admin API mutations persist"; the one admin-editable dial target, mesh peer URLs, is admin-only, audited and behind its own SSRF guard.
-**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 727; [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 1019.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 727; [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 117; [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 1019.
 
 ### NODE-STO-04 — One store always on, one owner
 - old: R88, UD:§23.1, UD:§23.7 · status: current · owner: yes · date: 2026-10-06 · normative: node/store.md#NODE-STO-04 · superseded-by: —
@@ -402,7 +402,7 @@ a lane key holds a role" is gone because no such contract may exist. A role-hold
 Safe (the `Safe.execTransaction` row, NODE-JOB-19); the lane only relays an `execTransaction` already signed by the role
 holders.
 **Cost if wrong.** Rows added later need review.
-**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 247.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 846; [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 247.
 
 ### NODE-JOB-02 — One journal, node-computed digests
 - old: R89 · status: current · owner: no · date: 2026-10-06 · normative: node/job-api.md#NODE-JOB-02 · superseded-by: —
@@ -540,7 +540,7 @@ It said: result queue default, node-configured callbacks.
 - old: CR-PD-5 · status: current · owner: no · date: 2026-10-07 · normative: node/submit-lanes.md#NODE-LANE-02 · superseded-by: —
 
 **Why.** The legacy client may resend reports; idempotency keeps nonces consistent.
-**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 244.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 910; [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 244.
 
 ### NODE-LANE-03 — Outer tx keys behind Signer trait
 - old: R15, UD:§1:custody, UD:§23.5 · status: current · owner: yes · date: 2026-10-03 · normative: node/submit-lanes.md#NODE-LANE-03 · superseded-by: —
@@ -689,7 +689,7 @@ It said: six-member Family enum.
 
 **Why.** Comparing one block hash cannot detect a provider that drops or invents logs; comparing the normalized event set can.
 **Cost if wrong.** A lying RPC books fake payments.
-**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 275; [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 646.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 878; [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 275; [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 646.
 
 ### NODE-IDX-02 — Node decides finality: depth or tag
 - old: R11(gate) · status: current · owner: no · date: 2026-10-06 · normative: node/indexer-feeds.md#NODE-IDX-02 · superseded-by: —
@@ -794,7 +794,7 @@ It said: three intake doors with trust levels.
 
 **Why.** Small deployments need no IdP; organisations with one get SSO. Two modes, one role model.
 **Cost if wrong.** A deployment without OIDC relies on node passwords; Argon2id and lockout bound guessing.
-**Source.** [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 1021.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 130; [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 1021.
 
 ### NODE-ADM-03 — OIDC JWT validation rules
 - old: R106a(oidc) · status: current · owner: yes · date: 2026-10-06 · normative: node/admin-auth.md#NODE-ADM-03 · superseded-by: —
@@ -901,7 +901,7 @@ It said: jWS verification on ring.
 
 **Why.** Settlement failures must be pinned on the party whose signed data caused them, from chain evidence, not guessed.
 **Cost if wrong.** Wrong attribution punishes honest makers.
-**Source.** [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 271.
+**Source.** [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 424; [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 271.
 
 ### NODE-DEX-03 — No WebSocket; clients poll
 - old: RS5-5 · status: current · owner: no · date: 2026-10-03 · normative: node/dex-venue.md#NODE-DEX-03 · superseded-by: —
@@ -981,19 +981,19 @@ It said: jWS verification on ring.
 - old: RS5-2 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NODE-DEX-14
 
 It said: dEX book persisted in ERP.
-**Source.** [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 13.
+**Source.** [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 400; [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 13.
 
 ### NODE-DEX-81 — Book accepts only own-relayer orders
 - old: RS5-9 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NODE-DEX-12
 
 It said: book accepts only own-relayer orders.
-**Source.** [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 15.
+**Source.** [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 411; [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 15.
 
 ### NODE-DEX-82 — DEX chains run one lane only
 - old: RS5-11 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NODE-JOB-08
 
 It said: dEX chains run one lane only.
-**Source.** [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 16.
+**Source.** [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 414; [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 16.
 
 ## Node — Mesh
 
@@ -1085,7 +1085,7 @@ It said: dEX chains run one lane only.
 - old: R99 · status: current · owner: yes · date: 2026-10-06 · normative: node/mesh.md#NODE-MESH-15 · superseded-by: —
 
 **Why.** Bus scope belongs to each job, set by its producer.
-**Source.** [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 1020.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 123; [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 1020.
 
 ### NODE-MESH-16 — Verify signatures before any chain call
 - old: R343 · status: current · owner: no · date: 2026-10-07 · normative: node/mesh.md#NODE-MESH-16 · superseded-by: —
@@ -1743,6 +1743,13 @@ It said: separate DB roles per module.
 **Cost if wrong.** A factory bug is inherited by every token created through it until a new factory ships.
 **Source.** `research/_USER-DECISIONS.md:1288`
 
+### CTR-TOK-19 — Multi wrap checks only its own leg's reserve
+- old: — · status: current · owner: yes · date: 2026-10-06 · normative: contracts/token-wrappers.md#CTR-TOK-19 · superseded-by: —
+
+**Why.** The reserve rule (CTR-TOK-05) stays per leg: `wrap`/`addReserve` on leg A check only leg A's `balanceOf ≥ reserve`, and a shortfall on another leg is disclosed and alerted on instead of blocking intake. Rejected: checking every leg on a multi `wrap` and `addReserve` (at most 8 `balanceOf`, as `executeRate` already does) — it would amend CTR-TOK-05.
+**Cost if wrong.** After one leg loses backing, new deposits into a good leg mint at par into an under-backed pool and early exiters take the good assets those deposits brought; the mitigation is off-chain (per-leg backing alerts, issuer pausing intake by communication, wallets showing per-leg backing).
+**Source.** `history/specs/2026-10-06-token-wrappers-v2.md:596` (owner decision 2026-10-06, implementation review L3); `history/specs/2026-10-06-token-wrappers-v2.md:925` (the open question it answers)
+
 ### CTR-TOK-80 — No EOA approve lockdown
 - old: R4 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CTR-TOK-01
 
@@ -2105,14 +2112,14 @@ It said: separate DB roles per module.
 **Source.** `history/specs/2026-10-03-zether-design.md:586`
 
 ### CTR-ZTH-04 — shieldScale is raw units per shielded unit
-- old: RS2-3, UD:§2 · status: current · owner: no · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-04 · superseded-by: —
+- old: RS2-3, UD:§2 · status: current · owner: yes · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-04 · superseded-by: —
 
 **Why.** `shieldScale` is raw underlying units per shielded unit, a single integer that keeps the 2^54 bound meaningful for any decimals. The bound exists because the amount is exponential ElGamal: the key only strips the mask (`C / D^x = g^b`), and getting `b` back from `g^b` is a discrete log that BSGS solves in `O(sqrt(b))` steps; the contract only ever returns ciphertext and never holds `x`. The bound bites only in cold recovery: in daily use the client knows the previous balance and solves only the difference. 2^44 is the last BSGS table size that fits a phone; `2^48` is blocked by memory, not time (Pollard kangaroo removes the memory wall at 2 to 4 times the time). Raising `shieldScale` is cheaper than buying bits and costs only granularity.
 **Cost if wrong.** Scaling by decimals inside the circuit would add rounding paths.
 **Source.** `history/specs/2026-10-03-zether-design.md:588`, `research/_USER-DECISIONS.md:49`
 
 ### CTR-ZTH-05 — Inner fee to beneficiary pending; outer fee public
-- old: RS2-4, UD:§10:fee-layers · status: current · owner: no · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-05 · superseded-by: —
+- old: RS2-4, UD:§10:fee-layers · status: current · owner: yes · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-05 · superseded-by: —
 
 **Why.** Two fee layers: an inner confidential fee to a beneficiary's pending balance and an outer public fee for the relayer. A holder whose money is all confidential has no public token to pay an outer fee; the inner fee (`C_fee`, debited from the encrypted balance) is the only way such an account can pay a relayer. Fee first, amount second: the proof shows `fee >= 0`, `v >= 0`, `b - fee >= 0` and `(b - fee) - v >= 0` together.
 **Cost if wrong.** One fee layer would either leak the amount or leave relayers unpaid.
@@ -2126,14 +2133,14 @@ It said: separate DB roles per module.
 **Source.** `history/specs/2026-10-03-zether-design.md:592`
 
 ### CTR-ZTH-07 — Outer FIXED fee uncapped; PERCENT forbidden
-- old: RS2-6, UD:§3, UD:§3.2, UD:§3.4 · status: current · owner: no · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-07 · superseded-by: —
+- old: RS2-6, UD:§3, UD:§3.2, UD:§3.4 · status: current · owner: yes · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-07 · superseded-by: —
 
 **Why.** Confidential ops take only an absolute FIXED outer fee; PERCENT would reveal the amount through the fee.
 **Cost if wrong.** A percentage fee on a hidden amount is an amount oracle.
 **Source.** `history/specs/2026-10-03-zether-design.md:594`, `research/_USER-DECISIONS.md:102`, `research/_USER-DECISIONS.md:124`, `research/_USER-DECISIONS.md:164`
 
 ### CTR-ZTH-08 — Separate ZetherMetaTx mixin; v1 sources untouched
-- old: RS2-7, UD:§10 · status: current · owner: no · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-08 · superseded-by: —
+- old: RS2-7, UD:§10 · status: current · owner: yes · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-08 · superseded-by: —
 
 **Why.** A separate `ZetherMetaTx` mixin reuses `MetaTxLib` read-only, so v1 token sources stay untouched. Zether is a child of the meta-transaction layer, so every confidential token is gasless too; an early code draft declared `ISecureERC20 is IERC20`, which would have left confidential tokens without meta-transactions. Rejected: the early `IZetherToken` interface sketch (`schnorrAddress`, `zetherNonce`, `EncryptedBalance` structs, `transferConfidential` with a `metaTx.amount = 0` wrapper) — replaced by the built `IZetherToken` and the envelope ops.
 **Cost if wrong.** Editing the v1 sources would invalidate their tests and audits.
@@ -2305,14 +2312,14 @@ It said: separate DB roles per module.
 
 **Why.** Open owner decision: the production curve for classical Zether (bn254 or BLS12-381); BLS12-381 is more secure and not cheaper.
 **Cost if wrong.** Choosing bn254 for money at rest accepts ~100-bit security.
-**Source.** `superpowers/plans/2026-10-07-docs-reorg.md:1219`
+**Source.** `superpowers/plans/2026-10-07-docs-reorg.md:1241`
 
 ### CTR-ZTH-33 — Chain 7622 is not a classical-Zether dev chain
 - old: reorg:Q5(dev-chain) · status: open · owner: yes · date: 2026-10-07 · normative: contracts/zether.md#CTR-ZTH-33 · superseded-by: —
 
 **Why.** Open owner decision: chain 7622 is not a classical-Zether dev chain until the owner decides.
 **Cost if wrong.** Treating it as dev would put unaudited classical Zether on the shared private chain.
-**Source.** `superpowers/plans/2026-10-07-docs-reorg.md:1219`
+**Source.** `superpowers/plans/2026-10-07-docs-reorg.md:1241`
 
 ### CTR-ZTH-80 — Range bits 32 and DECRYPT_BOUND 2^40
 - old: R34(params) · status: superseded · owner: yes · date: 2026-10-03 · normative: — · superseded-by: CTR-ZTH-18, CTR-ZTH-19

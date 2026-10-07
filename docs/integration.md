@@ -257,22 +257,12 @@ outside the table is `dead` with `CALL_TARGET_REFUSED` before simulation on the 
 `target_address`, `calldata_hex` and `payment_request_id`; the node uses `calldata` when present, and the request
 becomes `final` only from its `PaymentSettled` — the node is never a "blind signer" of client calldata.
 
-<a id="call-targets"></a>**Call targets.** `allow_call` on the namespace is necessary, not sufficient. The node runs a
-`call` job only if its 4-byte selector is in this table **and** the target meets the row's rule; never when the target
-is a registered token of the chain (any kind) or the token factory; `call` jobs carry no native value. Lane keys never
-hold a role: role-restricted calls go through the role holders' Safe (`Safe.execTransaction`, signed by them; the lane
-only relays it) — [NODE-JOB-01](node/job-api.md#NODE-JOB-01).
-
-| Selector | Target rule | Typical producer |
-|---|---|---|
-| `SubjectAccountFactory.deploy((uint8,bytes32,bytes32,bytes32,bytes32),address)` | the chain's account factory (`chain_contract.kind = account_factory`) | subject-account onboarding ([accounts](#accounts)) |
-| `SubjectAccount.executeAsOwner(bytes,uint256,uint256,bytes)` | an EIP-1167 clone of that factory's implementation (checked at lease) | subject-account key changes |
-| `MandateWallet.payUnderMandate`, `revokeWithSig` (epoch-bound), `executeAsOwner`; `HederaMandateWallet.executeAsOwnerRaw` (ED25519 owners) | any address that is not a registered token (the target checks the delegate/owner signature) | delegated payments, auto-pay, kill switch ([auto-pay](#auto-pay)) |
-| `OrderBookDex.settle` / `cancel` / `invalidateNonces` | the chain's DEX | DEX venue / DEX accounting |
-| `UniversalAccountRegistry.register` (`UARegistry.register` once the UA registry lands) | `chain.ua_registry`, `~gateway` only | node gateway `POST /v1/ua/register` ([accounts](#accounts)) |
-
-Anything else a client wants to call on chain (e.g. `createTender`, factory `createTiered`, regulated interventions)
-needs a table row first (node release) or is sent by the subject's or treasury's own wallet.
+<a id="call-targets"></a>**Call targets.** `allow_call` on the namespace is necessary, not sufficient: the node runs a
+`call` job only if it matches a row of the node's call table ([NODE-JOB-01](node/job-api.md#NODE-JOB-01)), which also
+lists the permissionless and self-authenticating rows (tender, vesting and distribution, exchange offers) and routes
+every role-restricted call through the role holder's own contract ([NODE-JOB-19](node/job-api.md#NODE-JOB-19)).
+Anything else a client wants to call on chain needs a table row first (node release) or is sent by the subject's or
+treasury's own wallet.
 
 ## Feeds and reconciliation
 
@@ -458,7 +448,7 @@ the node watch list (`PUT /v1/watch/{chain}`).
 | Mode | Who signs | From | Rule |
 |---|---|---|---|
 | `manual` (default) | the user, each time | their EOA/wallet | the existing flow |
-| `custodial` | the platform through the custody adapter (`signer_ref`) | an EOA the adapter controls | `signer_ref` required; a wallet of a **non-company partner** (customer/outlet) also needs `license_ref` |
+| `custodial` | the platform through the custody adapter (`signer_ref`) | an EOA the adapter controls | `signer_ref` required; a wallet of a **non-company partner** (customer/store) also needs `license_ref` |
 | `delegated` | a platform delegate key (through the adapter) **within on-chain limits** | the payer's `MandateWallet` | the payer keeps the owner key; limits enforced on chain ([CTR-ACC-07](contracts/accounts-mandates.md#CTR-ACC-07)) |
 
 <a id="INT-ERP-02"></a>**INT-ERP-02** — **A `custodial` paying wallet of a non-company partner requires `license_ref`.**
@@ -540,7 +530,7 @@ check is real ed25519 over `sha256(payload)` with the master key from the strkey
 
 | Family | ERP specifics |
 |---|---|
-| Hedera | Chain `family = hedera`, `evm_chain_number` 295–298. An alias `0x…` payer uses the EVM path (EIP-712 + EIP-6963) unchanged. Tokens and receiving wallets entered as `0.0.N` are resolved through the mirror node (`/api/v1/{contracts|accounts}/0.0.N` ⇒ `evm_address`), because `0.0.N` → long-zero is right only for ED25519 accounts without alias, and a CREATE2 clone's `address(this)` is its EVM address (a long-zero entry would break `verifyingContract`). To check on testnet: `msg.sender` of an ECDSA account with alias is the alias `0x…`. The connector signs the raw `digest` with a page-provided ED25519 signer (`m/44'/3030'/0'/0'/i'` seed key); one key per family — a connector key that signs any 32 bytes is never shared with Stellar or a TON mandate delegate ([NODE-LANE-20](node/submit-lanes.md#NODE-LANE-20)) |
+| Hedera | Chain `family = hedera`, `evm_chain_number` 295–298. An alias `0x…` payer uses the EVM path (EIP-712 + EIP-6963) unchanged. Tokens and receiving wallets entered as `0.0.N` are looked up **once, at entry**, on the chain's mirror node (`/api/v1/{contracts|accounts}/0.0.N` ⇒ `evm_address`) and stored as `0x`, because `0.0.N` → long-zero is right only for ED25519 accounts without alias, and a CREATE2 clone's `address(this)` is its EVM address (a long-zero entry would break `verifyingContract`; an ECDSA account receiving at its long-zero address strands the funds). Long-zero is kept only when the mirror reports an `ED25519` key and no alias; no mirror, a lookup error, or a non-ED25519 account without alias ⇒ refused, and a `0x` address is required. This is the only exception to "the ERP makes no chain RPC": one public read GET at entry, never on the payment path. To check on testnet: `msg.sender` of an ECDSA account with alias is the alias `0x…`. The connector signs the raw `digest` with a page-provided ED25519 signer (`m/44'/3030'/0'/0'/i'` seed key); one key per family — a connector key that signs any 32 bytes is never shared with Stellar or a TON mandate delegate ([NODE-LANE-20](node/submit-lanes.md#NODE-LANE-20)) |
 | Cosmos | `build_terms` builds the signed `payload` (contract = token address, `network` = `chain.network_key`); terms `{chain_id, signer, data_b64}`. `verify`: base64 64-byte signature + 33-byte pubkey, rebuild the ADR-036 doc, recover secp256k1 and compare; bind the address with `ripemd160` if `hashlib` has it, else `None`. Connector `cosmos.js`: `window.keplr || window.leap`, `enable(chainId)`, `getKey` ⇒ `{address, publicKey}`, `signArbitrary(chainId, signer, payloadString)` ⇒ `{signature, publicKey}`; no library |
 | Soroban | `build_terms(request, valid_until)` ⇒ `payload` (XDR), `digest`, `contract` = token, `terms` = `{network_passphrase, contract, function: "pay", from, preimage_b64, nonce, expiration_ledger, …}`. The chain keeps an anchor timestamp updated on event ingest. Freighter: `@stellar/freighter-api` pinned and vendored in `static/lib/`, loaded lazily; `connect()` = `requestAccess` ⇒ `{address}`; `sign(terms)` ⇒ `signAuthEntry(preimage_b64, …)` |
 | Sui | Token adds `sui_coin_type` (e.g. `0x2::sui::SUI`); `address` = the `Registry<T>` id; `chain.network_key` must equal the string given to `set_network`. A start checkpoint is taken at enable time (else the latest via the public RPC). A Sui receiving address is an object ⇒ checked as an `Account<T>`. `build_terms(req, valid_until)`: amount > u64::MAX refused; account = `derive(registry, payer)`; `MetaOp{pay, to=receiving, amount, pay_ref=entryRef, lane=batch, nonce=0, relayer=@0x0}` ⇒ `contract = account`, `terms = {message_b64, account, registry, network}`, `extra = {coin_type}`. `verify`: split the serialized signature; `blake2b256(flag ‖ pk)` must equal the payer; ed25519 / secp256k1 / secp256r1 checked with `cryptography`; passkeys check challenge + P-256, else `False`. Connector `connectors/sui.js`: pure Wallet Standard (`wallet-standard:register-wallet` / `wallet-standard:app-ready`), a wallet with `sui:signPersonalMessage`; `connect()` ⇒ `{address, publicKey}`; `sign(terms)` ⇒ `{signature (base64 serialized), publicKey}`; zkLogin/multisig accounts refused (key not 32/33 bytes, or flag ∉ 0/1/2/6) |
@@ -591,7 +581,7 @@ use the same or different nodes.
 
 | # | Step | System | Detail | Status |
 |---|---|---|---|---|
-| 1 | Bill approved | Buyer ERP | Vendor bill posted and approved (maker-checker for large amounts) | client |
+| 1 | Bill approved | Buyer ERP | Vendor bill posted and approved (maker-checker for risk-class-3 amounts, [signing policy](clients/signers-clientkeys.md#signing-policy)) | client |
 | 2 | Payment request | Buyer ERP | `entryRef` random; request row (token, supplier's approved receiving wallet, amount in base units, payer wallet); typed data with `pay(entryRef)` | **BUILT** (example connector, inbound direction); outbound treasury payouts **PLANNED** |
 | 3 | Sign | Buyer signer | Human approver signs on device (passkey/seed), or the delegated/custodial path signs under `SigningPolicyService` limits (`validUntil − now ≤ 300 s`) or `MandateWallet.payUnderMandate` | **BUILT** (device, mandate); policy service **PLANNED** |
 | 4 | Outbox + push | Buyer ERP → node | Outbox row in the same transaction as `request → pending`; push `POST /v1/jobs` (`kind = metatx`, or `call` for mandates) | outbox **BUILT**; push **SPECIFIED** |
@@ -652,20 +642,18 @@ payload of the family ([NET-ALL-02](networks/README.md#NET-ALL-02)).
 <a id="tender"></a>
 
 The contract is [contracts/tender](contracts/tender.md). The commit is the deposit token's own `pay` intent; reveal,
-withdraw and settle need no signature and can be run by any keeper. **Open (call table):** the tender's `call` jobs
-(`createTender`, `commitBid`, keeper `revealBid`/`withdrawDeposit`/`settleTender`, bond calls) are not yet rows of the
-[call table](#call-targets), so the node refuses them (`CALL_TARGET_REFUSED`) until the rows are added (target rule:
-the chain's `chain_contract.kind = tender`). Until then the buyer's and bidders' wallets send these calls themselves.
+withdraw and settle need no signature and can be run by any keeper. Which tender calls run as `call` jobs, and how the
+buyer's role-restricted calls reach the contract, is [NODE-JOB-19](node/job-api.md#NODE-JOB-19).
 
 **Buyer (ERP):**
 
 | # | Buyer ERP | Chain |
 |---|---|---|
 | 1 | Tender record linked to the RFQ; documents normalised (JCS), `documentRef` = salted commitment ([data protection](#data-protection)); deposit token, `minDeposit`, deadlines, public reserve, `minBidders`, bond policy, `slashSink`, allowlist root, `dqWindow`, `maxDisqualifications`, `forfeitClasses` | — |
-| 2 | Chain check: refuses, or warns with a recorded reason, on a chain whose validators the buyer organization controls alone; then a `call` job `createTender(config)` from the buyer account (namespace with `allow_call`, [NODE-JOB-09](node/job-api.md#NODE-JOB-09)); stores `tenderId` from `TenderCreated` | `TenderCreated` |
+| 2 | Chain check: refuses, or warns with a recorded reason, on a chain whose validators the buyer organization controls alone; then `createTender(config)` through the buyer's role-holder contract (`Safe.execTransaction` or `SubjectAccount.executeAsOwner`, relayed as a `call` job from a namespace with `allow_call`, [NODE-JOB-09](node/job-api.md#NODE-JOB-09), [NODE-JOB-19](node/job-api.md#NODE-JOB-19)); stores `tenderId` from `TenderCreated` | `TenderCreated` |
 | 3 | Publishes tender id, deadlines, deposit terms, eligibility proofs; may offer a sponsored portal path, never as the bidders' only path | — |
 | 4 | Watches commits (count only); may cancel until `commitDeadline` (all deposits refund) | `BidCommitted`, `TenderCancelled` |
-| 5 | Inside the award window: due diligence on the leader; if it fails, `disqualifyWinner(reasonRef, class)` with the reason document committed and retained for audit and dispute (leader only, only while a next valid bid exists) | `BidDisqualified` |
+| 5 | Inside the award window: due diligence on the leader; if it fails, `disqualifyWinner(reasonRef, class)` (through the same role-holder contract) with the reason document committed and retained for audit and dispute (leader only, only while a next valid bid exists) | `BidDisqualified` |
 | 5b | Then `settleTender` (buyer early, or any keeper after the window) | `TenderSettled` |
 | 6 | On the **finalized** `TenderSettled`: PO to the winner; non-revealers = committed set − revealed set (flagged from `DepositSlashed`); keeper jobs `withdrawDeposit` for every bid (refunds and forfeits) | `DepositRefunded`, `DepositSlashed` |
 | 7 | Bond: `releaseBond` on contract signature/delivery, or `claimBond(reasonRef)` | `BondReleased`/`BondClaimed` |
@@ -715,6 +703,10 @@ the bid's own data. Either way the salt is unknown to anyone else until reveal, 
   `SubjectAccountFactory.predict(firstKey, guardian)`; the client enqueues a `call` job `deploy(firstKey, guardian)`
   **before** the subject's first payment (deploy is permissionless and idempotent). Key changes go through
   `executeAsOwner` signed by an existing key (client builds `OwnerCall(bytes data,uint256 nonce,uint256 validUntil)`).
+  <a id="first-key-proof"></a>When the client registers the first key against a server challenge, the new key signs
+  `keccak256("scaas-subject-key-proof-v1" ‖ challenge)` — domain separation: a server-chosen challenge is never an
+  operation digest. A passkey proof is checked as any assertion (`clientDataJSON`, `rpIdHash`, UP|UV, P-256 signature),
+  a seed key by `ecrecover`; origin and rpId come from configuration, **never from the request host**.
   Under Universal Accounts it is **option (b)**: the optional smart account for subjects who want recovery without moving
   funds or one address across key changes ([CTR-ACC-09](contracts/accounts-mandates.md#CTR-ACC-09)); its seed keys come
   from the role path `m/7622'/0'/<account>'/2'/<i>'`, never the EOA path
@@ -756,7 +748,7 @@ kind (passkey `webauthn-p256`, `p256`, `ed25519`, `bip340`, Schnorr/BLS, MuSig2/
 4. On the finalized `UARegistered` event the client reads `recordOf(ua)` — kind **and** `authRef` equal what it asked
    for — and only then marks the account usable on that chain.
 
-Kind choice: staff/outlets with a phone → `webauthn-p256` UA (or `SubjectAccount` when they want recovery);
+Kind choice: staff/points of sale with a phone → `webauthn-p256` UA (or `SubjectAccount` when they want recovery);
 extension-wallet users → native EOA; boards and finance → `msig` over members' passkey UAs and/or EOAs (each member
 confirms its listing off chain; membership is not consent); agent clusters and Schnorr MPC → `frost-*` (shown with its
 attestation-only caveats); HSM keys → `p256`; confidential balances → `zether-*` with `authRef` one of the above; PQ

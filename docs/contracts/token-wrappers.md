@@ -164,6 +164,8 @@ pending or the pending change has expired). Previews ignore fee-on-transfer (the
 
 ### Tier 3 — `MultiUnderlyingToken` (kind `META_MULTI`)
 
+<a id="multi"></a>
+
 <a id="CTR-TOK-07"></a>**CTR-TOK-07** — Multi-underlying is **any-of**: the underlying set (2–8, no duplicates) and
 each leg's initial rate are set at creation and never added to or removed (rates themselves may be adjustable,
 [CTR-TOK-13](#CTR-TOK-13)); a user wraps one chosen underlying and unwraps into one chosen underlying, bounded by that
@@ -211,7 +213,8 @@ expected behaviour of an any-of wrapper, not a bug.
   should submit it privately (a private relay or a builder bundle).
 - No re-enable: a mistaken disable is permanent for that leg. Holders lose nothing by it; the issuer creates a new
   token if the leg must come back.
-- **A shortfall on one leg does not stop wrapping into the others** (owner decision; the reserve rule is per leg).
+- <a id="CTR-TOK-19"></a>**CTR-TOK-19** — **A shortfall on one leg does not stop wrapping into the others** (owner
+  decision 2026-10-06; the reserve rule of [CTR-TOK-05](#CTR-TOK-05) is per leg).
   `wrap(A)` checks only leg A's `balanceOf ≥ reserve`. If leg B loses backing (a blacklist burn, a negative rebase, a
   confiscation), new deposits into A still mint at par into a pool that is now under-backed, and early exiters
   through A take the good assets those deposits brought. `disableWrap(B)` does not prevent this. The node/ERP should
@@ -499,6 +502,8 @@ wrappers the live reserve `underlying.balanceOf(token)` — readable by anyone f
 - `IFactoryToken` (`src/factory/IFactoryToken.sol`): exactly one function, `initialize(...)` — the contract between
   the factory and every implementation, Zether included.
 
+<a id="factory-interface"></a>
+
 ```solidity
 interface IOpenFactory {
     enum TokenKind { META, ZETHER }   // future kinds append; values never reused
@@ -547,6 +552,8 @@ interface IOpenFactory {
 ```
 
 ### Factory v2 (`OpenFactoryV2`, **BUILT**)
+
+<a id="factory-v2"></a>
 
 <a id="CTR-TOK-03"></a>**CTR-TOK-03** — Factory v2 is a **new `OpenFactory` deployment**; `TokenKind` appends
 `META_NONE = 2`, `META_SINGLE = 3`, `META_MULTI = 4` (values never reused; `META = 0` stays the v1 combined kind). New

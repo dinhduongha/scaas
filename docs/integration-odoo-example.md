@@ -180,7 +180,7 @@ signature is stored `signature_verified = False` and judged by simulation ([INT-
 
 <a id="example-odoo-platform-company"></a><a id="INT-ODOO-11"></a>**INT-ODOO-11** — **One receiving-company seam and one
 "platform company".** The receiving company is `dms.portal.api._dms_chain_receiving_company(order)` (= `order.company_id`;
-on the territory branch `res.company._dms_document_company()`); every lookup of provider, receiving wallet and staff note
+in a multi-company deployment `res.company._dms_document_company()`); every lookup of provider, receiving wallet and staff note
 goes through it (`_dms_chain_offered`, `_dms_chain_start`, `sale_order`, `payment_transaction`). One wallet-admin seam:
 `res.users._blockchain_wallet_admin(company)` (`group_blockchain_treasury`, members with the company in
 `user.company_ids`, or `base.group_system`). The former "Host" is the **"platform company"**: parameter
@@ -270,16 +270,16 @@ owner-call jobs**; only one owner call is live at a time; `reverted` consumes no
 
 <a id="INT-ODOO-03"></a>**INT-ODOO-03** — **The first key registers in two steps with an HMAC challenge.**
 `..._register_start` returns a challenge HMAC(`database.secret`; user, partner, chain, expiry) — nothing stored, TTL
-600 s; the new key signs `keccak256("scaas-subject-register" ‖ challenge)`; the server checks the passkey with
-`_clientDataOk` (origin `dms_blockchain_bridge.passkey_origin`, else `web.base.url`) or a seed key with `ecrecover`; the
-caller must be a user entitled to act for that partner.
+600 s; the new key signs the [first-key proof](integration.md#first-key-proof); the server checks the passkey with
+`_clientDataOk` (origin and rpId from `dms_blockchain_bridge.passkey_origin`, else `web.base.url` — not the request host)
+or a seed key with `ecrecover`; the caller must be a user entitled to act for that partner.
 
 <a id="INT-ODOO-04"></a>**INT-ODOO-04** — **A deploy job is created only for the account of the paying partner itself**
 (`res_model/res_id` of the request).
 
 <a id="odoo-key-registration"></a><a id="INT-ODOO-14"></a>**INT-ODOO-14** — **Key registration is not the addon's job.**
-The blockchain addon keeps generic subject accounts linked to partners; it knows nothing of outlets. Mapping outlets to
-keys lives in a bridge, and the operator decides how keys are issued.
+The blockchain addon keeps generic subject accounts linked to partners; it knows nothing of the host application's business objects. Mapping
+those to keys lives in a bridge, and the operator decides how keys are issued.
 
 <a id="example-odoo-ua"></a><a id="INT-ODOO-13"></a>**INT-ODOO-13** — **Odoo stores UAs as addresses of a new kind and
 never derives policy off chain.** Model `blockchain.ua`; partner links only in the client store.

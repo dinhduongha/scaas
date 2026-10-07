@@ -14,7 +14,7 @@ of [NET-ALL-23](README.md#NET-ALL-23) (built: `signPersonalMessage(BCS(MetaOp))`
 `blake2b256([3,0,0] ‖ bcs(vector<u8>))` and
 verifies ed25519, secp256k1 (`secp256k1_verify(hash=SHA256)`), secp256r1 or a passkey; the domain is the network
 string set in the root config plus `object::id(account)`. A relayer lane sends a PTB calling
-`meta::relay_pay<T>` with its own gas coin. **Sponsored transactions** (dual signature) are used only for transactions
+`meta::relay_pay<T>` with its own gas coin. **Sponsored transactions** (dual signature, the sponsor owns `GasData`) are used only for transactions
 the subject sends itself (deposits, creating a mandate) — a seam, never as the gas mechanism of a meta operation. Keys
 move to a per-subject `Keys` object ([NET-SUI-02](#NET-SUI-02)).
 

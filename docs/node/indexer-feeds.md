@@ -99,8 +99,9 @@ today and are **SPECIFIED**.
 
 RPC endpoints are independent providers listed in `rpc_urls` (toml-only, [NODE-STO-03](store.md#NODE-STO-03)); the
 quorum is the failover: a failed or lagging endpoint costs liveness only while ≥ `quorum` agree; a lying one is outvoted
-or holds the indexer ([runbooks.md#incidents](runbooks.md#incidents) RB-05). Residual trust: clients trust their
-node's feed (a compromised node can lie on `/v1/events`, [threat-model.md#node](threat-model.md#node) T7).
+or holds the indexer ([runbooks.md#incidents](runbooks.md#incidents) RB-05). There is no latency-based routing
+between endpoints. Residual trust: clients trust their node's feed (a compromised node can lie on `/v1/events`,
+[threat-model.md#node](threat-model.md#node) T7).
 
 At start and every 600 s the indexer re-reads the hash at `indexed_block` from ≥ quorum endpoints; a mismatch holds that
 chain (`finality violated at <block>`, [NODE-OPS-12](ops.md#NODE-OPS-12)).

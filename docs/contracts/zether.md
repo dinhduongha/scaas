@@ -426,6 +426,8 @@ burn payload     = be32(provedAccSeq) ‖ be32(provedSendCounter) ‖ Y_f       
 
 ## Meta-transaction envelope and replay protection
 
+<a id="envelope"></a>
+
 <a id="zethermetatx"></a>
 <a id="CTR-ZTH-08"></a>**CTR-ZTH-08** — **A confidential token is a meta-tx token** (owner: Zether is a child of the
 meta-transaction layer, not a parallel branch): `ZetherToken` carries a separate `ZetherMetaTx` mixin that uses
@@ -866,18 +868,18 @@ tests and vectors; re-measured 2026-10-05 for `n_v = 64`): **execution gas, excl
 calldata** (a bn254 transfer ≈ 3.8 KB calldata ≈ +52 k; BLS ≈ 6.9 KB ≈ +99 k). Verification gas does not depend on the
 value (identical for `v = 300`, `v = 2^32 + 5`, `v = 2^64 − 1`).
 
-| Operation | bn254 | BLS12-381 | Earlier estimate (bn254 unless noted) |
-|---|---|---|---|
-| `verifyTransfer` (verifier, auditor off) | **2,700,151** (n_v = 32: 2,162,249) | **2,928,567** (2,411,138) | BP 1,507 k + Σ 171 k = 1,678 k |
-| `verifyTransfer` (auditor on) | **2,728,409** (2,190,479) | **2,971,201** (2,453,597) | +27.5 k |
-| `verifyBurn` | **1,329,957** (1,329,969) | **1,428,858** (1,428,870) | ~1.27 M |
-| `transferConfidential` direct (auditor, inner fee) | **3,286,339** (2,748,019) | **3,919,760** (3,400,986) | **1,905,000** (+73 %); BLS ≈ 1,050,000 (+273 %) |
-| `transferConfidential` in envelope (+ outer fee) | **3,357,045** (2,818,905) | **3,975,916** (3,457,852) | envelope ≈ +71 k / +56 k |
-| `burn` (incl. the underlying transfer) | **1,396,358** (1,396,398) | **1,521,169** (1,521,199) | ~1.27 M |
-| `fund` (first credit / warm) | 191,360 / 28,591 | 247,307 / 36,832 | — |
-| `rollOverPublic` (work / no-op) | 115,234 / 2,305 | 166,414 / 2,295 | ~66 k execution |
-| `rollOverSigned` (Schnorr) | **133,557** (133,370) | **197,503** (197,316) | ~31 k |
-| `register` SELF_SCHNORR | **102,659** (102,645) | **83,440** (83,437) | ~105,750; BLS ~160 k |
+| Operation | bn254 | BLS12-381 | Earlier estimate (bn254 unless noted) | Deviation (n_v = 64) |
+|---|---|---|---|---|
+| `verifyTransfer` (verifier, auditor off) | **2,700,151** (n_v = 32: 2,162,249) | **2,928,567** (2,411,138) | BP 1,507 k + Σ 171 k = 1,678 k | +61 % |
+| `verifyTransfer` (auditor on) | **2,728,409** (2,190,479) | **2,971,201** (2,453,597) | +27.5 k | matches (+28 k / +43 k) |
+| `verifyBurn` | **1,329,957** (1,329,969) | **1,428,858** (1,428,870) | ~1.27 M | +5 % |
+| `transferConfidential` direct (auditor, inner fee) | **3,286,339** (2,748,019) | **3,919,760** (3,400,986) | **1,905,000**; BLS ≈ 1,050,000 | +73 %; BLS +273 % |
+| `transferConfidential` in envelope (+ outer fee) | **3,357,045** (2,818,905) | **3,975,916** (3,457,852) | — | envelope ≈ +71 k / +56 k |
+| `burn` (incl. the underlying transfer) | **1,396,358** (1,396,398) | **1,521,169** (1,521,199) | ~1.27 M | +10 % |
+| `fund` (first credit / warm) | 191,360 / 28,591 | 247,307 / 36,832 | — | unchanged |
+| `rollOverPublic` (work / no-op) | 115,234 / 2,305 | 166,414 / 2,295 | ~66 k execution | unchanged |
+| `rollOverSigned` (Schnorr) | **133,557** (133,370) | **197,503** (197,316) | ~31 k | ×4 |
+| `register` SELF_SCHNORR | **102,659** (102,645) | **83,440** (83,437) | ~105,750; BLS ~160 k | matches; BLS cheaper |
 
 `n_v` 32 → 64 adds exactly one inner-product round and 64 pairs `G_i`/`H_i` to the BP-2 MSM of Bulletproof #1:
 ≈ +538 k (bn254) / +519 k (BLS) execution gas, ≈ +20 %/+15 % on `transferConfidential`. Burn is unchanged (BP#2 only).
@@ -1019,5 +1021,8 @@ Zether envelopes (`metatx`/`ua_metatx` jobs naming a PQ Zether token are never e
 |---|---|
 | Soroban | host functions for BLS12-381 (CAP-59) and BN254 (CAP-74, protocol 25) + Poseidon ⇒ a Bulletproofs/ElGamal verifier is feasible in principle, but one transaction's CPU budget (~100 M instructions) may not suffice for an `n = 64` Bulletproofs range proof ⇒ to be measured; Groth16 (one pairing check) over a Zether-like circuit is the more realistic candidate |
 | TON | TVM has BLS12-381 (`BLS_*`, pairing, MSM) since 2024 but **no** bn254; a port is mathematically feasible (a BLS12-381 verifier in TVM opcodes, ElGamal on G1), but the asynchronous actor model breaks the assumption that one transaction reads and updates several balances (a transfer reads/writes both parties' balances in one transaction) ⇒ the confidential balances would have to live in **one** contract (losing the jetton's sharding), at hundreds of thousands to millions of gas per transfer; if ever needed, a single-contract `ZetherTon` on BLS12-381 |
-| Hedera | the same Solidity runs on HSCS, but its throttle (an estimated ~15 M gas/s for contract calls network-wide) makes high-frequency confidential payments impractical |
-| Others | not assessed beyond the family notes in [networks/](../networks/README.md) |
+| Hedera | the same Solidity runs on HSCS, but its throttle (an estimated ~15 M gas/s for contract calls network-wide) makes high-frequency confidential payments impractical; bn254 variant only, gas-limit charge: [networks/hedera.md](../networks/hedera.md#wrappers) |
+| Cosmos | BLS12-381 variant: [networks/cosmos.md](../networks/cosmos.md#limitations) |
+| Sui | Groth16 path: [networks/sui.md](../networks/sui.md#limitations) |
+| Aptos | Ristretto255, native `confidential_asset`: [networks/aptos.md](../networks/aptos.md#limitations) |
+| Solana | Token-2022 ConfidentialTransfer: [networks/solana.md](../networks/solana.md#limitations) |

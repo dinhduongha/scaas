@@ -316,6 +316,8 @@ the 1 % cap and "percent of the sender's amount, charged on top" are unchanged. 
 
 ## v2 core
 
+<a id="v2"></a>
+
 <a id="CTR-MTX-07"></a>**CTR-MTX-07** — The v2 meta-tx base is `MetaTxCore`: the same `MetaTxLib` struct, typehash,
 `canon` and nine-step order; domain `("SCaaS MetaToken", "2", chainId, clone)` for all three tiers; the pipeline runs
 over a **memory** struct so that named functions can build one; v1 sources (`ERC20MetaTx.sol`, `MetaToken.sol`)
@@ -490,6 +492,8 @@ rates, legs) are in [token-wrappers.md](token-wrappers.md#interfaces). The node'
 reconciliation needs no change.
 
 ## v1 implementation `MetaToken`
+
+<a id="v1"></a>
 
 `contract MetaToken is ERC20MetaTx, IERC20Payment` (kind `META`, **BUILT**) inherits the measured `ERC20MetaTx`
 mixin unchanged. One implementation serves tiers 1 and 2, chosen by `underlying`:

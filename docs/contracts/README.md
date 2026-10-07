@@ -102,6 +102,8 @@ exit or upgrade code.
 
 ## Production gates (UNAUDITED)
 
+<a id="unaudited"></a>
+
 No contract of this repository has had a third-party audit. Every value-holding contract family (Solidity, Move,
 Soroban, CosmWasm, Tact, Solana) needs an independent audit before it holds real funds; the factory registrar moves
 to a multisig before mainnet; real deployments are recorded in `deployments/<chain>.json`. The confidential-token
@@ -120,6 +122,8 @@ families carry stronger gates, enforced in code:
 
 ## Build, CI and pins
 
+<a id="build-pins"></a>
+
 <a id="CTR-GEN-01"></a>**CTR-GEN-01** — Contracts have their own CI workflow (`.github/workflows/blockchain-ci.yml`),
 run on every PR/push that touches `smartcontracts/**` or `scaas-node/**`: (a) forge (foundry-toolchain) with
 `lib/` installed by `forge install` at pinned tags — OpenZeppelin `v5.2.0`, forge-std `v1.16.2` — because `lib/` is
@@ -136,7 +140,7 @@ own job (Move test, Soroban, CosmWasm, Tact, Solana) as the family is added.
 | Size | CI fails if any implementation exceeds 24 576 bytes (`forge build --sizes`, EIP-170) |
 | EIP-1153 | `TLOAD`/`TSTORE` is a prerequisite of every token (transient reentrancy guard); a chain without it cannot hold an eligible token |
 
-Deploy (EVM, **BUILT**): `script/Deploy.s.sol` (forge script; env `PRIVATE_KEY` = deployer and default registrar,
+<a id="deploy"></a>Deploy (EVM, **BUILT**): `script/Deploy.s.sol` (forge script; env `PRIVATE_KEY` = deployer and default registrar,
 `REGISTRAR` optional, `DEMO_SUPPLY`/`DEMO_HOLDER` optional) deploys `OpenFactory`, `SubjectAccountFactory`, the
 `MetaToken` implementation (its constructor takes the factory address), `registerImplementation(META, 1)` when the
 registrar is the deployer, factory v2 with the three tier implementations as version 1 of their kinds, the legacy

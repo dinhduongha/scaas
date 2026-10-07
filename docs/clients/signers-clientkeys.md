@@ -181,6 +181,13 @@ server response as the terms, so in a portal the check is internal consistency (
 from a malicious issuer; in the app, `shown` is the user's own input. Why: it closes the gap between checking
 `payload_hex` and signing `text`. Cost: a terms change must land with its `fam/*.js` change (shared KATs catch it).
 
+<a id="portal-signer-rules"></a>**Portal signer rules.** A portal or ERP page that hosts a signer also:
+
+1. shows the operation in human terms (amount, payee, token, chain, expiry) **before** invoking the authenticator;
+2. never sends mnemonics, `x`, PRF outputs or PINs to any server; tokens and keys live in memory or the encrypted vault;
+3. never runs the signer in a cross-origin iframe — assertions with `crossOrigin: true` or a `topOrigin` are refused
+   ([NET-ALL-04](../networks/README.md#NET-ALL-04)).
+
 ## Passkeys
 
 <a id="passkeys"></a>
@@ -250,6 +257,9 @@ secret buffers are overwritten (`fill(0)`) within JS limits (strings cannot be w
 `@noble/curves` (secp256k1, ed25519), `@scure/bip39`, `@scure/bip32`, pinned and vendored as ESM bundles (`static/lib/` in a portal), **loaded only
 when the seed wallet is chosen**. The seed key and the passkey back each other up (each is the natural recovery key when
 the other is lost). Signing uses each family's typed digest like every other signer. BUILT.
+One key per family: derived keys differ by coin type, and the seed wallet tags an **imported** key with its family and
+refuses to reuse it in another, so one key never signs raw digests for two families
+([NODE-LANE-20](../node/submit-lanes.md#NODE-LANE-20)).
 
 <a id="CLI-SGN-02"></a>**CLI-SGN-02** — **The vault encrypts the seed under a random data key wrapped by a passphrase
 envelope and, when available, a passkey PRF envelope.** A random DEK encrypts the seed with AES-256-GCM (a fresh 12-byte

@@ -275,7 +275,7 @@ every gap is listed, never implied away.** The subject-account "equivalents per 
 | Aptos | account keys + origins in `Account` | guardian + `RECOVERY_DELAY` | — |
 | Sui | per `Account<T>` as built → per subject `Keys` object ([NET-SUI-02](sui.md#NET-SUI-02), SPECIFIED) | guardian per `Account<T>` as built | moves to `Keys` |
 | Soroban | account-authorised add/remove | **seam only** ([NET-SOR-03](soroban.md#NET-SOR-03)) | guardian + delayed recovery (SPECIFIED) |
-| Cosmos | **none** (passkey account derived from key + rp + origin) | **none** | passkey account contract with rotation (design first) |
+| Cosmos | **none** (passkey owner = `webauthn-p256` UA id, [NET-ALL-21](#NET-ALL-21)) | **none** | passkey account contract with rotation (design first) |
 | TON | wallet key follows the owner's wallet; **a passkey cannot rotate** | **none** | guardian + delayed passkey rotation (SPECIFIED) |
 | Solana | key operations add/remove/policy | `start_recovery` / `finish_recovery` | — |
 

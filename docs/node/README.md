@@ -299,6 +299,37 @@ e2e:
 - A nightly manual run with a real ERP test database + node + anvil: portal payment → push → mined → final; flip one
   chain `pull → push` with an in-flight legacy job.
 
+Additions for the store-backed rulings (each lands with the change it covers):
+
+- Store: new tables on every backend + DDL equivalence; `DUPLICATE_CALL` classification; concurrent `usage_day` /
+  `sponsor_usage` upserts and decimal sums; `breaker_latch` across restart; `store restored` pauses and purges, and a
+  job cancelled after the backup point is never leased; `accept-nonce` refusals and gap-filler
+  ([NODE-RUN-03](runbooks.md#NODE-RUN-03)); `index reset`.
+- Gateway: `/v1/gateway` schema; the [NODE-GW-06](gateway.md#NODE-GW-06) golden on every route; CORS preflight;
+  `/v1/ops` accept order per family; 64-byte signatures accepted only on Hedera; UA routes (miss cached 60 s,
+  `UA_KEY_IN_USE`, the [NODE-GW-03](gateway.md#NODE-GW-03) target); app headers byte-exact.
+- Accept/lease: denylist per party, door and lease re-check (no address in logs, labels, audit mirror,
+  [NODE-OPS-14](ops.md#NODE-OPS-14)); the [sponsorship tests](sponsorship.md); `receiver_fee` rules; `traceparent` →
+  `trace_id`; cost fields per family; golden metrics with pre-emitted zeros; `/readyz` per-chain body. Client side:
+  acknowledgement cancels, cursor reset ([job-api.md#client-tests](job-api.md#client-tests)).
+- Cancel-by-origin tombstones: ungranted chain `403`, TTL over cap `422`, expired ⇒ no row, `max_tombstones` `429`,
+  rate, purge at `valid_until + 1 d`. Empty token subset refuses every token, `all_tokens` admin-only and audited,
+  reserved namespaces seeded; `job_live_call`: two namespaces with the same call both accepted, same namespace
+  `DUPLICATE_CALL`.
+- Authority races: suspension / grant revocation / subset replace / key revoke racing an accept, on every backend
+  (PostgreSQL case: the change commits while the accept waits on the fencing row ⇒ refused after retry).
+- `outer_tx` row per signed tx, restart replays per outer tx; gateway CORS with `bearer`/`hmac` refused at start.
+- Sponsorship counters: counts at accept and released before broadcast, one payer bounded by
+  `max_tx_per_payer_hour × max_cost_per_tx`, `SPONSOR_TOO_SHORT`, `sponsor_fallback` booking, `POLICY_INVALID` without
+  `fallback_to_namespace`, the `~gateway` UA-registration policy accepted and any other `~gateway` `call` policy
+  refused, `DUPLICATE_CALL {uid}`.
+- Chain binding (T-CHAIN at the node, [gateway.md#chain-binding](gateway.md#chain-binding)): genesis hash, registry
+  code or `chainUid()` mismatch holds the chain; two `evm:7622` profiles with different `chain_uid`. A 7702-delegated
+  payer's ECDSA signature passes the local check.
+- Planned: the [NODE-LANE-11](submit-lanes.md#NODE-LANE-11) batch journal and cost split over `outer_tx` (items never
+  requeued alone after `signed`); unwrap terminal reverts; token kinds 0–7, managed-market codes,
+  `merkle_dist_vectors.json`.
+
 ## Code pointers
 
 <a id="code-pointers"></a>Where the behaviour described in these docs sits in `scaas-node` today (orientation only;

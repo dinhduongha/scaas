@@ -254,7 +254,7 @@ R130		CTR-TOK-03	current		contracts/token-wrappers.md#factory-v2	no	2026-10-06	F
 R131		CTR-MTX-07	current		contracts/metatx.md#v2-core	no	2026-10-06	MetaTxCore v2: same struct, domain version 2	history/specs/2026-10-06-token-wrappers-v2.md:72		
 R132		CTR-MTX-08	current		contracts/metatx.md#fee-not-to-payee	yes	2026-10-06	Fee never goes to the payee	history/specs/2026-10-06-token-wrappers-v2.md:78		
 R133		CTR-TOK-04	current		contracts/token-wrappers.md#conversion-rate	no	2026-10-06	Conversion rate num/den, rounding favours contract	history/specs/2026-10-06-token-wrappers-v2.md:84		
-R134		CTR-TOK-05	current		contracts/token-wrappers.md#reserve-accounting	no	2026-10-06	Internal reserve accounting and solvency invariant	history/specs/2026-10-06-token-wrappers-v2.md:91		Owner question on per-leg check (TW2 §18 L3) still open, not changed
+R134		CTR-TOK-05	current		contracts/token-wrappers.md#reserve-accounting	no	2026-10-06	Internal reserve accounting and solvency invariant	history/specs/2026-10-06-token-wrappers-v2.md:91		Per-leg check (TW2 §18 L3) answered by the owner 2026-10-06: R134 unchanged, per-leg only; recorded as CTR-TOK-19 (no old id)
 R135		CTR-TOK-06	current		contracts/token-wrappers.md#rate-modes	yes	2026-10-06	Fixed or timelocked adjustable rate at creation	history/specs/2026-10-06-token-wrappers-v2.md:98		Owner option; rev 1.2 admin-only execution
 R136		CTR-TOK-07	current		contracts/token-wrappers.md#multi-underlying	yes	2026-10-06	Multi-underlying any-of with disable-only guardian	history/specs/2026-10-06-token-wrappers-v2.md:108		
 R137		CTR-TOK-08	current		contracts/token-wrappers.md#decimals	no	2026-10-06	Decimals are display only	history/specs/2026-10-06-token-wrappers-v2.md:115		
@@ -776,8 +776,8 @@ reorg:Q1		NODE-JOB-19	current		node/job-api.md#call-table	yes	2026-10-07	Call ta
 reorg:Q2		ARCH-POS-07	current		decisions.md	yes	2026-10-07	Register policy: open entries, defaults, superseded owner rulings	superpowers/plans/2026-10-07-docs-reorg.md:1216		Q2: NI I1-I8 keep stated defaults as open entries
 reorg:Q3		NET-TON-02	current		networks/ton.md#domain-binding	yes	2026-10-07	TON domain binding: per-wallet domain set	superpowers/plans/2026-10-07-docs-reorg.md:1217		K2: owner confirms CR-R3-7; R10-14 domain-in-init clause superseded
 reorg:Q4		NET-TON-03	current		networks/ton.md#dex	yes	2026-10-07	TON bounced payouts: per-owner claim	superpowers/plans/2026-10-07-docs-reorg.md:1218		K3: owner confirms CR-R3-9; R10-17 RefundBounced clause superseded
-reorg:Q5	(curve)	CTR-ZTH-32	open		contracts/zether.md#parameters	yes	2026-10-07	Production curve for classical Zether tokens	superpowers/plans/2026-10-07-docs-reorg.md:1219		K17: bn254 vs BLS12-381 open
-reorg:Q5	(dev-chain)	CTR-ZTH-33	open		contracts/zether.md#safety-gate	yes	2026-10-07	Chain 7622 is not a classical-Zether dev chain	superpowers/plans/2026-10-07-docs-reorg.md:1219		K16: ZetherSafety allowlist stays {31337, 1337}
+reorg:Q5	(curve)	CTR-ZTH-32	open		contracts/zether.md#parameters	yes	2026-10-07	Production curve for classical Zether tokens	superpowers/plans/2026-10-07-docs-reorg.md:1241		K17: bn254 vs BLS12-381 open
+reorg:Q5	(dev-chain)	CTR-ZTH-33	open		contracts/zether.md#safety-gate	yes	2026-10-07	Chain 7622 is not a classical-Zether dev chain	superpowers/plans/2026-10-07-docs-reorg.md:1241		K16: ZetherSafety allowlist stays {31337, 1337}
 reorg:Q6		NODE-MESH-24	open		node/mesh.md#scope	yes	2026-10-07	Soroban stays on the job API, not the mesh	superpowers/plans/2026-10-07-docs-reorg.md:1220		K18 (MESH R77 host nonce)
 reorg:Q7		NODE-IDX-07	open		node/indexer-feeds.md#limitations	yes	2026-10-07	Second independent event source	superpowers/plans/2026-10-07-docs-reorg.md:1221		K19: PLANNED
 reorg:Q8		NODE-OPS-16	current		node/ops.md#slos	yes	2026-10-07	OPS default numbers approved as stated	superpowers/plans/2026-10-07-docs-reorg.md:1222		K20

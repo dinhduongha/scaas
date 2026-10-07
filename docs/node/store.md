@@ -153,7 +153,8 @@ CREATE TABLE chain (
 CREATE TABLE token (chain_key TEXT NOT NULL, address TEXT NOT NULL, decimals INTEGER NOT NULL,
   active INTEGER NOT NULL DEFAULT 1,                              -- 0 = intake paused on every door, indexing continues
   kind TEXT NOT NULL DEFAULT 'meta' CHECK (kind IN ('meta', 'zether', 'meta_none', 'meta_single', 'meta_multi',
-    'meta_none_reg', 'meta_single_reg', 'meta_multi_reg')),       -- versionOf().kind 0–7
+    'meta_none_reg', 'meta_single_reg', 'meta_multi_reg',         -- versionOf().kind 0–7
+    'pqz')),                                                      -- PqzToken (ops.md#pqz)
   features TEXT NOT NULL DEFAULT '',                              -- space-separated: 'receiver_fee', 'ua' (v3: registry() ≠ 0)
   PRIMARY KEY (chain_key, address));
   -- planned: token.reg_cache TEXT (controls, roles, compliance registry of regulated tokens) and the snapshot
@@ -173,13 +174,14 @@ CREATE TABLE job (
   generation      INTEGER NOT NULL DEFAULT 0,
   client_ref      TEXT,                                           -- echoed, e.g. 'erp:<outbox row id>'
   chain_key       TEXT NOT NULL,                                  -- tombstones too: the granted chain of the cancel
-  kind            TEXT NOT NULL CHECK (kind IN ('metatx', 'call', 'signed_op', 'tombstone', 'ua_metatx')),
-  digest          BLOB,                                           -- node-computed; NULL for call/tombstone
+  kind            TEXT NOT NULL CHECK (kind IN ('metatx', 'call', 'signed_op', 'tombstone', 'ua_metatx',
+                                                'pqz_call')),
+  digest          BLOB,                                           -- node-computed; NULL for call/pqz_call/tombstone
   payload         BLOB,                                           -- NULL only for kind = 'tombstone'
   payload_hash    BLOB,                                           -- JCS SHA-256; NULL only for tombstone
-  -- CHECK ((digest IS NULL) = (kind IN ('call', 'tombstone'))): job_live_digest skips NULL, so a digest-bearing
-  -- kind without its digest would bypass durable G2. CHECK ((payload_hash IS NULL) = (kind = 'tombstone')).
-  -- ua_metatx is digest-bearing: digest = uaDigest.
+  -- CHECK ((digest IS NULL) = (kind IN ('call', 'pqz_call', 'tombstone'))): job_live_digest skips NULL, so a
+  -- digest-bearing kind without its digest would bypass durable G2. CHECK ((payload_hash IS NULL) = (kind = 'tombstone')).
+  -- ua_metatx is digest-bearing: digest = uaDigest. pqz_call is a direct call like call: digest NULL, call_hash set.
   valid_until     BIGINT NOT NULL,
   lane_hint       TEXT,                                           -- NODE-JOB-08
   bus_scope       TEXT NOT NULL DEFAULT 'restricted' CHECK (bus_scope IN ('restricted', 'open', 'public')),
@@ -192,7 +194,7 @@ CREATE TABLE job (
   lane_label      TEXT, outer_nonce BIGINT, tx_hash TEXT, claim_block BIGINT,
   attempt_count   INTEGER NOT NULL DEFAULT 0, last_error TEXT, last_seq BIGINT,
   trace_id        TEXT,                                           -- 32 hex from W3C traceparent, else generated
-  call_hash       BLOB,                                           -- kind = call: keccak256(target ‖ calldata)
+  call_hash       BLOB,                                           -- kind = call/pqz_call: keccak256(target ‖ calldata)
   sponsor_policy_id BIGINT,                                       -- NULL = booked to the namespace (sponsorship.md)
   sponsor_reserved TEXT,                                          -- amount reserved at accept (released/booked exactly)
   sponsor_day     TEXT,                                           -- 'd:YYYY-MM-DD' of the reservation; cost books to this day
