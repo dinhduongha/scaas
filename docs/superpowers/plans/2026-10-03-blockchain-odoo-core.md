@@ -640,7 +640,7 @@ class TestModels(ChainCase):
             self.env['blockchain.chain'].with_user(self.relay_user).node_config(9001)
 
     def test_seed_chains_are_draft(self):
-        c7622 = self.env.ref('dms_blockchain.data_chain_private9000')
+        c7622 = self.env.ref('dms_blockchain.data_chain_private7622')
         self.assertEqual(c7622.evm_chain_number, 7622)
         self.assertEqual(c7622.state, 'draft')
         self.assertEqual(self.env.ref('dms_blockchain.data_chain_gnosis').finality_quorum, 2)
@@ -993,7 +993,7 @@ Service users get **no** ACL rows: their methods `check_service` then `sudo()`.
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
 <odoo noupdate="1">
-    <record id="data_chain_private9000" model="blockchain.chain">
+    <record id="data_chain_private7622" model="blockchain.chain">
         <field name="name">Private EVM 7622</field>
         <field name="evm_chain_number">7622</field>
         <field name="native_currency">TOKEN7622</field>
