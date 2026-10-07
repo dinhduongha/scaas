@@ -218,9 +218,16 @@ served filtered to the namespace's watch pairs:
  "balances": [{"token": "0x…", "address": "0x…", "balance": "1000000"}]}
 ```
 
-<a id="NODE-IDX-06"></a>**NODE-IDX-06** (open; default applied) — The feed does not flag a repeated `entryRef`: the
-first `PaymentSettled` per `entryRef` is the payment and later ones are reconciliation exceptions
-([CTR-MTX-10](../contracts/metatx.md#CTR-MTX-10)); clients detect repeats from the events themselves.
+<a id="NODE-IDX-06"></a>**NODE-IDX-06** (owner, 2026-10-07) — **A repeated `entryRef` is flagged by the node and checked by
+the client — both.** The first `PaymentSettled` per `(chain_key, token, entryRef)` is the payment; every later one is
+an overpayment and a reconciliation exception, never a second payment
+([CTR-MTX-10](../contracts/metatx.md#CTR-MTX-10)). The node keeps the first finalized `PaymentSettled` per
+`(chain_key, token, entryRef)` in its store and marks every later `PaymentSettled` item on `/v1/events` with
+`repeat_of` = the first event's `(tx_hash, log_index)` (`null` on the first). The client still detects repeats from
+the events itself and books them; it never relies on the flag alone, because a node only knows the history it has
+indexed (a new or restored node may start after the first payment). A repeat keeps payer, amount, fee and
+transaction so that the business can decide a refund to the payer; a refund is a business decision and a new,
+separate payment, never automatic. Status: SPECIFIED.
 
 ### Cursors
 

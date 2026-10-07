@@ -29,6 +29,9 @@ chainId 9000 → **7622**; `PqzToken` implements `IERC20MetaTx` (PQZ rev 1.4 R28
       lock per `(from, pay_ref)` (R8-9), DEX needs relayer binding (R8-10); §7.2 `associateUnderlying()` superseded
       (R6-8, TW2 R144); §7.5 add lane-horizon client obligation (RS7-11, RS11-24, RS12-24) + Aptos multisig-wrap risk;
       §1.2/§1.3 immutability now true by ruling; admin-exception list; outbox rules into integration.md.
+- [ ] **NODE-IDX-06** (owner 2026-10-07: node flags *and* client checks a repeated `entryRef`): node store keeps the
+      first `PaymentSettled` per `(chain_key, token, entryRef)`, `/v1/events` items carry `repeat_of`; client books the
+      repeat as an overpayment exception for a refund decision. Code stream, not built.
 - [ ] Cross-spec nits: DEX RS5-15 "relayer 0 = open" needs a note — no open form on Soroban (net-soroban R8-10);
       merge PAY-FIX6 into DX-FIX3 (same 1271 cap); PAY-FIX7 (DEX fee-per-fill round-up) needs a DEX ruling;
       spec B's NI-amends row should list `job.sponsor_fallback`.

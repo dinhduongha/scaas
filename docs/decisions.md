@@ -716,11 +716,11 @@ It said: six-member Family enum.
 **Why.** Feed items carry exactly what the ingest needs, so clients do not re-read the chain.
 **Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 116.
 
-### NODE-IDX-06 — Repeated entryRef handling on the feed
-- old: NI:I6 · status: open · owner: no · date: 2026-10-07 · normative: node/indexer-feeds.md#NODE-IDX-06 · superseded-by: —
+### NODE-IDX-06 — Repeated entryRef: node flags, client checks
+- old: NI:I6 · status: current · owner: yes · date: 2026-10-07 · normative: node/indexer-feeds.md#NODE-IDX-06 · superseded-by: —
 
-**Why.** A repeated entryRef is a client-side matching question; the feed reports facts only.
-**Cost if wrong.** Default applied.
+**Why.** Owner: both — the client system must know about an overpayment so that the business can later decide to refund the payer. The node already indexes every `PaymentSettled`, so one uniqueness check per `(chain_key, token, entryRef)` serves every client; the client keeps its own check because a node only knows the history it has indexed. The field name `repeat_of` is chosen here.
+**Cost if wrong.** Without the flag each client re-implements duplicate detection and some miss overpayments; without the client check a new or restored node would hide a repeat whose first payment it never indexed.
 **Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 1615.
 
 ### NODE-IDX-07 — Second independent event source
@@ -4762,7 +4762,7 @@ It said: Host company configuration parameter; replaced by INT-ODOO-11.
 | NI:I3 | NODE-JOB-16 | open |
 | NI:I4 | INT-ERP-20 | open |
 | NI:I5 | NODE-JOB-17 | open |
-| NI:I6 | NODE-IDX-06 | open |
+| NI:I6 | NODE-IDX-06 | current |
 | NI:I7 | NODE-STO-09 | open |
 | NI:I8 | NODE-JOB-18(tombstones), NODE-LANE-21(outer-tx), NODE-ADM-09(last-admin) | open (split) |
 | R1 | ARCH-POS-80 | superseded |

@@ -610,7 +610,9 @@ never touches funds** — `to`, `value`, `data` are inside the digest; fee 0.
 
 Client contract: same `entryRef`, same lanes (a request lane can be consumed by either path, never both), same
 `PaymentSettled` — reconciliation code does not change; a second `PaymentSettled` for one `entryRef` (possible via
-`payWithFee` or another lane) is a reconciliation exception, never a second payment. The node batches per
+`payWithFee` or another lane) is a reconciliation exception, never a second payment: the node marks it `repeat_of`
+on the feed and the client checks it independently, keeping payer, amount and transaction so that the business can
+decide a refund ([NODE-IDX-06](node/indexer-feeds.md#NODE-IDX-06)). The node batches per
 `(chain_key, token)` only items bound to its own lane, at 50 items or 3 s; batching is invisible to the client except
 that several jobs share one `tx_hash`.
 
