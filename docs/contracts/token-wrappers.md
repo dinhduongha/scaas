@@ -602,7 +602,9 @@ function _baseOf(TokenKind k) private pure returns (TokenKind) {   // REG → it
 // _createTiered: TokenKind b = _baseOf(kind); count rule of b (0 / 1 / 2–8)
 ```
 
-Factory v1 stays deployed for v1 tokens; factory v2 does not register `MetaToken` v1. Factory v2 is a new source file
+Factory v1 stays deployed for v1 tokens. Factory v2 can create the v1 `META` kind (`OpenFactoryV2.sol:103`) once a v1
+implementation is registered in it, but `Deploy.s.sol` registers only the three v2 tiers, so as deployed factory v2
+does not create `MetaToken` v1. Factory v2 is a new source file
 (`src/factory/OpenFactoryV2.sol`); `OpenFactory.sol` stays byte-identical so deployed v1 factories remain
 source-verifiable. As built, the appended enum is `IOpenFactoryV2.TokenKind` (same values) in
 `src/common/IOpenFactoryV2.sol`, and `IOpenFactory.sol` is untouched: appending to the v1 enum would change the

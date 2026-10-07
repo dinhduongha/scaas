@@ -14,12 +14,9 @@ chainId 9000 → **7622**; `PqzToken` implements `IERC20MetaTx` (PQZ rev 1.4 R28
       from [`docs/README.md`](docs/README.md) (component docs, `docs/decisions.md` register + old-id alias index),
       history frozen in `docs/history/`, research in `docs/research/`, reorg ledgers (id map, fact ledger) in
       `docs/history/reorg/`, outside references repointed, CI `docs` job. Phase 4 reviewer pass done 2026-10-07 (28 findings,
-      fixed; review files `docs/reviews/reorg/`). Left: 10 % second-reviewer sample of `fine` rows; owner decision on
-      NODE-IDX-06 (who flags a repeated `entryRef`); fact `history/blockchain.md:214` (2D nonce + `mode` landed, native
-      per-family sponsorship rejected) and `history/blockchain.md:8` ("delegate to share code, many versions": met by
-      immutable clones, not rejected) need trace fixes — their content now lives in the root README, outside the checker's
-      docs root; then move the plan to
-      `docs/history/plans/`.
+      fixed; review files `docs/reviews/reorg/`); 10 % second sample: contracts 29/29 and node 42/42 fine, netcli running;
+      NODE-IDX-06 ruled; trace rows `blockchain.md:8` and `:214` fixed. Left: netcli sample result; Mermaid pass (ASCII
+      diagrams in current docs → Mermaid, checker C11); then move the plan to `docs/history/plans/`.
 - [x] ~~**Sync `docs/SCaaS.md` + `docs/integration.md`**~~ (closed by the docs reorg; files now `docs/history/SCaaS-2026-10-07.md`,
       `docs/history/integration-2026-10-07.md`) with the latest folds — collect every "Amends"/"amendments"
       table in: NI rev 3.7 (R340–R349), PQZ rev 1.4 (R284 meta-tx, register row still says 1.2), round3 rev 1.2,

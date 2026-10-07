@@ -1191,7 +1191,7 @@ It said: promote_after vs 300 s ERC-20 expiry.
 **Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 2001.
 
 ### NODE-MESH-88 — Callback subject registry on public nodes
-- old: UD:§22.10.4 · status: superseded · owner: yes · date: 2026-08-31 · normative: — · superseded-by: ARCH-POS-05
+- old: UD:§22.10.4 · status: superseded · owner: yes · date: 2026-08-31 · normative: — · superseded-by: NODE-IDX-04, ARCH-POS-05
 
 It said: callback subject registry on public nodes.
 **Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 2008.

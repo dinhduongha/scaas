@@ -427,3 +427,45 @@ gas_budget_remaining	obsolete	raw-fee profitability check replaced by the effect
 blockchain-research/02-account-registry.md	internal-path	moved to research/02-account-registry.md (cited in contracts/pq-zether.md sources)
 blockchain-research/03-zether-crypto.md	internal-path	moved to research/03-zether-crypto.md (cited in contracts/pq-zether.md sources)
 blockchain-research/_MANIFESTS.md	internal-path	moved to research/_MANIFESTS.md (cited in contracts/pq-zether.md sources)
+batchId	obsolete	owner note's EIP-1776 field and flag names; the adopted struct renames them (batch, nonce; fee in this token, no tokenContract) and splits mode into constraint and fee nibbles: contracts/metatx.md#CTR-MTX-15
+batchNonce	obsolete	owner note's EIP-1776 field and flag names; the adopted struct renames them (batch, nonce; fee in this token, no tokenContract) and splits mode into constraint and fee nibbles: contracts/metatx.md#CTR-MTX-15
+batchNonce = 0	obsolete	owner note's EIP-1776 field and flag names; the adopted struct renames them (batch, nonce; fee in this token, no tokenContract) and splits mode into constraint and fee nibbles: contracts/metatx.md#CTR-MTX-15
+tokenContract	obsolete	owner note's EIP-1776 field and flag names; the adopted struct renames them (batch, nonce; fee in this token, no tokenContract) and splits mode into constraint and fee nibbles: contracts/metatx.md#CTR-MTX-15
+metaTx.feeRecipient	obsolete	owner note's EIP-1776 field and flag names; the adopted struct renames them (batch, nonce; fee in this token, no tokenContract) and splits mode into constraint and fee nibbles: contracts/metatx.md#CTR-MTX-15
+require(msg.sender == metaTx.relayer)	obsolete	owner note's EIP-1776 field and flag names; the adopted struct renames them (batch, nonce; fee in this token, no tokenContract) and splits mode into constraint and fee nibbles: contracts/metatx.md#CTR-MTX-15
+MODE_OPEN (0x00)	obsolete	owner note's EIP-1776 field and flag names; the adopted struct renames them (batch, nonce; fee in this token, no tokenContract) and splits mode into constraint and fee nibbles: contracts/metatx.md#CTR-MTX-15
+MODE_RESTRICT_BOTH	obsolete	owner note's EIP-1776 field and flag names; the adopted struct renames them (batch, nonce; fee in this token, no tokenContract) and splits mode into constraint and fee nibbles: contracts/metatx.md#CTR-MTX-15
+MODE_RESTRICT_BOTH (0x03 = 0x01 | 0x02)	obsolete	owner note's EIP-1776 field and flag names; the adopted struct renames them (batch, nonce; fee in this token, no tokenContract) and splits mode into constraint and fee nibbles: contracts/metatx.md#CTR-MTX-15
+MODE_RESTRICT_FEE_RECIPIENT (0x02)	obsolete	owner note's EIP-1776 field and flag names; the adopted struct renames them (batch, nonce; fee in this token, no tokenContract) and splits mode into constraint and fee nibbles: contracts/metatx.md#CTR-MTX-15
+MODE_RESTRICT_RELAYER (0x01)	obsolete	owner note's EIP-1776 field and flag names; the adopted struct renames them (batch, nonce; fee in this token, no tokenContract) and splits mode into constraint and fee nibbles: contracts/metatx.md#CTR-MTX-15
+0x03	obsolete	owner note's EIP-1776 field and flag names; the adopted struct renames them (batch, nonce; fee in this token, no tokenContract) and splits mode into constraint and fee nibbles: contracts/metatx.md#CTR-MTX-15
+TrustedForwarder	obsolete	ERC-2771 forwarder rejected: contracts/metatx.md#CTR-MTX-16
+AccountID	obsolete	Hedera payer-account sponsorship of subject transactions rejected (subject lock): networks/hedera.md, NET-HED-04
+TransactionId	obsolete	Hedera payer-account sponsorship of subject transactions rejected (subject lock): networks/hedera.md, NET-HED-04
+TransactionId.generate(relayerAccountId)	obsolete	Hedera payer-account sponsorship of subject transactions rejected (subject lock): networks/hedera.md, NET-HED-04
+payerAccountId	obsolete	Hedera payer-account sponsorship of subject transactions rejected (subject lock): networks/hedera.md, NET-HED-04
+relayerAccountId	obsolete	Hedera payer-account sponsorship of subject transactions rejected (subject lock): networks/hedera.md, NET-HED-04
+InternalMessage	obsolete	TON subject-wallet gasless path rejected; relayer W5 lanes send SignedOp: networks/ton.md, NET-TON-01
+ExternalMessage	obsolete	TON subject-wallet gasless path rejected; relayer W5 lanes send SignedOp: networks/ton.md, NET-TON-01
+Highload Wallet V2/V3	obsolete	TON subject-wallet gasless path rejected; relayer W5 lanes send SignedOp: networks/ton.md, NET-TON-01
+nanoTON	obsolete	TON subject-wallet gasless path rejected; relayer W5 lanes send SignedOp: networks/ton.md, NET-TON-01
+ObjectID	obsolete	Sui sponsored subject transactions rejected for meta-tx (only subject-sent deposits): networks/sui.md, NET-SUI-01
+Version/SequenceNumber	obsolete	Sui sponsored subject transactions rejected for meta-tx (only subject-sent deposits): networks/sui.md, NET-SUI-01
+sender = UserAddress	obsolete	Sui sponsored subject transactions rejected for meta-tx (only subject-sent deposits): networks/sui.md, NET-SUI-01
+gas_data	obsolete	Sui sponsored subject transactions rejected for meta-tx (only subject-sent deposits): networks/sui.md, NET-SUI-01
+gas_data.owner	obsolete	Sui sponsored subject transactions rejected for meta-tx (only subject-sent deposits): networks/sui.md, NET-SUI-01
+GasData.owner	obsolete	Sui sponsored subject transactions rejected for meta-tx (only subject-sent deposits): networks/sui.md, NET-SUI-01
+gas_data.payment	obsolete	Sui sponsored subject transactions rejected for meta-tx (only subject-sent deposits): networks/sui.md, NET-SUI-01
+SponsorSignature	obsolete	Sui sponsored subject transactions rejected for meta-tx (only subject-sent deposits): networks/sui.md, NET-SUI-01
+extend_ttl	obsolete	Stellar fee-bump of subject transactions not used (subject sequence lock); native authorization entries instead: networks/soroban.md, NET-ALL-02
+TransactionEnvelope	obsolete	Stellar fee-bump of subject transactions not used (subject sequence lock); native authorization entries instead: networks/soroban.md, NET-ALL-02
+FeeBumpTransactionEnvelope	obsolete	Stellar fee-bump of subject transactions not used (subject sequence lock); native authorization entries instead: networks/soroban.md, NET-ALL-02
+FeeSource	obsolete	Stellar fee-bump of subject transactions not used (subject sequence lock); native authorization entries instead: networks/soroban.md, NET-ALL-02
+ExecuteMsg	obsolete	Cosmos feegrant/authz path rejected; contract-level Relay{payload, auth}, instantiated without admin: networks/cosmos.md, NET-COS-02
+ExecuteMsg::MetaExecute	obsolete	Cosmos feegrant/authz path rejected; contract-level Relay{payload, auth}, instantiated without admin: networks/cosmos.md, NET-COS-02
+MigrateMsg	obsolete	Cosmos feegrant/authz path rejected; contract-level Relay{payload, auth}, instantiated without admin: networks/cosmos.md, NET-COS-02
+SudoMsg	obsolete	Cosmos feegrant/authz path rejected; contract-level Relay{payload, auth}, instantiated without admin: networks/cosmos.md, NET-COS-02
+BasicAllowance	obsolete	Cosmos feegrant/authz path rejected; contract-level Relay{payload, auth}, instantiated without admin: networks/cosmos.md, NET-COS-02
+PeriodicAllowance	obsolete	Cosmos feegrant/authz path rejected; contract-level Relay{payload, auth}, instantiated without admin: networks/cosmos.md, NET-COS-02
+AllowedMsgAllowance	obsolete	Cosmos feegrant/authz path rejected; contract-level Relay{payload, auth}, instantiated without admin: networks/cosmos.md, NET-COS-02
+fee.granter	obsolete	Cosmos feegrant/authz path rejected; contract-level Relay{payload, auth}, instantiated without admin: networks/cosmos.md, NET-COS-02

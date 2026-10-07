@@ -661,8 +661,9 @@ refused (`UnsupportedUnderlying`) instead of minting the part actually received.
 no timelock is needed). It is optional per token (the creator's choice).
 
 <a id="sender-randomness"></a>
-<a id="CTR-ZTH-30"></a>**CTR-ZTH-30** — **The sender randomness `s` is derived, not stored** (owner): `s = HKDF(seed,
-chain, token, from UA, sendCounter)` with the **on-chain** `sendCounter`, so the client stores nothing and can always
+<a id="CTR-ZTH-30"></a>**CTR-ZTH-30** — **The sender randomness `s` is derived, not stored** (owner): `s =
+HKDF-SHA256(seed_zether, info = "ZTX/s/v1" ‖ chainId ‖ tokenAddress ‖ fromUA ‖ sendCounter)` with the **on-chain**
+`sendCounter`, so the client stores nothing and can always
 rebuild the `SENDER_S` opening from its seed; reusing a counter would reuse ElGamal randomness. (An earlier rule "the
 client must store every `s`" is superseded.)
 
