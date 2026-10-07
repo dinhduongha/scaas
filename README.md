@@ -229,7 +229,7 @@ flowchart TB
 
 | Area | Contracts | Built on | Status | Read |
 |---|---|---|---|---|
-| Factory | `OpenFactory`, `OpenFactoryV2` | EIP-1167 clones at CREATE2 addresses; the version catalogue ([section 4](#4-upgradeable-or-not-is-decided-at-deploy)) | BUILT | [token-wrappers](docs/contracts/token-wrappers.md) |
+| Factory | `OpenFactory`, `OpenFactoryV2` | EIP-1167 clones at CREATE2 addresses: shared code, separate data ([section 4](#shared-code)); the version catalogue | BUILT | [token-wrappers](docs/contracts/token-wrappers.md) |
 | Gasless tokens | `ERC20MetaTx` → `MetaToken` (v1); `MetaTxCore` → `MetaTokenBase` (v2) | `ERC20` + `EIP712` + `IERC20MetaTx` | BUILT | [metatx](docs/contracts/metatx.md) |
 | Payments | `IERC20Payment`: `pay(entryRef)` emits `PaymentSettled` | `IERC20MetaTx` | BUILT | [metatx](docs/contracts/metatx.md) |
 | Wrappers | `NoUnderlyingToken`, `SingleUnderlyingToken`, `MultiUnderlyingToken` | `MetaTokenBase` | BUILT | [token-wrappers](docs/contracts/token-wrappers.md) |
@@ -310,6 +310,48 @@ upgrade key can rewrite the rules over every user's balance**. SCaaS does not fo
   programs could still be upgraded ([docs/networks/README.md](docs/networks/README.md#deploy-gate)).
 
 The price is that there is no hotfix in place. That is deliberate: an upgrade key is an admin key over every balance.
+
+<a id="shared-code"></a>
+### Shared code, separate data
+
+Immutable does not mean that every contract carries its own copy of the code. An upgradeable proxy and a SCaaS clone
+use the **same mechanism**, `DELEGATECALL`: a small contract keeps its own data and runs code that lives elsewhere.
+The only difference is whether the pointer to that code can change. In a proxy an admin can repoint it; in a SCaaS
+clone it is fixed at deploy. SCaaS uses `DELEGATECALL` to **reuse code**, never to upgrade it.
+
+```mermaid
+flowchart LR
+    C1["Token A<br/>(its data)"] -->|"DELEGATECALL"| I["One implementation<br/>(the code)"]
+    C2["Token B<br/>(its data)"] -->|"DELEGATECALL"| I
+    C3["Token C<br/>(its data)"] -->|"DELEGATECALL"| I
+    I -->|"linked library"| L["Shared library<br/>(more code)"]
+```
+
+Every token is a 45-byte EIP-1167 clone whose only code is a fixed pointer to its implementation; the clone holds
+only its own balances and settings ([token-wrappers](docs/contracts/token-wrappers.md#CTR-TOK-18)). The same holds
+for subject accounts, vesting grants, distributions and the other action contracts, and large shared logic (the
+regulated module) sits in a library linked once per chain.
+
+| Benefit | Why |
+|---|---|
+| **Cheap to create** | A token clone costs about 45,000 gas instead of about 2.5 M for a full deployment; a `SubjectAccount` clone about 287,000 instead of several million |
+| **Light on the chain's nodes** | The implementation's code is stored once per chain — clients keep code by its hash — and each new clone adds 45 bytes plus its own storage. The one implementation, called by every clone, stays hot in the clients' code caches, and state grows more slowly |
+| **One audited code base** | Auditing and verifying one implementation covers every clone; all clones of a version share one code hash, so anyone can check which code a token runs |
+| **Versions without upgrades** | A new version is a new implementation added to the factory's catalogue; existing clones keep their pointer and their rules |
+
+The cost is one extra `DELEGATECALL` per call (a cold address access the first time in a transaction). This is the
+original requirement — *share code through delegation, keep separate data, support several versions* — met without an
+upgrade key.
+
+The other families have the same split built in, so SCaaS uses their native form:
+
+| Family | Code stored once | Data per contract or user |
+|---|---|---|
+| Cosmos (CosmWasm) | `store` the WASM once (`code_id`) | each `instantiate` is a contract with its own state |
+| Soroban | install the WASM once (by hash) | each instance references that hash |
+| Solana | one program | data lives in separate accounts (subject account, lanes) |
+| Move (Aptos, Sui) | one package | objects and resources per user or token |
+| TON | one jetton-wallet code | each wallet is deployed with the same code cell in its `state_init` |
 
 ---
 
@@ -681,6 +723,7 @@ flowchart LR
 | Payment reference | `mtxPay` with a sender-chosen `payId` and a `Payment` event | — | `pay(entryRef)` emits `PaymentSettled`; a random `entryRef` also picks the lane, which makes each payment pay-once |
 | Wrappers | No underlying, one underlying at a numerator/denominator rate, several underlyings with a rate each | — | The same three tiers (`NoUnderlyingToken`, `SingleUnderlyingToken`, `MultiUnderlyingToken`) with fixed or adjustable rates; basket legs fixed at creation |
 | Factory | A factory with `new`, one wrapper per underlying | — | An open factory of immutable EIP-1167 clones and a version catalogue |
+| Code reuse | Every wrapper deployed with its full code | — | The requirements note asked to "share code through delegation, keep separate data, support several versions": clones `DELEGATECALL` one fixed implementation per version ([section 4](#shared-code)) |
 | `approve` | Only contracts may call `approve` (code-size check) | The same rule, also on the NFT | A spender must be a contract, decided by explicit rules instead of a code-size guess ([CTR-TOK-01](docs/contracts/token-wrappers.md#CTR-TOK-01)) |
 | Trading | — | `ERC1776Tradeable` + `Dex`: one taker against several makers, partial fills, refunds of the unmatched part, at least 50 % of the wanted amount, a fee per side | The `trade` operation, the legacy `MetaTxDex`, and `OrderBookDex` with price-time priority and price limits ([section 3](#3-contracts-what-is-built-on-what)) |
 | A contract receiving tokens | — | `ERC1776Holder` pulls a signed transfer into itself | Any contract can be the recipient of a signed `pay` or transfer |
