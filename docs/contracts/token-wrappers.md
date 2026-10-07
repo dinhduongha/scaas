@@ -61,6 +61,9 @@ is its own implementation and factory kind, so each implementation's audit surfa
 | 2 Single-underlying wrapper | v1 `MetaToken`; v2 `SingleUnderlyingToken` (`META_SINGLE`) | ERC-20 address | Only via `wrap(amount)` (mints `⌊received·num/den⌋` of the **measured** delta) / `unwrap(wrapped, recipient)` (pays `⌊w·den/num⌋`, burns `⌈out·num/den⌉`); v1 is the 1:1 case | v1: `underlying.balanceOf(this) ≥ totalSupply`; v2: `Σ⌊reserve·num/den⌋ ≥ totalSupply` with internal `reserve` | v1 **BUILT** at 1:1; v2 with rates **BUILT** |
 | 3 Multi-underlying (any-of) | v2 `MultiUnderlyingToken is SingleUnderlyingToken` (`META_MULTI`) | 2–8 ERC-20s, fixed at creation | `wrap(u, amount)` on one chosen leg at that leg's rate; `unwrap(u, wrapped, recipient)` into one chosen leg, bounded by `reserve_u`; guardian may only `disableWrap(u)` (one-way; unwrap stays open) | `Σ_i⌊reserve_i·num_i/den_i⌋ ≥ totalSupply` (pooled; no per-leg invariant) | **BUILT** |
 
+Example (owner requirement): a wrapper over USDT and DAI at 1 → 25,000, i.e. one stablecoin mints 25,000 units of a
+low-value currency token — tier 3 with one rate per leg (`num/den` adjusted for each leg's decimals); one underlying at a rate is tier 2.
+
 `initData`: v1 `abi.encode(string name, string symbol, uint8 decimals, uint256 initialSupply, address minter)`
 (tier 2 ignores `decimals`); v2 per kind below. Fee-on-transfer underlyings are measured on the way in and must
 transfer exactly on the way out; rebasing underlyings are unsupported (a negative rebase stops wrap, exits stay

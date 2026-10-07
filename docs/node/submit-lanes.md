@@ -198,7 +198,8 @@ the cap; a job that must be dropped (its meta-tx expired) is replaced by a 0-val
 later transaction of the lane, and a journal without gap filling leaves a permanent hole; the cost is a few minimal
 0-value transactions.
 
-- **Cold start** (`nonce.rs::plan`, BUILT): `next = max(getTransactionCount(pending), journal_max + 1)`. Every
+- **Cold start** (`nonce.rs::plan`, BUILT): `next = max(getTransactionCount(pending), journal_max + 1)` (RPC
+  `eth_getTransactionCount` at block tag `pending`). Every
   journaled nonce in `[pending, journal_max]` = `[getTransactionCount(pending), journal_max]` whose tx is no longer in the mempool (`eth_getTransactionByHash` of the
   job that journaled it returns null) is gap-filled and its job returns to `queued` (the subject nonce prevents double
   execution). Jobs `nonce_leased` without a tx hash ⇒ `queued`; jobs `signed`/`broadcast` with a hash ⇒ ask receipt /
@@ -243,6 +244,9 @@ loop every poll_ms:
 The gateway's and the mesh scheduler's work go through the same runner, the same nonce counter and the same simulation
 gate. `final` of a job never comes from the runner: it comes from the event feed
 ([job-api.md#states](job-api.md#states)), so a job is final also when someone else executed it.
+An execution client keeps at most `txpool.accountslots` (16 by default) pending transactions per sender, so a lane's
+in-flight depth `max_inflight = 16` is a network ceiling, not a design constant; as built the runner does not cap it
+(PLANNED).
 
 ## Simulation
 

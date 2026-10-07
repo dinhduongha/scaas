@@ -490,7 +490,7 @@ verification detects one edited row.
 ## Cutover
 
 <a id="cutover"></a>Moving a chain from the legacy pull path to the store ([NODE-JOB-10](job-api.md#NODE-JOB-10)).
-Preconditions (checked by the client before it flips the chain, [integration.md#migration-from-pull](../integration.md#migration-from-pull)):
+Preconditions (checked by the client before it flips the chain, [migration from pull](../integration-odoo-example.md#migration-from-pull)):
 
 1. Every client entity with a non-terminal job **or an approved receiving/paying wallet** on the chain has a route to
    the node; the chain's event node is set; secrets are set; the client's copy-protection binding matches.
@@ -519,7 +519,7 @@ pre-migration aborts when any chain is still `pull`, and the final node refuses 
 outside these docs):
 
 - **Audits**: a third-party audit of every contract family before it holds real funds; confidential-payment contracts
-  stay behind their dev gate until an independent cryptographic audit ([contracts/README.md#unaudited](../contracts/README.md#unaudited)).
+  stay behind their dev gate until an independent cryptographic audit ([contracts/README.md#production-gates-unaudited](../contracts/README.md#production-gates-unaudited)).
   The factory registrar is a multisig, not an EOA, before mainnet.
 - **Chain enablement** (`draft → active`, tooling PLANNED): only after (1) a working simulation path, (2) 7 days of
   measured finality depth on the real network, (3) ≥ 2 independent RPC endpoints for the quorum

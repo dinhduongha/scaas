@@ -29,7 +29,7 @@ Non-goals:
 
 | Not in the app | Why / where instead |
 |---|---|
-| Any ERP call | the node is independent of any ERP ([ARCH-POS-05](../architecture.md#ARCH-POS-05)) |
+| Any ERP call | the node is independent of any ERP ([ARCH-POS-05](../decisions.md#ARCH-POS-05)) |
 | A backend of its own; the job API (`/v1/jobs`, `/v1/events`) | a machine key would sit in the bundle ([NODE-ADM-06](../node/admin-auth.md#NODE-ADM-06)) |
 | Admin API keys (`scaas_ak1.`) | the admin API has none |
 | Mandates, tender bidding, vesting, distributions, credential presentation, an "Approvers" wizard beyond the minimum | their own designs; the app shows them only where the availability matrix says so |

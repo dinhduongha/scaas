@@ -4,7 +4,7 @@ This guide is for teams connecting an ERP, accounting system or line-of-business
 `scaas-node`. The client keeps its own transactional outbox, **pushes** jobs to the node's job API and **polls** two
 feeds (`/v1/jobs`, `/v1/events`) to learn job states and finalized chain facts. The node never calls the client; the
 node's store is the configuration authority ([NODE-STO-03](node/store.md#NODE-STO-03)). The node is independent of any
-ERP ([ARCH-POS-05](architecture.md#ARCH-POS-05)); one worked ERP connector is shown at the end as an example.
+ERP ([ARCH-POS-05](decisions.md#ARCH-POS-05)); one worked ERP connector is shown at the end as an example.
 
 Status tags: **BUILT**, **SPECIFIED**, **PLANNED**. The job API, the feeds and the admin API are **SPECIFIED**
 ([node/job-api](node/job-api.md), [node/indexer-feeds](node/indexer-feeds.md)); the node that runs today pulls work

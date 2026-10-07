@@ -67,7 +67,11 @@ vsock only, called by the broker on the client's behalf, only when Zether is on)
 decrypt amounts, build proofs or change anything signed — its blindness is the security model. The oracle runs in its own
 process, never inside the node (the node parses strangers' bytes; one memory bug next to `x` drains every account it
 serves) and never inside the ERP (an ERP administrator can run arbitrary code; the ERP keeps a `signer_ref` handle,
-never key material). What it stores:
+never key material). The oracle interface is narrow and fixed — `zk_mul_by_x(points, ctx)`, `zk_nonce_commit(bases, ctx)`,
+`zk_response(nonce_id, challenge)` — with no arbitrary `decrypt(C, D)`: with an attacker-chosen `D` it returns the log of
+`C·D^{-x}`, an ECDH oracle on `x`, so `elgamal_decrypt` requires a `ChainWitness` proving that `(C,D)` is real on-chain
+state. Between the relay process and the custody broker (mTLS, or a Unix socket on one host) the broker takes the tenant
+from the client certificate only, never from a `tenant_uuid` in the body. What it stores:
 
 | State | Where | After a restart |
 |---|---|---|
@@ -396,8 +400,8 @@ is never throttled.
 
 <a id="CLI-SGN-16"></a>**CLI-SGN-16** — **Backup warnings are non-blocking, in both switch states.** BE/BS
 (`authenticatorData` bits 3 and 4) are read from each creation and assertion and cached client-side only (nothing stored
-server-side); a BE = 0 passkey is labelled "this device only (as reported)"; "these passkeys may share one password
-manager" is shown when ≥ 2 passkeys of one `rpId` all report BS = 1; "no backup" is shown with the add-backup action. Why:
+server-side); a BE = 0 passkey is labelled "this device only (as reported)"; "These passkeys may share one password
+manager" is shown when ≥ 2 passkeys of one `rpId` all report BS = 1; "No backup" is shown with the add-backup action. Why:
 the flags are the only sync signal and are self-reported (`attestation: 'none'`). Cost: a misreporting authenticator
 mislabels a key; counting is unaffected.
 
@@ -471,7 +475,7 @@ offered; an app end-to-end test.
 | Native account keys | the family paths below: EVM `m/44'/60'/0'/0/i`, Solana `m/44'/501'/i'/0'`, … | family |
 | Every derived UA kind and every account-role key | `m/7622'/0'/<account>'/<kindNo>'/<i>'` | BIP-32 (secp256k1, P-256 via SLIP-10 nist256p1), SLIP-10 ed25519 |
 | `SubjectAccount` SECP256K1 key (role of `evm-contract`) | `m/7622'/0'/<account>'/2'/<i>'` | secp256k1 |
-| Non-native subject-account owner keys (Sui/Aptos/Solana/Soroban role keys) | `m/7622'/0'/<account>'/<native kindNo>'/<i>'`: Solana 16, **Soroban `C…` 18** (`soroban-contract`, owner 2026-10-07), Aptos 19, Sui 20 | ed25519 |
+| Non-native subject-account owner keys (Sui/Aptos/Solana/Soroban role keys) | `m/7622'/0'/<account>'/<native kindNo>'/<i>'`: Solana 16, **Soroban `C…` 18** (`soroban-contract` 0x0012 = 18, not `stellar-account` 0x0011 = 17; owner 2026-10-07), Aptos 19, Sui 20 | ed25519 |
 | `musig2-secp256k1` participant keys | `m/7622'/0'/<account>'/272'/<i>'` (kind 0x0110; never a `bip340` key); `musig2-bn254` as the bn254 row | secp256k1 |
 | FROST shares | **not seed-derived**: DKG polynomial secrets are fresh randomness; the share is kept in the vault; a lost share is a lost participant | — |
 | `schnorr-bn254`, `musig2-bn254` keys from seed | EIP-2333-style `m/254/0/<account>/<kindNo>` (salt `"SCAAS-UA-BN254-v1"`) | bn254 |

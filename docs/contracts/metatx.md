@@ -390,7 +390,7 @@ which put `fee = 0`. Clients MUST sign `fee = 0` and `feeRecipient = 0` for ever
 What the names do not do: no second typehash, no `chainId` or `wrapper` field in the struct (both are met by the
 EIP-712 domain: `chainId` + `verifyingContract` = the wrapper clone); no decoding of `data` to find "the amount" (the
 amount is `m.value`, already the base of the percent fee); no gas promise — they hash the same 11-field struct and
-save only calldata (no dynamic `data`, and for `mtxPay` no `batch`/`nonce`). An earlier estimate of a "~4 k gas"
+save only calldata (no dynamic `data`, and for `mtxPay` no `batch`/`nonce`). An earlier estimate of a "≈ 4 k gas"
 saving assumed a fast path with its own short typehash and does not apply.
 
 <a id="CTR-MTX-10"></a>**CTR-MTX-10** — In `mtxPay(…, payId, …)`, `payId` **is** the payment reference `entryRef`

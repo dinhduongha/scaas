@@ -376,8 +376,9 @@ cost real money on public chains (an ML-DSA-65 signature is 53–132 k gas of ca
 <a id="functions"></a>
 <a id="function-kinds"></a>
 <a id="CTR-UA-14"></a>**CTR-UA-14** — **Each function accepts the kinds it needs** (owner): native-address functions (v1/v2
-tokens, DEX, mandates) keep accepting native ids only — the DEX with UA makers, `MandateWallet` with a UA owner or
-delegate, and regulated tokens with UA receivers are not in v1; the new UA-ledger functions on MetaToken v3 accept a
+tokens, DEX, mandates) keep accepting native ids only — the DEX with UA makers (UA holders trade through native
+accounts; it would need a UA-ledger allowance `uaApprove` to contracts and an `OrderBookDex` v2 with `bytes32 maker`),
+`MandateWallet` with a UA owner or delegate, and regulated tokens with UA receivers are not in v1; the new UA-ledger functions on MetaToken v3 accept a
 native id or a registered SIGNING kind as `from` and as `to`; Zether functions accept Zether kinds only, registered
 first. The kind sets SIGNING, ZETHER and MEMBER are **closed and enforced** at each point that names them: v3
 `from`/`to`, `requireAuthorized` (SIGNING and native only; ZETHER reverts), `msig` members (MEMBER), Zether `authRef`.

@@ -668,7 +668,9 @@ client must store every `s`" is superseded.)
 <a id="CTR-ZTH-29"></a>**CTR-ZTH-29** — **An independent, open-source disclosure verifier CLI** (owner, PLANNED): any
 third party (an auditor, a dispute resolver) verifies an opening against chain data without trusting SCaaS. The chain of
 evidence holds in both directions: the sender cannot open falsely (the ciphertext binds `v` and `s`), and the receiver
-cannot deny the amount (its own key opens it).
+cannot deny the amount (its own key opens it). The CLI takes `(entryRef, v, s)`, reads an archive node or a signed chain
+export, and prints PASS/FAIL with every intermediate value, deterministically (two examiners get the same result); the
+client exports a standalone evidence file `(entryRef, v, s, chainId, tokenAddress)` that the CLI checks without the app.
 
 ## Underlying, verifier gas, chains
 
@@ -773,14 +775,16 @@ two chains with the same token address do not make each other `staleSeq`. The cl
 `schnorrSign(curve, x, msg, k)` exports `k`); the fixed-`k` path remains only in a test export (vectors). Test: the
 public export does not accept `k`.
 
+<a id="limits"></a>
+
 Limits (shielded units; for a 6-decimal stablecoin kept to 2 decimals, `shieldScale = 10^4`, one unit = 0.01):
 
 | Limit | Where decided | Value |
 |---|---|---|
-| Maximum shielded supply of a token (hard cap) | `MAX_TOTAL_SHIELDED` | 2^54 (≈ $180 trillion at one unit = $0.01) |
+| Maximum shielded supply of a token (hard cap) | `MAX_TOTAL_SHIELDED` | 2^54 = 18,014,398,509,481,984 units (≈ $180 trillion at one unit = $0.01; ≈ $706 billion when one unit is worth 1/25,500 USD, a low-value fiat unit with `shieldScale = 1`) |
 | Actual supply cap of a token | `maxDecryptableShielded`, set by the creator at `initialize`, ≤ 2^54 | per token |
 | Maximum balance of one account | ≤ the token's supply | ≤ 2^54 |
-| **Maximum amount of ONE transfer** (`v < 2^n_v`) | `n_v` | 2^64 − 1 ⇒ in practice bounded only by the sender's balance: the whole balance in one transaction (the former 2^32 − 1 cap forced large payments into several transactions, whose count revealed "amount > cap") |
+| **Maximum amount of ONE transfer** (`v < 2^n_v`) | `n_v` | 2^64 − 1 ⇒ in practice bounded only by the sender's balance: the whole balance in one transaction (the former 2^32 − 1 = 4,294,967,295-unit cap — $42.9 million at one unit = $0.01 — forced large payments into several transactions, whose count revealed "amount > cap") |
 | Withdrawal (`burn`) | `0 < amount ≤ maxDecryptableShielded` | ≤ the supply |
 | Confidential fee | `confidentialFee < 2^n_v` **and** `< maxDecryptableShielded` (else `BadInit`, `ZetherToken.sol:138-140`) | < 2^64 and < `maxDecryptableShielded` |
 | Amount provable by disclosure | `amount < 2^n_v` | < 2^64 |
@@ -853,6 +857,8 @@ GPU kangaroo tool, measured first). Separate **series** are separate, non-fungib
 factory path creates linked series.
 
 ## Gas (measured)
+
+<a id="gas"></a>
 
 Measured with `gasleft()` around the call in tests (`ZetherVerifier.t.sol`, `ZetherToken.t.sol`,
 `UniversalAccountRegistry.t.sol`, `forge test -vv`, forge 1.3.5, EVM Prague, chain 31337, real proofs from the prover

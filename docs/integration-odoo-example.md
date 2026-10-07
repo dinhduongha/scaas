@@ -237,7 +237,13 @@ and `blockchain_relay_job.py:137` are shared. Sui verifier tests (`test_fam_sui.
 key"); clientkeys mirrors them in `fam_sui.test.js`. Mandate payments through the connector
 (`_enqueue_mandate_payment`) are EVM-only; for other families the contract exists and the connector path is a seam. Portal glue (`connectors/*.js` call each family's `fam_<f>.verify` mirror on the server): `chain_pay.js` and `subject_signers.js` call
 `window.dmsChainConnectors` and `dms_portal_chain_payment_options/start/submit`
-(`test_options_carry_family_and_network`); the WalletConnect project id is `dms_blockchain.walletconnect_project_id` in
+(`test_options_carry_family_and_network`). The multi-family `chain_pay.js` flow: `options` (now with `family` and
+`network`) → the signer (EVM and Hedera ECDSA: the EVM wallet chooser; other families: a family wallet or the seed-vault
+family path) → `start(order, signer.from, wallet_id)` (owner key only) → the family encoder's `checkTerms(start, shown)`
+([CLI-SGN-27](clients/signers-clientkeys.md#CLI-SGN-27); `shown` = the amount, currency and payee text the portal
+displayed) → `{signature, publicKey} = sign(checked)` → `submit(reference, validUntil, signature, kind, publicKey)` with
+`validUntil` from `typed_data.message.validUntil` or `valid_until`; a `checkTerms` refusal stops before `sign`. The
+WalletConnect project id is `dms_blockchain.walletconnect_project_id` in
 `ir.config_parameter`. `_hex32` normalises 32-byte values; `_apply_report` applies node reports.
 
 **Backup-key switch.** Parameter `dms_blockchain.require_backup_key` (`'1'`/`'True'` = ON).
