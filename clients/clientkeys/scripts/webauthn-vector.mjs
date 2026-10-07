@@ -32,6 +32,6 @@ const out = {
   signatureDer: hex(a.signature), derWasHighS: true,
   signature: hex(accountSignature(0, [], encodeAssertion(a))),
 };
-const path = new URL('../../smartcontracts/evm/test/vectors/webauthn_soft.json', import.meta.url);
+const path = new URL('../../../smartcontracts/evm/test/vectors/webauthn_soft.json', import.meta.url);
 writeFileSync(path, JSON.stringify(out, null, 2) + '\n');
 console.log('wrote', path.pathname);

@@ -725,7 +725,7 @@ requires the registry to have code, `ZetherToken.sol:136`) — "provenance inste
 ([CTR-TOK-17](token-wrappers.md#CTR-TOK-17)) — so a v1 token from a registered implementation could still carry a fake
 verifier (returning `true` for every proof ⇒ `burn` drains the escrow) or a fake registry (`requireAuthorized` a no-op).
 Pin by **address**, not codehash: a verifier embeds its `generatorStore` address as an immutable, so its codehash differs
-per deployment. The built `clientkeys/src/zether.js` does not read `verifier()`/`registry()` yet. Tests: the client
+per deployment. The built `clients/clientkeys/src/zether.js` does not read `verifier()`/`registry()` yet. Tests: the client
 refuses a token with a foreign `verifier()`/`registry()`; the gateway errors when relaying a Zether op of an unpinned
 token. The gateway half is [NODE-GW-01](../node/gateway.md#NODE-GW-01)'s door; the client half
 [CLI-SGN-10](../clients/signers-clientkeys.md#CLI-SGN-10). Status **SPECIFIED**.
@@ -769,7 +769,7 @@ These times are **estimates** from ≈ 0.35 µs per step on a desktop (Android �
 
 <a id="balance-cache-key"></a>
 <a id="CTR-ZTH-24"></a>**CTR-ZTH-24** — **The client balance-cache key includes the chain**: `chainId:ua:token` (the
-built key is `ua:token`, `clientkeys/src/zether.js:218`); with chain identity it becomes `chain_uid` ([NET-ALL-22](../networks/README.md#NET-ALL-22)). Test:
+built key is `ua:token`, `clients/clientkeys/src/zether.js:218`); with chain identity it becomes `chain_uid` ([NET-ALL-22](../networks/README.md#NET-ALL-22)). Test:
 two chains with the same token address do not make each other `staleSeq`. The client implementation is
 [CLI-SGN-10](../clients/signers-clientkeys.md#CLI-SGN-10).
 
@@ -923,7 +923,7 @@ Exported by the contracts (`smartcontracts/test/vectors/zether/`):
   "states": [st after each op], "challenges": [scalar] } ] }` + `hashToScalar` cases `{seed, bn254, bls12381}`.
 - `schnorr_{bn254,bls12381}.json`: `{ "x", "Y", "msg", "k", "R", "e", "z", "sig" }`.
 
-Exported by the prover (`zether-prover/vectors/`, copied into `smartcontracts/test/vectors/zether/s3/`):
+Exported by the prover (`clients/zether-prover/vectors/`, copied into `smartcontracts/test/vectors/zether/s3/`):
 
 - `transfer_{bn254,bls12381}.json`: `{ "curve", "statement", "proof", "payload", "witness":
   {"x","v","s","b","bPrime","gammaV","gammaB"}, "expect": true }` — the statement as above with any chainId/token (the

@@ -198,7 +198,7 @@ A "use passkey" button appears when `window.PublicKeyCredential` exists; `naviga
 into `(r, s)` and normalises low-s; a batch is one assertion over a Merkle root of digests (EVM and Soroban only). The
 on-chain rules are [NET-ALL-04](../networks/README.md#NET-ALL-04) and
 [CTR-ACC-08](../contracts/accounts-mandates.md#CTR-ACC-08). Tests use real WebAuthn vectors from a software authenticator
-(fixed P-256 key) and a public vector set where available. BUILT (EVM). `clientkeys/src/passkey-signer.js`:
+(fixed P-256 key) and a public vector set where available. BUILT (EVM). `clients/clientkeys/src/passkey-signer.js`:
 `creationOptions` (PRF enabled by default), `requestOptions`, `derToRS`, `encodeAssertion = abi.encode(authenticatorData,
 clientDataJSON, r, s)`, `merkleBatch`, `accountSignature = abi.encode(keyIndex, bytes32[] proof, sig)`. `signCount` is not
 checked (synced passkeys always return 0).
@@ -268,7 +268,7 @@ envelope (`extensions.prf`) when the passkey supports it — PRF is the **defaul
 (the passphrase envelope still always exists). Wrapping keys are never stored. v1 format (`vault.js`):
 `{ v: 1, label, data: {iv, ct}, pin: {kdf: 'scrypt', N, r, p, salt, iv, ct}, prf?: {credentialId, salt, iv, ct} }`. BUILT.
 
-<a id="CLI-SGN-21"></a>**CLI-SGN-21** — **New passphrase envelopes use scrypt `N = 2^17, r = 8, p = 1` (128 MiB; `clientkeys/src/vault.js:14,40-45`; helpers
+<a id="CLI-SGN-21"></a>**CLI-SGN-21** — **New passphrase envelopes use scrypt `N = 2^17, r = 8, p = 1` (128 MiB; `clients/clientkeys/src/vault.js:14,40-45`; helpers
 `needsRewrap`/`rewrapPin`), replacing the earlier `N = 2^15`; a new
 passphrase has ≥ 8 characters and is not digits only.** Measured on Node 26: noble 501 ms, native 334 ms at `2^17`
 (131 / 86 ms at `2^15`). The passphrase is the fallback unlock (PRF is the default) and `scryptAsync` yields to the event
@@ -466,7 +466,7 @@ Flows: **add a backup** — seed primary ⇒ add a passkey; passkey primary ⇒ 
 or ask the operator for a guardian (EVM/Sui/Aptos/Solana); **revoke** — EVM offers `rotateKey(index, newKey)` (one owner
 call: add, then remove) as the default when replacing a key, elsewhere "add new key, then remove"; plain remove and
 clear-guardian are always possible, with `BREAKS_BACKUP` shown; **lost paper** — create a new paper key, then remove the
-old one. Tests and vectors: `clientkeys/test/vectors/backup_policy.json` — each row `{name, families, account, required}`
+old one. Tests and vectors: `clients/clientkeys/test/vectors/backup_policy.json` — each row `{name, families, account, required}`
 → `{has_backup, ok, reason, allow, solana_onchain?}`, covering 0/1/2/8 keys; guardian set, unset, equal to its own key,
 equal to the account; the same passkey on two origins ⇒ 1; a Soroban key twice ⇒ 1; a Sui pk under two `rp_id_hash` ⇒ 1;
 `msig` weights; native; unsatisfiable; remove-key and clear-guardian **allowed** and yielding `NO_BACKUP`; exit allowed in
@@ -669,7 +669,7 @@ status  = payment_submit(start.reference, validUntil, signature, kind, publicKey
 `shown` is the amount, currency and payee text the portal displayed. Polling, terminal failures and the EIP-1193 chain
 switch guard stay; the issuer adds `'family'` and `'network'` to the payment options and nothing else. In a portal without
 chain reads, a non-EVM signer pays with the **owner key only**; added keys pay through the app. Tests: connector tests in
-`clientkeys/test/wallets/*.test.js` with an injected `win`; payment-script unit tests (dispatch, a `checkTerms` refusal
+`clients/clientkeys/test/wallets/*.test.js` with an injected `win`; payment-script unit tests (dispatch, a `checkTerms` refusal
 stops before `sign`, `validUntil` from `start.valid_until`); an issuer test that the options carry family and network;
 tours (Sui and Solana with fake Wallet Standard wallets end to end to a queued `signed_op`; Aptos with one seed-vault tour).
 
@@ -704,7 +704,7 @@ any signing scalar. BIP-32/SLIP-10 have no bn254 or BLS12-381, so derivation is 
 
 <a id="CLI-SGN-03"></a>**CLI-SGN-03** — **Zether keys are derived in clientkeys JavaScript.** `@noble/curves` (bn254 +
 BLS12-381) and `@noble/hashes` HKDF — no prover wasm is needed only to register. Byte-exact with the Rust prover (`zether-prover`): vectors
-`r33_keys.json` and `schnorr_*.json` copied verbatim into `clientkeys/test/vectors/`, plus 4 published EIP-2333 vectors. The
+`r33_keys.json` and `schnorr_*.json` copied verbatim into `clients/clientkeys/test/vectors/`, plus 4 published EIP-2333 vectors. The
 Schnorr nonce is hedged `sha512(x ‖ msg ‖ CSPRNG) mod r` (different from the prover's, but only cross-verification is
 needed; with a fixed `k` the bytes match). A separate lazy entry `zether-keys.js` keeps the seed bundle small; `x` is sealed
 in the vault like the seed. BUILT.

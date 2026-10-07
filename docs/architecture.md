@@ -32,7 +32,7 @@ product; everything else is a way to reach them:
   signs on its own device ([clients/signers-clientkeys.md](clients/signers-clientkeys.md)).
 - **`zether-prover`** — proofs for confidential amounts ([contracts/zether.md](contracts/zether.md),
   [contracts/pq-zether.md](contracts/pq-zether.md)).
-- **The console and dApp** (`app/`) — wallets, payments, DEX, Zether and node administration
+- **The console and dApp** (`clients/app/`) — wallets, payments, DEX, Zether and node administration
   ([clients/app.md](clients/app.md)).
 
 SCaaS depends on no ERP. Every ERP is one client of the node's job API, and every node is "standalone"
@@ -203,9 +203,9 @@ agent signs, a relayer pays gas); Zether keeps commercial amounts confidential w
 | Build and test scripts | `smartcontracts/scripts/{build,test,deploy,devnet}.sh <family>`; `scripts/capped` | One entry point per family; heavy runs capped at 4 GB, one at a time | BUILT |
 | `scaas-node` | `scaas-node/` | Rust relayer: gateway, submit lanes, indexer, drift, DEX venue, admin; mesh envelope library | BUILT with the legacy pull job source; store, job API, admin auth and gateway additions SPECIFIED; mesh transports SPECIFIED ([node/README.md](node/README.md)) |
 | Node store | (in `scaas-node`) | Jobs, feeds, configuration authority, credentials, audit, DEX book, mesh tables; SQLite, PostgreSQL or MySQL | SQLite store BUILT; the rest SPECIFIED ([node/store.md](node/store.md)) |
-| `zether-prover` | `zether-prover/` (Rust, `cdylib` + `rlib`, WASM) | Key generation (EIP-2333 paths), ElGamal, Σ-protocol + Bulletproofs (n = 64), disclosure openings, BSGS, `zether-cli`, `zether-read-balance` | BUILT (unaudited); feature `pq` and `pqz-cli` SPECIFIED ([contracts/pq-zether.md](contracts/pq-zether.md)) |
-| `clientkeys` | `clientkeys/` (ESM, `@noble` / `@scure`) | Passkey signer, 24-word seed vault, Zether keys and balance cache | BUILT (EVM-centric); vault v2, non-EVM signers, `fam/*`, `wallets/*` and `UAKey` SPECIFIED ([clients/signers-clientkeys.md](clients/signers-clientkeys.md)) |
-| `app/` | `scaas/app/` (React + Vite) | Console and dApp over every family: contracts, wallets, DEX book, Zether, node administration (built-in login or OIDC) | SPECIFIED ([clients/app.md](clients/app.md)) |
+| `zether-prover` | `clients/zether-prover/` (Rust, `cdylib` + `rlib`, WASM) | Key generation (EIP-2333 paths), ElGamal, Σ-protocol + Bulletproofs (n = 64), disclosure openings, BSGS, `zether-cli`, `zether-read-balance` | BUILT (unaudited); feature `pq` and `pqz-cli` SPECIFIED ([contracts/pq-zether.md](contracts/pq-zether.md)) |
+| `clientkeys` | `clients/clientkeys/` (ESM, `@noble` / `@scure`) | Passkey signer, 24-word seed vault, Zether keys and balance cache | BUILT (EVM-centric); vault v2, non-EVM signers, `fam/*`, `wallets/*` and `UAKey` SPECIFIED ([clients/signers-clientkeys.md](clients/signers-clientkeys.md)) |
+| `clients/app/` | `scaas/clients/app/` (React + Vite) | Console and dApp over every family: contracts, wallets, DEX book, Zether, node administration (built-in login or OIDC) | SPECIFIED ([clients/app.md](clients/app.md)) |
 | ERP connectors | in the client's codebase | Outbox, push and sync jobs, payment provider, portal, DEX accounting | one worked example: [integration-odoo-example.md](integration-odoo-example.md) |
 | CI | `.github/workflows/ci.yml` (`scaas-ci`) | forge tests (pinned OpenZeppelin v5.2.0, forge-std v1.16.2), `private7622` build, cargo clippy `-D warnings`, cargo test, EVM end-to-end on anvil | BUILT; CI for the prover, clientkeys and non-EVM end-to-end PLANNED |
 
@@ -260,7 +260,7 @@ flowchart TB
 
 | Caller | Enters through | Endpoint or transport | Authentication |
 |---|---|---|---|
-| `app/` (React + Vite) | admin API | login / session | JWT (built-in users, or an optional OIDC IdP) |
+| `clients/app/` (React + Vite) | admin API | login / session | JWT (built-in users, or an optional OIDC IdP) |
 | Automation | admin API | admin endpoints | OIDC client credentials |
 | Host shell | the store directly | `scaas-node admin …` (the CLI writes the store) | host access |
 | ERP or back office, push job (outbox) | job API | `POST /v1/jobs`, cancel, `PUT /v1/watch`, `/v1/tokens` | API key (HMAC) |

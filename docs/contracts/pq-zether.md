@@ -1332,7 +1332,7 @@ chains feasible later (a Go module calling `libpqz` via cgo); Hedera, Soroban, S
 
 <a id="vectors"></a>
 
-**KATs** (`pqz-core/vectors/`, copied to `smartcontracts/evm/test/vectors/pqz/` and `zether-prover/vectors/pq/`):
+**KATs** (`pqz-core/vectors/`, copied to `smartcontracts/evm/test/vectors/pqz/` and `clients/zether-prover/vectors/pq/`):
 
 | File | Content |
 |---|---|

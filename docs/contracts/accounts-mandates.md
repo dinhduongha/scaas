@@ -146,7 +146,7 @@ family: Sui `ecdsa_r1::secp256r1_verify`; Soroban `env.crypto().secp256r1_verify
 (cosmwasm-std 2.1+); Hedera as EVM (probe the precompile, Solidity fallback); TON: TVM has
 `P256_CHKSIGNU/P256_CHKSIGNS` (TVM upgrades of 2023/2024), used through `asm` in Tact, confirmed by compiling in the
 sandbox (otherwise TON is ed25519 only and the gap is recorded). The client side
-(`clientkeys/src/passkey-signer.js`: `creationOptions` with PRF enabled by default, `requestOptions`, `derToRS`,
+(`clients/clientkeys/src/passkey-signer.js`: `creationOptions` with PRF enabled by default, `requestOptions`, `derToRS`,
 `encodeAssertion = abi.encode(authenticatorData, clientDataJSON, r, s)`, `merkleBatch`, `accountSignature =
 abi.encode(keyIndex, bytes32[] proof, sig)`) is [CLI-SGN-09](../clients/signers-clientkeys.md#CLI-SGN-09).
 

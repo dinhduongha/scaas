@@ -785,9 +785,7 @@ flowchart LR
 |---|---|
 | `smartcontracts/` | On-chain code by family: `evm/` (Foundry; Gnosis, Celo, private chain, Hedera), `move/{aptos,sui}`, `soroban/`, `cosmos/`, `ton/`, `solana/`; `scripts/{build,test,deploy,devnet}.sh <family>`. See [`smartcontracts/README.md`](smartcontracts/README.md) |
 | `scaas-node/` | Rust relayer node: gateway, submit lanes, indexer, admin, mesh |
-| `zether-prover/` | Rust/WASM Zether prover |
-| `app/` | React + Vite console and dApp (planned) |
-| `clientkeys/` | Browser signers (passkey, seed vault) |
+| `clients/` | Everything that runs on the user's side: `clientkeys/` (browser signers: passkey, seed vault, Zether keys), `zether-prover/` (Rust/WASM prover for Zether proofs, balance reading and disclosure), `app/` (React + Vite console and dApp, planned) |
 | `docs/` | Product docs — start at [`docs/README.md`](docs/README.md). Check: `python3 scripts/docs_check.py check` |
 | `scripts/capped` | Run one heavy build in a 4 GB systemd scope, one at a time machine-wide |
 

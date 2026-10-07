@@ -2,14 +2,16 @@
 #   smartcontracts/evm: forge test; FOUNDRY_PROFILE=private7622 forge build
 #   scaas-node:    cargo test; cargo clippy --all-targets -- -D warnings; cargo test --test e2e -- --ignored
 #   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check
+#   clients/clientkeys:    npm ci --ignore-scripts; npm test
+#   clients/zether-prover: cargo test; ./wasm-smoke.sh (wasm32 build + wasm-bindgen + node smoke)
 name: scaas-ci
 
 on:
   pull_request:
-    paths: ['smartcontracts/**', 'scaas-node/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', '.github/workflows/ci.yml']
+    paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', '.github/workflows/ci.yml']
   push:
     branches: [main]
-    paths: ['smartcontracts/**', 'scaas-node/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', '.github/workflows/ci.yml']
+    paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', '.github/workflows/ci.yml']
 
 env:
   OZ_TAG: v5.2.0
@@ -66,7 +68,47 @@ jobs:
       - uses: actions/checkout@v4
       - name: checker self-test
         run: python3 scripts/test_docs_check.py
-      - name: register, links, lint (C1-C10)
+      - name: register, links, lint, diagrams (C1-C11)
         run: python3 scripts/docs_check.py check
       - name: fact ledger
         run: python3 scripts/docs_check.py facts check
+
+  clientkeys:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/clientkeys
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: install (no lifecycle scripts)
+        run: npm ci --ignore-scripts
+      # The vendored-bundle tests skip here: the bundle lives in the client repo that embeds scaas.
+      - name: unit tests and vectors
+        run: npm test
+
+  zether-prover:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/zether-prover
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/zether-prover
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@0.2.129
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: unit tests and vectors
+        run: cargo test
+      - name: wasm build and node smoke
+        run: WASM_BINDGEN=wasm-bindgen ./wasm-smoke.sh

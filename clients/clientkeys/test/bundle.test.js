@@ -2,15 +2,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const committed = fileURLToPath(new URL('../../../dms_blockchain_bridge/static/lib/clientkeys/', import.meta.url));
+const committed = fileURLToPath(new URL('../../../../dms_blockchain_bridge/static/lib/clientkeys/', import.meta.url));
+// The vendored copy lives in the client repo that embeds scaas; a standalone scaas checkout has none.
+const skip = !existsSync(committed) && 'no vendored bundle next to this checkout';
 
-test('committed bundle == fresh esbuild output', () => {
+test('committed bundle == fresh esbuild output', { skip }, () => {
   const out = mkdtempSync(join(tmpdir(), 'clientkeys-'));
   const script = JSON.parse(readFileSync(join(root, 'package.json'))).scripts.build;
   const args = script.split(' ').slice(1).map((a) => (a.startsWith('--outdir=') ? `--outdir=${out}` : a));
@@ -20,7 +22,7 @@ test('committed bundle == fresh esbuild output', () => {
   for (const f of fresh) assert.ok(readFileSync(join(out, f)).equals(readFileSync(join(committed, f))), `${f} is stale: npm run build`);
 });
 
-test('bundles load and work', async () => {
+test('bundles load and work', { skip }, async () => {
   const seed = await import(join(committed, 'seed-signer.js'));
   const pk = await import(join(committed, 'passkey-signer.js'));
   const s = seed.seedFromEntropy(seed.wordsToEntropy(

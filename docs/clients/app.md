@@ -1,6 +1,6 @@
 # SCaaS app — console and dApp
 
-The SCaaS app (`scaas/app/`) is one React + Vite single-page app with two halves: a **dApp** for subjects (no login) and
+The SCaaS app (`scaas/clients/app/`) is one React + Vite single-page app with two halves: a **dApp** for subjects (no login) and
 a **console** for node operators (login to one node's admin API). It depends on no ERP. Status: **SPECIFIED**; nothing of
 the app is built yet (the node store is built; the node's job API, admin API and admin auth are specified). Signer rules:
 [clients/signers-clientkeys](signers-clientkeys.md).
@@ -104,10 +104,10 @@ Libraries (the direct allowlist, [CLI-APP-15](#CLI-APP-15)):
 | Solana | `@solana/kit` 8.4.0, HTTP transport only, no subscriptions | as `smartcontracts/solana/scripts` |
 | Polyfill | `buffer` (feross), imported **only** inside the Soroban and TON adapter chunks (`globalThis.Buffer ??= Buffer` there) | `stellar-base` and `@ton/core` need it |
 
-Unpinned versions are fixed in `package-lock.json` by the size spike and recorded in `app/README`. Package layout:
+Unpinned versions are fixed in `package-lock.json` by the size spike and recorded in `clients/app/README`. Package layout:
 
 ```
-app/
+clients/app/
   package.json  package-lock.json  .npmrc (save-exact, ignore-scripts)  tsconfig.json  vite.config.ts  index.html
   budget.json (from the size spike)  deps-allowlist.json (direct + transitive)  public/config.example.json
   scripts/ csp.mjs  budget.mjs  abi.mjs  i18n-check.mjs  licenses.mjs  config-from-deployments.mjs  deps-gate.mjs
@@ -734,7 +734,7 @@ extra_connect_src = []
 **Loopback operation.** With the default loopback `admin_bind`, operators tunnel to **`localhost`** (not `127.0.0.1`, if they
 use passkeys); `"self"` resolves to `http://localhost:<port>`, which the config validator allows.
 
-**CI job `app`** (paths `app/**`, `clientkeys/**`): (1) `npm ci --ignore-scripts` (clientkeys, app); (2) clientkeys `node --test`;
+**CI job `app`** (paths `clients/app/**`, `clients/clientkeys/**`): (1) `npm ci --ignore-scripts` (clientkeys, app); (2) clientkeys `node --test`;
 (3) `tsc --noEmit`, `eslint`, `vitest`; (4) `vite build`, then `budget.mjs`, `deps-gate.mjs`, `i18n-check.mjs`, the dist
 secret/dev grep and the `abi.mjs` diff; (5) Playwright `evm` + `console`. Heavy steps never run in parallel with the node's
 `cargo` jobs on the self-hosted box.

@@ -9,7 +9,7 @@ import {
 } from '../src/evm.js';
 import { abiEncode, hex, fromHex, keccak_256, utf8ToBytes } from '../src/bytes.js';
 
-const vectors = new URL('../../smartcontracts/evm/test/vectors/', import.meta.url);
+const vectors = new URL('../../../smartcontracts/evm/test/vectors/', import.meta.url);
 const read = (f) => JSON.parse(readFileSync(new URL(f, vectors)));
 
 test('EIP-712 digest of the typed data Odoo issues = MetaTx KAT (MetaTxKat.t.sol)', () => {
