@@ -10,7 +10,10 @@ folded (dispositions inside each spec; review files in `docs/reviews/specs/`, gi
 chainId 9000 → **7622**; `PqzToken` implements `IERC20MetaTx` (PQZ rev 1.4 R284); Move/Solana (and Cosmos
 `--no-admin`) programs **immutable at deploy** (round3 CR-R3-11, NI R348).
 
-- [ ] **Sync `docs/SCaaS.md` + `docs/integration.md`** with the latest folds — collect every "Amends"/"amendments"
+- [ ] **Docs reorg** (plan `docs/superpowers/plans/2026-10-07-docs-reorg.md`): Phase 0 done 2026-10-07 (history frozen in
+      `docs/history/`, research in `docs/research/`, id map in `docs/_work/`); Phases 1–4 replace the sync item below.
+- [ ] ~~**Sync `docs/SCaaS.md` + `docs/integration.md`**~~ (superseded by the docs reorg; files now `docs/history/SCaaS-2026-10-07.md`,
+      `docs/history/integration-2026-10-07.md`) with the latest folds — collect every "Amends"/"amendments"
       table in: NI rev 3.7 (R340–R349), PQZ rev 1.4 (R284 meta-tx, register row still says 1.2), round3 rev 1.2,
       payments rev 1.1, wallets addendum, signing-formats, infra rev 1.2, DEX rev 1.1, Zether rev 1.1, net-* rev 1.1/1.2.
       Known SCaaS.md errors: §7.7 Solana `MetaOp` is 336 B not 337; §7.6 TON TODO #8 done, `BindKey` doesn't exist
@@ -26,7 +29,7 @@ chainId 9000 → **7622**; `PqzToken` implements `IERC20MetaTx` (PQZ rev 1.4 R28
       (default `gpt-6.1-sol` is rejected for a ChatGPT account); outputs `docs/reviews/specs/*-codex-review-1.md`; fold.
 - [x] **ChainId 9000 → 7622** stream CHAINID done 2026-10-07: genesis reset (`0x24e43dcb…c464`), `private7622` dir +
       foundry profile, KAT/mesh vectors regenerated, node examples, Odoo chain record + tests. Left: `private9000`
-      mentions in `docs/SCaaS.md` + `docs/integration.md`; `chain_uid` = genesis hash binding (UA R330, not built);
+      mentions in `docs/history/SCaaS-2026-10-07.md` + `docs/history/integration-2026-10-07.md` (history: the reorg writes 7622 only); `chain_uid` = genesis hash binding (UA R330, not built);
       redeploy the dev contracts on the empty chain.
 - [ ] Doc nits: `wasm-smoke.sh` needs `--target web`; node default `max_gas_per_tx` 3M < classical Zether transfer 3.36M
       (Zether rev 1.1 says ≥ 4.2M on Zether chains).

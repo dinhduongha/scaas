@@ -3,7 +3,7 @@
 //! mà **lane account** là source (sequence riêng của lane, trả phí) — chủ thể không có sequence trong đường đi (R30).
 //! Nonce auth là ngẫu nhiên (host ghi cặp (địa chỉ, nonce) đã dùng) ⇒ không head-of-line (R62).
 //! Tuỳ chọn fee-bump (CAP-15): `params.fee_bump_lane = i` ⇒ account của lane `i` trả phí cho mọi lane.
-//! Thiết kế: `docs/superpowers/specs/2026-10-03-net-soroban.md`.
+//! Thiết kế: `docs/history/specs/2026-10-03-net-soroban.md`.
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Mutex;

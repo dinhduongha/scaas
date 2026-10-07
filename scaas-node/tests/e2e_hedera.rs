@@ -3,7 +3,7 @@
 //! Hedera (R63) end to end on a LOCAL devnet stand-in: anvil `--chain-id 298` (Hedera localnet id) with the
 //! HIP-632 precompile 0x16a replaced by `MockHederaAccountService` (smartcontracts/evm/test/hedera/HederaMocks.sol).
 //! hedera-local-node / solo (≥ 8 GB, many containers) does not run on the shared machine — gap recorded in
-//! docs/superpowers/specs/2026-10-03-net-hedera.md §9. Proven here through the real `HederaAdapter`:
+//! docs/history/specs/2026-10-03-net-hedera.md §9. Proven here through the real `HederaAdapter`:
 //! 1. two relayer lanes from a 24-word mnemonic (`m/44'/3030'/0'/0/i`), each with its own key;
 //! 2. a payment by a Hedera NATIVE account (`0.0.N`, long-zero `from`, 64-byte account signature checked by the
 //!    precompile) through `lane_step`: signed → broadcast → mined;

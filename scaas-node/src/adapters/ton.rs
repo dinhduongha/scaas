@@ -1,4 +1,4 @@
-//! TON (R67, spec `docs/superpowers/specs/2026-10-03-net-ton.md`). Lane = ví W5R1 của relayer (seqno riêng,
+//! TON (R67, spec `docs/history/specs/2026-10-03-net-ton.md`). Lane = ví W5R1 của relayer (seqno riêng,
 //! một external message bay mỗi lane — R62); tx gửi internal message `SignedOp` tới jetton wallet của người trả,
 //! nơi contract kiểm chữ ký chủ thể trên phong bì TON Connect (R30: chủ thể không bao giờ gửi tx).
 //! API: TON Center v3 (`masterchainInfo`, `blocks`, `transactionsByMasterchainBlock`, `transactionsByMessage`,

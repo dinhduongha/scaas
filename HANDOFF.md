@@ -54,11 +54,11 @@ vectors from `scaas/…`.
 | Not deployed anywhere | domain tags renamed `bamboo.* → scaas.*` ⇒ every dev/test contract must be redeployed; DB rows `blockchain.token.domain_name` ("Bamboo MetaToken") and Cosmos `network_key` (`bamboo-1`) need updating after redeploy; operators rename env `BAMBOO_* → SCAAS_*`; every node needs `scaas-node store init` once (migration 0001 was edited in place — recreate dev `node.db`) |
 | Worktrees | `.claude/worktrees/{p1,p1fix,rename,s3,tonhash,tw2}` — all merged; remove when convenient |
 
-### Specs (all on `main`, `docs/superpowers/specs/`), rulings and review state
+### Specs (all on `main`, frozen in `docs/history/specs/` since the 2026-10-07 docs reorg), rulings and review state
 
 | Spec | Rulings | Rev | Review |
 |---|---|---|---|
-| `docs/SCaaS.md` (system, normative) + `docs/integration.md` | precedence | — | PLANNED material owner-review pending |
+| `docs/history/SCaaS-2026-10-07.md` (system) + `docs/history/integration-2026-10-07.md` | precedence | — | PLANNED material owner-review pending |
 | `2026-10-05-relayer-mesh-design.md` | R70–R86 | 3 | ×2 |
 | `2026-10-06-node-independence-design.md` (NI) | R87–R111 | 3.3 | ×1 + P1 code review |
 | `2026-10-06-mesh-gossip-amendment.md` (A2) | R112–R128 | 2.1 | ×1 |

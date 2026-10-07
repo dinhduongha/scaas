@@ -27,7 +27,7 @@ be `berlin`. The chainspec was rewritten with Nethermind keys; details in
 without a log line, so every activation is **probed**, never trusted (`TRAPS.md` §"Private chain").
 
 Classical Zether is still gated to dev chains 31337/1337 (RS2-1; owner question Z3). This chain is the only target
-of post-quantum Zether (`docs/superpowers/specs/2026-10-06-pq-zether-design.md`, precompiles `0x…0F01`/`0x…0F10`).
+of post-quantum Zether (`docs/history/specs/2026-10-06-pq-zether-design.md`, precompiles `0x…0F01`/`0x…0F10`).
 
 ## gasLimit có đủ không
 

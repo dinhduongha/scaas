@@ -9,7 +9,7 @@ bật bằng config:
 | `indexer` | đọc log trong vùng **đã final** (depth/tag + quorum RPC), gửi `chain_event_ingest` | API key nhóm *Blockchain Indexer (service)* |
 | `gateway` | HTTP mở: `POST /v1/metatx`, `GET /healthz`, DEX `/v1/dex/{orders,cancel,cancel-all,markets,depth,trades,ticker}` | (qua `submit`); sổ DEX lưu ở Odoo |
 
-Thiết kế: `docs/superpowers/specs/2026-10-03-blockchain-payments-design.md` §3.
+Thiết kế: `docs/history/specs/2026-10-03-blockchain-payments-design.md` §3.
 Không Redis, không Lua, không Postgres trực tiếp: mọi đọc/ghi Odoo đi qua `/json/2`.
 
 ## Build
@@ -50,4 +50,4 @@ Endpoint RPC **chỉ** nằm ở đây (ruling R20) và phải ≥ `finality.quo
 - Sổ lệnh DEX (`OrderBookDex`, R35) lưu ở Odoo (`dms_blockchain_dex`, RS5-2): mỗi thay đổi là một
   `dex_book_commit`; settle đi qua outbox như mọi job; khởi động lại nạp lại sổ. Bật bằng `dex = "0x…"`
   (địa chỉ `order_book_dex` trong `deployments/<chain>.json`) + `gateway` + `submit`; watcher event final
-  của DEX chạy khi `indexer` bật. Thiết kế: `docs/superpowers/specs/2026-10-03-dex-design.md`.
+  của DEX chạy khi `indexer` bật. Thiết kế: `docs/history/specs/2026-10-03-dex-design.md`.

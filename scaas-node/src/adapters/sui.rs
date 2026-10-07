@@ -1,4 +1,4 @@
-//! Sui (R64; thiết kế `docs/superpowers/specs/2026-10-03-net-sui.md` §6). Job `signed_op` mang BCS của
+//! Sui (R64; thiết kế `docs/history/specs/2026-10-03-net-sui.md` §6). Job `signed_op` mang BCS của
 //! `scaas::meta::MetaOp` + chữ ký serialized của ví (base64). Lane = địa chỉ ed25519 của relayer, vừa là
 //! sender vừa là chủ gas (không sponsored). PTB BCS dựng TẠI ĐÂY — không ký bytes do RPC dựng (RS7-5).
 //! Sui không có sequence tài khoản: một tx bay mỗi lane là đủ (gas coin của lane không bao giờ nằm

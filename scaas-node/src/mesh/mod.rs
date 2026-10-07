@@ -1,4 +1,4 @@
-//! Mesh relayer vòng 4 (`docs/superpowers/specs/2026-10-05-relayer-mesh-design.md`). S3: thư viện thuần —
+//! Mesh relayer vòng 4 (`docs/history/specs/2026-10-05-relayer-mesh-design.md`). S3: thư viện thuần —
 //! envelope `scaas-intent/1.2`, giải mã theo họ, chữ ký hub, nhận/từ chối (L0–L3) và bộ lọc xuất. Không mạng,
 //! không store (store nằm sau trait `accept::Seen`).
 use serde::{Deserialize, Serialize};

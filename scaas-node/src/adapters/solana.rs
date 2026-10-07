@@ -1,4 +1,4 @@
-//! Solana (S12; thiết kế `docs/superpowers/specs/2026-10-04-net-solana.md` §6). Job `signed_op` mang `MetaOp` v1
+//! Solana (S12; thiết kế `docs/history/specs/2026-10-04-net-solana.md` §6). Job `signed_op` mang `MetaOp` v1
 //! (336 byte) + blob chữ ký `kind ‖ key_index ‖ sig64 ‖ [u16le n ‖ authData ‖ cdj]` + khoá công khai. Lane = khoá
 //! ed25519 `m/44'/501'/{i}'/0'` của relayer, làm fee payer; thứ tự mỗi lane = durable nonce account
 //! `create_with_seed(lane, "scaas-nonce-v1", System)` (RS12-14): `sequence` = 8 byte đầu giá trị nonce, một tx bay.

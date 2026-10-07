@@ -4,7 +4,7 @@ Cây hợp đồng của `dms_blockchain`. **Nằm ngoài addon Odoo, ở `smart
 có vòng đời riêng (audit, deploy, immutability) không trùng vòng đời của một addon.
 
 Interface đã chốt cộng các implementation đã có (2026-10-03,
-`docs/superpowers/plans/2026-10-03-blockchain-contracts.md`):
+`docs/history/plans/2026-10-03-blockchain-contracts.md`):
 
 | Contract | File | Ghi chú |
 |---|---|---|
@@ -17,7 +17,7 @@ Interface đã chốt cộng các implementation đã có (2026-10-03,
 
 Zether is built (`src/zether/`: `ZetherToken`, `ZetherMetaTx`, `ZetherVerifierBn254`, `ZetherVerifierBls12381`;
 `src/registry/UniversalAccountRegistry.sol`), unaudited and gated to dev chains 31337/1337 (`ZetherSafety`,
-RS2-1); see `docs/SCaaS.md` §8. `test/vectors/metatx_kat.json` là vector digest dùng chung với
+RS2-1); see `docs/history/SCaaS-2026-10-07.md` §8. `test/vectors/metatx_kat.json` là vector digest dùng chung với
 Odoo (`dms_blockchain/lib/eip712.py`) và relayer (`scaas-node`).
 
 ## Mô hình: factory mở
@@ -143,7 +143,7 @@ Cùng lớp lỗi bắt được khi viết lại: `bytes32 indexed reference` t
 3. **The `mode` bitmask is kept** (`common/MetaTxLib.sol`, `supportedModes() = 0xF3`): flags
    `MODE_RESTRICT_RELAYER`, `MODE_RESTRICT_FEE_RECIPIENT` plus an enumerated fee-mode nibble. `mode` is part of the
    signed struct, and unbound `relayer`/`feeRecipient` are hashed as `address(0)` (canonical zeroing), so one
-   signature never validates under another mode. See `docs/SCaaS.md` §5.3.
+   signature never validates under another mode. See `docs/history/SCaaS-2026-10-07.md` §5.3.
 
 Mẫu số phần trăm thống nhất **ppm (1e6)**, trần cứng **1% = 10.000 ppm**.
 `setTransferFeePerMille` (1e3) bị loại: nó không biểu diễn được 0,05%.
@@ -151,5 +151,5 @@ Mẫu số phần trăm thống nhất **ppm (1e6)**, trần cứng **1% = 10.00
 ## Tham chiếu
 
 Mọi quyết định ở đây có nguồn trong
-`docs/superpowers/specs/blockchain-research/_USER-DECISIONS.md` (thẩm quyền cao nhất)
+`docs/research/_USER-DECISIONS.md` (thẩm quyền cao nhất)
 và `00-CANON.md`.

@@ -1,4 +1,4 @@
-//! Aptos (S11; thiết kế `docs/superpowers/specs/2026-10-04-net-aptos.md` §6). Job `signed_op` mang BCS của
+//! Aptos (S11; thiết kế `docs/history/specs/2026-10-04-net-aptos.md` §6). Job `signed_op` mang BCS của
 //! `scaas::meta::MetaOp` (309 byte) + blob chữ ký `sig64 ‖ envelope` (phong bì signMessage của ví, hoặc assertion
 //! WebAuthn) + khoá công khai. Lane = tài khoản ed25519 `m/44'/637'/{i}'/0'/0'` của relayer: gửi sequence-number tx,
 //! một tx bay mỗi lane, tự trả phí (RS11-6). `RawTransaction` BCS dựng TẠI ĐÂY, không crate `aptos-sdk` (RS11-7);
