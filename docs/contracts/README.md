@@ -8,15 +8,15 @@ the rules every one of them shares. Status tags (**BUILT**, **SPECIFIED**, **PLA
 
 | File | Covers | Status |
 |---|---|---|
+| [accounts.md](accounts.md) | the three account forms; Universal Account (ids, kinds, registry, verifiers, credentials, migration); passkeys on chain; the optional `SubjectAccount` smart account and its factory, guardians | UA **SPECIFIED**; `SubjectAccount` **BUILT** |
 | [metatx.md](metatx.md) | `MetaTransaction` struct, typehash, `mode`, 2D nonces, the nine-step pipeline, `FeePolicy`, named functions, pay references and the pay-once horizon, receiver-pays | v1/v2 **BUILT**; receiver-pays **SPECIFIED** |
 | [token-wrappers.md](token-wrappers.md) | three token tiers, conversion rates, multi-underlying wrappers, factory v1/v2, allowance lockdown | **BUILT** (EVM, Hedera) |
-| [accounts.md](accounts.md) | the three account forms; Universal Account (ids, kinds, registry, verifiers, credentials, migration); passkeys on chain; the optional `SubjectAccount` smart account and its factory, guardians | UA **SPECIFIED**; `SubjectAccount` **BUILT** |
-| [mandates.md](mandates.md) | `MandateWallet`: delegated, capped payment from the payer's own wallet; auto-pay client integration | **BUILT**; revocation epoch **SPECIFIED** |
 | [dex.md](dex.md) | `OrderBookDex`, legacy `MetaTxDex`, managed-market venue contract | **BUILT**; fixes **SPECIFIED** |
 | [tender.md](tender.md) | `SealedBidTender` | **SPECIFIED** |
 | [asset-suite.md](asset-suite.md) | regulated module, vesting, distributions, corporate actions, templates | **SPECIFIED** |
 | [zether.md](zether.md) | classical Zether, byte-exact; limits; decryption bound | **BUILT, UNAUDITED** (dev chains) |
 | [pq-zether.md](pq-zether.md) | post-quantum Zether on private/PoA chains | **SPECIFIED, UNAUDITED** |
+| [mandates.md](mandates.md) | `MandateWallet`: delegated, capped payment from the payer's own wallet; auto-pay client integration | **BUILT**; revocation epoch **SPECIFIED** |
 
 The node that relays these contracts is specified in [docs/node/](../node/README.md); the per-family programs
 (Hedera, Cosmos, Soroban, Sui, Aptos, Solana, TON) in [docs/networks/](../networks/README.md).
