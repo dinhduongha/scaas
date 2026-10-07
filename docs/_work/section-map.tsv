@@ -1,0 +1,574 @@
+source	sec	default	target_text
+SCaaS-2026-10-07.md	0.1	target:README.md#precedence;target:decisions.md	"Precedence: README#precedence (rewritten: owner rulings in decisions.md > component docs > code byte formats > history) || Component spec register: history/README (abbreviation register) || ""Superseded positions"" table: D (one supersession per row) || Naming note: architecture#glossary (names)"
+SCaaS-2026-10-07.md	0.2	target:architecture.md#glossary	Glossary: architecture#glossary
+SCaaS-2026-10-07.md	1.1–1.4	target:architecture.md#positioning	Positioning, authority model, what SCaaS is not, deployment profiles: architecture#positioning, #authority-model, #profiles
+SCaaS-2026-10-07.md	2.1–2.3	target:architecture.md#service-model	Service model (anchor/land, four-condition test, saga vs atomic): architecture#service-model
+SCaaS-2026-10-07.md	3.1–3.5	target:architecture.md#components;target:node/README.md#roles	Components, node roles, topology, data flows, trust boundaries: architecture#components, #trust-model; node/README#roles
+SCaaS-2026-10-07.md	4.1–4.5	target:contracts/token-wrappers.md	Token hierarchy, tiers, factory, allowance lockdown, permissionless vs controlled: contracts/token-wrappers
+SCaaS-2026-10-07.md	4.6, 4.8, 4.9	target:contracts/asset-suite.md;target:contracts/dex.md#managed-markets	Vesting, equity/bonds on managed DEX, asset suite: contracts/asset-suite; contracts/dex#managed-markets
+SCaaS-2026-10-07.md	4.7	target:contracts/accounts-mandates.md#mandatewallet	Mandates: contracts/accounts-mandates#mandatewallet
+SCaaS-2026-10-07.md	5.1–5.8	target:contracts/metatx.md	Meta-tx layer: contracts/metatx
+SCaaS-2026-10-07.md	5.9	target:contracts/metatx.md#payers;target:node/sponsorship.md	Payer flexibility: contracts/metatx#payers; node/sponsorship
+SCaaS-2026-10-07.md	6.1	target:node/README.md#invariants	Node invariants N1–N16: node/README#invariants (NODE-GEN)
+SCaaS-2026-10-07.md	6.2	target:node/job-api.md#states	Job lifecycle: node/job-api#states
+SCaaS-2026-10-07.md	6.3	target:node/submit-lanes.md#journal	Nonce journal and restart: node/submit-lanes#journal
+SCaaS-2026-10-07.md	6.4, 6.5	target:node/submit-lanes.md	Gas breakers, simulation gate: node/submit-lanes
+SCaaS-2026-10-07.md	6.6	target:node/indexer-feeds.md#finality	Finality gates per family: node/indexer-feeds#finality; per-family values → networks/*
+SCaaS-2026-10-07.md	6.7	target:node/mesh.md	Mesh: node/mesh (summary only; H for text already in MESH)
+SCaaS-2026-10-07.md	6.8	target:node/gossip.md#transport	Transports and PQ KEX: node/gossip#transport
+SCaaS-2026-10-07.md	6.9	target:architecture.md#economics;target:node/mesh.md#rewards	Economics: architecture#economics (short) + node/mesh#rewards
+SCaaS-2026-10-07.md	6.10	target:node/job-api.md#call-table;target:node/gateway.md#intake;target:node/submit-lanes.md#legacy-pull	Call table, Door A intake, idempotent report: node/job-api#call-table (single home); node/gateway#intake; node/submit-lanes#legacy-pull
+SCaaS-2026-10-07.md	7, 7.1–7.7	target:networks/README.md;target:networks/<family>.md	Families: networks/README, networks/<family>
+SCaaS-2026-10-07.md	7.8	target:node/indexer-feeds.md#event-normalization	Event normalization: node/indexer-feeds#event-normalization
+SCaaS-2026-10-07.md	8.1–8.11	target:contracts/zether.md;target:contracts/universal-account.md#legacy-registry	Zether: contracts/zether (8.6 → contracts/universal-account#legacy-registry)
+SCaaS-2026-10-07.md	8.12	history:H	PQ Zether summary: H (duplicate of PQZ)
+SCaaS-2026-10-07.md	9.1	target:architecture.md#trust-model	Custody axes: architecture#trust-model
+SCaaS-2026-10-07.md	9.2	target:clients/signers-clientkeys.md#signing-policy	SigningPolicyService (PLANNED): clients/signers-clientkeys#signing-policy
+SCaaS-2026-10-07.md	9.3	target:contracts/accounts-mandates.md#passkeys;target:clients/signers-clientkeys.md#passkeys	Passkeys: contracts/accounts-mandates#passkeys; clients/signers-clientkeys#passkeys
+SCaaS-2026-10-07.md	9.4	target:contracts/accounts-mandates.md;target:clients/signers-clientkeys.md#backup-switch	Subject accounts, guardians, recovery, backup: contracts/accounts-mandates; clients/signers-clientkeys#backup-switch
+SCaaS-2026-10-07.md	9.5	target:clients/signers-clientkeys.md#vault	Seed vault: clients/signers-clientkeys#vault
+SCaaS-2026-10-07.md	9.6	target:node/submit-lanes.md#lane-keys	Relayer lane keys: node/submit-lanes#lane-keys
+SCaaS-2026-10-07.md	9.7	target:contracts/universal-account.md#kinds	Threshold/aggregate signatures: contracts/universal-account#kinds
+SCaaS-2026-10-07.md	9.8	history:H	UA summary: H (duplicate of UA)
+SCaaS-2026-10-07.md	10.x	target:contracts/tender.md#invariants	Tender summary: H (duplicate of TSS §A) except 10.3 invariants → contracts/tender#invariants if missing there
+SCaaS-2026-10-07.md	11.1	target:architecture.md#data-protection	Data-protection principles: architecture#data-protection (principle)
+SCaaS-2026-10-07.md	11.2–11.4	target:integration.md#data-protection	Crypto-shredding, disclosure, land gate: integration#data-protection
+SCaaS-2026-10-07.md	12.x	target:node/job-api.md;target:node/gateway.md;target:node/admin-auth.md	Node API surface: node/job-api, node/gateway, node/admin-auth (summary text H; the error table rows each land in their route's file)
+SCaaS-2026-10-07.md	13.1–13.5	target:node/ops.md;target:node/runbooks.md	SLOs/telemetry, FinOps, RACI, IR, DR: node/ops, node/runbooks (summary text H)
+SCaaS-2026-10-07.md	13.6	target:node/runbooks.md#emergency	Circuit breakers and emergency procedures: node/runbooks#emergency
+SCaaS-2026-10-07.md	14.1	target:contracts/token-wrappers.md#factory-interface	IOpenFactory: contracts/token-wrappers#factory-interface
+SCaaS-2026-10-07.md	14.2	target:contracts/metatx.md#interfaces	IERC20MetaTx / IERC20Payment: contracts/metatx#interfaces
+SCaaS-2026-10-07.md	14.3, 14.4	target:contracts/zether.md#interfaces	IZetherToken, ITransferDisclosure: contracts/zether#interfaces
+SCaaS-2026-10-07.md	14.5	target:contracts/universal-account.md#legacy-registry	IUniversalAccountRegistry (built): contracts/universal-account#legacy-registry
+SCaaS-2026-10-07.md	14.6–14.8	history:H	Pointers: H
+SCaaS-2026-10-07.md	14.9		Other built interfaces: the owning contracts/* file
+SCaaS-2026-10-07.md	15.1	history:streams	Roadmap: T (TODO already holds the order) + H
+SCaaS-2026-10-07.md	15.2	target:decisions.md	Open owner questions: §4 of this plan → D (status `open`)
+SCaaS-2026-10-07.md	15.3	history:H	SRS contradictions: history/README#srs-deltas (owner reference; never in current docs, R-B) || In-repo contradictions: §4 of this plan → resolved in the rewrite; D
+integration-2026-10-07.md	1	target:integration.md#model	Integration model: integration#model
+integration-2026-10-07.md	2, 2.1	target:node/job-api.md#auth;target:integration.md#onboarding	Onboarding, HMAC signing: rules → node/job-api#auth; client how-to + example code → integration#onboarding
+integration-2026-10-07.md	3.1–3.4	target:node/job-api.md;target:integration.md#push	Push request, accept checks, push algorithm, cancel: rules → node/job-api; client algorithm → integration#push
+integration-2026-10-07.md	3.5	target:integration.md#outbox	Outbox rules: integration#outbox (generic: immutable rows, operator read-only) + Odoo example
+integration-2026-10-07.md	3.6	target:node/job-api.md#call-table;target:integration.md	`call` targets: node/job-api#call-table (single home); integration links
+integration-2026-10-07.md	4.1–4.3	target:node/indexer-feeds.md;target:integration.md#reconciliation	Feeds, client rules: rules → node/indexer-feeds; client rules → integration#reconciliation
+integration-2026-10-07.md	5.1, 5.2	target:contracts/metatx.md#entryref;target:integration.md#payment-references	entryRef generation and verification: contracts/metatx#entryref; integration#payment-references
+integration-2026-10-07.md	6, 7, 8	target:integration.md#procure-to-pay	P2P seven steps, fast path/batching, inbound payments: integration#procure-to-pay, #batching, #inbound
+integration-2026-10-07.md	9	target:integration.md#tender;target:contracts/tender.md	Tender in procurement: integration#tender (ERP flow); contract rules stay in contracts/tender
+integration-2026-10-07.md	10.1–10.3	target:integration.md#accounts	Subject accounts, UA registration, identity sync: integration#accounts
+integration-2026-10-07.md	11, 12	target:integration.md#regulated-assets	Regulated-token compliance flow, asset-suite configuration: integration#regulated-assets
+integration-2026-10-07.md	13, 14		clientkeys, app: pointers to clients/* (text H)
+integration-2026-10-07.md	15.1–15.5	target:integration.md#example-odoo	Odoo worked example: integration#example-odoo (fenced example block, R-B)
+integration-2026-10-07.md	16.1–16.3	target:integration.md#runbook	Failure handling, daily reconciliation, after a node restore: integration#runbook
+integration-2026-10-07.md	17	target:integration.md#checklist	Checklist: integration#checklist
+2026-10-03-blockchain-payments-design.md	0, 1	target:architecture.md	Goals, overview: H (covered by architecture)
+2026-10-03-blockchain-payments-design.md	2.1	target:contracts/metatx.md#v1	MetaToken v1: contracts/metatx#v1
+2026-10-03-blockchain-payments-design.md	2.2	target:contracts/token-wrappers.md#factory-v1	OpenFactory: contracts/token-wrappers#factory-v1
+2026-10-03-blockchain-payments-design.md	2.3	target:contracts/dex.md#legacy-metatxdex	MetaTxDex: contracts/dex#legacy-metatxdex
+2026-10-03-blockchain-payments-design.md	2.4	target:contracts/README.md#deploy;target:networks/evm.md#deployments	Deploy: contracts/README#deploy; networks/evm#deployments
+2026-10-03-blockchain-payments-design.md	3.1	target:node/store.md#config-file	node.toml: node/store#config-file
+2026-10-03-blockchain-payments-design.md	3.2	target:node/submit-lanes.md#evm-runner;target:node/job-api.md#legacy-pull	submit (outbox pull): node/submit-lanes#evm-runner; node/job-api#legacy-pull (transitional)
+2026-10-03-blockchain-payments-design.md	3.3	target:node/indexer-feeds.md#finality	indexer finality gate: node/indexer-feeds#finality
+2026-10-03-blockchain-payments-design.md	3.4	target:node/gateway.md	gateway: node/gateway
+2026-10-03-blockchain-payments-design.md	3.5	target:node/job-api.md#legacy-pull;target:integration.md#example-odoo	Odoo ↔ node RPC (`/json/2`): node/job-api#legacy-pull (inside example block); integration#example-odoo
+2026-10-03-blockchain-payments-design.md	4.1–4.6	target:integration.md#example-odoo;target:integration.md#outbox	Odoo addons, models, `relay.job.chain_state` table, payment, portal, groups: integration#example-odoo (state table → integration#outbox generic states + example)
+2026-10-03-blockchain-payments-design.md	5	target:integration.md#procure-to-pay	End-to-end portal payment: integration#procure-to-pay (generic) + example
+2026-10-03-blockchain-payments-design.md	6	target:contracts/metatx.md#digest	"Typed data and digest, ""one rule four places"": contracts/metatx#digest"
+2026-10-03-blockchain-payments-design.md	7	target:architecture.md#trust-model;target:node/submit-lanes.md#lane-keys	Trust and key management: architecture#trust-model; node/submit-lanes#lane-keys
+2026-10-03-blockchain-payments-design.md	8	target:node/runbooks.md	Incident handling: node/runbooks
+2026-10-03-blockchain-payments-design.md	9	target:node/threat-model.md;target:contracts/metatx.md#security	Security and threats: node/threat-model; contracts/metatx#security
+2026-10-03-blockchain-payments-design.md	10	target:contracts/metatx.md	Test strategy: conformance sections of contracts/metatx, node/*
+2026-10-03-blockchain-payments-design.md	11, 12	history:H	Out of scope, implementation plan: H
+2026-10-03-blockchain-payments-design.md	13	target:decisions.md	Rulings R1–R20: D (texts into targets per §3.2)
+2026-10-03-blockchain-payments-design.md	14	history:H	Review log: H
+2026-10-03-blockchain-payments-design.md	15.1–15.6	target:decisions.md	Claude review fold: CR-PD-1…6, superseded, amendments, streams, revisions: CR-PD-* texts per §3.2; 15.3 → D; 15.4 → X; 15.5 → T; rest H
+2026-10-03-blockchain-payments-addendum-wallets.md	A	target:contracts/token-wrappers.md#allowance-lockdown	Approve rule: contract spenders only: contracts/token-wrappers#allowance-lockdown
+2026-10-03-blockchain-payments-addendum-wallets.md	B	target:clients/signers-clientkeys.md#wallet-standards	Open-standard wallets (EIP-1193/6963/712/1271, WalletConnect): clients/signers-clientkeys#wallet-standards
+2026-10-03-blockchain-payments-addendum-wallets.md	C	target:integration.md#receiving-wallets	Receiving wallets per company: integration#receiving-wallets
+2026-10-03-blockchain-payments-addendum-wallets.md	D	target:contracts/accounts-mandates.md#mandatewallet;target:integration.md#auto-pay	Paying wallets, auto-pay: contracts/accounts-mandates#mandatewallet; integration#auto-pay
+2026-10-03-blockchain-payments-addendum-wallets.md	~^(rulings?|ruling)\b|quyết định	target:decisions.md	—: D; texts per §3.2
+2026-10-03-blockchain-infrastructure-service.md	~iaas|so sánh	target:architecture.md#authority-model	"—: architecture#authority-model (table, translated, with the ""Land"" row and admin-exception list)"
+2026-10-03-blockchain-infrastructure-service.md	~owner ruling	target:decisions.md	—: D (alias to CTR-GEN id)
+2026-10-03-blockchain-round3-design.md	0	target:networks/README.md#principles	Cross-cutting principles: networks/README#principles
+2026-10-03-blockchain-round3-design.md	A.1	target:integration.md#custody;target:node/submit-lanes.md#lane-keys	Custody `env:` dev-only (R50): integration#custody (generic) + node/submit-lanes#lane-keys (dev flag)
+2026-10-03-blockchain-round3-design.md	A.2		→ B.3: —
+2026-10-03-blockchain-round3-design.md	A.3	target:node/ops.md#health	Monitoring (R51): node/ops#health
+2026-10-03-blockchain-round3-design.md	A.4	target:contracts/README.md#build-pins	CI (R52): contracts/README#build-pins
+2026-10-03-blockchain-round3-design.md	A.5	target:node/store.md#chain-states	Pause only blocks sending (R53): node/store#chain-states
+2026-10-03-blockchain-round3-design.md	A.6	target:node/gateway.md#auth	Gateway auth + parser fuzz (R54): node/gateway#auth
+2026-10-03-blockchain-round3-design.md	A.7	target:node/submit-lanes.md#breaker	Gas breaker (R55): node/submit-lanes#breaker
+2026-10-03-blockchain-round3-design.md	A.8	target:integration.md#accounting	One journal per (chain, token) + drift (R56): integration#accounting
+2026-10-03-blockchain-round3-design.md	A.9	target:integration.md#example-odoo	"Territory seam, ""platform company"" (R57): integration#example-odoo"
+2026-10-03-blockchain-round3-design.md	A.10	history:streams	HANDOFF items: T / H
+2026-10-03-blockchain-round3-design.md	B.1	target:node/submit-lanes.md#adapters	ChainAdapter (R58): node/submit-lanes#adapters
+2026-10-03-blockchain-round3-design.md	B.2	target:node/submit-lanes.md#signer	Signer (R59): node/submit-lanes#signer
+2026-10-03-blockchain-round3-design.md	B.3	target:node/submit-lanes.md#lane-keys	Relayer key config (R60): node/submit-lanes#lane-keys
+2026-10-03-blockchain-round3-design.md	B.4	target:integration.md#addresses	ERP family/address/payload (R61): integration#addresses (generic) + example
+2026-10-03-blockchain-round3-design.md	B.5	target:networks/README.md#head-of-line	Head-of-line table (R62): networks/README#head-of-line
+2026-10-03-blockchain-round3-design.md	C (C.1–C.4)	target:contracts/accounts-mandates.md#passkeys;target:clients/signers-clientkeys.md#vault	Passkey (R31), seed wallet (R32), multi-key accounts, Zether key (R33): contracts/accounts-mandates#passkeys; clients/signers-clientkeys#vault, #zether-keys
+2026-10-03-blockchain-round3-design.md	D.0	target:networks/README.md#model	Common non-EVM model: networks/README#model
+2026-10-03-blockchain-round3-design.md	D.1–D.5	target:networks/<family>.md#overview	Hedera, Sui, Soroban, Cosmos, TON: networks/<family>#overview
+2026-10-03-blockchain-round3-design.md	D.6	target:integration.md#families;target:clients/signers-clientkeys.md#connectors	ERP and portal per family: integration#families (generic) + clients/signers-clientkeys#connectors
+2026-10-03-blockchain-round3-design.md	E, F	target:contracts/zether.md#scope;target:contracts/dex.md;target:node/dex-venue.md	Rulings, owner decisions (R34, R35): D; R34 → contracts/zether#scope, R35 → contracts/dex + node/dex-venue
+2026-10-03-blockchain-round3-design.md	G	history:H	Review log: H
+2026-10-03-blockchain-round3-design.md	H.1	history:H	Disposition: H
+2026-10-03-blockchain-round3-design.md	H.2	target:networks/README.md;target:node/indexer-feeds.md	CR-R3-1…10: per §3.2 (networks/README, node/indexer-feeds, networks/*)
+2026-10-03-blockchain-round3-design.md	H.3	target:contracts/README.md#immutable;target:networks/README.md#deploy-gate	CR-R3-11 immutable at deploy: contracts/README#immutable; networks/README#deploy-gate
+2026-10-03-blockchain-round3-design.md	H.4	target:decisions.md	Superseded: D
+2026-10-03-blockchain-round3-design.md	H.5	history:amendments-executed	Amendments: X
+2026-10-03-blockchain-round3-design.md	H.6, H.7	history:streams	Streams, revisions: T, H
+round3-wallet-signing-formats.md	1	target:networks/hedera.md#signatures	Hedera HIP-632: networks/hedera#signatures
+round3-wallet-signing-formats.md	2	target:networks/ton.md#signatures	TON Connect `signData`: networks/ton#signatures
+round3-wallet-signing-formats.md	3	target:networks/sui.md#signatures	Sui `signPersonalMessage`: networks/sui#signatures
+round3-wallet-signing-formats.md	4	target:networks/cosmos.md#signatures	Cosmos ADR-036: networks/cosmos#signatures
+round3-wallet-signing-formats.md	5	target:networks/soroban.md#signatures	Freighter `signAuthEntry`: networks/soroban#signatures
+round3-wallet-signing-formats.md	~^rulings$	target:networks/sui.md;target:networks/solana.md;target:networks/hedera.md;target:clients/signers-clientkeys.md#rendering	—: networks/sui, networks/solana (CR-WSF-1), networks/hedera (CR-WSF-2); clients/signers-clientkeys#rendering
+round3-wallet-signing-formats.md	~signing-domain	target:networks/README.md#signing-domains	—: networks/README#signing-domains
+round3-wallet-signing-formats.md	~passkey format	target:networks/README.md#webauthn	—: networks/README#webauthn
+round3-wallet-signing-formats.md	~aptos and solana	target:networks/aptos.md;target:networks/solana.md	—: networks/aptos, networks/solana
+2026-10-03-dex-design.md	0	target:contracts/dex.md#overview	Summary: contracts/dex#overview
+2026-10-03-dex-design.md	1.1–1.8	target:contracts/dex.md	OrderBookDex: signed orders, settle, cancel, markets/fees/admin, relayer fee, read functions, allowance/lanes, invariants: contracts/dex
+2026-10-03-dex-design.md	2	target:node/dex-venue.md#persistence	Book persistence (RS5-2, Odoo): node/dex-venue#persistence (target = store; Odoo book = transitional)
+2026-10-03-dex-design.md	3.1–3.6	target:node/dex-venue.md	Node: markets, price-time, matching, spam, `/v1/dex/*`, watcher: node/dex-venue
+2026-10-03-dex-design.md	4	target:integration.md#example-odoo	ERP DEX addon: integration#example-odoo (DEX accounting)
+2026-10-03-dex-design.md	5	target:networks/README.md#dex-per-family;target:networks/<family>.md#dex	Non-EVM model: networks/README#dex-per-family; networks/<family>#dex
+2026-10-03-dex-design.md	6	target:contracts/dex.md#conformance;target:node/dex-venue.md#tests	Tests: contracts/dex#conformance; node/dex-venue#tests
+2026-10-03-dex-design.md	7	target:decisions.md	Rulings (+ rev 1.1, 1.2): D; texts per §3.2
+2026-10-03-dex-design.md	8, 9	history:H	Review log, disposition, revisions: H
+2026-10-03-zether-design.md	1–9	target:contracts/zether.md	Parameters, curves, NUMS generators, transcript, ElGamal state, statement layout, Σ-protocols, Bulletproofs, proof wire format: contracts/zether (verbatim byte layouts)
+2026-10-03-zether-design.md	10	target:contracts/zether.md#envelope	Envelope binding, replay: contracts/zether#envelope
+2026-10-03-zether-design.md	11	target:contracts/zether.md#registry;target:contracts/universal-account.md#legacy-registry	Delegation and registry: contracts/zether#registry (built, transitional until UA) + contracts/universal-account#legacy-registry
+2026-10-03-zether-design.md	12	target:contracts/zether.md#disclosure	Disclosure: contracts/zether#disclosure
+2026-10-03-zether-design.md	13	target:contracts/zether.md#safety-gate;target:contracts/README.md#unaudited	Safety gate: contracts/zether#safety-gate; contracts/README#unaudited
+2026-10-03-zether-design.md	14	target:contracts/zether.md#vectors	Vectors: contracts/zether#vectors
+2026-10-03-zether-design.md	15	target:contracts/zether.md#gas	Gas (measured): contracts/zether#gas
+2026-10-03-zether-design.md	16	target:decisions.md	Rulings (S2, n_v = 64, rev 1.1): D; texts per §3.2
+2026-10-03-zether-design.md	17, 18	history:H	Review, revisions: H
+2026-10-05-zether-limits.md	1–5	target:contracts/zether.md#limits;target:clients/signers-clientkeys.md#zether-balance	Decisions D1–D6, limit tables, `n_b − n_v`, BSGS, device cache: contracts/zether#limits; clients/signers-clientkeys#zether-balance
+2026-10-05-zether-limits.md	6, 7	history:H	admin: H
+2026-10-05-zether-consensys-max.md	1–5	target:contracts/zether.md#decryption-bound	What `MAX = 2^32 − 1` is; three quantities; raising the bound: contracts/zether#decryption-bound (short normative part); analysis → D (rationale of RS-NV64 ids)
+2026-10-05-zether-consensys-max.md	6, 7	history:H	admin: H
+2026-10-05-relayer-mesh-design.md	1.1, 1.2	target:node/mesh.md#scope	Scope, non-goals: node/mesh#scope (as amended by A2 §18.1 and NI §13.1)
+2026-10-05-relayer-mesh-design.md	2	target:decisions.md	Rulings R70–R86: D; texts per §3.2
+2026-10-05-relayer-mesh-design.md	3.1	history:H	Shapes: H (superseded by NI: every node is Odoo-free)
+2026-10-05-relayer-mesh-design.md	3.2	target:node/store.md#config-file	node.toml changes: node/store#config-file (mesh keys)
+2026-10-05-relayer-mesh-design.md	3.3	history:H	Standalone mode: H (superseded entirely, NI §13.1)
+2026-10-05-relayer-mesh-design.md	3.4	target:node/gossip.md#crates	Dependencies: node/gossip#crates (aws-lc-rs per A2 R114)
+2026-10-05-relayer-mesh-design.md	4.1–4.6	target:node/mesh.md#envelope	Envelope `scaas-intent/1.2`: family qualification, wire, fields, `intent_id`, `hub.sig`, conformance vectors: node/mesh#envelope (verbatim)
+2026-10-05-relayer-mesh-design.md	5.1–5.4	target:node/mesh.md#bus	Bus HTTP API: auth/limits, routes, errors, forwarding/hops: node/mesh#bus
+2026-10-05-relayer-mesh-design.md	6	target:node/store.md#mesh-tables	Node-local store: node/store#mesh-tables (NI §4 shape wins; SQLite-only text H)
+2026-10-05-relayer-mesh-design.md	7.1–7.3	target:node/mesh.md#acceptance	Acceptance policy: node/mesh#acceptance (policy now in node store, NI R99)
+2026-10-05-relayer-mesh-design.md	8.1–8.7	target:node/mesh.md#exclusivity;target:node/submit-lanes.md#shared-submit;target:node/README.md#invariants	Exclusivity, submit, cancel, dedup, classification, restart, guarantees: node/mesh#exclusivity; 8.4 → node/submit-lanes#shared-submit; 8.7 → node/README#invariants
+2026-10-05-relayer-mesh-design.md	9	target:node/mesh.md#private-profile	Private profile: node/mesh#private-profile
+2026-10-05-relayer-mesh-design.md	10.1, 10.2, 10.5, 10.6	history:H	ERP-side chain field, policy/peer models, outbox publication, ACL: H (superseded by NI R95/R99)
+2026-10-05-relayer-mesh-design.md	10.3	target:integration.md#reconciliation	Consumption / `landed_elsewhere`: integration#reconciliation (generic) + example
+2026-10-05-relayer-mesh-design.md	10.4	target:integration.md#mesh-scope	Company bus-scope setting: integration#mesh-scope (per-job `bus_scope`, NI R99)
+2026-10-05-relayer-mesh-design.md	11	target:node/threat-model.md#mesh	Security: node/threat-model#mesh
+2026-10-05-relayer-mesh-design.md	12	target:node/ops.md#metrics	Observability: node/ops#metrics
+2026-10-05-relayer-mesh-design.md	13.1–13.4	target:node/mesh.md#tests	Test plan: node/mesh#tests; 13.4 → H (ERP tests)
+2026-10-05-relayer-mesh-design.md	14	history:H	Work breakdown: H, T
+2026-10-05-relayer-mesh-design.md	15.1	history:H	Doc corrections to research: H (research frozen; recorded in history/README)
+2026-10-05-relayer-mesh-design.md	15.2	target:node/mesh.md	Owner-confirmed interpretations: node/mesh (as rules, NODE-MESH ids; alias MESH:I1–I4)
+2026-10-05-relayer-mesh-design.md	15.3	target:node/mesh.md#limitations	Deferred work: node/mesh#limitations (PLANNED list)
+2026-10-05-relayer-mesh-design.md	15.4	target:decisions.md	Contradictions resolved: D (rationale)
+2026-10-05-relayer-mesh-design.md	16	history:H	Review disposition: H
+2026-10-06-node-independence-design.md	1.1–1.3	target:node/README.md#scope	Today, scope, non-goals: node/README#scope (1.1 evidence H)
+2026-10-06-node-independence-design.md	2	target:decisions.md	Rulings R87–R111, R320–R328, R340–R349: D; texts per §3.2
+2026-10-06-node-independence-design.md	3	target:node/README.md#listeners;target:architecture.md#components	Architecture after inversion (diagram, listener table): node/README#listeners; architecture#components (diagram)
+2026-10-06-node-independence-design.md	4	target:node/store.md#schema	Store schema additions (DDL): node/store#schema (verbatim, merged with A1.3, TSS B1.2, OPS 8.2 additions)
+2026-10-06-node-independence-design.md	5.1–5.4	target:node/job-api.md;target:node/indexer-feeds.md#cursors	Job API auth, routes, cursor semantics, errors/limits: node/job-api; 5.3 → node/indexer-feeds#cursors
+2026-10-06-node-independence-design.md	5.5	target:node/gateway.md#routes	Gateway (door A) routes: node/gateway#routes
+2026-10-06-node-independence-design.md	6	target:node/indexer-feeds.md#event-items	Event feed format per family: node/indexer-feeds#event-items
+2026-10-06-node-independence-design.md	7.1–7.6	target:node/admin-auth.md	Admin API: credentials/OIDC, built-in users/CLI, routes, CORS, audit, errors: node/admin-auth
+2026-10-06-node-independence-design.md	7.7	target:node/admin-auth.md#app-serving;target:clients/app.md#deploy	App serving: node/admin-auth#app-serving; clients/app#deploy
+2026-10-06-node-independence-design.md	8	target:node/store.md#config-authority	Configuration authority, bootstrap: node/store#config-authority
+2026-10-06-node-independence-design.md	9.1	target:node/submit-lanes.md;target:node/indexer-feeds.md	Node code changes: node/submit-lanes, node/indexer-feeds (as current behaviour)
+2026-10-06-node-independence-design.md	9.2	target:node/README.md#invariants	Safety properties, where each lives: node/README#invariants
+2026-10-06-node-independence-design.md	9.3, 9.4	target:node/store.md#durability;target:node/submit-lanes.md#lane-keys	Durability vs SKIP LOCKED; same lane keys in two stores: node/store#durability; node/submit-lanes#lane-keys
+2026-10-06-node-independence-design.md	10.1–10.8	target:integration.md#push	ERP side: models, client library, push/sync crons, cancel/requeue/expiry, transitional gates, deletions, ACL: integration#push, #reconciliation (generic) + example-odoo; 10.6, 10.7 → H
+2026-10-06-node-independence-design.md	11.1–11.4	target:integration.md#migration-from-pull;target:node/runbooks.md#cutover	Migration: version matrix, per-chain cutover, namespace bootstrap, proof criterion: integration#migration-from-pull (generic); node/runbooks#cutover
+2026-10-06-node-independence-design.md	12.1–12.4	target:node/dex-venue.md	DEX on the node: node/dex-venue
+2026-10-06-node-independence-design.md	13.1, 13.2	target:node/mesh.md	Interplay with mesh: X (applied to node/mesh) + H
+2026-10-06-node-independence-design.md	14	target:node/threat-model.md	Security T1–T19: node/threat-model
+2026-10-06-node-independence-design.md	15	target:node/ops.md#metrics	Observability: node/ops#metrics
+2026-10-06-node-independence-design.md	16.1–16.5		Test plan: test sections of node/*; 16.3 (ERP) → H
+2026-10-06-node-independence-design.md	17	history:streams	Work breakdown: T, H
+2026-10-06-node-independence-design.md	18.1	history:amendments-executed	Doc corrections: X
+2026-10-06-node-independence-design.md	18.2	target:decisions.md	Interpretations to confirm: D (status `open`, NI:I1–I8)
+2026-10-06-node-independence-design.md	18.3	target:node/README.md#limitations	Deferred: node/README#limitations (PLANNED)
+2026-10-06-node-independence-design.md	19.1–19.6	history:H	Review dispositions: H
+2026-10-06-node-independence-design.md	20		Additions consolidated in rev 3.4: folded into the node/* file each row names
+2026-10-06-node-independence-design.md	A1.1–A1.4	target:node/store.md#backends	Storage backends: owner/fencing, transactions, per-backend schema rules, driver/secrets/tests: node/store#backends
+2026-10-06-mesh-gossip-amendment.md	1	target:node/gossip.md#scope	Scope: node/gossip#scope
+2026-10-06-mesh-gossip-amendment.md	2	target:decisions.md	Rulings R112–R128: D; texts per §3.2
+2026-10-06-mesh-gossip-amendment.md	3, 3.1	target:node/gossip.md#architecture;target:node/store.md#config-file	Architecture, node.toml: node/gossip#architecture; node/store#config-file
+2026-10-06-mesh-gossip-amendment.md	4.1–4.4	target:node/gossip.md#identity	Identity, signing contexts, PQ KEX, private-profile consequences: node/gossip#identity, #transport
+2026-10-06-mesh-gossip-amendment.md	5.1–5.4	target:node/gossip.md#wire	Topics, message-id/size, schemas, protocols: node/gossip#wire
+2026-10-06-mesh-gossip-amendment.md	6, 6.1, 6.2	target:node/gossip.md#validation	Validation pipeline, acceptance codes: node/gossip#validation
+2026-10-06-mesh-gossip-amendment.md	7.1–7.4	target:node/gossip.md#numbers	Numbers: node/gossip#numbers
+2026-10-06-mesh-gossip-amendment.md	8.1–8.4	target:node/gossip.md#intents;target:node/store.md#schema	Intents over gossip: node/gossip#intents; 8.4 store changes → node/store#schema
+2026-10-06-mesh-gossip-amendment.md	9	target:node/gossip.md#hints	Landed hints: node/gossip#hints
+2026-10-06-mesh-gossip-amendment.md	10.1–10.4	target:node/gossip.md#announce	Announce: node/gossip#announce
+2026-10-06-mesh-gossip-amendment.md	11.1–11.7	target:node/dex-venue.md#gossip	DEX book gossip: node/dex-venue#gossip
+2026-10-06-mesh-gossip-amendment.md	12	target:node/gossip.md#private-isolation	Private-scope isolation proof sketch: node/gossip#private-isolation
+2026-10-06-mesh-gossip-amendment.md	13.1	target:node/admin-auth.md#routes	Admin routes: node/admin-auth#routes
+2026-10-06-mesh-gossip-amendment.md	13.2	target:clients/app.md#node-screens	App screens: clients/app#node-screens
+2026-10-06-mesh-gossip-amendment.md	13.3	target:node/ops.md#metrics	Metrics: node/ops#metrics
+2026-10-06-mesh-gossip-amendment.md	14	target:node/threat-model.md#gossip	Threat model: node/threat-model#gossip
+2026-10-06-mesh-gossip-amendment.md	15.1, 15.2	target:node/gossip.md#crates	Crates, budget: node/gossip#crates
+2026-10-06-mesh-gossip-amendment.md	16.1, 16.2	target:node/gossip.md#tests	Tests: node/gossip#tests
+2026-10-06-mesh-gossip-amendment.md	17	history:streams	Streams: T, H
+2026-10-06-mesh-gossip-amendment.md	18.1–18.3	history:H	Changes to existing specs: X (18.3 research/SRS edits → H + history/README)
+2026-10-06-mesh-gossip-amendment.md	19	target:decisions.md	Owner answers: D
+2026-10-06-mesh-gossip-amendment.md	20	history:H	Review disposition: H
+2026-10-06-operations-design.md	1.1–1.3	target:node/ops.md#scope	Scope, non-goals, severities: node/ops#scope, #severities
+2026-10-06-operations-design.md	2	target:decisions.md	Rulings R230–R247: D; texts per §3.2
+2026-10-06-operations-design.md	3.1–3.3	target:node/ops.md#slos	SLIs/SLOs, latency per family/profile, error budget: node/ops#slos
+2026-10-06-operations-design.md	4.1–4.4	target:node/ops.md#metrics	Metric rules, existing, new, admin/store additions: node/ops#metrics
+2026-10-06-operations-design.md	4.5	target:node/ops.md#denylist;target:node/job-api.md#intake	Subject denylist: node/ops#denylist (intake hook cited from node/job-api#intake)
+2026-10-06-operations-design.md	5.1–5.3	target:node/ops.md#alerts	Alert rules, routing, dashboards: node/ops#alerts
+2026-10-06-operations-design.md	6, 7	target:node/ops.md#traces	Traces, logs: node/ops#traces, #logs
+2026-10-06-operations-design.md	8.1–8.4	target:node/ops.md#finops;target:node/store.md#schema	FinOps: measurement, `usage_day`, report, budget alarms: node/ops#finops; DDL → node/store#schema
+2026-10-06-operations-design.md	9.1, 9.2	target:node/runbooks.md#raci	RACI: node/runbooks#raci
+2026-10-06-operations-design.md	10.0–10.x	target:node/runbooks.md#incidents	Incident runbooks: node/runbooks#incidents
+2026-10-06-operations-design.md	11.1–11.4	target:node/runbooks.md#backup-dr	RPO/RTO, restore loss, commands, DR drills: node/runbooks#backup-dr
+2026-10-06-operations-design.md	12	target:node/ops.md#capacity	Capacity: node/ops#capacity
+2026-10-06-operations-design.md	13	history:streams	Streams: T, H
+2026-10-06-operations-design.md	14, 15	target:decisions.md	Owner answers, review: D, H
+2026-10-06-tender-sponsorship-shredding.md	1.1, 1.2	target:contracts/tender.md#scope;target:node/sponsorship.md#scope;target:integration.md#data-protection	Scope: split: contracts/tender#scope, node/sponsorship#scope, integration#data-protection
+2026-10-06-tender-sponsorship-shredding.md	2.1–2.5	target:decisions.md	Rulings R180–R199: D; texts per §3.2
+2026-10-06-tender-sponsorship-shredding.md	A.1–A.5, A.7–A.9	target:contracts/tender.md;target:integration.md#tender	Tender roles, rules, interface, storage, flows, security, gas, tests: contracts/tender (A.5 ERP flow → integration#tender)
+2026-10-06-tender-sponsorship-shredding.md	A.6	target:node/job-api.md#call-table;target:integration.md#tender;target:clients/app.md	Node/ERP/app touchpoints: node/job-api#call-table rows; integration#tender; clients/app
+2026-10-06-tender-sponsorship-shredding.md	A.10	target:networks/README.md#availability	Families: networks/README#availability
+2026-10-06-tender-sponsorship-shredding.md	B1.1–B1.8	target:node/sponsorship.md;target:node/store.md#schema;target:node/admin-auth.md#routes;target:node/ops.md#metrics	Sponsorship policy (node): node/sponsorship (B1.2 DDL → node/store#schema; B1.5 routes → node/admin-auth#routes; B1.6 → node/ops#metrics)
+2026-10-06-tender-sponsorship-shredding.md	B2.1–B2.4, B2.6	target:contracts/metatx.md#receiver-pays	Receiver-pays messages, function, invariants, abuse, gas/tests: contracts/metatx#receiver-pays
+2026-10-06-tender-sponsorship-shredding.md	B2.5	target:node/sponsorship.md#receiver-pays;target:integration.md#inbound	Touchpoints: node/sponsorship#receiver-pays; integration#inbound
+2026-10-06-tender-sponsorship-shredding.md	B2.7	target:networks/README.md#availability	Families: networks/README#availability
+2026-10-06-tender-sponsorship-shredding.md	B3	target:node/sponsorship.md#pool	SponsorshipPool (PLANNED): node/sponsorship#pool
+2026-10-06-tender-sponsorship-shredding.md	C.1–C.7	target:integration.md#data-protection	Crypto-shredding: integration#data-protection (C.2 commitment formats verbatim)
+2026-10-06-tender-sponsorship-shredding.md	C.8	target:networks/README.md#availability	Families: networks/README#availability
+2026-10-06-tender-sponsorship-shredding.md	8	history:streams	Streams: T, H
+2026-10-06-tender-sponsorship-shredding.md	9	target:contracts/accounts-mandates.md#limitations	Open questions/follow-ups: D; follow-up (scoped key kind) → contracts/accounts-mandates#limitations (PLANNED)
+2026-10-06-tender-sponsorship-shredding.md	10, 11	history:H	Review dispositions: H
+2026-10-06-asset-suite-design.md	1.1, 1.2	target:contracts/asset-suite.md#scope	Scope: contracts/asset-suite#scope
+2026-10-06-asset-suite-design.md	2	target:decisions.md	Rulings R200–R217: D; texts per §3.2
+2026-10-06-asset-suite-design.md	3.1–3.12	target:contracts/asset-suite.md#regulated	Regulated module: contracts/asset-suite#regulated
+2026-10-06-asset-suite-design.md	4.1–4.8	target:contracts/asset-suite.md#vesting	Vesting: contracts/asset-suite#vesting
+2026-10-06-asset-suite-design.md	5.1–5.3, 5.5–5.7	target:contracts/asset-suite.md#distributions	Distributions: contracts/asset-suite#distributions
+2026-10-06-asset-suite-design.md	5.4	target:contracts/asset-suite.md#snapshot;target:node/indexer-feeds.md#snapshots	Snapshot (node, deterministic): contracts/asset-suite#snapshot (format) + node/indexer-feeds#snapshots (service)
+2026-10-06-asset-suite-design.md	6.1–6.4	target:contracts/asset-suite.md#corporate-actions	Corporate actions `ExchangeOffer`: contracts/asset-suite#corporate-actions
+2026-10-06-asset-suite-design.md	7	target:contracts/asset-suite.md#templates	Templates: contracts/asset-suite#templates
+2026-10-06-asset-suite-design.md	8.1	target:contracts/dex.md#managed-markets	Managed market venue: contracts/dex#managed-markets
+2026-10-06-asset-suite-design.md	8.2–8.4	target:node/dex-venue.md#managed-markets	Intake/matching, gossip, security: node/dex-venue#managed-markets
+2026-10-06-asset-suite-design.md	9.1–9.3	target:integration.md#regulated-assets;target:clients/app.md	Node / ERP / app touchpoints: node/* (cited rows), integration#regulated-assets, clients/app
+2026-10-06-asset-suite-design.md	10	target:networks/README.md#availability	Per-family availability: networks/README#availability
+2026-10-06-asset-suite-design.md	11	target:contracts/token-wrappers.md#factory-v2	Factory and catalogue changes: contracts/token-wrappers#factory-v2
+2026-10-06-asset-suite-design.md	12	target:contracts/asset-suite.md#storage	Storage layout pins: contracts/asset-suite#storage
+2026-10-06-asset-suite-design.md	13	history:streams	Work breakdown: T, H
+2026-10-06-asset-suite-design.md	14, 15	history:H	Open questions (none), review: H
+2026-10-06-token-wrappers-v2.md	1	target:contracts/token-wrappers.md#overview	Scope: contracts/token-wrappers#overview
+2026-10-06-token-wrappers-v2.md	2	target:decisions.md	Rulings R129–R149: D; texts per §3.2
+2026-10-06-token-wrappers-v2.md	3.1–3.3	target:contracts/metatx.md#v2	MetaTxCore: contracts/metatx#v2
+2026-10-06-token-wrappers-v2.md	4, 5.1–5.4	target:contracts/token-wrappers.md	Tier 1, tier 2: contracts/token-wrappers
+2026-10-06-token-wrappers-v2.md	5.3	target:contracts/metatx.md#ops	Gasless unwrap op: contracts/metatx#ops (op) + token-wrappers (semantics)
+2026-10-06-token-wrappers-v2.md	6.1–6.6	target:contracts/token-wrappers.md#rates	Rates: contracts/token-wrappers#rates
+2026-10-06-token-wrappers-v2.md	7.1–7.4	target:contracts/metatx.md#named-functions	Named functions, payLane, mtxBatch: contracts/metatx#named-functions
+2026-10-06-token-wrappers-v2.md	7.5, 7.6	target:node/submit-lanes.md#batches	Node usage, unwrap jobs: node/submit-lanes#batches, #unwrap-jobs
+2026-10-06-token-wrappers-v2.md	7.7	target:contracts/token-wrappers.md#limitations	Gasless wrap (PLANNED): contracts/token-wrappers#limitations
+2026-10-06-token-wrappers-v2.md	8.1–8.5	target:contracts/token-wrappers.md#multi	Tier 3 multi-underlying (incl. depeg disclosure text): contracts/token-wrappers#multi
+2026-10-06-token-wrappers-v2.md	9	target:contracts/token-wrappers.md#factory-v2	Factory v2: contracts/token-wrappers#factory-v2
+2026-10-06-token-wrappers-v2.md	10.1–10.4	target:contracts/token-wrappers.md	Storage, events, errors, gas, tests: contracts/token-wrappers (+ metatx for shared events/errors)
+2026-10-06-token-wrappers-v2.md	11	target:networks/hedera.md#wrappers	Hedera: networks/hedera#wrappers
+2026-10-06-token-wrappers-v2.md	12	target:networks/README.md#availability	Non-EVM: networks/README#availability
+2026-10-06-token-wrappers-v2.md	13	history:H	Open questions (none): H
+2026-10-06-token-wrappers-v2.md	14	target:contracts/token-wrappers.md#migration	Migration: contracts/token-wrappers#migration
+2026-10-06-token-wrappers-v2.md	15, 16, 17	history:streams	Stream plan, requirement trace, review: T, H
+2026-10-06-token-wrappers-v2.md	18	target:contracts/token-wrappers.md	Implementation notes T1–T6: normative facts → contracts/token-wrappers (as built); rest H
+2026-10-06-scaas-app-design.md	1–8	target:clients/app.md	Scope, architecture, config.json, family adapters, signers/accounts, availability matrix, screens: clients/app
+2026-10-06-scaas-app-design.md	9.1–9.5	target:clients/app.md#node-clients	Node clients, built-in login, OIDC, several nodes: clients/app#node-clients
+2026-10-06-scaas-app-design.md	9.6	target:node/gateway.md#routes;target:node/admin-auth.md;target:clients/app.md	Node addendum (normative for gateway/ops/UA routes): node/gateway#routes, node/admin-auth (single home); clients/app links
+2026-10-06-scaas-app-design.md	10.1–10.7	target:clients/app.md#security;target:clients/signers-clientkeys.md#signing-review	Security: clients/app#security (10.5 signing review → clients/signers-clientkeys#signing-review if shared)
+2026-10-06-scaas-app-design.md	11–14	target:clients/app.md;target:node/admin-auth.md#app-serving	i18n, testing, build/deploy, performance: clients/app (13.2 node-served → node/admin-auth#app-serving)
+2026-10-06-scaas-app-design.md	15	history:streams	Work breakdown: T, H
+2026-10-06-scaas-app-design.md	16	target:decisions.md	Owner answers: D
+2026-10-06-scaas-app-design.md	17	history:amendments-executed	Doc corrections: X
+2026-10-06-scaas-app-design.md	18	history:H	Review: H
+2026-10-06-signers-followups.md	1	target:clients/signers-clientkeys.md#scope	Scope: clients/signers-clientkeys#scope
+2026-10-06-signers-followups.md	2.1–2.6	target:decisions.md	Rulings R250–R269: D; texts per §3.2
+2026-10-06-signers-followups.md	3	history:H	What the UA spec rules: H (duplicate)
+2026-10-06-signers-followups.md	4.1–4.3, 4.6, 4.7	target:clients/signers-clientkeys.md#backup-switch	Backup-key switch: clients/signers-clientkeys#backup-switch
+2026-10-06-signers-followups.md	4.4	target:integration.md#example-odoo	ERP portal part: integration#example-odoo
+2026-10-06-signers-followups.md	4.5	target:networks/README.md#key-lifecycle	Per-family applicability: networks/README#key-lifecycle
+2026-10-06-signers-followups.md	5.1–5.6	target:clients/signers-clientkeys.md#vault	Device-bound vault v2, scrypt: clients/signers-clientkeys#vault
+2026-10-06-signers-followups.md	6.1, 6.3, 6.4	target:networks/sui.md#key-verification	Sui key verification facts, JS, vectors: networks/sui#key-verification
+2026-10-06-signers-followups.md	6.2	target:integration.md#families	Python ERP verifier: integration#families (generic rule) + example
+2026-10-06-signers-followups.md	7.1–7.4	target:clients/signers-clientkeys.md#role-keys	Role keys and seed signers: clients/signers-clientkeys#role-keys
+2026-10-06-signers-followups.md	8.1–8.3	target:clients/signers-clientkeys.md#passkeys	Passkey signers on non-EVM: clients/signers-clientkeys#passkeys
+2026-10-06-signers-followups.md	9.1–9.4	target:clients/signers-clientkeys.md#connectors	"Portal connectors: clients/signers-clientkeys#connectors (9.1 ""today"" → H)"
+2026-10-06-signers-followups.md	10	history:streams	Streams: T, H
+2026-10-06-signers-followups.md	11	target:decisions.md	Open question Q1 (answered: kindNo 18): D
+2026-10-06-signers-followups.md	12	history:H	Review: H
+2026-10-06-pq-zether-design.md	1	target:contracts/pq-zether.md#overview	Summary: contracts/pq-zether#overview
+2026-10-06-pq-zether-design.md	2.1–2.7	target:contracts/pq-zether.md#constraints	Research summary: D (rationale of CTR-PQZ ids); 2.6 hardware fact and 2.7 chain limits → contracts/pq-zether#constraints
+2026-10-06-pq-zether-design.md	3	target:decisions.md	Rulings R270–R289: D; texts per §3.2
+2026-10-06-pq-zether-design.md	4.1–4.5	target:contracts/pq-zether.md#encryption	MLWE-BFV-add scheme: contracts/pq-zether#encryption
+2026-10-06-pq-zether-design.md	5	target:contracts/pq-zether.md#encodings	Encodings: contracts/pq-zether#encodings
+2026-10-06-pq-zether-design.md	6.1–6.3	target:contracts/pq-zether.md#keys;target:clients/signers-clientkeys.md#zether-keys	Keys, UA kinds, derivation, seed custody: contracts/pq-zether#keys; clients/signers-clientkeys#zether-keys
+2026-10-06-pq-zether-design.md	7.1–7.11	target:contracts/pq-zether.md#protocol	Protocol: contracts/pq-zether#protocol
+2026-10-06-pq-zether-design.md	8	target:contracts/pq-zether.md#proof-engine	Proof engine: contracts/pq-zether#proof-engine
+2026-10-06-pq-zether-design.md	9.1–9.5	target:contracts/pq-zether.md#verifier	On-chain verifier, precompiles, gas, contracts: contracts/pq-zether#verifier
+2026-10-06-pq-zether-design.md	10.1–10.4	target:contracts/pq-zether.md#chain-integration;target:networks/evm.md#private-chain	Nethermind precompile on chain 7622: contracts/pq-zether#chain-integration; networks/evm#private-chain links
+2026-10-06-pq-zether-design.md	11.1, 11.5	target:contracts/pq-zether.md#provers	Prover, retail WASM prover: contracts/pq-zether#provers
+2026-10-06-pq-zether-design.md	11.2	target:clients/signers-clientkeys.md#zether-keys	clientkeys: clients/signers-clientkeys#zether-keys
+2026-10-06-pq-zether-design.md	11.3	target:node/ops.md#pqz	Node operator recommendations: node/ops#pqz
+2026-10-06-pq-zether-design.md	11.4	target:integration.md#confidential-payments	ERP: integration#confidential-payments
+2026-10-06-pq-zether-design.md	12.1, 12.2	target:contracts/pq-zether.md#threats	Threat model: contracts/pq-zether#threats
+2026-10-06-pq-zether-design.md	13	target:contracts/pq-zether.md#migration	Hybrid path, migration: contracts/pq-zether#migration
+2026-10-06-pq-zether-design.md	14	target:networks/README.md#availability	Per-family availability: networks/README#availability
+2026-10-06-pq-zether-design.md	15	target:contracts/pq-zether.md#vectors	Tests and vectors: contracts/pq-zether#vectors
+2026-10-06-pq-zether-design.md	16	history:streams	Streams: T, H
+2026-10-06-pq-zether-design.md	17.1–17.4	target:decisions.md	Owner answers, dispositions: D, H
+2026-10-06-pq-zether-design.md	18	target:contracts/pq-zether.md#references	Sources: contracts/pq-zether#references
+2026-10-06-universal-account-design.md	1	target:contracts/universal-account.md#scope	Scope: contracts/universal-account#scope
+2026-10-06-universal-account-design.md	2.1–2.6	target:decisions.md	Rulings R290–R318, R330–R331: D; texts per §3.2
+2026-10-06-universal-account-design.md	3	target:contracts/universal-account.md#model	Model in one page: contracts/universal-account#model
+2026-10-06-universal-account-design.md	4.1–4.4	target:contracts/universal-account.md#kinds	Kinds, derivation, kind table, MuSig2/FROST, guidance: contracts/universal-account#kinds
+2026-10-06-universal-account-design.md	5.1–5.5	target:contracts/universal-account.md#functions	Function → accepted kinds: contracts/universal-account#functions
+2026-10-06-universal-account-design.md	6.1–6.6	target:contracts/universal-account.md#registry	Registry: contracts/universal-account#registry
+2026-10-06-universal-account-design.md	7.1–7.3	target:contracts/universal-account.md#verifiers	Verifier library: contracts/universal-account#verifiers
+2026-10-06-universal-account-design.md	8.1	target:clients/signers-clientkeys.md#derivation	Layer 1: derivation and wallets: clients/signers-clientkeys#derivation
+2026-10-06-universal-account-design.md	8.2–8.4	target:contracts/universal-account.md#purposes	Layers 2–4: contracts/universal-account#purposes
+2026-10-06-universal-account-design.md	9.1–9.7	target:contracts/universal-account.md#credentials	VC/eKYC layer: contracts/universal-account#credentials
+2026-10-06-universal-account-design.md	10	target:contracts/accounts-mandates.md#subjectaccount	SubjectAccount as option (b): contracts/accounts-mandates#subjectaccount
+2026-10-06-universal-account-design.md	11.1	target:node/mesh.md#ua-intents	Mesh: node/mesh#ua-intents
+2026-10-06-universal-account-design.md	11.2	target:node/indexer-feeds.md;target:node/gateway.md	Node: node/indexer-feeds, node/gateway (cited rows)
+2026-10-06-universal-account-design.md	11.3		App and clientkeys: clients/*
+2026-10-06-universal-account-design.md	11.4	target:integration.md#accounts	ERP: integration#accounts
+2026-10-06-universal-account-design.md	12.1, 12.2, 12.4	target:contracts/universal-account.md#migration	Migration from the built registry: contracts/universal-account#migration
+2026-10-06-universal-account-design.md	12.3	target:integration.md#accounts	New registration flow: integration#accounts
+2026-10-06-universal-account-design.md	13	target:contracts/universal-account.md#security	Security analysis: contracts/universal-account#security
+2026-10-06-universal-account-design.md	14.1–14.3	target:contracts/universal-account.md#gas	Gas and calldata: contracts/universal-account#gas
+2026-10-06-universal-account-design.md	15.1–15.3	target:contracts/universal-account.md#vectors	Vectors, tests: contracts/universal-account#vectors
+2026-10-06-universal-account-design.md	16	history:streams	Streams: T, H
+2026-10-06-universal-account-design.md	17	target:decisions.md	Owner confirmations Q1–Q14: D (UA:Q1–Q14, owner flag)
+2026-10-06-universal-account-design.md	18, 19	history:H	Review dispositions: H
+2026-10-03-net-hedera.md	5	target:networks/hedera.md#relayer;target:networks/README.md#head-of-line	family-specific (§2.3): networks/hedera#relayer + README head-of-line row (R6-1)
+2026-10-03-net-hedera.md	7	target:networks/hedera.md#hts	family-specific (§2.3): networks/hedera#hts
+2026-10-03-net-hedera.md	10	target:networks/hedera.md#wrappers	family-specific (§2.3): networks/hedera#wrappers
+2026-10-03-net-hedera.md	~bài học|lessons	target:networks/README.md#design-lessons	network pattern (§2.3): networks/README#design-lessons
+2026-10-03-net-hedera.md	~cần từ|needed from	history:amendments-executed	network pattern (§2.3): H (executed)
+2026-10-03-net-hedera.md	~câu hỏi mở|open question|quyết định owner|owner decision	target:decisions.md	network pattern (§2.3): D
+2026-10-03-net-hedera.md	~kết quả thực thi|execution result	history:execution-log	network pattern (§2.3): H
+2026-10-03-net-hedera.md	~ruling|quy tắc node chung	target:decisions.md	network pattern (§2.3): D; texts per §3.2
+2026-10-03-net-hedera.md	~^(\d+\.\s*)?(nguồn|sources|tham khảo|references)	target:networks/hedera.md#references	network pattern (§2.3): networks/hedera#references
+2026-10-03-net-hedera.md	~odoo|portal	target:integration.md#families;target:clients/signers-clientkeys.md#connectors	network pattern (§2.3): integration#families + example; clients/signers-clientkeys#connectors
+2026-10-03-net-hedera.md	~kiểm thử|\btests?\b|devnet|vector	target:networks/hedera.md#conformance	network pattern (§2.3): networks/hedera#conformance
+2026-10-03-net-hedera.md	~thanh toán bảo mật|confidential|zether	target:contracts/zether.md#families	network pattern (§2.3): contracts/zether#families
+2026-10-03-net-hedera.md	~rủi ro|risk|\bgaps?\b|seam|khoảng trống|hạn chế|limitation	target:networks/hedera.md#limitations	network pattern (§2.3): networks/hedera#limitations
+2026-10-03-net-hedera.md	~payload|metaop|chữ ký|signature|passkey|ký\b	target:networks/hedera.md#payload;target:networks/hedera.md#signatures	network pattern (§2.3): networks/hedera#payload, #signatures
+2026-10-03-net-hedera.md	~relayer|adapter|phí|\bfees?\b|khoá|keys|simulat|submit|crash|finality|event|indexer|cấu hình node|node config|head-of-line	target:networks/hedera.md#relayer	network pattern (§2.3): networks/hedera#relayer (node-common rules stay in node/*)
+2026-10-03-net-hedera.md	~contract|object|account|instruction|lane|mandate|dex|admin|hợp đồng|program|module|package|token	target:networks/hedera.md#contracts	network pattern (§2.3): networks/hedera#contracts (+ #dex, #mandate)
+2026-10-03-net-hedera.md	~phạm vi|scope|tóm tắt|summary|quyết định|decisions|^\s*0\.	target:networks/hedera.md#overview	network pattern (§2.3): networks/hedera#overview
+2026-10-03-net-cosmos.md	~bài học|lessons	target:networks/README.md#design-lessons	network pattern (§2.3): networks/README#design-lessons
+2026-10-03-net-cosmos.md	~cần từ|needed from	history:amendments-executed	network pattern (§2.3): H (executed)
+2026-10-03-net-cosmos.md	~câu hỏi mở|open question|quyết định owner|owner decision	target:decisions.md	network pattern (§2.3): D
+2026-10-03-net-cosmos.md	~kết quả thực thi|execution result	history:execution-log	network pattern (§2.3): H
+2026-10-03-net-cosmos.md	~ruling|quy tắc node chung	target:decisions.md	network pattern (§2.3): D; texts per §3.2
+2026-10-03-net-cosmos.md	~^(\d+\.\s*)?(nguồn|sources|tham khảo|references)	target:networks/cosmos.md#references	network pattern (§2.3): networks/cosmos#references
+2026-10-03-net-cosmos.md	~odoo|portal	target:integration.md#families;target:clients/signers-clientkeys.md#connectors	network pattern (§2.3): integration#families + example; clients/signers-clientkeys#connectors
+2026-10-03-net-cosmos.md	~kiểm thử|\btests?\b|devnet|vector	target:networks/cosmos.md#conformance	network pattern (§2.3): networks/cosmos#conformance
+2026-10-03-net-cosmos.md	~thanh toán bảo mật|confidential|zether	target:contracts/zether.md#families	network pattern (§2.3): contracts/zether#families
+2026-10-03-net-cosmos.md	~rủi ro|risk|\bgaps?\b|seam|khoảng trống|hạn chế|limitation	target:networks/cosmos.md#limitations	network pattern (§2.3): networks/cosmos#limitations
+2026-10-03-net-cosmos.md	~payload|metaop|chữ ký|signature|passkey|ký\b	target:networks/cosmos.md#payload;target:networks/cosmos.md#signatures	network pattern (§2.3): networks/cosmos#payload, #signatures
+2026-10-03-net-cosmos.md	~relayer|adapter|phí|\bfees?\b|khoá|keys|simulat|submit|crash|finality|event|indexer|cấu hình node|node config|head-of-line	target:networks/cosmos.md#relayer	network pattern (§2.3): networks/cosmos#relayer (node-common rules stay in node/*)
+2026-10-03-net-cosmos.md	~contract|object|account|instruction|lane|mandate|dex|admin|hợp đồng|program|module|package|token	target:networks/cosmos.md#contracts	network pattern (§2.3): networks/cosmos#contracts (+ #dex, #mandate)
+2026-10-03-net-cosmos.md	~phạm vi|scope|tóm tắt|summary|quyết định|decisions|^\s*0\.	target:networks/cosmos.md#overview	network pattern (§2.3): networks/cosmos#overview
+2026-10-03-net-soroban.md	1.2	target:networks/soroban.md#payload	family-specific (§2.3): networks/soroban#payload (R8-1)
+2026-10-03-net-soroban.md	~bài học|lessons	target:networks/README.md#design-lessons	network pattern (§2.3): networks/README#design-lessons
+2026-10-03-net-soroban.md	~cần từ|needed from	history:amendments-executed	network pattern (§2.3): H (executed)
+2026-10-03-net-soroban.md	~câu hỏi mở|open question|quyết định owner|owner decision	target:decisions.md	network pattern (§2.3): D
+2026-10-03-net-soroban.md	~kết quả thực thi|execution result	history:execution-log	network pattern (§2.3): H
+2026-10-03-net-soroban.md	~ruling|quy tắc node chung	target:decisions.md	network pattern (§2.3): D; texts per §3.2
+2026-10-03-net-soroban.md	~^(\d+\.\s*)?(nguồn|sources|tham khảo|references)	target:networks/soroban.md#references	network pattern (§2.3): networks/soroban#references
+2026-10-03-net-soroban.md	~odoo|portal	target:integration.md#families;target:clients/signers-clientkeys.md#connectors	network pattern (§2.3): integration#families + example; clients/signers-clientkeys#connectors
+2026-10-03-net-soroban.md	~kiểm thử|\btests?\b|devnet|vector	target:networks/soroban.md#conformance	network pattern (§2.3): networks/soroban#conformance
+2026-10-03-net-soroban.md	~thanh toán bảo mật|confidential|zether	target:contracts/zether.md#families	network pattern (§2.3): contracts/zether#families
+2026-10-03-net-soroban.md	~rủi ro|risk|\bgaps?\b|seam|khoảng trống|hạn chế|limitation	target:networks/soroban.md#limitations	network pattern (§2.3): networks/soroban#limitations
+2026-10-03-net-soroban.md	~payload|metaop|chữ ký|signature|passkey|ký\b	target:networks/soroban.md#payload;target:networks/soroban.md#signatures	network pattern (§2.3): networks/soroban#payload, #signatures
+2026-10-03-net-soroban.md	~relayer|adapter|phí|\bfees?\b|khoá|keys|simulat|submit|crash|finality|event|indexer|cấu hình node|node config|head-of-line	target:networks/soroban.md#relayer	network pattern (§2.3): networks/soroban#relayer (node-common rules stay in node/*)
+2026-10-03-net-soroban.md	~contract|object|account|instruction|lane|mandate|dex|admin|hợp đồng|program|module|package|token	target:networks/soroban.md#contracts	network pattern (§2.3): networks/soroban#contracts (+ #dex, #mandate)
+2026-10-03-net-soroban.md	~phạm vi|scope|tóm tắt|summary|quyết định|decisions|^\s*0\.	target:networks/soroban.md#overview	network pattern (§2.3): networks/soroban#overview
+2026-10-03-net-sui.md	2.1	target:networks/sui.md#signatures	family-specific (§2.3): networks/sui#signatures (flags)
+2026-10-03-net-sui.md	~bài học|lessons	target:networks/README.md#design-lessons	network pattern (§2.3): networks/README#design-lessons
+2026-10-03-net-sui.md	~cần từ|needed from	history:amendments-executed	network pattern (§2.3): H (executed)
+2026-10-03-net-sui.md	~câu hỏi mở|open question|quyết định owner|owner decision	target:decisions.md	network pattern (§2.3): D
+2026-10-03-net-sui.md	~kết quả thực thi|execution result	history:execution-log	network pattern (§2.3): H
+2026-10-03-net-sui.md	~ruling|quy tắc node chung	target:decisions.md	network pattern (§2.3): D; texts per §3.2
+2026-10-03-net-sui.md	~^(\d+\.\s*)?(nguồn|sources|tham khảo|references)	target:networks/sui.md#references	network pattern (§2.3): networks/sui#references
+2026-10-03-net-sui.md	~odoo|portal	target:integration.md#families;target:clients/signers-clientkeys.md#connectors	network pattern (§2.3): integration#families + example; clients/signers-clientkeys#connectors
+2026-10-03-net-sui.md	~kiểm thử|\btests?\b|devnet|vector	target:networks/sui.md#conformance	network pattern (§2.3): networks/sui#conformance
+2026-10-03-net-sui.md	~thanh toán bảo mật|confidential|zether	target:contracts/zether.md#families	network pattern (§2.3): contracts/zether#families
+2026-10-03-net-sui.md	~rủi ro|risk|\bgaps?\b|seam|khoảng trống|hạn chế|limitation	target:networks/sui.md#limitations	network pattern (§2.3): networks/sui#limitations
+2026-10-03-net-sui.md	~payload|metaop|chữ ký|signature|passkey|ký\b	target:networks/sui.md#payload;target:networks/sui.md#signatures	network pattern (§2.3): networks/sui#payload, #signatures
+2026-10-03-net-sui.md	~relayer|adapter|phí|\bfees?\b|khoá|keys|simulat|submit|crash|finality|event|indexer|cấu hình node|node config|head-of-line	target:networks/sui.md#relayer	network pattern (§2.3): networks/sui#relayer (node-common rules stay in node/*)
+2026-10-03-net-sui.md	~contract|object|account|instruction|lane|mandate|dex|admin|hợp đồng|program|module|package|token	target:networks/sui.md#contracts	network pattern (§2.3): networks/sui#contracts (+ #dex, #mandate)
+2026-10-03-net-sui.md	~phạm vi|scope|tóm tắt|summary|quyết định|decisions|^\s*0\.	target:networks/sui.md#overview	network pattern (§2.3): networks/sui#overview
+2026-10-03-net-ton.md	3.4	target:networks/ton.md#dex	family-specific (§2.3): networks/ton (escrow DEX)
+2026-10-03-net-ton.md	3.5	target:networks/ton.md#signatures	family-specific (§2.3): networks/ton (passkey)
+2026-10-03-net-ton.md	4	target:networks/ton.md	family-specific (§2.3): networks/ton (anti-lock)
+2026-10-03-net-ton.md	~bài học|lessons	target:networks/README.md#design-lessons	network pattern (§2.3): networks/README#design-lessons
+2026-10-03-net-ton.md	~cần từ|needed from	history:amendments-executed	network pattern (§2.3): H (executed)
+2026-10-03-net-ton.md	~câu hỏi mở|open question|quyết định owner|owner decision	target:decisions.md	network pattern (§2.3): D
+2026-10-03-net-ton.md	~kết quả thực thi|execution result	history:execution-log	network pattern (§2.3): H
+2026-10-03-net-ton.md	~ruling|quy tắc node chung	target:decisions.md	network pattern (§2.3): D; texts per §3.2
+2026-10-03-net-ton.md	~^(\d+\.\s*)?(nguồn|sources|tham khảo|references)	target:networks/ton.md#references	network pattern (§2.3): networks/ton#references
+2026-10-03-net-ton.md	~odoo|portal	target:integration.md#families;target:clients/signers-clientkeys.md#connectors	network pattern (§2.3): integration#families + example; clients/signers-clientkeys#connectors
+2026-10-03-net-ton.md	~kiểm thử|\btests?\b|devnet|vector	target:networks/ton.md#conformance	network pattern (§2.3): networks/ton#conformance
+2026-10-03-net-ton.md	~thanh toán bảo mật|confidential|zether	target:contracts/zether.md#families	network pattern (§2.3): contracts/zether#families
+2026-10-03-net-ton.md	~rủi ro|risk|\bgaps?\b|seam|khoảng trống|hạn chế|limitation	target:networks/ton.md#limitations	network pattern (§2.3): networks/ton#limitations
+2026-10-03-net-ton.md	~payload|metaop|chữ ký|signature|passkey|ký\b	target:networks/ton.md#payload;target:networks/ton.md#signatures	network pattern (§2.3): networks/ton#payload, #signatures
+2026-10-03-net-ton.md	~relayer|adapter|phí|\bfees?\b|khoá|keys|simulat|submit|crash|finality|event|indexer|cấu hình node|node config|head-of-line	target:networks/ton.md#relayer	network pattern (§2.3): networks/ton#relayer (node-common rules stay in node/*)
+2026-10-03-net-ton.md	~contract|object|account|instruction|lane|mandate|dex|admin|hợp đồng|program|module|package|token	target:networks/ton.md#contracts	network pattern (§2.3): networks/ton#contracts (+ #dex, #mandate)
+2026-10-03-net-ton.md	~phạm vi|scope|tóm tắt|summary|quyết định|decisions|^\s*0\.	target:networks/ton.md#overview	network pattern (§2.3): networks/ton#overview
+2026-10-04-net-aptos.md	3.2	target:networks/aptos.md	family-specific (§2.3): networks/aptos (balances)
+2026-10-04-net-aptos.md	3.3	target:networks/aptos.md	family-specific (§2.3): networks/aptos (keys/guardian)
+2026-10-04-net-aptos.md	4.2	target:networks/aptos.md	family-specific (§2.3): networks/aptos (signMessage envelope)
+2026-10-04-net-aptos.md	~bài học|lessons	target:networks/README.md#design-lessons	network pattern (§2.3): networks/README#design-lessons
+2026-10-04-net-aptos.md	~cần từ|needed from	history:amendments-executed	network pattern (§2.3): H (executed)
+2026-10-04-net-aptos.md	~câu hỏi mở|open question|quyết định owner|owner decision	target:decisions.md	network pattern (§2.3): D
+2026-10-04-net-aptos.md	~kết quả thực thi|execution result	history:execution-log	network pattern (§2.3): H
+2026-10-04-net-aptos.md	~ruling|quy tắc node chung	target:decisions.md	network pattern (§2.3): D; texts per §3.2
+2026-10-04-net-aptos.md	~^(\d+\.\s*)?(nguồn|sources|tham khảo|references)	target:networks/aptos.md#references	network pattern (§2.3): networks/aptos#references
+2026-10-04-net-aptos.md	~odoo|portal	target:integration.md#families;target:clients/signers-clientkeys.md#connectors	network pattern (§2.3): integration#families + example; clients/signers-clientkeys#connectors
+2026-10-04-net-aptos.md	~kiểm thử|\btests?\b|devnet|vector	target:networks/aptos.md#conformance	network pattern (§2.3): networks/aptos#conformance
+2026-10-04-net-aptos.md	~thanh toán bảo mật|confidential|zether	target:contracts/zether.md#families	network pattern (§2.3): contracts/zether#families
+2026-10-04-net-aptos.md	~rủi ro|risk|\bgaps?\b|seam|khoảng trống|hạn chế|limitation	target:networks/aptos.md#limitations	network pattern (§2.3): networks/aptos#limitations
+2026-10-04-net-aptos.md	~payload|metaop|chữ ký|signature|passkey|ký\b	target:networks/aptos.md#payload;target:networks/aptos.md#signatures	network pattern (§2.3): networks/aptos#payload, #signatures
+2026-10-04-net-aptos.md	~relayer|adapter|phí|\bfees?\b|khoá|keys|simulat|submit|crash|finality|event|indexer|cấu hình node|node config|head-of-line	target:networks/aptos.md#relayer	network pattern (§2.3): networks/aptos#relayer (node-common rules stay in node/*)
+2026-10-04-net-aptos.md	~contract|object|account|instruction|lane|mandate|dex|admin|hợp đồng|program|module|package|token	target:networks/aptos.md#contracts	network pattern (§2.3): networks/aptos#contracts (+ #dex, #mandate)
+2026-10-04-net-aptos.md	~phạm vi|scope|tóm tắt|summary|quyết định|decisions|^\s*0\.	target:networks/aptos.md#overview	network pattern (§2.3): networks/aptos#overview
+2026-10-04-net-solana.md	2.4	target:networks/solana.md#write-locks	family-specific (§2.3): networks/solana#write-locks (RS12-2)
+2026-10-04-net-solana.md	3.6	target:networks/solana.md#tokens	family-specific (§2.3): networks/solana#tokens
+2026-10-04-net-solana.md	5.5	target:networks/solana.md#toolchain	family-specific (§2.3): networks/solana#toolchain
+2026-10-04-net-solana.md	~bài học|lessons	target:networks/README.md#design-lessons	network pattern (§2.3): networks/README#design-lessons
+2026-10-04-net-solana.md	~cần từ|needed from	history:amendments-executed	network pattern (§2.3): H (executed)
+2026-10-04-net-solana.md	~câu hỏi mở|open question|quyết định owner|owner decision	target:decisions.md	network pattern (§2.3): D
+2026-10-04-net-solana.md	~kết quả thực thi|execution result	history:execution-log	network pattern (§2.3): H
+2026-10-04-net-solana.md	~ruling|quy tắc node chung	target:decisions.md	network pattern (§2.3): D; texts per §3.2
+2026-10-04-net-solana.md	~^(\d+\.\s*)?(nguồn|sources|tham khảo|references)	target:networks/solana.md#references	network pattern (§2.3): networks/solana#references
+2026-10-04-net-solana.md	~odoo|portal	target:integration.md#families;target:clients/signers-clientkeys.md#connectors	network pattern (§2.3): integration#families + example; clients/signers-clientkeys#connectors
+2026-10-04-net-solana.md	~kiểm thử|\btests?\b|devnet|vector	target:networks/solana.md#conformance	network pattern (§2.3): networks/solana#conformance
+2026-10-04-net-solana.md	~thanh toán bảo mật|confidential|zether	target:contracts/zether.md#families	network pattern (§2.3): contracts/zether#families
+2026-10-04-net-solana.md	~rủi ro|risk|\bgaps?\b|seam|khoảng trống|hạn chế|limitation	target:networks/solana.md#limitations	network pattern (§2.3): networks/solana#limitations
+2026-10-04-net-solana.md	~payload|metaop|chữ ký|signature|passkey|ký\b	target:networks/solana.md#payload;target:networks/solana.md#signatures	network pattern (§2.3): networks/solana#payload, #signatures
+2026-10-04-net-solana.md	~relayer|adapter|phí|\bfees?\b|khoá|keys|simulat|submit|crash|finality|event|indexer|cấu hình node|node config|head-of-line	target:networks/solana.md#relayer	network pattern (§2.3): networks/solana#relayer (node-common rules stay in node/*)
+2026-10-04-net-solana.md	~contract|object|account|instruction|lane|mandate|dex|admin|hợp đồng|program|module|package|token	target:networks/solana.md#contracts	network pattern (§2.3): networks/solana#contracts (+ #dex, #mandate)
+2026-10-04-net-solana.md	~phạm vi|scope|tóm tắt|summary|quyết định|decisions|^\s*0\.	target:networks/solana.md#overview	network pattern (§2.3): networks/solana#overview
+blockchain.md	~^TOKEN$		"TOKEN (top list): tiers 1–3, rates, multi-underlying → contracts/token-wrappers (BUILT); EIP-1167 clones + factory versions → contracts/token-wrappers#factory (BUILT); ""delegate + versions"" via **UUPS rejected** (immutable clones, new implementation per version: CTR-GEN immutability; research 01 storage-layout note); weighted basket **rejected** in favour of any-of multi-underlying (R136 → CTR-TOK); prototypes = factory kinds + asset templates → contracts/asset-suite#templates; registry kinds → contracts/universal-account#kinds (FALCON = `fndsa512`, SPECIFIED) || TOKEN interface sketches (`IEIP1776`, `IZetherAccountRegistry`, …): contracts/metatx#interfaces (BUILT, 2D nonces); registry shape **rejected/corrected** per research 02 (pkX/pkY, `abi.encode`, PoP challenge with domain tag + chain id + registry, on-curve checks, non-upgradeable) → contracts/zether#registry, contracts/universal-account#registry"
+blockchain.md	~^BLOCKCHAIN$		BLOCKCHAIN item 11: family taxonomy (EVM incl. Hedera; Cosmos; Soroban; Move = Sui + Aptos; TON; Solana) → networks/README (owner decision ARCH-POS); meta-tx → contracts/metatx; open relayers → node/mesh, node/gossip
+blockchain.md	6.21		"6.21 data format and properties: node/indexer-feeds#event-items (what the node delivers); ""identity visible, amounts hidden"" → contracts/zether#philosophy || 6.21 scope of six chains: networks/<family> (BUILT parts); W5 gasless extensions for subjects **rejected** (R67), Sui sponsored tx as gas mechanism **rejected** (R64), `x/authz` **rejected** and `x/feegrant` seam only (R66), payer-sponsored Hedera **rejected** (R63); HCS anchoring, Schedule Service, IBC ICS-20/27, Celo CIP-64 fee currency and `l1_batch` → **PLANNED/open** entries in networks/hedera, networks/cosmos, networks/evm; Solana and Aptos are additions (owner) || 6.21 collection and `raw` landing tables: node/indexer-feeds (finality-gated feeds; polling, no WebSocket: RS5-5 → NODE-DEX/NODE-IDX); mesh intake → node/mesh, node/gossip; the ERP-side landing tables are **out of scope** (a client's data platform consumes `/v1/events`) → integration#reconciliation note || 6.21 projector pipeline (`ods`, `vec`, `ekg`, `sem`, `proc`, `olap`/ClickHouse): **out-of-scope** (client data platform / AI layer), one ARCH-POS decision; the inputs SCaaS provides (event feed, job feed, metrics, usage reports) → node/indexer-feeds, node/ops#finops || 6.21 enterprise-AI value: anchoring → architecture#service-model (anchor/land) + integration#data-protection (commitment formats); payments → integration; Zether disclosure → contracts/zether#disclosure"
+blockchain.md	10.1		"Ch.10 intro + 10.1 overview: architecture#components || 10.1 (1) relayer economics: contracts/metatx#fee-policy (BUILT); node/sponsorship (policies SPECIFIED; SponsorshipPool PLANNED, not a mesh reward: R75/R194); node/mesh#rewards || 10.1 (2) simulation engine: node/submit-lanes#simulation (BUILT); ""0 % revert"" **rejected** as a guarantee (races; consumption handling R80) || 10.1 (3), 10.3 (2) Redis nonce manager: **rejected**: store journal + owner lock + fencing (R88/R111), no Redis; replacement policy → node/submit-lanes#journal (×1.25 to cap, gap-fill R18) || 10.1 (4) RPC gateway and failover: node/indexer-feeds#quorum (independent endpoints, event-set quorum); provider names dropped (vendor-neutral) || 10.1 (5) Zether engine: contracts/zether; prover → contracts/zether#prover, clients || 10.1 (6) event ingestion + finality gate: node/indexer-feeds#finality (polling; WebSocket **rejected**)"
+blockchain.md	10.3		"10.1 (3), 10.3 (2) Redis nonce manager: **rejected**: store journal + owner lock + fencing (R88/R111), no Redis; replacement policy → node/submit-lanes#journal (×1.25 to cap, gap-fill R18) || 10.3 (1) key custody: node/submit-lanes#lane-keys (KMS/HSM seam, dev-only env custody R50); session keys → clients/signers-clientkeys#role-keys / UA purposes (SPECIFIED) or **open** if no equivalent; FIPS 140-2 → FIPS 140-3 language; ""all keys in HSM"" **corrected**: spending keys in HSM, Zether decryption key not HSM-capable (research 02/07) || 10.3 (3) anti-replay: contracts/metatx#digest, networks/README#signing-domains (BUILT); the fixed 15 min **rejected** for per-chain `max_valid_for_secs` + pay-lane horizon (CR-PD-4)"
+blockchain.md	10.2.1		10.2.1 EVM: networks/evm; UUPS **rejected** (immutable at deploy, CTR-GEN; registry must never be upgradeable — research 02)
+blockchain.md	10.2.2–10.2.6		10.2.2–10.2.6 Hedera, TON, Sui, Soroban, Cosmos: networks/<family>#overview (as built; deviations listed above)
+blockchain.md	10.4		10.4 (1) simulation per family: node/submit-lanes#simulation + networks/<family>#relayer (BUILT methods); Tenderly **rejected** (vendor; `eth_call`/`estimateGas` on own RPCs); incident log → node/ops#logs || 10.4 (2) gas circuit breakers: node/submit-lanes#breaker (BUILT: spike, hourly gas budget, lane floor; R340 metering); USD-denominated budgets → **open/PLANNED** (node budgets are native units, R190) || 10.4 (3) finality table: node/indexer-feeds#finality + networks/<family>#finality (values re-checked; Arbitrum/Base/Polygon/Ethereum L1 rows → networks/evm as **unsupported until configured**, not BUILT profiles)
+blockchain.md	10.5.1		10.5.1 philosophy: contracts/zether#philosophy
+blockchain.md	10.5.2		10.5.2 cryptography: contracts/zether (byte-exact); `MAX = 2^128 − 1` and 180–250 k gas **rejected/corrected** (decryption bound vs range bits, measured 3.29 M / 3.92 M; RS-NV64, ZL:D1–D6); harvest-now-decrypt-later → contracts/pq-zether#scope and contracts/zether#threats
+blockchain.md	10.5.3		10.5.3 identity, registry, token: contracts/zether#registry, #interfaces (BUILT), contracts/universal-account (SPECIFIED successor); corrections: hash identity costs more gas overall (calldata claim kept), `IZetherToken.MAX_AMOUNT` not `pure`, recipient/fee bound into transfer transcript (envelope binding RS2-5), Travel-Rule claim (needs amounts: `ITransferDisclosure` + auditor key, RS2-8/R283)
+blockchain.md	~CHƯƠNG 14|14.2.8		"14.2.8 settlement plane: architecture#service-model (summary); detail as above; ""8-plane"" target architecture → **out-of-scope** (client platform architecture)"
+blockchain.md	D		Appendix D standards: each standard to the file that applies it (EIP-712, -1271, -1167, -1193, -6963, -7702, TEP-74, CW20, SEP/Soroban auth, WebAuthn); standards not used → **rejected** with reason, or **open**
+blockchain.md	~CHƯƠNG 10		Ch.10 intro: architecture#components
+HANDOFF-blockchain.md	1	history:streams	owner/operator gates O1-O11: items in scaas/TODO.md §2; standing production rules -> node/runbooks#production-gates
+HANDOFF-blockchain.md	2	history:streams	scheduled, not built: scaas/TODO.md
+HANDOFF-blockchain.md	3	history:H	merge with the territory branch (client-repo coordination): history only
+HANDOFF-blockchain.md	4	target:contracts/README.md#unaudited;target:contracts/zether.md#safety-gate	Zether gates Z1-Z6: UNAUDITED rule -> contracts/README#unaudited, contracts/zether#safety-gate; tasks -> scaas/TODO.md
+2026-10-03-r3-passkey-seed.md	~^task$	history:execution-log	implementation tasks of BUILT work: history
+2026-10-03-r3-passkey-seed.md	~quyết định thiết kế	target:decisions.md	RS4 rulings (texts per plan §3.2: CTR-ACC / CLI-SGN / INT-ODOO)
+_USER-DECISIONS.md	0	history:research-finding	UD:§0 history: Reading table for § references
+_USER-DECISIONS.md	1	history:research-finding	UD:§1 history: Scope and direction (container)
+_USER-DECISIONS.md	2	target:decisions.md	UD:§2 current: Decimals, shield scale, decryption bound per token
+_USER-DECISIONS.md	3	target:decisions.md	UD:§3 current: Fees flexible for public, fixed for Zether
+_USER-DECISIONS.md	3.1	target:decisions.md	UD:§3.1 current: Public fee modes NONE, PERCENT, FIXED
+_USER-DECISIONS.md	3.2	target:decisions.md	UD:§3.2 current: Zether fee must be NONE or FIXED
+_USER-DECISIONS.md	3.3	target:decisions.md	UD:§3.3 open: Tiered Zether fees leak the amount
+_USER-DECISIONS.md	3.4	target:decisions.md	UD:§3.4 current: Two fee layers, allowed modes per layer
+_USER-DECISIONS.md	3.4b	target:decisions.md	UD:§3.4b current: Fee-0 intents allowed; acceptance policy decides
+_USER-DECISIONS.md	3.5	target:decisions.md	UD:§3.5 superseded: Drop GSN gas fields and per-mille setter
+_USER-DECISIONS.md	4	target:decisions.md	UD:§4 current: EIP-712 typed data, not personal_sign
+_USER-DECISIONS.md	5	target:decisions.md	UD:§5 superseded: Relayer wildcard instead of mode bitmask
+_USER-DECISIONS.md	6	target:decisions.md	UD:§6 current: Open relayer mesh modelled on 0x-mesh
+_USER-DECISIONS.md	7	history:research-finding	UD:§7 history: Findings from the owner's code
+_USER-DECISIONS.md	8	history:research-finding	UD:§8 history: Notes from the Grok conversation
+_USER-DECISIONS.md	9	history:research-finding	UD:§9 history: Build machine environment
+_USER-DECISIONS.md	10	target:decisions.md	UD:§10 current: Zether token is a meta-tx token
+_USER-DECISIONS.md	11	history:research-finding	UD:§11 history: Grok factory architecture (source)
+_USER-DECISIONS.md	12	target:decisions.md	UD:§12 current: transferWithProof: selective amount disclosure
+_USER-DECISIONS.md	12.1	history:research-finding	UD:§12.1 history: Why a hash commitment is weak
+_USER-DECISIONS.md	12.2	target:decisions.md	UD:§12.2 current: Open the transfer ciphertext; three openings
+_USER-DECISIONS.md	12.3	target:decisions.md	UD:§12.3 current: Disclosure verify is a view; attest optional
+_USER-DECISIONS.md	12.4	target:decisions.md	UD:§12.4 current: Disclosure security constraints
+_USER-DECISIONS.md	12.5	history:research-finding	UD:§12.5 history: Why disclosure meets audit needs
+_USER-DECISIONS.md	12.6	history:research-finding	UD:§12.6 history: Sections to update (doc chores)
+_USER-DECISIONS.md	12.7	history:research-finding	UD:§12.7 history: Dispute scenario: receiver denies payment
+_USER-DECISIONS.md	12.7.1	history:research-finding	UD:§12.7.1 history: Sender cannot open a false amount
+_USER-DECISIONS.md	12.7.2	history:research-finding	UD:§12.7.2 history: Receiver cannot deny: evidence chain
+_USER-DECISIONS.md	12.7.3	target:decisions.md	UD:§12.7.3 superseded: Permissionless rollOver proposed as D17
+_USER-DECISIONS.md	12.7.4	target:decisions.md	UD:§12.7.4 superseded: SDK must store every s
+_USER-DECISIONS.md	12.7.5	target:decisions.md	UD:§12.7.5 current: Independent open-source disclosure verifier CLI
+_USER-DECISIONS.md	12.7.6	target:decisions.md	UD:§12.7.6 current: Keep all three opening paths
+_USER-DECISIONS.md	13	history:research-finding	UD:§13 history: Three owner corrections (container)
+_USER-DECISIONS.md	13.1	target:decisions.md	UD:§13.1 current: Relayer abuse control is operator business
+_USER-DECISIONS.md	13.2	target:decisions.md	UD:§13.2 current: Derive s from seed via PRF
+_USER-DECISIONS.md	13.3	target:decisions.md	UD:§13.3 superseded: Implicit rollOver open to everyone
+_USER-DECISIONS.md	14	target:decisions.md	UD:§14 superseded: Curve D1 = BLS12-381 after preflight
+_USER-DECISIONS.md	15	history:research-finding	UD:§15 history: D-decision table (container)
+_USER-DECISIONS.md	16	target:decisions.md	UD:§16 current: First target chain is the private PoA chain
+_USER-DECISIONS.md	17	history:research-finding	UD:§17 history: Spike S7: BLS12-381 gas measured
+_USER-DECISIONS.md	18	target:decisions.md	UD:§18 superseded: Chain 9000 genesis keys silently ignored
+_USER-DECISIONS.md	19	target:decisions.md	UD:§19 superseded: Curve D1 = bn254 for the private phase
+_USER-DECISIONS.md	20	target:decisions.md	UD:§20 current: Open factory: anyone creates tokens
+_USER-DECISIONS.md	20.1	target:decisions.md	UD:§20.1 current: Support both curves, chosen per token
+_USER-DECISIONS.md	20.2	target:decisions.md	UD:§20.2 current: No upgrades; versions live in the factory
+_USER-DECISIONS.md	20.3	target:decisions.md	UD:§20.3 current: getWrapper keyed by creator and underlying
+_USER-DECISIONS.md	20.4	target:decisions.md	UD:§20.4 current: Provenance getters instead of gatekeeping
+_USER-DECISIONS.md	20.5	target:decisions.md	UD:§20.5 current: Issuer choices are not protocol decisions
+_USER-DECISIONS.md	20.6	target:decisions.md	UD:§20.6 current: Factory is the critical immutable artifact
+_USER-DECISIONS.md	21	target:decisions.md	UD:§21 superseded: Open relayer: two modes, two implementations
+_USER-DECISIONS.md	21.1	target:decisions.md	UD:§21.1 superseded: Relay-only vs network-node modes
+_USER-DECISIONS.md	21.2	target:decisions.md	UD:§21.2 superseded: One Rust node, Odoo as control plane
+_USER-DECISIONS.md	21.3	target:decisions.md	UD:§21.3 current: Protocol spec and public conformance vectors
+_USER-DECISIONS.md	21.4	target:decisions.md	UD:§21.4 current: Node is a capability matrix, not modes
+_USER-DECISIONS.md	21.5	target:decisions.md	UD:§21.5 current: Many signing lanes; fee sink never a lane
+_USER-DECISIONS.md	22	target:decisions.md	UD:§22 superseded: Lifecycle common to Rust and Odoo nodes
+_USER-DECISIONS.md	22.1	target:decisions.md	UD:§22.1 current: One state machine incl. landed elsewhere
+_USER-DECISIONS.md	22.2	target:decisions.md	UD:§22.2 superseded: Three intake doors with trust levels
+_USER-DECISIONS.md	22.3	target:decisions.md	UD:§22.3 current: Cheap-first validation ladder; meta nonce check
+_USER-DECISIONS.md	22.4	target:decisions.md	UD:§22.4 current: One policy lookup table, static columns
+_USER-DECISIONS.md	22.5	target:decisions.md	UD:§22.5 current: Submit, pool or forward with exclusivity window
+_USER-DECISIONS.md	22.6	target:decisions.md	UD:§22.6 current: Who submits and where the fee goes
+_USER-DECISIONS.md	22.7	target:decisions.md	UD:§22.7 superseded: Queue clocks and promote-after window
+_USER-DECISIONS.md	22.8	target:decisions.md	UD:§22.8 current: Watcher classifies landed, superseded, expired
+_USER-DECISIONS.md	22.9	target:decisions.md	UD:§22.9 superseded: Result queue default, node-configured callbacks
+_USER-DECISIONS.md	22.10	target:decisions.md	UD:§22.10 open: Open lifecycle questions
+_USER-DECISIONS.md	22.10.1	target:decisions.md	UD:§22.10.1 open: MAX_HOPS = 4 is arbitrary
+_USER-DECISIONS.md	22.10.2	target:decisions.md	UD:§22.10.2 superseded: promote_after vs 300 s ERC-20 expiry
+_USER-DECISIONS.md	22.10.3	target:decisions.md	UD:§22.10.3 open: Sybil resistance of forward scoring
+_USER-DECISIONS.md	22.10.4	target:decisions.md	UD:§22.10.4 superseded: Callback subject registry on public nodes
+_USER-DECISIONS.md	23	target:decisions.md	UD:§23 current: One Rust app for the daemon tier
+_USER-DECISIONS.md	23.1	target:decisions.md	UD:§23.1 current: Single process, no distributed nonce manager
+_USER-DECISIONS.md	23.2	target:decisions.md	UD:§23.2 current: Relayer never needs the Zether key
+_USER-DECISIONS.md	23.3	target:decisions.md	UD:§23.3 current: One codebase, one binary, roles by config
+_USER-DECISIONS.md	23.4	target:decisions.md	UD:§23.4 superseded: Separate DB roles per module
+_USER-DECISIONS.md	23.5	target:decisions.md	UD:§23.5 current: Two process boundaries: custody and key oracle
+_USER-DECISIONS.md	23.6	target:decisions.md	UD:§23.6 superseded: Lane diagram with ERP control plane
+_USER-DECISIONS.md	23.7	target:decisions.md	UD:§23.7 current: What dies: relay-pool, Redis, Lua
+_USER-DECISIONS.md	23.8	target:decisions.md	UD:§23.8 superseded: Odoo addon is control plane, not a node
+_USER-DECISIONS.md	23.9	history:research-finding	UD:§23.9 history: Technical debt left (doc chores)
+_USER-DECISIONS.md	23.10	target:decisions.md	UD:§23.10 current: Key oracle keeps no persistent state
+_USER-DECISIONS.md	23.11	target:decisions.md	UD:§23.11 current: Oracle lane only when an organization holds Zether
+_USER-DECISIONS.md	24	target:decisions.md	UD:§24 current: No forwarder; drop feeToken, innerGasLimit; keep mode
+_USER-DECISIONS.md	24.0	history:research-finding	UD:§24.0 history: Agent overreach recorded
+_USER-DECISIONS.md	24.1	target:decisions.md	UD:§24.1 current: MetaTransaction struct and mode nibbles
+_USER-DECISIONS.md	24.2	target:decisions.md	UD:§24.2 current: No generic forwarder; wrap legacy tokens
+_USER-DECISIONS.md	24.3	target:decisions.md	UD:§24.3 current: Fee charged iff the operation happened
+_USER-DECISIONS.md	24.4	history:research-finding	UD:§24.4 history: Debt paid; meta-tx gas measured
+_USER-DECISIONS.md	25	target:decisions.md	UD:§25 current: rollOver PUBLIC default, OWNER_ONLY opt-in

@@ -510,7 +510,7 @@ def fact_sources():
 
 
 def norm_num(t):
-    t = t.translate(SUP)
+    t = re.sub('[⁰¹²³⁴⁵⁶⁷⁸⁹]+', lambda m: '^' + m.group(0).translate(SUP), t)
     t = re.sub(r'(?<=\d)[ ,_  ](?=\d{3}\b)', '', t)
     return t
 
@@ -544,7 +544,7 @@ def heading_num(title):
     return m.group(1) if m else ''
 
 
-def split_facts(path, measure_only=False):
+def split_facts(path, measure_only=False, every_paragraph=False):
     """Yield dict(fact_id, chain, kind, excerpt, text)."""
     lines = read(path).split('\n')
     chain = []        # [(level, num, title)]
@@ -583,7 +583,7 @@ def split_facts(path, measure_only=False):
                 i += 1
             text = '\n'.join(lines[start:i])
             kind = ('formula' if FORMULA.search(text) else 'reference' if REFS.search(text)
-                    else 'prose' if NORMATIVE.search(text) else None)
+                    else 'prose' if NORMATIVE.search(text) else 'text' if every_paragraph else None)
             if kind is None:
                 continue
         else:
@@ -611,17 +611,22 @@ def load_section_map():
 
 
 def expand(sec):
-    """'3.1–3.5, 4' -> {'3.1',…,'3.5','4'}; tokens that are not numbers are kept as labels."""
+    """'3.1–3.5, 4' -> {'3.1',…,'3.5','4'}; '10.x' -> {'10'}; tokens that are not ranges are kept as they are."""
     out = set()
     for part in re.split(r',\s*', sec):
         part = part.strip()
-        m = re.fullmatch(r'([A-Z]?\d*(?:\.\d+)*?)(\d+)\s*[–-]\s*([A-Z]?\d*(?:\.\d+)*?)(\d+|x)', part)
-        if m and (m.group(3) in ('', m.group(1))):
-            pre = m.group(1)
-            if m.group(4) == 'x':
-                out.add(pre.rstrip('.'))
+        m = re.fullmatch(r'(\S+?)\s*[–-]\s*(\S+)', part)
+        if m:
+            lp, _, ln = m.group(1).rpartition('.')
+            rp, _, rn = m.group(2).rpartition('.')
+            if rn == 'x' or ln == 'x':
+                out.add(lp)
+            elif ln.isdigit() and rn.isdigit() and rp in ('', lp):
+                out |= {f'{lp + "." if lp else ""}{k}' for k in range(int(ln), int(rn) + 1)}
             else:
-                out |= {f'{pre}{k}' for k in range(int(m.group(2)), int(m.group(4)) + 1)}
+                out.add(part)
+        elif re.fullmatch(r'\S+\.x', part):
+            out.add(part[:-2])
         elif part:
             out.add(part)
     return out
@@ -683,7 +688,7 @@ def cmd_facts_extract():
                 old = {r['fact_id']: r for r in csv.DictReader(fh, delimiter='\t', quoting=csv.QUOTE_NONE)}
         rows_map = smap.get(p.name, [])
         rows = []
-        for f in split_facts(p, measure):
+        for f in split_facts(p, measure, every_paragraph=p.name == 'blockchain.md'):
             titles = ' / '.join(c[2] for c in f['chain'])
             sec = f['chain'][-1] if f['chain'] else (0, '', '(top)')
             disp, hint = '', ''
@@ -695,6 +700,8 @@ def cmd_facts_extract():
             if row:
                 hint = row['target_text']
                 disp = disp or row['default']
+            elif len(f['chain']) <= 1 and p.name != 'blockchain.md':
+                hint, disp = 'preamble (status/rev notes): confirm', disp or 'history:H'
             if f['kind'] == 'ruling':
                 rid = DEF.match(f['text'].split('\n')[0]).group(1)
                 disp = ruling_disposition(idmap, rid) or disp

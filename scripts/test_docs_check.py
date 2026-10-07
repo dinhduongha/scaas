@@ -46,6 +46,10 @@ def main():
     assert r.returncode == 1 and 'C6' in r.stdout, r.stdout
     root = tree()
     assert 'NODE-JOB-01' in run(root, 'resolve', 'R91').stdout
+    sys.path.insert(0, str(SCRIPT.parent))
+    import docs_check as dc
+    assert dc.expand('7.1–7.3, 9') == {'7.1', '7.2', '7.3', '9'} and dc.expand('10.0–10.x') == {'10'}
+    assert dc.norm_num('3,000,000') == dc.norm_num('3 000 000') == '3000000' and dc.norm_num('2⁵⁴') == '2^54'
     print('test_docs_check: ok')
 
 
