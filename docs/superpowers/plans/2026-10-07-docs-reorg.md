@@ -1,8 +1,5 @@
 # Plan: SCaaS docs reorganization (and scaas-node module layout)
 
-> **Owner 2026-10-07:** keep `docs/SCaaS.md` as the name of the system document. It replaces the planned
-> `architecture.md` (every mention below now says `SCaaS.md`), is rewritten short (~700 lines) and links out; the
-> current 2 695-line version is frozen as `history/SCaaS-2026-10-07.md` and goes through the same completeness check.
 
 **Date:** 2026-10-07 · **Status:** PLAN, not executed · **Owner-approved target structure:** see §1.
 **Scope:** `scaas/docs/**` (rewrite), `scaas/scripts/docs_check.py` (new), references outside docs (§5),
@@ -87,7 +84,7 @@ Total current-state text ≈ 15 500 lines + `decisions.md` ≈ 3 000, against 24
 ```
 docs/
   README.md                      map, reading order, precedence, how ids/aliases/history work            ~100
-  SCaaS.md                       system document (owner 2026-10-07: keep the name): what SCaaS is, positioning, trust model, admin exceptions, component map, system-wide principles, status table BUILT/SPECIFIED/PLANNED, roadmap summary, glossary; links out, no duplicated component normative text  ~700   ARCH-POS
+  architecture.md                what SCaaS is, trust model, positioning, profiles, glossary; links only  ~450   ARCH-POS
   decisions.md                   ruling register + generated alias index (old id → new id)              ~3000
   integration.md                 generic ERP/back-office guide; Odoo as one fenced example              ~950    INT-ERP, INT-ODOO
   node/
@@ -756,7 +753,7 @@ files, only facts of kind **measurement** (a number with a unit next to "measure
 
 | Area | Topics (file) |
 |---|---|
-| ARCH | POS (SCaaS.md) |
+| ARCH | POS (architecture.md) |
 | NODE | GEN (node/README), STO (store), JOB (job-api), LANE (submit-lanes), IDX (indexer-feeds), GW (gateway), ADM (admin-auth), SPN (sponsorship), DEX (dex-venue), MESH (mesh), GSP (gossip), OPS (ops), RUN (runbooks), SEC (threat-model) |
 | CTR | GEN (contracts/README), MTX, TOK, ACC, DEX, TND, AS, ZTH, PQZ, UA |
 | NET | ALL (networks/README), EVM, HED, COS, SOR, SUI, APT, SOL, TON |
@@ -914,7 +911,7 @@ Checks (current docs = `docs/**/*.md` minus `history/`, `reviews/`, `superpowers
   Links into `history/` allowed.
 - **C7 artifacts** — every load-bearing token in history sources (§6.3 key extraction) is present in some current
   doc or listed in `history/dropped-artifacts.tsv` with the superseding new id.
-- **C8 architecture is non-normative** — SCaaS.md and README.md define no ids.
+- **C8 architecture is non-normative** — architecture.md and README.md define no ids.
 - **C9 self-contained (R-B)** — banned in current docs outside `<!-- example:odoo -->…<!-- /example -->` and
   decisions.md alias index: `\bSRS\b`, `bamboo`, `\bDMS\b`, `\bNPP\b`, `canon`, `_USER-DECISIONS`, `\bUD §`,
   `\b(round|vòng) \d`, `\bspec [A-F]\b`, `\b(PD|ADW|R3D|WSF|INFRA|ZD|NI|MESH|A2|TW2|APP|TSS|AS|OPS|S4F|PQZ)\s*(§|rev\b|R\d)`,
@@ -959,7 +956,7 @@ on a missing anchor; fails on an old id in a doc; fails on a banned term. CI: ne
 | K11 | Duplicated call table (PD, SCaaS §6.10, integration §3.6) with drift (PD lacks the epoch-bound `revokeWithSig` and `executeAsOwnerRaw` notes) | — | One table (node/job-api) from the SCaaS version, which has both notes. | No |
 | K12 | Accept checks duplicated (NI §5.2, integration §3.2) | — | node/job-api only; integration links. | No |
 | K13 | APP §17 corrections partly unapplied: UA §11.3 does not name `POST /v1/ua/register` | grep UA: 0 hits | Name the route in node/gateway and cite from contracts/universal-account#migration. | No |
-| K14 | Precedence: SCaaS.md said "SCaaS.md > component specs" | SCaaS §0.1 | README: owner rulings (decisions.md `owner: yes`) > component docs > code (byte formats, vectors) > history > research (background only). SCaaS.md is not normative (C8). | No |
+| K14 | Precedence: SCaaS.md said "SCaaS.md > component specs" | SCaaS §0.1 | README: owner rulings (decisions.md `owner: yes`) > component docs > code (byte formats, vectors) > history > research (background only). architecture.md is not normative (C8). | No |
 | K15 | TSS R189 `~gateway` default floor per profile (PD asked TSS rev 1.3 to add it) | PD §15.4 | Verify during rewrite; one statement in node/gateway#intake citing NODE-SPN. | No |
 | K16 | Private chain 7622 as a classical Zether dev chain (`ZetherSafety` allowlist is {31337, 1337}) | HANDOFF-blockchain Z3; SCaaS §15.2 Q2 | Unchanged (not a dev chain) until owner decides. | **Yes** (open) |
 | K17 | Curve policy for production Zether tokens (bn254 vs BLS12-381; BLS measured more expensive) | Z4; ZD §15 | Unchanged (open). | **Yes** (open) |
@@ -981,7 +978,7 @@ on a missing anchor; fails on an old id in a doc; fails on a banned term. CI: ne
 | `scaas/HANDOFF.md` | reading order, links to `docs/superpowers/specs`, `SCaaS.md`, `integration.md` | new reading order (README → architecture → component docs); links updated |
 | `scaas/README.md` | `docs/superpowers/` row; `blockchain.md` row | replace with `docs/` row (README, decisions, history); blockchain.md row → `docs/history/blockchain.md` + trace |
 | `scaas-node/README.md` | VI, pull-model text, spec links | rewrite (K24) |
-| `smartcontracts/evm/README.md`, `src/chains/private7622/README.md` | links to SCaaS.md, specs, plans, `_USER-DECISIONS` | repoint: SCaaS.md → `docs/SCaaS.md` or the owning contracts/* file; specs/plans/research → `docs/history/…` |
+| `smartcontracts/evm/README.md`, `src/chains/private7622/README.md` | links to SCaaS.md, specs, plans, `_USER-DECISIONS` | repoint: SCaaS.md → `docs/architecture.md` or the owning contracts/* file; specs/plans/research → `docs/history/…` |
 | Code comments with spec **paths** (≈ 12 files: `IZetherToken.sol`, `IZetherVerifier.sol`, `HederaSmoke.sol`, `common.tact`, `solana/…/lib.rs`, `scaas-node/src/mesh/mod.rs`, `adapters/{sui,soroban,ton,aptos,solana}.rs`, `tests/e2e_hedera.rs`) | `docs/superpowers/specs/…` | mechanical path rewrite to `docs/history/specs/…` (and `docs/superpowers/specs/blockchain-research/` → `docs/research/`, incl. `_USER-DECISIONS` path cites in `smartcontracts/evm/README.md`); comment-only diff, checked with `git diff --stat` and a grep that no non-comment line changed |
 | Code comments citing **ruling ids** (≈ 900) and **sections** (≈ 400) | `R91`, `RS5-9`, `NI §5.2`, `spec §3.4`, `TW2 §7` | **No change.** Old ids stay valid through decisions.md aliases and `docs_check.py resolve`. Section references resolve against the frozen copies in `history/specs/` (same numbering); history/README maps abbreviations to files. Code comments are rewritten opportunistically when touched (and module headers in the node restructuring, §7). |
 | bamboo-dms (separate repo): `dms_blockchain_dex/__manifest__.py`, `TODO.md`, `HANDOFF.md`, `TRAPS.md` | paths into `scaas/docs/superpowers/specs/…` and research | repoint to `scaas/docs/history/…` or the new doc; separate bamboo-dms commit. **Exclude** bamboo-dms's own `docs/superpowers/plans` references (e.g. in `COMPLETED.md`) — they are a different docs tree. |
@@ -1030,7 +1027,7 @@ also places the research **measurements** for its files (§2.6). The `_USER-DECI
 (it feeds the id map; entries are written in Phase 2).
 
 **Phase 2 — assemble (1 agent).** Merge fragments into `decisions.md` (entries + why/cost from the history rulings,
-rewritten self-contained), `--write` the alias index; write `SCaaS.md`, `README.md`, `history/README.md`
+rewritten self-contained), `--write` the alias index; write `architecture.md`, `README.md`, `history/README.md`
 (abbreviation register, review-disposition note, SRS-delta table, research-correction list K8), and generate
 `history/blockchain-trace.md` (§2.5); run full `check`
 and `facts check`; fix; delete `docs/_work/`; commit.
