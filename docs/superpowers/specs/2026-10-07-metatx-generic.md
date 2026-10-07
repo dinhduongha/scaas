@@ -633,6 +633,8 @@ Every current rule this draft reverses or narrows; each needs the owner's accept
 
 ## 10. Open questions for the owner
 
+**Owner, 2026-10-08: OQ1–OQ5 accepted as recommended** (OQ1 no role function allowlisted; OQ2 new §24.3 wording; OQ3 a fork of a chain we run is a new chain; OQ4 uncapped `FIXED` fee for calls that move no amount; OQ5 Zether `fund` from the public balance). OQ6 closed earlier (`destination` kept). The table below is kept as the record.
+
 Only what needs an owner decision; each has a recommendation.
 
 | # | Question | Recommendation |
