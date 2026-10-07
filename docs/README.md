@@ -7,6 +7,8 @@ below, and every rule's id, aliases and rationale are in [decisions.md](decision
 
 ## Reading order
 
+0. [../README.md](../README.md) — the idea from the ground up: a smart chain as infrastructure, contracts as API
+   services, meta-transactions and fee models, open relayers, Zether and PQ Zether.
 1. [SCaaS-v2.md](SCaaS-v2.md) — what SCaaS is, who it is for, how to start.
 2. [architecture.md](architecture.md) — positioning, authority model, service model, components, trust model,
    families, economics, data protection, glossary.
