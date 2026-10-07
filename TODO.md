@@ -1,7 +1,29 @@
 # TODO — scaas
 
-Ordered by what blocks what (shutdown 2026-10-07). Owner rule: **finish all specs before app code**.
+Ordered by what blocks what (shutdown 2026-10-08). Owner rule: **finish all specs before app code**.
 Max 3 agents, one heavy build at a time (`scripts/capped`). The Odoo side lives in bamboo-dms (`dms_blockchain*`).
+
+## 00. Meta-transaction redesign — code streams (accepted 2026-10-08; rules in the component docs)
+
+Order: contracts first (one heavy build at a time), then node, clients, the Odoo connector (bamboo-dms).
+- [ ] **MT-1** Fold to one base `ERC20MetaTx` (rename `MetaTxCore`), delete `ERC20MetaTx`(v1)/`MetaToken`/`HederaMetaToken`/
+      v1 `OpenFactory`/`MetaTxDex`; v2 factory renamed `OpenFactory`; Hedera children on the tiers.
+- [ ] **MT-2** `mtxExecute` (+ alias): transient sender and one-shot ticket, per-implementation allowlist + `mtxSelectors()`,
+      fee classes, all-or-nothing; `_msgSender()` everywhere per the `msg.sender` inventory; lint/test that no token reads
+      `msg.sender` directly except the allowed spots.
+- [ ] **MT-3** `approve` only by contracts (caller and spender); `mtxWrap` for a SCaaS underlying.
+- [ ] **MT-4** `salt = chain_uid` in every domain (implementation immutables; SubjectAccount, MandateWallet, OrderBookDex,
+      UA registry, Zether digests); deploy scripts on a CREATE2 deployer; deploy gate checks `chainUid()`.
+- [ ] **MT-5** DEX: `TradeOrder` + `mtxTrade`/`mtxCancelOrder`/`mtxInvalidateNonces` in the tokens; `OrderBookDex.mtxSettle`
+      (Path A/B, 1 taker + N makers, 50 % floor, fee split, conservation invariant); outside-token legs.
+- [ ] **MT-6** Zether: transient envelope binding, `fund` from the public balance, `mtxWrap`; renames (`mtxRollOver`,
+      `mtxSetRollOverMode`); PQZ envelope question.
+- [ ] **MT-7** Renames on `MandateWallet`/`SubjectAccount`/Hedera (`mtx…`).
+- [ ] **MT-8** Node: selector tables (NODE-JOB-20), call table names, breaker per `(from, selector)`, `chainUid()` check
+      (NODE-GW-07), DEX venue `mtxSettle` (NODE-DEX-15/16), NODE-IDX-06 `repeat_of`.
+- [ ] **MT-9** clientkeys/app: `domain.salt`, decode `mtxExecute` data, refuse an unlisted `dex`, no EOA approve, wrap by
+      signature (CLI-SGN-33…36); vectors/KATs regenerated.
+- [ ] Draft for non-EVM families (generic op dispatch where the VM allows it; `mtx` names).
 
 ## 0. Finish the spec phase (5 items left)
 

@@ -1,5 +1,47 @@
 # HANDOFF — scaas
 
+## Shutdown 2026-10-08 — read this first
+
+**Meta-transaction redesign accepted and folded.** Design record: `docs/history/specs/2026-10-07-metatx-generic.md`
+(rev 5, two Claude reviews: `docs/reviews/specs/2026-10-07-metatx-generic-claude-review-{1,2}.md`, git-ignored). Rules
+now live in the component docs (`contracts/metatx.md`, `token-wrappers.md`, `dex.md`, `zether.md`, `accounts.md`,
+`mandates.md`, `node/job-api.md`, `node/dex-venue.md`, `networks/README.md`, `clients/signers-clientkeys.md`, …) and
+`decisions.md` (30 new ids, 58 updated, 5 superseded: CTR-TOK-12/14, CTR-DEX-06/07, CTR-ZTH-11). **Code is unchanged**:
+every affected section carries a "Transitional (BUILT)" note — the code streams below implement it.
+
+Owner rulings 2026-10-07/08 (all in decisions.md, owner: yes):
+- `mtxExecute`: the token calls **itself** with the signer's calldata on a fixed per-implementation selector allowlist
+  (transient sender + one-shot ticket; all or nothing; never calls another contract). No `approve`, no role functions
+  in any allowlist. `executeMetaTransaction` kept as an alias. Every signed entry point starts with `mtx`.
+- **Only a contract may call `approve`** on a SCaaS token (EOAs never, in any form; outside tokens excepted); wrapping a
+  SCaaS underlying by signature (`mtxWrap`).
+- One base **`ERC20MetaTx`**; the v1 line (`MetaToken`, `HederaMetaToken`, v1 `OpenFactory`) is deleted; one factory.
+- `salt = chain_uid` (genesis hash) in **every** EIP-712 domain; implementation immutable; deploys via **CREATE2**; a
+  fork of a chain we run is a new chain.
+- DEX: one signed **`TradeOrder`** (`from, receiveToken, amount, receiveAmount, minFill, fee, relayer, dex,
+  destination, flags, batch, nonce, validUntil`) — the owner's old `MtxTradeOrder` modernized; no role in the order;
+  funds move **only into `dex`**; `relayer` = matching party (0 = anyone); minimum fill = max(minFill, 50 %); one `fee`
+  paid out by the DEX in the same call per an admin-set split; Path A (resting, `pulled[orderHash]`) and Path B
+  (escrow + refund, IOC); one taker + many makers per call; DEX balance-conservation invariant. **Owner-accepted
+  residual risk:** `dex` only has to be a contract — clients must refuse an unlisted `dex`, the node never routes one.
+- NODE-IDX-06: a repeated `entryRef` is flagged by the node (`repeat_of`) **and** checked by the client (refund decision).
+- Nothing is deployed anywhere: no compatibility/migration work.
+
+Also today (all pushed except the meta-tx commits listed in `git log origin/main..main`):
+- Docs reorg closed: Phase 4 reviews (28 findings fixed), 10 % second sample (111 items, 3 minor fixed), every diagram
+  Mermaid, checker **C11** (ASCII art refused), plan in `docs/history/plans/`.
+- Root `README.md` rewritten: chain as infrastructure, IaaS/BaaS comparison, contracts as API services, standards
+  (incl. EIP-6963), shared code/upgradeability, Universal Accounts, fee models, transaction flow, open relayers,
+  Zether/PQZ, design evolution.
+- `clientkeys/` and `zether-prover/` moved to **`clients/`** (app planned at `clients/app/`); CI jobs `clientkeys` and
+  `zether-prover` added (first GitHub run pending).
+- `contracts/accounts.md` (Universal Account + passkeys + optional SubjectAccount) and `contracts/mandates.md`.
+
+Open for the next session: the code streams in `TODO.md` §0; points the fold left open — PqzToken's envelope on the
+self-call path, the Zether statement header now 416 bytes with `chainUid` at offset 96 (verify against the prover),
+ExchangeOffer's gasless leg as a `TradeOrder`; non-EVM families' equivalent of `mtxExecute`/`mtx` names (separate
+draft).
+
 ## Docs reorg 2026-10-07 — read this first
 
 The specs, `SCaaS.md` and `integration.md` were replaced by one set of self-contained component docs (plan
