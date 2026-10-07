@@ -1219,6 +1219,9 @@ Risks: shim period (M1–M2) briefly doubles paths — keep M1 and M2 in one ses
 
 ## 8. Open owner questions (collected)
 
+> **Answered 2026-10-07 after Phase 0:** (K25) Cosmos passkey address follows UA — 32-byte id (ADR-028-style module address) per UA R291/R315; CR-R3-1 keeps only the rpIdHash/origin/UV binding, its 20-byte address clause is superseded. (K26) Soroban non-positive `pay` amount error is `NonPositiveAmount` (i128: negative also refused); CR-R3-3's `ZeroAmount` is superseded.
+
+
 > **Answered 2026-10-07 (owner: "Còn lại theo mặc định")** — every question below takes its default; record each as an owner ruling dated 2026-10-07 in decisions.md. Also confirmed: English throughout; new component ids with old ids as aliases; SCaaS.md → history + new SCaaS-v2.md product intro.
 
 
