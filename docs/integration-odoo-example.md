@@ -235,7 +235,7 @@ and `blockchain_relay_job.py:137` are shared. Sui verifier tests (`test_fam_sui.
 `test_own_key_still_verified`, `test_passkey_cross_origin_refused`, `test_keyop_bytes_match_move`,
 `test_vectors_file_matches_move`, `test_signature_from_another_wallet_is_refused` (narrowed to "invalid under its own
 key"); clientkeys mirrors them in `fam_sui.test.js`. Mandate payments through the connector
-(`_enqueue_mandate_payment`) are EVM-only; for other families the contract exists and the connector path is a seam. Portal glue: `chain_pay.js` and `subject_signers.js` call
+(`_enqueue_mandate_payment`) are EVM-only; for other families the contract exists and the connector path is a seam. Portal glue (`connectors/*.js` call each family's `fam_<f>.verify` mirror on the server): `chain_pay.js` and `subject_signers.js` call
 `window.dmsChainConnectors` and `dms_portal_chain_payment_options/start/submit`
 (`test_options_carry_family_and_network`); the WalletConnect project id is `dms_blockchain.walletconnect_project_id` in
 `ir.config_parameter`. `_hex32` normalises 32-byte values; `_apply_report` applies node reports.

@@ -602,7 +602,7 @@ EVM extension wallets also use `wallet_switchEthereumChain`/`wallet_addEthereumC
 through `UAKey.signUA(purpose, digest)`: there is no raw "sign these 32 bytes" for a UA key.
 
 Per-family connector behaviour (loaded only when the payer chooses that network; no third-party library unless stated):
-EVM/Hedera EIP-6963; Sui and Aptos the Wallet Standard event protocol (`wallet-standard:register-wallet` /
+EVM/Hedera EIP-6963; Sui and Aptos the Wallet Standard event protocol (`wallet-standard:*`: `wallet-standard:register-wallet` /
 `wallet-standard:app-ready`; Sui chooses a wallet with `sui:signPersonalMessage`, refusing zkLogin/multisig accounts —
 keys not 32/33 bytes or flags other than 0/1/2/6; Aptos with `aptos:connect` + `aptos:signMessage`, checking
 `aptos:network` against the terms' chain id, refusing non-ed25519 keys, asking `signMessage({message, nonce, application:

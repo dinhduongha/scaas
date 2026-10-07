@@ -170,7 +170,7 @@ would let anyone pre-open a passkey-first id with an ed25519 key and brick that 
 behalf is unnecessary because the first `relay_pay` opens lazily with the owner's signature. Test
 `open_needs_the_wallet_signature`. BUILT.
 
-<a id="NET-SOL-07"></a>**NET-SOL-07** — **The `BACKUP_REQUIRED` policy bit is optional and off by default.** "Has a
+<a id="NET-SOL-07"></a>**NET-SOL-07** — **The `BACKUP_REQUIRED` policy bit ("backup key required") is optional and off by default.** "Has a
 backup" ⇔ (≥ 2 keys) **or** (1 key **and** a guardian) — the backup-key switch
 ([CLI-SGN-13](../clients/signers-clientkeys.md#CLI-SGN-13)). The owner sets it with `KeyOp set_policy` signed by **its
 own** key (the admin never touches an Account); turning it on without a backup is refused (no self-lock). When on:

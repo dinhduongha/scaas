@@ -74,7 +74,7 @@ metaop$_ domain:bits120 network:int32 op:uint8 amount:uint128 nonce:uint64 valid
   below it (the client sets 0 for payments to a person: no notification needed), and the floor is capped
   ([NET-TON-14](#NET-TON-14)); op 2 = the hash of the `TradeParams` cell (whose `forwardTon` field is the signed floor;
   the wallet adds a `MIN_LEG_TON` floor of 0.1 TON); op 4 = the digest of the cancelled order; op 5 = the hash of the
-  `PasskeyRecord` cell.
+  `PasskeyRecord` cell (`{pubkey33, rpIdHash, originPrefix}`).
 - **digest** = the representation hash of the root `MetaOp` cell (`0x` + 64 hex) — the client, Rust and Tact compute it;
   `MetaTransactionExecuted.digest` carries it.
 - Replay: (a) `lanes[lane]` (default 0) must equal `nonce`, then `+1` — the lane is random per `entryRef`, nonce 0; (b)
