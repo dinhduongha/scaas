@@ -569,9 +569,11 @@ verify:          z < r, R ≠ O, Y ≠ O, e ≠ 0, [z]G − R − [e]Y == O
 ```
 
 `register(encodedY, scheme, authData, popSignature, linkEVM)`: `|encodedY| ∈ {64, 128}` selects the curve; the point is
-valid, `≠ O`, in the subgroup; `UA = keccak256(encodedY)` does not exist yet (`AccountAlreadyRegistered`). Challenge
+valid, `≠ O`, in the subgroup (`y = g^x` in G1; `encodedY` is bn254 64 bytes `x‖y`, BLS12-381 128 bytes in the
+EIP-2537 encoding); `UA = keccak256(encodedY)` does not exist yet (`AccountAlreadyRegistered`). Challenge
 `c = keccak256(abi.encodePacked(registry, encodedY, msg.sender))`; because `c` binds `msg.sender`, `register` **cannot
-be relayed by a third party**: the subject calls from its own EOA or smart account (a relayer, if any, pays gas at that
+be relayed by a third party** and binds no chain id (`UniversalAccountRegistry.sol:95-96`; acceptable only because
+the registry is dev-only): the subject calls from its own EOA or smart account (a relayer, if any, pays gas at that
 account's level); a replay needs that same `msg.sender` and yields the same record, so there is no cross-chain replay.
 `popSignature = abi.encode(bytes schnorrPop, bytes authPop)`: `schnorrPop` = a Schnorr signature by `x` over `c`
 (anti-rogue-key for the ElGamal key); `authPop` = a proof of the authorization key, also over `c`:

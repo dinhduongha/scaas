@@ -24,6 +24,12 @@ only spender (the allowance lockdown, [CTR-TOK-01](token-wrappers.md#CTR-TOK-01)
 signed order) and the relayer fee through the existing meta-tx modes; every user action is a meta-tx; client systems
 configure markets, read the book and book the fees.
 
+Interface summary (BUILT): `settle(Match[]) returns (bool[])` (atomic per pair; none ⇒ `NothingSettled`),
+`cancel(CancelReq[])`, `invalidateNonces(maker, newMin, sig)`, `checkOrder`, `setMarket` (admin). The planned new
+deployment's `_validSig` contract branch = assembly `staticcall` capped at 400 k for `SubjectAccount` clones by
+codehash, else 50 k, ≤ 32 B returndata, and `gasleft() ≥ cap·64/63 + margin` or the whole tx reverts
+([CTR-DEX-08](#CTR-DEX-08)).
+
 ## Signed orders
 
 Domain: `name = "SCaaS OrderBookDex"`, `version = "1"`, `chainId`, `verifyingContract = DEX`. Orders are signed **on

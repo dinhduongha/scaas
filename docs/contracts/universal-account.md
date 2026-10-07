@@ -939,7 +939,8 @@ New registration flow:
    kind's signer (`UAKey.signUA("pop", …)`; MuSig2/FROST: a group signing session, plus the KeyAgg hints or the DKG
    transcript). Zether with `authRef ≠ 0`: the authority signs `authPop` (purpose `authref`; a native authority: EIP-712
    `UAAuth`).
-3. Anyone submits `register(kind, keyData, pop, authRef, authPop)` (self-paid, a relayer job, or sponsored).
+3. Anyone submits `register(kind, keyData, pop, authRef, authPop)` (self-paid, a relayer job, or sponsored through
+   the gateway route `POST /v1/ua/register`).
 4. On the finalized `UARegistered` the client checks `recordOf(ua)` — kind **and `authRef`** equal what it asked for —
    and only then marks the account usable on that chain.
 
@@ -1091,9 +1092,15 @@ The `bls12381-minsig` figure is the measured BLS12-381 min-sig verification on t
 (precompile costs: `MAP_FP_TO_G1` (0x10) × 2 = 11,682; `G1ADD` (0x0b) ~1,100; `expand_message_xmd` + 2 × reduced MODEXP
 ~4,000 (estimate); `PAIRING_CHECK` (0x0f) with k = 2 = 103,959 (measured); total ≈ 120 k). That does not contradict the
 Zether measurement that BLS12-381 is ~2 % more expensive at Bulletproofs-scale MSM (k = 277): pairing and MSM are
-different operations. Final EIP-2537 addresses differ from early drafts (`G2ADD` is `0x0d`, `MAP_FP_TO_G1` is `0x10`);
-`G1ADD`/`G2ADD` check only on-curve, while `G1MSM`/`G2MSM`/`PAIRING_CHECK` also check the subgroup, so aggregating keys
-with plain `G2ADD`s needs an explicit subgroup check.
+different operations. Measured on the private chain (2026-08-31, EIP-2537 live): the BLS12-381 pairing with k = 2 costs 103,959 gas, **less**
+than the bn254 pairing (114,091), so `bls-bn254-minsig` exists only for chains without EIP-2537. Final EIP-2537
+addresses differ from early drafts (`G2ADD` is `0x0d`, not `0x0e`; `MAP_FP_TO_G1` is `0x10`, not `0x11`; a draft
+address hits another precompile and, on all-zero input, still returns bytes). Skipping `clear_cofactor` is correct
+there: RFC 9380 computes `P = clear_cofactor(Q0 + Q1)`, but EIP-2537's `MAP_FP_TO_G1` already clears the cofactor, so
+the verifier computes `h·Q0 + h·Q1`, equal to `h·(Q0+Q1)` (scalar multiplication is a group homomorphism); checked on
+chain: `G1MSM(H(m), 1) == H(m)`. `G1ADD`/`G2ADD` check only on-curve, while `G1MSM`/`G2MSM`/`PAIRING_CHECK` also check
+the subgroup, so aggregating keys with plain `G2ADD`s is unprotected: registration forces one `G2MSM` with k = 1
+(`Bls12381.requireInG2Subgroup`).
 
 Registration (execution gas, bn254 base):
 

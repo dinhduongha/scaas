@@ -1473,4 +1473,5 @@ chains, `pqz-cli serve` LAN mode.
 - Repo: [zether.md](zether.md) (byte-exact classical design and limits), [universal-account.md](universal-account.md);
   design history in `docs/history/specs/` (`2026-10-03-zether-design.md`, `2026-10-05-zether-limits.md`,
   `2026-10-05-zether-consensys-max.md`); research notes `blockchain-research/02-account-registry.md` §2.6 (FALCON/PQ,
-  HNDL) and `03-zether-crypto.md` §3.1.3.
+  HNDL), `blockchain-research/03-zether-crypto.md` §3.1.3 and the research corrections index
+  `blockchain-research/_MANIFESTS.md`.

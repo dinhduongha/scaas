@@ -26,7 +26,7 @@ fields instead of 32 opaque bytes. The pinned typehash below is the only payment
 ## `MetaTransaction` and the pinned typehash
 
 <a id="CTR-MTX-15"></a>**CTR-MTX-15** — The struct is `MetaTxLib.MetaTransaction` (`smartcontracts/evm/src/common/MetaTxLib.sol`
-is normative). The fee is paid in **this** token (no `feeToken` field: another token lies outside this contract and
+is normative; a struct argument also keeps EIP-712 hashing clear of Solidity's "Stack too deep" limit). The fee is paid in **this** token (no `feeToken` field: another token lies outside this contract and
 this contract holds no allowance of it); there is no `innerGasLimit` (it only means something for a forwarder that
 swallows failures); `to`/`value`/`data` stay explicit (no opaque `op` + `args`); `mode` stays and is split into two
 nibbles.

@@ -133,7 +133,19 @@ Per family: EVM/Hedera `SubjectAccount` (ERC-1271; P-256 via OpenZeppelin 5.2 `P
 RIP-7212 precompile `0x100` when present, else the Solidity verifier); Sui `secp256r1_verify`/passkey; Soroban
 `secp256r1_verify` (CAP-51) in a custom account; Cosmos `secp256r1_verify` (cosmwasm-std 2.1+); Aptos pure-Move
 P-256; Solana Secp256r1 precompile; TON passkey auth kind in the jetton wallet. Merkle batching under one assertion
-exists today on EVM and Soroban only; the other families verify one digest per assertion. The client side
+exists today on EVM and Soroban only; the other families verify one digest per assertion. In the generic form the leaf is
+`H(H(0x00 ‖ digest))` with `H` the family hash (the OpenZeppelin double-hash recommendation against second
+preimages), and each operation carries `(assertion, proof)`: the verifier checks the proof (digest → root), then the
+assertion over the root. On EVM the subject account is the built registry's `AuthScheme.SMART_ACCOUNT_1271 = 7` kind of
+account, holding several passkeys `(qx, qy, rpIdHash)`; key types are `P256_WEBAUTHN(qx,qy,rpIdHash)` or
+`SECP256K1(address)`; the account signature was first specified as `abi.encode(keyIndex, payload)` and is now
+`abi.encode(keyIndex, bytes32[] proof, bytes sig)` for both key types. Key lifecycle: `addKey`/`removeKey`/`setGuardian`
+only through `executeAsOwner` signed by an existing key (own nonce), or `recover(newKey)` by the guardian after
+`RECOVERY_DELAY` (default 2 days, cancellable by a key); the account never has zero keys. P-256 verification per
+family: Sui `ecdsa_r1::secp256r1_verify`; Soroban `env.crypto().secp256r1_verify` (CAP-51); Cosmos `secp256r1_verify`
+(cosmwasm-std 2.1+); Hedera as EVM (probe the precompile, Solidity fallback); TON: TVM has
+`P256_CHKSIGNU/P256_CHKSIGNS` (TVM upgrades of 2023/2024), used through `asm` in Tact, confirmed by compiling in the
+sandbox (otherwise TON is ed25519 only and the gap is recorded). The client side
 (`clientkeys/src/passkey-signer.js`: `creationOptions` with PRF enabled by default, `requestOptions`, `derToRS`,
 `encodeAssertion = abi.encode(authenticatorData, clientDataJSON, r, s)`, `merkleBatch`, `accountSignature =
 abi.encode(keyIndex, bytes32[] proof, sig)`) is [CLI-SGN-09](../clients/signers-clientkeys.md#CLI-SGN-09).
