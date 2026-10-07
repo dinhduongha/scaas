@@ -1,8 +1,8 @@
 # Thanh toán on-chain bằng meta-transaction — Thiết kế
 
-**Ngày:** 2026-10-03 · **Trạng thái:** đã duyệt nội bộ, chờ review ngoài · **Rev 1.1 (2026-10-07):** Claude
-review 1 folded (§15: rulings CR-PD-1…6, streams PAY-FIX1…7, superseded-rulings table §15.3); the private chain is
-7622 (formerly 9000).
+**Ngày:** 2026-10-03 · **Trạng thái:** đã duyệt nội bộ, chờ review ngoài · **Rev 1.2 (2026-10-07):** Claude
+review 1 folded (§15: rulings CR-PD-1…6, streams PAY-FIX1…5, PAY-FIX6/7 merged into DEX DX-FIX3/4, superseded-rulings
+table §15.3); the private chain is 7622 (formerly 9000), identified by `chain_uid` (genesis hash, UA R330).
 **Nguồn:** `ai-enterprise-blockchain-architecture.md` v3.3, `ai-enterprise-blockchain-integration.md` v2.5,
 `smartcontracts/**`, `docs/superpowers/specs/blockchain-research/00-CANON.md`, `_USER-DECISIONS.md`.
 
@@ -833,8 +833,8 @@ cannot collide with the global R-numbers other streams are allocating.
 | M3 | med | Confirmed. A failed `report('signed')` re-queues the work without consuming `n` (`submit.rs:311-316`); the next job is signed at the same `n`; `signed → signed` is not in `TRANSITIONS` (`blockchain_relay_job.py:20-25`). | **Accepted** → CR-PD-5; PAY-FIX5 |
 | L1 | low | Confirmed (`blockchain_relay_job.py:20-26`). | **Accepted**: §4.2 state list and §4.3 table rewritten |
 | L2 | low | Confirmed (`wallet/MandateWallet.sol:148-154`). | **Accepted** → addendum CR-ADW-1, stream ADW-FIX1 |
-| L3 | low | Confirmed: `_validSig` uses uncapped `SignatureChecker.isValidERC1271SignatureNow` (`dex/OrderBookDex.sol:381-386`). | **Accepted**; ruling belongs to the DEX spec (recorded §15.4); stream PAY-FIX6 |
-| L4 | low | Confirmed: per-fill fee `fill * feePpm / PPM` floors (`OrderBookDex.sol:216-217`). | **Accepted**; ruling belongs to the DEX spec (§15.4); stream PAY-FIX7 |
+| L3 | low | Confirmed: `_validSig` uses uncapped `SignatureChecker.isValidERC1271SignatureNow` (`dex/OrderBookDex.sol:381-386`). | **Accepted**; DEX ruling RS5-14; stream PAY-FIX6, merged into DEX DX-FIX3 |
+| L4 | low | Confirmed: per-fill fee `fill * feePpm / PPM` floors (`OrderBookDex.sol:216-217`). | **Accepted**; DEX ruling RS5-21; stream PAY-FIX7, merged into DEX DX-FIX3 (EVM) / DX-FIX4 (non-EVM) |
 | L5 | low | Confirmed: journal only when `w.job_id` is set (`submit.rs:311-316`). | **Accepted** (doc): §3.4 note |
 | L6 | low | Confirmed: §1, §2.4, §3.1, §4.2, R11 said 9000. | **Accepted** → CR-PD-6; text now says 7622 (formerly 9000) |
 | Superseded table (15 rows) | — | Spot-checked: R28 (`dms_blockchain_payment/__manifest__.py:9`), R84 normalisation (`metatx.rs:124-131`), `mtxPay` built (`metatx/MetaTokenBase.sol:152`), platform company (`blockchain_receiving_wallet.py:9-10`). | **Accepted**: §15.3 + inline markers in §3.3, §7, §13 |
@@ -949,7 +949,7 @@ Rejected: none. Counts: 2 high, 3 medium, 6 low, 1 table — 12 accepted, 0 reje
 | NI rev 3.6 | R103 / §5.2 step 4: `allow_call` is necessary, not sufficient — add the CR-PD-1 call table and `403 CALL_TARGET_REFUSED` (also re-checked at lease); `chain_contract.kind` gains `account_factory` (and `dex` if it is not a chain field). §9 indexer and T7: event-set quorum, `scaas_finality_quorum` (CR-PD-2). §5.2 `~gateway`: `ZERO_VALUE`, per-`from` bucket, public-profile fee-0 rule (CR-PD-3). Pruning families: `max_valid_for_secs ≤ LANE_HORIZON` (CR-PD-4). |
 | SCaaS.md | §3.5 "Node ↔ chain": finality gate = event-set quorum, single-provider trust stated; §5.5: pay-lane issuance horizon H as a protocol rule; §6 Door A intake rules; chain 7622 (formerly 9000) wherever 9000 remains. |
 | integration.md | Odoo outbox: immutable job fields, operator read-only (CR-PD-1). |
-| DEX spec | `OrderBookDex._validSig`: cap the ERC-1271 call like `MetaToken._erc1271Gas` (400 k for `SubjectAccount` clones by codehash, 50 k otherwise) — L3; the venue fee per fill rounds **up** (`Math.mulDiv(…, Math.Rounding.Ceil)`) when the market fee is on, and the node matcher mirrors it — L4. |
+| DEX spec | `OrderBookDex._validSig`: cap the ERC-1271 call like `MetaToken._erc1271Gas` (400 k for `SubjectAccount` clones by codehash, 50 k otherwise) — L3; the venue fee per fill rounds **up** (`Math.mulDiv(…, Math.Rounding.Ceil)`) when the market fee is on — L4. **Done** (2026-10-07 clean-up): RS5-14 and RS5-21; the node matcher needs no change, it computes no DEX fee (RS5-21). |
 | TSS rev 1.3 | R189 door table: the `~gateway` default floor per profile (CR-PD-3). |
 
 ### 15.5 Code streams (new; for TODO)
@@ -961,8 +961,8 @@ Rejected: none. Counts: 2 high, 3 medium, 6 low, 1 table — 12 accepted, 0 reje
 | **PAY-FIX3** | `scaas-node` EVM/Hedera indexer: event-set quorum, min `finalized`/`latest`, quorum gauge; lying-provider tests | CR-PD-2 |
 | **PAY-FIX4** | `scaas-node` gateway Door A: `ZERO_VALUE`, `min_fee`/sponsor floor, public fee-0 rule, per-`from` bucket; tests | CR-PD-3 |
 | **PAY-FIX5** | Odoo `_apply_report` idempotent `signed`; node retry keeps `(raw, hash, n)`; timeout-after-commit test | CR-PD-5 |
-| **PAY-FIX6** | `OrderBookDex` ERC-1271 gas cap (after the DEX spec ruling) | review L3 |
-| **PAY-FIX7** | `OrderBookDex` fee rounds up per fill + node matcher (after the DEX spec ruling) | review L4 |
+| ~~**PAY-FIX6**~~ | **Merged into DEX DX-FIX3** (same ERC-1271 gas cap, RS5-14) | review L3 |
+| ~~**PAY-FIX7**~~ | **Merged into DEX DX-FIX3** (EVM) **and DX-FIX4** (non-EVM): venue fee rounds up per fill (RS5-21); no node matcher change — the node computes no DEX fee | review L4 |
 
 ### 15.6 Revision history
 
@@ -970,3 +970,4 @@ Rejected: none. Counts: 2 high, 3 medium, 6 low, 1 table — 12 accepted, 0 reje
 |---|---|---|
 | 1.0 | 2026-10-03 | Initial design; agy reviews of design, plans and implementation (§14) |
 | 1.1 | 2026-10-07 | Claude review 1 folded: 12 findings accepted, 0 rejected; rulings CR-PD-1…6; streams PAY-FIX1…7; superseded-rulings table (§15.3); amendments for NI, SCaaS.md, integration.md, DEX, TSS recorded (§15.4); chain 7622 (formerly 9000) |
+| 1.2 | 2026-10-07 | 2026-10-07 clean-up: PAY-FIX6 merged into DEX DX-FIX3 (RS5-14), PAY-FIX7 into DX-FIX3/4 (RS5-21, no node matcher change); §15.4 DEX row done |

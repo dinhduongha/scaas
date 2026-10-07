@@ -147,7 +147,7 @@ Theo chain, trong node (bộ nhớ, đặt lại khi khởi động):
 
 ### A.10 Ghi vào HANDOFF, không xây (GA 2.1#5/#6, 2.2 còn lại)
 
-`docs/superpowers/HANDOFF-blockchain.md`: audit bên thứ ba, triển khai thật (9000/Gnosis), bằng chứng finality 7
+`docs/superpowers/HANDOFF-blockchain.md`: audit bên thứ ba, triển khai thật (7622 (formerly 9000)/Gnosis), bằng chứng finality 7
 ngày, ≥2 RPC độc lập, và mọi mục GA 2.2 không làm ở round này (kèm tham chiếu SRS).
 
 ---
@@ -162,7 +162,9 @@ pub enum Family { Evm, Hedera, Sui, Soroban, Cosmos, Ton }
 #[async_trait]
 pub trait ChainAdapter: Send + Sync {
     fn family(&self) -> Family;
-    fn chain_key(&self) -> &str;                       // "evm:9000", "sui:localnet", "cosmos:wasmd-1"…
+    fn chain_key(&self) -> &str;                       // "evm:7622" (formerly 9000), "sui:localnet", "cosmos:wasmd-1"…
+    // chain_key một mình không định danh chain (7622 không giả định là duy nhất): chain = (chain_key, chain_uid),
+    // chain_uid = genesis hash do RPC báo (UA R330); adapter đối chiếu lúc khởi động.
     fn lanes(&self) -> &[Lane];                        // địa chỉ relayer theo lane
     async fn build(&self, job: &Job, lane: usize) -> Result<Built, SimError>;   // dựng + mô phỏng
     async fn sign(&self, built: Built, lane: usize, seq: u64) -> Result<Signed>; // qua Signer
@@ -822,3 +824,4 @@ network. Amended text: §0 principle 6 here; net-aptos/net-sui/net-solana RS11-1
 | 1.0 | 2026-10-03 | Round 3 design R30–R67; agy review S1–S28 (§G) |
 | 1.1 | 2026-10-07 | Claude review 1 folded: 17 findings accepted, 0 rejected, H3 left as **open owner question Q1**; rulings CR-R3-1…10; streams R3-FIX1…14; superseded-rulings table (§H.4); net-*/SCaaS/NI/UA amendments recorded (§H.5) |
 | 1.2 | 2026-10-07 | Owner ruling CR-R3-11: Aptos/Sui/Solana programs immutable at deploy (replaces Q1); deploy-script gate; stream R3-FIX15 (apply + redeploy dev deployments); RS11-13 superseded |
+| 1.3 | 2026-10-07 | 2026-10-07 clean-up: private chain 7622 (formerly 9000) in §A.10 and the `chain_key` example; chain = `(chain_key, chain_uid)` per UA R330 (§B.1) |

@@ -1,6 +1,6 @@
 # Operations: SLOs, telemetry, FinOps, RACI, incident response and disaster recovery (component spec C)
 
-Status: draft rev 1.2, 2026-10-06. Rev 1.1 folded in the owner's answers (denylist, internal SLOs, customer-run
+Status: draft rev 1.3, 2026-10-07 (2026-10-07 clean-up: private chain id 7622 (formerly 9000), §3.2). Rev 1.1 folded in the owner's answers (denylist, internal SLOs, customer-run
 monitoring, operator independence); rev 1.2 folds in independent review 1 (FIX-THEN-GO, H1–H4, M1–M11, L1–L6;
 disposition §15). Component spec **C**. Short name **OPS**. Code at `scaas` `main` 5f1d327 (node store P1 built; job
 API, admin API, mesh bus, gossip SPECIFIED). **Nothing in this spec is built** except the metrics marked BUILT (§4.2).
@@ -236,7 +236,7 @@ Recommended internal objectives for whoever runs a node (R247); no SLA. Window: 
 
 | Chain class | Block / finality | `include` | `broadcast_final` | Reason |
 |---|---|---|---|---|
-| EVM private (9000, Clique, 1 signer) | ~5 s, depth 1 | 15 s | 15 s | SCaaS §13.1 value; 3 blocks |
+| EVM private (7622 (formerly 9000), Clique, 1 signer) | ~5 s, depth 1 | 15 s | 15 s | SCaaS §13.1 value; 3 blocks |
 | EVM public (Gnosis) | 5 s, `finalized` ~160–240 s | 30 s | 300 s | 6 blocks; 240 s + 60 s |
 | EVM L2 (Celo, `tag` until `l1_batch`) | 1 s, L1 finality ~13–20 min | 10 s | 1 260 s | 20 min + 60 s |
 | Hedera | 3–5 s record files, instant | 15 s | 45 s | 3 record files |

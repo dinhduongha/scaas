@@ -1,6 +1,7 @@
 # SCaaS app (`scaas/app/`) — console and dApp (design)
 
-Status: draft **rev 1.2**, 2026-10-06. Rev 1.1 folded in the owner's answers to Q1–Q3 (§16). Rev 1.2 does three
+Status: draft **rev 1.3**, 2026-10-07 (2026-10-07 clean-up: private chain id 7622 (formerly 9000), §1 and §5.4; EVM/Hedera
+identity check adds `chain_uid`, §5.3). Rev 1.1 folded in the owner's answers to Q1–Q3 (§16). Rev 1.2 does three
 things: it applies independent review 1 (FIX-THEN-GO, H1–H7, M1–M9, L1–L7; disposition in §18), folds in spec D
 (signers follow-ups, R250–R268) and spec F (Universal Account, R290–R318), and writes the node addendum (§9.6:
 `/v1/ops`, `/v1/gateway`, error contract, gasless UA registration).
@@ -63,7 +64,7 @@ peers (SSRF-guarded), policy, gossip (peers, topics, announces, bans, trusted), 
 external-client API keys, admin users, audit, and a metrics dashboard link.
 
 **Families.** All seven sit behind one adapter interface:
-- EVM: Gnosis 100, Celo 42220, private chain 9000, anvil 31337;
+- EVM: Gnosis 100, Celo 42220, private chain 7622 (formerly 9000), anvil 31337;
 - Hedera 295–298 (EVM on HSCS, plus the HTS specifics);
 - Cosmos (CosmWasm);
 - Soroban (Stellar and Pi);
@@ -359,7 +360,7 @@ Two rules:
 
 | Family | Call | Must equal |
 |---|---|---|
-| EVM, Hedera | `eth_chainId` | id in `key` |
+| EVM, Hedera | `eth_chainId`; block 0 hash | id in `key`; the profile's `chain_uid` (genesis hash, UA R330 — a chain id such as 7622 is not assumed unique) |
 | Sui | `sui_getChainIdentifier` | configured `chainIdentifier` (from `key` network: mainnet/testnet/devnet known values; localnet: first-run pinned in dev only) |
 | Solana | `getGenesisHash` | `<genesis>` in `key` |
 | Soroban | `getNetwork().passphrase` | `networkPassphrase` |
@@ -373,7 +374,7 @@ Two rules:
 |---|---|---|
 | Gnosis 100 | `finalized` ~160–240 s | final badge waits for the `finalized` tag |
 | Celo 42220 | CIP-64 not used | CELO gas only |
-| Private 9000 | base fee 0, `private: true`; Zether gated (Z3) | no public explorer links; the RPC must send CORS for the app origin |
+| Private 7622 (formerly 9000) | base fee 0, `private: true`; Zether gated (Z3) | no public explorer links; the RPC must send CORS for the app origin |
 | anvil 31337 | `dev: true` | dev key in dev builds; Zether |
 | all | RIP-7212 presence affects passkey/UA P-256 cost | gas estimate shown before a self-paid passkey intent |
 

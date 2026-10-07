@@ -5,8 +5,8 @@
 
 Ruling của luồng đánh số `RS5-n` (lead đánh lại số khi merge).
 
-**Trạng thái (rev 1.1, 2026-10-07).** Code EVM + node BUILT; review Claude 1 (§8) mở 5 luồng sửa code DX-FIX1…5
-(§7, cuối). Các ruling dưới đây **đã bị thay** bởi spec sau — đọc spec sau trước:
+**Trạng thái (rev 1.2, 2026-10-07).** Code EVM + node BUILT; review Claude 1 (§8) mở 5 luồng sửa code DX-FIX1…5
+(§7, cuối); rev 1.2 thêm RS5-21 (phí DEX làm tròn lên) và gộp PAY-FIX6/7 của spec thanh toán vào DX-FIX3/4. Các ruling dưới đây **đã bị thay** bởi spec sau — đọc spec sau trước:
 
 | Ruling ở đây | Bị thay bởi | Nội dung thay |
 |---|---|---|
@@ -354,7 +354,8 @@ Sổ, matcher, Odoo, gateway **dùng chung** (không phụ thuộc EVM ngoài đ
    (R64); Cosmos CW20 `TransferFrom` với allowance cho contract DEX (R66); TON escrow (R67 — ngoại lệ duy nhất có
    giữ tiền tạm, vì jetton không có `transferFrom`).
 5. Event tương đương `OrderFilled/Matched/MatchFailed` để watcher + Odoo dùng nguyên.
-6. **Settle gắn relayer** (**RS5-15**, review Claude H4): lệnh mang `relayer` (0 = mở) và contract kiểm người nộp.
+6. **Settle gắn relayer** (**RS5-15**, review Claude H4): lệnh mang `relayer` (0 = mở; **không có dạng mở trên
+   Soroban**, net-soroban R8-10) và contract kiểm người nộp.
    Sui (`dex.move:321`), Aptos (`dex.move:382`), Solana (`dex.rs:187`) đã có; **Cosmos** (`Settle` không kiểm
    `info.sender`, `OrderParams` không có relayer — `cosmos/dex/src/lib.rs:29-34, 145`), **Soroban**
    (`require_auth_for_args((order,))` chỉ trói lệnh, không trói đối ứng/`maker_fill`/người nộp — `lib.rs:158-159`) và
@@ -404,6 +405,7 @@ Sổ, matcher, Odoo, gateway **dùng chung** (không phụ thuộc EVM ngoài đ
   Thay R3.
 - **RS5-5** Không WebSocket; poll.
 - **RS5-6** Phí DEX trên phần nhận, làm tròn xuống; phí relayer FIXED pro-rata làm tròn xuống.
+  *Phí DEX: thay bởi RS5-21 (làm tròn lên mỗi fill); phí relayer giữ nguyên.*
 - **RS5-7** `MetaTxDex` giữ làm legacy (không route); `OrderBookDex` là DEX của gateway.
 - **RS5-8** Watcher DEX có cursor riêng và gửi bằng key indexer; không sửa `indexer.rs`.
 - **RS5-9** Book chỉ nhận lệnh `relayer = ví relayer này` (chống MEV, chống settle lại phần đã huỷ off-chain).
@@ -434,6 +436,9 @@ Sổ, matcher, Odoo, gateway **dùng chung** (không phụ thuộc EVM ngoài đ
   được khôi phục. Contract là bất biến ⇒ bản sửa là **deploy mới** (chain dev; người dùng `approve` lại spender mới).
   Test forge như §6 dòng "Thiếu".
 - **RS5-15** (H4) Settle non-EVM gắn relayer (§5 mục 6). Test: bên thứ ba settle trên Cosmos/Soroban/TON fail.
+  **Soroban không cho `relayer` = 0 (mở)** (net-soroban **R8-10**): `Order.relayer: Address` bắt buộc, vì với dạng
+  mở ai thấy một `settle` đang chờ cũng nộp lại hai auth entry với `maker_fill = 1` ⇒ hai nonce bị tiêu cho một khớp
+  bụi, `settle` thật fail (tấn công dust-fill). Test Soroban: lệnh không có `relayer` không dựng được / bị từ chối.
 - **RS5-16** (M1) Cam kết cộng dồn gồm phần đã khớp chưa `settled`/`failed`, theo (maker, token), xoá khi trade
   xong. Test: số dư 100, ask #1 100 khớp và chờ ⇒ ask #2 100 bị từ chối.
 - **RS5-17** (M2) Đối chiếu `markets(key)` on-chain mỗi vòng `poll` (≤ 30 s); lệch ⇒ ngừng phục vụ thị trường đó
@@ -445,15 +450,36 @@ Sổ, matcher, Odoo, gateway **dùng chung** (không phụ thuộc EVM ngoài đ
   lượng đó khỏi sổ ở lần sync kế (trong R105: item `dex_trade` settled muộn ⇒ trừ `remaining` của lệnh đã khôi phục).
   Test: `Matched` muộn sau khôi phục ⇒ sổ không còn thanh khoản ma.
 
+### Ruling rev 1.2 — từ review Claude 1 của spec thanh toán (L4, 2026-10-07)
+
+- **RS5-21** (PD review L4; thay phần phí DEX của RS5-6) **Phí DEX mỗi fill làm tròn lên.** Hiện
+  `fill * ppm / PPM` làm tròn xuống (`OrderBookDex.sol:216-217`; non-EVM cũng vậy: Sui `dex.move:250-251`, Aptos
+  `dex.move:247-248`, Solana `dex.rs:208-210`, TON `dex.tact:208`) ⇒ chia lệnh thành fill `< PPM/ppm` đơn vị (ví dụ
+  ≤ 333 đơn vị ở 0,3 %) thì phí thị trường = 0; trên chain riêng phí gas 0 nên chia nhỏ không tốn gì. Sửa: khi
+  `feeOn` và `ppm > 0`, phí = `Math.mulDiv(fill, ppm, PPM, Math.Rounding.Ceil)` (non-EVM: `(fill·ppm + PPM − 1) / PPM`
+  trên số rộng gấp đôi). `maxFeePpm` đã ký giới hạn **tỉ lệ**; làm tròn lên thêm dưới 1 đơn vị nhỏ nhất mỗi fill —
+  đó là ngữ nghĩa mới của trần, ghi vào NatSpec. `ppm ≤ MAX_FEE_PPM` (1 %) < `PPM` ⇒ phí ≤ fill, `amount − fee` không
+  tràn dưới; fill 1 đơn vị trả phí 1 (bên nhận nhận 0) là giá của lệnh bụi. Phí relayer giữ làm tròn xuống (RS5-6:
+  tổng ≤ `fee` đã ký). **Node không đổi:** matcher không tính phí DEX (chỉ so `maxFeePpm` với phí thị trường,
+  `dex.rs:565, 616-624`; phí DEX bị trừ trong chính lượng chuyển nên `fundable` không đổi), Odoo đọc `dexFee` từ event
+  `OrderFilled`. Test forge: `ppm = 3_000`, fill 333 ⇒ phí 1 (trước: 0); fill 1 ⇒ phí 1, bên nhận 0; fill bội đúng ⇒
+  phí như cũ; một fill 1 000 so với mười fill 100 ⇒ tổng phí mười fill ≥ phí một fill; fuzz `fill`, `ppm ≤ MAX_FEE_PPM`
+  ⇒ `fee ≤ fill` và `fee · PPM ≥ fill · ppm`; `dexFee` trong event = lượng chuyển cho `feeRecipient`; `feeOn = false`
+  ⇒ không có lệnh chuyển phí; sửa `test_feeOnSplitsReceivedAmountsWithoutDust` (`OrderBookDex.t.sol:439-454`, đang kỳ
+  vọng làm tròn xuống) sang làm tròn lên. Mỗi mạng non-EVM một test tương đương (fill bụi trả phí 1).
+
 **Luồng code** (owner: không sửa code trong pha spec; làm sau §0 TODO):
 
 | Luồng | Lớp | Nội dung | Ruling |
 |---|---|---|---|
 | **DX-FIX1** | Node `dex.rs` | Maker dust: bỏ qua + gỡ; test | RS5-12 |
 | **DX-FIX2** | Node `dex.rs`, `dex/venue.rs` | Giới hạn `feeToken`; quy lỗi cặp qua `eth_call settleOne`; gỡ maker sau 2 fail; không khôi phục cặp OOG; tests | RS5-13, RS5-14 (phần node) |
-| **DX-FIX3** | Contract `OrderBookDex.sol` | 1271 có trần + returndata ≤ 32 B + chặn bỏ đói gas; tests forge (1271 trong lô, phát lại chéo DEX/chain, invariant mở rộng); deploy mới | RS5-14 |
-| **DX-FIX4** | Contract Cosmos/Soroban/TON + Sui/Aptos/Solana | Relayer gắn trong lệnh (3 mạng); trần `min_nonce` (3 mạng); tests | RS5-15, RS5-19 |
+| **DX-FIX3** | Contract `OrderBookDex.sol` | 1271 có trần + returndata ≤ 32 B + chặn bỏ đói gas; phí DEX làm tròn lên mỗi fill; tests forge (1271 trong lô, phát lại chéo DEX/chain, invariant mở rộng, làm tròn phí); deploy mới. **Gộp PAY-FIX6** (spec thanh toán, review L3: cùng trần gas ERC-1271) **và phần EVM của PAY-FIX7** (review L4) | RS5-14, RS5-21 |
+| **DX-FIX4** | Contract Cosmos/Soroban/TON + Sui/Aptos/Solana | Relayer gắn trong lệnh (3 mạng; Soroban bắt buộc, R8-10); trần `min_nonce` (3 mạng); phí DEX làm tròn lên (các mạng có phí ppm); tests. **Gộp phần non-EVM của PAY-FIX7** | RS5-15, RS5-19, RS5-21 |
 | **DX-FIX5** | Node (+ `dms_blockchain_dex`) | Cam kết gồm trade chờ; đối chiếu thị trường mỗi `poll`; `ioc_single_maker`; trừ sổ khi `Matched` muộn; tests | RS5-16, 17, 18, 20 |
+
+PAY-FIX6/7 không còn là luồng riêng (spec thanh toán §15.5 ghi gộp). PAY-FIX7 bỏ vế "node matcher": node không tính
+phí DEX (RS5-21).
 
 DX-FIX1/2/5 sửa đúng file mà NI **P7** (DEX lên store, R105) viết lại: làm trước P7 nếu P7 chưa bắt đầu, không thì
 gộp vào P7 (ruling vẫn áp).
@@ -537,3 +563,4 @@ Verdict của review: FIX-THEN-GO, 0 Critical. Đối chiếu từng finding v�
 |---|---|---|
 | 1.0 | 2026-10-03 | Bản đầu (S5): RS5-1…11; review agy D1–D24, review implementation I1–I7 |
 | 1.1 | 2026-10-07 | Gộp review Claude 1: bảng "bị thay" (R105, F10, R124, R102); RS5-3 sửa; RS5-12…20; bảng sai khác non-EVM §5; test thiếu §6; luồng code DX-FIX1…5 |
+| 1.2 | 2026-10-07 | 2026-10-07 clean-up: RS5-15 ghi Soroban không có relayer mở (net-soroban R8-10); RS5-21 phí DEX làm tròn lên mỗi fill (PD review L4); PAY-FIX6 gộp vào DX-FIX3, PAY-FIX7 vào DX-FIX3/4 |

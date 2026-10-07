@@ -1,9 +1,10 @@
 # Sealed-bid tender, gas sponsorship and receiver-pays, crypto-shredding (component spec B)
 
-Status: draft rev 1.3, 2026-10-07. Rev 1.1 folds in the owner's answers to the two rev-1 open questions
+Status: draft rev 1.4, 2026-10-07. Rev 1.1 folds in the owner's answers to the two rev-1 open questions
 (post-reveal disqualification, R185; receiver-pays stays v2-only, R193); rev 1.2 folds in independent review 1
 (FIX-THEN-GO; disposition in §10); rev 1.3 folds in the Codex review (FIX-THEN-GO; H1–H2, M1–M2, L1; disposition in
-§11) and aligns with NI rev 3.5 (R320, R325) and UA rev 1.4. Code verified at `scaas` `main` 9e27d35.
+§11) and aligns with NI rev 3.5 (R320, R325) and UA rev 1.4. Code verified at `scaas` `main` 9e27d35. Rev 1.4 (2026-10-07 clean-up): NI amends row and §B1.2 SQL gain
+`job.sponsor_fallback` (NI rev 3.6).
 **Nothing in this spec is built.**
 Rulings: **R180–R199** (§2). R150–R172 belong to the app spec, R200–R216 to the asset-suite spec (AS). Owner rulings of 2026-10-06 folded in:
 (1) sealed-bid tender = commit–reveal + deposit, gasless bidders, procurement integration, EVM + Hedera first;
@@ -16,7 +17,7 @@ Amends:
 |---|---|---|
 | SCaaS | `docs/SCaaS.md` | §5.9 (receiver pays, sponsorship), §6 consequences 1 and 4, §10 (tender), §11.2 (shredding), §13.2 (budgets), §14.7, §15.1 row 23: status → SPECIFIED, link here. §10 and §14.7 are superseded where this spec differs (R182, R185 and §A.3) |
 | INT | `docs/integration.md` | §8 (sponsorship, receiver pays), §9 (tender): status → SPECIFIED, link here |
-| NI | `2026-10-06-node-independence-design.md` rev 3.5 | additions only: tables `sponsor_policy`, `sponsor_usage`, `chain_contract`; job columns `sponsor_policy_id`, `sponsor_reserved`, `sponsor_day`, `call_hash`, `gas_used`, `gas_price`, `cost_native`; live-call dedupe index (per namespace, R325); local signature check for sponsored public-door jobs; admin routes §B1.5; job payload field `receiver_fee` (§B2.5). **Rev 1.3 additions for NI to fold** (all in NI §4/§5.2/§7.3, nothing removed): job column `sponsor_hour`; policy column `min_valid_secs`; `sponsor_usage.tx_count` counted at accept and released on a pre-broadcast end, so `SPONSOR_RATE` becomes an accept `429` and leaves the lease `dead` reasons (NI §4 state table); new accept `429 SPONSOR_TOO_SHORT` and admin `422 POLICY_INVALID` (`fallback_to_namespace`); `409 DUPLICATE_CALL` carries the live job's `uid`; a `~gateway` `call` policy is valid for the R320 UA registration target only (NI §7.3 sentence on TSS §B1.5); feed field `sponsor_fallback` |
+| NI | `2026-10-06-node-independence-design.md` rev 3.5 | additions only: tables `sponsor_policy`, `sponsor_usage`, `chain_contract`; job columns `sponsor_policy_id`, `sponsor_reserved`, `sponsor_day`, `call_hash`, `gas_used`, `gas_price`, `cost_native`; live-call dedupe index (per namespace, R325); local signature check for sponsored public-door jobs; admin routes §B1.5; job payload field `receiver_fee` (§B2.5). **Rev 1.3 additions for NI to fold** (all in NI §4/§5.2/§7.3, nothing removed): job columns `sponsor_hour`, `sponsor_fallback` (NI rev 3.6 added both); policy column `min_valid_secs`; `sponsor_usage.tx_count` counted at accept and released on a pre-broadcast end, so `SPONSOR_RATE` becomes an accept `429` and leaves the lease `dead` reasons (NI §4 state table); new accept `429 SPONSOR_TOO_SHORT` and admin `422 POLICY_INVALID` (`fallback_to_namespace`); `409 DUPLICATE_CALL` carries the live job's `uid`; a `~gateway` `call` policy is valid for the R320 UA registration target only (NI §7.3 sentence on TSS §B1.5); feed field `sponsor_fallback` |
 | TW2 | `2026-10-06-token-wrappers-v2.md` | one named function added to `MetaTokenBase` (`mtxPayReceiverFee`, R192), shipped as a new implementation version per tier; `_execute` returns the digest (no behaviour change) |
 | MESH | `2026-10-05-relayer-mesh-design.md` | R75 **not amended**; its scope is clarified by R194 |
 
@@ -619,6 +620,7 @@ ALTER TABLE job ADD COLUMN sponsor_policy_id BIGINT;  -- NULL = booked to the na
 ALTER TABLE job ADD COLUMN sponsor_reserved TEXT;     -- amount reserved at accept (released/booked exactly)
 ALTER TABLE job ADD COLUMN sponsor_day TEXT;          -- 'd:YYYY-MM-DD' of the reservation; cost books to this day
 ALTER TABLE job ADD COLUMN sponsor_hour TEXT;         -- rev 1.3: 'YYYY-MM-DDTHH' of the reservation; its counts are released here
+ALTER TABLE job ADD COLUMN sponsor_fallback TEXT;     -- policy name when matched but exhausted with on_exhausted = unsponsored (NI rev 3.6)
 ALTER TABLE job ADD COLUMN call_hash BLOB;            -- kind = call: keccak256(target ‖ calldata); else NULL
 CREATE UNIQUE INDEX job_live_call ON job (namespace, chain_key, call_hash)   -- per namespace (NI R325)
   WHERE call_hash IS NOT NULL AND state IN ('queued', 'leased', 'signed', 'broadcast');   -- ⇒ 409 DUPLICATE_CALL {uid}
