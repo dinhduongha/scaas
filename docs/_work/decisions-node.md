@@ -7,7 +7,7 @@ Phase-1 fragment of `docs/decisions.md` for the node area. Entries follow plan �
 ### NODE-GEN-01 — Node holds no subject funds or keys
 - old: SCaaS:N1, UD:§23.2 · status: current · owner: yes · date: 2026-10-07 · normative: node/README.md#NODE-GEN-01 · superseded-by: —
 
-**Why.** Funds and subject keys stay with subjects and contracts; a compromised node can only stop working or lie on its feed.
+**Why.** Funds and subject keys stay with subjects and contracts; a compromised node can only stop working or lie on its feed. A relayer signs only the outer transaction, with its `authKey`; it never needs a subject's confidential key `x`: it cannot decrypt the amount, build the proof or change any field (all are in the signed digest), and that blindness is the property, not a limitation. A server holds `x` only when the company itself sends from its own confidential treasury, which is custody, not relay; the key oracle that serves it is small (under 300 lines; the enclave image under 5,000 lines including the crypto backend), so it stays out of the node process, which parses strangers' bytes.
 **Source.** [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 880; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 2055.
 
 ### NODE-GEN-02 — No broadcast without committed journal
@@ -148,7 +148,7 @@ It said: eRP addon is control plane, not a node.
 ### NODE-STO-03 — RPC endpoints only in node config
 - old: R20, R95 · status: current · owner: yes · date: 2026-10-06 · normative: node/store.md#NODE-STO-03 · superseded-by: —
 
-**Why.** RPC URLs may embed keys and are dial targets; only the host's config may set them.
+**Why.** RPC URLs may embed keys and are dial targets; only the host's config may set them. Config authority is the node store, in the owner's words "toml bootstraps; admin API mutations persist"; the one admin-editable dial target, mesh peer URLs, is admin-only, audited and behind its own SSRF guard.
 **Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 727; [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 1019.
 
 ### NODE-STO-04 — One store always on, one owner
@@ -856,7 +856,7 @@ It said: dEX chains run one lane only.
 ### NODE-MESH-11 — Multi-process one-binary test topology
 - old: R83, UD:§21.3 · status: current · owner: yes · date: 2026-10-06 · normative: node/mesh.md#NODE-MESH-11 · superseded-by: —
 
-**Why.** Several processes of one binary test the mesh as deployed.
+**Why.** Several processes of one binary test the mesh as deployed. Two processes of one binary with different configuration catch wire-format errors but not misreadings of the spec; only the public conformance vectors stand in for a second implementation, so they must be complete, not token.
 **Source.** [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 83; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1365.
 
 ### NODE-MESH-12 — Private rows served only by origin
@@ -910,7 +910,7 @@ It said: dEX chains run one lane only.
 ### NODE-MESH-20 — Node is a capability matrix, not modes
 - old: UD:§21.4 · status: current · owner: yes · date: 2026-08-31 · normative: node/README.md#NODE-MESH-20 · superseded-by: —
 
-**Why.** Capabilities combine freely; fixed modes would need a second implementation.
+**Why.** Capabilities combine freely; fixed modes would need a second implementation. The earlier "Mode 1 / mode 2" split suggested a global enum, while there are three independent axes (ingest, pool, submit) and submit varies per `(chain, contract)`: a node may submit on one chain and only forward for another. The gateway shape is the old "mode 1". The research shapes "private pool" and "private relayer" (a private-mempool pair) showed that the mesh needs a pull mode next to gossip, with an explicit peer allowlist instead of discovery; the bus pull with pinned peers is that mode (the research table had called the mesh module "ingest + pool" and assumed gossip). Two queues shared the name "pool": the mesh-facing intent queue and the submit job queue, which exists even when nothing is pooled; the research note named "relay-pool" described the second. The store is now the mesh-facing queue.
 **Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1394.
 
 ### NODE-MESH-21 — One policy lookup table, static columns
@@ -928,7 +928,7 @@ It said: dEX chains run one lane only.
 ### NODE-MESH-23 — MAX_HOPS = 4 is arbitrary
 - old: UD:§22.10.1 · status: open · owner: yes · date: 2026-08-31 · normative: node/mesh.md#NODE-MESH-23 · superseded-by: —
 
-**Why.** Four hops is a guess; re-tuned after a multi-site run.
+**Why.** Four hops is a guess; re-tuned after a multi-site run. "Arbitrary" marks a number with no measurement behind it; node docs label such defaults so they are re-tuned after a measured run.
 **Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1999.
 
 ### NODE-MESH-24 — Soroban stays on the job API, not the mesh
@@ -997,7 +997,7 @@ It said: callback subject registry on public nodes.
 ### NODE-GSP-01 — Gossip required alongside the pull bus
 - old: R112, UD:§6 · status: current · owner: yes · date: 2026-10-06 · normative: node/gossip.md#NODE-GSP-01 · superseded-by: —
 
-**Why.** The pull bus covers admitted partners; gossip reaches the open network. Both are needed.
+**Why.** The pull bus covers admitted partners; gossip reaches the open network. Both are needed. The open network uses libp2p gossipsub v1.1 instead of a home-grown protocol: it is the stack the ERC-4337 shared mempool mandates (`eth-infinitism/bundler-spec/p2p-specs/p2p-interface.md`), and its peer scoring is the network-layer anti-spam primitive; intents are validated before they are forwarded, so spam costs real money.
 **Source.** [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 73; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 224.
 
 ### NODE-GSP-02 — Selectable carriers; admitted peers PQ only
@@ -1033,7 +1033,7 @@ It said: callback subject registry on public nodes.
 ### NODE-GSP-07 — Gossip validation pipeline and Reject rule
 - old: R118, UD:§22.3 · status: current · owner: yes · date: 2026-10-06 · normative: node/gossip.md#NODE-GSP-07 · superseded-by: —
 
-**Why.** Rejects cost the sender score; only faults decidable from the bytes may reject, so honest peers are never punished.
+**Why.** Rejects cost the sender score; only faults decidable from the bytes may reject, so honest peers are never punished. Checking the meta nonce with `eth_call` at receipt is exact but does not run at gossip speed: a node receiving 500 intents a second would make 500 RPC calls a second just to filter garbage. The freshness check is therefore one batched read, off the event loop and failing open for forwarding.
 **Cost if wrong.** Over-rejecting eclipses a node by itself.
 **Source.** [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 79; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1767.
 

@@ -1,0 +1,5455 @@
+# Decisions — ruling register
+
+Every ruling of SCaaS has one entry here: its id, the old ids it replaces (aliases), its status, whether it is an
+owner ruling, and **why** it holds. The rule itself is defined once, in the doc named by `normative`, at an anchor
+`<a id="ID">`; other docs link that anchor and never restate it. Entries whose `normative` is `decisions.md` are
+system-wide positions defined here. Precedence between sources is [ARCH-POS-01](#ARCH-POS-01); the doc map is
+[README.md](README.md).
+
+Each entry is a `###` heading `<ID> — <title>`, a meta line `- old: … · status: … · owner: yes|no · date: … ·
+normative: <file#ID> · superseded-by: …`, then **Rule.** (only where useful as a summary, or for self-defining
+entries), **Why.**, **Cost if wrong.** and **Source.** Superseded entries keep one sentence of what they said.
+
+- **Ids** are `<AREA>-<TOPIC>-<NN>`: `ARCH-POS` (system-wide), `NODE-*` ([node/](node/README.md)), `CTR-*`
+  ([contracts/](contracts/README.md)), `NET-*` ([networks/](networks/README.md)), `CLI-*` ([clients/](clients/app.md)),
+  `INT-ERP` / `INT-ODOO` ([integration.md](integration.md)). `01`–`79` are current or open, `80`–`99` superseded,
+  withdrawn or unused. Ids are never renumbered ([ARCH-POS-07](#ARCH-POS-07)).
+- **`open`** = an owner question whose stated default is already applied in the normative text.
+- **`old:`** lists the ids used before the 2026-10-07 reorganization (`R91`, `RS5-9`, `CR-PD-2`, `SCaaS:N4`, …);
+  `CR-PD-1(c)` names one clause of a split ruling. The generated [alias index](#alias-index) at the end maps every old
+  id to its new id(s); from a shell: `python3 scripts/docs_check.py resolve R91`.
+- **Source** lines point into `history/` (frozen designs) and `research/` (background); both are read-only.
+
+## Architecture and register policy
+
+These entries define themselves (`normative: decisions.md`): they are system-wide positions, and
+[architecture.md](architecture.md) and [README.md](README.md) only explain them.
+
+<a id="ARCH-POS-01"></a>
+### ARCH-POS-01 — Source precedence: owner rulings first
+- old: owner:2026-10-06:precedence · status: current · owner: yes · date: 2026-10-07 · normative: decisions.md#ARCH-POS-01 · superseded-by: —
+
+**Rule.** When two sources disagree, the higher one wins: (1) owner rulings, i.e. entries of this register with
+`owner: yes`; (2) the component docs under `node/`, `contracts/`, `networks/`, `clients/` and `integration.md`, each
+for its own subject; (3) code, but only for pinned byte formats (typehashes, KAT and conformance vectors); (4)
+`history/`; (5) `research/`, which is background only. [architecture.md](architecture.md), [SCaaS-v2.md](SCaaS-v2.md)
+and [README.md](README.md) are not normative. A difference between code and an owner ruling is a bug in the code, not
+in the ruling.
+**Why.** The earlier system specification ranked itself above the component specs while restating them, and the
+copies drifted; the specs disagreed with each other in several places. One register of rulings plus one normative home
+per rule removes the second copy. Owner rulings override code that has not caught up, so a ruling is never "undone" by
+an implementation shortcut.
+**Cost if wrong.** A reader who trusts the overview instead of the component doc applies a stale rule; the checker
+keeps ids out of the overview so there is nothing to trust there.
+**Source.** [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 33; [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) §4 K14.
+
+<a id="ARCH-POS-02"></a>
+### ARCH-POS-02 — Family taxonomy
+- old: owner:2026-10-06:families · status: current · owner: yes · date: 2026-10-06 · normative: decisions.md#ARCH-POS-02 · superseded-by: —
+
+**Rule.** SCaaS supports six families; a family is a group of chains that share one contract code base and one node
+adapter: `evm` (EVM chains, including Hedera), `cosmos` (CosmWasm), `soroban` (Stellar and Pi Network), `move` (Aptos
+and Sui), `ton` and `solana`. A chain is keyed `chain_key = family:network`. This replaces the earlier list of
+"Six ecosystems" (EVM, Hedera, TON, Sui, Soroban, Cosmos).
+**Why.** Hedera runs EVM contracts and shares the EVM code base and signer, so it is not a family of its own; Aptos and
+Sui share the Move language but not their object models, so they are one family with two adapters; Aptos and Solana
+were added by the owner. A taxonomy by code base matches how contracts, adapters, tests and the availability matrices
+are organized ([networks/README.md](networks/README.md)).
+**Cost if wrong.** Counting by ecosystem duplicates the EVM rules for Hedera and hides that one Move fix must be made
+twice.
+**Source.** [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 92; [history/blockchain.md](history/blockchain.md) line 17.
+
+<a id="ARCH-POS-03"></a>
+### ARCH-POS-03 — `scaas` names everywhere
+- old: owner:2026-10-06:naming · status: current · owner: yes · date: 2026-10-06 · normative: decisions.md#ARCH-POS-03 · superseded-by: —
+
+**Rule.** Every product name is a `scaas` name: the node `scaas-node`, the envelope `scaas-intent/1.2`, the pay-lane
+label `scaas.pay.lane`, environment variables `SCAAS_*`, metrics `scaas_*`, HTTP headers `X-Scaas-*`, EIP-712 domain
+names `"SCaaS …"`, tags `scaas.*`, `SCAAS-ZETHER-*`, `scaas/zether/…`. Clients read the domain a deployed contract
+reports (`eip712Domain()`) instead of assuming a string.
+**Why.** SCaaS is a standalone product; the first implementation carried the brand of its first client in node,
+envelope, lane and environment names, which tied every operator and every other client to that brand. The rename has
+landed in code.
+**Cost if wrong.** A domain string assumed by a client breaks signatures against any deployment that kept an older
+name; reading `eip712Domain()` avoids it.
+**Source.** [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) lines 93, 102.
+
+<a id="ARCH-POS-04"></a>
+### ARCH-POS-04 — Market-neutral protocol and docs
+- old: owner:2026-10-06:market-neutral · status: current · owner: yes · date: 2026-10-06 · normative: decisions.md#ARCH-POS-04 · superseded-by: —
+
+**Rule.** SCaaS names no country's law, currency or regulator in its protocol, contracts or docs. Data protection is
+specified as technical controls (no personal data on chain, off-chain linkage, minimized node state, crypto-shredding,
+disclosure) that a deployment maps to its own regime (GDPR-class: lawful basis, minimization, erasure, retention,
+cross-border transfer, processor agreements).
+**Why.** SCaaS is sold worldwide. A rule written for one market either does not apply elsewhere or reads as a
+compliance claim the product cannot make for every deployment.
+**Cost if wrong.** A deployment in a market with stricter rules must add controls on its side; the generic controls
+are designed to be the strict superset.
+**Source.** [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) lines 94, 1959.
+
+<a id="ARCH-POS-05"></a>
+### ARCH-POS-05 — The node is independent of any ERP
+- old: R87, owner:2026-10-06:node-independent · status: current · owner: yes · date: 2026-10-06 · normative: decisions.md#ARCH-POS-05 · superseded-by: —
+
+**Rule.** `scaas-node` never connects to an ERP. Every ERP, portal or application is one client among others: it
+pushes jobs to the node's job API and reads the node's feeds. The node's control plane is its own store and admin API;
+every node is "standalone". This supersedes the earlier design in which the node claimed jobs from an ERP database and
+the ERP stayed the control plane.
+**Why.** One product serves many ERPs; a node that depends on one ERP's database, models and RPC is a component of
+that ERP, not a service. Keeping the journal, configuration and feeds in the node's own store also keeps
+journal-before-broadcast local, without an ERP round trip.
+**Cost if wrong.** The ERP learns job and chain state by polling the feeds instead of being called; the client's sync
+schedule bounds the delay.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 109; [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 37.
+
+<a id="ARCH-POS-06"></a>
+### ARCH-POS-06 — Three use cases from the first wave
+- old: UD:§1:use-cases, UD:§15:D12, canon:D12 · status: current · owner: yes · date: 2026-08-30 · normative: decisions.md#ARCH-POS-06 · superseded-by: —
+
+**Rule.** SCaaS serves three use cases, all configurable from the first deployment: loyalty and rewards, B2B
+settlement between a brand and its distributors or suppliers, and end-user payments. The technical focus is
+meta-transactions, confidential amounts (Zether) and stablecoins.
+**Why.** The owner chose full configuration over a staged launch. The three cases share one token, meta-transaction
+and settlement core; what differs is configuration (fee mode, sponsorship, custody, confidentiality).
+**Cost if wrong.** Enabling B2B from the start makes organizational custody of signing and decryption keys a launch
+requirement rather than a later option.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) lines 38, 862.
+
+<a id="ARCH-POS-07"></a>
+### ARCH-POS-07 — Register policy: open entries, defaults, superseded owner rulings
+- old: reorg:Q2, reorg:Q10, reorg:Q13, reorg:Q14 · status: current · owner: yes · date: 2026-10-07 · normative: decisions.md#ARCH-POS-07 · superseded-by: —
+
+**Rule.** Ids are `<AREA>-<TOPIC>-<NN>`; `01`–`79` are current or open, `80`–`99` superseded, withdrawn or unused.
+Ids are never renumbered or reused; a clarification keeps its id, a reversal creates a new id and the old one becomes
+`superseded`. Status `open` means an owner question whose stated default is already applied in the normative text.
+Interpretations awaiting confirmation keep their stated defaults as `open` entries. Requirements of the original
+requirements note that no design ever ruled on are recorded as `open` entries, `PLANNED` where a seam exists. Earlier
+owner decisions that a later ruling replaced are recorded as `superseded` owner rulings, not re-opened; unruled items
+of the earlier decision log are `open` entries.
+**Why.** Nothing the owner asked for or decided may disappear silently, and nothing may be decided silently either: an
+`open` entry makes the default visible and keeps it reversible.
+**Cost if wrong.** An `open` default that the owner later reverses needs a new id and a doc change; the alias index
+keeps the old reference resolvable.
+**Source.** [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) §3.1, §8 (Q2, Q10, Q13, Q14).
+
+<a id="ARCH-POS-08"></a>
+### ARCH-POS-08 — Market-specific research stays private
+- old: reorg:Q9 · status: current · owner: yes · date: 2026-10-07 · normative: decisions.md#ARCH-POS-08 · superseded-by: —
+
+**Rule.** The research note on one market's law and the large raw tool-output file stay in `research/` while the
+repository is private and are removed before any public release. Neither ever enters the current docs.
+**Why.** The market-neutral rule ([ARCH-POS-04](#ARCH-POS-04)) keeps market law out of the product; the files remain
+useful background for the owner meanwhile.
+**Source.** [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) §8 Q9.
+
+<a id="ARCH-POS-09"></a>
+### ARCH-POS-09 — Work plans stay in history and the TODO list
+- old: reorg:Q11 · status: current · owner: yes · date: 2026-10-07 · normative: decisions.md#ARCH-POS-09 · superseded-by: —
+
+**Rule.** Implementation work items (their scope, gates and dependencies) stay in the frozen design specs under
+`history/` and are tracked in the repository TODO list; there is no roadmap document under `docs/`, and the current
+docs carry no work-item ids.
+**Why.** Work plans change weekly; normative docs that cite them go stale with every plan change.
+**Source.** [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) §4 K22, §8 Q11.
+
+<a id="ARCH-POS-10"></a>
+### ARCH-POS-10 — Client data platforms are out of scope
+- old: — · status: current · owner: no · date: 2026-10-07 · normative: decisions.md#ARCH-POS-10 · superseded-by: —
+
+**Rule.** SCaaS delivers finalized facts and operating data: the event feed, the job feed, metrics, usage reports and
+disclosure openings. What a client builds on top of them is the client's platform and out of scope: landing tables in a
+data warehouse, projections into operational, vector, knowledge-graph, semantic-metric or OLAP stores, AI tool
+gateways, and an enterprise-wide multi-plane target architecture.
+**Why.** Those layers depend on the client's data model and tooling; SCaaS stays a service whose interface is the
+contracts plus the node's feeds ([node/indexer-feeds.md](node/indexer-feeds.md), [node/ops.md](node/ops.md)).
+**Cost if wrong.** A client that wants these projections builds them from `/v1/events` and `/v1/jobs`; nothing in the
+feeds prevents it.
+**Source.** [history/blockchain.md](history/blockchain.md) lines 38–48, 56–74; [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) §2.5.
+
+<a id="ARCH-POS-11"></a>
+### ARCH-POS-11 — Documentation language and structure
+- old: — · status: current · owner: yes · date: 2026-10-07 · normative: decisions.md#ARCH-POS-11 · superseded-by: —
+
+**Rule.** The docs are English throughout and self-contained. Rulings carry new component ids with the old ids as
+aliases in this register. The old system specification is frozen as `history/SCaaS-2026-10-07.md` for reference;
+[SCaaS-v2.md](SCaaS-v2.md) is a short, non-normative product introduction. Line-budget overruns of the Zether, PQ
+Zether, network pages and the node overview are accepted.
+**Why.** One language and one id scheme for a product used worldwide; the old ids stay resolvable for code comments
+(`python3 scripts/docs_check.py resolve <id>`).
+**Source.** [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) §8 (owner answers 2026-10-07).
+
+### ARCH-POS-80 — EVM-only, META-only first scope
+- old: R1 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NET-ALL-02, CTR-ZTH-01, CTR-ZTH-18, CTR-ZTH-19, CTR-UA-02, CTR-UA-16, CTR-UA-22, INT-ERP-11, ARCH-POS-02
+
+It said: the first build covers EVM chains and the plain meta-tx token only; confidential amounts, non-EVM families
+and the mesh are out of scope.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 660.
+
+### ARCH-POS-81 — Legal deferred to a separate chapter
+- old: UD:§1:legal · status: superseded · owner: yes · date: 2026-08-30 · normative: — · superseded-by: ARCH-POS-04
+
+It said: legal questions are deferred to a separate chapter that does not block the buildable parts.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 47.
+
+## Node — General
+
+### NODE-GEN-01 — Node holds no subject funds or keys
+- old: SCaaS:N1, UD:§23.2 · status: current · owner: yes · date: 2026-10-07 · normative: node/README.md#NODE-GEN-01 · superseded-by: —
+
+**Why.** Funds and subject keys stay with subjects and contracts; a compromised node can only stop working or lie on its feed. A relayer signs only the outer transaction, with its `authKey`; it never needs a subject's confidential key `x`: it cannot decrypt the amount, build the proof or change any field (all are in the signed digest), and that blindness is the property, not a limitation. A server holds `x` only when the company itself sends from its own confidential treasury, which is custody, not relay; the key oracle that serves it is small (under 300 lines; the enclave image under 5,000 lines including the crypto backend), so it stays out of the node process, which parses strangers' bytes.
+**Source.** [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 880; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 2055.
+
+### NODE-GEN-02 — No broadcast without committed journal
+- old: SCaaS:N2 · status: current · owner: no · date: 2026-10-07 · normative: node/README.md#NODE-GEN-02 · superseded-by: —
+
+**Why.** A transaction broadcast without a durable record can be signed twice after a crash.
+**Cost if wrong.** Double spends of lane nonces.
+**Source.** [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 881.
+
+### NODE-GEN-03 — No outer nonce abandoned
+- old: SCaaS:N3 · status: current · owner: no · date: 2026-10-07 · normative: node/README.md#NODE-GEN-03 · superseded-by: —
+
+**Why.** An abandoned nonce blocks every later transaction of the lane.
+**Source.** [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 882.
+
+### NODE-GEN-04 — One live outer tx per intent
+- old: SCaaS:N4 · status: current · owner: no · date: 2026-10-07 · normative: node/README.md#NODE-GEN-04 · superseded-by: —
+
+**Why.** Two live outer transactions for one intent waste gas and confuse tracking.
+**Source.** [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 883.
+
+### NODE-GEN-05 — No bump after consumption
+- old: SCaaS:N5 · status: current · owner: no · date: 2026-10-07 · normative: node/README.md#NODE-GEN-05 · superseded-by: —
+
+**Why.** Once the subject nonce is consumed, a bump can only revert and burn gas.
+**Source.** [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 884.
+
+### NODE-GEN-06 — Never dead because landed elsewhere
+- old: SCaaS:N6 · status: current · owner: no · date: 2026-10-07 · normative: node/README.md#NODE-GEN-06 · superseded-by: —
+
+**Why.** An intent that landed through another relayer succeeded; reporting it dead would make clients re-ask the subject.
+**Source.** [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 885.
+
+### NODE-GEN-07 — Unbound wire values never submitted
+- old: SCaaS:N7 · status: current · owner: no · date: 2026-10-07 · normative: node/README.md#NODE-GEN-07 · superseded-by: —
+
+**Why.** Unbound wire values (relayer, fee recipient) are normalized first, so nobody can steer our lane to pay them.
+**Source.** [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 886.
+
+### NODE-GEN-08 — Nothing booked before finality
+- old: SCaaS:N8 · status: current · owner: no · date: 2026-10-07 · normative: node/README.md#NODE-GEN-08 · superseded-by: —
+
+**Why.** Clients book money; booking before finality books reorged payments.
+**Source.** [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 887.
+
+### NODE-GEN-09 — Breakers never block indexing or rescues
+- old: SCaaS:N9 · status: current · owner: no · date: 2026-10-07 · normative: node/README.md#NODE-GEN-09 · superseded-by: —
+
+**Why.** Breakers limit new spending; stopping rescues or indexing would turn a cost guard into an outage.
+**Source.** [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 888.
+
+### NODE-GEN-10 — One owner process per store
+- old: SCaaS:N10 · status: current · owner: no · date: 2026-10-07 · normative: node/README.md#NODE-GEN-10 · superseded-by: —
+
+**Why.** Two writers on one store break nonce and journal guarantees.
+**Source.** [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 889.
+
+### NODE-GEN-11 — Every paid outer tx metered
+- old: SCaaS:N11 · status: current · owner: no · date: 2026-10-07 · normative: node/README.md#NODE-GEN-11 · superseded-by: —
+
+**Why.** Every outer transaction costs the lane; unmetered ones escape budgets.
+**Source.** [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 890.
+
+### NODE-GEN-12 — Signed fields read from payload
+- old: SCaaS:N12 · status: current · owner: no · date: 2026-10-07 · normative: node/README.md#NODE-GEN-12 · superseded-by: —
+
+**Why.** The signed payload is the truth; side fields from the caller can disagree with it.
+**Source.** [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 891.
+
+### NODE-GEN-13 — Value out and deposits capped
+- old: SCaaS:N13 · status: current · owner: no · date: 2026-10-07 · normative: node/README.md#NODE-GEN-13 · superseded-by: —
+
+**Why.** Jobs that move lane value out must be capped, or a client can drain gas float.
+**Source.** [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 892.
+
+### NODE-GEN-14 — Intents signature-checked before chain calls
+- old: SCaaS:N14 · status: current · owner: no · date: 2026-10-07 · normative: node/README.md#NODE-GEN-14 · superseded-by: —
+
+**Why.** Checking signatures first keeps forged intents from costing RPC calls.
+**Source.** [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 893.
+
+### NODE-GEN-15 — Adapter restart state in store
+- old: SCaaS:N15 · status: current · owner: no · date: 2026-10-07 · normative: node/README.md#NODE-GEN-15 · superseded-by: —
+
+**Why.** Adapter state outside the store is lost on restore and cannot be fenced.
+**Source.** [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 894.
+
+### NODE-GEN-16 — No upgradeable program, one key per family
+- old: SCaaS:N16 · status: current · owner: no · date: 2026-10-07 · normative: node/README.md#NODE-GEN-16 · superseded-by: —
+
+**Why.** An upgradeable program can change under the node; one key per family keeps custody simple.
+**Source.** [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 895.
+
+### NODE-GEN-17 — One Rust app for the daemon tier
+- old: UD:§23, UD:§23.3 · status: current · owner: yes · date: 2026-08-31 · normative: node/README.md#NODE-GEN-17 · superseded-by: —
+
+**Why.** One binary with roles by configuration means one release, one test matrix and one operations story.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 2014; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 2154.
+
+### NODE-GEN-18 — scaas-node layout: module moves and job seam first
+- old: reorg:Q12 · status: current · owner: yes · date: 2026-10-07 · normative: node/README.md#NODE-GEN-18 · superseded-by: —
+
+**Why.** Code that mirrors the docs is easier to review; the job seam first keeps tests green during the move.
+**Source.** [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) line 1228.
+
+### NODE-GEN-80 — One Rust node, ERP as control plane
+- old: UD:§21.2 · status: superseded · owner: yes · date: 2026-08-31 · normative: — · superseded-by: ARCH-POS-05
+
+It said: one Rust node, ERP as control plane.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1341.
+
+### NODE-GEN-81 — Lane diagram with ERP control plane
+- old: UD:§23.6 · status: superseded · owner: yes · date: 2026-08-31 · normative: — · superseded-by: ARCH-POS-05, NODE-JOB-06, INT-ERP-16
+
+It said: lane diagram with ERP control plane.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 2261.
+
+### NODE-GEN-82 — ERP addon is control plane, not a node
+- old: UD:§23.8 · status: superseded · owner: yes · date: 2026-08-31 · normative: — · superseded-by: ARCH-POS-05
+
+It said: eRP addon is control plane, not a node.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 2319.
+
+## Node — Store
+
+### NODE-STO-01 — Node refuses max_valid_for_secs above horizon
+- old: CR-PD-4(node), CR-R3-8(node) · status: current · owner: no · date: 2026-10-07 · normative: node/store.md#NODE-STO-01 · superseded-by: —
+
+**Why.** A signature valid longer than the family keeps replay state would be replayable.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 901; [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 700.
+
+### NODE-STO-02 — paused blocks sending, halted blocks indexing
+- old: R53 · status: current · owner: no · date: 2026-10-06 · normative: node/store.md#NODE-STO-02 · superseded-by: —
+
+**Why.** Pause stops spending, halt also stops reading; two levers for two situations.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 526.
+
+### NODE-STO-03 — RPC endpoints only in node config
+- old: R20, R95 · status: current · owner: yes · date: 2026-10-06 · normative: node/store.md#NODE-STO-03 · superseded-by: —
+
+**Why.** RPC URLs may embed keys and are dial targets; only the host's config may set them. Config authority is the node store, in the owner's words "toml bootstraps; admin API mutations persist"; the one admin-editable dial target, mesh peer URLs, is admin-only, audited and behind its own SSRF guard.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 727; [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 1019.
+
+### NODE-STO-04 — One store always on, one owner
+- old: R88, UD:§23.1, UD:§23.7 · status: current · owner: yes · date: 2026-10-06 · normative: node/store.md#NODE-STO-04 · superseded-by: —
+
+**Why.** One store with one owner keeps every guarantee in one transaction domain.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 110; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 2024; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 2297.
+
+### NODE-STO-05 — Finality, pause, index cursor in node
+- old: R96 · status: current · owner: no · date: 2026-10-06 · normative: node/store.md#NODE-STO-05 · superseded-by: —
+
+**Why.** Finality and pause are node decisions; clients only read them.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 119.
+
+### NODE-STO-06 — SQLite, PostgreSQL or MySQL, storage only
+- old: R111 · status: current · owner: yes · date: 2026-10-06 · normative: node/store.md#NODE-STO-06 · superseded-by: —
+
+**Why.** Operators choose the database they run; the store is storage only, with fencing for safety.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 136.
+
+### NODE-STO-07 — Node halts chains with upgradeable programs
+- old: R348 · status: current · owner: yes · date: 2026-10-07 · normative: node/store.md#NODE-STO-07 · superseded-by: —
+
+**Why.** An upgradeable program can change under the node's assumptions.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 154.
+
+### NODE-STO-08 — Paused chain accepts and holds jobs
+- old: NI:I2 · status: open · owner: no · date: 2026-10-07 · normative: node/store.md#NODE-STO-08 · superseded-by: —
+
+**Why.** A paused chain keeps accepting so clients need not retry; jobs wait.
+**Cost if wrong.** Default applied.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 1611.
+
+### NODE-STO-09 — Names chosen where sources gave none
+- old: NI:I7 · status: open · owner: no · date: 2026-10-07 · normative: node/store.md#NODE-STO-09 · superseded-by: —
+
+**Why.** Names had to be chosen where the design gave none; recorded so they can be revisited.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 1617.
+
+### NODE-STO-10 — Gas cap warning for confidential tokens
+- old: — · status: current · owner: no · date: 2026-10-07 · normative: node/store.md#NODE-STO-10 · superseded-by: —
+
+**Why.** Classical Zether transfers need about 3.36 M gas; the 3 M default would silently reject them, so configuration warns.
+
+### NODE-STO-80 — In-memory gateway queue and DEX book
+- old: R16 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CTR-DEX-01, NODE-DEX-01, INT-ERP-12, NODE-STO-04, NODE-DEX-14
+
+It said: in-memory gateway queue and DEX book.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 718.
+
+## Node — Job API
+
+### NODE-JOB-01 — Call jobs limited to selector/target table
+- old: CR-PD-1(c) · status: current · owner: yes · date: 2026-10-07 · normative: node/job-api.md#NODE-JOB-01 · superseded-by: —
+
+**Why.** A `call` job is signed by our lane; an open-ended call would let a tenant spend or move anything the lane can.
+**Cost if wrong.** Rows added later need review.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 247.
+
+### NODE-JOB-02 — One journal, node-computed digests
+- old: R89 · status: current · owner: no · date: 2026-10-06 · normative: node/job-api.md#NODE-JOB-02 · superseded-by: —
+
+**Why.** One journal and node-computed digests let no tenant squat another's intent.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 111.
+
+### NODE-JOB-03 — Namespaces are the tenant unit
+- old: R90 · status: current · owner: yes · date: 2026-10-06 · normative: node/job-api.md#NODE-JOB-03 · superseded-by: —
+
+**Why.** Namespaces bound everything a credential can see and do.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 112.
+
+### NODE-JOB-04 — Idempotency key and payload hash
+- old: R91 · status: current · owner: yes · date: 2026-10-06 · normative: node/job-api.md#NODE-JOB-04 · superseded-by: —
+
+**Why.** Retries never duplicate; JCS makes the hash independent of key order and whitespace.
+**Cost if wrong.** A changed payload under one key flags attention instead of a duplicate.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 113.
+
+### NODE-JOB-05 — Machine credentials: namespaced HMAC keys
+- old: R92 · status: current · owner: no · date: 2026-10-06 · normative: node/job-api.md#NODE-JOB-05 · superseded-by: —
+
+**Why.** HMAC sends no secret on the wire and binds requests to a namespace.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 114.
+
+### NODE-JOB-06 — Claim is a CAS inside one owner
+- old: R97(claim) · status: current · owner: no · date: 2026-10-06 · normative: node/job-api.md#NODE-JOB-06 · superseded-by: —
+
+**Why.** With one owner process a claim is a compare-and-set, no distributed lock.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 120.
+
+### NODE-JOB-07 — Cancel is a node CAS
+- old: R98(node) · status: current · owner: no · date: 2026-10-06 · normative: node/job-api.md#NODE-JOB-07 · superseded-by: —
+
+**Why.** Cancel races with leasing; a CAS in the node decides it once.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 121.
+
+### NODE-JOB-08 — Relayer-bound jobs pinned to their lane
+- old: R102 · status: current · owner: no · date: 2026-10-06 · normative: node/job-api.md#NODE-JOB-08 · superseded-by: —
+
+**Why.** A relayer-bound intent can only be landed by its lane.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 126.
+
+### NODE-JOB-09 — call jobs are a namespace capability
+- old: R103 · status: current · owner: no · date: 2026-10-07 · normative: node/job-api.md#NODE-JOB-09 · superseded-by: —
+
+**Why.** Only namespaces that need calls may make them.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 127.
+
+### NODE-JOB-10 — Per-chain pull/push flag, then removal
+- old: R104 · status: current · owner: no · date: 2026-10-06 · normative: node/job-api.md#NODE-JOB-10 · superseded-by: —
+
+**Why.** Clients move chain by chain from pull to push; legacy code is removed in one step once all chains are on push.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 128.
+
+### NODE-JOB-11 — Cancel-by-origin tombstones bounded
+- old: R323 · status: current · owner: no · date: 2026-10-06 · normative: node/job-api.md#NODE-JOB-11 · superseded-by: —
+
+**Why.** Tombstones for jobs not yet pushed must not grow without bound.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 140.
+
+### NODE-JOB-12 — Empty namespace token subset means none
+- old: R324 · status: current · owner: no · date: 2026-10-06 · normative: node/job-api.md#NODE-JOB-12 · superseded-by: —
+
+**Why.** An empty subset must not mean 'all tokens'; fail closed.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 141.
+
+### NODE-JOB-13 — Live-call uniqueness per namespace
+- old: R325 · status: current · owner: no · date: 2026-10-06 · normative: node/job-api.md#NODE-JOB-13 · superseded-by: —
+
+**Why.** Live-call dedupe per namespace prevents one tenant from blocking another's call.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 142.
+
+### NODE-JOB-14 — Intake authority re-checked in insert tx
+- old: R327 · status: current · owner: no · date: 2026-10-06 · normative: node/job-api.md#NODE-JOB-14 · superseded-by: —
+
+**Why.** Grants may change between check and insert; re-checking in the transaction closes the race.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 144.
+
+### NODE-JOB-15 — Migrated ERP namespace gets allow_call
+- old: NI:I1 · status: open · owner: no · date: 2026-10-07 · normative: node/job-api.md#NODE-JOB-15 · superseded-by: —
+
+**Why.** A migrated ERP client needs calls it used before; default applied.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 1610.
+
+### NODE-JOB-16 — Shared namespace via origin.scope
+- old: NI:I3 · status: open · owner: no · date: 2026-10-07 · normative: node/job-api.md#NODE-JOB-16 · superseded-by: —
+
+**Why.** Several entities of one client can share a namespace if origin.scope separates their keys; default applied.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 1612.
+
+### NODE-JOB-17 — Cancel of published job reports already sent
+- old: NI:I5 · status: open · owner: no · date: 2026-10-07 · normative: node/job-api.md#NODE-JOB-17 · superseded-by: —
+
+**Why.** A published job may land; cancel reports that instead of pretending.
+**Cost if wrong.** Default applied.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 1614.
+
+### NODE-JOB-18 — Tombstone quota and rate defaults
+- old: NI:I8(tombstones) · status: open · owner: no · date: 2026-10-07 · normative: node/job-api.md#NODE-JOB-18 · superseded-by: —
+
+**Why.** Default quotas bound tombstone abuse; default applied.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 1619.
+
+### NODE-JOB-19 — Call table: permissionless selectors, role-holder Safe row
+- old: reorg:Q1 · status: current · owner: yes · date: 2026-10-07 · normative: node/job-api.md#NODE-JOB-19 · superseded-by: —
+
+**Why.** Permissionless and self-authenticating calls cannot be abused through our lane; a role holder executes only what its owners signed. The factory stays excluded.
+**Source.** [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) line 1215.
+
+### NODE-JOB-80 — Node talks to ERP only over json/2
+- old: R6 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: ARCH-POS-05, NODE-JOB-06, INT-ERP-16, INT-ERP-18
+
+It said: node talks to ERP only over json/2.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 677.
+
+### NODE-JOB-81 — Result queue default, node-configured callbacks
+- old: UD:§22.9 · status: superseded · owner: yes · date: 2026-08-31 · normative: — · superseded-by: NODE-IDX-04, ARCH-POS-05
+
+It said: result queue default, node-configured callbacks.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1955.
+
+## Node — Submit lanes
+
+### NODE-LANE-01 — USD-denominated gas velocity limits
+- old: req:blockchain.md:usd-velocity · status: open · owner: yes · date: 2026-10-07 · normative: node/submit-lanes.md#NODE-LANE-01 · superseded-by: —
+
+**Why.** Limits in a reporting currency need a price source the node does not have.
+**Cost if wrong.** Open; gas-unit limits apply meanwhile.
+**Source.** [history/blockchain.md](history/blockchain.md) line 353.
+
+### NODE-LANE-02 — Legacy pull: signed report idempotent, nonce held
+- old: CR-PD-5 · status: current · owner: no · date: 2026-10-07 · normative: node/submit-lanes.md#NODE-LANE-02 · superseded-by: —
+
+**Why.** The legacy client may resend reports; idempotency keeps nonces consistent.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 244.
+
+### NODE-LANE-03 — Outer tx keys behind Signer trait
+- old: R15, UD:§1:custody, UD:§23.5 · status: current · owner: yes · date: 2026-10-03 · normative: node/submit-lanes.md#NODE-LANE-03 · superseded-by: —
+
+**Why.** A Signer trait lets KMS or HSM replace local keys without touching lanes.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 715; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 43; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 2233.
+
+### NODE-LANE-04 — Never abandon an outer nonce
+- old: R18 · status: current · owner: no · date: 2026-10-03 · normative: node/submit-lanes.md#NODE-LANE-04 · superseded-by: —
+
+**Why.** A skipped nonce blocks the lane forever.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 720.
+
+### NODE-LANE-05 — Circuit breakers never block indexing
+- old: R55 · status: current · owner: no · date: 2026-10-03 · normative: node/submit-lanes.md#NODE-LANE-05 · superseded-by: —
+
+**Why.** Breakers stop spending, never the reading of the chain.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 528.
+
+### NODE-LANE-06 — ChainAdapter and per-lane runner
+- old: R58(adapter) · status: current · owner: no · date: 2026-10-03 · normative: node/submit-lanes.md#NODE-LANE-06 · superseded-by: —
+
+**Why.** One adapter trait per family and one runner per lane keep families independent.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 531.
+
+### NODE-LANE-07 — Local secp256k1/ed25519 signer, KMS seam
+- old: R59 · status: current · owner: no · date: 2026-10-03 · normative: node/submit-lanes.md#NODE-LANE-07 · superseded-by: —
+
+**Why.** Local signing suffices for development and private chains; production public chains use KMS.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 532.
+
+### NODE-LANE-08 — Lane keys: raw key or mnemonic
+- old: R60 · status: current · owner: no · date: 2026-10-03 · normative: node/submit-lanes.md#NODE-LANE-08 · superseded-by: —
+
+**Why.** A mnemonic derives many lanes from one backup.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 533.
+
+### NODE-LANE-09 — Consumption check before bump or resend
+- old: R80, UD:§22.1, UD:§22.8 · status: current · owner: yes · date: 2026-10-05 · normative: node/submit-lanes.md#NODE-LANE-09 · superseded-by: —
+
+**Why.** A bump after the subject nonce is consumed only burns gas.
+**Source.** [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 80; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1690; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1930.
+
+### NODE-LANE-10 — Normalize unbound relayer and feeRecipient
+- old: R84, R100 · status: current · owner: no · date: 2026-10-06 · normative: node/submit-lanes.md#NODE-LANE-10 · superseded-by: —
+
+**Why.** Unbound relayer and feeRecipient fields would let anyone redirect the fee.
+**Source.** [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 84; [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 124.
+
+### NODE-LANE-11 — A batch is several jobs journaled together
+- old: R321 · status: current · owner: no · date: 2026-10-06 · normative: node/submit-lanes.md#NODE-LANE-11 · superseded-by: —
+
+**Why.** A batch lands several jobs in one transaction; journaling them together keeps them atomic in the store.
+**Cost if wrong.** Planned.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 138.
+
+### NODE-LANE-12 — Outer transaction is a store row
+- old: R326 · status: current · owner: no · date: 2026-10-06 · normative: node/submit-lanes.md#NODE-LANE-12 · superseded-by: —
+
+**Why.** Tracking outer transactions as rows makes bumps, gap-fills and costs auditable.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 143.
+
+### NODE-LANE-13 — Breaker meters what the lane pays
+- old: R340 · status: current · owner: no · date: 2026-10-07 · normative: node/submit-lanes.md#NODE-LANE-13 · superseded-by: —
+
+**Why.** Budgets must meter what the lane actually pays, including failures.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 146.
+
+### NODE-LANE-14 — One retry after billed failure, attempt cap
+- old: R341 · status: current · owner: no · date: 2026-10-07 · normative: node/submit-lanes.md#NODE-LANE-14 · superseded-by: —
+
+**Why.** A failure that cost gas is retried once; more retries are a grief vector.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 147.
+
+### NODE-LANE-15 — Per-subject grief score, every family
+- old: R342 · status: current · owner: no · date: 2026-10-07 · normative: node/submit-lanes.md#NODE-LANE-15 · superseded-by: —
+
+**Why.** Subjects that repeatedly cost us gas get throttled, on every family.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 148.
+
+### NODE-LANE-16 — Signed fields read from the payload
+- old: R344 · status: current · owner: no · date: 2026-10-07 · normative: node/submit-lanes.md#NODE-LANE-16 · superseded-by: —
+
+**Why.** The payload is what the chain executes; read fields from it.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 150.
+
+### NODE-LANE-17 — Value out per job capped
+- old: R345 · status: current · owner: no · date: 2026-10-07 · normative: node/submit-lanes.md#NODE-LANE-17 · superseded-by: —
+
+**Why.** Value out of the lane must be capped per job.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 151.
+
+### NODE-LANE-18 — Lane-funded deposits refunded or bounded
+- old: R346 · status: current · owner: no · date: 2026-10-07 · normative: node/submit-lanes.md#NODE-LANE-18 · superseded-by: —
+
+**Why.** Deposits funded by the lane must come back or stay bounded.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 152.
+
+### NODE-LANE-19 — Adapter journals live in the store
+- old: R347 · status: current · owner: no · date: 2026-10-07 · normative: node/submit-lanes.md#NODE-LANE-19 · superseded-by: —
+
+**Why.** Adapter journals in the store survive restarts and restores with the rest.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 153.
+
+### NODE-LANE-20 — One custody key per family
+- old: R349 · status: current · owner: no · date: 2026-10-07 · normative: node/submit-lanes.md#NODE-LANE-20 · superseded-by: —
+
+**Why.** Raw-digest signing on several families needs exactly one custody key per family.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 155.
+
+### NODE-LANE-21 — outer_tx row for every signed tx
+- old: NI:I8(outer-tx) · status: open · owner: no · date: 2026-10-07 · normative: node/submit-lanes.md#NODE-LANE-21 · superseded-by: —
+
+**Why.** Every signed transaction gets a row so none is lost from tracking; default applied.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 1619.
+
+### NODE-LANE-22 — Node simulates unwrap jobs, never batches them
+- old: R148(node) · status: current · owner: yes · date: 2026-10-06 · normative: node/submit-lanes.md#NODE-LANE-22 · superseded-by: —
+
+**Why.** Unwraps move value out; full simulation catches failures, and batching would mix them.
+**Source.** [history/specs/2026-10-06-token-wrappers-v2.md](history/specs/2026-10-06-token-wrappers-v2.md) line 172.
+
+### NODE-LANE-23 — Simulation gate before every broadcast
+- old: — · status: current · owner: no · date: 2026-10-07 · normative: node/submit-lanes.md#NODE-LANE-23 · superseded-by: —
+
+**Why.** Simulating before broadcast keeps predictable reverts from spending gas; a simulation that cannot run fails closed.
+**Cost if wrong.** Some reverts remain (state changes between simulation and inclusion); they are measured (W3B-02).
+
+### NODE-LANE-80 — Six-member Family enum
+- old: R58(family-enum) · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: ARCH-POS-02
+
+It said: six-member Family enum.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 531.
+
+## Node — Indexer and feeds
+
+### NODE-IDX-01 — Finality quorum over normalized event sets
+- old: CR-PD-2, CR-R3-2 · status: current · owner: no · date: 2026-10-07 · normative: node/indexer-feeds.md#NODE-IDX-01 · superseded-by: —
+
+**Why.** Comparing one block hash cannot detect a provider that drops or invents logs; comparing the normalized event set can.
+**Cost if wrong.** A lying RPC books fake payments.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 275; [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 646.
+
+### NODE-IDX-02 — Node decides finality: depth or tag
+- old: R11(gate) · status: current · owner: no · date: 2026-10-06 · normative: node/indexer-feeds.md#NODE-IDX-02 · superseded-by: —
+
+**Why.** Finality differs per family; the node, not the client, applies the right rule.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 699.
+
+### NODE-IDX-03 — No reorg handling after hard finality
+- old: R12 · status: current · owner: no · date: 2026-10-03 · normative: node/indexer-feeds.md#NODE-IDX-03 · superseded-by: —
+
+**Why.** Hard finality is the model's base; reorg handling after it would add complexity for an event outside the model.
+**Cost if wrong.** A violation needs manual reconciliation (runbook).
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 703.
+
+### NODE-IDX-04 — Change feeds for jobs and events
+- old: R93 · status: current · owner: no · date: 2026-10-06 · normative: node/indexer-feeds.md#NODE-IDX-04 · superseded-by: —
+
+**Why.** Clients poll two cursors (jobs, events) instead of receiving callbacks the node must retry.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 115.
+
+### NODE-IDX-05 — Event feed items equal ingest arguments
+- old: R94 · status: current · owner: no · date: 2026-10-06 · normative: node/indexer-feeds.md#NODE-IDX-05 · superseded-by: —
+
+**Why.** Feed items carry exactly what the ingest needs, so clients do not re-read the chain.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 116.
+
+### NODE-IDX-06 — Repeated entryRef handling on the feed
+- old: NI:I6 · status: open · owner: no · date: 2026-10-07 · normative: node/indexer-feeds.md#NODE-IDX-06 · superseded-by: —
+
+**Why.** A repeated entryRef is a client-side matching question; the feed reports facts only.
+**Cost if wrong.** Default applied.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 1615.
+
+### NODE-IDX-07 — Second independent event source
+- old: reorg:Q7 · status: open · owner: yes · date: 2026-10-07 · normative: node/indexer-feeds.md#NODE-IDX-07 · superseded-by: —
+
+**Why.** A compromised node can lie on its feed; a second independent source would detect it.
+**Cost if wrong.** Planned.
+**Source.** [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) line 1221.
+
+### NODE-IDX-80 — Quorum on one block hash
+- old: R11(quorum) · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NODE-IDX-01
+
+It said: quorum on one block hash.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 699.
+
+## Node — Gateway
+
+### NODE-GW-01 — Door A is not a free gas faucet
+- old: CR-PD-3 · status: current · owner: no · date: 2026-10-07 · normative: node/gateway.md#NODE-GW-01 · superseded-by: —
+
+**Why.** A public door that relays fee-0 intents from fresh keys is a free gas faucet.
+**Cost if wrong.** Lane gas drained, breaker trips.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 891.
+
+### NODE-GW-02 — Gateway auth bearer or hmac
+- old: R54 · status: current · owner: no · date: 2026-10-06 · normative: node/gateway.md#NODE-GW-02 · superseded-by: —
+
+**Why.** Operators choose an open or authenticated door; one credential kind per listener.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 527.
+
+### NODE-GW-03 — Gateway call jobs only for UA registration
+- old: R320 · status: current · owner: no · date: 2026-10-06 · normative: node/gateway.md#NODE-GW-03 · superseded-by: —
+
+**Why.** Only UA registration needs a call through the gateway; everything else is signed by subjects.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 137.
+
+### NODE-GW-04 — Gateway CORS only with auth none
+- old: R328 · status: current · owner: no · date: 2026-10-06 · normative: node/gateway.md#NODE-GW-04 · superseded-by: —
+
+**Why.** Browsers may call an open gateway directly; with credentials, CORS would expose them.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 145.
+
+### NODE-GW-05 — Gateway info route, CORS, error contract
+- old: R159(gateway) · status: current · owner: no · date: 2026-10-06 · normative: node/gateway.md#NODE-GW-05 · superseded-by: —
+
+**Why.** Clients discover what a gateway serves before they sign.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 113.
+
+### NODE-GW-06 — Stable gateway error contract
+- old: R178 · status: current · owner: no · date: 2026-10-06 · normative: node/gateway.md#NODE-GW-06 · superseded-by: —
+
+**Why.** Wallets and apps branch on error codes; a stable contract keeps them working across releases.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 132.
+
+### NODE-GW-80 — Three intake doors with trust levels
+- old: UD:§22.2 · status: superseded · owner: yes · date: 2026-08-31 · normative: — · superseded-by: ARCH-POS-05, NODE-GSP-01, NODE-GSP-04
+
+It said: three intake doors with trust levels.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1750.
+
+## Node — Admin and auth
+
+### NODE-ADM-01 — Gossip admin routes and columns
+- old: R127(admin) · status: current · owner: no · date: 2026-10-06 · normative: node/admin-auth.md#NODE-ADM-01 · superseded-by: —
+
+**Why.** Gossip state (peers, scores, bans, trust) is operator data like any other; one admin surface keeps one auth and audit path.
+**Source.** [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 88.
+
+### NODE-ADM-02 — Admin auth: built-in users plus optional OIDC
+- old: R106 · status: current · owner: yes · date: 2026-10-06 · normative: node/admin-auth.md#NODE-ADM-02 · superseded-by: —
+
+**Why.** Small deployments need no IdP; organisations with one get SSO. Two modes, one role model.
+**Cost if wrong.** A deployment without OIDC relies on node passwords; Argon2id and lockout bound guessing.
+**Source.** [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 1021.
+
+### NODE-ADM-03 — OIDC JWT validation rules
+- old: R106a(oidc) · status: current · owner: yes · date: 2026-10-06 · normative: node/admin-auth.md#NODE-ADM-03 · superseded-by: —
+
+**Why.** A strict, allowlisted validator closes the known JWT confusion attacks (alg, key, audience, ID-token-as-access).
+**Cost if wrong.** A lax check is an admin takeover.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 131.
+
+### NODE-ADM-04 — Admin roles and no escalation
+- old: R107 · status: current · owner: yes · date: 2026-10-06 · normative: node/admin-auth.md#NODE-ADM-04 · superseded-by: —
+
+**Why.** Separating config power from credential power makes fee redirection or key minting a two-role act.
+**Cost if wrong.** One person holding both can still misuse; the RACI procedure covers it.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 132.
+
+### NODE-ADM-05 — Bootstrap and break-glass via host CLI
+- old: R108 · status: current · owner: yes · date: 2026-10-06 · normative: node/admin-auth.md#NODE-ADM-05 · superseded-by: —
+
+**Why.** The first admin and recovery must work with no running API and no IdP; host access already implies full power.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 133.
+
+### NODE-ADM-06 — API keys and admin credentials never cross
+- old: R109 · status: current · owner: no · date: 2026-10-06 · normative: node/admin-auth.md#NODE-ADM-06 · superseded-by: —
+
+**Why.** A leaked client key must never reach configuration, and admin credentials must never be scripted into clients.
+**Cost if wrong.** Mixing them turns a client compromise into a node compromise.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 134.
+
+### NODE-ADM-07 — Hash-chained audit log per mutation
+- old: R110(audit) · status: current · owner: no · date: 2026-10-06 · normative: node/admin-auth.md#NODE-ADM-07 · superseded-by: —
+
+**Why.** A hash chain makes silent edits of the audit table detectable; the off-host log mirror survives store loss.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 135.
+
+### NODE-ADM-08 — Admin-user mutations never exceed caller
+- old: R322 · status: current · owner: no · date: 2026-10-06 · normative: node/admin-auth.md#NODE-ADM-08 · superseded-by: —
+
+**Why.** Without the superset rule an operator could create or reset a stronger admin and take over.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 139.
+
+### NODE-ADM-09 — LAST_ADMIN counts built-in users only
+- old: NI:I8(last-admin) · status: open · owner: no · date: 2026-10-07 · normative: node/admin-auth.md#NODE-ADM-09 · superseded-by: —
+
+**Why.** OIDC callers are not node users; counting them would let an IdP change lock the node out.
+**Cost if wrong.** Default applied; an owner may revisit.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 1619.
+
+### NODE-ADM-10 — App serving with CSP on admin listener
+- old: R159(serving) · status: current · owner: no · date: 2026-10-06 · normative: node/admin-auth.md#NODE-ADM-10 · superseded-by: —
+
+**Why.** Serving the console from the node avoids a second web host; a strict CSP bounds script injection.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 113.
+
+### NODE-ADM-11 — App served only on admin listener
+- old: R160 · status: current · owner: no · date: 2026-10-06 · normative: node/admin-auth.md#NODE-ADM-11 · superseded-by: —
+
+**Why.** The public listeners stay API-only; static files there would widen their attack surface.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 114.
+
+### NODE-ADM-80 — JWS verification on ring
+- old: R106a(ring) · status: superseded · owner: yes · date: 2026-10-06 · normative: — · superseded-by: NODE-GSP-03
+
+It said: jWS verification on ring.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 131.
+
+## Node — Sponsorship
+
+### NODE-SPN-01 — Sponsorship policy is a node store row
+- old: R189 · status: current · owner: yes · date: 2026-10-07 · normative: node/sponsorship.md#NODE-SPN-01 · superseded-by: —
+
+**Why.** Sponsorship is an operator choice, configured as data, matched per job.
+**Source.** [history/specs/2026-10-06-tender-sponsorship-shredding.md](history/specs/2026-10-06-tender-sponsorship-shredding.md) line 132.
+
+### NODE-SPN-02 — Budget unit, reservation and rate counters
+- old: R190 · status: current · owner: no · date: 2026-10-07 · normative: node/sponsorship.md#NODE-SPN-02 · superseded-by: —
+
+**Why.** Budgets in native units are exact; reservations at accept prevent overspend.
+**Source.** [history/specs/2026-10-06-tender-sponsorship-shredding.md](history/specs/2026-10-06-tender-sponsorship-shredding.md) line 152.
+
+### NODE-SPN-03 — Sponsorship admin routes and audit
+- old: R191 · status: current · owner: no · date: 2026-10-06 · normative: node/sponsorship.md#NODE-SPN-03 · superseded-by: —
+
+**Why.** Sponsorship changes spend money; they are admin-only and audited.
+**Source.** [history/specs/2026-10-06-tender-sponsorship-shredding.md](history/specs/2026-10-06-tender-sponsorship-shredding.md) line 167.
+
+### NODE-SPN-04 — SponsorshipPool opt-in contract, mesh fee-only
+- old: R194 · status: current · owner: no · date: 2026-10-06 · normative: node/sponsorship.md#NODE-SPN-04 · superseded-by: —
+
+**Why.** An on-chain pool lets sponsors fund relays without trusting one node; on the mesh only the fee path applies.
+**Cost if wrong.** Planned.
+**Source.** [history/specs/2026-10-06-tender-sponsorship-shredding.md](history/specs/2026-10-06-tender-sponsorship-shredding.md) line 199.
+
+## Node — DEX venue
+
+### NODE-DEX-01 — Durable off-chain book, price-time, partial fills
+- old: R35(book) · status: current · owner: yes · date: 2026-10-07 · normative: node/dex-venue.md#NODE-DEX-01 · superseded-by: —
+
+**Why.** A venue needs a durable book that survives restarts and serves partial fills in a fair order.
+**Cost if wrong.** A lost book cancels resting orders silently.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 554.
+
+### NODE-DEX-02 — Fee token limited; failed pairs attributed by evidence
+- old: RS5-13 · status: current · owner: no · date: 2026-10-07 · normative: node/dex-venue.md#NODE-DEX-02 · superseded-by: —
+
+**Why.** Settlement failures must be pinned on the party whose signed data caused them, from chain evidence, not guessed.
+**Cost if wrong.** Wrong attribution punishes honest makers.
+**Source.** [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 271.
+
+### NODE-DEX-03 — No WebSocket; clients poll
+- old: RS5-5 · status: current · owner: no · date: 2026-10-03 · normative: node/dex-venue.md#NODE-DEX-03 · superseded-by: —
+
+**Why.** Polling is enough for book depth and trades and keeps the node free of long-lived push connections.
+**Source.** [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 406.
+
+### NODE-DEX-04 — DEX watcher has its own cursor
+- old: RS5-8 · status: current · owner: no · date: 2026-10-06 · normative: node/dex-venue.md#NODE-DEX-04 · superseded-by: —
+
+**Why.** The DEX watcher reads different events at a different pace; its own cursor keeps it independent of the main indexer.
+**Source.** [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 410.
+
+### NODE-DEX-05 — Rounding dust: skip and remove dust makers
+- old: RS5-12 · status: current · owner: no · date: 2026-10-07 · normative: node/dex-venue.md#NODE-DEX-05 · superseded-by: —
+
+**Why.** Fills that round to zero cannot settle; skipping and removing dust makers keeps the book matchable.
+**Source.** [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 420.
+
+### NODE-DEX-06 — OOG ERC-1271 orders are never restored
+- old: RS5-14(node) · status: current · owner: no · date: 2026-10-07 · normative: node/dex-venue.md#NODE-DEX-06 · superseded-by: —
+
+**Why.** An ERC-1271 check that ran out of gas cannot be proven valid again; restoring it would loop failures.
+**Source.** [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 431.
+
+### NODE-DEX-07 — Committed balance includes unsettled fills
+- old: RS5-16 · status: current · owner: no · date: 2026-10-07 · normative: node/dex-venue.md#NODE-DEX-07 · superseded-by: —
+
+**Why.** Counting unsettled fills in the committed balance prevents over-commitment of one maker's funds.
+**Cost if wrong.** Without it a maker can be matched beyond what it holds.
+**Source.** [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 442.
+
+### NODE-DEX-08 — Re-check on-chain market every poll
+- old: RS5-17 · status: current · owner: no · date: 2026-10-07 · normative: node/dex-venue.md#NODE-DEX-08 · superseded-by: —
+
+**Why.** Markets can be paused or changed on chain at any time; the venue must notice within one poll.
+**Source.** [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 444.
+
+### NODE-DEX-09 — IOC single maker on Move/Solana
+- old: RS5-18 · status: current · owner: no · date: 2026-10-07 · normative: node/dex-venue.md#NODE-DEX-09 · superseded-by: —
+
+**Why.** Move and Solana settle one maker per transaction; multi-maker IOC would need atomicity they lack.
+**Source.** [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 446.
+
+### NODE-DEX-10 — Late settled trade debits restored order
+- old: RS5-20(r105) · status: current · owner: no · date: 2026-10-07 · normative: node/dex-venue.md#NODE-DEX-10 · superseded-by: —
+
+**Why.** A trade that settles after its order was restored must still reduce that order, else it is filled twice.
+**Source.** [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 449.
+
+### NODE-DEX-11 — Managed markets: home-bound, eligibility at intake
+- old: R214(node) · status: current · owner: yes · date: 2026-10-06 · normative: node/dex-venue.md#NODE-DEX-11 · superseded-by: —
+
+**Why.** Managed markets enforce eligibility on chain; checking at intake avoids matches that would revert.
+**Source.** [history/specs/2026-10-06-asset-suite-design.md](history/specs/2026-10-06-asset-suite-design.md) line 176.
+
+### NODE-DEX-12 — DEX book gossip, two order modes
+- old: R124 · status: current · owner: yes · date: 2026-10-06 · normative: node/dex-venue.md#NODE-DEX-12 · superseded-by: —
+
+**Why.** Book gossip lets several venues show one market; two modes separate home-bound orders from settle-by-anyone orders.
+**Source.** [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 85.
+
+### NODE-DEX-13 — DEX homes trusted automatically
+- old: R128 · status: current · owner: yes · date: 2026-10-06 · normative: node/dex-venue.md#NODE-DEX-13 · superseded-by: —
+
+**Why.** Wallets need a default set of homes that settle honestly; trust is earned from chain-credited settles.
+**Cost if wrong.** Auto-trust can be farmed; the credit rules bound it.
+**Source.** [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 89.
+
+### NODE-DEX-14 — DEX book lives in the node store
+- old: R105 · status: current · owner: no · date: 2026-10-06 · normative: node/dex-venue.md#NODE-DEX-14 · superseded-by: —
+
+**Why.** The book belongs to the node's single store, with one owner and one backup story.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 129.
+
+### NODE-DEX-80 — DEX book persisted in ERP
+- old: RS5-2 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NODE-DEX-14
+
+It said: dEX book persisted in ERP.
+**Source.** [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 13.
+
+### NODE-DEX-81 — Book accepts only own-relayer orders
+- old: RS5-9 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NODE-DEX-12
+
+It said: book accepts only own-relayer orders.
+**Source.** [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 15.
+
+### NODE-DEX-82 — DEX chains run one lane only
+- old: RS5-11 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NODE-JOB-08
+
+It said: dEX chains run one lane only.
+**Source.** [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 16.
+
+## Node — Mesh
+
+### NODE-MESH-01 — Pull bus for admitted peers
+- old: R70 · status: current · owner: yes · date: 2026-10-06 · normative: node/mesh.md#NODE-MESH-01 · superseded-by: —
+
+**Why.** Admitted partners exchange intents by pull; the receiver controls its load.
+**Source.** [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 70.
+
+### NODE-MESH-02 — Commit-ordered bus seq and store id
+- old: R71(seq) · status: current · owner: yes · date: 2026-10-06 · normative: node/mesh.md#NODE-MESH-02 · superseded-by: —
+
+**Why.** A commit-ordered seq gives gap-free cursors; a new store id resets them after a restore.
+**Source.** [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 71.
+
+### NODE-MESH-03 — mTLS peers pinned by SPKI, Ed25519
+- old: R72 · status: current · owner: yes · date: 2026-10-06 · normative: node/mesh.md#NODE-MESH-03 · superseded-by: —
+
+**Why.** SPKI pins need no CA and identify peers by key.
+**Source.** [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 72.
+
+### NODE-MESH-04 — Origin is in its own round-robin
+- old: MESH:I1, MESH:I2, MESH:I3, R74, UD:§22.5 · status: current · owner: yes · date: 2026-10-06 · normative: node/mesh.md#NODE-MESH-04 · superseded-by: —
+
+**Why.** Round-robin exclusivity shares submissions fairly; the origin takes its turn too.
+**Source.** [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 1386; [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 1387; [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 1388; [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 74; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1842.
+
+### NODE-MESH-05 — Mesh reward is the intent fee only
+- old: R75 · status: current · owner: yes · date: 2026-10-05 · normative: node/mesh.md#NODE-MESH-05 · superseded-by: —
+
+**Why.** The intent fee is the only reward; no token, no extra economics.
+**Source.** [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 75.
+
+### NODE-MESH-06 — Chain profile, default private
+- old: R76 · status: current · owner: yes · date: 2026-10-06 · normative: node/mesh.md#NODE-MESH-06 · superseded-by: —
+
+**Why.** Chains default to private so nothing leaks before an operator opts in.
+**Source.** [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 76.
+
+### NODE-MESH-07 — Families on the bus; Soroban out
+- old: R77 · status: current · owner: yes · date: 2026-10-05 · normative: node/mesh.md#NODE-MESH-07 · superseded-by: —
+
+**Why.** v1 covers families whose intents are self-contained; Soroban is not.
+**Source.** [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 77.
+
+### NODE-MESH-08 — intent_id is the contract digest
+- old: R78 · status: current · owner: yes · date: 2026-10-05 · normative: node/mesh.md#NODE-MESH-08 · superseded-by: —
+
+**Why.** Using the contract's digest as id lets every node dedupe and match events without a separate registry.
+**Source.** [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 78.
+
+### NODE-MESH-09 — Envelope spec scaas-intent/1.2
+- old: R81 · status: current · owner: no · date: 2026-10-06 · normative: node/mesh.md#NODE-MESH-09 · superseded-by: —
+
+**Why.** A versioned, public envelope lets independent implementations interoperate.
+**Source.** [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 81.
+
+### NODE-MESH-10 — Mesh numbers, all config
+- old: R82 · status: current · owner: no · date: 2026-10-06 · normative: node/mesh.md#NODE-MESH-10 · superseded-by: —
+
+**Why.** All mesh numbers are configuration, with published defaults.
+**Source.** [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 82.
+
+### NODE-MESH-11 — Multi-process one-binary test topology
+- old: R83, UD:§21.3 · status: current · owner: yes · date: 2026-10-06 · normative: node/mesh.md#NODE-MESH-11 · superseded-by: —
+
+**Why.** Several processes of one binary test the mesh as deployed. Two processes of one binary with different configuration catch wire-format errors but not misreadings of the spec; only the public conformance vectors stand in for a second implementation, so they must be complete, not token.
+**Source.** [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 83; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1365.
+
+### NODE-MESH-12 — Private rows served only by origin
+- old: R85 · status: current · owner: no · date: 2026-10-05 · normative: node/mesh.md#NODE-MESH-12 · superseded-by: —
+
+**Why.** Private rows never leave their origin, so no forwarder can leak them.
+**Source.** [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 85.
+
+### NODE-MESH-13 — may_submit needs a registered token
+- old: R86, UD:§22.6 · status: current · owner: yes · date: 2026-10-06 · normative: node/mesh.md#NODE-MESH-13 · superseded-by: —
+
+**Why.** A node only submits for tokens it knows and has registered.
+**Source.** [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 86; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1877.
+
+### NODE-MESH-14 — Missing policy row means forward only
+- old: MESH:I4 · status: current · owner: yes · date: 2026-10-05 · normative: node/mesh.md#NODE-MESH-14 · superseded-by: —
+
+**Why.** Without a policy row the safe default is forward-only.
+**Source.** [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 1389.
+
+### NODE-MESH-15 — Bus scope arrives per job
+- old: R99 · status: current · owner: yes · date: 2026-10-06 · normative: node/mesh.md#NODE-MESH-15 · superseded-by: —
+
+**Why.** Bus scope belongs to each job, set by its producer.
+**Source.** [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 1020.
+
+### NODE-MESH-16 — Verify signatures before any chain call
+- old: R343 · status: current · owner: no · date: 2026-10-07 · normative: node/mesh.md#NODE-MESH-16 · superseded-by: —
+
+**Why.** Signature checks before chain calls stop forged intents from costing RPC.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 149.
+
+### NODE-MESH-17 — receiver_fee jobs use restricted bus scope
+- old: R193(node) · status: current · owner: no · date: 2026-10-06 · normative: node/mesh.md#NODE-MESH-17 · superseded-by: —
+
+**Why.** A receiver-fee co-signature must not travel to open peers.
+**Source.** [history/specs/2026-10-06-tender-sponsorship-shredding.md](history/specs/2026-10-06-tender-sponsorship-shredding.md) line 181.
+
+### NODE-MESH-18 — UA intents in scaas-intent/1.3
+- old: R316 · status: current · owner: no · date: 2026-10-06 · normative: node/mesh.md#NODE-MESH-18 · superseded-by: —
+
+**Why.** UA intents need a different body; a minor version keeps old nodes safe.
+**Source.** [history/specs/2026-10-06-universal-account-design.md](history/specs/2026-10-06-universal-account-design.md) line 320.
+
+### NODE-MESH-19 — Fee-0 intents allowed; acceptance policy decides
+- old: UD:§3.4b · status: current · owner: yes · date: 2026-08-30 · normative: node/mesh.md#NODE-MESH-19 · superseded-by: —
+
+**Why.** Fee-0 intents are legitimate for sponsored or B2B flows; the acceptance policy decides.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 179.
+
+### NODE-MESH-20 — Node is a capability matrix, not modes
+- old: UD:§21.4 · status: current · owner: yes · date: 2026-08-31 · normative: node/README.md#NODE-MESH-20 · superseded-by: —
+
+**Why.** Capabilities combine freely; fixed modes would need a second implementation. The earlier "Mode 1 / mode 2" split suggested a global enum, while there are three independent axes (ingest, pool, submit) and submit varies per `(chain, contract)`: a node may submit on one chain and only forward for another. The gateway shape is the old "mode 1". The research shapes "private pool" and "private relayer" (a private-mempool pair) showed that the mesh needs a pull mode next to gossip, with an explicit peer allowlist instead of discovery; the bus pull with pinned peers is that mode (the research table had called the mesh module "ingest + pool" and assumed gossip). Two queues shared the name "pool": the mesh-facing intent queue and the submit job queue, which exists even when nothing is pooled; the research note named "relay-pool" described the second. The store is now the mesh-facing queue.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1394.
+
+### NODE-MESH-21 — One policy lookup table, static columns
+- old: UD:§22.4 · status: current · owner: yes · date: 2026-08-31 · normative: node/mesh.md#NODE-MESH-21 · superseded-by: —
+
+**Why.** One lookup with static columns keeps acceptance cheap and predictable.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1817.
+
+### NODE-MESH-22 — Open lifecycle questions
+- old: UD:§22.10 · status: open · owner: yes · date: 2026-08-31 · normative: node/mesh.md#NODE-MESH-22 · superseded-by: —
+
+**Why.** Two lifecycle questions stay open until real traffic answers them.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1997.
+
+### NODE-MESH-23 — MAX_HOPS = 4 is arbitrary
+- old: UD:§22.10.1 · status: open · owner: yes · date: 2026-08-31 · normative: node/mesh.md#NODE-MESH-23 · superseded-by: —
+
+**Why.** Four hops is a guess; re-tuned after a multi-site run. "Arbitrary" marks a number with no measurement behind it; node docs label such defaults so they are re-tuned after a measured run.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1999.
+
+### NODE-MESH-24 — Soroban stays on the job API, not the mesh
+- old: reorg:Q6 · status: open · owner: yes · date: 2026-10-07 · normative: node/mesh.md#NODE-MESH-24 · superseded-by: —
+
+**Why.** Soroban intents need simulation footprints a forwarder cannot verify; job API only until a design exists.
+**Cost if wrong.** Default applied.
+**Source.** [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) line 1220.
+
+### NODE-MESH-80 — R68-R69 left unused
+- old: R68, R69 · status: unused · owner: no · date: 2026-10-05 · normative: — · superseded-by: —
+
+Numbers left unused in the old scheme; registered so the alias index is complete.
+**Source.** [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 5.
+
+### NODE-MESH-81 — Mesh SQLite store, ERP control plane
+- old: R71(store) · status: superseded · owner: yes · date: 2026-10-05 · normative: — · superseded-by: ARCH-POS-05, NODE-STO-04, NODE-JOB-02, NODE-DEX-14, NODE-STO-06
+
+It said: mesh SQLite store, ERP control plane.
+**Source.** [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 71.
+
+### NODE-MESH-82 — Acceptance policy authoritative in ERP
+- old: R79 · status: superseded · owner: yes · date: 2026-10-05 · normative: — · superseded-by: NODE-STO-03, NODE-MESH-15
+
+It said: acceptance policy authoritative in ERP.
+**Source.** [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 79.
+
+### NODE-MESH-83 — Open relayer: two modes, two implementations
+- old: UD:§21 · status: superseded · owner: yes · date: 2026-08-31 · normative: — · superseded-by: NODE-MESH-20, ARCH-POS-05
+
+It said: open relayer: two modes, two implementations.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1304.
+
+### NODE-MESH-84 — Relay-only vs network-node modes
+- old: UD:§21.1 · status: superseded · owner: yes · date: 2026-08-31 · normative: — · superseded-by: NODE-MESH-20
+
+It said: relay-only vs network-node modes.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1316.
+
+### NODE-MESH-85 — Lifecycle common to Rust and ERP nodes
+- old: UD:§22 · status: superseded · owner: yes · date: 2026-08-31 · normative: — · superseded-by: ARCH-POS-05
+
+It said: lifecycle common to Rust and ERP nodes.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1671.
+
+### NODE-MESH-86 — Queue clocks and promote-after window
+- old: UD:§22.7 · status: superseded · owner: yes · date: 2026-08-31 · normative: — · superseded-by: INT-ERP-15, NODE-MESH-10
+
+It said: queue clocks and promote-after window.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1912.
+
+### NODE-MESH-87 — promote_after vs 300 s ERC-20 expiry
+- old: UD:§22.10.2 · status: superseded · owner: yes · date: 2026-08-31 · normative: — · superseded-by: INT-ERP-15
+
+It said: promote_after vs 300 s ERC-20 expiry.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 2001.
+
+### NODE-MESH-88 — Callback subject registry on public nodes
+- old: UD:§22.10.4 · status: superseded · owner: yes · date: 2026-08-31 · normative: — · superseded-by: ARCH-POS-05
+
+It said: callback subject registry on public nodes.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 2008.
+
+## Node — Gossip
+
+### NODE-GSP-01 — Gossip required alongside the pull bus
+- old: R112, UD:§6 · status: current · owner: yes · date: 2026-10-06 · normative: node/gossip.md#NODE-GSP-01 · superseded-by: —
+
+**Why.** The pull bus covers admitted partners; gossip reaches the open network. Both are needed. The open network uses libp2p gossipsub v1.1 instead of a home-grown protocol: it is the stack the ERC-4337 shared mempool mandates (`eth-infinitism/bundler-spec/p2p-specs/p2p-interface.md`), and its peer scoring is the network-layer anti-spam primitive; intents are validated before they are forwarded, so spam costs real money.
+**Source.** [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 73; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 224.
+
+### NODE-GSP-02 — Selectable carriers; admitted peers PQ only
+- old: R113 · status: current · owner: yes · date: 2026-10-06 · normative: node/gossip.md#NODE-GSP-02 · superseded-by: —
+
+**Why.** QUIC is the default; TCP covers networks that block UDP. Admitted peers carry private data, so PQ only.
+**Source.** [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 74.
+
+### NODE-GSP-03 — PQ key exchange via aws-lc-rs, classical identity
+- old: R114 · status: current · owner: yes · date: 2026-10-06 · normative: node/gossip.md#NODE-GSP-03 · superseded-by: —
+
+**Why.** Harvest-now-decrypt-later threatens key exchange today; identity forgery needs a live quantum attacker. One crypto library keeps the build small.
+**Source.** [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 75.
+
+### NODE-GSP-04 — Wire names and topics use scaas and chain_key
+- old: R115 · status: current · owner: yes · date: 2026-10-06 · normative: node/gossip.md#NODE-GSP-04 · superseded-by: —
+
+**Why.** Product-neutral names and chain keys make topics unambiguous across networks.
+**Source.** [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 76.
+
+### NODE-GSP-05 — One Ed25519 node key for all identities
+- old: R116 · status: current · owner: no · date: 2026-10-06 · normative: node/gossip.md#NODE-GSP-05 · superseded-by: —
+
+**Why.** One key and separate signing contexts make rotation one action and keep signatures non-interchangeable.
+**Source.** [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 77.
+
+### NODE-GSP-06 — Gossip wire is bus JSON, content message-id
+- old: R117 · status: current · owner: no · date: 2026-10-06 · normative: node/gossip.md#NODE-GSP-06 · superseded-by: —
+
+**Why.** Reusing the bus JSON keeps one codec; a content-addressed message id makes duplicates collapse.
+**Source.** [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 78.
+
+### NODE-GSP-07 — Gossip validation pipeline and Reject rule
+- old: R118, UD:§22.3 · status: current · owner: yes · date: 2026-10-06 · normative: node/gossip.md#NODE-GSP-07 · superseded-by: —
+
+**Why.** Rejects cost the sender score; only faults decidable from the bytes may reject, so honest peers are never punished. Checking the meta nonce with `eth_call` at receipt is exact but does not run at gossip speed: a node receiving 500 intents a second would make 500 RPC calls a second just to filter garbage. The freshness check is therefore one batched read, off the event loop and failing open for forwarding.
+**Cost if wrong.** Over-rejecting eclipses a node by itself.
+**Source.** [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 79; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1767.
+
+### NODE-GSP-08 — Peer scoring and limits
+- old: R119 · status: current · owner: no · date: 2026-10-06 · normative: node/gossip.md#NODE-GSP-08 · superseded-by: —
+
+**Why.** Fixed, published scoring numbers make peer behaviour predictable and testable.
+**Source.** [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 80.
+
+### NODE-GSP-09 — Own Kademlia DHT with dial filter
+- old: R120 · status: current · owner: yes · date: 2026-10-06 · normative: node/gossip.md#NODE-GSP-09 · superseded-by: —
+
+**Why.** An own DHT namespace and dial filter stop the node from being used to scan private networks.
+**Source.** [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 81.
+
+### NODE-GSP-10 — Exclusivity over gossip, automatic trust
+- old: R121 · status: current · owner: yes · date: 2026-10-06 · normative: node/gossip.md#NODE-GSP-10 · superseded-by: —
+
+**Why.** Exclusivity reduces duplicate submissions; automatic trust requires a chain-credited track record.
+**Source.** [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 82.
+
+### NODE-GSP-11 — Landed hints only trigger a chain read
+- old: R122 · status: current · owner: no · date: 2026-10-06 · normative: node/gossip.md#NODE-GSP-11 · superseded-by: —
+
+**Why.** A hint can be false; only a chain read may change state.
+**Source.** [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 83.
+
+### NODE-GSP-12 — Signed versioned announce
+- old: R123 · status: current · owner: no · date: 2026-10-06 · normative: node/gossip.md#NODE-GSP-12 · superseded-by: —
+
+**Why.** Announces are signed and versioned so replays and rollbacks are refused.
+**Source.** [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 84.
+
+### NODE-GSP-13 — Anti-entropy sync protocol
+- old: R125 · status: current · owner: no · date: 2026-10-06 · normative: node/gossip.md#NODE-GSP-13 · superseded-by: —
+
+**Why.** Anti-entropy fills gaps after partitions without replaying the whole pool.
+**Source.** [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 86.
+
+### NODE-GSP-14 — Gossip crates and resource budget
+- old: R126 · status: current · owner: yes · date: 2026-10-06 · normative: node/gossip.md#NODE-GSP-14 · superseded-by: —
+
+**Why.** Pinned crates and a resource budget keep gossip from crowding the host.
+**Source.** [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 87.
+
+### NODE-GSP-15 — Native UA verification before gossip
+- old: R317 · status: current · owner: no · date: 2026-10-06 · normative: node/gossip.md#NODE-GSP-15 · superseded-by: —
+
+**Why.** UA intents must be verified natively before forwarding, else invalid ones spread.
+**Source.** [history/specs/2026-10-06-universal-account-design.md](history/specs/2026-10-06-universal-account-design.md) line 327.
+
+### NODE-GSP-16 — Sybil resistance of forward scoring
+- old: UD:§22.10.3 · status: open · owner: yes · date: 2026-08-31 · normative: node/gossip.md#NODE-GSP-16 · superseded-by: —
+
+**Why.** Forward scoring can be gamed by Sybils; no known cheap fix.
+**Cost if wrong.** Open.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 2004.
+
+### NODE-GSP-80 — rustls ring crypto provider
+- old: — · status: superseded · owner: no · date: 2026-10-07 · normative: — · superseded-by: NODE-GSP-03
+
+An earlier design used the rustls ring provider for TLS; replaced by aws-lc-rs for PQ key exchange.
+
+## Node — Operations
+
+### NODE-OPS-01 — readyz and metrics on admin port
+- old: R51 · status: current · owner: no · date: 2026-10-06 · normative: node/ops.md#NODE-OPS-01 · superseded-by: —
+
+**Why.** Monitoring must not depend on the public gateway; the admin port always exists.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 524.
+
+### NODE-OPS-02 — Gossip metrics
+- old: R127(metrics) · status: current · owner: no · date: 2026-10-06 · normative: node/ops.md#NODE-OPS-02 · superseded-by: —
+
+**Why.** Gossip health is visible without per-peer labels, which would be unbounded.
+**Source.** [history/specs/2026-10-06-mesh-gossip-amendment.md](history/specs/2026-10-06-mesh-gossip-amendment.md) line 88.
+
+### NODE-OPS-03 — Prometheus metrics, label allowlist
+- old: R230 · status: current · owner: no · date: 2026-10-06 · normative: node/ops.md#NODE-OPS-03 · superseded-by: —
+
+**Why.** A hand-written renderer avoids a dependency; the label allowlist keeps cardinality bounded.
+**Source.** [history/specs/2026-10-06-operations-design.md](history/specs/2026-10-06-operations-design.md) line 61.
+
+### NODE-OPS-04 — SLOs evaluated outside the node
+- old: R231 · status: current · owner: yes · date: 2026-10-06 · normative: node/ops.md#NODE-OPS-04 · superseded-by: —
+
+**Why.** Monitoring on the monitored host fails with it; an external dead-man's switch catches that.
+**Source.** [history/specs/2026-10-06-operations-design.md](history/specs/2026-10-06-operations-design.md) line 71.
+
+### NODE-OPS-05 — Three severities
+- old: R232 · status: current · owner: no · date: 2026-10-06 · normative: node/ops.md#NODE-OPS-05 · superseded-by: —
+
+**Why.** Pages that do not mean integrity or outage train people to ignore pages.
+**Source.** [history/specs/2026-10-06-operations-design.md](history/specs/2026-10-06-operations-design.md) line 77.
+
+### NODE-OPS-06 — W3B as the node measures it
+- old: R233 · status: current · owner: no · date: 2026-10-06 · normative: node/ops.md#NODE-OPS-06 · superseded-by: —
+
+**Why.** Each job counts once; landed-elsewhere is success; a revert streak opens a breaker.
+**Source.** [history/specs/2026-10-06-operations-design.md](history/specs/2026-10-06-operations-design.md) line 79.
+
+### NODE-OPS-07 — Job stage timing metric
+- old: R234 · status: current · owner: no · date: 2026-10-06 · normative: node/ops.md#NODE-OPS-07 · superseded-by: —
+
+**Why.** Stage timings show where latency comes from; in-memory samples lost on restart are acceptable.
+**Source.** [history/specs/2026-10-06-operations-design.md](history/specs/2026-10-06-operations-design.md) line 92.
+
+### NODE-OPS-08 — Ops watch for registered tokens
+- old: R235 · status: current · owner: no · date: 2026-10-06 · normative: node/ops.md#NODE-OPS-08 · superseded-by: —
+
+**Why.** Leg backing needs node data; code-hash pins need none, so they stay outside the node.
+**Source.** [history/specs/2026-10-06-operations-design.md](history/specs/2026-10-06-operations-design.md) line 99.
+
+### NODE-OPS-09 — Traces without OpenTelemetry SDK
+- old: R236 · status: current · owner: no · date: 2026-10-06 · normative: node/ops.md#NODE-OPS-09 · superseded-by: —
+
+**Why.** OpenTelemetry would be the heaviest dependency set; logs plus job events already trace a job.
+**Source.** [history/specs/2026-10-06-operations-design.md](history/specs/2026-10-06-operations-design.md) line 109.
+
+### NODE-OPS-10 — JSON logs, redaction, retention
+- old: R237 · status: current · owner: no · date: 2026-10-06 · normative: node/ops.md#NODE-OPS-10 · superseded-by: —
+
+**Why.** Logs must never carry personal or secret data; retention bounds what a node holds.
+**Source.** [history/specs/2026-10-06-operations-design.md](history/specs/2026-10-06-operations-design.md) line 114.
+
+### NODE-OPS-11 — FinOps measurement and usage_day
+- old: R238 · status: current · owner: no · date: 2026-10-06 · normative: node/ops.md#NODE-OPS-11 · superseded-by: —
+
+**Why.** Jobs are purged after 30 days; a durable daily rollup keeps a fiscal year of cost data.
+**Source.** [history/specs/2026-10-06-operations-design.md](history/specs/2026-10-06-operations-design.md) line 124.
+
+### NODE-OPS-12 — Integrity rechecks of index and audit
+- old: R242 · status: current · owner: no · date: 2026-10-06 · normative: node/ops.md#NODE-OPS-12 · superseded-by: —
+
+**Why.** A finality violation or audit break is a human-judgement event; holding stops the damage.
+**Source.** [history/specs/2026-10-06-operations-design.md](history/specs/2026-10-06-operations-design.md) line 162.
+
+### NODE-OPS-13 — Capacity rating and label caps
+- old: R244 · status: current · owner: no · date: 2026-10-06 · normative: node/ops.md#NODE-OPS-13 · superseded-by: —
+
+**Why.** Unbounded labels are a monitoring outage; caps are constants.
+**Source.** [history/specs/2026-10-06-operations-design.md](history/specs/2026-10-06-operations-design.md) line 176.
+
+### NODE-OPS-14 — Subject denylist, operator choice
+- old: R246 · status: current · owner: yes · date: 2026-10-06 · normative: node/ops.md#NODE-OPS-14 · superseded-by: —
+
+**Why.** An order binds the operator it is addressed to; a precise, evidenced lever beats pausing a namespace.
+**Cost if wrong.** No on-chain effect; the party can use other operators.
+**Source.** [history/specs/2026-10-06-operations-design.md](history/specs/2026-10-06-operations-design.md) line 185.
+
+### NODE-OPS-15 — Operators independent; ops are recommendations
+- old: R247, UD:§13.1 · status: current · owner: yes · date: 2026-10-06 · normative: node/ops.md#NODE-OPS-15 · superseded-by: —
+
+**Why.** Contracts carry the guarantees; node operators are independent and set their own policies.
+**Source.** [history/specs/2026-10-06-operations-design.md](history/specs/2026-10-06-operations-design.md) line 192; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 706.
+
+### NODE-OPS-16 — OPS default numbers approved as stated
+- old: reorg:Q8 · status: current · owner: yes · date: 2026-10-07 · normative: node/ops.md#NODE-OPS-16 · superseded-by: —
+
+**Why.** Defaults are needed to start; each stays operator-tunable.
+**Source.** [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) line 1222.
+
+## Node — Runbooks
+
+### NODE-RUN-01 — RACI roles
+- old: R239 · status: current · owner: no · date: 2026-10-06 · normative: node/runbooks.md#NODE-RUN-01 · superseded-by: —
+
+**Why.** Separating credential power from config power, and roles across keys, bounds single-person misuse.
+**Source.** [history/specs/2026-10-06-operations-design.md](history/specs/2026-10-06-operations-design.md) line 130.
+
+### NODE-RUN-02 — Restore is fixed and starts paused
+- old: R240 · status: current · owner: no · date: 2026-10-06 · normative: node/runbooks.md#NODE-RUN-02 · superseded-by: —
+
+**Why.** A restored store holds jobs cancelled after the backup; starting paused gives clients time to cancel them.
+**Cost if wrong.** One manual resume per chain.
+**Source.** [history/specs/2026-10-06-operations-design.md](history/specs/2026-10-06-operations-design.md) line 137.
+
+### NODE-RUN-03 — CLI lane accept-nonce
+- old: R241 · status: current · owner: no · date: 2026-10-06 · normative: node/runbooks.md#NODE-RUN-03 · superseded-by: —
+
+**Why.** After a restore the chain is ahead of the journal; adopting nonces is the only way back besides a new lane.
+**Source.** [history/specs/2026-10-06-operations-design.md](history/specs/2026-10-06-operations-design.md) line 148.
+
+### NODE-RUN-04 — DR drills scheduled and exported
+- old: R243 · status: current · owner: no · date: 2026-10-06 · normative: node/runbooks.md#NODE-RUN-04 · superseded-by: —
+
+**Why.** An untested restore is not a restore.
+**Source.** [history/specs/2026-10-06-operations-design.md](history/specs/2026-10-06-operations-design.md) line 172.
+
+### NODE-RUN-05 — Incident command by accountable role
+- old: R245 · status: current · owner: no · date: 2026-10-06 · normative: node/runbooks.md#NODE-RUN-05 · superseded-by: —
+
+**Why.** The accountable role of the failing component leads; evidence first, no silent rewinds.
+**Source.** [history/specs/2026-10-06-operations-design.md](history/specs/2026-10-06-operations-design.md) line 180.
+
+## Node — Threat model
+
+### NODE-SEC-01 — Merge processes, not privileges
+- old: — · status: current · owner: no · date: 2026-10-07 · normative: node/threat-model.md#NODE-SEC-01 · superseded-by: —
+
+**Why.** One process can still keep trust boundaries; bounding each credential to its listener limits compromise.
+
+### NODE-SEC-80 — Separate DB roles per module
+- old: UD:§23.4 · status: superseded · owner: yes · date: 2026-08-31 · normative: — · superseded-by: ARCH-POS-05, NODE-STO-04
+
+It said: separate DB roles per module.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 2211.
+
+## Contracts — General
+
+### CTR-GEN-01 — Separate blockchain CI; forge libs pinned by tag
+- old: R52 · status: current · owner: no · date: 2026-10-03 · normative: contracts/README.md#CTR-GEN-01 · superseded-by: —
+
+**Why.** Contracts break in ways the node tests do not see; pinning the forge libraries by tag makes a CI run reproducible because `lib/` is not committed.
+**Cost if wrong.** An unpinned dependency changes bytecode between two runs and a deployed address no longer matches its audited source.
+**Source.** `history/specs/2026-10-03-blockchain-round3-design.md:525`
+
+### CTR-GEN-02 — Value-holding programs immutable from deploy
+- old: CR-R3-11, UD:§20.2, owner:2026-10-07:immutable · status: current · owner: yes · date: 2026-10-07 · normative: contracts/README.md#CTR-GEN-02 · superseded-by: —
+
+**Why.** Users can verify once what a program does and rely on it forever; an upgrade key is an admin key over every balance. Rejected alternatives: UUPS/ERC-1822 proxies "for all contracts", `ReentrancyGuardUpgradeable` + an admin `Pausable` on every function, and "delegate to share code, support many versions": versions are new implementations behind immutable clones, and a registry must never be upgradeable.
+**Cost if wrong.** A bug is permanent for that deployment; the remedy is a new deployment plus voluntary migration, so audits and the deploy gate must precede real funds.
+**Source.** `history/specs/2026-10-03-blockchain-round3-design.md:714`, `research/_USER-DECISIONS.md:1140`, `history/SCaaS-2026-10-07.md:40`. Owner wording for the Aptos, Sui and Solana programs: "Bất biến ngay khi deploy" (immutable as soon as deployed).
+
+### CTR-GEN-03 — Contracts in their own tree per family
+- old: UD:§1:smartcontracts-tree · status: current · owner: yes · date: 2026-08-30 · normative: contracts/README.md#CTR-GEN-03 · superseded-by: —
+
+**Why.** Each family has its own toolchain; one tree per family keeps builds and audits separable.
+**Cost if wrong.** Mixed trees force every family build to know every other toolchain.
+**Source.** `research/_USER-DECISIONS.md:46`
+
+### CTR-GEN-04 — Issuer choices are not protocol decisions
+- old: UD:§20.5 · status: current · owner: yes · date: 2026-08-30 · normative: contracts/README.md#CTR-GEN-04 · superseded-by: —
+
+**Why.** SCaaS ships a protocol, not a token catalogue; names, symbols, rates and roles belong to the issuer who answers for them.
+**Cost if wrong.** If SCaaS made issuer choices it would carry issuer liability and become a gatekeeper.
+**Source.** `research/_USER-DECISIONS.md:1272`
+
+## Contracts — Meta-transactions
+
+### CTR-MTX-01 — Pay op is pay(bytes32) via executeMetaTransaction
+- old: R2(op) · status: current · owner: no · date: 2026-10-03 · normative: contracts/metatx.md#CTR-MTX-01 · superseded-by: —
+
+**Why.** A payment is one signed `pay(bytes32 entryRef)` op through the standard envelope, so wallets, relayers and indexers handle payments with no extra entry point.
+**Cost if wrong.** A separate payment entry point would duplicate the nine-step pipeline and its audit surface.
+**Source.** `history/specs/2026-10-03-blockchain-payments-design.md:664`
+
+### CTR-MTX-02 — Clone domain: implementation name, clone verifyingContract
+- old: R5 · status: current · owner: no · date: 2026-10-03 · normative: contracts/metatx.md#CTR-MTX-02 · superseded-by: —
+
+**Why.** Clones share the implementation name and version but each clone is its own `verifyingContract`, so a signature for one token never replays on another.
+**Cost if wrong.** A shared domain would let a signature move between clones of the same implementation.
+**Source.** `history/specs/2026-10-03-blockchain-payments-design.md:674`
+
+### CTR-MTX-03 — Random entryRef; pay lane derived from it
+- old: R9(lane) · status: current · owner: no · date: 2026-10-03 · normative: contracts/metatx.md#CTR-MTX-03 · superseded-by: —
+
+**Why.** A random `entryRef` cannot be guessed or front-run, and deriving the pay lane from it lets the contract enforce pay-once without a request registry.
+**Cost if wrong.** Sequential references leak volumes and allow pre-emptive lane exhaustion.
+**Source.** `history/specs/2026-10-03-blockchain-payments-design.md:692`
+
+### CTR-MTX-04 — Pay-once holds under lane horizon H
+- old: CR-PD-4(issuer) · status: current · owner: no · date: 2026-10-07 · normative: contracts/metatx.md#CTR-MTX-04 · superseded-by: —
+
+**Why.** Pay-once is a protocol rule only within the lane horizon; stating the horizon makes the guarantee checkable instead of implied.
+**Cost if wrong.** Clients that assume unconditional pay-once could double-pay after the horizon.
+**Source.** `history/specs/2026-10-03-blockchain-payments-design.md:901`
+
+### CTR-MTX-05 — Receiver-pays via payee co-signed ReceiverFee
+- old: R192 · status: current · owner: no · date: 2026-10-06 · normative: contracts/metatx.md#CTR-MTX-05 · superseded-by: —
+
+**Why.** Receiver-pays needs the payee to consent to the fee; a co-signed `ReceiverFee` keeps both parties bound to the same numbers.
+**Cost if wrong.** Without the payee signature a relayer could charge the payee arbitrarily.
+**Source.** `history/specs/2026-10-06-tender-sponsorship-shredding.md:172`
+
+### CTR-MTX-06 — Receiver-pays op shape, v2-only availability
+- old: R193(shape) · status: current · owner: yes · date: 2026-10-06 · normative: contracts/metatx.md#CTR-MTX-06 · superseded-by: —
+
+**Why.** Receiver-pays is a v2-only op of fixed shape, so v1 clones keep their audited surface.
+**Cost if wrong.** Back-porting would change audited v1 bytecode.
+**Source.** `history/specs/2026-10-06-tender-sponsorship-shredding.md:181`
+
+### CTR-MTX-07 — MetaTxCore v2: same struct, domain version 2
+- old: R131 · status: current · owner: no · date: 2026-10-06 · normative: contracts/metatx.md#CTR-MTX-07 · superseded-by: —
+
+**Why.** v2 keeps the v1 struct and typehash with domain version 2: existing signing code works and v1/v2 signatures cannot be confused.
+**Cost if wrong.** A new struct would split every client and indexer.
+**Source.** `history/specs/2026-10-06-token-wrappers-v2.md:72`
+
+### CTR-MTX-08 — Fee never goes to the payee
+- old: R132 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/metatx.md#CTR-MTX-08 · superseded-by: —
+
+**Why.** A fee that goes to the payee lets a payee inflate its own receipts; refusing it keeps the fee a relayer payment.
+**Cost if wrong.** Payees could disguise discounts or extract hidden charges through the fee field.
+**Source.** `history/specs/2026-10-06-token-wrappers-v2.md:78`
+
+### CTR-MTX-09 — Named meta-tx functions are thin entry points
+- old: R138 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/metatx.md#CTR-MTX-09 · superseded-by: —
+
+**Why.** Named functions are readable in wallets and explorers, but they only route into the one pipeline, so there is no second security model.
+**Cost if wrong.** Logic in the named functions would drift from the envelope path.
+**Source.** `history/specs/2026-10-06-token-wrappers-v2.md:119`
+
+### CTR-MTX-10 — mtxPay payId is entryRef, lane on chain
+- old: R139 · status: current · owner: no · date: 2026-10-06 · normative: contracts/metatx.md#CTR-MTX-10 · superseded-by: —
+
+**Why.** `payId` is the payment reference and the lane is derived on chain, so a client cannot mislabel the lane.
+**Cost if wrong.** Client-chosen lanes would break pay-once.
+**Source.** `history/specs/2026-10-06-token-wrappers-v2.md:124`
+
+### CTR-MTX-11 — No second typehash; mtxBatch atomic
+- old: R140 · status: current · owner: no · date: 2026-10-06 · normative: contracts/metatx.md#CTR-MTX-11 · superseded-by: —
+
+**Why.** One typehash per struct keeps every signer and verifier on one digest rule; `mtxBatch` is atomic so a partial batch cannot strand fees.
+**Cost if wrong.** A second hash of the same struct invites cross-path replay; a non-atomic batch leaves half-paid states.
+**Source.** `history/specs/2026-10-06-token-wrappers-v2.md:131`
+
+### CTR-MTX-12 — Gasless unwrap op with minOut
+- old: R148(contract) · status: current · owner: yes · date: 2026-10-06 · normative: contracts/metatx.md#CTR-MTX-12 · superseded-by: —
+
+**Why.** A gasless unwrap lets holders exit without native gas; `minOut` protects them against rate moves between signing and execution.
+**Cost if wrong.** Without `minOut` a relayer could time execution against the holder.
+**Source.** `history/specs/2026-10-06-token-wrappers-v2.md:172`
+
+### CTR-MTX-13 — Public fee modes NONE, PERCENT, FIXED
+- old: UD:§3.1, UD:§11:fee-denominator · status: current · owner: yes · date: 2026-08-30 · normative: contracts/metatx.md#CTR-MTX-13 · superseded-by: —
+
+**Why.** Three fee modes cover the business cases (none, percentage, fixed) with a 1 % cap on percentages: the denominator is 1e6 ppm, so the cap is 10000 ppm.
+**Cost if wrong.** More modes multiply audit cases; an uncapped percentage would let a signer be overcharged by a misreading.
+**Source.** `research/_USER-DECISIONS.md:107`, `research/_USER-DECISIONS.md:450`
+
+### CTR-MTX-14 — EIP-712 typed data, not personal_sign
+- old: UD:§4 · status: current · owner: yes · date: 2026-08-30 · normative: contracts/metatx.md#CTR-MTX-14 · superseded-by: —
+
+**Why.** EIP-712 typed data is what wallets display; `personal_sign` of a hash shows the user nothing they can check. The first committed code hashed with `toEthSignedMessageHash()` (`personal_sign`) while the design sketch signed with `wallet._signTypedData(domain, types, data)` (EIP-712); the design was right and the code was changed.
+**Cost if wrong.** Users would sign blind hashes, the precondition for drain attacks.
+**Source.** `research/_USER-DECISIONS.md:206`
+
+### CTR-MTX-15 — No forwarder; drop feeToken, innerGasLimit; keep mode
+- old: UD:§24, UD:§24.1 · status: current · owner: yes · date: 2026-08-31 · normative: contracts/metatx.md#CTR-MTX-15 · superseded-by: —
+
+**Why.** Meta-tx logic lives in the token, so there is no trusted forwarder; `feeToken` and `innerGasLimit` were dropped (another token is outside this contract; the gas limit only matters to a forwarder that swallows failures) and `mode` was kept, split into two nibbles: the low nibble holds flags (`RESTRICT_RELAYER` 0x01, `RESTRICT_FEE_RECIPIENT` 0x02), the high nibble an enum of the fee mode (`NONE` 0x00, `PERCENT` 0x10, `FIXED` 0x20). The halves differ in kind: `if (mode & MODE_FEE_PERCENT)` is a bug, because `MODE_FEE_FIXED = 0x20` lacks bit 0x10 but a future 0x30 would have it; validation checks unknown flag bits and enum values above 2. Rejected: the early `IEIP1776` sketch (`tokenContract`, `batchNonce`, `expiry`, `meta_nonce(from, batchId)`) — corrected to `MetaTxLib.MetaTransaction` with `metaNonce`, `validUntil` and the split mode nibble.
+**Cost if wrong.** A forwarder becomes a shared trust root for every token; keeping the sketch shape would add fields no contract can enforce.
+**Source.** `research/_USER-DECISIONS.md:2504`, `research/_USER-DECISIONS.md:2534`
+
+### CTR-MTX-16 — No generic forwarder; wrap legacy tokens
+- old: UD:§24.2, UD:§24.3 · status: current · owner: yes · date: 2026-08-31 · normative: contracts/metatx.md#CTR-MTX-16 · superseded-by: —
+
+**Why.** No generic forwarder means each token owns its replay protection; legacy tokens are wrapped instead of trusted. A generic forwarder cannot know why the inner call will fail, so it must either take the fee and swallow the error (the user pays for nothing) or bubble the revert (the relayer pays gas for nothing); a token that executes its own meta-transaction knows its failure cases before it charges.
+**Cost if wrong.** A generic forwarder would let one bug affect every legacy token at once.
+**Source.** `research/_USER-DECISIONS.md:2570`, `research/_USER-DECISIONS.md:2586`
+
+### CTR-MTX-80 — No named mtxPay; accepted gas cost
+- old: R2(cost) · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CTR-MTX-09, CTR-MTX-10, CTR-MTX-11
+
+**What it said.** An earlier design had no named `mtxPay` and accepted the generic path's gas cost.
+
+### CTR-MTX-81 — Unconditional pay-once per request
+- old: R9(pay-once) · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CTR-MTX-04, NET-ALL-01, NODE-STO-01
+
+**What it said.** An earlier design promised unconditional pay-once per payment request.
+
+### CTR-MTX-82 — Drop GSN gas fields and per-mille setter
+- old: UD:§3.5 · status: superseded · owner: yes · date: 2026-08-30 · normative: — · superseded-by: CTR-MTX-15
+
+**What it said.** An early proposal dropped the GSN gas fields and a per-mille fee setter.
+
+### CTR-MTX-83 — Relayer wildcard instead of mode bitmask
+- old: UD:§5 · status: superseded · owner: yes · date: 2026-08-30 · normative: — · superseded-by: CTR-MTX-15
+
+**What it said.** An early proposal replaced the mode bitmask with a relayer wildcard.
+
+### CTR-MTX-84 — Reconcile three struct variants
+- old: UD:§11:struct-variants · status: superseded · owner: yes · date: 2026-08-30 · normative: — · superseded-by: CTR-MTX-15
+
+**What it said.** An early note reconciled three different meta-tx struct variants.
+
+## Contracts — Token wrappers and factory
+
+### CTR-TOK-01 — Spender and transferFrom caller must be contracts
+- old: R26 · status: current · owner: yes · date: 2026-10-03 · normative: contracts/token-wrappers.md#CTR-TOK-01 · superseded-by: —
+
+**Why.** An allowance held by an EOA is the classic drain vector; restricting spenders (and `transferFrom` callers) to contracts keeps allowances for DEX and escrow code that enforces its own rules.
+**Cost if wrong.** EOA phishing approvals drain balances; legitimate EOA-spender flows must move to contracts or meta-tx.
+**Source.** `history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:198`. Owner wording: "spender là hợp đồng" (the spender is a contract).
+
+### CTR-TOK-02 — Three tiers, one implementation per tier
+- old: R129 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/token-wrappers.md#CTR-TOK-02 · superseded-by: —
+
+**Why.** Three tiers (no underlying, single, multi) with one implementation each keep the audit surface small and the behaviour predictable per tier.
+**Cost if wrong.** Per-token variants would multiply audits.
+**Source.** `history/specs/2026-10-06-token-wrappers-v2.md:61`
+
+### CTR-TOK-03 — Factory v2 new deployment, appended token kinds
+- old: R130 · status: current · owner: no · date: 2026-10-06 · normative: contracts/token-wrappers.md#CTR-TOK-03 · superseded-by: —
+
+**Why.** Factory v2 is a new deployment with appended kinds, so v1 kind numbers and clones never change meaning.
+**Cost if wrong.** Renumbering kinds would break indexers and existing addresses.
+**Source.** `history/specs/2026-10-06-token-wrappers-v2.md:66`
+
+### CTR-TOK-04 — Conversion rate num/den, rounding favours contract
+- old: R133 · status: current · owner: no · date: 2026-10-06 · normative: contracts/token-wrappers.md#CTR-TOK-04 · superseded-by: —
+
+**Why.** Rates as `(num, den)` with rounding in favour of the contract keep reserves solvent under every rounding path.
+**Cost if wrong.** Rounding in favour of users leaks value per operation and can drain reserves.
+**Source.** `history/specs/2026-10-06-token-wrappers-v2.md:84`
+
+### CTR-TOK-05 — Internal reserve accounting and solvency invariant
+- old: R134 · status: current · owner: no · date: 2026-10-06 · normative: contracts/token-wrappers.md#CTR-TOK-05 · superseded-by: —
+
+**Why.** Internal reserve accounting ignores donations and forced sends, so the solvency invariant is checkable from the contract's own state.
+**Cost if wrong.** Balance-based accounting lets an attacker skew rates with a donation.
+**Source.** `history/specs/2026-10-06-token-wrappers-v2.md:91`
+
+### CTR-TOK-06 — Fixed or timelocked adjustable rate at creation
+- old: R135 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/token-wrappers.md#CTR-TOK-06 · superseded-by: —
+
+**Why.** The issuer chooses at creation between a fixed rate and a timelocked adjustable one; holders see the choice before they wrap.
+**Cost if wrong.** A silently adjustable rate is an admin key over holders' value.
+**Source.** `history/specs/2026-10-06-token-wrappers-v2.md:98`
+
+### CTR-TOK-07 — Multi-underlying any-of with disable-only guardian
+- old: R136 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/token-wrappers.md#CTR-TOK-07 · superseded-by: —
+
+**Why.** Multi-underlying is any-of with a disable-only guardian: holders can always exit through any enabled leg and nobody can add a leg. Rejected: a weighted basket that mints from a group of tokens at fixed proportions — it needs price oracles and rebalancing, which the immutable design forbids.
+**Cost if wrong.** A basket would introduce oracle and rebalancing risk into every wrap and unwrap.
+**Source.** `history/specs/2026-10-06-token-wrappers-v2.md:108`
+
+### CTR-TOK-08 — Decimals are display only
+- old: R137 · status: current · owner: no · date: 2026-10-06 · normative: contracts/token-wrappers.md#CTR-TOK-08 · superseded-by: —
+
+**Why.** Decimals are display only; arithmetic uses raw units, so a decimals mismatch can never misprice a wrap.
+**Cost if wrong.** Scaling by decimals inside the contract adds rounding paths and errors.
+**Source.** `history/specs/2026-10-06-token-wrappers-v2.md:115`
+
+### CTR-TOK-09 — NoUnderlyingToken holder burn, renounceable minter
+- old: R141 · status: current · owner: no · date: 2026-10-06 · normative: contracts/token-wrappers.md#CTR-TOK-09 · superseded-by: —
+
+**Why.** A `NoUnderlyingToken` lets holders burn and its minter renounce, which matches self-issued tokens.
+**Cost if wrong.** A non-renounceable minter is a permanent admin key.
+**Source.** `history/specs/2026-10-06-token-wrappers-v2.md:135`
+
+### CTR-TOK-10 — Only creation-time visible admin exceptions
+- old: R142 · status: current · owner: no · date: 2026-10-06 · normative: contracts/token-wrappers.md#CTR-TOK-10 · superseded-by: —
+
+**Why.** Only creation-time, publicly visible admin exceptions exist, so a holder can read every power over a token before acquiring it.
+**Cost if wrong.** Hidden or later-added powers would make provenance meaningless.
+**Source.** `history/specs/2026-10-06-token-wrappers-v2.md:138`
+
+### CTR-TOK-11 — Fee-on-transfer-out and rebasing underlyings unsupported
+- old: R143 · status: current · owner: no · date: 2026-10-06 · normative: contracts/token-wrappers.md#CTR-TOK-11 · superseded-by: —
+
+**Why.** Fee-on-transfer-out and rebasing underlyings break 1:1 accounting; they are refused rather than half-supported.
+**Cost if wrong.** Supporting them silently would make reserves drift from supply.
+**Source.** `history/specs/2026-10-06-token-wrappers-v2.md:144`
+
+### CTR-TOK-12 — Voluntary v2 migration; domain read per token
+- old: R146 · status: current · owner: no · date: 2026-10-06 · normative: contracts/token-wrappers.md#CTR-TOK-12 · superseded-by: —
+
+**Why.** Moving from v1 to v2 is voluntary; each token reads its own domain, so both generations keep working side by side.
+**Cost if wrong.** Forced migration would require an admin key; a shared domain would confuse signatures.
+**Source.** `history/specs/2026-10-06-token-wrappers-v2.md:156`
+
+### CTR-TOK-13 — Multi rates adjustable per leg, default off
+- old: R147 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/token-wrappers.md#CTR-TOK-13 · superseded-by: —
+
+**Why.** Per-leg adjustable multi rates are an issuer option, off by default.
+**Cost if wrong.** Default-on adjustability would surprise holders of plain wrappers.
+**Source.** `history/specs/2026-10-06-token-wrappers-v2.md:160`
+
+### CTR-TOK-14 — Gasless wrap through permit is planned only
+- old: R149 · status: current · owner: no · date: 2026-10-06 · normative: contracts/token-wrappers.md#CTR-TOK-14 · superseded-by: —
+
+**Why.** Gasless wrap through permit depends on the underlying supporting it; until then it is planned only.
+**Cost if wrong.** Promising it would mislead integrators about tokens without permit.
+**Source.** `history/specs/2026-10-06-token-wrappers-v2.md:184`
+
+### CTR-TOK-15 — Open factory: anyone creates tokens
+- old: UD:§20 · status: current · owner: yes · date: 2026-08-30 · normative: contracts/token-wrappers.md#CTR-TOK-15 · superseded-by: —
+
+**Why.** An open factory means anyone can create tokens or wrap any token; SCaaS is not a gatekeeper.
+**Cost if wrong.** Spam tokens exist; provenance getters (CTR-TOK-17) let clients filter them.
+**Source.** `research/_USER-DECISIONS.md:1079`
+
+### CTR-TOK-16 — getWrapper keyed by creator and underlying
+- old: UD:§20.3 · status: current · owner: yes · date: 2026-08-30 · normative: contracts/token-wrappers.md#CTR-TOK-16 · superseded-by: —
+
+**Why.** Wrappers are looked up by `(creator, underlying)`, so two creators never collide and no global "official" wrapper exists. Three lookups answer three questions: getWrapper(creator, underlying) is A's xDAI wrapper; getWrapperCount / getWrapperAt list all of A's xDAI wrappers (one per curve or fee schedule); deployCountFor / deployedFor list every zDAI wrapper of every creator so the market can compare A with B. There is no uniqueness on `underlying` alone and no name or symbol review: `zDAI-A` and `zDAI-B` coexist normally.
+**Cost if wrong.** A global wrapper slot invites squatting.
+**Source.** `research/_USER-DECISIONS.md:1210`
+
+### CTR-TOK-17 — Provenance getters instead of gatekeeping
+- old: UD:§20.4 · status: current · owner: yes · date: 2026-08-30 · normative: contracts/token-wrappers.md#CTR-TOK-17 · superseded-by: —
+
+**Why.** Every token answers immutably who created it and from which implementation; clients decide trust instead of the factory.
+**Cost if wrong.** Clients that ignore provenance can be shown look-alike tokens.
+**Source.** `research/_USER-DECISIONS.md:1255`
+
+### CTR-TOK-18 — Factory is the critical immutable artifact
+- old: UD:§20.6 · status: current · owner: yes · date: 2026-08-30 · normative: contracts/token-wrappers.md#CTR-TOK-18 · superseded-by: —
+
+**Why.** The factory is the most critical immutable artifact: every clone inherits its code choices.
+**Cost if wrong.** A factory bug is inherited by every token created through it until a new factory ships.
+**Source.** `research/_USER-DECISIONS.md:1288`
+
+### CTR-TOK-80 — No EOA approve lockdown
+- old: R4 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CTR-TOK-01
+
+**What it said.** An earlier design did not lock EOA approvals.
+
+## Contracts — Accounts and mandates
+
+### CTR-ACC-01 — SubjectAccount clones; salt binds key and guardian
+- old: RS4-1 · status: current · owner: no · date: 2026-10-03 · normative: contracts/accounts-mandates.md#CTR-ACC-01 · superseded-by: —
+
+**Why.** Counterfactual clones with a salt binding the first key and the guardian give a predictable address that nobody else can claim.
+**Cost if wrong.** A salt of the key alone would let anyone deploy the account with a hostile guardian.
+**Source.** `history/plans/2026-10-03-r3-passkey-seed.md:11`
+
+### CTR-ACC-02 — Signature is keyIndex, Merkle proof, sig
+- old: RS4-3 · status: current · owner: no · date: 2026-10-03 · normative: contracts/accounts-mandates.md#CTR-ACC-02 · superseded-by: —
+
+**Why.** One signature encoding `(keyIndex, proof, sig)` covers single operations and Merkle batches for both key types.
+**Cost if wrong.** Two encodings would double the parsing and test surface.
+**Source.** `history/plans/2026-10-03-r3-passkey-seed.md:19`
+
+### CTR-ACC-03 — Guardian recovery adds a key after two days
+- old: RS4-4 · status: current · owner: no · date: 2026-10-03 · normative: contracts/accounts-mandates.md#CTR-ACC-03 · superseded-by: —
+
+**Why.** Guardian recovery adds a key after a two-day delay that any existing key can cancel, so a lost device is recoverable and a rogue guardian is visible.
+**Cost if wrong.** An instant recovery would let a compromised guardian take the account.
+**Source.** `history/plans/2026-10-03-r3-passkey-seed.md:23`
+
+### CTR-ACC-04 — Authenticator signCount is not checked
+- old: RS4-5 · status: current · owner: no · date: 2026-10-03 · normative: contracts/accounts-mandates.md#CTR-ACC-04 · superseded-by: —
+
+**Why.** Synced passkeys report a zero or non-monotonic signCount; checking it would lock out legitimate users.
+**Cost if wrong.** A cloned authenticator is not detected by the counter; the account relies on device security instead.
+**Source.** `history/plans/2026-10-03-r3-passkey-seed.md:27`
+
+### CTR-ACC-05 — 400k ERC-1271 cap only for SubjectAccount clones
+- old: RS4-10 · status: current · owner: no · date: 2026-10-03 · normative: contracts/accounts-mandates.md#CTR-ACC-05 · superseded-by: —
+
+**Why.** Only `SubjectAccount` clones, identified by codehash, get the 400 k ERC-1271 cap that the Solidity P-256 path needs; everything else keeps 50 k.
+**Cost if wrong.** A global 400 k cap lets any contract wallet grief relayers with expensive validation.
+**Source.** `history/plans/2026-10-03-r3-passkey-seed.md:43`
+
+### CTR-ACC-06 — Delegated payment uses MandateWallet, no allowance
+- old: R25 · status: current · owner: no · date: 2026-10-07 · normative: contracts/accounts-mandates.md#CTR-ACC-06 · superseded-by: —
+
+**Why.** Delegated payment through a dedicated `MandateWallet` with per-token limits never exposes the payer's main balance to an allowance.
+**Cost if wrong.** An allowance-based mandate would be an unlimited spender on the payer's tokens.
+**Source.** `history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:196`
+
+### CTR-ACC-07 — Signed mandate revocation bound to epoch
+- old: CR-ADW-1 · status: current · owner: no · date: 2026-10-07 · normative: contracts/accounts-mandates.md#CTR-ACC-07 · superseded-by: —
+
+**Why.** A signed revocation bound to an epoch revokes every outstanding mandate signature at once and works gaslessly.
+**Cost if wrong.** Without the epoch a revoked delegate could replay an older mandate.
+**Source.** `history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:296`
+
+### CTR-ACC-08 — Passkey subjects, Merkle batch, account key lifecycle
+- old: R31(account) · status: current · owner: yes · date: 2026-10-07 · normative: contracts/accounts-mandates.md#CTR-ACC-08 · superseded-by: —
+
+**Why.** Retail subjects use passkeys they already have; Merkle batching gives one biometric prompt for many lines; one grammar and check order apply in every family.
+**Cost if wrong.** Per-family WebAuthn checks drift, and one lax family (suffix origin, crossOrigin) becomes the phishing target.
+**Source.** `history/specs/2026-10-03-blockchain-round3-design.md:519`
+
+### CTR-ACC-09 — SubjectAccount kept as optional option (b)
+- old: R307 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/accounts-mandates.md#CTR-ACC-09 · superseded-by: —
+
+**Why.** `SubjectAccount` stays available as option (b) for users who want a stable address across key rotation.
+**Cost if wrong.** Removing it would force every rotation to move funds.
+**Source.** `history/specs/2026-10-06-universal-account-design.md:238`
+
+## Contracts — DEX
+
+### CTR-DEX-01 — Settlement contract checks two signed orders
+- old: R35(contract) · status: current · owner: yes · date: 2026-10-03 · normative: contracts/dex.md#CTR-DEX-01 · superseded-by: —
+
+**Why.** An off-chain persistent book with on-chain settlement of two signed orders gives exchange UX without custody; settlement checks price limits and fills itself.
+**Cost if wrong.** Trusting the book for prices would let the operator fill against users.
+**Source.** `history/specs/2026-10-03-blockchain-round3-design.md:554`
+
+### CTR-DEX-02 — Cancel signatures never expire
+- old: RS5-10 · status: current · owner: no · date: 2026-10-03 · normative: contracts/dex.md#CTR-DEX-02 · superseded-by: —
+
+**Why.** Cancel signatures never expire, so a cancellation cannot lapse before the order does.
+**Cost if wrong.** An expiring cancel could resurrect an order the maker withdrew.
+**Source.** `history/specs/2026-10-03-dex-design.md:119`
+
+### CTR-DEX-03 — Immutable admin sets markets; fee capped
+- old: RS5-1 · status: current · owner: no · date: 2026-10-03 · normative: contracts/dex.md#CTR-DEX-03 · superseded-by: —
+
+**Why.** An immutable admin sets markets and a capped fee; it cannot touch user funds.
+**Cost if wrong.** An uncapped or upgradeable admin is custody by another name.
+**Source.** `history/specs/2026-10-03-dex-design.md:398`
+
+### CTR-DEX-04 — EVM closes IOC remainder at settle
+- old: RS5-3 · status: current · owner: no · date: 2026-10-07 · normative: contracts/dex.md#CTR-DEX-04 · superseded-by: —
+
+**Why.** On EVM an IOC remainder is closed at settle, so it cannot fill later.
+**Cost if wrong.** A dangling IOC remainder could fill at a stale price.
+**Source.** `history/specs/2026-10-03-dex-design.md:402`
+
+### CTR-DEX-05 — FOK checked on chain as one full pair
+- old: RS5-4 · status: current · owner: no · date: 2026-10-03 · normative: contracts/dex.md#CTR-DEX-05 · superseded-by: —
+
+**Why.** FOK is checked on chain as one full pair, so a partial fill can never settle.
+**Cost if wrong.** Trusting the book for FOK lets a buggy matcher partially fill.
+**Source.** `history/specs/2026-10-03-dex-design.md:404`
+
+### CTR-DEX-06 — Relayer FIXED fee pro-rata, rounds down
+- old: RS5-6(relayer-fee) · status: current · owner: no · date: 2026-10-03 · normative: contracts/dex.md#CTR-DEX-06 · superseded-by: —
+
+**Why.** The relayer FIXED fee is charged pro-rata per fill and rounds down in the user's favour.
+**Cost if wrong.** Charging the full fee per partial fill overcharges makers.
+**Source.** `history/specs/2026-10-03-dex-design.md:407`
+
+### CTR-DEX-07 — MetaTxDex kept as unrouted legacy
+- old: RS5-7 · status: current · owner: no · date: 2026-10-03 · normative: contracts/dex.md#CTR-DEX-07 · superseded-by: —
+
+**Why.** `MetaTxDex` stays deployed as legacy but is not routed by the gateway.
+**Cost if wrong.** Routing two settlement contracts doubles the support surface.
+**Source.** `history/specs/2026-10-03-dex-design.md:409`
+
+### CTR-DEX-08 — OrderBookDex caps ERC-1271 gas by codehash
+- old: RS5-14(contract) · status: current · owner: no · date: 2026-10-07 · normative: contracts/dex.md#CTR-DEX-08 · superseded-by: —
+
+**Why.** OrderBookDex caps ERC-1271 gas by codehash (400 k for `SubjectAccount` clones, else 50 k) and refuses to run with too little gas left.
+**Cost if wrong.** Uncapped 1271 lets a maker grief the settler; a 63/64 starvation could fake a failed check.
+**Source.** `history/specs/2026-10-03-dex-design.md:431`
+
+### CTR-DEX-09 — Non-EVM settlement bound to the relayer
+- old: RS5-15(non-evm) · status: current · owner: no · date: 2026-10-07 · normative: contracts/dex.md#CTR-DEX-09 · superseded-by: —
+
+**Why.** Non-EVM settlement is bound to the relayer, so a third party cannot front-run a matched pair.
+**Cost if wrong.** Unbound settlement lets copycats steal relayer fees.
+**Source.** `history/specs/2026-10-03-dex-design.md:438`
+
+### CTR-DEX-10 — min_nonce capped by family word width
+- old: RS5-19 · status: current · owner: no · date: 2026-10-07 · normative: contracts/dex.md#CTR-DEX-10 · superseded-by: —
+
+**Why.** `min_nonce` is capped by each family's word width so a maker cannot brick its own nonce space by overflow.
+**Cost if wrong.** An uncapped value could wrap or exhaust the nonce space.
+**Source.** `history/specs/2026-10-03-dex-design.md:448`
+
+### CTR-DEX-11 — DEX fee per fill rounds up
+- old: RS5-21 · status: current · owner: no · date: 2026-10-07 · normative: contracts/dex.md#CTR-DEX-11 · superseded-by: —
+
+**Why.** The DEX fee per fill rounds up, so many small fills cannot evade the fee by rounding.
+**Cost if wrong.** Round-down lets dust fills trade fee-free.
+**Source.** `history/specs/2026-10-03-dex-design.md:455`
+
+### CTR-DEX-12 — Managed market venue contract and arbiter
+- old: R214(contract) · status: current · owner: yes · date: 2026-10-06 · normative: contracts/dex.md#CTR-DEX-12 · superseded-by: —
+
+**Why.** A managed market is a venue contract with an arbiter for regulated assets; ordinary markets stay permissionless.
+**Cost if wrong.** Mixing managed rules into the open DEX would gate everyone.
+**Source.** `history/specs/2026-10-06-asset-suite-design.md:176`
+
+### CTR-DEX-80 — Fill-or-kill two-leg MetaTxDex settlement
+- old: R3 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CTR-DEX-01, NODE-DEX-01, INT-ERP-12
+
+**What it said.** The first design settled two `MetaTxDex` legs fill-or-kill.
+
+### CTR-DEX-81 — DEX fee on received side rounds down
+- old: RS5-6(dex-fee) · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CTR-DEX-11
+
+**What it said.** An earlier rule rounded the DEX fee on the received side down.
+
+## Contracts — Sealed-bid tender
+
+### CTR-TND-01 — Deposit and commitment are one pay signature
+- old: R180 · status: current · owner: no · date: 2026-10-06 · normative: contracts/tender.md#CTR-TND-01 · superseded-by: —
+
+**Why.** The deposit and the bid commitment are one pay signature, so a bidder cannot commit without paying the deposit.
+**Cost if wrong.** Separate steps let a bidder commit and never deposit.
+**Source.** `history/specs/2026-10-06-tender-sponsorship-shredding.md:62`
+
+### CTR-TND-02 — Commitment hash binds chain, tender and bidder
+- old: R181 · status: current · owner: no · date: 2026-10-06 · normative: contracts/tender.md#CTR-TND-02 · superseded-by: —
+
+**Why.** The commitment hash binds chain, tender and bidder, so it cannot be copied to another tender or bidder.
+**Cost if wrong.** An unbound commitment could be replayed by another bidder.
+**Source.** `history/specs/2026-10-06-tender-sponsorship-shredding.md:70`
+
+### CTR-TND-03 — Permissionless reveal and withdraw; no bid replacement
+- old: R182 · status: current · owner: no · date: 2026-10-06 · normative: contracts/tender.md#CTR-TND-03 · superseded-by: —
+
+**Why.** Reveal and withdraw are permissionless and bids cannot be replaced, so nobody depends on the organizer to finish.
+**Cost if wrong.** Organizer-only reveal lets the organizer suppress bids.
+**Source.** `history/specs/2026-10-06-tender-sponsorship-shredding.md:76`
+
+### CTR-TND-04 — Forfeited deposits go to immutable slashSink
+- old: R183 · status: current · owner: no · date: 2026-10-06 · normative: contracts/tender.md#CTR-TND-04 · superseded-by: —
+
+**Why.** Forfeited deposits go to an immutable `slashSink`, so the organizer cannot profit from disqualifying bidders.
+**Cost if wrong.** A mutable sink rewards fake disqualification.
+**Source.** `history/specs/2026-10-06-tender-sponsorship-shredding.md:82`
+
+### CTR-TND-05 — Public price range; earliest commit wins ties
+- old: R184 · status: current · owner: no · date: 2026-10-06 · normative: contracts/tender.md#CTR-TND-05 · superseded-by: —
+
+**Why.** A public price range and earliest-commit tie-break make the winner deterministic from on-chain data.
+**Cost if wrong.** Hidden ranges or discretionary ties invite manipulation.
+**Source.** `history/specs/2026-10-06-tender-sponsorship-shredding.md:87`
+
+### CTR-TND-06 — Early cancel only; bounded leader disqualification
+- old: R185 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/tender.md#CTR-TND-06 · superseded-by: —
+
+**Why.** The organizer may cancel only early and disqualify the leader only within bounds, so a tender cannot be steered after reveal.
+**Cost if wrong.** Unbounded disqualification is a veto over the result.
+**Source.** `history/specs/2026-10-06-tender-sponsorship-shredding.md:92`
+
+### CTR-TND-07 — Deposit token from a registered factory implementation
+- old: R186 · status: current · owner: no · date: 2026-10-06 · normative: contracts/tender.md#CTR-TND-07 · superseded-by: —
+
+**Why.** The deposit token must come from a registered factory implementation, so its transfer semantics are known.
+**Cost if wrong.** An arbitrary token could block refunds or fake deposits.
+**Source.** `history/specs/2026-10-06-tender-sponsorship-shredding.md:107`
+
+### CTR-TND-08 — Fixed windows, bond policies, no admin
+- old: R187 · status: current · owner: no · date: 2026-10-06 · normative: contracts/tender.md#CTR-TND-08 · superseded-by: —
+
+**Why.** Fixed windows and bond policies with no admin make the timeline enforceable by anyone.
+**Cost if wrong.** An admin-adjustable window can be bent for a favoured bidder.
+**Source.** `history/specs/2026-10-06-tender-sponsorship-shredding.md:114`
+
+## Contracts — Asset suite
+
+### CTR-AS-01 — Regulated module as separate implementations, kinds 5-7
+- old: R200 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/asset-suite.md#CTR-AS-01 · superseded-by: —
+
+**Why.** Regulated behaviour ships as separate implementations (kinds 5–7), so plain tokens never carry compliance powers.
+**Cost if wrong.** Optional compliance flags inside plain tokens would make every token potentially regulated.
+**Source.** `history/specs/2026-10-06-asset-suite-design.md:69`
+
+### CTR-AS-02 — Regulated module is a third creation-time exception
+- old: R201 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/asset-suite.md#CTR-AS-02 · superseded-by: —
+
+**Why.** The regulated module is a third creation-time exception, visible before anyone acquires the token.
+**Cost if wrong.** Adding it later would break the provenance promise.
+**Source.** `history/specs/2026-10-06-asset-suite-design.md:80`
+
+### CTR-AS-03 — Issuer and compliance roles; renouncing relaxes
+- old: R202 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/asset-suite.md#CTR-AS-03 · superseded-by: —
+
+**Why.** Issuer and compliance roles are separate; renouncing a role only relaxes control.
+**Cost if wrong.** One combined role would concentrate every power in one key.
+**Source.** `history/specs/2026-10-06-asset-suite-design.md:87`
+
+### CTR-AS-04 — Forced transfer only against a recorded order
+- old: R203 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/asset-suite.md#CTR-AS-04 · superseded-by: —
+
+**Why.** A forced transfer requires a recorded order, so it leaves an auditable reason on chain.
+**Cost if wrong.** Unrecorded forced transfers are indistinguishable from theft.
+**Source.** `history/specs/2026-10-06-asset-suite-design.md:94`
+
+### CTR-AS-05 — Freeze semantics and bounded freeze duration
+- old: R204 · status: current · owner: no · date: 2026-10-06 · normative: contracts/asset-suite.md#CTR-AS-05 · superseded-by: —
+
+**Why.** Freezes have defined semantics and a bounded duration, so a freeze is not a silent confiscation.
+**Cost if wrong.** Unbounded freezes are de facto seizures.
+**Source.** `history/specs/2026-10-06-asset-suite-design.md:102`
+
+### CTR-AS-06 — Global pause up to 7 days with cooldown
+- old: R205 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/asset-suite.md#CTR-AS-06 · superseded-by: —
+
+**Why.** A global pause lasts at most 7 days with a cooldown, so it cannot become a permanent lock.
+**Cost if wrong.** Unbounded pauses trap holders indefinitely.
+**Source.** `history/specs/2026-10-06-asset-suite-design.md:111`
+
+### CTR-AS-07 — Allowlist through ComplianceRegistry, receivers only
+- old: R206 · status: current · owner: no · date: 2026-10-06 · normative: contracts/asset-suite.md#CTR-AS-07 · superseded-by: —
+
+**Why.** Allowlisting runs through the address-keyed `ComplianceRegistry` and checks receivers only, so holders can always exit to an allowed address.
+**Cost if wrong.** Checking senders too could trap holders who lost status.
+**Source.** `history/specs/2026-10-06-asset-suite-design.md:118`
+
+### CTR-AS-08 — Regulated checks at step 6 and in _update
+- old: R207 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/asset-suite.md#CTR-AS-08 · superseded-by: —
+
+**Why.** Regulated checks sit at pipeline step 6 and in `_update`, so every path (direct and meta-tx) is covered.
+**Cost if wrong.** A check in one path only is bypassed through the other.
+**Source.** `history/specs/2026-10-06-asset-suite-design.md:126`
+
+### CTR-AS-09 — No regulated power touches reserves, rates or legs
+- old: R208 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/asset-suite.md#CTR-AS-09 · superseded-by: —
+
+**Why.** No regulated power touches reserves, rates or legs, so compliance cannot be used to move backing value.
+**Cost if wrong.** Compliance roles over reserves would be custody.
+**Source.** `history/specs/2026-10-06-asset-suite-design.md:138`
+
+### CTR-AS-10 — One counterfactual VestingGrant clone per grant
+- old: R209 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/asset-suite.md#CTR-AS-10 · superseded-by: —
+
+**Why.** One counterfactual `VestingGrant` clone per grant isolates grants and gives each a predictable address.
+**Cost if wrong.** A shared vesting pool mixes beneficiaries' risks.
+**Source.** `history/specs/2026-10-06-asset-suite-design.md:145`
+
+### CTR-AS-11 — Merkle distributions from a node-indexed snapshot
+- old: R210 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/asset-suite.md#CTR-AS-11 · superseded-by: —
+
+**Why.** Distributions are Merkle claims from a node-indexed snapshot, so gas scales with claimants, not holders.
+**Cost if wrong.** On-chain iteration over holders does not scale and can be griefed.
+**Source.** `history/specs/2026-10-06-asset-suite-design.md:155`
+
+### CTR-AS-12 — Splits are migrations through ExchangeOffer
+- old: R211 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/asset-suite.md#CTR-AS-12 · superseded-by: —
+
+**Why.** Splits are migrations through `ExchangeOffer`, so no token ever rebases.
+**Cost if wrong.** Rebasing breaks integrations and 1:1 reserves.
+**Source.** `history/specs/2026-10-06-asset-suite-design.md:162`
+
+### CTR-AS-13 — ExchangeOffer exact multiples and protected obligations
+- old: R212 · status: current · owner: no · date: 2026-10-06 · normative: contracts/asset-suite.md#CTR-AS-13 · superseded-by: —
+
+**Why.** `ExchangeOffer` uses exact multiples and protects outstanding obligations, so a migration never strands value.
+**Cost if wrong.** Inexact ratios leave dust and disputes.
+**Source.** `history/specs/2026-10-06-asset-suite-design.md:167`
+
+### CTR-AS-14 — Asset templates are off-chain presets
+- old: R213 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/asset-suite.md#CTR-AS-14 · superseded-by: —
+
+**Why.** Asset templates are off-chain presets over the same implementations, so adding a template needs no contract change.
+**Cost if wrong.** On-chain templates would need upgradeable code or new audits per template.
+**Source.** `history/specs/2026-10-06-asset-suite-design.md:173`
+
+### CTR-AS-15 — Action contracts have no owner or upgrade
+- old: R216 · status: current · owner: no · date: 2026-10-06 · normative: contracts/asset-suite.md#CTR-AS-15 · superseded-by: —
+
+**Why.** Action contracts have no owner and no upgrade.
+**Cost if wrong.** An owner on an action contract is a backdoor over the assets it holds.
+**Source.** `history/specs/2026-10-06-asset-suite-design.md:187`
+
+### CTR-AS-16 — ELIGIBLE_CONTRACT only on pass-through contracts
+- old: R217 · status: current · owner: no · date: 2026-10-06 · normative: contracts/asset-suite.md#CTR-AS-16 · superseded-by: —
+
+**Why.** `ELIGIBLE_CONTRACT` is granted only to pass-through contracts, so allowlisting a contract cannot launder transfers to ineligible holders.
+**Cost if wrong.** Eligible contracts that hold and release value would bypass the receiver check.
+**Source.** `history/specs/2026-10-06-asset-suite-design.md:193`
+
+## Contracts — Zether (classical)
+
+### CTR-ZTH-01 — Full classical Zether, unaudited, dev-chain gated
+- old: R34(scope), UD:§12, UD:§12.2, UD:§12.3, UD:§12.4, UD:§12.7.6, UD:§15:D2, UD:§19:curve-param, UD:§20.1, UD:§25, UD:§25:flipped, UD:§25:ruling, canon:D1, canon:D2, canon:D17 · status: current · owner: yes · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-01 · superseded-by: —
+
+**Why.** The owner wants full classical Zether now (identity visible, amounts hidden), built, unaudited and gated to dev chains, with bn254 and BLS12-381 verifiers. The curve is a property of each token (chosen by its verifier address), not a system setting: bn254 uses the Byzantium (2017) precompiles 0x06/0x07/0x08 with 64-byte G1 points; BLS12-381 needs the Prague precompiles 0x0b to 0x10 and 128-byte G1 points (measured with `eth_call` to 0x0b on Gnosis). rollOver is `PUBLIC` by default and `OWNER_ONLY` by opt-in, per `(account, token)`: owner signing protects only if it covers every path that advances the account sequence, so per account `accSeq[a]` advances without the owner's consent exactly when `mode[a] == PUBLIC`. The `PUBLIC` branch is safe because rollOver is a no-op when `pendingSeq[a] == lastRolledPendingSeq[a]`, so a griefer must fund the victim before each attempt.
+**Cost if wrong.** Unaudited cryptography on a public chain could mint; the gate (CTR-ZTH-02) is what prevents that.
+**Source.** `history/specs/2026-10-03-blockchain-round3-design.md:546`, `research/_USER-DECISIONS.md:463`, `research/_USER-DECISIONS.md:483`, `research/_USER-DECISIONS.md:508`, `research/_USER-DECISIONS.md:537`, `research/_USER-DECISIONS.md:691`, `research/_USER-DECISIONS.md:860`, `research/_USER-DECISIONS.md:1060`, `research/_USER-DECISIONS.md:1093`, `research/_USER-DECISIONS.md:2630`, `research/_USER-DECISIONS.md:2638`, `research/_USER-DECISIONS.md:2653`, `research/_USER-DECISIONS.md:859`, `research/_USER-DECISIONS.md:864`
+
+### CTR-ZTH-02 — Classical Zether gated to dev chains 31337/1337
+- old: RS2-1 · status: current · owner: no · date: 2026-10-07 · normative: contracts/zether.md#CTR-ZTH-02 · superseded-by: —
+
+**Why.** A hard-coded dev-chain allowlist in every constructor keeps unaudited Zether off real networks even with a manual deploy.
+**Cost if wrong.** A configurable gate is one transaction away from production use.
+**Source.** `history/specs/2026-10-03-zether-design.md:583`
+
+### CTR-ZTH-03 — No epochs; verifier takes the full statement
+- old: RS2-2 · status: current · owner: no · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-03 · superseded-by: —
+
+**Why.** Proofs take the full statement and there are no epochs, removing epoch-boundary races. Rejected: the early `IZetherToken` sketch with epoch-based `simulateAccounts`, `getPendingBalance` per epoch and an epoch `rollOver()`.
+**Cost if wrong.** Epochs force retries at boundaries and couple liveness to block timing.
+**Source.** `history/specs/2026-10-03-zether-design.md:586`
+
+### CTR-ZTH-04 — shieldScale is raw units per shielded unit
+- old: RS2-3, UD:§2 · status: current · owner: no · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-04 · superseded-by: —
+
+**Why.** `shieldScale` is raw underlying units per shielded unit, a single integer that keeps the 2^54 bound meaningful for any decimals. The bound exists because the amount is exponential ElGamal: the key only strips the mask (`C / D^x = g^b`), and getting `b` back from `g^b` is a discrete log that BSGS solves in `O(sqrt(b))` steps; the contract only ever returns ciphertext and never holds `x`. The bound bites only in cold recovery: in daily use the client knows the previous balance and solves only the difference. 2^44 is the last BSGS table size that fits a phone; `2^48` is blocked by memory, not time (Pollard kangaroo removes the memory wall at 2 to 4 times the time). Raising `shieldScale` is cheaper than buying bits and costs only granularity.
+**Cost if wrong.** Scaling by decimals inside the circuit would add rounding paths.
+**Source.** `history/specs/2026-10-03-zether-design.md:588`, `research/_USER-DECISIONS.md:49`
+
+### CTR-ZTH-05 — Inner fee to beneficiary pending; outer fee public
+- old: RS2-4, UD:§10:fee-layers · status: current · owner: no · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-05 · superseded-by: —
+
+**Why.** Two fee layers: an inner confidential fee to a beneficiary's pending balance and an outer public fee for the relayer. A holder whose money is all confidential has no public token to pay an outer fee; the inner fee (`C_fee`, debited from the encrypted balance) is the only way such an account can pay a relayer. Fee first, amount second: the proof shows `fee >= 0`, `v >= 0`, `b - fee >= 0` and `(b - fee) - v >= 0` together.
+**Cost if wrong.** One fee layer would either leak the amount or leave relayers unpaid.
+**Source.** `history/specs/2026-10-03-zether-design.md:590`, `research/_USER-DECISIONS.md:351`
+
+### CTR-ZTH-06 — Envelope binding covers envelope fields except data
+- old: RS2-5 · status: current · owner: no · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-06 · superseded-by: —
+
+**Why.** The envelope binding covers every envelope field except `data`, so a proof cannot be stripped or re-wrapped.
+**Cost if wrong.** An unbound proof can be lifted into another envelope with another fee recipient.
+**Source.** `history/specs/2026-10-03-zether-design.md:592`
+
+### CTR-ZTH-07 — Outer FIXED fee uncapped; PERCENT forbidden
+- old: RS2-6, UD:§3, UD:§3.2, UD:§3.4 · status: current · owner: no · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-07 · superseded-by: —
+
+**Why.** Confidential ops take only an absolute FIXED outer fee; PERCENT would reveal the amount through the fee.
+**Cost if wrong.** A percentage fee on a hidden amount is an amount oracle.
+**Source.** `history/specs/2026-10-03-zether-design.md:594`, `research/_USER-DECISIONS.md:102`, `research/_USER-DECISIONS.md:124`, `research/_USER-DECISIONS.md:164`
+
+### CTR-ZTH-08 — Separate ZetherMetaTx mixin; v1 sources untouched
+- old: RS2-7, UD:§10 · status: current · owner: no · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-08 · superseded-by: —
+
+**Why.** A separate `ZetherMetaTx` mixin reuses `MetaTxLib` read-only, so v1 token sources stay untouched. Zether is a child of the meta-transaction layer, so every confidential token is gasless too; an early code draft declared `ISecureERC20 is IERC20`, which would have left confidential tokens without meta-transactions. Rejected: the early `IZetherToken` interface sketch (`schnorrAddress`, `zetherNonce`, `EncryptedBalance` structs, `transferConfidential` with a `metaTx.amount = 0` wrapper) — replaced by the built `IZetherToken` and the envelope ops.
+**Cost if wrong.** Editing the v1 sources would invalidate their tests and audits.
+**Source.** `history/specs/2026-10-03-zether-design.md:595`, `research/_USER-DECISIONS.md:331`
+
+### CTR-ZTH-09 — Auditor key immutable, set at initialize
+- old: RS2-8 · status: current · owner: no · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-09 · superseded-by: —
+
+**Why.** The auditor key is immutable and set at `initialize`; there is no setter.
+**Cost if wrong.** A settable auditor key would let an admin start reading every future transfer.
+**Source.** `history/specs/2026-10-03-zether-design.md:596`
+
+### CTR-ZTH-10 — Underlying must be an ERC-20 in v1
+- old: RS2-11 · status: current · owner: no · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-10 · superseded-by: —
+
+**Why.** The underlying must be an ERC-20 in v1; native coins and self-minted supply add paths the proofs do not cover.
+**Cost if wrong.** Native-coin handling would add reentrancy and accounting paths.
+**Source.** `history/specs/2026-10-03-zether-design.md:600`
+
+### CTR-ZTH-11 — fund and rollOver direct; transfer/burn enveloped
+- old: RS2-12 · status: current · owner: no · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-11 · superseded-by: —
+
+**Why.** `fund` and `rollOver*` are direct calls; only transfer and burn travel in envelopes.
+**Cost if wrong.** Enveloping public ops adds cost with no privacy gain.
+**Source.** `history/specs/2026-10-03-zether-design.md:601`
+
+### CTR-ZTH-12 — No AEAD memo; client decrypts by BSGS
+- old: RS2-13 · status: current · owner: no · date: 2026-10-05 · normative: contracts/zether.md#CTR-ZTH-12 · superseded-by: —
+
+**Why.** No AEAD memo: the client decrypts balances itself with BSGS, so no extra ciphertext format needs securing.
+**Cost if wrong.** A memo would be a second encryption to audit and key-manage.
+**Source.** `history/specs/2026-10-03-zether-design.md:603`
+
+### CTR-ZTH-13 — Direct transferConfidential carries no outer fee
+- old: RS2-14 · status: current · owner: no · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-13 · superseded-by: —
+
+**Why.** A direct confidential transfer carries no outer fee; the caller pays its own gas.
+**Cost if wrong.** An outer fee on direct calls would need an unbound recipient.
+**Source.** `history/specs/2026-10-03-zether-design.md:605`
+
+### CTR-ZTH-14 — Disclosure bundle stored; fee-on-transfer underlyings refused
+- old: RS2-15, ZL:D6 · status: current · owner: yes · date: 2026-10-05 · normative: contracts/zether.md#CTR-ZTH-14 · superseded-by: —
+
+**Why.** The disclosure bundle is stored per transfer so the parties can prove amounts later; fee-on-transfer underlyings are refused.
+**Cost if wrong.** Without the bundle disclosures depend on off-chain archives; FoT underlyings break the escrow invariant.
+**Source.** `history/specs/2026-10-03-zether-design.md:607`, `history/specs/2026-10-05-zether-limits.md:18`
+
+### CTR-ZTH-15 — Verifier forwards gas to precompiles; simulate first
+- old: RS2-16 · status: current · owner: no · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-15 · superseded-by: —
+
+**Why.** The verifier forwards `gas()` to the precompiles and clients simulate first, so a precompile repricing does not silently fail proofs.
+**Cost if wrong.** Pinned gas stipends break when precompile prices change.
+**Source.** `history/specs/2026-10-03-zether-design.md:609`
+
+### CTR-ZTH-16 — rollOverSigned accepts pendingSeq at least expected
+- old: RS2-17 · status: current · owner: no · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-16 · superseded-by: —
+
+**Why.** `rollOverSigned` accepts `pendingSeq` at least the expected value, so a free public rollover in between does not invalidate a signed one.
+**Cost if wrong.** An equality check lets anyone grief signed rollovers.
+**Source.** `history/specs/2026-10-03-zether-design.md:612`
+
+### CTR-ZTH-17 — rollOverSigned requires a new credit
+- old: RS2-19 · status: current · owner: no · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-17 · superseded-by: —
+
+**Why.** `rollOverSigned` requires a new credit, so it cannot be replayed to no effect.
+**Cost if wrong.** Replays would burn the owner's relayer fees.
+**Source.** `history/specs/2026-10-03-zether-design.md:614`
+
+### CTR-ZTH-18 — Range bits n_v = n_b = 64, sound
+- old: RS-NV64-1, ZL:D1, ZL:D2 · status: current · owner: yes · date: 2026-10-05 · normative: contracts/zether.md#CTR-ZTH-18 · superseded-by: —
+
+**Why.** Range bits `n_v = n_b = 64` are sound with the 2^54 cap; every honest value fits and no wrap-around is provable.
+**Cost if wrong.** Fewer bits would reject honest balances; an unsound pair would allow minting.
+**Source.** `history/specs/2026-10-03-zether-design.md:623`, `history/specs/2026-10-05-zether-limits.md:13`, `history/specs/2026-10-05-zether-limits.md:14`
+
+### CTR-ZTH-19 — Configurable client BSGS plus device balance cache
+- old: RS-NV64-2, ZL:D4, ZL:D5 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/zether.md#CTR-ZTH-19 · superseded-by: —
+
+**Why.** Client BSGS is configurable and a device balance cache avoids repeated discrete logs.
+**Cost if wrong.** A fixed BSGS table either wastes memory or fails on large balances.
+**Source.** `history/specs/2026-10-03-zether-design.md:644`, `history/specs/2026-10-05-zether-limits.md:16`, `history/specs/2026-10-05-zether-limits.md:17`
+
+### CTR-ZTH-20 — Clients and gateway pin canonical verifier and registry
+- old: RS2-20 · status: current · owner: no · date: 2026-10-07 · normative: contracts/zether.md#CTR-ZTH-20 · superseded-by: —
+
+**Why.** Clients and the gateway pin the verifier and registry addresses per chain profile.
+**Cost if wrong.** A spoofed verifier address would accept forged proofs in the client's view.
+**Source.** `history/specs/2026-10-03-zether-design.md:661`
+
+### CTR-ZTH-21 — ZetherMetaTx ERC-1271 gas cap by codehash
+- old: RS2-21 · status: current · owner: no · date: 2026-10-07 · normative: contracts/zether.md#CTR-ZTH-21 · superseded-by: —
+
+**Why.** `ZetherMetaTx` applies the same codehash-based ERC-1271 cap as `MetaToken`.
+**Cost if wrong.** An uncapped check lets contract wallets grief relayers.
+**Source.** `history/specs/2026-10-03-zether-design.md:664`
+
+### CTR-ZTH-22 — Mandatory invariant, subgroup and D_out tests
+- old: RS2-23 · status: current · owner: no · date: 2026-10-07 · normative: contracts/zether.md#CTR-ZTH-22 · superseded-by: —
+
+**Why.** Invariant, subgroup and `D_out` tests are mandatory before any gate is lifted.
+**Cost if wrong.** Missing subgroup tests have broken real Zether-like systems.
+**Source.** `history/specs/2026-10-03-zether-design.md:670`
+
+### CTR-ZTH-23 — Outer fee recipient equal to token reverts
+- old: RS2-24 · status: current · owner: no · date: 2026-10-07 · normative: contracts/zether.md#CTR-ZTH-23 · superseded-by: —
+
+**Why.** An outer fee recipient equal to the token reverts, so fees cannot be locked in the token.
+**Cost if wrong.** Fees sent to the token are stuck forever.
+**Source.** `history/specs/2026-10-03-zether-design.md:675`
+
+### CTR-ZTH-24 — Client balance-cache key includes the chain
+- old: RS2-25 · status: current · owner: no · date: 2026-10-07 · normative: contracts/zether.md#CTR-ZTH-24 · superseded-by: —
+
+**Why.** The client balance-cache key includes the chain, so two chains with the same token address do not mix balances.
+**Cost if wrong.** A shared cache shows wrong balances after a chain switch.
+**Source.** `history/specs/2026-10-03-zether-design.md:676`
+
+### CTR-ZTH-25 — Public schnorrSign export takes no nonce k
+- old: RS2-26 · status: current · owner: no · date: 2026-10-07 · normative: contracts/zether.md#CTR-ZTH-25 · superseded-by: —
+
+**Why.** The public `schnorrSign` export takes no nonce `k`, so callers cannot reuse nonces.
+**Cost if wrong.** A caller-supplied nonce reused twice leaks the key.
+**Source.** `history/specs/2026-10-03-zether-design.md:678`
+
+### CTR-ZTH-26 — MAX_TOTAL_SHIELDED stays 2^54
+- old: ZL:D3 · status: current · owner: yes · date: 2026-10-05 · normative: contracts/zether.md#CTR-ZTH-26 · superseded-by: —
+
+**Why.** `MAX_TOTAL_SHIELDED` stays 2^54: it is the BSGS decryption bound, not a per-transfer maximum.
+**Cost if wrong.** Raising it makes client decryption impractical.
+**Source.** `history/specs/2026-10-05-zether-limits.md:15`
+
+### CTR-ZTH-27 — Zether runs on the private chain first
+- old: UD:§1:private-chain · status: open · owner: yes · date: 2026-08-30 · normative: contracts/zether.md#CTR-ZTH-27 · superseded-by: —
+
+**Why.** Open owner decision: whether classical Zether runs on the private chain first.
+**Cost if wrong.** Deciding without the audit and gas data could put unaudited cryptography on a shared chain.
+**Source.** `research/_USER-DECISIONS.md:42`
+
+### CTR-ZTH-28 — Tiered Zether fees leak the amount
+- old: UD:§3.3 · status: open · owner: yes · date: 2026-08-30 · normative: contracts/zether.md#CTR-ZTH-28 · superseded-by: —
+
+**Why.** Open owner decision: a tiered Zether fee leaks the amount band; only flat fees are safe today.
+**Cost if wrong.** A tiered fee turns the fee into an amount oracle.
+**Source.** `research/_USER-DECISIONS.md:149`
+
+### CTR-ZTH-29 — Independent open-source disclosure verifier CLI
+- old: UD:§12.7.5 · status: current · owner: yes · date: 2026-08-30 · normative: contracts/zether.md#CTR-ZTH-29 · superseded-by: —
+
+**Why.** An independent open-source disclosure verifier lets any counterparty check a disclosure without trusting SCaaS. It reads from an archive node or a signed chain export, takes `(entryRef, v, s)` and prints PASS or FAIL with every intermediate value; it is deterministic, so two examiners get the same result.
+**Cost if wrong.** Disclosure checked only by SCaaS tools is trust in SCaaS.
+**Source.** `research/_USER-DECISIONS.md:676`
+
+### CTR-ZTH-30 — Derive s from seed via PRF
+- old: UD:§13.2 · status: current · owner: yes · date: 2026-08-30 · normative: contracts/zether.md#CTR-ZTH-30 · superseded-by: —
+
+**Why.** The sender randomness `s` is derived from the seed by a PRF, so nothing per transfer needs storing. The research sketch was s = HKDF-SHA256(seed_zether, info = "ZTX/s/v1" ‖ chainId ‖ tokenAddress ‖ fromUA ‖ sendCounter) with the `sendCounter` read from the chain, so a wallet restored from its seed alone can still prove every past transfer.
+**Cost if wrong.** Stored randomness is one more secret to lose or leak.
+**Source.** `research/_USER-DECISIONS.md:727`
+
+### CTR-ZTH-31 — Fallback: accept stale accSeq for credits only
+- old: UD:§25:fallback · status: open · owner: yes · date: 2026-09-03 · normative: contracts/zether.md#CTR-ZTH-31 · superseded-by: —
+
+**Why.** Open owner contingency: if rollover griefing spreads, accept a stale `accSeq` for credits only (a credit only raises the balance, so the range statement does not weaken); that is a protocol change and needs the cryptography review. The immediate escape hatch for one account is `setRollOverMode(OWNER_ONLY)`, one transaction; epochs are not the fallback.
+**Cost if wrong.** Without a fallback a griefer could keep a busy account from spending.
+**Source.** `research/_USER-DECISIONS.md:2688`
+
+### CTR-ZTH-32 — Production curve for classical Zether tokens
+- old: reorg:Q5(curve) · status: open · owner: yes · date: 2026-10-07 · normative: contracts/zether.md#CTR-ZTH-32 · superseded-by: —
+
+**Why.** Open owner decision: the production curve for classical Zether (bn254 or BLS12-381); BLS12-381 is more secure and not cheaper.
+**Cost if wrong.** Choosing bn254 for money at rest accepts ~100-bit security.
+**Source.** `superpowers/plans/2026-10-07-docs-reorg.md:1219`
+
+### CTR-ZTH-33 — Chain 7622 is not a classical-Zether dev chain
+- old: reorg:Q5(dev-chain) · status: open · owner: yes · date: 2026-10-07 · normative: contracts/zether.md#CTR-ZTH-33 · superseded-by: —
+
+**Why.** Open owner decision: chain 7622 is not a classical-Zether dev chain until the owner decides.
+**Cost if wrong.** Treating it as dev would put unaudited classical Zether on the shared private chain.
+**Source.** `superpowers/plans/2026-10-07-docs-reorg.md:1219`
+
+### CTR-ZTH-80 — Range bits 32 and DECRYPT_BOUND 2^40
+- old: R34(params) · status: superseded · owner: yes · date: 2026-10-03 · normative: — · superseded-by: CTR-ZTH-18, CTR-ZTH-19
+
+**What it said.** An earlier ruling used range bits 32 and a decryption bound of 2^40.
+
+### CTR-ZTH-81 — Zether registry with eight auth schemes and PoP
+- old: R34(registry) · status: superseded · owner: yes · date: 2026-10-03 · normative: — · superseded-by: CTR-UA-02, CTR-UA-16, CTR-UA-22
+
+**What it said.** The built Zether-only registry with eight auth schemes and a PoP bound to `msg.sender` (Transitional, BUILT on dev chains; replaced by the UA registry).
+
+### CTR-ZTH-82 — PQ_COMMITMENT verified like SELF_SCHNORR
+- old: RS2-10 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CTR-UA-23, CTR-UA-16
+
+**What it said.** An earlier rule verified `PQ_COMMITMENT` exactly like `SELF_SCHNORR`.
+
+### CTR-ZTH-83 — Built registry PoP does not bind authority
+- old: RS2-22 · status: superseded · owner: no · date: 2026-10-07 · normative: — · superseded-by: CTR-UA-07
+
+**What it said.** A note that the built registry PoP does not bind an authority.
+
+### CTR-ZTH-84 — Permissionless rollOver proposed as D17
+- old: UD:§12.7.3 · status: superseded · owner: yes · date: 2026-08-30 · normative: — · superseded-by: CTR-ZTH-01
+
+**What it said.** A proposal for permissionless rollOver as a separate decision.
+
+### CTR-ZTH-85 — SDK must store every s
+- old: UD:§12.7.4 · status: superseded · owner: yes · date: 2026-08-30 · normative: — · superseded-by: CTR-ZTH-30
+
+**What it said.** A proposal that the SDK store every sender randomness `s`.
+
+### CTR-ZTH-86 — Implicit rollOver open to everyone
+- old: UD:§13.3 · status: superseded · owner: yes · date: 2026-08-30 · normative: — · superseded-by: CTR-ZTH-01
+
+**What it said.** A proposal for implicit rollOver open to everyone.
+
+### CTR-ZTH-87 — Curve D1 = BLS12-381 after preflight
+- old: UD:§14 · status: superseded · owner: yes · date: 2026-08-30 · normative: — · superseded-by: CTR-ZTH-01
+
+**What it said.** A ruling setting the curve to BLS12-381 after a preflight.
+
+### CTR-ZTH-88 — D1 and D2 settled on BLS12-381
+- old: UD:§14:consequences · status: superseded · owner: yes · date: 2026-08-30 · normative: — · superseded-by: CTR-ZTH-01
+
+**What it said.** A ruling settling two curve decisions on BLS12-381.
+
+### CTR-ZTH-89 — Curve D1 = bls12_381
+- old: UD:§15:D1 · status: superseded · owner: yes · date: 2026-08-30 · normative: — · superseded-by: CTR-ZTH-01
+
+**What it said.** A ruling setting the curve to bls12_381.
+
+### CTR-ZTH-90 — Keep implicit rollOver plus public entry points
+- old: UD:§15:D17 · status: superseded · owner: yes · date: 2026-08-30 · normative: — · superseded-by: CTR-ZTH-01
+
+**What it said.** A ruling keeping implicit rollOver plus public entry points.
+
+### CTR-ZTH-91 — Curve D1 = bn254 for the private phase
+- old: UD:§19 · status: superseded · owner: yes · date: 2026-08-30 · normative: — · superseded-by: CTR-ZTH-01
+
+**What it said.** A ruling setting the curve to bn254 for the private phase.
+
+### CTR-ZTH-92 — Keep bn254 verifiers and chain 9000 as is
+- old: UD:§19:unlocked · status: superseded · owner: yes · date: 2026-08-30 · normative: — · superseded-by: CTR-ZTH-01, NET-EVM-02
+
+**What it said.** A ruling keeping the bn254 verifiers and the private chain unchanged.
+
+### CTR-ZTH-93 — When to reopen the curve decision
+- old: UD:§19:reopen-conditions · status: superseded · owner: yes · date: 2026-08-30 · normative: — · superseded-by: CTR-ZTH-01
+
+**What it said.** Conditions under which the curve decision would reopen.
+
+## Contracts — Universal Account
+
+### CTR-UA-01 — Refuse BLS keys and signatures at infinity
+- old: RS2-18 · status: current · owner: no · date: 2026-10-03 · normative: contracts/universal-account.md#CTR-UA-01 · superseded-by: —
+
+**Why.** BLS keys and signatures at infinity make the pairing trivial; refusing them prevents a fake BLS custody that lets `x` alone spend.
+**Cost if wrong.** Accepting infinity lets anyone pass a BLS check.
+**Source.** `history/specs/2026-10-03-zether-design.md:618`
+
+### CTR-UA-02 — UA is a key-derived identifier, not a contract
+- old: R290 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/universal-account.md#CTR-UA-02 · superseded-by: —
+
+**Why.** A UA is an identifier derived from key data, like an EOA for every scheme: free, deterministic, the same on every chain, with nothing to deploy.
+**Cost if wrong.** A contract per account costs a deploy per user per chain and is upgradeable state.
+**Source.** `history/specs/2026-10-06-universal-account-design.md:93`
+
+### CTR-UA-03 — 32-byte kind-tagged ids in canonical form
+- old: R291 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-03 · superseded-by: —
+
+**Why.** 32-byte kind-tagged ids never collide with 20-byte native ids; a 20-byte truncation would allow a 2^80 grind between an EOA and a multisig policy.
+**Cost if wrong.** 12 more calldata bytes per id (192 gas).
+**Source.** `history/specs/2026-10-06-universal-account-design.md:100`
+
+### CTR-UA-04 — keccak256 for ids in every family
+- old: R292 · status: current · owner: no · date: 2026-10-06 · normative: contracts/universal-account.md#CTR-UA-04 · superseded-by: —
+
+**Why.** One hash (keccak256) with native support in every family gives the same id on every chain.
+**Cost if wrong.** Different hashes per family would give different ids for one key.
+**Source.** `history/specs/2026-10-06-universal-account-design.md:113`
+
+### CTR-UA-05 — Fixed kind table per registry generation
+- old: R293 · status: current · owner: no · date: 2026-10-06 · normative: contracts/universal-account.md#CTR-UA-05 · superseded-by: —
+
+**Why.** The kind table is fixed per registry generation; a mutable table would be an admin key over every account.
+**Cost if wrong.** New schemes wait for a new generation and new token implementations.
+**Source.** `history/specs/2026-10-06-universal-account-design.md:117`
+
+### CTR-UA-06 — Native kinds unregistered; derived kinds register first
+- old: R294 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/universal-account.md#CTR-UA-06 · superseded-by: —
+
+**Why.** Native kinds need no registration; derived kinds register once per chain, which is where PoP and one-key-one-purpose are enforced and typos revert.
+**Cost if wrong.** One registration per chain (~75 k gas on bn254).
+**Source.** `history/specs/2026-10-06-universal-account-design.md:125`
+
+### CTR-UA-07 — PoP binds chain, registry, UA and authRef
+- old: R295, UA:Q10 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-07 · superseded-by: —
+
+**Why.** Every record field follows from signed data (PoP over chain, registry, UA and `authRef`; the authority co-signs), so registration is relayable and front-running yields the same record or a revert.
+**Cost if wrong.** A field taken from `msg.sender` or left unsigned would turn front-running into capture.
+**Source.** `history/specs/2026-10-06-universal-account-design.md:133`, `history/specs/2026-10-06-universal-account-design.md:1407`
+
+### CTR-UA-08 — Rogue-key defence chosen per aggregate kind
+- old: R296, UA:Q3 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-08 · superseded-by: —
+
+**Why.** Each aggregate kind uses its native rogue-key defence, checked on chain: per-member PoP for `msig`, KeyAgg for MuSig2, DKG PoKs for FROST.
+**Cost if wrong.** Off-chain facts (share distribution, distinct parties) stay attestation-only and must be shown as such.
+**Source.** `history/specs/2026-10-06-universal-account-design.md:148`, `history/specs/2026-10-06-universal-account-design.md:1391`
+
+### CTR-UA-09 — Structures commit to members; one nesting level
+- old: R297 · status: current · owner: no · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-09 · superseded-by: —
+
+**Why.** Structures commit to sorted members and nest one level, which bounds gas and avoids cycles.
+**Cost if wrong.** Two-level governance uses `SubjectAccount` or Safe as a member.
+**Source.** `history/specs/2026-10-06-universal-account-design.md:159`
+
+### CTR-UA-10 — One key one purpose: registry, tags, EOAs
+- old: R298(2-3-4) · status: current · owner: yes · date: 2026-10-06 · normative: contracts/universal-account.md#CTR-UA-10 · superseded-by: —
+
+**Why.** One key = one purpose in four layers (derivation, registry `keyOwner`, tagged messages, EOA rules) prevents cross-scheme nonce leaks and signing oracles.
+**Cost if wrong.** A foreign wallet reusing an EOA key for `bip340` remains undetectable on chain.
+**Source.** `history/specs/2026-10-06-universal-account-design.md:166`
+
+### CTR-UA-11 — keyHash per curve group, not per kind
+- old: R299 · status: current · owner: no · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-11 · superseded-by: —
+
+**Why.** `keyHash` per curve group makes all kinds over one group share a namespace, so the same key cannot register under two kinds.
+**Cost if wrong.** A per-kind keyHash allows the same key under two kinds.
+**Source.** `history/specs/2026-10-06-universal-account-design.md:173`
+
+### CTR-UA-12 — Tagged message for every derived-UA signature
+- old: R301 · status: current · owner: no · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-12 · superseded-by: —
+
+**Why.** Every derived-UA signature is over a tagged message with kind and purpose, so cross-kind and cross-purpose replay die at the hash; native signers sign EIP-712 `UAAuth`, never a raw hash.
+**Cost if wrong.** One extra keccak (~60 gas).
+**Source.** `history/specs/2026-10-06-universal-account-design.md:188`
+
+### CTR-UA-13 — No key rotation inside a UA
+- old: R302, RS2-9, UA:Q1 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/universal-account.md#CTR-UA-13 · superseded-by: —
+
+**Why.** A UA is immutable: new key data is a new UA; rotation moves funds. A rotatable policy kind was rejected for v1 because it brings back an admin-like mutable record.
+**Cost if wrong.** Membership changes of a corporate `msig` require moving funds.
+**Source.** `history/specs/2026-10-06-universal-account-design.md:202`, `history/specs/2026-10-03-zether-design.md:597`, `history/specs/2026-10-06-universal-account-design.md:1385`
+
+### CTR-UA-14 — Each function accepts only the kinds it needs
+- old: R303, UA:Q4, UA:Q5, UA:Q7 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-14 · superseded-by: —
+
+**Why.** Each function accepts exactly the kinds it needs; native-address functions keep their ABIs and Zether UAs can neither receive on v3 nor sign through `requireAuthorized`.
+**Cost if wrong.** UA holders need v3 tokens; deployed v1/v2 clones stay native-only.
+**Source.** `history/specs/2026-10-06-universal-account-design.md:207`, `history/specs/2026-10-06-universal-account-design.md:1394`, `history/specs/2026-10-06-universal-account-design.md:1396`, `history/specs/2026-10-06-universal-account-design.md:1400`
+
+### CTR-UA-15 — Registry is monotonic and admin-free
+- old: R304 · status: current · owner: no · date: 2026-10-06 · normative: contracts/universal-account.md#CTR-UA-15 · superseded-by: —
+
+**Why.** A monotonic, admin-free registry lets tokens rely on a record forever and nobody can repoint a key. Rejected: the early shared-registry sketch (`SchnorrPublicKey {x, y}`, `register(x, y, sig)`, `schnorrAddress = keccak256(abi.encodePacked(x, y))`) — corrected to kind-tagged ids, a PoP with domain tag, chain and registry, on-curve and subgroup checks, and no upgrade path.
+**Cost if wrong.** A compromised derived key is handled like a compromised EOA: move funds.
+**Source.** `history/specs/2026-10-06-universal-account-design.md:215`
+
+### CTR-UA-16 — Zether kinds bind encryption key; immutable authRef
+- old: R305, UA:Q2 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-16 · superseded-by: —
+
+**Why.** Zether kinds bind only the encryption key; authorization is an immutable `authRef` (self, native or SIGNING UA), so spend authority stays separate from decryption.
+**Cost if wrong.** `authRef` cannot rotate; a timelocked rotation was rejected.
+**Source.** `history/specs/2026-10-06-universal-account-design.md:219`, `history/specs/2026-10-06-universal-account-design.md:1389`
+
+### CTR-UA-17 — Verify through registry; large keys stored once
+- old: R306 · status: current · owner: no · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-17 · superseded-by: —
+
+**Why.** The registry does lookup and check in one call; small keys travel in calldata, large keys (PQ, MuSig2/FROST group keys) are stored once.
+**Cost if wrong.** No token-side cache in v1: one cold call (~2.6 k) per check.
+**Source.** `history/specs/2026-10-06-universal-account-design.md:229`
+
+### CTR-UA-18 — Derived-UA balances in a separate bytes32 ledger
+- old: R308 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-18 · superseded-by: —
+
+**Why.** Derived-UA balances live in a separate `bytes32` ledger shown to ERC-20 tools as the `UA_POOL` sub-ledger, keeping `Transfer` replay equal to `balanceOf`.
+**Cost if wrong.** Naive indexers see one large `UA_POOL` holder.
+**Source.** `history/specs/2026-10-06-universal-account-design.md:243`
+
+### CTR-UA-19 — UAMetaTransaction has its own typehash
+- old: R309, UA:Q11 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-19 · superseded-by: —
+
+**Why.** `UAMetaTransaction` has its own struct and typehash because `from` is `bytes32`; this is not a second hash of the same struct.
+**Cost if wrong.** Clients build two struct shapes.
+**Source.** `history/specs/2026-10-06-universal-account-design.md:255`, `history/specs/2026-10-06-universal-account-design.md:1410`
+
+### CTR-UA-20 — Optional VC layer; on-chain anchor deferred
+- old: R310 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-20 · superseded-by: —
+
+**Why.** The credential layer is optional; contracts consume only `ComplianceRegistry` flags. The on-chain anchor is deferred because nothing reads it and it would leak metadata.
+**Cost if wrong.** No public holder/issuer co-statement in v1; the evidence bundle carries it privately.
+**Source.** `history/specs/2026-10-06-universal-account-design.md:264`
+
+### CTR-UA-21 — Holder binding by account-signed presentation
+- old: R311, UA:Q14 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-21 · superseded-by: —
+
+**Why.** Holder binding is a presentation signed by the account under purpose `vp` (SD-JWT VC + KB-JWT `alg: scaas-ua`), ideally by a dedicated identity UA.
+**Cost if wrong.** External SD-JWT verifiers accept these presentations only if they implement `scaas-ua`.
+**Source.** `history/specs/2026-10-06-universal-account-design.md:271`, `history/specs/2026-10-06-universal-account-design.md:1415`
+
+### CTR-UA-22 — Breaking dev-only migration from Zether registry
+- old: R312 · status: current · owner: no · date: 2026-10-06 · normative: contracts/universal-account.md#CTR-UA-22 · superseded-by: —
+
+**Why.** Migration from the built Zether registry is breaking and dev-only: the old registry and `AuthScheme` are deleted, Zether accounts re-register.
+**Cost if wrong.** Dev balances are recreated by scripts; no production data exists.
+**Source.** `history/specs/2026-10-06-universal-account-design.md:278`
+
+### CTR-UA-23 — PQ and ed25519 kinds on every EVM chain
+- old: R313, UA:Q9 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-23 · superseded-by: —
+
+**Why.** PQ signing kinds and ed25519 are enabled on every EVM chain (owner), verified by precompile where probed or pure Solidity, each within a measured per-chain cap; an over-budget kind is disabled, never registrable-but-unusable.
+**Cost if wrong.** PQ checks cost real money on public L1s (≈ $36–240 per ML-DSA-65 check at 10 gwei).
+**Source.** `history/specs/2026-10-06-universal-account-design.md:281`, `history/specs/2026-10-06-universal-account-design.md:1404`
+
+### CTR-UA-24 — EIP-7702 EOAs are native; classify by code
+- old: R331 · status: current · owner: no · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-24 · superseded-by: —
+
+**Why.** An EIP-7702 delegated EOA keeps its base key as root, so ECDSA is accepted and ERC-1271 through the delegate is a fallback; classification is by code at verify time.
+**Cost if wrong.** If a future EIP lets 7702 accounts disable the base key, a new registry generation must follow it.
+**Source.** `history/specs/2026-10-06-universal-account-design.md:355`
+
+### CTR-UA-25 — No on-chain registration gate in v1
+- old: UA:Q8 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/universal-account.md#CTR-UA-25 · superseded-by: —
+
+**Why.** No on-chain registration gate in v1: node sponsorship limits bound spam; self-paid spam pays its own gas.
+**Cost if wrong.** An immutable `IRegistrationPolicy` per generation is the fallback if spam becomes a problem.
+**Source.** `history/specs/2026-10-06-universal-account-design.md:1402`
+
+## Contracts — Post-quantum Zether
+
+### CTR-PQZ-01 — Separate PQZ class gated to private chains
+- old: R270 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/pq-zether.md#CTR-PQZ-01 · superseded-by: —
+
+**Why.** PQZ is a separate token class gated by a hard-coded allowlist, a constructor precompile self-test and the registry `chain_uid`, with licence and audit release gates.
+**Cost if wrong.** Without the self-test a chain with the same id but another client would accept PQZ deployments.
+**Source.** `history/specs/2026-10-06-pq-zether-design.md:208`
+
+### CTR-PQZ-02 — Additive-only MLWE with BFV-style encoding
+- old: R271 · status: current · owner: no · date: 2026-10-06 · normative: contracts/pq-zether.md#CTR-PQZ-02 · superseded-by: —
+
+**Why.** Additive-only MLWE with BFV-style encoding gives exactly Enc/Add/Dec with a provable decryption relation; full FHE stacks bring relinearization keys and failure probabilities.
+**Cost if wrong.** A failure-prone scheme gives an attacker a key-recovery oracle.
+**Source.** `history/specs/2026-10-06-pq-zether-design.md:225`
+
+### CTR-PQZ-03 — Lattice parameters at or above Kyber-512
+- old: R272 · status: current · owner: no · date: 2026-10-07 · normative: contracts/pq-zether.md#CTR-PQZ-03 · superseded-by: —
+
+**Why.** Parameters at or above Kyber-512 under classical and quantum core-SVP (β ≈ 476) with worst-case noise bounds, so an accepted state never fails to decrypt.
+**Cost if wrong.** Any change needs a new `proofSystemId` and a recomputed noise budget.
+**Source.** `history/specs/2026-10-06-pq-zether-design.md:230`
+
+### CTR-PQZ-04 — Shared encryption randomness with split fallback
+- old: R273 · status: current · owner: no · date: 2026-10-07 · normative: contracts/pq-zether.md#CTR-PQZ-04 · superseded-by: —
+
+**Why.** One shared `(r, e1)` per transfer saves two 16 KB `u` vectors; security against malicious recipients is a stated hint-leakage assumption with a split-randomness fallback.
+**Cost if wrong.** If the assumption fails, a colluding receiver and auditor could open the sender's new balance.
+**Source.** `history/specs/2026-10-06-pq-zether-design.md:239`
+
+### CTR-PQZ-05 — Every debit re-encrypts the remaining balance
+- old: R274 · status: current · owner: no · date: 2026-10-06 · normative: contracts/pq-zether.md#CTR-PQZ-05 · superseded-by: —
+
+**Why.** Every debit re-encrypts the remaining balance fresh, resetting noise and digit growth.
+**Cost if wrong.** Homomorphic subtraction would accumulate noise until decryption fails.
+**Source.** `history/specs/2026-10-06-pq-zether-design.md:250`
+
+### CTR-PQZ-06 — Credit cap and public plainPending amounts
+- old: R275 · status: current · owner: no · date: 2026-10-07 · normative: contracts/pq-zether.md#CTR-PQZ-06 · superseded-by: —
+
+**Why.** Public amounts go to `plainPending` and only proven credits take slots under `K_MAX = 1024`, so dust cannot lock an account.
+**Cost if wrong.** Counting dust as slots let `fund(victim, 1)` × 4096 lock a victim.
+**Source.** `history/specs/2026-10-06-pq-zether-design.md:254`
+
+### CTR-PQZ-07 — Ciphertexts in calldata, hashes in storage
+- old: R276 · status: current · owner: no · date: 2026-10-06 · normative: contracts/pq-zether.md#CTR-PQZ-07 · superseded-by: —
+
+**Why.** Ciphertexts live in calldata and events with hashes in storage; storage of a 16 KB ciphertext would cost 2.6–8.8 M gas per write.
+**Cost if wrong.** Indexers must rebuild state from events; clients check hashes.
+**Source.** `history/specs/2026-10-06-pq-zether-design.md:265`
+
+### CTR-PQZ-08 — Public rollover with race-free debits
+- old: R277 · status: current · owner: no · date: 2026-10-07 · normative: contracts/pq-zether.md#CTR-PQZ-08 · superseded-by: —
+
+**Why.** Public rollover cannot disturb a debit because the contract rebuilds the same `T` either way; at most 16 inline credits.
+**Cost if wrong.** A griefer with > 16 proven credits can force one re-prove.
+**Source.** `history/specs/2026-10-06-pq-zether-design.md:269`
+
+### CTR-PQZ-09 — LNP22 proofs through rewritten LaZer fork
+- old: R278 · status: current · owner: no · date: 2026-10-07 · normative: contracts/pq-zether.md#CTR-PQZ-09 · superseded-by: —
+
+**Why.** LNP22 via a LaZer fork with six rewritten layers runs portably and deterministically in the node, the prover and WASM; one implementation, no Solidity verifier; kill criterion on size and verify time.
+**Cost if wrong.** We own a C fork; upstream fixes are merged by hand.
+**Source.** `history/specs/2026-10-06-pq-zether-design.md:277`
+
+### CTR-PQZ-10 — Native never-crash precompile on chain 7622
+- old: R279 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/pq-zether.md#CTR-PQZ-10 · superseded-by: —
+
+**Why.** A native never-crash precompile on chain 7622 verifies at ≈ 0.12 M gas per ms; a Solidity verifier would exceed the per-transaction cap.
+**Cost if wrong.** Every node of chain 7622 must run the PQZ client build; a crash would halt the single-signer chain.
+**Source.** `history/specs/2026-10-06-pq-zether-design.md:290`
+
+### CTR-PQZ-11 — Deterministic precompile pricing and chain limits
+- old: R280 · status: current · owner: no · date: 2026-10-07 · normative: contracts/pq-zether.md#CTR-PQZ-11 · superseded-by: —
+
+**Why.** Precompile prices are deterministic, calibrated on p99 adversarial verify time against `ecMul`; the block gas target rises to 80 M within the EIP-7934 byte limit.
+**Cost if wrong.** Mispriced verification makes block capacity a DoS surface.
+**Source.** `history/specs/2026-10-06-pq-zether-design.md:308`
+
+### CTR-PQZ-12 — Authorization always by a separate PQ signing UA
+- old: R281 · status: current · owner: no · date: 2026-10-07 · normative: contracts/pq-zether.md#CTR-PQZ-12 · superseded-by: —
+
+**Why.** PQZ authorization is always a separate PQ signing UA (or a PQ-dominant `msig`), so no classical-only key can move confidential value.
+**Cost if wrong.** Users need an ML-DSA key in addition to the PQZ key.
+**Source.** `history/specs/2026-10-06-pq-zether-design.md:318`
+
+### CTR-PQZ-13 — PQZ UA kind 0x0142 pqz-mlwe
+- old: R282 · status: current · owner: no · date: 2026-10-07 · normative: contracts/pq-zether.md#CTR-PQZ-13 · superseded-by: —
+
+**Why.** PQZ adds one UA kind (`0x0142` `pqz-mlwe`) under the UA rules instead of its own identity scheme.
+**Cost if wrong.** The UA kind table, keyHash groups and vectors gain one row each.
+**Source.** `history/specs/2026-10-06-pq-zether-design.md:325`
+
+### CTR-PQZ-14 — Disclosure only by zero-knowledge proof
+- old: R283 · status: current · owner: no · date: 2026-10-06 · normative: contracts/pq-zether.md#CTR-PQZ-14 · superseded-by: —
+
+**Why.** Disclosure is by zero-knowledge proof only; revealing `r` would open the sender's balance and noise must not leak.
+**Cost if wrong.** Each disclosure costs a proof (≈ 15–25 KB, estimate).
+**Source.** `history/specs/2026-10-06-pq-zether-design.md:333`
+
+### CTR-PQZ-15 — PqzToken is ERC-20 plus IERC20MetaTx
+- old: R284, owner:2026-10-07:pqz-metatx · status: current · owner: yes · date: 2026-10-07 · normative: contracts/pq-zether.md#CTR-PQZ-15 · superseded-by: —
+
+**Why.** The owner ruled that `PqzToken` follows `IERC20MetaTx` exactly like `ZetherToken`: v1 and v3 envelope paths over one pipeline, wrap/unwrap as direct calls on both tokens, and the envelope `burn` as the gasless exit; authority is split between the PQ `authSig` and the envelope signer.
+**Cost if wrong.** A broken v1 envelope key can spend that signer's public float and burn its nonces; it can never move confidential value.
+**Source.** `history/specs/2026-10-06-pq-zether-design.md:337`, `history/SCaaS-2026-10-07.md:39`. Owner wording (2026-10-07): "PqzToken => Cái này cũng phải theo MetaTransaction IERC20MetaTx chứ." (PqzToken must also follow IERC20MetaTx).
+
+### CTR-PQZ-16 — Direct decryption without BSGS
+- old: R285 · status: current · owner: no · date: 2026-10-06 · normative: contracts/pq-zether.md#CTR-PQZ-16 · superseded-by: —
+
+**Why.** Decryption is rounding of 16 coefficients: exact and microseconds, no BSGS.
+**Cost if wrong.** None found; a balance cache stays a UX convenience.
+**Source.** `history/specs/2026-10-06-pq-zether-design.md:361`
+
+### CTR-PQZ-17 — PQZ shielded supply and amount limits
+- old: R286 · status: current · owner: no · date: 2026-10-06 · normative: contracts/pq-zether.md#CTR-PQZ-17 · superseded-by: —
+
+**Why.** `MAX_TOTAL_SHIELDED = 2^62` and amounts `< 2^64` keep `b' + v + fee < 2^64` for honest states.
+**Cost if wrong.** The classical 2^54 rationale (BSGS) does not apply; raising further would break the digit argument.
+**Source.** `history/specs/2026-10-06-pq-zether-design.md:364`
+
+### CTR-PQZ-18 — Native and WASM prover platforms early
+- old: R287 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/pq-zether.md#CTR-PQZ-18 · superseded-by: —
+
+**Why.** Retail provers come early (owner): native x86-64/aarch64, then the WASM prover in the app's Zether worker with a user-run native fallback.
+**Cost if wrong.** WASM emulates 64×64→128 multiplication, which may miss phone budgets.
+**Source.** `history/specs/2026-10-06-pq-zether-design.md:367`
+
+### CTR-PQZ-19 — Message-bound derived encryption randomness
+- old: R288 · status: current · owner: no · date: 2026-10-06 · normative: contracts/pq-zether.md#CTR-PQZ-19 · superseded-by: —
+
+**Why.** Encryption randomness is derived from a message-bound seed, so the sender can re-derive it for disclosure and a re-proof never reuses `r`.
+**Cost if wrong.** Reusing `r` across two messages leaks `Δ·(m − m')` up to noise.
+**Source.** `history/specs/2026-10-06-pq-zether-design.md:376`
+
+### CTR-PQZ-20 — Classical to PQZ migration by burn then fund
+- old: R289 · status: current · owner: no · date: 2026-10-07 · normative: contracts/pq-zether.md#CTR-PQZ-20 · superseded-by: —
+
+**Why.** Migration is `ZetherToken.burn` then `PqzToken.fund`; the amount is public once, which is acceptable because classical Zether holds no production funds.
+**Cost if wrong.** No cross-system equality proof in v1.
+**Source.** `history/specs/2026-10-06-pq-zether-design.md:382`
+
+## Networks — common model
+
+### NET-ALL-01 — Pruning families keep executed lanes for H
+- old: CR-PD-4(pruning), CR-R3-8(pruning) · status: current · owner: no · date: 2026-10-07 · normative: networks/README.md#NET-ALL-01 · superseded-by: —
+
+**Rule.** Families that prune executed lane state keep an executed lane for at least the horizon H after the op's `validUntil`.
+**Why.** At-most-once payment per request holds only while the executed lane is remembered: TON measures `validUntil` from execution, not from lane creation, so state pruned earlier than the issuance horizon would let a sibling signature on the same lane execute again. The prune delays equal the 30-day horizon today, so ERP-issued terms are safe.
+**Cost if wrong.** Issuers that sign terms on a lane beyond H get no pay-once guarantee.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 901; [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 700.
+
+### NET-ALL-02 — Contract-level meta-tx default on every network
+- old: R30, UD:§1:eip1776, UD:§21.5 · status: current · owner: yes · date: 2026-10-03 · normative: networks/README.md#NET-ALL-02 · superseded-by: —
+
+**Rule.** Contract-level meta-transactions are the default path on every network; the subject's account sequence is never an ordering lock.
+**Why.** Owner ruling: an account sequence (Stellar sequence, Cosmos account sequence, TON wallet seqno, Hedera account transactions) queues every operation of a subject on every contract, so one stuck transaction locks that subject everywhere. The owner also chose EIP-1776 meta-transactions on purpose instead of ERC-4337.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 517; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 40; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1538.
+
+### NET-ALL-03 — Head-of-line table and anti-lock test
+- old: R62 · status: current · owner: no · date: 2026-10-05 · normative: networks/README.md#NET-ALL-03 · superseded-by: —
+
+**Rule.** Every adapter states how it avoids head-of-line blocking, and every family passes the anti-lock test.
+**Why.** A sequence is strictly ordered, so one stuck transaction (fee below the mempool floor, or a nonce gap) blocks everything queued behind it; with a single key that means a dead relayer until someone intervenes, and one key also caps throughput at about one transaction per block.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 535.; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1538
+
+### NET-ALL-04 — One WebAuthn grammar for every family
+- old: CR-R3-1(grammar), RS4-2 · status: current · owner: no · date: 2026-10-07 · normative: networks/README.md#NET-ALL-04 · superseded-by: —
+
+**Rule.** One WebAuthn rule and one bounded `clientDataJSON` grammar for every family.
+**Why.** Verifiers had drifted apart: on Cosmos any page that could get an assertion for the rpId (a sibling subdomain, a related origin, a delegated iframe) could sign any operation, TON accepted any origin extending the stored one as a prefix, and elsewhere a cross-origin iframe yields assertions that carry the relying party's origin.
+**Cost if wrong.** Cosmos dev passkey addresses change.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 630; [history/plans/2026-10-03-r3-passkey-seed.md](history/plans/2026-10-03-r3-passkey-seed.md) line 15.
+
+### NET-ALL-05 — Key lifecycle stated per family
+- old: CR-R3-6 · status: current · owner: no · date: 2026-10-07 · normative: networks/README.md#NET-ALL-05 · superseded-by: —
+
+**Rule.** Key rotation and recovery are stated per family; every gap is listed, never implied away.
+**Why.** The families do not offer the same lifecycle: a Cosmos passkey account is one key with no rotation, the Soroban guardian is only a seam, and a TON passkey cannot rotate and has no guardian, so a single blanket claim would hide real gaps.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 679.
+
+### NET-ALL-06 — Indexer filters registered contracts; empty stalls
+- old: net-aptos:L1, net-solana:L1 · status: current · owner: no · date: 2026-10-07 · normative: networks/README.md#NET-ALL-06 · superseded-by: —
+
+**Rule.** The indexer filters by the registered contracts in the family's own address form, and an empty list never advances the cursor.
+**Why.** The Cosmos, Sui and TON reviews found indexers reading a static or wrongly formatted contract list; an indexer that advances with an empty or mismatched list moves past ranges it never really scanned.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 37; [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 41.
+
+### NET-ALL-07 — e2e fakes return real token ids
+- old: net-aptos:L2, net-solana:L2 · status: current · owner: no · date: 2026-10-04 · normative: networks/README.md#NET-ALL-07 · superseded-by: —
+
+**Rule.** End-to-end fakes return real token ids and refuse unregistered emitters.
+**Why.** The TON and Hedera reviews found end-to-end tests that passed against fakes; a copy of the contract deployed elsewhere emits identical events, and only a fake that returns the real token ids and refuses strangers proves the indexer drops them.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 38; [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 42.
+
+### NET-ALL-08 — Payer signs every amount deciding delivery
+- old: net-aptos:L3, net-solana:L3 · status: current · owner: no · date: 2026-10-07 · normative: networks/README.md#NET-ALL-08 · superseded-by: —
+
+**Rule.** Every amount chosen by the relayer that decides whether value arrives must be inside the payer's signature.
+**Why.** The TON review found a relayer-chosen `forwardTon` amount that decided whether a signed payment arrived; any such amount outside the signature hands that decision to the relayer.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 39; [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 43.
+
+### NET-ALL-09 — Permanent submit refusals free the lane
+- old: net-aptos:L4, net-solana:L4 · status: current · owner: no · date: 2026-10-07 · normative: networks/README.md#NET-ALL-09 · superseded-by: —
+
+**Rule.** A permanent refusal at submit frees the lane at once
+**Why.** The Cosmos and Hedera reviews found lanes held by submissions that could never succeed; resending the same bytes after a permanent refusal never passes, so holding the lane only blocks the jobs behind it.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 40; [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 44.
+
+### NET-ALL-10 — Crash-safe lanes never equivocate
+- old: net-aptos:L5, net-solana:L5 · status: current · owner: no · date: 2026-10-04 · normative: networks/README.md#NET-ALL-10 · superseded-by: —
+
+**Rule.** Lanes are crash-safe: no equivocation, no sequence used twice.
+**Why.** The Sui review found that a restart could sign a second transaction on the same gas-coin version (equivocation); every family must show that a crash never yields two different transactions for one lane sequence.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 41; [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 45.
+
+### NET-ALL-11 — Multi-key accounts survive origin change
+- old: net-aptos:L6, net-solana:L6 · status: current · owner: no · date: 2026-10-04 · normative: networks/README.md#NET-ALL-11 · superseded-by: —
+
+**Rule.** Multi-key accounts with origins and a guardian survive an origin change.
+**Why.** The Sui review found a one-key account that was bricked when the portal origin changed; several keys, an origin list and a guardian with a delay let the owner add the new origin or recover instead.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 42; [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 46.
+
+### NET-ALL-12 — Coins sent to accounts stay spendable
+- old: net-aptos:L7, net-solana:L7 · status: current · owner: no · date: 2026-10-04 · normative: networks/README.md#NET-ALL-12 · superseded-by: —
+
+**Rule.** Coins sent directly to an account or contract address stay spendable.
+**Why.** The Sui, Cosmos and TON reviews found coins sent straight to an account or contract address that no code path could move, so they were stuck for good.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 43; [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 47.
+
+### NET-ALL-13 — No shared object serialises all markets
+- old: net-aptos:L8, net-solana:L8 · status: current · owner: no · date: 2026-10-04 · normative: networks/README.md#NET-ALL-13 · superseded-by: —
+
+**Rule.** No shared object serialises all markets.
+**Why.** The Sui review found one shared object serialising every market. A hot shared account runs its transactions one after another, hits per-account compute caps, raises local fees and is dropped under congestion, so unrelated operations of one subject end up waiting on each other.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 44; [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 48.
+
+### NET-ALL-14 — ERP verifies only keys it can prove
+- old: net-aptos:L9, net-solana:L9 · status: current · owner: no · date: 2026-10-04 · normative: networks/README.md#NET-ALL-14 · superseded-by: —
+
+**Rule.** A client verifies a signature only with a key it can prove belongs to the payer
+**Why.** The TON and Sui reviews found signatures accepted from keys not tied to the payer. A key added later on chain cannot be checked by the ERP without an RPC call, so it answers "unknown" and the node's simulation decides; it never answers "valid" for a key it cannot prove.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 45; [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 49.
+
+### NET-ALL-15 — Lane state prunable, storage refunded
+- old: net-aptos:L10, net-solana:L10 · status: current · owner: no · date: 2026-10-04 · normative: networks/README.md#NET-ALL-15 · superseded-by: —
+
+**Rule.** Lane and nonce state is prunable and its storage is refunded.
+**Why.** The TON review found lane and nonce tables that grow forever and keep charging storage; a permissionless prune that returns the storage deposit gives relayers a reason to clean up.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 46; [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 50.
+
+### NET-ALL-16 — Never case-fold base58 addresses or ids
+- old: net-solana:L11 · status: current · owner: no · date: 2026-10-04 · normative: networks/README.md#NET-ALL-16 · superseded-by: —
+
+**Rule.** Base58 addresses and ids are never case-folded.
+**Why.** Base58 is case-sensitive, and the ERP normalised addresses and transaction hashes with `.lower()`, which corrupts Solana addresses; transaction ids are therefore carried as `0x` plus 128 hex digits, which survive lowercasing.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 51.
+
+### NET-ALL-17 — Asset suite on EVM and Hedera
+- old: R215 · status: current · owner: no · date: 2026-10-06 · normative: networks/README.md#NET-ALL-17 · superseded-by: —
+
+**Rule.** The asset suite is specified for EVM and Hedera only.
+**Why.** EVM and Hedera run the same Solidity, so one implementation covers both; the other families first need their v2 wrapper work (NET-ALL-19) and then map the same rulings onto native mechanisms.
+**Cost if wrong.** Nothing to undo.
+**Source.** [history/specs/2026-10-06-asset-suite-design.md](history/specs/2026-10-06-asset-suite-design.md) line 184.
+
+### NET-ALL-18 — Tender on EVM and Hedera first
+- old: R188 · status: current · owner: yes · date: 2026-10-07 · normative: networks/README.md#NET-ALL-18 · superseded-by: —
+
+**Rule.** The sealed-bid tender ships on EVM and Hedera first
+**Why.** The tender verifies no signature, so the same bytecode runs on Hedera's smart contract service without a Hedera child, and Hedera-native bidders are handled by the deposit token; the other families need native designs.
+**Source.** [history/specs/2026-10-06-tender-sponsorship-shredding.md](history/specs/2026-10-06-tender-sponsorship-shredding.md) line 121.
+
+### NET-ALL-19 — Wrappers v2 on EVM and Hedera only
+- old: R145 · status: current · owner: no · date: 2026-10-06 · normative: networks/README.md#NET-ALL-19 · superseded-by: —
+
+**Rule.** Token wrappers v2 are EVM and Hedera only
+**Why.** Move and Solana need no wrapper for gaslessness because the subject account already holds any coin or asset; Cosmos, Soroban and TON keep their tier-1 tokens until wrappers there are designed with the same rate and reserve rules.
+**Source.** [history/specs/2026-10-06-token-wrappers-v2.md](history/specs/2026-10-06-token-wrappers-v2.md) line 152.
+
+### NET-ALL-20 — Per-family UA registries share kind table
+- old: R314, UA:Q12 · status: current · owner: yes · date: 2026-10-07 · normative: networks/README.md#NET-ALL-20 · superseded-by: —
+
+**Why.** TON calls are asynchronous, and owner consent alone would let a wallet claim someone else's key. Owner-confirmed.
+**Source.** [history/specs/2026-10-06-universal-account-design.md](history/specs/2026-10-06-universal-account-design.md) line 303; [history/specs/2026-10-06-universal-account-design.md](history/specs/2026-10-06-universal-account-design.md) line 1412.
+
+### NET-ALL-21 — Non-EVM passkey owners = UA id, URN only
+- old: R315, UA:Q13 · status: current · owner: yes · date: 2026-10-07 · normative: networks/README.md#NET-ALL-21 · superseded-by: —
+
+**Why.** A 20-byte form is exactly the truncation the UA id space forbids (2^80 collision work against secp256k1 accounts, CTR-UA-03); an account-shaped form invites native sends to a keyless address.
+**Cost if wrong.** dev passkey accounts re-open; users copy a URN, not an address. Owner-confirmed.
+**Source.** [history/specs/2026-10-06-universal-account-design.md](history/specs/2026-10-06-universal-account-design.md) line 311; [history/specs/2026-10-06-universal-account-design.md](history/specs/2026-10-06-universal-account-design.md) line 1413.
+
+### NET-ALL-22 — Chain identified by (chain_key, chain_uid)
+- old: R330 · status: current · owner: no · date: 2026-10-07 · normative: networks/README.md#NET-ALL-22 · superseded-by: —
+
+**Why.** Chain ids are a registry convention, not unique — 9000 is also Evmos Testnet, which is why the private chain moved to 7622 (NET-EVM-02).
+**Source.** [history/specs/2026-10-06-universal-account-design.md](history/specs/2026-10-06-universal-account-design.md) line 340.
+
+### NET-ALL-23 — Sui/Solana wallet signatures readable, passkey-first
+- old: CR-WSF-1 · status: current · owner: no · date: 2026-10-07 · normative: networks/README.md#NET-ALL-23 · superseded-by: —
+
+**Rule.** Solana and Sui wallet-key signatures: no blind blobs; origin binding through the passkey path or an opt-in account policy.
+**Why.** Solana `signMessage` and Sui `signPersonalMessage` wallets write no requesting origin into the signed bytes, so any origin line a contract checked could have been written by the phishing page itself; a readable text rebuilt on chain at least lets the wallet show what is being paid, as with any wallet transaction on that page.
+**Source.** [history/specs/round3-wallet-signing-formats.md](history/specs/round3-wallet-signing-formats.md) line 343.
+
+### NET-ALL-80 — R36-R49 reserved for the third design batch, never used
+- old: R36, R37, R38, R39, R40, R41, R42, R43, R44, R45, R46, R47, R48, R49 · status: unused · owner: no · date: 2026-10-03 · normative: — · superseded-by: —
+
+R36-R49 reserved for the third design batch, never used.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 4.
+
+## Networks — EVM
+
+### NET-EVM-01 — Celo fee currency (CIP-64)
+- old: req:blockchain.md:celo-fee-currency · status: open · owner: yes · date: 2026-10-07 · normative: networks/evm.md#NET-EVM-01 · superseded-by: —
+
+**Rule.** Celo fee-currency support (CIP-64) for relayer lanes is an open owner requirement.
+**Why.** Celo lets a transaction pay gas directly in an ERC-20 stablecoin, so an enterprise or an open relayer can submit and sponsor transactions without holding native CELO.
+**Open.** Owner decision pending; the default stated in the normative text applies.
+**Source.** [history/blockchain.md](history/blockchain.md) line 184.
+
+### NET-EVM-02 — Private reference chain id is 7622
+- old: CR-PD-6, owner:2026-10-07:chain-7622 · status: current · owner: yes · date: 2026-10-07 · normative: networks/evm.md#NET-EVM-02 · superseded-by: —
+
+**Rule.** The private reference chain is chain id 7622; its identity is the pair (chain id 7622, genesis hash `0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464`), profile `private7622`.
+**Why.** Chain id 9000 is also Evmos Testnet, and replay protection is only as good as the chain id; the genesis hash pins the chain beyond the registry convention.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 918; [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 39.
+
+### NET-EVM-03 — First target chain is the private PoA chain
+- old: UD:§16, UD:§16:roadmap · status: current · owner: yes · date: 2026-08-30 · normative: networks/evm.md#NET-EVM-03 · superseded-by: —
+
+**Rule.** The first target chain is the private PoA chain; public chains follow, and CI builds the `private7622` profile.
+**Why.** Owner decision: the private chain goes first because gas is not a constraint there (minimum gas price 0) and its Prague fork has EIP-2537 BLS12-381 from genesis, which confidential transfers need.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 889; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 929.
+
+### NET-EVM-04 — Single-signer PoA must be named honestly
+- old: UD:§16:single-signer · status: current · owner: yes · date: 2026-08-30 · normative: networks/evm.md#NET-EVM-04 · superseded-by: —
+
+**Rule.** A single-signer PoA chain is named honestly.
+**Why.** A Clique chain with one signer is not a decentralised blockchain in any sense; it is a database with hashes and signatures, a single point of censorship and of failure, so partners settling on it must know who controls the signer.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 917.
+
+### NET-EVM-80 — First chain Gnosis, then Celo
+- old: UD:§1:first-chain · status: superseded · owner: yes · date: 2026-08-30 · normative: — · superseded-by: NET-EVM-03
+
+It said: First chain Gnosis, then Celo; replaced by NET-EVM-03.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 41.
+
+### NET-EVM-81 — Raise the private chain block gas limit
+- old: UD:§16:gas-limit · status: superseded · owner: yes · date: 2026-08-30 · normative: — · superseded-by: CTR-PQZ-11
+
+It said: Raise the private chain block gas limit; replaced by CTR-PQZ-11.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 904.
+
+### NET-EVM-82 — Chain 9000 genesis keys silently ignored
+- old: UD:§18 · status: superseded · owner: yes · date: 2026-08-30 · normative: — · superseded-by: NET-EVM-02
+
+It said: Chain 9000 genesis keys silently ignored; replaced by NET-EVM-02.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 997.
+
+## Networks — Hedera
+
+### NET-HED-01 — Hedera HCS anchoring
+- old: req:blockchain.md:hcs-anchoring · status: open · owner: yes · date: 2026-10-07 · normative: networks/hedera.md#NET-HED-01 · superseded-by: —
+
+**Rule.** HCS anchoring is an open owner requirement.
+**Why.** HCS gives an immutable, timestamped audit log for the hashes of important agent decisions; the consensus timestamp is the evidence.
+**Open.** Owner decision pending; the default stated in the normative text applies.
+**Source.** [history/blockchain.md](history/blockchain.md) line 235.
+
+### NET-HED-02 — Hedera Schedule Service
+- old: req:blockchain.md:hedera-schedule · status: open · owner: yes · date: 2026-10-07 · normative: networks/hedera.md#NET-HED-02 · superseded-by: —
+
+**Rule.** The Hedera Schedule Service is an open owner requirement.
+**Why.** High-risk agent actions are created as scheduled transactions that execute only once reviewers have added enough signatures.
+**Open.** Owner decision pending; the default stated in the normative text applies.
+**Source.** [history/blockchain.md](history/blockchain.md) line 242.
+
+### NET-HED-03 — ED25519 owners pay via executeAsOwnerRaw
+- old: CR-ADW-2 · status: current · owner: no · date: 2026-10-07 · normative: networks/hedera.md#NET-HED-03 · superseded-by: —
+
+**Rule.** An ED25519 owner pays from its `MandateWallet` only through `executeAsOwnerRaw`.
+**Why.** ERC-1271 runs under STATICCALL and the HIP-632 `isAuthorizedRaw` precompile halts there, so `isValidSignature` cannot cover an ED25519 owner; special-casing the token would add one more Hedera-only path to the signature pipeline for a rare case.
+**Source.** [history/specs/2026-10-03-blockchain-payments-addendum-wallets.md](history/specs/2026-10-03-blockchain-payments-addendum-wallets.md) line 303.
+
+### NET-HED-04 — Hedera = Solidity on HSCS + HIP-632
+- old: R63 · status: current · owner: no · date: 2026-10-07 · normative: networks/hedera.md#NET-HED-04 · superseded-by: —
+
+**Rule.** Hedera is the EVM family on the Hedera Smart Contract Service: the same Solidity contracts behind a Hedera JSON-RPC relay, plus HIP-632 for ED25519 accounts; the payer-sponsored path is not used.
+**Why.** The payer-sponsored path is a transaction from the subject's own Hedera account, which is exactly the subject lock NET-ALL-02 forbids; running the existing Solidity contracts on HSCS reuses all of them unchanged. The first wording of this ruling, "reuse SubjectAccount/pipeline on Hedera", was narrowed by the Hedera design: there is no `SubjectAccount` and no EVM pipeline on Hedera, because native Hedera accounts already rotate keys and the relayer runs `lane_runner`.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 536.
+
+### NET-HED-05 — Hedera status code to outcome class table
+- old: R6-7 · status: current · owner: no · date: 2026-10-07 · normative: networks/hedera.md#NET-HED-05 · superseded-by: —
+
+**Rule.** Each Hedera status code maps to one outcome class; a billed failure is never requeued without limit
+**Why.** The adapter sent every known code except `CONTRACT_REVERT_EXECUTED` back to `queued`, including codes billed after consensus, with no attempt cap; a contract wallet whose `isValidSignature` burns almost no gas under estimation and the full cap at consensus then loops until `validUntil`.
+**Cost if wrong.** Each loop the lane pays at least 80% of the estimated gas, again and again, for one payment that never lands.
+**Source.** [history/specs/2026-10-03-net-hedera.md](history/specs/2026-10-03-net-hedera.md) line 162.
+
+### NET-HED-06 — v1 HTS wrapper fee check in initialize
+- old: R6-8 · status: current · owner: no · date: 2026-10-07 · normative: networks/hedera.md#NET-HED-06 · superseded-by: —
+
+**Why.** An HTS underlying with any fixed, fractional or royalty fee breaks a wrapper — `MetaToken.wrap` measures what actually arrived (fine for receiver-side fees) but `unwrap` sends exactly `amount` (`MetaToken.sol:134-139`), so a fixed fee in the same token or a fractional fee with `netOfTransfers = true` is taken from the wrapper again (`balanceOf(this) < totalSupply`, the last redeemer is stuck), and a fixed fee in HBAR makes every `unwrap` revert (the wrapper holds no HBAR), locking the reserve. v2 refuses these; the built v1 `HederaMetaToken` only associates (the permissionless `associateUnderlying()` calling `0x167 associateToken(this, underlying)`), is still registered as `META v1` (`DeployHedera.s.sol:29-30`), and anyone may create it through the open factory (`OpenFactory.createMetaToken`, permissionless, `:91-96`; `deprecate` does not block creation — `_registered` checks only non-zero, `:167-170`). Fix (SPECIFIED): `MetaToken.initialize` calls an `internal virtual _checkUnderlying(u)` hook (empty by default); `HederaMetaToken` overrides it with `HederaHts.checkAndAssociate(u)` and reverts `UnderlyingInvalid` on any fee; `associateUnderlying()` is deleted (association inside `initialize` means a token that cannot associate is never born, and the auto-association slot is no longer a detour); a new implementation is deployed, registered as a new META version on the Hedera factory, and `deprecate(META, 1)` follows. Until then the wizard and the node's token registry refuse a v1 Hedera token whose underlying is an HTS token with custom fees. Forge tests (mock `0x167`): v1 on an underlying with fixed/fractional/royalty fees ⇒ creation reverts; no fee ⇒ associated once, wrap/unwrap conserve the reserve; `isToken` failure ⇒ `HtsQueryFailed`.
+**Source.** [history/specs/2026-10-03-net-hedera.md](history/specs/2026-10-03-net-hedera.md) line 201.
+
+### NET-HED-07 — Wallets warn on HTS issuer keys
+- old: R6-9 · status: current · owner: no · date: 2026-10-07 · normative: networks/hedera.md#NET-HED-07 · superseded-by: —
+
+**Rule.** Wizards and wallets read every key of the HTS issuer and warn before a wrapper is created.
+**Why.** A wipe key can erase the wrapper's underlying balance and a freeze, KYC or pause key can lock every holder; these keys cannot be blocked on chain because real HTS tokens such as Hedera USDC carry them.
+**Cost if wrong.** A wrapper loses its backing or locks its holders without anyone having been told.
+**Source.** [history/specs/2026-10-03-net-hedera.md](history/specs/2026-10-03-net-hedera.md) line 215.
+
+### NET-HED-08 — Hedera runs lane_runner, one tx per lane
+- old: R6-1 · status: current · owner: no · date: 2026-10-03 · normative: networks/hedera.md#NET-HED-08 · superseded-by: —
+
+**Rule.** Hedera runs `lane_runner` (one transaction in flight per lane), with no pipeline, replacement or gap-fill.
+**Why.** Hedera has no mempool: a transaction with a future nonce is refused with `WRONG_NONCE`, so pipelining, replacement and gap-fill have nothing to work with.
+**Source.** [history/specs/2026-10-03-net-hedera.md](history/specs/2026-10-03-net-hedera.md) line 289.
+
+### NET-HED-09 — HederaMetaToken HIP-632 for 64-byte signatures
+- old: R6-2 · status: current · owner: no · date: 2026-10-03 · normative: networks/hedera.md#NET-HED-09 · superseded-by: —
+
+**Rule.** `HederaMetaToken` verifies a 64-byte signature from an account without code through HIP-632 `isAuthorizedRaw`; a precompile revert means "not authorised"; everything else is `MetaToken`.
+**Why.** A 64-byte signature is never ECDSA here (OpenZeppelin 5.2 `tryRecover` takes only 65 bytes) and the precompile itself classifies by length, so the branch is unambiguous; the precompile binds the key to the account from Hedera state, so a public key sent by the client never grants authority.
+**Source.** [history/specs/2026-10-03-net-hedera.md](history/specs/2026-10-03-net-hedera.md) line 291.
+
+### NET-HED-10 — HashPack signMessage and KeyList are seams
+- old: R6-4 · status: current · owner: no · date: 2026-10-03 · normative: networks/hedera.md#NET-HED-10 · superseded-by: —
+
+**Rule.** HashPack `signMessage` and threshold/KeyList accounts are seams.
+**Why.** HashPack `signMessage` (HIP-820) signs a prefixed message, which `isAuthorizedRaw` (exactly 32 bytes) cannot check; checking it through `isAuthorized` needs a protobuf `SignatureMap` built in Solidity and a test on a real network, so it is deferred.
+**Source.** [history/specs/2026-10-03-net-hedera.md](history/specs/2026-10-03-net-hedera.md) line 295.
+
+### NET-HED-11 — Call HIP-632 system contract with CALL
+- old: R6-6 · status: current · owner: no · date: 2026-10-07 · normative: networks/hedera.md#NET-HED-11 · superseded-by: —
+
+**Rule.** The HIP-632 system contract is called with `CALL`, never `STATICCALL`.
+**Why.** The `isAuthorizedRaw` call does not allow a static frame, and the system contract halts inside one; on testnet the same call returned `ok = false` with no data under STATICCALL and a real answer under CALL.
+**Cost if wrong.** Every ED25519 signature reads as not authorised.
+**Source.** [history/specs/2026-10-03-net-hedera.md](history/specs/2026-10-03-net-hedera.md) line 298.
+
+### NET-HED-12 — HederaAdapter reports tx_fee and lane_balance
+- old: R6-10 · status: current · owner: no · date: 2026-10-07 · normative: networks/hedera.md#NET-HED-12 · superseded-by: —
+
+**Why.** As built the adapter implements neither (both default to `None`, `adapter.rs:112-118`; `hedera.rs` implements only `op_consumed/build/sign/submit/tx_status/…`), so neither `gas_budget` nor `min_relayer_balance` ever sees a Hedera sample; only the zero-balance check in `build` (`hedera.rs:163-166`) stops a drain loop. Tests: a failed receipt still adds to `spent`; a balance below the floor stops the lane taking work.
+**Source.** [history/specs/2026-10-03-net-hedera.md](history/specs/2026-10-03-net-hedera.md) line 307.
+
+### NET-HED-13 — Mesh sig_kind hedera_ed25519 verified locally
+- old: R6-11 · status: current · owner: no · date: 2026-10-07 · normative: networks/hedera.md#NET-HED-13 · superseded-by: —
+
+**Why.** As built, `sig_kind` is only `eoa`/`erc1271` and `check_evm` returns `Ok` for every non-EOA intent (`mesh/digest.rs:193-195`), so garbage intents force every peer to simulate.
+**Source.** [history/specs/2026-10-03-net-hedera.md](history/specs/2026-10-03-net-hedera.md) line 308.
+
+### NET-HED-14 — Hedera v2 wrappers: fail-closed HTS checks
+- old: R144 · status: current · owner: no · date: 2026-10-06 · normative: networks/hedera.md#NET-HED-14 · superseded-by: —
+
+**Rule.** Hedera v2 wrappers check every underlying in `initialize`, fail-closed, through the HTS precompile `0x167`.
+**Why.** An HTS underlying with any custom fee breaks a wrapper's reserve or makes `unwrap` revert (the hazard of NET-HED-06), and checking inside `initialize` means a token whose legs cannot be checked or associated is never born.
+**Source.** [history/specs/2026-10-06-token-wrappers-v2.md](history/specs/2026-10-06-token-wrappers-v2.md) line 149.
+
+### NET-HED-15 — Hedera ED25519 needs a raw signer
+- old: CR-WSF-2 · status: current · owner: no · date: 2026-10-07 · normative: networks/hedera.md#NET-HED-15 · superseded-by: —
+
+**Rule.** Hedera ED25519 subjects need a raw signer.
+**Why.** The contracts accept raw ED25519 over the 32-byte EIP-712 digest only, and HashPack or WalletConnect `hedera_signMessage` adds the HIP-820 prefix, which `isAuthorizedRaw` cannot verify, so those wallets cannot sign meta-transactions for ED25519 accounts.
+**Source.** [history/specs/round3-wallet-signing-formats.md](history/specs/round3-wallet-signing-formats.md) line 363.
+
+### NET-HED-80 — Permissionless associateUnderlying
+- old: R6-5 · status: superseded · owner: no · date: 2026-10-07 · normative: — · superseded-by: NET-HED-06, NET-HED-14
+
+It said: Permissionless associateUnderlying; replaced by NET-HED-06, NET-HED-14.
+**Source.** [history/specs/2026-10-03-net-hedera.md](history/specs/2026-10-03-net-hedera.md) line 296.
+
+## Networks — Cosmos
+
+### NET-COS-01 — IBC ICS-20/27 transfers
+- old: req:blockchain.md:ibc · status: open · owner: yes · date: 2026-10-07 · normative: networks/cosmos.md#NET-COS-01 · superseded-by: —
+
+**Rule.** IBC token transfers (ICS-20) and interchain accounts (ICS-27) are an open owner requirement.
+**Open.** Owner decision pending; the default stated in the normative text applies.
+**Source.** [history/blockchain.md](history/blockchain.md) line 293.
+
+### NET-COS-02 — Cosmos CW20 + ADR-036, no authz
+- old: R66 · status: current · owner: no · date: 2026-10-07 · normative: networks/cosmos.md#NET-COS-02 · superseded-by: —
+
+**Rule.** Cosmos = a CW20 token with a contract-level meta operation signed through ADR-036; `x/authz` is never used and `x/feegrant` is only a seam.
+**Why.** An `x/authz` grantee would be the relayer, an ordinary account, which breaks the owner rule that only contracts are spenders; a contract grantee is unnecessary because the funds already sit in the contract.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 539.
+
+### NET-COS-03 — Cosmos passkey bound to rpIdHash, origin and UV
+- old: CR-R3-1(cosmos-binding) · status: current · owner: yes · date: 2026-10-07 · normative: networks/cosmos.md#NET-COS-03 · superseded-by: —
+
+**Why.** As built the decoder checks only the UP flag (`ad[32] & 0x01`) and `type`/challenge by substring `contains` (`cosmos/metaop/src/lib.rs:130-148`; `metaop/src/lib.rs:131-144`; no low-s check before `secp256r1_verify`, `cosmos/metaop/src/lib.rs:147`), with no rpIdHash, origin, UV or low-s check, so any page that can obtain an assertion for the rpId (sibling subdomain, related origin, delegated iframe) signs any `MetaOp`. The low-s check closes signature malleability (the digest identity never depended on the signature).
+**Cost if wrong.** Cosmos dev passkey accounts change.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 630.
+
+### NET-COS-04 — Cosmos DEX has no Sweep
+- old: CR-R3-10 · status: current · owner: no · date: 2026-10-07 · normative: networks/cosmos.md#NET-COS-04 · superseded-by: —
+
+**Rule.** The Cosmos DEX has no `Sweep`
+**Why.** The DEX never holds balances between transactions, as on EVM ("no owner, no sweep"), so an admin `Sweep` has nothing legitimate to move.
+**Cost if wrong.** Tokens sent to the DEX directly are lost, as on EVM.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 708.
+
+### NET-COS-05 — Cosmos DEX fill-or-kill, batch all-or-nothing
+- old: R9-2 · status: current · owner: no · date: 2026-10-03 · normative: networks/cosmos.md#NET-COS-05 · superseded-by: —
+
+**Rule.** Cosmos DEX orders are fill-or-kill, and a multi-pair batch is atomic as a whole.
+**Why.** Each leg is a fixed signed transfer, so a partial fill cannot be expressed on chain; several `MsgExecuteContract` messages in one Cosmos transaction revert together, so per-pair atomicity does not exist and the off-chain book sends single pairs when a failure must be isolated.
+**Source.** [history/specs/2026-10-03-net-cosmos.md](history/specs/2026-10-03-net-cosmos.md) line 117.
+
+### NET-COS-06 — Post-simulation grief metered; DEX rereads nonces
+- old: R9-3 · status: current · owner: no · date: 2026-10-07 · normative: networks/cosmos.md#NET-COS-06 · superseded-by: —
+
+**Rule.** Subject-caused grief after simulation is metered and throttled, not excluded; the DEX re-reads both legs' nonces before settling.
+**Why.** After simulation the subject can still move its own balance, and with an empty relayer field anyone can relay its op first, so the failure cannot be ruled out; before this ruling the breaker counted only mined fees and `Settle` was open.
+**Cost if wrong.** Even metered, each new payer can cost the lane up to three failed transactions per 24 hours before it is throttled.
+**Source.** [history/specs/2026-10-03-net-cosmos.md](history/specs/2026-10-03-net-cosmos.md) line 233.
+
+### NET-COS-07 — instantiate2 genesis salt; duplicate chain-id refused
+- old: R9-4 · status: current · owner: no · date: 2026-10-07 · normative: networks/cosmos.md#NET-COS-07 · superseded-by: —
+
+**Rule.** Cosmos contract addresses differ between chains, contracts are instantiated without an admin, and duplicate chain ids are refused.
+**Why.** Chain ids are not globally unique (`testing`, `localwasm`, restarted testnets, forks that keep the id) and a classic wasmd address is a function of code id and instance id, so a `pay` signed on one chain ran on its twin; immutability without an admin follows CTR-GEN-02.
+**Cost if wrong.** A signed payment replays on a twin chain.
+**Source.** [history/specs/2026-10-03-net-cosmos.md](history/specs/2026-10-03-net-cosmos.md) line 238.
+
+### NET-COS-08 — contract and valid_until from signed payload
+- old: R9-5 · status: current · owner: no · date: 2026-10-07 · normative: networks/cosmos.md#NET-COS-08 · superseded-by: —
+
+**Rule.** `contract` and `valid_until` come from the signed payload
+**Why.** The adapter took `contract` and `valid_until` from the unsigned job JSON, `op_consumed` asked the JSON's contract and the runner held the lane until that `valid_until` plus grace (NODE-LANE-16).
+**Cost if wrong.** A job can hold a lane past any signed expiry, or be reported consumed against the wrong contract.
+**Source.** [history/specs/2026-10-03-net-cosmos.md](history/specs/2026-10-03-net-cosmos.md) line 243.
+
+### NET-COS-09 — Cosmos passkey checks stored rpIdHash and origins
+- old: R9-6 · status: current · owner: no · date: 2026-10-07 · normative: networks/cosmos.md#NET-COS-09 · superseded-by: —
+
+**Rule.** The Cosmos passkey verifier checks the stored relying-party hashes and origins.
+**Why.** The verifier checked only the UP flag, `type` and `challenge`, with no relying-party hash, origin or UV check, so an assertion made for another site was accepted.
+**Source.** [history/specs/2026-10-03-net-cosmos.md](history/specs/2026-10-03-net-cosmos.md) line 246.
+
+### NET-COS-10 — Resubmit tx dropped from mempool
+- old: R9-7 · status: current · owner: no · date: 2026-10-07 · normative: networks/cosmos.md#NET-COS-10 · superseded-by: —
+
+**Rule.** A transaction dropped from the mempool is resent
+**Why.** CometBFT can evict a transaction at recheck; status then reads `Unknown` while the send was `Ok`, and the runner did not resend, so the lane sat idle until `valid_until` plus grace. Resending the same bytes is idempotent (code 19 means already in the mempool).
+**Source.** [history/specs/2026-10-03-net-cosmos.md](history/specs/2026-10-03-net-cosmos.md) line 249.
+
+### NET-COS-11 — extra must be empty outside trade
+- old: R9-8 · status: current · owner: no · date: 2026-10-07 · normative: networks/cosmos.md#NET-COS-11 · superseded-by: —
+
+**Rule.** `extra` must be empty outside `trade`
+**Why.** The token ignored `extra` on `pay` and `revoke`, so two payloads that differ only in `extra` authorised the same payment; with `extra` empty, the digest is the single key of one business operation.
+**Source.** [history/specs/2026-10-03-net-cosmos.md](history/specs/2026-10-03-net-cosmos.md) line 252.
+
+### NET-COS-80 — Cosmos passkey v1 derived address
+- old: R9-1 · status: superseded · owner: no · date: 2026-10-07 · normative: — · superseded-by: NET-ALL-21
+
+It said: Cosmos passkey v1 derived address; replaced by NET-ALL-21.
+**Source.** [history/specs/2026-10-03-net-cosmos.md](history/specs/2026-10-03-net-cosmos.md) line 13.
+
+### NET-COS-81 — Cosmos passkey v2 20-byte derived address
+- old: CR-R3-1(cosmos-address) · status: superseded · owner: yes · date: 2026-10-07 · normative: — · superseded-by: NET-ALL-21
+
+It said: Cosmos passkey v2 20-byte derived address; replaced by NET-ALL-21.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 630.
+
+## Networks — Soroban
+
+### NET-SOR-01 — Soroban native auth as meta-tx; fee-bump
+- old: R65 · status: current · owner: no · date: 2026-10-07 · normative: networks/soroban.md#NET-SOR-01 · superseded-by: —
+
+**Rule.** On Soroban the contract-level meta operation is the native Soroban authorization; a relayer lane is the transaction source, and fee-bump lets one lane pay for all.
+**Why.** A Soroban authorization entry already is a contract-level verifier with a non-sequential nonce and a domain-separated preimage, so no second verifier is written and the subject's sequence never orders anything.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 538.
+
+### NET-SOR-02 — Ledger expiry computed without RPC
+- old: R8-1 · status: current · owner: no · date: 2026-10-03 · normative: networks/soroban.md#NET-SOR-02 · superseded-by: —
+
+**Rule.** The ledger expiry is computed without RPC as a safe upper bound.
+**Why.** The ERP makes no chain RPC (NODE-STO-03), and ledgers close no faster than one per second, so the anchor-based bound never expires before `valid_until`; overshooting only lengthens how long the host keeps the nonce.
+**Source.** [history/specs/2026-10-03-net-soroban.md](history/specs/2026-10-03-net-soroban.md) line 64.
+
+### NET-SOR-03 — Soroban guardian recovery is a seam
+- old: R8-2 · status: current · owner: no · date: 2026-10-07 · normative: networks/soroban.md#NET-SOR-03 · superseded-by: —
+
+**Rule.** Soroban guardian recovery is a seam.
+**Source.** [history/specs/2026-10-03-net-soroban.md](history/specs/2026-10-03-net-soroban.md) line 96.
+
+### NET-SOR-04 — Per-key permissions are a seam
+- old: R8-8 · status: current · owner: no · date: 2026-10-07 · normative: networks/soroban.md#NET-SOR-04 · superseded-by: —
+
+**Rule.** Per-key permissions are a seam.
+**Why.** `__check_auth` does not read the auth contexts, and per-key permissions wait for the per-key purpose of the universal account (CTR-UA-10).
+**Cost if wrong.** Any one passkey can add an attacker's key to the account.
+**Source.** [history/specs/2026-10-03-net-soroban.md](history/specs/2026-10-03-net-soroban.md) line 97.
+
+### NET-SOR-05 — One signature settles once
+- old: R8-3 · status: current · owner: no · date: 2026-10-03 · normative: networks/soroban.md#NET-SOR-05 · superseded-by: —
+
+**Rule.** One signature settles once.
+**Why.** A Soroban auth entry consumes its nonce when used, so a partial fill needs the maker to re-sign the rest; `filled[order_hash]`, whose hash excludes the nonce, stops overfill across the re-signed copies.
+**Source.** [history/specs/2026-10-03-net-soroban.md](history/specs/2026-10-03-net-soroban.md) line 137.
+
+### NET-SOR-06 — No multi-pair batch per Soroban tx
+- old: R8-4 · status: current · owner: no · date: 2026-10-03 · normative: networks/soroban.md#NET-SOR-06 · superseded-by: —
+
+**Rule.** No multi-pair batch per Soroban transaction.
+**Why.** A Soroban transaction is one host call, so a failure in one pair reverts the whole transaction and per-pair atomicity does not exist; the matcher sends one pair per transaction, in parallel across lanes.
+**Source.** [history/specs/2026-10-03-net-soroban.md](history/specs/2026-10-03-net-soroban.md) line 139.
+
+### NET-SOR-07 — DEX jobs carry two auth entries
+- old: R8-5 · status: current · owner: no · date: 2026-10-03 · normative: networks/soroban.md#NET-SOR-07 · superseded-by: —
+
+**Rule.** A relayed DEX job carries two auth entries.
+**Why.** `settle` needs both the maker's and the taker's `require_auth`, while a `signed_op` job carried only one signature.
+**Source.** [history/specs/2026-10-03-net-soroban.md](history/specs/2026-10-03-net-soroban.md) line 141.
+
+### NET-SOR-08 — Token address is a per-family string
+- old: R8-7 · status: current · owner: no · date: 2026-10-07 · normative: networks/soroban.md#NET-SOR-08 · superseded-by: —
+
+**Rule.** A Soroban token address is a per-family string.
+**Why.** The token list was typed as an EVM address, which cannot hold the Soroban strkey (`C…`) contract address that `getEvents` filters on.
+**Source.** [history/specs/2026-10-03-net-soroban.md](history/specs/2026-10-03-net-soroban.md) line 182.
+
+### NET-SOR-09 — pay_ref one-shot per (from, pay_ref)
+- old: CR-R3-3(rule), R8-9 · status: current · owner: no · date: 2026-10-07 · normative: networks/soroban.md#NET-SOR-09 · superseded-by: —
+
+**Why.** With a global key, a stranger's 0- or 1-unit `pay(attacker, receiver, …, victim_ref)` burns the victim's ref and blocks the victim's signed payment; booking already sums settlements per `entry_ref` and receiver, so a stranger's payment with someone else's ref is only money in (same direction as Cosmos, which never locks `pay_ref`, and the EVM `MetaToken`). SPECIFIED (as built the key is global, `token/src/lib.rs:203-209`, and `check_amount` accepts 0, `:113-117`). Tests: a third party `pay(self, x, 0, victim_ref)` ⇒ `NonPositiveAmount`; `pay(self, x, 1, victim_ref)` does not block the victim's `pay`; the same `from` paying the same `pay_ref` twice (two signatures) ⇒ `RefUsed`; `pay_under_mandate` cannot be burnt by a third party.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 658; [history/specs/2026-10-03-net-soroban.md](history/specs/2026-10-03-net-soroban.md) line 224.
+
+### NET-SOR-10 — Soroban orders bind relayer, no open form
+- old: R8-10, RS5-15(soroban) · status: current · owner: no · date: 2026-10-07 · normative: networks/soroban.md#NET-SOR-10 · superseded-by: —
+
+**Why.** The host only matches `dex.settle(order)` (`dex/src/lib.rs:158-159`); the counter-order and `maker_fill` (`:153`) are the submitter's choice, so anyone who sees a pending `settle` (transactions flood to every peer before the ledger closes) re-submits both auth entries with `maker_fill = 1`: both nonces are consumed for a dust fill, the real `settle` fails (the relayer pays) and both makers must sign again. Binding the settler means only the DEX operator's lane can spend the auth entries; roles and `maker_fill` are chosen by the (trusted) operator. Binding `(order, fill)` into the signature is not possible: a resting order is signed before its fill is known. SPECIFIED (as built `Order` has no relayer, `:35-47`). Test: a third party re-submits both auth entries with `maker_fill = 1` ⇒ fails; the right relayer settles.
+**Source.** [history/specs/2026-10-03-net-soroban.md](history/specs/2026-10-03-net-soroban.md) line 230; [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 438.
+
+### NET-SOR-11 — TTL extension and RestoreFootprint retry
+- old: R8-11 · status: current · owner: no · date: 2026-10-07 · normative: networks/soroban.md#NET-SOR-11 · superseded-by: —
+
+**Rule.** Entries in daily use extend their TTL, and an archived footprint is restored by the lane and retried.
+**Why.** Only `save` and `set_payee` extended TTLs, so an account in daily use was archived about 60 days after its last key change and a payee 60 days after it was allowed; a `restorePreamble` from simulation killed the job.
+**Cost if wrong.** Payments from an archived account or to an archived payee die as dead jobs.
+**Source.** [history/specs/2026-10-03-net-soroban.md](history/specs/2026-10-03-net-soroban.md) line 233.
+
+### NET-SOR-12 — op_consumed reads host nonce key
+- old: R8-12 · status: current · owner: no · date: 2026-10-07 · normative: networks/soroban.md#NET-SOR-12 · superseded-by: —
+
+**Rule.** `op_consumed` reads the host nonce key
+**Why.** An auth entry submitted by someone else, or by the subject itself, consumes the nonce; reading the host nonce key lets the job end as `consumed` instead of `dead` or `reverted`, so the ERP never asks the payer to re-sign an operation that already ran.
+**Source.** [history/specs/2026-10-03-net-soroban.md](history/specs/2026-10-03-net-soroban.md) line 236.
+
+### NET-SOR-13 — Reject crossOrigin true and topOrigin
+- old: R8-13 · status: current · owner: no · date: 2026-10-07 · normative: networks/soroban.md#NET-SOR-13 · superseded-by: —
+
+**Rule.** The Soroban passkey verifier refuses `"crossOrigin":true` and any `topOrigin`
+**Why.** The verifier checked only `type`, `challenge` and `origin`, so a relying-party page embedded in a cross-origin iframe (Permissions-Policy `publickey-credentials-get`) yields a valid assertion under an attacker's page.
+**Source.** [history/specs/2026-10-03-net-soroban.md](history/specs/2026-10-03-net-soroban.md) line 238.
+
+### NET-SOR-14 — Soroban adapter reports tx_fee and lane_balance
+- old: R8-14 · status: current · owner: no · date: 2026-10-07 · normative: networks/soroban.md#NET-SOR-14 · superseded-by: —
+
+**Rule.** The Soroban adapter reports `tx_fee` (`feeCharged` from the `resultXdr` of `getTransaction`, for both `SUCCESS` and `FAILED`) and `lane_balance` (native balance of the lane and of the `fee_bump_lane`)
+**Why.** Both hooks were left at their `None` default, so the gas-budget and minimum-balance breakers were blind on Soroban, while a `FAILED` transaction still pays inclusion and resource fees that are not refunded (NODE-LANE-13).
+**Source.** [history/specs/2026-10-03-net-soroban.md](history/specs/2026-10-03-net-soroban.md) line 240.
+
+### NET-SOR-15 — Signed fields read from invocation
+- old: R8-15 · status: current · owner: no · date: 2026-10-07 · normative: networks/soroban.md#NET-SOR-15 · superseded-by: —
+
+**Rule.** `build` takes `valid_until` (hence `TimeBounds.max_time` and the runner's expiry) and `contract` from the signed invocation
+**Why.** `build` read `valid_until` from the unsigned job JSON, so a job could carry a later expiry than the one signed (NODE-LANE-16).
+**Source.** [history/specs/2026-10-03-net-soroban.md](history/specs/2026-10-03-net-soroban.md) line 242.
+
+### NET-SOR-80 — Non-positive pay refused with ZeroAmount
+- old: CR-R3-3(error-name) · status: superseded · owner: yes · date: 2026-10-07 · normative: — · superseded-by: NET-SOR-09
+
+It said: Non-positive pay refused with ZeroAmount; replaced by NET-SOR-09.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 658.
+
+## Networks — Sui
+
+### NET-SUI-01 — Sui shared Account<T> + personal message
+- old: R64 · status: current · owner: no · date: 2026-10-07 · normative: networks/sui.md#NET-SUI-01 · superseded-by: —
+
+**Rule.** Sui = a shared `Account<T>` per subject holding the balance, signed through `signPersonalMessage`; DEX settlement is two signed legs.
+**Why.** Owned coins on Sui cannot be spent by anyone else, so the balance must sit in a contract object; a shared object per subject keeps contention within that one subject.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 537.
+
+### NET-SUI-02 — Sui keys per subject in Keys object
+- old: CR-R3-5 · status: current · owner: no · date: 2026-10-07 · normative: networks/sui.md#NET-SUI-02 · superseded-by: —
+
+**Why.** As built keys live in each `Account<T>` (`meta.move:93-105`), so rotating a key on one coin type leaves the old key alive on another, and `dex::cancel`/`invalidate_nonces` accept any `Account<X>` of the maker (`dex.move:275-294`). A struct-layout change is a fresh package publish, and every publish is fresh and immutable anyway (NET-SUI-15). SPECIFIED. Tests: rotate a key on `Keys` ⇒ the old key fails on `Account<USDC>` and `Account<SUI>` and cannot cancel orders on any market. The `Keys.policy` bit `POLICY_PASSKEY_FOR_VALUE` is defined in NET-ALL-23.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 672.
+
+### NET-SUI-03 — Account and Registry are derived objects
+- old: RS7-1 · status: current · owner: no · date: 2026-10-03 · normative: networks/sui.md#NET-SUI-03 · superseded-by: —
+
+**Rule.** `Account<T>` and `Registry<T>` are derived objects.
+**Why.** The ERP and the relayer compute the account id offline from the registry id and the payer address; the chain refuses a second claim, so it enforces one account per subject and coin type with no mapping table, and a registry derived per type stops anyone creating a second registry to split accounts.
+**Source.** [history/specs/2026-10-03-net-sui.md](history/specs/2026-10-03-net-sui.md) line 272.
+
+### NET-SUI-04 — open_passkey requires an assertion
+- old: RS7-2 · status: current · owner: no · date: 2026-10-03 · normative: networks/sui.md#NET-SUI-04 · superseded-by: —
+
+**Rule.** `open_passkey` requires an assertion; origin and rpIdHash come from that assertion.
+**Why.** If anyone could set the relying-party hash and origin, an attacker could open the unique derived account for a victim's key with a wrong origin first, and that account could never sign.
+**Cost if wrong.** Funds deposited into that account are stuck.
+**Source.** [history/specs/2026-10-03-net-sui.md](history/specs/2026-10-03-net-sui.md) line 273.
+
+### NET-SUI-05 — Many keys, origins, guardian per account
+- old: RS7-3 · status: current · owner: no · date: 2026-10-07 · normative: networks/sui.md#NET-SUI-05 · superseded-by: —
+
+**Rule.** A Sui account has many keys, many origins and a guardian with delayed recovery.
+**Why.** With one key and fixed origins, losing the key or changing an origin bricks the account, and its derived id cannot be opened again.
+**Source.** [history/specs/2026-10-03-net-sui.md](history/specs/2026-10-03-net-sui.md) line 274.; [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 42
+
+### NET-SUI-06 — Sui DEX atomic PTB batch, no relayer fee
+- old: RS7-4 · status: current · owner: no · date: 2026-10-03 · normative: networks/sui.md#NET-SUI-06 · superseded-by: —
+
+**Rule.** Sui DEX differences from EVM
+**Why.** Move has no try/catch, so a batch is one PTB that is atomic as a whole and the relayer dry-runs and drops bad pairs first; new networks carry no relayer fee; balances are held per coin type, so each side needs two accounts.
+**Source.** [history/specs/2026-10-03-net-sui.md](history/specs/2026-10-03-net-sui.md) line 275.
+
+### NET-SUI-07 — Relayer builds PTB BCS locally
+- old: RS7-5 · status: current · owner: no · date: 2026-10-03 · normative: networks/sui.md#NET-SUI-07 · superseded-by: —
+
+**Rule.** The relayer builds the PTB BCS locally and resends the same bytes.
+**Why.** Signing bytes built by the RPC (`unsafe_moveCall`) is blind signing that lets the RPC take the lane's gas coin; resending the same bytes never puts a second signed transaction on the same gas coin version.
+**Cost if wrong.** A second transaction on the same gas coin version equivocates and locks the coin until the epoch ends.
+**Source.** [history/specs/2026-10-03-net-sui.md](history/specs/2026-10-03-net-sui.md) line 276.
+
+### NET-SUI-08 — Indexer filters registered tokens
+- old: RS7-6 · status: current · owner: no · date: 2026-10-07 · normative: networks/sui.md#NET-SUI-08 · superseded-by: —
+
+**Rule.** The Sui indexer filters by event type and by the registered tokens.
+**Why.** Event type alone does not prove origin: a copy of the package emits the same event shapes, so only events carrying a registered `Registry<T>` id count, and an empty list holds the cursor instead of skipping ranges.
+**Source.** [history/specs/2026-10-03-net-sui.md](history/specs/2026-10-03-net-sui.md) line 277.; [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 38
+
+### NET-SUI-09 — One shared Market per pair
+- old: RS7-8 · status: current · owner: no · date: 2026-10-03 · normative: networks/sui.md#NET-SUI-09 · superseded-by: —
+
+**Rule.** One shared `Market` per pair.
+**Why.** Sui limits transactions per shared object per commit, so one object per pair keeps the settles, cancels and `min_nonce` updates of one market from throttling every other market.
+**Source.** [history/specs/2026-10-03-net-sui.md](history/specs/2026-10-03-net-sui.md) line 279.
+
+### NET-SUI-10 — No second tx on one gas coin version
+- old: RS7-7, RS7-9 · status: current · owner: no · date: 2026-10-07 · normative: networks/sui.md#NET-SUI-10 · superseded-by: —
+
+**Why.** As built the journal is a local directory (`params.lane_journal/<chain>-lane<i>.json`, fsync + rename, written by `sign()` before the signed report and before sending) with **one** entry per lane — job B's `sign` overwrites job A's pending entry (`sui.rs:495-505, 693-707`), a failed resend of A is only logged (`sui.rs:523-527`), coin selection skips only the current entry's coin (`:657, 666`), so a later job can pick coin C1 vN again (the largest) and sign a second transaction on the same version — equivocation, C1 locked until the epoch ends; the directory (`:465-467`) does not follow the owner lock on failover; expiration is `None` (`sui.rs:317`). Tests: A `Unknown` + failed resend, B signed on C2, job C never picks C1 vN; a restart on a fresh disk with the same store ⇒ no equivocation; transactions carry an epoch expiration.
+**Source.** [history/specs/2026-10-03-net-sui.md](history/specs/2026-10-03-net-sui.md) line 278; [history/specs/2026-10-03-net-sui.md](history/specs/2026-10-03-net-sui.md) line 283.
+
+### NET-SUI-11 — forward never returns to removed key
+- old: RS7-10 · status: current · owner: no · date: 2026-10-07 · normative: networks/sui.md#NET-SUI-11 · superseded-by: —
+
+**Why.** As built `owner` never changes and `forward` is permissionless (`meta.move:257-261`), so after the owner removes a leaked first key (the main reason for key removal and recovery), anyone can forward objects sent to the account id (e.g. a `Coin<U>` of another type) to the leaked key's address. `Mandate.forward` (`mandate.move:118-120`) is not affected: a mandate's owner is the native address that created it. SPECIFIED. Move tests: remove the first key ⇒ `forward` aborts; `forward_signed` with a current key ⇒ sent to the right `to`.
+**Source.** [history/specs/2026-10-03-net-sui.md](history/specs/2026-10-03-net-sui.md) line 291.
+
+### NET-SUI-12 — Lane prune with on-chain horizon
+- old: RS7-11 · status: current · owner: no · date: 2026-10-07 · normative: networks/sui.md#NET-SUI-12 · superseded-by: —
+
+**Why.** As built there is no `prune` in `smartcontracts/move/sui/sources`; every lane is one dynamic field (`meta.move:285-287`) whose storage fee the lane pays and never recovers. SPECIFIED. Move tests: prune before the horizon aborts; after it deletes and rebates; `valid_until` beyond the horizon is refused.
+**Source.** [history/specs/2026-10-03-net-sui.md](history/specs/2026-10-03-net-sui.md) line 295.
+
+### NET-SUI-13 — Grief after dry-run via node rules
+- old: RS7-12 · status: current · owner: no · date: 2026-10-07 · normative: networks/sui.md#NET-SUI-13 · superseded-by: —
+
+**Rule.** Grief after dry-run uses the node rules, no Sui-specific mechanism.
+**Why.** The Sui grief (another op drains the account or spends the nonce before the lane's transaction) has the same shape as on other families and is covered by counting failed fees and lane storage per payer (NODE-LANE-13, NODE-LANE-15), with lane storage refunded by `prune`.
+**Source.** [history/specs/2026-10-03-net-sui.md](history/specs/2026-10-03-net-sui.md) line 301.
+
+### NET-SUI-14 — Mesh checks sui_op signature first
+- old: RS7-13 · status: current · owner: no · date: 2026-10-07 · normative: networks/sui.md#NET-SUI-14 · superseded-by: —
+
+**Rule.** The mesh checks a `sui_op` signature before any dry-run
+**Why.** The mesh decoder did not check the `sui_op` signature at all, so any unsigned op reached a dry-run on every peer (NODE-MESH-16).
+**Source.** [history/specs/2026-10-03-net-sui.md](history/specs/2026-10-03-net-sui.md) line 304.
+
+### NET-SUI-15 — Sui package immutable at deploy
+- old: RS7-14 · status: current · owner: yes · date: 2026-10-07 · normative: networks/sui.md#NET-SUI-15 · superseded-by: —
+
+**Rule.** The Sui package is immutable from deploy.
+**Why.** Owner decision (2026-10-07), the Sui case of immutable contracts (CTR-GEN-02): a fix ships as a new package, and holders move funds by signing a `pay` from the old account, whose code keeps running.
+**Source.** [history/specs/2026-10-03-net-sui.md](history/specs/2026-10-03-net-sui.md) line 306.
+
+### NET-SUI-16 — KeyOp encoded byte-identical in Python, JS
+- old: R261 · status: current · owner: no · date: 2026-10-06 · normative: networks/sui.md#NET-SUI-16 · superseded-by: —
+
+**Rule.** KeyOp is encoded in every client language byte-identical to Move `keyop_digest`, with the domain as a parameter.
+**Why.** One encoding for every language, so clients can check a KeyOp locally before submitting it (CLI-APP-09).
+**Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 200.
+
+### NET-SUI-17 — One generator run feeds every vector
+- old: R262 · status: current · owner: no · date: 2026-10-06 · normative: networks/sui.md#NET-SUI-17 · superseded-by: —
+
+**Rule.** One generator run feeds every language's Sui vectors.
+**Why.** ECDSA signatures are random per run, so vectors from separate runs never match; before this the cross-language vector was only a comment.
+**Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 208.
+
+## Networks — Aptos
+
+### NET-APT-01 — Object code deployment, one address
+- old: RS11-13(deploy) · status: current · owner: no · date: 2026-10-04 · normative: networks/aptos.md#NET-APT-01 · superseded-by: —
+
+**Rule.** The Aptos package is deployed as one object code deployment: one address for calls and event types.
+**Why.** Only code in the package can emit its event types, so the indexer can filter by type and drop a copy of the package deployed at another address.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 20.
+
+### NET-APT-02 — Aptos Rejected table; scaas abort Reverted
+- old: RS11-8(table) · status: current · owner: no · date: 2026-10-04 · normative: networks/aptos.md#NET-APT-02 · superseded-by: —
+
+**Rule.** Aptos outcome classes: validation refusals free the lane; a `scaas` abort is `Reverted`.
+**Why.** A validation refusal never enters the ledger and resending the same bytes never passes, so the job goes straight back to the queue; an abort from `scaas` means the subject's operation is wrong or already used.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 21.
+
+### NET-APT-03 — Account keys, origins, three admin paths
+- old: RS11-3 · status: current · owner: no · date: 2026-10-07 · normative: networks/aptos.md#NET-APT-03 · superseded-by: —
+
+**Rule.** An Aptos Account holds ≤ 8 ed25519 and WebAuthn P-256 keys and ≤ 8 origins; the first key must match the owner's live authentication key; three administration paths.
+**Why.** Checking the first key against the owner's live authentication key stops an attacker from opening the victim's Account first with a wrong key. Rotating the native wallet key never touches the Account's keys, so several keys and a guardian with a 2-day delay keep the Account from being bricked.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 22.
+
+### NET-APT-04 — aptos:signMessage envelope parsed strictly
+- old: RS11-1 · status: current · owner: no · date: 2026-10-03 · normative: networks/aptos.md#NET-APT-04 · superseded-by: —
+
+**Rule.** The main path is a contract-level meta-tx signed with `aptos:signMessage`, whose `fullMessage` envelope is parsed strictly
+**Why.** Aptos sequence numbers queue every transaction of a subject across all modules, and orderless transactions expire within 60 seconds, so neither lets a subject pre-sign queued jobs, mandates or hour-long DEX orders. Wallets self-report every `fullMessage` field and line order is not standardised, so only a strict parse stops a phishing page from injecting a second `message:` line.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 648.
+
+### NET-APT-05 — One derived Account per subject
+- old: RS11-2 · status: current · owner: no · date: 2026-10-04 · normative: networks/aptos.md#NET-APT-05 · superseded-by: —
+
+**Rule.** One derived `Account` object per subject holds every asset; its balance is the primary fungible store of the Account address — no internal ledger.
+**Why.** A primary store is created for any address that receives an asset, so anything sent to the Account address, even before the Account exists, is spendable at once; one Account for every asset also means one key set and one rotation.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 651.
+
+### NET-APT-06 — Lane table prunable after delay
+- old: RS11-4 · status: current · owner: no · date: 2026-10-04 · normative: networks/aptos.md#NET-APT-06 · superseded-by: —
+
+**Rule.** The lane table is a `Table` with `valid_until`, prunable by anyone after the delay.
+**Why.** A `Table` has no length counter, so two lanes are two state keys and Block-STM sees no conflict. The ERP reissues terms on the same lane and nonce, so deleting a lane right after the executed op's deadline would let a later-signed, still-valid op pay twice; the 30-day delay covers the lane horizon.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 656.
+
+### NET-APT-07 — Domain = chain_id, Account, asset
+- old: RS11-5 · status: current · owner: no · date: 2026-10-04 · normative: networks/aptos.md#NET-APT-07 · superseded-by: —
+
+**Rule.** The Aptos domain is the on-chain `chain_id`, the derived contract address and the explicit `asset`.
+**Why.** The on-chain `chain_id` cannot be faked, and the derived contract address differs between two deployments even on two networks that share chain id 4.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 658.
+
+### NET-APT-08 — Relayer lane ed25519 sequence account
+- old: RS11-6 · status: current · owner: no · date: 2026-10-04 · normative: networks/aptos.md#NET-APT-08 · superseded-by: —
+
+**Rule.** An Aptos relayer lane is an ed25519 account at `m/44'/637'/{i}'/0'/0'` sending sequence-number transactions, one in flight, paying its own fee.
+**Why.** A lane's sequence number matches the shared `recover_lane` contract exactly, and one transaction per lane needs no parallel submissions inside a lane; the relayer pays its own fee, so neither fee payer nor orderless transactions are needed.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 659.
+
+### NET-APT-09 — Hand-written BCS, TS SDK vectors
+- old: RS11-7 · status: current · owner: no · date: 2026-10-04 · normative: networks/aptos.md#NET-APT-09 · superseded-by: —
+
+**Rule.** Aptos transactions are hand-written BCS, hashed before sending, with vectors from the TS SDK.
+**Why.** The `aptos-sdk` crate pulls in all of `aptos-core`, a very large dependency tree that risks running out of memory on a shared build machine and pins its own tokio and rustc versions; hashing before sending lets the lane journal the transaction as signed.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 660.
+
+### NET-APT-10 — Finality commit; REST scan by package
+- old: RS11-9 · status: current · owner: no · date: 2026-10-04 · normative: networks/aptos.md#NET-APT-10 · superseded-by: —
+
+**Rule.** Aptos finality is commit (AptosBFT), indexed by block height; a block with missing transactions fails the range.
+**Why.** AptosBFT commits are final and the REST API returns only committed state; a block returned with fewer transactions than its version range is incomplete, and closing that range would skip events.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 662.
+
+### NET-APT-11 — Aptos DEX Market per pair
+- old: RS11-10 · status: current · owner: no · date: 2026-10-04 · normative: networks/aptos.md#NET-APT-11 · superseded-by: —
+
+**Rule.** Aptos DEX: one derived `Market` per pair, `min_nonce`/`filled` per market, a permissionless `sweep`, one pair per transaction.
+**Why.** Per-market state means no global counter is written on the hot path (the lesson of NET-ALL-13), and a market holds no funds between transactions, so anything sent to it can be swept without permission; entry functions take no structs, so one transaction carries one pair.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 664.
+
+### NET-APT-12 — Mandate opened by Account key
+- old: RS11-11 · status: current · owner: no · date: 2026-10-04 · normative: networks/aptos.md#NET-APT-12 · superseded-by: —
+
+**Rule.** An Aptos mandate is opened by an Account key's signature, funded by an ordinary `pay`, and its `pay_ref` entries are prunable.
+**Why.** Opening by an Account key's signature needs no native transaction from the owner, so it costs the owner no gas and takes no subject sequence (NET-ALL-02); a plain `pay` funds it because the mandate's balance is its own primary store.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 666.
+
+### NET-APT-13 — No disk tx journal on Aptos
+- old: RS11-12 · status: current · owner: no · date: 2026-10-04 · normative: networks/aptos.md#NET-APT-13 · superseded-by: —
+
+**Rule.** No disk transaction journal on Aptos.
+**Why.** The chain runs each (lane, sequence) exactly once and Aptos has no version-based object lock like Sui (NET-SUI-10), so two different transactions signed on one sequence after a restart lock nothing: at most one lands, and the contract refuses a used digest.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 667.
+
+### NET-APT-14 — Pure-Move P-256 passkey verifier
+- old: RS11-14 · status: current · owner: yes · date: 2026-10-04 · normative: networks/aptos.md#NET-APT-14 · superseded-by: —
+
+**Rule.** Aptos passkeys are WebAuthn P-256 verified by the pure-Move `scaas::p256`.
+**Why.** Move has no P-256 verify callable from contracts (P-256 is checked only at the transaction-authenticator layer), and the owner chose a pure-Move verifier over native passkey accounts or no passkeys; it is a separate, unaudited module so a native verifier can replace it.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 672.
+
+### NET-APT-15 — Indexer API as hint, reread fullnode
+- old: RS11-15 · status: current · owner: yes · date: 2026-10-04 · normative: networks/aptos.md#NET-APT-15 · superseded-by: —
+
+**Rule.** The Aptos Indexer API is a hint; content is re-read from the fullnode, and the cursor never passes the indexer's processed version.
+**Why.** Owner choice of the hosted Indexer API, trusted only for completeness; it has no `events` table, so it can only point at transactions, and content is re-read from the fullnode.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 675.
+
+### NET-APT-16 — pay_check view for unopened Account
+- old: RS11-16 · status: current · owner: no · date: 2026-10-07 · normative: networks/aptos.md#NET-APT-16 · superseded-by: —
+
+**Why.** Aptos-node 9.6.0's REST `simulate` hangs on a transaction that both creates the Account object and spends from its pre-existing primary store (the real transaction runs normally); reported upstream if it persists. `relay_pay` runs every check (`pay_checked`) BEFORE opening the Account. BUILT; amended by NET-APT-23.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 677.
+
+### NET-APT-17 — Passkey precomputed P-256 table
+- old: RS11-17 · status: current · owner: no · date: 2026-10-04 · normative: networks/aptos.md#NET-APT-17 · superseded-by: —
+
+**Rule.** A passkey key is stored with its precomputed `p256::table`
+**Why.** Precomputing the table once at registration makes each signature about 400 gas cheaper, which lets a `dex::settle` that matches two passkey orders fit the per-transaction execution gas cap.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 679.
+
+### NET-APT-18 — Mandate open, revoke, refund rules
+- old: RS11-18 · status: current · owner: no · date: 2026-10-04 · normative: networks/aptos.md#NET-APT-18 · superseded-by: —
+
+**Rule.** Mandate open, revoke and refund rules.
+**Why.** A named object can be created only once, so opening needs no nonce; letting the delegate or the owner's Account key revoke, and anyone refund after revoke or expiry, means funds never stay stuck in a mandate.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 681.
+
+### NET-APT-19 — Strict BCS orders; unordered pair market
+- old: RS11-19 · status: current · owner: no · date: 2026-10-04 · normative: networks/aptos.md#NET-APT-19 · superseded-by: —
+
+**Rule.** DEX orders travel as BCS bytes parsed strictly, and a market is a named object of the unordered pair.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 683.
+
+### NET-APT-20 — Aptos package immutable at deploy
+- old: RS11-20 · status: current · owner: yes · date: 2026-10-07 · normative: networks/aptos.md#NET-APT-20 · superseded-by: —
+
+**Rule.** The Aptos package is immutable from deploy.
+**Why.** Owner decision: the node's safety arguments assume fixed code, and an upgrade key can rewrite every account's rules; old Accounts stay spendable through the old package.
+**Cost if wrong.** Every fix is a new deployment at a new address plus migration (owner accepted).
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 688.; [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 154
+
+### NET-APT-21 — OOG rebuilt once at gas cap
+- old: RS11-21 · status: current · owner: no · date: 2026-10-07 · normative: networks/aptos.md#NET-APT-21 · superseded-by: —
+
+**Rule.** A committed out-of-gas is rebuilt once at the gas cap, then `reverted`; every committed transaction is metered.
+**Why.** A committed out-of-gas is billed in full, and a dispatchable asset hook can read the gas cap and burn gas only in the real transaction, so an unbounded rebuild made the lane pay on every attempt until `valid_until`, unseen by the hourly breaker.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 695.
+
+### NET-APT-22 — Lazy open requires application line
+- old: RS11-22 · status: current · owner: no · date: 2026-10-07 · normative: networks/aptos.md#NET-APT-22 · superseded-by: —
+
+**Why.** Opt-in was not enough — every client-opened Account starts without origins (`meta.move:345`; `check_envelope` requires `application` only when origins exist, `auth.move:132, 138`), and a phishing page that obtained a `signMessage` can submit `relay_pay` itself (relayer `0x0`) without passing the client.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 698.
+
+### NET-APT-23 — Dispatchable assets refused on unopened path
+- old: RS11-23 · status: current · owner: no · date: 2026-10-07 · normative: networks/aptos.md#NET-APT-23 · superseded-by: —
+
+**Rule.** Dispatchable assets are refused on the not-yet-opened path.
+**Why.** The not-yet-opened path runs the `pay_check` view, which checks the balance but does not run the transfer, so a hook that aborts or burns gas shows up only on chain, at the gas cap.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 700.
+
+### NET-APT-24 — Every signing client honours lane horizon
+- old: RS11-24 · status: current · owner: no · date: 2026-10-07 · normative: networks/aptos.md#NET-APT-24 · superseded-by: —
+
+**Rule.** Every signing client honours the lane horizon.
+**Why.** The chain cannot see when an op was signed: a client that signs two ops on one lane more than 30 days apart lets the later one run after someone prunes the lane, and a run-time check of `valid_until` does not close that gap.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 702.
+
+### NET-APT-25 — chainId line stays optional
+- old: RS11-25 · status: current · owner: no · date: 2026-10-07 · normative: networks/aptos.md#NET-APT-25 · superseded-by: —
+
+**Rule.** The `chainId:` line stays optional.
+**Why.** The digest already binds `chain_id`, so a missing line is no replay risk, and requiring it would refuse standard wallets that omit optional fields.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 704.
+
+### NET-APT-26 — Mesh verifies Aptos signatures locally
+- old: RS11-26 · status: current · owner: no · date: 2026-10-07 · normative: networks/aptos.md#NET-APT-26 · superseded-by: —
+
+**Rule.** Mesh and gateway verify Aptos signatures locally before any simulation
+**Why.** The mesh decoders checked only domain, network and contract, so every peer paid a simulation or view call for each garbage intent.
+**Cost if wrong.** One cached state read per new subject.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 706.; [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 149
+
+### NET-APT-80 — Upgrade policy compatible
+- old: RS11-13(upgrade) · status: superseded · owner: no · date: 2026-10-04 · normative: — · superseded-by: NET-APT-20
+
+It said: Upgrade policy compatible; replaced by NET-APT-20.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 20.
+
+### NET-APT-81 — Committed OOG requeued without limit
+- old: RS11-8(oog) · status: superseded · owner: no · date: 2026-10-04 · normative: — · superseded-by: NET-APT-21
+
+It said: Committed OOG requeued without limit; replaced by NET-APT-21.
+**Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 21.
+
+## Networks — Solana
+
+### NET-SOL-01 — Solana network = build-time genesis hash
+- old: CR-R3-4 · status: current · owner: no · date: 2026-10-07 · normative: networks/solana.md#NET-SOL-01 · superseded-by: —
+
+**Why.** Today `initialize(network, admin)` stores any 32 bytes (`account.rs:28-34`), so a Config initialised with another cluster's hash makes that cluster's signatures valid here for the same PDA, for any relayer; our node is protected by the cross-check, third-party relayers are not.
+**Cost if wrong.** one build per cluster (already one per program id). SPECIFIED. **Operator invariant until it lands:** never reuse a Solana program id across clusters, and keep the node's genesis cross-check on. Chains are keyed `solana:<genesis hash>`.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 663.
+
+### NET-SOL-02 — Solana Rejected table; scaas errors Reverted
+- old: RS12-16(table) · status: current · owner: no · date: 2026-10-04 · normative: networks/solana.md#NET-SOL-02 · superseded-by: —
+
+**Rule.** Solana outcome classes: preflight refusals free the lane; a `scaas` error is `Reverted`; the adapter rebroadcasts.
+**Why.** A preflight refusal never lands and resending never passes, so the lane is freed at once; RPC nodes often drop transactions under congestion, so the adapter resends the same bytes while the nonce has not moved.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 24.
+
+### NET-SOL-03 — Program-level meta-tx; native fee payer lane-only
+- old: RS12-1 · status: current · owner: yes · date: 2026-10-04 · normative: networks/solana.md#NET-SOL-03 · superseded-by: —
+
+**Rule.** Solana uses a program-level meta-tx; the subject never sends a transaction on the hot path, and the native fee payer is only ever a relayer lane.
+**Why.** A transaction the subject signs lives about 90 seconds, so it cannot be pre-signed for queued jobs, mandates or hour-long DEX orders; stretching it with the subject's own durable nonce would queue every operation of the subject across all programs, and transaction signatures are ed25519 only, so passkeys could not pay.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 697.
+
+### NET-SOL-04 — Write-lock is the real lock
+- old: RS12-2, net-solana:L12 · status: current · owner: yes · date: 2026-10-04 · normative: networks/solana.md#NET-SOL-04 · superseded-by: —
+
+**Rule.** On Solana the write-lock is the real lock: the hot path writes only the operation's own new PDA and the two parties' token accounts, and a write-set disjointness test is mandatory.
+**Why.** Write-locks exist only while a block executes, so disjoint write sets give the anti-lock property by construction, while a hot writable account serialises its transactions, hits the per-account compute cap and raises the local priority fee. The owner made the disjointness test mandatory.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 698; [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 52.
+
+### NET-SOL-05 — One SubjectAccount PDA per subject
+- old: RS12-3 · status: current · owner: no · date: 2026-10-04 · normative: networks/solana.md#NET-SOL-05 · superseded-by: —
+
+**Rule.** One SubjectAccount PDA per subject holds every mint; its balance is the token accounts owned by the PDA — no internal ledger.
+**Why.** Any token account owned by the PDA counts, so tokens sent to an unusual token account of the PDA stay spendable. Keeping funds in the wallet's own token account with an `Approve` to the PDA was rejected: a token account has only one delegate, each re-approval needs a native transaction, and there are no multiple keys or recovery.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 700.
+
+### NET-SOL-06 — Keys, origins, guardian; open needs assertion
+- old: RS12-4 · status: current · owner: yes · date: 2026-10-04 · normative: networks/solana.md#NET-SOL-06 · superseded-by: —
+
+**Rule.** A SubjectAccount holds ≤ 8 keys (ed25519 / P-256 WebAuthn), ≤ 8 origins and a guardian with a 2-day delay; a new origin under the same rpId is added by that passkey; `open_passkey` requires an assertion.
+**Why.** Browsers let only origins under an rpId create assertions for it, so a passkey adding a new origin under its own rpId keeps a domain change from bricking the Account while a phishing site on another rpId stays blocked; taking the origin from the assertion itself stops anyone pre-opening an Account with a wrong origin (NET-SUI-04).
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 701.
+
+### NET-SOL-07 — BACKUP_REQUIRED policy bit, default off
+- old: RS12-5 · status: current · owner: yes · date: 2026-10-04 · normative: networks/solana.md#NET-SOL-07 · superseded-by: —
+
+**Rule.** The `BACKUP_REQUIRED` policy bit is optional and off by default.
+**Why.** Owner decision: the backup rule is only an on/off option, with the same meaning as the client signer's backup policy.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 703.
+
+### NET-SOL-08 — Lane PDA prunable, rent to rent_payer
+- old: RS12-6 · status: current · owner: no · date: 2026-10-04 · normative: networks/solana.md#NET-SOL-08 · superseded-by: —
+
+**Rule.** A lane is a PDA per (account, lane), prunable by anyone after `valid_until + PRUNE_DELAY_S`, with the rent returned to the stored `rent_payer`.
+**Why.** One PDA per lane means no account is shared between two operations. The ERP reissues terms on the same lane and nonce within a 30-day horizon, so the delay ensures every other signed op of that request has expired before the PDA closes; rent goes to the stored payer so a caller cannot take it.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 704.
+
+### NET-SOL-09 — Token-2022 extension policy
+- old: RS12-7 · status: current · owner: yes · date: 2026-10-04 · normative: networks/solana.md#NET-SOL-09 · superseded-by: —
+
+**Rule.** SPL Token and Token-2022 are both supported through `token_interface`; a mint that is `NonTransferable`, has an active transfer hook, or charges a transfer fee is refused at every transfer.
+**Why.** A transfer fee makes the receiver get less than was signed (breaking NET-ALL-08), and fees can change after two epochs, so the check runs at every transfer rather than at registration; an active transfer hook runs arbitrary code that needs extra accounts. The owner chose this policy.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 706.
+
+### NET-SOL-10 — Domain = genesis hash, node cross-check
+- old: RS12-8 · status: current · owner: no · date: 2026-10-07 · normative: networks/solana.md#NET-SOL-10 · superseded-by: —
+
+**Rule.** The Solana domain is the genesis hash held by `Config` and cross-checked by the node, plus the PDA, the op and the asset.
+**Why.** A program cannot read the genesis hash on chain (there is no sysvar for it), so it is stored at `initialize` and the adapter checks it at start; the same program keypair deployed on two clusters still gets two domains.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 707.
+
+### NET-SOL-11 — Raw and OCMS v1; passkey b64url digest
+- old: RS12-9(formats) · status: current · owner: no · date: 2026-10-04 · normative: networks/solana.md#NET-SOL-11 · superseded-by: —
+
+**Rule.** ed25519 is accepted as a raw message or an off-chain message v1; a passkey challenge is `base64url(digest)`.
+**Why.** Off-chain message v1 is the format hardware wallets sign and is recommended when the wallet supports it, with raw messages as the fallback; an 80-byte raw text can never parse as a valid transaction, so the two never collide.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 708.
+
+### NET-SOL-12 — Precompile introspection rules
+- old: RS12-10 · status: current · owner: yes · date: 2026-10-04 · normative: networks/solana.md#NET-SOL-12 · superseded-by: —
+
+**Rule.** Precompile introspection: the instruction is loaded through the checked sysvar, must be the right precompile, every instruction index must be `u16::MAX`, and pk + message are compared byte for byte.
+**Why.** The checked loader blocks a fake Instructions sysvar (the class of the 2022 Wormhole exploit), and comparing pk and message byte for byte, with every index pointing at the precompile instruction itself, avoids the improper-introspection flaw of only checking that some ed25519 instruction exists.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 709.
+
+### NET-SOL-13 — Mandate opened by Account key; mref PDA
+- old: RS12-11 · status: current · owner: no · date: 2026-10-04 · normative: networks/solana.md#NET-SOL-13 · superseded-by: —
+
+**Rule.** A Solana mandate is opened by an Account key's signature; each `pay_ref` is consumed once through a prunable `mref` PDA.
+**Why.** Opening by an Account key's signature needs no native transaction from the owner (NET-ALL-02), and an `mref` PDA that can be created only once makes a second payment with the same `pay_ref` fail.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 711.
+
+### NET-SOL-14 — DEX settle checks both signatures
+- old: RS12-12 · status: current · owner: no · date: 2026-10-04 · normative: networks/solana.md#NET-SOL-14 · superseded-by: —
+
+**Rule.** Solana `settle` verifies both signatures in the same transaction, with one `Fill` PDA per order and a fee vault per market; cancelling creates or closes the `Fill`.
+**Why.** Once 4,096-byte v1 transactions reached mainnet, verifying both signatures inline replaced posting orders on chain first and gave one check path close to EVM; a cancel also creates the `Fill`, so an order that never matched can never settle later.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 712.
+
+### NET-SOL-15 — Anchor 1.x with LiteSVM
+- old: RS12-13 · status: current · owner: no · date: 2026-10-04 · normative: networks/solana.md#NET-SOL-15 · superseded-by: —
+
+**Rule.** The program uses Anchor 1.x, built with `cargo build-sbf` and tested with LiteSVM; no Anchor v2 alpha, no native/Pinocchio.
+**Why.** The largest class of Solana program bugs is missing account checks, which Anchor generates from declared constraints; native or Pinocchio code saves compute but every check is hand-written, and the compute budget has room. LiteSVM runs inside `cargo test` without a validator, which keeps memory use low.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 713.
+
+### NET-SOL-16 — Lane ed25519 with durable nonce
+- old: RS12-14 · status: current · owner: yes · date: 2026-10-04 · normative: networks/solana.md#NET-SOL-16 · superseded-by: —
+
+**Rule.** A Solana relayer lane is an ed25519 key at `m/44'/501'/{i}'/0'` with its own durable nonce account; `sequence` = the nonce value; one transaction in flight.
+**Why.** A durable nonce changes exactly when a transaction using it lands, which matches the shared `recover_lane` rule as written, while blockhash expiry cannot be expressed by the runner's comparison; every rebuild of a job uses the same nonce, so at most one transaction lands.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 714.
+
+### NET-SOL-17 — Hand-written tx v1, kit vectors
+- old: RS12-15 · status: current · owner: no · date: 2026-10-04 · normative: networks/solana.md#NET-SOL-17 · superseded-by: —
+
+**Rule.** Solana transactions are hand-written v1 transactions, with no `solana-sdk` and no new crate; vectors come from `@solana/kit`.
+**Why.** `solana-sdk` brings a large dependency tree that risks running out of memory on a shared build machine (as for NET-APT-09); v1 is required because passkey transactions and two-leg `settle` exceed the 1,232-byte legacy and v0 limit.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 716.
+
+### NET-SOL-18 — No disk journal; durable nonce suffices
+- old: RS12-17 · status: current · owner: no · date: 2026-10-07 · normative: networks/solana.md#NET-SOL-18 · superseded-by: —
+
+**Rule.** No disk journal on Solana: the durable nonce and the shared `recover_lane` suffice.
+**Why.** Each nonce value lets at most one transaction land, even a failed one, so a lane sequence equal to the nonce value makes the shared `recover_lane` correct without a disk journal.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 719.
+
+### NET-SOL-19 — Finalized; standard JSON-RPC indexer
+- old: RS12-18 · status: current · owner: yes · date: 2026-10-04 · normative: networks/solana.md#NET-SOL-19 · superseded-by: —
+
+**Rule.** Solana finality is commitment `finalized` with the slot as cursor; the indexer uses standard JSON-RPC (`getSignaturesForAddress` + `getTransaction`), events through `emit_cpi!`, filtered by program id, event authority and the registered tokens; missing history is an error.
+**Why.** Owner choice: standard JSON-RPC works on the test validator, self-hosted nodes and any hosted RPC with history, while Geyser needs a dedicated RPC node and provider webhooks lock in a vendor with unverifiable completeness. Only our program can sign with its event authority, so a copy at another program id is dropped.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 721.
+
+### NET-SOL-20 — Solana program immutable after initialize
+- old: RS12-19 · status: current · owner: yes · date: 2026-10-07 · normative: networks/solana.md#NET-SOL-20 · superseded-by: —
+
+**Rule.** The Solana program is immutable after `initialize`.
+**Why.** Owner decision: the node's safety arguments assume fixed code, and an upgrade key can rewrite every account's rules.
+**Cost if wrong.** Every fix is a new program id and domain plus migration (owner accepted).
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 726.; [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 154
+
+### NET-SOL-21 — Destination ATA must exist
+- old: RS12-20 · status: current · owner: no · date: 2026-10-07 · normative: networks/solana.md#NET-SOL-21 · superseded-by: —
+
+**Why.** An ATA owner can `CloseAccount` it at zero balance and recover ~0.00204 SOL of rent (more for Token-2022 with extensions), and `to` is signer-chosen — loop: the SubjectAccount holds 1 unit; sign `pay(1, to = W)`; the lane creates ATA(W) (as built, `account.rs:210-218`, `util.rs:55-73`; `mandate.rs:170-178` likewise); W sends the unit back, closes ATA(W), keeps the rent; repeat — ≈ 0.002 SOL profit per round, stopped only by `min_relayer_balance` (the hourly breaker sees only fees, `adapter.rs:270-276`). The ERP path is safe (`to` = a fixed receiving wallet); mesh `pay` and the job API are not. Taking the rent from the SubjectAccount's lamports was rejected (gasless subjects hold no SOL). DEX ATAs owned by a SubjectAccount PDA (`dex.rs:252-254`) and the fee vault owned by the Market (`:264-265`) cannot be closed (the program has no `CloseAccount` path), so they are a one-time cost per (PDA, mint), metered and bounded by `max_deposit_per_job`, not a drain. SPECIFIED. LiteSVM: `relay_pay` to a missing ATA ⇒ `DestinationMissing`; to an existing ATA ⇒ runs, the lane pays no rent. Rust: missing destination + unconfigured `to` ⇒ `422`; configured `to` ⇒ the transaction carries the ATA creation; the pay → close → pay loop never creates a second ATA on lane money.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 730.
+
+### NET-SOL-22 — On-chain MAX_TTL_S for expiries
+- old: RS12-21 · status: current · owner: no · date: 2026-10-07 · normative: networks/solana.md#NET-SOL-22 · superseded-by: —
+
+**Why.** `u64::MAX` makes a PDA never prunable (`account.rs:204`, `dex.rs:199, 312`) — one `cancel_signed` for an invented order hash locks a `Fill`'s rent forever. Rent that never returns (lazy SubjectAccount open, `account.rs:189`, no close path; KeyOp growth through `util::grow`, `account.rs:365`, bounded by 8 keys + 8 origins and never shrinking, so once per Account; `MinNonce`, `dex.rs:327`; DEX ATAs of the PDA and vaults) stays lane-paid — subjects are gasless — but is metered (NODE-LANE-13) and bounded per job (NODE-LANE-18) and per subject (NODE-LANE-15). SPECIFIED. LiteSVM tests: `cancel_signed` with `expiry = u64::MAX` ⇒ error; `relay_pay` with `valid_until = now + 32 days` ⇒ error; every lane PDA created is prunable ≤ `MAX_TTL_S + PRUNE_DELAY_S` after creation.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 735.
+
+### NET-SOL-23 — Out of CU rebuilt once at max_cu
+- old: RS12-22 · status: current · owner: no · date: 2026-10-07 · normative: networks/solana.md#NET-SOL-23 · superseded-by: —
+
+**Rule.** Compute exhaustion is rebuilt once at `max_cu`, then `reverted`; lane-side faults retry once without grief.
+**Why.** Landed compute exhaustion and lane-side faults went back to the queue without limit, each landing costing the base fee plus a priority fee of up to 2,000,000 lamports, and the subject can steer the compute gap between simulation and the real transaction.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 740.
+
+### NET-SOL-24 — Reject crossOrigin true and topOrigin
+- old: RS12-23 · status: current · owner: no · date: 2026-10-07 · normative: networks/solana.md#NET-SOL-24 · superseded-by: —
+
+**Rule.** The Solana passkey verifier refuses `"crossOrigin":true` and any `"topOrigin"`
+**Why.** The Aptos verifier already refuses both fields, and the review found the Solana verifier did not.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 742.
+
+### NET-SOL-25 — Every signing client honours lane horizon
+- old: RS12-24 · status: current · owner: no · date: 2026-10-07 · normative: networks/solana.md#NET-SOL-25 · superseded-by: —
+
+**Rule.** Every signing client honours the lane horizon
+**Why.** The chain cannot see when an op was signed, so a client that signs two ops on one lane more than 30 days apart lets the later one run after a prune (the gap found for Aptos, NET-APT-24).
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 744.
+
+### NET-SOL-26 — Mesh verifies Solana signatures locally
+- old: RS12-25 · status: current · owner: no · date: 2026-10-07 · normative: networks/solana.md#NET-SOL-26 · superseded-by: —
+
+**Rule.** Mesh and gateway verify Solana signatures locally before any simulation
+**Why.** The mesh decoders checked only domain, network and contract, so every peer paid a simulation for each garbage intent.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 746.; [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 149
+
+### NET-SOL-27 — open requires the wallet own signature
+- old: RS12-4a · status: current · owner: no · date: 2026-10-04 · normative: networks/solana.md#NET-SOL-27 · superseded-by: —
+
+**Rule.** `open` requires the wallet's own signature.
+**Why.** A permissionless `open(owner)` let anyone pre-open a passkey-first id with an ed25519 key and brick that passkey's Account; opening on someone's behalf is not needed because the first `relay_pay` opens the Account lazily with the owner's signature.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 883.
+
+### NET-SOL-28 — Mandate delegate ed25519; revoke and close
+- old: RS12-11a · status: current · owner: no · date: 2026-10-04 · normative: networks/solana.md#NET-SOL-28 · superseded-by: —
+
+**Rule.** The mandate delegate is ed25519; revoke only sets a flag; close returns the passed token accounts and closes the PDA.
+**Why.** The delegate is a platform service or HSM key and passkeys do not run on servers; splitting revoke from close settled a review finding that the two contradicted each other.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 884.
+
+### NET-SOL-29 — One pair per instruction; sweep rules
+- old: RS12-12a · status: current · owner: no · date: 2026-10-04 · normative: networks/solana.md#NET-SOL-29 · superseded-by: —
+
+**Rule.** One pair per `settle` instruction; a batch is several instructions in one transaction; `sweep` is permissionless.
+**Why.** One pair per instruction keeps every account a typed Anchor account instead of hand-checked `remaining_accounts`, and several instructions in one transaction still settle atomically.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 887.
+
+### NET-SOL-30 — Passkey blob length little-endian
+- old: RS12-9a · status: current · owner: no · date: 2026-10-04 · normative: networks/solana.md#NET-SOL-30 · superseded-by: —
+
+**Rule.** In the passkey blob the `u16` authenticatorData length is little-endian.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 891.
+
+### NET-SOL-31 — Restart advances nonce; error classes
+- old: RS12-16a · status: current · owner: no · date: 2026-10-04 · normative: networks/solana.md#NET-SOL-31 · superseded-by: —
+
+**Rule.** On restart the Solana adapter advances each lane's nonce once, and errors are classed by instruction index.
+**Why.** Advancing the nonce at restart means old bytes can never land, so `recover_lane` sees the nonce move and requeues the job at once instead of holding the lane until `valid_until`.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 892.
+
+### NET-SOL-32 — block_hash from last produced block
+- old: RS12-18a · status: current · owner: no · date: 2026-10-04 · normative: networks/solana.md#NET-SOL-32 · superseded-by: —
+
+**Rule.** `block_hash(s)` is the hash of the last produced block ≤ s within a 2 048-slot window; `Config` is read at `confirmed`.
+**Why.** Skipped slots are normal on Solana and a 512-slot window can be empty on an idle cluster, so the window is 2,048 slots; `Config` is immutable after `initialize`, so `confirmed` is enough.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 894.
+
+### NET-SOL-80 — Out of CU requeued without limit
+- old: RS12-16(cu) · status: superseded · owner: no · date: 2026-10-04 · normative: — · superseded-by: NET-SOL-23
+
+It said: Out of CU requeued without limit; replaced by NET-SOL-23.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 24.
+
+### NET-SOL-81 — Signed text is domain plus hex digest
+- old: RS12-9(text) · status: superseded · owner: no · date: 2026-10-04 · normative: — · superseded-by: NET-ALL-23
+
+It said: Signed text is domain plus hex digest; replaced by NET-ALL-23.
+**Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 708.
+
+## Networks — TON
+
+### NET-TON-01 — TON Tact jetton wallet; escrow DEX
+- old: R67(core) · status: current · owner: no · date: 2026-10-07 · normative: networks/ton.md#NET-TON-01 · superseded-by: —
+
+**Rule.** TON = a Tact jetton whose custom wallet verifies signed operations; the DEX is an escrow.
+**Why.** TON's asynchronous actor model has no atomicity across contracts, so the DEX holds the first signed leg in escrow until the second matches or the order expires; Tact was chosen because FunC, one level lower, was not worth it for this scope.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 540.
+
+### NET-TON-02 — TON per-wallet domain set on chain
+- old: CR-R3-7, reorg:Q3 · status: current · owner: yes · date: 2026-10-07 · normative: networks/ton.md#NET-TON-02 · superseded-by: —
+
+**Rule.** TON binds the `signData` domain on chain through a per-wallet domain set.
+**Why.** Anyone may relay a `SignedOp`, so an off-chain domain check never runs when a phishing dApp relays its own signed data.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 693; [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) line 1217.
+
+### NET-TON-03 — TON bounced payouts claimable by owner
+- old: CR-R3-9, reorg:Q4 · status: current · owner: yes · date: 2026-10-07 · normative: networks/ton.md#NET-TON-03 · superseded-by: —
+
+**Why.** As built `bounced<JettonTransfer>` adds to `fees[master]` (`dex.tact:131-136`), which `WithdrawFees` withdraws (`:43,158`). SPECIFIED. Tests (sandbox): a bounced refund lands in `unclaimed`, `WithdrawFees` cannot take it, `Claim` pays the owner.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 703; [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) line 1218.
+
+### NET-TON-04 — Compact Tact Jetton with meta-tx wallet
+- old: R10-1 · status: current · owner: no · date: 2026-10-03 · normative: networks/ton.md#NET-TON-04 · superseded-by: —
+
+**Rule.** The token is a compact Tact rewrite of a TEP-74 Jetton (`ScaasJettonMaster` + `ScaasJettonWallet`) whose wallet adds `pubkey`, `passkey` and a `lanes` table; no off-the-shelf jetton is used.
+**Why.** The wallet must verify meta-transactions (NET-ALL-02), and keeping the TEP-74 opcodes and getters lets wallets and explorers read it.
+**Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 24.
+
+### NET-TON-05 — TON Connect signData cell envelope
+- old: R10-2 · status: current · owner: no · date: 2026-10-03 · normative: networks/ton.md#NET-TON-05 · superseded-by: —
+
+**Rule.** The subject signs with TON Connect `signData` type `cell`; the contract rebuilds the exact envelope around the `MetaOp` cell and checks `CHKSIGNU` over the envelope cell hash; the seed signer builds the same envelope with `m/44'/607'/i'`.
+**Why.** One verification path serves both real TON Connect wallets and the seed wallet.
+**Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 25.
+
+### NET-TON-06 — Network domain = config 19 global id
+- old: R10-4 · status: current · owner: no · date: 2026-10-03 · normative: networks/ton.md#NET-TON-06 · superseded-by: —
+
+**Rule.** The TON network domain is the `global_id` read on chain from config parameter 19
+**Why.** TON addresses are identical across networks (same code and data), so a network id is required, and config parameter 19 cannot be faked.
+**Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 27.
+
+### NET-TON-07 — Lazy key bind via SignedOp stateInit
+- old: R10-5 · status: current · owner: no · date: 2026-10-03 · normative: networks/ton.md#NET-TON-07 · superseded-by: —
+
+**Rule.** The key binds lazily through the `SignedOp`'s optional `stateInit`.
+**Why.** The public key must be proven by the owner's address, and checking the `stateInit` hash against the address does that without the subject sending a transaction.
+**Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 28.
+
+### NET-TON-08 — One TON passkey set by set_key
+- old: R10-6 · status: current · owner: no · date: 2026-10-07 · normative: networks/ton.md#NET-TON-08 · superseded-by: —
+
+**Rule.** A TON wallet holds one passkey, attached or detached by `set_key`, which must carry a proof of possession of the attached key; origins match exactly.
+**Why.** One passkey is enough for the portal, and many passkeys with a guardian stay a seam because only the EVM subject account has the full lifecycle; the proof of possession comes from NET-ALL-20.
+**Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 29.
+
+### NET-TON-09 — TON DEX is fill-or-kill escrow
+- old: R10-7 · status: current · owner: no · date: 2026-10-03 · normative: networks/ton.md#NET-TON-09 · superseded-by: —
+
+**Rule.** The TON DEX is a fill-or-kill escrow.
+**Why.** TON has no atomic calls between contracts, a deliberate departure from the EVM DEX (CTR-DEX-01).
+**Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 30.
+
+### NET-TON-10 — Relayer lane = W5R1 wallet, one message
+- old: R10-8 · status: current · owner: no · date: 2026-10-03 · normative: networks/ton.md#NET-TON-10 · superseded-by: —
+
+**Rule.** A TON relayer lane is a W5R1 wallet with its own seqno, one external message in flight, and W5 `valid_until` = the payload's expiry.
+**Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 31.
+
+### NET-TON-11 — Node uses TON Center API v3
+- old: R10-9 · status: current · owner: no · date: 2026-10-03 · normative: networks/ton.md#NET-TON-11 · superseded-by: —
+
+**Rule.** The node uses TON Center API v3
+**Why.** It is available on mainnet, on testnet and in MyLocalTon (indexer profile).
+**Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 32.
+
+### NET-TON-12 — Events authenticated by derived wallet address
+- old: R10-10 · status: current · owner: no · date: 2026-10-07 · normative: networks/ton.md#NET-TON-12 · superseded-by: —
+
+**Rule.** TON events are authenticated by the derived wallet address.
+**Why.** Jettons have no central log; authenticating the emitter by its derived address stops a fake contract from emitting fake events or clogging the indexer, with no RPC per event.
+**Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 33.
+
+### NET-TON-13 — No relayer fee; forward TON capped
+- old: R10-11 · status: current · owner: no · date: 2026-10-07 · normative: networks/ton.md#NET-TON-13 · superseded-by: —
+
+**Rule.** No relayer fee on TON; the DEX ppm fee is signed in the order; gas TON is attached per message and the excess returns to the lane; forward TON is capped.
+**Why.** New networks carry no relayer fee by design; the forward cap answers a critical review finding that uncapped forward TON could drain a lane (NET-TON-14).
+**Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 34.
+
+### NET-TON-14 — Forward TON capped on every path
+- old: R10-12 · status: current · owner: no · date: 2026-10-07 · normative: networks/ton.md#NET-TON-14 · superseded-by: —
+
+**Rule.** Forward TON is capped on every path (blocking).
+**Why.** The adapter attached an uncapped amount, accepted an unsigned `extra.forward_nanoton` from job JSON, and the wallet forwards that TON to its owner, while the breaker counted only mined fees (NODE-LANE-17).
+**Cost if wrong.** Anyone who can place a job on a TON lane can drain the lane's TON; the review verdict was BLOCK until fixed.
+**Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 225.
+
+### NET-TON-15 — tx_id is TEP-467 normalized hash
+- old: R10-13 · status: current · owner: no · date: 2026-10-07 · normative: networks/ton.md#NET-TON-15 · superseded-by: —
+
+**Why.** As built the code returns `ext.hash()` of the message as sent (`ton.rs:743-750`, looked up raw at `:994-997`); for seqno 0 (with `init`) the two hashes differ, and anyone relaying the BOC (TON Center, a proxy, a mesh peer) can re-wrap it (the envelope is not inside the W5 signature), so `follow` reports `dead` while the money moved. SPECIFIED. Test: a seqno-0 message with `init` ⇒ `tx_id ≠ ext.hash()`, a fake API finds it by normalized hash; a re-wrapped copy still yields `Mined`.
+**Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 235.
+
+### NET-TON-16 — Node checks TON domain at every door
+- old: R10-14(node) · status: current · owner: no · date: 2026-10-07 · normative: networks/ton.md#NET-TON-16 · superseded-by: —
+
+**Rule.** The node checks the TON Connect domain at every door.
+**Why.** `SignedOp` is an ordinary message anyone can send, so a `signData` signature collected by a phishing page ran without passing the ERP; requiring a named relayer was rejected because it kills the open relay and the mesh.
+**Cost if wrong.** Pinning the domain on chain means a portal domain change needs a new master and new wallet addresses, accepted because domain binding is TON Connect's anti-phishing layer.
+**Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 239.
+
+### NET-TON-17 — Simulation reads balance, checks passkey locally
+- old: R10-15 · status: current · owner: no · date: 2026-10-07 · normative: networks/ton.md#NET-TON-17 · superseded-by: —
+
+**Rule.** TON simulation reads the jetton balance and checks the passkey locally.
+**Why.** `build` read neither the jetton balance nor the passkey, so an op certain to fail on chain was still signed and sent.
+**Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 245.
+
+### NET-TON-18 — Revoke runs exactly once
+- old: R10-16 · status: current · owner: no · date: 2026-10-07 · normative: networks/ton.md#NET-TON-18 · superseded-by: —
+
+**Why.** As built the wallet accepts `next == nonce` or `nonce + 1` (`jetton.tact:229`) and the first form sets `next + 1`, so a resend of the **same** signature runs again in the second form, consuming `nonce + 1` and sending a `CancelTag`. SPECIFIED. Test: resending the same revoke ⇒ `E_NONCE`, no second `CancelTag`.
+**Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 248.
+
+### NET-TON-19 — DEX keeps nothing not its own
+- old: R10-17(cancel/fees) · status: current · owner: no · date: 2026-10-07 · normative: networks/ton.md#NET-TON-19 · superseded-by: —
+
+**Rule.** The TON DEX keeps nothing that is not its own.
+**Why.** Cancelling an unknown order kept the attached TON, and bounced payouts were added to fees that the admin can withdraw; a bounce body is cut to 256 bits and carries no destination, so refunds go through an admin call with an event trail instead of a per-owner debt table.
+**Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 250.
+
+### NET-TON-80 — TON BindKey message
+- old: R67(bindkey) · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NET-TON-07
+
+It said: TON BindKey message; replaced by NET-TON-07.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 540.
+
+### NET-TON-81 — Domain checked only in the ERP
+- old: R10-3 · status: superseded · owner: no · date: 2026-10-07 · normative: — · superseded-by: NET-TON-16, NET-TON-02
+
+It said: Domain checked only in the ERP; replaced by NET-TON-16, NET-TON-02.
+**Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 16.
+
+### NET-TON-82 — domainHash pinned in wallet init
+- old: R10-14(contract) · status: superseded · owner: no · date: 2026-10-07 · normative: — · superseded-by: NET-TON-02
+
+It said: domainHash pinned in wallet init; replaced by NET-TON-02.
+**Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 239.
+
+### NET-TON-83 — Bounced payouts via admin RefundBounced
+- old: R10-17(bounced) · status: superseded · owner: no · date: 2026-10-07 · normative: — · superseded-by: NET-TON-03
+
+It said: Bounced payouts via admin RefundBounced; replaced by NET-TON-03.
+**Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 250.
+
+## Clients — signers and clientkeys
+
+### CLI-SGN-01 — Ephemeral agent session keys (1-8 h)
+- old: req:blockchain.md:session-keys · status: open · owner: yes · date: 2026-10-07 · normative: clients/signers-clientkeys.md#CLI-SGN-01 · superseded-by: —
+
+**Rule.** Short-lived agent session keys (1–8 h) are an open owner requirement.
+**Why.** Agents must never hold a sponsor or admin private key in plaintext; those keys live in an HSM or MPC, and an agent gets only a short-lived key bounded by a delegation contract and a per-transaction cap.
+**Open.** Owner decision pending; the default stated in the normative text applies.
+**Source.** [history/blockchain.md](history/blockchain.md) line 328.
+
+### CLI-SGN-02 — Seed vault DEK with passphrase and PRF envelopes
+- old: RS4-8(vault) · status: current · owner: no · date: 2026-10-03 · normative: clients/signers-clientkeys.md#CLI-SGN-02 · superseded-by: —
+
+**Rule.** The vault encrypts the seed under a random data key wrapped by a passphrase envelope and, when available, a passkey PRF envelope.
+**Source.** [history/plans/2026-10-03-r3-passkey-seed.md](history/plans/2026-10-03-r3-passkey-seed.md) line 33.
+
+### CLI-SGN-03 — Zether keys derived in clientkeys JS
+- old: RS4-9(keys) · status: current · owner: no · date: 2026-10-03 · normative: clients/signers-clientkeys.md#CLI-SGN-03 · superseded-by: —
+
+**Rule.** Zether keys are derived in clientkeys JavaScript.
+**Why.** Registering a key should not need the prover's WebAssembly; a separate lazy entry also keeps the seed bundle small.
+**Source.** [history/plans/2026-10-03-r3-passkey-seed.md](history/plans/2026-10-03-r3-passkey-seed.md) line 35.
+
+### CLI-SGN-04 — Random WebAuthn user handle per passkey
+- old: RS4-11 · status: current · owner: no · date: 2026-10-03 · normative: clients/signers-clientkeys.md#CLI-SGN-04 · superseded-by: —
+
+**Rule.** Each passkey gets a random 16-byte WebAuthn user handle.
+**Source.** [history/plans/2026-10-03-r3-passkey-seed.md](history/plans/2026-10-03-r3-passkey-seed.md) line 48.
+
+### CLI-SGN-05 — Client rebuilds operation before signing
+- old: RS4-13 · status: current · owner: no · date: 2026-10-03 · normative: clients/signers-clientkeys.md#CLI-SGN-05 · superseded-by: —
+
+**Rule.** A client never signs server-built typed data as is; it rebuilds the operation first.
+**Source.** [history/plans/2026-10-03-r3-passkey-seed.md](history/plans/2026-10-03-r3-passkey-seed.md) line 57.
+
+### CLI-SGN-06 — WalletConnect is a seam behind a flag
+- old: R21 · status: current · owner: no · date: 2026-10-03 · normative: clients/signers-clientkeys.md#CLI-SGN-06 · superseded-by: —
+
+**Why.** The SDK is ~400 KB, needs a pinned version + SRI, cannot be tested in offline CI, and a third-party script inside a payment page is supply-chain surface.
+**Cost if wrong.** mobile wallets need a small add-on that registers the factory (pinned `@walletconnect/ethereum-provider` + SRI) first. The same holds for Hedera HashPack (also a seam) and the TON Connect HTTP bridge.
+**Source.** [history/specs/2026-10-03-blockchain-payments-addendum-wallets.md](history/specs/2026-10-03-blockchain-payments-addendum-wallets.md) line 192.
+
+### CLI-SGN-07 — Subject-account seed keys use role path
+- old: CR-ADW-3 · status: current · owner: no · date: 2026-10-07 · normative: clients/signers-clientkeys.md#CLI-SGN-07 · superseded-by: —
+
+**Rule.** New seed keys of subject accounts use the role path.
+**Why.** The account accepts a secp256k1 key's signature over a raw 32-byte digest, so a seed key that is also the subject's EOA key lets any raw signer for that EOA produce account signatures; mainstream wallets no longer expose raw signing, so the exposure is custom raw signers.
+**Source.** [history/specs/2026-10-03-blockchain-payments-addendum-wallets.md](history/specs/2026-10-03-blockchain-payments-addendum-wallets.md) line 310.
+
+### CLI-SGN-08 — checkPayment pins expected token client-side
+- old: CR-ADW-4 · status: current · owner: no · date: 2026-10-07 · normative: clients/signers-clientkeys.md#CLI-SGN-08 · superseded-by: —
+
+**Rule.** `checkPayment` pins the expected token client-side.
+**Why.** The check took the amount and decimals from the caller and only checked that the token was not the account, so a server could substitute another token carrying the expected symbol.
+**Source.** [history/specs/2026-10-03-blockchain-payments-addendum-wallets.md](history/specs/2026-10-03-blockchain-payments-addendum-wallets.md) line 316.
+
+### CLI-SGN-09 — Portal and mobile subjects sign with passkeys
+- old: R31(client) · status: current · owner: yes · date: 2026-10-03 · normative: clients/signers-clientkeys.md#CLI-SGN-09 · superseded-by: —
+
+**Rule.** Portal and mobile subjects sign value operations with WebAuthn P-256 passkeys.
+**Why.** The client signs and the relayer pays: the server never holds a key to sign for a subject, the only exception being an explicitly delegated, limited custodial or mandate wallet.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 519.
+
+### CLI-SGN-10 — Zether keys from seed, own paths
+- old: R33(keys) · status: current · owner: yes · date: 2026-10-03 · normative: clients/signers-clientkeys.md#CLI-SGN-10 · superseded-by: —
+
+**Rule.** Zether confidential keys come from the same seed on their own paths.
+**Why.** Signing keys and the ElGamal key are separate custody: leaking a signing key must not reveal balances and leaking the confidential key must not authorise transfers, so the confidential key never shares a scalar with any signing key. Owner ruling.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 521.
+
+### CLI-SGN-11 — Client-side seed vault, multi-key accounts
+- old: R32(vault) · status: current · owner: yes · date: 2026-10-06 · normative: clients/signers-clientkeys.md#CLI-SGN-11 · superseded-by: —
+
+**Rule.** A non-custodial seed wallet lives on the client, and one subject account holds several keys (passkey + seed).
+**Why.** Owner ruling: build both passkeys and seed words; each is the natural recovery key when the other is lost.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 522.
+
+### CLI-SGN-12 — Backup key required is one switch
+- old: R250 · status: current · owner: yes · date: 2026-10-06 · normative: clients/signers-clientkeys.md#CLI-SGN-12 · superseded-by: —
+
+**Rule.** "Backup key required" is one boolean deployment switch, default off.
+**Why.** Owner decision: only a switch, replacing a per-account mode list and its "device_bound refused" rule.
+**Cost if wrong.** per-company rules later would need a company field. SPECIFIED.
+**Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 77.
+
+### CLI-SGN-13 — Backup predicate: distinct keys or guardian
+- old: R251 · status: current · owner: no · date: 2026-10-06 · normative: clients/signers-clientkeys.md#CLI-SGN-13 · superseded-by: —
+
+**Why.** Duplicates and self-guardians are exactly the false "backed up" state the switch exists to prevent.
+**Cost if wrong.** two passkeys in one password manager still count as two (CLI-SGN-16 warns).
+**Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 85.
+
+### CLI-SGN-14 — Backup enforced by clients and issuers
+- old: R252 · status: current · owner: no · date: 2026-10-06 · normative: clients/signers-clientkeys.md#CLI-SGN-14 · superseded-by: —
+
+**Why.** The switch protects users from loss and is not a security control.
+**Cost if wrong.** a third-party client ignores it, by design.
+**Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 99.
+
+### CLI-SGN-15 — Exits are never blocked
+- old: R253 · status: current · owner: no · date: 2026-10-06 · normative: clients/signers-clientkeys.md#CLI-SGN-15 · superseded-by: —
+
+**Why.** Rescue is never throttled.
+**Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 112.
+
+### CLI-SGN-16 — Non-blocking BE/BS warnings
+- old: R254 · status: current · owner: no · date: 2026-10-06 · normative: clients/signers-clientkeys.md#CLI-SGN-16 · superseded-by: —
+
+**Why.** The flags are the only sync signal and are self-reported (`attestation: 'none'`).
+**Cost if wrong.** a misreporting authenticator mislabels a key; counting is unaffected.
+**Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 123.
+
+### CLI-SGN-17 — Vault v2 under non-extractable device key
+- old: R255 · status: current · owner: no · date: 2026-10-06 · normative: clients/signers-clientkeys.md#CLI-SGN-17 · superseded-by: —
+
+**Rule.** Vault v2 is an outer AES-256-GCM layer under a per-origin non-extractable device key, wrapped around the unchanged v1 vault.
+**Why.** All of the v1 vault is reused, and a blob leaked on its own (storage dump, log, support export, file sync) becomes useless without the profile's IndexedDB.
+**Cost if wrong.** Once the device key is gone (site data cleared, Safari's 7-day eviction) the blob never opens again, and only the phrase recovers the keys (CLI-SGN-20).
+**Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 135.
+
+### CLI-SGN-18 — Device binding relaxes nothing
+- old: R256 · status: current · owner: no · date: 2026-10-06 · normative: clients/signers-clientkeys.md#CLI-SGN-18 · superseded-by: —
+
+**Rule.** Device binding relaxes nothing.
+**Why.** WebCrypto keys are not hardware-backed on Chromium and Firefox (the key bytes sit in the profile's IndexedDB files), so the gain is narrow and the claims must stay honest.
+**Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 144.
+
+### CLI-SGN-19 — Vault storage, precedence and migration
+- old: R257 · status: current · owner: no · date: 2026-10-06 · normative: clients/signers-clientkeys.md#CLI-SGN-19 · superseded-by: —
+
+**Rule.** Vault storage, precedence and migration.
+**Why.** No rollback to a stale weaker blob, no silently created new seed, and no second 128 MiB KDF run.
+**Cost if wrong.** One more migration path in the portal signer code.
+**Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 153.
+
+### CLI-SGN-20 — Device-loss recovery via phrase only
+- old: R258 · status: current · owner: no · date: 2026-10-06 · normative: clients/signers-clientkeys.md#CLI-SGN-20 · superseded-by: —
+
+**Why.** A re-reveal path would undermine "written down" (CLI-SGN-13).
+**Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 165.
+
+### CLI-SGN-21 — scrypt N=2^17 for new envelopes
+- old: R259, RS4-14 · status: current · owner: no · date: 2026-10-06 · normative: clients/signers-clientkeys.md#CLI-SGN-21 · superseded-by: —
+
+**Why.** One number in code and docs, and no device locked out by its own upgrade.
+**Cost if wrong.** very low-memory phones use a paper backup or an extension wallet. BUILT (parameters and re-wrap); the failure, marker and bounds tests SPECIFIED.
+**Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 173; [history/plans/2026-10-03-r3-passkey-seed.md](history/plans/2026-10-03-r3-passkey-seed.md) line 61.
+
+### CLI-SGN-22 — Seed signers sign family envelopes
+- old: R263 · status: current · owner: no · date: 2026-10-06 · normative: clients/signers-clientkeys.md#CLI-SGN-22 · superseded-by: —
+
+**Why.** The seed signs silently. SPECIFIED for Soroban, Aptos, Solana.
+**Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 217.
+
+### CLI-SGN-23 — One WebAuthn ceremony, per-family encoders
+- old: R264 · status: current · owner: no · date: 2026-10-06 · normative: clients/signers-clientkeys.md#CLI-SGN-23 · superseded-by: —
+
+**Why.** Verifier maturity.
+**Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 227.
+
+### CLI-SGN-24 — Passkey challenge = b64url op digest
+- old: R265 · status: current · owner: no · date: 2026-10-06 · normative: clients/signers-clientkeys.md#CLI-SGN-24 · superseded-by: —
+
+**Rule.** The passkey challenge is base64url (no padding) of the family's op digest.
+**Why.** One rule for every family, the same one passkeys already follow (CLI-SGN-09).
+**Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 231.
+
+### CLI-SGN-25 — Added seed keys are role keys
+- old: R269 · status: current · owner: no · date: 2026-10-07 · normative: clients/signers-clientkeys.md#CLI-SGN-25 · superseded-by: —
+
+**Why.** A backup in the same browser profile as the primary key is not a backup.
+**Cost if wrong.** one derivation per role; wallets show the role.
+**Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 235.
+
+### CLI-SGN-26 — One connector implementation in clientkeys
+- old: R266 · status: current · owner: yes · date: 2026-10-06 · normative: clients/signers-clientkeys.md#CLI-SGN-26 · superseded-by: —
+
+**Rule.** One connector implementation in clientkeys, shared by the app and every portal.
+**Why.** Owner decision; the existing connectors were tested but never wired into a flow.
+**Cost if wrong.** clientkeys gains browser glue. SPECIFIED (as built, the portal connectors are seven node-tested scripts that nothing loads; the portal's payment script is EVM only — EIP-6963, EIP-1193 fallback, the WalletConnect seam, `eth_signTypedData_v4`, the `wallet_kind` hint — and reads `start.typed_data.message.validUntil`, which a non-EVM start lacks; the issuer side is already family-ready: `{family, valid_until, payload_hex, digest, …terms}` plus `public_key`).
+**Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 254.
+
+### CLI-SGN-27 — Check, then sign what was checked
+- old: R267 · status: current · owner: no · date: 2026-10-06 · normative: clients/signers-clientkeys.md#CLI-SGN-27 · superseded-by: —
+
+**Rule.** Check, then sign exactly what was checked.
+**Why.** It closes the gap between checking `payload_hex` and signing a different `text`.
+**Cost if wrong.** A terms change must land together with its `fam/*.js` change; shared known-answer tests catch a mismatch.
+**Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 263.
+
+### CLI-SGN-28 — Signers spec adds no ids or kinds
+- old: R268 · status: current · owner: no · date: 2026-10-06 · normative: clients/signers-clientkeys.md#CLI-SGN-28 · superseded-by: —
+
+**Rule.** The signer rules add no account id, registry or key kind.
+**Why.** The signer rules and the universal-account design stay independent: the backup predicate works unchanged over the universal account's key sets.
+**Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 279.
+
+### CLI-SGN-29 — One key one purpose: wallet layer
+- old: R298(1) · status: current · owner: yes · date: 2026-10-06 · normative: clients/signers-clientkeys.md#CLI-SGN-29 · superseded-by: —
+
+**Why.** ECDSA and Schnorr over one secp256k1 key leak through nonce relations; a Schnorr signing oracle on an ElGamal key is a decryption-adjacent oracle; untagged digests replay across protocols. Owner decision.
+**Source.** [history/specs/2026-10-06-universal-account-design.md](history/specs/2026-10-06-universal-account-design.md) line 166.
+
+### CLI-SGN-30 — EOA path EOA-only; role tree m/7622
+- old: R300, S4F:Q1, UA:Q6 · status: current · owner: yes · date: 2026-10-07 · normative: clients/signers-clientkeys.md#CLI-SGN-30 · superseded-by: —
+
+**Rule.** The EVM seed path is the EOA only; every subject-account key that is not the native owner and every derived kind comes from the UA tree `m/7622'/0'/<account>'/<kindNo>'/<i>'`.
+**Why.** A key that is both an EOA and an account key serves two purposes; the owner chose one chain-independent tree under purpose `7622'`, so a subject has the same UA on every chain.
+**Cost if wrong.** One more derivation per role; wallets show the role.
+**Source.** [history/specs/2026-10-06-universal-account-design.md](history/specs/2026-10-06-universal-account-design.md) line 181; [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 784; [history/specs/2026-10-06-universal-account-design.md](history/specs/2026-10-06-universal-account-design.md) line 1398.
+
+### CLI-SGN-31 — Key oracle keeps no persistent state
+- old: UD:§23.10 · status: current · owner: yes · date: 2026-08-31 · normative: clients/signers-clientkeys.md#CLI-SGN-31 · superseded-by: —
+
+**Rule.** The key oracle keeps no persistent state.
+**Why.** Answering twice for the same proof commitment with two different challenges reveals the secret key at once, and an enclave that persisted its open-commitment table could be rolled back and made to answer again; forgetting everything on restart fails closed. With a sigma protocol the commit picks `k` and the response is `s = k + c·x`; two answers for one `k` give `x = (s₁ − s₂)/(c₁ − c₂)`. So `zk_response(nonce_id, c)` removes `k` from open_nonces (remove, not get) and rejects an unknown or used nonce_id, and after a restart every old nonce_id is unknown. Losing the replay cache on restart is also safe: with deterministic ECDSA nonces (RFC 6979) re-signing the same payload yields the same signature, so the cache only saves a signing. The audit log of who asked to sign what is written outside the enclave through the custody lane, so a restart loses none of it.
+**Cost if wrong.** A restart of the oracle lane breaks every proof being built; they are rebuilt at a CPU cost of 30 to 50 ms each, and no signed transaction is lost.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 2356.
+
+### CLI-SGN-32 — Oracle lane only when an organization holds Zether
+- old: UD:§23.11, canon:D7 · status: current · owner: yes · date: 2026-08-31 · normative: clients/signers-clientkeys.md#CLI-SGN-32 · superseded-by: —
+
+**Rule.** A server-side key-oracle lane exists only when an organization holds a Zether account.
+**Why.** Loyalty and end-user payments prove on the user's device, treasury operations are plain ECDSA, and confidential B2B settlement is optional (owner, 2026-08-31), so only an organization that holds its own confidential account has a server-side key to serve. "Non-custodial" means holding no one else's money; it does not mean no key on a server: a company's own treasury is self-custody and its key still lives somewhere. Loyalty and end-user payments are `on_device` 1-of-1 (the prover runs on the user's device); with confidential B2B on, the platform holds one share of a 2-of-3 split of the key and cannot spend alone. Even a receive-only confidential treasury needs its key to read what it received (the HSM or enclave exposes exactly `ecdh(D) -> compress(D^x)`), so dropping the oracle lane drops reconciliation, which then stays partial instead of clean. A person with a device can run payouts (500 payees × 12 months = 6,000 transfers a year, so 500 proofs a month, 100 to 250 s of compute on a laptop) but not the daily reconciliation.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 2416; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 861.
+
+### CLI-SGN-80 — Vault PIN scrypt N=2^15
+- old: RS4-8(scrypt) · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CLI-SGN-21
+
+It said: Vault PIN scrypt N=2^15; replaced by CLI-SGN-21.
+**Source.** [history/plans/2026-10-03-r3-passkey-seed.md](history/plans/2026-10-03-r3-passkey-seed.md) line 33.
+
+### CLI-SGN-81 — Zether PoP bound to subject account
+- old: RS4-9(pop) · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CTR-UA-07
+
+It said: Zether PoP bound to subject account; replaced by CTR-UA-07.
+**Source.** [history/plans/2026-10-03-r3-passkey-seed.md](history/plans/2026-10-03-r3-passkey-seed.md) line 35.
+
+### CLI-SGN-82 — Per-subject localStorage vault
+- old: RS4-15 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CLI-SGN-19
+
+It said: Per-subject localStorage vault; replaced by CLI-SGN-19.
+**Source.** [history/plans/2026-10-03-r3-passkey-seed.md](history/plans/2026-10-03-r3-passkey-seed.md) line 65.
+
+### CLI-SGN-83 — Zether on chain stays deferred
+- old: R33(deferred) · status: superseded · owner: yes · date: 2026-10-03 · normative: — · superseded-by: CTR-ZTH-01, CTR-ZTH-18, CTR-ZTH-19, CTR-UA-02, CTR-UA-16, CTR-UA-22, INT-ERP-11
+
+It said: Zether on chain stays deferred; replaced by CTR-ZTH-01, CTR-ZTH-18, CTR-ZTH-19, CTR-UA-02, CTR-UA-16, CTR-UA-22, INT-ERP-11.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 521.
+
+### CLI-SGN-84 — Zether PoP bound to caller account
+- old: R33(pop) · status: superseded · owner: yes · date: 2026-10-03 · normative: — · superseded-by: CTR-UA-07
+
+It said: Zether PoP bound to caller account; replaced by CTR-UA-07.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 521.
+
+### CLI-SGN-85 — Account seed keys on EOA path
+- old: R32(path) · status: superseded · owner: yes · date: 2026-10-03 · normative: — · superseded-by: CLI-SGN-30
+
+It said: Account seed keys on EOA path; replaced by CLI-SGN-30.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 522.
+
+### CLI-SGN-86 — Seed vault scrypt N=2^15 with PIN
+- old: R32(scrypt) · status: superseded · owner: yes · date: 2026-10-03 · normative: — · superseded-by: CLI-SGN-21
+
+It said: Seed vault scrypt N=2^15 with PIN; replaced by CLI-SGN-21.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 522.
+
+### CLI-SGN-87 — Custody tier A/B, HSM or MPC
+- old: UD:§15:D7 · status: superseded · owner: yes · date: 2026-08-30 · normative: — · superseded-by: CLI-SGN-32
+
+It said: Custody tier A/B, HSM or MPC; replaced by CLI-SGN-32.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 861.
+
+## Clients — SCaaS app
+
+### CLI-APP-01 — One SPA, two halves, one build
+- old: R150 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-01 · superseded-by: —
+
+**Why.** Chain features work without login; one artefact to test and pin.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 104.
+
+### CLI-APP-02 — React, TanStack Query, hash routes
+- old: R151 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-02 · superseded-by: —
+
+**Why.** Server state dominates; hash routing removes SPA-fallback rules from every host and from the node.
+**Cost if wrong.** deep links look like `/#/…`.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 105.
+
+### CLI-APP-03 — App has no server and no secrets
+- old: R152 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-03 · superseded-by: —
+
+**Why.** Machine credentials and admin credentials never cross (NODE-ADM-06).
+**Cost if wrong.** public gateways run with auth `none` behind a host proxy with rate limits.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 106.
+
+### CLI-APP-04 — One adapter interface per family
+- old: R153 · status: current · owner: yes · date: 2026-10-06 · normative: clients/app.md#CLI-APP-04 · superseded-by: —
+
+**Why.** Family SDKs are most of the bytes.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 107.
+
+### CLI-APP-05 — App builds and decodes every signed byte
+- old: R154 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-05 · superseded-by: —
+
+**Why.** Display and bytes cannot diverge silently; one JS implementation is shared with portals.
+**Cost if wrong.** clientkeys grows to all families.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 108.
+
+### CLI-APP-06 — App signer set and key paths
+- old: R155 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-06 · superseded-by: —
+
+**Why.** One wallet-glue implementation; one key, one purpose.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 109.
+
+### CLI-APP-07 — Relayed submission for Hedera and non-EVM
+- old: APP:Q1, R156 · status: current · owner: yes · date: 2026-10-06 · normative: clients/app.md#CLI-APP-07 · superseded-by: —
+
+**Why.** With gateway submission a user needs no native gas on any family.
+**Cost if wrong.** until those routes exist, Hedera and non-EVM are self-paid only.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 1029; [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 110.
+
+### CLI-APP-08 — Intent status is chain truth
+- old: R157 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-08 · superseded-by: —
+
+**Why.** The node is trusted for liveness, not truth.
+**Cost if wrong.** one read per poll.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 111.
+
+### CLI-APP-09 — Signing review from decoded bytes
+- old: R158 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-09 · superseded-by: —
+
+**Why.** Extension wallets show hex for most families; the app's review is the only real check.
+**Cost if wrong.** non-curated tokens take an explicit-add step.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 112.
+
+### CLI-APP-10 — Static mode config.json and CSP
+- old: R161 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-10 · superseded-by: —
+
+**Why.** One build, every host.
+**Cost if wrong.** a host without headers runs the weaker meta CSP.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 115.
+
+### CLI-APP-11 — Admin tokens in memory only
+- old: R162 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-11 · superseded-by: —
+
+**Rule.** Admin tokens live in memory only, per node.
+**Cost if wrong.** built-in users retype the password after a reload.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 116.
+
+### CLI-APP-12 — OIDC public client with PKCE
+- old: R163 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-12 · superseded-by: —
+
+**Why.** No hand-rolled OAuth.
+**Cost if wrong.** IdPs without SPA refresh tokens bounce the page once per token lifetime.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 117.
+
+### CLI-APP-13 — Zether runs in a session worker
+- old: R164 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-13 · superseded-by: —
+
+**Rule.** Zether runs in one session worker.
+**Why.** The worker opens the confidential vault itself, so the Zether secret key never enters the main page realm.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 118.
+
+### CLI-APP-14 — Passkeys origin-bound; backup de-duplication
+- old: R165 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-14 · superseded-by: —
+
+**Why.** The two deployment modes are two origins.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 119.
+
+### CLI-APP-15 — Pinned supply chain, one dev flag
+- old: R166 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-15 · superseded-by: —
+
+**Why.** Every dependency has signing reach.
+**Cost if wrong.** upgrades are deliberate.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 120.
+
+### CLI-APP-16 — Risk disclosures English beside translation
+- old: APP:Q3, R167 · status: current · owner: yes · date: 2026-10-06 · normative: clients/app.md#CLI-APP-16 · superseded-by: —
+
+**Rule.** English is the default and every string has a Vietnamese translation; risk disclosures show the English original beside the translation until the owner approves the text.
+**Why.** Owner choice; the translated risk disclosures are not yet approved by the owner.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 1031; [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 121.
+
+### CLI-APP-17 — Role gating is UI only
+- old: R168 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-17 · superseded-by: —
+
+**Rule.** Role gating in the app is UI only
+**Why.** The node enforces the roles on its own routes (NODE-ADM-04); the app only reads them to shape the UI.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 122.
+
+### CLI-APP-18 — Contract-held roles receive calldata
+- old: R169 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-18 · superseded-by: —
+
+**Rule.** Contract-held roles get calldata, not transactions.
+**Why.** `rateAdmin` must be a contract, so an EIP-681 link sent from an EOA would revert.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 123.
+
+### CLI-APP-19 — App dials only allowlisted origins
+- old: R170 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-19 · superseded-by: —
+
+**Why.** Network-learned URLs are attacker-chosen, and SDKs issue their own requests.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 124.
+
+### CLI-APP-20 — Metrics are a dashboard link
+- old: R171 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-20 · superseded-by: —
+
+**Rule.** Metrics are a dashboard link
+**Why.** `/metrics` is not CORS-enabled, and the operations design already provides the dashboard.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 125.
+
+### CLI-APP-21 — Non-EVM DEX books after EVM
+- old: APP:Q2, R172 · status: current · owner: yes · date: 2026-10-06 · normative: clients/app.md#CLI-APP-21 · superseded-by: —
+
+**Why.** Only the EVM venue has a book.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 1030; [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 126.
+
+### CLI-APP-22 — Chain identity and metadata verified
+- old: R173, R173a, R173b, R173c · status: current · owner: no · date: 2026-10-07 · normative: clients/app.md#CLI-APP-22 · superseded-by: —
+
+**Rule.** Chain identity and token metadata are verified, not trusted.
+**Why.** A third-party RPC can forge every read.
+**Cost if wrong.** One extra call per token and chain.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 127.
+
+### CLI-APP-23 — approve spender allowlist
+- old: R174 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-23 · superseded-by: —
+
+**Why.** The contract-only spender rule (CTR-TOK-01) stops EOA spenders only, and anyone can deploy a contract.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 128.
+
+### CLI-APP-24 — Keys run in a dedicated worker
+- old: R175 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-24 · superseded-by: —
+
+**Why.** A compromised transitive dependency in any SDK chunk could otherwise read an unlocked seed.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 129.
+
+### CLI-APP-25 — Account model follows UA spec
+- old: R176 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-25 · superseded-by: —
+
+**Rule.** The account model follows the Universal Account design.
+**Why.** Owner ruling in the Universal Account design, with the backup predicate taken from the client signer rules.
+**Cost if wrong.** two account kinds to explain.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 130.
+
+### CLI-APP-26 — Token kinds decoded from versionOf
+- old: R177 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-26 · superseded-by: —
+
+**Rule.** Token kinds are decoded from `versionOf(token)`, values 0–7.
+**Why.** The asset-suite and tender designs give wallets duties (regulated kinds view-only with a notice, managed markets unavailable) that a review found the app did not meet.
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 131.
+
+### CLI-APP-27 — Untrusted text sanitised
+- old: R179 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-27 · superseded-by: —
+
+**Why.** With an open factory anyone can deploy "USDC".
+**Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 133.
+
+## Integration — ERP
+
+### INT-ERP-01 — 24 h cooling-off for new receiving wallets
+- old: R22 · status: current · owner: no · date: 2026-10-03 · normative: integration.md#INT-ERP-01 · superseded-by: —
+
+**Rule.** A newly approved receiving wallet is usable only after a cooling-off of 24 h
+**Why.** Changing the receiving address is the number one fraud vector, and 24 hours is the window in which a second person can notice.
+**Cost if wrong.** A new wallet is usable one day later.
+**Source.** [history/specs/2026-10-03-blockchain-payments-addendum-wallets.md](history/specs/2026-10-03-blockchain-payments-addendum-wallets.md) line 193.
+
+### INT-ERP-02 — Custodial partner payer wallet needs license_ref
+- old: R24 · status: current · owner: no · date: 2026-10-03 · normative: integration.md#INT-ERP-02 · superseded-by: —
+
+**Rule.** A `custodial` paying wallet of a non-company partner requires `license_ref`.
+**Why.** Holding the keys to someone else's money is a custody activity.
+**Source.** [history/specs/2026-10-03-blockchain-payments-addendum-wallets.md](history/specs/2026-10-03-blockchain-payments-addendum-wallets.md) line 195.
+
+### INT-ERP-03 — Contract wallets: ERP defers to node simulation
+- old: R27 · status: current · owner: no · date: 2026-10-03 · normative: integration.md#INT-ERP-03 · superseded-by: —
+
+**Rule.** Contract wallets: the ERP defers to node simulation.
+**Why.** A contract wallet's ERC-1271 signature cannot be checked by recovering a key, so the ERP stores it unverified and the node's simulation is the arbiter.
+**Source.** [history/specs/2026-10-03-blockchain-payments-addendum-wallets.md](history/specs/2026-10-03-blockchain-payments-addendum-wallets.md) line 200.; [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 706
+
+### INT-ERP-04 — MandateWallet deployed outside the ERP
+- old: R29 · status: current · owner: no · date: 2026-10-03 · normative: integration.md#INT-ERP-04 · superseded-by: —
+
+**Rule.** A `MandateWallet` is deployed outside the ERP
+**Why.** The ERP makes no RPC calls and holds no deploy key (NODE-STO-03), and a CREATE2 factory would force it to compute the initcode hash.
+**Cost if wrong.** Onboarding a delegated wallet needs one operational step.
+**Source.** [history/specs/2026-10-03-blockchain-payments-addendum-wallets.md](history/specs/2026-10-03-blockchain-payments-addendum-wallets.md) line 204.
+
+### INT-ERP-05 — Outbox call jobs immutable, operator read-only
+- old: CR-PD-1(a/b) · status: current · owner: no · date: 2026-10-07 · normative: integration.md#INT-ERP-05 · superseded-by: —
+
+**Rule.** Outbox `call` jobs are immutable and operators are read-only.
+**Why.** The node had become a blind signer for ERP-built calldata: one operator session, or a stolen one, became an arbitrary transaction from a lane that holds fee income and, on dev deployments, admin roles.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 247.
+
+### INT-ERP-06 — Portal terms fee NONE, relayer restricted
+- old: R10 · status: current · owner: no · date: 2026-10-05 · normative: integration.md#INT-ERP-06 · superseded-by: —
+
+**Rule.** Self-service payment terms use fee `NONE` and `MODE_RESTRICT_RELAYER` to the company relayer, `fee = 0`, and a server-chosen validity (default 300 s).
+**Why.** Restricting the relayer is the default for money flows and B2B fees are zero; it trades payer self-submission for front-run safety.
+**Cost if wrong.** If the company relayer is down, users cannot submit themselves; signatures expire after 300 s, so payment is delayed, not lost.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 696.
+
+### INT-ERP-07 — No FX: token currency equals order currency
+- old: R17 · status: current · owner: no · date: 2026-10-03 · normative: integration.md#INT-ERP-07 · superseded-by: —
+
+**Rule.** No FX: the token's currency equals the order currency.
+**Why.** Quoting an exchange rate needs a price source.
+**Cost if wrong.** Only tokens pegged to the order currency can be used.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 730.
+
+### INT-ERP-08 — ERP-held env: custody dev-only, OpenSSL
+- old: R50 · status: current · owner: no · date: 2026-10-03 · normative: integration.md#INT-ERP-08 · superseded-by: —
+
+**Rule.** The ERP-held `env:` custody is dev-only and signs through OpenSSL.
+**Why.** Pure-Python ECDSA is not constant-time, and even around OpenSSL the key sits in the ERP process memory, which is acceptable only for development; production uses a KMS or HSM adapter.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 523.
+
+### INT-ERP-09 — Journal per (company, token); drift A and C
+- old: R56 · status: current · owner: no · date: 2026-10-06 · normative: integration.md#INT-ERP-09 · superseded-by: —
+
+**Rule.** One journal per (company, token); drift A and drift C.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 529.
+
+### INT-ERP-10 — ERP family-aware addresses and signed ops
+- old: R61 · status: current · owner: no · date: 2026-10-06 · normative: integration.md#INT-ERP-10 · superseded-by: —
+
+**Rule.** The ERP is family-aware: chains carry a family, addresses are stored in the family's normalised form, and non-EVM payments are signed ops.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 534.
+
+### INT-ERP-11 — ERP confidential requests, disclosure reconciliation, audit keys
+- old: R34(erp) · status: current · owner: yes · date: 2026-10-03 · normative: integration.md#INT-ERP-11 · superseded-by: —
+
+**Rule.** Confidential payment requests are reconciled from disclosed amounts, with an audit key per company.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 546.
+
+### INT-ERP-12 — ERP mirrors markets and books DEX fees
+- old: R35(erp) · status: current · owner: yes · date: 2026-10-03 · normative: integration.md#INT-ERP-12 · superseded-by: —
+
+**Rule.** The ERP mirrors DEX markets and books DEX fees.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 554.
+
+### INT-ERP-13 — ERP verifies ED25519 for long-zero payers
+- old: R6-3 · status: current · owner: no · date: 2026-10-03 · normative: integration.md#INT-ERP-13 · superseded-by: —
+
+**Rule.** Hedera long-zero payers sign with their native ED25519 key.
+**Why.** A long-zero `0.0.N` address is an ED25519 account without an EVM alias, and the precompile's EC branch refuses long-zero addresses; the ERP can check the ed25519 signature locally but cannot tell without chain RPC whether the key belongs to the account, so node simulation through HIP-632 decides (INT-ERP-03).
+**Source.** [history/specs/2026-10-03-net-hedera.md](history/specs/2026-10-03-net-hedera.md) line 293.
+
+### INT-ERP-14 — ERP verifies G… ed25519 via OpenSSL
+- old: R8-6 · status: current · owner: no · date: 2026-10-03 · normative: integration.md#INT-ERP-14 · superseded-by: —
+
+**Rule.** The ERP verifies Stellar `G…` ed25519 through OpenSSL.
+**Why.** `cryptography` is already a dependency of the custody code (INT-ERP-08) and replaces a pure-Python ed25519; a multisig account or a changed signer may make the master signature insufficient, which node simulation decides.
+**Source.** [history/specs/2026-10-03-net-soroban.md](history/specs/2026-10-03-net-soroban.md) line 193.
+
+### INT-ERP-15 — Bus scope is a per-tenant client setting
+- old: R73 · status: current · owner: yes · date: 2026-10-06 · normative: integration.md#INT-ERP-15 · superseded-by: —
+
+**Rule.** Bus scope is a per-tenant client setting delivered per job.
+**Why.** Owner decision; the private window is 120 s rather than 300 s because with a 300 s token `validUntil` a 300 s window would never open.
+**Cost if wrong.** A tenant that opts in exposes payer, payee, amount and timing to admitted peers of the matching class.
+**Source.** [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 73.
+
+### INT-ERP-16 — One node per company and chain
+- old: R97(routing) · status: current · owner: no · date: 2026-10-06 · normative: integration.md#INT-ERP-16 · superseded-by: —
+
+**Why.** One lane journal per signer is the double-spend guard.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 120.
+
+### INT-ERP-17 — Client kills locally only if never pushed
+- old: R98(client) · status: current · owner: no · date: 2026-10-06 · normative: integration.md#INT-ERP-17 · superseded-by: —
+
+**Rule.** The client kills a job locally only if it was never pushed; otherwise it cancels on the node, by uid or by origin.
+**Why.** The ERP's own veto went away with its journal; a compare-and-set on the node gives the same one-winner guarantee for our lanes, and a published job may already be landed by peers.
+**Cost if wrong.** During a node outage a kill switch waits for the node, at most until the job's `valid_until`.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 121.
+
+### INT-ERP-18 — Client push and sync cadence
+- old: R101 · status: current · owner: no · date: 2026-10-06 · normative: integration.md#INT-ERP-18 · superseded-by: —
+
+**Why.** A client that cannot hold a long poll still sees status within seconds.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 125.
+
+### INT-ERP-19 — Client halts sync on store change
+- old: R110(store-loss) · status: current · owner: no · date: 2026-10-06 · normative: integration.md#INT-ERP-19 · superseded-by: —
+
+**Rule.** The client halts sync on a store change.
+**Why.** A recreated or rewound store has no record of signed jobs, and a blind re-push can re-sign intents whose old outer transactions are still in a mempool (funds stay safe, gas is lost).
+**Cost if wrong.** One manual step after disk loss or restore.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 135.
+
+### INT-ERP-20 — Client status latency bounds
+- old: NI:I4 · status: open · owner: no · date: 2026-10-07 · normative: integration.md#INT-ERP-20 · superseded-by: —
+
+**Rule.** INT-ERP-20 — *Open (default applied).* Payment status latency is ≤ ~10 s while jobs are live and ≤ 1 min otherwise, from the cadence of INT-ERP-18. Owner confirmation pending; the default stands.
+**Why.** It follows from the sync cadence of INT-ERP-18: a fixed one-minute interval plus a trigger 10 s after each push while jobs are live, without any node-to-ERP call.
+**Open.** Owner decision pending; the default stated in the normative text applies.
+**Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 1613.
+
+### INT-ERP-21 — ERP Sui verify follows lesson L9
+- old: R260 · status: current · owner: no · date: 2026-10-06 · normative: integration.md#INT-ERP-21 · superseded-by: —
+
+**Rule.** ERP verifiers are three-valued and verify only with a key provably bound to the payer
+**Why.** The ERP rejected Sui payments the chain accepts (test cases `a2_pay_sui`, `a3_pay_sui`); settlement is driven only by chain events, so `None` can never mark anything paid.
+**Cost if wrong.** A valid signature from a non-member key queues one dead job per request, which needs portal access to the order.
+**Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 188.
+
+### INT-ERP-22 — Client holds salts; chain only commitments
+- old: R195 · status: current · owner: yes · date: 2026-10-06 · normative: integration.md#INT-ERP-22 · superseded-by: —
+
+**Rule.** The client holds every salt and key; the chain holds only commitments; the node holds neither salts nor personal data.
+**Why.** Owner decision: the erasure duty then lands entirely in the system of record, where it can be met.
+**Source.** [history/specs/2026-10-06-tender-sponsorship-shredding.md](history/specs/2026-10-06-tender-sponsorship-shredding.md) line 215.
+
+### INT-ERP-23 — Commitment and Merkle formats
+- old: R196 · status: current · owner: no · date: 2026-10-06 · normative: integration.md#INT-ERP-23 · superseded-by: —
+
+**Rule.** Commitment and Merkle formats:
+**Why.** Domain tags and the leaf/node prefix stop cross-format and second-preimage confusion, and JCS reuses the canonical form of NODE-JOB-04.
+**Source.** [history/specs/2026-10-06-tender-sponsorship-shredding.md](history/specs/2026-10-06-tender-sponsorship-shredding.md) line 218.
+
+### INT-ERP-24 — Per-subject DEK; erasure destroys it
+- old: R197 · status: current · owner: no · date: 2026-10-07 · normative: integration.md#INT-ERP-24 · superseded-by: —
+
+**Rule.** Salts and anchored payloads are encrypted under a per-subject data key (DEK); erasure destroys the DEK.
+**Why.** Deleting rows alone leaves them in backups, and a plain hash of a sequential id is reversible; destroying the key makes every copy unreadable, backups included.
+**Source.** [history/specs/2026-10-06-tender-sponsorship-shredding.md](history/specs/2026-10-06-tender-sponsorship-shredding.md) line 224.
+
+### INT-ERP-25 — References carry no personal data
+- old: R198 · status: current · owner: no · date: 2026-10-06 · normative: integration.md#INT-ERP-25 · superseded-by: —
+
+**Rule.** References carry no personal data and are not derived from business identifiers.
+**Source.** [history/specs/2026-10-06-tender-sponsorship-shredding.md](history/specs/2026-10-06-tender-sponsorship-shredding.md) line 234.
+
+### INT-ERP-26 — Disclosure is opening a commitment
+- old: R199 · status: current · owner: no · date: 2026-10-06 · normative: integration.md#INT-ERP-26 · superseded-by: —
+
+**Rule.** Disclosure is opening a commitment.
+**Source.** [history/specs/2026-10-06-tender-sponsorship-shredding.md](history/specs/2026-10-06-tender-sponsorship-shredding.md) line 238.
+
+### INT-ERP-27 — Payment mode is configuration, not hard-coded
+- old: UD:§1:payment-mode · status: current · owner: yes · date: 2026-08-30 · normative: integration.md#INT-ERP-27 · superseded-by: —
+
+**Rule.** The payment mode is configuration, not code.
+**Why.** Owner decision: deployments choose among several payment modes, so none is fixed in code.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 45.
+
+<!-- example:odoo -->
+## Integration — example connector
+
+### INT-ODOO-01 — Deploy job precedes pay via prerequisite
+- old: RS4-6 · status: current · owner: no · date: 2026-10-06 · normative: integration-odoo-example.md#INT-ODOO-01 · superseded-by: —
+
+**Rule.** The deploy job precedes payment through a prerequisite.
+**Source.** [history/plans/2026-10-03-r3-passkey-seed.md](history/plans/2026-10-03-r3-passkey-seed.md) line 28.
+
+### INT-ODOO-02 — Owner-call nonce from mined jobs
+- old: RS4-7 · status: current · owner: no · date: 2026-10-03 · normative: integration-odoo-example.md#INT-ODOO-02 · superseded-by: —
+
+**Rule.** The `executeAsOwner` nonce is the count of the account's `mined/final` owner-call jobs
+**Why.** A reverted owner call does not consume the account's nonce, so counting only mined or final jobs keeps the ERP count in step with the chain.
+**Cost if wrong.** A call made outside the ERP skews the count and the next owner call fails with `BadNonce`; no funds are lost.
+**Source.** [history/plans/2026-10-03-r3-passkey-seed.md](history/plans/2026-10-03-r3-passkey-seed.md) line 31.
+
+### INT-ODOO-03 — First key registered with HMAC challenge
+- old: RS4-12 · status: current · owner: no · date: 2026-10-03 · normative: integration-odoo-example.md#INT-ODOO-03 · superseded-by: —
+
+**Rule.** The first key registers in two steps with an HMAC challenge.
+**Why.** A new key must prove possession and its origin before it is stored, which blocks a broken first key at registration; the HMAC challenge needs no server state, and the proof message is domain-separated so a server-chosen challenge is never the digest of a real operation.
+**Source.** [history/plans/2026-10-03-r3-passkey-seed.md](history/plans/2026-10-03-r3-passkey-seed.md) line 51.
+
+### INT-ODOO-04 — Deploy job only for payer own account
+- old: RS4-16 · status: current · owner: no · date: 2026-10-03 · normative: integration-odoo-example.md#INT-ODOO-04 · superseded-by: —
+
+**Rule.** A deploy job is created only for the account of the paying partner itself
+**Source.** [history/plans/2026-10-03-r3-passkey-seed.md](history/plans/2026-10-03-r3-passkey-seed.md) line 67.
+
+### INT-ODOO-05 — Payment addon depends on account_payment
+- old: R28 · status: current · owner: no · date: 2026-10-03 · normative: integration-odoo-example.md#INT-ODOO-05 · superseded-by: —
+
+**Rule.** `dms_blockchain_payment` depends on `account_payment`
+**Why.** Auto-pay reads invoices and leaves reconciliation to `account_payment`.
+**Cost if wrong.** The chain payment provider cannot be installed on a database without accounting.
+**Source.** [history/specs/2026-10-03-blockchain-payments-addendum-wallets.md](history/specs/2026-10-03-blockchain-payments-addendum-wallets.md) line 202.
+
+### INT-ODOO-06 — No idempotency addon; natural UNIQUE keys
+- old: R7 · status: current · owner: no · date: 2026-10-03 · normative: integration-odoo-example.md#INT-ODOO-06 · superseded-by: —
+
+**Rule.** No `bamboo_idempotency` dependency; dedup by UNIQUE natural keys.
+**Why.** An optional addon must install on its own, and the idempotency addon adds a column to every table in the database.
+**Cost if wrong.** It can be added later as a dependency; the natural keys stay correct.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 682.
+
+### INT-ODOO-07 — Odoo addon split, no account addon
+- old: R8, UD:§1:independent-addon · status: current · owner: yes · date: 2026-10-03 · normative: integration-odoo-example.md#INT-ODOO-07 · superseded-by: —
+
+**Rule.** The blockchain addons never depend on the DMS core; no accounting addon of their own.
+**Why.** Owner ruling, repeated twice: the blockchain addons stay fully independent of the sales core; the standard `account_payment` already reconciles when a transaction is done, so a separate accounting addon has no user yet.
+**Cost if wrong.** An accounting addon is added when FX or batch reconciliation is needed.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 685; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 44.
+
+### INT-ODOO-08 — Odoo verifies ECDSA signatures itself
+- old: R13 · status: current · owner: no · date: 2026-10-03 · normative: integration-odoo-example.md#INT-ODOO-08 · superseded-by: —
+
+**Rule.** Odoo verifies ECDSA signatures itself
+**Why.** It gives the user immediate feedback and is the third implementation of the digest, pinned by the shared test vectors; no external crypto library is a dependency of the ERP.
+**Cost if wrong.** ERC-1271 contract-wallet signatures cannot be recovered and are left to the node's simulation, and a contract wallet that returns a 65-byte signature is refused.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 706.
+
+### INT-ODOO-09 — Portal pay button calls model facade
+- old: R14 · status: current · owner: no · date: 2026-10-03 · normative: integration-odoo-example.md#INT-ODOO-09 · superseded-by: —
+
+**Rule.** The portal pay button is plain JS calling the model facade
+**Why.** All logic lives in model methods, and the standard payment form would need its own payment-form JavaScript.
+**Cost if wrong.** Website checkout has no chain button yet.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 712.
+
+### INT-ODOO-10 — Portal pays confirmed orders only
+- old: R19 · status: current · owner: no · date: 2026-10-03 · normative: integration-odoo-example.md#INT-ODOO-10 · superseded-by: —
+
+**Rule.** The portal pays confirmed orders only
+**Why.** When a transaction completes, the sale post-processing confirms a draft or sent quotation by itself, which would skip the sales approval and the credit check.
+**Cost if wrong.** Buyers cannot prepay a quotation until a separate approval flow exists.
+**Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 723.
+
+### INT-ODOO-11 — One receiving-company seam; platform company
+- old: R57 · status: current · owner: no · date: 2026-10-03 · normative: integration-odoo-example.md#INT-ODOO-11 · superseded-by: —
+
+**Rule.** One receiving-company seam and one "platform company".
+**Why.** Provider, receiving-wallet and staff-note lookups each resolved the receiving company on their own; one method gives a future tier one place to change, and a test turns red if the resolved company stops matching the order's. "Host" already meant the record with no company in the territory model, so it was renamed.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 530.
+
+### INT-ODOO-12 — Late Matched after restore debits Odoo book
+- old: RS5-20(odoo-book) · status: current · owner: no · date: 2026-10-07 · normative: integration-odoo-example.md#INT-ODOO-12 · superseded-by: —
+
+**Rule.** A late `Matched` after a restore debits the Odoo-held book.
+**Why.** Without it a trade restored as failed and later settled leaves phantom liquidity in the book.
+**Source.** [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 449.
+
+### INT-ODOO-13 — Odoo stores UAs as addresses
+- old: R318 · status: current · owner: no · date: 2026-10-06 · normative: integration-odoo-example.md#INT-ODOO-13 · superseded-by: —
+
+**Rule.** Odoo stores UAs as addresses of a new kind and never derives policy off chain.
+**Why.** Same rule as every other address.
+**Source.** [history/specs/2026-10-06-universal-account-design.md](history/specs/2026-10-06-universal-account-design.md) line 334.
+
+### INT-ODOO-14 — Key registration is not the addon's job
+- old: UD:§15:D14, canon:D14 · status: current · owner: yes · date: 2026-08-30 · normative: integration-odoo-example.md#INT-ODOO-14 · superseded-by: —
+
+**Rule.** Key registration is not the addon's job.
+**Why.** Owner ruling: the payment addon must not know what an outlet is, because that belongs to the sales system; the operator owns the policy of who gets a key, when, and who pays the registration gas.
+**Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 869.
+
+### INT-ODOO-80 — Host company configuration parameter
+- old: R23 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: INT-ODOO-11
+
+It said: Host company configuration parameter; replaced by INT-ODOO-11.
+**Source.** [history/specs/2026-10-03-blockchain-payments-addendum-wallets.md](history/specs/2026-10-03-blockchain-payments-addendum-wallets.md) line 194.
+
+<!-- /example -->
+
+## Alias index
+
+<!-- BEGIN alias-index (generated by scripts/docs_check.py --write) -->
+| Old id | New id(s) | Status |
+|---|---|---|
+| APP:Q1 | CLI-APP-07 | current |
+| APP:Q2 | CLI-APP-21 | current |
+| APP:Q3 | CLI-APP-16 | current |
+| CR-ADW-1 | CTR-ACC-07 | current |
+| CR-ADW-2 | NET-HED-03 | current |
+| CR-ADW-3 | CLI-SGN-07 | current |
+| CR-ADW-4 | CLI-SGN-08 | current |
+| CR-PD-1 | NODE-JOB-01(c), INT-ERP-05(a/b) | current (split) |
+| CR-PD-2 | NODE-IDX-01 | current |
+| CR-PD-3 | NODE-GW-01 | current |
+| CR-PD-4 | NODE-STO-01(node), CTR-MTX-04(issuer), NET-ALL-01(pruning) | current (split) |
+| CR-PD-5 | NODE-LANE-02 | current |
+| CR-PD-6 | NET-EVM-02 | current |
+| CR-R3-1 | NET-ALL-04(grammar), NET-COS-03(cosmos-binding), NET-COS-81(cosmos-address) | current/superseded (split) |
+| CR-R3-2 | NODE-IDX-01 | current |
+| CR-R3-3 | NET-SOR-09(rule), NET-SOR-80(error-name) | current/superseded (split) |
+| CR-R3-4 | NET-SOL-01 | current |
+| CR-R3-5 | NET-SUI-02 | current |
+| CR-R3-6 | NET-ALL-05 | current |
+| CR-R3-7 | NET-TON-02 | current |
+| CR-R3-8 | NODE-STO-01(node), NET-ALL-01(pruning) | current (split) |
+| CR-R3-9 | NET-TON-03 | current |
+| CR-R3-10 | NET-COS-04 | current |
+| CR-R3-11 | CTR-GEN-02 | current |
+| CR-WSF-1 | NET-ALL-23 | current |
+| CR-WSF-2 | NET-HED-15 | current |
+| MESH:I1 | NODE-MESH-04 | current |
+| MESH:I2 | NODE-MESH-04 | current |
+| MESH:I3 | NODE-MESH-04 | current |
+| MESH:I4 | NODE-MESH-14 | current |
+| NI:I1 | NODE-JOB-15 | open |
+| NI:I2 | NODE-STO-08 | open |
+| NI:I3 | NODE-JOB-16 | open |
+| NI:I4 | INT-ERP-20 | open |
+| NI:I5 | NODE-JOB-17 | open |
+| NI:I6 | NODE-IDX-06 | open |
+| NI:I7 | NODE-STO-09 | open |
+| NI:I8 | NODE-JOB-18(tombstones), NODE-LANE-21(outer-tx), NODE-ADM-09(last-admin) | open (split) |
+| R1 | ARCH-POS-80 | superseded |
+| R2 | CTR-MTX-01(op), CTR-MTX-80(cost) | current/superseded (split) |
+| R3 | CTR-DEX-80 | superseded |
+| R4 | CTR-TOK-80 | superseded |
+| R5 | CTR-MTX-02 | current |
+| R6 | NODE-JOB-80 | superseded |
+| R6-1 | NET-HED-08 | current |
+| R6-2 | NET-HED-09 | current |
+| R6-3 | INT-ERP-13 | current |
+| R6-4 | NET-HED-10 | current |
+| R6-5 | NET-HED-80 | superseded |
+| R6-6 | NET-HED-11 | current |
+| R6-7 | NET-HED-05 | current |
+| R6-8 | NET-HED-06 | current |
+| R6-9 | NET-HED-07 | current |
+| R6-10 | NET-HED-12 | current |
+| R6-11 | NET-HED-13 | current |
+| R7 | INT-ODOO-06 | current |
+| R8 | INT-ODOO-07 | current |
+| R8-1 | NET-SOR-02 | current |
+| R8-2 | NET-SOR-03 | current |
+| R8-3 | NET-SOR-05 | current |
+| R8-4 | NET-SOR-06 | current |
+| R8-5 | NET-SOR-07 | current |
+| R8-6 | INT-ERP-14 | current |
+| R8-7 | NET-SOR-08 | current |
+| R8-8 | NET-SOR-04 | current |
+| R8-9 | NET-SOR-09 | current |
+| R8-10 | NET-SOR-10 | current |
+| R8-11 | NET-SOR-11 | current |
+| R8-12 | NET-SOR-12 | current |
+| R8-13 | NET-SOR-13 | current |
+| R8-14 | NET-SOR-14 | current |
+| R8-15 | NET-SOR-15 | current |
+| R9 | CTR-MTX-03(lane), CTR-MTX-81(pay-once) | current/superseded (split) |
+| R9-1 | NET-COS-80 | superseded |
+| R9-2 | NET-COS-05 | current |
+| R9-3 | NET-COS-06 | current |
+| R9-4 | NET-COS-07 | current |
+| R9-5 | NET-COS-08 | current |
+| R9-6 | NET-COS-09 | current |
+| R9-7 | NET-COS-10 | current |
+| R9-8 | NET-COS-11 | current |
+| R10 | INT-ERP-06 | current |
+| R10-1 | NET-TON-04 | current |
+| R10-2 | NET-TON-05 | current |
+| R10-3 | NET-TON-81 | superseded |
+| R10-4 | NET-TON-06 | current |
+| R10-5 | NET-TON-07 | current |
+| R10-6 | NET-TON-08 | current |
+| R10-7 | NET-TON-09 | current |
+| R10-8 | NET-TON-10 | current |
+| R10-9 | NET-TON-11 | current |
+| R10-10 | NET-TON-12 | current |
+| R10-11 | NET-TON-13 | current |
+| R10-12 | NET-TON-14 | current |
+| R10-13 | NET-TON-15 | current |
+| R10-14 | NET-TON-16(node), NET-TON-82(contract) | current/superseded (split) |
+| R10-15 | NET-TON-17 | current |
+| R10-16 | NET-TON-18 | current |
+| R10-17 | NET-TON-19(cancel/fees), NET-TON-83(bounced) | current/superseded (split) |
+| R11 | NODE-IDX-02(gate), NODE-IDX-80(quorum) | current/superseded (split) |
+| R12 | NODE-IDX-03 | current |
+| R13 | INT-ODOO-08 | current |
+| R14 | INT-ODOO-09 | current |
+| R15 | NODE-LANE-03 | current |
+| R16 | NODE-STO-80 | superseded |
+| R17 | INT-ERP-07 | current |
+| R18 | NODE-LANE-04 | current |
+| R19 | INT-ODOO-10 | current |
+| R20 | NODE-STO-03 | current |
+| R21 | CLI-SGN-06 | current |
+| R22 | INT-ERP-01 | current |
+| R23 | INT-ODOO-80 | superseded |
+| R24 | INT-ERP-02 | current |
+| R25 | CTR-ACC-06 | current |
+| R26 | CTR-TOK-01 | current |
+| R27 | INT-ERP-03 | current |
+| R28 | INT-ODOO-05 | current |
+| R29 | INT-ERP-04 | current |
+| R30 | NET-ALL-02 | current |
+| R31 | CTR-ACC-08(account), CLI-SGN-09(client) | current (split) |
+| R32 | CLI-SGN-11(vault), CLI-SGN-85(path), CLI-SGN-86(scrypt) | current/superseded (split) |
+| R33 | CLI-SGN-10(keys), CLI-SGN-83(deferred), CLI-SGN-84(pop) | current/superseded (split) |
+| R34 | CTR-ZTH-01(scope), CTR-ZTH-80(params), CTR-ZTH-81(registry), INT-ERP-11(erp) | current/superseded (split) |
+| R35 | NODE-DEX-01(book), CTR-DEX-01(contract), INT-ERP-12(erp) | current (split) |
+| R36 | NET-ALL-80 | unused |
+| R37 | NET-ALL-80 | unused |
+| R38 | NET-ALL-80 | unused |
+| R39 | NET-ALL-80 | unused |
+| R40 | NET-ALL-80 | unused |
+| R41 | NET-ALL-80 | unused |
+| R42 | NET-ALL-80 | unused |
+| R43 | NET-ALL-80 | unused |
+| R44 | NET-ALL-80 | unused |
+| R45 | NET-ALL-80 | unused |
+| R46 | NET-ALL-80 | unused |
+| R47 | NET-ALL-80 | unused |
+| R48 | NET-ALL-80 | unused |
+| R49 | NET-ALL-80 | unused |
+| R50 | INT-ERP-08 | current |
+| R51 | NODE-OPS-01 | current |
+| R52 | CTR-GEN-01 | current |
+| R53 | NODE-STO-02 | current |
+| R54 | NODE-GW-02 | current |
+| R55 | NODE-LANE-05 | current |
+| R56 | INT-ERP-09 | current |
+| R57 | INT-ODOO-11 | current |
+| R58 | NODE-LANE-06(adapter), NODE-LANE-80(family-enum) | current/superseded (split) |
+| R59 | NODE-LANE-07 | current |
+| R60 | NODE-LANE-08 | current |
+| R61 | INT-ERP-10 | current |
+| R62 | NET-ALL-03 | current |
+| R63 | NET-HED-04 | current |
+| R64 | NET-SUI-01 | current |
+| R65 | NET-SOR-01 | current |
+| R66 | NET-COS-02 | current |
+| R67 | NET-TON-01(core), NET-TON-80(bindkey) | current/superseded (split) |
+| R68 | NODE-MESH-80 | unused |
+| R69 | NODE-MESH-80 | unused |
+| R70 | NODE-MESH-01 | current |
+| R71 | NODE-MESH-02(seq), NODE-MESH-81(store) | current/superseded (split) |
+| R72 | NODE-MESH-03 | current |
+| R73 | INT-ERP-15 | current |
+| R74 | NODE-MESH-04 | current |
+| R75 | NODE-MESH-05 | current |
+| R76 | NODE-MESH-06 | current |
+| R77 | NODE-MESH-07 | current |
+| R78 | NODE-MESH-08 | current |
+| R79 | NODE-MESH-82 | superseded |
+| R80 | NODE-LANE-09 | current |
+| R81 | NODE-MESH-09 | current |
+| R82 | NODE-MESH-10 | current |
+| R83 | NODE-MESH-11 | current |
+| R84 | NODE-LANE-10 | current |
+| R85 | NODE-MESH-12 | current |
+| R86 | NODE-MESH-13 | current |
+| R87 | ARCH-POS-05 | current |
+| R88 | NODE-STO-04 | current |
+| R89 | NODE-JOB-02 | current |
+| R90 | NODE-JOB-03 | current |
+| R91 | NODE-JOB-04 | current |
+| R92 | NODE-JOB-05 | current |
+| R93 | NODE-IDX-04 | current |
+| R94 | NODE-IDX-05 | current |
+| R95 | NODE-STO-03 | current |
+| R96 | NODE-STO-05 | current |
+| R97 | NODE-JOB-06(claim), INT-ERP-16(routing) | current (split) |
+| R98 | NODE-JOB-07(node), INT-ERP-17(client) | current (split) |
+| R99 | NODE-MESH-15 | current |
+| R100 | NODE-LANE-10 | current |
+| R101 | INT-ERP-18 | current |
+| R102 | NODE-JOB-08 | current |
+| R103 | NODE-JOB-09 | current |
+| R104 | NODE-JOB-10 | current |
+| R105 | NODE-DEX-14 | current |
+| R106 | NODE-ADM-02 | current |
+| R106a | NODE-ADM-03(oidc), NODE-ADM-80(ring) | current/superseded (split) |
+| R107 | NODE-ADM-04 | current |
+| R108 | NODE-ADM-05 | current |
+| R109 | NODE-ADM-06 | current |
+| R110 | NODE-ADM-07(audit), INT-ERP-19(store-loss) | current (split) |
+| R111 | NODE-STO-06 | current |
+| R112 | NODE-GSP-01 | current |
+| R113 | NODE-GSP-02 | current |
+| R114 | NODE-GSP-03 | current |
+| R115 | NODE-GSP-04 | current |
+| R116 | NODE-GSP-05 | current |
+| R117 | NODE-GSP-06 | current |
+| R118 | NODE-GSP-07 | current |
+| R119 | NODE-GSP-08 | current |
+| R120 | NODE-GSP-09 | current |
+| R121 | NODE-GSP-10 | current |
+| R122 | NODE-GSP-11 | current |
+| R123 | NODE-GSP-12 | current |
+| R124 | NODE-DEX-12 | current |
+| R125 | NODE-GSP-13 | current |
+| R126 | NODE-GSP-14 | current |
+| R127 | NODE-ADM-01(admin), NODE-OPS-02(metrics) | current (split) |
+| R128 | NODE-DEX-13 | current |
+| R129 | CTR-TOK-02 | current |
+| R130 | CTR-TOK-03 | current |
+| R131 | CTR-MTX-07 | current |
+| R132 | CTR-MTX-08 | current |
+| R133 | CTR-TOK-04 | current |
+| R134 | CTR-TOK-05 | current |
+| R135 | CTR-TOK-06 | current |
+| R136 | CTR-TOK-07 | current |
+| R137 | CTR-TOK-08 | current |
+| R138 | CTR-MTX-09 | current |
+| R139 | CTR-MTX-10 | current |
+| R140 | CTR-MTX-11 | current |
+| R141 | CTR-TOK-09 | current |
+| R142 | CTR-TOK-10 | current |
+| R143 | CTR-TOK-11 | current |
+| R144 | NET-HED-14 | current |
+| R145 | NET-ALL-19 | current |
+| R146 | CTR-TOK-12 | current |
+| R147 | CTR-TOK-13 | current |
+| R148 | NODE-LANE-22(node), CTR-MTX-12(contract) | current (split) |
+| R149 | CTR-TOK-14 | current |
+| R150 | CLI-APP-01 | current |
+| R151 | CLI-APP-02 | current |
+| R152 | CLI-APP-03 | current |
+| R153 | CLI-APP-04 | current |
+| R154 | CLI-APP-05 | current |
+| R155 | CLI-APP-06 | current |
+| R156 | CLI-APP-07 | current |
+| R157 | CLI-APP-08 | current |
+| R158 | CLI-APP-09 | current |
+| R159 | NODE-GW-05(gateway), NODE-ADM-10(serving) | current (split) |
+| R160 | NODE-ADM-11 | current |
+| R161 | CLI-APP-10 | current |
+| R162 | CLI-APP-11 | current |
+| R163 | CLI-APP-12 | current |
+| R164 | CLI-APP-13 | current |
+| R165 | CLI-APP-14 | current |
+| R166 | CLI-APP-15 | current |
+| R167 | CLI-APP-16 | current |
+| R168 | CLI-APP-17 | current |
+| R169 | CLI-APP-18 | current |
+| R170 | CLI-APP-19 | current |
+| R171 | CLI-APP-20 | current |
+| R172 | CLI-APP-21 | current |
+| R173 | CLI-APP-22 | current |
+| R173a | CLI-APP-22 | current |
+| R173b | CLI-APP-22 | current |
+| R173c | CLI-APP-22 | current |
+| R174 | CLI-APP-23 | current |
+| R175 | CLI-APP-24 | current |
+| R176 | CLI-APP-25 | current |
+| R177 | CLI-APP-26 | current |
+| R178 | NODE-GW-06 | current |
+| R179 | CLI-APP-27 | current |
+| R180 | CTR-TND-01 | current |
+| R181 | CTR-TND-02 | current |
+| R182 | CTR-TND-03 | current |
+| R183 | CTR-TND-04 | current |
+| R184 | CTR-TND-05 | current |
+| R185 | CTR-TND-06 | current |
+| R186 | CTR-TND-07 | current |
+| R187 | CTR-TND-08 | current |
+| R188 | NET-ALL-18 | current |
+| R189 | NODE-SPN-01 | current |
+| R190 | NODE-SPN-02 | current |
+| R191 | NODE-SPN-03 | current |
+| R192 | CTR-MTX-05 | current |
+| R193 | NODE-MESH-17(node), CTR-MTX-06(shape) | current (split) |
+| R194 | NODE-SPN-04 | current |
+| R195 | INT-ERP-22 | current |
+| R196 | INT-ERP-23 | current |
+| R197 | INT-ERP-24 | current |
+| R198 | INT-ERP-25 | current |
+| R199 | INT-ERP-26 | current |
+| R200 | CTR-AS-01 | current |
+| R201 | CTR-AS-02 | current |
+| R202 | CTR-AS-03 | current |
+| R203 | CTR-AS-04 | current |
+| R204 | CTR-AS-05 | current |
+| R205 | CTR-AS-06 | current |
+| R206 | CTR-AS-07 | current |
+| R207 | CTR-AS-08 | current |
+| R208 | CTR-AS-09 | current |
+| R209 | CTR-AS-10 | current |
+| R210 | CTR-AS-11 | current |
+| R211 | CTR-AS-12 | current |
+| R212 | CTR-AS-13 | current |
+| R213 | CTR-AS-14 | current |
+| R214 | NODE-DEX-11(node), CTR-DEX-12(contract) | current (split) |
+| R215 | NET-ALL-17 | current |
+| R216 | CTR-AS-15 | current |
+| R217 | CTR-AS-16 | current |
+| R230 | NODE-OPS-03 | current |
+| R231 | NODE-OPS-04 | current |
+| R232 | NODE-OPS-05 | current |
+| R233 | NODE-OPS-06 | current |
+| R234 | NODE-OPS-07 | current |
+| R235 | NODE-OPS-08 | current |
+| R236 | NODE-OPS-09 | current |
+| R237 | NODE-OPS-10 | current |
+| R238 | NODE-OPS-11 | current |
+| R239 | NODE-RUN-01 | current |
+| R240 | NODE-RUN-02 | current |
+| R241 | NODE-RUN-03 | current |
+| R242 | NODE-OPS-12 | current |
+| R243 | NODE-RUN-04 | current |
+| R244 | NODE-OPS-13 | current |
+| R245 | NODE-RUN-05 | current |
+| R246 | NODE-OPS-14 | current |
+| R247 | NODE-OPS-15 | current |
+| R250 | CLI-SGN-12 | current |
+| R251 | CLI-SGN-13 | current |
+| R252 | CLI-SGN-14 | current |
+| R253 | CLI-SGN-15 | current |
+| R254 | CLI-SGN-16 | current |
+| R255 | CLI-SGN-17 | current |
+| R256 | CLI-SGN-18 | current |
+| R257 | CLI-SGN-19 | current |
+| R258 | CLI-SGN-20 | current |
+| R259 | CLI-SGN-21 | current |
+| R260 | INT-ERP-21 | current |
+| R261 | NET-SUI-16 | current |
+| R262 | NET-SUI-17 | current |
+| R263 | CLI-SGN-22 | current |
+| R264 | CLI-SGN-23 | current |
+| R265 | CLI-SGN-24 | current |
+| R266 | CLI-SGN-26 | current |
+| R267 | CLI-SGN-27 | current |
+| R268 | CLI-SGN-28 | current |
+| R269 | CLI-SGN-25 | current |
+| R270 | CTR-PQZ-01 | current |
+| R271 | CTR-PQZ-02 | current |
+| R272 | CTR-PQZ-03 | current |
+| R273 | CTR-PQZ-04 | current |
+| R274 | CTR-PQZ-05 | current |
+| R275 | CTR-PQZ-06 | current |
+| R276 | CTR-PQZ-07 | current |
+| R277 | CTR-PQZ-08 | current |
+| R278 | CTR-PQZ-09 | current |
+| R279 | CTR-PQZ-10 | current |
+| R280 | CTR-PQZ-11 | current |
+| R281 | CTR-PQZ-12 | current |
+| R282 | CTR-PQZ-13 | current |
+| R283 | CTR-PQZ-14 | current |
+| R284 | CTR-PQZ-15 | current |
+| R285 | CTR-PQZ-16 | current |
+| R286 | CTR-PQZ-17 | current |
+| R287 | CTR-PQZ-18 | current |
+| R288 | CTR-PQZ-19 | current |
+| R289 | CTR-PQZ-20 | current |
+| R290 | CTR-UA-02 | current |
+| R291 | CTR-UA-03 | current |
+| R292 | CTR-UA-04 | current |
+| R293 | CTR-UA-05 | current |
+| R294 | CTR-UA-06 | current |
+| R295 | CTR-UA-07 | current |
+| R296 | CTR-UA-08 | current |
+| R297 | CTR-UA-09 | current |
+| R298 | CTR-UA-10(2-3-4), CLI-SGN-29(1) | current (split) |
+| R299 | CTR-UA-11 | current |
+| R300 | CLI-SGN-30 | current |
+| R301 | CTR-UA-12 | current |
+| R302 | CTR-UA-13 | current |
+| R303 | CTR-UA-14 | current |
+| R304 | CTR-UA-15 | current |
+| R305 | CTR-UA-16 | current |
+| R306 | CTR-UA-17 | current |
+| R307 | CTR-ACC-09 | current |
+| R308 | CTR-UA-18 | current |
+| R309 | CTR-UA-19 | current |
+| R310 | CTR-UA-20 | current |
+| R311 | CTR-UA-21 | current |
+| R312 | CTR-UA-22 | current |
+| R313 | CTR-UA-23 | current |
+| R314 | NET-ALL-20 | current |
+| R315 | NET-ALL-21 | current |
+| R316 | NODE-MESH-18 | current |
+| R317 | NODE-GSP-15 | current |
+| R318 | INT-ODOO-13 | current |
+| R320 | NODE-GW-03 | current |
+| R321 | NODE-LANE-11 | current |
+| R322 | NODE-ADM-08 | current |
+| R323 | NODE-JOB-11 | current |
+| R324 | NODE-JOB-12 | current |
+| R325 | NODE-JOB-13 | current |
+| R326 | NODE-LANE-12 | current |
+| R327 | NODE-JOB-14 | current |
+| R328 | NODE-GW-04 | current |
+| R330 | NET-ALL-22 | current |
+| R331 | CTR-UA-24 | current |
+| R340 | NODE-LANE-13 | current |
+| R341 | NODE-LANE-14 | current |
+| R342 | NODE-LANE-15 | current |
+| R343 | NODE-MESH-16 | current |
+| R344 | NODE-LANE-16 | current |
+| R345 | NODE-LANE-17 | current |
+| R346 | NODE-LANE-18 | current |
+| R347 | NODE-LANE-19 | current |
+| R348 | NODE-STO-07 | current |
+| R349 | NODE-LANE-20 | current |
+| RS2-1 | CTR-ZTH-02 | current |
+| RS2-2 | CTR-ZTH-03 | current |
+| RS2-3 | CTR-ZTH-04 | current |
+| RS2-4 | CTR-ZTH-05 | current |
+| RS2-5 | CTR-ZTH-06 | current |
+| RS2-6 | CTR-ZTH-07 | current |
+| RS2-7 | CTR-ZTH-08 | current |
+| RS2-8 | CTR-ZTH-09 | current |
+| RS2-9 | CTR-UA-13 | current |
+| RS2-10 | CTR-ZTH-82 | superseded |
+| RS2-11 | CTR-ZTH-10 | current |
+| RS2-12 | CTR-ZTH-11 | current |
+| RS2-13 | CTR-ZTH-12 | current |
+| RS2-14 | CTR-ZTH-13 | current |
+| RS2-15 | CTR-ZTH-14 | current |
+| RS2-16 | CTR-ZTH-15 | current |
+| RS2-17 | CTR-ZTH-16 | current |
+| RS2-18 | CTR-UA-01 | current |
+| RS2-19 | CTR-ZTH-17 | current |
+| RS2-20 | CTR-ZTH-20 | current |
+| RS2-21 | CTR-ZTH-21 | current |
+| RS2-22 | CTR-ZTH-83 | superseded |
+| RS2-23 | CTR-ZTH-22 | current |
+| RS2-24 | CTR-ZTH-23 | current |
+| RS2-25 | CTR-ZTH-24 | current |
+| RS2-26 | CTR-ZTH-25 | current |
+| RS4-1 | CTR-ACC-01 | current |
+| RS4-2 | NET-ALL-04 | current |
+| RS4-3 | CTR-ACC-02 | current |
+| RS4-4 | CTR-ACC-03 | current |
+| RS4-5 | CTR-ACC-04 | current |
+| RS4-6 | INT-ODOO-01 | current |
+| RS4-7 | INT-ODOO-02 | current |
+| RS4-8 | CLI-SGN-02(vault), CLI-SGN-80(scrypt) | current/superseded (split) |
+| RS4-9 | CLI-SGN-03(keys), CLI-SGN-81(pop) | current/superseded (split) |
+| RS4-10 | CTR-ACC-05 | current |
+| RS4-11 | CLI-SGN-04 | current |
+| RS4-12 | INT-ODOO-03 | current |
+| RS4-13 | CLI-SGN-05 | current |
+| RS4-14 | CLI-SGN-21 | current |
+| RS4-15 | CLI-SGN-82 | superseded |
+| RS4-16 | INT-ODOO-04 | current |
+| RS5-1 | CTR-DEX-03 | current |
+| RS5-2 | NODE-DEX-80 | superseded |
+| RS5-3 | CTR-DEX-04 | current |
+| RS5-4 | CTR-DEX-05 | current |
+| RS5-5 | NODE-DEX-03 | current |
+| RS5-6 | CTR-DEX-06(relayer-fee), CTR-DEX-81(dex-fee) | current/superseded (split) |
+| RS5-7 | CTR-DEX-07 | current |
+| RS5-8 | NODE-DEX-04 | current |
+| RS5-9 | NODE-DEX-81 | superseded |
+| RS5-10 | CTR-DEX-02 | current |
+| RS5-11 | NODE-DEX-82 | superseded |
+| RS5-12 | NODE-DEX-05 | current |
+| RS5-13 | NODE-DEX-02 | current |
+| RS5-14 | NODE-DEX-06(node), CTR-DEX-08(contract) | current (split) |
+| RS5-15 | CTR-DEX-09(non-evm), NET-SOR-10(soroban) | current (split) |
+| RS5-16 | NODE-DEX-07 | current |
+| RS5-17 | NODE-DEX-08 | current |
+| RS5-18 | NODE-DEX-09 | current |
+| RS5-19 | CTR-DEX-10 | current |
+| RS5-20 | NODE-DEX-10(r105), INT-ODOO-12(odoo-book) | current (split) |
+| RS5-21 | CTR-DEX-11 | current |
+| RS7-1 | NET-SUI-03 | current |
+| RS7-2 | NET-SUI-04 | current |
+| RS7-3 | NET-SUI-05 | current |
+| RS7-4 | NET-SUI-06 | current |
+| RS7-5 | NET-SUI-07 | current |
+| RS7-6 | NET-SUI-08 | current |
+| RS7-7 | NET-SUI-10 | current |
+| RS7-8 | NET-SUI-09 | current |
+| RS7-9 | NET-SUI-10 | current |
+| RS7-10 | NET-SUI-11 | current |
+| RS7-11 | NET-SUI-12 | current |
+| RS7-12 | NET-SUI-13 | current |
+| RS7-13 | NET-SUI-14 | current |
+| RS7-14 | NET-SUI-15 | current |
+| RS11-1 | NET-APT-04 | current |
+| RS11-2 | NET-APT-05 | current |
+| RS11-3 | NET-APT-03 | current |
+| RS11-4 | NET-APT-06 | current |
+| RS11-5 | NET-APT-07 | current |
+| RS11-6 | NET-APT-08 | current |
+| RS11-7 | NET-APT-09 | current |
+| RS11-8 | NET-APT-02(table), NET-APT-81(oog) | current/superseded (split) |
+| RS11-9 | NET-APT-10 | current |
+| RS11-10 | NET-APT-11 | current |
+| RS11-11 | NET-APT-12 | current |
+| RS11-12 | NET-APT-13 | current |
+| RS11-13 | NET-APT-01(deploy), NET-APT-80(upgrade) | current/superseded (split) |
+| RS11-14 | NET-APT-14 | current |
+| RS11-15 | NET-APT-15 | current |
+| RS11-16 | NET-APT-16 | current |
+| RS11-17 | NET-APT-17 | current |
+| RS11-18 | NET-APT-18 | current |
+| RS11-19 | NET-APT-19 | current |
+| RS11-20 | NET-APT-20 | current |
+| RS11-21 | NET-APT-21 | current |
+| RS11-22 | NET-APT-22 | current |
+| RS11-23 | NET-APT-23 | current |
+| RS11-24 | NET-APT-24 | current |
+| RS11-25 | NET-APT-25 | current |
+| RS11-26 | NET-APT-26 | current |
+| RS12-1 | NET-SOL-03 | current |
+| RS12-2 | NET-SOL-04 | current |
+| RS12-3 | NET-SOL-05 | current |
+| RS12-4 | NET-SOL-06 | current |
+| RS12-4a | NET-SOL-27 | current |
+| RS12-5 | NET-SOL-07 | current |
+| RS12-6 | NET-SOL-08 | current |
+| RS12-7 | NET-SOL-09 | current |
+| RS12-8 | NET-SOL-10 | current |
+| RS12-9 | NET-SOL-11(formats), NET-SOL-81(text) | current/superseded (split) |
+| RS12-9a | NET-SOL-30 | current |
+| RS12-10 | NET-SOL-12 | current |
+| RS12-11 | NET-SOL-13 | current |
+| RS12-11a | NET-SOL-28 | current |
+| RS12-12 | NET-SOL-14 | current |
+| RS12-12a | NET-SOL-29 | current |
+| RS12-13 | NET-SOL-15 | current |
+| RS12-14 | NET-SOL-16 | current |
+| RS12-15 | NET-SOL-17 | current |
+| RS12-16 | NET-SOL-02(table), NET-SOL-80(cu) | current/superseded (split) |
+| RS12-16a | NET-SOL-31 | current |
+| RS12-17 | NET-SOL-18 | current |
+| RS12-18 | NET-SOL-19 | current |
+| RS12-18a | NET-SOL-32 | current |
+| RS12-19 | NET-SOL-20 | current |
+| RS12-20 | NET-SOL-21 | current |
+| RS12-21 | NET-SOL-22 | current |
+| RS12-22 | NET-SOL-23 | current |
+| RS12-23 | NET-SOL-24 | current |
+| RS12-24 | NET-SOL-25 | current |
+| RS12-25 | NET-SOL-26 | current |
+| RS-NV64-1 | CTR-ZTH-18 | current |
+| RS-NV64-2 | CTR-ZTH-19 | current |
+| S4F:Q1 | CLI-SGN-30 | current |
+| SCaaS:N1 | NODE-GEN-01 | current |
+| SCaaS:N2 | NODE-GEN-02 | current |
+| SCaaS:N3 | NODE-GEN-03 | current |
+| SCaaS:N4 | NODE-GEN-04 | current |
+| SCaaS:N5 | NODE-GEN-05 | current |
+| SCaaS:N6 | NODE-GEN-06 | current |
+| SCaaS:N7 | NODE-GEN-07 | current |
+| SCaaS:N8 | NODE-GEN-08 | current |
+| SCaaS:N9 | NODE-GEN-09 | current |
+| SCaaS:N10 | NODE-GEN-10 | current |
+| SCaaS:N11 | NODE-GEN-11 | current |
+| SCaaS:N12 | NODE-GEN-12 | current |
+| SCaaS:N13 | NODE-GEN-13 | current |
+| SCaaS:N14 | NODE-GEN-14 | current |
+| SCaaS:N15 | NODE-GEN-15 | current |
+| SCaaS:N16 | NODE-GEN-16 | current |
+| UA:Q1 | CTR-UA-13 | current |
+| UA:Q2 | CTR-UA-16 | current |
+| UA:Q3 | CTR-UA-08 | current |
+| UA:Q4 | CTR-UA-14 | current |
+| UA:Q5 | CTR-UA-14 | current |
+| UA:Q6 | CLI-SGN-30 | current |
+| UA:Q7 | CTR-UA-14 | current |
+| UA:Q8 | CTR-UA-25 | current |
+| UA:Q9 | CTR-UA-23 | current |
+| UA:Q10 | CTR-UA-07 | current |
+| UA:Q11 | CTR-UA-19 | current |
+| UA:Q12 | NET-ALL-20 | current |
+| UA:Q13 | NET-ALL-21 | current |
+| UA:Q14 | CTR-UA-21 | current |
+| UD:§1:custody | NODE-LANE-03 | current |
+| UD:§1:eip1776 | NET-ALL-02 | current |
+| UD:§1:first-chain | NET-EVM-80 | superseded |
+| UD:§1:independent-addon | INT-ODOO-07 | current |
+| UD:§1:legal | ARCH-POS-81 | superseded |
+| UD:§1:payment-mode | INT-ERP-27 | current |
+| UD:§1:private-chain | CTR-ZTH-27 | open |
+| UD:§1:smartcontracts-tree | CTR-GEN-03 | current |
+| UD:§1:use-cases | ARCH-POS-06 | current |
+| UD:§2 | CTR-ZTH-04 | current |
+| UD:§3 | CTR-ZTH-07 | current |
+| UD:§3.1 | CTR-MTX-13 | current |
+| UD:§3.2 | CTR-ZTH-07 | current |
+| UD:§3.3 | CTR-ZTH-28 | open |
+| UD:§3.4 | CTR-ZTH-07 | current |
+| UD:§3.4b | NODE-MESH-19 | current |
+| UD:§3.5 | CTR-MTX-82 | superseded |
+| UD:§4 | CTR-MTX-14 | current |
+| UD:§5 | CTR-MTX-83 | superseded |
+| UD:§6 | NODE-GSP-01 | current |
+| UD:§10 | CTR-ZTH-08 | current |
+| UD:§10:fee-layers | CTR-ZTH-05 | current |
+| UD:§11:fee-denominator | CTR-MTX-13 | current |
+| UD:§11:struct-variants | CTR-MTX-84 | superseded |
+| UD:§12 | CTR-ZTH-01 | current |
+| UD:§12.2 | CTR-ZTH-01 | current |
+| UD:§12.3 | CTR-ZTH-01 | current |
+| UD:§12.4 | CTR-ZTH-01 | current |
+| UD:§12.7.3 | CTR-ZTH-84 | superseded |
+| UD:§12.7.4 | CTR-ZTH-85 | superseded |
+| UD:§12.7.5 | CTR-ZTH-29 | current |
+| UD:§12.7.6 | CTR-ZTH-01 | current |
+| UD:§13.1 | NODE-OPS-15 | current |
+| UD:§13.2 | CTR-ZTH-30 | current |
+| UD:§13.3 | CTR-ZTH-86 | superseded |
+| UD:§14 | CTR-ZTH-87 | superseded |
+| UD:§14:consequences | CTR-ZTH-88 | superseded |
+| UD:§15:D1 | CTR-ZTH-89 | superseded |
+| UD:§15:D2 | CTR-ZTH-01 | current |
+| UD:§15:D7 | CLI-SGN-87 | superseded |
+| UD:§15:D12 | ARCH-POS-06 | current |
+| UD:§15:D14 | INT-ODOO-14 | current |
+| UD:§15:D17 | CTR-ZTH-90 | superseded |
+| UD:§16 | NET-EVM-03 | current |
+| UD:§16:gas-limit | NET-EVM-81 | superseded |
+| UD:§16:roadmap | NET-EVM-03 | current |
+| UD:§16:single-signer | NET-EVM-04 | current |
+| UD:§18 | NET-EVM-82 | superseded |
+| UD:§19 | CTR-ZTH-91 | superseded |
+| UD:§19:curve-param | CTR-ZTH-01 | current |
+| UD:§19:reopen-conditions | CTR-ZTH-93 | superseded |
+| UD:§19:unlocked | CTR-ZTH-92 | superseded |
+| UD:§20 | CTR-TOK-15 | current |
+| UD:§20.1 | CTR-ZTH-01 | current |
+| UD:§20.2 | CTR-GEN-02 | current |
+| UD:§20.3 | CTR-TOK-16 | current |
+| UD:§20.4 | CTR-TOK-17 | current |
+| UD:§20.5 | CTR-GEN-04 | current |
+| UD:§20.6 | CTR-TOK-18 | current |
+| UD:§21 | NODE-MESH-83 | superseded |
+| UD:§21.1 | NODE-MESH-84 | superseded |
+| UD:§21.2 | NODE-GEN-80 | superseded |
+| UD:§21.3 | NODE-MESH-11 | current |
+| UD:§21.4 | NODE-MESH-20 | current |
+| UD:§21.5 | NET-ALL-02 | current |
+| UD:§22 | NODE-MESH-85 | superseded |
+| UD:§22.1 | NODE-LANE-09 | current |
+| UD:§22.2 | NODE-GW-80 | superseded |
+| UD:§22.3 | NODE-GSP-07 | current |
+| UD:§22.4 | NODE-MESH-21 | current |
+| UD:§22.5 | NODE-MESH-04 | current |
+| UD:§22.6 | NODE-MESH-13 | current |
+| UD:§22.7 | NODE-MESH-86 | superseded |
+| UD:§22.8 | NODE-LANE-09 | current |
+| UD:§22.9 | NODE-JOB-81 | superseded |
+| UD:§22.10 | NODE-MESH-22 | open |
+| UD:§22.10.1 | NODE-MESH-23 | open |
+| UD:§22.10.2 | NODE-MESH-87 | superseded |
+| UD:§22.10.3 | NODE-GSP-16 | open |
+| UD:§22.10.4 | NODE-MESH-88 | superseded |
+| UD:§23 | NODE-GEN-17 | current |
+| UD:§23.1 | NODE-STO-04 | current |
+| UD:§23.2 | NODE-GEN-01 | current |
+| UD:§23.3 | NODE-GEN-17 | current |
+| UD:§23.4 | NODE-SEC-80 | superseded |
+| UD:§23.5 | NODE-LANE-03 | current |
+| UD:§23.6 | NODE-GEN-81 | superseded |
+| UD:§23.7 | NODE-STO-04 | current |
+| UD:§23.8 | NODE-GEN-82 | superseded |
+| UD:§23.10 | CLI-SGN-31 | current |
+| UD:§23.11 | CLI-SGN-32 | current |
+| UD:§24 | CTR-MTX-15 | current |
+| UD:§24.1 | CTR-MTX-15 | current |
+| UD:§24.2 | CTR-MTX-16 | current |
+| UD:§24.3 | CTR-MTX-16 | current |
+| UD:§25 | CTR-ZTH-01 | current |
+| UD:§25:fallback | CTR-ZTH-31 | open |
+| UD:§25:flipped | CTR-ZTH-01 | current |
+| UD:§25:ruling | CTR-ZTH-01 | current |
+| ZL:D1 | CTR-ZTH-18 | current |
+| ZL:D2 | CTR-ZTH-18 | current |
+| ZL:D3 | CTR-ZTH-26 | current |
+| ZL:D4 | CTR-ZTH-19 | current |
+| ZL:D5 | CTR-ZTH-19 | current |
+| ZL:D6 | CTR-ZTH-14 | current |
+| canon:D1 | CTR-ZTH-01 | current |
+| canon:D2 | CTR-ZTH-01 | current |
+| canon:D7 | CLI-SGN-32 | current |
+| canon:D12 | ARCH-POS-06 | current |
+| canon:D14 | INT-ODOO-14 | current |
+| canon:D17 | CTR-ZTH-01 | current |
+| net-aptos:L1 | NET-ALL-06 | current |
+| net-aptos:L2 | NET-ALL-07 | current |
+| net-aptos:L3 | NET-ALL-08 | current |
+| net-aptos:L4 | NET-ALL-09 | current |
+| net-aptos:L5 | NET-ALL-10 | current |
+| net-aptos:L6 | NET-ALL-11 | current |
+| net-aptos:L7 | NET-ALL-12 | current |
+| net-aptos:L8 | NET-ALL-13 | current |
+| net-aptos:L9 | NET-ALL-14 | current |
+| net-aptos:L10 | NET-ALL-15 | current |
+| net-solana:L1 | NET-ALL-06 | current |
+| net-solana:L2 | NET-ALL-07 | current |
+| net-solana:L3 | NET-ALL-08 | current |
+| net-solana:L4 | NET-ALL-09 | current |
+| net-solana:L5 | NET-ALL-10 | current |
+| net-solana:L6 | NET-ALL-11 | current |
+| net-solana:L7 | NET-ALL-12 | current |
+| net-solana:L8 | NET-ALL-13 | current |
+| net-solana:L9 | NET-ALL-14 | current |
+| net-solana:L10 | NET-ALL-15 | current |
+| net-solana:L11 | NET-ALL-16 | current |
+| net-solana:L12 | NET-SOL-04 | current |
+| owner:2026-10-06:families | ARCH-POS-02 | current |
+| owner:2026-10-06:market-neutral | ARCH-POS-04 | current |
+| owner:2026-10-06:naming | ARCH-POS-03 | current |
+| owner:2026-10-06:node-independent | ARCH-POS-05 | current |
+| owner:2026-10-06:precedence | ARCH-POS-01 | current |
+| owner:2026-10-07:chain-7622 | NET-EVM-02 | current |
+| owner:2026-10-07:immutable | CTR-GEN-02 | current |
+| owner:2026-10-07:pqz-metatx | CTR-PQZ-15 | current |
+| reorg:Q1 | NODE-JOB-19 | current |
+| reorg:Q2 | ARCH-POS-07 | current |
+| reorg:Q3 | NET-TON-02 | current |
+| reorg:Q4 | NET-TON-03 | current |
+| reorg:Q5 | CTR-ZTH-32(curve), CTR-ZTH-33(dev-chain) | open (split) |
+| reorg:Q6 | NODE-MESH-24 | open |
+| reorg:Q7 | NODE-IDX-07 | open |
+| reorg:Q8 | NODE-OPS-16 | current |
+| reorg:Q9 | ARCH-POS-08 | current |
+| reorg:Q10 | ARCH-POS-07 | current |
+| reorg:Q11 | ARCH-POS-09 | current |
+| reorg:Q12 | NODE-GEN-18 | current |
+| reorg:Q13 | ARCH-POS-07 | current |
+| reorg:Q14 | ARCH-POS-07 | current |
+| req:blockchain.md:celo-fee-currency | NET-EVM-01 | open |
+| req:blockchain.md:hcs-anchoring | NET-HED-01 | open |
+| req:blockchain.md:hedera-schedule | NET-HED-02 | open |
+| req:blockchain.md:ibc | NET-COS-01 | open |
+| req:blockchain.md:session-keys | CLI-SGN-01 | open |
+| req:blockchain.md:usd-velocity | NODE-LANE-01 | open |
+<!-- END alias-index -->

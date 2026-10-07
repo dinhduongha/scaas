@@ -122,28 +122,28 @@ self-contained; the old ids live only in the `old:` field.
 ### CTR-MTX-13 — Public fee modes NONE, PERCENT, FIXED
 - old: UD:§3.1, UD:§11:fee-denominator · status: current · owner: yes · date: 2026-08-30 · normative: contracts/metatx.md#CTR-MTX-13 · superseded-by: —
 
-**Why.** Three fee modes cover the business cases (none, percentage, fixed) with a 1 % cap on percentages.
+**Why.** Three fee modes cover the business cases (none, percentage, fixed) with a 1 % cap on percentages: the denominator is 1e6 ppm, so the cap is 10000 ppm.
 **Cost if wrong.** More modes multiply audit cases; an uncapped percentage would let a signer be overcharged by a misreading.
 **Source.** `research/_USER-DECISIONS.md:107`, `research/_USER-DECISIONS.md:450`
 
 ### CTR-MTX-14 — EIP-712 typed data, not personal_sign
 - old: UD:§4 · status: current · owner: yes · date: 2026-08-30 · normative: contracts/metatx.md#CTR-MTX-14 · superseded-by: —
 
-**Why.** EIP-712 typed data is what wallets display; `personal_sign` of a hash shows the user nothing they can check.
+**Why.** EIP-712 typed data is what wallets display; `personal_sign` of a hash shows the user nothing they can check. The first committed code hashed with `toEthSignedMessageHash()` (`personal_sign`) while the design sketch signed with `wallet._signTypedData(domain, types, data)` (EIP-712); the design was right and the code was changed.
 **Cost if wrong.** Users would sign blind hashes, the precondition for drain attacks.
 **Source.** `research/_USER-DECISIONS.md:206`
 
 ### CTR-MTX-15 — No forwarder; drop feeToken, innerGasLimit; keep mode
 - old: UD:§24, UD:§24.1 · status: current · owner: yes · date: 2026-08-31 · normative: contracts/metatx.md#CTR-MTX-15 · superseded-by: —
 
-**Why.** Meta-tx logic lives in the token, so there is no trusted forwarder; `feeToken` and `innerGasLimit` were dropped (another token is outside this contract; the gas limit only matters to a forwarder that swallows failures) and `mode` was kept. Rejected: the early `IEIP1776` sketch (`tokenContract`, `batchNonce`, `expiry`, `meta_nonce(from, batchId)`) — corrected to `MetaTxLib.MetaTransaction` with `metaNonce`, `validUntil` and the split mode nibble.
+**Why.** Meta-tx logic lives in the token, so there is no trusted forwarder; `feeToken` and `innerGasLimit` were dropped (another token is outside this contract; the gas limit only matters to a forwarder that swallows failures) and `mode` was kept, split into two nibbles: the low nibble holds flags (`RESTRICT_RELAYER` 0x01, `RESTRICT_FEE_RECIPIENT` 0x02), the high nibble an enum of the fee mode (`NONE` 0x00, `PERCENT` 0x10, `FIXED` 0x20). The halves differ in kind: `if (mode & MODE_FEE_PERCENT)` is a bug, because `MODE_FEE_FIXED = 0x20` lacks bit 0x10 but a future 0x30 would have it; validation checks unknown flag bits and enum values above 2. Rejected: the early `IEIP1776` sketch (`tokenContract`, `batchNonce`, `expiry`, `meta_nonce(from, batchId)`) — corrected to `MetaTxLib.MetaTransaction` with `metaNonce`, `validUntil` and the split mode nibble.
 **Cost if wrong.** A forwarder becomes a shared trust root for every token; keeping the sketch shape would add fields no contract can enforce.
 **Source.** `research/_USER-DECISIONS.md:2504`, `research/_USER-DECISIONS.md:2534`
 
 ### CTR-MTX-16 — No generic forwarder; wrap legacy tokens
 - old: UD:§24.2, UD:§24.3 · status: current · owner: yes · date: 2026-08-31 · normative: contracts/metatx.md#CTR-MTX-16 · superseded-by: —
 
-**Why.** No generic forwarder means each token owns its replay protection; legacy tokens are wrapped instead of trusted.
+**Why.** No generic forwarder means each token owns its replay protection; legacy tokens are wrapped instead of trusted. A generic forwarder cannot know why the inner call will fail, so it must either take the fee and swallow the error (the user pays for nothing) or bubble the revert (the relayer pays gas for nothing); a token that executes its own meta-transaction knows its failure cases before it charges.
 **Cost if wrong.** A generic forwarder would let one bug affect every legacy token at once.
 **Source.** `research/_USER-DECISIONS.md:2570`, `research/_USER-DECISIONS.md:2586`
 
@@ -282,7 +282,7 @@ self-contained; the old ids live only in the `old:` field.
 ### CTR-TOK-16 — getWrapper keyed by creator and underlying
 - old: UD:§20.3 · status: current · owner: yes · date: 2026-08-30 · normative: contracts/token-wrappers.md#CTR-TOK-16 · superseded-by: —
 
-**Why.** Wrappers are looked up by `(creator, underlying)`, so two creators never collide and no global "official" wrapper exists.
+**Why.** Wrappers are looked up by `(creator, underlying)`, so two creators never collide and no global "official" wrapper exists. Three lookups answer three questions: getWrapper(creator, underlying) is A's xDAI wrapper; getWrapperCount / getWrapperAt list all of A's xDAI wrappers (one per curve or fee schedule); deployCountFor / deployedFor list every zDAI wrapper of every creator so the market can compare A with B. There is no uniqueness on `underlying` alone and no name or symbol review: `zDAI-A` and `zDAI-B` coexist normally.
 **Cost if wrong.** A global wrapper slot invites squatting.
 **Source.** `research/_USER-DECISIONS.md:1210`
 
@@ -643,7 +643,7 @@ self-contained; the old ids live only in the `old:` field.
 ### CTR-ZTH-01 — Full classical Zether, unaudited, dev-chain gated
 - old: R34(scope), UD:§12, UD:§12.2, UD:§12.3, UD:§12.4, UD:§12.7.6, UD:§15:D2, UD:§19:curve-param, UD:§20.1, UD:§25, UD:§25:flipped, UD:§25:ruling, canon:D1, canon:D2, canon:D17 · status: current · owner: yes · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-01 · superseded-by: —
 
-**Why.** The owner wants full classical Zether now (identity visible, amounts hidden), built, unaudited and gated to dev chains, with bn254 and BLS12-381 verifiers.
+**Why.** The owner wants full classical Zether now (identity visible, amounts hidden), built, unaudited and gated to dev chains, with bn254 and BLS12-381 verifiers. The curve is a property of each token (chosen by its verifier address), not a system setting: bn254 uses the Byzantium (2017) precompiles 0x06/0x07/0x08 with 64-byte G1 points; BLS12-381 needs the Prague precompiles 0x0b to 0x10 and 128-byte G1 points (measured with `eth_call` to 0x0b on Gnosis). rollOver is `PUBLIC` by default and `OWNER_ONLY` by opt-in, per `(account, token)`: owner signing protects only if it covers every path that advances the account sequence, so per account `accSeq[a]` advances without the owner's consent exactly when `mode[a] == PUBLIC`. The `PUBLIC` branch is safe because rollOver is a no-op when `pendingSeq[a] == lastRolledPendingSeq[a]`, so a griefer must fund the victim before each attempt.
 **Cost if wrong.** Unaudited cryptography on a public chain could mint; the gate (CTR-ZTH-02) is what prevents that.
 **Source.** `history/specs/2026-10-03-blockchain-round3-design.md:546`, `research/_USER-DECISIONS.md:463`, `research/_USER-DECISIONS.md:483`, `research/_USER-DECISIONS.md:508`, `research/_USER-DECISIONS.md:537`, `research/_USER-DECISIONS.md:691`, `research/_USER-DECISIONS.md:860`, `research/_USER-DECISIONS.md:1060`, `research/_USER-DECISIONS.md:1093`, `research/_USER-DECISIONS.md:2630`, `research/_USER-DECISIONS.md:2638`, `research/_USER-DECISIONS.md:2653`, `research/_USER-DECISIONS.md:859`, `research/_USER-DECISIONS.md:864`
 
@@ -664,14 +664,14 @@ self-contained; the old ids live only in the `old:` field.
 ### CTR-ZTH-04 — shieldScale is raw units per shielded unit
 - old: RS2-3, UD:§2 · status: current · owner: no · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-04 · superseded-by: —
 
-**Why.** `shieldScale` is raw underlying units per shielded unit, a single integer that keeps the 2^54 bound meaningful for any decimals.
+**Why.** `shieldScale` is raw underlying units per shielded unit, a single integer that keeps the 2^54 bound meaningful for any decimals. The bound exists because the amount is exponential ElGamal: the key only strips the mask (`C / D^x = g^b`), and getting `b` back from `g^b` is a discrete log that BSGS solves in `O(sqrt(b))` steps; the contract only ever returns ciphertext and never holds `x`. The bound bites only in cold recovery: in daily use the client knows the previous balance and solves only the difference. 2^44 is the last BSGS table size that fits a phone; `2^48` is blocked by memory, not time (Pollard kangaroo removes the memory wall at 2 to 4 times the time). Raising `shieldScale` is cheaper than buying bits and costs only granularity.
 **Cost if wrong.** Scaling by decimals inside the circuit would add rounding paths.
 **Source.** `history/specs/2026-10-03-zether-design.md:588`, `research/_USER-DECISIONS.md:49`
 
 ### CTR-ZTH-05 — Inner fee to beneficiary pending; outer fee public
 - old: RS2-4, UD:§10:fee-layers · status: current · owner: no · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-05 · superseded-by: —
 
-**Why.** Two fee layers: an inner confidential fee to a beneficiary's pending balance and an outer public fee for the relayer.
+**Why.** Two fee layers: an inner confidential fee to a beneficiary's pending balance and an outer public fee for the relayer. A holder whose money is all confidential has no public token to pay an outer fee; the inner fee (`C_fee`, debited from the encrypted balance) is the only way such an account can pay a relayer. Fee first, amount second: the proof shows `fee >= 0`, `v >= 0`, `b - fee >= 0` and `(b - fee) - v >= 0` together.
 **Cost if wrong.** One fee layer would either leak the amount or leave relayers unpaid.
 **Source.** `history/specs/2026-10-03-zether-design.md:590`, `research/_USER-DECISIONS.md:351`
 
@@ -692,7 +692,7 @@ self-contained; the old ids live only in the `old:` field.
 ### CTR-ZTH-08 — Separate ZetherMetaTx mixin; v1 sources untouched
 - old: RS2-7, UD:§10 · status: current · owner: no · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-08 · superseded-by: —
 
-**Why.** A separate `ZetherMetaTx` mixin reuses `MetaTxLib` read-only, so v1 token sources stay untouched. Rejected: the early `IZetherToken` interface sketch (`schnorrAddress`, `zetherNonce`, `EncryptedBalance` structs, `transferConfidential` with a `metaTx.amount = 0` wrapper) — replaced by the built `IZetherToken` and the envelope ops.
+**Why.** A separate `ZetherMetaTx` mixin reuses `MetaTxLib` read-only, so v1 token sources stay untouched. Zether is a child of the meta-transaction layer, so every confidential token is gasless too; an early code draft declared `ISecureERC20 is IERC20`, which would have left confidential tokens without meta-transactions. Rejected: the early `IZetherToken` interface sketch (`schnorrAddress`, `zetherNonce`, `EncryptedBalance` structs, `transferConfidential` with a `metaTx.amount = 0` wrapper) — replaced by the built `IZetherToken` and the envelope ops.
 **Cost if wrong.** Editing the v1 sources would invalidate their tests and audits.
 **Source.** `history/specs/2026-10-03-zether-design.md:595`, `research/_USER-DECISIONS.md:331`
 
@@ -839,21 +839,21 @@ self-contained; the old ids live only in the `old:` field.
 ### CTR-ZTH-29 — Independent open-source disclosure verifier CLI
 - old: UD:§12.7.5 · status: current · owner: yes · date: 2026-08-30 · normative: contracts/zether.md#CTR-ZTH-29 · superseded-by: —
 
-**Why.** An independent open-source disclosure verifier lets any counterparty check a disclosure without trusting SCaaS.
+**Why.** An independent open-source disclosure verifier lets any counterparty check a disclosure without trusting SCaaS. It reads from an archive node or a signed chain export, takes `(entryRef, v, s)` and prints PASS or FAIL with every intermediate value; it is deterministic, so two examiners get the same result.
 **Cost if wrong.** Disclosure checked only by SCaaS tools is trust in SCaaS.
 **Source.** `research/_USER-DECISIONS.md:676`
 
 ### CTR-ZTH-30 — Derive s from seed via PRF
 - old: UD:§13.2 · status: current · owner: yes · date: 2026-08-30 · normative: contracts/zether.md#CTR-ZTH-30 · superseded-by: —
 
-**Why.** The sender randomness `s` is derived from the seed by a PRF, so nothing per transfer needs storing.
+**Why.** The sender randomness `s` is derived from the seed by a PRF, so nothing per transfer needs storing. The research sketch was s = HKDF-SHA256(seed_zether, info = "ZTX/s/v1" ‖ chainId ‖ tokenAddress ‖ fromUA ‖ sendCounter) with the `sendCounter` read from the chain, so a wallet restored from its seed alone can still prove every past transfer.
 **Cost if wrong.** Stored randomness is one more secret to lose or leak.
 **Source.** `research/_USER-DECISIONS.md:727`
 
 ### CTR-ZTH-31 — Fallback: accept stale accSeq for credits only
 - old: UD:§25:fallback · status: open · owner: yes · date: 2026-09-03 · normative: contracts/zether.md#CTR-ZTH-31 · superseded-by: —
 
-**Why.** Open owner contingency: if rollover griefing spreads, accept a stale `accSeq` for credits only.
+**Why.** Open owner contingency: if rollover griefing spreads, accept a stale `accSeq` for credits only (a credit only raises the balance, so the range statement does not weaken); that is a protocol change and needs the cryptography review. The immediate escape hatch for one account is `setRollOverMode(OWNER_ONLY)`, one transaction; epochs are not the fallback.
 **Cost if wrong.** Without a fallback a griefer could keep a busy account from spending.
 **Source.** `research/_USER-DECISIONS.md:2688`
 
