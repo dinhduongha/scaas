@@ -650,7 +650,7 @@ def load_facts(area=None):
     out = []
     for p in sorted(d('_work', 'facts').glob('*.tsv')):
         with p.open(encoding='utf-8') as fh:
-            out += [r for r in csv.DictReader(fh, delimiter='\t', quoting=csv.QUOTE_NONE)]
+            out += [r for r in csv.DictReader(fh, delimiter='\t', quoting=csv.QUOTE_NONE, escapechar='\\')]
     if area:
         out = [f for f in out if any(t.startswith(x) for t in targets(f['disposition']) for x in AREAS[area][0])]
     return out
@@ -685,7 +685,7 @@ def cmd_facts_extract():
         old = {}
         if out.exists():
             with out.open(encoding='utf-8') as fh:
-                old = {r['fact_id']: r for r in csv.DictReader(fh, delimiter='\t', quoting=csv.QUOTE_NONE)}
+                old = {r['fact_id']: r for r in csv.DictReader(fh, delimiter='\t', quoting=csv.QUOTE_NONE, escapechar='\\')}
         rows_map = smap.get(p.name, [])
         rows = []
         for f in split_facts(p, measure, every_paragraph=p.name == 'blockchain.md'):
