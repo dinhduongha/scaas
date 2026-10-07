@@ -48,7 +48,7 @@ The difference between SCaaS and IaaS or BaaS is **who signs a valuable write**.
 operator's server; in SCaaS the service is the contract, and a node only carries signed writes to it and reads facts
 back.
 
-| Criterion | IaaS (e.g. a cloud VM) — the app issues JWTs, the server signs | BaaS (e.g. a hosted Postgres backend) — the backend's auth issues JWTs, the server writes; row-level security reads `auth.uid()` | SCaaS — the client signs every valuable create/update |
+| Criterion | IaaS: cloud VM (e.g. EC2, Compute Engine) — the app issues JWTs, the server signs | BaaS: hosted backend (e.g. Supabase, Firebase) — the backend's auth issues JWTs, the server writes; row-level security reads `auth.uid()` | SCaaS — the client signs every valuable create/update |
 |---|---|---|---|
 | Who signs a write | The application server; the client holds a server-signed JWT and the server writes on its behalf | The backend's auth service signs the JWT; the database executes; row-level security checks the `uid` | **The subject**: its device signs each operation with a passkey (WebAuthn P-256) or a wallet key. The relayer pays gas and holds no subject key |
 | Trust root | The operator, the cloud provider (IAM, hypervisor), anyone holding the JWT signing key | The operator plus the project owner holding the JWT secret or the `service_role` key | The subject's authenticator or secure element, chain consensus, and contract code that is immutable at deploy on every family (no upgrade key in the trust root) |

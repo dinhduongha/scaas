@@ -59,16 +59,78 @@ Three supporting services complete the picture:
 - **Notifications** — contracts emit *events*; anyone can subscribe.
 - **API endpoints** — every chain exposes RPC to submit, read and **simulate** a call before paying for it.
 
-**Compared with a cloud platform:**
+### How a smart chain compares with IaaS and BaaS
 
-| Cloud concept | Smart-chain equivalent | The difference that matters |
-|---|---|---|
-| Function / serverless handler | Contract function | Code is public and runs the same for everyone |
-| Database | Contract storage | Writable only through the contract's own code; storage costs fees (or rent) |
-| IAM, sessions, API keys | The caller's signature | Issued by the **user's device**, not by the provider; nobody can forge it |
-| Billing | Native transaction fee (gas) | Paid per call, inside the call, by whoever submits it |
-| Commit / durability | Finality | Probabilistic or BFT, per chain; SCaaS waits for it before reporting a result |
-| Webhooks | Events and logs | Public, ordered, verifiable |
+If a smart chain is infrastructure, it should be judged next to the infrastructure people already use: a **cloud VM**
+(IaaS, e.g. EC2, Compute Engine) and a **hosted backend** (BaaS, e.g. Supabase, Firebase). The chain loses on some
+counts and wins on others; the tables below say which.
+
+**Code and data**
+
+| | Cloud VM (e.g. EC2, Compute Engine) | Hosted backend (e.g. Supabase, Firebase) | Smart chain + SCaaS |
+|---|---|---|---|
+| Compute | Your code on machines you rent | Managed database, auth and functions | Contract code in the chain's VM, run identically by every validator |
+| Storage and its price | Disks and databases, per GB-month | Rows and files, per plan or usage | Contract state, paid in gas per write (some chains add rent) |
+| Latency of a write | Milliseconds | Milliseconds | Seconds to minutes, until finality |
+| Throughput | Grows with what you rent | Grows with the plan | Bounded by the chain's block space, shared with everyone |
+| Reads | Your server answers | API with row-level rules | Free: RPC, node feeds or an indexer; no signature needed |
+| Changing code | Redeploy at will | Migrate at will | Immutable at deploy; new behaviour is a new version ([section 4](#4-upgradeable-or-not-is-decided-at-deploy)) |
+
+For computing and storing data, the chain is slower, smaller and dearer. Application data and logic stay where they are.
+
+**Money and billing**
+
+| | Cloud VM | Hosted backend | Smart chain + SCaaS |
+|---|---|---|---|
+| How the service is paid | A monthly invoice | A monthly plan or usage invoice | A native fee inside every transaction, settled at once |
+| Who pays | The application owner | The application owner | Whoever submits: a relayer, the subject or the payee; it can be passed on in the token ([section 7](#7-who-pays-the-fee-every-model)) |
+| Moving value between parties | Needs a bank or a payment processor | Same | Built into the protocol: a payment is an ordinary call |
+
+Only the chain has payment inside the infrastructure itself.
+
+**Operations and reliability**
+
+| | Cloud VM | Hosted backend | Smart chain + SCaaS |
+|---|---|---|---|
+| Who operates it | One provider, plus you | One provider | Many independent validators; anyone can run a SCaaS node and relayer |
+| Availability | Provider SLA and your redundancy | Provider SLA | The chain's liveness; a relayer outage only delays, and the subject can switch relayer or submit itself |
+| When a write is safe | When your database commits; backups | Same | After finality; before it a reorg can undo the write, so SCaaS reports only final results |
+| Lock-in | Provider APIs and migration effort | Provider-specific auth, rules and APIs | Contracts and data are public and any node can serve them; the lock-in is to the chain itself |
+
+No single operator controls the service, but the chain is the one dependency that cannot be swapped without a
+migration.
+
+**Who holds the power** — the core difference
+
+| | Cloud VM | Hosted backend | Smart chain + SCaaS |
+|---|---|---|---|
+| Who signs a write | The application server, for the user, with a token it issued | The backend's auth service issues the token; the database writes | **The subject**, on its own device (passkey or wallet); the relayer holds no user key |
+| Trust root | Operator, cloud IAM, whoever holds the token-signing key | Operator, whoever holds the JWT secret or the admin (service-role) key | The user's authenticator, chain consensus, immutable contract code |
+| Who can forge a user's write | Anyone with the signing key, database access or a compromised server | Anyone with the JWT secret or the admin key | **Nobody** without the user's private key; relayers can only refuse or delay |
+| Proof and audit | Logs the operator writes and can edit | Same | Each operation carries a signature anyone can verify, forever |
+| Where permissions are enforced | Application code (an endpoint is easy to miss) | Row-level rules (the admin key bypasses them) | Contract code on every call: signature, nonce, expiry, limits |
+| Revoking a key | Easy: short TTLs, deny lists, rotation | Easy: rotate the secret, revoke refresh tokens | Harder: on-chain rotation, guardians, backup keys (per family) |
+| Typical breach | Leaked signing key: every user impersonated | Leaked JWT secret or admin key: every user, rules bypassed | Leaked key of one user: that user only, within its mandate limits |
+
+This is where the chain wins, and why SCaaS exists. The full comparison, with the bounded admin powers and how the
+ERP trusts finalized events, is in [docs/architecture.md](docs/architecture.md#authority-model).
+
+**Privacy and data**
+
+| | Cloud VM | Hosted backend | Smart chain + SCaaS |
+|---|---|---|---|
+| Who can see the data | The operator and whom it grants | Same | Everyone on a public chain; Zether hides amounts and balances, identities stay visible |
+| Deleting data | Delete rows, files and backups | Delete rows | Impossible: chain history is permanent |
+| A private setup | A private network | Self-hosting | A private or permissioned chain with admitted peers only |
+
+Treat whatever goes on a chain as published forever: personal data never goes on chain, only commitments, references
+and amounts ([docs/integration.md](docs/integration.md#data-protection)).
+
+**Which to use for what.** Use the chain for **write authority and value**: every valuable create or update — a
+payment, a trade, a grant of rights, a key registration — carries the subject's signature, and no server ever holds
+a key to sign for a subject. Keep reads, reports and business workflows on ordinary infrastructure with ordinary
+sessions. The chain does not replace the application's database; it replaces the server's power to act for the
+user.
 
 <a id="what-a-chain-is-not"></a>**What a chain is not.** Building on the four services means being honest about
 their limits:
