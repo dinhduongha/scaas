@@ -1,5 +1,9 @@
 # Plan: SCaaS docs reorganization (and scaas-node module layout)
 
+> **Owner 2026-10-07:** keep `docs/SCaaS.md` as the name of the system document. It replaces the planned
+> `architecture.md` (every mention below now says `SCaaS.md`), is rewritten short (~700 lines) and links out; the
+> current 2 695-line version is frozen as `history/SCaaS-2026-10-07.md` and goes through the same completeness check.
+
 **Date:** 2026-10-07 · **Status:** PLAN, not executed · **Owner-approved target structure:** see §1.
 **Scope:** `scaas/docs/**` (rewrite), `scaas/scripts/docs_check.py` (new), references outside docs (§5),
 `scaas-node` module/crate layout (§7, plan only). Nothing below has been done yet. Read-only survey basis:
@@ -83,7 +87,7 @@ Total current-state text ≈ 15 500 lines + `decisions.md` ≈ 3 000, against 24
 ```
 docs/
   README.md                      map, reading order, precedence, how ids/aliases/history work            ~100
-  architecture.md                what SCaaS is, trust model, positioning, profiles, glossary; links only  ~450   ARCH-POS
+  SCaaS.md                       system document (owner 2026-10-07: keep the name): what SCaaS is, positioning, trust model, admin exceptions, component map, system-wide principles, status table BUILT/SPECIFIED/PLANNED, roadmap summary, glossary; links out, no duplicated component normative text  ~700   ARCH-POS
   decisions.md                   ruling register + generated alias index (old id → new id)              ~3000
   integration.md                 generic ERP/back-office guide; Odoo as one fenced example              ~950    INT-ERP, INT-ODOO
   node/
@@ -130,13 +134,16 @@ docs/
     specs/                       the 26 dated specs, unchanged (git mv)
     SCaaS-2026-10-07.md          old system spec, unchanged
     integration-2026-10-07.md    old integration guide, unchanged
-    research/                    blockchain-research/ unchanged (incl. round3-wallet-signing-formats.md)
+    specs/round3-wallet-signing-formats.md   the WSF note (normative content mined into networks/*), unchanged
     plans/                       superpowers/plans/*.md unchanged (this plan moves here when done)
     HANDOFF-blockchain.md        unchanged
     blockchain.md                the original requirements note, unchanged (git mv from docs/blockchain.md)
     blockchain-trace.md          generated: every requirement item of blockchain.md → new doc anchor and
                                  status (BUILT / SPECIFIED / PLANNED / open / rejected / out of scope), §2.5
     ruling-ids.txt               frozen old-id inventory (generated once, §3.4)
+  research/                      blockchain-research/ moved here unchanged (except the WSF note): background and
+                                 rationale only; README.md (new, ~30 lines) carries the non-normative banner and the
+                                 file list; every file gets a one-line banner header inserted at the top (the only edit)
   reviews/specs/                 unchanged, git-ignored
   superpowers/                   stays for future design drafts (process §3.5); empty after the move
 ```
@@ -666,8 +673,8 @@ Aptos §3.2 balances, §3.3 keys/guardian, §4.2 `signMessage` envelope → netw
 
 | Item | Decision |
 |---|---|
-| `blockchain-research/` (25 files, 2.9 MB) | `git mv` to `history/research/` unchanged. Never cited as normative; decisions.md "source" lines may link it. Open owner question Q9 on `13-legal-vn.md` and `_GROK-CODE.md` (§4). |
-| `blockchain-research/round3-wallet-signing-formats.md` | moves with the folder; its rulings are mapped above |
+| `blockchain-research/` (25 files, 2.9 MB) | `git mv` to **`docs/research/`** (out of `specs/`; not history, because it stays a live background library). New `research/README.md` + a one-line banner atop each file: *"Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md)."* Current docs never link it except decisions.md "Source" lines (check C10). Mining rules per file in §2.6. |
+| `blockchain-research/round3-wallet-signing-formats.md` | **normative** (carries CR-WSF-1/2): content → networks/* per the WSF table above; the file → `history/specs/round3-wallet-signing-formats.md` |
 | `superpowers/plans/*.md` (19) | `git mv` to `history/plans/`; RS4-* rulings get new ids like any other; this plan moves there after execution |
 | `superpowers/HANDOFF-blockchain.md` | `git mv` to `history/`; still-open owner/operator gates O1–O11 and Z1–Z6 become items in `scaas/TODO.md` §2 and, where they are standing production rules, `node/runbooks#production-gates` / `contracts/README#unaudited` |
 | `docs/reviews/specs/` | stays, git-ignored; `history/README` says each history spec carries its disposition tables and that raw review files are local-only (other clones do not have them) |
@@ -686,7 +693,7 @@ docs carry the substance in self-contained English; "Nhóm 21", "CHƯƠNG 10", "
 appear outside history (C9 bans them: `\bNhóm \d`, `CHƯƠNG`, `\b(6\.21|10\.[1-5](\.\d)?|14\.2\.8)\b` next to §).
 
 Where research already corrected the note, the correction is the current text and the note's claim gets a
-`rejected:` disposition citing it (`history/research/_MANIFESTS.md`, 16 blocks "Where blockchain.md is wrong /
+`rejected:` disposition citing it (`research/_MANIFESTS.md`, 16 blocks "Where blockchain.md is wrong /
 under-specified", one per research note 01–16).
 
 | blockchain.md part | Items (summary) | Target / disposition |
@@ -723,6 +730,22 @@ Phase 0 extends the inventory: owner requirements from blockchain.md that the sp
 agent session keys, USD velocity limits, HCS anchoring, IBC) get `open` entries in decisions.md (aliases
 `req:blockchain.md:<item>`), so nothing silently disappears.
 
+### 2.6 Research (`docs/research/`) — what is mined, what stays
+
+| File | Treatment |
+|---|---|
+| `_USER-DECISIONS.md` (2 702 lines, §0–§25, the owner's decisions + findings from code) | **Mined fully into decisions.md.** Every decision unit (each `##`/`###` that states a choice: e.g. §3 fee modes, §3.2 Zether fee must be FIXED, §4 EIP-712 not `personal_sign`, §10 Zether is a child of MetaTransaction, §12 `transferWithProof` disclosure, §13.1–13.3 owner corrections, §14/§17/§19 curve decision D1 history, §15 D1/D2/D7/D12/D14/D17, §16 first chain is private, §20 open factory/no upgrade/one wrapper per creator, §21 two relayer modes, §22 intent lifecycle, §23 one Rust binary, §24 no forwarder/keep `mode`, §25 `rollOver` permissionless default) becomes an entry with `owner: yes`, its date and `Source: research/_USER-DECISIONS.md §n`; aliases `UD:§n` (and `canon:Dn` for the D-ids). Where a later ruling replaced it (§5 "wildcard, no mode bitmask" → §24 keep `mode`; §23 `[odoo]` control plane → NI R87; §18 genesis of chain 9000 → 7622), the entry is `superseded` with `superseded-by`; current ones are cited by the component doc that applies them. Pure findings ("§7 findings from code", "§8 Grok conversation", "§9 environment") get disposition `history:research-finding` unless a current rule depends on them. The file itself stays in `research/` unchanged. |
+| `00-CANON.md`, notes `01`–`12`, `14`–`16` | stay in `research/`. Rationale is quoted (self-contained, R-B) into decisions.md "Why" where a ruling rests on it. **Measured** numbers (gas from forge/anvil runs, precompile I/O sizes and costs, latency/timing runs, preflight results such as `_USER-DECISIONS` §14 EIP-2537 and §17 MSM spike) go into the doc that owns the thing measured — contracts/zether#gas, contracts/pq-zether#gas, contracts/universal-account#gas, networks/evm#precompiles, networks/<family>#costs — with method, tool version and date; estimates stay in research (or are labelled "estimate" if a current doc needs them). |
+| `13-legal-vn.md` | market-specific law: **never** enters the new docs (market-neutral rule; the generic GDPR-class controls are in integration#data-protection). Stays in `research/` only; owner question Q9. |
+| `_CRITIQUES.md`, `_MANIFESTS.md`, `_REVIEW-01-UPGRADE.md`, `AUDIT_SPEC_REPORT_20260831_021000.md`, `_GROK-CODE.md`, `SYNTHESIS_ENTERPRISE_BLOCKCHAIN_V3.md`, `_EXPLAIN-07-CUSTODY.md` | stay in `research/` unchanged; cited only as decisions.md sources (`_MANIFESTS.md` also feeds the blockchain.md `rejected:` dispositions, §2.5). |
+| `round3-wallet-signing-formats.md` | normative → networks/* (§2.3 WSF table); file → `history/specs/`. |
+
+Fact ledger (§6.3) sources from research: `_USER-DECISIONS.md` (every fact, like a spec) and, in all other research
+files, only facts of kind **measurement** (a number with a unit next to "measured", "đo", "đã đo", "gas report",
+"forge", "anvil", "benchmark", or inside a results table). Each measurement needs `target:` or
+`history:estimate` / `history:superseded-measurement` (a newer measurement is in a current doc).
+
+
 ---
 
 ## 3. Ruling ids and `decisions.md`
@@ -733,7 +756,7 @@ agent session keys, USD velocity limits, HCS anchoring, IBC) get `open` entries 
 
 | Area | Topics (file) |
 |---|---|
-| ARCH | POS (architecture.md) |
+| ARCH | POS (SCaaS.md) |
 | NODE | GEN (node/README), STO (store), JOB (job-api), LANE (submit-lanes), IDX (indexer-feeds), GW (gateway), ADM (admin-auth), SPN (sponsorship), DEX (dex-venue), MESH (mesh), GSP (gossip), OPS (ops), RUN (runbooks), SEC (threat-model) |
 | CTR | GEN (contracts/README), MTX, TOK, ACC, DEX, TND, AS, ZTH, PQZ, UA |
 | NET | ALL (networks/README), EVM, HED, COS, SOR, SUI, APT, SOL, TON |
@@ -833,6 +856,7 @@ Numbering:
 | NI:I1–I8 | NODE-JOB/NODE-STO, status `open` | Q2 |
 | UA:Q1–Q14, APP:Q1–Q3, S4F:Q1 | the area of the rule they confirm | most are aliases of an R-id already allocated |
 | owner:* decisions | ARCH-POS | `chain-7622` → NET-EVM; `immutable` → CTR-GEN |
+| UD:§n, canon:Dn (`_USER-DECISIONS` units) | the area of the rule (fees → CTR-MTX; Zether → CTR-ZTH; relayer/mesh → NODE-MESH/NODE-GSP; one binary → NODE-GEN; factory → CTR-TOK; first chain private → NET-EVM) | most are superseded or aliases of a later R-id |
 
 ### 3.3 `decisions.md` format
 
@@ -864,7 +888,7 @@ Subcommands:
 
 | Command | Does |
 |---|---|
-| `inventory` | one-time (Phase 0): scan `history/specs`, `history/plans/2026-10-03-r3-passkey-seed.md`, `history/research/round3-wallet-signing-formats.md`, `history/SCaaS-2026-10-07.md` for definition lines; union with `history/ruling-ids.extra.txt` (prose-defined R8-1/2/6/7/8, R173a–c, RS-NV64-1/2, qualified extras); write `history/ruling-ids.txt` (one id per line + defining file:line). Definition regex: `^\s*(?:\|\s*\|?[-*]\s+)(?:~~)?\*{0,2}(ID)(?:\s*\((?:owner\|[Ss]uperseded)[^)]*\))?(?:\*\*\|\s*\|\|\s)` with `ID = CR-[A-Z0-9]+-\d+[a-z]? \| RS-NV64-\d+ \| RS\d+-\d+[a-z]? \| R\d+-\d+[a-z]? \| R\d+[a-z]?`. Expected ≈ 513 numbered + extras; the run prints counts per scheme and fails if they differ from §0. |
+| `inventory` | one-time (Phase 0): scan `history/specs`, `history/plans/2026-10-03-r3-passkey-seed.md`, `history/specs/round3-wallet-signing-formats.md`, `research/_USER-DECISIONS.md` (decision units, §2.6), `history/SCaaS-2026-10-07.md` for definition lines; union with `history/ruling-ids.extra.txt` (prose-defined R8-1/2/6/7/8, R173a–c, RS-NV64-1/2, qualified extras); write `history/ruling-ids.txt` (one id per line + defining file:line). Definition regex: `^\s*(?:\|\s*\|?[-*]\s+)(?:~~)?\*{0,2}(ID)(?:\s*\((?:owner\|[Ss]uperseded)[^)]*\))?(?:\*\*\|\s*\|\|\s)` with `ID = CR-[A-Z0-9]+-\d+[a-z]? \| RS-NV64-\d+ \| RS\d+-\d+[a-z]? \| R\d+-\d+[a-z]? \| R\d+[a-z]?`. Expected ≈ 513 numbered + extras; the run prints counts per scheme and fails if they differ from §0. |
 | `check` | all checks below; exit 1 on any error; warnings for budgets |
 | `check --area node\|contracts\|netcli` | Phase 1 partial: C2–C4 restricted to that area's files and the id map |
 | `--write` | regenerate the alias index in decisions.md |
@@ -890,13 +914,15 @@ Checks (current docs = `docs/**/*.md` minus `history/`, `reviews/`, `superpowers
   Links into `history/` allowed.
 - **C7 artifacts** — every load-bearing token in history sources (§6.3 key extraction) is present in some current
   doc or listed in `history/dropped-artifacts.tsv` with the superseding new id.
-- **C8 architecture is non-normative** — architecture.md and README.md define no ids.
+- **C8 architecture is non-normative** — SCaaS.md and README.md define no ids.
 - **C9 self-contained (R-B)** — banned in current docs outside `<!-- example:odoo -->…<!-- /example -->` and
   decisions.md alias index: `\bSRS\b`, `bamboo`, `\bDMS\b`, `\bNPP\b`, `canon`, `_USER-DECISIONS`, `\bUD §`,
   `\b(round|vòng) \d`, `\bspec [A-F]\b`, `\b(PD|ADW|R3D|WSF|INFRA|ZD|NI|MESH|A2|TW2|APP|TSS|AS|OPS|S4F|PQZ)\s*(§|rev\b|R\d)`,
   stream-id patterns (`\b(P\d+b?|NR\d|OP\d|S\d+′*|G\d|T\d|TB\d|RP\d|CS\d|PL\d|SP\d|AS\d|F\d+|N\d|A\d+(-\w+)?|E-S\d+|D\d)\b`
   next to "stream"), `\bdms_`, `res\.company`, `\bOdoo\b`, Vietnamese diacritics outside i18n examples
   (`[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]`).
+- **C10 research is background** — links into `research/` from current docs only in decisions.md `Source.` lines;
+  every file under `research/` starts with the non-normative banner.
 - Budgets (warning) — per-file line counts against §1 × 1.3.
 
 Self-test `scripts/test_docs_check.py` builds a temp tree (one entry, one doc, one alias) and asserts: pass; fails
@@ -933,7 +959,7 @@ on a missing anchor; fails on an old id in a doc; fails on a banned term. CI: ne
 | K11 | Duplicated call table (PD, SCaaS §6.10, integration §3.6) with drift (PD lacks the epoch-bound `revokeWithSig` and `executeAsOwnerRaw` notes) | — | One table (node/job-api) from the SCaaS version, which has both notes. | No |
 | K12 | Accept checks duplicated (NI §5.2, integration §3.2) | — | node/job-api only; integration links. | No |
 | K13 | APP §17 corrections partly unapplied: UA §11.3 does not name `POST /v1/ua/register` | grep UA: 0 hits | Name the route in node/gateway and cite from contracts/universal-account#migration. | No |
-| K14 | Precedence: SCaaS.md said "SCaaS.md > component specs" | SCaaS §0.1 | README: owner rulings (decisions.md `owner: yes`) > component docs > code (byte formats, vectors) > history/research. architecture.md is not normative (C8). | No |
+| K14 | Precedence: SCaaS.md said "SCaaS.md > component specs" | SCaaS §0.1 | README: owner rulings (decisions.md `owner: yes`) > component docs > code (byte formats, vectors) > history > research (background only). SCaaS.md is not normative (C8). | No |
 | K15 | TSS R189 `~gateway` default floor per profile (PD asked TSS rev 1.3 to add it) | PD §15.4 | Verify during rewrite; one statement in node/gateway#intake citing NODE-SPN. | No |
 | K16 | Private chain 7622 as a classical Zether dev chain (`ZetherSafety` allowlist is {31337, 1337}) | HANDOFF-blockchain Z3; SCaaS §15.2 Q2 | Unchanged (not a dev chain) until owner decides. | **Yes** (open) |
 | K17 | Curve policy for production Zether tokens (bn254 vs BLS12-381; BLS measured more expensive) | Z4; ZD §15 | Unchanged (open). | **Yes** (open) |
@@ -955,8 +981,8 @@ on a missing anchor; fails on an old id in a doc; fails on a banned term. CI: ne
 | `scaas/HANDOFF.md` | reading order, links to `docs/superpowers/specs`, `SCaaS.md`, `integration.md` | new reading order (README → architecture → component docs); links updated |
 | `scaas/README.md` | `docs/superpowers/` row; `blockchain.md` row | replace with `docs/` row (README, decisions, history); blockchain.md row → `docs/history/blockchain.md` + trace |
 | `scaas-node/README.md` | VI, pull-model text, spec links | rewrite (K24) |
-| `smartcontracts/evm/README.md`, `src/chains/private7622/README.md` | links to SCaaS.md, specs, plans, `_USER-DECISIONS` | repoint: SCaaS.md → `docs/architecture.md` or the owning contracts/* file; specs/plans/research → `docs/history/…` |
-| Code comments with spec **paths** (≈ 12 files: `IZetherToken.sol`, `IZetherVerifier.sol`, `HederaSmoke.sol`, `common.tact`, `solana/…/lib.rs`, `scaas-node/src/mesh/mod.rs`, `adapters/{sui,soroban,ton,aptos,solana}.rs`, `tests/e2e_hedera.rs`) | `docs/superpowers/specs/…` | mechanical path rewrite to `docs/history/specs/…` (and `blockchain-research/` → `history/research/`); comment-only diff, checked with `git diff --stat` and a grep that no non-comment line changed |
+| `smartcontracts/evm/README.md`, `src/chains/private7622/README.md` | links to SCaaS.md, specs, plans, `_USER-DECISIONS` | repoint: SCaaS.md → `docs/SCaaS.md` or the owning contracts/* file; specs/plans/research → `docs/history/…` |
+| Code comments with spec **paths** (≈ 12 files: `IZetherToken.sol`, `IZetherVerifier.sol`, `HederaSmoke.sol`, `common.tact`, `solana/…/lib.rs`, `scaas-node/src/mesh/mod.rs`, `adapters/{sui,soroban,ton,aptos,solana}.rs`, `tests/e2e_hedera.rs`) | `docs/superpowers/specs/…` | mechanical path rewrite to `docs/history/specs/…` (and `docs/superpowers/specs/blockchain-research/` → `docs/research/`, incl. `_USER-DECISIONS` path cites in `smartcontracts/evm/README.md`); comment-only diff, checked with `git diff --stat` and a grep that no non-comment line changed |
 | Code comments citing **ruling ids** (≈ 900) and **sections** (≈ 400) | `R91`, `RS5-9`, `NI §5.2`, `spec §3.4`, `TW2 §7` | **No change.** Old ids stay valid through decisions.md aliases and `docs_check.py resolve`. Section references resolve against the frozen copies in `history/specs/` (same numbering); history/README maps abbreviations to files. Code comments are rewritten opportunistically when touched (and module headers in the node restructuring, §7). |
 | bamboo-dms (separate repo): `dms_blockchain_dex/__manifest__.py`, `TODO.md`, `HANDOFF.md`, `TRAPS.md` | paths into `scaas/docs/superpowers/specs/…` and research | repoint to `scaas/docs/history/…` or the new doc; separate bamboo-dms commit. **Exclude** bamboo-dms's own `docs/superpowers/plans` references (e.g. in `COMPLETED.md`) — they are a different docs tree. |
 | bamboo-dms addons citing ids (`dms_blockchain*`, ≈ 111) | old ids | no change (aliases) |
@@ -974,7 +1000,7 @@ owner asks. Agents never edit files outside their set.
 **Phase 0 — freeze and allocate (1 agent, sequential).** Starts only after the running chainId-rename agent has
 committed (it edits specs).
 
-1. Tag `docs-pre-reorg`. `git mv` specs → `history/specs/`, research → `history/research/`, plans (except this
+1. Tag `docs-pre-reorg`. `git mv` specs → `history/specs/`, research → `docs/research/` (WSF note → `history/specs/`; add banners + `research/README.md` in a separate commit so the move stays a pure rename), plans (except this
    one) → `history/plans/`, `HANDOFF-blockchain.md` → `history/`, `SCaaS.md` → `history/SCaaS-2026-10-07.md`,
    `integration.md` → `history/integration-2026-10-07.md`, `blockchain.md` → `history/blockchain.md`. Commit (pure moves: `git diff -M --stat` shows renames only).
 2. Write `scripts/docs_check.py`, `scripts/test_docs_check.py`; run `inventory`; commit `history/ruling-ids.txt`
@@ -999,10 +1025,12 @@ disposition (section default, then per-fact where a key does not land in the def
 `docs_check.py check --area <x>` and `facts check --area <x>` clean. Each agent also disposes the
 `history/blockchain.md` items routed to its area by §2.5 (A: relayer, nonce, simulation, breakers, finality,
 RPC, data feeds; B: TOKEN list, interfaces, Zether, registry; C: chain scope per family, keys/custody, anti-replay,
-standards list); Phase 2 disposes the rest (data-platform and 8-plane items as out-of-scope ARCH-POS entries).
+standards list); Phase 2 disposes the rest (data-platform and 8-plane items as out-of-scope ARCH-POS entries). Each agent
+also places the research **measurements** for its files (§2.6). The `_USER-DECISIONS.md` mining is a Phase 0 task
+(it feeds the id map; entries are written in Phase 2).
 
 **Phase 2 — assemble (1 agent).** Merge fragments into `decisions.md` (entries + why/cost from the history rulings,
-rewritten self-contained), `--write` the alias index; write `architecture.md`, `README.md`, `history/README.md`
+rewritten self-contained), `--write` the alias index; write `SCaaS.md`, `README.md`, `history/README.md`
 (abbreviation register, review-disposition note, SRS-delta table, research-correction list K8), and generate
 `history/blockchain-trace.md` (§2.5); run full `check`
 and `facts check`; fix; delete `docs/_work/`; commit.
@@ -1021,7 +1049,7 @@ Two commits: scaas, bamboo-dms.
    (b) every `superseded` id has an existing `superseded-by` (C2); (c) no superseded id is cited (C3);
    (d) no fact disposition `history-only` outside the admin section classes of §2 unless it names a superseding id.
 5. `grep -rn 'docs/superpowers/specs\|blockchain-research' scaas --include=*.{rs,sol,move,tact,ts,js,py,md}`
-   outside `docs/history` returns nothing.
+   outside `docs/history` and `docs/research` returns nothing.
 
 ### 6.3 Fact ledger (owner requirement R-A)
 
@@ -1040,7 +1068,8 @@ HANDOFF-blockchain, `blockchain.md`) by heading into sections and each section i
 
 Output per source: `docs/_work/facts/<source>.tsv` = `fact_id (file:line) · section · kind · excerpt · keys ·
 disposition`. Disposition is one of `target:<file>#<anchor>` | `superseded:<new id>` | `history:<class>` with
-class ∈ {review, revision, streams, execution-log, amendments-executed, duplicate-of:<fact_id>, research-correction};
+class ∈ {review, revision, streams, execution-log, amendments-executed, duplicate-of:<fact_id>, research-correction, research-finding, estimate,
+superseded-measurement};
 for `blockchain.md` also `rejected:<new id>` | `open:<new id>` | `out-of-scope:<new id>` (§2.5).
 Phase 0 fills section defaults from §2 (admin sections get `history:*`); writers override per fact.
 
@@ -1185,8 +1214,9 @@ Risks: shim period (M1–M2) briefly doubles paths — keep M1 and M2 in one ses
 | Q6 | K18: Soroban on the mesh | job API only |
 | Q7 | K19: second event source | PLANNED |
 | Q8 | K20: approve OPS OA defaults | stated as defaults |
-| Q9 | Research `13-legal-vn.md` (market-specific law) and `_GROK-CODE.md` (206 KB tool output): keep in `history/research/` or delete from the product repo? | keep (history, non-normative) |
+| Q9 | `research/13-legal-vn.md` is market-specific law (market-neutral rule: it never enters the new docs). Drop it from the repo if scaas goes public? Same question for `_GROK-CODE.md` (206 KB tool output) | keep in `research/` while private; drop both before a public release |
 | Q10 | Add status `open` to the decisions register (beside current/superseded/withdrawn)? | yes |
 | Q11 | K22: stream definitions — stay in history (linked from TODO.md) or a new `docs/roadmap.md`? | history + TODO.md |
 | Q13 | blockchain.md requirements the specs never ruled on (ephemeral agent session keys 1–8 h, USD-denominated gas velocity limits, HCS anchoring, Hedera Schedule Service, IBC ICS-20/27, Celo fee currency): which are wanted? | recorded `open`, PLANNED where a seam exists |
+| Q14 | `_USER-DECISIONS` decisions later replaced by specs (e.g. §5 mode wildcard, §23 ERP as control plane): record as superseded owner rulings, not re-open? And are the remaining unrulled UD items (e.g. §3.3 tiered-fee leakage, §22.10 open points) wanted as `open` entries? | superseded; open entries for unruled items |
 | Q12 | scaas-node: approve the 3-crate workspace (core/store/chains + bin) or stop at M1–M4 (module moves + job seam, one crate)? | M1–M4 now; M5–M7 when their windows in §7.3 open |
