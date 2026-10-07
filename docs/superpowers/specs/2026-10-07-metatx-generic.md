@@ -1,6 +1,6 @@
 # Meta-transactions: generic self-call, `mtx` names, `chain_uid` in every domain, token-verified trade orders
 
-**Status:** DRAFT **rev 3** for owner review — nothing in the component docs or the code changes until it is accepted.
+**Status:** DRAFT **rev 4** for owner review — nothing in the component docs or the code changes until it is accepted.
 Provisional ids `MG-n`; real ids are allocated in `docs/decisions.md` on acceptance (docs/README "Ids").
 **Date:** 2026-10-07. **Scope:** EVM and Hedera tokens (today v1 `ERC20MetaTx`/`MetaToken`/`HederaMetaToken`, v2
 `MetaTxCore`/`MetaTokenBase` with three tiers, `ZetherMetaTx`/`ZetherToken` — folded into one base by MG-9), the DEX
@@ -27,7 +27,7 @@ to another contract, where the callee sees the token as `msg.sender` — not the
 The same session showed that token v1/v2 domains lack `chain_uid`, that meta-transaction entry points have no common
 naming, and that EOAs can still grant allowances (an `approve` meta-tx op, and spender-only checks).
 
-## 2. Owner answers (2026-10-07)
+## 2. Owner answers (2026-10-07, A12–A15 2026-10-08)
 
 | # | Question | Answer |
 |---|---|---|
@@ -42,6 +42,10 @@ naming, and that EOAs can still grant allowances (an `approve` meta-tx op, and s
 | A9 | Wrapping a **SCaaS** underlying by an EOA (review M6) | **Accepted:** a signature-based wrap, no EOA approve — the wrapper pulls the underlying through the underlying's own signed path and mints in the same call (MG-7b) |
 | A10 | `TradeOrder` | **The owner's `MtxTradeOrder` modernized** — one struct for both paths, fields mapped in MG-8.1. Owner correction: `relayer` keeps its meaning (the matching party, 0 = anyone, paid the relayer fee); a separate `dex` (the old `to`) is the settlement contract and the only place funds go (rev 3); the order carries no role and no counterparty field (rev 3) |
 | A11 | Deployment | **CREATE2 everywhere:** implementations, factories, registry and DEX are deployed through a deterministic CREATE2 deployer with a fixed salt (MG-4) |
+| A12 | `TradeOrder` field names | The old names: `amount`, `receiveToken`, `receiveAmount` (not `sellAmount`/`buyToken`/`buyAmount`) |
+| A13 | Minimum fill | Keep `minFill` (the signer's minimum per settlement) **with a protocol floor** `MIN_FILL` = 50 % (the old `MIN_RECEIVE_PERCENTAGE`): effective minimum `max(minFill, ceil(amount/2))`, for **every** order in a settlement, taker and makers alike, to avoid junk fills; `minFill = amount` ⇒ fill-or-kill; the last remainder of a Path A order may close below it. Who is taker or maker is arranged by the node / submitter, not in the order |
+| A14 | `destination` | **Accepted** (closes rev 2's OQ6): who receives the proceeds in `receiveToken`; 0 = `from` |
+| A15 | Fees | **One** field `fee` (ppm, the old name): the DEX fee rate the signer agrees to pay. No `maxFeePpm`, `relayerFee`, `relayerFeeRecipient`. The DEX collects it and distributes it in the same call per its admin's configuration (relayer share and/or treasury); the admin changes only the split and recipients, never the amount; cap 1 % |
 
 Fixed constraints this revision never weakens: no compatibility text; the token gateway only calls the token itself;
 only a contract calls `approve`; `executeMetaTransaction` alias and `mtx` names; one base `ERC20MetaTx`; the DEX on
@@ -326,72 +330,94 @@ EOAs. Consequences:
 #### MG-7b — Signature wrap of a SCaaS underlying (owner A9, review M6)
 
 When a wrapper's underlying is itself a SCaaS token, an EOA cannot approve the wrapper. It signs a `TradeOrder` (MG-8)
-in the **underlying's** domain with `dex = the wrapper`, `buyToken = the wrapper`, `buyAmount` = the minimum it
-accepts to receive (its `minOut`), `minFill = sellAmount`:
+in the **underlying's** domain with `dex = the wrapper`, `receiveToken = the wrapper`, `receiveAmount` = the minimum
+it accepts to receive (its `minOut`):
 
 ```solidity
 function mtxWrap(address underlying, TradeOrder calldata o, bytes calldata sig) external returns (uint256 minted);
 ```
 
-The wrapper checks `o.buyToken == address(this)` and the `relayer` binding against its `msg.sender`, quotes `minted`
-at the leg's current rate, and calls `underlying.mtxTrade(o, sig, TradeFill(o.sellAmount, minted, 0, relayerFee,
-msg.sender))`. The underlying checks the signature, that the wrapper is `o.dex`, the price `sellAmount·buyAmount ≤
-minted·sellAmount` and the relayer-fee ceiling, and moves the funds **only into the wrapper** (MG-8.2). The wrapper
-pays the relayer fee out of what it pulled, measures the rest as `_pull` does, records the reserve and mints `minted`
-to `destination` (or `from`). No allowance; only the named wrapper can pull, and only at the signed minimum. The
-wrapper's call to its underlying is a wrap function talking to its underlying, as `_pull` does today, not the meta-tx
-gateway calling out (§4). Zether `fund` over a SCaaS underlying needs the UA bound in the signature, which a
-`TradeOrder` has no field for — OQ5.
+The wrapper checks `o.receiveToken == address(this)` and the `relayer` binding against its `msg.sender`, quotes
+`minted` at the leg's current rate, and calls `underlying.mtxTrade(o, sig, TradeFill(o.amount, minted, wrapFee,
+msg.sender))`. The underlying checks the signature, that the wrapper is `o.dex`, the price `amount·receiveAmount ≤
+minted·amount` and `wrapFee ≤ ceil(minted · fee / 10⁶)`, and moves the funds **only into the wrapper** (MG-8.2). The
+wrapper measures what arrived as `_pull` does, records the reserve, mints `minted − wrapFee` to `destination` (or
+`from`) and `wrapFee` to the submitting relayer — the order's `fee` is how a gasless wrap pays its relayer. No
+allowance; only the named wrapper can pull, and only at the signed minimum. The wrapper's call to its underlying is a
+wrap function talking to its underlying, as `_pull` does today, not the meta-tx gateway calling out (§4). Zether
+`fund` over a SCaaS underlying needs the UA bound in the signature, which a `TradeOrder` has no field for — OQ5.
 
 ### MG-8 — DEX settlement without allowances: one struct, two paths (review C1, H7, H8, M1–M3)
 
-#### MG-8.1 — `TradeOrder` = the owner's `MtxTradeOrder` modernized (owner A10)
+#### MG-8.1 — `TradeOrder` = the owner's `MtxTradeOrder` modernized (owner A10, A12–A15)
 
-A signed order is **one blob with no role in it**: whether it acts as taker or maker is decided at settlement time,
-so the same order can rest as a maker and later take, or the reverse. Hence `from` (the signer), never
-`maker`/`taker`, in the struct. There is no counterparty binding either (the old struct had none; rev 2's RFQ `taker`
-field, copied from today's `OrderBookDex.Order`, was withdrawn by the owner): who may match an order is the job of
-`relayer` (0 = anyone).
+A signed order is **one blob with no role in it**: whether it acts as taker or maker is decided at settlement time by
+the node or whoever submits the settlement, so the same order can rest as a maker and later take, or the reverse.
+Hence `from` (the signer), never `maker`/`taker`, in the struct. There is no counterparty field (the old struct had
+none; rev 2's RFQ `taker` was withdrawn by the owner): who may match an order is the job of `relayer` (0 = anyone).
+The field names are the old ones (A12).
 
 ```solidity
 struct TradeOrder {
-    address from;                // signer; this token's balance is sold
-    address buyToken;            // what the signer receives
-    uint256 sellAmount;          // at most this much of THIS token in total
-    uint256 buyAmount;           // signed price limit: sellAmount for at least buyAmount (gross, before the DEX fee)
-    uint256 minFill;             // smallest sellFill in one settlement (0 = any; = sellAmount ⇒ fill-or-kill)
-    address relayer;             // the matching party allowed to submit the settlement (0 = anyone); paid the relayer fee
-    address dex;                 // the only contract that may pull this order's funds, and the only place they go; a contract
-    address destination;         // receives the proceeds in buyToken; 0 = from
-    uint32  maxFeePpm;           // max DEX fee rate on the proceeds, whatever role the order plays; ≤ 10 000
-    uint8   flags;               // IOC 1 | ESCROW 2 (Path B; implies IOC)
-    uint256 relayerFee;          // in THIS token, on top, for the whole order, pro-rata per fill, ≤ 1 % of sellAmount
-    address relayerFeeRecipient; // 0 = the relayer (bound or submitting); never the dex
-    uint256 batch;               // cancel lane
-    uint256 nonce;               // valid while nonce ≥ minNonce[from][batch]
+    address from;          // signer; this token's balance is sold
+    address receiveToken;  // what the signer receives
+    uint256 amount;        // at most this much of THIS token in total
+    uint256 receiveAmount; // signed price limit: `amount` for at least `receiveAmount` (gross, before the DEX fee)
+    uint256 minFill;       // signer's minimum fill per settlement; effective = max(minFill, ceil(amount/2)); = amount ⇒ fill-or-kill
+    uint256 fee;           // DEX fee rate in ppm the signer agrees to pay on what it receives; ≤ 10 000 (1 %)
+    address relayer;       // the matching party allowed to submit the settlement (0 = anyone)
+    address dex;           // the only contract that may pull this order's funds, and the only place they go; a contract
+    address destination;   // receives the proceeds in receiveToken; 0 = from
+    uint8   flags;         // IOC 1 | ESCROW 2 (Path B; implies IOC)
+    uint256 batch;         // cancel lane
+    uint256 nonce;         // valid while nonce ≥ minNonce[from][batch]
     uint256 validUntil;
 }
-// "TradeOrder(address from,address buyToken,uint256 sellAmount,uint256 buyAmount,uint256 minFill,address relayer,"
-// "address dex,address destination,uint32 maxFeePpm,uint8 flags,uint256 relayerFee,"
-// "address relayerFeeRecipient,uint256 batch,uint256 nonce,uint256 validUntil)"
+// "TradeOrder(address from,address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,uint256 fee,"
+// "address relayer,address dex,address destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"
+
+uint256 constant MIN_FILL_PPM = 500_000; // 50 % floor under every order's minFill, in every settlement, whatever its role (A13)
 ```
 
 Signed in the **sell token's** domain `("SCaaS MetaToken","1", chainId, verifyingContract = the token, salt =
 chain_uid)`.
 
+**Minimum fill (owner A13).** Each order signs `minFill`, its minimum fill per settlement; the protocol floor
+`MIN_FILL` = 50 % (the old `MIN_RECEIVE_PERCENTAGE`) sits under it. The **effective minimum** is
+
+```
+m = max(minFill, ceil(amount · MIN_FILL_PPM / 10⁶))          // = max(minFill, ceil(amount / 2))
+```
+
+and in one settlement call **every** order — the taker and each maker alike — must satisfy
+
+```
+sellFill ≥ m                                       or  sellFill == amount − pulled[h]   (the remainder closes)
+receiveFill · 10⁶ ≥ receiveAmount · MIN_FILL_PPM   or  sellFill == amount − pulled[h]   (received side, as the old taker check)
+```
+
+An order signed with `minFill` below 50 % is **treated as 50 %**, not refused: the contract applies `m`, and clients
+show the effective value before signing (so orders built by outside tools still work). `minFill = amount` is
+fill-or-kill (with `pulled == 0`, the remainder clause cannot apply). The received-side line follows from the
+sold-side line and the price limit; it is asserted anyway, as the old `ERC1776Dex` did for its taker (`:110-111`).
+Purpose: no junk fills — a maker matched for 1 % would have to re-create its order. Consequences: a Path A order fills
+in at most two settlements, and an order can only be matched against counterparts that take at least half of it.
+
 | Old `MtxTradeOrder` (`MtxTradeOrderLib.sol`) | New `TradeOrder` | Note |
 |---|---|---|
 | `from` | `from` — kept | the signer; no role in the order |
 | `to` (always the DEX) | `dex` | the only contract that may pull the order's funds and the only address they go to; must be a contract, never 0 (checked by the token: `msg.sender == o.dex`, H7) |
-| `amount` | `sellAmount` | Path B pulls all of it; Path A pulls fills up to it (`pulled[orderHash]`) |
-| `receiveToken` | `buyToken` | — |
-| `receiveAmount` | `buyAmount` | the signed price limit, checked cross-multiplied |
-| `relayer` (0 = anyone) | `relayer` — kept | the matching party: when ≠ 0 only it may submit the settlement (checked by the DEX against its `msg.sender`, and by the token against the submitter the DEX reports); it earns the relayer fee — the meaning of `MetaTransaction.relayer` / `MODE_RESTRICT_RELAYER` |
-| `fee` (ppm, DEX fee) | `maxFeePpm` | the highest DEX fee rate the signer accepts, as maker or as taker |
+| `amount` | `amount` — kept | Path B pulls all of it; Path A pulls fills up to it (`pulled[orderHash]`) |
+| `receiveToken` | `receiveToken` — kept | — |
+| `receiveAmount` | `receiveAmount` — kept | the signed price limit, checked cross-multiplied |
+| `relayer` (0 = anyone) | `relayer` — kept | the matching party: when ≠ 0 only it may submit the settlement (checked by the DEX against its `msg.sender`, and by the token against the submitter the DEX reports) — the meaning of `MetaTransaction.relayer` / `MODE_RESTRICT_RELAYER` |
+| `fee` (ppm, DEX fee) | `fee` — kept | the DEX fee rate the signer agrees to pay on what it receives; the DEX never charges more and distributes it per its admin's split (MG-8.3) |
 | `batch`, `nonce`, `validUntil` | kept | `nonce` is no longer consumed per fill: it is the cancel handle (`minNonce` per lane); per-order cancel added |
 | `chainId`, `contract` | EIP-712 domain | `chainId`, `verifyingContract` = the token, `salt` = `chain_uid` |
-| — | `destination` — new | who receives the proceeds (0 = the signer) — OQ6 |
-| — | `minFill`, `flags`, `relayerFee`, `relayerFeeRecipient` — new | signer's minimum fill, IOC/escrow, relayer pay (H8) |
+| `MIN_RECEIVE_PERCENTAGE` = 50 % (`ERC1776Dex.sol:10, 110-111`), taker only | `MIN_FILL_PPM` = 50 % | a protocol floor, now for **every** order in a settlement, sold and received side |
+| — | `minFill` — new | the signer's minimum per settlement, raised to the 50 % floor; `= amount` ⇒ fill-or-kill |
+| — | `destination` — new (owner-accepted, A14) | who receives the proceeds (0 = the signer) |
+| — | `flags` — new | IOC / ESCROW (Path B) |
 | `signature` (in the struct) | separate `bytes sig` argument | a signature cannot be inside what it signs |
 
 Not reused from the old code, and why:
@@ -401,43 +427,40 @@ Not reused from the old code, and why:
 | `toEthSignedMessageHash` prefix (`SignatureValidator.sol:10`) | `personal_sign` shows 32 opaque bytes; EIP-712 shows every field (CTR-MTX-14) |
 | `contract` field | a reserved word in Solidity ≥ 0.5, and redundant with `verifyingContract` |
 | `ERC1776` base (`ERC1776Tradeable.sol:4`, file absent) | the base is `ERC20MetaTx` (MG-9) |
-| `MIN_RECEIVE_PERCENTAGE` = 50 % (`ERC1776Dex.sol:10, 110-111`) | replaced by the signer's own `minFill` and price limit |
 | `PRECISION` rate division (`ERC1776Dex.sol:41, 64, 78`) | rounds against the maker; replaced by exact cross-multiplied limits rounded in each signer's favour |
 | `to` not tied to the caller nor required to be a contract (`ERC1776Tradeable.sol:23, 49, 53`) | with `relayer = 0` any caller could move the leg to any `to` the signer named, an EOA included; `dex` is both the only caller and the only recipient, and a contract |
-| fee to `address(this)` when no recipient (`ERC1776Dex.sol:141`) | the fee would stick in the DEX; recipients must be set and ≠ DEX |
+| fee kept by the DEX when no `feeRecipient` (`ERC1776Dex.sol:141`) | fees would accumulate in the DEX; the DEX pays every fee out in the same call per its admin's split (MG-8.3) |
 | `Rescuable` admin sweep | the DEX never holds funds after a call (conservation invariant below); no sweep |
 
 #### MG-8.2 — The token's side: funds go only into `dex`
 
 ```solidity
-struct TradeFill { uint256 sellFill; uint256 buyFill; uint256 dexFee; uint256 relayerFee; address submitter; }
+struct TradeFill { uint256 sellFill; uint256 receiveFill; uint256 dexFee; address submitter; }
 function mtxTrade(TradeOrder calldata o, bytes calldata sig, TradeFill calldata f) external;
 function mtxCancelOrder(TradeOrder calldata o, bytes calldata sig) external;          // CancelOrder(bytes32 orderHash)
 function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes calldata sig) external;
                                                        // InvalidateNonces(address from,uint256 batch,uint256 minNonce)
-mapping(bytes32 => uint256) public pulled;                         // orderHash => amount pulled (sellAmount = closed)
+mapping(bytes32 => uint256) public pulled;                         // orderHash => amount pulled (amount = closed)
 mapping(address => mapping(uint256 => uint256)) public minNonce;   // from => batch => min valid nonce
 ```
 
 `mtxTrade` checks, in order: `msg.sender == o.dex` and `_isContract(o.dex)`; `o.relayer == 0 || o.relayer ==
 f.submitter` (the DEX reports its own `msg.sender`); `block.timestamp ≤ validUntil`; `o.nonce ≥
-minNonce[from][batch]`; known flags (`ESCROW` requires `IOC`); `sellAmount, buyAmount > 0`; `maxFeePpm ≤ 10 000`;
-`relayerFee ≤ 1 %` of `sellAmount`; `relayerFeeRecipient ≠ dex`; the signature (EOA or ERC-1271, capped gas) over `h`
-= the order's digest; then with `p = pulled[h]`:
+minNonce[from][batch]`; known flags (`ESCROW` requires `IOC`); `amount, receiveAmount > 0`; `fee ≤ 10 000`; the
+signature (EOA or ERC-1271, capped gas) over `h` = the order's digest; then with `p = pulled[h]`:
 
 - **Path A** (`ESCROW` clear) — the token enforces every bound the signer set, against the figures the DEX passes:
-  `f.sellFill ≥ max(minFill, 1)` unless it closes the order; `p + f.sellFill ≤ sellAmount`; price `f.sellFill ·
-  buyAmount ≤ f.buyFill · sellAmount` (checked multiplication); DEX fee `f.dexFee ≤ ceil(f.buyFill · maxFeePpm / 10⁶)`
-  and `< f.buyFill`; relayer fee `f.relayerFee ≤ o.relayerFee · f.sellFill / sellAmount` (floor). It moves
-  `f.sellFill + f.relayerFee` from `from` **to `o.dex`**.
-- **Path B** (`ESCROW` set): `p == 0`; `f.buyFill`, `f.dexFee`, `f.relayerFee` must be 0; it moves `sellAmount +
-  o.relayerFee` from `from` **to `o.dex`**. The DEX enforces price and fees on the matched part (MG-8.3).
-- Effects: `pulled[h] = IOC ? sellAmount : p + f.sellFill` (an IOC order is pulled **once**: one pull per order per
-  settlement call). Emit `TradeFilled(h, from, sellFill, buyFill, dexFee, relayerFee)`.
+  `p + f.sellFill ≤ amount`; the effective minimum `m` and the received-side floor (MG-8.1); price `f.sellFill · receiveAmount ≤ f.receiveFill ·
+  amount` (checked multiplication); `f.dexFee ≤ ceil(f.receiveFill · fee / 10⁶)` — the signed rate, rounded up per
+  CTR-DEX-11 (less than one smallest unit). It moves exactly `f.sellFill` from `from` **to `o.dex`**.
+- **Path B** (`ESCROW` set): `p == 0`; `f.receiveFill` and `f.dexFee` must be 0; it moves `amount` from `from` **to
+  `o.dex`**. The DEX enforces price, the effective minimum and the fee on the matched part (MG-8.3).
+- Effects: `pulled[h] = IOC ? amount : p + f.sellFill` (an IOC order is pulled **once**: one pull per order per
+  settlement call). Emit `TradeFilled(h, from, sellFill, receiveFill, dexFee)`.
 
 The token has exactly one recipient, `o.dex`; it splits nothing and pays no fee itself.
 
-`mtxCancelOrder` sets `pulled[h] = sellAmount` (emit `OrderCancelled(h, from)`); `mtxInvalidateNonces` raises
+`mtxCancelOrder` sets `pulled[h] = amount` (emit `OrderCancelled(h, from)`); `mtxInvalidateNonces` raises
 `minNonce[from][batch]` (strictly increasing, capped 2¹²⁸, emit `NoncesInvalidated`). Neither signature expires
 (CTR-DEX-02 kept). A signer with orders on several tokens cancels per token; the off-chain book drops them at once.
 
@@ -449,50 +472,56 @@ struct Settlement { bytes32 ref; Leg taker; Leg[] makers; }               // rol
 function mtxSettle(Settlement[] calldata s) external returns (bool[] memory ok); // each settlement atomic (try), as today
 ```
 
-`taker`/`makers` is a call-time arrangement — one taker against many makers — not a property of the orders.
+`taker`/`makers` is a call-time arrangement — one taker against many makers — chosen by the node or the submitter,
+not a property of the orders.
 
-1. **Check.** Every leg's `relayer` is 0 or `msg.sender` (`WrongRelayer`); each maker's `sellToken` is the taker's `buyToken` and vice versa; no self-trade (`from`s differ); the market is listed;
-   the market's fee rate **for the role this order plays in this settlement** (`makerFeePpm` or `takerFeePpm`) is ≤
-   the order's `maxFeePpm` (`FeeAboveSigned`).
-2. **Match first.** Fills at each maker's signed price, rounded in that maker's favour; only legs with a fill > 0 are
-   pulled (M3: zero-fill legs are not consumed); each order is pulled at most once per call.
+1. **Check.** Every leg's `relayer` is 0 or `msg.sender` (`WrongRelayer`); each maker's `sellToken` is the taker's
+   `receiveToken` and vice versa; no self-trade (`from`s differ); the market is listed.
+2. **Match first.** Fills at each maker's signed price, rounded in that maker's favour; **every** order in the
+   settlement meets its effective minimum `max(minFill, 50 %)` and the received-side floor (MG-8.1) — the taker's
+   received total ≥ 50 % of its `receiveAmount`, as the old code checked, and each maker likewise (`BelowMinFill`); each order is pulled at most once per call.
 3. **Pull** every leg into the DEX: Path A legs through their token's `mtxTrade` with the exact fill and fee figures;
    Path B legs whole; legs whose sell token is an **outside** ERC-20 by `safeTransferFrom` under the party's
    allowance to the DEX (A6), with the same `TradeOrder` signed in the DEX's domain as `DexOrder(address sellToken,
    TradeOrder order)` and checked by the DEX (M2).
-4. **Pay** out of what was pulled, in the same call: each party's `destination` (or `from`) receives its proceeds
-   `buyFill − dexFee` in its `buyToken`; DEX fees go to the market's fee recipient (≠ DEX); relayer fees go to
-   `relayerFeeRecipient`, else the bound `relayer`, else `msg.sender` (never the DEX: `FeeWouldStick`); Path B
-   remainders (unmatched amount and unused relayer fee) are refunded to `from`.
+4. **Pay** out of what was pulled, in the same call: each party's `destination` (or `from`) receives `receiveFill −
+   dexFee` in its `receiveToken`; each `dexFee` is distributed per the admin's split (below); Path B remainders are
+   refunded to `from`.
 5. **Invariants**, asserted at the end of each settlement: the DEX's balance of every token touched is unchanged
    (`ConservationBroken`), and each party's `destination` received at least its signed proceeds (balance delta;
    fee-on-transfer outside tokens are refused at listing; `ProceedsShort`).
 
 | Leg | Pulled into the DEX | Bounds checked by |
 |---|---|---|
-| Path A, any role | exactly `sellFill` + its relayer-fee share | the signer's token, against the fill figures the DEX passes (amount, price, `maxFeePpm`, `relayerFee`) |
-| Path B, any role | all of `sellAmount` + `relayerFee`; the remainder refunded in the same call | the DEX, on the matched part, against the signed order |
+| Path A, any role | exactly `sellFill` | the signer's token, against the fill figures the DEX passes (amount, effective minimum, price, `fee`) |
+| Path B, any role | all of `amount`; the remainder refunded in the same call | the DEX, on the matched part, against the signed order |
 | outside sell token, any role | the fill, by `safeTransferFrom` (allowance, A6) | the DEX, against the `DexOrder` |
 
 **Why everything goes through the DEX (owner ruling, review M1).** (a) One choke point: a single contract sees every
 unit that enters and leaves a settlement, so delivery to each `destination` is checked in one place instead of the
-token trusting a `buyFill` it cannot see. (b) One simple invariant: "the DEX's balance of every token is the same
+token trusting a `receiveFill` it cannot see. (b) One simple invariant: "the DEX's balance of every token is the same
 before and after the call" — no dust, no donated tokens paid out, nothing stuck. (c) The token stays minimal: one
 recipient (`dex`), no fee splitting, no route chosen by the caller; a signer reads one address to know where its
 funds can go. The cost is two transfers per leg instead of one. In Path A the signer still relies on the named DEX
 — immutable code on the chain profile's DEX list — only for delivery, which the DEX itself asserts; in Path B,
 chosen by `ESCROW`, it relies on it for price as well.
 
-**Fees.** The DEX fee stays on the **proceeds** (the received side, as today and in the old code), per market and per
-role (`makerFeePpm`/`takerFeePpm`, cap 1 %, ≤ the order's `maxFeePpm`), rounded up per fill (CTR-DEX-11), deducted by
-the DEX before it pays `destination`; the token checks the figure against `maxFeePpm`. The relayer fee is the order's
-`relayerFee`, in the sold token, on top (`feeToken` and the separate relayer `feeMode` are gone: `FIXED` pro-rata and
-`PERCENT` are the same function of the fill). The relayer binding works as today (CTR-DEX-06,
-`OrderBookDex.sol:263`): a signer that only wants to trade through relayer X signs `relayer = X`.
+**Fees (owner A15).** One field, `fee`: the DEX fee rate (ppm, ≤ 1 %) the signer agrees to pay on what it receives,
+whatever role the order plays. The DEX charges `dexFee = ceil(receiveFill · fee / 10⁶)` (CTR-DEX-11) — never more —
+in the `receiveToken`, deducts it before paying `destination`, and **distributes it in the same call** per its own
+configuration, as the old `ERC1776Dex` sent fees to a `feeRecipient` (`:141-147`): `relayerSharePpm` of every fee to
+the relayer that submitted the settlement (`msg.sender`), the rest to `treasury`. No separate relayer fee exists: the
+relayer is paid from its share. Role-based pricing (maker vs taker rates) is the node's intake policy — it does not
+match an order whose signed `fee` is below its venue's rate for the role it would play — not an on-chain setting.
 
-`OrderBookDex` keeps its book semantics (price-time priority, limit + IOC/FOK, partial fills in the node's book) with
-`mtxSettle` replacing `settle`; its DEX-domain `Order` survives only as `DexOrder` for outside sell tokens. The legacy
-`MetaTxDex` is deleted. Non-EVM DEXes keep their own leg shapes (Q4).
+**Admin powers.** The DEX `admin` stays immutable (a Safe, CTR-DEX-03) and can do exactly two things: list or delist a
+market (`setMarket(base, quote, listed)`) and set the split (`setFeeSplit(relayerSharePpm, treasury)`; `treasury ∉
+{0, DEX}` unless the share is 100 %). It can change who receives fees and in what proportion, **never the amount**:
+the amount comes only from the signed `fee`. No access to funds, no upgrade, no sweep, no pause.
+
+`OrderBookDex` keeps its book semantics (price-time priority, limit + IOC/FOK, partial fills above the effective
+minimum, the node's book) with `mtxSettle` replacing `settle`; its DEX-domain `Order` survives only as `DexOrder` for outside sell
+tokens. The legacy `MetaTxDex` is deleted. Non-EVM DEXes keep their own leg shapes (Q4).
 
 ### MG-9 — One base: `ERC20MetaTx`
 
@@ -520,7 +549,7 @@ structs); `approve` and trade stay refused there. A `bytes32` sender for self-ca
 | EOA allowances | `approve` needs a contract caller; not allowlisted; `TradeOrder.dex` must be a contract (H3, H7) |
 | Zether envelope stripping | Binding passed by transient slot; direct calls prove with binding 0 (MG-2.1) |
 | Fees on non-value calls | Per-selector fee class (MG-5) |
-| DEX legs | Orders carry no role (`from`, no `maker`/`taker`, no counterparty field); price, minimum fill, settlement contract (`dex`), matching party (`relayer`), fee ceilings signed; the token moves funds **only into `dex`** (a contract) and checks amount, price, `maxFeePpm`, `relayerFee` against the fill figures (Path A); the named DEX checks Path B; one pull per order per call; zero-fill legs not pulled; the DEX pays every `destination`, fee and refund in the same call and asserts conservation and proceeds |
+| DEX legs | Orders carry no role (`from`, no `maker`/`taker`, no counterparty field); price limit, settlement contract (`dex`), matching party (`relayer`) and fee rate (`fee`) signed; effective minimum fill `max(minFill, 50 %)` for every order in every settlement; the token moves funds **only into `dex`** (a contract) and checks amount, `MIN_FILL`, price and the fee figure against the signed values (Path A); the named DEX checks Path B; one pull per order per call; the DEX pays every `destination`, fee share and refund in the same call and asserts conservation and proceeds; the admin sets only the fee split, never the amount |
 | Cross-chain replay | `salt = chain_uid` in every domain and Zether binding (MG-4), with the fork limit stated |
 | Opaque `data` in wallets | EIP-712 shows every field; clients decode `data` against the published allowlist before asking for a signature |
 
@@ -563,11 +592,12 @@ Every current rule this draft reverses or narrows; each needs the owner's accept
 | CTR-TOK-01 | spender must be a contract; only contracts call `transferFrom` | also the **caller** of `approve`; `TradeOrder.dex` likewise |
 | CTR-TOK-14 | gasless wrap planned via a permit op | `mtxExecute(wrap)` (underlying allowance) or `mtxWrap` (SCaaS underlying, signature) |
 | CTR-TOK-03/12 | factory v2 beside factory v1 and v1 clones | one factory `OpenFactory` (the v2 code) |
-| CTR-DEX-01 | DEX checks two DEX-domain orders (`maker`/`taker` fields), is the only spender, fee on the received part | SCaaS legs are token-verified, role-free `TradeOrder`s (`from`; the role is chosen at settlement, the fee rate by that role ≤ `maxFeePpm`); the token moves funds only into the DEX, no allowance; the DEX pays out and must end each call with unchanged balances; fee stays on the received part; DEX-domain order only for outside tokens |
+| CTR-DEX-01 | DEX checks two DEX-domain orders (`maker`/`taker` fields), is the only spender; DEX fee per market (`makerPpm`/`takerPpm`) on the received part | SCaaS legs are token-verified, role-free `TradeOrder`s (`from`; the role is chosen at settlement); the token moves funds only into the DEX, no allowance; the DEX pays out and must end each call with unchanged balances; the fee **rate** is the order's signed `fee` (no market rate on chain; maker/taker pricing is node intake policy), still on the received part; partial fills ≥ `max(minFill, 50 %)` per settlement; DEX-domain order only for outside tokens |
+| CTR-DEX-03 | admin's one power: `setMarket(base, quote, listed, feeOn, makerPpm, takerPpm, feeRecipient)` | two powers: `setMarket(base, quote, listed)` and `setFeeSplit(relayerSharePpm, treasury)` — recipients and proportions only, never the amount |
 | `dex.md` signed-order fields (`taker`: "non-zero = only this counterparty (RFQ)") | RFQ counterparty binding | **dropped** (owner): no counterparty field; `relayer` decides who may match |
 | CTR-DEX-02 | `CancelOrder`/`InvalidateNonces` on the DEX | the same, per token (`mtxCancelOrder`, `mtxInvalidateNonces` per lane); never expire |
-| CTR-DEX-04/05 | IOC closed and FOK checked by the DEX | the token closes IOC at its single pull; FOK = `minFill = sellAmount` |
-| CTR-DEX-06 | relayer fee `feeMode`/`fee`/`feeToken`, paid by `transferFrom`; `relayer` binding | one `relayerFee` ceiling in the sold token, pulled into the DEX and paid by it (recipient: signed, else the bound or submitting relayer); `relayer` binding kept; no `feeToken` |
+| CTR-DEX-04/05 | IOC closed and FOK checked by the DEX | the token closes IOC at its single pull; FOK = `minFill = amount`; every fill ≥ 50 % of the order (new floor) |
+| CTR-DEX-06 | relayer fee `feeMode`/`fee`/`feeToken`, separate from the DEX fee, paid by `transferFrom`; `relayer` binding | **no separate relayer fee**: the relayer is paid its admin-configured share of the DEX fee; `relayer` binding kept |
 | CTR-DEX-07 | `MetaTxDex` legacy | deleted |
 | CTR-UA-19 | domain version `"3"`; clone copies `registry.chainUid()` at `initialize` | version `"1"`; `chain_uid` is the implementation's constructor immutable |
 | `accounts.md` signer table (`MetaTxDex`, `OrderBookDex` rows) | `settle`, `MetaTxDex.settle(a, b)` | `mtxSettle`, token `mtxTrade`; `MetaTxDex` row removed |
@@ -586,7 +616,7 @@ Every current rule this draft reverses or narrows; each needs the owner's accept
 | Q1 | Add `token` / `chainId` / `chain_uid` to the signed struct? | No: the domain binds them; the node routes by `(chain_key, contract)` and verifies the digest |
 | Q2 | Meaning of `to`/`value` when `data` is a self-call | **Changed:** both must be 0; the fee basis comes from the selector's fee class (MG-5) |
 | Q3 | Role functions in the allowlists | **Changed (H4): none** — OQ1 |
-| Q4b | Order fields | Replaced by MG-8.1 (A10). Rev 1's "`taker` optional" is **withdrawn by the owner**: no counterparty field; `relayer` decides who may match |
+| Q4b | Order fields | Replaced by MG-8.1 (A10, A12–A15). Rev 1's "fee ppm in the order" kept as `fee`; "`taker` optional" **withdrawn by the owner** (no counterparty field; `relayer` decides who may match); "`minNonce` bulk cancel" kept per lane, plus per-order cancel; `minFill` kept with a 50 % protocol floor |
 | Q4 | Same rule for non-EVM families | Separate draft after this one |
 
 ## 9. Names fixed before code (review L5)
@@ -594,10 +624,11 @@ Every current rule this draft reverses or narrows; each needs the owner's accept
 | Kind | Names |
 |---|---|
 | Transient slots | `keccak256("scaas.mtx.guard")`, `"scaas.mtx.sender"`, `"scaas.mtx.ticket"`, `"scaas.mtx.binding"` (written as literals: assembly takes no `keccak256` constant) |
-| Errors | `MtxSelectorNotAllowed(bytes4)`, `MtxDataShape(bytes4)`, `MtxEnvelopeShape()`, `MtxFeeClass(bytes4, uint32 mode)`, `Reentrancy()`; inner failures bubble raw; `NotDex()`, `DexNotContract(address)`, `WrongRelayer(bytes32)`, `FeeWouldStick()`, `OrderClosed(bytes32)`, `BelowMinFill(bytes32)`, `PriceLimit(bytes32)`, `FeeAboveSigned(bytes32)`, `RelayerFeeAboveSigned(bytes32)`; DEX: `ConservationBroken(address token)`, `ProceedsShort(bytes32)` |
+| Errors | `MtxSelectorNotAllowed(bytes4)`, `MtxDataShape(bytes4)`, `MtxEnvelopeShape()`, `MtxFeeClass(bytes4, uint32 mode)`, `Reentrancy()`; inner failures bubble raw; `NotDex()`, `DexNotContract(address)`, `WrongRelayer(bytes32)`, `FeeWouldStick()`, `OrderClosed(bytes32)`, `BelowMinFill(bytes32)`, `PriceLimit(bytes32)`, `FeeAboveSigned(bytes32)`, DEX: `ConservationBroken(address token)`, `ProceedsShort(bytes32)` |
 | Views | `mtxSelectors()`, `chainUid() returns (bytes32)`, `pulled(bytes32)`, `minNonce(address,uint256)`, `tradeOrderDigest(TradeOrder)` |
-| Events | `MetaTransactionExecuted` unchanged; `TradeFilled(bytes32 orderHash, address from, uint256 sellFill, uint256 buyFill, uint256 dexFee, uint256 relayerFee)`, `OrderCancelled(bytes32, address from)`, `NoncesInvalidated(address from, uint256 batch, uint256 minNonce)` on the token |
+| Events | `MetaTransactionExecuted` unchanged; `TradeFilled(bytes32 orderHash, address from, uint256 sellFill, uint256 receiveFill, uint256 dexFee)`, `OrderCancelled(bytes32, address from)`, `NoncesInvalidated(address from, uint256 batch, uint256 minNonce)` on the token; `FeeSplitSet(uint32 relayerSharePpm, address treasury)` on the DEX |
 | Typehashes | `TradeOrder(…)` (MG-8.1), `CancelOrder(bytes32 orderHash)`, `InvalidateNonces(address from,uint256 batch,uint256 minNonce)`, `DexOrder(address sellToken,TradeOrder order)TradeOrder(…)` |
+| Constants | `MIN_FILL_PPM = 500_000` (token base and DEX); `MAX_FEE_PPM = 10_000` (existing) |
 | DEX | `Leg`, `Settlement { taker, makers }` (roles of one call only), `mtxSettle` (MG-8.3); struct fields `from`, never `maker`/`taker` |
 
 ## 10. Open questions for the owner
@@ -611,7 +642,7 @@ Only what needs an owner decision; each has a recommendation.
 | OQ3 | Forks share genesis, so `chain_uid` cannot separate two branches of a fork. Rule? | For chains we run: a fork is a new chain — new `chain_id` (EIP-155) and new `chain_key` — enforced by the deploy gate. For public chains: rely on the fork's chain-id change; without one, signatures replay on both branches (residual, documented) |
 | OQ4 | `ABSOLUTE` fee class: `FIXED` uncapped for public calls that move no amount (wrap, addReserve, cancelNonce), extending CTR-ZTH-07 beyond Zether | **Accept.** The wallet shows the exact amount; the 1 % cap protects a signer from percentages it cannot recompute, which do not exist here |
 | OQ5 | Zether `fund` over a **SCaaS** underlying by an EOA: a `TradeOrder` cannot bind the receiving UA | Let `fund` draw from the signer's **public** Zether balance (burn `amount · shieldScale`, escrow unchanged) instead of pulling the underlying a second time; an EOA then `mtxWrap`s by signature and funds through `mtxExecute(fund)` |
-| OQ6 | `destination` is a new field: the address that receives the order's proceeds in `buyToken` (0 = the signer `from`). The old `to` (always the DEX) is now `dex`. Keep `destination`? | **Keep:** a signer can sell from one account and receive into another (e.g. a treasury); the DEX pays it and asserts the amount, so it costs no trust |
+| OQ6 | ~~`destination` field~~ | **Closed — owner-accepted 2026-10-08 (A14).** |
 
 ## 11. Revision history
 
@@ -619,7 +650,8 @@ Only what needs an owner decision; each has a recommendation.
 |---|---|---|---|
 | 1 | 2026-10-07 | `db68c51`, `490b9ba`, `4472549` | MG-1…MG-9, owner answers A1–A8, defaults Q1–Q4b |
 | 2 | 2026-10-07 | (uncommitted) | Review 1 folded (C1, H1–H9, M1–M11, L1–L9); owner inputs A9 (signature wrap), A10 (`TradeOrder` = modernized `MtxTradeOrder`, with the owner's correction: `relayer` kept as the matching party, `dex` added), A11 (CREATE2); §3.1 `msg.sender` table; fee classes; ticket; Zether binding; MG-8 rewritten; changes-to-rules list; open questions OQ1–OQ6 |
-| 3 | 2026-10-07 | (this, uncommitted) | Owner rulings: funds move **only into `dex`** on both paths (old `to` = `dex`; `TradeFill` loses `to`/`feeTo`; the DEX pays destinations, fees and refunds and keeps its balances unchanged); orders carry **no role** (`maker` → `from`; taker/maker decided at settlement; fee rate by role ≤ `maxFeePpm`); the RFQ `taker` field **dropped** (Q4b's "`taker` optional" withdrawn); DEX fee back on the received side; OQ6 reworded |
+| 3 | 2026-10-07 | (uncommitted) | Owner rulings: funds move **only into `dex`** on both paths (old `to` = `dex`; `TradeFill` loses `to`/`feeTo`; the DEX pays destinations, fees and refunds and keeps its balances unchanged); orders carry **no role** (`maker` → `from`; taker/maker decided at settlement; fee rate by role ≤ `maxFeePpm`); the RFQ `taker` field **dropped** (Q4b's "`taker` optional" withdrawn); DEX fee back on the received side; OQ6 reworded |
+| 4 | 2026-10-08 | (this, uncommitted) | Owner rulings A12–A15: old field names `amount`/`receiveToken`/`receiveAmount`; `minFill` kept under a protocol floor `MIN_FILL` = 50 % — effective minimum `max(minFill, ceil(amount/2))` on every order in a settlement (sold and received side), `minFill = amount` ⇒ FOK; `destination` accepted (OQ6 closed); one fee field `fee` (`maxFeePpm`, `relayerFee`, `relayerFeeRecipient` removed), distributed by the DEX per an admin-set split that cannot change the amount; `TradeFill` = `sellFill`, `receiveFill`, `dexFee`, `submitter` |
 
 ## 12. Review 1 disposition
 
@@ -636,11 +668,11 @@ it cites; all citations held.
 | H5 | Fees for non-value calls | Accepted — fee classes; `to = value = 0` | MG-5 |
 | H6 | Zether loses the envelope binding | Accepted — transient binding; `relayed*`/`OuterFee` deleted | MG-2.1 |
 | H7 | `dex` = EOA is an EOA permit | Accepted — `dex` (the old `to`) is the only caller and the only recipient: the token checks `msg.sender == o.dex && _isContract(o.dex)` and moves funds only to it; separate from the kept `relayer` (who may match) | MG-7, MG-8.1, MG-8.2 |
-| H8 | `TradeOrder` lacks DEX fee, IOC/FOK, relayer fee, per-order cancel | Accepted — `maxFeePpm` (whatever role), `flags` + `minFill`, `relayer` + `relayerFee`/`relayerFeeRecipient` (ceilings checked by the token, paid by the DEX), `mtxCancelOrder` and per-lane `mtxInvalidateNonces`; no `taker` field (owner) | MG-8.1, MG-8.2 |
+| H8 | `TradeOrder` lacks DEX fee, IOC/FOK, relayer fee, per-order cancel | Accepted, **adjusted by the owner (A13, A15)**: one signed `fee` rate (the DEX pays the relayer a share of it), `flags` IOC/ESCROW, `minFill` with the 50 % floor (`minFill = amount` ⇒ FOK), `mtxCancelOrder` and per-lane `mtxInvalidateNonces`; no `taker` field | MG-8.1–8.3 |
 | H9 | Salt only on token domains | Accepted — every domain, with sources | MG-4 |
-| M1 | Token cannot see `buyFill` delivered | Accepted — every leg goes only into the DEX (owner ruling), which pays each `destination` and asserts proceeds and unchanged balances in one place; `buyAmount`, fills > 0 | MG-8.2, MG-8.3 |
+| M1 | Token cannot see `buyFill` (now `receiveFill`) delivered | Accepted — every leg goes only into the DEX (owner ruling), which pays each `destination` and asserts proceeds and unchanged balances in one place; `buyAmount`, fills > 0 | MG-8.2, MG-8.3 |
 | M2 | Path composition, outside tokens | Accepted — leg table, `DexOrder` | MG-8.3 |
-| M3 | Zero-fill burning, fee sticking, conservation, lanes | Accepted — pull only filled legs, signed `minFill`, fee recipients ≠ DEX, balance-unchanged invariant; lane issue gone (orders use `pulled`, not sequential nonces) | MG-8 |
+| M3 | Zero-fill burning, fee sticking, conservation, lanes | Accepted — signed `minFill` with the 50 % protocol floor for every order (owner A13), fees paid out in the call per the split (never kept), balance-unchanged invariant; lane issue gone (orders use `pulled`, not sequential nonces) | MG-8 |
 | M4 | Contradicts CTR-UA-19/NET-ALL-22; CREATE claim; fork claim | Accepted — one source (implementation immutable, factory check); design changed to CREATE2 (A11) so the address claim now holds; fork limit stated | MG-4, §7, OQ3 |
 | M5 | Derived UA cannot be a self-call sender | Accepted — `ua*` keeps explicit shapes in the one base | MG-9 |
 | M6 | EOAs cannot wrap a SCaaS underlying | Accepted (owner A9) — `mtxWrap`; Zether `fund` part to the owner | MG-7b, OQ5 |
