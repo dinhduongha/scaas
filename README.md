@@ -266,6 +266,22 @@ current DEX, with signed EIP-712 orders, partial fills and an off-chain book ([s
 | BIP-340, BIP-327, RFC 9591 | Schnorr, MuSig2 and FROST Universal Accounts |
 | FIPS 204, FIPS 206 | ML-DSA and FN-DSA (Falcon) post-quantum Universal Accounts |
 
+**Wallet and client standards** — how signers and apps reach the user's keys
+([docs/clients/signers-clientkeys.md](docs/clients/signers-clientkeys.md#wallet-standards)):
+
+| Standard | What for |
+|---|---|
+| EIP-1193 | The browser wallet provider interface (`window.ethereum` as the fallback) |
+| **EIP-6963** | Discover every installed browser wallet, let the user choose one, remember the choice — no wallet library |
+| EIP-712 | The wallet shows each field of what it signs |
+| Wallet Standard | Sui, Aptos and Solana browser wallets |
+| WalletConnect, TON Connect | Mobile and TON wallets (interfaces reserved; the TON Connect HTTP bridge is not wired yet) |
+| WebAuthn | Passkeys (P-256) that sign on the user's device |
+| BIP-39, BIP-32, BIP-43, SLIP-10, SLIP-44 | One 24-word seed; per-network and per-kind key paths (Universal Account tree `m/7622'/…`) |
+| EIP-2333, EIP-2334 | BLS and bn254 key derivation for BLS and Schnorr Universal Accounts |
+| RFC 6979 | Deterministic ECDSA for server-side signing: re-signing after a restart gives the same signature |
+| OIDC with RFC 9207 | Console login to a node's admin API, with issuer pinning |
+
 **Standards deliberately not used:**
 
 | Standard | Why not |
