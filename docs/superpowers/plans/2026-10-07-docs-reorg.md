@@ -6,7 +6,19 @@
 > architecture.md); it is not normative and defines no ids. `architecture.md` stays as planned.
 
 
-**Date:** 2026-10-07 · **Status:** PLAN, not executed · **Owner-approved target structure:** see §1.
+> **Phase 0 executed 2026-10-07** (tag `docs-pre-reorg`; commits `08250aa`…`3d0afb5`). Outputs: `docs/history/`,
+> `docs/research/`, `docs/history/ruling-ids.txt` (746 ids), `docs/_work/{id-map.tsv,facts/,section-map.tsv}` —
+> see `docs/_work/README.md`. Deviations from the text below: (1) "current docs" also exclude `research/` and
+> `_work/` (C3–C9 would fire on frozen research; C10 covers research); (2) 539 numbered ids, not ≈ 513: the §0 table
+> sums to 523, plus the 16 unused R36–R49/R68–R69 registered as `unused`; net-aptos lessons are L1–L10 (= net-solana
+> L1–L10, merged); (3) new ids are numbered in **old definition order** (file, line), not new-file reading order —
+> stable, never renumbered; (4) ARCH-POS and register-policy entries are self-defining (`normative: decisions.md`),
+> since C8 bans ids in architecture.md; (5) owner answers of §8 are aliases `reorg:Q1…Q14`; the six §2.5/Q13
+> requirements are `req:blockchain.md:*` (`open`); (6) fact ledger has a 7th column `hint`, a `history:H` class
+> ("plan says H — confirm"), and `;`-joined multi-targets; (7) small commits, pushed (owner); (8) Solidity/Tact/
+> Solana comment paths left for Phase 3 (a `.sol` comment edit changes the bytecode metadata hash).
+
+**Date:** 2026-10-07 · **Status:** PLAN, Phase 0 executed · **Owner-approved target structure:** see §1.
 **Scope:** `scaas/docs/**` (rewrite), `scaas/scripts/docs_check.py` (new), references outside docs (§5),
 `scaas-node` module/crate layout (§7, plan only). Nothing below has been done yet. Read-only survey basis:
 `scaas` HEAD `d4c296d` (chainId 7622 sweep), docs as of 2026-10-07.
