@@ -268,12 +268,14 @@ def example_mask(text):
     return mask
 
 
-C9 = [r'\bSRS\b', r'bamboo', r'\bDMS\b', r'\bNPP\b', r'canon', r'_USER-DECISIONS', r'\bUD §', r'\b(round|vòng) \d',
+C9 = [r'\bSRS\b', r'bamboo', r'\bDMS\b', r'\bNPP\b', r'(?<![`.\w])canon\b', r'_USER-DECISIONS', r'\bUD §', r'\b(round|vòng) \d',
       r'\bspec [A-F]\b', r'\b(PD|ADW|R3D|WSF|INFRA|ZD|NI|MESH|A2|TW2|APP|TSS|AS|OPS|S4F|PQZ)\s*(§|rev\b|R\d)',
       r'\bdms_', r'res\.company', r'\bOdoo\b', r'\bNhóm \d', r'CHƯƠNG', r'§\s*(6\.21|10\.[1-5](\.\d)?|14\.2\.8)\b']
 C9_RE = re.compile('|'.join(f'(?:{x})' for x in C9))
 STREAM_RE = re.compile(r'\b(P\d+b?|NR\d|OP\d|S\d+′*|G\d|T\d|TB\d|RP\d|CS\d|PL\d|SP\d|AS\d|F\d+|N\d|A\d+(-\w+)?|E-S\d+|D\d)\b')
 VI_RE = re.compile('[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]', re.I)
+VI_KEY = re.compile(VI_RE.pattern[:-1] + 'àáèéìíòóùúýãõ]', re.I)   # a fact key in Vietnamese can never land
+REV_KEY = re.compile(r'\d\.\d|`_USER-DECISIONS`|`\s.*|.*\s`')   # keys that can never land: bare 'N.N' revision/section labels ("rev 3.5", "§2.1") the banned decisions-file citation, and text between two code spans picked up as a key (` x ` with edge spaces)
 
 
 def run_checks(area=None):
@@ -650,7 +652,7 @@ def load_facts(area=None):
     out = []
     for p in sorted(d('_work', 'facts').glob('*.tsv')):
         with p.open(encoding='utf-8') as fh:
-            out += [r for r in csv.DictReader(fh, delimiter='\t', quoting=csv.QUOTE_NONE)]
+            out += [r for r in csv.DictReader(fh, delimiter='\t', quoting=csv.QUOTE_NONE, escapechar='\\')]
     if area:
         out = [f for f in out if any(t.startswith(x) for t in targets(f['disposition']) for x in AREAS[area][0])]
     return out
@@ -685,7 +687,7 @@ def cmd_facts_extract():
         old = {}
         if out.exists():
             with out.open(encoding='utf-8') as fh:
-                old = {r['fact_id']: r for r in csv.DictReader(fh, delimiter='\t', quoting=csv.QUOTE_NONE)}
+                old = {r['fact_id']: r for r in csv.DictReader(fh, delimiter='\t', quoting=csv.QUOTE_NONE, escapechar='\\')}
         rows_map = smap.get(p.name, [])
         rows = []
         for f in split_facts(p, measure, every_paragraph=p.name == 'blockchain.md'):
@@ -754,8 +756,8 @@ def cmd_facts_check(area):
                     if not k:
                         continue
                     kk = norm_text(k.strip('`"'))
-                    if OLD_TOK.fullmatch(k):
-                        continue
+                    if OLD_TOK.search(k) or VI_KEY.search(k) or REV_KEY.fullmatch(k):
+                        continue                          # old ids live in decisions.md; C9 bans Vietnamese text
                     if kk not in texts[tf] and not (k.startswith('`') and kk in corpus):
                         errs.append(f"{f['fact_id']} [{f['section']}] key {k} not in {tf}")
             elif part.startswith('superseded:'):
