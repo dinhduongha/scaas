@@ -13,7 +13,7 @@ in the component docs under [`docs/`](docs/README.md), each with an id and a rea
 1. [A smart chain is infrastructure](#1-a-smart-chain-is-infrastructure)
 2. [Smart contracts are API services](#2-smart-contracts-are-api-services)
 3. [Contracts: what is built on what](#3-contracts-what-is-built-on-what)
-4. [Upgradeable or not is decided at deploy](#4-upgradeable-or-not-is-decided-at-deploy)
+4. [Shared code, delegate call, separate data and upgradeable](#4-shared-code-delegate-call-separate-data-and-upgradeable)
 5. [What the traditional model gets wrong](#5-what-the-traditional-model-gets-wrong)
 6. [Universal Accounts: one identifier for every kind of key](#6-universal-accounts-one-identifier-for-every-kind-of-key)
 7. [Meta-transactions and EIP-1776](#7-meta-transactions-and-eip-1776)
@@ -76,7 +76,7 @@ counts and wins on others; the tables below say which.
 | Latency of a write | Milliseconds | Milliseconds | Seconds to minutes, until finality |
 | Throughput | Grows with what you rent | Grows with the plan | Bounded by the chain's block space, shared with everyone |
 | Reads | Your server answers | API with row-level rules | Free: RPC, node feeds or an indexer; no signature needed |
-| Changing code | Redeploy at will | Migrate at will | Immutable at deploy; new behaviour is a new version ([section 4](#4-upgradeable-or-not-is-decided-at-deploy)) |
+| Changing code | Redeploy at will | Migrate at will | Immutable at deploy; new behaviour is a new version ([section 4](#4-shared-code-delegate-call-separate-data-and-upgradeable)) |
 
 For computing and storing data, the chain is slower, smaller and dearer. Application data and logic stay where they are.
 
@@ -140,7 +140,7 @@ their limits:
 - **Results can be undone until finality.** Blocks can be reorganized; SCaaS reports nothing before its finality
   gate ([docs/node/indexer-feeds.md](docs/node/indexer-feeds.md)).
 - **Contracts are not automatically immutable.** Most platforms let a deployer keep an upgrade key. Immutability is a
-  *deployment decision* ([section 4](#4-upgradeable-or-not-is-decided-at-deploy)).
+  *deployment decision* ([section 4](#4-shared-code-delegate-call-separate-data-and-upgradeable)).
 - **A private chain with one block signer is a signed database**, not a decentralized network. SCaaS uses one
   (chain 7622) and names it as such ([docs/networks/evm.md](docs/networks/evm.md#private-chain)).
 - **Validators can delay or censor** a transaction; they cannot forge it.
@@ -162,7 +162,7 @@ mobile apps and AI agents call them like any other API.
 | API function (`POST /payments`) | A contract function (`pay(entryRef)`, `trade(...)`, `transferConfidential(...)`) |
 | Bearer token issued by the server | The **subject's own signature** over exactly this call (EIP-712 on EVM) |
 | Quotas and limits | Caps inside the contract: per-payment and per-period mandate limits, expiry on every signature |
-| API versioning | A version catalogue in the factory; each deployed contract stays fixed ([section 4](#4-upgradeable-or-not-is-decided-at-deploy)) |
+| API versioning | A version catalogue in the factory; each deployed contract stays fixed ([section 4](#4-shared-code-delegate-call-separate-data-and-upgradeable)) |
 | Billing | Gas, paid by a relayer; optionally a fee in the token ([section 8](#8-who-pays-the-fee-every-model)) |
 | Commit acknowledgement | A finalized event, delivered by the node as a feed |
 
@@ -272,7 +272,7 @@ current DEX, with signed EIP-712 orders, partial fills and an off-chain book ([s
 |---|---|
 | ERC-2771 trusted forwarder | A forwarder sits outside the token, can swallow a failed call after charging for it, and needs a trusted address; the meta-transaction lives inside the token instead ([section 7](#7-meta-transactions-and-eip-1776)) |
 | ERC-4337 bundlers and paymasters | An extra mempool, bundler and entry point for something the token already does; SCaaS follows EIP-1776 |
-| UUPS, Transparent, Beacon or Diamond proxies | An upgrade key is an admin key over every balance ([section 4](#4-upgradeable-or-not-is-decided-at-deploy)) |
+| UUPS, Transparent, Beacon or Diamond proxies | An upgrade key is an admin key over every balance ([section 4](#4-shared-code-delegate-call-separate-data-and-upgradeable)) |
 | Allowances to ordinary accounts | The classic drain; only contracts may be spenders ([section 5](#5-what-the-traditional-model-gets-wrong)) |
 
 **Other families** implement the same three pieces — token, mandate, DEX — on their own standards
@@ -289,35 +289,13 @@ current DEX, with signed EIP-712 orders, partial fills and an off-chain book ([s
 
 ---
 
-## 4. Upgradeable or not is decided at deploy
-
-Whether a contract can be changed later is **not a property of the chain; it is a choice made when the contract is
-deployed**. Every platform offers a way to keep an upgrade key: proxies on EVM (UUPS, Transparent, Beacon, Diamond),
-an `UpgradeCap` on Sui, a package upgrade policy on Aptos, an upgrade authority on Solana, a contract admin on
-CosmWasm.
-
-The common habit — "deploy everything behind a UUPS proxy so it can be patched" — means that **whoever holds the
-upgrade key can rewrite the rules over every user's balance**. SCaaS does not follow that habit:
-
-- **Every program that holds user value is deployed immutable** ([CTR-GEN-02](docs/contracts/README.md#CTR-GEN-02)):
-  no proxy anywhere. Users verify once what a contract does and can rely on it for good.
-- **New behaviour is a new version, not a patch.** The open factory keeps a catalogue of versions; a new version
-  applies only to contracts deployed after it. A bug fix is a new deployment plus a voluntary migration by the
-  balance owners.
-- **The deploy gate enforces it.** Each family freezes its programs in the deploy run (Aptos `immutable` policy, Sui
-  `make_immutable`, Solana authority `None`, CosmWasm `--no-admin`, EVM non-upgradeable clones), and the deploy
-  script fails if a program is still upgradeable. The node re-checks at every start and halts a chain whose
-  programs could still be upgraded ([docs/networks/README.md](docs/networks/README.md#deploy-gate)).
-
-The price is that there is no hotfix in place. That is deliberate: an upgrade key is an admin key over every balance.
+## 4. Shared code, delegate call, separate data and upgradeable
 
 <a id="shared-code"></a>
-### Shared code, separate data
 
-Immutable does not mean that every contract carries its own copy of the code. An upgradeable proxy and a SCaaS clone
-use the **same mechanism**, `DELEGATECALL`: a small contract keeps its own data and runs code that lives elsewhere.
-The only difference is whether the pointer to that code can change. In a proxy an admin can repoint it; in a SCaaS
-clone it is fixed at deploy. SCaaS uses `DELEGATECALL` to **reuse code**, never to upgrade it.
+A contract is two things: **code** (what it does) and **data** (its balances and settings). They do not have to live
+in the same place. With `DELEGATECALL` a small contract keeps only its own data and runs code that lives in another
+contract, the implementation:
 
 ```mermaid
 flowchart LR
@@ -327,9 +305,27 @@ flowchart LR
     I -->|"linked library"| L["Shared library<br/>(more code)"]
 ```
 
-Every token is a 45-byte EIP-1167 clone whose only code is a fixed pointer to its implementation; the clone holds
-only its own balances and settings ([token-wrappers](docs/contracts/token-wrappers.md#CTR-TOK-18)). The same holds
-for subject accounts, vesting grants, distributions and the other action contracts, and large shared logic (the
+### Two uses of the same mechanism
+
+The same `DELEGATECALL` serves two very different purposes. What separates them is one question: **can the pointer
+to the code change after deploy?**
+
+| | Reuse: clone (EIP-1167) | Upgrade: proxy (UUPS, Transparent, Beacon, Diamond) |
+|---|---|---|
+| Pointer to the code | Fixed at deploy, part of the clone's own bytecode | Stored in a slot that an admin can rewrite |
+| Who can change the rules | **Nobody** | Whoever holds the upgrade key |
+| What users must trust | The code they can read today | The code today **and** every future decision of the key holder |
+| A bug fix | A new version, plus a voluntary migration by the balance owners | Repoint the proxy; every balance follows at once |
+
+The common habit is "deploy everything behind a UUPS proxy so it can be patched". That habit means **whoever holds
+the upgrade key can rewrite the rules over every user's balance**. SCaaS uses `DELEGATECALL` only to **reuse** code,
+never to upgrade it.
+
+### Shared code: what it brings
+
+Every SCaaS token is a 45-byte EIP-1167 clone whose only code is a fixed pointer to its implementation; the clone
+holds only its own balances and settings ([token-wrappers](docs/contracts/token-wrappers.md#CTR-TOK-18)). Subject
+accounts, vesting grants, distributions and the other action contracts are clones too, and large shared logic (the
 regulated module) sits in a library linked once per chain.
 
 | Benefit | Why |
@@ -337,21 +333,39 @@ regulated module) sits in a library linked once per chain.
 | **Cheap to create** | A token clone costs about 45,000 gas instead of about 2.5 M for a full deployment; a `SubjectAccount` clone about 287,000 instead of several million |
 | **Light on the chain's nodes** | The implementation's code is stored once per chain — clients keep code by its hash — and each new clone adds 45 bytes plus its own storage. The one implementation, called by every clone, stays hot in the clients' code caches, and state grows more slowly |
 | **One audited code base** | Auditing and verifying one implementation covers every clone; all clones of a version share one code hash, so anyone can check which code a token runs |
-| **Versions without upgrades** | A new version is a new implementation added to the factory's catalogue; existing clones keep their pointer and their rules |
+| **Versions without upgrades** | A new version is a new implementation added to the factory's catalogue; it applies only to contracts created after it, and existing clones keep their pointer and their rules |
 
-The cost is one extra `DELEGATECALL` per call (a cold address access the first time in a transaction). This is the
-original requirement — *share code through delegation, keep separate data, support several versions* — met without an
+The cost is one extra `DELEGATECALL` per call (a cold address access the first time in a transaction). The original
+requirement — *share code through delegation, keep separate data, support several versions* — is met without an
 upgrade key.
 
-The other families have the same split built in, so SCaaS uses their native form:
+### Upgradeable: a deploy-time choice
 
-| Family | Code stored once | Data per contract or user |
-|---|---|---|
-| Cosmos (CosmWasm) | `store` the WASM once (`code_id`) | each `instantiate` is a contract with its own state |
-| Soroban | install the WASM once (by hash) | each instance references that hash |
-| Solana | one program | data lives in separate accounts (subject account, lanes) |
-| Move (Aptos, Sui) | one package | objects and resources per user or token |
-| TON | one jetton-wallet code | each wallet is deployed with the same code cell in its `state_init` |
+Whether a program can be changed later is **not a property of the chain; it is decided when the program is
+deployed**. Every platform offers a way to keep an upgrade key: proxies on EVM, an `UpgradeCap` on Sui, a package
+upgrade policy on Aptos, an upgrade authority on Solana, a contract admin on CosmWasm. SCaaS decides:
+
+- **Every program that holds user value is deployed immutable** ([CTR-GEN-02](docs/contracts/README.md#CTR-GEN-02)).
+  Users verify once what a contract does and can rely on it for good.
+- **New behaviour is a new version, not a patch** (above). A bug fix is a new deployment plus a voluntary migration.
+- **The deploy gate enforces it.** Each family freezes its programs in the deploy run, and the deploy script fails if
+  a program is still upgradeable. The node re-checks at every start and halts a chain whose programs could still be
+  upgraded ([docs/networks/README.md](docs/networks/README.md#deploy-gate)).
+
+The price is that there is no hotfix in place. That is deliberate: an upgrade key is an admin key over every balance.
+
+### Per family
+
+Every family separates shared code from per-user data in its own way, and each has its own switch to freeze the code:
+
+| Family | Code stored once | Data per contract or user | Frozen at deploy by |
+|---|---|---|---|
+| EVM, Hedera | one implementation per version | 45-byte EIP-1167 clones with their own storage | clones have no upgrade path; no proxy anywhere |
+| Cosmos (CosmWasm) | `store` the WASM once (`code_id`) | each `instantiate` is a contract with its own state | instantiate with `--no-admin` |
+| Soroban | install the WASM once (by hash) | each instance references that hash | contracts are immutable as built |
+| Solana | one program | data in separate accounts (subject account, lanes) | upgrade authority set to `None` |
+| Move (Aptos, Sui) | one package | objects and resources per user or token | Aptos `immutable` policy; Sui `make_immutable` on the `UpgradeCap` |
+| TON | one jetton-wallet code | each wallet deployed with the same code cell in its `state_init` | code is immutable as built |
 
 ---
 
@@ -729,7 +743,7 @@ flowchart LR
 | A contract receiving tokens | — | `ERC1776Holder` pulls a signed transfer into itself | Any contract can be the recipient of a signed `pay` or transfer |
 | NFTs | — | `ERC1776Nft721`: `safeTransferFrom` by meta-transaction | PLANNED with the asset suite ([asset-suite](docs/contracts/asset-suite.md)) |
 | Admin powers | An `Ownable` owner per wrapper | `ERC1776Adminable` (an admin moves its own tokens by signature), `Rescuable` (an owner or rescuer withdraws stuck tokens) | No one can move a user's funds; only bounded roles fixed at creation ([docs/architecture.md](docs/architecture.md#authority-model)) |
-| Upgrades | — | — | Immutable at deploy ([section 4](#4-upgradeable-or-not-is-decided-at-deploy)) |
+| Upgrades | — | — | Immutable at deploy ([section 4](#4-shared-code-delegate-call-separate-data-and-upgradeable)) |
 
 **Lessons that changed the design:**
 
