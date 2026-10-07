@@ -712,7 +712,7 @@ vectors (`smartcontracts/vectors/ua/kinds.json`) gain the `pqz-mlwe` row (seed â
 
 The wallet reads a classical Zether balance by decrypting `(C, D) = ([b]G + [r]Y, [r]G)`: the owner computes `[b]G = C âˆ’
 [x]D` and finds `b` (a discrete logarithm) with baby-step giant-step (BSGS). The limits on chain are in
-[contracts/zether](../contracts/zether.md#limits); the client side:
+[contracts/zether](../contracts/zether.md#decryption-bound); the client side:
 
 | Limit | Default |
 |---|---|
