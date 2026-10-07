@@ -26,7 +26,8 @@ QUAL = re.compile(r'^[\w.-]+:\S+$')          # qualified alias: SCaaS:N4, UD:§2
 STATUSES = {'current', 'superseded', 'withdrawn', 'unused', 'open'}
 AREAS = {'node': (['node/'], ['NODE-']), 'contracts': (['contracts/'], ['CTR-']),
          'netcli': (['networks/', 'clients/', 'integration.md', 'integration-odoo-example.md'], ['NET-', 'CLI-', 'INT-'])}
-NOT_CURRENT = ('history/', 'research/', 'reviews/', 'superpowers/', '_work/')
+NOT_CURRENT = ('history/', 'research/', 'reviews/', 'superpowers/')
+REORG = ('history', 'reorg')          # reorg ledgers: id-map.tsv, section-map.tsv, facts/ (were docs/_work/ until Phase 2)
 BUDGET = {'README.md': 100, 'SCaaS-v2.md': 150, 'architecture.md': 450, 'decisions.md': 3000, 'integration.md': 950,
           'node/README.md': 250, 'node/store.md': 600, 'node/job-api.md': 550, 'node/submit-lanes.md': 550,
           'node/indexer-feeds.md': 400, 'node/gateway.md': 300, 'node/admin-auth.md': 400, 'node/sponsorship.md': 250,
@@ -154,9 +155,7 @@ Entry = collections.namedtuple('Entry', 'new title old status owner date normati
 
 
 def register_files():
-    if d('decisions.md').exists():
-        return [d('decisions.md')]
-    return sorted(d('_work').glob('decisions-*.md'))
+    return [d('decisions.md')] if d('decisions.md').exists() else []
 
 
 def parse_register(files=None):
@@ -181,7 +180,7 @@ def parse_register(files=None):
 
 
 def load_idmap():
-    p = d('_work', 'id-map.tsv')
+    p = d(*REORG, 'id-map.tsv')
     if not p.exists():
         return []
     with p.open(encoding='utf-8') as fh:
@@ -316,7 +315,7 @@ def run_checks(area=None):
     else:
         im = load_idmap()
         if not im:
-            notes.append('C1 pending: no register and no docs/_work/id-map.tsv')
+            notes.append('C1 pending: no register and no docs/history/reorg/id-map.tsv')
         else:
             seen = collections.defaultdict(list)
             for r in im:
@@ -444,7 +443,7 @@ def run_checks(area=None):
     # C7 artifacts
     c7 = c7_misses(docs) if docs and not area else None
     if c7 is None:
-        notes.append('C7 pending: needs current docs and docs/_work/facts (full check only)')
+        notes.append('C7 pending: needs current docs and docs/history/reorg/facts (full check only)')
     else:
         errs += [f'C7 load-bearing token {k!r} ({src}) in no current doc and not in history/dropped-artifacts.tsv'
                  for k, src in c7]
@@ -613,7 +612,7 @@ def split_facts(path, measure_only=False, every_paragraph=False):
 
 def load_section_map():
     rows = collections.defaultdict(list)
-    p = d('_work', 'section-map.tsv')
+    p = d(*REORG, 'section-map.tsv')
     if p.exists():
         with p.open(encoding='utf-8') as fh:
             for row in csv.DictReader(fh, delimiter='\t'):
@@ -659,7 +658,7 @@ def section_default(rows, chain):
 
 def load_facts(area=None):
     out = []
-    for p in sorted(d('_work', 'facts').glob('*.tsv')):
+    for p in sorted(d(*REORG, 'facts').glob('*.tsv')):
         with p.open(encoding='utf-8') as fh:
             out += [r for r in csv.DictReader(fh, delimiter='\t', quoting=csv.QUOTE_NONE, escapechar='\\')]
     if area:
@@ -687,7 +686,7 @@ def ruling_disposition(idmap, old):
 def cmd_facts_extract():
     smap, idmap = load_section_map(), load_idmap()
     main, other = fact_sources()
-    outdir = d('_work', 'facts')
+    outdir = d(*REORG, 'facts')
     outdir.mkdir(parents=True, exist_ok=True)
     total = collections.Counter()
     for p, measure in [(x, False) for x in main] + [(x, True) for x in other]:
@@ -739,7 +738,7 @@ def cmd_facts_extract():
 def cmd_facts_check(area):
     facts = load_facts(area)
     if not facts:
-        print('pending: no docs/_work/facts (run facts extract)')
+        print('pending: no docs/history/reorg/facts (run facts extract)')
         return 0
     entries = {e.new: e for e in parse_register()[0]}
     byid = {f['fact_id']: f for f in facts}
