@@ -15,14 +15,15 @@ in the component docs under [`docs/`](docs/README.md), each with an id and a rea
 3. [Contracts built on standards](#3-contracts-built-on-standards)
 4. [Upgradeable or not is decided at deploy](#4-upgradeable-or-not-is-decided-at-deploy)
 5. [What the traditional model gets wrong](#5-what-the-traditional-model-gets-wrong)
-6. [Meta-transactions and EIP-1776](#6-meta-transactions-and-eip-1776)
-7. [Who pays the fee: every model](#7-who-pays-the-fee-every-model)
-8. [Meta-transactions and liquidity](#8-meta-transactions-and-liquidity)
-9. [Open relayers: open and competitive](#9-open-relayers-open-and-competitive)
-10. [Confidential amounts: Zether and PQ Zether](#10-confidential-amounts-zether-and-pq-zether)
-11. [Chains and families](#11-chains-and-families)
-12. [The components and where to read more](#12-the-components-and-where-to-read-more)
-13. [Repository layout](#13-repository-layout)
+6. [Universal Accounts: one identifier for every kind of key](#6-universal-accounts-one-identifier-for-every-kind-of-key)
+7. [Meta-transactions and EIP-1776](#7-meta-transactions-and-eip-1776)
+8. [Who pays the fee: every model](#8-who-pays-the-fee-every-model)
+9. [Meta-transactions and liquidity](#9-meta-transactions-and-liquidity)
+10. [Open relayers: open and competitive](#10-open-relayers-open-and-competitive)
+11. [Confidential amounts: Zether and PQ Zether](#11-confidential-amounts-zether-and-pq-zether)
+12. [Chains and families](#12-chains-and-families)
+13. [The components and where to read more](#13-the-components-and-where-to-read-more)
+14. [Repository layout](#14-repository-layout)
 
 ---
 
@@ -83,7 +84,7 @@ For computing and storing data, the chain is slower, smaller and dearer. Applica
 | | Cloud VM | Hosted backend | Smart chain + SCaaS |
 |---|---|---|---|
 | How the service is paid | A monthly invoice | A monthly plan or usage invoice | A native fee inside every transaction, settled at once |
-| Who pays | The application owner | The application owner | Whoever submits: a relayer, the subject or the payee; it can be passed on in the token ([section 7](#7-who-pays-the-fee-every-model)) |
+| Who pays | The application owner | The application owner | Whoever submits: a relayer, the subject or the payee; it can be passed on in the token ([section 8](#8-who-pays-the-fee-every-model)) |
 | Moving value between parties | Needs a bank or a payment processor | Same | Built into the protocol: a payment is an ordinary call |
 
 Only the chain has payment inside the infrastructure itself.
@@ -143,7 +144,7 @@ their limits:
   (chain 7622) and names it as such ([docs/networks/evm.md](docs/networks/evm.md#private-chain)).
 - **Validators can delay or censor** a transaction; they cannot forge it.
 - **Everything is public by default**, including amounts and balances — which is why
-  [Zether](#10-confidential-amounts-zether-and-pq-zether) exists.
+  [Zether](#11-confidential-amounts-zether-and-pq-zether) exists.
 
 ---
 
@@ -161,7 +162,7 @@ mobile apps and AI agents call them like any other API.
 | Bearer token issued by the server | The **subject's own signature** over exactly this call (EIP-712 on EVM) |
 | Quotas and limits | Caps inside the contract: per-payment and per-period mandate limits, expiry on every signature |
 | API versioning | A version catalogue in the factory; each deployed contract stays fixed ([section 4](#4-upgradeable-or-not-is-decided-at-deploy)) |
-| Billing | Gas, paid by a relayer; optionally a fee in the token ([section 7](#7-who-pays-the-fee-every-model)) |
+| Billing | Gas, paid by a relayer; optionally a fee in the token ([section 8](#8-who-pays-the-fee-every-model)) |
 | Commit acknowledgement | A finalized event, delivered by the node as a feed |
 
 The one difference from an ordinary web API is **who authorizes a write**. In a web API the server decides and
@@ -202,7 +203,7 @@ flowchart BT
     STD["Standards (OpenZeppelin)<br/>ERC20 · EIP712 · IERC1271"]
     MTX["Gasless base<br/>ERC20MetaTx · MetaTxCore<br/>implements IERC20MetaTx"]
     ZB["Confidential base<br/>ZetherMetaTx"]
-    ACC["Accounts<br/>SubjectAccount · MandateWallet"]
+    ACC["Smart accounts (optional)<br/>SubjectAccount · MandateWallet"]
     TOK["Tokens<br/>MetaToken · No / Single / Multi<br/>UnderlyingToken"]
     ZT["ZetherToken<br/>(PqzToken: same interface)"]
     MTX -->|inherits| STD
@@ -215,10 +216,10 @@ flowchart BT
 | Layer | Inherits | What it adds |
 |---|---|---|
 | Standard | `ERC20`, `EIP712`, `IERC1271` (OpenZeppelin) | Balances and transfers, typed-data signing, contract signatures |
-| Gasless token | `ERC20MetaTx` / `MetaTxCore` + `IERC20MetaTx` | The meta-transaction entry point inside the token ([section 6](#6-meta-transactions-and-eip-1776)) |
+| Gasless token | `ERC20MetaTx` / `MetaTxCore` + `IERC20MetaTx` | The meta-transaction entry point inside the token ([section 7](#7-meta-transactions-and-eip-1776)) |
 | Token tiers | `MetaToken`; `NoUnderlyingToken`, `SingleUnderlyingToken`, `MultiUnderlyingToken` | Issuer tokens; wrappers of one or several existing tokens ([docs/contracts/token-wrappers.md](docs/contracts/token-wrappers.md)) |
-| Confidential | `ZetherMetaTx` → `ZetherToken`; `PqzToken` follows the same `IERC20MetaTx` | Encrypted balances behind the same gasless interface ([section 10](#10-confidential-amounts-zether-and-pq-zether)) |
-| Accounts | `SubjectAccount`, `MandateWallet` (`EIP712` + `IERC1271`) | Passkey-controlled accounts, capped spending mandates ([docs/contracts/accounts-mandates.md](docs/contracts/accounts-mandates.md)) |
+| Confidential | `ZetherMetaTx` → `ZetherToken`; `PqzToken` follows the same `IERC20MetaTx` | Encrypted balances behind the same gasless interface ([section 11](#11-confidential-amounts-zether-and-pq-zether)) |
+| Smart accounts (optional) | `SubjectAccount`, `MandateWallet` (`EIP712` + `IERC1271`) | A stable-address account with guardian recovery; capped spending mandates ([docs/contracts/accounts-mandates.md](docs/contracts/accounts-mandates.md)). The default account is a Universal Account ([section 6](#6-universal-accounts-one-identifier-for-every-kind-of-key)) |
 
 The other families follow their own token standards — CW20 on Cosmos, TEP-74 jettons on TON, SEP-41 on Soroban, SPL
 and Token-2022 on Solana, the native coin model on Move — and add the same meta-transaction model on top
@@ -286,7 +287,7 @@ for it.
 SCaaS: the subject signs an **intent** — "this operation, on this contract, valid until this time" — and **anyone**
 may execute it later, from their own account ([NET-ALL-02](docs/networks/README.md#NET-ALL-02)). Each contract keeps
 its own two-dimensional nonce space (a lane and a sequence inside it), so independent operations never wait for each
-other ([section 6](#6-meta-transactions-and-eip-1776)).
+other ([section 7](#7-meta-transactions-and-eip-1776)).
 
 ### The operator's server holds the power
 
@@ -296,7 +297,76 @@ sign for a subject ([docs/architecture.md](docs/architecture.md#authority-model)
 
 ---
 
-## 6. Meta-transactions and EIP-1776
+## 6. Universal Accounts: one identifier for every kind of key
+
+On a chain, an account is simply **whoever can produce a valid signature**. But each chain natively understands only
+its own key types — an EVM chain knows secp256k1 addresses and nothing else. Real users and organizations need much
+more: passkeys on phones, HSMs, ed25519 keys, Schnorr and BLS keys, multisig and threshold groups, post-quantum keys,
+and confidential (Zether) keys.
+
+**A Universal Account (UA) is an identifier derived from key data or from a policy — an EOA address generalized to
+every signature scheme** ([docs/contracts/universal-account.md](docs/contracts/universal-account.md)).
+
+```mermaid
+flowchart LR
+    K["Key data or policy<br/>(passkey, BLS, multisig…)"] -->|"hash with kind tag"| U["UA id<br/>32 bytes"]
+    U -->|"register once per chain<br/>with proof of possession"| R["UA registry<br/>(no admin)"]
+    R --> F["Contract functions<br/>accept the kinds they need"]
+    N["Native account<br/>(EVM address, Safe…)"] -.->|"no registration"| F
+```
+
+What makes it work:
+
+- **It is an identifier, not a contract.** Nothing is deployed per user: creating a UA is free and deterministic, and
+  the same key data gives the same id on every chain of every family
+  ([CTR-UA-02](docs/contracts/universal-account.md#CTR-UA-02)).
+- **Native accounts are used as they are.** An EVM address, a contract account (Safe, `SubjectAccount`) or a native
+  account of another family is already a UA and never registers. Every other kind registers once per chain, with a
+  proof that the registrant holds the key; the registry has no admin and never forgets.
+- **Ids never collide.** Every derived id carries a versioned kind tag and is 32 bytes, so a passkey UA can never equal
+  an EVM address or a UA of another kind over the same key
+  ([CTR-UA-03](docs/contracts/universal-account.md#CTR-UA-03)).
+- **One key, one purpose.** The same key is never used for two kinds — wallets derive a separate key per kind, and the
+  registry refuses a key already registered under another kind
+  ([CTR-UA-10](docs/contracts/universal-account.md#CTR-UA-10)).
+- **Each function accepts the kinds it needs.** A payment accepts any signing kind; a confidential transfer accepts
+  only Zether kinds ([CTR-UA-14](docs/contracts/universal-account.md#CTR-UA-14)).
+
+**What a UA can hold:**
+
+| Use | Kinds | What it gives |
+|---|---|---|
+| Native accounts | EVM address, contract account (Safe, `SubjectAccount`), Hedera, Solana, Stellar, Aptos, Sui, Cosmos, TON wallets | Work as they are; no registration |
+| Sign with one key | `webauthn-p256` (passkey), `p256` (HSM, secure enclave), `ed25519`, `bip340` (Schnorr), `schnorr-bn254`, `schnorr-bls12381` | Sign from any device or HSM, on any EVM chain, not only with secp256k1 |
+| BLS | `bls12381-minsig`, `bls-bn254-minsig` | Short signatures that aggregate; one pairing check on chain |
+| n-of-n group | `musig2-secp256k1`, `musig2-bn254` | Several parties produce **one** aggregate signature; the registry recomputes the group key |
+| t-of-n threshold | `frost-secp256k1`, `frost-bn254` | Any `t` of `n` parties sign; the chain checks **one** signature; key-generation proofs checked at registration |
+| Multisig policy | `msig` | A weighted threshold over up to 16 members of any signing kind — e.g. two passkeys plus an HSM, or a director's passkey plus a company EOA |
+| Post-quantum signing | `mldsa44`, `mldsa65`, `fndsa512` (Falcon) | Authorization that survives a quantum computer |
+| Confidential balances | `zether-bn254`, `zether-bls12381`, `pqz-mlwe` | Encryption keys for Zether and PQ Zether; they never sign — spending is authorized by another UA (`authRef`) |
+
+Threshold ECDSA from MPC custody providers needs no kind of its own: its output is an ordinary ECDSA signature, so it
+is a plain EVM address.
+
+**Ways to use it:** sign alone (one key); sign together (`msig`, weighted); aggregate (MuSig2, BLS); share a key by
+threshold (FROST); authorize a confidential account (a Zether UA points to the UA that may spend it); and, optionally,
+attach verifiable credentials (eKYC) to any account, native or derived — never mandatory, and never parsed on chain
+([credentials](docs/contracts/universal-account.md#credentials)).
+
+**Rotation and recovery.** A UA is its key data, so a new key is a new UA and funds move to it. Users who need a stable
+address across key changes, guardian recovery, or compatibility with contracts that only understand addresses use the
+optional smart account `SubjectAccount` — itself a native contract UA
+([CTR-ACC-09](docs/contracts/accounts-mandates.md#CTR-ACC-09)).
+
+**Status.** The UA model is SPECIFIED, nothing of the new registry is built yet. Already BUILT: BLS verification,
+bn254 FROST and MuSig2 verification, ECDSA N-of-M quorums, `SubjectAccount`, and the Zether-only registry that the UA
+registry replaces. In the first version, existing tokens, the DEX and mandates keep accepting native accounts; UA
+holders use the new UA-ledger tokens (MetaToken v3) and Zether
+([function → kinds](docs/contracts/universal-account.md#function-kinds)).
+
+---
+
+## 7. Meta-transactions and EIP-1776
 
 A **meta-transaction** separates *who authorizes* an operation from *who submits and pays for* it. SCaaS puts it
 **inside the contract itself**, following the design of [EIP-1776](https://github.com/ethereum/EIPs/issues/1776)
@@ -337,7 +407,7 @@ account ([docs/networks/README.md](docs/networks/README.md)).
 
 ---
 
-## 7. Who pays the fee: every model
+## 8. Who pays the fee: every model
 
 Because authorization and payment are separate, SCaaS can offer every reasonable answer to "who pays?". All of them
 use the same signed intent; only the fee fields and the submitter differ.
@@ -370,7 +440,7 @@ break-even of a fee-earning relayer and the B2B default are in [docs/architectur
 
 ---
 
-## 8. Meta-transactions and liquidity
+## 9. Meta-transactions and liquidity
 
 Here **liquidity means transaction flow: how many transactions actually happen on the chain**, how often and by how
 many participants. A chain is only as useful as the flow of calls into its contracts. The traditional model throttles
@@ -404,7 +474,7 @@ the same contract rules and the same subject signatures.
 
 ---
 
-## 9. Open relayers: open and competitive
+## 10. Open relayers: open and competitive
 
 **Anyone can run `scaas-node` as a relayer, with their own policies.** A relayer is a business, not a gatekeeper:
 
@@ -431,7 +501,7 @@ fee-earning ones. Both kinds serve the same contracts under the same rules
 
 ---
 
-## 10. Confidential amounts: Zether and PQ Zether
+## 11. Confidential amounts: Zether and PQ Zether
 
 On a public chain every amount and balance is visible to competitors. Mixers hide *who* paid *whom*, which breaks
 audit and anti-money-laundering duties. **Zether hides the opposite: amounts and balances are encrypted, identities
@@ -454,7 +524,7 @@ Read more: [docs/contracts/zether.md](docs/contracts/zether.md), [docs/contracts
 
 ---
 
-## 11. Chains and families
+## 12. Chains and families
 
 SCaaS groups chains into **families**: one contract code base and one node adapter per family.
 
@@ -476,7 +546,7 @@ or permissioned chain (your nodes and admitted peers only); a consortium (each m
 
 ---
 
-## 12. The components and where to read more
+## 13. The components and where to read more
 
 ```mermaid
 flowchart TB
@@ -493,7 +563,7 @@ flowchart TB
     subgraph SC["Smart contracts = API services"]
         direction LR
         T["Tokens, wrappers"]
-        M["Accounts, mandates"]
+        M["Universal Accounts,<br/>mandates"]
         D["DEX, tender, assets"]
         Z["Zether, PQ Zether"]
     end
@@ -529,7 +599,7 @@ or **PLANNED** (direction only).
 
 ---
 
-## 13. Repository layout
+## 14. Repository layout
 
 | Path | What |
 |---|---|
