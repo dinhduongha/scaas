@@ -1207,6 +1207,9 @@ Risks: shim period (M1–M2) briefly doubles paths — keep M1 and M2 in one ses
 
 ## 8. Open owner questions (collected)
 
+> **Answered 2026-10-07 (owner: "Còn lại theo mặc định")** — every question below takes its default; record each as an owner ruling dated 2026-10-07 in decisions.md. Also confirmed: English throughout; new component ids with old ids as aliases; SCaaS.md → history + new SCaaS-v2.md product intro.
+
+
 | # | Question | Default if unanswered |
 |---|---|---|
 | Q1 | K1: call-table rows for permissionless tender/vesting/distribution/offer selectors + a `Safe.execTransaction` row for role-holder contracts; factory stays excluded? | as proposed |
