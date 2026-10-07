@@ -42,6 +42,8 @@ as [NODE-STO-04](#NODE-STO-04). Multi-node HA on a shared database is **not** in
   (new epoch) before resuming, and replays `plan()` from the store.
 - PostgreSQL: refuse to start when the server answers `SHOW pool_mode` (PgBouncer) or when `pg_backend_pid()` of the
   lock connection changes between two pings. A connection pooler must not sit between the node and its database.
+  <!-- example:odoo -->The reference ERP stack runs PgBouncer (`/home/dockers/odoo19/pgbouncer`) for its own database;
+  it must not sit in front of the node store.<!-- /example -->
 
 ### Transactions and outcomes
 
@@ -180,6 +182,7 @@ CREATE TABLE job (
   valid_until     BIGINT NOT NULL,
   lane_hint       TEXT,                                           -- NODE-JOB-08
   bus_scope       TEXT NOT NULL DEFAULT 'restricted' CHECK (bus_scope IN ('restricted', 'open', 'public')),
+                  -- open "exposes … to admitted peers" (partners); public: also the open mesh
   private_window_secs INTEGER NOT NULL DEFAULT 120,
   published_at    BIGINT,                                         -- set when offered on the bus (NODE-JOB-07, NODE-MESH-15)
   hold            INTEGER NOT NULL DEFAULT 0,                     -- 1 = never lease (cancelled after publication)
@@ -399,7 +402,9 @@ CREATE TABLE mesh_policy (id BIGINT PRIMARY KEY, chain_key TEXT NOT NULL, contra
   UNIQUE (chain_key, contract, selector));
 ```
 
-Transitions are single `UPDATE … WHERE intent_id = ? AND state = ?` statements (CAS); a zero row count means
+First-draft state names (`POOLED`, `FORWARDING`, `SUBMITTABLE`, `SIMULATED`, `LANDED_ELSEWHERE`, `REJECTED`) map to
+the lowercase states below (`forwarding` and `simulated` were dropped). Transitions are single `UPDATE … WHERE
+intent_id = ? AND state = ?` statements (CAS); a zero row count means
 someone else moved it.
 
 | From | Event | To | Who |
@@ -475,8 +480,7 @@ expired announces/bans are deleted by the janitor. `dex_market` gains `gossip IN
 
 ## Chain state
 
-<a id="chain-state"></a><a id="chain-states"></a><a id="NODE-STO-02"></a>**NODE-STO-02** — Chain `state ∈ active |
-paused | halted`. **`paused` blocks sending only**: no new lease, the gateway refuses new intake for the chain, but
+<a id="chain-state"></a><a id="chain-states"></a><a id="NODE-STO-02"></a>**NODE-STO-02** — Chain `state ∈ active|paused|halted`. **`paused` blocks sending only**: no new lease, the gateway refuses new intake for the chain, but
 the indexer and the event feed continue and signed transactions keep being tracked, so a customer who has paid is
 still booked. **`halted`** also stops indexing (chain fault or reorg that needs a human). A chain not yet enabled
 stays out of the store (enablement: [runbooks.md#production-gates](runbooks.md#production-gates)). A client may keep
@@ -529,8 +533,9 @@ call; the store snapshot replaces it chain by chain ([job-api.md#legacy-pull](jo
 [README.md#listeners](README.md#listeners):
 
 <a id="NODE-STO-01"></a>**NODE-STO-01** — On a family that prunes lane state after expiry (TON, Aptos, Solana), a chain
-must have `max_valid_for_secs ≤ LANE_HORIZON` (the pay-lane issuance horizon H, 30 d,
-[CTR-MTX-04](../contracts/metatx.md#CTR-MTX-04)); the node refuses a larger value, because pay-once then no longer
+must have `max_valid_for_secs ≤ LANE_HORIZON` — `max_valid_for_secs ≤ H` with `H = LANE_HORIZON = 30 d`, so that
+`validUntil ≤ t_first_issue + H` holds (the pay-lane issuance horizon H,
+[CTR-MTX-04](../contracts/metatx.md#CTR-MTX-04)); the node refuses `max_valid_for_secs > LANE_HORIZON`, because pay-once then no longer
 holds ([NET-ALL-01](../networks/README.md#NET-ALL-01)). The constants are pinned equal in tests (TON `LANE_TTL`,
 Aptos/Solana `PRUNE_DELAY_S`, node `LANE_TTL_S`, the issuer's `LANE_HORIZON_S`).
 
@@ -585,7 +590,7 @@ poll_ms = 1000
 stuck_after_secs = 60                           # replace at the same nonce, fee ×1.25
 max_gas_per_tx = 3000000                        # structural breaker
 max_fee_cap_gwei = 500                          # fee ceiling for replacements
-profile = "public"                              # default "private" (NODE-MESH-06)
+profile = "public"                              # chain_profile; default "private" (NODE-MESH-06)
 fee_recipient = "0x…"                           # optional, EVM/Hedera. Cold wallet: normalization target, published
                                                 # in /v1/mesh/policy, used by fee_recipient_allow = "self_or_zero".
                                                 # Never a lane key. Unset ⇒ normalization writes 0 (fee to the lane).

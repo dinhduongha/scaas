@@ -7,14 +7,16 @@ transactional outbox) hand signed work to the node and learn what happened to it
 
 All bodies JSON, body cap 1 MiB, no cookies, no redirects, no CORS (a browser cannot call it cross-origin even with a
 leaked key). Authentication [NODE-JOB-05](#NODE-JOB-05) on every route. Errors:
-`{"error": "<CODE>", "detail": "<text ≤ 300 chars>", …}`.
+`{"error": "<CODE>", "detail": "<text ≤ 300 chars>", …}`, i.e. `{"error": "<CODE>", "detail": "<text ≤ 300 chars>"}`
+plus code-specific fields (the gateway's contract is
+`{error, code, detail, revert_data?}`, [NODE-GW-06](gateway.md#NODE-GW-06)).
 
 ## Namespaces
 
 <a id="namespaces"></a><a id="NODE-JOB-03"></a>**NODE-JOB-03** — **Namespaces are the node's tenant unit**
 (`[a-z0-9-]{3,40}`; names starting `~` are reserved: `~gateway`, `~mesh`, `~dex`, and `~lane` — a booking label only,
 for gap-fillers of adopted nonces, never a job namespace). A namespace has granted chains and a token subset pushed by
-the client ([NODE-JOB-12](#NODE-JOB-12)). The node has no notion of company or legal entity: a client maps its own
+the client ([NODE-JOB-12](#NODE-JOB-12)). The node has no notion of company or legal entity (owner: "the node doesn't know companies"): a client maps its own
 tenants to a node endpoint + namespace credential. A namespace shared by several of a client's entities sees their
 combined feed; the client routes by `origin`.
 
@@ -35,7 +37,7 @@ restore can resurrect a revoked key ([threat-model.md#node](threat-model.md#node
 X-Scaas-Key: k_3f9a0c1d2e4b5a6c
 X-Scaas-Timestamp: 1790000000                # unix seconds; ±300 s accepted
 X-Scaas-Nonce: 9b2c…                         (1–64 [A-Za-z0-9_-], remembered until ts + 300 s)
-X-Scaas-Signature: hex(HMAC-SHA256(secret, ts "." nonce "." METHOD " " path?query "\n" body))
+X-Scaas-Signature: hex(HMAC-SHA256(secret, ts "." nonce "." METHOD " " path_with_query "\n" body))
 ```
 
 Verification (`Auth::HmacKeys { keys, seen }`): look up `key_id` in the hot key snapshot (active, not expired,
@@ -46,8 +48,8 @@ the request extensions. Nonce cache keyed by `(key_id, nonce)`. Unknown key and 
 
 API keys are for **external server-side clients only** ([NODE-ADM-06](admin-auth.md#NODE-ADM-06)): never on admin
 routes, never in a browser, mobile or desktop app or extension. Keys are created, rotated (`generation + 1`) and
-revoked (hot, ≤ 2 s) by a `key_custodian` ([admin-auth.md#cli](admin-auth.md#cli)); the secret (64 hex) is shown
-once.
+revoked (hot, ≤ 2 s) by a `key_custodian` (`POST /v1/admin/keys`, `POST /v1/admin/keys/{id}/rotate`, CLI,
+[admin-auth.md#cli](admin-auth.md#cli)); the secret (64 hex) is shown once.
 
 ## Journal and digests
 
@@ -82,7 +84,7 @@ means "the node holds a job under this key", never "dead".
 | `POST /v1/jobs` | submit | accept ≤ 50 jobs, per-item results |
 | `GET /v1/jobs/{uid}` | read | one job snapshot (own namespace only, else 404) |
 | `POST /v1/jobs/{uid}/cancel`, `POST /v1/jobs/cancel` (`{"origin": {…}, "chain_key", "valid_until"}`) | submit | [cancel](#cancel) |
-| `GET /v1/jobs?cursor=&limit=&wait=` | read | jobs change feed ([indexer-feeds.md#feeds](indexer-feeds.md#feeds)) |
+| `GET /v1/jobs?cursor=&limit=&wait=` (`limit` ≤ 500) | read | jobs change feed ([indexer-feeds.md#feeds](indexer-feeds.md#feeds)) |
 | `GET /v1/events?cursor=&limit=&wait=` | read | events feed ([indexer-feeds.md#event-items](indexer-feeds.md#event-items)) |
 | `GET/PUT /v1/watch/{chain_key}` | read / submit | namespace's receiving wallets (full replace) |
 | `GET/PUT /v1/tokens/{chain_key}` | read / submit | namespace's token subset (full replace; ∩ node registry incl. `chain_contract` rows; unknown ones listed in the response as `missing`) |
@@ -119,7 +121,7 @@ Payload by kind:
 | `metatx` | `{token, signature, metatx: {11 fields of MetaTransaction}}`; `uint256` as decimal strings; addresses lowercase. May carry `receiver_fee: {fee, feeRecipient, validUntil, signature}` ([sponsorship.md#receiver-pays](sponsorship.md#receiver-pays)); incl. v1 envelopes of a `PqzToken` |
 | `signed_op` | `{op: {op_kind: "pay", payload: "0x<exact signed bytes>", signature, public_key, auth_kind: "wallet"\|"passkey", extra: {…native params}}}`; `from`, lane, nonce, `valid_until`, relayer are decoded from `payload` (non-EVM `MetaOp` or Soroban auth payload) |
 | `call` | `{call: {target, calldata, validUntil}}` — e.g. `MandateWallet.payUnderMandate(...)`, `SubjectAccountFactory.deploy(...)`; the signature lives inside the calldata; selector and target must match a row of the [call table](#call-table); no native value |
-| `ua_metatx` (SPECIFIED) | MetaToken v3 `UAMetaTransaction` with `from: bytes32` and its `auth`: `{token, m: WireUAMetaTransaction, auth}`; same lifecycle as `metatx`; idempotency on `(chain, token, from, batch, nonce)`; digest = `uaDigest` (incl. v3 envelopes of a `PqzToken`) |
+| `ua_metatx` (SPECIFIED; `kind = ua_metatx`) | MetaToken v3 `UAMetaTransaction` with `from: bytes32` and its `auth`: `{token, m: WireUAMetaTransaction, auth}`; same lifecycle as `metatx`; idempotency on `(chain, token, from, batch, nonce)`; digest = `uaDigest` (incl. v3 envelopes of a `PqzToken`) |
 | `pqz_call` (SPECIFIED; private chain only) | **Direct open calls only**: `{chain, contract, selector ∈ {pqzTransfer, pqzBurn, rollOver}, calldata}` to a configured PQZ token (direct `fund` pulls the caller's underlying and is never a node job) |
 | PQZ envelopes (SPECIFIED) | **No new kind** ([CTR-PQZ-15](../contracts/pq-zether.md#CTR-PQZ-15)): a `PqzToken` is an `IERC20MetaTx` token, so its envelope ops travel as ordinary `metatx` (v1 domain `("SCaaS PqzToken", "1", chainId, token)`) or `ua_metatx` (v3, `salt = chainUid`) jobs, `m.to = 0`, `m.value = 0`, `m.data` = the direct calldata of `pqzTransfer`/`pqzBurn`/`fund`/`rollOver` (opaque to the client); outer fee `NONE`/`FIXED` only; never batched, never on the mesh; 1 MiB job body on the `pqz` profile; a gasless exit is the envelope `pqzBurn` paying the underlying to `recipient` |
 
@@ -150,7 +152,7 @@ unchanged. A W3C `traceparent` header applies to every item of the batch ([NODE-
    - 4b. The payload's `from` is over the grief threshold (≥ 10 billed failures in 24 h, or cost ≥
      `chain.grief_cost_cap`) ⇒ `429 SUBJECT_THROTTLED {retry_after}`; from 3 in 24 h it gets one live job per chain
      ([NODE-LANE-15](submit-lanes.md#NODE-LANE-15)).
-5. `now < valid_until ≤ now + chain.max_valid_for_secs` (default 3600) ⇒ `422 EXPIRED` / `VALID_TOO_LONG`.
+5. `now < valid_until ≤ now + chain.max_valid_for_secs` (default: `now < valid_until ≤ now + 3600`) ⇒ `422 EXPIRED` / `VALID_TOO_LONG`.
 6. relayer bound ⇒ a lane of this chain ⇒ `lane_hint`, else `422 RELAYER_NOT_OURS` ([NODE-JOB-08](#NODE-JOB-08)).
 7. normalization (unbound `feeRecipient`/`relayer`) of the stored work ([NODE-LANE-10](submit-lanes.md#NODE-LANE-10));
    `payload_hash` is over the client's payload, so a retry hashes identically.
@@ -163,7 +165,7 @@ unchanged. A W3C `traceparent` header applies to every item of the batch ([NODE-
    - 7c. Sponsorship match on job data only ([sponsorship.md#evaluation](sponsorship.md#evaluation)); on
      `~gateway`/`~mesh` a matched metatx/op needs a valid local payer signature (`422 BAD_SIGNATURE`; EIP-7702
      delegated payers per [gateway.md#eip-7702](gateway.md#eip-7702)); a matched job with `valid_until < now +
-     p.min_valid_secs` is not sponsored (`429 SPONSOR_TOO_SHORT` or unsponsored per `on_exhausted`).
+     p.min_valid_secs` is not sponsored (a sponsored job needs `valid_until ≥ now + min_valid_secs`) (`429 SPONSOR_TOO_SHORT` or unsponsored per `on_exhausted`).
 8. In one transaction: **re-check steps 1, 3, 4 from store rows with locking reads** ([NODE-JOB-14](#NODE-JOB-14)),
    then `SELECT … FOR UPDATE` by the idempotency tuple (all generations) — existing same generation: same hash ⇒
    return it (`created: false`); tombstone ⇒ `created:false, state:cancelled`; different hash ⇒
@@ -225,7 +227,8 @@ and it would revert in simulation; with pinning a DEX chain may run several lane
 <a id="token-subsets"></a><a id="NODE-JOB-12"></a>**NODE-JOB-12** — **An empty namespace token subset means no
 tokens.** `namespace.all_tokens` (default 0; `admin` only, audited) is the one way to serve every registered token of
 the granted chains; `store init` creates the reserved `~gateway`, `~mesh`, `~dex` rows with it. A client pushes
-`PUT /v1/tokens/{chain}` before its first job push on that chain; until then its jobs get `422 UNKNOWN_TOKEN`.
+`PUT /v1/tokens/{chain}` before its first job push on that chain (its push waits until the route's `tokens_hash`, the
+hash of the last pushed subset, is set); until then its jobs get `422 UNKNOWN_TOKEN`.
 ("Empty ⇒ all" would give a new, copied or misconfigured namespace every token of its chains until the first sync.)
 
 ## Call jobs
@@ -242,7 +245,8 @@ with several tenants this must be granted.
 `(namespace, chain_key, call_hash)` over live states (`call_hash = keccak256(target ‖ calldata)`). UA registrations
 all live in `~gateway`, so they stay deduplicated node-wide. A duplicate across namespaces is left to the target's own
 replay protection, which [NODE-JOB-09](#NODE-JOB-09) already requires of every `call` target. `job_live_digest` stays
-global (a digest is the intent's identity; a call hash is not). Two tenants may each queue the same call; the target
+global (a digest is the intent's identity; a call hash is not). An earlier key `(chain_key, call_hash)` let a tenant
+with `allow_call` hold another tenant's retry at `409 DUPLICATE_CALL`. Two tenants may each queue the same call; the target
 refuses the second.
 
 <a id="NODE-JOB-15"></a>**NODE-JOB-15** (open; default applied) — The namespace created for an ERP client that
@@ -309,7 +313,7 @@ sides read the vector file `scaas/scaas-node/tests/api/transitions.json` (client
 |---|---|---|
 | — | `queued` | job API accept / gateway / mesh scheduler / DEX venue |
 | — | `cancelled` (kind `tombstone`) | cancel by origin with no job ([NODE-JOB-07](#NODE-JOB-07); granted chain, capped TTL, quota, [NODE-JOB-11](#NODE-JOB-11)) |
-| `queued` (`hold = 0`, past `lease_hold_after_start_secs` = 15 s) | `leased` (`lane_label`, `claim_block`, `attempt_count+1`) | lane scheduler (replaces the legacy `relay_claim`) |
+| `queued` (`hold = 0`, past `lease_hold_after_start_secs` = 15 s) | `leased` (`lane_label`, `claim_block`, `attempt_count + 1` = `attempt_count+1`) | lane scheduler (replaces the legacy `relay_claim`) |
 | `queued`, `leased` (never published) | `cancelled` | cancel |
 | `queued` (published) | `queued` + `hold = 1` | cancel ⇒ `409 TOO_LATE, published: true` |
 | `queued`, `leased` | `dead` | expiry before submit; `bad payload`; `attempt_count > chain.max_attempts` (default 5) ⇒ `ATTEMPTS_EXHAUSTED` ([NODE-LANE-14](submit-lanes.md#NODE-LANE-14)); at lease `SUBJECT_DENIED`, `SPONSOR_TX_CAP` (`SPONSOR_RATE` is an accept-time `429`, never a lease-time death) |
@@ -363,7 +367,8 @@ can never pass intake step 5). A tombstone stores that `chain_key`/`valid_until`
 caller-chosen TTL and no quota would be ~1.7 M durable rows/day per key.)
 
 <a id="NODE-JOB-17"></a>**NODE-JOB-17** (open; default applied) — A cancel of a published job reports "already sent"
-and the client keeps its request open until final or expiry.
+and the client keeps its request open until final or expiry. (Client handling: `cancelled` ⇒ local dead + side
+effects; `TOO_LATE` ⇒ already sent; transport error ⇒ `cancel_requested`, retried first on the next sync.)
 
 <a id="NODE-JOB-18"></a>**NODE-JOB-18** (open; default applied) — Defaults: `max_tombstones = 1000`, tombstone
 cancels 2 rps (burst 10).
@@ -388,9 +393,35 @@ cancels 2 rps (burst 10).
 Terminal reasons that are not HTTP codes: job `dead` with `error = ATTEMPTS_EXHAUSTED` (`attempt_count >
 chain.max_attempts`); chain `halted` with reason `PROGRAM_UPGRADEABLE` ([NODE-STO-07](store.md#NODE-STO-07)).
 
+## Client conformance
+
+<a id="client-tests"></a>What a client of this API must test (the reference client's suite runs against a fake node):
+
+- Push: the outbox marker is committed before the HTTP call; a rollback after accept ⇒ the re-push applies the returned
+  snapshot; feed items for an unknown uid are adopted by origin; permanent vs transient errors;
+  `IDEMPOTENCY_MISMATCH`/`PREVIOUS_GENERATION_LIVE` ⇒ `attention`, never `dead`; a prerequisite job is not pushed
+  until `mined`; paused chain; no route ⇒ creating the request raises; a copied database (bound values mismatch)
+  refuses.
+- Sync: the ladder from `queued` to every target state; `FEED_LATE_NOOP` (`final` absorbs a late `mined`); overlap
+  no-op; poison item skipped; gap halts; straddle; unregistered contract dropped and counted; `balances` at the right
+  height; `store_id`/`restore_epoch` change, `head_seq < cursor`, incarnation mismatch ⇒ halt; acknowledgement
+  re-pushes.
+- Cancel: never pushed ⇒ local; `cancelled`; `TOO_LATE` signed and published; transport error ⇒ `cancel_requested`
+  retried first. Requeue bumps `generation`.
+- Server-only node-sync fields on every client record (explicit values and default-context injection, as user and as
+  superuser); transitional gates; cutover preconditions incl. tokens ⊆ node and journal continuity; the database
+  neutralization effect; DEX mirror seq guard; the new UNIQUE constraints exist in the database catalog (checked with
+  SQL, not trusted from code).
+
+<!-- example:odoo -->
+Reference client: `dms_blockchain/tests/test_node_client.py` (fake node via `_client()`), `push_attempted` false ⇒
+local cancel, `bound_*` mismatch, `default_*` context, `action_switch_to_push` preconditions, `pg_constraint` check;
+nightly `scripts/e2e_odoo_node.sh` (real Odoo test DB + node + anvil).
+<!-- /example -->
+
 ## Legacy pull
 
-<a id="legacy-pull"></a><a id="NODE-JOB-10"></a>**NODE-JOB-10** — **Per-chain pull/push flag, then one-step removal.**
+<a id="legacy-pull"></a><a id="NODE-JOB-10"></a>**NODE-JOB-10** — **Per-chain pull/push flag, then one-step removal** (the decision on "flag or hard cut").
 A client chain flag `node_transport ∈ pull|push` (default `pull`) selects the path. A transitional node runs both
 paths in one process (legacy pull for `pull` chains, the store for `push` chains; same lane, same nonce counter, one
 `lane.journal_max`). Legacy in-flight jobs drain on the legacy path; they are never imported into the store. After the
@@ -418,3 +449,39 @@ The legacy pull rules: the signed report is idempotent ([NODE-LANE-02](submit-la
 are checked against the [call table](#call-table) before simulation; a job the client moved to `dead` cannot be
 journaled `signed` (the client refuses the transition), which acted as a client-side veto that the node CAS
 ([NODE-JOB-07](#NODE-JOB-07)) now replaces.
+
+<!-- example:odoo -->
+**Reference ERP client (Odoo) names.** The legacy pull path and the transitional node were built against one
+reference ERP client, an Odoo addon (`dms_blockchain*`; DEX in `dms_blockchain_dex`). Its names, for readers of that
+code (orientation only; line numbers as of 2026-10-07):
+
+| Concept here | Reference client name |
+|---|---|
+| Legacy node client module (Rust) | `odoo.rs` (`odoo::Odoo`, `odoo::Job`, `odoo.rs:90-108`), config section `[odoo]`, marked with `// legacy(…)` comments until removal |
+| Per-chain flag | `blockchain.chain.node_transport ∈ pull|push`; cutover `action_switch_to_push` sets `node_transport = 'push'`, rollback `node_transport = 'pull'` |
+| Chain, its key and profile, DEX cursor, readiness counts | `blockchain.chain`, `blockchain.chain.chain_key`, `blockchain.chain.chain_profile`, `blockchain.chain.dex_indexed_block`, `blockchain.chain.relay_stats(chain_key)` |
+| RPC endpoints (moved to `node.toml`) | `blockchain.rpc.endpoint` |
+| Job (outbox row) and its payload builder | `blockchain.relay.job`, `blockchain.relay.job._payload` / `blockchain_relay_job._payload()` (`blockchain_relay_job.py:160-187`); allowed transitions `blockchain_relay_job.py:20-26`; idempotency `UNIQUE(company_id, origin_producer, origin_key)` (`blockchain_relay_job.py:99-101`); expiry cron `_cron_expire`; finality `_mark_final`; executed `_mark_executed`; dependents `_fail_dependents` / `_fail_dependents()` (`blockchain_subject_account.py`, `blockchain_subject_account.py:180-195`); autopay `blockchain_autopay.py:101-113`; durability around `blockchain_relay_job.py:121-138`; dependency field `prerequisite_job_id` |
+| Locked `call` jobs (the client half of the call table) | group `group_blockchain_operator`; ACL `1,0,0,0`; `action_requeue` guarded by `has_group('dms_blockchain.group_blockchain_operator')` and `sudo()` (`blockchain_relay_job.py:249-262`); immutable fields `_MUTABLE` on `blockchain.metatx` (`blockchain_metatx.py:10,65`) |
+| Legacy RPC methods | `relay_poll`, `relay_claim`, `relay_report(signed)` = `relay_report(job, 'signed', tx_hash, n)`, `chain_event_ingest` (`blockchain_chain_event.py:20-27`, `blockchain_chain_event.py:79`) |
+| Digests the client stores | `blockchain.metatx.digest_hash`, `blockchain.signed.op.digest_hash` |
+| Node record, route, attention state | `blockchain.node` (writable by `base.group_system` only), `blockchain.node.route` (`UNIQUE(company_id, chain_id)`), `blockchain.node.needs_attention` / `needs_attention`, acknowledgement `action_acknowledge_store_change`, event node `event_node_id`, crons `cron_node_push` / `cron_node_sync`, "never pushed" flag `push_attempted = False` |
+| Copy protection | `neutralize.sql` deletes node secrets; push/sync compare `database.uuid` and `web.base.url` with the `bound_*` values stored when the secret was set |
+| Secrets and server-only fields | node secrets in `ir.config_parameter`; `SERVER_ONLY` on every node-sync field; service users from `res.users.apikeys` |
+| Bus scope per company | `res.company.blockchain_bus_scope` |
+| Target acceptance policy (old design, now the node's `mesh_policy`) | `blockchain.target.policy`, `blockchain.target.policy.pool_visibility` |
+| Old mesh client methods (superseded) | `mesh_config`, `mesh_publish_claim`, `mesh_report` |
+| Payment request, settlement, tender | `blockchain.payment.request`, `blockchain.settlement`, `blockchain.tender`, `blockchain.tender.bid` |
+| DEX mirrors | `blockchain.dex.order` / `blockchain.dex.order/trade` with server-only `node_seq`; `_apply_dex_order(item)`, `_apply_dex_trade(item)` (skip when `item.seq <= node_seq`), `_upsert`, `_create_from_node`, `_dex_ingest_range`, fee booking `_book_fees` with `move_ids`, errors as `UserError` (`dex_order.py:106-141`, `dex_order.py:151-152`, `dex_trade.py:58-76`, `dex_trade.py:195-198`, `dex_trade.py:203`, `dex_trade.py:207`) |
+| Relayer address per chain | `chain_relayer_address` |
+| Development custody | `dms_blockchain.allow_dev_custody` (`ir.config_parameter`), `is_dev_chain = True`, `signer_ref`; Python `cryptography` / `secp256k1.py` (`secp256k1.sign`, RFC 6979) |
+| Roles | compliance officer `compliance_officer`; regulated templates `*_REG` |
+| Client-side family libraries and vectors | `lib/eip712.py`, `lib/fam_*.py` (`lib/fam_cosmos.py`, `lib/fam_sui.py`, `lib/fam_aptos.py`, `lib/fam_ton.py`, `lib/fam_solana.py`; also cited as `fam_sui.py`, `fam_aptos.py`, `fam_ton.py`, `fam_solana.py`), `dms_blockchain/lib/addresses.py`, vectors `dms_blockchain/tests/data/mesh-envelope-v1.2.json` run by `dms_blockchain/tests/test_mesh_vectors.py`; test data under `dms_blockchain/tests/data/` |
+| Idempotency scope the client sends | `scope = "<database.uuid>:<company_id>"` |
+| Tender client | models `blockchain.tender` (`tender_id`, `chain_id`) and `blockchain.tender.bid` (encrypted `(price, salt)`, `SERVER_ONLY`); purchase order only from the finalized `TenderSettled`; reveal reminder at `commitDeadline` |
+| Receiver-pays request fields | `fee_paid_by_receiver`, `receiver_fee_amount`, digest `paymentDigest` |
+| DEX book location (old choice "Odoo hay SQLite": ERP or SQLite) | built in the ERP; target the node store; mirrors keyed by `order_hash`/`trade_ref`, market gains server-only `node_market_id` |
+| Revert root cause on the client | `blockchain.transaction.revert_reason` |
+| Other models | `blockchain.chain.event` (event rows), `blockchain.dex.market`, DEX order helper `dex_order.py:144-149` |
+| Identity provider of the reference deployment | ABP AuthServer (`addons/bamboo_abp_auth`, role claim `role`) |
+<!-- /example -->

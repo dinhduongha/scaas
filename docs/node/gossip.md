@@ -8,7 +8,7 @@ outbound rustls client).
 ## Scope
 
 <a id="scope"></a><a id="NODE-GSP-01"></a>**NODE-GSP-01** — **Gossip is required alongside the pull bus.** The pull bus
-is the **admitted-peer** transport (consortium/private); libp2p gossipsub v1.1 is the **open-mesh** transport. Same
+is no longer "transport v1, libp2p later"; it is the **admitted-peer** transport (consortium/private); libp2p gossipsub v1.1 is the **open-mesh** transport. Same
 envelope, same store, same `accept()`, same dedup/tombstones, same policy table. Admission on the open mesh = scoring +
 limits ([NODE-GSP-08](#NODE-GSP-08)), not an allowlist. The model is an open relayer mesh in the style of 0x-mesh:
 validate before forwarding, any relayer may race to land. The pull bus keeps what gossip cannot give: cursor catch-up
@@ -107,7 +107,8 @@ runs on `https` **and** on `quic` as request-response protocol `/scaas/bus/1.2` 
 the bus over QUIC (not over gossip topics) keeps origin-only serving and the cursor discipline; one connection per peer
 serves both bus and gossip. A partner without QUIC/UDP egress uses HTTPS.
 
-<a id="NODE-GSP-03"></a>**NODE-GSP-03** — **PQ key exchange, classical identity, one crypto library.** One
+<a id="NODE-GSP-03"></a>**NODE-GSP-03** — **PQ key exchange, classical identity, one crypto library** (replacing the earlier "ring provider
+explicit, no aws-lc-rs" choice; the ring provider has no ML-KEM group). One
 process-wide rustls `CryptoProvider` = **`aws-lc-rs`** with **X25519MLKEM768** (codepoint `0x11EC`); installed once at
 start and passed explicitly to every rustls builder. **QUIC and the HTTPS bus offer only X25519MLKEM768** (no classical
 group: a QUIC/HTTPS connection is PQ by construction). TCP+Noise (XX, X25519) is classical and carries **only**
@@ -167,7 +168,7 @@ is under a hybrid ML-KEM key exchange.**
 <a id="identity"></a><a id="NODE-GSP-05"></a>**NODE-GSP-05** — **One node key** (Ed25519, 32-byte seed) is: the
 `hub.sig` key, the self-signed TLS cert key of the HTTPS bus ([NODE-MESH-03](mesh.md#NODE-MESH-03)), the libp2p
 identity (`PeerId` = identity-multihash of the protobuf Ed25519 public key; QUIC's libp2p-TLS cert and Noise
-static-key signature are made with it). The canonical id everywhere in envelopes, store and admin API stays `peer_id =
+static-key signature are made with it). Config `[identity] key` (replaces the never-built `[mesh] key`). The canonical id everywhere in envelopes, store and admin API stays `peer_id =
 SHA-256(SPKI DER)`; `PeerId ↔ peer_id` is a pure function of the public key. Config: `[identity] key`. One thing to
 pin, one thing to rotate; an announce, a `hub.sig` and a gossip connection are attributable to the same operator
 without a binding certificate. Compromise of the key = all three identities; rotation = new identity (new `peer_id`;
@@ -469,7 +470,8 @@ deployment must set `allow_private_addrs`.
 
 ## Intents
 
-<a id="intents"></a>Publish rule — `may_gossip`, the second and last exit (the first is `may_export`,
+<a id="intents"></a>`bus_scope = public` is a separate opt-in from `open`: the consent behind `open` (it "exposes … to admitted
+peers") covered partners, not the world. Publish rule — `may_gossip`, the second and last exit (the first is `may_export`,
 [mesh.md#private-profile](mesh.md#private-profile)):
 
 ```
@@ -553,7 +555,8 @@ forward scores are not built; the exclusivity credit counts only landings of int
 
 ## Hints
 
-<a id="hints"></a><a id="NODE-GSP-11"></a>**NODE-GSP-11** — **Landed hints only trigger a chain read.** Hints are
+<a id="hints"></a><a id="NODE-GSP-11"></a>**NODE-GSP-11** — **Landed hints only trigger a chain read** (this closes the earlier "no receipt gossip in v1" with
+no new trust). Hints are
 published only by the node whose lane landed the intent; processed only from signers with ≥ 1 credited landing or
 `gossip_trusted`, on their own RPC budget; a hint is **a trigger for the consumption read
 ([NODE-LANE-09](submit-lanes.md#NODE-LANE-09)), never a state change**. Our row/job changes state only from the chain

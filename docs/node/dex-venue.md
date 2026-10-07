@@ -63,7 +63,7 @@ treats IOC like FOK's single counterpart. Required before non-EVM books are serv
 `remaining` (+ the relayer fee in `sellToken`) of every open order of the same (maker, sellToken) **plus the new
 order**, **plus fills already matched whose trade is not yet `settled`/`failed`** (funds not yet moved but `remaining`
 already reduced) must be `<= fundable`; cleared when the trade completes. Otherwise a balance of 100 could place 50
-orders of 100. Test: balance 100, ask #1 of 100 matched and pending ⇒ ask #2 of 100 refused. (Today `Book::committed`
+orders of 100. Test: balance 100, ask #1 100 matched and pending ⇒ ask #2 100 refused. (Today `Book::committed`
 counts only resting orders, `dex.rs:449-462`.)
 
 The venue computes no DEX fee: the matcher only compares the signed `maxFeePpm` with the market fee; the DEX fee is
@@ -90,17 +90,19 @@ refused; `checkOrder` must answer `OK`; the committed-balance rule above.
 <a id="fault-attribution"></a><a id="NODE-DEX-02"></a>**NODE-DEX-02** — **The relayer fee token is limited, and
 failed pairs are attributed by evidence.** Intake requires `feeToken ∈ {0, sellToken, buyToken}` (the two tokens of the
 listed market); otherwise refused at the door (a fake fee token with `balanceOf`/`allowance` = 2^255 whose
-`transferFrom` always reverts would pass `checkOrder` and block every taker crossing it). A pair that fails in
+`transferFrom` always reverts would pass `checkOrder` with a huge `feeFundable` and block every taker crossing it). A pair that fails in
 simulation is attributed from the revert reason of `eth_call settleOne(m, relayer)` with `from = DEX`, never guessed: a
 DEX error carries an `orderHash`; a token error (`SafeERC20FailedOperation(token)`) is attributed to the side that pays
 that token in the pair (M pays X, T pays Y, each pays its own fee token). Only a reason that points at the new order
 answers `400`; one that points at the maker ⇒ the maker is dropped (`invalid`) and matching retries (≤ 3 rounds). A
-maker that fails in 2 pairs with 2 different takers is removed. Recovery after a failed settle uses the same
+maker that fails in 2 pairs with 2 different takers is removed. Recovery after a failed settle (`sync_once`) uses the same
 attribution: only the side at fault is not restored.
 
 <a id="oog-pairs"></a><a id="NODE-DEX-06"></a>**NODE-DEX-06** — **ERC-1271 orders whose check ran out of gas are never
 restored.** The contract caps an ERC-1271 signature check ([CTR-DEX-08](../contracts/dex.md#CTR-DEX-08)); a pair whose
-reason is out-of-gas in that check ⇒ that ERC-1271 order is not restored to the book.
+reason is out-of-gas in that check ⇒ that ERC-1271 order is not restored to the book. (The contract's `_validSig`
+branch uses a `staticcall` with cap `_erc1271Gas(signer)`: 400k when `signer.codehash` is the `SubjectAccount` clone
+code hash, else 50k; at most 32 bytes of return data.)
 
 ## Routes
 
@@ -156,6 +158,14 @@ CREATE TABLE dex_cursor (chain_key TEXT PRIMARY KEY, indexed_block BIGINT NOT NU
 
 (`remaining`/fills are uint256 decimal text; they are never aggregated or ordered by the store.)
 
+Transitional (BUILT): the book lives in the client database. At start `dex_book_load(chain)` loads every
+`open/partial` order (signature, `remaining`, `seq`) and rebuilds price-time order; an order is matched on a **copy**
+of the book, `settle` simulated, then `dex_book_commit` (orders + trade + job) runs; only on success is the in-memory
+book replaced. A failed commit (a timeout included: the client may have committed) reloads the whole book and answers
+`503`; `trade_ref` UNIQUE blocks double writes. A failed trade (job `dead/reverted`, or a final `MatchFailed`) is set
+`failed` by the client and the node's `dex_sync` loop restores eligible orders (IOC/FOK never). The book-location
+choice (<!-- example:odoo -->first phrased "Odoo hay SQLite"<!-- /example -->) was first recorded in the DEX design note `2026-10-03-dex-design.md`; the target is the node store.
+
 Lifecycle in the venue:
 
 1. **Start:** `Venue::start` loads markets from the config snapshot and the book from `dex_order` (every `open/partial`
@@ -190,9 +200,10 @@ through the legacy `dex_book_load`, then resumes markets in the node.
 ## Gossip
 
 <a id="gossip"></a><a id="NODE-DEX-12"></a>**NODE-DEX-12** — **DEX book gossip, two order modes per market.**
-**Home-bound** (default): an order bound to relayer `r` is matched and settled **only by the home** that proved `r` in
-its announce ([gossip.md#announce](gossip.md#announce)); `OrderBookDex._accept` (`relayer ∈ {0, sender}`) makes this
-**hard**. Other nodes keep read-only replicas — a home register (highest `home_seq` wins) joined with chain facts
+**Home-bound** (default; `dex.rs` l.552–554): an order bound to relayer `r` is matched and settled **only by the home** that proved `r` in
+its announce ([gossip.md#announce](gossip.md#announce)); `OrderBookDex._accept` (`relayer ∈ {0, sender}`, l.263) makes this
+**hard**, and with `filled + fill ≤ sellAmount` (l.267) and each pair in `try settleOne` (`MatchFailed`) **no fill can be
+settled twice in either mode**; the rules below only keep honest nodes from wasting gas and showing phantom fills. Other nodes keep read-only replicas — a home register (highest `home_seq` wins) joined with chain facts
 (`filled = max`, `closed = or`) — and replicate/advertise only **DEX-trusted homes**. **Relayer-unbound**
 (`dex_market.unbound = 1`, maker opts in per order with `relayer = 0`): resting GTC orders only; one deterministic
 **claimant** may match during `claim_ms`, then any node matches its own (bound) takers against it; cancel is final only
@@ -376,7 +387,7 @@ Private-profile chains: managed markets are never on gossip ([gossip.md#private-
 <a id="tests"></a>cargo: price-time matching, partial fills, IOC, FOK, match limits == contract, snapshot/reload
 (durable), spam controls, digest KAT, event decoding; dust maker at the head + deeper maker ⇒ the taker matches the
 deeper maker; a poisoned-`feeToken` maker with "healthy maker, failed pair" blocks neither other takers nor recovery;
-an OOG pair is not restored; over-commitment while a trade is pending; an on-chain market fee raise ⇒ the market stops
+an OOG pair is not restored; `min_nonce < 2^(w−1)` per network (Sui/Aptos `w = 128`, Solana `w = 64`); over-commitment while a trade is pending; an on-chain market fee raise ⇒ the market stops
 being served within one poll; IOC single maker on the Move/Solana families; a late `Matched` after recovery debits the
 book. e2e (anvil ports 31950–31959, gateway 18650–18659): approve meta-tx → two orders through the gateway → partial
 match → settle job → balances; cancel ⇒ settle never runs; venue restart ⇒ book intact. Managed markets: intake refusals

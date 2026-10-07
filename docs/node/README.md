@@ -240,3 +240,94 @@ job path runs from the store. No step mixes a move with a behaviour change; test
 - OIDC introspection / revocation, DPoP or mTLS-bound tokens.
 - Admin-API management of RPC URLs with a dial allowlist.
 - Audit retention and export; per-key IP allowlists; signed feed pages (only with a second verifier).
+
+## Tests
+
+<a id="tests"></a>Node-wide test plan for the store-backed node (each item lands with the change it covers; component
+docs add their own: [mesh.md#tests](mesh.md#tests), [gossip.md#tests](gossip.md#tests),
+[dex-venue.md#tests](dex-venue.md#tests), [sponsorship.md](sponsorship.md), [ops.md#alerts](ops.md#alerts),
+[runbooks.md#backup-dr](runbooks.md#backup-dr)).
+
+Unit (`cargo test`, no network):
+
+- `store.rs` (contract suite, run per backend): migrations; second owner refused; **fencing**: a stale owner's journal
+  transaction aborts; state machine = `transitions.json`; `job_event` atomic with the CAS; `job_live_digest`;
+  idempotency incl. tombstone and generations; unique violations classified by constraint (name, or the SQLite column
+  list); `transition` never enters `cancelled`; journal fields only on their transitions; purge never deletes an
+  unexpired origin; lease vs cancel race; published-job cancel ⇒ hold + `TOO_LATE`; tri-state `transition` (`Moved`
+  after cancel, `Moved{signed, own hash}` proceeds, injected commit-outcome-unknown ⇒ re-read); `lane.journal_max`
+  monotonic with out-of-order writes; byte-exact keys (`'0xAB' != '0xab'`, base58 case); nonces as i64.
+- `jobs_api.rs`: every accept check and code; node-computed digest vs client digest; JCS KAT; snapshot in accept
+  results; namespace isolation; `wait`; `410`; continuity fields in pages.
+- `gwauth.rs`: `HmacKeys` (two keys, revoked/expired/rotated, nonce per key); shared KAT; per-listener body caps.
+- `oidc.rs`: RS256/ES256/EdDSA (test keys generated with the crypto library); wrong `iss`/`aud`, expired, `nbf` future,
+  missing `iat`, lifetime too long, `alg = none`, `HS256`, `alg`/`kty` mismatch, JWK `alg` mismatch, `jku` header,
+  `typ` required, unknown `kid` ⇒ one refetch then reject, refetch rate limit, rotation (old key removed ⇒ old token
+  rejected), stale-JWKS fail closed, `(iss, kid)` collision across two issuers, discovery redirect refused, `scope`
+  mapping refused for a user token, `audience ∈ client_ids` config refused, role mapping (`role` string/array,
+  `realm_access.roles`).
+- `admin_auth.rs`: Argon2id hash/verify round trip; login ok/bad/unknown (same status and comparable timing via dummy
+  hash)/locked/disabled; session MAC, expiry, refresh window, `session_epoch` revocation, role change ⇒ old token
+  rejected; dispatch by prefix with each mode off; roles ⊆ caller's on user create; the [NODE-ADM-08](admin-auth.md#NODE-ADM-08)
+  matrix (`key_custodian` alone ⇒ `403` on reset/disable/delete/demote of an `admin`; `409 LAST_ADMIN` incl. self; CLI
+  allowed; target `session_epoch` bumped); API key create/rotate/revoke by `key_custodian` only (403 for `admin`
+  alone); CLI writes while the node holds the owner lock.
+- `admin.rs`: route × role matrix for both admin credential kinds; CORS preflight; audit row before/after + actor + hash
+  chain, secrets masked; HMAC key on the admin listener ⇒ 401; session or OIDC token on the job API ⇒ 401; `LANE_BUSY`.
+- `submit.rs`/`adapter.rs`: the submit tests rewritten on a temp store; `plan()` from `lane.journal_max`; `leased`
+  mapped to `nonce_leased`; `lane_hint`; the foreign-nonce heuristic; gateway job digest present.
+- `config.rs`: bootstrap import, drift, toml-only fields refused by the API, the legacy client section accepted
+  (transitional) / refused (final), OIDC config validation.
+
+Contract fixtures (node ↔ clients): `scaas/scaas-node/tests/api/`: `job_request.json`, `job_result.json`,
+`jobs_page.json`, `events_page.json` (one `range` per family from the adapters' fixtures, plus `balances`),
+`transitions.json`, `hmac_kat.json`, `jcs_kat.json`. Clients keep byte-identical copies (CI `cmp`).
+
+e2e:
+
+- `tests/e2e_push.rs` (`--ignored`, anvil + forge, no ERP): a fake client pushes through HMAC and follows both feeds to
+  `mined` and a `range` with `MetaTransactionExecuted`; restart between `signed` and `broadcast` (no second outer tx);
+  consumption by a second EOA ⇒ `consumed`; cancel/lease race; cancel of a published job ⇒ `TOO_LATE` and no lease by
+  us; two namespaces isolation and digest squatting refused; gateway door A durable and deduplicated across restart;
+  transitional run with a fake client on the legacy path for one chain and the store path for another, same lane
+  (shared nonce counter, `journal_max` bumped by legacy `signed`); store indexer running on a `pull` chain then switched.
+- `tests/e2e_oidc.rs`: in-test mock issuer (discovery + JWKS + EdDSA/RS256 minting): admin flows per role, rotation
+  mid-run, issuer down ⇒ cached keys ⇒ fail closed after max stale; built-in login and OIDC against the same routes;
+  OIDC off ⇒ JWTs refused.
+- `tests/e2e_store_backends.rs` (`--ignored`, docker PG + MySQL): contract suite + lock loss (kill the lock session) ⇒
+  fencing stops journaling ⇒ second owner takes over without a double broadcast.
+- A nightly manual run with a real ERP test database + node + anvil: portal payment → push → mined → final; flip one
+  chain `pull → push` with an in-flight legacy job.
+
+## Code pointers
+
+<a id="code-pointers"></a>Where the behaviour described in these docs sits in `scaas-node` today (orientation only;
+line numbers as of 2026-10-07 and will drift; the module map above is the target layout). "After" = the change from the
+legacy pull path to the store ([job-api.md#legacy-pull](job-api.md#legacy-pull)).
+
+| Topic | Today | After |
+|---|---|---|
+| Wiring | the legacy client handle is passed to `Submitter`, the lane runner, the index runner, `indexer::run`, `drift::step`, `admin::refresh_loop` and the venue (`main.rs:103-228`) | `Store` handle + `ConfigSnapshot` receiver; the legacy client module stays only until the one-step removal |
+| Work intake | `poll_outbox` (`submit.rs:540-568`, `main.rs:181-186`) | `poll_store`: queued rows with `hold = 0` and `lane_hint IS NULL OR = lane`, oldest first, ≤ 10 → skip in-flight digest → CAS `queued→leased` |
+| Outcome reports | `report(…) -> bool` (`submit.rs:244-261`, `adapter.rs:151-159`) | `store.transition(uid, from, to, fields) -> Ok \| Moved{state, tx_hash} \| Unknown(err)` |
+| Journal before send | `signed` over HTTP before `send_raw`, `false` ⇒ retry (`submit.rs:308-316, 386-392`; `adapter.rs:419-423`) | CAS on the job row + `lane.journal_max` + fencing check; same tri-state in the non-EVM `step_once` |
+| Cold start | `Submitter::start` / `recover_lane` from `node_config.inflight` + `journal_max_nonce` (`submit.rs:146-190`, `adapter.rs:232-248`); start refuses when the legacy journal is unreachable (`submit.rs:148-150`) | `store.inflight(chain, lane)`: leased rows + `signed/broadcast` outer-tx rows with `lane_label = lane`; `leased` maps to `"nonce_leased"` at this boundary (`nonce.rs:28` matches the literal) |
+| Restart plan, nonces | `plan()` per nonce of one job (`nonce.rs:23-33`, `nonce.rs:23-32`; `submit.rs:98-105, 327`) | per outer transaction ([submit-lanes.md#nonce-plan](submit-lanes.md#nonce-plan)) |
+| In-flight digest set (G2) | `submit.rs:63-90`; client-supplied digest today (`submit.rs:93-96`; fields `lane_label/outer_nonce/tx_hash`, states `submitting/broadcast/landed`) | node-computed digest ([NODE-JOB-02](job-api.md#NODE-JOB-02)) |
+| Pause and breaker gate | block `poll_outbox` (`submit.rs:574-583`) | block `poll_store` the same way |
+| Cost metering | EVM meters every receipt (`submit.rs:526-529`); non-EVM meters `Mined` only (`adapter.rs:270-276`, `tx_fee`) | every landed status ([NODE-LANE-13](submit-lanes.md#NODE-LANE-13)) |
+| Attempts | `store/sqlite.rs:162` increments `attempt_count`; every `Rejected` goes back to `queued` (`adapter.rs:293-299`) | billed-failure rule ([NODE-LANE-14](submit-lanes.md#NODE-LANE-14)) |
+| Unsigned job fields | Cosmos `relay_msg` (`cosmos.rs:177-198`), Soroban `max_time` (`soroban.rs:313`), TON forward amount (`ton.rs:1145`; `ton.rs:1140-1149`, `jetton.tact:149-161, 235`) | read from the payload ([NODE-LANE-16](submit-lanes.md#NODE-LANE-16), [NODE-LANE-17](submit-lanes.md#NODE-LANE-17)) |
+| Adapter-local journals | Sui gas-coin `Pending` (`sui.rs:465-467`) | store ([NODE-LANE-19](submit-lanes.md#NODE-LANE-19)) |
+| Gateway | unjournaled `Work`, in-memory `mpsc` (`gateway.rs:139-150`, `main.rs:139-153`); auth `gwauth.rs:5-8`, `gwauth.rs:23`, `gwauth.rs:74-104`, `gwauth.rs:108-116` | a job in `~gateway` ([gateway.md#door-a-intake](gateway.md#door-a-intake)) |
+| Indexer | `index_step` / `indexer::step` (`adapter.rs:443-458`, `indexer.rs:106-118`); finality read from the client (`indexer.rs:113`); race fix `indexer.rs:81-82`; normalization `indexer.rs:21-59, 69-77`, `adapters/hedera.rs:14-15`, `adapters/cosmos.rs:278-290`, `adapters/sui.rs:364-393`, `adapters/aptos.rs:352-380`, `adapters/aptos.rs:555-572`, `adapters/ton.rs:1022-1024, 1263-1272`, `adapters/solana.rs:543-566`, `adapters/soroban.rs:191-198` | cursor in `chain_index`, one transaction per range ([indexer-feeds.md](indexer-feeds.md)) |
+| Drift | `node_config.indexed_block` + `balance_report` (`drift.rs:30-50`) | `chain_index` + `feed_item(balances)` |
+| Readiness | via the client (`admin.rs:125-153`) | store + RPC + lag ([ops.md#health](ops.md#health)) |
+| Config sources | `main.rs:131-167`, `adapters/evm.rs:31`, `hedera.rs:14-15`, `ton.rs:940`, `indexer.rs:106-117`, `adapter.rs:445-450`, `drift.rs:31-33`; admin bind `config.rs:51-52`; validation `config.rs` | [store.md#config-authority](store.md#config-authority) |
+| Store (first cut) | tombstones without quota (`store/sqlite.rs:357-373`); `accept_once` reads only `max_live_jobs` (`store/sqlite.rs:188-214`) | [NODE-JOB-11](job-api.md#NODE-JOB-11), [NODE-JOB-14](job-api.md#NODE-JOB-14) |
+| Job builder | `job.rs` `build(&Job, …)` | unchanged |
+| Keys in one process | relay and indexer keys both loaded (`main.rs:103, 117`) | [threat-model.md#node](threat-model.md#node) T7 |
+| Mesh | `mesh/digest.rs:130-300` (`check_evm`, `:193-195`), `mesh/store.rs`, e2e `tests/e2e.rs`, `tests/e2e_<family>.rs`; adapters `adapters/cosmos.rs`, `adapters/hedera.rs`; wiring `main.rs` | [mesh.md](mesh.md) |
+| DEX venue | `dex/venue.rs:1`, `dex/venue.rs:179-199`, `dex/venue.rs:403-421`, `venue.rs:188-196`, `venue.rs:317-324`, `venue.rs:500, 542`, matching `dex.rs:637-643`, watcher in `indexer.rs`; contract `OrderBookDex.sol:188-198` (`_validSig`, `_erc1271Gas(signer)`), tests `OrderBookDex.t.sol:667`, `OrderBookDexInvariant.t.sol` | [dex-venue.md](dex-venue.md) |
+| Meta-tx contracts | `smartcontracts/src/common/MetaTxLib.sol`, `ERC20MetaTx.sol`, `smartcontracts/src/metatx/ERC20MetaTx.sol`, `smartcontracts/src/hedera/HederaMetaToken.sol` | [contracts/metatx.md](../contracts/metatx.md) |
+| Console app | `scaas/app/` | [clients/app.md](../clients/app.md) |

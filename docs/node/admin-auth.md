@@ -14,7 +14,8 @@ PHC hash + roles); login issues a short-lived node-signed session token ([built-
 `oidc` is on). **"API key" means only the external-client credentials** of [NODE-JOB-05](job-api.md#NODE-JOB-05) (ERP
 backends and other services): namespace-scoped, `submit`/`read` on the job and event API, never admin, and
 **server-side only** (never in browser/mobile/desktop apps or extensions). A node works with no IdP; built-in mode
-makes the node a password store (Argon2id, lockout, [threat-model.md#node](threat-model.md#node) T21). Opaque-token
+makes the node a password store (Argon2id, lockout, [threat-model.md#node](threat-model.md#node) T21). The owner's
+requirement was "as simple as possible". Opaque-token
 introspection (RFC 7662), DPoP and mTLS-bound tokens are not supported (follow-up).
 
 ### Credentials and token validation
@@ -83,7 +84,8 @@ exact `issuer`, JWKS cached by `(iss, kid)` with rotation, `iss` exact, `aud` co
 `HS*`, `jku/x5u/jwk/x5c/crit` rejected; no redirects. Any standards-conforming IdP works (e.g. an ASP.NET-style auth
 server with role claim `role`; Keycloak; others). **Several issuers allowed**, selected by exact `iss`; unknown `iss`
 never causes a fetch. Verification uses the node's one crypto library, **`aws-lc-rs`** (ring-compatible `signature`
-API); no JWT crate. An IdP that only issues opaque tokens cannot be used. `Config::validate` refuses `audience ∈
+API; the crate is already in `Cargo.lock`); no JWT crate. An earlier text said "verification uses `ring`"; it is
+`aws-lc-rs` now (one crypto library, [NODE-GSP-03](gossip.md#NODE-GSP-03)). An IdP that only issues opaque tokens cannot be used. `Config::validate` refuses `audience ∈
 client_ids` (an ID token of the app would otherwise be accepted as an access token) and `role_claim = "scope"` unless
 `machine_only = true` or the mapping is marked `scope_for_machines = true`.
 
@@ -127,7 +129,8 @@ memory only ([CLI-APP-11](../clients/app.md#CLI-APP-11)).
 - **Session token**: `scaas_s1.` ‖ base64url(JSON `{sub: name, ep: session_epoch, roles, iat, exp, auth_time}`) ‖ `.` ‖
   base64url(HMAC-SHA256(K, payload)), K = HMAC-SHA256(`master_key`, `"scaas-admin-session/1"`). Valid iff MAC ok,
   `exp > now`, the user is active and `ep == session_epoch` and `roles` equal the row's (one indexed read per request).
-  TTL 900 s; `POST /v1/admin/session/refresh` returns a new token while `now < auth_time + session_max_age_secs`
+  Wire form `scaas_s1.<b64url(json{sub, ep, roles, iat, exp, auth_time})>.<b64url(HMAC)>`; refresh until
+  `auth_time + 43 200 s`. TTL 900 s; `POST /v1/admin/session/refresh` returns a new token while `now < auth_time + session_max_age_secs`
   (43 200 s). `POST /v1/admin/logout` increments `session_epoch` (logs out every session of that user — simple and
   sufficient).
 - **External-client API keys** are managed by `key_custodian` users through `/v1/admin/keys`, the app, or the CLI; the
@@ -135,7 +138,7 @@ memory only ([CLI-APP-11](../clients/app.md#CLI-APP-11)).
 
 ## Roles
 
-<a id="roles"></a><a id="NODE-ADM-04"></a>**NODE-ADM-04** — **Roles**: `viewer` ⊂ `operator` ⊂ `admin`, plus
+<a id="roles"></a><a id="NODE-ADM-04"></a>**NODE-ADM-04** — **Roles**: `viewer ⊂ operator ⊂ admin`, plus
 `key_custodian` (not implied by `admin`). **Every admin credential carries roles**: built-in users store them; OIDC maps
 a configurable claim per issuer (scope-based mapping only for machine tokens: `sub == client_id`/`azp`, or
 `machine_only`). Creating, rotating and revoking **external-client API keys** and managing built-in admin users needs
@@ -166,7 +169,8 @@ never count as "last".
 ## CLI
 
 <a id="cli"></a><a id="NODE-ADM-05"></a>**NODE-ADM-05** — **Bootstrap and break-glass = the host CLI**, which writes
-credential rows straight into the store. The CLI may run while the node runs: it touches only `admin_user`, `api_key`,
+credential rows straight into the store: `scaas-node admin create <name> --role … --config node.toml` (password
+from stdin), `admin passwd`, `admin disable`, `key create|rotate|revoke` (the secret is printed once). The CLI may run while the node runs: it touches only `admin_user`, `api_key`,
 `namespace` and `audit_log` (actor `cli:<uid>`), never jobs, so it needs no owner lock or fencing (it takes the
 `store_owner` row lock only to serialize the audit chain, [store.md#backends](store.md#backends)). There is no
 second (Unix-socket) admin listener: host access (to `node.toml` and the store) is already the root of trust.
@@ -178,15 +182,15 @@ scaas-node admin create alice --role admin --role key_custodian --config node.to
 scaas-node admin passwd alice --config node.toml
 scaas-node admin disable alice --config node.toml
 scaas-node key create --namespace acme-erp --scopes "submit read" --config node.toml  # external-client API key, secret printed once
-scaas-node key rotate k_3f9a0c1d2e4b5a6c --config node.toml
-scaas-node key revoke k_3f9a0c1d2e4b5a6c --config node.toml
+scaas-node key rotate KEY_ID --config node.toml                                       # e.g. k_3f9a0c1d2e4b5a6c
+scaas-node key revoke KEY_ID --config node.toml
 scaas-node keystore new --kind mnemonic|secp256k1|ed25519 --out DIR --name FILE      # submit-lanes.md#lane-keys
 scaas-node mesh-id --config node.toml                                                # peer_id, PeerId, SPKI pin
 ```
 
 Every CLI action is audited (`actor_kind = 'cli'`, uid) and counted in `scaas_admin_cli_total`.
 
-**Maintenance CLIs** (node stopped, owner lock taken, epoch + 1, audited — the lock-free rule covers only the
+**Maintenance CLIs** (`scaas-node lane accept-nonce …`, `scaas-node index reset …`, …; node stopped, owner lock taken, epoch + 1, audited — the lock-free rule covers only the
 credential CLIs above); read-only ones take no lock:
 
 ```bash
@@ -208,6 +212,21 @@ start: a missing store file (unmounted volume, typo'd `[store] url`) refuses to 
 
 <a id="routes"></a>
 
+Summary (role to read / role to change):
+
+| Routes | Read | Change |
+|---|---|---|
+| `GET /v1/admin/info`, `GET /v1/admin/chains[/{key}]`, `GET …/lanes`, `GET /v1/admin/jobs`, `GET /v1/admin/audit` | viewer | — |
+| `PATCH /v1/admin/chains/{key}`, `PUT …/fee_recipient`, `POST/DELETE …/tokens`, `PUT …/lanes` (`409 LANE_BUSY`) | viewer | admin |
+| `PUT /v1/admin/chains/{key}/state`, `POST …/breaker/reset`, `POST /v1/admin/jobs/{uid}/cancel` | — | operator |
+| `GET/POST/PATCH/DELETE /v1/admin/users`, `/keys` (external-client API keys; `…/rotate`) | viewer | key_custodian |
+| `/v1/admin/deny`, `/v1/admin/sponsorship/*`, `/v1/admin/usage`, `…/chains/{key}/contracts`, `…/watch` | viewer | operator / admin |
+| `GET/POST/PATCH/DELETE /v1/admin/mesh/peers`, `/mesh/policy`; `PUT …/peers/{id}/state`; `PATCH /v1/admin/mesh/peers/{id}` (`multiaddr`), `PATCH /v1/admin/mesh/policy/{id}` (`gossip`), `PATCH /v1/admin/dex/markets/{id}` (`gossip`, `unbound`) | viewer | admin / operator |
+| `POST /v1/admin/sponsorship/policies`, `PATCH …/{id}`, `DELETE …/{id}`; `PUT /v1/admin/sponsorship/policies/{id}/state` | viewer | admin; operator |
+| `GET /v1/admin/gossip[/peers|/announces]`, `PUT/DELETE …/peers/{id}/ban`, `GET/PUT/DELETE …/trusted` | viewer | operator / admin |
+
+Detail:
+
 | Route | Role | Hot / restart |
 |---|---|---|
 | `GET /v1/admin/info` (version, store_id, incarnation, owner epoch, `pending_restart`, toml drift) | viewer | — |
@@ -218,7 +237,7 @@ start: a missing store file (unmounted volume, typo'd `[store] url`) refuses to 
 | `PUT /v1/admin/chains/{key}/fee_recipient` | admin | hot (metric `scaas_fee_recipient_changed_total`) |
 | `POST /v1/admin/chains/{key}/breaker/reset` `{"lane": "<label>\|*", "breaker": "<name>\|*"}`; also clears `breaker_latch` | operator | hot |
 | `GET/POST/DELETE /v1/admin/chains/{key}/tokens` (`POST` sets `decimals`, `kind`, `features`; `DELETE` also stops indexing, so runbooks pause instead) | viewer / admin / admin | hot |
-| `PATCH /v1/admin/chains/{key}/tokens/{address}` `{active: bool}` — `false` refuses intake of every op on the token on every door, **keeps indexing**; audited | admin | hot |
+| `PATCH /v1/admin/chains/{key}/tokens/{address}` `{active: bool}` — `false` (`token.active = 0`) refuses intake of every op on the token on every door, **keeps indexing**; audited | admin | hot |
 | `GET/POST/DELETE /v1/admin/chains/{key}/contracts` (`chain_contract`) | viewer / admin / admin | hot |
 | `GET /v1/admin/chains/{key}/watch` (backing ratios per leg, last watched events) | viewer | — |
 | `GET /v1/admin/chains/{key}/lanes` (address, balance, breaker, journal_max) | viewer | — |
@@ -249,7 +268,8 @@ start: a missing store file (unmounted volume, typo'd `[store] url`) refuses to 
 | `PUT /v1/admin/gossip/peers/{peer_id}/ban` `{until_ms?, reason}`, `DELETE …/ban` | operator | hot (disconnect now) |
 | `GET/PUT/DELETE /v1/admin/gossip/trusted[/{peer_id}]` (`assign`; `dex` = 1 pre-trust / 0 automatic / −1 block) | viewer / admin / admin | hot |
 
-<a id="NODE-ADM-01"></a>**NODE-ADM-01** — **Gossip is administered through the admin API**: the gossip routes and
+<a id="NODE-ADM-01"></a>**NODE-ADM-01** — **Gossip is administered through the admin API**: the `/v1/admin/gossip/*` routes, `scaas_gossip_*`
+metrics ([NODE-OPS-02](ops.md#NODE-OPS-02)) and
 the gossip columns on `chain`, mesh policy and `dex_market` above; bootstrap, listen addresses, external addresses,
 direct peers and the node key stay toml-only ([NODE-STO-03](store.md#NODE-STO-03)). Every mutation is audited. The
 console app's gossip screens are requirements in [clients/app.md](../clients/app.md).
@@ -277,7 +297,7 @@ before/after, and an **SSRF guard** applied at write and again at every dial (DN
   `allow_private`;
 - private ranges (`10/8`, `172.16/12`, `192.168/16`, `100.64/10`, `fc00::/7`) only when the admin explicitly allows
   them **for that peer** (`mesh_peer.allow_private`, default 0, itself an audited admin change);
-- normalization before classification: parse with `url`, host IDNA-to-ASCII and trailing dot stripped; an IP literal
+- normalization before classification: parse with `url` (in `Cargo.lock`), host IDNA-to-ASCII and trailing dot stripped; an IP literal
   must parse as `IpAddr` in canonical form (dotted-decimal IPv4 only: integer, octal and hex forms refused); IPv6 zone
   ids refused; IPv4-mapped/-compatible IPv6 (`::ffff:a.b.c.d`) classified as the embedded IPv4; resolved addresses go
   through the same classifier. SSRF tests pin each form.
@@ -286,15 +306,16 @@ Toml `[[mesh.peers]]` stays `https://` only until the full peer routes with the 
 
 ## CORS
 
-<a id="cors"></a>Admin listener only: `tower-http` (feature `cors`): exact `admin_cors_origins` (no `*`, no
-reflection), methods `GET, POST, PATCH, PUT, DELETE`, headers `Authorization, Content-Type`, `allow_credentials =
+<a id="cors"></a>Admin listener only: `tower-http` (in `Cargo.lock`, direct dependency; feature `cors`): exact `admin_cors_origins` (no `*`, no
+reflection), methods `GET, POST, PATCH, PUT, DELETE` (`GET POST PATCH PUT DELETE`), headers `Authorization, Content-Type`, `allow_credentials =
 false`, `max_age = 600`. Health/metrics are not CORS-enabled. No cookies are ever set or read.
 
 ## Audit
 
 <a id="audit"></a><a id="NODE-ADM-07"></a>**NODE-ADM-07** — **Audit and store loss**: every admin mutation appends a
 hash-chained `audit_log` row (actor `user:<name>`, `oidc:<iss>|<sub>` or `cli:<uid>`, roles, route, target,
-before/after, result) in the same transaction as the change. A client halts sync for a node when `store_id` or
+before/after, result) in the same transaction as the change (`row_hash = sha256(prev_hash ‖ canonical row)`) in the same transaction; head
+exported as `scaas_audit_head_seq`. A client halts sync for a node when `store_id` or
 `restore_epoch` changes, when `head_seq < cursor`, or when after an `incarnation` change the item at its cursor differs
 from the one it applied ([indexer-feeds.md#cursors](indexer-feeds.md#cursors)). Re-pushing to a recreated or restored
 store is an operator action on the client ([INT-ERP-19](../integration.md#INT-ERP-19)): a recreated or rewound store
@@ -322,7 +343,8 @@ expired, wrong aud, stale session epoch — the body never says which); `403 NO_
 ## App serving
 
 <a id="app-serving"></a><a id="NODE-ADM-10"></a>**NODE-ADM-10** — **The node can serve the console app with its
-security headers.** When `[app] enabled`, the admin listener serves the built app (static files + CSP with Trusted
+security headers.** (The node additions the app needs — gateway info route, gateway CORS, error contract, app
+serving — are ~300 lines of Rust.) When `[app] enabled`, the admin listener serves the built app (static files + CSP with Trusted
 Types), plus `GET /v1/admin/auth-modes`, admin CORS for the static mode and the gateway routes and error contract the
 app needs. Requirements the app relies on: no API key in the app, user actions signed with `clientkeys` through the
 gateway, admin tokens in memory only (only the OIDC redirect state `{issuer, code_verifier, state, nonce,

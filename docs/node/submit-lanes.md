@@ -39,6 +39,9 @@ pub trait ChainAdapter: Send + Sync {
 }
 ```
 
+In prose: `events(from, to, contracts)` returns normalized events, `final_head -> Option<Head>` the quorum head; the
+earlier `tx_fee` became `tx_cost`. The legacy indexer handed each range to the client's `chain_event_ingest`.
+
 The EVM runner implements the trait over `chain.rs`; its nonce pipelining, replacement and gap-fill behaviour is
 unchanged and covered by its tests. The EVM indexer runs through `final_head`/`events`. `final_head` and `events` must
 agree across ≥ `quorum` endpoints on every family ([NODE-IDX-01](indexer-feeds.md#NODE-IDX-01)). Normalized event
@@ -81,7 +84,8 @@ pub trait Signer: Send + Sync {
 }
 ```
 
-`LocalSigner`: secp256k1 via alloy's k256, ed25519 via `ed25519-dalek`.
+`LocalSigner`: secp256k1 via alloy's k256 (deterministic RFC 6979 nonces, constant-time), ed25519 via
+`ed25519-dalek`. The trait in short: `curve()`, `public_key()`, `sign(msg)`.
 
 ## Lane keys
 
@@ -94,7 +98,7 @@ mnemonic = { env = "SCAAS_MNEMONIC" }          # or { file = "/run/secrets/mnemo
 bip39_passphrase_env = "SCAAS_BIP39_PASSPHRASE" # optional
 [[chains]]
 family = "sui"; network = "localnet"
-lanes = [0, 1, 2, 3]                            # account index per BIP-44/SLIP-44
+lanes = [0, 1, 2, 3]                            # lanes = [account indexes] per BIP-44/SLIP-44
 # or: private_key = { env = "…" } | { file = "…" } | { keystore = "…", passphrase_env = "…" }  (one lane)
 ```
 
@@ -108,19 +112,22 @@ lanes = [0, 1, 2, 3]                            # account index per BIP-44/SLIP-
 | Sui | 784 | ed25519 SLIP-10 | `m/44'/784'/i'/0'/0'` | Sui standard (all levels hardened) |
 | Stellar | 148 | ed25519 SLIP-10 | `m/44'/148'/i'` | SEP-0005 |
 | Cosmos | 118 | secp256k1 BIP-32 | `m/44'/118'/0'/0/i` | |
-| TON | 607 | ed25519 SLIP-10 | `m/44'/607'/i'` | **not** the native TON mnemonic (PBKDF2 "TON default seed"); a TON wallet imports it through its "BIP-39/Ledger path" option |
+| TON | 607 | ed25519 SLIP-10 | `m/44'/607'/i'` | **not** the native TON mnemonic (PBKDF2 "TON default seed"); a TON wallet imports it through its "BIP-39 /Ledger path" option |
 
 Aptos and Solana lane paths are in [networks/aptos.md](../networks/aptos.md) and
 [networks/solana.md](../networks/solana.md).
 
-- Sources (`SecretSource`): file (refused unless mode 0600/0400), environment variable, encrypted keystore. Keystore:
+- Sources (`SecretSource`): `{env}`, `{file}` (refused unless mode 0600/0400), `{keystore, passphrase_env}` (encrypted
+  keystore). Keystore:
   **Web3 Secret Storage v3** (scrypt + AES-128-CTR, MAC keccak) for **both** curves — a 32-byte secret (secp256k1 key
   or ed25519 seed) or a mnemonic (UTF-8); extra field `"scaas": {"kind": "secp256k1"|"ed25519"|"mnemonic"}`. CLI:
-  `scaas-node keystore new --kind mnemonic|secp256k1|ed25519 --out DIR --name FILE` (secret from stdin, passphrase
+  `scaas-node keystore new --kind … --out …` (`--kind mnemonic|secp256k1|ed25519 --out DIR --name FILE`) (secret from stdin, passphrase
   from env).
 - Secrets are never logged or written to config files; at start the node prints **only the derived address** of each
   lane. `scaas-node addresses --config node.toml` prints the addresses and exits (`--chain <key> --labels` prints lane
   labels).
+- The relayer key (`authKey`, secp256k1 or ed25519, pays gas) lives in the node's env/file/keystore behind `Signer`;
+  its loss costs the lane's gas balance; recovery = rotate the key and update the relayer address clients know.
 - Lanes hold gas only; funding from treasury and balance monitoring (`scaas_relayer_balance{chain,lane}`) are
   operator tasks ([runbooks.md#production-gates](runbooks.md#production-gates)). The node identity key (Ed25519,
   `[identity] key`) is separate from lane keys (secp256k1 is not a TLS signature scheme,
@@ -138,7 +145,9 @@ connector sections state the same rule for client connectors. (Hedera ED25519 ac
 delegate all sign raw 32-byte digests with ed25519: one key across two families turns a compromised signer into a
 cross-chain oracle.)
 
-**Same lane keys in two stores** is forbidden and detected ([store.md#durability](store.md#durability)).
+**Same lane keys in two stores** is forbidden and detected ([store.md#durability](store.md#durability)): on sequence
+families `nonce_at(latest) > journal_max + 1 + tracked` ⇒ the lane refuses to lease, `/readyz` reason, metric
+`scaas_lane_foreign_nonce_total`.
 
 ## Journal
 
@@ -174,7 +183,8 @@ Transitional (BUILT): the journal is the client's job row, written by a `signed`
 `send_raw`; a failed report puts the work in the `retry` queue without sending.
 
 <a id="legacy-pull"></a><a id="NODE-LANE-02"></a>**NODE-LANE-02** — **Legacy pull: the `signed` report is idempotent
-and the nonce is held.** A `signed` report repeated with the same `(tx_hash, outer_nonce, signer)` succeeds unchanged
+and the nonce is held.** A `signed` report repeated with the same `(tx_hash, outer_nonce, signer_address)` (per signer: `(tx_hash,
+outer_nonce)`) succeeds unchanged
 on the client; other values are an error. When the report fails (for example a timeout after the client committed),
 the work keeps its signed `(raw, hash, n)`; the retry re-reports those values before anything else; success ⇒
 consume `n`, broadcast; `n` is given to no other job while the retry is pending. Transitional (BUILT) pull path only;
@@ -189,7 +199,7 @@ later transaction of the lane, and a journal without gap filling leaves a perman
 0-value transactions.
 
 - **Cold start** (`nonce.rs::plan`, BUILT): `next = max(getTransactionCount(pending), journal_max + 1)`. Every
-  journaled nonce in `[pending, journal_max]` whose tx is no longer in the mempool (`eth_getTransactionByHash` of the
+  journaled nonce in `[pending, journal_max]` = `[getTransactionCount(pending), journal_max]` whose tx is no longer in the mempool (`eth_getTransactionByHash` of the
   job that journaled it returns null) is gap-filled and its job returns to `queued` (the subject nonce prevents double
   execution). Jobs `nonce_leased` without a tx hash ⇒ `queued`; jobs `signed`/`broadcast` with a hash ⇒ ask receipt /
   mempool and keep tracking — **never re-signed** (no double submission of one meta-tx, no wasted gas).
@@ -197,7 +207,9 @@ later transaction of the lane, and a journal without gap filling leaves a perman
   as `leased → signed` (and on every legacy `signed` report in the transitional binary); never an aggregate over
   purgeable rows. Nonces are `BIGINT` (i64); adapters refuse values above `i64::MAX`. Non-terminal mesh rows follow
   the rules of job rows; terminal ones only raise `journal_max`; the in-flight digest set is rebuilt from tracked
-  entries; non-EVM `recover_lane` walks its lane's rows the same way.
+  entries; non-EVM `recover_lane` walks its lane's rows the same way. (Mesh rows entered `plan()` as `Inflight` entries
+  keyed by `Origin::Mesh`; a row with `outer_nonce < pending` is settled from its receipt. Store rows replace that
+  special case now.)
 - **Replacement:** stuck after `stuck_after_secs` (default 60) ⇒ same nonce, `maxFee`/`priority` × 1.25 (≥ +1 wei),
   repeated up to `max_fee_cap_gwei` (default 500); at the cap, wait (a same-fee replacement is rejected as
   underpriced); the operator may raise the cap (hot) ([runbooks.md#emergency](runbooks.md#emergency)).
@@ -214,16 +226,16 @@ in-memory value). Loop every `poll_ms`:
 
 ```
 loop every poll_ms:
-  jobs = lease(chain, limit=10)                     # CAS queued→leased (store); legacy: poll + claim
+  jobs = lease(chain, limit=10)                     # CAS queued→leased (store); legacy: relay_poll + relay_claim(node_id)
   for job:
      sim = eth_estimateGas(token.executeMetaTransaction(m, sig), from=lane, block=pending)
      revert → consumption check; consumed ⇒ 'consumed'; else 'dead' with the decoded error (MetaTxBadNonce, Expired…)
      gas > max_gas_per_tx → 'dead'
      ok → sign EIP-1559 (nonce = next++) → tx_hash known BEFORE sending
           → journal 'signed' (tx_hash, nonce)       # journal first
-          → eth_sendRawTransaction → 'broadcast'
+          → eth_sendRawTransaction → 'broadcast'        # legacy: relay_report(chain_state = signed|broadcast|…)
   track in-flight: receipt present → status 0: consumption check, then 'reverted' or 'consumed'; status 1: 'mined'
-                   older than stuck_after_secs → consumption re-check, then replace at the same nonce, fees ×1.25,
+                   older than stuck_after_secs → consumption re-check (eth_call metaNonce), then replace at the same nonce, maxFee ×1.25,
                    repeated up to max_fee_cap; NEVER abandon a nonce: a job that must be dropped (meta-tx
                    expired) is replaced by a 0-value self-send to the lane at that nonce (gap-filler)
 ```
@@ -237,9 +249,10 @@ gate. `final` of a job never comes from the runner: it comes from the event feed
 <a id="simulation"></a><a id="NODE-LANE-23"></a>**NODE-LANE-23** — **Simulation before signing is mandatory**, on the
 node's own RPC endpoints (no third-party simulation service). EVM: `eth_estimateGas` from the lane address at
 `pending` (gas limit = estimate + 20 %); non-EVM: `ChainAdapter::build` = build + family simulation (Soroban
-`simulateTransaction`, Sui dry-run/dev-inspect, Cosmos `tx/simulate`, Aptos simulate, TON emulation, Solana
+`simulateTransaction`, Sui dry-run/dev-inspect (`sui_dryRun`), Cosmos `tx/simulate`, Aptos simulate, TON emulation, Solana
 `simulateTransaction`; per-family details in [networks/](../networks/README.md)). Simulation narrows but cannot rule out
-a revert: state can change between simulation and inclusion (a race, or the subject moving its own funds), so the node
+a revert: state can change between simulation and inclusion (a race, an allowance spent, a pause switched on, a
+confidential `zetherNonce` used first, or the subject moving its own funds), so the node
 measures post-simulation reverts ([NODE-OPS-06](ops.md#NODE-OPS-06)) and handles lost races as consumption
 ([NODE-LANE-09](#NODE-LANE-09)) instead of promising a zero revert rate. Failures and their decoded reasons are logged
 with the job and counted (`scaas_simulation_total`).
@@ -270,7 +283,8 @@ never indexing, tracking or replacing signed transactions, rescues or gap-filler
 | structural | simulated gas > `max_gas_per_tx` ⇒ job `dead` | 3 000 000 (classical Zether chains ≥ 4 200 000; post-quantum Zether chain 16 000 000; [NODE-STO-10](store.md#NODE-STO-10)) |
 | `revert_streak` (chain) | ≥ 3 post-simulation reverts of class `other` in 15 min | [NODE-OPS-06](ops.md#NODE-OPS-06), latched |
 
-Non-EVM families use budget + balance floor (no EIP-1559 base fee). Metric `scaas_breaker_open{chain,lane,breaker}`;
+Non-EVM families use budget + balance floor (no EIP-1559 base fee). The private chain 7622 (formerly 9000) is a
+pre-London Clique chain with `MinGasPrice = 0`: it has no base fee, so `base_fee_spike` does not apply there. Metric `scaas_breaker_open{chain,lane,breaker}`;
 manual reset `POST /v1/admin/chains/{key}/breaker/reset` (operator, [admin-auth.md#routes](admin-auth.md#routes)).
 
 <a id="NODE-LANE-01"></a>**NODE-LANE-01** (open; PLANNED where a seam exists) — Gas velocity limits denominated in a
@@ -285,14 +299,15 @@ what succeeds.** Every included outer tx of ours (mined, reverted, or failed and
 `fee + value_out + deposits`: `fee` = the fee the chain charged, failures included; `value_out` = native value the tx
 moved out of the lane beyond fees, net of excess observed coming back (TON forward and attached TON, EVM `value`);
 `deposits` = rent or storage the lane funded (Solana account rent, Sui storage net of rebate, Aptos storage fee,
-Soroban rent). Adapter method `tx_cost(tx_id) -> Option<TxCost { fee, value_out, deposits }>` for every landed
+Soroban rent). So `Breaker::spend(fee + value_out + deposits)`; adapter method `tx_cost(tx_id) → TxCost`
+(`tx_cost(tx_id) -> Option<TxCost { fee, value_out, deposits }>`) for every landed
 terminal status; the three are `outer_tx` cost fields. Status: the EVM path meters every receipt (**BUILT**); the
 generic runner metering every terminal status is **SPECIFIED**. Under attack the hourly budget trips earlier, as
 intended.
 
 <a id="retries"></a><a id="NODE-LANE-14"></a>**NODE-LANE-14** — **A billed failure is retried at most once; every job
 has an attempt cap.** Adapters classify each outcome as **not included** (precheck, CheckTx or mempool reject,
-`BUSY`, dropped: nothing billed) ⇒ `queued`; or **included and billed** ⇒ at most **one** requeue per job, and only
+`BUSY`, dropped: nothing billed) ⇒ `queued`; included failures such as `OUT_OF_GAS` are billed; or **included and billed** ⇒ at most **one** requeue per job, and only
 when the family doc names the parameter the retry changes (gas or CU limit raised to the configured cap); otherwise,
 and on the second time, `reverted` with the decoded reason (consumption still checked first). `Rejected` carries
 `billed: bool`. Independently, `chain.max_attempts` (hot, default 5) caps `job.attempt_count` (incremented at
@@ -300,13 +315,15 @@ and on the second time, `reverted` with the decoded reason (consumption still ch
 Solana, Cosmos, Soroban, Sui, TON). A genuinely transient billed failure costs the payer a re-sign after two tries.
 
 <a id="grief"></a><a id="NODE-LANE-15"></a>**NODE-LANE-15** — **Per-subject grief score, node-wide, every family.**
-Store table `subject_grief (chain_key, subject, day, billed_failures, cost)`, `subject` = the payload's
+Store table `subject_grief (chain_key, subject, day, billed_failures, cost)` = `subject_grief(chain_key, subject, day,
+billed_failures, cost)` (the `origin_grief_score` that earlier
+designs assumed), `subject` = the payload's
 family-normalised `from` (the UA id once UA tokens are used), written in the transaction that records the outcome. It
 counts every billed failure of an included tx of ours ([NODE-LANE-14](#NODE-LANE-14)), and a `consumed` outcome of a
 job never published on the bus (only the subject or someone it gave the payload to can have landed it), minus the
 exemptions of unwrap jobs ([unwrap jobs](#unwrap-jobs)) and of regulated-token compliance refusals
 ([contracts/asset-suite.md](../contracts/asset-suite.md)). ≥ 3 in 24 h ⇒ the subject gets one live job per chain and
-a re-simulation right before signing; ≥ 10 in 24 h, or `cost` ≥ `chain.grief_cost_cap` ⇒ intake refuses `429
+a re-simulation right before signing; ≥ 10 in 24 h, or `cost ≥ chain.grief_cost_cap` ⇒ intake refuses `429
 SUBJECT_THROTTLED` until 24 h after the last count. A namespace aggregate feeds a `scaas_grief_*` metric and alert; the
 chain-level breaker stays `revert_streak`. Fresh lanes per request (Cosmos, Sui, Solana, Aptos) make per-lane counting
 useless, and a new signature costs the subject nothing: only a counter keyed by subject bounds post-simulation flips
@@ -342,7 +359,7 @@ existing ATA.
 and every resend, and after every reverted receipt/status.** If the subject nonce moved past the intent's nonce, never
 bump or resend the meta-tx; report `consumed` instead of `reverted`/`dead`; on EVM free the outer nonce with a
 gap-filler ([NODE-LANE-04](#NODE-LANE-04)). A failed consumption read **fails closed**: no bump this round, retry next
-round. The job state `consumed` is non-terminal for the client's business: a job is never `dead`/`failed` because
+round. The job state `consumed` (legacy client: `chain_state = 'consumed'`) is non-terminal for the client's business: a job is never `dead`/`failed` because
 someone else landed it; the client marks it final from the event feed (landed elsewhere), or the expiry rule makes it
 `dead` when superseded. One per-chain in-flight digest set prevents our node from holding two live outer txs for one
 intent. Cost: one `eth_call` per stuck tx per `stuck_after_secs` (60 s) and per reverted receipt.
@@ -355,7 +372,7 @@ intent. Cost: one `eth_call` per stuck tx per `stuck_after_secs` (60 s) and per 
 | others | `unknown` in v1 (the adapter `events()` scan is per block range and belongs to the indexer) | resolved at finality from the event feed |
 
 After `valid_until` the subject nonce of TON/Solana/Aptos lanes may be pruned and read as 0; consumption checks are
-only made while `now ≤ valid_until + clock_skew`, and expiry decides after that.
+only made while `now ≤ valid_until + clock_skew_secs`, and expiry decides after that.
 
 ### Shared submit path
 
@@ -370,10 +387,11 @@ struct Sent { work: Option<Work>, hashes: Vec<B256>, gas: u64, fees: (u128, u128
 pub type Inflight = Arc<Mutex<HashSet<B256>>>;                     // one per chain, all lanes + mesh scheduler
 ```
 
-`work_from_job` fills `meta` for `kind = metatx`. The outcome sink is the store `transition` for every origin, and a
+`job_id: Option<i64>` became `origin`; `work_from_job` fills `meta` for `kind = metatx`. The outcome sink is the store `transition` for every origin, and a
 landed or consumed job CASes its mesh `intent` row (if any) to the same outcome, so we stop serving an intent we landed.
 Transient errors, gas over `max_gas_per_tx`, expiry in the channel and the `retry` queue all produce an outcome for
-every origin.
+every origin (the first cut's `requeue()`/`fail()` did nothing without a job id, `submit.rs` l.247–259; legacy store
+rows were matched by digest with `source = outbox`).
 
 **In-flight digest set (G2).** Members: every EVM lane, the gateway, the mesh scheduler **and every non-EVM
 `lane_runner`/`step_once`** of the chain. Lifecycle is an RAII guard, so no exit can leak a digest:
@@ -400,14 +418,17 @@ impl Drop for InflightGuard { fn drop(&mut self) { /* remove d */ } }
    (`DIGEST_MISMATCH`: the envelope's `domain` lied).
 3. Simulate. On `SimError::Revert`: if `meta` is set, read `metaNonce(from, batch)`; `> nonce` ⇒ **consumed**
    (classification above), else `failed`/`dead`. A failed `metaNonce` read ⇒ transient (requeue).
-4. Journal before send ([journal](#journal)). Journal write fails ⇒ do not send, do not consume the nonce.
+4. Journal before send ([journal](#journal); the first mesh draft used `UPDATE intent SET lane_label, outer_nonce,
+   tx_hash`). Journal write fails ⇒ do not send, do not consume the nonce.
 5. Send; `broadcast`.
 
 Receipt handling — **reverted receipt** with `meta` set: read `metaNonce`; consumed ⇒ classify and report `consumed`
-(never `reverted`, which a client would book as a failed business payment and use to fail dependent jobs); read
+(never `reverted`, which a client would book as a failed business payment and use to fail dependent jobs; code:
+`track()`, `submit.rs` l.280–292; client dependents l.459); read
 failed ⇒ keep the entry and retry next round.
 
-`track()` for stuck txs (`chain.nonce_at(lane, latest)` = `get_transaction_count(addr).latest()`). For each in-flight
+`track()` for stuck txs (`chain.nonce_at(lane, latest)` = `get_transaction_count(addr).latest()`; the first cut had only
+`pending_nonce()`). For each in-flight
 outer nonce `n` whose newest hash has no receipt:
 
 ```
@@ -438,20 +459,21 @@ Generic lane runner (non-EVM, and Hedera):
   absent ⇒ 0) and Hedera `metaNonce`. TON revoke would be `next > nonce + 1`; not needed in v1.
 - `step_once`: on `SimError::Revert`, call `op_consumed`; `Some(true)` ⇒ report `consumed`, not `dead`.
 - `follow()`: on `TxStatus::Reverted`, call `op_consumed`; `Some(true)` ⇒ `consumed`, not `reverted`. Before every
-  resend call `op_consumed`; `Some(true)` ⇒ report `consumed`, stop resending, keep following the tx until its status is
+  resend (`sent.is_err()` branch) call `op_consumed`; `Some(true)` ⇒ report `consumed`, stop resending, keep following the tx until its status is
   terminal or `valid_until + EXPIRY_GRACE`. RPC error ⇒ no resend this round.
-- `Built`/`Signed` carry `origin: Origin`; reports go to the outcome sink.
+- `Built`/`Signed` carry `origin: Origin` instead of `job_id: i64`; reports go to the outcome sink.
 
 ## Normalization
 
 <a id="normalization"></a><a id="NODE-LANE-10"></a>**NODE-LANE-10** — **The submitter normalizes the fields the
-canonical digest zeroes, for every origin.** Before building any meta-tx: `MODE_RESTRICT_FEE_RECIPIENT` off ⇒
+canonical digest zeroes, for every origin.** Before building any meta-tx — `feeRecipient := chains.fee_recipient or 0` when `mode & MODE_RESTRICT_FEE_RECIPIENT == 0`,
+`relayer := 0` when `mode & MODE_RESTRICT_RELAYER == 0` — i.e. `MODE_RESTRICT_FEE_RECIPIENT` off ⇒
 `feeRecipient := chains.fee_recipient` (our cold wallet) or `0` (the contract pays `msg.sender`);
 `MODE_RESTRICT_RELAYER` off ⇒ `relayer := 0`. Wire values of unbound fields are never submitted (NODE-GEN-07);
-`intent_id` is unchanged. The token pays `m.feeRecipient` whenever it is non-zero, but the digest zeroes it when
-unbound (`MetaTxLib.canon`), so without this a client or forwarder would take the fee while we pay gas. `metatx.rs`
+`intent_id` is unchanged. The token pays `m.feeRecipient` whenever it is non-zero (`ERC20MetaTx.sol` l.87), but the digest zeroes it when
+unbound (`MetaTxLib.canon`, the fields `canon()` zeroes), so without this a client or forwarder would take the fee while we pay gas. `metatx.rs`
 has `pub fn normalize(m: &mut MetaTransaction, fee_recipient: Option<Address>)`, called **once, where the `Work`/`Job`
-is built from a request or an envelope** (job API accept, gateway, mesh work builder), not in the runner, so Hedera
+is built from a request or an envelope** (job API accept, gateway `post_metatx`, mesh work builder), not in the runner, so Hedera
 work through `lane_runner` → the Hedera adapter's `build` gets it too. A job-API job built by an ERP with fee 0 and
 recipient 0 is unchanged in effect.
 
@@ -474,6 +496,9 @@ transaction per outer tx keeps journal-before-broadcast and `plan()` unchanged; 
 <a id="unwrap-jobs"></a><a id="NODE-LANE-22"></a>**NODE-LANE-22** — **The node simulates unwrap jobs in full and never
 batches them.** For gasless unwrap ops ([CTR-MTX-12](../contracts/metatx.md#CTR-MTX-12)):
 
+- Op shape (contract side): `unwrap(address underlying, address recipient, uint256 minOut)` (100 bytes, amount =
+  `m.value`, `m.to == recipient`); the contract checks `recipient ∉ {0, address(this)}`, `0 < out ≤ reserve`,
+  `out ≥ minOut`, burns `⌈out·q⌉`; entry points `mtxUnwrap` and `mtxUnwrapWithFee`.
 - The simulation gate runs the full outer transaction (`eth_call`/`eth_estimateGas` at `pending`), so it executes the
   underlying's transfer, `balanceOf` reads and the exact-amount check; it re-simulates immediately before signing the
   outer transaction, as for every job.

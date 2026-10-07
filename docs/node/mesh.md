@@ -38,7 +38,8 @@ offers only the PQ group; DEX homes are auto-trusted on chain evidence. UA inten
    submission only on registered tokens ([NODE-MESH-13](#NODE-MESH-13)).
 4. **Soft exclusivity** assigned by the origin node, round-robin over eligible submitters ([NODE-MESH-04](#NODE-MESH-04)).
 5. **Cancel/dedup correctness on every submit path**: consumption re-checked before every bump or resend and after every
-   reverted receipt ([NODE-LANE-09](submit-lanes.md#NODE-LANE-09)); clients learn of consumption at detection time.
+   reverted receipt ([NODE-LANE-09](submit-lanes.md#NODE-LANE-09)); clients learn of consumption at detection time
+   (outcome `landed_elsewhere`, written `LANDED_ELSEWHERE` in the first draft).
 6. **Private profile**: a chain's `profile`; private-chain intents only travel from the origin to private peers it
    admitted itself ([private profile](#private-profile)).
 7. **Per-job bus scope**: default keeps the job on our own lanes; opt-in publishes relayer-unbound jobs after a private
@@ -51,11 +52,11 @@ Non-goals (v1):
 | PoW, stake, lottery, `beacon` | admission (bus) and scoring (gossip) are the anti-sybil controls |
 | Rewards other than the intent's own `fee` / `feeRecipient` | [NODE-MESH-05](#NODE-MESH-05): no `SponsorshipPool` reward, no statement payouts, no forwarder pay |
 | Soroban on the mesh | [NODE-MESH-07](#NODE-MESH-07), [NODE-MESH-24](#NODE-MESH-24): replay protection is the host's auth nonce, not a per-subject nonce in our contract |
-| Zether intents on the mesh (classical and post-quantum) | `W = 0` and single-flight per confidential subject need their own design; pull latency does not fit a 20 s budget |
+| Zether intents on the mesh (classical and post-quantum) | `W = 0` and single-flight per confidential subject (`from_schnorr`) need their own design; pull latency does not fit a 20 s budget |
 | EVM `call` jobs (mandate calldata), DEX `settle` jobs, non-EVM op kinds other than `pay` | no subject-signed digest whose replay guard is a lane nonce a peer can check (TON revoke uses `next == nonce + 1`, Solana mandate revoke uses a generation) |
 | Multi-hop private routing | [NODE-MESH-12](#NODE-MESH-12): private intents are served by their origin only; needs an origin-signed recipient set and a ruling |
 | Callback subject registry, ban-list sharing | no callbacks exist ([NODE-IDX-04](indexer-feeds.md#NODE-IDX-04)); ban lists stay local |
-| Promote-to-open of pooled intents | the only "private then open" path is the per-job window on own jobs ([bus scope](#bus-scope)); a pooled bus intent never changes visibility |
+| Promote-to-open of pooled intents ("private pool") | the only "private then open" path is the per-job window on own jobs ([bus scope](#bus-scope)); a pooled bus intent never changes visibility |
 | `nonce_unverified` cache tiers; a cache of rejected intents | federation volume does not need them; the submitter's simulation is the check |
 | Client-side mesh counters | `/metrics` on the node only ([ops.md#metrics](ops.md#metrics)) |
 
@@ -72,7 +73,7 @@ gives catch-up after downtime (cursor) and puts the export filter for private in
 
 <a id="NODE-MESH-02"></a>**NODE-MESH-02** — **Commit-ordered bus `seq`, and a `store_id` that resets cursors.** Intents
 live in the node store ([store.md#mesh-tables](store.md#mesh-tables)); `bus_seq` comes from a counter row incremented
-in the inserting transaction (one writer ⇒ seqs in commit order, so a seq can never be allocated before its commit); a
+in the inserting transaction (the single-writer equivalent of SQLite `INTEGER PRIMARY KEY AUTOINCREMENT`; one writer ⇒ seqs in commit order, so a seq can never be allocated before its commit); a
 random `store_id` names the store and is sent with every page, so a peer whose store was recreated is detected (cursor
 reset). A lost disk loses pooled intents; signers re-send.
 
@@ -131,6 +132,8 @@ cache it 60 s.
 
 #### `GET /v1/mesh/intents?since=<seq>&limit=<n>`
 
+(Summary form `GET /v1/mesh/intents?since=&limit=`.)
+
 - `since` default 0, `limit` ≤ `page_max` (200). Full envelopes only (no summary/by-id two-step: an admitted peer could
   ask for full anyway, and a second round trip per hop is not in the latency budget).
 - Server returns rows with `seq > since`, `received_at ≤ now − publish_lag_ms`, non-terminal, `valid_until > now`,
@@ -153,7 +156,7 @@ with the peer's `store_id` in `peer_cursor`. A `store_id` different from the sto
 peer's store was recreated). With the single-writer store the lag and overlap are not needed for correctness; they stay
 in the protocol so another implementation can rely on them.
 
-Gateway additions: `POST /v1/metatx` normalizes before simulation; its response carries `intent_id` and, when
+Gateway additions: rows written by door A carry `source = 'gateway'`; `POST /v1/metatx` normalizes before simulation; its response carries `intent_id` and, when
 published, `exclusive` (`202`); a duplicate returns `200` with the stored state. `GET /v1/intents/{intent_id}` serves
 only gateway-origin rows ([gateway.md#routes](gateway.md#routes)).
 
@@ -189,9 +192,12 @@ Ingest outcome codes (local; metrics label `code`; also returned by the gateway 
 ## Envelope
 
 <a id="envelope"></a><a id="NODE-MESH-09"></a>**NODE-MESH-09** — **Envelope spec `scaas-intent/1.2`.** JSON on the
-wire. `hub.sig` covers a fixed binary message ([hub.sig](#hubsig)) that includes `body_hash` = SHA-256 of the canonical
+wire: `spec`, `intent_id`, `chain_key`, `family`, `contract`, `visibility`, the family body (`evm` with domain,
+11-field `meta_tx`, signature, `sig_kind` `eoa|erc1271`; or `op` with the exact signed `payload`),
+`hub{id, pubkey, published_at, sig}`, `exclusive{relayer_id, until}?`, `hop_count`. `hub.sig` covers a fixed binary message ([hub.sig](#hubsig)) that includes `body_hash` = SHA-256 of the canonical
 JSON of the family body. Drafts 1.0/1.1 were never implemented by any node and are void: receivers reject `1.0`/`1.1`
-and any other major with `UNSUPPORTED_SPEC`. `body_hash` stops forwarders swapping the signature, `sig_kind` or native
+and any other major with `UNSUPPORTED_SPEC` (1.1's `hub_sig_payload` used `address(relayer_id)` and a lottery `beacon`;
+changing both is a breaking change). `body_hash` stops forwarders swapping the signature, `sig_kind` or native
 params.
 
 <a id="NODE-MESH-18"></a>**NODE-MESH-18** — **UA intents use `scaas-intent/1.3`** (only for this body; everything else
@@ -226,6 +232,15 @@ consumption check. Non-EVM op kind limited to `pay` in v1. Soroban partners rela
 | Solana | `sha256(MetaOp)` | `LanePda{next}` seeded `["lane", subject, lane]`, `lp.next == args.nonce` | read the `LanePda` account | **yes** (`pay`; lane PDA prunable after `valid_until`) |
 | Soroban | `op_digest` = sha256(XDR) emitted by the token | **none in our contract**: replay protection is the host's `SorobanAddressCredentials` nonce (`i64(sha256("scaas.soroban.nonce" ‖ entryRef ‖ validUntil)[0..8])`, a per-entry value, not a per-subject sequence); our contract only has a one-shot `pay_ref` | `ref_used(pay_ref)` only | **no** |
 
+Contract source lines (orientation, as of 2026-10-07): EVM `smartcontracts/src/metatx/ERC20MetaTx.sol` digest l.62–103,
+nonce l.26, l.80, l.102, view l.44; Hedera `smartcontracts/src/hedera/HederaMetaToken.sol` l.15 (`MetaToken is
+ERC20MetaTx`); Cosmos `chains/cosmos/metaop/src/lib.rs` l.119, `chains/cosmos/token/src/lib.rs` l.81, l.194–197, query
+l.239; Sui `chains/sui/sources/meta.move` digest l.322, lanes l.104, l.285–287, view l.484; Aptos
+`chains/aptos/sources/meta.move` l.114, l.110, l.278–279, view l.666; TON `chains/ton/contracts/jetton.tact` l.233,
+lanes l.121, l.226–230 (revoke l.229), getter l.359; Solana `chains/solana/programs/scaas/src/account.rs` l.197
+(`lib.rs` l.125), lane check l.159–161, l.202; Soroban `chains/soroban/contracts/token/src/lib.rs` l.102, `pay_ref`
+l.203–206.
+
 ### Wire encoding
 
 - UTF-8 JSON object, at most 32 KiB per envelope.
@@ -236,7 +251,7 @@ consumption check. Non-EVM op kind limited to `pay` in v1. Soroban partners rela
 - Bytes and hashes: `0x` + lowercase hex. `peer_id`, `pubkey`, `sig`: lowercase hex **without** `0x`.
 - Addresses: the family's canonical form: lowercase `0x` 20 bytes on EVM/Hedera, bech32 on Cosmos, `0x` + 64 hex on
   Sui/Aptos, raw `wc:hex` on TON, base58 on Solana.
-- `chain_key` = `family:network` (`evm:100`, `hedera:296`, `cosmos:scaas-1`, `sui:localnet`, `aptos:4`, `ton:-239`,
+- `chain_key` = `family:network`, exactly as the node's `ChainCfg::chain_key()` (`evm:100`, `hedera:296`, `cosmos:scaas-1`, `sui:localnet`, `aptos:4`, `ton:-239`,
   `solana:<genesis base58>`). Not CAIP-2: the node and its clients key on `chain_key`; CAIP-2 stays a display field.
 - **Canonical body JSON** (for `body_hash` only): the `evm` or `op` object serialized with object keys sorted bytewise,
   no whitespace, no floats (integers must fit `i64`), every string printable ASCII `0x20–0x7e` (all values are hex,
@@ -292,17 +307,17 @@ hints would leak shape on public chains).
 
 <a id="intent-id"></a><a id="NODE-MESH-08"></a>**NODE-MESH-08** — **`intent_id` is the digest the contract emits** in
 `MetaTransactionExecuted.digest`: EIP-712 `_hashTypedDataV4(hashStruct(m))` on EVM, the family digest otherwise. It
-equals the digest a client stores for its own meta-tx or signed op. Dedup is by `intent_id` (with id = digest, "dedup
-by digest" and "dedup by intent id" are one value).
+equals the digest a client stores for its own meta-tx or signed op. Dedup is by `intent_id` (an earlier note said "dedup by digest, not intent_id", assuming a
+sender-chosen id; with id = digest the two are one value).
 
 | Family | `intent_id` = | Routing fields decoded from | Implementations that must agree |
 |---|---|---|---|
-| `evm`, `hedera` | `keccak256(0x1901 ‖ domainSeparator(name, version, chainId, contract) ‖ hashStruct(canon(m)))`; `chainId` = number in `chain_key` | `meta_tx` (all signed) | `MetaTxLib.hashStruct`, `metatx.rs` `digest()`, client libraries |
-| `cosmos` | `sha256(payload)` | payload JSON (`MetaOp`) | contract `metaop`, client libraries |
-| `sui` | `blake2b256([3,0,0] ‖ bcs(vector<u8>(payload)))` | `adapters/sui.rs` `MetaOp::decode` | `meta.move` `op_digest`, `adapters/sui.rs` `personal_digest`, client libraries |
-| `aptos` | `sha3_256(payload)` | `adapters/aptos.rs` `MetaOp::decode` | `meta.move`, client libraries |
-| `ton` | representation hash of the `MetaOp` cell tree carried in `payload` (BOC) | `adapters/ton.rs` `boc_parse` + `parse_metaop` | `jetton.tact`, `adapters/ton.rs`, client libraries |
-| `solana` | `sha256(payload)` (336-byte `MetaOp`) | `adapters/solana.rs` `MetaOp::decode` | `account.rs` `digest()`, `adapters/solana.rs`, client libraries |
+| `evm`, `hedera` | `keccak256(0x1901 ‖ domainSeparator(name, version, chainId, contract) ‖ hashStruct(canonical(m)))`; `chainId` = number in `chain_key` | `meta_tx` (all signed) | `MetaTxLib.hashStruct` (`smartcontracts/src/common/MetaTxLib.sol`), `metatx.rs` `digest()`, client libraries |
+| `cosmos` | `sha256(payload)` | payload JSON (`MetaOp`) | contract `metaop` (`metaop/src/lib.rs` = `chains/cosmos/metaop/src/lib.rs`), client libraries |
+| `sui` | `blake2b256([3,0,0] ‖ bcs(vector<u8>(payload)))` | `adapters/sui.rs` `MetaOp::decode` (l.136) | `meta.move` `op_digest`, `adapters/sui.rs` `personal_digest`, client libraries |
+| `aptos` | `sha3_256(payload)` | `adapters/aptos.rs` `MetaOp::decode` (l.149) | `meta.move`, client libraries |
+| `ton` | representation hash of the `MetaOp` cell tree carried in `payload` (BOC) | `adapters/ton.rs` `boc_parse` + `parse_metaop` (l.486) | `jetton.tact`, `adapters/ton.rs`, client libraries |
+| `solana` | `sha256(payload)` (336-byte `MetaOp`) | `adapters/solana.rs` `MetaOp::decode` (l.154) | `account.rs` `digest()`, `adapters/solana.rs`, client libraries |
 
 `scaas-node/src/mesh/digest.rs`: `pub fn decode(env: &Envelope) -> Result<Decoded>` returning `{intent_id, from, lane,
 nonce, valid_until, relayer, fee_effective, selector, token}` by calling the existing helpers and decoders above
@@ -321,6 +336,9 @@ to it:
 | Aptos | the payer's Account object | `asset` from the payload | `account_of(from) == contract` |
 | TON | the payer's jetton wallet | `extra.jetton_master` (bound by `body_hash`) | `jetton_wallet_address(from, master, code) == contract` (code hash from the token record) |
 | Solana | the payer's SubjectAccount PDA | `asset` (payload field; `extra.asset` must equal it) | `account_of(program, from) == contract` |
+
+Reference lines: Sui account derivation in the reference client library l.167 (formula l.159); Aptos l.233 and
+`adapters/aptos.rs` l.207; TON l.296–312 and `adapters/ton.rs` l.526; Solana l.185 (check l.176).
 
 A failed check makes the intent `may_submit = false` (held and served, never submitted); it is not a rejection.
 
@@ -368,7 +386,8 @@ failed-row deletion bound that ([threat-model.md#mesh](threat-model.md#mesh) MT6
 
 `scaas-node/tests/vectors/mesh-envelope-v1.2.json`, published with the node so any second implementation (including
 client libraries that compute the same digests) checks against it; clients keep byte-identical copies (CI `cmp`).
-Generated by `cargo test --test mesh_vectors -- --ignored regenerate`; checked by the non-ignored test.
+Generated by `cargo test --test mesh_vectors -- --ignored regenerate`; checked by the non-ignored test. A client's copy
+also checks that the client's own digest functions (`build_terms`/`digest` per family) produce the same `intent_id`.
 
 ```json
 {"spec": "scaas-intent/1.2",
@@ -443,14 +462,16 @@ table with static columns**, in the node store (`mesh_policy`, managed through t
 | `fee_recipient_allow` | enum | `any` \| `self_or_zero`; only consulted when the intent **binds** `feeRecipient` (`MODE_RESTRICT_FEE_RECIPIENT`), since unbound recipients are normalized |
 | `gossip` | bool | door-A intents on this row are published on gossip ([gossip.md#intents](gossip.md#intents)) |
 
-Lookup order (most specific wins, no merging): `(contract, selector)`, `(contract, *)`, `(*, selector)`, `(*, *)`.
+Lookup order (most specific wins, no merging): `(contract, selector)`, `(contract, *)`, `(*, selector)`, `(*, *)`, no row ⇒
+`forward_only`.
 Every column is static data; nothing in the table calls out (evaluable before simulation).
 
 <a id="NODE-MESH-14"></a>**NODE-MESH-14** — **A missing policy row means forward only**, with `pool_visibility` derived
 from the chain profile: default deny for submission, routing kept. An explicit `support = none` rejects.
 
 <a id="NODE-MESH-13"></a>**NODE-MESH-13** — **`may_submit` requires `token_of(intent)` to be a registered token** of an
-active chain (node token table); the admin API refuses `submit` on `contract = '*'`. `token_of` = `contract` on
+active chain (node token table; formerly the client's `node_config.tokens`, or `[[chains]] tokens` standalone; the
+gateway already gated on registered tokens via `gateway.rs` `chain_of`); the admin API refuses `submit` on `contract = '*'`. `token_of` = `contract` on
 EVM/Hedera/Cosmos; on Sui/Aptos/TON/Solana, where `contract` is the payer's own account, it is the token named in the
 payload or body, and the node checks that `contract` is that payer's account derived from it. The policy `contract`
 column holds `token_of`. Fee checks use the **effective** fee as `FeePolicy.compute` (NONE ⇒ 0, PERCENT ⇒ `value × fee
@@ -537,8 +558,8 @@ not a lock: a peer that ignores it causes at most one reverted outer tx per lose
 Bus-eligible = `pool_visibility ≠ none` after the export rule and not relayer-bound to one of our lanes. A gateway
 intent that is not bus-eligible is still written to the store with `visibility = 2` (durable) and submitted locally.
 When publication of an own job hits a `DUPLICATE` (the same digest already arrived from a peer, e.g. the payer's wallet
-also posted it elsewhere), the existing row is flipped to `may_submit = 0`, `source = 'job'`, `job_uid = …`: the job
-path owns it from then on.
+also posted it elsewhere), the existing row is flipped to `may_submit = 0`, `source = 'job'`, `job_uid = …` (first draft: `may_submit = 0,
+source = 'outbox', odoo_job_id = …`): the job path owns it from then on.
 
 ### Assignment (origin only)
 
@@ -552,6 +573,7 @@ assignee = eligible[rr[chain_key] % len]; rr[chain_key] += 1        # in memory;
 exclusive = {relayer_id: assignee, until: published_at + exclusive_ms/1000}   # omitted when eligible is empty
 ```
 
+So `until = published_at + exclusive_ms`, and the post-window jitter is keyed by `sha256(intent_id ‖ peer_id)`.
 Receivers honour `exclusive` only if `hub.sig` verified and `0 < until − published_at ≤ exclusive_ms/1000` of the
 **receiver's** config; otherwise they store `exclusive_until = NULL` (clamp, vector 24).
 
@@ -567,7 +589,8 @@ for row in submittable (oldest first):
 jitter(row) = u16(first 2 bytes of sha256(intent_id ‖ self.peer_id)) mod post_exclusive_jitter_ms   # differs per node
 ```
 
-`exclusive_self` rows go straight to `submittable`. The `job_live_digest` index is the single admission point for every
+The first draft handed the work to the lane channel with `try_send`; inserting a job in `~mesh` replaced it, so every
+submission goes through the job store. `exclusive_self` rows go straight to `submittable`. The `job_live_digest` index is the single admission point for every
 submission path, so the mesh adds no path around G2.
 
 ## Numbers
@@ -601,7 +624,8 @@ the job API forces `bus.scope = restricted`.
 
 <a id="private-profile"></a><a id="NODE-MESH-06"></a>**NODE-MESH-06** — **Chain profile, default private.** A chain's
 `profile` = `public` | `private`, **default `private`** (the default must be derived, not a flag someone remembers;
-private fails closed). A policy's `pool_visibility` defaults from it. A private-chain intent is served **only** to peers
+private fails closed; the open-relayer research and the client-design study, line 408, derive it; the enterprise
+relay-pool study proposed `public` and was overruled). A policy's `pool_visibility` defaults from it. A private-chain intent is served **only** to peers
 of class `private` whose allowed chains include it, over mTLS/QUIC; it is never exported to an `open` peer and never
 promoted. A node rejects a private-chain intent (by label **or** by its own chain profile) arriving from an `open` peer.
 Visibility is signed in `hub.sig` and only gets stricter. An operator who forgets to set `public` on a public chain gets
@@ -609,7 +633,7 @@ a bus that only private peers see: a liveness loss, never a leak.
 
 <a id="NODE-MESH-12"></a>**NODE-MESH-12** — **Private-visibility rows are served only by their origin** (stored
 `source != 'peer'`). Every private recipient must be admitted by the origin directly; otherwise a correct private peer
-would re-serve to peers *it* trusts, outside the origin's allowlist. Private liveness depends on the origin being up.
+would re-serve to peers *it* trusts, outside the origin's allowlist (owner: "allowlisted private peers"). Private liveness depends on the origin being up.
 
 ```
 chain_visibility(chain) = private if chain_profile == 'private' else open
@@ -644,7 +668,10 @@ Rules:
 own `fee` / `feeRecipient` only.** No sponsorship pool reward, no statement payouts, forwarders unpaid. A non-EVM
 `MetaOp` has no fee field, so peers relay non-EVM intents unpaid. Relayers are mostly paid outside the intent: peers
 with no off-chain agreement have no reason to submit our fee-0 jobs; liveness then rests on our own node. An opt-in
-`SponsorshipPool` is an application contract, not a mesh reward ([NODE-SPN-04](sponsorship.md#NODE-SPN-04)).
+`SponsorshipPool` is an application contract, not a mesh reward ([NODE-SPN-04](sponsorship.md#NODE-SPN-04)). Any third
+party may run a relayer: it advances gas in the native coin and recovers it from the intent's fee, paid in the token
+itself to `feeRecipient` (unbound: `msg.sender`) — the role EIP-1776 gives `rewardToken`/`rewardAmount` — or from
+issuer sponsorship; relayers compete on latency and accepted fee.
 
 **Break-even of a fee-earning relayer** (an order-of-magnitude argument): a meta-tx on Gnosis costs ≈ $0.00015 of gas;
 at a 10× markup the margin is ≈ $0.0015 per tx; a relayer with SLA RPC, a small VPS and gas float costs ≈ $45–70 per
@@ -707,7 +734,7 @@ Conformance: `tests/mesh_vectors.rs` runs all vector cases through `accept()` an
 checked by the clients' own suites; CI `cmp`s the files.
 
 Multi-node e2e (`tests/e2e_mesh.rs`, `--ignored`, anvil + forge + a fake job-API client; nodes A, B, C started as
-**separate processes** of the built binary with generated configs and temp stores; self-signed Ed25519 certs generated
+**separate processes** of the built binary (`env!("CARGO_BIN_EXE_scaas-node")`) with generated configs and temp stores; self-signed Ed25519 certs generated
 by the test with `openssl`, skipped with a clear message if absent). Each scenario asserts chain state (balances,
 `metaNonce`) and store states. The same scenarios also run with the bus over QUIC.
 
@@ -733,7 +760,7 @@ vectors + adapter unit tests with fakes.
 
 <a id="limitations"></a>Deferred (PLANNED unless noted):
 
-- Zether on the mesh: `W = 0`, single-flight per confidential subject, push latency.
+- Zether on the mesh: `W = 0`, single-flight per confidential subject (`from_schnorr`), push latency.
 - Soroban: a contract-level per-subject nonce (or the host nonce accepted as equivalent) would qualify it
   ([NODE-MESH-24](#NODE-MESH-24)).
 - Non-EVM op kinds other than `pay` (TON revoke `next > nonce + 1`, Solana mandate generation) on the mesh and in

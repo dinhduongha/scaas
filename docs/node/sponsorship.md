@@ -24,9 +24,11 @@ enforces that account's budget and rate caps.** It never changes a signed field 
 only job data (no RPC at accept). Doors: client namespaces (no fee floor: the policy books and limits), `~gateway` and
 `~mesh` (the mesh policy `min_fee` floor, [mesh.md#acceptance](mesh.md#acceptance), is waived for matching jobs; the
 door-A defaults per profile are in [NODE-GW-01](gateway.md#NODE-GW-01)). Policies are data; nothing on chain depends
-on them.
+on them. One mechanism serves inbound subsidies ("to wallet W, value ≥ X ⇒ fee 0, gas to account Y") and tenant cost
+control.
 
-**Client namespaces: `unsponsored` means "booked to the namespace".** The node pays gas for every client job and books
+**Client namespaces: `unsponsored` means "booked to the namespace".** (A review finding said the node "silently spends
+lane gas" on unmatched jobs: that is the namespace's default; what was missing was the statement and the mark.) The node pays gas for every client job and books
 unmatched jobs to the namespace (`sponsor_policy_id NULL`, `usage_day.sponsor_policy = ''`), which is the tenant's own
 billed spend; a fallback is that and nothing more, and is marked (`sponsor_fallback`, [feed](#feed); metric
 `result="unsponsored"`), never booked to the sponsor account. A policy is therefore a cap on the **sponsor account** in
@@ -192,15 +194,26 @@ and MySQL; feed fields per family (EVM, Hedera, one non-EVM); admin route roles 
 [CTR-MTX-06](../contracts/metatx.md#CTR-MTX-06)):
 
 - **Job payload** (`kind = metatx`): optional `receiver_fee: {fee, feeRecipient, validUntil, signature}`. Digest = the
-  payer digest (G2 unchanged). Accept adds: the shape checks of the contract function (pay op, payer fee mode `NONE`,
-  relayer bound, `payLane`/nonce 0, `feeRecipient ≠ 0`, `feeRecipient ≠ m.to`, `0 < fee ≤ m.value`) without RPC;
+  payer digest (G2 unchanged). Accept adds: the shape checks of the contract function (pay op `pay(entryRef)`, payer fee mode `NONE`,
+  relayer bound, `batch = payLane(entryRef)`, `nonce = 0` — once per `(payer, entryRef)` —, `feeRecipient ≠ 0`, `feeRecipient ≠ m.to`, `0 < fee ≤ m.value`) without RPC;
   `valid_until = min(m.validUntil, receiver_fee.validUntil)`; `bus.scope` forced `restricted`
   ([NODE-MESH-17](mesh.md#NODE-MESH-17): the mesh envelope has no slot for the co-signature); never batched.
   Normalization may rewrite the payer's unbound `feeRecipient`; the contract ignores it. The co-signed `feeRecipient`
   is signed and untouched. Submit calls `mtxPayReceiverFee`.
+- **Payee client:** the payment request carries "fee paid by receiver" and the receiver fee amount (base units); once
+  the payer's address is known the payee's server builds the payer's typed data (fee `NONE`, relayer = its lane),
+  computes the payment digest and signs `ReceiverFee` with the receiving wallet's key. That key controls the wallet (a
+  `SubjectAccount` key validates any digest), so the receiving wallet for this mode is a dedicated **hot collection
+  wallet** holding only incoming receiver-pays funds, swept to a cold treasury; a cold receiving wallet cannot
+  co-sign and must not offer this mode. Booking: receipt `N` from `PaymentSettled`, fee expense `F` from
+  `ReceiverFeePaid` matched by digest. E-cheque flow: the payee's request names the relayer lane; the payer signs
+  offline with that relayer bound and hands the intent to the payee, which co-signs and pushes it to that relayer's
+  node.
+- Contract size: the token families stay under the 24576-byte (EIP-170) CI gate; if one exceeds it, the receiver-fee
+  hashing moves to an external library (`ReceiverFeeLib`).
 - Token capability: admin flag `token.features` contains `receiver_fee` (set at registration; simulation is the final
   check) ⇒ else `422 FEATURE_UNSUPPORTED`.
-- **Indexer:** decodes `ReceiverFeePaid` into `range` items; the payee books receipt `N` from `PaymentSettled` and fee
+- **Indexer:** decodes `ReceiverFeePaid` into `range` items; the payee books receipt `N` from `PaymentSettled(…, N, entryRef)` and fee
   expense `F` from `ReceiverFeePaid`, matched by digest ([integration.md#inbound](../integration.md#inbound)).
 - The payee names the relayer's fee address (the node's `chains.fee_recipient`) in its co-signature. A co-signing
   receiving wallet is a **hot collection wallet**: its key controls the wallet, so it holds only incoming
@@ -211,7 +224,8 @@ and MySQL; feed fields per family (EVM, Hedera, one non-EVM); admin route roles 
 <a id="pool"></a><a id="NODE-SPN-04"></a>**NODE-SPN-04** (PLANNED) — **`SponsorshipPool` is an opt-in application
 contract, not a mesh reward**; the mesh pays only the intent's own fee ([NODE-MESH-05](mesh.md#NODE-MESH-05) is not
 amended). A pool is a `call` target any relayer may use, like the tender. In v1 the mesh does not carry pool-bound
-intents (an envelope slot would be a mesh change). **Pool reward = native-gas refund**, `min((gasMeasured +
+intents (an envelope slot would be a mesh change; if that proves wrong, a later mesh revision adds a `via_pool` envelope
+field). **Pool reward = native-gas refund**, `min((gasMeasured +
 overheadGas) × min(tx.gasprice, block.basefee + maxPriorityFee), maxRewardPerIntent, balance)`, paid to `msg.sender`
 after the intent executes inside `settle`. Sponsor withdrawals wait `withdrawDelay ≥ 3600 s + finality` (≥
 `max_valid_for_secs`). A refund, not a profit, removes the incentive to farm the pool with self-made intents; the delay

@@ -523,7 +523,8 @@ outside these docs):
   The factory registrar is a multisig, not an EOA, before mainnet.
 - **Chain enablement** (`draft → active`, tooling PLANNED): only after (1) a working simulation path, (2) 7 days of
   measured finality depth on the real network, (3) ≥ 2 independent RPC endpoints for the quorum
-  ([indexer-feeds.md#finality](indexer-feeds.md#finality)). Deployments are recorded per chain.
+  ([indexer-feeds.md#finality](indexer-feeds.md#finality)). Real deployments (chain 7622 — formerly 9000 — and Gnosis first, then the other
+  families) are recorded per chain in `deployments/<chain>.json`.
 - **Open gateway**: a per-IP rate limit at the reverse proxy in front of any gateway open to the public
   ([gateway.md#auth](gateway.md#auth)).
 - **Custody**: production custody adapters (KMS/HSM/broker) for custodial or delegated client wallets — an env-held key

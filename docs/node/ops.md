@@ -24,7 +24,7 @@ capacity limits. Non-goals:
 
 - High availability for one (company, chain) ([README.md#limitations](README.md#limitations)). DR is restore, not
   failover.
-- Automatic lane refill from a treasury (PLANNED); runway alerts replace it in v1.
+- Automatic lane refill from a treasury ("auto-refill", PLANNED); runway alerts replace it in v1.
 - A price oracle in the node. FinOps conversion uses an operator-supplied price file.
 - Contractual SLAs or service credits: every target is an internal objective of whoever runs a node.
 - Telemetry from the console app. The app sends nothing; W3B-05 is a release benchmark.
@@ -110,7 +110,7 @@ finality + 60 s for depth/tag families, `include` + 30 s for instant families (o
 
 | Chain class | Block / finality | `include` | `broadcast_final` | Reason |
 |---|---|---|---|---|
-| EVM private (7622, Clique, 1 signer) | ~5 s, depth 1 | 15 s | 15 s | 3 blocks |
+| EVM private (7622, formerly 9000; Clique, 1 signer) | ~5 s, depth 1 | 15 s | 15 s | 3 blocks |
 | EVM public (Gnosis) | 5 s, `finalized` ~160–240 s | 30 s | 300 s | 6 blocks; 240 s + 60 s |
 | EVM L2 (Celo, `tag` until `l1_batch`) | 1 s, L1 finality ~13–20 min | 10 s | 1 260 s | 20 min + 60 s |
 | Hedera | 3–5 s record files, instant | 15 s | 45 s | 3 record files |
@@ -181,7 +181,9 @@ Rules:
 - Gauges come from the 10 s snapshot; chain probes run in parallel (today sequential, `admin.rs` ponytail) and
   `scaas_snapshot_age_seconds` exposes staleness. Counters/histograms are atomics read at render. Scrape 15 s.
 
-Existing (BUILT, `admin.rs`, `submit.rs`):
+Existing (BUILT, `admin.rs` `render()`, `submit.rs`; first-release forms `scaas_relay_jobs{chain,state}`,
+`scaas_payment_requests_attention{chain}`, `scaas_indexer_lag_blocks{chain}`, `scaas_breaker_open{chain,breaker}`,
+`scaas_drift_alerts{chain}`; mesh counters come from a `MeshStats` snapshot of atomics):
 
 | Metric | Type | Labels | Note |
 |---|---|---|---|
@@ -207,8 +209,8 @@ Job API, feeds, store, admin, audit, OIDC (SPECIFIED):
 | `scaas_admin_mutations_total` | counter | `route`, `actor_kind`, `result` |
 | `scaas_admin_cli_total` | counter | `action` |
 | `scaas_admin_login_total` | counter | `result` (`ok`, `bad`, `locked`) |
-| `scaas_audit_head_seq` | gauge | — (one series; the head hash is logged, not a label) |
-| `scaas_oidc_rejections_total` | counter | `issuer` (index), `reason` |
+| `scaas_audit_head_seq` | gauge | — (one series; the head hash is logged, not a label; replaces `scaas_audit_head_info{hash}`) |
+| `scaas_oidc_rejections_total` (with the jwks counter: `scaas_oidc_*{issuer}`) | counter | `issuer` (index), `reason` |
 | `scaas_oidc_jwks_refresh_total` | counter | `issuer`, `result` |
 | `scaas_fee_recipient_changed_total` | counter | `chain` |
 | `scaas_lane_foreign_nonce_total`; `scaas_lane_foreign_nonce` (0/1, latched until the lane leases) | counter; gauge | `chain`, `lane` |
@@ -529,7 +531,7 @@ capacity load test runs alone.
 
 <a id="traces"></a><a id="NODE-OPS-09"></a>**NODE-OPS-09** — **Traces: no OpenTelemetry SDK in the v1 binary.**
 Gateway and job API accept a W3C `traceparent` (the `POST /v1/jobs` header applies to every item); the trace id (32
-hex) is stored as `job.trace_id` (absent ⇒ generated) and carried by lifecycle log lines and jobs-feed items. Span
+hex) is stored as `job.trace_id` (`job.trace_id TEXT NULL`, 32 hex; absent ⇒ generated) and carried by lifecycle log lines and jobs-feed items. Span
 names are fixed now; OTLP export = cargo feature `otel`, default off (PLANNED). OpenTelemetry + OTLP + `tonic` would be
 the node's heaviest dependency set; `job_event` already is a durable per-job trace. Until export exists, correlation is
 via logs.
@@ -679,11 +681,11 @@ Above the rated load: a second node on **different chains**, not a bigger store.
 - Chain profile flag `pqz = { genesis_hash = "0x…", registry = "0x…", tokens = ["0x…"] }`; a start-up probe
   `has_pqz_precompile` (genesis hash first) — a chain that fails it refuses PQZ jobs. The node checks RPC genesis hash
   `==` profile `genesis_hash` `==` `registry.chainUid()` `==` each token's `chainUid` and refuses a mismatch (the node
-  chain binding, [gateway.md#chain-binding](gateway.md#chain-binding)): the chain id 7622 alone does not identify our
+  chain binding, [gateway.md#chain-binding](gateway.md#chain-binding)): the chain id 7622 (formerly 9000) alone does not identify our
   chain.
 - Job kinds ([job-api.md#post-v1jobs](job-api.md#post-v1jobs)): envelope ops use the **existing** `metatx` (v1) and
   `ua_metatx` (v3) jobs, with the node-computed digest over the token's domain, idempotency and lanes unchanged; the
-  token row has kind `pqz`. Job kind `pqz_call` is for **direct open calls** only: `{chain, contract, selector ∈
+  token row has `kind = pqz`. Job kind `pqz_call` is for **direct open calls** only: `{chain, contract, selector ∈
   {pqzTransfer, pqzBurn, rollOver}, calldata}` (direct `fund` pulls the caller's underlying, so it is never a node
   job). For all three: the contract must be a configured PQZ token; pre-simulation by `eth_estimateGas` on a
   **follower**, never the signer (fails ⇒ job rejected, no gas spent); `max_gas_per_tx = 16_000_000` on chain 7622 (the

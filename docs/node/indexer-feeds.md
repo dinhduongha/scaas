@@ -42,7 +42,7 @@ family details in [networks/](../networks/README.md)):
 |---|---|---|---|---|
 | EVM private (chain 7622, Clique 1 signer) | `depth`, 1 | `latest − 1` | block | Reorg-free by construction |
 | EVM public (Gnosis) | `tag` `finalized`, quorum ≥ 2 | `eth_getBlockByNumber('finalized')` | block | ~160–240 s; quorum 2 required before `active` |
-| EVM L2 (Celo OP Stack) | `l1_batch` | L1-finalized batch | block | **PLANNED**; until then `tag` |
+| EVM L2 (Celo OP Stack) | `l1_batch` | L1-finalized batch | block | **PLANNED** (tracker item 13); until then `tag` |
 | Hedera | `instant` | latest record file via JSON-RPC relay | block | aBFT |
 | Cosmos | `instant` | latest committed block (`/status`) | height | CometBFT |
 | Soroban (Stellar, Pi) | `instant` | `getLatestLedger` | ledger | SCP closed ledger |
@@ -50,6 +50,23 @@ family details in [networks/](../networks/README.md)):
 | Aptos | `instant` | committed `block_height` (bounded by indexer progress) | block | AptosBFT |
 | TON | `depth`, 0 | `masterchainInfo.last` | masterchain seqno | |
 | Solana | `tag` `finalized` | `getSlot(finalized)`, min slot over quorum | slot | ~12.8 s TowerBFT |
+
+Transitional (BUILT) loop, with the cursor read from the client:
+
+```
+cursor = node_config(chain).indexed_block
+loop:
+  head_final = mode == 'tag' ? eth_getBlockByNumber('finalized').number : latest.number - depth
+  to = min(head_final, cursor + 1000); if to <= cursor: sleep
+  hash_to = block(to).hash on the primary endpoint; quorum on hash_to (now: on the event set, NODE-IDX-01)
+  logs = eth_getLogs(from = cursor + 1, to, address = [tokens…, dex], topics = [MetaTransactionExecuted, PaymentSettled, TradeSettled])
+  chain_event_ingest(chain, cursor + 1, to, hash_to, decoded(logs))   # atomic on the client
+  cursor = to
+```
+
+The client refuses a non-contiguous batch (`from_block != indexed_block + 1`), so a restarted or doubled indexer never
+leaves a hole or writes twice; dedup also by `UNIQUE(chain_id, tx_hash, log_index)`. The store feed keeps the same
+property with `from_block = indexed + 1`.
 
 Other EVM networks (Ethereum L1, Arbitrum, Base, Polygon, …) are **unsupported until configured**: a chain is a
 profile only once its finality has been measured ([networks/evm.md](../networks/evm.md)). Soft finality (booking small
@@ -133,8 +150,9 @@ Further events, same object, same filters (decoders for a new kind ship before t
 
 ## Feeds
 
-<a id="feeds"></a><a id="NODE-IDX-04"></a>**NODE-IDX-04** — **Change feeds**: `GET /v1/jobs?cursor=` (job state
-changes) and `GET /v1/events?cursor=` (index ranges, balances, DEX items). `seq` comes from the store's counter row,
+<a id="feeds"></a><a id="NODE-IDX-04"></a>**NODE-IDX-04** — **Change feeds** (a client's data platform may land them in its own
+`raw` tables; that platform is outside the node): `GET /v1/jobs?cursor=` (job state
+changes) and `GET /v1/events?cursor=` (`GET /v1/events?cursor=…`: index ranges, balances, DEX items). `seq` comes from the store's counter row,
 filtered per namespace; every page carries `store_id`, `incarnation`, `restore_epoch`, `head_seq`; the client cursor
 rule is the bus overlap rule ([cursors](#cursors)); `wait ≤ 25 s` long-poll for clients that want it (an ERP cron uses
 `wait=0`, so no client worker is held). Cursor older than retention ⇒ `410 CURSOR_EXPIRED`. Results reach clients
@@ -154,7 +172,7 @@ Each item is a **snapshot** of the job after that transition (state + journal fi
 `broadcast`, `mined`, `reverted`, `consumed`, `dead`, `cancelled`), so a client that missed earlier items can still
 reach the right state. `final` never appears here (finality comes from the events feed). Every item carries
 `trace_id`; `mined`/`reverted` items add `gas_used`, `gas_price`, `cost_native`, `sponsor: {policy, account} | null`
-and `sponsor_fallback: <policy name> | null` ([sponsorship.md#feed](sponsorship.md#feed),
+and `sponsor_fallback: <policy name> | null` (`sponsor_fallback: <policy> | null`) ([sponsorship.md#feed](sponsorship.md#feed),
 [NODE-OPS-11](ops.md#NODE-OPS-11)). Error values a client must recognise on `dead`/`reverted` items: `cancelled`,
 decoded contract errors (`MetaTxBadNonce`, `MetaTxExpired`, …), `ATTEMPTS_EXHAUSTED` (`attempt_count` passed
 `chain.max_attempts`, default 5), and a `reverted` after one billed retry (the chain charged the lane for a failure the
@@ -238,8 +256,12 @@ recordToken, recordBlock, policy)` with `recordBlock` final under the chain's fi
 finalized `Transfer` of `recordToken` from its creation block (indexer watch list) to the end of `recordBlock`; must
 equal `balanceOf(a)` at `recordBlock` for a sampled set (archive RPC quorum) or the build fails. Policy (canonical JSON,
 `policyHash = keccak256` of its RFC 8785 bytes): excluded addresses and attribution of protocol clones; the builder
-**must** classify every leaf that has code, and any other contract leaf **fails the build** unless the policy lists
-it. Output: root, total, leafCount, leaves file (CSV + JSON), proofs. API (job-API conventions, namespace-scoped):
+**must** classify every leaf that has code — every `AssetFactory` clone (known from its events, including
+counterfactual grant addresses funded before `GrantCreated`, found with `predictGrant` of pending client grants) and the
+token's own address are excluded or attributed — and any other contract leaf **fails the build** unless the policy
+lists it. Tree: OZ `StandardMerkleTree` v1, leaf encoding `["uint256","address","uint256"]` = `(index, account,
+amount)`, leaf = `keccak256(bytes.concat(keccak256(abi.encode(index, account, amount))))`, `sortLeaves = true`,
+sorted-pair node hashing as `MerkleProof.verify`. Output: root, total, leafCount, leaves file (CSV + JSON), proofs. API (job-API conventions, namespace-scoped):
 `POST /v1/snapshots {chain, token, block, policy}` → `{id}`; `GET /v1/snapshots/{id}` → `{state, root, total,
 leaf_count, policy_hash}`; `GET /v1/snapshots/{id}/leaves`; `GET /v1/snapshots/{id}/proof?account=` (public data).
 CLI `scaas-node snapshot verify <file>` recomputes a root from chain without trusting the store. The node is not

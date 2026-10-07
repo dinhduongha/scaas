@@ -7,11 +7,11 @@ durable door-A jobs, `/v1/gateway`, `/v1/ops`, UA routes, CORS and the error con
 
 ## Auth
 
-<a id="auth"></a><a id="NODE-GW-02"></a>**NODE-GW-02** — **Gateway auth is `none`, `bearer` or `hmac`**
+<a id="auth"></a><a id="NODE-GW-02"></a>**NODE-GW-02** — **Gateway auth is `none`, `bearer` or `hmac`** (`bearer|hmac` off loopback)
 (`[modules] gateway_auth = "none" | "bearer" | "hmac"`; secret from `gateway_secret_env`, ≥ 16 bytes). `bearer`:
 `Authorization: Bearer <secret>`, compared in constant time. `hmac`: `X-Scaas-Timestamp` + `X-Scaas-Signature =
 hex(HMAC-SHA256(secret, ts ‖ "." ‖ nonce ‖ "." ‖ METHOD ‖ " " ‖ path?query ‖ "\n" ‖ body))`, clock skew ≤ 300 s,
-`X-Scaas-Nonce` (`[A-Za-z0-9_-]{1,64}`) remembered until its own timestamp expires (ts + 300 s), so nothing replays;
+`X-Scaas-Nonce` (header names are case-insensitive: `X-SCaaS-Nonce` is the same; `[A-Za-z0-9_-]{1,64}`) remembered until its own timestamp expires (ts + 300 s), so nothing replays;
 method and path are in the signed string, so a signature for one route is useless on another. **`none` is refused when
 the bind is not loopback** (a config error fails fast). Every decoder of untrusted input (`WireMetaTx::to_sol`, the
 gateway body, job payloads, every family adapter's decoder — BCS/XDR/protobuf/BOC) has `proptest` fuzz tests
@@ -66,12 +66,12 @@ A duplicate returns `200` with the stored state (idempotent).
 | Route | Body / answer | Accept checks, in order |
 |---|---|---|
 | `GET /v1/gateway` | above | — |
-| `POST /v1/metatx {chain, token, m, signature}` | `202 {"status":"queued", "intent_id"}` (+ `exclusive` when published on the mesh) | token registered and active (`TOKEN_NOT_SERVED`); strict parse; normalization ([NODE-LANE-10](submit-lanes.md#NODE-LANE-10)) before simulation; `metaTxDigest` + simulation; [door A rules](#door-a-intake). On Hedera chains (295–298) `sig_bytes` may be **64** bytes (HIP-632 ED25519); 65–2048 bytes elsewhere |
+| `POST /v1/metatx {chain, token, m, signature}` | `202 {"status":"queued"}` today; the target adds `"intent_id"` (+ `exclusive` when published on the mesh) | token registered and active (`TOKEN_NOT_SERVED`); strict parse; normalization ([NODE-LANE-10](submit-lanes.md#NODE-LANE-10)) before simulation; `metaTxDigest` + simulation; [door A rules](#door-a-intake). On Hedera chains (295–298) `sig_bytes` may be **64** bytes (HIP-632 ED25519); 65–2048 bytes elsewhere |
 | `POST /v1/ops {chain, op}` | `op` = the job API `signed_op` payload; `202 {"status": "queued", "intent_id": "<digest hex>"}` | below |
 | `POST /v1/ua-metatx {chain, token, m: WireUAMetaTransaction, auth}` | `ua_metatx` job | token `features ∋ ua` (v3: `registry() ≠ 0`); `from >> 160 ≠ 0` ⇒ registry record ([UA record cache](#ua-cache), `UA_NOT_REGISTERED`); cheap kinds verified locally ([NODE-GSP-15](gossip.md#NODE-GSP-15)); node computes `uaDigest` |
-| `POST /v1/ua/register {chain, kind, keyData, pop, authRef}` | `call` job to `chain.ua_registry` ([NODE-GW-03](#NODE-GW-03)) | id recomputed, `>> 160 ≠ 0`; not registered (`UA_ALREADY_REGISTERED`, `UA_KEY_IN_USE`); PoP verified for cheap kinds over `pop_digest` with `chain.chain_uid`; per-chain registration quota |
+| `POST /v1/ua/register {chain, kind, keyData, pop, authRef}` (`{chain, kind, keyData: 0x…, pop: 0x…, authRef: 0x…32}`) | `call` job to `chain.ua_registry` ([NODE-GW-03](#NODE-GW-03)) | id recomputed, `>> 160 ≠ 0`; not registered (`UA_ALREADY_REGISTERED`, `UA_KEY_IN_USE`); PoP verified for cheap kinds over `pop_digest` with `chain.chain_uid`; per-chain registration quota |
 | `GET /v1/intents/{intent_id}` | the `~gateway` job: `{"intent_id", "state", "consumed_kind"?, "tx_hash"?, "updated_at"}` | **only for gateway-origin rows**: rows from peers or from the job API (incl. private-chain intents) answer 404, the same as unknown or expired ids |
-| `POST /v1/dex/orders`, `…/cancel`, `…/cancel-all`; `GET /v1/dex/{markets,depth,trades,ticker,orders}` | [dex-venue.md#routes](dex-venue.md#routes) | managed markets add `NOT_ELIGIBLE {reason}`, `UNBOUND_FORBIDDEN`, `FEE_FORBIDDEN`, `PAUSED`, `ATTESTATION_SHORTER`; mesh `route_order` ⇒ `MANAGED_LOCAL` ([dex-venue.md#managed-markets](dex-venue.md#managed-markets)) |
+| `POST /v1/dex/orders`, `…/cancel`, `…/cancel-all`; `GET /v1/dex/{markets,depth,trades,ticker,orders}` (`GET /v1/dex/orders?maker=`) | [dex-venue.md#routes](dex-venue.md#routes) | managed markets add `NOT_ELIGIBLE {reason}`, `UNBOUND_FORBIDDEN`, `FEE_FORBIDDEN`, `PAUSED`, `ATTESTATION_SHORTER`; mesh `route_order` ⇒ `MANAGED_LOCAL` ([dex-venue.md#managed-markets](dex-venue.md#managed-markets)) |
 | `GET /v1/dex/depth?scope=network`, `GET /v1/dex/homes` | network depth and DEX homes ([dex-venue.md#gossip](dex-venue.md#gossip)) | — |
 
 `POST /v1/ops` (six non-EVM families):
@@ -86,7 +86,8 @@ A duplicate returns `200` with the stored state (idempotent).
         "valid_until": 1790000300, "extra": {"coin_type": "0x2::sui::SUI"}}}
 ```
 
-`op` is exactly the `signed_op` payload of a job and what every adapter's `build` consumes. Accept checks, in order:
+`op` is exactly the `signed_op` payload of a job and what every adapter's `build` consumes; `op.family` must be the
+chain's. Accept checks, in order:
 
 1. `chain` is served (`UNKNOWN_CHAIN`).
 2. `family` equals the chain's family (`BAD_PAYLOAD`).
@@ -107,7 +108,7 @@ door A work is not journaled and has no digest guard until it becomes a `~gatewa
 <a id="ua-register"></a><a id="NODE-GW-03"></a>**NODE-GW-03** — **Gateway `call` jobs exist only for UA
 registration.** `POST /v1/ua/register` is the one gateway route that creates a `call` job in `~gateway`: target = the
 chain's `chain.ua_registry`, function `register`, calldata built by the node from the checked body. It is a gateway
-capability, not an `allow_call` grant ([NODE-JOB-09](job-api.md#NODE-JOB-09) is unchanged for namespaces);
+capability, not an `allow_call` grant ("gateway capability, not a namespace grant") ([NODE-JOB-09](job-api.md#NODE-JOB-09) is unchanged for namespaces);
 `job_live_call` dedupes retries; every registration lives in `~gateway`, so the per-namespace index
 ([NODE-JOB-13](job-api.md#NODE-JOB-13)) dedupes them node-wide. Sponsored registration spam is bounded by the per-chain
 registration quota and the sponsor budget; the one `~gateway` `call` sponsor policy shape allowed is `contract =
@@ -168,6 +169,7 @@ chars>", "revert_data": "0x…"?}`; the legacy `"error"` keeps the code, so old 
 `UNKNOWN_CHAIN`, `TOKEN_NOT_SERVED`, `BREAKER_OPEN`, `SUBMIT_BUSY`, `EXPIRED`, `BAD_SIGNATURE`, `BAD_PAYLOAD`,
 `RELAYER_NOT_OURS`, `SIMULATION_REVERT` (raw `0x…` revert data), `RPC_UNAVAILABLE`, `QUOTA`, `ZERO_VALUE`,
 `SUBJECT_DENIED`, `SPONSOR_BUDGET`, `SPONSOR_RATE`, `SPONSOR_TOO_SHORT`, `UA_NOT_REGISTERED`, `UA_ALREADY_REGISTERED`,
-`UA_KEY_IN_USE`, and the managed-market codes above. Clients decode revert data with their own ABI and map codes; no
+`UA_KEY_IN_USE`, and the managed-market codes above. Clients decode revert data with their own ABI and map codes (the console app maps `errors.node.<code>`); it replaces
+the earlier `{"error": "<text>"}` bodies and Rust `Debug` reverts; no
 logic keys on free text. The gateway and the job API keep per-listener code sets over the same checks (gateway
 `TOKEN_NOT_SERVED` and `EXPIRED` for too long a validity, job API `UNKNOWN_TOKEN` and `VALID_TOO_LONG`).
