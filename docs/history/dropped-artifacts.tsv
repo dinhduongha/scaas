@@ -1,0 +1,426 @@
+# Load-bearing tokens of history/research sources that are deliberately absent from the current docs (docs_check.py C7 and facts check skip them).
+# token<TAB>reason<TAB>where the meaning lives now, or why it is obsolete. Reasons: vi-quote, revision-label, vi-number, stale-chain-9000, internal-path, extraction-artifact, obsolete.
+, challenge = base64url(thông điệp). secp256k1: 	extraction-artifact	contracts/accounts-mandates.md#CTR-ACC-02
+e1a4a8b	internal-path	commit id of a merge note; the implementation pin is contracts/accounts-mandates.md#CTR-ACC-05
+test/helpers/Fixtures.sol	internal-path	contracts/accounts-mandates.md#CTR-ACC-05
+addKey(khoá vừa tạo)	vi-quote	clients/signers-clientkeys.md#CLI-SGN-05
+ (~160–240 s), quorum ≥ 2 independent RPCs; profile 	extraction-artifact	networks/evm.md#chains
+); address = bech32(ripemd160(sha256(pk))) must equal 	extraction-artifact	networks/cosmos.md#NET-COS-02
+sha256("scaas.passkey.v2" ‖ pk65 ‖ rpIdHash ‖ sha256(origin))[..20]	obsolete	derived passkey address superseded: the Cosmos passkey owner is the 32-byte UA id, networks/cosmos.md#NET-COS-03
+ fixed **336 bytes** (	extraction-artifact	networks/solana.md#payload
+ (prunable after 	extraction-artifact	contracts/metatx.md#CTR-MTX-04
+ (SPECIFIED replacement 	extraction-artifact	contracts/accounts-mandates.md#CTR-ACC-07
+. SPECIFIED (DEX rev 1.1, new deployment, DX-FIX3): 	extraction-artifact	contracts/dex.md#CTR-DEX-01
+; registration checks the implementation's 	extraction-artifact	contracts/token-wrappers.md#CTR-TOK-03
+ from the claim block, pick 	extraction-artifact	node/submit-lanes.md#NODE-LANE-09
+: same digest and relayer ∈ our lanes ⇒ 	extraction-artifact	node/submit-lanes.md#NODE-LANE-09
+auth.uid()	obsolete	BaaS authority-model comparison (background); the client-signs principle is networks/README.md#principles
+service_role	obsolete	BaaS authority-model comparison (background); the client-signs principle is networks/README.md#principles
+dex.rs:58-66	internal-path	contracts/README.md#admin-powers-complete-list
+MultiUnderlyingToken.sol:86-98	internal-path	contracts/README.md#admin-powers-complete-list
+OrderBookDex.admin	extraction-artifact	contracts/README.md#admin-powers-complete-list
+OrderBookDex.sol:143-151	internal-path	contracts/README.md#admin-powers-complete-list
+SingleUnderlyingToken.sol:261-331	internal-path	contracts/README.md#admin-powers-complete-list
+soroban/contracts/token/src/lib.rs:188-194	internal-path	contracts/README.md#admin-powers-complete-list
+authenticatorData ‖ SHA-256(clientDataJSON)	extraction-artifact	contracts/accounts-mandates.md#CTR-ACC-08
+soroban/contracts/account/src/lib.rs:136	internal-path	networks/README.md#NET-ALL-04
+SubjectAccount.sol:257	internal-path	networks/README.md#NET-ALL-04
+ERC20MetaTx.sol:58-60	internal-path	contracts/metatx.md#2d-nonces-and-lanes
+--admin	obsolete	pre-ruling option list; Cosmos is instantiated --no-admin, contracts/README.md#CTR-GEN-02
+_USER-DECISIONS	internal-path	research file name; the custody ruling it cites is integration.md#custody
+blockchain_autopay._enqueue_revoke	internal-path	ERP-internal method; the revoke job is integration.md#auto-pay
+usable_from = approved + N giờ	vi-quote	integration.md#INT-ERP-01
+, cờ 	extraction-artifact	contracts/dex.md#CTR-DEX-07
+anvil --chain-id 9000 --hardfork prague	stale-chain-9000	private chain is 7622, node/submit-lanes.md#NODE-LANE-05
+ với 	extraction-artifact	node/submit-lanes.md#NODE-LANE-04
+valid_until + 10 phút < now	vi-quote	integration-odoo-example.md#INT-ODOO-07
+valid_until + 1 giờ > now	vi-quote	integration-odoo-example.md#INT-ODOO-07
+validUntil ≤ lần phát đầu + H	vi-quote	integration.md (validUntil ≤ first issue + H, paid-at-most-once rule)
+smartcontracts/test/vectors/metatx_kat.json	internal-path	contracts/metatx.md#digest
+address ∈ token đã đăng ký	vi-quote	node/threat-model.md#payment-path
+, bỏ qua 	extraction-artifact	contracts/metatx.md (v1 MetaToken initData, WrapperHasNoMint)
+ (đọc từ underlying) và **bắt buộc** 	extraction-artifact	contracts/metatx.md (v1 MetaToken initData, WrapperHasNoMint)
+. Tầng 2 dùng 	extraction-artifact	contracts/metatx.md (v1 MetaToken initData, WrapperHasNoMint)
+balanceOf(ví nhận)	vi-quote	integration.md#INT-ERP-09
+ với địa chỉ ở **dạng chuẩn của họ** (§D.0). 	extraction-artifact	node/indexer-feeds.md (normalized event, family-canonical addresses)
+ (bytes canonical của họ), 	extraction-artifact	integration.md#push
+blockchain.chain.has_p256_precompile	internal-path	ERP chain field; P-256 precompile use is contracts/accounts-mandates.md#CTR-ACC-08
+2026-10-03-srs-deltas.md	internal-path	research/spec file name
+extra = H(tham số)	vi-quote	networks/README.md#model
+: a wallet transaction the user sees, not a signData). 	extraction-artifact	networks/ton.md#NET-TON-02
+chromium	obsolete	ERP browser-test job left the contracts CI; contracts CI is contracts/README.md#CTR-GEN-01
+dms_blockchain*/**	internal-path	ERP addon path glob; contracts CI is contracts/README.md#CTR-GEN-01
+odoo:19	obsolete	ERP container job left the contracts CI; contracts CI is contracts/README.md#CTR-GEN-01
+, rồi 	extraction-artifact	contracts/README.md#CTR-GEN-01
+ so sánh constant-time. 	extraction-artifact	node/gateway.md#NODE-GW-02
+ khi trả bằng 	extraction-artifact	contracts/dex.md#CTR-DEX-06
+, và 	extraction-artifact	contracts/dex.md#CTR-DEX-06
+expiry ∈ (now+5 s, now+30 ngày]	vi-quote	node/dex-venue.md#intake
+scaas-node/src/dex.rs	internal-path	node/dex-venue.md
+POST/GET /v1/dex/orders	extraction-artifact	node/dex-venue.md#routes
+gasleft() ≥ cap · 64/63 + dự phòng	vi-quote	contracts/dex.md#CTR-DEX-08
+taker ∈ {0, đối ứng}	vi-quote	contracts/dex.md#CTR-DEX-04
+ JSON nguyên văn: 	extraction-artifact	networks/cosmos.md#dex
+nhận − phí ≥ buy_amount_min	vi-quote	networks/cosmos.md#dex
+: kiểm §2–3, rồi theo 	extraction-artifact	networks/cosmos.md#signatures
+gasUsed × giá	vi-quote	networks/hedera.md#NET-HED-12
+ ghi đè bằng 	extraction-artifact	networks/hedera.md#NET-HED-06
+ (mặc định rỗng); 	extraction-artifact	networks/hedera.md#NET-HED-06
+ cho connector 	extraction-artifact	integration.md#INT-ERP-14
+ nhận chữ ký **64 byte** + 	extraction-artifact	node/mesh.md#NODE-MESH-16
+), proptest decoder; e2e 	extraction-artifact	networks/hedera.md#conformance
+) trên anvil 	extraction-artifact	networks/hedera.md#conformance
+pay(self, x, 0, ref_nạn_nhân)	vi-quote	networks/soroban.md#NET-SOR-09
+pay(self, x, 1, ref_nạn_nhân)	vi-quote	networks/soroban.md#NET-SOR-09
+[ledger hiện tại, ledger hiện tại + max_entry_ttl − 1]	vi-quote	networks/soroban.md (signature_expiration_ledger, max_entry_ttl)
+"origin":"<origin đã đăng ký>"	vi-quote	networks/soroban.md#signatures
+to = chính mình	vi-quote	networks/sui.md#NET-SUI-03
+: chủ (	extraction-artifact	networks/sui.md#mandate
+ kiểm đúng danh sách §1.2 của DEX design: flags, hạn, 	extraction-artifact	networks/sui.md#dex
+(gas coin, version, tx bytes, chữ ký, digest)	vi-quote	networks/sui.md#NET-SUI-10
+TransactionExpiration::Epoch(epoch hiện tại + 1)	vi-quote	networks/sui.md#NET-SUI-10
+PasskeyRecord = pubkey:bits264 (nén) rp_id_hash:bits256 ^origin_prefix	vi-quote	networks/ton.md#NET-TON-08
+), dựng 	extraction-artifact	networks/ton.md#NET-TON-17
+ (hoặc pubkey từ 	extraction-artifact	networks/ton.md#NET-TON-17
+, **mô phỏng bằng getter**: 	extraction-artifact	networks/ton.md#NET-TON-17
+). Sai ⇒ 	extraction-artifact	networks/ton.md#NET-TON-17
+, số dư, chữ ký ed25519 cục bộ với 	extraction-artifact	networks/ton.md#NET-TON-17
+, địa chỉ raw 	extraction-artifact	networks/ton.md#NET-TON-12
+, breaker cộng forward; sandbox — 	extraction-artifact	networks/ton.md#NET-TON-14
+ > hằng ⇒ 	extraction-artifact	networks/ton.md#NET-TON-14
+max(attach, forward + 0,1 TON)	vi-number	networks/ton.md#NET-TON-14
+; chữ ký = Ed25519(hash cell phong bì). 	extraction-artifact	networks/ton.md#NET-TON-05
+0,01 + 0,002 TON × số mục	vi-number	networks/ton.md#payload
+r3-zether-prover	internal-path	branch name; the prover contract is contracts/zether.md
+AuthScheme.sol:7	internal-path	source line ref of a stale comment; the dev-chain gate is contracts/README.md#production-gates-unaudited
+shieldScale = 10^(decimals − giữ)	vi-quote	contracts/zether.md#CTR-ZTH-04
+) chạm tới 	extraction-artifact	contracts/zether.md#CTR-ZTH-18
+. Hệ quả: (a) mọi số dư thật 	extraction-artifact	contracts/zether.md#CTR-ZTH-18
+, nên 	extraction-artifact	contracts/zether.md#CTR-ZTH-18
+ vì mọi số hạng và tổng đều 	extraction-artifact	contracts/zether.md#CTR-ZTH-18
+, bảng baby 	extraction-artifact	contracts/zether.md#CTR-ZTH-19
+feeRecipient = token	extraction-artifact	contracts/zether.md#CTR-ZTH-23
+test/zether/*	internal-path	test directory; Zether tests are listed in contracts/zether.md
+ (SingleKey ed25519, AIP-55) phải bằng 	extraction-artifact	networks/aptos.md#NET-APT-03
+ — đổi cách dẫn lane ở Odoo/connector, chưa làm (	extraction-artifact	networks/aptos.md#NET-APT-06
+ vẫn qua. Quy tắc: mọi client ký (Odoo, connector 	extraction-artifact	networks/aptos.md#NET-APT-06
+ và đầu ra 	extraction-artifact	networks/aptos.md#signatures
+"<khoá>: <giá trị>"	vi-quote	networks/aptos.md#signatures
+. Move nhận 	extraction-artifact	networks/aptos.md#signatures
+: dựng 	extraction-artifact	networks/aptos.md#contracts
+ rồi 	extraction-artifact	networks/aptos.md#contracts
+: chủ ký 	extraction-artifact	networks/aptos.md#NET-APT-12
+: delegate ký 	extraction-artifact	networks/aptos.md#NET-APT-12
+; hash lệnh = 	extraction-artifact	networks/aptos.md#NET-APT-11
+; ký qua phong bì §4.2 với 	extraction-artifact	networks/aptos.md#NET-APT-11
+) là 	extraction-artifact	networks/aptos.md#NET-APT-15
+ = null). Gợi ý = 	extraction-artifact	networks/aptos.md#NET-APT-15
+ (địa chỉ package), 	extraction-artifact	integration.md#INT-ERP-14
+; thêm 	extraction-artifact	integration.md#INT-ERP-14
+FAMILIES	internal-path	shared-file enum of a merge-coordination note (process)
+ (id, không phải ví). Account tạo 	extraction-artifact	contracts/universal-account.md#CTR-UA-19
+ ký bởi **một khoá hiện có**; 	extraction-artifact	networks/solana.md#NET-SOL-06
+KeyOp{action=add_origin, origin = chính origin trong assertion}	vi-quote	networks/solana.md#NET-SOL-06
+ ⇒ không tx native của chủ (R30). Cấp vốn = một 	extraction-artifact	networks/solana.md#accounts
+ thường tới Mandate PDA (	extraction-artifact	networks/solana.md#accounts
+, trần 	extraction-artifact	networks/solana.md#NET-SOL-17
+. Chạy được trên 	extraction-artifact	networks/solana.md#NET-SOL-19
+ phân trang lùi tới khi gặp slot 	extraction-artifact	networks/solana.md#NET-SOL-19
+ (CAIP-2 namespace solana); thêm 	extraction-artifact	integration.md#INT-ERP-14
+valid_until = now + 32 ngày	vi-quote	networks/solana.md#NET-SOL-22
+ **8.4.0** cục bộ ở 	extraction-artifact	networks/solana.md#NET-SOL-17
+ (chỉ workspace này); 	extraction-artifact	networks/solana.md#NET-SOL-17
+ 8.4.0, codec 	extraction-artifact	networks/solana.md#NET-SOL-11
+); Python = program = connector (vector 	extraction-artifact	networks/solana.md#NET-SOL-11
+; tx = message **rồi** chữ ký. Adapter khớp byte-for-byte với codec kit (	extraction-artifact	networks/solana.md#NET-SOL-17
+/get?ids=	obsolete	research-era summary-plus-fetch gossip; peers exchange full pages, node/gossip.md#NODE-GSP-01
+intent.fee >= min_fee	obsolete	raw-fee profitability check replaced by the effective fee, node/mesh.md#acceptance
+profitable()	obsolete	raw-fee profitability check replaced by the effective fee, node/mesh.md#acceptance
+intent_bus.py	internal-path	ERP controller file of a dropped design; the bus is hosted by the node, node/mesh.md
+blockchain.mesh.peer	internal-path	ERP model name; peers are rows pinned by SPKI hash, node/mesh.md#authentication-and-connection-limits
+blockchain.relayer	internal-path	ERP model name of a dropped address-keyed registry; peers are pinned by SPKI, node/mesh.md#authentication-and-connection-limits
+2^n_b > tổng × 1024	vi-quote	superseded rule, contracts/zether.md#CTR-ZTH-18
+b' ≤ a ≤ tổng	vi-quote	contracts/zether.md#CTR-ZTH-18
+tổng ≤ 2^64 − 1	vi-quote	contracts/zether.md#CTR-ZTH-18
+fund(nạn nhân, 1)	vi-quote	contracts/zether.md#CTR-ZTH-19
+9000	stale-chain-9000	the earlier private chain id; the private reference chain is 7622 (networks/evm.md#private-7622)
+chain 9000	stale-chain-9000	networks/evm.md#private-7622 (chain 7622)
+103.959	vi-number	measured BLS12-381/bn254 precompile gas, normalized (e.g. 103,959) in contracts/universal-account.md#gas
+114.091	vi-number	measured BLS12-381/bn254 precompile gas, normalized (e.g. 103,959) in contracts/universal-account.md#gas
+11.682	vi-number	measured BLS12-381/bn254 precompile gas, normalized (e.g. 103,959) in contracts/universal-account.md#gas
+1.100	vi-number	measured BLS12-381/bn254 precompile gas, normalized (e.g. 103,959) in contracts/universal-account.md#gas
+4.000	vi-number	measured BLS12-381/bn254 precompile gas, normalized (e.g. 103,959) in contracts/universal-account.md#gas
+ (R104, deleted in P9) and 	extraction-artifact	node/job-api.md#NODE-JOB-10
+blockchain_autopay.py:12	internal-path	ERP source line ref; the auto-pay signing window is node/job-api.md#NODE-JOB-07
+MAX_SIGNING_WINDOW = 300 s	internal-path	ERP auto-pay constant; the 300 s signing window is node/job-api.md#NODE-JOB-07
+; a system user enters 	extraction-artifact	node/admin-auth.md#NODE-ADM-05
+odoo-<db>	obsolete	namespace example of a dropped migration recipe; key creation per namespace is node/admin-auth.md#NODE-ADM-05
+scaas-node admin create <name> --role admin --role key_custodian	extraction-artifact	node/admin-auth.md#NODE-ADM-05
+// legacy(R104)	extraction-artifact	node/job-api.md#NODE-JOB-10
+chain.profile	obsolete	node chain.profile superseded: policy and peers are node store tables, node/mesh.md#NODE-MESH-21
+intent.source 'outbox'	obsolete	amended-items list; mesh intent rows now come from the job store, node/mesh.md#sources
+journal_max = max(…)	obsolete	aggregate journal_max replaced by the monotonic lane.journal_max, node/README.md#where-each-safety-property-lives
+Origin::Job(uid)	obsolete	origin enum renamed; current Origin is node/submit-lanes.md#shared-submit
+Origin::Odoo	obsolete	client-specific origin dropped; current Origin is node/submit-lanes.md#shared-submit
+ (F §11.2); a W3C 	extraction-artifact	node/ops.md#NODE-OPS-09
+ numeric for EVM/Hedera, 	extraction-artifact	node/gateway.md#NODE-GW-05
+ txs and bumped hashes); lost on restart (samples lost, never wrong). — No new 	extraction-artifact	node/ops.md#NODE-OPS-07
+ slot is ever read; (4) (rev 1.4) escrow 	extraction-artifact	contracts/pq-zether.md#vectors
+/home/dockers/mba-chain-nethermind/README-chainspec.md	internal-path	local chainspec README; the private-chain profile is contracts/pq-zether.md#constraints
+TRAPS.md	internal-path	repo traps file
+). — Classical §8.9 used counter-only derivation; reusing 	extraction-artifact	contracts/pq-zether.md#CTR-PQZ-19
+ (§5 prefix; 	extraction-artifact	contracts/pq-zether.md#register-the-ua-registry
+, F R330), registry, UA and 	extraction-artifact	contracts/pq-zether.md#register-the-ua-registry
+ for stored PQ kinds (F R306), 	extraction-artifact	contracts/pq-zether.md#authorization-check
+, this always runs F's 	extraction-artifact	contracts/pq-zether.md#authorization-check
+ and vice versa (vectors §15). F's 	extraction-artifact	contracts/pq-zether.md#authorization-check
+7225'	obsolete	purpose corrected to 7622', clients/signers-clientkeys.md#CLI-SGN-30
+ computed by the node | 	extraction-artifact	node/gateway.md#NODE-GW-05
+ | token is v3 (	extraction-artifact	node/gateway.md#NODE-GW-05
+ ⇒ registry record read once (cached, F R317); cheap kinds verified locally; 	extraction-artifact	node/gateway.md#NODE-GW-05
+{"v":2,"moved":"indexeddb"}	extraction-artifact	clients/signers-clientkeys.md#CLI-SGN-19
+fam_sui.keyop_bytes/keyop_digest	extraction-artifact	networks/sui.md#NET-SUI-16
+keyOpBytes/keyOpDigest/verifyKeyOp	extraction-artifact	networks/sui.md#NET-SUI-16
+bamboo-dms/dms_blockchain_bridge/static/src/js/connectors/*.js	internal-path	clients/signers-clientkeys.md#CLI-SGN-26
+src/signers/extension/*	internal-path	clients/app.md#CLI-APP-06
+. A self-paid envelope hash is signed only via the adapter's 	extraction-artifact	clients/signers-clientkeys.md#CLI-SGN-01
+ (a custom verifier, not OZ 	extraction-artifact	integration.md#INT-ERP-23
+ + itemized tombstones keyed by 	extraction-artifact	integration.md#INT-ERP-24
+, rev 1.3; 	revision-label	integration.md#INT-ERP-24
+), model 	extraction-artifact	integration-odoo-example.md#INT-ODOO-12
+ | any valid mode (fee optional) | on-chain lane derivation (R139); 	extraction-artifact	contracts/metatx.md#CTR-MTX-09
+dms_blockchain/lib/eip712.py	internal-path	contracts/metatx.md#digest
+dms_blockchain_bridge/static/lib/clientkeys/	internal-path	ERP addon path of the clientkeys bundle; clients/signers-clientkeys.md
+dms_blockchain/tests/test_ua_vectors.py	internal-path	contracts/universal-account.md#vectors
+blockchain_ua	internal-path	ERP-internal module name; UA vector consumers are contracts/universal-account.md#vectors
+ (R330) — derived 	extraction-artifact	contracts/universal-account.md#CTR-UA-10
+18.014	vi-number	2^54 = 18,014,398,509,481,984 units in contracts/zether.md#limits
+4.294	vi-number	2^32 − 1 = 4,294,967,295 units in contracts/zether.md#limits
+967.295	vi-number	2^32 − 1 = 4,294,967,295 units in contracts/zether.md#limits
+genesis.json	obsolete	one-off private-chain incident note (genesis backup); the private chain profile is contracts/pq-zether.md#constraints
+curve_profile = 'bn254'	obsolete	ERP selection value; the curve is a deploy-time parameter of each token, contracts/zether.md#CTR-ZTH-01
+InnerProductVerifier.sol	obsolete	keep-the-user's-verifier ruling superseded by the built verifiers, contracts/zether.md#zether--confidential-amounts-classical
+blockchain.zether.token.curve_profile	internal-path	ERP field; the per-token curve is contracts/zether.md#CTR-ZTH-01
+bn254 | bls12_381	extraction-artifact	contracts/zether.md#CTR-ZTH-01
+proof_system_id	extraction-artifact	proofSystemId per curve, contracts/zether.md#curves-encoding-point-checks
+ark-ec::PairingEngine	obsolete	trait name of an old arkworks version; prover generic over the curve, contracts/zether.md#CTR-ZTH-01
+curve_profile	internal-path	ERP field; the per-token curve is contracts/zether.md#CTR-ZTH-01
+Pairing	extraction-artifact	prover effort estimate; per-curve prover in contracts/zether.md#CTR-ZTH-01
+feeAmount = 0	extraction-artifact	contracts/metatx.md#CTR-MTX-13
+feeRecipient = address(0)	extraction-artifact	feeRecipient = 0 means msg.sender, contracts/metatx.md#execution-pipeline
+feeAmount = amount * feePpm / 1e6	extraction-artifact	contracts/metatx.md#CTR-MTX-13
+getWrapperCount(creator, underlying) > 1	extraction-artifact	contracts/token-wrappers.md#CTR-TOK-16
+getWrapper(A, xDAI)	extraction-artifact	contracts/token-wrappers.md#CTR-TOK-16
+getWrapper(xDAI)	extraction-artifact	contracts/token-wrappers.md#CTR-TOK-16
+zDAI-A	extraction-artifact	example names; no uniqueness on the underlying, contracts/token-wrappers.md#CTR-TOK-16
+zDAI-B	extraction-artifact	example names; no uniqueness on the underlying, contracts/token-wrappers.md#CTR-TOK-16
+ringSize()	extraction-artifact	ring size is a verifier/token parameter, contracts/README.md#CTR-GEN-04
+compliance_profile	internal-path	client-side attribute, not on chain, contracts/README.md#CTR-GEN-04
+g^fee	extraction-artifact	public fee as [fee]G, contracts/zether.md#CTR-ZTH-07
+_REVIEW-01-UPGRADE.md	internal-path	research review file name
+06-relay-pool-enterprise.md	internal-path	research file name
+pool: none	obsolete	research node-shape table; the node's shapes are node/README.md#roles
+FeeMode.PERCENT	extraction-artifact	contracts/zether.md#CTR-ZTH-07
+never_public	obsolete	promote-to-open of pooled intents dropped, node/mesh.md#scope
+T = expiry / 3	obsolete	promote-to-open of pooled intents dropped, node/mesh.md#scope
+fee = 50.000 ₫	vi-quote	tiered fee leaks the amount, contracts/zether.md#CTR-ZTH-28
+relayer == address(0)	extraction-artifact	relayer = 0 means any relayer, contracts/metatx.md#mode-constraint-flags-and-fee-mode
+SponsorshipPool.settle()	obsolete	no SponsorshipPool reward on the mesh, node/mesh.md#scope; pool PLANNED in node/sponsorship.md
+relayer = address(0)	extraction-artifact	contracts/metatx.md#mode-constraint-flags-and-fee-mode
+feeRecipient == address(0)	extraction-artifact	contracts/metatx.md#execution-pipeline
+stuck_since > 3 block	obsolete	block-count stuck rule replaced by stuck_after_secs, node/submit-lanes.md#NODE-LANE-04
+MINTER	obsolete	lane keys hold gas only, node/README.md#NODE-GEN-01
+TREASURY	obsolete	lane keys hold gas only, node/README.md#NODE-GEN-01
+KeyPool	obsolete	research key-pool concept; custody is a pluggable signer, node/submit-lanes.md#NODE-LANE-03
+RECEIVED	obsolete	research intent state machine; current job states are node/job-api.md#states
+SCREENED	obsolete	research intent state machine; current job states are node/job-api.md#states
+POOLED(open)	obsolete	research pool states; promote-to-open dropped, node/mesh.md#scope
+POOLED(private)	obsolete	research pool states; promote-to-open dropped, node/mesh.md#scope
+BROADCAST	obsolete	research intent state machine; current job states are node/job-api.md#states
+nonce_consumed	obsolete	research state name; consumption outcomes are node/submit-lanes.md#NODE-LANE-09
+limit_req	obsolete	nginx per-IP limit replaced by in-process per-key buckets, node/gateway.md#NODE-GW-01
+POST /v1/intents	obsolete	research intake route; door A is POST /v1/metatx, node/gateway.md#NODE-GW-05
+scaas/intent/<caip2>/v1	obsolete	research gossip topic name; gossip topics are node/gossip.md
+_enqueue_intent	internal-path	ERP-internal method of a dropped door-B design
+hop_count >= MAX_HOPS	extraction-artifact	node/mesh.md#NODE-MESH-10
+expiry > now + skew	extraction-artifact	node/mesh.md#evaluation-order-no-rpc-before-l4
+meta_nonce(from, batchId)	obsolete	research spelling (batchId); nonce read is metaNonce(from, batch), contracts/metatx.md#2d-nonces-and-lanes
+intent.nonce < known	obsolete	nonce cache tiers dropped, node/mesh.md#scope
+(from, batchId)	obsolete	research spelling (batchId); lane key is (from, batch), contracts/metatx.md#2d-nonces-and-lanes
+MetaTransactionExecuted(from, batchId, nonce)	obsolete	research event shape; current MetaTransactionExecuted is contracts/metatx.md#execution-pipeline
+nonce_unverified = True	obsolete	nonce_unverified tier dropped, node/mesh.md#scope
+(caip2, contract_address, selector)	extraction-artifact	one row per (chain, contract, selector), node/mesh.md#NODE-MESH-21
+max_inner_gas	obsolete	callout columns dropped; static policy columns only, node/mesh.md#NODE-MESH-21
+requires_simulation	obsolete	callout columns dropped; static policy columns only, node/mesh.md#NODE-MESH-21
+calldata_rules	obsolete	callout columns dropped; static policy columns only, node/mesh.md#NODE-MESH-21
+support = 'none'	extraction-artifact	node/mesh.md#NODE-MESH-21
+exclusive_until = now + W	obsolete	exclusivity is origin-assigned exclusive, node/mesh.md#exclusivity
+held_by_someone_else	obsolete	research outcome name; exclusivity is node/mesh.md#exclusivity
+W = 3s	obsolete	W = 10 s (exclusive_ms 10000), node/mesh.md#NODE-MESH-10
+BROADCAST → SUPERSEDED	obsolete	research state name; replacement outcomes are node/submit-lanes.md#NODE-LANE-09
+relayer == <địa chỉ cụ thể>	vi-quote	bound relayer means forward, not submit, node/mesh.md#forward-vs-submit-vs-reject
+policy.fee_recipient_allow	extraction-artifact	node/mesh.md#NODE-MESH-21
+fee > gas_cost	obsolete	profitability uses the effective fee, node/mesh.md#NODE-MESH-21
+fee_recipient_allow = '*'	extraction-artifact	fee_recipient_allow is any or self_or_zero, node/mesh.md#NODE-MESH-21
+POOLED(private) → POOLED(open)	obsolete	promote-to-open of pooled intents dropped, node/mesh.md#scope
+promote_after	obsolete	promote-to-open of pooled intents dropped, node/mesh.md#scope
+EXPIRED('queue_pressure')	obsolete	research queue-pressure outcome; caps and eviction are node/gossip.md#NODE-GSP-08
+min(expiry, queue_max_age)	obsolete	research queue TTL; caps and eviction are node/gossip.md#NODE-GSP-08
+(from, batchId, nonce)	obsolete	research spelling (batchId); consumption is node/submit-lanes.md#NODE-LANE-09
+DROPPED	obsolete	research state name; a dropped tx is resent on its lane, node/submit-lanes.md#NODE-LANE-04
+GET /v1/intents/<digest>	extraction-artifact	placeholder spelling; the route is GET /v1/intents/{intent_id}, node/mesh.md#get-v1meshintentssincelimit
+GET /v1/intents/<digest>/stream	obsolete	SSE result stream dropped; results come from the job and event feeds, node/indexer-feeds.md#NODE-IDX-04
+callback_url = http://169.254.169.254/latest/meta-data/	obsolete	callbacks dropped, node/mesh.md#scope; metadata-endpoint refusal is node/admin-auth.md#mesh-peer-url
+secret_ref	obsolete	callback HMAC secret of the dropped callback design, node/mesh.md#scope
+expiry = 300s	obsolete	promote-to-open of pooled intents dropped, node/mesh.md#scope
+ ( ). [Aptos docs — orderless guide: *	extraction-artifact	quoted text spanning code spans in history/specs/2026-10-04-net-aptos.md:67; the content is placed by its fact disposition
+needs from  	extraction-artifact	quoted text spanning code spans in history/specs/2026-10-04-net-solana.md:601; the content is placed by its fact disposition
+  wins  	extraction-artifact	quoted text spanning code spans in history/specs/2026-10-05-relayer-mesh-design.md:1058; the content is placed by its fact disposition
+removed by  	extraction-artifact	quoted text spanning code spans in history/specs/2026-10-06-node-independence-design.md:1239; the content is placed by its fact disposition
+round-3   says  	extraction-artifact	quoted text spanning code spans in history/specs/2026-10-06-signers-followups.md:508; the content is placed by its fact disposition
+ /Ledger path	extraction-artifact	quoted text spanning code spans in history/SCaaS-2026-10-07.md:1826; the content is placed by its fact disposition
+compares   output	extraction-artifact	quoted text spanning code spans in history/specs/2026-10-06-token-wrappers-v2.md:922; the content is placed by its fact disposition
+. MuSig2 groups show 	extraction-artifact	quoted text spanning code spans in history/specs/2026-10-06-universal-account-design.md:1096; the content is placed by its fact disposition
+227	obsolete	owner-conversation turn number cited as provenance in history/specs/2026-10-06-token-wrappers-v2.md; not a value (the rulings are in contracts/token-wrappers.md and contracts/metatx.md)
+1726	obsolete	owner-conversation turn number cited as provenance in history/specs/2026-10-06-token-wrappers-v2.md; not a value (the rulings are in contracts/token-wrappers.md and contracts/metatx.md)
+3293	obsolete	owner-conversation turn number cited as provenance in history/specs/2026-10-06-token-wrappers-v2.md; not a value (the rulings are in contracts/token-wrappers.md and contracts/metatx.md)
+4145	obsolete	owner-conversation turn number cited as provenance in history/specs/2026-10-06-token-wrappers-v2.md; not a value (the rulings are in contracts/token-wrappers.md and contracts/metatx.md)
+4667	obsolete	owner-conversation turn number cited as provenance in history/specs/2026-10-06-token-wrappers-v2.md; not a value (the rulings are in contracts/token-wrappers.md and contracts/metatx.md)
+5296	obsolete	owner-conversation turn number cited as provenance in history/specs/2026-10-06-token-wrappers-v2.md; not a value (the rulings are in contracts/token-wrappers.md and contracts/metatx.md)
+5867	obsolete	owner-conversation turn number cited as provenance in history/specs/2026-10-06-token-wrappers-v2.md; not a value (the rulings are in contracts/token-wrappers.md and contracts/metatx.md)
+bamboo-*	obsolete	pre-rename product names; now scaas-* (ARCH-POS-03)
+bamboo-node	obsolete	now scaas-node (ARCH-POS-03)
+bamboo-intent/1.2	obsolete	now scaas-intent/1.2 (ARCH-POS-03, node/mesh.md#envelope)
+bamboo.pay.lane	obsolete	now scaas.pay.lane (ARCH-POS-03, contracts/metatx.md)
+BAMBOO_*	obsolete	now SCAAS_* (ARCH-POS-03)
+multisig in production	obsolete	old upgradeable-package position; immutable at deploy (CTR-GEN-02)
+H = 30 d	extraction-artifact	written H = LANE_HORIZON = 30 d in contracts/metatx.md#pay-once-horizon (CTR-MTX-04)
+dms_blockchain_bridge/static/lib/clientkeys	internal-path	ERP connector vendoring path; integration-odoo-example.md
+bamboo-dms/dms_blockchain	internal-path	ERP connector repository path; architecture.md#components "ERP connectors", integration-odoo-example.md
+  unchanged: … Odoo stays control plane	extraction-artifact	quote of the superseded clause; ARCH-POS-05
+Math.mulDiv(…, Ceil)	extraction-artifact	written Math.mulDiv(fill, ppm, PPM, Math.Rounding.Ceil) in contracts/dex.md
+from = dex	obsolete	two-leg MetaTxDex simulation detail of the superseded DEX design (CTR-DEX-80); fee-recipient normalization is node/submit-lanes.md#NODE-LANE-10
+treo	vi-quote	networks/README.md#head-of-line: the outer tx carries the payload expiry, so an unincluded tx expires with it and the account sequence never hangs
+Odoo hay SQLite	vi-quote	node/dex-venue.md#persistence (book persistence, NODE-DEX-01)
+dms_test_chain_5	internal-path	ERP test database name of the reference addon; the ERP-side DEX tests are in integration-odoo-example.md#example-odoo-dex
+8925	internal-path	ERP test server port of the reference addon (with dms_test_chain_5)
+0002	vi-number	≈ 0.002 SOL per round in networks/solana.md (ATA rent drain)
+promote_after = 300s	obsolete	promote-to-open of pooled intents dropped; per-job private window 120 s, node/mesh.md#NODE-MESH-10
+freelist	obsolete	multi-worker nonce allocator not needed: one owner process per store, node/README.md#NODE-GEN-10
+owner_fence	obsolete	multi-worker shard fencing not needed: one owner process with a store fencing epoch, node/README.md#NODE-GEN-10
+% N_workers	obsolete	multi-worker sharding not needed: one owner process per store, node/README.md#NODE-GEN-10
+max(getTransactionCount(pending), max_signed_nonce_in_journal + 1)	extraction-artifact	node/submit-lanes.md#NODE-LANE-04
+s = k + c·x	extraction-artifact	clients/signers-clientkeys.md#CLI-SGN-31
+ICustodyProvider	obsolete	research interface name; split into custody broker (group A) and key oracle (group B), clients/signers-clientkeys.md#CLI-SGN-31
+toEthSignedMessageHash()	obsolete	compares an old design with old code; signatures are EIP-712, never personal_sign, contracts/metatx.md#CTR-MTX-14
+wallet._signTypedData(domain, types, data)	obsolete	compares an old design with old code; signatures are EIP-712, never personal_sign, contracts/metatx.md#CTR-MTX-14
+panic!	extraction-artifact	decoders never panic on arbitrary bytes, node/threat-model.md#mesh
+ZetherKeyOracle	obsolete	research component name; the planned key oracle is clients/signers-clientkeys.md#CLI-SGN-31
+ir.actions.server	internal-path	ERP-internal model (admin code execution); the oracle never runs inside the ERP, clients/signers-clientkeys.md#CLI-SGN-31
+state='code'	internal-path	ERP-internal field value; the oracle never runs inside the ERP, clients/signers-clientkeys.md#CLI-SGN-31
+confidential-signer	obsolete	research service name; split into custody broker and key oracle, clients/signers-clientkeys.md#CLI-SGN-31
+intent-hub	obsolete	research module name; node roles are node/README.md#roles
+chain-indexer	obsolete	research module name; the indexer role is node/README.md#roles
+require(trade.relayer == address(0) || trade.relayer == msg.sender)	extraction-artifact	relayer ∈ {0, sender}, contracts/dex.md#CTR-DEX-04
+--preset=gateway	obsolete	no preset flag: roles come from configuration, node/README.md#roles
+scaas-node --role=custody	obsolete	custody broker and key oracle are not roles of the node binary, node/README.md#NODE-GEN-17
+relay-pool → confidential-signer	obsolete	diagram correction; a relayer never needs x, clients/signers-clientkeys.md#CLI-SGN-31
+meta_nonce	obsolete	research spelling; the nonce read is metaNonce(from, batch), contracts/metatx.md#2d-nonces-and-lanes
+eth-infinitism/bundler-spec/p2p-specs/p2p-interface.md	internal-path	external spec path of a research comparison; gossip is node/gossip.md
+07-custody-providers.md	internal-path	research file name
+12-threat-model.md	internal-path	research file name
+blockchain.custody.policy	internal-path	ERP-internal model; custody per money flow is clients/signers-clientkeys.md#CLI-SGN-32
+10-odoo-addon-design.md	internal-path	research file name
+scaas-node/src/roles/oracle.rs	obsolete	planned source path of an oracle role; the oracle is not a node role, node/README.md#NODE-GEN-17
+digest → đã thấy	vi-quote	clients/signers-clientkeys.md#CLI-SGN-31
+blockchain.security.event	internal-path	ERP-internal model; audit goes to the client's security events, clients/signers-clientkeys.md#CLI-SGN-31
+x = (s₁ − s₂)/(c₁ − c₂)	extraction-artifact	clients/signers-clientkeys.md#CLI-SGN-31
+on_device	internal-path	ERP custody-policy value; x stays on the device for loyalty and counter payments, clients/signers-clientkeys.md#CLI-SGN-32
+blockchain.custody.policy.conf_provider_id	internal-path	ERP-internal field; Zether for B2B is optional, clients/signers-clientkeys.md#CLI-SGN-32
+min_threshold_n >= 3	internal-path	ERP-internal constraint of that field; threshold custody is clients/signers-clientkeys.md#CLI-SGN-32
+ecdh(D) -> compress(D^x)	obsolete	superseded by the narrow key-oracle interface (no arbitrary decrypt), clients/signers-clientkeys.md#CLI-SGN-31
+run_state = 'partial'	internal-path	ERP-internal field value; reconciliation stays partial without the oracle, clients/signers-clientkeys.md#CLI-SGN-32
+if (mode & MODE_FEE_PERCENT)	extraction-artifact	contracts/metatx.md#mode-constraint-flags-and-fee-mode
+MODE_FEE_FIXED = 0x20	extraction-artifact	contracts/metatx.md#mode-constraint-flags-and-fee-mode
+_CRITIQUES.md	internal-path	research file name
+accSeq[a]	extraction-artifact	PUBLIC lets anyone roll over, contracts/zether.md#rollover
+mode[a] == PUBLIC	extraction-artifact	contracts/zether.md#rollover
+(account, token)	extraction-artifact	per-account mode, contracts/zether.md#elgamal-state-and-lifecycle
+risk_class	internal-path	ERP-internal field; OWNER_ONLY chosen per account by risk class, contracts/zether.md#rollover
+pendingSeq[a] == lastRolledPendingSeq[a]	extraction-artifact	silent no-op rule, contracts/zether.md#CTR-ZTH-03
+schnorr_address	obsolete	renamed; single-flight per confidential subject (from_schnorr), node/mesh.md#scope
+setRollOverMode(OWNER_ONLY)	extraction-artifact	contracts/zether.md#rollover
+04-eip1776-metatx.md	internal-path	research file name
+_cron_zether_rollover_request	internal-path	ERP-internal cron
+14-contracts-repo-testing.md	internal-path	research file name
+SRS/ai/ai-enterprise-blockchain-architecture.md	internal-path	research file path
+ISecureERC20 is IERC20	obsolete	interface renamed; every token is IERC20MetaTx, contracts/token-wrappers.md
+C_fee	obsolete	encrypted inner fee dropped; the inner fee is a public scalar [fee]G, contracts/zether.md#CTR-ZTH-07
+b - fee >= 0	extraction-artifact	b' = b − fee − v range statement, contracts/zether.md#curves-encoding-point-checks
+(b - fee) - v >= 0	extraction-artifact	b' = b − fee − v range statement, contracts/zether.md#curves-encoding-point-checks
+blockchain.md	internal-path	research file name
+fee >= 0	extraction-artifact	fee is public and < 2^64, contracts/zether.md#parameters
+v >= 0	extraction-artifact	v ∈ [0, 2^n_v) range statement, contracts/zether.md#curves-encoding-point-checks
+C_transfer · g^{-v} == y_to^s	obsolete	renamed ciphertexts; SENDER_S check is [amount]G + [s]Y_to == C_out, contracts/zether.md#disclosure
+C_transfer · g^{-v} == D_transfer^{x_to}	obsolete	renamed ciphertexts; RECEIVER_X Chaum-Pedersen check, contracts/zether.md#disclosure
+C_out · g^{-v} == D_out^{x_to}	obsolete	renamed ciphertexts; disclosure checks are contracts/zether.md#disclosure
+C_debit	obsolete	renamed to C_deb, contracts/zether.md#CTR-ZTH-18
+C_transfer	obsolete	renamed to C_out, contracts/zether.md#CTR-ZTH-18
+maxSupply / SHIELD_SCALE <= MAX_DECRYPTABLE_SHIELDED	obsolete	superseded constants (shieldScale, maxDecryptableShielded ≤ MAX_TOTAL_SHIELDED), contracts/zether.md#parameters
+SHIELD_SCALE	obsolete	renamed shieldScale, contracts/zether.md#CTR-ZTH-04
+MAX_DECRYPTABLE_SHIELDED	obsolete	renamed maxDecryptableShielded, contracts/zether.md#parameters
+pending → available	extraction-artifact	rollOver moves pending into acc, contracts/zether.md#CTR-ZTH-03
+(entryRef, v, s, chainId, tokenAddress)	extraction-artifact	contracts/zether.md#CTR-ZTH-29
+decimals = 6	obsolete	superseded default; parameters are contracts/zether.md#parameters
+MAX_DECRYPTABLE_SHIELDED = 2^44	obsolete	superseded default (cap 2^54, mobile bound 2^44), contracts/zether.md#parameters
+(entryRef, v, s)	extraction-artifact	contracts/zether.md#CTR-ZTH-29
+C / D^x = g^b	extraction-artifact	g^b = C·D^{-x}, contracts/zether.md#decryption-bound
+O(sqrt(b))	extraction-artifact	contracts/zether.md#decryption-bound
+delete nonceSet	obsolete	epoch replay set removed with epochs, contracts/zether.md#CTR-ZTH-03
+rollOver()	extraction-artifact	contracts/zether.md#CTR-ZTH-03
+simulateAccounts()	extraction-artifact	contracts/zether.md#CTR-ZTH-03
+b_cũ	vi-quote	balance-cache difference decryption, contracts/zether.md#CTR-ZTH-19
+g^{b_mới}/g^{b_cũ} = g^Δ	vi-quote	balance-cache difference decryption, contracts/zether.md#CTR-ZTH-19
+0x2328	stale-chain-9000	old chain id; the private chain is 7622, networks/evm.md#NET-EVM-04
+epoch: 30000	extraction-artifact	networks/evm.md#NET-EVM-04
+period: 5	extraction-artifact	networks/evm.md#NET-EVM-04
+0x1000000	stale-chain-9000	old chain block gas limit; current limits networks/evm.md#NET-EVM-04
+0xdE36845Cc887783397b2808c13f2Ed95DC2646BB	stale-chain-9000	signer address of the old chain 9000
+clique	stale-chain-9000	RPC module list of the old chain; consensus Clique, networks/evm.md#NET-EVM-04
+gasLimitBoundDivisor = 0x400	stale-chain-9000	gas-limit raise note for the old chain; current limits networks/evm.md#NET-EVM-04
+2^48	obsolete	estimated BSGS memory wall of an earlier sizing; current table sizes contracts/zether.md#CTR-ZTH-19
+ trước khi simulate (nếu để 0, 	extraction-artifact	node/submit-lanes.md#NODE-LANE-10
+ trả phí cho 	extraction-artifact	node/submit-lanes.md#NODE-LANE-10
+SCaaS.md	internal-path	old system spec path; history/SCaaS-2026-10-07.md (history/README.md path table), precedence ARCH-POS-01
+docs/superpowers/specs/	internal-path	old spec folder; history/specs/ (history/README.md path table)
+docs/superpowers/specs/blockchain-research/	internal-path	old research folder; research/ (history/README.md path table)
+00-CANON.md	internal-path	research file name; research/ is background only (ARCH-POS-01)
+ai-enterprise-blockchain-architecture.md	internal-path	owner SRS draft outside the repo; history/README.md#srs-deltas-owner-reference
+ai-enterprise-blockchain-integration.md	internal-path	owner SRS draft outside the repo; history/README.md#srs-deltas-owner-reference
+ and pair failures are attributed by evidence (	extraction-artifact	text between two code spans; node/dex-venue.md
+maxSupply	obsolete	research invariant term; the cap is maxDecryptableShielded, contracts/zether.md#CTR-ZTH-04
+y_to	obsolete	research notation; now Y_to, contracts/zether.md#disclosure
+x_to	obsolete	research notation for the receiver key; the RECEIVER_X opening, contracts/zether.md#disclosure
+6.000	vi-number	6,000 transfers a year (estimate), decisions.md#CLI-SGN-32
+fund your meta account	obsolete	label renamed "fund your account", clients/signers-clientkeys.md#CLI-SGN-14
+hai node	vi-quote	two processes of one binary, decisions.md#NODE-MESH-11
+max_gas_price_gwei	obsolete	research YAML config key; per-chain policy is the lookup table, node/mesh.md#NODE-MESH-21
+min_fee_native	obsolete	research YAML config key; per-chain policy is the lookup table, node/mesh.md#NODE-MESH-21
+peers_allowed	obsolete	research YAML config key; peers are pinned rows, node/mesh.md#NODE-MESH-21
+balance_native	obsolete	research KeyPool field; lanes hold gas only, node/submit-lanes.md#lane-keys
+fee_sink	obsolete	research KeyPool field; the fee recipient is a cold wallet, node/submit-lanes.md#normalization
+hot_treasury	obsolete	research KeyPool field; lanes are funded from treasury, node/submit-lanes.md#lane-keys
+in_flight	obsolete	research KeyPool field; one transaction in flight per lane, node/submit-lanes.md#lane-keys
+nonce_local	obsolete	research KeyPool field; the nonce plan is node/submit-lanes.md#NODE-LANE-04
+stuck_since	obsolete	research KeyPool field; stuck_after_secs, node/submit-lanes.md#NODE-LANE-04
+batch_id	obsolete	research nonce-cache key; there is no nonce cache tier, node/gossip.md#NODE-GSP-07
+from_address	obsolete	research nonce-cache key; there is no nonce cache tier, node/gossip.md#NODE-GSP-07
+nonce_cache	obsolete	research nonce cache; there is no nonce cache tier, node/gossip.md#NODE-GSP-07
+verifying_contract	obsolete	research nonce-cache key; there is no nonce cache tier, node/gossip.md#NODE-GSP-07
+can_submit	obsolete	research decision-procedure name, node/mesh.md#forward-vs-submit-vs-reject
+has_capacity	obsolete	research decision-procedure name, node/mesh.md#forward-vs-submit-vs-reject
+key_pool	obsolete	research key-pool name; lanes, node/submit-lanes.md#lane-keys
+estimated_gas_cost	obsolete	raw-fee profitability check replaced by the effective fee, node/mesh.md#NODE-MESH-21
+gas_budget_remaining	obsolete	raw-fee profitability check replaced by the effective fee, node/mesh.md#NODE-MESH-21
+5.000	vi-number	under 5,000 lines (enclave image size), decisions.md#NODE-GEN-01
+06.1	revision-label	section number of a research note
