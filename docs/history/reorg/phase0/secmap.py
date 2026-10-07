@@ -1,5 +1,5 @@
 import re, csv, collections
-L = open('/home/dockers/odoo19/custom-addons/bamboo-dms/scaas/docs/superpowers/plans/2026-10-07-docs-reorg.md', encoding='utf-8').read().split('\n')
+L = open('/home/dockers/odoo19/custom-addons/bamboo-dms/scaas/docs/history/plans/2026-10-07-docs-reorg.md', encoding='utf-8').read().split('\n')
 s = next(i for i,l in enumerate(L) if l.startswith('## 2. Source map')); e = next(i for i,l in enumerate(L) if l.startswith('### 2.4 '))
 FILES = {'2.1': ['SCaaS-2026-10-07.md'], '2.2': ['integration-2026-10-07.md']}
 NET = {f: f'2026-10-0{"4" if f in ("aptos","solana") else "3"}-net-{f}.md' for f in ['hedera','cosmos','soroban','sui','ton','aptos','solana']}

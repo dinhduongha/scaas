@@ -152,7 +152,7 @@ the first block, and deployer keys come from a hardware wallet or KMS.
 per network family, each with its native layout and tool; `smartcontracts/scripts/` is the one place to build,
 test, deploy and run a devnet:
 
-```
+```text
 smartcontracts/
 ├── evm/          Foundry (forge): src/ test/ script/; real EVM chains = FOUNDRY_PROFILE
 │                 (private7622, gnosis, celo); Hedera lives here too (src|test|script/hedera)

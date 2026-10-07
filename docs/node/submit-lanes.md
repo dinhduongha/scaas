@@ -225,7 +225,7 @@ later transaction of the lane, and a journal without gap filling leaves a perman
 <a id="evm-runner"></a>One task per chain **owns** the outer nonce of each lane (one process ⇒ the next nonce is an
 in-memory value). Loop every `poll_ms`:
 
-```
+```text
 loop every poll_ms:
   jobs = lease(chain, limit=10)                     # CAS queued→leased (store); legacy: relay_poll + relay_claim(node_id)
   for job:

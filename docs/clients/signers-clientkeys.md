@@ -636,7 +636,7 @@ CI (stated).
 
 Layout and interface:
 
-```
+```text
 src/fam/<family>.js       encoders + checkTerms/packSignature      → entry fam-<family>.js
 src/wallets/<family>.js   extension glue                            → entry wallets-<family>.js
 src/wallets/evm.js        EIP-6963 discovery + walletKind           → entry wallets-evm.js

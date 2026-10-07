@@ -254,7 +254,7 @@ parameter ruling before vectors freeze.
 
 ### Algorithms
 
-```
+```text
 CBD_η(stream):           per coefficient: a = Σ_{i<η} bit, b = Σ_{i<η} bit;  coeff = a − b    (bits LSB-first, FIPS 203 style)
 KeyGen(seed32):          for ctr = 0,1,…: st = SHAKE256("SCAAS-PQZ-KEYGEN-V1" ‖ seed32 ‖ be4(ctr))
                            s ← CBD_1^{2048}(st), e ← CBD_20^{2048}(st)  (same stream, s first)
@@ -599,7 +599,7 @@ because third parties can only increase it. Clients set `plainUsed = plainPendin
 builds the statement ([statement](#statement)), verifies `authSig` ([authorization check](#authorization-check)), calls
 `PQZ(OP_TRANSFER, statement ‖ proof)`, then:
 
-```
+```text
 acc[from]    = (u, v_f);  accHash[from] = ctHash(u ‖ v_f)
                if p < rolled:  acc[from] += Σ inline  (those credits stay inside acc);  accUnits = 1 + (rolled − p)
                else:           rolled[from] = p;  accUnits = 1

@@ -1,7 +1,7 @@
 # Ruling classification for the SCaaS docs reorg (Phase 0, id pre-allocation)
 
 Repo: /home/dockers/odoo19/custom-addons/bamboo-dms/scaas (paths below are relative to its `docs/`).
-Plan: `docs/superpowers/plans/2026-10-07-docs-reorg.md` — read §1 (target file tree), §3.1–§3.2 (id scheme and
+Plan: `docs/history/plans/2026-10-07-docs-reorg.md` — read §1 (target file tree), §3.1–§3.2 (id scheme and
 allocation defaults), §4 (conflicts K1–K24) and §8 (owner questions) before starting. The owner answered **every**
 §8 question with its stated default on 2026-10-07.
 

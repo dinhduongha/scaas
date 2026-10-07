@@ -31,19 +31,33 @@ to an authorization UA); a DID method, a credential issuer, or an on-chain crede
 
 <a id="model"></a>
 
+Deriving and registering a UA:
+
+```mermaid
+flowchart LR
+    S["subject<br/>device"] -->|"key data / policy"| K["kind_tag ‖ key_data"]
+    K -->|keccak| U["UA id"]
+    U -->|per chain| R["UARegistry.register"]
 ```
-                 key data / policy                         per chain
- subject ──────► kind_tag ‖ key_data ──keccak──► UA id ───► UARegistry.register(kind, keyData, pop, authRef, authPop)
- device                                            │            stores {kind, registeredAt, keyPtr, authRef},
- (clientkeys,                                      │            keyOwner[keyHash] = ua  (one key = one purpose)
-  per-kind path)                                   ▼
-                                     token function (accepts the kinds it needs)
-                                       ├─ native id (EOA / 1271)  → ECDSA / isValidSignature over the token's EIP-712 digest
-                                       └─ derived SIGNING UA      → registry.requireAuthorized(ua, purpose, digest, auth)
-                                                                      ├─ per-kind verifier over ua_msg
-                                                                      └─ native signer behind the registry: EIP-712 UAAuth
- optional: VC (issuer-signed) + VP / KB-JWT (signed by the identity UA, purpose vp) → relying party / attester
+
+- The device holds the keys (`clientkeys`, per-kind path).
+- `UARegistry.register(kind, keyData, pop, authRef, authPop)` stores `{kind, registeredAt, keyPtr, authRef}` and
+  `keyOwner[keyHash] = ua` (one key = one purpose).
+
+Verifying a signature in a token function (it accepts the kinds it needs):
+
+```mermaid
+flowchart TD
+    T["token function<br/>accepts the kinds it needs"] --> N["native id<br/>EOA / 1271"]
+    T --> D["derived SIGNING UA"]
+    N --> E["ECDSA / isValidSignature<br/>token's EIP-712 digest"]
+    D --> Q["registry.requireAuthorized"]
+    Q --> V["per-kind verifier<br/>over ua_msg"]
+    Q --> W["native signer behind registry<br/>EIP-712 UAAuth"]
 ```
+
+- The registry call is `registry.requireAuthorized(ua, purpose, digest, auth)`.
+- Optional: VC (issuer-signed) + VP / KB-JWT (signed by the identity UA, purpose `vp`) → relying party / attester.
 
 ## Identity
 

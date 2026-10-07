@@ -103,22 +103,45 @@ behind the signer seam ([NODE-LANE-03](submit-lanes.md#NODE-LANE-03)) as separat
 
 <a id="listeners"></a>
 
+```mermaid
+flowchart LR
+    subgraph CALLERS["Callers"]
+        IDP["OIDC IdP<br/>(optional)"]
+        APP["console app"]
+        SH["host shell"]
+        PROM["Prometheus"]
+        ERP["ERP / server-side client<br/>(outbox)"]
+        PUB["wallets, apps,<br/>third parties"]
+        PEER["admitted peers"]
+        OPEN["open mesh"]
+    end
+    subgraph NODE["scaas-node listeners"]
+        ADM["admin API<br/>admin_bind"]
+        CLI["CLIs"]
+        MET["metrics<br/>metrics_bind"]
+        JAPI["job API<br/>bind"]
+        GW["gateway (door A)"]
+        BUS["mesh bus"]
+        GSP["gossip"]
+    end
+    IDP -->|"access token (JWT)"| APP
+    APP -->|"login / session / JWT"| ADM
+    SH --> CLI
+    PROM --> MET
+    ERP -->|"push · HMAC key"| JAPI
+    ERP -->|"sync · HMAC key"| JAPI
+    PUB -->|"auth, CORS"| GW
+    PEER -->|"mTLS / QUIC"| BUS
+    OPEN -->|"libp2p gossipsub"| GSP
 ```
-                 OIDC IdP (optional)
-                        │ access token (JWT)
- console app ───────────┼─ login / session / JWT ─► admin API (admin_bind, CORS) ┐
-   (node-served: same origin, [app] files + CSP on admin_bind)                   │
- host shell ──── scaas-node admin|key|store|lane|index|report … (CLIs)           │
- Prometheus ────────────► /healthz /readyz /metrics (metrics_bind)               │  scaas-node
-                                                                                 │   ├ store
- ERP or other server-side client (outbox)                                        │   ├ submit / lane_runner
-   push ── HMAC key ─► POST /v1/jobs, cancel, PUT watch/tokens (bind)            │   ├ indexer → feed
-   sync ── HMAC key ─► GET /v1/jobs?cursor=  GET /v1/events?cursor=              │   ├ gateway (door A)
- wallets, apps, third parties ─► gateway /v1/gateway /v1/metatx /v1/ops          │   ├ mesh + gossip
-                                  /v1/ua-* /v1/dex/*  (auth, CORS)               │   └ dex venue
- admitted peers ── mTLS / QUIC ─► /v1/mesh/*, /scaas/bus/1.2                     │
- open mesh ─────── libp2p gossipsub over QUIC (PQ) or TCP+Noise ─────────────────┘
-```
+
+- console app: node-served, same origin, `[app]` files + CSP on `admin_bind`; admin API with CORS.
+- host shell: `scaas-node admin|key|store|lane|index|report …` (CLIs).
+- Prometheus: `/healthz` `/readyz` `/metrics` on `metrics_bind`.
+- ERP push: `POST /v1/jobs`, cancel, `PUT` watch/tokens; ERP sync: `GET /v1/jobs?cursor=`, `GET /v1/events?cursor=`.
+- gateway: `/v1/gateway` `/v1/metatx` `/v1/ops` `/v1/ua-*` `/v1/dex/*`.
+- admitted peers: `/v1/mesh/*`, `/scaas/bus/1.2`; open mesh: libp2p gossipsub over QUIC (PQ) or TCP+Noise.
+- Inside `scaas-node`: store, submit / lane_runner, indexer → feed, gateway (door A), mesh + gossip, dex venue.
 
 | Listener | Config | Auth | Routes |
 |---|---|---|---|

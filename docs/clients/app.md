@@ -57,18 +57,30 @@ directly and to `scaas-node` only for (a) the gateway and (b) the admin API. It 
 ([NODE-ADM-06](../node/admin-auth.md#NODE-ADM-06)). Cost: public gateways run with auth `none` behind a host proxy with
 rate limits.
 
+```mermaid
+flowchart LR
+    subgraph BR["browser (one origin)"]
+        direction TB
+        BOOT["boot"] --> SHELL["shell"]
+        SHELL --> DAPP["dApp screens"]
+        SHELL --> CON["console (lazy)"]
+        KW["key worker"]
+        ZW["zether worker"]
+    end
+    BR -->|"RPC (identity-checked)"| RPC[("chain RPCs<br/>(config)")]
+    BR -->|"gateway routes"| GW["scaas-node gateway<br/>(CORS)"]
+    BR -->|"Bearer /v1/admin/*"| ADM["admin listener<br/>(+ app files)"]
 ```
- ┌───────────────────────────────── browser (one origin) ─────────────────────────────────────┐
- │ boot: URL guard (fetch/XHR/WebSocket) → frame check → config load + validate → React       │
- │ shell ─ router(#) ─ Query cache ─ store (sessions, signer, chain; memory)                   │
- │   dApp screens ── family registry ── lazy adapter chunk (SDK + clientkeys fam/* + wallets/*) │
- │   console (lazy) ── admin client ── auth (builtin | OIDC)                                   │
- │   key worker (clientkeys only: vault v2, seed, UAKey)   zether worker (prover WASM + conf)  │
- └────┼───────────────────────────────┼──────────────────────────────────┼─────────────────────┘
-      │ RPC (identity-checked)         │ /v1/gateway /v1/metatx /v1/ops    │ Bearer /v1/admin/*
-      ▼                                ▼ /v1/ua/* /v1/dex/*               ▼
-   chain RPCs (config)          scaas-node gateway (CORS)              admin listener (+ app files)
-```
+
+| Part | Detail |
+|---|---|
+| boot | URL guard (fetch/XHR/WebSocket) → frame check → config load + validate → React |
+| shell | router(#) ─ Query cache ─ store (sessions, signer, chain; memory) |
+| dApp screens | family registry ─ lazy adapter chunk (SDK + clientkeys `fam/*` + `wallets/*`) |
+| console (lazy) | admin client ─ auth (builtin \| OIDC) |
+| key worker | clientkeys only: vault v2, seed, UAKey |
+| zether worker | prover WASM + conf |
+| gateway routes | `/v1/gateway` `/v1/metatx` `/v1/ops` `/v1/ua/*` `/v1/dex/*` |
 
 <a id="stack"></a><a id="CLI-APP-02"></a>**CLI-APP-02** — **Stack: React 19 + TypeScript strict + Vite; TanStack Query for
 every remote read; no global state library; react-router 7 with hash routes.** A ~50-line `useSyncExternalStore` store

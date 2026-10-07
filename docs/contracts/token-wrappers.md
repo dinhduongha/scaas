@@ -8,24 +8,33 @@ for v2 **SPECIFIED**; regulated tiers ([asset-suite.md](asset-suite.md)) **SPECI
 
 ## Overview
 
+```mermaid
+flowchart TD
+    E20[IERC20] --> MTX[IERC20MetaTx]
+    MTX --> PAY[IERC20Payment] & ZI["IZetherToken +<br/>ITransferDisclosure"] & PQZ[PqzToken]
+    PAY --> V1["MetaToken v1"] & B2["MetaTokenBase v2"]
+    V1 --> HV1[HederaMetaToken]
+    B2 --> NU[NoUnderlyingToken] & SU[SingleUnderlyingToken]
+    SU --> MU[MultiUnderlyingToken]
+    ZI --> ZT["ZetherToken v1"]
 ```
-IERC20
- └── IERC20MetaTx                         base: every token is gasless (metatx.md)
-      ├── IERC20Payment                   public payment: payWithFee, PaymentSettled(entryRef)
-      │    ├── MetaToken v1 (kind META)   tier 1 standalone / tier 2 single-underlying wrapper   BUILT
-      │    │    └── HederaMetaToken       + HIP-632 ED25519 signatures, HTS association          BUILT
-      │    └── MetaTokenBase v2           + mtxTransfer/…WithFee/mtxPay/mtxBatch                 BUILT
-      │         ├── NoUnderlyingToken     (kind META_NONE)   tier 1
-      │         └── SingleUnderlyingToken (kind META_SINGLE) tier 2, rate (num/den), reserve
-      │              └── MultiUnderlyingToken (kind META_MULTI) tier 3, 2–8 underlyings, guardian
-      │         (+ Hedera children of each v2 tier: HederaNo/Single/MultiUnderlyingToken)         BUILT
-      │         (+ regulated child per tier: *_REG kinds 5–7, RegulatedControls)                  SPECIFIED
-      │         (+ MetaToken v3 per tier: bytes32 UA ledger, UAMetaTransaction)                   SPECIFIED
-      ├── IZetherToken + ITransferDisclosure
-      │    └── ZetherToken v1 (kind ZETHER, dev chains only)                                    BUILT (unaudited)
-      └── PqzToken (post-quantum class, never an upgrade of ZetherToken; + v3 UAMetaTransaction
-           path; dev chains and the private chain 7622 only)                                    SPECIFIED
-```
+
+| Node | Role | Status |
+|---|---|---|
+| `IERC20MetaTx` | base: every token is gasless ([metatx.md](metatx.md)) | |
+| `IERC20Payment` | public payment: `payWithFee`, `PaymentSettled(entryRef)` | |
+| `MetaToken` v1 (kind `META`) | tier 1 standalone / tier 2 single-underlying wrapper | BUILT |
+| `HederaMetaToken` | + HIP-632 ED25519 signatures, HTS association | BUILT |
+| `MetaTokenBase` v2 | + `mtxTransfer`/…`WithFee`/`mtxPay`/`mtxBatch` | BUILT |
+| `NoUnderlyingToken` | (kind `META_NONE`) tier 1 | BUILT |
+| `SingleUnderlyingToken` | (kind `META_SINGLE`) tier 2, rate (num/den), reserve | BUILT |
+| `MultiUnderlyingToken` | (kind `META_MULTI`) tier 3, 2–8 underlyings, guardian | BUILT |
+| + Hedera children of each v2 tier | `HederaNo/Single/MultiUnderlyingToken` | BUILT |
+| + regulated child per tier | `*_REG` kinds 5–7, `RegulatedControls` | SPECIFIED |
+| + `MetaToken` v3 per tier | `bytes32` UA ledger, `UAMetaTransaction` | SPECIFIED |
+| `IZetherToken` + `ITransferDisclosure` | confidential interface | |
+| `ZetherToken` v1 | (kind `ZETHER`, dev chains only) | BUILT (unaudited) |
+| `PqzToken` | post-quantum class, never an upgrade of `ZetherToken`; + v3 `UAMetaTransaction` path; dev chains and the private chain 7622 only | SPECIFIED |
 
 Confidential tokens are **children** of the meta-tx layer, not a parallel branch: every confidential token is
 relayable through the same envelope, `PqzToken` included ([CTR-PQZ-15](pq-zether.md#CTR-PQZ-15)). Non-EVM families
@@ -38,16 +47,30 @@ change, so every signature format, KAT and client builder stays valid; only the 
 `verifyingContract`) differs per implementation. Not covered: baskets (proportional, weighted multi-asset
 redemption), oracle rates, rebasing/share wrappers (ERC-4626 style).
 
+```mermaid
+flowchart TD
+    subgraph ifc["Interfaces"]
+        direction LR
+        MTX[IERC20MetaTx] --> PAY[IERC20Payment] --> V2I["IMetaTokenV2<br/>named functions"]
+    end
+    subgraph impl["Implementations"]
+        CORE["MetaTxCore<br/>abstract"] --> BASE["MetaTokenBase<br/>abstract"]
+        BASE --> NU["NoUnderlyingToken<br/>META_NONE"]
+        BASE --> SU["SingleUnderlyingToken<br/>META_SINGLE"]
+        SU --> MU["MultiUnderlyingToken<br/>META_MULTI"]
+    end
+    ifc -.->|implemented by| impl
 ```
-IERC20MetaTx ── IERC20Payment ── IMetaTokenV2 (named functions)
-                                     │
-MetaTxCore (abstract)  ← nine-step pipeline over a memory struct, allowance lockdown, FeePolicy, 2D nonces
- └── MetaTokenBase (abstract)  ← ops pay/trade/approve(/unwrap), payWithFee, named functions, init, provenance
-      ├── NoUnderlyingToken          kind META_NONE    issuer-minted (initialSupply, optional minter, burn)
-      └── SingleUnderlyingToken      kind META_SINGLE  one underlying, rate, reserve, optional rate timelock
-           └── MultiUnderlyingToken  kind META_MULTI   2..8 underlyings, per-leg rate + reserve, guardian
-Hedera children: HederaNoUnderlyingToken, HederaSingleUnderlyingToken, HederaMultiUnderlyingToken
-```
+
+| Node | Adds |
+|---|---|
+| `IMetaTokenV2` | named functions |
+| `MetaTxCore` (abstract) | nine-step pipeline over a memory struct, allowance lockdown, `FeePolicy`, 2D nonces |
+| `MetaTokenBase` (abstract) | ops pay/trade/approve(/unwrap), `payWithFee`, named functions, init, provenance |
+| `NoUnderlyingToken` (kind `META_NONE`) | issuer-minted (`initialSupply`, optional minter, burn) |
+| `SingleUnderlyingToken` (kind `META_SINGLE`) | one underlying, rate, reserve, optional rate timelock |
+| `MultiUnderlyingToken` (kind `META_MULTI`) | 2..8 underlyings, per-leg rate + reserve, guardian |
+| Hedera children | `HederaNoUnderlyingToken`, `HederaSingleUnderlyingToken`, `HederaMultiUnderlyingToken` |
 
 ## Tiers
 

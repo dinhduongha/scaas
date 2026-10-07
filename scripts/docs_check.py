@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""SCaaS docs checker (stdlib only). Plan: docs/superpowers/plans/2026-10-07-docs-reorg.md §3.4, §6.3.
+"""SCaaS docs checker (stdlib only). Plan: docs/history/plans/2026-10-07-docs-reorg.md §3.4, §6.3.
 
   docs_check.py inventory                 freeze old ruling ids -> docs/history/ruling-ids.txt
-  docs_check.py check [--area A]          checks C1-C10 (+ budgets); exit 1 on error
+  docs_check.py check [--area A]          checks C1-C11 (+ budgets); exit 1 on error
   docs_check.py --write                   regenerate the alias index in docs/decisions.md
   docs_check.py resolve ID                old id -> new id(s) / new id -> old ids
   docs_check.py facts extract [--reset]   (keeps existing dispositions unless --reset)
@@ -424,6 +424,10 @@ def run_checks(area=None):
                     errs.append(f'C6 {r}:{n}: broken link {target}')
                 elif frag and tp.suffix == '.md' and frag not in anchors_of(tp):
                     errs.append(f'C6 {r}:{n}: missing anchor {target}')
+        for m in FENCE_BLOCK.finditer(text):                     # C11 diagrams are Mermaid, layouts are ```text
+            if m.group(1) not in ('mermaid', 'text') and len(BOX_ART.findall(m.group(2))) >= 4:
+                errs.append(f'C11 {r}:{text[:m.start()].count(chr(10)) + 1}: ASCII-art block: '
+                            'use ```mermaid for a diagram, ```text for a layout or pseudocode')
         if r in ('architecture.md', 'README.md', 'SCaaS-v2.md') and ANCHOR.search(text):
             errs.append(f'C8 {r}: defines ruling ids (non-normative file)')
         lim = BUDGET.get(r)
@@ -453,6 +457,10 @@ def run_checks(area=None):
         if not read(p).startswith(BANNER):
             errs.append(f'C10 {rel(p)}: missing the non-normative banner')
     return errs, warns, notes
+
+
+FENCE_BLOCK = re.compile(r'^```(\w*)\n(.*?)^```', re.S | re.M)
+BOX_ART = re.compile('[┌┐└┘├┤┬┴┼│─▶◀▼▲►◄]')
 
 
 def load_dropped():

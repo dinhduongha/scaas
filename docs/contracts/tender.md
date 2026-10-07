@@ -117,12 +117,26 @@ Buyer: `msg.sender` of `createTender` (in practice a `SubjectAccount`, a `Mandat
 submitted as a `call` job). Bidder: `m.from` of the deposit intent. Keeper: anyone (node, buyer, bidder) running
 permissionless steps.
 
+```mermaid
+stateDiagram-v2
+    direction LR
+    REVEAL: REVEAL (derived)
+    AWARDABLE: AWARDABLE (derived)
+    [*] --> OPEN: createTender
+    OPEN --> REVEAL: commitDeadline
+    REVEAL --> AWARDABLE: revealDeadline
+    AWARDABLE --> SETTLED: settle
+    AWARDABLE --> FAILED: settle
+    OPEN --> CANCELLED: cancelTender
 ```
-createTender ─► OPEN ──commitDeadline──► (REVEAL) ──revealDeadline──► (AWARDABLE) ─settle─► SETTLED | FAILED
-                │ commitBid               │ revealBid                     │ disqualifyWinner    │ withdrawDeposit
-                │                                                         │ (buyer, ≤ dqWindow) │ releaseBond / claimBond
-                └ cancelTender (buyer, now ≤ commitDeadline) ─► CANCELLED ─ withdrawDeposit
-```
+
+| State | Calls in this state |
+|---|---|
+| `OPEN` | `commitBid`; `cancelTender` (buyer, `now ≤ commitDeadline`) → `CANCELLED` |
+| `REVEAL` | `revealBid` |
+| `AWARDABLE` | `disqualifyWinner` (buyer, `≤ dqWindow`); `settle` → `SETTLED` or `FAILED` |
+| `SETTLED`, `FAILED` | `withdrawDeposit`; `releaseBond` / `claimBond` |
+| `CANCELLED` | `withdrawDeposit` |
 
 Stored states: `OPEN`, `SETTLED`, `FAILED`, `CANCELLED`; `REVEAL` and `AWARDABLE` (the award window
 `(revealDeadline, revealDeadline + dqWindow]`, then until someone settles) are derived from `block.timestamp`.

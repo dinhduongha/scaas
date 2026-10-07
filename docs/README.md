@@ -76,6 +76,7 @@ from the target, a short **Transitional (BUILT)** paragraph says what runs today
 ## Checks
 
 `python3 scripts/docs_check.py check` verifies the register (every old id covered, every current id defined exactly
-once), links, the absence of old ids and client-specific names in current docs, and the research banners;
+once), links, the absence of old ids and client-specific names in current docs, the research banners, and that diagrams are
+Mermaid (C11: an ASCII-art block must become ```mermaid, or ```text when it is a layout or pseudocode);
 `python3 scripts/docs_check.py facts check` verifies that every fact of the frozen sources landed in a current doc or
 is classified as history. `python3 scripts/test_docs_check.py` tests the checker itself.

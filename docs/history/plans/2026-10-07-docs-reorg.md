@@ -25,7 +25,7 @@
 > comment paths were checked against pinned codehashes first. This plan stays here (decisions.md cites it) until
 > Phase 4 closes, then moves to `history/plans/` with its links repointed.
 
-**Date:** 2026-10-07 · **Status:** Phases 0–3 executed, Phase 4 (reviews) open · **Owner-approved target structure:** see §1.
+**Date:** 2026-10-07 · **Status:** executed — Phases 0–4 done 2026-10-07 (Phase 4: three area reviews, 28 findings fixed; 10 % second sample 111 items, 3 minor findings fixed; Mermaid pass and checker C11) · **Owner-approved target structure:** see §1.
 **Scope:** `scaas/docs/**` (rewrite), `scaas/scripts/docs_check.py` (new), references outside docs (§5),
 `scaas-node` module/crate layout (§7, plan only). Nothing below has been done yet. Read-only survey basis:
 `scaas` HEAD `d4c296d` (chainId 7622 sweep), docs as of 2026-10-07.

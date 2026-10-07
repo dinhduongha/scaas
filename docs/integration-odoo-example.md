@@ -137,27 +137,43 @@ from `pending` (a `cancel`/`error` transaction gets a note for an operator, no a
 | `dms_portal_chain_payment_status(reference)` | `{tx_state, request_state, job_state, tx_hash}` |
 | `dms_portal_chain_payment_options(order_id)` | the usable (chain, asset) pairs of the receiving company whose token currency equals the order currency; `start(order_id, from_address, receiving_wallet_id=None)` |
 
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as portal user
+    participant O as Odoo
+    participant N as node
+    participant C as chain
+    U->>O: connect wallet: start(order, from)
+    Note over O: checks, amount,<br/>new request
+    O-->>U: typed data
+    Note over U: eth_signTypedData_v4<br/>or passkey
+    U->>O: signature: submit(...)
+    Note over O: verify, then COMMIT<br/>metatx + relay.job + tx pending
+    alt pull model today
+        N->>O: relay_poll / claim
+    else push model
+        O->>N: cron POST /v1/jobs
+    end
+    N->>C: simulate, journal, send
+    Note over C: PaymentSettled
+    N-->>O: relay_report / GET /v1/jobs<br/>(signed, broadcast, mined)
+    N-->>O: chain_event_ingest / GET /v1/events<br/>(finalized range)
+    Note over O: request final when<br/>Σ PaymentSettled ≥ amount<br/>→ _set_done()
+    U->>O: poll status
+    O-->>U: {tx_state, request_state, job_state, tx_hash}
 ```
-portal user           Odoo                                   node                         chain
- connect wallet ───► dms_portal_chain_payment_start(order, from)
-                     entitlement; order confirmed (state = 'sale');
-                     token currency == order currency (no FX);
-                     amount = posted invoices' residual, or order total − paid (advance);
-                     request: entryRef random, lane = keccak("scaas.pay.lane" ‖ entryRef), nonce 0,
-                     issued_valid_until = now + validity
- ◄── typed data ──── {to: receiving wallet, value, data: pay(entryRef), mode: RESTRICT_RELAYER, relayer: company lane, fee 0}
- eth_signTypedData_v4 / passkey
- ── signature ─────► dms_portal_chain_payment_submit(reference, valid_until, signature, wallet_kind)
-                     valid_until == issued_valid_until; digest rebuilt; 65-byte sig must recover payer;
-                     metatx + relay.job (outbox) + tx pending   [COMMIT]
-                     ── pull model today: node relay_poll/claim ── push model: cron POST /v1/jobs ──►
-                                                                    simulate, journal, send ─────► PaymentSettled
-                     ◄── relay_report / GET /v1/jobs (signed, broadcast, mined) ──
-                     ◄── chain_event_ingest / GET /v1/events (finalized range) ──
-                     request final when Σ PaymentSettled(token, to, entryRef) ≥ amount
-                     → payment.transaction._set_done() → account_payment posts and reconciles
- poll status ──────► dms_portal_chain_payment_status(reference) → {tx_state, request_state, job_state, tx_hash}
-```
+
+1. `dms_portal_chain_payment_start(order, from)`. Checks: entitlement; order confirmed (`state = 'sale'`); token currency == order currency (no FX). Amount = posted invoices' residual, or order total − paid (advance). New request: `entryRef` random, `lane = keccak("scaas.pay.lane" ‖ entryRef)`, nonce 0, `issued_valid_until = now + validity`.
+2. Typed data: `{to: receiving wallet, value, data: pay(entryRef), mode: RESTRICT_RELAYER, relayer: company lane, fee 0}`; the user signs with `eth_signTypedData_v4` / passkey.
+3. `dms_portal_chain_payment_submit(reference, valid_until, signature, wallet_kind)`. Verify: `valid_until == issued_valid_until`; digest rebuilt; 65-byte sig must recover payer. Then metatx + `relay.job` (outbox) + tx pending in one `[COMMIT]`.
+4. Pull model today: the node calls `relay_poll`/claim.
+5. Push model: an Odoo cron sends `POST /v1/jobs`.
+6. The node simulates, journals and sends; the chain emits `PaymentSettled`.
+7. Job states (signed, broadcast, mined) come back by `relay_report` / `GET /v1/jobs`.
+8. Events come back by `chain_event_ingest` / `GET /v1/events` (finalized range). The request is final when Σ `PaymentSettled(token, to, entryRef)` ≥ amount → `payment.transaction._set_done()` → `account_payment` posts and reconciles.
+9. Poll status: `dms_portal_chain_payment_status(reference)`.
+10. → `{tx_state, request_state, job_state, tx_hash}`.
 
 The pull-model sequence uses `relay_poll`, `relay_claim`, `eth_call`, `signTypedData`, `sendRawTransaction`,
 `getLogs` and `chain_event_ingest`, with `RESTRICT_RELAYER`, `feeRecipient` 0, `validUntil`, `tx_hash` and

@@ -2,7 +2,7 @@
 
 Repo: /home/dockers/odoo19/custom-addons/bamboo-dms/scaas. Source: `docs/research/_USER-DECISIONS.md` (2 705 lines,
 Vietnamese, the owner's decisions + findings from code; line numbers include the 2-line banner at the top).
-Plan: `docs/superpowers/plans/2026-10-07-docs-reorg.md` — read §2.6 (row `_USER-DECISIONS.md`), §3.1–§3.2 (id scheme;
+Plan: `docs/history/plans/2026-10-07-docs-reorg.md` — read §2.6 (row `_USER-DECISIONS.md`), §3.1–§3.2 (id scheme;
 the last row of the §3.2 table is about UD units) and §8 Q14 (owner answered: UD decisions later replaced by specs are
 recorded as **superseded owner rulings**, not re-opened; remaining **unruled** UD items become `open` entries).
 Current rulings live in the frozen specs `docs/history/specs/*.md` and `docs/history/SCaaS-2026-10-07.md`

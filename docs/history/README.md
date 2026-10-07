@@ -151,6 +151,6 @@ frozen; the corrections are kept here for the owner (`UD` = `research/_USER-DECI
 
 ## The reorganization itself
 
-Plan: `../superpowers/plans/2026-10-07-docs-reorg.md`. New ids were allocated in old definition order (file, line)
+Plan: `../history/plans/2026-10-07-docs-reorg.md`. New ids were allocated in old definition order (file, line)
 and are never renumbered. `scripts/docs_check.py` keeps the current docs consistent with `ruling-ids.txt`, the
 ledgers in `reorg/` and `dropped-artifacts.tsv`.

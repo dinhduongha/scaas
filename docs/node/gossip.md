@@ -47,22 +47,41 @@ Non-goals:
 
 <a id="architecture"></a>
 
+```mermaid
+flowchart LR
+    subgraph DOORS["HTTP doors"]
+        WAL["wallets / ERPs"] -->|"HTTP"| GW["gateway (door A)"]
+        PUSH["ERP push"] -->|"HMAC"| JAPI["job API"]
+    end
+    subgraph SWARM["libp2p swarm"]
+        TR["QUIC (PQ)<br/>TCP+Noise"] --> GS["gossipsub<br/>topics (wire)"]
+        TR --> BUSP["/scaas/bus/1.2<br/>QUIC only"]
+        TR --> SYNC["/scaas/sync/1"]
+        TR --> KAD["/scaas/kad/1.0.0<br/>identify, ping"]
+    end
+    MTLS["HTTPS mTLS (PQ)<br/>/v1/mesh/*"]
+    subgraph ACC["accept() L0–L3"]
+        AL["accept<br/>gateway / job"]
+        GV["gossip validator"] --> AG["accept<br/>source = gossip"]
+        BS["bus server / puller"] --> AP["accept<br/>source = peer"]
+        SV["sync validator"] --> AP
+    end
+    GW --> AL
+    JAPI --> AL
+    GS --> GV
+    BUSP --> BS
+    MTLS --> BS
+    SYNC --> SV
+    AL --> ST[("store<br/>intent, job, dex_*, gossip_*")]
+    AG --> ST
+    AP --> ST
+    ST --> SCH["scheduler"]
 ```
-  wallets / ERPs ──HTTP──► gateway (door A) ─┐
-  ERP push ──HMAC──► job API ────────────────┤
-                                              ▼
-                     ┌──────────────── accept() L0–L3 (mesh.md#acceptance) ──────┐
-  libp2p swarm       │                                                            │
-   QUIC (PQ) ─┐      │  gossip validator ──► accept(source = gossip)              │
-   TCP+Noise ─┼─► gossipsub ── topics (wire)                                      ├──► store (intent, job,
-              │      │                                                            │     dex_*, gossip_*)
-              ├─► /scaas/bus/1.2 (QUIC only) ──► bus server/puller ──┐           │        │
-              ├─► /scaas/sync/1  ───────────────► validator ─────────┤           │        ▼
-              └─► /scaas/kad/1.0.0, identify, ping                   │           │   scheduler
-  HTTPS mTLS (PQ) ─► /v1/mesh/* ─► bus server/puller ────────────────┴► accept(source = peer)
-                     └────────────────────────────────────────────────────────────┘
-  publishers: may_export (bus) · may_gossip (gossip + sync) — the only two exits
-```
+
+- `accept()` runs the acceptance levels L0–L3 ([mesh.md#acceptance](mesh.md#acceptance)) for every source.
+- The swarm carries gossipsub, `/scaas/bus/1.2` (QUIC only), `/scaas/sync/1` and `/scaas/kad/1.0.0`, identify, ping over QUIC (PQ) or TCP+Noise; the bus also runs over HTTPS mTLS (PQ) on `/v1/mesh/*`.
+- Store tables: intent, job, `dex_*`, `gossip_*`; the scheduler reads the store.
+- Publishers: `may_export` (bus) · `may_gossip` (gossip + sync) — the only two exits.
 
 `src/mesh/` keeps the transport-neutral parts; `src/gossip/` holds the swarm task, validator, scoring glue, announce,
 hints, sync and the DEX replica. The swarm runs in **one tokio task** that owns the `Swarm`; every store or RPC call it

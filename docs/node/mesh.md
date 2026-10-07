@@ -485,7 +485,7 @@ by itself.
 
 ### Evaluation order (no RPC before L4)
 
-```
+```text
 accept(env, source, peer?) -> Result<Row, Code>          // mesh/accept.rs, pure except store + clock
   L0  size ≤ 32 KiB, JSON object, spec major == 1 and minor ≥ 2, family supported, chain_key known
       (in the chain table or in any policy row), fields well-formed, body canonicalizable
@@ -579,7 +579,7 @@ Receivers honour `exclusive` only if `hub.sig` verified and `0 < until − publi
 
 ### Scheduler (every 250 ms, `mesh/sched.rs`)
 
-```
+```text
 for row in pooled where may_submit and (exclusive_until IS NULL or now ≥ exclusive_until + jitter(row)):
     CAS pooled → submittable
 for row in submittable (oldest first):

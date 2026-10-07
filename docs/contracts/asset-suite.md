@@ -10,23 +10,37 @@ of eligibility attestations, and three permissionless **action contracts** — `
 
 <a id="scope"></a>
 
-```
-EVM / Hedera (Solidity), all clones of never-upgraded implementations:
+EVM / Hedera (Solidity), all clones of never-upgraded implementations. Each `MetaTokenBase` v2 tier (BUILT) gains a
+regulated child with `RegulatedControls` (ERC-7201 storage) + `RegulatedLib` (linked); Hedera children of each
+regulated tier: `HederaRegulated*`.
 
-MetaTokenBase v2 tiers (BUILT)                 + RegulatedControls (ERC-7201 storage) + RegulatedLib (linked)
- ├── NoUnderlyingToken      META_NONE            → RegulatedNoUnderlyingToken      META_NONE_REG   (5)
- ├── SingleUnderlyingToken  META_SINGLE          → RegulatedSingleUnderlyingToken  META_SINGLE_REG (6)
- └── MultiUnderlyingToken   META_MULTI           → RegulatedMultiUnderlyingToken   META_MULTI_REG  (7)
-     (+ Hedera children of each regulated tier: HederaRegulated*)
-
-ComplianceRegistry          address-keyed attestations (flags, validUntil, attester); no personal data
-AssetFactory                CREATE2 clones of the three action contracts, counterfactual funding
- ├── VestingGrant           one per grant: linear + cliff + interval, or tranches/milestones
- ├── Distribution           one per dividend/coupon: Merkle root over a node-indexed snapshot
- └── ExchangeOffer          one per offer: redemption at maturity, buyback, split/reverse-split exchange
-Templates                   equity, bond, loyalty, voucher: off-chain presets over the above
-Managed markets             OrderBookDex unchanged; node intake + gossip rules
+```mermaid
+flowchart LR
+    N0[NoUnderlyingToken] --> N1[RegulatedNoUnderlyingToken]
+    S0[SingleUnderlyingToken] --> S1[RegulatedSingleUnderlyingToken]
+    M0[MultiUnderlyingToken] --> M1[RegulatedMultiUnderlyingToken]
 ```
+
+| Tier (BUILT) | Kind | Regulated child | Kind |
+|---|---|---|---|
+| `NoUnderlyingToken` | `META_NONE` | `RegulatedNoUnderlyingToken` | `META_NONE_REG` (5) |
+| `SingleUnderlyingToken` | `META_SINGLE` | `RegulatedSingleUnderlyingToken` | `META_SINGLE_REG` (6) |
+| `MultiUnderlyingToken` | `META_MULTI` | `RegulatedMultiUnderlyingToken` | `META_MULTI_REG` (7) |
+
+```mermaid
+flowchart LR
+    F["AssetFactory<br/>CREATE2 clones"] --> V["VestingGrant<br/>one per grant"] & D["Distribution<br/>one per dividend / coupon"] & E["ExchangeOffer<br/>one per offer"]
+```
+
+| Component | Role |
+|---|---|
+| `ComplianceRegistry` | address-keyed attestations (flags, `validUntil`, attester); no personal data |
+| `AssetFactory` | CREATE2 clones of the three action contracts, counterfactual funding |
+| `VestingGrant` | one per grant: linear + cliff + interval, or tranches/milestones |
+| `Distribution` | one per dividend/coupon: Merkle root over a node-indexed snapshot |
+| `ExchangeOffer` | one per offer: redemption at maturity, buyback, split/reverse-split exchange |
+| Templates | equity, bond, loyalty, voucher: off-chain presets over the above |
+| Managed markets | `OrderBookDex` unchanged; node intake + gossip rules |
 
 Not covered: confidential (Zether) regulated tokens — a confidential balance can be frozen (stuck) but not seized on
 public chains, and no Zether code changes; non-fungible assets (ERC-721/1155, PLANNED); rebasing, scaled balances or
@@ -475,15 +489,39 @@ Roles: `grantor` (funds, may revoke if `revocable`), `beneficiary` (receives; sh
 key is recoverable), `approver` (optional, milestones only; a Safe or `SubjectAccount` approves through a sponsored
 call), relayer (submits anything; earns nothing on chain).
 
+```mermaid
+sequenceDiagram
+    actor G as grantor
+    participant R as relayer / anyone
+    participant F as AssetFactory
+    participant C as grant clone
+    actor B as beneficiary
+    actor A as approver
+    G->>F: predictGrant(p) → grant
+    G->>R: signed transfer of p.total
+    R->>C: transfer lands at grant
+    R->>F: createGrant(p)
+    F->>C: clone + init
+    loop over time
+        R->>C: release()
+        C->>B: pays releasable()
+    end
+    opt milestones
+        A->>C: approveMilestone(i, ref)
+    end
+    opt revocable
+        G->>C: revoke()
+        C->>G: unvested part
+    end
 ```
-1. client builds GrantParams p; grant = AssetFactory.predictGrant(p)    // reverts on any invalid p
-2. grantor signs a gasless transfer (or pay op with entryRef = p.ref) of p.total to `grant`; relayer submits
-   (regulated token: registry admin attests `grant` ELIGIBLE_CONTRACT first)
-3. anyone: AssetFactory.createGrant(p) → clone at `grant`; init reverts only Underfunded(balance, total)
-4. over time: anyone calls release() → pays releasable() to beneficiary
-5. milestones: approver calls approveMilestone(i, ref)
-6. optional: grantor revoke() → unvested part to grantor; vested part stays releasable
-```
+
+1. Client builds `GrantParams p`; `grant = AssetFactory.predictGrant(p)` (reverts on any invalid `p`).
+2. Grantor signs a gasless transfer (or pay op with `entryRef = p.ref`) of `p.total` to `grant`; relayer submits
+   (regulated token: registry admin attests `grant` `ELIGIBLE_CONTRACT` first).
+3. Anyone: `AssetFactory.createGrant(p)` → clone at `grant`; init reverts only `Underfunded(balance, total)`.
+4. Over time: anyone calls `release()` → pays `releasable()` to beneficiary.
+5. Milestones: approver calls `approveMilestone(i, ref)`.
+6. Optional: grantor `revoke()` → unvested part to grantor; vested part stays releasable.
 
 ```solidity
 interface IVestingGrant {
@@ -602,15 +640,40 @@ account; `sweep()` of the remainder to `sweepTo` after `expiry` (or never). The 
 classify every contract leaf, and is recomputable by anyone. It replaces an earlier `CouponPayer` design. A wrong root
 can be published; the review window, recomputation and `cancel` bound it.
 
+```mermaid
+sequenceDiagram
+    actor I as issuer
+    participant N as node
+    participant K as anyone
+    participant F as AssetFactory
+    participant D as dist clone
+    actor M as admin
+    actor A as account
+    actor S as sweepTo
+    I->>N: recordToken, recordBlock, pool, policy
+    N-->>I: snapshot (root, total, leaves)
+    I->>F: predictDistribution(p)
+    I->>D: fund dist
+    K->>F: createDistribution(p)
+    F->>D: clone + init
+    alt review window
+        M->>D: cancel()
+        D->>S: all funds
+    else from opensAt
+        K->>D: claim(index, account, amount, proof)
+        D->>A: amount
+        K->>D: sweep() after expiry
+        D->>S: remainder
+    end
 ```
-1. issuer picks recordToken, recordBlock (final), payout pool and policy (exclusions, protocol-clone attribution)
-2. node builds the snapshot → root, total, leafCount, leaves; anyone can recompute
-3. client builds DistParams p; dist = AssetFactory.predictDistribution(p) (reverts on invalid p); issuer funds `dist`
-4. anyone: AssetFactory.createDistribution(p) → init reverts only Underfunded; opensAt = max(claimStart, now + 1 h)
-5. review window [createdAt, opensAt): admin may cancel() → all funds to sweepTo
-6. claims from opensAt: anyone submits claim(index, account, amount, proof) → pays `account`
-7. after expiry (if any): anyone sweep() → remainder to sweepTo
-```
+
+1. Issuer picks `recordToken`, `recordBlock` (final), payout pool and policy (exclusions, protocol-clone attribution).
+2. Node builds the snapshot → `root`, `total`, `leafCount`, `leaves`; anyone can recompute.
+3. Client builds `DistParams p`; `dist = AssetFactory.predictDistribution(p)` (reverts on invalid `p`); issuer funds `dist`.
+4. Anyone: `AssetFactory.createDistribution(p)` → init reverts only `Underfunded`; `opensAt = max(claimStart, now + 1 h)`.
+5. Review window `[createdAt, opensAt)`: `admin` may `cancel()` → all funds to `sweepTo`.
+6. Claims from `opensAt`: anyone submits `claim(index, account, amount, proof)` → pays `account`.
+7. After `expiry` (if any): anyone `sweep()` → remainder to `sweepTo`.
 
 ```solidity
 interface IDistribution {

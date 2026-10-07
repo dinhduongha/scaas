@@ -298,18 +298,33 @@ check). The table mirrors the client-side transition table (`TRANSITIONS`) and l
 sides read the vector file `scaas/scaas-node/tests/api/transitions.json` (clients keep a byte-identical copy; CI
 `cmp`). Status: client-side state machine incl. `consumed` **BUILT**; node store state machine **SPECIFIED**.
 
+```mermaid
+stateDiagram-v2
+    [*] --> queued: accept
+    [*] --> cancelled: cancel by origin, no job
+    queued --> leased: lease
+    leased --> queued: transient / restart
+    leased --> signed: journal (before send)
+    signed --> broadcast
+    broadcast --> signed: replace
+    broadcast --> mined
+    mined --> reverted: late receipt
+    queued --> cancelled: cancel (never published)
+    queued --> queued: published + cancel
+    queued --> dead: expiry before submit, bad payload
+    signed --> reverted
+    signed --> dead: expired + gap-filled
+    leased --> consumed
+    signed --> consumed
+    broadcast --> consumed
+    note left of cancelled: tombstone
 ```
-            accept                lease (CAS, lane_hint)         journal (before send)
-  (none) ─────────► queued ───────────────────────► leased ─────────────────────► signed ──► broadcast ──► mined
-     │ cancel-by-     │  ▲  transient / restart       │                              │  ▲        │           │
-     │ origin, no job │  └────────────────────────────┘                              │  └ replace┘           │ late receipt
-     ▼                │ cancel (never published)                                     │                       ▼
-  cancelled ◄─────────┤                                                              ├──► reverted ◄─────────┘
-  (tombstone)         │ published + cancel ⇒ stays queued, hold = 1, 409 TOO_LATE    │
-                      ├──► dead (expiry before submit, bad payload)                  ├──► dead (expired + gap-filled)
-                      │                                                              │
-                      └────────────── leased/signed/broadcast ──► consumed ◄─────────┘ (consumption classification)
-```
+
+- `[*]` is "(none)": no job row yet. A cancel by origin with no job writes a `cancelled` tombstone.
+- lease = CAS with `lane_hint`; `signed` is journaled before the send.
+- `published + cancel` ⇒ the job stays `queued` with `hold = 1` and the cancel gets `409 TOO_LATE`.
+- `broadcast → signed` (replace) re-signs at the same nonce; `dead` from the in-flight side means expired and gap-filled.
+- `consumed` comes from `leased`/`signed`/`broadcast` through the consumption classification.
 
 | From | To | Who |
 |---|---|---|

@@ -41,7 +41,7 @@ per rule removes the second copy. Owner rulings override code that has not caugh
 an implementation shortcut.
 **Cost if wrong.** A reader who trusts the overview instead of the component doc applies a stale rule; the checker
 keeps ids out of the overview so there is nothing to trust there.
-**Source.** [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 33; [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) §4 K14.
+**Source.** [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 33; [history/plans/2026-10-07-docs-reorg.md](history/plans/2026-10-07-docs-reorg.md) §4 K14.
 
 <a id="ARCH-POS-02"></a>
 ### ARCH-POS-02 — Family taxonomy
@@ -131,7 +131,7 @@ of the earlier decision log are `open` entries.
 `open` entry makes the default visible and keeps it reversible.
 **Cost if wrong.** An `open` default that the owner later reverses needs a new id and a doc change; the alias index
 keeps the old reference resolvable.
-**Source.** [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) §3.1, §8 (Q2, Q10, Q13, Q14).
+**Source.** [history/plans/2026-10-07-docs-reorg.md](history/plans/2026-10-07-docs-reorg.md) §3.1, §8 (Q2, Q10, Q13, Q14).
 
 <a id="ARCH-POS-08"></a>
 ### ARCH-POS-08 — Market-specific research stays private
@@ -141,7 +141,7 @@ keeps the old reference resolvable.
 repository is private and are removed before any public release. Neither ever enters the current docs.
 **Why.** The market-neutral rule ([ARCH-POS-04](#ARCH-POS-04)) keeps market law out of the product; the files remain
 useful background for the owner meanwhile.
-**Source.** [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) §8 Q9.
+**Source.** [history/plans/2026-10-07-docs-reorg.md](history/plans/2026-10-07-docs-reorg.md) §8 Q9.
 
 <a id="ARCH-POS-09"></a>
 ### ARCH-POS-09 — Work plans stay in history and the TODO list
@@ -151,7 +151,7 @@ useful background for the owner meanwhile.
 `history/` and are tracked in the repository TODO list; there is no roadmap document under `docs/`, and the current
 docs carry no work-item ids.
 **Why.** Work plans change weekly; normative docs that cite them go stale with every plan change.
-**Source.** [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) §4 K22, §8 Q11.
+**Source.** [history/plans/2026-10-07-docs-reorg.md](history/plans/2026-10-07-docs-reorg.md) §4 K22, §8 Q11.
 
 <a id="ARCH-POS-10"></a>
 ### ARCH-POS-10 — Client data platforms are out of scope
@@ -165,7 +165,7 @@ gateways, and an enterprise-wide multi-plane target architecture.
 contracts plus the node's feeds ([node/indexer-feeds.md](node/indexer-feeds.md), [node/ops.md](node/ops.md)).
 **Cost if wrong.** A client that wants these projections builds them from `/v1/events` and `/v1/jobs`; nothing in the
 feeds prevents it.
-**Source.** [history/blockchain.md](history/blockchain.md) lines 38–48, 56–74; [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) §2.5.
+**Source.** [history/blockchain.md](history/blockchain.md) lines 38–48, 56–74; [history/plans/2026-10-07-docs-reorg.md](history/plans/2026-10-07-docs-reorg.md) §2.5.
 
 <a id="ARCH-POS-11"></a>
 ### ARCH-POS-11 — Documentation language and structure
@@ -178,7 +178,7 @@ Zether, network pages and the node overview are accepted, and so is the overrun 
 2026-10-07).
 **Why.** One language and one id scheme for a product used worldwide; the old ids stay resolvable for code comments
 (`python3 scripts/docs_check.py resolve <id>`).
-**Source.** [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) §8 (owner answers 2026-10-07).
+**Source.** [history/plans/2026-10-07-docs-reorg.md](history/plans/2026-10-07-docs-reorg.md) §8 (owner answers 2026-10-07).
 
 ### ARCH-POS-80 — EVM-only, META-only first scope
 - old: R1 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NET-ALL-02, CTR-ZTH-01, CTR-ZTH-18, CTR-ZTH-19, CTR-UA-02, CTR-UA-16, CTR-UA-22, INT-ERP-11, ARCH-POS-02
@@ -303,7 +303,7 @@ It said: legal questions are deferred to a separate chapter that does not block 
 - old: reorg:Q12 · status: current · owner: yes · date: 2026-10-07 · normative: node/README.md#NODE-GEN-18 · superseded-by: —
 
 **Why.** Code that mirrors the docs is easier to review; the job seam first keeps tests green during the move.
-**Source.** [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) line 1228.
+**Source.** [history/plans/2026-10-07-docs-reorg.md](history/plans/2026-10-07-docs-reorg.md) line 1228.
 
 ### NODE-GEN-80 — One Rust node, ERP as control plane
 - old: UD:§21.2 · status: superseded · owner: yes · date: 2026-08-31 · normative: — · superseded-by: ARCH-POS-05
@@ -513,7 +513,7 @@ holders.
 
 **Why.** Permissionless and self-authenticating calls cannot be abused through our lane; a role holder executes only what its owners signed. The factory stays excluded.
 **Owner ruling (2026-10-07).** Lane keys never hold roles (NODE-GEN-01); the `Safe.execTransaction` row is the only path to a role-holding target, and the lane only relays an `execTransaction` already signed by the role holders.
-**Source.** [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) line 1215.
+**Source.** [history/plans/2026-10-07-docs-reorg.md](history/plans/2026-10-07-docs-reorg.md) line 1215.
 
 ### NODE-JOB-80 — Node talks to ERP only over json/2
 - old: R6 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: ARCH-POS-05, NODE-JOB-06, INT-ERP-16, INT-ERP-18
@@ -728,7 +728,7 @@ It said: six-member Family enum.
 
 **Why.** A compromised node can lie on its feed; a second independent source would detect it.
 **Cost if wrong.** Planned.
-**Source.** [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) line 1221.
+**Source.** [history/plans/2026-10-07-docs-reorg.md](history/plans/2026-10-07-docs-reorg.md) line 1221.
 
 ### NODE-IDX-80 — Quorum on one block hash
 - old: R11(quorum) · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NODE-IDX-01
@@ -1140,7 +1140,7 @@ It said: dEX chains run one lane only.
 
 **Why.** Soroban intents need simulation footprints a forwarder cannot verify; job API only until a design exists.
 **Cost if wrong.** Default applied.
-**Source.** [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) line 1220.
+**Source.** [history/plans/2026-10-07-docs-reorg.md](history/plans/2026-10-07-docs-reorg.md) line 1220.
 
 ### NODE-MESH-80 — R68-R69 left unused
 - old: R68, R69 · status: unused · owner: no · date: 2026-10-05 · normative: — · superseded-by: —
@@ -1398,7 +1398,7 @@ An earlier design used the rustls ring provider for TLS; replaced by aws-lc-rs f
 - old: reorg:Q8 · status: current · owner: yes · date: 2026-10-07 · normative: node/ops.md#NODE-OPS-16 · superseded-by: —
 
 **Why.** Defaults are needed to start; each stays operator-tunable.
-**Source.** [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) line 1222.
+**Source.** [history/plans/2026-10-07-docs-reorg.md](history/plans/2026-10-07-docs-reorg.md) line 1222.
 
 ## Node — Runbooks
 
@@ -2312,14 +2312,14 @@ It said: separate DB roles per module.
 
 **Why.** Open owner decision: the production curve for classical Zether (bn254 or BLS12-381); BLS12-381 is more secure and not cheaper.
 **Cost if wrong.** Choosing bn254 for money at rest accepts ~100-bit security.
-**Source.** `superpowers/plans/2026-10-07-docs-reorg.md:1241`
+**Source.** `history/plans/2026-10-07-docs-reorg.md:1241`
 
 ### CTR-ZTH-33 — Chain 7622 is not a classical-Zether dev chain
 - old: reorg:Q5(dev-chain) · status: open · owner: yes · date: 2026-10-07 · normative: contracts/zether.md#CTR-ZTH-33 · superseded-by: —
 
 **Why.** Open owner decision: chain 7622 is not a classical-Zether dev chain until the owner decides.
 **Cost if wrong.** Treating it as dev would put unaudited classical Zether on the shared private chain.
-**Source.** `superpowers/plans/2026-10-07-docs-reorg.md:1241`
+**Source.** `history/plans/2026-10-07-docs-reorg.md:1241`
 
 ### CTR-ZTH-80 — Range bits 32 and DECRYPT_BOUND 2^40
 - old: R34(params) · status: superseded · owner: yes · date: 2026-10-03 · normative: — · superseded-by: CTR-ZTH-18, CTR-ZTH-19
@@ -3815,13 +3815,13 @@ It said: Signed text is domain plus hex digest; replaced by NET-ALL-23.
 
 **Rule.** TON binds the `signData` domain on chain through a per-wallet domain set.
 **Why.** Anyone may relay a `SignedOp`, so an off-chain domain check never runs when a phishing dApp relays its own signed data.
-**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 693; [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) line 1217.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 693; [history/plans/2026-10-07-docs-reorg.md](history/plans/2026-10-07-docs-reorg.md) line 1217.
 
 ### NET-TON-03 — TON bounced payouts claimable by owner
 - old: CR-R3-9, reorg:Q4 · status: current · owner: yes · date: 2026-10-07 · normative: networks/ton.md#NET-TON-03 · superseded-by: —
 
 **Why.** As built `bounced<JettonTransfer>` adds to `fees[master]` (`dex.tact:131-136`), which `WithdrawFees` withdraws (`:43,158`). SPECIFIED. Tests (sandbox): a bounced refund lands in `unclaimed`, `WithdrawFees` cannot take it, `Claim` pays the owner.
-**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 703; [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) line 1218.
+**Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 703; [history/plans/2026-10-07-docs-reorg.md](history/plans/2026-10-07-docs-reorg.md) line 1218.
 
 ### NET-TON-04 — Compact Tact Jetton with meta-tx wallet
 - old: R10-1 · status: current · owner: no · date: 2026-10-03 · normative: networks/ton.md#NET-TON-04 · superseded-by: —

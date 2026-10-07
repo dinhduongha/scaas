@@ -44,6 +44,10 @@ def main():
     assert r.returncode == 1 and 'C9' in r.stdout, r.stdout
     r = check(tree(DOC + '\n[x](missing.md)\n'))
     assert r.returncode == 1 and 'C6' in r.stdout, r.stdout
+    r = check(tree(DOC + '\n```\n┌──┐\n│ x │──►\n└──┘\n```\n'))
+    assert r.returncode == 1 and 'C11' in r.stdout, r.stdout
+    r = check(tree(DOC + '\n```text\n┌──┐\n│ x │──►\n└──┘\n```\n'))
+    assert r.returncode == 0, r.stdout
     root = tree()
     assert 'NODE-JOB-01' in run(root, 'resolve', 'R91').stdout
     sys.path.insert(0, str(SCRIPT.parent))

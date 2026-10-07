@@ -1,6 +1,6 @@
 # history/reorg — reorganization ledgers (frozen after Phase 2)
 
-Plan: `docs/superpowers/plans/2026-10-07-docs-reorg.md`. Phase 0 output, edited in Phases 1–2, moved here from `docs/_work/` at the end of Phase 2 (the register fragments `decisions-*.md` were merged into `docs/decisions.md` and removed). `scripts/docs_check.py` reads these files for C1 (pre-register), C7 and `facts check`/`facts trace`; Phase 4 reviewers use them as their work list.
+Plan: `docs/history/plans/2026-10-07-docs-reorg.md`. Phase 0 output, edited in Phases 1–2, moved here from `docs/_work/` at the end of Phase 2 (the register fragments `decisions-*.md` were merged into `docs/decisions.md` and removed). `scripts/docs_check.py` reads these files for C1 (pre-register), C7 and `facts check`/`facts trace`; Phase 4 reviewers use them as their work list.
 
 | File | What | Who edits |
 |---|---|---|

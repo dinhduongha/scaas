@@ -3,7 +3,7 @@
 ## Docs reorg 2026-10-07 — read this first
 
 The specs, `SCaaS.md` and `integration.md` were replaced by one set of self-contained component docs (plan
-`docs/superpowers/plans/2026-10-07-docs-reorg.md`, tag `docs-pre-reorg` = state before). **Reading order:**
+`docs/history/plans/2026-10-07-docs-reorg.md`, tag `docs-pre-reorg` = state before). **Reading order:**
 
 1. [`docs/README.md`](docs/README.md) — map, precedence (owner rulings > component docs > code > history > research),
    status tags, id scheme.

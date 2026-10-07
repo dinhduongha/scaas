@@ -10,13 +10,10 @@ folded (dispositions inside each spec; review files in `docs/reviews/specs/`, gi
 chainId 9000 → **7622**; `PqzToken` implements `IERC20MetaTx` (PQZ rev 1.4 R284); Move/Solana (and Cosmos
 `--no-admin`) programs **immutable at deploy** (round3 CR-R3-11, NI R348).
 
-- [ ] **Docs reorg** (plan `docs/superpowers/plans/2026-10-07-docs-reorg.md`): Phases 0–3 done 2026-10-07 — new docs
-      from [`docs/README.md`](docs/README.md) (component docs, `docs/decisions.md` register + old-id alias index),
-      history frozen in `docs/history/`, research in `docs/research/`, reorg ledgers (id map, fact ledger) in
-      `docs/history/reorg/`, outside references repointed, CI `docs` job. Phase 4 reviewer pass done 2026-10-07 (28 findings,
-      fixed; review files `docs/reviews/reorg/`); 10 % second sample: contracts 29/29 and node 42/42 fine, netcli running;
-      NODE-IDX-06 ruled; trace rows `blockchain.md:8` and `:214` fixed. Left: netcli sample result; Mermaid pass (ASCII
-      diagrams in current docs → Mermaid, checker C11); then move the plan to `docs/history/plans/`.
+- [x] **Docs reorg** (plan `docs/history/plans/2026-10-07-docs-reorg.md`), done 2026-10-07: component docs from
+      [`docs/README.md`](docs/README.md), register + alias index in `docs/decisions.md`, history frozen in `docs/history/`,
+      ledgers in `docs/history/reorg/`, Phase 4 reviews (28 findings) and a 10 % second sample (3 minor) fixed, all
+      diagrams Mermaid (checker C11), CI `docs` job. Review files: `docs/reviews/reorg/` (git-ignored).
 - [x] ~~**Sync `docs/SCaaS.md` + `docs/integration.md`**~~ (closed by the docs reorg; files now `docs/history/SCaaS-2026-10-07.md`,
       `docs/history/integration-2026-10-07.md`) with the latest folds — collect every "Amends"/"amendments"
       table in: NI rev 3.7 (R340–R349), PQZ rev 1.4 (R284 meta-tx, register row still says 1.2), round3 rev 1.2,
