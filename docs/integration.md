@@ -3,8 +3,8 @@
 **Status:** normative, 2026-10-07. Companion of [`SCaaS.md`](SCaaS.md) (the system specification; its §0
 precedence and component spec register apply here). Status tags as in SCaaS.md: **BUILT**, **SPECIFIED** (link), **PLANNED**.
 
-This guide describes integration under the **current model** (owner rulings 2026-10-06, NI rev 3.6 R87–R111,
-R320–R328; TSS rev 1.3, UA rev 1.4): the ERP or
+This guide describes integration under the **current model** (owner rulings 2026-10-06 and 2026-10-07, NI rev 3.7
+R87–R111, R320–R328, R340–R349; PD rev 1.1 CR-PD-1…6; TSS rev 1.3, UA rev 1.4, PQZ rev 1.4): the ERP or
 application is a **client** of `scaas-node`. It keeps its own transactional outbox, **pushes** jobs to the node's job
 API, and **polls** two feeds (`/v1/jobs`, `/v1/events`) to learn job states and finalized chain facts. The node never
 calls the client. The node's store is the configuration authority.
@@ -15,8 +15,13 @@ calls the client. The node's store is the configuration authority.
 > `relay_report`, `chain_event_ingest`). New integrations must target the push model; Odoo migrates chain by chain
 > through the flag `blockchain.chain.node_transport ∈ pull|push` (R104). The public gateway `POST /v1/metatx` and
 > `/v1/dex/*` are **BUILT** and unchanged.
+>
+> **TON is blocked on every non-Odoo path** until the node half of NET-TON-FIX1 lands (net-ton rev 1.1, review C1:
+> an unbounded forward-TON floor drains a lane). Until then no job API, mesh or gateway submission may reach a TON
+> lane, and no TON chain is cut over to push (§15.4). The built Odoo pull path is safe (it builds `extra = 0` and no
+> `forward_nanoton`).
 
-**Contents:** 1 Model · 2 Onboarding · 3 Pushing jobs · 4 Feeds and reconciliation · 5 Payment references ·
+**Contents:** 1 Model · 2 Onboarding · 3 Pushing jobs (3.5 outbox rules, 3.6 `call` targets) · 4 Feeds and reconciliation · 5 Payment references ·
 6 Procure-to-Pay · 7 Fast path and batching · 8 Inbound payments and self-relay · 9 Sealed-bid tender ·
 10 Accounts and identity · 11 Regulated tokens · 12 Asset suite · 13 Wallets and signers · 14 The app ·
 15 Worked example: Odoo · 16 Failure handling and reconciliation runbook · 17 Checklist
@@ -43,8 +48,8 @@ Responsibilities:
 
 | Client | Node |
 |---|---|
-| Build typed data / `MetaOp` for the subject; choose `validUntil`; verify the signature shape | Recompute the digest from the payload (a differing client digest ⇒ `422 BAD_PAYLOAD`) |
-| Record the outbox row in the business transaction | Accept idempotently; enforce namespace grants, registered tokens, normalization (R100) |
+| Build typed data / `MetaOp` for the subject; choose `validUntil` inside the lane horizon (§5.1); verify the signature shape | Recompute the digest from the payload (a differing client digest ⇒ `422 BAD_PAYLOAD`); read every signed field from the payload, never from job JSON (R344) |
+| Record the outbox row in the business transaction; keep it immutable (§3.5) | Accept idempotently; enforce namespace grants, registered tokens, normalization (R100), the `call` target table (§3.6), value-out and deposit caps, the per-subject grief score (R342, R345, R346) |
 | Push, retry, cancel | Lease to a lane, simulate, journal before broadcast, replace, gap-fill, consumption checks |
 | Apply job snapshots; mark business documents final **only** from finalized events | Index finalized ranges with RPC quorum; serve them per namespace |
 | Keep payer/payee/party mapping and business data | Keep jobs ≤ 30 d after terminal, feeds ≤ 7 d |
@@ -66,7 +71,7 @@ Rules every client must follow:
 | Step | Who | Command / route |
 |---|---|---|
 | 1 | Host operator | `scaas-node admin create alice --role admin --role key_custodian --config node.toml` (first admin) |
-| 2 | Admin | Create namespace: `POST /v1/admin/namespaces {"name": "acme-erp", "chains": ["evm:100"], "allow_call": false, "max_live_jobs": 10000}` (`allow_call = true` only if the client needs `call` jobs: mandates, subject-account deploys, DEX settles) |
+| 2 | Admin | Create namespace: `POST /v1/admin/namespaces {"name": "acme-erp", "chains": ["evm:100"], "allow_call": false, "max_live_jobs": 10000}` (`allow_call = true` only if the client needs `call` jobs: mandates, subject-account deploys, DEX settles; even then only the selectors and targets of §3.6 run) |
 | 3 | Admin | Register chains/tokens on the node if not yet present (`POST /v1/admin/chains/{key}/tokens`); RPC URLs and lane keys are toml-only |
 | 4 | key_custodian | `scaas-node key create --namespace acme-erp --scopes "submit read"` or `POST /v1/admin/keys` → `{"key_id": "k_3f9a0c1d2e4b5a6c", "secret": "<64 hex>", …}` shown **once** |
 | 5 | Client admin | Store `key_id` + secret in the client's secret store (never in a business table) |
@@ -137,7 +142,7 @@ and bad signature both return `401 UNAUTHORIZED`. API keys never work on the adm
 | `origin.key` | Natural key of the business event (e.g. the payment `entryRef`, `invoice:42:attempt:1`) |
 | `origin.generation` | `0` initially; `+1` on an operator requeue of a dead job |
 | `client_ref` | Echoed in feeds; for the client's own lookup |
-| `kind` | `metatx` (EVM meta-tx), `signed_op` (non-EVM `MetaOp` or Soroban auth payload), `call` (calldata to a contract, needs `allow_call`); planned `ua_metatx` (UA) and `pqz_call` (PQZ, private chain) |
+| `kind` | `metatx` (EVM meta-tx, incl. v1 envelopes of a `PqzToken`), `signed_op` (non-EVM `MetaOp` or Soroban auth payload), `call` (calldata to a contract, needs `allow_call` **and** a §3.6 table row); planned `ua_metatx` (UA; incl. v3 envelopes of a `PqzToken`) and `pqz_call` (direct PQZ calls, private chain) |
 | `payload.digest` / `op.digest` | Optional; if present must equal the node's digest |
 | `bus.scope` | `restricted` (company lanes only; default), `open` (admitted peers after the window), `public` (also the open mesh; A2) |
 
@@ -147,17 +152,27 @@ Payload by kind:
 |---|---|
 | `metatx` | `{token, signature, metatx: {11 fields of MetaTransaction}}`; `uint256` as decimal strings; addresses lowercase |
 | `signed_op` | `{op: {op_kind: "pay", payload: "0x<exact signed bytes>", signature, public_key, auth_kind: "wallet"|"passkey", extra: {…native params}}}`; `from`, lane, nonce, `valid_until`, relayer are decoded from `payload` |
-| `call` | `{call: {target, calldata, validUntil}}` — e.g. `MandateWallet.payUnderMandate(...)`, `SubjectAccountFactory.deploy(...)`; the signature lives inside the calldata |
+| `call` | `{call: {target, calldata, validUntil}}` — e.g. `MandateWallet.payUnderMandate(...)`, `SubjectAccountFactory.deploy(...)`; the signature lives inside the calldata; selector and target must match a row of §3.6; no native value |
 | `ua_metatx` (SPECIFIED, UA F5) | MetaToken v3 `UAMetaTransaction` with `from: bytes32` and its `auth`; same lifecycle as `metatx` (UA §11.2) |
-| `pqz_call` (SPECIFIED, PQZ §11.3; private chain only) | `{chain, contract, selector ∈ {pqzTransfer, pqzBurn, rollOver, fund}, calldata}` to a configured PQZ token |
+| `pqz_call` (SPECIFIED, PQZ rev 1.4 §11.3; private chain only) | **Direct open calls only**: `{chain, contract, selector ∈ {pqzTransfer, pqzBurn, rollOver}, calldata}` to a configured PQZ token (direct `fund` pulls the caller's underlying and is never a node job) |
+| PQZ envelopes (SPECIFIED, PQZ rev 1.4 R284, §11.4) | **No new kind**: a `PqzToken` is an `IERC20MetaTx` token, so its envelope ops travel as ordinary `metatx` (v1 domain `("SCaaS PqzToken", "1", chainId, token)`) or `ua_metatx` (v3, `salt = chainUid`) jobs, `m.to = 0`, `m.value = 0`, `m.data` = the direct calldata of `pqzTransfer`/`pqzBurn`/`fund`/`rollOver` (opaque to the client); outer fee `NONE`/`FIXED` only; never batched, never on the mesh; 1 MiB job body on the `pqz` profile; a gasless exit is the envelope `pqzBurn` paying the underlying to `recipient` |
 
 ### 3.2 Accept checks (in order; no RPC)
 
 1. Scope `submit`, namespace active, chain granted ⇒ `403 CHAIN_NOT_GRANTED`.
 2. Payload decodes; node computes `digest` (per family) and `payload_hash` = SHA-256 of RFC 8785 (JCS) of the payload
-   ⇒ `422 BAD_PAYLOAD`.
+   ⇒ `422 BAD_PAYLOAD`. Every field the signed payload carries (`contract`, `valid_until`, `from`, lane, nonce,
+   relayer binding, value or forward floors) is taken from the payload; a job-JSON copy that differs ⇒
+   `422 BAD_PAYLOAD`; unsigned fields may only narrow, never widen (NI R344).
 3. Token registered, active and in the namespace subset ⇒ `422 UNKNOWN_TOKEN`.
-4. `kind = call` needs `allow_call` ⇒ `403 CALL_NOT_ALLOWED`.
+4. `kind = call` needs `allow_call` ⇒ `403 CALL_NOT_ALLOWED`, **and** its selector and target must match the call
+   table (§3.6) ⇒ `403 CALL_TARGET_REFUSED` (re-checked at lease; PD CR-PD-1).
+4a. Native value the job makes the lane send beyond fees ≤ `chain.max_value_out` (TON 0.05 TON above the fixed
+   attach, every other family 0) ⇒ `422 VALUE_OUT_TOO_HIGH` (also at lease, config is hot; NI R345). A lane-funded
+   deposit a third party can reclaim (e.g. a Solana ATA of an unconfigured recipient) ⇒ `422 DEPOSIT_NOT_ALLOWED`
+   (re-checked before signing; NI R346).
+4b. The payload's `from` is over the grief threshold (≥ 10 billed failures in 24 h, or cost ≥ `chain.grief_cost_cap`)
+   ⇒ `429 SUBJECT_THROTTLED {retry_after}`; from 3 in 24 h it gets one live job per chain (NI R342).
 5. `now < valid_until ≤ now + 3600` ⇒ `422 EXPIRED` / `VALID_TOO_LONG`.
 6. Bound relayer must be one of the chain's lanes ⇒ `422 RELAYER_NOT_OURS` (else `lane_hint` pins the job).
 7. Normalization of unbound `relayer`/`feeRecipient` (stored work only; `payload_hash` is over the client's payload);
@@ -190,12 +205,14 @@ loop (cron, after each new outbox commit and every minute):
   for each (row, r):
      accepted               → push_state='sent', node_uid=r.uid, apply r's snapshot (§4.3)
      BAD_PAYLOAD | UNKNOWN_TOKEN | EXPIRED | VALID_TOO_LONG | RELAYER_NOT_OURS | CALL_NOT_ALLOWED | CHAIN_NOT_GRANTED
+       | CALL_TARGET_REFUSED | VALUE_OUT_TOO_HIGH | DEPOSIT_NOT_ALLOWED
                             → business job dead/failed with last_error (the node holds nothing)
      IDEMPOTENCY_MISMATCH | PREVIOUS_GENERATION_LIVE
                             → push_state='attention', node_uid from the 409 body, GET /v1/jobs/{uid}, apply it;
                               NEVER mark dead (the node holds a job under this key)
      DUPLICATE_DIGEST       → stay 'local', last_error (another key carries this intent)
      DUPLICATE_CALL         → stay 'local', last_error with the 409 body's uid (follow that job, or cancel and re-push)
+     SUBJECT_THROTTLED      → stay 'local', retry after retry_after; flag the subject for attention (its intents keep failing)
      transport | 429 | 503  → stay 'local' (retry; idempotent)
   COMMIT
 ```
@@ -219,6 +236,41 @@ request open until final or expiry; transport error ⇒ `cancel_requested`, retr
 subject can always invalidate its own pending intents with `cancelMetaNonce(batch)` (EVM, direct call) — the
 authoritative cancel.
 
+### 3.5 Outbox rules (PD rev 1.1 CR-PD-1 (a)(b); Odoo stream PAY-FIX1, SPECIFIED)
+
+A `call` job is a transaction a node lane signs as `msg.sender`; whoever can edit an outbox row can point it anywhere.
+Every client's outbox therefore follows these rules (the Odoo names are the reference implementation):
+
+| Rule | Detail |
+|---|---|
+| **Operators are read-only** | No role below the service itself may write outbox rows. Odoo: `group_blockchain_operator` loses write on `blockchain.relay.job` (ACL `1,0,0,0`). Requeue of a `dead`/`reverted` job is one public method (`action_requeue`) that checks the operator group explicitly and then writes internally; a viewer calling it over RPC fails |
+| **Job fields are immutable after create** | Odoo: `company_id`, `chain_id`, `job_kind`, `metatx_id`, `signed_op_id`, `target_address`, `calldata_hex`, `call_valid_until_ts`, `payment_request_id`, `subject_account_id`, `origin_producer`, `origin_key` — `write` raises for every environment, privileged ones included; `prerequisite_job_id` may be set once, from empty, while the job is `queued`. State and progress fields (`chain_state`, `tx_hash`, `outer_nonce`, `last_error`, push fields) stay writable by the service |
+| **A different call is a new job** | Never edit target, calldata, kind or payload of an existing row; create a new outbox row (new origin key or `generation + 1` after an operator requeue) |
+| **No context-key switches** | Immutability is enforced in `write` itself, not bypassed by a client-settable flag (client context reaches the server on RPC) |
+| **Signed envelopes are immutable too** | `blockchain.metatx` / `signed_op` rows are frozen after signing (canon §C10.5) |
+
+Tests a client must carry: operator write on any job field ⇒ access error; privileged write of each immutable field
+⇒ error; `prerequisite_job_id` set once from empty passes, a second change fails; operator requeue still works.
+
+### 3.6 `call` targets (PD CR-PD-1 (c); node stream PAY-FIX2, SPECIFIED)
+
+`allow_call` on the namespace is necessary, not sufficient. The node runs a `call` job only if its 4-byte selector is
+in this table **and** the target meets the row's rule; never when the target is a registered token of the chain (any
+kind), the token factory, or a contract in which a lane key holds a role; `call` jobs carry no native value.
+
+| Selector | Target rule | Typical producer |
+|---|---|---|
+| `SubjectAccountFactory.deploy((uint8,bytes32,bytes32,bytes32,bytes32),address)` | the chain's account factory (`chain_contract.kind = account_factory`) | subject-account onboarding (§10.1) |
+| `SubjectAccount.executeAsOwner(bytes,uint256,uint256,bytes)` | an EIP-1167 clone of that factory's implementation (checked at lease) | subject-account key changes |
+| `MandateWallet.payUnderMandate`, `revokeWithSig` (epoch-bound, CR-ADW-1), `executeAsOwner`; `HederaMandateWallet.executeAsOwnerRaw` (ED25519 owners, CR-ADW-2) | any address that is not a registered token (the target checks the delegate/owner signature) | delegated payments, auto-pay, kill switch (§15.5) |
+| `OrderBookDex.settle` / `cancel` / `invalidateNonces` | the chain's DEX | DEX venue / DEX accounting |
+| `UniversalAccountRegistry.register` (`UARegistry.register` after UA F1) | `chain.ua_registry`, `~gateway` only | node gateway `POST /v1/ua/register` (§10.2) |
+
+Refused ⇒ `403 CALL_TARGET_REFUSED` at accept (push model), `dead` with `CALL_TARGET_REFUSED` before simulation on the
+legacy pull path. Anything else a client wants to call on chain (e.g. `createTender`, factory `createTiered`, regulated
+interventions in §11–§12) needs a table row first (node release) or is sent by the subject's or treasury's own wallet;
+SCaaS.md §6.10 is normative for the table until NI folds it.
+
 ---
 
 ## 4. Feeds and reconciliation (SPECIFIED, NI §5.3, §6)
@@ -239,7 +291,11 @@ authoritative cancel.
 Each item is a **snapshot** after one transition (`queued`, `leased`, `signed`, `broadcast`, `mined`, `reverted`,
 `consumed`, `dead`, `cancelled`). `final` never appears here (finality comes from §4.2). `mined`/`reverted` items add
 `gas_used`, `gas_price`, `cost_native`, `sponsor: {policy, account} | null` and `sponsor_fallback: <policy> | null`
-(a policy matched but was exhausted and the job was booked to the namespace; TSS §B1.4).
+(a policy matched but was exhausted and the job was booked to the namespace; TSS §B1.4). Error values the client
+must recognise on `dead`/`reverted` items: `cancelled`, decoded contract errors (`MetaTxBadNonce`, `MetaTxExpired`, …),
+`ATTEMPTS_EXHAUSTED` (`attempt_count` passed `chain.max_attempts`, default 5; NI R341), and a `reverted` after one
+billed retry (the chain charged the lane for a failure the subject could make deterministic, e.g. Hedera
+`INSUFFICIENT_GAS`, Aptos out-of-gas, Solana CU exhaustion — the subject must re-sign; NI R341).
 
 ### 4.2 Events feed
 
@@ -272,7 +328,7 @@ wallets.
 | State ladder | Map node → client states (`leased → nonce_leased`, `cancelled → dead`) and walk `queued → nonce_leased → signed → broadcast → mined` up to the target, applying side effects once; late `mined`/`reverted` after `final` or `consumed` are no-ops |
 | Ranges | Reject a gap (`from_block > indexed + 1`) ⇒ halt events; straddle (`from_block ≤ indexed < to_block`) ⇒ drop events at or below `indexed`; dedup events by `(chain_key, tx_hash, log_index)` |
 | Unknown contract | Event for a contract that is not a client token ⇒ drop and count, never fail the page |
-| Finality | A job is **final** when a `MetaTransactionExecuted` with its digest arrives in a range (by any relayer: `landed_elsewhere = relayer ∉ our signers`) |
+| Finality | A job is **final** when a `MetaTransactionExecuted` with its digest arrives in a range (by any relayer: `landed_elsewhere = relayer ∉ our signers`). A range is served only after ≥ `quorum` independent RPC endpoints returned the same event set (CR-PD-2, CR-R3-2); a chain with `quorum = 1` is single-provider trust — confirm the chain's quorum with the node operator (gauge `scaas_finality_quorum{chain}`) before booking material amounts on it |
 | Business booking | Only from `PaymentSettled` (or the family equivalent) in a range, matched on `(chain, contract, to, entryRef)`; isolate business hooks (savepoint) so a failing hook never blocks the cursor |
 | Consumed | `consumed` keeps the business request pending; it becomes final via the event, or dead if no event arrives by `valid_until + grace + 1 h` (superseded) |
 | Latency | Poll with `wait = 0` every minute, and every ~10 s while pushed jobs are live (≤ 25 s long-poll available for clients that can hold a connection) |
@@ -291,6 +347,11 @@ nonce    = 0
 
 - One `entryRef` per **payment request** (an invoice may have several requests over time; each request is payable at
   most once because its lane has nonce 0).
+- **Lane horizon** (protocol rule, PD CR-PD-4; SCaaS.md §5.5): pay-once holds only if every signature the client
+  issues on a pay lane has `validUntil ≤ t_first_issue + 30 d`. Re-issuing terms on the same lane later than that, or
+  signing an op with `valid_until > now + 30 d` on a pruning family (TON, Aptos, Solana, Sui), gives no pay-once
+  guarantee — issue a new request (new `entryRef`, new lane) instead. Wallet connectors and `clientkeys` refuse such
+  ops (RS11-24, RS12-24, RS7-11).
 - The client stores `entryRef` with a UNIQUE constraint on the request, together with `chain`, `token`,
   `receiving_address`, `payer_address` (locked at start), `amount_base`, `issued_valid_until`.
 - Do **not** derive `entryRef` from business identifiers (`keccak256(company ‖ move ‖ amount ‖ salt)` as in older
@@ -363,6 +424,7 @@ items or 3 s; batching is invisible to the client except that several jobs share
 | Pattern | How the client integrates | Status |
 |---|---|---|
 | Enterprise inbound gateway | Partners/agents post signed EVM meta-txs to the company node: `POST /v1/metatx {chain, token, m, signature}` (gateway auth `bearer`/`hmac` for partners; `none` only on loopback behind a proxy). The client sees results on its events feed by `entryRef`/`to` | **BUILT** |
+| Door A intake rules | `value == 0` transfer/pay ⇒ `422 ZERO_VALUE`; the `~gateway` `min_fee` floor applies unless a sponsor policy matches (which also caps the spend); `profile = private` keeps fee 0, `profile = public` refuses fee-0 intents without a matching sponsor policy; per-`from` bucket (default 60 per hour); signature checked before simulation (PD CR-PD-3, NI R343) | **SPECIFIED** (PAY-FIX4, NR3) |
 | Gateway discovery and other families | `GET /v1/gateway` lists served chains (with `chain_uid` where a UA registry is configured), tokens, fee recipient and DEX policy; Hedera intents use `POST /v1/metatx` (64-byte HIP-632 signatures allowed); the six non-EVM families use `POST /v1/ops {chain, op}`; UA intents `POST /v1/ua-metatx`; errors follow the stable contract `{error, code, detail, revert_data?}` (NI §5.5, APP R178) | **SPECIFIED** (N1, N2, N4) |
 | Non-EVM inbound | The client builds the `MetaOp`, the payer signs, the client pushes `signed_op` jobs | **BUILT** (via Odoo outbox); job API **SPECIFIED** |
 | Payee self-relay ("e-cheque") | Payer signs offline with fee 0 and relayer unbound or bound to the payee's address; the payee (or its node) submits; ERP books from `PaymentSettled` exactly as usual | contract **BUILT**; QR (EIP-681-style payload) tooling **PLANNED** |
@@ -380,6 +442,11 @@ contract-level payload of the family (SCaaS.md §7).
 Contract: SCaaS.md §10 / [TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §A.3. Client flow
 (summary of TSS §A.5, which is normative): the commit is the deposit token's own `pay` intent; reveal, withdraw and
 settle need no signature and can be run by any keeper.
+
+> **Open (call table).** The tender's `call` jobs (`createTender`, `commitBid`, keeper `revealBid`/`withdrawDeposit`/
+> `settleTender`, bond calls) are not yet rows of the §3.6 table, so under CR-PD-1 the node refuses them
+> (`CALL_TARGET_REFUSED`) until the rows are added (target rule: the chain's `chain_contract.kind = tender`). Until
+> then the buyer's and bidders' wallets send these calls themselves (SCaaS.md §15.3).
 
 | # | Buyer ERP | Bidder | Chain |
 |---|---|---|---|
@@ -410,7 +477,11 @@ depositRef`).
   moving funds or one address across key changes (UA R307); its seed keys come from the role path
   `m/7622'/0'/<account>'/2'/<i>'`, never the EOA path (UA R300, S4F R269).
 - Non-EVM: open the subject's account object (`meta::open`/`open_passkey` on Sui/Aptos, `open`/`open_passkey` on
-  Solana, `BindKey` on TON, custom account on Soroban).
+  Solana, custom account on Soroban). TON needs no open step and has no `BindKey` message: the first `SignedOp`
+  carries the owner wallet's `stateInit` and the jetton wallet binds the key lazily (net-ton R10-5).
+- Every non-EVM program is immutable at deploy (SCaaS.md §1.3): a contract fix is a new deployment with new
+  package/program/account ids, and subjects move their balances by signing `pay` from the old account. Clients
+  re-read chain profiles after such a redeploy (dev deployments are redeployed by stream R3-FIX15).
 
 ### 10.2 Universal Account registration (SPECIFIED, [UA](superpowers/specs/2026-10-06-universal-account-design.md) rev 1.4 §12.3)
 
@@ -434,8 +505,9 @@ MuSig2/FROST, `msig`, ML-DSA/FN-DSA, `zether-*`, `pqz-mlwe`) registers once on e
    (`UAKey.signUA("pop", …)`; MuSig2/FROST: a group signing session plus the KeyAgg hints or the DKG transcript).
    For a Zether kind with `authRef ≠ 0` the authority also signs `authPop` (purpose `authref`; a native authority
    signs the EIP-712 `UAAuth`). `authRef = 0` for every non-Zether kind.
-3. **Anyone** submits `register(kind, keyData, pop, authRef, authPop)`: the subject self-paid, a relayer `call` job,
-   or the node gateway `POST /v1/ua/register {chain, kind, keyData, pop, authRef}` (gasless; NI §5.5, R320).
+3. **Anyone** submits `register(kind, keyData, pop, authRef, authPop)`: the subject self-paid, or the node gateway
+   `POST /v1/ua/register {chain, kind, keyData, pop, authRef}` (gasless; NI §5.5, R320) — the only node path, since
+   registry calls run only from `~gateway` (§3.6).
    Front-running yields the identical record or a revert.
 4. On the finalized `UARegistered` event the client reads `recordOf(ua)` — kind **and** `authRef` equal what it
    asked for — and only then marks the account usable on that chain.
@@ -474,7 +546,8 @@ public key under a second kind (`UAKeyInUse`) and a BLS `authRef` on the same cu
 authority order ──► issuer legal/compliance verifies; orderId = keccak256(canonical order id), document hash off chain
         ──► compliance contract (multisig) records the order {subject, beneficiary, maxAmount, freezeUntil}
         ──► issuer contract (multisig) freezes the subject, then force-transfers ≤ maxAmount to the beneficiary
-            (members sign on their devices; the client pushes `call` jobs from a namespace with allow_call)
+            (members sign on their devices; the client pushes `call` jobs from a namespace with allow_call —
+             once the issuer/compliance selectors are rows of the §3.6 table; until then the multisig submits)
         ──► finalized freeze / order / forced-transfer / pause events
         ──► client books the effect (reclassify the frozen balance, post the forced transfer) and links the order
             document to the event
@@ -492,8 +565,8 @@ off chain and only an attester pushes flags (no personal data on chain; optional
 
 ## 12. Asset-suite configuration
 
-Creating a token is a subject-signed (or treasury-multisig) factory call pushed as a `call` job, or sent directly by
-the creator's wallet. Templates are off-chain presets mapping to one factory call plus optional action contracts
+Creating a token is a subject-signed (or treasury-multisig) factory call sent directly by the creator's wallet; a
+`call` job to the factory is refused by the node (the factory is excluded from the §3.6 table, CR-PD-1). Templates are off-chain presets mapping to one factory call plus optional action contracts
 (AS R213).
 
 | Template | Call | Client configuration | Status |
@@ -535,7 +608,23 @@ Client UX rules:
    lazily per chosen network.
 6. One key = one purpose: native keys keep their family paths (EVM `m/44'/60'/0'/0/i` is the EOA only); every UA
    kind and every account-role key comes from `m/7622'/0'/<account>'/<kindNo>'/<i>'` and signs only through
-   `UAKey.signUA(purpose, digest)` — there is no raw "sign these 32 bytes" for a UA key (UA R298–R301).
+   `UAKey.signUA(purpose, digest)` — there is no raw "sign these 32 bytes" for a UA key (UA R298–R301). New
+   `SubjectAccount` seed keys use the role path and are never equal to the subject's EOA (CR-ADW-3). A custody or
+   connector key signs in one family only (NI R349).
+7. **Pin the token client-side** (CR-ADW-4, ADW-FIX4): `checkPayment` takes `expectedToken` (and its decimals and
+   symbol) from the signer's own chain profile (app/extension build or a user-pinned registry), never from the server
+   response, and refuses `verifyingContract ≠ expectedToken`. A portal page served by the same server that serves the
+   typed data cannot be defended this way (it ships the signer code) — stated out of scope.
+8. **Lane horizon**: refuse to sign an op with `valid_until > now + 30 d` (§5.1).
+9. **Sui and Solana wallet keys** (CR-WSF-1): the wallet must show a readable text the contract rebuilds from the
+   `MetaOp` (`SCaaS <op>` / `Amount:` / `To:` / `Network:` / `Valid until:` / `Ref:` / `Digest:`), never a hex blob;
+   offer the passkey first; accounts may set `POLICY_PASSKEY_FOR_VALUE` so value ops need a passkey (WSF-FIX1/2).
+10. **Hedera ED25519 accounts** need a raw signer over the 32-byte EIP-712 digest (clientkeys seed
+   `m/44'/3030'/0'/0'/i'`); HashPack/WalletConnect `hedera_signMessage` (HIP-820 prefix) cannot be verified on chain —
+   use an ECDSA-alias account with those wallets (CR-WSF-2). An ED25519 `MandateWallet` owner pays through
+   `executeAsOwnerRaw` (CR-ADW-2).
+11. **Passkeys**: one `clientDataJSON` grammar on every family; assertions with `crossOrigin: true` or a `topOrigin`
+   are refused (R3D CR-R3-1) — do not run the signer in a cross-origin iframe.
 
 Specified next ([S4F](superpowers/specs/2026-10-06-signers-followups.md) rev 1.1, UA F3): vault v2 under a
 non-extractable device key; scrypt `N = 2^17` for every new passphrase envelope (R259); Soroban, Aptos and Solana
@@ -592,7 +681,11 @@ implementations, and never accept `company_id` from the client (project rule).
   nonce_leased, signed, broadcast, mined, final, reverted, dead, consumed}`, `business_state ∈ {pending, success,
   failed}`, `signer_address`, `tx_hash`, `outer_nonce`, `attempt_count`, `last_error`, `landed_elsewhere`,
   `mesh_published_datetime`. Push model adds (SPECIFIED): `node_id`, `node_job_uid`, `push_state ∈ {local, sent,
-  cancel_requested, attention}`, `push_attempted`, `push_generation`, `node_event_seq`.
+  cancel_requested, attention}`, `push_attempted`, `push_generation`, `node_event_seq`. Immutable after create and
+  operator read-only (SPECIFIED, PAY-FIX1, §3.5): `company_id`, `chain_id`, `job_kind`, `metatx_id`, `signed_op_id`,
+  `target_address`, `calldata_hex`, `call_valid_until_ts`, `payment_request_id`, `subject_account_id`,
+  `origin_producer`, `origin_key`; `prerequisite_job_id` set once from empty while `queued`. The built ACL still
+  gives operators write (`1,1,0,0`).
 - `blockchain.payment.request`: `request_uuid`, `company_id`, `chain_id`, `token_id`, `receiving_address`,
   `amount_base`, `amount_settled_base`, `entry_ref_hex` (32 random bytes, UNIQUE), `batch_hex`, `payer_address`,
   `issued_valid_until`, `expiry_datetime`, `request_state ∈ {open, partial, final, expired}`, `needs_attention`,
@@ -603,7 +696,10 @@ implementations, and never accept `company_id` from the client (project rule).
   `dms_blockchain.node_secret.<id>`, `bound_db_uuid`, `bound_base_url`, cursors, `store_id`, `incarnation`,
   `restore_epoch`, `needs_attention`), `blockchain.node.route` (`UNIQUE(company_id, chain_id)` → node).
 - Groups: `group_blockchain_viewer` ⊂ `operator` ⊂ `manager`; service groups `relay_worker`/`indexer` exist for the
-  pull model and are deleted in P9.
+  pull model and are deleted in P9. Operators read jobs and may requeue `dead`/`reverted` ones through
+  `action_requeue` only (CR-PD-1).
+- `relay_report(job, 'signed', tx_hash, n)` repeated with the same `(tx_hash, outer_nonce, signer_address)` succeeds
+  unchanged (pull model, CR-PD-5, PAY-FIX5).
 
 ### 15.3 Portal payment, end to end
 
@@ -644,7 +740,9 @@ after the previous typed data expired (new request, new lane); relayer cannot re
   `database.uuid` or `web.base.url` differ from the node record's `bound_*`.
 - Cutover per chain (`action_switch_to_push`): routes exist for every company with jobs or approved wallets; node
   reachable with `api ≥ 1`; Odoo tokens ⊆ node tokens; node `lane.journal_max` ≥ Odoo `max(outer_nonce)` per signer;
-  DEX markets paused. Rollback = set the chain back to `pull`.
+  DEX markets paused; for TON chains, NET-TON-FIX1 deployed on the node; NR1/NR2 (breaker cost metering, payload-
+  sourced fields, value-out and deposit caps) landed before the first push cutover (NI §17: before P6). Rollback =
+  set the chain back to `pull`.
 
 ### 15.5 Auto-pay
 
@@ -652,7 +750,10 @@ after the previous typed data expired (new request, new lane); relayer cannot re
 four-eyes, kill switch) → cron `_cron_autopay` creates exactly one `blockchain.autopay.run` per (policy, invoice,
 event) (UNIQUE) → same request + outbox path as manual payments. Custodial wallets sign through the custody adapter
 (dev `env:` only; production KMS/HSM PLANNED); delegated wallets sign `PayUnderMandate` and push a `call` job to
-`MandateWallet.payUnderMandate`. Kill: off-chain immediately, and for delegated wallets a `revokeWithSig` job.
+`MandateWallet.payUnderMandate`. Kill: off-chain immediately, and for delegated wallets a `revokeWithSig` job; the
+revoke digest becomes `RevokeMandate(address token,uint64 epoch,uint256 validUntil)` with the wallet's current
+`epoch[token]` (SPECIFIED, CR-ADW-1, ADW-FIX1: Odoo `eip712.revoke_mandate_digest` and `_enqueue_revoke` change with
+the contract and the KAT).
 
 ---
 
@@ -670,6 +771,12 @@ event) (UNIQUE) → same request + outbox path as manual payments. Custodial wal
 | Reverted on chain | `reverted` (rare: state changed between simulation and inclusion) | Re-push with `generation + 1` after operator requeue if still wanted; the subject nonce was not consumed |
 | Chain paused | Jobs accepted and held `queued`; events continue | None; resumes automatically |
 | Chain halted | `409 CHAIN_HALTED`; no new ranges | Wait for the operator; do not re-route to another node for the same (company, chain) |
+| Chain halted for an upgradeable program | `409 CHAIN_HALTED`; operator reason `PROGRAM_UPGRADEABLE` (Aptos/Sui/Solana package or program still upgradeable, NI R348) | Nothing to fix client-side; the operator redeploys immutable (R3-FIX15) and the client updates the chain profile (new package/program and account ids) |
+| `CALL_TARGET_REFUSED` | `403` per item (push) or `dead` with that error (pull) | Permanent: the call shape is not in the node's table (§3.6). Do not retry; send the call from the subject's/treasury's wallet or ask for a table row |
+| `VALUE_OUT_TOO_HIGH` | `422` per item | Permanent for this payload: the signed forward/value floor exceeds `chain.max_value_out` (TON); have the payer re-sign with a floor ≤ the cap |
+| `DEPOSIT_NOT_ALLOWED` | `422` per item | The lane would fund a deposit a third party can reclaim (Solana: destination ATA missing for an unconfigured receiver); the receiver creates its ATA, or the operator configures the receiving wallet |
+| `SUBJECT_THROTTLED` | `429 {retry_after}` | Retry after `retry_after`; the subject's intents keep failing after simulation (balance moved, nonce burnt, key changed) — investigate before re-pushing |
+| `ATTEMPTS_EXHAUSTED` | Snapshot `dead`, `error = ATTEMPTS_EXHAUSTED` | Request stays open; re-sign if still wanted (new job); several in a row ⇒ check the chain's health with the operator |
 | `IDEMPOTENCY_MISMATCH` | 409 with `uid` | The business payload changed under the same key (e.g. module upgrade); fetch the node job, compare, decide manually; never mark dead |
 | Range gap | `from_block > indexed + 1` | Halt event sync, needs attention; check the node's `event_node_id` routing and restore events from 0 |
 | Store recreated or restored | `store_id`/`restore_epoch` change, `head_seq < cursor`, incarnation mismatch | Halt sync; operator verifies the node runbook was followed (`store restored` CLI), then acknowledges in the client; acknowledged re-push of non-terminal jobs (old outer txs may still be in a mempool: funds safe, gas may be lost) |
@@ -708,6 +815,13 @@ event) (UNIQUE) → same request + outbox path as manual payments. Custodial wal
 - [ ] HMAC client passes the shared KAT; clock synced (NTP); the API key lives only in the server-side secret store
       (never in a browser, mobile or desktop app or extension).
 - [ ] Idempotency tuple stable across retries; generation bumped only by operator requeue.
+- [ ] Outbox rows immutable after create (kind, target, calldata, payload links, origin); operators read-only, requeue
+      through one checked method; a different call is a new row (§3.5).
+- [ ] `call` jobs only for selectors/targets in §3.6; everything else sent from the subject's or treasury's wallet.
+- [ ] Every signature on a pay lane inside the 30-day lane horizon; new request (new `entryRef`) instead of
+      re-issuing old terms (§5.1).
+- [ ] Error handling covers `CALL_TARGET_REFUSED`, `VALUE_OUT_TOO_HIGH`, `DEPOSIT_NOT_ALLOWED` (permanent),
+      `SUBJECT_THROTTLED` (retry later), `ATTEMPTS_EXHAUSTED` (dead), `PROGRAM_UPGRADEABLE` halts (§16.1).
 - [ ] `push_attempted` committed before HTTP; permanent vs transient errors distinguished; 409 never ⇒ dead.
 - [ ] Both feeds polled with overlap; cursors persisted with `store_id`, `incarnation`, `restore_epoch`; continuity
       checks halt on mismatch.

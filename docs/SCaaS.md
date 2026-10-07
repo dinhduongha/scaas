@@ -1,6 +1,8 @@
 # SCaaS — SmartContract as a Service: System Specification
 
-**Status:** normative, 2026-10-07 (aligned with the component specs listed in §0.1). Owner of this file: the `scaas` repository (`scaas/docs/SCaaS.md`).
+**Status:** normative, 2026-10-07 (aligned with the component specs listed in §0.1, including every 2026-10-07 review
+fold and the owner rulings of that day: chain id 7622, `PqzToken` implements `IERC20MetaTx`, every value-holding program
+immutable at deploy). Owner of this file: the `scaas` repository (`scaas/docs/SCaaS.md`).
 **Companion:** [`integration.md`](integration.md) — how an ERP or application integrates.
 **Language of record:** English. Component specs under `docs/superpowers/specs/` are partly in Vietnamese; their
 rulings are cited by id (`R9`, `RS2-6`, `R114` …) and remain authoritative for their detail.
@@ -34,7 +36,9 @@ When two sources disagree, the higher one wins:
 
 1. **Owner rulings** — recorded in the component specs as `(owner)` rulings and in the decision list of
    2026-10-06 (node independence, store backends, admin auth, transports, `scaas` naming, families, market
-   neutrality). They override everything below, including code that has not caught up.
+   neutrality) and 2026-10-07 (private chain id 7622; `PqzToken` implements `IERC20MetaTx`, PQZ R284; Aptos, Sui,
+   Solana and Cosmos programs immutable at deploy, R3D CR-R3-11 / NI R348). They override everything below,
+   including code that has not caught up.
 2. **This document** (`SCaaS.md`) and `integration.md`.
 3. **Component specs** in `docs/superpowers/specs/` (register below). For a detail this document does not state,
    the component spec is normative.
@@ -47,14 +51,22 @@ When two sources disagree, the higher one wins:
 
 | Short | Spec | Rev | Rulings | Status |
 |---|---|---|---|---|
-| PD | [payments design](superpowers/specs/2026-10-03-blockchain-payments-design.md) | — | R1–R20 | BUILT (pull model) |
-| ADW | [wallets addendum](superpowers/specs/2026-10-03-blockchain-payments-addendum-wallets.md) | — | R21–R29 | BUILT |
-| R3D | [round 3](superpowers/specs/2026-10-03-blockchain-round3-design.md) | — | R30–R67 | BUILT |
-| ZD | [Zether design](superpowers/specs/2026-10-03-zether-design.md), [limits](superpowers/specs/2026-10-05-zether-limits.md) | — | RS2-*, RS-NV64-* | BUILT (dev chains, unaudited) |
-| DEX | [DEX design](superpowers/specs/2026-10-03-dex-design.md) | — | RS5-* | BUILT (EVM) |
-| net | per-family specs `2026-10-03-net-*.md`, `2026-10-04-net-{aptos,solana}.md` | — | R6-* (Hedera), RS7-* (Sui), R8-* (Soroban), R9-* (Cosmos), R10-* (TON), RS11-* (Aptos), RS12-* (Solana) | BUILT |
+| PD | [payments design](superpowers/specs/2026-10-03-blockchain-payments-design.md) | 1.1 | R1–R20, CR-PD-1…6 | BUILT (pull model); fixes PAY-FIX1…7 SPECIFIED |
+| ADW | [wallets addendum](superpowers/specs/2026-10-03-blockchain-payments-addendum-wallets.md) | 1.1 | R21–R29, CR-ADW-1…4 | BUILT; fixes ADW-FIX1…4 SPECIFIED |
+| R3D | [round 3](superpowers/specs/2026-10-03-blockchain-round3-design.md) | 1.2 | R30–R67, CR-R3-1…11 | BUILT; fixes R3-FIX1…15 SPECIFIED |
+| WSF | [wallet signing formats](superpowers/specs/blockchain-research/round3-wallet-signing-formats.md) (research note) | 1.1 | CR-WSF-1…2 | fixes WSF-FIX1…2 SPECIFIED |
+| INFRA | [infrastructure-service positioning](superpowers/specs/2026-10-03-blockchain-infrastructure-service.md) | 1.2 | — (follows §1 here; CR-R3-11) | positioning text |
+| ZD | [Zether design](superpowers/specs/2026-10-03-zether-design.md) rev 1.1, [limits](superpowers/specs/2026-10-05-zether-limits.md) rev 1.1, [ConsenSys `MAX` note](superpowers/specs/2026-10-05-zether-consensys-max.md) rev 1.1 | 1.1 | RS2-1…26, RS-NV64-* | BUILT (dev chains, unaudited); fixes ZF-FIX1…3 SPECIFIED |
+| DEX | [DEX design](superpowers/specs/2026-10-03-dex-design.md) | 1.1 | RS5-1…20 | BUILT (EVM); fixes DX-FIX1…5 SPECIFIED |
+| net-hedera | [Hedera](superpowers/specs/2026-10-03-net-hedera.md) | 1.2 | R6-1…11 | BUILT; NET-HEDERA-FIX1…3 SPECIFIED |
+| net-sui | [Sui](superpowers/specs/2026-10-03-net-sui.md) | 1.1 | RS7-1…14 | BUILT; NET-SUI-FIX1…4 SPECIFIED |
+| net-soroban | [Soroban](superpowers/specs/2026-10-03-net-soroban.md) | 1.1 | R8-1…15 | BUILT; NET-SOROBAN-FIX1…2 SPECIFIED |
+| net-cosmos | [Cosmos](superpowers/specs/2026-10-03-net-cosmos.md) | 1.1 | R9-1…8 | BUILT; NET-COSMOS-FIX1…3 SPECIFIED |
+| net-ton | [TON](superpowers/specs/2026-10-03-net-ton.md) | 1.1 | R10-1…17 | BUILT; review verdict **BLOCK** (C1) until NET-TON-FIX1; NET-TON-FIX1…4 SPECIFIED |
+| net-aptos | [Aptos](superpowers/specs/2026-10-04-net-aptos.md) | 1.1 | RS11-1…26 | BUILT; NET-APTOS-FIX1…3 SPECIFIED |
+| net-solana | [Solana](superpowers/specs/2026-10-04-net-solana.md) | 1.1 | RS12-1…25 | BUILT; NET-SOLANA-FIX1…3 SPECIFIED |
 | MESH | [relayer mesh](superpowers/specs/2026-10-05-relayer-mesh-design.md) | 3 | R70–R86 | library BUILT; transports SPECIFIED |
-| NI | [node independence](superpowers/specs/2026-10-06-node-independence-design.md) (single normative place for node routes, tables, config) | 3.6 | R87–R111, R320–R328 | store P1 BUILT; rest SPECIFIED |
+| NI | [node independence](superpowers/specs/2026-10-06-node-independence-design.md) (single normative place for node routes, tables, config) | 3.7 | R87–R111, R320–R328, R340–R349 | store P1 BUILT; rest SPECIFIED; node fixes NR1–NR5 SPECIFIED |
 | A2 | [mesh gossip amendment](superpowers/specs/2026-10-06-mesh-gossip-amendment.md) | 2.1 | R112–R128 | SPECIFIED |
 | TW2 | [token wrappers v2](superpowers/specs/2026-10-06-token-wrappers-v2.md) | 1.2 | R129–R149 | contracts T1–T6, T8 **BUILT**; T7 SPECIFIED |
 | APP | [app (console + dApp)](superpowers/specs/2026-10-06-scaas-app-design.md) | 1.2 | R150–R179 | SPECIFIED |
@@ -62,7 +74,7 @@ When two sources disagree, the higher one wins:
 | AS (A) | [asset suite](superpowers/specs/2026-10-06-asset-suite-design.md) | 1.1 | R200–R217 | SPECIFIED |
 | OPS (C) | [operations](superpowers/specs/2026-10-06-operations-design.md) | 1.2 | R230–R247 | SPECIFIED (some metrics BUILT) |
 | S4F (D) | [signers follow-ups](superpowers/specs/2026-10-06-signers-followups.md) | 1.1 | R250–R269 | SPECIFIED |
-| PQZ (E) | [post-quantum Zether](superpowers/specs/2026-10-06-pq-zether-design.md) | 1.2 | R270–R289 | SPECIFIED |
+| PQZ (E) | [post-quantum Zether](superpowers/specs/2026-10-06-pq-zether-design.md) | 1.4 | R270–R289 (R284 rewritten in rev 1.4) | SPECIFIED |
 | UA (F) | [Universal Account](superpowers/specs/2026-10-06-universal-account-design.md) | 1.4 | R290–R318, R330–R331 | SPECIFIED |
 
 The owner's SRS drafts (`ai-enterprise-blockchain-architecture.md` v3.3, `ai-enterprise-blockchain-integration.md`
@@ -80,6 +92,12 @@ Superseded positions that readers of older material will meet:
 | "Six ecosystems" (EVM, Hedera, TON, Sui, Soroban, Cosmos) | Family taxonomy (§7): EVM incl. Hedera; Cosmos; Soroban (Stellar, Pi); Move (Aptos, Sui); TON; Solana | owner 2026-10-06 |
 | `bamboo-*` names (`bamboo-node`, `bamboo-intent/1.2`, `bamboo.pay.lane`, `BAMBOO_*`) | `scaas-*` names everywhere (`scaas-node`, `scaas-intent/1.2`, `scaas.pay.lane`, `SCAAS_*`) | R115, NI header |
 | Country-specific data-protection law named in the protocol | Market-neutral: data-protection regimes are handled generically (GDPR-class) | owner |
+| Aptos/Sui/Solana packages upgradeable (`compatible`, "multisig in production", net-* RS11-13) | **Immutable at deploy** on every family (Aptos `immutable`, Sui `make_immutable`, Solana authority `None`, Cosmos `--no-admin`); deploy-script gate; node holds an upgradeable chain `halted` | CR-R3-11, NI R348 |
+| `PqzToken` has no meta-tx envelope (PQZ rev ≤ 1.3) | `PqzToken` is ERC-20 + `IERC20MetaTx` exactly like `ZetherToken`, plus the v3 `UAMetaTransaction` path | PQZ R284 (rev 1.4) |
+| Finality = RPC quorum on one block hash | Quorum over the **normalized event set** of each range, every family; `quorum = 1` is single-provider trust | CR-PD-2, CR-R3-2 |
+| Pay-once per request is unconditional | Pay-once holds under the lane-horizon rule `H = 30 d` (issuers and every signing client) | CR-PD-4, RS7-11, RS11-24, RS12-24 |
+| `allow_call` lets a namespace send any `call` | `allow_call` is necessary, not sufficient: node-side target/selector table | CR-PD-1 |
+| Gas breaker meters successful fees only | Breaker meters every billed outcome (`fee + value_out + deposits`); attempt cap; per-subject grief score | NI R340–R342 |
 
 **Naming note.** The `scaas` rename has landed in code: node `scaas-node/`, env `SCAAS_*`, metrics
 `scaas_*`, headers `X-Scaas-*`, EIP-712 domains `"SCaaS …"`, tags `scaas.*` / `SCAAS-ZETHER-*` / `scaas/zether/…`.
@@ -122,8 +140,9 @@ Clients still read the domain a deployed contract reports (`eip712Domain()`) rat
 
 **SCaaS means the smart contracts themselves are the API services that run the business services** (owner).
 Payments, mandates, tokens and wrappers, the DEX, tenders, vesting, distributions and confidential transfers are
-contract functions (§4, §5, §7, §8, §10): immutable code per network family, deployed as EIP-1167 clones from an open
-factory on EVM and as equivalent modules/programs elsewhere, that checks the subject's signature, nonce, expiry and
+contract functions (§4, §5, §7, §8, §10): code per network family that is immutable from the moment it is deployed
+(owner, R3D CR-R3-11), deployed as EIP-1167 clones from an open factory on EVM and as equivalent modules/programs
+elsewhere, that checks the subject's signature, nonce, expiry and
 limits on every call. ERPs, portals, mobile apps and AI agents call them the way they call any API. The contracts
 are the product; everything else is a way to reach them:
 
@@ -151,26 +170,46 @@ the service is the contract, and a node only carries signed writes to it and rea
 | Criterion | IaaS (AWS EC2, Google Compute Engine) — the app issues JWTs, the server signs | BaaS (Supabase) — Supabase Auth issues JWTs, the server signs; Postgres RLS | SCaaS — the client signs every valuable create/update |
 |---|---|---|---|
 | Who signs a write | The application server; the client holds a server-signed JWT and the server writes on its behalf | Supabase Auth signs the JWT; PostgREST/Postgres executes; RLS reads `auth.uid()` | **The subject**: its device signs each operation with a passkey (WebAuthn P-256) or a wallet key. The relayer pays gas and holds no subject key |
-| Trust root | The operator, the cloud provider (IAM, hypervisor), anyone holding the JWT signing key | Supabase (operator) + the project owner holding the JWT secret / `service_role` key | The subject's authenticator/secure element + chain consensus + immutable contract code |
+| Trust root | The operator, the cloud provider (IAM, hypervisor), anyone holding the JWT signing key | Supabase (operator) + the project owner holding the JWT secret / `service_role` key | The subject's authenticator/secure element + chain consensus + contract code that is immutable at deploy on every family (no upgrade key in the trust root; CR-R3-11) |
 | Who can forge a subject's write | Anyone with the JWT signing key, direct DB write access or a compromised server/IAM — indistinguishable from the subject | Anyone with the JWT secret (mints any `uid`) or the `service_role` key (bypasses RLS) | **Nobody without the subject's private key.** An operator or relayer can only refuse or delay (censorship/liveness); countered by other relayers or by the subject (or payee) submitting itself |
 | Non-repudiation | None: the server writes the log and can write any line | None (same reason) | Per operation: a domain-separated signature with nonce and expiry, publicly verifiable forever |
-| Audit trail | App logs / CloudTrail held by the operator | Postgres/Supabase logs held by the operator | Append-only distributed ledger; the ERP is a read-in replica (land) |
-| Authorization enforcement | App code (an endpoint is easy to miss) | RLS (centralized, but `service_role` and policy bugs bypass it) | Immutable contract code checks signature, nonce, expiry and limits on **every** call; no admin key above it |
+| Audit trail | App logs / CloudTrail held by the operator | Postgres/Supabase logs held by the operator | Append-only distributed ledger; the ERP is a read-in replica (land) **through its node** (see "Land") |
+| Authorization enforcement | App code (an endpoint is easy to miss) | RLS (centralized, but `service_role` and policy bugs bypass it) | Immutable contract code checks signature, nonce, expiry and limits on **every** call; **no admin can move a subject's funds**, except the bounded, creation-time powers listed below this table |
 | Revocation / rotation | Easy: short TTL, deny lists, rotate server keys | Easy: rotate JWT secret, revoke refresh tokens | Harder: on-chain key rotation in a smart account; several passkeys or guardians for device loss (§9.4) |
 | Write latency and cost | Milliseconds; compute/DB cost | Milliseconds; plan-based | Chain finality (seconds to minutes); gas per write, sponsored by a relayer (§5.9, §6.9) |
 | Reads | Served by the server | PostgREST + RLS | **Unsigned**: through the node feeds, an indexer or the ERP, with ordinary JWT/session auth. Only valuable writes go through client signatures |
+| Land (booking into the ERP) | — | — | The ERP trusts **its own node** and, through it, the **RPC quorum**: an event is booked only when ≥ `quorum` independent providers return the same event set for a final range (CR-PD-2, CR-R3-2); `quorum = 1` is single-provider trust; a compromised node can lie on `/v1/events` (§3.5, NI T7). "Verifiable without trusting a server" holds for **signatures**, not automatically for ERP bookings |
 | Privacy | Data inside the operator's infrastructure | Same | Public ledger: both parties' identities are visible by design; amounts and balances can be hidden with Zether (§8) |
-| Typical failure | Leaked JWT signing key / IAM = every user impersonated | Leaked JWT secret / `service_role` = every user impersonated | Leaked key of **one** subject = only that subject, bounded by its mandate limits; lost relayer = delay, never loss |
+| Typical failure | Leaked JWT signing key / IAM = every user impersonated | Leaked JWT secret / `service_role` = every user impersonated | Leaked key of **one** subject = only that subject, bounded by its mandate limits; lost relayer = delay, never loss; no upgrade key exists to leak; a leaked admin key reaches only the bounded powers below, never subject balances |
+
+**Admin-power exceptions** (the complete list; each is public, set at creation or bounded, and none moves a subject's
+balance; [INFRA](superpowers/specs/2026-10-03-blockchain-infrastructure-service.md) rev 1.2):
+
+| Power | Bound | Status |
+|---|---|---|
+| TW2 adjustable-rate `rateAdmin` and multi-underlying `guardian` (R142) | creation-time, timelocked/step-capped rate changes; guardian may only `disableWrap` (§4.2) | BUILT |
+| `OrderBookDex.admin` `setMarket` | per-market fee ≤ 1 %, bounded by each order's signed `maxFeePpm` | BUILT |
+| Soroban token admin `mint` | unlimited mint on that token (a supply power, not a balance power) | BUILT |
+| TON DEX admin `WithdrawFees` | fees only; bounced payouts kept apart (R3D CR-R3-9, net-ton R10-17) | BUILT; fix NET-TON-FIX3 / R3-FIX13 SPECIFIED |
+| Cosmos DEX `Sweep` | **removed** (R3D CR-R3-10): the DEX holds no balances between transactions | removal R3-FIX14 SPECIFIED |
+| Solana program `Config.admin` | creates DEX markets only | BUILT |
+| Controlled tokens' `issuer`/`compliance` | only for the regulated class, against a recorded order (§4.5, AS R200–R208) | SPECIFIED |
+
+There is **no upgrade key** on any family (CR-R3-11, §1.3). Existing dev deployments of Aptos, Sui and Solana are still
+upgradeable by one key; they are abandoned and redeployed immutable by stream R3-FIX15 (dev funds only).
 
 Design consequences (normative):
 
 1. **Scope of client signatures.** Every valuable create/update — transfer, payment, DEX order, tender bid,
    granting or changing authority, registering a key — carries the subject's signature. The server never holds a
    key to sign for a subject. The single exception is a custodial or delegated wallet that the subject or its
-   organization **explicitly** entrusted, with limits and an approval log (R24, R25, R50).
+   organization **explicitly** entrusted, with limits and an approval log (R24, R25, R50). The node signs ERP-built
+   `call` jobs (whose own signature lives in the calldata) only when selector and target are in its call table
+   (CR-PD-1, §6.10).
 2. **Passkeys** (WebAuthn, P-256) sign `authenticatorData ‖ SHA-256(clientDataJSON)` whose `challenge` is the typed
    digest of the operation (EIP-712 on EVM, the family digest elsewhere). Verifiers check `type`, `challenge`,
-   `rpIdHash`, `origin`, UP and UV flags and low-`s` (R31, §9.3).
+   `rpIdHash`, `origin` (exact), UP and UV flags and low-`s` with **one `clientDataJSON` grammar and one shared vector
+   file for every family** (R31, R3D CR-R3-1, §9.3).
 3. **UX.** One biometric/PIN per signature; related operations are batched under one signature over a Merkle root
    of their digests (R31).
 4. **Anti-lock.** Subject signatures use **contract-level lanes and nonces**, never the subject's account sequence,
@@ -185,7 +224,7 @@ Design consequences (normative):
 | A custodian | Relayer lanes hold gas only; the DEX holds no balances between transactions; subject funds stay in subject-controlled accounts or wallet contracts (MESH T14, §4.2, §10) |
 | A mixer | Identities of both parties are always visible; only amounts and balances can be hidden (§8.1) |
 | A database replacement | Business data stays in the client's system of record; only commitments, settlements and the minimum identity linkage go on chain (§2.2) |
-| An upgradeable platform | No proxy upgrade on any contract that holds value; new behaviour = new version + voluntary migration (§4.3) |
+| An upgradeable platform | No proxy upgrade on any contract that holds value; **immutable at deploy on every family** (EVM clones; Aptos `upgrade_policy = "immutable"`; Sui `make_immutable` on the `UpgradeCap` in the deploy run; Solana upgrade authority `None` after `initialize`; Cosmos instantiated `--no-admin`; TON and Soroban as built). Each family's deploy script fails if the result is still upgradeable, and the node holds such a chain `halted` (`PROGRAM_UPGRADEABLE`). New behaviour = new version + voluntary migration (§4.3) (owner, CR-R3-11, NI R348; streams R3-FIX15, NR5) |
 | A token gatekeeper | The factory is open; provenance replaces allowlists (§4.3). Controlled tokens are a separate, explicit class (§4.5) |
 | A hosted node service | The node is infrastructure anyone can run; operators are independent, set their own policies and can only refuse or delay, never forge (§1.1, §1.2) |
 | A single-ERP product | Odoo is one client; any ERP integrates through the same job API (R87, `integration.md`) |
@@ -220,7 +259,7 @@ serves all three profiles without a mesh is **BUILT**.
 |---|---|---|
 | Initiator | User, agent, workflow, ERP action | Node indexer |
 | Pipeline | Client outbox → push (`POST /v1/jobs`) → accept checks → lease → simulate → journal (`signed`) → broadcast → follow | `final_head` → quorum hash → `getLogs`/family scan → normalized events → `feed_item(range)` → client sync |
-| Controls | Idempotency key, namespace grants, registered tokens, R84/R100 normalization, simulation gate, gas breakers | Finality mode + RPC quorum, contiguous ranges, dedup by `(chain, tx_hash, log_index)` |
+| Controls | Idempotency key, namespace grants, registered tokens, signed fields read from the payload (R344), R84/R100 normalization, `call` target table (CR-PD-1), value-out and deposit caps (R345, R346), simulation gate, gas breakers + grief score (R340–R342) | Finality mode + RPC quorum over the event set (CR-PD-2, CR-R3-2), contiguous ranges, dedup by `(chain, tx_hash, log_index)` |
 | Hard rule | No broadcast without a committed journal entry (F5/I5, R88) | **No business booking before the finality gate** (PD §5 guarantee 1, R11) |
 
 Three properties distinguish a contract call from an ordinary API call:
@@ -284,7 +323,7 @@ mandates (`MandateWallet.payUnderMandate`); generic saga orchestration **PLANNED
 | TON contracts | `smartcontracts/ton/` (Tact) | Jetton master/wallet with pubkey + lanes (`SignedTransfer`), mandate, escrow DEX | **BUILT** |
 | Solana program | `smartcontracts/solana/` (Anchor) | Program `scaas`: SubjectAccount PDA, `LanePda`, mandate, DEX | **BUILT** |
 | Build/test scripts | `smartcontracts/scripts/{build,test,deploy,devnet}.sh <family>`; `scripts/capped` | One entry point per family; heavy runs capped at 4 GB, one at a time | **BUILT** |
-| `scaas-node` | `scaas-node/` | Rust relayer: gateway, submit lanes, indexer, drift, DEX venue, admin; mesh envelope library | **BUILT** (Odoo-pulled job source); store/job API/admin auth/gateway additions **SPECIFIED** ([NI](superpowers/specs/2026-10-06-node-independence-design.md) rev 3.6); mesh transports **SPECIFIED** ([MESH](superpowers/specs/2026-10-05-relayer-mesh-design.md), [A2](superpowers/specs/2026-10-06-mesh-gossip-amendment.md)) |
+| `scaas-node` | `scaas-node/` | Rust relayer: gateway, submit lanes, indexer, drift, DEX venue, admin; mesh envelope library | **BUILT** (Odoo-pulled job source); store/job API/admin auth/gateway additions **SPECIFIED** ([NI](superpowers/specs/2026-10-06-node-independence-design.md) rev 3.7); mesh transports **SPECIFIED** ([MESH](superpowers/specs/2026-10-05-relayer-mesh-design.md), [A2](superpowers/specs/2026-10-06-mesh-gossip-amendment.md)) |
 | Node store | (in `scaas-node`) | Jobs, feeds, config authority, credentials, audit, DEX book, mesh tables; SQLite/PostgreSQL/MySQL | SQLite store P1 **BUILT**; the rest **SPECIFIED** (NI §4, A1/R111) |
 | `zether-prover` | `zether-prover/` (Rust, `cdylib`+`rlib`, WASM) | Keygen (EIP-2333 paths), ElGamal, Σ + Bulletproofs (n=64), disclosure openings, BSGS, `zether-cli`, `zether-read-balance` | **BUILT** (unaudited); PQZ feature `pq`, `pqz-cli` **SPECIFIED** ([PQZ](superpowers/specs/2026-10-06-pq-zether-design.md) §11) |
 | `clientkeys` | `clientkeys/` (ESM, `@noble`/`@scure`) | Passkey signer, 24-word seed vault, Zether conf keys and balance cache; bundle vendored into `dms_blockchain_bridge/static/lib/clientkeys` | **BUILT** (EVM-centric); vault v2, non-EVM signers, `fam/*` and `wallets/*` **SPECIFIED** ([S4F](superpowers/specs/2026-10-06-signers-followups.md)); `UAKey` **SPECIFIED** (UA F3) |
@@ -349,6 +388,16 @@ simulate → `metaTxDigest` → lane queue → same submit path.
 
 **F3 — DEX (BUILT):** maker/taker orders signed over the DEX domain → `/v1/dex/orders` → venue book → match →
 settle job (`call`) → `OrderBookDex.settle` → `OrderFilled`/`Matched` → watcher → accounting mirror.
+Venue fixes (SPECIFIED, [DEX](superpowers/specs/2026-10-03-dex-design.md) rev 1.1 RS5-12…20; streams DX-FIX1…5): a
+rounding-dust **maker** is skipped and removed from the book instead of stopping the match (RS5-12); `feeToken ∈ {0,
+sellToken, buyToken}` and pair failures are attributed by evidence (`eth_call settleOne` revert reason), so one poisoned
+maker blocks neither healthier makers nor recovery (RS5-13); ERC-1271 checks capped (RS5-14, §14.9); **non-EVM
+settlement is relayer-bound** — Cosmos, Soroban and TON orders name the settling relayer and the contract checks the
+sender (RS5-15; Soroban has no open form, R8-10); committed balance includes matched-but-unsettled fills (RS5-16);
+on-chain `markets(key)` re-checked every poll (≤ 30 s) and a mismatching market stops serving (RS5-17); IOC matches a
+single maker on Sui/Aptos/Solana (`ioc_single_maker`, required before N3, RS5-18); `min_nonce < 2^(w−1)` on
+Sui/Aptos/Solana (RS5-19); a late `Matched` after recovery debits the restored order (RS5-20). The book moves to the
+node store (NI R105) and relayer-bound jobs are lane-pinned (NI R102).
 
 **F4 — Mesh (SPECIFIED):** origin wraps a bus-eligible intent in `scaas-intent/1.2`, signs `hub.sig`, optionally
 assigns `exclusive` → peers pull (bus) or receive (gossip) → `accept()` L0–L3 → store → scheduler → job in `~mesh` →
@@ -367,13 +416,16 @@ via `ITransferDisclosure` for reconciliation.
 | Operator ↔ node admin | Built-in users (Argon2id) or optional OIDC; roles; audit. Config automation = OIDC client credentials or the host CLI | R106–R110 |
 | Anyone ↔ gateway | Optional bearer/HMAC; body cap 64 KiB; concurrency 32; simulate before queue; reverse proxy rate limit (HANDOFF O5) | R54 |
 | Node ↔ peers | Bus: SPKI-pinned mTLS or QUIC, admission per request; gossip: scoring, rate limits, validation | R72, R113, R118, R119 |
-| Node ↔ chain | Simulation gate, finality gate + RPC quorum, breakers | R11, R55 |
+| Node ↔ chain | Simulation gate; finality gate = ≥ `quorum` independent endpoints agree on the final head **and on the normalized event set** of every range, else no ingest and `/readyz` red; `quorum = 1` is single-provider trust, reported at start and as `scaas_finality_quorum{chain}`; breakers | R11, CR-PD-2, CR-R3-2, R55, R340 |
 | Contract ↔ caller | Signature, lane nonce, expiry, mode, fee cap, contract-only allowance | §4.4, §5 |
 | Node ↔ secrets | Toml/keystores only; the store holds no secret | R92, R95 |
 
 The node is trusted for **liveness and for the truth of the event feed it serves** (a compromised node can lie on
-`/v1/events`; NI T7). It is never trusted with subject funds or subject keys. A second independent event source is
-deferred (NI §18.3).
+`/v1/events`; NI T7). It is never trusted with subject funds or subject keys. The event-set quorum bounds what one
+dishonest RPC provider can inject (it sees pending payments through the node's own simulate calls, CR-PD-2); it does
+not bound a compromised node. A second independent event source is deferred (NI §18.3). Status: event-set quorum
+**SPECIFIED** (PAY-FIX3 EVM/Hedera, R3-FIX3 Sui/Solana/Soroban, R3-FIX4 Cosmos/TON, which today read one endpoint);
+Aptos per-transaction agreement **BUILT**.
 
 ---
 
@@ -394,15 +446,15 @@ IERC20
       │         (+ Hedera children of each v2 tier: HederaNo/Single/MultiUnderlyingToken)         BUILT
       │         (+ regulated child per tier: *_REG kinds 5–7, RegulatedControls)                  SPECIFIED (AS §3)
       │         (+ MetaToken v3 per tier: bytes32 UA ledger, UAMetaTransaction, §9.8)             SPECIFIED (UA F2)
-      └── IZetherToken + ITransferDisclosure
-           └── ZetherToken v1 (kind ZETHER, dev chains only)                                    BUILT (unaudited)
-
-PqzToken — separate post-quantum confidential class outside this tree (open calls, no meta-tx envelope;
-            private chain only, §8.12)                                                         SPECIFIED (PQZ)
+      ├── IZetherToken + ITransferDisclosure
+      │    └── ZetherToken v1 (kind ZETHER, dev chains only)                                    BUILT (unaudited)
+      └── PqzToken (post-quantum class, never an upgrade of ZetherToken; + v3 UAMetaTransaction
+           path; dev chains and the private chain 7622 only, §8.12)                            SPECIFIED (PQZ R284)
 ```
 
 Zether is a **child** of the meta-tx layer, not a parallel branch: every confidential token is relayable through
-the same envelope (owner decision, canon). Non-EVM families implement the same roles natively (§7).
+the same envelope (owner decision, canon). This includes `PqzToken` (owner 2026-10-07, PQZ rev 1.4 R284: "PqzToken
+must also follow `IERC20MetaTx`"). Non-EVM families implement the same roles natively (§7).
 
 ### 4.2 Three tiers
 
@@ -461,6 +513,9 @@ stay first-come); Zether refuses fee-on-transfer underlyings (`UnsupportedUnderl
   public: an adjustable-rate `rateAdmin` and the multi-underlying `guardian` (R142).
 - **Registrar** is an EOA by default (deployer); it must become a multisig before mainnet (HANDOFF O2). Its only
   powers are `registerImplementation`, `deprecate`, `setZetherEnabled`.
+- **Same rule on every family** (CR-R3-11): a fix to an Aptos package, Sui package, Solana program, Cosmos contract,
+  TON or Soroban contract is a new deployment at a new address plus voluntary migration by the owners of the
+  balances; accounts on the old deployment keep working with the old code.
 
 EIP-712 domains: name per implementation (`"SCaaS MetaToken"`, `"SCaaS ZetherToken"`, `"SCaaS MandateWallet"`,
 `"SCaaS SubjectAccount"`, `"SCaaS OrderBookDex"`), version `"1"` (`"2"` for the v2 tiers, R131), `chainId`,
@@ -547,6 +602,16 @@ delegate's EIP-712 signature (`PayUnderMandate(address token,address payee,uint2
 validUntil)`), then pays through `payWithFee(FeeMode.NONE)` — no allowance. Kill switch: `revoke(token)` by the owner
 or `revokeWithSig` by the delegate (platform revokes immediately through a relayer). Equivalent mandates exist on
 Cosmos, Soroban, Sui, Aptos, TON and Solana.
+
+- **Revocation epoch** (SPECIFIED, ADW CR-ADW-1, stream ADW-FIX1): `MandateWallet` keeps `epoch[token]`, bumped by
+  every `setMandate` and revoke; the signed revoke becomes `RevokeMandate(address token,uint64 epoch,uint256
+  validUntil)` and must match the current epoch, so a public revoke signature cannot be replayed against a mandate the
+  owner re-established. Typehash change on dev deployments only; the built wallet has no epoch (EVM only: the Solana
+  mandate binds a generation, and the Sui/Aptos/Cosmos mandates are one-shot).
+- **Hedera ED25519 owners** pay from a `MandateWallet` only through `HederaMandateWallet.executeAsOwnerRaw`
+  (ADW CR-ADW-2): ERC-1271 runs under STATICCALL, where HIP-632 `isAuthorizedRaw` halts, so a meta-tx with
+  `from = wallet` works for ECDSA owners only. The raw call is relayed as a `call` job (call table, §6.10) or sent by
+  the owner.
 
 ### 4.8 Equity and bonds on a managed DEX (SPECIFIED, [AS](superpowers/specs/2026-10-06-asset-suite-design.md) §5–§8)
 
@@ -692,6 +757,19 @@ pending intent on that lane, including ones circulating on the mesh, without a d
 costs ≈ +17 k gas (new storage slot). Anti-lock test per family is mandatory: X stuck on contract 1 never blocks Y on
 contract 2 (R62).
 
+**Lane horizon (protocol rule, PD CR-PD-4; amends R9).** "Each payment request is payable at most once" holds iff
+(1) every signature issued on a pay lane has `validUntil ≤ t_first_issue + H`, `H = LANE_HORIZON = 30 d`, and (2) every
+family that prunes lane state keeps an executed lane for ≥ `H` after the executed op's `validUntil` (TON two
+`LANE_TTL` generations; Aptos and Solana `PRUNE_DELAY_S`; Sui `prune` after `valid_until + LANE_HORIZON_S`, RS7-11).
+Obligations:
+
+| Who | Obligation | Status |
+|---|---|---|
+| Issuer (ERP, app) | Sign one op per pay lane, or keep every op on that lane inside `H` of the first; terms signed beyond `H` get no pay-once guarantee | Odoo constants comply (BUILT) |
+| Every signing client (connectors, `clientkeys`, app) | Refuse to sign an op with `valid_until > now + LANE_HORIZON_S` on a pruning family (Aptos RS11-24, Solana RS12-24, Sui RS7-11) | SPECIFIED (NET-APTOS-FIX3, NET-SOLANA-FIX3, NET-SUI-FIX2) |
+| Contract | Sui `relay_pay` refuses `valid_until > now + LANE_HORIZON_S` on chain (RS7-11); Solana caps `valid_until` and order `expiry` at `MAX_TTL_S = 31 d` (RS12-21) | SPECIFIED (NET-SUI-FIX2, NET-SOLANA-FIX1) |
+| Node | Refuses `max_valid_for_secs > LANE_HORIZON` on a pruning family; constants pinned equal in tests (TON `LANE_TTL`, Aptos/Solana `PRUNE_DELAY_S`, node `LANE_TTL_S`, Odoo `LANE_HORIZON_S`) | SPECIFIED (R3-FIX12) |
+
 ### 5.6 Cheap-first execution pipeline (BUILT; the SRS "8 steps" are steps 1–8 below, step 9 is the nonce increment and event)
 
 `executeMetaTransaction` (not payable), reentrancy guard in transient storage
@@ -779,7 +857,7 @@ non-via-IR ABI decoder holds: the token decodes it in `fallback` (same selector 
 | **Receiver pays the fee** | Payer signs `pay` of `N`; payee co-signs a fee authorization (`fee`, `feeRecipient`) from its own balance; relayer submits both in one transaction (payer sends `N`, payee receives `N`, pays `fee`) | Relayer, reimbursed by payee | **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §B2: `mtxPayReceiverFee`, payee co-signs `ReceiverFee` over the payer digest; R192–R193) |
 | Gas sponsorship policy | Node policy: e.g. "inbound to wallet W, value ≥ X ⇒ accept with fee 0, book gas to account Y" | Sponsor (contract outside the chain) | **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) rev 1.3 §B1, R189–R191; budget and rate counts at accept, NI rev 3.6 §5.2); on-chain `SponsorshipPool` PLANNED-later (§B3) |
 | `fee = 0` B2B | Company relayer, `MODE_FEE_NONE`; gas is OPEX | Company | **BUILT** |
-| Enterprise inbound gateway | Partners post signed intents to the company's gateway (`POST /v1/metatx`); the company relays with its lanes | Company | **BUILT** (EVM door A) |
+| Enterprise inbound gateway | Partners post signed intents to the company's gateway (`POST /v1/metatx`); the company relays with its lanes | Company | **BUILT** (EVM door A); intake rules that stop Door A being a free gas faucet **SPECIFIED** (CR-PD-3, §6.10) |
 
 Per-family equivalents (subject never pays, relayer lane submits): Hedera — same Solidity on HSCS, no payer-account
 sponsorship of subject transactions (R63); Cosmos — relayer lane sends `Relay{payload, auth}`, feegrant only as a
@@ -807,6 +885,12 @@ relayer lane is fee payer, subject signature checked through the Ed25519/Secp256
 | N8 | Nothing is booked before finality. | Indexer delivers only final, quorum-agreed, contiguous ranges | **BUILT** |
 | N9 | Circuit breakers never block indexing, tracking of signed txs, rescues or gap-fillers. | Breakers gate new work only (R55) | **BUILT** |
 | N10 | One owner process per store. | Backend lock + fencing epoch checked in every journal transaction (A1.1) | **SPECIFIED** |
+| N11 | Every outer tx the lane pays for is metered, and a subject cannot make the node pay repeatedly. | Breaker meters `fee + value_out + deposits` of every included tx (failures too); one requeue after a billed failure; `max_attempts`; per-subject grief score (R340–R342, §6.4) | EVM metering **BUILT**; rest **SPECIFIED** (NR1) |
+| N12 | Fields the signed payload carries are read from it, never from job JSON. | `contract`, `valid_until`, `from`, lane, nonce, relayer binding, value/forward floors from the decoded payload; a differing JSON copy ⇒ `422 BAD_PAYLOAD`; unsigned fields may only narrow (R344) | mesh decoders **BUILT**; job paths **SPECIFIED** (NR2) |
+| N13 | No lane sends native value or funds deposits it cannot get back, beyond caps. | `chain.max_value_out` (R345), deposit rule (R346) | **SPECIFIED** (NR2) |
+| N14 | Mesh and gateway intents are signature-checked before any chain call. | Per-family local verify, `BAD_SIGNATURE` counts against the peer (R343) | EVM `eoa` **BUILT**; rest **SPECIFIED** (NR3) |
+| N15 | Adapter state needed across restarts lives in the store. | `outer_tx` signed bytes, object refs, durable-nonce value; no local journal (R347) | **SPECIFIED** (NR4) |
+| N16 | The node serves no upgradeable program and holds each custody key in one family. | Upgradeability read at activation and start ⇒ `halted`, `PROGRAM_UPGRADEABLE` (R348); `Config::validate` refuses one public key in two families (R349) | **SPECIFIED** (NR5) |
 
 ### 6.2 Job lifecycle
 
@@ -832,8 +916,9 @@ relayer lane is fee payer, subject signature checked through the Ed25519/Secp256
 | `queued` (`hold = 0`, past `lease_hold_after_start_secs` = 15 s) | `leased` (lane, `claim_block`, `attempt_count + 1`) | lane scheduler |
 | `queued`, `leased` (never published) | `cancelled` | cancel |
 | `queued` (published) | `queued` + `hold = 1` | cancel ⇒ `409 TOO_LATE, published: true` |
-| `queued`, `leased` | `dead` | expiry before submit; bad payload |
-| `leased` | `queued` | transient simulate/fee/RPC error; restart before signing; in flight on another path |
+| `queued`, `leased` | `dead` | expiry before submit; bad payload; `attempt_count > chain.max_attempts` (default 5) ⇒ `ATTEMPTS_EXHAUSTED` (R341) |
+| `leased` | `queued` | transient simulate/fee/RPC error; restart before signing; in flight on another path; outcome **not included** (precheck/CheckTx/mempool reject, `BUSY`, dropped: nothing billed) |
+| `broadcast` | `queued` once, then `reverted` | outcome **included and billed** (R341): at most one requeue per job, only where the family spec names the parameter the retry raises (gas or CU limit to its cap: Hedera, Aptos RS11-21, Solana RS12-22); otherwise, or the second time, `reverted` with the decoded reason (R80 checked first) |
 | `leased` | `signed` (+ `outer_nonce`, `tx_hash`, signer; `lane.journal_max` bumped) | **journal, before send** |
 | `leased`, `signed`, `broadcast` | `consumed` | R80 |
 | `signed`, `broadcast` | `broadcast`, `mined`, `reverted`, `queued` (gap-filled at cold start), `dead` | submit / follow |
@@ -869,7 +954,10 @@ other relayer ⇒ `landed_elsewhere`; other digest ⇒ `superseded`; no log yet 
   underpriced).
 - **Generic lanes** (non-EVM): one transaction in flight per lane, status poll 500 ms, backoff 1 s → 60 s, expiry
   grace 30 s; Sui additionally journals the last signed tx bytes to `params.lane_journal` and re-sends them on start
-  so a gas coin is never equivocated. Solana lanes use a per-lane durable nonce account.
+  so a gas coin is never equivocated. Solana lanes use a per-lane durable nonce account. Target (NI R347, RS7-9,
+  SPECIFIED NR4): every adapter-local state (Sui unresolved txs — all of them per lane, not the last one — Solana
+  durable-nonce value, TON seqno generation) lives in the store's `outer_tx` row, written in the `leased → signed`
+  transaction, so it moves with the owner lock on a restore elsewhere; no local-directory journal.
 - **Same lane keys in two stores** (forbidden; SPECIFIED NI §9.4): on sequence families, `nonce_at(latest) >
   journal_max + 1 + tracked` ⇒ the lane refuses to lease, `/readyz` reason, metric `scaas_lane_foreign_nonce_total`.
 
@@ -882,10 +970,22 @@ Per lane, in memory, sampled every 15 s; open breakers stop **new** work only.
 | `base_fee_spike` (EVM) | current base fee > `spike_ratio` × 1 h trailing mean, with ≥ 4 samples and fee > `spike_min_base_fee_gwei` | ratio 3.0 (0 disables), min 1 gwei |
 | `gas_budget` | gas spent in the fixed hour window ≥ `gas_budget_per_hour` (smallest gas unit) | warn at 90 % |
 | `balance_floor` | lane balance < `min_relayer_balance` | warn below 120 % of the floor |
-| structural | simulated gas > `max_gas_per_tx` ⇒ job `dead` | 3 000 000 |
+| structural | simulated gas > `max_gas_per_tx` ⇒ job `dead` | 3 000 000 (Zether chains ≥ 4 200 000, ZD §15; PQZ chain 16 000 000) |
 
 Metric `scaas_breaker_open{chain,lane,breaker}`; manual reset
 `POST /v1/admin/chains/{key}/breaker/reset` (operator, SPECIFIED).
+
+**What the breaker meters (NI rev 3.7, SPECIFIED, stream NR1).** Today the EVM path meters every receipt; the non-EVM
+runner meters `Mined` only, so a drain through failed, billed transactions passes under `gas_budget_per_hour` on every
+non-EVM family. Target:
+
+| Rule | Detail | Ruling |
+|---|---|---|
+| Cost of every included tx | `Breaker::spend(fee + value_out + deposits)` for mined, reverted and billed-failed txs of ours: `fee` as charged; `value_out` = native value moved out of the lane beyond fees, net of excess returned (TON forward and attach, EVM `value`); `deposits` = rent/storage the lane funded (Solana rent, Sui storage net of rebate, Aptos storage fee, Soroban rent). Adapter `tx_cost(tx_id) → TxCost`; stored on `outer_tx` | R340 |
+| Billed-failure retry | not included ⇒ `queued`; included and billed ⇒ one requeue at most, then `reverted`; `chain.max_attempts` (hot, default 5) ⇒ `dead ATTEMPTS_EXHAUSTED`; each family spec keeps its code → class table | R341 |
+| Grief score | table `subject_grief(chain_key, subject, day, billed_failures, cost)`; counts billed failures and `consumed` outcomes of jobs never published on the bus (TW2 §7.6 / AS §3.8 exemptions); ≥ 3 in 24 h ⇒ one live job per chain + re-simulation right before signing; ≥ 10 in 24 h or `cost ≥ chain.grief_cost_cap` ⇒ intake `429 SUBJECT_THROTTLED` until 24 h after the last count; namespace aggregate metric `scaas_grief_*` | R342 |
+| Value out | `chain.max_value_out` (hot; TON default 0.05 TON above the fixed attach, every other family 0); above ⇒ `422 VALUE_OUT_TOO_HIGH` at intake and again at lease | R345 |
+| Deposits | the lane funds rent/storage only if refunded to the lane (`rent_payer` + `prune`), for an account only a configured receiving wallet controls, or ≤ `chain.max_deposit_per_job`; a deposit a third party can reclaim (e.g. a Solana ATA its owner closes) ⇒ `422 DEPOSIT_NOT_ALLOWED`, re-checked before signing | R346 |
 
 ### 6.5 Simulation gate (BUILT)
 
@@ -908,6 +1008,16 @@ SLO W3B-02 requires **0 %** of broadcast transactions to revert for a reason sim
 `finality = {mode, depth, quorum}` per chain; `rpc_urls.len() ≥ quorum` or the node refuses to start; the indexer
 advances only when ≥ `quorum` endpoints return the same hash at the candidate head; ranges ≤ 1 000 blocks
 (`MAX_SPAN`); `/readyz` fails when `final_head − indexed > max_index_lag` (default 100).
+
+**Event-set quorum (SPECIFIED, PD CR-PD-2 / R3D CR-R3-2; supersedes R11's quorum on one block hash).** `final_head` =
+the minimum height reported by ≥ `quorum` endpoints with the same block/ledger/checkpoint hash there (`tag` mode: min
+`finalized`; `depth` mode: min `latest`); `events(from, to)` is read from ≥ `quorum` endpoints and must be the **same
+normalized list** (the adapter's own output, so one comparison serves every family; EVM: sorted `(block_number,
+block_hash, tx_hash, log_index, address, topics, data)`); disagreement ⇒ no ingest, warning, `/readyz` red. Per
+family: EVM/Hedera `eth_getLogs` (PAY-FIX3); Aptos per-transaction agreement (**BUILT**); Sui event query per
+checkpoint range, Solana per-signature transaction agreement, Soroban `getEvents` per ledger range (R3-FIX3); Cosmos
+`status` + `block` + tx events and TON `masterchainInfo` + jetton-wallet transactions **honour the configured
+quorum** (today one endpoint; R3-FIX4). Receipt proofs may replace the set comparison where providers serve them.
 
 | Family | Mode | Final head | Height unit | Notes |
 |---|---|---|---|---|
@@ -955,8 +1065,16 @@ mode/relayer/low-s, `hub.sig` → L3 private isolation, policy lookup `(contract
 selector) > (*, *)`, no row ⇒ `forward_only`; `may_submit` requires `support = full`, `submit`, a **registered token**
 (R86), a lane, relayer and effective-fee checks. RPC only on the submit path.
 
+**Signature check before any chain call** (NI R343, SPECIFIED, stream NR3; before S5): today the decoders check
+domain, network and contract only, and every EVM `erc1271` intent passes. Target: EVM `eoa` as today; `erc1271` by one
+`eth_call isValidSignature` charged to a per-peer simulate budget; Hedera 64-byte ED25519 as `sig_kind =
+"hedera_ed25519"` (key from the mirror node, cached; R6-11); Cosmos ADR-036 and passkey, Solana ed25519 locally; Aptos,
+TON and Sui against the account's key (one cached state read each). Failure ⇒ `BAD_SIGNATURE`, never simulated,
+counted against the publishing peer.
+
 **Families on the mesh v1** (R77): EVM, Hedera, Cosmos, Sui, Aptos, TON, Solana; **Soroban is out** (replay
-protection is the host's random auth nonce, not a peer-readable per-subject nonce). Non-EVM op kind: `pay` only.
+protection is the host's authorization nonce, `i64(sha256("scaas.soroban.nonce" ‖ entryRef ‖ validUntil)[0..8])`, a
+per-entry value with no peer-readable per-subject sequence). Non-EVM op kind: `pay` only.
 
 **Exclusivity** (R74, R121): the origin assigns `exclusive.relayer_id` round-robin over eligible submitters (itself
 included); `until = published_at + exclusive_ms` (bus clamp 10 000 ms; gossip default per chain 7 000 ms). Gossip
@@ -1035,6 +1153,40 @@ Consequences (normative):
    fee 0, booked to account Y") is a node policy row, never a contract feature. Status **SPECIFIED** ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §B1).
 5. Metric W3B-06 (relayer fee spread) may be negative by design.
 
+### 6.10 Intake rules for `call` jobs and Door A (SPECIFIED, PD rev 1.1 CR-PD-1, CR-PD-3)
+
+**`call` target/selector table** (CR-PD-1 (c); streams PAY-FIX2 node, PAY-FIX1 Odoo). A `call` job carries calldata
+the client built; a lane signs it as `msg.sender`. The node executes one only if its 4-byte selector is in the table
+**and** the target meets the row's rule; **never** when the target is a registered token of the chain (any kind),
+the token factory, or a contract in which a lane key holds a role; `call` jobs carry no native value. `allow_call`
+on the namespace stays necessary and is no longer sufficient (NI R103 grants `call` per namespace, not per target).
+
+| Selector | Target rule | Producer today |
+|---|---|---|
+| `SubjectAccountFactory.deploy((uint8,bytes32,bytes32,bytes32,bytes32),address)` | the chain's account factory (`chain_contract.kind = account_factory`) | Odoo subject accounts |
+| `SubjectAccount.executeAsOwner(bytes,uint256,uint256,bytes)` | runtime code = EIP-1167 clone of that factory's `IMPLEMENTATION` (checked at lease, cached) | Odoo subject accounts |
+| `MandateWallet.payUnderMandate`, `revokeWithSig` (epoch-bound, CR-ADW-1), `executeAsOwner`; `HederaMandateWallet.executeAsOwnerRaw` (CR-ADW-2) | any address that is not a registered token (self-authenticating: the target checks the delegate/owner signature) | Odoo payment requests, auto-pay |
+| `OrderBookDex.settle` / `cancel` / `invalidateNonces` | the chain's DEX | DEX venue, `dms_blockchain_dex` |
+| `UniversalAccountRegistry.register` (UA `UARegistry.register` after F1) | `chain.ua_registry`, `~gateway` only (NI R320) | node gateway |
+
+Refusal: NI push model `403 CALL_TARGET_REFUSED` at accept (next to the `allow_call` check, re-checked at lease);
+legacy pull path `dead` with `CALL_TARGET_REFUSED` before simulation. A new call shape needs a table row (node
+release). Why: one operator session (or a stolen one) could otherwise turn a lane that holds fee income, and on dev
+deployments admin roles, into an arbitrary transaction. The NI text still has to fold this table (PD §15.4
+amendment); this document is normative until it does. Client side: the outbox row is immutable (`integration.md`
+§3.5).
+
+**Door A is not a free gas faucet** (CR-PD-3; stream PAY-FIX4). At gateway intake: a `transfer`/`pay` op with
+`value == 0` ⇒ `422 ZERO_VALUE`; the `~gateway` door applies its `min_fee` floor to the effective fee (TSS R189,
+MESH §7), waived and budget-capped by a matching sponsor policy; `profile = private` keeps fee 0 (B2B default), while
+`profile = public` refuses fee-0 Door A intents unless a sponsor policy matches; a per-`from` token bucket (default 60
+per hour, in memory) sits on top of the reverse-proxy per-IP limit. Every door also applies R343–R346 (§6.1 N12–N14,
+§6.4).
+
+**Idempotent journal report on the pull path** (CR-PD-5, PAY-FIX5): a `signed` report repeated with the same
+`(tx_hash, outer_nonce, signer)` succeeds unchanged; the node keeps the signed `(raw, hash, n)` and re-reports it
+before anything else, and gives `n` to no other job meanwhile.
+
 ---
 
 ## 7. Families
@@ -1045,6 +1197,20 @@ used only so that a **relayer** pays, never so that the subject's account sequen
 the same three roles: token with `pay` + meta-op, mandate, DEX — plus a multi-key subject account where the chain
 needs one.
 
+Cross-family rules from the 2026-10-07 reviews (each family spec's "fix" table is normative for detail):
+
+- **Immutable at deploy** (CR-R3-11, §1.3): every family's deploy script ends with a gate that fails on an
+  upgradeable result; the node re-checks at activation and start (NI R348).
+- **Node rules** NI R340–R349 apply to every adapter (§6.1 N11–N16, §6.4): failed-fee/value/deposit metering, one
+  billed retry, attempt cap, grief score, payload-sourced fields, value-out and deposit caps, journals in the store,
+  one custody key per family. Each family spec keeps its own error code → class table and deposit list.
+- **One WebAuthn grammar** (CR-R3-1): exact `clientDataJSON` grammar, exact origin match, UP and UV, low-`s`;
+  `crossOrigin: true` and any `topOrigin` refused; shared vectors `smartcontracts/test/vectors/webauthn_kat.json` run in
+  every family's suite (R3-FIX1, R3-FIX2).
+- **Event-set quorum** on every family (§6.6).
+- **Lane horizon** obligations on pruning families (§5.5).
+- **Key lifecycle per family** (CR-R3-6; §9.4 table).
+
 **`MetaOp` v1** (non-EVM; family encoding, every field mandatory): `domain = "scaas.metaop.v1"` ‖ `network` ‖ `contract` ‖ `op` (`pay | trade | mandate_pay |
 revoke`) ‖ `from` ‖ `to` ‖ `amount` ‖ `payRef` (32) ‖ `lane` (32) ‖ `nonce` (u64) ‖ `validUntil` (u64 seconds) ‖
 `relayer` (optional) ‖ `extra` (hash of op-specific parameters). No relayer fee field on non-EVM (fee NONE, R10/R75).
@@ -1053,14 +1219,14 @@ Summary:
 
 | Family | Chains | Meta-tx mechanism | Subject signature | Lane key (relayer) | Mesh v1 | Status |
 |---|---|---|---|---|---|---|
-| EVM | Gnosis (100), Celo (42220), private chain 7622, anvil 31337 | Contract-level EIP-712 (`ERC20MetaTx`) | ECDSA secp256k1 (EOA) / ERC-1271 (SubjectAccount: P-256 WebAuthn, secp256k1) | secp256k1 `m/44'/60'/0'/0/i` | yes | **BUILT** |
-| Hedera | 295 / 296 / 297 / 298 | Same Solidity on HSCS via JSON-RPC relay | ECDSA (alias) or ED25519 via HIP-632 `isAuthorizedRaw` | secp256k1 `m/44'/3030'/0'/0/i` | yes (family `hedera`) | **BUILT** |
-| Cosmos | CosmWasm chains (`cosmos:<chain-id>`) | Contract-level `Relay{payload, auth}` | ADR-036 secp256k1 (Keplr/Leap `signArbitrary`) / WebAuthn P-256 | secp256k1 `m/44'/118'/0'/0/i` | yes | **BUILT** |
-| Soroban | Stellar (`pubnet`, `testnet`, `standalone`), Pi Network (`pi-mainnet`, `pi-testnet`) | Native Soroban authorization (`SorobanAddressCredentials`, random nonce + ledger expiry) | ed25519 (Freighter `signAuthEntry`) / custom account `__check_auth` with `secp256r1_verify` | ed25519 `m/44'/148'/i'`; Pi `m/44'/314159'/i'` (`coin_type` override) | **no** (R77) | **BUILT** |
-| Move — Aptos | 1 / 2 / 4 | Contract-level, per-owner `Account` object with lanes | ed25519 (Wallet Standard `signMessage`) / WebAuthn P-256 (pure-Move verifier) | ed25519 `m/44'/637'/i'/0'/0'` | yes | **BUILT** |
-| Move — Sui | mainnet / testnet / devnet / localnet | Contract-level, shared `Account<T>` per subject with lanes | ed25519 / secp256k1 / secp256r1 / passkey (`signPersonalMessage`) | ed25519 `m/44'/784'/i'/0'/0'` | yes | **BUILT** |
-| TON | -239 / -3 | Custom jetton wallet verifies `SignedOp` | TON Connect `signData` (cell) / passkey | ed25519 `m/44'/607'/i'` (W5R1 lane wallets) | yes (`pay`) | **BUILT** |
-| Solana | `solana:<genesis hash>` | Program-level, SubjectAccount PDA + `LanePda` | raw ed25519 / off-chain message / passkey, verified via precompile instruction | ed25519 `m/44'/501'/i'/0'` | yes (`pay`) | **BUILT** |
+| EVM | Gnosis (100), Celo (42220), private chain 7622, anvil 31337 | Contract-level EIP-712 (`ERC20MetaTx`) | ECDSA secp256k1 (EOA) / ERC-1271 (SubjectAccount: P-256 WebAuthn, secp256k1) | secp256k1 `m/44'/60'/0'/0/i` | yes | **BUILT**; DX-FIX3, ZF-FIX1, ADW-FIX1 SPECIFIED |
+| Hedera | 295 / 296 / 297 / 298 | Same Solidity on HSCS via JSON-RPC relay | ECDSA (alias) or ED25519 via HIP-632 `isAuthorizedRaw` | secp256k1 `m/44'/3030'/0'/0/i` | yes (family `hedera`) | **BUILT**; NET-HEDERA-FIX1…3 SPECIFIED |
+| Cosmos | CosmWasm chains (`cosmos:<chain-id>`) | Contract-level `Relay{payload, auth}` | ADR-036 secp256k1 (Keplr/Leap `signArbitrary`) / WebAuthn P-256 | secp256k1 `m/44'/118'/0'/0/i` | yes | **BUILT**; R3-FIX1/4/9/14, NET-COSMOS-FIX1…3 SPECIFIED |
+| Soroban | Stellar (`pubnet`, `testnet`, `standalone`), Pi Network (`pi-mainnet`, `pi-testnet`) | Native Soroban authorization (`SorobanAddressCredentials`, random nonce + ledger expiry) | ed25519 (Freighter `signAuthEntry`) / custom account `__check_auth` with `secp256r1_verify` | ed25519 `m/44'/148'/i'`; Pi `m/44'/314159'/i'` (`coin_type` override) | **no** (R77) | **BUILT**; R3-FIX5/8, NET-SOROBAN-FIX1…2 SPECIFIED |
+| Move — Aptos | 1 / 2 / 4 | Contract-level, per-owner `Account` object with lanes | ed25519 (Wallet Standard `signMessage`) / WebAuthn P-256 (pure-Move verifier) | ed25519 `m/44'/637'/i'/0'/0'` | yes | **BUILT**; R3-FIX15, NET-APTOS-FIX1…3 SPECIFIED |
+| Move — Sui | mainnet / testnet / devnet / localnet | Contract-level, shared `Account<T>` per subject with lanes | ed25519 / secp256k1 / secp256r1 / passkey (`signPersonalMessage`) | ed25519 `m/44'/784'/i'/0'/0'` | yes | **BUILT**; R3-FIX7/15, WSF-FIX2, NET-SUI-FIX1…4 SPECIFIED |
+| TON | -239 / -3 | Custom jetton wallet verifies `SignedOp` | TON Connect `signData` (cell) / passkey | ed25519 `m/44'/607'/i'` (W5R1 lane wallets) | yes (`pay`) | **BUILT**; **BLOCK** for non-Odoo paths until NET-TON-FIX1; R3-FIX10/11/13, NET-TON-FIX1…4 SPECIFIED |
+| Solana | `solana:<genesis hash>` | Program-level, SubjectAccount PDA + `LanePda` | raw ed25519 / off-chain message / passkey, verified via precompile instruction | ed25519 `m/44'/501'/i'/0'` | yes (`pay`) | **BUILT**; R3-FIX6/15, WSF-FIX1, NET-SOLANA-FIX1…3 SPECIFIED |
 
 Lane keys come from one 24-word BIP-39 mnemonic (`[keys] mnemonic`: env, 0600 file, or Web3 Secret Storage v3
 keystore) or a raw `private_key` (one lane); `scaas-node addresses` prints every lane address to fund (R60).
@@ -1091,8 +1257,18 @@ keystore) or a raw `private_key` (one lane); `scaas-node addresses` prints every
 - HSCS runs EVM bytecode; the relayer is the EVM adapter pointed at a JSON-RPC relay; lanes are ECDSA accounts with
   EVM aliases (coin 3030) that must exist and be funded.
 - `HederaMetaToken`: 64-byte signatures from an account without code are verified through HIP-632
-  `isAuthorizedRaw` (HAS precompile `0x16a`, 100 k gas) — ED25519 Hedera accounts sign meta-txs natively.
-  `associateUnderlying()` associates the HTS underlying (`0x167`). `HederaMandateWallet` adds `executeAsOwnerRaw`.
+  `isAuthorizedRaw` (HAS precompile `0x16a`, called with CALL; 100 k gas cap) — ED25519 Hedera accounts sign
+  meta-txs natively, but only with a **raw signer** over the 32-byte EIP-712 digest: clientkeys seed
+  (`m/44'/3030'/0'/0'/i'`) or an ECDSA-alias account; HashPack/WalletConnect `hedera_signMessage` (HIP-820 prefix)
+  cannot be verified (WSF CR-WSF-2).
+- **HTS underlying association is part of `initialize`**, with a fail-closed custom-fee check (TW2 R144 for v2,
+  net-hedera R6-8 for v1, SPECIFIED, NET-HEDERA-FIX2: new v1 implementation, `deprecate(META, 1)` on Hedera). The
+  built v1 permissionless `associateUnderlying()` (`0x167`) is **superseded** and removed by that stream. Wizards and
+  wallets read every key of the HTS issuer and warn (R6-9).
+- `HederaMandateWallet` adds `executeAsOwnerRaw`: the only way an ED25519 owner pays from its wallet (CR-ADW-2, §4.7).
+- Node (SPECIFIED, NET-HEDERA-FIX1/3): Hedera status code → class table instead of unconditional requeue (R6-7, NI
+  R341; `WRONG_NONCE` retried once); `tx_fee` on every receipt and `lane_balance` for the breaker (R6-10); mesh
+  `sig_kind = "hedera_ed25519"` (R6-11).
 - **Payer-account sponsorship of subject transactions is not used** (it orders operations by the subject's account,
   R30). **HTS** tokens are used only behind a tier-2 wrapper (protocol-level HTS allowances cannot be restricted to
   contracts). **HCS** (consensus topics as an audit log) and **scheduled transactions** (multi-signature collection
@@ -1110,27 +1286,54 @@ keystore) or a raw `private_key` (one lane); `scaas-node addresses` prints every
 - **feegrant** is only a seam for subject-sent deposits; **authz is never used** (a relayer grantee would be an EOA
   spender, R26). ICS-29 relayer fees for IBC are out of scope.
 - Relayer: lane account sends `MsgExecuteContract`, account sequence per lane, one tx in flight; finality
-  `instant` (CometBFT). Deploy tooling for Cosmos is **PLANNED** (`deploy.sh` exits 2).
+  `instant` (CometBFT). Deploy tooling for Cosmos is **PLANNED** (`deploy.sh` exits 2); when it lands, contracts are
+  instantiated `--no-admin` (CR-R3-11) with `instantiate2` and a salt containing the genesis hash, and the node
+  refuses two chains with the same chain id (R9-4).
+- Fixes (SPECIFIED): **passkey v2** — account `sha256("scaas.passkey.v2" ‖ pk65 ‖ rpIdHash ‖ sha256(origin))[..20]`,
+  rpIdHash read from `authenticatorData`, origin through the shared grammar, UV and low-`s` checked; v1 passkey
+  addresses (dev only) no longer accepted (CR-R3-1, R9-6; R3-FIX1, NET-COSMOS-FIX2); `extra` must be empty outside
+  `trade` (R9-8); node reads `contract`/`valid_until` from the signed payload (R9-5) and resends a tx that dropped out
+  of the mempool after `resubmit_after_blocks` (R9-7); head and events honour the quorum (R3-FIX4); the DEX loses
+  `Sweep` (CR-R3-10) and gains a bound settler (DEX RS5-15, DX-FIX4); no key rotation or guardian yet (R3-FIX9). Under
+  UA the passkey account becomes a 32-byte `webauthn-p256` UA shown only as a URN (UA R315).
 
 ### 7.4 Soroban (Stellar and Pi Network)
 
 - Meta-tx = **native Soroban authorization**: the subject signs `HashIdPreimage::SorobanAuthorization` (network id +
-  contract + function + args, random `i64` nonce, ledger expiry); the relayer lane is the transaction source and
-  pays; `fee_bump_lane = i` lets one lane fee-bump (CAP-15) every lane's transaction. No second verifier is written.
-- Contracts: token (SEP-41 + `pay(from, to, amount, pay_ref, valid_until)`, one-shot `pay_ref`, `approve` only to
-  contract spenders), custom account (P-256 WebAuthn + ed25519 keys, Merkle batching; guardian recovery is a stub),
-  mandate, DEX (`settle(maker, taker, maker_fill)` with two `require_auth_for_args`).
+  contract + function + args, `i64` nonce, ledger expiry); the relayer lane is the transaction source and pays;
+  `fee_bump_lane = i` lets one lane fee-bump (CAP-15) every lane's transaction. No second verifier is written. The
+  nonce is **deterministic**, not random: `nonce = i64(sha256("scaas.soroban.nonce" ‖ entryRef ‖
+  validUntil_be64)[0..8])` (Odoo `fam_soroban.py`; net-soroban §1), so one payment request at one validity maps to
+  one host nonce.
+- Contracts: token (SEP-41 + `pay(from, to, amount, pay_ref, valid_until)`, `approve` only to contract spenders),
+  custom account (P-256 WebAuthn + ed25519 keys, Merkle batching; guardian recovery is a stub), mandate, DEX
+  (`settle(maker, taker, maker_fill)` with two `require_auth_for_args`).
+- **`pay_ref` is one-shot per `(from, pay_ref)`**, not globally, and `pay` moves a positive amount
+  (`Key::PayRef(from, pay_ref)`, `ref_used(from, pay_ref)`, `amount ≤ 0` ⇒ `NonPositiveAmount`; R8-9 = R3D CR-R3-3;
+  SPECIFIED, NET-SOROBAN-FIX1 / R3-FIX5): with the built global key, a stranger's 0- or 1-unit `pay` with the victim's
+  ref blocks the victim's signed payment. The mandate keeps its own `Key::Ref(pay_ref)` (only its delegate spends it).
+  Booking already sums settlements per `entry_ref` and receiver, so a stranger's payment is only money in.
+- **DEX relayer binding** (R8-10 = DEX RS5-15; SPECIFIED, DX-FIX4): `Order.relayer: Address` is mandatory — Soroban has
+  **no open form** (unlike DEX RS5-15's "relayer 0 = open" elsewhere) — and `settle` calls
+  `maker.relayer.require_auth()` and requires `maker.relayer == taker.relayer`; the built DEX lets a third party
+  re-submit both auth entries with `maker_fill = 1`.
+- Other fixes (SPECIFIED): TTL bumps on `pay_under_mandate`/`__check_auth` and adapter `RestoreFootprint` + retry
+  (R8-11); `op_consumed` reads the host nonce key and `ref_used` (R8-12); `crossOrigin`/`topOrigin` refused (R8-13);
+  `tx_fee` on SUCCESS and FAILED + `lane_balance` (R8-14); `valid_until`/`contract` from the signed invocation (R8-15);
+  guardian + delayed recovery (R3-FIX8).
 - Op digest (for indexing and the job API): `sha256(XDR(Vec[Symbol("scaas_metaop_v1"), network_id, contract,
   Symbol(fn), Vec(args)]))`.
 - The subject `G…` account must exist on the ledger. Pi Network = the Soroban family with network passphrase "Pi
   Testnet"/"Pi Network" and SLIP-44 314159 (owner to confirm passphrases at deploy).
-- **Not on the mesh v1** (R77): replay protection is the host's random auth nonce; there is no peer-readable
-  per-subject sequential nonce. Soroban jobs go through the job API only.
+- **Not on the mesh v1** (R77): replay protection is the host's auth nonce (per entry, above); there is no
+  peer-readable per-subject sequential nonce. Soroban jobs go through the job API only.
 - Finality: `instant` (SCP closed ledger).
 
 ### 7.5 Move — Aptos and Sui
 
-**Aptos** (package `scaas`, `upgrade_policy = compatible`): one `Account` object per owner (derived from Root
+**Aptos** (package `scaas`; deployed as an object code deployment; **`upgrade_policy = "immutable"`** at deploy,
+RS11-20 / CR-R3-11 — the built `Move.toml` still says `compatible` and dev deployments are redeployed by NET-APTOS-FIX2 /
+R3-FIX15; the publish script reads `0x1::code::PackageRegistry` back and exits 1 unless immutable): one `Account` object per owner (derived from Root
 `b"scaas.root"`) holding primary fungible-asset stores for every asset; `MetaOp{domain, chain_id, contract, asset,
 op, from, to, amount: u128, pay_ref, lane, nonce: u64, valid_until: u64, relayer, extra}`, digest
 `sha3_256(bcs(MetaOp))`; `package entry relay_pay(lane, owner, asset, …)` prevents other modules from wrapping
@@ -1138,6 +1341,19 @@ relayed entries (`check_entry_visibility.sh`); key management with up to 8 keys 
 after 172 800 s; pure-Move P-256 verifier (unaudited). Native **fee-payer (AIP-39) and orderless transactions** are
 kept as a seam for passkey/keyless subjects only; the relayer lane uses sequence-number transactions and pays.
 Finality: committed block (AptosBFT), cursor bounded by the Indexer API's processed version.
+
+Aptos fixes (SPECIFIED): error-class table — a committed out-of-gas is rebuilt **once** at `params.max_gas_amount`,
+then `reverted`; every committed tx (failures too) feeds `tx_cost`; billed failures count toward the subject's grief
+score (RS11-21, NI R340–R342); dispatchable fungible assets refused unless the token enables `features.dispatchable`,
+and always on the not-yet-opened path (RS11-23); lazy ed25519 open requires the `application:` line and records it as
+the first origin (RS11-22); mesh/gateway verify the ed25519 `fullMessage` locally (RS11-26). Streams NET-APTOS-FIX1…3.
+
+**Residual risk — multisig wrap (Aptos, stated).** Relayed entries are `package entry`, so scripts and other
+packages cannot wrap them, but the VM calls an entry function regardless of visibility when a
+`0x1::multisig_account` executes a stored payload; a hash-only execution carries no payload, so the indexer gets no
+hint. Bounded: the wrapper needs the subject's signature (relayer `0x0`), funds still reach the signed receiver, and
+the consumed lane stops a replay on the same lane — the client only misses the settlement (the request expires with
+attention). Mitigation if needed: hint by `fungible_asset_activities` per asset (net-aptos §6.6, L1).
 
 **Sui** (package `scaas`): shared `Account<T>` per (subject, coin type) registered in `Registry<T>` (a second
 `open` is refused, so nobody can create a decoy account); subject signs `signPersonalMessage(BCS(MetaOp))`, Move
@@ -1147,29 +1363,99 @@ flight; the node journals the last signed tx bytes to disk (`lane_journal`) so a
 **Sponsored transactions** (dual signature) are used only for subject-sent deposits (seam). DEX `settle<A,B>` is
 atomic; several settles batch in one PTB. Finality: certified checkpoint.
 
+Sui rulings (SPECIFIED):
+
+- **Immutable at deploy** (RS7-14, CR-R3-11): the deploy script publishes and calls
+  `0x2::package::make_immutable(upgrade_cap)` in the same run; the gate requires the `UpgradeCap` to be deleted before
+  `params.package` is recorded; the node re-checks `params.upgrade_cap` at activation and every start (`halted`,
+  `PROGRAM_UPGRADEABLE`). `type_package = package`; every fix is a new package with new `Root`/`Registry<T>`/
+  `Account<T>` ids, and owners move funds by signing `pay` from the old account (NET-SUI-FIX3).
+- **`Keys` belong to the subject, not to a coin type** (CR-R3-5, R3-FIX7): one shared `Keys` object per subject (keys,
+  origins, guardian, recovery, `key_nonce`, policy) created by the first `open`; every `Account<T>` stores its `Keys`
+  id; DEX `cancel`/`invalidate_nonces` take the maker's `&Keys`. Fresh package publish.
+- Lane table `{nonce, valid_until}`, `relay_pay` refuses `valid_until > now + LANE_HORIZON_S` (30 d) on chain;
+  permissionless `prune` after `valid_until + LANE_HORIZON_S` with the storage rebate to the caller (the node collects it
+  with its lanes, NI R346 (a)); replacing ops on one lane/nonce signed more than `LANE_HORIZON_S` apart is the
+  client's obligation (RS7-11, §5.5). `forward` never returns a removed key (RS7-10). NET-SUI-FIX2.
+- Lane journal = the set of every unresolved tx per lane, moved into the store's `outer_tx` (RS7-9, NI R347;
+  NET-SUI-FIX1); mesh `sui_op` signature checked before dry-run (RS7-13).
+
+**Wallet-key signatures on Sui and Solana** (WSF CR-WSF-1; streams WSF-FIX1, WSF-FIX2). These wallets put no
+requesting origin into `signMessage`/`signPersonalMessage` bytes, so on-chain application binding is not possible.
+Rules: (1) the signed bytes are **readable UTF-8 text the contract re-renders from the `MetaOp`** and compares byte for
+byte (`SCaaS <op>` / `Amount: <decimal> <symbol>` / `To:` / `Network:` / `Valid until:` / `Ref:` / `Digest:`; decimals
+and symbol from the on-chain token/config; Solana as OCMS v1 in the `\xffsolana offchain` envelope, Sui as a personal
+message, not BCS) — no blind hex blobs; (2) portal/app flows offer the **passkey first** (origin and rpIdHash checked on
+chain); (3) opt-in account policy bit `POLICY_PASSKEY_FOR_VALUE` (Solana `SubjectAccount.policy`, Sui `Keys.policy`)
+makes value ops require a passkey, wallet keys then authorise key operations only. **Residual risk:** a user who
+approves a readable "pay X to Y" message on a phishing page has authorised it, as with any wallet transaction.
+
 ### 7.6 TON
 
+> **BLOCK (net-ton rev 1.1, review C1).** An unbounded forward-TON amount lets one signed `pay` send a lane's balance
+> to an address the signer chooses. **No job API (NI P2, cutover P6), mesh (S5) or gateway path may reach a TON lane
+> until the node half of NET-TON-FIX1 lands** (R10-12, NI R340/R344/R345). The built Odoo pull path is safe today:
+> Odoo builds `extra = 0` and never sets `forward_nanoton`.
+
 - Jetton (TEP-74) rewritten in **Tact** with a custom jetton wallet holding the owner's pubkey, an optional
-  passkey and `lanes: map<uint256, uint64>` (rotated every `LANE_TTL` = 30 days). `BindKey` proves the pubkey from
-  the owner's W5R1/V4R2/V3R2 wallet `stateInit` (no subject transaction needed).
+  passkey and `lanes: map<uint256, uint64>` (rotated every `LANE_TTL` = 30 days). There is **no `BindKey` message**:
+  the key binds lazily — a `SignedOp` carries the owner wallet's optional `stateInit`; the jetton wallet checks
+  `hash(stateInit) == owner.hash` and reads the pubkey from the W5R1/V4R2/V3R2 data by code hash (R10-5; no subject
+  transaction needed). `set_key` (passkey attach/detach) must carry a proof of possession of the attached key (UA
+  R314; not yet in code).
 - Subject signs with TON Connect `signData` (type `cell`); the wallet rebuilds the exact envelope (prefix
-  `0x75569022`, app domain, timestamp, address) around the `MetaOp` cell tree and checks `CHKSIGNU`; the app domain is
-  checked off-chain against the chain's configured domain (R10-3).
+  `0x75569022`, app domain, timestamp, address) around the `MetaOp` cell tree and checks `CHKSIGNU`. **Domain binding**
+  (R10-14, supersedes R10-3's Odoo-only check): the node refuses a `domain ∉ chain.ton_app_domains` at every door (job
+  API, mesh, gateway) before any `build`, and new deployments pin it on chain (R10-14: `domainHash` in the wallet init
+  data; R3D CR-R3-7 records a per-wallet `domains` set changed only by the owner's own wallet plus a timestamp bound —
+  the two forms are reconciled in NET-TON-FIX3 / R3-FIX11, §15.3). `SignedOp` is an ordinary message anyone can relay,
+  so the off-chain check alone never runs when a phishing page relays its own.
 - Relayer: lane **W5** wallet (seqno per lane) sends `SignedOp` (opcode `0x5b0a1d01`) as an internal message with
   TON attached (`attach_nanoton`, default 0.15 TON). **W5 gasless extensions and Highload wallets of the subject are
   not used** (subject seqno would be a lock, R30); a Highload-v3 relayer wallet is a possible future lane type
   (PLANNED).
+- **Forward TON is capped on every path** (R10-12, SPECIFIED): node `chain.max_value_out` (0.05 TON) at intake and at
+  lease for the signed floor and any `extra.forward_nanoton` (unsigned, NI R344) ⇒ `422 VALUE_OUT_TOO_HIGH`; lane
+  `value = max(attach, forward + 0.1 TON)`; forwarded value feeds the breaker (`value_out`, R340). Contract (new wallet
+  code and master): `MAX_FORWARD_TON` (0.1 TON) ⇒ `E_VALUE`; DEX legs carry `excessTo` so a failed leg returns tokens
+  to their owner and excess TON to the lane.
+- Other fixes (SPECIFIED): `tx_id` = TEP-467 normalized message hash, with seqno lookup as fallback (R10-13); `build`
+  simulates the balance and checks the passkey locally (R10-15); a revoke moves the lane to `nonce + 2`, so it runs
+  exactly once (R10-16); a guardian and delayed passkey rotation (R3-FIX10; a TON passkey cannot rotate today).
+  Streams NET-TON-FIX1…4.
 - DEX: actor model has no cross-contract atomicity ⇒ **escrow**: leg A waits in the DEX for leg B; expiry ⇒
-  permissionless `Refund`.
-- Finality: masterchain block (`depth 0`). Open item: report the payer jetton-wallet tx hash with `mined`
-  (TODO #8).
+  permissionless `Refund`. The DEX keeps nothing that is not its own (R10-17, SPECIFIED): `cancel` of an unknown order
+  returns the TON; bounced payouts and refunds go to a separate `bounced[master]`, never to `fees`, and the admin
+  returns them through an evented `RefundBounced{master, to, amount}`; `WithdrawFees` withdraws fees only (R3D CR-R3-9
+  states a per-owner `unclaimed` + `Claim`; R10-17 notes the bounce body is truncated to 256 bits, so it cannot carry
+  the destination — reconciled in NET-TON-FIX3 / R3-FIX13, §15.3). Settlement relayer binding: DEX RS5-15, DX-FIX4.
+- Finality: masterchain block (`depth 0`). The adapter reports the payer jetton-wallet tx hash with `mined`
+  (**BUILT**; the former TODO #8 is done). Residual: a `final` from the indexer before the node's `mined` still flags
+  `landed_elsewhere` (informational).
 
 ### 7.7 Solana
 
 - Anchor program `scaas`: SubjectAccount PDA owns the token accounts; `LanePda{next}` seeded `["lane", subject,
-  lane]` (prunable after `valid_until`); `MetaOp` fixed 337 bytes, digest `sha256(MetaOp)`; the subject signs
-  `"<domain>:" ‖ hex(sha256(MetaOp))` as raw ed25519, Solana off-chain message (`\xffsolana offchain`) or passkey;
-  the program verifies by inspecting the Ed25519/Secp256r1 precompile instruction in the same transaction.
+  lane]` (prunable after `valid_until + PRUNE_DELAY_S`); `MetaOp` fixed **336 bytes** (`MetaOp::LEN`), digest
+  `sha256(MetaOp)`; the subject signs `"<domain>:" ‖ hex(sha256(MetaOp))` as raw ed25519, Solana off-chain message
+  (`\xffsolana offchain`) or passkey; the program verifies by inspecting the Ed25519/Secp256r1 precompile instruction
+  in the same transaction. Wallet text becomes readable and rebuilt on chain under WSF CR-WSF-1 (§7.5).
+- **Immutable at deploy** (RS12-19, CR-R3-11; SPECIFIED, NET-SOLANA-FIX1 / R3-FIX15): `deploy.sh` = deploy with a
+  temporary authority → `initialize` → `solana program set-upgrade-authority --final` → check `ProgramData`
+  `upgrade_authority_address == None` and `Config` exists, else exit 1. The node holds a chain whose program still has
+  an authority `halted` (`PROGRAM_UPGRADEABLE`). The built deploy keeps an upgrade authority (dev only).
+- **Signing network fixed at build time** (R3D CR-R3-4, R3-FIX6): the Solana runtime exposes no genesis hash, so
+  `deploy.sh` reads `solana genesis-hash --url <cluster>` and builds with `SCAAS_NETWORK` = that hash; `initialize`
+  loses its `network` argument; a program id already recorded for another genesis is refused. The chain profile's
+  `chain_uid` (UA R330) is that genesis hash; the node keeps RS12-8 (RPC genesis == `chain_uid` == `Config.network`).
+  Until R3-FIX6 lands: never reuse a program id across clusters.
+- **Lane-funded rent** (RS12-20, NI R346): the destination ATA of `relay_pay`/`mandate_pay` must exist (the program no
+  longer creates it); the node adds `create_idempotent` paid by the lane only for a configured receiving wallet, else
+  `422 DEPOSIT_NOT_ALLOWED` — otherwise a recipient that closes its ATA for the rent drains the lane in a loop.
+  `MAX_TTL_S = 31 d` caps `valid_until` and order `expiry` on chain (RS12-21); a CU exhaustion is rebuilt once at
+  `max_cu`, then `reverted` (RS12-22); `crossOrigin`/`topOrigin` refused (RS12-23); connectors refuse ops beyond the
+  lane horizon (RS12-24); mesh verifies ed25519 locally (RS12-25). The owner passkey id becomes the UA `webauthn-p256`
+  id shown only as a URN (UA R315). Streams NET-SOLANA-FIX1…3.
 - Native fee payer is the relayer lane; recent-blockhash expiry (~60–90 s) is why the subject never signs the
   transaction itself (queued jobs and resting DEX orders live much longer). Each **lane** owns a **durable nonce
   account** (created on first use), so lane transactions do not expire while queued.
@@ -1177,7 +1463,7 @@ atomic; several settles batch in one PTB. Finality: certified checkpoint.
   limits (`max_cu`, `max_loaded_bytes`).
 - Finality: commitment `finalized`; indexing via standard JSON-RPC (`getSignaturesForAddress` + `getTransaction`),
   no proprietary APIs. The public test program id is refused on public clusters.
-- clientkeys has no Solana signer yet (PLANNED).
+- clientkeys has no Solana signer yet; the seed and passkey signers are **SPECIFIED** (S4F R263–R267, `fam/*`).
 
 ### 7.8 Event normalization (all families, BUILT)
 
@@ -1197,7 +1483,17 @@ to `false`. Spec: [Zether design](superpowers/specs/2026-10-03-zether-design.md)
 [limits](superpowers/specs/2026-10-05-zether-limits.md). Owner gates: Z1 independent cryptographic audit, Z3 whether
 the private chain 7622 counts as dev, Z4 curve choice, Z5 gas optimization before public chains. Post-quantum
 confidential balances are a separate class: §8.12. Node note: the built default `max_gas_per_tx` (3,000,000) is
-below a classical Zether transfer (3.36 M); a Zether chain needs it raised (PQZ §11.3).
+below a classical Zether transfer (3.36 M); a chain with Zether must set `max_gas_per_tx ≥ 4.2 M` (BLS envelope
+3.98 M execution + intrinsic + calldata ≈ 4.10 M; ZD rev 1.1 §15).
+
+Review fixes (ZD rev 1.1, SPECIFIED; streams ZF-FIX1…3): clientkeys and the node gateway accept a Zether token only if
+its `verifier()` and `registry()` are the chain's pinned canonical addresses (the factory stays open for provenance,
+RS2-20); `ZetherMetaTx` applies the `MetaToken` ERC-1271 cap — 400 k when `m.from.codehash` is the `SubjectAccount`
+clone codehash, else 50 k — so a passkey `SubjectAccount` can sign envelopes (RS2-21); an outer fee recipient equal to
+the token reverts `FeeWouldStick` (RS2-24); mandatory invariant/fuzz, off-subgroup and `D_out = O` tests (RS2-23); the
+client balance-cache key includes the chain (`chainId:ua:token`, later `chain_uid`, RS2-25); the public
+`schnorrSign` export takes no caller-chosen `k` (RS2-26). The built registry's PoP does not bind an authority: register
+only from an account you alone control until UA F1 (RS2-22).
 
 ### 8.1 Philosophy: identity visible, amounts hidden
 
@@ -1240,11 +1536,17 @@ it is more expensive; the earlier "45–60 % cheaper" claim is wrong).
 | Single transfer maximum | `< 2^64` (in practice bounded by the sender's balance ≤ 2^54) — one transaction for any amount, so large payments are no longer split and their size is not revealed by the number of transactions | |
 | `confidentialFee` | `< 2^64` and `< maxDecryptableShielded` | set at `initialize` |
 | Decryption (BSGS) | **no `DECRYPT_BOUND` constant**: client-configured `table_bits ∈ [18, 27]`, `bound_bits ≤ 54`; defaults mobile/WASM 22/44, desktop 24–26/54; WASM caps at 2^24 entries (2^26 with `allowLargeTable`) | `zether-prover` `BsgsParams` |
-| Balance cache | `{ua, token, accSeq, balance}` in the device vault, verified by `[b]G == C − [x]D` before use, updated on rollOver (BSGS only on `pending`) and own debits; never on chain or on a server | clientkeys `sealBalanceCache` |
+| Balance cache | `{ua, token, accSeq, balance}` in the device vault, verified by `[b]G == C − [x]D` before use, updated on rollOver (BSGS only on `pending`) and own debits; never on chain or on a server; key `chainId:ua:token` (RS2-25; built key `ua:token`) | clientkeys `sealBalanceCache` |
 | `shieldScale` | raw underlying units per shielded unit (e.g. a 6-decimal stablecoin kept to 2 decimals: `10^4`) | `fund(amount)` pulls `amount × shieldScale` |
 | Ring size | 2 | |
 
 Native CLI `zether-read-balance` reads balances above the device bound (table up to 2^27).
+
+Soundness of the balance relation holds for every balance `< r` (RS-NV64-1), so the canon rule "`2^n_b > total ×
+1024`" is superseded; `n_b = 128` would add ≈ 1.06 M gas (≈ +32 %) per transfer and ≈ +76 % per burn and is not
+planned. ConsenSys Zether's `MAX = 2^32 − 1` is a decryption bound, not a soundness bound; separate Zether "series"
+are separate, non-fungible tokens ([MAX note](superpowers/specs/2026-10-05-zether-consensys-max.md) rev 1.1). BSGS
+timings in the limits spec are estimates ([limits](superpowers/specs/2026-10-05-zether-limits.md) rev 1.1).
 
 ### 8.4 Gas (measured, execution gas, chain 31337, n_v = 64)
 
@@ -1343,8 +1645,8 @@ keccak256(abi.encode(keccak256("SCAAS-ZETHER-ENTRY-V1"), chainid, token, fromUA,
 
 ### 8.9 Disclosure (`ITransferDisclosure`, BUILT)
 
-The token stores per `entryRef` the bundle `Y_to ‖ C_out ‖ D_out ‖ C_aud` (256 B, ≈ +200 k gas, RS2-15). Three
-openings, all kept:
+The token stores per `entryRef` the bundle `Y_to ‖ C_out ‖ D_out ‖ C_aud` (bn254 256 B ≈ +200 k gas; BLS12-381
+512 B ≈ +375 k gas, estimate; RS2-15, ZD rev 1.1 §12). Three openings, all kept:
 
 | Kind | Opening | Check |
 |---|---|---|
@@ -1369,15 +1671,16 @@ the device (clientkeys `sealConfKey`).
 ### 8.11 Families
 
 Zether is EVM-only in v1 (BN254 or BLS12-381 precompiles). Non-EVM families: feasibility notes only. Zether intents
-are not carried on the mesh (`W = 0` and single-flight per sender need their own design). PQZ: private chain only
+are not carried on the mesh (`W = 0` and single-flight per sender need their own design); neither are PQZ
+envelopes (`metatx`/`ua_metatx` naming a PQZ token are never exported). PQZ: private chain only
 (§8.12).
 
-### 8.12 Post-quantum Zether on private/PoA chains (SPECIFIED, [PQZ](superpowers/specs/2026-10-06-pq-zether-design.md) rev 1.2)
+### 8.12 Post-quantum Zether on private/PoA chains (SPECIFIED, [PQZ](superpowers/specs/2026-10-06-pq-zether-design.md) rev 1.4)
 
 Component spec E (R270–R289) is normative; nothing of it is built. **UNAUDITED — NOT FOR PRODUCTION FUNDS.**
 Summary:
 
-| Item | PQZ (rev 1.2) |
+| Item | PQZ (rev 1.4) |
 |---|---|
 | Class | `PqzToken`, a separate token class, never an upgrade of `ZetherToken`; same shape (identities visible, ring size 2, encrypted amounts and balances, public fee scalar, sender/receiver/auditor disclosure) (R270) |
 | Encryption | additive module-LWE with BFV-style encoding ("MLWE-BFV-add"): `d = 64`, `k = 32` (LWE dimension 2048), `q = 2^42 − 215` (prime, `X^64 + 1` splits into 4 factors), `Δ = 2^26 − 1`, CBD(1) secrets, CBD(20) errors, plaintext = 16 base-16 digits; primal-uSVP β ≈ 476 (core-SVP 139 classical / 126 quantum; Kyber-512 is 406) (R271, R272) |
@@ -1386,12 +1689,13 @@ Summary:
 | Verification | native precompiles on the private chain only: `PQZ` at `0x…0F01`, `MLDSA65` at `0x…0F10`; the verify path never crashes the node; no Solidity verifier (R279, R280) |
 | Gate | hard-coded allowlist (dev 31337/1337 and the private chain) **and** a constructor precompile self-test; `OpenFactory.pqzEnabled = false` by default; release gates G-LIC (licences/patents) and Z1 (audit) (R270) |
 | Identity | UA kind `0x0142` `pqz-mlwe` (`d` = 16,384-byte public key), a Zether-family kind; `authRef` must be a PQ signing UA (`mldsa65`/`mldsa44`/`fndsa512`) or an `msig` whose non-PQ members' weight is below the threshold; `0`, native ids and classical-only kinds refused (R281, R282; UA R305) |
-| Envelope | none: open calls, ML-DSA signature over the statement plus the proof; inner confidential fee only; not on the mesh (R284) |
+| Meta-transactions (owner 2026-10-07, R284 rewritten in rev 1.4, §7.11 there) | `PqzToken` is ERC-20 + **`IERC20MetaTx` exactly like `ZetherToken`**: public ERC-20 ledger, `wrap`/`unwrap` of the underlying 1:1 as **direct calls** (same surface as classical), R26 allowances, the unchanged `MetaTransaction` struct, typehash, `canon`, 2D nonce, `cancelMetaNonce`, `supportedModes() = 0xF3`, nine steps, `MetaTransactionExecuted`; domain `("SCaaS PqzToken", "1", chainId, token)`. **v3 path**: `uaExecute(UAMetaTransaction, auth)`, domain `("SCaaS PqzToken", "3", chainId, token, salt = chainUid)`, so a PQ UA (an `mldsa65` fee UA) pays the outer fee and the whole path is post-quantum; one nonce map for both paths. Envelope ops: `m.to = 0`, `m.value = 0`, `m.data` byte-identical to the direct calldata of `pqzTransfer`, `pqzBurn` (burn and refresh), `fund(bytes32,uint256)` (from the signer's public balance), `rollOver`; `data` empty = plain public transfer. Outer fee `NONE`/`FIXED` only on PQZ ops (`PERCENT` refused), checked before any statement build and taken after the proof verifies. `envelopeBinding` is a statement header field (0 for a direct call), so proof and PQ `authSig` cover exactly one envelope. **Gasless exit = the envelope `burn`**, which pays the underlying straight to `recipient`; no envelope `unwrap` op, no `pay`, no `mtxBatch`/`uaBatch` (an op is ≈ 3 M gas, ≈ 80 KB). Authority split: the envelope signer controls only its public balance and its nonces; confidential value needs the PQ `authSig` and the proof. Not on the mesh, as classical Zether |
 | Decryption | direct rounding, exact, microseconds; no BSGS, no cache needed (R285) |
-| Limits and sizes | `MAX_TOTAL_SHIELDED = 2^62`, amounts `< 2^64` (R286); ciphertext 16,512 B, public key 16,384 B, transfer proof ≈ 30–50 KB (estimate); a transfer ≈ 77 KB calldata, ≈ 2.8 M gas (§4.4, §9.4 there) |
+| Limits and sizes | `MAX_TOTAL_SHIELDED = 2^62`, amounts `< 2^64` (R286); ciphertext 16,512 B, public key 16,384 B, transfer proof ≈ 30–50 KB (estimate); statement 83,008 B (transfer) / 49,984 B (burn) with the 576-byte header incl. `envelopeBinding`; a transfer ≈ 77 KB calldata (≈ 81 KB in a v3 envelope), ≈ 2.8 M gas direct and ≈ 2.82 M in a v1 envelope while p99 verify ≲ 9.7 ms (§4.4, §9.4 there) |
 | Keys | seed by UA §8.1's PQ rule `HKDF-SHA256(BIP-39 seed, "scaas.ua.pq.v1", kind_tag ‖ account ‖ i)`, derived in the app's key worker, sealed as a 32-byte leaf (R282) |
 | Provers | native x86-64/aarch64, then the browser/mobile WASM prover in the app's Zether worker (E-S6), fallback a loopback-only `pqz-cli serve` run by the user (R287, §11.5 there) |
-| Node | chain profile flag `pqz` bound to the genesis hash, probe `has_pqz_precompile`, job kind `pqz_call` pre-simulated on a follower, `max_gas_per_tx = 16,000,000` on the private chain (§11.3 there; operator recommendations, OPS R247) |
+| Node | chain profile flag `pqz` bound to the genesis hash (RPC genesis == profile == `registry.chainUid()` == each token's `chainUid`), probe `has_pqz_precompile`; **envelope ops travel as ordinary `metatx` (v1) and `ua_metatx` (v3) jobs** on a token row with `kind = pqz`; job kind `pqz_call` stays for **direct open calls** only (`pqzTransfer`, `pqzBurn`, `rollOver`; direct `fund` is never a node job); every PQZ job is pre-simulated on a follower and never batched; `max_gas_per_tx = 16,000,000` on the private chain; 1 MiB body limit on job submissions to the `pqz` profile only (§11.3 there; NI amendment pending; operator recommendations, OPS R247) |
+| Odoo / ERPs | no new model: PQZ envelopes are pushed as ordinary `metatx`/`ua_metatx` jobs (`m.data` opaque), the outer fee booked from `MetaTransactionExecuted`/`UAMetaTransactionExecuted` like any token (§11.4 there; `integration.md` §3.1) |
 | Migration | classical `ZetherToken.burn` then `PqzToken.fund`; the amount is public once (R289) |
 
 Per family: v1 on the private EVM chain only (Nethermind precompile); other private EVM chains later through a
@@ -1443,6 +1747,19 @@ mandate path enforces caps on chain (§4.7).
 - Verifier checks: `type == "webauthn.get"`, challenge, `rpIdHash`, `origin` (stored per key as `keccak(origin)` on
   EVM), UP and UV flags, low-`s` (clients convert DER to `(r, s)` and normalize `s := n − s` when `s > n/2`), then
   P-256 over `sha256(authenticatorData ‖ sha256(clientDataJSON))`.
+- **One rule and one grammar for every family** (R3D CR-R3-1, SPECIFIED; streams R3-FIX1, R3-FIX2), in order:
+  `authenticatorData` ≥ 37 bytes; `rpIdHash` equals the stored one; UP **and** UV; `clientDataJSON` matches exactly
+  `{"type":"webauthn.get","challenge":"<b64url(digest)>","origin":"<origin>"` followed by `}` (end), or by
+  `,"crossOrigin":false` and then `}` (end) or `,` (the EVM `_clientDataOk` grammar); the origin equals a stored origin
+  **exactly** (no prefix match; the built TON check accepts `https://a.example.evil`); `s ≤ n/2`; then P-256. Shared
+  vectors `smartcontracts/test/vectors/webauthn_kat.json` (Safari L2 and Chrome/Firefox L3 accept shapes; rejects:
+  `crossOrigin:true`, `topOrigin`, a member before `crossOrigin`, whitespace, a suffixed origin, wrong rpIdHash, UV
+  unset, high-s, another digest) run in every family's suite. Built gaps: Cosmos checks neither rpIdHash, origin nor
+  UV; Sui, Soroban, TON and Solana do not refuse `crossOrigin: true`.
+- **Documented limitation** (ADW L3): `SubjectAccount.isValidSignature` accepts any digest signed by any of its keys —
+  ERC-1271 digests are not account-wrapped (ERC-7739 class). SCaaS digests bind `from`/`verifyingContract`, so none of
+  ours replay across accounts; a third-party protocol that trusts the same key on two accounts is exposed. Wrapping is
+  rejected for now (it would change every 1271 digest, KAT, clientkeys and Odoo builder).
 - Batch: one assertion over a Merkle root of digests; leaf `keccak256(keccak256(0x00 ‖ digest))` (second-preimage
   safe); each operation carries `(keyIndex, proof, sig)`.
 - Per family: EVM/Hedera `SubjectAccount` (ERC-1271; P-256 via precompile `0x100` or Solidity); Sui
@@ -1466,7 +1783,25 @@ stable address across key rotation, guardian recovery or third-party compatibili
 come from the role path `m/7622'/0'/<account>'/2'/<i>'`, never the EOA path (UA R300, S4F R269).
 
 Seed and passkey back each other up: the seed-derived key is the natural recovery key when a passkey is lost and
-vice versa.
+vice versa. New `SECP256K1` keys that Odoo or clientkeys register on a subject account use the role path, never the
+subject's EOA key; registering a key whose address equals the subject's `payer_address` on the same account is refused
+(ADW CR-ADW-3, ADW-FIX3; existing dev keys stay until rotated).
+
+**Key lifecycle per family** (R3D CR-R3-6; gaps are streams):
+
+| Family | Rotation | Guardian / recovery | Gap |
+|---|---|---|---|
+| EVM | `SubjectAccount` add/remove/rotate via `executeAsOwner` | guardian + `RECOVERY_DELAY` | — |
+| Hedera | native account key update (no `SubjectAccount`, R6-2) | native | — (stated) |
+| Aptos | account keys + origins | guardian + `RECOVERY_DELAY` | — |
+| Sui | per `Account<T>` today → per subject `Keys` (CR-R3-5) | guardian per `Account<T>` today | R3-FIX7 |
+| Soroban | account-authorised add/remove | **seam only** (R8-2) | R3-FIX8 |
+| Cosmos | **none** (passkey address = hash of key + rp + origin) | **none** | R3-FIX9 (passkey account contract: design + impl) |
+| TON | wallet key follows the owner's wallet; **a passkey cannot rotate** | **none** | R3-FIX10 (guardian + delayed passkey rotation) |
+| Solana | KeyOp add/remove/policy | `start_recovery` / `finish_recovery` | — |
+
+A plain EOA never rotates. Merkle batching of several digests under one passkey assertion exists today on EVM and
+Soroban only; Sui, Aptos, Cosmos, TON and Solana verify one digest per assertion (INFRA review M2).
 
 **Backup switch (SPECIFIED, S4F R250–R254; replaces the earlier per-account mode list):** one boolean deployment
 switch "backup key required", default **OFF** (app `policy.requireBackupKey`, Odoo
@@ -1505,6 +1840,11 @@ unsatisfiable kinds may only move their balance out. BE/BS flags drive non-block
 - Lanes hold gas only; funding from treasury and balance monitoring (`scaas_relayer_balance{chain,lane}`) are
   operator duties (O8); automatic refill is PLANNED (HANDOFF GA 2.2 #3).
 - Node identity key (Ed25519, `[identity] key`) is separate from lane keys (secp256k1 is not a TLS signature scheme).
+- **One custody key per family** (NI R349, SPECIFIED, NR5): a key the node holds (lane key, mandate delegate,
+  custody adapter key) signs in exactly one family; `Config::validate` refuses the same public key in two families and
+  imported keys carry a family tag. Hedera ED25519, Stellar and the TON mandate delegate all sign raw 32-byte digests
+  with ed25519, so one key across two families would make a compromised signer a cross-chain oracle. Portal
+  connectors follow the same rule.
 
 ### 9.7 Threshold and aggregate signatures
 
@@ -1667,10 +2007,23 @@ impact assessment is signed by its compliance and security owners (HANDOFF O9).
 ## 12. Node API surface
 
 All JSON, no cookies, no redirects. Errors are `{"error": "<CODE>", "detail": "<text ≤ 300 chars>"}` (gateway:
-the stable contract `{error, code, detail, revert_data?}`, APP R178). NI rev 3.6 is the single normative place for
+the stable contract `{error, code, detail, revert_data?}`, APP R178). NI rev 3.7 is the single normative place for
 node routes, tables and config. Detail:
 [NI §5–§7](superpowers/specs/2026-10-06-node-independence-design.md), [MESH §5](superpowers/specs/2026-10-05-relayer-mesh-design.md),
 [A2 §5, §13](superpowers/specs/2026-10-06-mesh-gossip-amendment.md). Client usage: `integration.md`.
+
+Error codes added by the 2026-10-07 folds (job API and gateway; per item in `POST /v1/jobs`):
+
+| HTTP | Code | When | Source |
+|---|---|---|---|
+| 403 | `CALL_TARGET_REFUSED` | `call` selector/target not in the call table (§6.10); also re-checked at lease | PD CR-PD-1 (NI fold pending) |
+| 422 | `BAD_PAYLOAD` (widened) | a job field differs from the signed payload | NI R344 |
+| 422 | `VALUE_OUT_TOO_HIGH` | native value out above `chain.max_value_out` (intake and lease) | NI R345, net-ton R10-12 |
+| 422 | `DEPOSIT_NOT_ALLOWED` | the job would make the lane fund a deposit a third party can reclaim (intake, re-checked before signing) | NI R346, RS12-20 |
+| 422 | `ZERO_VALUE` | gateway Door A `transfer`/`pay` with `value == 0` | PD CR-PD-3 |
+| 429 | `SUBJECT_THROTTLED` (+ `retry_after`) | the payload's `from` passed the grief threshold | NI R342 |
+| — | job `dead`, `error = ATTEMPTS_EXHAUSTED` | `attempt_count > chain.max_attempts` | NI R341 |
+| — | chain `halted`, reason `PROGRAM_UPGRADEABLE` | the chain's package/program is still upgradeable at activation or start | NI R348 |
 
 ### 12.1 Listeners and authentication
 
@@ -1716,7 +2069,7 @@ Keycloak; `scope` only for machine tokens).
 | `POST /v1/dex/orders`, `GET /v1/dex/orders?maker=`, `POST /v1/dex/cancel`, `POST /v1/dex/cancel-all`, `GET /v1/dex/markets`, `GET /v1/dex/depth` (levels ≤ 200), `GET /v1/dex/trades`, `GET /v1/dex/ticker` | gateway | R54 | **BUILT** |
 | `GET /v1/dex/depth?scope=network`, `GET /v1/dex/homes` | gateway | R54 | **SPECIFIED** (A2 §11.5) |
 | `GET /v1/info` | job API | read | **SPECIFIED** |
-| `POST /v1/jobs` (≤ 50 per batch; sponsorship `429 SPONSOR_BUDGET`/`SPONSOR_RATE`/`SPONSOR_TOO_SHORT`, `409 DUPLICATE_CALL {uid}`) | job API | submit | **SPECIFIED** |
+| `POST /v1/jobs` (≤ 50 per batch; sponsorship `429 SPONSOR_BUDGET`/`SPONSOR_RATE`/`SPONSOR_TOO_SHORT`, `409 DUPLICATE_CALL {uid}`, `403 CALL_TARGET_REFUSED`, `422 VALUE_OUT_TOO_HIGH`/`DEPOSIT_NOT_ALLOWED`, `429 SUBJECT_THROTTLED`) | job API | submit | **SPECIFIED** |
 | `GET /v1/jobs/{uid}` | job API | read | **SPECIFIED** |
 | `POST /v1/jobs/{uid}/cancel`, `POST /v1/jobs/cancel {origin}` | job API | submit | **SPECIFIED** |
 | `GET /v1/jobs?cursor=&limit=&wait=` | job API | read | **SPECIFIED** |
@@ -1799,7 +2152,8 @@ age = 0 for 99.9 % of the time; signed-but-orphaned transactions = 0.
 **Metrics (BUILT, prefix `scaas_`):** `relay_jobs{chain,state}`, `payment_requests_attention{chain}`,
 `indexer_lag_blocks{chain}`, `relayer_balance{chain,lane}`, `breaker_open{chain,lane,breaker}`,
 `drift_alerts{chain}`, `submit_bump_skipped_consumed_total`. SPECIFIED additions: job API, feed, store owner,
-admin, audit, OIDC, lane-foreign-nonce (NI §15), mesh (MESH §12) and gossip/TLS (A2 §13.3) metrics.
+admin, audit, OIDC, lane-foreign-nonce (NI §15), `finality_quorum{chain}` (single-provider trust visible, CR-PD-2),
+`grief_*` (namespace aggregate, NI R342), mesh (MESH §12) and gossip/TLS (A2 §13.3) metrics.
 
 **Trace contract (SPECIFIED, [OPS](superpowers/specs/2026-10-06-operations-design.md) §6; OTLP export PLANNED):** every submission span carries `chain_key`, `lane` (address),
 `tx_hash`, `gas_used`, `effective_gas_price`, `entry_ref`, `mode`, `batch`/`nonce`, `finality_depth`, `job_uid`,
@@ -1807,7 +2161,8 @@ admin, audit, OIDC, lane-foreign-nonce (NI §15), mesh (MESH §12) and gossip/TL
 
 **Readiness** (`/readyz`, BUILT): per chain ≥ quorum RPCs answer within 3 s, indexer lag ≤ `max_index_lag`, upstream
 reachable; snapshot refreshed every 10 s; 503 with reasons. SPECIFIED additions: store open and owned, lane used
-outside this store, issuer failed closed, no gossip peer for 5 min (informational).
+outside this store, issuer failed closed, RPC endpoints disagree on a range's event set (CR-PD-2), chain held for an
+upgradeable program (`PROGRAM_UPGRADEABLE`, R348), no gossip peer for 5 min (informational).
 
 ### 13.2 FinOps
 
@@ -2177,9 +2532,9 @@ counterfactual funding through `predictGrant`, permissionless `release()` (§4.6
 
 | Contract | Key entry points |
 |---|---|
-| `MandateWallet` | `setMandate(token, delegate, maxPerPayment, maxPerPeriod, periodSeconds, expiry)`, `setPayee`, `revoke`, `payUnderMandate(token, payee, amount, entryRef, validUntil, sig)`, `revokeWithSig`, `executeAsOwner`, `isValidSignature`; typehashes `PayUnderMandate(address token,address payee,uint256 amount,bytes32 entryRef,uint256 validUntil)`, `RevokeMandate(address token,uint256 validUntil)` |
+| `MandateWallet` | `setMandate(token, delegate, maxPerPayment, maxPerPeriod, periodSeconds, expiry)`, `setPayee`, `revoke`, `payUnderMandate(token, payee, amount, entryRef, validUntil, sig)`, `revokeWithSig`, `executeAsOwner`, `isValidSignature`; typehashes `PayUnderMandate(address token,address payee,uint256 amount,bytes32 entryRef,uint256 validUntil)`, `RevokeMandate(address token,uint256 validUntil)` (SPECIFIED replacement `RevokeMandate(address token,uint64 epoch,uint256 validUntil)` + `epoch[token]`, CR-ADW-1) |
 | `SubjectAccount` / `SubjectAccountFactory` | `initialize(firstKey, guardian)`, `isValidSignature`, `executeAsOwner(data, nonce, validUntil, signature)`, `addKey`/`removeKey`/`rotateKey`/`setGuardian`/`execute` (self), `initiateRecovery`/`completeRecovery`/`cancelRecovery`; factory `predict`, `deploy` (idempotent) |
-| `OrderBookDex` | `settle(Match[]) returns (bool[])` (atomic per pair; none ⇒ `NothingSettled`), `cancel(CancelReq[])`, `invalidateNonces(maker, newMin, sig)`, `checkOrder`, `setMarket` (admin); `Order(address maker,address taker,address sellToken,address buyToken,uint256 sellAmount,uint256 buyAmount,uint256 nonce,uint256 expiry,uint32 maxFeePpm,uint8 flags,address relayer,uint8 feeMode,uint256 fee,address feeToken,address feeRecipient)` |
+| `OrderBookDex` | `settle(Match[]) returns (bool[])` (atomic per pair; none ⇒ `NothingSettled`), `cancel(CancelReq[])`, `invalidateNonces(maker, newMin, sig)`, `checkOrder`, `setMarket` (admin); `Order(address maker,address taker,address sellToken,address buyToken,uint256 sellAmount,uint256 buyAmount,uint256 nonce,uint256 expiry,uint32 maxFeePpm,uint8 flags,address relayer,uint8 feeMode,uint256 fee,address feeToken,address feeRecipient)`. SPECIFIED (DEX rev 1.1, new deployment, DX-FIX3): `_validSig` contract branch = assembly `staticcall` capped at 400 k for `SubjectAccount` clones by codehash, else 50 k, ≤ 32 B returndata, and `gasleft() ≥ cap·64/63 + margin` or the whole tx reverts (RS5-14) |
 | `MetaTxDex` (legacy) | `settle(Leg a, Leg b)`: two `trade` meta-tx legs, fill-or-kill, no allowance, no route in the gateway |
 | `IZetherVerifier` | `proofSystemId`, `curveName`, `isSupportedOnThisChain`, `verifyTransfer(statement, proof)`, `verifyBurn`, `generators`, point ops |
 
@@ -2194,10 +2549,11 @@ code; at most three agents, one heavy build at a time). Revisions and ruling ran
 
 | # | Stream | Content | Depends on | Status |
 |---|---|---|---|---|
-| 0 | Review | Codex review of every component spec (`docs/reviews/specs/*-codex-review-1.md`), then fold; owner review of NI §18.2; deferred full test runs after the repo split | — | in progress |
+| 0 | Review | Every spec reviewed and folded 2026-10-07 (Codex on PQZ/UA/NI/TSS, Claude on the 16 older specs; dispositions inside each spec, review files in `docs/reviews/specs/`, git-ignored). Codex reviews still owed: AS, TW2, APP, OPS, S4F, MESH, A2, SCaaS.md, integration.md; owner review of NI §18.2; deferred full test runs after the repo split | — | in progress |
+| 0′ | Fix first | The fix-first streams of the table below (bugs found in BUILT code by the 2026-10-07 reviews), before the first feature wave (NI P2 → P3, UA F0 → F1, app A1 + A0-evm) | §0 of `TODO.md` | **SPECIFIED** |
 | 1 | S3 / S3′ | Envelope library, digests per family, `hub.sig`, conformance vectors; renames to `scaas-intent/1.2`; gossip message builders + `scaas-gossip-v1.json` | — | envelope **BUILT** (43 cases); gossip vectors open |
 | 2 | P1 | Node store v2 on SQLite + config authority; `[identity]`, `[transport]`, `[gossip]` config parsing | S3 | **BUILT** |
-| 3 | P2 | Job API, HMAC external-client API keys, built-in admin users, host CLI | P1 | **SPECIFIED** (NI rev 3.6) |
+| 3 | P2 | Job API, HMAC external-client API keys, built-in admin users, host CLI | P1 | **SPECIFIED** (NI rev 3.7) |
 | 4 | P3 | Submit and lanes from the store (safety-critical); gateway journaled in `~gateway`; R321 batch journal | P2 | **SPECIFIED** |
 | 5 | P4 | Indexer and `/v1/events`, watch lists, token subsets | P3 | **SPECIFIED** |
 | 6 | P5 | Odoo push/sync client | P4 | **SPECIFIED** |
@@ -2223,9 +2579,35 @@ code; at most three agents, one heavy build at a time). Revisions and ruling ran
 | 26 | AS1–AS9 | Regulated module (kinds 5–7), `ComplianceRegistry`, `VestingGrant`, distributions, `ExchangeOffer`, templates, managed markets ([AS](superpowers/specs/2026-10-06-asset-suite-design.md) §13) | TW2 | **SPECIFIED** (AS rev 1.1) |
 | 27 | TB1–TB3, SP1, RP1–RP2, CS1–CS2, PL1 | Tender, sponsorship policy, receiver-pays, crypto-shredding, `SponsorshipPool` (later) ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §8) | NI P3 | **SPECIFIED** (TSS rev 1.3); PL1 PLANNED-later |
 | 28 | OP1–OP8 | W3B SLOs, telemetry, trace contract, FinOps usage, denylist, runbooks, DR ([OPS](superpowers/specs/2026-10-06-operations-design.md)) | NI P3 | **SPECIFIED** (OPS rev 1.2; some metrics BUILT); OTLP export PLANNED |
-| 29 | CHAINID | Private chain id 9000 → 7622 (owner 2026-10-07): sweep specs and docs, then genesis reset, rename `src/chains/private9000` and the foundry profile, node and Odoo chain records, `chain_uid` genesis-hash binding (UA R330, NI §9.1) | owner | **PLANNED** |
-| 30 | Other product features | KeyPool auto-refill, outbound treasury payouts, anchoring (Merkle/HCS), Celo `l1_batch`, Hedera HCS/scheduled tx, TON payer tx hash on `mined`, NFT kinds | — | **PLANNED** |
+| 29 | CHAINID | Private chain id 9000 → 7622 (owner 2026-10-07): sweep the remaining specs (MESH, A2, TW2, APP, OPS, S4F, AS), `AuthScheme.sol:7` comment and the TRAPS.md heading; then genesis reset, rename `src/chains/private9000` and the foundry profile, node and Odoo chain records, `chain_uid` = genesis hash (UA R330, NI §9.1) | owner | specs partly swept (PD, ADW, R3D, ZD, UA, NI, PQZ done); code not yet landed |
+| 30 | Other product features | KeyPool auto-refill, outbound treasury payouts, anchoring (Merkle/HCS), Celo `l1_batch`, Hedera HCS/scheduled tx, NFT kinds (TON payer tx hash on `mined` is done) | — | **PLANNED** |
+| 31 | DX-FIX1…5 | DEX fixes (§3.4 F3): node DX-FIX1/2/5 fold into P7 if P7 starts first; contract DX-FIX3 (`OrderBookDex` 1271 cap, new deployment; PAY-FIX6 merges into it) and DX-FIX4 (non-EVM relayer binding, `min_nonce` caps) | — | **SPECIFIED** (DEX rev 1.1) |
+| 32 | ZF-FIX1…3 | Zether fixes (§8): `ZetherMetaTx` 1271 cap + `FeeWouldStick` + disclosure NatSpec; invariant/subgroup/`D_out = O` tests; verifier/registry pin, chain-keyed cache, `schnorrSign` without `k` | — | **SPECIFIED** (ZD rev 1.1) |
 | — | Owner/operator steps | O1 audit of every contract family; O2 registrar multisig; O3 real deployments; O4 7-day finality evidence + ≥ 2 RPCs; O5 reverse-proxy rate limits; O6/O7 KMS/HSM custody and lane signers; O8 lane funding; O9 land-gate decision; O10 subject-account onboarding; Z1–Z6 Zether gates; G-LIC (PQZ) | — | open |
+
+**Fix-first streams** (order of `TODO.md` §1; bugs in BUILT code found by the 2026-10-07 reviews; code starts when the
+spec phase ends):
+
+| Order | Stream | Content | Ruling | Gate |
+|---|---|---|---|---|
+| 1 | **NET-TON-FIX1** | Node half: forward cap at intake and lease, `forward_nanoton` ≤ cap, `value_out` into `tx_cost`, TON Connect domain checked at every door | net-ton R10-12, R10-14; NI R340/R344/R345 | **BLOCKING**: no job API, mesh or gateway path may reach a TON lane before it lands |
+| 1 | NET-TON-FIX2…4 | `tx_id` normalized hash + seqno lookup, balance/passkey simulation; contract `MAX_FORWARD_TON`, domain pin, revoke `nonce + 2`, DEX `excessTo`/bounces (new master); mesh `ton_op` signature | R10-13…17; NI R343 | — |
+| 2 | **NR1** | Breaker meters `fee + value_out + deposits`; one billed retry; `max_attempts`; `subject_grief` + `429 SUBJECT_THROTTLED` | NI R340–R342 | after P3, **before P6** (first non-Odoo path) |
+| 2 | **NR2** | Signed fields from the payload; `chain.max_value_out`; deposit rule (`DEPOSIT_NOT_ALLOWED`) | NI R344–R346 | with P3, **before P6**; TON part = NET-TON-FIX1 |
+| 2 | **NR3** | Mesh/gateway signature checks per family (`hedera_ed25519`, cached key reads, `BAD_SIGNATURE`) | NI R343 | before S5 |
+| 2 | **NR4** | Adapter journals (Sui coins, Solana durable nonce, TON seqno) in `outer_tx` | NI R347 | with P3 (needs R326) |
+| 2 | **NR5** | Upgradeability read ⇒ `halted PROGRAM_UPGRADEABLE`; one public key per family | NI R348, R349 | after P1, with the family deploy gates |
+| 3 | **PAY-FIX1** | Odoo: operator read-only on `blockchain.relay.job`, `action_requeue` group check, immutable job fields | PD CR-PD-1 (a)(b) | — |
+| 3 | **PAY-FIX2** | Node `call` target/selector table (pull path and NI accept), `CALL_TARGET_REFUSED` | PD CR-PD-1 (c) | — |
+| 3 | PAY-FIX3…5 | Event-set quorum (EVM/Hedera); Door A intake (`ZERO_VALUE`, floor, public fee-0 rule, per-`from` bucket); idempotent `signed` report | CR-PD-2, CR-PD-3, CR-PD-5 | — |
+| 3 | PAY-FIX6, PAY-FIX7 | `OrderBookDex` 1271 cap (merged into DX-FIX3); DEX fee per fill rounded up + node matcher (needs a DEX ruling) | PD review L3, L4 | PAY-FIX7 waits for the DEX ruling |
+| 3 | ADW-FIX1…4 | `MandateWallet` revoke epoch; Hedera ED25519 `executeAsOwnerRaw` test; role-path seed keys; `checkPayment(expectedToken)` | CR-ADW-1…4 | — |
+| 4 | DX-FIX1…5 | DEX venue and contract fixes (row 31) | RS5-12…20 | — |
+| 5 | R3-FIX1…14 | Cosmos passkey v2; shared WebAuthn vectors; event quorum (Sui/Solana/Soroban, Cosmos/TON); Soroban `pay_ref`; Solana build-time network; Sui `Keys`; guardians (Soroban, Cosmos, TON); TON domain set; lane-horizon constants; TON DEX bounces; Cosmos `Sweep` removed | CR-R3-1…10 | — |
+| 5 | **R3-FIX15** | Immutable at deploy: Aptos `immutable`, Sui `make_immutable`, Solana `--final` after `initialize`, Cosmos `--no-admin`; deploy-script gate + negative test; redeploy dev deployments; update node/Odoo chain profiles | CR-R3-11 (owner) | — |
+| 5 | WSF-FIX1…2 | Readable on-chain-rebuilt wallet text + `POLICY_PASSKEY_FOR_VALUE` (Solana, Sui after R3-FIX7) | CR-WSF-1 | — |
+| 5 | NET-COSMOS-FIX1…3, NET-SUI-FIX1…4, NET-HEDERA-FIX1…3, NET-SOROBAN-FIX1…2, NET-APTOS-FIX1…3, NET-SOLANA-FIX1…3 | Per-family "fix" tables of the net-* specs (§7) | R9-3…8, RS7-9…14, R6-7…11, R8-9…15, RS11-20…26, RS12-19…25 | — |
+| 5 | ZF-FIX1…3 | Zether fixes (row 32) | RS2-20…26 | — |
 
 ### 15.2 Open questions for the owner
 
@@ -2240,13 +2622,16 @@ Still open:
    job-API only.
 4. **Second event source** to bound a compromised node's ability to fake `/v1/events` (NI §18.3).
 5. Every OPS default number marked OA (OPS header: owner to approve).
+6. **DEX venue fee per fill rounding** (PAY-FIX7): round up (`Math.Rounding.Ceil`) when the market fee is on, with the
+   node matcher mirroring it — needs a DEX-spec ruling.
 
 Answered since the previous revision: `bus_scope = public` is a separate opt-in; DEX books carry home-bound and
 relayer-unbound orders per market; exclusive-assignment trust is automatic after 3 verified landings; QUIC offers
 only the PQ group (A2 rev 2.1 §19). Receiver-pays is v2-only, no v1 router (TSS R193). Regulated tokens are factory
 kinds 5–7 with issuer and compliance roles (AS R200, R202). Tender parameters: TSS R183–R187. UA purpose `7622'`,
 MuSig2/FROST kinds kept, Soroban role `kindNo` 18 (UA rev 1.3). Private chain id 7622 (owner 2026-10-07; stream
-CHAINID).
+CHAINID). Aptos/Sui/Solana programs immutable at deploy, Cosmos `--no-admin` (owner 2026-10-07, CR-R3-11; was R3D open
+question Q1). `PqzToken` implements `IERC20MetaTx` (owner 2026-10-07, PQZ R284).
 
 ### 15.3 Contradictions between the SRS drafts and rulings/code (resolved here in favour of rulings/code)
 
@@ -2294,9 +2679,17 @@ Contradictions inside this repository found while writing (fixed in their own fi
 | `smartcontracts/evm/README.md` | "Zether is still interface only" | `ZetherToken`, verifiers, registry built (dev chains) | fixed 2026-10-07 |
 | `smartcontracts/evm/README.md`, `src/chains/private9000/README.md` | chain 9000 profile `berlin`, pre-London, no BLS precompiles | `foundry.toml` `private9000 = prague`; the chain runs through Fusaka + BPO2 after the 2026-08-31 chainspec fix | fixed 2026-10-07 |
 | round-3 design R32 | seed vault scrypt `N = 2^15` | `clientkeys` uses `N = 2^17` | resolved: S4F R259 (`N = 2^17`) |
-| round-3 design §B.1 `Family` enum | six families | adapters for eight (`evm`, `hedera`, `cosmos`, `soroban`, `sui`, `ton`, `solana`, `aptos`) | open (S8″) |
+| round-3 design §B.1 `Family` enum | six families | adapters for eight (`evm`, `hedera`, `cosmos`, `soroban`, `sui`, `ton`, `solana`, `aptos`) | resolved: R3D rev 1.1 §H.4 marks it superseded |
 | MESH §3.4 | `ring` provider, no `aws-lc-rs` | reversed by R114 for rustls; NI R106a keeps `ring` for JWS verification | open (S8″) |
 | NI §3 / §7.1 (rev ≤ 3.3) | job API `[api] bind` default `127.0.0.1:8547`, same as `gateway_bind` | NI rev 3.4: job API `127.0.0.1:8548`; two listeners on one port refused | resolved |
-| node default `max_gas_per_tx` | 3,000,000 | a classical Zether transfer needs 3.36 M; PQZ needs 16 M on the private chain | open (config) |
-| component specs (PQZ, UA, OPS, NI, TRAPS) | private chain id 9000 | owner 2026-10-07: 7622; UA rev 1.4, NI rev 3.6 and PQZ rev 1.3 swept | open for the rest (stream CHAINID) |
+| node default `max_gas_per_tx` | 3,000,000 | a classical Zether transfer needs 3.36 M (Zether chains: set ≥ 4.2 M, ZD rev 1.1 §15); PQZ needs 16 M on the private chain | open (config) |
+| component specs, `AuthScheme.sol:7`, TRAPS.md heading | private chain id 9000 | owner 2026-10-07: 7622; swept in UA rev 1.4, NI rev 3.6+, PQZ rev 1.3+, PD/ADW rev 1.1, R3D rev 1.1+, ZD rev 1.1 | open for MESH, A2, TW2, APP, OPS, S4F, AS, the code comment and TRAPS.md (stream CHAINID) |
+| SCaaS.md (before this revision) §7.7, §7.6, §7.4, §7.2, §7.5 | Solana `MetaOp` 337 B; TON "TODO #8" open and a `BindKey` message; Soroban random nonce and one-shot `pay_ref`; Hedera `associateUnderlying()`; Aptos `upgrade_policy = compatible` | 336 B (`MetaOp::LEN`); TODO #8 done, key bound through `SignedOp.stateInit` (R10-5); deterministic nonce, `(from, pay_ref)` (R8-9); association in `initialize` (R6-8, TW2 R144); immutable at deploy (RS11-20) | fixed in this revision |
+| R3D CR-R3-7 vs net-ton R10-14 | TON domain pinned as a per-wallet `domains` set changed by the owner's wallet | `domainHash` in the wallet init data issued by the master; node checks at every door | open: reconcile in NET-TON-FIX3 / R3-FIX11 (both rev 2026-10-07) |
+| R3D CR-R3-9 vs net-ton R10-17 | TON DEX bounced payouts credited per owner (`unclaimed`) + permissionless `Claim` | bounce body is truncated to 256 bits (no destination): `bounced[master]` + evented admin `RefundBounced` | open: reconcile in NET-TON-FIX3 / R3-FIX13 |
+| DEX RS5-15 vs net-soroban R8-10 | "relayer 0 = open" settlement form | Soroban has no open form (`Order.relayer` mandatory) | open: note in DEX spec (cross-spec nit, `TODO.md` §0) |
+| PD PAY-FIX6 vs DEX DX-FIX3 | two streams for the `OrderBookDex` 1271 cap | same fix | open: merge PAY-FIX6 into DX-FIX3 |
+| CR-PD-1 call table vs NI rev 3.7 §5.2 | NI lists no `CALL_TARGET_REFUSED`, no `chain_contract.kind = account_factory` | PD §15.4 amendment | open: NI fold pending; this document is normative meanwhile (§6.10) |
+| TSS rev 1.3 NI-amends row | omits `job.sponsor_fallback` | NI rev 3.6 folded it | open (cross-spec nit) |
+| CR-PD-1 call table vs TSS §A.5, AS §3, `integration.md` §9, §11 | tender calls (`createTender`, `commitBid`, keeper `revealBid`/`withdrawDeposit`/`settleTender`, bonds) and issuer/compliance interventions pushed as `call` jobs | not rows of the call table ⇒ `CALL_TARGET_REFUSED`; the factory is excluded outright | open: add rows (target `chain_contract.kind = tender`, the token's issuer/compliance contracts) in PD/NI, or keep these calls wallet-sent |
 | `zether-prover/wasm-smoke.sh` | no `--target web` build | APP R164 runs the prover as a web worker | open (APP §17) |
