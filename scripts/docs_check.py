@@ -268,7 +268,7 @@ def example_mask(text):
     return mask
 
 
-C9 = [r'\bSRS\b', r'bamboo', r'\bDMS\b', r'\bNPP\b', r'canon', r'_USER-DECISIONS', r'\bUD §', r'\b(round|vòng) \d',
+C9 = [r'\bSRS\b', r'bamboo', r'\bDMS\b', r'\bNPP\b', r'\bcanon\s*(?:§|C\d)|CANON', r'_USER-DECISIONS', r'\bUD §', r'\b(round|vòng) \d',
       r'\bspec [A-F]\b', r'\b(PD|ADW|R3D|WSF|INFRA|ZD|NI|MESH|A2|TW2|APP|TSS|AS|OPS|S4F|PQZ)\s*(§|rev\b|R\d)',
       r'\bdms_', r'res\.company', r'\bOdoo\b', r'\bNhóm \d', r'CHƯƠNG', r'§\s*(6\.21|10\.[1-5](\.\d)?|14\.2\.8)\b']
 C9_RE = re.compile('|'.join(f'(?:{x})' for x in C9))
@@ -650,7 +650,7 @@ def load_facts(area=None):
     out = []
     for p in sorted(d('_work', 'facts').glob('*.tsv')):
         with p.open(encoding='utf-8') as fh:
-            out += [r for r in csv.DictReader(fh, delimiter='\t', quoting=csv.QUOTE_NONE)]
+            out += [r for r in csv.DictReader(fh, delimiter='\t', quoting=csv.QUOTE_NONE, escapechar='\\')]
     if area:
         out = [f for f in out if any(t.startswith(x) for t in targets(f['disposition']) for x in AREAS[area][0])]
     return out
@@ -685,7 +685,7 @@ def cmd_facts_extract():
         old = {}
         if out.exists():
             with out.open(encoding='utf-8') as fh:
-                old = {r['fact_id']: r for r in csv.DictReader(fh, delimiter='\t', quoting=csv.QUOTE_NONE)}
+                old = {r['fact_id']: r for r in csv.DictReader(fh, delimiter='\t', quoting=csv.QUOTE_NONE, escapechar='\\')}
         rows_map = smap.get(p.name, [])
         rows = []
         for f in split_facts(p, measure, every_paragraph=p.name == 'blockchain.md'):
