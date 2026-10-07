@@ -274,6 +274,7 @@ C9 = [r'\bSRS\b', r'bamboo', r'\bDMS\b', r'\bNPP\b', r'\bcanon\s*(?:§|C\d)|CANO
 C9_RE = re.compile('|'.join(f'(?:{x})' for x in C9))
 STREAM_RE = re.compile(r'\b(P\d+b?|NR\d|OP\d|S\d+′*|G\d|T\d|TB\d|RP\d|CS\d|PL\d|SP\d|AS\d|F\d+|N\d|A\d+(-\w+)?|E-S\d+|D\d)\b')
 VI_RE = re.compile('[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]', re.I)
+VI_KEY = re.compile(VI_RE.pattern[:-1] + 'àáèéìíòóùúýãõ]', re.I)   # a fact key in Vietnamese can never land
 
 
 def run_checks(area=None):
@@ -754,8 +755,8 @@ def cmd_facts_check(area):
                     if not k:
                         continue
                     kk = norm_text(k.strip('`"'))
-                    if OLD_TOK.fullmatch(k):
-                        continue
+                    if OLD_TOK.fullmatch(k) or VI_KEY.search(k):
+                        continue                          # old ids live in decisions.md; C9 bans Vietnamese text
                     if kk not in texts[tf] and not (k.startswith('`') and kk in corpus):
                         errs.append(f"{f['fact_id']} [{f['section']}] key {k} not in {tf}")
             elif part.startswith('superseded:'):

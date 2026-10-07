@@ -94,7 +94,7 @@ A duplicate returns `200` with the stored state (idempotent).
 4. The token or asset is registered (`TOKEN_NOT_SERVED`).
 5. `now < valid_until ≤ now + max_valid_for_secs` (`EXPIRED`).
 6. The family signature verify, where the node has one (`BAD_SIGNATURE`). A verifier that returns `None` (the key is
-   not the payer's) goes on to simulation, which arbitrates ([INT-ERP-21](../integration.md#INT-ERP-21)).
+   not the payer's) goes on to simulation, which arbitrates ([NET-ALL-14](../networks/README.md#NET-ALL-14)).
 7. A bound relayer must be a lane of the chain (`RELAYER_NOT_OURS`).
 8. Simulation (`SIMULATION_REVERT`).
 9. INSERT a `signed_op` job in `~gateway`, origin key = digest (G2 durable).
