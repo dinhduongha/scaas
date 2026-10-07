@@ -329,7 +329,7 @@ mandates (`MandateWallet.payUnderMandate`); generic saga orchestration **PLANNED
 | `clientkeys` | `clientkeys/` (ESM, `@noble`/`@scure`) | Passkey signer, 24-word seed vault, Zether conf keys and balance cache; bundle vendored into `dms_blockchain_bridge/static/lib/clientkeys` | **BUILT** (EVM-centric); vault v2, non-EVM signers, `fam/*` and `wallets/*` **SPECIFIED** ([S4F](superpowers/specs/2026-10-06-signers-followups.md)); `UAKey` **SPECIFIED** (UA F3) |
 | `app/` | `scaas/app/` (React + Vite) | Console and dApp over all seven families: contracts, wallets, DEX book, Zether, node admin (built-in login or OIDC) | **SPECIFIED** ([APP](superpowers/specs/2026-10-06-scaas-app-design.md) rev 1.3; requirements NI §7.7, A2 §13.2) |
 | Odoo client | `bamboo-dms/dms_blockchain`, `dms_blockchain_payment`, `dms_blockchain_bridge`, `dms_blockchain_dex` | One ERP client: outbox, payment provider `chain`, portal facade, DEX accounting | **BUILT** (pull model); push client **SPECIFIED** (NI §10) |
-| CI | `.github/workflows/ci.yml` (`scaas-ci`) | forge test (pinned OZ v5.2.0, forge-std v1.16.2), `private9000` build, cargo clippy `-D warnings`, cargo test, EVM e2e on anvil | **BUILT**; CI for prover, clientkeys and non-EVM e2e **PLANNED** |
+| CI | `.github/workflows/ci.yml` (`scaas-ci`) | forge test (pinned OZ v5.2.0, forge-std v1.16.2), `private7622` build, cargo clippy `-D warnings`, cargo test, EVM e2e on anvil | **BUILT**; CI for prover, clientkeys and non-EVM e2e **PLANNED** |
 
 ### 3.2 Node roles (one binary, modules switched in config)
 
@@ -1243,11 +1243,12 @@ keystore) or a raw `private_key` (one lane); `scaas-node addresses` prints every
   add ≈ 50 000 intrinsic gas for the fee currency. Finality mode `l1_batch` is **PLANNED**; profile `celo` (Cancun).
 - **Private chain 7622:** Nethermind 1.39, Clique PoA, one signer, 5 s blocks, base fee 0 (gas free), forks live
   through Fusaka + BPO2 (incl. EIP-2537, EIP-7951 P-256 at `0x100`, EIP-7825 16,777,216 gas per-tx cap, EIP-7623,
-  EIP-7934) after the 2026-08-31 chainspec fix; Solidity profile `private9000` = `prague`; finality `depth 1, quorum
+  EIP-7934) after the 2026-08-31 chainspec fix; Solidity profile `private7622` = `prague`; finality `depth 1, quorum
   1`. Not on the classical Zether dev allowlist (RS2-1, owner question Z3); the only PQZ chain (§8.12). Nodes bind
   the profile to the genesis hash, not to the chain id alone (PQZ §11.3).
-  Chain id formerly 9000 (collides with Evmos Testnet); owner decision 2026-10-07, migration pending (stream CHAINID).
-  Component specs, code directories (`src/chains/private9000`) and the foundry profile still say 9000 until then.
+  Chain id formerly 9000 (collides with Evmos Testnet); moved 2026-10-07 (stream CHAINID, scaas d4c296d,
+  bamboo-dms a76291f): genesis reset, chainId `0x1dc6`, genesis hash
+  `0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464`; directory `src/chains/private7622`.
 - **Deployment:** `smartcontracts/scripts/deploy.sh evm <rpc>` runs `script/Deploy.s.sol` (OpenFactory, registrar,
   SubjectAccountFactory, MetaToken v1 registered as `META v1`, MetaTxDex, OrderBookDex, optional demo token) and
   writes `deployments/<chainid>.json`. Zether and the registry are not in the deploy script (dev chains only).
@@ -2581,7 +2582,7 @@ code; at most three agents, one heavy build at a time). Revisions and ruling ran
 | 26 | AS1–AS9 | Regulated module (kinds 5–7), `ComplianceRegistry`, `VestingGrant`, distributions, `ExchangeOffer`, templates, managed markets ([AS](superpowers/specs/2026-10-06-asset-suite-design.md) §13) | TW2 | **SPECIFIED** (AS rev 1.1) |
 | 27 | TB1–TB3, SP1, RP1–RP2, CS1–CS2, PL1 | Tender, sponsorship policy, receiver-pays, crypto-shredding, `SponsorshipPool` (later) ([TSS](superpowers/specs/2026-10-06-tender-sponsorship-shredding.md) §8) | NI P3 | **SPECIFIED** (TSS rev 1.4); PL1 PLANNED-later |
 | 28 | OP1–OP8 | W3B SLOs, telemetry, trace contract, FinOps usage, denylist, runbooks, DR ([OPS](superpowers/specs/2026-10-06-operations-design.md)) | NI P3 | **SPECIFIED** (OPS rev 1.3; some metrics BUILT); OTLP export PLANNED |
-| 29 | CHAINID | Private chain id 9000 → 7622 (owner 2026-10-07): sweep the remaining specs (MESH, A2, TW2, S4F, AS), `AuthScheme.sol:7` comment and the TRAPS.md heading; then genesis reset, rename `src/chains/private9000` and the foundry profile, node and Odoo chain records, `chain_uid` = genesis hash (UA R330, NI §9.1) | owner | specs partly swept (PD, ADW, R3D, ZD, UA, NI, PQZ, OPS, APP done); code not yet landed |
+| 29 | CHAINID | Private chain id 9000 → 7622 (owner 2026-10-07) | owner | **done** 2026-10-07: chain reset (genesis `0x24e4…c464`), `private7622` profile/dir, KAT vectors, node examples, Odoo chain data (scaas d4c296d, bamboo-dms a76291f). Left: existing Odoo DBs (`noupdate=1` record `data_chain_private9000` edited by hand), redeploy contracts on 7622, `chain_uid` binding in node/Odoo (UA R330) |
 | 30 | Other product features | KeyPool auto-refill, outbound treasury payouts, anchoring (Merkle/HCS), Celo `l1_batch`, Hedera HCS/scheduled tx, NFT kinds (TON payer tx hash on `mined` is done) | — | **PLANNED** |
 | 31 | DX-FIX1…5 | DEX fixes (§3.4 F3): node DX-FIX1/2/5 fold into P7 if P7 starts first; contract DX-FIX3 (`OrderBookDex` 1271 cap + fee round-up, new deployment; absorbs PAY-FIX6 and the EVM part of PAY-FIX7) and DX-FIX4 (non-EVM relayer binding, `min_nonce` caps, fee round-up; absorbs the non-EVM part of PAY-FIX7) | — | **SPECIFIED** (DEX rev 1.2) |
 | 32 | ZF-FIX1…3 | Zether fixes (§8): `ZetherMetaTx` 1271 cap + `FeeWouldStick` + disclosure NatSpec; invariant/subgroup/`D_out = O` tests; verifier/registry pin, chain-keyed cache, `schnorrSign` without `k` | — | **SPECIFIED** (ZD rev 1.1) |
@@ -2677,7 +2678,7 @@ Contradictions inside this repository found while writing (fixed in their own fi
 |---|---|---|---|
 | `smartcontracts/evm/README.md` | "mode bitmask removed, wildcard `relayer == 0`" | `MetaTxLib` keeps the bitmask (`0xF3`) | fixed 2026-10-07 |
 | `smartcontracts/evm/README.md` | "Zether is still interface only" | `ZetherToken`, verifiers, registry built (dev chains) | fixed 2026-10-07 |
-| `smartcontracts/evm/README.md`, `src/chains/private9000/README.md` | chain 9000 profile `berlin`, pre-London, no BLS precompiles | `foundry.toml` `private9000 = prague`; the chain runs through Fusaka + BPO2 after the 2026-08-31 chainspec fix | fixed 2026-10-07 |
+| `smartcontracts/evm/README.md`, `src/chains/private7622/README.md` | chain 9000 profile `berlin`, pre-London, no BLS precompiles | `foundry.toml` `private7622 = prague`; the chain runs through Fusaka + BPO2 after the 2026-08-31 chainspec fix | fixed 2026-10-07 |
 | round-3 design R32 | seed vault scrypt `N = 2^15` | `clientkeys` uses `N = 2^17` | resolved: S4F R259 (`N = 2^17`) |
 | round-3 design §B.1 `Family` enum | six families | adapters for eight (`evm`, `hedera`, `cosmos`, `soroban`, `sui`, `ton`, `solana`, `aptos`) | resolved: R3D rev 1.1 §H.4 marks it superseded |
 | MESH §3.4 | `ring` provider, no `aws-lc-rs` | reversed by R114 for rustls; NI R106a keeps `ring` for JWS verification | open (S8″) |
