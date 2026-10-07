@@ -126,14 +126,17 @@ The single-node relayer that serves all three profiles without a mesh is BUILT; 
 flowchart TB
     subgraph OUT["1 · Write out (anchor / settle)"]
         direction LR
-        S["Subject signs"] --> OB["Client outbox"] --> JA["Node job API"] --> SIM["Simulate"] --> JR["Journal"] --> BC["Broadcast"]
+        S["Subject<br/>signs"] --> OB["Client<br/>outbox"] --> JA["Node<br/>job API"] --> SIM["Simulate"] --> JR["Journal"] --> BC["Broadcast"]
     end
+    CH[("Chain")]
     subgraph IN["2 · Read in (land)"]
         direction LR
-        RPC["Chain RPC"] --> FG["Finality gate<br/>depth · tag · instant<br/>+ RPC quorum"] --> NE["Normalized events"] --> FD["Feed /v1/events"] --> CA["Client applies"] --> BK["ERP book"]
+        RPC["Chain<br/>RPC"] --> FG["Finality gate<br/>+ RPC quorum"] --> NE["Normalized<br/>events"] --> FD["Feed<br/>/v1/events"] --> CA["Client<br/>applies"] --> BK["ERP<br/>book"]
     end
-    BC --> CH[("Chain")] --> RPC
+    OUT --> CH --> IN
 ```
+
+The finality gate is `depth`, `tag` or `instant` per family, plus agreement across a quorum of RPC endpoints.
 
 | | Write out | Read in |
 |---|---|---|

@@ -686,9 +686,7 @@ or permissioned chain (your nodes and admitted peers only); a consortium (each m
 flowchart TB
     subgraph CL["Clients"]
         direction LR
-        ERP["ERP / back office"]
-        W["Wallets and signers"]
-        A["Console and dApp"]
+        ERP["ERP / back office"] ~~~ W["Wallets and signers"] ~~~ A["Console and dApp"]
     end
     subgraph NO["Relayers"]
         direction LR
@@ -696,10 +694,7 @@ flowchart TB
     end
     subgraph SC["Smart contracts = API services"]
         direction LR
-        T["Tokens, wrappers"]
-        M["Universal Accounts,<br/>mandates"]
-        D["DEX, tender, assets"]
-        Z["Zether, PQ Zether"]
+        T["Tokens, wrappers"] ~~~ M["Universal Accounts,<br/>mandates"] ~~~ D["DEX, tender, assets"] ~~~ Z["Zether, PQ Zether"]
     end
     CH["Smart chains = infrastructure"]
     CL -->|"1 · signed intents"| NO

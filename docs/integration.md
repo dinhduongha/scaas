@@ -790,7 +790,7 @@ key under a second kind (`UAKeyInUse`) and a BLS `authRef` on the same curve as 
 <a id="regulated-assets"></a>
 
 ```mermaid
-flowchart TB
+flowchart LR
     A["1 · Authority order"] --> B["2 · Issuer verifies"]
     B --> C["3 · Compliance multisig<br/>records the order"]
     C --> D["4 · Issuer multisig freezes,<br/>then force-transfers"]
