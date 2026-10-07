@@ -12,7 +12,7 @@ in the component docs under [`docs/`](docs/README.md), each with an id and a rea
 
 1. [A smart chain is infrastructure](#1-a-smart-chain-is-infrastructure)
 2. [Smart contracts are API services](#2-smart-contracts-are-api-services)
-3. [Contracts built on standards](#3-contracts-built-on-standards)
+3. [Contracts: what is built on what](#3-contracts-what-is-built-on-what)
 4. [Upgradeable or not is decided at deploy](#4-upgradeable-or-not-is-decided-at-deploy)
 5. [What the traditional model gets wrong](#5-what-the-traditional-model-gets-wrong)
 6. [Universal Accounts: one identifier for every kind of key](#6-universal-accounts-one-identifier-for-every-kind-of-key)
@@ -70,7 +70,7 @@ counts and wins on others; the tables below say which.
 
 | | Cloud VM (e.g. EC2, Compute Engine) | Hosted backend (e.g. Supabase, Firebase) | Smart chain + SCaaS |
 |---|---|---|---|
-| Compute | Your code on machines you rent | Managed database, auth and functions | Contract code in the chain's VM, run identically by every validator |
+| Compute | Your code on virtual machines you rent | A managed database per project plus serverless functions (Supabase: V8 isolates at the edge; Firebase: Cloud Functions) | Contract code in the chain's VM, run identically by every validator |
 | Storage and its price | Disks and databases, per GB-month | Rows and files, per plan or usage | Contract state, paid in gas per write (some chains add rent) |
 | Latency of a write | Milliseconds | Milliseconds | Seconds to minutes, until finality |
 | Throughput | Grows with what you rent | Grows with the plan | Bounded by the chain's block space, shared with everyone |
@@ -192,38 +192,99 @@ Read more: the authority model and why it differs from IaaS/BaaS —
 
 ---
 
-## 3. Contracts built on standards
+## 3. Contracts: what is built on what
 
 SCaaS contracts **inherit from the standard contracts** instead of reinventing them. On EVM they are built on
 OpenZeppelin (version pinned in CI) and the ERC/EIP interfaces, so wallets, explorers and other contracts see an
-ordinary ERC-20 token; the gasless layer is an **extension** of the standard, not a fork of it.
+ordinary ERC-20 token; the gasless layer is an **extension** of the standard, not a fork of it. Every product sits on
+the same few layers:
 
 ```mermaid
-flowchart BT
-    STD["Standards (OpenZeppelin)<br/>ERC20 · EIP712 · IERC1271"]
-    MTX["Gasless base<br/>ERC20MetaTx · MetaTxCore<br/>implements IERC20MetaTx"]
-    ZB["Confidential base<br/>ZetherMetaTx"]
-    ACC["Smart accounts (optional)<br/>SubjectAccount · MandateWallet"]
-    TOK["Tokens<br/>MetaToken · No / Single / Multi<br/>UnderlyingToken"]
-    ZT["ZetherToken<br/>(PqzToken: same interface)"]
-    MTX -->|inherits| STD
-    ZB -->|inherits| STD
-    ACC -->|inherits| STD
-    TOK -->|inherits| MTX
-    ZT -->|inherits| ZB
+flowchart TB
+    STD["Standards<br/>ERC-20 · EIP-712<br/>ERC-1271 · EIP-1167"]
+    LIB["Shared libraries<br/>signatures · fees<br/>multisig · BLS<br/>hash-to-curve"]
+    BASE["Bases<br/>gasless token<br/>confidential token"]
+    subgraph BUILT["Built"]
+        direction LR
+        F["Factory"]
+        T["Tokens and<br/>wrappers"]
+        D["Tradable tokens<br/>and DEX"]
+        A["Mandates and<br/>accounts"]
+        Z["Zether"]
+    end
+    subgraph SPEC["Specified"]
+        direction LR
+        U["Universal Account<br/>registry"]
+        P["PQ Zether"]
+        AS["Asset suite"]
+        TD["Tender"]
+    end
+    STD --> LIB --> BASE
+    BASE --> BUILT
+    BASE -.-> SPEC
 ```
 
-| Layer | Inherits | What it adds |
-|---|---|---|
-| Standard | `ERC20`, `EIP712`, `IERC1271` (OpenZeppelin) | Balances and transfers, typed-data signing, contract signatures |
-| Gasless token | `ERC20MetaTx` / `MetaTxCore` + `IERC20MetaTx` | The meta-transaction entry point inside the token ([section 7](#7-meta-transactions-and-eip-1776)) |
-| Token tiers | `MetaToken`; `NoUnderlyingToken`, `SingleUnderlyingToken`, `MultiUnderlyingToken` | Issuer tokens; wrappers of one or several existing tokens ([docs/contracts/token-wrappers.md](docs/contracts/token-wrappers.md)) |
-| Confidential | `ZetherMetaTx` → `ZetherToken`; `PqzToken` follows the same `IERC20MetaTx` | Encrypted balances behind the same gasless interface ([section 11](#11-confidential-amounts-zether-and-pq-zether)) |
-| Smart accounts (optional) | `SubjectAccount`, `MandateWallet` (`EIP712` + `IERC1271`) | A stable-address account with guardian recovery; capped spending mandates ([docs/contracts/accounts-mandates.md](docs/contracts/accounts-mandates.md)). The default account is a Universal Account ([section 6](#6-universal-accounts-one-identifier-for-every-kind-of-key)) |
+**The catalogue (EVM):**
 
-The other families follow their own token standards — CW20 on Cosmos, TEP-74 jettons on TON, SEP-41 on Soroban, SPL
-and Token-2022 on Solana, the native coin model on Move — and add the same meta-transaction model on top
-([docs/networks/README.md](docs/networks/README.md)).
+| Area | Contracts | Built on | Status | Read |
+|---|---|---|---|---|
+| Factory | `OpenFactory`, `OpenFactoryV2` | EIP-1167 clones at CREATE2 addresses; the version catalogue ([section 4](#4-upgradeable-or-not-is-decided-at-deploy)) | BUILT | [token-wrappers](docs/contracts/token-wrappers.md) |
+| Gasless tokens | `ERC20MetaTx` → `MetaToken` (v1); `MetaTxCore` → `MetaTokenBase` (v2) | `ERC20` + `EIP712` + `IERC20MetaTx` | BUILT | [metatx](docs/contracts/metatx.md) |
+| Payments | `IERC20Payment`: `pay(entryRef)` emits `PaymentSettled` | `IERC20MetaTx` | BUILT | [metatx](docs/contracts/metatx.md) |
+| Wrappers | `NoUnderlyingToken`, `SingleUnderlyingToken`, `MultiUnderlyingToken` | `MetaTokenBase` | BUILT | [token-wrappers](docs/contracts/token-wrappers.md) |
+| Tradable tokens | the `trade` operation inside `MetaToken`; `MetaTxDex` two-leg settlement | `IERC20MetaTx` | BUILT (`MetaTxDex` kept as legacy) | [metatx](docs/contracts/metatx.md), [legacy DEX](docs/contracts/dex.md#legacy-metatxdex) |
+| DEX | `OrderBookDex` | `EIP712` + `ReentrancyGuardTransient`; makers sign with ECDSA or ERC-1271; the only allowed spender | BUILT | [dex](docs/contracts/dex.md) |
+| Mandates | `MandateWallet` | `EIP712` + `IERC1271` | BUILT | [accounts-mandates](docs/contracts/accounts-mandates.md) |
+| Smart account (optional) | `SubjectAccount`, `SubjectAccountFactory` | `EIP712` + `IERC1271`; P-256 passkeys | BUILT | [accounts-mandates](docs/contracts/accounts-mandates.md) |
+| Universal Accounts | today the Zether-only `UniversalAccountRegistry`; next the UA registry with one verifier per kind, and MetaToken v3 with a UA ledger | the signature, multisig, BLS and hash-to-curve libraries | legacy registry BUILT; UA registry and v3 SPECIFIED | [universal-account](docs/contracts/universal-account.md) |
+| Zether | `ZetherToken`, `ZetherVerifierBn254`, `ZetherVerifierBls12381`, `ITransferDisclosure` | `ZetherMetaTx` (`ERC20` + `EIP712` + `IERC20MetaTx`); EIP-196/197 and EIP-2537 precompiles | BUILT, unaudited | [zether](docs/contracts/zether.md) |
+| PQ Zether | `PqzToken` | `IERC20MetaTx`; a lattice precompile on chain 7622 | SPECIFIED | [pq-zether](docs/contracts/pq-zether.md) |
+| Asset suite | `RegulatedControls`, `ComplianceRegistry`, `VestingGrant`, `Distribution`, `ExchangeOffer` | the v2 token tiers; ERC-7201 namespaced storage | SPECIFIED | [asset-suite](docs/contracts/asset-suite.md) |
+| Tender | `SealedBidTender` | commit and reveal with deposits | SPECIFIED | [tender](docs/contracts/tender.md) |
+| Sponsorship | `SponsorshipPool` | opt-in gas sponsorship contract | PLANNED | [sponsorship](docs/node/sponsorship.md) |
+| Hedera | `HederaMetaToken`, `Hedera*UnderlyingToken`, `HederaMandateWallet` | the same EVM contracts plus HIP-632 for native Hedera keys | BUILT | [hedera](docs/networks/hedera.md) |
+
+**Tradable tokens: where they came from.** The first SCaaS code had an `ERC1776Tradeable` token: a trade order signed
+against the token itself and settled by a DEX contract (it was never completed). The idea lives on in three steps:
+the `trade` operation of `MetaToken`, a meta-transaction leg that only the settlement contract may submit; the
+two-leg `MetaTxDex`, which settles two such legs at once (still deployed, no longer routed); and `OrderBookDex`, the
+current DEX, with signed EIP-712 orders, partial fills and an off-chain book.
+
+**Standards used:**
+
+| Standard | What for |
+|---|---|
+| ERC-20 (OpenZeppelin) | Every token stays an ordinary ERC-20 |
+| EIP-712, ERC-5267 | Typed, readable signatures; the domain is published by `eip712Domain()` |
+| ERC-1271 | Contract accounts (Safe, `SubjectAccount`) sign like users |
+| EIP-1167 | Cheap, immutable clones from the factory |
+| ERC-7201 | Namespaced storage for the regulated module |
+| EIP-196/197, EIP-2537 | bn254 and BLS12-381 precompiles for Zether, BLS and Schnorr |
+| EIP-7951 (RIP-7212) | P-256 precompile for passkeys, with a Solidity fallback |
+| RFC 9380 | Hash-to-curve for BLS |
+| BIP-340, BIP-327, RFC 9591 | Schnorr, MuSig2 and FROST Universal Accounts |
+| FIPS 204, FIPS 206 | ML-DSA and FN-DSA (Falcon) post-quantum Universal Accounts |
+
+**Standards deliberately not used:**
+
+| Standard | Why not |
+|---|---|
+| ERC-2771 trusted forwarder | A forwarder sits outside the token, can swallow a failed call after charging for it, and needs a trusted address; the meta-transaction lives inside the token instead ([section 7](#7-meta-transactions-and-eip-1776)) |
+| ERC-4337 bundlers and paymasters | An extra mempool, bundler and entry point for something the token already does; SCaaS follows EIP-1776 |
+| UUPS, Transparent, Beacon or Diamond proxies | An upgrade key is an admin key over every balance ([section 4](#4-upgradeable-or-not-is-decided-at-deploy)) |
+| Allowances to ordinary accounts | The classic drain; only contracts may be spenders ([section 5](#5-what-the-traditional-model-gets-wrong)) |
+
+**Other families** implement the same three pieces — token, mandate, DEX — on their own standards
+([docs/networks/README.md](docs/networks/README.md#model)):
+
+| Family | Language | Token | Mandate and DEX | Accounts |
+|---|---|---|---|---|
+| Cosmos | Rust (CosmWasm) | `token` (CW20) + `metaop` | `mandate`, `dex` | ADR-036 secp256k1, passkey |
+| Soroban | Rust (WASM) | `token` (SEP-41) | `mandate`, `dex` | `account` with `__check_auth` |
+| Aptos | Move | `meta` (one account object per owner, lanes inside) | `mandate`, `dex` | `auth`, `p256` |
+| Sui | Move | `meta` (shared `Account<T>` per subject) | `mandate`, `dex` | `auth` |
+| TON | Tact | `jetton` (TEP-74, custom wallet checks the signed op) | `mandate`, `dex` (escrow) | wallet signature, passkey |
+| Solana | Rust | program `scaas` (subject account and lane accounts) | in the same program | ed25519 / P-256 precompiles |
 
 ---
 
