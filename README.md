@@ -23,7 +23,8 @@ in the component docs under [`docs/`](docs/README.md), each with an id and a rea
 11. [Confidential amounts: Zether and PQ Zether](#11-confidential-amounts-zether-and-pq-zether)
 12. [Chains and families](#12-chains-and-families)
 13. [The components and where to read more](#13-the-components-and-where-to-read-more)
-14. [Repository layout](#14-repository-layout)
+14. [How the design evolved](#14-how-the-design-evolved)
+15. [Repository layout](#15-repository-layout)
 
 ---
 
@@ -248,7 +249,7 @@ flowchart TB
 against the token itself and settled by a DEX contract (it was never completed). The idea lives on in three steps:
 the `trade` operation of `MetaToken`, a meta-transaction leg that only the settlement contract may submit; the
 two-leg `MetaTxDex`, which settles two such legs at once (still deployed, no longer routed); and `OrderBookDex`, the
-current DEX, with signed EIP-712 orders, partial fills and an off-chain book.
+current DEX, with signed EIP-712 orders, partial fills and an off-chain book ([section 14](#14-how-the-design-evolved)).
 
 **Standards used:**
 
@@ -660,7 +661,57 @@ or **PLANNED** (direction only).
 
 ---
 
-## 14. Repository layout
+## 14. How the design evolved
+
+SCaaS did not start from a blank page. Two early prototypes shaped it: a **wrapped ERC-20 with meta-transactions**,
+then the **ERC1776 token family** with tradable tokens and a DEX. Most of their ideas survive; some were changed once
+they proved unsafe.
+
+```mermaid
+flowchart LR
+    P1["Prototype 1<br/>wrapped ERC-20<br/>with meta-transactions"] --> P2["Prototype 2<br/>ERC1776 family<br/>tradable tokens, DEX"]
+    P2 --> NOW["SCaaS today<br/>contracts as API services"]
+```
+
+| Idea | Prototype 1: wrapped ERC-20 | Prototype 2: ERC1776 family | Today |
+|---|---|---|---|
+| Meta-transaction inside the token | `executeMetaTransaction`, `mtxTransfer`; one nonce per account; chain id and token address signed | `mtxTransfer` with a two-dimensional nonce (`batch`, `nonce`), `validUntil`, a bound relayer or any relayer (`address(0)`) | One pinned EIP-712 `MetaTransaction`: lanes and nonces, expiry, `mode` flags; chain and contract in the domain ([section 7](#7-meta-transactions-and-eip-1776)) |
+| Signature format | EIP-712 typed data | Ethereum signed-message prefix | EIP-712 only, low-s, ERC-1271 for contract accounts |
+| Fees | The sender chooses the fee amount and its recipient, both signed, at most 1 % of the amount | A fee in parts per million inside each trade order | Fee modes `NONE` / `PERCENT` / `FIXED`, capped at 1 %, recipient optionally bound ([section 8](#8-who-pays-the-fee-every-model)) |
+| Payment reference | `mtxPay` with a sender-chosen `payId` and a `Payment` event | — | `pay(entryRef)` emits `PaymentSettled`; a random `entryRef` also picks the lane, which makes each payment pay-once |
+| Wrappers | No underlying, one underlying at a numerator/denominator rate, several underlyings with a rate each | — | The same three tiers (`NoUnderlyingToken`, `SingleUnderlyingToken`, `MultiUnderlyingToken`) with fixed or adjustable rates; basket legs fixed at creation |
+| Factory | A factory with `new`, one wrapper per underlying | — | An open factory of immutable EIP-1167 clones and a version catalogue |
+| `approve` | Only contracts may call `approve` (code-size check) | The same rule, also on the NFT | A spender must be a contract, decided by explicit rules instead of a code-size guess ([CTR-TOK-01](docs/contracts/token-wrappers.md#CTR-TOK-01)) |
+| Trading | — | `ERC1776Tradeable` + `Dex`: one taker against several makers, partial fills, refunds of the unmatched part, at least 50 % of the wanted amount, a fee per side | The `trade` operation, the legacy `MetaTxDex`, and `OrderBookDex` with price-time priority and price limits ([section 3](#3-contracts-what-is-built-on-what)) |
+| A contract receiving tokens | — | `ERC1776Holder` pulls a signed transfer into itself | Any contract can be the recipient of a signed `pay` or transfer |
+| NFTs | — | `ERC1776Nft721`: `safeTransferFrom` by meta-transaction | PLANNED with the asset suite ([asset-suite](docs/contracts/asset-suite.md)) |
+| Admin powers | An `Ownable` owner per wrapper | `ERC1776Adminable` (an admin moves its own tokens by signature), `Rescuable` (an owner or rescuer withdraws stuck tokens) | No one can move a user's funds; only bounded roles fixed at creation ([docs/architecture.md](docs/architecture.md#authority-model)) |
+| Upgrades | — | — | Immutable at deploy ([section 4](#4-upgradeable-or-not-is-decided-at-deploy)) |
+
+**Lessons that changed the design:**
+
+- **A generic "execute this call" runs as the token, not as the signer.** When a token forwards signed calldata to
+  another contract, the callee sees the token as `msg.sender`, so a signed `transfer` would move the token's own
+  balance. Today every operation runs **inside** the token that verified the signature; there is no forwarder
+  ([CTR-MTX-16](docs/contracts/metatx.md#CTR-MTX-16)).
+- **One nonce per account is a queue.** A single stuck signature blocks every later one. Two-dimensional nonces came
+  in with the second prototype and are now the rule on every family
+  ([NET-ALL-02](docs/networks/README.md#NET-ALL-02)).
+- **Guessing "is this an ordinary account?" from code size fails**: a contract under construction has no code yet,
+  and an account delegated with EIP-7702 has a few bytes of code but is still a key holder. The contract-only spender
+  rule now names each case and its treatment.
+- **A signed-message prefix shows 32 opaque bytes to the user.** EIP-712 shows every field.
+- **An owner on every token is an admin key over balances.** Prototype owners, admin moves and rescue functions are
+  gone. A wrapper owned by its factory could not even be configured. Tokens are ownerless clones with roles fixed at
+  creation.
+- **A basket wrapper whose owner can add underlyings at will can be drained** by adding a weak one and unwrapping
+  into the strong ones. Today the legs and their initial rates are fixed at creation, each unwrap is bounded by that
+  leg's own reserve, and a guardian can only stop inflow into a depegged leg
+  ([token-wrappers](docs/contracts/token-wrappers.md#multi)).
+
+---
+
+## 15. Repository layout
 
 | Path | What |
 |---|---|
