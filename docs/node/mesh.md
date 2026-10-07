@@ -53,7 +53,7 @@ Non-goals (v1):
 | Rewards other than the intent's own `fee` / `feeRecipient` | [NODE-MESH-05](#NODE-MESH-05): no `SponsorshipPool` reward, no statement payouts, no forwarder pay |
 | Soroban on the mesh | [NODE-MESH-07](#NODE-MESH-07), [NODE-MESH-24](#NODE-MESH-24): replay protection is the host's auth nonce, not a per-subject nonce in our contract |
 | Zether intents on the mesh (classical and post-quantum) | `W = 0` and single-flight per confidential subject (`from_schnorr`) need their own design; pull latency does not fit a 20 s budget |
-| EVM `call` jobs (mandate calldata), DEX `settle` jobs, non-EVM op kinds other than `pay` | no subject-signed digest whose replay guard is a lane nonce a peer can check (TON revoke uses `next == nonce + 1`, Solana mandate revoke uses a generation) |
+| EVM `call` jobs (mandate calldata), DEX `mtxSettle` jobs, non-EVM op kinds other than `pay` | no subject-signed digest whose replay guard is a lane nonce a peer can check (TON revoke uses `next == nonce + 1`, Solana mandate revoke uses a generation) |
 | Multi-hop private routing | [NODE-MESH-12](#NODE-MESH-12): private intents are served by their origin only; needs an origin-signed recipient set and a ruling |
 | Callback subject registry, ban-list sharing | no callbacks exist ([NODE-IDX-04](indexer-feeds.md#NODE-IDX-04)); ban lists stay local |
 | Promote-to-open of pooled intents ("private pool") | the only "private then open" path is the per-job window on own jobs ([bus scope](#bus-scope)); a pooled bus intent never changes visibility |
@@ -223,8 +223,8 @@ consumption check. Non-EVM op kind limited to `pay` in v1. Soroban partners rela
 
 | Family | Digest (contract) | Per-subject nonce (contract) | Readable by a peer | Qualifies |
 |---|---|---|---|---|
-| EVM | `ERC20MetaTx.executeMetaTransaction`: `_hashTypedDataV4(m.hashStruct())`, emitted in `MetaTransactionExecuted.digest` | `_metaNonce[from][batch]`, must equal `m.nonce`, `+1` after execution | `metaNonce(from, batch)` view | **yes** |
-| Hedera | `HederaMetaToken is MetaToken` — same `ERC20MetaTx` | same | same, via the JSON-RPC relay | **yes** (envelope family `hedera`, EVM body) |
+| EVM | `ERC20MetaTx.mtxExecute` (as built `ERC20MetaTx.executeMetaTransaction`, kept as an alias): `_hashTypedDataV4(m.hashStruct())` over the salted domain, emitted in `MetaTransactionExecuted.digest` | `_metaNonce[from][batch]`, must equal `m.nonce`, `+1` after execution | `mtxNonce(from, batch)` view (deployed tokens: `metaNonce`) | **yes** |
+| Hedera | the Hedera token tiers, on the same `ERC20MetaTx` base | same | same, via the JSON-RPC relay | **yes** (envelope family `hedera`, EVM body) |
 | Cosmos | `sha256(payload)`, emitted as `digest` attribute | `NONCES: Map<(&Addr, lane), u64>`, `op.nonce == next` | `QueryMsg::Nonce { owner, lane }` | **yes** |
 | Sui | `personal_digest(bcs(MetaOp))` | `Account<T>.lanes: Table<lane, u64>`, `next == nonce` | `lane_nonce<T>(account, lane)` | **yes** |
 | Aptos | `sha3_256(bcs(MetaOp))` | `Account.lanes: Table<lane, Lane{next}>` | `#[view] lane_nonce(owner, lane)` | **yes** |
@@ -232,7 +232,8 @@ consumption check. Non-EVM op kind limited to `pay` in v1. Soroban partners rela
 | Solana | `sha256(MetaOp)` | `LanePda{next}` seeded `["lane", subject, lane]`, `lp.next == args.nonce` | read the `LanePda` account | **yes** (`pay`; lane PDA prunable after `valid_until`) |
 | Soroban | `op_digest` = sha256(XDR) emitted by the token | **none in our contract**: replay protection is the host's `SorobanAddressCredentials` nonce (`i64(sha256("scaas.soroban.nonce" ‖ entryRef ‖ validUntil)[0..8])`, a per-entry value, not a per-subject sequence); our contract only has a one-shot `pay_ref` | `ref_used(pay_ref)` only | **no** |
 
-Contract source lines (orientation, as of 2026-10-07): EVM `smartcontracts/src/metatx/ERC20MetaTx.sol` digest l.62–103,
+Contract source lines (orientation, as of 2026-10-07, before the single `ERC20MetaTx` base replaces the earlier
+token lines): EVM `smartcontracts/src/metatx/ERC20MetaTx.sol` digest l.62–103,
 nonce l.26, l.80, l.102, view l.44; Hedera `smartcontracts/src/hedera/HederaMetaToken.sol` l.15 (`MetaToken is
 ERC20MetaTx`); Cosmos `chains/cosmos/metaop/src/lib.rs` l.119, `chains/cosmos/token/src/lib.rs` l.81, l.194–197, query
 l.239; Sui `chains/sui/sources/meta.move` digest l.322, lanes l.104, l.285–287, view l.484; Aptos
@@ -312,7 +313,7 @@ sender-chosen id; with id = digest the two are one value).
 
 | Family | `intent_id` = | Routing fields decoded from | Implementations that must agree |
 |---|---|---|---|
-| `evm`, `hedera` | `keccak256(0x1901 ‖ domainSeparator(name, version, chainId, contract) ‖ hashStruct(canonical(m)))`; `chainId` = number in `chain_key` | `meta_tx` (all signed) | `MetaTxLib.hashStruct` (`smartcontracts/src/common/MetaTxLib.sol`), `metatx.rs` `digest()`, client libraries |
+| `evm`, `hedera` | `keccak256(0x1901 ‖ domainSeparator(name, version, chainId, contract, salt) ‖ hashStruct(canonical(m)))`; `chainId` = number in `chain_key`; `salt` = the receiver's own `chain.chain_uid`, never a value from the envelope (target; deployed tokens have no salt yet, [NODE-GW-07](gateway.md#NODE-GW-07)); a self-call `data` must be canonical before hashing ([NODE-JOB-20](job-api.md#NODE-JOB-20)) | `meta_tx` (all signed) | `MetaTxLib.hashStruct` (`smartcontracts/src/common/MetaTxLib.sol`), `metatx.rs` `digest()`, client libraries |
 | `cosmos` | `sha256(payload)` | payload JSON (`MetaOp`) | contract `metaop` (`metaop/src/lib.rs` = `chains/cosmos/metaop/src/lib.rs`), client libraries |
 | `sui` | `blake2b256([3,0,0] ‖ bcs(vector<u8>(payload)))` | `adapters/sui.rs` `MetaOp::decode` (l.136) | `meta.move` `op_digest`, `adapters/sui.rs` `personal_digest`, client libraries |
 | `aptos` | `sha3_256(payload)` | `adapters/aptos.rs` `MetaOp::decode` (l.149) | `meta.move`, client libraries |

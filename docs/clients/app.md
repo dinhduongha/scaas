@@ -11,7 +11,8 @@ the app is built yet (the node store is built; the node's job API, admin API and
 
 **dApp** (no login): accounts (the Universal Account default, `SubjectAccount` option (b), the seed vault, extension
 wallets); balances and the token catalogue; token creation (factory v1 and v2) and wrapping an existing token into a
-meta-tx token; wrap/unwrap including gasless `mtxUnwrap`; meta-tx transfers and payments submitted through a node gateway
+meta-tx token; wrap/unwrap including gasless unwrap (target: `mtxExecute` with the token's `unwrap` calldata, and
+`mtxWrap` by signature for a SCaaS underlying; as built `mtxUnwrap`); meta-tx transfers and payments submitted through a node gateway
 (all families) or self-paid; the DEX order book (home-bound and relayer-unbound markets) with place/cancel; Zether
 (register, deposit/shield, confidential transfer, withdraw, balance via the device cache + BSGS).
 
@@ -154,7 +155,9 @@ Fake wallets are not duplicated: end-to-end tests inject clientkeys `test/wallet
     { "key": "evm:100", "family": "evm", "label": "Gnosis", "rpc": ["https://a…", "https://b…"],
       "explorer": "https://gnosisscan.io", "native": { "symbol": "xDAI", "decimals": 18 },
       "dev": false, "private": false, "gatewayNode": "main",
+      "chainUid": "0x…",                                     // genesis hash = every domain salt (NET-ALL-24)
       "contracts": { "factoryV1": "0x…", "factoryV2": "0x…", "dex": "0x…",           // dex = OrderBookDex
+                     "dexes": ["0x…"],                         // the DEX list (NET-ALL-24, SPECIFIED)
                      "subjectAccountFactory": "0x…", "uaRegistry": null },
       "tokens": [ { "address": "0x…", "symbol": "EUR-M", "decimals": 6, "label": "Euro meta" } ],  // pinned
       "zetherTokens": [] },
@@ -180,6 +183,10 @@ way; a chain without `gatewayNode` has the self-paid path only. `npm run config:
 `smartcontracts/evm/deployments/<chainid>.json` and maps `order_book_dex` → `contracts.dex`, `factory` →
 `contracts.factoryV1`, `factory_v2` → `contracts.factoryV2`, `subject_account_factory` → `contracts.subjectAccountFactory`;
 the deployment's `dex` key is `MetaTxDex`, a different contract, and is not mapped; other families are written by hand.
+Target (SPECIFIED): the deployment file also carries `chain_uid` and the DEX list ([NET-EVM-05](../networks/evm.md#NET-EVM-05)),
+mapped to `chainUid` and `contracts.dexes` (with `contracts.dex` = the venue's DEX, which must be on the list); the
+validator refuses an EVM or Hedera chain without `chainUid`, and at start the app compares it with the RPC's block-0
+hash and with `/v1/gateway` (a mismatch disables the chain). There is one factory and no `MetaTxDex`.
 
 **Validation** (`src/config/schema.ts`, no library). The app refuses to start, with an English + Vietnamese error screen,
 on: an unknown `version`; a duplicate `key` or `id`; an unknown family; `policy.requireBackupKey` not boolean; a URL that is
@@ -389,7 +396,7 @@ families; the app's review is the only real check. Cost: non-curated tokens take
 |---|---|
 | Network | config label + `chain_key` + identity check passed |
 | Contract | curated label, or `untrustedText` name + "unverified"; provenance "curated" / "open factory (anyone can)"; domain check |
-| Operation | decoded op: transfer, pay(payId), trade, approve (spender: "configured DEX" / "wrapper of <underlying>"), unwrap (underlying → recipient, `minOut`), DEX order (both legs, limit price both ways, market fee, relayer fee, expiry), cancel, UA register (kind, id), Zether |
+| Operation | decoded op: transfer, pay(payId), self-call (function and arguments from the allowlist, [CLI-SGN-34](signers-clientkeys.md#CLI-SGN-34): wrap, unwrap with recipient and `minOut`, burn, add reserve, cancel a lane, Zether fund/transfer/burn), approve on an outside token only (spender: "configured DEX" / "wrapper of <underlying>"), trade order (both tokens, limit price both ways, signed `fee`, effective minimum fill, `dex`, `relayer`, `destination`, order lane, expiry, [CLI-SGN-35](signers-clientkeys.md#CLI-SGN-35)), signature wrap, cancel, UA register (kind, id); as built: trade, approve, DEX order with market and relayer fees |
 | From → To | address views; kind (EOA / contract / UA kind / unknown) |
 | Amount, fee | decimal from `bigint` with pinned decimals (raw integer beside it if non-curated); fee, recipient (bound, or "relayer's: <addr>") |
 | Validity | local time + relative; > 1 h warns; > 24 h needs a second confirmation |
@@ -401,12 +408,15 @@ Blocking warnings: an unknown contract (allowed in dev builds only); a fee ≥ 1
 token itself; a lookalike recipient; a DEX price ≥ 5 % from the best opposite level; an under-reserved Multi leg; a pending
 rate change before `validUntil`; a UA user sending a v1/v2 token.
 
-<a id="approve-allowlist"></a><a id="CLI-APP-23"></a>**CLI-APP-23** — **`approve` spenders are allowlisted.** The spender is
-either the chain's config `contracts.dex` (OrderBookDex), or a wrapper being wrapped into, after `underlyings()` contains
-the token and the wrapper is curated or its factory provenance is cross-checked; anything else is refused, with no override
-outside dev builds. The amount is exactly what the operation needs, never `2^256−1`; the token page offers "revoke"
-(approve 0). Why: the contract-only spender rule ([CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)) stops EOA
-spenders only, and anyone can deploy a contract.
+<a id="approve-allowlist"></a><a id="CLI-APP-23"></a>**CLI-APP-23** — **`approve` is offered only on outside tokens, and
+its spenders are allowlisted.** The app never offers `approve` on a SCaaS token ([CLI-SGN-36](signers-clientkeys.md#CLI-SGN-36));
+on an outside token (a stablecoin underlying, an outside-token DEX leg) the spender is either a DEX on the chain's list
+(`contracts.dexes`), or a wrapper being wrapped into, after `underlyings()` contains the token and the wrapper is
+curated or its factory provenance is cross-checked; anything else is refused, with no override outside dev builds. The
+amount is exactly what the operation needs, never `2^256−1`; the token page offers "revoke" (approve 0). Why: the
+contract-only spender rule ([CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)) stops EOA spenders only, and anyone
+can deploy a contract. Transitional (BUILT): the app also approves SCaaS tokens to the configured DEX for DEX-domain
+orders, and to a wrapper over a SCaaS underlying; both disappear with token-verified orders and the signature wrap.
 
 <a id="untrusted-text"></a><a id="CLI-APP-27"></a>**CLI-APP-27** — **Every string from chain or network passes through
 `untrustedText(s, max)`.** Sources: token `name`/`symbol`, revert strings, gossip peer fields, audit before/after, peer
@@ -463,7 +473,9 @@ key metadata. Why: the two deployment modes are two origins.
 0–7.** Kinds 5–7 (the regulated `*_REG` kinds) are **view-only** with the regulated-token notice until the regulated flows
 ship; managed DEX markets are "unavailable" the same way. Named functions are chosen from a `(kind, implementation version)`
 table, falling back to `executeMetaTransaction` for unknown versions — including receiver-pays (`mtxPayReceiverFee`)
-versions. `termsHash` documents link only to config-listed URLs.
+versions. Target: every gasless operation of a token is `mtxExecute` with calldata the app encodes and decodes against
+the implementation's allowlist ([CLI-SGN-34](signers-clientkeys.md#CLI-SGN-34)); `mtxTransfer`, `mtxPay` and
+`mtxBatch` stay as typed builders. `termsHash` documents link only to config-listed URLs.
 
 <a id="contract-roles"></a><a id="CLI-APP-18"></a>**CLI-APP-18** — **Contract-held roles get calldata, not transactions.**
 `rateAdmin` must be a contract, so rate operations are emitted as **Safe Transaction Builder JSON** (`{to, value: "0",
@@ -483,13 +495,13 @@ wizards build Safe transactions the same way.
 | 5 | Accounts & keys | account state, backup status, key metadata (BE/BS, origins), vault state | create UA / SubjectAccount / Approvers; register (`/v1/ua/register`); add key/origin; guardian; vault create/import/unlock/rewrap/PRF; find my account | per account kind |
 | 6 | Token catalogue | factory versions, `versionOf` kind, views (`legOf`, `collateralValue`, `pendingRate`, `rateAdmin`, guardian), per-leg `balanceOf ≥ reserve` | add token (explicit); revoke approval | EVM, Hedera; read-only lists elsewhere |
 | 7 | Create token | factory, catalogue, `predictAddress`, underlying `decimals` (cross-checked), HTS checks, existing wrappers of the underlying shown first | `createMetaToken`, `createTiered`, `createZetherToken` (dev) | EVM, Hedera |
-| 8 | Wrap / unwrap | `previewWrap`, `previewUnwrap`, `legOf`, allowance, `pendingRate` | `approve` + `wrap`; `unwrap(…, minOut)`; `addReserve`; gasless `mtxUnwrap` | EVM, Hedera |
+| 8 | Wrap / unwrap | `previewWrap`, `previewUnwrap`, `legOf`, allowance, `pendingRate` | `approve` + `wrap`; `unwrap(…, minOut)`; `addReserve`; gasless `mtxUnwrap` (target: gasless wrap/unwrap/addReserve via `mtxExecute`; `mtxWrap` for a SCaaS underlying, no approve) | EVM, Hedera |
 | 9 | Rate & guardian | as 6 | guardian direct; rate ops as Safe JSON | EVM, Hedera |
 | 10 | Sui coin type enable | derived `Registry<T>` id | `new_registry<T>` | Sui |
 | 11 | Fund meta account | owned coins / FA / SPL | deposit transfer; `transferToUA` | Sui, Aptos, Solana, EVM v3 |
 | 12 | DEX markets | `/v1/dex/markets` + `/v1/gateway` `dex`, on-chain `markets(key)` | — | EVM; others "unavailable" |
-| 13 | DEX market | `depth` (poll 2 s while visible), `trades`, `ticker`, `orders?maker=`, own-node `depth?scope=network` (read-only) | place, cancel, cancel-all; on-chain `cancel`/`invalidateNonces` | EVM |
-| 14 | Zether | `registered(UA)`, account state, cache, BSGS (worker) | register a `zether-*` UA with `authRef` (gasless); `approve` + `fund`; transfer; burn; rollOver | EVM dev |
+| 13 | DEX market | `depth` (poll 2 s while visible), `trades`, `ticker`, `orders?maker=`, own-node `depth?scope=network` (read-only) | place, cancel, cancel-all; on-chain `cancel`/`invalidateNonces` (target: `mtxCancelOrder`/`mtxInvalidateNonces` on the sell token, `mtxCancelOrders` on the DEX for outside-token orders) | EVM |
+| 14 | Zether | `registered(UA)`, account state, cache, BSGS (worker) | register a `zether-*` UA with `authRef` (gasless); `approve` + `fund` (target: wrap first, then `fund` from the public balance, no approve); transfer; burn; rollOver | EVM dev |
 | 15 | Settings | — | locale, theme, dev key (dev builds) | — |
 | 16 | Console login | `GET /v1/admin/auth-modes` ∩ config OIDC | built-in login; OIDC redirect | — |
 | 17 | Overview | `/v1/admin/info`, `/me` | — | — |
@@ -513,7 +525,17 @@ submit, and the status screen.
 **Unwrap.** `minOut` defaults to `previewUnwrap` at signing time, exactly, never 0; if a rate change is pending and `eta <
 validUntil`, the app warns and shortens `validUntil` to before `eta`.
 
-**DEX.** Order fields (`dex.rs:540-580`): `taker` 0 (public book); amounts in `(0, 2^128)`; base amount ≥ the market
+**Wrap.** An outside underlying: `approve(wrapper)` on the outside token ([CLI-APP-23](#CLI-APP-23)), then `wrap`, direct
+or gasless through `mtxExecute(wrap)`. A SCaaS underlying (SPECIFIED): no approve; the app builds the signature wrap of
+[CLI-SGN-36](signers-clientkeys.md#CLI-SGN-36) with `receiveAmount` = `previewWrap` at signing time and submits it as
+an `mtxWrap` job; the same rate-change warning applies.
+
+**DEX.** Target (SPECIFIED): a SCaaS sell token is traded with a `TradeOrder` signed in the token's domain, funded
+without any allowance; fields and review per [CLI-SGN-35](signers-clientkeys.md#CLI-SGN-35) — `dex` from
+`contracts.dexes` (refused otherwise), `relayer` = `/v1/gateway` `dex.relayer` by default, `fee` = the venue's rate for
+the order's expected role, `minFill` default half the amount (FOK sets it to the amount), cancel on the sell token
+(`CancelOrder` per order, `InvalidateNonces` per order lane); an outside sell token uses a `DexOrder` with an
+allowance to the listed DEX. As built: order fields (`dex.rs:540-580`): `taker` 0 (public book); amounts in `(0, 2^128)`; base amount ≥ the market
 `min_base_amount`; `expiry` default 1 d, within `(now + 5 s, now + 30 d]`; FOK and IOC mutually exclusive; `maxFeePpm` = the
 market fee by default; `relayer` = `/v1/gateway` `dex.relayer` (home-bound), or 0 on `unbound` markets (resting GTC only);
 relayer fee `feeMode` 0 by default, otherwise within `/v1/gateway` `dex.relayer_fee_policy` (`feeMode ≤ 2`, ppm cap 10 000);

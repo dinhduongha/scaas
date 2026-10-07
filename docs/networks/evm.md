@@ -107,14 +107,43 @@ the precompile — the deployment checklist does both. The chainspec was fixed o
 
 <a id="deployments"></a>
 
-`smartcontracts/scripts/deploy.sh evm <rpc>` runs the forge script `script/Deploy.s.sol` (reads `PRIVATE_KEY` and
-`REGISTRAR`): `OpenFactory`, the `MetaToken` implementation (its constructor takes the factory address) registered as
-`registerImplementation(META, 1)`, `SubjectAccountFactory`, `MetaTxDex`, `OrderBookDex`, optionally a tier-1 demo token;
-it writes `deployments/<chainid>.json`, which seeds the client and the node configuration. Zether and the registry are
-not in the deploy script (dev chains only). Integration tests use `anvil --hardfork prague`. Every contract is a
-non-upgradeable clone or a fixed deployment ([CTR-GEN-02](../contracts/README.md#CTR-GEN-02)): upgradeable proxies
-(UUPS / ERC-1822) are not used, and a fix is a new implementation version registered on the factory plus a
-voluntary migration.
+<a id="NET-EVM-05"></a>**NET-EVM-05** — **SCaaS contracts are deployed through a deterministic CREATE2 deployer with
+a fixed salt, with `chain_uid` read from the RPC, and the deploy gate checks every `chainUid()`.** Owner ruling
+2026-10-07; status **SPECIFIED**. The deploy script reads the chain's genesis block hash from the RPC (from ≥ the
+profile's RPC quorum) and passes it as the `chain_uid` constructor argument of every contract that takes one
+([NET-ALL-22](README.md#NET-ALL-22)): the token implementations, the factory, `SubjectAccountFactory`, `OrderBookDex`,
+the Universal Account registry, and any later contract that checks a signature. Every deployment — implementations,
+factories, registry, DEX — goes through one deterministic CREATE2 deployer with a fixed per-contract salt, so an
+address depends only on the init code: a contract whose constructor takes `chain_uid` (and every clone of it) has a
+different address on each chain, one without a chain-specific argument the same address on every chain. Before the
+run passes, the deploy gate requires, for each deployed contract, `chainUid()` = the RPC's genesis hash = the chain
+profile's `chain_uid`; refuses a genesis hash already present in another chain profile
+([NET-ALL-25](README.md#NET-ALL-25)); and requires the factory to have registered only implementations whose
+`chainUid()` equals its own. The run writes `chain_uid` and the DEX list into `deployments/<chainid>.json`, which seeds
+the chain profiles of the node and the clients ([NET-ALL-24](README.md#NET-ALL-24)). Why: a CREATE address depends on
+the deployer's nonce, so the same contract lands at unrelated addresses on each chain and a missed transaction shifts
+every later address; with CREATE2 the address follows from what was deployed. Cost: a fixed-salt deployer must exist on
+each chain before the first deployment, and a redeploy with the same init code collides with the first (a new
+version needs a new salt or new code).
+
+Runbook notes: (1) read the genesis hash from every configured RPC and stop if they differ; (2) on a private chain,
+confirm the genesis carries its unique `extraData` nonce before deploying; (3) deploy the CREATE2 deployer once per
+chain, then the implementations, the factory, the subject-account factory, the registry and the DEX; (4) run the gate;
+(5) publish the profile update (`chain_uid`, contract addresses, DEX list) to the node's chain row and the clients'
+pinned profiles in the same release; the node re-checks every `chainUid()` at activation and every start
+([NODE-GW-07](../node/gateway.md#NODE-GW-07)).
+
+Transitional (BUILT): `smartcontracts/scripts/deploy.sh evm <rpc>` runs the forge script `script/Deploy.s.sol` (reads
+`PRIVATE_KEY` and `REGISTRAR`) with plain CREATE and no `chain_uid`: `OpenFactory`, the `MetaToken` implementation (its
+constructor takes the factory address) registered as `registerImplementation(META, 1)`, `SubjectAccountFactory`,
+`MetaTxDex`, `OrderBookDex`, optionally a tier-1 demo token; it writes `deployments/<chainid>.json`, which seeds the
+client and the node configuration. The single `ERC20MetaTx` base replaces the `MetaToken` line, and `MetaTxDex` is
+deleted. Zether and the registry are not in the deploy script (dev chains only). Integration tests use `anvil
+--hardfork prague`.
+
+Every contract is a non-upgradeable clone or a fixed deployment ([CTR-GEN-02](../contracts/README.md#CTR-GEN-02)):
+upgradeable proxies (UUPS / ERC-1822) are not used, and a fix is a new implementation version registered on the factory
+plus a voluntary migration.
 
 ## EIP-7702 accounts
 

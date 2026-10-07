@@ -1,6 +1,6 @@
 # Meta-transactions: generic self-call, `mtx` names, `chain_uid` in every domain, token-verified trade orders
 
-**Status:** DRAFT **rev 5** for owner review — nothing in the component docs or the code changes until it is accepted.
+**Status:** ACCEPTED by the owner 2026-10-08 and folded into the component docs (rules in `docs/decisions.md`); frozen here as the design record.
 Provisional ids `MG-n`; real ids are allocated in `docs/decisions.md` on acceptance (docs/README "Ids").
 **Date:** 2026-10-07. **Scope:** EVM and Hedera tokens (today v1 `ERC20MetaTx`/`MetaToken`/`HederaMetaToken`, v2
 `MetaTxCore`/`MetaTokenBase` with three tiers, `ZetherMetaTx`/`ZetherToken` — folded into one base by MG-9), the DEX

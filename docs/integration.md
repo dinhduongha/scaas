@@ -150,7 +150,7 @@ process ([NODE-JOB-06](node/job-api.md#NODE-JOB-06)). Why: one lane journal per 
 |---|---|
 | `metatx` | `{token, signature, metatx: {11 fields of MetaTransaction}}`; `uint256` as decimal strings; addresses lowercase |
 | `signed_op` | `{op: {op_kind: "pay", payload: "0x<exact signed bytes>", signature, public_key, auth_kind: "wallet"|"passkey", extra: {…native params}}}`; `from`, lane, nonce, `valid_until`, relayer are decoded from `payload` |
-| `call` | `{call: {target, calldata, validUntil}}` — e.g. `MandateWallet.payUnderMandate(...)`, `SubjectAccountFactory.deploy(...)`; the signature lives inside the calldata; selector and target must match a call-table row; no native value |
+| `call` | `{call: {target, calldata, validUntil}}` — e.g. `MandateWallet.mtxPayUnderMandate(...)` (as built `MandateWallet.payUnderMandate(...)`), `SubjectAccountFactory.deploy(...)`; the signature lives inside the calldata; selector and target must match a call-table row; no native value |
 | `ua_metatx` (SPECIFIED) | MetaToken v3 `UAMetaTransaction` with `from: bytes32` and its `auth`; same lifecycle as `metatx` |
 | `pqz_call` (SPECIFIED; private chain only) | **Direct open calls only**: `{chain, contract, selector ∈ {pqzTransfer, pqzBurn, rollOver}, calldata}` to a configured PQZ token (direct `fund` pulls the caller's underlying and is never a node job) |
 | PQZ envelopes (SPECIFIED) | **No new kind**: a `PqzToken` is an `IERC20MetaTx` token, so its envelope ops travel as ordinary `metatx` (v1 domain `("SCaaS PqzToken", "1", chainId, token)`) or `ua_metatx` (v3, `salt = chainUid`) jobs, `m.to = 0`, `m.value = 0`, `m.data` = the direct calldata of `pqzTransfer`/`pqzBurn`/`fund`/`rollOver` (opaque to the client); outer fee `NONE`/`FIXED` only; never batched, never on the mesh; 1 MiB job body on the `pqz` profile; a gasless exit is the envelope `pqzBurn` paying the underlying to `recipient` |
@@ -240,7 +240,8 @@ never published on the bus:
 
 Client handling: `cancelled` ⇒ local dead + side effects; `TOO_LATE` ⇒ treat as "already sent", keep the business
 request open until final or expiry; transport error ⇒ `cancel_requested`, retried first on the next sync. A subject can
-always invalidate its own pending intents with `cancelMetaNonce(batch)` (EVM, direct call) — the authoritative cancel.
+always invalidate its own pending intents with `cancelNonce(batch)` (EVM; a direct call, or signed through `mtxExecute`
+on another lane; as built `cancelMetaNonce(batch)`, direct only) — the authoritative cancel.
 
 ## Outbox rules
 
@@ -482,9 +483,9 @@ payment/day/month, four-eyes, kill switch) drives a scheduled job that finds the
 invoices and creates exactly **one** run per (policy, invoice, event) (`UNIQUE`); each run creates the same request and
 outbox job as a manual payment (a `chain` payment transaction over `invoice_ids`, `operation='offline'`). `custodial`
 wallets sign `pay` through the custody adapter under `SigningPolicyService` (`validUntil ≤ 300 s`); `delegated` wallets
-sign `PayUnderMandate` and push a `call` job to `MandateWallet.payUnderMandate`. A run ends `done` when the payment
+sign `PayUnderMandate` and push a `call` job to `MandateWallet.mtxPayUnderMandate` (as built `payUnderMandate`). A run ends `done` when the payment
 transaction is done (the accounting module posts and reconciles) or `failed`. Kill: off-chain immediately, and for
-delegated wallets a `revokeWithSig` job; the revoke digest is `RevokeMandate(address token,uint64 epoch,uint256
+delegated wallets an `mtxRevoke` job (as built `revokeWithSig`); the revoke digest is `RevokeMandate(address token,uint64 epoch,uint256
 validUntil)` with the wallet's current `epoch[token]` ([CTR-ACC-07](contracts/mandates.md#CTR-ACC-07)).
 
 ## Families and addresses
@@ -571,7 +572,12 @@ Market configuration lives in the node store ([NODE-DEX-14](node/dex-venue.md#NO
 mirrors of markets, orders and trades from the `dex_*` feed items and books: **DEX fees received** (the operator's fee
 wallet) — debit the token journal's default account, credit the market's income account; **relayer fees paid** (payer =
 an approved paying wallet of a company) — debit the market's relayer-expense account, credit that company's token journal
-default account.
+default account. Target (SPECIFIED, [dex-venue.md#trade-orders](node/dex-venue.md#trade-orders)): there is no separate
+relayer fee; each order pays one DEX fee (its signed `fee` rate on what it receives), which the DEX splits in the same
+call between the submitting relayer and the treasury. The ERP books from the DEX's `LegSettled` record: for a
+company's own order, `received − dexFee` into its token journal and `dexFee` to the market's fee-expense account; for
+the operator, its treasury share (and the relayer share, when its own lane submitted) as market income. A token's
+`TradeFilled` alone is never booked (an escrowed leg shows the whole amount pulled with nothing received).
 
 <a id="confidential-payments"></a><a id="INT-ERP-11"></a>**INT-ERP-11** — **Confidential payment requests are reconciled
 from disclosed amounts, with an audit key per company.** The ERP issues confidential payment requests on Zether tokens,
@@ -611,7 +617,7 @@ never touches funds** — `to`, `value`, `data` are inside the digest; fee 0.
 
 | Path | Use today | Status |
 |---|---|---|
-| `executeMetaTransaction` with `data = pay(entryRef)` | Every relayed payment; emits `PaymentSettled` | **BUILT** |
+| `executeMetaTransaction` with `data = pay(entryRef)` | Every relayed payment; emits `PaymentSettled`. Target: `mtxExecute`, with `executeMetaTransaction` kept as an alias returning `bool`; same struct, same digest except the domain `salt = chain_uid` | **BUILT** |
 | `payWithFee(to, amount, feeMode, fee, feeRecipient, entryRef)` | Contract wallets and payers submitting themselves | **BUILT** |
 | v2 `mtxPay(from, to, amount, payId, validUntil, mode, relayer, fee, feeRecipient, sig)` | Typed entry point over the SAME struct and typehash; lane `payLane(payId)` derived on chain, `nonce = 0`; same digest, so one signature works on either path ([CTR-MTX-10](contracts/metatx.md#CTR-MTX-10)) | **BUILT** (contracts); node use **SPECIFIED** |
 | v2 `mtxBatch(MetaTransaction[], bytes[])` | Several intents of one token in one outer transaction, atomic (one failing item reverts all; the partial-success `batchMtxPay` and its second typehash were withdrawn, [CTR-MTX-11](contracts/metatx.md#CTR-MTX-11)) | **BUILT** (contracts); node batching **SPECIFIED** |
@@ -630,7 +636,7 @@ that several jobs share one `tx_hash`.
 |---|---|---|
 | Enterprise inbound gateway | Partners/agents post signed EVM meta-txs to the company node: `POST /v1/metatx {chain, token, m, signature}` (gateway auth `bearer`/`hmac` for partners; `none` only on loopback behind a proxy). The client sees results on its events feed by `entryRef`/`to` | **BUILT** |
 | Door A intake rules | `value == 0` transfer/pay ⇒ `422 ZERO_VALUE`; the `~gateway` `min_fee` floor applies unless a sponsor policy matches (which also caps the spend); `profile = private` keeps fee 0, `profile = public` refuses fee-0 intents without a matching sponsor policy; per-`from` bucket (default 60 per hour); signature checked before simulation ([NODE-GW-01](node/gateway.md#NODE-GW-01)) | **SPECIFIED** |
-| Gateway discovery and other families | `GET /v1/gateway` lists served chains (with `chain_uid` where a UA registry is configured), tokens, fee recipient and DEX policy; Hedera intents use `POST /v1/metatx` (64-byte HIP-632 signatures allowed); the six non-EVM families use `POST /v1/ops {chain, op}`; UA intents `POST /v1/ua-metatx`; errors follow the stable contract `{error, code, detail, revert_data?}` ([NODE-GW-06](node/gateway.md#NODE-GW-06)) | **SPECIFIED** |
+| Gateway discovery and other families | `GET /v1/gateway` lists served chains (with `chain_uid` where a UA registry is configured; target: on every EVM and Hedera chain, with the DEX list, [NET-ALL-24](networks/README.md#NET-ALL-24)), tokens, fee recipient and DEX policy; Hedera intents use `POST /v1/metatx` (64-byte HIP-632 signatures allowed); the six non-EVM families use `POST /v1/ops {chain, op}`; UA intents `POST /v1/ua-metatx`; errors follow the stable contract `{error, code, detail, revert_data?}` ([NODE-GW-06](node/gateway.md#NODE-GW-06)) | **SPECIFIED** |
 | Non-EVM inbound | The client builds the `MetaOp`, the payer signs, the client pushes `signed_op` jobs | **BUILT** (via the example outbox); job API **SPECIFIED** |
 | Payee self-relay ("e-cheque") | Payer signs offline with fee 0 and relayer unbound or bound to the payee's address; the payee (or its node) submits; the ERP books from `PaymentSettled` exactly as usual | contract **BUILT**; QR (EIP-681-style payload) tooling **PLANNED** |
 | Gas sponsorship policy | Node policy rows: e.g. "to wallet W, value ≥ X ⇒ fee 0, gas to account Y"; the client books gas from the job's receipt data. A policy caps a tenant's own spend only with `on_exhausted = reject`; with `unsponsored` an exhausted policy books the job to the namespace and marks it `sponsor_fallback` (the admin must set `fallback_to_namespace`, audited) ([NODE-SPN-01](node/sponsorship.md#NODE-SPN-01)) | **SPECIFIED** |
@@ -638,7 +644,7 @@ that several jobs share one `tx_hash`.
 
 Receiver pays, client side: the **payee ERP** sets `fee_paid_by_receiver` and `receiver_fee_amount` (base units) on the
 request it issues; the payer's terms stay fee `NONE`; once the payer's address is known (portal: wallet connect), the
-payee signs `ReceiverFee` over the `paymentDigest` (a `SubjectAccount` payee signs through `executeAsOwner` rules) and
+payee signs `ReceiverFee` over the `paymentDigest` (a `SubjectAccount` payee signs through `mtxExecuteAsOwner` rules) and
 books payment `N` received and fee `F` paid from `PaymentSettled` + `ReceiverFeePaid`. The **payer ERP** is unchanged
 (pays `N`, books `N`). **E-cheque flow:** the payee's request names the relayer lane; the payer signs offline with that
 relayer bound and hands the intent to the payee, which co-signs over the digest and pushes it to that node.
@@ -712,7 +718,10 @@ the bid's own data. Either way the salt is unknown to anyone else until reveal, 
 - **EVM `SubjectAccount`** (passkey + seed keys, guardian): address predicted by
   `SubjectAccountFactory.predict(firstKey, guardian)`; the client enqueues a `call` job `deploy(firstKey, guardian)`
   **before** the subject's first payment (deploy is permissionless and idempotent). Key changes go through
-  `executeAsOwner` signed by an existing key (client builds `OwnerCall(bytes data,uint256 nonce,uint256 validUntil)`).
+  `mtxExecuteAsOwner` (as built `executeAsOwner`) signed by an existing key (client builds `OwnerCall(bytes
+  data,uint256 nonce,uint256 validUntil)` in the account's domain, `salt = chain_uid`). The factory's constructor takes
+  `chain_uid`, so the predicted address differs per chain: the client predicts and records it per chain
+  ([NET-ALL-22](networks/README.md#NET-ALL-22)).
   <a id="first-key-proof"></a>When the client registers the first key against a server challenge, the new key signs
   `keccak256("scaas-subject-key-proof-v1" ‖ challenge)` — domain separation: a server-chosen challenge is never an
   operation digest. A passkey proof is checked as any assertion (`clientDataJSON`, `rpIdHash`, UP|UV, P-256 signature),
@@ -836,7 +845,11 @@ factory call plus optional action contracts ([CTR-AS-14](contracts/asset-suite.m
 
 After creation: read `predictAddress` before, verify `isDeployedHere`, `creatorOf`, `versionOf` after (decoders know
 kinds 0–7); register the token on the node (`POST /v1/admin/chains/{key}/tokens`) and in the client
-(`PUT /v1/tokens/{chain}`), record the EIP-712 domain from `eip712Domain()`.
+(`PUT /v1/tokens/{chain}`), record the EIP-712 domain from `eip712Domain()` (target: with `salt` = the chain's
+`chain_uid`, checked against the chain profile). Target (SPECIFIED): one factory, `OpenFactory` (the tiered factory's
+code): the v1 `createMetaToken` rows above become `createTiered(META_NONE, …)` and `createTiered(META_SINGLE, …)` with
+`num = den = 1`; gasless token operations other than transfer and payment are `mtxExecute` self-calls on the token's
+allowlist; role calls such as `mint` stay `call` jobs through the role holder's contract.
 
 ## Data protection
 
@@ -1005,7 +1018,7 @@ commitment computationally unlinkable (2^256 preimage space); the on-chain value
 - [ ] Business documents booked only from finalized events matched on (chain, contract, to, `entryRef`).
 - [ ] Business hooks isolated so they never block the cursor.
 - [ ] Watch list and token subset pushed after every wallet approval and token activation.
-- [ ] Cancel semantics implemented (`TOO_LATE` = already sent; `cancelMetaNonce` for subject-side cancel).
+- [ ] Cancel semantics implemented (`TOO_LATE` = already sent; `cancelNonce`, as built `cancelMetaNonce`, for subject-side cancel).
 - [ ] Database copies neutralized (secrets removed, pushing disabled).
 - [ ] No personal data in any payload; party ↔ address mapping erasable on the client side.
 

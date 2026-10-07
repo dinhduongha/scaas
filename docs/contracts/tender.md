@@ -19,12 +19,13 @@ not anonymous: bidder identities are public at commit).
 
 <a id="deposit-commitment"></a>
 <a id="CTR-TND-01"></a>**CTR-TND-01** — **Deposit and commitment are one signature: the deposit token's own `pay`
-meta-tx** (unchanged typehash, v1 or v2 token): `to = tender`, `value = minDeposit`, `data = pay(depositRef)`, fee
+meta-tx** (the one `MetaTransaction` typehash, [CTR-MTX-01](metatx.md#CTR-MTX-01)): `to = tender`, `value = minDeposit`, `data = pay(depositRef)`, fee
 `NONE`, `MODE_RESTRICT_RELAYER` with `relayer = tender`, `depositRef = keccak256(abi.encode(DEPOSIT_TAG,
 block.chainid, tender, tenderId, commitment))`. Anyone submits `commitBid(tenderId, commitment, proof, m, sig)`; the
-tender recomputes `depositRef`, checks the shape, calls `token.executeMetaTransaction(m, sig)` and records the bid. The
+tender recomputes `depositRef`, checks the shape, calls `token.executeMetaTransaction(m, sig)` (the `bool` alias of
+`mtxExecute`) and records the bid. The
 payment reference binds the deposit to this commitment: no tender-level signature, no allowance, and nobody lands the
-deposit outside `commitBid` (v1 and every v2 entry point check the relayer first). Bidders reconcile it as a payment
+deposit outside `commitBid` (every entry point checks the relayer first). Bidders reconcile it as a payment
 (`entryRef = depositRef`). Cost: wallets show "pay 1000 to <tender>" rather than "bid".
 
 <a id="commitment-format"></a>
@@ -77,11 +78,12 @@ fails due diligence; leader-only, a short window, a public reason, a cap and the
 discretion. A tender that wants no discretion sets `dqWindow = 0`.
 
 <a id="deposit-token"></a>
-<a id="CTR-TND-07"></a>**CTR-TND-07** — **Deposit token** = a token deployed by the configured factory v1 (`META`) or
-factory v2 (`META`, `META_NONE`, `META_SINGLE`, `META_MULTI`; factory v2 also deploys the v1 `META` kind, accepted when
-registered) through a **registered, non-deprecated** implementation (unregistered clones have version 0 ⇒
-`implementationOf == 0` ⇒ refused; Zether kinds refused), checked at `createTender`. `versionOf` is decoded with each
-factory's own `TokenKind` type (the `IOpenFactory` and `IOpenFactoryV2` enums differ). The tender also checks that the
+<a id="CTR-TND-07"></a>**CTR-TND-07** — **Deposit token** = a token deployed by the chain's one `OpenFactory`
+([CTR-TOK-03](token-wrappers.md#CTR-TOK-03)) as `META_NONE`, `META_SINGLE` or `META_MULTI` (or their regulated kinds)
+through a **registered, non-deprecated** implementation (unregistered clones have version 0 ⇒
+`implementationOf == 0` ⇒ refused; Zether kinds refused), checked at `createTender`. `versionOf` is decoded with the
+factory's one `TokenKind` enum. **Transitional (BUILT):** two factories exist (v1 `META`, v2 tiers, with enums that
+differ); the tender is not built yet and follows the one factory. The tender also checks that the
 balance delta equals `minDeposit` (redundant for META tokens, kept as defence). Bidders sign an intent on this token;
 an attacker-chosen "token" could fake `executeMetaTransaction`. Other tokens are wrapped first.
 
@@ -107,7 +109,7 @@ refuses the chain; there is no storage-guard fallback.
 | Reserve and ties | public `[minPrice, maxPrice]` only; tie-break = earliest commit `seq` |
 | Cancel | buyer, until `commitDeadline`, with a `reasonRef`; every deposit refunds 100 % |
 | Award window | `minBidders` valid reveals else `FAILED`; for `dqWindow` (≤ 7 d) the buyer may disqualify only the current leader, only while a next valid bid exists, with a public `reasonRef`, at most 2 times; buyer settles any time after reveals, anyone after the window; no `awardDeadline` |
-| Deposit token | a registered, non-deprecated META kind from factory v1/v2; Zether refused; balance delta checked |
+| Deposit token | a registered, non-deprecated tier kind from the one factory; Zether refused; balance delta checked |
 | Windows, bonds, admin | reveal window 1 h–30 d; `RETURN_ON_AWARD` or `HOLD_UNTIL_RELEASE`; one immutable contract per chain, no owner, pause or upgrade; `bidder ≠ buyer` |
 | Families | EVM and Hedera first (same bytecode); others PLANNED ([NET-ALL-18](../networks/README.md#NET-ALL-18)) |
 
@@ -417,13 +419,13 @@ Known limits (stated to users):
 
 ## Conformance
 
-Unit: every `BadConfig` code; commit with each `BadDepositIntent` code; v1 and v2 tokens; the factory-v2 `META` kind
-accepted when registered; unregistered and deprecated tokens refused; Zether refused; eligibility proof valid/invalid;
+Unit: every `BadConfig` code; commit with each `BadDepositIntent` code; each tier kind; the deposit through the
+`executeMetaTransaction` alias; unregistered and deprecated tokens refused; Zether refused; eligibility proof valid/invalid;
 buyer and sink cannot bid; ERC-1271 bidder (`SubjectAccount`); reveal mismatch, out-of-range reveal, reveal outside the
 window; ties broken by `seq`; both rules; `minBidders` ⇒ `FAILED`; cancel before/after `commitDeadline`, and commit +
 cancel in the same block at `now == commitDeadline`; every routing row and double withdraw; bond release by buyer, by
 anyone after `bondReleaseTime`, claim before it. **I6 front-running:** a third party submits the deposit intent through
-`mtxPay`, `mtxBatch`, `executeMetaTransaction` (v2) and `executeMetaTransaction` (v1) ⇒ `MetaTxUnauthorizedRelayer`;
+`mtxPay`, `mtxBatch`, `mtxExecute` and `executeMetaTransaction` ⇒ `MetaTxUnauthorizedRelayer`;
 the intent replayed into another `tenderId` and another tender contract ⇒ `BadDepositIntent(3)`. Disqualification:
 outside the window (before `revealDeadline`, after `revealDeadline + dqWindow`), non-buyer, `dqWindow = 0`, cap
 reached, `NoNextBid` on the last candidate, zero `reasonRef`, undeclared class, class 0 ⇒ refund, declared class ⇒

@@ -193,7 +193,7 @@ Layer 3 — purposes:
 | `pop` | `popDigest(ua, authRef)` ([CTR-UA-07](#CTR-UA-07)) |
 | `authref` | `popDigest(ua, authRef)`, signed by the authority `authRef` (consent to authorize that Zether `ua`) |
 | `metatx` | v3 EIP-712 digest of `UAMetaTransaction` |
-| `metatx-cancel` | `keccak256(abi.encode(CANCEL_TAG, chainid, chainUid, token, ua, batch, validUntil))` — derived `ua` only (natives use `cancelMetaNonce`) |
+| `metatx-cancel` | `keccak256(abi.encode(CANCEL_TAG, chainid, chainUid, token, ua, batch, validUntil))` — derived `ua` only (natives use `cancelNonce`) |
 | `member` | `keccak256(structureUA ‖ ua_msg_of_structure)` (native members: inside `UAAuth`) |
 | `zether-auth` | the Zether `authDigest` ([zether.md](zether.md#registry)) |
 | `zether-owner` | the Zether rollOver/mode digests |
@@ -405,30 +405,33 @@ cost real money on public chains (an ML-DSA-65 signature is 53–132 k gas of ca
 
 <a id="functions"></a>
 <a id="function-kinds"></a>
-<a id="CTR-UA-14"></a>**CTR-UA-14** — **Each function accepts the kinds it needs** (owner): native-address functions (v1/v2
-tokens, DEX, mandates) keep accepting native ids only — the DEX with UA makers (UA holders trade through native
+<a id="CTR-UA-14"></a>**CTR-UA-14** — **Each function accepts the kinds it needs** (owner): native-address functions (the
+tokens' address-typed paths, DEX, mandates) keep accepting native ids only — the DEX with UA makers (UA holders trade through native
 accounts; it would need a UA-ledger allowance `uaApprove` to contracts and an `OrderBookDex` v2 with `bytes32 maker`),
-`MandateWallet` with a UA owner or delegate, and regulated tokens with UA receivers are not in v1; the new UA-ledger functions on MetaToken v3 accept a
+`MandateWallet` with a UA owner or delegate, and regulated tokens with UA receivers are not in v1; the UA-ledger functions of the token base accept a
 native id or a registered SIGNING kind as `from` and as `to`; Zether functions accept Zether kinds only, registered
 first. The kind sets SIGNING, ZETHER and MEMBER are **closed and enforced** at each point that names them: v3
 `from`/`to`, `requireAuthorized` (SIGNING and native only; ZETHER reverts), `msig` members (MEMBER), Zether `authRef`.
-No existing ABI changes; deployed v1/v2 clones stay valid; a Zether UA can never be a v3 receiver (it could never spend)
-nor sign through `requireAuthorized` (that would be a signing use of the decryption key). UA holders need v3 tokens.
+The address-typed ABI does not change for them; a Zether UA can never be a v3 receiver (it could never spend) nor sign
+through `requireAuthorized` (that would be a signing use of the decryption key). "v3" in this file names the
+UA-ledger functions (`ua*`) of the one token base `ERC20MetaTx` ([CTR-MTX-07](metatx.md#CTR-MTX-07)), not a separate
+token generation.
 
 Legend: **N** = native ids only (EOA, ERC-1271 incl. `SubjectAccount`/Safe/`MandateWallet`, Hedera native); **U** = a
 native id or a registered SIGNING kind (never ZETHER); **Z** = a Zether kind matching the token's verifier curve;
 **Z-auth** = the Zether record's `authRef` (self, native, or any SIGNING kind); **sender** = `msg.sender` (native by
 definition).
 
-EVM tokens v1 / v2 (unchanged ABIs):
+EVM tokens, address-typed paths:
 
 | Contract | Function | Subject parameter | Accepts | Verified by |
 |---|---|---|---|---|
-| `ERC20MetaTx` / `MetaToken` (v1), `MetaTxCore` (v2) | `executeMetaTransaction(m, sig)` | `m.from` | N | `_requireValidSignature`: EOA ECDSA or ERC-1271 |
-| same | `cancelMetaNonce(batch)` | sender | N | — |
-| same | `transfer`, `approve`, `transferFrom` | sender; `approve` spender | N; spender contract | — |
-| `MetaTokenBase` (v2) | `mtxTransfer`, `mtxTransferWithFee`, `executeMetaTransactionWithFee`, `mtxPay`, `mtxUnwrap`, `mtxUnwrapWithFee`, `mtxBatch` | `from` / `m.from` | N | same pipeline |
-| same | `payWithFee`, `wrap`, `unwrap`, `addReserve` | sender | N | — |
+| `ERC20MetaTx` | `mtxExecute(m, sig)` (alias `executeMetaTransaction`) | `m.from` | N | `_requireValidSignature`: EOA ECDSA or ERC-1271 |
+| same | `cancelNonce(batch)` | sender (or `m.from` through `mtxExecute`) | N | — |
+| same | `transfer`; `approve`, `transferFrom` | sender; `approve` caller and spender | N; caller and spender contracts | — |
+| same | `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces` | `o.from` | N | `_requireValidSignature`; `msg.sender == o.dex` |
+| `MetaTokenBase` | `mtxTransfer`, `mtxTransferWithFee`, `mtxExecuteWithFee`, `mtxPay`, `mtxBatch` | `from` / `m.from` | N | same pipeline |
+| same | `payWithFee`, `wrap`, `unwrap`, `addReserve`; `mtxWrap` | sender (`_msgSender()`); `o.from` | N | — ; the underlying's `mtxTrade` |
 | `mtxPayReceiverFee` (planned) | payer `m.from`, payee `m.to` co-sign | N (payer), N (payee) | `_requireValidSignature` | |
 | Hedera children | as above | as above | N incl. `hedera-native` | HIP-632 for 64-byte sigs from codeless accounts |
 | regulated tokens (planned) | transfers, `recordOrder`, `freeze`, … | `to`, `account` | N (address-keyed `ComplianceRegistry`) | — |
@@ -440,10 +443,10 @@ EVM Zether (`ZetherToken`, re-pointed at migration):
 | `fund(encodedY, amount)` | receiver `UA(zether, Y)`; sender pays | Z (registered); sender N | registry `kindOf` |
 | `transferConfidential(payload, proof, authSig, beneficiary)` | `from = UA(Y_f)`, `to = UA(Y_t)`, `beneficiary` | Z, Z, Z | proof + `requireZetherAuthorized(from, digest, authSig, zkCovered = true)` ⇒ Z-auth |
 | `burn(payload, amount, recipient, beneficiary, proof, authSig)` | `from`, `beneficiary`; `recipient` address | Z, Z; recipient N | as transfer |
-| `rollOverSigned(ua, …, sig)`, `setRollOverMode(ua, …, sig)` | `ua` | Z | `requireZetherAuthorized(ua, digest, sig, zkCovered = false)` ⇒ Z-auth (self ⇒ Zether Schnorr by `x`, purpose `zether-owner`) |
+| `mtxRollOver(ua, …, sig)`, `mtxSetRollOverMode(ua, …, sig)` | `ua` | Z | `requireZetherAuthorized(ua, digest, sig, zkCovered = false)` ⇒ Z-auth (self ⇒ Zether Schnorr by `x`, purpose `zether-owner`) |
 | `rollOverPublic(ua)`, `rollOverBatch(uas)` | `ua` | Z | none (public) |
 | `wrap`, `unwrap` | sender | N | — |
-| `executeMetaTransaction(m, sig)` (envelope for `OP_ZTRANSFER`/`OP_ZBURN`, outer fee) | `m.from` (outer-fee payer) | N | `ZetherMetaTx._requireValidSignature` |
+| `mtxExecute(m, sig)` (self-call of `transferConfidential`/`burn`/`fund`/`wrap`/`unwrap`, outer fee) | `m.from` (outer-fee payer) | N | the base's `_requireValidSignature` |
 | views `registered`, `accountState`, `sendCounter` | `ua` | Z | — |
 
 `authSig` for Z-auth: `0x` with a proof and `authRef = 0`; else `abi.encode(bytes authKeyData, bytes sig)` checked by the
@@ -464,7 +467,7 @@ and no lookup; spend authority stays separate from decryption (`survivesEncKeyLe
 cannot rotate ([CTR-UA-13](#CTR-UA-13)); a timelocked `rotateZetherAuth` was the rejected alternative.
 
 <a id="ua-ledger"></a>
-<a id="CTR-UA-18"></a>**CTR-UA-18** — **EVM balances of derived UAs live in a separate `bytes32` ledger on MetaToken v3**
+<a id="CTR-UA-18"></a>**CTR-UA-18** — **EVM balances of derived UAs live in a separate `bytes32` ledger in the token base**
 (owner; `_uaBalance[ua]`), never in an address projection; native ids in UA-ledger functions read and write the ERC-20
 ledger. To ERC-20 observers the UA ledger is the **sub-ledger of one sentinel address**
 `UA_POOL = address(uint160(uint256(keccak256("scaas.ua.pool.v1"))))`: `balanceOf(UA_POOL)` returns `_uaTotal` (= Σ
@@ -479,14 +482,16 @@ holder; the SCaaS indexer splits it.
 
 <a id="uametatransaction"></a>
 <a id="CTR-UA-19"></a>**CTR-UA-19** — **The UA-ledger meta-transaction has its own struct and typehash**
-(`UAMetaTransaction`, `from`/`to` as `bytes32`; owner), domain `("SCaaS MetaToken", "3", chainId, clone, salt =
-chainUid)` (the clone copies `registry.chainUid()` at `initialize`), and the same nine-step pipeline
-([metatx.md](metatx.md#execution-pipeline)). This is a deliberate exception to "no second typehash"
+(`UAMetaTransaction`, `from`/`to` as `bytes32`; owner) in the token's own domain `("SCaaS MetaToken", "1", chainId,
+clone, salt = chainUid)` — one domain for both structs, the typehash separates them — where `chainUid` is the
+implementation's constructor immutable ([CTR-MTX-02](metatx.md#CTR-MTX-02)), checked equal to `registry.chainUid()` at
+`initialize`; and the base's pipeline with explicit shapes ([metatx.md](metatx.md#execution-pipeline)).
+**Transitional:** an earlier text gave this path its own domain `("SCaaS MetaToken", "3", chainId, clone, salt =
+chainUid)` and copied `registry.chainUid()` into the clone at `initialize`; neither is built. This is a deliberate exception to "no second typehash"
 ([CTR-MTX-11](metatx.md#CTR-MTX-11)): that rule forbids a second hash of the **same** struct; this is a different struct
 whose `from` cannot be an `address`. Clients build two struct shapes (vectors below).
 
-New implementation versions of the three tiers (`META_NONE`, `META_SINGLE`, `META_MULTI`) in factory v2; v1/v2 clones are
-untouched. Storage adds `_uaBalance[bytes32]` and `_uaNonce[bytes32][batch]` (the v3 nonce map is keyed by `bytes32` for
+The `ua*` functions live in the one base, so every tier (`META_NONE`, `META_SINGLE`, `META_MULTI`) has them. Storage adds `_uaBalance[bytes32]` and `_uaNonce[bytes32][batch]` (the v3 nonce map is keyed by `bytes32` for
 both paths; native ids are zero-padded).
 
 ```solidity
@@ -500,13 +505,13 @@ struct UAMetaTransaction {
 
 | Function | Mirrors | `from` | `to` |
 |---|---|---|---|
-| `uaExecute(UAMetaTransaction m, bytes auth)` | `executeMetaTransaction` | U | U (`UANotRegistered`, `UAKindNotAccepted`, `UAPoolNotPayable`) |
+| `uaExecute(UAMetaTransaction m, bytes auth)` | `mtxExecute` (transfer, `pay`, `unwrap` shapes only) | U | U (`UANotRegistered`, `UAKindNotAccepted`, `UAPoolNotPayable`) |
 | `uaTransfer(from, to, amount, batch, nonce, validUntil, mode, relayer, auth)` | `mtxTransfer` | U | U |
 | `uaTransferWithFee(…, fee, feeRecipient, auth)` | `mtxTransferWithFee` | U | U |
 | `uaPay(from, to, amount, payId, validUntil, mode, relayer, fee, feeRecipient, auth)` | `mtxPay` (`batch = payLane(payId)`) | U | U |
-| `uaUnwrap(from, underlying, wrapped, recipient, minOut, batch, nonce, validUntil, mode, relayer, auth)` | `mtxUnwrap` | U | `recipient` address (N) |
+| `uaUnwrap(from, underlying, wrapped, recipient, minOut, batch, nonce, validUntil, mode, relayer, auth)` | `mtxExecute(unwrap(…))` | U | `recipient` address (N) |
 | `uaBatch(UAMetaTransaction[] ms, bytes[] auths)` | `mtxBatch` | each U | each |
-| `uaCancelNonce(bytes32 ua, uint256 batch, uint256 validUntil, bytes auth)` | `cancelMetaNonce` | **derived** SIGNING `ua` only (purpose `metatx-cancel`); native ids use `cancelMetaNonce` (sender), which writes `_uaNonce[pad(sender)]` | — |
+| `uaCancelNonce(bytes32 ua, uint256 batch, uint256 validUntil, bytes auth)` | `cancelNonce` | **derived** SIGNING `ua` only (purpose `metatx-cancel`); native ids use `cancelNonce` (sender), which writes `_uaNonce[pad(sender)]` | — |
 | `transferToUA(bytes32 to, uint256 amount)` | — | sender N | registered SIGNING (emits `Transfer(sender, UA_POOL)` + `UATransfer`) |
 | views `balanceOfUA(bytes32)`, `uaNonce(bytes32, batch)`, `uaDigest(m)`, `registry()` | — | — | — |
 
@@ -514,8 +519,8 @@ Rules: step 5 of the pipeline is ECDSA/1271 over the v3 EIP-712 digest when `fro
 classified per [CTR-UA-24](#CTR-UA-24) (a 7702-delegated `from`: ECDSA, else 1271 — not v2's `_isContract` rule), else
 `registry.requireAuthorized(from, PURPOSE_METATX, digest, auth)`. Ops allowed in `m.data`: empty (transfer),
 `pay(bytes32)`, `unwrap(…)`; **`approve` and `trade` are refused in every `ua*` function, for native `from` too**
-(`MetaTxUnknownOp`; natives use the v2 address-typed path; a UA-ledger allowance model waits for DEX v2). v3 **keeps the
-v2 address-typed entry points** (`executeMetaTransaction`, `mtx*`) unchanged; they and the `ua*` functions share one
+(`MetaTxUnknownOp`; natives use the address-typed path; a UA-ledger allowance model waits for DEX v2). The base **keeps the
+address-typed entry points** (`mtxExecute`, `mtx*`) unchanged; they and the `ua*` functions share one
 nonce map, `_uaNonce[pad(addr)]`, so one native nonce cannot be used on both paths (test T-V3-1). Fees are paid from the
 `from` ledger to `feeRecipient` (an address, native ledger; from a UA `from` it emits `Transfer(UA_POOL, feeRecipient)`);
 the `FeeRecipientIsPayee` check compares `bytes32(uint256(uint160(feeRecipient)))` with `m.to`. Event per item:
@@ -528,13 +533,19 @@ EVM DEX, mandates, accounts, registry:
 
 | Contract | Function | Subject | Accepts | Note |
 |---|---|---|---|---|
-| `OrderBookDex` | `settle`, `settleOne`, `cancel`, `invalidateNonces`, `checkOrder` | `o.maker`, `maker` | N | `_validSig`; its ERC-1271 branch gets the 50 k/400 k cap ([CTR-DEX-08](dex.md#CTR-DEX-08)) |
-| `MetaTxDex` | `settle(a, b)` | `a.m.from`, `b.m.from` | N | via token `executeMetaTransaction`; UA legs wait for a v3 `trade` |
-| `MandateWallet` (native 1271 itself) | `setMandate`, `setPayee`, `revoke`, `execute`; `executeAsOwner`; `payUnderMandate`, `revokeWithSig` | owner; delegate | owner N (ECDSA); delegate N (ECDSA) | a UA owner/delegate = a future `MandateWallet` v2 calling `requireAuthorized` |
-| `SubjectAccount` (option (b)) | `executeAsOwner`, `isValidSignature`, recovery | its keys | P-256 WebAuthn, secp256k1 (account keys) | is itself an N id |
+| `OrderBookDex` | `mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces`; SCaaS legs through the token's `mtxTrade` | `o.from` | N | outside legs: `_validSig`, its ERC-1271 branch with the 50 k/400 k cap ([CTR-DEX-08](dex.md#CTR-DEX-08)); SCaaS legs: the token; UA legs wait for a `bytes32` order |
+| `MandateWallet` (native 1271 itself) | `setMandate`, `setPayee`, `revoke`, `execute`; `mtxExecuteAsOwner`; `mtxPayUnderMandate`, `mtxRevoke` | owner; delegate | owner N (ECDSA); delegate N (ECDSA) | a UA owner/delegate = a future `MandateWallet` v2 calling `requireAuthorized` |
+| `SubjectAccount` (option (b)) | `mtxExecuteAsOwner`, `isValidSignature`, recovery | its keys | P-256 WebAuthn, secp256k1 (account keys) | is itself an N id |
 | `UARegistry` | `register` | — | any derived kind | PoP |
 | `SealedBidTender` (planned) | `commitBid(… m, depositSig)`; `revealBid`, `withdrawDeposit` | bidder = `m.from` | N | a UA bidder needs a v3 deposit token; the bidder id in the commitment becomes `bytes32` then |
 | `VestingGrant`, `Distribution`, `ExchangeOffer` (planned) | `release`, `claim(account)`, `exchange(m, sig)` | beneficiary, account | N | beneficiaries "should be a `SubjectAccount`" — still valid as option (b) |
+
+**Transitional (BUILT names).** `SubjectAccount` and `MandateWallet` expose `executeAsOwner(data, nonce, validUntil,
+signature)` (recovery cancel: `executeAsOwner(cancelRecovery)`); Zether exposes `rollOverSigned(ua, …, sig)` and
+`setRollOverMode(ua, …, sig)` and verifies envelopes with `ZetherMetaTx._requireValidSignature`; the classifier is
+`MetaTxCore._isContract`; `OrderBookDex` keys orders by `o.maker`; the legacy `MetaTxDex.settle(a, b)` takes legs
+signed by `a.m.from` and `b.m.from`. The renames and deletions are [CTR-MTX-21](metatx.md#CTR-MTX-21) and
+[CTR-DEX-16](dex.md#CTR-DEX-16).
 
 Non-EVM families ([NET-ALL-20](../networks/README.md#NET-ALL-20)):
 
@@ -796,7 +807,7 @@ ERC-1271 on the address (which runs the delegate code) under the 50 k cap; any o
 base key of a 7702 account controls it at protocol level (it can send a transaction itself, re-delegate or clear the
 delegation), so no signature rule of ours can make it weaker than root; refusing its ECDSA would add no security and
 break plain 7702 wallets, while the 1271 fallback lets delegated wallets with session keys or passkeys sign. v2's
-`MetaTxCore._isContract` (7702 ⇒ "not a contract" ⇒ ECDSA only) is sound for the same reason and stays unchanged; it only
+`ERC20MetaTx._isContract` (7702 ⇒ "not a contract" ⇒ ECDSA only) is sound for the same reason and stays unchanged; it only
 refuses such wallets' 1271 signatures. If a future EIP lets a 7702 account disable its base key, ECDSA acceptance for it
 must follow that EIP's flag (a new registry generation).
 
@@ -1275,7 +1286,7 @@ assertion over the root. On EVM the subject account is the built registry's `Aut
 account, holding several passkeys `(qx, qy, rpIdHash)`; key types are `P256_WEBAUTHN(qx,qy,rpIdHash)` or
 `SECP256K1(address)`; the account signature was first specified as `abi.encode(keyIndex, payload)` and is now
 `abi.encode(keyIndex, bytes32[] proof, bytes sig)` for both key types. Key lifecycle: `addKey`/`removeKey`/`setGuardian`
-only through `executeAsOwner` signed by an existing key (own nonce), or `recover(newKey)` by the guardian after
+only through `mtxExecuteAsOwner` signed by an existing key (own nonce), or `recover(newKey)` by the guardian after
 `RECOVERY_DELAY` (default 2 days, cancellable by a key); the account never has zero keys. P-256 verification per
 family: Sui `ecdsa_r1::secp256r1_verify`; Soroban `env.crypto().secp256r1_verify` (CAP-51); Cosmos `secp256r1_verify`
 (cosmwasm-std 2.1+); Hedera as EVM (probe the precompile, Solidity fallback); TON: TVM has
@@ -1286,7 +1297,7 @@ sandbox (otherwise TON is ed25519 only and the gap is recorded). The client side
 abi.encode(keyIndex, bytes32[] proof, sig)`) is [CLI-SGN-09](../clients/signers-clientkeys.md#CLI-SGN-09).
 
 Tests: real WebAuthn vectors — generated by a software authenticator (fixed P-256 key, correct WebAuthn format) and a
-published vector suite; failure cases; batch; key lifecycle; recovery; a `MetaToken` `pay` signed by a passkey and by
+published vector suite; failure cases; batch; key lifecycle; recovery; a token `pay` signed by a passkey and by
 a seed key; precompile and Solidity gas; end to end: add a second key (seed when a passkey exists) and sign with each.
 
 ## Smart account (optional): `SubjectAccount`
@@ -1313,8 +1324,8 @@ identifier features. Tokens verify a `SubjectAccount` through ERC-1271 with the 
   (per `rpId`). A passkey that is a `webauthn-p256` UA may **also** be a `SubjectAccount` key: same kind, same
   WebAuthn scheme, digests differ (the account's challenge is the token's EIP-712 digest with `from` = the account);
   allowed.
-- Key management: `addKey`/`removeKey`/`rotateKey`/`setGuardian`/`execute` only through `executeAsOwner(data, nonce,
-  validUntil, signature)` signed by an existing key (own nonce, EIP-712 `OwnerCall(bytes data,uint256 nonce,uint256
+- Key management: `addKey`/`removeKey`/`rotateKey`/`setGuardian`/`execute` only through `mtxExecuteAsOwner(data, nonce,
+  validUntil, signature)` (built name `executeAsOwner`, [CTR-MTX-21](metatx.md#CTR-MTX-21)) signed by an existing key (own nonce, EIP-712 `OwnerCall(bytes data,uint256 nonce,uint256
   validUntil)` in the account's own domain `"SCaaS SubjectAccount"`). A plain EOA never rotates.
 - The client backup predicate ([CLI-SGN-13](../clients/signers-clientkeys.md#CLI-SGN-13)) applies to it unchanged;
   derived UAs are "single-key, no recovery" by construction and the app shows that.
@@ -1343,7 +1354,7 @@ raw message.
 <a id="CTR-ACC-03"></a>**CTR-ACC-03** — **Guardian recovery adds a key; it removes none.** The guardian calls
 `initiateRecovery(newKey)`; after `RECOVERY_DELAY = 2 days` anyone calls `completeRecovery(newKey)` ⇒ the key is
 **added** (recovery is for a LOST key; a STOLEN key could already spend through meta-transactions and needs no
-recovery). An existing key cancels through `executeAsOwner(cancelRecovery)`; `setGuardian` cancels a pending recovery.
+recovery). An existing key cancels through `mtxExecuteAsOwner(cancelRecovery)`; `setGuardian` cancels a pending recovery.
 The guardian may be a multisig contract. Watching `RecoveryInitiated` events is the owner's defence against a
 compromised guardian (the 2-day delay plus cancel by key).
 
@@ -1351,13 +1362,16 @@ compromised guardian (the 2-day delay plus cancel by key).
 <a id="CTR-ACC-04"></a>**CTR-ACC-04** — The authenticator `signCount` is not checked: synced passkeys always return 0.
 
 <a id="erc1271-cap"></a>
-<a id="CTR-ACC-05"></a>**CTR-ACC-05** — **The 400 k ERC-1271 gas cap is only for `SubjectAccount` clones.** `MetaToken`
-pins the chain's `SubjectAccount` implementation (constructor parameter, immutable); `ERC20MetaTx._erc1271Gas(from)`
-defaults to 50 k, and `MetaToken` (and every v2 tier through `SUBJECT_ACCOUNT_IMPL`) grants 400 k **only** when
+<a id="CTR-ACC-05"></a>**CTR-ACC-05** — **The 400 k ERC-1271 gas cap is only for `SubjectAccount` clones.** Every token
+implementation pins the chain's `SubjectAccount` implementation (constructor parameter, immutable,
+`SUBJECT_ACCOUNT_IMPL`); `ERC20MetaTx._erc1271Gas(from)` defaults to 50 k and grants 400 k **only** when
 `from.codehash` is the EIP-1167 clone code of that implementation, because a Solidity P-256 verifier costs ~200–330 k
 gas on chains without the precompile. Other contract wallets (Safe, …) keep 50 k. `Deploy.s.sol` deploys
 `SubjectAccountFactory` before the token and records its address in `deployments/<chainid>.json`. The same rule is
-applied by `OrderBookDex` ([CTR-DEX-08](dex.md#CTR-DEX-08)) and `ZetherMetaTx` ([CTR-ZTH-21](zether.md#CTR-ZTH-21)).
+applied by `OrderBookDex` ([CTR-DEX-08](dex.md#CTR-DEX-08)) and to Zether envelopes ([CTR-ZTH-21](zether.md#CTR-ZTH-21)).
+`SubjectAccount` has its own salted domain `("SCaaS SubjectAccount","1", chainId, account, chain_uid)`; the factory
+takes `chain_uid` as a constructor argument and passes it to `new SubjectAccount(chainUid)`, so a user's account has a
+different address on each chain and the node and app predict it per chain ([CTR-GEN-05](README.md#CTR-GEN-05)).
 
 **Documented limitation.** `SubjectAccount.isValidSignature` accepts any digest signed by any of its keys —
 ERC-1271 digests are not account-wrapped (the ERC-7739 class). SCaaS digests bind `from`/`verifyingContract`, so none
@@ -1368,7 +1382,7 @@ is rejected for now: it would change every 1271 digest, every KAT and every clie
 |---|---|
 | `initialize(firstKey, guardian)` | factory only, once |
 | `isValidSignature(digest, sig)` | ERC-1271; [CTR-ACC-02](#CTR-ACC-02) encoding |
-| `executeAsOwner(data, nonce, validUntil, signature)` | self-call of `addKey`/`removeKey`/`rotateKey`/`setGuardian`/`execute`; the nonce increments before the call |
+| `mtxExecuteAsOwner(data, nonce, validUntil, signature)` | self-call of `addKey`/`removeKey`/`rotateKey`/`setGuardian`/`execute`; the nonce increments before the call |
 | `initiateRecovery` / `completeRecovery` / `cancelRecovery` | [CTR-ACC-03](#CTR-ACC-03) |
 | factory `predict`, `deploy` | idempotent, [CTR-ACC-01](#CTR-ACC-01) |
 
@@ -1376,7 +1390,7 @@ Key lifecycle per family ([NET-ALL-05](../networks/README.md#NET-ALL-05) is norm
 
 | Family | Rotation | Guardian / recovery | Gap |
 |---|---|---|---|
-| EVM | `SubjectAccount` add/remove/rotate via `executeAsOwner` | guardian + `RECOVERY_DELAY` | — |
+| EVM | `SubjectAccount` add/remove/rotate via `mtxExecuteAsOwner` | guardian + `RECOVERY_DELAY` | — |
 | Hedera | native account key update (no `SubjectAccount`) | native | — (stated) |
 | Aptos | account keys + origins | guardian + `RECOVERY_DELAY` | — |
 | Sui | per subject `Keys` object, shared by every `Account<T>` of the subject | guardian on `Keys` | planned (today per `Account<T>`) |

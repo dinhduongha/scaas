@@ -293,6 +293,15 @@ Non-EVM families use budget + balance floor (no EIP-1559 base fee). The private 
 pre-London Clique chain with `MinGasPrice = 0`: it has no base fee, so `base_fee_spike` does not apply there. Metric `scaas_breaker_open{chain,lane,breaker}`;
 manual reset `POST /v1/admin/chains/{key}/breaker/reset` (operator, [admin-auth.md#routes](admin-auth.md#routes)).
 
+<a id="selector-breaker"></a><a id="NODE-LANE-25"></a>**NODE-LANE-25** — **A breaker per `(from, selector)` for
+self-calls.** Status: **SPECIFIED**. A meta-transaction self-call ([NODE-JOB-20](job-api.md#NODE-JOB-20)) that passed
+simulation and reverted on chain counts against the pair `(from, selector)`; ≥ 2 such reverts in 24 h ⇒ intake refuses
+that pair (`429 SUBJECT_THROTTLED {retry_after}`) until 24 h after the last one, on every door, in addition to the
+subject's grief score ([NODE-LANE-15](#NODE-LANE-15)). The usual causes are outside the relayer's control and specific
+to one function: a rate change paused wraps, a reserve fell short, a confidential send counter moved, or the signer
+front-ran its own intent. Why: a self-call can fail after simulation in ways a plain transfer cannot, and a per-subject
+counter alone would also stop that subject's unrelated payments. Cost: a store row per pair with a recent revert.
+
 <a id="NODE-LANE-01"></a>**NODE-LANE-01** (open; PLANNED where a seam exists) — Gas velocity limits denominated in a
 reporting currency (per agent and per enterprise, per hour) are an owner requirement that is not yet ruled: node
 budgets are in the family's smallest native unit ([NODE-SPN-02](sponsorship.md#NODE-SPN-02)) and the node holds no
@@ -379,6 +388,11 @@ intent. Cost: one `eth_call` per stuck tx per `stuck_after_secs` (60 s) and per 
 
 After `valid_until` the subject nonce of TON/Solana/Aptos lanes may be pruned and read as 0; consumption checks are
 only made while `now ≤ valid_until + clock_skew_secs`, and expiry decides after that.
+
+EVM view names: the target tokens expose the nonce and digest views as `mtxNonce(from, batch)` and `mtxDigest(m)`, and
+the gateway as `mtxExecute` (the alias `executeMetaTransaction` stays, [contracts/metatx.md](../contracts/metatx.md)).
+Transitional (BUILT): deployed tokens and the code paths above use `metaNonce`, `metaTxDigest` and
+`executeMetaTransaction`; the adapter switches by implementation when the renamed tokens are deployed.
 
 ### Shared submit path
 
@@ -502,9 +516,14 @@ transaction per outer tx keeps journal-before-broadcast and `plan()` unchanged; 
 <a id="unwrap-jobs"></a><a id="NODE-LANE-22"></a>**NODE-LANE-22** — **The node simulates unwrap jobs in full and never
 batches them.** For gasless unwrap ops ([CTR-MTX-12](../contracts/metatx.md#CTR-MTX-12)):
 
-- Op shape (contract side): `unwrap(address underlying, address recipient, uint256 minOut)` (100 bytes, amount =
-  `m.value`, `m.to == recipient`); the contract checks `recipient ∉ {0, address(this)}`, `0 < out ≤ reserve`,
-  `out ≥ minOut`, burns `⌈out·q⌉`; entry points `mtxUnwrap` and `mtxUnwrapWithFee`.
+- Shape (contract side): a self-call through `mtxExecute` whose `data` is the token's own allowlisted `unwrap`
+  calldata — single-underlying `unwrap(uint256 amount, address recipient, uint256 minOut)`, multi-underlying
+  `unwrap(address underlying, uint256 amount, address recipient, uint256 minOut)`, confidential-token public
+  `unwrap(uint256, address)` — with `m.to = m.value = 0` ([NODE-JOB-20](job-api.md#NODE-JOB-20)); the contract checks
+  `recipient ∉ {0, address(this)}`, `0 < out ≤ reserve`, `out ≥ minOut`, burns `⌈out·q⌉`. Transitional (BUILT): the
+  deployed tokens use the `unwrap(address underlying, address recipient, uint256 minOut)` pseudo-op (100 bytes, amount =
+  `m.value`, `m.to == recipient`) with the entry points `mtxUnwrap` and `mtxUnwrapWithFee`, which the allowlist tokens
+  delete.
 - The simulation gate runs the full outer transaction (`eth_call`/`eth_estimateGas` at `pending`), so it executes the
   underlying's transfer, `balanceOf` reads and the exact-amount check; it re-simulates immediately before signing the
   outer transaction, as for every job.

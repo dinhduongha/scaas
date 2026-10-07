@@ -66,8 +66,9 @@ back.
 **Admin-power exceptions.** The complete list is in [contracts/README.md](contracts/README.md#admin-powers-complete-list);
 each power is public, set at creation or bounded, and none moves a subject's balance. In short: the adjustable-rate
 `rateAdmin` and the multi-underlying `guardian` (step-capped, timelocked rate changes; the guardian may only
-`disableWrap`; [CTR-TOK-10](contracts/token-wrappers.md#CTR-TOK-10)); `OrderBookDex.admin` `setMarket` (market fee at
-most 1 %, bounded by each order's signed `maxFeePpm`); the Soroban token admin `mint` (a supply power, not a balance
+`disableWrap`; [CTR-TOK-10](contracts/token-wrappers.md#CTR-TOK-10)); `OrderBookDex.admin` `setMarket` (as built a
+market fee of at most 1 %, bounded by each order's signed `maxFeePpm`; specified: listing only, plus the split of each
+order's signed fee between relayer and treasury — recipients and proportions, never the amount); the Soroban token admin `mint` (a supply power, not a balance
 power); the TON DEX admin `WithdrawFees` (fees only; bounced payouts are claimed by their owners,
 [NET-TON-03](networks/ton.md#NET-TON-03)); the Solana program `Config.admin` (creates DEX markets only); and the
 `issuer`/`compliance` roles of regulated tokens (only that class, against a recorded order,
@@ -182,8 +183,9 @@ uses Zether; hiding the relationship itself is out of scope by design ("not a mi
 
 When every leg is on chain, use one-transaction settlement. When a leg is off chain, anchor the on-chain leg **after**
 the off-chain leg is irrevocable, or give the saga a funded on-chain compensation path. Atomic settlement is BUILT for
-payments (the `pay` op), the DEX (`OrderBookDex.settle`, legacy `MetaTxDex`) and mandates
-(`MandateWallet.payUnderMandate`); generic saga orchestration is a client concern.
+payments (the `pay` op), the DEX (`OrderBookDex.settle`, legacy `MetaTxDex`; specified: `OrderBookDex.mtxSettle`, one
+taker against several makers, each leg verified by its sell token) and mandates (`MandateWallet.payUnderMandate`,
+specified name `mtxPayUnderMandate`); generic saga orchestration is a client concern.
 
 **Anchoring as proof of action.** For automated agents and workflows the anchor gives a tamper-evident proof that a
 decision or commitment existed at a time, without publishing it; the relayers make agent payments frictionless (the
@@ -289,14 +291,18 @@ moves each chain to the push model, and the pull path is removed in one step aft
 - **Door A.** Anyone posts `{chain, token, m, signature}` to `/v1/metatx` → breaker → normalize → simulate →
   `metaTxDigest` → lane queue → the same submit path.
 - **DEX.** Maker and taker orders signed over the DEX domain → `/v1/dex/orders` → venue book → match → settle job
-  (`call`) → `OrderBookDex.settle` → `OrderFilled` / `Matched` → watcher → accounting. On non-EVM families settlement
+  (`call`) → `OrderBookDex.settle` → `OrderFilled` / `Matched` → watcher → accounting. Specified: role-free
+  `TradeOrder`s signed in each sell token's domain → venue book → the venue arranges one taker against its makers →
+  `OrderBookDex.mtxSettle` → each sell token's `mtxTrade` checks its signer's limits and moves the funds into the DEX,
+  which pays every party and the fee split in the same call → `LegSettled` → watcher → accounting. On non-EVM families settlement
   is relayer-bound; the venue re-checks the on-chain market every poll (at most 30 s)
   ([node/dex-venue.md](node/dex-venue.md), [contracts/dex.md](contracts/dex.md)).
 - **Mesh.** The origin wraps a bus-eligible intent in `scaas-intent/1.2`, signs `hub.sig`, optionally assigns
   `exclusive` → peers pull (bus) or receive (gossip) → acceptance levels L0–L3 → store → scheduler → a job in the
   `~mesh` namespace → submit. Landed hints trigger consumption reads.
 - **Confidential payment** (BUILT on dev chains only). The prover builds the statement, Σ-proof and two Bulletproofs
-  bound to the envelope → a meta-tx with `OP_ZTRANSFER` → `ZetherToken` verifies → `ConfidentialTransfer(entryRef)` →
+  bound to the envelope → a meta-tx with `OP_ZTRANSFER` (specified: an `mtxExecute` self-call of
+  `transferConfidential`) → `ZetherToken` verifies → `ConfidentialTransfer(entryRef)` →
   disclosure through `ITransferDisclosure` for reconciliation.
 
 ## Trust model
@@ -330,8 +336,9 @@ funds (except for `SELF_SCHNORR` accounts). Relayer lane keys are a third, unrel
 
 **Key management of the relayer.** Lane keys sign outer transactions only (the `Signer` seam has a local signer
 today; KMS/HSM signers plug in behind it); environment-variable key custody (`env:`) is for development only. A
-payment request is pinned by the typed-data domain (`chainId`, `verifyingContract`) and expires at `validUntil`; a
-subject can revoke an unused signature with `cancelMetaNonce(batch)`. On private chains the B2B fee mode is `NONE`
+payment request is pinned by the typed-data domain (`chainId`, `verifyingContract`, and — specified — `salt =
+chain_uid`, the genesis hash) and expires at `validUntil`; a subject can revoke an unused signature with
+`cancelMetaNonce(batch)` (specified name `cancelNonce`). On private chains the B2B fee mode is `NONE`
 with `MODE_RESTRICT_RELAYER` and `fee = 0`; on public chains the gateway also accepts fee-paying intents from anyone.
 
 ## Families

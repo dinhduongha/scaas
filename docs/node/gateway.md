@@ -56,7 +56,13 @@ max_valid_for_secs, dex?: {address, relayer, markets: [{id, min_base_amount}], r
 max_open_per_maker, min_ttl_secs, max_ttl_secs}}]}`. `chain` is numeric for EVM and Hedera (the `/v1/metatx` body);
 `chain_key` is always present. `routes` ⊆ `metatx`, `ops`, `ua-metatx`, `ua-register`, `dex`. `chain_uid` is present
 for chains with a UA registry; clients compare it with the EIP-712 `salt` before signing; UA routes are listed only
-while the [chain binding](#chain-binding) holds.
+while the [chain binding](#chain-binding) holds. Target (SPECIFIED): `chain_uid` is present for every EVM and Hedera
+chain (every SCaaS domain carries it as `salt`, [NET-ALL-22](../networks/README.md#NET-ALL-22)); `dex.address`
+becomes `dex.addresses`, the chain profile's DEX list ([NET-ALL-24](../networks/README.md#NET-ALL-24)), with the
+venue's own DEX first; `relayer_fee_policy` disappears (the relayer is paid its share of the signed DEX fee,
+[dex-venue.md#trade-orders](dex-venue.md#trade-orders)). A client checks both against its **own** pinned profile,
+never against this answer alone ([CLI-SGN-33](../clients/signers-clientkeys.md#CLI-SGN-33),
+[CLI-SGN-35](../clients/signers-clientkeys.md#CLI-SGN-35)).
 
 Unlike the job API, gateway doors **simulate before INSERT**. An accepted item is a `~gateway` job (origin key = node
 digest = `intent_id`, [NODE-JOB-02](job-api.md#NODE-JOB-02); intake steps 3, 6 and 7a–7c and the in-transaction
@@ -66,7 +72,7 @@ A duplicate returns `200` with the stored state (idempotent).
 | Route | Body / answer | Accept checks, in order |
 |---|---|---|
 | `GET /v1/gateway` | above | — |
-| `POST /v1/metatx {chain, token, m, signature}` | `202 {"status":"queued"}` today; the target adds `"intent_id"` (+ `exclusive` when published on the mesh) | token registered and active (`TOKEN_NOT_SERVED`); strict parse; normalization ([NODE-LANE-10](submit-lanes.md#NODE-LANE-10)) before simulation; `metaTxDigest` + simulation; [door A rules](#door-a-intake). On Hedera chains (295–298) `sig_bytes` may be **64** bytes (HIP-632 ED25519); 65–2048 bytes elsewhere |
+| `POST /v1/metatx {chain, token, m, signature}` | `202 {"status":"queued"}` today; the target adds `"intent_id"` (+ `exclusive` when published on the mesh) | token registered and active (`TOKEN_NOT_SERVED`); strict parse; normalization ([NODE-LANE-10](submit-lanes.md#NODE-LANE-10)) before simulation; `data` shape and selector ([NODE-JOB-20](job-api.md#NODE-JOB-20)); `metaTxDigest` (target `mtxDigest`) + simulation; [door A rules](#door-a-intake). On Hedera chains (295–298) `sig_bytes` may be **64** bytes (HIP-632 ED25519); 65–2048 bytes elsewhere |
 | `POST /v1/ops {chain, op}` | `op` = the job API `signed_op` payload; `202 {"status": "queued", "intent_id": "<digest hex>"}` | below |
 | `POST /v1/ua-metatx {chain, token, m: WireUAMetaTransaction, auth}` | `ua_metatx` job | token `features ∋ ua` (v3: `registry() ≠ 0`); `from >> 160 ≠ 0` ⇒ registry record ([UA record cache](#ua-cache), `UA_NOT_REGISTERED`); cheap kinds verified locally ([NODE-GSP-15](gossip.md#NODE-GSP-15)); node computes `uaDigest` |
 | `POST /v1/ua/register {chain, kind, keyData, pop, authRef}` (`{chain, kind, keyData: 0x…, pop: 0x…, authRef: 0x…32}`) | `call` job to `chain.ua_registry` ([NODE-GW-03](#NODE-GW-03)) | id recomputed, `>> 160 ≠ 0`; not registered (`UA_ALREADY_REGISTERED`, `UA_KEY_IN_USE`); PoP verified for cheap kinds over `pop_digest` with `chain.chain_uid`; per-chain registration quota |
@@ -126,15 +132,30 @@ keys; lane keys are unaffected.
 
 ### Chain binding
 
-<a id="chain-binding"></a>For every chain with `ua_registry`, at start and on every RPC (re)connect, the node checks
-that the RPC's genesis block hash (EVM/Hedera: block 0, from ≥ `finality_quorum` endpoints) equals `chain.chain_uid`,
-that `ua_registry` has code and that its `chainUid()` equals `chain.chain_uid`; non-EVM families compare the family's
-network id where the RPC exposes it (Soroban network id, Solana genesis hash), else trust the profile constant
-([NET-ALL-22](../networks/README.md#NET-ALL-22)). A mismatch holds the chain (readiness reason `chain_uid mismatch`,
-as `finality violated`): nothing is leased, UA routes answer `UNKNOWN_CHAIN`. `pop_digest`, the registry and v3
-EIP-712 domain `salt` and the `metatx-cancel` digest are computed with `chain.chain_uid`, never from the chain id
-alone. The post-quantum Zether chain profile adds the same binding for its registry and tokens (RPC genesis hash `==`
-profile `genesis_hash` `==` `registry.chainUid()` `==` each token's `chainUid`, [ops.md#pqz](ops.md#pqz)).
+<a id="chain-binding"></a><a id="NODE-GW-07"></a>**NODE-GW-07** — **Every SCaaS contract the node relays for is bound
+to the chain's `chain_uid`.** Status: **SPECIFIED**. At chain activation, at every start and on every RPC (re)connect, the node checks that the RPC's genesis
+block hash (EVM/Hedera: block 0, from ≥ `finality_quorum` endpoints) equals `chain.chain_uid`, and that every
+registered SCaaS contract of the chain has code and a `chainUid()` equal to `chain.chain_uid`: each registered token
+implementation and the factory, every `chain_contract` row (DEX, account factory, tender, role-holder contracts that
+sign with a SCaaS domain) and `ua_registry`. A token clone needs no own check — it runs its implementation's code and
+the factory registers only implementations whose `chainUid()` equals its own. Contracts deployed per user —
+`MandateWallet`, `SubjectAccount` — are read once before the node relays anything for them (cached; a mismatch ⇒
+`403 CALL_TARGET_REFUSED`, [NODE-JOB-19](job-api.md#NODE-JOB-19)). Non-EVM families compare the family's network id
+where the RPC exposes it (Soroban network id, Solana genesis hash), else trust the profile constant
+([NET-ALL-22](../networks/README.md#NET-ALL-22)). A mismatch of the genesis hash or of a chain-wide contract holds the
+chain (readiness reason `chain_uid mismatch`, as `finality violated`): nothing is leased, UA routes answer
+`UNKNOWN_CHAIN`. Every EIP-712 domain `salt` the node computes (token, subject account, mandate wallet, DEX, registry),
+`pop_digest` and the `metatx-cancel` digest use `chain.chain_uid`, never the chain id alone. The post-quantum Zether
+chain profile adds the same binding for its registry and tokens (RPC genesis hash `==` profile `genesis_hash` `==`
+`registry.chainUid()` `==` each token's `chainUid`, [ops.md#pqz](ops.md#pqz)). Why: a contract cannot read its own
+genesis hash after block 256, so a wrong constructor value is caught only off chain; a wrong value makes correct
+signatures fail, and is unsafe only if it equals another chain's `chain_uid`, which the comparison with the RPC's
+genesis hash excludes. Cost: one `chainUid()` read per contract at start, and one per user-deployed wallet or
+account.
+
+Transitional (BUILT): deployed tokens, the DEX, mandate wallets and subject accounts expose no `chainUid()` until
+they are redeployed with the salted domain; until then the binding covers the genesis hash and the UA registry, on
+chains with `ua_registry` only.
 
 ### EIP-7702
 
@@ -169,7 +190,8 @@ chars>", "revert_data": "0x…"?}`; the legacy `"error"` keeps the code, so old 
 `UNKNOWN_CHAIN`, `TOKEN_NOT_SERVED`, `BREAKER_OPEN`, `SUBMIT_BUSY`, `EXPIRED`, `BAD_SIGNATURE`, `BAD_PAYLOAD`,
 `RELAYER_NOT_OURS`, `SIMULATION_REVERT` (raw `0x…` revert data), `RPC_UNAVAILABLE`, `QUOTA`, `ZERO_VALUE`,
 `SUBJECT_DENIED`, `SPONSOR_BUDGET`, `SPONSOR_RATE`, `SPONSOR_TOO_SHORT`, `UA_NOT_REGISTERED`, `UA_ALREADY_REGISTERED`,
-`UA_KEY_IN_USE`, and the managed-market codes above. Clients decode revert data with their own ABI and map codes (the console app maps `errors.node.<code>`); it replaces
+`UA_KEY_IN_USE`, (SPECIFIED) `SELECTOR_NOT_ALLOWED` ([NODE-JOB-20](job-api.md#NODE-JOB-20)), `DEX_NOT_LISTED` and
+`FEE_TOO_LOW` ([dex-venue.md#trade-orders](dex-venue.md#trade-orders)), and the managed-market codes above. Clients decode revert data with their own ABI and map codes (the console app maps `errors.node.<code>`); it replaces
 the earlier `{"error": "<text>"}` bodies and Rust `Debug` reverts; no
 logic keys on free text. The gateway and the job API keep per-listener code sets over the same checks (gateway
 `TOKEN_NOT_SERVED` and `EXPIRED` for too long a validity, job API `UNKNOWN_TOKEN` and `VALID_TOO_LONG`).

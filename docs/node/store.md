@@ -143,7 +143,8 @@ CREATE TABLE chain (
   max_inflight INTEGER NOT NULL DEFAULT 16,                       -- per-lane in-flight depth (NODE-LANE-24, PLANNED)
   ua_registry TEXT, ua_registry_gen INTEGER,                      -- NULL = no UA routes
   chain_uid TEXT,          -- '0x' + 64 hex, ≠ 0; EVM/Hedera genesis block hash, else the family's network id or a
-                           -- profile constant; required when ua_registry is set (gateway.md#chain-binding)
+                           -- profile constant; required when ua_registry is set, and (SPECIFIED) on every EVM/Hedera
+                           -- chain: the salt of every SCaaS EIP-712 domain (NODE-GW-07, NET-ALL-24)
   max_attempts INTEGER NOT NULL DEFAULT 5,                        -- NODE-LANE-14: attempt_count > it ⇒ dead ATTEMPTS_EXHAUSTED
   max_value_out TEXT NOT NULL DEFAULT '0',                        -- NODE-LANE-17, smallest native unit; TON profile 50000000
   max_deposit_per_job TEXT NOT NULL DEFAULT '0',                  -- NODE-LANE-18 (c)
@@ -164,7 +165,8 @@ CREATE TABLE lane (chain_key TEXT NOT NULL, label TEXT NOT NULL, account_index I
   PRIMARY KEY (chain_key, label));                                -- transaction as leased→signed (and legacy signed)
 CREATE TABLE chain_contract (chain_key TEXT NOT NULL, address TEXT NOT NULL,
   kind TEXT NOT NULL CHECK (kind IN ('tender', 'sponsorship_pool', 'account_factory', 'dex', 'role_holder')),
-  PRIMARY KEY (chain_key, address));                              -- registered non-token contracts (call table, job-api.md)
+  PRIMARY KEY (chain_key, address));                              -- registered non-token contracts (call table, job-api.md);
+                                                                  -- kind 'dex' rows = the chain profile's DEX list (NET-ALL-24)
 
 -- jobs (NODE-JOB-02, NODE-JOB-04)
 CREATE TABLE job (
@@ -551,7 +553,9 @@ and a `422`-free admin response field `warnings`, so the operator raises the cap
 Also refused: an upgradeable program on a chain being activated ([NODE-STO-07](#NODE-STO-07)); the same public key in
 two families ([NODE-LANE-20](submit-lanes.md#NODE-LANE-20)); `gateway_cors_origins` with gateway auth `bearer` or
 `hmac` ([NODE-GW-04](gateway.md#NODE-GW-04)); a private profile with `gossip = 1` or a policy `pool_visibility =
-open`; `submit` on `contract = "*"`; a mesh peer of class `private` without chains; `ua_registry` without `chain_uid`.
+open`; `submit` on `contract = "*"`; a mesh peer of class `private` without chains; `ua_registry` without `chain_uid`;
+(SPECIFIED) an EVM or Hedera chain without `chain_uid`, a `chain_uid` already used by another chain row, and a
+`chain_contract` row of kind `dex` whose `chainUid()` differs ([NODE-GW-07](gateway.md#NODE-GW-07)).
 
 ## Immutable programs
 

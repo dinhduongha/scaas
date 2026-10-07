@@ -106,8 +106,10 @@ Every signature not made by a human on a device — custodial wallets, delegated
 users, bounded by policy. Checks before any signature:
 
 1. Destination contract ∈ allowlist (token, mandate wallet, DEX).
-2. Operation ∈ allowed ops/selectors (`pay(bytes32)`, `payUnderMandate`, `executeMetaTransaction` with an allowed op;
-   never `approve` to an EOA — impossible anyway, [CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)).
+2. Operation ∈ allowed ops/selectors (`pay(bytes32)`, `mtxPayUnderMandate`, `mtxExecute` with an allowed self-call
+   selector, [CLI-SGN-34](#CLI-SGN-34); as built `payUnderMandate` and `executeMetaTransaction` with an allowed op);
+   never `approve` on a SCaaS token — an EOA never approves one ([CLI-SGN-36](#CLI-SGN-36),
+   [CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)).
 3. Amount ≤ per-call cap; cumulative ≤ hourly and daily caps (velocity, in the signer's own store).
 4. `validUntil − now ≤ 300 s`.
 5. Risk-class routing: class 1 (no value), class 2 (small value), class 3 (above the class-2 threshold, treasury or
@@ -128,7 +130,10 @@ EVM browser wallets are used only through open standards (EIP-1193, EIP-6963, EI
    de-duplicate by `rdns`, show a chooser (names with `textContent`; icons only when `data:image/{png,jpeg,gif,webp,svg+xml}`
    and only through `<img src>` — never `innerHTML`). Remember the chosen `rdns` in `localStorage` (try/catch). No wallet
    answers ⇒ fall back to `window.ethereum` (EIP-1193). No JS library.
-2. **Typed data** stays standard: the domain has `chainId` + `verifyingContract`; every EIP-712 wallet can sign.
+2. **Typed data** stays standard: the domain has `chainId` + `verifyingContract`, and (SPECIFIED) `salt = chain_uid`
+   on every SCaaS domain ([CLI-SGN-33](#CLI-SGN-33)); every EIP-712 wallet can sign it. Wallets such as MetaMask sign
+   the domain they are given and check only `chainId`, so the salt is checked by clientkeys, and enforced by the
+   contract.
 3. **Events:** `chainChanged`/`accountsChanged` cancel the running flow and tell the user (no polling); code `4001` = the
    user refused ⇒ a soft message, not an error.
 4. **EIP-1271 (contract wallets):** on chain `ERC20MetaTx._requireValidSignature` calls `isValidSignature` (magic
@@ -180,6 +185,58 @@ encoder renders the same text and `checkTerms` compares it byte for byte. Portal
 server response as the terms, so in a portal the check is internal consistency (bytes ⇔ displayed fields), not protection
 from a malicious issuer; in the app, `shown` is the user's own input. Why: it closes the gap between checking
 `payload_hex` and signing `text`. Cost: a terms change must land with its `fam/*.js` change (shared KATs catch it).
+
+### Meta-transaction calls and trade orders
+
+<a id="CLI-SGN-33"></a>**CLI-SGN-33** — **Every SCaaS EIP-712 domain is built with `salt = chain_uid` from the
+signer's own chain profile, and a different salt is refused.** Status: **SPECIFIED**. The app, the portal signer and
+clientkeys fill `domain.salt` with the chain profile's `chain_uid` ([NET-ALL-24](../networks/README.md#NET-ALL-24)),
+which works offline, or from the contract's `eip712Domain()` read once and cached; clientkeys refuses typed data whose
+`salt` differs from its pinned profile, or a domain without one for a SCaaS contract. This covers tokens (transfers,
+payments, self-calls, trade orders), mandate wallets, subject accounts, the DEX and the registry. What protects the
+user is the contract — a contract on another chain computes its digest with that chain's `chain_uid`, so the signature
+fails there whichever wallet made it; the client check catches a wrong profile or a hostile server before the user is
+asked. Transitional (BUILT): only the Universal Account domains carry `salt` (the existing check of the PoP flow,
+[integration.md](../integration.md)); the other domains are unsalted until the salted contracts are deployed.
+
+<a id="CLI-SGN-34"></a>**CLI-SGN-34** — **A meta-transaction's `data` is decoded and shown before the user signs;
+a selector outside the token's allowlist is refused.** Status: **SPECIFIED**. clientkeys and the app encode
+`mtxExecute` calldata themselves, and before any signature decode `data` against the implementation's published
+allowlist (`mtxSelectors()`, pinned per implementation version in the chain profile, cross-checked with the chain):
+empty = transfer of `value` to `to`; `pay(bytes32)` = payment; otherwise the selector's function name and every
+argument in human terms (amounts with the token's decimals, recipients, `minOut`), the fee and its class (a fixed fee
+on a call that moves no amount of this token is shown as an exact amount). An unknown selector, `to ≠ 0` or `value ≠ 0`
+on a self-call, or `approve`/`transferFrom` ⇒ refused, with no override. [CLI-SGN-05](#CLI-SGN-05) and
+[CLI-SGN-27](#CLI-SGN-27) apply: the shown call is the one rebuilt and signed. The meta-transaction lane (`batch` of
+the meta-transaction) and an order lane (`batch` of a trade order) are labelled differently wherever both appear.
+
+<a id="CLI-SGN-35"></a>**CLI-SGN-35** — **A trade order names a DEX on the chain profile's list, or the client refuses
+to build and sign it.** Status: **SPECIFIED**. Before signing a `TradeOrder` (in the app, clientkeys or a portal)
+the review shows `dex`, `relayer`, `destination`, the price limit both ways, the signed `fee` rate and the effective
+minimum fill per settlement (`max(minFill, ceil(amount / 2))`; a `minFill` below half is shown as half; `minFill =
+amount` as fill-or-kill). By default the client **refuses** to build or sign when `dex` is not on its pinned chain
+profile's DEX list ([NET-ALL-24](../networks/README.md#NET-ALL-24)) — for a signature wrap, when `dex` is not a
+registered wrapper of that underlying — with a warning that a contract named there can take the signed amount;
+overriding needs an explicit expert setting and is never offered in a portal. It warns when `destination ≠ from`
+(someone else receives the proceeds), and it defaults `relayer` to the venue node's lane from the gateway profile
+(with `relayer = 0` anyone who submits can earn the relayer share of the fee, and the order can be copied from the
+mempool). Why: the token requires only that `dex` is a contract (owner decision 2026-10-08, accepted residual risk);
+the signer is the last place a phishing `dex` can be stopped. Cost: a new DEX needs a profile update before users can
+trade on it.
+
+<a id="CLI-SGN-36"></a>**CLI-SGN-36** — **A client never asks an EOA to approve a SCaaS token; wrapping a SCaaS
+underlying is signed, not approved.** Status: **SPECIFIED**. On a SCaaS token only a contract may call `approve`
+([CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)), and `approve` is on no token allowlist, so no client offers
+an approve screen, typed data or permit for one. A wrap whose underlying is a SCaaS token is a `TradeOrder` signed in
+the **underlying's** domain with `dex` = `receiveToken` = the wrapper, `receiveAmount` = the minimum to mint,
+`minFill = amount` and `fee` = what the submitting relayer earns from the minted units; it is submitted as an `mtxWrap`
+job ([job-api.md#metatx-entries](../node/job-api.md#metatx-entries)). A wrap of an **outside** underlying (e.g. a
+stablecoin) still needs the holder's allowance on that outside token, to the wrapper only, for the exact amount
+([CLI-APP-23](app.md#CLI-APP-23)); trading an outside token needs the allowance to a listed DEX. A contract account
+that must approve a SCaaS token for another contract does so through its own call path (`mtxExecuteAsOwner` →
+`execute(token, approve)`, or a Safe transaction), never by a signature the token checks. Why: an EOA allowance is a
+standing permission any later bug or phishing page can spend; the order-based wrap gives the wrapper exactly one
+signed pull at a signed minimum.
 
 <a id="portal-signer-rules"></a>**Portal signer rules.** A portal or ERP page that hosts a signer also:
 

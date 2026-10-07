@@ -4,13 +4,13 @@ The asset suite turns the open factory into a tokenization toolkit: an optional 
 tier (freeze, forced transfer against a recorded order, bounded pause, receiver allowlist), a `ComplianceRegistry`
 of eligibility attestations, and three permissionless **action contracts** — `VestingGrant`, `Distribution` and
 `ExchangeOffer` — plus off-chain **templates** and **managed markets** on the existing DEX. Status: **SPECIFIED**
-(EVM and Hedera); nothing is built; the primitives it reuses (token tiers, factory v2, `OrderBookDex`) are BUILT.
+(EVM and Hedera); nothing is built; the primitives it reuses (token tiers, the factory, `OrderBookDex`) are BUILT.
 
 ## Scope
 
 <a id="scope"></a>
 
-EVM / Hedera (Solidity), all clones of never-upgraded implementations. Each `MetaTokenBase` v2 tier (BUILT) gains a
+EVM / Hedera (Solidity), all clones of never-upgraded implementations. Each tier on `MetaTokenBase` (BUILT) gains a
 regulated child with `RegulatedControls` (ERC-7201 storage) + `RegulatedLib` (linked); Hedera children of each
 regulated tier: `HederaRegulated*`.
 
@@ -58,17 +58,16 @@ headroom below 24 576, less than the control surface; hence the library split be
 
 <a id="regulated"></a>
 <a id="regulated-kinds"></a>
-<a id="CTR-AS-01"></a>**CTR-AS-01** — The regulated module is an option chosen at creation on any tier (owner),
-built as **separate implementations**, one per tier, each a child of its tier plus `RegulatedControls`; factory kinds
-are **appended**: `META_NONE_REG = 5`, `META_SINGLE_REG = 6`, `META_MULTI_REG = 7`. `OpenFactoryV2` gets a **code
-change**, not only an enum change: the underlying-count map becomes a function of the base kind (`_baseOf(kind)`;
-the built `_createTiered` ternary would put `META_NONE_REG`/`META_SINGLE_REG` into the 2–8 branch,
+<a id="CTR-AS-01"></a>**CTR-AS-01** — The regulated module is an option chosen at creation on any tier (owner), built as
+**separate implementations**, one per tier, each a child of its tier plus `RegulatedControls`; factory kinds are
+**appended**: `META_NONE_REG = 5`, `META_SINGLE_REG = 6`, `META_MULTI_REG = 7`. `OpenFactory` gets a **code change**,
+not only an enum change: the underlying-count map becomes a function of the base kind (`_baseOf(kind)`; the built
+`_createTiered` ternary would put `META_NONE_REG`/`META_SINGLE_REG` into the 2–8 branch,
 [token-wrappers.md](token-wrappers.md#CTR-TOK-03)). Unregulated implementations carry no control code and no runtime
-flag. The change lands **before the first production deployment** of factory v2 (deployment records are not in the
-repository, so the operator confirms on its hosts that no v2 factory or implementation is live); otherwise it ships as
-factory v2.1, never as an edit of a deployed one. Node and client decoders of `versionOf().kind` must know 5–7 before
-the first `*_REG` create. The choice must be visible in `versionOf()`, not in a storage flag; the cost is one more
-catalogue line per tier.
+flag. The change lands **before the first production deployment** of the factory (the operator confirms on its hosts
+that none is live); otherwise it ships as a new factory, never as an edit of a deployed one. Node and client decoders of `versionOf().kind` must know 5–7 before the
+first `*_REG` create. The choice must be visible in `versionOf()`, not in a storage flag; the cost is one more catalogue
+line per tier.
 
 <a id="regulated-exception"></a>
 <a id="CTR-AS-02"></a>**CTR-AS-02** — **Third exception to "Nobody alters a deployed token"** (owner;
@@ -129,18 +128,18 @@ unwrap. `issuer` may `disableControls(ALLOWLIST)` one-way, so a dead registry ne
 check would trap holders when an attester is slow.
 
 <a id="step6-checks"></a>
-<a id="CTR-AS-08"></a>**CTR-AS-08** — **Regulated checks run at step 6** (owner) through an override of `_checkOp`
-([metatx.md](metatx.md#execution-pipeline)), so a failing intent costs the relayer only the cheap prefix; the same rules
-are enforced again in an `_update` override for every direct path. A frozen `from` reverts every op, including
-`approve`; a frozen or ineligible resolved fee recipient reverts (also on `payWithFee`, whose override copies the base
-body, since an external function cannot call `super`; an event-equality test pins it). The allowance lockdown is
-unchanged and orthogonal. Regulated templates default to `MODE_FEE_NONE` (sponsored), because a fee-earning relayer
-would itself need an attestation. Keyword changes to built code: `virtual` on `MetaTokenBase._checkOp`,
+<a id="CTR-AS-08"></a>**CTR-AS-08** — **Regulated checks run at the shape step** (owner) through an override of the
+pipeline's shape check (step 3, [metatx.md](metatx.md#execution-pipeline); built: step 6, `_checkOp`), so a failing
+transfer or payment costs the relayer only the cheap prefix; an `_update` override enforces the same rules again on
+every direct path, self-call and `mtxTrade`. A frozen `from` reverts every shape, including `approve`; a frozen or
+ineligible resolved fee recipient reverts (also on `payWithFee`, whose override copies the base body, since an external
+function cannot call `super`; an event-equality test pins it). The allowance rule is unchanged and orthogonal.
+Regulated templates default to `MODE_FEE_NONE` (sponsored), because a fee-earning relayer would itself need an
+attestation. Keyword changes to built code: `virtual` on the shape check (built `MetaTokenBase._checkOp`),
 `MetaTokenBase.payWithFee`, `NoUnderlyingToken.tokenKind`, `NoUnderlyingToken._init`, `MultiUnderlyingToken.tokenKind`,
 `MultiUnderlyingToken._init`; the module's code-check hook is named `_regIsContract` (implemented by the child as
-`_isContract(a)`) to avoid a clash with the non-virtual `MetaTxCore._isContract`. Every source edit changes the CBOR
-metadata hash of all v2 implementations, acceptable only because none is deployed ([CTR-AS-01](#CTR-AS-01)).
-Otherwise failures surface at step 7/8 at full gas.
+`_isContract(a)`) to avoid a clash with the non-virtual `ERC20MetaTx._isContract`. Every source edit changes the CBOR
+metadata hash of all tier implementations, acceptable only because none is deployed ([CTR-AS-01](#CTR-AS-01)).
 
 <a id="reserves-untouched"></a>
 <a id="CTR-AS-09"></a>**CTR-AS-09** — **No regulated power touches the token's own reserves, rates or legs** (owner):
@@ -154,7 +153,7 @@ allowlist. Otherwise a seizure could drain a leg other holders rely on.
 <a id="eligible-contract"></a>
 <a id="CTR-AS-16"></a>**CTR-AS-16** — `ELIGIBLE_CONTRACT` (the registry flag that satisfies any `requiredFlags`) may be
 set **only by the registry admin**, only on **pass-through** contracts whose every outflow is re-checked by the token
-or goes only to a committed party (`VestingGrant`, `Distribution`, `ExchangeOffer` clones, `MetaTxDex`), with
+or goes only to a committed party (`VestingGrant`, `Distribution`, `ExchangeOffer` clones, `OrderBookDex`), with
 `validUntil = type(uint64).max`. Never on a wrapper, a Safe, a venue fee recipient or an EOA: those get ordinary flags
 for their controller. Otherwise one attestation would be a master key across every token on the registry.
 
@@ -164,7 +163,7 @@ for their controller. Otherwise one attestation would be a master key across eve
 | 2 | A forced transfer needs a live compliance **order record** `{subject, beneficiary, maxAmount, freezeUntil}` (`orderId` = keccak256 of the authority's canonical order identifier, the document off chain), moves only from the frozen subject to the recorded beneficiary, cumulatively ≤ `maxAmount`. There is **no court-ordered burn** |
 | 3 | A frozen account cannot send, be a meta-tx `from` or receive a relayer fee; it can still receive. Issuer-only freezes last ≤ 30 days (≤ 60 days per episode); longer ones need a compliance record |
 | 4 | `pause(ref, until)`: `until ≤ now + 7 days`, no extension, 7-day cooldown; a fee-less unwrap, holder burn and forced transfer are never paused |
-| 5 | Transfer eligibility through a separate `ComplianceRegistry` (address → flags, `validUntil`, attester; no personal data); only **receivers** are checked; checks run at pipeline step 6 |
+| 5 | Transfer eligibility through a separate `ComplianceRegistry` (address → flags, `validUntil`, attester; no personal data); only **receivers** are checked; checks run at the pipeline's shape step |
 | 6 | Confidential tokens: a confidential balance can be frozen (stuck) but not seized on public chains |
 
 ### Shape
@@ -287,20 +286,19 @@ set and `frozenUntil(a) > now`. `P` = `CTRL_PAUSE` set and `pausedUntil > now`.
 
 | Path | Reverts when |
 |---|---|
-| `transfer`, `transferFrom` (incl. DEX settle), meta-tx transfer / `pay` / `trade` | `P`; `F(from)`; `!R(to)` |
-| meta-tx `approve` op | `P`; `F(from)` (direct `approve` is unrestricted: `transferFrom` checks `F(from)`) |
-| relayer fee (meta-tx step 7, `payWithFee`) | `F(feeRecipient)` ⇒ `FeeRecipientFrozen`; `!R(feeRecipient)` |
+| `transfer`, `transferFrom` (outside-token DEX legs), meta-tx transfer / `pay`, `mtxTrade` (to `dex`, then the DEX's payouts) | `P`; `F(from)`; `!R(to)` |
+| `approve` (contract callers only) | `P`; `F(from)` (`transferFrom` checks `F(from)` again) |
+| relayer fee (meta-tx fee transfer, `payWithFee`) | `F(feeRecipient)` ⇒ `FeeRecipientFrozen`; `!R(feeRecipient)` |
 | mint (tier-1 `minter`, wrap) | `P`; `!R(to)` |
 | holder `burn` (tier 1), the burn inside unwrap | `F(from)` (not `P`) |
-| unwrap (direct, multi, the meta-tx op) | `F(from)` via the burn row; the unwrap op with a fee during `P` refused at step 6 (`TokenPaused`), because its fee leg is a transfer; the recipient is not checked |
+| unwrap (direct, multi, gasless) | `F(from)` via the burn row; a gasless unwrap with a fee during `P` refused at the shape step (`TokenPaused`), because its fee leg is a transfer; the recipient is not checked |
 | `forceTransfer` | the order rules below only (not `P`, not `F(from)`) |
 | `addReserve` (wrapper tiers) | unchanged |
 
-Step-6 placement: the `_checkOp` override computes the resolved fee recipient and fee amount exactly as step 6 does
-(`m.feeRecipient == 0 ? msg.sender : m.feeRecipient`, `FeePolicy.compute`), applies the table for the op in `m.data`,
-then calls `super._checkOp(m)`. The `_update` override re-applies the transfer/mint/burn rows for direct paths; on
-the meta-tx path its reads are warm. Step 8 still cannot fail for a reason step 6 did not check (same state in one
-transaction).
+Shape-step placement: the override computes the resolved fee recipient and fee amount exactly as the shape step does
+(`m.feeRecipient == 0 ? msg.sender : m.feeRecipient`, `FeePolicy.compute`), applies the table for the shape or selector
+in `m.data`, then calls `super` (built: `super._checkOp(m)`). The `_update` override re-applies the transfer/mint/burn
+rows for direct paths, self-calls and `mtxTrade`; on the meta-tx path its reads are warm.
 
 ### Freeze, order records and forced transfer
 
@@ -376,13 +374,12 @@ from the optional verifiable-credential layer reach contracts only as these flag
 
 | With | Rule |
 |---|---|
-| Meta-tx pipeline | the path table at step 6; step order, digest, typehash, nonces, named functions and `mtxBatch` unchanged; a failing batch item reverts the batch ([CTR-MTX-11](metatx.md#CTR-MTX-11)), so the node re-checks the parties of every regulated item it batches |
+| Meta-tx pipeline | the path table at the shape step; step order, digest, typehash, nonces, named functions and `mtxBatch` unchanged; a failing batch item reverts the batch ([CTR-MTX-11](metatx.md#CTR-MTX-11)), so the node re-checks the parties of every regulated item it batches |
 | Node simulation and grief score | a post-simulation revert with `Frozen`, `TokenPaused`, `NotEligible` or `FeeRecipientFrozen` is exempt from the origin's grief score only if the node's re-simulation at the inclusion block's **parent** succeeds and the inclusion block contains a transaction from the token's `issuer`/`compliance` or from the registry (admin or attester) touching the failing account; attester-caused exemptions are capped at 3 per origin per day (a colluding attester buys at most that). The node refuses at intake intents whose `validUntil` exceeds the receiver's attestation `validUntil` |
 | Allowance lockdown | unchanged: spenders are contracts; the regulated check binds `from`/`to`, so an allowance to any contract cannot move tokens to an ineligible party |
 | Single/multi wrappers (own reserves) | [CTR-AS-09](#CTR-AS-09); `wrap` is a mint (paused ⇒ refused; receiver check on `msg.sender`); `disableWrap` and the rate timelock unchanged; a pending rate change and a pause can overlap; fee-less unwrap stays open in both |
 | `*_REG` as an underlying | refused by the wizard; if forced, freezing the wrapper blocks only that leg and a seizure breaks that wrapper's reserve rule (a test documents it) |
-| `OrderBookDex` | settle's `transferFrom` runs the regulated check per leg; a failing leg fails only its pair (`MatchFailed`); `checkOrder` does not see freezes or eligibility, so the venue adds the pre-check above ([NODE-DEX-11](../node/dex-venue.md#NODE-DEX-11)); market fee recipients on a regulated leg need `R` |
-| `MetaTxDex` | the `to` of every `trade` leg: attested `ELIGIBLE_CONTRACT` by the registry admin |
+| `OrderBookDex` | each leg's pull into the DEX and each payout runs the regulated check, so the DEX is attested `ELIGIBLE_CONTRACT` by the registry admin; a failing leg fails only its settlement (`MatchFailed`); intake reads do not see freezes or eligibility, so the venue adds the pre-check above ([NODE-DEX-11](../node/dex-venue.md#NODE-DEX-11)); fee-split recipients on a regulated leg need `R` |
 | `MandateWallet` | it calls `payWithFee`; the wallet is the `from` and must not be frozen; payees need `R` |
 | Vesting / distribution / offer clones | holders like any other; attested `ELIGIBLE_CONTRACT` before funding (the address is known in advance) |
 | Zether | none (not covered) |
@@ -436,7 +433,7 @@ Invariants (each an invariant test):
 | A6 | Wrong beneficiary | impossible without a new record by `compliance` |
 | A7 | Registry admin compromised | attests anyone (allowlist bypass) or voids attesters (receives fail); no fund movement; the issuer can `disableControls(ALLOWLIST)`. Disclosed; registry pinned at creation |
 | A8 | Attestation lapse | receivers fail; holders still send to eligible parties, burn and unwrap |
-| A9 | Fee griefing with a frozen/ineligible fee recipient | fails at step 6 (cheap) |
+| A9 | Fee griefing with a frozen/ineligible fee recipient | fails at the shape step (cheap) |
 | A10 | Unwrap to a frozen accomplice | out of scope: the underlying is a different asset; the holder itself must be unfrozen to unwrap |
 | A11 | Rolling pauses | bounded by the cooldown; wrapper exits stay open; tier-1 regulated tokens are disclosed as pausable half of the time, offers included |
 | A12 | Frozen holder escapes via DEX | `transferFrom` checks `F(from)`; the pair fails; the venue drops the maker's orders on `AccountFrozen` |
@@ -456,15 +453,15 @@ warm (≈ +0.5 k). Control calls add one library `DELEGATECALL` (≈ 2.6 k cold)
 | Area | Tests |
 |---|---|
 | Init | every init refusal; EOA and 7702 roles refused; `FORCE` without `FREEZE`; tier fields decode unchanged with the trailing config; config stored before the tier-1 mint (allowlist refuses an unattested `creator`) |
-| Factory | `FactoryV2.t.sol`: each `*_REG` kind with counts 0/1/2/8/9; REG↔base kind mismatch at registration and at `createTieredUnregistered`; v1 entry points refuse 5–7 |
-| Paths | each row of the path table on all three tiers, direct and meta-tx (generic, named, `mtxBatch`), refused at step 6 (gas of a refused intent < 40 k); `payWithFee` override emits exactly the base events |
+| Factory | `FactoryV2.t.sol`: each `*_REG` kind with counts 0/1/2/8/9; REG↔base kind mismatch at registration and at `createTieredUnregistered`; the Zether entry points refuse 5–7 |
+| Paths | each row of the path table on all three tiers, direct and meta-tx (generic, named, `mtxBatch`), refused at the shape step (gas of a refused intent < 40 k); `payWithFee` override emits exactly the base events |
 | Freeze | issuer-only 30 d, extension to 60 d from episode start, `FreezeTooLong`, `FreezeCooldown` after expiry and after unfreeze, record-backed freeze to `freezeUntil`, ended by `revokeOrder`, open-ended record |
 | Orders | record/revoke/execute; `SubjectNotFrozen`; `OrderExceeded` at the exact edge; beneficiary frozen/ineligible; same `orderId` with two subjects |
-| Pause | 7-day bound, cooldown from actual end, passive expiry, refused while paused (`PauseCooldown`), fee-less unwrap op and burn during pause, fee-bearing unwrap op refused at step 6, forced transfer during pause |
+| Pause | 7-day bound, cooldown from actual end, passive expiry, refused while paused (`PauseCooldown`), fee-less gasless unwrap and burn during pause, fee-bearing gasless unwrap refused at the shape step, forced transfer during pause |
 | Relaxations | freeze then `issuer` renounce ⇒ holder transfers and unwraps; `compliance` renounce clears `FORCE`; `disableControls(ALLOWLIST)` with a reverting registry |
-| Wrappers | frozen holder unwrap refused (direct, multi, the meta-tx op); a holder with a lapsed attestation unwraps; unwrap works while the registry reverts; reserves untouched by every regulated call; guardian/rate flows unchanged; `*_REG` as an underlying: freezing the wrapper blocks only that leg |
-| DEX | `OrderBookDex.settle` with a frozen maker, an ineligible taker, an ineligible market fee recipient: only that pair fails |
-| Keywords | the v2 gas table and layout pins identical after the `virtual` changes |
+| Wrappers | frozen holder unwrap refused (direct, multi, gasless); a holder with a lapsed attestation unwraps; unwrap works while the registry reverts; reserves untouched by every regulated call; guardian/rate flows unchanged; `*_REG` as an underlying: freezing the wrapper blocks only that leg |
+| DEX | `OrderBookDex.mtxSettle` with a frozen maker, an ineligible taker, an ineligible fee recipient: only that settlement fails |
+| Keywords | the tier gas table and layout pins identical after the `virtual` changes |
 | Registry | admin contract only; attester add/remove; disable voids its attestations; batch attest; revoke by flags 0; expiry; `ELIGIBLE_CONTRACT` by admin only |
 | Hedera | each `HederaRegulated*` signs via HIP-632; HTS fail-closed checks and association on single/multi regulated children; layout pins for all three |
 | Sizes | `--sizes` ≤ 24 576 for the six regulated implementations |
@@ -775,12 +772,13 @@ buybacks are `ExchangeOffer`s too; a buyback at market is a DEX bid. Every holde
 the old token, buyable by a cash offer.
 
 <a id="exchange-offer"></a>
-<a id="CTR-AS-13"></a>**CTR-AS-13** — `ExchangeOffer` is gasless through a `trade` op leg exactly as `MetaTxDex`, plus a
-direct `transferFrom` path. Exact multiples only (`in·num % den == 0`, else `NotExactMultiple`). A **non-closable**
-offer must burn what it receives, requires `tokenIn.minter() == 0` at exchange time, and its `sweep()` never takes
-`tokenOut` below the live obligation `quote(tokenIn.totalSupply())` before `closesAt`; a non-zero `closesAt` on it is
-≥ `opensAt + 365 days` (prescription is the issuer's terms, disclosed with a blocking notice). Otherwise a short window
-or a live minter would let the issuer take unexchanged holders' new shares or redemption money.
+<a id="CTR-AS-13"></a>**CTR-AS-13** — `ExchangeOffer` is gasless through a `TradeOrder` leg it pulls as its `dex` (as
+`mtxWrap`, [CTR-TOK-20](token-wrappers.md#CTR-TOK-20)), plus a direct `transferFrom` path. Exact multiples only
+(`in·num % den == 0`, else `NotExactMultiple`). A **non-closable** offer must burn what it receives, requires
+`tokenIn.minter() == 0` at exchange time, and its `sweep()` never takes `tokenOut` below the live obligation
+`quote(tokenIn.totalSupply())` before `closesAt`; a non-zero `closesAt` on it is ≥ `opensAt + 365 days` (prescription is
+the issuer's terms, disclosed with a blocking notice). Otherwise a short window or a live minter would let the issuer
+take unexchanged holders' new shares or redemption money.
 
 | Use | `tokenIn` | `tokenOut` | `num/den` | Window | `closable` | `sink` |
 |---|---|---|---|---|---|---|
@@ -807,11 +805,11 @@ interface IExchangeOffer {
     event Rescued(address indexed token, uint256 amount);
     error NotOpen(); error ClosedOffer(); error CapExceeded(uint256 remaining); error NotExactMultiple();
     error InsufficientOut(uint256 have, uint256 need); error NotATradeLeg(); error LegNotRoutedHere();
-    error CounterTokenMismatch(); error PriceNotMet(uint256 out, uint256 min); error FeeWouldStick();
+    error CounterTokenMismatch(); error PriceNotMet(uint256 out, uint256 min);
     error DeltaMismatch(uint256 got, uint256 expected); error NotAdmin(); error NotClosable(); error SinkRequired();
     error MinterLive(address minter); error ParamsInvalid(); error OwnToken();
 
-    function exchange(MetaTxLib.MetaTransaction calldata leg, bytes calldata sig) external returns (uint256 out);
+    function exchange(TradeOrder calldata leg, bytes calldata sig) external returns (uint256 out);
     function exchangeDirect(uint256 amountIn, uint256 minOut) external returns (uint256 out);
     function close() external;                 // admin, only if closable
     function sweep() external returns (uint256); // anyone; tokenOut → sweepTo, bounded by the obligation (below)
@@ -822,14 +820,16 @@ interface IExchangeOffer {
 }
 ```
 
-`exchange` (gasless): `leg` is a `trade` op on `tokenIn` signed by the holder with `data = trade(tokenOut,
-minCounterValue, counterparty ∈ {0, this})`, `to = relayer = this`, `MODE_RESTRICT_RELAYER`, fee `NONE` or a bound
-`feeRecipient ∉ {0, this}` — the `MetaTxDex._terms`/`_checkRouting`/`_pull` checks verbatim (a shared library extracted
-from `MetaTxDex`, no behaviour change there). The offer calls `tokenIn.executeMetaTransaction(leg, sig)`, requires the
-measured delta `== leg.value`, computes `out`, requires `out ≥ minCounterValue`, `filledIn + in ≤ capIn`, the window
-open, non-closable ⇒ `tokenIn.minter() == 0` (`MinterLive`), and `tokenOut.balanceOf(this) ≥ out`; writes `filledIn`,
-burns (`NoUnderlyingToken.burn`) or forwards to `sink`, then pays `out` to `leg.from`. `exchangeDirect`: the same checks
-with `transferFrom(msg.sender)` (the holder approved this contract).
+`exchange` (gasless): `leg` is a `TradeOrder` on `tokenIn` signed by the holder with `dex = this` (`LegNotRoutedHere`),
+`receiveToken = tokenOut` (`CounterTokenMismatch`), `receiveAmount` = its minimum out, `minFill = amount`, `flags` 0
+(`NotATradeLeg`), `relayer ∈ {0, msg.sender}`. The offer computes `out`, requires `out ≥ receiveAmount` (`PriceNotMet`),
+`filledIn + amount ≤ capIn`, the window open, non-closable ⇒ `tokenIn.minter() == 0` (`MinterLive`),
+`tokenOut.balanceOf(this) ≥ out`; calls `tokenIn.mtxTrade(leg, sig, TradeFill(amount, out, fee, msg.sender))` with `fee
+= ⌈out · leg.fee / 10⁶⌉`, requires the measured delta `== amount`; writes `filledIn`, burns (`NoUnderlyingToken.burn`)
+or forwards to `sink`, pays `out − fee` to `destination` (or `from`) and `fee` to `msg.sender`, the relayer.
+`exchangeDirect`: the same with `transferFrom(msg.sender)`. (Replaced: a `trade`-op leg, `tokenIn.executeMetaTransaction(leg,
+sig)`, `MetaTxDex._terms`/`_checkRouting`, `feeRecipient ∉ {0, this}`, `out ≥ minCounterValue`, `filledIn + in ≤ capIn`,
+`== leg.value`, payout to `leg.from`.)
 
 `predictOffer` checks (`ParamsInvalid`/`SinkRequired`): `num, den ∈ [1, 2⁹⁶)`; `tokenIn ≠ tokenOut`; `closesAt == 0 ||
 closesAt > opensAt`; `sweepTo ≠ 0`; `closable == false` ⇒ `sink == 0` and (`closesAt == 0 || closesAt ≥ opensAt + 365
@@ -861,11 +861,11 @@ except to a holder or to `sweepTo` within the sweep rule; a non-closable offer's
 nonce), a leg routed to another offer (`LegNotRoutedHere`), a fake token delta (measured), reentrancy via hooks
 (transient guard, checks-effects-interactions), early close of a non-closable redemption (`NotClosable`), the issuer
 sweeping unexchanged entitlement (bounded by `obligation`), a live minter diluting the pool (`MinterLive`), a rate typo
-(bounded by the funded balance; the wizard shows the human rate). Gas (estimate): ≈ `MetaTxDex` leg (≈ 60 k) + burn
+(bounded by the funded balance; the wizard shows the human rate). Gas (estimate): ≈ `mtxTrade` leg (≈ 60 k) + burn
 (≈ 8 k) + minter read (2.1 k) + payout (≈ 30–55 k) ≈ 110–130 k. Tests: both paths, exact-multiple edges, cap edge,
 window edges, sink vs burn, `predictOffer` refusals, `SinkRequired` for a wrapper `tokenIn`, `MinterLive`, sweep bounded
 by `obligation` before `closesAt` and full after, rescue, regulated `tokenIn` (offer `ELIGIBLE_CONTRACT`; frozen holder
-refused at step 6; paused ⇒ refused) and regulated `tokenOut` (ineligible holder refused), fuzz `num/den` ∈ [1, 2⁹⁶)
+refused by the shape check; paused ⇒ refused) and regulated `tokenOut` (ineligible holder refused), fuzz `num/den` ∈ [1, 2⁹⁶)
 with the rate vectors' edge set.
 
 ## Action contracts
@@ -882,7 +882,7 @@ Remainders and stray tokens (`rescue(token)` for any token other than the contra
 `predictDistribution/createDistribution`, `predictOffer/createOffer`; each `predict*` reverts on invalid params;
 CREATE2 salt `keccak256(abi.encode(kindTag, params))`; implementations immutable in the constructor, no registrar, no
 catalogue (a new implementation = a new `AssetFactory`); events `GrantCreated`, `DistributionCreated`, `OfferCreated`.
-Deploy scripts: `RegulatedLib` deployed and linked per chain; factory v2 (with the appended kinds) registers the six
+Deploy scripts: `RegulatedLib` deployed and linked per chain; the factory (with the appended kinds) registers the six
 regulated implementations as version 1 of their kinds; `AssetFactory` and one `ComplianceRegistry` per operator are
 deployed separately.
 
@@ -907,12 +907,12 @@ offer, disclosed as such. A loyalty or voucher issuer who needs freeze or allowl
 tier; the wizard then applies the mandatory disclosure. The wizard refuses a `*_REG` token as the underlying of any
 wrapper template.
 
-The configuration wizard (in the app and any client system) works over `IOpenFactory`/`IOpenFactoryV2`:
+The configuration wizard (in the app and any client system) works over `IOpenFactory`:
 
 | Template | Factory call | Parameters | Status of primitive |
 |---|---|---|---|
-| Loyalty / rewards | `createMetaToken(1, 0, initData, salt)` | name, symbol, decimals, `minter` = issuer's mint contract or treasury multisig, fee 0 | **BUILT** |
-| Internal 1:1 money | `createMetaToken(1, underlying, …)` | underlying stablecoin; wrap/unwrap through the clone | **BUILT** |
+| Loyalty / rewards | `createTiered(META_NONE, 1, [], initData, salt)` (built: `createMetaToken(1, 0, initData, salt)`) | name, symbol, decimals, `minter` = issuer's mint contract or treasury multisig, fee 0 | **BUILT** |
+| Internal 1:1 money | `createTiered(META_SINGLE, 1, [underlying], …)` with `num = den = 1` (built: `createMetaToken(1, underlying, …)`) | underlying stablecoin; wrap/unwrap through the clone | **BUILT** |
 | Wrapper with a rate | `createTiered(META_SINGLE, …)` | underlying, `num/den`, fixed or adjustable (admin, delay, step) | **BUILT** |
 | Confidential money | `createZetherToken(1, underlying, verifier, initData, salt)` | `registry`, `shieldScale`, `maxDecryptableShielded ≤ 2^54`, `confidentialFee`, auditor key | **BUILT** (dev chains only) |
 | Multi-underlying money (e.g. xDAI/USDC/USDT) | `createTiered(META_MULTI, …)` | 2–8 underlyings, per-leg rates, guardian | **BUILT** |

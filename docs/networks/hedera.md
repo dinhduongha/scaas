@@ -20,8 +20,8 @@ someone else pays) is **not** used: it orders operations by the subject's accoun
 |---|---|---|
 | Token | `HederaMetaToken is MetaToken`: a Hedera account's **ED25519** signature verified through HIP-632 `isAuthorizedRaw` (`0x16a`); tier-2 wrappers on HTS tokens ([wrappers](#wrappers)) | `smartcontracts/evm/src/hedera/HederaMetaToken.sol` (v1), `HederaTokensV2.sol` + `HederaV2Lib.sol` (v2) |
 | Account auth | library calling `isAuthorizedRaw` with `CALL` (100 000 gas cap); a revert or garbage ⇒ `false` | `smartcontracts/evm/src/hedera/HederaAccountAuth.sol` |
-| Mandate | `HederaMandateWallet is MandateWallet` adds `executeAsOwnerRaw` for ED25519 owners ([NET-HED-03](#NET-HED-03)) | `smartcontracts/evm/src/hedera/HederaMandateWallet.sol` |
-| DEX | unchanged — every leg is a meta-tx on the token, so an ED25519 leg goes through `HederaMetaToken` | — |
+| Mandate | `HederaMandateWallet is MandateWallet` adds `mtxExecuteAsOwnerRaw` for ED25519 owners ([NET-HED-03](#NET-HED-03)) | `smartcontracts/evm/src/hedera/HederaMandateWallet.sol` |
+| DEX | unchanged — every leg is a meta-tx on the token, so an ED25519 leg goes through `HederaMetaToken` (target: a `TradeOrder` verified by the Hedera token's signature check, [Mandate and DEX](#mandate)) | — |
 | Relayer | EVM adapter pointed at the JSON-RPC relay, run under `lane_runner`; fee `eth_gasPrice × 1.2`, priority 0 | `scaas-node/src/adapters/hedera.rs` |
 | Client | long-zero payer `0.0.N` ⇒ native ED25519 path ([client families](../integration.md#families)) | — |
 
@@ -36,13 +36,19 @@ On Hedera the `MetaOp` v1 **is** the EIP-712 `MetaTransaction` of `MetaToken` �
 | `domain="scaas.metaop.v1"` | `EIP712Domain{name:"SCaaS MetaToken", version:"1"}` |
 | `network` | `chainId` = 295 / 296 / 297 / 298 |
 | `contract` | `verifyingContract` = the token clone |
-| `op` | `data` = `pay(bytes32)` ‖ payRef (op `trade` = `trade(address,uint256,address)`) |
+| `op` | `data` = `pay(bytes32)` ‖ payRef (as built, op `trade` = `trade(address,uint256,address)`; target: empty `data` = transfer, `pay(bytes32)`, or an allowlisted self-call, [NODE-JOB-20](../node/job-api.md#NODE-JOB-20)) |
 | `from, to, amount` | `from, to, value` |
 | `payRef(32)` | inside `data` |
 | `lane(32)`, `nonce` | `batch = keccak(entryRef)`, `nonce = 0` ([CTR-MTX-03](../contracts/metatx.md#CTR-MTX-03)) |
 | `validUntil` | `validUntil` |
 | `relayer` | `relayer` + flag `MODE_RESTRICT_RELAYER` |
 | `extra` | `data` (hashed as `keccak256(data)` in the struct) |
+
+Target domain (SPECIFIED): `EIP712Domain{name, version, chainId, verifyingContract, salt = chain_uid}`
+([NET-ALL-22](README.md#NET-ALL-22)). On Hedera `chain_uid` is the block-0 hash the JSON-RPC relay reports; before a
+Hedera profile fixes it, the operator confirms that the value is the same across mirror-node and relay restarts and
+across two independent relays (the relay derives blocks from mirror-node record files, so this is checked, not
+assumed); an unstable value keeps the profile `draft`.
 
 Cross-network replay: `chainId` in the domain (Hedera mainnet 295 differs from every other EVM chain). Cross-contract:
 `verifyingContract`. Cross-use: the token's own `(from, batch) → nonce`. Expiry: `validUntil` against
@@ -126,7 +132,7 @@ ED25519 over the 32-byte EIP-712 digest only. HashPack/WalletConnect `hedera_sig
   protobuf blob reverts.
 
 Supported signers for ED25519 subjects: the clientkeys seed (`m/44'/3030'/0'/0'/i'`) with raw signing, or an
-ECDSA-alias account. A `MandateWallet` owned by an ED25519 account pays through `executeAsOwnerRaw`
+ECDSA-alias account. A `MandateWallet` owned by an ED25519 account pays through `mtxExecuteAsOwnerRaw`
 ([NET-HED-03](#NET-HED-03)).
 
 Passkeys on Hedera go through ERC-1271 smart accounts with OpenZeppelin P-256 (Solidity verifier when the `0x100`
@@ -234,19 +240,25 @@ allows 1 000 blocks per call, equal to the indexer's step cap. The token list is
 ## Mandate and DEX
 
 <a id="mandate"></a><a id="NET-HED-03"></a>**NET-HED-03** — **An ED25519 owner pays from its `MandateWallet` only
-through `executeAsOwnerRaw`.** `MandateWallet` is used unchanged with the platform's secp256k1 custody key as
-delegate. An ED25519 owner cannot use `executeAsOwner` (ECDSA), so `HederaMandateWallet.executeAsOwnerRaw` checks the
+through `mtxExecuteAsOwnerRaw`.** `MandateWallet` is used unchanged with the platform's secp256k1 custody key as
+delegate. An ED25519 owner cannot use `executeAsOwner` (ECDSA; target name `mtxExecuteAsOwner`), so `HederaMandateWallet.mtxExecuteAsOwnerRaw` checks the
 owner through HIP-632 with the same `ownerNonce` and the same `OwnerCall` digest; `isValidSignature` (ERC-1271 for
-the owner) stays ECDSA, and an ED25519 owner pays manually with `executeAsOwnerRaw(execute(token, payWithFee…))`. ERC-1271 runs under
+the owner) stays ECDSA, and an ED25519 owner pays manually with `mtxExecuteAsOwnerRaw(execute(token, payWithFee…))`. ERC-1271 runs under
 STATICCALL, where HIP-632 halts, so `isValidSignature` cannot cover ED25519; the token is not special-cased (one more
 Hedera-only path in the signature pipeline for a rare case). Paying manually by meta-tx holds for ECDSA owners only.
 The owner's raw call is relayed as a `call` job (selector in the call table,
 [NODE-JOB-01](../node/job-api.md#NODE-JOB-01)) or submitted by the owner. Tests: forge with a `vm.etch` HAS mock — an
-ED25519 owner pays a payee through `executeAsOwnerRaw` (`token.pay…` as `data`); the same owner's meta-tx with
+ED25519 owner pays a payee through `mtxExecuteAsOwnerRaw` (`token.pay…` as `data`); the same owner's meta-tx with
 `from = wallet` fails ERC-1271. BUILT.
 
 DEX: `MetaTxDex` and `OrderBookDex` are unchanged; each leg is `executeMetaTransaction` on the token, so an ED25519
 leg is verified by `HederaMetaToken`. Fees, `filled[orderHash]` and cancel as in [contracts/dex](../contracts/dex.md).
+Target (SPECIFIED): `MetaTxDex` is deleted; `OrderBookDex.mtxSettle` pulls each SCaaS leg through the sell token's
+`mtxTrade`, whose signature check is the Hedera token's own (HIP-632 for a 64-byte ED25519 signature, ECDSA,
+ERC-1271), so an ED25519 subject trades with no allowance ([NODE-DEX-15](../node/dex-venue.md#NODE-DEX-15)). HIP-632
+signers are not contracts, so they can never call `approve` on a SCaaS token
+([CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)); they wrap a SCaaS underlying by signature
+([CLI-SGN-36](../clients/signers-clientkeys.md#CLI-SGN-36)).
 
 ## HTS tokens
 

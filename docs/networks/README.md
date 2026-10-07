@@ -49,14 +49,20 @@ per-subject sequential nonce ([NODE-MESH-07](../node/mesh.md#NODE-MESH-07); owne
    Soroban fee-bump, Cosmos feegrant, TON W5) are used only so that a **relayer** pays, never so that the subject's
    sequence orders anything. A relayer runs many signing lanes (accounts derived from one mnemonic by account
    index), each with its own sequence; jobs spread across lanes; the fee sink is a fixed cold wallet and never a
-   lane. SCaaS has no ERC-4337 dependency: the meta-transaction lives in the token contract.
+   lane. SCaaS has no ERC-4337 dependency: the meta-transaction lives in the token contract. On EVM and Hedera the
+   token's gateway (`mtxExecute`, alias `executeMetaTransaction`) runs a transfer, a payment, or a self-call of one of
+   the token's **own** functions on that implementation's selector allowlist — never a call to another contract
+   ([NODE-JOB-20](../node/job-api.md#NODE-JOB-20)); every entry point whose authority is a subject's signature is named
+   `mtx…`.
 3. **The relayer is not a new global lock**: every adapter's head-of-line behaviour is in
    [NET-ALL-03](#NET-ALL-03).
    Every relayer simulates on its own RPCs before signing: EVM and Hedera `eth_call`/`eth_estimateGas` (no vendor fork
    service such as Tenderly), Sui `sui_devInspectTransactionBlock`, Soroban and Solana `simulateTransaction`, Cosmos
    `tx/simulate`, Aptos `/v1/transactions/simulate`, TON get-method reads ([NET-TON-17](ton.md#NET-TON-17)).
 4. **Owner invariants hold on every network:** no ordinary account is ever a spender (allowance and delegation go to
-   contracts/programs only — [CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)), no replay, every signature
+   contracts/programs only — [CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)), and on a SCaaS token only a
+   contract may call `approve`, so an ordinary account never grants an allowance either (a trade order names its DEX,
+   a contract, as the only place its funds may go; a wrap of a SCaaS underlying is signed, not approved), no replay, every signature
    expires, mandate limits per payment and per period, and the client keeps four-eyes control and a snapshot of its
    receiving wallets.
 5. <a id="deploy-gate"></a>**Immutable at deploy.** Every program that holds subject value is immutable from the
@@ -87,7 +93,9 @@ Three pieces, as on EVM:
 2. **Mandate.** As the EVM `MandateWallet`: funds sit in the contract, a delegate signs, limits per payment and per
    period, a payee, an expiry, revocation, each `payRef` once.
 3. **DEX.** Two signed legs, fill-or-kill per pair, no allowance to an ordinary account — except TON, which uses an
-   escrow (actor model, no cross-contract atomicity; [TON DEX](ton.md#dex)).
+   escrow (actor model, no cross-contract atomicity; [TON DEX](ton.md#dex)). EVM and Hedera (SPECIFIED): one taker
+   against one or more makers per settlement; each SCaaS leg is a role-free `TradeOrder` verified by its own sell token,
+   which moves the funds only into the DEX; no allowance at all ([NODE-DEX-15](../node/dex-venue.md#NODE-DEX-15)).
 
 **`MetaOp` v1** — the signed payload of every non-EVM family (family encoding; every field mandatory):
 
@@ -127,7 +135,7 @@ Where the network identity in each family's signed payload comes from:
 
 | Family | Network in the signed payload comes from | Contract / app binding |
 |---|---|---|
-| EVM (incl. Hedera) | `block.chainid` (runtime) + `verifyingContract`; Universal Account domains add `chain_uid` ([NET-ALL-22](#NET-ALL-22)) | EIP-712 domain |
+| EVM (incl. Hedera) | `block.chainid` (runtime) + `verifyingContract` + `salt = chain_uid` in every SCaaS domain ([NET-ALL-22](#NET-ALL-22); as built, only the Universal Account domains carry it) | EIP-712 domain |
 | Aptos | `chain_id::get()` (runtime) | AIP-62 `application ∈ origins` |
 | Sui | per-network object ids (`Config`, `Account`) | none ([NET-ALL-23](#NET-ALL-23)) |
 | Soroban | `network_id` (host preimage) | host auth preimage (contract + function + args) |
@@ -140,19 +148,59 @@ nonce, so a signature from a test network or another chain is worthless elsewher
 (`max_valid_for_secs`) and bounded by the lane horizon, not a fixed global window.
 
 <a id="chain-identity"></a><a id="NET-ALL-22"></a>**NET-ALL-22** — **A chain is identified by `(chain_key,
-chain_uid)`, never by its chain id alone.** `chain_uid` (`bytes32`, `≠ 0`) is the chain's genesis block hash as its
-RPC reports it (EVM, Hedera); on EVM it is a **constructor immutable** of the Universal Account registry exposed as
-`chainUid()` and published in the chain profile, and it is bound into the proof-of-possession digest, the registry's
-EIP-712 domain `salt`, the v3 meta-transaction domain `salt` and the `metatx-cancel` digest
-([CTR-UA-07](../contracts/accounts.md#CTR-UA-07)); being a constructor argument it also makes the CREATE2
-address differ per chain. The EVM cannot read its own genesis hash after block 256, so a registry cannot *prove*
-`chain_uid`; the guarantee is that two honest registries on chains sharing a chain id (7622 or any other) never
-accept each other's signatures. A replica deployed elsewhere from a copy of our profile is trusted by nothing of
-ours: tokens bind the registry address at `initialize`, and the node binds the registry address, its `chainUid()`
-and the RPC's genesis hash per chain profile and refuses a mismatch. Non-EVM families take the family's genesis or
-network identifier where the runtime exposes it (Soroban network id, Solana genesis hash), else a chain-profile
-constant, each fixed with vectors. Why: chain ids are a registry convention, not unique — 9000 is also Evmos
-Testnet, which is why the private chain moved to 7622 ([NET-EVM-02](evm.md#NET-EVM-02)).
+chain_uid)`, never by its chain id alone, and `chain_uid` is the `salt` of every SCaaS signing domain.** `chain_uid`
+(`bytes32`, `≠ 0`) is the chain's genesis block hash as its RPC reports it (EVM, Hedera). On EVM and Hedera it is a
+**constructor immutable**, exposed as `chainUid()`, of every SCaaS contract that checks a signature or binds a
+digest to a chain — token implementations (a clone runs its implementation's code, so it uses the implementation's
+value and cannot declare another), the factory (which registers only implementations with its own value), the subject
+account factory, mandate wallets, the DEX and the Universal Account registry — and it is the `salt` of every SCaaS
+EIP-712 domain: `(name, version, chainId, verifyingContract, salt = chain_uid)`, ERC-5267 `eip712Domain()` fields
+`0x1f`. It is also bound into the registry's proof-of-possession digest and the `metatx-cancel` digest
+([CTR-UA-07](../contracts/accounts.md#CTR-UA-07)) and into the confidential token's statement, envelope, rollover,
+mode, disclosure and `entryRef` digests beside `chainId`, since those are not EIP-712 domains. The EVM cannot read its
+own genesis hash after block 256, so a contract cannot *prove* `chain_uid`; the deploy script reads it from the RPC,
+and the deploy gate and the node require each contract's `chainUid()` = the RPC's genesis hash = the chain profile
+([NODE-GW-07](../node/gateway.md#NODE-GW-07), [NET-EVM-05](evm.md#NET-EVM-05)). A wrong value makes correct signatures
+fail; it is unsafe only if it equals another chain's `chain_uid`, which that comparison excludes. The guarantee is that
+honest contracts on two chains sharing a chain id (7622 or any other) never accept each other's signatures, whichever
+wallet produced them. A replica deployed elsewhere from a copy of our profile is trusted by nothing of ours: tokens
+bind the registry address at `initialize`, and the node binds every contract's `chainUid()` and the RPC's genesis hash
+per chain profile and refuses a mismatch. Because contracts are deployed through a CREATE2 deployer with a fixed salt
+([NET-EVM-05](evm.md#NET-EVM-05)), a contract whose constructor takes `chain_uid` — and every clone made from it — has
+a **different address on each chain**, so a user's subject account does too; a contract with no chain-specific
+constructor argument has the same address everywhere. Safety does not rest on the address: the salt is in every
+digest. Limit: a genesis hash does not separate the two branches of a fork, which share genesis
+([NET-ALL-25](#NET-ALL-25)). Non-EVM families take the family's genesis or network identifier where the runtime
+exposes it (Soroban network id, Solana genesis hash), else a chain-profile constant, each fixed with vectors. Hedera:
+the relay's block-0 hash, fixed only once it is confirmed stable across mirror-node and relay restarts
+([hedera.md#payload](hedera.md#payload)). Why: chain ids are a registry convention, not unique — 9000 is also Evmos
+Testnet, which is why the private chain moved to 7622 ([NET-EVM-02](evm.md#NET-EVM-02)). Transitional (BUILT): only
+the Universal Account registry and the UA meta-transaction domain carry `chain_uid`; deployed tokens, the factory,
+subject accounts, mandate wallets and the DEX sign with `(name, version, chainId, verifyingContract)` and are
+deployed with CREATE, until the salted contracts replace them (nothing is deployed outside test chains).
+
+<a id="chain-profile"></a><a id="NET-ALL-24"></a>**NET-ALL-24** — **A chain profile carries the chain's `chain_uid`
+and its list of SCaaS DEX contracts.** Status: **SPECIFIED**. Every EVM and Hedera chain profile — the node's chain row
+with its registered contracts ([store.md](../node/store.md)), the signer's own pinned profile
+([CLI-SGN-08](../clients/signers-clientkeys.md#CLI-SGN-08)) and the app's chain configuration — holds `chain_uid` and
+the list of DEX contracts deployed by SCaaS on that chain (each with its `chainUid()` checked). Clients fill
+`domain.salt` from `chain_uid` and refuse to build or sign a trade order whose `dex` is not on the list
+([CLI-SGN-33](../clients/signers-clientkeys.md#CLI-SGN-33), [CLI-SGN-35](../clients/signers-clientkeys.md#CLI-SGN-35));
+the node routes and settles orders only for listed DEXes ([NODE-DEX-16](../node/dex-venue.md#NODE-DEX-16)). A
+client takes both values from its own pinned profile (built in, or pinned by the user) and uses a server's
+`/v1/gateway` answer only to detect a disagreement, never as the source. Why: the token requires only that a trade
+order's `dex` is a contract (owner, 2026-10-08), so the list of genuine DEXes has to live where the signer and the
+relayer can check it. Cost: a new DEX reaches users only with a profile update.
+
+<a id="chain-forks"></a><a id="NET-ALL-25"></a>**NET-ALL-25** — **A chain we run that forks becomes a new chain, and
+no two chain profiles share a genesis hash.** Owner ruling 2026-10-08. Two branches of a fork share their genesis
+block, so `chain_uid` cannot tell them apart and a signature made on one replays on the other. For chains SCaaS runs,
+a fork is a new chain: a new chain id (EIP-155 practice) and a new `chain_key`, with its own profile; the deploy gate
+enforces it. A private chain re-created from the **same** genesis file would also repeat its genesis hash, so every
+private chain's genesis carries a unique `extraData` nonce, and the deploy gate and the node refuse a genesis hash
+that is already present in any chain profile. On public chains SCaaS relies on the fork's own chain-id change; a fork
+without one is a documented residual (signatures replay on both branches until the profile is withdrawn). Cost: a
+fork of our own chain needs fresh deployments and profiles.
 
 ## Passkeys (WebAuthn P-256)
 
@@ -392,7 +440,10 @@ The book, matcher, gateway and client mirror are shared (they depend on no EVM d
 Each family supplies a "settlement adapter" — a settlement contract that keeps the same invariants:
 
 1. Signed orders are domain-separated (network + DEX contract + every order field) and verified on chain with the
-   subject's key; no account sequence; nonces and `filled` are held by the DEX contract.
+   subject's key; no account sequence; nonces and `filled` are held by the DEX contract. EVM and Hedera (SPECIFIED):
+   a SCaaS leg is verified by its sell token in the token's domain (network + token + `chain_uid`), which holds the
+   order's fill state and cancels; only outside-token legs are verified and held by the DEX
+   ([NODE-DEX-15](../node/dex-venue.md#NODE-DEX-15)).
 2. `filled[orderHash]` on chain, no overfill, cross-multiplied price check, `maxFeePpm` inside the order, fee cap
    1 %.
 3. Cancel closes `filled` with the owner's signature; `minNonce` raises in bulk, capped below `2^(w−1)` for the
@@ -424,7 +475,7 @@ Accepted differences, which the adapter, matcher and client must know:
 | IOC closes at its first fill (one maker, [NODE-DEX-09](../node/dex-venue.md#NODE-DEX-09)) | Sui, Aptos, Solana |
 | One fee recipient for the whole DEX, not per market | Cosmos (`InstantiateMsg`), Soroban (`Key::FeeRecipient`) |
 | One `fee_ppm`, no maker/taker split (`dex.rs:74-97`) | Solana |
-| Minimum received measured **after** the DEX fee (EVM: `buyAmount` gross) | Cosmos, TON |
+| Minimum received measured **after** the DEX fee (EVM: `buyAmount`, target `receiveAmount`, gross) | Cosmos, TON |
 | No on-chain self-trade check (the node still skips self-trades) | Cosmos, Soroban |
 
 Non-EVM books are served after the venue moves into the node store ([CLI-APP-21](../clients/app.md#CLI-APP-21)).

@@ -213,7 +213,7 @@ list is an `ir.model.fields` selection, secrets in `ir.config_parameter`); `env:
 `dms_blockchain.allow_dev_custody` = `1` and `is_dev_chain = True`, and signs through `cryptography`, not `secp256k1.py`.
 Auto-pay: `blockchain.autopay.policy` → `_cron_autopay` → one `blockchain.autopay.run` per (policy, invoice, event);
 `payment.transaction` provider `chain`, `invoice_ids`, `operation='offline'`; kill switch `revokeWithSig` job
-(`eip712.revoke_mandate_digest`, `_enqueue_revoke`). The outbox generalisation added `job_kind`, `target_address`,
+(`eip712.revoke_mandate_digest`, `_enqueue_revoke`; target selector `mtxRevoke`). The outbox generalisation added `job_kind`, `target_address`,
 `calldata_hex`, `payment_request_id` to `blockchain.relay.job` and made `metatx_id` optional. Accounting:
 `blockchain.token.journal_id` (company-dependent); drift A `blockchain.chain.event` with `event_name = 'Transfer'` ⇒
 `unmatched_inbound`; drift C `blockchain.chain.balance_report(chain_key, height, [{token, address, balance}])` (pull) or
@@ -281,8 +281,10 @@ deploys the account and the payment/owner-call job both sit in the outbox; the l
 and neither `relay_poll` nor the push batch hands it out until the earlier job is `mined/final`; when the earlier job
 ends `dead/reverted`, the dependant goes `dead` too.
 
-<a id="INT-ODOO-02"></a>**INT-ODOO-02** — **The `executeAsOwner` nonce is the count of the account's `mined/final`
-owner-call jobs**; only one owner call is live at a time; `reverted` consumes no nonce (a failed receipt is not `mined`).
+<a id="INT-ODOO-02"></a>**INT-ODOO-02** — **The owner-call nonce (`executeAsOwner`, target `mtxExecuteAsOwner`) is the
+count of the account's `mined/final` owner-call jobs** on that chain; only one owner call is live at a time; `reverted`
+consumes no nonce (a failed receipt is not `mined`). The account address is predicted per chain, since the account
+factory's constructor takes `chain_uid` ([NET-ALL-22](networks/README.md#NET-ALL-22)).
 
 <a id="INT-ODOO-03"></a>**INT-ODOO-03** — **The first key registers in two steps with an HMAC challenge.**
 `..._register_start` returns a challenge HMAC(`database.secret`; user, partner, chain, expiry) — nothing stored, TTL
@@ -323,6 +325,18 @@ as `filled` on chain), `nonce`, `expiry_ts`, `flags`, `max_fee_ppm`, `signature_
 `maker_fill_base`, `taker_fill_base`, expected/actual fees, `relay_job_id`, `trade_state`, `restored`, `tx_hash`,
 `block_number`, `move_ids`. Fee postings use `income_account_id` and, for payers that are an approved
 `blockchain.paying.wallet`, `relayer_expense_account_id` ([INT-ERP-12](integration.md#INT-ERP-12)).
+
+**Encoders and selectors (target, SPECIFIED).** The connector's `lib/eip712.py` and the portal encoders follow the
+renamed contracts: `blockchain.chain` gains `chain_uid` (the genesis hash, seeded with the chain and compared at
+activation with the RPC's block 0 and with `/v1/gateway`), and every domain the connector builds — token
+(`domain_name`, `domain_version`), mandate wallet, subject account — adds `salt = chain_uid`; the digest KATs are
+regenerated with it. Call-job calldata uses `mtxPayUnderMandate`, `mtxRevoke` and `mtxExecuteAsOwner`; the payment
+envelope is unchanged (`pay(bytes32)` through `executeMetaTransaction`, now an alias of `mtxExecute`); the subject-side
+cancel is `cancelNonce(batch)`. The connector never builds an `approve` on a SCaaS token. DEX mirrors: an order row
+stores the `TradeOrder` fields (`from`, `receiveToken`, `amount`, `receiveAmount`, `minFill`, `fee`, `relayer`, `dex`,
+`destination`, `flags`, order lane `batch`, `nonce`, `validUntil`); `maker_fee_ppm`/`taker_fee_ppm` become the venue's
+intake rates and `fee_recipient_address` the DEX treasury; trades are booked from `LegSettled`
+([INT-ERP-12](integration.md#INT-ERP-12)).
 
 <a id="INT-ODOO-12"></a>**INT-ODOO-12** — **A late `Matched` after a restore debits the Odoo-held book.** When
 `dex_fill_ingest` flips a `failed` + `restored` trade to `settled` (`dex_trade.py:195-198`), the node subtracts that

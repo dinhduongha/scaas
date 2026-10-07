@@ -6,7 +6,9 @@ the Rust prover `zether-prover` exist with tests (`smartcontracts/evm/src/zether
 form `smartcontracts/src/…` (e.g. `smartcontracts/src/zether/**`) and `smartcontracts/test/…` in older references now live under `smartcontracts/evm/`). Every
 Zether contract and the registry refuse to deploy or initialize outside chain ids 31337/1337, and
 `OpenFactory.zetherEnabled` defaults to `false` ([safety gate](#safety-gate)). Post-quantum confidential balances are a
-separate class ([pq-zether.md](pq-zether.md)).
+separate class ([pq-zether.md](pq-zether.md)). The relaying target — `ZetherToken` on the one meta-transaction base,
+confidential ops through the generic self-call, `fund` from the public balance, `chainUid` in every chain-bound
+digest — is **SPECIFIED** ([relaying](#envelope)); the built `ZetherMetaTx` envelope ops are its transitional form.
 
 This file is the contract between the prover and the Solidity verifier: **every byte** of the statement, the
 transcript and the proof must be exactly as written here. An ambiguity is a bug of this document — report it, do not
@@ -65,8 +67,8 @@ so a valid balance is always provable and decryptable by BSGS up to 2^54.
 <a id="CTR-ZTH-04"></a>**CTR-ZTH-04** — **`shieldScale` = raw underlying units per shielded unit** (as in the code's
 NatSpec; not "the number of decimals kept": with `decimals` and `keep` the relation is `shieldScale =
 10^(decimals − keep)`). Example: a 6-decimal stablecoin kept to 2 decimals has `shieldScale = 10^4`; a 0-decimal
-underlying has `shieldScale = 1`. `fund(amount)` takes `amount` in **shielded units** and pulls `amount · shieldScale` (`amount × shieldScale`)
-raw units; `burn(amount)` pays `amount · shieldScale`. Decimals, shield scale and decryption bound are per token (the
+underlying has `shieldScale = 1`. `fund(amount)` takes `amount` in **shielded units** and draws `amount · shieldScale` (`amount × shieldScale`)
+raw units of the caller's public balance ([CTR-ZTH-35](#CTR-ZTH-35)); `burn(amount)` pays `amount · shieldScale`. Decimals, shield scale and decryption bound are per token (the
 creator's choice, [CTR-GEN-04](README.md#CTR-GEN-04)).
 
 <a id="range-bits"></a>
@@ -202,7 +204,7 @@ State per `(UA, token)`:
 | `pendingSeq` (uint64) | `+1` per credit | tells the client there is new money |
 | `lastRolledPendingSeq` | rollOver | the no-op rule |
 | `sendCounter` (uint64) | `+1` per successful debit | **in the statement**; anti-replay of proofs; client PRF for `s` |
-| `mode` | `setRollOverMode` (owner signature) | `PUBLIC` (default) / `OWNER_ONLY` |
+| `mode` | `mtxSetRollOverMode` (owner signature) | `PUBLIC` (default) / `OWNER_ONLY` |
 
 A new account has `acc = pending = (O, O)`, every counter `0`, `mode = PUBLIC`.
 
@@ -211,9 +213,19 @@ A new account has `acc = pending = (O, O)`, every counter `0`, `mode = PUBLIC`.
 `statement` instead of `(payload, epoch)`; per-account state is read with `accountState(UA)` (there is no
 `simulateAccounts(encodedY, epoch)`).
 
-- **fund(Y, amount):** `pending.C += [amount]G` (D unchanged; the amount is public), `pendingSeq++`. It pulls
-  `amount·shieldScale` underlying from `msg.sender` through `transferFrom` — the spender is **the token contract
-  itself** (the allowance lockdown).
+- **fund(Y, amount):** `pending.C += [amount]G` (D unchanged; the amount is public), `pendingSeq++`. It burns
+  `amount·shieldScale` public units of this token from the caller ([CTR-ZTH-35](#CTR-ZTH-35)).
+
+<a id="CTR-ZTH-35"></a>**CTR-ZTH-35** — **`fund` draws from the caller's public balance** (owner):
+`fund(encodedY, amount)` always burns `amount · shieldScale` public Zether units from `_msgSender()` and adds `amount`
+to `totalShielded`, instead of pulling the underlying a second time — one path for every Zether token. The escrow
+invariant (`underlying held ≥ totalSupply + totalShielded · shieldScale`, `ZetherToken.sol:619-623`) is unchanged by
+construction: the underlying is already held for those public units. A holder of an outside underlying wraps, then
+funds — two direct calls, or one gasless `mtxBatch` of `mtxExecute(wrap)` and `mtxExecute(fund)`; an EOA holding a
+SCaaS underlying wraps by signature (`mtxWrap`, [CTR-TOK-20](token-wrappers.md#CTR-TOK-20)), then funds. Without it, an
+EOA holding a SCaaS underlying could not fund at all (it cannot approve, [CTR-TOK-01](token-wrappers.md#CTR-TOK-01)).
+**Transitional (BUILT):** `fund` pulls `amount·shieldScale` underlying from `msg.sender` through `transferFrom`, the
+spender being the token contract itself.
 - **transfer:** the sender proves over `acc`. Effect:
 
 ```
@@ -229,29 +241,33 @@ sendCounter_f++
   `acc += pending; pending = 0; accSeq += 1`). It runs only when
   `pendingSeq > lastRolledPendingSeq`; otherwise it is a **silent no-op** (anti-DoS).
 
-<a id="rollover"></a>Two modes (`enum RollOverMode { PUBLIC, OWNER_ONLY }`, `setRollOverMode` signed):
+<a id="rollover"></a>Two modes (`enum RollOverMode { PUBLIC, OWNER_ONLY }`, `mtxSetRollOverMode` signed; the built
+names are `rollOverSigned(UA, expectedPendingSeq, validUntilBlock, sig)` and `setRollOverMode(UA, mode,
+validUntilBlock, sig)`, renamed with the base rebuild, [CTR-MTX-21](metatx.md#CTR-MTX-21)):
 
 - `PUBLIC` (default; retail, loyalty, low-risk): anyone may call `rollOverPublic(UA)` / `rollOverBatch(UA[])` without a
   signature. `rollOverBatch` skips `OWNER_ONLY` and unregistered items.
-- `OWNER_ONLY` (treasury, B2B high value): `rollOverPublic` reverts `RollOverOwnerOnly`; only `rollOverSigned(UA,
+- `OWNER_ONLY` (treasury, B2B high value): `rollOverPublic` reverts `RollOverOwnerOnly`; only `mtxRollOver(UA,
   expectedPendingSeq, validUntilBlock, sig)` — `block.number ≤ validUntilBlock`, `lastRolledPendingSeq <
   expectedPendingSeq ≤ pendingSeq`, signed by the account's authority (`authScheme` in the built registry) over
-  `keccak256(abi.encode(keccak256("ZETHER_ROLLOVER_V1"), chainid, token, UA, accSeq, expectedPendingSeq, validUntilBlock))`.
-- `rollOverSigned` also works for `PUBLIC` accounts.
-- `setRollOverMode(UA, mode, validUntilBlock, sig)`: digest
-  `keccak256(abi.encode(keccak256("ZETHER_SET_ROLLOVER_MODE_V1"), chainid, token, UA, uint8(mode), modeNonce, validUntilBlock))`,
-  `modeNonce++` after every change (no replay of an old signature).
+  `keccak256(abi.encode(keccak256("ZETHER_ROLLOVER_V1"), chainid, chainUid, token, UA, accSeq, expectedPendingSeq, validUntilBlock))`.
+- `mtxRollOver` also works for `PUBLIC` accounts.
+- `mtxSetRollOverMode(UA, mode, validUntilBlock, sig)`: digest
+  `keccak256(abi.encode(keccak256("ZETHER_SET_ROLLOVER_MODE_V1"), chainid, chainUid, token, UA, uint8(mode), modeNonce, validUntilBlock))`,
+  `modeNonce++` after every change (no replay of an old signature). `chainUid` is in both digests
+  ([CTR-ZTH-36](#CTR-ZTH-36)): a re-created chain restarts `modeNonce`, `accSeq` and block numbers, so a captured mode
+  or rollover signature would replay without it.
 
 The owner-signed-only rollOver of an earlier design was rejected: the `PUBLIC` default keeps every incoming credit
 usable without the owner's key, and `OWNER_ONLY` is chosen per account by risk class (by the client system).
 
 <a id="rollover-signed"></a>
-<a id="CTR-ZTH-16"></a>**CTR-ZTH-16** — `rollOverSigned` accepts `pendingSeq ≥ expectedPendingSeq` (not `==`): a free
+<a id="CTR-ZTH-16"></a>**CTR-ZTH-16** — `mtxRollOver` (built: `rollOverSigned`) accepts `pendingSeq ≥ expectedPendingSeq` (not `==`): a free
 `v = 0` transfer by a griefer cannot kill an `OWNER_ONLY` owner's rollOver. Replay stays blocked because the digest
 pins `accSeq`. Test: `test_rollOverSignedSurvivesFrontRunCredit`.
 
 <a id="rollover-signed-new-credit"></a>
-<a id="CTR-ZTH-17"></a>**CTR-ZTH-17** — `rollOverSigned` also requires `expectedPendingSeq > lastRolledPendingSeq`: a
+<a id="CTR-ZTH-17"></a>**CTR-ZTH-17** — `mtxRollOver` also requires `expectedPendingSeq > lastRolledPendingSeq`: a
 signature that names no new credit would be a no-op that does not raise `accSeq`, would live until the next credit,
 and anyone could use it to force a rollOver and kill the owner's in-flight proof. Now every accepted signature performs
 a real rollOver ⇒ single use (`test_rollOverSignedWithoutNewCreditIsRejected`).
@@ -259,7 +275,7 @@ a real rollOver ⇒ single use (`test_rollOverSignedWithoutNewCreditIsRejected`)
 **Race.** Transfer/burn **never** merge pending by themselves. A credit that arrives while a proof is being built
 changes only `pending` ⇒ the proof stays valid. Only rollOver changes `accSeq`; a proof built on an old `accSeq` is
 refused **before** verification (`StaleAccSeq`, cheap). With `OWNER_ONLY` nobody but the owner bumps `accSeq`, and an
-inserted credit cannot kill the owner's `rollOverSigned`. With `PUBLIC` the grief **costs only gas**: a registered
+inserted credit cannot kill the owner's `mtxRollOver`. With `PUBLIC` the grief **costs only gas**: a registered
 account with balance 0 can still prove a `v = 0` transfer (a valid proof, the amount hidden ⇒ not blockable on chain)
 and then call `rollOverPublic` ⇒ a wallet that needs stable proofs while targeted switches to `OWNER_ONLY`. Wallet
 rule: never hold a signed rollOver while a transfer is in flight; short `validUntilBlock` (≈ 50 blocks).
@@ -271,22 +287,37 @@ protocol change that needs its own cryptographic review; epochs are not the fall
 ## Statement (byte layout)
 
 The token **builds** the statement from storage + payload; the prover builds exactly the same. `P` = the bytes of one
-point. Header (384 bytes, common to every op):
+point. Header (416 bytes, common to every op; **SPECIFIED** — the built header is 384 bytes, without the `chainUid`
+word at offset 96 and with every later field 32 bytes earlier, [CTR-ZTH-36](#CTR-ZTH-36)):
 
 | Offset | Len | Field |
 |---|---|---|
 | 0 | 32 | `opTag` — transfer: `keccak256("SCAAS-ZETHER-OP-TRANSFER-V1")`, burn: `keccak256("SCAAS-ZETHER-OP-BURN-V1")` |
 | 32 | 32 | `proofSystemId` |
 | 64 | 32 | `chainId` |
-| 96 | 32 | token address (12 zero bytes ‖ 20 bytes) |
-| 128 | 32 | `bindingTag` — `keccak256("ZTX_V1_DIRECT")` or `keccak256("ZTX_V1_RELAYED")` |
-| 160 | 32 | `envelopeBinding` — 0 if DIRECT; [envelope binding](#envelope-binding) if RELAYED |
-| 192 | 32 | `sendCounter` |
-| 224 | 32 | `accSeq` |
-| 256 | 32 | `fee` (inner fee, shielded units) |
-| 288 | 32 | `beneficiary` (UA receiving the fee; 0 if none) |
-| 320 | 32 | `amount` (burn; transfer = 0) |
-| 352 | 32 | `recipient` (burn: 12 zero bytes ‖ address; transfer = 0) |
+| 96 | 32 | `chainUid` (the token's `chainUid()`, [CTR-ZTH-36](#CTR-ZTH-36)) |
+| 128 | 32 | token address (12 zero bytes ‖ 20 bytes) |
+| 160 | 32 | `bindingTag` — `keccak256("ZTX_V1_DIRECT")` or `keccak256("ZTX_V1_RELAYED")` |
+| 192 | 32 | `envelopeBinding` — 0 if DIRECT; [envelope binding](#envelope-binding) if RELAYED |
+| 224 | 32 | `sendCounter` |
+| 256 | 32 | `accSeq` |
+| 288 | 32 | `fee` (inner fee, shielded units) |
+| 320 | 32 | `beneficiary` (UA receiving the fee; 0 if none) |
+| 352 | 32 | `amount` (burn; transfer = 0) |
+| 384 | 32 | `recipient` (burn: 12 zero bytes ‖ address; transfer = 0) |
+
+<a id="CTR-ZTH-36"></a>**CTR-ZTH-36** — **Every chain-bound Zether digest carries `chainUid` beside `chainid`** (owner):
+the statement header (above), the envelope binding ([CTR-ZTH-06](#CTR-ZTH-06)), the disclosure challenge
+([disclosure](#disclosure)), the rollover digest `ZETHER_ROLLOVER_V1` and the mode digest
+`ZETHER_SET_ROLLOVER_MODE_V1` ([rollover](#rollover)) and `entryRef` (`SCAAS-ZETHER-ENTRY-V1`). `chainUid` is the
+implementation's constructor immutable, exposed as `chainUid()` and equal to the chain's genesis hash
+([CTR-GEN-05](README.md#CTR-GEN-05)). Without it a re-created chain restarts `modeNonce`, `accSeq`, `sendCounter` and
+block numbers, so a captured mode or rollover signature, a proof or a disclosure would verify there; `entryRef` gains
+it so that references never collide across chains (client reconciliation still keys by `(chain_key, entryRef)`). The
+built `UniversalAccountRegistry` takes `chainUid` as a constructor immutable and adds it to its PoP challenge; because
+it checks raw digests, every caller's digest carries `chainUid` itself. The prover builds statements with `chainUid`,
+and the statement, envelope, rollover, mode, disclosure and `entryRef` vectors are regenerated. **Transitional
+(BUILT):** these digests carry `block.chainid` only, and the registry takes no `chainUid`.
 
 Points:
 
@@ -430,15 +461,17 @@ burn payload     = be32(provedAccSeq) ‖ be32(provedSendCounter) ‖ Y_f       
 
 <a id="zethermetatx"></a>
 <a id="CTR-ZTH-08"></a>**CTR-ZTH-08** — **A confidential token is a meta-tx token** (owner: Zether is a child of the
-meta-transaction layer, not a parallel branch): `ZetherToken` carries a separate `ZetherMetaTx` mixin that uses
-`MetaTxLib` read-only; the v1 sources `ERC20MetaTx`/`MetaToken` are untouched. Every confidential token is relayable
-through the same envelope ([metatx.md](metatx.md)); the post-quantum class follows the same rule
-([CTR-PQZ-15](pq-zether.md#CTR-PQZ-15)).
+meta-transaction layer, not a parallel branch): `ZetherToken` sits on the one base `ERC20MetaTx`
+([CTR-MTX-07](metatx.md#CTR-MTX-07)) — nonce, envelope, fee and ticket steps are the base's. Every confidential token
+is relayable through the same pipeline ([metatx.md](metatx.md)); the post-quantum class follows the same rule
+([CTR-PQZ-15](pq-zether.md#CTR-PQZ-15)). **Transitional (BUILT):** `ZetherToken` carries a separate `ZetherMetaTx`
+mixin that uses `MetaTxLib` read-only, with its own pipeline, domain `("SCaaS ZetherToken", "1", chainId, token)` and
+envelope ops (`m.data = op ‖ abi.encode(...)`, `m.to = address(0)`, `m.value = 0`); it disappears into the base.
 
 Three layers:
 
 1. **Envelope:** the 2D nonce `(from, batch) → nonce`, `validUntil`, the EIP-712 signature (`MetaTxLib.METATX_TYPEHASH`,
-   domain `("SCaaS ZetherToken", "1", chainId, token)`), a random lane per `entryRef` chosen by the client.
+   domain `("SCaaS ZetherToken", "1", chainId, token, chain_uid)`), a random lane per `entryRef` chosen by the client.
 2. **State:** `accSeq` and `sendCounter` in the statement, compared with storage **before** verification.
 3. **Binding:** `bindingTag`/`envelopeBinding` in the statement.
 
@@ -449,28 +482,39 @@ envelope's identity `(from, batch, nonce, …)`:
 
 ```
 envelopeBinding = keccak256(abi.encode(
-    keccak256("SCAAS-ZETHER-ENVELOPE-V1"), chainid, token,
+    keccak256("SCAAS-ZETHER-ENVELOPE-V1"), chainid, chainUid, token,
     m.from, m.to, m.value, m.batch, m.nonce, m.validUntil, m.mode,
     canonRelayer, m.fee, canonFeeRecipient))        // canon* per MetaTxLib.canon
 ```
 
-It is part of the statement (`ZTX_V1_RELAYED`); direct calls use `ZTX_V1_DIRECT` with binding 0. Consequences:
+It is part of the statement (`ZTX_V1_RELAYED`); direct calls use `ZTX_V1_DIRECT` with binding 0. The base computes it
+in step 5 of `mtxExecute` and passes it to the self-call through the transient ticket
+([CTR-ZTH-34](#CTR-ZTH-34)); a function reads it only while `msg.sender == address(this)` and the ticket is live, else
+it proves with binding 0. Consequences:
 stripping the proof out of its envelope and calling directly ⇒ the statement carries `ZTX_V1_DIRECT`, binding 0 ⇒ the
 transcript differs ⇒ revert; putting the proof into another envelope (other `from`/`batch`/`nonce`/expiry/fee) ⇒ the
 binding differs ⇒ revert; another token / another chain ⇒ the header differs ⇒ revert; a replay after execution ⇒
 `sendCounter`/`accSeq`/the envelope nonce have advanced ⇒ revert.
 
-Envelope ops (`m.data = op ‖ abi.encode(...)`, `m.to = address(0)`, `m.value = 0`):
-
-- `OP_ZTRANSFER = bytes4(keccak256("zetherTransfer(bytes,bytes,bytes,bytes32)"))`, args `(bytes payload, bytes proof,
-  bytes authSig, bytes32 beneficiary)`.
-- `OP_ZBURN = bytes4(keccak256("zetherBurn(bytes,uint256,address,bytes32,bytes,bytes)"))`, args `(bytes payload,
-  uint256 amount, address recipient, bytes32 beneficiary, bytes proof, bytes authSig)`.
-- `m.data` empty ⇒ a public ERC-20 transfer `m.from → m.to` like every token.
-
 <a id="direct-calls"></a>
-<a id="CTR-ZTH-11"></a>**CTR-ZTH-11** — `fund` and the `rollOver*` functions are direct calls; only transfer and burn
-have envelope ops (`rollOverSigned` carries its own signature, so anyone can relay it).
+<a id="CTR-ZTH-34"></a>**CTR-ZTH-34** — **Zether runs through the generic self-call** (owner). `mtxExecute` with `m.to =
+0`, `m.value = 0` and `m.data` = the real calldata of an allowlisted Zether function
+([CTR-MTX-19](metatx.md#CTR-MTX-19)): `transferConfidential(bytes,bytes,bytes,bytes32)`,
+`burn(bytes,uint256,address,bytes32,bytes,bytes)`, `fund(bytes,uint256)`, public `wrap(uint256)` and `unwrap(uint256,address)`;
+`m.data` empty is a public ERC-20 transfer `m.from → m.to` like every token. `transferConfidential` and `burn` compute
+`binding = (msg.sender == address(this) && ticket live) ? ticketBinding : 0`, so the statement tag is
+`ZTX_V1_RELAYED` with the envelope's binding inside `mtxExecute` and `ZTX_V1_DIRECT` with binding 0 otherwise: a proof
+lifted from a pending meta-tx fails as a direct call, and the envelope-stripping attack stays closed. The outer fee is
+the base's step 6, `FIXED` absolute or `NONE` (fee class `ABSOLUTE`, [CTR-MTX-20](metatx.md#CTR-MTX-20)); the inner fee
+(`confidentialFee` to the beneficiary) is unchanged. The dynamic arguments are re-encoded canonically by the node
+before it computes the mesh `intent_id`. The `rollOver*` functions stay outside the allowlist: `rollOverPublic` needs no
+signature, and `mtxRollOver`/`mtxSetRollOverMode` carry their own signature, so anyone can relay them.
+**Transitional (BUILT):** the envelope carries hand-written ops — `OP_ZTRANSFER =
+bytes4(keccak256("zetherTransfer(bytes,bytes,bytes,bytes32)"))`, args `(bytes payload, bytes proof, bytes authSig,
+bytes32 beneficiary)`, and `OP_ZBURN = bytes4(keccak256("zetherBurn(bytes,uint256,address,bytes32,bytes,bytes)"))`,
+args `(bytes payload, uint256 amount, address recipient, bytes32 beneficiary, bytes proof, bytes authSig)` — decoded
+and re-sent through the self-only `relayedTransfer`/`relayedBurn`/`relayedBurnDecoded` with an internal `OuterFee`
+(payer, recipient, amount); `fund` and the `rollOver*` functions are direct calls only.
 
 <a id="direct-transfer"></a>
 <a id="CTR-ZTH-13"></a>**CTR-ZTH-13** — **A direct call carries no outer fee.** The caller (`msg.sender`) pays its own
@@ -492,7 +536,7 @@ and 7 parameters push every Solidity caller into *stack too deep* with legacy co
 `0 < amount ≤ maxDecryptableShielded` (≤ 2^54) is checked **before** the statement is built — with `fee < 2^64` this
 guarantees `amount + fee < 2^65 < r`, no alias mod `r`.
 
-`entryRef = keccak256(abi.encode(keccak256("SCAAS-ZETHER-ENTRY-V1"), chainid, token, fromUA, sendCounter))`
+`entryRef = keccak256(abi.encode(keccak256("SCAAS-ZETHER-ENTRY-V1"), chainid, chainUid, token, fromUA, sendCounter))`
 (`sendCounter` before the increment).
 
 ### Fees
@@ -528,21 +572,26 @@ already is one constant per token, but nothing forbids an outer `FIXED` fee chos
 
 <a id="fee-would-stick"></a>
 <a id="CTR-ZTH-23"></a>**CTR-ZTH-23** — The outer fee recipient = m.feeRecipient or `msg.sender`; a resolved
-recipient `== address(token)` reverts `FeeWouldStick` (as in the DEX). The built `ZetherMetaTx` checks only 0
+recipient `== address(token)` reverts `FeeWouldStick` (as in the DEX); the base also refuses every transfer **to**
+`address(this)` (`TransferToSelf`, [CTR-MTX-18](metatx.md#CTR-MTX-18)). The built `ZetherMetaTx` checks only 0
 (`ZetherMetaTx.sol:74-75`), so such a
 fee would be stuck forever in the token's own public ERC-20 balance. Status **SPECIFIED**; test included.
 
 <a id="erc1271-cap"></a>
-<a id="CTR-ZTH-21"></a>**CTR-ZTH-21** — `ZetherMetaTx` applies the same ERC-1271 cap as `MetaToken`
+<a id="CTR-ZTH-21"></a>**CTR-ZTH-21** — Zether envelopes get the same ERC-1271 cap as every token of the base
 ([CTR-ACC-05](accounts.md#CTR-ACC-05)): 400 k when `m.from.codehash` is the `SubjectAccount` clone codehash
 (immutable at `initialize`/deploy), else 50 k. The built mixin uses `staticcall{gas: 50_000}` (`ZetherMetaTx.sol:123`), so a passkey
 `SubjectAccount` clone always fails `MetaTxBadSignature` on envelopes. The built registry is not changed (the UA
 registry replaces it and already sets 400 k, [CTR-UA-17](accounts.md#CTR-UA-17)). Test: an envelope signed by a
 real passkey `SubjectAccount` passes (the built `test_smartAccount1271Auth` uses only a `Mock1271Wallet` ECDSA). Status **SPECIFIED**.
 
-Pipeline order (cheap first): relayer → expiry → mode → nonce → signature → **public balance sufficient for the outer
-fee** → cheap op checks (`accSeq`, `sendCounter`, registration, lengths) → **proof verification** → collect the outer
-fee → execute → nonce++. An envelope without enough for its fee reverts before any precompile.
+Pipeline order: the base's ([CTR-MTX-17](metatx.md#CTR-MTX-17)) — relayer → expiry → mode → nonce → signature →
+shape (allowlist, fee class) → nonce written → the self-call (cheap op checks `accSeq`, `sendCounter`, registration,
+lengths, then **proof verification**, then effects) → outer fee from the public balance → event; a failure anywhere
+reverts everything. Relayers simulate first, so an envelope whose signer lacks the fee is refused at intake.
+**Transitional (BUILT):** relayer → expiry → mode → nonce → signature → **public balance sufficient for the outer fee**
+→ cheap op checks → **proof verification** → collect the outer fee → execute → nonce++, so an envelope without enough
+for its fee reverts before any precompile.
 
 <a id="no-memo"></a>
 <a id="CTR-ZTH-12"></a>**CTR-ZTH-12** — **No AEAD memo**; the client decrypts balances itself, with the configurable BSGS
@@ -573,9 +622,9 @@ verify:          z < r, R ≠ O, Y ≠ O, e ≠ 0, [z]G − R − [e]Y == O
 `register(encodedY, scheme, authData, popSignature, linkEVM)`: `|encodedY| ∈ {64, 128}` selects the curve; the point is
 valid, `≠ O`, in the subgroup (`y = g^x` in G1; `encodedY` is bn254 64 bytes `x‖y`, BLS12-381 128 bytes in the
 EIP-2537 encoding); `UA = keccak256(encodedY)` does not exist yet (`AccountAlreadyRegistered`). Challenge
-`c = keccak256(abi.encodePacked(registry, encodedY, msg.sender))`; because `c` binds `msg.sender`, `register` **cannot
-be relayed by a third party** and binds no chain id (`UniversalAccountRegistry.sol:95-96`; acceptable only because
-the registry is dev-only): the subject calls from its own EOA or smart account (a relayer, if any, pays gas at that
+`c = keccak256(abi.encodePacked(registry, encodedY, msg.sender))` (target: plus `chainUid`, [CTR-ZTH-36](#CTR-ZTH-36));
+because `c` binds `msg.sender`, `register` **cannot be relayed by a third party** and, as built, binds no chain id
+(`UniversalAccountRegistry.sol:95-96`; acceptable only because the registry is dev-only): the subject calls from its own EOA or smart account (a relayer, if any, pays gas at that
 account's level); a replay needs that same `msg.sender` and yields the same record, so there is no cross-chain replay.
 `popSignature = abi.encode(bytes schnorrPop, bytes authPop)`: `schnorrPop` = a Schnorr signature by `x` over `c`
 (anti-rogue-key for the ElGamal key); `authPop` = a proof of the authorization key, also over `c`:
@@ -629,7 +678,7 @@ The token stores per `entryRef` the bundle `Y_t ‖ C_out ‖ D_out ‖ C_aud` (
 - `AUDITOR`: as `RECEIVER_X` with `Y_a`, `C_aud`.
 
 ```
-e = hashToScalar(keccak256("SCAAS-ZETHER-DISCLOSE-V1" ‖ be32(chainid) ‖ token(20) ‖ entryRef ‖ be32(amount)
+e = hashToScalar(keccak256("SCAAS-ZETHER-DISCLOSE-V1" ‖ be32(chainid) ‖ chainUid ‖ token(20) ‖ entryRef ‖ be32(amount)
                            ‖ u8(kind) ‖ A1 ‖ A2))
 check:  [z]G − A1 − [e]K == O    and    [z]D_out − A2 − [e](M − [amount]G) == O
         (K, M) = (Y_t, C_out) for RECEIVER_X, (Y_a, C_aud) for AUDITOR
@@ -969,16 +1018,18 @@ interface IZetherToken is IERC20MetaTx {
 
     function rollOverPublic(ZetherTypes.UA account) external;
     function rollOverBatch(ZetherTypes.UA[] calldata accounts) external;
-    function rollOverSigned(ZetherTypes.UA account, uint64 expectedPendingSeq, uint64 validUntilBlock, bytes calldata sig) external;
-    function setRollOverMode(ZetherTypes.UA account, ZetherTypes.RollOverMode mode, uint64 validUntilBlock, bytes calldata sig) external;
+    function mtxRollOver(ZetherTypes.UA account, uint64 expectedPendingSeq, uint64 validUntilBlock, bytes calldata sig) external;
+    function mtxSetRollOverMode(ZetherTypes.UA account, ZetherTypes.RollOverMode mode, uint64 validUntilBlock, bytes calldata sig) external;
 
-    function fund(bytes calldata encodedY, uint256 amount) external;
+    function fund(bytes calldata encodedY, uint256 amount) external;   // burns amount·shieldScale public units (CTR-ZTH-35)
     function transferConfidential(bytes calldata payload, bytes calldata proof, bytes calldata authSig,
                                   ZetherTypes.UA beneficiary) external returns (bytes32 entryRef);
     function burn(bytes calldata payload, uint256 amount, address recipient, ZetherTypes.UA beneficiary,
                   bytes calldata proof, bytes calldata authSig) external;
     function wrap(uint256 amount) external;
     function unwrap(uint256 amount, address recipient) external;
+    function mtxWrap(address underlying, TradeOrder calldata o, bytes calldata sig) external returns (uint256 minted);
+    function chainUid() external view returns (bytes32);
 
     function transferStatement(bytes calldata payload, ZetherTypes.UA beneficiary, bytes32 envelopeBinding) external view returns (bytes memory);
     function burnStatement(bytes calldata payload, uint256 amount, address recipient, ZetherTypes.UA beneficiary,
@@ -1003,7 +1054,7 @@ interface ITransferDisclosure {
 ```
 
 Compared with earlier drafts: the direct `transferConfidential` has 4 parameters and no outer fee (the outer fee lives
-only in the envelope); `burn` carries `recipient`, `beneficiary`, `authSig`; registration lives in the registry, not the
+only in the envelope); the built names of the signed rollover functions are `rollOverSigned` and `setRollOverMode`; `burn` carries `recipient`, `beneficiary`, `authSig`; registration lives in the registry, not the
 token (no `Registered` event); `RolledOver` carries `accSeq` (no epoch). `IZetherVerifier`: `proofSystemId`,
 `curveName`, `isSupportedOnThisChain`, `verifyTransfer(statement, proof)`, `verifyBurn`, `generators`, point ops.
 

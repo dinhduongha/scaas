@@ -1,10 +1,12 @@
 # DEX venue
 
 The DEX venue is the node's off-chain order book in front of `OrderBookDex` ([contracts/dex.md](../contracts/dex.md)):
-it admits signed orders at the gateway, matches them price-time, and settles matched pairs with `settle` jobs in
-`~dex`. The contract is the arbiter of every fill; the venue only decides which pairs are worth sending. Status: book,
-matcher, intake, routes and watcher **BUILT** (book persisted in the legacy client); store-backed book **SPECIFIED**;
-book gossip and managed markets **SPECIFIED**; non-EVM books **PLANNED**.
+it admits signed orders at the gateway, matches them price-time, and settles each match — one taker against one or
+more makers — with `mtxSettle` jobs in `~dex`. The contracts are the arbiter of every fill; the venue only decides
+which matches are worth sending. Status: book, matcher, intake, routes and watcher **BUILT** (book persisted in the
+legacy client; DEX-domain orders settled pair by pair); token-verified orders and `mtxSettle`
+([trade orders](#trade-orders)) **SPECIFIED**; store-backed book **SPECIFIED**; book gossip and managed markets
+**SPECIFIED**; non-EVM books **PLANNED**.
 
 ## Order book
 
@@ -12,7 +14,7 @@ book gossip and managed markets **SPECIFIED**; non-EVM books **PLANNED**.
 partial fills.** The venue keeps one book per market, with limit (GTC), IOC and FOK orders and partial fills; the book
 survives restarts ([NODE-DEX-14](#NODE-DEX-14)); settlement goes through the node's ordinary job path (claim CAS,
 journal before send, replacement, gap-fill — no second send channel). The DEX contract itself is
-[CTR-DEX-01](../contracts/dex.md#CTR-DEX-01).
+[CTR-DEX-01](../contracts/dex.md#CTR-DEX-01); what the venue sends it is [NODE-DEX-15](#NODE-DEX-15).
 
 **Single writer**: the node (one process per chain, book under a `tokio::Mutex`). A client never edits `remaining`; it
 only mirrors order and trade states from feed items ([persistence](#persistence)).
@@ -25,10 +27,13 @@ on-chain `markets(key)` at load and on every poll.
 <a id="NODE-DEX-08"></a>**NODE-DEX-08** — **The on-chain market is re-checked every poll** (≤ 30 s); a mismatch
 (listing, fee, recipient) ⇒ the market stops being served (no matching, no intake) until it matches again. Test:
 `setMarket` raises the ppm ⇒ the market stops being served within one poll. Status: today checked only at venue start;
-the per-poll check is **SPECIFIED**.
+the per-poll check is **SPECIFIED**. With token-verified orders the DEX holds no fee rate (the rate is each order's
+signed `fee`), so the check covers the listing, each token's recorded kind and the fee split (`relayerSharePpm`,
+`treasury`); a split the venue's configuration does not expect (e.g. a relayer share of 0 where the operator priced
+one) also stops the market.
 
 A sell order of `base` is an **ask**, price `buyAmount/sellAmount` (quote/base); a sell order of `quote` is a **bid**,
-price `sellAmount/buyAmount`. Prices are compared by `U256` cross-multiplication (amounts at intake `< 2^128` ⇒ no
+price `sellAmount/buyAmount` (for a `TradeOrder`, `sellAmount` = `amount` and `buyAmount` = `receiveAmount`). Prices are compared by `U256` cross-multiplication (amounts at intake `< 2^128` ⇒ no
 overflow). Each side is a `Vec` sorted by (best price, increasing `seq`); `seq` is assigned monotonically at intake,
 stored, and kept on reload (time priority survives restarts).
 
@@ -52,7 +57,9 @@ dust ask at the head + a deeper ask ⇒ an incoming bid matches the deeper ask; 
 - **FOK:** checked **on chain**: a FOK order settles only in **one** pair that fills its whole `sellAmount`. The book
   matches FOK only against a single resting order (the first by price-time) that can fill it entirely; otherwise the
   whole order is cancelled. No aggregation of several counterparts for FOK: "all or nothing" across several pairs of a
-  pair-atomic batch is not provable on chain. Partial fill is the default for every other kind.
+  pair-atomic batch is not provable on chain. Partial fill is the default for every other kind. Target: a FOK order is
+  a `TradeOrder` with `minFill = amount`, and one settlement (one taker, several makers) is atomic, so FOK **may**
+  aggregate several makers inside that settlement ([NODE-DEX-15](#NODE-DEX-15)).
 - Resting orders are never FOK/IOC (they do not rest).
 
 <a id="NODE-DEX-09"></a>**NODE-DEX-09** — **IOC matches a single maker on Move and Solana.** Sui, Aptos and Solana close
@@ -68,7 +75,80 @@ counts only resting orders, `dex.rs:449-462`.)
 
 The venue computes no DEX fee: the matcher only compares the signed `maxFeePpm` with the market fee; the DEX fee is
 taken from the transferred amount (so `fundable` is unchanged) and rounds up per fill on chain
-([CTR-DEX-11](../contracts/dex.md#CTR-DEX-11)); the relayer fee rounds down ([CTR-DEX-06](../contracts/dex.md#CTR-DEX-06)).
+([CTR-DEX-11](../contracts/dex.md#CTR-DEX-11)). This is the built behaviour; with token-verified orders the fee is the
+order's signed `fee` rate, charged once per order per settlement on what it receives, and the venue applies its
+per-role rates at intake ([NODE-DEX-15](#NODE-DEX-15)).
+
+## Token-verified orders
+
+<a id="trade-orders"></a><a id="NODE-DEX-15"></a>**NODE-DEX-15** — **The venue settles role-free `TradeOrder`s with
+`mtxSettle`, one taker against one or more makers, and arranges the roles itself.** Status: **SPECIFIED**. The
+contract side — the struct, the token's checks, the DEX's payout and conservation — is
+[contracts/dex.md](../contracts/dex.md) and [contracts/metatx.md](../contracts/metatx.md); this rule is what the venue
+does with it.
+
+- **Two order forms, chosen by the DEX's listing.** When the sell token is a SCaaS token the order is a `TradeOrder`
+  (`from`, `receiveToken`, `amount`, `receiveAmount`, `minFill`, `fee`, `relayer`, `dex`, `destination`, `flags`,
+  `batch`, `nonce`, `validUntil`) signed in the **sell token's** EIP-712 domain (`salt = chain_uid`); the token verifies
+  it and moves funds only into `dex`, with no allowance. When the sell token is an outside token the same struct is
+  signed in the DEX's domain as a `DexOrder` (`dex` = the DEX, `ESCROW` refused) and pulled under the holder's
+  allowance to the DEX. The venue takes each token's kind from the DEX's own market listing (re-checked every poll,
+  [NODE-DEX-08](#NODE-DEX-08)), never from the order or the client.
+- **No role in the order.** The book keeps price-time priority over orders as they arrive; an incoming order that
+  crosses is the **taker** of the settlement the venue builds, the resting orders it crosses are its **makers**, and an
+  order that rests may later be a maker. One settlement is atomic; one `mtxSettle` call carries one or more
+  settlements, each tried on its own. The venue binds a settlement to its own lane: `relayer` of every leg is 0 or that
+  lane (home-bound markets require the lane, [intake](#intake)).
+- **Effective minimum fill.** In a settlement every order — taker and each maker — fills at least `m = max(minFill,
+  ceil(amount / 2))` of its sold amount and receives at least half of its `receiveAmount` pro rata, unless the fill
+  closes the order's remainder. The matcher therefore adds a maker only with a fill ≥ that maker's `m` (or its whole
+  remainder), and emits a settlement only when the taker's total reaches the taker's `m`; otherwise an IOC taker is
+  cancelled and a GTC taker rests. A resting order fills in at most two settlements. The dust rule
+  ([NODE-DEX-05](#NODE-DEX-05)) still applies to remainders.
+- **IOC, FOK, escrow.** `IOC` (flag 1): the token closes the order at its single pull, so nothing of it rests. FOK:
+  `minFill = amount`. `ESCROW` (flag 2, implies IOC): the whole `amount` is pulled into the DEX and the unmatched part
+  refunded in the same call; the DEX, not the token, enforces price, minimum and fee on it.
+- **Fees.** An order signs one `fee` (ppm, ≤ 1 %): the DEX fee rate it accepts on what it receives, whatever role it
+  plays. The DEX charges `ceil(receiveFill · fee / 10⁶)` once per order per settlement and pays it out in the same call
+  per its admin's split — the relayer share to the lane that submitted, the rest to the treasury
+  ([CTR-DEX-03](../contracts/dex.md#CTR-DEX-03), [CTR-DEX-11](../contracts/dex.md#CTR-DEX-11)). Maker and taker
+  pricing is venue policy: per market `maker_fee_ppm` and `taker_fee_ppm`; an order whose signed `fee` is below the
+  rate of the role it would play is not matched in that role (an incoming order below the taker rate that would cross
+  is refused at intake, `FEE_TOO_LOW`; a resting order below the maker rate is never selected as a maker). There is no
+  separate relayer fee: the lane's income is its share. On managed markets each split recipient must be eligible for
+  the regulated legs ([NODE-DEX-11](#NODE-DEX-11)).
+- **Fill state and cancels.** A `TradeOrder`'s fill state (`pulled[orderHash]`) and its cancels live on the sell
+  token: `mtxCancelOrder` per order, `mtxInvalidateNonces` per order lane (`batch` of the order, which is not the
+  meta-transaction lane of the same name); a `DexOrder`'s on the DEX (`mtxCancelOrders`, `mtxInvalidateNonces`).
+  Cancels never expire. The venue removes a cancelled order from the book at once and submits the on-chain cancel on
+  the right contract ([routes](#routes)); the watcher closes it on the mined event.
+- **Committed balance.** [NODE-DEX-07](#NODE-DEX-07) counts `amount − pulled` of every open order of the same
+  `(from, sell token)` plus unsettled fills; the fee is on the received side, so it adds nothing there.
+- **Simulation and attribution.** Before the job is written the venue simulates the whole `mtxSettle` from its lane;
+  token and DEX errors carry the `orderHash` (`BelowMinFill`, `PriceLimit`, `FeeAboveSigned`, `OrderClosed`,
+  `NonceInvalidated`, `WrongRelayer`, …), so the order at fault is known ([NODE-DEX-02](#NODE-DEX-02)); a failing
+  settlement in a multi-settlement call fails alone.
+
+Why: the token verifies the signer's own limits against the fill figures, so a maker needs no allowance and an EOA
+never grants one ([CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)); orders without roles let the same signed
+order rest and later take. Cost: two transfers per leg (into the DEX, out to the destination), and partial fills
+below half an order are impossible.
+
+Transitional (BUILT): the venue matches DEX-domain orders (`maker`/`taker` fields, `sellAmount`/`buyAmount`,
+`maxFeePpm`, a separate relayer fee in `feeToken`) funded by an allowance to the DEX, and settles them pair by pair
+with `settle(Match[])`; the legacy `MetaTxDex` is not served. Both go when the token-verified DEX is deployed.
+
+<a id="NODE-DEX-16"></a>**NODE-DEX-16** — **The venue serves only DEXes on the chain profile's DEX list.** Status:
+**SPECIFIED**. An order whose `dex` is not on the chain's DEX list ([NET-ALL-24](../networks/README.md#NET-ALL-24)) is
+refused at intake (`422 DEX_NOT_LISTED`), whatever the market; an order for a listed DEX that this venue does not run
+is answered with that DEX's home ([gossip](#gossip)) or refused. The node never builds, simulates or submits
+`mtxSettle` for an unlisted DEX, never relays an `mtxWrap` whose wrapper is not a registered wrapper of that
+underlying, never routes or replicates a gossiped order naming an unlisted `dex` (validation V4, Ignore), and never
+lists one in depth or homes. A cancel (`mtxCancelOrder`, `mtxInvalidateNonces`) is relayed whatever the `dex`, since it
+only protects the signer. Why: the token requires only that `dex` is a contract, so a contract written to look like a
+DEX can report any fill and take the signed `amount`; the owner accepted that residual risk (2026-10-08) and placed
+the defence off chain — clients refuse to sign for an unlisted `dex` ([CLI-SGN-35](../clients/signers-clientkeys.md#CLI-SGN-35))
+and the node never carries such an order. Cost: a new DEX needs a chain-profile entry before the venue serves it.
 
 ## Intake
 
@@ -82,13 +162,19 @@ refused; `checkOrder` must answer `OK`; the committed-balance rule above.
   the user's limit (MEV), and another relayer can settle an IOC remainder or an order cancelled off-chain. The contract
   still allows `relayer = 0` (open relayers); markets that opt in (`unbound = 1`) accept relayer-unbound resting GTC
   orders, whose makers accept that exposure ([gossip](#gossip)).
+- **DEX listing**: `dex` must be on the chain's DEX list and run by this venue for the market
+  ([NODE-DEX-16](#NODE-DEX-16)); a signed `fee` below the venue's rate for the order's role ⇒ `FEE_TOO_LOW`
+  ([NODE-DEX-15](#NODE-DEX-15)).
 - **On-chain cancel** (costs relayer gas): only for orders in the book; batched into **one** `cancel(...)` per poll
-  (≤ 50 orders); at most 20 on-chain cancels per maker per hour — beyond the cap the order is still removed from the
+  (≤ 50 orders; target: one `mtxCancelOrders` call on the DEX, or a job per sell token for `mtxCancelOrder`); at most 20 on-chain cancels per maker per hour — beyond the cap the order is still removed from the
   book at once (this relayer is the only one that can settle it) but no gas is spent. Cancel-all only when the maker
   still has ≥ 1 open order.
 
-<a id="fault-attribution"></a><a id="NODE-DEX-02"></a>**NODE-DEX-02** — **The relayer fee token is limited, and
-failed pairs are attributed by evidence.** Intake requires `feeToken ∈ {0, sellToken, buyToken}` (the two tokens of the
+<a id="fault-attribution"></a><a id="NODE-DEX-02"></a>**NODE-DEX-02** — **Failed matches are attributed by evidence,
+and (as built) the relayer fee token is limited.** Target: an `mtxSettle` that fails in simulation is attributed from
+the `orderHash` in the token's or the DEX's error ([NODE-DEX-15](#NODE-DEX-15)); an outside token's
+`SafeERC20FailedOperation(token)` is attributed to the order that sells that token; the restore and removal rules below
+are unchanged; with no separate relayer fee there is no fee token to limit. Transitional (BUILT): intake requires `feeToken ∈ {0, sellToken, buyToken}` (the two tokens of the
 listed market); otherwise refused at the door (a fake fee token with `balanceOf`/`allowance` = 2^255 whose
 `transferFrom` always reverts would pass `checkOrder` with a huge `feeFundable` and block every taker crossing it). A pair that fails in
 simulation is attributed from the revert reason of `eth_call settleOne(m, relayer)` with `from = DEX`, never guessed: a
@@ -111,9 +197,9 @@ own `Router` merged into the gateway router, so the auth layer wraps it without 
 
 | Route | Does |
 |---|---|
-| `POST /v1/dex/orders` `{chain, order, signature}` | place ⇒ `{hash, status: resting/partial/filled/cancelled, fills[]}` |
-| `POST /v1/dex/cancel` `{chain, orderHash, validUntil, signature}` | `CancelOrder` signature ⇒ removed from the book **at once** + on-chain `cancel` job |
-| `POST /v1/dex/cancel-all` `{chain, maker, minNonce, validUntil, signature}` | `InvalidateNonces` ⇒ every order with `nonce < minNonce` removed + on-chain job |
+| `POST /v1/dex/orders` `{chain, order, signature}` | place ⇒ `{hash, status: resting/partial/filled/cancelled, fills[]}`; target: `order` is a `TradeOrder` (SCaaS sell token) or a `DexOrder` `{sellToken, order}` (outside sell token), per the DEX's listing |
+| `POST /v1/dex/cancel` `{chain, orderHash, validUntil, signature}` | `CancelOrder` signature ⇒ removed from the book **at once** + on-chain `cancel` job (target: `CancelOrder` in the sell token's domain ⇒ `mtxCancelOrder` job on that token; a `DexOrder` ⇒ DEX `mtxCancelOrders`) |
+| `POST /v1/dex/cancel-all` `{chain, maker, minNonce, validUntil, signature}` | `InvalidateNonces` ⇒ every order with `nonce < minNonce` removed + on-chain job (target: `{chain, token, from, batch, minNonce, signature}`, per sell token and order lane ⇒ `mtxInvalidateNonces`) |
 | `GET /v1/dex/markets?chain` | markets + fees |
 | `GET /v1/dex/depth?chain&market&levels` | aggregated price levels of both sides (levels ≤ 200); prices are decimal strings scaled by both tokens' `decimals`, never a raw integer division |
 | `GET /v1/dex/trades?chain&market` | recent fills (ring of 200 in memory; history from the feed) |
@@ -129,7 +215,8 @@ a dependency for no need at the volumes served.
 <a id="watcher"></a><a id="NODE-DEX-04"></a>**NODE-DEX-04** — **The DEX watcher has its own cursor.** One task per
 chain with the same finality helpers as the indexer (`finality::{safe_head, next_range, quorum_ok}`) and a **separate
 cursor** (`dex_cursor`) reads the DEX contract's logs (`OrderFilled`, `Matched`, `MatchFailed`, `OrderCancelled`,
-`NoncesInvalidated`), writes `dex_range` feed items and advances `dex_cursor`, then removes from the book every order
+`NoncesInvalidated`; target: the DEX's `LegSettled` and the listed tokens' `TradeFilled`, `OrderCancelled`,
+`NoncesInvalidated`, [indexer-feeds.md#event-normalization](indexer-feeds.md#event-normalization)), writes `dex_range` feed items and advances `dex_cursor`, then removes from the book every order
 closed on chain (cancelled through any relayer, too). `settled` is final: a later `MatchFailed` does not flip it. A
 separate cursor means a DEX ingest fault never blocks payment booking and vice versa.
 
@@ -269,7 +356,9 @@ Validation (dex topic):
   signature over `dexbook_msg`/`dexhead_msg`; `claim_until ≠ 0` on a bound order or `= 0` on an unbound one.
 - V4 state-dependent ⇒ Ignore: `home` is not the sole prover of `order.relayer` (`NOT_HOME`); home not DEX-trusted
   (`UNTRUSTED_HOME`, forwarded, not stored); unbound order in a market that is not `unbound` for us; unbound claimant
-  that loses the claim (`NOT_CLAIMANT`, forwarded, not stored); `erc1271` order outside a home/claimant `book`.
+  that loses the claim (`NOT_CLAIMANT`, forwarded, not stored); `erc1271` order outside a home/claimant `book`; an
+  order whose `dex` is not on our chain profile's DEX list (`DEX_NOT_LISTED`, neither stored nor forwarded,
+  [NODE-DEX-16](#NODE-DEX-16)).
 - V6: per-maker 5/s; per home ≤ 10 000 replica orders, ≤ 50 open per (home, maker) (`MAX_OPEN_PER_MAKER`); per
   claimant ≤ 1 000 unbound orders.
 - V7: market unknown to us ⇒ forward, do not store.
@@ -313,8 +402,9 @@ Relayer-unbound orders (market option `unbound = 1`; requires `gossip = 1` and a
    `MAX_OPEN_PER_MAKER`). The API and wallet say "cancel final when mined".
 6. **What makers accept** (stated in the wallet before signing `relayer = 0`): `settle` is permissionless, so
    **anyone** — not only nodes — may settle the order at any price within its limit until it is cancelled on chain or
-   expires; with `feeRecipient = 0` the relayer fee goes to whoever settles. The claim window binds only honest nodes.
-7. Fees, `maxFeePpm`, partial fills and price checks are the contract's, unchanged.
+   expires; with `feeRecipient = 0` the relayer fee goes to whoever settles (target: whoever submits `mtxSettle` earns
+   the relayer share of every fee in that settlement). The claim window binds only honest nodes.
+7. Fees, `maxFeePpm` (target: the signed `fee`), partial fills and price checks are the contract's, unchanged.
 
 <a id="home-trust"></a><a id="NODE-DEX-13"></a>**NODE-DEX-13** — **DEX homes become trusted automatically** after
 `dex_trust_min_settles = 20` **credited settles** in a `dex_trust_window = 14 d` involving ≥
@@ -386,7 +476,12 @@ deeper maker; a poisoned-`feeToken` maker with "healthy maker, failed pair" bloc
 an OOG pair is not restored; `min_nonce < 2^(w−1)` per network (Sui/Aptos `w = 128`, Solana `w = 64`); over-commitment while a trade is pending; an on-chain market fee raise ⇒ the market stops
 being served within one poll; IOC single maker on the Move/Solana families; a late `Matched` after recovery debits the
 book. e2e (anvil ports 31950–31959, gateway 18650–18659): approve meta-tx → two orders through the gateway → partial
-match → settle job → balances; cancel ⇒ settle never runs; venue restart ⇒ book intact. Managed markets: intake refusals
+match → settle job → balances; cancel ⇒ settle never runs; venue restart ⇒ book intact. Token-verified orders
+(SPECIFIED): one taker against three makers in one atomic settlement; a maker offered less than half its order is
+skipped; FOK filled across two makers; an IOC remainder never rests; an `ESCROW` taker refunded in the same call;
+signed `fee` below the taker rate ⇒ `FEE_TOO_LOW`; `dex` off the chain's list ⇒ `DEX_NOT_LISTED` at intake and never
+replicated; cancel on the sell token closes the order on the mined `OrderCancelled`; the DEX's balances unchanged after
+every settlement. Managed markets: intake refusals
 per reason; drop on `AccountFrozen`/`Paused`/revocation/attester disable; pre-settle re-check; unbound and fee refusals;
 gossip refusal and admin-trust-only listing. Book gossip: merge commutativity/idempotence (proptest over update orders ⇒
 equal replicas and equal `head` digest); restore at higher `home_seq`; `home_seq` after store restore > before; spoofed

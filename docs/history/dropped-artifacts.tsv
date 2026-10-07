@@ -469,3 +469,11 @@ BasicAllowance	obsolete	Cosmos feegrant/authz path rejected; contract-level Rela
 PeriodicAllowance	obsolete	Cosmos feegrant/authz path rejected; contract-level Relay{payload, auth}, instantiated without admin: networks/cosmos.md, NET-COS-02
 AllowedMsgAllowance	obsolete	Cosmos feegrant/authz path rejected; contract-level Relay{payload, auth}, instantiated without admin: networks/cosmos.md, NET-COS-02
 fee.granter	obsolete	Cosmos feegrant/authz path rejected; contract-level Relay{payload, auth}, instantiated without admin: networks/cosmos.md, NET-COS-02
+, fee fields from parameters | fee 	extraction-artifact	text between two code spans; the named-function fee rules are contracts/metatx.md (mtx entry points, fee classes)
+, spender a contract) — used by 	extraction-artifact	text between two code spans; the approve rule is contracts/token-wrappers.md#CTR-TOK-01 (only a contract may call approve)
+ contract branch = assembly 	extraction-artifact	text between two code spans; ERC-1271 verification is contracts/metatx.md
+ capped at 400 k for 	extraction-artifact	text between two code spans; the ERC-1271 gas caps are contracts/accounts.md#CTR-ACC-05
+ clones by codehash, else 50 k, ≤ 32 B returndata, and 	extraction-artifact	text between two code spans; the ERC-1271 gas caps are contracts/accounts.md#CTR-ACC-05
+executeAsOwnerRaw	obsolete	renamed mtxExecuteAsOwnerRaw (every signed entry point starts with mtx): networks/hedera.md#NET-HED-03
+HederaMandateWallet.executeAsOwnerRaw	obsolete	renamed HederaMandateWallet.mtxExecuteAsOwnerRaw: networks/hedera.md#NET-HED-03
+executeAsOwnerRaw(execute(token, payWithFee…))	obsolete	renamed mtxExecuteAsOwnerRaw(execute(token, payWithFee…)): networks/hedera.md

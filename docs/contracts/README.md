@@ -9,9 +9,9 @@ the rules every one of them shares. Status tags (**BUILT**, **SPECIFIED**, **PLA
 | File | Covers | Status |
 |---|---|---|
 | [accounts.md](accounts.md) | the three account forms; Universal Account (ids, kinds, registry, verifiers, credentials, migration); passkeys on chain; the optional `SubjectAccount` smart account and its factory, guardians | UA **SPECIFIED**; `SubjectAccount` **BUILT** |
-| [metatx.md](metatx.md) | `MetaTransaction` struct, typehash, `mode`, 2D nonces, the nine-step pipeline, `FeePolicy`, named functions, pay references and the pay-once horizon, receiver-pays | v1/v2 **BUILT**; receiver-pays **SPECIFIED** |
-| [token-wrappers.md](token-wrappers.md) | three token tiers, conversion rates, multi-underlying wrappers, factory v1/v2, allowance lockdown | **BUILT** (EVM, Hedera) |
-| [dex.md](dex.md) | `OrderBookDex`, legacy `MetaTxDex`, managed-market venue contract | **BUILT**; fixes **SPECIFIED** |
+| [metatx.md](metatx.md) | the one base `ERC20MetaTx`: `MetaTransaction` struct, typehash, `mode`, 2D nonces, `mtxExecute` (generic self-call, ticket, selector allowlist, fee classes), `mtx` names, pay references and the pay-once horizon, receiver-pays | **SPECIFIED** (built as the v1/v2 lines) |
+| [token-wrappers.md](token-wrappers.md) | three token tiers, conversion rates, multi-underlying wrappers, signature wrap, the one `OpenFactory`, allowance rule | tiers **BUILT** (EVM, Hedera); one base and factory **SPECIFIED** |
+| [dex.md](dex.md) | `OrderBookDex` with token-verified `TradeOrder`s, outside-token legs, managed-market venue contract | **SPECIFIED** (built with DEX-signed orders over allowances) |
 | [tender.md](tender.md) | `SealedBidTender` | **SPECIFIED** |
 | [asset-suite.md](asset-suite.md) | regulated module, vesting, distributions, corporate actions, templates | **SPECIFIED** |
 | [zether.md](zether.md) | classical Zether, byte-exact; limits; decryption bound | **BUILT, UNAUDITED** (dev chains) |
@@ -28,10 +28,47 @@ are normative targets for future versions and keep the built conventions: custom
 contract itself, lane nonces, contract-only allowances, no proxy upgrades.
 
 EIP-712 domains: name per implementation (`"SCaaS MetaToken"`, `"SCaaS ZetherToken"`, `"SCaaS MandateWallet"`,
-`"SCaaS SubjectAccount"`, `"SCaaS OrderBookDex"`, `"SCaaS PqzToken"`), version `"1"` (`"2"` for the v2 token tiers,
-`"3"` for the UA ledger path), `chainId`, `verifyingContract` = the clone or contract itself. All clones of one
-implementation share the name; replay safety comes from `verifyingContract` ([CTR-MTX-02](metatx.md#CTR-MTX-02)).
-Clients read `eip712Domain()` (ERC-5267), never a constant.
+`"SCaaS SubjectAccount"`, `"SCaaS OrderBookDex"`, `"SCaaS PqzToken"`, `"SCaaS UARegistry"`), version `"1"` (the UA
+registry: its generation), `chainId`,
+`verifyingContract` = the clone or contract itself, `salt` = the chain's `chain_uid` ([CTR-GEN-05](#CTR-GEN-05)). All
+clones of one implementation share the name; replay safety comes from `verifyingContract` and the salt
+([CTR-MTX-02](metatx.md#CTR-MTX-02)). Clients read `eip712Domain()` (ERC-5267), never a constant.
+
+<a id="CTR-GEN-05"></a>**CTR-GEN-05** — **`salt = chain_uid` in every EIP-712 domain of a SCaaS contract and in every
+chain-bound non-EIP-712 digest** (owner). Every domain is `(name, version, chainId, verifyingContract, salt =
+chain_uid)` and `eip712Domain()` returns fields `0x1f`; one helper, `SaltedEIP712` (OpenZeppelin `EIP712` has no salt),
+serves every contract and rebuilds the separator whenever `address(this)` differs from the cached one (clones share
+the implementation's immutables). `chain_uid` is the chain's genesis block hash as its RPC reports it
+([NET-ALL-22](../networks/README.md#NET-ALL-22)). Where it comes from:
+
+| Contract | Source of `chain_uid` |
+|---|---|
+| token implementations (the tiers, their Hedera children, `ZetherToken`) | constructor immutable of the **implementation**; a clone runs its code by `DELEGATECALL`, so it uses the value with no storage and no `initialize` argument and cannot declare another one |
+| `OpenFactory` | constructor immutable; `registerImplementation` refuses an implementation whose `chainUid()` differs ([CTR-TOK-03](token-wrappers.md#CTR-TOK-03)) |
+| `SubjectAccount` | the factory's constructor argument, passed to `new SubjectAccount(chainUid)` |
+| `MandateWallet`, `HederaMandateWallet` | constructor argument from the chain profile; the node checks it before relaying for that wallet |
+| `OrderBookDex` | constructor argument |
+| built `UniversalAccountRegistry` | constructor immutable, in its PoP challenge; it checks raw digests, so every caller's digest carries `chainUid` ([CTR-ZTH-36](zether.md#CTR-ZTH-36)) |
+| `UARegistry` | constructor immutable ([CTR-UA-07](accounts.md#CTR-UA-07)) |
+| any later contract with a signature (tender, asset suite) | the same helper, constructor argument |
+
+The deploy script reads the genesis hash from the RPC; the deploy gate and the node, at chain activation and every
+start, require each contract's `chainUid()` = the RPC's genesis hash = the chain profile, and refuse a mismatch (the node
+also refuses to relay for a wallet or account whose `chainUid()` differs). A contract cannot read its own genesis hash
+after block 256, so this is checked off chain. A wrong value makes correct signatures fail; it is unsafe only if it
+equals **another** chain's `chain_uid`, which the per-contract check against the RPC excludes. Signing clients fill
+`domain.salt` from the chain profile (works offline) or from `eip712Domain()` (read once, cached); wallets such as
+MetaMask sign the domain they are given and check only `chainId`, and clientkeys refuses a `salt` that differs from the
+profile. What protects is the contract: on chain B the digest uses B's `chain_uid`, so a signature for chain A reverts
+there, whichever wallet produced it. **Limit:** a genesis hash separates chains with different genesis blocks that
+share a chain id (another network on 7622, a private chain re-created with a new genesis). It does not separate two
+branches of a fork (they share genesis) nor a PoA chain re-created from the **same** genesis file. The second is closed
+by the deploy gate: every private chain's genesis carries a unique `extraData` nonce, and a genesis hash already
+present in any chain profile is refused. The first is ruled by the owner: a fork of a chain we run is a **new chain** —
+new chain id and `chain_key` — enforced by the deploy gate; on public chains, where a fork without a chain-id change
+replays on both branches, it is a documented residual. On Hedera `chain_uid` is the relay's block-0 hash, fixed only
+after the Hedera profile confirms it is stable across mirror-node and relay restarts. **Transitional (BUILT):** only
+the UA registry design carries the salt; built token, wallet, account and DEX domains have none.
 
 ## Immutable at deploy
 
@@ -90,14 +127,14 @@ exit or upgrade code.
 
 | Contract | Holder | Powers | Rule |
 |---|---|---|---|
-| `OpenFactory` v1/v2 | `registrar` (immutable; an EOA by default — the deployer — and a multisig before mainnet) | `registerImplementation`, `deprecate`, `setZetherEnabled` (dev chains only); none over any token | [token-wrappers](token-wrappers.md#factory) |
+| `OpenFactory` | `registrar` (immutable; an EOA by default — the deployer — and a multisig before mainnet) | `registerImplementation`, `deprecate`, `setZetherEnabled` (dev chains only); none over any token | [token-wrappers](token-wrappers.md#factory) |
 | `SingleUnderlyingToken` / `MultiUnderlyingToken` with an adjustable rate | `rateAdmin` (has code; chosen at creation) | propose / cancel / execute a bounded, timelocked rate change; renounce | [CTR-TOK-06](token-wrappers.md#CTR-TOK-06) |
 | `MultiUnderlyingToken` | `guardian` (optional, chosen at creation) | `disableWrap(underlying)`, one-way; renounce | [CTR-TOK-07](token-wrappers.md#CTR-TOK-07) |
-| `NoUnderlyingToken`, v1 tier-1 `MetaToken` | `minter` (optional; `0` = fixed supply) | `mint`; v2 also `renounceMinter` | [CTR-TOK-09](token-wrappers.md#CTR-TOK-09) |
-| `OrderBookDex` | immutable `admin` (a multisig in production; the venue operator's multisig for a managed market) | `setMarket` (pairs, fee switch, maker/taker fee ≤ 1 %) | [CTR-DEX-03](dex.md#CTR-DEX-03) |
+| `NoUnderlyingToken` | `minter` (optional; `0` = fixed supply) | `mint`, `renounceMinter` | [CTR-TOK-09](token-wrappers.md#CTR-TOK-09) |
+| `OrderBookDex` | immutable `admin` (a multisig in production; the venue operator's multisig for a managed market) | `setMarket` (list or delist a pair), `setFeeSplit` (relayer share and treasury of the signed fee; never the amount) | [CTR-DEX-03](dex.md#CTR-DEX-03) |
 | Regulated tokens (kinds 5–7) | `issuer`, `compliance` (contracts, fixed at creation) | the `controls()` bits set at creation: freeze, forced transfer against a recorded order, bounded pause, allowlist; bits can only be cleared | [CTR-AS-03](asset-suite.md#CTR-AS-03) |
 | `ZetherToken` | none after `initialize` (the auditor key is immutable) | — | [CTR-ZTH-09](zether.md#CTR-ZTH-09) |
-| `SealedBidTender`, `VestingGrant`, `Distribution`, `ExchangeOffer`, `MetaTxDex`, `UARegistry` | none | — | per file |
+| `SealedBidTender`, `VestingGrant`, `Distribution`, `ExchangeOffer`, `UARegistry` | none | — | per file |
 | Non-EVM DEX programs | market admin | set markets only; no sweep of user funds, no admin refund of bounced payouts ([NET-TON-03](../networks/ton.md#NET-TON-03)) | [networks/](../networks/README.md) |
 
 ## Production gates (UNAUDITED)
@@ -140,13 +177,24 @@ own job (Move test, Soroban, CosmWasm, Tact, Solana) as the family is added.
 | Size | CI fails if any implementation exceeds 24 576 bytes (`forge build --sizes`, EIP-170) |
 | EIP-1153 | `TLOAD`/`TSTORE` is a prerequisite of every token (transient reentrancy guard); a chain without it cannot hold an eligible token |
 
-<a id="deploy"></a>Deploy (EVM, **BUILT**): `script/Deploy.s.sol` (forge script; env `PRIVATE_KEY` = deployer and default registrar,
-`REGISTRAR` optional, `DEMO_SUPPLY`/`DEMO_HOLDER` optional) deploys `OpenFactory`, `SubjectAccountFactory`, the
-`MetaToken` implementation (its constructor takes the factory address), `registerImplementation(META, 1)` when the
-registrar is the deployer, factory v2 with the three tier implementations as version 1 of their kinds, the legacy
-`MetaTxDex` and `OrderBookDex(registrar)`; optionally a tier-1 demo token. It writes `deployments/<chainid>.json`
-to seed the node's chain configuration and client chain data. Production: every contract owner/admin is a Safe from
-the first block, and deployer keys come from a hardware wallet or KMS.
+<a id="deploy"></a>Deploy (EVM): `script/Deploy.s.sol` (forge script; env `PRIVATE_KEY` = deployer and default registrar,
+`REGISTRAR` optional, `DEMO_SUPPLY`/`DEMO_HOLDER` optional) reads the genesis hash from the RPC and deploys, through
+the CREATE2 deployer ([CTR-GEN-06](#CTR-GEN-06)), `SubjectAccountFactory`, `OpenFactory` with the three tier
+implementations (each taking the factory address and `chain_uid`) registered as version 1 of their kinds, and
+`OrderBookDex(registrar, chainUid)`; optionally a tier-1 demo token (**SPECIFIED**). It writes
+`deployments/<chainid>.json` to seed the node's chain configuration and client chain data. Production: every contract
+owner/admin is a Safe from the first block, and deployer keys come from a hardware wallet or KMS. **Transitional
+(BUILT):** the script deploys with `new` and also deploys factory v1 with the `MetaToken` implementation
+(`registerImplementation(META, 1)` when the registrar is the deployer) and the legacy `MetaTxDex`.
+
+<a id="CTR-GEN-06"></a>**CTR-GEN-06** — **Every SCaaS EVM contract is deployed through a deterministic CREATE2
+deployer with a fixed salt** (owner): implementations, factories, registries and the DEX, instead of `new` (CREATE,
+address = f(deployer, nonce)). A contract whose constructor takes `chain_uid` (implementations, factories,
+`SubjectAccountFactory`, `OrderBookDex`, the registries) gets a **different address on each chain**, because its init
+code differs; so does every clone, whose CREATE2 address depends on the implementation and the factory, and so does a
+user's `SubjectAccount` (the node and app predict it per chain). A contract with no chain-specific constructor
+argument gets the **same address on every chain**. Safety never rests on the address: the salt is in every digest
+([CTR-GEN-05](#CTR-GEN-05)).
 
 <a id="CTR-GEN-03"></a>**CTR-GEN-03** — On-chain code lives in its own tree at the repository root, one directory
 per network family, each with its native layout and tool; `smartcontracts/scripts/` is the one place to build,

@@ -76,7 +76,7 @@ Non-goals:
 | **job API** | External server-side clients push jobs, cancel, read feeds, push watch lists and token subsets | `[api] bind` (default `127.0.0.1:8548`), HMAC per API key | **SPECIFIED** ([job-api.md](job-api.md)) |
 | **submit** | Per-chain lanes: lease → simulate → journal → sign → broadcast → follow → replace/gap-fill; consumption checks | — | **BUILT** ([submit-lanes.md](submit-lanes.md)) |
 | **indexer** | Finality gate + RPC quorum → normalized events → `feed_item(range)`; drift A/C | — | **BUILT** (writes to the legacy client sink); feed **SPECIFIED** ([indexer-feeds.md](indexer-feeds.md)) |
-| **dex venue** | Price-time order book per market (limit, IOC, FOK, partial fills), settle jobs, final-event watcher | gateway `/v1/dex/*` | **BUILT** (book persisted in the legacy client); store-backed **SPECIFIED** ([dex-venue.md](dex-venue.md)) |
+| **dex venue** | Price-time order book per market (limit, IOC, FOK, partial fills), settle jobs (target: `mtxSettle`, one taker against several makers), final-event watcher | gateway `/v1/dex/*` | **BUILT** (book persisted in the legacy client); store-backed **SPECIFIED** ([dex-venue.md](dex-venue.md)) |
 | **mesh** | Envelope `scaas-intent/1.2`, acceptance policy, store, exclusivity, pull bus, gossip, hints, announces, DEX book replication | `[mesh] bind` (HTTPS mTLS), `[gossip] listen` (QUIC/TCP) | Envelope/digest/accept/hubsig/export library **BUILT** (43 conformance cases); transports and pipeline **SPECIFIED** ([mesh.md](mesh.md), [gossip.md](gossip.md)) |
 | **admin** | `/healthz`, `/readyz`, `/metrics` (open); `/v1/admin/*` (roles) | `[modules] admin_bind` (default `127.0.0.1:9108`) | health/metrics **BUILT**; admin API **SPECIFIED** ([admin-auth.md](admin-auth.md)) |
 
