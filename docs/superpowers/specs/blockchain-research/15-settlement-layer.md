@@ -1414,7 +1414,7 @@ Bốn kết luận đọc được từ bảng trên, và ba trong số đó ng�
    EIP-1559 **đã bật**, nhưng `baseFeePerGas` đặt 0 ngay ở genesis và công thức 1559 giữ nó dính vĩnh viễn
    ở 0 (`next = base + base·delta/target/denom`, base = 0 ⇒ mọi số hạng bằng 0) — **gas vẫn miễn phí**.
    EIP-7623 **đã bật**, nên sàn calldata nay **có** áp: phải tính lại cho chunk lớn. PUSH0/TSTORE/MCOPY
-   dùng được; `foundry.toml` profile `private9000` đổi sang `evm_version = "prague"`.
+   dùng được; `foundry.toml` profile `private7622` đổi sang `evm_version = "prague"`.
 
 3. **Zether không batch được, và khoảng cách lớn hơn bản nháp nghĩ.** 564M gas là **33 block Gnosis liên tiếp**
    (17M/block), tức ~2.8 phút chiếm **toàn bộ** không gian block của cả mạng lưới. Không thể. Mỗi

@@ -21,7 +21,7 @@ contract BaseKatTest is V2Fixture {
     function _domainSep(address vc) internal pure returns (bytes32) {
         return keccak256(abi.encode(
             keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-            keccak256("SCaaS MetaToken"), keccak256("2"), uint256(9000), vc));
+            keccak256("SCaaS MetaToken"), keccak256("2"), uint256(7622), vc));
     }
 
     function _vector(string memory k, address vc, MetaTxLib.MetaTransaction memory m)
@@ -33,7 +33,7 @@ contract BaseKatTest is V2Fixture {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(PK, digest);
         vm.serializeString(k, "domain_name", "SCaaS MetaToken");
         vm.serializeString(k, "domain_version", "2");
-        vm.serializeString(k, "chain_id", "9000");
+        vm.serializeString(k, "chain_id", "7622");
         vm.serializeString(k, "verifying_contract", vm.toString(vc));
         vm.serializeString(k, "from", vm.toString(m.from));
         vm.serializeString(k, "to", vm.toString(m.to));
@@ -53,7 +53,7 @@ contract BaseKatTest is V2Fixture {
     }
 
     function test_writeV2Kat() public {
-        vm.chainId(9000);
+        vm.chainId(7622);
         vm.warp(1_800_000_000);
         BaseHarness tok = _harness(address(this), 0);
         address from = vm.addr(PK);

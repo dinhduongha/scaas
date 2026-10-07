@@ -70,7 +70,7 @@ Ba ranh giới, và mỗi cái có đúng một đường đi qua:
 ## 2. Smart contracts
 
 Cây `smartcontracts/` giữ nguyên bố cục đã chốt (`common/`, `metatx/`, `zether/`, `chains/`), thêm
-`factory/` và `dex/`. Solidity 0.8.28, OpenZeppelin 5.2, profile `private9000` = `prague`.
+`factory/` và `dex/`. Solidity 0.8.28, OpenZeppelin 5.2, profile `private7622` = `prague`.
 
 ### 2.1 `MetaToken` — implementation v1 của kind `META`
 
@@ -168,8 +168,8 @@ SRS §3.3 mô tả `settleTrade(makerTx, takerTx, makerSig, takerSig)` với rel
 `script/Deploy.s.sol` (forge script, đọc `PRIVATE_KEY`, `REGISTRAR`): deploy `OpenFactory`,
 `MetaToken` implementation (constructor nhận địa chỉ factory), `registerImplementation(META, 1)`,
 `MetaTxDex`; tuỳ chọn tạo một token demo tầng 1. In địa chỉ ra JSON để seed Odoo và config node.
-Chain 7622 (formerly 9000) dùng profile `private9000` (tên profile và `--chain-id` của test đổi cùng stream
-migration của owner); test tích hợp dùng `anvil --chain-id 9000 --hardfork prague`.
+Chain 7622 (formerly 9000) dùng profile `private7622` (đổi tên trong stream
+CHAINID); test tích hợp dùng `anvil --chain-id 9000 --hardfork prague`.
 
 ---
 
@@ -606,7 +606,7 @@ Rust đọc cùng file; đổi typehash là ba test đỏ.
 
 ## 10. Chiến lược kiểm thử
 
-**Foundry** (`forge test`, profile default + `private9000`):
+**Foundry** (`forge test`, profile default + `private7622`):
 - `MetaToken.t.sol`: init một lần, chỉ factory, implementation bị khoá; tầng 1 mint/minter; tầng 2
   wrap/unwrap với token phí-chuyển; op `pay` phát `PaymentSettled` với phí thật; op lạ revert; op
   `trade` không restrict ⇒ revert; nonce/expiry/replay/cancel; ERC-1271.
@@ -917,7 +917,7 @@ Rejected: none. Counts: 2 high, 3 medium, 6 low, 1 table — 12 accepted, 0 reje
 
 - **CR-PD-6** **The private reference chain is 7622 (formerly 9000)** (L6; owner 2026-10-07 — 9000 is also Evmos
   Testnet). Replay protection is only as good as the chain id; UA R330 adds `chain_uid`. Doc only; the migration
-  (profile `private9000`, seeds, env var names, KAT) is the owner's pending stream.
+  (profile `private7622`, seeds, env var names, KAT) landed in stream CHAINID.
 
 ### 15.3 Superseded rulings and statements
 

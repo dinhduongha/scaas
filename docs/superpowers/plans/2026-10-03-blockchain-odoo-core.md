@@ -172,7 +172,7 @@ class TestEip712(BaseCase):
         td = eip712.typed_data(domain, m)
         self.assertEqual(td['primaryType'], 'MetaTransaction')
         self.assertEqual(td['message']['feeRecipient'], '0x' + '00' * 20)
-        self.assertEqual(td['domain']['chainId'], 9000)
+        self.assertEqual(td['domain']['chainId'], 7622)
 
     def test_pay_data_and_lane(self):
         ref = b'\x42' * 32
@@ -640,9 +640,9 @@ class TestModels(ChainCase):
             self.env['blockchain.chain'].with_user(self.relay_user).node_config(9001)
 
     def test_seed_chains_are_draft(self):
-        c9000 = self.env.ref('dms_blockchain.data_chain_private9000')
-        self.assertEqual(c9000.evm_chain_number, 9000)
-        self.assertEqual(c9000.state, 'draft')
+        c7622 = self.env.ref('dms_blockchain.data_chain_private9000')
+        self.assertEqual(c7622.evm_chain_number, 7622)
+        self.assertEqual(c7622.state, 'draft')
         self.assertEqual(self.env.ref('dms_blockchain.data_chain_gnosis').finality_quorum, 2)
 ```
 
@@ -994,9 +994,9 @@ Service users get **no** ACL rows: their methods `check_service` then `sudo()`.
 <?xml version="1.0" encoding="utf-8"?>
 <odoo noupdate="1">
     <record id="data_chain_private9000" model="blockchain.chain">
-        <field name="name">Private EVM 9000</field>
-        <field name="evm_chain_number">9000</field>
-        <field name="native_currency">TOKEN9000</field>
+        <field name="name">Private EVM 7622</field>
+        <field name="evm_chain_number">7622</field>
+        <field name="native_currency">TOKEN7622</field>
         <field name="finality_mode">depth</field>
         <field name="finality_depth">1</field>
         <field name="finality_quorum">1</field>

@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 /// @title Sơ đồ uỷ quyền cho một tài khoản Zether.
 /// @notice Giá trị 0–4 giữ nguyên số của `02-account-registry.md` §2.4.1 — chúng nằm
 ///         trong storage đã ghi và trong digest đã ký, **không đổi số được**. `BLS12381`
-///         là giá trị mới: chain 9000 đã bật EIP-2537 (2026-08-31) nên biến thể này
+///         là giá trị mới: chain 7622 (formerly 9000) đã bật EIP-2537 (2026-08-31) nên biến thể này
 ///         chạy được, và nó là đường cong mạnh hơn hẳn `BLS_BN254`.
 ///
 /// **Bất biến an ninh #1 (§02.4.2):** `transferConfidential` và `withdraw` phải xác thực

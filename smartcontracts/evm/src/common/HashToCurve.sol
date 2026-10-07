@@ -23,7 +23,7 @@ import {Bls12381} from "./Bls12381.sol";
 /// này dùng lại ở ngữ cảnh kia.
 library HashToCurve {
     /// @dev Modulus của trường cơ sở BLS12-381, 48 byte.
-    ///      **Đã kiểm trên chain 9000**: `MAP_FP_TO_G1(p-1)` thành công, `MAP_FP_TO_G1(p)`
+    ///      **Đã kiểm trên chain 7622 (formerly 9000)**: `MAP_FP_TO_G1(p-1)` thành công, `MAP_FP_TO_G1(p)`
     ///      revert — đúng hành vi EIP-2537 quy định (input phải < p). Xem
     ///      `test_fieldModulusIsPinnedByThePrecompile` và README-chainspec.md.
     bytes internal constant P =

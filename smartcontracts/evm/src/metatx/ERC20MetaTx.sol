@@ -26,7 +26,7 @@ abstract contract ERC20MetaTx is ERC20, EIP712, IERC20MetaTx {
     mapping(address => mapping(uint256 => uint256)) private _metaNonce;
 
     /// @dev Guard theo CONTRACT, không theo hàm (§04.6.3). Transient storage: chain
-    ///      9000 đã có Cancun/Prague sau khi sửa chainspec, Gnosis và Celo cũng vậy.
+    ///      7622 (formerly 9000) đã có Cancun/Prague sau khi sửa chainspec, Gnosis và Celo cũng vậy.
     /// keccak256("scaas.metatx.reentrancy.v1") — hằng số phải viết thẳng số:
     /// inline assembly của solc 0.8 không nhận một constant tính bằng keccak256().
     bytes32 private constant _REENTRANCY_SLOT =

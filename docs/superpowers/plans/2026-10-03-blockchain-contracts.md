@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Solidity `^0.8.20`, compiler pinned `0.8.28` by `foundry.toml`; default profile EVM = cancun (TSTORE used); `private9000` = prague.
+- Solidity `^0.8.20`, compiler pinned `0.8.28` by `foundry.toml`; default profile EVM = cancun (TSTORE used); `private7622` = prague.
 - `MetaTxLib.METATX_TYPEHASH` and the struct MUST NOT change (`test_metaTxTypehashIsPinned` stays green, untouched).
 - No upgrade path anywhere: no proxy other than EIP-1167 clones, no owner, no pause, no sweep.
 - No `CALL` to a foreign contract inside a token's meta-tx path (canon §C8.5).
@@ -1607,7 +1607,7 @@ contract MetaTxKatTest is Fixtures {
     using MetaTxLib for MetaTxLib.MetaTransaction;
 
     function test_writeKat() public {
-        vm.chainId(9000);
+        vm.chainId(7622);
         vm.warp(1_800_000_000);
         _deployFactory();
         MetaToken tok = _standalone(address(this), "BUSD", 6, 0, address(0));
@@ -1622,7 +1622,7 @@ contract MetaTxKatTest is Fixtures {
         bytes32 structHash = m.hashStruct();
         bytes32 domainSep = keccak256(abi.encode(
             keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-            keccak256("SCaaS MetaToken"), keccak256("1"), uint256(9000), address(tok)));
+            keccak256("SCaaS MetaToken"), keccak256("1"), uint256(7622), address(tok)));
         bytes32 digest = keccak256(abi.encodePacked(hex"1901", domainSep, structHash));
         assertEq(digest, tok.metaTxDigest(m));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, digest);
@@ -1630,7 +1630,7 @@ contract MetaTxKatTest is Fixtures {
         string memory k = "kat";
         vm.serializeString(k, "domain_name", "SCaaS MetaToken");
         vm.serializeString(k, "domain_version", "1");
-        vm.serializeString(k, "chain_id", "9000");
+        vm.serializeString(k, "chain_id", "7622");
         vm.serializeString(k, "verifying_contract", vm.toString(address(tok)));
         vm.serializeString(k, "from", vm.toString(m.from));
         vm.serializeString(k, "to", vm.toString(m.to));
@@ -1724,16 +1724,16 @@ contract Deploy is Script {
 
 Run:
 ```bash
-anvil --chain-id 9000 --hardfork prague --port 18545 > /tmp/anvil.log 2>&1 &
+anvil --chain-id 7622 --hardfork prague --port 18545 > /tmp/anvil.log 2>&1 &
 cd smartcontracts && PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 DEMO_SUPPLY=1000000000000 \
-  FOUNDRY_PROFILE=private9000 forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:18545 --broadcast
-cat deployments/9000.json; kill %1
+  FOUNDRY_PROFILE=private7622 forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:18545 --broadcast
+cat deployments/7622.json; kill %1
 ```
 Expected: JSON with four non-zero addresses.
 
 - [ ] **Step 5: Full suite, both profiles**
 
-Run: `cd smartcontracts && forge test && FOUNDRY_PROFILE=private9000 forge test`
+Run: `cd smartcontracts && forge test && FOUNDRY_PROFILE=private7622 forge test`
 Expected: all PASS, including the pre-existing 39.
 
 - [ ] **Step 6: Commit**

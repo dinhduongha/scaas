@@ -664,7 +664,7 @@ contract OrderBookDexTest is Fixtures {
     // ------------------------------------------------------------------ KAT for Rust/clients
 
     function test_writeDexKat() public {
-        vm.chainId(9000);
+        vm.chainId(7622);
         OrderBookDex d = new OrderBookDex(admin);
         OrderBookDex.Order memory o = OrderBookDex.Order({
             maker: alice, taker: address(0), sellToken: address(0xA0), buyToken: address(0xB0),
@@ -674,11 +674,11 @@ contract OrderBookDexTest is Fixtures {
         });
         bytes32 domainSep = keccak256(abi.encode(
             keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-            keccak256("SCaaS OrderBookDex"), keccak256("1"), uint256(9000), address(d)));
+            keccak256("SCaaS OrderBookDex"), keccak256("1"), uint256(7622), address(d)));
         bytes32 h = keccak256(abi.encodePacked(hex"1901", domainSep, keccak256(abi.encode(d.ORDER_TYPEHASH(), o))));
         assertEq(h, d.orderHash(o));
         string memory k = "dexkat";
-        vm.serializeString(k, "chain_id", "9000");
+        vm.serializeString(k, "chain_id", "7622");
         vm.serializeString(k, "dex", vm.toString(address(d)));
         vm.serializeString(k, "maker", vm.toString(o.maker));
         vm.serializeString(k, "sell_token", vm.toString(o.sellToken));

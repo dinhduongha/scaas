@@ -1,5 +1,5 @@
 # R52 (GA 2.1#4): contracts and the relay node. Mirrors the local commands:
-#   smartcontracts/evm: forge test; FOUNDRY_PROFILE=private9000 forge build
+#   smartcontracts/evm: forge test; FOUNDRY_PROFILE=private7622 forge build
 #   scaas-node:    cargo test; cargo clippy --all-targets -- -D warnings; cargo test --test e2e -- --ignored
 name: scaas-ci
 
@@ -30,8 +30,8 @@ jobs:
           forge install --no-git OpenZeppelin/openzeppelin-contracts@${OZ_TAG}
       - name: forge test (default profile)
         run: forge test
-      - name: forge build (private9000 profile)
-        run: FOUNDRY_PROFILE=private9000 forge build
+      - name: forge build (private7622 profile)
+        run: FOUNDRY_PROFILE=private7622 forge build
 
   node:
     runs-on: ubuntu-latest

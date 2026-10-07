@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 /// @title Bọc precompile EIP-2537 (BLS12-381).
-/// @notice Địa chỉ và kích thước I/O dưới đây **đã đo trên chain 9000** (Nethermind
+/// @notice Địa chỉ và kích thước I/O dưới đây **đã đo trên chain 7622 (formerly 9000)** (Nethermind
 ///         1.39.0, Fusaka, 2026-08-31), không chép từ draft:
 ///
 ///         | addr | tên              | input                | output |

@@ -27,7 +27,7 @@ contract ZetherGateTest is ZetherFixture {
     }
 
     function test_cannotEnableOnNonDevChain() public {
-        uint256[4] memory prod = [uint256(1), 100, 42220, 9000];
+        uint256[4] memory prod = [uint256(1), 100, 42220, 7622];
         for (uint256 i; i < prod.length; ++i) {
             vm.chainId(prod[i]);
             OpenFactory f = new OpenFactory(registrar);

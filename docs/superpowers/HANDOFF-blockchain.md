@@ -8,7 +8,7 @@ Nguồn: gap analysis `/.superpowers/blockchain-gap-analysis.md` (GA), spec roun
 |---|---|---|
 | O1 | Audit bên thứ ba cho mọi contract (Solidity, Move, Soroban, CosmWasm, Tact) trước khi giữ tiền thật | GA 2.1#5, I§7.3 #4 |
 | O2 | `registrar` của OpenFactory là một EOA (mặc định deployer) ⇒ chuyển sang multisig trước mainnet | GA 2.1#5, B12 |
-| O3 | Triển khai thật (chain 9000, Gnosis; sau đó các mạng round 3) và ghi `deployments/<chain>.json` | GA 2.1#6, N9 |
+| O3 | Triển khai thật (chain 7622 — formerly 9000, Gnosis; sau đó các mạng round 3) và ghi `deployments/<chain>.json` | GA 2.1#6, N9 |
 | O4 | Bằng chứng finality 7 ngày + ≥2 RPC độc lập trước khi chuyển chain sang `active` | GA 2.1#6, I§5.1 |
 | O5 | Rate limit theo IP ở reverse proxy trước gateway mở | GA 2.1#9 |
 | O6 | Adapter custody production (KMS/HSM/broker) cho ví custodial/delegated; `env:` chỉ dev (R50) | GA 2.1#1, R50 |
@@ -50,7 +50,7 @@ Contract `smartcontracts/evm/src/zether/**` (`ZetherToken`, `ZetherMetaTx`, `Zet
 |---|---|---|
 | Z1 | Audit mật mã độc lập (Σ-Bullets, transcript, IPA, registry PoP) **trước khi** bỏ cổng dev | canon C5.4 / §3.4.6 |
 | Z2 | Cổng: `OpenFactory.zetherEnabled` mặc định tắt; chỉ bật được trên chain id 31337/1337 (`ZetherSafety`). Token, verifier, registry cũng từ chối deploy/khởi tạo ngoài allowlist. Thêm chain = sửa `ZetherSafety` + deploy version mới, sau Z1 | RS2-1 |
-| Z3 | Quyết định chain 9000 có phải "dev" không (hiện **không**) | needs owner |
+| Z3 | Quyết định chain 7622 (formerly 9000) có phải "dev" không (hiện **không**) | needs owner |
 | Z4 | Chốt curve (gate G1): BLS12-381 an toàn hơn nhưng **không** rẻ hơn bn254 (đo §15 đặc tả) | canon C6.1 |
 | Z5 | Tối ưu gas trước public chain: transfer bn254 2.75M > kill criterion 2.5M | đặc tả §15 |
 | Z6 | Form chain/token Odoo hiển thị cảnh báo UNAUDITED (luồng tích hợp Odoo) | R34 |

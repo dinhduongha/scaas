@@ -4,7 +4,7 @@ use super::sqlite::SqliteStore;
 use super::*;
 
 const LANE: &str = "0x00000000000000000000000000000000000000aa";
-const CHAIN: &str = "evm:9000";
+const CHAIN: &str = "evm:7622";
 
 /// A store directory of its own, removed on drop (review F15). `url` names a file that does not exist yet.
 struct Tmp {
@@ -476,7 +476,7 @@ async fn keys_compare_byte_exact() {
     set.tokens.push(TokenRow { chain_key: CHAIN.into(), address: "0xab".into(), decimals: 6, active: true });
     set.lanes.push(LaneRow { chain_key: CHAIN.into(), label: "0xbb".into(), account_index: 2, journal_max: None });
     let r = bootstrap(&s, &set, 2).await.unwrap();
-    assert_eq!(r.imported, ["token:evm:9000/0xab", "lane:evm:9000/0xbb"], "'0xAB' != '0xab'");
+    assert_eq!(r.imported, ["token:evm:7622/0xab", "lane:evm:7622/0xbb"], "'0xAB' != '0xab'");
     // origin keys: hex and base58 are case-sensitive
     let a = created(&s, &new_job("3mJr7AoUXx2Wqd", 1)).await;
     let b = created(&s, &new_job("3MJR7AOUXX2WQD", 2)).await;
@@ -604,7 +604,7 @@ async fn unique_violations_are_classified_by_constraint_name() {
     let dup = |uid: i64, key: &str, digest: Vec<u8>| {
         sqlx::query("INSERT INTO job (uid, namespace, origin_scope, origin_producer, origin_key, generation, chain_key, \
                      kind, digest, payload, payload_hash, valid_until, state, created_at, updated_at) \
-                     VALUES (?, 'odoo', 'db:1', 'blockchain.payment.request', ?, 0, 'evm:9000', 'metatx', ?, x'00', \
+                     VALUES (?, 'odoo', 'db:1', 'blockchain.payment.request', ?, 0, 'evm:7622', 'metatx', ?, x'00', \
                      zeroblob(32), 1, 'queued', 1, 1)")
             .bind(uid).bind(key.to_string()).bind(digest)
     };
@@ -809,7 +809,7 @@ async fn bootstrap_imports_absent_entries_and_reports_drift() {
     toml.lanes[1].account_index = 7;
     let r = bootstrap(&s, &toml, 2).await.unwrap();
     assert!(r.imported.is_empty());
-    assert_eq!(r.drift, ["chain:evm:9000", "token:evm:9000/0xAB", "lane:evm:9000/0xBB"]);
+    assert_eq!(r.drift, ["chain:evm:7622", "token:evm:7622/0xAB", "lane:evm:7622/0xBB"]);
     let loaded = s.load_config().await.unwrap();
     assert_eq!(loaded.chains.iter().find(|c| c.chain_key == CHAIN).unwrap().state, "paused");
     assert_eq!(loaded.tokens[0].decimals, 6);

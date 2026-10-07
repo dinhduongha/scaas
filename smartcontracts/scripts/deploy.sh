@@ -2,7 +2,7 @@
 # Deploy one family's contracts with its native tool. Keys/credentials come from the tool's own config or env.
 # usage: deploy.sh <family> <network> [args…]   (args go to the native tool)
 #   evm     <rpc-url>        forge script script/Deploy.s.sol --broadcast; env PRIVATE_KEY, REGISTRAR?, DEMO_SUPPLY?,
-#                            DEMO_HOLDER?; FOUNDRY_PROFILE=private9000|gnosis|celo picks the EVM version.
+#                            DEMO_HOLDER?; FOUNDRY_PROFILE=private7622|gnosis|celo picks the EVM version.
 #                            Writes evm/deployments/<chainid>.json.
 #   hedera  <relay-url>      same, script/hedera/DeployHedera.s.sol --slow (writes deployments/hedera-<chainid>.json)
 #   aptos   <cli-profile>    aptos move deploy-object --address-name scaas

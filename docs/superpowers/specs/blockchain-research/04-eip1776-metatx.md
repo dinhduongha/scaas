@@ -654,7 +654,7 @@ Guard vẫn bắt buộc, quy tắc không đổi:
 - Test `ReentrancyCross.t.sol` gọi chéo **từng cặp** hàm đổi state.
 
 **[CẬP NHẬT 2026-08-31] Chain 9000 đã nâng lên Nethermind 1.39.0 với Fusaka + BPO2, nên `TSTORE`/`TLOAD`
-đã có** và `ReentrancyGuardTransient` dùng được. Profile `private9000` trong `foundry.toml` đổi từ
+đã có** và `ReentrancyGuardTransient` dùng được. Profile `private7622` trong `foundry.toml` đổi từ
 `berlin` sang `prague`.
 
 Nhưng lý do bản trước phải hạ xuống `berlin` thì đáng giữ làm bài học: genesis khai `cancunBlock: 0`

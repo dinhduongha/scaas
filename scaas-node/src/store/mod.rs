@@ -498,7 +498,7 @@ pub struct ConfigSet {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct BootReport {
-    /// `chain:evm:9000`, `token:evm:9000/0x…`… đã import.
+    /// `chain:evm:7622`, `token:evm:7622/0x…`… đã import.
     pub imported: Vec<String>,
     /// Có trong store và khác toml: không ghi đè (R95), chỉ cảnh báo + gauge `scaas_config_toml_drift`.
     pub drift: Vec<String>,

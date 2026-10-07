@@ -6,7 +6,7 @@ native layout and tool; `scripts/` is the one place to build, test, deploy and r
 ```
 smartcontracts/
 ├── evm/          Foundry (forge): src/ test/ script/; real EVM chains = FOUNDRY_PROFILE
-│                 (private9000, gnosis, celo); Hedera lives here too (src|test|script/hedera)
+│                 (private7622, gnosis, celo); Hedera lives here too (src|test|script/hedera)
 ├── move/aptos/   Aptos Move package `scaas` (+ testfa/, wrapcheck/); scripts/devnet.sh, vector generators
 ├── move/sui/     Sui Move package `scaas` (+ demo_coin/); scripts/gen_vectors.py
 ├── soroban/      Stellar Soroban cargo workspace (contracts/*)

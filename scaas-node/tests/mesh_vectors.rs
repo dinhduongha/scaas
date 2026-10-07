@@ -337,11 +337,11 @@ fn regenerate() {
         f(&mut x);
         x
     };
-    let e1 = evm_env("evm:9000", &token, &base);
+    let e1 = evm_env("evm:7622", &token, &base);
     let mut cases = vec![
         case("01_evm_open_fixed_fee", e1.clone(), json!({"accept": true, "fee_effective": "5000", "selector": "0x8609cad1",
              "may_submit": true, "state": "submittable"})),
-        case("02_evm_garbage_unbound_fields", evm_env("evm:9000", &token, &m(&|x| {
+        case("02_evm_garbage_unbound_fields", evm_env("evm:7622", &token, &m(&|x| {
             x.relayer = "0x00000000000000000000000000000000deadbeef".into();
             x.fee_recipient = "0x000000000000000000000000000000000bad0bad".into();
         })), json!({"accept": true, "may_submit": true})),
@@ -353,17 +353,17 @@ fn regenerate() {
         fee_recipient: ks("fee_recipient"),
     };
     cases.push(case("03a_evm_restrict_relayer_our_lane_kat",
-        evm_env_named("evm:9000", &token, k["domain_name"].as_str().unwrap(), &kat_m, "eoa", Some(ks("signature"))),
+        evm_env_named("evm:7622", &token, k["domain_name"].as_str().unwrap(), &kat_m, "eoa", Some(ks("signature"))),
         json!({"accept": true, "may_submit": true, "fee_effective": "0"})));
-    cases.push(case("03b_evm_restrict_relayer_foreign_lane", evm_env("evm:9000", &token, &m(&|x| {
+    cases.push(case("03b_evm_restrict_relayer_foreign_lane", evm_env("evm:7622", &token, &m(&|x| {
         x.mode = 0x21;
         x.relayer = "0x000000000000000000000000000000000000cafe".into();
     })), json!({"accept": true, "may_submit": false})));
-    cases.push(case("04_evm_restrict_relayer_zero", evm_env("evm:9000", &token, &m(&|x| x.mode = 0x21)), reject("RELAYER_BOUND_ZERO")));
-    cases.push(case("05_evm_empty_data", evm_env("evm:9000", &token, &m(&|x| x.data = "0x".into())),
+    cases.push(case("04_evm_restrict_relayer_zero", evm_env("evm:7622", &token, &m(&|x| x.mode = 0x21)), reject("RELAYER_BOUND_ZERO")));
+    cases.push(case("05_evm_empty_data", evm_env("evm:7622", &token, &m(&|x| x.data = "0x".into())),
         json!({"accept": true, "selector": "0x"})));
     let wallet = m(&|x| x.from = "0x0000000000000000000000000000000000001271".into());
-    let e6 = evm_env_named("evm:9000", &token, "SCaaS MetaToken", &wallet, "erc1271", Some(format!("0x{}", "ab".repeat(96))));
+    let e6 = evm_env_named("evm:7622", &token, "SCaaS MetaToken", &wallet, "erc1271", Some(format!("0x{}", "ab".repeat(96))));
     cases.push(case("06_evm_erc1271_no_local_recover", e6.clone(), json!({"accept": true, "may_submit": true})));
     // 07: cùng chữ ký case 01 nhưng s → n − s (v lật): khôi phục đúng người ký, contract vẫn từ chối.
     let mut e7 = e1.clone();
@@ -471,9 +471,9 @@ fn regenerate() {
     cases.push(case("16_unknown_top_level_field", with(e1.clone(), "x_future", json!({"anything": [1, 2]})),
         json!({"accept": true, "may_submit": true})));
     cases.push(case("17_hop_limit", with(e1.clone(), "hop_count", json!(4)), reject("HOP_LIMIT")));
-    cases.push(case("18a_valid_too_long", evm_env("evm:9000", &token, &m(&|x| x.valid_until = (NOW + 3601).to_string())),
+    cases.push(case("18a_valid_too_long", evm_env("evm:7622", &token, &m(&|x| x.valid_until = (NOW + 3601).to_string())),
         reject("VALID_TOO_LONG")));
-    cases.push(case("18b_expired_inside_skew", evm_env("evm:9000", &token, &m(&|x| x.valid_until = (NOW + 10).to_string())),
+    cases.push(case("18b_expired_inside_skew", evm_env("evm:7622", &token, &m(&|x| x.valid_until = (NOW + 10).to_string())),
         reject("EXPIRED")));
     let mut e19 = e1.clone();
     let mut id = alloy::hex::decode(e1["intent_id"].as_str().unwrap()).unwrap();
@@ -517,15 +517,15 @@ fn regenerate() {
     e28["hub"]["published_at"] = json!(NOW + 60);
     seal(&mut e28);
     cases.push(case("28b_published_in_the_future", e28, reject("BAD_ENVELOPE")));
-    let pol = |contract: &str, min_fee: &str| json!([{"chain_key": "evm:9000", "contract": contract, "selector": "*", "support": "full",
+    let pol = |contract: &str, min_fee: &str| json!([{"chain_key": "evm:7622", "contract": contract, "selector": "*", "support": "full",
         "submit": true, "pool_visibility": "open", "min_fee": min_fee, "fee_recipient_allow": "any"}]);
-    cases.push(with(case("29_none_mode_huge_fee", evm_env("evm:9000", &token, &m(&|x| {
+    cases.push(with(case("29_none_mode_huge_fee", evm_env("evm:7622", &token, &m(&|x| {
         x.mode = 0x00;
         x.fee = format!("1{}", "0".repeat(30));
     })), json!({"accept": true, "fee_effective": "0", "may_submit": false})), "policy", pol(&token, "1")));
-    cases.push(with(case("30_unregistered_contract", evm_env("evm:9000", UNREGISTERED, &base),
+    cases.push(with(case("30_unregistered_contract", evm_env("evm:7622", UNREGISTERED, &base),
         json!({"accept": true, "token": UNREGISTERED, "may_submit": false})), "policy", pol(UNREGISTERED, "0")));
-    let mut e31 = evm_env_named("evm:9000", &token, "SCaaS MetaToken", &base, "eoa", None);
+    let mut e31 = evm_env_named("evm:7622", &token, "SCaaS MetaToken", &base, "eoa", None);
     e31["evm"]["domain"]["name"] = json!("SCaaS MetaTokén");
     cases.push(case("31_non_ascii_body_string", e31, reject("BAD_ENVELOPE")));
     // 32: cùng envelope case 01, mọi khoá viết ngược thứ tự trên dây.
@@ -534,12 +534,12 @@ fn regenerate() {
                       "envelope_raw": raw, "expect": {"accept": true}}));
 
     let tokens = json!({
-        "evm:9000": [token], "hedera:296": [token],
+        "evm:7622": [token], "hedera:296": [token],
         "cosmos:scaas-1": [cosmos_vector("contract")], "sui:localnet": [SUI_REGISTRY], "aptos:4": [asset],
         "ton:-239": [master.raw()], sol_chain.clone(): [SOL_USD],
     });
     let lanes = json!({
-        "evm:9000": [EVM_LANE], "hedera:296": [EVM_LANE], "cosmos:scaas-1": ["wasm1xvenxvenxvenxvenxvenxvenxvenxvenkz5vxp"],
+        "evm:7622": [EVM_LANE], "hedera:296": [EVM_LANE], "cosmos:scaas-1": ["wasm1xvenxvenxvenxvenxvenxvenxvenxvenkz5vxp"],
         "sui:localnet": [format!("0x{}", "77".repeat(32))], "aptos:4": [format!("0x{}", "77".repeat(32))],
         "ton:-239": [format!("0:{}", "77".repeat(32))], sol_chain.clone(): [SOL_BOB],
     });

@@ -323,7 +323,7 @@ impl Domain {
 
     #[cfg(test)]
     pub fn default_for_test() -> Self {
-        Self { name: "SCaaS MetaToken".into(), version: "1".into(), chain_id: 9000,
+        Self { name: "SCaaS MetaToken".into(), version: "1".into(), chain_id: 7622,
                verifying_contract: Address::repeat_byte(0xcd) }
     }
 }
@@ -458,7 +458,7 @@ database = "odoo19"
 relay_api_key_env = "R"
 indexer_api_key_env = "I"
 [[chains]]
-evm_chain_number = 9000
+evm_chain_number = 7622
 rpc_urls = ["http://a"]
 signer_key_env = "K"
 finality = { mode = "depth", depth = 1, quorum = 1 }
@@ -1782,7 +1782,7 @@ async fn main() -> Result<()> {
 
 `node.example.toml`: the TOML of spec §3.1 with `[modules] submit = true, indexer = true, gateway = true, gateway_bind = "127.0.0.1:8547"`.
 
-`README.md` (Vietnamese): build (`cargo build --release`), env vars (`SCAAS_RELAY_API_KEY`, `SCAAS_INDEXER_API_KEY`, `SCAAS_RELAYER_KEY_9000`, `SCAAS_NODE_ID`), creating the two Odoo service users + API keys (Settings → Users; groups "Blockchain Relay Worker (service)" / "Blockchain Indexer (service)"; Account Security → New API Key), running against chain 9000, and the e2e test command.
+`README.md` (Vietnamese): build (`cargo build --release`), env vars (`SCAAS_RELAY_API_KEY`, `SCAAS_INDEXER_API_KEY`, `SCAAS_RELAYER_KEY_7622`, `SCAAS_NODE_ID`), creating the two Odoo service users + API keys (Settings → Users; groups "Blockchain Relay Worker (service)" / "Blockchain Indexer (service)"; Account Security → New API Key), running against chain 7622, and the e2e test command.
 
 - [ ] **Step 2: Build** `cargo build && cargo clippy -- -D warnings` (fix lints) → OK.
 - [ ] **Step 3: Commit** `git commit -m "feat(node): wire submit, indexer and gateway into one binary"`
@@ -1794,7 +1794,7 @@ async fn main() -> Result<()> {
 **Files:** Create `scaas-node/tests/e2e.rs`. Modify `Cargo.toml` (`[lib]` so the test can use the crate: add `src/lib.rs` re-exporting modules and make `main.rs` use `scaas_node::*`).
 
 **Interfaces:**
-- Consumes: everything; `smartcontracts/script/Deploy.s.sol` (`deployments/9000.json`).
+- Consumes: everything; `smartcontracts/script/Deploy.s.sol` (`deployments/7622.json`).
 
 - [ ] **Step 1: Write the test** — `tests/e2e.rs`:
 
@@ -1844,7 +1844,7 @@ async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path
     let mut o = s.lock().unwrap();
     let out = match (model.as_str(), method.as_str()) {
         ("blockchain.chain", "node_config") => json!({
-            "evm_chain_number": 9000, "finality_mode": "depth", "finality_depth": 0, "finality_quorum": 1,
+            "evm_chain_number": 7622, "finality_mode": "depth", "finality_depth": 0, "finality_quorum": 1,
             "indexed_block": o.indexed_block, "tokens": [{"address": o.token, "decimals": 6}],
             "journal_max_nonce": null, "inflight": []}),
         ("blockchain.relay.job", "relay_poll") => json!(std::mem::take(&mut o.jobs)),
@@ -1865,7 +1865,7 @@ async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path
 async fn outbox_payment_reaches_chain_and_comes_back_final() {
     let port = 18600 + (std::process::id() % 300) as u16;
     let rpc = format!("http://127.0.0.1:{port}");
-    let _anvil = Anvil(Command::new("anvil").args(["--chain-id", "9000", "--hardfork", "prague",
+    let _anvil = Anvil(Command::new("anvil").args(["--chain-id", "7622", "--hardfork", "prague",
         "--port", &port.to_string(), "--silent"]).stdout(Stdio::null()).spawn().expect("anvil"));
     tokio::time::sleep(Duration::from_millis(800)).await;
 
@@ -1874,10 +1874,10 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     let st = Command::new("forge").current_dir(sc)
         .args(["script", "script/Deploy.s.sol", "--rpc-url", &rpc, "--broadcast", "--silent"])
         .env("PRIVATE_KEY", DEPLOYER).env("DEMO_SUPPLY", "1000000000000")
-        .env("DEMO_HOLDER", format!("{:#x}", payer.address())).env("FOUNDRY_PROFILE", "private9000")
+        .env("DEMO_HOLDER", format!("{:#x}", payer.address())).env("FOUNDRY_PROFILE", "private7622")
         .status().expect("forge");
     assert!(st.success());
-    let dep: Value = serde_json::from_str(&std::fs::read_to_string(format!("{sc}/deployments/9000.json")).unwrap()).unwrap();
+    let dep: Value = serde_json::from_str(&std::fs::read_to_string(format!("{sc}/deployments/7622.json")).unwrap()).unwrap();
     let token: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();
 
     // Fake Odoo holding one signed payment job.
@@ -1892,7 +1892,7 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
         batch: U256::from_be_bytes(keccak256(b"lane").0), nonce: U256::ZERO, validUntil: U256::from(now + 300),
         mode: MODE_RESTRICT_RELAYER, relayer: relayer.address(), fee: U256::ZERO, feeRecipient: Address::ZERO,
     };
-    let domain = Domain { name: "SCaaS MetaToken".into(), version: "1".into(), chain_id: 9000, verifying_contract: token };
+    let domain = Domain { name: "SCaaS MetaToken".into(), version: "1".into(), chain_id: 7622, verifying_contract: token };
     let d = digest(&domain, &m);
     let sig = payer.sign_hash_sync(&d).unwrap().as_bytes();
     let state = Arc::new(Mutex::new(FakeOdoo { token: format!("{token:#x}"), ..Default::default() }));
@@ -1905,7 +1905,7 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
 
     // Fund the relayer wallet (anvil account #1 already has ETH) and run one submit + track cycle.
     let ccfg = ChainCfg {
-        evm_chain_number: 9000, rpc_urls: vec![rpc.clone()], signer_key_env: String::new(),
+        evm_chain_number: 7622, rpc_urls: vec![rpc.clone()], signer_key_env: String::new(),
         finality: FinalityCfg { mode: "depth".into(), depth: 0, quorum: 1 }, dex: None, poll_ms: 200,
         stuck_after_secs: 60, max_gas_per_tx: 3_000_000, max_fee_cap_gwei: 500,
     };
@@ -1940,7 +1940,7 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
 }
 ```
 
-A second test `dex_orders_match_through_the_gateway` in the same file: deploy, create a second token `BBB` via `forge create`-free path (call `OpenFactory.createMetaToken` with the deployer through alloy), fund alice/bob, start a `gateway::router` with a `GwChain` whose `tx` feeds a `Submitter` driven in the test loop, POST two crossing orders with `reqwest`, run `poll_outbox`/drain/`track`, and assert balances swapped. (Write it with the same helpers; the order JSON is `{"chain": 9000, "token": "<addr>", "m": <WireMetaTx>, "signature": "0x…"}`.)
+A second test `dex_orders_match_through_the_gateway` in the same file: deploy, create a second token `BBB` via `forge create`-free path (call `OpenFactory.createMetaToken` with the deployer through alloy), fund alice/bob, start a `gateway::router` with a `GwChain` whose `tx` feeds a `Submitter` driven in the test loop, POST two crossing orders with `reqwest`, run `poll_outbox`/drain/`track`, and assert balances swapped. (Write it with the same helpers; the order JSON is `{"chain": 7622, "token": "<addr>", "m": <WireMetaTx>, "signature": "0x…"}`.)
 
 - [ ] **Step 2: Run** `cd scaas-node && cargo test --test e2e -- --ignored --nocapture`
 Expected: both PASS.

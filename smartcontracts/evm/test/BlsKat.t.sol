@@ -6,7 +6,7 @@ import {Bls12381} from "../src/common/Bls12381.sol";
 import {HashToCurve} from "../src/common/HashToCurve.sol";
 
 /// @notice KAT cho BLS12-381 min-signature-size, sinh bằng `py_ecc` và **đã xác nhận trên
-///         chain 9000**: `PAIRING_CHECK` trả 1 cho bộ dưới đây, trả 0 khi đổi thông điệp,
+///         chain 7622 (formerly 9000)**: `PAIRING_CHECK` trả 1 cho bộ dưới đây, trả 0 khi đổi thông điệp,
 ///         và revert khi sửa một bit của chữ ký (điểm rời khỏi đường cong).
 ///
 /// Các test cần precompile EIP-2537 sẽ **tự bỏ qua** nếu chain đang chạy không có nó —
@@ -15,7 +15,7 @@ import {HashToCurve} from "../src/common/HashToCurve.sol";
 ///     forge test --fork-url http://127.0.0.1:8545 --match-contract BlsKat
 contract BlsKatTest is Test {
     bytes constant DST = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
-    bytes constant MSG = "bamboo"; // message of the external py_ecc KAT (verified on chain 9000), not a tag
+    bytes constant MSG = "bamboo"; // message of the external py_ecc KAT (verified on chain 7622, formerly 9000), not a tag
 
     bytes constant HM =
         hex"000000000000000000000000000000000a8420a64f75971be4bccf69a1adcec1"

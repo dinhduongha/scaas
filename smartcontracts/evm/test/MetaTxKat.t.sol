@@ -12,7 +12,7 @@ contract MetaTxKatTest is Fixtures {
     using MetaTxLib for MetaTxLib.MetaTransaction;
 
     function test_writeKat() public {
-        vm.chainId(9000);
+        vm.chainId(7622);
         vm.warp(1_800_000_000);
         _deployFactory();
         MetaToken tok = _standalone(address(this), "BUSD", 6, 0, address(0));
@@ -27,7 +27,7 @@ contract MetaTxKatTest is Fixtures {
         bytes32 structHash = m.hashStruct();
         bytes32 domainSep = keccak256(abi.encode(
             keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-            keccak256("SCaaS MetaToken"), keccak256("1"), uint256(9000), address(tok)));
+            keccak256("SCaaS MetaToken"), keccak256("1"), uint256(7622), address(tok)));
         bytes32 digest = keccak256(abi.encodePacked(hex"1901", domainSep, structHash));
         assertEq(digest, tok.metaTxDigest(m));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, digest);
@@ -35,7 +35,7 @@ contract MetaTxKatTest is Fixtures {
         string memory k = "kat";
         vm.serializeString(k, "domain_name", "SCaaS MetaToken");
         vm.serializeString(k, "domain_version", "1");
-        vm.serializeString(k, "chain_id", "9000");
+        vm.serializeString(k, "chain_id", "7622");
         vm.serializeString(k, "verifying_contract", vm.toString(address(tok)));
         vm.serializeString(k, "from", vm.toString(m.from));
         vm.serializeString(k, "to", vm.toString(m.to));

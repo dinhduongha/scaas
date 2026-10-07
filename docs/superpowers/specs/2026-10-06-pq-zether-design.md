@@ -14,8 +14,8 @@ co-sign (F R295), the shared-randomness leakage model over the joint secret `(r,
 fallback, normative inline lengths, and a fixed-price, cached `OP_SELFTEST`. The owner moved the private chain id
 from 9000 (also Evmos Testnet) to **7622**: the gate is `{31337, 1337, 7622}`, and the chain is identified by
 `(chain id, chain_uid)` as F R330 (genesis hash, copied from the registry into every statement). Wherever rev 1.2
-said chain 9000 this spec says chain 7622 (formerly 9000); repo paths named `private9000` keep their name until the
-7622 code stream renames them. Component spec **E**. Short name **PQZ**. Code at `scaas` `main` 28c165c (classical
+said chain 9000 this spec says chain 7622 (formerly 9000); repo paths and the foundry
+profile are named `private7622` (renamed by the 7622 code stream). Component spec **E**. Short name **PQZ**. Code at `scaas` `main` 28c165c (classical
 Zether BUILT on dev chains; nothing of PQZ is built). **UNAUDITED — NOT FOR PRODUCTION FUNDS**, like every Zether
 artifact (R34). Rulings: **R270–R289** (§3). R290–R318 belong to spec F (UA), R250–R268 to spec D (S4F), R230–R247 to spec C (OPS).
 
@@ -40,7 +40,7 @@ Sources read: [Zether design](2026-10-03-zether-design.md) (byte-exact classical
 `blockchain-research/02-account-registry.md` §2.6 (FALCON/PQ, HNDL), `docs/SCaaS.md` §6.8, §8, §9,
 `smartcontracts/evm/src/zether/*`, [spec F](2026-10-06-universal-account-design.md) (UA, R290–R318), `zether-prover/src/*`, `clientkeys/src/zether.js`, `scaas-node` (`submit.rs`,
 `gateway.rs`, `node.example.toml`), parent `TRAPS.md` "Private chain (Nethermind, chainId 9000)" (heading predates the move to 7622) and
-`/home/dockers/mba-chain-nethermind/README-chainspec.md`, `smartcontracts/evm/src/chains/private9000/README.md`.
+`/home/dockers/mba-chain-nethermind/README-chainspec.md`, `smartcontracts/evm/src/chains/private7622/README.md`.
 External sources in §18. Rev 1.4 also read `smartcontracts/evm/src/zether/ZetherToken.sol`, `ZetherMetaTx.sol`,
 `metatx/IERC20MetaTx.sol`, `metatx/MetaTxCore.sol` (v2), `common/MetaTxLib.sol`, `common/FeePolicy.sol`, classical
 spec §10 (RS2-5–RS2-7), F §5.3 (v3), MESH §1.2/R70 and NI §5 (job kinds, R321).
@@ -192,7 +192,7 @@ PQZ parameters (R278, E-S1).
 | Fact | Value | Consequence |
 |---|---|---|
 | Client | Nethermind 1.39.0, Clique, one signer, 5 s, base fee 0 (TRAPS; README-chainspec 2026-08-31) | gas is free in money, but still meters block capacity |
-| Forks live | through Fusaka + BPO2, incl. EIP-2537, EIP-7951 (secp256r1 at `0x100`), **EIP-7825**, **EIP-7623**, **EIP-7934** | `smartcontracts/evm/src/chains/private9000/README.md` still says "pre-London" — stale (SCaaS §15 recorded contradiction) |
+| Forks live | through Fusaka + BPO2, incl. EIP-2537, EIP-7951 (secp256r1 at `0x100`), **EIP-7825**, **EIP-7623**, **EIP-7934** | `smartcontracts/evm/src/chains/private7622/README.md` still says "pre-London" — stale (SCaaS §15 recorded contradiction) |
 | [EIP-7825](https://eips.ethereum.org/EIPS/eip-7825) tx gas cap | 16,777,216 per transaction, independent of block limit | rules out a Solidity lattice verifier (§9.1) |
 | Chain id | **7622** (owner, 2026-10-07; formerly 9000, which is **also Evmos Testnet**, a public chain: [chainlist](https://chainlist.org/chain/9000), [Sequence chainlist](https://docs.sequence.xyz/solutions/chainlist/non-integrated/evmos-testnet)). Chain ids are a registry convention, so 7622 is not assumed unique either | `chainid == 7622` does not prove "our chain"; the precompile self-test (R270), the registry's `chain_uid` (genesis hash, F R330) in every statement and the node's genesis-hash binding (§11.3) do |
 | Block gas limit | 16,777,216 (Clique signer can move it without reset) | ~5 transfers per block unless raised (R280) |

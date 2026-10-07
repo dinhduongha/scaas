@@ -24,9 +24,10 @@ chainId 9000 → **7622**; `PqzToken` implements `IERC20MetaTx` (PQZ rev 1.4 R28
 - [ ] **Codex reviews still owed** (credit ran out after 4): AS, TW2, app, OPS, S4F, mesh, A2, SCaaS.md, integration.md.
       All already have a Claude review. Run with `codex exec -m gpt-5.5 -s read-only -C <scaas> -o <out.md> "<prompt>"`
       (default `gpt-6.1-sol` is rejected for a ChatGPT account); outputs `docs/reviews/specs/*-codex-review-1.md`; fold.
-- [ ] **ChainId 9000 → 7622** remaining: specs not yet swept (mesh, A2, TW2, app, OPS, S4F, AS), `AuthScheme.sol:7`
-      comment, TRAPS.md heading; then code/infra stream CHAINID (genesis reset, rename `private9000` dir + foundry
-      profile, node + Odoo chain records, `chain_uid` = genesis hash).
+- [x] **ChainId 9000 → 7622** stream CHAINID done 2026-10-07: genesis reset (`0x24e43dcb…c464`), `private7622` dir +
+      foundry profile, KAT/mesh vectors regenerated, node examples, Odoo chain record + tests. Left: `private9000`
+      mentions in `docs/SCaaS.md` + `docs/integration.md`; `chain_uid` = genesis hash binding (UA R330, not built);
+      redeploy the dev contracts on the empty chain.
 - [ ] Doc nits: `wasm-smoke.sh` needs `--target web`; node default `max_gas_per_tx` 3M < classical Zether transfer 3.36M
       (Zether rev 1.1 says ≥ 4.2M on Zether chains).
 

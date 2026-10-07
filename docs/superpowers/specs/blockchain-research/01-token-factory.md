@@ -1179,7 +1179,7 @@ smartcontracts/
 │   ├── zether/{IZetherToken.sol,IZetherVerifier.sol,ITransferDisclosure.sol,
 │   │           ZetherAccountRegistry.sol,ZetherTypes.sol}
 │   ├── verifier/{BulletproofVerifierBn254.sol,BulletproofVerifierBls12381.sol}
-│   └── chains/{private9000,gnosis,celo}/              # cau hinh + script deploy theo chain
+│   └── chains/{private7622,gnosis,celo}/              # cau hinh + script deploy theo chain
 ├── test/
 │   ├── invariant/{WrapInvariant.t.sol,PegInvariant.t.sol,SupplyInvariant.t.sol,
 │   │              ConfidentialInvariant.t.sol,ImmutabilityInvariant.t.sol}
@@ -1215,7 +1215,7 @@ optimizer_runs = 200          # PIN. Doi con so nay doi bytecode doi dia chi.
 via_ir         = true         # struct MetaTransaction nhieu truong => stack too deep neu khong bat
 evm_version    = "cancun"     # doi chieu voi tung chain — xem profile rieng ben duoi
 
-[profile.private9000]
+[profile.private7622]
 evm_version    = "berlin"     # chain Nethermind private chay TRUOC London. Xem TRAPS.md
 ```
 
@@ -1275,7 +1275,7 @@ Bản trước viết mục này quanh một stack giả định: **Hyperledger 
 | `gaslimit` | `0x1000000` = **16.777.216** | 8 Zether tx/block, y hệt Gnosis. Nâng được bằng signer vote, **không cần reset chain** |
 | Gas price | `MinGasPrice = 0` | Hiện thực hoá khoá quyết định #5 |
 | Số signer | **1** | Xem câu treo ở cuối mục |
-| EVM fork thực tế | **trước London** | Không EIP-1559, không EIP-2537. Build với `FOUNDRY_PROFILE=private9000` |
+| EVM fork thực tế | **trước London** | Không EIP-1559, không EIP-2537. Build với `FOUNDRY_PROFILE=private7622` |
 | `contractSizeLimit` | giữ 24576 | Không nới lỏng. Nới lỏng thì public build và private build phân nhánh, và ta có hai codebase để audit |
 
 **Cảnh báo, và nó là loại bẫy im lặng tệ nhất:** genesis khai `londonBlock: 0`, `cancunBlock: 0`, `pragueBlock: 0`. **Không key nào có tác dụng.** Nethermind đọc chainspec riêng và bỏ qua key kiểu Geth mà không log gì. Cách duy nhất phát hiện là kiểm block header (`baseFeePerGas` vắng mặt) hoặc gọi thử precompile. Chi tiết ở `TRAPS.md` §"Private chain".

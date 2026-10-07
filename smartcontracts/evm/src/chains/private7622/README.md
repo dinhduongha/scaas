@@ -1,11 +1,12 @@
-# chain 9000 — Nethermind private, Clique
+# chain 7622 — Nethermind private, Clique
 
 Chain đích **đầu tiên** cho Zether (quyết định #5: gas không phải ràng buộc, nên
 chạy private trước).
 
 | | |
 |---|---|
-| chainId | 9000 (`0x2328`) today; **moving to 7622** (owner 2026-10-07: 9000 is also Evmos Testnet). Migration pending (stream CHAINID: genesis reset, directory and foundry-profile rename, node and Odoo chain records, genesis-hash binding) |
+| chainId | **7622** (`0x1dc6`); formerly 9000 (`0x2328`), moved 2026-10-07 because 9000 is also Evmos Testnet. Genesis was reset: state started empty, every contract redeployed |
+| genesis hash | `0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464` (`chain_uid`, UA R330) |
 | client | Nethermind 1.39.0 |
 | consensus | Clique, period 5s, **một** signer `0xdE36845C…` |
 | gasLimit | `0x1000000` = 16.777.216 |
@@ -16,7 +17,7 @@ chạy private trước).
 
 The chain runs every fork through Fusaka + BPO2: PUSH0, TSTORE/TLOAD, MCOPY, BASEFEE and CLZ are live; all seven
 BLS12-381 precompiles (EIP-2537) answer with the right byte counts; EIP-7951 (secp256r1 at `0x100`), EIP-7825
-(16,777,216 gas per-transaction cap), EIP-7623 and EIP-7934 are active. Build with `FOUNDRY_PROFILE=private9000`
+(16,777,216 gas per-transaction cap), EIP-7623 and EIP-7934 are active. Build with `FOUNDRY_PROFILE=private7622`
 (`evm_version = "prague"`, `foundry.toml`). The precompiles for both Zether curves (bn254 and BLS12-381) are available.
 
 History: before 2026-08-31 the genesis declared Geth-style fork keys (`londonBlock: 0`, `pragueBlock: 0`, …) that

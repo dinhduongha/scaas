@@ -209,7 +209,7 @@ mod tests {
 
     fn ok_reading() -> Reading {
         Reading {
-            key: "evm:9000".into(),
+            key: "evm:7622".into(),
             head: Ok(120),
             stats: Ok(Stats {
                 indexed_block: 100,
@@ -245,25 +245,25 @@ mod tests {
         let want = "\
 # HELP scaas_relay_jobs Relay jobs by chain state.
 # TYPE scaas_relay_jobs gauge
-scaas_relay_jobs{chain=\"evm:9000\",state=\"dead\"} 2
-scaas_relay_jobs{chain=\"evm:9000\",state=\"queued\"} 5
+scaas_relay_jobs{chain=\"evm:7622\",state=\"dead\"} 2
+scaas_relay_jobs{chain=\"evm:7622\",state=\"queued\"} 5
 # HELP scaas_payment_requests_attention Payment requests needing attention.
 # TYPE scaas_payment_requests_attention gauge
-scaas_payment_requests_attention{chain=\"evm:9000\"} 1
+scaas_payment_requests_attention{chain=\"evm:7622\"} 1
 # HELP scaas_indexer_lag_blocks Final head minus the indexed block.
 # TYPE scaas_indexer_lag_blocks gauge
-scaas_indexer_lag_blocks{chain=\"evm:9000\"} 20
+scaas_indexer_lag_blocks{chain=\"evm:7622\"} 20
 # HELP scaas_relayer_balance Relayer lane balance in the smallest gas-coin unit.
 # TYPE scaas_relayer_balance gauge
-scaas_relayer_balance{chain=\"evm:9000\",lane=\"0xaa\"} 10
+scaas_relayer_balance{chain=\"evm:7622\",lane=\"0xaa\"} 10
 # HELP scaas_breaker_open Gas circuit breaker open (1) per lane.
 # TYPE scaas_breaker_open gauge
-scaas_breaker_open{chain=\"evm:9000\",lane=\"0xaa\",breaker=\"base_fee_spike\"} 0
-scaas_breaker_open{chain=\"evm:9000\",lane=\"0xaa\",breaker=\"gas_budget\"} 1
-scaas_breaker_open{chain=\"evm:9000\",lane=\"0xaa\",breaker=\"balance_floor\"} 0
+scaas_breaker_open{chain=\"evm:7622\",lane=\"0xaa\",breaker=\"base_fee_spike\"} 0
+scaas_breaker_open{chain=\"evm:7622\",lane=\"0xaa\",breaker=\"gas_budget\"} 1
+scaas_breaker_open{chain=\"evm:7622\",lane=\"0xaa\",breaker=\"balance_floor\"} 0
 # HELP scaas_drift_alerts Unmatched inbound transfers plus balance mismatches.
 # TYPE scaas_drift_alerts gauge
-scaas_drift_alerts{chain=\"evm:9000\"} 3
+scaas_drift_alerts{chain=\"evm:7622\"} 3
 ";
         assert_eq!(render(&[ok_reading()]).metrics, want);
         assert_eq!(esc("a\"b\\c\nd"), "a\\\"b\\\\c\\nd");

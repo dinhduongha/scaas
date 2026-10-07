@@ -792,7 +792,7 @@ impl ChainCfg {
         self.family != "evm"
     }
 
-    /// `evm:9000`, `hedera:296`, `sui:localnet`… — khoá chung với Odoo `blockchain.chain.chain_key`
+    /// `evm:7622`, `hedera:296`, `sui:localnet`… — khoá chung với Odoo `blockchain.chain.chain_key`
     /// (EVM/Hedera: luôn theo `evm_chain_number`, `network` bị bỏ qua như ở Odoo).
     pub fn chain_key(&self) -> String {
         match &self.network {
@@ -815,7 +815,7 @@ indexer_api_key_env = "I"
 [store]
 url = "sqlite:///var/lib/scaas/node.db"
 [[chains]]
-evm_chain_number = 9000
+evm_chain_number = 7622
 rpc_urls = ["http://a"]
 signer_key_env = "K"
 finality = { mode = "depth", depth = 1, quorum = 1 }
@@ -843,7 +843,7 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         let c: Config = toml::from_str(&raw).unwrap();
         c.validate().unwrap();
         assert_eq!(c.chains[1].chain_key(), "sui:localnet");
-        assert_eq!(c.chains[0].chain_key(), "evm:9000");
+        assert_eq!(c.chains[0].chain_key(), "evm:7622");
         assert_eq!(c.chains[1].params["package"].as_str(), Some("0x2"));
         std::env::set_var("SCAAS_TEST_MNEMONIC", "abandon abandon abandon abandon abandon abandon abandon abandon \
             abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
@@ -859,7 +859,7 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         assert!(c.validate().is_err());
         let c: Config = toml::from_str(&OK.replace("signer_key_env = \"K\"\n", "")).unwrap();
         assert!(c.validate().is_err(), "no key at all");
-        let c: Config = toml::from_str(&OK.replace("evm_chain_number = 9000\n", "")).unwrap();
+        let c: Config = toml::from_str(&OK.replace("evm_chain_number = 7622\n", "")).unwrap();
         assert!(c.validate().is_err(), "evm needs a chain id");
     }
 
@@ -967,7 +967,7 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
     #[test]
     fn bootstrap_lists_are_validated() {
         let ns = |t: &str| format!("{OK}\n[[namespaces]]\n{t}\n");
-        toml::from_str::<Config>(&ns("name = \"odoo-prod\"\nchains = [\"evm:9000\"]\nallow_call = true")).unwrap()
+        toml::from_str::<Config>(&ns("name = \"odoo-prod\"\nchains = [\"evm:7622\"]\nallow_call = true")).unwrap()
             .validate().unwrap();
         assert!(bad(&ns("name = \"~gateway\"")), "reserved");
         assert!(bad(&ns("name = \"Odoo\"")));
@@ -977,11 +977,11 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         let peer = |t: &str| format!("{OK}\n[[mesh.peers]]\nname = \"a\"\nurl = \"https://a.example.net:8550\"\n\
                                       spki_sha256 = \"{}\"\n{t}\n", "9f".repeat(32));
         toml::from_str::<Config>(&peer("class = \"open\"")).unwrap().validate().unwrap();
-        toml::from_str::<Config>(&peer("class = \"private\"\nchains = [\"evm:9000\"]")).unwrap().validate().unwrap();
+        toml::from_str::<Config>(&peer("class = \"private\"\nchains = [\"evm:7622\"]")).unwrap().validate().unwrap();
         assert!(bad(&peer("class = \"private\"")), "private peer without chains");
         assert!(bad(&peer("class = \"open\"").replace("https://", "http://")));
         assert!(bad(&peer("class = \"open\"").replace(&"9f".repeat(32), &"9F".repeat(32))));
-        let pol = |t: &str| format!("{OK}\n[[mesh.policy]]\nchain = \"evm:9000\"\nsupport = \"full\"\n\
+        let pol = |t: &str| format!("{OK}\n[[mesh.policy]]\nchain = \"evm:7622\"\nsupport = \"full\"\n\
                                      pool_visibility = \"open\"\n{t}\n");
         toml::from_str::<Config>(&pol(&format!("contract = \"{C0}\"\nselector = \"0x12345678\"\nsubmit = true"))).unwrap()
             .validate().unwrap();
@@ -1011,16 +1011,16 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
     fn boot_set_maps_toml_to_store_rows() {
         let raw = OK.replace("finality =", "tokens = [{ address = \"0xCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCD\", decimals = 6 }]\n\
             breaker = { gas_budget_per_hour = \"100000000000000000000\" }\nfinality =")
-            + "\n[[namespaces]]\nname = \"odoo\"\nchains = [\"evm:9000\", \"evm:9000\"]\n";
+            + "\n[[namespaces]]\nname = \"odoo\"\nchains = [\"evm:7622\", \"evm:7622\"]\n";
         let c: Config = toml::from_str(&raw).unwrap();
         c.validate().unwrap();
         let set = c.boot_set(&[vec!["0xAA".into()]]);
-        assert_eq!(set.chains[0].chain_key, "evm:9000");
+        assert_eq!(set.chains[0].chain_key, "evm:7622");
         assert_eq!(set.chains[0].state, "active");
         assert_eq!(set.tokens[0].address, "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd", "one spelling per EVM token");
-        assert_eq!(set.lanes, [store::LaneRow { chain_key: "evm:9000".into(), label: "0xAA".into(), account_index: 0,
+        assert_eq!(set.lanes, [store::LaneRow { chain_key: "evm:7622".into(), label: "0xAA".into(), account_index: 0,
                                                 journal_max: None }]);
-        assert_eq!(set.namespaces[0].chains, ["evm:9000"]);
+        assert_eq!(set.namespaces[0].chains, ["evm:7622"]);
         let b: serde_json::Value = serde_json::from_str(&set.chains[0].breaker).unwrap();
         assert_eq!(b["gas_budget_per_hour"], "100000000000000000000", "u128 amounts as decimal text");
         let back: BreakerCfg = serde_json::from_value(b).unwrap();
@@ -1036,9 +1036,9 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
                       tokens = [{ address = \"0.0.1234\", decimals = 6 }]\n";
         let raw = OK.replace("finality =", &format!("tokens = [{{ address = \"{ck}\", decimals = 6 }}]\nfinality ="))
             + hedera
-            + &format!("[[mesh.policy]]\nchain = \"evm:9000\"\ncontract = \"{ck}\"\nselector = \"0xA9059CBB\"\n\
+            + &format!("[[mesh.policy]]\nchain = \"evm:7622\"\ncontract = \"{ck}\"\nselector = \"0xA9059CBB\"\n\
                         support = \"none\"\npool_visibility = \"none\"\n\
-                        [[mesh.policy]]\nchain = \"evm:9000\"\ncontract = \"*\"\nselector = \"*\"\n\
+                        [[mesh.policy]]\nchain = \"evm:7622\"\ncontract = \"*\"\nselector = \"*\"\n\
                         support = \"full\"\npool_visibility = \"open\"\n");
         let c: Config = toml::from_str(&raw).unwrap();
         c.validate().unwrap();
@@ -1047,7 +1047,7 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         assert_eq!(set.tokens[1].address, "0x00000000000000000000000000000000000004d2", "Hedera 0.0.N = long-zero");
         assert_eq!((set.policy[0].contract.as_str(), set.policy[0].selector.as_str()), (low, "0xa9059cbb"));
         let rows: Vec<crate::mesh::accept::PolicyRow> = serde_json::from_value(serde_json::to_value(&set.policy).unwrap()).unwrap();
-        let hit = crate::mesh::accept::lookup(&rows, "evm:9000", low, "0xa9059cbb");
+        let hit = crate::mesh::accept::lookup(&rows, "evm:7622", low, "0xa9059cbb");
         assert_eq!(hit.map(|r| r.support), Some(crate::mesh::accept::Support::None),
                    "the deny row matches; no fall-through to (*, *)");
         assert!(bad(&raw.replace(ck, "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAeD")), "bad EIP-55 checksum (Odoo refuses it)");

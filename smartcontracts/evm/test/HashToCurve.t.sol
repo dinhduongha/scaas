@@ -80,7 +80,7 @@ contract HashToCurveTest is Test {
     }
 
     /// Modulus trường cơ sở: 48 byte, và giá trị của nó đã được CHÍNH precompile EIP-2537
-    /// trên chain 9000 xác nhận — `MAP_FP_TO_G1(p-1)` trả 128 byte, `MAP_FP_TO_G1(p)` revert.
+    /// trên chain 7622 (formerly 9000) xác nhận — `MAP_FP_TO_G1(p-1)` trả 128 byte, `MAP_FP_TO_G1(p)` revert.
     /// Ở đây chỉ ghim độ dài và byte đầu/cuối để một lần sửa nhầm không đi lọt.
     function test_fieldModulusShape() public pure {
         assertEq(HashToCurve.P.length, 48);

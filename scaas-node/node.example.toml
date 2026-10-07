@@ -26,7 +26,7 @@ bind = "127.0.0.1:8548"                          # default; never the port of ga
 # Tenants (R90). Imported once; afterwards managed in the store.
 # [[namespaces]]
 # name = "odoo-prod"
-# chains = ["evm:9000"]
+# chains = ["evm:7622"]
 # allow_call = true                              # mandates / subject accounts need call jobs (R103)
 
 # Mesh partners and acceptance policy (MESH §3.2), imported once like namespaces. The bus itself comes later.
@@ -35,9 +35,9 @@ bind = "127.0.0.1:8548"                          # default; never the port of ga
 # url = "https://a.example.net:8550"
 # spki_sha256 = "<64 lowercase hex>"
 # class = "private"                              # open | private (private: chains required)
-# chains = ["evm:9000"]
+# chains = ["evm:7622"]
 # [[mesh.policy]]
-# chain = "evm:9000"
+# chain = "evm:7622"
 # contract = "0x..."                             # or "*" (never with submit = true)
 # selector = "*"
 # support = "full"                               # none | forward_only | full
@@ -83,12 +83,12 @@ mnemonic = { keystore = "/etc/scaas/mnemonic.json", passphrase_env = "SCAAS_KEYS
 
 [[chains]]
 family = "evm"
-evm_chain_number = 9000
+evm_chain_number = 7622
 rpc_urls = ["http://nethermind:8545"]            # >= finality.quorum independent endpoints
 lanes = [0, 1, 2, 3]                             # 4 relayer accounts: hold gas only, never user funds
-# private_key = { env = "SCAAS_RELAYER_KEY_9000" }   # alternative: one raw key = one lane
+# private_key = { env = "SCAAS_RELAYER_KEY_7622" }   # alternative: one raw key = one lane
 finality = { mode = "depth", depth = 1, quorum = 1 }
-# dex = "0x..."                                  # OrderBookDex ("order_book_dex" in smartcontracts/evm/deployments/9000.json)
+# dex = "0x..."                                  # OrderBookDex ("order_book_dex" in smartcontracts/evm/deployments/7622.json)
 # fee_recipient = "0x..."                        # cold wallet for fees of gateway meta-txs that leave feeRecipient
                                                  # unbound (R84); never a lane key. Unset: the fee goes to the sending lane.
 # tokens = [{ address = "0x...", decimals = 6 }] # registered tokens, imported into the store (R95, MESH R86)

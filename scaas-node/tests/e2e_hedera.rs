@@ -81,7 +81,7 @@ fn deploy(rpc: &str) -> Value {
         .args(["script", "script/hedera/DeployHedera.s.sol", "--rpc-url", rpc, "--broadcast", "--silent"])
         .env("PRIVATE_KEY", DEPLOYER)
         .env("DEMO_SUPPLY", "1000000000000")
-        .env("FOUNDRY_PROFILE", "private9000")
+        .env("FOUNDRY_PROFILE", "private7622")
         .status()
         .expect("forge in PATH");
     assert!(status.success(), "forge script failed");

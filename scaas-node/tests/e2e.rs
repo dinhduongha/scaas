@@ -84,7 +84,7 @@ fn deploy(rpc: &str, chain_id: u64, holder: Address) -> Value {
         .env("PRIVATE_KEY", DEPLOYER)
         .env("DEMO_SUPPLY", "1000000000000")
         .env("DEMO_HOLDER", format!("{holder:#x}"))
-        .env("FOUNDRY_PROFILE", "private9000")
+        .env("FOUNDRY_PROFILE", "private7622")
         .status()
         .expect("forge in PATH");
     assert!(status.success(), "forge script failed");
