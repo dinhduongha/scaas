@@ -140,6 +140,7 @@ CREATE TABLE chain (
   breaker TEXT NOT NULL,                                          -- BreakerCfg as JSON text (small metadata)
   dex TEXT, updated_at INTEGER NOT NULL,
   max_valid_for_secs INTEGER NOT NULL DEFAULT 3600,               -- job accept step 5, /v1/gateway, mesh accept
+  max_inflight INTEGER NOT NULL DEFAULT 16,                       -- per-lane in-flight depth (NODE-LANE-24, PLANNED)
   ua_registry TEXT, ua_registry_gen INTEGER,                      -- NULL = no UA routes
   chain_uid TEXT,          -- '0x' + 64 hex, ≠ 0; EVM/Hedera genesis block hash, else the family's network id or a
                            -- profile constant; required when ua_registry is set (gateway.md#chain-binding)
@@ -590,6 +591,7 @@ poll_ms = 1000
 stuck_after_secs = 60                           # replace at the same nonce, fee ×1.25
 max_gas_per_tx = 3000000                        # structural breaker
 max_fee_cap_gwei = 500                          # fee ceiling for replacements
+max_inflight = 16                               # per-lane in-flight depth, tunable default (NODE-LANE-24)
 profile = "public"                              # chain_profile; default "private" (NODE-MESH-06)
 fee_recipient = "0x…"                           # optional, EVM/Hedera. Cold wallet: normalization target, published
                                                 # in /v1/mesh/policy, used by fee_recipient_allow = "self_or_zero".

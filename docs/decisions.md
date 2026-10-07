@@ -174,7 +174,8 @@ feeds prevents it.
 **Rule.** The docs are English throughout and self-contained. Rulings carry new component ids with the old ids as
 aliases in this register. The old system specification is frozen as `history/SCaaS-2026-10-07.md` for reference;
 [SCaaS-v2.md](SCaaS-v2.md) is a short, non-normative product introduction. Line-budget overruns of the Zether, PQ
-Zether, network pages and the node overview are accepted.
+Zether, network pages and the node overview are accepted, and so is the overrun of this register (owner
+2026-10-07).
 **Why.** One language and one id scheme for a product used worldwide; the old ids stay resolvable for code comments
 (`python3 scripts/docs_check.py resolve <id>`).
 **Source.** [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) §8 (owner answers 2026-10-07).
@@ -197,6 +198,7 @@ It said: legal questions are deferred to a separate chapter that does not block 
 ### NODE-GEN-01 — Node holds no subject funds or keys
 - old: SCaaS:N1, UD:§23.2 · status: current · owner: yes · date: 2026-10-07 · normative: node/README.md#NODE-GEN-01 · superseded-by: —
 
+**Owner ruling (2026-10-07).** Lane keys hold gas only and never hold a role on any contract, dev deployments included; role-holding targets go through a Safe (NODE-JOB-19).
 **Why.** Funds and subject keys stay with subjects and contracts; a compromised node can only stop working or lie on its feed. A relayer signs only the outer transaction, with its `authKey`; it never needs a subject's confidential key `x`: it cannot decrypt the amount, build the proof or change any field (all are in the signed digest), and that blindness is the property, not a limitation. A server holds `x` only when the company itself sends from its own confidential treasury, which is custody, not relay; the key oracle that serves it is small (under 300 lines; the enclave image under 5,000 lines including the crypto backend), so it stays out of the node process, which parses strangers' bytes.
 **Source.** [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 880; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 2055.
 
@@ -395,6 +397,10 @@ It said: in-memory gateway queue and DEX book.
 - old: CR-PD-1(c) · status: current · owner: yes · date: 2026-10-07 · normative: node/job-api.md#NODE-JOB-01 · superseded-by: —
 
 **Why.** A `call` job is signed by our lane; an open-ended call would let a tenant spend or move anything the lane can.
+**Owner ruling (2026-10-07).** Lane keys never hold roles (NODE-GEN-01 stands); the old exclusion "a contract in which
+a lane key holds a role" is gone because no such contract may exist. A role-holding target is reached only through a
+Safe (the `Safe.execTransaction` row, NODE-JOB-19); the lane only relays an `execTransaction` already signed by the role
+holders.
 **Cost if wrong.** Rows added later need review.
 **Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 247.
 
@@ -506,6 +512,7 @@ It said: in-memory gateway queue and DEX book.
 - old: reorg:Q1 · status: current · owner: yes · date: 2026-10-07 · normative: node/job-api.md#NODE-JOB-19 · superseded-by: —
 
 **Why.** Permissionless and self-authenticating calls cannot be abused through our lane; a role holder executes only what its owners signed. The factory stays excluded.
+**Owner ruling (2026-10-07).** Lane keys never hold roles (NODE-GEN-01); the `Safe.execTransaction` row is the only path to a role-holding target, and the lane only relays an `execTransaction` already signed by the role holders.
 **Source.** [superpowers/plans/2026-10-07-docs-reorg.md](superpowers/plans/2026-10-07-docs-reorg.md) line 1215.
 
 ### NODE-JOB-80 — Node talks to ERP only over json/2
@@ -661,6 +668,13 @@ It said: result queue default, node-configured callbacks.
 
 **Why.** Simulating before broadcast keeps predictable reverts from spending gas; a simulation that cannot run fails closed.
 **Cost if wrong.** Some reverts remain (state changes between simulation and inclusion); they are measured (W3B-02).
+
+### NODE-LANE-24 — Per-lane in-flight depth: tunable default 16
+- old: — · status: current · owner: yes · date: 2026-10-07 · normative: node/submit-lanes.md#NODE-LANE-24 · superseded-by: —
+
+**Owner ruling (2026-10-07).** `max_inflight = 16` stays as a tunable default (per-chain config `[[chains]] max_inflight`), not a design constant.
+**Why.** 16 is the default per-sender pending limit of common execution clients (`txpool.accountslots`); chains differ, so the depth is configuration.
+**Cost if wrong.** Too high: transactions beyond the pool limit are dropped and must be replaced; too low: lane throughput is capped below what the chain allows.
 
 ### NODE-LANE-80 — Six-member Family enum
 - old: R58(family-enum) · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: ARCH-POS-02
@@ -4431,7 +4445,7 @@ It said: Custody tier A/B, HSM or MPC; replaced by CLI-SGN-32.
 - old: CR-PD-1(a/b) · status: current · owner: no · date: 2026-10-07 · normative: integration.md#INT-ERP-05 · superseded-by: —
 
 **Rule.** Outbox `call` jobs are immutable and operators are read-only.
-**Why.** The node had become a blind signer for ERP-built calldata: one operator session, or a stolen one, became an arbitrary transaction from a lane that holds fee income and, on dev deployments, admin roles.
+**Why.** The node had become a blind signer for ERP-built calldata: one operator session, or a stolen one, became an arbitrary transaction from a lane that holds fee income (dev deployments then also gave lanes admin roles; lane keys never hold roles, owner 2026-10-07, NODE-GEN-01).
 **Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 247.
 
 ### INT-ERP-06 — Portal terms fee NONE, relayer restricted

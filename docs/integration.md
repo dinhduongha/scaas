@@ -259,8 +259,9 @@ becomes `final` only from its `PaymentSettled` — the node is never a "blind si
 
 <a id="call-targets"></a>**Call targets.** `allow_call` on the namespace is necessary, not sufficient. The node runs a
 `call` job only if its 4-byte selector is in this table **and** the target meets the row's rule; never when the target
-is a registered token of the chain (any kind), the token factory, or a contract in which a lane key holds a role; `call`
-jobs carry no native value.
+is a registered token of the chain (any kind) or the token factory; `call` jobs carry no native value. Lane keys never
+hold a role: role-restricted calls go through the role holders' Safe (`Safe.execTransaction`, signed by them; the lane
+only relays it) — [NODE-JOB-01](node/job-api.md#NODE-JOB-01).
 
 | Selector | Target rule | Typical producer |
 |---|---|---|

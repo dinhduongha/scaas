@@ -257,12 +257,14 @@ migrates from the legacy pull path gets `allow_call = true` (mandates and subjec
 <a id="call-table"></a><a id="NODE-JOB-01"></a>**NODE-JOB-01** — **`call` jobs are limited to a selector/target
 table.** A `call` job carries calldata the client built; a lane signs it as `msg.sender`. The node executes one only
 if its 4-byte selector is in the table **and** the target meets the row's rule; **never** when the target is a
-registered token of the chain (any kind), the token factory, or a contract in which a lane key holds a role; `call`
-jobs carry no native value. Refusal: `403 CALL_TARGET_REFUSED` at accept (step 4), re-checked at lease; on the legacy
+registered token of the chain (any kind) or the token factory; `call` jobs carry no native value. Lane keys never hold
+a role on any contract ([NODE-GEN-01](README.md#NODE-GEN-01), owner 2026-10-07): a role-restricted call reaches its
+target only through a Safe of the role holders (the `Safe.execTransaction` row, [NODE-JOB-19](#NODE-JOB-19)), and the
+lane only relays an `execTransaction` the role holders already signed. Refusal: `403 CALL_TARGET_REFUSED` at accept (step 4), re-checked at lease; on the legacy
 pull path `dead` with `CALL_TARGET_REFUSED` before simulation. A new call shape needs a table row (a node release).
 Selector matching suffices outside the token/role set: a lane's authority is only `msg.sender` of the direct call,
 never of calls the target makes. One operator session (or a stolen one) could otherwise turn a lane that holds fee
-income, and on dev deployments admin roles, into an arbitrary transaction. The client side keeps its outbox rows
+income into an arbitrary transaction. The client side keeps its outbox rows
 immutable after creation ([INT-ERP-05](../integration.md#INT-ERP-05)).
 
 <a id="NODE-JOB-19"></a>**NODE-JOB-19** — **Rows for permissionless and self-authenticating calls; role holders call

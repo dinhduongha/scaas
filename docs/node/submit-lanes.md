@@ -244,9 +244,11 @@ loop every poll_ms:
 The gateway's and the mesh scheduler's work go through the same runner, the same nonce counter and the same simulation
 gate. `final` of a job never comes from the runner: it comes from the event feed
 ([job-api.md#states](job-api.md#states)), so a job is final also when someone else executed it.
-An execution client keeps at most `txpool.accountslots` (16 by default) pending transactions per sender, so a lane's
-in-flight depth `max_inflight = 16` is a network ceiling, not a design constant; as built the runner does not cap it
-(PLANNED).
+<a id="NODE-LANE-24"></a>**NODE-LANE-24** — **Per-lane in-flight depth is a tunable default:** `max_inflight` on the
+chain entry (`[[chains]] max_inflight` in node.toml, column `chain.max_inflight`, [store.md](store.md#NODE-STO-03)), **default 16** (owner 2026-10-07). An execution client keeps at most
+`txpool.accountslots` (16 by default) pending transactions per sender, so the default follows that network ceiling; it
+is not a design constant — an operator raises it where the chain's nodes accept deeper per-sender pools and lowers it
+where they accept fewer. As built the runner does not cap it (PLANNED).
 
 ## Simulation
 
