@@ -139,7 +139,7 @@ Further events, same object, same filters (decoders for a new kind ship before t
 - `ReceiverFeePaid` and the tender events of `chain_contract` rows (indexed like token events; a namespace receives
   them when the contract is in its token subset);
 - universal accounts: `UATransfer`, `UAMetaTransactionExecuted`, `UARegistered` (with key data), balances per 32-byte
-  id; `Transfer` to/from `UA_POOL` ([CTR-UA-18](../contracts/universal-account.md#CTR-UA-18)) is paired with the
+  id; `Transfer` to/from `UA_POOL` ([CTR-UA-18](../contracts/accounts.md#CTR-UA-18)) is paired with the
   `UATransfer` of the same log batch and reported as the UA movement, never as a `UA_POOL` balance; balances feed
   `/v1/events` per canonical id; native ids keep today's form;
 - post-quantum Zether: `MetaTransactionExecuted`, `UAMetaTransactionExecuted`, `Transfer` and `UATransfer` of a PQZ

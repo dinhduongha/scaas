@@ -6,7 +6,7 @@ SCaaS-2026-10-07.md	2.1–2.3	target:architecture.md#service-model	Service model
 SCaaS-2026-10-07.md	3.1–3.5	target:architecture.md#components;target:node/README.md#roles	Components, node roles, topology, data flows, trust boundaries: architecture#components, #trust-model; node/README#roles
 SCaaS-2026-10-07.md	4.1–4.5	target:contracts/token-wrappers.md	Token hierarchy, tiers, factory, allowance lockdown, permissionless vs controlled: contracts/token-wrappers
 SCaaS-2026-10-07.md	4.6, 4.8, 4.9	target:contracts/asset-suite.md;target:contracts/dex.md#managed-markets	Vesting, equity/bonds on managed DEX, asset suite: contracts/asset-suite; contracts/dex#managed-markets
-SCaaS-2026-10-07.md	4.7	target:contracts/accounts-mandates.md#mandatewallet	Mandates: contracts/accounts-mandates#mandatewallet
+SCaaS-2026-10-07.md	4.7	target:contracts/mandates.md#mandatewallet	Mandates: contracts/accounts-mandates#mandatewallet
 SCaaS-2026-10-07.md	5.1–5.8	target:contracts/metatx.md	Meta-tx layer: contracts/metatx
 SCaaS-2026-10-07.md	5.9	target:contracts/metatx.md#payers;target:node/sponsorship.md	Payer flexibility: contracts/metatx#payers; node/sponsorship
 SCaaS-2026-10-07.md	6.1	target:node/README.md#invariants	Node invariants N1–N16: node/README#invariants (NODE-GEN)
@@ -20,15 +20,15 @@ SCaaS-2026-10-07.md	6.9	target:architecture.md#economics;target:node/mesh.md#rew
 SCaaS-2026-10-07.md	6.10	target:node/job-api.md#call-table;target:node/gateway.md#intake;target:node/submit-lanes.md#legacy-pull	Call table, Door A intake, idempotent report: node/job-api#call-table (single home); node/gateway#intake; node/submit-lanes#legacy-pull
 SCaaS-2026-10-07.md	7, 7.1–7.7	target:networks/README.md;target:networks/<family>.md	Families: networks/README, networks/<family>
 SCaaS-2026-10-07.md	7.8	target:node/indexer-feeds.md#event-normalization	Event normalization: node/indexer-feeds#event-normalization
-SCaaS-2026-10-07.md	8.1–8.11	target:contracts/zether.md;target:contracts/universal-account.md#legacy-registry	Zether: contracts/zether (8.6 → contracts/universal-account#legacy-registry)
+SCaaS-2026-10-07.md	8.1–8.11	target:contracts/zether.md;target:contracts/accounts.md#legacy-registry	Zether: contracts/zether (8.6 → contracts/universal-account#legacy-registry)
 SCaaS-2026-10-07.md	8.12	history:H	PQ Zether summary: H (duplicate of PQZ)
 SCaaS-2026-10-07.md	9.1	target:architecture.md#trust-model	Custody axes: architecture#trust-model
 SCaaS-2026-10-07.md	9.2	target:clients/signers-clientkeys.md#signing-policy	SigningPolicyService (PLANNED): clients/signers-clientkeys#signing-policy
-SCaaS-2026-10-07.md	9.3	target:contracts/accounts-mandates.md#passkeys;target:clients/signers-clientkeys.md#passkeys	Passkeys: contracts/accounts-mandates#passkeys; clients/signers-clientkeys#passkeys
-SCaaS-2026-10-07.md	9.4	target:contracts/accounts-mandates.md;target:clients/signers-clientkeys.md#backup-switch	Subject accounts, guardians, recovery, backup: contracts/accounts-mandates; clients/signers-clientkeys#backup-switch
+SCaaS-2026-10-07.md	9.3	target:contracts/accounts.md#passkeys;target:clients/signers-clientkeys.md#passkeys	Passkeys: contracts/accounts-mandates#passkeys; clients/signers-clientkeys#passkeys
+SCaaS-2026-10-07.md	9.4	target:contracts/accounts.md;target:clients/signers-clientkeys.md#backup-switch	Subject accounts, guardians, recovery, backup: contracts/accounts-mandates; clients/signers-clientkeys#backup-switch
 SCaaS-2026-10-07.md	9.5	target:clients/signers-clientkeys.md#vault	Seed vault: clients/signers-clientkeys#vault
 SCaaS-2026-10-07.md	9.6	target:node/submit-lanes.md#lane-keys	Relayer lane keys: node/submit-lanes#lane-keys
-SCaaS-2026-10-07.md	9.7	target:contracts/universal-account.md#kinds	Threshold/aggregate signatures: contracts/universal-account#kinds
+SCaaS-2026-10-07.md	9.7	target:contracts/accounts.md#kinds	Threshold/aggregate signatures: contracts/universal-account#kinds
 SCaaS-2026-10-07.md	9.8	history:H	UA summary: H (duplicate of UA)
 SCaaS-2026-10-07.md	10.x	target:contracts/tender.md#invariants	Tender summary: H (duplicate of TSS §A) except 10.3 invariants → contracts/tender#invariants if missing there
 SCaaS-2026-10-07.md	11.1	target:architecture.md#data-protection	Data-protection principles: architecture#data-protection (principle)
@@ -39,7 +39,7 @@ SCaaS-2026-10-07.md	13.6	target:node/runbooks.md#emergency	Circuit breakers and 
 SCaaS-2026-10-07.md	14.1	target:contracts/token-wrappers.md#factory-interface	IOpenFactory: contracts/token-wrappers#factory-interface
 SCaaS-2026-10-07.md	14.2	target:contracts/metatx.md#interfaces	IERC20MetaTx / IERC20Payment: contracts/metatx#interfaces
 SCaaS-2026-10-07.md	14.3, 14.4	target:contracts/zether.md#interfaces	IZetherToken, ITransferDisclosure: contracts/zether#interfaces
-SCaaS-2026-10-07.md	14.5	target:contracts/universal-account.md#legacy-registry	IUniversalAccountRegistry (built): contracts/universal-account#legacy-registry
+SCaaS-2026-10-07.md	14.5	target:contracts/accounts.md#legacy-registry	IUniversalAccountRegistry (built): contracts/universal-account#legacy-registry
 SCaaS-2026-10-07.md	14.6–14.8	history:H	Pointers: H
 SCaaS-2026-10-07.md	14.9		Other built interfaces: the owning contracts/* file
 SCaaS-2026-10-07.md	15.1	history:streams	Roadmap: T (TODO already holds the order) + H
@@ -84,7 +84,7 @@ integration-2026-10-07.md	17	target:integration.md#checklist	Checklist: integrat
 2026-10-03-blockchain-payments-addendum-wallets.md	A	target:contracts/token-wrappers.md#allowance-lockdown	Approve rule: contract spenders only: contracts/token-wrappers#allowance-lockdown
 2026-10-03-blockchain-payments-addendum-wallets.md	B	target:clients/signers-clientkeys.md#wallet-standards	Open-standard wallets (EIP-1193/6963/712/1271, WalletConnect): clients/signers-clientkeys#wallet-standards
 2026-10-03-blockchain-payments-addendum-wallets.md	C	target:integration.md#receiving-wallets	Receiving wallets per company: integration#receiving-wallets
-2026-10-03-blockchain-payments-addendum-wallets.md	D	target:contracts/accounts-mandates.md#mandatewallet;target:integration.md#auto-pay	Paying wallets, auto-pay: contracts/accounts-mandates#mandatewallet; integration#auto-pay
+2026-10-03-blockchain-payments-addendum-wallets.md	D	target:contracts/mandates.md#mandatewallet;target:integration.md#auto-pay	Paying wallets, auto-pay: contracts/accounts-mandates#mandatewallet; integration#auto-pay
 2026-10-03-blockchain-payments-addendum-wallets.md	~^(rulings?|ruling)\b|quyết định	target:decisions.md	—: D; texts per §3.2
 2026-10-03-blockchain-infrastructure-service.md	~iaas|so sánh	target:architecture.md#authority-model	"—: architecture#authority-model (table, translated, with the ""Land"" row and admin-exception list)"
 2026-10-03-blockchain-infrastructure-service.md	~owner ruling	target:decisions.md	—: D (alias to CTR-GEN id)
@@ -104,7 +104,7 @@ integration-2026-10-07.md	17	target:integration.md#checklist	Checklist: integrat
 2026-10-03-blockchain-round3-design.md	B.3	target:node/submit-lanes.md#lane-keys	Relayer key config (R60): node/submit-lanes#lane-keys
 2026-10-03-blockchain-round3-design.md	B.4	target:integration.md#addresses	ERP family/address/payload (R61): integration#addresses (generic) + example
 2026-10-03-blockchain-round3-design.md	B.5	target:networks/README.md#head-of-line	Head-of-line table (R62): networks/README#head-of-line
-2026-10-03-blockchain-round3-design.md	C (C.1–C.4)	target:contracts/accounts-mandates.md#passkeys;target:clients/signers-clientkeys.md#vault	Passkey (R31), seed wallet (R32), multi-key accounts, Zether key (R33): contracts/accounts-mandates#passkeys; clients/signers-clientkeys#vault, #zether-keys
+2026-10-03-blockchain-round3-design.md	C (C.1–C.4)	target:contracts/accounts.md#passkeys;target:clients/signers-clientkeys.md#vault	Passkey (R31), seed wallet (R32), multi-key accounts, Zether key (R33): contracts/accounts-mandates#passkeys; clients/signers-clientkeys#vault, #zether-keys
 2026-10-03-blockchain-round3-design.md	D.0	target:networks/README.md#model	Common non-EVM model: networks/README#model
 2026-10-03-blockchain-round3-design.md	D.1–D.5	target:networks/<family>.md#overview	Hedera, Sui, Soroban, Cosmos, TON: networks/<family>#overview
 2026-10-03-blockchain-round3-design.md	D.6	target:integration.md#families;target:clients/signers-clientkeys.md#connectors	ERP and portal per family: integration#families (generic) + clients/signers-clientkeys#connectors
@@ -136,7 +136,7 @@ round3-wallet-signing-formats.md	~aptos and solana	target:networks/aptos.md;targ
 2026-10-03-dex-design.md	8, 9	history:H	Review log, disposition, revisions: H
 2026-10-03-zether-design.md	1–9	target:contracts/zether.md	Parameters, curves, NUMS generators, transcript, ElGamal state, statement layout, Σ-protocols, Bulletproofs, proof wire format: contracts/zether (verbatim byte layouts)
 2026-10-03-zether-design.md	10	target:contracts/zether.md#envelope	Envelope binding, replay: contracts/zether#envelope
-2026-10-03-zether-design.md	11	target:contracts/zether.md#registry;target:contracts/universal-account.md#legacy-registry	Delegation and registry: contracts/zether#registry (built, transitional until UA) + contracts/universal-account#legacy-registry
+2026-10-03-zether-design.md	11	target:contracts/zether.md#registry;target:contracts/accounts.md#legacy-registry	Delegation and registry: contracts/zether#registry (built, transitional until UA) + contracts/universal-account#legacy-registry
 2026-10-03-zether-design.md	12	target:contracts/zether.md#disclosure	Disclosure: contracts/zether#disclosure
 2026-10-03-zether-design.md	13	target:contracts/zether.md#safety-gate;target:contracts/README.md#unaudited	Safety gate: contracts/zether#safety-gate; contracts/README#unaudited
 2026-10-03-zether-design.md	14	target:contracts/zether.md#vectors	Vectors: contracts/zether#vectors
@@ -247,7 +247,7 @@ round3-wallet-signing-formats.md	~aptos and solana	target:networks/aptos.md;targ
 2026-10-06-tender-sponsorship-shredding.md	C.1–C.7	target:integration.md#data-protection	Crypto-shredding: integration#data-protection (C.2 commitment formats verbatim)
 2026-10-06-tender-sponsorship-shredding.md	C.8	target:networks/README.md#availability	Families: networks/README#availability
 2026-10-06-tender-sponsorship-shredding.md	8	history:streams	Streams: T, H
-2026-10-06-tender-sponsorship-shredding.md	9	target:contracts/accounts-mandates.md#limitations	Open questions/follow-ups: D; follow-up (scoped key kind) → contracts/accounts-mandates#limitations (PLANNED)
+2026-10-06-tender-sponsorship-shredding.md	9	target:contracts/accounts.md#limitations	Open questions/follow-ups: D; follow-up (scoped key kind) → contracts/accounts-mandates#limitations (PLANNED)
 2026-10-06-tender-sponsorship-shredding.md	10, 11	history:H	Review dispositions: H
 2026-10-06-asset-suite-design.md	1.1, 1.2	target:contracts/asset-suite.md#scope	Scope: contracts/asset-suite#scope
 2026-10-06-asset-suite-design.md	2	target:decisions.md	Rulings R200–R217: D; texts per §3.2
@@ -328,26 +328,26 @@ round3-wallet-signing-formats.md	~aptos and solana	target:networks/aptos.md;targ
 2026-10-06-pq-zether-design.md	16	history:streams	Streams: T, H
 2026-10-06-pq-zether-design.md	17.1–17.4	target:decisions.md	Owner answers, dispositions: D, H
 2026-10-06-pq-zether-design.md	18	target:contracts/pq-zether.md#references	Sources: contracts/pq-zether#references
-2026-10-06-universal-account-design.md	1	target:contracts/universal-account.md#scope	Scope: contracts/universal-account#scope
+2026-10-06-universal-account-design.md	1	target:contracts/accounts.md#scope	Scope: contracts/universal-account#scope
 2026-10-06-universal-account-design.md	2.1–2.6	target:decisions.md	Rulings R290–R318, R330–R331: D; texts per §3.2
-2026-10-06-universal-account-design.md	3	target:contracts/universal-account.md#model	Model in one page: contracts/universal-account#model
-2026-10-06-universal-account-design.md	4.1–4.4	target:contracts/universal-account.md#kinds	Kinds, derivation, kind table, MuSig2/FROST, guidance: contracts/universal-account#kinds
-2026-10-06-universal-account-design.md	5.1–5.5	target:contracts/universal-account.md#functions	Function → accepted kinds: contracts/universal-account#functions
-2026-10-06-universal-account-design.md	6.1–6.6	target:contracts/universal-account.md#registry	Registry: contracts/universal-account#registry
-2026-10-06-universal-account-design.md	7.1–7.3	target:contracts/universal-account.md#verifiers	Verifier library: contracts/universal-account#verifiers
+2026-10-06-universal-account-design.md	3	target:contracts/accounts.md#model	Model in one page: contracts/universal-account#model
+2026-10-06-universal-account-design.md	4.1–4.4	target:contracts/accounts.md#kinds	Kinds, derivation, kind table, MuSig2/FROST, guidance: contracts/universal-account#kinds
+2026-10-06-universal-account-design.md	5.1–5.5	target:contracts/accounts.md#functions	Function → accepted kinds: contracts/universal-account#functions
+2026-10-06-universal-account-design.md	6.1–6.6	target:contracts/accounts.md#registry	Registry: contracts/universal-account#registry
+2026-10-06-universal-account-design.md	7.1–7.3	target:contracts/accounts.md#verifiers	Verifier library: contracts/universal-account#verifiers
 2026-10-06-universal-account-design.md	8.1	target:clients/signers-clientkeys.md#derivation	Layer 1: derivation and wallets: clients/signers-clientkeys#derivation
-2026-10-06-universal-account-design.md	8.2–8.4	target:contracts/universal-account.md#purposes	Layers 2–4: contracts/universal-account#purposes
-2026-10-06-universal-account-design.md	9.1–9.7	target:contracts/universal-account.md#credentials	VC/eKYC layer: contracts/universal-account#credentials
-2026-10-06-universal-account-design.md	10	target:contracts/accounts-mandates.md#subjectaccount	SubjectAccount as option (b): contracts/accounts-mandates#subjectaccount
+2026-10-06-universal-account-design.md	8.2–8.4	target:contracts/accounts.md#purposes	Layers 2–4: contracts/universal-account#purposes
+2026-10-06-universal-account-design.md	9.1–9.7	target:contracts/accounts.md#credentials	VC/eKYC layer: contracts/universal-account#credentials
+2026-10-06-universal-account-design.md	10	target:contracts/accounts.md#subjectaccount	SubjectAccount as option (b): contracts/accounts-mandates#subjectaccount
 2026-10-06-universal-account-design.md	11.1	target:node/mesh.md#ua-intents	Mesh: node/mesh#ua-intents
 2026-10-06-universal-account-design.md	11.2	target:node/indexer-feeds.md;target:node/gateway.md	Node: node/indexer-feeds, node/gateway (cited rows)
 2026-10-06-universal-account-design.md	11.3		App and clientkeys: clients/*
 2026-10-06-universal-account-design.md	11.4	target:integration.md#accounts	ERP: integration#accounts
-2026-10-06-universal-account-design.md	12.1, 12.2, 12.4	target:contracts/universal-account.md#migration	Migration from the built registry: contracts/universal-account#migration
+2026-10-06-universal-account-design.md	12.1, 12.2, 12.4	target:contracts/accounts.md#migration	Migration from the built registry: contracts/universal-account#migration
 2026-10-06-universal-account-design.md	12.3	target:integration.md#accounts	New registration flow: integration#accounts
-2026-10-06-universal-account-design.md	13	target:contracts/universal-account.md#security	Security analysis: contracts/universal-account#security
-2026-10-06-universal-account-design.md	14.1–14.3	target:contracts/universal-account.md#gas	Gas and calldata: contracts/universal-account#gas
-2026-10-06-universal-account-design.md	15.1–15.3	target:contracts/universal-account.md#vectors	Vectors, tests: contracts/universal-account#vectors
+2026-10-06-universal-account-design.md	13	target:contracts/accounts.md#security	Security analysis: contracts/universal-account#security
+2026-10-06-universal-account-design.md	14.1–14.3	target:contracts/accounts.md#gas	Gas and calldata: contracts/universal-account#gas
+2026-10-06-universal-account-design.md	15.1–15.3	target:contracts/accounts.md#vectors	Vectors, tests: contracts/universal-account#vectors
 2026-10-06-universal-account-design.md	16	history:streams	Streams: T, H
 2026-10-06-universal-account-design.md	17	target:decisions.md	Owner confirmations Q1–Q14: D (UA:Q1–Q14, owner flag)
 2026-10-06-universal-account-design.md	18, 19	history:H	Review dispositions: H

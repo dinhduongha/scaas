@@ -168,7 +168,7 @@ R261		NET-SUI	current			no	2026-10-06	networks/sui.md#key-verification	KeyOp enc
 R262		NET-SUI	current			no	2026-10-06	networks/sui.md#key-verification	One generator run feeds every vector	
 S4F:Q1		CLI-SGN	current		R300	yes	2026-10-07	clients/signers-clientkeys.md#role-keys	Soroban account role kindNo is 18	owner 2026-10-07 (UA rev 1.3); stated in R300
 R298	(1)	CLI-SGN	current			yes	2026-10-06	clients/signers-clientkeys.md#role-keys	One key one purpose: wallet layer	
-R298	(2,3,4)	CTR-UA	current			yes	2026-10-06	contracts/universal-account.md#purposes	One key one purpose: registry, tags, EOAs	layers 2–4 are registry/message rules
+R298	(2,3,4)	CTR-UA	current			yes	2026-10-06	contracts/accounts.md#purposes	One key one purpose: registry, tags, EOAs	layers 2–4 are registry/message rules
 R300		CLI-SGN	current			yes	2026-10-07	clients/signers-clientkeys.md#role-keys	EOA path EOA-only; role tree m/7622	owner: purpose 7622 (UA Q6), Soroban kindNo 18; S4F:Q1 merged here
 R314		NET-ALL	current			yes	2026-10-07	networks/README.md#ua-registries	Per-family UA registries share kind table	owner accepted UA Q12 default (rev 1.2)
 R315		NET-ALL	current			yes	2026-10-07	networks/README.md#ua-passkey-ids	Non-EVM passkey owners = UA id, URN only	owner accepted UA Q13 default; replaces Cosmos R9-1 and Solana owner hash

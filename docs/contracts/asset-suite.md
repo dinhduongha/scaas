@@ -121,7 +121,7 @@ everyone.
 <a id="CTR-AS-07"></a>**CTR-AS-07** — **Allowlist through a separate `ComplianceRegistry`** (address → `{uint64 flags,
 uint64 validUntil, uint32 attesterId}` in one slot; an immutable `admin` contract manages attesters; disabling an
 attester voids its attestations at once; no personal data). The UA registry is **not** extended (it is monotonic and
-admin-free by design, [CTR-UA-15](universal-account.md#CTR-UA-15)); compliance flags live only here (an earlier
+admin-free by design, [CTR-UA-15](accounts.md#CTR-UA-15)); compliance flags live only here (an earlier
 `attributes(UA)` registry extension was withdrawn and its flag bits reused below). A regulated
 token pins one registry and one `requiredFlags` mask at creation. **Only receivers of this token are checked** (`to`
 of a transfer or mint, fee recipient): a holder whose attestation lapsed can still send to an eligible party, burn and
@@ -370,7 +370,7 @@ the same block (one extra SLOAD per check, `attesterEnabled`). The registry hold
 is the system of record for identity evidence and pushes only flags. The node alerts 30 days before any protocol
 clone's attestation would expire (it should not: [CTR-AS-16](#CTR-AS-16) mandates `type(uint64).max`). Credentials
 from the optional verifiable-credential layer reach contracts only as these flags
-([CTR-UA-20](universal-account.md#CTR-UA-20)).
+([CTR-UA-20](accounts.md#CTR-UA-20)).
 
 ### Interactions
 

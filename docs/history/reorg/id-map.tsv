@@ -2,7 +2,7 @@ old	clause	new	status	superseded_by	target	owner	date	title	defined_at	supersede
 APP:Q1		CLI-APP-07	current		clients/app.md#submission	yes	2026-10-06	Relayed submission for Hedera and non-EVM	history/specs/2026-10-06-scaas-app-design.md:1029		owner answer restating R156 (route itself is NODE-GW)
 APP:Q2		CLI-APP-21	current		clients/app.md#dex	yes	2026-10-06	Non-EVM DEX books after EVM	history/specs/2026-10-06-scaas-app-design.md:1030		owner answer restating R172
 APP:Q3		CLI-APP-16	current		clients/app.md#i18n	yes	2026-10-06	Risk disclosures English beside translation	history/specs/2026-10-06-scaas-app-design.md:1031		owner answer restating R167
-CR-ADW-1		CTR-ACC-07	current		contracts/accounts-mandates.md#revocation-epoch	no	2026-10-07	Signed mandate revocation bound to epoch	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:296		
+CR-ADW-1		CTR-ACC-07	current		contracts/mandates.md#revocation-epoch	no	2026-10-07	Signed mandate revocation bound to epoch	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:296		
 CR-ADW-2		NET-HED-03	current		networks/hedera.md#mandate	no	2026-10-07	ED25519 owners pay via executeAsOwnerRaw	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:303		
 CR-ADW-3		CLI-SGN-07	current		clients/signers-clientkeys.md#role-keys	no	2026-10-07	Subject-account seed keys use role path	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:310		implements R300/R269 for subject accounts; ERP refuses EOA-equal key
 CR-ADW-4		CLI-SGN-08	current		clients/signers-clientkeys.md#signing-review	no	2026-10-07	checkPayment pins expected token client-side	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:316		
@@ -126,13 +126,13 @@ R21		CLI-SGN-06	current		clients/signers-clientkeys.md#connectors	no	2026-10-03	
 R22		INT-ERP-01	current		integration.md#receiving-wallets	no	2026-10-03	24 h cooling-off for new receiving wallets	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:193		
 R23		INT-ODOO-80	superseded	INT-ODOO-11		no	2026-10-03	Host company configuration parameter	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:194	R57	topic INT-ODOO to sit with R57
 R24		INT-ERP-02	current		integration.md#payer-wallets	no	2026-10-03	Custodial partner payer wallet needs license_ref	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:195		
-R25		CTR-ACC-06	current		contracts/accounts-mandates.md#mandatewallet	no	2026-10-07	Delegated payment uses MandateWallet, no allowance	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:196		Amended by CR-ADW-1 (revoke epoch) and CR-ADW-2 (Hedera ED25519 owners)
+R25		CTR-ACC-06	current		contracts/mandates.md#mandatewallet	no	2026-10-07	Delegated payment uses MandateWallet, no allowance	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:196		Amended by CR-ADW-1 (revoke epoch) and CR-ADW-2 (Hedera ED25519 owners)
 R26		CTR-TOK-01	current		contracts/token-wrappers.md#allowance-lockdown	yes	2026-10-03	Spender and transferFrom caller must be contracts	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:198		Owner ruling (ADW §A); narrowed by R63: HTS allowances only through wrappers
 R27		INT-ERP-03	current		integration.md#families	no	2026-10-03	Contract wallets: ERP defers to node simulation	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:200		
 R28		INT-ODOO-05	current		integration-odoo-example.md#example-odoo-addons	no	2026-10-03	Payment addon depends on account_payment	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:202		Odoo-specific dependency
 R29		INT-ERP-04	current		integration.md#mandates	no	2026-10-03	MandateWallet deployed outside the ERP	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:204		
 R30		NET-ALL-02	current		networks/README.md#r30-path	yes	2026-10-03	Contract-level meta-tx default on every network	history/specs/2026-10-03-blockchain-round3-design.md:517		
-R31	(account)	CTR-ACC-08	current		contracts/accounts-mandates.md#passkeys	yes	2026-10-07	Passkey subjects, Merkle batch, account key lifecycle	history/specs/2026-10-03-blockchain-round3-design.md:519		Amended by CR-R3-1, CR-R3-6; salt/gas/encoding details now RS4-1, RS4-10, RS4-3
+R31	(account)	CTR-ACC-08	current		contracts/accounts.md#passkeys	yes	2026-10-07	Passkey subjects, Merkle batch, account key lifecycle	history/specs/2026-10-03-blockchain-round3-design.md:519		Amended by CR-R3-1, CR-R3-6; salt/gas/encoding details now RS4-1, RS4-10, RS4-3
 R31	(client)	CLI-SGN-09	current		clients/signers-clientkeys.md#passkeys	yes	2026-10-03	Portal and mobile subjects sign with passkeys	history/specs/2026-10-03-blockchain-round3-design.md:519		Plan: client half to CLI-SGN
 R32	(path)	CLI-SGN-85	superseded	CLI-SGN-30		yes	2026-10-03	Account seed keys on EOA path	history/specs/2026-10-03-blockchain-round3-design.md:522	R300	also CR-ADW-3, R269
 R32	(scrypt)	CLI-SGN-86	superseded	CLI-SGN-21		yes	2026-10-03	Seed vault scrypt N=2^15 with PIN	history/specs/2026-10-03-blockchain-round3-design.md:522	R259	
@@ -403,31 +403,31 @@ R286		CTR-PQZ-17	current		contracts/pq-zether.md#limits	no	2026-10-06	PQZ shield
 R287		CTR-PQZ-18	current		contracts/pq-zether.md#prover-platforms	yes	2026-10-06	Native and WASM prover platforms early	history/specs/2026-10-06-pq-zether-design.md:367		
 R288		CTR-PQZ-19	current		contracts/pq-zether.md#derived-randomness	no	2026-10-06	Message-bound derived encryption randomness	history/specs/2026-10-06-pq-zether-design.md:376		
 R289		CTR-PQZ-20	current		contracts/pq-zether.md#migration	no	2026-10-07	Classical to PQZ migration by burn then fund	history/specs/2026-10-06-pq-zether-design.md:382		
-R290		CTR-UA-02	current		contracts/universal-account.md#ua-identifier	yes	2026-10-06	UA is a key-derived identifier, not a contract	history/specs/2026-10-06-universal-account-design.md:93		
-R291		CTR-UA-03	current		contracts/universal-account.md#id-space	yes	2026-10-07	32-byte kind-tagged ids in canonical form	history/specs/2026-10-06-universal-account-design.md:100		
-R292		CTR-UA-04	current		contracts/universal-account.md#keccak	no	2026-10-06	keccak256 for ids in every family	history/specs/2026-10-06-universal-account-design.md:113		
-R293		CTR-UA-05	current		contracts/universal-account.md#kind-table	no	2026-10-06	Fixed kind table per registry generation	history/specs/2026-10-06-universal-account-design.md:117		
-R294		CTR-UA-06	current		contracts/universal-account.md#registration	yes	2026-10-06	Native kinds unregistered; derived kinds register first	history/specs/2026-10-06-universal-account-design.md:125		
-R295		CTR-UA-07	current		contracts/universal-account.md#pop	yes	2026-10-07	PoP binds chain, registry, UA and authRef	history/specs/2026-10-06-universal-account-design.md:133		UA:Q10 merged (owner-accepted default, rev 1.2)
-R296		CTR-UA-08	current		contracts/universal-account.md#rogue-key	yes	2026-10-07	Rogue-key defence chosen per aggregate kind	history/specs/2026-10-06-universal-account-design.md:148		UA:Q3 merged; owner 2026-10-07 kept MuSig2/FROST, made checkable
-R297		CTR-UA-09	current		contracts/universal-account.md#structures	no	2026-10-07	Structures commit to members; one nesting level	history/specs/2026-10-06-universal-account-design.md:159		
+R290		CTR-UA-02	current		contracts/accounts.md#ua-identifier	yes	2026-10-06	UA is a key-derived identifier, not a contract	history/specs/2026-10-06-universal-account-design.md:93		
+R291		CTR-UA-03	current		contracts/accounts.md#id-space	yes	2026-10-07	32-byte kind-tagged ids in canonical form	history/specs/2026-10-06-universal-account-design.md:100		
+R292		CTR-UA-04	current		contracts/accounts.md#keccak	no	2026-10-06	keccak256 for ids in every family	history/specs/2026-10-06-universal-account-design.md:113		
+R293		CTR-UA-05	current		contracts/accounts.md#kind-table	no	2026-10-06	Fixed kind table per registry generation	history/specs/2026-10-06-universal-account-design.md:117		
+R294		CTR-UA-06	current		contracts/accounts.md#registration	yes	2026-10-06	Native kinds unregistered; derived kinds register first	history/specs/2026-10-06-universal-account-design.md:125		
+R295		CTR-UA-07	current		contracts/accounts.md#pop	yes	2026-10-07	PoP binds chain, registry, UA and authRef	history/specs/2026-10-06-universal-account-design.md:133		UA:Q10 merged (owner-accepted default, rev 1.2)
+R296		CTR-UA-08	current		contracts/accounts.md#rogue-key	yes	2026-10-07	Rogue-key defence chosen per aggregate kind	history/specs/2026-10-06-universal-account-design.md:148		UA:Q3 merged; owner 2026-10-07 kept MuSig2/FROST, made checkable
+R297		CTR-UA-09	current		contracts/accounts.md#structures	no	2026-10-07	Structures commit to members; one nesting level	history/specs/2026-10-06-universal-account-design.md:159		
 R298	(1)	CLI-SGN-29	current		clients/signers-clientkeys.md#role-keys	yes	2026-10-06	One key one purpose: wallet layer	history/specs/2026-10-06-universal-account-design.md:166		
-R298	(2,3,4)	CTR-UA-10	current		contracts/universal-account.md#purposes	yes	2026-10-06	One key one purpose: registry, tags, EOAs	history/specs/2026-10-06-universal-account-design.md:166		layers 2–4 are registry/message rules
-R299		CTR-UA-11	current		contracts/universal-account.md#keyhash	no	2026-10-07	keyHash per curve group, not per kind	history/specs/2026-10-06-universal-account-design.md:173		
+R298	(2,3,4)	CTR-UA-10	current		contracts/accounts.md#purposes	yes	2026-10-06	One key one purpose: registry, tags, EOAs	history/specs/2026-10-06-universal-account-design.md:166		layers 2–4 are registry/message rules
+R299		CTR-UA-11	current		contracts/accounts.md#keyhash	no	2026-10-07	keyHash per curve group, not per kind	history/specs/2026-10-06-universal-account-design.md:173		
 R300		CLI-SGN-30	current		clients/signers-clientkeys.md#role-keys	yes	2026-10-07	EOA path EOA-only; role tree m/7622	history/specs/2026-10-06-universal-account-design.md:181		owner: purpose 7622 (UA Q6), Soroban kindNo 18; S4F:Q1 merged here
-R301		CTR-UA-12	current		contracts/universal-account.md#tagged-message	no	2026-10-07	Tagged message for every derived-UA signature	history/specs/2026-10-06-universal-account-design.md:188		
-R302		CTR-UA-13	current		contracts/universal-account.md#no-rotation	yes	2026-10-06	No key rotation inside a UA	history/specs/2026-10-06-universal-account-design.md:202		UA:Q1 and RS2-9 merged
-R303		CTR-UA-14	current		contracts/universal-account.md#function-kinds	yes	2026-10-07	Each function accepts only the kinds it needs	history/specs/2026-10-06-universal-account-design.md:207		UA:Q4, Q5, Q7 merged (DEX, MandateWallet, regulated tokens stay native-only in v1)
-R304		CTR-UA-15	current		contracts/universal-account.md#monotonic-registry	no	2026-10-06	Registry is monotonic and admin-free	history/specs/2026-10-06-universal-account-design.md:215		
-R305		CTR-UA-16	current		contracts/universal-account.md#zether-kinds	yes	2026-10-07	Zether kinds bind encryption key; immutable authRef	history/specs/2026-10-06-universal-account-design.md:219		Owner via UA:Q2 (default accepted rev 1.2); supersedes AuthScheme and links
-R306		CTR-UA-17	current		contracts/universal-account.md#verification	no	2026-10-07	Verify through registry; large keys stored once	history/specs/2026-10-06-universal-account-design.md:229		
-R307		CTR-ACC-09	current		contracts/accounts-mandates.md#subjectaccount	yes	2026-10-06	SubjectAccount kept as optional option (b)	history/specs/2026-10-06-universal-account-design.md:238		
-R308		CTR-UA-18	current		contracts/universal-account.md#ua-ledger	yes	2026-10-07	Derived-UA balances in a separate bytes32 ledger	history/specs/2026-10-06-universal-account-design.md:243		
-R309		CTR-UA-19	current		contracts/universal-account.md#uametatransaction	yes	2026-10-07	UAMetaTransaction has its own typehash	history/specs/2026-10-06-universal-account-design.md:255		UA:Q11 merged; stated exception to R140
-R310		CTR-UA-20	current		contracts/universal-account.md#credentials	yes	2026-10-07	Optional VC layer; on-chain anchor deferred	history/specs/2026-10-06-universal-account-design.md:264		
-R311		CTR-UA-21	current		contracts/universal-account.md#holder-binding	yes	2026-10-07	Holder binding by account-signed presentation	history/specs/2026-10-06-universal-account-design.md:271		Owner via UA:Q14 (credential formats) merged here
-R312		CTR-UA-22	current		contracts/universal-account.md#migration	no	2026-10-06	Breaking dev-only migration from Zether registry	history/specs/2026-10-06-universal-account-design.md:278		
-R313		CTR-UA-23	current		contracts/universal-account.md#pq-kinds	yes	2026-10-07	PQ and ed25519 kinds on every EVM chain	history/specs/2026-10-06-universal-account-design.md:281		UA:Q9 merged
+R301		CTR-UA-12	current		contracts/accounts.md#tagged-message	no	2026-10-07	Tagged message for every derived-UA signature	history/specs/2026-10-06-universal-account-design.md:188		
+R302		CTR-UA-13	current		contracts/accounts.md#no-rotation	yes	2026-10-06	No key rotation inside a UA	history/specs/2026-10-06-universal-account-design.md:202		UA:Q1 and RS2-9 merged
+R303		CTR-UA-14	current		contracts/accounts.md#function-kinds	yes	2026-10-07	Each function accepts only the kinds it needs	history/specs/2026-10-06-universal-account-design.md:207		UA:Q4, Q5, Q7 merged (DEX, MandateWallet, regulated tokens stay native-only in v1)
+R304		CTR-UA-15	current		contracts/accounts.md#monotonic-registry	no	2026-10-06	Registry is monotonic and admin-free	history/specs/2026-10-06-universal-account-design.md:215		
+R305		CTR-UA-16	current		contracts/accounts.md#zether-kinds	yes	2026-10-07	Zether kinds bind encryption key; immutable authRef	history/specs/2026-10-06-universal-account-design.md:219		Owner via UA:Q2 (default accepted rev 1.2); supersedes AuthScheme and links
+R306		CTR-UA-17	current		contracts/accounts.md#verification	no	2026-10-07	Verify through registry; large keys stored once	history/specs/2026-10-06-universal-account-design.md:229		
+R307		CTR-ACC-09	current		contracts/accounts.md#subjectaccount	yes	2026-10-06	SubjectAccount kept as optional option (b)	history/specs/2026-10-06-universal-account-design.md:238		
+R308		CTR-UA-18	current		contracts/accounts.md#ua-ledger	yes	2026-10-07	Derived-UA balances in a separate bytes32 ledger	history/specs/2026-10-06-universal-account-design.md:243		
+R309		CTR-UA-19	current		contracts/accounts.md#uametatransaction	yes	2026-10-07	UAMetaTransaction has its own typehash	history/specs/2026-10-06-universal-account-design.md:255		UA:Q11 merged; stated exception to R140
+R310		CTR-UA-20	current		contracts/accounts.md#credentials	yes	2026-10-07	Optional VC layer; on-chain anchor deferred	history/specs/2026-10-06-universal-account-design.md:264		
+R311		CTR-UA-21	current		contracts/accounts.md#holder-binding	yes	2026-10-07	Holder binding by account-signed presentation	history/specs/2026-10-06-universal-account-design.md:271		Owner via UA:Q14 (credential formats) merged here
+R312		CTR-UA-22	current		contracts/accounts.md#migration	no	2026-10-06	Breaking dev-only migration from Zether registry	history/specs/2026-10-06-universal-account-design.md:278		
+R313		CTR-UA-23	current		contracts/accounts.md#pq-kinds	yes	2026-10-07	PQ and ed25519 kinds on every EVM chain	history/specs/2026-10-06-universal-account-design.md:281		UA:Q9 merged
 R314		NET-ALL-20	current		networks/README.md#ua-registries	yes	2026-10-07	Per-family UA registries share kind table	history/specs/2026-10-06-universal-account-design.md:303		owner accepted UA Q12 default (rev 1.2)
 R315		NET-ALL-21	current		networks/README.md#ua-passkey-ids	yes	2026-10-07	Non-EVM passkey owners = UA id, URN only	history/specs/2026-10-06-universal-account-design.md:311		owner accepted UA Q13 default; replaces Cosmos R9-1 and Solana owner hash
 R316		NODE-MESH-18	current		node/mesh.md#envelope	no	2026-10-06	UA intents in scaas-intent/1.3	history/specs/2026-10-06-universal-account-design.md:320		Topic NODE-GSP→NODE-MESH: envelope version/body rule (node/mesh#envelope).
@@ -443,7 +443,7 @@ R326		NODE-LANE-12	current		node/submit-lanes.md#outer-tx	no	2026-10-06	Outer tr
 R327		NODE-JOB-14	current		node/job-api.md#intake	no	2026-10-06	Intake authority re-checked in insert tx	history/specs/2026-10-06-node-independence-design.md:144		
 R328		NODE-GW-04	current		node/gateway.md#cors	no	2026-10-06	Gateway CORS only with auth none	history/specs/2026-10-06-node-independence-design.md:145		
 R330		NET-ALL-22	current		networks/README.md#chain-identity	no	2026-10-07	Chain identified by (chain_key, chain_uid)	history/specs/2026-10-06-universal-account-design.md:340		
-R331		CTR-UA-24	current		contracts/universal-account.md#eip7702	no	2026-10-07	EIP-7702 EOAs are native; classify by code	history/specs/2026-10-06-universal-account-design.md:355		
+R331		CTR-UA-24	current		contracts/accounts.md#eip7702	no	2026-10-07	EIP-7702 EOAs are native; classify by code	history/specs/2026-10-06-universal-account-design.md:355		
 R340		NODE-LANE-13	current		node/submit-lanes.md#cost-metering	no	2026-10-07	Breaker meters what the lane pays	history/specs/2026-10-06-node-independence-design.md:146		
 R341		NODE-LANE-14	current		node/submit-lanes.md#retries	no	2026-10-07	One retry after billed failure, attempt cap	history/specs/2026-10-06-node-independence-design.md:147		
 R342		NODE-LANE-15	current		node/submit-lanes.md#grief	no	2026-10-07	Per-subject grief score, every family	history/specs/2026-10-06-node-independence-design.md:148		
@@ -462,7 +462,7 @@ RS2-5		CTR-ZTH-06	current		contracts/zether.md#envelope-binding	no	2026-10-03	En
 RS2-6		CTR-ZTH-07	current		contracts/zether.md#fixed-fee	no	2026-10-03	Outer FIXED fee uncapped; PERCENT forbidden	history/specs/2026-10-03-zether-design.md:594		
 RS2-7		CTR-ZTH-08	current		contracts/zether.md#zethermetatx	no	2026-10-03	Separate ZetherMetaTx mixin; v1 sources untouched	history/specs/2026-10-03-zether-design.md:595		
 RS2-8		CTR-ZTH-09	current		contracts/zether.md#auditor	no	2026-10-03	Auditor key immutable, set at initialize	history/specs/2026-10-03-zether-design.md:596		
-RS2-9		CTR-UA-13	current		contracts/universal-account.md#no-rotation	no	2026-10-03	No key rotation inside a UA	history/specs/2026-10-03-zether-design.md:597		UA R305 says 'RS2-9 kept'; restated by R302/R305; its registry is replaced (R312). Topic changed to CTR-UA
+RS2-9		CTR-UA-13	current		contracts/accounts.md#no-rotation	no	2026-10-03	No key rotation inside a UA	history/specs/2026-10-03-zether-design.md:597		UA R305 says 'RS2-9 kept'; restated by R302/R305; its registry is replaced (R312). Topic changed to CTR-UA
 RS2-10		CTR-ZTH-82	superseded	CTR-UA-23, CTR-UA-16		no	2026-10-03	PQ_COMMITMENT verified like SELF_SCHNORR	history/specs/2026-10-03-zether-design.md:598	R313,R305	UA retires PQ_COMMITMENT (R313) and AuthScheme (R305)
 RS2-11		CTR-ZTH-10	current		contracts/zether.md#underlying	no	2026-10-03	Underlying must be an ERC-20 in v1	history/specs/2026-10-03-zether-design.md:600		
 RS2-12		CTR-ZTH-11	current		contracts/zether.md#direct-calls	no	2026-10-03	fund and rollOver direct; transfer/burn enveloped	history/specs/2026-10-03-zether-design.md:601		
@@ -471,7 +471,7 @@ RS2-14		CTR-ZTH-13	current		contracts/zether.md#direct-transfer	no	2026-10-03	Di
 RS2-15		CTR-ZTH-14	current		contracts/zether.md#disclosure-bundle	yes	2026-10-05	Disclosure bundle stored; fee-on-transfer underlyings refused	history/specs/2026-10-03-zether-design.md:607		Owner limits ZL:D6 (keep bundle) merged here
 RS2-16		CTR-ZTH-15	current		contracts/zether.md#precompile-gas	no	2026-10-03	Verifier forwards gas to precompiles; simulate first	history/specs/2026-10-03-zether-design.md:609		
 RS2-17		CTR-ZTH-16	current		contracts/zether.md#rollover-signed	no	2026-10-03	rollOverSigned accepts pendingSeq at least expected	history/specs/2026-10-03-zether-design.md:612		
-RS2-18		CTR-UA-01	current		contracts/universal-account.md#key-validation	no	2026-10-03	Refuse BLS keys and signatures at infinity	history/specs/2026-10-03-zether-design.md:618		Topic changed: UA §4.2/S11 keep it for every BLS kind after the Zether registry is deleted
+RS2-18		CTR-UA-01	current		contracts/accounts.md#key-validation	no	2026-10-03	Refuse BLS keys and signatures at infinity	history/specs/2026-10-03-zether-design.md:618		Topic changed: UA §4.2/S11 keep it for every BLS kind after the Zether registry is deleted
 RS2-19		CTR-ZTH-17	current		contracts/zether.md#rollover-signed-new-credit	no	2026-10-03	rollOverSigned requires a new credit	history/specs/2026-10-03-zether-design.md:614		
 RS2-20		CTR-ZTH-20	current		contracts/zether.md#pinned-verifier	no	2026-10-07	Clients and gateway pin canonical verifier and registry	history/specs/2026-10-03-zether-design.md:661		Client/gateway clauses cite CLI-SGN and NODE-GW (plan)
 RS2-21		CTR-ZTH-21	current		contracts/zether.md#erc1271-cap	no	2026-10-07	ZetherMetaTx ERC-1271 gas cap by codehash	history/specs/2026-10-03-zether-design.md:664		
@@ -480,18 +480,18 @@ RS2-23		CTR-ZTH-22	current		contracts/zether.md#required-tests	no	2026-10-07	Man
 RS2-24		CTR-ZTH-23	current		contracts/zether.md#fee-would-stick	no	2026-10-07	Outer fee recipient equal to token reverts	history/specs/2026-10-03-zether-design.md:675		
 RS2-25		CTR-ZTH-24	current		contracts/zether.md#balance-cache-key	no	2026-10-07	Client balance-cache key includes the chain	history/specs/2026-10-03-zether-design.md:676		Client clause cites CLI-SGN; later chain_uid per R330
 RS2-26		CTR-ZTH-25	current		contracts/zether.md#schnorr-export	no	2026-10-07	Public schnorrSign export takes no nonce k	history/specs/2026-10-03-zether-design.md:678		Client clause cites CLI-SGN
-RS4-1		CTR-ACC-01	current		contracts/accounts-mandates.md#factory	no	2026-10-03	SubjectAccount clones; salt binds key and guardian	history/plans/2026-10-03-r3-passkey-seed.md:11		
+RS4-1		CTR-ACC-01	current		contracts/accounts.md#factory	no	2026-10-03	SubjectAccount clones; salt binds key and guardian	history/plans/2026-10-03-r3-passkey-seed.md:11		
 RS4-2		NET-ALL-04	current		networks/README.md#webauthn	no	2026-10-03	One bounded WebAuthn clientDataJSON grammar	history/plans/2026-10-03-r3-passkey-seed.md:15		Restated and generalised by CR-R3-1 (NET-ALL, other batch); topic changed
-RS4-3		CTR-ACC-02	current		contracts/accounts-mandates.md#signature-encoding	no	2026-10-03	Signature is keyIndex, Merkle proof, sig	history/plans/2026-10-03-r3-passkey-seed.md:19		
-RS4-4		CTR-ACC-03	current		contracts/accounts-mandates.md#recovery	no	2026-10-03	Guardian recovery adds a key after two days	history/plans/2026-10-03-r3-passkey-seed.md:23		
-RS4-5		CTR-ACC-04	current		contracts/accounts-mandates.md#signcount	no	2026-10-03	Authenticator signCount is not checked	history/plans/2026-10-03-r3-passkey-seed.md:27		
+RS4-3		CTR-ACC-02	current		contracts/accounts.md#signature-encoding	no	2026-10-03	Signature is keyIndex, Merkle proof, sig	history/plans/2026-10-03-r3-passkey-seed.md:19		
+RS4-4		CTR-ACC-03	current		contracts/accounts.md#recovery	no	2026-10-03	Guardian recovery adds a key after two days	history/plans/2026-10-03-r3-passkey-seed.md:23		
+RS4-5		CTR-ACC-04	current		contracts/accounts.md#signcount	no	2026-10-03	Authenticator signCount is not checked	history/plans/2026-10-03-r3-passkey-seed.md:27		
 RS4-6		INT-ODOO-01	current		integration-odoo-example.md#example-odoo-subject-account	no	2026-10-06	Deploy job precedes pay via prerequisite	history/plans/2026-10-03-r3-passkey-seed.md:28		amended: push job API (R87) replaces relay_poll
 RS4-7		INT-ODOO-02	current		integration-odoo-example.md#example-odoo-subject-account	no	2026-10-03	Owner-call nonce from mined jobs	history/plans/2026-10-03-r3-passkey-seed.md:31		
 RS4-8	(scrypt)	CLI-SGN-80	superseded	CLI-SGN-21		no	2026-10-03	Vault PIN scrypt N=2^15	history/plans/2026-10-03-r3-passkey-seed.md:33	R259	via RS4-14 (merged into R259)
 RS4-8	(vault)	CLI-SGN-02	current		clients/signers-clientkeys.md#vault	no	2026-10-03	Seed vault DEK with passphrase and PRF envelopes	history/plans/2026-10-03-r3-passkey-seed.md:33		wrapped by v2 (R255)
 RS4-9	(keys)	CLI-SGN-03	current		clients/signers-clientkeys.md#zether-keys	no	2026-10-03	Zether keys derived in clientkeys JS	history/plans/2026-10-03-r3-passkey-seed.md:35		
 RS4-9	(pop)	CLI-SGN-81	superseded	CTR-UA-07		no	2026-10-03	Zether PoP bound to subject account	history/plans/2026-10-03-r3-passkey-seed.md:35	R295	UA R294–R297 like R33(pop)
-RS4-10		CTR-ACC-05	current		contracts/accounts-mandates.md#erc1271-cap	no	2026-10-03	400k ERC-1271 cap only for SubjectAccount clones	history/plans/2026-10-03-r3-passkey-seed.md:43		
+RS4-10		CTR-ACC-05	current		contracts/accounts.md#erc1271-cap	no	2026-10-03	400k ERC-1271 cap only for SubjectAccount clones	history/plans/2026-10-03-r3-passkey-seed.md:43		
 RS4-11		CLI-SGN-04	current		clients/signers-clientkeys.md#passkeys	no	2026-10-03	Random WebAuthn user handle per passkey	history/plans/2026-10-03-r3-passkey-seed.md:48		
 RS4-12		INT-ODOO-03	current		integration-odoo-example.md#example-odoo-subject-account	no	2026-10-03	First key registered with HMAC challenge	history/plans/2026-10-03-r3-passkey-seed.md:51		
 RS4-13		CLI-SGN-05	current		clients/signers-clientkeys.md#signing-review	no	2026-10-03	Client rebuilds operation before signing	history/plans/2026-10-03-r3-passkey-seed.md:57		generalised by R267, token pin CR-ADW-4
@@ -617,20 +617,20 @@ SCaaS:N13		NODE-GEN-13	current		node/README.md#invariants	no	2026-10-07	Value ou
 SCaaS:N14		NODE-GEN-14	current		node/README.md#invariants	no	2026-10-07	Intents signature-checked before chain calls	history/SCaaS-2026-10-07.md:893		
 SCaaS:N15		NODE-GEN-15	current		node/README.md#invariants	no	2026-10-07	Adapter restart state in store	history/SCaaS-2026-10-07.md:894		
 SCaaS:N16		NODE-GEN-16	current		node/README.md#invariants	no	2026-10-07	No upgradeable program, one key per family	history/SCaaS-2026-10-07.md:895		
-UA:Q1		CTR-UA-13	current		contracts/universal-account.md#no-rotation	yes	2026-10-06	No key rotation inside a UA	history/specs/2026-10-06-universal-account-design.md:1385		Owner confirmation of R302 (rev 1.1)
-UA:Q2		CTR-UA-16	current		contracts/universal-account.md#zether-kinds	yes	2026-10-06	Zether kinds bind encryption key; immutable authRef	history/specs/2026-10-06-universal-account-design.md:1389		Default accepted by owner (rev 1.2)
-UA:Q3		CTR-UA-08	current		contracts/universal-account.md#rogue-key	yes	2026-10-07	Rogue-key defence chosen per aggregate kind	history/specs/2026-10-06-universal-account-design.md:1391		Owner 2026-10-07 sharpening
-UA:Q4		CTR-UA-14	current		contracts/universal-account.md#function-kinds	yes	2026-10-06	Each function accepts only the kinds it needs	history/specs/2026-10-06-universal-account-design.md:1394		DEX with UA makers not in v1
-UA:Q5		CTR-UA-14	current		contracts/universal-account.md#function-kinds	yes	2026-10-06	Each function accepts only the kinds it needs	history/specs/2026-10-06-universal-account-design.md:1396		MandateWallet with UA owner not in v1
+UA:Q1		CTR-UA-13	current		contracts/accounts.md#no-rotation	yes	2026-10-06	No key rotation inside a UA	history/specs/2026-10-06-universal-account-design.md:1385		Owner confirmation of R302 (rev 1.1)
+UA:Q2		CTR-UA-16	current		contracts/accounts.md#zether-kinds	yes	2026-10-06	Zether kinds bind encryption key; immutable authRef	history/specs/2026-10-06-universal-account-design.md:1389		Default accepted by owner (rev 1.2)
+UA:Q3		CTR-UA-08	current		contracts/accounts.md#rogue-key	yes	2026-10-07	Rogue-key defence chosen per aggregate kind	history/specs/2026-10-06-universal-account-design.md:1391		Owner 2026-10-07 sharpening
+UA:Q4		CTR-UA-14	current		contracts/accounts.md#function-kinds	yes	2026-10-06	Each function accepts only the kinds it needs	history/specs/2026-10-06-universal-account-design.md:1394		DEX with UA makers not in v1
+UA:Q5		CTR-UA-14	current		contracts/accounts.md#function-kinds	yes	2026-10-06	Each function accepts only the kinds it needs	history/specs/2026-10-06-universal-account-design.md:1396		MandateWallet with UA owner not in v1
 UA:Q6		CLI-SGN-30	current		clients/signers-clientkeys.md#role-keys	yes	2026-10-06	One chain-independent UA tree, purpose 7622'	history/specs/2026-10-06-universal-account-design.md:1398		Confirms R300 (CLI-SGN, other batch)
-UA:Q7		CTR-UA-14	current		contracts/universal-account.md#function-kinds	yes	2026-10-06	Each function accepts only the kinds it needs	history/specs/2026-10-06-universal-account-design.md:1400		Regulated AS tokens stay native-only
-UA:Q8		CTR-UA-25	current		contracts/universal-account.md#registration-gate	yes	2026-10-06	No on-chain registration gate in v1	history/specs/2026-10-06-universal-account-design.md:1402		No R-id states it; default accepted by owner rev 1.2; sponsorship limits at the node
-UA:Q9		CTR-UA-23	current		contracts/universal-account.md#pq-kinds	yes	2026-10-06	PQ and ed25519 kinds on every EVM chain	history/specs/2026-10-06-universal-account-design.md:1404		Owner answer rev 1.1
-UA:Q10		CTR-UA-07	current		contracts/universal-account.md#pop	yes	2026-10-07	PoP binds chain, registry, UA and authRef	history/specs/2026-10-06-universal-account-design.md:1407		Sharpened rev 1.4 (chain_uid)
-UA:Q11		CTR-UA-19	current		contracts/universal-account.md#uametatransaction	yes	2026-10-06	UAMetaTransaction has its own typehash	history/specs/2026-10-06-universal-account-design.md:1410		Owner confirmation rev 1.1
+UA:Q7		CTR-UA-14	current		contracts/accounts.md#function-kinds	yes	2026-10-06	Each function accepts only the kinds it needs	history/specs/2026-10-06-universal-account-design.md:1400		Regulated AS tokens stay native-only
+UA:Q8		CTR-UA-25	current		contracts/accounts.md#registration-gate	yes	2026-10-06	No on-chain registration gate in v1	history/specs/2026-10-06-universal-account-design.md:1402		No R-id states it; default accepted by owner rev 1.2; sponsorship limits at the node
+UA:Q9		CTR-UA-23	current		contracts/accounts.md#pq-kinds	yes	2026-10-06	PQ and ed25519 kinds on every EVM chain	history/specs/2026-10-06-universal-account-design.md:1404		Owner answer rev 1.1
+UA:Q10		CTR-UA-07	current		contracts/accounts.md#pop	yes	2026-10-07	PoP binds chain, registry, UA and authRef	history/specs/2026-10-06-universal-account-design.md:1407		Sharpened rev 1.4 (chain_uid)
+UA:Q11		CTR-UA-19	current		contracts/accounts.md#uametatransaction	yes	2026-10-06	UAMetaTransaction has its own typehash	history/specs/2026-10-06-universal-account-design.md:1410		Owner confirmation rev 1.1
 UA:Q12		NET-ALL-20	current		networks/README.md#ua-registries	yes	2026-10-06	TON has no registry; wallet-bound keys	history/specs/2026-10-06-universal-account-design.md:1412		Confirms R314 (NET-ALL, other batch)
 UA:Q13		NET-ALL-21	current		networks/README.md#ua-passkey-ids	yes	2026-10-07	Non-EVM passkey owners are UA ids	history/specs/2026-10-06-universal-account-design.md:1413		Confirms R315 (NET-ALL, other batch)
-UA:Q14		CTR-UA-21	current		contracts/universal-account.md#holder-binding	yes	2026-10-07	Holder binding by account-signed presentation	history/specs/2026-10-06-universal-account-design.md:1415		SD-JWT VC default, BBS optional; no own DID method
+UA:Q14		CTR-UA-21	current		contracts/accounts.md#holder-binding	yes	2026-10-07	Holder binding by account-signed presentation	history/specs/2026-10-06-universal-account-design.md:1415		SD-JWT VC default, BBS optional; no own DID method
 UD:§1:custody		NODE-LANE-03	current		node/submit-lanes.md#signer	yes	2026-08-30	Pluggable custody chosen at deploy	research/_USER-DECISIONS.md:43		R15 Signer trait as custody seam; ADW §D calls it settled; SCaaS §9.1 custody axes.
 UD:§1:eip1776		NET-ALL-02	current		networks/README.md#r30-path	yes	2026-08-30	Contract-level meta-tx, no ERC-4337	research/_USER-DECISIONS.md:40		R30 makes contract meta-tx the default path; SCaaS §5.1: no 4337 dependency. The EIP-1776 name appears in no spec.
 UD:§1:first-chain		NET-EVM-80	superseded	NET-EVM-03		yes	2026-08-30	First chain Gnosis, then Celo	research/_USER-DECISIONS.md:41	UD:§16	Replaced by private chain first (UD:§16).

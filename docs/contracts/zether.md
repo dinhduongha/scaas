@@ -187,7 +187,7 @@ recomputes it. Vector: `transcript.json`.
 ## ElGamal state and lifecycle
 
 Key: `x ∈ [1, r)`, `Y = [x]G`, `UA = keccak256(encodedY)` (the built identifier; the Universal Account form is
-[CTR-UA-16](universal-account.md#CTR-UA-16)). Lifted ElGamal: `(C, D) = ([b]G + [ρ]Y, [ρ]G)` (with `r` for the randomness: `(C, D) = ([b]G + [r]Y, [r]G)`);
+[CTR-UA-16](accounts.md#CTR-UA-16)). Lifted ElGamal: `(C, D) = ([b]G + [ρ]Y, [ρ]G)` (with `r` for the randomness: `(C, D) = ([b]G + [r]Y, [r]G)`);
 homomorphic add/sub on ciphertexts. Decryption: `[b]G = C − [x]D`, then the configurable client BSGS ([CTR-ZTH-19](#CTR-ZTH-19)). The wallet keeps
 the balance in a **device cache** and checks it with `[b]G == C − [x]D` instead of decrypting again; when the cache is
 lost and the balance exceeds the device's BSGS bound, `zether-read-balance` (native, up to `2^54`) reads it.
@@ -534,10 +534,10 @@ fee would be stuck forever in the token's own public ERC-20 balance. Status **SP
 
 <a id="erc1271-cap"></a>
 <a id="CTR-ZTH-21"></a>**CTR-ZTH-21** — `ZetherMetaTx` applies the same ERC-1271 cap as `MetaToken`
-([CTR-ACC-05](accounts-mandates.md#CTR-ACC-05)): 400 k when `m.from.codehash` is the `SubjectAccount` clone codehash
+([CTR-ACC-05](accounts.md#CTR-ACC-05)): 400 k when `m.from.codehash` is the `SubjectAccount` clone codehash
 (immutable at `initialize`/deploy), else 50 k. The built mixin uses `staticcall{gas: 50_000}` (`ZetherMetaTx.sol:123`), so a passkey
 `SubjectAccount` clone always fails `MetaTxBadSignature` on envelopes. The built registry is not changed (the UA
-registry replaces it and already sets 400 k, [CTR-UA-17](universal-account.md#CTR-UA-17)). Test: an envelope signed by a
+registry replaces it and already sets 400 k, [CTR-UA-17](accounts.md#CTR-UA-17)). Test: an envelope signed by a
 real passkey `SubjectAccount` passes (the built `test_smartAccount1271Auth` uses only a `Mock1271Wallet` ECDSA). Status **SPECIFIED**.
 
 Pipeline order (cheap first): relayer → expiry → mode → nonce → signature → **public balance sufficient for the outer
@@ -554,8 +554,8 @@ and the device balance cache of [CTR-ZTH-19](#CTR-ZTH-19) (there is no `DECRYPT_
 
 **Transitional (BUILT).** The built `UniversalAccountRegistry` described here (eight `AuthScheme` values, `links` /
 `link_eth`, a PoP bound to `msg.sender`, "register is not relayable") is **superseded by the Universal Account
-registry** ([universal-account.md](universal-account.md)): it is deleted and replaced, dev chains only, when the UA
-registry and the Zether re-point land ([CTR-UA-22](universal-account.md#CTR-UA-22)). Until then this section describes
+registry** ([accounts.md](accounts.md)): it is deleted and replaced, dev chains only, when the UA
+registry and the Zether re-point land ([CTR-UA-22](accounts.md#CTR-UA-22)). Until then this section describes
 the code that runs.
 
 Transfer and burn authenticate **two** things: the proof (knowledge of `x`) **and** `authSig` by the account's
@@ -600,22 +600,22 @@ account's level); a replay needs that same `msg.sender` and yields the same reco
   "SCAAS-AUTH-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_"`; pk through `G2MSM` k=1 (subgroup).
 - **BLS on the same curve as the ElGamal key is forbidden** (publishing `[x]G2` breaks DDH on G1): `BLS_BN254` with a
   64-byte `Y` and `BLS_12381` with a 128-byte `Y` ⇒ `UnauthorizedScheme`. BLS keys and signatures at infinity are
-  refused ([CTR-UA-01](universal-account.md#CTR-UA-01)).
+  refused ([CTR-UA-01](accounts.md#CTR-UA-01)).
 - `linkEVM`: `links[msg.sender] = UA`, `link_eth[UA] = msg.sender`; an already-linked `msg.sender` ⇒ `EVMAlreadyLinked`.
-- A duplicate UA ⇒ `AccountAlreadyRegistered`. No key rotation: a new key = a new UA ([CTR-UA-13](universal-account.md#CTR-UA-13)).
+- A duplicate UA ⇒ `AccountAlreadyRegistered`. No key rotation: a new key = a new UA ([CTR-UA-13](accounts.md#CTR-UA-13)).
 - FROST and MuSig2 share one Schnorr verification path (`z·G == R + c·P`, O(1) gas regardless of the signer count).
 - **Built limitations, not fixed in this registry:** the PoP does not bind `scheme`/`authData`/`linkEVM` — when
   `msg.sender` is a shared contract (a public multicall/forwarder), a front-runner can replay `schnorrPop` through that
   contract with `SMART_ACCOUNT_1271` pointing at its own always-true contract, giving the UA a foreign authority forever;
   **register only from an account you alone control** (an EOA, your own `SubjectAccount`, your own Safe;
-  `UniversalAccountRegistry.sol:96`) until the UA registry, whose PoP binds `authRef` ([CTR-UA-07](universal-account.md#CTR-UA-07)), replaces it. `SMART_ACCOUNT_1271`
+  `UniversalAccountRegistry.sol:96`) until the UA registry, whose PoP binds `authRef` ([CTR-UA-07](accounts.md#CTR-UA-07)), replaces it. `SMART_ACCOUNT_1271`
   calls `isValidSignature` with a 50 k cap (`UniversalAccountRegistry.sol:206`), so a passkey `SubjectAccount` (Solidity P-256 on a dev chain without
   P256VERIFY) cannot register (`InvalidProofOfPossession`; fail-closed, no loss). `AuthSchemeLib.survivesEncKeyLeak(PQ_COMMITMENT)`
   returns `true` (`AuthScheme.sol:58-60`) although the registry treats `PQ_COMMITMENT` exactly like `SELF_SCHNORR`
   (registry `:122-127`; a leaked `x` loses funds for both); the helper is used only in `test/AuthScheme.t.sol` and the
   file is deleted with the registry.
 
-The built interface is quoted in [universal-account.md](universal-account.md#legacy-registry).
+The built interface is quoted in [accounts.md](accounts.md#legacy-registry).
 
 ## Disclosure
 

@@ -1,15 +1,15 @@
 # Load-bearing tokens of history/research sources that are deliberately absent from the current docs (docs_check.py C7 and facts check skip them).
 # token<TAB>reason<TAB>where the meaning lives now, or why it is obsolete. Reasons: vi-quote, revision-label, vi-number, stale-chain-9000, internal-path, extraction-artifact, obsolete.
-, challenge = base64url(thông điệp). secp256k1: 	extraction-artifact	contracts/accounts-mandates.md#CTR-ACC-02
-e1a4a8b	internal-path	commit id of a merge note; the implementation pin is contracts/accounts-mandates.md#CTR-ACC-05
-test/helpers/Fixtures.sol	internal-path	contracts/accounts-mandates.md#CTR-ACC-05
+, challenge = base64url(thông điệp). secp256k1: 	extraction-artifact	contracts/accounts.md#CTR-ACC-02
+e1a4a8b	internal-path	commit id of a merge note; the implementation pin is contracts/accounts.md#CTR-ACC-05
+test/helpers/Fixtures.sol	internal-path	contracts/accounts.md#CTR-ACC-05
 addKey(khoá vừa tạo)	vi-quote	clients/signers-clientkeys.md#CLI-SGN-05
  (~160–240 s), quorum ≥ 2 independent RPCs; profile 	extraction-artifact	networks/evm.md#chains
 ); address = bech32(ripemd160(sha256(pk))) must equal 	extraction-artifact	networks/cosmos.md#NET-COS-02
 sha256("scaas.passkey.v2" ‖ pk65 ‖ rpIdHash ‖ sha256(origin))[..20]	obsolete	derived passkey address superseded: the Cosmos passkey owner is the 32-byte UA id, networks/cosmos.md#NET-COS-03
  fixed **336 bytes** (	extraction-artifact	networks/solana.md#payload
  (prunable after 	extraction-artifact	contracts/metatx.md#CTR-MTX-04
- (SPECIFIED replacement 	extraction-artifact	contracts/accounts-mandates.md#CTR-ACC-07
+ (SPECIFIED replacement 	extraction-artifact	contracts/mandates.md#CTR-ACC-07
 . SPECIFIED (DEX rev 1.1, new deployment, DX-FIX3): 	extraction-artifact	contracts/dex.md#CTR-DEX-01
 ; registration checks the implementation's 	extraction-artifact	contracts/token-wrappers.md#CTR-TOK-03
  from the claim block, pick 	extraction-artifact	node/submit-lanes.md#NODE-LANE-09
@@ -22,7 +22,7 @@ OrderBookDex.admin	extraction-artifact	contracts/README.md#admin-powers-complete
 OrderBookDex.sol:143-151	internal-path	contracts/README.md#admin-powers-complete-list
 SingleUnderlyingToken.sol:261-331	internal-path	contracts/README.md#admin-powers-complete-list
 soroban/contracts/token/src/lib.rs:188-194	internal-path	contracts/README.md#admin-powers-complete-list
-authenticatorData ‖ SHA-256(clientDataJSON)	extraction-artifact	contracts/accounts-mandates.md#CTR-ACC-08
+authenticatorData ‖ SHA-256(clientDataJSON)	extraction-artifact	contracts/accounts.md#CTR-ACC-08
 soroban/contracts/account/src/lib.rs:136	internal-path	networks/README.md#NET-ALL-04
 SubjectAccount.sol:257	internal-path	networks/README.md#NET-ALL-04
 ERC20MetaTx.sol:58-60	internal-path	contracts/metatx.md#2d-nonces-and-lanes
@@ -44,7 +44,7 @@ address ∈ token đã đăng ký	vi-quote	node/threat-model.md#payment-path
 balanceOf(ví nhận)	vi-quote	integration.md#INT-ERP-09
  với địa chỉ ở **dạng chuẩn của họ** (§D.0). 	extraction-artifact	node/indexer-feeds.md (normalized event, family-canonical addresses)
  (bytes canonical của họ), 	extraction-artifact	integration.md#push
-blockchain.chain.has_p256_precompile	internal-path	ERP chain field; P-256 precompile use is contracts/accounts-mandates.md#CTR-ACC-08
+blockchain.chain.has_p256_precompile	internal-path	ERP chain field; P-256 precompile use is contracts/accounts.md#CTR-ACC-08
 2026-10-03-srs-deltas.md	internal-path	research/spec file name
 extra = H(tham số)	vi-quote	networks/README.md#model
 : a wallet transaction the user sees, not a signData). 	extraction-artifact	networks/ton.md#NET-TON-02
@@ -118,7 +118,7 @@ test/zether/*	internal-path	test directory; Zether tests are listed in contracts
  (địa chỉ package), 	extraction-artifact	integration.md#INT-ERP-14
 ; thêm 	extraction-artifact	integration.md#INT-ERP-14
 FAMILIES	internal-path	shared-file enum of a merge-coordination note (process)
- (id, không phải ví). Account tạo 	extraction-artifact	contracts/universal-account.md#CTR-UA-19
+ (id, không phải ví). Account tạo 	extraction-artifact	contracts/accounts.md#CTR-UA-19
  ký bởi **một khoá hiện có**; 	extraction-artifact	networks/solana.md#NET-SOL-06
 KeyOp{action=add_origin, origin = chính origin trong assertion}	vi-quote	networks/solana.md#NET-SOL-06
  ⇒ không tx native của chủ (R30). Cấp vốn = một 	extraction-artifact	networks/solana.md#accounts
@@ -145,11 +145,11 @@ tổng ≤ 2^64 − 1	vi-quote	contracts/zether.md#CTR-ZTH-18
 fund(nạn nhân, 1)	vi-quote	contracts/zether.md#CTR-ZTH-19
 9000	stale-chain-9000	the earlier private chain id; the private reference chain is 7622 (networks/evm.md#private-7622)
 chain 9000	stale-chain-9000	networks/evm.md#private-7622 (chain 7622)
-103.959	vi-number	measured BLS12-381/bn254 precompile gas, normalized (e.g. 103,959) in contracts/universal-account.md#gas
-114.091	vi-number	measured BLS12-381/bn254 precompile gas, normalized (e.g. 103,959) in contracts/universal-account.md#gas
-11.682	vi-number	measured BLS12-381/bn254 precompile gas, normalized (e.g. 103,959) in contracts/universal-account.md#gas
-1.100	vi-number	measured BLS12-381/bn254 precompile gas, normalized (e.g. 103,959) in contracts/universal-account.md#gas
-4.000	vi-number	measured BLS12-381/bn254 precompile gas, normalized (e.g. 103,959) in contracts/universal-account.md#gas
+103.959	vi-number	measured BLS12-381/bn254 precompile gas, normalized (e.g. 103,959) in contracts/accounts.md#gas
+114.091	vi-number	measured BLS12-381/bn254 precompile gas, normalized (e.g. 103,959) in contracts/accounts.md#gas
+11.682	vi-number	measured BLS12-381/bn254 precompile gas, normalized (e.g. 103,959) in contracts/accounts.md#gas
+1.100	vi-number	measured BLS12-381/bn254 precompile gas, normalized (e.g. 103,959) in contracts/accounts.md#gas
+4.000	vi-number	measured BLS12-381/bn254 precompile gas, normalized (e.g. 103,959) in contracts/accounts.md#gas
  (R104, deleted in P9) and 	extraction-artifact	node/job-api.md#NODE-JOB-10
 blockchain_autopay.py:12	internal-path	ERP source line ref; the auto-pay signing window is node/job-api.md#NODE-JOB-07
 MAX_SIGNING_WINDOW = 300 s	internal-path	ERP auto-pay constant; the 300 s signing window is node/job-api.md#NODE-JOB-07
@@ -191,9 +191,9 @@ src/signers/extension/*	internal-path	clients/app.md#CLI-APP-06
  | any valid mode (fee optional) | on-chain lane derivation (R139); 	extraction-artifact	contracts/metatx.md#CTR-MTX-09
 dms_blockchain/lib/eip712.py	internal-path	contracts/metatx.md#digest
 dms_blockchain_bridge/static/lib/clientkeys/	internal-path	ERP addon path of the clientkeys bundle; clients/signers-clientkeys.md
-dms_blockchain/tests/test_ua_vectors.py	internal-path	contracts/universal-account.md#vectors
-blockchain_ua	internal-path	ERP-internal module name; UA vector consumers are contracts/universal-account.md#vectors
- (R330) — derived 	extraction-artifact	contracts/universal-account.md#CTR-UA-10
+dms_blockchain/tests/test_ua_vectors.py	internal-path	contracts/accounts.md#vectors
+blockchain_ua	internal-path	ERP-internal module name; UA vector consumers are contracts/accounts.md#vectors
+ (R330) — derived 	extraction-artifact	contracts/accounts.md#CTR-UA-10
 18.014	vi-number	2^54 = 18,014,398,509,481,984 units in contracts/zether.md#limits
 4.294	vi-number	2^32 − 1 = 4,294,967,295 units in contracts/zether.md#limits
 967.295	vi-number	2^32 − 1 = 4,294,967,295 units in contracts/zether.md#limits

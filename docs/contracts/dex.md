@@ -195,7 +195,7 @@ ERC-1271, balance, allowance, closed/cancelled, nonce).
 <a id="CTR-DEX-08"></a>**CTR-DEX-08** — **`OrderBookDex` caps the ERC-1271 call by codehash.** `_validSig`'s contract
 branch is an assembly `staticcall` with cap `_erc1271Gas(signer)` = 400 k if `signer.codehash` is the `SubjectAccount`
 clone codehash (immutable at deployment, as `MetaToken._erc1271Gas` does, `MetaToken.sol:141-143`,
-[CTR-ACC-05](accounts-mandates.md#CTR-ACC-05)), else 50 k;
+[CTR-ACC-05](accounts.md#CTR-ACC-05)), else 50 k;
 at most 32 bytes of returndata are copied; before the call it requires `gasleft() ≥ cap · 64/63 + margin`, otherwise
 the whole transaction reverts (EIP-150: a relayer must not starve the call to turn a valid signature into an invalid
 one). `cancel` needs no `try`: a capped `_validSig` only returns `false` ⇒ the item is skipped. The node does not

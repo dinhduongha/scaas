@@ -43,7 +43,7 @@ whose numbering is unchanged.
 | Short name / session label | File under `history/` | Last rev | Old ids | Content now in |
 |---|---|---|---|---|
 | PD (payments design) | `specs/2026-10-03-blockchain-payments-design.md` | 1.2 | R1–R20, CR-PD-1…6 | contracts/metatx, contracts/token-wrappers, contracts/dex, node/*, integration |
-| ADW (wallets addendum) | `specs/2026-10-03-blockchain-payments-addendum-wallets.md` | 1.1 | R21–R29, CR-ADW-1…4 | contracts/token-wrappers, contracts/accounts-mandates, clients/signers-clientkeys, integration |
+| ADW (wallets addendum) | `specs/2026-10-03-blockchain-payments-addendum-wallets.md` | 1.1 | R21–R29, CR-ADW-1…4 | contracts/token-wrappers, contracts/accounts, contracts/mandates, clients/signers-clientkeys, integration |
 | R3D, "round 3" | `specs/2026-10-03-blockchain-round3-design.md` | 1.3 | R30–R67 (R36–R49 unused), CR-R3-1…11 | networks/*, node/submit-lanes, contracts/README, clients/signers-clientkeys |
 | WSF (wallet signing formats) | `specs/round3-wallet-signing-formats.md` | 1.1 | CR-WSF-1…2 | networks/{hedera,ton,sui,cosmos,soroban}, networks/README |
 | INFRA (infrastructure-service positioning) | `specs/2026-10-03-blockchain-infrastructure-service.md` | 1.2 | — | architecture.md (authority model) |
@@ -66,8 +66,8 @@ whose numbering is unchanged.
 | OPS, "spec C" (operations) | `specs/2026-10-06-operations-design.md` | 1.3 | R230–R247 | node/ops, node/runbooks |
 | S4F, "spec D" (signers follow-ups) | `specs/2026-10-06-signers-followups.md` | 1.1 | R250–R269, `S4F:Q1` | clients/signers-clientkeys, networks/sui |
 | PQZ, "spec E" (post-quantum Zether) | `specs/2026-10-06-pq-zether-design.md` | 1.4 | R270–R289 | contracts/pq-zether |
-| UA, "spec F" (Universal Account) | `specs/2026-10-06-universal-account-design.md` | 1.4 | R290–R318, R330–R331, `UA:Q1…Q14` | contracts/universal-account, contracts/accounts-mandates, clients/signers-clientkeys |
-| RS4 plan (passkey and seed) | `plans/2026-10-03-r3-passkey-seed.md` | — | RS4-1…16 | contracts/accounts-mandates, clients/signers-clientkeys, integration example |
+| UA, "spec F" (Universal Account) | `specs/2026-10-06-universal-account-design.md` | 1.4 | R290–R318, R330–R331, `UA:Q1…Q14` | contracts/accounts, clients/signers-clientkeys |
+| RS4 plan (passkey and seed) | `plans/2026-10-03-r3-passkey-seed.md` | — | RS4-1…16 | contracts/accounts, clients/signers-clientkeys, integration example |
 | SCaaS.md (system spec) | `SCaaS-2026-10-07.md` | 2026-10-07 | node invariants `SCaaS:N1…N16` | architecture.md, node/README (invariants), the component docs |
 | HANDOFF | `HANDOFF-blockchain.md` | 2026-10-06 | gates O1–O11, Z1–Z6 | node/runbooks (production gates), contracts/README (unaudited gates), `scaas/TODO.md` |
 | UD (owner decision log) | `../research/_USER-DECISIONS.md` (research, not history) | — | `UD:§n…`, `canon:Dn` | decisions.md entries (owner rulings) |

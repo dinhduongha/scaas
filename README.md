@@ -235,9 +235,9 @@ flowchart TB
 | Wrappers | `NoUnderlyingToken`, `SingleUnderlyingToken`, `MultiUnderlyingToken` | `MetaTokenBase` | BUILT | [token-wrappers](docs/contracts/token-wrappers.md) |
 | Tradable tokens | the `trade` operation inside `MetaToken`; `MetaTxDex` two-leg settlement | `IERC20MetaTx` | BUILT (`MetaTxDex` kept as legacy) | [metatx](docs/contracts/metatx.md), [legacy DEX](docs/contracts/dex.md#legacy-metatxdex) |
 | DEX | `OrderBookDex` | `EIP712` + `ReentrancyGuardTransient`; makers sign with ECDSA or ERC-1271; the only allowed spender | BUILT | [dex](docs/contracts/dex.md) |
-| Mandates | `MandateWallet` | `EIP712` + `IERC1271` | BUILT | [accounts-mandates](docs/contracts/accounts-mandates.md) |
-| Smart account (optional) | `SubjectAccount`, `SubjectAccountFactory` | `EIP712` + `IERC1271`; P-256 passkeys | BUILT | [accounts-mandates](docs/contracts/accounts-mandates.md) |
-| Universal Accounts | today the Zether-only `UniversalAccountRegistry`; next the UA registry with one verifier per kind, and MetaToken v3 with a UA ledger | the signature, multisig, BLS and hash-to-curve libraries | legacy registry BUILT; UA registry and v3 SPECIFIED | [universal-account](docs/contracts/universal-account.md) |
+| Mandates | `MandateWallet` | `EIP712` + `IERC1271` | BUILT | [mandates](docs/contracts/mandates.md) |
+| Smart account (optional) | `SubjectAccount`, `SubjectAccountFactory` | `EIP712` + `IERC1271`; P-256 passkeys | BUILT | [accounts](docs/contracts/accounts.md#subjectaccount) |
+| Universal Accounts | today the Zether-only `UniversalAccountRegistry`; next the UA registry with one verifier per kind, and MetaToken v3 with a UA ledger | the signature, multisig, BLS and hash-to-curve libraries | legacy registry BUILT; UA registry and v3 SPECIFIED | [accounts](docs/contracts/accounts.md#universal-account) |
 | Zether | `ZetherToken`, `ZetherVerifierBn254`, `ZetherVerifierBls12381`, `ITransferDisclosure` | `ZetherMetaTx` (`ERC20` + `EIP712` + `IERC20MetaTx`); EIP-196/197 and EIP-2537 precompiles | BUILT, unaudited | [zether](docs/contracts/zether.md) |
 | PQ Zether | `PqzToken` | `IERC20MetaTx`; a lattice precompile on chain 7622 | SPECIFIED | [pq-zether](docs/contracts/pq-zether.md) |
 | Asset suite | `RegulatedControls`, `ComplianceRegistry`, `VestingGrant`, `Distribution`, `ExchangeOffer` | the v2 token tiers; ERC-7201 namespaced storage | SPECIFIED | [asset-suite](docs/contracts/asset-suite.md) |
@@ -439,7 +439,7 @@ more: passkeys on phones, HSMs, ed25519 keys, Schnorr and BLS keys, multisig and
 and confidential (Zether) keys.
 
 **A Universal Account (UA) is an identifier derived from key data or from a policy — an EOA address generalized to
-every signature scheme** ([docs/contracts/universal-account.md](docs/contracts/universal-account.md)).
+every signature scheme** ([docs/contracts/accounts.md](docs/contracts/accounts.md)).
 
 ```mermaid
 flowchart LR
@@ -453,18 +453,18 @@ What makes it work:
 
 - **It is an identifier, not a contract.** Nothing is deployed per user: creating a UA is free and deterministic, and
   the same key data gives the same id on every chain of every family
-  ([CTR-UA-02](docs/contracts/universal-account.md#CTR-UA-02)).
+  ([CTR-UA-02](docs/contracts/accounts.md#CTR-UA-02)).
 - **Native accounts are used as they are.** An EVM address, a contract account (Safe, `SubjectAccount`) or a native
   account of another family is already a UA and never registers. Every other kind registers once per chain, with a
   proof that the registrant holds the key; the registry has no admin and never forgets.
 - **Ids never collide.** Every derived id carries a versioned kind tag and is 32 bytes, so a passkey UA can never equal
   an EVM address or a UA of another kind over the same key
-  ([CTR-UA-03](docs/contracts/universal-account.md#CTR-UA-03)).
+  ([CTR-UA-03](docs/contracts/accounts.md#CTR-UA-03)).
 - **One key, one purpose.** The same key is never used for two kinds — wallets derive a separate key per kind, and the
   registry refuses a key already registered under another kind
-  ([CTR-UA-10](docs/contracts/universal-account.md#CTR-UA-10)).
+  ([CTR-UA-10](docs/contracts/accounts.md#CTR-UA-10)).
 - **Each function accepts the kinds it needs.** A payment accepts any signing kind; a confidential transfer accepts
-  only Zether kinds ([CTR-UA-14](docs/contracts/universal-account.md#CTR-UA-14)).
+  only Zether kinds ([CTR-UA-14](docs/contracts/accounts.md#CTR-UA-14)).
 
 **What a UA can hold:**
 
@@ -485,18 +485,18 @@ is a plain EVM address.
 **Ways to use it:** sign alone (one key); sign together (`msig`, weighted); aggregate (MuSig2, BLS); share a key by
 threshold (FROST); authorize a confidential account (a Zether UA points to the UA that may spend it); and, optionally,
 attach verifiable credentials (eKYC) to any account, native or derived — never mandatory, and never parsed on chain
-([credentials](docs/contracts/universal-account.md#credentials)).
+([credentials](docs/contracts/accounts.md#credentials)).
 
 **Rotation and recovery.** A UA is its key data, so a new key is a new UA and funds move to it. Users who need a stable
 address across key changes, guardian recovery, or compatibility with contracts that only understand addresses use the
 optional smart account `SubjectAccount` — itself a native contract UA
-([CTR-ACC-09](docs/contracts/accounts-mandates.md#CTR-ACC-09)).
+([CTR-ACC-09](docs/contracts/accounts.md#CTR-ACC-09)).
 
 **Status.** The UA model is SPECIFIED, nothing of the new registry is built yet. Already BUILT: BLS verification,
 bn254 FROST and MuSig2 verification, ECDSA N-of-M quorums, `SubjectAccount`, and the Zether-only registry that the UA
 registry replaces. In the first version, existing tokens, the DEX and mandates keep accepting native accounts; UA
 holders use the new UA-ledger tokens (MetaToken v3) and Zether
-([function → kinds](docs/contracts/universal-account.md#function-kinds)).
+([function → kinds](docs/contracts/accounts.md#function-kinds)).
 
 ---
 
@@ -654,7 +654,7 @@ named auditor opens any single transfer.
 | Status | BUILT, **unaudited — not for production funds** | SPECIFIED, **unaudited** |
 
 Read more: [docs/contracts/zether.md](docs/contracts/zether.md), [docs/contracts/pq-zether.md](docs/contracts/pq-zether.md),
-[docs/contracts/universal-account.md](docs/contracts/universal-account.md).
+[docs/contracts/accounts.md](docs/contracts/accounts.md).
 
 ---
 

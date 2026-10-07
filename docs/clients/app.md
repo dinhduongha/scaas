@@ -426,8 +426,8 @@ no chain or network string is rendered as a link.
 <a id="accounts"></a><a id="CLI-APP-25"></a>**CLI-APP-25** — **The account model follows the Universal Account design.**
 The default "Create account" makes a **`webauthn-p256` UA** and registers it gaslessly through the gateway (`POST
 /v1/ua/register`, [NODE-GW-03](../node/gateway.md#NODE-GW-03); registration is relayable). "Recoverable account" makes a
-`SubjectAccount` (option (b), [CTR-ACC-09](../contracts/accounts-mandates.md#CTR-ACC-09)). UA balances exist only on
-**MetaToken v3** clones ([CTR-UA-18](../contracts/universal-account.md#CTR-UA-18)); a UA user offered a v1/v2 token is told to
+`SubjectAccount` (option (b), [CTR-ACC-09](../contracts/accounts.md#CTR-ACC-09)). UA balances exist only on
+**MetaToken v3** clones ([CTR-UA-18](../contracts/accounts.md#CTR-UA-18)); a UA user offered a v1/v2 token is told to
 use v3 or option (b). With `policy.requireBackupKey` on, a single-key derived UA is **unsatisfiable**
 ([CLI-SGN-15](signers-clientkeys.md#CLI-SGN-15)): the default flow becomes `SubjectAccount` + backup step, and an existing
 single-key UA is exit-only. An `msig` UA counts as backed up iff `Σweights − max(weight) ≥ threshold`. Until the UA registry,
@@ -441,7 +441,7 @@ explain.
 | Subject accounts per family | Sui `Account<T>`, Aptos Account, Solana PDA, Soroban `C…`, TON jetton wallet | as the matrix | per family (Soroban/TON: ≥ 2 keys) |
 | **Approvers** (minimal) | `msig` UA over member UAs/EOAs; the app shows the id and registers it | EVM | `Σw − max(w) ≥ threshold` |
 | Native wallet | a seed-vault native key or an extension wallet | all | outside the predicate |
-| Zether account | `zether-*` UA, `authRef` chosen from the user's accounts ([CTR-UA-16](../contracts/universal-account.md#CTR-UA-16)) | EVM dev | n/a |
+| Zether account | `zether-*` UA, `authRef` chosen from the user's accounts ([CTR-UA-16](../contracts/accounts.md#CTR-UA-16)) | EVM dev | n/a |
 
 The accounts screen (`src/features/accounts/`) shows, per account, the kind and the key role; the bound origin(s) for passkeys; BE/BS labels ("this
 device only", "may share one password manager"); the backup state from `backupStatus`.

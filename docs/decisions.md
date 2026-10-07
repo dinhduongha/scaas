@@ -1758,63 +1758,63 @@ It said: separate DB roles per module.
 ## Contracts — Accounts and mandates
 
 ### CTR-ACC-01 — SubjectAccount clones; salt binds key and guardian
-- old: RS4-1 · status: current · owner: no · date: 2026-10-03 · normative: contracts/accounts-mandates.md#CTR-ACC-01 · superseded-by: —
+- old: RS4-1 · status: current · owner: no · date: 2026-10-03 · normative: contracts/accounts.md#CTR-ACC-01 · superseded-by: —
 
 **Why.** Counterfactual clones with a salt binding the first key and the guardian give a predictable address that nobody else can claim.
 **Cost if wrong.** A salt of the key alone would let anyone deploy the account with a hostile guardian.
 **Source.** `history/plans/2026-10-03-r3-passkey-seed.md:11`
 
 ### CTR-ACC-02 — Signature is keyIndex, Merkle proof, sig
-- old: RS4-3 · status: current · owner: no · date: 2026-10-03 · normative: contracts/accounts-mandates.md#CTR-ACC-02 · superseded-by: —
+- old: RS4-3 · status: current · owner: no · date: 2026-10-03 · normative: contracts/accounts.md#CTR-ACC-02 · superseded-by: —
 
 **Why.** One signature encoding `(keyIndex, proof, sig)` covers single operations and Merkle batches for both key types.
 **Cost if wrong.** Two encodings would double the parsing and test surface.
 **Source.** `history/plans/2026-10-03-r3-passkey-seed.md:19`
 
 ### CTR-ACC-03 — Guardian recovery adds a key after two days
-- old: RS4-4 · status: current · owner: no · date: 2026-10-03 · normative: contracts/accounts-mandates.md#CTR-ACC-03 · superseded-by: —
+- old: RS4-4 · status: current · owner: no · date: 2026-10-03 · normative: contracts/accounts.md#CTR-ACC-03 · superseded-by: —
 
 **Why.** Guardian recovery adds a key after a two-day delay that any existing key can cancel, so a lost device is recoverable and a rogue guardian is visible.
 **Cost if wrong.** An instant recovery would let a compromised guardian take the account.
 **Source.** `history/plans/2026-10-03-r3-passkey-seed.md:23`
 
 ### CTR-ACC-04 — Authenticator signCount is not checked
-- old: RS4-5 · status: current · owner: no · date: 2026-10-03 · normative: contracts/accounts-mandates.md#CTR-ACC-04 · superseded-by: —
+- old: RS4-5 · status: current · owner: no · date: 2026-10-03 · normative: contracts/accounts.md#CTR-ACC-04 · superseded-by: —
 
 **Why.** Synced passkeys report a zero or non-monotonic signCount; checking it would lock out legitimate users.
 **Cost if wrong.** A cloned authenticator is not detected by the counter; the account relies on device security instead.
 **Source.** `history/plans/2026-10-03-r3-passkey-seed.md:27`
 
 ### CTR-ACC-05 — 400k ERC-1271 cap only for SubjectAccount clones
-- old: RS4-10 · status: current · owner: no · date: 2026-10-03 · normative: contracts/accounts-mandates.md#CTR-ACC-05 · superseded-by: —
+- old: RS4-10 · status: current · owner: no · date: 2026-10-03 · normative: contracts/accounts.md#CTR-ACC-05 · superseded-by: —
 
 **Why.** Only `SubjectAccount` clones, identified by codehash, get the 400 k ERC-1271 cap that the Solidity P-256 path needs; everything else keeps 50 k.
 **Cost if wrong.** A global 400 k cap lets any contract wallet grief relayers with expensive validation.
 **Source.** `history/plans/2026-10-03-r3-passkey-seed.md:43`
 
 ### CTR-ACC-06 — Delegated payment uses MandateWallet, no allowance
-- old: R25 · status: current · owner: no · date: 2026-10-07 · normative: contracts/accounts-mandates.md#CTR-ACC-06 · superseded-by: —
+- old: R25 · status: current · owner: no · date: 2026-10-07 · normative: contracts/mandates.md#CTR-ACC-06 · superseded-by: —
 
 **Why.** Delegated payment through a dedicated `MandateWallet` with per-token limits never exposes the payer's main balance to an allowance.
 **Cost if wrong.** An allowance-based mandate would be an unlimited spender on the payer's tokens.
 **Source.** `history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:196`
 
 ### CTR-ACC-07 — Signed mandate revocation bound to epoch
-- old: CR-ADW-1 · status: current · owner: no · date: 2026-10-07 · normative: contracts/accounts-mandates.md#CTR-ACC-07 · superseded-by: —
+- old: CR-ADW-1 · status: current · owner: no · date: 2026-10-07 · normative: contracts/mandates.md#CTR-ACC-07 · superseded-by: —
 
 **Why.** A signed revocation bound to an epoch revokes every outstanding mandate signature at once and works gaslessly.
 **Cost if wrong.** Without the epoch a revoked delegate could replay an older mandate.
 **Source.** `history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:296`
 
 ### CTR-ACC-08 — Passkey subjects, Merkle batch, account key lifecycle
-- old: R31(account) · status: current · owner: yes · date: 2026-10-07 · normative: contracts/accounts-mandates.md#CTR-ACC-08 · superseded-by: —
+- old: R31(account) · status: current · owner: yes · date: 2026-10-07 · normative: contracts/accounts.md#CTR-ACC-08 · superseded-by: —
 
 **Why.** Retail subjects use passkeys they already have; Merkle batching gives one biometric prompt for many lines; one grammar and check order apply in every family.
 **Cost if wrong.** Per-family WebAuthn checks drift, and one lax family (suffix origin, crossOrigin) becomes the phishing target.
 **Source.** `history/specs/2026-10-03-blockchain-round3-design.md:519`
 
 ### CTR-ACC-09 — SubjectAccount kept as optional option (b)
-- old: R307 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/accounts-mandates.md#CTR-ACC-09 · superseded-by: —
+- old: R307 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/accounts.md#CTR-ACC-09 · superseded-by: —
 
 **Why.** `SubjectAccount` stays available as option (b) for users who want a stable address across key rotation.
 **Cost if wrong.** Removing it would force every rotation to move funds.
@@ -2394,175 +2394,175 @@ It said: separate DB roles per module.
 ## Contracts — Universal Account
 
 ### CTR-UA-01 — Refuse BLS keys and signatures at infinity
-- old: RS2-18 · status: current · owner: no · date: 2026-10-03 · normative: contracts/universal-account.md#CTR-UA-01 · superseded-by: —
+- old: RS2-18 · status: current · owner: no · date: 2026-10-03 · normative: contracts/accounts.md#CTR-UA-01 · superseded-by: —
 
 **Why.** BLS keys and signatures at infinity make the pairing trivial; refusing them prevents a fake BLS custody that lets `x` alone spend.
 **Cost if wrong.** Accepting infinity lets anyone pass a BLS check.
 **Source.** `history/specs/2026-10-03-zether-design.md:618`
 
 ### CTR-UA-02 — UA is a key-derived identifier, not a contract
-- old: R290 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/universal-account.md#CTR-UA-02 · superseded-by: —
+- old: R290 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/accounts.md#CTR-UA-02 · superseded-by: —
 
 **Why.** A UA is an identifier derived from key data, like an EOA for every scheme: free, deterministic, the same on every chain, with nothing to deploy.
 **Cost if wrong.** A contract per account costs a deploy per user per chain and is upgradeable state.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:93`
 
 ### CTR-UA-03 — 32-byte kind-tagged ids in canonical form
-- old: R291 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-03 · superseded-by: —
+- old: R291 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/accounts.md#CTR-UA-03 · superseded-by: —
 
 **Why.** 32-byte kind-tagged ids never collide with 20-byte native ids; a 20-byte truncation would allow a 2^80 grind between an EOA and a multisig policy.
 **Cost if wrong.** 12 more calldata bytes per id (192 gas).
 **Source.** `history/specs/2026-10-06-universal-account-design.md:100`
 
 ### CTR-UA-04 — keccak256 for ids in every family
-- old: R292 · status: current · owner: no · date: 2026-10-06 · normative: contracts/universal-account.md#CTR-UA-04 · superseded-by: —
+- old: R292 · status: current · owner: no · date: 2026-10-06 · normative: contracts/accounts.md#CTR-UA-04 · superseded-by: —
 
 **Why.** One hash (keccak256) with native support in every family gives the same id on every chain.
 **Cost if wrong.** Different hashes per family would give different ids for one key.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:113`
 
 ### CTR-UA-05 — Fixed kind table per registry generation
-- old: R293 · status: current · owner: no · date: 2026-10-06 · normative: contracts/universal-account.md#CTR-UA-05 · superseded-by: —
+- old: R293 · status: current · owner: no · date: 2026-10-06 · normative: contracts/accounts.md#CTR-UA-05 · superseded-by: —
 
 **Why.** The kind table is fixed per registry generation; a mutable table would be an admin key over every account.
 **Cost if wrong.** New schemes wait for a new generation and new token implementations.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:117`
 
 ### CTR-UA-06 — Native kinds unregistered; derived kinds register first
-- old: R294 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/universal-account.md#CTR-UA-06 · superseded-by: —
+- old: R294 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/accounts.md#CTR-UA-06 · superseded-by: —
 
 **Why.** Native kinds need no registration; derived kinds register once per chain, which is where PoP and one-key-one-purpose are enforced and typos revert.
 **Cost if wrong.** One registration per chain (~75 k gas on bn254).
 **Source.** `history/specs/2026-10-06-universal-account-design.md:125`
 
 ### CTR-UA-07 — PoP binds chain, registry, UA and authRef
-- old: R295, UA:Q10 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-07 · superseded-by: —
+- old: R295, UA:Q10 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/accounts.md#CTR-UA-07 · superseded-by: —
 
 **Why.** Every record field follows from signed data (PoP over chain, registry, UA and `authRef`; the authority co-signs), so registration is relayable and front-running yields the same record or a revert.
 **Cost if wrong.** A field taken from `msg.sender` or left unsigned would turn front-running into capture.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:133`, `history/specs/2026-10-06-universal-account-design.md:1407`
 
 ### CTR-UA-08 — Rogue-key defence chosen per aggregate kind
-- old: R296, UA:Q3 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-08 · superseded-by: —
+- old: R296, UA:Q3 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/accounts.md#CTR-UA-08 · superseded-by: —
 
 **Why.** Each aggregate kind uses its native rogue-key defence, checked on chain: per-member PoP for `msig`, KeyAgg for MuSig2, DKG PoKs for FROST.
 **Cost if wrong.** Off-chain facts (share distribution, distinct parties) stay attestation-only and must be shown as such.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:148`, `history/specs/2026-10-06-universal-account-design.md:1391`
 
 ### CTR-UA-09 — Structures commit to members; one nesting level
-- old: R297 · status: current · owner: no · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-09 · superseded-by: —
+- old: R297 · status: current · owner: no · date: 2026-10-07 · normative: contracts/accounts.md#CTR-UA-09 · superseded-by: —
 
 **Why.** Structures commit to sorted members and nest one level, which bounds gas and avoids cycles.
 **Cost if wrong.** Two-level governance uses `SubjectAccount` or Safe as a member.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:159`
 
 ### CTR-UA-10 — One key one purpose: registry, tags, EOAs
-- old: R298(2-3-4) · status: current · owner: yes · date: 2026-10-06 · normative: contracts/universal-account.md#CTR-UA-10 · superseded-by: —
+- old: R298(2-3-4) · status: current · owner: yes · date: 2026-10-06 · normative: contracts/accounts.md#CTR-UA-10 · superseded-by: —
 
 **Why.** One key = one purpose in four layers (derivation, registry `keyOwner`, tagged messages, EOA rules) prevents cross-scheme nonce leaks and signing oracles.
 **Cost if wrong.** A foreign wallet reusing an EOA key for `bip340` remains undetectable on chain.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:166`
 
 ### CTR-UA-11 — keyHash per curve group, not per kind
-- old: R299 · status: current · owner: no · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-11 · superseded-by: —
+- old: R299 · status: current · owner: no · date: 2026-10-07 · normative: contracts/accounts.md#CTR-UA-11 · superseded-by: —
 
 **Why.** `keyHash` per curve group makes all kinds over one group share a namespace, so the same key cannot register under two kinds.
 **Cost if wrong.** A per-kind keyHash allows the same key under two kinds.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:173`
 
 ### CTR-UA-12 — Tagged message for every derived-UA signature
-- old: R301 · status: current · owner: no · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-12 · superseded-by: —
+- old: R301 · status: current · owner: no · date: 2026-10-07 · normative: contracts/accounts.md#CTR-UA-12 · superseded-by: —
 
 **Why.** Every derived-UA signature is over a tagged message with kind and purpose, so cross-kind and cross-purpose replay die at the hash; native signers sign EIP-712 `UAAuth`, never a raw hash.
 **Cost if wrong.** One extra keccak (~60 gas).
 **Source.** `history/specs/2026-10-06-universal-account-design.md:188`
 
 ### CTR-UA-13 — No key rotation inside a UA
-- old: R302, RS2-9, UA:Q1 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/universal-account.md#CTR-UA-13 · superseded-by: —
+- old: R302, RS2-9, UA:Q1 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/accounts.md#CTR-UA-13 · superseded-by: —
 
 **Why.** A UA is immutable: new key data is a new UA; rotation moves funds. A rotatable policy kind was rejected for v1 because it brings back an admin-like mutable record.
 **Cost if wrong.** Membership changes of a corporate `msig` require moving funds.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:202`, `history/specs/2026-10-03-zether-design.md:597`, `history/specs/2026-10-06-universal-account-design.md:1385`
 
 ### CTR-UA-14 — Each function accepts only the kinds it needs
-- old: R303, UA:Q4, UA:Q5, UA:Q7 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-14 · superseded-by: —
+- old: R303, UA:Q4, UA:Q5, UA:Q7 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/accounts.md#CTR-UA-14 · superseded-by: —
 
 **Why.** Each function accepts exactly the kinds it needs; native-address functions keep their ABIs and Zether UAs can neither receive on v3 nor sign through `requireAuthorized`.
 **Cost if wrong.** UA holders need v3 tokens; deployed v1/v2 clones stay native-only.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:207`, `history/specs/2026-10-06-universal-account-design.md:1394`, `history/specs/2026-10-06-universal-account-design.md:1396`, `history/specs/2026-10-06-universal-account-design.md:1400`
 
 ### CTR-UA-15 — Registry is monotonic and admin-free
-- old: R304 · status: current · owner: no · date: 2026-10-06 · normative: contracts/universal-account.md#CTR-UA-15 · superseded-by: —
+- old: R304 · status: current · owner: no · date: 2026-10-06 · normative: contracts/accounts.md#CTR-UA-15 · superseded-by: —
 
 **Why.** A monotonic, admin-free registry lets tokens rely on a record forever and nobody can repoint a key. Rejected: the early shared-registry sketch (`SchnorrPublicKey {x, y}`, `register(x, y, sig)`, `schnorrAddress = keccak256(abi.encodePacked(x, y))`) — corrected to kind-tagged ids, a PoP with domain tag, chain and registry, on-curve and subgroup checks, and no upgrade path.
 **Cost if wrong.** A compromised derived key is handled like a compromised EOA: move funds.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:215`
 
 ### CTR-UA-16 — Zether kinds bind encryption key; immutable authRef
-- old: R305, UA:Q2 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-16 · superseded-by: —
+- old: R305, UA:Q2 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/accounts.md#CTR-UA-16 · superseded-by: —
 
 **Why.** Zether kinds bind only the encryption key; authorization is an immutable `authRef` (self, native or SIGNING UA), so spend authority stays separate from decryption.
 **Cost if wrong.** `authRef` cannot rotate; a timelocked rotation was rejected.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:219`, `history/specs/2026-10-06-universal-account-design.md:1389`
 
 ### CTR-UA-17 — Verify through registry; large keys stored once
-- old: R306 · status: current · owner: no · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-17 · superseded-by: —
+- old: R306 · status: current · owner: no · date: 2026-10-07 · normative: contracts/accounts.md#CTR-UA-17 · superseded-by: —
 
 **Why.** The registry does lookup and check in one call; small keys travel in calldata, large keys (PQ, MuSig2/FROST group keys) are stored once.
 **Cost if wrong.** No token-side cache in v1: one cold call (~2.6 k) per check.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:229`
 
 ### CTR-UA-18 — Derived-UA balances in a separate bytes32 ledger
-- old: R308 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-18 · superseded-by: —
+- old: R308 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/accounts.md#CTR-UA-18 · superseded-by: —
 
 **Why.** Derived-UA balances live in a separate `bytes32` ledger shown to ERC-20 tools as the `UA_POOL` sub-ledger, keeping `Transfer` replay equal to `balanceOf`.
 **Cost if wrong.** Naive indexers see one large `UA_POOL` holder.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:243`
 
 ### CTR-UA-19 — UAMetaTransaction has its own typehash
-- old: R309, UA:Q11 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-19 · superseded-by: —
+- old: R309, UA:Q11 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/accounts.md#CTR-UA-19 · superseded-by: —
 
 **Why.** `UAMetaTransaction` has its own struct and typehash because `from` is `bytes32`; this is not a second hash of the same struct.
 **Cost if wrong.** Clients build two struct shapes.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:255`, `history/specs/2026-10-06-universal-account-design.md:1410`
 
 ### CTR-UA-20 — Optional VC layer; on-chain anchor deferred
-- old: R310 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-20 · superseded-by: —
+- old: R310 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/accounts.md#CTR-UA-20 · superseded-by: —
 
 **Why.** The credential layer is optional; contracts consume only `ComplianceRegistry` flags. The on-chain anchor is deferred because nothing reads it and it would leak metadata.
 **Cost if wrong.** No public holder/issuer co-statement in v1; the evidence bundle carries it privately.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:264`
 
 ### CTR-UA-21 — Holder binding by account-signed presentation
-- old: R311, UA:Q14 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-21 · superseded-by: —
+- old: R311, UA:Q14 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/accounts.md#CTR-UA-21 · superseded-by: —
 
 **Why.** Holder binding is a presentation signed by the account under purpose `vp` (SD-JWT VC + KB-JWT `alg: scaas-ua`), ideally by a dedicated identity UA.
 **Cost if wrong.** External SD-JWT verifiers accept these presentations only if they implement `scaas-ua`.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:271`, `history/specs/2026-10-06-universal-account-design.md:1415`
 
 ### CTR-UA-22 — Breaking dev-only migration from Zether registry
-- old: R312 · status: current · owner: no · date: 2026-10-06 · normative: contracts/universal-account.md#CTR-UA-22 · superseded-by: —
+- old: R312 · status: current · owner: no · date: 2026-10-06 · normative: contracts/accounts.md#CTR-UA-22 · superseded-by: —
 
 **Why.** Migration from the built Zether registry is breaking and dev-only: the old registry and `AuthScheme` are deleted, Zether accounts re-register.
 **Cost if wrong.** Dev balances are recreated by scripts; no production data exists.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:278`
 
 ### CTR-UA-23 — PQ and ed25519 kinds on every EVM chain
-- old: R313, UA:Q9 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-23 · superseded-by: —
+- old: R313, UA:Q9 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/accounts.md#CTR-UA-23 · superseded-by: —
 
 **Why.** PQ signing kinds and ed25519 are enabled on every EVM chain (owner), verified by precompile where probed or pure Solidity, each within a measured per-chain cap; an over-budget kind is disabled, never registrable-but-unusable.
 **Cost if wrong.** PQ checks cost real money on public L1s (≈ $36–240 per ML-DSA-65 check at 10 gwei).
 **Source.** `history/specs/2026-10-06-universal-account-design.md:281`, `history/specs/2026-10-06-universal-account-design.md:1404`
 
 ### CTR-UA-24 — EIP-7702 EOAs are native; classify by code
-- old: R331 · status: current · owner: no · date: 2026-10-07 · normative: contracts/universal-account.md#CTR-UA-24 · superseded-by: —
+- old: R331 · status: current · owner: no · date: 2026-10-07 · normative: contracts/accounts.md#CTR-UA-24 · superseded-by: —
 
 **Why.** An EIP-7702 delegated EOA keeps its base key as root, so ECDSA is accepted and ERC-1271 through the delegate is a fallback; classification is by code at verify time.
 **Cost if wrong.** If a future EIP lets 7702 accounts disable the base key, a new registry generation must follow it.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:355`
 
 ### CTR-UA-25 — No on-chain registration gate in v1
-- old: UA:Q8 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/universal-account.md#CTR-UA-25 · superseded-by: —
+- old: UA:Q8 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/accounts.md#CTR-UA-25 · superseded-by: —
 
 **Why.** No on-chain registration gate in v1: node sponsorship limits bound spam; self-paid spam pays its own gas.
 **Cost if wrong.** An immutable `IRegistrationPolicy` per generation is the fallback if spam becomes a problem.

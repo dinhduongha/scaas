@@ -252,7 +252,7 @@ unwrap, `addReserve`, `mtxBatch`). Cheap checks come first:
 | 2 | `block.timestamp ≤ m.validUntil` | no SLOAD | `MetaTxExpired` |
 | 3 | `validateMode(m.mode)` | no SLOAD | `MetaTxUnknownMode` (v2: `ModeUnknownBits` / `ModeFeeInvalid`) |
 | 4 | `m.nonce == metaNonce(from, batch)` | 1 SLOAD | `MetaTxBadNonce(expected, got)` |
-| 5 | Signature over the digest (`_hashTypedDataV4(hashStruct(m))`): EOA ⇒ `ECDSA.tryRecover` (65 bytes, low-s); contract ⇒ ERC-1271 `isValidSignature` staticcall (50 000 gas; 400 000 for `SubjectAccount` clones, which verify P-256 in Solidity when no precompile, [CTR-ACC-05](accounts-mandates.md#CTR-ACC-05)) | ecrecover / call | `MetaTxBadSignature` |
+| 5 | Signature over the digest (`_hashTypedDataV4(hashStruct(m))`): EOA ⇒ `ECDSA.tryRecover` (65 bytes, low-s); contract ⇒ ERC-1271 `isValidSignature` staticcall (50 000 gas; 400 000 for `SubjectAccount` clones, which verify P-256 in Solidity when no precompile, [CTR-ACC-05](accounts.md#CTR-ACC-05)) | ecrecover / call | `MetaTxBadSignature` |
 | 6 | Fee computation (`feeRecipient = 0` ⇒ `msg.sender`), `FeePolicy.compute` on `m.value` + `validateRecipient`, the payee check (v2), balance ≥ value + fee, `_checkOp` | SLOADs | `MetaTxInsufficientForFee`, `FeeExceedsCap`, `FeeRecipientRequired`, `FeeRecipientIsPayee`, op errors |
 | 7 | Transfer the fee (v2: and write `metaNonce = expected + 1`) | SSTORE | — |
 | 8 | `_executeOp` | SSTORE | — (must not fail; v2 unwrap: only the underlying's transfer may revert, undoing the whole tx) |
@@ -419,7 +419,7 @@ items or 3 s; unwrap items are never batched. Rules: `ms.length == sigs.length` 
 `msg.sender` is the relayer for every item (restricted-relayer intents keep working); any item reverting reverts the
 batch, so fee collected ⇔ op completed holds per item and per batch; items may mix ops and payers but never tokens or
 chains (it is a function of one token). The one exception to "one typehash" is the Universal Account path, which has
-its own `UAMetaTransaction` type ([CTR-UA-19](universal-account.md#CTR-UA-19)).
+its own `UAMetaTransaction` type ([CTR-UA-19](accounts.md#CTR-UA-19)).
 
 Measured (`test/v2/MetaTxGasV2.t.sol`, clones, warm lane): `mtxTransfer` ≈ 660 gas and `mtxPay` ≈ 140 gas below the
 generic path, `mtxTransferWithFee` ≈ 200 below, `executeMetaTransactionWithFee` ≈ 85 above (dispatch + shape check);
@@ -628,7 +628,7 @@ The co-signing key controls the receiving wallet (a `SubjectAccount` key validat
 `executeAsOwner`; there is no scoped key kind), so the receiving wallet for this mode is a dedicated hot collection
 wallet (EOA or `SubjectAccount`) holding only incoming receiver-pays funds, swept automatically to a cold treasury; a
 cold receiving wallet cannot co-sign and must not offer this mode. A scoped key kind that validates only
-`ReceiverFee` preimages with a fee cap is a planned `SubjectAccount` change ([accounts-mandates.md](accounts-mandates.md#limitations)).
+`ReceiverFee` preimages with a fee cap is a planned `SubjectAccount` change ([accounts.md](accounts.md#smart-account-limitations)).
 Bytecode size: the 24 576-byte CI gate covers every tier and both Hedera children; if one exceeds it, the
 `ReceiverFee` hashing and check move to an external library (`ReceiverFeeLib`, public functions). Node and client
 touchpoints (job field `receiver_fee`, `token.features`, booking): [node/sponsorship.md](../node/sponsorship.md#receiver-pays),

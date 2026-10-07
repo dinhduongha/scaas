@@ -42,8 +42,8 @@ and the subject can always go to another relayer, or submit itself.
 |---|---|---|
 | Gasless meta-transactions | Users sign typed data; a relayer submits and pays gas; 2D nonces and lanes so one stuck operation never blocks another; fee policies from "free" (B2B) to fee-paying | [contracts/metatx.md](contracts/metatx.md) |
 | Tokens and wrappers | Issuer tokens, wrappers of existing tokens at fixed or adjustable rates, multi-underlying wrappers; an open factory of immutable clones; contract-only allowances | [contracts/token-wrappers.md](contracts/token-wrappers.md) |
-| Accounts and mandates | Passkey-controlled subject accounts with guardians and recovery; mandate wallets with per-payment and per-period caps | [contracts/accounts-mandates.md](contracts/accounts-mandates.md) |
-| Universal Account | One account identifier derived from any key type (secp256k1, ed25519, P-256, BLS, post-quantum…), registered per chain with proof of possession | [contracts/universal-account.md](contracts/universal-account.md) |
+| Accounts | Universal Account: one account identifier derived from any key type (secp256k1, ed25519, P-256, BLS, post-quantum…), registered per chain with proof of possession; optional passkey-controlled smart accounts with guardians and recovery | [contracts/accounts.md](contracts/accounts.md) |
+| Mandates | Mandate wallets with per-payment and per-period caps, approved payees and expiry | [contracts/mandates.md](contracts/mandates.md) |
 | Trading | A signed-order, price-time order book; settlement in one transaction; managed markets for regulated assets | [contracts/dex.md](contracts/dex.md), [node/dex-venue.md](node/dex-venue.md) |
 | Procurement | Sealed-bid tenders with deposits, commit/reveal and refunds | [contracts/tender.md](contracts/tender.md) |
 | Asset tokenization | Regulated tokens, vesting and streaming, distributions, corporate actions, templates | [contracts/asset-suite.md](contracts/asset-suite.md) |

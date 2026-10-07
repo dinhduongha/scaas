@@ -202,7 +202,7 @@ params.
 
 <a id="NODE-MESH-18"></a>**NODE-MESH-18** — **UA intents use `scaas-intent/1.3`** (only for this body; everything else
 stays 1.2): EVM body `evm.ua_meta_tx = {token, m: UAMetaTransaction (hex fields), auth}`; `from` decoded from `m.from`
-(32-byte hex, canonicalised per [CTR-UA-03](../contracts/universal-account.md#CTR-UA-03)). `intent_id` = `uaDigest(m)`.
+(32-byte hex, canonicalised per [CTR-UA-03](../contracts/accounts.md#CTR-UA-03)). `intent_id` = `uaDigest(m)`.
 `sig_kind` values: `eoa`, `erc1271`, `ua`. No `from_kind`: the kind comes from `recordOf` (an unsigned JSON field would
 be a second source of truth). 1.2 nodes refuse/ignore 1.3 envelopes (no penalty, no forwarding).
 

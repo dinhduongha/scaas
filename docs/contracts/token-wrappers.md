@@ -454,7 +454,7 @@ explicitly:
 - Hedera HTS allowances at protocol level cannot be restricted; HTS tokens are used only through a tier-2 wrapper
   ([NET-HED-04](../networks/hedera.md#NET-HED-04)).
 - **Agents never sign allowances.** Spending authority is expressed as exact-amount, expiring meta-tx signatures or
-  as an on-chain mandate ([CTR-ACC-06](accounts-mandates.md#CTR-ACC-06)).
+  as an on-chain mandate ([CTR-ACC-06](mandates.md#CTR-ACC-06)).
 
 The stricter rule replaces a weaker "EOA caller" form that blocked EOA **callers** of `approve` (`msg.sender == tx.origin &&
 extcodesize == 0`): what matters is that no EOA can be a spender and no EOA can spend an allowance.

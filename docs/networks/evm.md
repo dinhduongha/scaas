@@ -121,7 +121,7 @@ voluntary migration.
 <a id="eip7702"></a>
 
 An EOA that delegated its code through EIP-7702 is still a native account: SCaaS classifies `from` by its code
-([CTR-UA-24](../contracts/universal-account.md#CTR-UA-24)).
+([CTR-UA-24](../contracts/accounts.md#CTR-UA-24)).
 
 ## Limitations
 

@@ -114,7 +114,7 @@ capability, not an `allow_call` grant ("gateway capability, not a namespace gran
 registration quota and the sponsor budget; the one `~gateway` `call` sponsor policy shape allowed is `contract =
 chain.ua_registry`, `selector` = `register`, `max_tx_per_payer_hour = 0`
 ([sponsorship.md#admin](sponsorship.md#admin)). The universal-account migration uses this route
-([contracts/universal-account.md#migration](../contracts/universal-account.md#migration)).
+([contracts/accounts.md#migration](../contracts/accounts.md#migration)).
 
 ### UA record cache
 
@@ -139,7 +139,7 @@ profile `genesis_hash` `==` `registry.chainUid()` `==` each token's `chainUid`, 
 ### EIP-7702
 
 <a id="eip-7702"></a>The node never classifies a native EVM `from` by reading its code at accept
-([CTR-UA-24](../contracts/universal-account.md#CTR-UA-24)). A local ECDSA check that recovers the address passes
+([CTR-UA-24](../contracts/accounts.md#CTR-UA-24)). A local ECDSA check that recovers the address passes
 whether the code is empty or a 7702 designator (`0xef0100 ‖ address`); a signature that does not recover is an
 ERC-1271 candidate: refused for sponsoring on public doors (`BAD_SIGNATURE`,
 [sponsorship.md#evaluation](sponsorship.md#evaluation)), otherwise left to simulation, which runs the contract's own

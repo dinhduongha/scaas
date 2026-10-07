@@ -290,7 +290,7 @@ ledger range: SPECIFIED.
 - <a id="NET-SOR-04"></a>**NET-SOR-04** — **Per-key permissions are a seam.** `__check_auth` ignores `auth_contexts`
   (`_contexts`, `account/src/lib.rs:215`): every key of the account may do everything, including `add_key`; per-key
   scopes (a passkey that pays ≤ X, only a seed key changes keys…) wait for Universal Account key purposes
-  ([CTR-UA-10](../contracts/universal-account.md#CTR-UA-10)). Residual risk, stated: any one passkey can `add_key` an
+  ([CTR-UA-10](../contracts/accounts.md#CTR-UA-10)). Residual risk, stated: any one passkey can `add_key` an
   attacker's key.
 - Not on the mesh (above). Seed role keys of a `C…` account use `kindNo` 18
   ([CLI-SGN-30](../clients/signers-clientkeys.md#CLI-SGN-30)).

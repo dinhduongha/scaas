@@ -37,7 +37,7 @@ per-subject sequential nonce ([NODE-MESH-07](../node/mesh.md#NODE-MESH-07); owne
 
 1. **The client signs, the relayer pays.** No server ever holds a key to sign for a subject. The only exception is
    an explicitly delegated, capped custodial or mandate wallet with four-eyes control
-   ([CTR-ACC-06](../contracts/accounts-mandates.md#CTR-ACC-06)).
+   ([CTR-ACC-06](../contracts/mandates.md#CTR-ACC-06)).
 2. <a id="r30-path"></a><a id="NET-ALL-02"></a>**NET-ALL-02** — **Contract-level meta-transactions are the default
    path on every network; the subject's account sequence is never an ordering lock.** An account sequence (Stellar
    sequence, Cosmos account sequence, TON wallet seqno, the Hedera account transaction path) queues *every*
@@ -144,7 +144,7 @@ chain_uid)`, never by its chain id alone.** `chain_uid` (`bytes32`, `≠ 0`) is 
 RPC reports it (EVM, Hedera); on EVM it is a **constructor immutable** of the Universal Account registry exposed as
 `chainUid()` and published in the chain profile, and it is bound into the proof-of-possession digest, the registry's
 EIP-712 domain `salt`, the v3 meta-transaction domain `salt` and the `metatx-cancel` digest
-([CTR-UA-07](../contracts/universal-account.md#CTR-UA-07)); being a constructor argument it also makes the CREATE2
+([CTR-UA-07](../contracts/accounts.md#CTR-UA-07)); being a constructor argument it also makes the CREATE2
 address differ per chain. The EVM cannot read its own genesis hash after block 256, so a registry cannot *prove*
 `chain_uid`; the guarantee is that two honest registries on chains sharing a chain id (7622 or any other) never
 accept each other's signatures. A replica deployed elsewhere from a copy of our profile is trusted by nothing of
@@ -243,7 +243,7 @@ BCS). Client rendering: [CLI-SGN-27](../clients/signers-clientkeys.md#CLI-SGN-27
 
 <a id="ua-registries"></a><a id="NET-ALL-20"></a>**NET-ALL-20** — **Per-family registries share the kind table, the
 tags, the derivations and one vector file** (`smartcontracts/vectors/ua/kinds.json`,
-[CTR-UA-05](../contracts/universal-account.md#CTR-UA-05)); each family realises the registry in its own idiom. TON
+[CTR-UA-05](../contracts/accounts.md#CTR-UA-05)); each family realises the registry in its own idiom. TON
 has no registry in v1: a derived key on TON is bound by the native wallet owner's `set_key`, which **also carries a
 signature by the bound key** over `uaMessage(kind, POP_TAG, pop_digest)` (`registry_id` = the jetton-wallet address;
 TVM `CHKSIGNS` for ed25519, `P256_CHKSIGNS` for P-256), so binding is consent **and** possession; chain-wide keyHash
@@ -259,7 +259,7 @@ contracts, not accounts of the chain: nobody can sign for them as an x/auth acco
 `MsgSend`, a SOL transfer or an ATA created for one burns funds. They are therefore **displayed and encoded only as
 `urn:scaas:ua:v1:<kind>:<hex32>`** (never the chain's account HRP, never base58 as a pubkey), and wallets and
 clientkeys refuse a native send to that form. Why: a 20-byte form is exactly the truncation the UA id space forbids
-(2^80 collision work against secp256k1 accounts, [CTR-UA-03](../contracts/universal-account.md#CTR-UA-03)); an
+(2^80 collision work against secp256k1 accounts, [CTR-UA-03](../contracts/accounts.md#CTR-UA-03)); an
 account-shaped form invites native sends to a keyless address. Cost: dev passkey accounts re-open; users copy a URN,
 not an address. Owner-confirmed.
 

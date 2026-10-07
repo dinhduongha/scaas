@@ -56,7 +56,7 @@ back.
 | Non-repudiation | None: the server writes the log and can write any line | None, for the same reason | Per operation: a domain-separated signature with nonce and expiry, publicly verifiable forever |
 | Audit trail | Application logs and cloud audit logs held by the operator | Database and platform logs held by the operator | An append-only distributed ledger; the ERP is a read-in replica ("Land") **through its node** |
 | Authorization enforcement | Application code (an endpoint is easy to miss) | Row-level security (central, but the `service_role` key and policy bugs bypass it) | Immutable contract code checks signature, nonce, expiry and limits on **every** call; **no admin can move a subject's funds**, except the bounded, creation-time powers listed below |
-| Revocation and rotation | Easy: short TTL, deny lists, rotate server keys | Easy: rotate the JWT secret, revoke refresh tokens | Harder: on-chain key rotation in a smart account; several passkeys or guardians for device loss ([contracts/accounts-mandates.md](contracts/accounts-mandates.md)) |
+| Revocation and rotation | Easy: short TTL, deny lists, rotate server keys | Easy: rotate the JWT secret, revoke refresh tokens | Harder: on-chain key rotation in a smart account; several passkeys or guardians for device loss ([contracts/accounts.md](contracts/accounts.md)) |
 | Write latency and cost | Milliseconds; compute and database cost | Milliseconds; plan-based | Chain finality (seconds to minutes); gas per write, sponsored by a relayer ([Economics](#economics)) |
 | Reads | Served by the server | Served by the backend with row-level security | **Unsigned**: through the node feeds, an indexer or the ERP, with ordinary JWT or session auth. Only valuable writes need client signatures |
 | Land (booking into the ERP) | — | — | The ERP trusts **its own node** and, through it, the **RPC quorum**: an event is booked only when at least `quorum` independent providers return the same event set for a final range ([NODE-IDX-01](node/indexer-feeds.md#NODE-IDX-01)); `quorum = 1` is single-provider trust, and a compromised node can lie on `/v1/events`. "Verifiable without trusting a server" holds for **signatures**, not automatically for ERP bookings |
@@ -80,7 +80,7 @@ Design consequences:
    granting or changing authority, registering a key — carries the subject's signature. The server never holds a key
    to sign for a subject. The one exception is a custodial or delegated wallet that the subject or its organization
    **explicitly** entrusted, with limits and an approval log ([INT-ERP-02](integration.md#INT-ERP-02),
-   [CTR-ACC-06](contracts/accounts-mandates.md#CTR-ACC-06), [INT-ERP-08](integration.md#INT-ERP-08)). The node signs
+   [CTR-ACC-06](contracts/mandates.md#CTR-ACC-06), [INT-ERP-08](integration.md#INT-ERP-08)). The node signs
    client-built `call` jobs (whose own authorization lives in the calldata) only when target and selector are in its
    call table ([NODE-JOB-01](node/job-api.md#NODE-JOB-01)).
 2. **Passkeys** (WebAuthn, P-256) sign `authenticatorData ‖ SHA-256(clientDataJSON)` whose `challenge` is the typed
@@ -88,7 +88,7 @@ Design consequences:
    `rpIdHash`, `origin` (exact), the UP and UV flags and low-`s`, with **one `clientDataJSON` grammar and one shared
    vector file for every family** ([NET-ALL-04](networks/README.md#NET-ALL-04)).
 3. **UX.** One biometric or PIN per signature; related operations are batched under one signature over a Merkle root
-   of their digests ([CTR-ACC-08](contracts/accounts-mandates.md#CTR-ACC-08)).
+   of their digests ([CTR-ACC-08](contracts/accounts.md#CTR-ACC-08)).
 4. **Anti-lock.** Subject signatures use **contract-level lanes and nonces**, never the subject's account sequence,
    so a stuck operation on one contract never blocks the subject elsewhere ([NET-ALL-02](networks/README.md#NET-ALL-02)).
 5. **Reads, reports and workflow** keep using JWT or session auth as in IaaS/BaaS. SCaaS is the layer for write
@@ -303,7 +303,7 @@ moves each chain to the push model, and the pull path is removed in one step aft
 
 | Boundary | Crossing | Control |
 |---|---|---|
-| Subject device ↔ everything | Signatures only; keys never leave the device (seed, passkey, Zether secret `x`) | [CTR-ACC-08](contracts/accounts-mandates.md#CTR-ACC-08), [CLI-SGN-11](clients/signers-clientkeys.md#CLI-SGN-11), [CLI-SGN-10](clients/signers-clientkeys.md#CLI-SGN-10) |
+| Subject device ↔ everything | Signatures only; keys never leave the device (seed, passkey, Zether secret `x`) | [CTR-ACC-08](contracts/accounts.md#CTR-ACC-08), [CLI-SGN-11](clients/signers-clientkeys.md#CLI-SGN-11), [CLI-SGN-10](clients/signers-clientkeys.md#CLI-SGN-10) |
 | Client ↔ node job API | HMAC per API key, namespace-scoped, idempotent; API keys only for external **server-side** clients, never in browser, mobile or desktop apps or extensions | [NODE-JOB-04](node/job-api.md#NODE-JOB-04), [NODE-JOB-05](node/job-api.md#NODE-JOB-05), [NODE-ADM-06](node/admin-auth.md#NODE-ADM-06) |
 | Operator ↔ node admin | Built-in users (Argon2id) or optional OIDC; roles; audit. Configuration automation uses OIDC client credentials or the host CLI | [node/admin-auth.md](node/admin-auth.md) |
 | Anyone ↔ gateway | Optional bearer or HMAC; body cap 64 KiB; concurrency 32; simulate before queueing; reverse-proxy rate limit | [NODE-GW-02](node/gateway.md#NODE-GW-02) |
@@ -407,5 +407,5 @@ Crypto-shredding, disclosure for reconciliation and the land gate are in
 | **`entryRef`** | The 32-byte reference carried by a payment op and emitted in `PaymentSettled`; links an on-chain payment to a business document; 32 random bytes ([CTR-MTX-03](contracts/metatx.md#CTR-MTX-03)). Some requirement texts call it `payId`. |
 | **Finality gate** | The rule that decides when a block range is final: `depth` (n confirmations), `tag` (`finalized`) or `instant` (BFT families), plus a quorum of independent RPC endpoints returning the same event set ([NODE-IDX-02](node/indexer-feeds.md#NODE-IDX-02)). |
 | **Consumed** | Job state: the subject nonce moved past the intent's nonce through a transaction this node did not land (or has not attributed yet). Never a failure by itself ([NODE-LANE-09](node/submit-lanes.md#NODE-LANE-09)). |
-| **UA** | Universal Account: an account identifier derived from key data, an EOA generalised to every signature scheme — the native address for a chain's native accounts (never registered), otherwise `keccak256(keccak256(kind_tag) ‖ key_data)` (32 bytes, kind-tagged, top 96 bits non-zero), registered per chain with a proof of possession that binds the chain (`chain_key` and `chain_uid`, the genesis hash), the registry, the UA and `authRef` (not the caller, so registration is relayable) ([contracts/universal-account.md](contracts/universal-account.md)). The built registry uses the Zether-only `keccak256(encodedY)` form until the UA registry replaces it ([CTR-UA-22](contracts/universal-account.md#CTR-UA-22)). |
-| **Mandate** | An on-chain spending authorization held by a subject's wallet contract (`MandateWallet`): delegate, per-payment and per-period caps, payees, expiry, revocation ([CTR-ACC-06](contracts/accounts-mandates.md#CTR-ACC-06)). |
+| **UA** | Universal Account: an account identifier derived from key data, an EOA generalised to every signature scheme — the native address for a chain's native accounts (never registered), otherwise `keccak256(keccak256(kind_tag) ‖ key_data)` (32 bytes, kind-tagged, top 96 bits non-zero), registered per chain with a proof of possession that binds the chain (`chain_key` and `chain_uid`, the genesis hash), the registry, the UA and `authRef` (not the caller, so registration is relayable) ([contracts/accounts.md](contracts/accounts.md)). The built registry uses the Zether-only `keccak256(encodedY)` form until the UA registry replaces it ([CTR-UA-22](contracts/accounts.md#CTR-UA-22)). |
+| **Mandate** | An on-chain spending authorization held by a subject's wallet contract (`MandateWallet`): delegate, per-payment and per-period caps, payees, expiry, revocation ([CTR-ACC-06](contracts/mandates.md#CTR-ACC-06)). |

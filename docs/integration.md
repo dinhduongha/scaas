@@ -456,7 +456,7 @@ the node watch list (`PUT /v1/watch/{chain}`).
 |---|---|---|---|
 | `manual` (default) | the user, each time | their EOA/wallet | the existing flow |
 | `custodial` | the platform through the custody adapter (`signer_ref`) | an EOA the adapter controls | `signer_ref` required; a wallet of a **non-company partner** (customer/store) also needs `license_ref` |
-| `delegated` | a platform delegate key (through the adapter) **within on-chain limits** | the payer's `MandateWallet` | the payer keeps the owner key; limits enforced on chain ([CTR-ACC-07](contracts/accounts-mandates.md#CTR-ACC-07)) |
+| `delegated` | a platform delegate key (through the adapter) **within on-chain limits** | the payer's `MandateWallet` | the payer keeps the owner key; limits enforced on chain ([CTR-ACC-07](contracts/mandates.md#CTR-ACC-07)) |
 
 <a id="INT-ERP-02"></a>**INT-ERP-02** — **A `custodial` paying wallet of a non-company partner requires `license_ref`.**
 Holding someone else's key for them is a regulated activity; the reference records the licence it runs under.
@@ -475,7 +475,7 @@ never a pure-language `secp256k1.sign`. Node lane keys are separate ([NODE-LANE-
 <a id="mandates"></a><a id="INT-ERP-04"></a>**INT-ERP-04** — **A `MandateWallet` is deployed outside the ERP**
 (`forge create … --constructor-args <owner>`); the ERP only records its address. The ERP makes no deploy RPC and holds
 no deploy key; a CREATE2 factory would force it to compute addresses. Contract rules:
-[contracts/accounts-mandates](contracts/accounts-mandates.md).
+[contracts/mandates](contracts/mandates.md).
 
 <a id="auto-pay"></a>**Auto-pay.** A policy (payer, paying wallet, trigger `invoice_posted|invoice_due`, caps per
 payment/day/month, four-eyes, kill switch) drives a scheduled job that finds the payer's `posted`, unpaid customer
@@ -485,7 +485,7 @@ wallets sign `pay` through the custody adapter under `SigningPolicyService` (`va
 sign `PayUnderMandate` and push a `call` job to `MandateWallet.payUnderMandate`. A run ends `done` when the payment
 transaction is done (the accounting module posts and reconciles) or `failed`. Kill: off-chain immediately, and for
 delegated wallets a `revokeWithSig` job; the revoke digest is `RevokeMandate(address token,uint64 epoch,uint256
-validUntil)` with the wallet's current `epoch[token]` ([CTR-ACC-07](contracts/accounts-mandates.md#CTR-ACC-07)).
+validUntil)` with the wallet's current `epoch[token]` ([CTR-ACC-07](contracts/mandates.md#CTR-ACC-07)).
 
 ## Families and addresses
 
@@ -525,7 +525,7 @@ simulation decides. Sui verify follows the same rule as Aptos and Solana.
 <a id="INT-ERP-03"></a>**INT-ERP-03** — **Contract wallets: the ERP defers to node simulation.** The browser reports the
 `wallet_kind` (from `eth_getCode` through the wallet); for `contract` the ERP accepts the signature unverified and the
 node's simulation arbitrates. A 23-byte `0xef0100…` code is an EIP-7702 delegated **EOA**
-([CTR-UA-24](contracts/universal-account.md#CTR-UA-24)).
+([CTR-UA-24](contracts/accounts.md#CTR-UA-24)).
 
 <a id="INT-ERP-13"></a>**INT-ERP-13** — **Hedera long-zero payers sign with their native ED25519 key.** A payer stored as
 `0.0.N` (long-zero) takes the native-key path: the ERP issues the raw 32-byte digest, receives a **64-byte** signature
@@ -718,7 +718,7 @@ the bid's own data. Either way the salt is unknown to anyone else until reveal, 
   operation digest. A passkey proof is checked as any assertion (`clientDataJSON`, `rpIdHash`, UP|UV, P-256 signature),
   a seed key by `ecrecover`; origin and rpId come from configuration, **never from the request host**.
   Under Universal Accounts it is **option (b)**: the optional smart account for subjects who want recovery without moving
-  funds or one address across key changes ([CTR-ACC-09](contracts/accounts-mandates.md#CTR-ACC-09)); its seed keys come
+  funds or one address across key changes ([CTR-ACC-09](contracts/accounts.md#CTR-ACC-09)); its seed keys come
   from the role path `m/7622'/0'/<account>'/2'/<i>'`, never the EOA path
   ([CLI-SGN-30](clients/signers-clientkeys.md#CLI-SGN-30)).
 - Non-EVM: open the subject's account object (`meta::open`/`open_passkey` on Sui/Aptos, `open`/`open_passkey` on
@@ -729,11 +729,11 @@ the bid's own data. Either way the salt is unknown to anyone else until reveal, 
   and subjects move their balances by signing `pay` from the old account. Clients re-read chain profiles after such a
   redeploy.
 
-**Universal Account registration (SPECIFIED; [contracts/universal-account](contracts/universal-account.md)).** It
+**Universal Account registration (SPECIFIED; [contracts/accounts](contracts/accounts.md#universal-account)).** It
 replaces the Zether-only flow of the built `UniversalAccountRegistry` (`UA = keccak256(encodedY)`, PoP bound to
 `msg.sender`, `AuthScheme`, `linkEVM`), which stays on dev chains until the new registry ships.
 
-**Native accounts are never registered** ([CTR-UA-06](contracts/universal-account.md#CTR-UA-06)): an EVM EOA or contract
+**Native accounts are never registered** ([CTR-UA-06](contracts/accounts.md#CTR-UA-06)): an EVM EOA or contract
 account (incl. `SubjectAccount`, Safe), Hedera native accounts (an `msig` member only on Hedera registries), Solana,
 Stellar/Pi `G…`, Soroban `C…`, Aptos, Sui and Cosmos native accounts, TON wallets. They sign as today. Every **derived**
 kind (passkey `webauthn-p256`, `p256`, `ed25519`, `bip340`, Schnorr/BLS, MuSig2/FROST, `msig`, ML-DSA/FN-DSA,
@@ -745,7 +745,7 @@ kind (passkey `webauthn-p256`, `p256`, `ed25519`, `bip340`, Schnorr/BLS, MuSig2/
 2. It reads `popDigest(ua, authRef)` from the registry, or computes it —
    `keccak256(POP_TAG ‖ keccak256(chain_key) ‖ chainUid ‖ registry_id ‖ ua ‖ authRef)` binds chain (`chain_key` **and**
    `chain_uid`, the genesis hash: the chain id alone is not unique, [NET-ALL-22](networks/README.md#NET-ALL-22)),
-   registry, UA and `authRef`, **not the caller** ([CTR-UA-07](contracts/universal-account.md#CTR-UA-07)). `chain_uid`
+   registry, UA and `authRef`, **not the caller** ([CTR-UA-07](contracts/accounts.md#CTR-UA-07)). `chain_uid`
    comes from the chain profile (`GET /v1/gateway`) and must equal the registry's `chainUid()`; clientkeys refuses an
    EIP-712 domain whose `salt` differs from it. The client then signs `uaMessage(kind, POP_TAG, popDigest)` with the
    kind's signer (`UAKey.signUA("pop", …)`; MuSig2/FROST: a group signing session plus the KeyAgg hints or the DKG
@@ -771,17 +771,17 @@ key under a second kind (`UAKeyInUse`) and a BLS `authRef` on the same curve as 
   holds kind, normalised id, key data and per-chain registrations.
 - Normalised UA form everywhere: lower-case hex; a value whose top 96 bits are zero is the 20-byte native id. On non-EVM
   families a derived id is shown only as `urn:scaas:ua:v1:<kind>:<hex32>`, never as a native address
-  ([CTR-UA-03](contracts/universal-account.md#CTR-UA-03)).
+  ([CTR-UA-03](contracts/accounts.md#CTR-UA-03)).
 - Receiving wallets are approved with four-eyes and become usable after the cooling-off ([INT-ERP-01](#INT-ERP-01));
   push them to the node watch list.
 - A UA is the same on every chain (chain-independent id) but registered per chain; never per token. No rotation inside a
-  UA: a new key is a new UA plus a transfer ([CTR-UA-13](contracts/universal-account.md#CTR-UA-13)); a stable address
+  UA: a new key is a new UA plus a transfer ([CTR-UA-13](contracts/accounts.md#CTR-UA-13)); a stable address
   across key changes is `SubjectAccount`.
 - EVM balances of derived UAs exist only on MetaToken v3 clones (`bytes32` ledger, events `UATransfer`,
-  `UAMetaTransactionExecuted`); v1/v2 tokens accept native ids only ([CTR-UA-14](contracts/universal-account.md#CTR-UA-14)).
-- EIP-7702 delegated EOAs are native EOAs ([CTR-UA-24](contracts/universal-account.md#CTR-UA-24)): their key signs as an
+  `UAMetaTransactionExecuted`); v1/v2 tokens accept native ids only ([CTR-UA-14](contracts/accounts.md#CTR-UA-14)).
+- EIP-7702 delegated EOAs are native EOAs ([CTR-UA-24](contracts/accounts.md#CTR-UA-24)): their key signs as an
   EOA everywhere; the UA registry and v3 also accept an ERC-1271 signature through the delegate. Never register them.
-- Verifiable credentials stay optional ([CTR-UA-20](contracts/universal-account.md#CTR-UA-20)). A BBS presentation is
+- Verifiable credentials stay optional ([CTR-UA-20](contracts/accounts.md#CTR-UA-20)). A BBS presentation is
   never legal evidence: workflows with legal recourse require the account-bound KB-JWT with `nonce` = deal reference /
   `intent_id`.
 

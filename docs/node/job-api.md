@@ -281,7 +281,7 @@ a registered role-holder contract — so a lane is never `msg.sender` of a privi
 |---|---|---|
 | `SubjectAccountFactory.deploy((uint8,bytes32,bytes32,bytes32,bytes32),address)` | the chain's account factory (`chain_contract.kind = account_factory`) | client subject-account onboarding |
 | `SubjectAccount.executeAsOwner(bytes,uint256,uint256,bytes)` | runtime code = EIP-1167 clone of that factory's `IMPLEMENTATION` (checked at lease, cached) | client subject accounts; role holders that are subject accounts |
-| `MandateWallet.payUnderMandate`, `revokeWithSig` (epoch-bound, [CTR-ACC-07](../contracts/accounts-mandates.md#CTR-ACC-07)), `executeAsOwner`; `HederaMandateWallet.executeAsOwnerRaw` | any address that is not a registered token (self-authenticating: the target checks the delegate/owner signature) | client payment requests, auto-pay |
+| `MandateWallet.payUnderMandate`, `revokeWithSig` (epoch-bound, [CTR-ACC-07](../contracts/mandates.md#CTR-ACC-07)), `executeAsOwner`; `HederaMandateWallet.executeAsOwnerRaw` | any address that is not a registered token (self-authenticating: the target checks the delegate/owner signature) | client payment requests, auto-pay |
 | `OrderBookDex.settle` / `cancel` / `invalidateNonces` | the chain's DEX (`chain_contract.kind = dex` or the chain's `dex` field) | DEX venue (`~dex`) |
 | `UniversalAccountRegistry.register` (`UARegistry.register` once the UA registry is deployed) | `chain.ua_registry`, `~gateway` only ([NODE-GW-03](gateway.md#NODE-GW-03)) | node gateway |
 | `SealedBidTender.commitBid`, `revealBid`, `withdrawDeposit`, `settleTender` | `chain_contract.kind = tender` | client tender flows ([contracts/tender.md](../contracts/tender.md)) |

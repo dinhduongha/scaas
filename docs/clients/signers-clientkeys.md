@@ -17,7 +17,7 @@ and recovered keys (KeyOp encoding in every client language, [NET-SUI-16](../net
 every family as one implementation shared by app and portals.
 
 Out of scope: UA ids, the registry, kind tags, `UAKey`/`signUA` internals and credentials
-([contracts/universal-account](../contracts/universal-account.md)); new contract code (an on-chain backup bit on
+([contracts/accounts](../contracts/accounts.md#universal-account)); new contract code (an on-chain backup bit on
 EVM/Sui/Aptos, Soroban/TON guardians, a Soroban duplicate-key check — the switch is only a toggle and client
 de-duplication covers duplicates); KMS/HSM, the signing-policy service and FROST/MuSig2 signers (below, PLANNED);
 WalletConnect and the TON Connect HTTP bridge (seams); ERP mirrors of non-EVM key sets (the node's simulation decides);
@@ -197,7 +197,7 @@ A "use passkey" button appears when `window.PublicKeyCredential` exists; `naviga
 `get` at signing with `challenge = digest`; an EIP-6963 wallet stays an alternative. The client decodes the DER signature
 into `(r, s)` and normalises low-s; a batch is one assertion over a Merkle root of digests (EVM and Soroban only). The
 on-chain rules are [NET-ALL-04](../networks/README.md#NET-ALL-04) and
-[CTR-ACC-08](../contracts/accounts-mandates.md#CTR-ACC-08). Tests use real WebAuthn vectors from a software authenticator
+[CTR-ACC-08](../contracts/accounts.md#CTR-ACC-08). Tests use real WebAuthn vectors from a software authenticator
 (fixed P-256 key) and a public vector set where available. BUILT (EVM). `clients/clientkeys/src/passkey-signer.js`:
 `creationOptions` (PRF enabled by default), `requestOptions`, `derToRS`, `encodeAssertion = abi.encode(authenticatorData,
 clientDataJSON, r, s)`, `merkleBatch`, `accountSignature = abi.encode(keyIndex, bytes32[] proof, sig)`. `signCount` is not
@@ -515,7 +515,7 @@ offer "use this EOA as a passkey/Schnorr/multisig member key".
 
 <a id="CLI-SGN-29"></a>**CLI-SGN-29** — **One key, one purpose, starting at the wallet layer.** Wallets and clientkeys derive
 a separate hardened path per kind and per account role and expose no generic "sign this digest with that key" for UA keys;
-the registry, tagged messages and EOA rules are the other three layers ([CTR-UA-10](../contracts/universal-account.md#CTR-UA-10)).
+the registry, tagged messages and EOA rules are the other three layers ([CTR-UA-10](../contracts/accounts.md#CTR-UA-10)).
 The registry layer keeps `keyOwner[keyHash] → ua` and refuses the same public key under another kind (`UAKeyInUse`). Why:
 ECDSA and Schnorr over one secp256k1 key leak through nonce relations; a Schnorr signing oracle on an ElGamal key is a
 decryption-adjacent oracle; untagged digests replay across protocols. Owner decision.
@@ -695,7 +695,7 @@ any signing scalar. BIP-32/SLIP-10 have no bn254 or BLS12-381, so derivation is 
 - Short forms: `m/12381/<coin>/<acct>/7` and `m/254/<coin>/<acct>/7` (`m/254/…`).
 - `y = g^x` (G1 of the curve); in the built registry `UA = keccak256(encodedY)` (`ZetherTypes.toUA`: bn254 64 bytes
   `x‖y`, BLS12-381 128 bytes per EIP-2537); the proof of possession now binds chain, registry, UA and `authRef`
-  ([CTR-UA-07](../contracts/universal-account.md#CTR-UA-07); an earlier Schnorr PoP over `keccak256(registry ‖ encodedY ‖
+  ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07); an earlier Schnorr PoP over `keccak256(registry ‖ encodedY ‖
   account)` bound to the caller account is replaced; the built dev registry's challenge has no chain id,
 `UniversalAccountRegistry.sol:95-96`). Zether protocol: [contracts/zether](../contracts/zether.md).
 - Stored like the seed: client only, encrypted at rest, never sent to a server or a relayer.
