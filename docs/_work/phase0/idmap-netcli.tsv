@@ -1,0 +1,287 @@
+old	clause	topic	status	superseded_by	merge_into	owner	date	target	title	note
+APP:Q1		CLI-APP	current		R156	yes	2026-10-06	clients/app.md#submission	Relayed submission for Hedera and non-EVM	owner answer restating R156 (route itself is NODE-GW)
+APP:Q2		CLI-APP	current		R172	yes	2026-10-06	clients/app.md#dex	Non-EVM DEX books after EVM	owner answer restating R172
+APP:Q3		CLI-APP	current		R167	yes	2026-10-06	clients/app.md#i18n	Risk disclosures English beside translation	owner answer restating R167
+CR-ADW-2		NET-HED	current			no	2026-10-07	networks/hedera.md#mandate	ED25519 owners pay via executeAsOwnerRaw	
+CR-ADW-3		CLI-SGN	current			no	2026-10-07	clients/signers-clientkeys.md#role-keys	Subject-account seed keys use role path	implements R300/R269 for subject accounts; ERP refuses EOA-equal key
+CR-ADW-4		CLI-SGN	current			no	2026-10-07	clients/signers-clientkeys.md#signing-review	checkPayment pins expected token client-side	
+CR-PD-1	(a,b)	INT-ERP	current			no	2026-10-07	integration.md#outbox	Outbox call jobs immutable, operator read-only	ERP outbox half; Odoo ACL/field names go in the example block
+CR-PD-1	(c)	NODE-JOB	current			yes	2026-10-07	node/job-api.md#call-table	Call jobs limited to selector/target table	owner reorg:Q1 (K1): add permissionless tender/vesting/distribution/offer rows + Safe.execTransaction row; factory excluded; one table (K11)
+CR-PD-6		NET-EVM	current			yes	2026-10-07	networks/evm.md#private-7622	Private reference chain id is 7622	
+owner:2026-10-07:chain-7622		NET-EVM	current		CR-PD-6	yes	2026-10-07	networks/evm.md#private-7622	Private reference chain id is 7622	same owner decision as CR-PD-6
+CR-R3-1	(grammar)	NET-ALL	current			no	2026-10-07	networks/README.md#webauthn	One WebAuthn grammar for every family	
+CR-R3-1	(cosmos-v2)	NET-COS	current			no	2026-10-07	networks/cosmos.md#passkey	Cosmos passkey v2 address binds rp and origin	unresolved vs UA R315 (32-byte UA id; R291 forbids 20-byte truncation) and R9-6 stored lists; flag for rewrite
+CR-R3-3		NET-SOR	current		R8-9	no	2026-10-07	networks/soroban.md#pay-ref	pay_ref one-shot per (from, pay_ref)	same rule as R8-9; error name differs (ZeroAmount vs NonPositiveAmount)
+CR-R3-4		NET-SOL	current			no	2026-10-07	networks/solana.md#network-domain	Solana network = build-time genesis hash	
+CR-R3-5		NET-SUI	current			no	2026-10-07	networks/sui.md#keys	Sui keys per subject in Keys object	
+CR-R3-6		NET-ALL	current			no	2026-10-07	networks/README.md#key-lifecycle	Key lifecycle stated per family	
+CR-R3-7		NET-TON	current			yes	2026-10-07	networks/ton.md#domain-binding	TON per-wallet domain set on chain	owner reorg:Q3 (K2) chose this over R10-14 contract clause
+CR-R3-9		NET-TON	current			yes	2026-10-07	networks/ton.md#dex	TON bounced payouts claimable by owner	owner reorg:Q4 (K3); removes admin RefundBounced from admin-power list
+CR-R3-10		NET-COS	current			no	2026-10-07	networks/cosmos.md#dex	Cosmos DEX has no Sweep	
+CR-WSF-1		NET-ALL	current			no	2026-10-07	networks/README.md#readable-signing	Sui/Solana wallet signatures readable, passkey-first	rendering cited from NET-SUI/NET-SOL and clients/signers-clientkeys#rendering; supersedes RS12-9 hex text
+CR-WSF-2		NET-HED	current			no	2026-10-07	networks/hedera.md#signatures	Hedera ED25519 needs a raw signer	
+R6-1		NET-HED	current			no	2026-10-03	networks/hedera.md#relayer	Hedera runs lane_runner, one tx per lane	
+R6-2		NET-HED	current			no	2026-10-03	networks/hedera.md#signatures	HederaMetaToken HIP-632 for 64-byte signatures	
+R6-3		INT-ERP	current			no	2026-10-03	integration.md#families	ERP verifies ED25519 for long-zero payers	topic changed: wholly an ERP-side rule (plan exception R6-3 ERP clause)
+R6-4		NET-HED	current			no	2026-10-03	networks/hedera.md#limitations	HashPack signMessage and KeyList are seams	see CR-WSF-2 (HIP-820 follow-up)
+R6-5		NET-HED	superseded	R6-8,R144		no	2026-10-07		Permissionless associateUnderlying	
+R6-6		NET-HED	current			no	2026-10-07	networks/hedera.md#signatures	Call HIP-632 system contract with CALL	dropping view in ERC20MetaTx is an open item, not part of the rule
+R6-7		NET-HED	current			no	2026-10-07	networks/hedera.md#relayer	Hedera status code to outcome class table	applies NODE-LANE R341
+R6-8		NET-HED	current			no	2026-10-07	networks/hedera.md#wrappers	v1 HTS wrapper fee check in initialize	
+R6-9		NET-HED	current			no	2026-10-07	networks/hedera.md#hts	Wallets warn on HTS issuer keys	
+R6-10		NET-HED	current			no	2026-10-07	networks/hedera.md#relayer	HederaAdapter reports tx_fee and lane_balance	applies R340
+R6-11		NET-HED	current			no	2026-10-07	networks/hedera.md#relayer	Mesh sig_kind hedera_ed25519 verified locally	applies R343 (NODE-MESH)
+R7		INT-ODOO	current			no	2026-10-03	integration.md#example-odoo-addons	No idempotency addon; natural UNIQUE keys	
+R8		INT-ODOO	current			no	2026-10-03	integration.md#example-odoo-addons	Odoo addon split, no account addon	DEX addon added later by DEX spec
+R10		INT-ERP	current			no	2026-10-05	integration.md#payment-terms	Portal terms fee NONE, relayer restricted	decided INT-ERP (ERP issuance policy, not contract); amended by R73 bus scope open ⇒ relayer 0; payee self-relay stays
+R13		INT-ODOO	current			no	2026-10-03	integration.md#example-odoo-verify	Odoo verifies ECDSA signatures itself	narrowed by R27
+R14		INT-ODOO	current			no	2026-10-03	integration.md#example-odoo-portal	Portal pay button calls model facade	
+R17		INT-ERP	current			no	2026-10-03	integration.md#currency	No FX: token currency equals order currency	decided INT-ERP
+R19		INT-ODOO	current			no	2026-10-03	integration.md#example-odoo-portal	Portal pays confirmed orders only	
+R8-1		NET-SOR	current			no	2026-10-03	networks/soroban.md#payload	Ledger expiry computed without RPC	
+R8-2		NET-SOR	current			no	2026-10-07	networks/soroban.md#limitations	Soroban guardian recovery is a seam	gap stream per CR-R3-6
+R8-3		NET-SOR	current			no	2026-10-03	networks/soroban.md#dex	One signature settles once	
+R8-4		NET-SOR	current			no	2026-10-03	networks/soroban.md#dex	No multi-pair batch per Soroban tx	
+R8-5		NET-SOR	current			no	2026-10-03	networks/soroban.md#dex	DEX jobs carry two auth entries	
+R8-6		INT-ERP	current			no	2026-10-03	integration.md#families	ERP verifies G… ed25519 via OpenSSL	topic changed: ERP-side verifier; amends R61 pure-Python ed25519
+R8-7		NET-SOR	current			no	2026-10-07	networks/soroban.md#relayer	Token address is a per-family string	done; token source now node store (R95)
+R8-8		NET-SOR	current			no	2026-10-07	networks/soroban.md#limitations	Per-key permissions are a seam	until UA R298 purposes
+R8-9		NET-SOR	current			no	2026-10-07	networks/soroban.md#pay-ref	pay_ref per (from, pay_ref), amount > 0	CR-R3-3 merged here
+R8-10		NET-SOR	current			no	2026-10-07	networks/soroban.md#dex	Soroban orders bind relayer, no open form	Soroban application of RS5-15 (CTR-DEX); cite it
+R8-11		NET-SOR	current			no	2026-10-07	networks/soroban.md#ttl	TTL extension and RestoreFootprint retry	
+R8-12		NET-SOR	current			no	2026-10-07	networks/soroban.md#relayer	op_consumed reads host nonce key	
+R8-13		NET-SOR	current			no	2026-10-07	networks/soroban.md#signatures	Reject crossOrigin true and topOrigin	family application of CR-R3-1 grammar
+R8-14		NET-SOR	current			no	2026-10-07	networks/soroban.md#relayer	Soroban adapter reports tx_fee and lane_balance	
+R8-15		NET-SOR	current			no	2026-10-07	networks/soroban.md#relayer	Signed fields read from invocation	
+R9-1		NET-COS	superseded	R315		no	2026-10-07		Cosmos passkey v1 derived address	also replaced by CR-R3-1 v2 derivation; see conflict note there
+R9-2		NET-COS	current			no	2026-10-03	networks/cosmos.md#dex	Cosmos DEX fill-or-kill, batch all-or-nothing	
+R9-3		NET-COS	current			no	2026-10-07	networks/cosmos.md#relayer	Post-simulation grief metered; DEX rereads nonces	
+R9-4		NET-COS	current			no	2026-10-07	networks/cosmos.md#deploy	instantiate2 genesis salt; duplicate chain-id refused	
+R9-5		NET-COS	current			no	2026-10-07	networks/cosmos.md#relayer	contract and valid_until from signed payload	
+R9-6		NET-COS	current			no	2026-10-07	networks/cosmos.md#passkey	Cosmos passkey checks stored rpIdHash and origins	overlaps CR-R3-1 cosmos-v2 binding (derivation); reconcile in rewrite
+R9-7		NET-COS	current			no	2026-10-07	networks/cosmos.md#relayer	Resubmit tx dropped from mempool	
+R9-8		NET-COS	current			no	2026-10-07	networks/cosmos.md#payload	extra must be empty outside trade	
+R10-1		NET-TON	current			no	2026-10-03	networks/ton.md#contracts	Compact Tact Jetton with meta-tx wallet	
+R10-2		NET-TON	current			no	2026-10-03	networks/ton.md#signatures	TON Connect signData cell envelope	
+R10-3		NET-TON	superseded	R10-14,CR-R3-7		no	2026-10-07		Domain checked only in the ERP	node half → R10-14(node); on-chain half → CR-R3-7 per reorg:Q3
+R10-4		NET-TON	current			no	2026-10-03	networks/ton.md#payload	Network domain = config 19 global id	
+R10-5		NET-TON	current			no	2026-10-03	networks/ton.md#key-binding	Lazy key bind via SignedOp stateInit	
+R10-6		NET-TON	current			no	2026-10-07	networks/ton.md#passkey	One TON passkey set by set_key	amended: exact origin (CR-R3-1), set_key PoP (R314), rotation gap (CR-R3-6)
+R10-7		NET-TON	current			no	2026-10-03	networks/ton.md#dex	TON DEX is fill-or-kill escrow	
+R10-8		NET-TON	current			no	2026-10-03	networks/ton.md#relayer	Relayer lane = W5R1 wallet, one message	
+R10-9		NET-TON	current			no	2026-10-03	networks/ton.md#relayer	Node uses TON Center API v3	
+R10-10		NET-TON	current			no	2026-10-07	networks/ton.md#events	Events authenticated by derived wallet address	token registry = node store (R95)
+R10-11		NET-TON	current			no	2026-10-07	networks/ton.md#fees	No relayer fee; forward TON capped	
+R10-12		NET-TON	current			no	2026-10-07	networks/ton.md#forward-cap	Forward TON capped on every path	node half applies R345
+R10-13		NET-TON	current			no	2026-10-07	networks/ton.md#relayer	tx_id is TEP-467 normalized hash	
+R10-14	(node)	NET-TON	current			no	2026-10-07	networks/ton.md#domain-binding	Node checks TON domain at every door	
+R10-14	(contract)	NET-TON	superseded	reorg:Q3		no	2026-10-07		domainHash pinned in wallet init	K2: owner chose CR-R3-7 domain set
+R10-15		NET-TON	current			no	2026-10-07	networks/ton.md#relayer	Simulation reads balance, checks passkey locally	origin check exact per CR-R3-1
+R10-16		NET-TON	current			no	2026-10-07	networks/ton.md#revoke	Revoke runs exactly once	
+R10-17	(cancel,fees)	NET-TON	current			no	2026-10-07	networks/ton.md#dex	DEX keeps nothing not its own	cancel of unknown order ⇒ returnExcess; WithdrawFees never touches bounced/unclaimed
+R10-17	(bounced)	NET-TON	superseded	reorg:Q4		no	2026-10-07		Bounced payouts via admin RefundBounced	K3: CR-R3-9 claim model
+R21		CLI-SGN	current			no	2026-10-03	clients/signers-clientkeys.md#connectors	WalletConnect is a seam behind a flag	
+R22		INT-ERP	current			no	2026-10-03	integration.md#receiving-wallets	24 h cooling-off for new receiving wallets	
+R23		INT-ODOO	superseded	R57		no	2026-10-03		Host company configuration parameter	topic INT-ODOO to sit with R57
+R24		INT-ERP	current			no	2026-10-03	integration.md#payer-wallets	Custodial partner payer wallet needs license_ref	
+R27		INT-ERP	current			no	2026-10-03	integration.md#families	Contract wallets: ERP defers to node simulation	
+R28		INT-ODOO	current			no	2026-10-03	integration.md#example-odoo-addons	Payment addon depends on account_payment	Odoo-specific dependency
+R29		INT-ERP	current			no	2026-10-03	integration.md#mandates	MandateWallet deployed outside the ERP	
+R30		NET-ALL	current			yes	2026-10-03	networks/README.md#r30-path	Contract-level meta-tx default on every network	
+R32	(vault)	CLI-SGN	current			yes	2026-10-06	clients/signers-clientkeys.md#vault	Client-side seed vault, multi-key accounts	amended by R255 vault v2
+R32	(scrypt)	CLI-SGN	superseded	R259		yes	2026-10-03		Seed vault scrypt N=2^15 with PIN	
+R32	(path)	CLI-SGN	superseded	R300		yes	2026-10-03		Account seed keys on EOA path	also CR-ADW-3, R269
+R33	(keys)	CLI-SGN	current			yes	2026-10-03	clients/signers-clientkeys.md#zether-keys	Zether keys from seed, own paths	paths unchanged per UA §8.1
+R33	(pop)	CLI-SGN	superseded	R295		yes	2026-10-03		Zether PoP bound to caller account	UA R294–R297
+R33	(deferred)	CLI-SGN	superseded	R34		yes	2026-10-03		Zether on chain stays deferred	
+R50		INT-ERP	current			no	2026-10-03	integration.md#custody	ERP-held env: custody dev-only, OpenSSL	node/submit-lanes#lane-keys cites it for the dev flag; no node clause to split
+R56		INT-ERP	current			no	2026-10-06	integration.md#accounting	Journal per (company, token); drift A and C	amended by R94 (balances items) and PUT /v1/watch
+R57		INT-ODOO	current			no	2026-10-03	integration.md#example-odoo-platform-company	One receiving-company seam; platform company	Odoo method/parameter names
+R61		INT-ERP	current			no	2026-10-06	integration.md#addresses	ERP family-aware addresses and signed ops	amended: eight families (owner 2026-10-06), ed25519 via OpenSSL (R8-6)
+R62		NET-ALL	current			no	2026-10-05	networks/README.md#head-of-line	Head-of-line table and anti-lock test	amended by R77: Soroban off the mesh (reorg:Q6 keeps job API only)
+R63		NET-HED	current			no	2026-10-07	networks/hedera.md#overview	Hedera = Solidity on HSCS + HIP-632	amended by R6-1/R6-2 (no SubjectAccount/pipeline), CR-ADW-2
+R64		NET-SUI	current			no	2026-10-07	networks/sui.md#overview	Sui shared Account<T> + personal message	amended by CR-R3-5 Keys, CR-WSF-1 readable message
+R65		NET-SOR	current			no	2026-10-07	networks/soroban.md#overview	Soroban native auth as meta-tx; fee-bump	amended by CR-R3-3/R8-9
+R66		NET-COS	current			no	2026-10-07	networks/cosmos.md#overview	Cosmos CW20 + ADR-036, no authz	amended by CR-R3-1, CR-R3-10
+R67	(core)	NET-TON	current			no	2026-10-07	networks/ton.md#overview	TON Tact jetton wallet; escrow DEX	amended by CR-R3-7, CR-R3-9
+R67	(bindkey)	NET-TON	superseded	R10-5		no	2026-10-03		TON BindKey message	lazy bind in SignedOp.stateInit
+R73		INT-ERP	current			yes	2026-10-06	integration.md#bus-scope	Bus scope is a per-tenant client setting	amended: delivered per job (R99), node publishes; values restricted|open|public (A2)
+R101		INT-ERP	current			no	2026-10-06	integration.md#status-sync	Client push and sync cadence	Odoo ir.cron/SERVER_ONLY mechanics go in the example block
+R144		NET-HED	current			no	2026-10-06	networks/hedera.md#wrappers	Hedera v2 wrappers: fail-closed HTS checks	
+R145		NET-ALL	current			no	2026-10-06	networks/README.md#availability	Wrappers v2 on EVM and Hedera only	
+R188		NET-ALL	current			yes	2026-10-07	networks/README.md#availability	Tender on EVM and Hedera first	owner 2026-10-06 ruling (1); EIP-1153 prerequisite rev 1.3
+R195		INT-ERP	current			yes	2026-10-06	integration.md#data-protection	Client holds salts; chain only commitments	
+R196		INT-ERP	current			no	2026-10-06	integration.md#data-protection	Commitment and Merkle formats	formats move verbatim
+R197		INT-ERP	current			no	2026-10-07	integration.md#data-protection	Per-subject DEK; erasure destroys it	
+R198		INT-ERP	current			no	2026-10-06	integration.md#data-protection	References carry no personal data	
+R199		INT-ERP	current			no	2026-10-06	integration.md#data-protection	Disclosure is opening a commitment	
+R215		NET-ALL	current			no	2026-10-06	networks/README.md#availability	Asset suite on EVM and Hedera	
+R150		CLI-APP	current			no	2026-10-06	clients/app.md#architecture	One SPA, two halves, one build	
+R151		CLI-APP	current			no	2026-10-06	clients/app.md#stack	React, TanStack Query, hash routes	
+R152		CLI-APP	current			no	2026-10-06	clients/app.md#architecture	App has no server and no secrets	
+R153		CLI-APP	current			yes	2026-10-06	clients/app.md#family-adapters	One adapter interface per family	owner: all families at once
+R154		CLI-APP	current			no	2026-10-06	clients/app.md#signing	App builds and decodes every signed byte	
+R155		CLI-APP	current			no	2026-10-06	clients/app.md#signers	App signer set and key paths	
+R156		CLI-APP	current			yes	2026-10-06	clients/app.md#submission	Gateway or self-paid submission	owner Q1; APP:Q1 merged here
+R157		CLI-APP	current			no	2026-10-06	clients/app.md#intent-status	Intent status is chain truth	
+R158		CLI-APP	current			no	2026-10-06	clients/app.md#signing-review	Signing review from decoded bytes	digest-only text for Solana stale after CR-WSF-1 readable text
+R161		CLI-APP	current			no	2026-10-06	clients/app.md#static-mode	Static mode config.json and CSP	
+R162		CLI-APP	current			no	2026-10-06	clients/app.md#admin-session	Admin tokens in memory only	
+R163		CLI-APP	current			no	2026-10-06	clients/app.md#oidc	OIDC public client with PKCE	
+R164		CLI-APP	current			no	2026-10-06	clients/app.md#zether-worker	Zether runs in a session worker	Zether chains 31337/1337 only: K16 left unchanged (reorg:Q5)
+R165		CLI-APP	current			no	2026-10-06	clients/app.md#passkeys	Passkeys origin-bound; backup de-duplication	
+R166		CLI-APP	current			no	2026-10-06	clients/app.md#supply-chain	Pinned supply chain, one dev flag	
+R167		CLI-APP	current			yes	2026-10-06	clients/app.md#i18n	English default plus translations	owner; APP:Q3 merged here
+R168		CLI-APP	current			no	2026-10-06	clients/app.md#roles	Role gating is UI only	
+R169		CLI-APP	current			no	2026-10-06	clients/app.md#contract-roles	Contract-held roles receive calldata	
+R170		CLI-APP	current			no	2026-10-06	clients/app.md#network-allowlist	App dials only allowlisted origins	
+R171		CLI-APP	current			no	2026-10-06	clients/app.md#metrics	Metrics are a dashboard link	
+R172		CLI-APP	current			yes	2026-10-06	clients/app.md#dex	Non-EVM DEX unavailable until venue	owner Q2; APP:Q2 merged here
+R173		CLI-APP	current			no	2026-10-07	clients/app.md#chain-identity	Chain identity and metadata verified	rev 1.3 adds chain_uid to identity check
+R174		CLI-APP	current			no	2026-10-06	clients/app.md#approve-allowlist	approve spender allowlist	
+R175		CLI-APP	current			no	2026-10-06	clients/app.md#key-worker	Keys run in a dedicated worker	
+R176		CLI-APP	current			no	2026-10-06	clients/app.md#accounts	Account model follows UA spec	interim default SubjectAccount until UA streams
+R177		CLI-APP	current			no	2026-10-06	clients/app.md#token-kinds	Token kinds decoded from versionOf	
+R179		CLI-APP	current			no	2026-10-06	clients/app.md#untrusted-text	Untrusted text sanitised	
+R173a		CLI-APP	current		R173	no	2026-10-07	clients/app.md#chain-identity	Chain identity clause (a)	alias of R173 clause (a)
+R173b		CLI-APP	current		R173	no	2026-10-07	clients/app.md#chain-identity	Chain identity clause (b)	alias of R173 clause (b)
+R173c		CLI-APP	current		R173	no	2026-10-07	clients/app.md#chain-identity	Chain identity clause (c)	alias of R173 clause (c)
+R250		CLI-SGN	current			yes	2026-10-06	clients/signers-clientkeys.md#backup-switch	Backup key required is one switch	owner: only a switch
+R251		CLI-SGN	current			no	2026-10-06	clients/signers-clientkeys.md#backup-switch	Backup predicate: distinct keys or guardian	
+R252		CLI-SGN	current			no	2026-10-06	clients/signers-clientkeys.md#backup-switch	Backup enforced by clients and issuers	
+R253		CLI-SGN	current			no	2026-10-06	clients/signers-clientkeys.md#backup-switch	Exits are never blocked	
+R254		CLI-SGN	current			no	2026-10-06	clients/signers-clientkeys.md#backup-switch	Non-blocking BE/BS warnings	
+R255		CLI-SGN	current			no	2026-10-06	clients/signers-clientkeys.md#vault	Vault v2 under non-extractable device key	
+R256		CLI-SGN	current			no	2026-10-06	clients/signers-clientkeys.md#vault	Device binding relaxes nothing	
+R257		CLI-SGN	current			no	2026-10-06	clients/signers-clientkeys.md#vault	Vault storage, precedence and migration	
+R258		CLI-SGN	current			no	2026-10-06	clients/signers-clientkeys.md#vault	Device-loss recovery via phrase only	
+R259		CLI-SGN	current			no	2026-10-06	clients/signers-clientkeys.md#vault	scrypt N=2^17 for new envelopes	RS4-14 merged here (passphrase ≥ 8 chars, not digits only)
+R263		CLI-SGN	current			no	2026-10-06	clients/signers-clientkeys.md#role-keys	Seed signers sign family envelopes	
+R264		CLI-SGN	current			no	2026-10-06	clients/signers-clientkeys.md#passkeys	One WebAuthn ceremony, per-family encoders	
+R265		CLI-SGN	current			no	2026-10-06	clients/signers-clientkeys.md#passkeys	Passkey challenge = b64url op digest	
+R266		CLI-SGN	current			yes	2026-10-06	clients/signers-clientkeys.md#connectors	One connector implementation in clientkeys	owner
+R267		CLI-SGN	current			no	2026-10-06	clients/signers-clientkeys.md#signing-review	Check, then sign what was checked	
+R268		CLI-SGN	current			no	2026-10-06	clients/signers-clientkeys.md#scope	Signers spec adds no ids or kinds	
+R269		CLI-SGN	current			no	2026-10-07	clients/signers-clientkeys.md#role-keys	Added seed keys are role keys	applies owner R300; Soroban kindNo 18 (S4F:Q1)
+R260		INT-ERP	current			no	2026-10-06	integration.md#families	ERP Sui verify follows lesson L9	topic changed: Odoo fam_sui.verify is an ERP verifier (S4F §6.2 → integration#families)
+R261		NET-SUI	current			no	2026-10-06	networks/sui.md#key-verification	KeyOp encoded byte-identical in Python, JS	
+R262		NET-SUI	current			no	2026-10-06	networks/sui.md#key-verification	One generator run feeds every vector	
+S4F:Q1		CLI-SGN	current		R300	yes	2026-10-07	clients/signers-clientkeys.md#role-keys	Soroban account role kindNo is 18	owner 2026-10-07 (UA rev 1.3); stated in R300
+R298	(1)	CLI-SGN	current			yes	2026-10-06	clients/signers-clientkeys.md#role-keys	One key one purpose: wallet layer	
+R298	(2,3,4)	CTR-UA	current			yes	2026-10-06	contracts/universal-account.md#purposes	One key one purpose: registry, tags, EOAs	layers 2–4 are registry/message rules
+R300		CLI-SGN	current			yes	2026-10-07	clients/signers-clientkeys.md#role-keys	EOA path EOA-only; role tree m/7622	owner: purpose 7622 (UA Q6), Soroban kindNo 18; S4F:Q1 merged here
+R314		NET-ALL	current			yes	2026-10-07	networks/README.md#ua-registries	Per-family UA registries share kind table	owner accepted UA Q12 default (rev 1.2)
+R315		NET-ALL	current			yes	2026-10-07	networks/README.md#ua-passkey-ids	Non-EVM passkey owners = UA id, URN only	owner accepted UA Q13 default; replaces Cosmos R9-1 and Solana owner hash
+R318		INT-ODOO	current			no	2026-10-06	integration.md#example-odoo-ua	Odoo stores UAs as addresses	
+R330		NET-ALL	current			no	2026-10-07	networks/README.md#chain-identity	Chain identified by (chain_key, chain_uid)	
+RS4-6		INT-ODOO	current			no	2026-10-06	integration.md#example-odoo-subject-account	Deploy job precedes pay via prerequisite	amended: push job API (R87) replaces relay_poll
+RS4-7		INT-ODOO	current			no	2026-10-03	integration.md#example-odoo-subject-account	Owner-call nonce from mined jobs	
+RS4-8	(vault)	CLI-SGN	current			no	2026-10-03	clients/signers-clientkeys.md#vault	Seed vault DEK with passphrase and PRF envelopes	wrapped by v2 (R255)
+RS4-8	(scrypt)	CLI-SGN	superseded	R259		no	2026-10-03		Vault PIN scrypt N=2^15	via RS4-14 (merged into R259)
+RS4-9	(keys)	CLI-SGN	current			no	2026-10-03	clients/signers-clientkeys.md#zether-keys	Zether keys derived in clientkeys JS	
+RS4-9	(pop)	CLI-SGN	superseded	R295		no	2026-10-03		Zether PoP bound to subject account	UA R294–R297 like R33(pop)
+RS4-11		CLI-SGN	current			no	2026-10-03	clients/signers-clientkeys.md#passkeys	Random WebAuthn user handle per passkey	
+RS4-12		INT-ODOO	current			no	2026-10-03	integration.md#example-odoo-subject-account	First key registered with HMAC challenge	
+RS4-13		CLI-SGN	current			no	2026-10-03	clients/signers-clientkeys.md#signing-review	Client rebuilds operation before signing	generalised by R267, token pin CR-ADW-4
+RS4-14		CLI-SGN	current		R259	no	2026-10-06	clients/signers-clientkeys.md#vault	Passphrase ≥ 8 chars, scrypt N=2^17	same rule as R259
+RS4-15		CLI-SGN	superseded	R257		no	2026-10-03		Per-subject localStorage vault	storage moved to IndexedDB vault:<id> with tombstone; no-silent-overwrite kept in R257
+RS4-16		INT-ODOO	current			no	2026-10-03	integration.md#example-odoo-subject-account	Deploy job only for payer own account	
+RS5-20	(odoo-book)	INT-ODOO	current			no	2026-10-07	integration.md#example-odoo-dex	Late Matched after restore debits Odoo book	transitional BUILT Odoo-held book
+RS5-20	(r105)	NODE-DEX	current			no	2026-10-07	node/dex-venue.md#persistence	Late settled trade debits restored order	R105 store-backed venue half
+RS7-1		NET-SUI	current			no	2026-10-03	networks/sui.md#objects	Account and Registry are derived objects	
+RS7-2		NET-SUI	current			no	2026-10-03	networks/sui.md#passkey	open_passkey requires an assertion	
+RS7-3		NET-SUI	current			no	2026-10-07	networks/sui.md#keys	Many keys, origins, guardian per account	amended in place (one key struck); keys move to per-subject Keys (CR-R3-5)
+RS7-4		NET-SUI	current			no	2026-10-03	networks/sui.md#dex	Sui DEX atomic PTB batch, no relayer fee	
+RS7-5		NET-SUI	current			no	2026-10-03	networks/sui.md#relayer	Relayer builds PTB BCS locally	
+RS7-6		NET-SUI	current			no	2026-10-07	networks/sui.md#events	Indexer filters registered tokens	token list from node store (R95/R324)
+RS7-8		NET-SUI	current			no	2026-10-03	networks/sui.md#dex	One shared Market per pair	
+RS7-9		NET-SUI	current			no	2026-10-07	networks/sui.md#lane-journal	Lane journal = all unfinalized txs, in store	RS7-7 merged here
+RS7-10		NET-SUI	current			no	2026-10-07	networks/sui.md#keys	forward never returns to removed key	
+RS7-11		NET-SUI	current			no	2026-10-07	networks/sui.md#lanes	Lane prune with on-chain horizon	
+RS7-12		NET-SUI	current			no	2026-10-07	networks/sui.md#relayer	Grief after dry-run via node rules	applies R340/R342/R346
+RS7-13		NET-SUI	current			no	2026-10-07	networks/sui.md#relayer	Mesh checks sui_op signature first	applies R343
+RS7-7		NET-SUI	current		RS7-9	no	2026-10-07	networks/sui.md#lane-journal	No second tx on one gas coin version	extended and restated by RS7-9
+RS7-14		NET-SUI	current			yes	2026-10-07	networks/sui.md#deploy	Sui package immutable at deploy	family application of CR-R3-11 / R348
+RS11-1		NET-APT	current			no	2026-10-03	networks/aptos.md#signatures	aptos:signMessage envelope parsed strictly	
+RS11-2		NET-APT	current			no	2026-10-04	networks/aptos.md#accounts	One derived Account per subject	
+RS11-3		NET-APT	current			no	2026-10-07	networks/aptos.md#keys	Account keys, origins, three admin paths	amended rev 1.1: origins inside Account
+RS11-4		NET-APT	current			no	2026-10-04	networks/aptos.md#lanes	Lane table prunable after delay	
+RS11-5		NET-APT	current			no	2026-10-04	networks/aptos.md#payload	Domain = chain_id, Account, asset	
+RS11-6		NET-APT	current			no	2026-10-04	networks/aptos.md#relayer	Relayer lane ed25519 sequence account	
+RS11-7		NET-APT	current			no	2026-10-04	networks/aptos.md#relayer	Hand-written BCS, TS SDK vectors	
+RS11-9		NET-APT	current			no	2026-10-04	networks/aptos.md#events	Finality commit; REST scan by package	
+RS11-10		NET-APT	current			no	2026-10-04	networks/aptos.md#dex	Aptos DEX Market per pair	
+RS11-11		NET-APT	current			no	2026-10-04	networks/aptos.md#mandate	Mandate opened by Account key	
+RS11-12		NET-APT	current			no	2026-10-04	networks/aptos.md#relayer	No disk tx journal on Aptos	
+RS11-14		NET-APT	current			yes	2026-10-04	networks/aptos.md#passkey	Pure-Move P-256 passkey verifier	owner OQ1 → B; UNAUDITED
+RS11-15		NET-APT	current			yes	2026-10-04	networks/aptos.md#events	Indexer API as hint, reread fullnode	owner OQ2; token list from node store (R95)
+RS11-16		NET-APT	current			no	2026-10-07	networks/aptos.md#relayer	pay_check view for unopened Account	amended by RS11-23
+RS11-17		NET-APT	current			no	2026-10-04	networks/aptos.md#passkey	Passkey precomputed P-256 table	
+RS11-18		NET-APT	current			no	2026-10-04	networks/aptos.md#mandate	Mandate open, revoke, refund rules	
+RS11-19		NET-APT	current			no	2026-10-04	networks/aptos.md#dex	Strict BCS orders; unordered pair market	
+RS11-20		NET-APT	current			yes	2026-10-07	networks/aptos.md#deploy	Aptos package immutable at deploy	family application of CR-R3-11 / R348
+RS11-21		NET-APT	current			no	2026-10-07	networks/aptos.md#relayer	OOG rebuilt once at gas cap	
+RS11-22		NET-APT	current			no	2026-10-07	networks/aptos.md#signatures	Lazy open requires application line	
+RS11-23		NET-APT	current			no	2026-10-07	networks/aptos.md#relayer	Dispatchable assets refused on unopened path	
+RS11-24		NET-APT	current			no	2026-10-07	networks/aptos.md#lanes	Every signing client honours lane horizon	client half of CR-PD-4 horizon
+RS11-25		NET-APT	current			no	2026-10-07	networks/aptos.md#signatures	chainId line stays optional	
+RS11-26		NET-APT	current			no	2026-10-07	networks/aptos.md#relayer	Mesh verifies Aptos signatures locally	applies R343
+RS11-8	(table)	NET-APT	current			no	2026-10-04	networks/aptos.md#relayer	Aptos Rejected table; scaas abort Reverted	
+RS11-8	(oog)	NET-APT	superseded	RS11-21		no	2026-10-04		Committed OOG requeued without limit	
+RS11-13	(deploy)	NET-APT	current			no	2026-10-04	networks/aptos.md#deploy	Object code deployment, one address	admin = object code owner; --included-artifacts none
+RS11-13	(upgrade)	NET-APT	superseded	RS11-20		no	2026-10-04		Upgrade policy compatible	CR-R3-11 owner
+RS12-1		NET-SOL	current			yes	2026-10-04	networks/solana.md#overview	Program-level meta-tx; native fee payer lane-only	owner 2026-10-04 (gasless decision)
+RS12-2		NET-SOL	current			yes	2026-10-04	networks/solana.md#write-locks	Write-lock is the real lock	owner L12 merged here
+RS12-3		NET-SOL	current			no	2026-10-04	networks/solana.md#accounts	One SubjectAccount PDA per subject	
+RS12-4		NET-SOL	current			yes	2026-10-04	networks/solana.md#keys	Keys, origins, guardian; open needs assertion	owner 2026-10-04
+RS12-4a		NET-SOL	current			no	2026-10-04	networks/solana.md#keys	open requires the wallet own signature	
+RS12-5		NET-SOL	current			yes	2026-10-04	networks/solana.md#keys	BACKUP_REQUIRED policy bit, default off	owner OQ1; predicate refined by R251
+RS12-6		NET-SOL	current			no	2026-10-04	networks/solana.md#lanes	Lane PDA prunable, rent to rent_payer	
+RS12-7		NET-SOL	current			yes	2026-10-04	networks/solana.md#tokens	Token-2022 extension policy	owner OQ3
+RS12-8		NET-SOL	current			no	2026-10-07	networks/solana.md#network-domain	Domain = genesis hash, node cross-check	amended by CR-R3-4 build-time network
+RS12-9a		NET-SOL	current			no	2026-10-04	networks/solana.md#signatures	Passkey blob length little-endian	
+RS12-10		NET-SOL	current			yes	2026-10-04	networks/solana.md#signatures	Precompile introspection rules	owner 2026-10-04 (precompile via introspection)
+RS12-11		NET-SOL	current			no	2026-10-04	networks/solana.md#mandate	Mandate opened by Account key; mref PDA	
+RS12-11a		NET-SOL	current			no	2026-10-04	networks/solana.md#mandate	Mandate delegate ed25519; revoke and close	
+RS12-12		NET-SOL	current			no	2026-10-04	networks/solana.md#dex	DEX settle checks both signatures	
+RS12-12a		NET-SOL	current			no	2026-10-04	networks/solana.md#dex	One pair per instruction; sweep rules	
+RS12-13		NET-SOL	current			no	2026-10-04	networks/solana.md#toolchain	Anchor 1.x with LiteSVM	
+RS12-14		NET-SOL	current			yes	2026-10-04	networks/solana.md#relayer	Lane ed25519 with durable nonce	owner 2026-10-04 (lane keys coin 501)
+RS12-15		NET-SOL	current			no	2026-10-04	networks/solana.md#relayer	Hand-written tx v1, kit vectors	
+RS12-16a		NET-SOL	current			no	2026-10-04	networks/solana.md#relayer	Restart advances nonce; error classes	
+RS12-17		NET-SOL	current			no	2026-10-07	networks/solana.md#relayer	No disk journal; durable nonce suffices	
+RS12-18		NET-SOL	current			yes	2026-10-04	networks/solana.md#events	Finalized; standard JSON-RPC indexer	owner OQ2; token list from node store (R95)
+RS12-18a		NET-SOL	current			no	2026-10-04	networks/solana.md#events	block_hash from last produced block	
+RS12-19		NET-SOL	current			yes	2026-10-07	networks/solana.md#deploy	Solana program immutable after initialize	family application of CR-R3-11 / R348
+RS12-20		NET-SOL	current			no	2026-10-07	networks/solana.md#tokens	Destination ATA must exist	
+RS12-21		NET-SOL	current			no	2026-10-07	networks/solana.md#lanes	On-chain MAX_TTL_S for expiries	
+RS12-22		NET-SOL	current			no	2026-10-07	networks/solana.md#relayer	Out of CU rebuilt once at max_cu	
+RS12-23		NET-SOL	current			no	2026-10-07	networks/solana.md#signatures	Reject crossOrigin true and topOrigin	family application of CR-R3-1
+RS12-24		NET-SOL	current			no	2026-10-07	networks/solana.md#lanes	Every signing client honours lane horizon	client half of CR-PD-4 horizon
+RS12-25		NET-SOL	current			no	2026-10-07	networks/solana.md#relayer	Mesh verifies Solana signatures locally	applies R343
+RS12-9	(formats)	NET-SOL	current			no	2026-10-04	networks/solana.md#signatures	Raw and OCMS v1; passkey b64url digest	
+RS12-9	(text)	NET-SOL	superseded	CR-WSF-1		no	2026-10-04		Signed text is domain plus hex digest	readable on-chain-rebuilt text
+RS12-16	(table)	NET-SOL	current			no	2026-10-04	networks/solana.md#relayer	Solana Rejected table; scaas errors Reverted	
+RS12-16	(cu)	NET-SOL	superseded	RS12-22		no	2026-10-04		Out of CU requeued without limit	
+net-aptos:L1		NET-ALL	current			no	2026-10-07	networks/README.md#design-lessons	Indexer filters registered contracts; empty stalls	token list from node store (R95/R324)
+net-solana:L1		NET-ALL	current		net-aptos:L1	no	2026-10-07	networks/README.md#design-lessons	Indexer filters registered contracts; empty stalls	same lesson as net-aptos:L1
+net-aptos:L2		NET-ALL	current			no	2026-10-04	networks/README.md#design-lessons	e2e fakes return real token ids	fake job-API client (NI)
+net-solana:L2		NET-ALL	current		net-aptos:L2	no	2026-10-04	networks/README.md#design-lessons	e2e fakes return real token ids	same lesson as net-aptos:L2
+net-aptos:L3		NET-ALL	current			no	2026-10-07	networks/README.md#design-lessons	Payer signs every amount deciding delivery	lane-billed retry once (RS11-21/RS12-22)
+net-solana:L3		NET-ALL	current		net-aptos:L3	no	2026-10-07	networks/README.md#design-lessons	Payer signs every amount deciding delivery	same lesson as net-aptos:L3
+net-aptos:L4		NET-ALL	current			no	2026-10-07	networks/README.md#design-lessons	Permanent submit refusals free the lane	lane-billed retry once (RS11-21/RS12-22)
+net-solana:L4		NET-ALL	current		net-aptos:L4	no	2026-10-07	networks/README.md#design-lessons	Permanent submit refusals free the lane	same lesson as net-aptos:L4
+net-aptos:L5		NET-ALL	current			no	2026-10-04	networks/README.md#design-lessons	Crash-safe lanes never equivocate	
+net-solana:L5		NET-ALL	current		net-aptos:L5	no	2026-10-04	networks/README.md#design-lessons	Crash-safe lanes never equivocate	same lesson as net-aptos:L5
+net-aptos:L6		NET-ALL	current			no	2026-10-04	networks/README.md#design-lessons	Multi-key accounts survive origin change	
+net-solana:L6		NET-ALL	current		net-aptos:L6	no	2026-10-04	networks/README.md#design-lessons	Multi-key accounts survive origin change	same lesson as net-aptos:L6
+net-aptos:L7		NET-ALL	current			no	2026-10-04	networks/README.md#design-lessons	Coins sent to accounts stay spendable	
+net-solana:L7		NET-ALL	current		net-aptos:L7	no	2026-10-04	networks/README.md#design-lessons	Coins sent to accounts stay spendable	same lesson as net-aptos:L7
+net-aptos:L8		NET-ALL	current			no	2026-10-04	networks/README.md#design-lessons	No shared object serialises all markets	
+net-solana:L8		NET-ALL	current		net-aptos:L8	no	2026-10-04	networks/README.md#design-lessons	No shared object serialises all markets	same lesson as net-aptos:L8
+net-aptos:L9		NET-ALL	current			no	2026-10-04	networks/README.md#design-lessons	ERP verifies only keys it can prove	
+net-solana:L9		NET-ALL	current		net-aptos:L9	no	2026-10-04	networks/README.md#design-lessons	ERP verifies only keys it can prove	same lesson as net-aptos:L9
+net-aptos:L10		NET-ALL	current			no	2026-10-04	networks/README.md#design-lessons	Lane state prunable, storage refunded	
+net-solana:L10		NET-ALL	current		net-aptos:L10	no	2026-10-04	networks/README.md#design-lessons	Lane state prunable, storage refunded	same lesson as net-aptos:L10
+net-solana:L11		NET-ALL	current			no	2026-10-04	networks/README.md#design-lessons	Never case-fold base58 addresses or ids	Solana-only lesson; ERP side cited from integration#addresses
+net-solana:L12		NET-SOL	current		RS12-2	yes	2026-10-04	networks/solana.md#write-locks	Write-lock disjointness test required	owner lesson; same rule as RS12-2

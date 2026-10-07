@@ -1,0 +1,38 @@
+old	clause	topic	status	superseded_by	merge_into	owner	date	target	title	note
+R36		NET-ALL	unused			no	2026-10-03		R36-R49 reserved for round 3, never used	
+R37		NET-ALL	unused		R36	no	2026-10-03		R36-R49 reserved for round 3, never used	
+R38		NET-ALL	unused		R36	no	2026-10-03		R36-R49 reserved for round 3, never used	
+R39		NET-ALL	unused		R36	no	2026-10-03		R36-R49 reserved for round 3, never used	
+R40		NET-ALL	unused		R36	no	2026-10-03		R36-R49 reserved for round 3, never used	
+R41		NET-ALL	unused		R36	no	2026-10-03		R36-R49 reserved for round 3, never used	
+R42		NET-ALL	unused		R36	no	2026-10-03		R36-R49 reserved for round 3, never used	
+R43		NET-ALL	unused		R36	no	2026-10-03		R36-R49 reserved for round 3, never used	
+R44		NET-ALL	unused		R36	no	2026-10-03		R36-R49 reserved for round 3, never used	
+R45		NET-ALL	unused		R36	no	2026-10-03		R36-R49 reserved for round 3, never used	
+R46		NET-ALL	unused		R36	no	2026-10-03		R36-R49 reserved for round 3, never used	
+R47		NET-ALL	unused		R36	no	2026-10-03		R36-R49 reserved for round 3, never used	
+R48		NET-ALL	unused		R36	no	2026-10-03		R36-R49 reserved for round 3, never used	
+R49		NET-ALL	unused		R36	no	2026-10-03		R36-R49 reserved for round 3, never used	
+R68		NODE-MESH	unused			no	2026-10-05		R68-R69 left unused	
+R69		NODE-MESH	unused		R68	no	2026-10-05		R68-R69 left unused	
+reorg:Q1		NODE-JOB	current			yes	2026-10-07	node/job-api.md#call-table	Call table: permissionless selectors, role-holder Safe row	K1: tender/vesting/distribution/offer rows + Safe.execTransaction; factory excluded
+reorg:Q2		ARCH-POS	current			yes	2026-10-07	decisions.md	Register policy: open entries, defaults, superseded owner rulings	Q2: NI I1-I8 keep stated defaults as open entries
+reorg:Q10		ARCH-POS	current		reorg:Q2	yes	2026-10-07	decisions.md	Register policy: open entries, defaults, superseded owner rulings	Q10: status open exists
+reorg:Q13		ARCH-POS	current		reorg:Q2	yes	2026-10-07	decisions.md	Register policy: open entries, defaults, superseded owner rulings	Q13: unruled blockchain.md requirements recorded open (req:*), PLANNED where a seam exists
+reorg:Q14		ARCH-POS	current		reorg:Q2	yes	2026-10-07	decisions.md	Register policy: open entries, defaults, superseded owner rulings	Q14: replaced UD decisions = superseded owner rulings; unruled UD items open
+reorg:Q3		NET-TON	current		CR-R3-7	yes	2026-10-07		TON domain binding: per-wallet domain set	K2: owner confirms CR-R3-7; R10-14 domain-in-init clause superseded
+reorg:Q4		NET-TON	current		CR-R3-9	yes	2026-10-07		TON bounced payouts: per-owner claim	K3: owner confirms CR-R3-9; R10-17 RefundBounced clause superseded
+reorg:Q5	(dev-chain)	CTR-ZTH	open			yes	2026-10-07	contracts/zether.md#safety-gate	Chain 7622 is not a classical-Zether dev chain	K16: ZetherSafety allowlist stays {31337, 1337}
+reorg:Q5	(curve)	CTR-ZTH	open			yes	2026-10-07	contracts/zether.md#parameters	Production curve for classical Zether tokens	K17: bn254 vs BLS12-381 open
+reorg:Q6		NODE-MESH	open			yes	2026-10-07	node/mesh.md#scope	Soroban stays on the job API, not the mesh	K18 (MESH R77 host nonce)
+reorg:Q7		NODE-IDX	open			yes	2026-10-07	node/indexer-feeds.md#limitations	Second independent event source	K19: PLANNED
+reorg:Q8		NODE-OPS	current			yes	2026-10-07	node/ops.md#slos	OPS default numbers approved as stated	K20
+reorg:Q9		ARCH-POS	current			yes	2026-10-07	decisions.md	Market-specific research kept private, dropped before release	research/13-legal-vn.md and _GROK-CODE.md
+reorg:Q11		ARCH-POS	current			yes	2026-10-07	decisions.md	Stream definitions stay in history and TODO	K22: no docs/roadmap.md
+reorg:Q12		NODE-GEN	current			yes	2026-10-07	node/README.md#module-map	scaas-node layout: module moves and job seam first	plan §7.3: M1-M4 now; M5-M7 when their windows open
+req:blockchain.md:session-keys		CLI-SGN	open			yes	2026-10-07	clients/signers-clientkeys.md#role-keys	Ephemeral agent session keys (1-8 h)	owner requirement never ruled on (Q13 default: open; PLANNED where a seam exists)
+req:blockchain.md:usd-velocity		NODE-LANE	open			yes	2026-10-07	node/submit-lanes.md#breaker	USD-denominated gas velocity limits	owner requirement never ruled on (Q13 default: open; PLANNED where a seam exists)
+req:blockchain.md:hcs-anchoring		NET-HED	open			yes	2026-10-07	networks/hedera.md#limitations	Hedera HCS anchoring	owner requirement never ruled on (Q13 default: open; PLANNED where a seam exists)
+req:blockchain.md:hedera-schedule		NET-HED	open			yes	2026-10-07	networks/hedera.md#limitations	Hedera Schedule Service	owner requirement never ruled on (Q13 default: open; PLANNED where a seam exists)
+req:blockchain.md:ibc		NET-COS	open			yes	2026-10-07	networks/cosmos.md#limitations	IBC ICS-20/27 transfers	owner requirement never ruled on (Q13 default: open; PLANNED where a seam exists)
+req:blockchain.md:celo-fee-currency		NET-EVM	open			yes	2026-10-07	networks/evm.md#limitations	Celo fee currency (CIP-64)	owner requirement never ruled on (Q13 default: open; PLANNED where a seam exists)

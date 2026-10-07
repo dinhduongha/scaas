@@ -1,0 +1,133 @@
+alias	line	class	status	merge_into	superseded_by	topic	owner	date	target	title	note
+UD:§0	11	finding	history				no	2026-08-30		Reading table for § references	Doc convention only; §17–§23 are sections of this file.
+UD:§1	34	finding	history				no	2026-08-30		Scope and direction (container)	Container; decisions in the UD:§1:* rows.
+UD:§1:use-cases	38	decision	current			ARCH-POS	yes	2026-08-30	architecture.md#use-cases	Three use cases: loyalty, B2B, payments	Includes focus MetaTx + Zether + stablecoin. Same rule as UD:§15:D12. No spec ruling id (SCaaS §1 positioning).
+UD:§1:eip1776	40	decision	current	R30		CTR-MTX	yes	2026-08-30		Contract-level meta-tx, no ERC-4337	R30 makes contract meta-tx the default path; SCaaS §5.1: no 4337 dependency. The EIP-1776 name appears in no spec.
+UD:§1:first-chain	41	decision	superseded		UD:§16	NET-EVM	yes	2026-08-30		First chain Gnosis, then Celo	Replaced by private chain first (UD:§16).
+UD:§1:private-chain	42	decision	open			CTR-ZTH	yes	2026-08-30	contracts/zether.md#chains	Zether runs on the private chain first	Private chain is in scope (7622), but RS2-1 limits classical Zether to 31337/1337; owner gate Z3 / reorg:Q5 leaves it open.
+UD:§1:custody	43	decision	current	R15		NODE-LANE	yes	2026-08-30		Pluggable custody chosen at deploy	R15 Signer trait as custody seam; ADW §D calls it settled; SCaaS §9.1 custody axes.
+UD:§1:independent-addon	44	decision	current	R8		INT-ODOO	yes	2026-08-30		Blockchain addon never depends on DMS	R8 addon split; generalized by R87 (node independent of any ERP).
+UD:§1:payment-mode	45	decision	current			INT-ERP	yes	2026-08-30	integration.md#payment-modes	Payment mode is configuration, not hard-coded	Mode numbers from blockchain.md; SCaaS §5.9 payer-flexibility table states the modes without a ruling id.
+UD:§1:smartcontracts-tree	46	decision	current			CTR-GEN	yes	2026-08-30	contracts/README.md#repository-layout	Contracts in their own tree per family	BUILT as smartcontracts/evm/ etc. (SCaaS §3.1); no ruling id.
+UD:§1:legal	47	decision	superseded		owner:2026-10-06:market-neutral	ARCH-POS	yes	2026-08-30		Legal deferred to a separate chapter	Market-neutral rule: no market-specific law in the docs.
+UD:§2	49	decision	current	RS2-3		CTR-ZTH	yes	2026-08-30		Decimals, shield scale, decryption bound per token	RS2-3 shieldScale semantics; cap now ZL:D3 (2^54), BSGS client-configured (ZL:D4); v2 decimals issuer's choice (R137). BSGS table is an estimate.
+UD:§3	102	decision	current	RS2-6		CTR-MTX	yes	2026-08-30		Fees flexible for public, fixed for Zether	Public half is UD:§3.1; Zether half restated by RS2-6.
+UD:§3.1	107	decision	current			CTR-MTX	yes	2026-08-30	contracts/metatx.md#fee-policy	Public fee modes NONE, PERCENT, FIXED	ppm denominator, 1 % cap, feeRecipient 0 = msg.sender; BUILT FeePolicy (SCaaS §5.3, §5.7) without ruling id; R132 adds never-the-payee.
+UD:§3.2	124	decision	current	RS2-6		CTR-ZTH	yes	2026-08-30		Zether fee must be NONE or FIXED	RS2-6 forbids PERCENT on Zether ops; inner fee is one constant per token (confidentialFee, SCaaS §8.7).
+UD:§3.3	149	decision	open			CTR-ZTH	yes	2026-08-30	contracts/zether.md#fees	Tiered Zether fees leak the amount	Inner fee is constant per token, but nothing forbids an outer FIXED fee chosen by amount. Unruled (plan Q14).
+UD:§3.4	164	decision	current	RS2-6		CTR-ZTH	yes	2026-08-30		Two fee layers, allowed modes per layer	RS2-6 (outer NONE/FIXED on Zether ops) and RS2-4 (inner fee to the beneficiary's pending).
+UD:§3.4b	179	decision	current			NODE-MESH	yes	2026-08-30	node/mesh.md#acceptance-policy	Fee-0 intents allowed; acceptance policy decides	Policy min_fee may be 0 (MESH §7.1); R75 notes relayers are mostly paid outside the intent. No ruling says never filter fee 0.
+UD:§3.5	201	decision	superseded		UD:§24.1	CTR-MTX	yes	2026-08-30		Drop GSN gas fields and per-mille setter	GSN fields absent from BUILT IERC20MetaTx; fee is per intent in the struct, no token fee setter exists.
+UD:§4	206	decision	current			CTR-MTX	yes	2026-08-30	contracts/metatx.md#signature	EIP-712 typed data, not personal_sign	Pinned typehash SCaaS §5.2 (no id); domain per R5; drop the raw ecrecover helper (s malleability).
+UD:§5	215	decision	superseded		UD:§24.1	CTR-MTX	yes	2026-08-30		Relayer wildcard instead of mode bitmask	UD:§24 restores mode (in the hash, canonical zeroing); smartcontracts README fixed 2026-10-07.
+UD:§6	224	decision	current	R112		NODE-GSP	yes	2026-08-30		Open relayer mesh modelled on 0x-mesh	R112 gossipsub v1.1 (cites UD §6); validate before gossip R118; relayer race R74; item 6 on-chain sponsor caps dropped by UD:§13.1.
+UD:§7	268	finding	history				no	2026-08-30		Findings from the owner's code	Inputs (reserved word, missing files, constant fee, ring size); addressed by later specs.
+UD:§8	317	finding	history				no	2026-08-30		Notes from the Grok conversation	Source note only.
+UD:§9	325	finding	history				no	2026-08-30		Build machine environment	The 3-agent fan-out cap is a process rule, not a product rule.
+UD:§10	331	decision	current	RS2-7		CTR-ZTH	yes	2026-08-30		Zether token is a meta-tx token	RS2-7 ZetherMetaTx mixin over MetaTxLib; same rule for PQZ (R284).
+UD:§10:fee-layers	351	decision	current	RS2-4		CTR-ZTH	yes	2026-08-30		Outer and inner fees serve different cases	RS2-4 inner fee to the beneficiary UA; RS2-14 direct call has no outer fee; three combinations.
+UD:§11	384	finding	history				no	2026-08-30		Grok factory architecture (source)	Design replaced by TW2 tiers (R129); native-coin wrapper not carried (RS2-11 for Zether).
+UD:§11:grok-struct	419	finding	history				no	2026-08-30		Grok MetaTransaction struct	Source; replaced by UD:§24.1.
+UD:§11:struct-variants	437	decision	superseded		UD:§24.1	CTR-MTX	yes	2026-08-30		Reconcile three struct variants	2D nonce and fee in the struct kept; 'drop mode' reversed by UD:§24.1.
+UD:§11:fee-denominator	450	decision	current	UD:§3.1		CTR-MTX	yes	2026-08-30		Percent fees in ppm (1e6)	Same rule as UD:§3.1; MODE_FEE_PERCENT is ppm of value (SCaaS §5.3).
+UD:§12	463	decision	current	R34		CTR-ZTH	yes	2026-08-30		transferWithProof: selective amount disclosure	R34 lists ITransferDisclosure; BUILT (SCaaS §8.9).
+UD:§12.1	470	finding	history				no	2026-08-30		Why a hash commitment is weak	Rationale for decisions.md Why.
+UD:§12.2	483	decision	current	R34		CTR-ZTH	yes	2026-08-30		Open the transfer ciphertext; three openings	SENDER_S, RECEIVER_X, AUDITOR (SCaaS §8.9, ZD).
+UD:§12.3	508	decision	current	R34		CTR-ZTH	yes	2026-08-30		Disclosure verify is a view; attest optional	verifyTransferAmount view, attestTransferAmount event, entryRef mandatory; bundle stored per RS2-15.
+UD:§12.4	537	decision	current	R34		CTR-ZTH	yes	2026-08-30		Disclosure security constraints	Item 1 (fresh random s) replaced by UD:§13.2; shared-s analysis and irrevocability remain (SCaaS §8.9).
+UD:§12.5	554	finding	history				no	2026-08-30		Why disclosure meets audit needs	Rationale; market-specific legal parts excluded.
+UD:§12.6	565	finding	history				no	2026-08-30		Sections to update (doc chores)	Doc-edit list.
+UD:§12.7	575	finding	history				no	2026-08-30		Dispute scenario: receiver denies payment	Analysis.
+UD:§12.7.1	586	finding	history				no	2026-08-30		Sender cannot open a false amount	Pedersen binding proof; rationale.
+UD:§12.7.2	614	finding	history				no	2026-08-30		Receiver cannot deny: evidence chain	Rationale.
+UD:§12.7.3	631	decision	superseded		UD:§25	CTR-ZTH	yes	2026-08-30		Permissionless rollOver proposed as D17	Replaced by UD:§13.3, then UD:§25 (PUBLIC default, OWNER_ONLY opt-in).
+UD:§12.7.4	657	decision	superseded		UD:§13.2	CTR-ZTH	yes	2026-08-30		SDK must store every s	UD:§13.2 deletes it: s derived from seed and on-chain sendCounter.
+UD:§12.7.5	676	decision	current			CTR-ZTH	yes	2026-08-30	contracts/zether.md#independent-verifier	Independent open-source disclosure verifier CLI	PLANNED in SCaaS §11.3 without ruling id; drop the market-specific court notes.
+UD:§12.7.6	691	decision	current	R34		CTR-ZTH	yes	2026-08-30		Keep all three opening paths	Same rule as UD:§12.2.
+UD:§13	704	finding	history				no	2026-08-30		Three owner corrections (container)	Decisions in UD:§13.1–§13.3.
+UD:§13.1	706	decision	current	R247		NODE-OPS	yes	2026-08-30		Relayer abuse control is operator business	R247 operators set their own policy; on-chain escrow cap exception → SponsorshipPool budgets (R189, R194).
+UD:§13.2	727	decision	current			CTR-ZTH	yes	2026-08-30	contracts/zether.md#sender-randomness	Derive s from seed via PRF	HKDF over seed, chain, token, from UA, on-chain sendCounter; stated in SCaaS §8.9 and ZD without ruling id.
+UD:§13.3	771	decision	superseded		UD:§25	CTR-ZTH	yes	2026-08-30		Implicit rollOver open to everyone	Owner later adopted accSeq with PUBLIC default and OWNER_ONLY opt-in (UD:§25).
+UD:§14	813	decision	superseded		UD:§20.1	CTR-ZTH	yes	2026-08-30		Curve D1 = BLS12-381 after preflight	First replaced by UD:§19 (bn254), then curve per token (UD:§20.1). Precompile-liveness measurement → networks/evm.md#precompiles.
+UD:§14:consequences	837	decision	superseded		UD:§20.1	CTR-ZTH	yes	2026-08-30		D1 and D2 settled on BLS12-381	Same replacement chain as UD:§14.
+UD:§14:to-measure	848	finding	history				no	2026-08-30		BLS12-381 gas still to measure	Done in UD:§17.
+UD:§15	855	finding	history				no	2026-08-30		D-decision table (container)	Rows UD:§15:D1…D17.
+UD:§15:D1	859	decision	superseded		UD:§20.1	CTR-ZTH	yes	2026-08-30		Curve D1 = bls12_381	Via UD:§19; no system curve any more.
+UD:§15:D2	860	decision	current	R34		CTR-ZTH	yes	2026-08-30		Freeze Zether struct with D1	Statement and transcript are byte-exact in ZD under R34.
+UD:§15:D7	861	decision	superseded		UD:§23.11	CLI-SGN	yes	2026-08-30		Custody tier A/B, HSM or MPC	B2B Zether optional, so A/B is no longer mandatory; FIPS 140-2 → 140-3 (SCaaS §15.3); KMS/HSM PLANNED (SCaaS §9.1).
+UD:§15:D12	862	decision	current	UD:§1:use-cases		ARCH-POS	yes	2026-08-30		First wave covers all three use cases	Same rule as UD:§1:use-cases.
+UD:§15:D14	869	decision	current			INT-ODOO	yes	2026-08-30	integration.md#odoo-key-registration	Key registration is not the addon's job	Addon keeps generic accounts linked to partners; outlet mapping in a bridge; operator sets issuance policy. No spec ruling (UA R320 is the node route).
+UD:§15:D17	864	decision	superseded		UD:§25	CTR-ZTH	yes	2026-08-30		Keep implicit rollOver plus public entry points	UD:§25 keeps rollOverPublic/Batch, adds accSeq and OWNER_ONLY.
+canon:D1	859	decision	current	UD:§20.1		CTR-ZTH	yes	2026-08-30		Canon D1: Zether curve	Current form: curve chosen per token (UD:§20.1).
+canon:D2	860	decision	current	UD:§15:D2		CTR-ZTH	yes	2026-08-30		Canon D2: freeze Zether struct	Current form UD:§15:D2.
+canon:D7	861	decision	current	UD:§23.11		CLI-SGN	yes	2026-08-30		Canon D7: custody tier	Current form: oracle lane only when an organization holds Zether (UD:§23.11).
+canon:D12	862	decision	current	UD:§1:use-cases		ARCH-POS	yes	2026-08-30		Canon D12: first-wave scope	Current form UD:§1:use-cases.
+canon:D14	869	decision	current	UD:§15:D14		INT-ODOO	yes	2026-08-30		Canon D14: key registration onboarding	Current form UD:§15:D14.
+canon:D17	864	decision	current	UD:§25		CTR-ZTH	yes	2026-09-03		Canon D17: rollOver authorization	Current form UD:§25 (PUBLIC default, OWNER_ONLY opt-in).
+UD:§16	889	decision	current			NET-EVM	yes	2026-08-30	networks/evm.md#private-chain	First target chain is the private PoA chain	Chain id and parameters now owner:2026-10-07:chain-7622 (7622, Fusaka); public chains after.
+UD:§16:gas-limit	904	decision	superseded		R280	NET-EVM	yes	2026-08-30		Raise the private chain block gas limit	R280 sets TargetBlockGasLimit 80 M on 7622 (UD asked for 50 M).
+UD:§16:single-signer	917	decision	current			NET-EVM	yes	2026-08-30	networks/evm.md#private-chain	Single-signer PoA must be named honestly	Never 'decentralized'; threat model lists the single signer (censorship, failure); partners told who controls it. R12 relies on it.
+UD:§16:roadmap	929	decision	current	UD:§16		NET-EVM	yes	2026-08-30		Private chain first and in CI	CI builds the private7622 profile (SCaaS §3.1).
+UD:§17	938	finding	history				no	2026-08-30		Spike S7: BLS12-381 gas measured	Measurement (eth_estimateGas, Gnosis, 2026-08-30) → networks/evm.md#precompiles per plan §2.6.
+UD:§17:results	944	finding	history				no	2026-08-30		MSM gas table, BLS vs BN254	Measurement; see UD:§17.
+UD:§17:canon-wrong	958	finding	history				no	2026-08-30		Canon BLS cost claim refuted	Analysis.
+UD:§17:reopen-d1	970	finding	history				no	2026-08-30		Recommendation to reopen D1	Agent recommendation; ruled in UD:§19.
+UD:§18	997	decision	superseded		owner:2026-10-07:chain-7622	NET-EVM	yes	2026-08-30		Chain 9000 genesis keys silently ignored	Chainspec fixed 2026-08-31, chain reset as 7622 (SCaaS §7.1). The trap (Nethermind ignores Geth keys) stays a finding.
+UD:§19	1029	decision	superseded		UD:§20.1	CTR-ZTH	yes	2026-08-30		Curve D1 = bn254 for the private phase	Curve became a per-token choice (UD:§20.1); both verifiers BUILT (R34).
+UD:§19:unlocked	1037	decision	superseded		UD:§20.1,owner:2026-10-07:chain-7622	CTR-ZTH	yes	2026-08-30		Keep bn254 verifiers and chain 9000 as is	Chain reset as 7622 with EIP-2537 live.
+UD:§19:reopen-conditions	1047	decision	superseded		UD:§20.1	CTR-ZTH	yes	2026-08-30		When to reopen the curve decision	No system curve; creators choose per security horizon (UD:§20.1; D3 dropped in UD:§20.5).
+UD:§19:curve-param	1060	decision	current	R34		CTR-ZTH	yes	2026-08-30		Curve is a deploy-time token parameter	Verifier injected at initialize, no setter; prover generic over curve; R34 both verifiers.
+UD:§19:canon-fix	1073	finding	history				no	2026-08-30		Canon corrections required	Doc chores.
+UD:§20	1079	decision	current			CTR-TOK	yes	2026-08-30	contracts/token-wrappers.md#open-factory	Open factory: anyone creates tokens	SCaaS §4.3 BUILT without ruling id; project deploys the protocol, not tokens.
+UD:§20.1	1093	decision	current	R34		CTR-ZTH	yes	2026-08-30		Support both curves, chosen per token	R34 verifiers bn254 + BLS12-381; points as bytes by proofSystemId; one UA per curve.
+UD:§20.2	1140	decision	current	CR-R3-11		CTR-GEN	yes	2026-08-30		No upgrades; versions live in the factory	CR-R3-11 (alias owner:2026-10-07:immutable); append-only catalogue, deprecate marks, createUnregistered version 0 (SCaaS §4.3).
+UD:§20.3	1210	decision	current			CTR-TOK	yes	2026-08-30	contracts/token-wrappers.md#provenance	getWrapper keyed by creator and underlying	No uniqueness on underlying alone; SCaaS §4.3 BUILT without id.
+UD:§20.4	1255	decision	current			CTR-TOK	yes	2026-08-30	contracts/token-wrappers.md#provenance	Provenance getters instead of gatekeeping	factory(), creator(), underlying(), verifier(), isDeployedHere; RS2-20 adds client-side pinning.
+UD:§20.5	1272	decision	current			CTR-GEN	yes	2026-08-30	contracts/README.md#issuer-choices	Issuer choices are not protocol decisions	Curve, ring size, optional auditor key, loyalty privacy belong to token creators; licence question dropped (market-neutral).
+UD:§20.6	1288	decision	current			CTR-TOK	yes	2026-08-30	contracts/token-wrappers.md#factory	Factory is the critical immutable artifact	Audit budget on the factory; isSupportedOnThisChain check mandatory (BUILT, PD §1).
+UD:§21	1304	decision	superseded		UD:§21.4,R87	NODE-MESH	yes	2026-08-31		Open relayer: two modes, two implementations	Modes → capability matrix (UD:§21.4); Odoo implementation dropped (UD:§23.8, R87).
+UD:§21.1	1316	decision	superseded		UD:§21.4	NODE-MESH	yes	2026-08-31		Relay-only vs network-node modes	Forward-on-reject kept as MESH default (no policy row ⇒ forward only); hop cap and dedup in R82, R78.
+UD:§21.2	1341	decision	superseded		R87	NODE-GEN	yes	2026-08-31		One Rust node, Odoo as control plane	R87: node independent; Odoo is one client; the node's control plane is its admin API.
+UD:§21.3	1365	decision	current	R83		NODE-MESH	yes	2026-08-31		Protocol spec and public conformance vectors	R81 wire spec; R83 test topology (cites UD §21.3); vectors BUILT (S3, 43 cases).
+UD:§21.4	1394	decision	current			NODE-MESH	yes	2026-08-31	node/README.md#modules-and-shapes	Node is a capability matrix, not modes	Modules vs shapes restated without id (MESH §3.1, SCaaS §3.2); exclusivity R74/R121; promote-to-open and forward score not in v1.
+UD:§21.5	1538	decision	current	R30		NODE-LANE	yes	2026-08-31		Many signing lanes; fee sink never a lane	R30 multiple relayer lanes; R84 fixed fee_recipient cold wallet; SCaaS §9.6 lanes gas-only, least-in-flight.
+UD:§22	1671	decision	superseded		R87	NODE-MESH	yes	2026-08-31		Lifecycle common to Rust and Odoo nodes	One implementation only (R87, UD:§23.8); lifecycle rules live in UD:§22.1–§22.10.
+UD:§22.1	1690	decision	current	R80		NODE-MESH	yes	2026-08-31		One state machine incl. landed elsewhere	R80 consumed state; SCaaS N5, N6.
+UD:§22.2	1750	decision	superseded		R87,R112,R115	NODE-GW	yes	2026-08-31		Three intake doors with trust levels	Door B → job API (R87, R91); door C → pull bus + gossip on chain_key topics (R112, R115). source field and MAX_HOPS kept (MESH §6, R82).
+UD:§22.3	1767	decision	current	R118		NODE-MESH	yes	2026-08-31		Cheap-first validation ladder; meta nonce check	Ladder kept (MESH §7.2 accept L0–L3, R118); nonce cache tiers and nonce_unverified dropped (MESH §1.2).
+UD:§22.4	1817	decision	current			NODE-MESH	yes	2026-08-31	node/mesh.md#acceptance-policy	One policy lookup table, static columns	Table in MESH §7.1; authority moved R79 → R99/R95 (node store); no row ⇒ forward only.
+UD:§22.5	1842	decision	current	R74		NODE-MESH	yes	2026-08-31		Submit, pool or forward with exclusivity window	R74 origin-signed exclusive; W 3 s → 10 s (R82); Zether intents off the mesh.
+UD:§22.6	1877	decision	current	R86		NODE-MESH	yes	2026-08-31		Who submits and where the fee goes	R86 effective fee; R84 normalization; R102 relayer-bound jobs pinned to their lane.
+UD:§22.7	1912	decision	superseded		R73,R82	NODE-MESH	yes	2026-08-31		Queue clocks and promote-after window	expiry stays the hard cap (max_valid_for_secs, R82); promote 300 s → 120 s window on own outbox jobs only (R73).
+UD:§22.8	1930	decision	current	R80		NODE-MESH	yes	2026-08-31		Watcher classifies landed, superseded, expired	R80 consumption checks; R78 makes intent_id = digest (dedup point resolved).
+UD:§22.9	1955	decision	superseded		R93,R87	NODE-JOB	yes	2026-08-31		Result queue default, node-configured callbacks	Results via change feeds (R93); node never calls the ERP or callbacks (R87); never dial a URL from an intent (MESH T8).
+UD:§22.10	1997	decision	open			NODE-MESH	yes	2026-08-31	node/mesh.md#open-questions	Open lifecycle questions	Items .1 and .3 remain open; .2 and .4 resolved (rows below).
+UD:§22.10.1	1999	decision	open			NODE-MESH	yes	2026-08-31	node/mesh.md#numbers	MAX_HOPS = 4 is arbitrary	R82 records it as arbitrary; re-tune after a multi-site run.
+UD:§22.10.2	2001	decision	superseded		R73	NODE-MESH	yes	2026-08-31		promote_after vs 300 s ERC-20 expiry	R73 chose a 120 s private window.
+UD:§22.10.3	2004	decision	open			NODE-GSP	yes	2026-08-31	node/gossip.md#scoring	Sybil resistance of forward scoring	Forward score not built; R121 credits only landings of intents the peer did not originate, ≥ 3 distinct from: partial answer.
+UD:§22.10.4	2008	decision	superseded		R87	NODE-MESH	yes	2026-08-31		Callback subject registry on public nodes	Moot: no callbacks (R87, NI §1.2); MESH lists it out of v1.
+UD:§23	2014	decision	current	UD:§23.3		NODE-GEN	yes	2026-08-31		One Rust app for the daemon tier	Same decision as UD:§23.3.
+UD:§23.1	2024	decision	current	R88		NODE-STO	yes	2026-08-31		Single process, no distributed nonce manager	R88 one owner process per store; R18 cold start, never abandon a nonce; Postgres journal → node store (R111).
+UD:§23.2	2055	decision	current	SCaaS:N1		NODE-GEN	yes	2026-08-31		Relayer never needs the Zether key	N1 node never holds subject keys; SCaaS §9.1 custody axes; names custody broker and key oracle.
+UD:§23.3	2154	decision	current			NODE-GEN	yes	2026-08-31	node/README.md#one-binary	One codebase, one binary, roles by config	SCaaS §3.2 BUILT without id; custody/oracle roles not in the binary (R15 seam).
+UD:§23.4	2211	decision	superseded		R87,R88	NODE-SEC	yes	2026-08-31		Separate DB roles per module	Node never writes ERP tables (R87); store is storage-only on SQLite/PG/MySQL (R111). 'Merge processes, not privileges' could be rewritten for NODE-SEC.
+UD:§23.5	2233	decision	current	R15		NODE-LANE	yes	2026-08-31		Two process boundaries: custody and key oracle	R15 custody broker as separate lane; oracle narrow interface (SCaaS §9.1), decrypt needs a chain witness.
+UD:§23.6	2261	decision	superseded		R87,R97	NODE-GEN	yes	2026-08-31		Lane diagram with ERP control plane	Outbox SKIP LOCKED → job API push (R87, R97); MESH R70 already flagged it.
+UD:§23.7	2297	decision	current	R88		NODE-STO	yes	2026-08-31		What dies: relay-pool, Redis, Lua	SCaaS §15.3 cites it; fencing returns as the store owner epoch (R88, R111) for a different reason.
+UD:§23.8	2319	decision	superseded		R87	NODE-GEN	yes	2026-08-31		Odoo addon is control plane, not a node	R87: node never connects to Odoo; control plane is the node admin API. Spec-for-strangers argument kept in UD:§21.3.
+UD:§23.9	2340	finding	history				no	2026-08-31		Technical debt left (doc chores)	Doc-edit list; status table in UD:§24.4.
+UD:§23.10	2356	decision	current			CLI-SGN	yes	2026-08-31	clients/signers-clientkeys.md#key-oracle	Key oracle keeps no persistent state	x only wrapped; nonce_id single-use (remove, unknown ⇒ reject); replay cache lossy by design; restart voids in-flight proofs. Part (a) is a file map.
+UD:§23.11	2416	decision	current			CLI-SGN	yes	2026-08-31	clients/signers-clientkeys.md#organization-custody	Oracle lane only when an organization holds Zether	Owner 2026-08-31: Zether for B2B optional; default B2B has no x; a receive-only treasury still needs x.
+UD:§24	2504	decision	current	UD:§24.1		CTR-MTX	yes	2026-08-31		No forwarder; drop feeToken, innerGasLimit; keep mode	Same decision as UD:§24.1 and UD:§24.2.
+UD:§24.0	2519	finding	history				no	2026-08-31		Agent overreach recorded	Process lesson: 'drop X' is no licence to redesign.
+UD:§24.1	2534	decision	current			CTR-MTX	yes	2026-08-31	contracts/metatx.md#struct	MetaTransaction struct and mode nibbles	BUILT MetaTxLib (SCaaS §5.2–§5.3) without ruling id; fee in the same token; flags low nibble, fee enum high nibble.
+UD:§24.2	2570	decision	current			CTR-MTX	yes	2026-08-31	contracts/metatx.md#no-forwarder	No generic forwarder; wrap legacy tokens	verifyingContract is always the token (SCaaS §5.1, no id).
+UD:§24.3	2586	decision	current	UD:§24.2		CTR-MTX	yes	2026-08-31		Fee charged iff the operation happened	Consequence of in-contract execution; closes _CRITIQUES contradictions 2 and 3.
+UD:§24.4	2598	finding	history				no	2026-08-31		Debt paid; meta-tx gas measured	Measurements (15,160 / 32,260 / +2,189 / +8,324 gas, chain 9000) → contracts/metatx.md#gas per plan §2.6.
+UD:§25	2630	decision	current	R34		CTR-ZTH	yes	2026-09-03		rollOver PUBLIC default, OWNER_ONLY opt-in	R34 two rollOver modes; ZD BUILT with RS2-17, RS2-19 (SCaaS §8.5).
+UD:§25:flipped	2638	decision	current	R34		CTR-ZTH	yes	2026-09-03		Canon owner-signed rollOver rejected	Part of UD:§25.
+UD:§25:why-both	2645	finding	history				no	2026-09-03		Why both modes are sound per account	Rationale.
+UD:§25:ruling	2653	decision	current	R34		CTR-ZTH	yes	2026-09-03		Per-account RollOverMode flag and entry points	Four PUBLIC constraints; flag in v1; OWNER_ONLY by risk class (ERP side).
+UD:§25:trade-off	2679	finding	history				no	2026-09-03		Gains and losses of PUBLIC mode	Rationale.
+UD:§25:fallback	2688	decision	open			CTR-ZTH	yes	2026-09-03	contracts/zether.md#rollover	Fallback: accept stale accSeq for credits only	Contingency if grief spreads; protocol change for crypto review (D8); never ruled.
+UD:§25:applied	2695	finding	history				no	2026-09-03		Docs updated for the rollOver ruling	Doc-edit list.

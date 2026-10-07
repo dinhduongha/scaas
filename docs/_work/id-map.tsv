@@ -1,0 +1,793 @@
+old	clause	new	status	superseded_by	target	owner	date	title	defined_at	superseded_by_old	note
+APP:Q1		CLI-APP-07	current		clients/app.md#submission	yes	2026-10-06	Relayed submission for Hedera and non-EVM	history/specs/2026-10-06-scaas-app-design.md:1029		owner answer restating R156 (route itself is NODE-GW)
+APP:Q2		CLI-APP-21	current		clients/app.md#dex	yes	2026-10-06	Non-EVM DEX books after EVM	history/specs/2026-10-06-scaas-app-design.md:1030		owner answer restating R172
+APP:Q3		CLI-APP-16	current		clients/app.md#i18n	yes	2026-10-06	Risk disclosures English beside translation	history/specs/2026-10-06-scaas-app-design.md:1031		owner answer restating R167
+CR-ADW-1		CTR-ACC-07	current		contracts/accounts-mandates.md#revocation-epoch	no	2026-10-07	Signed mandate revocation bound to epoch	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:296		
+CR-ADW-2		NET-HED-03	current		networks/hedera.md#mandate	no	2026-10-07	ED25519 owners pay via executeAsOwnerRaw	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:303		
+CR-ADW-3		CLI-SGN-07	current		clients/signers-clientkeys.md#role-keys	no	2026-10-07	Subject-account seed keys use role path	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:310		implements R300/R269 for subject accounts; ERP refuses EOA-equal key
+CR-ADW-4		CLI-SGN-08	current		clients/signers-clientkeys.md#signing-review	no	2026-10-07	checkPayment pins expected token client-side	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:316		
+CR-PD-1	(a,b)	INT-ERP-05	current		integration.md#outbox	no	2026-10-07	Outbox call jobs immutable, operator read-only	history/specs/2026-10-03-blockchain-payments-design.md:247		ERP outbox half; Odoo ACL/field names go in the example block
+CR-PD-1	(c)	NODE-JOB-01	current		node/job-api.md#call-table	yes	2026-10-07	Call jobs limited to selector/target table	history/specs/2026-10-03-blockchain-payments-design.md:247		owner reorg:Q1 (K1): add permissionless tender/vesting/distribution/offer rows + Safe.execTransaction row; factory excluded; one table (K11)
+CR-PD-2		NODE-IDX-01	current		node/indexer-feeds.md#event-set-quorum	no	2026-10-07	Finality quorum over normalized event sets	history/specs/2026-10-03-blockchain-payments-design.md:275		Primary of the CR-PD-2+CR-R3-2 merge; new text = CR-R3-2 universal per-family wording.
+CR-PD-3		NODE-GW-01	current		node/gateway.md#door-a-intake	no	2026-10-07	Door A is not a free gas faucet	history/specs/2026-10-03-blockchain-payments-design.md:891		Floor/sponsor clause (b,c) cites NODE-SPN (R189); K15 single statement here.
+CR-PD-4	(issuer)	CTR-MTX-04	current		contracts/metatx.md#pay-once-horizon	no	2026-10-07	Pay-once holds under lane horizon H	history/specs/2026-10-03-blockchain-payments-design.md:901		Split per plan; amends R9; CR-R3-8 merges clause-by-clause
+CR-PD-4	(node)	NODE-STO-01	current		node/store.md#config-validation	no	2026-10-07	Node refuses max_valid_for_secs above horizon	history/specs/2026-10-03-blockchain-payments-design.md:901		K4: node/store config validation on pruning families
+CR-PD-4	(pruning)	NET-ALL-01	current		networks/README.md#lane-pruning	no	2026-10-07	Pruning families keep executed lanes for H	history/specs/2026-10-03-blockchain-payments-design.md:901		Plan: pruning-family clause to NET-ALL
+CR-PD-5		NODE-LANE-02	current		node/submit-lanes.md#legacy-pull	no	2026-10-07	Legacy pull: signed report idempotent, nonce held	history/specs/2026-10-03-blockchain-payments-design.md:244		Transitional (BUILT) pull path only; removed with the pull adapter (R104 P9).
+CR-PD-6		NET-EVM-02	current		networks/evm.md#private-7622	yes	2026-10-07	Private reference chain id is 7622	history/specs/2026-10-03-blockchain-payments-design.md:918		
+CR-R3-1	(cosmos-v2)	NET-COS-03	current		networks/cosmos.md#passkey	no	2026-10-07	Cosmos passkey v2 address binds rp and origin	history/specs/2026-10-03-blockchain-round3-design.md:630		unresolved vs UA R315 (32-byte UA id; R291 forbids 20-byte truncation) and R9-6 stored lists; flag for rewrite
+CR-R3-1	(grammar)	NET-ALL-04	current		networks/README.md#webauthn	no	2026-10-07	One WebAuthn grammar for every family	history/specs/2026-10-03-blockchain-round3-design.md:630		
+CR-R3-2		NODE-IDX-01	current		node/indexer-feeds.md#event-set-quorum	no	2026-10-07	Finality quorum over normalized event sets	history/specs/2026-10-03-blockchain-round3-design.md:646		Restates CR-PD-2 for every family (plan §3.2 merge); per-family read methods stay in this entry.
+CR-R3-3		NET-SOR-09	current		networks/soroban.md#pay-ref	no	2026-10-07	pay_ref one-shot per (from, pay_ref)	history/specs/2026-10-03-blockchain-round3-design.md:658		same rule as R8-9; error name differs (ZeroAmount vs NonPositiveAmount)
+CR-R3-4		NET-SOL-01	current		networks/solana.md#network-domain	no	2026-10-07	Solana network = build-time genesis hash	history/specs/2026-10-03-blockchain-round3-design.md:663		
+CR-R3-5		NET-SUI-02	current		networks/sui.md#keys	no	2026-10-07	Sui keys per subject in Keys object	history/specs/2026-10-03-blockchain-round3-design.md:672		
+CR-R3-6		NET-ALL-05	current		networks/README.md#key-lifecycle	no	2026-10-07	Key lifecycle stated per family	history/specs/2026-10-03-blockchain-round3-design.md:679		
+CR-R3-7		NET-TON-02	current		networks/ton.md#domain-binding	yes	2026-10-07	TON per-wallet domain set on chain	history/specs/2026-10-03-blockchain-round3-design.md:693		owner reorg:Q3 (K2) chose this over R10-14 contract clause
+CR-R3-8	(node)	NODE-STO-01	current		node/store.md#config-validation	no	2026-10-07	Node refuses max_valid_for_secs above horizon	history/specs/2026-10-03-blockchain-round3-design.md:700		Merges into CR-PD-4(node)
+CR-R3-8	(pruning)	NET-ALL-01	current		networks/README.md#lane-pruning	no	2026-10-07	Pruning families keep executed lanes for H	history/specs/2026-10-03-blockchain-round3-design.md:700		Restates CR-PD-4; merged into CR-PD-4(pruning)/(node) rather than one CTR-MTX id, since its text is the pruning+node half
+CR-R3-9		NET-TON-03	current		networks/ton.md#dex	yes	2026-10-07	TON bounced payouts claimable by owner	history/specs/2026-10-03-blockchain-round3-design.md:703		owner reorg:Q4 (K3); removes admin RefundBounced from admin-power list
+CR-R3-10		NET-COS-04	current		networks/cosmos.md#dex	no	2026-10-07	Cosmos DEX has no Sweep	history/specs/2026-10-03-blockchain-round3-design.md:708		
+CR-R3-11		CTR-GEN-02	current		contracts/README.md#immutable-at-deploy	yes	2026-10-07	Value-holding programs immutable from deploy	history/specs/2026-10-03-blockchain-round3-design.md:714		Node check is R348 (NODE-STO); per-family deploy steps and deploy gate stay here
+CR-WSF-1		NET-ALL-23	current		networks/README.md#readable-signing	no	2026-10-07	Sui/Solana wallet signatures readable, passkey-first	history/specs/round3-wallet-signing-formats.md:343		rendering cited from NET-SUI/NET-SOL and clients/signers-clientkeys#rendering; supersedes RS12-9 hex text
+CR-WSF-2		NET-HED-15	current		networks/hedera.md#signatures	no	2026-10-07	Hedera ED25519 needs a raw signer	history/specs/round3-wallet-signing-formats.md:363		
+MESH:I1		NODE-MESH-04	current		node/mesh.md#exclusivity	yes	2026-10-05	Origin is in its own round-robin	history/specs/2026-10-05-relayer-mesh-design.md:1386		Owner-confirmed clause already in R74 text.
+MESH:I2		NODE-MESH-04	current		node/mesh.md#exclusivity	yes	2026-10-05	Own jobs published without exclusive	history/specs/2026-10-05-relayer-mesh-design.md:1387		Owner-confirmed clause already in R74 text.
+MESH:I3		NODE-MESH-04	current		node/mesh.md#exclusivity	yes	2026-10-05	Only queued jobs are published	history/specs/2026-10-05-relayer-mesh-design.md:1388		Owner-confirmed clause already in R74 text.
+MESH:I4		NODE-MESH-14	current		node/mesh.md#acceptance	yes	2026-10-05	Missing policy row means forward only	history/specs/2026-10-05-relayer-mesh-design.md:1389		
+NI:I1		NODE-JOB-15	open		node/job-api.md#call-jobs	no	2026-10-07	Migrated ERP namespace gets allow_call	history/specs/2026-10-06-node-independence-design.md:1610		Open, default applied (reorg:Q2, K21).
+NI:I2		NODE-STO-08	open		node/store.md#chain-state	no	2026-10-07	Paused chain accepts and holds jobs	history/specs/2026-10-06-node-independence-design.md:1611		Topic NODE-STO (R53/R96 chain state). Open, default applied (reorg:Q2, K21).
+NI:I3		NODE-JOB-16	open		node/job-api.md#namespaces	no	2026-10-07	Shared namespace via origin.scope	history/specs/2026-10-06-node-independence-design.md:1612		Open, default applied (reorg:Q2, K21).
+NI:I4		INT-ERP-20	open		integration.md#sync-latency	no	2026-10-07	Client status latency bounds	history/specs/2026-10-06-node-independence-design.md:1613		Topic INT-ERP: latency is the client push/sync cadence (R101). Open, default applied (reorg:Q2, K21).
+NI:I5		NODE-JOB-17	open		node/job-api.md#cancel	no	2026-10-07	Cancel of published job reports already sent	history/specs/2026-10-06-node-independence-design.md:1614		Open, default applied (reorg:Q2, K21).
+NI:I6		NODE-IDX-06	open		node/indexer-feeds.md#event-items	no	2026-10-07	Repeated entryRef handling on the feed	history/specs/2026-10-06-node-independence-design.md:1615		Topic NODE-IDX: whether the event feed flags repeats (TW2 T7). Open, default applied (reorg:Q2, K21).
+NI:I7		NODE-STO-09	open		node/store.md#schema	no	2026-10-07	Names chosen where sources gave none	history/specs/2026-10-06-node-independence-design.md:1617		Schema/config names; action_reset_event_cursor goes to the INT-ODOO example. Open, default applied (reorg:Q2, K21).
+NI:I8	(last-admin)	NODE-ADM-09	open		node/admin-auth.md#roles	no	2026-10-07	LAST_ADMIN counts built-in users only	history/specs/2026-10-06-node-independence-design.md:1619		Open, default applied (reorg:Q2, K21).
+NI:I8	(outer-tx)	NODE-LANE-21	open		node/submit-lanes.md#outer-tx	no	2026-10-07	outer_tx row for every signed tx	history/specs/2026-10-06-node-independence-design.md:1619		Open, default applied (reorg:Q2, K21).
+NI:I8	(tombstones)	NODE-JOB-18	open		node/job-api.md#cancel	no	2026-10-07	Tombstone quota and rate defaults	history/specs/2026-10-06-node-independence-design.md:1619		Open, default applied (reorg:Q2, K21).
+R1		ARCH-POS-80	superseded	NET-ALL-02, CTR-ZTH-01, CTR-ZTH-18, CTR-ZTH-19, CTR-UA-02, CTR-UA-16, CTR-UA-22, INT-ERP-11, ARCH-POS-02		no	2026-10-03	EVM-only META-only scope	history/specs/2026-10-03-blockchain-payments-design.md:660	R30,R34,owner:2026-10-06:families	
+R2	(cost)	CTR-MTX-80	superseded	CTR-MTX-09, CTR-MTX-10, CTR-MTX-11		no	2026-10-03	No named mtxPay; accepted gas cost	history/specs/2026-10-03-blockchain-payments-design.md:664	R138,R139,R140	PD §15.3: mtxPay built in v2
+R2	(op)	CTR-MTX-01	current		contracts/metatx.md#pay-op	no	2026-10-03	Pay op is pay(bytes32) via executeMetaTransaction	history/specs/2026-10-03-blockchain-payments-design.md:664		One-typehash reason restated by R140
+R3		CTR-DEX-80	superseded	CTR-DEX-01, NODE-DEX-01, INT-ERP-12		no	2026-10-03	Fill-or-kill two-leg MetaTxDex settlement	history/specs/2026-10-03-blockchain-payments-design.md:668	R35	PD §15.3
+R4		CTR-TOK-80	superseded	CTR-TOK-01		no	2026-10-03	No EOA approve lockdown	history/specs/2026-10-03-blockchain-payments-design.md:671	R26	PD §15.3; ADW §A
+R5		CTR-MTX-02	current		contracts/metatx.md#eip712-domain	no	2026-10-03	Clone domain: implementation name, clone verifyingContract	history/specs/2026-10-03-blockchain-payments-design.md:674		
+R6		NODE-JOB-80	superseded	ARCH-POS-05, NODE-JOB-06, INT-ERP-16, INT-ERP-18		no	2026-10-03	Node talks to Odoo only over json/2	history/specs/2026-10-03-blockchain-payments-design.md:677	R87,R97,R101	Pull path still BUILT; described as Transitional (K9).
+R6-1		NET-HED-08	current		networks/hedera.md#relayer	no	2026-10-03	Hedera runs lane_runner, one tx per lane	history/specs/2026-10-03-net-hedera.md:289		
+R6-2		NET-HED-09	current		networks/hedera.md#signatures	no	2026-10-03	HederaMetaToken HIP-632 for 64-byte signatures	history/specs/2026-10-03-net-hedera.md:291		
+R6-3		INT-ERP-13	current		integration.md#families	no	2026-10-03	ERP verifies ED25519 for long-zero payers	history/specs/2026-10-03-net-hedera.md:293		topic changed: wholly an ERP-side rule (plan exception R6-3 ERP clause)
+R6-4		NET-HED-10	current		networks/hedera.md#limitations	no	2026-10-03	HashPack signMessage and KeyList are seams	history/specs/2026-10-03-net-hedera.md:295		see CR-WSF-2 (HIP-820 follow-up)
+R6-5		NET-HED-80	superseded	NET-HED-06, NET-HED-14		no	2026-10-07	Permissionless associateUnderlying	history/specs/2026-10-03-net-hedera.md:296	R6-8,R144	
+R6-6		NET-HED-11	current		networks/hedera.md#signatures	no	2026-10-07	Call HIP-632 system contract with CALL	history/specs/2026-10-03-net-hedera.md:298		dropping view in ERC20MetaTx is an open item, not part of the rule
+R6-7		NET-HED-05	current		networks/hedera.md#relayer	no	2026-10-07	Hedera status code to outcome class table	history/specs/2026-10-03-net-hedera.md:162		applies NODE-LANE R341
+R6-8		NET-HED-06	current		networks/hedera.md#wrappers	no	2026-10-07	v1 HTS wrapper fee check in initialize	history/specs/2026-10-03-net-hedera.md:201		
+R6-9		NET-HED-07	current		networks/hedera.md#hts	no	2026-10-07	Wallets warn on HTS issuer keys	history/specs/2026-10-03-net-hedera.md:215		
+R6-10		NET-HED-12	current		networks/hedera.md#relayer	no	2026-10-07	HederaAdapter reports tx_fee and lane_balance	history/specs/2026-10-03-net-hedera.md:307		applies R340
+R6-11		NET-HED-13	current		networks/hedera.md#relayer	no	2026-10-07	Mesh sig_kind hedera_ed25519 verified locally	history/specs/2026-10-03-net-hedera.md:308		applies R343 (NODE-MESH)
+R7		INT-ODOO-06	current		integration.md#example-odoo-addons	no	2026-10-03	No idempotency addon; natural UNIQUE keys	history/specs/2026-10-03-blockchain-payments-design.md:682		
+R8		INT-ODOO-07	current		integration.md#example-odoo-addons	no	2026-10-03	Odoo addon split, no account addon	history/specs/2026-10-03-blockchain-payments-design.md:685		DEX addon added later by DEX spec
+R8-1		NET-SOR-02	current		networks/soroban.md#payload	no	2026-10-03	Ledger expiry computed without RPC	history/specs/2026-10-03-net-soroban.md:64		
+R8-2		NET-SOR-03	current		networks/soroban.md#limitations	no	2026-10-07	Soroban guardian recovery is a seam	history/specs/2026-10-03-net-soroban.md:96		gap stream per CR-R3-6
+R8-3		NET-SOR-05	current		networks/soroban.md#dex	no	2026-10-03	One signature settles once	history/specs/2026-10-03-net-soroban.md:137		
+R8-4		NET-SOR-06	current		networks/soroban.md#dex	no	2026-10-03	No multi-pair batch per Soroban tx	history/specs/2026-10-03-net-soroban.md:139		
+R8-5		NET-SOR-07	current		networks/soroban.md#dex	no	2026-10-03	DEX jobs carry two auth entries	history/specs/2026-10-03-net-soroban.md:141		
+R8-6		INT-ERP-14	current		integration.md#families	no	2026-10-03	ERP verifies G… ed25519 via OpenSSL	history/specs/2026-10-03-net-soroban.md:193		topic changed: ERP-side verifier; amends R61 pure-Python ed25519
+R8-7		NET-SOR-08	current		networks/soroban.md#relayer	no	2026-10-07	Token address is a per-family string	history/specs/2026-10-03-net-soroban.md:182		done; token source now node store (R95)
+R8-8		NET-SOR-04	current		networks/soroban.md#limitations	no	2026-10-07	Per-key permissions are a seam	history/specs/2026-10-03-net-soroban.md:97		until UA R298 purposes
+R8-9		NET-SOR-09	current		networks/soroban.md#pay-ref	no	2026-10-07	pay_ref per (from, pay_ref), amount > 0	history/specs/2026-10-03-net-soroban.md:224		CR-R3-3 merged here
+R8-10		NET-SOR-10	current		networks/soroban.md#dex	no	2026-10-07	Soroban orders bind relayer, no open form	history/specs/2026-10-03-net-soroban.md:230		Soroban application of RS5-15 (CTR-DEX); cite it
+R8-11		NET-SOR-11	current		networks/soroban.md#ttl	no	2026-10-07	TTL extension and RestoreFootprint retry	history/specs/2026-10-03-net-soroban.md:233		
+R8-12		NET-SOR-12	current		networks/soroban.md#relayer	no	2026-10-07	op_consumed reads host nonce key	history/specs/2026-10-03-net-soroban.md:236		
+R8-13		NET-SOR-13	current		networks/soroban.md#signatures	no	2026-10-07	Reject crossOrigin true and topOrigin	history/specs/2026-10-03-net-soroban.md:238		family application of CR-R3-1 grammar
+R8-14		NET-SOR-14	current		networks/soroban.md#relayer	no	2026-10-07	Soroban adapter reports tx_fee and lane_balance	history/specs/2026-10-03-net-soroban.md:240		
+R8-15		NET-SOR-15	current		networks/soroban.md#relayer	no	2026-10-07	Signed fields read from invocation	history/specs/2026-10-03-net-soroban.md:242		
+R9	(lane)	CTR-MTX-03	current		contracts/metatx.md#entryref-pay-lane	no	2026-10-03	Random entryRef; pay lane derived from it	history/specs/2026-10-03-blockchain-payments-design.md:692		Amended by R139 (v2 derives the lane on chain)
+R9	(pay-once)	CTR-MTX-81	superseded	CTR-MTX-04, NET-ALL-01, NODE-STO-01		no	2026-10-03	Unconditional pay-once per request	history/specs/2026-10-03-blockchain-payments-design.md:692	CR-PD-4	PD §15.3: R9 unconditional pay-once -> CR-PD-4
+R9-1		NET-COS-80	superseded	NET-ALL-21		no	2026-10-07	Cosmos passkey v1 derived address	history/specs/2026-10-03-net-cosmos.md:13	R315	also replaced by CR-R3-1 v2 derivation; see conflict note there
+R9-2		NET-COS-05	current		networks/cosmos.md#dex	no	2026-10-03	Cosmos DEX fill-or-kill, batch all-or-nothing	history/specs/2026-10-03-net-cosmos.md:117		
+R9-3		NET-COS-06	current		networks/cosmos.md#relayer	no	2026-10-07	Post-simulation grief metered; DEX rereads nonces	history/specs/2026-10-03-net-cosmos.md:233		
+R9-4		NET-COS-07	current		networks/cosmos.md#deploy	no	2026-10-07	instantiate2 genesis salt; duplicate chain-id refused	history/specs/2026-10-03-net-cosmos.md:238		
+R9-5		NET-COS-08	current		networks/cosmos.md#relayer	no	2026-10-07	contract and valid_until from signed payload	history/specs/2026-10-03-net-cosmos.md:243		
+R9-6		NET-COS-09	current		networks/cosmos.md#passkey	no	2026-10-07	Cosmos passkey checks stored rpIdHash and origins	history/specs/2026-10-03-net-cosmos.md:246		overlaps CR-R3-1 cosmos-v2 binding (derivation); reconcile in rewrite
+R9-7		NET-COS-10	current		networks/cosmos.md#relayer	no	2026-10-07	Resubmit tx dropped from mempool	history/specs/2026-10-03-net-cosmos.md:249		
+R9-8		NET-COS-11	current		networks/cosmos.md#payload	no	2026-10-07	extra must be empty outside trade	history/specs/2026-10-03-net-cosmos.md:252		
+R10		INT-ERP-06	current		integration.md#payment-terms	no	2026-10-05	Portal terms fee NONE, relayer restricted	history/specs/2026-10-03-blockchain-payments-design.md:696		decided INT-ERP (ERP issuance policy, not contract); amended by R73 bus scope open ⇒ relayer 0; payee self-relay stays
+R10-1		NET-TON-04	current		networks/ton.md#contracts	no	2026-10-03	Compact Tact Jetton with meta-tx wallet	history/specs/2026-10-03-net-ton.md:24		
+R10-2		NET-TON-05	current		networks/ton.md#signatures	no	2026-10-03	TON Connect signData cell envelope	history/specs/2026-10-03-net-ton.md:25		
+R10-3		NET-TON-81	superseded	NET-TON-16, NET-TON-02		no	2026-10-07	Domain checked only in the ERP	history/specs/2026-10-03-net-ton.md:16	R10-14,CR-R3-7	node half → R10-14(node); on-chain half → CR-R3-7 per reorg:Q3
+R10-4		NET-TON-06	current		networks/ton.md#payload	no	2026-10-03	Network domain = config 19 global id	history/specs/2026-10-03-net-ton.md:27		
+R10-5		NET-TON-07	current		networks/ton.md#key-binding	no	2026-10-03	Lazy key bind via SignedOp stateInit	history/specs/2026-10-03-net-ton.md:28		
+R10-6		NET-TON-08	current		networks/ton.md#passkey	no	2026-10-07	One TON passkey set by set_key	history/specs/2026-10-03-net-ton.md:29		amended: exact origin (CR-R3-1), set_key PoP (R314), rotation gap (CR-R3-6)
+R10-7		NET-TON-09	current		networks/ton.md#dex	no	2026-10-03	TON DEX is fill-or-kill escrow	history/specs/2026-10-03-net-ton.md:30		
+R10-8		NET-TON-10	current		networks/ton.md#relayer	no	2026-10-03	Relayer lane = W5R1 wallet, one message	history/specs/2026-10-03-net-ton.md:31		
+R10-9		NET-TON-11	current		networks/ton.md#relayer	no	2026-10-03	Node uses TON Center API v3	history/specs/2026-10-03-net-ton.md:32		
+R10-10		NET-TON-12	current		networks/ton.md#events	no	2026-10-07	Events authenticated by derived wallet address	history/specs/2026-10-03-net-ton.md:33		token registry = node store (R95)
+R10-11		NET-TON-13	current		networks/ton.md#fees	no	2026-10-07	No relayer fee; forward TON capped	history/specs/2026-10-03-net-ton.md:34		
+R10-12		NET-TON-14	current		networks/ton.md#forward-cap	no	2026-10-07	Forward TON capped on every path	history/specs/2026-10-03-net-ton.md:225		node half applies R345
+R10-13		NET-TON-15	current		networks/ton.md#relayer	no	2026-10-07	tx_id is TEP-467 normalized hash	history/specs/2026-10-03-net-ton.md:235		
+R10-14	(contract)	NET-TON-82	superseded	NET-TON-02		no	2026-10-07	domainHash pinned in wallet init	history/specs/2026-10-03-net-ton.md:239	reorg:Q3	K2: owner chose CR-R3-7 domain set
+R10-14	(node)	NET-TON-16	current		networks/ton.md#domain-binding	no	2026-10-07	Node checks TON domain at every door	history/specs/2026-10-03-net-ton.md:239		
+R10-15		NET-TON-17	current		networks/ton.md#relayer	no	2026-10-07	Simulation reads balance, checks passkey locally	history/specs/2026-10-03-net-ton.md:245		origin check exact per CR-R3-1
+R10-16		NET-TON-18	current		networks/ton.md#revoke	no	2026-10-07	Revoke runs exactly once	history/specs/2026-10-03-net-ton.md:248		
+R10-17	(bounced)	NET-TON-83	superseded	NET-TON-03		no	2026-10-07	Bounced payouts via admin RefundBounced	history/specs/2026-10-03-net-ton.md:250	reorg:Q4	K3: CR-R3-9 claim model
+R10-17	(cancel,fees)	NET-TON-19	current		networks/ton.md#dex	no	2026-10-07	DEX keeps nothing not its own	history/specs/2026-10-03-net-ton.md:250		cancel of unknown order ⇒ returnExcess; WithdrawFees never touches bounced/unclaimed
+R11	(gate)	NODE-IDX-02	current		node/indexer-feeds.md#finality-gate	no	2026-10-06	Node decides finality: depth or tag	history/specs/2026-10-03-blockchain-payments-design.md:699		Finality modes stay; config lives in node store (R96).
+R11	(quorum)	NODE-IDX-80	superseded	NODE-IDX-01		no	2026-10-03	Quorum on one block hash	history/specs/2026-10-03-blockchain-payments-design.md:699	CR-PD-2	PD §15.3: one-hash quorum replaced by event-set quorum.
+R12		NODE-IDX-03	current		node/indexer-feeds.md#no-reorg-after-finality	no	2026-10-03	No reorg handling after hard finality	history/specs/2026-10-03-blockchain-payments-design.md:703		
+R13		INT-ODOO-08	current		integration.md#example-odoo-verify	no	2026-10-03	Odoo verifies ECDSA signatures itself	history/specs/2026-10-03-blockchain-payments-design.md:706		narrowed by R27
+R14		INT-ODOO-09	current		integration.md#example-odoo-portal	no	2026-10-03	Portal pay button calls model facade	history/specs/2026-10-03-blockchain-payments-design.md:712		
+R15		NODE-LANE-03	current		node/submit-lanes.md#signer	no	2026-10-03	Outer tx keys behind Signer trait	history/specs/2026-10-03-blockchain-payments-design.md:715		
+R16		NODE-STO-80	superseded	CTR-DEX-01, NODE-DEX-01, INT-ERP-12, NODE-STO-04, NODE-DEX-14		no	2026-10-03	In-memory gateway queue and DEX book	history/specs/2026-10-03-blockchain-payments-design.md:718	R35,R88,R105	
+R17		INT-ERP-07	current		integration.md#currency	no	2026-10-03	No FX: token currency equals order currency	history/specs/2026-10-03-blockchain-payments-design.md:730		decided INT-ERP
+R18		NODE-LANE-04	current		node/submit-lanes.md#nonce-plan	no	2026-10-03	Never abandon an outer nonce	history/specs/2026-10-03-blockchain-payments-design.md:720		
+R19		INT-ODOO-10	current		integration.md#example-odoo-portal	no	2026-10-03	Portal pays confirmed orders only	history/specs/2026-10-03-blockchain-payments-design.md:723		
+R20		NODE-STO-03	current		node/store.md#config-authority	no	2026-10-06	RPC endpoints only in node config	history/specs/2026-10-03-blockchain-payments-design.md:727		PD §15.3: kept, restated by NI R95 toml-only list.
+R21		CLI-SGN-06	current		clients/signers-clientkeys.md#connectors	no	2026-10-03	WalletConnect is a seam behind a flag	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:192		
+R22		INT-ERP-01	current		integration.md#receiving-wallets	no	2026-10-03	24 h cooling-off for new receiving wallets	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:193		
+R23		INT-ODOO-80	superseded	INT-ODOO-11		no	2026-10-03	Host company configuration parameter	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:194	R57	topic INT-ODOO to sit with R57
+R24		INT-ERP-02	current		integration.md#payer-wallets	no	2026-10-03	Custodial partner payer wallet needs license_ref	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:195		
+R25		CTR-ACC-06	current		contracts/accounts-mandates.md#mandatewallet	no	2026-10-07	Delegated payment uses MandateWallet, no allowance	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:196		Amended by CR-ADW-1 (revoke epoch) and CR-ADW-2 (Hedera ED25519 owners)
+R26		CTR-TOK-01	current		contracts/token-wrappers.md#allowance-lockdown	yes	2026-10-03	Spender and transferFrom caller must be contracts	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:198		Owner ruling (ADW §A); narrowed by R63: HTS allowances only through wrappers
+R27		INT-ERP-03	current		integration.md#families	no	2026-10-03	Contract wallets: ERP defers to node simulation	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:200		
+R28		INT-ODOO-05	current		integration.md#example-odoo-addons	no	2026-10-03	Payment addon depends on account_payment	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:202		Odoo-specific dependency
+R29		INT-ERP-04	current		integration.md#mandates	no	2026-10-03	MandateWallet deployed outside the ERP	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:204		
+R30		NET-ALL-02	current		networks/README.md#r30-path	yes	2026-10-03	Contract-level meta-tx default on every network	history/specs/2026-10-03-blockchain-round3-design.md:517		
+R31	(account)	CTR-ACC-08	current		contracts/accounts-mandates.md#passkeys	yes	2026-10-07	Passkey subjects, Merkle batch, account key lifecycle	history/specs/2026-10-03-blockchain-round3-design.md:519		Amended by CR-R3-1, CR-R3-6; salt/gas/encoding details now RS4-1, RS4-10, RS4-3
+R31	(client)	CLI-SGN-09	current		clients/signers-clientkeys.md#passkeys	yes	2026-10-03	Portal and mobile subjects sign with passkeys	history/specs/2026-10-03-blockchain-round3-design.md:519		Plan: client half to CLI-SGN
+R32	(path)	CLI-SGN-85	superseded	CLI-SGN-30		yes	2026-10-03	Account seed keys on EOA path	history/specs/2026-10-03-blockchain-round3-design.md:522	R300	also CR-ADW-3, R269
+R32	(scrypt)	CLI-SGN-86	superseded	CLI-SGN-21		yes	2026-10-03	Seed vault scrypt N=2^15 with PIN	history/specs/2026-10-03-blockchain-round3-design.md:522	R259	
+R32	(vault)	CLI-SGN-11	current		clients/signers-clientkeys.md#vault	yes	2026-10-06	Client-side seed vault, multi-key accounts	history/specs/2026-10-03-blockchain-round3-design.md:522		amended by R255 vault v2
+R33	(deferred)	CLI-SGN-83	superseded	CTR-ZTH-01, CTR-ZTH-18, CTR-ZTH-19, CTR-UA-02, CTR-UA-16, CTR-UA-22, INT-ERP-11		yes	2026-10-03	Zether on chain stays deferred	history/specs/2026-10-03-blockchain-round3-design.md:521	R34	
+R33	(keys)	CLI-SGN-10	current		clients/signers-clientkeys.md#zether-keys	yes	2026-10-03	Zether keys from seed, own paths	history/specs/2026-10-03-blockchain-round3-design.md:521		paths unchanged per UA §8.1
+R33	(pop)	CLI-SGN-84	superseded	CTR-UA-07		yes	2026-10-03	Zether PoP bound to caller account	history/specs/2026-10-03-blockchain-round3-design.md:521	R295	UA R294–R297
+R34	(erp)	INT-ERP-11	current		integration.md#confidential-payments	yes	2026-10-03	ERP confidential requests, disclosure reconciliation, audit keys	history/specs/2026-10-03-blockchain-round3-design.md:546		ERP clause of R34, written generically
+R34	(params)	CTR-ZTH-80	superseded	CTR-ZTH-18, CTR-ZTH-19		yes	2026-10-03	Range bits 32 and DECRYPT_BOUND 2^40	history/specs/2026-10-03-blockchain-round3-design.md:546	RS-NV64-1,RS-NV64-2	Owner limits D1/D4 (2026-10-05)
+R34	(registry)	CTR-ZTH-81	superseded	CTR-UA-02, CTR-UA-16, CTR-UA-22		yes	2026-10-03	Zether registry with eight auth schemes and PoP	history/specs/2026-10-03-blockchain-round3-design.md:546	R290,R305,R312	UA spec replaces the Zether-only registry and AuthScheme
+R34	(scope)	CTR-ZTH-01	current		contracts/zether.md#scope	yes	2026-10-03	Full classical Zether, unaudited, dev-chain gated	history/specs/2026-10-03-blockchain-round3-design.md:546		Contract, prover, relayer, client proving, mandatory tests, UNAUDITED gate, non-EVM feasibility only
+R35	(book)	NODE-DEX-01	current		node/dex-venue.md#order-book	yes	2026-10-07	Durable off-chain book, price-time, partial fills	history/specs/2026-10-03-blockchain-round3-design.md:554		Book location 'Odoo or SQLite' amended: node store per R105 (R3D H.4)
+R35	(contract)	CTR-DEX-01	current		contracts/dex.md#orderbookdex	yes	2026-10-03	Settlement contract checks two signed orders	history/specs/2026-10-03-blockchain-round3-design.md:554		
+R35	(erp)	INT-ERP-12	current		integration.md#dex-accounting	yes	2026-10-03	ERP mirrors markets and books DEX fees	history/specs/2026-10-03-blockchain-round3-design.md:554		Market config authority moved to node store (R99/R105); ERP keeps the mirror and fee accounting
+R36		NET-ALL-80	unused			no	2026-10-03	R36-R49 reserved for round 3, never used	history/specs/2026-10-03-blockchain-round3-design.md:4		
+R37		NET-ALL-80	unused			no	2026-10-03	R36-R49 reserved for round 3, never used	history/specs/2026-10-03-blockchain-round3-design.md:4		
+R38		NET-ALL-80	unused			no	2026-10-03	R36-R49 reserved for round 3, never used	history/specs/2026-10-03-blockchain-round3-design.md:4		
+R39		NET-ALL-80	unused			no	2026-10-03	R36-R49 reserved for round 3, never used	history/specs/2026-10-03-blockchain-round3-design.md:4		
+R40		NET-ALL-80	unused			no	2026-10-03	R36-R49 reserved for round 3, never used	history/specs/2026-10-03-blockchain-round3-design.md:4		
+R41		NET-ALL-80	unused			no	2026-10-03	R36-R49 reserved for round 3, never used	history/specs/2026-10-03-blockchain-round3-design.md:4		
+R42		NET-ALL-80	unused			no	2026-10-03	R36-R49 reserved for round 3, never used	history/specs/2026-10-03-blockchain-round3-design.md:4		
+R43		NET-ALL-80	unused			no	2026-10-03	R36-R49 reserved for round 3, never used	history/specs/2026-10-03-blockchain-round3-design.md:4		
+R44		NET-ALL-80	unused			no	2026-10-03	R36-R49 reserved for round 3, never used	history/specs/2026-10-03-blockchain-round3-design.md:4		
+R45		NET-ALL-80	unused			no	2026-10-03	R36-R49 reserved for round 3, never used	history/specs/2026-10-03-blockchain-round3-design.md:4		
+R46		NET-ALL-80	unused			no	2026-10-03	R36-R49 reserved for round 3, never used	history/specs/2026-10-03-blockchain-round3-design.md:4		
+R47		NET-ALL-80	unused			no	2026-10-03	R36-R49 reserved for round 3, never used	history/specs/2026-10-03-blockchain-round3-design.md:4		
+R48		NET-ALL-80	unused			no	2026-10-03	R36-R49 reserved for round 3, never used	history/specs/2026-10-03-blockchain-round3-design.md:4		
+R49		NET-ALL-80	unused			no	2026-10-03	R36-R49 reserved for round 3, never used	history/specs/2026-10-03-blockchain-round3-design.md:4		
+R50		INT-ERP-08	current		integration.md#custody	no	2026-10-03	ERP-held env: custody dev-only, OpenSSL	history/specs/2026-10-03-blockchain-round3-design.md:523		node/submit-lanes#lane-keys cites it for the dev flag; no node clause to split
+R51		NODE-OPS-01	current		node/ops.md#admin-listener	no	2026-10-06	readyz and metrics on admin port	history/specs/2026-10-03-blockchain-round3-design.md:524		Amended NI §18.1: relay_stats replaced by store counts.
+R52		CTR-GEN-01	current		contracts/README.md#build-ci-pins	no	2026-10-03	Separate blockchain CI; forge libs pinned by tag	history/specs/2026-10-03-blockchain-round3-design.md:525		
+R53		NODE-STO-02	current		node/store.md#chain-state	no	2026-10-06	paused blocks sending, halted blocks indexing	history/specs/2026-10-03-blockchain-round3-design.md:526		Amended by R96 (node-side gate; ERP keeps a push gate).
+R54		NODE-GW-02	current		node/gateway.md#auth	no	2026-10-06	Gateway auth bearer or hmac	history/specs/2026-10-03-blockchain-round3-design.md:527		Extended by R92 key ids for the job API.
+R55		NODE-LANE-05	current		node/submit-lanes.md#breaker	no	2026-10-03	Circuit breakers never block indexing	history/specs/2026-10-03-blockchain-round3-design.md:528		Metering refined by R340.
+R56		INT-ERP-09	current		integration.md#accounting	no	2026-10-06	Journal per (company, token); drift A and C	history/specs/2026-10-03-blockchain-round3-design.md:529		amended by R94 (balances items) and PUT /v1/watch
+R57		INT-ODOO-11	current		integration.md#example-odoo-platform-company	no	2026-10-03	One receiving-company seam; platform company	history/specs/2026-10-03-blockchain-round3-design.md:530		Odoo method/parameter names
+R58	(adapter)	NODE-LANE-06	current		node/submit-lanes.md#adapters	no	2026-10-03	ChainAdapter and per-lane runner	history/specs/2026-10-03-blockchain-round3-design.md:531		Built trait in scaas-node is the reference (L6).
+R58	(family-enum)	NODE-LANE-80	superseded	ARCH-POS-02		no	2026-10-03	Six-member Family enum	history/specs/2026-10-03-blockchain-round3-design.md:531	owner:2026-10-06:families	
+R59		NODE-LANE-07	current		node/submit-lanes.md#signer	no	2026-10-03	Local secp256k1/ed25519 signer, KMS seam	history/specs/2026-10-03-blockchain-round3-design.md:532		
+R60		NODE-LANE-08	current		node/submit-lanes.md#lane-keys	no	2026-10-03	Lane keys: raw key or mnemonic	history/specs/2026-10-03-blockchain-round3-design.md:533		
+R61		INT-ERP-10	current		integration.md#addresses	no	2026-10-06	ERP family-aware addresses and signed ops	history/specs/2026-10-03-blockchain-round3-design.md:534		amended: eight families (owner 2026-10-06), ed25519 via OpenSSL (R8-6)
+R62		NET-ALL-03	current		networks/README.md#head-of-line	no	2026-10-05	Head-of-line table and anti-lock test	history/specs/2026-10-03-blockchain-round3-design.md:535		amended by R77: Soroban off the mesh (reorg:Q6 keeps job API only)
+R63		NET-HED-04	current		networks/hedera.md#overview	no	2026-10-07	Hedera = Solidity on HSCS + HIP-632	history/specs/2026-10-03-blockchain-round3-design.md:536		amended by R6-1/R6-2 (no SubjectAccount/pipeline), CR-ADW-2
+R64		NET-SUI-01	current		networks/sui.md#overview	no	2026-10-07	Sui shared Account<T> + personal message	history/specs/2026-10-03-blockchain-round3-design.md:537		amended by CR-R3-5 Keys, CR-WSF-1 readable message
+R65		NET-SOR-01	current		networks/soroban.md#overview	no	2026-10-07	Soroban native auth as meta-tx; fee-bump	history/specs/2026-10-03-blockchain-round3-design.md:538		amended by CR-R3-3/R8-9
+R66		NET-COS-02	current		networks/cosmos.md#overview	no	2026-10-07	Cosmos CW20 + ADR-036, no authz	history/specs/2026-10-03-blockchain-round3-design.md:539		amended by CR-R3-1, CR-R3-10
+R67	(bindkey)	NET-TON-80	superseded	NET-TON-07		no	2026-10-03	TON BindKey message	history/specs/2026-10-03-blockchain-round3-design.md:540	R10-5	lazy bind in SignedOp.stateInit
+R67	(core)	NET-TON-01	current		networks/ton.md#overview	no	2026-10-07	TON Tact jetton wallet; escrow DEX	history/specs/2026-10-03-blockchain-round3-design.md:540		amended by CR-R3-7, CR-R3-9
+R68		NODE-MESH-80	unused			no	2026-10-05	R68-R69 left unused	history/specs/2026-10-05-relayer-mesh-design.md:5		
+R69		NODE-MESH-80	unused			no	2026-10-05	R68-R69 left unused	history/specs/2026-10-05-relayer-mesh-design.md:5		
+R70		NODE-MESH-01	current		node/mesh.md#bus	yes	2026-10-06	Pull bus for admitted peers	history/specs/2026-10-05-relayer-mesh-design.md:70		Amended by R112: libp2p-later clause replaced; bus = admitted-peer transport.
+R71	(seq)	NODE-MESH-02	current		node/mesh.md#bus	yes	2026-10-06	Commit-ordered bus seq and store id	history/specs/2026-10-05-relayer-mesh-design.md:71		Kept: commit-order seq (A1 counter row) and store_id cursor reset.
+R71	(store)	NODE-MESH-81	superseded	ARCH-POS-05, NODE-STO-04, NODE-JOB-02, NODE-DEX-14, NODE-STO-06		yes	2026-10-05	Mesh SQLite store, Odoo control plane	history/specs/2026-10-05-relayer-mesh-design.md:71	R87,R88,R89,R105,R111	NI §13.1: rusqlite, [mesh]-only store, Odoo control plane, DEX book clause, gateway-before-202 subsumed by R88/R89.
+R72		NODE-MESH-03	current		node/mesh.md#peer-identity	yes	2026-10-06	mTLS peers pinned by SPKI, Ed25519	history/specs/2026-10-05-relayer-mesh-design.md:72		Amended by R116 (one node key, [identity]); ring reasoning obsolete (K7, R114).
+R73		INT-ERP-15	current		integration.md#bus-scope	yes	2026-10-06	Bus scope is a per-tenant client setting	history/specs/2026-10-05-relayer-mesh-design.md:73		amended: delivered per job (R99), node publishes; values restricted|open|public (A2)
+R74		NODE-MESH-04	current		node/mesh.md#exclusivity	yes	2026-10-06	Signed round-robin exclusivity	history/specs/2026-10-05-relayer-mesh-design.md:74		Amended by R121 (gossip eligible set) and NI (job store, not Odoo outbox).
+R75		NODE-MESH-05	current		node/mesh.md#reward	yes	2026-10-05	Mesh reward is the intent fee only	history/specs/2026-10-05-relayer-mesh-design.md:75		R194 confirms R75 unamended.
+R76		NODE-MESH-06	current		node/mesh.md#private-profile	yes	2026-10-06	Chain profile, default private	history/specs/2026-10-05-relayer-mesh-design.md:76		Profile is a node store chain field (NI §13.1, §10.1 superseded).
+R77		NODE-MESH-07	current		node/mesh.md#families	yes	2026-10-05	Families on the bus; Soroban out	history/specs/2026-10-05-relayer-mesh-design.md:77		Soroban stays job-API only (reorg:Q6, K18).
+R78		NODE-MESH-08	current		node/mesh.md#intent-id	yes	2026-10-05	intent_id is the contract digest	history/specs/2026-10-05-relayer-mesh-design.md:78		
+R79		NODE-MESH-82	superseded	NODE-STO-03, NODE-MESH-15		yes	2026-10-05	Acceptance policy authoritative in Odoo	history/specs/2026-10-05-relayer-mesh-design.md:79	R95,R99	
+R80		NODE-LANE-09	current		node/submit-lanes.md#consumption-check	no	2026-10-05	Consumption check before bump or resend	history/specs/2026-10-05-relayer-mesh-design.md:80		Topic NODE-MESH→NODE-LANE: rule governs every submit path (submit.rs/adapter), mesh §8.4 → submit-lanes.
+R81		NODE-MESH-09	current		node/mesh.md#envelope	no	2026-10-06	Envelope spec scaas-intent/1.2	history/specs/2026-10-05-relayer-mesh-design.md:81		String per R115; 1.3 UA body added by R316.
+R82		NODE-MESH-10	current		node/mesh.md#numbers	no	2026-10-06	Mesh numbers, all config	history/specs/2026-10-05-relayer-mesh-design.md:82		Amended by A2: chain.exclusive_ms 7000 and gossip numbers.
+R83		NODE-MESH-11	current		node/mesh.md#tests	yes	2026-10-06	Multi-process one-binary test topology	history/specs/2026-10-05-relayer-mesh-design.md:83		Fake Odoo replaced by fake job-API client (NI §13.1).
+R84		NODE-LANE-10	current		node/submit-lanes.md#normalization	no	2026-10-06	Normalize unbound relayer and feeRecipient	history/specs/2026-10-05-relayer-mesh-design.md:84		Topic NODE-MESH→NODE-LANE (submitter); amended by R100 (every origin).
+R85		NODE-MESH-12	current		node/mesh.md#private-profile	no	2026-10-05	Private rows served only by origin	history/specs/2026-10-05-relayer-mesh-design.md:85		
+R86		NODE-MESH-13	current		node/mesh.md#acceptance	no	2026-10-06	may_submit needs a registered token	history/specs/2026-10-05-relayer-mesh-design.md:86		Amended NI §13.1: node token table, admin API validation.
+R87		ARCH-POS-05	current		architecture.md#node-independence	yes	2026-10-06	The node is independent of any ERP	history/specs/2026-10-06-node-independence-design.md:109		
+R88		NODE-STO-04	current		node/store.md#one-store	no	2026-10-06	One store always on, one owner	history/specs/2026-10-06-node-independence-design.md:110		
+R89		NODE-JOB-02	current		node/job-api.md#journal	no	2026-10-06	One journal, node-computed digests	history/specs/2026-10-06-node-independence-design.md:111		
+R90		NODE-JOB-03	current		node/job-api.md#namespaces	yes	2026-10-06	Namespaces are the tenant unit	history/specs/2026-10-06-node-independence-design.md:112		Odoo route mapping sentence goes to the INT-ODOO example text.
+R91		NODE-JOB-04	current		node/job-api.md#idempotency	yes	2026-10-06	Idempotency key and payload hash	history/specs/2026-10-06-node-independence-design.md:113		Odoo scope string goes to the INT-ODOO example text; tombstones bounded by R323.
+R92		NODE-JOB-05	current		node/job-api.md#auth	no	2026-10-06	Machine credentials: namespaced HMAC keys	history/specs/2026-10-06-node-independence-design.md:114		
+R93		NODE-IDX-04	current		node/indexer-feeds.md#feeds	no	2026-10-06	Change feeds for jobs and events	history/specs/2026-10-06-node-independence-design.md:115		
+R94		NODE-IDX-05	current		node/indexer-feeds.md#event-items	no	2026-10-06	Event feed items equal ingest arguments	history/specs/2026-10-06-node-independence-design.md:116		
+R95		NODE-STO-03	current		node/store.md#config-authority	yes	2026-10-06	Node store is configuration authority	history/specs/2026-10-06-mesh-gossip-amendment.md:1019		Amended by A2 §18.2 (identity, transport, gossip addrs toml-only); owner exception mesh_peer.url.
+R96		NODE-STO-05	current		node/store.md#chain-state	no	2026-10-06	Finality, pause, index cursor in node	history/specs/2026-10-06-node-independence-design.md:119		
+R97	(claim)	NODE-JOB-06	current		node/job-api.md#lease	no	2026-10-06	Claim is a CAS inside one owner	history/specs/2026-10-06-node-independence-design.md:120		Includes same-lane-keys-in-two-stores ban (§9.4).
+R97	(routing)	INT-ERP-16	current		integration.md#node-routing	no	2026-10-06	One node per company and chain	history/specs/2026-10-06-node-independence-design.md:120		Company-to-node routing is client-side; node has no company notion (R90).
+R98	(client)	INT-ERP-17	current		integration.md#cancel	no	2026-10-06	Client kills locally only if never pushed	history/specs/2026-10-06-node-independence-design.md:121		
+R98	(node)	NODE-JOB-07	current		node/job-api.md#cancel	no	2026-10-06	Cancel is a node CAS	history/specs/2026-10-06-node-independence-design.md:121		Tombstones bounded by R323.
+R99		NODE-MESH-15	current		node/mesh.md#bus-scope	yes	2026-10-06	Bus scope arrives per job	history/specs/2026-10-06-mesh-gossip-amendment.md:1020		Topic NODE-STO→NODE-MESH: per-job scope and node publication; policy tables cited in NODE-STO. Amended by A2 (public).
+R100		NODE-LANE-10	current		node/submit-lanes.md#normalization	no	2026-10-06	Normalization applies to every origin	history/specs/2026-10-06-node-independence-design.md:124		Restates R84 with the Odoo exception dropped; one id.
+R101		INT-ERP-18	current		integration.md#status-sync	no	2026-10-06	Client push and sync cadence	history/specs/2026-10-06-node-independence-design.md:125		Odoo ir.cron/SERVER_ONLY mechanics go in the example block
+R102		NODE-JOB-08	current		node/job-api.md#lane-pinning	no	2026-10-06	Relayer-bound jobs pinned to their lane	history/specs/2026-10-06-node-independence-design.md:126		
+R103		NODE-JOB-09	current		node/job-api.md#call-jobs	no	2026-10-07	call jobs are a namespace capability	history/specs/2026-10-06-node-independence-design.md:127		Amended by CR-PD-1(c) call table and reorg:Q1 rows; Odoo default is NI:I1.
+R104		NODE-JOB-10	current		node/job-api.md#legacy-pull	no	2026-10-06	Per-chain pull/push flag, then removal	history/specs/2026-10-06-node-independence-design.md:128		
+R105		NODE-DEX-14	current		node/dex-venue.md#book-store	no	2026-10-06	DEX book lives in the node store	history/specs/2026-10-06-node-independence-design.md:129		
+R106		NODE-ADM-02	current		node/admin-auth.md#modes	yes	2026-10-06	Admin auth: built-in users plus optional OIDC	history/specs/2026-10-06-mesh-gossip-amendment.md:1021		A2 §18.2 ring→aws-lc-rs row applies to R106a text (K5).
+R106a	(oidc)	NODE-ADM-03	current		node/admin-auth.md#oidc	yes	2026-10-06	OIDC JWT validation rules	history/specs/2026-10-06-node-independence-design.md:131		
+R106a	(ring)	NODE-ADM-80	superseded	NODE-GSP-03		yes	2026-10-06	JWS verification on ring	history/specs/2026-10-06-node-independence-design.md:131	R114	K5: aws-lc-rs everywhere.
+R107		NODE-ADM-04	current		node/admin-auth.md#roles	yes	2026-10-06	Admin roles and no escalation	history/specs/2026-10-06-node-independence-design.md:132		Amended by R322.
+R108		NODE-ADM-05	current		node/admin-auth.md#cli	yes	2026-10-06	Bootstrap and break-glass via host CLI	history/specs/2026-10-06-node-independence-design.md:133		
+R109		NODE-ADM-06	current		node/admin-auth.md#credential-separation	no	2026-10-06	API keys and admin credentials never cross	history/specs/2026-10-06-node-independence-design.md:134		
+R110	(audit)	NODE-ADM-07	current		node/admin-auth.md#audit	no	2026-10-06	Hash-chained audit log per mutation	history/specs/2026-10-06-node-independence-design.md:135		
+R110	(store-loss)	INT-ERP-19	current		integration.md#store-change	no	2026-10-06	Client halts sync on store change	history/specs/2026-10-06-node-independence-design.md:135		Client rule on feed store_id/restore_epoch/head_seq (R93).
+R111		NODE-STO-06	current		node/store.md#backends	yes	2026-10-06	SQLite, PostgreSQL or MySQL, storage only	history/specs/2026-10-06-node-independence-design.md:136		
+R112		NODE-GSP-01	current		node/gossip.md#scope	yes	2026-10-06	Gossip required alongside the pull bus	history/specs/2026-10-06-mesh-gossip-amendment.md:73		
+R113		NODE-GSP-02	current		node/gossip.md#transport	yes	2026-10-06	Selectable carriers; admitted peers PQ only	history/specs/2026-10-06-mesh-gossip-amendment.md:74		
+R114		NODE-GSP-03	current		node/gossip.md#transport	yes	2026-10-06	PQ key exchange via aws-lc-rs, classical identity	history/specs/2026-10-06-mesh-gossip-amendment.md:75		K5/K7: one crypto library node-wide.
+R115		NODE-GSP-04	current		node/gossip.md#names	yes	2026-10-06	Wire names and topics use scaas and chain_key	history/specs/2026-10-06-mesh-gossip-amendment.md:76		
+R116		NODE-GSP-05	current		node/gossip.md#identity	no	2026-10-06	One Ed25519 node key for all identities	history/specs/2026-10-06-mesh-gossip-amendment.md:77		
+R117		NODE-GSP-06	current		node/gossip.md#wire	no	2026-10-06	Gossip wire is bus JSON, content message-id	history/specs/2026-10-06-mesh-gossip-amendment.md:78		
+R118		NODE-GSP-07	current		node/gossip.md#validation	no	2026-10-06	Gossip validation pipeline and Reject rule	history/specs/2026-10-06-mesh-gossip-amendment.md:79		
+R119		NODE-GSP-08	current		node/gossip.md#numbers	no	2026-10-06	Peer scoring and limits	history/specs/2026-10-06-mesh-gossip-amendment.md:80		
+R120		NODE-GSP-09	current		node/gossip.md#discovery	yes	2026-10-06	Own Kademlia DHT with dial filter	history/specs/2026-10-06-mesh-gossip-amendment.md:81		
+R121		NODE-GSP-10	current		node/gossip.md#exclusivity	yes	2026-10-06	Exclusivity over gossip, automatic trust	history/specs/2026-10-06-mesh-gossip-amendment.md:82		
+R122		NODE-GSP-11	current		node/gossip.md#hints	no	2026-10-06	Landed hints only trigger a chain read	history/specs/2026-10-06-mesh-gossip-amendment.md:83		
+R123		NODE-GSP-12	current		node/gossip.md#announce	no	2026-10-06	Signed versioned announce	history/specs/2026-10-06-mesh-gossip-amendment.md:84		
+R124		NODE-DEX-12	current		node/dex-venue.md#gossip	yes	2026-10-06	DEX book gossip, two order modes	history/specs/2026-10-06-mesh-gossip-amendment.md:85		
+R125		NODE-GSP-13	current		node/gossip.md#sync	no	2026-10-06	Anti-entropy sync protocol	history/specs/2026-10-06-mesh-gossip-amendment.md:86		
+R126		NODE-GSP-14	current		node/gossip.md#crates	yes	2026-10-06	Gossip crates and resource budget	history/specs/2026-10-06-mesh-gossip-amendment.md:87		
+R127	(admin)	NODE-ADM-01	current		node/admin-auth.md#routes	no	2026-10-06	Gossip admin routes and columns	history/specs/2026-10-06-mesh-gossip-amendment.md:88		App screens part cited from CLI-APP node screens.
+R127	(metrics)	NODE-OPS-02	current		node/ops.md#metrics	no	2026-10-06	Gossip metrics	history/specs/2026-10-06-mesh-gossip-amendment.md:88		
+R128		NODE-DEX-13	current		node/dex-venue.md#home-trust	yes	2026-10-06	DEX homes trusted automatically	history/specs/2026-10-06-mesh-gossip-amendment.md:89		
+R129		CTR-TOK-02	current		contracts/token-wrappers.md#tiers	yes	2026-10-06	Three tiers, one implementation per tier	history/specs/2026-10-06-token-wrappers-v2.md:61		
+R130		CTR-TOK-03	current		contracts/token-wrappers.md#factory-v2	no	2026-10-06	Factory v2 new deployment, appended token kinds	history/specs/2026-10-06-token-wrappers-v2.md:66		AS R200 adds kinds 5-7 and a count-map change
+R131		CTR-MTX-07	current		contracts/metatx.md#v2-core	no	2026-10-06	MetaTxCore v2: same struct, domain version 2	history/specs/2026-10-06-token-wrappers-v2.md:72		
+R132		CTR-MTX-08	current		contracts/metatx.md#fee-not-to-payee	yes	2026-10-06	Fee never goes to the payee	history/specs/2026-10-06-token-wrappers-v2.md:78		
+R133		CTR-TOK-04	current		contracts/token-wrappers.md#conversion-rate	no	2026-10-06	Conversion rate num/den, rounding favours contract	history/specs/2026-10-06-token-wrappers-v2.md:84		
+R134		CTR-TOK-05	current		contracts/token-wrappers.md#reserve-accounting	no	2026-10-06	Internal reserve accounting and solvency invariant	history/specs/2026-10-06-token-wrappers-v2.md:91		Owner question on per-leg check (TW2 §18 L3) still open, not changed
+R135		CTR-TOK-06	current		contracts/token-wrappers.md#rate-modes	yes	2026-10-06	Fixed or timelocked adjustable rate at creation	history/specs/2026-10-06-token-wrappers-v2.md:98		Owner option; rev 1.2 admin-only execution
+R136		CTR-TOK-07	current		contracts/token-wrappers.md#multi-underlying	yes	2026-10-06	Multi-underlying any-of with disable-only guardian	history/specs/2026-10-06-token-wrappers-v2.md:108		
+R137		CTR-TOK-08	current		contracts/token-wrappers.md#decimals	no	2026-10-06	Decimals are display only	history/specs/2026-10-06-token-wrappers-v2.md:115		
+R138		CTR-MTX-09	current		contracts/metatx.md#named-functions	yes	2026-10-06	Named meta-tx functions are thin entry points	history/specs/2026-10-06-token-wrappers-v2.md:119		
+R139		CTR-MTX-10	current		contracts/metatx.md#mtxpay	no	2026-10-06	mtxPay payId is entryRef, lane on chain	history/specs/2026-10-06-token-wrappers-v2.md:124		
+R140		CTR-MTX-11	current		contracts/metatx.md#no-second-typehash	no	2026-10-06	No second typehash; mtxBatch atomic	history/specs/2026-10-06-token-wrappers-v2.md:131		Heuristic said superseded: it is current (it withdraws the SCaaS §5.8 proposal); UA R309 is a stated exception
+R141		CTR-TOK-09	current		contracts/token-wrappers.md#no-underlying-token	no	2026-10-06	NoUnderlyingToken holder burn, renounceable minter	history/specs/2026-10-06-token-wrappers-v2.md:135		
+R142		CTR-TOK-10	current		contracts/token-wrappers.md#admin-exceptions	no	2026-10-06	Only creation-time visible admin exceptions	history/specs/2026-10-06-token-wrappers-v2.md:138		AS R201 adds the regulated module as a third exception
+R143		CTR-TOK-11	current		contracts/token-wrappers.md#unsupported-underlyings	no	2026-10-06	Fee-on-transfer-out and rebasing underlyings unsupported	history/specs/2026-10-06-token-wrappers-v2.md:144		
+R144		NET-HED-14	current		networks/hedera.md#wrappers	no	2026-10-06	Hedera v2 wrappers: fail-closed HTS checks	history/specs/2026-10-06-token-wrappers-v2.md:149		
+R145		NET-ALL-19	current		networks/README.md#availability	no	2026-10-06	Wrappers v2 on EVM and Hedera only	history/specs/2026-10-06-token-wrappers-v2.md:152		
+R146		CTR-TOK-12	current		contracts/token-wrappers.md#migration	no	2026-10-06	Voluntary v2 migration; domain read per token	history/specs/2026-10-06-token-wrappers-v2.md:156		
+R147		CTR-TOK-13	current		contracts/token-wrappers.md#adjustable-multi-rates	yes	2026-10-06	Multi rates adjustable per leg, default off	history/specs/2026-10-06-token-wrappers-v2.md:160		
+R148	(contract)	CTR-MTX-12	current		contracts/metatx.md#unwrap-op	yes	2026-10-06	Gasless unwrap op with minOut	history/specs/2026-10-06-token-wrappers-v2.md:172		Plan: node half to NODE-LANE
+R148	(node)	NODE-LANE-22	current		node/submit-lanes.md#unwrap-jobs	yes	2026-10-06	Node simulates unwrap jobs, never batches them	history/specs/2026-10-06-token-wrappers-v2.md:172		Simulation of the external call, no batching, grief-score exemption (TW2 §7.6)
+R149		CTR-TOK-14	current		contracts/token-wrappers.md#gasless-wrap	no	2026-10-06	Gasless wrap through permit is planned only	history/specs/2026-10-06-token-wrappers-v2.md:184		
+R150		CLI-APP-01	current		clients/app.md#architecture	no	2026-10-06	One SPA, two halves, one build	history/specs/2026-10-06-scaas-app-design.md:104		
+R151		CLI-APP-02	current		clients/app.md#stack	no	2026-10-06	React, TanStack Query, hash routes	history/specs/2026-10-06-scaas-app-design.md:105		
+R152		CLI-APP-03	current		clients/app.md#architecture	no	2026-10-06	App has no server and no secrets	history/specs/2026-10-06-scaas-app-design.md:106		
+R153		CLI-APP-04	current		clients/app.md#family-adapters	yes	2026-10-06	One adapter interface per family	history/specs/2026-10-06-scaas-app-design.md:107		owner: all families at once
+R154		CLI-APP-05	current		clients/app.md#signing	no	2026-10-06	App builds and decodes every signed byte	history/specs/2026-10-06-scaas-app-design.md:108		
+R155		CLI-APP-06	current		clients/app.md#signers	no	2026-10-06	App signer set and key paths	history/specs/2026-10-06-scaas-app-design.md:109		
+R156		CLI-APP-07	current		clients/app.md#submission	yes	2026-10-06	Gateway or self-paid submission	history/specs/2026-10-06-scaas-app-design.md:110		owner Q1; APP:Q1 merged here
+R157		CLI-APP-08	current		clients/app.md#intent-status	no	2026-10-06	Intent status is chain truth	history/specs/2026-10-06-scaas-app-design.md:111		
+R158		CLI-APP-09	current		clients/app.md#signing-review	no	2026-10-06	Signing review from decoded bytes	history/specs/2026-10-06-scaas-app-design.md:112		digest-only text for Solana stale after CR-WSF-1 readable text
+R159	(gateway)	NODE-GW-05	current		node/gateway.md#routes	no	2026-10-06	Gateway info route, CORS, error contract	history/specs/2026-10-06-scaas-app-design.md:113		
+R159	(serving)	NODE-ADM-10	current		node/admin-auth.md#app-serving	no	2026-10-06	App serving with CSP on admin listener	history/specs/2026-10-06-scaas-app-design.md:113		
+R160		NODE-ADM-11	current		node/admin-auth.md#app-serving	no	2026-10-06	App served only on admin listener	history/specs/2026-10-06-scaas-app-design.md:114		
+R161		CLI-APP-10	current		clients/app.md#static-mode	no	2026-10-06	Static mode config.json and CSP	history/specs/2026-10-06-scaas-app-design.md:115		
+R162		CLI-APP-11	current		clients/app.md#admin-session	no	2026-10-06	Admin tokens in memory only	history/specs/2026-10-06-scaas-app-design.md:116		
+R163		CLI-APP-12	current		clients/app.md#oidc	no	2026-10-06	OIDC public client with PKCE	history/specs/2026-10-06-scaas-app-design.md:117		
+R164		CLI-APP-13	current		clients/app.md#zether-worker	no	2026-10-06	Zether runs in a session worker	history/specs/2026-10-06-scaas-app-design.md:118		Zether chains 31337/1337 only: K16 left unchanged (reorg:Q5)
+R165		CLI-APP-14	current		clients/app.md#passkeys	no	2026-10-06	Passkeys origin-bound; backup de-duplication	history/specs/2026-10-06-scaas-app-design.md:119		
+R166		CLI-APP-15	current		clients/app.md#supply-chain	no	2026-10-06	Pinned supply chain, one dev flag	history/specs/2026-10-06-scaas-app-design.md:120		
+R167		CLI-APP-16	current		clients/app.md#i18n	yes	2026-10-06	English default plus translations	history/specs/2026-10-06-scaas-app-design.md:121		owner; APP:Q3 merged here
+R168		CLI-APP-17	current		clients/app.md#roles	no	2026-10-06	Role gating is UI only	history/specs/2026-10-06-scaas-app-design.md:122		
+R169		CLI-APP-18	current		clients/app.md#contract-roles	no	2026-10-06	Contract-held roles receive calldata	history/specs/2026-10-06-scaas-app-design.md:123		
+R170		CLI-APP-19	current		clients/app.md#network-allowlist	no	2026-10-06	App dials only allowlisted origins	history/specs/2026-10-06-scaas-app-design.md:124		
+R171		CLI-APP-20	current		clients/app.md#metrics	no	2026-10-06	Metrics are a dashboard link	history/specs/2026-10-06-scaas-app-design.md:125		
+R172		CLI-APP-21	current		clients/app.md#dex	yes	2026-10-06	Non-EVM DEX unavailable until venue	history/specs/2026-10-06-scaas-app-design.md:126		owner Q2; APP:Q2 merged here
+R173		CLI-APP-22	current		clients/app.md#chain-identity	no	2026-10-07	Chain identity and metadata verified	history/specs/2026-10-06-scaas-app-design.md:127		rev 1.3 adds chain_uid to identity check
+R173a		CLI-APP-22	current		clients/app.md#chain-identity	no	2026-10-07	Chain identity clause (a)	history/specs/2026-10-06-scaas-app-design.md:127		alias of R173 clause (a)
+R173b		CLI-APP-22	current		clients/app.md#chain-identity	no	2026-10-07	Chain identity clause (b)	history/specs/2026-10-06-scaas-app-design.md:127		alias of R173 clause (b)
+R173c		CLI-APP-22	current		clients/app.md#chain-identity	no	2026-10-07	Chain identity clause (c)	history/specs/2026-10-06-scaas-app-design.md:127		alias of R173 clause (c)
+R174		CLI-APP-23	current		clients/app.md#approve-allowlist	no	2026-10-06	approve spender allowlist	history/specs/2026-10-06-scaas-app-design.md:128		
+R175		CLI-APP-24	current		clients/app.md#key-worker	no	2026-10-06	Keys run in a dedicated worker	history/specs/2026-10-06-scaas-app-design.md:129		
+R176		CLI-APP-25	current		clients/app.md#accounts	no	2026-10-06	Account model follows UA spec	history/specs/2026-10-06-scaas-app-design.md:130		interim default SubjectAccount until UA streams
+R177		CLI-APP-26	current		clients/app.md#token-kinds	no	2026-10-06	Token kinds decoded from versionOf	history/specs/2026-10-06-scaas-app-design.md:131		
+R178		NODE-GW-06	current		node/gateway.md#errors	no	2026-10-06	Stable gateway error contract	history/specs/2026-10-06-scaas-app-design.md:132		
+R179		CLI-APP-27	current		clients/app.md#untrusted-text	no	2026-10-06	Untrusted text sanitised	history/specs/2026-10-06-scaas-app-design.md:133		
+R180		CTR-TND-01	current		contracts/tender.md#deposit-commitment	no	2026-10-06	Deposit and commitment are one pay signature	history/specs/2026-10-06-tender-sponsorship-shredding.md:62		
+R181		CTR-TND-02	current		contracts/tender.md#commitment-format	no	2026-10-06	Commitment hash binds chain, tender and bidder	history/specs/2026-10-06-tender-sponsorship-shredding.md:70		
+R182		CTR-TND-03	current		contracts/tender.md#reveal-withdraw	no	2026-10-06	Permissionless reveal and withdraw; no bid replacement	history/specs/2026-10-06-tender-sponsorship-shredding.md:76		
+R183		CTR-TND-04	current		contracts/tender.md#forfeits	no	2026-10-06	Forfeited deposits go to immutable slashSink	history/specs/2026-10-06-tender-sponsorship-shredding.md:82		
+R184		CTR-TND-05	current		contracts/tender.md#reserve-tiebreak	no	2026-10-06	Public price range; earliest commit wins ties	history/specs/2026-10-06-tender-sponsorship-shredding.md:87		
+R185		CTR-TND-06	current		contracts/tender.md#cancel-disqualify	yes	2026-10-06	Early cancel only; bounded leader disqualification	history/specs/2026-10-06-tender-sponsorship-shredding.md:92		Award window and disqualification are the owner answer of rev 1.1
+R186		CTR-TND-07	current		contracts/tender.md#deposit-token	no	2026-10-06	Deposit token from a registered factory implementation	history/specs/2026-10-06-tender-sponsorship-shredding.md:107		
+R187		CTR-TND-08	current		contracts/tender.md#windows-bonds	no	2026-10-06	Fixed windows, bond policies, no admin	history/specs/2026-10-06-tender-sponsorship-shredding.md:114		
+R188		NET-ALL-18	current		networks/README.md#availability	yes	2026-10-07	Tender on EVM and Hedera first	history/specs/2026-10-06-tender-sponsorship-shredding.md:121		owner 2026-10-06 ruling (1); EIP-1153 prerequisite rev 1.3
+R189		NODE-SPN-01	current		node/sponsorship.md#policy	yes	2026-10-07	Sponsorship policy is a node store row	history/specs/2026-10-06-tender-sponsorship-shredding.md:132		Rev 1.3 unsponsored = booked to namespace; door floor per profile with CR-PD-3 (K15).
+R190		NODE-SPN-02	current		node/sponsorship.md#budgets	no	2026-10-07	Budget unit, reservation and rate counters	history/specs/2026-10-06-tender-sponsorship-shredding.md:152		
+R191		NODE-SPN-03	current		node/sponsorship.md#admin	no	2026-10-06	Sponsorship admin routes and audit	history/specs/2026-10-06-tender-sponsorship-shredding.md:167		
+R192		CTR-MTX-05	current		contracts/metatx.md#receiver-pays	no	2026-10-06	Receiver-pays via payee co-signed ReceiverFee	history/specs/2026-10-06-tender-sponsorship-shredding.md:172		
+R193	(node)	NODE-MESH-17	current		node/mesh.md#bus-scope	no	2026-10-06	receiver_fee jobs use restricted bus scope	history/specs/2026-10-06-tender-sponsorship-shredding.md:181		Envelope has no slot for the co-signature
+R193	(shape)	CTR-MTX-06	current		contracts/metatx.md#receiver-pays	yes	2026-10-06	Receiver-pays op shape, v2-only availability	history/specs/2026-10-06-tender-sponsorship-shredding.md:181		Owner rev 1.1: v2-only, no v1 router; hot collection wallet note stays here
+R194		NODE-SPN-04	current		node/sponsorship.md#pool	no	2026-10-06	SponsorshipPool opt-in contract, mesh fee-only	history/specs/2026-10-06-tender-sponsorship-shredding.md:199		PLANNED-later.
+R195		INT-ERP-22	current		integration.md#data-protection	yes	2026-10-06	Client holds salts; chain only commitments	history/specs/2026-10-06-tender-sponsorship-shredding.md:215		
+R196		INT-ERP-23	current		integration.md#data-protection	no	2026-10-06	Commitment and Merkle formats	history/specs/2026-10-06-tender-sponsorship-shredding.md:218		formats move verbatim
+R197		INT-ERP-24	current		integration.md#data-protection	no	2026-10-07	Per-subject DEK; erasure destroys it	history/specs/2026-10-06-tender-sponsorship-shredding.md:224		
+R198		INT-ERP-25	current		integration.md#data-protection	no	2026-10-06	References carry no personal data	history/specs/2026-10-06-tender-sponsorship-shredding.md:234		
+R199		INT-ERP-26	current		integration.md#data-protection	no	2026-10-06	Disclosure is opening a commitment	history/specs/2026-10-06-tender-sponsorship-shredding.md:238		
+R200		CTR-AS-01	current		contracts/asset-suite.md#regulated-kinds	yes	2026-10-06	Regulated module as separate implementations, kinds 5-7	history/specs/2026-10-06-asset-suite-design.md:69		
+R201		CTR-AS-02	current		contracts/asset-suite.md#regulated-exception	yes	2026-10-06	Regulated module is a third creation-time exception	history/specs/2026-10-06-asset-suite-design.md:80		Amends R142 (CTR-TOK)
+R202		CTR-AS-03	current		contracts/asset-suite.md#roles	yes	2026-10-06	Issuer and compliance roles; renouncing relaxes	history/specs/2026-10-06-asset-suite-design.md:87		
+R203		CTR-AS-04	current		contracts/asset-suite.md#forced-transfer	yes	2026-10-06	Forced transfer only against a recorded order	history/specs/2026-10-06-asset-suite-design.md:94		
+R204		CTR-AS-05	current		contracts/asset-suite.md#freeze	no	2026-10-06	Freeze semantics and bounded freeze duration	history/specs/2026-10-06-asset-suite-design.md:102		Only the fee-recipient clause is marked owner; duration came from review H3
+R205		CTR-AS-06	current		contracts/asset-suite.md#pause	yes	2026-10-06	Global pause up to 7 days with cooldown	history/specs/2026-10-06-asset-suite-design.md:111		
+R206		CTR-AS-07	current		contracts/asset-suite.md#compliance-registry	no	2026-10-06	Allowlist through ComplianceRegistry, receivers only	history/specs/2026-10-06-asset-suite-design.md:118		Heuristic said superseded: current; UA Amends table keeps it
+R207		CTR-AS-08	current		contracts/asset-suite.md#step6-checks	yes	2026-10-06	Regulated checks at step 6 and in _update	history/specs/2026-10-06-asset-suite-design.md:126		
+R208		CTR-AS-09	current		contracts/asset-suite.md#reserves-untouched	yes	2026-10-06	No regulated power touches reserves, rates or legs	history/specs/2026-10-06-asset-suite-design.md:138		
+R209		CTR-AS-10	current		contracts/asset-suite.md#vesting	yes	2026-10-06	One counterfactual VestingGrant clone per grant	history/specs/2026-10-06-asset-suite-design.md:145		
+R210		CTR-AS-11	current		contracts/asset-suite.md#distributions	yes	2026-10-06	Merkle distributions from a node-indexed snapshot	history/specs/2026-10-06-asset-suite-design.md:155		
+R211		CTR-AS-12	current		contracts/asset-suite.md#corporate-actions	yes	2026-10-06	Splits are migrations through ExchangeOffer	history/specs/2026-10-06-asset-suite-design.md:162		
+R212		CTR-AS-13	current		contracts/asset-suite.md#exchange-offer	no	2026-10-06	ExchangeOffer exact multiples and protected obligations	history/specs/2026-10-06-asset-suite-design.md:167		
+R213		CTR-AS-14	current		contracts/asset-suite.md#templates	yes	2026-10-06	Asset templates are off-chain presets	history/specs/2026-10-06-asset-suite-design.md:173		
+R214	(contract)	CTR-DEX-12	current		contracts/dex.md#managed-markets	yes	2026-10-06	Managed market venue contract and arbiter	history/specs/2026-10-06-asset-suite-design.md:176		OrderBookDex admin = venue multisig; regulated token arbitrates on chain.
+R214	(node)	NODE-DEX-11	current		node/dex-venue.md#managed-markets	yes	2026-10-06	Managed markets: home-bound, eligibility at intake	history/specs/2026-10-06-asset-suite-design.md:176		
+R215		NET-ALL-17	current		networks/README.md#availability	no	2026-10-06	Asset suite on EVM and Hedera	history/specs/2026-10-06-asset-suite-design.md:184		
+R216		CTR-AS-15	current		contracts/asset-suite.md#action-contracts	no	2026-10-06	Action contracts have no owner or upgrade	history/specs/2026-10-06-asset-suite-design.md:187		
+R217		CTR-AS-16	current		contracts/asset-suite.md#eligible-contract	no	2026-10-06	ELIGIBLE_CONTRACT only on pass-through contracts	history/specs/2026-10-06-asset-suite-design.md:193		
+R230		NODE-OPS-03	current		node/ops.md#metrics	no	2026-10-06	Prometheus metrics, label allowlist	history/specs/2026-10-06-operations-design.md:61		
+R231		NODE-OPS-04	current		node/ops.md#slos	yes	2026-10-06	SLOs evaluated outside the node	history/specs/2026-10-06-operations-design.md:71		
+R232		NODE-OPS-05	current		node/ops.md#severities	no	2026-10-06	Three severities	history/specs/2026-10-06-operations-design.md:77		
+R233		NODE-OPS-06	current		node/ops.md#slos	no	2026-10-06	W3B as the node measures it	history/specs/2026-10-06-operations-design.md:79		OA defaults approved as stated (reorg:Q8, K20).
+R234		NODE-OPS-07	current		node/ops.md#metrics	no	2026-10-06	Job stage timing metric	history/specs/2026-10-06-operations-design.md:92		OA defaults approved as stated (reorg:Q8, K20).
+R235		NODE-OPS-08	current		node/ops.md#ops-watch	no	2026-10-06	Ops watch for registered tokens	history/specs/2026-10-06-operations-design.md:99		OA defaults approved as stated (reorg:Q8, K20).
+R236		NODE-OPS-09	current		node/ops.md#traces	no	2026-10-06	Traces without OpenTelemetry SDK	history/specs/2026-10-06-operations-design.md:109		
+R237		NODE-OPS-10	current		node/ops.md#logs	no	2026-10-06	JSON logs, redaction, retention	history/specs/2026-10-06-operations-design.md:114		OA defaults approved as stated (reorg:Q8, K20).
+R238		NODE-OPS-11	current		node/ops.md#finops	no	2026-10-06	FinOps measurement and usage_day	history/specs/2026-10-06-operations-design.md:124		OA defaults approved as stated (reorg:Q8, K20).
+R239		NODE-RUN-01	current		node/runbooks.md#raci	no	2026-10-06	RACI roles	history/specs/2026-10-06-operations-design.md:130		
+R240		NODE-RUN-02	current		node/runbooks.md#backup-dr	no	2026-10-06	Restore is fixed and starts paused	history/specs/2026-10-06-operations-design.md:137		
+R241		NODE-RUN-03	current		node/runbooks.md#backup-dr	no	2026-10-06	CLI lane accept-nonce	history/specs/2026-10-06-operations-design.md:148		
+R242		NODE-OPS-12	current		node/ops.md#integrity	no	2026-10-06	Integrity rechecks of index and audit	history/specs/2026-10-06-operations-design.md:162		OA defaults approved as stated (reorg:Q8, K20).
+R243		NODE-RUN-04	current		node/runbooks.md#backup-dr	no	2026-10-06	DR drills scheduled and exported	history/specs/2026-10-06-operations-design.md:172		
+R244		NODE-OPS-13	current		node/ops.md#capacity	no	2026-10-06	Capacity rating and label caps	history/specs/2026-10-06-operations-design.md:176		OA defaults approved as stated (reorg:Q8, K20).
+R245		NODE-RUN-05	current		node/runbooks.md#incidents	no	2026-10-06	Incident command by accountable role	history/specs/2026-10-06-operations-design.md:180		
+R246		NODE-OPS-14	current		node/ops.md#denylist	yes	2026-10-06	Subject denylist, operator choice	history/specs/2026-10-06-operations-design.md:185		
+R247		NODE-OPS-15	current		node/ops.md#scope	yes	2026-10-06	Operators independent; ops are recommendations	history/specs/2026-10-06-operations-design.md:192		
+R250		CLI-SGN-12	current		clients/signers-clientkeys.md#backup-switch	yes	2026-10-06	Backup key required is one switch	history/specs/2026-10-06-signers-followups.md:77		owner: only a switch
+R251		CLI-SGN-13	current		clients/signers-clientkeys.md#backup-switch	no	2026-10-06	Backup predicate: distinct keys or guardian	history/specs/2026-10-06-signers-followups.md:85		
+R252		CLI-SGN-14	current		clients/signers-clientkeys.md#backup-switch	no	2026-10-06	Backup enforced by clients and issuers	history/specs/2026-10-06-signers-followups.md:99		
+R253		CLI-SGN-15	current		clients/signers-clientkeys.md#backup-switch	no	2026-10-06	Exits are never blocked	history/specs/2026-10-06-signers-followups.md:112		
+R254		CLI-SGN-16	current		clients/signers-clientkeys.md#backup-switch	no	2026-10-06	Non-blocking BE/BS warnings	history/specs/2026-10-06-signers-followups.md:123		
+R255		CLI-SGN-17	current		clients/signers-clientkeys.md#vault	no	2026-10-06	Vault v2 under non-extractable device key	history/specs/2026-10-06-signers-followups.md:135		
+R256		CLI-SGN-18	current		clients/signers-clientkeys.md#vault	no	2026-10-06	Device binding relaxes nothing	history/specs/2026-10-06-signers-followups.md:144		
+R257		CLI-SGN-19	current		clients/signers-clientkeys.md#vault	no	2026-10-06	Vault storage, precedence and migration	history/specs/2026-10-06-signers-followups.md:153		
+R258		CLI-SGN-20	current		clients/signers-clientkeys.md#vault	no	2026-10-06	Device-loss recovery via phrase only	history/specs/2026-10-06-signers-followups.md:165		
+R259		CLI-SGN-21	current		clients/signers-clientkeys.md#vault	no	2026-10-06	scrypt N=2^17 for new envelopes	history/specs/2026-10-06-signers-followups.md:173		RS4-14 merged here (passphrase ≥ 8 chars, not digits only)
+R260		INT-ERP-21	current		integration.md#families	no	2026-10-06	ERP Sui verify follows lesson L9	history/specs/2026-10-06-signers-followups.md:188		topic changed: Odoo fam_sui.verify is an ERP verifier (S4F §6.2 → integration#families)
+R261		NET-SUI-16	current		networks/sui.md#key-verification	no	2026-10-06	KeyOp encoded byte-identical in Python, JS	history/specs/2026-10-06-signers-followups.md:200		
+R262		NET-SUI-17	current		networks/sui.md#key-verification	no	2026-10-06	One generator run feeds every vector	history/specs/2026-10-06-signers-followups.md:208		
+R263		CLI-SGN-22	current		clients/signers-clientkeys.md#role-keys	no	2026-10-06	Seed signers sign family envelopes	history/specs/2026-10-06-signers-followups.md:217		
+R264		CLI-SGN-23	current		clients/signers-clientkeys.md#passkeys	no	2026-10-06	One WebAuthn ceremony, per-family encoders	history/specs/2026-10-06-signers-followups.md:227		
+R265		CLI-SGN-24	current		clients/signers-clientkeys.md#passkeys	no	2026-10-06	Passkey challenge = b64url op digest	history/specs/2026-10-06-signers-followups.md:231		
+R266		CLI-SGN-26	current		clients/signers-clientkeys.md#connectors	yes	2026-10-06	One connector implementation in clientkeys	history/specs/2026-10-06-signers-followups.md:254		owner
+R267		CLI-SGN-27	current		clients/signers-clientkeys.md#signing-review	no	2026-10-06	Check, then sign what was checked	history/specs/2026-10-06-signers-followups.md:263		
+R268		CLI-SGN-28	current		clients/signers-clientkeys.md#scope	no	2026-10-06	Signers spec adds no ids or kinds	history/specs/2026-10-06-signers-followups.md:279		
+R269		CLI-SGN-25	current		clients/signers-clientkeys.md#role-keys	no	2026-10-07	Added seed keys are role keys	history/specs/2026-10-06-signers-followups.md:235		applies owner R300; Soroban kindNo 18 (S4F:Q1)
+R270		CTR-PQZ-01	current		contracts/pq-zether.md#scope-gate	yes	2026-10-07	Separate PQZ class gated to private chains	history/specs/2026-10-06-pq-zether-design.md:208		Owner O3 and release gates G-LIC + audit (rev 1.1); allowlist includes 7622
+R271		CTR-PQZ-02	current		contracts/pq-zether.md#encryption	no	2026-10-06	Additive-only MLWE with BFV-style encoding	history/specs/2026-10-06-pq-zether-design.md:225		
+R272		CTR-PQZ-03	current		contracts/pq-zether.md#parameters	no	2026-10-07	Lattice parameters at or above Kyber-512	history/specs/2026-10-06-pq-zether-design.md:230		
+R273		CTR-PQZ-04	current		contracts/pq-zether.md#shared-randomness	no	2026-10-07	Shared encryption randomness with split fallback	history/specs/2026-10-06-pq-zether-design.md:239		
+R274		CTR-PQZ-05	current		contracts/pq-zether.md#fresh-reencryption	no	2026-10-06	Every debit re-encrypts the remaining balance	history/specs/2026-10-06-pq-zether-design.md:250		
+R275		CTR-PQZ-06	current		contracts/pq-zether.md#credit-cap	no	2026-10-07	Credit cap and public plainPending amounts	history/specs/2026-10-06-pq-zether-design.md:254		
+R276		CTR-PQZ-07	current		contracts/pq-zether.md#calldata-storage	no	2026-10-06	Ciphertexts in calldata, hashes in storage	history/specs/2026-10-06-pq-zether-design.md:265		
+R277		CTR-PQZ-08	current		contracts/pq-zether.md#rollover	no	2026-10-07	Public rollover with race-free debits	history/specs/2026-10-06-pq-zether-design.md:269		
+R278		CTR-PQZ-09	current		contracts/pq-zether.md#proof-engine	no	2026-10-07	LNP22 proofs through rewritten LaZer fork	history/specs/2026-10-06-pq-zether-design.md:277		
+R279		CTR-PQZ-10	current		contracts/pq-zether.md#precompile	yes	2026-10-07	Native never-crash precompile on chain 7622	history/specs/2026-10-06-pq-zether-design.md:290		Owner rev 1.1: v1 on our Nethermind chain only
+R280		CTR-PQZ-11	current		contracts/pq-zether.md#gas	no	2026-10-07	Deterministic precompile pricing and chain limits	history/specs/2026-10-06-pq-zether-design.md:308		Node/operator numbers (max_gas_per_tx 16 M, 1 MiB body) are recommendations cited from NODE-OPS (OPS R247)
+R281		CTR-PQZ-12	current		contracts/pq-zether.md#authorization	no	2026-10-07	Authorization always by a separate PQ signing UA	history/specs/2026-10-06-pq-zether-design.md:318		
+R282		CTR-PQZ-13	current		contracts/pq-zether.md#ua-kind	no	2026-10-07	PQZ UA kind 0x0142 pqz-mlwe	history/specs/2026-10-06-pq-zether-design.md:325		
+R283		CTR-PQZ-14	current		contracts/pq-zether.md#disclosure	no	2026-10-06	Disclosure only by zero-knowledge proof	history/specs/2026-10-06-pq-zether-design.md:333		
+R284		CTR-PQZ-15	current		contracts/pq-zether.md#metatx	yes	2026-10-07	PqzToken is ERC-20 plus IERC20MetaTx	history/specs/2026-10-06-pq-zether-design.md:337		Rev 1.4 rewrite replaced rev 1.3 'no envelope'; that text is not a separate id
+R285		CTR-PQZ-16	current		contracts/pq-zether.md#decryption	no	2026-10-06	Direct decryption without BSGS	history/specs/2026-10-06-pq-zether-design.md:361		
+R286		CTR-PQZ-17	current		contracts/pq-zether.md#limits	no	2026-10-06	PQZ shielded supply and amount limits	history/specs/2026-10-06-pq-zether-design.md:364		
+R287		CTR-PQZ-18	current		contracts/pq-zether.md#prover-platforms	yes	2026-10-06	Native and WASM prover platforms early	history/specs/2026-10-06-pq-zether-design.md:367		
+R288		CTR-PQZ-19	current		contracts/pq-zether.md#derived-randomness	no	2026-10-06	Message-bound derived encryption randomness	history/specs/2026-10-06-pq-zether-design.md:376		
+R289		CTR-PQZ-20	current		contracts/pq-zether.md#migration	no	2026-10-07	Classical to PQZ migration by burn then fund	history/specs/2026-10-06-pq-zether-design.md:382		
+R290		CTR-UA-02	current		contracts/universal-account.md#ua-identifier	yes	2026-10-06	UA is a key-derived identifier, not a contract	history/specs/2026-10-06-universal-account-design.md:93		
+R291		CTR-UA-03	current		contracts/universal-account.md#id-space	yes	2026-10-07	32-byte kind-tagged ids in canonical form	history/specs/2026-10-06-universal-account-design.md:100		
+R292		CTR-UA-04	current		contracts/universal-account.md#keccak	no	2026-10-06	keccak256 for ids in every family	history/specs/2026-10-06-universal-account-design.md:113		
+R293		CTR-UA-05	current		contracts/universal-account.md#kind-table	no	2026-10-06	Fixed kind table per registry generation	history/specs/2026-10-06-universal-account-design.md:117		
+R294		CTR-UA-06	current		contracts/universal-account.md#registration	yes	2026-10-06	Native kinds unregistered; derived kinds register first	history/specs/2026-10-06-universal-account-design.md:125		
+R295		CTR-UA-07	current		contracts/universal-account.md#pop	yes	2026-10-07	PoP binds chain, registry, UA and authRef	history/specs/2026-10-06-universal-account-design.md:133		UA:Q10 merged (owner-accepted default, rev 1.2)
+R296		CTR-UA-08	current		contracts/universal-account.md#rogue-key	yes	2026-10-07	Rogue-key defence chosen per aggregate kind	history/specs/2026-10-06-universal-account-design.md:148		UA:Q3 merged; owner 2026-10-07 kept MuSig2/FROST, made checkable
+R297		CTR-UA-09	current		contracts/universal-account.md#structures	no	2026-10-07	Structures commit to members; one nesting level	history/specs/2026-10-06-universal-account-design.md:159		
+R298	(1)	CLI-SGN-29	current		clients/signers-clientkeys.md#role-keys	yes	2026-10-06	One key one purpose: wallet layer	history/specs/2026-10-06-universal-account-design.md:166		
+R298	(2,3,4)	CTR-UA-10	current		contracts/universal-account.md#purposes	yes	2026-10-06	One key one purpose: registry, tags, EOAs	history/specs/2026-10-06-universal-account-design.md:166		layers 2–4 are registry/message rules
+R299		CTR-UA-11	current		contracts/universal-account.md#keyhash	no	2026-10-07	keyHash per curve group, not per kind	history/specs/2026-10-06-universal-account-design.md:173		
+R300		CLI-SGN-30	current		clients/signers-clientkeys.md#role-keys	yes	2026-10-07	EOA path EOA-only; role tree m/7622	history/specs/2026-10-06-universal-account-design.md:181		owner: purpose 7622 (UA Q6), Soroban kindNo 18; S4F:Q1 merged here
+R301		CTR-UA-12	current		contracts/universal-account.md#tagged-message	no	2026-10-07	Tagged message for every derived-UA signature	history/specs/2026-10-06-universal-account-design.md:188		
+R302		CTR-UA-13	current		contracts/universal-account.md#no-rotation	yes	2026-10-06	No key rotation inside a UA	history/specs/2026-10-06-universal-account-design.md:202		UA:Q1 and RS2-9 merged
+R303		CTR-UA-14	current		contracts/universal-account.md#function-kinds	yes	2026-10-07	Each function accepts only the kinds it needs	history/specs/2026-10-06-universal-account-design.md:207		UA:Q4, Q5, Q7 merged (DEX, MandateWallet, regulated tokens stay native-only in v1)
+R304		CTR-UA-15	current		contracts/universal-account.md#monotonic-registry	no	2026-10-06	Registry is monotonic and admin-free	history/specs/2026-10-06-universal-account-design.md:215		
+R305		CTR-UA-16	current		contracts/universal-account.md#zether-kinds	yes	2026-10-07	Zether kinds bind encryption key; immutable authRef	history/specs/2026-10-06-universal-account-design.md:219		Owner via UA:Q2 (default accepted rev 1.2); supersedes AuthScheme and links
+R306		CTR-UA-17	current		contracts/universal-account.md#verification	no	2026-10-07	Verify through registry; large keys stored once	history/specs/2026-10-06-universal-account-design.md:229		
+R307		CTR-ACC-09	current		contracts/accounts-mandates.md#subjectaccount	yes	2026-10-06	SubjectAccount kept as optional option (b)	history/specs/2026-10-06-universal-account-design.md:238		
+R308		CTR-UA-18	current		contracts/universal-account.md#ua-ledger	yes	2026-10-07	Derived-UA balances in a separate bytes32 ledger	history/specs/2026-10-06-universal-account-design.md:243		
+R309		CTR-UA-19	current		contracts/universal-account.md#uametatransaction	yes	2026-10-07	UAMetaTransaction has its own typehash	history/specs/2026-10-06-universal-account-design.md:255		UA:Q11 merged; stated exception to R140
+R310		CTR-UA-20	current		contracts/universal-account.md#credentials	yes	2026-10-07	Optional VC layer; on-chain anchor deferred	history/specs/2026-10-06-universal-account-design.md:264		
+R311		CTR-UA-21	current		contracts/universal-account.md#holder-binding	yes	2026-10-07	Holder binding by account-signed presentation	history/specs/2026-10-06-universal-account-design.md:271		Owner via UA:Q14 (credential formats) merged here
+R312		CTR-UA-22	current		contracts/universal-account.md#migration	no	2026-10-06	Breaking dev-only migration from Zether registry	history/specs/2026-10-06-universal-account-design.md:278		
+R313		CTR-UA-23	current		contracts/universal-account.md#pq-kinds	yes	2026-10-07	PQ and ed25519 kinds on every EVM chain	history/specs/2026-10-06-universal-account-design.md:281		UA:Q9 merged
+R314		NET-ALL-20	current		networks/README.md#ua-registries	yes	2026-10-07	Per-family UA registries share kind table	history/specs/2026-10-06-universal-account-design.md:303		owner accepted UA Q12 default (rev 1.2)
+R315		NET-ALL-21	current		networks/README.md#ua-passkey-ids	yes	2026-10-07	Non-EVM passkey owners = UA id, URN only	history/specs/2026-10-06-universal-account-design.md:311		owner accepted UA Q13 default; replaces Cosmos R9-1 and Solana owner hash
+R316		NODE-MESH-18	current		node/mesh.md#envelope	no	2026-10-06	UA intents in scaas-intent/1.3	history/specs/2026-10-06-universal-account-design.md:320		Topic NODE-GSP→NODE-MESH: envelope version/body rule (node/mesh#envelope).
+R317		NODE-GSP-15	current		node/gossip.md#validation	no	2026-10-06	Native UA verification before gossip	history/specs/2026-10-06-universal-account-design.md:327		
+R318		INT-ODOO-13	current		integration.md#example-odoo-ua	no	2026-10-06	Odoo stores UAs as addresses	history/specs/2026-10-06-universal-account-design.md:334		
+R320		NODE-GW-03	current		node/gateway.md#ua-register	no	2026-10-06	Gateway call jobs only for UA registration	history/specs/2026-10-06-node-independence-design.md:137		
+R321		NODE-LANE-11	current		node/submit-lanes.md#batching	no	2026-10-06	A batch is several jobs journaled together	history/specs/2026-10-06-node-independence-design.md:138		Topic NODE-JOB→NODE-LANE (batching lives in submit-lanes, plan §1). PLANNED (TW2 T7).
+R322		NODE-ADM-08	current		node/admin-auth.md#roles	no	2026-10-06	Admin-user mutations never exceed caller	history/specs/2026-10-06-node-independence-design.md:139		
+R323		NODE-JOB-11	current		node/job-api.md#cancel	no	2026-10-06	Cancel-by-origin tombstones bounded	history/specs/2026-10-06-node-independence-design.md:140		
+R324		NODE-JOB-12	current		node/job-api.md#token-subsets	no	2026-10-06	Empty namespace token subset means none	history/specs/2026-10-06-node-independence-design.md:141		
+R325		NODE-JOB-13	current		node/job-api.md#call-jobs	no	2026-10-06	Live-call uniqueness per namespace	history/specs/2026-10-06-node-independence-design.md:142		
+R326		NODE-LANE-12	current		node/submit-lanes.md#outer-tx	no	2026-10-06	Outer transaction is a store row	history/specs/2026-10-06-node-independence-design.md:143		
+R327		NODE-JOB-14	current		node/job-api.md#intake	no	2026-10-06	Intake authority re-checked in insert tx	history/specs/2026-10-06-node-independence-design.md:144		
+R328		NODE-GW-04	current		node/gateway.md#cors	no	2026-10-06	Gateway CORS only with auth none	history/specs/2026-10-06-node-independence-design.md:145		
+R330		NET-ALL-22	current		networks/README.md#chain-identity	no	2026-10-07	Chain identified by (chain_key, chain_uid)	history/specs/2026-10-06-universal-account-design.md:340		
+R331		CTR-UA-24	current		contracts/universal-account.md#eip7702	no	2026-10-07	EIP-7702 EOAs are native; classify by code	history/specs/2026-10-06-universal-account-design.md:355		
+R340		NODE-LANE-13	current		node/submit-lanes.md#cost-metering	no	2026-10-07	Breaker meters what the lane pays	history/specs/2026-10-06-node-independence-design.md:146		
+R341		NODE-LANE-14	current		node/submit-lanes.md#retries	no	2026-10-07	One retry after billed failure, attempt cap	history/specs/2026-10-06-node-independence-design.md:147		
+R342		NODE-LANE-15	current		node/submit-lanes.md#grief	no	2026-10-07	Per-subject grief score, every family	history/specs/2026-10-06-node-independence-design.md:148		
+R343		NODE-MESH-16	current		node/mesh.md#decoders	no	2026-10-07	Verify signatures before any chain call	history/specs/2026-10-06-node-independence-design.md:149		
+R344		NODE-LANE-16	current		node/submit-lanes.md#payload-fields	no	2026-10-07	Signed fields read from the payload	history/specs/2026-10-06-node-independence-design.md:150		
+R345		NODE-LANE-17	current		node/submit-lanes.md#value-out	no	2026-10-07	Value out per job capped	history/specs/2026-10-06-node-independence-design.md:151		
+R346		NODE-LANE-18	current		node/submit-lanes.md#deposits	no	2026-10-07	Lane-funded deposits refunded or bounded	history/specs/2026-10-06-node-independence-design.md:152		
+R347		NODE-LANE-19	current		node/submit-lanes.md#adapter-journals	no	2026-10-07	Adapter journals live in the store	history/specs/2026-10-06-node-independence-design.md:153		
+R348		NODE-STO-07	current		node/store.md#immutable-programs	yes	2026-10-07	Node halts chains with upgradeable programs	history/specs/2026-10-06-node-independence-design.md:154		Node half of CR-R3-11.
+R349		NODE-LANE-20	current		node/submit-lanes.md#custody-keys	no	2026-10-07	One custody key per family	history/specs/2026-10-06-node-independence-design.md:155		
+RS2-1		CTR-ZTH-02	current		contracts/zether.md#dev-gate	no	2026-10-07	Classical Zether gated to dev chains 31337/1337	history/specs/2026-10-03-zether-design.md:583		Q5/K16: chain 7622 stays off the classical allowlist
+RS2-2		CTR-ZTH-03	current		contracts/zether.md#no-epoch	no	2026-10-03	No epochs; verifier takes the full statement	history/specs/2026-10-03-zether-design.md:586		
+RS2-3		CTR-ZTH-04	current		contracts/zether.md#shieldscale	no	2026-10-03	shieldScale is raw units per shielded unit	history/specs/2026-10-03-zether-design.md:588		
+RS2-4		CTR-ZTH-05	current		contracts/zether.md#fees	no	2026-10-03	Inner fee to beneficiary pending; outer fee public	history/specs/2026-10-03-zether-design.md:590		
+RS2-5		CTR-ZTH-06	current		contracts/zether.md#envelope-binding	no	2026-10-03	Envelope binding covers envelope fields except data	history/specs/2026-10-03-zether-design.md:592		
+RS2-6		CTR-ZTH-07	current		contracts/zether.md#fixed-fee	no	2026-10-03	Outer FIXED fee uncapped; PERCENT forbidden	history/specs/2026-10-03-zether-design.md:594		
+RS2-7		CTR-ZTH-08	current		contracts/zether.md#zethermetatx	no	2026-10-03	Separate ZetherMetaTx mixin; v1 sources untouched	history/specs/2026-10-03-zether-design.md:595		
+RS2-8		CTR-ZTH-09	current		contracts/zether.md#auditor	no	2026-10-03	Auditor key immutable, set at initialize	history/specs/2026-10-03-zether-design.md:596		
+RS2-9		CTR-UA-13	current		contracts/universal-account.md#no-rotation	no	2026-10-03	No key rotation inside a UA	history/specs/2026-10-03-zether-design.md:597		UA R305 says 'RS2-9 kept'; restated by R302/R305; its registry is replaced (R312). Topic changed to CTR-UA
+RS2-10		CTR-ZTH-82	superseded	CTR-UA-23, CTR-UA-16		no	2026-10-03	PQ_COMMITMENT verified like SELF_SCHNORR	history/specs/2026-10-03-zether-design.md:598	R313,R305	UA retires PQ_COMMITMENT (R313) and AuthScheme (R305)
+RS2-11		CTR-ZTH-10	current		contracts/zether.md#underlying	no	2026-10-03	Underlying must be an ERC-20 in v1	history/specs/2026-10-03-zether-design.md:600		
+RS2-12		CTR-ZTH-11	current		contracts/zether.md#direct-calls	no	2026-10-03	fund and rollOver direct; transfer/burn enveloped	history/specs/2026-10-03-zether-design.md:601		
+RS2-13		CTR-ZTH-12	current		contracts/zether.md#no-memo	no	2026-10-05	No AEAD memo; client decrypts by BSGS	history/specs/2026-10-03-zether-design.md:603		Amended by RS-NV64-2 (configurable BSGS replaces DECRYPT_BOUND)
+RS2-14		CTR-ZTH-13	current		contracts/zether.md#direct-transfer	no	2026-10-03	Direct transferConfidential carries no outer fee	history/specs/2026-10-03-zether-design.md:605		
+RS2-15		CTR-ZTH-14	current		contracts/zether.md#disclosure-bundle	yes	2026-10-05	Disclosure bundle stored; fee-on-transfer underlyings refused	history/specs/2026-10-03-zether-design.md:607		Owner limits ZL:D6 (keep bundle) merged here
+RS2-16		CTR-ZTH-15	current		contracts/zether.md#precompile-gas	no	2026-10-03	Verifier forwards gas to precompiles; simulate first	history/specs/2026-10-03-zether-design.md:609		
+RS2-17		CTR-ZTH-16	current		contracts/zether.md#rollover-signed	no	2026-10-03	rollOverSigned accepts pendingSeq at least expected	history/specs/2026-10-03-zether-design.md:612		
+RS2-18		CTR-UA-01	current		contracts/universal-account.md#key-validation	no	2026-10-03	Refuse BLS keys and signatures at infinity	history/specs/2026-10-03-zether-design.md:618		Topic changed: UA §4.2/S11 keep it for every BLS kind after the Zether registry is deleted
+RS2-19		CTR-ZTH-17	current		contracts/zether.md#rollover-signed-new-credit	no	2026-10-03	rollOverSigned requires a new credit	history/specs/2026-10-03-zether-design.md:614		
+RS2-20		CTR-ZTH-20	current		contracts/zether.md#pinned-verifier	no	2026-10-07	Clients and gateway pin canonical verifier and registry	history/specs/2026-10-03-zether-design.md:661		Client/gateway clauses cite CLI-SGN and NODE-GW (plan)
+RS2-21		CTR-ZTH-21	current		contracts/zether.md#erc1271-cap	no	2026-10-07	ZetherMetaTx ERC-1271 gas cap by codehash	history/specs/2026-10-03-zether-design.md:664		
+RS2-22		CTR-ZTH-83	superseded	CTR-UA-07		no	2026-10-07	Built registry PoP does not bind authority	history/specs/2026-10-03-zether-design.md:668	R295	Transitional BUILT limitation until UA F1; K9 pattern
+RS2-23		CTR-ZTH-22	current		contracts/zether.md#required-tests	no	2026-10-07	Mandatory invariant, subgroup and D_out tests	history/specs/2026-10-03-zether-design.md:670		
+RS2-24		CTR-ZTH-23	current		contracts/zether.md#fee-would-stick	no	2026-10-07	Outer fee recipient equal to token reverts	history/specs/2026-10-03-zether-design.md:675		
+RS2-25		CTR-ZTH-24	current		contracts/zether.md#balance-cache-key	no	2026-10-07	Client balance-cache key includes the chain	history/specs/2026-10-03-zether-design.md:676		Client clause cites CLI-SGN; later chain_uid per R330
+RS2-26		CTR-ZTH-25	current		contracts/zether.md#schnorr-export	no	2026-10-07	Public schnorrSign export takes no nonce k	history/specs/2026-10-03-zether-design.md:678		Client clause cites CLI-SGN
+RS4-1		CTR-ACC-01	current		contracts/accounts-mandates.md#factory	no	2026-10-03	SubjectAccount clones; salt binds key and guardian	history/plans/2026-10-03-r3-passkey-seed.md:11		
+RS4-2		NET-ALL-04	current		networks/README.md#webauthn	no	2026-10-03	One bounded WebAuthn clientDataJSON grammar	history/plans/2026-10-03-r3-passkey-seed.md:15		Restated and generalised by CR-R3-1 (NET-ALL, other batch); topic changed
+RS4-3		CTR-ACC-02	current		contracts/accounts-mandates.md#signature-encoding	no	2026-10-03	Signature is keyIndex, Merkle proof, sig	history/plans/2026-10-03-r3-passkey-seed.md:19		
+RS4-4		CTR-ACC-03	current		contracts/accounts-mandates.md#recovery	no	2026-10-03	Guardian recovery adds a key after two days	history/plans/2026-10-03-r3-passkey-seed.md:23		
+RS4-5		CTR-ACC-04	current		contracts/accounts-mandates.md#signcount	no	2026-10-03	Authenticator signCount is not checked	history/plans/2026-10-03-r3-passkey-seed.md:27		
+RS4-6		INT-ODOO-01	current		integration.md#example-odoo-subject-account	no	2026-10-06	Deploy job precedes pay via prerequisite	history/plans/2026-10-03-r3-passkey-seed.md:28		amended: push job API (R87) replaces relay_poll
+RS4-7		INT-ODOO-02	current		integration.md#example-odoo-subject-account	no	2026-10-03	Owner-call nonce from mined jobs	history/plans/2026-10-03-r3-passkey-seed.md:31		
+RS4-8	(scrypt)	CLI-SGN-80	superseded	CLI-SGN-21		no	2026-10-03	Vault PIN scrypt N=2^15	history/plans/2026-10-03-r3-passkey-seed.md:33	R259	via RS4-14 (merged into R259)
+RS4-8	(vault)	CLI-SGN-02	current		clients/signers-clientkeys.md#vault	no	2026-10-03	Seed vault DEK with passphrase and PRF envelopes	history/plans/2026-10-03-r3-passkey-seed.md:33		wrapped by v2 (R255)
+RS4-9	(keys)	CLI-SGN-03	current		clients/signers-clientkeys.md#zether-keys	no	2026-10-03	Zether keys derived in clientkeys JS	history/plans/2026-10-03-r3-passkey-seed.md:35		
+RS4-9	(pop)	CLI-SGN-81	superseded	CTR-UA-07		no	2026-10-03	Zether PoP bound to subject account	history/plans/2026-10-03-r3-passkey-seed.md:35	R295	UA R294–R297 like R33(pop)
+RS4-10		CTR-ACC-05	current		contracts/accounts-mandates.md#erc1271-cap	no	2026-10-03	400k ERC-1271 cap only for SubjectAccount clones	history/plans/2026-10-03-r3-passkey-seed.md:43		
+RS4-11		CLI-SGN-04	current		clients/signers-clientkeys.md#passkeys	no	2026-10-03	Random WebAuthn user handle per passkey	history/plans/2026-10-03-r3-passkey-seed.md:48		
+RS4-12		INT-ODOO-03	current		integration.md#example-odoo-subject-account	no	2026-10-03	First key registered with HMAC challenge	history/plans/2026-10-03-r3-passkey-seed.md:51		
+RS4-13		CLI-SGN-05	current		clients/signers-clientkeys.md#signing-review	no	2026-10-03	Client rebuilds operation before signing	history/plans/2026-10-03-r3-passkey-seed.md:57		generalised by R267, token pin CR-ADW-4
+RS4-14		CLI-SGN-21	current		clients/signers-clientkeys.md#vault	no	2026-10-06	Passphrase ≥ 8 chars, scrypt N=2^17	history/plans/2026-10-03-r3-passkey-seed.md:61		same rule as R259
+RS4-15		CLI-SGN-82	superseded	CLI-SGN-19		no	2026-10-03	Per-subject localStorage vault	history/plans/2026-10-03-r3-passkey-seed.md:65	R257	storage moved to IndexedDB vault:<id> with tombstone; no-silent-overwrite kept in R257
+RS4-16		INT-ODOO-04	current		integration.md#example-odoo-subject-account	no	2026-10-03	Deploy job only for payer own account	history/plans/2026-10-03-r3-passkey-seed.md:67		
+RS5-1		CTR-DEX-03	current		contracts/dex.md#admin	no	2026-10-03	Immutable admin sets markets; fee capped	history/specs/2026-10-03-dex-design.md:398		
+RS5-2		NODE-DEX-80	superseded	NODE-DEX-14		no	2026-10-03	DEX book persisted in Odoo	history/specs/2026-10-03-dex-design.md:13	R105	
+RS5-3		CTR-DEX-04	current		contracts/dex.md#ioc	no	2026-10-07	EVM closes IOC remainder at settle	history/specs/2026-10-03-dex-design.md:402		Heuristic said superseded: struck text is the rev 1.1 correction of itself; Move/Solana in RS5-18
+RS5-4		CTR-DEX-05	current		contracts/dex.md#fok	no	2026-10-03	FOK checked on chain as one full pair	history/specs/2026-10-03-dex-design.md:404		Book half (FOK matches one counterparty) cited from NODE-DEX
+RS5-5		NODE-DEX-03	current		node/dex-venue.md#routes	no	2026-10-03	No WebSocket; clients poll	history/specs/2026-10-03-dex-design.md:406		
+RS5-6	(dex-fee)	CTR-DEX-81	superseded	CTR-DEX-11		no	2026-10-03	DEX fee on received side rounds down	history/specs/2026-10-03-dex-design.md:407	RS5-21	Plan: fee clause superseded by RS5-21
+RS5-6	(relayer-fee)	CTR-DEX-06	current		contracts/dex.md#relayer-fee-rounding	no	2026-10-03	Relayer FIXED fee pro-rata, rounds down	history/specs/2026-10-03-dex-design.md:407		Kept per RS5-21
+RS5-7		CTR-DEX-07	current		contracts/dex.md#legacy-metatxdex	no	2026-10-03	MetaTxDex kept as unrouted legacy	history/specs/2026-10-03-dex-design.md:409		
+RS5-8		NODE-DEX-04	current		node/dex-venue.md#watcher	no	2026-10-06	DEX watcher has its own cursor	history/specs/2026-10-03-dex-design.md:410		Amended by R105: watcher writes dex_range items, advances dex_cursor; no indexer key to Odoo.
+RS5-9		NODE-DEX-81	superseded	NODE-DEX-12		no	2026-10-03	Book accepts only own-relayer orders	history/specs/2026-10-03-dex-design.md:15	R124	DEX §header table: now per-market default (home-bound).
+RS5-10		CTR-DEX-02	current		contracts/dex.md#cancel-no-expiry	no	2026-10-03	Cancel signatures never expire	history/specs/2026-10-03-dex-design.md:119		
+RS5-11		NODE-DEX-82	superseded	NODE-JOB-08		no	2026-10-03	DEX chains run one lane only	history/specs/2026-10-03-dex-design.md:16	R102	
+RS5-12		NODE-DEX-05	current		node/dex-venue.md#matching	no	2026-10-07	Rounding dust: skip and remove dust makers	history/specs/2026-10-03-dex-design.md:420		
+RS5-13		NODE-DEX-02	current		node/dex-venue.md#fault-attribution	no	2026-10-07	Fee token limited; failed pairs attributed by evidence	history/specs/2026-10-03-dex-design.md:271		Topic changed: admit and fault attribution are node venue rules (plan §3.2 left it in CTR-DEX)
+RS5-14	(contract)	CTR-DEX-08	current		contracts/dex.md#erc1271-cap	no	2026-10-07	OrderBookDex caps ERC-1271 gas by codehash	history/specs/2026-10-03-dex-design.md:431		
+RS5-14	(node)	NODE-DEX-06	current		node/dex-venue.md#oog-pairs	no	2026-10-07	OOG ERC-1271 orders are never restored	history/specs/2026-10-03-dex-design.md:431		Node clause of RS5-14
+RS5-15	(non-evm)	CTR-DEX-09	current		contracts/dex.md#bound-settler	no	2026-10-07	Non-EVM settlement bound to the relayer	history/specs/2026-10-03-dex-design.md:438		
+RS5-15	(soroban)	NET-SOR-10	current		networks/soroban.md#dex	no	2026-10-07	Soroban orders always name a relayer	history/specs/2026-10-03-dex-design.md:438		SCaaS: R8-10 = DEX RS5-15 Soroban clause (R8-10 in another batch)
+RS5-16		NODE-DEX-07	current		node/dex-venue.md#matching	no	2026-10-07	Committed balance includes unsettled fills	history/specs/2026-10-03-dex-design.md:442		
+RS5-17		NODE-DEX-08	current		node/dex-venue.md#markets	no	2026-10-07	Re-check on-chain market every poll	history/specs/2026-10-03-dex-design.md:444		
+RS5-18		NODE-DEX-09	current		node/dex-venue.md#matching	no	2026-10-07	IOC single maker on Move/Solana	history/specs/2026-10-03-dex-design.md:446		
+RS5-19		CTR-DEX-10	current		contracts/dex.md#min-nonce-cap	no	2026-10-07	min_nonce capped by family word width	history/specs/2026-10-03-dex-design.md:448		
+RS5-20	(odoo-book)	INT-ODOO-12	current		integration.md#example-odoo-dex	no	2026-10-07	Late Matched after restore debits Odoo book	history/specs/2026-10-03-dex-design.md:449		transitional BUILT Odoo-held book
+RS5-20	(r105)	NODE-DEX-10	current		node/dex-venue.md#persistence	no	2026-10-07	Late settled trade debits restored order	history/specs/2026-10-03-dex-design.md:449		R105 store-backed venue half
+RS5-21		CTR-DEX-11	current		contracts/dex.md#fee-round-up	no	2026-10-07	DEX fee per fill rounds up	history/specs/2026-10-03-dex-design.md:455		
+RS7-1		NET-SUI-03	current		networks/sui.md#objects	no	2026-10-03	Account and Registry are derived objects	history/specs/2026-10-03-net-sui.md:272		
+RS7-2		NET-SUI-04	current		networks/sui.md#passkey	no	2026-10-03	open_passkey requires an assertion	history/specs/2026-10-03-net-sui.md:273		
+RS7-3		NET-SUI-05	current		networks/sui.md#keys	no	2026-10-07	Many keys, origins, guardian per account	history/specs/2026-10-03-net-sui.md:274		amended in place (one key struck); keys move to per-subject Keys (CR-R3-5)
+RS7-4		NET-SUI-06	current		networks/sui.md#dex	no	2026-10-03	Sui DEX atomic PTB batch, no relayer fee	history/specs/2026-10-03-net-sui.md:275		
+RS7-5		NET-SUI-07	current		networks/sui.md#relayer	no	2026-10-03	Relayer builds PTB BCS locally	history/specs/2026-10-03-net-sui.md:276		
+RS7-6		NET-SUI-08	current		networks/sui.md#events	no	2026-10-07	Indexer filters registered tokens	history/specs/2026-10-03-net-sui.md:277		token list from node store (R95/R324)
+RS7-7		NET-SUI-10	current		networks/sui.md#lane-journal	no	2026-10-07	No second tx on one gas coin version	history/specs/2026-10-03-net-sui.md:278		extended and restated by RS7-9
+RS7-8		NET-SUI-09	current		networks/sui.md#dex	no	2026-10-03	One shared Market per pair	history/specs/2026-10-03-net-sui.md:279		
+RS7-9		NET-SUI-10	current		networks/sui.md#lane-journal	no	2026-10-07	Lane journal = all unfinalized txs, in store	history/specs/2026-10-03-net-sui.md:283		RS7-7 merged here
+RS7-10		NET-SUI-11	current		networks/sui.md#keys	no	2026-10-07	forward never returns to removed key	history/specs/2026-10-03-net-sui.md:291		
+RS7-11		NET-SUI-12	current		networks/sui.md#lanes	no	2026-10-07	Lane prune with on-chain horizon	history/specs/2026-10-03-net-sui.md:295		
+RS7-12		NET-SUI-13	current		networks/sui.md#relayer	no	2026-10-07	Grief after dry-run via node rules	history/specs/2026-10-03-net-sui.md:301		applies R340/R342/R346
+RS7-13		NET-SUI-14	current		networks/sui.md#relayer	no	2026-10-07	Mesh checks sui_op signature first	history/specs/2026-10-03-net-sui.md:304		applies R343
+RS7-14		NET-SUI-15	current		networks/sui.md#deploy	yes	2026-10-07	Sui package immutable at deploy	history/specs/2026-10-03-net-sui.md:306		family application of CR-R3-11 / R348
+RS11-1		NET-APT-04	current		networks/aptos.md#signatures	no	2026-10-03	aptos:signMessage envelope parsed strictly	history/specs/2026-10-04-net-aptos.md:648		
+RS11-2		NET-APT-05	current		networks/aptos.md#accounts	no	2026-10-04	One derived Account per subject	history/specs/2026-10-04-net-aptos.md:651		
+RS11-3		NET-APT-03	current		networks/aptos.md#keys	no	2026-10-07	Account keys, origins, three admin paths	history/specs/2026-10-04-net-aptos.md:22		amended rev 1.1: origins inside Account
+RS11-4		NET-APT-06	current		networks/aptos.md#lanes	no	2026-10-04	Lane table prunable after delay	history/specs/2026-10-04-net-aptos.md:656		
+RS11-5		NET-APT-07	current		networks/aptos.md#payload	no	2026-10-04	Domain = chain_id, Account, asset	history/specs/2026-10-04-net-aptos.md:658		
+RS11-6		NET-APT-08	current		networks/aptos.md#relayer	no	2026-10-04	Relayer lane ed25519 sequence account	history/specs/2026-10-04-net-aptos.md:659		
+RS11-7		NET-APT-09	current		networks/aptos.md#relayer	no	2026-10-04	Hand-written BCS, TS SDK vectors	history/specs/2026-10-04-net-aptos.md:660		
+RS11-8	(oog)	NET-APT-81	superseded	NET-APT-21		no	2026-10-04	Committed OOG requeued without limit	history/specs/2026-10-04-net-aptos.md:21	RS11-21	
+RS11-8	(table)	NET-APT-02	current		networks/aptos.md#relayer	no	2026-10-04	Aptos Rejected table; scaas abort Reverted	history/specs/2026-10-04-net-aptos.md:21		
+RS11-9		NET-APT-10	current		networks/aptos.md#events	no	2026-10-04	Finality commit; REST scan by package	history/specs/2026-10-04-net-aptos.md:662		
+RS11-10		NET-APT-11	current		networks/aptos.md#dex	no	2026-10-04	Aptos DEX Market per pair	history/specs/2026-10-04-net-aptos.md:664		
+RS11-11		NET-APT-12	current		networks/aptos.md#mandate	no	2026-10-04	Mandate opened by Account key	history/specs/2026-10-04-net-aptos.md:666		
+RS11-12		NET-APT-13	current		networks/aptos.md#relayer	no	2026-10-04	No disk tx journal on Aptos	history/specs/2026-10-04-net-aptos.md:667		
+RS11-13	(deploy)	NET-APT-01	current		networks/aptos.md#deploy	no	2026-10-04	Object code deployment, one address	history/specs/2026-10-04-net-aptos.md:20		admin = object code owner; --included-artifacts none
+RS11-13	(upgrade)	NET-APT-80	superseded	NET-APT-20		no	2026-10-04	Upgrade policy compatible	history/specs/2026-10-04-net-aptos.md:20	RS11-20	CR-R3-11 owner
+RS11-14		NET-APT-14	current		networks/aptos.md#passkey	yes	2026-10-04	Pure-Move P-256 passkey verifier	history/specs/2026-10-04-net-aptos.md:672		owner OQ1 → B; UNAUDITED
+RS11-15		NET-APT-15	current		networks/aptos.md#events	yes	2026-10-04	Indexer API as hint, reread fullnode	history/specs/2026-10-04-net-aptos.md:675		owner OQ2; token list from node store (R95)
+RS11-16		NET-APT-16	current		networks/aptos.md#relayer	no	2026-10-07	pay_check view for unopened Account	history/specs/2026-10-04-net-aptos.md:677		amended by RS11-23
+RS11-17		NET-APT-17	current		networks/aptos.md#passkey	no	2026-10-04	Passkey precomputed P-256 table	history/specs/2026-10-04-net-aptos.md:679		
+RS11-18		NET-APT-18	current		networks/aptos.md#mandate	no	2026-10-04	Mandate open, revoke, refund rules	history/specs/2026-10-04-net-aptos.md:681		
+RS11-19		NET-APT-19	current		networks/aptos.md#dex	no	2026-10-04	Strict BCS orders; unordered pair market	history/specs/2026-10-04-net-aptos.md:683		
+RS11-20		NET-APT-20	current		networks/aptos.md#deploy	yes	2026-10-07	Aptos package immutable at deploy	history/specs/2026-10-04-net-aptos.md:688		family application of CR-R3-11 / R348
+RS11-21		NET-APT-21	current		networks/aptos.md#relayer	no	2026-10-07	OOG rebuilt once at gas cap	history/specs/2026-10-04-net-aptos.md:695		
+RS11-22		NET-APT-22	current		networks/aptos.md#signatures	no	2026-10-07	Lazy open requires application line	history/specs/2026-10-04-net-aptos.md:698		
+RS11-23		NET-APT-23	current		networks/aptos.md#relayer	no	2026-10-07	Dispatchable assets refused on unopened path	history/specs/2026-10-04-net-aptos.md:700		
+RS11-24		NET-APT-24	current		networks/aptos.md#lanes	no	2026-10-07	Every signing client honours lane horizon	history/specs/2026-10-04-net-aptos.md:702		client half of CR-PD-4 horizon
+RS11-25		NET-APT-25	current		networks/aptos.md#signatures	no	2026-10-07	chainId line stays optional	history/specs/2026-10-04-net-aptos.md:704		
+RS11-26		NET-APT-26	current		networks/aptos.md#relayer	no	2026-10-07	Mesh verifies Aptos signatures locally	history/specs/2026-10-04-net-aptos.md:706		applies R343
+RS12-1		NET-SOL-03	current		networks/solana.md#overview	yes	2026-10-04	Program-level meta-tx; native fee payer lane-only	history/specs/2026-10-04-net-solana.md:697		owner 2026-10-04 (gasless decision)
+RS12-2		NET-SOL-04	current		networks/solana.md#write-locks	yes	2026-10-04	Write-lock is the real lock	history/specs/2026-10-04-net-solana.md:698		owner L12 merged here
+RS12-3		NET-SOL-05	current		networks/solana.md#accounts	no	2026-10-04	One SubjectAccount PDA per subject	history/specs/2026-10-04-net-solana.md:700		
+RS12-4		NET-SOL-06	current		networks/solana.md#keys	yes	2026-10-04	Keys, origins, guardian; open needs assertion	history/specs/2026-10-04-net-solana.md:701		owner 2026-10-04
+RS12-4a		NET-SOL-27	current		networks/solana.md#keys	no	2026-10-04	open requires the wallet own signature	history/specs/2026-10-04-net-solana.md:883		
+RS12-5		NET-SOL-07	current		networks/solana.md#keys	yes	2026-10-04	BACKUP_REQUIRED policy bit, default off	history/specs/2026-10-04-net-solana.md:703		owner OQ1; predicate refined by R251
+RS12-6		NET-SOL-08	current		networks/solana.md#lanes	no	2026-10-04	Lane PDA prunable, rent to rent_payer	history/specs/2026-10-04-net-solana.md:704		
+RS12-7		NET-SOL-09	current		networks/solana.md#tokens	yes	2026-10-04	Token-2022 extension policy	history/specs/2026-10-04-net-solana.md:706		owner OQ3
+RS12-8		NET-SOL-10	current		networks/solana.md#network-domain	no	2026-10-07	Domain = genesis hash, node cross-check	history/specs/2026-10-04-net-solana.md:707		amended by CR-R3-4 build-time network
+RS12-9	(formats)	NET-SOL-11	current		networks/solana.md#signatures	no	2026-10-04	Raw and OCMS v1; passkey b64url digest	history/specs/2026-10-04-net-solana.md:708		
+RS12-9	(text)	NET-SOL-81	superseded	NET-ALL-23		no	2026-10-04	Signed text is domain plus hex digest	history/specs/2026-10-04-net-solana.md:708	CR-WSF-1	readable on-chain-rebuilt text
+RS12-9a		NET-SOL-30	current		networks/solana.md#signatures	no	2026-10-04	Passkey blob length little-endian	history/specs/2026-10-04-net-solana.md:891		
+RS12-10		NET-SOL-12	current		networks/solana.md#signatures	yes	2026-10-04	Precompile introspection rules	history/specs/2026-10-04-net-solana.md:709		owner 2026-10-04 (precompile via introspection)
+RS12-11		NET-SOL-13	current		networks/solana.md#mandate	no	2026-10-04	Mandate opened by Account key; mref PDA	history/specs/2026-10-04-net-solana.md:711		
+RS12-11a		NET-SOL-28	current		networks/solana.md#mandate	no	2026-10-04	Mandate delegate ed25519; revoke and close	history/specs/2026-10-04-net-solana.md:884		
+RS12-12		NET-SOL-14	current		networks/solana.md#dex	no	2026-10-04	DEX settle checks both signatures	history/specs/2026-10-04-net-solana.md:712		
+RS12-12a		NET-SOL-29	current		networks/solana.md#dex	no	2026-10-04	One pair per instruction; sweep rules	history/specs/2026-10-04-net-solana.md:887		
+RS12-13		NET-SOL-15	current		networks/solana.md#toolchain	no	2026-10-04	Anchor 1.x with LiteSVM	history/specs/2026-10-04-net-solana.md:713		
+RS12-14		NET-SOL-16	current		networks/solana.md#relayer	yes	2026-10-04	Lane ed25519 with durable nonce	history/specs/2026-10-04-net-solana.md:714		owner 2026-10-04 (lane keys coin 501)
+RS12-15		NET-SOL-17	current		networks/solana.md#relayer	no	2026-10-04	Hand-written tx v1, kit vectors	history/specs/2026-10-04-net-solana.md:716		
+RS12-16	(cu)	NET-SOL-80	superseded	NET-SOL-23		no	2026-10-04	Out of CU requeued without limit	history/specs/2026-10-04-net-solana.md:24	RS12-22	
+RS12-16	(table)	NET-SOL-02	current		networks/solana.md#relayer	no	2026-10-04	Solana Rejected table; scaas errors Reverted	history/specs/2026-10-04-net-solana.md:24		
+RS12-16a		NET-SOL-31	current		networks/solana.md#relayer	no	2026-10-04	Restart advances nonce; error classes	history/specs/2026-10-04-net-solana.md:892		
+RS12-17		NET-SOL-18	current		networks/solana.md#relayer	no	2026-10-07	No disk journal; durable nonce suffices	history/specs/2026-10-04-net-solana.md:719		
+RS12-18		NET-SOL-19	current		networks/solana.md#events	yes	2026-10-04	Finalized; standard JSON-RPC indexer	history/specs/2026-10-04-net-solana.md:721		owner OQ2; token list from node store (R95)
+RS12-18a		NET-SOL-32	current		networks/solana.md#events	no	2026-10-04	block_hash from last produced block	history/specs/2026-10-04-net-solana.md:894		
+RS12-19		NET-SOL-20	current		networks/solana.md#deploy	yes	2026-10-07	Solana program immutable after initialize	history/specs/2026-10-04-net-solana.md:726		family application of CR-R3-11 / R348
+RS12-20		NET-SOL-21	current		networks/solana.md#tokens	no	2026-10-07	Destination ATA must exist	history/specs/2026-10-04-net-solana.md:730		
+RS12-21		NET-SOL-22	current		networks/solana.md#lanes	no	2026-10-07	On-chain MAX_TTL_S for expiries	history/specs/2026-10-04-net-solana.md:735		
+RS12-22		NET-SOL-23	current		networks/solana.md#relayer	no	2026-10-07	Out of CU rebuilt once at max_cu	history/specs/2026-10-04-net-solana.md:740		
+RS12-23		NET-SOL-24	current		networks/solana.md#signatures	no	2026-10-07	Reject crossOrigin true and topOrigin	history/specs/2026-10-04-net-solana.md:742		family application of CR-R3-1
+RS12-24		NET-SOL-25	current		networks/solana.md#lanes	no	2026-10-07	Every signing client honours lane horizon	history/specs/2026-10-04-net-solana.md:744		client half of CR-PD-4 horizon
+RS12-25		NET-SOL-26	current		networks/solana.md#relayer	no	2026-10-07	Mesh verifies Solana signatures locally	history/specs/2026-10-04-net-solana.md:746		applies R343
+RS-NV64-1		CTR-ZTH-18	current		contracts/zether.md#range-bits	yes	2026-10-05	Range bits n_v = n_b = 64, sound	history/specs/2026-10-03-zether-design.md:623		Owner limits ZL:D1, ZL:D2 merged here
+RS-NV64-2		CTR-ZTH-19	current		contracts/zether.md#client-decryption	yes	2026-10-07	Configurable client BSGS plus device balance cache	history/specs/2026-10-03-zether-design.md:644		Owner limits ZL:D4, ZL:D5 merged here
+S4F:Q1		CLI-SGN-30	current		clients/signers-clientkeys.md#role-keys	yes	2026-10-07	Soroban account role kindNo is 18	history/specs/2026-10-06-signers-followups.md:784		owner 2026-10-07 (UA rev 1.3); stated in R300
+SCaaS:N1		NODE-GEN-01	current		node/README.md#invariants	no	2026-10-07	Node holds no subject funds or keys	history/SCaaS-2026-10-07.md:880		
+SCaaS:N2		NODE-GEN-02	current		node/README.md#invariants	no	2026-10-07	No broadcast without committed journal	history/SCaaS-2026-10-07.md:881		
+SCaaS:N3		NODE-GEN-03	current		node/README.md#invariants	no	2026-10-07	No outer nonce abandoned	history/SCaaS-2026-10-07.md:882		
+SCaaS:N4		NODE-GEN-04	current		node/README.md#invariants	no	2026-10-07	One live outer tx per intent	history/SCaaS-2026-10-07.md:883		
+SCaaS:N5		NODE-GEN-05	current		node/README.md#invariants	no	2026-10-07	No bump after consumption	history/SCaaS-2026-10-07.md:884		
+SCaaS:N6		NODE-GEN-06	current		node/README.md#invariants	no	2026-10-07	Never dead because landed elsewhere	history/SCaaS-2026-10-07.md:885		
+SCaaS:N7		NODE-GEN-07	current		node/README.md#invariants	no	2026-10-07	Unbound wire values never submitted	history/SCaaS-2026-10-07.md:886		
+SCaaS:N8		NODE-GEN-08	current		node/README.md#invariants	no	2026-10-07	Nothing booked before finality	history/SCaaS-2026-10-07.md:887		
+SCaaS:N9		NODE-GEN-09	current		node/README.md#invariants	no	2026-10-07	Breakers never block indexing or rescues	history/SCaaS-2026-10-07.md:888		
+SCaaS:N10		NODE-GEN-10	current		node/README.md#invariants	no	2026-10-07	One owner process per store	history/SCaaS-2026-10-07.md:889		
+SCaaS:N11		NODE-GEN-11	current		node/README.md#invariants	no	2026-10-07	Every paid outer tx metered	history/SCaaS-2026-10-07.md:890		
+SCaaS:N12		NODE-GEN-12	current		node/README.md#invariants	no	2026-10-07	Signed fields read from payload	history/SCaaS-2026-10-07.md:891		
+SCaaS:N13		NODE-GEN-13	current		node/README.md#invariants	no	2026-10-07	Value out and deposits capped	history/SCaaS-2026-10-07.md:892		
+SCaaS:N14		NODE-GEN-14	current		node/README.md#invariants	no	2026-10-07	Intents signature-checked before chain calls	history/SCaaS-2026-10-07.md:893		
+SCaaS:N15		NODE-GEN-15	current		node/README.md#invariants	no	2026-10-07	Adapter restart state in store	history/SCaaS-2026-10-07.md:894		
+SCaaS:N16		NODE-GEN-16	current		node/README.md#invariants	no	2026-10-07	No upgradeable program, one key per family	history/SCaaS-2026-10-07.md:895		
+UA:Q1		CTR-UA-13	current		contracts/universal-account.md#no-rotation	yes	2026-10-06	No key rotation inside a UA	history/specs/2026-10-06-universal-account-design.md:1385		Owner confirmation of R302 (rev 1.1)
+UA:Q2		CTR-UA-16	current		contracts/universal-account.md#zether-kinds	yes	2026-10-06	Zether kinds bind encryption key; immutable authRef	history/specs/2026-10-06-universal-account-design.md:1389		Default accepted by owner (rev 1.2)
+UA:Q3		CTR-UA-08	current		contracts/universal-account.md#rogue-key	yes	2026-10-07	Rogue-key defence chosen per aggregate kind	history/specs/2026-10-06-universal-account-design.md:1391		Owner 2026-10-07 sharpening
+UA:Q4		CTR-UA-14	current		contracts/universal-account.md#function-kinds	yes	2026-10-06	Each function accepts only the kinds it needs	history/specs/2026-10-06-universal-account-design.md:1394		DEX with UA makers not in v1
+UA:Q5		CTR-UA-14	current		contracts/universal-account.md#function-kinds	yes	2026-10-06	Each function accepts only the kinds it needs	history/specs/2026-10-06-universal-account-design.md:1396		MandateWallet with UA owner not in v1
+UA:Q6		CLI-SGN-30	current		clients/signers-clientkeys.md#role-keys	yes	2026-10-06	One chain-independent UA tree, purpose 7622'	history/specs/2026-10-06-universal-account-design.md:1398		Confirms R300 (CLI-SGN, other batch)
+UA:Q7		CTR-UA-14	current		contracts/universal-account.md#function-kinds	yes	2026-10-06	Each function accepts only the kinds it needs	history/specs/2026-10-06-universal-account-design.md:1400		Regulated AS tokens stay native-only
+UA:Q8		CTR-UA-25	current		contracts/universal-account.md#registration-gate	yes	2026-10-06	No on-chain registration gate in v1	history/specs/2026-10-06-universal-account-design.md:1402		No R-id states it; default accepted by owner rev 1.2; sponsorship limits at the node
+UA:Q9		CTR-UA-23	current		contracts/universal-account.md#pq-kinds	yes	2026-10-06	PQ and ed25519 kinds on every EVM chain	history/specs/2026-10-06-universal-account-design.md:1404		Owner answer rev 1.1
+UA:Q10		CTR-UA-07	current		contracts/universal-account.md#pop	yes	2026-10-07	PoP binds chain, registry, UA and authRef	history/specs/2026-10-06-universal-account-design.md:1407		Sharpened rev 1.4 (chain_uid)
+UA:Q11		CTR-UA-19	current		contracts/universal-account.md#uametatransaction	yes	2026-10-06	UAMetaTransaction has its own typehash	history/specs/2026-10-06-universal-account-design.md:1410		Owner confirmation rev 1.1
+UA:Q12		NET-ALL-20	current		networks/README.md#ua-registries	yes	2026-10-06	TON has no registry; wallet-bound keys	history/specs/2026-10-06-universal-account-design.md:1412		Confirms R314 (NET-ALL, other batch)
+UA:Q13		NET-ALL-21	current		networks/README.md#ua-passkey-ids	yes	2026-10-07	Non-EVM passkey owners are UA ids	history/specs/2026-10-06-universal-account-design.md:1413		Confirms R315 (NET-ALL, other batch)
+UA:Q14		CTR-UA-21	current		contracts/universal-account.md#holder-binding	yes	2026-10-07	Holder binding by account-signed presentation	history/specs/2026-10-06-universal-account-design.md:1415		SD-JWT VC default, BBS optional; no own DID method
+UD:§1:custody		NODE-LANE-03	current		node/submit-lanes.md#signer	yes	2026-08-30	Pluggable custody chosen at deploy	research/_USER-DECISIONS.md:43		R15 Signer trait as custody seam; ADW §D calls it settled; SCaaS §9.1 custody axes.
+UD:§1:eip1776		NET-ALL-02	current		networks/README.md#r30-path	yes	2026-08-30	Contract-level meta-tx, no ERC-4337	research/_USER-DECISIONS.md:40		R30 makes contract meta-tx the default path; SCaaS §5.1: no 4337 dependency. The EIP-1776 name appears in no spec.
+UD:§1:first-chain		NET-EVM-80	superseded	NET-EVM-03		yes	2026-08-30	First chain Gnosis, then Celo	research/_USER-DECISIONS.md:41	UD:§16	Replaced by private chain first (UD:§16).
+UD:§1:independent-addon		INT-ODOO-07	current		integration.md#example-odoo-addons	yes	2026-08-30	Blockchain addon never depends on DMS	research/_USER-DECISIONS.md:44		R8 addon split; generalized by R87 (node independent of any ERP).
+UD:§1:legal		ARCH-POS-81	superseded	ARCH-POS-04		yes	2026-08-30	Legal deferred to a separate chapter	research/_USER-DECISIONS.md:47	owner:2026-10-06:market-neutral	Market-neutral rule: no market-specific law in the docs.
+UD:§1:payment-mode		INT-ERP-27	current		integration.md#payment-modes	yes	2026-08-30	Payment mode is configuration, not hard-coded	research/_USER-DECISIONS.md:45		Mode numbers from blockchain.md; SCaaS §5.9 payer-flexibility table states the modes without a ruling id.
+UD:§1:private-chain		CTR-ZTH-27	open		contracts/zether.md#chains	yes	2026-08-30	Zether runs on the private chain first	research/_USER-DECISIONS.md:42		Private chain is in scope (7622), but RS2-1 limits classical Zether to 31337/1337; owner gate Z3 / reorg:Q5 leaves it open.
+UD:§1:smartcontracts-tree		CTR-GEN-03	current		contracts/README.md#repository-layout	yes	2026-08-30	Contracts in their own tree per family	research/_USER-DECISIONS.md:46		BUILT as smartcontracts/evm/ etc. (SCaaS §3.1); no ruling id.
+UD:§1:use-cases		ARCH-POS-06	current		architecture.md#use-cases	yes	2026-08-30	Three use cases: loyalty, B2B, payments	research/_USER-DECISIONS.md:38		Includes focus MetaTx + Zether + stablecoin. Same rule as UD:§15:D12. No spec ruling id (SCaaS §1 positioning).
+UD:§2		CTR-ZTH-04	current		contracts/zether.md#shieldscale	yes	2026-08-30	Decimals, shield scale, decryption bound per token	research/_USER-DECISIONS.md:49		RS2-3 shieldScale semantics; cap now ZL:D3 (2^54), BSGS client-configured (ZL:D4); v2 decimals issuer's choice (R137). BSGS table is an estimate.
+UD:§3		CTR-ZTH-07	current		contracts/zether.md#fixed-fee	yes	2026-08-30	Fees flexible for public, fixed for Zether	research/_USER-DECISIONS.md:102		Public half is UD:§3.1; Zether half restated by RS2-6.
+UD:§3.1		CTR-MTX-13	current		contracts/metatx.md#fee-policy	yes	2026-08-30	Public fee modes NONE, PERCENT, FIXED	research/_USER-DECISIONS.md:107		ppm denominator, 1 % cap, feeRecipient 0 = msg.sender; BUILT FeePolicy (SCaaS §5.3, §5.7) without ruling id; R132 adds never-the-payee.
+UD:§3.2		CTR-ZTH-07	current		contracts/zether.md#fixed-fee	yes	2026-08-30	Zether fee must be NONE or FIXED	research/_USER-DECISIONS.md:124		RS2-6 forbids PERCENT on Zether ops; inner fee is one constant per token (confidentialFee, SCaaS §8.7).
+UD:§3.3		CTR-ZTH-28	open		contracts/zether.md#fees	yes	2026-08-30	Tiered Zether fees leak the amount	research/_USER-DECISIONS.md:149		Inner fee is constant per token, but nothing forbids an outer FIXED fee chosen by amount. Unruled (plan Q14).
+UD:§3.4		CTR-ZTH-07	current		contracts/zether.md#fixed-fee	yes	2026-08-30	Two fee layers, allowed modes per layer	research/_USER-DECISIONS.md:164		RS2-6 (outer NONE/FIXED on Zether ops) and RS2-4 (inner fee to the beneficiary's pending).
+UD:§3.4b		NODE-MESH-19	current		node/mesh.md#acceptance-policy	yes	2026-08-30	Fee-0 intents allowed; acceptance policy decides	research/_USER-DECISIONS.md:179		Policy min_fee may be 0 (MESH §7.1); R75 notes relayers are mostly paid outside the intent. No ruling says never filter fee 0.
+UD:§3.5		CTR-MTX-82	superseded	CTR-MTX-15		yes	2026-08-30	Drop GSN gas fields and per-mille setter	research/_USER-DECISIONS.md:201	UD:§24.1	GSN fields absent from BUILT IERC20MetaTx; fee is per intent in the struct, no token fee setter exists.
+UD:§4		CTR-MTX-14	current		contracts/metatx.md#signature	yes	2026-08-30	EIP-712 typed data, not personal_sign	research/_USER-DECISIONS.md:206		Pinned typehash SCaaS §5.2 (no id); domain per R5; drop the raw ecrecover helper (s malleability).
+UD:§5		CTR-MTX-83	superseded	CTR-MTX-15		yes	2026-08-30	Relayer wildcard instead of mode bitmask	research/_USER-DECISIONS.md:215	UD:§24.1	UD:§24 restores mode (in the hash, canonical zeroing); smartcontracts README fixed 2026-10-07.
+UD:§6		NODE-GSP-01	current		node/gossip.md#scope	yes	2026-08-30	Open relayer mesh modelled on 0x-mesh	research/_USER-DECISIONS.md:224		R112 gossipsub v1.1 (cites UD §6); validate before gossip R118; relayer race R74; item 6 on-chain sponsor caps dropped by UD:§13.1.
+UD:§10		CTR-ZTH-08	current		contracts/zether.md#zethermetatx	yes	2026-08-30	Zether token is a meta-tx token	research/_USER-DECISIONS.md:331		RS2-7 ZetherMetaTx mixin over MetaTxLib; same rule for PQZ (R284).
+UD:§10:fee-layers		CTR-ZTH-05	current		contracts/zether.md#fees	yes	2026-08-30	Outer and inner fees serve different cases	research/_USER-DECISIONS.md:351		RS2-4 inner fee to the beneficiary UA; RS2-14 direct call has no outer fee; three combinations.
+UD:§11:fee-denominator		CTR-MTX-13	current		contracts/metatx.md#fee-policy	yes	2026-08-30	Percent fees in ppm (1e6)	research/_USER-DECISIONS.md:450		Same rule as UD:§3.1; MODE_FEE_PERCENT is ppm of value (SCaaS §5.3).
+UD:§11:struct-variants		CTR-MTX-84	superseded	CTR-MTX-15		yes	2026-08-30	Reconcile three struct variants	research/_USER-DECISIONS.md:437	UD:§24.1	2D nonce and fee in the struct kept; 'drop mode' reversed by UD:§24.1.
+UD:§12		CTR-ZTH-01	current		contracts/zether.md#scope	yes	2026-08-30	transferWithProof: selective amount disclosure	research/_USER-DECISIONS.md:463		R34 lists ITransferDisclosure; BUILT (SCaaS §8.9).
+UD:§12.2		CTR-ZTH-01	current		contracts/zether.md#scope	yes	2026-08-30	Open the transfer ciphertext; three openings	research/_USER-DECISIONS.md:483		SENDER_S, RECEIVER_X, AUDITOR (SCaaS §8.9, ZD).
+UD:§12.3		CTR-ZTH-01	current		contracts/zether.md#scope	yes	2026-08-30	Disclosure verify is a view; attest optional	research/_USER-DECISIONS.md:508		verifyTransferAmount view, attestTransferAmount event, entryRef mandatory; bundle stored per RS2-15.
+UD:§12.4		CTR-ZTH-01	current		contracts/zether.md#scope	yes	2026-08-30	Disclosure security constraints	research/_USER-DECISIONS.md:537		Item 1 (fresh random s) replaced by UD:§13.2; shared-s analysis and irrevocability remain (SCaaS §8.9).
+UD:§12.7.3		CTR-ZTH-84	superseded	CTR-ZTH-01		yes	2026-08-30	Permissionless rollOver proposed as D17	research/_USER-DECISIONS.md:631	UD:§25	Replaced by UD:§13.3, then UD:§25 (PUBLIC default, OWNER_ONLY opt-in).
+UD:§12.7.4		CTR-ZTH-85	superseded	CTR-ZTH-30		yes	2026-08-30	SDK must store every s	research/_USER-DECISIONS.md:657	UD:§13.2	UD:§13.2 deletes it: s derived from seed and on-chain sendCounter.
+UD:§12.7.5		CTR-ZTH-29	current		contracts/zether.md#independent-verifier	yes	2026-08-30	Independent open-source disclosure verifier CLI	research/_USER-DECISIONS.md:676		PLANNED in SCaaS §11.3 without ruling id; drop the market-specific court notes.
+UD:§12.7.6		CTR-ZTH-01	current		contracts/zether.md#scope	yes	2026-08-30	Keep all three opening paths	research/_USER-DECISIONS.md:691		Same rule as UD:§12.2.
+UD:§13.1		NODE-OPS-15	current		node/ops.md#scope	yes	2026-08-30	Relayer abuse control is operator business	research/_USER-DECISIONS.md:706		R247 operators set their own policy; on-chain escrow cap exception → SponsorshipPool budgets (R189, R194).
+UD:§13.2		CTR-ZTH-30	current		contracts/zether.md#sender-randomness	yes	2026-08-30	Derive s from seed via PRF	research/_USER-DECISIONS.md:727		HKDF over seed, chain, token, from UA, on-chain sendCounter; stated in SCaaS §8.9 and ZD without ruling id.
+UD:§13.3		CTR-ZTH-86	superseded	CTR-ZTH-01		yes	2026-08-30	Implicit rollOver open to everyone	research/_USER-DECISIONS.md:771	UD:§25	Owner later adopted accSeq with PUBLIC default and OWNER_ONLY opt-in (UD:§25).
+UD:§14		CTR-ZTH-87	superseded	CTR-ZTH-01		yes	2026-08-30	Curve D1 = BLS12-381 after preflight	research/_USER-DECISIONS.md:813	UD:§20.1	First replaced by UD:§19 (bn254), then curve per token (UD:§20.1). Precompile-liveness measurement → networks/evm.md#precompiles.
+UD:§14:consequences		CTR-ZTH-88	superseded	CTR-ZTH-01		yes	2026-08-30	D1 and D2 settled on BLS12-381	research/_USER-DECISIONS.md:837	UD:§20.1	Same replacement chain as UD:§14.
+UD:§15:D1		CTR-ZTH-89	superseded	CTR-ZTH-01		yes	2026-08-30	Curve D1 = bls12_381	research/_USER-DECISIONS.md:859	UD:§20.1	Via UD:§19; no system curve any more.
+UD:§15:D2		CTR-ZTH-01	current		contracts/zether.md#scope	yes	2026-08-30	Freeze Zether struct with D1	research/_USER-DECISIONS.md:860		Statement and transcript are byte-exact in ZD under R34.
+UD:§15:D7		CLI-SGN-87	superseded	CLI-SGN-32		yes	2026-08-30	Custody tier A/B, HSM or MPC	research/_USER-DECISIONS.md:861	UD:§23.11	B2B Zether optional, so A/B is no longer mandatory; FIPS 140-2 → 140-3 (SCaaS §15.3); KMS/HSM PLANNED (SCaaS §9.1).
+UD:§15:D12		ARCH-POS-06	current		architecture.md#use-cases	yes	2026-08-30	First wave covers all three use cases	research/_USER-DECISIONS.md:862		Same rule as UD:§1:use-cases.
+UD:§15:D14		INT-ODOO-14	current		integration.md#odoo-key-registration	yes	2026-08-30	Key registration is not the addon's job	research/_USER-DECISIONS.md:869		Addon keeps generic accounts linked to partners; outlet mapping in a bridge; operator sets issuance policy. No spec ruling (UA R320 is the node route).
+UD:§15:D17		CTR-ZTH-90	superseded	CTR-ZTH-01		yes	2026-08-30	Keep implicit rollOver plus public entry points	research/_USER-DECISIONS.md:864	UD:§25	UD:§25 keeps rollOverPublic/Batch, adds accSeq and OWNER_ONLY.
+UD:§16		NET-EVM-03	current		networks/evm.md#private-chain	yes	2026-08-30	First target chain is the private PoA chain	research/_USER-DECISIONS.md:889		Chain id and parameters now owner:2026-10-07:chain-7622 (7622, Fusaka); public chains after.
+UD:§16:gas-limit		NET-EVM-81	superseded	CTR-PQZ-11		yes	2026-08-30	Raise the private chain block gas limit	research/_USER-DECISIONS.md:904	R280	R280 sets TargetBlockGasLimit 80 M on 7622 (UD asked for 50 M).
+UD:§16:roadmap		NET-EVM-03	current		networks/evm.md#private-chain	yes	2026-08-30	Private chain first and in CI	research/_USER-DECISIONS.md:929		CI builds the private7622 profile (SCaaS §3.1).
+UD:§16:single-signer		NET-EVM-04	current		networks/evm.md#private-chain	yes	2026-08-30	Single-signer PoA must be named honestly	research/_USER-DECISIONS.md:917		Never 'decentralized'; threat model lists the single signer (censorship, failure); partners told who controls it. R12 relies on it.
+UD:§18		NET-EVM-82	superseded	NET-EVM-02		yes	2026-08-30	Chain 9000 genesis keys silently ignored	research/_USER-DECISIONS.md:997	owner:2026-10-07:chain-7622	Chainspec fixed 2026-08-31, chain reset as 7622 (SCaaS §7.1). The trap (Nethermind ignores Geth keys) stays a finding.
+UD:§19		CTR-ZTH-91	superseded	CTR-ZTH-01		yes	2026-08-30	Curve D1 = bn254 for the private phase	research/_USER-DECISIONS.md:1029	UD:§20.1	Curve became a per-token choice (UD:§20.1); both verifiers BUILT (R34).
+UD:§19:curve-param		CTR-ZTH-01	current		contracts/zether.md#scope	yes	2026-08-30	Curve is a deploy-time token parameter	research/_USER-DECISIONS.md:1060		Verifier injected at initialize, no setter; prover generic over curve; R34 both verifiers.
+UD:§19:reopen-conditions		CTR-ZTH-93	superseded	CTR-ZTH-01		yes	2026-08-30	When to reopen the curve decision	research/_USER-DECISIONS.md:1047	UD:§20.1	No system curve; creators choose per security horizon (UD:§20.1; D3 dropped in UD:§20.5).
+UD:§19:unlocked		CTR-ZTH-92	superseded	CTR-ZTH-01, NET-EVM-02		yes	2026-08-30	Keep bn254 verifiers and chain 9000 as is	research/_USER-DECISIONS.md:1037	UD:§20.1,owner:2026-10-07:chain-7622	Chain reset as 7622 with EIP-2537 live.
+UD:§20		CTR-TOK-15	current		contracts/token-wrappers.md#open-factory	yes	2026-08-30	Open factory: anyone creates tokens	research/_USER-DECISIONS.md:1079		SCaaS §4.3 BUILT without ruling id; project deploys the protocol, not tokens.
+UD:§20.1		CTR-ZTH-01	current		contracts/zether.md#scope	yes	2026-08-30	Support both curves, chosen per token	research/_USER-DECISIONS.md:1093		R34 verifiers bn254 + BLS12-381; points as bytes by proofSystemId; one UA per curve.
+UD:§20.2		CTR-GEN-02	current		contracts/README.md#immutable-at-deploy	yes	2026-08-30	No upgrades; versions live in the factory	research/_USER-DECISIONS.md:1140		CR-R3-11 (alias owner:2026-10-07:immutable); append-only catalogue, deprecate marks, createUnregistered version 0 (SCaaS §4.3).
+UD:§20.3		CTR-TOK-16	current		contracts/token-wrappers.md#provenance	yes	2026-08-30	getWrapper keyed by creator and underlying	research/_USER-DECISIONS.md:1210		No uniqueness on underlying alone; SCaaS §4.3 BUILT without id.
+UD:§20.4		CTR-TOK-17	current		contracts/token-wrappers.md#provenance	yes	2026-08-30	Provenance getters instead of gatekeeping	research/_USER-DECISIONS.md:1255		factory(), creator(), underlying(), verifier(), isDeployedHere; RS2-20 adds client-side pinning.
+UD:§20.5		CTR-GEN-04	current		contracts/README.md#issuer-choices	yes	2026-08-30	Issuer choices are not protocol decisions	research/_USER-DECISIONS.md:1272		Curve, ring size, optional auditor key, loyalty privacy belong to token creators; licence question dropped (market-neutral).
+UD:§20.6		CTR-TOK-18	current		contracts/token-wrappers.md#factory	yes	2026-08-30	Factory is the critical immutable artifact	research/_USER-DECISIONS.md:1288		Audit budget on the factory; isSupportedOnThisChain check mandatory (BUILT, PD §1).
+UD:§21		NODE-MESH-83	superseded	NODE-MESH-20, ARCH-POS-05		yes	2026-08-31	Open relayer: two modes, two implementations	research/_USER-DECISIONS.md:1304	UD:§21.4,R87	Modes → capability matrix (UD:§21.4); Odoo implementation dropped (UD:§23.8, R87).
+UD:§21.1		NODE-MESH-84	superseded	NODE-MESH-20		yes	2026-08-31	Relay-only vs network-node modes	research/_USER-DECISIONS.md:1316	UD:§21.4	Forward-on-reject kept as MESH default (no policy row ⇒ forward only); hop cap and dedup in R82, R78.
+UD:§21.2		NODE-GEN-80	superseded	ARCH-POS-05		yes	2026-08-31	One Rust node, Odoo as control plane	research/_USER-DECISIONS.md:1341	R87	R87: node independent; Odoo is one client; the node's control plane is its admin API.
+UD:§21.3		NODE-MESH-11	current		node/mesh.md#tests	yes	2026-08-31	Protocol spec and public conformance vectors	research/_USER-DECISIONS.md:1365		R81 wire spec; R83 test topology (cites UD §21.3); vectors BUILT (S3, 43 cases).
+UD:§21.4		NODE-MESH-20	current		node/README.md#modules-and-shapes	yes	2026-08-31	Node is a capability matrix, not modes	research/_USER-DECISIONS.md:1394		Modules vs shapes restated without id (MESH §3.1, SCaaS §3.2); exclusivity R74/R121; promote-to-open and forward score not in v1.
+UD:§21.5		NET-ALL-02	current		networks/README.md#r30-path	yes	2026-08-31	Many signing lanes; fee sink never a lane	research/_USER-DECISIONS.md:1538		R30 multiple relayer lanes; R84 fixed fee_recipient cold wallet; SCaaS §9.6 lanes gas-only, least-in-flight.
+UD:§22		NODE-MESH-85	superseded	ARCH-POS-05		yes	2026-08-31	Lifecycle common to Rust and Odoo nodes	research/_USER-DECISIONS.md:1671	R87	One implementation only (R87, UD:§23.8); lifecycle rules live in UD:§22.1–§22.10.
+UD:§22.1		NODE-LANE-09	current		node/submit-lanes.md#consumption-check	yes	2026-08-31	One state machine incl. landed elsewhere	research/_USER-DECISIONS.md:1690		R80 consumed state; SCaaS N5, N6.
+UD:§22.2		NODE-GW-80	superseded	ARCH-POS-05, NODE-GSP-01, NODE-GSP-04		yes	2026-08-31	Three intake doors with trust levels	research/_USER-DECISIONS.md:1750	R87,R112,R115	Door B → job API (R87, R91); door C → pull bus + gossip on chain_key topics (R112, R115). source field and MAX_HOPS kept (MESH §6, R82).
+UD:§22.3		NODE-GSP-07	current		node/gossip.md#validation	yes	2026-08-31	Cheap-first validation ladder; meta nonce check	research/_USER-DECISIONS.md:1767		Ladder kept (MESH §7.2 accept L0–L3, R118); nonce cache tiers and nonce_unverified dropped (MESH §1.2).
+UD:§22.4		NODE-MESH-21	current		node/mesh.md#acceptance-policy	yes	2026-08-31	One policy lookup table, static columns	research/_USER-DECISIONS.md:1817		Table in MESH §7.1; authority moved R79 → R99/R95 (node store); no row ⇒ forward only.
+UD:§22.5		NODE-MESH-04	current		node/mesh.md#exclusivity	yes	2026-08-31	Submit, pool or forward with exclusivity window	research/_USER-DECISIONS.md:1842		R74 origin-signed exclusive; W 3 s → 10 s (R82); Zether intents off the mesh.
+UD:§22.6		NODE-MESH-13	current		node/mesh.md#acceptance	yes	2026-08-31	Who submits and where the fee goes	research/_USER-DECISIONS.md:1877		R86 effective fee; R84 normalization; R102 relayer-bound jobs pinned to their lane.
+UD:§22.7		NODE-MESH-86	superseded	INT-ERP-15, NODE-MESH-10		yes	2026-08-31	Queue clocks and promote-after window	research/_USER-DECISIONS.md:1912	R73,R82	expiry stays the hard cap (max_valid_for_secs, R82); promote 300 s → 120 s window on own outbox jobs only (R73).
+UD:§22.8		NODE-LANE-09	current		node/submit-lanes.md#consumption-check	yes	2026-08-31	Watcher classifies landed, superseded, expired	research/_USER-DECISIONS.md:1930		R80 consumption checks; R78 makes intent_id = digest (dedup point resolved).
+UD:§22.9		NODE-JOB-81	superseded	NODE-IDX-04, ARCH-POS-05		yes	2026-08-31	Result queue default, node-configured callbacks	research/_USER-DECISIONS.md:1955	R93,R87	Results via change feeds (R93); node never calls the ERP or callbacks (R87); never dial a URL from an intent (MESH T8).
+UD:§22.10		NODE-MESH-22	open		node/mesh.md#open-questions	yes	2026-08-31	Open lifecycle questions	research/_USER-DECISIONS.md:1997		Items .1 and .3 remain open; .2 and .4 resolved (rows below).
+UD:§22.10.1		NODE-MESH-23	open		node/mesh.md#numbers	yes	2026-08-31	MAX_HOPS = 4 is arbitrary	research/_USER-DECISIONS.md:1999		R82 records it as arbitrary; re-tune after a multi-site run.
+UD:§22.10.2		NODE-MESH-87	superseded	INT-ERP-15		yes	2026-08-31	promote_after vs 300 s ERC-20 expiry	research/_USER-DECISIONS.md:2001	R73	R73 chose a 120 s private window.
+UD:§22.10.3		NODE-GSP-16	open		node/gossip.md#scoring	yes	2026-08-31	Sybil resistance of forward scoring	research/_USER-DECISIONS.md:2004		Forward score not built; R121 credits only landings of intents the peer did not originate, ≥ 3 distinct from: partial answer.
+UD:§22.10.4		NODE-MESH-88	superseded	ARCH-POS-05		yes	2026-08-31	Callback subject registry on public nodes	research/_USER-DECISIONS.md:2008	R87	Moot: no callbacks (R87, NI §1.2); MESH lists it out of v1.
+UD:§23		NODE-GEN-17	current		node/README.md#one-binary	yes	2026-08-31	One Rust app for the daemon tier	research/_USER-DECISIONS.md:2014		Same decision as UD:§23.3.
+UD:§23.1		NODE-STO-04	current		node/store.md#one-store	yes	2026-08-31	Single process, no distributed nonce manager	research/_USER-DECISIONS.md:2024		R88 one owner process per store; R18 cold start, never abandon a nonce; Postgres journal → node store (R111).
+UD:§23.2		NODE-GEN-01	current		node/README.md#invariants	yes	2026-08-31	Relayer never needs the Zether key	research/_USER-DECISIONS.md:2055		N1 node never holds subject keys; SCaaS §9.1 custody axes; names custody broker and key oracle.
+UD:§23.3		NODE-GEN-17	current		node/README.md#one-binary	yes	2026-08-31	One codebase, one binary, roles by config	research/_USER-DECISIONS.md:2154		SCaaS §3.2 BUILT without id; custody/oracle roles not in the binary (R15 seam).
+UD:§23.4		NODE-SEC-80	superseded	ARCH-POS-05, NODE-STO-04		yes	2026-08-31	Separate DB roles per module	research/_USER-DECISIONS.md:2211	R87,R88	Node never writes ERP tables (R87); store is storage-only on SQLite/PG/MySQL (R111). 'Merge processes, not privileges' could be rewritten for NODE-SEC.
+UD:§23.5		NODE-LANE-03	current		node/submit-lanes.md#signer	yes	2026-08-31	Two process boundaries: custody and key oracle	research/_USER-DECISIONS.md:2233		R15 custody broker as separate lane; oracle narrow interface (SCaaS §9.1), decrypt needs a chain witness.
+UD:§23.6		NODE-GEN-81	superseded	ARCH-POS-05, NODE-JOB-06, INT-ERP-16		yes	2026-08-31	Lane diagram with ERP control plane	research/_USER-DECISIONS.md:2261	R87,R97	Outbox SKIP LOCKED → job API push (R87, R97); MESH R70 already flagged it.
+UD:§23.7		NODE-STO-04	current		node/store.md#one-store	yes	2026-08-31	What dies: relay-pool, Redis, Lua	research/_USER-DECISIONS.md:2297		SCaaS §15.3 cites it; fencing returns as the store owner epoch (R88, R111) for a different reason.
+UD:§23.8		NODE-GEN-82	superseded	ARCH-POS-05		yes	2026-08-31	Odoo addon is control plane, not a node	research/_USER-DECISIONS.md:2319	R87	R87: node never connects to Odoo; control plane is the node admin API. Spec-for-strangers argument kept in UD:§21.3.
+UD:§23.10		CLI-SGN-31	current		clients/signers-clientkeys.md#key-oracle	yes	2026-08-31	Key oracle keeps no persistent state	research/_USER-DECISIONS.md:2356		x only wrapped; nonce_id single-use (remove, unknown ⇒ reject); replay cache lossy by design; restart voids in-flight proofs. Part (a) is a file map.
+UD:§23.11		CLI-SGN-32	current		clients/signers-clientkeys.md#organization-custody	yes	2026-08-31	Oracle lane only when an organization holds Zether	research/_USER-DECISIONS.md:2416		Owner 2026-08-31: Zether for B2B optional; default B2B has no x; a receive-only treasury still needs x.
+UD:§24		CTR-MTX-15	current		contracts/metatx.md#struct	yes	2026-08-31	No forwarder; drop feeToken, innerGasLimit; keep mode	research/_USER-DECISIONS.md:2504		Same decision as UD:§24.1 and UD:§24.2.
+UD:§24.1		CTR-MTX-15	current		contracts/metatx.md#struct	yes	2026-08-31	MetaTransaction struct and mode nibbles	research/_USER-DECISIONS.md:2534		BUILT MetaTxLib (SCaaS §5.2–§5.3) without ruling id; fee in the same token; flags low nibble, fee enum high nibble.
+UD:§24.2		CTR-MTX-16	current		contracts/metatx.md#no-forwarder	yes	2026-08-31	No generic forwarder; wrap legacy tokens	research/_USER-DECISIONS.md:2570		verifyingContract is always the token (SCaaS §5.1, no id).
+UD:§24.3		CTR-MTX-16	current		contracts/metatx.md#no-forwarder	yes	2026-08-31	Fee charged iff the operation happened	research/_USER-DECISIONS.md:2586		Consequence of in-contract execution; closes _CRITIQUES contradictions 2 and 3.
+UD:§25		CTR-ZTH-01	current		contracts/zether.md#scope	yes	2026-09-03	rollOver PUBLIC default, OWNER_ONLY opt-in	research/_USER-DECISIONS.md:2630		R34 two rollOver modes; ZD BUILT with RS2-17, RS2-19 (SCaaS §8.5).
+UD:§25:fallback		CTR-ZTH-31	open		contracts/zether.md#rollover	yes	2026-09-03	Fallback: accept stale accSeq for credits only	research/_USER-DECISIONS.md:2688		Contingency if grief spreads; protocol change for crypto review (D8); never ruled.
+UD:§25:flipped		CTR-ZTH-01	current		contracts/zether.md#scope	yes	2026-09-03	Canon owner-signed rollOver rejected	research/_USER-DECISIONS.md:2638		Part of UD:§25.
+UD:§25:ruling		CTR-ZTH-01	current		contracts/zether.md#scope	yes	2026-09-03	Per-account RollOverMode flag and entry points	research/_USER-DECISIONS.md:2653		Four PUBLIC constraints; flag in v1; OWNER_ONLY by risk class (ERP side).
+ZL:D1		CTR-ZTH-18	current		contracts/zether.md#range-bits	yes	2026-10-05	Range bits n_v = n_b = 64, sound	history/specs/2026-10-05-zether-limits.md:13		Owner limits decision restated by RS-NV64-1
+ZL:D2		CTR-ZTH-18	current		contracts/zether.md#range-bits	yes	2026-10-05	Range bits n_v = n_b = 64, sound	history/specs/2026-10-05-zether-limits.md:14		Owner limits decision restated by RS-NV64-1
+ZL:D3		CTR-ZTH-26	current		contracts/zether.md#max-total-shielded	yes	2026-10-05	MAX_TOTAL_SHIELDED stays 2^54	history/specs/2026-10-05-zether-limits.md:15		No RS2 id states the cap as a ruling
+ZL:D4		CTR-ZTH-19	current		contracts/zether.md#client-decryption	yes	2026-10-05	Configurable client BSGS plus device balance cache	history/specs/2026-10-05-zether-limits.md:16		Owner limits decision restated by RS-NV64-2
+ZL:D5		CTR-ZTH-19	current		contracts/zether.md#client-decryption	yes	2026-10-05	Configurable client BSGS plus device balance cache	history/specs/2026-10-05-zether-limits.md:17		Owner limits decision restated by RS-NV64-2
+ZL:D6		CTR-ZTH-14	current		contracts/zether.md#disclosure-bundle	yes	2026-10-05	Disclosure bundle stored; fee-on-transfer underlyings refused	history/specs/2026-10-05-zether-limits.md:18		Owner limits decision restated by RS2-15
+canon:D1		CTR-ZTH-01	current		contracts/zether.md#scope	yes	2026-08-30	Canon D1: Zether curve	research/_USER-DECISIONS.md:859		Current form: curve chosen per token (UD:§20.1).
+canon:D2		CTR-ZTH-01	current		contracts/zether.md#scope	yes	2026-08-30	Canon D2: freeze Zether struct	research/_USER-DECISIONS.md:860		Current form UD:§15:D2.
+canon:D7		CLI-SGN-32	current		clients/signers-clientkeys.md#organization-custody	yes	2026-08-30	Canon D7: custody tier	research/_USER-DECISIONS.md:861		Current form: oracle lane only when an organization holds Zether (UD:§23.11).
+canon:D12		ARCH-POS-06	current		architecture.md#use-cases	yes	2026-08-30	Canon D12: first-wave scope	research/_USER-DECISIONS.md:862		Current form UD:§1:use-cases.
+canon:D14		INT-ODOO-14	current		integration.md#odoo-key-registration	yes	2026-08-30	Canon D14: key registration onboarding	research/_USER-DECISIONS.md:869		Current form UD:§15:D14.
+canon:D17		CTR-ZTH-01	current		contracts/zether.md#scope	yes	2026-09-03	Canon D17: rollOver authorization	research/_USER-DECISIONS.md:864		Current form UD:§25 (PUBLIC default, OWNER_ONLY opt-in).
+net-aptos:L1		NET-ALL-06	current		networks/README.md#design-lessons	no	2026-10-07	Indexer filters registered contracts; empty stalls	history/specs/2026-10-04-net-aptos.md:37		token list from node store (R95/R324)
+net-aptos:L2		NET-ALL-07	current		networks/README.md#design-lessons	no	2026-10-04	e2e fakes return real token ids	history/specs/2026-10-04-net-aptos.md:38		fake job-API client (NI)
+net-aptos:L3		NET-ALL-08	current		networks/README.md#design-lessons	no	2026-10-07	Payer signs every amount deciding delivery	history/specs/2026-10-04-net-aptos.md:39		lane-billed retry once (RS11-21/RS12-22)
+net-aptos:L4		NET-ALL-09	current		networks/README.md#design-lessons	no	2026-10-07	Permanent submit refusals free the lane	history/specs/2026-10-04-net-aptos.md:40		lane-billed retry once (RS11-21/RS12-22)
+net-aptos:L5		NET-ALL-10	current		networks/README.md#design-lessons	no	2026-10-04	Crash-safe lanes never equivocate	history/specs/2026-10-04-net-aptos.md:41		
+net-aptos:L6		NET-ALL-11	current		networks/README.md#design-lessons	no	2026-10-04	Multi-key accounts survive origin change	history/specs/2026-10-04-net-aptos.md:42		
+net-aptos:L7		NET-ALL-12	current		networks/README.md#design-lessons	no	2026-10-04	Coins sent to accounts stay spendable	history/specs/2026-10-04-net-aptos.md:43		
+net-aptos:L8		NET-ALL-13	current		networks/README.md#design-lessons	no	2026-10-04	No shared object serialises all markets	history/specs/2026-10-04-net-aptos.md:44		
+net-aptos:L9		NET-ALL-14	current		networks/README.md#design-lessons	no	2026-10-04	ERP verifies only keys it can prove	history/specs/2026-10-04-net-aptos.md:45		
+net-aptos:L10		NET-ALL-15	current		networks/README.md#design-lessons	no	2026-10-04	Lane state prunable, storage refunded	history/specs/2026-10-04-net-aptos.md:46		
+net-solana:L1		NET-ALL-06	current		networks/README.md#design-lessons	no	2026-10-07	Indexer filters registered contracts; empty stalls	history/specs/2026-10-04-net-solana.md:41		same lesson as net-aptos:L1
+net-solana:L2		NET-ALL-07	current		networks/README.md#design-lessons	no	2026-10-04	e2e fakes return real token ids	history/specs/2026-10-04-net-solana.md:42		same lesson as net-aptos:L2
+net-solana:L3		NET-ALL-08	current		networks/README.md#design-lessons	no	2026-10-07	Payer signs every amount deciding delivery	history/specs/2026-10-04-net-solana.md:43		same lesson as net-aptos:L3
+net-solana:L4		NET-ALL-09	current		networks/README.md#design-lessons	no	2026-10-07	Permanent submit refusals free the lane	history/specs/2026-10-04-net-solana.md:44		same lesson as net-aptos:L4
+net-solana:L5		NET-ALL-10	current		networks/README.md#design-lessons	no	2026-10-04	Crash-safe lanes never equivocate	history/specs/2026-10-04-net-solana.md:45		same lesson as net-aptos:L5
+net-solana:L6		NET-ALL-11	current		networks/README.md#design-lessons	no	2026-10-04	Multi-key accounts survive origin change	history/specs/2026-10-04-net-solana.md:46		same lesson as net-aptos:L6
+net-solana:L7		NET-ALL-12	current		networks/README.md#design-lessons	no	2026-10-04	Coins sent to accounts stay spendable	history/specs/2026-10-04-net-solana.md:47		same lesson as net-aptos:L7
+net-solana:L8		NET-ALL-13	current		networks/README.md#design-lessons	no	2026-10-04	No shared object serialises all markets	history/specs/2026-10-04-net-solana.md:48		same lesson as net-aptos:L8
+net-solana:L9		NET-ALL-14	current		networks/README.md#design-lessons	no	2026-10-04	ERP verifies only keys it can prove	history/specs/2026-10-04-net-solana.md:49		same lesson as net-aptos:L9
+net-solana:L10		NET-ALL-15	current		networks/README.md#design-lessons	no	2026-10-04	Lane state prunable, storage refunded	history/specs/2026-10-04-net-solana.md:50		same lesson as net-aptos:L10
+net-solana:L11		NET-ALL-16	current		networks/README.md#design-lessons	no	2026-10-04	Never case-fold base58 addresses or ids	history/specs/2026-10-04-net-solana.md:51		Solana-only lesson; ERP side cited from integration#addresses
+net-solana:L12		NET-SOL-04	current		networks/solana.md#write-locks	yes	2026-10-04	Write-lock disjointness test required	history/specs/2026-10-04-net-solana.md:52		owner lesson; same rule as RS12-2
+owner:2026-10-06:families		ARCH-POS-02	current		architecture.md#families	yes	2026-10-06	Family taxonomy	history/SCaaS-2026-10-07.md:92		
+owner:2026-10-06:market-neutral		ARCH-POS-04	current		architecture.md#market-neutral	yes	2026-10-06	Market-neutral data protection	history/SCaaS-2026-10-07.md:94		
+owner:2026-10-06:naming		ARCH-POS-03	current		architecture.md#naming	yes	2026-10-06	scaas names everywhere	history/SCaaS-2026-10-07.md:93		
+owner:2026-10-06:node-independent		ARCH-POS-05	current		architecture.md#node-independence	yes	2026-10-06	The node is independent of any ERP	history/SCaaS-2026-10-07.md:37		Decision-list item restated by R87 (owner).
+owner:2026-10-06:precedence		ARCH-POS-01	current		architecture.md#precedence	yes	2026-10-07	Source precedence: owner rulings first	history/SCaaS-2026-10-07.md:34		Amended per K14: SCaaS.md level removed; owner rulings > component docs > code (byte formats) > history > research. Home docs/README.
+owner:2026-10-07:chain-7622		NET-EVM-02	current		networks/evm.md#private-7622	yes	2026-10-07	Private reference chain id is 7622	history/SCaaS-2026-10-07.md:39		same owner decision as CR-PD-6
+owner:2026-10-07:immutable		CTR-GEN-02	current		contracts/README.md#immutable-at-deploy	yes	2026-10-07	Value-holding programs immutable from deploy	history/SCaaS-2026-10-07.md:40		SCaaS §0.1 owner list entry = CR-R3-11 / R348
+owner:2026-10-07:pqz-metatx		CTR-PQZ-15	current		contracts/pq-zether.md#metatx	yes	2026-10-07	PqzToken implements IERC20MetaTx	history/SCaaS-2026-10-07.md:39		Topic ARCH-POS→CTR-PQZ: same rule as PQZ R284 rev 1.4.
+reorg:Q1		NODE-JOB-19	current		node/job-api.md#call-table	yes	2026-10-07	Call table: permissionless selectors, role-holder Safe row	superpowers/plans/2026-10-07-docs-reorg.md:1215		K1: tender/vesting/distribution/offer rows + Safe.execTransaction; factory excluded
+reorg:Q2		ARCH-POS-07	current		decisions.md	yes	2026-10-07	Register policy: open entries, defaults, superseded owner rulings	superpowers/plans/2026-10-07-docs-reorg.md:1216		Q2: NI I1-I8 keep stated defaults as open entries
+reorg:Q3		NET-TON-02	current		networks/ton.md#domain-binding	yes	2026-10-07	TON domain binding: per-wallet domain set	superpowers/plans/2026-10-07-docs-reorg.md:1217		K2: owner confirms CR-R3-7; R10-14 domain-in-init clause superseded
+reorg:Q4		NET-TON-03	current		networks/ton.md#dex	yes	2026-10-07	TON bounced payouts: per-owner claim	superpowers/plans/2026-10-07-docs-reorg.md:1218		K3: owner confirms CR-R3-9; R10-17 RefundBounced clause superseded
+reorg:Q5	(curve)	CTR-ZTH-32	open		contracts/zether.md#parameters	yes	2026-10-07	Production curve for classical Zether tokens	superpowers/plans/2026-10-07-docs-reorg.md:1219		K17: bn254 vs BLS12-381 open
+reorg:Q5	(dev-chain)	CTR-ZTH-33	open		contracts/zether.md#safety-gate	yes	2026-10-07	Chain 7622 is not a classical-Zether dev chain	superpowers/plans/2026-10-07-docs-reorg.md:1219		K16: ZetherSafety allowlist stays {31337, 1337}
+reorg:Q6		NODE-MESH-24	open		node/mesh.md#scope	yes	2026-10-07	Soroban stays on the job API, not the mesh	superpowers/plans/2026-10-07-docs-reorg.md:1220		K18 (MESH R77 host nonce)
+reorg:Q7		NODE-IDX-07	open		node/indexer-feeds.md#limitations	yes	2026-10-07	Second independent event source	superpowers/plans/2026-10-07-docs-reorg.md:1221		K19: PLANNED
+reorg:Q8		NODE-OPS-16	current		node/ops.md#slos	yes	2026-10-07	OPS default numbers approved as stated	superpowers/plans/2026-10-07-docs-reorg.md:1222		K20
+reorg:Q9		ARCH-POS-08	current		decisions.md	yes	2026-10-07	Market-specific research kept private, dropped before release	superpowers/plans/2026-10-07-docs-reorg.md:1223		research/13-legal-vn.md and _GROK-CODE.md
+reorg:Q10		ARCH-POS-07	current		decisions.md	yes	2026-10-07	Register policy: open entries, defaults, superseded owner rulings	superpowers/plans/2026-10-07-docs-reorg.md:1224		Q10: status open exists
+reorg:Q11		ARCH-POS-09	current		decisions.md	yes	2026-10-07	Stream definitions stay in history and TODO	superpowers/plans/2026-10-07-docs-reorg.md:1225		K22: no docs/roadmap.md
+reorg:Q12		NODE-GEN-18	current		node/README.md#module-map	yes	2026-10-07	scaas-node layout: module moves and job seam first	superpowers/plans/2026-10-07-docs-reorg.md:1228		plan §7.3: M1-M4 now; M5-M7 when their windows open
+reorg:Q13		ARCH-POS-07	current		decisions.md	yes	2026-10-07	Register policy: open entries, defaults, superseded owner rulings	superpowers/plans/2026-10-07-docs-reorg.md:1226		Q13: unruled blockchain.md requirements recorded open (req:*), PLANNED where a seam exists
+reorg:Q14		ARCH-POS-07	current		decisions.md	yes	2026-10-07	Register policy: open entries, defaults, superseded owner rulings	superpowers/plans/2026-10-07-docs-reorg.md:1227		Q14: replaced UD decisions = superseded owner rulings; unruled UD items open
+req:blockchain.md:celo-fee-currency		NET-EVM-01	open		networks/evm.md#limitations	yes	2026-10-07	Celo fee currency (CIP-64)	history/blockchain.md:184		owner requirement never ruled on (Q13 default: open; PLANNED where a seam exists)
+req:blockchain.md:hcs-anchoring		NET-HED-01	open		networks/hedera.md#limitations	yes	2026-10-07	Hedera HCS anchoring	history/blockchain.md:235		owner requirement never ruled on (Q13 default: open; PLANNED where a seam exists)
+req:blockchain.md:hedera-schedule		NET-HED-02	open		networks/hedera.md#limitations	yes	2026-10-07	Hedera Schedule Service	history/blockchain.md:242		owner requirement never ruled on (Q13 default: open; PLANNED where a seam exists)
+req:blockchain.md:ibc		NET-COS-01	open		networks/cosmos.md#limitations	yes	2026-10-07	IBC ICS-20/27 transfers	history/blockchain.md:293		owner requirement never ruled on (Q13 default: open; PLANNED where a seam exists)
+req:blockchain.md:session-keys		CLI-SGN-01	open		clients/signers-clientkeys.md#role-keys	yes	2026-10-07	Ephemeral agent session keys (1-8 h)	history/blockchain.md:328		owner requirement never ruled on (Q13 default: open; PLANNED where a seam exists)
+req:blockchain.md:usd-velocity		NODE-LANE-01	open		node/submit-lanes.md#breaker	yes	2026-10-07	USD-denominated gas velocity limits	history/blockchain.md:353		owner requirement never ruled on (Q13 default: open; PLANNED where a seam exists)

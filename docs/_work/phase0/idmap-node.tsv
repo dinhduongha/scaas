@@ -1,0 +1,180 @@
+old	clause	topic	status	superseded_by	merge_into	owner	date	target	title	note
+CR-PD-2		NODE-IDX	current			no	2026-10-07	node/indexer-feeds.md#event-set-quorum	Finality quorum over normalized event sets	Primary of the CR-PD-2+CR-R3-2 merge; new text = CR-R3-2 universal per-family wording.
+CR-R3-2		NODE-IDX	current		CR-PD-2	no	2026-10-07	node/indexer-feeds.md#event-set-quorum	Finality quorum over normalized event sets	Restates CR-PD-2 for every family (plan §3.2 merge); per-family read methods stay in this entry.
+CR-PD-3		NODE-GW	current			no	2026-10-07	node/gateway.md#door-a-intake	Door A is not a free gas faucet	Floor/sponsor clause (b,c) cites NODE-SPN (R189); K15 single statement here.
+CR-PD-5		NODE-LANE	current			no	2026-10-07	node/submit-lanes.md#legacy-pull	Legacy pull: signed report idempotent, nonce held	Transitional (BUILT) pull path only; removed with the pull adapter (R104 P9).
+R1		ARCH-POS	superseded	R30,R34,owner:2026-10-06:families		no	2026-10-03		EVM-only META-only scope	
+R6		NODE-JOB	superseded	R87,R97,R101		no	2026-10-03		Node talks to Odoo only over json/2	Pull path still BUILT; described as Transitional (K9).
+R11	(gate)	NODE-IDX	current			no	2026-10-06	node/indexer-feeds.md#finality-gate	Node decides finality: depth or tag	Finality modes stay; config lives in node store (R96).
+R11	(quorum)	NODE-IDX	superseded	CR-PD-2		no	2026-10-03		Quorum on one block hash	PD §15.3: one-hash quorum replaced by event-set quorum.
+R12		NODE-IDX	current			no	2026-10-03	node/indexer-feeds.md#no-reorg-after-finality	No reorg handling after hard finality	
+R15		NODE-LANE	current			no	2026-10-03	node/submit-lanes.md#signer	Outer tx keys behind Signer trait	
+R16		NODE-STO	superseded	R35,R88,R105		no	2026-10-03		In-memory gateway queue and DEX book	
+R18		NODE-LANE	current			no	2026-10-03	node/submit-lanes.md#nonce-plan	Never abandon an outer nonce	
+R20		NODE-STO	current		R95	no	2026-10-06	node/store.md#config-authority	RPC endpoints only in node config	PD §15.3: kept, restated by NI R95 toml-only list.
+R51		NODE-OPS	current			no	2026-10-06	node/ops.md#admin-listener	readyz and metrics on admin port	Amended NI §18.1: relay_stats replaced by store counts.
+R53		NODE-STO	current			no	2026-10-06	node/store.md#chain-state	paused blocks sending, halted blocks indexing	Amended by R96 (node-side gate; ERP keeps a push gate).
+R54		NODE-GW	current			no	2026-10-06	node/gateway.md#auth	Gateway auth bearer or hmac	Extended by R92 key ids for the job API.
+R55		NODE-LANE	current			no	2026-10-03	node/submit-lanes.md#breaker	Circuit breakers never block indexing	Metering refined by R340.
+R58	(adapter)	NODE-LANE	current			no	2026-10-03	node/submit-lanes.md#adapters	ChainAdapter and per-lane runner	Built trait in scaas-node is the reference (L6).
+R58	(family-enum)	NODE-LANE	superseded	owner:2026-10-06:families		no	2026-10-03		Six-member Family enum	
+R59		NODE-LANE	current			no	2026-10-03	node/submit-lanes.md#signer	Local secp256k1/ed25519 signer, KMS seam	
+R60		NODE-LANE	current			no	2026-10-03	node/submit-lanes.md#lane-keys	Lane keys: raw key or mnemonic	
+R70		NODE-MESH	current			yes	2026-10-06	node/mesh.md#bus	Pull bus for admitted peers	Amended by R112: libp2p-later clause replaced; bus = admitted-peer transport.
+R71	(seq)	NODE-MESH	current			yes	2026-10-06	node/mesh.md#bus	Commit-ordered bus seq and store id	Kept: commit-order seq (A1 counter row) and store_id cursor reset.
+R71	(store)	NODE-MESH	superseded	R87,R88,R89,R105,R111		yes	2026-10-05		Mesh SQLite store, Odoo control plane	NI §13.1: rusqlite, [mesh]-only store, Odoo control plane, DEX book clause, gateway-before-202 subsumed by R88/R89.
+R72		NODE-MESH	current			yes	2026-10-06	node/mesh.md#peer-identity	mTLS peers pinned by SPKI, Ed25519	Amended by R116 (one node key, [identity]); ring reasoning obsolete (K7, R114).
+R74		NODE-MESH	current			yes	2026-10-06	node/mesh.md#exclusivity	Signed round-robin exclusivity	Amended by R121 (gossip eligible set) and NI (job store, not Odoo outbox).
+R75		NODE-MESH	current			yes	2026-10-05	node/mesh.md#reward	Mesh reward is the intent fee only	R194 confirms R75 unamended.
+R76		NODE-MESH	current			yes	2026-10-06	node/mesh.md#private-profile	Chain profile, default private	Profile is a node store chain field (NI §13.1, §10.1 superseded).
+R77		NODE-MESH	current			yes	2026-10-05	node/mesh.md#families	Families on the bus; Soroban out	Soroban stays job-API only (reorg:Q6, K18).
+R78		NODE-MESH	current			yes	2026-10-05	node/mesh.md#intent-id	intent_id is the contract digest	
+R79		NODE-MESH	superseded	R95,R99		yes	2026-10-05		Acceptance policy authoritative in Odoo	
+R80		NODE-LANE	current			no	2026-10-05	node/submit-lanes.md#consumption-check	Consumption check before bump or resend	Topic NODE-MESH→NODE-LANE: rule governs every submit path (submit.rs/adapter), mesh §8.4 → submit-lanes.
+R81		NODE-MESH	current			no	2026-10-06	node/mesh.md#envelope	Envelope spec scaas-intent/1.2	String per R115; 1.3 UA body added by R316.
+R82		NODE-MESH	current			no	2026-10-06	node/mesh.md#numbers	Mesh numbers, all config	Amended by A2: chain.exclusive_ms 7000 and gossip numbers.
+R83		NODE-MESH	current			yes	2026-10-06	node/mesh.md#tests	Multi-process one-binary test topology	Fake Odoo replaced by fake job-API client (NI §13.1).
+R84		NODE-LANE	current			no	2026-10-06	node/submit-lanes.md#normalization	Normalize unbound relayer and feeRecipient	Topic NODE-MESH→NODE-LANE (submitter); amended by R100 (every origin).
+R85		NODE-MESH	current			no	2026-10-05	node/mesh.md#private-profile	Private rows served only by origin	
+R86		NODE-MESH	current			no	2026-10-06	node/mesh.md#acceptance	may_submit needs a registered token	Amended NI §13.1: node token table, admin API validation.
+MESH:I1		NODE-MESH	current		R74	yes	2026-10-05	node/mesh.md#exclusivity	Origin is in its own round-robin	Owner-confirmed clause already in R74 text.
+MESH:I2		NODE-MESH	current		R74	yes	2026-10-05	node/mesh.md#exclusivity	Own jobs published without exclusive	Owner-confirmed clause already in R74 text.
+MESH:I3		NODE-MESH	current		R74	yes	2026-10-05	node/mesh.md#exclusivity	Only queued jobs are published	Owner-confirmed clause already in R74 text.
+MESH:I4		NODE-MESH	current			yes	2026-10-05	node/mesh.md#acceptance	Missing policy row means forward only	
+R87		ARCH-POS	current			yes	2026-10-06	architecture.md#node-independence	The node is independent of any ERP	
+R88		NODE-STO	current			no	2026-10-06	node/store.md#one-store	One store always on, one owner	
+R89		NODE-JOB	current			no	2026-10-06	node/job-api.md#journal	One journal, node-computed digests	
+R90		NODE-JOB	current			yes	2026-10-06	node/job-api.md#namespaces	Namespaces are the tenant unit	Odoo route mapping sentence goes to the INT-ODOO example text.
+R91		NODE-JOB	current			yes	2026-10-06	node/job-api.md#idempotency	Idempotency key and payload hash	Odoo scope string goes to the INT-ODOO example text; tombstones bounded by R323.
+R92		NODE-JOB	current			no	2026-10-06	node/job-api.md#auth	Machine credentials: namespaced HMAC keys	
+R93		NODE-IDX	current			no	2026-10-06	node/indexer-feeds.md#feeds	Change feeds for jobs and events	
+R94		NODE-IDX	current			no	2026-10-06	node/indexer-feeds.md#event-items	Event feed items equal ingest arguments	
+R95		NODE-STO	current			yes	2026-10-06	node/store.md#config-authority	Node store is configuration authority	Amended by A2 §18.2 (identity, transport, gossip addrs toml-only); owner exception mesh_peer.url.
+R96		NODE-STO	current			no	2026-10-06	node/store.md#chain-state	Finality, pause, index cursor in node	
+R97	(claim)	NODE-JOB	current			no	2026-10-06	node/job-api.md#lease	Claim is a CAS inside one owner	Includes same-lane-keys-in-two-stores ban (§9.4).
+R97	(routing)	INT-ERP	current			no	2026-10-06	integration.md#node-routing	One node per company and chain	Company-to-node routing is client-side; node has no company notion (R90).
+R98	(node)	NODE-JOB	current			no	2026-10-06	node/job-api.md#cancel	Cancel is a node CAS	Tombstones bounded by R323.
+R98	(client)	INT-ERP	current			no	2026-10-06	integration.md#cancel	Client kills locally only if never pushed	
+R99		NODE-MESH	current			yes	2026-10-06	node/mesh.md#bus-scope	Bus scope arrives per job	Topic NODE-STO→NODE-MESH: per-job scope and node publication; policy tables cited in NODE-STO. Amended by A2 (public).
+R100		NODE-LANE	current		R84	no	2026-10-06	node/submit-lanes.md#normalization	Normalization applies to every origin	Restates R84 with the Odoo exception dropped; one id.
+R102		NODE-JOB	current			no	2026-10-06	node/job-api.md#lane-pinning	Relayer-bound jobs pinned to their lane	
+R103		NODE-JOB	current			no	2026-10-07	node/job-api.md#call-jobs	call jobs are a namespace capability	Amended by CR-PD-1(c) call table and reorg:Q1 rows; Odoo default is NI:I1.
+R104		NODE-JOB	current			no	2026-10-06	node/job-api.md#legacy-pull	Per-chain pull/push flag, then removal	
+R105		NODE-DEX	current			no	2026-10-06	node/dex-venue.md#book-store	DEX book lives in the node store	
+R106		NODE-ADM	current			yes	2026-10-06	node/admin-auth.md#modes	Admin auth: built-in users plus optional OIDC	A2 §18.2 ring→aws-lc-rs row applies to R106a text (K5).
+R106a	(oidc)	NODE-ADM	current			yes	2026-10-06	node/admin-auth.md#oidc	OIDC JWT validation rules	
+R106a	(ring)	NODE-ADM	superseded	R114		yes	2026-10-06		JWS verification on ring	K5: aws-lc-rs everywhere.
+R107		NODE-ADM	current			yes	2026-10-06	node/admin-auth.md#roles	Admin roles and no escalation	Amended by R322.
+R108		NODE-ADM	current			yes	2026-10-06	node/admin-auth.md#cli	Bootstrap and break-glass via host CLI	
+R109		NODE-ADM	current			no	2026-10-06	node/admin-auth.md#credential-separation	API keys and admin credentials never cross	
+R110	(audit)	NODE-ADM	current			no	2026-10-06	node/admin-auth.md#audit	Hash-chained audit log per mutation	
+R110	(store-loss)	INT-ERP	current			no	2026-10-06	integration.md#store-change	Client halts sync on store change	Client rule on feed store_id/restore_epoch/head_seq (R93).
+R111		NODE-STO	current			yes	2026-10-06	node/store.md#backends	SQLite, PostgreSQL or MySQL, storage only	
+R320		NODE-GW	current			no	2026-10-06	node/gateway.md#ua-register	Gateway call jobs only for UA registration	
+R321		NODE-LANE	current			no	2026-10-06	node/submit-lanes.md#batching	A batch is several jobs journaled together	Topic NODE-JOB→NODE-LANE (batching lives in submit-lanes, plan §1). PLANNED (TW2 T7).
+R322		NODE-ADM	current			no	2026-10-06	node/admin-auth.md#roles	Admin-user mutations never exceed caller	
+R323		NODE-JOB	current			no	2026-10-06	node/job-api.md#cancel	Cancel-by-origin tombstones bounded	
+R324		NODE-JOB	current			no	2026-10-06	node/job-api.md#token-subsets	Empty namespace token subset means none	
+R325		NODE-JOB	current			no	2026-10-06	node/job-api.md#call-jobs	Live-call uniqueness per namespace	
+R326		NODE-LANE	current			no	2026-10-06	node/submit-lanes.md#outer-tx	Outer transaction is a store row	
+R327		NODE-JOB	current			no	2026-10-06	node/job-api.md#intake	Intake authority re-checked in insert tx	
+R328		NODE-GW	current			no	2026-10-06	node/gateway.md#cors	Gateway CORS only with auth none	
+R340		NODE-LANE	current			no	2026-10-07	node/submit-lanes.md#cost-metering	Breaker meters what the lane pays	
+R341		NODE-LANE	current			no	2026-10-07	node/submit-lanes.md#retries	One retry after billed failure, attempt cap	
+R342		NODE-LANE	current			no	2026-10-07	node/submit-lanes.md#grief	Per-subject grief score, every family	
+R343		NODE-MESH	current			no	2026-10-07	node/mesh.md#decoders	Verify signatures before any chain call	
+R344		NODE-LANE	current			no	2026-10-07	node/submit-lanes.md#payload-fields	Signed fields read from the payload	
+R345		NODE-LANE	current			no	2026-10-07	node/submit-lanes.md#value-out	Value out per job capped	
+R346		NODE-LANE	current			no	2026-10-07	node/submit-lanes.md#deposits	Lane-funded deposits refunded or bounded	
+R347		NODE-LANE	current			no	2026-10-07	node/submit-lanes.md#adapter-journals	Adapter journals live in the store	
+R348		NODE-STO	current			yes	2026-10-07	node/store.md#immutable-programs	Node halts chains with upgradeable programs	Node half of CR-R3-11.
+R349		NODE-LANE	current			no	2026-10-07	node/submit-lanes.md#custody-keys	One custody key per family	
+NI:I1		NODE-JOB	open			no	2026-10-07	node/job-api.md#call-jobs	Migrated ERP namespace gets allow_call	Open, default applied (reorg:Q2, K21).
+NI:I2		NODE-STO	open			no	2026-10-07	node/store.md#chain-state	Paused chain accepts and holds jobs	Topic NODE-STO (R53/R96 chain state). Open, default applied (reorg:Q2, K21).
+NI:I3		NODE-JOB	open			no	2026-10-07	node/job-api.md#namespaces	Shared namespace via origin.scope	Open, default applied (reorg:Q2, K21).
+NI:I4		INT-ERP	open			no	2026-10-07	integration.md#sync-latency	Client status latency bounds	Topic INT-ERP: latency is the client push/sync cadence (R101). Open, default applied (reorg:Q2, K21).
+NI:I5		NODE-JOB	open			no	2026-10-07	node/job-api.md#cancel	Cancel of published job reports already sent	Open, default applied (reorg:Q2, K21).
+NI:I6		NODE-IDX	open			no	2026-10-07	node/indexer-feeds.md#event-items	Repeated entryRef handling on the feed	Topic NODE-IDX: whether the event feed flags repeats (TW2 T7). Open, default applied (reorg:Q2, K21).
+NI:I7		NODE-STO	open			no	2026-10-07	node/store.md#schema	Names chosen where sources gave none	Schema/config names; action_reset_event_cursor goes to the INT-ODOO example. Open, default applied (reorg:Q2, K21).
+NI:I8	(tombstones)	NODE-JOB	open			no	2026-10-07	node/job-api.md#cancel	Tombstone quota and rate defaults	Open, default applied (reorg:Q2, K21).
+NI:I8	(last-admin)	NODE-ADM	open			no	2026-10-07	node/admin-auth.md#roles	LAST_ADMIN counts built-in users only	Open, default applied (reorg:Q2, K21).
+NI:I8	(outer-tx)	NODE-LANE	open			no	2026-10-07	node/submit-lanes.md#outer-tx	outer_tx row for every signed tx	Open, default applied (reorg:Q2, K21).
+R112		NODE-GSP	current			yes	2026-10-06	node/gossip.md#scope	Gossip required alongside the pull bus	
+R113		NODE-GSP	current			yes	2026-10-06	node/gossip.md#transport	Selectable carriers; admitted peers PQ only	
+R114		NODE-GSP	current			yes	2026-10-06	node/gossip.md#transport	PQ key exchange via aws-lc-rs, classical identity	K5/K7: one crypto library node-wide.
+R115		NODE-GSP	current			yes	2026-10-06	node/gossip.md#names	Wire names and topics use scaas and chain_key	
+R116		NODE-GSP	current			no	2026-10-06	node/gossip.md#identity	One Ed25519 node key for all identities	
+R117		NODE-GSP	current			no	2026-10-06	node/gossip.md#wire	Gossip wire is bus JSON, content message-id	
+R118		NODE-GSP	current			no	2026-10-06	node/gossip.md#validation	Gossip validation pipeline and Reject rule	
+R119		NODE-GSP	current			no	2026-10-06	node/gossip.md#numbers	Peer scoring and limits	
+R120		NODE-GSP	current			yes	2026-10-06	node/gossip.md#discovery	Own Kademlia DHT with dial filter	
+R121		NODE-GSP	current			yes	2026-10-06	node/gossip.md#exclusivity	Exclusivity over gossip, automatic trust	
+R122		NODE-GSP	current			no	2026-10-06	node/gossip.md#hints	Landed hints only trigger a chain read	
+R123		NODE-GSP	current			no	2026-10-06	node/gossip.md#announce	Signed versioned announce	
+R124		NODE-DEX	current			yes	2026-10-06	node/dex-venue.md#gossip	DEX book gossip, two order modes	
+R125		NODE-GSP	current			no	2026-10-06	node/gossip.md#sync	Anti-entropy sync protocol	
+R126		NODE-GSP	current			yes	2026-10-06	node/gossip.md#crates	Gossip crates and resource budget	
+R127	(admin)	NODE-ADM	current			no	2026-10-06	node/admin-auth.md#routes	Gossip admin routes and columns	App screens part cited from CLI-APP node screens.
+R127	(metrics)	NODE-OPS	current			no	2026-10-06	node/ops.md#metrics	Gossip metrics	
+R128		NODE-DEX	current			yes	2026-10-06	node/dex-venue.md#home-trust	DEX homes trusted automatically	
+R159	(gateway)	NODE-GW	current			no	2026-10-06	node/gateway.md#routes	Gateway info route, CORS, error contract	
+R159	(serving)	NODE-ADM	current			no	2026-10-06	node/admin-auth.md#app-serving	App serving with CSP on admin listener	
+R160		NODE-ADM	current			no	2026-10-06	node/admin-auth.md#app-serving	App served only on admin listener	
+R178		NODE-GW	current			no	2026-10-06	node/gateway.md#errors	Stable gateway error contract	
+R189		NODE-SPN	current			yes	2026-10-07	node/sponsorship.md#policy	Sponsorship policy is a node store row	Rev 1.3 unsponsored = booked to namespace; door floor per profile with CR-PD-3 (K15).
+R190		NODE-SPN	current			no	2026-10-07	node/sponsorship.md#budgets	Budget unit, reservation and rate counters	
+R191		NODE-SPN	current			no	2026-10-06	node/sponsorship.md#admin	Sponsorship admin routes and audit	
+R194		NODE-SPN	current			no	2026-10-06	node/sponsorship.md#pool	SponsorshipPool opt-in contract, mesh fee-only	PLANNED-later.
+R214	(node)	NODE-DEX	current			yes	2026-10-06	node/dex-venue.md#managed-markets	Managed markets: home-bound, eligibility at intake	
+R214	(contract)	CTR-DEX	current			yes	2026-10-06	contracts/dex.md#managed-markets	Managed market venue contract and arbiter	OrderBookDex admin = venue multisig; regulated token arbitrates on chain.
+R230		NODE-OPS	current			no	2026-10-06	node/ops.md#metrics	Prometheus metrics, label allowlist	
+R231		NODE-OPS	current			yes	2026-10-06	node/ops.md#slos	SLOs evaluated outside the node	
+R232		NODE-OPS	current			no	2026-10-06	node/ops.md#severities	Three severities	
+R233		NODE-OPS	current			no	2026-10-06	node/ops.md#slos	W3B as the node measures it	OA defaults approved as stated (reorg:Q8, K20).
+R234		NODE-OPS	current			no	2026-10-06	node/ops.md#metrics	Job stage timing metric	OA defaults approved as stated (reorg:Q8, K20).
+R235		NODE-OPS	current			no	2026-10-06	node/ops.md#ops-watch	Ops watch for registered tokens	OA defaults approved as stated (reorg:Q8, K20).
+R236		NODE-OPS	current			no	2026-10-06	node/ops.md#traces	Traces without OpenTelemetry SDK	
+R237		NODE-OPS	current			no	2026-10-06	node/ops.md#logs	JSON logs, redaction, retention	OA defaults approved as stated (reorg:Q8, K20).
+R238		NODE-OPS	current			no	2026-10-06	node/ops.md#finops	FinOps measurement and usage_day	OA defaults approved as stated (reorg:Q8, K20).
+R239		NODE-RUN	current			no	2026-10-06	node/runbooks.md#raci	RACI roles	
+R240		NODE-RUN	current			no	2026-10-06	node/runbooks.md#backup-dr	Restore is fixed and starts paused	
+R241		NODE-RUN	current			no	2026-10-06	node/runbooks.md#backup-dr	CLI lane accept-nonce	
+R242		NODE-OPS	current			no	2026-10-06	node/ops.md#integrity	Integrity rechecks of index and audit	OA defaults approved as stated (reorg:Q8, K20).
+R243		NODE-RUN	current			no	2026-10-06	node/runbooks.md#backup-dr	DR drills scheduled and exported	
+R244		NODE-OPS	current			no	2026-10-06	node/ops.md#capacity	Capacity rating and label caps	OA defaults approved as stated (reorg:Q8, K20).
+R245		NODE-RUN	current			no	2026-10-06	node/runbooks.md#incidents	Incident command by accountable role	
+R246		NODE-OPS	current			yes	2026-10-06	node/ops.md#denylist	Subject denylist, operator choice	
+R247		NODE-OPS	current			yes	2026-10-06	node/ops.md#scope	Operators independent; ops are recommendations	
+R316		NODE-MESH	current			no	2026-10-06	node/mesh.md#envelope	UA intents in scaas-intent/1.3	Topic NODE-GSP→NODE-MESH: envelope version/body rule (node/mesh#envelope).
+R317		NODE-GSP	current			no	2026-10-06	node/gossip.md#validation	Native UA verification before gossip	
+RS5-2		NODE-DEX	superseded	R105		no	2026-10-03		DEX book persisted in Odoo	
+RS5-5		NODE-DEX	current			no	2026-10-03	node/dex-venue.md#routes	No WebSocket; clients poll	
+RS5-8		NODE-DEX	current			no	2026-10-06	node/dex-venue.md#watcher	DEX watcher has its own cursor	Amended by R105: watcher writes dex_range items, advances dex_cursor; no indexer key to Odoo.
+RS5-9		NODE-DEX	superseded	R124		no	2026-10-03		Book accepts only own-relayer orders	DEX §header table: now per-market default (home-bound).
+RS5-11		NODE-DEX	superseded	R102		no	2026-10-03		DEX chains run one lane only	
+RS5-12		NODE-DEX	current			no	2026-10-07	node/dex-venue.md#matching	Rounding dust: skip and remove dust makers	
+RS5-16		NODE-DEX	current			no	2026-10-07	node/dex-venue.md#matching	Committed balance includes unsettled fills	
+RS5-17		NODE-DEX	current			no	2026-10-07	node/dex-venue.md#markets	Re-check on-chain market every poll	
+RS5-18		NODE-DEX	current			no	2026-10-07	node/dex-venue.md#matching	IOC single maker on Move/Solana	
+SCaaS:N1		NODE-GEN	current			no	2026-10-07	node/README.md#invariants	Node holds no subject funds or keys	
+SCaaS:N2		NODE-GEN	current			no	2026-10-07	node/README.md#invariants	No broadcast without committed journal	
+SCaaS:N3		NODE-GEN	current			no	2026-10-07	node/README.md#invariants	No outer nonce abandoned	
+SCaaS:N4		NODE-GEN	current			no	2026-10-07	node/README.md#invariants	One live outer tx per intent	
+SCaaS:N5		NODE-GEN	current			no	2026-10-07	node/README.md#invariants	No bump after consumption	
+SCaaS:N6		NODE-GEN	current			no	2026-10-07	node/README.md#invariants	Never dead because landed elsewhere	
+SCaaS:N7		NODE-GEN	current			no	2026-10-07	node/README.md#invariants	Unbound wire values never submitted	
+SCaaS:N8		NODE-GEN	current			no	2026-10-07	node/README.md#invariants	Nothing booked before finality	
+SCaaS:N9		NODE-GEN	current			no	2026-10-07	node/README.md#invariants	Breakers never block indexing or rescues	
+SCaaS:N10		NODE-GEN	current			no	2026-10-07	node/README.md#invariants	One owner process per store	
+SCaaS:N11		NODE-GEN	current			no	2026-10-07	node/README.md#invariants	Every paid outer tx metered	
+SCaaS:N12		NODE-GEN	current			no	2026-10-07	node/README.md#invariants	Signed fields read from payload	
+SCaaS:N13		NODE-GEN	current			no	2026-10-07	node/README.md#invariants	Value out and deposits capped	
+SCaaS:N14		NODE-GEN	current			no	2026-10-07	node/README.md#invariants	Intents signature-checked before chain calls	
+SCaaS:N15		NODE-GEN	current			no	2026-10-07	node/README.md#invariants	Adapter restart state in store	
+SCaaS:N16		NODE-GEN	current			no	2026-10-07	node/README.md#invariants	No upgradeable program, one key per family	
+owner:2026-10-06:families		ARCH-POS	current			yes	2026-10-06	architecture.md#families	Family taxonomy	
+owner:2026-10-06:market-neutral		ARCH-POS	current			yes	2026-10-06	architecture.md#market-neutral	Market-neutral data protection	
+owner:2026-10-06:naming		ARCH-POS	current			yes	2026-10-06	architecture.md#naming	scaas names everywhere	
+owner:2026-10-06:node-independent		ARCH-POS	current		R87	yes	2026-10-06	architecture.md#node-independence	The node is independent of any ERP	Decision-list item restated by R87 (owner).
+owner:2026-10-06:precedence		ARCH-POS	current			yes	2026-10-07	architecture.md#precedence	Source precedence: owner rulings first	Amended per K14: SCaaS.md level removed; owner rulings > component docs > code (byte formats) > history > research. Home docs/README.
+owner:2026-10-07:pqz-metatx		CTR-PQZ	current		R284	yes	2026-10-07	contracts/pq-zether.md#metatx	PqzToken implements IERC20MetaTx	Topic ARCH-POS→CTR-PQZ: same rule as PQZ R284 rev 1.4.
