@@ -64,8 +64,8 @@ R6-8		NET-HED-06	current		networks/hedera.md#wrappers	no	2026-10-07	v1 HTS wrapp
 R6-9		NET-HED-07	current		networks/hedera.md#hts	no	2026-10-07	Wallets warn on HTS issuer keys	history/specs/2026-10-03-net-hedera.md:215		
 R6-10		NET-HED-12	current		networks/hedera.md#relayer	no	2026-10-07	HederaAdapter reports tx_fee and lane_balance	history/specs/2026-10-03-net-hedera.md:307		applies R340
 R6-11		NET-HED-13	current		networks/hedera.md#relayer	no	2026-10-07	Mesh sig_kind hedera_ed25519 verified locally	history/specs/2026-10-03-net-hedera.md:308		applies R343 (NODE-MESH)
-R7		INT-ODOO-06	current		integration.md#example-odoo-addons	no	2026-10-03	No idempotency addon; natural UNIQUE keys	history/specs/2026-10-03-blockchain-payments-design.md:682		
-R8		INT-ODOO-07	current		integration.md#example-odoo-addons	no	2026-10-03	Odoo addon split, no account addon	history/specs/2026-10-03-blockchain-payments-design.md:685		DEX addon added later by DEX spec
+R7		INT-ODOO-06	current		integration-odoo-example.md#example-odoo-addons	no	2026-10-03	No idempotency addon; natural UNIQUE keys	history/specs/2026-10-03-blockchain-payments-design.md:682		
+R8		INT-ODOO-07	current		integration-odoo-example.md#example-odoo-addons	no	2026-10-03	Odoo addon split, no account addon	history/specs/2026-10-03-blockchain-payments-design.md:685		DEX addon added later by DEX spec
 R8-1		NET-SOR-02	current		networks/soroban.md#payload	no	2026-10-03	Ledger expiry computed without RPC	history/specs/2026-10-03-net-soroban.md:64		
 R8-2		NET-SOR-03	current		networks/soroban.md#limitations	no	2026-10-07	Soroban guardian recovery is a seam	history/specs/2026-10-03-net-soroban.md:96		gap stream per CR-R3-6
 R8-3		NET-SOR-05	current		networks/soroban.md#dex	no	2026-10-03	One signature settles once	history/specs/2026-10-03-net-soroban.md:137		
@@ -114,13 +114,13 @@ R10-17	(cancel,fees)	NET-TON-19	current		networks/ton.md#dex	no	2026-10-07	DEX k
 R11	(gate)	NODE-IDX-02	current		node/indexer-feeds.md#finality-gate	no	2026-10-06	Node decides finality: depth or tag	history/specs/2026-10-03-blockchain-payments-design.md:699		Finality modes stay; config lives in node store (R96).
 R11	(quorum)	NODE-IDX-80	superseded	NODE-IDX-01		no	2026-10-03	Quorum on one block hash	history/specs/2026-10-03-blockchain-payments-design.md:699	CR-PD-2	PD §15.3: one-hash quorum replaced by event-set quorum.
 R12		NODE-IDX-03	current		node/indexer-feeds.md#no-reorg-after-finality	no	2026-10-03	No reorg handling after hard finality	history/specs/2026-10-03-blockchain-payments-design.md:703		
-R13		INT-ODOO-08	current		integration.md#example-odoo-verify	no	2026-10-03	Odoo verifies ECDSA signatures itself	history/specs/2026-10-03-blockchain-payments-design.md:706		narrowed by R27
-R14		INT-ODOO-09	current		integration.md#example-odoo-portal	no	2026-10-03	Portal pay button calls model facade	history/specs/2026-10-03-blockchain-payments-design.md:712		
+R13		INT-ODOO-08	current		integration-odoo-example.md#example-odoo-verify	no	2026-10-03	Odoo verifies ECDSA signatures itself	history/specs/2026-10-03-blockchain-payments-design.md:706		narrowed by R27
+R14		INT-ODOO-09	current		integration-odoo-example.md#example-odoo-portal	no	2026-10-03	Portal pay button calls model facade	history/specs/2026-10-03-blockchain-payments-design.md:712		
 R15		NODE-LANE-03	current		node/submit-lanes.md#signer	no	2026-10-03	Outer tx keys behind Signer trait	history/specs/2026-10-03-blockchain-payments-design.md:715		
 R16		NODE-STO-80	superseded	CTR-DEX-01, NODE-DEX-01, INT-ERP-12, NODE-STO-04, NODE-DEX-14		no	2026-10-03	In-memory gateway queue and DEX book	history/specs/2026-10-03-blockchain-payments-design.md:718	R35,R88,R105	
 R17		INT-ERP-07	current		integration.md#currency	no	2026-10-03	No FX: token currency equals order currency	history/specs/2026-10-03-blockchain-payments-design.md:730		decided INT-ERP
 R18		NODE-LANE-04	current		node/submit-lanes.md#nonce-plan	no	2026-10-03	Never abandon an outer nonce	history/specs/2026-10-03-blockchain-payments-design.md:720		
-R19		INT-ODOO-10	current		integration.md#example-odoo-portal	no	2026-10-03	Portal pays confirmed orders only	history/specs/2026-10-03-blockchain-payments-design.md:723		
+R19		INT-ODOO-10	current		integration-odoo-example.md#example-odoo-portal	no	2026-10-03	Portal pays confirmed orders only	history/specs/2026-10-03-blockchain-payments-design.md:723		
 R20		NODE-STO-03	current		node/store.md#config-authority	no	2026-10-06	RPC endpoints only in node config	history/specs/2026-10-03-blockchain-payments-design.md:727		PD §15.3: kept, restated by NI R95 toml-only list.
 R21		CLI-SGN-06	current		clients/signers-clientkeys.md#connectors	no	2026-10-03	WalletConnect is a seam behind a flag	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:192		
 R22		INT-ERP-01	current		integration.md#receiving-wallets	no	2026-10-03	24 h cooling-off for new receiving wallets	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:193		
@@ -129,7 +129,7 @@ R24		INT-ERP-02	current		integration.md#payer-wallets	no	2026-10-03	Custodial pa
 R25		CTR-ACC-06	current		contracts/accounts-mandates.md#mandatewallet	no	2026-10-07	Delegated payment uses MandateWallet, no allowance	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:196		Amended by CR-ADW-1 (revoke epoch) and CR-ADW-2 (Hedera ED25519 owners)
 R26		CTR-TOK-01	current		contracts/token-wrappers.md#allowance-lockdown	yes	2026-10-03	Spender and transferFrom caller must be contracts	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:198		Owner ruling (ADW §A); narrowed by R63: HTS allowances only through wrappers
 R27		INT-ERP-03	current		integration.md#families	no	2026-10-03	Contract wallets: ERP defers to node simulation	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:200		
-R28		INT-ODOO-05	current		integration.md#example-odoo-addons	no	2026-10-03	Payment addon depends on account_payment	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:202		Odoo-specific dependency
+R28		INT-ODOO-05	current		integration-odoo-example.md#example-odoo-addons	no	2026-10-03	Payment addon depends on account_payment	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:202		Odoo-specific dependency
 R29		INT-ERP-04	current		integration.md#mandates	no	2026-10-03	MandateWallet deployed outside the ERP	history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:204		
 R30		NET-ALL-02	current		networks/README.md#r30-path	yes	2026-10-03	Contract-level meta-tx default on every network	history/specs/2026-10-03-blockchain-round3-design.md:517		
 R31	(account)	CTR-ACC-08	current		contracts/accounts-mandates.md#passkeys	yes	2026-10-07	Passkey subjects, Merkle batch, account key lifecycle	history/specs/2026-10-03-blockchain-round3-design.md:519		Amended by CR-R3-1, CR-R3-6; salt/gas/encoding details now RS4-1, RS4-10, RS4-3
@@ -168,7 +168,7 @@ R53		NODE-STO-02	current		node/store.md#chain-state	no	2026-10-06	paused blocks 
 R54		NODE-GW-02	current		node/gateway.md#auth	no	2026-10-06	Gateway auth bearer or hmac	history/specs/2026-10-03-blockchain-round3-design.md:527		Extended by R92 key ids for the job API.
 R55		NODE-LANE-05	current		node/submit-lanes.md#breaker	no	2026-10-03	Circuit breakers never block indexing	history/specs/2026-10-03-blockchain-round3-design.md:528		Metering refined by R340.
 R56		INT-ERP-09	current		integration.md#accounting	no	2026-10-06	Journal per (company, token); drift A and C	history/specs/2026-10-03-blockchain-round3-design.md:529		amended by R94 (balances items) and PUT /v1/watch
-R57		INT-ODOO-11	current		integration.md#example-odoo-platform-company	no	2026-10-03	One receiving-company seam; platform company	history/specs/2026-10-03-blockchain-round3-design.md:530		Odoo method/parameter names
+R57		INT-ODOO-11	current		integration-odoo-example.md#example-odoo-platform-company	no	2026-10-03	One receiving-company seam; platform company	history/specs/2026-10-03-blockchain-round3-design.md:530		Odoo method/parameter names
 R58	(adapter)	NODE-LANE-06	current		node/submit-lanes.md#adapters	no	2026-10-03	ChainAdapter and per-lane runner	history/specs/2026-10-03-blockchain-round3-design.md:531		Built trait in scaas-node is the reference (L6).
 R58	(family-enum)	NODE-LANE-80	superseded	ARCH-POS-02		no	2026-10-03	Six-member Family enum	history/specs/2026-10-03-blockchain-round3-design.md:531	owner:2026-10-06:families	
 R59		NODE-LANE-07	current		node/submit-lanes.md#signer	no	2026-10-03	Local secp256k1/ed25519 signer, KMS seam	history/specs/2026-10-03-blockchain-round3-design.md:532		
@@ -432,7 +432,7 @@ R314		NET-ALL-20	current		networks/README.md#ua-registries	yes	2026-10-07	Per-fa
 R315		NET-ALL-21	current		networks/README.md#ua-passkey-ids	yes	2026-10-07	Non-EVM passkey owners = UA id, URN only	history/specs/2026-10-06-universal-account-design.md:311		owner accepted UA Q13 default; replaces Cosmos R9-1 and Solana owner hash
 R316		NODE-MESH-18	current		node/mesh.md#envelope	no	2026-10-06	UA intents in scaas-intent/1.3	history/specs/2026-10-06-universal-account-design.md:320		Topic NODE-GSP→NODE-MESH: envelope version/body rule (node/mesh#envelope).
 R317		NODE-GSP-15	current		node/gossip.md#validation	no	2026-10-06	Native UA verification before gossip	history/specs/2026-10-06-universal-account-design.md:327		
-R318		INT-ODOO-13	current		integration.md#example-odoo-ua	no	2026-10-06	Odoo stores UAs as addresses	history/specs/2026-10-06-universal-account-design.md:334		
+R318		INT-ODOO-13	current		integration-odoo-example.md#example-odoo-ua	no	2026-10-06	Odoo stores UAs as addresses	history/specs/2026-10-06-universal-account-design.md:334		
 R320		NODE-GW-03	current		node/gateway.md#ua-register	no	2026-10-06	Gateway call jobs only for UA registration	history/specs/2026-10-06-node-independence-design.md:137		
 R321		NODE-LANE-11	current		node/submit-lanes.md#batching	no	2026-10-06	A batch is several jobs journaled together	history/specs/2026-10-06-node-independence-design.md:138		Topic NODE-JOB→NODE-LANE (batching lives in submit-lanes, plan §1). PLANNED (TW2 T7).
 R322		NODE-ADM-08	current		node/admin-auth.md#roles	no	2026-10-06	Admin-user mutations never exceed caller	history/specs/2026-10-06-node-independence-design.md:139		
@@ -485,19 +485,19 @@ RS4-2		NET-ALL-04	current		networks/README.md#webauthn	no	2026-10-03	One bounded
 RS4-3		CTR-ACC-02	current		contracts/accounts-mandates.md#signature-encoding	no	2026-10-03	Signature is keyIndex, Merkle proof, sig	history/plans/2026-10-03-r3-passkey-seed.md:19		
 RS4-4		CTR-ACC-03	current		contracts/accounts-mandates.md#recovery	no	2026-10-03	Guardian recovery adds a key after two days	history/plans/2026-10-03-r3-passkey-seed.md:23		
 RS4-5		CTR-ACC-04	current		contracts/accounts-mandates.md#signcount	no	2026-10-03	Authenticator signCount is not checked	history/plans/2026-10-03-r3-passkey-seed.md:27		
-RS4-6		INT-ODOO-01	current		integration.md#example-odoo-subject-account	no	2026-10-06	Deploy job precedes pay via prerequisite	history/plans/2026-10-03-r3-passkey-seed.md:28		amended: push job API (R87) replaces relay_poll
-RS4-7		INT-ODOO-02	current		integration.md#example-odoo-subject-account	no	2026-10-03	Owner-call nonce from mined jobs	history/plans/2026-10-03-r3-passkey-seed.md:31		
+RS4-6		INT-ODOO-01	current		integration-odoo-example.md#example-odoo-subject-account	no	2026-10-06	Deploy job precedes pay via prerequisite	history/plans/2026-10-03-r3-passkey-seed.md:28		amended: push job API (R87) replaces relay_poll
+RS4-7		INT-ODOO-02	current		integration-odoo-example.md#example-odoo-subject-account	no	2026-10-03	Owner-call nonce from mined jobs	history/plans/2026-10-03-r3-passkey-seed.md:31		
 RS4-8	(scrypt)	CLI-SGN-80	superseded	CLI-SGN-21		no	2026-10-03	Vault PIN scrypt N=2^15	history/plans/2026-10-03-r3-passkey-seed.md:33	R259	via RS4-14 (merged into R259)
 RS4-8	(vault)	CLI-SGN-02	current		clients/signers-clientkeys.md#vault	no	2026-10-03	Seed vault DEK with passphrase and PRF envelopes	history/plans/2026-10-03-r3-passkey-seed.md:33		wrapped by v2 (R255)
 RS4-9	(keys)	CLI-SGN-03	current		clients/signers-clientkeys.md#zether-keys	no	2026-10-03	Zether keys derived in clientkeys JS	history/plans/2026-10-03-r3-passkey-seed.md:35		
 RS4-9	(pop)	CLI-SGN-81	superseded	CTR-UA-07		no	2026-10-03	Zether PoP bound to subject account	history/plans/2026-10-03-r3-passkey-seed.md:35	R295	UA R294–R297 like R33(pop)
 RS4-10		CTR-ACC-05	current		contracts/accounts-mandates.md#erc1271-cap	no	2026-10-03	400k ERC-1271 cap only for SubjectAccount clones	history/plans/2026-10-03-r3-passkey-seed.md:43		
 RS4-11		CLI-SGN-04	current		clients/signers-clientkeys.md#passkeys	no	2026-10-03	Random WebAuthn user handle per passkey	history/plans/2026-10-03-r3-passkey-seed.md:48		
-RS4-12		INT-ODOO-03	current		integration.md#example-odoo-subject-account	no	2026-10-03	First key registered with HMAC challenge	history/plans/2026-10-03-r3-passkey-seed.md:51		
+RS4-12		INT-ODOO-03	current		integration-odoo-example.md#example-odoo-subject-account	no	2026-10-03	First key registered with HMAC challenge	history/plans/2026-10-03-r3-passkey-seed.md:51		
 RS4-13		CLI-SGN-05	current		clients/signers-clientkeys.md#signing-review	no	2026-10-03	Client rebuilds operation before signing	history/plans/2026-10-03-r3-passkey-seed.md:57		generalised by R267, token pin CR-ADW-4
 RS4-14		CLI-SGN-21	current		clients/signers-clientkeys.md#vault	no	2026-10-06	Passphrase ≥ 8 chars, scrypt N=2^17	history/plans/2026-10-03-r3-passkey-seed.md:61		same rule as R259
 RS4-15		CLI-SGN-82	superseded	CLI-SGN-19		no	2026-10-03	Per-subject localStorage vault	history/plans/2026-10-03-r3-passkey-seed.md:65	R257	storage moved to IndexedDB vault:<id> with tombstone; no-silent-overwrite kept in R257
-RS4-16		INT-ODOO-04	current		integration.md#example-odoo-subject-account	no	2026-10-03	Deploy job only for payer own account	history/plans/2026-10-03-r3-passkey-seed.md:67		
+RS4-16		INT-ODOO-04	current		integration-odoo-example.md#example-odoo-subject-account	no	2026-10-03	Deploy job only for payer own account	history/plans/2026-10-03-r3-passkey-seed.md:67		
 RS5-1		CTR-DEX-03	current		contracts/dex.md#admin	no	2026-10-03	Immutable admin sets markets; fee capped	history/specs/2026-10-03-dex-design.md:398		
 RS5-2		NODE-DEX-80	superseded	NODE-DEX-14		no	2026-10-03	DEX book persisted in Odoo	history/specs/2026-10-03-dex-design.md:13	R105	
 RS5-3		CTR-DEX-04	current		contracts/dex.md#ioc	no	2026-10-07	EVM closes IOC remainder at settle	history/specs/2026-10-03-dex-design.md:402		Heuristic said superseded: struck text is the rev 1.1 correction of itself; Move/Solana in RS5-18
@@ -520,7 +520,7 @@ RS5-16		NODE-DEX-07	current		node/dex-venue.md#matching	no	2026-10-07	Committed 
 RS5-17		NODE-DEX-08	current		node/dex-venue.md#markets	no	2026-10-07	Re-check on-chain market every poll	history/specs/2026-10-03-dex-design.md:444		
 RS5-18		NODE-DEX-09	current		node/dex-venue.md#matching	no	2026-10-07	IOC single maker on Move/Solana	history/specs/2026-10-03-dex-design.md:446		
 RS5-19		CTR-DEX-10	current		contracts/dex.md#min-nonce-cap	no	2026-10-07	min_nonce capped by family word width	history/specs/2026-10-03-dex-design.md:448		
-RS5-20	(odoo-book)	INT-ODOO-12	current		integration.md#example-odoo-dex	no	2026-10-07	Late Matched after restore debits Odoo book	history/specs/2026-10-03-dex-design.md:449		transitional BUILT Odoo-held book
+RS5-20	(odoo-book)	INT-ODOO-12	current		integration-odoo-example.md#example-odoo-dex	no	2026-10-07	Late Matched after restore debits Odoo book	history/specs/2026-10-03-dex-design.md:449		transitional BUILT Odoo-held book
 RS5-20	(r105)	NODE-DEX-10	current		node/dex-venue.md#persistence	no	2026-10-07	Late settled trade debits restored order	history/specs/2026-10-03-dex-design.md:449		R105 store-backed venue half
 RS5-21		CTR-DEX-11	current		contracts/dex.md#fee-round-up	no	2026-10-07	DEX fee per fill rounds up	history/specs/2026-10-03-dex-design.md:455		
 RS7-1		NET-SUI-03	current		networks/sui.md#objects	no	2026-10-03	Account and Registry are derived objects	history/specs/2026-10-03-net-sui.md:272		
@@ -634,7 +634,7 @@ UA:Q14		CTR-UA-21	current		contracts/universal-account.md#holder-binding	yes	202
 UD:§1:custody		NODE-LANE-03	current		node/submit-lanes.md#signer	yes	2026-08-30	Pluggable custody chosen at deploy	research/_USER-DECISIONS.md:43		R15 Signer trait as custody seam; ADW §D calls it settled; SCaaS §9.1 custody axes.
 UD:§1:eip1776		NET-ALL-02	current		networks/README.md#r30-path	yes	2026-08-30	Contract-level meta-tx, no ERC-4337	research/_USER-DECISIONS.md:40		R30 makes contract meta-tx the default path; SCaaS §5.1: no 4337 dependency. The EIP-1776 name appears in no spec.
 UD:§1:first-chain		NET-EVM-80	superseded	NET-EVM-03		yes	2026-08-30	First chain Gnosis, then Celo	research/_USER-DECISIONS.md:41	UD:§16	Replaced by private chain first (UD:§16).
-UD:§1:independent-addon		INT-ODOO-07	current		integration.md#example-odoo-addons	yes	2026-08-30	Blockchain addon never depends on DMS	research/_USER-DECISIONS.md:44		R8 addon split; generalized by R87 (node independent of any ERP).
+UD:§1:independent-addon		INT-ODOO-07	current		integration-odoo-example.md#example-odoo-addons	yes	2026-08-30	Blockchain addon never depends on DMS	research/_USER-DECISIONS.md:44		R8 addon split; generalized by R87 (node independent of any ERP).
 UD:§1:legal		ARCH-POS-81	superseded	ARCH-POS-04		yes	2026-08-30	Legal deferred to a separate chapter	research/_USER-DECISIONS.md:47	owner:2026-10-06:market-neutral	Market-neutral rule: no market-specific law in the docs.
 UD:§1:payment-mode		INT-ERP-27	current		integration.md#payment-modes	yes	2026-08-30	Payment mode is configuration, not hard-coded	research/_USER-DECISIONS.md:45		Mode numbers from blockchain.md; SCaaS §5.9 payer-flexibility table states the modes without a ruling id.
 UD:§1:private-chain		CTR-ZTH-27	open		contracts/zether.md#chains	yes	2026-08-30	Zether runs on the private chain first	research/_USER-DECISIONS.md:42		Private chain is in scope (7622), but RS2-1 limits classical Zether to 31337/1337; owner gate Z3 / reorg:Q5 leaves it open.
@@ -672,7 +672,7 @@ UD:§15:D1		CTR-ZTH-89	superseded	CTR-ZTH-01		yes	2026-08-30	Curve D1 = bls12_38
 UD:§15:D2		CTR-ZTH-01	current		contracts/zether.md#scope	yes	2026-08-30	Freeze Zether struct with D1	research/_USER-DECISIONS.md:860		Statement and transcript are byte-exact in ZD under R34.
 UD:§15:D7		CLI-SGN-87	superseded	CLI-SGN-32		yes	2026-08-30	Custody tier A/B, HSM or MPC	research/_USER-DECISIONS.md:861	UD:§23.11	B2B Zether optional, so A/B is no longer mandatory; FIPS 140-2 → 140-3 (SCaaS §15.3); KMS/HSM PLANNED (SCaaS §9.1).
 UD:§15:D12		ARCH-POS-06	current		architecture.md#use-cases	yes	2026-08-30	First wave covers all three use cases	research/_USER-DECISIONS.md:862		Same rule as UD:§1:use-cases.
-UD:§15:D14		INT-ODOO-14	current		integration.md#odoo-key-registration	yes	2026-08-30	Key registration is not the addon's job	research/_USER-DECISIONS.md:869		Addon keeps generic accounts linked to partners; outlet mapping in a bridge; operator sets issuance policy. No spec ruling (UA R320 is the node route).
+UD:§15:D14		INT-ODOO-14	current		integration-odoo-example.md#odoo-key-registration	yes	2026-08-30	Key registration is not the addon's job	research/_USER-DECISIONS.md:869		Addon keeps generic accounts linked to partners; outlet mapping in a bridge; operator sets issuance policy. No spec ruling (UA R320 is the node route).
 UD:§15:D17		CTR-ZTH-90	superseded	CTR-ZTH-01		yes	2026-08-30	Keep implicit rollOver plus public entry points	research/_USER-DECISIONS.md:864	UD:§25	UD:§25 keeps rollOverPublic/Batch, adds accSeq and OWNER_ONLY.
 UD:§16		NET-EVM-03	current		networks/evm.md#private-chain	yes	2026-08-30	First target chain is the private PoA chain	research/_USER-DECISIONS.md:889		Chain id and parameters now owner:2026-10-07:chain-7622 (7622, Fusaka); public chains after.
 UD:§16:gas-limit		NET-EVM-81	superseded	CTR-PQZ-11		yes	2026-08-30	Raise the private chain block gas limit	research/_USER-DECISIONS.md:904	R280	R280 sets TargetBlockGasLimit 80 M on 7622 (UD asked for 50 M).
@@ -740,7 +740,7 @@ canon:D1		CTR-ZTH-01	current		contracts/zether.md#scope	yes	2026-08-30	Canon D1:
 canon:D2		CTR-ZTH-01	current		contracts/zether.md#scope	yes	2026-08-30	Canon D2: freeze Zether struct	research/_USER-DECISIONS.md:860		Current form UD:§15:D2.
 canon:D7		CLI-SGN-32	current		clients/signers-clientkeys.md#organization-custody	yes	2026-08-30	Canon D7: custody tier	research/_USER-DECISIONS.md:861		Current form: oracle lane only when an organization holds Zether (UD:§23.11).
 canon:D12		ARCH-POS-06	current		architecture.md#use-cases	yes	2026-08-30	Canon D12: first-wave scope	research/_USER-DECISIONS.md:862		Current form UD:§1:use-cases.
-canon:D14		INT-ODOO-14	current		integration.md#odoo-key-registration	yes	2026-08-30	Canon D14: key registration onboarding	research/_USER-DECISIONS.md:869		Current form UD:§15:D14.
+canon:D14		INT-ODOO-14	current		integration-odoo-example.md#odoo-key-registration	yes	2026-08-30	Canon D14: key registration onboarding	research/_USER-DECISIONS.md:869		Current form UD:§15:D14.
 canon:D17		CTR-ZTH-01	current		contracts/zether.md#scope	yes	2026-09-03	Canon D17: rollOver authorization	research/_USER-DECISIONS.md:864		Current form UD:§25 (PUBLIC default, OWNER_ONLY opt-in).
 net-aptos:L1		NET-ALL-06	current		networks/README.md#design-lessons	no	2026-10-07	Indexer filters registered contracts; empty stalls	history/specs/2026-10-04-net-aptos.md:37		token list from node store (R95/R324)
 net-aptos:L2		NET-ALL-07	current		networks/README.md#design-lessons	no	2026-10-04	e2e fakes return real token ids	history/specs/2026-10-04-net-aptos.md:38		fake job-API client (NI)
