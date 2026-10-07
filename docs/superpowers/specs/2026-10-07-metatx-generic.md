@@ -36,7 +36,7 @@ have no common naming.
 | A7 | DEX without maker allowances | **Both paths** (MG-8): token-verified signed orders for resting orders, and pull-into-the-DEX-then-refund legs for immediate orders — each in one call with one taker and many makers, as in the owner's `ERC1776Dex` |
 | A8 | One base | Fold everything into one base named **`ERC20MetaTx`**; delete the v1 line |
 
-Still open: §7 (Q1, Q2, Q3, Q4).
+Open questions: §7 (defaults applied, owner may override).
 
 ## 3. Design
 
@@ -232,9 +232,12 @@ forwarder; non-EVM families (§7, Q4).
    spoofing and nesting tests, EOA-approve refusal, DEX one-taker-many-makers on both paths, domain-with-salt KATs.
 3. Node, clientkeys, app and the ERP connector follow; vectors regenerated.
 
-## 7. Open questions for the owner
+## 7. Open questions — defaults applied
 
-| # | Question | Recommendation |
+The owner said "tiếp tục" (continue) on 2026-10-07 without choosing; the recommendations below are applied as
+**defaults** and can still be overridden before the fold.
+
+| # | Question | Default applied |
 |---|---|---|
 | Q1 | Add `token` (and `chainId`/`chain_uid`) to the signed struct, so a payload names its own chain and contract? | No: the domain already binds them and the node routes by the envelope (`chain_key`, contract) and verifies the digest; a field adds self-description only |
 | Q2 | Meaning of `to`/`value` when `data` is not empty (MG-5) | `value` = declared fee basis, equal to the call's amount for value-moving selectors; `to` = declared counterparty, equal to the call's recipient where it has one, else 0 |
