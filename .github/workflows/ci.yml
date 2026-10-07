@@ -1,14 +1,15 @@
 # R52 (GA 2.1#4): contracts and the relay node. Mirrors the local commands:
 #   smartcontracts/evm: forge test; FOUNDRY_PROFILE=private7622 forge build
 #   scaas-node:    cargo test; cargo clippy --all-targets -- -D warnings; cargo test --test e2e -- --ignored
+#   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check
 name: scaas-ci
 
 on:
   pull_request:
-    paths: ['smartcontracts/**', 'scaas-node/**', '.github/workflows/ci.yml']
+    paths: ['smartcontracts/**', 'scaas-node/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', '.github/workflows/ci.yml']
   push:
     branches: [main]
-    paths: ['smartcontracts/**', 'scaas-node/**', '.github/workflows/ci.yml']
+    paths: ['smartcontracts/**', 'scaas-node/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', '.github/workflows/ci.yml']
 
 env:
   OZ_TAG: v5.2.0
@@ -58,3 +59,14 @@ jobs:
         run: cargo test
       - name: e2e on anvil
         run: cargo test --test e2e -- --ignored --test-threads=1
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: checker self-test
+        run: python3 scripts/test_docs_check.py
+      - name: register, links, lint (C1-C10)
+        run: python3 scripts/docs_check.py check
+      - name: fact ledger
+        run: python3 scripts/docs_check.py facts check

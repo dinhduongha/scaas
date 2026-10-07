@@ -1,6 +1,37 @@
 # HANDOFF — scaas
 
-## Shutdown 2026-10-07 — read this first
+## Docs reorg 2026-10-07 — read this first
+
+The specs, `SCaaS.md` and `integration.md` were replaced by one set of self-contained component docs (plan
+`docs/superpowers/plans/2026-10-07-docs-reorg.md`, tag `docs-pre-reorg` = state before). **Reading order:**
+
+1. [`docs/README.md`](docs/README.md) — map, precedence (owner rulings > component docs > code > history > research),
+   status tags, id scheme.
+2. [`docs/SCaaS-v2.md`](docs/SCaaS-v2.md) — product introduction.
+3. [`docs/architecture.md`](docs/architecture.md) — system overview.
+4. Component docs for the area you touch: `docs/node/`, `docs/contracts/`, `docs/networks/`, `docs/clients/`,
+   `docs/integration.md` (+ `integration-odoo-example.md`).
+5. [`docs/decisions.md`](docs/decisions.md) — every ruling (`<AREA>-<TOPIC>-NN`), why, and the alias index. Old ids in
+   code comments (`R91`, `RS5-9`, `CR-PD-1`, `UD:§23`) stay valid: `python3 scripts/docs_check.py resolve <id>`.
+   Section refs in code (`NI §5.2`, `TW2 §7`) point into the frozen copies in `docs/history/specs/` (abbreviations:
+   `docs/history/README.md`).
+
+Frozen: `docs/history/` (specs, plans, `SCaaS-2026-10-07.md`, `integration-2026-10-07.md`, `blockchain.md` + trace,
+reorg ledgers in `history/reorg/`); background: `docs/research/`. Checks (CI `docs` job): `python3 scripts/docs_check.py
+check`, `… facts check`, `python3 scripts/test_docs_check.py`.
+
+| Phase | Commits | What |
+|---|---|---|
+| 0 | `08250aa`…`a59909a` | history frozen (pure renames), checker, old-id inventory (746), id map, fact ledger |
+| 1 | `a492fa9`…`4cc227c` | node, contracts, networks/clients/integration docs + register fragments, every fact placed |
+| 2 | `2e9bf4e`…`e13be84` | README, architecture, SCaaS-v2, decisions.md (merged register + alias index), history README, `_work` retired |
+| — | `9513731` | owner rulings: lane keys hold no roles (NODE-JOB-01/19), `max_inflight` tunable default (NODE-LANE-24), decisions.md budget accepted |
+| 3 | this commit | outside references: README, TODO (stream table → Doc/Scope), this file, scaas-node README (English, rewritten), smartcontracts READMEs, code-comment spec paths, CI `docs` job |
+
+Left: Phase 4 reviewer pass (§6.4, ≤ 3 read-only reviewers, fixes by area); then move the plan to `docs/history/plans/`.
+New design work: draft in `docs/superpowers/specs/`, rules into the component docs on acceptance (docs/README "Ids").
+
+## Shutdown 2026-10-07 (before the docs reorg)
 
 Spec phase is almost closed: **every spec has had at least one independent review and every review is folded**.
 Remaining spec work = TODO §0 (SCaaS.md/integration.md sync, a few cross-spec nits, 9 Codex reviews owed, the

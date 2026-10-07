@@ -8,7 +8,7 @@ import {HederaMetaToken} from "../../src/hedera/HederaMetaToken.sol";
 /// Smoke test on the REAL Hedera EVM without an account or HBAR: the constructor is run as initcode through
 /// `eth_call` on the public testnet relay (mirror-node web3 runs the services EVM and system contracts).
 /// Driver: `python3 script/hedera/testnet_smoke.py` (after `forge build`). Result 2026-10-03 recorded in
-/// docs/superpowers/specs/2026-10-03-net-hedera.md §9.
+/// docs/history/specs/2026-10-03-net-hedera.md §9 (current rules: docs/networks/hedera.md).
 contract HederaSmoke {
     constructor(address ecdsaFrom, bytes memory ecdsaSig, address edAccount, bytes memory edSig) {
         OpenFactory f = new OpenFactory(address(this));

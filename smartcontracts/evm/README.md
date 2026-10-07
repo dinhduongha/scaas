@@ -17,7 +17,7 @@ Interface đã chốt cộng các implementation đã có (2026-10-03,
 
 Zether is built (`src/zether/`: `ZetherToken`, `ZetherMetaTx`, `ZetherVerifierBn254`, `ZetherVerifierBls12381`;
 `src/registry/UniversalAccountRegistry.sol`), unaudited and gated to dev chains 31337/1337 (`ZetherSafety`,
-RS2-1); see `docs/history/SCaaS-2026-10-07.md` §8. `test/vectors/metatx_kat.json` là vector digest dùng chung với
+RS2-1); see `docs/contracts/zether.md` (CTR-ZTH-02) and `docs/contracts/README.md`. `test/vectors/metatx_kat.json` là vector digest dùng chung với
 Odoo (`dms_blockchain/lib/eip712.py`) và relayer (`scaas-node`).
 
 ## Mô hình: factory mở
@@ -143,13 +143,13 @@ Cùng lớp lỗi bắt được khi viết lại: `bytes32 indexed reference` t
 3. **The `mode` bitmask is kept** (`common/MetaTxLib.sol`, `supportedModes() = 0xF3`): flags
    `MODE_RESTRICT_RELAYER`, `MODE_RESTRICT_FEE_RECIPIENT` plus an enumerated fee-mode nibble. `mode` is part of the
    signed struct, and unbound `relayer`/`feeRecipient` are hashed as `address(0)` (canonical zeroing), so one
-   signature never validates under another mode. See `docs/history/SCaaS-2026-10-07.md` §5.3.
+   signature never validates under another mode. See `docs/contracts/metatx.md#digest`.
 
 Mẫu số phần trăm thống nhất **ppm (1e6)**, trần cứng **1% = 10.000 ppm**.
 `setTransferFeePerMille` (1e3) bị loại: nó không biểu diễn được 0,05%.
 
 ## Tham chiếu
 
-Mọi quyết định ở đây có nguồn trong
-`docs/research/_USER-DECISIONS.md` (thẩm quyền cao nhất)
-và `00-CANON.md`.
+Quy tắc hiện hành: `docs/contracts/` (bắt đầu từ `docs/contracts/README.md`); lý do và alias id cũ
+(`R…`, `RS…`, `UD:§…`): `docs/decisions.md` (`python3 scripts/docs_check.py resolve <id>`). Thứ tự ưu tiên:
+`docs/README.md#precedence`. Nguồn gốc (chỉ tham khảo): `docs/research/_USER-DECISIONS.md`, `docs/research/00-CANON.md`.

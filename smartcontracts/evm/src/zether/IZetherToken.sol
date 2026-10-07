@@ -8,7 +8,8 @@ import {IZetherVerifier} from "./IZetherVerifier.sol";
 
 /// @title Token có số dư bí mật (SRS §7, §9.3). Kế thừa TOÀN BỘ meta-transaction từ tầng nền.
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Đặc tả byte-exact:
-///         `docs/superpowers/specs/2026-10-03-zether-design.md`. Chỗ lệch SRS: ruling RS2-n ở §16.
+///         `docs/contracts/zether.md` (bản đóng băng `docs/history/specs/2026-10-03-zether-design.md`). Chỗ lệch SRS:
+///         ruling RS2-n ở §16 của bản đóng băng.
 interface IZetherToken is IERC20MetaTx {
     /// @notice Ảnh chụp một tài khoản tại MỘT block (canon C5.2). Điểm rỗng = `O`.
     struct AccountState {

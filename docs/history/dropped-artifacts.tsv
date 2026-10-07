@@ -424,3 +424,6 @@ estimated_gas_cost	obsolete	raw-fee profitability check replaced by the effectiv
 gas_budget_remaining	obsolete	raw-fee profitability check replaced by the effective fee, node/mesh.md#NODE-MESH-21
 5.000	vi-number	under 5,000 lines (enclave image size), decisions.md#NODE-GEN-01
 06.1	revision-label	section number of a research note
+blockchain-research/02-account-registry.md	internal-path	moved to research/02-account-registry.md (cited in contracts/pq-zether.md sources)
+blockchain-research/03-zether-crypto.md	internal-path	moved to research/03-zether-crypto.md (cited in contracts/pq-zether.md sources)
+blockchain-research/_MANIFESTS.md	internal-path	moved to research/_MANIFESTS.md (cited in contracts/pq-zether.md sources)

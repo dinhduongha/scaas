@@ -11,7 +11,7 @@ pragma solidity ^0.8.20;
 ///
 ///         Ngoài kiểm proof, verifier là **nơi duy nhất biết đường cong**: token (một implementation cho
 ///         mọi curve) làm phép cộng đồng hình qua các hàm `g1*` ở đây. Đặc tả byte-exact:
-///         `docs/superpowers/specs/2026-10-03-zether-design.md`.
+///         `docs/contracts/zether.md` (bản đóng băng `docs/history/specs/2026-10-03-zether-design.md`).
 interface IZetherVerifier {
     /// @notice Khoá cứng bộ ba (curve, mạch, mã hoá điểm). Nằm trong statement (§6) ⇒ trong transcript.
     function proofSystemId() external pure returns (bytes32);

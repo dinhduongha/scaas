@@ -1,53 +1,34 @@
 # scaas-node
 
-Tầng daemon của thanh toán on-chain — **một binary Rust** (`_USER-DECISIONS` §23), ba mô-đun
-bật bằng config:
+The SCaaS relayer and indexer: **one Rust binary** whose modules are switched on in config — `submit` (lanes:
+simulate, sign the outer transaction, broadcast, replace stuck transactions, fill nonce gaps), `indexer` (finality-gated
+event reading with an RPC quorum), `gateway` (open HTTP door for signed intents, `/v1/metatx`, DEX `/v1/dex/*`) and
+`mesh`. The node never holds subject funds or subject keys; lane keys hold gas only and never a contract role.
 
-| Mô-đun | Việc | Nói với Odoo bằng |
-|---|---|---|
-| `submit` | rút outbox `blockchain.relay.job`, simulate, ký vỏ tx, broadcast, theo dõi receipt, thay thế tx kẹt, lấp nonce | API key nhóm *Blockchain Relay Worker (service)* |
-| `indexer` | đọc log trong vùng **đã final** (depth/tag + quorum RPC), gửi `chain_event_ingest` | API key nhóm *Blockchain Indexer (service)* |
-| `gateway` | HTTP mở: `POST /v1/metatx`, `GET /healthz`, DEX `/v1/dex/{orders,cancel,cancel-all,markets,depth,trades,ticker}` | (qua `submit`); sổ DEX lưu ở Odoo |
+The normative description is [`docs/node/`](../docs/node/README.md) — start with its README (roles, listeners,
+invariants, the built-vs-target table), then [store](../docs/node/store.md), [job API](../docs/node/job-api.md),
+[submit lanes](../docs/node/submit-lanes.md), [indexer and feeds](../docs/node/indexer-feeds.md),
+[gateway](../docs/node/gateway.md), [operations](../docs/node/ops.md) and [runbooks](../docs/node/runbooks.md). Every
+ruling's rationale and the old-id aliases used in code comments (`R91`, `_USER-DECISIONS` §23, …) are in
+[`docs/decisions.md`](../docs/decisions.md): `python3 ../scripts/docs_check.py resolve <old id>`.
 
-Thiết kế: `docs/history/specs/2026-10-03-blockchain-payments-design.md` §3.
-Không Redis, không Lua, không Postgres trực tiếp: mọi đọc/ghi Odoo đi qua `/json/2`.
+**Transitional (BUILT).** Today's binary still takes jobs over the legacy *pull* path (it leases rows from a client's
+outbox over JSON-RPC with two separate service credentials, relay and indexer) and keeps its journal there; the target
+is the node-owned store and job API (push), switched per chain and then removed in one step
+([job-api.md#legacy-pull](../docs/node/job-api.md#legacy-pull), [runbooks.md#cutover](../docs/node/runbooks.md#cutover)).
 
-## Build
+## Build and test
 
 ```bash
-cargo build --release          # rustc 1.90; alloy được ghim 1.6 qua resolver MSRV-aware (.cargo/config.toml)
+cargo build --release          # rustc 1.90; alloy pinned to 1.6 through the MSRV-aware resolver (.cargo/config.toml)
 cargo test                     # unit
-cargo test --test e2e -- --ignored --nocapture   # cần anvil + forge trong PATH
+cargo test --test e2e -- --ignored --nocapture   # needs anvil + forge on PATH
 ```
 
-## Cấu hình
+Heavy builds go through `../scripts/capped` (one at a time per machine).
 
-Xem `node.example.toml`. File config **không** chứa bí mật — chỉ tên biến môi trường:
+## Configuration
 
-| Biến | Nội dung |
-|---|---|
-| `SCAAS_RELAY_API_KEY` | API key của user service relay |
-| `SCAAS_INDEXER_API_KEY` | API key của user service indexer — **user khác**, nhóm khác |
-| `SCAAS_RELAYER_KEY_<chain>` | khoá vỏ tx (chỉ giữ gas, không bao giờ giữ tiền người dùng) |
-| `SCAAS_NODE_ID` | tên node ghi vào `claimed_by` |
-
-Tạo hai user service trong Odoo: *Settings → Users*, thêm đúng một nhóm
-(*Blockchain Relay Worker (service)* hoặc *Blockchain Indexer (service)*), rồi
-*Account Security → New API Key*. Hai key, hai user: chiếm key indexer không ghi được job.
-
-Danh sách token **không** nằm trong config: node đọc nó từ `blockchain.chain.node_config`.
-Endpoint RPC **chỉ** nằm ở đây (ruling R20) và phải ≥ `finality.quorum`.
-
-## Bất biến vận hành
-
-- Không bao giờ bỏ một nonce vỏ: tx kẹt được thay thế (phí ×1.25 tới `max_fee_cap_gwei`); job
-  hết hạn ⇒ nonce được lấp bằng tx 0-value tự chuyển.
-- `signed` (tx_hash + nonce) được ghi vào Odoo **trước** khi gửi; khởi động lại không ký lại.
-- Job chỉ `final` khi indexer thấy `MetaTransactionExecuted(digest)` trong vùng final.
-- Hàng đợi `/v1/metatx` nằm trong bộ nhớ (R16): khởi động lại thì người ký gửi lại. Trường không ràng buộc
-  bị chuẩn hoá trước mô phỏng (R84): `feeRecipient` ⇒ `[[chains]] fee_recipient` (không đặt ⇒ 0, phí về lane gửi),
-  `relayer` ⇒ 0; giá trị client gửi cho chúng không bao giờ lên chain.
-- Sổ lệnh DEX (`OrderBookDex`, R35) lưu ở Odoo (`dms_blockchain_dex`, RS5-2): mỗi thay đổi là một
-  `dex_book_commit`; settle đi qua outbox như mọi job; khởi động lại nạp lại sổ. Bật bằng `dex = "0x…"`
-  (địa chỉ `order_book_dex` trong `deployments/<chain>.json`) + `gateway` + `submit`; watcher event final
-  của DEX chạy khi `indexer` bật. Thiết kế: `docs/history/specs/2026-10-03-dex-design.md`.
+See [`node.example.toml`](node.example.toml) and [store.md](../docs/node/store.md#NODE-STO-03). The file holds no
+secrets, only the names of environment variables, files or keystores that do; RPC endpoints live only there and must
+number at least `finality.quorum`. Lane keys: [submit-lanes.md#lane-keys](../docs/node/submit-lanes.md#lane-keys).

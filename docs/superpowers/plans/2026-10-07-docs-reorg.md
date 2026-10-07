@@ -18,7 +18,14 @@
 > ("plan says H — confirm"), and `;`-joined multi-targets; (7) small commits, pushed (owner); (8) Solidity/Tact/
 > Solana comment paths left for Phase 3 (a `.sol` comment edit changes the bytecode metadata hash).
 
-**Date:** 2026-10-07 · **Status:** PLAN, Phase 0 executed · **Owner-approved target structure:** see §1.
+> **Phases 1–3 executed 2026-10-07.** Phase 1 `a492fa9`…`4cc227c` (component docs + register fragments, every fact
+> placed); Phase 2 `2e9bf4e`…`e13be84` (README, architecture, SCaaS-v2, merged `decisions.md` + alias index, history
+> README and blockchain trace; `docs/_work/` → `docs/history/reorg/`); owner rulings `9513731` (lane keys hold no roles,
+> NODE-LANE-24 `max_inflight`, decisions.md budget); Phase 3 (§5) in the following commit — the `.sol`/`.tact`/Solana
+> comment paths were checked against pinned codehashes first. This plan stays here (decisions.md cites it) until
+> Phase 4 closes, then moves to `history/plans/` with its links repointed.
+
+**Date:** 2026-10-07 · **Status:** Phases 0–3 executed, Phase 4 (reviews) open · **Owner-approved target structure:** see §1.
 **Scope:** `scaas/docs/**` (rewrite), `scaas/scripts/docs_check.py` (new), references outside docs (§5),
 `scaas-node` module/crate layout (§7, plan only). Nothing below has been done yet. Read-only survey basis:
 `scaas` HEAD `d4c296d` (chainId 7622 sweep), docs as of 2026-10-07.

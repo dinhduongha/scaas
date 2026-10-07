@@ -1,5 +1,5 @@
 // Shared messages and helpers: TEP-74 jetton messages, the signed MetaOp v1 (R30, §2 of
-// docs/superpowers/specs/2026-10-03-net-ton.md), the TON Connect signData envelope, passkey (R31).
+// docs/history/specs/2026-10-03-net-ton.md; current rules docs/networks/ton.md), the TON Connect signData envelope, passkey (R31).
 
 // ------------------------------------------------------------------ TEP-74 / TEP-89
 
