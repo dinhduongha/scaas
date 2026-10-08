@@ -2164,9 +2164,10 @@ Change (2026-10-08): the pull is `DexPuller.pull` under the party's allowance to
 ### CTR-DEX-19 — dex must be a contract, nothing more (owner-accepted residual risk)
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/dex.md#CTR-DEX-19 · superseded-by: —
 
-**Why.** The owner decided against a factory DEX registry or codehash allowlist: the token requires only that `dex` is a contract. A phishing contract named as `dex` can take the signed amount; the mitigations are off chain — clients warn and by default refuse to build or sign for a `dex` off the chain profile's DEX list (for `mtxWrap`: a registered wrapper), wallets show `dex`, and the node routes only to listed DEXes.
+**Why.** The owner decided against a token-side DEX registry or codehash allowlist: the token requires only that `dex` is a contract and consults no registry (the factory's `isDex`, CTR-DEX-24, is advisory, for clients and the node). A phishing contract named as `dex` can take the signed amount; the mitigations are off chain — clients warn and by default refuse to build or sign for a `dex` off the chain profile's DEX list (for `mtxWrap`: a registered wrapper), wallets show `dex`, and the node routes only to listed DEXes.
 **Cost if wrong.** A user who overrides the client refusal and signs for a malicious contract loses the signed amount.
 **Source.** `history/specs/2026-10-07-metatx-generic.md` §4, §8 Q5, §13 (N-H1).
+Change (2026-10-08): wording only — the token consults no registry; the factory's advisory `isDex` (CTR-DEX-24) is for clients and the node.
 
 ### CTR-DEX-20 — mtxExchange: TradeOrders executed against AMMs, multi-hop and cycles
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/dex.md#CTR-DEX-20 · superseded-by: —

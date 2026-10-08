@@ -71,7 +71,7 @@ Outside the tokens, unchanged in role: the Zether verifiers (one per curve), `Un
   (`wrap(amount)`, `unwrap(amount, recipient[, minOut])`) works only when the token has exactly one leg
   (`UnderlyingRequired` otherwise); the per-leg ABI works for every count. The kind labels `META_SINGLE`/`META_MULTI`
   disappear: the leg count says it.
-  A leg may be the chain's native coin (T16): `underlying = address(0)`, wrapped like WETH/WXDAI, for chains that have no
+  A leg of every `UNDERLYING*` kind may be the chain's native coin (T16): `underlying = address(0)`, wrapped like WETH/WXDAI, for chains that have no
   standard wrapped native token.
 - **Hedera (T3, T13).** Each implementation is deployed with an immutable `IS_HEDERA`. When set, the signature check
   takes the HIP-632 path and `UnderlyingLib` associates HTS underlyings fail-closed (`HederaLib`). The Hedera children

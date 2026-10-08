@@ -1,7 +1,7 @@
 # Token kinds, wrappers and the open factory
 
 SCaaS tokens are created by anyone through an open factory as immutable EIP-1167 clones of versioned
-implementations. There are two axes: the **kind** is code (a standalone token, or a wrapper of 1–8 ERC-20s at
+implementations. There are two axes: the **kind** is code (a standalone token, or a wrapper of 1–8 ERC-20s or the native coin ([CTR-TOK-26](#CTR-TOK-26)) at
 conversion rates, each with or without the Zether layer) and the **features** are flags chosen at creation. Every
 token carries the meta-transaction layer of [metatx.md](metatx.md). Status: the tree, kinds, features, libraries and
 the `createToken` factory **SPECIFIED** (accepted 2026-10-08, implemented in phase P1; what is built today is under
@@ -51,7 +51,7 @@ is a per-chain variant, not a creator's choice ([CTR-TOK-23](#CTR-TOK-23)).
 | Kind | Contract | Meaning |
 |---|---|---|
 | `NONE` | `NoUnderlyingToken` | standalone: loyalty, internal units, access tokens |
-| `UNDERLYING` | `UnderlyingToken` | wrapper of 1–8 ERC-20s at per-leg rates |
+| `UNDERLYING` | `UnderlyingToken` | wrapper of 1–8 ERC-20s or the native coin ([CTR-TOK-26](#CTR-TOK-26)) at per-leg rates |
 | `NONE_ZETHER` | `NoUnderlyingZetherToken` | standalone + Zether layer ([zether.md](zether.md)) |
 | `UNDERLYING_ZETHER` | `UnderlyingZetherToken` | wrapper + Zether layer, wrap-shield and unshield-unwrap |
 | `NONE_PQZ`, `UNDERLYING_PQZ`, `NONE_ZETHER_PQZ`, `UNDERLYING_ZETHER_PQZ` | — | **reserved, not built**: post-quantum layer ([pq-zether.md](pq-zether.md)); Zether and PQZ on one token have room in the kind ids only |
@@ -77,7 +77,7 @@ The kinds are in [CTR-TOK-21](#CTR-TOK-21). The two public kinds without a Zethe
 | Kind | Contract | `underlyings` | Supply rule | Invariant |
 |---|---|---|---|---|
 | `NONE` | `NoUnderlyingToken` | none | `initialSupply` minted to `initialHolder` at init; `mint` by `minter` only with `MINTABLE`; holder `burn` with `BURNABLE` ([CTR-TOK-22](#CTR-TOK-22)) | `Σ balances == totalSupply` |
-| `UNDERLYING` | `UnderlyingToken` | 1–8 ERC-20s, fixed at creation | Only via `wrap` (mints `⌊received·num/den⌋` of the **measured** delta) / `unwrap` (pays `⌊w·den/num⌋`, burns `⌈out·num/den⌉`) on a chosen leg at that leg's rate; `num = den = 1` is the 1:1 case | `Σ_i⌊reserve_i·num_i/den_i⌋ ≥ totalSupply` with internal per-leg `reserve` (pooled; no per-leg invariant) |
+| `UNDERLYING` | `UnderlyingToken` | 1–8 ERC-20s or the native coin ([CTR-TOK-26](#CTR-TOK-26)), fixed at creation | Only via `wrap` (mints `⌊received·num/den⌋` of the **measured** delta) / `unwrap` (pays `⌊w·den/num⌋`, burns `⌈out·num/den⌉`) on a chosen leg at that leg's rate; `num = den = 1` is the 1:1 case | `Σ_i⌊reserve_i·num_i/den_i⌋ ≥ totalSupply` with internal per-leg `reserve` (pooled; no per-leg invariant) |
 
 Example (owner requirement): a wrapper over USDT and DAI at 1 → 25,000, i.e. one stablecoin mints 25,000 units of a
 low-value currency token — an `UnderlyingToken` with two legs and one rate per leg (`num/den` adjusted for each leg's decimals); one leg at a rate is the one-leg case.
@@ -188,7 +188,7 @@ Views: `underlying()` (a one-leg token: the single underlying), `underlyings() r
 `maxRateStepBps()`, `pendingRate() returns (address u, uint96 num, uint96 den, uint64 eta)` (all zero when nothing is
 pending or the pending change has expired). Previews ignore fee-on-transfer (they assume `received == amount`).
 
-<a id="CTR-TOK-26"></a>**CTR-TOK-26** — **A leg may be the chain's native coin** (owner), wrapped like WETH or WXDAI, because some chains have
+<a id="CTR-TOK-26"></a>**CTR-TOK-26** — **A leg of every `UNDERLYING*` kind may be the chain's native coin** (owner), wrapped like WETH or WXDAI, because some chains have
 no standard wrapped native token. `underlying = address(0)` in a `Leg` is the native coin; the per-leg rules above and
 [CTR-TOK-05](#CTR-TOK-05) hold, with these differences:
 
@@ -198,9 +198,15 @@ no standard wrapped native token. `underlying = address(0)` in a `Leg` is the na
 - **Unwrap** pays the native coin with checks-effects-interactions (burn and `reserve -= out` before the send) under
   the token's reentrancy guard, to a recipient that may be a contract (no gas-stipend limit); a recipient that fails to
   receive reverts the unwrap.
+- **Balance mechanics of [CTR-TOK-05](#CTR-TOK-05)** read `address(this).balance` for the native leg: `ReserveShortfall`
+  (`balance ≥ reserve`), `UnderlyingTransferMismatch`, the `balance_i ≥ reserve_i` check in `executeRate` and the
+  invariant. This is safe because forced coin only raises the balance, and minting stays bounded by the internal
+  `reserve`. The measured delta of a native wrap is `msg.value`; `addReserve` for the native leg is `payable` with
+  `msg.value == amount`.
+- **`mtxWrap(address underlying, …)` with `address(0)` reverts** (`NativeNotGasless()`): a signature cannot carry value.
 - **At most one native leg** per token; its rate math uses 18 decimals.
-- **Reserve** is internal ([CTR-TOK-05](#CTR-TOK-05)): the invariant counts `reserve_i` for the native leg, never
-  `address(this).balance`; coins forced in by `selfdestruct` or as a block reward are not reserve.
+- **Reserve** is internal ([CTR-TOK-05](#CTR-TOK-05)): `collateralValue()` counts the internal `reserve_i` for the native leg, never
+  the raw balance; coins forced in by `selfdestruct` or as a block reward are not reserve.
 - **Provenance:** the factory's index ([CTR-TOK-25](#CTR-TOK-25), [CTR-TOK-17](#CTR-TOK-17)) records `address(0)` as the
   native underlying; `underlying()` of a one-leg native token therefore returns `address(0)` too, and clients read
   `underlyings()`. Libraries and size budget: [CTR-TOK-24](#CTR-TOK-24).

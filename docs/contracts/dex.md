@@ -371,8 +371,7 @@ burns gas) fails only its own plan.
 ## The named `dex`
 
 <a id="CTR-DEX-19"></a>**CTR-DEX-19** — **`dex` must be a contract, nothing more: an owner-accepted residual risk with
-off-chain mitigations** (owner). The token checks only `msg.sender == o.dex` and `_isContract(o.dex)`; there is no
-factory DEX registry and no codehash allowlist. A phishing contract named as `dex` can report any `receiveFill` and
+off-chain mitigations** (owner). The token checks only `msg.sender == o.dex` and `_isContract(o.dex)`; the token consults no DEX registry and no codehash allowlist (the factory's `isDex`, [CTR-DEX-24](#CTR-DEX-24), is advisory, for clients and the node). A phishing contract named as `dex` can report any `receiveFill` and
 take the signed `amount`. Mitigations: the app, `clientkeys` and the portal warn about, and **by default refuse to build
 or sign**, a `TradeOrder` whose `dex` is not on the chain profile's DEX list (for `mtxWrap`: not a registered wrapper of
 that underlying); the wallet's EIP-712 view shows `dex`; the node routes orders only to DEXes on the chain profile's
