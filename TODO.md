@@ -17,13 +17,18 @@ Order: contracts first (one heavy build at a time), then node, clients, the Odoo
 - [ ] **MT-5** DEX: `TradeOrder` + `mtxTrade`/`mtxCancelOrder`/`mtxInvalidateNonces` in the tokens; `OrderBookDex.mtxSettle`
       (Path A/B, 1 taker + N makers, 50 % floor, fee split, conservation invariant); outside-token legs.
 - [ ] **MT-6** Zether: transient envelope binding, `fund` from the public balance, `mtxWrap`; renames (`mtxRollOver`,
-      `mtxSetRollOverMode`); PQZ envelope question.
+      `mtxSetRollOverMode`); PQZ on the one base (draft GC-10); prover `Header` gains `chain_uid` as word 3,
+      `HEADER_LEN` 384 → 416 (`clients/zether-prover/src/zether.rs`).
 - [ ] **MT-7** Renames on `MandateWallet`/`SubjectAccount`/Hedera (`mtx…`).
 - [ ] **MT-8** Node: selector tables (NODE-JOB-20), call table names, breaker per `(from, selector)`, `chainUid()` check
       (NODE-GW-07), DEX venue `mtxSettle` (NODE-DEX-15/16), NODE-IDX-06 `repeat_of`.
 - [ ] **MT-9** clientkeys/app: `domain.salt`, decode `mtxExecute` data, refuse an unlisted `dex`, no EOA approve, wrap by
       signature (CLI-SGN-33…36); vectors/KATs regenerated.
-- [ ] Draft for non-EVM families (generic op dispatch where the VM allows it; `mtx` names).
+- [x] Draft for non-EVM families: `docs/superpowers/specs/2026-10-08-nonevm-metacall-design.md` (owner Q1–Q4 open).
+- [ ] **Owner review of three drafts (2026-10-08), then fold into the component docs:**
+      `2026-10-08-dex-solver-design.md` (DS-1…8; design approved in chat), `2026-10-08-metatx-generic-call-design.md`
+      (GC-1…10; Q4 PqzToken open), `2026-10-08-nonevm-metacall-design.md` (NM-1…4; Q1–Q4 open). Each changes MT-1…MT-9
+      scope as listed in its "Changes to current rules" table.
 
 ## 0. Finish the spec phase (5 items left)
 

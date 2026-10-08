@@ -37,8 +37,9 @@ The subject signs **sorted-key JSON** (no whitespace, every field mandatory):
   `extra` = hex `sha256(params)` for `trade`, empty for every other op.
 - **The contract receives the exact bytes** (`Relay{payload: Binary, …}`) and never rebuilds the JSON: the signature
   covers exactly what the contract reads, so there is no second normalisation layer to drift. Parsing is strict
-  (`deny_unknown_fields`; serde refuses duplicate keys). In short form the entry point is
-  `Relay{op, pubkey, signature, scheme}`; the payload's `MetaOp.network` and `MetaOp.contract` carry the domain.
+  (`deny_unknown_fields`; serde refuses duplicate keys). The entry point is
+  `Relay{payload, auth}` with `auth = {scheme (adr036 | passkey), pubkey, signature, authenticator_data?,
+  client_data_json?}` (`cosmos/metaop/src/lib.rs`); the payload's `MetaOp.network` and `MetaOp.contract` carry the domain.
 - **The domain lives inside the payload** (ADR-036 has `chain_id: ""`): `network == env.block.chain_id`,
   `contract == env.contract.address`, `domain == "scaas.metaop.v1"`; a payload for another contract or network is
   refused.
