@@ -201,6 +201,39 @@ The payee check compares `bytes32(uint256(uint160(feeRecipient)))` with `t.to`; 
 emitted for both structs and its `digest` stays the mesh `intent_id`. Vectors: the v3 KAT splits into a
 `UAMetaTransaction` and a `UAMetaTransfer` vector.
 
+### GC-10 — `PqzToken` on the one base; envelope bindings without `to`/`value`
+
+The fold left open how `PqzToken` relays ([CTR-PQZ-15](../../contracts/pq-zether.md#CTR-PQZ-15) still describes its own
+mixin `PqzMetaTx` with an `_executeOp` that reads `m.data` as calldata slices, to avoid copying ≈ 340 KB of `m.data`).
+Proposal:
+
+- **`PqzToken is ERC20MetaTx`** like `ZetherToken` ([CTR-MTX-07](../../contracts/metatx.md#CTR-MTX-07)); `PqzMetaTx`
+  disappears. `pqzTransfer`, `pqzBurn`, `fund(bytes32,uint256)` and `rollOver(bytes32,bytes,bytes[])` are allowlisted
+  self-calls through `mtxExecute` (fee class `ABSOLUTE`), and the proof-carrying ones read the envelope binding from
+  the ticket exactly as classical Zether ([CTR-ZTH-34](../../contracts/zether.md#CTR-ZTH-34)). Plain public transfers
+  are `MetaTransfer`s (GC-1), `PERCENT` allowed. The PQ-complete path is `uaExecute` with a `UAMetaTransaction` (GC-9)
+  whose UA allowlist on `PqzToken` holds the same four selectors. PQZ selectors stay out of `mtxBatch`/`uaBatch`
+  (`MtxNotBatchable(selector)`: one op is ≈ 3 M gas and up to ≈ 340 KB).
+- **Cost of the self-call:** one memory copy of `m.data` for the `CALL`, `3·w + w²/512` gas with `w` = words: ≈ 0.25 M
+  at 340 KB (`w` = 10 625). The callee's arguments are `bytes calldata`, so nothing is decoded into memory again. The
+  earlier ≈ 2 M estimate assumed three copies (decode + re-encode + call). A PQZ op becomes ≈ 3.25 M, below the
+  EIP-7825 cap of 16,777,216.
+- **Bindings follow the new struct.** `to` and `value` are no longer fields of `MetaTransaction`, so the classical
+  ([CTR-ZTH-06](../../contracts/zether.md#CTR-ZTH-06)) and PQ envelope bindings drop them:
+
+```text
+envelopeBinding = keccak256(abi.encode(keccak256(TAG), chainid, chainUid, token,
+                    m.from, m.batch, m.nonce, m.validUntil, m.mode, canonRelayer, m.fee, canonFeeRecipient))
+TAG = "SCAAS-ZETHER-ENVELOPE-V1" | "SCAAS-PQZ-ENVELOPE-V1" | "SCAAS-PQZ-UA-ENVELOPE-V1" (v3: m.from as bytes32)
+```
+
+  `m.data` stays excluded (it contains the proof). Vectors regenerate with the statement vectors of
+  [CTR-ZTH-36](../../contracts/zether.md#CTR-ZTH-36).
+- **Statement header check (open point of the fold):** the prover (`clients/zether-prover/src/zether.rs`, `Header`,
+  `HEADER_LEN = 384`) encodes the BUILT layout — `opTag, proofSystemId, chainId, token, …`. The SPECIFIED 416-byte header
+  inserts `chainUid` as word 3 (offset 96) and moves every later field 32 bytes on; the prover's change is
+  `HEADER_LEN = 416` and one `be32(chain_uid)` word after `chain_id` (stream MT-6). No other difference.
+
 ## 4. Changes to current rules (on acceptance)
 
 | Rule | Change |
@@ -215,12 +248,17 @@ emitted for both structs and its `digest` stays the mesh `intent_id`. Vectors: t
 | [CTR-ACC-06](../../contracts/mandates.md#CTR-ACC-06), [CTR-ACC-07](../../contracts/mandates.md#CTR-ACC-07), `SubjectAccount` key management ([accounts.md](../../contracts/accounts.md)) | GC-6 |
 | [CTR-TND-01](../../contracts/tender.md#CTR-TND-01) | deposit = `MetaTransfer` |
 | [CTR-UA-19](../../contracts/accounts.md#CTR-UA-19) | GC-9 |
+| [CTR-PQZ-15](../../contracts/pq-zether.md#CTR-PQZ-15), [CTR-ZTH-06](../../contracts/zether.md#CTR-ZTH-06), [CTR-ZTH-34](../../contracts/zether.md#CTR-ZTH-34) | GC-10 |
 | node `job-api`, `submit-lanes`, `mesh`; `clients/signers-clientkeys.md`; `integration.md` | GC-8 |
 | `TODO.md` | MT-1/MT-2 split the base (GC-2); MT-7 becomes "`MandateWallet`/`SubjectAccount` on `MetaTxBase`"; MT-8/MT-9 + both structs |
 
 ## 5. Open questions for the owner
 
-None: Q1–Q3 of rev 1 answered (G8–G10).
+Q1–Q3 of rev 1 answered (G8–G10). New in rev 3:
+
+| # | Question | Recommendation |
+|---|---|---|
+| Q4 | `PqzToken` on `ERC20MetaTx` with the generic self-call (+ ≈ 0.25 M gas per op), dropping `PqzMetaTx` (GC-10)? | yes: one base, one pipeline, the classical Zether pattern |
 
 ## 6. Revision history
 
@@ -228,3 +266,4 @@ None: Q1–Q3 of rev 1 answered (G8–G10).
 |---|---|---|
 | 1 | 2026-10-08 | First draft from the owner's chat answers G1–G7 |
 | 2 | 2026-10-08 | Owner answers G8–G10: UA ledger split (GC-9), `SubjectAccount` signs as itself, names kept |
+| 3 | 2026-10-08 | GC-10: `PqzToken` on the one base, bindings without `to`/`value`, prover header check |
