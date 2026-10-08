@@ -264,10 +264,10 @@ it. Nothing else is reachable through `mtxExecute`.
 | `MultiUnderlyingToken` | `wrap(address,uint256)` | `ABSOLUTE` |
 | | `unwrap(address,uint256,address,uint256)` | `AMOUNT(1)` |
 | | `addReserve(address,uint256)` | `ABSOLUTE` |
-| `ZetherToken` | `wrap(uint256)`, `fund(bytes,uint256)` | `ABSOLUTE` |
+| `ZetherToken` | `wrap(uint256)`, `zetherShield(bytes,uint256)` | `ABSOLUTE` |
 | | `unwrap(uint256,address)` (public balance) | `AMOUNT(0)` |
-| | `transferConfidential(bytes,bytes,bytes,bytes32)`, `burn(bytes,uint256,address,bytes32,bytes,bytes)` | `ABSOLUTE`; envelope binding through the ticket ([CTR-ZTH-34](zether.md#CTR-ZTH-34)) |
-| `PqzToken` | `pqzTransfer(bytes,bytes,bytes[],bytes,bytes)`, `pqzBurn(bytes,bytes,bytes[],uint256,address,bytes,bytes)`, `fund(bytes32,uint256)`, `rollOver(bytes32,bytes,bytes[])` | `ABSOLUTE`; not batchable ([CTR-PQZ-21](pq-zether.md#CTR-PQZ-21)) |
+| | `zetherTransfer(bytes,bytes,bytes,bytes32)`, `zetherUnshield(bytes,uint256,address,bytes32,bytes,bytes)` | `ABSOLUTE`; envelope binding through the ticket ([CTR-ZTH-34](zether.md#CTR-ZTH-34)) |
+| `PqzToken` | `pqzTransfer(bytes,bytes,bytes[],bytes,bytes)`, `pqzUnshield(bytes,bytes,bytes[],uint256,address,bytes,bytes)`, `pqzShield(bytes32,uint256)`, `pqzRollOver(bytes32,bytes,bytes[])` | `ABSOLUTE`; not batchable ([CTR-PQZ-21](pq-zether.md#CTR-PQZ-21)) |
 | `MandateWallet` | delegate: `payUnderMandate(address,address,uint256,bytes32)`, `revoke(address,uint64)`; owner: `setMandate`, `setPayee`, `revoke(address)`, `execute` ([CTR-ACC-06](mandates.md#CTR-ACC-06)) | fee `NONE` only |
 | `SubjectAccount` | `addKey`, `removeKey`, `rotateKey`, `setGuardian`, `execute`, signed by the account itself ([CTR-ACC-10](accounts.md#CTR-ACC-10)) | fee `NONE` only |
 
@@ -279,7 +279,7 @@ second digest and no `minOut`), nor are Multi's single-asset overrides that alwa
 `cancelRate`, `executeRate`, `renounceRateAdmin`, `disableWrap`, `renounceGuardian` (role holders act through their own
 contract, [NODE-JOB-01](../node/job-api.md#NODE-JOB-01); a signature check would skip a minter contract's caps or a
 Safe's guards); `transfer` and `pay` (they are `MetaTransfer`s); `payWithFee` (it charges its own fee); `mtxExecute`, its alias and every other `mtx…` entry
-(no nesting); `initialize`; views; Zether `mtxRollOver`/`mtxSetRollOverMode` (they carry their
+(no nesting); `initialize`; views; Zether `zetherRollOverSigned`/`zetherSetRollOverMode` (they carry their
 own signature). For selectors with dynamic arguments (Zether) the contract cannot cheaply pin one encoding: the node
 re-encodes the decoded arguments and refuses non-canonical `data` before it computes the mesh `intent_id`; a
 non-canonical duplicate on chain is harmless, because only the signer can produce one (`data` is signed) and the
@@ -491,7 +491,7 @@ signed, not the entry point, and stay. Non-EVM families follow the same rule in 
 | tokens | + `mtxExecuteWithFee`, `mtxExecuteTransfer`, `mtxBatchTransfer`, `mtxTransfer`, `mtxTransferWithFee`, `mtxPay`, `mtxPayReceiverFee`; views `mtxTransferDigest`, `payLane` |
 | tokens (trade) | `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces` ([dex.md](dex.md#CTR-DEX-15)) |
 | wrappers, `ZetherToken` | `mtxWrap` ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)) |
-| `ZetherToken` | `mtxRollOver`, `mtxSetRollOverMode` ([CTR-ZTH-16](zether.md#CTR-ZTH-16)) |
+| `ZetherToken` | `zetherRollOverSigned`, `zetherSetRollOverMode` ([CTR-ZTH-16](zether.md#CTR-ZTH-16)) |
 | `MandateWallet` | + `mtxPayUnderMandate`, `mtxRevoke`, `mtxExecuteAsOwner`, named builders of a `MetaTransaction` ([mandates.md](mandates.md#mandatewallet)) |
 | `SubjectAccount` | + `mtxExecuteAsOwner`, named builder of a `MetaTransaction` ([CTR-ACC-10](accounts.md#CTR-ACC-10)) |
 | `OrderBookDex` | `mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces` ([dex.md](dex.md#CTR-DEX-16)) |

@@ -686,14 +686,14 @@ Above the rated load: a second node on **different chains**, not a bigger store.
 - Job kinds ([job-api.md#post-v1jobs](job-api.md#post-v1jobs)): envelope ops use the **existing** `metatx` (v1) and
   `ua_metatx` (v3) jobs, with the node-computed digest over the token's domain, idempotency and lanes unchanged; the
   token row has `kind = pqz`. Job kind `pqz_call` is for **direct open calls** only: `{chain, contract, selector ∈
-  {pqzTransfer, pqzBurn, rollOver}, calldata}` (direct `fund` pulls the caller's underlying, so it is never a node
+  {pqzTransfer, pqzUnshield, pqzRollOver}, calldata}` (direct `pqzShield` pulls the caller's underlying, so it is never a node
   job). For all three: the contract must be a configured PQZ token; pre-simulation by `eth_estimateGas` on a
   **follower**, never the signer (fails ⇒ job rejected, no gas spent); `max_gas_per_tx = 16_000_000` on chain 7622 (the
   default 3,000,000 already rejects classical Zether transfers at 3.36 M); never batched (`PqzToken` has no
   `mtxBatch`). Gateway body limit 1 MiB on job submissions to the `pqz` chain profile only (a v3 transfer job is ≈ 170
   KB as hex).
 - Optional rollover keeper: per configured PQZ token, when an account has ≥ 16 unrolled credits **older than
-  `KEEPER_AGE = 24` blocks** (2 min) and the chain is idle, submit `rollOver` of those old credits only, with
+  `KEEPER_AGE = 24` blocks** (2 min) and the chain is idle, submit `pqzRollOver` of those old credits only, with
   ciphertexts from logs (anyone may; it is harmless). A proof in flight chose `p ≥` every credit older than its own
   state read, so the keeper never pushes `rolled` more than 16 past it. Clients prove at `p = pendingCount` and, on
   `InlineTooFar`, refresh state and re-prove once.

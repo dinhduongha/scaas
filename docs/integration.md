@@ -152,8 +152,8 @@ process ([NODE-JOB-06](node/job-api.md#NODE-JOB-06)). Why: one lane journal per 
 | `signed_op` | `{op: {op_kind: "pay", payload: "0x<exact signed bytes>", signature, public_key, auth_kind: "wallet"|"passkey", extra: {…native params}}}`; `from`, lane, nonce, `valid_until`, relayer are decoded from `payload` |
 | `call` | `{call: {target, calldata, validUntil}}` — e.g. `MandateWallet.mtxPayUnderMandate(...)` (as built `MandateWallet.payUnderMandate(...)`), `SubjectAccountFactory.deploy(...)`; the signature lives inside the calldata; selector and target must match a call-table row; no native value |
 | `ua_metatx` (SPECIFIED) | MetaToken v3 `UAMetaTransaction` or `UAMetaTransfer` with `from: bytes32` and its `auth`; same lifecycle as `metatx` |
-| `pqz_call` (SPECIFIED; private chain only) | **Direct open calls only**: `{chain, contract, selector ∈ {pqzTransfer, pqzBurn, rollOver}, calldata}` to a configured PQZ token (direct `fund` pulls the caller's underlying and is never a node job) |
-| PQZ envelopes (SPECIFIED) | **No new kind**: a `PqzToken` is an `IERC20MetaTx` token, so its envelope ops travel as ordinary `metatx` or `ua_metatx` jobs with `struct = call` (domain `("SCaaS PqzToken", "1", chainId, token, chainUid)`), `m.data` = the direct calldata of `pqzTransfer`/`pqzBurn`/`fund`/`rollOver` (opaque to the client); outer fee `NONE`/`FIXED` only; never batched, never on the mesh; 1 MiB job body on the `pqz` profile; a gasless exit is the envelope `pqzBurn` paying the underlying to `recipient` |
+| `pqz_call` (SPECIFIED; private chain only) | **Direct open calls only**: `{chain, contract, selector ∈ {pqzTransfer, pqzUnshield, pqzRollOver}, calldata}` to a configured PQZ token (direct `pqzShield` pulls the caller's underlying and is never a node job) |
+| PQZ envelopes (SPECIFIED) | **No new kind**: a `PqzToken` is an `IERC20MetaTx` token, so its envelope ops travel as ordinary `metatx` or `ua_metatx` jobs with `struct = call` (domain `("SCaaS PqzToken", "1", chainId, token, chainUid)`), `m.data` = the direct calldata of `pqzTransfer`/`pqzUnshield`/`pqzShield`/`pqzRollOver` (opaque to the client); outer fee `NONE`/`FIXED` only; never batched, never on the mesh; 1 MiB job body on the `pqz` profile; a gasless exit is the envelope `pqzUnshield` paying the underlying to `recipient` |
 
 **Accept checks.** The node checks every item in a fixed order without RPC and answers per item; the rules and their
 order are [job-api.md#intake](node/job-api.md#intake). What a client must get right before it pushes:
@@ -933,7 +933,7 @@ handed to a counterparty or auditor cannot be revoked (state this to data subjec
 | Integrity of the remaining batch | yes: leaves are hashes of commitments, not personal data; the client keeps the leaf list after shredding X |
 | What X contained / who X was about | no (by design) |
 | Payment N from address A to B with `entryRef` E | yes from chain data; who A or B is: only while the mapping is retained |
-| Zether amount of transfer E | yes with an opening (`ITransferDisclosure`: `SENDER_S`, `RECEIVER_X`, `AUDITOR`) via `verifyTransferAmount` (view, leaves no trace); identity only while the mapping is retained |
+| Zether amount of transfer E | yes with an opening (`ITransferDisclosure`: `SENDER_S`, `RECEIVER_X`, `AUDITOR`, `SENDER_CP` ([CTR-ZTH-40](contracts/zether.md#CTR-ZTH-40))) via `verifyTransferAmount` (view, leaves no trace); identity only while the mapping is retained |
 | Tender procedure fairness | yes: all events and reveals are public; `documentRef` opens only while its salt is retained |
 
 Disclosure flow: the client hands the auditor `(salt, payload)` for the specific record, never the DEK. Transparent tokens:

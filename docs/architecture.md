@@ -305,7 +305,7 @@ moves each chain to the push model, and the pull path is removed in one step aft
   `~mesh` namespace → submit. Landed hints trigger consumption reads.
 - **Confidential payment** (BUILT on dev chains only). The prover builds the statement, Σ-proof and two Bulletproofs
   bound to the envelope → a meta-tx with `OP_ZTRANSFER` (specified: an `mtxExecute` self-call of
-  `transferConfidential`) → `ZetherToken` verifies → `ConfidentialTransfer(entryRef)` →
+  `zetherTransfer`) → `ZetherToken` verifies → `ConfidentialTransfer(entryRef)` →
   disclosure through `ITransferDisclosure` for reconciliation.
 
 ## Trust model

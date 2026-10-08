@@ -806,7 +806,7 @@ The wallet reads a classical Zether balance by decrypting `(C, D) = ([b]G + [r]Y
 |---|---|
 | Balance a wallet reads by itself **without** a cache | mobile 2^44; desktop up to 2^54 |
 | Balance read and spendable **with** a cache | up to 2^54 |
-| Incoming funds between two `rollOver`s that a mobile wallet decrypts by itself (`pending`) | 2^44 |
+| Incoming funds between two `zetherRollOver`s that a mobile wallet decrypts by itself (`pending`) | 2^44 |
 
 For a 2-decimal USD token: 2^40 base units ≈ $11 billion, 2^44 ≈ $176 billion, 2^54 ≈ $180 trillion. Beyond the mobile
 `pending` limit nothing is lost: roll over more often, or read with a desktop/CLI.
@@ -831,9 +831,9 @@ For a 2-decimal USD token: 2^40 base units ≈ $11 billion, 2^44 ≈ $176 billio
 - **Device balance cache:** `{ua, token, accSeq, balance}` is stored in the wallet's encrypted vault (the same protection
   as the seed) — never on chain, never sent to a server. Check: `[b]G == C − [x]D` on the current `acc` — one point
   multiplication, a few ms; a wrong or stale cache is detected at once and can never lead to a wrong spend (the prover and
-  the contract both refuse a proof built on a wrong balance). Update: `rollOver` ⇒ `b += pending` (BSGS only on `pending`);
-  own spend ⇒ `b −= v + fee`. When `acc` changed without the wallet knowing (anyone may call `rollOverPublic`/`rollOverBatch`
-  — `fund(victim, 1)` + `rollOverPublic` is a nearly free grief; late credits are merged by `rollOverSigned`; an own spend
+  the contract both refuse a proof built on a wrong balance). Update: `zetherRollOver` ⇒ `b += pending` (BSGS only on `pending`);
+  own spend ⇒ `b −= v + fee`. When `acc` changed without the wallet knowing (anyone may call `zetherRollOver`/`zetherRollOverBatch`
+  — `zetherShield(victim, 1)` + `zetherRollOver` is a nearly free grief; late credits are merged by `zetherRollOverSigned`; an own spend
   not yet recorded), the last verified value stays the anchor and the wallet solves BSGS on the **difference**
   `(C − [x]D) − [b_cache]G` (trying increase, then decrease) within the device bound, re-checks and updates — no CLI needed
   even when the balance exceeds 2^44. Cache lost: a balance within the device's BSGS bound is re-read; above it, use a

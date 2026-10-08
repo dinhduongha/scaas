@@ -2447,7 +2447,7 @@ Change (2026-10-08): `MetaTransaction` has no `to`/`value`, so the binding drops
 ### CTR-ZTH-08 — ZetherToken on the one meta-tx base
 - old: RS2-7, UD:§10 · status: current · owner: yes · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-08 · superseded-by: —
 
-**Why.** Zether is a child of the meta-transaction layer, so every confidential token is gasless; with one base the separate `ZetherMetaTx` mixin goes and `ZetherToken` uses the base's nonce, envelope, fee and ticket. An early code draft declared `ISecureERC20 is IERC20`, which would have left confidential tokens without meta-transactions. Rejected: the early `IZetherToken` interface sketch (`schnorrAddress`, `zetherNonce`, `EncryptedBalance` structs, `transferConfidential` with a `metaTx.amount = 0` wrapper).
+**Why.** Zether is a child of the meta-transaction layer, so every confidential token is gasless; with one base the separate `ZetherMetaTx` mixin goes and Zether is a `ZetherLayer` on `MetaTokenBase` (kinds `NONE_ZETHER`, `UNDERLYING_ZETHER`, CTR-TOK-21), using the base's nonce, envelope, fee and ticket; its entry points are allowlisted self-calls of `mtxExecute` (CTR-ZTH-34). An early code draft declared `ISecureERC20 is IERC20`, which would have left confidential tokens without meta-transactions. Rejected: the early `IZetherToken` interface sketch (`schnorrAddress`, `zetherNonce`, `EncryptedBalance` structs, `transferConfidential` with a `metaTx.amount = 0` wrapper).
 **Cost if wrong.** A second pipeline for Zether duplicates replay protection and fee logic.
 **Source.** `history/specs/2026-10-03-zether-design.md:595`, `research/_USER-DECISIONS.md:331`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-9.
 
@@ -2459,10 +2459,9 @@ Change (2026-10-08): `MetaTransaction` has no `to`/`value`, so the binding drops
 **Source.** `history/specs/2026-10-03-zether-design.md:596`
 
 ### CTR-ZTH-10 — Underlying must be an ERC-20 in v1
-- old: RS2-11 · status: current · owner: no · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-10 · superseded-by: —
+- old: RS2-11 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CTR-ZTH-44
 
-**Why.** The underlying must be an ERC-20 in v1; native coins and self-minted supply add paths the proofs do not cover.
-**Cost if wrong.** Native-coin handling would add reentrancy and accounting paths.
+**What it said.** The underlying must be an ERC-20 in v1 (no native coin, no self-minted confidential supply); replaced by the confidential layer, which keeps no underlying of its own and reuses `UnderlyingLib`, so a native leg is allowed (CTR-TOK-26).
 **Source.** `history/specs/2026-10-03-zether-design.md:600`
 
 ### CTR-ZTH-11 — fund and rollOver direct; transfer/burn enveloped
@@ -2486,11 +2485,11 @@ Change (2026-10-08): `MetaTransaction` has no `to`/`value`, so the binding drops
 **Cost if wrong.** An outer fee on direct calls would need an unbound recipient.
 **Source.** `history/specs/2026-10-03-zether-design.md:605`
 
-### CTR-ZTH-14 — Disclosure bundle stored; fee-on-transfer underlyings refused
+### CTR-ZTH-14 — Disclosure bundle stored; unsupported underlyings are UnderlyingLib's rule
 - old: RS2-15, ZL:D6 · status: current · owner: yes · date: 2026-10-05 · normative: contracts/zether.md#CTR-ZTH-14 · superseded-by: —
 
-**Why.** The disclosure bundle is stored per transfer so the parties can prove amounts later (the multi-recipient entry points choose what is stored, [CTR-ZTH-38](contracts/zether.md#CTR-ZTH-38)); fee-on-transfer underlyings are refused.
-**Cost if wrong.** Without the bundle disclosures depend on off-chain archives; FoT underlyings break the escrow invariant.
+**Why.** The disclosure bundle is stored per transfer so the parties can prove amounts later (the multi-recipient entry points choose what is stored, [CTR-ZTH-38](contracts/zether.md#CTR-ZTH-38)); the refusal of fee-on-transfer underlyings moved to the `UnderlyingLib` rule ([CTR-TOK-11](contracts/token-wrappers.md#CTR-TOK-11)), because the confidential layer has no underlying of its own.
+**Cost if wrong.** Without the bundle disclosures depend on off-chain archives; FoT underlyings break the reserve invariant.
 **Source.** `history/specs/2026-10-03-zether-design.md:607`, `history/specs/2026-10-05-zether-limits.md:18`
 
 ### CTR-ZTH-15 — Verifier forwards gas to precompiles; simulate first
@@ -2696,6 +2695,36 @@ Change (2026-10-08): `m.to`/`m.value` are gone from the struct; a public transfe
 **Why.** `verifyTransferAmount` and `transferCiphertext` move out of the token into one stateless contract (no admin, no upgrade, every token and curve); the token keeps `transferEntry` and the implementation-immutable `disclosure()`. It takes 2,972 B off `ZetherToken`; the challenge binds the token address.
 **Cost if wrong.** Left in the token, disclosure keeps it further over EIP-170 (still 4,363 B over after the split); a mutable disclosure contract could change what an opening proves.
 **Source.** `history/specs/2026-10-08-zether-multi-recipient-design.md` §2 (Z13), §5, §7.
+
+### CTR-ZTH-44 — Zether is a layer over the public balance; no underlying of its own
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-44 · superseded-by: —
+
+**Rule.** `ZetherLayer` (storage `scaas.zether`, stubs) plus `ZetherLib` (logic) sit on `MetaTokenBase`; shielded value is taken from the public balance (`zetherShield`) or from an underlying leg through `UnderlyingLib` (`zetherWrapShield`), and `UNDERLYING_ZETHER` keeps `Σ_i ⌊reserve_i·num_i/den_i⌋ ≥ totalSupply() + totalShielded·shieldScale`. The minter never mints shielded value. A leg may be the native coin (CTR-TOK-26).
+**Why.** One base, one underlying implementation and one invariant instead of a second escrow inside `ZetherToken`; a Zether token is an ordinary token whose balance can also be shielded.
+**Cost if wrong.** A layer-owned underlying duplicates `UnderlyingLib` and its audit surface, and the supply and reserve checks diverge.
+**Source.** `history/specs/2026-10-08-token-tree-design.md` T4, T5, §6.1, §6.3.
+
+### CTR-ZTH-45 — Zether entry points are `zether*` (`pqz*` for PQZ); no register function
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-45 · superseded-by: —
+
+**Rule.** `zetherShield`, `zetherWrapShield`, `zetherTransfer` (+`Bundle`, `NoBundle`, `Single`), `zetherUnshield`, `zetherUnshieldUnwrap`, `zetherRollOver` (+`Batch`, `Signed`), `zetherSetRollOverMode`; events follow the names; there is no `zetherRegister` / `pqzRegister` because the registry's `register` is relayable.
+**Why.** The old names `fund` / `burn` read as ERC-20 operations on a token that now has both; the prefix says which balance an entry point touches.
+**Cost if wrong.** `burn` on a token with `BURNABLE` means a holder burn of the public balance, so a clash with the Zether `burn` would be silent.
+**Source.** `history/specs/2026-10-08-token-tree-design.md` T5, T6, §6.2.
+
+### CTR-ZTH-46 — Prover views in a stateless ZetherStatements
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-46 · superseded-by: —
+
+**Why.** The prover-only views (`transferStatement*`, `unshieldStatement`) read the token's `accountState` and move to one stateless contract, pairing with `ZetherDisclosure`; it takes the views out of a token that is over EIP-170.
+**Cost if wrong.** The views stay in the token and its size budget (CTR-TOK-24) is spent on code no transaction runs.
+**Source.** `history/specs/2026-10-08-token-tree-design.md` T14, §6.1.
+
+### CTR-ZTH-47 — Regulated flags are refused on confidential kinds
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-47 · superseded-by: —
+
+**Why.** Flags 5–8 (`FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`, CTR-AS-17) are refused on `NONE_ZETHER` / `UNDERLYING_ZETHER`; valid flags are `PAYABLE`, `MINTABLE`/`BURNABLE` (`NONE_ZETHER`), `RATE_ADJUSTABLE`/`WRAP_DISABLEABLE` (`UNDERLYING_ZETHER`). A confidential balance can be frozen but not seized on public chains.
+**Cost if wrong.** Every control combination on a confidential kind would need its own audited implementation.
+**Source.** `history/specs/2026-10-08-token-tree-design.md` T11, §6.3.
 
 ### CTR-ZTH-80 — Range bits 32 and DECRYPT_BOUND 2^40
 - old: R34(params) · status: superseded · owner: yes · date: 2026-10-03 · normative: — · superseded-by: CTR-ZTH-18, CTR-ZTH-19
@@ -3102,6 +3131,13 @@ Change (2026-10-08): `PqzToken` sits on the one token base and relays like `Zeth
 **Why.** The owner asked why `PqzToken` should differ from `ZetherToken`; the only reason given for the separate `PqzMetaTx` was ≈ 2 M gas of memory copies, which assumed three copies of `m.data`. One copy for the `CALL` costs ≈ 0.25 M at 340 KB (`3·w + w²/512`), the callee takes `bytes calldata`, and an op stays ≈ 3.25 M, below the EIP-7825 cap. One base and one pipeline then serve every token; PQZ selectors are not batchable.
 **Cost if wrong.** ≈ 0.25 M gas more per PQZ op than a sliced-argument dispatch; a second meta-tx implementation to audit otherwise.
 **Source.** `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G11, §3 GC-10.
+
+### CTR-PQZ-22 — PQZ entry-point names mirror classical Zether; kinds reserved
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/pq-zether.md#CTR-PQZ-22 · superseded-by: —
+
+**Why.** `pqzShield`, `pqzWrapShield`, `pqzTransfer`, `pqzUnshield`, `pqzUnshieldUnwrap`, `pqzRollOver` follow CTR-ZTH-45; `NONE_PQZ`, `UNDERLYING_PQZ` and `*_ZETHER_PQZ` are reserved kinds (CTR-TOK-21). Open: the disclosure changes Z9/Z10/Z12 and multi-recipient transfers are not ruled for PQZ (owner review pending).
+**Cost if wrong.** Two naming schemes for the same operations across the two classes.
+**Source.** `history/specs/2026-10-08-token-tree-design.md` T5, §6.2.
 
 ### CTR-PQZ-80 — PqzMetaTx: own mixin with op arguments sliced from calldata
 - old: — · status: superseded · owner: yes · date: 2026-10-08 · normative: — · superseded-by: CTR-PQZ-21
@@ -5697,7 +5733,7 @@ It said: Host company configuration parameter; replaced by INT-ODOO-11.
 | RS2-8 | CTR-ZTH-09 | current |
 | RS2-9 | CTR-UA-13 | current |
 | RS2-10 | CTR-ZTH-82 | superseded |
-| RS2-11 | CTR-ZTH-10 | current |
+| RS2-11 | CTR-ZTH-10 | superseded |
 | RS2-12 | CTR-ZTH-11 | superseded |
 | RS2-13 | CTR-ZTH-12 | current |
 | RS2-14 | CTR-ZTH-13 | current |

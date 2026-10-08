@@ -440,13 +440,13 @@ EVM Zether (`ZetherToken`, re-pointed at migration):
 
 | Function | Subject | Accepts | Verified by |
 |---|---|---|---|
-| `fund(encodedY, amount)` | receiver `UA(zether, Y)`; sender pays | Z (registered); sender N | registry `kindOf` |
-| `transferConfidential(payload, proof, authSig, beneficiary)` | `from = UA(Y_f)`, `to = UA(Y_t)`, `beneficiary` | Z, Z, Z | proof + `requireZetherAuthorized(from, digest, authSig, zkCovered = true)` ⇒ Z-auth |
-| `burn(payload, amount, recipient, beneficiary, proof, authSig)` | `from`, `beneficiary`; `recipient` address | Z, Z; recipient N | as transfer |
-| `mtxRollOver(ua, …, sig)`, `mtxSetRollOverMode(ua, …, sig)` | `ua` | Z | `requireZetherAuthorized(ua, digest, sig, zkCovered = false)` ⇒ Z-auth (self ⇒ Zether Schnorr by `x`, purpose `zether-owner`) |
-| `rollOverPublic(ua)`, `rollOverBatch(uas)` | `ua` | Z | none (public) |
+| `zetherShield(encodedY, amount)` | receiver `UA(zether, Y)`; sender pays | Z (registered); sender N | registry `kindOf` |
+| `zetherTransfer(payload, proof, authSig, beneficiary)` | `from = UA(Y_f)`, `to = UA(Y_t)`, `beneficiary` | Z, Z, Z | proof + `requireZetherAuthorized(from, digest, authSig, zkCovered = true)` ⇒ Z-auth |
+| `zetherUnshield(payload, amount, recipient, beneficiary, proof, authSig)` | `from`, `beneficiary`; `recipient` address | Z, Z; recipient N | as transfer |
+| `zetherRollOverSigned(ua, …, sig)`, `zetherSetRollOverMode(ua, …, sig)` | `ua` | Z | `requireZetherAuthorized(ua, digest, sig, zkCovered = false)` ⇒ Z-auth (self ⇒ Zether Schnorr by `x`, purpose `zether-owner`) |
+| `zetherRollOver(ua)`, `zetherRollOverBatch(uas)` | `ua` | Z | none (public) |
 | `wrap`, `unwrap` | sender | N | — |
-| `mtxExecute(m, sig)` (self-call of `transferConfidential`/`burn`/`fund`/`wrap`/`unwrap`, outer fee) | `m.from` (outer-fee payer) | N | the base's `_requireValidSignature` |
+| `mtxExecute(m, sig)` (self-call of `zetherTransfer`/`zetherUnshield`/`zetherShield`/`wrap`/`unwrap`, outer fee) | `m.from` (outer-fee payer) | N | the base's `_requireValidSignature` |
 | views `registered`, `accountState`, `sendCounter` | `ua` | Z | — |
 
 `authSig` for Z-auth: `0x` with a proof and `authRef = 0`; else `abi.encode(bytes authKeyData, bytes sig)` checked by the
@@ -1028,7 +1028,7 @@ person has distinct UAs on two curves, never merged). `register(encodedY, authSc
 - `linkEVM` ⇒ `links[msg.sender] = UA`, `link_eth[UA] = msg.sender` (`EVMAlreadyLinked` if already linked);
 - no key rotation, no relinking: a new key is a new UA.
 
-| # | Scheme | `authData` | Authorization on transfer/burn/rollOverSigned | Use |
+| # | Scheme | `authData` | Authorization on transfer/unshield/zetherRollOverSigned | Use |
 |---|---|---|---|---|
 | 0 | `SELF_SCHNORR` | `0x` | the ZK proof itself (or Schnorr by `x`) | single holder |
 | 1 | `ECDSA_MULTISIG` | `abi.encode(address[] ownersSorted, uint256 threshold)`, `0 < t ≤ n` | `abi.encode(bytes[] sigs)` sorted by signer, raw digest, low-s | boards, finance approvers |
