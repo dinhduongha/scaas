@@ -91,8 +91,8 @@ first-come); classical Zether refuses fee-on-transfer underlyings (`UnsupportedU
 
 <a id="CTR-TOK-09"></a>**CTR-TOK-09** — `NoUnderlyingToken` (kind `NONE`) mints `initialSupply` to `initialHolder` at
 init (`NONE*` kinds only). Further supply and burning are features, not class: `mint` by the `minter` with `MINTABLE`
-(`minter == 0` and no flag ⇒ fixed supply), holder `burn` with `BURNABLE`, and the minter's one-way retirement is
-`disableFeature(MINTABLE)` ([CTR-TOK-22](#CTR-TOK-22)); `renounceMinter` is gone.
+(`minter == 0` and no flag ⇒ fixed supply), holder `burn` with `BURNABLE`, and the role and its lifecycle are in
+[CTR-TOK-22](#CTR-TOK-22). (Built: `renounceMinter`.)
 
 `underlyings.length == 0`. The creation parameters are the `TokenConfig` fields of [CTR-TOK-25](#CTR-TOK-25)
 (`name`, `symbol`, `decimals`, `features`, `lockedFeatures`, `roles`, `initialSupply`, `initialHolder`).
@@ -114,13 +114,8 @@ kind labels: the leg count says it. The single-asset convenience ABI (`wrap(amou
 minOut])`) works **only** with exactly one leg (`UnderlyingRequired()` otherwise); the per-leg ABI works for every
 count. Everything below until the multi-leg subsection holds per leg, and for a one-leg token as it stands.
 
-A one-leg token: `underlyings.length == 1`. The creation encoding (built `initData`; in the target the `TokenConfig`
-fields `legs` and `rate` of [CTR-TOK-25](#CTR-TOK-25)) is `initData = abi.encode(string name, string symbol, uint8 decimals, uint96 num, uint96 den,
-RateConfig cfg)`, with
-
-```solidity
-struct RateConfig { bool adjustable; address rateAdmin; uint32 rateDelay; uint16 maxRateStepBps; }
-```
+A one-leg token: `underlyings.length == 1`. Creation parameters are the `TokenConfig` fields `legs` and `rate` of
+[CTR-TOK-25](#CTR-TOK-25); the rate role and the flags are in [CTR-TOK-22](#CTR-TOK-22).
 
 Checks (all revert at init, so a bad token is never born):
 
@@ -129,11 +124,17 @@ Checks (all revert at init, so a bad token is never born):
 | underlying `≠ 0`, `≠ address(this)`, has code | `UnderlyingInvalid(u)` |
 | `decimals()` returns a `uint8` (staticcall) | `DecimalsUnreadable(u)` |
 | `1 ≤ num, den < 2^96` | `RateInvalid(num, den)` |
-| `adjustable == false` ⇒ `rateAdmin == 0 && rateDelay == 0 && maxRateStepBps == 0` | `RateConfigInvalid()` |
-| `adjustable == true` ⇒ `rateAdmin` is a contract (the `_isContract` of the allowance lockdown), `2 days ≤ rateDelay ≤ 30 days`, `1 ≤ maxRateStepBps ≤ 1000` | `RateAdminNotContract(a)`, `RateConfigInvalid()` |
+| rates fixed ⇒ no rate role, `rateDelay == 0 && maxRateStepBps == 0` | `RateConfigInvalid()` |
+| rates adjustable ⇒ the rate role is a contract (the `_isContract` of the allowance lockdown), `2 days ≤ rateDelay ≤ 30 days`, `1 ≤ maxRateStepBps ≤ 1000` | `RateAdminNotContract(a)`, `RateConfigInvalid()` |
 
-Client defaults (UI and ERP wizard): `decimals = d_u`, `num = den = 1` (a plain 1:1 wrapper), `adjustable = false`;
-when the issuer turns on `adjustable`: `rateDelay = 7 days`, `maxRateStepBps = 100`.
+Client defaults (UI and ERP wizard): `decimals = d_u`, `num = den = 1` (a plain 1:1 wrapper), rates fixed; when the
+issuer makes them adjustable: `rateDelay = 7 days`, `maxRateStepBps = 100`. Role and its lifecycle:
+[CTR-TOK-22](#CTR-TOK-22).
+
+**Transitional (BUILT).** Built creation encoding: `initData = abi.encode(string name, string symbol, uint8 decimals,
+uint96 num, uint96 den, RateConfig cfg)` with `struct RateConfig { bool adjustable; address rateAdmin; uint32 rateDelay;
+uint16 maxRateStepBps; }`; the checks above read `adjustable == false` ⇒ `rateAdmin == 0 && rateDelay == 0 && maxRateStepBps == 0` and `adjustable == true` ⇒ the contract and bound checks; the client default was `adjustable = false`. Replaced in P1 by
+`TokenConfig`.
 
 ```
 wrap(uint256 amount) returns (uint256 minted)                  // sender = _msgSender() (the signer under mtxExecute)
@@ -200,10 +201,8 @@ leg's reserve (`InsufficientReserve`). The `guardian` (role of the `WRAP_DISABLE
 would let a compromised guardian reopen a depegged inflow and drain the good legs.
 
 Init: `1 ≤ underlyings.length ≤ 8` (`UnderlyingCountInvalid(n)`), each checked as for one leg, no duplicates
-(`DuplicateUnderlying(u)`). `initData = abi.encode(string name, string symbol, uint8 decimals, uint96[] nums,
-uint96[] dens, RateConfig cfg, address guardian)`; array lengths equal `underlyings.length`. `guardian` may be 0 (no
-guardian) or any address — its only power stops inflow, so an on-call key is acceptable and speed matters in a depeg.
-The leg order is the factory's `underlyings` order and never changes.
+(`DuplicateUnderlying(u)`). The guardian may be any address — its only power stops inflow, so an on-call key is acceptable and speed
+matters in a depeg; role and lifecycle: [CTR-TOK-22](#CTR-TOK-22). The leg order is the factory's `underlyings` order and never changes.
 
 | Function | Rule |
 |---|---|
@@ -211,11 +210,14 @@ The leg order is the factory's `underlyings` order and never changes.
 | `unwrap(address u, uint256 wrapped, address recipient, uint256 minOut) returns (uint256 out, uint256 burned)` | one-leg unwrap on leg `u`, bounded by `reserve_u` and `minOut`; works on disabled legs and during a pending change |
 | `addReserve(address u, uint256 amount)` | as for one leg; refused on disabled legs |
 | `disableWrap(address u, bytes32 reason)` | guardian; one-way; `WrapDisabled(u, guardian, reason)`; second call reverts `WrapDisabledFor(u)` |
-| `renounceGuardian()` | guardian; `GuardianRenounced()` |
 | `wrap(uint256)`, `unwrap(uint256,address)`, `unwrap(uint256,address,uint256)` (single-asset ABI) | revert `UnderlyingRequired()` unless exactly one leg |
 | `underlying()` | returns `address(0)` with more than one leg; clients use `underlyings()` |
 | rate functions | as for one leg with the leg named in `proposeRate` (default fixed; adjustable per [CTR-TOK-13](#CTR-TOK-13)); one pending change per token; admin-only execution; `RateDecreaseWithDisabledLeg()` if a change lowers `C` while any leg is disabled |
 | gasless unwrap (`mtxExecute`) | with the leg chosen by the signer; works on disabled legs |
+
+**Transitional (BUILT).** Built multi-leg creation encoding: `initData = abi.encode(string name, string symbol, uint8
+decimals, uint96[] nums, uint96[] dens, RateConfig cfg, address guardian)`; array lengths equal `underlyings.length`; `guardian` may be 0 (no guardian). Built functions `renounceGuardian()` (guardian; emits
+`GuardianRenounced()`) and `renounceRateAdmin()`; replaced in P1.
 
 Invariant and solvency: `C = Σ_i ⌊reserve_i·num_i/den_i⌋ ≥ totalSupply()` is the aggregate invariant; the one-leg
 per-operation argument holds leg by leg. There is **no** per-leg invariant: the backing is pooled and redemption is
@@ -463,8 +465,7 @@ two immutable words written by `initialize`, with `lockedFeatures ⊆ features`.
   Errors `FeatureInvalidForKind(bit)`, `LockedNotSubset()`, `RoleMismatch(bit)`.
 - **`disableFeature(bit)`**: callable by the flag's role; clears the bit one-way; reverts `FeatureLocked(bit)` on a
   locked bit and `FeatureNotSet(bit)` when already clear; the role loses its power with the bit. Emits
-  `FeatureDisabled(bit, by)`. It replaces `renounceMinter`, `renounceRateAdmin`, the guardian renounce and
-  `disableControls`. `PAYABLE` and `BURNABLE` have no role and are therefore immutable.
+  `FeatureDisabled(bit, by)`. `PAYABLE` and `BURNABLE` have no role and are therefore immutable.
 - **Views:** `features()`, `lockedFeatures()`, `roles()`, `kind()`, `version()`. `supportsInterface(IERC20Payment)` is
   true iff `PAYABLE` is set. `rateAdjustable()`, `rateAdmin()` and `guardian()` stay public so wallets and indexers
   flag them. (The wrap pause during a pending rate change is a consequence of that change, not a separate power.)
@@ -909,7 +910,7 @@ Unit (forge, `test/v2/`):
 | Named | `testFuzz_namedDigestEqualsGeneric` over random struct fields for every named function; a signature consumed by a named call fails on the generic path and vice versa; every `MtxModeShape` case; a no-fee struct signed with a leftover `fee ≠ 0` fails through `mtxTransfer`; `mtxPay` lane equals `payLane`; second `mtxPay` of a `payId` reverts `MetaTxBadNonce`; `payWithFee` with the same `entryRef` still emits `PaymentSettled` (documents the per-path limit); `mtxBatch` atomic (one bad item reverts all), length mismatch, empty |
 | `NONE` | init mint to `initialHolder`; `mint` with `MINTABLE` and `NotMinter`; `burn` with `BURNABLE`; fixed supply without `MINTABLE`; `disableFeature(MINTABLE)` |
 | `UNDERLYING`, one leg | rate 1:1 equals the deleted v1 wrapper's behaviour; rounding down on wrap/unwrap; `burned = ⌈out·q⌉`; `previewWrap` `used`; `WrapTooSmall`/`UnwrapTooSmall`/`UnwrapBelowMin`; two-argument `unwrap` = `minOut 0`; fee-on-transfer inbound measured; sender-pays fee-on-transfer reverts `UnderlyingTransferMismatch`; donation not counted; `ReserveShortfall` after a negative-rebase mock stops wrap and not unwrap; `addReserve`; decimals snapshot; init refusals |
-| Rates | fixed ⇒ `RateFixed`; propose/cancel/execute; only the admin executes (`NotRateAdmin` for anyone else); delay and window bounds; an expired change counts as none for `proposeRate`, `pendingRate()` and the pause; step bound both directions at the exact edge; decrease refused without collateral, accepted after `addReserve`; execute refused with `ReserveShortfall` when any leg's balance is below its reserve (shock, then decrease); `collateralValue` saturates and `executeRate` exits early on a huge leg; renounce drops pending; EOA admin refused at init; wrap paused on **every** leg while anything is pending, reopens on execute/cancel/expiry, unwrap and `addReserve` open |
+| Rates | fixed ⇒ `RateFixed`; propose/cancel/execute; only the admin executes (`NotRateAdmin` for anyone else); delay and window bounds; an expired change counts as none for `proposeRate`, `pendingRate()` and the pause; step bound both directions at the exact edge; decrease refused without collateral, accepted after `addReserve`; execute refused with `ReserveShortfall` when any leg's balance is below its reserve (shock, then decrease); `collateralValue` saturates and `executeRate` exits early on a huge leg; giving up the rate role (built: `renounceRateAdmin`) drops pending, as [CTR-TOK-22](#CTR-TOK-22) rules; EOA admin refused at init; wrap paused on **every** leg while anything is pending, reopens on execute/cancel/expiry, unwrap and `addReserve` open |
 | `UNDERLYING`, several legs | 2–8 legs, duplicates, zero; per-leg reserves; unwrap bounded by `reserve_i`; guardian disable one-way and idempotence error; unwrap open on a disabled leg; `addReserve` refused on it; `RateDecreaseWithDisabledLeg`; the cross-leg scenario (pending decrease on leg `i`, flash-wrap of leg `j`) reverts `WrapPausedForRateChange` and a third-party `executeRate` reverts `NotRateAdmin`; single-asset ABI reverts `UnderlyingRequired` with more than one leg |
 | Factory | kind ⇒ leg count (`NONE` 0, `UNDERLYING` 1–8); `createToken` and `createTokenUnregistered`; `VersionKindMismatch`; `ImplementationFactoryMismatch`; append-only catalogue; unregistered version 0; salt scoped by creator; every underlying indexed; exactly one `TokenCreated`; the factory only forwards flags (the token validates) |
 | Features | every invalid combination of [CTR-TOK-22](#CTR-TOK-22) reverts with its error (`FeatureInvalidForKind`, `LockedNotSubset`, `RoleMismatch`); `disableFeature` on a locked, a disableable and an already-clear bit, and the role loses its power; `PAYABLE` off ⇒ `supportsInterface(IERC20Payment)` false and pay reverts; rate fixed vs adjustable; guardian; the four regulated flags (existing asset-suite cases on the ordinary kinds) |

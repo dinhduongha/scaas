@@ -1821,7 +1821,7 @@ Change (2026-10-08): the non-EVM exception is gone — non-EVM families name sig
 ### CTR-TOK-09 — NoUnderlyingToken holder burn, renounceable minter
 - old: R141 · status: current · owner: no · date: 2026-10-06 · normative: contracts/token-wrappers.md#CTR-TOK-09 · superseded-by: —
 
-**Why.** A `NoUnderlyingToken` lets holders burn and its minter retire, which matches self-issued tokens; both are now the flags `BURNABLE` and `MINTABLE` and the retirement is `disableFeature` ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)).
+**Why.** A `NoUnderlyingToken` lets holders burn and its minter retire, which matches self-issued tokens; both are now the flags `BURNABLE` and `MINTABLE` ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)).
 **Cost if wrong.** A non-renounceable minter is a permanent admin key.
 **Source.** `history/specs/2026-10-06-token-wrappers-v2.md:135`
 
@@ -1912,7 +1912,7 @@ Change (2026-10-08): the non-EVM exception is gone — non-EVM families name sig
 ### CTR-TOK-22 — Features are flags: features, lockedFeatures, disableFeature
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/token-wrappers.md#CTR-TOK-22 · superseded-by: —
 
-**Why.** One administration word chosen at creation (bits 0–8: `PAYABLE`, `MINTABLE`, `BURNABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE`, `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`); per flag the creator picks locked or disableable (its role may clear it once, never set it). Validation lives in the token's `initialize`; `PAYABLE` is default off and immutable; the factory refuses flags 5–8 on a confidential kind; a minter never mints into a shielded balance. `disableFeature` replaces `renounceMinter`, `renounceRateAdmin`, the guardian renounce and `disableControls`.
+**Why.** One administration word chosen at creation (bits 0–8: `PAYABLE`, `MINTABLE`, `BURNABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE`, `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`); per flag the creator picks locked or disableable (its role may clear it once, never set it). Validation lives in the token's `initialize`; `PAYABLE` is default off and immutable; the factory refuses flags 5–8 on a confidential kind; a minter never mints into a shielded balance.
 **Cost if wrong.** Per-class powers cannot express a mix; an unvalidated factory-side check would let `createTokenUnregistered` bring a token with inconsistent roles.
 **Source.** `history/specs/2026-10-08-token-tree-design.md` §2 (T2, T5, T8, T11), §5.
 
