@@ -26,7 +26,7 @@ Order: contracts first (one heavy build at a time), then node, clients, the Odoo
       signature (CLI-SGN-33…36); vectors/KATs regenerated.
 - [x] Draft for non-EVM families: `docs/superpowers/specs/2026-10-08-nonevm-metacall-design.md` (owner Q1–Q4 open).
 - [ ] **Owner review of three drafts (2026-10-08), then fold into the component docs:**
-      `2026-10-08-dex-solver-design.md` (DS-1…8; design approved in chat), `2026-10-08-metatx-generic-call-design.md`
+      `2026-10-08-dex-exchange-design.md` (DS-1…8; design approved in chat), `2026-10-08-metatx-generic-call-design.md`
       (GC-1…10; Q4 PqzToken open), `2026-10-08-nonevm-metacall-design.md` (NM-1…4; Q1–Q4 open). Each changes MT-1…MT-9
       scope as listed in its "Changes to current rules" table.
 

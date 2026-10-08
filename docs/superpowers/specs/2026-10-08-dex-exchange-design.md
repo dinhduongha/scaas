@@ -1,4 +1,4 @@
-# DEX solver settlement: `TradeOrder`s executed against AMMs, multi-hop and cycles
+# DEX exchange settlement: `TradeOrder`s executed against AMMs, multi-hop and cycles
 
 **Status:** DRAFT, design approved by the owner in chat 2026-10-08; written spec awaiting owner review.
 Provisional ids `DS-n`; real ids are allocated in `docs/decisions.md` on acceptance (docs/README "Ids").
@@ -25,26 +25,27 @@ cycle — sell X, receive more X — when pools disagree. The owner asked for th
 | S3 | Approach | **Solver settlement** (CoW-style) in `OrderBookDex` itself, beside `mtxSettle`; the node's TradeEngine runs its own algorithm. `receiveToken` is whatever the order names — a cycle X→…→X is allowed, not required |
 | S4 | Surplus (output above the signed limit) | **The signer's**; the contract enforces it for everything that reaches the DEX, the node's policy for the rest |
 | S5 | Who performs the AMM calls? | **The DEX itself** (`interactions[]`) — and, in a **separate function**, a solver-named **executor** contract |
+| S7 | Function names | `mtxSolve` renamed **`mtxExchange`** (owner); hence `mtxExchangeVia`, `ExchangePlan`, `ExchangeLeg`, `IExchangeExecutor.exchangeCallback`, `setExchangeTarget`, `ExchangeLegSettled`. Not to be confused with `ExchangeOffer.exchange` ([CTR-AS-13](../../contracts/asset-suite.md#CTR-AS-13)), a different contract |
 | S6 | Node income | Only the `relayerShare` of the signed fee; the node never routes surplus to itself |
 
 ## 3. Design
 
-### DS-1 — Two solver entry points on `OrderBookDex`
+### DS-1 — Two exchange entry points on `OrderBookDex`
 
 ```solidity
-struct SolveLeg    { address sellToken; TradeOrder o; bytes sig; uint256 sellFill; uint256 receiveFill; }
+struct ExchangeLeg    { address sellToken; TradeOrder o; bytes sig; uint256 sellFill; uint256 receiveFill; }
 struct Interaction { address target; bytes data; }          // no value: the DEX holds no native coin
-struct Solution    { bytes32 ref; SolveLeg[] legs; address[] extraTokens; }
+struct ExchangePlan    { bytes32 ref; ExchangeLeg[] legs; address[] extraTokens; }
 
 // (a) the DEX calls each interaction itself (CoW GPv2Settlement model)
-function mtxSolve(Solution calldata s, Interaction[] calldata interactions) external nonReentrant;
+function mtxExchange(ExchangePlan calldata s, Interaction[] calldata interactions) external nonReentrant;
 
 // (b) the DEX hands the pulled funds to a solver-named executor (UniswapX filler model)
-interface ISolveExecutor {
-    function solveCallback(bytes32 ref, address[] calldata tokensOut, uint256[] calldata amountsOut,
+interface IExchangeExecutor {
+    function exchangeCallback(bytes32 ref, address[] calldata tokensOut, uint256[] calldata amountsOut,
                            address[] calldata tokensIn, uint256[] calldata amountsIn, bytes calldata data) external;
 }
-function mtxSolveVia(Solution calldata s, address executor, bytes calldata data) external nonReentrant;
+function mtxExchangeVia(ExchangePlan calldata s, address executor, bytes calldata data) external nonReentrant;
 ```
 
 `receiveFill` is the **floor** the solver commits to for that leg; what the leg finally receives is the floor plus its
@@ -69,14 +70,14 @@ Steps, identical for (a) and (b) except step 4:
    - (a) For each interaction: the blocklist and allowlist of DS-5, then `target.call(data)`; a failure reverts the
      solution with its revert data.
    - (b) The allowlist of DS-5 on `executor`; the DEX `transfer`s to `executor` the pulled amount of each sell token
-     (`tokensOut`/`amountsOut`) and calls `solveCallback` with, per receive token, the **minimum** it needs back
+     (`tokensOut`/`amountsOut`) and calls `exchangeCallback` with, per receive token, the **minimum** it needs back
      (`tokensIn`/`amountsIn` = Σ floors of the legs receiving that token). The executor does whatever it wants
      (pool callbacks, flash swaps, its own inventory) and transfers to the DEX before it returns.
 5. **Settle surplus** (DS-3), then **pay**: each leg's `destination` (or `from`) receives `receiveFill − dexFee +
    surplusShare` in `o.receiveToken`; each `dexFee` is split per [CTR-DEX-17](../../contracts/dex.md#CTR-DEX-17)
    (relayer share to `msg.sender`); a Path B leg is refunded `amount − sellFill` in its sell token.
 6. **Conservation**: the DEX's balance of every snapshotted token equals its snapshot (`ConservationBroken(token)`).
-   Emit per leg `SolveLegSettled(ref, orderHash, from, destination, sold, receivedFloor, surplus, dexFee, refund,
+   Emit per leg `ExchangeLegSettled(ref, orderHash, from, destination, sold, receivedFloor, surplus, dexFee, refund,
    limitReceive)` with `limitReceive = ceil(sellFill · receiveAmount / amount)`, so a client checks what the signer got
    against what it signed without trusting the node.
 
@@ -125,7 +126,7 @@ contract DexPuller {                       // deployed by the DEX's constructor;
 ```
 
 Holders of an **outside** token approve the **puller**, not the DEX; the DEX calls `pull` only after its own checks of
-the `DexOrder` (for `mtxSettle` and both solver functions alike). This changes
+the `DexOrder` (for `mtxSettle` and both exchange functions alike). This changes
 [CTR-DEX-18](../../contracts/dex.md#CTR-DEX-18) ("Pull" row) and every place that says "allowance to the DEX": node
 intake reads `allowance(from, puller)`; clients and the app ask for an approval of the puller. SCaaS tokens are
 unaffected (no allowance exists, [CTR-TOK-01](../../contracts/token-wrappers.md#CTR-TOK-01)).
@@ -139,7 +140,7 @@ For (a), each interaction is refused unless:
   SCaaS token (`ForbiddenSelector`). Without it an interaction could call `mtxTrade` of a victim's resting order
   (which names this DEX) with an invented `receiveFill`, pull the victim's funds into the DEX and move the same amount
   out, and conservation would still balance;
-- if any leg sets `LISTED_POOLS` **or** the DEX is in listed-only mode: `solveTarget[target]` (`TargetNotListed`).
+- if any leg sets `LISTED_POOLS` **or** the DEX is in listed-only mode: `exchangeTarget[target]` (`TargetNotListed`).
 
 Other `mtx…` selectors need no block: cancels need the signer's own signature and only close orders; `mtxExecute`
 can be submitted by any relayer anyway. Interactions may `approve` routers (the DEX is a contract, and so is the
@@ -148,14 +149,14 @@ harmless: between calls the DEX holds no user funds (conservation over every dec
 movement is checked at the end; tests prove it (DS-9).
 
 For (b): an executor that calls back into the DEX hits `nonReentrant`; one that calls `mtxTrade` fails because it is
-not `o.dex`; one that calls the puller fails because it is not the DEX. The allowlist (`solveTarget[executor]`) applies
+not `o.dex`; one that calls the puller fails because it is not the DEX. The allowlist (`exchangeTarget[executor]`) applies
 under the same condition as for targets — the DEX cannot see what an executor calls inside.
 
 ### DS-6 — Admin: two new powers
 
 | Function | Effect | Event |
 |---|---|---|
-| `setSolveTarget(address target, bool listed)` | list or delist an interaction target or an executor | `SolveTargetSet(target, listed)` |
+| `setExchangeTarget(address target, bool listed)` | list or delist an interaction target or an executor | `ExchangeTargetSet(target, listed)` |
 | `setListedOnly(bool on)` | DEX-wide listed-only mode; default `false` (any target) | `ListedOnlySet(on)` |
 
 Neither touches funds or changes a fee amount. A signer who wants the guarantee whatever the admin does sets
@@ -168,29 +169,29 @@ Neither touches funds or changes a fee amount. A signer who wants the guarantee 
 Part of the DEX venue ([node/dex-venue.md](../../node/dex-venue.md)), off unless the chain enables it.
 
 - **Intake split.** An order on a listed market enters the book as today. An order whose pair is not a listed market,
-  or whose `receiveToken` equals its sell token, is **solve-only**: it never rests in the book and only the
+  or whose `receiveToken` equals its sell token, is **exchange-only**: it never rests in the book and only the
   TradeEngine handles it. Both tokens must be known to the DEX (DS-1 step 1), else `TOKEN_NOT_SERVED`.
-- **Each tick** (every block or `solver.tick`):
+- **Each tick** (every block or `trade_engine.tick`):
   1. book matching first (`mtxSettle`) — internal liquidity pays no pool fee;
-  2. then: coincidences of wants among solve-only orders, and AMM routes for the remainder — quotes by `eth_call` to
-     the configured quoters, at most `solver.max_hops` (default 3) hops, cycles for X→X orders;
+  2. then: coincidences of wants among exchange-only orders, and AMM routes for the remainder — quotes by `eth_call` to
+     the configured quoters, at most `trade_engine.max_hops` (default 3) hops, cycles for X→X orders;
   3. a resting book order is also filled through AMMs when an AMM route reaches its limit (per market `amm_fill`,
      default on when the solver is enabled);
-  4. `receiveFill` floor = quote × (1 − `solver.buffer`), never below the signed limit — the buffer costs the signer
+  4. `receiveFill` floor = quote × (1 − `trade_engine.buffer`), never below the signed limit — the buffer costs the signer
      nothing, because the surplus comes back (DS-3);
   5. path (a) when routers suffice; path (b) through the node's own executor (listed) for callbacks or flash swaps;
   6. simulate the whole call (`eth_call`), submit through a `call` job, watch the final event.
 - **Surplus and income (owner S4, S6).** Every swap the node builds sends its output to the DEX; the node's income is
-  the `relayerShare` of the signed fee and nothing else. `GET /v1/dex/solves/{ref}` returns the quote at decision time
-  next to the settled `SolveLegSettled` figures.
-- **Fees by role.** A solve-only order pays the market's `taker_fee_ppm` (orders below it are refused, `FEE_TOO_LOW`);
+  the `relayerShare` of the signed fee and nothing else. `GET /v1/dex/exchanges/{ref}` returns the quote at decision time
+  next to the settled `ExchangeLegSettled` figures.
+- **Fees by role.** A exchange-only order pays the market's `taker_fee_ppm` (orders below it are refused, `FEE_TOO_LOW`);
   a resting order filled through an AMM pays `maker_fee_ppm`.
 - **MEV.** On a public chain the node submits through a private relay where one exists. A sandwich can only take
   surplus, never go below the signed limit. The private chain 7622 has no public mempool (and no AMM unless one is
   deployed).
-- **Config per chain:** `solver.enabled` (default `false`), `solver.amm` (list of `{kind: univ2|univ3, factory,
-  quoter, router}`), `solver.max_hops`, `solver.executor`, `solver.tick`, `solver.buffer`.
-- **Call table** ([NODE-JOB-20](../../node/job-api.md#NODE-JOB-20)): `mtxSolve` and `mtxSolveVia` on the chain
+- **Config per chain:** `trade_engine.enabled` (default `false`), `trade_engine.amm` (list of `{kind: univ2|univ3, factory,
+  quoter, router}`), `trade_engine.max_hops`, `trade_engine.executor`, `trade_engine.tick`, `trade_engine.buffer`.
+- **Call table** ([NODE-JOB-20](../../node/job-api.md#NODE-JOB-20)): `mtxExchange` and `mtxExchangeVia` on the chain
   profile's DEXes, like `mtxSettle`.
 - **Relayer binding.** Clients keep defaulting `relayer` to the venue node ([CTR-DEX-17](../../contracts/dex.md#CTR-DEX-17)).
   With `relayer = 0` any solver may solve the order; the signed limit holds, and only the surplus outside the DEX
@@ -223,8 +224,8 @@ ordinary ERC-20s); a solver auction among several nodes; RFQ market makers.
 
 | Rule | Change |
 |---|---|
-| [CTR-DEX-01](../../contracts/dex.md#CTR-DEX-01) | the overview gains the solver path |
-| [CTR-DEX-03](../../contracts/dex.md#CTR-DEX-03) | admin: + `setSolveTarget`, `setListedOnly` |
+| [CTR-DEX-01](../../contracts/dex.md#CTR-DEX-01) | the overview gains the exchange path |
+| [CTR-DEX-03](../../contracts/dex.md#CTR-DEX-03) | admin: + `setExchangeTarget`, `setListedOnly` |
 | [CTR-DEX-15](../../contracts/dex.md#CTR-DEX-15) | `receiveToken == this` allowed; flag `LISTED_POOLS` |
 | [CTR-DEX-16](../../contracts/dex.md#CTR-DEX-16) | outside legs pulled through the puller |
 | [CTR-DEX-18](../../contracts/dex.md#CTR-DEX-18) | allowance to the puller, not the DEX |
@@ -232,9 +233,9 @@ ordinary ERC-20s); a solver auction among several nodes; RFQ market makers.
 | [contracts/README.md](../../contracts/README.md#admin-powers-complete-list) | admin-powers row of `OrderBookDex` |
 | [NODE-DEX-15](../../node/dex-venue.md#NODE-DEX-15) | outside legs: allowance to the puller |
 | new NODE-DEX-17… | DS-7 |
-| [NODE-JOB-20](../../node/job-api.md#NODE-JOB-20) | call-table rows `mtxSolve`, `mtxSolveVia` |
+| [NODE-JOB-20](../../node/job-api.md#NODE-JOB-20) | call-table rows `mtxExchange`, `mtxExchangeVia` |
 | [clients/signers-clientkeys.md](../../clients/signers-clientkeys.md) | DS-8 |
-| `TODO.md` MT-5 | + puller, solver functions, surplus, admin powers; node MT-8 + TradeEngine |
+| `TODO.md` MT-5 | + puller, exchange functions, surplus, admin powers; node MT-8 + TradeEngine |
 
 ## 7. Tests (gate of the stream)
 
@@ -247,8 +248,8 @@ ordinary ERC-20s); a solver auction among several nodes; RFQ market makers.
   unknown flag bits still refused; Path B leg in a solution (refund); outside-token leg through the puller in
   `mtxSettle` and in a solution; a reverting and a gas-burning target; invariant: between calls the DEX's balance of
   every token is 0 and residual allowances move nothing.
-- **node**: route finder (hops, cycles), coincidence of wants, quote → solution → simulation, solve-only intake split,
-  `amm_fill` on resting orders, fee-by-role refusal, `/v1/dex/solves/{ref}`.
+- **node**: route finder (hops, cycles), coincidence of wants, quote → solution → simulation, exchange-only intake split,
+  `amm_fill` on resting orders, fee-by-role refusal, `/v1/dex/exchanges/{ref}`.
 
 ## 8. Open questions for the owner
 
@@ -261,3 +262,4 @@ gasless call to any SCaaS contract) is a separate redesign; `TradeOrder` is its 
 | Rev | Date | What |
 |---|---|---|
 | 1 | 2026-10-08 | First draft from the owner's chat answers S1–S6 |
+| 2 | 2026-10-08 | Owner S7: `mtxSolve` → `mtxExchange` and the related names; file renamed from `…-dex-solver-design.md` |

@@ -35,6 +35,7 @@ A token transfer is a **special case** of a meta-transaction (owner), not its de
 | G8 | Split the UA ledger's `UAMetaTransaction` the same way? | **Yes** (GC-9) |
 | G9 | `SubjectAccount` signs as itself (`from = address(this)`) | **OK** (GC-6) |
 | G10 | Names `MetaTransaction`, `MetaTransfer`, `MetaTxBase` | **Kept** |
+| G11 | `PqzToken` relaying | **Like `ZetherToken`** (owner: "why not the same as Zether?"): GC-10 as written |
 | G7 | `pay` as a Solidity function name | no conflict: `pay` is not a keyword or reserved word (`payable` is a different token); `function pay(address,uint256,bytes32)` compiles, selector `0x5e5571ac` |
 
 ## 3. Design
@@ -258,7 +259,7 @@ Q1–Q3 of rev 1 answered (G8–G10). New in rev 3:
 
 | # | Question | Recommendation |
 |---|---|---|
-| Q4 | `PqzToken` on `ERC20MetaTx` with the generic self-call (+ ≈ 0.25 M gas per op), dropping `PqzMetaTx` (GC-10)? | yes: one base, one pipeline, the classical Zether pattern |
+| Q4 | `PqzToken` on `ERC20MetaTx` with the generic self-call (+ ≈ 0.25 M gas per op), dropping `PqzMetaTx` (GC-10)? | **answered (G11): exactly like Zether** |
 
 ## 6. Revision history
 
@@ -267,3 +268,4 @@ Q1–Q3 of rev 1 answered (G8–G10). New in rev 3:
 | 1 | 2026-10-08 | First draft from the owner's chat answers G1–G7 |
 | 2 | 2026-10-08 | Owner answers G8–G10: UA ledger split (GC-9), `SubjectAccount` signs as itself, names kept |
 | 3 | 2026-10-08 | GC-10: `PqzToken` on the one base, bindings without `to`/`value`, prover header check |
+| 4 | 2026-10-08 | Owner G11: PQZ like Zether; no open question left |

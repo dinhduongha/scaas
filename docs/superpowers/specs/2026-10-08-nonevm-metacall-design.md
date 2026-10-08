@@ -84,6 +84,18 @@ vector<u8>, nonce: u64, lane_id: vector<u8>, valid_until: u64, relayer: address,
 `let who = metacall::verify(…, b"family::add_person", sha3_256(bcs(parent, data)))`, then the usual body with `who` as
 the caller. The relayer lane pays gas. The same shape on every family: one typed entry, one call into the library.
 
+### NM-5 — Parity with EVM (owner Q4)
+
+The typed path offers what EVM offers (GC-5 of [the EVM draft](2026-10-08-metatx-generic-call-design.md)), in each family's form:
+
+| EVM | Non-EVM | Notes |
+|---|---|---|
+| `mtxTransfer` | `mtx_transfer` / `MtxTransfer` | `MetaTransfer{entry_ref: 0}`; a transfer without reference becomes possible everywhere |
+| `mtxPay` | `mtx_pay` / `MtxPay` | `entry_ref = payId`, lane derived on chain as `H("scaas.pay.lane" ‖ payId)`, `nonce = 0` (today's `relay_pay` uses a client-chosen random lane) |
+| `mtxExecuteTransfer` | `mtx_execute_transfer` / `MtxExecuteTransfer` | `MetaTransfer` on a client-chosen lane; on Move the struct travels as typed arguments (entry functions take no structs) |
+| `mtxBatchTransfer`, `mtxBatch` | native multi-message transactions where they exist (Cosmos messages, Solana instructions, Sui PTB commands, TON internal messages from one lane); Aptos gets `mtx_batch_transfer` with parallel vectors (one entry per transaction) | atomic per transaction as on EVM |
+| `mtxTransferWithFee`, `mtxExecuteWithFee`, `mtxPayReceiverFee` | none while non-EVM tokens charge no relayer fee (G2) | added with a token fee, if one is ever specified |
+
 ## 4. Wallet display
 
 `MetaCall` is shown as `function` + decoded arguments by the app and `clientkeys`, which hold each contract's
@@ -107,13 +119,14 @@ show the domain line and the digest, as today. `MetaTransfer` keeps the typed te
 
 | # | Question | Recommendation |
 |---|---|---|
-| Q1 | Rename non-EVM signed entry points with the `mtx` prefix (in family case), reversing the "keep op names" line of CTR-MTX-21? | yes: one rule everywhere, nothing deployed |
-| Q2 | Generic verification + typed entries (NM-2) instead of one dispatching entry? | yes: the only form Move and Solana support cleanly; CosmWasm and TON use one `MtxExecute` message with internal dispatch because their message model makes it natural |
+| Q1 | Rename non-EVM signed entry points with the `mtx` prefix (in family case), reversing the "keep op names" line of CTR-MTX-21? | **answered: yes** |
+| Q2 | Generic verification + typed entries (NM-2) instead of one dispatching entry? | **answered: OK** |
 | Q3 | Move key management and mandate structs onto `MetaCall` now (NM-3)? | yes, together with the renames — one model, one vector set |
-| Q4 | `MetaTransfer` with `entry_ref = 0` as a plain transfer off EVM (today only `pay` exists)? | yes where the token supports a transfer without reference; the indexer keys payments on `entry_ref ≠ 0` |
+| Q4 | `MetaTransfer` with `entry_ref = 0` as a plain transfer off EVM (today only `pay` exists)? | **answered: do the EVM equivalent** (NM-5) |
 
 ## 7. Revision history
 
 | Rev | Date | What |
 |---|---|---|
 | 1 | 2026-10-08 | First draft from the per-family survey of the current docs |
+| 2 | 2026-10-08 | Owner: Q1 yes, Q2 OK, Q4 EVM parity (NM-5); Q3 (`KeyOp`) under discussion |
