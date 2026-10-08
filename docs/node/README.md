@@ -350,7 +350,7 @@ Additions for the store-backed rulings (each lands with the change it covers):
   code or `chainUid()` mismatch holds the chain; two `evm:7622` profiles with different `chain_uid`. A 7702-delegated
   payer's ECDSA signature passes the local check.
 - Planned: the [NODE-LANE-11](submit-lanes.md#NODE-LANE-11) batch journal and cost split over `outer_tx` (items never
-  requeued alone after `signed`); unwrap terminal reverts; token kinds 0–7, managed-market codes,
+  requeued alone after `signed`); unwrap terminal reverts; token kinds 0–4 (built) and flags 5–8 ([CTR-AS-17](../contracts/asset-suite.md#CTR-AS-17)), managed-market codes,
   `merkle_dist_vectors.json`.
 
 ## Code pointers

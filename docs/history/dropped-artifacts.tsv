@@ -585,3 +585,8 @@ CTRL_ALLOWLIST	obsolete	contracts/asset-suite.md#CTR-AS-17 (the flag is ALLOWLIS
 * Tier 1: *	obsolete	contracts/asset-suite.md#CTR-AS-17 (disclosure by kind NONE)
 *_REG	obsolete	contracts/asset-suite.md#CTR-AS-17 (regulated controls are flags 5–8, no regulated kinds)
 createTiered(META_*_REG, …)	obsolete	contracts/asset-suite.md#CTR-AS-17 (regulated controls are flags 5–8, no regulated kinds)
+disableControls(ALLOWLIST)	obsolete	contracts/token-wrappers.md#CTR-TOK-22 (owner calls disableFeature(ALLOWLIST) unless locked)
+meta_none_reg	obsolete	contracts/asset-suite.md#CTR-AS-17 (no regulated kinds)
+meta_single_reg	obsolete	contracts/asset-suite.md#CTR-AS-17 (no regulated kinds)
+meta_multi_reg	obsolete	contracts/asset-suite.md#CTR-AS-17 (no regulated kinds)
+disableControls(ALLOWLIST)	obsolete	contracts/token-wrappers.md#CTR-TOK-22 (owner calls disableFeature(ALLOWLIST) unless locked)

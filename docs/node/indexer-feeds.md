@@ -135,7 +135,7 @@ Further events, same object, same filters (decoders for a new kind ship before t
 
 - token wrappers: `Wrapped`, `Unwrapped`, `ReserveAdded`, `RateChangeProposed`, `RateChanged`, `RateChangeCancelled`,
   `RateAdminRenounced`, `WrapDisabled`, `GuardianRenounced`, `MinterRenounced`, `MetaNonceCancelled`; factory
-  `TieredTokenDeployed` (kinds 0–7), `ImplementationRegistered`, `ImplementationDeprecated`;
+  `TieredTokenDeployed` (built kinds 0–4), `ImplementationRegistered`, `ImplementationDeprecated`;
 - token-verified trade orders (SPECIFIED, [dex-venue.md#trade-orders](dex-venue.md#trade-orders)): on the sell token
   `TradeFilled(orderHash, from, sellFill, receiveFill, dexFee)`, `OrderCancelled(orderHash, from)`,
   `NoncesInvalidated(from, batch, minNonce)`; on the DEX `LegSettled(ref, orderHash, from, destination, sold, received,
@@ -153,7 +153,7 @@ Further events, same object, same filters (decoders for a new kind ship before t
 - post-quantum Zether: `MetaTransactionExecuted`, `UAMetaTransactionExecuted`, `Transfer` and `UATransfer` of a PQZ
   token normalized like any meta token's, beside the `Pqz*` events ([contracts/pq-zether.md](../contracts/pq-zether.md));
 - planned asset suite: `OrderRecorded`, `OrderRevoked`, `AccountFrozen`, `AccountUnfrozen`, `ForcedTransfer`, `Paused`,
-  `Unpaused`, `ControlsDisabled`, `RoleRenounced`, `Attested`, `AttesterSet`, `GrantCreated`, `Released`, `Revoked`,
+  `Unpaused`, `FeatureDisabled`, `RoleGranted`, `RoleRevoked`, `Attested`, `AttesterSet`, `GrantCreated`, `Released`, `Revoked`,
   `RevocationRenounced`, `MilestoneApproved`, `ExcessSwept`, `DistributionCreated`, `Claimed`, `Cancelled`, `Swept`,
   `OfferCreated`, `Exchanged`, `Closed`, `Rescued`; `TieredTokenDeployed` (flags 5–8 are fields of the token, [CTR-AS-17](../contracts/asset-suite.md#CTR-AS-17)).
 

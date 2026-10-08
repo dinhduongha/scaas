@@ -34,7 +34,7 @@ Non-goals:
 | A backend of its own; the job API (`/v1/jobs`, `/v1/events`) | a machine key would sit in the bundle ([NODE-ADM-06](../node/admin-auth.md#NODE-ADM-06)) |
 | Admin API keys (`scaas_ak1.`) | the admin API has none |
 | Mandates, tender bidding, vesting, distributions, credential presentation, an "Approvers" wizard beyond the minimum | their own designs; the app shows them only where the availability matrix says so |
-| Regulated (token kinds 5–7) send/receive/DEX flows and managed DEX markets | view-only with the regulated-token notice ([CLI-APP-26](#CLI-APP-26)) |
+| Regulated (flags 5–8, [CTR-AS-17](../contracts/asset-suite.md#CTR-AS-17)) send/receive/DEX flows and managed DEX markets | view-only with the regulated-token notice ([CLI-APP-26](#CLI-APP-26)) |
 | Zether disclosure openings | not requested; the prover already exposes them |
 | Non-EVM token deployment and non-EVM wrappers | PLANNED ([NET-ALL-19](../networks/README.md#NET-ALL-19)); Move/Solana need none |
 | Cosmos and TON passkeys | not offered yet ([CLI-SGN-23](signers-clientkeys.md#CLI-SGN-23)) |
@@ -582,7 +582,7 @@ Post-quantum Zether (PQZ) tokens configured on the private chain 7622 run in the
 | Wrap / unwrap / addReserve | ✓ | ✓ | — | — | — | — | — | — |
 | Gasless `mtxUnwrap` | G + S | G + S | — | — | — | — | — | — |
 | Rate admin (calldata) / guardian | ✓ | ✓ | — | — | — | — | — | — |
-| Regulated tokens (kinds 5–7) | view-only | view-only | — | — | — | — | — | — |
+| Regulated tokens (flags 5–8) | view-only | view-only | — | — | — | — | — | — |
 | DEX book, place, cancel | G (venue); on-chain cancel S | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable |
 | Zether | ✓ 31337/1337 only | — | — | — | — | — | — | — |
 | Passkey | ✓ SubjectAccount / UA | ✓ SubjectAccount / UA | — | planned (third) | planned (first) | planned (fourth, unaudited) | — | planned (second) |

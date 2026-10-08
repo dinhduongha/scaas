@@ -259,7 +259,7 @@ Node, chains, jobs, lanes, RPC, store (SPECIFIED):
 | `scaas_token_gas_cost_native_total`, `scaas_fee_earned_total` | counter | `chain`, `token` | `token = "call"` for non-token call targets; fees in token base units |
 
 Watched events (`event`): asset suite `OrderRecorded`, `OrderRevoked`, `ForcedTransfer`, `AccountFrozen`,
-`AccountUnfrozen`, `Paused`, `Unpaused`, `ControlsDisabled`, `RoleRenounced`, `AttesterSet`; token wrappers
+`AccountUnfrozen`, `Paused`, `Unpaused`, `FeatureDisabled`, `RoleGranted`, `RoleRevoked`, `AttesterSet`; token wrappers
 `WrapDisabled`, `GuardianRenounced`, `MinterRenounced`, `RateChangeProposed`, `RateChanged`, `RateChangeCancelled`,
 `RateAdminRenounced`; factory `ImplementationRegistered`, `ImplementationDeprecated` (`IOpenFactoryV2.sol`). Only
 registered tokens and configured factories. (`MetaNonceCancelled` is a subject's own action, handled by the

@@ -154,8 +154,7 @@ CREATE TABLE chain (
 CREATE TABLE token (chain_key TEXT NOT NULL, address TEXT NOT NULL, decimals INTEGER NOT NULL,
   active INTEGER NOT NULL DEFAULT 1,                              -- 0 = intake paused on every door, indexing continues
   kind TEXT NOT NULL DEFAULT 'meta' CHECK (kind IN ('meta', 'zether', 'meta_none', 'meta_single', 'meta_multi',
-    'meta_none_reg', 'meta_single_reg', 'meta_multi_reg',         -- versionOf().kind 0–7
-    'pqz')),                                                      -- PqzToken (ops.md#pqz)
+    'pqz')),                                                      -- built versionOf().kind 0–4; flags 5–8: features                                                      -- PqzToken (ops.md#pqz)
   features TEXT NOT NULL DEFAULT '',                              -- space-separated: 'receiver_fee', 'ua' (v3: registry() ≠ 0)
   PRIMARY KEY (chain_key, address));
   -- planned: token.reg_cache TEXT (controls, roles, compliance registry of regulated tokens) and the snapshot

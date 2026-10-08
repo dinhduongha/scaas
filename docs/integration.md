@@ -838,7 +838,7 @@ factory call plus optional action contracts ([CTR-AS-14](contracts/asset-suite.m
 | NFT kinds | — | — | **PLANNED** |
 
 After creation: read `predictAddress` before, verify `isDeployedHere`, `creatorOf`, `versionOf` after (decoders know
-kinds 0–7); register the token on the node (`POST /v1/admin/chains/{key}/tokens`) and in the client
+the built kinds 0–4; flags 5–8 are fields, [CTR-AS-17](contracts/asset-suite.md#CTR-AS-17)); register the token on the node (`POST /v1/admin/chains/{key}/tokens`) and in the client
 (`PUT /v1/tokens/{chain}`), record the EIP-712 domain from `eip712Domain()` (target: with `salt` = the chain's
 `chain_uid`, checked against the chain profile). Target (SPECIFIED): one factory, `OpenFactory` (the tiered factory's
 code): the v1 `createMetaToken` rows above become `createTiered(META_NONE, …)` and `createTiered(META_SINGLE, …)` with

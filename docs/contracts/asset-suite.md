@@ -71,8 +71,7 @@ external seat is recommended, default 3-of-5, which the contract cannot prove): 
 forced transfer, pause, unpause); `compliance` records and revokes orders. Neither role is
 transferable; a holder may `renounceRole` and the owner may revoke it ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)),
 and losing a role **relaxes**: when no `issuer` holder is left, `FREEZE|FORCE|PAUSE` stop being active (every freeze and
-pause ends at once); when no `compliance` holder is left, `FORCE` stops. Wallets compare `issuer()` and
-`compliance()` to show whether the roles are separated. Without the relaxation a renounced or dead issuer would leave
+pause ends at once); when no `compliance` holder is left, `FORCE` stops. Wallets compare the holders (`hasRole`, a role may have several, [CTR-TOK-22](token-wrappers.md#CTR-TOK-22)) to show whether the roles are separated. Without the relaxation a renounced or dead issuer would leave
 frozen balances frozen forever.
 
 <a id="forced-transfer"></a>
@@ -145,7 +144,7 @@ for their controller. Otherwise one attestation would be a master key across eve
 
 | | Controlled-token rules in short |
 |---|---|
-| 1 | Two creation-time roles, each a **contract** (multisig, default 3-of-5 with an external seat recommended): `issuer` executes (freeze, unfreeze, forced transfer, pause), `compliance` records and revokes orders. Neither is transferable; renouncing **relaxes** powers |
+| 1 | Two roles, each held by a **contract** (multisig, default 3-of-5 with an external seat recommended): `issuer` executes (freeze, unfreeze, forced transfer, pause), `compliance` records and revokes orders. The token's owner grants and revokes them, a holder may `renounceRole`, the owner may `disableFeature` unless the flag is locked ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)); losing a role **relaxes** powers |
 | 2 | A forced transfer needs a live compliance **order record** `{subject, beneficiary, maxAmount, freezeUntil}` (`orderId` = keccak256 of the authority's canonical order identifier, the document off chain), moves only from the frozen subject to the recorded beneficiary, cumulatively ≤ `maxAmount`. There is **no court-ordered burn** |
 | 3 | A frozen account cannot send, be a meta-tx `from` or receive a relayer fee; it can still receive. Issuer-only freezes last ≤ 30 days (≤ 60 days per episode); longer ones need a compliance record |
 | 4 | `pause(ref, until)`: `until ≤ now + 7 days`, no extension, 7-day cooldown; a fee-less unwrap, holder burn and forced transfer are never paused |
@@ -166,7 +165,7 @@ for their controller. Otherwise one attestation would be a master key across eve
 
 ### Configuration and init
 
-The regulated parameters ride in the creation config ([CTR-TOK-25](token-wrappers.md#CTR-TOK-25)); the flags and roles
+**P1-open:** the placement of the parameters below in `TokenConfig` ([CTR-TOK-25](token-wrappers.md#CTR-TOK-25)) is decided in P1; the field list is the requirement of what must be configurable. The flags and roles
 are `features`, `lockedFeatures` and `roles`. `initialize` validates them through `AdminLib` ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)),
 **before** the initial-supply mint, so that mint already sees the allowlist. The initial supply goes to `creator`, the
 factory caller: an issuer whose treasury is a Safe makes the Safe call `createToken`.
@@ -195,8 +194,8 @@ reads slot a only); `mapping(bytes32 ⇒ OrderRecord)`.
 
 ### Interface
 
-In the token, `disableControls(bits)` is `disableFeature(bit)` and `renounceRole()` is `renounceRole(bit)`, with the events
-`FeatureDisabled` and `RoleRevoked` ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)); the names below are the control surface.
+In the token, `disableControls(bits)` is `disableFeature(bit)` (owner) and `renounceRole()` is `renounceRole(bit)`, and the events
+`ControlsDisabled` and `RoleRenounced` are `FeatureDisabled` and `RoleRevoked` ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)); the names below are the control surface.
 
 ```solidity
 interface IRegulatedToken {
@@ -382,8 +381,8 @@ these statements, kept to the enabled bits:
   Unwrapping is never paused, and frozen accounts cannot unwrap."* Kind `NONE`: *"The issuer can pause transfers for up to
   7 days at a time, with at least 7 days between pauses. Redemption, buyback and exchange offers are paused too; only
   burning stays open."*
-- *"Receiving requires an attestation from the registry above; its admin chooses the attesters. The issuer can switch
-  this check off for good, never on."*
+- *"Receiving requires an attestation from the registry above; its admin chooses the attesters. The owner can switch
+  this check off for good, unless the token locked it; never on."*
 - *"The issuer cannot mint outside the minter rules, change rates beyond the rate rules, or touch the reserve."*
 
 Wallets mark accounts named in a live `OrderRecorded`.
@@ -406,13 +405,13 @@ Invariants (each an invariant test):
 
 | # | Abuse | Outcome |
 |---|---|---|
-| A1 | Compromised `issuer` alone | freezes anyone for ≤ 60 days (then a 30-day gap), pauses ≤ 7 of every 14 days, disables controls (relaxations only); **cannot move funds or freeze longer** without a compliance record. Every call emits |
+| A1 | Compromised `issuer` alone | freezes anyone for ≤ 60 days (then a 30-day gap), pauses ≤ 7 of every 14 days, can only relax (renounce its role); **cannot move funds or freeze longer** without a compliance record. Every call emits |
 | A2 | Compromised `compliance` alone | records fake orders; cannot execute. Node and client alert on every `OrderRecorded` |
 | A3 | Both compromised, or `issuer == compliance` | open-ended freezes and seizure up to recorded amounts: the nature of a regulated token. Mitigation: separate multisigs with an external seat, alerts, disclosure |
 | A4 | Subject front-runs a freeze | moves funds first. Mitigation: private submission (as for the guardian, [token-wrappers.md](token-wrappers.md#CTR-TOK-07)); moot on private chains |
 | A5 | Replay / over-execution of an order | cumulative `executed ≤ maxAmount`; records immutable; revocation stops it |
 | A6 | Wrong beneficiary | impossible without a new record by `compliance` |
-| A7 | Registry admin compromised | attests anyone (allowlist bypass) or voids attesters (receives fail); no fund movement; the issuer can `disableControls(ALLOWLIST)`. Disclosed; registry pinned at creation |
+| A7 | Registry admin compromised | attests anyone (allowlist bypass) or voids attesters (receives fail); no fund movement; the owner can `disableFeature(ALLOWLIST)` unless the token locked it. Disclosed; registry pinned at creation |
 | A8 | Attestation lapse | receivers fail; holders still send to eligible parties, burn and unwrap |
 | A9 | Fee griefing with a frozen/ineligible fee recipient | fails at the shape step (cheap) |
 | A10 | Unwrap to a frozen accomplice | out of scope: the underlying is a different asset; the holder itself must be unfrozen to unwrap |
@@ -446,7 +445,7 @@ warm (≈ +0.5 k). Control calls add one library `DELEGATECALL` (≈ 2.6 k cold)
 | Registry | admin contract only; attester add/remove; disable voids its attestations; batch attest; revoke by flags 0; expiry; `ELIGIBLE_CONTRACT` by admin only |
 | Hedera | the `IS_HEDERA` variants of `NONE` and `UNDERLYING` with flags 5–8 sign via HIP-632; HTS fail-closed checks and association on `UNDERLYING` |
 | Sizes | `--sizes` within the cap of CTR-TOK-24 with flags 5–8 compiled in |
-| Invariant | handlers: transfers, meta-tx with fees, wraps/unwraps, freezes (both kinds), records, forced transfers, pauses with `warp`, renounces, `disableControls`, attester disable and attestation expiry by the registry admin; invariants I1–I7 |
+| Invariant | handlers: transfers, meta-tx with fees, wraps/unwraps, freezes (both kinds), records, forced transfers, pauses with `warp`, role grants, revokes and renounces, `disableFeature`, attester disable and attestation expiry by the registry admin; invariants I1–I7 |
 
 ## Vesting and streaming
 
@@ -912,13 +911,14 @@ regulated legs and eligibility at intake ([NODE-DEX-11](../node/dex-venue.md#NOD
 ## Touchpoints
 
 - Node: the event normaliser adds `OrderRecorded`, `OrderRevoked`, `AccountFrozen`, `AccountUnfrozen`,
-  `ForcedTransfer`, `Paused`, `Unpaused`, `ControlsDisabled`, `RoleRenounced`, `Attested`, `AttesterSet`,
+  `ForcedTransfer`, `Paused`, `Unpaused`, `FeatureDisabled`, `RoleGranted`, `RoleRevoked`, `Attested`, `AttesterSet`,
   `GrantCreated`, `Released`, `Revoked`, `RevocationRenounced`, `MilestoneApproved`, `ExcessSwept`,
   `DistributionCreated`, `Claimed`, `Cancelled`, `Swept`, `OfferCreated`, `Exchanged`, `Closed`, `Rescued`;
   `TokenCreated` ([CTR-TOK-25](token-wrappers.md#CTR-TOK-25)) with the flags. The token table's `features` and
-  `lockedFeatures` are cached with the roles and registry (refreshed on `FeatureDisabled`/`RoleGranted`/`RoleRevoked`). Intake applies the receiver-attestation expiry rule and the
+  `lockedFeatures` are cached with the roles and registry (refreshed on `FeatureDisabled`/`RoleGranted`/`RoleRevoked`).
+  Intake applies the receiver-attestation expiry rule and the
   grief-score exemption test; during a pause the node sponsors fee-less unwrap ops. Alerts: any `OrderRecorded`,
-  `ForcedTransfer`, `Paused`, `ControlsDisabled`, `AttesterSet`, a role contract's code-hash change, and a protocol
+  `ForcedTransfer`, `Paused`, `FeatureDisabled`, `RoleRevoked`, `AttesterSet`, a role contract's code-hash change, and a protocol
   clone's attestation within 30 days of expiry. Control actions are ordinary `call` jobs (a Safe's `execTransaction`
   with its owners' signatures, or a `SubjectAccount.executeAsOwner`); the node holds no role key.
 - Client systems: an asset register (kind, template, terms document, `termsHash`), a cap table mirrored from the feed,
