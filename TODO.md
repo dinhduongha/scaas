@@ -94,6 +94,8 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
 
 ## 0. Finish the spec phase (5 items left)
 
+- [ ] **Rewrite `docs/integration.md`** (owner 2026-10-09: later). Goal to settle when started: shorten/restructure, align with the token tree and meta-tx v3, ERP-neutral; then `integration-odoo-example.md`. Keep the 27 `INT-ERP-*` ids (supersede, never renumber). No code dependency; PQZ parts stay open.
+
 Done 2026-10-07: every spec reviewed — Codex on PQZ/UA/NI/B, Claude on the 16 older specs — and every review
 folded (dispositions inside each spec; review files in `docs/reviews/specs/`, git-ignored). Owner rulings today:
 chainId 9000 → **7622**; `PqzToken` implements `IERC20MetaTx` (PQZ rev 1.4 R284); Move/Solana (and Cosmos
