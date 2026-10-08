@@ -1,6 +1,6 @@
 # Non-EVM families: a generic signed call and a typed transfer, per VM
 
-**Status:** DRAFT, proposals with recommendations; owner decisions open (§6). Provisional ids `NM-n`; real ids are
+**Status:** DRAFT rev 3, every owner question answered (§6); to be folded. Provisional ids `NM-n`; real ids are
 allocated in `docs/decisions.md` on acceptance (docs/README "Ids").
 **Date:** 2026-10-08. **Scope:** Aptos, Sui (Move), Soroban, CosmWasm, TON, Solana. Follows the EVM drafts
 [`2026-10-08-metatx-generic-call-design.md`](2026-10-08-metatx-generic-call-design.md) (G1–G10: a generic
@@ -121,7 +121,7 @@ show the domain line and the digest, as today. `MetaTransfer` keeps the typed te
 |---|---|---|
 | Q1 | Rename non-EVM signed entry points with the `mtx` prefix (in family case), reversing the "keep op names" line of CTR-MTX-21? | **answered: yes** |
 | Q2 | Generic verification + typed entries (NM-2) instead of one dispatching entry? | **answered: OK** |
-| Q3 | Move key management and mandate structs onto `MetaCall` now (NM-3)? | yes, together with the renames — one model, one vector set |
+| Q3 | Move key management and mandate structs onto `MetaCall` now (NM-3)? | **answered: yes, `MetaCall`** (`KeyOp` is a SCaaS struct, `"scaas.keyop.v1"`, not a chain standard; native key rotation — Aptos `rotate_authentication_key` — is untouched): `mtx_add_key`, `mtx_remove_key`, `mtx_set_guardian`, … |
 | Q4 | `MetaTransfer` with `entry_ref = 0` as a plain transfer off EVM (today only `pay` exists)? | **answered: do the EVM equivalent** (NM-5) |
 
 ## 7. Revision history
@@ -129,4 +129,5 @@ show the domain line and the digest, as today. `MetaTransfer` keeps the typed te
 | Rev | Date | What |
 |---|---|---|
 | 1 | 2026-10-08 | First draft from the per-family survey of the current docs |
-| 2 | 2026-10-08 | Owner: Q1 yes, Q2 OK, Q4 EVM parity (NM-5); Q3 (`KeyOp`) under discussion |
+| 2 | 2026-10-08 | Owner: Q1 yes, Q2 OK, Q4 EVM parity (NM-5) |
+| 3 | 2026-10-08 | Owner Q3: `KeyOp` and the mandate structs become `MetaCall` entries; no open question left |
