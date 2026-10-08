@@ -1585,13 +1585,14 @@ Change (2026-10-08): `paymentDigest` is the digest of the payer's `MetaTransfer`
 **Source.** `history/specs/2026-10-06-tender-sponsorship-shredding.md:181`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-9.
 Change (2026-10-08): the payer shape is a `MetaTransfer` with `entryRef ≠ 0`, fee `NONE`, relayer bound, `payLane`/0; not in `mtxBatchTransfer`. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-5.
 
-### CTR-MTX-07 — One base ERC20MetaTx; v1 line deleted
+### CTR-MTX-07 — One meta-tx tree: MetaTxBase, ERC20MetaTx, MetaTokenBase
 - old: R131 · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-07 · superseded-by: —
 
 **Why.** The owner folded every meta-transaction base into one, `ERC20MetaTx` (the built `MetaTxCore` renamed): the v1 `ERC20MetaTx`/`MetaToken`/`HederaMetaToken`, factory v1 and `ZetherMetaTx` go, and the struct, typehash and one domain version serve every token. Nothing is deployed, so no version coexists.
 **Cost if wrong.** Two or three bases keep two security models and three pipelines in sync by hand.
 **Source.** `history/specs/2026-10-06-token-wrappers-v2.md:72`; `history/specs/2026-10-07-metatx-generic.md` §2 A4, A8, §3 MG-9.
 Change (2026-10-08): `ERC20MetaTx is MetaTxBase`: the token base adds the fee in this token, the typed `MetaTransfer` path, `payLane`, receiver-pays, trade and the UA path on the generic base (CTR-MTX-22); `PqzMetaTx` disappears too (CTR-PQZ-21). Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-2.
+Change (2026-10-08): the tree is `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase`; trade and pay sit in `MetaTokenBase`, not `ERC20MetaTx`; the kinds, Hedera and the Zether kinds sit on it. Source add: `history/specs/2026-10-08-token-tree-design.md` §2 (T10), §3.
 
 ### CTR-MTX-08 — Fee never goes to the payee
 - old: R132 · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-08 · superseded-by: —
@@ -1724,6 +1725,13 @@ Change (2026-10-08): the non-EVM exception is gone — non-EVM families name sig
 **Cost if wrong.** Payments could no longer be batched, or one batch function would have to decode two structs.
 **Source.** `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G5, §3 GC-5.
 
+### CTR-MTX-25 — One SigCheck
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-25 · superseded-by: —
+
+**Why.** One internal `SigCheck` (ECDSA low-s, ERC-1271 with the gas-cap rule, the HIP-632 hook) serves `MetaTxBase`, `OrderBookDex`, `MandateWallet` and `SmartKeyAccount`; `SigLib`, which has no importer, is deleted. Today the check is written five times and the HIP-632 override four times.
+**Cost if wrong.** Copies drift: a fix to the gas cap or the low-s rule lands in one contract and not in the others.
+**Source.** `history/specs/2026-10-08-token-tree-design.md` §1, §4.
+
 ### CTR-MTX-80 — No named mtxPay; accepted gas cost
 - old: R2(cost) · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CTR-MTX-09, CTR-MTX-10, CTR-MTX-11
 
@@ -1764,16 +1772,14 @@ Change (2026-10-08): the non-EVM exception is gone — non-EVM families name sig
 **Source.** `history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:198`. Owner wording: "spender là hợp đồng" (the spender is a contract); `history/specs/2026-10-07-metatx-generic.md` §2 A5, A6, §3 MG-7, §8 Q5.
 
 ### CTR-TOK-02 — Three tiers, one implementation per tier, on ERC20MetaTx
-- old: R129 · status: current · owner: yes · date: 2026-10-08 · normative: contracts/token-wrappers.md#CTR-TOK-02 · superseded-by: —
+- old: R129 · status: superseded · owner: yes · date: 2026-10-08 · normative: — · superseded-by: CTR-TOK-21
 
-**Why.** Three tiers (no underlying, single, multi) with one implementation each keep the audit surface small and the behaviour predictable per tier; all sit on `MetaTokenBase is ERC20MetaTx`.
-**Cost if wrong.** Per-token variants would multiply audits.
-**Source.** `history/specs/2026-10-06-token-wrappers-v2.md:61`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-9.
+**What it said.** Three tiers (no underlying, single, multi) with one implementation each on `MetaTokenBase is ERC20MetaTx`; replaced by the kinds `NONE` and `UNDERLYING` (1–8 legs) plus the Zether kinds, with features as flags.
 
 ### CTR-TOK-03 — One factory OpenFactory; append-only kinds; chainUid check
 - old: R130 · status: current · owner: yes · date: 2026-10-08 · normative: contracts/token-wrappers.md#CTR-TOK-03 · superseded-by: —
 
-**Why.** With nothing deployed, the owner kept only the factory v2 code, renamed `OpenFactory`; kinds stay append-only (`META = 0` gets no implementation) and the factory registers only implementations whose `chainUid()` equals its own, so a clone's domain salt has one source.
+**Why.** With nothing deployed, the owner kept only the factory v2 code, renamed `OpenFactory`; the version catalogue stays append-only and the factory registers only implementations whose `chainUid()` equals its own, so a clone's domain salt has one source. The kinds are [CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21) and the creation API [CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25).
 **Cost if wrong.** Two factories split provenance and tender checks; a mismatched implementation would mint clones whose signatures verify on no chain.
 **Source.** `history/specs/2026-10-06-token-wrappers-v2.md:66`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-4, MG-9, §7 (CTR-TOK-03/12 row).
 
@@ -1815,14 +1821,14 @@ Change (2026-10-08): the non-EVM exception is gone — non-EVM families name sig
 ### CTR-TOK-09 — NoUnderlyingToken holder burn, renounceable minter
 - old: R141 · status: current · owner: no · date: 2026-10-06 · normative: contracts/token-wrappers.md#CTR-TOK-09 · superseded-by: —
 
-**Why.** A `NoUnderlyingToken` lets holders burn and its minter renounce, which matches self-issued tokens.
+**Why.** A `NoUnderlyingToken` lets holders burn and its minter retire, which matches self-issued tokens; both are now the flags `BURNABLE` and `MINTABLE` and the retirement is `disableFeature` ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)).
 **Cost if wrong.** A non-renounceable minter is a permanent admin key.
 **Source.** `history/specs/2026-10-06-token-wrappers-v2.md:135`
 
 ### CTR-TOK-10 — Only creation-time visible admin exceptions
 - old: R142 · status: current · owner: no · date: 2026-10-06 · normative: contracts/token-wrappers.md#CTR-TOK-10 · superseded-by: —
 
-**Why.** Only creation-time, publicly visible admin exceptions exist, so a holder can read every power over a token before acquiring it.
+**Why.** Only creation-time, publicly visible admin exceptions exist, so a holder can read every power over a token before acquiring it; the exceptions are the feature flags of [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22).
 **Cost if wrong.** Hidden or later-added powers would make provenance meaningless.
 **Source.** `history/specs/2026-10-06-token-wrappers-v2.md:138`
 
@@ -1895,6 +1901,41 @@ Change (2026-10-08): the non-EVM exception is gone — non-EVM families name sig
 **Why.** An EOA holding a SCaaS underlying cannot approve the wrapper, so the owner accepted a signature wrap: the holder signs a `TradeOrder` in the underlying's domain naming the wrapper as `dex`; the wrapper pulls through the underlying's `mtxTrade`, checks the received amount and mints in the same call, paying the relayer from the order's `fee`.
 **Cost if wrong.** Without it, holders of SCaaS underlyings could never wrap (or fund Zether) without a contract account.
 **Source.** `history/specs/2026-10-07-metatx-generic.md` §2 A9, §3 MG-7b.
+
+### CTR-TOK-21 — One implementation per kind; the token tree
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/token-wrappers.md#CTR-TOK-21 · superseded-by: —
+
+**Why.** Two axes: the kind is code (`NONE`, `UNDERLYING` with 1–8 legs, `NONE_ZETHER`, `UNDERLYING_ZETHER`; four PQZ kinds reserved), the features are flags; the tree is `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase` → kinds. Single and Multi merge (the leg count says which); Hedera is a deploy-time `IS_HEDERA`, not a child contract; every token can trade. The built code carries three generations side by side and the Zether token duplicates a second wrapper tier.
+**Cost if wrong.** Per-combination contracts multiply audits and overflow EIP-170 (today `ZetherToken` is 4,363 B over); a creator could not pick "single underlying, payable off, confidential".
+**Source.** `history/specs/2026-10-08-token-tree-design.md` §1, §2 (T1, T3, T9, T10, T13), §3.
+
+### CTR-TOK-22 — Features are flags: features, lockedFeatures, disableFeature
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/token-wrappers.md#CTR-TOK-22 · superseded-by: —
+
+**Why.** One administration word chosen at creation (bits 0–8: `PAYABLE`, `MINTABLE`, `BURNABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE`, `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`); per flag the creator picks locked or disableable (its role may clear it once, never set it). Validation lives in the token's `initialize`; `PAYABLE` is default off and immutable; the factory refuses flags 5–8 on a confidential kind; a minter never mints into a shielded balance. `disableFeature` replaces `renounceMinter`, `renounceRateAdmin`, the guardian renounce and `disableControls`.
+**Cost if wrong.** Per-class powers cannot express a mix; an unvalidated factory-side check would let `createTokenUnregistered` bring a token with inconsistent roles.
+**Source.** `history/specs/2026-10-08-token-tree-design.md` §2 (T2, T5, T8, T11), §5.
+
+### CTR-TOK-23 — Hedera is IS_HEDERA, not a child contract
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/token-wrappers.md#CTR-TOK-23 · superseded-by: —
+
+**Why.** Hedera is a per-chain variant, so each implementation carries an immutable `IS_HEDERA`; when set the signature check takes the HIP-632 path and `UnderlyingLib` associates HTS underlyings fail-closed (`HederaLib`). The three Hedera children and four copies of the override go for about 0.5–1 KB per implementation.
+**Cost if wrong.** Hedera children triple the deployable set and keep four copies of one override in sync by hand.
+**Source.** `history/specs/2026-10-08-token-tree-design.md` §2 (T3, T13), §3.
+
+### CTR-TOK-24 — External libraries, ERC-7201 namespaces, size budget
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/token-wrappers.md#CTR-TOK-24 · superseded-by: —
+
+**Why.** Heavy logic moves to external libraries linked at deploy (`TradeLib`, `PayLib`, `AdminLib`, `UnderlyingLib`, `ZetherLib`, `HederaLib`); the transfer hot path and the per-transfer administration check stay inline. Each module keeps state in its own ERC-7201 namespace so libraries never overlap; each token implementation is capped at 20,480 B (about 4 KB of room for later streams) and CI fails above it.
+**Cost if wrong.** Without the split the rewrite does not fit EIP-170 (24,576 B); shared storage between libraries would corrupt silently.
+**Source.** `history/specs/2026-10-08-token-tree-design.md` §1, §4.
+
+### CTR-TOK-25 — Creation API: createToken, createTokenUnregistered, TokenConfig, TokenCreated
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/token-wrappers.md#CTR-TOK-25 · superseded-by: —
+
+**Why.** One `TokenConfig` (name, symbol, decimals, features, lockedFeatures, roles, initial supply, legs, rate, confidential parameters) replaces the per-kind `initData`; `CREATE2` clone and `initialize` in one call; one `TokenCreated` event; registry views `isToken` and `versionOf`; one `IOpenFactory` and one `IFactoryToken`.
+**Cost if wrong.** Per-kind encodings keep a second parsing surface in the factory, node and clients; a deployed-but-uninitialized clone can be front-run.
+**Source.** `history/specs/2026-10-08-token-tree-design.md` §7.
 
 ### CTR-TOK-80 — No EOA approve lockdown
 - old: R4 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CTR-TOK-01
@@ -5426,7 +5467,7 @@ It said: Host company configuration parameter; replaced by INT-ODOO-11.
 | R126 | NODE-GSP-14 | current |
 | R127 | NODE-ADM-01(admin), NODE-OPS-02(metrics) | current (split) |
 | R128 | NODE-DEX-13 | current |
-| R129 | CTR-TOK-02 | current |
+| R129 | CTR-TOK-02 | superseded |
 | R130 | CTR-TOK-03 | current |
 | R131 | CTR-MTX-07 | current |
 | R132 | CTR-MTX-08 | current |

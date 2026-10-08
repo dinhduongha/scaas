@@ -542,3 +542,16 @@ log_G(Y_t) == log_{D_out}(C_out − [amount]G)	obsolete	disclosure openings are 
 log_G(Y_to) == log_{D_out}(C_out − [amount]G)	obsolete	disclosure openings are per leg of a bundle B_j (four kinds, leg index j); contracts/zether.md#CTR-ZTH-40
 Y_to ‖ C_out ‖ D_out ‖ C_aud	obsolete	disclosure openings are per leg of a bundle B_j (four kinds, leg index j); contracts/zether.md#CTR-ZTH-40
  is a free view; 	obsolete	attestTransferAmount/AmountAttested are removed; contracts/zether.md#CTR-ZTH-39
+mint(to, v)	obsolete	contracts/token-wrappers.md#CTR-TOK-22
+underlying == 0	obsolete	contracts/token-wrappers.md#CTR-TOK-21
+MultiUnderlyingToken is SingleUnderlyingToken	obsolete	contracts/token-wrappers.md#CTR-TOK-21
+MetaTokenBase is MetaTxCore	obsolete	contracts/token-wrappers.md#CTR-TOK-21
+msg.sender == minter != 0	obsolete	contracts/token-wrappers.md#CTR-TOK-22
+minter = 0	obsolete	contracts/token-wrappers.md#CTR-TOK-22
+2 ≤ underlyings.length ≤ 8	obsolete	contracts/token-wrappers.md#CTR-TOK-21
+ | tier-2 unwrap on leg 	extraction-artifact	contracts/token-wrappers.md#CTR-TOK-07
+unwrap(wrapped, recipient)	obsolete	contracts/token-wrappers.md#CTR-TOK-21
+Σ⌊reserve·num/den⌋ ≥ totalSupply	obsolete	contracts/token-wrappers.md#CTR-TOK-21
+wrap(u, amount)	obsolete	contracts/token-wrappers.md#CTR-TOK-21
+unwrap(u, wrapped, recipient)	obsolete	contracts/token-wrappers.md#CTR-TOK-21
+disableWrap(u)	obsolete	contracts/token-wrappers.md#CTR-TOK-21

@@ -4,7 +4,7 @@ Every SCaaS contract is gasless: the subject signs a call of one of the contract
 and the submitter — usually a sponsor's or the company's relayer — pays the gas. A token transfer is a special case of
 that call, not its definition (owner). This file specifies the EVM meta-transaction layer: the generic base
 `MetaTxBase` that any SCaaS contract inherits (tokens, `MandateWallet`, `SubjectAccount`, and contracts built on SCaaS
-later, such as a family-tree registry), and its token form `ERC20MetaTx` under the three token tiers, the Zether and
+later, such as a family-tree registry), and its token form `ERC20MetaTx` under the token kinds ([CTR-TOK-21](token-wrappers.md#CTR-TOK-21)), the Zether and
 PQ Zether tokens and the Universal Account ledger path. Two signed structs: the generic `MetaTransaction` (a call of
 an allowlisted function) and, on tokens, the typed `MetaTransfer` (transfer or payment). Other families implement the
 same model natively ([networks/README.md](../networks/README.md)).
@@ -27,7 +27,7 @@ calldata sender suffix, no 63/64 gas rule, no return bomb, no swallow mode), no 
 the signer's calldata, and no ERC-4337 bundler/paymaster dependency for token operations. The signer travels in a
 transient slot, never in calldata ([CTR-MTX-18](#CTR-MTX-18)); what may run is a fixed **selector** allowlist per
 implementation ([CTR-MTX-19](#CTR-MTX-19)), never a target allowlist. A contract that does not support gasless
-operation is wrapped into a meta-tx token (tier 2, [token-wrappers.md](token-wrappers.md)); a generic forwarder is
+operation is wrapped into a meta-tx token (an `UnderlyingToken`, [token-wrappers.md](token-wrappers.md)); a generic forwarder is
 never added. **All or nothing, and the user never pays for an operation that did not happen:** transfer and payment
 check everything before the fee and cannot fail afterwards; a self-call runs **first** and pays its fee **after**
 (so a wrap can pay from the units it mints), and any failure — of the call or of the fee transfer — reverts the whole
@@ -39,18 +39,27 @@ fields instead of 32 opaque bytes. The pinned typehash below is the only payment
 `ecrecover` helper (it would not stop `s` malleability) — EOAs are verified with OpenZeppelin `ECDSA.tryRecover`
 (65 bytes, low-s).
 
-<a id="CTR-MTX-07"></a>**CTR-MTX-07** — **One token base, `ERC20MetaTx is MetaTxBase`.** The meta-transaction base of
+<a id="CTR-MTX-07"></a>**CTR-MTX-07** — **One meta-tx tree: `MetaTxBase`, `ERC20MetaTx`, `MetaTokenBase`.** The meta-transaction base of
 every SCaaS EVM and Hedera token is the abstract contract `ERC20MetaTx` (the built `MetaTxCore`, renamed) on the
 generic `MetaTxBase` ([CTR-MTX-22](#CTR-MTX-22)): it adds the fee in this token (`_chargeFee`, `FeePolicy`), the typed
 `MetaTransfer` path (`mtxExecuteTransfer`, `mtxBatchTransfer`, [CTR-MTX-23](#CTR-MTX-23), [CTR-MTX-24](#CTR-MTX-24)),
 `payLane`, receiver-pays, `mtxTrade`/cancels ([dex.md](dex.md#CTR-DEX-15)), the allowance rule
 ([CTR-TOK-01](token-wrappers.md#CTR-TOK-01)) and the `ua*` Universal Account path ([CTR-UA-19](accounts.md#CTR-UA-19),
-[CTR-UA-26](accounts.md#CTR-UA-26)). `MetaTokenBase is ERC20MetaTx` carries
-`payWithFee`, the named functions, init and provenance; the tiers, their Hedera children and `ZetherToken` sit on it.
+[CTR-UA-26](accounts.md#CTR-UA-26)). The tree is `MetaTxBase → ERC20MetaTx → MetaTokenBase`
+([CTR-TOK-21](token-wrappers.md#CTR-TOK-21)): `MetaTxBase` holds the `MetaTransaction`, nonce lanes, signature check
+(`SigCheck`, [CTR-MTX-25](#CTR-MTX-25)), the transient sender and ticket, the selector allowlist and
+`mtxExecute`/`mtxBatch`/`cancelNonce`; `ERC20MetaTx` holds the ERC-20, `MetaTransfer` (`entryRef`), the fee,
+receiver-pays, the approve rule and the UA ledger; `MetaTokenBase` holds trade (`TradeLib`), pay behind `PAYABLE`
+(`PayLib`), features and roles (`AdminLib`), init and provenance. Trade and pay live in `MetaTokenBase`, **not** in
+`ERC20MetaTx`. The kinds (`NoUnderlyingToken`, `UnderlyingToken`, and the two Zether kinds) sit on `MetaTokenBase`;
+Hedera is the immutable `IS_HEDERA` ([CTR-TOK-23](token-wrappers.md#CTR-TOK-23)), not a child contract.
 The v1 line (the built `ERC20MetaTx` mixin, `MetaToken`, `HederaMetaToken` and factory v1) is deleted: issuer tokens
-use `NoUnderlyingToken`, 1:1 wrappers use `SingleUnderlyingToken` with `num = den = 1`; Zether's separate mixin
+use `NoUnderlyingToken`, 1:1 wrappers use an `UnderlyingToken` with one leg and `num = den = 1`; Zether's separate mixin
 `ZetherMetaTx` disappears into the base, and so does `PqzToken`'s `PqzMetaTx` ([CTR-PQZ-21](pq-zether.md#CTR-PQZ-21)).
 One domain version, `"1"`, for every token.
+
+<a id="CTR-MTX-25"></a>**CTR-MTX-25** — One internal `SigCheck` (ECDSA low-s, ERC-1271 with the gas-cap rule, the HIP-632
+hook) is used by `MetaTxBase`, `OrderBookDex`, `MandateWallet` and `SmartKeyAccount`; `SigLib` is deleted.
 
 <a id="metatxbase"></a>
 <a id="CTR-MTX-22"></a>**CTR-MTX-22** — **`MetaTxBase`: the generic base of every SCaaS contract** (owner). It holds
@@ -133,7 +142,7 @@ signature; a `MetaTransfer` shows its typed fields.
 
 <a id="CTR-MTX-02"></a>**CTR-MTX-02** — The EIP-712 domain of a clone is the implementation's name and version plus
 `verifyingContract` = the clone and `salt` = the chain's `chain_uid`: `("SCaaS MetaToken", "1", chainId, clone,
-chain_uid)` for every tier, `("SCaaS ZetherToken", "1", chainId, clone, chain_uid)` for Zether; every other SCaaS
+chain_uid)` for every kind, `("SCaaS ZetherToken", "1", chainId, clone, chain_uid)` for Zether; every other SCaaS
 contract on `MetaTxBase` uses `("SCaaS <Contract>", "1", chainId, contract, chain_uid)` (e.g. `"SCaaS MandateWallet"`,
 `"SCaaS SubjectAccount"`; a contract built on SCaaS names its own); both structs of a contract share its domain; `eip712Domain()`
 (ERC-5267) reports fields `0x1f`. `chain_uid` is the implementation's constructor immutable, so a clone (which runs the
@@ -488,7 +497,7 @@ signed, not the entry point, and stay. Non-EVM families follow the same rule in 
 | `OrderBookDex` | `mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces` ([dex.md](dex.md#CTR-DEX-16)) |
 
 <a id="CTR-MTX-09"></a>**CTR-MTX-09** — The named functions `mtxTransfer`, `mtxTransferWithFee`, `mtxExecuteWithFee`,
-`mtxPay` and the batches `mtxBatch`/`mtxBatchTransfer` live in `MetaTokenBase` (so every tier has them), keep their
+`mtxPay` and the batches `mtxBatch`/`mtxBatchTransfer` live in `MetaTokenBase` (so every kind has them; pay only with `PAYABLE`), keep their
 signatures (owner: kept separate, nothing merged) and **only build the struct of their kind** — `MetaTransfer` for
 transfers and payments, `MetaTransaction` for calls — **and run that struct's pipeline**. Each enforces a mode shape
 (`MtxModeShape`), nothing else. The digest of a named call equals the digest of `mtxExecuteTransfer` or `mtxExecute`
@@ -610,7 +619,7 @@ interface IERC20Payment is IERC20MetaTx {
                         bytes32 entryRef) external returns (bool);   // msg.sender pays; fee on top of amount
 }
 
-// MetaTokenBase (all tiers)
+// MetaTokenBase (all kinds)
 error FeeRecipientIsPayee();  error MtxModeShape(uint32 mode);
 function mtxTransfer(address from, address to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil,
                      uint32 mode, address relayer, bytes calldata signature) external returns (bool);
@@ -623,8 +632,8 @@ function mtxPay(address from, address to, uint256 amount, bytes32 payId, uint256
 function payLane(bytes32 payId) external view returns (uint256);
 ```
 
-`MetaTokenBase` adds `NotFactory()`, `AlreadyInitialized()` and the provenance getters; the trade entry points and
-their errors are in [dex.md](dex.md#CTR-DEX-15); the tier functions (wrap, unwrap, rates, legs) are in
+`MetaTokenBase` adds `NotFactory()`, `AlreadyInitialized()` and the provenance getters (the pay functions work only with `PAYABLE`, [CTR-TOK-22](token-wrappers.md#CTR-TOK-22)); the trade entry points and
+their errors are in [dex.md](dex.md#CTR-DEX-15); the kind functions (wrap, unwrap, rates, legs) are in
 [token-wrappers.md](token-wrappers.md#interfaces). The node's event normaliser decodes `MetaNonceCancelled`;
 `PaymentSettled` and `MetaTransactionExecuted` keep their fields, so payment reconciliation needs no change.
 
@@ -672,7 +681,7 @@ field is **not** checked (`canon` zeroes it, and the submitter may rewrite it, [
 No 1 % cap: the payee signs the exact amount it gives up and can never lose more than it receives in this call.
 Events: `PaymentSettled(…, N, entryRef)` unchanged (gross), plus `ReceiverFeePaid(paymentDigest, payee, feeRecipient,
 fee)`; the payer's books do not change; the payee books receipt `N` and expense `F` (net `N − F`). **Availability:**
-every tier of the one base (EVM and Hedera children); not in `mtxBatchTransfer`. Jobs carrying a receiver fee travel only on
+every kind of the one base (EVM and Hedera); not in `mtxBatchTransfer`. Jobs carrying a receiver fee travel only on
 the restricted bus scope (`bus.scope = restricted`) ([NODE-MESH-17](../node/mesh.md#NODE-MESH-17)). A co-signing
 receiving wallet is a **hot collection wallet**.
 
@@ -739,7 +748,7 @@ The co-signing key controls the receiving wallet (a `SubjectAccount` key validat
 wallet (EOA or `SubjectAccount`) holding only incoming receiver-pays funds, swept automatically to a cold treasury; a
 cold receiving wallet cannot co-sign and must not offer this mode. A scoped key kind that validates only
 `ReceiverFee` preimages with a fee cap is a planned `SubjectAccount` change ([accounts.md](accounts.md#smart-account-limitations)).
-Bytecode size: the 24 576-byte CI gate covers every tier and both Hedera children; if one exceeds it, the
+Bytecode size: the CI size gate (20,480 B per implementation, 24,576 B per library, [CTR-TOK-24](token-wrappers.md#CTR-TOK-24)) covers every kind; if one exceeds it, the
 `ReceiverFee` hashing and check move to an external library (`ReceiverFeeLib`, public functions). Node and client
 touchpoints (job field `receiver_fee`, `token.features`, booking): [node/sponsorship.md](../node/sponsorship.md#receiver-pays),
 [integration.md](../integration.md#inbound).
@@ -800,7 +809,7 @@ Foundry (`forge test`, default profile and `private7622`):
   refused; a re-entry from an underlying hook during the self-call reverts; the "stays `msg.sender`" lint.
 - All-or-nothing: an inner revert bubbles its data and leaves fee and nonce untouched; a fee transfer that fails after
   the call reverts the call's effects; a wrap pays its `ABSOLUTE` fee from minted units.
-- Init once, factory only, implementation locked; tier 1 mint/minter; wrap/unwrap with a fee-on-transfer token; the
+- Init once, factory only, implementation locked; `NONE` mint/minter; wrap/unwrap with a fee-on-transfer token; the
   payment (`entryRef ≠ 0`) emits `PaymentSettled` with the real fee; nonce/expiry/replay/`cancelNonce` (direct and signed);
   ERC-1271; EOA `approve` refused.
 - Invariants (`StdInvariant`): `Σ balances == totalSupply`; wrapper solvency; the DEX holds 0 after every handler
@@ -831,6 +840,9 @@ Until the base is rebuilt, the code runs two lines with a hand-written op dispat
   arguments read with `mload` at fixed offsets and an address word with any of its upper 96 bits set refused (as
   `abi.decode` would); Zether on `ZetherMetaTx`. Invariants as built: `Σ balance == totalSupply`; wrapper
   `reserve >= totalSupply`, fuzzed as `reserve >= supply`.
+- **Signature checks** ([CTR-MTX-25](#CTR-MTX-25)). Built: the check is repeated in `ERC20MetaTx`, `MetaTxCore`,
+  `ZetherMetaTx`, `OrderBookDex`, `MandateWallet` and `SubjectAccount`, the HIP-632 override four times, and `SigLib` has
+  no importer; one `SigCheck` replaces them in P1.
 - **Structs** ([CTR-MTX-15](#CTR-MTX-15), [CTR-MTX-22](#CTR-MTX-22), [CTR-MTX-23](#CTR-MTX-23)). One 11-field
   `MetaTransaction{from, to, value, data, batch, nonce, validUntil, mode, relayer, fee, feeRecipient}` (typehash
   `MetaTransaction(address from,address to,uint256 value,bytes data,…)`) carries transfers (`data` empty), payments
@@ -864,7 +876,7 @@ Until the base is rebuilt, the code runs two lines with a hand-written op dispat
   holds per path, as in [CTR-MTX-10](#CTR-MTX-10).
 - **Fees** ([CTR-MTX-20](#CTR-MTX-20), [CTR-MTX-08](#CTR-MTX-08)). `FIXED` is capped at 1 % of `value` on every public
   op; `FeeRecipientIsPayee` exists on v2 only.
-- **Clone safety** (unchanged in the target, now on every tier, [token-wrappers.md](token-wrappers.md#permissionless-vs-controlled)).
+- **Clone safety** (unchanged in the target, now on every kind, [token-wrappers.md](token-wrappers.md#permissionless-vs-controlled)).
   The implementation's `constructor(address factory_)` sets `FACTORY` and `_SELF` and locks the implementation;
   `initialize(creator, underlying, verifier, version, initData)` does `require(msg.sender == FACTORY)` once, requires
   `verifier == 0` (kind `META`) and runs in the same factory function as `CREATE2`; `name()`, `symbol()`,

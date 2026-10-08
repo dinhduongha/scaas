@@ -75,7 +75,8 @@ the UA registry design carries the salt; built token, wallet, account and DEX do
 <a id="CTR-GEN-02"></a>**CTR-GEN-02** — **Every program that holds subject value is immutable from the moment it is
 deployed.** There are no proxy upgrades anywhere (no UUPS, Transparent, Beacon or Diamond proxy). A bug fix is a new
 deployment at a new address plus voluntary migration by the owners of the balances, never an in-place upgrade.
-Versions live in the factory, immutability lives in the token:
+Versions live in the factory, immutability lives in the token, including its `features` and `lockedFeatures`
+([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)):
 
 | | Who can change it | Affects |
 |---|---|---|
@@ -123,18 +124,15 @@ deploy-script gate **SPECIFIED**.
 
 "Your key, your funds" holds for every value-holding contract except the powers listed here. Each is fixed at
 creation or deployment and public on chain. None can touch a reserve or upgrade code. None can move, freeze or pause
-a subject's balance, except the regulated class's controls chosen at its creation (freeze, forced transfer against a
+a subject's balance, except the regulated flags (5–8) chosen at creation (freeze, forced transfer against a
 recorded order, bounded pause). Minting is a supply power of a token's own `minter`/admin only, never a balance
 power.
 
 | Contract | Holder | Powers | Rule |
 |---|---|---|---|
 | `OpenFactory` | `registrar` (immutable; an EOA by default — the deployer — and a multisig before mainnet) | `registerImplementation`, `deprecate`, `setZetherEnabled` (dev chains only); none over any token | [token-wrappers](token-wrappers.md#factory) |
-| `SingleUnderlyingToken` / `MultiUnderlyingToken` with an adjustable rate | `rateAdmin` (has code; chosen at creation) | propose / cancel / execute a bounded, timelocked rate change; renounce | [CTR-TOK-06](token-wrappers.md#CTR-TOK-06) |
-| `MultiUnderlyingToken` | `guardian` (optional, chosen at creation) | `disableWrap(underlying)`, one-way; renounce | [CTR-TOK-07](token-wrappers.md#CTR-TOK-07) |
-| `NoUnderlyingToken` | `minter` (optional; `0` = fixed supply) | `mint`, `renounceMinter` | [CTR-TOK-09](token-wrappers.md#CTR-TOK-09) |
+| Any token (EVM) | the role of each feature flag set at creation: `minter`, `rateAdmin` (has code), `guardian`, `issuer`, `compliance` (contracts); the role column of the flag table | the power of the flag only (mint to a public balance, a bounded timelocked rate change, `disableWrap`, freeze / forced transfer against a recorded order / bounded pause / allowlist); `disableFeature(bit)` clears the flag one-way unless locked; no power touches a reserve or upgrades code | [CTR-TOK-22](token-wrappers.md#CTR-TOK-22), [CTR-TOK-06](token-wrappers.md#CTR-TOK-06), [CTR-TOK-07](token-wrappers.md#CTR-TOK-07) |
 | `OrderBookDex` | immutable `admin` (a multisig in production; the venue operator's multisig for a managed market) | `setMarket` (list or delist a pair), `setFeeSplit` (relayer share and treasury of the signed fee; never the amount), `setExchangeTarget` (list or delist an exchange target or executor), `setListedOnly` (DEX-wide listed-only mode for the exchange path); none touches funds | [CTR-DEX-03](dex.md#CTR-DEX-03), [CTR-DEX-23](dex.md#CTR-DEX-23) |
-| Regulated tokens (kinds 5–7) | `issuer`, `compliance` (contracts, fixed at creation) | the `controls()` bits set at creation: freeze, forced transfer against a recorded order, bounded pause, allowlist; bits can only be cleared | [CTR-AS-03](asset-suite.md#CTR-AS-03) |
 | `ZetherToken` | none after `initialize` (the auditor key is immutable) | — | [CTR-ZTH-09](zether.md#CTR-ZTH-09) |
 | `SealedBidTender`, `VestingGrant`, `Distribution`, `ExchangeOffer`, `UARegistry` | none | — | per file |
 | Non-EVM tier-1 tokens: Soroban `scaas-token`, TON `ScaasJettonMaster`, CosmWasm CW20 | Soroban and TON `admin`, CW20 `minter` (optional) | `mint` / `Mint`, unlimited on that token (a supply power, not a balance power) | [soroban](../networks/soroban.md#contracts), [ton](../networks/ton.md#overview), [cosmos](../networks/cosmos.md#contracts) |
