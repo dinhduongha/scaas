@@ -596,7 +596,7 @@ rollOverBatch(UA[])	obsolete	contracts/zether.md#CTR-ZTH-45 (renamed to zether* 
 setRollOverMode(UA, mode, validUntilBlock, sig)	obsolete	contracts/zether.md#CTR-ZTH-45 (renamed to zether* names)
 transferConfidential(payload, proof, authSig, beneficiary)	obsolete	contracts/zether.md#CTR-ZTH-45 (renamed to zether* names)
 fund(bytes32 ua, uint256 amount)	obsolete	contracts/pq-zether.md#CTR-PQZ-22 (renamed to pqz* names)
-burn(payload, acc, inline, amount, recipient, proof, authSig)	obsolete	contracts/zether.md#CTR-ZTH-45 (renamed to zether* names)
+burn(payload, acc, inline, amount, recipient, proof, authSig)	obsolete	contracts/pq-zether.md#CTR-PQZ-22 (renamed to pqz* names)
 rollOver(bytes32 ua, bytes acc, bytes[] cts)	obsolete	contracts/pq-zether.md#CTR-PQZ-22 (renamed to pqz* names)
 pqzBurn(bytes,bytes,bytes[],uint256,address,bytes,bytes)	obsolete	contracts/pq-zether.md#CTR-PQZ-22 (renamed to pqz* names)
 fund(bytes32,uint256)	obsolete	contracts/pq-zether.md#CTR-PQZ-22 (renamed to pqz* names)

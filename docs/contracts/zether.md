@@ -598,7 +598,7 @@ binding differs ⇒ revert; another token / another chain ⇒ the header differs
 <a id="CTR-ZTH-34"></a>**CTR-ZTH-34** — **Zether runs through the generic self-call** (owner). `mtxExecute` with `m.data` =
 the real calldata of an allowlisted Zether function
 ([CTR-MTX-19](metatx.md#CTR-MTX-19)): `zetherTransfer(bytes,bytes,bytes,bytes32)`,
-`zetherUnshield(bytes,uint256,address,bytes32,bytes,bytes)`, `zetherShield(bytes,uint256)`, public `wrap(uint256)` and `unwrap(uint256,address)`;
+`zetherUnshield(bytes,bytes,bytes,bytes32,address,uint256)`, `zetherShield(bytes,uint256)`, public `wrap(uint256)` and `unwrap(uint256,address)`;
 a public ERC-20 transfer is a `MetaTransfer` like on every token ([CTR-MTX-23](metatx.md#CTR-MTX-23)). `PqzToken`
 relays the same way ([CTR-PQZ-21](pq-zether.md#CTR-PQZ-21)). `zetherTransfer` and `zetherUnshield` compute
 `binding = (msg.sender == address(this) && ticket live) ? ticketBinding : 0`, so the statement tag is
@@ -621,13 +621,12 @@ gas, statement `ZTX_V1_DIRECT`, `envelopeBinding = 0`; the outer fee lives only 
 
 ```
 zetherTransfer(bytes payload, bytes proof, bytes authSig, bytes32 beneficiary) returns (bytes32 entryRef)
-      selector 0x7c947e8e   (built name `transferConfidential`)
-zetherUnshield(bytes payload, uint256 amount, address recipient, bytes32 beneficiary, bytes proof, bytes authSig)
-      selector 0x8938052e   (built name `burn`)
+      built selector 0x7c947e8e (`transferConfidential`); the new name has another selector
+zetherUnshield(bytes payload, bytes proof, bytes authSig, bytes32 beneficiary, address to, uint256 amount)
 ```
 
 In short: `zetherTransfer(payload, proof, authSig, beneficiary)` and
-`zetherUnshield(payload, amount, recipient, beneficiary, proof, authSig)`.
+`zetherUnshield(payload, proof, authSig, beneficiary, to, amount)`. **Transitional (BUILT):** the function is `burn(payload, amount, recipient, beneficiary, proof, authSig)`, built selector 0x8938052e, and `to` is `recipient`.
 
 (A first version had 7 parameters `…, FeeMode, uint256, address` — dropped: nobody needs to pay a fee to themselves,
 and 7 parameters push every Solidity caller into *stack too deep* with legacy codegen.) `authSig` is present on
@@ -897,7 +896,7 @@ events are `Funded`, `ConfidentialTransfer`, `ConfidentialTransferMulti`, `Burne
 <a id="CTR-ZTH-46"></a>**CTR-ZTH-46** — **The prover views live in a stateless `ZetherStatements`** (owner, T14; pairs
 with `ZetherDisclosure`). It serves `transferStatement`, `transferStatementSingle` and `unshieldStatement` (built:
 `burnStatement`) from the token's `accountState`, so the token carries no prover-only view; no admin, no upgrade, one
-instance per curve family as `ZetherDisclosure` is. Its output is the byte layout of [Statement](#statement-byte-layout) and
+stateless instance, as `ZetherDisclosure` ([CTR-ZTH-43](#CTR-ZTH-43)); it reads the curve from the token. Its output is the byte layout of [Statement](#statement-byte-layout) and
 nothing else. **Transitional (BUILT):** the views are on `ZetherToken`, which is over EIP-170 ([Gas](#gas)); the move
 is P3.
 
@@ -1279,7 +1278,7 @@ interface IZetherToken is IERC20MetaTx {
     function zetherRollOverSigned(ZetherTypes.UA account, uint64 expectedPendingSeq, uint64 validUntilBlock, bytes calldata sig) external;
     function zetherSetRollOverMode(ZetherTypes.UA account, ZetherTypes.RollOverMode mode, uint64 validUntilBlock, bytes calldata sig) external;
 
-    function zetherShield(bytes calldata encodedY, uint256 amount) external;   // burns amount·shieldScale public units (CTR-ZTH-35)
+    function zetherShield(bytes calldata ua, uint256 amount) external;   // burns amount·shieldScale public units (CTR-ZTH-35)
     // multi-recipient (CTR-ZTH-37/38); enum TransferMode { HASH, BUNDLE, NONE }
     function zetherTransfer(bytes calldata payload, bytes calldata proof, bytes calldata authSig,
                                   ZetherTypes.UA beneficiary) external returns (bytes32 entryRef);          // HASH
@@ -1289,11 +1288,11 @@ interface IZetherToken is IERC20MetaTx {
                                           ZetherTypes.UA beneficiary) external returns (bytes32 entryRef);  // NONE
     function zetherTransferSingle(bytes calldata payload, bytes calldata proof, bytes calldata authSig,
                                         ZetherTypes.UA beneficiary) external returns (bytes32 entryRef);    // one recipient
-    function zetherUnshield(bytes calldata payload, uint256 amount, address recipient, ZetherTypes.UA beneficiary,
-                  bytes calldata proof, bytes calldata authSig) external;
-    function zetherWrapShield(address leg, uint256 amountIn, ZetherTypes.UA ua) external payable;   // CTR-ZTH-45; payable for a native leg
-    function zetherUnshieldUnwrap(bytes calldata payload, uint256 amount, address recipient, ZetherTypes.UA beneficiary,
-                  address leg, uint256 minOut, bytes calldata proof, bytes calldata authSig) external;
+    function zetherUnshield(bytes calldata payload, bytes calldata proof, bytes calldata authSig,
+                  ZetherTypes.UA beneficiary, address to, uint256 amount) external;
+    function zetherWrapShield(address u, uint256 amountIn, ZetherTypes.UA ua) external payable;   // CTR-ZTH-45; payable for a native leg
+    function zetherUnshieldUnwrap(bytes calldata payload, bytes calldata proof, bytes calldata authSig,
+                  ZetherTypes.UA beneficiary, address u, address recipient, uint256 amount, uint256 minOut) external;
     // wrap / unwrap / mtxWrap and the legs are the UnderlyingLib surface of UNDERLYING_ZETHER (CTR-TOK-24), not repeated here
     function chainUid() external view returns (bytes32);
 

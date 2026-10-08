@@ -266,7 +266,7 @@ it. Nothing else is reachable through `mtxExecute`.
 | | `addReserve(address,uint256)` | `ABSOLUTE` |
 | `ZetherToken` | `wrap(uint256)`, `zetherShield(bytes,uint256)` | `ABSOLUTE` |
 | | `unwrap(uint256,address)` (public balance) | `AMOUNT(0)` |
-| | `zetherTransfer(bytes,bytes,bytes,bytes32)`, `zetherUnshield(bytes,uint256,address,bytes32,bytes,bytes)` | `ABSOLUTE`; envelope binding through the ticket ([CTR-ZTH-34](zether.md#CTR-ZTH-34)) |
+| | `zetherTransfer(bytes,bytes,bytes,bytes32)`, `zetherUnshield(bytes,bytes,bytes,bytes32,address,uint256)` | `ABSOLUTE`; envelope binding through the ticket ([CTR-ZTH-34](zether.md#CTR-ZTH-34)) |
 | `PqzToken` | `pqzTransfer(bytes,bytes,bytes[],bytes,bytes)`, `pqzUnshield(bytes,bytes,bytes[],uint256,address,bytes,bytes)`, `pqzShield(bytes32,uint256)`, `pqzRollOver(bytes32,bytes,bytes[])` | `ABSOLUTE`; not batchable ([CTR-PQZ-21](pq-zether.md#CTR-PQZ-21)) |
 | `MandateWallet` | delegate: `payUnderMandate(address,address,uint256,bytes32)`, `revoke(address,uint64)`; owner: `setMandate`, `setPayee`, `revoke(address)`, `execute` ([CTR-ACC-06](mandates.md#CTR-ACC-06)) | fee `NONE` only |
 | `SubjectAccount` | `addKey`, `removeKey`, `rotateKey`, `setGuardian`, `execute`, signed by the account itself ([CTR-ACC-10](accounts.md#CTR-ACC-10)) | fee `NONE` only |

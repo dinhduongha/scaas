@@ -442,7 +442,7 @@ EVM Zether (`ZetherToken`, re-pointed at migration):
 |---|---|---|---|
 | `zetherShield(encodedY, amount)` | receiver `UA(zether, Y)`; sender pays | Z (registered); sender N | registry `kindOf` |
 | `zetherTransfer(payload, proof, authSig, beneficiary)` | `from = UA(Y_f)`, `to = UA(Y_t)`, `beneficiary` | Z, Z, Z | proof + `requireZetherAuthorized(from, digest, authSig, zkCovered = true)` ⇒ Z-auth |
-| `zetherUnshield(payload, amount, recipient, beneficiary, proof, authSig)` | `from`, `beneficiary`; `recipient` address | Z, Z; recipient N | as transfer |
+| `zetherUnshield(payload, proof, authSig, beneficiary, to, amount)` | `from`, `beneficiary`; `to` address | Z, Z; recipient N | as transfer |
 | `zetherRollOverSigned(ua, …, sig)`, `zetherSetRollOverMode(ua, …, sig)` | `ua` | Z | `requireZetherAuthorized(ua, digest, sig, zkCovered = false)` ⇒ Z-auth (self ⇒ Zether Schnorr by `x`, purpose `zether-owner`) |
 | `zetherRollOver(ua)`, `zetherRollOverBatch(uas)` | `ua` | Z | none (public) |
 | `wrap`, `unwrap` | sender | N | — |
