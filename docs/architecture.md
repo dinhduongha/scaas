@@ -6,9 +6,13 @@ Where this page and a component doc disagree, the component doc wins ([ARCH-POS-
 For the product introduction, the doc map and reading order see [README.md](README.md).
 
 **Contents:** [Positioning](#positioning) · [Authority model](#authority-model) · [What SCaaS is not](#what-scaas-is-not) ·
-[Profiles](#profiles) · [Service model](#service-model) · [Components](#components) · [Node roles](#node-roles) ·
-[Topology](#topology) · [Data flows](#data-flows) · [Trust model](#trust-model) · [Families](#families) ·
-[Economics](#economics) · [Data protection](#data-protection) · [Glossary](#glossary)
+[Profiles](#profiles) · [Service model](#service-model) · [Components](#components) ·
+[Contract layer](#contract-layer) ([EVM token tree](#evm-token-tree) · [Meta-transactions](#meta-transactions) ·
+[Accounts and keys](#accounts-and-keys) · [Confidential balances](#confidential-balances) · [Trading](#trading) ·
+[Non-EVM families](#non-evm-families)) · [Node layer](#node-layer) ([Node roles](#node-roles) ·
+[Topology](#topology)) · [Data flows](#data-flows) · [Trust model](#trust-model)
+([Authority after deployment](#authority-after-deployment)) · [Families](#families) · [Economics](#economics) ·
+[Data protection](#data-protection) · [Glossary](#glossary)
 
 ## Positioning
 
@@ -64,11 +68,14 @@ back.
 
 **Admin-power exceptions.** The complete list is in [contracts/README.md](contracts/README.md#admin-powers-complete-list);
 each power is public, set at creation or bounded, and none moves a subject's balance except the regulated class's
-forced transfer against a recorded order. Among them: the adjustable-rate `rateAdmin` and the multi-underlying
-`guardian` (step-capped, timelocked rate changes; the guardian may only `disableWrap`;
-[CTR-TOK-10](contracts/token-wrappers.md#CTR-TOK-10)); `OrderBookDex.admin` `setMarket` (as built a
-market fee of at most 1 %, bounded by each order's signed `maxFeePpm`; specified: listing only, plus the split of each
-order's signed fee between relayer and treasury — recipients and proportions, never the amount); the tier-1 token admin `mint` on Soroban, TON and CosmWasm (a supply
+forced transfer against a recorded order. Among them: a token's optional `owner`, who only administers (grants and
+revokes the roles of the flags chosen at creation, disables a flag that was not locked, renounces;
+[CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)), and the role holders of those flags, such as the `rateAdmin`
+(step-capped, timelocked rate changes) and the `guardian` (only `disableWrap`)
+([CTR-TOK-10](contracts/token-wrappers.md#CTR-TOK-10)); the `OrderBookDex` `admin` (as built `setMarket` with a
+market fee of at most 1 %, bounded by each order's signed `maxFeePpm`; specified: four powers — listing, the split of
+each order's signed fee between relayer and treasury, exchange targets, listed-only mode — never the amount,
+[CTR-DEX-03](contracts/dex.md#CTR-DEX-03)); the admin `mint` of the standalone non-EVM tokens on Soroban, TON and CosmWasm (a supply
 power, not a balance power); the TON DEX admin `WithdrawFees` (fees only; bounced payouts are claimed by their owners,
 [NET-TON-03](networks/ton.md#NET-TON-03)); the market admins of the other DEX programs (Soroban, Sui `AdminCap`, which
 also sets the network once, Aptos, which may also sweep assets sent by mistake to its own objects, and Solana
@@ -196,8 +203,8 @@ agent signs, a relayer pays gas); Zether keeps commercial amounts confidential w
 
 | Component | Path | Role | Status |
 |---|---|---|---|
-| EVM contracts | `smartcontracts/evm/` (Foundry; `src/{common,metatx,factory,dex,wallet,account,registry,zether,hedera,chains}`) | Meta-tx tokens, open factory, DEX, mandate wallet, subject (passkey) account, Zether, account registry; build profiles `private7622` (the private chain 7622), `zether`, `gnosis`, `celo` | BUILT; Universal Account registry, MetaToken v3 and `PqzToken` SPECIFIED |
-| Hedera contracts | `smartcontracts/evm/src/hedera/` | `HederaMetaToken` (HIP-632 `isAuthorizedRaw` for ED25519 accounts) on the Hedera smart contract service | BUILT |
+| EVM contracts | `smartcontracts/evm/` (Foundry; `src/{common,metatx,factory,dex,wallet,account,registry,zether,hedera,chains}`) | Target: the token tree `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase` → kinds `NONE`, `UNDERLYING`, `NONE_ZETHER`, `UNDERLYING_ZETHER` ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)); the libraries `TradeLib`, `PayLib`, `AdminLib`, `UnderlyingLib`, `ZetherLib`, `HederaLib` ([CTR-TOK-24](contracts/token-wrappers.md#CTR-TOK-24)); `OpenFactory` for tokens and DEX clones ([CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25)); `OrderBookDex`; `MandateWallet`; `SmartKeyAccount`; `UniversalAccountRegistry`; the Zether verifiers (bn254, BLS12-381), `ZetherDisclosure`, `ZetherStatements`. Build profiles `private7622` (the private chain 7622), `zether`, `gnosis`, `celo` | BUILT: the v1/v2 lines and `ZetherToken`; target tree SPECIFIED (phases P1–P5); `PqzToken` SPECIFIED |
+| Hedera contracts | the EVM implementations | No separate contracts: the EVM implementations deployed with `IS_HEDERA` (HIP-632 signatures, fail-closed HTS checks; [CTR-TOK-23](contracts/token-wrappers.md#CTR-TOK-23)) | BUILT: `HederaMetaToken` and three v2 Hedera children (`smartcontracts/evm/src/hedera/`); target SPECIFIED (P1) |
 | Cosmos contracts | `smartcontracts/cosmos/` (CosmWasm workspace) | `scaas-token` (CW20 + meta-op), `scaas-mandate`, `scaas-dex`, shared `scaas-metaop` | BUILT |
 | Soroban contracts | `smartcontracts/soroban/` | SEP-41 token + `pay`, mandate, DEX; native auth as the meta-tx (Stellar and Pi Network) | BUILT |
 | Move contracts | `smartcontracts/move/{aptos,sui}/` | Package `scaas`: `meta` (per-subject account + lanes), mandate, DEX | BUILT |
@@ -211,6 +218,284 @@ agent signs, a relayer pays gas); Zether keeps commercial amounts confidential w
 | `clients/app/` | `scaas/clients/app/` (React + Vite) | Console and dApp over every family: contracts, wallets, DEX book, Zether, node administration (built-in login or OIDC) | SPECIFIED ([clients/app.md](clients/app.md)) |
 | ERP connectors | in the client's codebase | Outbox, push and sync jobs, payment provider, portal, DEX accounting | one worked example: [integration-odoo-example.md](integration-odoo-example.md) |
 | CI | `.github/workflows/ci.yml` (`scaas-ci`) | forge tests (pinned OpenZeppelin v5.2.0, forge-std v1.16.2), `private7622` build, cargo clippy `-D warnings`, cargo test, EVM end-to-end on anvil | BUILT; CI for the prover, clientkeys and non-EVM end-to-end PLANNED |
+
+**Target and built.** The contract sections below describe the target that the component docs specify. The built EVM
+code still carries the older lines (v1/v2 tokens, `ZetherToken`, `SubjectAccount`); every component doc says what is
+built in a *Transitional (BUILT)* note naming the phase that replaces it: P1 the base, the two public kinds and
+`createToken`; P2 `TradeLib` and the DEX clone; P3 the Zether kinds; P4 `MandateWallet` and `SmartKeyAccount` on the
+base; P5 node and client support for the new ABI ([contracts/token-wrappers.md](contracts/token-wrappers.md#transitional-built-tokens),
+[contracts/metatx.md](contracts/metatx.md#transitional-built)). Nothing is deployed, so the target replaces the built
+lines in place; there is no migration between them.
+
+## Contract layer
+
+The contracts are the product ([Positioning](#positioning)), so most of the design work sits here. Four pressures
+shape every EVM contract: code is **immutable** once deployed, so every power must be visible at creation and can
+only shrink afterwards; a contract is limited to **24,576 bytes** (EIP-170), so features cannot all live in one
+bytecode; subjects hold **no gas**, so every write must be relayable without giving the relayer any authority; and
+amounts may need to be **private yet auditable**. The subsections show how each part answers them. Rules live in the
+linked docs; this page only explains the fit.
+
+### EVM token tree
+
+```mermaid
+classDiagram
+    MetaTxBase <|-- ERC20MetaTx
+    ERC20MetaTx <|-- MetaTokenBase
+    MetaTokenBase <|-- NoUnderlyingToken : NONE
+    MetaTokenBase <|-- UnderlyingToken : UNDERLYING, 1-8 legs
+    MetaTokenBase <|-- NoUnderlyingZetherToken : NONE_ZETHER
+    MetaTokenBase <|-- UnderlyingZetherToken : UNDERLYING_ZETHER
+    ZetherLayer <|-- NoUnderlyingZetherToken
+    ZetherLayer <|-- UnderlyingZetherToken
+    MetaTokenBase ..> TradeLib : trade
+    MetaTokenBase ..> PayLib : pay if PAYABLE
+    MetaTokenBase ..> AdminLib : flags and roles
+    MetaTokenBase ..> HederaLib : if IS_HEDERA
+    UnderlyingToken ..> UnderlyingLib : legs
+    UnderlyingZetherToken ..> UnderlyingLib : legs
+    ZetherLayer ..> ZetherLib : proofs
+    class MetaTxBase {
+        <<abstract>>
+        MetaTransaction, lanes, SigCheck
+        mtxExecute, mtxBatch, cancelNonce
+    }
+    class ERC20MetaTx {
+        <<abstract>>
+        ERC-20, MetaTransfer, fee, UA ledger
+    }
+    class MetaTokenBase {
+        <<abstract>>
+        features, owner, roles, provenance
+    }
+    class ZetherLayer {
+        <<abstract>>
+        acc and pending per UA, totalShielded
+    }
+    class TradeLib { <<library>> }
+    class PayLib { <<library>> }
+    class AdminLib { <<library>> }
+    class UnderlyingLib { <<library>> }
+    class ZetherLib { <<library>> }
+    class HederaLib { <<library>> }
+```
+
+*The target tree ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21), [CTR-MTX-07](contracts/metatx.md#CTR-MTX-07)),
+the libraries ([CTR-TOK-24](contracts/token-wrappers.md#CTR-TOK-24)); the four post-quantum kinds are reserved, not built.*
+
+One base serves every SCaaS contract: `MetaTxBase` carries the signed call, the nonce lanes and the one signature
+check (`SigCheck`, [CTR-MTX-25](contracts/metatx.md#CTR-MTX-25)), so `MandateWallet`, `SmartKeyAccount` and
+third-party contracts are gasless in the same way as tokens ([CTR-MTX-22](contracts/metatx.md#CTR-MTX-22)).
+`ERC20MetaTx` adds what only a balance holder can do (the typed transfer, a fee in the token, the UA ledger), and
+`MetaTokenBase` adds trade, pay and administration. Every token is made by `OpenFactory` as an EIP-1167 clone of a
+registered implementation, initialized in the same call, and answers its own provenance
+([CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25), [CTR-TOK-17](contracts/token-wrappers.md#CTR-TOK-17)).
+
+| Kind | `PAYABLE` | `MINTABLE` | `BURNABLE` | `RATE_ADJUSTABLE` | `WRAP_DISABLEABLE` | `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST` |
+|---|---|---|---|---|---|---|
+| `NONE` | yes | yes | yes | — | — | yes |
+| `UNDERLYING` | yes | — | — | yes | yes | yes |
+| `NONE_ZETHER` | yes | yes | yes | — | — | refused |
+| `UNDERLYING_ZETHER` | yes | — | — | yes | yes | refused |
+
+*Valid features per kind: the "Valid kinds" column of [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22); the
+regulated flags 5–8 are [CTR-AS-17](contracts/asset-suite.md#CTR-AS-17).*
+
+**Why kinds are code and features are flags.** EIP-170 caps every implementation at 24,576 bytes, and the built
+`ZetherToken` is already over it ([CTR-ZTH-46](contracts/zether.md#CTR-ZTH-46)): one contract per combination of
+features would not fit, and one contract with everything would not either. So the large, structural differences
+(underlying legs or not, a confidential layer or not) are separate implementations, each audited for only what it
+holds, while the small switches are bits chosen at creation; the code behind each switch exists once, in an external
+library shared by every implementation, inside a per-implementation size budget
+([CTR-TOK-24](contracts/token-wrappers.md#CTR-TOK-24)). A creator therefore gets "one leg, pay off, rate fixed" without
+anyone writing a class for it.
+
+**Why the owner can only give things up.** There is no upgrade key, so the flags a token is born with are the most it
+can ever do: an optional `owner` grants and revokes the roles of those flags, may clear a flag that was not locked,
+and may renounce, after which nobody administers the token; a role holder exercises only its flag
+([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22), [CTR-TOK-10](contracts/token-wrappers.md#CTR-TOK-10)).
+Wallets read `features()`, `lockedFeatures()` and the role holders, so a holder can see the whole power set before
+accepting a token. Hedera is not a creator's choice but a per-chain parameter of each implementation (`IS_HEDERA`,
+[CTR-TOK-23](contracts/token-wrappers.md#CTR-TOK-23)); a wrapper leg may be the native coin
+([CTR-TOK-26](contracts/token-wrappers.md#CTR-TOK-26)).
+
+### Meta-transactions
+
+```mermaid
+flowchart LR
+    SUB["Subject<br/>signs EIP-712 typed data"]
+    SUB -->|"MetaTransfer<br/>transfer or payment"| SUBM
+    SUB -->|"MetaTransaction<br/>any allowlisted function"| SUBM
+    SUBM["Submitter pays gas<br/>company relayer, open relayer or payee"]
+    SUBM -->|"mtxExecuteTransfer"| TOK["Token<br/>moves its own balance"]
+    SUBM -->|"mtxExecute"| SELF["Any MetaTxBase contract<br/>runs a self-call"]
+    TOK -.->|"optional fee in the token"| SUBM
+    SELF -.->|"fee mode NONE outside tokens"| OFF["Gas booked off chain"]
+```
+
+*Two signed structs, one relayer path; the contract itself checks relayer binding, expiry, lane nonce and signature
+before anything runs ([CTR-MTX-17](contracts/metatx.md#CTR-MTX-17), [CTR-MTX-23](contracts/metatx.md#CTR-MTX-23)).*
+
+Subjects hold no gas, and many never will (a loyalty member, a supplier's clerk, an AI agent). So the subject signs
+and anyone may submit: a relayer pays the gas and can delay or refuse an intent but never change it. The signature
+is checked inside the contract it targets — the EIP-712 `verifyingContract` is that contract, and the domain `salt`
+is the chain's `chain_uid` ([NET-ALL-22](networks/README.md#NET-ALL-22)) — so there is no trusted forwarder and no
+bundler between the subject and its funds ([CTR-MTX-16](contracts/metatx.md#CTR-MTX-16)).
+
+There are two signed structs because wallets must show what is signed. A transfer or payment is a typed
+`MetaTransfer` that a wallet displays field by field ("send `value` to `to`", with `entryRef` for a payment); anything
+else is a generic `MetaTransaction` whose `data` is a call of one of the contract's **own** functions, from a fixed
+selector allowlist ([CTR-MTX-19](contracts/metatx.md#CTR-MTX-19)). The self-call runs first and the fee is charged
+after, so a failed operation costs the subject nothing. Each subject has independent **lanes** (2D nonces), so a stuck
+payment never blocks an unrelated one, and a payment request derives its own lane so it can be paid at most once
+([CTR-MTX-03](contracts/metatx.md#CTR-MTX-03)).
+
+Who pays is a commercial choice, not a contract change: the company relayer with fee 0 (the B2B default), a fee in
+the token to an open relayer, the payee submitting the payer's signed cheque itself, or the payee co-signing to pay
+the fee ([payers](contracts/metatx.md#payers), [receiver-pays](contracts/metatx.md#receiver-pays)). A sponsorship
+policy is node configuration ([node/sponsorship.md](node/sponsorship.md)).
+
+### Accounts and keys
+
+```mermaid
+flowchart LR
+    subgraph DEV["Keys on the subject's device"]
+        K1["secp256k1 key"]
+        K2["Passkey P-256"]
+        K3["ed25519, Schnorr, BLS,<br/>multisig, PQ, Zether keys"]
+    end
+    NAT["Native account<br/>EOA address"]
+    UA["Universal Account<br/>32-byte id"]
+    SKA["SmartKeyAccount<br/>ERC-1271, many keys"]
+    MW["MandateWallet<br/>holds the payer's funds"]
+    REG["UniversalAccountRegistry"]
+    GUA["Guardian"]
+    DEL["Delegate"]
+    T["Token or any<br/>MetaTxBase contract"]
+    K1 --> NAT & SKA
+    K2 --> UA & SKA
+    K3 --> UA
+    REG -.->|"record with PoP"| UA
+    GUA -.->|"recovery after a delay"| SKA
+    NAT -->|"owns"| MW
+    DEL -->|"pays within the caps"| MW
+    NAT -->|"signs as itself"| T
+    UA -->|"UA meta-tx"| T
+    SKA -->|"ERC-1271"| T
+    MW -->|"pays as the wallet"| T
+```
+
+*Who signs for whom: a key signs for a native account, a Universal Account or a `SmartKeyAccount`; a delegate signs
+for a `MandateWallet` within caps its owner set.*
+
+An account is whoever can produce a valid signature, and SCaaS has three forms ([contracts/accounts.md](contracts/accounts.md)).
+A **native account** is what the chain already understands, and never registers. A **Universal Account** is the
+default for subjects: a 32-byte id derived from key data, so any key type works on any family without a contract per
+user ([universal-account](contracts/accounts.md#universal-account)). Because a token must know how to verify such a
+key, the id is registered once per chain in the admin-free `UniversalAccountRegistry` with a proof of possession that
+binds the chain, the registry, the id and `authRef` — but not the caller, so a relayer can submit the registration and
+onboarding is gasless ([CTR-UA-07](contracts/accounts.md#CTR-UA-07)).
+
+A UA never rotates: its key is its identity ([CTR-UA-13](contracts/accounts.md#CTR-UA-13)). A subject that needs a
+stable address across key changes, guardian recovery or compatibility with contracts that only understand `address`
+uses a **`SmartKeyAccount`**, an ERC-1271 contract with several keys whose key management is itself a meta-transaction
+([CTR-ACC-11](contracts/accounts.md#CTR-ACC-11), [CTR-ACC-10](contracts/accounts.md#CTR-ACC-10)). Delegated payment
+is not an account form: a **`MandateWallet`** holds the payer's funds and lets a delegate pay approved payees within
+per-payment and per-period caps, revocable at once. It replaces an allowance: a bug in one mandate reaches only
+the funds in that wallet, and the payer pays no gas for an `approve` ([CTR-ACC-06](contracts/mandates.md#CTR-ACC-06)).
+
+### Confidential balances
+
+```mermaid
+flowchart LR
+    U["Underlying leg<br/>ERC-20 or native coin"]
+    subgraph TOK["UnderlyingZetherToken"]
+        P["Public balance<br/>ERC-20"]
+        S["Shielded balance<br/>acc and pending per UA"]
+    end
+    V["Zether verifier<br/>bn254 or BLS12-381"]
+    R["UniversalAccountRegistry"]
+    ST["ZetherStatements"]
+    D["ZetherDisclosure"]
+    U -->|"wrap"| P
+    P -->|"unwrap"| U
+    P -->|"zetherShield"| S
+    S -->|"zetherUnshield"| P
+    U -->|"zetherWrapShield"| S
+    S -->|"zetherUnshieldUnwrap"| U
+    S -->|"zetherTransfer, M legs"| S
+    S -.->|"verify proof"| V
+    S -.->|"requireAuthorized"| R
+    ST -.->|"reads account state"| S
+    D -.->|"reads transfer entry"| S
+```
+
+*Public and shielded paths of a confidential kind ([CTR-ZTH-44](contracts/zether.md#CTR-ZTH-44),
+[CTR-ZTH-45](contracts/zether.md#CTR-ZTH-45)); `NONE_ZETHER` has only shield and unshield.*
+
+Businesses need amounts hidden from competitors and visible to their auditor; identities stay public by design ("not
+a mixer"). The confidential kinds therefore add a **layer over the public balance** instead of a separate token: the
+public ERC-20 balance works as on any token, value enters the shielded balance from it or straight from an
+underlying leg, and leaves the same two ways. The reserve invariant counts the shielded supply, and no minter can
+create shielded value ([CTR-ZTH-44](contracts/zether.md#CTR-ZTH-44)). A shielded transfer has `M` recipient legs
+under one proof; the sender may add **decoys** that receive an encryption of 0 so an observer cannot tell the real
+recipient ([CTR-ZTH-37](contracts/zether.md#CTR-ZTH-37)).
+
+Audit is a set of **openings**, not a backdoor. The sender can prove one leg's amount with `SENDER_CP` without
+revealing the randomness that would open every leg, decoys included; a recipient opens its own leg; an optional
+auditor key — best held as a k-of-n threshold key — reads the per-transfer auditor ciphertext and nothing else, and a
+sender may leave the auditor out of a transfer, visibly ([CTR-ZTH-40](contracts/zether.md#CTR-ZTH-40),
+[CTR-ZTH-41](contracts/zether.md#CTR-ZTH-41), [CTR-ZTH-42](contracts/zether.md#CTR-ZTH-42)). How much of each
+transfer is stored for later disclosure is chosen per call (`HASH`, `BUNDLE`, `NONE`,
+[CTR-ZTH-38](contracts/zether.md#CTR-ZTH-38)).
+
+Verification and disclosure sit **outside** the token: one verifier per curve, the stateless `ZetherDisclosure` and
+`ZetherStatements` serve every Zether token ([CTR-ZTH-43](contracts/zether.md#CTR-ZTH-43),
+[CTR-ZTH-46](contracts/zether.md#CTR-ZTH-46)). That keeps each token under EIP-170 and gives a checker one canonical
+contract to call. Confidential kinds refuse the regulated flags ([CTR-ZTH-47](contracts/zether.md#CTR-ZTH-47)), and
+classical Zether is gated to development chains until its audit ([CTR-ZTH-02](contracts/zether.md#CTR-ZTH-02)).
+
+### Trading
+
+The order book lives in the node; on chain a DEX call matches or routes signed orders, pays every party in the same
+call and ends holding nothing ([CTR-DEX-01](contracts/dex.md#CTR-DEX-01); sequence 3 in [Data flows](#data-flows)).
+A SCaaS token needs **no allowance** to trade: the signer's `TradeOrder` names the one DEX that may pull its funds,
+and the sell token itself checks the signature and the signed price limit before moving exactly the fill into that
+DEX ([CTR-DEX-13](contracts/dex.md#CTR-DEX-13), [CTR-DEX-15](contracts/dex.md#CTR-DEX-15)). The order has no maker
+or taker role, so the same signature can rest in the node's book or take, and the same orders can be executed against
+AMM pools instead of makers, with the surplus above each signed limit paid to its signer
+([exchange settlement](contracts/dex.md#exchange)). A leg in an outside token is checked by the DEX and pulled through
+the separate `DexPuller`, so the DEX itself never holds a user allowance ([CTR-DEX-22](contracts/dex.md#CTR-DEX-22)).
+
+Each `OrderBookDex` is a clone made by the same factory, with an admin written once at creation
+([CTR-DEX-24](contracts/dex.md#CTR-DEX-24)). The factory's `isDex` is **advisory**: wallets and the node use it to
+warn about or refuse an unknown DEX, but tokens never consult it, so the factory registrar gains no power over trades
+([CTR-DEX-19](contracts/dex.md#CTR-DEX-19)). The fee rate is in each signed order; the DEX admin decides only who
+shares it ([CTR-DEX-03](contracts/dex.md#CTR-DEX-03)).
+
+### Non-EVM families
+
+The other families implement the same three pieces — token, mandate, DEX — in their own idiom
+([common model](networks/README.md#model)); the target signed kinds are `MetaCall` and `MetaTransfer` everywhere
+([NET-ALL-26](networks/README.md#NET-ALL-26)).
+
+| Family | Meta-tx mechanism (BUILT) | Account model | DEX settlement | Confidential |
+|---|---|---|---|---|
+| EVM, Hedera (reference) | `MetaTransaction` / `MetaTransfer` in the contract (EIP-712, `salt = chain_uid`) | native EOA or ERC-1271, Universal Account ledger in the token, `SmartKeyAccount` | `OrderBookDex` clone, token-verified `TradeOrder`s | Zether kinds (development chains); PQ Zether on chain 7622 ([contracts/pq-zether.md](contracts/pq-zether.md)) |
+| Cosmos | contract-level `Relay{payload, auth}` | CW20 balances per account; passkey owners as UA ids ([NET-ALL-21](networks/README.md#NET-ALL-21)) | CW20 `TransferFrom` under an allowance to the DEX contract | none |
+| Soroban (Stellar, Pi) | native Soroban authorization entries (nonce + ledger expiry) | native accounts or a custom account (`__check_auth`) | two `require_auth` in one call | none |
+| Move — Aptos | contract-level, one `Account` object per owner with lanes | the `Account` object holds any asset | legs moved inside one transaction | none |
+| Move — Sui | contract-level, shared `Account<T>` per subject with lanes | the `Account<T>` holds the coin | two `Account<T>` legs | none |
+| TON | custom jetton wallet verifies `SignedOp` (cells) | the jetton wallet carries the public key and lanes | escrow (holds funds briefly; no `transferFrom`) | none |
+| Solana | program-level, `SmartKeyAccount` PDA + `LanePda`; signature through the precompile instruction | the PDA owns SPL token accounts | DEX program | none |
+
+*Details per family: [networks/README.md](networks/README.md#families-and-chains),
+[DEX per family](networks/README.md#dex-per-family), [availability](networks/README.md#availability).*
+
+## Node layer
+
+The node carries signed writes to the contracts and finalized facts back; it never holds a subject key
+([node/README.md](node/README.md)).
 
 ### Node roles
 
@@ -281,31 +566,180 @@ Transitional (BUILT): today the node pulls work from one ERP and writes indexed 
 moves each chain to the push model, and the pull path is removed in one step afterwards
 ([NODE-JOB-10](node/job-api.md#NODE-JOB-10), [node/runbooks.md](node/runbooks.md#cutover)).
 
-### Data flows
+## Data flows
 
-- **Client payment.** The client builds typed data (a `pay(entryRef)` op with a server-chosen `validUntil`) → the
-  subject signs on its device → the client verifies the signature and writes an outbox row in the business
-  transaction → its push job calls `POST /v1/jobs` (idempotent) → the node accepts (digest recomputed, token
-  registered, unbound fields normalized) → a lane leases, simulates, journals `signed`, broadcasts → receipt `mined`
-  → the indexer finalizes the range → the feed carries a range item with `PaymentSettled(entryRef)` → the client books
-  the payment.
-- **Door A.** Anyone posts `{chain, token, m, signature}` to `/v1/metatx` → breaker → normalize → simulate →
-  `metaTxDigest` → lane queue → the same submit path.
-- **DEX.** Maker and taker orders signed over the DEX domain → `/v1/dex/orders` → venue book → match → settle job
-  (`call`) → `OrderBookDex.settle` → `OrderFilled` / `Matched` → watcher → accounting. Specified: role-free
-  `TradeOrder`s signed in each sell token's domain → venue book → the venue arranges one taker against its makers →
-  `OrderBookDex.mtxSettle` → each sell token's `mtxTrade` checks its signer's limits and moves the funds into the DEX,
-  which pays every party and the fee split in the same call → `LegSettled` → watcher → accounting; orders the book cannot
-  match may instead be exchanged against AMM pools (`mtxExchange`, [CTR-DEX-20](contracts/dex.md#CTR-DEX-20)). On non-EVM families settlement
-  is relayer-bound; the venue re-checks the on-chain market every poll (at most 30 s)
-  ([node/dex-venue.md](node/dex-venue.md), [contracts/dex.md](contracts/dex.md)).
-- **Mesh.** The origin wraps a bus-eligible intent in `scaas-intent/1.2`, signs `hub.sig`, optionally assigns
-  `exclusive` → peers pull (bus) or receive (gossip) → acceptance levels L0–L3 → store → scheduler → a job in the
-  `~mesh` namespace → submit. Landed hints trigger consumption reads.
-- **Confidential payment** (BUILT on dev chains only). The prover builds the statement, Σ-proof and two Bulletproofs
-  bound to the envelope → a meta-tx with `OP_ZTRANSFER` (specified: an `mtxExecute` self-call of
-  `zetherTransfer`) → `ZetherToken` verifies → `ConfidentialTransfer(entryRef)` →
-  disclosure through `ITransferDisclosure` for reconciliation.
+Each flow is a caption plus a sequence diagram; the participants are named as in the component docs. Diagrams show
+the target; the caption says what is built.
+
+**1 · Client payment.** The subject signs on its device, the client's outbox pushes the intent to its own node, and
+the client books the payment only from the finalized feed ([INT-ERP-18](integration.md#INT-ERP-18),
+[NODE-GEN-08](node/README.md#NODE-GEN-08)); built: the `pay` op of the v1/v2 lines.
+
+```mermaid
+sequenceDiagram
+    participant DEV as Subject device
+    participant ERP as Client app (ERP)
+    participant JOB as Node job API
+    participant LANE as Submit lane
+    participant TOK as Token
+    participant IDX as Indexer and feed
+    ERP->>DEV: MetaTransfer typed data (entryRef, validUntil)
+    DEV-->>ERP: signature (passkey or wallet key)
+    ERP->>ERP: verify, write the outbox row in the business transaction
+    ERP->>JOB: POST /v1/jobs (idempotency key)
+    JOB->>JOB: recompute the digest, token registered, normalize unbound fields
+    JOB->>LANE: job accepted
+    LANE->>LANE: lease, simulate, journal signed, broadcast
+    LANE->>TOK: mtxExecuteTransfer(t, sig)
+    TOK-->>TOK: PaymentSettled(entryRef)
+    IDX->>TOK: logs of the final range, RPC quorum
+    IDX-->>ERP: GET /v1/events range item with PaymentSettled
+    ERP->>ERP: book the payment
+```
+
+**2 · Gasless transfer through door A.** Anyone posts a signed intent to the public gateway, which simulates before
+it queues ([NODE-GW-01](node/gateway.md#NODE-GW-01), [node/gateway.md](node/gateway.md)); built for EVM with the
+built digest name `metaTxDigest`.
+
+```mermaid
+sequenceDiagram
+    participant W as Wallet or partner
+    participant GW as Node gateway
+    participant LANE as Submit lane
+    participant TOK as Token
+    participant IDX as Indexer
+    W->>GW: POST /v1/metatx (chain, token, m, signature)
+    GW->>GW: breaker, strict parse, normalize unbound fields
+    GW->>TOK: simulate the call
+    TOK-->>GW: success
+    GW->>GW: intent_id = mtxDigest, insert a job in ~gateway
+    GW-->>W: 202 queued, intent_id
+    LANE->>LANE: lease, journal signed, broadcast
+    LANE->>TOK: mtxExecuteTransfer(m, signature)
+    TOK->>TOK: relayer, expiry, lane nonce, signature, fee
+    TOK-->>TOK: Transfer, MetaTransactionExecuted(digest)
+    IDX->>TOK: read the final range
+    W->>GW: GET /v1/intents/intent_id
+    GW-->>W: job state
+```
+
+**3 · DEX order to settlement** (target, P2). Role-free `TradeOrder`s rest in the node's book and settle in one call
+that pays every party ([CTR-DEX-15](contracts/dex.md#CTR-DEX-15), [node/dex-venue.md](node/dex-venue.md)); built:
+DEX-signed orders over allowances, `OrderBookDex.settle`, `OrderFilled` / `Matched`.
+
+```mermaid
+sequenceDiagram
+    participant MK as Maker wallet
+    participant TK as Taker wallet
+    participant VEN as Node gateway and venue
+    participant LANE as Submit lane
+    participant DEX as OrderBookDex
+    participant ST as Sell token (SCaaS)
+    participant PUL as DexPuller
+    MK->>VEN: POST /v1/dex/orders (TradeOrder, sig)
+    VEN->>VEN: rest in the book, price-time priority
+    TK->>VEN: POST /v1/dex/orders (TradeOrder, sig)
+    VEN->>VEN: match one taker against its makers
+    VEN->>LANE: settle job (call)
+    LANE->>DEX: mtxSettle(settlements)
+    DEX->>ST: mtxTrade(order, sig, fill) per SCaaS leg
+    ST->>ST: signature, expiry, nonce, signed price limit
+    ST-->>DEX: transfer the fill into the DEX
+    DEX->>PUL: pull(token, from, fill) per outside-token leg
+    DEX->>DEX: pay destinations, fee split, refunds, balances unchanged
+    DEX-->>VEN: LegSettled, seen by the final-event watcher
+    VEN-->>MK: fill on the book feed
+```
+
+On non-EVM families settlement is bound to the relayer, and the venue re-checks the on-chain market every poll
+([DEX per family](networks/README.md#dex-per-family)). Orders the book cannot match may instead be exchanged against
+AMM pools with `mtxExchange` ([CTR-DEX-20](contracts/dex.md#CTR-DEX-20)).
+
+**4 · Universal Account registration submitted by a relayer** (SPECIFIED). The proof of possession binds the chain,
+the registry, the id and `authRef` but not the caller, so the gateway can pay for it
+([CTR-UA-07](contracts/accounts.md#CTR-UA-07), [NODE-GW-03](node/gateway.md#NODE-GW-03)).
+
+```mermaid
+sequenceDiagram
+    participant APP as Client app (clientkeys)
+    participant GW as Node gateway
+    participant LANE as Submit lane
+    participant REG as UniversalAccountRegistry
+    participant VER as Kind verifier
+    APP->>APP: ua = uaOf(kind, keyData)
+    APP->>REG: popDigest(ua, authRef), bound to chain_uid
+    APP->>APP: the key signs the PoP
+    APP->>GW: POST /v1/ua/register (chain, kind, keyData, pop, authRef)
+    GW->>GW: recompute the id, not yet registered, PoP of cheap kinds
+    GW->>LANE: call job in ~gateway to chain.ua_registry
+    GW-->>APP: 202 queued
+    LANE->>REG: register(kind, keyData, pop, authRef, authPop)
+    REG->>VER: verify the PoP, capped staticcall
+    VER-->>REG: valid
+    REG->>REG: store the record, UARegistered(ua, kind, keyData, authRef)
+    APP->>REG: isRegistered(ua)
+```
+
+**5 · Confidential: wrap-shield, multi-recipient transfer, unshield-unwrap** (target, P3). Value enters the
+shielded balance straight from an underlying leg and leaves straight to one
+([CTR-ZTH-45](contracts/zether.md#CTR-ZTH-45), [CTR-ZTH-37](contracts/zether.md#CTR-ZTH-37)); built on development
+chains only: `ZetherToken` with its own underlying, the `OP_ZTRANSFER` envelope op emitting
+`ConfidentialTransfer(entryRef)`, and `ITransferDisclosure`.
+
+```mermaid
+sequenceDiagram
+    participant SND as Sender (clientkeys, zether-prover)
+    participant RLY as Node (relayer)
+    participant TOK as UnderlyingZetherToken
+    participant STM as ZetherStatements
+    participant VER as Zether verifier
+    participant RCV as Recipient
+    SND->>RLY: MetaTransaction zetherWrapShield(u, amountIn, ua)
+    RLY->>TOK: mtxExecute(m, sig)
+    TOK->>TOK: pull leg u at its rate, credit pending of ua
+    SND->>STM: transferStatement(token, ...)
+    SND->>SND: prove M legs (real and decoys) under one proof
+    SND->>RLY: MetaTransaction zetherTransfer(payload, proof, authSig, beneficiary)
+    RLY->>TOK: mtxExecute(m, sig)
+    TOK->>VER: verify, after the registry's requireAuthorized
+    TOK->>TOK: debit the sender, credit each leg, store the bundle hash
+    RCV->>TOK: zetherRollOver (relayed), then decrypt off chain
+    RCV->>RLY: MetaTransaction zetherUnshieldUnwrap(..., u, recipient, amount, minOut)
+    RLY->>TOK: mtxExecute(m, sig)
+    TOK->>VER: verify the unshield proof
+    TOK-->>RCV: pay leg u, nothing minted
+```
+
+**6 · Disclosure by `SENDER_CP`.** The sender proves one leg's amount without handing over `s`; the checker verifies
+off chain or through the stateless `ZetherDisclosure`, and no attestation is written
+([CTR-ZTH-40](contracts/zether.md#CTR-ZTH-40), [CTR-ZTH-43](contracts/zether.md#CTR-ZTH-43),
+[CTR-ZTH-39](contracts/zether.md#CTR-ZTH-39)).
+
+```mermaid
+sequenceDiagram
+    participant SND as Sender (clientkeys)
+    participant CHK as Checker (auditor or counterparty)
+    participant TOK as Zether token
+    participant DSC as ZetherDisclosure
+    SND->>SND: rebuild s from the seed and the on-chain sendCounter
+    SND->>SND: SENDER_CP opening of leg j (A1, A2, z)
+    SND->>CHK: token, entryRef, j, amount, opening
+    alt off chain
+        CHK->>TOK: bundles from the TransferBundles event or calldata
+        CHK->>CHK: zether-prover verify_opening on leg j
+    else through ZetherDisclosure
+        CHK->>TOK: disclosure()
+        CHK->>DSC: verifyTransferAmount(token, entryRef, j, amount, SENDER_CP, opening, bundles)
+        DSC->>TOK: transferEntry(entryRef), verifier(), auditorKey()
+        DSC->>DSC: bundles match the stored hash, DLEQ on leg j
+        DSC-->>CHK: true or false (a view)
+    end
+    CHK->>CHK: record the result in its own books
+```
+
+**Mesh** (SPECIFIED transports). The origin wraps a bus-eligible intent in `scaas-intent/1.2`, signs `hub.sig`,
+optionally assigns `exclusive` → peers pull (bus) or receive (gossip) → acceptance levels L0–L3 → store → scheduler →
+a job in the `~mesh` namespace → submit. Landed hints trigger consumption reads ([node/mesh.md](node/mesh.md)).
 
 ## Trust model
 
@@ -343,13 +777,30 @@ chain_uid`, the genesis hash) and expires at `validUntil`; a subject can revoke 
 `cancelMetaNonce(batch)` (specified name `cancelNonce`). On private chains the B2B fee mode is `NONE`
 with `MODE_RESTRICT_RELAYER` and `fee = 0`; on public chains the gateway also accepts fee-paying intents from anyone.
 
+### Authority after deployment
+
+No contract has an upgrade key, so what each party can still do after deployment is fixed at creation and public.
+The table is a map of the [complete admin-power list](contracts/README.md#admin-powers-complete-list) for the EVM
+target; the rules are at the linked anchors.
+
+| Who | Can | Cannot | Rule |
+|---|---|---|---|
+| Factory registrar (multisig before mainnet) | register implementation versions, deprecate a version (marks, never blocks), enable Zether on development chains | touch any token or DEX, change a deployed implementation, stop a token from working | [CTR-TOK-18](contracts/token-wrappers.md#CTR-TOK-18), [CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25) |
+| Token `owner` (optional; 0 = none) | grant and revoke the roles of the flags set at creation, clear a flag that was not locked, transfer or renounce ownership | set a flag, act on a flag without granting itself the role, touch a reserve | [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22) |
+| Token role holders (`minter`, `rateAdmin`, `guardian`, `issuer`, `compliance`) | the power of their flag only: mint to a public balance, a timelocked rate step, disable wrap, and on non-confidential kinds freeze, forced transfer against a recorded order, bounded pause, allowlist | mint into a shielded balance, touch a reserve, move balances outside `FORCE`, upgrade | [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22), [CTR-AS-17](contracts/asset-suite.md#CTR-AS-17) |
+| DEX `admin` (written once at creation) | list or delist a market, set the fee split, list exchange targets, switch listed-only mode | touch funds, change a signed fee amount, pause the whole DEX | [CTR-DEX-03](contracts/dex.md#CTR-DEX-03) |
+| Auditor (ideally a k-of-n threshold key) | read the per-transfer auditor ciphertext `C_aud` of transfers that include it, give an `AUDITOR` opening | read anyone's balance (`acc`, `pending`), read a transfer whose sender left it out | [CTR-ZTH-41](contracts/zether.md#CTR-ZTH-41), [CTR-ZTH-42](contracts/zether.md#CTR-ZTH-42) |
+| Relayers and nodes | submit, delay or refuse an intent; choose the fee recipient where the intent leaves it unbound | change any signed field, move funds, sign for a subject | [CTR-MTX-17](contracts/metatx.md#CTR-MTX-17), [NODE-LANE-16](node/submit-lanes.md#NODE-LANE-16) |
+| `UniversalAccountRegistry`, `ZetherDisclosure`, `ZetherStatements` | nobody administers them | — | [CTR-UA-15](contracts/accounts.md#CTR-UA-15), [CTR-ZTH-43](contracts/zether.md#CTR-ZTH-43) |
+
 ## Families
 
 SCaaS groups chains into six families, each with one contract code base and one node adapter
 ([ARCH-POS-02](decisions.md#ARCH-POS-02)): `evm` (EVM chains including Hedera), `cosmos`, `soroban` (Stellar, Pi
 Network), `move` (`aptos`, `sui`), `ton` and `solana`. Contract-level meta-transactions are the default on every
-family; open relayers form the mesh. Per-family detail, the head-of-line table and the availability matrices are in
-[networks/README.md](networks/README.md).
+family; open relayers form the mesh. How each family realises the meta-tx, the account, the DEX and confidentiality
+is summarised in [Non-EVM families](#non-evm-families); per-family detail, the head-of-line table and the availability
+matrices are in [networks/README.md](networks/README.md).
 
 ## Economics
 
@@ -418,3 +869,11 @@ Crypto-shredding, disclosure for reconciliation and the land gate are in
 | **Consumed** | Job state: the subject nonce moved past the intent's nonce through a transaction this node did not land (or has not attributed yet). Never a failure by itself ([NODE-LANE-09](node/submit-lanes.md#NODE-LANE-09)). |
 | **UA** | Universal Account: an account identifier derived from key data, an EOA generalised to every signature scheme — the native address for a chain's native accounts (never registered), otherwise `keccak256(keccak256(kind_tag) ‖ key_data)` (32 bytes, kind-tagged, top 96 bits non-zero), registered per chain with a proof of possession that binds the chain (`chain_key` and `chain_uid`, the genesis hash), the registry, the UA and `authRef` (not the caller, so registration is relayable) ([contracts/accounts.md](contracts/accounts.md)). The built registry uses the Zether-only `keccak256(encodedY)` form until the UA registry replaces it ([CTR-UA-22](contracts/accounts.md#CTR-UA-22)). |
 | **Mandate** | An on-chain spending authorization held by a subject's wallet contract (`MandateWallet`): delegate, per-payment and per-period caps, payees, expiry, revocation ([CTR-ACC-06](contracts/mandates.md#CTR-ACC-06)). |
+| **Kind** | The implementation a token is cloned from, chosen at creation: `NONE`, `UNDERLYING` (1–8 legs), `NONE_ZETHER`, `UNDERLYING_ZETHER`; the post-quantum kinds are reserved ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)). Code, not a setting. |
+| **Feature flag** | A bit of a token's `features`, chosen at creation (`PAYABLE`, `MINTABLE`, `BURNABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE`, the regulated `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`); per flag locked or disableable, never set later ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). |
+| **Owner** | A token's optional administrator: grants and revokes the roles of its flags, may clear an unlocked flag, may renounce for good; it acts on a flag only through a role ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). |
+| **Role holder** | An account granted the role of a flag (`minter`, `rateAdmin`, `guardian`, `issuer`, `compliance`); it can use only that flag's power and keeps the role after the owner renounces ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). |
+| **Shield / unshield** | Moving value into or out of a confidential token's shielded (encrypted) balance, from or to the public balance (`zetherShield`, `zetherUnshield`) or straight from or to an underlying leg (`zetherWrapShield`, `zetherUnshieldUnwrap`) ([CTR-ZTH-45](contracts/zether.md#CTR-ZTH-45)). |
+| **Decoy** | A recipient leg of a confidential transfer that receives an encryption of 0, added by the sender to hide the real recipient ([CTR-ZTH-37](contracts/zether.md#CTR-ZTH-37)). |
+| **Opening** | Data that proves the amount of one confidential transfer leg to a checker without revealing a key: `SENDER_S`, `RECEIVER_X`, `AUDITOR`, `SENDER_CP` ([CTR-ZTH-40](contracts/zether.md#CTR-ZTH-40)). |
+| **`chain_uid`** | The chain's genesis block hash: with `chain_key` it identifies a chain (a chain id alone is not unique), and it is the `salt` of every SCaaS signing domain ([NET-ALL-22](networks/README.md#NET-ALL-22)). |

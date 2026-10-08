@@ -28,7 +28,7 @@ AREAS = {'node': (['node/'], ['NODE-']), 'contracts': (['contracts/'], ['CTR-'])
          'netcli': (['networks/', 'clients/', 'integration.md', 'integration-odoo-example.md'], ['NET-', 'CLI-', 'INT-'])}
 NOT_CURRENT = ('history/', 'research/', 'reviews/', 'superpowers/')
 REORG = ('history', 'reorg')          # reorg ledgers: id-map.tsv, section-map.tsv, facts/ (were docs/_work/ until Phase 2)
-BUDGET = {'README.md': 250, 'architecture.md': 450, 'decisions.md': 3000, 'integration.md': 950,
+BUDGET = {'README.md': 250, 'architecture.md': 900, 'decisions.md': 3000, 'integration.md': 950,
           'node/README.md': 250, 'node/store.md': 600, 'node/job-api.md': 550, 'node/submit-lanes.md': 550,
           'node/indexer-feeds.md': 400, 'node/gateway.md': 300, 'node/admin-auth.md': 400, 'node/sponsorship.md': 250,
           'node/dex-venue.md': 400, 'node/mesh.md': 650, 'node/gossip.md': 600, 'node/ops.md': 550,
