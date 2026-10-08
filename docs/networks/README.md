@@ -217,7 +217,7 @@ nonce, so a signature from a test network or another chain is worthless elsewher
 (`max_valid_for_secs`) and bounded by the lane horizon, not a fixed global window.
 
 <a id="chain-identity"></a><a id="NET-ALL-22"></a>**NET-ALL-22** — **A chain is identified by `(chain_key,
-chain_uid)`, never by its chain id alone, and `chain_uid` is the `salt` of every SCaaS signing domain.** `chain_uid`
+chain_uid)`, never by its chain id alone (the chain key resolves to the chain id, so `(chain_key, chain_uid)` and `(chainId, chain_uid)` name the same pair), and `chain_uid` is the `salt` of every SCaaS signing domain.** `chain_uid`
 (`bytes32`, `≠ 0`) is the chain's genesis block hash as its RPC reports it (EVM, Hedera). On EVM and Hedera it is a
 **constructor immutable**, exposed as `chainUid()`, of every SCaaS contract that checks a signature or binds a
 digest to a chain — token implementations (a clone runs its implementation's code, so it uses the implementation's

@@ -1912,7 +1912,8 @@ Change (2026-10-08): the non-EVM exception is gone — non-EVM families name sig
 ### CTR-TOK-22 — Features are flags: features, lockedFeatures, owner, roles, disableFeature
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/token-wrappers.md#CTR-TOK-22 · superseded-by: —
 
-**Why.** One administration word chosen at creation (bits 0–8: `PAYABLE`, `MINTABLE`, `BURNABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE`, `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`); per flag the creator picks locked or disableable (the owner may clear it once, never set it). Owner ruling: issuers administer through one `owner` (optional; candidate OpenZeppelin `AccessControlDefaultAdminRules`, decided in P1) who grants and revokes the roles and disables disableable flags, and can give everything up: after `renounceOwnership()` role holders keep their roles, so an unchangeable token means revoking every role first. The built `renounceMinter`, `renounceRateAdmin`, `renounceGuardian` correspond to the holder's `renounceRole`, `disableControls` to `disableFeature`. Validation lives in the token's `initialize` (`FeatureInvalidForKind`, `LockedNotSubset`, `RoleWithoutFeature`); `PAYABLE` is default off and immutable; the token refuses flags 5–8 on a confidential kind; a minter never mints into a shielded balance.
+**Why.** One administration word chosen at creation (bits 0–8: `PAYABLE`, `MINTABLE`, `BURNABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE`, `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`); per flag the creator picks locked or disableable (the owner may clear it once, never set it). Owner ruling: issuers administer through one `owner` (optional; candidate OpenZeppelin `AccessControlDefaultAdminRules`, decided in P1) who grants and revokes the roles and disables disableable flags, and can give everything up: after `renounceOwnership()` role holders keep their roles, so an unchangeable token means revoking every role first. The built `renounceMinter`, `renounceRateAdmin`, `renounceGuardian` correspond to the holder's `renounceRole`, `disableControls` to `disableFeature`. Validation lives in the token's `initialize` (`FeatureInvalidForKind`, `LockedNotSubset`, `RoleWithoutFeature`); `PAYABLE` is default off; `PAYABLE` and `BURNABLE` have no role and are always locked (`disableFeature` reverts `FeatureLocked(bit)`); the token refuses flags 5–8 on a confidential kind; a minter never mints into a shielded balance.
+Change (2026-10-09): `PAYABLE` and `BURNABLE` have no role and are always treated as locked; `disableFeature(PAYABLE|BURNABLE)` reverts `FeatureLocked(bit)`.
 **Cost if wrong.** Per-class powers cannot express a mix; an unvalidated factory-side check would let `createTokenUnregistered` bring a token with inconsistent roles.
 **Source.** `history/specs/2026-10-08-token-tree-design.md` §2 (T2, T5, T8, T11), §5.
 
@@ -2506,17 +2507,17 @@ Change (2026-10-08): `MetaTransaction` has no `to`/`value`, so the binding drops
 **Cost if wrong.** Pinned gas stipends break when precompile prices change.
 **Source.** `history/specs/2026-10-03-zether-design.md:609`
 
-### CTR-ZTH-16 — mtxRollOver accepts pendingSeq at least expected
+### CTR-ZTH-16 — zetherRollOverSigned accepts pendingSeq at least expected
 - old: RS2-17 · status: current · owner: no · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-16 · superseded-by: —
 
-**Why.** `mtxRollOver` (renamed from `rollOverSigned`) accepts `pendingSeq` at least the expected value, so a free public rollover in between does not invalidate a signed one.
+**Why.** `zetherRollOverSigned` (CTR-ZTH-45; built: `rollOverSigned`) accepts `pendingSeq` at least the expected value, so a free public rollover in between does not invalidate a signed one.
 **Cost if wrong.** An equality check lets anyone grief signed rollovers.
 **Source.** `history/specs/2026-10-03-zether-design.md:612`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-3.
 
-### CTR-ZTH-17 — mtxRollOver requires a new credit
+### CTR-ZTH-17 — zetherRollOverSigned requires a new credit
 - old: RS2-19 · status: current · owner: no · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-17 · superseded-by: —
 
-**Why.** `mtxRollOver` requires a new credit, so it cannot be replayed to no effect.
+**Why.** `zetherRollOverSigned` requires a new credit, so it cannot be replayed to no effect.
 **Cost if wrong.** Replays would burn the owner's relayer fees.
 **Source.** `history/specs/2026-10-03-zether-design.md:614`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-3.
 
@@ -3320,7 +3321,7 @@ Change (2026-10-08): the readable text is rebuilt from the `MetaTransfer`; a `Me
 ### NET-ALL-24 — Chain profile carries chain_uid and the DEX list
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: networks/README.md#NET-ALL-24 · superseded-by: —
 
-**Why.** Every SCaaS domain is salted with `chain_uid`, and the genuine DEXes are known only off chain (no on-chain DEX registry, owner 2026-10-08); the signer and the relayer need both values from a source they control, not from a server answer.
+**Why.** Every SCaaS domain is salted with `chain_uid`, and the genuine DEXes are known only off chain (the token consults no on-chain DEX registry; the factory's `isDex` is advisory, CTR-DEX-24; owner 2026-10-08); the signer and the relayer need both values from a source they control, not from a server answer.
 **Cost if wrong.** Clients sign with the wrong salt (every signature fails) or for a phishing `dex`.
 **Source.** [history/specs/2026-10-07-metatx-generic.md](history/specs/2026-10-07-metatx-generic.md) §3 MG-4, MG-6; §4; §13 N-H1.
 

@@ -264,8 +264,8 @@ it. Nothing else is reachable through `mtxExecute`.
 | `MultiUnderlyingToken` | `wrap(address,uint256)` | `ABSOLUTE` |
 | | `unwrap(address,uint256,address,uint256)` | `AMOUNT(1)` |
 | | `addReserve(address,uint256)` | `ABSOLUTE` |
-| `ZetherToken` | `wrap(uint256)`, `zetherShield(bytes,uint256)` | `ABSOLUTE` |
-| | `unwrap(uint256,address)` (public balance) | `AMOUNT(0)` |
+| `NONE_ZETHER` / `UNDERLYING_ZETHER` (built: `ZetherToken`; replaced in P1/P3) | `wrap(uint256)` (UnderlyingLib surface of `UNDERLYING_ZETHER`), `zetherShield(bytes,uint256)` | `ABSOLUTE` |
+| | `unwrap(uint256,address)` (public balance; `UNDERLYING_ZETHER`) | `AMOUNT(0)` |
 | | `zetherTransfer(bytes,bytes,bytes,bytes32)`, `zetherUnshield(bytes,bytes,bytes,bytes32,address,uint256)` | `ABSOLUTE`; envelope binding through the ticket ([CTR-ZTH-34](zether.md#CTR-ZTH-34)) |
 | `PqzToken` | `pqzTransfer(bytes,bytes,bytes[],bytes,bytes)`, `pqzUnshield(bytes,bytes,bytes[],uint256,address,bytes,bytes)`, `pqzShield(bytes32,uint256)`, `pqzRollOver(bytes32,bytes,bytes[])` | `ABSOLUTE`; not batchable ([CTR-PQZ-21](pq-zether.md#CTR-PQZ-21)) |
 | `MandateWallet` | delegate: `payUnderMandate(address,address,uint256,bytes32)`, `revoke(address,uint64)`; owner: `setMandate`, `setPayee`, `revoke(address)`, `execute` ([CTR-ACC-06](mandates.md#CTR-ACC-06)) | fee `NONE` only |
@@ -288,7 +288,7 @@ sequential nonce lets only one variant execute.
 <a id="CTR-MTX-12"></a>**CTR-MTX-12** — **Gasless unwrap** is `mtxExecute` with the wrapper's real `unwrap` calldata:
 `unwrap(uint256 wrapped, address recipient, uint256 minOut)` on `SingleUnderlyingToken`, `unwrap(address underlying,
 uint256 wrapped, address recipient, uint256 minOut)` on `MultiUnderlyingToken`, `unwrap(uint256, address)` (public
-balance) on `ZetherToken`. The function runs exactly as a direct call by `from` (checks, burn
+balance) on `UNDERLYING_ZETHER` (built: `ZetherToken`; replaced in P1/P3). The function runs exactly as a direct call by `from` (checks, burn
 `⌈out·q⌉`, reserve debit, the underlying's exact-amount transfer, `Unwrapped`), and `minOut` protects the signer
 against rate moves between signing and execution. Its fee class is `AMOUNT` with the wrapped amount as basis, taken
 in wrapped units after the call. The underlying's transfer failing reverts everything, fee and nonce included. The fee
@@ -490,8 +490,8 @@ signed, not the entry point, and stay. Non-EVM families follow the same rule in 
 | every contract on `MetaTxBase` | `mtxExecute` (+ alias `executeMetaTransaction`), `mtxBatch`; `cancelNonce(uint256 batch)` (direct, or signed through `mtxExecute`); views `mtxNonce`, `mtxDigest`, `mtxSelectors`, `chainUid`, `supportedModes` |
 | tokens | + `mtxExecuteWithFee`, `mtxExecuteTransfer`, `mtxBatchTransfer`, `mtxTransfer`, `mtxTransferWithFee`, `mtxPay`, `mtxPayReceiverFee`; views `mtxTransferDigest`, `payLane` |
 | tokens (trade) | `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces` ([dex.md](dex.md#CTR-DEX-15)) |
-| wrappers, `ZetherToken` | `mtxWrap` ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)) |
-| `ZetherToken` | `zetherRollOverSigned`, `zetherSetRollOverMode` ([CTR-ZTH-16](zether.md#CTR-ZTH-16)) |
+| wrappers, `UNDERLYING_ZETHER` (built: `ZetherToken`; replaced in P1/P3) | `mtxWrap` ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)) |
+| `NONE_ZETHER` / `UNDERLYING_ZETHER` (built: `ZetherToken`; replaced in P1/P3) | `zetherRollOverSigned`, `zetherSetRollOverMode` ([CTR-ZTH-16](zether.md#CTR-ZTH-16)) |
 | `MandateWallet` | + `mtxPayUnderMandate`, `mtxRevoke`, `mtxExecuteAsOwner`, named builders of a `MetaTransaction` ([mandates.md](mandates.md#mandatewallet)) |
 | `SmartKeyAccount` | + `mtxExecuteAsOwner`, named builder of a `MetaTransaction` ([CTR-ACC-10](accounts.md#CTR-ACC-10)) |
 | `OrderBookDex` | `mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces` ([dex.md](dex.md#CTR-DEX-16)) |

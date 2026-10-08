@@ -741,7 +741,7 @@ indexer for state. The node's indexer normalizes `MetaTransactionExecuted`, `UAM
 
 <a id="disclosure"></a>
 <a id="CTR-PQZ-14"></a>**CTR-PQZ-14** — **Disclosure by zero-knowledge proof**, never by revealing randomness or noise.
-`ITransferDisclosure` is kept (same three `OpeningKind`s; `opening = bundle ‖ proof`). `transferCiphertext(entryRef)`
+`ITransferDisclosure` is kept (the three v1 kinds (classical Zether added `SENDER_CP`, [CTR-ZTH-40](zether.md#CTR-ZTH-40); open for PQZ); `opening = bundle ‖ proof`). `transferCiphertext(entryRef)`
 reverts `CiphertextOffState(bundleHash)`; new view `transferCiphertextHash(entryRef)`. Shared randomness and decryption
 noise must not leak ([CTR-PQZ-04](#CTR-PQZ-04)); the indexer or the parties supply the bundle bytes.
 
@@ -758,10 +758,10 @@ token's `auditorUA` for `AUDITOR`), never from the opening; `v = v_t`, or `v_a` 
 | `AUDITOR` | auditor | as `RECEIVER_X` with `pk_a`, `v_a` |
 
 Uniqueness by [noise](#noise). `verifyTransferAmount` is a view (the precompile runs in `eth_call`);
-There is no on-chain attestation, as classical ([CTR-ZTH-39](zether.md#CTR-ZTH-39)). `transferCiphertextHash(entryRef)` returns the bundle hash;
+`attestTransferAmount` emits `AmountAttested` as classical (classical Zether removed attestation, [CTR-ZTH-39](zether.md#CTR-ZTH-39); for PQZ this is open, [CTR-PQZ-22](#CTR-PQZ-22)). `transferCiphertextHash(entryRef)` returns the bundle hash;
 the bundle bytes come from `PqzTransfer` logs. Nothing reveals `r` (which would open `v_f`, the sender's balance) or
-decryption noise. Client systems see PQZ like classical Zether: amounts known from their own documents, disclosure
-through `verifyTransferAmount` ([integration.md](../integration.md#confidential-payments)).
+decryption noise. Client systems see PQZ like classical Zether: amounts known from their own documents, attestations
+through `attestTransferAmount` ([integration.md](../integration.md#confidential-payments)).
 
 ### Authorization check
 
@@ -869,8 +869,8 @@ again. An earlier ≈ 2 M estimate, which had motivated a mixin reading `m.data`
 <a id="CTR-PQZ-22"></a>**CTR-PQZ-22** — **PQZ entry-point names mirror classical Zether** (owner,
 [CTR-ZTH-45](zether.md#CTR-ZTH-45)). PQZ entry points are `pqzShield`, `pqzWrapShield`, `pqzTransfer`, `pqzUnshield`,
 `pqzUnshieldUnwrap`, `pqzRollOver`; kinds `NONE_PQZ`, `UNDERLYING_PQZ` (and `*_ZETHER_PQZ`) are reserved
-([CTR-TOK-21](token-wrappers.md#CTR-TOK-21)). There is no `pqzRegister`. **Transitional (BUILT, renamed with the kinds):**
-the built names are `fund`, `pqzBurn`, `rollOver`. *Open (owner review pending):* the disclosure changes Z9/Z10/Z12 and
+([CTR-TOK-21](token-wrappers.md#CTR-TOK-21)). There is no `pqzRegister`. Renamed from the earlier specified names
+`fund`, `pqzBurn`, `rollOver`. *Open (owner review pending):* the disclosure changes Z9/Z10/Z12 and
 multi-recipient transfers are not ruled for PQZ.
 
 **Binding** ([CTR-ZTH-06](zether.md#CTR-ZTH-06), plus `chainUid`; `m.data` excluded because it contains the proof;

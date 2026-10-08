@@ -159,7 +159,7 @@ mobile apps and AI agents call them like any other API.
 | Web API | SCaaS |
 |---|---|
 | Service endpoint | A contract address on a chain |
-| API function (`POST /payments`) | A contract function (`mtxPay(...)`, `mtxExchange(...)`, `transferConfidential(...)`, or any allowlisted function of any SCaaS contract) |
+| API function (`POST /payments`) | A contract function (`mtxPay(...)`, `mtxExchange(...)`, `zetherTransfer(...)`, or any allowlisted function of any SCaaS contract) |
 | Bearer token issued by the server | The **subject's own signature** over exactly this call (EIP-712 on EVM) |
 | Quotas and limits | Caps inside the contract: per-payment and per-period mandate limits, expiry on every signature |
 | API versioning | A version catalogue in the factory; each deployed contract stays fixed ([section 4](#4-shared-code-delegate-call-separate-data-and-upgradeable)) |
@@ -236,11 +236,11 @@ flowchart TB
 | Tradable tokens | `mtxTrade`: the token pulls a signed `TradeOrder` into the DEX named in it | `IERC20MetaTx` | SPECIFIED (today: the `trade` op and the legacy `MetaTxDex`, both to be removed) | [metatx](docs/contracts/metatx.md), [legacy DEX](docs/contracts/dex.md#legacy-metatxdex) |
 | DEX | `OrderBookDex`, `DexPuller` | `EIP712` + `ReentrancyGuardTransient`; one taker against many makers per call on two paths, no maker allowance; `mtxExchange` fills the same orders against AMMs (Uniswap v2/v3), multi-hop or in a cycle, surplus to the signers ([CTR-DEX-20](docs/contracts/dex.md#CTR-DEX-20)) | BUILT; the no-allowance settlement and the AMM exchange SPECIFIED | [dex](docs/contracts/dex.md) |
 | Mandates | `MandateWallet` | `MetaTxBase` + `IERC1271` | BUILT (own signed structs; `MetaTxBase` SPECIFIED) | [mandates](docs/contracts/mandates.md) |
-| Smart account (optional) | `SubjectAccount`, `SubjectAccountFactory` | `MetaTxBase` + `IERC1271`; P-256 passkeys; signs its own calls as itself ([CTR-ACC-10](docs/contracts/accounts.md#CTR-ACC-10)) | BUILT (`OwnerCall`; `MetaTxBase` SPECIFIED) | [accounts](docs/contracts/accounts.md#subjectaccount) |
+| Smart account (optional) | `SmartKeyAccount`, `SmartKeyAccountFactory` (built: `SubjectAccount`) | `MetaTxBase` + `IERC1271`; P-256 passkeys; signs its own calls as itself ([CTR-ACC-10](docs/contracts/accounts.md#CTR-ACC-10)) | BUILT (`OwnerCall`; `MetaTxBase` SPECIFIED) | [accounts](docs/contracts/accounts.md#subjectaccount) |
 | Universal Accounts | today the Zether-only `UniversalAccountRegistry`; next the UA registry with one verifier per kind, and MetaToken v3 with a UA ledger | the signature, multisig, BLS and hash-to-curve libraries | legacy registry BUILT; UA registry and v3 SPECIFIED | [accounts](docs/contracts/accounts.md#universal-account) |
 | Zether | `ZetherToken`, `ZetherVerifierBn254`, `ZetherVerifierBls12381`, `ITransferDisclosure` | `ERC20MetaTx` (built: `ZetherMetaTx`); EIP-196/197 and EIP-2537 precompiles | BUILT, unaudited | [zether](docs/contracts/zether.md) |
 | PQ Zether | `PqzToken` | `ERC20MetaTx`, relayed like Zether ([CTR-PQZ-21](docs/contracts/pq-zether.md#CTR-PQZ-21)); a lattice precompile on chain 7622 — public chains once they offer one | SPECIFIED | [pq-zether](docs/contracts/pq-zether.md) |
-| Asset suite | `RegulatedControls`, `ComplianceRegistry`, `VestingGrant`, `Distribution`, `ExchangeOffer` | the v2 token tiers; ERC-7201 namespaced storage | SPECIFIED | [asset-suite](docs/contracts/asset-suite.md) |
+| Asset suite | `ComplianceRegistry`, `VestingGrant`, `Distribution`, `ExchangeOffer` | regulated flags 5–8 on ordinary token kinds ([CTR-AS-17](docs/contracts/asset-suite.md#CTR-AS-17)); ERC-7201 namespaced storage | SPECIFIED | [asset-suite](docs/contracts/asset-suite.md) |
 | Tender | `SealedBidTender` | commit and reveal with deposits | SPECIFIED | [tender](docs/contracts/tender.md) |
 | Sponsorship | `SponsorshipPool` | opt-in gas sponsorship contract | PLANNED | [sponsorship](docs/node/sponsorship.md) |
 | Hedera | the same kinds with `IS_HEDERA` set, `HederaMandateWallet` | the same EVM contracts plus HIP-632 for native Hedera keys | BUILT today as `Hedera*UnderlyingToken` children (P1 folds them into `IS_HEDERA`, CTR-TOK-23) | [hedera](docs/networks/hedera.md) |
@@ -258,7 +258,7 @@ refunding the rest ([section 14](#14-how-the-design-evolved)).
 |---|---|
 | ERC-20 (OpenZeppelin) | Every token stays an ordinary ERC-20 |
 | EIP-712, ERC-5267 | Typed, readable signatures; the domain is published by `eip712Domain()` |
-| ERC-1271 | Contract accounts (Safe, `SubjectAccount`) sign like users |
+| ERC-1271 | Contract accounts (Safe, `SmartKeyAccount`) sign like users |
 | EIP-1167 | Cheap, immutable clones from the factory |
 | ERC-7201 | Namespaced storage for the regulated module |
 | EIP-196/197, EIP-2537 | bn254 and BLS12-381 precompiles for Zether, BLS and Schnorr |
@@ -352,7 +352,7 @@ regulated module) sits in a library linked once per chain.
 
 | Benefit | Why |
 |---|---|
-| **Cheap to create** | A token clone costs about 45,000 gas instead of about 2.5 M for a full deployment; a `SubjectAccount` clone about 287,000 instead of several million |
+| **Cheap to create** | A token clone costs about 45,000 gas instead of about 2.5 M for a full deployment; a `SmartKeyAccount` clone about 287,000 instead of several million |
 | **Light on the chain's nodes** | The implementation's code is stored once per chain — clients keep code by its hash — and each new clone adds 45 bytes plus its own storage. The one implementation, called by every clone, stays hot in the clients' code caches, and state grows more slowly |
 | **One audited code base** | Auditing and verifying one implementation covers every clone; all clones of a version share one code hash, so anyone can check which code a token runs |
 | **Versions without upgrades** | A new version is a new implementation added to the factory's catalogue; it applies only to contracts created after it, and existing clones keep their pointer and their rules |
@@ -460,7 +460,7 @@ What makes it work:
 - **It is an identifier, not a contract.** Nothing is deployed per user: creating a UA is free and deterministic, and
   the same key data gives the same id on every chain of every family
   ([CTR-UA-02](docs/contracts/accounts.md#CTR-UA-02)).
-- **Native accounts are used as they are.** An EVM address, a contract account (Safe, `SubjectAccount`) or a native
+- **Native accounts are used as they are.** An EVM address, a contract account (Safe, `SmartKeyAccount`) or a native
   account of another family is already a UA and never registers. Every other kind registers once per chain, with a
   proof that the registrant holds the key; the registry has no admin and never forgets.
 - **Ids never collide.** Every derived id carries a versioned kind tag and is 32 bytes, so a passkey UA can never equal
@@ -476,7 +476,7 @@ What makes it work:
 
 | Use | Kinds | What it gives |
 |---|---|---|
-| Native accounts | EVM address, contract account (Safe, `SubjectAccount`), Hedera, Solana, Stellar, Aptos, Sui, Cosmos, TON wallets | Work as they are; no registration |
+| Native accounts | EVM address, contract account (Safe, `SmartKeyAccount`), Hedera, Solana, Stellar, Aptos, Sui, Cosmos, TON wallets | Work as they are; no registration |
 | Sign with one key | `webauthn-p256` (passkey), `p256` (HSM, secure enclave), `ed25519`, `bip340` (Schnorr), `schnorr-bn254`, `schnorr-bls12381` | Sign from any device or HSM, on any EVM chain, not only with secp256k1 |
 | BLS | `bls12381-minsig`, `bls-bn254-minsig` | Short signatures that aggregate; one pairing check on chain |
 | n-of-n group | `musig2-secp256k1`, `musig2-bn254` | Several parties produce **one** aggregate signature; the registry recomputes the group key |
@@ -495,11 +495,11 @@ attach verifiable credentials (eKYC) to any account, native or derived — never
 
 **Rotation and recovery.** A UA is its key data, so a new key is a new UA and funds move to it. Users who need a stable
 address across key changes, guardian recovery, or compatibility with contracts that only understand addresses use the
-optional smart account `SubjectAccount` — itself a native contract UA
+optional smart account `SmartKeyAccount` — itself a native contract UA
 ([CTR-ACC-09](docs/contracts/accounts.md#CTR-ACC-09)).
 
 **Status.** The UA model is SPECIFIED, nothing of the new registry is built yet. Already BUILT: BLS verification,
-bn254 FROST and MuSig2 verification, ECDSA N-of-M quorums, `SubjectAccount`, and the Zether-only registry that the UA
+bn254 FROST and MuSig2 verification, ECDSA N-of-M quorums, `SmartKeyAccount`, and the Zether-only registry that the UA
 registry replaces. In the first version, existing tokens, the DEX and mandates keep accepting native accounts; UA
 holders use the new UA-ledger tokens (MetaToken v3) and Zether
 ([function → kinds](docs/contracts/accounts.md#function-kinds)).

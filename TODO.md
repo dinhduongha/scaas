@@ -31,7 +31,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
 **P1 — MT-1…MT-4**
 - [ ] **MT-1** Two bases: generic `MetaTxBase` (any SCaaS contract; `_chargeFee` refuses all but `NONE`, CTR-MTX-22) and
       the token base `ERC20MetaTx is MetaTxBase` (absorbs `MetaTxCore`) with `MetaTokenBase` on top; kinds `NONE` and
-      `UNDERLYING` with `AdminLib`, `PayLib`, `UnderlyingLib`, `HederaLib`, `SigCheck` (CTR-TOK-21…24); factory
+      `UNDERLYING` (the native-coin leg, CTR-TOK-26) with `AdminLib`, `PayLib`, `UnderlyingLib`, `HederaLib`, `SigCheck` (CTR-TOK-21…24); factory
       `createToken` (CTR-TOK-25). Delete what token-tree spec §8 deletes: `ERC20MetaTx`(v1), `MetaToken`, `HederaMetaToken`,
       v1 `OpenFactory`, `MetaTxDex`, `MetaTxCore`, `Single`/`MultiUnderlyingToken` (merged), the `Hedera*UnderlyingToken`
       children, `SigLib`, `OpenFactoryV2.createMetaToken`, the regulated children (flags instead, CTR-AS-17).
@@ -54,8 +54,8 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
       `setListedOnly` (CTR-DEX-03); tokens accept `receiveToken == this` and flag 4 (CTR-DEX-15).
 
 **P3 — MT-6**
-- [ ] **MT-6** Zether: transient envelope binding, `zetherShield` from the public balance (CTR-ZTH-45), `mtxWrap`; renames (`mtxRollOver`,
-      `mtxSetRollOverMode`); envelope binding without `to`/`value` (CTR-ZTH-06); `PqzToken` on the one base like Zether,
+- [ ] **MT-6** Zether: transient envelope binding, `zetherShield` from the public balance (CTR-ZTH-45), `mtxWrap`; renames (`zetherRollOverSigned`,
+      `zetherSetRollOverMode`, CTR-ZTH-45; built: `rollOverSigned`, `setRollOverMode`); envelope binding without `to`/`value` (CTR-ZTH-06); `PqzToken` on the one base like Zether,
       no `PqzMetaTx`, PQZ selectors not batchable (CTR-PQZ-21); prover `Header` gains `chain_uid` as word 3,
       `HEADER_LEN` 384 → 416 (`clients/zether-prover/src/zether.rs`).
 

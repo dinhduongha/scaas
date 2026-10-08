@@ -30,7 +30,7 @@ suite and the confidential layer. The node (`scaas-node`). Clients: signers, wal
 **The EVM token model in one paragraph.** One base tree serves every token. A token has one of four kinds: `NONE` (a
 plain issuer token), `UNDERLYING` (a wrapper of one to eight legs, each an ERC-20 or the native coin), or the same two
 with the confidential layer, `NONE_ZETHER` and `UNDERLYING_ZETHER`
-([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)). Features are chosen at creation and then fixed: `PAYABLE`,
+([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)). Features are chosen at creation and never set later (disableable flags can be cleared): `PAYABLE`,
 `MINTABLE`, `BURNABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE`, and for regulated tokens `FREEZE`, `FORCE`, `PAUSE`,
 `ALLOWLIST`. One owner administers a token, grants roles and may renounce
 ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). An open factory creates tokens and DEX clones.

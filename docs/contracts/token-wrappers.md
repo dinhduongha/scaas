@@ -84,8 +84,8 @@ low-value currency token — an `UnderlyingToken` with two legs and one rate per
 
 `initData` per kind below. Fee-on-transfer underlyings are measured on the way in and must
 transfer exactly on the way out; rebasing underlyings are unsupported (a negative rebase stops wrap, exits stay
-first-come); classical Zether refuses fee-on-transfer underlyings (`UnsupportedUnderlying`,
-[CTR-ZTH-14](zether.md#CTR-ZTH-14)). Weighted baskets (proportional redemption) are not planned.
+first-come); built `ZetherToken` refuses fee-on-transfer underlyings (`UnsupportedUnderlying`,
+[CTR-ZTH-14](zether.md#CTR-ZTH-14)); target: the confidential kinds use UnderlyingLib ([CTR-TOK-11](#CTR-TOK-11)). Weighted baskets (proportional redemption) are not planned.
 
 ### NONE — `NoUnderlyingToken`
 
@@ -496,7 +496,7 @@ immutable: see the administration bullet below.
   `renounceOwnership()` the existing role holders **keep** their roles; to make a token unchangeable the owner revokes
   every role, then renounces. A role holder performs the flag's actions (mint, rate change, freeze, …) and may
   `renounceRole(bit)` itself. The owner only administers: it acts on a flag only if it grants itself the role.
-  `PAYABLE` and `BURNABLE` have no role and are therefore immutable. Events: `RoleGranted`/`RoleRevoked`,
+  `PAYABLE` and `BURNABLE` have no role and are always treated as locked: `disableFeature(PAYABLE|BURNABLE)` reverts `FeatureLocked(bit)`. Events: `RoleGranted`/`RoleRevoked`,
   `FeatureDisabled(bit, by)`, the ownership events.
 - **Validation in the token**, in `initialize` through `AdminLib` (the factory only forwards; `createTokenUnregistered`
   lets anyone bring an implementation, so the token is the one authority): each flag valid for the kind
@@ -516,7 +516,7 @@ immutable: see the administration bullet below.
 
 | | No regulated flag | Any of flags 5–8 |
 |---|---|---|
-| Admin powers | None beyond the creation-time flags 1, 3, 4: no pause, blacklist, freeze, confiscation | The flags chosen at creation; a flag can only be disabled later (where not locked), never set; no power mints, changes a rate or touches the reserve |
+| Admin powers | None beyond the creation-time flags 1, 3, 4: no pause, blacklist, freeze, confiscation | The flags chosen at creation; a flag can only be disabled later (where not locked), never set; no regulated flag mints, changes a rate or touches the reserve |
 | Use | Loyalty, internal units, B2B settlement tokens, wrapped stablecoins | Central-bank digital currency, licensed stablecoins, digital securities and bonds, real-world-asset claims |
 | Guarantee | "Your key, your funds": neither the issuer nor the factory can touch balances | Due-process intervention against a recorded order, permanently evidenced on chain; mandatory disclosure (`termsHash`) |
 

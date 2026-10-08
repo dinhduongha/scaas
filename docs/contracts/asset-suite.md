@@ -248,7 +248,7 @@ interface IRegulatedToken {
     function forceTransfer(bytes32 recordId, uint256 amount) external;
     function pause(bytes32 ref, uint64 until) external;
     function unpause(bytes32 ref) external;
-    function disableControls(uint8 bits) external;                        // one-way relaxation
+    // owner (= disableFeature(bit), CTR-TOK-22): function disableControls(uint8 bits) external;  // one-way relaxation
     // either role, for itself, one-way (relaxations)
     function renounceRole() external;
 }
