@@ -1,6 +1,6 @@
 # Meta-transactions: a generic call for every SCaaS contract, transfers as a typed special case
 
-**Status:** DRAFT for discussion, from the owner's chat answers of 2026-10-08; not folded. Amends the accepted meta-tx
+**Status:** DRAFT rev 2, every owner question answered (G1–G10); awaiting the owner's review of this text; not folded. Amends the accepted meta-tx
 design (`docs/history/specs/2026-10-07-metatx-generic.md`, rules in [contracts/metatx.md](../../contracts/metatx.md)).
 Provisional ids `GC-n`; real ids are allocated in `docs/decisions.md` on acceptance (docs/README "Ids").
 **Date:** 2026-10-08. **Scope:** EVM and Hedera: the meta-tx base, every token, `MandateWallet`, `SubjectAccount`,
@@ -32,6 +32,9 @@ A token transfer is a **special case** of a meta-transaction (owner), not its de
 | G4 | Named functions | **Kept separate**, signatures unchanged (`mtxTransfer`, `mtxTransferWithFee`, `mtxPay`, `mtxExecuteWithFee`, `mtxBatch`, `mtxPayReceiverFee`, …) — nothing is merged |
 | G5 | Batching transfers | **1a**: add `mtxBatchTransfer(MetaTransfer[], sigs)` beside `mtxBatch` |
 | G6 | Payment on a client-chosen lane | **2a**: add `mtxExecuteTransfer(MetaTransfer, sig)`, the struct entry of the typed path |
+| G8 | Split the UA ledger's `UAMetaTransaction` the same way? | **Yes** (GC-9) |
+| G9 | `SubjectAccount` signs as itself (`from = address(this)`) | **OK** (GC-6) |
+| G10 | Names `MetaTransaction`, `MetaTransfer`, `MetaTxBase` | **Kept** |
 | G7 | `pay` as a Solidity function name | no conflict: `pay` is not a keyword or reserved word (`payable` is a different token); `function pay(address,uint256,bytes32)` compiles, selector `0x5e5571ac` |
 
 ## 3. Design
@@ -147,7 +150,7 @@ another lane for a payment uses `mtxExecuteTransfer`".
   are `onlySelf` (`_msgSender() == address(this)`). `OwnerCall` and its single nonce disappear; `mtxExecuteAsOwner`
   stays as the named builder. Fee mode `NONE`.
 - Not moved: tender (it verifies no signature; the deposit becomes a `MetaTransfer` with `entryRef = depositRef` and
-  `commitBid` calls the token's `mtxExecuteTransfer`), the UA ledger (Q1).
+  `commitBid` calls the token's `mtxExecuteTransfer`). The UA ledger keeps its own `bytes32` structs, split as GC-9.
 
 ### GC-7 — Contracts outside the token set
 
@@ -167,6 +170,37 @@ the node's call table ([NODE-JOB-20](../../node/job-api.md#NODE-JOB-20)). Chargi
   JSON for `MetaTransfer` shows typed fields; `MetaTransaction` is decoded through `mtxSelectors()` before signing
   (already required).
 
+### GC-9 — The UA ledger split the same way (owner G8)
+
+[CTR-UA-19](../../contracts/accounts.md#CTR-UA-19)'s `UAMetaTransaction` carries the same `to`/`value`/`data` shapes
+with `bytes32` ids. It splits like GC-1, in the token's domain, sharing the one nonce map `_uaNonce[bytes32][batch]`
+with the address path (native ids zero-padded, as today):
+
+```solidity
+struct UAMetaTransaction {   // generic: an allowlisted call of this token under a UA (today: unwrap only)
+    bytes32 from; bytes data; uint256 batch; uint256 nonce; uint256 validUntil;
+    uint32 mode; address relayer; uint256 fee; address feeRecipient;
+}
+struct UAMetaTransfer {      // typed: transfer (entryRef = 0) or payment
+    bytes32 from; bytes32 to; uint256 value; bytes32 entryRef; uint256 batch; uint256 nonce; uint256 validUntil;
+    uint32 mode; address relayer; uint256 fee; address feeRecipient;
+}
+```
+
+| Function (signature unchanged) | Builds |
+|---|---|
+| `uaExecute(UAMetaTransaction m, bytes auth)` | `UAMetaTransaction`; `data` limited to the UA allowlist (`unwrap` today; `approve`/`trade` refused as now) |
+| `uaUnwrap(from, underlying, wrapped, recipient, minOut, batch, nonce, validUntil, mode, relayer, auth)` | `UAMetaTransaction{data: unwrap(…)}` |
+| `uaBatch(UAMetaTransaction[] ms, bytes[] auths)` | `UAMetaTransaction` per item |
+| `uaTransfer(…)`, `uaTransferWithFee(…)` | `UAMetaTransfer{entryRef: 0}` (fee 0 for `uaTransfer`) |
+| `uaPay(from, to, amount, payId, …)` | `UAMetaTransfer{entryRef: payId, batch: payLane(payId), nonce: 0}` |
+| **new** `uaExecuteTransfer(UAMetaTransfer t, bytes auth)` | `UAMetaTransfer` as given (mirror of `mtxExecuteTransfer`) |
+| **new** `uaBatchTransfer(UAMetaTransfer[] ts, bytes[] auths)` | `UAMetaTransfer` per item (mirror of `mtxBatchTransfer`) |
+
+The payee check compares `bytes32(uint256(uint160(feeRecipient)))` with `t.to`; `UAMetaTransactionExecuted` is
+emitted for both structs and its `digest` stays the mesh `intent_id`. Vectors: the v3 KAT splits into a
+`UAMetaTransaction` and a `UAMetaTransfer` vector.
+
 ## 4. Changes to current rules (on acceptance)
 
 | Rule | Change |
@@ -180,19 +214,17 @@ the node's call table ([NODE-JOB-20](../../node/job-api.md#NODE-JOB-20)). Chargi
 | [CTR-MTX-13](../../contracts/metatx.md#CTR-MTX-13), [CTR-MTX-20](../../contracts/metatx.md#CTR-MTX-20) | fee only where `_chargeFee` is overridden; `supportedModes()` per contract |
 | [CTR-ACC-06](../../contracts/mandates.md#CTR-ACC-06), [CTR-ACC-07](../../contracts/mandates.md#CTR-ACC-07), `SubjectAccount` key management ([accounts.md](../../contracts/accounts.md)) | GC-6 |
 | [CTR-TND-01](../../contracts/tender.md#CTR-TND-01) | deposit = `MetaTransfer` |
+| [CTR-UA-19](../../contracts/accounts.md#CTR-UA-19) | GC-9 |
 | node `job-api`, `submit-lanes`, `mesh`; `clients/signers-clientkeys.md`; `integration.md` | GC-8 |
 | `TODO.md` | MT-1/MT-2 split the base (GC-2); MT-7 becomes "`MandateWallet`/`SubjectAccount` on `MetaTxBase`"; MT-8/MT-9 + both structs |
 
 ## 5. Open questions for the owner
 
-| # | Question | Recommendation |
-|---|---|---|
-| Q1 | The UA ledger's `UAMetaTransaction` ([CTR-UA-19](../../contracts/accounts.md#CTR-UA-19)) has the same `to`/`value`/`data` shapes with `bytes32` ids. Split it the same way (`UAMetaTransaction` generic + `UAMetaTransfer`), or leave it? | split it, for one model everywhere |
-| Q2 | `SubjectAccount` signs as itself (`from = address(this)`, GC-6). Acceptable, or should `from` be the signing key's id? | `from = address(this)`: passkeys have no address, and the account already verifies its own keys |
-| Q3 | Names: `MetaTransaction` (generic, typehash changes), `MetaTransfer`, `MetaTxBase` | as written |
+None: Q1–Q3 of rev 1 answered (G8–G10).
 
 ## 6. Revision history
 
 | Rev | Date | What |
 |---|---|---|
 | 1 | 2026-10-08 | First draft from the owner's chat answers G1–G7 |
+| 2 | 2026-10-08 | Owner answers G8–G10: UA ledger split (GC-9), `SubjectAccount` signs as itself, names kept |
