@@ -8,7 +8,7 @@ the rules every one of them shares. Status tags (**BUILT**, **SPECIFIED**, **PLA
 
 | File | Covers | Status |
 |---|---|---|
-| [accounts.md](accounts.md) | the three account forms; Universal Account (ids, kinds, registry, verifiers, credentials, migration); passkeys on chain; the optional `SubjectAccount` smart account and its factory, guardians | UA **SPECIFIED**; `SubjectAccount` **BUILT** |
+| [accounts.md](accounts.md) | the three account forms; Universal Account (ids, kinds, registry, verifiers, credentials, migration); passkeys on chain; the optional `SmartKeyAccount` smart account and its factory, guardians | UA **SPECIFIED**; `SmartKeyAccount` **BUILT** |
 | [metatx.md](metatx.md) | the one base `ERC20MetaTx`: `MetaTransaction` struct, typehash, `mode`, 2D nonces, `mtxExecute` (generic self-call, ticket, selector allowlist, fee classes), `mtx` names, pay references and the pay-once horizon, receiver-pays | **SPECIFIED** (built as the v1/v2 lines) |
 | [token-wrappers.md](token-wrappers.md) | three token tiers, conversion rates, multi-underlying wrappers, signature wrap, the one `OpenFactory`, allowance rule | tiers **BUILT** (EVM, Hedera); one base and factory **SPECIFIED** |
 | [dex.md](dex.md) | `OrderBookDex` with token-verified `TradeOrder`s, outside-token legs through the `DexPuller`, the exchange path against AMMs (`mtxExchange`), managed-market venue contract | **SPECIFIED** (built with DEX-signed orders over allowances) |
@@ -45,7 +45,7 @@ the implementation's immutables). `chain_uid` is the chain's genesis block hash 
 |---|---|
 | token implementations (the tiers, their Hedera children, `ZetherToken`) | constructor immutable of the **implementation**; a clone runs its code by `DELEGATECALL`, so it uses the value with no storage and no `initialize` argument and cannot declare another one |
 | `OpenFactory` | constructor immutable; `registerImplementation` refuses an implementation whose `chainUid()` differs ([CTR-TOK-03](token-wrappers.md#CTR-TOK-03)) |
-| `SubjectAccount` | the factory's constructor argument, passed to `new SubjectAccount(chainUid)` |
+| `SmartKeyAccount` | the factory's constructor argument, passed to `new SmartKeyAccount(chainUid)` |
 | `MandateWallet`, `HederaMandateWallet` | constructor argument from the chain profile; the node checks it before relaying for that wallet |
 | `OrderBookDex` | constructor argument |
 | built `UniversalAccountRegistry` | constructor immutable, in its PoP challenge; it checks raw digests, so every caller's digest carries `chainUid` ([CTR-ZTH-36](zether.md#CTR-ZTH-36)) |
@@ -142,7 +142,7 @@ power.
 | Cosmos DEX | admin | `SetMarket` only; the `Sweep` of the built version is removed (SPECIFIED) | [NET-COS-04](../networks/cosmos.md#NET-COS-04) |
 | Sui | `meta::AdminCap` | `set_network` once, create `Dex`, `set_market` (fees, listing) | [sui](../networks/sui.md#objects) |
 | Aptos | `Root.admin` (the code-object owner) | `create_dex`, `list_market`, `set_market` (fee, on/off), `admin_sweep` of an asset sent by mistake to Root, the Dex or a Market (refuses every Account and Mandate) | [aptos](../networks/aptos.md#dex) |
-| Solana | `Config.admin` | `list_market`, `set_market` (fee, on/off); never a SubjectAccount or Mandate | [solana](../networks/solana.md#dex) |
+| Solana | `Config.admin` | `list_market`, `set_market` (fee, on/off); never a SmartKeyAccount or Mandate | [solana](../networks/solana.md#dex) |
 
 ## Production gates (UNAUDITED)
 
@@ -186,7 +186,7 @@ own job (Move test, Soroban, CosmWasm, Tact, Solana) as the family is added.
 
 <a id="deploy"></a>Deploy (EVM): `script/Deploy.s.sol` (forge script; env `PRIVATE_KEY` = deployer and default registrar,
 `REGISTRAR` optional, `DEMO_SUPPLY`/`DEMO_HOLDER` optional) reads the genesis hash from the RPC and deploys, through
-the CREATE2 deployer ([CTR-GEN-06](#CTR-GEN-06)), `SubjectAccountFactory`, `OpenFactory` with the three tier
+the CREATE2 deployer ([CTR-GEN-06](#CTR-GEN-06)), `SmartKeyAccountFactory`, `OpenFactory` with the three tier
 implementations (each taking the factory address and `chain_uid`) registered as version 1 of their kinds, and
 `OrderBookDex(registrar, chainUid)`; optionally a tier-1 demo token (**SPECIFIED**). It writes
 `deployments/<chainid>.json` to seed the node's chain configuration and client chain data. Production: every contract
@@ -197,9 +197,9 @@ owner/admin is a Safe from the first block, and deployer keys come from a hardwa
 <a id="CTR-GEN-06"></a>**CTR-GEN-06** — **Every SCaaS EVM contract is deployed through a deterministic CREATE2
 deployer with a fixed salt** (owner): implementations, factories, registries and the DEX, instead of `new` (CREATE,
 address = f(deployer, nonce)). A contract whose constructor takes `chain_uid` (implementations, factories,
-`SubjectAccountFactory`, `OrderBookDex`, the registries) gets a **different address on each chain**, because its init
+`SmartKeyAccountFactory`, `OrderBookDex`, the registries) gets a **different address on each chain**, because its init
 code differs; so does every clone, whose CREATE2 address depends on the implementation and the factory, and so does a
-user's `SubjectAccount` (the node and app predict it per chain). A contract with no chain-specific constructor
+user's `SmartKeyAccount` (the node and app predict it per chain). A contract with no chain-specific constructor
 argument gets the **same address on every chain**. Safety never rests on the address: the salt is in every digest
 ([CTR-GEN-05](#CTR-GEN-05)).
 

@@ -41,7 +41,7 @@ have no multi-key / guardian / recovery and no capped mandate.
 
 <a id="NET-SOL-03"></a>**NET-SOL-03** — **Solana uses a program-level meta-tx; the subject never sends a transaction on
 the hot path, and the native fee payer is only ever a relayer lane.** The subject signs a domain-separated message; each
-"contract" (our SubjectAccount, Mandate, Market) keeps its lane/nonce space **as one PDA per lane**; the relayer sends
+"contract" (our SmartKeyAccount, Mandate, Market) keeps its lane/nonce space **as one PDA per lane**; the relayer sends
 from **its own** lane (fee payer = lane) and pays base fee + priority fee + rent. The subject sends native transactions
 only for one-off actions off the hot path (funding from a wallet; a guardian's `start_recovery`). Owner decision
 (gasless: contract-level meta-tx before the native fee payer). BUILT.
@@ -61,22 +61,22 @@ operation's own new PDA and the two parties' token accounts, and a write-set dis
 write-lock exists only while a block executes the transaction; a pending or held-back transaction holds no lock, so the
 anti-lock property (X held, Y passes) follows structurally when X and Y share no nonce — the property the native path
 breaks. The real risk is a **hot account**: any account many transactions write (a global counter, a `Market` storing
-its book/`filled`, a shared fee vault, `Config` written on the hot path, `SubjectAccount` written per op) serialises
+its book/`filled`, a shared fee vault, `Config` written on the hot path, `SmartKeyAccount` written per op) serialises
 those transactions within a block, hits 12M CU/account/block, raises the local priority fee and drops under congestion —
 a "lock" between two **unrelated** ops of one subject. Rule: on the hot path each transaction **writes** only the relayer
 lane + the lane's nonce account; one **new** op-specific PDA (lane / mref / fill PDA); the token accounts of exactly the
 two parties; the Mandate PDA (mandate ops only — period caps are sequential anyway); the fee vault of **one** market (only
-when the fee is on). Everything else (`Config`, `Market`, `SubjectAccount`, mints, min-nonce PDA) is **read-only**. The
+when the fee is on). Everything else (`Config`, `Market`, `SmartKeyAccount`, mints, min-nonce PDA) is **read-only**. The
 mandatory test builds real X and Y transactions of one subject on different contracts and asserts their writable sets,
-minus lane + lane nonce, are **disjoint**, and that `Config`, `Market`, `SubjectAccount` are read-only in every hot-path
+minus lane + lane nonce, are **disjoint**, and that `Config`, `Market`, `SmartKeyAccount` are read-only in every hot-path
 transaction. Owner decision. BUILT.
 
 | Instruction | Writable (besides lane + lane nonce) | Read-only |
 |---|---|---|
-| `relay_pay` | LanePda (new), the Account's source token account, the receiver's ATA | Config, SubjectAccount (except a lazy open), mint, Instructions sysvar |
+| `relay_pay` | LanePda (new), the Account's source token account, the receiver's ATA | Config, SmartKeyAccount (except a lazy open), mint, Instructions sysvar |
 | `mandate_pay` | Mandate (period counter), MandateRef (new), the Mandate's source token account, the receiver's ATA | Config, mint |
-| `settle` (per pair) | Fill ×2, the 4 token accounts of the two sides, the market fee vault (only when the fee > 0) | Config, Market, SubjectAccount ×2, MinNonce ×2, mint ×2 |
-| `cancel_signed` | that order's Fill | Config, Market, SubjectAccount |
+| `settle` (per pair) | Fill ×2, the 4 token accounts of the two sides, the market fee vault (only when the fee > 0) | Config, Market, SmartKeyAccount ×2, MinNonce ×2, mint ×2 |
+| `cancel_signed` | that order's Fill | Config, Market, SmartKeyAccount |
 
 Two subjects never share a writable account except when paying the same receiver (that receiver's ATA is an
 unavoidable shared write; 12M CU/block ≈ a few hundred payments per block to one receiver). One subject, two assets ⇒
@@ -91,7 +91,7 @@ blocks).
 |---|---|---|---|
 | program `scaas` | program id = `SCAAS_PROGRAM_ID` at build (default: the published test/localnet id, refused on public clusters); upgrade authority **None** after `initialize` ([NET-SOL-20](#NET-SOL-20)) | deployer (`scripts/deploy.sh`, key outside the repo) | one id for calls **and** the event authority; another program id = another domain |
 | `Config` | `["config"]` | `initialize` (only the upgrade authority — checked through `ProgramData`; runs **before** the authority is removed) | `admin`, `network` = the cluster genesis hash; **read-only** on the hot path |
-| `SubjectAccount` | `["acct", owner32]` | lazily at the first `relay_pay` (ed25519), or `open` / `open_passkey` | keys, origins, guardian, policy; **balances = token accounts owned by this PDA** |
+| `SmartKeyAccount` | `["acct", owner32]` | lazily at the first `relay_pay` (ed25519), or `open` / `open_passkey` | keys, origins, guardian, policy; **balances = token accounts owned by this PDA** |
 | `LanePda` | `["lane", account, lane32]` | `relay_pay` / `mandate::open` / KeyOp (init) | `LanePda{next}`: `{next u64, valid_until i64, rent_payer}` |
 | `Mandate` | `["mandate", account, seed32]` | `mandate_open` (signed by an Account key) | as `MandateWallet`; balances = token accounts owned by this PDA |
 | `MandateRef` | `["mref", mandate, pay_ref32]` | `mandate_pay` (init — a second run fails) | `pay_ref` once, prunable |
@@ -105,7 +105,7 @@ PDA = `find_program_address(seeds, program_id)` (sha256(seeds ‖ bump ‖ progr
 **without RPC** (the client checks "off-curve" by decompressing the ed25519 point in ~20 lines, RFC 8032 §5.1.3). Cross
 vectors program = client = adapter.
 
-<a id="NET-SOL-05"></a>**NET-SOL-05** — **One SubjectAccount PDA per subject holds every mint; its balance is the token
+<a id="NET-SOL-05"></a>**NET-SOL-05** — **One SmartKeyAccount PDA per subject holds every mint; its balance is the token
 accounts owned by the PDA — no internal ledger.** The balance of mint X = the token accounts (SPL Token or Token-2022)
 with `owner` = the Account PDA and `mint` = X. The standard one is ATA(Account PDA, X, token_program) (ATAs are valid for
 off-curve owners), but the program accepts **any** token account owned by the PDA as a source, so funds sent to an odd
@@ -124,7 +124,7 @@ alternative: funds in the wallet's ATA with an `Approve` to the PDA — a token 
 
 ```rust
 #[account]
-pub struct SubjectAccount {
+pub struct SmartKeyAccount {
     pub owner: [u8; 32],          // PDA seed, never changes
     pub bump: u8,
     pub keys: Vec<Key>,           // 1..=8
@@ -138,7 +138,7 @@ pub struct Key { pub scheme: u8, pub pubkey: [u8; 33], pub rp_id_hash: [u8; 32] 
 // scheme 0 = ed25519 (32 B + one 0 byte), 2 = P-256 WebAuthn (33 B compressed + rpIdHash)
 ```
 
-<a id="NET-SOL-06"></a>**NET-SOL-06** — **A SubjectAccount holds ≤ 8 keys (ed25519 / P-256 WebAuthn), ≤ 8 origins and a
+<a id="NET-SOL-06"></a>**NET-SOL-06** — **A SmartKeyAccount holds ≤ 8 keys (ed25519 / P-256 WebAuthn), ≤ 8 origins and a
 guardian with a 2-day delay; a new origin under the same rpId is added by that passkey; `open_passkey` requires an
 assertion.** Owner decision. Rules:
 
@@ -201,7 +201,7 @@ stays there; the node does not yet crank `prune` automatically (a script/cron ca
 program refuses `valid_until` (LanePda, MandateRef) and order `expiry` (`Fill` in `settle`/`cancel_signed`) beyond `now +
 MAX_TTL_S` (`MAX_TTL_S = 31 d`; `expiry > now + MAX_TTL_S` ⇒ error) (the 30-day DEX book cap + 1 day of clock skew); the Mandate's own `expiry` is unchanged (a Mandate PDA has a
 `rent_payer` and can be closed). Why: `u64::MAX` makes a PDA never prunable (`account.rs:204`, `dex.rs:199, 312`) — one
-`cancel_signed` for an invented order hash locks a `Fill`'s rent forever. Rent that never returns (lazy SubjectAccount
+`cancel_signed` for an invented order hash locks a `Fill`'s rent forever. Rent that never returns (lazy SmartKeyAccount
 open, `account.rs:189`, no close path; KeyOp growth through `util::grow`, `account.rs:365`, bounded by 8 keys + 8 origins
 and never shrinking, so once per Account; `MinNonce`, `dex.rs:327`; DEX ATAs of the PDA and vaults) stays lane-paid —
 subjects are gasless — but is metered ([NODE-LANE-13](../node/submit-lanes.md#NODE-LANE-13)) and bounded per job
@@ -237,7 +237,7 @@ unchanged). Each keeps its fixed write-set ([NET-SOL-04](#NET-SOL-04)). A new pr
 |---|---|---|
 | 0 | 15 | `"scaas.metaop.v1"` |
 | 15 | 32 | `network` = the cluster genesis hash (from `Config.network`) |
-| 47 | 32 | `contract` = SubjectAccount PDA (pay) / Mandate PDA (mandate_pay, revoke) |
+| 47 | 32 | `contract` = SmartKeyAccount PDA (pay) / Mandate PDA (mandate_pay, revoke) |
 | 79 | 32 | `asset` = mint |
 | 111 | 1 | `op`: 0 pay · 1 trade (reserved) · 2 mandate_pay · 3 revoke |
 | 112 | 32 | `from` = owner |
@@ -357,7 +357,7 @@ the transfer aborts, so the receiver must turn it off (receiving wallets are pla
 the job `dead` with a clear reason, no fee). Owner decision. BUILT.
 
 Pay entry: `relay_pay(to, amount, pay_ref, lane, nonce, valid_until, relayer, extra, auth)` — accounts: lane signer (fee
-payer), Config, SubjectAccount (lazy init), LanePda, source, destination ATA (must exist), mint, token program,
+payer), Config, SmartKeyAccount (lazy init), LanePda, source, destination ATA (must exist), mint, token program,
 Instructions sysvar, system/ATA program, event authority; checks domain/expiry/relayer/lane/key/envelope/policy,
 `amount > 0`, the extension policy; `transfer_checked`; `emit_cpi!` `MetaTransactionExecuted{contract: mint, account,
 from, digest, lane, nonce}` then `PaymentSettled{contract: mint, from, to, amount, pay_ref}`. Also `open`,
@@ -370,12 +370,12 @@ creates one, lane-paid, only for a configured receiving wallet.** The program no
 paid by the lane **only** when `to` is a configured receiving wallet (namespace/token in the node store), otherwise
 `422 DEPOSIT_NOT_ALLOWED` ([NODE-LANE-18](../node/submit-lanes.md#NODE-LANE-18)); the lane-paid rent feeds the breaker.
 Why: an ATA owner can `CloseAccount` it at zero balance and recover ~0.00204 SOL of rent (more for Token-2022 with
-extensions), and `to` is signer-chosen — loop: the SubjectAccount holds 1 unit; sign `pay(1, to = W)`; the lane creates
+extensions), and `to` is signer-chosen — loop: the SmartKeyAccount holds 1 unit; sign `pay(1, to = W)`; the lane creates
 ATA(W) (as built, `account.rs:210-218`, `util.rs:55-73`; `mandate.rs:170-178` likewise); W sends the unit back, closes
 ATA(W), keeps the rent; repeat — ≈ 0.002 SOL profit per round, stopped only by `min_relayer_balance` (the hourly breaker
 sees only fees, `adapter.rs:270-276`). The ERP path is safe (`to` = a fixed receiving wallet); mesh `pay` and the job API
-are not. Taking the rent from the SubjectAccount's lamports was rejected (gasless subjects hold no SOL). DEX ATAs owned by
-a SubjectAccount PDA (`dex.rs:252-254`) and the fee vault owned by the Market (`:264-265`) cannot be closed (the program
+are not. Taking the rent from the SmartKeyAccount's lamports was rejected (gasless subjects hold no SOL). DEX ATAs owned by
+a SmartKeyAccount PDA (`dex.rs:252-254`) and the fee vault owned by the Market (`:264-265`) cannot be closed (the program
 has no `CloseAccount` path), so they are a one-time cost per (PDA, mint), metered and bounded by
 `max_deposit_per_job`, not a drain. SPECIFIED. LiteSVM: `relay_pay` to a missing ATA ⇒ `DestinationMissing`; to an
 existing ATA ⇒ runs, the lane pays no rent. Rust: missing destination + unconfigured `to` ⇒ `422`; configured `to` ⇒ the
@@ -431,7 +431,7 @@ network ‖ market ‖ account ‖ min_nonce`; a market has one `fee_ppm` (no ma
 mint)` moves every token account of the Market (including the vault) to `fee_recipient`. BUILT.
 
 Admin: `Config.admin` (production: a multisig). Admin only: `list_market`, `set_market` (fee, on/off); the admin **never**
-touches a SubjectAccount or Mandate; `initialize` only by the upgrade authority (no front-run of init).
+touches a SmartKeyAccount or Mandate; `initialize` only by the upgrade authority (no front-run of init).
 
 ## Relayer
 
@@ -548,7 +548,7 @@ exhaustion; errors in the nonce advance or at transaction level ⇒ `Rejected`. 
 
 <a id="NET-SOL-26"></a>**NET-SOL-26** — **Mesh and gateway verify Solana signatures locally before any simulation**
 ([NODE-MESH-16](../node/mesh.md#NODE-MESH-16)): ed25519 (`ed25519-dalek`, already a dependency) over the raw/OCMS text with
-`from` as the key (key 0) or a key ∈ `SubjectAccount.keys` (one cached account read); passkeys with `p256` over
+`from` as the key (key 0) or a key ∈ `SmartKeyAccount.keys` (one cached account read); passkeys with `p256` over
 `authData ‖ sha256(cdj)`. SPECIFIED (as built `solana_op` checks no signature, `mesh/digest.rs:281-291`).
 
 Head-of-line row: Solana — lane fee payer (ed25519, coin 501) — durable nonce per lane, one transaction in flight — the
@@ -655,7 +655,7 @@ exists), to an extra token account of the PDA, to a Mandate; market `sweep`; sur
 `prune` only after expiry, rent to `rent_payer`, an old op cannot replay. Self-reviewed facts kept: the open of
 [NET-SOL-27](#NET-SOL-27); base fee counts precompile signatures (`python_signatures_pay…`); `#[event_cpi]` adds
 `event_authority` + `program`, and the ATA program checks derivation in `create_idempotent` (`recipient_and_destination…`);
-the SubjectAccount is an `UncheckedAccount` without `mut` and marked writable only for a lazy open; `set_guardian(other)`
+the SmartKeyAccount is an `UncheckedAccount` without `mut` and marked writable only for a lazy open; `set_guardian(other)`
 always allowed (`backup_policy…`); `getBlocks` window 2 048 slots; `sign` re-reads the 32-byte nonce and refuses when the
 first 8 bytes ≠ `sequence`.
 

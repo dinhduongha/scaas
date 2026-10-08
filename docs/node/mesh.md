@@ -336,7 +336,7 @@ to it:
 | Sui | the payer's `Account<T>` | `extra.registry` (bound by `body_hash`) | `derive_account(registry, from) == contract` |
 | Aptos | the payer's Account object | `asset` from the payload | `account_of(from) == contract` |
 | TON | the payer's jetton wallet | `extra.jetton_master` (bound by `body_hash`) | `jetton_wallet_address(from, master, code) == contract` (code hash from the token record) |
-| Solana | the payer's SubjectAccount PDA | `asset` (payload field; `extra.asset` must equal it) | `account_of(program, from) == contract` |
+| Solana | the payer's SmartKeyAccount PDA | `asset` (payload field; `extra.asset` must equal it) | `account_of(program, from) == contract` |
 
 Reference lines: Sui account derivation in the reference client library l.167 (formula l.159); Aptos l.233 and
 `adapters/aptos.rs` l.207; TON l.296–312 and `adapters/ton.rs` l.526; Solana l.185 (check l.176).

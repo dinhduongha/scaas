@@ -7,9 +7,9 @@ names the forms it accepts.
 |---|---|---|---|
 | **Native account** | The chain's own account: an EVM address (EOA, or a contract via ERC-1271), a Solana, Stellar, Aptos, Sui, Cosmos or TON account | none | Wallet users and anything a chain already understands |
 | **Universal Account** (default) | An identifier derived from key data or from a policy — passkey, P-256, ed25519, Schnorr, BLS, MuSig2/FROST groups, weighted multisig, post-quantum keys, Zether keys | once per chain, with proof of possession, for derived kinds | The default for subjects: any key type on any family, no contract per user ([Universal Account](#universal-account)) |
-| **Smart account** (optional) | `SubjectAccount`, an ERC-1271 contract with several keys and guardian recovery | deployed per user as a clone | A stable address across key rotation, guardian recovery, or contracts that only understand addresses ([smart account](#subjectaccount)) |
+| **Smart account** (optional) | `SmartKeyAccount`, an ERC-1271 contract with several keys and guardian recovery | deployed per user as a clone | A stable address across key rotation, guardian recovery, or contracts that only understand addresses ([smart account](#subjectaccount)) |
 
-Passkeys can serve either way: as a `webauthn-p256` Universal Account, or as a key of a `SubjectAccount`
+Passkeys can serve either way: as a `webauthn-p256` Universal Account, or as a key of a `SmartKeyAccount`
 ([passkeys on chain](#passkeys)). Delegated, capped payment from a payer's own wallet is a separate contract:
 [mandates.md](mandates.md).
 
@@ -32,11 +32,11 @@ is needed, proof of possession, verifier, families); the **per-chain registry** 
 per-family realisation); the **verifier library** per kind, the calldata/caching policy and the gas budget; **function →
 accepted kinds** for every contract function, and the UA-ledger functions that let tokens hold balances for non-native
 UAs directly; **one key = one purpose**, enforced in four layers; the optional **attestation layer** (verifiable
-credentials / eKYC); `SubjectAccount` kept as **option (b)** ([CTR-ACC-09](#CTR-ACC-09)); node,
+credentials / eKYC); `SmartKeyAccount` kept as **option (b)** ([CTR-ACC-09](#CTR-ACC-09)); node,
 mesh, client and ERP touchpoints, migration, security, tests and vectors.
 
 Not in scope: a wallet or proxy contract per account (a UA is an identifier, like an EOA address); key rotation inside
-one UA (new key data = a new UA; users who need a stable address across rotation use `SubjectAccount`); cross-chain
+one UA (new key data = a new UA; users who need a stable address across rotation use `SmartKeyAccount`); cross-chain
 state sync of registrations (each chain has its own registry; the id is the same on every chain because it is a pure
 function); registry-level freeze, revocation or compliance status (compliance stays in the `ComplianceRegistry`,
 [CTR-AS-07](asset-suite.md#CTR-AS-07), and in token controls; the registry is monotonic); post-quantum confidential
@@ -162,7 +162,7 @@ invisible to the chain.
 <a id="CTR-UA-09"></a>**CTR-UA-09** — **Structures commit to their members; nesting is one level.** `msig` key data lists
 members by `(kind, id, weight)`, strictly sorted by id; a member may not itself be a structure. (A `bls12381-multi` kind
 was cut — no consumer, and `msig` over `bls12381-minsig` covers it; number `0x0121` stays reserved.) Bounded gas, no
-cycles, a simple audit. Two-level governance uses `SubjectAccount` or Safe (native 1271) as a member.
+cycles, a simple audit. Two-level governance uses `SmartKeyAccount` or Safe (native 1271) as a member.
 
 <a id="registration-gate"></a>
 <a id="CTR-UA-25"></a>**CTR-UA-25** — **No on-chain registration gate in v1** (owner): registration spam is bounded by
@@ -259,7 +259,7 @@ Native kinds (no registration, no tag-derived id; listed so that structures and 
 | No. | Name | Native id | Families | Signature accepted |
 |---|---|---|---|---|
 | `0x0001` | `evm-eoa` | 20-byte address (incl. EIP-7702 delegated) | EVM, Hedera (ECDSA alias) | ECDSA low-s over the EIP-712 digest; 7702-delegated: ECDSA, else ERC-1271 of the delegate ([CTR-UA-24](#CTR-UA-24)) |
-| `0x0002` | `evm-contract` | 20-byte address with code | EVM, Hedera | ERC-1271 `isValidSignature(digest, sig)`, 50 k gas (400 k for `SubjectAccount` clones) |
+| `0x0002` | `evm-contract` | 20-byte address with code | EVM, Hedera | ERC-1271 `isValidSignature(digest, sig)`, 50 k gas (400 k for `SmartKeyAccount` clones) |
 | `0x0003` | `hedera-native` | long-zero address `0.0.N` | **Hedera only** (never a member on another EVM chain) | HIP-632 `isAuthorizedRaw` (64-byte ed25519), else as 0x0001/0x0002 |
 | `0x0010` | `solana-ed25519` | 32-byte pubkey | Solana | ed25519 precompile instruction |
 | `0x0011` | `stellar-account` | 32-byte `G…` pubkey | Soroban (Stellar, Pi) | host `require_auth` |
@@ -370,7 +370,7 @@ Which kind for whom (guidance for apps and client systems):
 
 | Subject | Default | Option |
 |---|---|---|
-| Retail outlet / staff with a phone | `webauthn-p256` UA | `SubjectAccount` (b) when they want recovery without moving funds |
+| Retail outlet / staff with a phone | `webauthn-p256` UA | `SmartKeyAccount` (b) when they want recovery without moving funds |
 | User with an extension wallet | native EOA | — |
 | Board, finance approvers | `msig` over members' passkey UAs and/or EOAs | Safe (native 1271) |
 | Agent cluster, MPC custody with Schnorr | `frost-secp256k1` (cheap on EVM) or `frost-bn254`; shown with the attestation-only caveats | threshold ECDSA ⇒ native EOA |
@@ -417,7 +417,7 @@ through `requireAuthorized` (that would be a signing use of the decryption key).
 UA-ledger functions (`ua*`) of the one token base `ERC20MetaTx` ([CTR-MTX-07](metatx.md#CTR-MTX-07)), not a separate
 token generation.
 
-Legend: **N** = native ids only (EOA, ERC-1271 incl. `SubjectAccount`/Safe/`MandateWallet`, Hedera native); **U** = a
+Legend: **N** = native ids only (EOA, ERC-1271 incl. `SmartKeyAccount`/Safe/`MandateWallet`, Hedera native); **U** = a
 native id or a registered SIGNING kind (never ZETHER); **Z** = a Zether kind matching the token's verifier curve;
 **Z-auth** = the Zether record's `authRef` (self, native, or any SIGNING kind); **sender** = `msg.sender` (native by
 definition).
@@ -555,12 +555,12 @@ EVM DEX, mandates, accounts, registry:
 |---|---|---|---|---|
 | `OrderBookDex` | `mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces`; SCaaS legs through the token's `mtxTrade` | `o.from` | N | outside legs: `_validSig`, its ERC-1271 branch with the 50 k/400 k cap ([CTR-DEX-08](dex.md#CTR-DEX-08)); SCaaS legs: the token; UA legs wait for a `bytes32` order |
 | `MandateWallet` (native 1271 itself) | `setMandate`, `setPayee`, `revoke`, `execute`; `mtxExecuteAsOwner`; `mtxPayUnderMandate`, `mtxRevoke` | owner; delegate | owner N (ECDSA); delegate N (ECDSA) | a UA owner/delegate = a future `MandateWallet` v2 calling `requireAuthorized` |
-| `SubjectAccount` (option (b)) | `mtxExecuteAsOwner`, `isValidSignature`, recovery | its keys | P-256 WebAuthn, secp256k1 (account keys) | is itself an N id |
+| `SmartKeyAccount` (option (b)) | `mtxExecuteAsOwner`, `isValidSignature`, recovery | its keys | P-256 WebAuthn, secp256k1 (account keys) | is itself an N id |
 | `UARegistry` | `register` | — | any derived kind | PoP |
 | `SealedBidTender` (planned) | `commitBid(… m, depositSig)`; `revealBid`, `withdrawDeposit` | bidder = `m.from` | N | a UA bidder needs a v3 deposit token; the bidder id in the commitment becomes `bytes32` then |
-| `VestingGrant`, `Distribution`, `ExchangeOffer` (planned) | `release`, `claim(account)`, `exchange(m, sig)` | beneficiary, account | N | beneficiaries "should be a `SubjectAccount`" — still valid as option (b) |
+| `VestingGrant`, `Distribution`, `ExchangeOffer` (planned) | `release`, `claim(account)`, `exchange(m, sig)` | beneficiary, account | N | beneficiaries "should be a `SmartKeyAccount`" — still valid as option (b) |
 
-**Transitional (BUILT names).** `SubjectAccount` and `MandateWallet` expose `executeAsOwner(data, nonce, validUntil,
+**Transitional (BUILT names).** `SmartKeyAccount` and `MandateWallet` expose `executeAsOwner(data, nonce, validUntil,
 signature)` (recovery cancel: `executeAsOwner(cancelRecovery)`); Zether exposes `rollOverSigned(ua, …, sig)` and
 `setRollOverMode(ua, …, sig)` and verifies envelopes with `ZetherMetaTx._requireValidSignature`; the classifier is
 `MetaTxCore._isContract`; `OrderBookDex` keys orders by `o.maker`; the legacy `MetaTxDex.settle(a, b)` takes legs
@@ -595,7 +595,7 @@ compromised EOA: move the funds; compliance freezes stay token-level.
 <a id="no-rotation"></a>
 <a id="CTR-UA-13"></a>**CTR-UA-13** — **No key rotation inside a UA; no rotatable policy kind in v1** (owner). A UA is
 immutable: key data, members and threshold are in the id. Rotation = a new UA + moving the funds (a transfer, or a
-confidential transfer to the new Zether UA). A stable identity across rotation is `SubjectAccount`
+confidential transfer to the new Zether UA). A stable identity across rotation is `SmartKeyAccount`
 ([CTR-ACC-09](#CTR-ACC-09)) or another native contract account. Immutable records make tokens' view
 of the registry cacheable and the registry admin-free. Membership changes of a corporate `msig` require moving funds.
 (A rotatable "policy" kind — id = hash of the first policy, current policy in the registry with a timelock — was
@@ -655,7 +655,7 @@ interface IUARegistry {
     function keyOwner(bytes32 keyHash) external view returns (bytes32);
 
     /// Reverts UAUnauthorized unless `auth` authorizes `digest` for `ua` under `purposeTag`.
-    /// Native ids (ua >> 160 == 0): ECDSA low-s (EOA) or ERC-1271 (50 k cap; 400 k for SubjectAccount clones, by the
+    /// Native ids (ua >> 160 == 0): ECDSA low-s (EOA) or ERC-1271 (50 k cap; 400 k for SmartKeyAccount clones, by the
     ///   immutable clone codehash) over uaAuthDigest(ua, purposeTag, digest) — never over the raw digest.
     ///   Classified by code at call time: empty ⇒ ECDSA; 7702 designator ⇒ ECDSA, else 1271; other ⇒ 1271.
     /// Derived SIGNING: auth = abi.encode(bytes keyData, bytes sig); keyData empty for stored kinds.
@@ -713,7 +713,7 @@ mapping(bytes32 ua      => bytes32) _authRef;     // Zether kinds only
 mapping(bytes32 keyHash => bytes32) _keyOwner;    // single-key kinds
 immutable: generation, predecessor, chainKeyHash (= keccak256("evm:" ‖ decimal(block.chainid)), computed in the
            constructor), chainUid (constructor argument, ≠ 0), hederaNative, per-kind verifier addresses
-           (0 = disabled), per-kind verifyCap, verifyBudget, SubjectAccount clone codehash (1271 cap),
+           (0 = disabled), per-kind verifyCap, verifyBudget, SmartKeyAccount clone codehash (1271 cap),
            EIP-712 domain separator (incl. salt = chainUid)
 ```
 
@@ -781,7 +781,7 @@ native   : ECDSA / 1271 over uaAuthDigest(ua, purposeTag, digest), classified by
 
 | Kind | `sig` | Check |
 |---|---|---|
-| `webauthn-p256` | `abi.encode(authenticatorData, clientDataJSON, r, s)` (the `SubjectAccount` encoding) | type `webauthn.get`, challenge = base64url(`ua_msg`), `rpIdHash`, UP+UV, low-s, P-256 over `sha256(authData ‖ sha256(clientDataJSON))`; the strict clientDataJSON grammar of `SubjectAccount._clientDataOk` is reused, **without** its origin comparison (the id has no origin); `crossOrigin` absent or false |
+| `webauthn-p256` | `abi.encode(authenticatorData, clientDataJSON, r, s)` (the `SmartKeyAccount` encoding) | type `webauthn.get`, challenge = base64url(`ua_msg`), `rpIdHash`, UP+UV, low-s, P-256 over `sha256(authData ‖ sha256(clientDataJSON))`; the strict clientDataJSON grammar of `SmartKeyAccount._clientDataOk` is reused, **without** its origin comparison (the id has no origin); `crossOrigin` absent or false |
 | `p256` | `r ‖ s` (64) | low-s; P-256 over `sha256(ua_msg)` |
 | `ed25519` | 64 | RFC 8032 strict (canonical `S`, no small-order `A`/`R`) over the 32-byte `ua_msg` |
 | `bip340` / `musig2-secp256k1` | 64 | BIP-340 verify of `ua_msg` (x-only key; MuSig2: `x(Q)` from `keyPtr`); EVM: `ecrecover` trick with `e = sha256(tag "BIP0340/challenge")`, `R` lifted with one `MODEXP` |
@@ -795,7 +795,7 @@ native   : ECDSA / 1271 over uaAuthDigest(ua, purposeTag, digest), classified by
 | `pqz-mlwe` | as [pq-zether.md](pq-zether.md) | proofs via the PQZ precompile; authorization via its PQ `authRef` |
 | `zether-*` (self, owner ops) | `R ‖ z` | Zether Schnorr with tag `SCAAS-ZETHER-SCHNORR-V1` over `ua_msg` — never the UA Schnorr tag, so a Zether key never produces a `schnorr-*` signature |
 
-Members of `msig` (kinds ∈ MEMBER) may be native EOAs, native contracts (Safe, `SubjectAccount`), or registered
+Members of `msig` (kinds ∈ MEMBER) may be native EOAs, native contracts (Safe, `SmartKeyAccount`), or registered
 single-key UAs (incl. PQ, MuSig2, FROST); never a Zether UA or a structure. This is how "a UA that is the hash of an
 MPC/multisig structure pointing to members with their own schemes" is expressed (owner).
 
@@ -823,7 +823,7 @@ classification is by code at verify time.** Wherever a native EVM id is verified
 members, a native `authRef` and its co-sign, v3's native path): empty code ⇒ ECDSA low-s by the address; code that is
 exactly the EIP-7702 designator `0xef0100 ‖ address` (23 bytes) ⇒ ECDSA low-s by the address is accepted, and otherwise
 ERC-1271 on the address (which runs the delegate code) under the 50 k cap; any other code ⇒ ERC-1271 only (50 k; 400 k for
-`SubjectAccount` clones). A member's stated kind `0x0001`/`0x0002` is a label checked for MEMBER, never the dispatch. The
+`SmartKeyAccount` clones). A member's stated kind `0x0001`/`0x0002` is a label checked for MEMBER, never the dispatch. The
 base key of a 7702 account controls it at protocol level (it can send a transaction itself, re-delegate or clear the
 delegation), so no signature rule of ours can make it weaker than root; refusing its ECDSA would add no security and
 break plain 7702 wallets, while the 1271 fallback lets delegated wallets with session keys or passkeys sign. v2's
@@ -1008,7 +1008,7 @@ New registration flow:
 
 Order: the registry, the Zether re-point, the prover and the client Zether change land in one change set (the vectors
 are shared; a partial landing breaks the cross-language tests); dev chains 31337/1337 redeploy; fixtures re-register;
-dev `SubjectAccount` secp256k1 keys rotate to the role path with `rotateKey` (script); non-EVM owner derivations move
+dev `SmartKeyAccount` secp256k1 keys rotate to the role path with `rotateKey` (script); non-EVM owner derivations move
 with their family work.
 
 #### Legacy registry
@@ -1037,7 +1037,7 @@ person has distinct UAs on two curves, never merged). `register(encodedY, authSc
 | 4 | `BLS_BN254` | `abi.encode(bytes g2PubKey128)` | BLS min-sig, pairing `0x08` | private chains; **forbidden on a bn254 Zether key** |
 | 5 | `BLS_12381` | `abi.encode(bytes g2PubKey256)` | BLS min-sig, EIP-2537 | public chains; **forbidden on a BLS12-381 Zether key** |
 | 6 | `PQ_COMMITMENT` | `abi.encode(bytes32 pqCommitmentHash)` | as 0 on chain; PQ verification off chain; commitment kept for future rotation | PQ readiness (retired by the UA PQ kinds, verified on chain) |
-| 7 | `SMART_ACCOUNT_1271` | `abi.encode(address account)` (must have code) | `isValidSignature(digest, sig)` | Safe, `SubjectAccount` (passkeys) |
+| 7 | `SMART_ACCOUNT_1271` | `abi.encode(address account)` (must have code) | `isValidSignature(digest, sig)` | Safe, `SmartKeyAccount` (passkeys) |
 
 FROST and MuSig2 share one Schnorr verification path (`z·G == R + c·P`, O(1) gas regardless of the signer count). BLS
 on the same curve as the ElGamal key is rejected because publishing `[x]G2` makes DDH decidable on G1. BLS keys at
@@ -1085,7 +1085,7 @@ live in the separate `ComplianceRegistry`. This interface is deleted and replace
 | MuSig2 n-of-n | legacy scheme 3 (bn254); UA kinds `musig2-secp256k1` `0x0110` (BIP-327) and `musig2-bn254` `0x0112` | UA registration recomputes KeyAgg on chain from the member list plus one aggregate PoP; nonce reuse leaks the key | bn254 verification **BUILT**; UA kinds and signers **SPECIFIED** |
 | BLS aggregation (BN254 on private chains, BLS12-381 via EIP-2537) | legacy schemes 4/5; UA `bls12381-minsig` `0x0106`, `bls-bn254-minsig` `0x0107`; `Bls12381.verifyMinSig`, RFC 9380 hash-to-curve (KAT tested) | one pairing check; never on the same curve as a Zether key | **BUILT** |
 | Threshold ECDSA (MPC providers) | not a kind: the output is an ordinary ECDSA signature ⇒ native EOA ([CTR-UA-08](#CTR-UA-08)) | — | — |
-| Smart-account policies (Safe, `SubjectAccount`) | legacy scheme 7; UA: native contract id (never registered) | arbitrary policy via ERC-1271 | **BUILT** |
+| Smart-account policies (Safe, `SmartKeyAccount`) | legacy scheme 7; UA: native contract id (never registered) | arbitrary policy via ERC-1271 | **BUILT** |
 
 ### Security
 
@@ -1101,7 +1101,7 @@ live in the separate `ComplianceRegistry`. This interface is deleted and replace
 | S6 | Spam registrations (state growth, sponsored pools) | sponsorship policy at the node; no on-chain invite gate in v1 | self-paid spam pays its own gas |
 | S7 | Key reuse across purposes | four layers | a foreign wallet reusing an EOA key for `bip340` (layer 4 cannot be enforced on chain) |
 | S8 | Cross-protocol / cross-purpose replay | tagged `ua_msg`; digests domain-separated | none |
-| S9 | WebAuthn origin/iframe confusion | the `SubjectAccount` clientDataJSON grammar reused (fail-closed), `crossOrigin` refused, `rpIdHash` in the id | no origin in the id: any origin the platform lets assert for the `rpId` (subdomains, related origins) can request a signature; deployment rule: narrowest `rpId`, no untrusted content under it |
+| S9 | WebAuthn origin/iframe confusion | the `SmartKeyAccount` clientDataJSON grammar reused (fail-closed), `crossOrigin` refused, `rpIdHash` in the id | no origin in the id: any origin the platform lets assert for the `rpId` (subdomains, related origins) can request a signature; deployment rule: narrowest `rpId`, no untrusted content under it |
 | S10 | ed25519 malleability / small-order keys | strict RFC 8032 verify; small-order `A` refused at registration | — |
 | S11 | BLS subgroup / infinity | G2MSM k=1 at registration; signatures in subgroup, ≠ O ([CTR-UA-01](#CTR-UA-01)) | — |
 | S12 | Zether same-curve BLS auth (DDH) | refused at registration; disjoint trees + a clientkeys test | a foreign wallet reusing a Zether `x` as an independent same-curve BLS key makes G1 DDH decidable (not detectable on chain) |
@@ -1133,7 +1133,7 @@ measured worst case (T-GAS), published in the chain profile.
 | Kind | Calldata (key data + sig) | Verify | Registry overhead | Cap |
 |---|---|---|---|---|
 | native EOA | 65 | ~3.5 k | none (token-local) | — |
-| native 1271 | per account | per account | — | 50 k / 400 k (registry: by the immutable `SubjectAccount` codehash too) |
+| native 1271 | per account | per account | — | 50 k / 400 k (registry: by the immutable `SmartKeyAccount` codehash too) |
 | native behind the registry (`UAAuth`) | 65 | ~3.5 k + EIP-712 hash ~1 k | ~5 k | 50 k / 400 k for 1271 |
 | `webauthn-p256` | 96 + ~300 | ~6.9 k precompile / ~200 k+ OZ fallback (measure) | ~5 k (cold call + SLOAD + hash) | 400 k |
 | `p256` | 64 + 64 | as above, no JSON | ~5 k | 400 k |
@@ -1209,7 +1209,7 @@ Cross-language vectors (`smartcontracts/vectors/ua/`):
   high-s P-256/ECDSA; **non-canonical encodings**: ed25519 `y ≥ p` and `x = 0` with the sign bit set, bn254/BLS
   coordinates `≥ p`, P-256 `x ≥ p`, secp256k1 prefix ∉ {02, 03}, an FN-DSA coefficient `≥ q`.
 
-`structures.json` — `msig` with mixed members (EOA, `SubjectAccount`, `webauthn-p256`, `bip340`, `mldsa44`) and the member
+`structures.json` — `msig` with mixed members (EOA, `SmartKeyAccount`, `webauthn-p256`, `bip340`, `mldsa44`) and the member
 digests; **`UAAuth` typed data and digests** for native members, a native `authRef` and `authPop`, with the domain `salt` =
 `chain_uid` (and the same struct under another `chain_uid` as a negative); members ∉ MEMBER (Zether, structure, a foreign
 native kind, `hedera-native` in a non-Hedera profile, a top-96-nonzero native) as negatives.
@@ -1244,7 +1244,7 @@ EVM tests:
 | T-AUTH-1 | `requireAuthorized` per kind × purpose; a wrong purpose fails; a wrong kind's tag fails |
 | T-AUTH-1b | a Zether UA (any `authRef`) via `requireAuthorized` ⇒ `UAUnauthorized` |
 | T-AUTH-2 | `msig` threshold/weights, duplicate member, unregistered member, nested structure, member ∉ MEMBER refused; a `MemberSig` after the threshold ⇒ `UAUnauthorized` |
-| T-AUTH-3 | native paths: EOA low-s over `UAAuth` (a raw-digest signature fails), 1271 gas caps incl. the `SubjectAccount` codehash in the registry, an ERC-7739 wallet against `eip712Domain()` (incl. `salt`); **EIP-7702 delegated accounts**, in the registry and v3's native path: ECDSA by the base key passes; a 1271 signature through a delegate that implements it passes within 50 k; a delegate without 1271, a wrong magic value, a reverting or gas-exhausting delegate ⇒ fail; a designator-length code that is not `0xef0100…` is treated as a contract (1271 only) |
+| T-AUTH-3 | native paths: EOA low-s over `UAAuth` (a raw-digest signature fails), 1271 gas caps incl. the `SmartKeyAccount` codehash in the registry, an ERC-7739 wallet against `eip712Domain()` (incl. `salt`); **EIP-7702 delegated accounts**, in the registry and v3's native path: ECDSA by the base key passes; a 1271 signature through a delegate that implements it passes within 50 k; a delegate without 1271, a wrong magic value, a reverting or gas-exhausting delegate ⇒ fail; a designator-length code that is not `0xef0100…` is treated as a contract (1271 only) |
 | T-CHAIN | two registries with the same `block.chainid` and different `chainUid` (and v3 clones bound to them): a PoP, a native `UAAuth` and a v3 signature from one fail on the other; `eip712Domain()` returns `fields = 0x1f` and `salt = chainUid`; the constructor refuses `chainUid = 0` |
 | T-MEMBER | an `msig` with a `hedera-native` member registers in a `hederaNative` registry and is refused (`UAMemberUnknown`) in every other profile |
 | T-AUTH-4 | 63/64 starvation and out-of-gas inside every capped verifier `staticcall` ⇒ the check reverts, never passes; malformed/short returndata ⇒ revert |
@@ -1295,7 +1295,7 @@ UV unset, high-s, another digest) run in every family's suite. Built gaps closed
 neither rpIdHash, origin nor UV; Sui, Soroban, TON and Solana do not refuse `crossOrigin: true`; the built TON check
 accepts a suffixed origin.
 
-Per family: EVM/Hedera `SubjectAccount` (ERC-1271; P-256 via OpenZeppelin 5.2 `P256.verify`, which calls the
+Per family: EVM/Hedera `SmartKeyAccount` (ERC-1271; P-256 via OpenZeppelin 5.2 `P256.verify`, which calls the
 RIP-7212 precompile `0x100` when present, else the Solidity verifier); Sui `secp256r1_verify`/passkey; Soroban
 `secp256r1_verify` (CAP-51) in a custom account; Cosmos `secp256r1_verify` (cosmwasm-std 2.1+); Aptos pure-Move
 P-256; Solana Secp256r1 precompile; TON passkey auth kind in the jetton wallet. Merkle batching under one assertion
@@ -1320,17 +1320,19 @@ Tests: real WebAuthn vectors — generated by a software authenticator (fixed P-
 published vector suite; failure cases; batch; key lifecycle; recovery; a token `pay` signed by a passkey and by
 a seed key; precompile and Solidity gas; end to end: add a second key (seed when a passkey exists) and sign with each.
 
-## Smart account (optional): `SubjectAccount`
+## Smart account (optional): `SmartKeyAccount`
 
 Status: **BUILT** (`smartcontracts/evm/src/account/`).
 
+<a id="CTR-ACC-11"></a>**CTR-ACC-11** — **The multi-key ERC-1271 contract account is named `SmartKeyAccount` (factory `SmartKeyAccountFactory`) in every chain family**: "smart" marks a contract account, "key" its many keys. **Transitional:** built code and non-EVM programs still use `SubjectAccount`; renamed in P4 (every family at once).
+
 <a id="subjectaccount"></a>
-<a id="CTR-ACC-09"></a>**CTR-ACC-09** — **`SubjectAccount` is option (b), kept as built**: an optional ERC-1271 smart
+<a id="CTR-ACC-09"></a>**CTR-ACC-09** — **`SmartKeyAccount` is option (b), kept as built**: an optional ERC-1271 smart
 account (P-256 + secp256k1 keys, guardian recovery, Merkle batch) for users who need a stable address across key
 rotation, guardian recovery, or compatibility with third-party contracts that only understand `address`. It is a
 native id (an `evm-contract` id in the UA kind table); it never registers. **The default is UA kinds verified directly
 by the tokens** ([CTR-UA-02](#CTR-UA-02)); rotation and recovery are account features, not
-identifier features. Tokens verify a `SubjectAccount` through ERC-1271 with the 400 k cap for its clones
+identifier features. Tokens verify a `SmartKeyAccount` through ERC-1271 with the 400 k cap for its clones
 ([CTR-ACC-05](#CTR-ACC-05)). Non-EVM equivalents (Sui/Aptos/Solana/Soroban accounts) keep their role likewise.
 
 - When to offer it: the subject asks for recovery without moving funds, wants one address across key changes, or must
@@ -1338,14 +1340,14 @@ identifier features. Tokens verify a `SubjectAccount` through ERC-1271 with the 
 - Keys: multiple authorized keys (`P256_WEBAUTHN(x, y, rpIdHash, originHash)`, `SECP256K1(address)`), never zero keys (`LastKey`);
   guardian `initiateRecovery(newKey)` → anyone `completeRecovery` after `RECOVERY_DELAY`. Its
   `SECP256K1` keys come from the role path `m/7622'/0'/<account>'/2'/<i>'` ([CLI-SGN-30](../clients/signers-clientkeys.md#CLI-SGN-30)),
-  never from the EOA path (the factory salt and the 400 k cap as built: `SubjectAccountFactory.sol:21-23`,
+  never from the EOA path (the factory salt and the 400 k cap as built: `SmartKeyAccountFactory.sol:21-23`,
   `MetaToken.sol:141-144`); registering a key whose address equals the subject's own EOA (its payer address) on the
   same account is refused ([CLI-SGN-07](../clients/signers-clientkeys.md#CLI-SGN-07)). Its P-256 keys are passkeys
-  (per `rpId`). A passkey that is a `webauthn-p256` UA may **also** be a `SubjectAccount` key: same kind, same
+  (per `rpId`). A passkey that is a `webauthn-p256` UA may **also** be a `SmartKeyAccount` key: same kind, same
   WebAuthn scheme, digests differ (the account's challenge is the token's EIP-712 digest with `from` = the account);
   allowed.
 - <a id="CTR-ACC-10"></a>**CTR-ACC-10** — **Key management is a `MetaTransaction` signed by the account itself**
-  (owner). `SubjectAccount` is a `MetaTxBase` contract ([CTR-MTX-22](metatx.md#CTR-MTX-22)): `addKey`, `removeKey`,
+  (owner). `SmartKeyAccount` is a `MetaTxBase` contract ([CTR-MTX-22](metatx.md#CTR-MTX-22)): `addKey`, `removeKey`,
   `rotateKey`, `setGuardian` and `execute` are allowlisted self-calls, `onlySelf` (`_msgSender() == address(this)`).
   Its keys include P-256 passkeys that have no address, so the signer of the `MetaTransaction` is **the account**:
   `from = address(this)` is allowed here (the `SelfSender` guard of tokens is overridden) and `_requireValidSignature`
@@ -1356,12 +1358,12 @@ identifier features. Tokens verify a `SubjectAccount` through ERC-1271 with the 
   its own `OwnerCall(bytes data,uint256 nonce,uint256 validUntil)` with a single nonce.
 - The client backup predicate ([CLI-SGN-13](../clients/signers-clientkeys.md#CLI-SGN-13)) applies to it unchanged;
   derived UAs are "single-key, no recovery" by construction and the app shows that.
-- `msig` UAs may list a `SubjectAccount` as a member (native contract member).
+- `msig` UAs may list a `SmartKeyAccount` as a member (native contract member).
 - Seed and passkey back each other up: the seed-derived key is the natural recovery key when a passkey is lost, and
   vice versa.
 
 <a id="factory"></a>
-<a id="CTR-ACC-01"></a>**CTR-ACC-01** — `SubjectAccountFactory` deploys **EIP-1167 clones** (`Clones.cloneDeterministic`)
+<a id="CTR-ACC-01"></a>**CTR-ACC-01** — `SmartKeyAccountFactory` deploys **EIP-1167 clones** (`Clones.cloneDeterministic`)
 and runs `initialize` in the same transaction; salt = `keccak256(abi.encode(firstKey, guardian))`. The guardian is
 in the salt: with a salt of the first key alone, whoever deployed first would choose the guardian (a front-run that
 takes the recovery power). Clones make a deploy ~287 k gas instead of several million (the P-256 verifier lives in
@@ -1370,7 +1372,7 @@ gives the address in advance, so the client enqueues the deploy job before the s
 needs no permission: whoever deploys gets the same account for the same key and guardian).
 
 <a id="signature-encoding"></a>
-<a id="CTR-ACC-02"></a>**CTR-ACC-02** — A `SubjectAccount` signature is `abi.encode(uint256 keyIndex, bytes32[] proof,
+<a id="CTR-ACC-02"></a>**CTR-ACC-02** — A `SmartKeyAccount` signature is `abi.encode(uint256 keyIndex, bytes32[] proof,
 bytes sig)`. An empty `proof` ⇒ the signed message is the digest; a non-empty one ⇒ the message is
 `MerkleProof.processProof(proof, leaf)`, `leaf = keccak256(keccak256(0x00 ‖ digest))` (node pairs sorted as in
 OpenZeppelin). A one-item batch signs the digest directly. P-256: `sig = abi.encode(authenticatorData,
@@ -1389,18 +1391,18 @@ compromised guardian (the 2-day delay plus cancel by key).
 <a id="CTR-ACC-04"></a>**CTR-ACC-04** — The authenticator `signCount` is not checked: synced passkeys always return 0.
 
 <a id="erc1271-cap"></a>
-<a id="CTR-ACC-05"></a>**CTR-ACC-05** — **The 400 k ERC-1271 gas cap is only for `SubjectAccount` clones.** Every token
-implementation pins the chain's `SubjectAccount` implementation (constructor parameter, immutable,
+<a id="CTR-ACC-05"></a>**CTR-ACC-05** — **The 400 k ERC-1271 gas cap is only for `SmartKeyAccount` clones.** Every token
+implementation pins the chain's `SmartKeyAccount` implementation (constructor parameter, immutable,
 `SUBJECT_ACCOUNT_IMPL`); `ERC20MetaTx._erc1271Gas(from)` defaults to 50 k and grants 400 k **only** when
 `from.codehash` is the EIP-1167 clone code of that implementation, because a Solidity P-256 verifier costs ~200–330 k
 gas on chains without the precompile. Other contract wallets (Safe, …) keep 50 k. `Deploy.s.sol` deploys
-`SubjectAccountFactory` before the token and records its address in `deployments/<chainid>.json`. The same rule is
+`SmartKeyAccountFactory` before the token and records its address in `deployments/<chainid>.json`. The same rule is
 applied by `OrderBookDex` ([CTR-DEX-08](dex.md#CTR-DEX-08)) and to Zether envelopes ([CTR-ZTH-21](zether.md#CTR-ZTH-21)).
-`SubjectAccount` has its own salted domain `("SCaaS SubjectAccount","1", chainId, account, chain_uid)`; the factory
-takes `chain_uid` as a constructor argument and passes it to `new SubjectAccount(chainUid)`, so a user's account has a
+`SmartKeyAccount` has its own salted domain `("SCaaS SubjectAccount","1", chainId, account, chain_uid)`; the factory
+takes `chain_uid` as a constructor argument and passes it to `new SmartKeyAccount(chainUid)`, so a user's account has a
 different address on each chain and the node and app predict it per chain ([CTR-GEN-05](README.md#CTR-GEN-05)).
 
-**Documented limitation.** `SubjectAccount.isValidSignature` accepts any digest signed by any of its keys —
+**Documented limitation.** `SmartKeyAccount.isValidSignature` accepts any digest signed by any of its keys —
 ERC-1271 digests are not account-wrapped (the ERC-7739 class). SCaaS digests bind `from`/`verifyingContract`, so none
 of ours replay across accounts; a third-party protocol that trusts the same key on two accounts is exposed. Wrapping
 is rejected for now: it would change every 1271 digest, every KAT and every client builder.
@@ -1417,8 +1419,8 @@ Key lifecycle per family ([NET-ALL-05](../networks/README.md#NET-ALL-05) is norm
 
 | Family | Rotation | Guardian / recovery | Gap |
 |---|---|---|---|
-| EVM | `SubjectAccount` add/remove/rotate via `mtxExecuteAsOwner` | guardian + `RECOVERY_DELAY` | — |
-| Hedera | native account key update (no `SubjectAccount`) | native | — (stated) |
+| EVM | `SmartKeyAccount` add/remove/rotate via `mtxExecuteAsOwner` | guardian + `RECOVERY_DELAY` | — |
+| Hedera | native account key update (no `SmartKeyAccount`) | native | — (stated) |
 | Aptos | account keys + origins | guardian + `RECOVERY_DELAY` | — |
 | Sui | per subject `Keys` object, shared by every `Account<T>` of the subject | guardian on `Keys` | planned (today per `Account<T>`) |
 | Soroban | account-authorised add/remove | **seam only** | guardian + delayed recovery planned |
@@ -1430,7 +1432,7 @@ Key lifecycle per family ([NET-ALL-05](../networks/README.md#NET-ALL-05) is norm
 
 <a id="smart-account-limitations"></a>
 
-- **Scoped receiver-fee key** (PLANNED): a `SubjectAccount` key kind that validates only `ReceiverFee` preimages with a
+- **Scoped receiver-fee key** (PLANNED): a `SmartKeyAccount` key kind that validates only `ReceiverFee` preimages with a
   fee cap, so that a payee's co-signing key ([CTR-MTX-05](metatx.md#CTR-MTX-05)) need not control its wallet. Until
   then the co-signing wallet is a hot collection wallet.
 - ERC-1271 digests are not account-wrapped (above).

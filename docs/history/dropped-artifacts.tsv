@@ -1,5 +1,5 @@
 # Load-bearing tokens of history/research sources that are deliberately absent from the current docs (docs_check.py C7 and facts check skip them).
-# token<TAB>reason<TAB>where the meaning lives now, or why it is obsolete. Reasons: vi-quote, revision-label, vi-number, stale-chain-9000, internal-path, extraction-artifact, obsolete.
+# token<TAB>reason<TAB>where the meaning lives now, or why it is obsolete. Reasons: renamed, vi-quote, revision-label, vi-number, stale-chain-9000, internal-path, extraction-artifact, obsolete.
 , challenge = base64url(thông điệp). secp256k1: 	extraction-artifact	contracts/accounts.md#CTR-ACC-02
 e1a4a8b	internal-path	commit id of a merge note; the implementation pin is contracts/accounts.md#CTR-ACC-05
 test/helpers/Fixtures.sol	internal-path	contracts/accounts.md#CTR-ACC-05
@@ -609,3 +609,15 @@ rollOverPublic(ua)	obsolete	contracts/zether.md#CTR-ZTH-45 (renamed to zether* n
 rollOverBatch(uas)	obsolete	contracts/zether.md#CTR-ZTH-45 (renamed to zether* names)
 rollOverSigned(UA, expectedPendingSeq, validUntilBlock, sig)	obsolete	contracts/zether.md#CTR-ZTH-45 (renamed to zether* names)
 {chain, contract, selector ∈ {pqzTransfer, pqzBurn, rollOver}, calldata}	obsolete	contracts/pq-zether.md#CTR-PQZ-22 (renamed to pqz* names)
+SubjectAccountFactory	renamed	contracts/accounts.md#CTR-ACC-11
+SubjectAccountFactory.sol:21-23	renamed	contracts/accounts.md#CTR-ACC-11
+SubjectAccount.keys	renamed	contracts/accounts.md#CTR-ACC-11
+SubjectAccount.executeAsOwner	renamed	contracts/accounts.md#CTR-ACC-11
+SubjectAccount(Factory)	renamed	contracts/accounts.md#CTR-ACC-11
+SubjectAccount._clientDataOk	renamed	contracts/accounts.md#CTR-ACC-11
+SubjectAccountFactory.deploy((uint8,bytes32,bytes32,bytes32,bytes32),address)	renamed	contracts/accounts.md#CTR-ACC-11
+SubjectAccount.executeAsOwner(bytes,uint256,uint256,bytes)	renamed	contracts/accounts.md#CTR-ACC-11
+SubjectAccount.policy	renamed	contracts/accounts.md#CTR-ACC-11
+SubjectAccount.isValidSignature	renamed	contracts/accounts.md#CTR-ACC-11
+SubjectAccountFactory.deploy(...)	renamed	contracts/accounts.md#CTR-ACC-11
+SubjectAccountFactory.predict(firstKey, guardian)	renamed	contracts/accounts.md#CTR-ACC-11

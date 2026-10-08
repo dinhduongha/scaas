@@ -16,14 +16,14 @@ The family taxonomy is an owner decision: EVM (Hedera is an EVM chain with its o
 
 | Family | Chains | Meta-tx mechanism | Subject signature | Relayer lane key | Mesh v1 | Status |
 |---|---|---|---|---|---|---|
-| EVM | Gnosis (100), Celo (42220), private chain 7622, anvil 31337 | contract-level EIP-712 (`ERC20MetaTx`) | ECDSA secp256k1 (EOA) / ERC-1271 (`SubjectAccount`: P-256 WebAuthn, secp256k1) | secp256k1 `m/44'/60'/0'/0/i` | yes | BUILT |
+| EVM | Gnosis (100), Celo (42220), private chain 7622, anvil 31337 | contract-level EIP-712 (`ERC20MetaTx`) | ECDSA secp256k1 (EOA) / ERC-1271 (`SmartKeyAccount`: P-256 WebAuthn, secp256k1) | secp256k1 `m/44'/60'/0'/0/i` | yes | BUILT |
 | Hedera | 295 / 296 / 297 / 298 | the same Solidity on HSCS through a JSON-RPC relay | ECDSA (EVM alias) or ED25519 through HIP-632 `isAuthorizedRaw` | secp256k1 `m/44'/3030'/0'/0/i` | yes (family `hedera`) | BUILT |
 | Cosmos | CosmWasm chains (`cosmos:<chain-id>`) | contract-level `Relay{payload, auth}` | ADR-036 secp256k1 (Keplr/Leap `signArbitrary`) / WebAuthn P-256 | secp256k1 `m/44'/118'/0'/0/i` | yes | BUILT |
 | Soroban | Stellar (`pubnet`, `testnet`, `standalone`), Pi Network (`pi-mainnet`, `pi-testnet`) | native Soroban authorization (`SorobanAddressCredentials`, nonce + ledger expiry) | ed25519 (Freighter `signAuthEntry`) / custom account `__check_auth` with `secp256r1_verify` | ed25519 `m/44'/148'/i'`; Pi `m/44'/314159'/i'` | **no** | BUILT |
 | Move — Aptos | 1 / 2 / 4 | contract-level, one `Account` object per owner, lanes inside | ed25519 (Wallet Standard `signMessage`) / WebAuthn P-256 (pure-Move verifier) | ed25519 `m/44'/637'/i'/0'/0'` | yes | BUILT |
 | Move — Sui | mainnet / testnet / devnet / localnet | contract-level, shared `Account<T>` per subject, lanes inside | ed25519 / secp256k1 / secp256r1 / passkey (`signPersonalMessage`) | ed25519 `m/44'/784'/i'/0'/0'` | yes | BUILT |
 | TON | -239 / -3 | custom jetton wallet verifies `SignedOp` | TON Connect `signData` (cell) / passkey | ed25519 `m/44'/607'/i'` (W5R1 lane wallets) | yes (`pay`) | BUILT; **blocked** for every path except the transitional ERP pull path until the forward-TON cap lands ([NET-TON-14](ton.md#NET-TON-14)) |
-| Solana | `solana:<genesis hash>` | program-level, `SubjectAccount` PDA + `LanePda` | raw ed25519 / off-chain message / passkey, verified through the precompile instruction | ed25519 `m/44'/501'/i'/0'` | yes (`pay`) | BUILT |
+| Solana | `solana:<genesis hash>` | program-level, `SmartKeyAccount` PDA + `LanePda` | raw ed25519 / off-chain message / passkey, verified through the precompile instruction | ed25519 `m/44'/501'/i'/0'` | yes (`pay`) | BUILT |
 
 Lane keys come from one 24-word BIP-39 mnemonic or a raw private key per lane (Pi Network overrides the SLIP-44
 `coin_type`)
@@ -175,7 +175,7 @@ close/revoke messages, the Cosmos mandate JSON (`"scaas.mandate.v1"`), TON `Mand
 structs, not chain standards; each becomes a `MetaCall` entry of its contract — `mtx_add_key`, `mtx_remove_key`,
 `mtx_set_guardian`, `mtx_cancel_recovery`, `mtx_mandate_open`, `mtx_mandate_pay`, `mtx_revoke`, … — on the contract's
 lanes, with one vector set per family. Where the account's keys have no address of their own, the account signs as
-itself, as `SubjectAccount` on EVM ([CTR-ACC-10](../contracts/accounts.md#CTR-ACC-10)). Native key rotation of the
+itself, as `SmartKeyAccount` on EVM ([CTR-ACC-10](../contracts/accounts.md#CTR-ACC-10)). Native key rotation of the
 chain account (Aptos `rotate_authentication_key`) is untouched. DEX `Order`/`Cancel`/min-nonce structs stay
 ([CTR-DEX-13](../contracts/dex.md#CTR-DEX-13)); the op byte `trade` disappears — where a DEX leg is signed to the token
 (Cosmos, TON) it becomes the token's `MetaCall` entry `MtxTrade`, with the binding `relayer = to = the DEX` unchanged.
@@ -348,7 +348,7 @@ Therefore:
    paid, so the wallet path is as safe as signing a wallet transaction on that page.
 2. **Origin-bound path by default.** Portal and app flows on Solana and Sui offer the passkey first (origin and
    rpIdHash checked on chain, [NET-ALL-04](#NET-ALL-04)).
-3. **Opt-in on-chain binding.** An account policy bit `POLICY_PASSKEY_FOR_VALUE` (Solana `SubjectAccount.policy`,
+3. **Opt-in on-chain binding.** An account policy bit `POLICY_PASSKEY_FOR_VALUE` (Solana `SmartKeyAccount.policy`,
    `account.rs:254`; Sui `Keys.policy`), set by a key operation, makes value ops (`pay`, `trade`, mandate setup) require a passkey
    signature; wallet keys then authorise key operations only.
 
@@ -389,8 +389,8 @@ every gap is listed, never implied away.** The subject-account "equivalents per 
 
 | Family | Rotation | Guardian / recovery | Gap |
 |---|---|---|---|
-| EVM | `SubjectAccount` add/remove/rotate through `mtxExecute` signed by the account ([CTR-ACC-10](../contracts/accounts.md#CTR-ACC-10)) | guardian + `RECOVERY_DELAY` (default 2 days, cancellable by a key) | — |
-| Hedera | native account key update (no `SubjectAccount` on Hedera) | native | — (stated) |
+| EVM | `SmartKeyAccount` add/remove/rotate through `mtxExecute` signed by the account ([CTR-ACC-10](../contracts/accounts.md#CTR-ACC-10)) | guardian + `RECOVERY_DELAY` (default 2 days, cancellable by a key) | — |
+| Hedera | native account key update (no `SmartKeyAccount` on Hedera) | native | — (stated) |
 | Aptos | account keys + origins in `Account` | guardian + `RECOVERY_DELAY` | — |
 | Sui | per `Account<T>` as built → per subject `Keys` object ([NET-SUI-02](sui.md#NET-SUI-02), SPECIFIED) | guardian per `Account<T>` as built | moves to `Keys` |
 | Soroban | account-authorised add/remove | **seam only** ([NET-SOR-03](soroban.md#NET-SOR-03)) | guardian + delayed recovery (SPECIFIED) |
@@ -402,10 +402,10 @@ The **backup-key switch** ([CLI-SGN-12](../clients/signers-clientkeys.md#CLI-SGN
 
 | Family | Subject account | Max keys | Guardian | Satisfiable by | On-chain bit | Client-side check by the ERP |
 |---|---|---|---|---|---|---|
-| EVM, Hedera | `SubjectAccount` | unbounded | yes | 2 keys or key + guardian | no | yes |
+| EVM, Hedera | `SmartKeyAccount` | unbounded | yes | 2 keys or key + guardian | no | yes |
 | Sui | `Account<T>` | 8 | yes | as EVM | no | no |
 | Aptos | `Account` object | 8 | yes | as EVM | no | no |
-| Solana | `SubjectAccount` PDA | 8 | yes | as EVM | opt-in (no de-duplication) | no |
+| Solana | `SmartKeyAccount` PDA | 8 | yes | as EVM | opt-in (no de-duplication) | no |
 | Soroban | `scaas-account` `C…` | multi | no | **≥ 2 distinct keys** (owner) | no | no |
 | TON | `ScaasJettonWallet` | 2 (`pubkey` + one passkey) | no | **both keys** (owner) | no | no |
 | Cosmos | none (native; multi-key seam) | 1 | no | seed: native; passkey-only: **unsatisfiable** | no | no |
@@ -580,7 +580,7 @@ Non-EVM books are served after the venue moves into the node store ([CLI-APP-21]
 | Sealed-bid tender | SPECIFIED | SPECIFIED (same bytecode on HSCS; the tender checks no signature, so no Hedera child; deposit token = Hedera v2 meta token; tight gas limit since HSCS charges ≥ 80 % of it) | PLANNED: contract holds the deposit; commit = the meta token's signed `Relay` op with a `pay` memo = `depositRef`, executed by the tender via submessage; commitment over `(chain_id, contract, tender, bidder, price, salt)` with SHA-256 | PLANNED: the bidder's `require_auth` entries for `commit_bid` (deposit = SAC/token `transfer` sub-invocation in the same auth tree); reveal/withdraw permissionless | PLANNED: tender object / resource; deposit coin moved by the relayer-submitted PTB / entry function under the bidder's signed op; time from `Clock` / `timestamp` | PLANNED: async — deposit arrives as a jetton `transfer_notification` with `forward_payload = (tenderId, commitment)`; reveal/withdraw are internal messages; bounce handling on refunds | PLANNED: program + PDA vault per tender; deposit through the token-program CPI under the bidder's precompile-verified op |
 | Receiver-pays | EVM v2 | Hedera v2 | — | — | — | — | — |
 | Gas sponsorship policy (node) | all | all | book and limit only | 〃 | 〃 | 〃 | 〃 |
-| Token wrappers v2 | SPECIFIED | SPECIFIED ([hedera wrappers](hedera.md#wrappers)) | today `scaas-token` (CW20 + meta-op, `minter`, `initial_balances`, tier 1): tier 1 unchanged (gets `Burn` and minter renounce with its next version); wrapper of a bank denom (`info.funds`) or a CW20 (`Receive`) with the same rate/reserve rules and `wrap_rate_vectors.json`: PLANNED | today SEP-41 token + `pay`, admin `mint`, `burn` (tier 1): unchanged; wrapper of a Stellar Asset Contract (e.g. USDC): PLANNED | none needed (the subject `Account` holds any FA / `Coin<T>`; gasless for every asset) | today Tact jetton + custom wallet + `SignedOp`, admin `Mint` (tier 1): unchanged; third-party jettons cannot carry `SignedOp`, so a wrapper minter (receive `transfer_notification`, mint; unwrap with bounce handling) is the only gasless route: PLANNED, highest value of the three | none needed (the `SubjectAccount` PDA owns SPL token accounts for any mint) |
+| Token wrappers v2 | SPECIFIED | SPECIFIED ([hedera wrappers](hedera.md#wrappers)) | today `scaas-token` (CW20 + meta-op, `minter`, `initial_balances`, tier 1): tier 1 unchanged (gets `Burn` and minter renounce with its next version); wrapper of a bank denom (`info.funds`) or a CW20 (`Receive`) with the same rate/reserve rules and `wrap_rate_vectors.json`: PLANNED | today SEP-41 token + `pay`, admin `mint`, `burn` (tier 1): unchanged; wrapper of a Stellar Asset Contract (e.g. USDC): PLANNED | none needed (the subject `Account` holds any FA / `Coin<T>`; gasless for every asset) | today Tact jetton + custom wallet + `SignedOp`, admin `Mint` (tier 1): unchanged; third-party jettons cannot carry `SignedOp`, so a wrapper minter (receive `transfer_notification`, mint; unwrap with bounce handling) is the only gasless route: PLANNED, highest value of the three | none needed (the `SmartKeyAccount` PDA owns SPL token accounts for any mint) |
 | Post-quantum Zether | chain 7622 only (precompile in our client); dev chains 31337/1337 tests only (anvil cannot host the precompile, so forge mocks it with `vm.mockCall` on KAT inputs; end to end on a chain-7622 copy); other private EVM clients not in v1 (later via an attestation seam); public EVM never without an owner ruling | no | Cosmos SDK private chains feasible later (Go module calling `libpqz` via cgo; own spec) | no | no | no | no |
 | Crypto-shredding commitments | keccak256 | keccak256 | SHA-256, tag `scaas.commit.sha256.v1` | 〃 | 〃 | 〃 | 〃 |
 

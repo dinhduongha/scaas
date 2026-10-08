@@ -212,7 +212,7 @@ attribution: only the side at fault is not restored.
 <a id="oog-pairs"></a><a id="NODE-DEX-06"></a>**NODE-DEX-06** — **ERC-1271 orders whose check ran out of gas are never
 restored.** The contract caps an ERC-1271 signature check ([CTR-DEX-08](../contracts/dex.md#CTR-DEX-08)); a pair whose
 reason is out-of-gas in that check ⇒ that ERC-1271 order is not restored to the book. (The contract's `_validSig`
-branch uses a `staticcall` with cap `_erc1271Gas(signer)`: 400k when `signer.codehash` is the `SubjectAccount` clone
+branch uses a `staticcall` with cap `_erc1271Gas(signer)`: 400k when `signer.codehash` is the `SmartKeyAccount` clone
 code hash, else 50k; at most 32 bytes of return data.)
 
 ## Routes

@@ -203,7 +203,7 @@ and MySQL; feed fields per family (EVM, Hedera, one non-EVM); admin route roles 
 - **Payee client:** the payment request carries "fee paid by receiver" and the receiver fee amount (base units); once
   the payer's address is known the payee's server builds the payer's typed data (fee `NONE`, relayer = its lane),
   computes the payment digest and signs `ReceiverFee` with the receiving wallet's key. That key controls the wallet (a
-  `SubjectAccount` key validates any digest), so the receiving wallet for this mode is a dedicated **hot collection
+  `SmartKeyAccount` key validates any digest), so the receiving wallet for this mode is a dedicated **hot collection
   wallet** holding only incoming receiver-pays funds, swept to a cold treasury; a cold receiving wallet cannot
   co-sign and must not offer this mode. Booking: receipt `N` from `PaymentSettled`, fee expense `F` from
   `ReceiverFeePaid` matched by digest. E-cheque flow: the payee's request names the relayer lane; the payer signs

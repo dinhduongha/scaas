@@ -677,11 +677,11 @@ fee would be stuck forever in the token's own public ERC-20 balance. Status **SP
 
 <a id="erc1271-cap"></a>
 <a id="CTR-ZTH-21"></a>**CTR-ZTH-21** — Zether envelopes get the same ERC-1271 cap as every token of the base
-([CTR-ACC-05](accounts.md#CTR-ACC-05)): 400 k when `m.from.codehash` is the `SubjectAccount` clone codehash
+([CTR-ACC-05](accounts.md#CTR-ACC-05)): 400 k when `m.from.codehash` is the `SmartKeyAccount` clone codehash
 (immutable at `initialize`/deploy), else 50 k. The built mixin uses `staticcall{gas: 50_000}` (`ZetherMetaTx.sol:123`), so a passkey
-`SubjectAccount` clone always fails `MetaTxBadSignature` on envelopes. The built registry is not changed (the UA
+`SmartKeyAccount` clone always fails `MetaTxBadSignature` on envelopes. The built registry is not changed (the UA
 registry replaces it and already sets 400 k, [CTR-UA-17](accounts.md#CTR-UA-17)). Test: an envelope signed by a
-real passkey `SubjectAccount` passes (the built `test_smartAccount1271Auth` uses only a `Mock1271Wallet` ECDSA). Status **SPECIFIED**.
+real passkey `SmartKeyAccount` passes (the built `test_smartAccount1271Auth` uses only a `Mock1271Wallet` ECDSA). Status **SPECIFIED**.
 
 Pipeline order: the base's ([CTR-MTX-17](metatx.md#CTR-MTX-17)) — relayer → expiry → mode → nonce → signature →
 shape (allowlist, fee class) → nonce written → the self-call (cheap op checks `accSeq`, `sendCounter`, registration,
@@ -754,9 +754,9 @@ account's level); a replay needs that same `msg.sender` and yields the same reco
 - **Built limitations, not fixed in this registry:** the PoP does not bind `scheme`/`authData`/`linkEVM` — when
   `msg.sender` is a shared contract (a public multicall/forwarder), a front-runner can replay `schnorrPop` through that
   contract with `SMART_ACCOUNT_1271` pointing at its own always-true contract, giving the UA a foreign authority forever;
-  **register only from an account you alone control** (an EOA, your own `SubjectAccount`, your own Safe;
+  **register only from an account you alone control** (an EOA, your own `SmartKeyAccount`, your own Safe;
   `UniversalAccountRegistry.sol:96`) until the UA registry, whose PoP binds `authRef` ([CTR-UA-07](accounts.md#CTR-UA-07)), replaces it. `SMART_ACCOUNT_1271`
-  calls `isValidSignature` with a 50 k cap (`UniversalAccountRegistry.sol:206`), so a passkey `SubjectAccount` (Solidity P-256 on a dev chain without
+  calls `isValidSignature` with a 50 k cap (`UniversalAccountRegistry.sol:206`), so a passkey `SmartKeyAccount` (Solidity P-256 on a dev chain without
   P256VERIFY) cannot register (`InvalidProofOfPossession`; fail-closed, no loss). `AuthSchemeLib.survivesEncKeyLeak(PQ_COMMITMENT)`
   returns `true` (`AuthScheme.sol:58-60`) although the registry treats `PQ_COMMITMENT` exactly like `SELF_SCHNORR`
   (registry `:122-127`; a leaked `x` loses funds for both); the helper is used only in `test/AuthScheme.t.sol` and the

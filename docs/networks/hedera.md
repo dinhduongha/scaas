@@ -9,7 +9,7 @@ Common rules for every family: [networks/README](README.md). Status: contracts, 
 Service: the same Solidity contracts behind a Hedera JSON-RPC relay, plus HIP-632 for ED25519 accounts; the
 payer-sponsored path is not used.** HSCS runs EVM bytecode (Besu), so the Solidity set is reused unchanged:
 `MetaToken` (contract-level EIP-712 meta-tx), `MandateWallet`, `MetaTxDex`/`OrderBookDex`. There is **no
-`SubjectAccount` and no EVM pipeline on Hedera** (as built: `HederaMetaToken.sol:22-24`, `adapters/hedera.rs:4-6`): native Hedera accounts already rotate keys, and the relayer runs
+`SmartKeyAccount` and no EVM pipeline on Hedera** (as built: `HederaMetaToken.sol:22-24`, `adapters/hedera.rs:4-6`): native Hedera accounts already rotate keys, and the relayer runs
 the one-transaction-per-lane runner ([NET-HED-08](#NET-HED-08)). ED25519 accounts need a raw signer
 ([NET-HED-15](#NET-HED-15)). Payer-account sponsorship (the subject sends a Hedera account transaction whose fee
 someone else pays) is **not** used: it orders operations by the subject's account, exactly the lock

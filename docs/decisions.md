@@ -505,7 +505,7 @@ Change: a token's own signed entry points travel only as `metatx` jobs. Source a
 ### NODE-JOB-19 — Call table: permissionless selectors, role-holder Safe row
 - old: reorg:Q1 · status: current · owner: yes · date: 2026-10-08 · normative: node/job-api.md#NODE-JOB-19 · superseded-by: —
 
-Change: rows renamed (`SubjectAccount.mtxExecuteAsOwner`, `MandateWallet.mtxPayUnderMandate`/`mtxRevoke`/`mtxExecuteAsOwner`, `OrderBookDex.mtxSettle`/`mtxCancelOrders`/`mtxInvalidateNonces`); the DEX row admits only DEXes on the chain profile's list; chain-bound targets must report `chainUid() = chain_uid`; no role function is on any token allowlist, so role calls stay on the role holder's contract also for gasless token calls (OQ1). Source add: §3 MG-2, MG-3, MG-4, MG-6, §7, §10 OQ1.
+Change: rows renamed (`SmartKeyAccount.mtxExecuteAsOwner`, `MandateWallet.mtxPayUnderMandate`/`mtxRevoke`/`mtxExecuteAsOwner`, `OrderBookDex.mtxSettle`/`mtxCancelOrders`/`mtxInvalidateNonces`); the DEX row admits only DEXes on the chain profile's list; chain-bound targets must report `chainUid() = chain_uid`; no role function is on any token allowlist, so role calls stay on the role holder's contract also for gasless token calls (OQ1). Source add: §3 MG-2, MG-3, MG-4, MG-6, §7, §10 OQ1.
 
 ### NODE-JOB-20 — Meta-tx `data` read through the implementation's selector allowlist
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: node/job-api.md#NODE-JOB-20 · superseded-by: —
@@ -1685,7 +1685,7 @@ Change (2026-10-08): `mtxExecute` serves every SCaaS contract and `data` is alwa
 **Why.** The owner chose a fixed per-implementation allowlist, published by `mtxSelectors()` with fee classes; `approve`, `transferFrom`, `transfer`, `payWithFee`, every `mtx…` entry and every role function are never listed (the owner flipped the earlier default: role holders act through their own contract, whose caps and guards a signature check would skip). Every listed function is `nonReentrant`; dynamic Zether arguments are canonicalized by the node.
 **Cost if wrong.** An open allowlist lets a signature reach role functions or `approve`; a second encoding of one intent splits its digest.
 **Source.** `history/specs/2026-10-07-metatx-generic.md` §2 A2, §3 MG-2, §10 OQ1.
-Change (2026-10-08): `transfer` and `pay` are never allowlisted (they are `MetaTransfer`s); rows added for `PqzToken`, `MandateWallet` and `SubjectAccount` (fee `NONE` only on the latter two). Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-1, GC-6, GC-10.
+Change (2026-10-08): `transfer` and `pay` are never allowlisted (they are `MetaTransfer`s); rows added for `PqzToken`, `MandateWallet` and `SmartKeyAccount` (fee `NONE` only on the latter two). Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-1, GC-6, GC-10.
 
 ### CTR-MTX-20 — Fee classes per selector: AMOUNT(i) and ABSOLUTE
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-20 · superseded-by: —
@@ -1698,17 +1698,17 @@ Change (2026-10-08): a `MetaTransaction` has no amount field, so the basis alway
 ### CTR-MTX-21 — mtx names for every signature-authorized entry point
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-21 · superseded-by: —
 
-**Why.** Every external function whose authority comes from a subject's signature starts with `mtx` (tokens, `ZetherToken` rollover, `MandateWallet`, `SubjectAccount`, `OrderBookDex`), so readers and the node's call table tell signed paths from direct ones at a glance; `executeMetaTransaction` stays as the alias; EIP-712 type names and non-EVM op names are unchanged.
+**Why.** Every external function whose authority comes from a subject's signature starts with `mtx` (tokens, `ZetherToken` rollover, `MandateWallet`, `SmartKeyAccount`, `OrderBookDex`), so readers and the node's call table tell signed paths from direct ones at a glance; `executeMetaTransaction` stays as the alias; EIP-712 type names and non-EVM op names are unchanged.
 **Cost if wrong.** Mixed names hide which entry points need a signature and which only a caller.
 **Source.** `history/specs/2026-10-07-metatx-generic.md` §2 A3, §3 MG-3.
-Change (2026-10-08): entry table: every contract on `MetaTxBase` has `mtxExecute`/`mtxBatch`/`cancelNonce`; tokens add `mtxExecuteTransfer`, `mtxBatchTransfer`; `MandateWallet` and `SubjectAccount` named entries build a `MetaTransaction`. The non-EVM line is unchanged here. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G4, §3 GC-5, GC-6.
+Change (2026-10-08): entry table: every contract on `MetaTxBase` has `mtxExecute`/`mtxBatch`/`cancelNonce`; tokens add `mtxExecuteTransfer`, `mtxBatchTransfer`; `MandateWallet` and `SmartKeyAccount` named entries build a `MetaTransaction`. The non-EVM line is unchanged here. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G4, §3 GC-5, GC-6.
 Change (2026-10-08): the non-EVM exception is gone — non-EVM families name signed entries `mtx` in their own case (NET-ALL-28). Source add: `history/specs/2026-10-08-nonevm-metacall-design.md` §6 Q1.
 
 ### CTR-MTX-22 — MetaTxBase: the generic base of every SCaaS contract; fee NONE unless overridden
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-22 · superseded-by: —
 
 **Why.** SCaaS meta-transactions exist so that someone other than the subject pays for a call of any SCaaS contract, not only for moving tokens (owner: a family-tree contract whose edits a service company pays for in native gas). One generic base gives every contract the struct, digest, lanes, ticket, allowlist and `mtxExecute`; a contract that holds no charged balance cannot collect a fee, so `_chargeFee` refuses every mode but `NONE` unless a token overrides it, and the sponsor settles with the user off chain.
-**Cost if wrong.** A token-only base forces every other contract to invent its own signed struct and nonce rules (as `MandateWallet` and `SubjectAccount` did); a fee field such a contract cannot collect would mislead signers.
+**Cost if wrong.** A token-only base forces every other contract to invent its own signed struct and nonce rules (as `MandateWallet` and `SmartKeyAccount` did); a fee field such a contract cannot collect would mislead signers.
 **Source.** `history/specs/2026-10-08-metatx-generic-call-design.md` §1, §2 G2, G3, §3 GC-2, GC-7.
 
 ### CTR-MTX-23 — The typed path: MetaTransfer through mtxExecuteTransfer
@@ -1951,7 +1951,7 @@ Change (2026-10-08): the non-EVM exception is gone — non-EVM families name sig
 
 ## Contracts — Accounts and mandates
 
-### CTR-ACC-01 — SubjectAccount clones; salt binds key and guardian
+### CTR-ACC-01 — SmartKeyAccount clones; salt binds key and guardian
 - old: RS4-1 · status: current · owner: no · date: 2026-10-03 · normative: contracts/accounts.md#CTR-ACC-01 · superseded-by: —
 
 **Why.** Counterfactual clones with a salt binding the first key and the guardian give a predictable address that nobody else can claim.
@@ -1979,10 +1979,10 @@ Change (2026-10-08): the non-EVM exception is gone — non-EVM families name sig
 **Cost if wrong.** A cloned authenticator is not detected by the counter; the account relies on device security instead.
 **Source.** `history/plans/2026-10-03-r3-passkey-seed.md:27`
 
-### CTR-ACC-05 — 400k ERC-1271 cap only for SubjectAccount clones; salted account domain
+### CTR-ACC-05 — 400k ERC-1271 cap only for SmartKeyAccount clones; salted account domain
 - old: RS4-10 · status: current · owner: no · date: 2026-10-08 · normative: contracts/accounts.md#CTR-ACC-05 · superseded-by: —
 
-**Why.** Only `SubjectAccount` clones, identified by codehash, get the 400 k ERC-1271 cap that the Solidity P-256 path needs; everything else keeps 50 k. The account's domain carries `salt = chain_uid` from the factory, so its address differs per chain.
+**Why.** Only `SmartKeyAccount` clones, identified by codehash, get the 400 k ERC-1271 cap that the Solidity P-256 path needs; everything else keeps 50 k. The account's domain carries `salt = chain_uid` from the factory, so its address differs per chain.
 **Cost if wrong.** A global 400 k cap lets any contract wallet grief relayers with expensive validation.
 **Source.** `history/plans/2026-10-03-r3-passkey-seed.md:43`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-4.
 
@@ -2009,24 +2009,31 @@ Change (2026-10-08): the epoch travels in the revoke data, `revoke(token, epoch)
 **Cost if wrong.** Per-family WebAuthn checks drift, and one lax family (suffix origin, crossOrigin) becomes the phishing target.
 **Source.** `history/specs/2026-10-03-blockchain-round3-design.md:519`
 
-### CTR-ACC-09 — SubjectAccount kept as optional option (b)
+### CTR-ACC-09 — SmartKeyAccount kept as optional option (b)
 - old: R307 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/accounts.md#CTR-ACC-09 · superseded-by: —
 
-**Why.** `SubjectAccount` stays available as option (b) for users who want a stable address across key rotation.
+**Why.** `SmartKeyAccount` stays available as option (b) for users who want a stable address across key rotation.
 **Cost if wrong.** Removing it would force every rotation to move funds.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:238`
 
-### CTR-ACC-10 — SubjectAccount key management is a MetaTransaction signed by the account itself
+### CTR-ACC-10 — SmartKeyAccount key management is a MetaTransaction signed by the account itself
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/accounts.md#CTR-ACC-10 · superseded-by: —
 
-**Why.** `SubjectAccount` moves onto `MetaTxBase` like every SCaaS contract (owner G3); its keys include passkeys with no address, so the account itself is `from` and verifies the signature against its own key set (owner G9); the typed `OwnerCall` and its single nonce go, the lanes and vectors are shared with every contract.
+**Why.** `SmartKeyAccount` moves onto `MetaTxBase` like every SCaaS contract (owner G3); its keys include passkeys with no address, so the account itself is `from` and verifies the signature against its own key set (owner G9); the typed `OwnerCall` and its single nonce go, the lanes and vectors are shared with every contract.
 **Cost if wrong.** An account that signed as one of its keys could not use passkeys; a separate owner struct keeps a second digest rule and nonce space alive.
 **Source.** `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G3, G9, §3 GC-6.
+
+### CTR-ACC-11 — The multi-key contract account is SmartKeyAccount in every chain family
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/accounts.md#CTR-ACC-11 · superseded-by: —
+
+**Why.** "Smart" marks a contract account and "key" its many keys; the old name said nothing a reader could use. One name in every family (EVM `SmartKeyAccount` and `SmartKeyAccountFactory`, the Solana, Sui, Aptos and Soroban equivalents) is renamed in code in phase P4, all at once.
+**Cost if wrong.** Two names live side by side in code and docs for longer than P4; a half-renamed family reads as a different contract.
+**Source.** `history/specs/2026-10-08-token-tree-design.md` T15.
 
 ### CTR-ACC-80 — Typed owner and mandate structs (OwnerCall, PayUnderMandate, RevokeMandate)
 - old: — · status: superseded · owner: yes · date: 2026-10-08 · normative: — · superseded-by: CTR-ACC-06, CTR-ACC-07, CTR-ACC-10
 
-**What it said.** `SubjectAccount` and `MandateWallet` each verified their own EIP-712 structs (`OwnerCall(bytes data,uint256 nonce,uint256 validUntil)`, `PayUnderMandate(…)`, `RevokeMandate(…)`) with their own nonce rules.
+**What it said.** `SmartKeyAccount` and `MandateWallet` each verified their own EIP-712 structs (`OwnerCall(bytes data,uint256 nonce,uint256 validUntil)`, `PayUnderMandate(…)`, `RevokeMandate(…)`) with their own nonce rules.
 
 ## Contracts — DEX
 
@@ -2084,7 +2091,7 @@ Change (2026-10-08): `admin` is written once by `initialize` of a factory-made c
 ### CTR-DEX-08 — OrderBookDex caps ERC-1271 gas by codehash
 - old: RS5-14(contract) · status: current · owner: no · date: 2026-10-08 · normative: contracts/dex.md#CTR-DEX-08 · superseded-by: —
 
-**Why.** The DEX's own signature checks (outside-token legs, DEX-domain cancels) cap ERC-1271 gas by codehash (400 k for `SubjectAccount` clones, else 50 k) and refuse to run with too little gas left; SCaaS legs get the same cap inside their token.
+**Why.** The DEX's own signature checks (outside-token legs, DEX-domain cancels) cap ERC-1271 gas by codehash (400 k for `SmartKeyAccount` clones, else 50 k) and refuse to run with too little gas left; SCaaS legs get the same cap inside their token.
 **Cost if wrong.** Uncapped 1271 lets a signer grief the settler; a 63/64 starvation could fake a failed check.
 **Source.** `history/specs/2026-10-03-dex-design.md:431`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-8.4.
 
@@ -2537,7 +2544,7 @@ Change (2026-10-08): `MetaTransaction` has no `to`/`value`, so the binding drops
 ### CTR-ZTH-21 — Zether envelopes use the base's ERC-1271 cap by codehash
 - old: RS2-21 · status: current · owner: no · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-21 · superseded-by: —
 
-**Why.** Zether envelopes get the same codehash-based ERC-1271 cap as every token of the base (400 k for `SubjectAccount` clones).
+**Why.** Zether envelopes get the same codehash-based ERC-1271 cap as every token of the base (400 k for `SmartKeyAccount` clones).
 **Cost if wrong.** An uncapped check lets contract wallets grief relayers; a 50 k cap fails every passkey account.
 **Source.** `history/specs/2026-10-03-zether-design.md:664`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-9.
 
@@ -2858,7 +2865,7 @@ Change (2026-10-08): `m.to`/`m.value` are gone from the struct; a public transfe
 - old: R297 · status: current · owner: no · date: 2026-10-07 · normative: contracts/accounts.md#CTR-UA-09 · superseded-by: —
 
 **Why.** Structures commit to sorted members and nest one level, which bounds gas and avoids cycles.
-**Cost if wrong.** Two-level governance uses `SubjectAccount` or Safe as a member.
+**Cost if wrong.** Two-level governance uses `SmartKeyAccount` or Safe as a member.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:159`
 
 ### CTR-UA-10 — One key one purpose: registry, tags, EOAs
@@ -3458,7 +3465,7 @@ It said: Chain 9000 genesis keys silently ignored; replaced by NET-EVM-02.
 - old: R63 · status: current · owner: no · date: 2026-10-07 · normative: networks/hedera.md#NET-HED-04 · superseded-by: —
 
 **Rule.** Hedera is the EVM family on the Hedera Smart Contract Service: the same Solidity contracts behind a Hedera JSON-RPC relay, plus HIP-632 for ED25519 accounts; the payer-sponsored path is not used.
-**Why.** The payer-sponsored path is a transaction from the subject's own Hedera account, which is exactly the subject lock NET-ALL-02 forbids; running the existing Solidity contracts on HSCS reuses all of them unchanged. The first wording of this ruling, "reuse SubjectAccount/pipeline on Hedera", was narrowed by the Hedera design: there is no `SubjectAccount` and no EVM pipeline on Hedera, because native Hedera accounts already rotate keys and the relayer runs `lane_runner`.
+**Why.** The payer-sponsored path is a transaction from the subject's own Hedera account, which is exactly the subject lock NET-ALL-02 forbids; running the existing Solidity contracts on HSCS reuses all of them unchanged. The first wording of this ruling, "reuse SubjectAccount/pipeline on Hedera", was narrowed by the Hedera design: there is no `SmartKeyAccount` and no EVM pipeline on Hedera, because native Hedera accounts already rotate keys and the relayer runs `lane_runner`.
 **Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 536.
 
 ### NET-HED-05 — Hedera status code to outcome class table
@@ -4125,17 +4132,17 @@ It said: Committed OOG requeued without limit; replaced by NET-APT-21.
 **Why.** Write-locks exist only while a block executes, so disjoint write sets give the anti-lock property by construction, while a hot writable account serialises its transactions, hits the per-account compute cap and raises the local priority fee. The owner made the disjointness test mandatory.
 **Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 698; [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 52.
 
-### NET-SOL-05 — One SubjectAccount PDA per subject
+### NET-SOL-05 — One SmartKeyAccount PDA per subject
 - old: RS12-3 · status: current · owner: no · date: 2026-10-04 · normative: networks/solana.md#NET-SOL-05 · superseded-by: —
 
-**Rule.** One SubjectAccount PDA per subject holds every mint; its balance is the token accounts owned by the PDA — no internal ledger.
+**Rule.** One SmartKeyAccount PDA per subject holds every mint; its balance is the token accounts owned by the PDA — no internal ledger.
 **Why.** Any token account owned by the PDA counts, so tokens sent to an unusual token account of the PDA stay spendable. Keeping funds in the wallet's own token account with an `Approve` to the PDA was rejected: a token account has only one delegate, each re-approval needs a native transaction, and there are no multiple keys or recovery.
 **Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 700.
 
 ### NET-SOL-06 — Keys, origins, guardian; open needs assertion
 - old: RS12-4 · status: current · owner: yes · date: 2026-10-04 · normative: networks/solana.md#NET-SOL-06 · superseded-by: —
 
-**Rule.** A SubjectAccount holds ≤ 8 keys (ed25519 / P-256 WebAuthn), ≤ 8 origins and a guardian with a 2-day delay; a new origin under the same rpId is added by that passkey; `open_passkey` requires an assertion.
+**Rule.** A SmartKeyAccount holds ≤ 8 keys (ed25519 / P-256 WebAuthn), ≤ 8 origins and a guardian with a 2-day delay; a new origin under the same rpId is added by that passkey; `open_passkey` requires an assertion.
 **Why.** Browsers let only origins under an rpId create assertions for it, so a passkey adding a new origin under its own rpId keeps a domain change from bricking the Account while a phishing site on another rpId stays blocked; taking the origin from the assertion itself stops anyone pre-opening an Account with a wrong origin (NET-SUI-04).
 **Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 701.
 
@@ -4241,13 +4248,13 @@ It said: Committed OOG requeued without limit; replaced by NET-APT-21.
 ### NET-SOL-21 — Destination ATA must exist
 - old: RS12-20 · status: current · owner: no · date: 2026-10-07 · normative: networks/solana.md#NET-SOL-21 · superseded-by: —
 
-**Why.** An ATA owner can `CloseAccount` it at zero balance and recover ~0.00204 SOL of rent (more for Token-2022 with extensions), and `to` is signer-chosen — loop: the SubjectAccount holds 1 unit; sign `pay(1, to = W)`; the lane creates ATA(W) (as built, `account.rs:210-218`, `util.rs:55-73`; `mandate.rs:170-178` likewise); W sends the unit back, closes ATA(W), keeps the rent; repeat — ≈ 0.002 SOL profit per round, stopped only by `min_relayer_balance` (the hourly breaker sees only fees, `adapter.rs:270-276`). The ERP path is safe (`to` = a fixed receiving wallet); mesh `pay` and the job API are not. Taking the rent from the SubjectAccount's lamports was rejected (gasless subjects hold no SOL). DEX ATAs owned by a SubjectAccount PDA (`dex.rs:252-254`) and the fee vault owned by the Market (`:264-265`) cannot be closed (the program has no `CloseAccount` path), so they are a one-time cost per (PDA, mint), metered and bounded by `max_deposit_per_job`, not a drain. SPECIFIED. LiteSVM: `relay_pay` to a missing ATA ⇒ `DestinationMissing`; to an existing ATA ⇒ runs, the lane pays no rent. Rust: missing destination + unconfigured `to` ⇒ `422`; configured `to` ⇒ the transaction carries the ATA creation; the pay → close → pay loop never creates a second ATA on lane money.
+**Why.** An ATA owner can `CloseAccount` it at zero balance and recover ~0.00204 SOL of rent (more for Token-2022 with extensions), and `to` is signer-chosen — loop: the SmartKeyAccount holds 1 unit; sign `pay(1, to = W)`; the lane creates ATA(W) (as built, `account.rs:210-218`, `util.rs:55-73`; `mandate.rs:170-178` likewise); W sends the unit back, closes ATA(W), keeps the rent; repeat — ≈ 0.002 SOL profit per round, stopped only by `min_relayer_balance` (the hourly breaker sees only fees, `adapter.rs:270-276`). The ERP path is safe (`to` = a fixed receiving wallet); mesh `pay` and the job API are not. Taking the rent from the SmartKeyAccount's lamports was rejected (gasless subjects hold no SOL). DEX ATAs owned by a SmartKeyAccount PDA (`dex.rs:252-254`) and the fee vault owned by the Market (`:264-265`) cannot be closed (the program has no `CloseAccount` path), so they are a one-time cost per (PDA, mint), metered and bounded by `max_deposit_per_job`, not a drain. SPECIFIED. LiteSVM: `relay_pay` to a missing ATA ⇒ `DestinationMissing`; to an existing ATA ⇒ runs, the lane pays no rent. Rust: missing destination + unconfigured `to` ⇒ `422`; configured `to` ⇒ the transaction carries the ATA creation; the pay → close → pay loop never creates a second ATA on lane money.
 **Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 730.
 
 ### NET-SOL-22 — On-chain MAX_TTL_S for expiries
 - old: RS12-21 · status: current · owner: no · date: 2026-10-07 · normative: networks/solana.md#NET-SOL-22 · superseded-by: —
 
-**Why.** `u64::MAX` makes a PDA never prunable (`account.rs:204`, `dex.rs:199, 312`) — one `cancel_signed` for an invented order hash locks a `Fill`'s rent forever. Rent that never returns (lazy SubjectAccount open, `account.rs:189`, no close path; KeyOp growth through `util::grow`, `account.rs:365`, bounded by 8 keys + 8 origins and never shrinking, so once per Account; `MinNonce`, `dex.rs:327`; DEX ATAs of the PDA and vaults) stays lane-paid — subjects are gasless — but is metered (NODE-LANE-13) and bounded per job (NODE-LANE-18) and per subject (NODE-LANE-15). SPECIFIED. LiteSVM tests: `cancel_signed` with `expiry = u64::MAX` ⇒ error; `relay_pay` with `valid_until = now + 32 days` ⇒ error; every lane PDA created is prunable ≤ `MAX_TTL_S + PRUNE_DELAY_S` after creation.
+**Why.** `u64::MAX` makes a PDA never prunable (`account.rs:204`, `dex.rs:199, 312`) — one `cancel_signed` for an invented order hash locks a `Fill`'s rent forever. Rent that never returns (lazy SmartKeyAccount open, `account.rs:189`, no close path; KeyOp growth through `util::grow`, `account.rs:365`, bounded by 8 keys + 8 origins and never shrinking, so once per Account; `MinNonce`, `dex.rs:327`; DEX ATAs of the PDA and vaults) stays lane-paid — subjects are gasless — but is metered (NODE-LANE-13) and bounded per job (NODE-LANE-18) and per subject (NODE-LANE-15). SPECIFIED. LiteSVM tests: `cancel_signed` with `expiry = u64::MAX` ⇒ error; `relay_pay` with `valid_until = now + 32 days` ⇒ error; every lane PDA created is prunable ≤ `MAX_TTL_S + PRUNE_DELAY_S` after creation.
 **Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 735.
 
 ### NET-SOL-23 — Out of CU rebuilt once at max_cu
@@ -4536,7 +4543,7 @@ It said: Bounced payouts via admin RefundBounced; replaced by NET-TON-03.
 
 **Rule.** A client never signs server-built typed data as is; it rebuilds the operation first.
 **Source.** [history/plans/2026-10-03-r3-passkey-seed.md](history/plans/2026-10-03-r3-passkey-seed.md) line 57.
-Change (2026-10-08): `checkPayment` rebuilds a payment `MetaTransfer`; `checkOwnerCall` a `SubjectAccount` `MetaTransaction` signed as the account (CTR-ACC-10). Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-6, GC-8.
+Change (2026-10-08): `checkPayment` rebuilds a payment `MetaTransfer`; `checkOwnerCall` a `SmartKeyAccount` `MetaTransaction` signed as the account (CTR-ACC-10). Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-6, GC-8.
 
 ### CLI-SGN-06 — WalletConnect is a seam behind a flag
 - old: R21 · status: current · owner: no · date: 2026-10-03 · normative: clients/signers-clientkeys.md#CLI-SGN-06 · superseded-by: —

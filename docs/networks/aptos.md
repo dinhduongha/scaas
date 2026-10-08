@@ -301,7 +301,7 @@ replay), and requiring the line would refuse standard wallets that omit optional
 <a id="NET-APT-14"></a>**NET-APT-14** — **Aptos passkeys are WebAuthn P-256 verified by the pure-Move `scaas::p256`.**
 Owner decision (2026-10-04). Montgomery u256 arithmetic, interleaved wNAF (G window 7 with constant tables, Q window 5),
 low-s, on-curve key check, no inversion in the final x comparison; WebAuthn `clientDataJSON`/`authenticatorData`
-checked as on the EVM `SubjectAccount` (`_clientDataOk`; `crossOrigin`/`topOrigin` refused); cross vectors with Wycheproof secp256r1
+checked as on the EVM `SmartKeyAccount` (`_clientDataOk`; `crossOrigin`/`topOrigin` refused); cross vectors with Wycheproof secp256r1
 (262 cases) + W3C + clientkeys vectors pass; **UNAUDITED**; a separate module, replaced by a native verifier when Aptos
 has one (only `scaas::p256`'s API `verify`/`table`/`verify_with` changes). Consequence: Account accepts `p256_webauthn`
 keys beside ed25519, so pre-signed mandates and DEX orders work with passkeys. The framework's `single_key.move`

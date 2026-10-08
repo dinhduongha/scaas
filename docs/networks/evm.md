@@ -111,7 +111,7 @@ measured); post-quantum Zether raises the target to 80 M ([CTR-PQZ-11](../contra
 a fixed salt, with `chain_uid` read from the RPC, and the deploy gate checks every `chainUid()`.** Owner ruling
 2026-10-07; status **SPECIFIED**. The deploy script reads the chain's genesis block hash from the RPC (from ≥ the
 profile's RPC quorum) and passes it as the `chain_uid` constructor argument of every contract that takes one
-([NET-ALL-22](README.md#NET-ALL-22)): the token implementations, the factory, `SubjectAccountFactory`, `OrderBookDex`,
+([NET-ALL-22](README.md#NET-ALL-22)): the token implementations, the factory, `SmartKeyAccountFactory`, `OrderBookDex`,
 the Universal Account registry, and any later contract that checks a signature. Every deployment — implementations,
 factories, registry, DEX — goes through one deterministic CREATE2 deployer with a fixed per-contract salt, so an
 address depends only on the init code: a contract whose constructor takes `chain_uid` (and every clone of it) has a
@@ -135,7 +135,7 @@ pinned profiles in the same release; the node re-checks every `chainUid()` at ac
 
 Transitional (BUILT): `smartcontracts/scripts/deploy.sh evm <rpc>` runs the forge script `script/Deploy.s.sol` (reads
 `PRIVATE_KEY` and `REGISTRAR`) with plain CREATE and no `chain_uid`: `OpenFactory`, the `MetaToken` implementation (its
-constructor takes the factory address) registered as `registerImplementation(META, 1)`, `SubjectAccountFactory`,
+constructor takes the factory address) registered as `registerImplementation(META, 1)`, `SmartKeyAccountFactory`,
 `OpenFactoryV2` with the three tier implementations (`NoUnderlyingToken`, `SingleUnderlyingToken`,
 `MultiUnderlyingToken`) as version 1 of their kinds, `MetaTxDex`, `OrderBookDex`, optionally a tier-1 demo token
 ([deploy](../contracts/README.md#build-ci-and-pins)); it writes `deployments/<chainid>.json`, which seeds the

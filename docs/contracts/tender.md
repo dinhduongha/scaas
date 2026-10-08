@@ -12,7 +12,7 @@ client touchpoints. The same design family also specifies gas sponsorship ([node
 receiver-pays ([metatx.md](metatx.md#receiver-pays)), an on-chain `SponsorshipPool` (rule only, PLANNED) and
 crypto-shredding of commitments ([integration.md](../integration.md)). Not in scope: multi-criteria scoring,
 multi-lot tenders, other auction types (pre-qualification = the eligibility allowlist); confidential bids, Zether
-deposits and anonymous bidders (a fresh `SubjectAccount` per tender is possible); hiding the address graph (SCaaS is
+deposits and anonymous bidders (a fresh `SmartKeyAccount` per tender is possible); hiding the address graph (SCaaS is
 not anonymous: bidder identities are public at commit).
 
 ## Rules
@@ -116,7 +116,7 @@ refuses the chain; there is no storage-guard fallback.
 
 ## Roles and lifecycle
 
-Buyer: `msg.sender` of `createTender` (in practice a `SubjectAccount`, a `MandateWallet` owner call or a multisig,
+Buyer: `msg.sender` of `createTender` (in practice a `SmartKeyAccount`, a `MandateWallet` owner call or a multisig,
 submitted as a `call` job). Bidder: `t.from` of the deposit `MetaTransfer`. Keeper: anyone (node, buyer, bidder) running
 permissionless steps.
 
@@ -412,7 +412,7 @@ Known limits (stated to users):
 |---|---|---|
 | `createTender` | 240–280 k | ~12 new slots + event with config |
 | `commitBid` (EOA bidder) | 120–150 k | token meta-tx with first-use lane (~52 k) + 2 bid slots (44 k) + checks, Merkle proof ~1.5 k/level |
-| `commitBid` (ERC-1271 bidder) | + up to 400 k | `SubjectAccount` cap; WebAuthn P-256 ≈ 100–300 k. Sponsors size `max_cost_per_tx` for this row, or ERC-1271 bidders die with `SPONSOR_TX_CAP` |
+| `commitBid` (ERC-1271 bidder) | + up to 400 k | `SmartKeyAccount` cap; WebAuthn P-256 ≈ 100–300 k. Sponsors size `max_cost_per_tx` for this row, or ERC-1271 bidders die with `SPONSOR_TX_CAP` |
 | `revealBid` | 25–50 k | keccak + 1 slot update + sorted insert into `top` (≤ 3) |
 | `disqualifyWinner` | 15–30 k | status write + pop head |
 | `settleTender` | 8–15 k | state write + event |
@@ -422,7 +422,7 @@ Known limits (stated to users):
 
 Unit: every `BadConfig` code; commit with each `BadDepositIntent` code; each tier kind; the deposit through
 `mtxExecuteTransfer`; unregistered and deprecated tokens refused; Zether refused; eligibility proof valid/invalid;
-buyer and sink cannot bid; ERC-1271 bidder (`SubjectAccount`); reveal mismatch, out-of-range reveal, reveal outside the
+buyer and sink cannot bid; ERC-1271 bidder (`SmartKeyAccount`); reveal mismatch, out-of-range reveal, reveal outside the
 window; ties broken by `seq`; both rules; `minBidders` ⇒ `FAILED`; cancel before/after `commitDeadline`, and commit +
 cancel in the same block at `now == commitDeadline`; every routing row and double withdraw; bond release by buyer, by
 anyone after `bondReleaseTime`, claim before it. **I6 front-running:** a third party submits the deposit intent through

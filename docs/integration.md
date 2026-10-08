@@ -150,7 +150,7 @@ process ([NODE-JOB-06](node/job-api.md#NODE-JOB-06)). Why: one lane journal per 
 |---|---|
 | `metatx` | `{token, signature, struct: "call"\|"transfer", metatx: {…}}`: a `MetaTransaction` (an allowlisted call of any SCaaS contract) or a token's `MetaTransfer` (transfer or payment) ([NODE-JOB-20](node/job-api.md#NODE-JOB-20), [CTR-MTX-15](contracts/metatx.md#CTR-MTX-15)); `uint256` as decimal strings; addresses lowercase |
 | `signed_op` | `{op: {op_kind: "pay", payload: "0x<exact signed bytes>", signature, public_key, auth_kind: "wallet"|"passkey", extra: {…native params}}}`; `from`, lane, nonce, `valid_until`, relayer are decoded from `payload` |
-| `call` | `{call: {target, calldata, validUntil}}` — e.g. `MandateWallet.mtxPayUnderMandate(...)` (as built `MandateWallet.payUnderMandate(...)`), `SubjectAccountFactory.deploy(...)`; the signature lives inside the calldata; selector and target must match a call-table row; no native value |
+| `call` | `{call: {target, calldata, validUntil}}` — e.g. `MandateWallet.mtxPayUnderMandate(...)` (as built `MandateWallet.payUnderMandate(...)`), `SmartKeyAccountFactory.deploy(...)`; the signature lives inside the calldata; selector and target must match a call-table row; no native value |
 | `ua_metatx` (SPECIFIED) | MetaToken v3 `UAMetaTransaction` or `UAMetaTransfer` with `from: bytes32` and its `auth`; same lifecycle as `metatx` |
 | `pqz_call` (SPECIFIED; private chain only) | **Direct open calls only**: `{chain, contract, selector ∈ {pqzTransfer, pqzUnshield, pqzRollOver}, calldata}` to a configured PQZ token (direct `pqzShield` pulls the caller's underlying and is never a node job) |
 | PQZ envelopes (SPECIFIED) | **No new kind**: a `PqzToken` is an `IERC20MetaTx` token, so its envelope ops travel as ordinary `metatx` or `ua_metatx` jobs with `struct = call` (domain `("SCaaS PqzToken", "1", chainId, token, chainUid)`), `m.data` = the direct calldata of `pqzTransfer`/`pqzUnshield`/`pqzShield`/`pqzRollOver` (opaque to the client); outer fee `NONE`/`FIXED` only; never batched, never on the mesh; 1 MiB job body on the `pqz` profile; a gasless exit is the envelope `pqzUnshield` paying the underlying to `recipient` |
@@ -252,7 +252,7 @@ becomes `final` only from its `PaymentSettled` — the node is never a "blind si
 ([accounts](#accounts)), mandate payments and revokes ([auto-pay](#auto-pay)), DEX settles, the permissionless tender
 steps ([tender](#tender)), vesting releases, distribution claims and `ExchangeOffer` legs. Lane keys never hold a role:
 a role-restricted call (`createTender`, bond calls, issuer and compliance interventions, factory `create*`) reaches
-its target only through the role holder's own contract — `SubjectAccount.executeAsOwner`, or a `Safe.execTransaction`
+its target only through the role holder's own contract — `SmartKeyAccount.executeAsOwner`, or a `Safe.execTransaction`
 the owners already signed, pushed as a `call` job to a registered role-holder contract
 (`chain_contract.kind = role_holder`). Any other call shape needs a table row first (a node release) or is sent by the
 subject's or treasury's own wallet.
@@ -633,7 +633,7 @@ that several jobs share one `tx_hash`.
 
 Receiver pays, client side: the **payee ERP** sets `fee_paid_by_receiver` and `receiver_fee_amount` (base units) on the
 request it issues; the payer's terms stay fee `NONE`; once the payer's address is known (portal: wallet connect), the
-payee signs `ReceiverFee` over the `paymentDigest` (a `SubjectAccount` payee signs through `mtxExecuteAsOwner` rules) and
+payee signs `ReceiverFee` over the `paymentDigest` (a `SmartKeyAccount` payee signs through `mtxExecuteAsOwner` rules) and
 books payment `N` received and fee `F` paid from `PaymentSettled` + `ReceiverFeePaid`. The **payer ERP** is unchanged
 (pays `N`, books `N`). **E-cheque flow:** the payee's request names the relayer lane; the payer signs offline with that
 relayer bound and hands the intent to the payee, which co-signs over the digest and pushes it to that node.
@@ -658,7 +658,7 @@ withdraw and settle need no signature and can be run by any keeper. `commitBid`,
 | # | Buyer ERP | Chain |
 |---|---|---|
 | 1 | Tender record linked to the RFQ; documents normalised (JCS), `documentRef` = salted commitment ([data protection](#data-protection)); deposit token, `minDeposit`, deadlines, public reserve, `minBidders`, bond policy, `slashSink`, allowlist root, `dqWindow`, `maxDisqualifications`, `forfeitClasses` | — |
-| 2 | Chain check: refuses, or warns with a recorded reason, on a chain whose validators the buyer organization controls alone; then `createTender(config)` sent through the buyer's `SubjectAccount.executeAsOwner` or its registered role-holder Safe (a `Safe.execTransaction` `call` job, namespace with `allow_call`, [NODE-JOB-09](node/job-api.md#NODE-JOB-09), [NODE-JOB-19](node/job-api.md#NODE-JOB-19)); stores `tenderId` from `TenderCreated` | `TenderCreated` |
+| 2 | Chain check: refuses, or warns with a recorded reason, on a chain whose validators the buyer organization controls alone; then `createTender(config)` sent through the buyer's `SmartKeyAccount.executeAsOwner` or its registered role-holder Safe (a `Safe.execTransaction` `call` job, namespace with `allow_call`, [NODE-JOB-09](node/job-api.md#NODE-JOB-09), [NODE-JOB-19](node/job-api.md#NODE-JOB-19)); stores `tenderId` from `TenderCreated` | `TenderCreated` |
 | 3 | Publishes tender id, deadlines, deposit terms, eligibility proofs; may offer a sponsored portal path, never as the bidders' only path | — |
 | 4 | Watches commits (count only); may cancel until `commitDeadline` (all deposits refund) | `BidCommitted`, `TenderCancelled` |
 | 5 | Inside the award window: due diligence on the leader; if it fails, `disqualifyWinner(reasonRef, class)` (through the same role-holder contract) with the reason document committed and retained for audit and dispute (leader only, only while a next valid bid exists) | `BidDisqualified` |
@@ -707,8 +707,8 @@ the bid's own data. Either way the salt is unknown to anyone else until reveal, 
 
 **Subject accounts (BUILT).**
 
-- **EVM `SubjectAccount`** (passkey + seed keys, guardian): address predicted by
-  `SubjectAccountFactory.predict(firstKey, guardian)`; the client enqueues a `call` job `deploy(firstKey, guardian)`
+- **EVM `SmartKeyAccount`** (passkey + seed keys, guardian): address predicted by
+  `SmartKeyAccountFactory.predict(firstKey, guardian)`; the client enqueues a `call` job `deploy(firstKey, guardian)`
   **before** the subject's first payment (deploy is permissionless and idempotent). Key changes are `MetaTransaction`s of the account signed by an existing key with `from` = the account itself
   ([CTR-ACC-10](contracts/accounts.md#CTR-ACC-10)), in the account's domain, `salt = chain_uid`, relayed through
   `mtxExecuteAsOwner` or `mtxExecute` (as built `executeAsOwner` with `OwnerCall(bytes data,uint256 nonce,uint256
@@ -736,7 +736,7 @@ replaces the Zether-only flow of the built `UniversalAccountRegistry` (`UA = kec
 `msg.sender`, `AuthScheme`, `linkEVM`), which stays on dev chains until the new registry ships.
 
 **Native accounts are never registered** ([CTR-UA-06](contracts/accounts.md#CTR-UA-06)): an EVM EOA or contract
-account (incl. `SubjectAccount`, Safe), Hedera native accounts (an `msig` member only on Hedera registries), Solana,
+account (incl. `SmartKeyAccount`, Safe), Hedera native accounts (an `msig` member only on Hedera registries), Solana,
 Stellar/Pi `G…`, Soroban `C…`, Aptos, Sui and Cosmos native accounts, TON wallets. They sign as today. Every **derived**
 kind (passkey `webauthn-p256`, `p256`, `ed25519`, `bip340`, Schnorr/BLS, MuSig2/FROST, `msig`, ML-DSA/FN-DSA,
 `zether-*`, `pqz-mlwe`) registers once on each chain where it is used:
@@ -760,7 +760,7 @@ kind (passkey `webauthn-p256`, `p256`, `ed25519`, `bip340`, Schnorr/BLS, MuSig2/
 4. On the finalized `UARegistered` event the client reads `recordOf(ua)` — kind **and** `authRef` equal what it asked
    for — and only then marks the account usable on that chain.
 
-Kind choice: staff/points of sale with a phone → `webauthn-p256` UA (or `SubjectAccount` when they want recovery);
+Kind choice: staff/points of sale with a phone → `webauthn-p256` UA (or `SmartKeyAccount` when they want recovery);
 extension-wallet users → native EOA; boards and finance → `msig` over members' passkey UAs and/or EOAs (each member
 confirms its listing off chain; membership is not consent); agent clusters and Schnorr MPC → `frost-*` (shown with its
 attestation-only caveats); HSM keys → `p256`; confidential balances → `zether-*` with `authRef` one of the above; PQ
@@ -778,7 +778,7 @@ key under a second kind (`UAKeyInUse`) and a BLS `authRef` on the same curve as 
   push them to the node watch list.
 - A UA is the same on every chain (chain-independent id) but registered per chain; never per token. No rotation inside a
   UA: a new key is a new UA plus a transfer ([CTR-UA-13](contracts/accounts.md#CTR-UA-13)); a stable address
-  across key changes is `SubjectAccount`.
+  across key changes is `SmartKeyAccount`.
 - EVM balances of derived UAs exist only on MetaToken v3 clones (`bytes32` ledger, events `UATransfer`,
   `UAMetaTransactionExecuted`); v1/v2 tokens accept native ids only ([CTR-UA-14](contracts/accounts.md#CTR-UA-14)).
 - EIP-7702 delegated EOAs are native EOAs ([CTR-UA-24](contracts/accounts.md#CTR-UA-24)): their key signs as an

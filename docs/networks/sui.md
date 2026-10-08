@@ -169,7 +169,7 @@ that can sign now; `origins` (≤ 8, including `android:apk-key-hash:…`) are t
 `manage(action…)` signs `KeyOp{domain=b"scaas.keyop.v1", network, account, action, scheme, public_key, rp_id_hash,
 origin, guardian, nonce = key_nonce, valid_until}` with **one current key**: add/remove a key, add/remove an origin,
 set the guardian, cancel a recovery — one action per call. Never zero keys; an account with a passkey never has zero
-origins. Recovery as the EVM `SubjectAccount`: the guardian (native tx) calls `start_recovery(key)`, then
+origins. Recovery as the EVM `SmartKeyAccount`: the guardian (native tx) calls `start_recovery(key)`, then
 `finish_recovery` after `RECOVERY_DELAY` = 172 800 s (2 days); a current key can cancel. BUILT per `Account<T>`. The
 `owner` is an **identity**, not a receiving address. Client verification is [NET-SUI-16](#key-verification).
 

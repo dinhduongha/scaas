@@ -462,8 +462,8 @@ needs no allowance, for ≈ 15 k gas (≈ 11 %) more per grant, once. It replace
 (`IVestingVault`) design. Uses: streaming payroll, equity incentive vesting (e.g. 12-month cliff, 48-month linear),
 milestone grants.
 
-Roles: `grantor` (funds, may revoke if `revocable`), `beneficiary` (receives; should be a `SubjectAccount` so a lost
-key is recoverable), `approver` (optional, milestones only; a Safe or `SubjectAccount` approves through a sponsored
+Roles: `grantor` (funds, may revoke if `revocable`), `beneficiary` (receives; should be a `SmartKeyAccount` so a lost
+key is recoverable), `approver` (optional, milestones only; a Safe or `SmartKeyAccount` approves through a sponsored
 call), relayer (submits anything; earns nothing on chain).
 
 ```mermaid
@@ -559,7 +559,7 @@ tranches without an approver, "milestones" tranches with one (`at` = earliest da
   outflow.
 - `renounceRevocation()`: one-way; turns a revocable grant into an irrevocable one.
 - `approveMilestone`: approver only, one-way (`AlreadyApproved` on repeat). Approvers that are agents use a
-  `SubjectAccount` or `MandateWallet`-style contract and a sponsored call job; there is no grant-level signature type.
+  `SmartKeyAccount` or `MandateWallet`-style contract and a sponsored call job; there is no grant-level signature type.
 - `sweepExcess()`: pays the grantor `balance − (obligation − released)`, saturating at 0 (`obligation = cap` after
   revoke, else `total`).
 - **After a seizure** (a forced transfer from the grant): the **beneficiary bears it first** — `release` pays
@@ -920,7 +920,7 @@ regulated legs and eligibility at intake ([NODE-DEX-11](../node/dex-venue.md#NOD
   grief-score exemption test; during a pause the node sponsors fee-less unwrap ops. Alerts: any `OrderRecorded`,
   `ForcedTransfer`, `Paused`, `FeatureDisabled`, `RoleRevoked`, `AttesterSet`, a role contract's code-hash change, and a protocol
   clone's attestation within 30 days of expiry. Control actions are ordinary `call` jobs (a Safe's `execTransaction`
-  with its owners' signatures, or a `SubjectAccount.executeAsOwner`); the node holds no role key.
+  with its owners' signatures, or a `SmartKeyAccount.executeAsOwner`); the node holds no role key.
 - Client systems: an asset register (kind, template, terms document, `termsHash`), a cap table mirrored from the feed,
   compliance cases (order id, document, `documentHash`, records, freezes with their end dates, forced transfers),
   attestation sync (the client's KYC process is the system of record; it pushes `attest` `call` jobs signed by the

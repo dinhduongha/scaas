@@ -139,7 +139,7 @@ registered SCaaS contract of the chain has code and a `chainUid()` equal to `cha
 implementation and the factory, every `chain_contract` row (DEX, account factory, tender, role-holder contracts that
 sign with a SCaaS domain) and `ua_registry`. A token clone needs no own check — it runs its implementation's code and
 the factory registers only implementations whose `chainUid()` equals its own. Contracts deployed per user —
-`MandateWallet`, `SubjectAccount` — are read once before the node relays anything for them (cached; a mismatch ⇒
+`MandateWallet`, `SmartKeyAccount` — are read once before the node relays anything for them (cached; a mismatch ⇒
 `403 CALL_TARGET_REFUSED`, [NODE-JOB-19](job-api.md#NODE-JOB-19)). Non-EVM families compare the family's network id
 where the RPC exposes it (Soroban network id, Solana genesis hash), else trust the profile constant
 ([NET-ALL-22](../networks/README.md#NET-ALL-22)). A mismatch of the genesis hash or of a chain-wide contract holds the

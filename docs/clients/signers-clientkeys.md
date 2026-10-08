@@ -159,7 +159,7 @@ Hedera HashPack (also a seam) and the TON Connect HTTP bridge.
 <a id="CLI-SGN-05"></a>**CLI-SGN-05** — **A client never signs server-built typed data as is; it rebuilds the operation
 first.** `checkPayment` rebuilds the payment `MetaTransfer` (`entryRef` = the request's reference, `value` = the displayed
 amount × 10^`tokenDecimals`, `from` = the account, the right chain, fee 0, expiry ≤ 1 day, the right type);
-`checkOwnerCall` accepts only a `SubjectAccount` `MetaTransaction` (`from` = the account itself,
+`checkOwnerCall` accepts only a `SmartKeyAccount` `MetaTransaction` (`from` = the account itself,
 [CTR-ACC-10](../contracts/accounts.md#CTR-ACC-10)) whose `data` is `addKey(the key just created)` on the right
 account/chain with expiry ≤ 1 hour; anything else ⇒ refused. An owner call
 is signed only after a form showing the account, the selector and value 0. BUILT.
@@ -213,7 +213,7 @@ the selector's function name and every argument in human terms (amounts with the
 amount). Transfers and payments are `MetaTransfer`s, shown by their typed fields (recipient, amount, reference)
 ([CTR-MTX-23](../contracts/metatx.md#CTR-MTX-23)); clients build both structs ([CTR-MTX-15](../contracts/metatx.md#CTR-MTX-15)).
 An unknown selector, a `transfer`/`pay` selector inside a `MetaTransaction`, or `approve`/`transferFrom` ⇒ refused,
-with no override. The same applies to `MandateWallet`, `SubjectAccount` and any SCaaS contract on `MetaTxBase`
+with no override. The same applies to `MandateWallet`, `SmartKeyAccount` and any SCaaS contract on `MetaTxBase`
 ([CTR-MTX-22](../contracts/metatx.md#CTR-MTX-22)). [CLI-SGN-05](#CLI-SGN-05) and
 [CLI-SGN-27](#CLI-SGN-27) apply: the shown call is the one rebuilt and signed. The meta-transaction lane (`batch` of
 the meta-transaction) and an order lane (`batch` of a trade order) are labelled differently wherever both appear.
@@ -290,7 +290,7 @@ by `fam/*`; passkeys stay origin-bound ([CLI-APP-14](app.md#CLI-APP-14)).
 
 | Family | On-chain P-256 | Account | pk | Origin binding | Status |
 |---|---|---|---|---|---|
-| EVM, Hedera | RIP-7212 `0x100` or OZ Solidity | `SubjectAccount` | `(x, y)` + `rpIdHash`, `keccak(origin)` | per key | BUILT |
+| EVM, Hedera | RIP-7212 `0x100` or OZ Solidity | `SmartKeyAccount` | `(x, y)` + `rpIdHash`, `keccak(origin)` | per key | BUILT |
 | Sui | native `secp256r1_verify`, flag 6 | `Account<T>` (`open_passkey`) | 33 B | `origins` ≤ 8 | contract BUILT; signer first |
 | Solana | precompile `Secp256r1SigVerify1111…` (SIMD-0075), low-S, ≤ 8 per instruction | PDA (`open_passkey`) | 33 B | `origins` ≤ 8, same-rpId rule | contract BUILT; second |
 | Soroban | host `secp256r1_verify` (CAP-51) | `scaas-account` `C…` | 65 B | per key | contract BUILT; third |
@@ -504,7 +504,7 @@ Reading the key set (clients re-read after any key change reaches finality and c
 | EVM, Hedera | `nextKeyIndex()`, `keyAt(i)` for `i ∈ [0, nextKeyIndex)`, skipping `kind == NONE` (slots are sparse after `removeKey`); `guardian()` | non-NONE slots | `guardian() != 0x0` |
 | Sui | `Account<T>` fields `keys`, `guardian` (`sui_getObject`) | `keys` | `guardian != @0x0` |
 | Aptos | `Account` resource | `keys` | `option::is_some(guardian)` |
-| Solana | `SubjectAccount` PDA (Borsh) | `keys` | `guardian`; also `policy & 1` |
+| Solana | `SmartKeyAccount` PDA (Borsh) | `keys` | `guardian`; also `policy & 1` |
 | Soroban | `scaas-account` key map | values (no duplicate check on chain) | none |
 | TON | jetton wallet `pubkey`, `passkey` | the bound ones | none |
 
@@ -558,7 +558,7 @@ offered; an app end-to-end test.
 |---|---|---|
 | Native account keys | the family paths below: EVM `m/44'/60'/0'/0/i`, Solana `m/44'/501'/i'/0'`, … | family |
 | Every derived UA kind and every account-role key | `m/7622'/0'/<account>'/<kindNo>'/<i>'` | BIP-32 (secp256k1, P-256 via SLIP-10 nist256p1), SLIP-10 ed25519 |
-| `SubjectAccount` SECP256K1 key (role of `evm-contract`) | `m/7622'/0'/<account>'/2'/<i>'` | secp256k1 |
+| `SmartKeyAccount` SECP256K1 key (role of `evm-contract`) | `m/7622'/0'/<account>'/2'/<i>'` | secp256k1 |
 | Non-native subject-account owner keys (Sui/Aptos/Solana/Soroban role keys) | `m/7622'/0'/<account>'/<native kindNo>'/<i>'`: Solana 16, **Soroban `C…` 18** (`soroban-contract` 0x0012 = 18, not `stellar-account` 0x0011 = 17; owner 2026-10-07), Aptos 19, Sui 20 | ed25519 |
 | `musig2-secp256k1` participant keys | `m/7622'/0'/<account>'/272'/<i>'` (kind 0x0110; never a `bip340` key); `musig2-bn254` as the bn254 row | secp256k1 |
 | FROST shares | **not seed-derived**: DKG polynomial secrets are fresh randomness; the share is kept in the vault; a lost share is a lost participant | — |
@@ -593,7 +593,7 @@ decryption-adjacent oracle; untagged digests replay across protocols. Owner deci
 
 <a id="CLI-SGN-30"></a>**CLI-SGN-30** — **The EVM seed path is the EOA only; every subject-account key that is not the
 native owner and every derived kind comes from the UA tree `m/7622'/0'/<account>'/<kindNo>'/<i>'`.** The role `kindNo` is
-the kind of the account the key serves: EVM/Hedera `SubjectAccount` 2, Solana 16, Soroban `scaas-account` `C…` 18
+the kind of the account the key serves: EVM/Hedera `SmartKeyAccount` 2, Solana 16, Soroban `scaas-account` `C…` 18
 (`soroban-contract`), Aptos 19, Sui 20. Owner decisions (one chain-independent tree under purpose `7622'`; Soroban
 `kindNo` 18). Existing dev accounts whose SECP256K1 key is the EOA key rotate at the UA migration.
 
@@ -625,7 +625,7 @@ above; a session-key mechanism would map to Universal Account key purposes. Stat
 | Family | `NETWORKS` key | Native path | Curve | Native address | Adds to a subject account | Seed signer signs | Status |
 |---|---|---|---|---|---|---|---|
 | EVM | `evm` | `m/44'/60'/0'/0/i` (EOA only) | secp256k1 | keccak address | role `m/7622'/0'/a'/2'/i'` (SECP256K1 key) | EIP-712 digest | native BUILT; role SPECIFIED |
-| Hedera ECDSA | `hedera_ecdsa` | `m/44'/3030'/0'/0/i` | secp256k1 | EVM alias | role `…/2'/i'` (HSCS `SubjectAccount`) | EIP-712 digest | as EVM |
+| Hedera ECDSA | `hedera_ecdsa` | `m/44'/3030'/0'/0/i` | secp256k1 | EVM alias | role `…/2'/i'` (HSCS `SmartKeyAccount`) | EIP-712 digest | as EVM |
 | Hedera ED25519 | `hedera_ed25519` | `m/44'/3030'/0'/0'/i'` | ed25519 | `0.0.N` | — | raw ed25519 over the EIP-712 digest (HIP-632) | BUILT |
 | Cosmos | `cosmos` | `m/44'/118'/0'/0/i` | secp256k1 | bech32 | — (no subject account) | ADR-036 doc | key BUILT; envelope SPECIFIED |
 | Sui | `sui` | `m/44'/784'/i'/0'/0'` | ed25519 | `blake2b(0x00 ‖ pk)` | native if owner; else role `…/20'/i'` | personal-message digest, flag 0 | key BUILT; envelope SPECIFIED |
@@ -682,7 +682,7 @@ Built entry points (BUILT; load only what the chosen signer needs):
 
 | Entry | Exports (main) | Use |
 |---|---|---|
-| `passkey-signer.js` | `passkeySupported`, `creationOptions` (PRF on), `requestOptions`, `publicKeyFromSpki`, `derToRS`, `encodeAssertion`, `hashTypedData`, `passkeySubjectKey`, `accountSignature`, `merkleBatch`, `checkOwnerCall`, `checkPayment` | create a passkey, sign `challenge = digest`, encode for `SubjectAccount.isValidSignature` |
+| `passkey-signer.js` | `passkeySupported`, `creationOptions` (PRF on), `requestOptions`, `publicKeyFromSpki`, `derToRS`, `encodeAssertion`, `hashTypedData`, `passkeySubjectKey`, `accountSignature`, `merkleBatch`, `checkOwnerCall`, `checkPayment` | create a passkey, sign `challenge = digest`, encode for `SmartKeyAccount.isValidSignature` |
 | `seed-signer.js` | `normalizeMnemonic`, `wordsToEntropy`, `seedFromEntropy`, `deriveKey`, `signDigest`, `NETWORKS`, `createVault`, `openVault`, `enablePrf`, `rewrapPin`, `SeedBackup`, `wipe` | 24-word vault: generate, back up (3-word challenge), unlock by PRF or PIN, derive per family, sign digests |
 | `zether-keys.js` (`zether.js`) | `deriveConfKey`, `confPublic` (returns the tagged UA once Universal Accounts land), `zetherPop` (signs the new PoP; `popMessage` removed), `sealConfKey`/`openConfKey`, `checkBalance`, cache helpers, `readBalance` | confidential keys and balance cache; proofs via the prover WASM `zetherCall(cmd, json)` (`keygen`, `encrypt`, `decrypt`, `decryptPending`, `checkBalance`, `proveTransfer`, `proveBurn`, `verifyTransfer`, `verifyBurn`, `pop`, `fundCalldata`, `envelope`) |
 

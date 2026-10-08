@@ -309,7 +309,7 @@ never derives policy off chain.** Model `blockchain.ua`; partner links only in t
 | `lib/addresses.py` (`canonical`) and `blockchain.address.mixin` | accept a 32-byte UA id as an address form on EVM (`0x` + 64 hex) alongside 20-byte addresses; never truncate |
 | `blockchain.signed.op` | `auth_kind` gains `ua`; `from_address` holds the UA id |
 | `blockchain.metatx`, `payment_request.payer_address`, `chain_event` from/to | accept UA ids; `blockchain.chain.event` maps `UATransfer` |
-| `dms_portal_subject_account.py` | `register_start/register` gain the UA path (passkey ⇒ `webauthn-p256` UA) next to `SubjectAccount` |
+| `dms_portal_subject_account.py` | `register_start/register` gain the UA path (passkey ⇒ `webauthn-p256` UA) next to `SmartKeyAccount` |
 | `lib/fam_*.py` `verify(...)` | `fam_evm.verify_ua(record, digest, auth)` using the shared Python kind library (same vectors) |
 | `blockchain.subject.account.key` | `evm_address` keys created from now on come from the role path; existing dev keys get a migration note |
 | Credentials (optional, relying-party side only) | `blockchain.ua.credential`: issuer, schema, `validUntil`, status URL, received VP / evidence as `ir.attachment` encrypted under the per-subject DEK ([INT-ERP-24](integration.md#INT-ERP-24)); `bundleHash` |

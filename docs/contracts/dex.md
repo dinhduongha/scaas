@@ -82,7 +82,7 @@ It is signed in the **sell token's own** domain — `("SCaaS MetaToken","1",…)
 `chainId`, `verifyingContract` = the token and `salt` = `chain_uid` ([CTR-MTX-02](metatx.md#CTR-MTX-02)) — so the
 token, chain and contract need no fields of their own. It is a different struct from `MetaTransaction`, not a second
 hash of it ([CTR-MTX-11](metatx.md#CTR-MTX-11)). The signer is an EOA (ECDSA low-s) or a contract (ERC-1271, e.g. a
-passkey `SubjectAccount`), told apart as in the token pipeline (an EIP-7702 designator is an EOA). `nonce` is not
+passkey `SmartKeyAccount`), told apart as in the token pipeline (an EIP-7702 designator is an EOA). `nonce` is not
 consumed per fill: it is the cancel handle of its lane. `relayer ≠ 0` means only that address may submit the
 settlement — the meaning of `MetaTransaction.relayer`. Clients show `dex`, `relayer`, `destination` and the effective
 minimum fill before signing, warn when `destination ≠ from`, default `relayer` to the venue node, and label the order
@@ -384,7 +384,7 @@ honesty; the rule only guarantees that an EOA can never be granted a pull ([CTR-
 <a id="erc1271-cap"></a>
 <a id="CTR-DEX-08"></a>**CTR-DEX-08** — **`OrderBookDex` caps the ERC-1271 call by codehash.** `_validSig`'s contract
 branch (outside-token legs and DEX-domain cancels) is an assembly `staticcall` with cap `_erc1271Gas(signer)` = 400 k
-if `signer.codehash` is the `SubjectAccount` clone codehash (immutable at deployment, as the token's `_erc1271Gas`
+if `signer.codehash` is the `SmartKeyAccount` clone codehash (immutable at deployment, as the token's `_erc1271Gas`
 does, [CTR-ACC-05](accounts.md#CTR-ACC-05)), else 50 k; at most 32 bytes of returndata are copied; before the call it
 requires `gasleft() ≥ cap · 64/63 + margin`, otherwise the whole transaction reverts (EIP-150: a relayer must not
 starve the call to turn a valid signature into an invalid one). `mtxCancelOrders` needs no `try`: a capped `_validSig`
