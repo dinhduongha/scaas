@@ -516,6 +516,7 @@ Change: rows renamed (`SubjectAccount.mtxExecuteAsOwner`, `MandateWallet.mtxPayU
 Change (2026-10-08): the table covers every SCaaS contract on `MetaTxBase`, not only tokens; `metatx` jobs name their struct (`call` | `transfer`); a `MetaTransfer` counts as selector `transfer`/`pay` in the breaker. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-7, GC-8.
 
 Under "Node — Submit lanes":
+Change (2026-10-08): non-EVM `signed_op` jobs carry `op_kind` `call`/`transfer`; the node relays only the `mtx_` entries it lists per contract (`SELECTOR_NOT_ALLOWED` otherwise) and breaks per `(from, function)`. Source add: `history/specs/2026-10-08-nonevm-metacall-design.md` §3 NM-2, §5.
 
 ### NODE-JOB-80 — Node talks to ERP only over json/2
 - old: R6 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: ARCH-POS-05, NODE-JOB-06, INT-ERP-16, INT-ERP-18
@@ -1700,6 +1701,7 @@ Change (2026-10-08): a `MetaTransaction` has no amount field, so the basis alway
 **Cost if wrong.** Mixed names hide which entry points need a signature and which only a caller.
 **Source.** `history/specs/2026-10-07-metatx-generic.md` §2 A3, §3 MG-3.
 Change (2026-10-08): entry table: every contract on `MetaTxBase` has `mtxExecute`/`mtxBatch`/`cancelNonce`; tokens add `mtxExecuteTransfer`, `mtxBatchTransfer`; `MandateWallet` and `SubjectAccount` named entries build a `MetaTransaction`. The non-EVM line is unchanged here. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G4, §3 GC-5, GC-6.
+Change (2026-10-08): the non-EVM exception is gone — non-EVM families name signed entries `mtx` in their own case (NET-ALL-28). Source add: `history/specs/2026-10-08-nonevm-metacall-design.md` §6 Q1.
 
 ### CTR-MTX-22 — MetaTxBase: the generic base of every SCaaS contract; fee NONE unless overridden
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-22 · superseded-by: —
@@ -3009,6 +3011,7 @@ Change (2026-10-08): `PqzToken` sits on the one token base and relays like `Zeth
 - old: R30, UD:§1:eip1776, UD:§21.5 · status: current · owner: yes · date: 2026-10-08 · normative: networks/README.md#NET-ALL-02 · superseded-by: —
 
 Change: on EVM and Hedera the gateway runs a transfer, a payment or an allowlisted self-call of the token itself, never a call to another contract; signature-authorised entry points are named `mtx…`. Source add: §2 A1–A3, §3 MG-1, MG-3.
+Change (2026-10-08): `mtxExecute` runs only allowlisted self-calls and token transfers/payments are `MetaTransfer`s (CTR-MTX-23); the non-EVM families sign the same two kinds (NET-ALL-26) and name signed entries `mtx` in their case (NET-ALL-28). Source add: `history/specs/2026-10-08-nonevm-metacall-design.md` §3 NM-1, NM-2.
 
 ### NET-ALL-03 — Head-of-line table and anti-lock test
 - old: R62 · status: current · owner: no · date: 2026-10-05 · normative: networks/README.md#NET-ALL-03 · superseded-by: —
@@ -3026,11 +3029,12 @@ Change: on EVM and Hedera the gateway runs a transfer, a payment or an allowlist
 **Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 630; [history/plans/2026-10-03-r3-passkey-seed.md](history/plans/2026-10-03-r3-passkey-seed.md) line 15.
 
 ### NET-ALL-05 — Key lifecycle stated per family
-- old: CR-R3-6 · status: current · owner: no · date: 2026-10-07 · normative: networks/README.md#NET-ALL-05 · superseded-by: —
+- old: CR-R3-6 · status: current · owner: no · date: 2026-10-08 · normative: networks/README.md#NET-ALL-05 · superseded-by: —
 
 **Rule.** Key rotation and recovery are stated per family; every gap is listed, never implied away.
 **Why.** The families do not offer the same lifecycle: a Cosmos passkey account is one key with no rotation, the Soroban guardian is only a seam, and a TON passkey cannot rotate and has no guardian, so a single blanket claim would hide real gaps.
 **Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 679.
+Change (2026-10-08): EVM rotation runs through `mtxExecute` signed by the account (CTR-ACC-10). Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-6.
 
 ### NET-ALL-06 — Indexer filters registered contracts; empty stalls
 - old: net-aptos:L1, net-solana:L1 · status: current · owner: no · date: 2026-10-07 · normative: networks/README.md#NET-ALL-06 · superseded-by: —
@@ -3148,13 +3152,15 @@ Change: on EVM and Hedera the gateway runs a transfer, a payment or an allowlist
 - old: R330 · status: current · owner: no · date: 2026-10-08 · normative: networks/README.md#NET-ALL-22 · superseded-by: —
 
 Change: `chain_uid` is a constructor immutable of every SCaaS contract with a signature and the `salt` of every SCaaS EIP-712 domain, also bound into the confidential token's non-EIP-712 digests; CREATE2 deployer stated (addresses per chain for contracts that take `chain_uid`); fork limit stated (NET-ALL-25); Hedera block-0 hash stability check. Source add: §3 MG-4, §7 NET-ALL-22.
+Change (2026-10-08): `chain_uid` (or the family identifier) is the `network` field of `MetaCall`/`MetaTransfer` (NET-ALL-26). Source add: `history/specs/2026-10-08-nonevm-metacall-design.md` §3 NM-1.
 
 ### NET-ALL-23 — Sui/Solana wallet signatures readable, passkey-first
-- old: CR-WSF-1 · status: current · owner: no · date: 2026-10-07 · normative: networks/README.md#NET-ALL-23 · superseded-by: —
+- old: CR-WSF-1 · status: current · owner: no · date: 2026-10-08 · normative: networks/README.md#NET-ALL-23 · superseded-by: —
 
 **Rule.** Solana and Sui wallet-key signatures: no blind blobs; origin binding through the passkey path or an opt-in account policy.
 **Why.** Solana `signMessage` and Sui `signPersonalMessage` wallets write no requesting origin into the signed bytes, so any origin line a contract checked could have been written by the phishing page itself; a readable text rebuilt on chain at least lets the wallet show what is being paid, as with any wallet transaction on that page.
 **Source.** [history/specs/round3-wallet-signing-formats.md](history/specs/round3-wallet-signing-formats.md) line 343.
+Change (2026-10-08): the readable text is rebuilt from the `MetaTransfer`; a `MetaCall` renders its function, argument hash, network, expiry and digest, and clients decode the arguments before signing. Source add: `history/specs/2026-10-08-nonevm-metacall-design.md` §4.
 
 ### NET-ALL-24 — Chain profile carries chain_uid and the DEX list
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: networks/README.md#NET-ALL-24 · superseded-by: —
@@ -3172,11 +3178,51 @@ Change: `chain_uid` is a constructor immutable of every SCaaS contract with a si
 
 Under "Networks — EVM":
 
+### NET-ALL-26 — Two signed kinds off EVM: MetaCall and MetaTransfer
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: networks/README.md#NET-ALL-26 · superseded-by: —
+
+**Why.** SCaaS meta-transactions pay for any SCaaS function, not only transfers (owner, 2026-10-08); the non-EVM families mirror the EVM split into a generic `MetaCall` (function + hash of its arguments) and a typed `MetaTransfer` (`entry_ref` 0 = transfer, else payment) on one lane space per contract, with no fee field off EVM.
+**Cost if wrong.** A closed op byte keeps every new gasless function (and every third-party contract) out of reach, and families drift from the EVM model.
+**Source.** `history/specs/2026-10-08-nonevm-metacall-design.md` §1, §3 NM-1, §6 Q4.
+
+### NET-ALL-27 — Verify generically, dispatch statically
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: networks/README.md#NET-ALL-27 · superseded-by: —
+
+**Why.** Move has no call by name and Solana declares every account up front, so the shared part is a per-family verifier library; each gasless function is a typed entry that calls it with its own name and argument hash; CosmWasm and TON use one `MtxExecute` message with internal dispatch. Owner: OK (2026-10-08).
+**Cost if wrong.** One dispatching entry would need dynamic dispatch Move lacks, or a write-set Solana cannot declare.
+**Source.** `history/specs/2026-10-08-nonevm-metacall-design.md` §2, §3 NM-2, NM-4, §6 Q2.
+
+### NET-ALL-28 — mtx names in every family, typed path at parity with EVM
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: networks/README.md#NET-ALL-28 · superseded-by: —
+
+**Why.** One naming rule everywhere (owner, 2026-10-08, reversing "non-EVM families keep their op names"): `mtx_` snake case in Move, Soroban and Solana, `Mtx` Pascal case for CosmWasm and TON; `mtx_transfer`, `mtx_pay` (lane derived from the reference), `mtx_execute_transfer` and batch as on EVM; native-signer entries and chain standards (SEP-41, CW20) keep their names. Nothing is deployed outside test chains.
+**Cost if wrong.** Signed and direct entry points look alike, and the node, clients and readers cannot tell them apart.
+**Source.** `history/specs/2026-10-08-nonevm-metacall-design.md` §3 NM-2, NM-5, §6 Q1, Q4.
+
+### NET-ALL-29 — Key management and mandate operations are MetaCall entries
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: networks/README.md#NET-ALL-29 · superseded-by: —
+
+**Why.** `KeyOp`, `ForwardOp`, `MandateInit`, the mandate close/revoke messages, the Cosmos mandate JSON and TON `MandatePay`/`set_key` are SCaaS structs, not chain standards (owner, 2026-10-08); as `MetaCall` entries they share the verifier, the lanes and one vector set; native chain-key rotation is untouched; DEX order structs stay, and the `trade` op becomes the token entry `MtxTrade` where a leg is token-signed.
+**Cost if wrong.** Each extra struct keeps its own domain, nonce and vectors to maintain in every client language.
+**Source.** `history/specs/2026-10-08-nonevm-metacall-design.md` §3 NM-3, §6 Q3.
+
 ### NET-ALL-80 — R36-R49 reserved for the third design batch, never used
 - old: R36, R37, R38, R39, R40, R41, R42, R43, R44, R45, R46, R47, R48, R49 · status: unused · owner: no · date: 2026-10-03 · normative: — · superseded-by: —
 
 R36-R49 reserved for the third design batch, never used.
 **Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 4.
+
+### NET-ALL-81 — MetaOp v1: one payload with an op byte for every non-EVM family
+- old: — · status: superseded · owner: yes · date: 2026-10-08 · normative: — · superseded-by: NET-ALL-26
+
+**What it said.** Every non-EVM family signed `"scaas.metaop.v1" ‖ network ‖ contract ‖ op (pay | trade | mandate_pay | revoke) ‖ from ‖ to ‖ amount ‖ payRef ‖ lane ‖ nonce ‖ validUntil ‖ relayer ‖ extra`.
+**Source.** `history/specs/2026-10-08-nonevm-metacall-design.md` §1, §3 NM-1.
+
+### NET-ALL-82 — Key management and mandates on structs of their own
+- old: — · status: superseded · owner: yes · date: 2026-10-08 · normative: — · superseded-by: NET-ALL-29
+
+**What it said.** `KeyOp` (`scaas.keyop.v1`), `ForwardOp`, `MandateInit`, mandate close/revoke messages, the Cosmos mandate JSON and TON `MandatePay` were separate signed structs with their own nonces.
+**Source.** `history/specs/2026-10-08-nonevm-metacall-design.md` §3 NM-3, §6 Q3.
 
 ## Networks — EVM
 
@@ -3434,6 +3480,13 @@ It said: Permissionless associateUnderlying; replaced by NET-HED-06, NET-HED-14.
 **Why.** The token ignored `extra` on `pay` and `revoke`, so two payloads that differ only in `extra` authorised the same payment; with `extra` empty, the digest is the single key of one business operation.
 **Source.** [history/specs/2026-10-03-net-cosmos.md](history/specs/2026-10-03-net-cosmos.md) line 252.
 
+### NET-COS-12 — Cosmos target: MetaCall/MetaTransfer JSON, Mtx messages
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: networks/cosmos.md#NET-COS-12 · superseded-by: —
+
+**Why.** The family form of NET-ALL-26 to NET-ALL-29: the encoding of both kinds, the verifier, and the map from each built entry and struct to its `mtx` name; programs are immutable, so it ships as a new deployment.
+**Cost if wrong.** Clients, node and contract drift on names and encodings per family.
+**Source.** `history/specs/2026-10-08-nonevm-metacall-design.md` §3 NM-2, NM-3, NM-5.
+
 ### NET-COS-80 — Cosmos passkey v1 derived address
 - old: R9-1 · status: superseded · owner: no · date: 2026-10-07 · normative: — · superseded-by: NET-ALL-21
 
@@ -3468,13 +3521,14 @@ It said: Cosmos passkey v2 20-byte derived address; replaced by NET-ALL-21.
 **Rule.** Soroban guardian recovery is a seam.
 **Source.** [history/specs/2026-10-03-net-soroban.md](history/specs/2026-10-03-net-soroban.md) line 96.
 
-### NET-SOR-04 — Per-key permissions are a seam
-- old: R8-8 · status: current · owner: no · date: 2026-10-07 · normative: networks/soroban.md#NET-SOR-04 · superseded-by: —
+### NET-SOR-04 — __check_auth checks auth contexts per key
+- old: R8-8 · status: current · owner: yes · date: 2026-10-08 · normative: networks/soroban.md#NET-SOR-04 · superseded-by: —
 
-**Rule.** Per-key permissions are a seam.
-**Why.** `__check_auth` does not read the auth contexts, and per-key permissions wait for the per-key purpose of the universal account (CTR-UA-10).
+**Rule.** `__check_auth` checks every auth context against the key's `(contract, function)` allowlist.
+**Why.** Soroban host authorization is generic (any function that calls `require_auth`), so restriction, not dispatch, is the missing part once every gasless function is an `mtx_` entry (NET-ALL-27); the allowlist aligns with the universal account's key purposes (CTR-UA-10).
 **Cost if wrong.** Any one passkey can add an attacker's key to the account.
 **Source.** [history/specs/2026-10-03-net-soroban.md](history/specs/2026-10-03-net-soroban.md) line 97.
+Change (2026-10-08): no longer a seam — `__check_auth` checks every auth context against the key's `(contract, function)` allowlist (owner, via NET-ALL-27); Transitional (BUILT): contexts ignored. Source add: `history/specs/2026-10-08-nonevm-metacall-design.md` §3 NM-2, §5.
 
 ### NET-SOR-05 — One signature settles once
 - old: R8-3 · status: current · owner: no · date: 2026-10-03 · normative: networks/soroban.md#NET-SOR-05 · superseded-by: —
@@ -3551,6 +3605,13 @@ It said: Cosmos passkey v2 20-byte derived address; replaced by NET-ALL-21.
 **Rule.** `build` takes `valid_until` (hence `TimeBounds.max_time` and the runner's expiry) and `contract` from the signed invocation
 **Why.** `build` read `valid_until` from the unsigned job JSON, so a job could carry a later expiry than the one signed (NODE-LANE-16).
 **Source.** [history/specs/2026-10-03-net-soroban.md](history/specs/2026-10-03-net-soroban.md) line 242.
+
+### NET-SOR-16 — Soroban target: host authorizations of mtx_ functions
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: networks/soroban.md#NET-SOR-16 · superseded-by: —
+
+**Why.** The family form of NET-ALL-26 to NET-ALL-29: the encoding of both kinds, the verifier, and the map from each built entry and struct to its `mtx` name; programs are immutable, so it ships as a new deployment.
+**Cost if wrong.** Clients, node and contract drift on names and encodings per family.
+**Source.** `history/specs/2026-10-08-nonevm-metacall-design.md` §3 NM-2, NM-3, NM-5.
 
 ### NET-SOR-80 — Non-positive pay refused with ZeroAmount
 - old: CR-R3-3(error-name) · status: superseded · owner: yes · date: 2026-10-07 · normative: — · superseded-by: NET-SOR-09
@@ -3663,12 +3724,13 @@ It said: Non-positive pay refused with ZeroAmount; replaced by NET-SOR-09.
 **Why.** Owner decision (2026-10-07), the Sui case of immutable contracts (CTR-GEN-02): a fix ships as a new package, and holders move funds by signing a `pay` from the old account, whose code keeps running.
 **Source.** [history/specs/2026-10-03-net-sui.md](history/specs/2026-10-03-net-sui.md) line 306.
 
-### NET-SUI-16 — KeyOp encoded byte-identical in Python, JS
-- old: R261 · status: current · owner: no · date: 2026-10-06 · normative: networks/sui.md#NET-SUI-16 · superseded-by: —
+### NET-SUI-16 — Signed Sui payloads encoded byte-identical in every client language
+- old: R261 · status: current · owner: no · date: 2026-10-08 · normative: networks/sui.md#NET-SUI-16 · superseded-by: —
 
-**Rule.** KeyOp is encoded in every client language byte-identical to Move `keyop_digest`, with the domain as a parameter.
+**Rule.** Every signed Sui payload (target `MetaCall`/`MetaTransfer`, built `KeyOp`) is encoded in every client language byte-identical to Move, with the domain as a parameter.
 **Why.** One encoding for every language, so clients can check a KeyOp locally before submitting it (CLI-APP-09).
 **Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 200.
+Change (2026-10-08): the rule covers every signed Sui payload, the target `MetaCall`/`MetaTransfer` (NET-SUI-18) as the built `KeyOp`. Source add: `history/specs/2026-10-08-nonevm-metacall-design.md` §3 NM-3.
 
 ### NET-SUI-17 — One generator run feeds every vector
 - old: R262 · status: current · owner: no · date: 2026-10-06 · normative: networks/sui.md#NET-SUI-17 · superseded-by: —
@@ -3676,6 +3738,13 @@ It said: Non-positive pay refused with ZeroAmount; replaced by NET-SOR-09.
 **Rule.** One generator run feeds every language's Sui vectors.
 **Why.** ECDSA signatures are random per run, so vectors from separate runs never match; before this the cross-language vector was only a comment.
 **Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 208.
+
+### NET-SUI-18 — Sui target: MetaCall/MetaTransfer in BCS, mtx_ entries
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: networks/sui.md#NET-SUI-18 · superseded-by: —
+
+**Why.** The family form of NET-ALL-26 to NET-ALL-29: the encoding of both kinds, the verifier, and the map from each built entry and struct to its `mtx` name; programs are immutable, so it ships as a new deployment.
+**Cost if wrong.** Clients, node and contract drift on names and encodings per family.
+**Source.** `history/specs/2026-10-08-nonevm-metacall-design.md` §3 NM-2, NM-3, NM-5.
 
 ## Networks — Aptos
 
@@ -3859,6 +3928,13 @@ It said: Non-positive pay refused with ZeroAmount; replaced by NET-SOR-09.
 **Why.** The mesh decoders checked only domain, network and contract, so every peer paid a simulation or view call for each garbage intent.
 **Cost if wrong.** One cached state read per new subject.
 **Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 706.; [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 149
+
+### NET-APT-27 — Aptos target: MetaCall/MetaTransfer in BCS, mtx_ entries
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: networks/aptos.md#NET-APT-27 · superseded-by: —
+
+**Why.** The family form of NET-ALL-26 to NET-ALL-29: the encoding of both kinds, the verifier, and the map from each built entry and struct to its `mtx` name; programs are immutable, so it ships as a new deployment.
+**Cost if wrong.** Clients, node and contract drift on names and encodings per family.
+**Source.** `history/specs/2026-10-08-nonevm-metacall-design.md` §3 NM-2, NM-3, NM-5.
 
 ### NET-APT-80 — Upgrade policy compatible
 - old: RS11-13(upgrade) · status: superseded · owner: no · date: 2026-10-04 · normative: — · superseded-by: NET-APT-20
@@ -4096,6 +4172,13 @@ It said: Committed OOG requeued without limit; replaced by NET-APT-21.
 **Why.** Skipped slots are normal on Solana and a 512-slot window can be empty on an idle cluster, so the window is 2,048 slots; `Config` is immutable after `initialize`, so `confirmed` is enough.
 **Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 894.
 
+### NET-SOL-33 — Solana target: MetaCall/MetaTransfer layouts, mtx_ instructions
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: networks/solana.md#NET-SOL-33 · superseded-by: —
+
+**Why.** The family form of NET-ALL-26 to NET-ALL-29: the encoding of both kinds, the verifier, and the map from each built entry and struct to its `mtx` name; programs are immutable, so it ships as a new deployment.
+**Cost if wrong.** Clients, node and contract drift on names and encodings per family.
+**Source.** `history/specs/2026-10-08-nonevm-metacall-design.md` §3 NM-2, NM-3, NM-5.
+
 ### NET-SOL-80 — Out of CU requeued without limit
 - old: RS12-16(cu) · status: superseded · owner: no · date: 2026-10-04 · normative: — · superseded-by: NET-SOL-23
 
@@ -4240,6 +4323,13 @@ It said: Signed text is domain plus hex digest; replaced by NET-ALL-23.
 **Rule.** The TON DEX keeps nothing that is not its own.
 **Why.** Cancelling an unknown order kept the attached TON, and bounced payouts were added to fees that the admin can withdraw; a bounce body is cut to 256 bits and carries no destination, so refunds go through an admin call with an event trail instead of a per-owner debt table.
 **Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 250.
+
+### NET-TON-20 — TON target: MetaCall/MetaTransfer cells, Mtx messages
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: networks/ton.md#NET-TON-20 · superseded-by: —
+
+**Why.** The family form of NET-ALL-26 to NET-ALL-29: the encoding of both kinds, the verifier, and the map from each built entry and struct to its `mtx` name; programs are immutable, so it ships as a new deployment.
+**Cost if wrong.** Clients, node and contract drift on names and encodings per family.
+**Source.** `history/specs/2026-10-08-nonevm-metacall-design.md` §3 NM-2, NM-3, NM-5.
 
 ### NET-TON-80 — TON BindKey message
 - old: R67(bindkey) · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NET-TON-07
@@ -4449,12 +4539,13 @@ Change (2026-10-08): `checkPayment` rebuilds a payment `MetaTransfer`; `checkOwn
 **Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 254.
 
 ### CLI-SGN-27 — Check, then sign what was checked
-- old: R267 · status: current · owner: no · date: 2026-10-06 · normative: clients/signers-clientkeys.md#CLI-SGN-27 · superseded-by: —
+- old: R267 · status: current · owner: no · date: 2026-10-08 · normative: clients/signers-clientkeys.md#CLI-SGN-27 · superseded-by: —
 
 **Rule.** Check, then sign exactly what was checked.
 **Why.** It closes the gap between checking `payload_hex` and signing a different `text`.
 **Cost if wrong.** A terms change must land together with its `fam/*.js` change; shared known-answer tests catch a mismatch.
 **Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 263.
+Change (2026-10-08): the target `MetaTransfer` is checked like the built `MetaOp`; a `MetaCall` is checked against the contract's allowlist (function, decoded arguments, recomputed `args_hash`). Source add: `history/specs/2026-10-08-nonevm-metacall-design.md` §4.
 
 ### CLI-SGN-28 — Signers spec adds no ids or kinds
 - old: R268 · status: current · owner: no · date: 2026-10-06 · normative: clients/signers-clientkeys.md#CLI-SGN-28 · superseded-by: —

@@ -56,6 +56,18 @@ Withdrawal: the owner signs `pay` with `to` = itself.
 
 <a id="payload"></a>
 
+<a id="NET-SUI-18"></a>**NET-SUI-18** — **Target: `MetaCall`/`MetaTransfer` in BCS and `mtx_` entries**
+([NET-ALL-26](README.md#NET-ALL-26)–[NET-ALL-29](README.md#NET-ALL-29); owner 2026-10-08). Status: **SPECIFIED**. Both
+kinds are BCS structs (domains `b"scaas.metacall.v1"`, `b"scaas.metatransfer.v1"`, `network` = `Root.network`) signed
+with `sui:signPersonalMessage` as the readable text of [NET-ALL-23](README.md#NET-ALL-23); `scaas::metacall::verify` is
+`public`. Entries: `relay_pay<T>` → `mtx_pay<T>` (+ `mtx_transfer<T>`, `mtx_execute_transfer<T>`; a batch is one PTB);
+`manage` + `KeyOp` → `mtx_add_key`, `mtx_remove_key`, `mtx_add_origin`, `mtx_remove_origin`, `mtx_set_guardian`,
+`mtx_cancel_recovery`; `forward_signed` + `ForwardOp` → `mtx_forward`; mandate `pay<T>` → `mtx_mandate_pay<T>`,
+`revoke_with_sig` → `mtx_revoke`; DEX `settle`, `cancel`, `invalidate_nonces` → `mtx_settle`, `mtx_cancel`,
+`mtx_invalidate_nonces` (order structs unchanged). Owner-native calls (mandate creation, `withdraw`, `set_payee`, the
+owner's `revoke`) and recovery keep their names. A fresh immutable package ([NET-SUI-15](#NET-SUI-15)). The `MetaOp`,
+`KeyOp`, `ForwardOp` and entry text on this page is **Transitional (BUILT)**.
+
 ```move
 public struct MetaOp has copy, drop {
     domain: vector<u8>,     // b"scaas.metaop.v1"
@@ -351,8 +363,9 @@ KeyOp still returns `True`); `None` for a valid signature by any other key (adde
 `finish_recovery`), and the node's simulation decides ([INT-ERP-21](../integration.md#INT-ERP-21)). The passkey path
 also refuses `"crossOrigin":true` and `"topOrigin"`.
 
-<a id="NET-SUI-16"></a>**NET-SUI-16** — **KeyOp is encoded in every client language byte-identical to Move
-`keyop_digest`, with the domain as a parameter.** A version bump replaces `scaas.keyop.v1`. The encoding:
+<a id="NET-SUI-16"></a>**NET-SUI-16** — **Every signed Sui payload is encoded in every client language byte-identical to
+Move, with the domain as a parameter** — the target `MetaCall`/`MetaTransfer` ([NET-SUI-18](#NET-SUI-18)) as the built
+`KeyOp` (`keyop_digest`), whose encoding (Transitional, BUILT) is:
 
 ```python
 ADD_KEY, REMOVE_KEY, ADD_ORIGIN, REMOVE_ORIGIN, SET_GUARDIAN, CANCEL_RECOVERY = range(6)

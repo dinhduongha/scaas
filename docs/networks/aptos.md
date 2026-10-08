@@ -172,6 +172,19 @@ store (a read-write conflict that Block-STM re-executes — **never aborts**, un
 
 <a id="payload"></a>
 
+<a id="NET-APT-27"></a>**NET-APT-27** — **Target: `MetaCall`/`MetaTransfer` in BCS and `mtx_` entries**
+([NET-ALL-26](README.md#NET-ALL-26)–[NET-ALL-29](README.md#NET-ALL-29); owner 2026-10-08). Status: **SPECIFIED**. Both
+kinds are BCS structs (domains `b"scaas.metacall.v1"`, `b"scaas.metatransfer.v1"`, `network` = `chain_id::get()`,
+digest `sha3_256(bcs)`) signed through the same `aptos:signMessage` envelope ([NET-APT-04](#NET-APT-04));
+`scaas::metacall::verify` is `public`, so other packages use it. Entries: `relay_pay` → `mtx_pay` (+ `mtx_transfer`,
+`mtx_execute_transfer`, `mtx_batch_transfer`); `manage_signed` + `KeyOp` → `mtx_add_key`, `mtx_remove_key`,
+`mtx_add_origin`, `mtx_remove_origin`, `mtx_set_guardian`, `mtx_cancel_recovery` (on the account's lanes, `key_nonce`
+retired); `mandate::open` + `MandateInit` → `mtx_mandate_open`; `mandate::pay` → `mtx_mandate_pay`; `revoke_signed` →
+`mtx_revoke`; `dex::settle`, `cancel_signed`, `invalidate_nonces_signed` → `mtx_settle`, `mtx_cancel`,
+`mtx_invalidate_nonces` (order structs unchanged). `manage_native`, `reset_keys`, the guardian's recovery entries and
+admin entries keep their names. A new immutable package ([NET-APT-20](#NET-APT-20)). The `MetaOp`, `KeyOp` and entry
+lists on this page are **Transitional (BUILT)**.
+
 ```move
 struct MetaOp has copy, drop {
     domain: vector<u8>,     // b"scaas.metaop.v1"

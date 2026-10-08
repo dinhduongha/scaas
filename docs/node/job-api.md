@@ -119,7 +119,7 @@ Payload by kind:
 | Kind | Payload |
 |---|---|
 | `metatx` | `{token, signature, struct: "call"\|"transfer", metatx: {…}}`: `struct = call` carries the 9 fields of `MetaTransaction` (`data` = an allowlisted self-call, [NODE-JOB-20](#NODE-JOB-20)), `struct = transfer` the 11 fields of `MetaTransfer` (`entryRef = 0` transfer, else payment) ([CTR-MTX-15](../contracts/metatx.md#CTR-MTX-15)); `uint256` as decimal strings; addresses lowercase; `token` is any registered SCaaS contract on `MetaTxBase` for `call` (tokens, `MandateWallet`, `SubjectAccount`, contracts built on SCaaS), a token for `transfer`. Idempotency and the mesh `intent_id` are the struct's digest; one `(from, batch, nonce)` lane space spans both structs. The token's other signed entry points travel as `metatx` jobs too, with `entry` naming them ([order and wrap entries](#metatx-entries)). May carry `receiver_fee: {fee, feeRecipient, validUntil, signature}` ([sponsorship.md#receiver-pays](sponsorship.md#receiver-pays)); incl. v1 envelopes of a `PqzToken` |
-| `signed_op` | `{op: {op_kind: "pay", payload: "0x<exact signed bytes>", signature, public_key, auth_kind: "wallet"\|"passkey", extra: {…native params}}}`; `from`, lane, nonce, `valid_until`, relayer are decoded from `payload` (non-EVM `MetaOp` or Soroban auth payload) |
+| `signed_op` | `{op: {op_kind: "call"\|"transfer", function?, payload: "0x<exact signed bytes>", signature, public_key, auth_kind: "wallet"\|"passkey", extra: {…native params}}}`; `from`, lane, nonce, `valid_until`, relayer are decoded from `payload` (non-EVM `MetaCall`/`MetaTransfer`, [NET-ALL-26](../networks/README.md#NET-ALL-26), or Soroban auth payload); as built `op_kind: "pay"` over `MetaOp` v1 |
 | `call` | `{call: {target, calldata, validUntil}}` — e.g. `MandateWallet.mtxPayUnderMandate(...)` (as built `MandateWallet.payUnderMandate(...)`), `SubjectAccountFactory.deploy(...)`; the signature lives inside the calldata; selector and target must match a row of the [call table](#call-table); no native value |
 | `ua_metatx` (SPECIFIED; `kind = ua_metatx`) | MetaToken v3 `UAMetaTransaction` or `UAMetaTransfer` ([CTR-UA-26](../contracts/accounts.md#CTR-UA-26)) with `from: bytes32` and its `auth`: `{token, struct: "call"\|"transfer", m: WireUAMetaTransaction\|WireUAMetaTransfer, auth}`; same lifecycle as `metatx`; idempotency on `(chain, token, from, batch, nonce)`; digest = `uaDigest` (incl. v3 envelopes of a `PqzToken`) |
 | `pqz_call` (SPECIFIED; private chain only) | **Direct open calls only**: `{chain, contract, selector ∈ {pqzTransfer, pqzBurn, rollOver}, calldata}` to a configured PQZ token (direct `fund` pulls the caller's underlying and is never a node job); stored like `call`: `digest` NULL, `call_hash` set |
@@ -150,6 +150,10 @@ chain and cached (implementations are immutable, so the table never changes). It
 - **Breaker.** Self-calls that pass simulation and fail on chain count per `(from, selector)`
   ([NODE-LANE-25](submit-lanes.md#NODE-LANE-25)); a `MetaTransfer` counts as selector `transfer` (`entryRef = 0`) or
   `pay`.
+
+Non-EVM families: the node keeps per registered contract the `mtx_` entries it relays (`function`,
+[NET-ALL-27](../networks/README.md#NET-ALL-27)); a `signed_op` naming another function ⇒ `422 SELECTOR_NOT_ALLOWED`, and
+the breaker counts per `(from, function)`.
 
 No role function (mint, rate administration, guardian) is on any allowlist, so a role holder never calls one through a
 token's gateway: it acts through its own contract ([NODE-JOB-19](#NODE-JOB-19)). Why: a fixed op list made every new

@@ -59,6 +59,17 @@ it. BUILT.
 
 <a id="payload"></a>
 
+<a id="NET-TON-20"></a>**NET-TON-20** — **Target: `MetaCall`/`MetaTransfer` cells and `Mtx` messages**
+([NET-ALL-26](README.md#NET-ALL-26)–[NET-ALL-29](README.md#NET-ALL-29); owner 2026-10-08). Status: **SPECIFIED**. Both
+kinds are cell trees (domains `scaas.metacall.v1`, `scaas.metatransfer.v1`, `network` = `global_id`, digest = the root
+cell hash) signed with `signData` as today; the `MetaTransfer` cell keeps the signed forward-TON floor
+([NET-TON-14](#NET-TON-14)). Messages: `SignedOp` op 1 → `MtxPay`/`MtxTransfer`/`MtxExecuteTransfer`; ops 2, 4, 5 →
+`MtxExecute{call, auth, body}` with body `MtxTrade` (`TradeParams`), `MtxRevoke` ([NET-TON-18](#NET-TON-18): lane to
+`nonce + 2`), `MtxSetKey` (`PasskeyRecord`); `MandatePay` → `MtxExecute` on the `Mandate` with body `MtxMandatePay`. The
+lazy key bind travels on the first `Mtx` message's `stateInit` ([NET-TON-07](#NET-TON-07)). Opcodes are fixed with the
+vectors. New code ([CTR-GEN-02](../contracts/README.md#CTR-GEN-02)). The `MetaOp`/`SignedOp` text on this page is
+**Transitional (BUILT)**.
+
 `MetaOp` v1 is a **cell tree** (a cell holds only 1023 bits):
 
 ```tlb

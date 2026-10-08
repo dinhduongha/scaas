@@ -49,11 +49,12 @@ per-subject sequential nonce ([NODE-MESH-07](../node/mesh.md#NODE-MESH-07); owne
    Soroban fee-bump, Cosmos feegrant, TON W5) are used only so that a **relayer** pays, never so that the subject's
    sequence orders anything. A relayer runs many signing lanes (accounts derived from one mnemonic by account
    index), each with its own sequence; jobs spread across lanes; the fee sink is a fixed cold wallet and never a
-   lane. SCaaS has no ERC-4337 dependency: the meta-transaction lives in the token contract. On EVM and Hedera the
-   token's gateway (`mtxExecute`, alias `executeMetaTransaction`) runs a transfer, a payment, or a self-call of one of
-   the token's **own** functions on that implementation's selector allowlist — never a call to another contract
-   ([NODE-JOB-20](../node/job-api.md#NODE-JOB-20)); every entry point whose authority is a subject's signature is named
-   `mtx…`.
+   lane. SCaaS has no ERC-4337 dependency: the meta-transaction lives in the token contract. On EVM and Hedera
+   `mtxExecute` (alias `executeMetaTransaction`) runs a self-call of one of the contract's **own** functions on that
+   implementation's selector allowlist — never a call to another contract — and a token's transfers and payments are
+   `MetaTransfer`s ([CTR-MTX-23](../contracts/metatx.md#CTR-MTX-23), [NODE-JOB-20](../node/job-api.md#NODE-JOB-20)); the
+   other families sign the same two kinds ([NET-ALL-26](#NET-ALL-26)); every entry point whose authority is a subject's
+   signature is named `mtx…` in the family's case ([NET-ALL-28](#NET-ALL-28)).
 3. **The relayer is not a new global lock**: every adapter's head-of-line behaviour is in
    [NET-ALL-03](#NET-ALL-03).
    Every relayer simulates on its own RPCs before signing: EVM and Hedera `eth_call`/`eth_estimateGas` (no vendor fork
@@ -87,8 +88,8 @@ per-subject sequential nonce ([NODE-MESH-07](../node/mesh.md#NODE-MESH-07); owne
 Three pieces, as on EVM:
 
 1. **Token.** Our contract holds the balances; `pay(from,to,amount,payRef)` emits
-   `PaymentSettled{from,to,amount,payRef}`; the contract-level meta operation (`relay(op, auth)`) checks the
-   subject's signature over the domain-separated payload, its lane/nonce, `validUntil` and the optional `relayer`
+   `PaymentSettled{from,to,amount,payRef}`; the contract-level signed entries (`mtx_pay`, `mtx_transfer`, one `mtx_<name>` per gasless
+   function, [NET-ALL-27](#NET-ALL-27)) check the subject's signature over the domain-separated payload, its lane/nonce, `validUntil` and the optional `relayer`
    binding. Where the chain has allowances, only a contract may be a spender.
 2. **Mandate.** As the EVM `MandateWallet`: funds sit in the contract, a delegate signs, limits per payment and per
    period, a payee, an expiry, revocation, each `payRef` once.
@@ -97,19 +98,87 @@ Three pieces, as on EVM:
    against one or more makers per settlement; each SCaaS leg is a role-free `TradeOrder` verified by its own sell token,
    which moves the funds only into the DEX; no allowance at all ([NODE-DEX-15](../node/dex-venue.md#NODE-DEX-15)).
 
-**`MetaOp` v1** — the signed payload of every non-EVM family (family encoding; every field mandatory):
+<a id="metacall"></a><a id="NET-ALL-26"></a>**NET-ALL-26** — **Two signed kinds on every non-EVM family, as on EVM:
+`MetaCall` for any gasless function, `MetaTransfer` for transfers and payments** (owner 2026-10-08). Status:
+**SPECIFIED**. Family encoding; every field mandatory:
 
-```
-domain = "scaas.metaop.v1" ‖ network ‖ contract ‖ op (pay | trade | mandate_pay | revoke) ‖ from ‖ to ‖
-amount (u128) ‖ payRef (32) ‖ lane (32) ‖ nonce (u64) ‖ validUntil (u64, seconds) ‖ relayer (optional) ‖
-extra (32-byte hash of op-specific parameters)
+```text
+MetaCall     { domain "scaas.metacall.v1",     network, contract, function, args_hash, from, lane, nonce, valid_until, relayer }
+MetaTransfer { domain "scaas.metatransfer.v1", network, contract, asset, from, to, amount, entry_ref, lane, nonce, valid_until, relayer }
 ```
 
-There is no relayer-fee field off EVM (fee mode NONE; [INT-ERP-06](../integration.md#INT-ERP-06),
-[NODE-MESH-05](../node/mesh.md#NODE-MESH-05)); relayer fees exist only on EVM. For `trade`, the op-specific
-parameters (counter token, minimum received, counterparty) travel **verbatim** next to the `MetaOp` and
-`extra = H(parameters)`. On EVM and Hedera the `MetaOp` *is* the EIP-712 `MetaTransaction`
-([Hedera mapping](hedera.md#payload)).
+- `function` = the entry's stable name: Move `module::function`, CosmWasm the `ExecuteMsg` variant, TON the internal
+  opcode (`uint32`), Solana the 8-byte Anchor discriminator, Soroban the host's `function_name`. `args_hash` = the
+  family hash (Aptos `sha3_256`, Sui `blake2b256`, CosmWasm and Solana `sha256`, TON the cell hash) of the canonical
+  encoding of the entry's arguments other than the `MetaCall` and the auth.
+- `MetaTransfer` is the EVM `MetaTransfer` ([CTR-MTX-23](../contracts/metatx.md#CTR-MTX-23)): `entry_ref` 0 = a plain
+  transfer, ≠ 0 = a payment (`PaymentSettled` with that reference); it keeps the typed fields wallets and the indexer
+  read. Family-specific signed bounds stay in the family's `MetaTransfer` (TON: the forward-TON floor,
+  [NET-TON-14](ton.md#NET-TON-14)).
+- `network` = the chain identity of [NET-ALL-22](#NET-ALL-22).
+- No fee field off EVM: the lane pays native gas, as for EVM contracts that are not tokens
+  ([CTR-MTX-22](../contracts/metatx.md#CTR-MTX-22)); a family that ever charges a token fee adds it to `MetaTransfer`
+  only ([INT-ERP-06](../integration.md#INT-ERP-06), [NODE-MESH-05](../node/mesh.md#NODE-MESH-05)).
+- One lane space per contract for both kinds ([CTR-MTX-03](../contracts/metatx.md#CTR-MTX-03)). DEX orders keep their
+  own signed structs, as EVM keeps `TradeOrder` ([CTR-DEX-13](../contracts/dex.md#CTR-DEX-13)).
+
+Soroban maps both kinds onto the host authorization preimage and has no struct of its own
+([NET-SOR-16](soroban.md#NET-SOR-16)). On EVM and Hedera the two kinds *are* the EIP-712 `MetaTransaction` and
+`MetaTransfer` ([Hedera mapping](hedera.md#payload)). Transitional (BUILT): the token's generic `relay(op, auth)` checks **`MetaOp` v1** in every
+family — `domain = "scaas.metaop.v1"` ‖ network ‖ contract ‖ op (pay | trade | mandate_pay | revoke; TON also set_key)
+‖ from ‖ to ‖ amount (u128) ‖ payRef (32) ‖ lane (32) ‖ nonce (u64) ‖ validUntil (u64, seconds) ‖ relayer ‖ extra
+(H(op parameters); for `trade` the parameters travel verbatim next to it) — and key management and mandates use
+structs of their own (`KeyOp`, `ForwardOp`, `MandateInit`, the Cosmos mandate JSON, TON `MandatePay`).
+
+<a id="NET-ALL-27"></a>**NET-ALL-27** — **Verify generically, dispatch statically** (owner 2026-10-08). Status:
+**SPECIFIED**. Move has no call by name and Solana declares every account up front, so the shared part is verification:
+one library per family checks a `MetaCall` or `MetaTransfer` — domain, expiry, relayer binding, lane nonce, signature
+(key, passkey, account) — and returns the authorised subject; each gasless function is a typed entry of its own
+contract that calls the library with its own `function` and the hash of its own arguments. The allowlist is the set of
+entries that call the verifier; a contract adds a gasless function by adding one entry.
+
+| Family | Library | Generic entry | Typed path |
+|---|---|---|---|
+| Aptos | `scaas::metacall::verify(…, function, args_hash): address` (`public`) | `mtx_<name>(lane, from, args…, lane_id, nonce, valid_until, relayer, auth)` rebuilds the `MetaCall` from typed arguments | `mtx_transfer`, `mtx_pay`, `mtx_execute_transfer`, `mtx_batch_transfer` |
+| Sui | `scaas::metacall::verify` (`public`) | as Aptos | `mtx_transfer<T>`, `mtx_pay<T>`, `mtx_execute_transfer<T>` |
+| Soroban | none: the host verifies; `scaas-account.__check_auth` checks contexts ([NET-SOR-04](soroban.md#NET-SOR-04)) | the function itself, `from.require_auth_for_args(args)`, named `mtx_<name>` | SEP-41 `transfer` (standard name), `mtx_pay` |
+| CosmWasm | `scaas-metacall` crate: `verify(deps, env, info, payload, auth) -> Addr` | `MtxExecute{payload, auth}`, `payload.msg` = the inner allowlisted message, matched in the contract's own `execute` with the verified `from` (never a self-message, which would carry the contract as sender) | `MtxTransfer`, `MtxPay`, `MtxExecuteTransfer` |
+| TON | Tact trait `MetaCallVerifier` | `MtxExecute{call, auth, body}`: `hash(body) == args_hash`, then the contract dispatches `body`'s opcode over its allowlist | `MtxTransfer`, `MtxPay`, `MtxExecuteTransfer` |
+| Solana | `scaas-metacall` crate (instruction-sysvar signature check, lane PDA) | one instruction `mtx_<name>` per gasless function with its fixed accounts ([NET-SOL-04](solana.md#NET-SOL-04)); the library checks `function` = its own discriminator | `mtx_transfer`, `mtx_pay`, `mtx_execute_transfer` |
+
+A third-party contract (the owner's family-tree example) on Aptos: `mtx_add_person(lane, from, parent, data, lane_id,
+nonce, valid_until, relayer, auth)` calls `metacall::verify(…, b"family::add_person", sha3_256(bcs(parent, data)))` and
+runs its body with the returned subject; the relayer lane pays gas. Every family has the same shape: one typed entry,
+one call into the library.
+
+<a id="NET-ALL-28"></a>**NET-ALL-28** — **Every entry point whose authority is a subject's signature is named `mtx` in
+the family's case, and the typed path matches EVM** (owner 2026-10-08). `mtx_` snake case in Move, Soroban and Solana;
+`Mtx` Pascal case for CosmWasm `ExecuteMsg` variants and TON messages ([CTR-MTX-21](../contracts/metatx.md#CTR-MTX-21)).
+Parity with EVM ([CTR-MTX-09](../contracts/metatx.md#CTR-MTX-09), [CTR-MTX-23](../contracts/metatx.md#CTR-MTX-23),
+[CTR-MTX-24](../contracts/metatx.md#CTR-MTX-24)):
+
+| EVM | Non-EVM | Rule |
+|---|---|---|
+| `mtxTransfer` | `mtx_transfer` / `MtxTransfer` (Soroban: SEP-41 `transfer`) | `MetaTransfer{entry_ref: 0}` |
+| `mtxPay` | `mtx_pay` / `MtxPay` | `entry_ref = payId`, lane derived on chain as `H("scaas.pay.lane" ‖ payId)`, `nonce = 0` |
+| `mtxExecuteTransfer` | `mtx_execute_transfer` / `MtxExecuteTransfer` | `MetaTransfer` on a client-chosen lane (Move: fields as typed arguments); not on Soroban (host nonces, no lanes) |
+| `mtxBatchTransfer`, `mtxBatch` | multi-message transactions (Cosmos messages, Solana instructions, Sui PTB commands, TON messages from one lane); Aptos `mtx_batch_transfer` with parallel vectors | atomic per transaction |
+| `mtxTransferWithFee`, `mtxExecuteWithFee`, `mtxPayReceiverFee` | none while non-EVM tokens charge no relayer fee | added with a token fee |
+
+Entry points whose authority is the native transaction signer (owner-native calls, guardian recovery, admin) and chain
+standard interfaces (SEP-41, CW20 `Transfer`/`Send`) keep their names. Programs are immutable at deploy, so the renames
+ship as new deployments ([CTR-GEN-02](../contracts/README.md#CTR-GEN-02)).
+
+<a id="NET-ALL-29"></a>**NET-ALL-29** — **Key management and mandate operations are `MetaCall` entries** (owner
+2026-10-08). `KeyOp` (`"scaas.keyop.v1"`: Aptos, Sui, Solana), Sui `ForwardOp`, `MandateInit` and the signed mandate
+close/revoke messages, the Cosmos mandate JSON (`"scaas.mandate.v1"`), TON `MandatePay` and op `set_key` are SCaaS
+structs, not chain standards; each becomes a `MetaCall` entry of its contract — `mtx_add_key`, `mtx_remove_key`,
+`mtx_set_guardian`, `mtx_cancel_recovery`, `mtx_mandate_open`, `mtx_mandate_pay`, `mtx_revoke`, … — on the contract's
+lanes, with one vector set per family. Where the account's keys have no address of their own, the account signs as
+itself, as `SubjectAccount` on EVM ([CTR-ACC-10](../contracts/accounts.md#CTR-ACC-10)). Native key rotation of the
+chain account (Aptos `rotate_authentication_key`) is untouched. DEX `Order`/`Cancel`/min-nonce structs stay
+([CTR-DEX-13](../contracts/dex.md#CTR-DEX-13)); the op byte `trade` disappears — where a DEX leg is signed to the token
+(Cosmos, TON) it becomes the token's `MetaCall` entry `MtxTrade`, with the binding `relayer = to = the DEX` unchanged.
 
 **Account-sequence lanes** (Cosmos, Stellar, TON): before each job the runner reads the lane's **committed**
 sequence; the outer transaction carries a timebound / `valid_until` equal to the payload's expiry, so a transaction
@@ -171,7 +240,8 @@ a **different address on each chain**, so a user's subject account does too; a c
 constructor argument has the same address everywhere. Safety does not rest on the address: the salt is in every
 digest. Limit: a genesis hash does not separate the two branches of a fork, which share genesis
 ([NET-ALL-25](#NET-ALL-25)). Non-EVM families take the family's genesis or network identifier where the runtime
-exposes it (Soroban network id, Solana genesis hash), else a chain-profile constant, each fixed with vectors. Hedera:
+exposes it (Soroban network id, Solana genesis hash), else a chain-profile constant, each fixed with vectors; it is the `network` field of `MetaCall`/`MetaTransfer`
+([NET-ALL-26](#NET-ALL-26)). Hedera:
 the relay's block-0 hash, fixed only once it is confirmed stable across mirror-node and relay restarts
 ([hedera.md#payload](hedera.md#payload)). Why: chain ids are a registry convention, not unique — 9000 is also Evmos
 Testnet, which is why the private chain moved to 7622 ([NET-EVM-02](evm.md#NET-EVM-02)). Transitional (BUILT): only
@@ -259,8 +329,9 @@ of a wallet's `signMessage` / `signPersonalMessage` is not possible on Solana an
 requesting origin into the signed bytes, so any line a contract checks could be written by the phishing page itself.
 Therefore:
 
-1. **Readable payload, rebuilt on chain.** The signed bytes are UTF-8 text the contract re-renders from the `MetaOp`
-   and compares byte for byte:
+1. **Readable payload, rebuilt on chain.** The signed bytes are UTF-8 text the contract re-renders from the `MetaTransfer`
+   ([NET-ALL-26](#NET-ALL-26)) and compares byte for byte (a `MetaCall` renders `SCaaS <function>`, `Args: <args_hash>`,
+   the network, expiry and digest; the app and clientkeys decode its arguments before signing):
 
    ```
    SCaaS <op>
@@ -283,7 +354,7 @@ Therefore:
 
 Residual risk, stated to users: a user who approves a readable "pay X to Y" message on a phishing page has
 authorised it, as with any wallet transaction. Tests: the readable text verifies; a hex-only text is refused; a text
-whose amount or `to` differs from the `MetaOp` is refused; with the policy bit a wallet-key `pay` is refused and a
+whose amount or `to` differs from the `MetaTransfer` is refused; with the policy bit a wallet-key `pay` is refused and a
 passkey `pay` passes. Status: SPECIFIED (built today: Solana signs `"<label>:" ‖ hex(sha256(MetaOp))`, Sui signs
 BCS). Client rendering: [CLI-SGN-27](../clients/signers-clientkeys.md#CLI-SGN-27).
 
@@ -318,7 +389,7 @@ every gap is listed, never implied away.** The subject-account "equivalents per 
 
 | Family | Rotation | Guardian / recovery | Gap |
 |---|---|---|---|
-| EVM | `SubjectAccount` add/remove/rotate through `executeAsOwner` | guardian + `RECOVERY_DELAY` (default 2 days, cancellable by a key) | — |
+| EVM | `SubjectAccount` add/remove/rotate through `mtxExecute` signed by the account ([CTR-ACC-10](../contracts/accounts.md#CTR-ACC-10)) | guardian + `RECOVERY_DELAY` (default 2 days, cancellable by a key) | — |
 | Hedera | native account key update (no `SubjectAccount` on Hedera) | native | — (stated) |
 | Aptos | account keys + origins in `Account` | guardian + `RECOVERY_DELAY` | — |
 | Sui | per `Account<T>` as built → per subject `Keys` object ([NET-SUI-02](sui.md#NET-SUI-02), SPECIFIED) | guardian per `Account<T>` as built | moves to `Keys` |

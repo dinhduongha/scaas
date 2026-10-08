@@ -330,7 +330,7 @@ compromised node — a second independent event source is PLANNED ([node/indexer
 
 | Axis | Key | Purpose | Custody |
 |---|---|---|---|
-| `auth_custody` | secp256k1 / ed25519 / P-256 signing keys | Authorizes spending (EIP-712, family `MetaOp`, WebAuthn) | The subject's device (passkey, seed vault) or wallet extension; for explicitly entrusted custodial or delegated wallets, a KMS/HSM (FIPS 140-3 Level 3) behind the custody adapter (PLANNED) |
+| `auth_custody` | secp256k1 / ed25519 / P-256 signing keys | Authorizes spending (EIP-712, family `MetaCall`/`MetaTransfer`, WebAuthn) | The subject's device (passkey, seed vault) or wallet extension; for explicitly entrusted custodial or delegated wallets, a KMS/HSM (FIPS 140-3 Level 3) behind the custody adapter (PLANNED) |
 | `conf_custody` | Zether secret `x` (bn254 or BLS12-381); PQ Zether 32-byte leaf | Decrypts balances, builds proofs | The subject's device (seed path ending `…/7`; the PQ leaf sealed in the key worker); for organizations a threshold-MPC or enclave key oracle with a narrow interface (`zk_mul_by_x(points, ctx)`, `zk_nonce_commit`, `zk_response`) — commercial HSMs do not support these curves (PLANNED) |
 
 Leaking one axis does not compromise the other: a leaked signing key cannot read balances; a leaked `x` cannot move
@@ -396,7 +396,7 @@ Crypto-shredding, disclosure for reconciliation and the land gate are in
 | Term | Meaning |
 |---|---|
 | **Subject** | The party whose value moves or whose authority is exercised: a person, a company, an AI agent, a device. Subjects sign; nobody signs for them. |
-| **Intent** | A subject-signed, domain-separated authorization of exactly one operation on exactly one contract (a meta-transaction on EVM, a `MetaOp` elsewhere). Valid until `validUntil`; executes at most once. |
+| **Intent** | A subject-signed, domain-separated authorization of exactly one operation on exactly one contract (a meta-transaction on EVM, a `MetaCall`/`MetaTransfer` elsewhere). Valid until `validUntil`; executes at most once. |
 | **Envelope** | The wire wrapper of an intent between nodes: `scaas-intent/1.2` JSON with the family body, `intent_id`, origin signature `hub.sig`, optional `exclusive`, `hop_count` ([node/mesh.md](node/mesh.md#envelope)). |
 | **`intent_id` / digest** | The 32-byte digest the contract computes and emits in `MetaTransactionExecuted.digest` (EVM: EIP-712 `_hashTypedDataV4`; other families: their family digest). The dedup key everywhere ([NODE-MESH-08](node/mesh.md#NODE-MESH-08)). |
 | **Relayer** | A process holding gas-paying keys that submits subject intents as outer transactions. It cannot alter an intent; it can only submit, delay or refuse it. |

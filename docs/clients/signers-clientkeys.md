@@ -12,7 +12,7 @@ on the user's device and never sends secrets anywhere. Status: passkeys, the see
 
 In scope: (1) a deployment switch "backup key required" (default off); (2) vault v2, bound to the device by a
 non-extractable WebCrypto key; (3) one scrypt cost, with the mobile failure mode handled; (4) Sui verification of added
-and recovered keys (KeyOp encoding in every client language, [NET-SUI-16](../networks/sui.md#NET-SUI-16)); (5) role keys
+and recovered keys (payload encoding in every client language, [NET-SUI-16](../networks/sui.md#NET-SUI-16)); (5) role keys
 (`deriveRoleKey`) and seed signers for Soroban, Aptos and Solana; (6) non-EVM passkey signers; (7) wallet connectors for
 every family as one implementation shared by app and portals.
 
@@ -27,8 +27,8 @@ showing the phrase again (the phrase on paper is the transfer format).
 <a id="CLI-SGN-28"></a>**CLI-SGN-28** — **The signer rules add no account id, registry or key kind.** The backup
 predicate takes "active key set + guardian" and works unchanged over Universal Account key sets; "Native single-key ⇒ outside" (the predicate) maps to the unregistered native kinds; `deriveRoleKey` is the UA tree path
 ([CLI-SGN-30](#CLI-SGN-30)). Account identity stays the family derivations as built (EVM CREATE2 salt, Sui
-`derive_address`, Aptos object address, Solana PDA, the Cosmos passkey id); KeyOp/open domains are unchanged now and a
-`keyop` purpose bumps their version later.
+`derive_address`, Aptos object address, Solana PDA, the Cosmos passkey id); key-management entries ([NET-ALL-29](../networks/README.md#NET-ALL-29)) keep their
+domains now and a `keyop` purpose bumps their version later.
 
 ## Custody axes
 
@@ -36,7 +36,7 @@ predicate takes "active key set + guardian" and works unchanged over Universal A
 
 | Axis | Key | Purpose | Custody | Status |
 |---|---|---|---|---|
-| `auth_custody` | secp256k1 / ed25519 / P-256 signing keys | authorises spending (EIP-712, `MetaOp`, WebAuthn) | the subject's device (passkey, seed vault), a wallet extension, or — for entrusted custodial/delegated wallets — a KMS/HSM (FIPS 140-3 Level 3) behind a custody adapter | device BUILT; KMS/HSM adapters PLANNED |
+| `auth_custody` | secp256k1 / ed25519 / P-256 signing keys | authorises spending (EIP-712, `MetaCall`/`MetaTransfer`, WebAuthn) | the subject's device (passkey, seed vault), a wallet extension, or — for entrusted custodial/delegated wallets — a KMS/HSM (FIPS 140-3 Level 3) behind a custody adapter | device BUILT; KMS/HSM adapters PLANNED |
 | `conf_custody` | Zether `x` (bn254 / BLS12-381); post-quantum Zether 32-byte leaf | decrypts balances, builds proofs | the subject's device (seed path `…/7`; the PQ leaf sealed in the key worker); for organizations a threshold-MPC or enclave **key oracle** ([CLI-SGN-31](#CLI-SGN-31)) — commercial HSMs do not support these curves | device BUILT; key oracle PLANNED |
 
 Leaking one axis does not compromise the other: a leaked signing key cannot read balances; a leaked `x` cannot move funds
@@ -184,7 +184,9 @@ rebuilds the payload with `fam/<family>.js` and returns a frozen `checked` objec
 | Cosmos, TON, Hedera ED25519 | the payload rebuilt from terms == `payload_hex`; `from`; chain/network; contract; amount |
 
 When a family's signed text becomes the readable message of [NET-ALL-23](../networks/README.md#NET-ALL-23), its
-encoder renders the same text and `checkTerms` compares it byte for byte. Portal limitation: `shown` comes from the same
+encoder renders the same text and `checkTerms` compares it byte for byte. The rows above check the built `MetaOp`; the
+target `MetaTransfer` is checked the same way, a `MetaCall` against the contract's allowlist (`function` known,
+arguments decoded and shown, `args_hash` recomputed) ([NET-ALL-26](../networks/README.md#NET-ALL-26)). Portal limitation: `shown` comes from the same
 server response as the terms, so in a portal the check is internal consistency (bytes ⇔ displayed fields), not protection
 from a malicious issuer; in the app, `shown` is the user's own input. Why: it closes the gap between checking
 `payload_hex` and signing `text`. Cost: a terms change must land with its `fam/*.js` change (shared KATs catch it).
@@ -601,7 +603,7 @@ BIP-32 for secp256k1, SLIP-10 for ed25519) — plain derivation that `UAKey` lat
 **native** path is used only for a native account and for the owner/first key of a Sui/Aptos/Solana account derived from
 the user's own native address; every other key added by a seed is a role key (backup, added device, a passkey-first
 account's seed key, a Soroban `C…` key). **Backup flow:** generate a phrase, show it once, run the 3-word check, derive the
-role key, sign `addKey`/KeyOp with the existing key, then `abandon()` — **nothing is stored** unless the user asks to keep
+role key, sign `addKey`/`mtx_add_key` with the existing key, then `abandon()` — **nothing is stored** unless the user asks to keep
 it on this device, and no scrypt runs, so low-memory phones can comply. Why: a backup in the same browser profile as the
 primary key is not a backup. Cost: one derivation per role; wallets show the role.
 
@@ -627,7 +629,7 @@ above; a session-key mechanism would map to Universal Account key purposes. Stat
 | Hedera ED25519 | `hedera_ed25519` | `m/44'/3030'/0'/0'/i'` | ed25519 | `0.0.N` | — | raw ed25519 over the EIP-712 digest (HIP-632) | BUILT |
 | Cosmos | `cosmos` | `m/44'/118'/0'/0/i` | secp256k1 | bech32 | — (no subject account) | ADR-036 doc | key BUILT; envelope SPECIFIED |
 | Sui | `sui` | `m/44'/784'/i'/0'/0'` | ed25519 | `blake2b(0x00 ‖ pk)` | native if owner; else role `…/20'/i'` | personal-message digest, flag 0 | key BUILT; envelope SPECIFIED |
-| TON | `ton` | `m/44'/607'/i'` | ed25519 | pubkey (wallet-bound) | — (wallet-bound) | MetaOp cell hash | key BUILT; envelope SPECIFIED |
+| TON | `ton` | `m/44'/607'/i'` | ed25519 | pubkey (wallet-bound) | — (wallet-bound) | `MetaCall`/`MetaTransfer` cell hash | key BUILT; envelope SPECIFIED |
 | Soroban Stellar | `stellar` | `m/44'/148'/i'` | ed25519 | `G…` | role `…/18'/i'` (`C…` key) | `G…`: sha256(auth preimage); `C…`: `Ed25519{key_id, sig}` | SPECIFIED |
 | Soroban Pi | `stellar` + 314159 | `m/44'/314159'/i'` | ed25519 | `G…` | as Stellar | as Stellar, Pi passphrase | SPECIFIED |
 | Aptos | `aptos` | `m/44'/637'/i'/0'/0'` | ed25519 | `sha3_256(pk ‖ 0x00)` | native if owner; else role `…/19'/i'` | AIP-62 `fullMessage` | SPECIFIED |

@@ -474,7 +474,7 @@ is the typed path, not a self-call.
 <a id="CTR-MTX-21"></a>**CTR-MTX-21** — **Every entry point whose authority comes from a subject's signature starts
 with `mtx`** (owner); a submitter only relays. `executeMetaTransaction` stays as the alias of `mtxExecute` (the
 EIP-1776 name, for outside tools). EIP-712 type names (`MetaTransaction`, `MetaTransfer`, `TradeOrder`, …) name what is
-signed, not the entry point, and stay. Non-EVM families keep their op names (`relay`, `Relay`, `SignedOp`).
+signed, not the entry point, and stay. Non-EVM families follow the same rule in their own case ([NET-ALL-28](../networks/README.md#NET-ALL-28)).
 
 | Contract | Entry points |
 |---|---|

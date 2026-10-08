@@ -1,6 +1,7 @@
 # Non-EVM families: a generic signed call and a typed transfer, per VM
 
-**Status:** DRAFT rev 3, every owner question answered (§6); to be folded. Provisional ids `NM-n`; real ids are
+**Status:** ACCEPTED by the owner 2026-10-08 and folded into the component docs (NET-ALL-26…29, NET-APT-27, NET-SUI-18,
+NET-SOR-16, NET-COS-12, NET-TON-20, NET-SOL-33; rules in `docs/decisions.md`); frozen here as the design record. Provisional ids `NM-n`; real ids are
 allocated in `docs/decisions.md` on acceptance (docs/README "Ids").
 **Date:** 2026-10-08. **Scope:** Aptos, Sui (Move), Soroban, CosmWasm, TON, Solana. Follows the EVM drafts
 [`2026-10-08-metatx-generic-call-design.md`](../../history/specs/2026-10-08-metatx-generic-call-design.md) (G1–G10: a generic

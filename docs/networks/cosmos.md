@@ -24,6 +24,17 @@ keyed `cosmos:<chain-id>`.
 
 <a id="payload"></a>
 
+<a id="NET-COS-12"></a>**NET-COS-12** — **Target: `MetaCall`/`MetaTransfer` JSON and `Mtx` messages**
+([NET-ALL-26](README.md#NET-ALL-26)–[NET-ALL-29](README.md#NET-ALL-29); owner 2026-10-08). Status: **SPECIFIED**. Both
+kinds are sorted-key JSON with domains `"scaas.metacall.v1"`/`"scaas.metatransfer.v1"` (`network` = chain id), read as
+the exact signed bytes as today; the `scaas-metacall` crate verifies them. Messages: `Relay{payload, auth}` with op
+`pay` → `MtxPay`/`MtxTransfer`/`MtxExecuteTransfer{payload, auth}`; `MtxExecute{payload, auth}` with `payload.msg` = an
+allowlisted inner message: op `trade` → `MtxTrade` (binding `relayer = to = info.sender` = the DEX unchanged), op
+`revoke` → `CancelNonce{lane}`; the mandate's `PayUnderMandate{…, signature}` and its `"scaas.mandate.v1"` JSON →
+`MtxExecute` on the mandate with `msg = PayUnderMandate{…}`. CW20 `Transfer`/`Send` and owner-only `Revoke`/`Withdraw`
+keep their names. New code ids, `--no-admin` ([NET-COS-07](#NET-COS-07)). The `Relay`/`MetaOp` text on this page is
+**Transitional (BUILT)**.
+
 The subject signs **sorted-key JSON** (no whitespace, every field mandatory):
 
 ```json

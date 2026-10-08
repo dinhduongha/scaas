@@ -218,6 +218,19 @@ LANE_HORIZON_S` and re-issue on one lane only within the horizon of its first op
 
 <a id="payload"></a>
 
+<a id="NET-SOL-33"></a>**NET-SOL-33** — **Target: `MetaCall`/`MetaTransfer` layouts and `mtx_` instructions**
+([NET-ALL-26](README.md#NET-ALL-26)–[NET-ALL-29](README.md#NET-ALL-29); owner 2026-10-08). Status: **SPECIFIED**. Both
+kinds are fixed little-endian layouts (domains `"scaas.metacall.v1"`/`"scaas.metatransfer.v1"`, `network` = the genesis
+hash, `function` = the 8-byte discriminator; lengths pinned by vectors), digest `sha256`, signed as today
+([NET-SOL-11](#NET-SOL-11)); the `scaas-metacall` crate verifies them. Instructions: `relay_pay` → `mtx_pay` (+
+`mtx_transfer`, `mtx_execute_transfer`; a batch is a multi-instruction transaction); `manage_signed` + `KeyOp` actions →
+`mtx_add_key`, `mtx_remove_key`, `mtx_add_origin`, `mtx_remove_origin`, `mtx_set_guardian`, `mtx_cancel_recovery`,
+`mtx_set_policy`, `mtx_withdraw_lamports`; `mandate_open` + `MandateInit` → `mtx_mandate_open`; `mandate_pay` →
+`mtx_mandate_pay`; `mandate_revoke_signed` → `mtx_revoke`; `mandate_close_signed` → `mtx_mandate_close`; `settle`,
+`cancel_signed`, `invalidate_nonces_signed` → `mtx_settle`, `mtx_cancel`, `mtx_invalidate_nonces` (order structs
+unchanged). Each keeps its fixed write-set ([NET-SOL-04](#NET-SOL-04)). A new program, authority `None`
+([NET-SOL-20](#NET-SOL-20)). The `MetaOp`, `KeyOp` and instruction names on this page are **Transitional (BUILT)**.
+
 **Bytes (336 B, fixed, little-endian, no length prefixes — `MetaOp::LEN`; the tag is 15 bytes):**
 
 | off | len | field |

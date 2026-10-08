@@ -23,6 +23,16 @@ requirement). Pi Network is the same family with network passphrases "Pi Testnet
 
 <a id="payload"></a>
 
+<a id="NET-SOR-16"></a>**NET-SOR-16** — **Target: both kinds are host authorizations of `mtx_` functions**
+([NET-ALL-26](README.md#NET-ALL-26)–[NET-ALL-29](README.md#NET-ALL-29); owner 2026-10-08). Status: **SPECIFIED**.
+Soroban needs no struct and no verifier library: a `MetaCall` is the host authorization entry of an `mtx_<name>`
+function (`function_name` + `args`), a `MetaTransfer` that of SEP-41 `transfer` (standard name kept) or `mtx_pay(from,
+to, amount, pay_ref, valid_until)`; the contract's own op digest tag becomes `"scaas_metacall_v1"`. No
+`mtx_execute_transfer`: host nonces order nothing ([NET-SOR-02](#NET-SOR-02)). Renames: `pay` → `mtx_pay`,
+`pay_under_mandate` → `mtx_mandate_pay`, `revoke(token, by)` → `mtx_revoke`, `add_key`/`remove_key` → `mtx_add_key`/
+`mtx_remove_key`, DEX `settle`/`cancel` → `mtx_settle`/`mtx_cancel`. Restriction is the missing part, so
+[NET-SOR-04](#NET-SOR-04) becomes mandatory. New deployments. The names on this page are **Transitional (BUILT)**.
+
 The subject signs these exact XDR bytes (the client builds them without RPC):
 
 ```
@@ -287,11 +297,11 @@ ledger range: SPECIFIED.
 
 - <a id="NET-SOR-03"></a>**NET-SOR-03** — **Soroban guardian recovery is a seam.** Guardian + delayed recovery is not
   built on Soroban; SPECIFIED as a gap ([NET-ALL-05](README.md#NET-ALL-05)).
-- <a id="NET-SOR-04"></a>**NET-SOR-04** — **Per-key permissions are a seam.** `__check_auth` ignores `auth_contexts`
-  (`_contexts`, `account/src/lib.rs:215`): every key of the account may do everything, including `add_key`; per-key
-  scopes (a passkey that pays ≤ X, only a seed key changes keys…) wait for Universal Account key purposes
-  ([CTR-UA-10](../contracts/accounts.md#CTR-UA-10)). Residual risk, stated: any one passkey can `add_key` an
-  attacker's key.
+- <a id="NET-SOR-04"></a>**NET-SOR-04** — **`__check_auth` checks every entry of `auth_contexts` against the key's allowlist**
+  (owner 2026-10-08, [NET-ALL-27](README.md#NET-ALL-27)). Each key of `scaas-account` carries the `(contract, function)`
+  pairs it may authorise (a passkey that pays, only a seed key changes keys…), aligned with Universal Account key
+  purposes ([CTR-UA-10](../contracts/accounts.md#CTR-UA-10)); a context outside it fails. SPECIFIED. Transitional
+  (BUILT): `_contexts` is ignored (`account/src/lib.rs:215`), so any one passkey can `add_key` an attacker's key.
 - Not on the mesh (above). Seed role keys of a `C…` account use `kindNo` 18
   ([CLI-SGN-30](../clients/signers-clientkeys.md#CLI-SGN-30)).
 - Confidential payments: Soroban has BLS12-381 (CAP-59) and BN254 (CAP-74, protocol 25) host functions plus Poseidon, so

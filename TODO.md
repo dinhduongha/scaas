@@ -39,12 +39,22 @@ Order: contracts first (one heavy build at a time), then node, clients, the Odoo
 - [ ] **MT-9** clientkeys/app and the reference ERP's `lib/eip712.py`: both structs (`MetaTransfer` typed in wallets,
       `MetaTransaction` decoded via `mtxSelectors()`), `domain.salt`, refuse an unlisted `dex`, no EOA approve, wrap by
       signature (CLI-SGN-05, CLI-SGN-33…36); `SubjectAccount`/mandate digests as `MetaTransaction`s; vectors/KATs regenerated.
-- [x] Draft for non-EVM families: `docs/superpowers/specs/2026-10-08-nonevm-metacall-design.md` (owner Q1–Q4 open).
+- [ ] **NM-APT** Aptos: `MetaCall`/`MetaTransfer` (BCS), public `scaas::metacall::verify`, `mtx_` entries incl. key and
+      mandate entries, `KeyOp`/`MandateInit`/`key_nonce` removed; new immutable package (NET-APT-27, NET-ALL-26…29).
+- [ ] **NM-SUI** Sui: as Aptos plus `mtx_forward` (no `ForwardOp`), client encoders byte-identical (NET-SUI-18, NET-SUI-16).
+- [ ] **NM-SOR** Soroban: `mtx_` functions, SEP-41 `transfer` kept, `__check_auth` context allowlist per key (NET-SOR-16,
+      NET-SOR-04); new deployments.
+- [ ] **NM-COS** Cosmos: `scaas-metacall` crate, `MtxTransfer`/`MtxPay`/`MtxExecuteTransfer`/`MtxExecute` (inner
+      `MtxTrade`, `CancelNonce`, mandate `PayUnderMandate`), mandate JSON removed; new code ids (NET-COS-12).
+- [ ] **NM-TON** TON: `MetaCall`/`MetaTransfer` cells, `Mtx` messages replacing `SignedOp` ops and `MandatePay`, opcodes
+      fixed with vectors; new code (NET-TON-20).
+- [ ] **NM-SOL** Solana: fixed layouts, `scaas-metacall` crate, `mtx_` instructions incl. key and mandate entries, `KeyOp`
+      and `MandateInit` removed; new program (NET-SOL-33).
+- Node (adapters, `signed_op` `op_kind` `call`/`transfer`, per-contract `mtx_` lists, NODE-JOB-20) and clients (`fam/*.js`
+  encoders, CLI-SGN-27 checks) follow each family stream; vectors regenerated per family.
+- [x] Non-EVM generic signed call (NM-1…5) accepted and folded 2026-10-08; record `docs/history/specs/2026-10-08-nonevm-metacall-design.md`.
 - [x] Meta-tx generic call (GC-1…10) accepted and folded 2026-10-08; record `docs/history/specs/2026-10-08-metatx-generic-call-design.md`.
 - [x] DEX exchange path (DS-1…8) accepted and folded 2026-10-08; record `docs/history/specs/2026-10-08-dex-exchange-design.md`.
-- [ ] **Owner review of two drafts (2026-10-08), then fold into the component docs:**
-      ~~`2026-10-08-dex-exchange-design.md`~~ (folded, above), `2026-10-08-nonevm-metacall-design.md`
-      (NM-1…5). Each changes MT-1…MT-9 scope as listed in its "Changes to current rules" table.
 
 ## 0. Finish the spec phase (5 items left)
 

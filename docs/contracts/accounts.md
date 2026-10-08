@@ -578,7 +578,7 @@ Non-EVM families ([NET-ALL-20](../networks/README.md#NET-ALL-20)):
 | Cosmos | bech32 `from`; passkey address 20-byte truncation | passkey owner = 32-byte UA id, a ledger key in our contracts, shown only as URN; `bip340`/MuSig2/`frost-secp256k1` via an `ua-registry` contract |
 | TON | `MetaOp.from` wallet; jetton-wallet `passkey` bound by `set_key` | native `ton-wallet`; no registry |
 
-Families keep their entry points (`relay_pay`, `Relay{payload, auth}`, `SignedOp`…); UA changes the owner ids and adds
+Families keep their entry points (`mtx_pay`, `MtxExecute`…, [NET-ALL-28](../networks/README.md#NET-ALL-28)); UA changes the owner ids and adds
 the registry check where an account opens for a derived owner. Every non-EVM owner field gains an explicit
 `owner_kind`: on these families a native 32-byte key and a derived id cannot be told apart by shape.
 
