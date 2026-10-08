@@ -1,7 +1,7 @@
 # Asset suite: regulated tokens, vesting, distributions, corporate actions, templates
 
-The asset suite turns the open factory into a tokenization toolkit: an optional **regulated module** on every token
-tier (freeze, forced transfer against a recorded order, bounded pause, receiver allowlist), a `ComplianceRegistry`
+The asset suite turns the open factory into a tokenization toolkit: optional **regulated controls** (creation-time flags on every non-confidential token kind:
+freeze, forced transfer against a recorded order, bounded pause, receiver allowlist), a `ComplianceRegistry`
 of eligibility attestations, and three permissionless **action contracts** — `VestingGrant`, `Distribution` and
 `ExchangeOffer` — plus off-chain **templates** and **managed markets** on the existing DEX. Status: **SPECIFIED**
 (EVM and Hedera); nothing is built; the primitives it reuses (token tiers, the factory, `OrderBookDex`) are BUILT.
@@ -10,22 +10,9 @@ of eligibility attestations, and three permissionless **action contracts** — `
 
 <a id="scope"></a>
 
-EVM / Hedera (Solidity), all clones of never-upgraded implementations. Each tier on `MetaTokenBase` (BUILT) gains a
-regulated child with `RegulatedControls` (ERC-7201 storage) + `RegulatedLib` (linked); Hedera children of each
-regulated tier: `HederaRegulated*`.
-
-```mermaid
-flowchart LR
-    N0[NoUnderlyingToken] --> N1[RegulatedNoUnderlyingToken]
-    S0[SingleUnderlyingToken] --> S1[RegulatedSingleUnderlyingToken]
-    M0[MultiUnderlyingToken] --> M1[RegulatedMultiUnderlyingToken]
-```
-
-| Tier (BUILT) | Kind | Regulated child | Kind |
-|---|---|---|---|
-| `NoUnderlyingToken` | `META_NONE` | `RegulatedNoUnderlyingToken` | `META_NONE_REG` (5) |
-| `SingleUnderlyingToken` | `META_SINGLE` | `RegulatedSingleUnderlyingToken` | `META_SINGLE_REG` (6) |
-| `MultiUnderlyingToken` | `META_MULTI` | `RegulatedMultiUnderlyingToken` | `META_MULTI_REG` (7) |
+EVM / Hedera (Solidity), all clones of never-upgraded implementations. The four regulated controls are creation-time
+flags of the ordinary token kinds ([CTR-AS-17](#CTR-AS-17), [CTR-TOK-22](token-wrappers.md#CTR-TOK-22)); there are no
+regulated kinds or contracts of their own.
 
 ```mermaid
 flowchart LR
@@ -52,38 +39,39 @@ are node policy over `OrderBookDex` plus token-level enforcement).
 
 Measured runtime sizes of the base tiers (existing artifacts): `SingleUnderlyingToken` 21 637, `MultiUnderlyingToken`
 22 561, `HederaMultiUnderlyingToken` 23 885 bytes — 2.9 k (Single), 2.0 k (Multi) and 0.7 k (Hedera Multi) bytes of
-headroom below 24 576, less than the control surface; hence the library split below.
+headroom below 24 576, less than the control surface; hence the controls live in `AdminLib`, an external library
+([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)).
 
-## Regulated module
+## Regulated controls
 
 <a id="regulated"></a>
 <a id="regulated-kinds"></a>
-<a id="CTR-AS-01"></a>**CTR-AS-01** — The regulated module is an option chosen at creation on any tier (owner), built as
-**separate implementations**, one per tier, each a child of its tier plus `RegulatedControls`; factory kinds are
-**appended**: `META_NONE_REG = 5`, `META_SINGLE_REG = 6`, `META_MULTI_REG = 7`. `OpenFactory` gets a **code change**,
-not only an enum change: the underlying-count map becomes a function of the base kind (`_baseOf(kind)`; the built
-`_createTiered` ternary would put `META_NONE_REG`/`META_SINGLE_REG` into the 2–8 branch,
-[token-wrappers.md](token-wrappers.md#CTR-TOK-03)). Unregulated implementations carry no control code and no runtime
-flag. The change lands **before the first production deployment** of the factory (the operator confirms on its hosts
-that none is live); otherwise it ships as a new factory, never as an edit of a deployed one. Node and client decoders of `versionOf().kind` must know 5–7 before the
-first `*_REG` create. The choice must be visible in `versionOf()`, not in a storage flag; the cost is one more catalogue
-line per tier.
+<a id="CTR-AS-17"></a>**CTR-AS-17** — **Regulated controls are flags 5–8 (`FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`) on the
+ordinary kinds, code in `AdminLib`; refused on confidential kinds** (owner, T8, T11). They are creation-time flags of
+[CTR-TOK-22](token-wrappers.md#CTR-TOK-22), chosen per token and locked or disableable per flag; their roles are held and
+administered as that bullet says. The rules of [CTR-AS-03](#CTR-AS-03)…[CTR-AS-09](#CTR-AS-09) apply to any token with
+one of the flags. A token with none carries no active control and is fully permissionless. A confidential kind refuses
+flags 5–8 in `initialize` (`FeatureInvalidForKind`; the token validates, not the factory), because a confidential balance
+can be frozen (stuck) but not seized on public chains. Otherwise every control combination would need its own
+implementation.
 
 <a id="regulated-exception"></a>
 <a id="CTR-AS-02"></a>**CTR-AS-02** — **Third exception to "Nobody alters a deployed token"** (owner;
-[CTR-TOK-10](token-wrappers.md#CTR-TOK-10)). Besides the rate admin and the guardian, the **regulated module** of a
-`*_REG` token is a creation-time, visible exception. Its powers are the bits of `controls()` (`FREEZE`, `FORCE`,
-`PAUSE`, `ALLOWLIST`), set at creation; bits can only be **cleared** later (renounce, `disableControls`), never set.
+[CTR-TOK-10](token-wrappers.md#CTR-TOK-10)). Besides the rate admin and the guardian, the **regulated controls** of a
+token with flags 5–8 is a creation-time, visible exception. Its powers are those flags (`FREEZE`, `FORCE`, `PAUSE`,
+`ALLOWLIST`, part of the features of [CTR-TOK-22](token-wrappers.md#CTR-TOK-22)), chosen at creation and never added
+later; each is locked or disableable.
 `termsHash` (non-zero) commits to the issuer's disclosure document; disclosure is **mandatory**
 ([disclosure](#disclosure)). No regulated power can mint, change a rate, touch the token's own reserve or add a power.
 Otherwise holders would have to read code to learn a token can be seized.
 
 <a id="roles"></a>
-<a id="CTR-AS-03"></a>**CTR-AS-03** — **Two roles** (owner), set at creation, each **a contract** (a multisig with an
+<a id="CTR-AS-03"></a>**CTR-AS-03** — **Two roles** (owner), granted at creation (and later by the token's owner, [CTR-TOK-22](token-wrappers.md#CTR-TOK-22)), each **a contract** (a multisig with an
 external seat is recommended, default 3-of-5, which the contract cannot prove): `issuer` executes (freeze, unfreeze,
-forced transfer, pause, unpause, `disableControls`); `compliance` records and revokes orders. Neither role is
-transferable; each can renounce one-way, and renouncing **relaxes**: `issuer` renounce clears `FREEZE|FORCE|PAUSE`
-(every freeze and pause ends at once), `compliance` renounce clears `FORCE`. Wallets compare `issuer()` and
+forced transfer, pause, unpause); `compliance` records and revokes orders. Neither role is
+transferable; a holder may `renounceRole` and the owner may revoke it ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)),
+and losing a role **relaxes**: when no `issuer` holder is left, `FREEZE|FORCE|PAUSE` stop being active (every freeze and
+pause ends at once); when no `compliance` holder is left, `FORCE` stops. Wallets compare `issuer()` and
 `compliance()` to show whether the roles are separated. Without the relaxation a renounced or dead issuer would leave
 frozen balances frozen forever.
 
@@ -124,7 +112,7 @@ admin-free by design, [CTR-UA-15](accounts.md#CTR-UA-15)); compliance flags live
 `attributes(UA)` registry extension was withdrawn and its flag bits reused below). A regulated
 token pins one registry and one `requiredFlags` mask at creation. **Only receivers of this token are checked** (`to`
 of a transfer or mint, fee recipient): a holder whose attestation lapsed can still send to an eligible party, burn and
-unwrap. `issuer` may `disableControls(ALLOWLIST)` one-way, so a dead registry never locks a tier-1 token. A sender-side
+unwrap. The owner may `disableFeature(ALLOWLIST)` one-way when the flag is not locked ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)), so a dead registry never locks a token that left it disableable. A sender-side
 check would trap holders when an attester is slow.
 
 <a id="step6-checks"></a>
@@ -135,17 +123,15 @@ every direct path, self-call and `mtxTrade`. A frozen `from` reverts every shape
 ineligible resolved fee recipient reverts (also on `payWithFee`, whose override copies the base body, since an external
 function cannot call `super`; an event-equality test pins it). The allowance rule is unchanged and orthogonal.
 Regulated templates default to `MODE_FEE_NONE` (sponsored), because a fee-earning relayer would itself need an
-attestation. Keyword changes to built code: `virtual` on the shape check (built `MetaTokenBase._checkOp`),
-`MetaTokenBase.payWithFee`, `NoUnderlyingToken.tokenKind`, `NoUnderlyingToken._init`, `MultiUnderlyingToken.tokenKind`,
-`MultiUnderlyingToken._init`; the module's code-check hook is named `_regIsContract` (implemented by the child as
-`_isContract(a)`) to avoid a clash with the non-virtual `ERC20MetaTx._isContract`. Every source edit changes the CBOR
-metadata hash of all tier implementations, acceptable only because none is deployed ([CTR-AS-01](#CTR-AS-01)).
+attestation. The shape check is a hook in the base that `AdminLib` extends; the module's code-check hook is named `_regIsContract`
+to avoid a clash with the non-virtual `ERC20MetaTx._isContract`. Every source edit changes the CBOR
+metadata hash of all implementations, acceptable only because none is deployed.
 
 <a id="reserves-untouched"></a>
 <a id="CTR-AS-09"></a>**CTR-AS-09** — **No regulated power touches the token's own reserves, rates or legs** (owner):
 forced transfer moves wrapped units only, so its `collateralValue() ≥ totalSupply()` is untouched. A frozen holder
 **cannot unwrap**; the beneficiary of a forced transfer can. Unwrap is open during a pause. Guardian and rate admin
-keep exactly their tier powers. A `*_REG` token used as the **underlying** of a wrapper is refused by the wizard (a
+keep exactly their tier powers. A token with flags 5–8 used as the **underlying** of a wrapper is refused by the wizard (a
 blocking warning when forced): the regulated issuer could freeze or seize that wrapper's leg (breaking the wrapper's
 reserve rule, [CTR-TOK-05](token-wrappers.md#CTR-TOK-05)), and an attested wrapper would let its units bypass the
 allowlist. Otherwise a seizure could drain a leg other holders rely on.
@@ -168,54 +154,49 @@ for their controller. Otherwise one attestation would be a master key across eve
 
 ### Shape
 
-- **In the token** (per tier child): `tokenKind()`, `_init`, the overrides of `_update`, `_checkOp` and `payWithFee`,
-  `forceTransfer` (it needs `ERC20._update`, internal to the token), the cheap getters, and one-line external stubs
-  for every control function.
-- **`RegulatedLib`** (linked library, external functions, deployed once per chain, linked in `Deploy.s.sol` and the
-  Hedera deploy script): `recordOrder`, `revokeOrder`, `freeze`, `unfreeze`, `pause`, `unpause`, `renounceRole`,
-  `disableControls`, `canReceive`. Each stub `DELEGATECALL`s it (a Solidity external library call), so it runs on the
-  clone's storage.
-- **`RegulatedControls`** (abstract, no base contract): the ERC-7201 namespace
-  (`keccak256(abi.encode(uint256(keccak256("scaas.regulated.v1")) - 1)) & ~0xff`), so the tier slot pins (slots 0–15)
-  of every tier stay valid; the hooks `_forceMove(from, to, amount)` and `_regIsContract(a)`, implemented by the child
-  (`_forceMove` calls `ERC20._update` directly, bypassing the overrides).
-- Hedera: `HederaRegulatedNo/Single/MultiUnderlyingToken` add the signature override through `HederaV2Lib` **and**
-  re-add the `_checkUnderlying` override with the fail-closed HTS checks ([NET-HED-14](../networks/hedera.md#NET-HED-14));
-  both live in the sibling Hedera tier contracts today, not in the regulated parents.
-- The build gates on `forge build --sizes` ≤ 24 576 for all six regulated implementations.
+- **In the token** (every non-confidential kind): the overrides of `_update`, the shape check and `payWithFee`, the
+  cheap getters, one-line external stubs for every control function, and `forceTransfer` (it needs `ERC20._update`,
+  internal to the token).
+- **`AdminLib`** ([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)): `recordOrder`, `revokeOrder`, `freeze`, `unfreeze`,
+  `pause`, `unpause`, `canReceive`, with the role and flag administration of [CTR-TOK-22](token-wrappers.md#CTR-TOK-22).
+  Each stub `DELEGATECALL`s it (a Solidity external library call), so it runs on the clone's storage. Hedera is the
+  per-chain `IS_HEDERA` variant ([CTR-TOK-23](token-wrappers.md#CTR-TOK-23)), not a regulated child.
+- **Storage**: the controls live in the `scaas.admin` ERC-7201 namespace ([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)).
+- The build gates on `forge build --sizes` within the per-implementation cap of CTR-TOK-24.
 
 ### Configuration and init
 
-`initData = abi.encode(<the tier's TW2 fields…>, RegulatedConfig cfg)` (the tier's v2 fields): the tier fields decode as today (ABI decoding
-ignores the extra trailing head word; a test pins this). **Order:** the child stores and validates `RegulatedConfig`
-**first**, then runs the tier init, so a tier-1 `initialSupply` mint already sees the allowlist. The initial supply
-goes to `creator`, the factory caller: an issuer whose treasury is a Safe makes the Safe call `createTiered`.
+The regulated parameters ride in the creation config ([CTR-TOK-25](token-wrappers.md#CTR-TOK-25)); the flags and roles
+are `features`, `lockedFeatures` and `roles`. `initialize` validates them through `AdminLib` ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)),
+**before** the initial-supply mint, so that mint already sees the allowlist. The initial supply goes to `creator`, the
+factory caller: an issuer whose treasury is a Safe makes the Safe call `createToken`.
 
 ```solidity
-struct RegulatedConfig {
-    address issuer;        // enforcement role (contract)
-    address compliance;    // order role (contract)
-    address registry;      // IComplianceRegistry; ≠ 0 iff CTRL_ALLOWLIST
-    uint64  requiredFlags; // receivers must hold all of these; ≠ 0 iff CTRL_ALLOWLIST
-    uint8   controls;      // CTRL_FREEZE 1 | CTRL_FORCE 2 | CTRL_PAUSE 4 | CTRL_ALLOWLIST 8; ≠ 0; FORCE ⇒ FREEZE
-    bytes32 termsHash;     // hash of the issuer's terms/disclosure document; ≠ 0
+struct RegulatedParams {
+    address registry;      // IComplianceRegistry; ≠ 0 iff ALLOWLIST
+    uint64  requiredFlags; // receivers must hold all of these; ≠ 0 iff ALLOWLIST
+    bytes32 termsHash;     // hash of the issuer's terms/disclosure document; ≠ 0 when any of flags 5–8 is set
 }
 ```
 
 | Init check | Error |
 |---|---|
-| `controls ≠ 0`, no unknown bit, `FORCE ⇒ FREEZE` (a forced transfer needs a frozen subject) | `RegulatedConfigInvalid()` |
-| `issuer`, `compliance` have code (`_regIsContract`; 7702 designators are EOAs) | `RoleNotContract(a)` |
+| any of flags 5–8 on a confidential kind | `FeatureInvalidForKind(bit)` |
+| `FORCE ⇒ FREEZE` (a forced transfer needs a frozen subject) | `RegulatedConfigInvalid()` |
+| `issuer`, `compliance` holders have code (`_regIsContract`; 7702 designators are EOAs) | `RoleNotContract(a)` |
 | `ALLOWLIST` ⇔ `registry ≠ 0 && requiredFlags ≠ 0`; registry has code | `RegulatedConfigInvalid()` |
 | `termsHash ≠ 0` | `RegulatedConfigInvalid()` |
-| tier-1 `initialSupply` recipient (`creator`) passes the receiver check | `NotEligible(creator, reason)` |
+| initial-supply recipient (`creator`) passes the receiver check | `NotEligible(creator, reason)` |
 
-Storage (namespace): **hot slot** `registry (20) ‖ controls u8 ‖ pausedUntil u64` (29 bytes, read on every transfer);
+Storage (namespace): **hot slot** `registry (20) ‖ active controls u8 ‖ pausedUntil u64` (29 bytes, read on every transfer);
 `requiredFlags u64 ‖ cooldownUntil u64`; `issuer`; `compliance`; `termsHash`; `mapping(address ⇒ FreezeState)`,
 `FreezeState = {slot a: until u64 ‖ episodeStart u64 ‖ issuerCooldownUntil u64; slot b: recordId bytes32}` (the hot path
 reads slot a only); `mapping(bytes32 ⇒ OrderRecord)`.
 
 ### Interface
+
+In the token, `disableControls(bits)` is `disableFeature(bit)` and `renounceRole()` is `renounceRole(bit)`, with the events
+`FeatureDisabled` and `RoleRevoked` ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)); the names below are the control surface.
 
 ```solidity
 interface IRegulatedToken {
@@ -289,7 +270,7 @@ set and `frozenUntil(a) > now`. `P` = `CTRL_PAUSE` set and `pausedUntil > now`.
 | `transfer`, `transferFrom` (outside-token DEX legs), meta-tx transfer / `pay`, `mtxTrade` (to `dex`, then the DEX's payouts) | `P`; `F(from)`; `!R(to)` |
 | `approve` (contract callers only) | `P`; `F(from)` (`transferFrom` checks `F(from)` again) |
 | relayer fee (meta-tx fee transfer, `payWithFee`) | `F(feeRecipient)` ⇒ `FeeRecipientFrozen`; `!R(feeRecipient)` |
-| mint (tier-1 `minter`, wrap) | `P`; `!R(to)` |
+| mint (`minter`, wrap) | `P`; `!R(to)` |
 | holder `burn` (tier 1), the burn inside unwrap | `F(from)` (not `P`) |
 | unwrap (direct, multi, gasless) | `F(from)` via the burn row; a gasless unwrap with a fee during `P` refused at the shape step (`TokenPaused`), because its fee leg is a transfer; the recipient is not checked |
 | `forceTransfer` | the order rules below only (not `P`, not `F(from)`) |
@@ -378,7 +359,7 @@ from the optional verifiable-credential layer reach contracts only as these flag
 | Node simulation and grief score | a post-simulation revert with `Frozen`, `TokenPaused`, `NotEligible` or `FeeRecipientFrozen` is exempt from the origin's grief score only if the node's re-simulation at the inclusion block's **parent** succeeds and the inclusion block contains a transaction from the token's `issuer`/`compliance` or from the registry (admin or attester) touching the failing account; attester-caused exemptions are capped at 3 per origin per day (a colluding attester buys at most that). The node refuses at intake intents whose `validUntil` exceeds the receiver's attestation `validUntil` |
 | Allowance lockdown | unchanged: spenders are contracts; the regulated check binds `from`/`to`, so an allowance to any contract cannot move tokens to an ineligible party |
 | Single/multi wrappers (own reserves) | [CTR-AS-09](#CTR-AS-09); `wrap` is a mint (paused ⇒ refused; receiver check on `msg.sender`); `disableWrap` and the rate timelock unchanged; a pending rate change and a pause can overlap; fee-less unwrap stays open in both |
-| `*_REG` as an underlying | refused by the wizard; if forced, freezing the wrapper blocks only that leg and a seizure breaks that wrapper's reserve rule (a test documents it) |
+| Flags 5–8 on an underlying | refused by the wizard; if forced, freezing the wrapper blocks only that leg and a seizure breaks that wrapper's reserve rule (a test documents it) |
 | `OrderBookDex` | each leg's pull into the DEX and each payout runs the regulated check, so the DEX is attested `ELIGIBLE_CONTRACT` by the registry admin; a failing leg fails only its settlement (`MatchFailed`); intake reads do not see freezes or eligibility, so the venue adds the pre-check above ([NODE-DEX-11](../node/dex-venue.md#NODE-DEX-11)); fee-split recipients on a regulated leg need `R` |
 | `MandateWallet` | it calls `payWithFee`; the wallet is the `from` and must not be frozen; payees need `R` |
 | Vesting / distribution / offer clones | holders like any other; attested `ELIGIBLE_CONTRACT` before funding (the address is known in advance) |
@@ -389,7 +370,7 @@ from the optional verifiable-credential layer reach contracts only as these flag
 <a id="disclosure"></a>
 
 Disclosure is mandatory ([CTR-AS-02](#CTR-AS-02)). The wizard refuses to create, and wallets show a blocking notice
-before a first receive, with: kind (`*_REG`), each enabled control in plain words, `issuer`, `compliance` and whether
+before a first receive, with: kind and flags, each enabled control in plain words, `issuer`, `compliance` and whether
 they are the same contract, the registry, its admin and `requiredFlags`, `termsHash` with a link to the document, and
 these statements, kept to the enabled bits:
 
@@ -397,8 +378,8 @@ these statements, kept to the enabled bits:
   open-ended freezes require an order recorded by the compliance role, and end when that order is revoked."*
 - *"With a recorded order naming an account, the issuer can move tokens out of that frozen account to the beneficiary
   named in the order, up to the recorded amount."*
-- Wrapper tiers: *"The issuer can pause transfers for up to 7 days at a time, with at least 7 days between pauses.
-  Unwrapping is never paused, and frozen accounts cannot unwrap."* Tier 1: *"The issuer can pause transfers for up to
+- Wrapper kind (`UNDERLYING`): *"The issuer can pause transfers for up to 7 days at a time, with at least 7 days between pauses.
+  Unwrapping is never paused, and frozen accounts cannot unwrap."* Kind `NONE`: *"The issuer can pause transfers for up to
   7 days at a time, with at least 7 days between pauses. Redemption, buyback and exchange offers are paused too; only
   burning stays open."*
 - *"Receiving requires an attestation from the registry above; its admin chooses the attesters. The issuer can switch
@@ -435,11 +416,11 @@ Invariants (each an invariant test):
 | A8 | Attestation lapse | receivers fail; holders still send to eligible parties, burn and unwrap |
 | A9 | Fee griefing with a frozen/ineligible fee recipient | fails at the shape step (cheap) |
 | A10 | Unwrap to a frozen accomplice | out of scope: the underlying is a different asset; the holder itself must be unfrozen to unwrap |
-| A11 | Rolling pauses | bounded by the cooldown; wrapper exits stay open; tier-1 regulated tokens are disclosed as pausable half of the time, offers included |
+| A11 | Rolling pauses | bounded by the cooldown; wrapper exits stay open; `NONE` tokens with `PAUSE` are disclosed as pausable half of the time, offers included |
 | A12 | Frozen holder escapes via DEX | `transferFrom` checks `F(from)`; the pair fails; the venue drops the maker's orders on `AccountFrozen` |
 | A13 | Forced transfer from a protocol clone | address-exact; the clone degrades as defined below |
-| A14 | Renounced or dead issuer | `issuer` renounce clears `FREEZE|FORCE|PAUSE` (all freezes end); a dead issuer multisig leaves issuer-only freezes ending within 60 days and record-backed ones at `freezeUntil` or when compliance revokes |
-| A15 | Dead registry | `disableControls(ALLOWLIST)` by the issuer; migration offers then work again |
+| A14 | Renounced or dead issuer | no `issuer` holder left stops `FREEZE|FORCE|PAUSE` (all freezes end); a dead issuer multisig leaves issuer-only freezes ending within 60 days and record-backed ones at `freezeUntil` or when compliance revokes |
+| A15 | Dead registry | `disableFeature(ALLOWLIST)` by the owner (flag not locked); migration offers then work again |
 
 Gas (estimates; measured numbers replace them in `test/as/RegulatedGas.t.sol`): per transfer on top of the tier row:
 hot-slot SLOAD (2 100 cold) + `FreezeState(from)` slot a (2 100 cold) ≈ **+4.3 k** without allowlist; with allowlist,
@@ -452,19 +433,19 @@ warm (≈ +0.5 k). Control calls add one library `DELEGATECALL` (≈ 2.6 k cold)
 
 | Area | Tests |
 |---|---|
-| Init | every init refusal; EOA and 7702 roles refused; `FORCE` without `FREEZE`; tier fields decode unchanged with the trailing config; config stored before the tier-1 mint (allowlist refuses an unattested `creator`) |
-| Factory | `FactoryV2.t.sol`: each `*_REG` kind with counts 0/1/2/8/9; REG↔base kind mismatch at registration and at `createTieredUnregistered`; the Zether entry points refuse 5–7 |
-| Paths | each row of the path table on all three tiers, direct and meta-tx (generic, named, `mtxBatch`), refused at the shape step (gas of a refused intent < 40 k); `payWithFee` override emits exactly the base events |
+| Init | every init refusal; EOA and 7702 roles refused; `FORCE` without `FREEZE`; config stored before the initial-supply mint (allowlist refuses an unattested `creator`) |
+| Factory | `FactoryV2.t.sol`: flags 5–8 on `NONE` and `UNDERLYING` with counts 0/1/2/8/9; flags 5–8 refused on both confidential kinds in `initialize`, including through `createTokenUnregistered` |
+| Paths | each row of the path table on both kinds, direct and meta-tx (generic, named, `mtxBatch`), refused at the shape step (gas of a refused intent < 40 k); `payWithFee` override emits exactly the base events |
 | Freeze | issuer-only 30 d, extension to 60 d from episode start, `FreezeTooLong`, `FreezeCooldown` after expiry and after unfreeze, record-backed freeze to `freezeUntil`, ended by `revokeOrder`, open-ended record |
 | Orders | record/revoke/execute; `SubjectNotFrozen`; `OrderExceeded` at the exact edge; beneficiary frozen/ineligible; same `orderId` with two subjects |
 | Pause | 7-day bound, cooldown from actual end, passive expiry, refused while paused (`PauseCooldown`), fee-less gasless unwrap and burn during pause, fee-bearing gasless unwrap refused at the shape step, forced transfer during pause |
-| Relaxations | freeze then `issuer` renounce ⇒ holder transfers and unwraps; `compliance` renounce clears `FORCE`; `disableControls(ALLOWLIST)` with a reverting registry |
-| Wrappers | frozen holder unwrap refused (direct, multi, gasless); a holder with a lapsed attestation unwraps; unwrap works while the registry reverts; reserves untouched by every regulated call; guardian/rate flows unchanged; `*_REG` as an underlying: freezing the wrapper blocks only that leg |
+| Relaxations | freeze then every `issuer` holder renounces or is revoked ⇒ holder transfers and unwraps; no `compliance` holder stops `FORCE`; `disableFeature(ALLOWLIST)` with a reverting registry |
+| Wrappers | frozen holder unwrap refused (direct, multi, gasless); a holder with a lapsed attestation unwraps; unwrap works while the registry reverts; reserves untouched by every regulated call; guardian/rate flows unchanged; flags 5–8 on an underlying: freezing the wrapper blocks only that leg |
 | DEX | `OrderBookDex.mtxSettle` with a frozen maker, an ineligible taker, an ineligible fee recipient: only that settlement fails |
-| Keywords | the tier gas table and layout pins identical after the `virtual` changes |
+| Keywords | the kind gas table and layout pins identical after the shape-check hook change |
 | Registry | admin contract only; attester add/remove; disable voids its attestations; batch attest; revoke by flags 0; expiry; `ELIGIBLE_CONTRACT` by admin only |
-| Hedera | each `HederaRegulated*` signs via HIP-632; HTS fail-closed checks and association on single/multi regulated children; layout pins for all three |
-| Sizes | `--sizes` ≤ 24 576 for the six regulated implementations |
+| Hedera | the `IS_HEDERA` variants of `NONE` and `UNDERLYING` with flags 5–8 sign via HIP-632; HTS fail-closed checks and association on `UNDERLYING` |
+| Sizes | `--sizes` within the cap of CTR-TOK-24 with flags 5–8 compiled in |
 | Invariant | handlers: transfers, meta-tx with fees, wraps/unwraps, freezes (both kinds), records, forced transfers, pauses with `warp`, renounces, `disableControls`, attester disable and attestation expiry by the registry admin; invariants I1–I7 |
 
 ## Vesting and streaming
@@ -782,7 +763,7 @@ take unexchanged holders' new shares or redemption money.
 
 | Use | `tokenIn` | `tokenOut` | `num/den` | Window | `closable` | `sink` |
 |---|---|---|---|---|---|---|
-| Bond redemption at maturity | bond (tier-1 REG, minter renounced) | payout stablecoin | face value per unit | `opensAt = maturity`, `closesAt = 0` or ≥ `opensAt + 365 d` per the terms | no | 0 (burn) |
+| Bond redemption at maturity | bond (kind `NONE` with flags 5–8, minter renounced) | payout stablecoin | face value per unit | `opensAt = maturity`, `closesAt = 0` or ≥ `opensAt + 365 d` per the terms | no | 0 (burn) |
 | Buyback (tender at a fixed price) | equity | stablecoin | price | issuer's choice, `capIn` | yes | issuer treasury or 0 |
 | Split `1 : k` | old equity (minter renounced) | new equity (pre-minted `k × supply` to the offer) | `k/1` | `closesAt = 0` (default) or ≥ 365 d | no | 0 (burn) |
 | Reverse split `k : 1` | old equity (minter renounced) | new equity | `1/k` | as split | no | 0 (burn) |
@@ -833,7 +814,7 @@ sig)`, `MetaTxDex._terms`/`_checkRouting`, `feeRecipient ∉ {0, this}`, `out �
 
 `predictOffer` checks (`ParamsInvalid`/`SinkRequired`): `num, den ∈ [1, 2⁹⁶)`; `tokenIn ≠ tokenOut`; `closesAt == 0 ||
 closesAt > opensAt`; `sweepTo ≠ 0`; `closable == false` ⇒ `sink == 0` and (`closesAt == 0 || closesAt ≥ opensAt + 365
-days`); `sink == 0` ⇒ `tokenIn.tokenKind() ∈ {META_NONE, META_NONE_REG}`. Offers need not be funded at creation (a
+days`); `sink == 0` ⇒ `tokenIn.kind() == NONE`. Offers need not be funded at creation (a
 redemption offer is created at issuance and funded at maturity); an exchange that cannot be paid reverts
 `InsufficientOut`.
 
@@ -882,8 +863,7 @@ Remainders and stray tokens (`rescue(token)` for any token other than the contra
 `predictDistribution/createDistribution`, `predictOffer/createOffer`; each `predict*` reverts on invalid params;
 CREATE2 salt `keccak256(abi.encode(kindTag, params))`; implementations immutable in the constructor, no registrar, no
 catalogue (a new implementation = a new `AssetFactory`); events `GrantCreated`, `DistributionCreated`, `OfferCreated`.
-Deploy scripts: `RegulatedLib` deployed and linked per chain; the factory (with the appended kinds) registers the six
-regulated implementations as version 1 of their kinds; `AssetFactory` and one `ComplianceRegistry` per operator are
+Deploy scripts: `AdminLib` is deployed and linked per chain ([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)); `AssetFactory` and one `ComplianceRegistry` per operator are
 deployed separately.
 
 ## Templates
@@ -897,14 +877,14 @@ names its kind, `initData` builder, required inputs, defaults, follow-up actions
 
 | Template | Kind | Defaults | Follow-ups |
 |---|---|---|---|
-| **Equity** (shares, units of a fund) | `META_NONE_REG` | `decimals 0`; `initialSupply` to the issuer treasury Safe (the Safe calls `createTiered`); `minter` = issuance multisig or 0 (fixed); `controls = FREEZE|FORCE|PAUSE|ALLOWLIST`; `requiredFlags = KYC_DONE|SANCTIONS_CLEAR` (+ `ACCREDITED` for restricted offerings); fee `NONE` | dividends, splits/buybacks, managed market, vesting of employee grants |
-| **Bond** | `META_NONE_REG` | `decimals 0` (1 unit = 1 denomination); supply minted at issuance, **minter renounced** after (required by the redemption offer); controls as equity; `termsHash` covers face, coupon dates and rate, maturity, redemption offer address and any prescription date | one `Distribution` per coupon date; one `ExchangeOffer` (redemption, burn, `opensAt = maturity`) created at issuance |
+| **Equity** (shares, units of a fund) | `NONE` + flags 5–8 | `decimals 0`; `initialSupply` to the issuer treasury Safe (the Safe calls `createTiered`); `minter` = issuance multisig or 0 (fixed); `features` include `FREEZE|FORCE|PAUSE|ALLOWLIST`; `requiredFlags = KYC_DONE|SANCTIONS_CLEAR` (+ `ACCREDITED` for restricted offerings); fee `NONE` | dividends, splits/buybacks, managed market, vesting of employee grants |
+| **Bond** | `NONE` + flags 5–8 | `decimals 0` (1 unit = 1 denomination); supply minted at issuance, **minter renounced** after (required by the redemption offer); controls as equity; `termsHash` covers face, coupon dates and rate, maturity, redemption offer address and any prescription date | one `Distribution` per coupon date; one `ExchangeOffer` (redemption, burn, `opensAt = maturity`) created at issuance |
 | **Loyalty points** | `META_NONE` | `decimals 0`; `minter` = the issuer's mint contract (rate limits live there); fee `NONE`; no regulated module. Prepaid points: `META_SINGLE` with a rate (1 USDC → 100 points, [token-wrappers.md](token-wrappers.md#CTR-TOK-08)) | campaigns as `Distribution` of points; redemption = `pay` to the merchant |
 | **Voucher** (gift card, coupon) | `META_NONE` (or `META_SINGLE` for prepaid value) | `decimals 0`, 1 unit = 1 voucher of the stated face value; issuer minter; validity = the redemption offer's window | issuance by mint or `Distribution` (campaign); merchants accept by `pay`; the issuer redeems merchants' vouchers by a **closable** `ExchangeOffer` (voucher → payout, burn) whose `closesAt` is the expiry |
 
 Points and vouchers do not expire on chain (balances never change); expiry is the end of the issuer's redemption
-offer, disclosed as such. A loyalty or voucher issuer who needs freeze or allowlist picks the `*_REG` kind of the same
-tier; the wizard then applies the mandatory disclosure. The wizard refuses a `*_REG` token as the underlying of any
+offer, disclosed as such. A loyalty or voucher issuer who needs freeze or allowlist sets flags 5–8 on the same kind;
+the wizard then applies the mandatory disclosure. The wizard refuses a token with flags 5–8 as the underlying of any
 wrapper template.
 
 The configuration wizard (in the app and any client system) works over `IOpenFactory`:
@@ -917,7 +897,7 @@ The configuration wizard (in the app and any client system) works over `IOpenFac
 | Confidential money | `createZetherToken(1, underlying, verifier, initData, salt)` | `registry`, `shieldScale`, `maxDecryptableShielded ≤ 2^54`, `confidentialFee`, auditor key | **BUILT** (dev chains only) |
 | Multi-underlying money (e.g. xDAI/USDC/USDT) | `createTiered(META_MULTI, …)` | 2–8 underlyings, per-leg rates, guardian | **BUILT** |
 | Vesting / streaming | `VestingGrant` clone per grant | cliff, duration, interval or tranches, approver, revocability | **SPECIFIED** |
-| Controlled / security / bond | `createTiered(META_*_REG, …)` + `Distribution` / `ExchangeOffer` | issuer and compliance contracts, `controls()` bits, `ComplianceRegistry` + `requiredFlags`, `termsHash` | **SPECIFIED** |
+| Controlled / security / bond | `createToken` with flags 5–8 + `Distribution` / `ExchangeOffer` | issuer and compliance contracts, the flags, `ComplianceRegistry` + `requiredFlags`, `termsHash` | **SPECIFIED** |
 | Non-fungible in-app assets (ERC-721/1155 with meta-tx) | new kinds | — | **PLANNED** |
 
 Provenance metadata published for every asset: `creator`, `underlying`, `version`, `implementation`, creation block
@@ -935,9 +915,8 @@ regulated legs and eligibility at intake ([NODE-DEX-11](../node/dex-venue.md#NOD
   `ForcedTransfer`, `Paused`, `Unpaused`, `ControlsDisabled`, `RoleRenounced`, `Attested`, `AttesterSet`,
   `GrantCreated`, `Released`, `Revoked`, `RevocationRenounced`, `MilestoneApproved`, `ExcessSwept`,
   `DistributionCreated`, `Claimed`, `Cancelled`, `Swept`, `OfferCreated`, `Exchanged`, `Closed`, `Rescued`;
-  `TieredTokenDeployed` with kinds 5–7 (decoders ship before the first `*_REG` create). The token table's `kind` gains
-  `meta_none_reg`, `meta_single_reg`, `meta_multi_reg`, with cached `controls` (refreshed on
-  `ControlsDisabled`/`RoleRenounced`), roles and registry. Intake applies the receiver-attestation expiry rule and the
+  `TokenCreated` ([CTR-TOK-25](token-wrappers.md#CTR-TOK-25)) with the flags. The token table's `features` and
+  `lockedFeatures` are cached with the roles and registry (refreshed on `FeatureDisabled`/`RoleGranted`/`RoleRevoked`). Intake applies the receiver-attestation expiry rule and the
   grief-score exemption test; during a pause the node sponsors fee-less unwrap ops. Alerts: any `OrderRecorded`,
   `ForcedTransfer`, `Paused`, `ControlsDisabled`, `AttesterSet`, a role contract's code-hash change, and a protocol
   clone's attestation within 30 days of expiry. Control actions are ordinary `call` jobs (a Safe's `execTransaction`
@@ -956,15 +935,15 @@ regulated legs and eligibility at intake ([NODE-DEX-11](../node/dex-venue.md#NOD
 
 <a id="storage"></a>
 
-New implementations get `test/as/layout/*.json` pins (as the v2 tiers do). Regulated children (EVM and Hedera): slots
-0–15 identical to their base tier (asserted) plus the ERC-7201 namespace; `VestingGrant`, `Distribution`,
-`ExchangeOffer` pinned in full. Indexers that read `reserve` by slot keep working on regulated wrappers.
+New implementations get `test/as/layout/*.json` pins. The controls live in the `scaas.admin` namespace
+([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)), so the kind's own slots are unchanged by flags 5–8; `VestingGrant`, `Distribution`,
+`ExchangeOffer` pinned in full. Indexers that read `reserve` by slot keep working on wrappers with flags 5–8.
 
 ## Families
 
 | Component | EVM | Hedera | Cosmos | Soroban (Stellar, Pi) | Move (Aptos, Sui) | TON | Solana |
 |---|---|---|---|---|---|---|---|
-| Regulated module | this file | this file (HSCS contracts + HIP-632 + HTS fail-closed underlying checks; HTS-native tokens not used, owner) | PLANNED: CW20 variant with the same rules | PLANNED: SEP-41 variant; candidate native flags (auth-required, clawback) to be assessed | PLANNED: candidate native mechanisms (Aptos FA `TransferRef` freeze/transfer; Sui regulated coin deny list) | PLANNED: jetton master + wallet with order records | PLANNED: candidate Token-2022 extensions (permanent delegate, default frozen state, transfer hook) |
+| Regulated controls | this file | this file (HSCS contracts + HIP-632 + HTS fail-closed underlying checks; HTS-native tokens not used, owner) | PLANNED: CW20 variant with the same rules | PLANNED: SEP-41 variant; candidate native flags (auth-required, clawback) to be assessed | PLANNED: candidate native mechanisms (Aptos FA `TransferRef` freeze/transfer; Sui regulated coin deny list) | PLANNED: jetton master + wallet with order records | PLANNED: candidate Token-2022 extensions (permanent delegate, default frozen state, transfer hook) |
 | ComplianceRegistry | this file | this file | PLANNED | PLANNED | PLANNED | PLANNED | PLANNED |
 | VestingGrant, Distribution, ExchangeOffer | this file | this file | PLANNED | PLANNED | PLANNED (subject account holds any asset; contracts as Move modules) | PLANNED | PLANNED |
 | Snapshot builder | this file | this file (same indexer) | with each family's token | 〃 | 〃 | 〃 | 〃 |

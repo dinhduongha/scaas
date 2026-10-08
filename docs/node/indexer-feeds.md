@@ -131,7 +131,7 @@ Common keys: `event`, `contract`, `block_number`, `block_hash`, `tx_hash`, `log_
 Clients validate addresses in their own decoder.
 
 Further events, same object, same filters (decoders for a new kind ship before the first such token is created,
-[CTR-AS-01](../contracts/asset-suite.md#CTR-AS-01)):
+[CTR-TOK-25](../contracts/token-wrappers.md#CTR-TOK-25)):
 
 - token wrappers: `Wrapped`, `Unwrapped`, `ReserveAdded`, `RateChangeProposed`, `RateChanged`, `RateChangeCancelled`,
   `RateAdminRenounced`, `WrapDisabled`, `GuardianRenounced`, `MinterRenounced`, `MetaNonceCancelled`; factory
@@ -155,7 +155,7 @@ Further events, same object, same filters (decoders for a new kind ship before t
 - planned asset suite: `OrderRecorded`, `OrderRevoked`, `AccountFrozen`, `AccountUnfrozen`, `ForcedTransfer`, `Paused`,
   `Unpaused`, `ControlsDisabled`, `RoleRenounced`, `Attested`, `AttesterSet`, `GrantCreated`, `Released`, `Revoked`,
   `RevocationRenounced`, `MilestoneApproved`, `ExcessSwept`, `DistributionCreated`, `Claimed`, `Cancelled`, `Swept`,
-  `OfferCreated`, `Exchanged`, `Closed`, `Rescued`; `TieredTokenDeployed` with kinds 5–7.
+  `OfferCreated`, `Exchanged`, `Closed`, `Rescued`; `TieredTokenDeployed` (flags 5–8 are fields of the token, [CTR-AS-17](../contracts/asset-suite.md#CTR-AS-17)).
 
 ## Feeds
 

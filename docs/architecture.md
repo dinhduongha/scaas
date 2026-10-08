@@ -74,7 +74,7 @@ power, not a balance power); the TON DEX admin `WithdrawFees` (fees only; bounce
 [NET-TON-03](networks/ton.md#NET-TON-03)); the market admins of the other DEX programs (Soroban, Sui `AdminCap`, which
 also sets the network once, Aptos, which may also sweep assets sent by mistake to its own objects, and Solana
 `Config.admin`: market listing and fees); and the `issuer`/`compliance` roles of regulated tokens (only that class,
-against a recorded order, [CTR-AS-01](contracts/asset-suite.md#CTR-AS-01)). The Cosmos DEX holds no balances between
+against a recorded order, [CTR-AS-17](contracts/asset-suite.md#CTR-AS-17)). The Cosmos DEX holds no balances between
 transactions, so it has no `Sweep` ([NET-COS-04](networks/cosmos.md#NET-COS-04)). There is **no upgrade key** on any family.
 
 Design consequences:
@@ -105,7 +105,7 @@ Design consequences:
 | A mixer | The identities of both parties are always visible; only amounts and balances can be hidden ([contracts/zether.md](contracts/zether.md)) |
 | A database replacement | Business data stays in the client's system of record; only commitments, settlements and the minimum identity linkage go on chain ([Service model](#service-model)) |
 | An upgradeable platform | No proxy upgrade on any contract that holds value; **immutable at deploy on every family** (EVM clones; Aptos `upgrade_policy = "immutable"`; Sui `make_immutable` on the `UpgradeCap` in the deploy run; Solana upgrade authority `None` after `initialize`; Cosmos instantiated `--no-admin`; TON and Soroban as built). Each family's deploy script fails if the result is still upgradeable, and the node holds such a chain `halted` with `PROGRAM_UPGRADEABLE` ([CTR-GEN-02](contracts/README.md#CTR-GEN-02), [NODE-STO-07](node/store.md#NODE-STO-07)). New behaviour = a new version plus voluntary migration |
-| A token gatekeeper | The factory is open; provenance replaces allowlists. Controlled (regulated) tokens are a separate, explicit class ([contracts/token-wrappers.md](contracts/token-wrappers.md), [contracts/asset-suite.md](contracts/asset-suite.md)) |
+| A token gatekeeper | The factory is open; provenance replaces allowlists. Controlled (regulated) tokens are an explicit creation-time choice, flags 5–8 ([CTR-AS-17](contracts/asset-suite.md#CTR-AS-17); [contracts/token-wrappers.md](contracts/token-wrappers.md), [contracts/asset-suite.md](contracts/asset-suite.md)) |
 | A hosted node service | The node is infrastructure anyone can run; operators are independent, set their own policies and can only refuse or delay, never forge |
 | A single-ERP product | Any ERP integrates through the same job API ([integration.md](integration.md)) |
 | A market maker or profit-seeking relayer market | Relayer economics are cost recovery between parties with aligned interests; fee = 0 is the B2B default ([Economics](#economics)) |

@@ -834,7 +834,7 @@ factory call plus optional action contracts ([CTR-AS-14](contracts/asset-suite.m
 | Internal 1:1 money (tier 2) | `createMetaToken(1, underlying, abi.encode(name, symbol, 0, 0, address(0)), salt)` | Journal per (company, token) for accounting; wrap/unwrap by holders | **BUILT** |
 | Wrapper with a rate, multi-underlying (tiers 2/3, v2) | `createTiered(kind, version, underlyings[], initData, salt)`, kind `META_SINGLE` or `META_MULTI` | rates fixed or adjustable (contract `rateAdmin`), guardian for multi | **BUILT** (contracts; client fields SPECIFIED) |
 | Confidential money | `createZetherToken(1, underlying, verifier, abi.encode(name, symbol, registry, shieldScale, maxDecryptableShielded, confidentialFee, auditorKey), salt)` | dev chains only until audit; curve decision; auditor key custody | **BUILT** (dev chains) |
-| Regulated tokens (kinds 5–7), vesting (`VestingGrant`), distributions, `ExchangeOffer` | `createTiered(META_*_REG, …)`; counterfactual clones via `predict*` | issuer/compliance contracts, `ComplianceRegistry`, `termsHash` disclosure | **SPECIFIED** |
+| Regulated tokens (flags 5–8, [CTR-AS-17](contracts/asset-suite.md#CTR-AS-17)), vesting (`VestingGrant`), distributions, `ExchangeOffer` | `createToken` with flags 5–8 ([CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25)); counterfactual clones via `predict*` | issuer/compliance contracts, `ComplianceRegistry`, `termsHash` disclosure | **SPECIFIED** |
 | NFT kinds | — | — | **PLANNED** |
 
 After creation: read `predictAddress` before, verify `isDeployedHere`, `creatorOf`, `versionOf` after (decoders know

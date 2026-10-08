@@ -2261,23 +2261,21 @@ Change (2026-10-08): the deposit is a payment `MetaTransfer` (`entryRef = deposi
 ## Contracts — Asset suite
 
 ### CTR-AS-01 — Regulated module as separate implementations, kinds 5-7
-- old: R200 · status: current · owner: yes · date: 2026-10-08 · normative: contracts/asset-suite.md#CTR-AS-01 · superseded-by: —
+- old: R200 · status: superseded · owner: yes · date: 2026-10-08 · normative: — · superseded-by: CTR-AS-17
 
-**Why.** Regulated behaviour ships as separate implementations (kinds 5–7) registered in the one `OpenFactory`, so plain tokens never carry compliance powers.
-**Cost if wrong.** Optional compliance flags inside plain tokens would make every token potentially regulated.
-**Source.** `history/specs/2026-10-06-asset-suite-design.md:69`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-9.
+**What it said.** The regulated module ships as separate implementations (kinds 5–7) registered in the one `OpenFactory`; replaced by the regulated controls as flags 5–8 on the ordinary kinds.
 
 ### CTR-AS-02 — Regulated module is a third creation-time exception
 - old: R201 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/asset-suite.md#CTR-AS-02 · superseded-by: —
 
-**Why.** The regulated module is a third creation-time exception, visible before anyone acquires the token.
+**Why.** The regulated controls (flags 5–8 of CTR-TOK-22) are a third creation-time exception, visible before anyone acquires the token.
 **Cost if wrong.** Adding it later would break the provenance promise.
 **Source.** `history/specs/2026-10-06-asset-suite-design.md:80`
 
 ### CTR-AS-03 — Issuer and compliance roles; renouncing relaxes
 - old: R202 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/asset-suite.md#CTR-AS-03 · superseded-by: —
 
-**Why.** Issuer and compliance roles are separate; renouncing a role only relaxes control.
+**Why.** Issuer and compliance roles are separate; losing a role (a holder's `renounceRole`, or the owner's revoke, CTR-TOK-22) only relaxes control.
 **Cost if wrong.** One combined role would concentrate every power in one key.
 **Source.** `history/specs/2026-10-06-asset-suite-design.md:87`
 
@@ -2373,6 +2371,13 @@ Change (2026-10-08): the deposit is a payment `MetaTransfer` (`entryRef = deposi
 **Source.** `history/specs/2026-10-06-asset-suite-design.md:193`
 
 ## Contracts — Zether (classical)
+
+### CTR-AS-17 — Regulated controls are flags 5-8 on the ordinary kinds
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/asset-suite.md#CTR-AS-17 · superseded-by: —
+
+**Why.** `FREEZE`, `FORCE`, `PAUSE` and `ALLOWLIST` are creation-time flags (locked or disableable, CTR-TOK-22) of every non-confidential kind, with their code in `AdminLib` and their state in the `scaas.admin` namespace; the rules CTR-AS-03…09 apply to any token with one of the flags. The confidential kinds refuse flags 5–8 in `initialize`.
+**Cost if wrong.** Separate regulated kinds multiply implementations (three tiers times Hedera times Zether); a confidential balance can be frozen but not seized on public chains.
+**Source.** `history/specs/2026-10-08-token-tree-design.md` §2 (T8, T11), §5.
 
 ### CTR-ZTH-01 — Full classical Zether, unaudited, dev-chain gated
 - old: R34(scope), UD:§12, UD:§12.2, UD:§12.3, UD:§12.4, UD:§12.7.6, UD:§15:D2, UD:§19:curve-param, UD:§20.1, UD:§25, UD:§25:flipped, UD:§25:ruling, canon:D1, canon:D2, canon:D17 · status: current · owner: yes · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-01 · superseded-by: —
@@ -5541,7 +5546,7 @@ It said: Host company configuration parameter; replaced by INT-ODOO-11.
 | R197 | INT-ERP-24 | current |
 | R198 | INT-ERP-25 | current |
 | R199 | INT-ERP-26 | current |
-| R200 | CTR-AS-01 | current |
+| R200 | CTR-AS-01 | superseded |
 | R201 | CTR-AS-02 | current |
 | R202 | CTR-AS-03 | current |
 | R203 | CTR-AS-04 | current |

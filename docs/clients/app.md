@@ -470,7 +470,7 @@ key metadata. Why: the two deployment modes are two origins.
 ## Tokens
 
 <a id="token-kinds"></a><a id="CLI-APP-26"></a>**CLI-APP-26** — **Token kinds are decoded from `versionOf(token)`, values
-0–7.** Kinds 5–7 (the regulated `*_REG` kinds) are **view-only** with the regulated-token notice until the regulated flows
+as built (0–4, [CTR-TOK-21](../contracts/token-wrappers.md#CTR-TOK-21)).** A token with regulated flags 5–8 ([CTR-AS-17](../contracts/asset-suite.md#CTR-AS-17)) is **view-only** with the regulated-token notice until the regulated flows
 ship; managed DEX markets are "unavailable" the same way. Named functions are chosen from a `(kind, implementation version)`
 table, falling back to `executeMetaTransaction` for unknown versions — including receiver-pays (`mtxPayReceiverFee`)
 versions. Target: every gasless operation of a token is `mtxExecute` with calldata the app encodes and decodes against

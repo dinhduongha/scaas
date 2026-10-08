@@ -457,7 +457,7 @@ immutable: see the administration bullet below.
 | 2 | `BURNABLE` | — (holder) | `NONE*` | holder `burn` of its public balance |
 | 3 | `RATE_ADJUSTABLE` | `rateAdmin` (contract) | `UNDERLYING*` | rate change with timelock; off ⇒ rates fixed at creation |
 | 4 | `WRAP_DISABLEABLE` | `guardian` | `UNDERLYING*` | disable wrap per leg, one-way |
-| 5 | `FREEZE` | `issuer` (contract) | non-confidential | as [CTR-AS-05](asset-suite.md#CTR-AS-05) |
+| 5 | `FREEZE` | `issuer` (contract) | non-confidential ([CTR-AS-17](asset-suite.md#CTR-AS-17)) | as [CTR-AS-05](asset-suite.md#CTR-AS-05) |
 | 6 | `FORCE` | `issuer` + `compliance` | non-confidential | forced transfer on a recorded order ([CTR-AS-04](asset-suite.md#CTR-AS-04)) |
 | 7 | `PAUSE` | `issuer` | non-confidential | as [CTR-AS-06](asset-suite.md#CTR-AS-06) |
 | 8 | `ALLOWLIST` | `compliance` | non-confidential | receivers checked against a `ComplianceRegistry` ([CTR-AS-07](asset-suite.md#CTR-AS-07)) |
@@ -481,8 +481,7 @@ immutable: see the administration bullet below.
   `supportsInterface(IERC20Payment)` is true iff `PAYABLE` is set. `rateAdjustable()` and the role holders stay public so
   wallets and indexers flag them. (The wrap pause during a pending rate change is a consequence of that change, not a
   separate power.)
-- **The four regulated controls are flags 5–8** on the ordinary kinds, not separate kinds (the regulated kinds 5–7 are
-  superseded); their rules (caps, cooldowns, orders, receiver-only allowlist, the shape-step plus `_update` check) are
+- **The four regulated controls are flags 5–8** on the ordinary kinds ([CTR-AS-17](asset-suite.md#CTR-AS-17)), not separate kinds; their rules (caps, cooldowns, orders, receiver-only allowlist, the shape-step plus `_update` check) are
   unchanged and live in `AdminLib`. A token with none of the flags is fully permissionless. Confidential kinds refuse
   flags 5–8 (`FeatureInvalidForKind`).
 - Flags valid on confidential kinds: `PAYABLE`; `MINTABLE`/`BURNABLE` (`NONE_ZETHER`); `RATE_ADJUSTABLE`/
@@ -499,7 +498,7 @@ immutable: see the administration bullet below.
 **Transitional (BUILT).** The built tokens fix these powers by class and at creation: the minter, rate admin and
 guardian are set through `initData` and cannot be changed; `renounceMinter`, `renounceRateAdmin` and `renounceGuardian`
 correspond to the holder's `renounceRole(bit)`, and `disableControls` to `disableFeature(bit)`; there is no owner. The
-regulated controls are specified only (`RegulatedControls`, kinds 5–7). Replaced in P1 by the flags and the owner above.
+regulated controls are specified only. Replaced in P1 by the flags and the owner above.
 
 ## Allowance lockdown
 
@@ -648,9 +647,9 @@ and `roles`.
 **Transitional (BUILT).** Built: the v1 line (`ERC20MetaTx` mixin, `MetaToken`, `HederaMetaToken`, v1 `OpenFactory`,
 `MetaTxDex`), the v2 line (`MetaTxCore`/`MetaTokenBase`, `SingleUnderlyingToken`/`MultiUnderlyingToken`, three Hedera
 children) and `OpenFactoryV2.createTiered`; replaced in P1. The rest of this section is that built factory; the enum
-and the kind-count table below are the built `TokenKind` (`META`, `ZETHER`, `META_NONE`, `META_SINGLE`, `META_MULTI`,
-`META_*_REG`), superseded by [CTR-TOK-21](#CTR-TOK-21). The built factory fixed `META_NONE = 2`, `META_SINGLE = 3`,
-`META_MULTI = 4`, Zether `ZETHER = 1`, `META_*_REG = 5..7`; `META = 0` got no implementation.
+and the kind-count table below are the built `TokenKind` (`META`, `ZETHER`, `META_NONE`, `META_SINGLE`, `META_MULTI`),
+superseded by [CTR-TOK-21](#CTR-TOK-21). The built factory fixed `META_NONE = 2`, `META_SINGLE = 3`,
+`META_MULTI = 4`, Zether `ZETHER = 1`; `META = 0` got no implementation.
 
 - `constructor(address registrar, bytes32 chainUid)`. `registerImplementation` and `deprecate` are registrar-only;
   the catalogue is **append-only** (`VersionAlreadyRegistered`); `deprecate` only marks.
@@ -668,8 +667,7 @@ and the kind-count table below are the built `TokenKind` (`META`, `ZETHER`, `MET
 <a id="factory-interface"></a>
 
 ```solidity
-enum TokenKind { META, ZETHER, META_NONE, META_SINGLE, META_MULTI,
-                 META_NONE_REG, META_SINGLE_REG, META_MULTI_REG }   // append only; META has no implementation
+enum TokenKind { META, ZETHER, META_NONE, META_SINGLE, META_MULTI }   // append only; META has no implementation
 
 interface IOpenFactory {
     event ImplementationRegistered(TokenKind indexed kind, uint64 indexed version, address indexed implementation, address registrar);
@@ -720,22 +718,13 @@ interface IOpenFactory {
 
 | Rule | Detail |
 |---|---|
-| Kind ⇒ count | `META_NONE` 0, `META_SINGLE` 1, `META_MULTI` 2–8 (each `*_REG` kind counts as its tier through `_baseOf`), else `UnderlyingCountInvalid(n)` (the token re-checks; the factory checks so its indexes are meaningful) |
+| Kind ⇒ count | `META_NONE` 0, `META_SINGLE` 1, `META_MULTI` 2–8, else `UnderlyingCountInvalid(n)` (the token re-checks; the factory checks so its indexes are meaningful) |
 | Registration | `registerImplementation(kind, v, impl)` calls `impl.tokenKind()`, `impl.factory()` and `impl.chainUid()` (try/catch) and reverts `VersionKindMismatch(kind, got)` on a kind mismatch or "No answer" (`got = META`), `ImplementationFactoryMismatch(impl)` unless `factory() == address(this)`, `ChainUidMismatch` unless `chainUid() == chainUid` (the catalogue is append-only, so a wrong entry would be dead forever) |
 | Kind ⇔ entry point | `createZetherToken`/`createUnregistered` take only `ZETHER`, `createTiered*` refuse it (`VersionKindMismatch`, `expected = META_NONE` on the tiered path), so neither the count check nor `tokenKind()` can be bypassed |
 | Creation | CREATE2 salt `keccak256(abi.encode(msg.sender, salt))`, `Clones.cloneDeterministic`, `initialize` in the same call; tiers emit **only** `TieredTokenDeployed`, Zether emits `TokenDeployed` |
-| Provenance | every underlying of a tier-2/3 token is indexed: `_wrappers[creator][u]`, `_byUnderlying[u]`. `getWrapper(creator, u)` can return a multi-underlying token, whose single-asset ABI reverts: clients read `versionOf(token).kind` first; for `*_REG`, the regulated views ([asset-suite.md](asset-suite.md#regulated)) |
+| Provenance | every underlying of a tier-2/3 token is indexed: `_wrappers[creator][u]`, `_byUnderlying[u]`. `getWrapper(creator, u)` can return a multi-underlying token, whose single-asset ABI reverts: clients read `versionOf(token).kind` first; for a token with flags 5–8, the regulated views ([asset-suite.md](asset-suite.md#regulated)) |
 | Registrar | `registerImplementation`, `deprecate`, `setZetherEnabled`; none over tokens |
 | Deploy script | `Deploy.s.sol` deploys the factory and the three tier implementations (each with `chain_uid`) through the CREATE2 deployer and registers them as version 1 of their kind (`version()` of a clone is the catalogue version; the domain version string is `"1"`) |
-
-```solidity
-function _baseOf(TokenKind k) private pure returns (TokenKind) {   // REG → its tier
-    return k == TokenKind.META_NONE_REG ? TokenKind.META_NONE
-         : k == TokenKind.META_SINGLE_REG ? TokenKind.META_SINGLE
-         : k == TokenKind.META_MULTI_REG ? TokenKind.META_MULTI : k;
-}
-// _createTiered: TokenKind b = _baseOf(kind); count rule of b (0 / 1 / 2–8)
-```
 
 **Transitional (BUILT).** Two factories exist: `OpenFactory` v1 (`src/factory/OpenFactory.sol`, `IOpenFactory.sol`,
 `constructor(address registrar)`, `createMetaToken` then `IFactoryToken(token).initialize(...)`, `createUnregistered`
@@ -859,7 +848,7 @@ constant `KIND`. The ticket and sender live in transient storage, never in a slo
 The constructor sets `_initialized = true` on the implementation's own storage (it cannot be initialized). Renouncing
 the rate admin sets `rateAdjustable = false`, `rateAdmin = 0` and drops the pending change; the per-leg `adjustable`
 copy stays set (wrap then reads an empty `_pending`, one extra SLOAD), so fixed-at-creation tokens keep the cheap path.
-Regulated children keep slots 0–15 identical to their base tier as built ([asset-suite.md](asset-suite.md#storage); the controls become flags, [CTR-TOK-22](#CTR-TOK-22)).
+The controls of flags 5–8 live in the `scaas.admin` namespace ([asset-suite.md](asset-suite.md#storage), [CTR-TOK-24](#CTR-TOK-24)).
 
 ## Gas
 
