@@ -159,7 +159,7 @@ mobile apps and AI agents call them like any other API.
 | Web API | SCaaS |
 |---|---|
 | Service endpoint | A contract address on a chain |
-| API function (`POST /payments`) | A contract function (`pay(entryRef)`, `trade(...)`, `transferConfidential(...)`) |
+| API function (`POST /payments`) | A contract function (`mtxPay(...)`, `mtxExchange(...)`, `transferConfidential(...)`, or any allowlisted function of any SCaaS contract) |
 | Bearer token issued by the server | The **subject's own signature** over exactly this call (EIP-712 on EVM) |
 | Quotas and limits | Caps inside the contract: per-payment and per-period mandate limits, expiry on every signature |
 | API versioning | A version catalogue in the factory; each deployed contract stays fixed ([section 4](#4-shared-code-delegate-call-separate-data-and-upgradeable)) |
@@ -230,16 +230,16 @@ flowchart TB
 | Area | Contracts | Built on | Status | Read |
 |---|---|---|---|---|
 | Factory | `OpenFactory` (one factory) | EIP-1167 clones at CREATE2 addresses: shared code, separate data ([section 4](#shared-code)); the version catalogue | BUILT | [token-wrappers](docs/contracts/token-wrappers.md) |
-| Gasless tokens | one base `ERC20MetaTx` → `MetaTokenBase` | `ERC20` + `EIP712` + `IERC20MetaTx`; `mtxExecute` self-call gateway with a selector allowlist | BUILT as two lines (v1, v2); one base SPECIFIED | [metatx](docs/contracts/metatx.md) |
-| Payments | `IERC20Payment`: `pay(entryRef)` emits `PaymentSettled` | `IERC20MetaTx` | BUILT | [metatx](docs/contracts/metatx.md) |
+| Gasless contracts | `MetaTxBase` (any SCaaS contract) → `ERC20MetaTx` (every token) → `MetaTokenBase` | `EIP712`; `mtxExecute` runs a signed `MetaTransaction` as a self-call on a selector allowlist; tokens add `ERC20` + `IERC20MetaTx` and the typed `MetaTransfer` ([CTR-MTX-22](docs/contracts/metatx.md#CTR-MTX-22), [CTR-MTX-23](docs/contracts/metatx.md#CTR-MTX-23)) | BUILT as two token lines (v1, v2); the two bases SPECIFIED | [metatx](docs/contracts/metatx.md) |
+| Payments | a signed `MetaTransfer` with an `entryRef` (`mtxPay`), or `IERC20Payment.payWithFee`; both emit `PaymentSettled` | `IERC20MetaTx` | BUILT (as a `pay(bytes32)` data shape; `MetaTransfer` SPECIFIED) | [metatx](docs/contracts/metatx.md) |
 | Wrappers | `NoUnderlyingToken`, `SingleUnderlyingToken`, `MultiUnderlyingToken` | `MetaTokenBase` | BUILT | [token-wrappers](docs/contracts/token-wrappers.md) |
 | Tradable tokens | `mtxTrade`: the token pulls a signed `TradeOrder` into the DEX named in it | `IERC20MetaTx` | SPECIFIED (today: the `trade` op and the legacy `MetaTxDex`, both to be removed) | [metatx](docs/contracts/metatx.md), [legacy DEX](docs/contracts/dex.md#legacy-metatxdex) |
-| DEX | `OrderBookDex` | `EIP712` + `ReentrancyGuardTransient`; one taker against many makers per call on two paths, no maker allowance | BUILT; the no-allowance settlement SPECIFIED | [dex](docs/contracts/dex.md) |
-| Mandates | `MandateWallet` | `EIP712` + `IERC1271` | BUILT | [mandates](docs/contracts/mandates.md) |
-| Smart account (optional) | `SubjectAccount`, `SubjectAccountFactory` | `EIP712` + `IERC1271`; P-256 passkeys | BUILT | [accounts](docs/contracts/accounts.md#subjectaccount) |
+| DEX | `OrderBookDex`, `DexPuller` | `EIP712` + `ReentrancyGuardTransient`; one taker against many makers per call on two paths, no maker allowance; `mtxExchange` fills the same orders against AMMs (Uniswap v2/v3), multi-hop or in a cycle, surplus to the signers ([CTR-DEX-20](docs/contracts/dex.md#CTR-DEX-20)) | BUILT; the no-allowance settlement and the AMM exchange SPECIFIED | [dex](docs/contracts/dex.md) |
+| Mandates | `MandateWallet` | `MetaTxBase` + `IERC1271` | BUILT (own signed structs; `MetaTxBase` SPECIFIED) | [mandates](docs/contracts/mandates.md) |
+| Smart account (optional) | `SubjectAccount`, `SubjectAccountFactory` | `MetaTxBase` + `IERC1271`; P-256 passkeys; signs its own calls as itself ([CTR-ACC-10](docs/contracts/accounts.md#CTR-ACC-10)) | BUILT (`OwnerCall`; `MetaTxBase` SPECIFIED) | [accounts](docs/contracts/accounts.md#subjectaccount) |
 | Universal Accounts | today the Zether-only `UniversalAccountRegistry`; next the UA registry with one verifier per kind, and MetaToken v3 with a UA ledger | the signature, multisig, BLS and hash-to-curve libraries | legacy registry BUILT; UA registry and v3 SPECIFIED | [accounts](docs/contracts/accounts.md#universal-account) |
-| Zether | `ZetherToken`, `ZetherVerifierBn254`, `ZetherVerifierBls12381`, `ITransferDisclosure` | `ZetherMetaTx` (`ERC20` + `EIP712` + `IERC20MetaTx`); EIP-196/197 and EIP-2537 precompiles | BUILT, unaudited | [zether](docs/contracts/zether.md) |
-| PQ Zether | `PqzToken` | `IERC20MetaTx`; a lattice precompile on chain 7622 | SPECIFIED | [pq-zether](docs/contracts/pq-zether.md) |
+| Zether | `ZetherToken`, `ZetherVerifierBn254`, `ZetherVerifierBls12381`, `ITransferDisclosure` | `ERC20MetaTx` (built: `ZetherMetaTx`); EIP-196/197 and EIP-2537 precompiles | BUILT, unaudited | [zether](docs/contracts/zether.md) |
+| PQ Zether | `PqzToken` | `ERC20MetaTx`, relayed like Zether ([CTR-PQZ-21](docs/contracts/pq-zether.md#CTR-PQZ-21)); a lattice precompile on chain 7622 — public chains once they offer one | SPECIFIED | [pq-zether](docs/contracts/pq-zether.md) |
 | Asset suite | `RegulatedControls`, `ComplianceRegistry`, `VestingGrant`, `Distribution`, `ExchangeOffer` | the v2 token tiers; ERC-7201 namespaced storage | SPECIFIED | [asset-suite](docs/contracts/asset-suite.md) |
 | Tender | `SealedBidTender` | commit and reveal with deposits | SPECIFIED | [tender](docs/contracts/tender.md) |
 | Sponsorship | `SponsorshipPool` | opt-in gas sponsorship contract | PLANNED | [sponsorship](docs/node/sponsorship.md) |
@@ -303,6 +303,11 @@ refunding the rest ([section 14](#14-how-the-design-evolved)).
 | Sui | Move | `meta` (shared `Account<T>` per subject) | `mandate`, `dex` | `auth` |
 | TON | Tact | `jetton` (TEP-74, custom wallet checks the signed op) | `mandate`, `dex` (escrow) | wallet signature, passkey |
 | Solana | Rust | program `scaas` (subject account and lane accounts) | in the same program | ed25519 / P-256 precompiles |
+
+On every family a subject signs one of two kinds: a `MetaCall` (a call of one of the contract's allowlisted
+functions, checked by one verification library per family) or a typed `MetaTransfer`, and every signed entry point
+starts with `mtx` in the family's case (`mtx_transfer`, `MtxExecute`) ([NET-ALL-26](docs/networks/README.md#NET-ALL-26),
+[NET-ALL-27](docs/networks/README.md#NET-ALL-27), [NET-ALL-28](docs/networks/README.md#NET-ALL-28)).
 
 ---
 
@@ -516,35 +521,42 @@ Why it matters:
   code, message or file, and executed by any relayer — or by the payee — until it expires.
 - **No head-of-line blocking.** Nonces are two-dimensional (`batch`, `nonce`): independent operations use different
   lanes (a payment's lane is derived from its random reference), dependent steps share one lane in order.
-- **Any function of the token, gasless.** `mtxExecute` lets the token call **itself** with the signer's calldata, for
-  every function on the token's fixed allowlist — `transfer`, `pay`, `wrap`, `unwrap`, `burn`… The token never calls
-  another contract on the signer's behalf: no forwarder.
+- **Any function of any SCaaS contract, gasless.** Not only token transfers: a contract that keeps a family tree, a
+  mandate wallet or a token all accept a signed call of one of their own allowlisted functions — `addPerson`,
+  `wrap`, `unwrap`, `burn`… `mtxExecute` lets the contract call **itself** with the signer's calldata; it never calls
+  another contract on the signer's behalf: no forwarder. A token transfer is a special case with its own typed
+  struct, so wallets show the amount and the recipient.
 - **All or nothing.** The call and the fee succeed together or revert together: the user never pays for an operation
   that did not happen, and no failure is swallowed.
 - **Readable signatures.** EIP-712 typed data: the wallet shows every field instead of 32 opaque bytes.
 
-The signed structure on EVM ([docs/contracts/metatx.md](docs/contracts/metatx.md)):
+The signed structures on EVM ([docs/contracts/metatx.md](docs/contracts/metatx.md)): `MetaTransaction` for every
+contract and, on tokens only, the typed `MetaTransfer` ([CTR-MTX-23](docs/contracts/metatx.md#CTR-MTX-23)). Both share
+the lanes, so one signature spends one lane slot whichever struct carries it.
 
 | Field | Purpose |
 |---|---|
-| `from` | The subject who signs and whose balance changes |
-| `to`, `value`, `data` | A transfer (`data` empty), or the token's own function to call (`data` = its calldata) |
+| `from` | The subject who signs; the authority the call runs under |
+| `data` (`MetaTransaction`) | The contract's own allowlisted function to call (its calldata) |
+| `to`, `value`, `entryRef` (`MetaTransfer`) | Recipient, amount, and the payment reference (`0` = a plain transfer) |
 | `batch`, `nonce` | Two-dimensional nonce: the lane, and the sequence inside it |
 | `validUntil` | Every signature expires |
 | `mode` | Relayer and fee-recipient binding, and the fee mode (`NONE`, `PERCENT`, `FIXED`) |
-| `relayer`, `fee`, `feeRecipient` | Who may submit (if bound), how much fee, to whom |
+| `relayer`, `fee`, `feeRecipient` | Who may submit (if bound), how much fee, to whom (only tokens charge a fee; other contracts accept fee `NONE`) |
 
 **`mode` decides how open the intent is.** With no binding, any relayer may submit and earn the fee — the open
 market. With `MODE_RESTRICT_RELAYER`, only the named relayer may submit — the typical B2B setting with `fee = 0`.
 `MODE_RESTRICT_FEE_RECIPIENT` fixes who receives the fee whoever submits.
 
 **Names.** Every entry point a relayer submits on a subject's behalf starts with `mtx`: `mtxExecute` (with
-`executeMetaTransaction` kept as an alias, the EIP-1776 name), `mtxTransfer`, `mtxPay`, `mtxTrade`, `mtxCancelNonce`…
+`executeMetaTransaction` kept as an alias, the EIP-1776 name), `mtxExecuteTransfer`, `mtxTransfer`, `mtxPay`, `mtxBatch`,
+`mtxBatchTransfer`, `mtxTrade`, `mtxExchange`…
 The signing domain carries `chainId`, the contract and `salt = chain_uid`, so a signature is valid on exactly one chain.
 
-**Same model on every family.** Cosmos, Soroban, Sui, Aptos, TON and Solana implement the same contract-level
-meta-operation with their own signature formats and replay protection; the relayer always submits from its own
-account ([docs/networks/README.md](docs/networks/README.md)).
+**Same model on every family.** Cosmos, Soroban, Sui, Aptos, TON and Solana sign the same two kinds — a `MetaCall` of
+an allowlisted function and a typed `MetaTransfer` — with their own signature formats and replay protection, and the
+same `mtx` names in their own case; the relayer always submits from its own account
+([NET-ALL-26](docs/networks/README.md#NET-ALL-26)).
 
 ---
 
@@ -572,6 +584,7 @@ flowchart TB
 | **Direct settlement (payee self-relay)** | The payer signs offline and hands the signature to the payee — QR, NFC, message, file. The payee submits it and pays the gas. The signature works like an expiring electronic cheque | Payee | BUILT on EVM ([inbound](docs/integration.md#inbound)) |
 | **Receiver pays the fee** | The payer signs a payment of `N`; the payee co-signs a fee authorization from its own balance; one transaction delivers `N` and pays the relayer | Payee | SPECIFIED ([receiver-pays](docs/contracts/metatx.md#receiver-pays)) |
 | **Gas sponsorship policy** | A node rule such as "inbound to wallet W, value ≥ X ⇒ accept at fee 0, book the gas to account Y" | The sponsor | SPECIFIED ([docs/node/sponsorship.md](docs/node/sponsorship.md)); an on-chain sponsorship pool is PLANNED |
+| **Sponsored call of a non-token contract** | A service company relays the user's signed call of, say, a family-tree contract and pays the native gas; the contract takes no fee (`NONE`), the company bills off chain | The service company | SPECIFIED ([CTR-MTX-22](docs/contracts/metatx.md#CTR-MTX-22)) |
 | **Enterprise inbound gateway** | Partners post signed intents to the company's gateway; the company relays them with its own lanes | Company | BUILT on EVM ([docs/node/gateway.md](docs/node/gateway.md)) |
 
 The chain's own billing can help too: on chains that bill gas in stablecoins (Gnosis xDAI, Celo fee currencies) or
@@ -608,6 +621,7 @@ flowchart LR
 | Small transactions are not worth a user's own gas | Sponsored (fee 0) and fee-in-token models make micro-payments, loyalty points and B2B line items economic |
 | Submission depends on one operator | Any relayer may submit; relayers share intents over the mesh and gossip, so more submitters carry more flow |
 | Trading needs native gas for every order and cancel | Orders and cancels are signatures in an off-chain book; only matches go on chain, several pairs per transaction ([docs/contracts/dex.md](docs/contracts/dex.md)) |
+| A new venue starts with an empty book | The same signed order also fills against existing AMMs (Uniswap v2/v3), through several pools or in a cycle, and any surplus above the signed price goes to the signer ([CTR-DEX-20](docs/contracts/dex.md#CTR-DEX-20), [CTR-DEX-21](docs/contracts/dex.md#CTR-DEX-21)) |
 | Existing tokens were not built for gasless use | A wrapper makes any existing token gasless ([docs/contracts/token-wrappers.md](docs/contracts/token-wrappers.md)), so its holders join the flow too |
 
 The result is more participants, more operations per participant and more parties able to submit them — all under
@@ -749,7 +763,7 @@ flowchart LR
 
 | Idea | Prototype 1: wrapped ERC-20 | Prototype 2: ERC1776 family | Today |
 |---|---|---|---|
-| Meta-transaction inside the token | `executeMetaTransaction`, `mtxTransfer`; one nonce per account; chain id and token address signed | `mtxTransfer` with a two-dimensional nonce (`batch`, `nonce`), `validUntil`, a bound relayer or any relayer (`address(0)`) | One pinned EIP-712 `MetaTransaction`: lanes and nonces, expiry, `mode` flags; chain and contract in the domain ([section 7](#7-meta-transactions-and-eip-1776)) |
+| Meta-transaction inside the token | `executeMetaTransaction`, `mtxTransfer`; one nonce per account; chain id and token address signed | `mtxTransfer` with a two-dimensional nonce (`batch`, `nonce`), `validUntil`, a bound relayer or any relayer (`address(0)`) | A pinned EIP-712 `MetaTransaction` for a call of any allowlisted function of **any** SCaaS contract, plus a typed `MetaTransfer` on tokens: lanes and nonces, expiry, `mode` flags; chain and contract in the domain ([section 7](#7-meta-transactions-and-eip-1776)) |
 | Signature format | EIP-712 typed data | Ethereum signed-message prefix | EIP-712 only, low-s, ERC-1271 for contract accounts |
 | Fees | The sender chooses the fee amount and its recipient, both signed, at most 1 % of the amount | A fee in parts per million inside each trade order | Fee modes `NONE` / `PERCENT` / `FIXED`, capped at 1 %, recipient optionally bound ([section 8](#8-who-pays-the-fee-every-model)) |
 | Payment reference | `mtxPay` with a sender-chosen `payId` and a `Payment` event | — | `pay(entryRef)` emits `PaymentSettled`; a random `entryRef` also picks the lane, which makes each payment pay-once |
@@ -757,7 +771,7 @@ flowchart LR
 | Factory | A factory with `new`, one wrapper per underlying | — | An open factory of immutable EIP-1167 clones and a version catalogue |
 | Code reuse | Every wrapper deployed with its full code | — | The requirements note asked to "share code through delegation, keep separate data, support several versions": clones `DELEGATECALL` one fixed implementation per version ([section 4](#shared-code)) |
 | `approve` | Only contracts may call `approve` (code-size check) | The same rule, also on the NFT | Only a contract may call `approve`, decided by explicit rules instead of a code-size guess ([CTR-TOK-01](docs/contracts/token-wrappers.md#CTR-TOK-01)) |
-| Trading | — | `ERC1776Tradeable` + `Dex`: one taker against several makers, partial fills, refunds of the unmatched part, at least 50 % of the wanted amount, a fee per side | `TradeOrder` (the old `MtxTradeOrder` fields) pulled only into the named DEX; one taker against many makers per call, resting orders filled in parts or immediate orders refunded; a 50 % minimum fill ([section 3](#3-contracts-what-is-built-on-what)) |
+| Trading | — | `ERC1776Tradeable` + `Dex`: one taker against several makers, partial fills, refunds of the unmatched part, at least 50 % of the wanted amount, a fee per side | `TradeOrder` (the old `MtxTradeOrder` fields) pulled only into the named DEX; one taker against many makers per call, resting orders filled in parts or immediate orders refunded; a 50 % minimum fill; the same orders fill against AMMs through `mtxExchange` ([section 3](#3-contracts-what-is-built-on-what)) |
 | A contract receiving tokens | — | `ERC1776Holder` pulls a signed transfer into itself | Any contract can be the recipient of a signed `pay` or transfer |
 | NFTs | — | `ERC1776Nft721`: `safeTransferFrom` by meta-transaction | PLANNED with the asset suite ([asset-suite](docs/contracts/asset-suite.md)) |
 | Admin powers | An `Ownable` owner per wrapper | `ERC1776Adminable` (an admin moves its own tokens by signature), `Rescuable` (an owner or rescuer withdraws stuck tokens) | No one can move a user's funds; only bounded roles fixed at creation ([docs/architecture.md](docs/architecture.md#authority-model)) |
@@ -769,6 +783,10 @@ flowchart LR
   **another** contract, which then saw the token as `msg.sender`, so a signed `transfer` moved the token's own
   balance. The fix is not to give up generic execution but to keep it inside: `mtxExecute` calls the token **itself**,
   with the signer carried in transient storage, on a fixed allowlist ([docs/contracts/metatx.md](docs/contracts/metatx.md)).
+- **A meta-transaction shaped like a token transfer is too narrow.** `to` and `value` meant nothing for a call such
+  as "add a person to a family tree", and a contract without a balance could not even take the fee. The signed call is
+  now generic (`MetaTransaction`, any SCaaS contract), and a transfer is its typed special case (`MetaTransfer`)
+  ([CTR-MTX-22](docs/contracts/metatx.md#CTR-MTX-22)).
 - **One nonce per account is a queue.** A single stuck signature blocks every later one. Two-dimensional nonces came
   in with the second prototype and are now the rule on every family
   ([NET-ALL-02](docs/networks/README.md#NET-ALL-02)).

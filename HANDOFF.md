@@ -1,5 +1,27 @@
 # HANDOFF — scaas
 
+## Session 2026-10-08 (afternoon) — read this first
+
+Three designs accepted by the owner and folded (drafts frozen in `docs/history/specs/`), root README updated:
+
+- **Generic meta-tx call** (`2026-10-08-metatx-generic-call-design.md`): `MetaTransaction{from, data, …}` for a call of
+  any allowlisted function of **any** SCaaS contract (base `MetaTxBase`, fee `NONE` unless a token overrides it; gas
+  paid by a sponsor), typed `MetaTransfer{from, to, value, entryRef, …}` on tokens; named functions kept, plus
+  `mtxExecuteTransfer`/`mtxBatchTransfer`; `MandateWallet`/`SubjectAccount` on `MetaTxBase` (account signs as itself);
+  UA ledger split the same way; `PqzToken` relays like Zether. Ids CTR-MTX-22…24, CTR-ACC-10, CTR-UA-26, CTR-PQZ-21.
+- **DEX exchange** (`2026-10-08-dex-exchange-design.md`): `mtxExchange` (DEX calls AMM interactions) and
+  `mtxExchangeVia` (solver executor) fill `TradeOrder`s against AMMs, multi-hop, `receiveToken` may equal the sell token;
+  surplus to signers on chain; `DexPuller` holds outside-token allowances; allowlist via order flag `LISTED_POOLS` and
+  admin `setListedOnly`; node TradeEngine keeps only the relayer share. Ids CTR-DEX-20…23, NODE-DEX-17/18, CLI-SGN-37.
+- **Non-EVM** (`2026-10-08-nonevm-metacall-design.md`): `MetaCall` + `MetaTransfer` per family, one verification library
+  + typed `mtx_*` entries (CosmWasm/TON one `MtxExecute`), `KeyOp`/mandate structs → `MetaCall`, EVM parity. Ids
+  NET-ALL-26…29 and one per family. Streams NM-APT…NM-SOL in TODO §00.
+- Owner rulings: PQZ is meant for public chains but **waits for a lattice precompile there** (CTR-PQZ-01 change);
+  `contracts/metatx.md` line budget accepted. Phase 4 fixes from the lost `fix-cnc`/`fix-node` worktrees landed (`9476617`).
+
+Next: code streams in TODO §00 (MT-1 first); Codex reviews still owed (needs credit). The Odoo side (`SCAAS_ROOT` in
+four `dms_blockchain` tests, compose mount) is uncommitted in bamboo-dms/odoo19, left to another instance.
+
 **Repo moved 2026-10-08** from `bamboo-dms/scaas/` to `/home/ha/work/ainative/scaas` (standalone). The bamboo-dms
 `dms_blockchain` tests read vectors via env `SCAAS_ROOT` (fallback `../../scaas`); the Odoo container mounts the repo
 read-only at `/mnt/scaas` with `SCAAS_ROOT=/mnt/scaas` (`/home/dockers/odoo19/docker-compose.yml`). Older sections
