@@ -1,6 +1,6 @@
 # Zether: one transfer to many recipients, three disclosure modes
 
-**Status:** DRAFT; owner decisions recorded (Z1–Z6); a measuring spike implements it and stays in the code (owner:
+**Status:** DRAFT rev 5; owner decisions recorded (Z1–Z12); a measuring spike implements it and stays in the code (owner:
 "merge it so it can be reused"). Provisional ids `ZM-n`; real ids are allocated in `docs/decisions.md` on acceptance.
 **Date:** 2026-10-08. **Scope:** classical Zether on EVM (`ZetherToken`, `ZetherVerifier` bn254 + BLS12-381,
 `clients/zether-prover`). PQZ: notes only (§6). Builds on [contracts/zether.md](../../contracts/zether.md); the
@@ -26,6 +26,10 @@ three disclosure-storage modes instead of one.
 | Z7 | The multi-recipient transfer **is** `transferConfidential` (default, HASH) |
 | Z8 | The single-recipient format is **kept, renamed `transferConfidentialSingle`** — same payload, statement, proof, proof system id and full-bundle storage as today; only the name changes |
 | Z6 | `s` of one transfer opens only that transfer (HKDF over `sendCounter`, [CTR-ZTH-30](../../contracts/zether.md#CTR-ZTH-30)); the sender rebuilds `s` from its seed and reads the bundle from calldata when nothing is stored |
+| Z9 | **`attestTransferAmount` and `AmountAttested` are removed.** `verifyTransferAmount` (view, callable by any contract, third-party ones included) and `transferCiphertext` stay |
+| Z10 | New opening **`SENDER_CP`**: the sender proves leg `j` with a Chaum-Pedersen proof instead of handing over `s`, so only `v_j` opens (§5.1). The disclosure challenge binds the leg index `j` for every kind |
+| Z11 | The auditor key **should be a k-of-n threshold key** (e.g. company, audit firm, regulator): `Y_a` stays one public key, `x_a` is split off chain by a DKG; decrypting or an `AUDITOR` opening needs k parties. No contract change; prover/CLI protocol follows with [CTR-ZTH-29](../../contracts/zether.md#CTR-ZTH-29) |
+| Z12 | **The sender may leave the auditor out of a transfer** on a token whose auditor is on (both formats): every `C_aud_j = O`; the token then builds the statement with `Y_a = O`. Owner-accepted consequence: on such a transfer the auditor reads nothing, and the opt-out is publicly visible (`C_aud = O`) |
 
 ## 3. Relation and proof
 
@@ -49,7 +53,7 @@ E2    [z_s]G − [c]D_out − A_D
 E3_j  [z_vj]G + [z_s]Y_tj − [c]C_out_j − A_out_j
 E4    [Σ z_vj]G + [z_s]Y_f − [c]C_deb − A_deb
 E5    [z_b + c·fee]G + [z_x]D_acc − [z_x]D_out − [c]C_acc + [c]C_deb − A_bal
-E6_j  [z_vj]G + [z_s]Y_a − [c]C_aud_j − A_aud_j            (auditor on; off ⇒ every C_aud_j, A_aud_j = O)
+E6_j  [z_vj]G + [z_s]Y_a − [c]C_aud_j − A_aud_j            (auditor on for this transfer; off ⇒ every C_aud_j, A_aud_j = O)
 E7_j  [z_vj]G + [z_gvj]Hb − [c]V_vj − A_Vvj
 E8    [z_b]G + [z_gb]Hb − [c]V_b − A_Vb
 ```
@@ -91,9 +95,29 @@ recipient `j` is addressed as `(entryRef, j)`. Bundle `B_j = Y_tj ‖ C_out_j �
 | BUNDLE | `B_1 ‖ … ‖ B_M` | the summary event | on chain, nothing supplied |
 | NONE | nothing | the summary event | off chain only (calldata) |
 
-`verifyTransferAmount(entryRef, j, amount, kind, opening, bundles)` / `attestTransferAmount(…)` serve both formats
-(the token knows each entry's mode; a single entry has `j = 0` and its stored bundle), as the single-recipient disclosure (`bundles` ignored in BUNDLE mode, refused in NONE mode). Relaying through the meta-tx
-envelope follows stream MT-6 (direct calls only here).
+`verifyTransferAmount(entryRef, j, amount, kind, opening, bundles)` serves both formats (the token knows each entry's
+mode; a single entry has `j = 0` and its stored bundle; `bundles` ignored in BUNDLE mode, refused in NONE mode).
+`transferCiphertext(entryRef, j, bundles)` exports the raw leg for an independent verifier. No attestation (Z9).
+Relaying through the meta-tx envelope follows stream MT-6 (direct calls only here).
+
+**Auditor per transfer (Z12).** Token auditor off: every `C_aud_j` must be `O` (as today). Token auditor on: either
+every `C_aud_j ≠ O` (statement `Y_a` = the token key) or every `C_aud_j = O` (statement `Y_a = O`, E6 skipped); a mix
+reverts (`AuditorLegsMixed`). `Y_a` is in the statement and the transcript, so a proof made for one choice never
+verifies under the other. The single format follows the same rule with its one `C_aud`.
+
+### 5.1 Openings
+
+| Kind | Who | Secret | Opening | Checks (leg `j`, `M_j = C_out_j − [v]G`) | Opens |
+|---|---|---|---|---|---|
+| `SENDER_S` (0) | sender | `s` | `s` (32 B) | `[s]G == D_out`, `M_j == [s]Y_tj` | every leg of the transfer |
+| `RECEIVER_X` (1) | recipient `j` | `x_tj` | `(A1, A2, z)` | DLEQ `log_G Y_tj == log_{D_out} M_j` | leg `j` |
+| `AUDITOR` (2) | auditor | `x_a` | `(A1, A2, z)` | DLEQ `log_G Y_a == log_{D_out}(C_aud_j − [v]G)`; false when `C_aud_j = O` | leg `j` |
+| `SENDER_CP` (3) | sender | `s` | `(A1, A2, z)` | DLEQ `log_G D_out == log_{Y_tj} M_j` | leg `j` |
+
+DLEQ as the existing `_chaumPedersen`: `[z]P − A1 − [e]K == O` and `[z]Q − A2 − [e]N == O` over the pairs above.
+Challenge `e = H(DISCLOSE_TAG ‖ chainid ‖ token ‖ entryRef ‖ j ‖ amount ‖ kind ‖ A1 ‖ A2)` — `j` is new for every kind
+(vectors change). Nonce `k` hedged (`H(secret ‖ statement ‖ rng)`): a repeated `k` over two openings reveals the secret.
+The prover's `verify_opening` mirrors the token; off-chain checking needs no storage mode.
 
 ## 6. PQZ (note)
 
@@ -150,3 +174,4 @@ first credit, as in the single-recipient figure), auditor on, inner fee to a ben
 | 2 | 2026-10-08 | Z7: the multi-recipient transfer is `transferConfidential`; names without "Many" |
 | 3 | 2026-10-08 | Z8: the single-recipient format stays as `transferConfidentialSingle` |
 | 4 | 2026-10-08 | Spike merged (`93eddd2` on main as cherry-pick): names aligned with the code (`…-MULTI-V1/…` opTag, `ConfidentialTransferMulti`); measurements in §7 |
+| 5 | 2026-10-08 | Z9 attestation removed, Z10 `SENDER_CP` + `j` in the disclosure challenge, Z11 threshold auditor key (off chain), Z12 per-transfer auditor opt-out; measurements to redo (§7) |
