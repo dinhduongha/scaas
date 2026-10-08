@@ -925,7 +925,7 @@ handed to a counterparty or auditor cannot be revoked (state this to data subjec
 
 <a id="INT-ERP-26"></a>**INT-ERP-26** — **Disclosure is opening a commitment.** An auditor verifies a commitment from
 `(salt, payload)`, a batch member from the Merkle path; Zether amounts via `ITransferDisclosure.verifyTransferAmount`
-(view, leaves no trace) or a counterparty's `attestTransferAmount`, which emits `AmountAttested(entryRef, amount, …)`.
+(view, leaves no trace; there is no on-chain attestation, [CTR-ZTH-39](contracts/zether.md#CTR-ZTH-39); a contract that needs a trace records the result itself).
 
 | Question after erasing X | Answerable? |
 |---|---|

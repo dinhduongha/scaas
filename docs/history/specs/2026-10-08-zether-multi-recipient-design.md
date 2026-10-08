@@ -1,7 +1,6 @@
 # Zether: one transfer to many recipients, three disclosure modes
 
-**Status:** DRAFT rev 6; owner decisions recorded (Z1–Z13); a measuring spike implements it and stays in the code (owner:
-"merge it so it can be reused"). Provisional ids `ZM-n`; real ids are allocated in `docs/decisions.md` on acceptance.
+**Status:** ACCEPTED by the owner 2026-10-08 and folded into the component docs; frozen here as the design record. Ids: Z1/Z2/Z3/Z7/Z8 → CTR-ZTH-37, Z4 → CTR-ZTH-38, Z9 → CTR-ZTH-39, Z10 → CTR-ZTH-40, Z11 → CTR-ZTH-41, Z12 → CTR-ZTH-42, Z13 → CTR-ZTH-43; Z5/Z6 need no rule (spike merged; CTR-ZTH-30 unchanged).
 **Date:** 2026-10-08. **Scope:** classical Zether on EVM (`ZetherToken`, `ZetherDisclosure`, `ZetherVerifier` bn254 + BLS12-381,
 `clients/zether-prover`). PQZ: notes only (§6). Builds on [contracts/zether.md](../../contracts/zether.md); the
 statement header stays the BUILT 384-byte layout (the `chainUid` word is stream MT-6).

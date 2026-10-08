@@ -270,7 +270,7 @@ second digest and no `minOut`), nor are Multi's single-asset overrides that alwa
 `cancelRate`, `executeRate`, `renounceRateAdmin`, `disableWrap`, `renounceGuardian` (role holders act through their own
 contract, [NODE-JOB-01](../node/job-api.md#NODE-JOB-01); a signature check would skip a minter contract's caps or a
 Safe's guards); `transfer` and `pay` (they are `MetaTransfer`s); `payWithFee` (it charges its own fee); `mtxExecute`, its alias and every other `mtx…` entry
-(no nesting); `initialize`; views; `attestTransferAmount`; Zether `mtxRollOver`/`mtxSetRollOverMode` (they carry their
+(no nesting); `initialize`; views; Zether `mtxRollOver`/`mtxSetRollOverMode` (they carry their
 own signature). For selectors with dynamic arguments (Zether) the contract cannot cheaply pin one encoding: the node
 re-encodes the decoded arguments and refuses non-canonical `data` before it computes the mesh `intent_id`; a
 non-canonical duplicate on chain is harmless, because only the signer can produce one (`data` is signed) and the

@@ -2428,7 +2428,7 @@ Change (2026-10-08): `MetaTransaction` has no `to`/`value`, so the binding drops
 ### CTR-ZTH-14 — Disclosure bundle stored; fee-on-transfer underlyings refused
 - old: RS2-15, ZL:D6 · status: current · owner: yes · date: 2026-10-05 · normative: contracts/zether.md#CTR-ZTH-14 · superseded-by: —
 
-**Why.** The disclosure bundle is stored per transfer so the parties can prove amounts later; fee-on-transfer underlyings are refused.
+**Why.** The disclosure bundle is stored per transfer so the parties can prove amounts later (the multi-recipient entry points choose what is stored, [CTR-ZTH-38](contracts/zether.md#CTR-ZTH-38)); fee-on-transfer underlyings are refused.
 **Cost if wrong.** Without the bundle disclosures depend on off-chain archives; FoT underlyings break the escrow invariant.
 **Source.** `history/specs/2026-10-03-zether-design.md:607`, `history/specs/2026-10-05-zether-limits.md:18`
 
@@ -2586,6 +2586,55 @@ Change (2026-10-08): `m.to`/`m.value` are gone from the struct; a public transfe
 **Why.** The statement header, envelope binding, disclosure challenge, rollover and mode digests and `entryRef` carry `chainUid` beside `chainid`, and the built registry takes it in its PoP; a re-created chain restarts `modeNonce`, `accSeq`, `sendCounter` and block numbers, so without it captured signatures and proofs would replay there.
 **Cost if wrong.** A mode or rollover signature, or a proof, replays on a chain that reuses the chain id.
 **Source.** `history/specs/2026-10-07-metatx-generic.md` §3 MG-4, §13 (N-M4).
+
+### CTR-ZTH-37 — One transfer to M recipients, one proof; transferConfidential is the multi-recipient transfer
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-37 · superseded-by: —
+
+**Why.** The owner wants a sender to add randomly chosen decoy recipients receiving 0 and hide the real one, with one proof and one shared `s` (handing `s` over opens every leg, decoys included, accepted); the sender stays public. The multi-recipient transfer is `transferConfidential`; the single-recipient format is kept unchanged as `transferConfidentialSingle`.
+**Cost if wrong.** Without it each decoy is a separate transfer at ≈ 3.3 M gas; without the kept single format, existing proofs and vectors break.
+**Source.** `history/specs/2026-10-08-zether-multi-recipient-design.md` §2 (Z1-Z3, Z7, Z8), §3, §4.
+
+### CTR-ZTH-38 — Three storage modes: HASH (default), BUNDLE, NONE
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-38 · superseded-by: —
+
+**Why.** Disclosure storage is the per-transfer cost the sender should choose: only `keccak256` of the bundles (default, bundles in an event), the full bundle, or nothing (off-chain disclosure from calldata). The mode is in the statement `opTag`, so a relayer cannot switch it.
+**Cost if wrong.** Always storing the full bundle costs ≈ +375 k gas (BLS) per leg; storing nothing makes on-chain disclosure impossible.
+**Source.** `history/specs/2026-10-08-zether-multi-recipient-design.md` §2 (Z4, Z6), §5.
+
+### CTR-ZTH-39 — No on-chain attestation of a disclosed amount
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-39 · superseded-by: —
+
+**Why.** `attestTransferAmount` and `AmountAttested` are removed; `verifyTransferAmount` stays a view that any contract can call, and a contract that needs an on-chain trace records the result itself.
+**Cost if wrong.** An attestation event is a public, irrevocable record that a party disclosed an amount; keeping it forces that trace on every user of the check.
+**Source.** `history/specs/2026-10-08-zether-multi-recipient-design.md` §2 (Z9), §5.
+
+### CTR-ZTH-40 — SENDER_CP opening; leg index in every disclosure challenge
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-40 · superseded-by: —
+
+**Why.** Handing `s` over opens every leg of a multi-recipient transfer, decoys included; a Chaum-Pedersen proof opens leg `j` only. The challenge binds `j` for every kind, so an opening of one leg never verifies for another.
+**Cost if wrong.** A sender proving one payment reveals its decoys, so the decoys stop hiding the real recipient.
+**Source.** `history/specs/2026-10-08-zether-multi-recipient-design.md` §5.1.
+
+### CTR-ZTH-41 — Auditor key should be a k-of-n threshold key
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-41 · superseded-by: —
+
+**Why.** A single auditor secret `x_a` reads every transfer of the token; splitting it off chain by a DKG (company, audit firm, regulator) needs k parties to decrypt or open, with no contract change since `Y_a` stays one public key.
+**Cost if wrong.** A single auditor key is one point of compromise or coercion for all transfer amounts.
+**Source.** `history/specs/2026-10-08-zether-multi-recipient-design.md` §2 (Z11).
+
+### CTR-ZTH-42 — The sender may leave the auditor out of one transfer
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-42 · superseded-by: —
+
+**Why.** On a token whose auditor is on, the sender may set every `C_aud_j = O` and the statement `Y_a = O`; a mix reverts. The owner accepted that the auditor then reads nothing for that transfer and that the opt-out is publicly visible.
+**Cost if wrong.** Without it the auditor-on token forces every transfer into the auditor's view; with a mix allowed a proof could verify under either choice.
+**Source.** `history/specs/2026-10-08-zether-multi-recipient-design.md` §2 (Z12), §5.
+
+### CTR-ZTH-43 — Disclosure in a stateless ZetherDisclosure
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-43 · superseded-by: —
+
+**Why.** `verifyTransferAmount` and `transferCiphertext` move out of the token into one stateless contract (no admin, no upgrade, every token and curve); the token keeps `transferEntry` and the implementation-immutable `disclosure()`. It takes 2,972 B off `ZetherToken`; the challenge binds the token address.
+**Cost if wrong.** Left in the token, disclosure keeps it further over EIP-170 (still 4,363 B over after the split); a mutable disclosure contract could change what an opening proves.
+**Source.** `history/specs/2026-10-08-zether-multi-recipient-design.md` §2 (Z13), §5, §7.
 
 ### CTR-ZTH-80 — Range bits 32 and DECRYPT_BOUND 2^40
 - old: R34(params) · status: superseded · owner: yes · date: 2026-10-03 · normative: — · superseded-by: CTR-ZTH-18, CTR-ZTH-19

@@ -758,10 +758,10 @@ token's `auditorUA` for `AUDITOR`), never from the opening; `v = v_t`, or `v_a` 
 | `AUDITOR` | auditor | as `RECEIVER_X` with `pk_a`, `v_a` |
 
 Uniqueness by [noise](#noise). `verifyTransferAmount` is a view (the precompile runs in `eth_call`);
-`attestTransferAmount` emits `AmountAttested` as classical. `transferCiphertextHash(entryRef)` returns the bundle hash;
+There is no on-chain attestation, as classical ([CTR-ZTH-39](zether.md#CTR-ZTH-39)). `transferCiphertextHash(entryRef)` returns the bundle hash;
 the bundle bytes come from `PqzTransfer` logs. Nothing reveals `r` (which would open `v_f`, the sender's balance) or
-decryption noise. Client systems see PQZ like classical Zether: amounts known from their own documents, attestations
-through `attestTransferAmount` ([integration.md](../integration.md#confidential-payments)).
+decryption noise. Client systems see PQZ like classical Zether: amounts known from their own documents, disclosure
+through `verifyTransferAmount` ([integration.md](../integration.md#confidential-payments)).
 
 ### Authorization check
 

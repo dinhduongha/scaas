@@ -523,3 +523,22 @@ struct_hash	obsolete	MetaTransaction has no to/value; transfers are MetaTransfer
 commitBid(tenderId, commitment, proof, m, sig)	obsolete	tender deposit is a MetaTransfer; contracts/tender.md#CTR-TND-01
 {token, signature, metatx: {11 fields of MetaTransaction}}	obsolete	metatx jobs carry MetaTransaction or MetaTransfer; node/job-api.md#NODE-JOB-20, contracts/metatx.md#CTR-MTX-09
  | Typed entry point over the SAME struct and typehash; lane 	obsolete	metatx jobs carry MetaTransaction or MetaTransfer; node/job-api.md#NODE-JOB-20, contracts/metatx.md#CTR-MTX-09
+1050000	obsolete	single-recipient transfer gas of the earlier measurement; replaced by the rev 6 tables, contracts/zether.md#gas-multi
+1905000	obsolete	single-recipient transfer gas of the earlier measurement; replaced by the rev 6 tables, contracts/zether.md#gas-multi
+273	obsolete	single-recipient transfer gas of the earlier measurement; replaced by the rev 6 tables, contracts/zether.md#gas-multi
+2748019	obsolete	single-recipient transfer gas of the earlier measurement; replaced by the rev 6 tables, contracts/zether.md#gas-multi
+2818905	obsolete	single-recipient transfer gas of the earlier measurement; replaced by the rev 6 tables, contracts/zether.md#gas-multi
+3400986	obsolete	single-recipient transfer gas of the earlier measurement; replaced by the rev 6 tables, contracts/zether.md#gas-multi
+3457852	obsolete	single-recipient transfer gas of the earlier measurement; replaced by the rev 6 tables, contracts/zether.md#gas-multi
+3919760	obsolete	single-recipient transfer gas of the earlier measurement; replaced by the rev 6 tables, contracts/zether.md#gas-multi
+3975916	obsolete	single-recipient transfer gas of the earlier measurement; replaced by the rev 6 tables, contracts/zether.md#gas-multi
+abi.encode(A1, A2, z)	obsolete	disclosure openings are per leg of a bundle B_j (four kinds, leg index j); contracts/zether.md#CTR-ZTH-40
+AmountAttested(entryRef, amount, …)	obsolete	attestTransferAmount/AmountAttested are removed; contracts/zether.md#CTR-ZTH-39
+AmountAttested(entryRef, amount, kind, attestedBy, timestamp)	obsolete	attestTransferAmount/AmountAttested are removed; contracts/zether.md#CTR-ZTH-39
+[amount]G + [s]Y_t == C_out	obsolete	disclosure openings are per leg of a bundle B_j (four kinds, leg index j); contracts/zether.md#CTR-ZTH-40
+[amount]G + [s]Y_to == C_out	obsolete	disclosure openings are per leg of a bundle B_j (four kinds, leg index j); contracts/zether.md#CTR-ZTH-40
+attestedBy	obsolete	attestTransferAmount/AmountAttested are removed; contracts/zether.md#CTR-ZTH-39
+log_G(Y_t) == log_{D_out}(C_out − [amount]G)	obsolete	disclosure openings are per leg of a bundle B_j (four kinds, leg index j); contracts/zether.md#CTR-ZTH-40
+log_G(Y_to) == log_{D_out}(C_out − [amount]G)	obsolete	disclosure openings are per leg of a bundle B_j (four kinds, leg index j); contracts/zether.md#CTR-ZTH-40
+Y_to ‖ C_out ‖ D_out ‖ C_aud	obsolete	disclosure openings are per leg of a bundle B_j (four kinds, leg index j); contracts/zether.md#CTR-ZTH-40
+ is a free view; 	obsolete	attestTransferAmount/AmountAttested are removed; contracts/zether.md#CTR-ZTH-39
