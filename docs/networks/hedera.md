@@ -36,9 +36,9 @@ On Hedera the `MetaOp` v1 **is** the EIP-712 `MetaTransaction` of `MetaToken` �
 | `domain="scaas.metaop.v1"` | `EIP712Domain{name:"SCaaS MetaToken", version:"1"}` |
 | `network` | `chainId` = 295 / 296 / 297 / 298 |
 | `contract` | `verifyingContract` = the token clone |
-| `op` | `data` = `pay(bytes32)` ‖ payRef (as built, op `trade` = `trade(address,uint256,address)`; target: empty `data` = transfer, `pay(bytes32)`, or an allowlisted self-call, [NODE-JOB-20](../node/job-api.md#NODE-JOB-20)) |
+| `op` | `data` = `pay(bytes32)` ‖ payRef (as built, op `trade` = `trade(address,uint256,address)`; target: a `MetaTransfer` with `entryRef` for transfer/payment, or a `MetaTransaction` whose `data` is an allowlisted self-call, [CTR-MTX-15](../contracts/metatx.md#CTR-MTX-15), [NODE-JOB-20](../node/job-api.md#NODE-JOB-20)) |
 | `from, to, amount` | `from, to, value` |
-| `payRef(32)` | inside `data` |
+| `payRef(32)` | `entryRef` of the `MetaTransfer` (as built inside `data`) |
 | `lane(32)`, `nonce` | `batch = keccak(entryRef)`, `nonce = 0` ([CTR-MTX-03](../contracts/metatx.md#CTR-MTX-03)) |
 | `validUntil` | `validUntil` |
 | `relayer` | `relayer` + flag `MODE_RESTRICT_RELAYER` |
@@ -242,7 +242,9 @@ allows 1 000 blocks per call, equal to the indexer's step cap. The token list is
 <a id="mandate"></a><a id="NET-HED-03"></a>**NET-HED-03** — **An ED25519 owner pays from its `MandateWallet` only
 through `mtxExecuteAsOwnerRaw`.** `MandateWallet` is used unchanged with the platform's secp256k1 custody key as
 delegate. An ED25519 owner cannot use `executeAsOwner` (ECDSA; target name `mtxExecuteAsOwner`), so `HederaMandateWallet.mtxExecuteAsOwnerRaw` checks the
-owner through HIP-632 with the same `ownerNonce` and the same `OwnerCall` digest; `isValidSignature` (ERC-1271 for
+owner through HIP-632 over the same owner digest as `mtxExecuteAsOwner` (target: the owner's `MetaTransaction` digest
+in the wallet's domain, [CTR-ACC-06](../contracts/mandates.md#CTR-ACC-06); as built the `OwnerCall` digest with
+`ownerNonce`); `isValidSignature` (ERC-1271 for
 the owner) stays ECDSA, and an ED25519 owner pays manually with `mtxExecuteAsOwnerRaw(execute(token, payWithFee…))`. ERC-1271 runs under
 STATICCALL, where HIP-632 halts, so `isValidSignature` cannot cover ED25519; the token is not special-cased (one more
 Hedera-only path in the signature pipeline for a rare case). Paying manually by meta-tx holds for ECDSA owners only.

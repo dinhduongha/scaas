@@ -21,7 +21,7 @@ module-lattice assumptions:
 | Validity proofs | Σ-protocol + 2 Bulletproofs (`n_v = n_b = 64`) | one LNP22 lattice proof per op ([proof engine](#proof-engine)): key, encryption, decryption and integer-carry relations with exact norms |
 | Verification | Solidity + bn254/BLS precompiles | native precompile on chain 7622 (`0x…0F01`), same C core as the prover ([CTR-PQZ-09](#CTR-PQZ-09), [CTR-PQZ-10](#CTR-PQZ-10)) |
 | Authorization | 8 `AuthScheme`s in the built registry; the UA registry replaces them by `authRef` | UA `authRef` = `mldsa65` UA (default) or a PQ-dominant UA `msig` (hybrid, t-of-n), verified via precompile `0x…0F10` ([CTR-PQZ-12](#CTR-PQZ-12)) |
-| Relaying | ERC-20 on the one base `ERC20MetaTx`: allowlisted self-calls through `mtxExecute`, outer fee `NONE`/`FIXED` from the public balance, `envelopeBinding` in the statement ([CTR-ZTH-34](zether.md#CTR-ZTH-34); built: `ZetherMetaTx` with `OP_ZTRANSFER`/`OP_ZBURN`) | the same envelope and rules ([CTR-PQZ-15](#CTR-PQZ-15)), plus MetaToken v3's `UAMetaTransaction` so a PQ UA pays the outer fee |
+| Relaying | ERC-20 on the one base `ERC20MetaTx`: allowlisted self-calls through `mtxExecute`, outer fee `NONE`/`FIXED` from the public balance, `envelopeBinding` in the statement ([CTR-ZTH-34](zether.md#CTR-ZTH-34); built: `ZetherMetaTx` with `OP_ZTRANSFER`/`OP_ZBURN`) | the same base, self-call and rules ([CTR-PQZ-15](#CTR-PQZ-15), [CTR-PQZ-21](#CTR-PQZ-21)), plus the UA path's `UAMetaTransaction` so a PQ UA pays the outer fee |
 | Decryption | BSGS discrete log, device cache, `zether-read-balance` | direct rounding, microseconds, exact; no BSGS, no cache needed ([CTR-PQZ-16](#CTR-PQZ-16)) |
 | State | points in storage | ciphertext **hashes** in storage, bytes in calldata + events; public amounts (`fund`, fees) as a public `plainPending` integer; public keys in SSTORE2 ([CTR-PQZ-07](#CTR-PQZ-07), [CTR-PQZ-06](#CTR-PQZ-06)) |
 | Chains | dev allowlist 31337/1337 | allowlist 31337/1337/**7622** **and** a constructor self-test through the precompile **and** the registry's `chain_uid` in every statement ([CTR-PQZ-01](#CTR-PQZ-01), [NET-ALL-22](../networks/README.md#NET-ALL-22)) |
@@ -786,98 +786,92 @@ proof (knowledge of the PQZ key) **and** the signature (the auth UA) are require
 
 <a id="metatx"></a>
 <a id="CTR-PQZ-15"></a>**CTR-PQZ-15** — **`PqzToken` is an ERC-20 + `IERC20MetaTx` token exactly like `ZetherToken`**
-(owner, 2026-10-07; it replaces an earlier "no meta-tx envelope" design). A public ERC-20 ledger (`wrap`/`unwrap` of
-the underlying 1:1, allowances per [CTR-TOK-01](token-wrappers.md#CTR-TOK-01), escrow invariant) and the classical
-envelope unchanged: `MetaTxLib.MetaTransaction`, `METATX_TYPEHASH` and `MetaTxLib`'s address normalizer, the 2D nonce
-(`metaNonce`, `cancelMetaNonce`), `executeMetaTransaction`, `metaTxDigest`, `supportedModes() = MODE_KNOWN_MASK`
-(`0xF3`), the nine cheap-before-expensive steps, `MetaTransactionExecuted` and the `MetaTx*` errors, EIP-712 domain
-`("SCaaS PqzToken", "1", chainId, token, salt = chainUid)` ([CTR-GEN-05](README.md#CTR-GEN-05)). Every PQZ op — `fund`, transfer, burn, refresh, `rollOver` — is reachable as
-a direct open call **and** as an envelope op through `_executeOp`, whose `m.data` is byte-identical to the direct
-calldata. Envelope ops take outer fee `NONE` or `FIXED` only, absolute; `PERCENT` reverts
-(`FeePolicy.requireConfidentialSafe`, [CTR-ZTH-07](zether.md#CTR-ZTH-07)) and stays available only for plain public
-transfers (`data` empty). The outer fee is checked against the payer's public balance before any statement build or
-precompile call, and collected after the proof verifies, before any effect. Proof-carrying ops bind their envelope as
-classical `_envelopeBinding` ([CTR-ZTH-06](zether.md#CTR-ZTH-06)): `envelopeBinding` is a statement header field (0
-for a direct call), so the proof and the PQ `authSig` cover exactly one envelope. The inner confidential fee
-(`beneficiaryUA`, `confidentialFee`) stays beside it, as classical. **Authority is split:** confidential balances move
-only on the PQ `authSig` over the statement plus the PQZ proof ([CTR-PQZ-12](#CTR-PQZ-12), unchanged); the envelope
-signer authorizes only the public-ledger part — the outer fee from its own public balance, its nonce, and for `fund`
-the public amount it shields from that balance. **PQ-complete path:** the same ops through MetaToken v3's
-`UAMetaTransaction` ([CTR-UA-19](accounts.md#CTR-UA-19)) on `PqzToken`'s own `bytes32` UA ledger
-([CTR-UA-18](accounts.md#CTR-UA-18)), so an `mldsa65`/`mldsa44` UA or a PQ-dominant `msig` pays the outer fee
-and signs the nonce, and no classical key signs anything on the op path. Envelopes are not carried on the mesh, exactly
-as classical Zether ([NODE-MESH-01](../node/mesh.md#NODE-MESH-01)). Relayers, the node, the indexer and client systems
-handle PQZ with the existing meta-tx path. A v1 envelope signer is ECDSA/1271, hence the v3 path. A broken envelope key
-can spend that signer's public balance and burn its nonces; it can never move confidential value. Envelope bytes add
-≈ 0.6 KB (v1) / ≈ 4 KB (v3 with ML-DSA) and ≈ 0.2 M execution gas; a changed outer-fee quote needs a new proof (the
-binding is in the statement).
+(owner, 2026-10-07, replacing an earlier "no meta-tx envelope" design; relaying as Zether, 2026-10-08). A public ERC-20 ledger (`wrap`/`unwrap` of the underlying 1:1,
+allowances per [CTR-TOK-01](token-wrappers.md#CTR-TOK-01), escrow invariant) on the one token base `ERC20MetaTx`
+([CTR-MTX-07](metatx.md#CTR-MTX-07)): the two structs, the 2D nonce, `cancelNonce`, `mtxExecute` and its alias,
+`supportedModes() = MODE_KNOWN_MASK` (`0xF3`), `MetaTransactionExecuted` and the base's errors, EIP-712 domain
+`("SCaaS PqzToken", "1", chainId, token, salt = chainUid)` ([CTR-GEN-05](README.md#CTR-GEN-05)). Every PQZ op —
+`fund`, transfer, burn, refresh, `rollOver` — is reachable as a direct open call **and** as an allowlisted self-call
+whose `m.data` is byte-identical to the direct call's calldata ([CTR-PQZ-21](#CTR-PQZ-21)), so a client builds one
+calldata and either submits it or wraps it. Envelope ops take outer fee `NONE` or `FIXED` only, absolute; `PERCENT`
+reverts (`FeePolicy.requireConfidentialSafe`, [CTR-ZTH-07](zether.md#CTR-ZTH-07)) and stays available only for plain
+public transfers and payments, which are `MetaTransfer`s as on every token ([CTR-MTX-23](metatx.md#CTR-MTX-23)). The
+outer fee is the base's step 6, after the call; a failing fee reverts everything. Proof-carrying ops bind their
+envelope as classical Zether ([CTR-ZTH-06](zether.md#CTR-ZTH-06)): `envelopeBinding` is a statement header field (0 for
+a direct call), read from the ticket, so the proof and the PQ `authSig` cover exactly one envelope. The inner
+confidential fee (`beneficiaryUA`, `confidentialFee`) stays beside it, as classical. **Authority is split:**
+confidential balances move only on the PQ `authSig` over the statement plus the PQZ proof
+([CTR-PQZ-12](#CTR-PQZ-12), unchanged); the envelope signer authorizes only the public-ledger part — the outer fee
+from its own public balance, its nonce, and for `fund` the public amount it shields from that balance. **PQ-complete
+path:** the same selectors through `uaExecute` with a `UAMetaTransaction` ([CTR-UA-26](accounts.md#CTR-UA-26)) on
+`PqzToken`'s own `bytes32` UA ledger ([CTR-UA-18](accounts.md#CTR-UA-18)), whose UA allowlist holds the four PQZ
+selectors, so an `mldsa65`/`mldsa44` UA or a PQ-dominant `msig` pays the outer fee and signs the nonce, and no
+classical key signs anything on the op path. Envelopes are not carried on the mesh, exactly as classical Zether
+([NODE-MESH-01](../node/mesh.md#NODE-MESH-01)). Relayers, the node, the indexer and client systems handle PQZ with the
+existing meta-tx path. An address-path envelope signer is ECDSA/1271, hence the UA path. A broken envelope key can
+spend that signer's public balance and burn its nonces; it can never move confidential value. Envelope bytes add
+≈ 0.6 KB (address path) / ≈ 4 KB (UA path with ML-DSA) and ≈ 0.2 M execution gas; a changed outer-fee quote needs a
+new proof (the binding is in the statement).
 
-**Two envelopes over one pipeline.** Mixin `PqzMetaTx` (ERC20 + EIP712 + `IERC20MetaTx`, the `ZetherMetaTx` pattern with
-the UA shared nonce map) gives `PqzToken`:
+**Two paths over one pipeline** (the base's, [CTR-MTX-17](metatx.md#CTR-MTX-17)):
 
-| | v1 path — exactly as `ZetherToken` | v3 path — exactly as MetaToken v3 |
+| | Address path ("v1") | UA path ("v3") |
 |---|---|---|
-| Entry point | `executeMetaTransaction(MetaTxLib.MetaTransaction m, bytes sig)` | `uaExecute(UAMetaTransaction m, bytes auth)` |
-| Struct, typehash | `MetaTxLib`'s, read-only ([CTR-ZTH-08](zether.md#CTR-ZTH-08)) | the UA `UAMetaTransaction` (`bytes32 from, to`) |
-| EIP-712 domain | `("SCaaS PqzToken", "1", chainId, token, salt = chainUid)` — the token shape ([CTR-GEN-05](README.md#CTR-GEN-05)), so the digest code of the SDK, the node ([NODE-JOB-02](../node/job-api.md#NODE-JOB-02)) and client-system builders serves it | the same domain; the typehash separates the two structs ([CTR-UA-19](accounts.md#CTR-UA-19), [NET-ALL-22](../networks/README.md#NET-ALL-22)) |
-| `from`, step 5 | address: ECDSA low-s if `_isContract(from)` is false, else ERC-1271 (50 k gas), as `ZetherMetaTx` | native id (`from >> 160 == 0`, classified per [CTR-UA-24](accounts.md#CTR-UA-24)) as v1; else a registered SIGNING UA through `registry.requireAuthorized(from, PURPOSE_METATX, digest, auth)`; ZETHER kinds (incl. `pqz-mlwe`) ⇒ `UAKindNotAccepted` |
+| Entry point | `mtxExecute(MetaTxLib.MetaTransaction m, bytes sig)` (alias `executeMetaTransaction`) | `uaExecute(UAMetaTransaction m, bytes auth)` |
+| Struct, typehash | `MetaTxLib.MetaTransaction` ([CTR-MTX-15](metatx.md#CTR-MTX-15)) | `UAMetaTransaction` (`bytes32 from`) ([CTR-UA-26](accounts.md#CTR-UA-26)) |
+| EIP-712 domain | `("SCaaS PqzToken", "1", chainId, token, salt = chainUid)` — the token shape ([CTR-GEN-05](README.md#CTR-GEN-05)), so the digest code of the SDK, the node ([NODE-JOB-02](../node/job-api.md#NODE-JOB-02)) and client-system builders serves it | the same domain; the typehash separates the structs ([CTR-UA-19](accounts.md#CTR-UA-19), [NET-ALL-22](../networks/README.md#NET-ALL-22)) |
+| `from`, signature step | address: ECDSA low-s or ERC-1271 (50 k gas) | native id (`from >> 160 == 0`, classified per [CTR-UA-24](accounts.md#CTR-UA-24)); else a registered SIGNING UA through `registry.requireAuthorized(from, PURPOSE_METATX, digest, auth)`; ZETHER kinds (incl. `pqz-mlwe`) ⇒ `UAKindNotAccepted` |
 | Pays the outer fee from | its ERC-20 balance | `_uaBalance[from]` (derived) or the ERC-20 balance (native) |
-| Nonce | one map `_uaNonce[bytes32][batch]` for both paths (UA test T-V3-1); `metaNonce(address, batch)` reads `pad(from)`; `cancelMetaNonce(batch)` by the sender, emits `MetaNonceCancelled` | the same map; `uaNonce(bytes32, batch)`; `uaCancelNonce(ua, batch, validUntil, auth)` for derived UAs (purpose `metatx-cancel`) |
+| Nonce | one map `_uaNonce[bytes32][batch]` for both paths (UA test T-V3-1); `mtxNonce(address, batch)` reads `pad(from)`; `cancelNonce(batch)` by the sender | the same map; `uaNonce(bytes32, batch)`; `uaCancelNonce(ua, batch, validUntil, auth)` for derived UAs (purpose `metatx-cancel`) |
 | Event | `MetaTransactionExecuted` | `UAMetaTransactionExecuted` (its `digest` is the `intent_id`, [NODE-MESH-18](../node/mesh.md#NODE-MESH-18)) |
 | Binding tag | `SCAAS-PQZ-ENVELOPE-V1` | `SCAAS-PQZ-UA-ENVELOPE-V1` |
 
 Plus the UA ledger's `transferToUA(bytes32, uint256)`, `balanceOfUA(bytes32)`, `UA_POOL` and `UATransfer`, so a PQ UA can
 hold the public fee float. Same surface as `ZetherToken` (owner check 2026-10-07): **`wrap`/`unwrap` exist as direct
-calls** exactly as classical (`ZetherToken.sol:189-200`), and the envelope ops are the confidential ones — as
-classical, whose `_executeOp` carries only `zetherTransfer`/`zetherBurn` (`ZetherToken.sol:447-455`). **Wrap/unwrap
-parity:** `wrap` and `unwrap` are direct calls on both tokens and neither is an envelope op. The **gasless exit is the
-envelope `burn`**, which pays the underlying straight to `recipient` (classical `ZetherToken.sol:406`), so no envelope
-`unwrap` op is needed. No `mtxBatch`/`uaBatch` and no `pay` op: a PQZ op is ≈ 3 M gas and ≈ 80 KB.
+calls** exactly as classical, and the envelope ops are the confidential ones. **Wrap/unwrap parity:** `wrap` and
+`unwrap` are direct calls on both tokens and neither is an envelope op. The **gasless exit is the envelope `burn`**,
+which pays the underlying straight to `recipient`, so no envelope `unwrap` op is needed.
 
-**Ops in `m.data`.** `data` empty ⇒ plain public transfer `from → to` with the full `FeePolicy` (incl. `PERCENT`, 1 %
-cap) and v2's `FeeRecipientIsPayee` check, as every meta token. Otherwise `m.to = 0` and `m.value = 0` (else
-`PqzOpNotCanonical`) and `m.data` is **byte-identical to the direct call's calldata**, so a client builds one calldata
-and either submits it or wraps it:
+**Allowlisted selectors** (fee class `ABSOLUTE`, [CTR-MTX-20](metatx.md#CTR-MTX-20)):
 
-| `m.data` selector | Effect | Statement binding |
+| Selector | Effect | Statement binding |
 |---|---|---|
 | `pqzTransfer(bytes,bytes,bytes[],bytes,bytes)` | [transfer](#transfer) | `envelopeBinding` = this envelope's |
 | `pqzBurn(bytes,bytes,bytes[],uint256,address,bytes,bytes)` (burn and refresh) | burn and refresh | as above |
 | `fund(bytes32,uint256)` | fund, source = the signer's public balance | none: no statement; the envelope signature covers `(ua, amount)` |
 | `rollOver(bytes32,bytes,bytes[])` | [rollover](#rollover-op) | none (no authority needed) |
 
-Any other selector ⇒ `PqzOpNotCanonical`. `supportedModes()` returns `0xF3` on both paths: flag bits
+Any other selector ⇒ `MtxSelectorNotAllowed`. `supportedModes()` returns `0xF3` on both paths: flag bits
 `MODE_RESTRICT_RELAYER` (`0x01`) and `MODE_RESTRICT_FEE_RECIPIENT` (`0x02`) apply to every op; fee nibble `NONE`
 (`0x00`) and `FIXED` (`0x20`) apply to every op, `FIXED` absolute (no 1 % cap, the amount is hidden —
-[CTR-ZTH-07](zether.md#CTR-ZTH-07)); `PERCENT` (`0x10`) applies to plain public transfers only and reverts
-`PercentFeeForbiddenOnConfidential` on the four PQZ ops; other bits ⇒ `ModeUnknownBits`/`ModeFeeInvalid` (step 3).
+[CTR-ZTH-07](zether.md#CTR-ZTH-07)); `PERCENT` (`0x10`) applies to `MetaTransfer`s only and reverts
+`MtxFeeClass`/`PercentFeeForbiddenOnConfidential` on the four PQZ selectors. The PQZ functions run their cheap checks
+(shape, the signer's public balance `≥ amount·shieldScale` for `fund`) before any SSTORE2 read, statement build or
+precompile call; then the op's own checks in transfer/burn order, the statement with `envelopeBinding`,
+`requireZetherAuthorized` (the PQ `authSig`) and the `PQZ` verify; burn's underlying transfer last, then the escrow
+check. Anything failing ⇒ the whole transaction reverts: no fee, nonce unspent; the relayer loses its gas (free on
+chain 7622) and protects itself by simulating on a follower.
 
-**Pipeline** (classical order; nonce spent with the fee as `MetaTxCore` v2, [execution pipeline](metatx.md#execution-pipeline)):
+<a id="CTR-PQZ-21"></a>**CTR-PQZ-21** — **`PqzToken` relays through the generic self-call, as classical Zether**
+(owner 2026-10-08: "why not the same as Zether?"). `pqzTransfer`, `pqzBurn`, `fund(bytes32,uint256)` and
+`rollOver(bytes32,bytes,bytes[])` are allowlisted self-calls through `mtxExecute`/`uaExecute`, and the proof-carrying
+ones read the envelope binding from the ticket ([CTR-ZTH-34](zether.md#CTR-ZTH-34)); there is no separate PQZ mixin.
+PQZ selectors are refused in `mtxBatch`/`uaBatch` (`MtxNotBatchable(selector)`: one op is ≈ 3 M gas and up to
+≈ 340 KB). **Cost of the self-call:** one memory copy of `m.data` for the `CALL`, `3·w + w²/512` gas with `w` = words:
+≈ 0.25 M at 340 KB (`w` = 10 625); the callee's arguments are `bytes calldata`, so nothing is decoded into memory
+again. An earlier ≈ 2 M estimate, which had motivated a mixin reading `m.data` as calldata slices, assumed three copies
+(decode, re-encode, call). A PQZ op is ≈ 3.25 M gas, below the EIP-7825 cap of 16,777,216.
 
-1. relayer; 2. `validUntil`; 3. `MetaTxLib.validateMode`; 4. nonce; 5. signature (per path, table above);
-6. **checks**, cheap first: envelope shape, `requireConfidentialSafe`, `fee = FIXED ? m.fee : 0`,
-   `FeePolicy.validateRecipient`, payer public balance `≥ fee` (`+ amount·shieldScale` for `fund`) — before any SSTORE2
-   read, statement build or precompile call (`MetaTxInsufficientForFee`); then the op's own checks in transfer/burn
-   order, the statement with `envelopeBinding`, `requireZetherAuthorized` (the PQ `authSig`) and the `PQZ` verify;
-7. collect the outer fee and spend the nonce;
-8. effects (fund, transfer, burn, rollover); burn's underlying transfer last, then the escrow check;
-9. emit the path's event.
-
-Anything failing ⇒ the whole transaction reverts: no fee, nonce unspent; the relayer loses its gas (free on chain 7622)
-and protects itself by simulating on a follower. Op arguments are read from `m.data` as calldata slices, not decoded
-into memory and re-sent through a `this.relayed*` self-call as `ZetherToken` does: at +16 inline credits `m.data` is
-≈ 340 KB, and three memory copies would cost ≈ 2 M gas of quadratic memory expansion.
-
-**Binding** (classical [CTR-ZTH-06](zether.md#CTR-ZTH-06), plus `chainUid`; `m.data` excluded because it contains the
-proof):
+**Binding** ([CTR-ZTH-06](zether.md#CTR-ZTH-06), plus `chainUid`; `m.data` excluded because it contains the proof;
+`MetaTransaction` has no `to`/`value`):
 
 ```
 envelopeBinding = keccak256(abi.encode(keccak256("SCAAS-PQZ-ENVELOPE-V1"), chainid, chainUid, token,
-                    m.from, m.to, m.value, m.batch, m.nonce, m.validUntil, m.mode, canonRelayer, m.fee, canonFeeRecipient))
-                  (v3: tag "SCAAS-PQZ-UA-ENVELOPE-V1", `m.from`/`m.to` as bytes32; direct call: 0)
+                    m.from, m.batch, m.nonce, m.validUntil, m.mode, canonRelayer, m.fee, canonFeeRecipient))
+                  (UA path: tag "SCAAS-PQZ-UA-ENVELOPE-V1", `m.from` as bytes32; direct call: 0)
 ```
 
-Views `envelopeBinding(m)`, `uaEnvelopeBinding(m)`, `metaTxDigest(m)`, `uaDigest(m)` and `transferStatement` /
+Views `envelopeBinding(m)`, `uaEnvelopeBinding(m)`, `mtxDigest(m)`, `uaDigest(m)` and `transferStatement` /
 `burnStatement(…, binding)` let clients cross-check before proving. As classical: stripping the op out of its envelope
 and calling directly (binding 0), re-wrapping it in another envelope (other `from`, nonce, validity, fee, relayer or fee
 recipient), or using it on another token or chain changes the statement ⇒ `AuthRejected` (the `authSig` is checked
@@ -898,13 +892,12 @@ through the v3 path with a dedicated `mldsa65` **fee UA** (same derivation, its 
 the `authRef` key signs only `zether-auth`, one key per role ([CLI-SGN-29](../clients/signers-clientkeys.md#CLI-SGN-29)).
 The v1 path serves existing EOA/1271 payers; a 1271 wallet whose own validation is ML-DSA is PQ on the v1 path too.
 
-Choices taken with the owner ruling: nonce spent with the fee after verify (`MetaTxCore` v2 order) rather than at step 9
-as `ZetherMetaTx`; one salted domain for both paths (the token shape; an earlier text had the v3 path at
-`("SCaaS PqzToken", "3", chainId, token, salt = chainUid)`); one `envelopeBinding` field (0 = direct) instead of classical's tag + binding pair; op
-args sliced from calldata instead of the classical self-call; a dedicated `mldsa65` fee UA, not the `authRef` key; no
-batch, `pay` or `unwrap` ops. Classical Zether has since moved to the one base and its generic self-call
-([CTR-ZTH-34](zether.md#CTR-ZTH-34)); whether `PqzToken`'s envelope follows it (`mtxExecute`, the transient ticket, the
-`mtx` names) or keeps the sliced-argument dispatch above is open, and this file keeps the latter until it is decided.
+Choices taken with the owner rulings: one salted domain for both paths (the token shape; an earlier text had the v3
+path at `("SCaaS PqzToken", "3", chainId, token, salt = chainUid)`); one `envelopeBinding` field (0 = direct) instead of
+classical's tag + binding pair; a dedicated `mldsa65` fee UA, not the `authRef` key; no batching of PQZ ops and no
+`unwrap` envelope op. The relaying itself follows classical Zether: the one base, `mtxExecute`, the transient ticket
+and the `mtx` names ([CTR-PQZ-21](#CTR-PQZ-21)); an earlier text gave `PqzToken` its own mixin with arguments sliced
+from calldata.
 
 Relaying: envelope ops use the **existing** `metatx` (v1) and `ua_metatx` (v3) node jobs, with the node-computed digest
 over the token's domain; the token row has `kind = pqz`; never batched ([NODE-LANE-11](../node/submit-lanes.md#NODE-LANE-11));
@@ -1107,7 +1100,7 @@ disks for that or prune ([NODE-OPS-15](../node/ops.md#NODE-OPS-15)).
 | `PqzSafety` (library) | [CTR-PQZ-01](#CTR-PQZ-01) allowlist + self-test helper | |
 | `UAPqzVerifier` | UA `IUAKindVerifier` for `0x0142` | stateless; precompile address immutable |
 | `UAMldsaVerifier` | UA verifier for `mldsa44`/`mldsa65` on chain 7622 | stateless; used by the UA `UARegistry` |
-| `PqzMetaTx` (abstract) | ERC20 + EIP712 + `IERC20MetaTx`, v1 and v3 envelopes, UA ledger | `MetaTxLib`/`FeePolicy` read-only ([CTR-ZTH-08](zether.md#CTR-ZTH-08)); not `ZetherMetaTx` itself, whose nonce map is address-keyed; `PqzToken --sizes` ≤ 24,576 B, else the `ua*` entry points move to a `fallback` decoder as MetaToken v3 |
+| `ERC20MetaTx` (the one token base) | ERC20 + EIP712 + `IERC20MetaTx`, both structs, the address and UA paths, UA ledger | [CTR-MTX-07](metatx.md#CTR-MTX-07); `PqzToken --sizes` ≤ 24,576 B, else the `ua*` entry points move to a `fallback` decoder as MetaToken v3 |
 | `PqzToken` | fund, transfer, burn, refresh, rollover, disclosure, meta-tx, `ITransferDisclosure`, `wrap`/`unwrap` | clone per token via `OpenFactory.createPqzToken` (flag-gated); immutable |
 | `PqzCt` (library) | `add`/`sub` on 64-bit lanes, `addTrivial(digits)` for the plain term, the `< q` check, `ctHash` | pure Solidity, no precompile |
 | `Sstore2` | existing pattern (classical generator blob) | reused |
@@ -1119,7 +1112,7 @@ uint64 cleared, uint64 sendCounter, uint256 plainPending)`, `pendingHash(bytes32
 meta-tx: `executeMetaTransaction`, `metaTxDigest`, `metaNonce`, `cancelMetaNonce`, `supportedModes`, `envelopeBinding`,
 `uaExecute`, `uaDigest`, `uaNonce`, `uaCancelNonce`, `uaEnvelopeBinding`, `transferToUA`, `balanceOfUA`, `wrap(uint256)`,
 `unwrap(uint256,address)`, and `transferStatement`/`burnStatement` views taking `binding`. Errors (plus
-`IERC20MetaTx`'s, the UA `UA*`, `PercentFeeForbiddenOnConfidential`, `PqzOpNotCanonical`): `NotAllowedChain`,
+`IERC20MetaTx`'s, the UA `UA*`, `PercentFeeForbiddenOnConfidential`, `MtxNotBatchable`): `NotAllowedChain`,
 `SelfTestFailed`, `NonCanonical`, `StaleSendCounter`, `AccMismatch`, `InlineMismatch`, `InlineTooFar`, `RefreshRequired`,
 `UnitsInvariant` (the debit-time `unitsOf(T) > K_MAX` assert; unreachable unless accounting is broken), `PlainOverdraw`
 (`plainUsed > plainPending`), `Expired`, `ProofRejected`, `AuthRejected`, `AmountOutOfRange`, `CiphertextOffState`.
@@ -1394,11 +1387,11 @@ clientkeys (derivation, ML-DSA, `authDigest`); a pure-Python `pqz_kat.py` (no nu
   `mldsa44` or `msig` `authRef` ⇒ `AuthRejected`;
 - disclosure: right amount ⇒ true, amount ± 1 ⇒ false, wrong `entryRef`, bundle bytes not matching the hash;
 - **meta-tx**, each on the v1 and the v3 path: `PERCENT` on a PQZ op ⇒ `PercentFeeForbiddenOnConfidential` (and accepted
-  on a plain public transfer); `m.to ≠ 0`, `m.value ≠ 0` or an unknown selector ⇒ `PqzOpNotCanonical`; outer fee above
+  on a plain public transfer); an unknown selector ⇒ `MtxSelectorNotAllowed`; a PQZ selector in `mtxBatch`/`uaBatch` ⇒ `MtxNotBatchable`; outer fee above
   the payer's public balance ⇒ `MetaTxInsufficientForFee` **with the precompile mock asserting zero calls**; invalid
   proof or `authSig` ⇒ revert, no fee moved, nonce unspent; an op stripped from its envelope and called directly, or
   re-wrapped with another nonce / fee / `validUntil` / bound relayer / bound fee recipient / `from` ⇒ `AuthRejected`; v1
-  binding presented on the v3 path (and vice versa) ⇒ `AuthRejected`; `cancelMetaNonce` / `uaCancelNonce` kills a bound
+  binding presented on the v3 path (and vice versa) ⇒ `AuthRejected`; `cancelNonce` / `uaCancelNonce` kills a bound
   in-flight op; v1 and v3 share one nonce per native id; v3 `from` = a `pqz-mlwe` UA ⇒ `UAKindNotAccepted`; a broken-key
   simulation (the test owns the v1 envelope key, not the `authRef` key) can drain the public float and burn nonces but
   every confidential op it builds reverts; envelope `fund` debits the public balance and keeps the escrow invariant;

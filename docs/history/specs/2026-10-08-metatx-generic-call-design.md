@@ -1,6 +1,6 @@
 # Meta-transactions: a generic call for every SCaaS contract, transfers as a typed special case
 
-**Status:** DRAFT rev 2, every owner question answered (G1–G10); awaiting the owner's review of this text; not folded. Amends the accepted meta-tx
+**Status:** ACCEPTED by the owner 2026-10-08 and folded into the component docs (rules in `docs/decisions.md`: CTR-MTX-22/23/24, CTR-ACC-10, CTR-UA-26, CTR-PQZ-21 new; superseded CTR-MTX-85, CTR-ACC-80, CTR-PQZ-80); frozen here as the design record. Amends the accepted meta-tx
 design (`docs/history/specs/2026-10-07-metatx-generic.md`, rules in [contracts/metatx.md](../../contracts/metatx.md)).
 Provisional ids `GC-n`; real ids are allocated in `docs/decisions.md` on acceptance (docs/README "Ids").
 **Date:** 2026-10-08. **Scope:** EVM and Hedera: the meta-tx base, every token, `MandateWallet`, `SubjectAccount`,

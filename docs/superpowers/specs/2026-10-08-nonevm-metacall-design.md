@@ -3,7 +3,7 @@
 **Status:** DRAFT rev 3, every owner question answered (§6); to be folded. Provisional ids `NM-n`; real ids are
 allocated in `docs/decisions.md` on acceptance (docs/README "Ids").
 **Date:** 2026-10-08. **Scope:** Aptos, Sui (Move), Soroban, CosmWasm, TON, Solana. Follows the EVM drafts
-[`2026-10-08-metatx-generic-call-design.md`](2026-10-08-metatx-generic-call-design.md) (G1–G10: a generic
+[`2026-10-08-metatx-generic-call-design.md`](../../history/specs/2026-10-08-metatx-generic-call-design.md) (G1–G10: a generic
 `MetaTransaction` for any contract + a typed `MetaTransfer`, no on-chain fee for non-token contracts) and
 [`2026-10-07-metatx-generic.md`](../../history/specs/2026-10-07-metatx-generic.md) (`mtx` names, `chain_uid`), which
 left this question to a separate draft (TODO §00). Nothing is deployed: changes in place.
@@ -86,7 +86,7 @@ the caller. The relayer lane pays gas. The same shape on every family: one typed
 
 ### NM-5 — Parity with EVM (owner Q4)
 
-The typed path offers what EVM offers (GC-5 of [the EVM draft](2026-10-08-metatx-generic-call-design.md)), in each family's form:
+The typed path offers what EVM offers (GC-5 of [the EVM draft](../../history/specs/2026-10-08-metatx-generic-call-design.md)), in each family's form:
 
 | EVM | Non-EVM | Notes |
 |---|---|---|

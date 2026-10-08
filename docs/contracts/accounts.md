@@ -192,7 +192,7 @@ Layer 3 — purposes:
 |---|---|
 | `pop` | `popDigest(ua, authRef)` ([CTR-UA-07](#CTR-UA-07)) |
 | `authref` | `popDigest(ua, authRef)`, signed by the authority `authRef` (consent to authorize that Zether `ua`) |
-| `metatx` | v3 EIP-712 digest of `UAMetaTransaction` |
+| `metatx` | v3 EIP-712 digest of `UAMetaTransaction` or `UAMetaTransfer` |
 | `metatx-cancel` | `keccak256(abi.encode(CANCEL_TAG, chainid, chainUid, token, ua, batch, validUntil))` — derived `ua` only (natives use `cancelNonce`) |
 | `member` | `keccak256(structureUA ‖ ua_msg_of_structure)` (native members: inside `UAAuth`) |
 | `zether-auth` | the Zether `authDigest` ([zether.md](zether.md#registry)) |
@@ -481,49 +481,69 @@ Projecting `bytes32 → address` re-creates the 2^80 collision ([CTR-UA-03](#CTR
 holder; the SCaaS indexer splits it.
 
 <a id="uametatransaction"></a>
-<a id="CTR-UA-19"></a>**CTR-UA-19** — **The UA-ledger meta-transaction has its own struct and typehash**
-(`UAMetaTransaction`, `from`/`to` as `bytes32`; owner) in the token's own domain `("SCaaS MetaToken", "1", chainId,
+<a id="CTR-UA-19"></a>**CTR-UA-19** — **The UA-ledger meta-transactions have their own structs and typehashes**
+(`UAMetaTransaction` and `UAMetaTransfer`, ids as `bytes32`; owner) in the token's own domain `("SCaaS MetaToken", "1", chainId,
 clone, salt = chainUid)` — one domain for both structs, the typehash separates them — where `chainUid` is the
 implementation's constructor immutable ([CTR-MTX-02](metatx.md#CTR-MTX-02)), checked equal to `registry.chainUid()` at
-`initialize`; and the base's pipeline with explicit shapes ([metatx.md](metatx.md#execution-pipeline)).
+`initialize`; and the base's two pipelines ([metatx.md](metatx.md#execution-pipeline),
+[CTR-MTX-23](metatx.md#CTR-MTX-23)), split as on the address path ([CTR-UA-26](#CTR-UA-26)).
 **Transitional:** an earlier text gave this path its own domain `("SCaaS MetaToken", "3", chainId, clone, salt =
 chainUid)` and copied `registry.chainUid()` into the clone at `initialize`; neither is built. This is a deliberate exception to "no second typehash"
-([CTR-MTX-11](metatx.md#CTR-MTX-11)): that rule forbids a second hash of the **same** struct; this is a different struct
-whose `from` cannot be an `address`. Clients build two struct shapes (vectors below).
+([CTR-MTX-11](metatx.md#CTR-MTX-11)): that rule forbids a second hash of the **same** intent; these are different
+structs whose `from` cannot be an `address`. Clients build the UA struct shapes beside the address ones (vectors
+below).
 
 The `ua*` functions live in the one base, so every tier (`META_NONE`, `META_SINGLE`, `META_MULTI`) has them. Storage adds `_uaBalance[bytes32]` and `_uaNonce[bytes32][batch]` (the v3 nonce map is keyed by `bytes32` for
 both paths; native ids are zero-padded).
 
+<a id="CTR-UA-26"></a>**CTR-UA-26** — **The UA path splits like the address path** (owner): a generic
+`UAMetaTransaction` (an allowlisted call of this token under a UA — today `unwrap` only, and `PqzToken`'s four PQZ
+selectors, [CTR-PQZ-21](pq-zether.md#CTR-PQZ-21)) and a typed `UAMetaTransfer` (transfer with `entryRef = 0`, or
+payment). Both share the one nonce map `_uaNonce[bytes32][batch]` with the address path (native ids zero-padded). The
+`ua*` functions keep their signatures and build the struct of their kind; `uaExecuteTransfer` and `uaBatchTransfer`
+mirror `mtxExecuteTransfer` and `mtxBatchTransfer` ([CTR-MTX-23](metatx.md#CTR-MTX-23),
+[CTR-MTX-24](metatx.md#CTR-MTX-24)).
+
 ```solidity
 struct UAMetaTransaction {
-    bytes32 from; bytes32 to; uint256 value; bytes data; uint256 batch; uint256 nonce;
-    uint256 validUntil; uint32 mode; address relayer; uint256 fee; address feeRecipient;
+    bytes32 from; bytes data; uint256 batch; uint256 nonce; uint256 validUntil;
+    uint32 mode; address relayer; uint256 fee; address feeRecipient;
 }
-// typehash: keccak256("UAMetaTransaction(bytes32 from,bytes32 to,uint256 value,bytes data,uint256 batch,"
-//                     "uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)")
+struct UAMetaTransfer {
+    bytes32 from; bytes32 to; uint256 value; bytes32 entryRef; uint256 batch; uint256 nonce; uint256 validUntil;
+    uint32 mode; address relayer; uint256 fee; address feeRecipient;
+}
+// typehashes: keccak256("UAMetaTransaction(bytes32 from,bytes data,uint256 batch,uint256 nonce,uint256 validUntil,"
+//                       "uint32 mode,address relayer,uint256 fee,address feeRecipient)")
+//             keccak256("UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,"
+//                       "uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)")
 ```
 
-| Function | Mirrors | `from` | `to` |
-|---|---|---|---|
-| `uaExecute(UAMetaTransaction m, bytes auth)` | `mtxExecute` (transfer, `pay`, `unwrap` shapes only) | U | U (`UANotRegistered`, `UAKindNotAccepted`, `UAPoolNotPayable`) |
-| `uaTransfer(from, to, amount, batch, nonce, validUntil, mode, relayer, auth)` | `mtxTransfer` | U | U |
-| `uaTransferWithFee(…, fee, feeRecipient, auth)` | `mtxTransferWithFee` | U | U |
-| `uaPay(from, to, amount, payId, validUntil, mode, relayer, fee, feeRecipient, auth)` | `mtxPay` (`batch = payLane(payId)`) | U | U |
-| `uaUnwrap(from, underlying, wrapped, recipient, minOut, batch, nonce, validUntil, mode, relayer, auth)` | `mtxExecute(unwrap(…))` | U | `recipient` address (N) |
-| `uaBatch(UAMetaTransaction[] ms, bytes[] auths)` | `mtxBatch` | each U | each |
-| `uaCancelNonce(bytes32 ua, uint256 batch, uint256 validUntil, bytes auth)` | `cancelNonce` | **derived** SIGNING `ua` only (purpose `metatx-cancel`); native ids use `cancelNonce` (sender), which writes `_uaNonce[pad(sender)]` | — |
-| `transferToUA(bytes32 to, uint256 amount)` | — | sender N | registered SIGNING (emits `Transfer(sender, UA_POOL)` + `UATransfer`) |
-| views `balanceOfUA(bytes32)`, `uaNonce(bytes32, batch)`, `uaDigest(m)`, `registry()` | — | — | — |
+| Function | Builds | Mirrors | `from` | `to` |
+|---|---|---|---|---|
+| `uaExecute(UAMetaTransaction m, bytes auth)` | `UAMetaTransaction` | `mtxExecute` (UA allowlist only) | U | — |
+| `uaUnwrap(from, underlying, wrapped, recipient, minOut, batch, nonce, validUntil, mode, relayer, auth)` | `UAMetaTransaction{data: unwrap(…)}` | `mtxExecute(unwrap(…))` | U | `recipient` address (N) |
+| `uaBatch(UAMetaTransaction[] ms, bytes[] auths)` | `UAMetaTransaction` per item | `mtxBatch` | each U | — |
+| `uaExecuteTransfer(UAMetaTransfer t, bytes auth)` | `UAMetaTransfer` as given | `mtxExecuteTransfer` | U | U (`UANotRegistered`, `UAKindNotAccepted`, `UAPoolNotPayable`) |
+| `uaTransfer(from, to, amount, batch, nonce, validUntil, mode, relayer, auth)` | `UAMetaTransfer{entryRef: 0, fee: 0}` | `mtxTransfer` | U | U |
+| `uaTransferWithFee(…, fee, feeRecipient, auth)` | `UAMetaTransfer{entryRef: 0}` | `mtxTransferWithFee` | U | U |
+| `uaPay(from, to, amount, payId, validUntil, mode, relayer, fee, feeRecipient, auth)` | `UAMetaTransfer{entryRef: payId, batch: payLane(payId), nonce: 0}` | `mtxPay` | U | U |
+| `uaBatchTransfer(UAMetaTransfer[] ts, bytes[] auths)` | `UAMetaTransfer` per item | `mtxBatchTransfer` | each U | each |
+| `uaCancelNonce(bytes32 ua, uint256 batch, uint256 validUntil, bytes auth)` | — | `cancelNonce` | **derived** SIGNING `ua` only (purpose `metatx-cancel`); native ids use `cancelNonce` (sender), which writes `_uaNonce[pad(sender)]` | — |
+| `transferToUA(bytes32 to, uint256 amount)` | — | — | sender N | registered SIGNING (emits `Transfer(sender, UA_POOL)` + `UATransfer`) |
+| views `balanceOfUA(bytes32)`, `uaNonce(bytes32, batch)`, `uaDigest(m)`, `uaTransferDigest(t)`, `registry()` | — | — | — | — |
 
 Rules: step 5 of the pipeline is ECDSA/1271 over the v3 EIP-712 digest when `from` is a native id (`from >> 160 == 0`),
 classified per [CTR-UA-24](#CTR-UA-24) (a 7702-delegated `from`: ECDSA, else 1271 — not v2's `_isContract` rule), else
-`registry.requireAuthorized(from, PURPOSE_METATX, digest, auth)`. Ops allowed in `m.data`: empty (transfer),
-`pay(bytes32)`, `unwrap(…)`; **`approve` and `trade` are refused in every `ua*` function, for native `from` too**
+`registry.requireAuthorized(from, PURPOSE_METATX, digest, auth)`. Selectors allowed in `UAMetaTransaction.data`: the
+UA allowlist (`unwrap(…)`; on `PqzToken` its four PQZ selectors); **`approve` and `trade` are refused in every `ua*`
+function, for native `from` too**
 (`MetaTxUnknownOp`; natives use the address-typed path; a UA-ledger allowance model waits for DEX v2). The base **keeps the
 address-typed entry points** (`mtxExecute`, `mtx*`) unchanged; they and the `ua*` functions share one
 nonce map, `_uaNonce[pad(addr)]`, so one native nonce cannot be used on both paths (test T-V3-1). Fees are paid from the
 `from` ledger to `feeRecipient` (an address, native ledger; from a UA `from` it emits `Transfer(UA_POOL, feeRecipient)`);
-the `FeeRecipientIsPayee` check compares `bytes32(uint256(uint160(feeRecipient)))` with `m.to`. Event per item:
+the `FeeRecipientIsPayee` check compares `bytes32(uint256(uint160(feeRecipient)))` with `t.to`. Event per item (both
+structs):
 `UAMetaTransactionExecuted(bytes32 indexed from, address indexed relayer, uint256 indexed batch, uint256 nonce, bytes32
 digest, address feeRecipient, uint256 fee)`; its `digest` is the mesh `intent_id`
 ([NODE-MESH-18](../node/mesh.md#NODE-MESH-18)). Code size: if `--sizes` exceeds 24 576 bytes the `ua*` wrappers move to a
@@ -1198,7 +1218,7 @@ native kind, `hedera-native` in a non-Hedera profile, a top-96-nonzero native) a
 RFC 9591 Appendix E.5 FROST(secp256k1, SHA-256) vectors, DKG transcripts with PoKs from the ZF `frost-secp256k1` crate, a
 bad PoK, `Y ≠ Σ C_i0`; the FROST(bn254, keccak256) ciphersuite's vectors.
 
-`metatx3.json` — `UAMetaTransaction` typed data (domain `salt` = `chain_uid`), digests and auth blobs per kind (the v3 KAT,
+`metatx3.json` — `UAMetaTransaction` and `UAMetaTransfer` typed data (one vector set per struct; domain `salt` = `chain_uid`), digests and auth blobs per kind (the v3 KAT,
 like `MetaTxKat`). `derivation.json` — seed → per-kind keys for the derivation paths (BIP-39 test mnemonic), including the
 role paths and the PQ HKDF.
 
@@ -1324,9 +1344,16 @@ identifier features. Tokens verify a `SubjectAccount` through ERC-1271 with the 
   (per `rpId`). A passkey that is a `webauthn-p256` UA may **also** be a `SubjectAccount` key: same kind, same
   WebAuthn scheme, digests differ (the account's challenge is the token's EIP-712 digest with `from` = the account);
   allowed.
-- Key management: `addKey`/`removeKey`/`rotateKey`/`setGuardian`/`execute` only through `mtxExecuteAsOwner(data, nonce,
-  validUntil, signature)` (built name `executeAsOwner`, [CTR-MTX-21](metatx.md#CTR-MTX-21)) signed by an existing key (own nonce, EIP-712 `OwnerCall(bytes data,uint256 nonce,uint256
-  validUntil)` in the account's own domain `"SCaaS SubjectAccount"`). A plain EOA never rotates.
+- <a id="CTR-ACC-10"></a>**CTR-ACC-10** — **Key management is a `MetaTransaction` signed by the account itself**
+  (owner). `SubjectAccount` is a `MetaTxBase` contract ([CTR-MTX-22](metatx.md#CTR-MTX-22)): `addKey`, `removeKey`,
+  `rotateKey`, `setGuardian` and `execute` are allowlisted self-calls, `onlySelf` (`_msgSender() == address(this)`).
+  Its keys include P-256 passkeys that have no address, so the signer of the `MetaTransaction` is **the account**:
+  `from = address(this)` is allowed here (the `SelfSender` guard of tokens is overridden) and `_requireValidSignature`
+  checks the signature against the account's own key set (its ERC-1271 logic), signed by an existing key. Domain
+  `("SCaaS SubjectAccount", "1", chainId, account, chain_uid)`, the 2D lane nonce, fee mode `NONE` (the relayer pays
+  gas). `mtxExecuteAsOwner(data, nonce, validUntil, signature)` keeps its signature as the named builder of that
+  `MetaTransaction` with `batch = 0`. A plain EOA never rotates. **Transitional (BUILT):** `executeAsOwner` verifies
+  its own `OwnerCall(bytes data,uint256 nonce,uint256 validUntil)` with a single nonce.
 - The client backup predicate ([CLI-SGN-13](../clients/signers-clientkeys.md#CLI-SGN-13)) applies to it unchanged;
   derived UAs are "single-key, no recovery" by construction and the app shows that.
 - `msig` UAs may list a `SubjectAccount` as a member (native contract member).

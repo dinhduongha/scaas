@@ -331,7 +331,9 @@ renamed contracts: `blockchain.chain` gains `chain_uid` (the genesis hash, seede
 activation with the RPC's block 0 and with `/v1/gateway`), and every domain the connector builds — token
 (`domain_name`, `domain_version`), mandate wallet, subject account — adds `salt = chain_uid`; the digest KATs are
 regenerated with it. Call-job calldata uses `mtxPayUnderMandate`, `mtxRevoke` and `mtxExecuteAsOwner`; the payment
-envelope is unchanged (`pay(bytes32)` through `executeMetaTransaction`, now an alias of `mtxExecute`); the subject-side
+envelope becomes a `MetaTransfer` with `entryRef` (new typehash and KAT, `metatransfer_kat.json`) through `mtxPay` or
+`mtxExecuteTransfer` (as built: `pay(bytes32)` through `executeMetaTransaction`); mandate and subject-account calls are
+`MetaTransaction`s in those contracts' domains ([CTR-MTX-22](contracts/metatx.md#CTR-MTX-22)); the subject-side
 cancel is `cancelNonce(batch)`. The connector never builds an `approve` on a SCaaS token. DEX mirrors: an order row
 stores the `TradeOrder` fields (`from`, `receiveToken`, `amount`, `receiveAmount`, `minFill`, `fee`, `relayer`, `dex`,
 `destination`, `flags`, order lane `batch`, `nonce`, `validUntil`); `maker_fee_ppm`/`taker_fee_ppm` become the venue's

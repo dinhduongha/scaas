@@ -481,3 +481,45 @@ smartcontracts/evm/src/chains/private7622/README.md	obsolete	the README now says
 {"error": "<text>"}	obsolete	pre-NODE-GW-06 error bodies; node/gateway.md#NODE-GW-06
 Debug	obsolete	Rust Debug reverts replaced by stable codes; node/gateway.md#NODE-GW-06
 , or the job goes unsponsored when the policy says 	extraction-artifact	node/job-api.md#intake (on_exhausted)
+RevokeMandate(address token,uint64 epoch,uint256 validUntil)	obsolete	typed mandate struct replaced by a MetaTransaction; contracts/mandates.md#CTR-ACC-07
+emit PaymentSettled(from, to, value, feeAmount, feeRecipient, entryRef)	obsolete	payment emitted by the typed path; contracts/metatx.md#CTR-MTX-23
+to/value/data	obsolete	MetaTransaction has no to/value; transfers are MetaTransfers; contracts/metatx.md#CTR-MTX-15, #CTR-MTX-23
+m.from → m.to	obsolete	MetaTransaction has no to/value; transfers are MetaTransfers; contracts/metatx.md#CTR-MTX-15, #CTR-MTX-23
+{token, m: WireUAMetaTransaction, auth}	obsolete	UA jobs name their struct; node/job-api.md (ua_metatx), node/gateway.md
+POST /v1/ua-metatx {chain, token, m: WireUAMetaTransaction, auth}	obsolete	UA jobs name their struct; node/job-api.md (ua_metatx), node/gateway.md
+("SCaaS PqzToken", "1", chainId, token)	obsolete	PqzMetaTx pipeline replaced by the generic self-call; contracts/pq-zether.md#CTR-PQZ-21
+_envelopeBinding	obsolete	PqzMetaTx pipeline replaced by the generic self-call; contracts/pq-zether.md#CTR-PQZ-21
+executeMetaTransaction(MetaTxLib.MetaTransaction m, bytes sig)	obsolete	PqzMetaTx pipeline replaced by the generic self-call; contracts/pq-zether.md#CTR-PQZ-21
+bytes32 from, to	obsolete	PqzMetaTx pipeline replaced by the generic self-call; contracts/pq-zether.md#CTR-PQZ-21
+metaNonce(address, batch)	obsolete	PqzMetaTx pipeline replaced by the generic self-call; contracts/pq-zether.md#CTR-PQZ-21
+ZetherToken.sol:189-200	internal-path	line reference of built code; contracts/zether.md#CTR-ZTH-34
+ZetherToken.sol:447-455	internal-path	line reference of built code; contracts/zether.md#CTR-ZTH-34
+ZetherToken.sol:406	internal-path	line reference of built code; contracts/zether.md#CTR-ZTH-34
+m.to = 0	obsolete	MetaTransaction has no to/value; transfers are MetaTransfers; contracts/metatx.md#CTR-MTX-15, #CTR-MTX-23
+MetaTxLib.validateMode	obsolete	PqzMetaTx pipeline replaced by the generic self-call; contracts/pq-zether.md#CTR-PQZ-21
+fee = FIXED ? m.fee : 0	obsolete	PqzMetaTx pipeline replaced by the generic self-call; contracts/pq-zether.md#CTR-PQZ-21
+FeePolicy.validateRecipient	obsolete	PqzMetaTx pipeline replaced by the generic self-call; contracts/pq-zether.md#CTR-PQZ-21
++ amount·shieldScale	obsolete	PqzMetaTx pipeline replaced by the generic self-call; contracts/pq-zether.md#CTR-PQZ-21
+m.to ≠ 0	obsolete	MetaTransaction has no to/value; transfers are MetaTransfers; contracts/metatx.md#CTR-MTX-15, #CTR-MTX-23
+m.value ≠ 0	obsolete	MetaTransaction has no to/value; transfers are MetaTransfers; contracts/metatx.md#CTR-MTX-15, #CTR-MTX-23
+bidder = m.from	obsolete	tender deposit is a MetaTransfer; contracts/tender.md#CTR-TND-01
+m.to == address(this)	obsolete	tender deposit is a MetaTransfer; contracts/tender.md#CTR-TND-01
+m.value == minDeposit	obsolete	tender deposit is a MetaTransfer; contracts/tender.md#CTR-TND-01
+feeModeOf(m.mode) == NONE	obsolete	receiver-pays payer is a MetaTransfer t; contracts/metatx.md#CTR-MTX-05
+m.mode & MODE_RESTRICT_RELAYER != 0	obsolete	receiver-pays payer is a MetaTransfer t; contracts/metatx.md#CTR-MTX-05
+m.relayer == address(this)	obsolete	tender deposit is a MetaTransfer; contracts/tender.md#CTR-TND-01
+IERC20MetaTx(token).executeMetaTransaction(m, sig)	obsolete	tender deposit is a MetaTransfer; contracts/tender.md#CTR-TND-01
+pay(p)	obsolete	receiver-pays payer is a MetaTransfer t; contracts/metatx.md#CTR-MTX-05
+m.fee == 0	obsolete	receiver-pays payer is a MetaTransfer t; contracts/metatx.md#CTR-MTX-05
+m.mode & MODE_RESTRICT_RELAYER ≠ 0	obsolete	receiver-pays payer is a MetaTransfer t; contracts/metatx.md#CTR-MTX-05
+m.batch == payLane(p)	obsolete	receiver-pays payer is a MetaTransfer t; contracts/metatx.md#CTR-MTX-05
+m.nonce == 0	obsolete	receiver-pays payer is a MetaTransfer t; contracts/metatx.md#CTR-MTX-05
+feeRecipient == m.to	obsolete	receiver-pays payer is a MetaTransfer t; contracts/metatx.md#CTR-MTX-05
+bytes32 d = _execute(m, payerSig)	obsolete	receiver-pays payer is a MetaTransfer t; contracts/metatx.md#CTR-MTX-05
+_erc1271Gas(m.to)	obsolete	receiver-pays payer is a MetaTransfer t; contracts/metatx.md#CTR-MTX-05
+_transfer(m.to, feeRecipient, fee)	obsolete	receiver-pays payer is a MetaTransfer t; contracts/metatx.md#CTR-MTX-05
+data = ""	obsolete	MetaTransaction has no to/value; transfers are MetaTransfers; contracts/metatx.md#CTR-MTX-15, #CTR-MTX-23
+struct_hash	obsolete	MetaTransaction has no to/value; transfers are MetaTransfers; contracts/metatx.md#CTR-MTX-15, #CTR-MTX-23
+commitBid(tenderId, commitment, proof, m, sig)	obsolete	tender deposit is a MetaTransfer; contracts/tender.md#CTR-TND-01
+{token, signature, metatx: {11 fields of MetaTransaction}}	obsolete	metatx jobs carry MetaTransaction or MetaTransfer; node/job-api.md#NODE-JOB-20, contracts/metatx.md#CTR-MTX-09
+ | Typed entry point over the SAME struct and typehash; lane 	obsolete	metatx jobs carry MetaTransaction or MetaTransfer; node/job-api.md#NODE-JOB-20, contracts/metatx.md#CTR-MTX-09

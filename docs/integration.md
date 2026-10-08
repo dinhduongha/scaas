@@ -148,12 +148,12 @@ process ([NODE-JOB-06](node/job-api.md#NODE-JOB-06)). Why: one lane journal per 
 
 | Kind | Payload |
 |---|---|
-| `metatx` | `{token, signature, metatx: {11 fields of MetaTransaction}}`; `uint256` as decimal strings; addresses lowercase |
+| `metatx` | `{token, signature, struct: "call"\|"transfer", metatx: {…}}`: a `MetaTransaction` (an allowlisted call of any SCaaS contract) or a token's `MetaTransfer` (transfer or payment) ([NODE-JOB-20](node/job-api.md#NODE-JOB-20), [CTR-MTX-15](contracts/metatx.md#CTR-MTX-15)); `uint256` as decimal strings; addresses lowercase |
 | `signed_op` | `{op: {op_kind: "pay", payload: "0x<exact signed bytes>", signature, public_key, auth_kind: "wallet"|"passkey", extra: {…native params}}}`; `from`, lane, nonce, `valid_until`, relayer are decoded from `payload` |
 | `call` | `{call: {target, calldata, validUntil}}` — e.g. `MandateWallet.mtxPayUnderMandate(...)` (as built `MandateWallet.payUnderMandate(...)`), `SubjectAccountFactory.deploy(...)`; the signature lives inside the calldata; selector and target must match a call-table row; no native value |
-| `ua_metatx` (SPECIFIED) | MetaToken v3 `UAMetaTransaction` with `from: bytes32` and its `auth`; same lifecycle as `metatx` |
+| `ua_metatx` (SPECIFIED) | MetaToken v3 `UAMetaTransaction` or `UAMetaTransfer` with `from: bytes32` and its `auth`; same lifecycle as `metatx` |
 | `pqz_call` (SPECIFIED; private chain only) | **Direct open calls only**: `{chain, contract, selector ∈ {pqzTransfer, pqzBurn, rollOver}, calldata}` to a configured PQZ token (direct `fund` pulls the caller's underlying and is never a node job) |
-| PQZ envelopes (SPECIFIED) | **No new kind**: a `PqzToken` is an `IERC20MetaTx` token, so its envelope ops travel as ordinary `metatx` (v1 domain `("SCaaS PqzToken", "1", chainId, token)`) or `ua_metatx` (v3, `salt = chainUid`) jobs, `m.to = 0`, `m.value = 0`, `m.data` = the direct calldata of `pqzTransfer`/`pqzBurn`/`fund`/`rollOver` (opaque to the client); outer fee `NONE`/`FIXED` only; never batched, never on the mesh; 1 MiB job body on the `pqz` profile; a gasless exit is the envelope `pqzBurn` paying the underlying to `recipient` |
+| PQZ envelopes (SPECIFIED) | **No new kind**: a `PqzToken` is an `IERC20MetaTx` token, so its envelope ops travel as ordinary `metatx` or `ua_metatx` jobs with `struct = call` (domain `("SCaaS PqzToken", "1", chainId, token, chainUid)`), `m.data` = the direct calldata of `pqzTransfer`/`pqzBurn`/`fund`/`rollOver` (opaque to the client); outer fee `NONE`/`FIXED` only; never batched, never on the mesh; 1 MiB job body on the `pqz` profile; a gasless exit is the envelope `pqzBurn` paying the underlying to `recipient` |
 
 **Accept checks.** The node checks every item in a fixed order without RPC and answers per item; the rules and their
 order are [job-api.md#intake](node/job-api.md#intake). What a client must get right before it pushes:
@@ -367,8 +367,8 @@ nonce    = 0
   request. If a business case needs partial payments, issue one request (one `entryRef`) per instalment.
 
 **Client → chain (before signing and at push):**
-1. Typed data built server-side from the request: `to = receiving_address`, `value = amount_base`,
-   `data = pay(entryRef)`, `batch` as above, `validUntil = issued_valid_until` (server-chosen, e.g. now + 300 s).
+1. The payment `MetaTransfer` built server-side from the request: `to = receiving_address`, `value = amount_base`,
+   `entryRef`, `batch` as above, `validUntil = issued_valid_until` (server-chosen, e.g. now + 300 s).
 2. After signing: recompute the digest; a 65-byte signature must recover `payer_address` (EOA); a contract wallet
    (ERC-1271) is accepted unverified and judged by the node's simulation ([INT-ERP-03](#INT-ERP-03)).
 3. The node recomputes the digest and simulates before broadcast.
@@ -468,10 +468,11 @@ payment/day/month, four-eyes, kill switch) drives a scheduled job that finds the
 invoices and creates exactly **one** run per (policy, invoice, event) (`UNIQUE`); each run creates the same request and
 outbox job as a manual payment (a `chain` payment transaction over `invoice_ids`, `operation='offline'`). `custodial`
 wallets sign `pay` through the custody adapter under `SigningPolicyService` (`validUntil ≤ 300 s`); `delegated` wallets
-sign `PayUnderMandate` and push a `call` job to `MandateWallet.mtxPayUnderMandate` (as built `payUnderMandate`). A run ends `done` when the payment
+sign the `payUnderMandate` `MetaTransaction` in the wallet's domain and push a `call` job to
+`MandateWallet.mtxPayUnderMandate` (as built `payUnderMandate` with the typed `PayUnderMandate`). A run ends `done` when the payment
 transaction is done (the accounting module posts and reconciles) or `failed`. Kill: off-chain immediately, and for
-delegated wallets an `mtxRevoke` job (as built `revokeWithSig`); the revoke digest is `RevokeMandate(address token,uint64 epoch,uint256
-validUntil)` with the wallet's current `epoch[token]` ([CTR-ACC-07](contracts/mandates.md#CTR-ACC-07)).
+delegated wallets an `mtxRevoke` job (as built `revokeWithSig`); the revoke is the delegate's `MetaTransaction` with `data =
+revoke(token, epoch)` and the wallet's current `epoch[token]` ([CTR-ACC-07](contracts/mandates.md#CTR-ACC-07)).
 
 ## Families and addresses
 
@@ -602,9 +603,9 @@ never touches funds** — `to`, `value`, `data` are inside the digest; fee 0.
 
 | Path | Use today | Status |
 |---|---|---|
-| `executeMetaTransaction` with `data = pay(entryRef)` | Every relayed payment; emits `PaymentSettled`. Target: `mtxExecute`, with `executeMetaTransaction` kept as an alias returning `bool`; same struct, same digest except the domain `salt = chain_uid` | **BUILT** |
+| `executeMetaTransaction` with `data = pay(entryRef)` | Every relayed payment; emits `PaymentSettled`. Target: a payment `MetaTransfer` (`entryRef ≠ 0`) through `mtxExecuteTransfer` or `mtxPay` ([CTR-MTX-23](contracts/metatx.md#CTR-MTX-23)), domain `salt = chain_uid`; new typehash, `PaymentSettled` unchanged | **BUILT** (single struct); target **SPECIFIED** |
 | `payWithFee(to, amount, feeMode, fee, feeRecipient, entryRef)` | Contract wallets and payers submitting themselves | **BUILT** |
-| v2 `mtxPay(from, to, amount, payId, validUntil, mode, relayer, fee, feeRecipient, sig)` | Typed entry point over the SAME struct and typehash; lane `payLane(payId)` derived on chain, `nonce = 0`; same digest, so one signature works on either path ([CTR-MTX-10](contracts/metatx.md#CTR-MTX-10)) | **BUILT** (contracts); node use **SPECIFIED** |
+| v2 `mtxPay(from, to, amount, payId, validUntil, mode, relayer, fee, feeRecipient, sig)` | Flat entry point that builds the same `MetaTransfer`; lane `payLane(payId)` derived on chain, `nonce = 0`; same digest, so one signature works on either path ([CTR-MTX-10](contracts/metatx.md#CTR-MTX-10)) | **BUILT** (contracts); node use **SPECIFIED** |
 | v2 `mtxBatch(MetaTransaction[], bytes[])` | Several intents of one token in one outer transaction, atomic (one failing item reverts all; the partial-success `batchMtxPay` and its second typehash were withdrawn, [CTR-MTX-11](contracts/metatx.md#CTR-MTX-11)) | **BUILT** (contracts); node batching **SPECIFIED** |
 
 Client contract: same `entryRef`, same lanes (a request lane can be consumed by either path, never both), same
@@ -674,8 +675,8 @@ from the finalized `TenderSettled`.
 1. Generate `salt`, compute `commitment = commitmentOf(…)` locally — `keccak256(abi.encode(BID_TAG, chainId, tender,
    tenderId, bidder, price, salt))` — and store `(tenderId, price, salt)` in the bidder's secret store **before**
    signing.
-2. Build and sign the deposit intent ([CTR-TND-01](contracts/tender.md#CTR-TND-01)): `to = tender`,
-   `value = minDeposit`, `data = pay(depositRef)`, `batch = payLane(depositRef)`, `nonce = 0`,
+2. Build and sign the deposit `MetaTransfer` ([CTR-TND-01](contracts/tender.md#CTR-TND-01)): `to = tender`,
+   `value = minDeposit`, `entryRef = depositRef`, `batch = payLane(depositRef)`, `nonce = 0`,
    `mode = MODE_RESTRICT_RELAYER`, `relayer = tender`, `fee = 0`, `feeRecipient = 0`, `validUntil ≤ now + 3600`.
 3. Submit `commitBid` as a `call` job (own path, or the portal). Verify `BidCommitted` is final; if missing before
    `validUntil`/`commitDeadline − margin`, submit the same signed intent through the independent path.
@@ -705,9 +706,10 @@ the bid's own data. Either way the salt is unknown to anyone else until reveal, 
 
 - **EVM `SubjectAccount`** (passkey + seed keys, guardian): address predicted by
   `SubjectAccountFactory.predict(firstKey, guardian)`; the client enqueues a `call` job `deploy(firstKey, guardian)`
-  **before** the subject's first payment (deploy is permissionless and idempotent). Key changes go through
-  `mtxExecuteAsOwner` (as built `executeAsOwner`) signed by an existing key (client builds `OwnerCall(bytes
-  data,uint256 nonce,uint256 validUntil)` in the account's domain, `salt = chain_uid`). The factory's constructor takes
+  **before** the subject's first payment (deploy is permissionless and idempotent). Key changes are `MetaTransaction`s of the account signed by an existing key with `from` = the account itself
+  ([CTR-ACC-10](contracts/accounts.md#CTR-ACC-10)), in the account's domain, `salt = chain_uid`, relayed through
+  `mtxExecuteAsOwner` or `mtxExecute` (as built `executeAsOwner` with `OwnerCall(bytes data,uint256 nonce,uint256
+  validUntil)`). The factory's constructor takes
   `chain_uid`, so the predicted address differs per chain: the client predicts and records it per chain
   ([NET-ALL-22](networks/README.md#NET-ALL-22)).
   <a id="first-key-proof"></a>When the client registers the first key against a server challenge, the new key signs

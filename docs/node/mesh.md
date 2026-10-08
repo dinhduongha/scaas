@@ -291,7 +291,7 @@ l.203–206.
 | `chain_key`, `family` | yes | `family` must equal the prefix of `chain_key`; `soroban` ⇒ `FAMILY_NOT_SUPPORTED` |
 | `contract` | yes | EVM: the token = EIP-712 `verifyingContract` (no forwarder). Others: the contract that verifies the op |
 | `visibility` | yes | `open` \| `private`, as set by the origin; receivers apply the stricter of this and their own policy |
-| `evm` | iff `family ∈ {evm, hedera}` | `meta_tx` = `WireMetaTx` (`scaas-node/src/metatx.rs`, camelCase, 11 fields of `MetaTxLib.MetaTransaction`); `domain` = EIP-712 `name`/`version` of the token (implementation name/version on clones, [CTR-MTX-02](../contracts/metatx.md#CTR-MTX-02)); `sig_kind` `eoa` (65 bytes, low-s) or `erc1271` (contract wallet, no local recover); `hedera_ed25519` (64-byte HIP-632 signature, [NODE-MESH-16](#NODE-MESH-16)). The origin writes **zeros** in unbound `relayer`/`feeRecipient` ([NODE-LANE-10](submit-lanes.md#NODE-LANE-10)) |
+| `evm` | iff `family ∈ {evm, hedera}` | `struct` = `call` \| `transfer` and `meta_tx` = `WireMetaTx` (`scaas-node/src/metatx.rs`, camelCase; the 9 fields of `MetaTxLib.MetaTransaction` or the 11 of `MetaTxLib.MetaTransfer`, [CTR-MTX-15](../contracts/metatx.md#CTR-MTX-15)); `intent_id` is that struct's digest; `domain` = EIP-712 `name`/`version` of the token (implementation name/version on clones, [CTR-MTX-02](../contracts/metatx.md#CTR-MTX-02)); `sig_kind` `eoa` (65 bytes, low-s) or `erc1271` (contract wallet, no local recover); `hedera_ed25519` (64-byte HIP-632 signature, [NODE-MESH-16](#NODE-MESH-16)). The origin writes **zeros** in unbound `relayer`/`feeRecipient` ([NODE-LANE-10](submit-lanes.md#NODE-LANE-10)) |
 | `op` | iff other families | the `op` object of a `signed_op` job: `op_kind` (`pay` in v1), `payload` (hex of the exact signed bytes), `signature`, `public_key`, `auth_kind`, `extra` (native params for building the tx). `from`, `valid_until`, lane, nonce and relayer are **not** taken from the clear JSON: receivers decode them from `payload`. `contract` is lifted to the top level |
 | `hub.id` | yes | origin `peer_id` = SHA-256(SPKI DER) |
 | `hub.pubkey` | yes | raw 32-byte Ed25519 key; receivers check `sha256(SPKI_ED25519_PREFIX ‖ pubkey) == hub.id`, with `SPKI_ED25519_PREFIX = 302a300506032b6570032100` |
@@ -404,12 +404,12 @@ also checks that the client's own digest functions (`build_terms`/`digest` per f
 `submit_meta_tx` is the struct the submitter would encode after normalization. Required cases (accept unless a code is
 given):
 
-1. EVM open FIXED fee, `pay(bytes32)` data — intent_id equal to the `MetaTxLib` KAT in `smartcontracts/test`.
+1. EVM open FIXED fee, a payment `MetaTransfer` (`entryRef ≠ 0`) — intent_id equal to the `metatransfer_kat.json` vector in `smartcontracts/evm/test/vectors`.
 2. EVM open mode with garbage in `relayer` and `feeRecipient` ⇒ **same** `intent_id` as case 1;
    `submit_meta_tx.feeRecipient` = `fee_recipient`, `relayer` = 0.
 3. EVM `MODE_RESTRICT_RELAYER` with a lane address (accepted; `may_submit` only for that lane's node).
 4. EVM `MODE_RESTRICT_RELAYER`, `relayer = 0` ⇒ `RELAYER_BOUND_ZERO`.
-5. EVM empty `data` ⇒ selector `"0x"`.
+5. EVM `MetaTransfer` ⇒ selector `"transfer"` (`entryRef = 0`) or `"pay"`.
 6. EVM `sig_kind = erc1271` (no local recover, accepted).
 7. EVM high-s signature ⇒ `BAD_SIGNATURE`.
 8. Hedera `hedera:296` (chain id 296 in the domain).
@@ -455,7 +455,7 @@ table with static columns**, in the node store (`mesh_policy`, managed through t
 |---|---|---|
 | `chain_key` | text | |
 | `contract` | text | `token_of` (the token itself; never a per-payer account) as canonical address, or `*` |
-| `selector` | text | EVM: first 4 bytes of `meta_tx.data` as `0x` + 8 hex, `0x` for empty data, or `*`; other families: `pay` or `*` |
+| `selector` | text | EVM: first 4 bytes of `meta_tx.data` of a `MetaTransaction` as `0x` + 8 hex, `transfer`/`pay` for a `MetaTransfer`, or `*`; other families: `pay` or `*` |
 | `support` | enum | `none` ⇒ reject `UNSUPPORTED`; `forward_only` ⇒ hold and serve, never submit; `full` |
 | `submit` | bool | this node submits for this row (requires `support = full`, a concrete registered contract, a lane for the chain) |
 | `pool_visibility` | enum | `open` \| `private` \| `none` (hold, never serve); defaults from the chain profile |

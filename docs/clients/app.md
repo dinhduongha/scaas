@@ -249,7 +249,7 @@ the terms. Every adapter receives transports wired to the guarded `fetch` ([CLI-
 
 | Family | Encoders (clientkeys `fam/`) | Subject signs | Gateway | Self-paid | Reads | Events / status |
 |---|---|---|---|---|---|---|
-| **EVM** | `evm.js` + DEX `Order`/`CancelOrder`/`InvalidateNonces`, v2 calldata, `payLane`; v3 `UAMetaTransaction`; KAT `metatx_kat`, `metatx_v2_kat`, `dex_kat`, `vectors/ua/*` | EIP-712 (`eip712Domain()` checked); EOA, ERC-1271 SubjectAccount, or `UAKey.signUA("metatx", digest)` for a UA | `/v1/metatx`; `/v1/ua-metatx` | `executeMetaTransaction` / named `mtx*` / `ua*`; the direct function when signer = submitter | `balanceOf`, `balanceOfUA`, `metaNonce`, `uaNonce`, `payLane`, `versionOf` | `eth_getLogs` (bounded) |
+| **EVM** | `evm.js` + DEX `Order`/`CancelOrder`/`InvalidateNonces`, v2 calldata, `payLane`; v3 `UAMetaTransaction`/`UAMetaTransfer`; KAT `metatx_kat`, `metatransfer_kat`, `metatx_v2_kat`, `dex_kat`, `vectors/ua/*` | EIP-712 (`eip712Domain()` checked); EOA, ERC-1271 SubjectAccount, or `UAKey.signUA("metatx", digest)` for a UA | `/v1/metatx`; `/v1/ua-metatx` | `executeMetaTransaction` / named `mtx*` / `ua*`; the direct function when signer = submitter | `balanceOf`, `balanceOfUA`, `metaNonce`, `uaNonce`, `payLane`, `versionOf` | `eth_getLogs` (bounded) |
 | **Hedera** | EVM + `hedera_kat` | ECDSA alias via extension; ED25519 `0.0.N` raw over the digest via seed (`hedera_ed25519`) | `/v1/metatx` (64-byte signatures allowed) | as EVM via the relay | as EVM; mirror for `0.0.N` ⇄ address, associations, HTS info | relay logs; mirror tx |
 | **Cosmos** | `fam/cosmos.js` | ADR-036 via Keplr/Leap or seed `m/44'/118'/0'/0/i` | `/v1/ops` | `MsgExecuteContract{Relay}` signed + broadcast by the user | CW20 `Balance`, `Nonce{owner, lane}` | tx search; `getTx` |
 | **Soroban** | `fam/soroban.js` | Freighter `signAuthEntry`, or seed `m/44'/148'/i'` (Pi coin 314159): sha256 of the auth preimage (`G…`) / `Ed25519{key_id, sig}` (`C…`) | `/v1/ops` | user = transaction source: simulate, attach auth, sign the envelope hash (only via `buildSelfPaid`) | SEP-41 `balance`; random nonce | `getEvents`, `getTransaction` |
@@ -706,7 +706,7 @@ Unit (Vitest / `node --test`, no network):
 
 | Area | Vectors / method |
 |---|---|
-| EVM encoders | `metatx_kat`, `metatx_v2_kat`, `dex_kat`, `hedera_kat`, `wrap_rate_vectors`, `subject_account_create2`, `webauthn_soft` |
+| EVM encoders | `metatx_kat`, `metatransfer_kat`, `metatx_v2_kat`, `dex_kat`, `hedera_kat`, `wrap_rate_vectors`, `subject_account_create2`, `webauthn_soft` |
 | Non-EVM encoders (clientkeys) | `mesh-envelope-v1.2.json` cross-language payloads, `ton-vectors.json`, `fam_*.json` per family, `sui_vectors.json`, the seed-signed vectors, `solana_derivation.json` |
 | UA (clientkeys) | `smartcontracts/vectors/ua/*`: ids, keyHash, `ua_msg`, PoP, `UAMetaTransaction` digests; `deriveUAKey` paths under `m/7622'` |
 | Backup / vault | `backup_policy.json` plus the de-duplication and `msig` rows; `vault_v2_fixture.json` |

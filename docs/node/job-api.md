@@ -118,12 +118,12 @@ Payload by kind:
 
 | Kind | Payload |
 |---|---|
-| `metatx` | `{token, signature, metatx: {11 fields of MetaTransaction}}`; `uint256` as decimal strings; addresses lowercase; `metatx.data` is empty (transfer), `pay(bytes32)` or an allowlisted self-call ([NODE-JOB-20](#NODE-JOB-20)). The token's other signed entry points travel as `metatx` jobs too, with `entry` naming them ([order and wrap entries](#metatx-entries)). May carry `receiver_fee: {fee, feeRecipient, validUntil, signature}` ([sponsorship.md#receiver-pays](sponsorship.md#receiver-pays)); incl. v1 envelopes of a `PqzToken` |
+| `metatx` | `{token, signature, struct: "call"\|"transfer", metatx: {…}}`: `struct = call` carries the 9 fields of `MetaTransaction` (`data` = an allowlisted self-call, [NODE-JOB-20](#NODE-JOB-20)), `struct = transfer` the 11 fields of `MetaTransfer` (`entryRef = 0` transfer, else payment) ([CTR-MTX-15](../contracts/metatx.md#CTR-MTX-15)); `uint256` as decimal strings; addresses lowercase; `token` is any registered SCaaS contract on `MetaTxBase` for `call` (tokens, `MandateWallet`, `SubjectAccount`, contracts built on SCaaS), a token for `transfer`. Idempotency and the mesh `intent_id` are the struct's digest; one `(from, batch, nonce)` lane space spans both structs. The token's other signed entry points travel as `metatx` jobs too, with `entry` naming them ([order and wrap entries](#metatx-entries)). May carry `receiver_fee: {fee, feeRecipient, validUntil, signature}` ([sponsorship.md#receiver-pays](sponsorship.md#receiver-pays)); incl. v1 envelopes of a `PqzToken` |
 | `signed_op` | `{op: {op_kind: "pay", payload: "0x<exact signed bytes>", signature, public_key, auth_kind: "wallet"\|"passkey", extra: {…native params}}}`; `from`, lane, nonce, `valid_until`, relayer are decoded from `payload` (non-EVM `MetaOp` or Soroban auth payload) |
 | `call` | `{call: {target, calldata, validUntil}}` — e.g. `MandateWallet.mtxPayUnderMandate(...)` (as built `MandateWallet.payUnderMandate(...)`), `SubjectAccountFactory.deploy(...)`; the signature lives inside the calldata; selector and target must match a row of the [call table](#call-table); no native value |
-| `ua_metatx` (SPECIFIED; `kind = ua_metatx`) | MetaToken v3 `UAMetaTransaction` with `from: bytes32` and its `auth`: `{token, m: WireUAMetaTransaction, auth}`; same lifecycle as `metatx`; idempotency on `(chain, token, from, batch, nonce)`; digest = `uaDigest` (incl. v3 envelopes of a `PqzToken`) |
+| `ua_metatx` (SPECIFIED; `kind = ua_metatx`) | MetaToken v3 `UAMetaTransaction` or `UAMetaTransfer` ([CTR-UA-26](../contracts/accounts.md#CTR-UA-26)) with `from: bytes32` and its `auth`: `{token, struct: "call"\|"transfer", m: WireUAMetaTransaction\|WireUAMetaTransfer, auth}`; same lifecycle as `metatx`; idempotency on `(chain, token, from, batch, nonce)`; digest = `uaDigest` (incl. v3 envelopes of a `PqzToken`) |
 | `pqz_call` (SPECIFIED; private chain only) | **Direct open calls only**: `{chain, contract, selector ∈ {pqzTransfer, pqzBurn, rollOver}, calldata}` to a configured PQZ token (direct `fund` pulls the caller's underlying and is never a node job); stored like `call`: `digest` NULL, `call_hash` set |
-| PQZ envelopes (SPECIFIED) | **No new kind** ([CTR-PQZ-15](../contracts/pq-zether.md#CTR-PQZ-15)): a `PqzToken` is an `IERC20MetaTx` token, so its envelope ops travel as ordinary `metatx` (v1 domain `("SCaaS PqzToken", "1", chainId, token)`) or `ua_metatx` (v3, `salt = chainUid`) jobs, `m.to = 0`, `m.value = 0`, `m.data` = the direct calldata of `pqzTransfer`/`pqzBurn`/`fund`/`rollOver` (opaque to the client); outer fee `NONE`/`FIXED` only; never batched, never on the mesh; 1 MiB job body on the `pqz` profile; a gasless exit is the envelope `pqzBurn` paying the underlying to `recipient` |
+| PQZ envelopes (SPECIFIED) | **No new kind** ([CTR-PQZ-15](../contracts/pq-zether.md#CTR-PQZ-15)): a `PqzToken` is an `IERC20MetaTx` token, so its envelope ops travel as ordinary `metatx` or `ua_metatx` jobs with `struct = call` (domain `("SCaaS PqzToken", "1", chainId, token, chainUid)`), `m.data` = the direct calldata of `pqzTransfer`/`pqzBurn`/`fund`/`rollOver` (opaque to the client) ([CTR-PQZ-21](../contracts/pq-zether.md#CTR-PQZ-21)); outer fee `NONE`/`FIXED` only; never batched, never on the mesh; 1 MiB job body on the `pqz` profile; a gasless exit is the envelope `pqzBurn` paying the underlying to `recipient` |
 
 `payload` is exactly what every adapter `build` consumes today; `work_from_job` and the family adapters are
 unchanged. A W3C `traceparent` header applies to every item of the batch ([NODE-OPS-09](ops.md#NODE-OPS-09)).
@@ -131,16 +131,15 @@ unchanged. A W3C `traceparent` header applies to every item of the batch ([NODE-
 ### Meta-transaction data
 
 <a id="selector-table"></a><a id="NODE-JOB-20"></a>**NODE-JOB-20** — **The node reads a meta-transaction's `data`
-through the token implementation's published selector allowlist.** Status: **SPECIFIED**. On EVM and Hedera a token's
-gateway `mtxExecute` (alias `executeMetaTransaction`) runs three shapes: empty `data` (a transfer of `value` to `to`),
-`pay(bytes32)` (a payment, [CTR-MTX-01](../contracts/metatx.md#CTR-MTX-01)), or a **self-call** of one of the token's
-own functions whose selector is on that implementation's fixed allowlist, with `to = 0` and `value = 0`
-([contracts/metatx.md](../contracts/metatx.md)). The node keeps, per registered implementation, the table
+through the implementation's published selector allowlist.** Status: **SPECIFIED**. On EVM and Hedera every SCaaS
+contract's `mtxExecute` (alias `executeMetaTransaction`) runs a **self-call** of one of the contract's own functions
+whose selector is on that implementation's fixed allowlist ([CTR-MTX-17](../contracts/metatx.md#CTR-MTX-17)); a
+token's transfers and payments are `MetaTransfer`s with no `data` to read ([CTR-MTX-23](../contracts/metatx.md#CTR-MTX-23)). The node keeps, per registered implementation, the table
 `mtxSelectors() → (selector, fee class, amount argument)`, read once when the implementation is registered on the
 chain and cached (implementations are immutable, so the table never changes). It uses it for:
 
-- **Intake.** A self-call whose selector is not in the table of the token's implementation, a `data` length that is not
-  the selector's static ABI length, a self-call with `to ≠ 0` or `value ≠ 0`, or a fee mode the selector's fee class
+- **Intake.** A self-call whose selector is not in the table of the contract's implementation, a `data` length that is
+  not the selector's static ABI length, or a fee mode the selector's fee class or the contract's `supportedModes()`
   does not allow ⇒ `422 SELECTOR_NOT_ALLOWED` (the reason in `detail`), before any simulation. For selectors with
   dynamic arguments (confidential transfer and burn) the node decodes and re-encodes the arguments and refuses
   non-canonical `data` (`422 BAD_PAYLOAD`) before it computes the digest and the mesh `intent_id`, so one intent has one
@@ -149,7 +148,8 @@ chain and cached (implementations are immutable, so the table never changes). It
   selectors carry a fixed fee or none. Feeds, the job view and the gateway show the decoded call (selector name and
   arguments), never raw bytes alone.
 - **Breaker.** Self-calls that pass simulation and fail on chain count per `(from, selector)`
-  ([NODE-LANE-25](submit-lanes.md#NODE-LANE-25)).
+  ([NODE-LANE-25](submit-lanes.md#NODE-LANE-25)); a `MetaTransfer` counts as selector `transfer` (`entryRef = 0`) or
+  `pay`.
 
 No role function (mint, rate administration, guardian) is on any allowlist, so a role holder never calls one through a
 token's gateway: it acts through its own contract ([NODE-JOB-19](#NODE-JOB-19)). Why: a fixed op list made every new

@@ -500,9 +500,10 @@ recipient 0 is unchanged in effect.
 ## Batching
 
 <a id="batching"></a><a id="batches"></a><a id="NODE-LANE-11"></a>**NODE-LANE-11** (PLANNED) — **A batch is several
-jobs journaled together.** `mtxBatch` groups `metatx` jobs of one `(chain_key, token)` whose relayer is bound to the
-submitting lane ([CTR-MTX-11](../contracts/metatx.md#CTR-MTX-11)), so no other relayer can consume an item between
-simulation and inclusion; a subject's `cancelMetaNonce` remains the only race. One `leased → signed` transaction writes
+jobs journaled together.** `mtxBatchTransfer` groups `metatx` jobs with `struct = transfer`, and `mtxBatch` jobs with
+`struct = call`, of one `(chain_key, token)` whose relayer is bound to the submitting lane — never the two structs in
+one batch ([CTR-MTX-11](../contracts/metatx.md#CTR-MTX-11), [CTR-MTX-24](../contracts/metatx.md#CTR-MTX-24)), so no other relayer can consume an item between
+simulation and inclusion; a subject's `cancelNonce` remains the only race. One `leased → signed` transaction writes
 the batch's `outer_tx` row, journals every item with the same `lane_label`, `outer_nonce`, `tx_hash` and bumps
 `lane.journal_max` once; each item keeps its own digest (G2), state and `job_event`. A failing batch is re-simulated
 and resubmitted without the failing item (`dead` with its decoded reason; the item counts toward

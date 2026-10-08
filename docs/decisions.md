@@ -513,6 +513,7 @@ Change: rows renamed (`SubjectAccount.mtxExecuteAsOwner`, `MandateWallet.mtxPayU
 **Why.** The token gateway runs a transfer, a payment or a self-call of the token's own allowlisted functions (owner: "functions of the token itself", "a fixed per-implementation selector allowlist"); a fixed op list in the node would refuse every new operation and need a node release each time. Reading the published `mtxSelectors()` table per immutable implementation keeps intake, pricing (fee class, amount argument), display and the canonical-encoding check exact, and keeps role functions out of the token path.
 **Cost if wrong.** The node relays self-calls whose fee basis it misreads, or refuses valid wraps/burns; a non-canonical dynamic encoding would give one intent two mesh identities.
 **Source.** [history/specs/2026-10-07-metatx-generic.md](history/specs/2026-10-07-metatx-generic.md) §2 A1–A3, §3 MG-1, MG-2, MG-5, MG-6.
+Change (2026-10-08): the table covers every SCaaS contract on `MetaTxBase`, not only tokens; `metatx` jobs name their struct (`call` | `transfer`); a `MetaTransfer` counts as selector `transfer`/`pay` in the breaker. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-7, GC-8.
 
 Under "Node — Submit lanes":
 
@@ -592,11 +593,12 @@ It said: result queue default, node-configured callbacks.
 **Source.** [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 84; [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 124.
 
 ### NODE-LANE-11 — A batch is several jobs journaled together
-- old: R321 · status: current · owner: no · date: 2026-10-06 · normative: node/submit-lanes.md#NODE-LANE-11 · superseded-by: —
+- old: R321 · status: current · owner: no · date: 2026-10-08 · normative: node/submit-lanes.md#NODE-LANE-11 · superseded-by: —
 
 **Why.** A batch lands several jobs in one transaction; journaling them together keeps them atomic in the store.
 **Cost if wrong.** Planned.
 **Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 138.
+Change (2026-10-08): `mtxBatchTransfer` batches `transfer` jobs and `mtxBatch` `call` jobs, never mixed. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G5, §3 GC-8.
 
 ### NODE-LANE-12 — Outer transaction is a store row
 - old: R326 · status: current · owner: no · date: 2026-10-06 · normative: node/submit-lanes.md#NODE-LANE-12 · superseded-by: —
@@ -1521,12 +1523,13 @@ It said: separate DB roles per module.
 
 ## Contracts — Meta-transactions
 
-### CTR-MTX-01 — Payment is the built-in pay(bytes32) shape of mtxExecute
-- old: R2(op) · status: current · owner: no · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-01 · superseded-by: —
+### CTR-MTX-01 — Payment is a MetaTransfer with entryRef ≠ 0
+- old: R2(op) · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-01 · superseded-by: —
 
-**Why.** A payment is one signed `pay(bytes32 entryRef)` shape through the standard pipeline (`mtxExecute`, its alias and `mtxPay`), built in rather than a self-call, so `PaymentSettled` keeps its fee fields and wallets, relayers and indexers need no extra entry point.
+**Why.** A payment is one signed typed `MetaTransfer` with its reference (`mtxExecuteTransfer`, `mtxPay`), not a self-call, so `PaymentSettled` keeps its fee fields and wallets show recipient, amount and reference field by field; until 2026-10-08 it was the `pay(bytes32)` shape of the single struct.
 **Cost if wrong.** A separate payment entry point would duplicate the pipeline and its audit surface; making payment a self-call would lose the fee in `PaymentSettled`.
 **Source.** `history/specs/2026-10-03-blockchain-payments-design.md:664`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-1, MG-5.
+Change (2026-10-08): a payment is a `MetaTransfer` with `entryRef ≠ 0`, run through `mtxExecuteTransfer`, `mtxPay` or `mtxPayReceiverFee`; `PaymentSettled` unchanged. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-4.
 
 ### CTR-MTX-02 — Clone domain: implementation name, version 1, clone verifyingContract, salt chain_uid
 - old: R5 · status: current · owner: no · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-02 · superseded-by: —
@@ -1534,6 +1537,7 @@ It said: separate DB roles per module.
 **Why.** Clones share the implementation name and the one version `"1"`; each clone is its own `verifyingContract` and the domain carries `salt = chain_uid` from the implementation's immutable, so a signature never replays on another token or another chain with the same chain id.
 **Cost if wrong.** A shared domain would let a signature move between clones; without the salt it would move between chains that share a chain id.
 **Source.** `history/specs/2026-10-03-blockchain-payments-design.md:674`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-4.
+Change (2026-10-08): every SCaaS contract on `MetaTxBase` signs in `("SCaaS <Contract>", "1", chainId, contract, chain_uid)`; both structs of a contract share its domain. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-1.
 
 ### CTR-MTX-03 — Random entryRef; pay lane derived from it
 - old: R9(lane) · status: current · owner: no · date: 2026-10-03 · normative: contracts/metatx.md#CTR-MTX-03 · superseded-by: —
@@ -1550,11 +1554,12 @@ It said: separate DB roles per module.
 **Source.** `history/specs/2026-10-03-blockchain-payments-design.md:901`
 
 ### CTR-MTX-05 — Receiver-pays via payee co-signed ReceiverFee
-- old: R192 · status: current · owner: no · date: 2026-10-06 · normative: contracts/metatx.md#CTR-MTX-05 · superseded-by: —
+- old: R192 · status: current · owner: no · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-05 · superseded-by: —
 
 **Why.** Receiver-pays needs the payee to consent to the fee; a co-signed `ReceiverFee` keeps both parties bound to the same numbers.
 **Cost if wrong.** Without the payee signature a relayer could charge the payee arbitrarily.
 **Source.** `history/specs/2026-10-06-tender-sponsorship-shredding.md:172`
+Change (2026-10-08): `paymentDigest` is the digest of the payer's `MetaTransfer`; `mtxPayReceiverFee` takes `MetaTransfer t`. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-5.
 
 ### CTR-MTX-06 — Receiver-pays shape; every tier of the one base
 - old: R193(shape) · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-06 · superseded-by: —
@@ -1562,6 +1567,7 @@ It said: separate DB roles per module.
 **Why.** Receiver-pays keeps its fixed shape (fee `NONE` on the payer, restricted relayer, pay lane with nonce 0, payee-signed absolute fee); with the v1 line deleted it is available on every tier of the one base, still not in `mtxBatch`.
 **Cost if wrong.** A looser shape would let a submitter attach the co-signature to another intent.
 **Source.** `history/specs/2026-10-06-tender-sponsorship-shredding.md:181`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-9.
+Change (2026-10-08): the payer shape is a `MetaTransfer` with `entryRef ≠ 0`, fee `NONE`, relayer bound, `payLane`/0; not in `mtxBatchTransfer`. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-5.
 
 ### CTR-MTX-07 — One base ERC20MetaTx; v1 line deleted
 - old: R131 · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-07 · superseded-by: —
@@ -1569,6 +1575,7 @@ It said: separate DB roles per module.
 **Why.** The owner folded every meta-transaction base into one, `ERC20MetaTx` (the built `MetaTxCore` renamed): the v1 `ERC20MetaTx`/`MetaToken`/`HederaMetaToken`, factory v1 and `ZetherMetaTx` go, and the struct, typehash and one domain version serve every token. Nothing is deployed, so no version coexists.
 **Cost if wrong.** Two or three bases keep two security models and three pipelines in sync by hand.
 **Source.** `history/specs/2026-10-06-token-wrappers-v2.md:72`; `history/specs/2026-10-07-metatx-generic.md` §2 A4, A8, §3 MG-9.
+Change (2026-10-08): `ERC20MetaTx is MetaTxBase`: the token base adds the fee in this token, the typed `MetaTransfer` path, `payLane`, receiver-pays, trade and the UA path on the generic base (CTR-MTX-22); `PqzMetaTx` disappears too (CTR-PQZ-21). Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-2.
 
 ### CTR-MTX-08 — Fee never goes to the payee
 - old: R132 · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-08 · superseded-by: —
@@ -1576,6 +1583,7 @@ It said: separate DB roles per module.
 **Why.** A fee that goes to the payee lets a payee inflate its own receipts; the check applies to the transfer and payment shapes and `payWithFee`, and a self-call has no payee.
 **Cost if wrong.** Payees could disguise discounts or extract hidden charges through the fee field.
 **Source.** `history/specs/2026-10-06-token-wrappers-v2.md:78`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-5.
+Change (2026-10-08): the payee check applies to every `MetaTransfer` (payee = `t.to`) and to `payWithFee`; a `MetaTransaction` has no payee. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-4.
 
 ### CTR-MTX-09 — Named meta-tx functions are thin entry points
 - old: R138 · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-09 · superseded-by: —
@@ -1583,20 +1591,23 @@ It said: separate DB roles per module.
 **Why.** Named functions (`mtxTransfer`, `mtxTransferWithFee`, `mtxExecuteWithFee`, `mtxPay`, `mtxBatch`) are readable in wallets and explorers but only route into the one pipeline; the unwrap pseudo-op and its named functions are gone because `mtxExecute` runs the real `unwrap`.
 **Cost if wrong.** Logic in the named functions would drift from the generic path.
 **Source.** `history/specs/2026-10-06-token-wrappers-v2.md:119`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-3.
+Change (2026-10-08): the named functions keep their signatures and build the struct of their kind — `mtxTransfer`, `mtxTransferWithFee`, `mtxPay` a `MetaTransfer`, `mtxExecuteWithFee`, `mtxBatch` a `MetaTransaction`; nothing is merged (owner); `mtxExecuteTransfer` and `mtxBatchTransfer` are added (CTR-MTX-23, CTR-MTX-24). Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G4, §3 GC-5.
 
 ### CTR-MTX-10 — mtxPay payId is entryRef, lane on chain
-- old: R139 · status: current · owner: no · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-10 · superseded-by: —
+- old: R139 · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-10 · superseded-by: —
 
 **Why.** `payId` is the payment reference and the lane is derived on chain, so a client cannot mislabel the lane; `cancelNonce` replaces `cancelMetaNonce` in the per-path caveat.
 **Cost if wrong.** Client-chosen lanes would break pay-once.
 **Source.** `history/specs/2026-10-06-token-wrappers-v2.md:124`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-3.
+Change (2026-10-08): a payment on a client-chosen lane uses `mtxExecuteTransfer` (owner G6); the generic `pay` shape is gone. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G6, §3 GC-5.
 
-### CTR-MTX-11 — No second typehash for the same struct; mtxBatch atomic
-- old: R140 · status: current · owner: no · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-11 · superseded-by: —
+### CTR-MTX-11 — One intent, one digest; no second typehash for the same struct; batches atomic
+- old: R140 · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-11 · superseded-by: —
 
 **Why.** One typehash per struct keeps every signer and verifier on one digest rule; different structs in the token's domain (`UAMetaTransaction`, `TradeOrder`, `CancelOrder`, `InvalidateNonces`) are not a second hash of `MetaTransaction`. `mtxBatch` is atomic with a fresh ticket per item.
 **Cost if wrong.** A second hash of the same struct invites cross-path replay; a non-atomic batch leaves half-paid states.
 **Source.** `history/specs/2026-10-06-token-wrappers-v2.md:131`; `history/specs/2026-10-07-metatx-generic.md` §7 (CTR-MTX-11 row).
+Change (2026-10-08): one intent, one digest across two structs: transfer and payment only as `MetaTransfer`, calls only as `MetaTransaction`; batches never mix structs; `UAMetaTransfer` joins the different-struct list. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G5, §3 GC-1, GC-5.
 
 ### CTR-MTX-12 — Gasless unwrap is mtxExecute(unwrap) with minOut
 - old: R148(contract) · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-12 · superseded-by: —
@@ -1611,6 +1622,7 @@ It said: separate DB roles per module.
 **Why.** Three fee modes cover the business cases with a 1 % cap (10 000 ppm of a 1e6 denominator) on transfer, payment and `AMOUNT` selectors; the owner narrowed the cap so that calls moving no amount pay an absolute, uncapped `FIXED` fee (CTR-MTX-20).
 **Cost if wrong.** More modes multiply audit cases; an uncapped percentage would let a signer be overcharged by a misreading; a cap on a zero basis would make wrap and cancel fee-less forever.
 **Source.** `research/_USER-DECISIONS.md:107`, `research/_USER-DECISIONS.md:450`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-5, §10 OQ4.
+Change (2026-10-08): fees exist only where `_chargeFee` is overridden (every token); any other SCaaS contract accepts `NONE` only and the sponsor pays native gas (owner G2). Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G2, §3 GC-2.
 
 ### CTR-MTX-14 — EIP-712 typed data, not personal_sign
 - old: UD:§4 · status: current · owner: yes · date: 2026-08-30 · normative: contracts/metatx.md#CTR-MTX-14 · superseded-by: —
@@ -1619,12 +1631,13 @@ It said: separate DB roles per module.
 **Cost if wrong.** Users would sign blind hashes, the precondition for drain attacks.
 **Source.** `research/_USER-DECISIONS.md:206`
 
-### CTR-MTX-15 — No forwarder; drop feeToken, innerGasLimit; keep mode; three data shapes
+### CTR-MTX-15 — Two structs, one nonce space; no forwarder; drop feeToken, innerGasLimit; keep mode
 - old: UD:§24, UD:§24.1 · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-15 · superseded-by: —
 
-**Why.** Meta-tx logic lives in the token, so there is no trusted forwarder; `feeToken` and `innerGasLimit` were dropped and `mode` kept, split into two nibbles: the low nibble holds flags (`RESTRICT_RELAYER` 0x01, `RESTRICT_FEE_RECIPIENT` 0x02), the high nibble an enum of the fee mode (`NONE` 0x00, `PERCENT` 0x10, `FIXED` 0x20); `if (mode & MODE_FEE_PERCENT)` is a bug, because `MODE_FEE_FIXED = 0x20` lacks bit 0x10 but a future 0x30 would have it; validation checks unknown flag bits and enum values above 2. `data` is empty (transfer), `pay(bytes32)` (payment) or an allowlisted call of the token itself with `to = value = 0` — the owner's explicit `to`/`value`/`data` never meant a fixed op list. Rejected: the early `IEIP1776` sketch (`tokenContract`, `batchNonce`, `expiry`, `meta_nonce(from, batchId)`).
+**Why.** Meta-tx logic lives in the token, so there is no trusted forwarder; `feeToken` and `innerGasLimit` were dropped and `mode` kept, split into two nibbles: the low nibble holds flags (`RESTRICT_RELAYER` 0x01, `RESTRICT_FEE_RECIPIENT` 0x02), the high nibble an enum of the fee mode (`NONE` 0x00, `PERCENT` 0x10, `FIXED` 0x20); `if (mode & MODE_FEE_PERCENT)` is a bug, because `MODE_FEE_FIXED = 0x20` lacks bit 0x10 but a future 0x30 would have it; validation checks unknown flag bits and enum values above 2. `data` is an allowlisted call of the contract itself — the owner's explicit `to`/`value`/`data` never meant a fixed op list; since 2026-10-08 a transfer or payment is a typed `MetaTransfer` beside it, because a token transfer is a special case of a meta-transaction, not its definition (owner). Rejected: the early `IEIP1776` sketch (`tokenContract`, `batchNonce`, `expiry`, `meta_nonce(from, batchId)`).
 **Cost if wrong.** A forwarder becomes a shared trust root for every token; an op list makes `wrap`, `burn`, `addReserve` and `fund` impossible to relay.
 **Source.** `research/_USER-DECISIONS.md:2504`, `research/_USER-DECISIONS.md:2534`; `history/specs/2026-10-07-metatx-generic.md` §1, §3 MG-1.
+Change (2026-10-08): two structs share one lane space: the generic `MetaTransaction{from, data, batch, nonce, validUntil, mode, relayer, fee, feeRecipient}` for a call of any SCaaS contract and the token-only typed `MetaTransfer{from, to, value, entryRef, …}` that wallets display field by field; `data` is always a self-call; `transfer`/`pay` are never allowlisted; new typehashes and KATs (`metatx_kat.json`, `metatransfer_kat.json`). Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G1, G10, §3 GC-1.
 
 ### CTR-MTX-16 — No generic forwarder; the token calls only itself; all or nothing
 - old: UD:§24.2, UD:§24.3 · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-16 · superseded-by: —
@@ -1632,6 +1645,7 @@ It said: separate DB roles per module.
 **Why.** No generic forwarder means each token owns its replay protection; legacy tokens are wrapped instead of trusted. The prototype's flaw was a call **out** with the signer's calldata, not executing calldata: the token now runs allowlisted functions of itself only. The owner accepted the new invariant: transfer and payment check everything before the fee; a self-call runs first and pays after, and any failure reverts everything with the inner revert data, so the user never pays for an operation that did not happen.
 **Cost if wrong.** A generic forwarder would let one bug affect every legacy token at once; charging before a self-call could not let a wrap pay from minted units.
 **Source.** `research/_USER-DECISIONS.md:2570`, `research/_USER-DECISIONS.md:2586`; `history/specs/2026-10-07-metatx-generic.md` §1, §2 A1, §3 MG-1, §10 OQ2.
+Change (2026-10-08): the logic lives in every SCaaS contract (`MetaTxBase`), not only tokens; `mtxExecute` calls one of the contract's own allowlisted functions, a token's transfer and payment run through `mtxExecuteTransfer`. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-2, GC-3.
 
 ### CTR-MTX-17 — mtxExecute runs the signer's calldata on the token itself
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-17 · superseded-by: —
@@ -1639,6 +1653,7 @@ It said: separate DB roles per module.
 **Why.** The owner asked for the explicit `to`/`value`/`data` envelope to execute any function of the token itself, so `wrap`, `burn`, `addReserve`, `cancelNonce` and Zether ops become gasless without a forwarder; `executeMetaTransaction` stays as the EIP-1776 alias returning `bool` for tender and outside tools. The pipeline is cheap-first, writes the nonce before the call, bubbles inner reverts and charges a self-call's fee after it.
 **Cost if wrong.** A hand-written op dispatch must grow per function and diverges from the direct functions' checks; swallowing errors would charge users for nothing.
 **Source.** `history/specs/2026-10-07-metatx-generic.md` §2 A1, A3, §3 MG-1.
+Change (2026-10-08): `mtxExecute` serves every SCaaS contract and `data` is always a self-call: the shape table is gone; the signature check is the virtual `_requireValidSignature`; the fee is `_chargeFee` after the call and is refused outside `NONE` where not overridden. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-3.
 
 ### CTR-MTX-18 — Transient sender and one-shot ticket
 - old: — · status: current · owner: no · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-18 · superseded-by: —
@@ -1653,13 +1668,15 @@ It said: separate DB roles per module.
 **Why.** The owner chose a fixed per-implementation allowlist, published by `mtxSelectors()` with fee classes; `approve`, `transferFrom`, `transfer`, `payWithFee`, every `mtx…` entry and every role function are never listed (the owner flipped the earlier default: role holders act through their own contract, whose caps and guards a signature check would skip). Every listed function is `nonReentrant`; dynamic Zether arguments are canonicalized by the node.
 **Cost if wrong.** An open allowlist lets a signature reach role functions or `approve`; a second encoding of one intent splits its digest.
 **Source.** `history/specs/2026-10-07-metatx-generic.md` §2 A2, §3 MG-2, §10 OQ1.
+Change (2026-10-08): `transfer` and `pay` are never allowlisted (they are `MetaTransfer`s); rows added for `PqzToken`, `MandateWallet` and `SubjectAccount` (fee `NONE` only on the latter two). Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-1, GC-6, GC-10.
 
 ### CTR-MTX-20 — Fee classes per selector: AMOUNT(i) and ABSOLUTE
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-20 · superseded-by: —
 
-**Why.** A self-call has `to = value = 0`, so the fee basis comes from the selector: `AMOUNT(i)` uses argument `i` with the 1 % cap, `ABSOLUTE` allows only an uncapped `FIXED` amount (or `NONE`), extending the confidential rule to public calls that move no amount; the wallet shows the exact fee.
+**Why.** A self-call carries no amount field, so the fee basis comes from the selector: `AMOUNT(i)` uses argument `i` with the 1 % cap, `ABSOLUTE` allows only an uncapped `FIXED` amount (or `NONE`), extending the confidential rule to public calls that move no amount; the wallet shows the exact fee.
 **Cost if wrong.** A fee on a zero `value` is either always zero or uncheckable; a percentage of a hidden or absent amount is meaningless.
 **Source.** `history/specs/2026-10-07-metatx-generic.md` §3 MG-5, §10 OQ4.
+Change (2026-10-08): a `MetaTransaction` has no amount field, so the basis always comes from the selector; on contracts that charge no fee every class admits `NONE` only. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G2, §3 GC-2.
 
 ### CTR-MTX-21 — mtx names for every signature-authorized entry point
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-21 · superseded-by: —
@@ -1667,6 +1684,28 @@ It said: separate DB roles per module.
 **Why.** Every external function whose authority comes from a subject's signature starts with `mtx` (tokens, `ZetherToken` rollover, `MandateWallet`, `SubjectAccount`, `OrderBookDex`), so readers and the node's call table tell signed paths from direct ones at a glance; `executeMetaTransaction` stays as the alias; EIP-712 type names and non-EVM op names are unchanged.
 **Cost if wrong.** Mixed names hide which entry points need a signature and which only a caller.
 **Source.** `history/specs/2026-10-07-metatx-generic.md` §2 A3, §3 MG-3.
+Change (2026-10-08): entry table: every contract on `MetaTxBase` has `mtxExecute`/`mtxBatch`/`cancelNonce`; tokens add `mtxExecuteTransfer`, `mtxBatchTransfer`; `MandateWallet` and `SubjectAccount` named entries build a `MetaTransaction`. The non-EVM line is unchanged here. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G4, §3 GC-5, GC-6.
+
+### CTR-MTX-22 — MetaTxBase: the generic base of every SCaaS contract; fee NONE unless overridden
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-22 · superseded-by: —
+
+**Why.** SCaaS meta-transactions exist so that someone other than the subject pays for a call of any SCaaS contract, not only for moving tokens (owner: a family-tree contract whose edits a service company pays for in native gas). One generic base gives every contract the struct, digest, lanes, ticket, allowlist and `mtxExecute`; a contract that holds no charged balance cannot collect a fee, so `_chargeFee` refuses every mode but `NONE` unless a token overrides it, and the sponsor settles with the user off chain.
+**Cost if wrong.** A token-only base forces every other contract to invent its own signed struct and nonce rules (as `MandateWallet` and `SubjectAccount` did); a fee field such a contract cannot collect would mislead signers.
+**Source.** `history/specs/2026-10-08-metatx-generic-call-design.md` §1, §2 G2, G3, §3 GC-2, GC-7.
+
+### CTR-MTX-23 — The typed path: MetaTransfer through mtxExecuteTransfer
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-23 · superseded-by: —
+
+**Why.** A token transfer is a special case of a meta-transaction (owner); keeping it as a typed struct (`to`, `value`, `entryRef`) lets outside wallets show "send value to to" instead of opaque `data` (owner G1 (b)), and `mtxExecuteTransfer` takes the struct as given so a payment can use a client-chosen lane (owner G6).
+**Cost if wrong.** Without the typed struct a transfer would be hex in every outside wallet; without the struct entry a payment could use only `payLane`.
+**Source.** `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G1, G6, §3 GC-1, GC-4, GC-5.
+
+### CTR-MTX-24 — mtxBatchTransfer beside mtxBatch
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-24 · superseded-by: —
+
+**Why.** With transfers in their own struct, `mtxBatch(MetaTransaction[])` can no longer carry the payments the node batches; a typed batch keeps that saving (owner G5 1a) under the same atomic rules, and a batch never mixes the two structs.
+**Cost if wrong.** Payments could no longer be batched, or one batch function would have to decode two structs.
+**Source.** `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G5, §3 GC-5.
 
 ### CTR-MTX-80 — No named mtxPay; accepted gas cost
 - old: R2(cost) · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CTR-MTX-09, CTR-MTX-10, CTR-MTX-11
@@ -1692,6 +1731,11 @@ It said: separate DB roles per module.
 - old: UD:§11:struct-variants · status: superseded · owner: yes · date: 2026-08-30 · normative: — · superseded-by: CTR-MTX-15
 
 **What it said.** An early note reconciled three different meta-tx struct variants.
+
+### CTR-MTX-85 — Transfer and payment as data shapes of the one MetaTransaction
+- old: — · status: superseded · owner: yes · date: 2026-10-08 · normative: — · superseded-by: CTR-MTX-15, CTR-MTX-23
+
+**What it said.** From 2026-10-07 to 2026-10-08 one 11-field `MetaTransaction{from, to, value, data, …}` carried a transfer (`data` empty), a payment (`data = pay(bytes32)`) and self-calls (`to = value = 0`).
 
 ## Contracts — Token wrappers and factory
 
@@ -1878,18 +1922,20 @@ It said: separate DB roles per module.
 **Source.** `history/plans/2026-10-03-r3-passkey-seed.md:43`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-4.
 
 ### CTR-ACC-06 — Delegated payment uses MandateWallet, no allowance
-- old: R25 · status: current · owner: no · date: 2026-10-08 · normative: contracts/mandates.md#CTR-ACC-06 · superseded-by: —
+- old: R25 · status: current · owner: yes · date: 2026-10-08 · normative: contracts/mandates.md#CTR-ACC-06 · superseded-by: —
 
 **Why.** Delegated payment through a dedicated `MandateWallet` (`mtxPayUnderMandate`) with per-token limits never exposes the payer's main balance to an allowance; a mandate is not an allowance, since the wallet, a contract, is the token's caller. The wallet's domain is salted with a deployer-chosen `chain_uid`, so the node checks it before relaying.
 **Cost if wrong.** An allowance-based mandate would be an unlimited spender on the payer's tokens.
 **Source.** `history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:196`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-3, MG-4, MG-7.
+Change (2026-10-08): `MandateWallet` is a `MetaTxBase` contract: the delegate signs a `MetaTransaction` with `data = payUnderMandate(token, payee, amount, entryRef)` or `revoke(token, epoch)`, fee `NONE`; the typed `PayUnderMandate`/`RevokeMandate` go; named entries keep their signatures and derive their lane (`"scaas.mandate.pay"`/`"scaas.mandate.revoke"`, nonce 0). Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G3, §3 GC-6.
 
 ### CTR-ACC-07 — Signed mandate revocation bound to epoch
-- old: CR-ADW-1 · status: current · owner: no · date: 2026-10-08 · normative: contracts/mandates.md#CTR-ACC-07 · superseded-by: —
+- old: CR-ADW-1 · status: current · owner: yes · date: 2026-10-08 · normative: contracts/mandates.md#CTR-ACC-07 · superseded-by: —
 
 **Why.** A signed revocation (`mtxRevoke`, renamed from `revokeWithSig`) bound to an epoch revokes every outstanding mandate signature at once and works gaslessly.
 **Cost if wrong.** Without the epoch a revoked delegate could replay an older mandate.
 **Source.** `history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:296`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-3.
+Change (2026-10-08): the epoch travels in the revoke data, `revoke(token, epoch)`, on the lane `keccak256("scaas.mandate.revoke" ‖ token ‖ epoch)`. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-6.
 
 ### CTR-ACC-08 — Passkey subjects, Merkle batch, account key lifecycle
 - old: R31(account) · status: current · owner: yes · date: 2026-10-07 · normative: contracts/accounts.md#CTR-ACC-08 · superseded-by: —
@@ -1904,6 +1950,18 @@ It said: separate DB roles per module.
 **Why.** `SubjectAccount` stays available as option (b) for users who want a stable address across key rotation.
 **Cost if wrong.** Removing it would force every rotation to move funds.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:238`
+
+### CTR-ACC-10 — SubjectAccount key management is a MetaTransaction signed by the account itself
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/accounts.md#CTR-ACC-10 · superseded-by: —
+
+**Why.** `SubjectAccount` moves onto `MetaTxBase` like every SCaaS contract (owner G3); its keys include passkeys with no address, so the account itself is `from` and verifies the signature against its own key set (owner G9); the typed `OwnerCall` and its single nonce go, the lanes and vectors are shared with every contract.
+**Cost if wrong.** An account that signed as one of its keys could not use passkeys; a separate owner struct keeps a second digest rule and nonce space alive.
+**Source.** `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G3, G9, §3 GC-6.
+
+### CTR-ACC-80 — Typed owner and mandate structs (OwnerCall, PayUnderMandate, RevokeMandate)
+- old: — · status: superseded · owner: yes · date: 2026-10-08 · normative: — · superseded-by: CTR-ACC-06, CTR-ACC-07, CTR-ACC-10
+
+**What it said.** `SubjectAccount` and `MandateWallet` each verified their own EIP-712 structs (`OwnerCall(bytes data,uint256 nonce,uint256 validUntil)`, `PayUnderMandate(…)`, `RevokeMandate(…)`) with their own nonce rules.
 
 ## Contracts — DEX
 
@@ -2058,6 +2116,7 @@ It said: separate DB roles per module.
 **Why.** The deposit and the bid commitment are one `pay` signature, submitted by the tender through the `executeMetaTransaction` alias (which returns the `bool` the tender decodes), so a bidder cannot commit without paying the deposit; the shape is unchanged.
 **Cost if wrong.** Separate steps let a bidder commit and never deposit.
 **Source.** `history/specs/2026-10-06-tender-sponsorship-shredding.md:62`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-1.
+Change (2026-10-08): the deposit is a payment `MetaTransfer` (`entryRef = depositRef`) and `commitBid` takes it and calls `mtxExecuteTransfer`. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-6.
 
 ### CTR-TND-02 — Commitment hash binds chain, tender and bidder
 - old: R181 · status: current · owner: no · date: 2026-10-06 · normative: contracts/tender.md#CTR-TND-02 · superseded-by: —
@@ -2265,6 +2324,7 @@ It said: separate DB roles per module.
 **Why.** The envelope binding covers every envelope field except `data` (and now `chainUid`), so a proof cannot be stripped or re-wrapped; the base computes it and passes it to the self-call through the transient ticket instead of `relayed*` functions.
 **Cost if wrong.** An unbound proof can be lifted into another envelope with another fee recipient.
 **Source.** `history/specs/2026-10-03-zether-design.md:592`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-2.1, §7.
+Change (2026-10-08): `MetaTransaction` has no `to`/`value`, so the binding drops them: `(tag, chainid, chainUid, token, from, batch, nonce, validUntil, mode, canonRelayer, fee, canonFeeRecipient)`. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-10.
 
 ### CTR-ZTH-07 — Outer FIXED fee uncapped; PERCENT forbidden
 - old: RS2-6, UD:§3, UD:§3.2, UD:§3.4 · status: current · owner: yes · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-07 · superseded-by: —
@@ -2461,6 +2521,7 @@ It said: separate DB roles per module.
 **Why.** `transferConfidential`, `burn`, `fund`, public `wrap`/`unwrap` are allowlisted self-calls; the confidential ones take the envelope binding from the transient ticket (tag `RELAYED`) and use binding 0 otherwise, so a proof lifted from a pending meta-tx fails as a direct call. `relayedTransfer`/`relayedBurn`/`relayedBurnDecoded`, `OuterFee` and the `OP_ZTRANSFER`/`OP_ZBURN` ops are deleted; the outer fee is the base's, `ABSOLUTE` class.
 **Cost if wrong.** Losing the binding reopens envelope stripping; a second dispatch path for Zether keeps two fee pipelines.
 **Source.** `history/specs/2026-10-07-metatx-generic.md` §3 MG-2, MG-2.1, §12 (H6).
+Change (2026-10-08): `m.to`/`m.value` are gone from the struct; a public transfer is a `MetaTransfer`; `PqzToken` relays the same way. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-10.
 
 ### CTR-ZTH-35 — fund draws from the caller's public balance
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-35 · superseded-by: —
@@ -2680,6 +2741,7 @@ It said: separate DB roles per module.
 **Why.** `UAMetaTransaction` has its own struct and typehash because `from` is `bytes32`; it is signed in the token's one salted domain (version `"1"`, `chainUid` the implementation's immutable) and keeps explicit shapes (transfer, `pay`, `unwrap`), since a `bytes32` sender cannot run a self-call.
 **Cost if wrong.** Clients build two struct shapes; a separate domain version would add a second salt source.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:255`, `history/specs/2026-10-06-universal-account-design.md:1410`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-9, §7 (CTR-UA-19 row).
+Change (2026-10-08): both UA structs (`UAMetaTransaction`, `UAMetaTransfer`) share the token domain; the split is CTR-UA-26. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G8, §3 GC-9.
 
 ### CTR-UA-20 — Optional VC layer; on-chain anchor deferred
 - old: R310 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/accounts.md#CTR-UA-20 · superseded-by: —
@@ -2722,6 +2784,13 @@ It said: separate DB roles per module.
 **Why.** No on-chain registration gate in v1: node sponsorship limits bound spam; self-paid spam pays its own gas.
 **Cost if wrong.** An immutable `IRegistrationPolicy` per generation is the fallback if spam becomes a problem.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:1402`
+
+### CTR-UA-26 — The UA path splits into UAMetaTransaction and UAMetaTransfer
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/accounts.md#CTR-UA-26 · superseded-by: —
+
+**Why.** The UA ledger carried the same token-shaped `to`/`value`/`data` struct as the address path; splitting it the same way (owner G8) gives one model everywhere: a generic call for the UA allowlist and a typed transfer/payment, sharing the one nonce map.
+**Cost if wrong.** Two meta-tx models — split on the address path, mixed on the UA path — for clients, node and vectors.
+**Source.** `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G8, §3 GC-9.
 
 ## Contracts — Post-quantum Zether
 
@@ -2829,6 +2898,7 @@ It said: separate DB roles per module.
 **Why.** The owner ruled that `PqzToken` follows `IERC20MetaTx` like `ZetherToken`: v1 and v3 envelope paths over one pipeline, wrap/unwrap as direct calls, the envelope `burn` as the gasless exit, authority split between the PQ `authSig` and the envelope signer; both paths now sign in one domain salted with `chain_uid`. Whether its envelope moves to the generic self-call is open.
 **Cost if wrong.** A broken v1 envelope key can spend that signer's public float and burn its nonces; it can never move confidential value.
 **Source.** `history/specs/2026-10-06-pq-zether-design.md:337`, `history/SCaaS-2026-10-07.md:39`. Owner wording (2026-10-07): "PqzToken => Cái này cũng phải theo MetaTransaction IERC20MetaTx chứ." (PqzToken must also follow IERC20MetaTx); `history/specs/2026-10-07-metatx-generic.md` §3 MG-4.
+Change (2026-10-08): `PqzToken` sits on the one token base and relays like `ZetherToken` (CTR-PQZ-21): `PqzMetaTx` and its sliced-argument dispatch are gone; plain public transfers are `MetaTransfer`s. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G11, §3 GC-10.
 
 ### CTR-PQZ-16 — Direct decryption without BSGS
 - old: R285 · status: current · owner: no · date: 2026-10-06 · normative: contracts/pq-zether.md#CTR-PQZ-16 · superseded-by: —
@@ -2864,6 +2934,18 @@ It said: separate DB roles per module.
 **Why.** Migration is `ZetherToken.burn` then `PqzToken.fund`; the amount is public once, which is acceptable because classical Zether holds no production funds.
 **Cost if wrong.** No cross-system equality proof in v1.
 **Source.** `history/specs/2026-10-06-pq-zether-design.md:382`
+
+### CTR-PQZ-21 — PqzToken relays through the generic self-call, as classical Zether
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/pq-zether.md#CTR-PQZ-21 · superseded-by: —
+
+**Why.** The owner asked why `PqzToken` should differ from `ZetherToken`; the only reason given for the separate `PqzMetaTx` was ≈ 2 M gas of memory copies, which assumed three copies of `m.data`. One copy for the `CALL` costs ≈ 0.25 M at 340 KB (`3·w + w²/512`), the callee takes `bytes calldata`, and an op stays ≈ 3.25 M, below the EIP-7825 cap. One base and one pipeline then serve every token; PQZ selectors are not batchable.
+**Cost if wrong.** ≈ 0.25 M gas more per PQZ op than a sliced-argument dispatch; a second meta-tx implementation to audit otherwise.
+**Source.** `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G11, §3 GC-10.
+
+### CTR-PQZ-80 — PqzMetaTx: own mixin with op arguments sliced from calldata
+- old: — · status: superseded · owner: yes · date: 2026-10-08 · normative: — · superseded-by: CTR-PQZ-21
+
+**What it said.** `PqzToken` relayed through its own mixin `PqzMetaTx` with an `_executeOp` reading `m.data` as calldata slices (no self-call, `m.to = m.value = 0` else `PqzOpNotCanonical`), nonce spent with the fee after verify.
 
 ## Networks — common model
 
@@ -4165,10 +4247,11 @@ It said: Bounced payouts via admin RefundBounced; replaced by NET-TON-03.
 **Source.** [history/plans/2026-10-03-r3-passkey-seed.md](history/plans/2026-10-03-r3-passkey-seed.md) line 48.
 
 ### CLI-SGN-05 — Client rebuilds operation before signing
-- old: RS4-13 · status: current · owner: no · date: 2026-10-03 · normative: clients/signers-clientkeys.md#CLI-SGN-05 · superseded-by: —
+- old: RS4-13 · status: current · owner: no · date: 2026-10-08 · normative: clients/signers-clientkeys.md#CLI-SGN-05 · superseded-by: —
 
 **Rule.** A client never signs server-built typed data as is; it rebuilds the operation first.
 **Source.** [history/plans/2026-10-03-r3-passkey-seed.md](history/plans/2026-10-03-r3-passkey-seed.md) line 57.
+Change (2026-10-08): `checkPayment` rebuilds a payment `MetaTransfer`; `checkOwnerCall` a `SubjectAccount` `MetaTransaction` signed as the account (CTR-ACC-10). Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-6, GC-8.
 
 ### CLI-SGN-06 — WalletConnect is a seam behind a flag
 - old: R21 · status: current · owner: no · date: 2026-10-03 · normative: clients/signers-clientkeys.md#CLI-SGN-06 · superseded-by: —
@@ -4374,6 +4457,7 @@ It said: Bounced payouts via admin RefundBounced; replaced by NET-TON-03.
 **Why.** With a generic self-call, opaque `data` would let a page ask for any allowlisted call; decoding against the published allowlist shows the function, its arguments and the fee class, and the two `batch` lanes are labelled apart.
 **Cost if wrong.** A user signs a burn or an unwrap to a stranger while shown a transfer.
 **Source.** [history/specs/2026-10-07-metatx-generic.md](history/specs/2026-10-07-metatx-generic.md) §3 MG-6; §4 (opaque `data`); §13 L-12(e).
+Change (2026-10-08): transfers and payments are shown by the typed `MetaTransfer` fields; a `transfer`/`pay` selector inside a `MetaTransaction` is refused; the rule covers every contract on `MetaTxBase`. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-8.
 
 ### CLI-SGN-35 — A trade order names a listed DEX, or the client refuses to build and sign it
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: clients/signers-clientkeys.md#CLI-SGN-35 · superseded-by: —

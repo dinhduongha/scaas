@@ -483,9 +483,13 @@ envelope's identity `(from, batch, nonce, …)`:
 ```
 envelopeBinding = keccak256(abi.encode(
     keccak256("SCAAS-ZETHER-ENVELOPE-V1"), chainid, chainUid, token,
-    m.from, m.to, m.value, m.batch, m.nonce, m.validUntil, m.mode,
+    m.from, m.batch, m.nonce, m.validUntil, m.mode,
     canonRelayer, m.fee, canonFeeRecipient))        // canon* per MetaTxLib.canon
 ```
+
+`MetaTransaction` has no `to`/`value` ([CTR-MTX-15](metatx.md#CTR-MTX-15)), so the binding carries none; the
+binding and statement vectors regenerate with those of [CTR-ZTH-36](#CTR-ZTH-36). **Transitional (BUILT):** the built
+binding also hashes `m.to` and `m.value` of the single 11-field struct.
 
 It is part of the statement (`ZTX_V1_RELAYED`); direct calls use `ZTX_V1_DIRECT` with binding 0. The base computes it
 in step 5 of `mtxExecute` and passes it to the self-call through the transient ticket
@@ -497,11 +501,12 @@ binding differs ⇒ revert; another token / another chain ⇒ the header differs
 `sendCounter`/`accSeq`/the envelope nonce have advanced ⇒ revert.
 
 <a id="direct-calls"></a>
-<a id="CTR-ZTH-34"></a>**CTR-ZTH-34** — **Zether runs through the generic self-call** (owner). `mtxExecute` with `m.to =
-0`, `m.value = 0` and `m.data` = the real calldata of an allowlisted Zether function
+<a id="CTR-ZTH-34"></a>**CTR-ZTH-34** — **Zether runs through the generic self-call** (owner). `mtxExecute` with `m.data` =
+the real calldata of an allowlisted Zether function
 ([CTR-MTX-19](metatx.md#CTR-MTX-19)): `transferConfidential(bytes,bytes,bytes,bytes32)`,
 `burn(bytes,uint256,address,bytes32,bytes,bytes)`, `fund(bytes,uint256)`, public `wrap(uint256)` and `unwrap(uint256,address)`;
-`m.data` empty is a public ERC-20 transfer `m.from → m.to` like every token. `transferConfidential` and `burn` compute
+a public ERC-20 transfer is a `MetaTransfer` like on every token ([CTR-MTX-23](metatx.md#CTR-MTX-23)). `PqzToken`
+relays the same way ([CTR-PQZ-21](pq-zether.md#CTR-PQZ-21)). `transferConfidential` and `burn` compute
 `binding = (msg.sender == address(this) && ticket live) ? ticketBinding : 0`, so the statement tag is
 `ZTX_V1_RELAYED` with the envelope's binding inside `mtxExecute` and `ZTX_V1_DIRECT` with binding 0 otherwise: a proof
 lifted from a pending meta-tx fails as a direct call, and the envelope-stripping attack stays closed. The outer fee is

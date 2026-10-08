@@ -106,8 +106,9 @@ Every signature not made by a human on a device — custodial wallets, delegated
 users, bounded by policy. Checks before any signature:
 
 1. Destination contract ∈ allowlist (token, mandate wallet, DEX).
-2. Operation ∈ allowed ops/selectors (`pay(bytes32)`, `mtxPayUnderMandate`, `mtxExecute` with an allowed self-call
-   selector, [CLI-SGN-34](#CLI-SGN-34); as built `payUnderMandate` and `executeMetaTransaction` with an allowed op);
+2. Operation ∈ allowed ops/selectors (a payment `MetaTransfer`, the `MandateWallet` `payUnderMandate` call,
+   `mtxExecute` with an allowed self-call selector, [CLI-SGN-34](#CLI-SGN-34); as built `payUnderMandate` and
+   `executeMetaTransaction` with an allowed op);
    never `approve` on a SCaaS token — an EOA never approves one ([CLI-SGN-36](#CLI-SGN-36),
    [CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)).
 3. Amount ≤ per-call cap; cumulative ≤ hourly and daily caps (velocity, in the signer's own store).
@@ -156,9 +157,11 @@ Hedera HashPack (also a seam) and the TON Connect HTTP bridge.
 <a id="signing-review"></a><a id="rendering"></a>
 
 <a id="CLI-SGN-05"></a>**CLI-SGN-05** — **A client never signs server-built typed data as is; it rebuilds the operation
-first.** `checkPayment` rebuilds the `pay` op (op `pay(bytes32)`, `value` = the displayed amount × 10^`tokenDecimals`,
-`from` = the account, the right chain, fee 0, expiry ≤ 1 day, the right type); `checkOwnerCall` accepts only
-`addKey(the key just created)` on the right account/chain with expiry ≤ 1 hour; anything else ⇒ refused. An owner call
+first.** `checkPayment` rebuilds the payment `MetaTransfer` (`entryRef` = the request's reference, `value` = the displayed
+amount × 10^`tokenDecimals`, `from` = the account, the right chain, fee 0, expiry ≤ 1 day, the right type);
+`checkOwnerCall` accepts only a `SubjectAccount` `MetaTransaction` (`from` = the account itself,
+[CTR-ACC-10](../contracts/accounts.md#CTR-ACC-10)) whose `data` is `addKey(the key just created)` on the right
+account/chain with expiry ≤ 1 hour; anything else ⇒ refused. An owner call
 is signed only after a form showing the account, the selector and value 0. BUILT.
 
 <a id="CLI-SGN-08"></a>**CLI-SGN-08** — **`checkPayment` pins the expected token client-side.** It takes `expectedToken`
@@ -203,10 +206,13 @@ asked. Transitional (BUILT): only the Universal Account domains carry `salt` (th
 a selector outside the token's allowlist is refused.** Status: **SPECIFIED**. clientkeys and the app encode
 `mtxExecute` calldata themselves, and before any signature decode `data` against the implementation's published
 allowlist (`mtxSelectors()`, pinned per implementation version in the chain profile, cross-checked with the chain):
-empty = transfer of `value` to `to`; `pay(bytes32)` = payment; otherwise the selector's function name and every
-argument in human terms (amounts with the token's decimals, recipients, `minOut`), the fee and its class (a fixed fee
-on a call that moves no amount of this token is shown as an exact amount). An unknown selector, `to ≠ 0` or `value ≠ 0`
-on a self-call, or `approve`/`transferFrom` ⇒ refused, with no override. [CLI-SGN-05](#CLI-SGN-05) and
+the selector's function name and every argument in human terms (amounts with the token's decimals, recipients,
+`minOut`), the fee and its class (a fixed fee on a call that moves no amount of this token is shown as an exact
+amount). Transfers and payments are `MetaTransfer`s, shown by their typed fields (recipient, amount, reference)
+([CTR-MTX-23](../contracts/metatx.md#CTR-MTX-23)); clients build both structs ([CTR-MTX-15](../contracts/metatx.md#CTR-MTX-15)).
+An unknown selector, a `transfer`/`pay` selector inside a `MetaTransaction`, or `approve`/`transferFrom` ⇒ refused,
+with no override. The same applies to `MandateWallet`, `SubjectAccount` and any SCaaS contract on `MetaTxBase`
+([CTR-MTX-22](../contracts/metatx.md#CTR-MTX-22)). [CLI-SGN-05](#CLI-SGN-05) and
 [CLI-SGN-27](#CLI-SGN-27) apply: the shown call is the one rebuilt and signed. The meta-transaction lane (`batch` of
 the meta-transaction) and an order lane (`batch` of a trade order) are labelled differently wherever both appear.
 
@@ -775,8 +781,8 @@ key oracle and the ML-DSA key in an HSM with FIPS 204 firmware where available. 
 next to `sealConfKey`/`openConfKey`. clientkeys uses `deriveUAKey(seed, {kind: 'mldsa65', account, index})` /
 `signUA('zether-auth', authDigest)` with a vetted JS/WASM ML-DSA package; an explicit export of the 32-byte leaf (never the
 seed) feeds the native prover or the organization's key oracle — PQ Zether proving is **not** in JS; envelopes reuse the
-existing `MetaTransaction` EIP-712 builder (v1, domain `("SCaaS PqzToken", "1", …)`) and the `UAMetaTransaction` builder
-(v3, `salt = chainUid`) with `signUA('metatx', digest)` by the dedicated `mldsa65` fee UA — no new signing code; the UA kind
+existing `MetaTransaction` EIP-712 builder (address path, domain `("SCaaS PqzToken", "1", …)`) and the
+`UAMetaTransaction` builder (UA path, `salt = chainUid`) with `signUA('metatx', digest)` by the dedicated `mldsa65` fee UA — no new signing code; the UA kind
 vectors (`smartcontracts/vectors/ua/kinds.json`) gain the `pqz-mlwe` row (seed → pk, UA, keyHash). Protocol detail:
 [contracts/pq-zether](../contracts/pq-zether.md). SPECIFIED.
 

@@ -18,12 +18,13 @@ not anonymous: bidder identities are public at commit).
 ## Rules
 
 <a id="deposit-commitment"></a>
-<a id="CTR-TND-01"></a>**CTR-TND-01** — **Deposit and commitment are one signature: the deposit token's own `pay`
-meta-tx** (the one `MetaTransaction` typehash, [CTR-MTX-01](metatx.md#CTR-MTX-01)): `to = tender`, `value = minDeposit`, `data = pay(depositRef)`, fee
-`NONE`, `MODE_RESTRICT_RELAYER` with `relayer = tender`, `depositRef = keccak256(abi.encode(DEPOSIT_TAG,
-block.chainid, tender, tenderId, commitment))`. Anyone submits `commitBid(tenderId, commitment, proof, m, sig)`; the
-tender recomputes `depositRef`, checks the shape, calls `token.executeMetaTransaction(m, sig)` (the `bool` alias of
-`mtxExecute`) and records the bid. The
+<a id="CTR-TND-01"></a>**CTR-TND-01** — **Deposit and commitment are one signature: the deposit token's own payment
+`MetaTransfer`** ([CTR-MTX-01](metatx.md#CTR-MTX-01)): `to = tender`, `value = minDeposit`, `entryRef = depositRef`,
+fee `NONE`, `MODE_RESTRICT_RELAYER` with `relayer = tender`, `depositRef = keccak256(abi.encode(DEPOSIT_TAG,
+block.chainid, tender, tenderId, commitment))`. Anyone submits `commitBid(tenderId, commitment, proof, t, sig)`; the
+tender recomputes `depositRef`, checks the shape, calls `token.mtxExecuteTransfer(t, sig)`
+([CTR-MTX-23](metatx.md#CTR-MTX-23)) and records the bid. **Transitional (BUILT):** the deposit is the single struct's
+`data = pay(depositRef)` shape through `executeMetaTransaction`. The
 payment reference binds the deposit to this commitment: no tender-level signature, no allowance, and nobody lands the
 deposit outside `commitBid` (every entry point checks the relayer first). Bidders reconcile it as a payment
 (`entryRef = depositRef`). Cost: wallets show "pay 1000 to <tender>" rather than "bid".
@@ -85,7 +86,7 @@ through a **registered, non-deprecated** implementation (unregistered clones hav
 factory's one `TokenKind` enum. **Transitional (BUILT):** two factories exist (v1 `META`, v2 tiers, with enums that
 differ); the tender is not built yet and follows the one factory. The tender also checks that the
 balance delta equals `minDeposit` (redundant for META tokens, kept as defence). Bidders sign an intent on this token;
-an attacker-chosen "token" could fake `executeMetaTransaction`. Other tokens are wrapped first.
+an attacker-chosen "token" could fake `mtxExecuteTransfer`. Other tokens are wrapped first.
 
 <a id="windows-bonds"></a>
 <a id="CTR-TND-08"></a>**CTR-TND-08** — **Windows, bonds, no admin.** `revealDeadline − commitDeadline ∈ [1 h, 30 d]`
@@ -102,7 +103,7 @@ refuses the chain; there is no storage-guard fallback.
 
 | Item | Rule |
 |---|---|
-| Commit = deposit | One signature: the deposit token's own `pay` meta-tx (`to = tender`, `value = minDeposit`, `data = pay(depositRef)`, fee `NONE`, relayer bound to the tender); anyone submits `commitBid(tenderId, commitment, proof, m, sig)`; no tender-level signature, no allowance |
+| Commit = deposit | One signature: the deposit token's own payment `MetaTransfer` (`to = tender`, `value = minDeposit`, `entryRef = depositRef`, fee `NONE`, relayer bound to the tender); anyone submits `commitBid(tenderId, commitment, proof, t, sig)`; no tender-level signature, no allowance |
 | Commitment | `keccak256(abi.encode(BID_TAG, chainid, tender, tenderId, bidder, price, salt))`, `BID_TAG = keccak256("scaas.tender.bid.v1")`, `price` `uint128`, 32-byte salt |
 | Reveal, withdraw | permissionless, no signature; payouts go only to the destination the rules fix; no replacement in v1 |
 | Forfeits | non-reveal, invalid (out-of-range) reveal, a declared violation class, or a HOLD bond claim ⇒ `slashSink`, fixed at creation, never a bidder |
@@ -116,7 +117,7 @@ refuses the chain; there is no storage-guard fallback.
 ## Roles and lifecycle
 
 Buyer: `msg.sender` of `createTender` (in practice a `SubjectAccount`, a `MandateWallet` owner call or a multisig,
-submitted as a `call` job). Bidder: `m.from` of the deposit intent. Keeper: anyone (node, buyer, bidder) running
+submitted as a `call` job). Bidder: `t.from` of the deposit `MetaTransfer`. Keeper: anyone (node, buyer, bidder) running
 permissionless steps.
 
 ```mermaid
@@ -145,14 +146,14 @@ Stored states: `OPEN`, `SETTLED`, `FAILED`, `CANCELLED`; `REVEAL` and `AWARDABLE
 
 ### Commit (`now ≤ commitDeadline`)
 
-1. Tender exists and stored state `OPEN`; `bidder = m.from`; `bidder ∉ {buyer, slashSink}`; eligibility proof valid
+1. Tender exists and stored state `OPEN`; `bidder = t.from`; `bidder ∉ {buyer, slashSink}`; eligibility proof valid
    when `eligibilityRoot ≠ 0` (OpenZeppelin `MerkleProof`, leaf `keccak256(bytes.concat(keccak256(abi.encode(
    bidder))))`); the bidder has no bid.
-2. Intent shape (`BadDepositIntent(code)`): `m.to == address(this)`, `m.value == minDeposit`,
-   `m.data == abi.encodePacked(bytes4(keccak256("pay(bytes32)")), depositRef(tenderId, commitment))`,
-   `feeModeOf(m.mode) == NONE`, `m.mode & MODE_RESTRICT_RELAYER != 0`, `m.relayer == address(this)`.
+2. Intent shape (`BadDepositIntent(code)`): `t.to == address(this)`, `t.value == minDeposit`,
+   `t.entryRef == depositRef(tenderId, commitment)`, `feeModeOf(t.mode) == NONE`, `t.mode & MODE_RESTRICT_RELAYER != 0`,
+   `t.relayer == address(this)`.
 3. Effects: bid `{commitment, seq = nextSeq++, status = COMMITTED}`, `commits++`.
-4. Interaction: `b0 = balanceOf(this)`; `IERC20MetaTx(token).executeMetaTransaction(m, sig)` (reverts propagate);
+4. Interaction: `b0 = balanceOf(this)`; `IERC20MetaTx(token).mtxExecuteTransfer(t, sig)` (reverts propagate);
    `balanceOf(this) − b0 == minDeposit` else `DepositNotReceived`.
 5. Emit `BidCommitted(tenderId, bidder, commitment, seq)`.
 
@@ -264,7 +265,7 @@ interface ISealedBidTender {
     function createTender(TenderConfig calldata c) external returns (uint256 tenderId);
     function cancelTender(uint256 tenderId, bytes32 reasonRef) external;                  // buyer
     function commitBid(uint256 tenderId, bytes32 commitment, bytes32[] calldata eligibilityProof,
-                       MetaTxLib.MetaTransaction calldata m, bytes calldata depositSig) external;   // anyone
+                       MetaTxLib.MetaTransfer calldata t, bytes calldata depositSig) external;   // anyone
     function revealBid(uint256 tenderId, address bidder, uint128 price, bytes32 salt) external;   // anyone
     function disqualifyWinner(uint256 tenderId, bytes32 reasonRef, uint8 violationClass) external;  // buyer
     function settleTender(uint256 tenderId) external;                 // buyer after reveals; anyone after the window
@@ -328,7 +329,7 @@ purchase order is created only from the finalized `TenderSettled`; non-revealers
    configured it refuses to sign. The buyer's portal may be used as a convenience, never as the only path.
 1. The bidder generates `salt`, computes `commitment = commitmentOf(…)` locally, stores `(tenderId, price, salt)` in
    its secret store **before** signing.
-2. Build and sign the deposit intent: `to = tender`, `value = minDeposit`, `data = pay(depositRef)`,
+2. Build and sign the deposit `MetaTransfer`: `to = tender`, `value = minDeposit`, `entryRef = depositRef`,
    `batch = payLane(depositRef)`, `nonce = 0`, `mode = MODE_RESTRICT_RELAYER`, `relayer = tender`, `fee = 0`,
    `feeRecipient = 0`, `validUntil ≤ now + 3600`.
 3. Submit `commitBid` as a `call` job (own path, or the portal). Verify `BidCommitted` is final; if missing before
@@ -370,7 +371,7 @@ unless the signer is proven deterministic (passkeys are not). The salt is never 
 |---|---|
 | Copying a commitment to another tender/chain, or pairing a deposit with another commitment | commitment binding ([CTR-TND-02](#CTR-TND-02)); `depositRef` inside the signed `pay` data |
 | Landing the deposit outside `commitBid` (stranded funds) | relayer bound to the tender (I6) |
-| Fake token implementing a no-op `executeMetaTransaction` | factory provenance + balance delta ([CTR-TND-07](#CTR-TND-07)) |
+| Fake token implementing a no-op `mtxExecuteTransfer` | factory provenance + balance delta ([CTR-TND-07](#CTR-TND-07)) |
 | Fee taken from the deposit intent to the tender (`feeRecipient` unbound ⇒ `msg.sender` = tender) | fee mode `NONE` required |
 | Last-revealer exit after seeing others | possible at the cost of `minDeposit` (forfeit); an out-of-range reveal is also forfeit |
 | Selective reveal by a multi-identity bidder | each unrevealed identity forfeits `minDeposit`; the buyer sizes `minDeposit` ≥ the expected surplus at risk; allowlist |
@@ -419,13 +420,13 @@ Known limits (stated to users):
 
 ## Conformance
 
-Unit: every `BadConfig` code; commit with each `BadDepositIntent` code; each tier kind; the deposit through the
-`executeMetaTransaction` alias; unregistered and deprecated tokens refused; Zether refused; eligibility proof valid/invalid;
+Unit: every `BadConfig` code; commit with each `BadDepositIntent` code; each tier kind; the deposit through
+`mtxExecuteTransfer`; unregistered and deprecated tokens refused; Zether refused; eligibility proof valid/invalid;
 buyer and sink cannot bid; ERC-1271 bidder (`SubjectAccount`); reveal mismatch, out-of-range reveal, reveal outside the
 window; ties broken by `seq`; both rules; `minBidders` ⇒ `FAILED`; cancel before/after `commitDeadline`, and commit +
 cancel in the same block at `now == commitDeadline`; every routing row and double withdraw; bond release by buyer, by
 anyone after `bondReleaseTime`, claim before it. **I6 front-running:** a third party submits the deposit intent through
-`mtxPay`, `mtxBatch`, `mtxExecute` and `executeMetaTransaction` ⇒ `MetaTxUnauthorizedRelayer`;
+`mtxPay`, `mtxBatchTransfer` and `mtxExecuteTransfer` ⇒ `MetaTxUnauthorizedRelayer`;
 the intent replayed into another `tenderId` and another tender contract ⇒ `BadDepositIntent(3)`. Disqualification:
 outside the window (before `revealDeadline`, after `revealDeadline + dqWindow`), non-buyer, `dqWindow = 0`, cap
 reached, `NoNextBid` on the last candidate, zero `reasonRef`, undeclared class, class 0 ⇒ refund, declared class ⇒

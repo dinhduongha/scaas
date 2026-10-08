@@ -6,29 +6,40 @@ Max 3 agents, one heavy build at a time (`scripts/capped`). The Odoo side lives 
 ## 00. Meta-transaction redesign — code streams (accepted 2026-10-08; rules in the component docs)
 
 Order: contracts first (one heavy build at a time), then node, clients, the Odoo connector (bamboo-dms).
-- [ ] **MT-1** Fold to one base `ERC20MetaTx` (rename `MetaTxCore`), delete `ERC20MetaTx`(v1)/`MetaToken`/`HederaMetaToken`/
+- [ ] **MT-1** Two bases: generic `MetaTxBase` (any SCaaS contract; `_chargeFee` refuses all but `NONE`, CTR-MTX-22) and
+      the token base `ERC20MetaTx is MetaTxBase` (rename `MetaTxCore`); delete `ERC20MetaTx`(v1)/`MetaToken`/`HederaMetaToken`/
       v1 `OpenFactory`/`MetaTxDex`; v2 factory renamed `OpenFactory`; Hedera children on the tiers.
-- [ ] **MT-2** `mtxExecute` (+ alias): transient sender and one-shot ticket, per-implementation allowlist + `mtxSelectors()`,
-      fee classes, all-or-nothing; `_msgSender()` everywhere per the `msg.sender` inventory; lint/test that no token reads
-      `msg.sender` directly except the allowed spots.
+- [ ] **MT-2** Two structs, one lane space (CTR-MTX-15): `MetaTransaction{from, data, …}` + `mtxExecute` (+ alias), `mtxBatch`;
+      tokens' typed `MetaTransfer{from, to, value, entryRef, …}` + `mtxExecuteTransfer`, `mtxBatchTransfer` (CTR-MTX-23/24);
+      named functions keep their signatures and build their struct (CTR-MTX-09); receiver-pays on `MetaTransfer`;
+      transient sender and one-shot ticket, per-implementation allowlist + `mtxSelectors()`, fee classes,
+      all-or-nothing; `_msgSender()` everywhere per the `msg.sender` inventory; lint/test that no token reads
+      `msg.sender` directly except the allowed spots; UA path split into `UAMetaTransaction`/`UAMetaTransfer` +
+      `uaExecuteTransfer`/`uaBatchTransfer` (CTR-UA-26); KATs `metatx_kat.json`, `metatransfer_kat.json`, v3 pair.
 - [ ] **MT-3** `approve` only by contracts (caller and spender); `mtxWrap` for a SCaaS underlying.
 - [ ] **MT-4** `salt = chain_uid` in every domain (implementation immutables; SubjectAccount, MandateWallet, OrderBookDex,
       UA registry, Zether digests); deploy scripts on a CREATE2 deployer; deploy gate checks `chainUid()`.
 - [ ] **MT-5** DEX: `TradeOrder` + `mtxTrade`/`mtxCancelOrder`/`mtxInvalidateNonces` in the tokens; `OrderBookDex.mtxSettle`
       (Path A/B, 1 taker + N makers, 50 % floor, fee split, conservation invariant); outside-token legs.
 - [ ] **MT-6** Zether: transient envelope binding, `fund` from the public balance, `mtxWrap`; renames (`mtxRollOver`,
-      `mtxSetRollOverMode`); PQZ on the one base (draft GC-10); prover `Header` gains `chain_uid` as word 3,
+      `mtxSetRollOverMode`); envelope binding without `to`/`value` (CTR-ZTH-06); `PqzToken` on the one base like Zether,
+      no `PqzMetaTx`, PQZ selectors not batchable (CTR-PQZ-21); prover `Header` gains `chain_uid` as word 3,
       `HEADER_LEN` 384 → 416 (`clients/zether-prover/src/zether.rs`).
-- [ ] **MT-7** Renames on `MandateWallet`/`SubjectAccount`/Hedera (`mtx…`).
-- [ ] **MT-8** Node: selector tables (NODE-JOB-20), call table names, breaker per `(from, selector)`, `chainUid()` check
+- [ ] **MT-7** `MandateWallet` and `SubjectAccount` on `MetaTxBase` (CTR-ACC-06/07/10): delegate/owner calls as
+      `MetaTransaction` self-calls, `SubjectAccount` signs as itself, typed `PayUnderMandate`/`RevokeMandate`/`OwnerCall`
+      removed, named entries derive their lanes; Hedera `mtxExecuteAsOwnerRaw` over the same owner digest; `mtx…` renames.
+- [ ] **MT-8** Node: two `sol!` structs, `metatx`/`ua_metatx` jobs name their struct (`call` | `transfer`), selector tables for
+      every contract on `MetaTxBase` (NODE-JOB-20), call table names, breaker per `(from, selector)` (`MetaTransfer` =
+      `transfer`/`pay`), batching via `mtxBatchTransfer`/`mtxBatch` never mixed (NODE-LANE-11), `chainUid()` check
       (NODE-GW-07), DEX venue `mtxSettle` (NODE-DEX-15/16), NODE-IDX-06 `repeat_of`.
-- [ ] **MT-9** clientkeys/app: `domain.salt`, decode `mtxExecute` data, refuse an unlisted `dex`, no EOA approve, wrap by
-      signature (CLI-SGN-33…36); vectors/KATs regenerated.
+- [ ] **MT-9** clientkeys/app and the reference ERP's `lib/eip712.py`: both structs (`MetaTransfer` typed in wallets,
+      `MetaTransaction` decoded via `mtxSelectors()`), `domain.salt`, refuse an unlisted `dex`, no EOA approve, wrap by
+      signature (CLI-SGN-05, CLI-SGN-33…36); `SubjectAccount`/mandate digests as `MetaTransaction`s; vectors/KATs regenerated.
 - [x] Draft for non-EVM families: `docs/superpowers/specs/2026-10-08-nonevm-metacall-design.md` (owner Q1–Q4 open).
-- [ ] **Owner review of three drafts (2026-10-08), then fold into the component docs:**
-      `2026-10-08-dex-exchange-design.md` (DS-1…8; design approved in chat), `2026-10-08-metatx-generic-call-design.md`
-      (GC-1…10; Q4 PqzToken open), `2026-10-08-nonevm-metacall-design.md` (NM-1…4; Q1–Q4 open). Each changes MT-1…MT-9
-      scope as listed in its "Changes to current rules" table.
+- [x] Meta-tx generic call (GC-1…10) accepted and folded 2026-10-08; record `docs/history/specs/2026-10-08-metatx-generic-call-design.md`.
+- [ ] **Owner review of two drafts (2026-10-08), then fold into the component docs:**
+      `2026-10-08-dex-exchange-design.md` (DS-1…8; design approved in chat), `2026-10-08-nonevm-metacall-design.md`
+      (NM-1…5). Each changes MT-1…MT-9 scope as listed in its "Changes to current rules" table.
 
 ## 0. Finish the spec phase (5 items left)
 
