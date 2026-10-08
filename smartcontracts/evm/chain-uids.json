@@ -1,0 +1,341 @@
+{
+  "description": "chain_uid (genesis block hash, NET-ALL-22) of live EVM chains, queried from public RPCs; each value matched on two sources unless noted. chain_uid alone is NOT unique (ETH/ETC, Avalanche/Fuji share genesis): a chain is (chainId, chain_uid).",
+  "verified": "2026-10-08",
+  "method": "eth_chainId + eth_getBlockByNumber(\"0x0\").hash",
+  "chains": [
+    {
+      "key": "private7622",
+      "name": "SCaaS private chain",
+      "chainId": 7622,
+      "testnet": false,
+      "chainUid": "0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464",
+      "genesisTimestamp": null,
+      "sources": [
+        "docs/networks/evm.md"
+      ],
+      "note": "from the chain profile in the docs, not re-queried"
+    },
+    {
+      "key": "ethereum",
+      "name": "Ethereum",
+      "chainId": 1,
+      "testnet": false,
+      "chainUid": "0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3",
+      "genesisTimestamp": 0,
+      "sources": [
+        "https://eth.drpc.org",
+        "https://1rpc.io/eth"
+      ],
+      "note": "same genesis as ETC (61): chainId separates them"
+    },
+    {
+      "key": "sepolia",
+      "name": "Ethereum Sepolia",
+      "chainId": 11155111,
+      "testnet": true,
+      "chainUid": "0x25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9",
+      "genesisTimestamp": 1633267481,
+      "sources": [
+        "https://ethereum-sepolia-rpc.publicnode.com",
+        "https://1rpc.io/sepolia"
+      ]
+    },
+    {
+      "key": "hoodi",
+      "name": "Ethereum Hoodi",
+      "chainId": 560048,
+      "testnet": true,
+      "chainUid": "0xbbe312868b376a3001692a646dd2d7d1e4406380dfd86b98aa8a34d1557c971b",
+      "genesisTimestamp": 1742212800,
+      "sources": [
+        "https://ethereum-hoodi-rpc.publicnode.com",
+        "https://hoodi.drpc.org"
+      ]
+    },
+    {
+      "key": "etc",
+      "name": "Ethereum Classic",
+      "chainId": 61,
+      "testnet": false,
+      "chainUid": "0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3",
+      "genesisTimestamp": 0,
+      "sources": [
+        "https://0xrpc.io/etc",
+        "https://etc.drpc.org"
+      ],
+      "note": "same genesis as Ethereum (1): chainId separates them"
+    },
+    {
+      "key": "mordor",
+      "name": "Ethereum Classic Mordor",
+      "chainId": 63,
+      "testnet": true,
+      "chainUid": "0xa68ebde7932eccb177d38d55dcc6461a019dd795a681e59b5a3e4f3a7259a3f1",
+      "genesisTimestamp": 1570141915,
+      "sources": [
+        "https://rpc.mordor.etccooperative.org",
+        "https://geth-mordor.etc-network.info"
+      ]
+    },
+    {
+      "key": "bsc",
+      "name": "BNB Smart Chain",
+      "chainId": 56,
+      "testnet": false,
+      "chainUid": "0x0d21840abff46b96c84b2ac9e10e4f5cdaeb5693cb665db62a2f3b02d2d57b5b",
+      "genesisTimestamp": 1587390414,
+      "sources": [
+        "https://bsc-rpc.publicnode.com",
+        "https://bsc-dataseed.bnbchain.org"
+      ]
+    },
+    {
+      "key": "bsc-testnet",
+      "name": "BNB Smart Chain testnet",
+      "chainId": 97,
+      "testnet": true,
+      "chainUid": "0x6d3c66c5357ec91d5c43af47e234a939b22557cbb552dc45bebbceeed90fbe34",
+      "genesisTimestamp": 1587390414,
+      "sources": [
+        "https://bsc-testnet-rpc.publicnode.com",
+        "https://bsc-testnet.drpc.org"
+      ]
+    },
+    {
+      "key": "gnosis",
+      "name": "Gnosis",
+      "chainId": 100,
+      "testnet": false,
+      "chainUid": "0x4f1dd23188aab3a76b463e4af801b52b1248ef073c648cbdc4c9333d3da79756",
+      "genesisTimestamp": 0,
+      "sources": [
+        "https://gnosis-rpc.publicnode.com",
+        "https://rpc.gnosischain.com"
+      ]
+    },
+    {
+      "key": "chiado",
+      "name": "Gnosis Chiado",
+      "chainId": 10200,
+      "testnet": true,
+      "chainUid": "0xada44fd8d2ecab8b08f256af07ad3e777f17fb434f8f8e678b312f576212ba9a",
+      "genesisTimestamp": 0,
+      "sources": [
+        "https://gnosis-chiado-rpc.publicnode.com",
+        "https://rpc.chiadochain.net"
+      ]
+    },
+    {
+      "key": "polygon",
+      "name": "Polygon PoS",
+      "chainId": 137,
+      "testnet": false,
+      "chainUid": "0xa9c28ce2141b56c474f1dc504bee9b01eb1bd7d1a507580d5519d4437a97de1b",
+      "genesisTimestamp": 1590824836,
+      "sources": [
+        "https://polygon-bor-rpc.publicnode.com",
+        "https://polygon.drpc.org"
+      ]
+    },
+    {
+      "key": "amoy",
+      "name": "Polygon Amoy",
+      "chainId": 80002,
+      "testnet": true,
+      "chainUid": "0x7202b2b53c5a0836e773e319d18922cc756dd67432f9a1f65352b61f4406c697",
+      "genesisTimestamp": 1700225065,
+      "sources": [
+        "https://polygon-amoy-bor-rpc.publicnode.com",
+        "https://polygon-amoy.drpc.org"
+      ]
+    },
+    {
+      "key": "base",
+      "name": "Base",
+      "chainId": 8453,
+      "testnet": false,
+      "chainUid": "0xf712aa9241cc24369b143cf6dce85f0902a9731e70d66818a3a5845b296c73dd",
+      "genesisTimestamp": 1686789347,
+      "sources": [
+        "https://base-rpc.publicnode.com",
+        "https://mainnet.base.org"
+      ]
+    },
+    {
+      "key": "base-sepolia",
+      "name": "Base Sepolia",
+      "chainId": 84532,
+      "testnet": true,
+      "chainUid": "0x0dcc9e089e30b90ddfc55be9a37dd15bc551aeee999d2e2b51414c54eaf934e4",
+      "genesisTimestamp": 1695768288,
+      "sources": [
+        "https://base-sepolia.gateway.tenderly.co",
+        "https://84532.rpc.thirdweb.com"
+      ],
+      "note": "sepolia.base.org, publicnode and drpc prune block 0 (EIP-4444): 'pruned history unavailable'"
+    },
+    {
+      "key": "celo",
+      "name": "Celo",
+      "chainId": 42220,
+      "testnet": false,
+      "chainUid": "0x19ea3339d3c8cda97235bc8293240d5b9dadcdfbb5d4b0b90ee731cac1bd11c3",
+      "genesisTimestamp": 1587571200,
+      "sources": [
+        "https://forno.celo.org",
+        "https://celo-rpc.publicnode.com",
+        "https://1rpc.io/celo"
+      ],
+      "note": "genesis of the original L1, kept by the L2 migration"
+    },
+    {
+      "key": "celo-sepolia",
+      "name": "Celo Sepolia",
+      "chainId": 11142220,
+      "testnet": true,
+      "chainUid": "0xabcc77fb92a7ea1e7d330042d81200585d251355b33408ed1c27fb54175b1fe2",
+      "genesisTimestamp": 1753283988,
+      "sources": [
+        "https://celo-sepolia.drpc.org",
+        "https://celo-sepolia.gateway.tenderly.co"
+      ],
+      "note": "forno.celo-sepolia refuses blocks older than ~10k behind head; replaces Alfajores"
+    },
+    {
+      "key": "optimism",
+      "name": "OP Mainnet",
+      "chainId": 10,
+      "testnet": false,
+      "chainUid": "0x7ca38a1916c42007829c55e69d3e9a73265554b586a499015373241b8a3fa48b",
+      "genesisTimestamp": 0,
+      "sources": [
+        "https://optimism-rpc.publicnode.com",
+        "https://mainnet.optimism.io"
+      ]
+    },
+    {
+      "key": "op-sepolia",
+      "name": "OP Sepolia",
+      "chainId": 11155420,
+      "testnet": true,
+      "chainUid": "0x102de6ffb001480cc9b8b548fd05c34cd4f46ae4aa91759393db90ea0409887d",
+      "genesisTimestamp": 1691802540,
+      "sources": [
+        "https://optimism-sepolia-rpc.publicnode.com",
+        "https://sepolia.optimism.io"
+      ]
+    },
+    {
+      "key": "arbitrum",
+      "name": "Arbitrum One",
+      "chainId": 42161,
+      "testnet": false,
+      "chainUid": "0x7ee576b35482195fc49205cec9af72ce14f003b9ae69f6ba0faef4514be8b442",
+      "genesisTimestamp": 0,
+      "sources": [
+        "https://arbitrum-one-rpc.publicnode.com",
+        "https://arb1.arbitrum.io/rpc"
+      ]
+    },
+    {
+      "key": "arbitrum-sepolia",
+      "name": "Arbitrum Sepolia",
+      "chainId": 421614,
+      "testnet": true,
+      "chainUid": "0x77194da4010e549a7028a9c3c51c3e277823be6ac7d138d0bb8a70197b5c004c",
+      "genesisTimestamp": 0,
+      "sources": [
+        "https://arbitrum-sepolia-rpc.publicnode.com",
+        "https://sepolia-rollup.arbitrum.io/rpc"
+      ]
+    },
+    {
+      "key": "avalanche",
+      "name": "Avalanche C-Chain",
+      "chainId": 43114,
+      "testnet": false,
+      "chainUid": "0x31ced5b9beb7f8782b014660da0cb18cc409f121f408186886e1ca3e8eeca96b",
+      "genesisTimestamp": 0,
+      "sources": [
+        "https://avalanche-c-chain-rpc.publicnode.com",
+        "https://api.avax.network/ext/bc/C/rpc"
+      ],
+      "note": "same genesis as Fuji (43113): chainId separates them"
+    },
+    {
+      "key": "fuji",
+      "name": "Avalanche Fuji",
+      "chainId": 43113,
+      "testnet": true,
+      "chainUid": "0x31ced5b9beb7f8782b014660da0cb18cc409f121f408186886e1ca3e8eeca96b",
+      "genesisTimestamp": 0,
+      "sources": [
+        "https://avalanche-fuji-c-chain-rpc.publicnode.com",
+        "https://api.avax-test.network/ext/bc/C/rpc"
+      ],
+      "note": "same genesis as Avalanche C-Chain (43114): chainId separates them"
+    },
+    {
+      "key": "linea",
+      "name": "Linea",
+      "chainId": 59144,
+      "testnet": false,
+      "chainUid": "0xb6762a65689107b2326364aefc18f94cda413209fab35c00d4af51eaa20ffbc6",
+      "genesisTimestamp": 1670496243,
+      "sources": [
+        "https://linea-rpc.publicnode.com",
+        "https://rpc.linea.build"
+      ]
+    },
+    {
+      "key": "linea-sepolia",
+      "name": "Linea Sepolia",
+      "chainId": 59141,
+      "testnet": true,
+      "chainUid": "0x65a64c825d7c13ce1bf077801d0b6b2a89853e19e4a89a5433d7d85d2102a20b",
+      "genesisTimestamp": 1670496243,
+      "sources": [
+        "https://linea-sepolia-rpc.publicnode.com",
+        "https://rpc.sepolia.linea.build"
+      ]
+    },
+    {
+      "key": "hedera",
+      "name": "Hedera mainnet",
+      "chainId": 295,
+      "testnet": false,
+      "chainUid": "0x420fffe68fcd2a1eadcce589fdf9565bcf5a269d02232fe07cdc565b3b6f76ce",
+      "genesisTimestamp": null,
+      "sources": [
+        "https://mainnet-public.mirrornode.hedera.com/api/v1/blocks/0"
+      ],
+      "note": "DERIVED: first 32 bytes of the 48-byte mirror-node block-0 hash (relay convention); hashio relay errored on block 0 \u2014 confirm against the relay before use"
+    },
+    {
+      "key": "hedera-testnet",
+      "name": "Hedera testnet",
+      "chainId": 296,
+      "testnet": true,
+      "chainUid": "0x5699954170cc8177692691d15368cad54f1e7a90c9e16b782f989de1b8d19358",
+      "genesisTimestamp": null,
+      "sources": [
+        "https://testnet.mirrornode.hedera.com/api/v1/blocks/0"
+      ],
+      "note": "DERIVED as mainnet; Hedera testnet is reset periodically (this genesis: 2024-02-01) \u2014 a reset is a new chain_uid"
+    }
+  ],
+  "unreachable": [
+    {
+      "key": "holesky",
+      "name": "Ethereum Holesky",
+      "chainId": 17000,
+      "note": "no public RPC answered (network sunset)"
+    },
+    {
+      "key": "celo-alfajores",
+      "name": "Celo Alfajores",
+      "chainId": 44787,
+      "note": "no public RPC answered (replaced by Celo Sepolia)"
+    }
+  ]
+}
