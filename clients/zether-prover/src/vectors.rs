@@ -12,9 +12,9 @@ use crate::bulletproofs::Gens;
 use crate::curve::{decode_scalar, encode_point, encode_scalar, Bls12381, Bn254, Fr, ZCurve};
 use crate::elgamal::encrypt;
 use crate::keys::{derive_child_sk, derive_master_sk, seed_from_mnemonic, ZetherKey, USE_CONF, USE_DISCLOSURE};
-use crate::schnorr::{self, entry_ref, open_chaum_pedersen, open_sender, Entry, OpeningKind};
+use crate::schnorr::{self, entry_ref, open_chaum_pedersen, open_sender, open_sender_cp, Entry, OpeningKind};
 use crate::transcript::{hash_to_scalar, Op, Transcript};
-use crate::zether::{self, BurnProof, BurnStatement, TransferProof, TransferStatement};
+use crate::zether::{self, BurnProof, BurnStatement, MultiTransferStatement, TransferProof, TransferStatement};
 
 pub const MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
 abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
@@ -93,13 +93,16 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
     let t = zether::verify_transfer(&gens, &st, &p).unwrap();
     transcripts.push(json!({"name": format!("transfer_{}", C::NAME), "case": transcript_json::<C>(&t)}));
 
-    // disclosure of that transfer, three kinds.
+    // disclosure of that transfer, four kinds. SENDER_CP (and the multi legs below) draw from their own
+    // RNG so the files after this one keep their bytes.
     let s = decode_scalar::<C>(&hex::decode(&tv["witness"]["s"].as_str().unwrap()[2..]).unwrap()).unwrap();
     let token: [u8; 20] = hex::decode(&TOKEN[2..]).unwrap().try_into().unwrap();
+    let mut cp_rng = ChaCha20Rng::seed_from_u64(0x5e9d_e7c9);
     let e = Entry {
         chain_id: CHAIN,
         token,
         entry_ref: entry_ref(CHAIN, &token, &from.ua(), 3),
+        index: 0,
         y_t: st.y_t,
         c_out: st.c_out,
         d_out: st.d_out,
@@ -111,20 +114,9 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
         (OpeningKind::SenderS, open_sender::<C>(&s)),
         (OpeningKind::ReceiverX, open_chaum_pedersen(&e, amount, OpeningKind::ReceiverX, &to, &mut rng).unwrap()),
         (OpeningKind::Auditor, open_chaum_pedersen(&e, amount, OpeningKind::Auditor, &aud, &mut rng).unwrap()),
+        (OpeningKind::SenderCp, open_sender_cp(&e, amount, &s, &mut cp_rng).unwrap()),
     ];
-    let cases: Vec<Value> = openings
-        .iter()
-        .map(|(kind, opening)| {
-            schnorr::verify_opening(&e, amount, *kind, opening).unwrap();
-            json!({
-                "entryRef": hx(&e.entry_ref), "chainId": CHAIN, "token": TOKEN, "amount": amount, "kind": *kind as u8,
-                "Yt": hx(&encode_point::<C>(&e.y_t)), "Cout": hx(&encode_point::<C>(&e.c_out)),
-                "Dout": hx(&encode_point::<C>(&e.d_out)), "Ya": hx(&encode_point::<C>(&e.y_a)),
-                "Caud": hx(&encode_point::<C>(&e.c_aud)), "opening": hx(opening), "expect": true,
-            })
-        })
-        .collect();
-    files.push((format!("disclosure_{}.json", C::NAME), json!({"curve": C::NAME, "cases": cases})));
+    let mut cases = disclosure_cases(&e, amount, &openings);
     files.push((format!("transfer_{}.json", C::NAME), tv));
 
     // transfer: auditor off, direct, no inner fee.
@@ -175,6 +167,29 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
     let mut mv = prove_transfer_multi_json::<C, _>(&gens, &req, &mut rng).unwrap();
     mv["expect"] = json!(true);
     mv["request"] = req;
+    // disclosure of leg j = 1 (the real recipient): the challenge binds j.
+    let st = MultiTransferStatement::<C>::decode(&hex::decode(&mv["statement"].as_str().unwrap()[2..]).unwrap()).unwrap();
+    let s = decode_scalar::<C>(&hex::decode(&mv["witness"]["s"].as_str().unwrap()[2..]).unwrap()).unwrap();
+    let leg = &st.legs[1];
+    let e = Entry {
+        chain_id: CHAIN,
+        token,
+        entry_ref: entry_ref(CHAIN, &token, &from.ua(), 3),
+        index: 1,
+        y_t: leg.y_t,
+        c_out: leg.c_out,
+        d_out: st.d_out,
+        y_a: st.y_a,
+        c_aud: leg.c_aud,
+    };
+    let openings = [
+        (OpeningKind::SenderS, open_sender::<C>(&s)),
+        (OpeningKind::ReceiverX, open_chaum_pedersen(&e, amount, OpeningKind::ReceiverX, &to, &mut cp_rng).unwrap()),
+        (OpeningKind::Auditor, open_chaum_pedersen(&e, amount, OpeningKind::Auditor, &aud, &mut cp_rng).unwrap()),
+        (OpeningKind::SenderCp, open_sender_cp(&e, amount, &s, &mut cp_rng).unwrap()),
+    ];
+    cases.extend(disclosure_cases(&e, amount, &openings));
+    files.push((format!("disclosure_{}.json", C::NAME), json!({"curve": C::NAME, "cases": cases})));
     files.push((format!("transfer_multi_{}.json", C::NAME), mv));
 
     // multi-recipient, M = 1, auditor off, no fee, NoBundle.
@@ -183,6 +198,21 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
     mv["expect"] = json!(true);
     mv["request"] = req;
     files.push((format!("transfer_multi_noaud_{}.json", C::NAME), mv));
+}
+
+fn disclosure_cases<C: ZCurve>(e: &Entry<C>, amount: u64, openings: &[(OpeningKind, Vec<u8>)]) -> Vec<Value> {
+    openings
+        .iter()
+        .map(|(kind, opening)| {
+            schnorr::verify_opening(e, amount, *kind, opening).unwrap();
+            json!({
+                "entryRef": hx(&e.entry_ref), "chainId": CHAIN, "token": TOKEN, "index": e.index, "amount": amount,
+                "kind": *kind as u8, "Yt": hx(&encode_point::<C>(&e.y_t)), "Cout": hx(&encode_point::<C>(&e.c_out)),
+                "Dout": hx(&encode_point::<C>(&e.d_out)), "Ya": hx(&encode_point::<C>(&e.y_a)),
+                "Caud": hx(&encode_point::<C>(&e.c_aud)), "opening": hx(opening), "expect": true,
+            })
+        })
+        .collect()
 }
 
 fn r33_curve<C: ZCurve>() -> Value {

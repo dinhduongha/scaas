@@ -1,8 +1,8 @@
 # Zether: one transfer to many recipients, three disclosure modes
 
-**Status:** DRAFT rev 5; owner decisions recorded (Z1–Z12); a measuring spike implements it and stays in the code (owner:
+**Status:** DRAFT rev 6; owner decisions recorded (Z1–Z13); a measuring spike implements it and stays in the code (owner:
 "merge it so it can be reused"). Provisional ids `ZM-n`; real ids are allocated in `docs/decisions.md` on acceptance.
-**Date:** 2026-10-08. **Scope:** classical Zether on EVM (`ZetherToken`, `ZetherVerifier` bn254 + BLS12-381,
+**Date:** 2026-10-08. **Scope:** classical Zether on EVM (`ZetherToken`, `ZetherDisclosure`, `ZetherVerifier` bn254 + BLS12-381,
 `clients/zether-prover`). PQZ: notes only (§6). Builds on [contracts/zether.md](../../contracts/zether.md); the
 statement header stays the BUILT 384-byte layout (the `chainUid` word is stream MT-6).
 
@@ -30,6 +30,7 @@ three disclosure-storage modes instead of one.
 | Z10 | New opening **`SENDER_CP`**: the sender proves leg `j` with a Chaum-Pedersen proof instead of handing over `s`, so only `v_j` opens (§5.1). The disclosure challenge binds the leg index `j` for every kind |
 | Z11 | The auditor key **should be a k-of-n threshold key** (e.g. company, audit firm, regulator): `Y_a` stays one public key, `x_a` is split off chain by a DKG; decrypting or an `AUDITOR` opening needs k parties. No contract change; prover/CLI protocol follows with [CTR-ZTH-29](../../contracts/zether.md#CTR-ZTH-29) |
 | Z12 | **The sender may leave the auditor out of a transfer** on a token whose auditor is on (both formats): every `C_aud_j = O`; the token then builds the statement with `Y_a = O`. Owner-accepted consequence: on such a transfer the auditor reads nothing, and the opt-out is publicly visible (`C_aud = O`) |
+| Z13 | **Disclosure lives in a separate stateless `ZetherDisclosure`** (no state, no admin, no upgrade; one instance for every Zether token on every curve); the token exposes the raw entry (`transferEntry`) and `disclosure()` |
 
 ## 3. Relation and proof
 
@@ -91,13 +92,21 @@ recipient `j` is addressed as `(entryRef, j)`. Bundle `B_j = Y_tj ‖ C_out_j �
 
 | Mode | Stored | Event | Disclosure |
 |---|---|---|---|
-| HASH | `keccak256(B_1 ‖ … ‖ B_M)` (one slot) | `ConfidentialTransferMulti(from, recipients, beneficiary, fee, sendCounter, entryRef, mode)` + the bundles in a `TransferBundles(entryRef, bundles)` event | on chain: the caller supplies all bundles, the token checks the hash, then the existing opening checks on `B_j` |
+| HASH | `keccak256(B_1 ‖ … ‖ B_M)` (one slot) | `ConfidentialTransferMulti(from, recipients, beneficiary, fee, sendCounter, entryRef, mode)` + the bundles in a `TransferBundles(entryRef, bundles)` event | on chain: the caller supplies all bundles, `ZetherDisclosure` checks the hash, then the opening checks on `B_j` |
 | BUNDLE | `B_1 ‖ … ‖ B_M` | the summary event | on chain, nothing supplied |
 | NONE | nothing | the summary event | off chain only (calldata) |
 
-`verifyTransferAmount(entryRef, j, amount, kind, opening, bundles)` serves both formats (the token knows each entry's
-mode; a single entry has `j = 0` and its stored bundle; `bundles` ignored in BUNDLE mode, refused in NONE mode).
-`transferCiphertext(entryRef, j, bundles)` exports the raw leg for an independent verifier. No attestation (Z9).
+**Disclosure contract (Z13).** Disclosure is not in the token: `ZetherDisclosure` (stateless, no admin, no upgrade, one
+instance for every token and curve) reads `transferEntry(entryRef)`, `verifier()` and `auditorKey()` from the token.
+`transferEntry` returns the raw record: `B_1 ‖ … ‖ B_M` (single format, BUNDLE), the 32-byte hash (HASH), empty (NONE,
+unknown ref). `disclosure()` is an immutable of the token implementation (set in its constructor, shared by every
+clone), so a third party finds the canonical contract from the token:
+`token.disclosure().verifyTransferAmount(token, entryRef, j, amount, kind, opening, bundles)` serves both formats (a
+single entry has `j = 0`; `bundles` ignored when the record is stored, checked against the hash in HASH mode,
+`UnknownEntry` in NONE mode). `transferCiphertext(token, entryRef, j, bundles)` exports the raw leg for an independent
+verifier. No attestation (Z9): a contract that needs an on-chain trace records the result itself. The caller picks the
+token it trusts (a fake "token" can answer anything); the challenge binds the token address, not the disclosure
+contract's.
 Relaying through the meta-tx envelope follows stream MT-6 (direct calls only here).
 
 **Auditor per transfer (Z12).** Token auditor off: every `C_aud_j` must be `O` (as today). Token auditor on: either
@@ -114,10 +123,10 @@ verifies under the other. The single format follows the same rule with its one `
 | `AUDITOR` (2) | auditor | `x_a` | `(A1, A2, z)` | DLEQ `log_G Y_a == log_{D_out}(C_aud_j − [v]G)`; false when `C_aud_j = O` | leg `j` |
 | `SENDER_CP` (3) | sender | `s` | `(A1, A2, z)` | DLEQ `log_G D_out == log_{Y_tj} M_j` | leg `j` |
 
-DLEQ as the existing `_chaumPedersen`: `[z]P − A1 − [e]K == O` and `[z]Q − A2 − [e]N == O` over the pairs above.
+DLEQ `log_G K == log_B N` (`ZetherDisclosure._chaumPedersen`): `[z]G − A1 − [e]K == O` and `[z]B − A2 − [e]N == O` over the pairs above.
 Challenge `e = H(DISCLOSE_TAG ‖ chainid ‖ token ‖ entryRef ‖ j ‖ amount ‖ kind ‖ A1 ‖ A2)` — `j` is new for every kind
 (vectors change). Nonce `k` hedged (`H(secret ‖ statement ‖ rng)`): a repeated `k` over two openings reveals the secret.
-The prover's `verify_opening` mirrors the token; off-chain checking needs no storage mode.
+The prover's `verify_opening` mirrors `ZetherDisclosure` (`open_sender_cp` builds `SENDER_CP`); off-chain checking needs no storage mode.
 
 ## 6. PQZ (note)
 
@@ -134,37 +143,80 @@ forge, real proofs from the prover, bn254 and BLS12-381: execution gas of `trans
 `M ∈ {1, 2, 4, 8}` × the three modes, next to `transferConfidentialSingle` (baseline: the measured table of `contracts/zether.md`); calldata bytes per case. Prover time per `M`.
 Results go into the gas table of `contracts/zether.md` on fold.
 
-**Measured 2026-10-08** (owner Z7/Z8 names: the multi-recipient entry points are `transferConfidential` (HASH),
-`transferConfidentialBundle`, `transferConfidentialNoBundle`; the single format is `transferConfidentialSingle`).
-`test/zether/ZetherMulti.t.sol` `test_gas*`, forge 1.3.5, Prague, `gasleft()` around the call — execution gas
-without the 21,000 intrinsic and calldata, each cell from a fresh state (every recipient and the beneficiary get their
-first credit, as in the single-recipient figure), auditor on, inner fee to a beneficiary, one real recipient and
-`M − 1` decoys at 0. Calldata = the ABI-encoded call in bytes.
+**Measured 2026-10-08, rev 6** (Z9/Z10/Z12/Z13 in the code). `test/zether/ZetherMulti.t.sol` `test_gas*`, forge 1.3.5,
+Prague, `gasleft()` around the call — execution gas without the 21,000 intrinsic and calldata, each cell from a fresh
+state (every recipient and the beneficiary get their first credit), inner fee to a beneficiary, one real recipient
+and `M − 1` decoys at 0, real proofs (test prover `ZetherProver.sol`). **on** = auditor on; **out** = the same
+auditor-on token, the sender leaves the auditor out (Z12, every `C_aud = O`, statement `Y_a = O`). Calldata = the
+ABI-encoded call in bytes (same for on and out).
 
-| Curve | Entry | M = 1 | M = 2 | M = 4 | M = 8 | Calldata (M = 1 / 2 / 4 / 8) |
-|---|---|---|---|---|---|---|
-| bn254 | `transferConfidentialSingle` | 3,286,811 | — | — | — | 3,876 (derived: payload 32 B shorter, same proof) |
-| bn254 | HASH (default) | 3,144,613 | 4,649,839 | 7,671,625 | 13,761,419 | 3,908 / 5,604 / 8,996 / 15,780 |
-| bn254 | BUNDLE | 3,295,898 | 4,976,484 | 8,348,990 | 15,139,891 | same |
-| bn254 | NONE | 3,093,384 | 4,595,117 | 7,609,845 | 13,684,495 | same |
-| BLS12-381 | `transferConfidentialSingle` | 3,920,276 | — | — | — | 6,948 (derived) |
-| BLS12-381 | HASH (default) | 3,584,305 | 5,309,455 | 8,820,900 | 16,090,549 | 6,980 / 10,148 / 16,484 / 29,156 |
-| BLS12-381 | BUNDLE | 3,910,950 | 5,986,820 | 10,199,705 | **18,871,249** | same |
-| BLS12-381 | NONE | 3,530,932 | 5,250,421 | 8,750,400 | 15,994,832 | same |
+| Curve | Entry | Aud. | M = 1 | M = 2 | M = 4 | M = 8 | Calldata (M = 1 / 2 / 4 / 8) |
+|---|---|---|---|---|---|---|---|
+| bn254 | `transferConfidentialSingle` | on | 3,287,303 | — | — | — | 3,876 |
+| bn254 | `transferConfidentialSingle` | out | 3,218,528 | — | — | — | 3,876 |
+| bn254 | HASH (default) | on | 3,146,110 | 4,652,247 | 7,675,864 | 13,769,380 | 3,908 / 5,604 / 8,996 / 15,780 |
+| bn254 | HASH (default) | out | 3,117,996 | 4,596,256 | 7,563,572 | 13,542,293 | same |
+| bn254 | BUNDLE | on | 3,297,417 | 4,978,914 | 8,353,251 | 15,147,864 | same |
+| bn254 | BUNDLE | out | 3,229,503 | 4,843,323 | 8,081,759 | 14,602,377 | same |
+| bn254 | NONE | on | 3,094,881 | 4,597,525 | 7,614,084 | 13,692,433 | same |
+| bn254 | NONE | out | 3,066,767 | 4,541,534 | 7,501,792 | 13,465,346 | same |
+| BLS12-381 | `transferConfidentialSingle` | on | 3,902,468 | — | — | — | 6,948 |
+| BLS12-381 | `transferConfidentialSingle` | out | 3,779,228 | — | — | — | 6,948 |
+| BLS12-381 | HASH (default) | on | 3,585,859 | 5,311,984 | 8,825,406 | 16,099,191 | 6,980 / 10,148 / 16,484 / 29,156 |
+| BLS12-381 | HASH (default) | out | 3,543,316 | 5,226,325 | 8,650,604 | 15,734,441 | same |
+| BLS12-381 | BUNDLE | on | 3,912,526 | 5,989,371 | 10,204,233 | **18,879,876** | same |
+| BLS12-381 | BUNDLE | out | 3,790,383 | 5,744,512 | 9,711,031 | **17,878,326** | same |
+| BLS12-381 | NONE | on | 3,532,486 | 5,252,950 | 8,754,906 | 16,003,409 | same |
+| BLS12-381 | NONE | out | 3,489,943 | 5,167,291 | 8,580,104 | 15,638,659 | same |
 
-- **Per extra recipient** (slope M = 1 → 8): bn254 HASH ≈ 1.52 M, BUNDLE ≈ 1.69 M, NONE ≈ 1.51 M; BLS12-381 HASH
-  ≈ 1.79 M, BUNDLE ≈ 2.14 M, NONE ≈ 1.78 M — against ≈ 3.29 M / 3.92 M for another separate transfer. The slope is
-  one 64-bit range proof (≈ 1.2–1.4 M), E3/E6/E7, the recipient's `pending` write and its share of the bundle.
-- **M = 1 vs the single format** (bn254): BUNDLE stores the same 256 B and costs +9 k (the `proofSystemIdMulti` call,
-  the count word, the recipient loop); HASH saves 142 k, NONE 193 k. BLS12-381: HASH −336 k, NONE −389 k.
+- **Rev 6 vs rev 4 (auditor on):** multi cells +1.5 k (M = 1) to +9 k (M = 8) — the `C_aud` scan that picks `Y_a`
+  (Z12), ≈ 1 k per leg; the slopes below are unchanged. Single is now measured by the same harness as the multi cells
+  (rev 4 took it from `contracts/zether.md`).
+- **Per extra recipient** (slope M = 1 → 8, auditor on): bn254 HASH ≈ 1.52 M, BUNDLE ≈ 1.69 M, NONE ≈ 1.51 M;
+  BLS12-381 HASH ≈ 1.79 M, BUNDLE ≈ 2.14 M, NONE ≈ 1.78 M — against ≈ 3.29 M / 3.90 M for another separate transfer.
+- **Leaving the auditor out (Z12)** saves E6 per leg (bn254 ≈ 28 k, BLS12-381 ≈ 43–46 k) and, where the bundle is
+  stored, the zero `C_aud` words: Single −69 k / −123 k, BUNDLE M = 8 −545 k / −1.0 M (bn254 / BLS12-381).
 - **EIP-7825 cap (16,777,216 per transaction, intrinsic + calldata included):** every bn254 cell fits; on BLS12-381
-  M = 8 BUNDLE does not (18.9 M execution), M = 8 HASH ≈ 16.6 M and NONE ≈ 16.5 M fit with < 2 % headroom.
-- **Prover** (release `zether-cli proveTransferMulti`, one process per call — includes process start and generator
-  setup; median of 3 on the chain-7622 host, AMD Ryzen 5 7235HS): bn254 single 74 ms, M = 1/2/4/8 = 75 / 114 / 181 /
-  322 ms; BLS12-381 single 162 ms, M = 1/2/4/8 = 159 / 231 / 361 / 660 ms.
-- **Sizes:** `ZetherToken` runtime 31,911 B (27,353 B before this change — already over the EIP-170 limit of 24,576 B
-  on `main`); verifiers 15,955 B (bn254) / 16,312 B (BLS12-381). Optimizer runs = 1 does not bring the token under the
-  limit (31,548 B); see the implementation notes.
+  M = 8 BUNDLE does not, auditor on or out; M = 8 HASH on ≈ 16.6 M and NONE on ≈ 16.5 M fit with ≈ 1–2 % headroom,
+  out ≈ 16.2 M / 16.1 M.
+- **Prover** (rev 4, unchanged code path; release `zether-cli proveTransferMulti`, one process per call; median of 3
+  on the chain-7622 host, AMD Ryzen 5 7235HS): bn254 single 74 ms, M = 1/2/4/8 = 75 / 114 / 181 / 322 ms; BLS12-381
+  single 162 ms, M = 1/2/4/8 = 159 / 231 / 361 / 660 ms.
+
+**Disclosure** (`ZetherDisclosure.verifyTransferAmount`, `test_gasDisclose*`): an on-chain call from a contract
+(`Escrow3P.measure`: `token.disclosure()`, then `gasleft()` around the call), every opening true, on the real leg
+`j = M − 1`. Token, `ZetherDisclosure` and verifier cooled with `vm.cool` before each call (cold accounts and slots as
+in a new transaction; the token account itself is warm, the caller just read `disclosure()`). HASH: the bundles are
+passed in calldata — their size in the last column; their transaction calldata cost (≤ 16 gas/B) is not included.
+
+| Curve | Entry | `SENDER_S` | `RECEIVER_X` | `AUDITOR` | `SENDER_CP` | Bundles in calldata |
+|---|---|---|---|---|---|---|
+| bn254 | Single (stored) | 74,935 | 97,975 | 106,783 | 98,024 | — |
+| bn254 | BUNDLE M = 1 | 74,935 | 97,975 | 106,783 | 98,024 | — |
+| bn254 | BUNDLE M = 8 | 196,953 | 220,014 | 228,826 | 220,063 | — |
+| bn254 | HASH M = 1 | 60,248 | 83,287 | 92,094 | 83,336 | 256 B |
+| bn254 | HASH M = 8 | 61,459 | 84,510 | 93,320 | 84,559 | 2,048 B |
+| BLS12-381 | Single (stored) | 118,091 | 148,712 | 161,917 | 148,761 | — |
+| BLS12-381 | BUNDLE M = 1 | 118,091 | 148,712 | 161,917 | 148,761 | — |
+| BLS12-381 | BUNDLE M = 8 | 362,294 | 392,974 | 406,193 | 393,023 | — |
+| BLS12-381 | HASH M = 1 | 86,150 | 116,767 | 129,971 | 116,816 | 512 B |
+| BLS12-381 | HASH M = 8 | 88,617 | 119,270 | 132,481 | 119,319 | 4,096 B |
+
+- `SENDER_CP` costs as `RECEIVER_X` (+49 gas: the bases swap); `AUDITOR` adds the cold `auditorKey()` read (≈ 9 k /
+  13 k). A stored entry is read whole: BUNDLE M = 8 pays ≈ 65 / 129 cold slots for 2 / 4 KiB, which is why HASH (one
+  slot + calldata) is the cheaper on-chain check at large `M`. Off chain (`eth_call`) every kind is free.
+
+**Sizes** (`forge build --sizes`, runtime bytes, optimizer 200 runs; EIP-170 limit 24,576 B):
+
+| Contract | Before (`main` `c137dca`) | After (rev 6) |
+|---|---|---|
+| `ZetherToken` | 31,911 (+7,335 over) | 28,939 (+4,363 over) |
+| `ZetherDisclosure` | — | 4,916 |
+| `ZetherVerifierBn254` | 15,955 | 15,955 |
+| `ZetherVerifierBls12381` | 16,312 | 16,312 |
+
+The split (Z13) takes 2,972 B off the token; it is **still over EIP-170** by 4,363 B. The next candidates are the prover-only views (`transferStatement*`, `burnStatement`) and the meta-tx relay
+path; not done here.
 
 ## 8. Revision history
 
@@ -175,3 +227,4 @@ first credit, as in the single-recipient figure), auditor on, inner fee to a ben
 | 3 | 2026-10-08 | Z8: the single-recipient format stays as `transferConfidentialSingle` |
 | 4 | 2026-10-08 | Spike merged (`93eddd2` on main as cherry-pick): names aligned with the code (`…-MULTI-V1/…` opTag, `ConfidentialTransferMulti`); measurements in §7 |
 | 5 | 2026-10-08 | Z9 attestation removed, Z10 `SENDER_CP` + `j` in the disclosure challenge, Z11 threshold auditor key (off chain), Z12 per-transfer auditor opt-out; measurements to redo (§7) |
+| 6 | 2026-10-08 | Z9, Z10, Z12 implemented; Z13: disclosure split into the stateless `ZetherDisclosure`, the token keeps `transferEntry` + `disclosure()`; §7 re-measured (transfer with auditor on / left out, disclosure per kind, sizes) |

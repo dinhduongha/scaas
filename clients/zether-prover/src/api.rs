@@ -220,6 +220,8 @@ pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v
 }
 
 /// `recipients`: `[{"yTo", "amount"}, …]` (decoys with amount 0), `mode`: `hash` (default) | `bundle` | `none`.
+/// `yAud` absent or null leaves the auditor out (statement `Y_a = O`, every `C_aud = O`): required on a token
+/// without auditor, the sender's choice on one with it (Z12); the same holds for `proveTransfer`.
 /// Direct calls only: the meta-tx envelope carries single-recipient transfers (stream MT-6).
 pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value, rng: &mut Rn) -> R<Value> {
     let k = key::<C>(v)?;

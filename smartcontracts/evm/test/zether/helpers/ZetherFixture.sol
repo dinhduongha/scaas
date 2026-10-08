@@ -8,6 +8,9 @@ import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 import {AuthScheme} from "../../../src/common/AuthScheme.sol";
 import {UniversalAccountRegistry} from "../../../src/registry/UniversalAccountRegistry.sol";
 import {ZetherToken} from "../../../src/zether/ZetherToken.sol";
+import {ZetherDisclosure} from "../../../src/zether/ZetherDisclosure.sol";
+import {ITransferDisclosure} from "../../../src/zether/ITransferDisclosure.sol";
+import {ZetherTranscript} from "../../../src/zether/ZetherTranscript.sol";
 import {IZetherToken} from "../../../src/zether/IZetherToken.sol";
 import {IZetherVerifier} from "../../../src/zether/IZetherVerifier.sol";
 import {ZetherVerifierBn254, ZetherVerifierBls12381} from "../../../src/zether/ZetherVerifier.sol";
@@ -32,8 +35,11 @@ abstract contract ZetherFixture is Test {
     MockERC20 internal usd;
     IZetherVerifier internal ver;
     ZetherToken internal tok;
+    ZetherDisclosure internal dis;
     ZetherProver internal prover;
     bool internal bls;
+    /// @dev Z12: người gửi bỏ auditor (mọi `C_aud = O`) dù token có auditor.
+    bool internal audOut;
 
     address internal registrar = address(0xF00D);
     address internal relayer = address(0xBEEF);
@@ -48,7 +54,8 @@ abstract contract ZetherFixture is Test {
     function _deploy(bool useBls, bool auditor) internal {
         bls = useBls;
         factory = new OpenFactory(registrar);
-        impl = new ZetherToken(address(factory));
+        dis = new ZetherDisclosure();
+        impl = new ZetherToken(address(factory), dis);
         reg = new UniversalAccountRegistry();
         usd = new MockERC20("USD", "USD", 6);
         prover = new ZetherProver();
@@ -123,7 +130,7 @@ abstract contract ZetherFixture is Test {
 
     function _cts(ZetherToken t, bytes memory yf, bytes memory yt, uint256 v, uint256 s) internal view returns (bytes memory) {
         bytes memory aud = t.auditorKey();
-        if (aud.length == 0) aud = ver.identity();
+        if (aud.length == 0 || audOut) aud = ver.identity();
         (bytes memory cOut, bytes memory dOut, bytes memory cDeb, bytes memory cAud) = prover.ciphertexts(ver, yf, yt, aud, v, s);
         return bytes.concat(cOut, dOut, cDeb, cAud);
     }
@@ -169,7 +176,7 @@ abstract contract ZetherFixture is Test {
         IZetherToken.AccountState memory st
     ) internal view returns (bytes memory payload) {
         bytes memory aud = t.auditorKey();
-        if (aud.length == 0) aud = ver.identity();
+        if (aud.length == 0 || audOut) aud = ver.identity();
         bytes memory legs;
         uint256 total;
         for (uint256 j; j < to.length; ++j) {
@@ -199,6 +206,43 @@ abstract contract ZetherFixture is Test {
 
     function _direct(ZetherToken t, Tx memory r, ZetherTypes.UA ben) internal returns (bytes32) {
         return t.transferConfidentialSingle(r.payload, r.proof, "", ben);
+    }
+
+    // ------------------------------------------------------------------ tiết lộ (ZetherDisclosure)
+
+    /// @dev `verifyTransferAmount` qua `ZetherDisclosure`: đúng một lời gọi ngoài, để `vm.expectRevert` bắt nó.
+    function _vta(
+        ZetherToken t,
+        bytes32 ref,
+        uint256 j,
+        uint256 amount,
+        ITransferDisclosure.OpeningKind kind,
+        bytes memory opening,
+        bytes memory bundles
+    ) internal view returns (bool) {
+        return dis.verifyTransferAmount(address(t), ref, j, amount, kind, opening, bundles);
+    }
+
+    /// @dev Chaum-Pedersen `log_G(K) == log_B(M − [amount]G)` bằng khoá `x` trên cơ sở `base`
+    ///      (`D_out` cho RECEIVER_X/AUDITOR, `Y_tj` cho SENDER_CP), leg `j` của `ref`.
+    function _cpOpening(
+        ZetherToken t,
+        uint256 x,
+        bytes32 ref,
+        uint256 j,
+        uint256 amount,
+        ITransferDisclosure.OpeningKind kind,
+        bytes memory base
+    ) internal view returns (bytes memory) {
+        uint256 r = ver.groupOrder();
+        uint256 k = uint256(keccak256(abi.encode("cp", x, ref, j, amount, kind))) % r;
+        bytes memory a1 = ver.g1MulBase(k);
+        bytes memory a2 = ver.g1Mul(base, k);
+        uint256 e = ZetherTranscript.hashToScalar(keccak256(bytes.concat(
+            abi.encodePacked("SCAAS-ZETHER-DISCLOSE-V1", block.chainid, address(t)),
+            abi.encodePacked(ref, j, amount, uint8(kind), a1, a2)
+        )), r);
+        return abi.encode(a1, a2, addmod(k, mulmod(e, x, r), r));
     }
 
     function _none() internal pure returns (ZetherTypes.UA) {

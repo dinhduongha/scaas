@@ -23,13 +23,14 @@ import {ZetherSafety} from "./ZetherSafety.sol";
 ///
 ///         Một implementation cho MỌI đường cong: điểm là `bytes`, phép nhóm và proof đi qua `verifier`
 ///         bất biến chọn lúc tạo. Trạng thái `acc`/`pending` + `accSeq`/`pendingSeq`/`sendCounter`, hai
-///         chế độ rollOver, fund/transfer/burn, ràng phong bì meta-tx, phí scalar công khai, tiết lộ có
-///         chọn lọc — đặc tả `2026-10-03-zether-design.md` §5–§12.
+///         chế độ rollOver, fund/transfer/burn, ràng phong bì meta-tx, phí scalar công khai — đặc tả
+///         `2026-10-03-zether-design.md` §5–§11. Tiết lộ có chọn lọc (§12) sống ở `ZetherDisclosure` (owner Z13):
+///         token chỉ lưu bundle và xuất nó qua `transferEntry`.
 ///
 ///         Hai lớp số dư: ERC-20 công khai (wrap 1:1 underlying, dùng trả phí ngoài) và số dư mã hoá.
 ///         Bất biến escrow: `underlying.balanceOf(this) ≥ totalSupply() + totalShielded·shieldScale`,
 ///         kiểm sau mọi lần tiền rời contract.
-contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactoryToken {
+contract ZetherToken is ZetherMetaTx, IZetherToken, IFactoryToken {
     using SafeERC20 for IERC20;
 
     struct Account {
@@ -83,13 +84,14 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
     bytes32 private constant TAG_ROLLOVER = keccak256("ZETHER_ROLLOVER_V1");
     bytes32 private constant TAG_SET_MODE = keccak256("ZETHER_SET_ROLLOVER_MODE_V1");
     bytes private constant AUTH_TAG = "SCAAS-ZETHER-AUTH-V1";
-    bytes private constant DISCLOSE_TAG = "SCAAS-ZETHER-DISCLOSE-V1";
     uint256 private constant MAX_TOTAL_SHIELDED = 1 << 54;
-    /// @dev `2^n_v` (n_v = 64, RS-NV64-1): trần của `confidentialFee` và của số tiền tiết lộ.
+    /// @dev `2^n_v` (n_v = 64, RS-NV64-1): trần của `confidentialFee`.
     uint256 private constant VALUE_BOUND = 1 << 64;
 
     address public immutable FACTORY;
     address private immutable _SELF;
+    /// @dev Bất biến của implementation: mọi clone dùng chung một `ZetherDisclosure`.
+    ITransferDisclosure private immutable _DISCLOSURE;
 
     bool private _initialized;
     string private _tokenName;
@@ -108,7 +110,6 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
     bytes private _auditorKey;
     bytes32 private _psid;
     uint256 private _p;
-    uint256 private _r;
 
     mapping(ZetherTypes.UA => Account) private _acct;
     /// @dev Bundle tiết lộ theo `entryRef`: `B_1 ‖ … ‖ B_M` với `B_j = Y_t ‖ C_out ‖ D_out ‖ C_aud` (transfer một
@@ -120,9 +121,10 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
     error AlreadyInitialized();
     error BadInit();
 
-    constructor(address factory_) ERC20("", "") EIP712("SCaaS ZetherToken", "1") {
+    constructor(address factory_, ITransferDisclosure disclosure_) ERC20("", "") EIP712("SCaaS ZetherToken", "1") {
         FACTORY = factory_;
         _SELF = address(this);
+        _DISCLOSURE = disclosure_;
         _initialized = true;
     }
 
@@ -159,7 +161,6 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
         _auditorKey = aud;
         _psid = v.proofSystemId();
         _p = p;
-        _r = v.groupOrder();
         _tokenName = n;
         _tokenSymbol = s;
         _tokenDecimals = IERC20Metadata(underlying_).decimals();
@@ -171,6 +172,8 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
     function factory() external view returns (address) { return FACTORY; }
     function implementation() external view returns (address) { return _SELF; }
     function auditorKey() external view returns (bytes memory) { return _auditorKey; }
+    function disclosure() external view returns (ITransferDisclosure) { return _DISCLOSURE; }
+    function transferEntry(bytes32 entryRef) external view returns (bytes memory) { return _entries[entryRef]; }
 
     // ------------------------------------------------------------------ đọc
 
@@ -386,7 +389,7 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
         pp.sendCounter = _checkSeqs(a, payload);
         pp.statement = bytes.concat(
             _header(OP_TRANSFER, _psid, binding, a, pp.fee, beneficiary, 0, address(0)),
-            pts[0:2 * p], _auditorPoint(), _pt(a.accC), _pt(a.accD), pts[2 * p:6 * p]
+            pts[0:2 * p], _auditorPoint(_isO(pts[5 * p:6 * p]) ? 1 : 0, 1), _pt(a.accC), _pt(a.accD), pts[2 * p:6 * p]
         );
     }
 
@@ -520,7 +523,7 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
             : mode == ZetherTypes.TransferMode.BUNDLE ? OP_MULTI_BUNDLE : OP_MULTI_NONE;
         bytes memory head = bytes.concat(
             _header(op, verifier.proofSystemIdMulti(), bytes32(0), a, fee, beneficiary, 0, address(0)),
-            payload[96:96 + p], _auditorPoint(), _pt(a.accC), _pt(a.accD)
+            payload[96:96 + p], _auditorPoint(_audOff(payload), uint256(bytes32(payload[64:96]))), _pt(a.accC), _pt(a.accD)
         );
         return bytes.concat(head, payload[96 + p:96 + 3 * p], payload[64:96], payload[96 + 3 * p:]);
     }
@@ -677,109 +680,6 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
         return _prepareBurn(payload, BurnArgs(amount, recipient, beneficiary, binding)).statement;
     }
 
-    // ------------------------------------------------------------------ tiết lộ (§12, SRS §9.4)
-
-    function verifyTransferAmount(
-        bytes32 entryRef,
-        uint256 index,
-        uint256 amount,
-        OpeningKind kind,
-        bytes calldata opening,
-        bytes calldata bundles
-    ) public view returns (bool) {
-        bytes memory ent = _bundle(entryRef, index, bundles);
-        if (amount >= VALUE_BOUND) return false; // [amount]G chỉ phụ thuộc amount mod r
-        uint256 p = _p;
-        bytes memory yt = _cut(ent, 0, p);
-        bytes memory cOut = _cut(ent, p, p);
-        bytes memory dOut = _cut(ent, 2 * p, p);
-        if (kind == OpeningKind.SENDER_S) {
-            if (opening.length != 32) revert OpeningMalformed();
-            uint256 s = abi.decode(opening, (uint256));
-            if (s >= _r) return false;
-            uint256[] memory sc = new uint256[](3);
-            (sc[0], sc[1], sc[2]) = (amount, s, _r - 1);
-            return keccak256(verifier.g1MulBase(s)) == keccak256(dOut)
-                && _isO(verifier.g1Msm(bytes.concat(verifier.g1MulBase(1), yt, cOut), sc));
-        }
-        if (kind == OpeningKind.AUDITOR) {
-            if (_auditorKey.length == 0) return false;
-            return _chaumPedersen(entryRef, amount, kind, opening, bytes.concat(_auditorKey, _cut(ent, 3 * p, p), dOut));
-        }
-        return _chaumPedersen(entryRef, amount, kind, opening, bytes.concat(yt, cOut, dOut));
-    }
-
-    /// @dev `log_G(K) == log_{D_out}(M − [amount]G)`:
-    ///      `[z]G − A1 − [e]K == O` và `[z]D_out − A2 − [e]M + [e·amount]G == O`.
-    function _chaumPedersen(
-        bytes32 entryRef,
-        uint256 amount,
-        OpeningKind kind,
-        bytes calldata opening,
-        bytes memory kmd // K ‖ M ‖ D_out
-    ) private view returns (bool) {
-        (bytes memory a1, bytes memory a2, uint256 z) = abi.decode(opening, (bytes, bytes, uint256));
-        if (a1.length != _p || a2.length != _p || z >= _r) revert OpeningMalformed();
-        uint256 e = _discloseChallenge(entryRef, amount, kind, bytes.concat(a1, a2));
-        if (e == 0) return false;
-        amount = mulmod(e, amount, _r); // từ đây: e·amount
-        bytes memory g = verifier.g1MulBase(1);
-        if (!_cpEq(bytes.concat(g, a1, _cut(kmd, 0, _p)), z, e, 0)) return false;
-        return _cpEq(bytes.concat(_cut(kmd, 2 * _p, _p), a2, _cut(kmd, _p, _p), g), z, e, amount);
-    }
-
-    /// @dev `[z]P0 − P1 − [e]P2 (+ [extra]P3) == O`.
-    function _cpEq(bytes memory pts, uint256 z, uint256 e, uint256 extra) private view returns (bool) {
-        uint256 n = pts.length / _p;
-        uint256[] memory sc = new uint256[](n);
-        (sc[0], sc[1], sc[2]) = (z, _r - 1, _r - e);
-        if (n == 4) sc[3] = extra;
-        return _isO(verifier.g1Msm(pts, sc));
-    }
-
-    function _discloseChallenge(bytes32 entryRef, uint256 amount, OpeningKind kind, bytes memory a1a2)
-        private view returns (uint256)
-    {
-        return ZetherTranscript.hashToScalar(keccak256(abi.encodePacked(
-            DISCLOSE_TAG, block.chainid, address(this), entryRef, amount, uint8(kind), a1a2
-        )), _r);
-    }
-
-    function attestTransferAmount(
-        bytes32 entryRef,
-        uint256 index,
-        uint256 amount,
-        OpeningKind kind,
-        bytes calldata opening,
-        bytes calldata bundles
-    ) external returns (bool) {
-        if (!verifyTransferAmount(entryRef, index, amount, kind, opening, bundles)) revert OpeningMalformed();
-        emit AmountAttested(entryRef, index, amount, kind, msg.sender, block.timestamp);
-        return true;
-    }
-
-    function transferCiphertext(bytes32 entryRef, uint256 index, bytes calldata bundles)
-        external view returns (bytes memory encodedCiphertext, bytes memory encodedYTo)
-    {
-        bytes memory ent = _bundle(entryRef, index, bundles);
-        uint256 p = _p;
-        return (_cut(ent, p, 3 * p), _cut(ent, 0, p));
-    }
-
-    /// @dev `B_index` của `entryRef`: từ storage, hoặc (mode HASH) từ `bundles` sau khi khớp hash. Không có gì
-    ///      lưu (mode NONE, ref lạ) ⇒ `UnknownEntry`. Transfer một người nhận: chỉ `index = 0`.
-    function _bundle(bytes32 entryRef, uint256 index, bytes calldata bundles) private view returns (bytes memory) {
-        bytes memory all = _entries[entryRef];
-        if (all.length == 0) revert UnknownEntry(entryRef);
-        if (all.length == 32) {
-            if (keccak256(bundles) != bytes32(all)) revert BundlesMismatch(entryRef);
-            all = bundles;
-        }
-        uint256 len = 4 * _p;
-        if ((index + 1) * len > all.length) revert BadRecipientIndex(index);
-        return _cut(all, index * len, len);
-    }
-
     // ------------------------------------------------------------------ tiện ích
 
     function _requireRegistered(ZetherTypes.UA ua) private view {
@@ -803,8 +703,18 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
         if (held < owed) revert EscrowInvariant(held, owed);
     }
 
-    function _auditorPoint() private view returns (bytes memory) {
-        return _auditorKey.length == 0 ? new bytes(_p) : _auditorKey;
+    /// @dev `Y_a` của statement (Z12): khoá auditor khi mọi `C_aud_j ≠ O`, `O` khi mọi `C_aud_j = O` (người gửi bỏ
+    ///      auditor) hoặc token không có auditor (verifier khi đó đòi mọi `C_aud_j = O`); lẫn lộn ⇒ revert.
+    function _auditorPoint(uint256 nOff, uint256 m) private view returns (bytes memory) {
+        if (_auditorKey.length == 0 || nOff == m) return new bytes(_p);
+        if (nOff != 0) revert AuditorLegsMixed();
+        return _auditorKey;
+    }
+
+    /// @dev Số leg có `C_aud_j = O`.
+    function _audOff(bytes calldata payload) private view returns (uint256 n) {
+        uint256 p = _p;
+        for (uint256 o = 96 + 6 * p; o <= payload.length; o += 3 * p) if (_isO(payload[o - p:o])) ++n;
     }
 
     /// @dev Điểm đã lưu, hoặc `O` nếu chưa từng ghi.
@@ -814,14 +724,5 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
 
     function _isO(bytes memory a) private pure returns (bool) {
         return keccak256(a) == keccak256(new bytes(a.length));
-    }
-
-    function _cut(bytes memory a, uint256 off, uint256 len) private pure returns (bytes memory out) {
-        out = new bytes(len);
-        assembly ("memory-safe") {
-            let d := add(out, 32)
-            let s := add(add(a, 32), off)
-            for { let i := 0 } lt(i, len) { i := add(i, 32) } { mstore(add(d, i), mload(add(s, i))) }
-        }
     }
 }

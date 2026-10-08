@@ -7,7 +7,6 @@ import {ZetherToken} from "../../src/zether/ZetherToken.sol";
 import {IZetherToken} from "../../src/zether/IZetherToken.sol";
 import {ITransferDisclosure} from "../../src/zether/ITransferDisclosure.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
-import {ZetherTranscript} from "../../src/zether/ZetherTranscript.sol";
 import {ZetherKeys} from "./helpers/ZetherKeys.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {FeeMode, FeePolicy} from "../../src/common/FeePolicy.sol";
@@ -30,18 +29,7 @@ abstract contract ZetherTokenSuite is ZetherFixture {
     function _vta(bytes32 ref, uint256 amount, ITransferDisclosure.OpeningKind kind, bytes memory opening)
         internal view returns (bool)
     {
-        (bool ok, bytes memory ret) = address(tok).staticcall(
-            abi.encodeWithSelector(ITransferDisclosure.verifyTransferAmount.selector, ref, uint256(0), amount, uint8(kind), opening, bytes(""))
-        );
-        if (!ok) assembly { revert(add(ret, 32), mload(ret)) }
-        return abi.decode(ret, (bool));
-    }
-
-    function _ata(bytes32 ref, uint256 amount, ITransferDisclosure.OpeningKind kind, bytes memory opening) internal {
-        (bool ok, bytes memory ret) = address(tok).call(
-            abi.encodeWithSelector(ITransferDisclosure.attestTransferAmount.selector, ref, uint256(0), amount, uint8(kind), opening, bytes(""))
-        );
-        if (!ok) assembly { revert(add(ret, 32), mload(ret)) }
+        return _vta(tok, ref, 0, amount, kind, opening, "");
     }
 
     function test_lifecycleFundTransferRollOverBurn() public {
@@ -404,23 +392,13 @@ abstract contract ZetherTokenSuite is ZetherFixture {
 
     // ------------------------------------------------------------------ tiết lộ (ITransferDisclosure)
 
+    /// @dev Opening Chaum-Pedersen leg 0: RECEIVER_X/AUDITOR trên cơ sở `D_out`, SENDER_CP trên `Y_t` (khoá `s`).
     function _cpOpening(uint256 x, bytes32 ref, uint256 amount, ITransferDisclosure.OpeningKind kind)
         internal view returns (bytes memory)
     {
-        uint256 r = ver.groupOrder();
-        uint256 k = uint256(keccak256(abi.encode("cp", x, ref))) % r;
-        bytes memory a1a2 = bytes.concat(ver.g1MulBase(k), ver.g1Mul(_dOut(ref), k));
-        uint256 e = ZetherTranscript.hashToScalar(keccak256(bytes.concat(
-            abi.encodePacked("SCAAS-ZETHER-DISCLOSE-V1", block.chainid, address(tok)),
-            abi.encodePacked(ref, amount, uint8(kind), a1a2)
-        )), r);
-        uint256 p = ver.g1EncodedBytes();
-        return abi.encode(_cut(a1a2, 0, p), _cut(a1a2, p, p), addmod(k, mulmod(e, x, r), r));
-    }
-
-    function _dOut(bytes32 ref) internal view returns (bytes memory) {
-        (bytes memory ct,) = tok.transferCiphertext(ref, 0, "");
-        return _cut(ct, ver.g1EncodedBytes(), ver.g1EncodedBytes());
+        (bytes memory ct, bytes memory yt) = dis.transferCiphertext(address(tok), ref, 0, "");
+        bytes memory base = kind == ITransferDisclosure.OpeningKind.SENDER_CP ? yt : _cut(ct, ver.g1EncodedBytes(), ver.g1EncodedBytes());
+        return _cpOpening(tok, x, ref, 0, amount, kind, base);
     }
 
     function _cut(bytes memory a, uint256 off, uint256 len) internal pure returns (bytes memory out) {
@@ -445,15 +423,14 @@ abstract contract ZetherTokenSuite is ZetherFixture {
         // auditor mở C_aud
         bytes memory au = _cpOpening(X_AUD, ref, 123, ITransferDisclosure.OpeningKind.AUDITOR);
         assertTrue(_vta(ref, 123, ITransferDisclosure.OpeningKind.AUDITOR, au));
+        // người gửi mở leg bằng Chaum-Pedersen trên `s`, không giao `s` (Z10)
+        bytes memory cp = _cpOpening(t.s, ref, 123, ITransferDisclosure.OpeningKind.SENDER_CP);
+        assertTrue(_vta(ref, 123, ITransferDisclosure.OpeningKind.SENDER_CP, cp));
+        assertFalse(_vta(ref, 124, ITransferDisclosure.OpeningKind.SENDER_CP, cp));
+        assertFalse(_vta(ref, 123, ITransferDisclosure.OpeningKind.RECEIVER_X, cp), "kind is bound");
         // bí danh mod r và vượt n_v bị từ chối
         assertFalse(_vta(ref, 123 + ver.groupOrder(), ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(t.s)));
         assertFalse(_vta(ref, 1 << 64, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(t.s)));
-        // attestation có dấu thời gian
-        vm.expectEmit(true, true, false, true, address(tok));
-        emit ITransferDisclosure.AmountAttested(ref, 0, 123, ITransferDisclosure.OpeningKind.RECEIVER_X, address(this), block.timestamp);
-        _ata(ref, 123, ITransferDisclosure.OpeningKind.RECEIVER_X, rx);
-        vm.expectRevert(ITransferDisclosure.OpeningMalformed.selector);
-        _ata(ref, 99, ITransferDisclosure.OpeningKind.RECEIVER_X, rx);
         // opening sai khuôn: s không đủ 32 byte, A1 sai độ dài, z ≥ r
         vm.expectRevert(ITransferDisclosure.OpeningMalformed.selector);
         _vta(ref, 123, ITransferDisclosure.OpeningKind.SENDER_S, new bytes(31));
@@ -463,9 +440,36 @@ abstract contract ZetherTokenSuite is ZetherFixture {
         bytes memory zBig = abi.encode(a1, a2, ver.groupOrder());
         vm.expectRevert(ITransferDisclosure.OpeningMalformed.selector);
         _vta(ref, 123, ITransferDisclosure.OpeningKind.RECEIVER_X, zBig);
-        (bytes memory ct, bytes memory yTo) = tok.transferCiphertext(ref, 0, "");
+        (bytes memory ct, bytes memory yTo) = dis.transferCiphertext(address(tok), ref, 0, "");
         assertEq(yTo, bob.y);
         assertEq(ct.length, 3 * ver.g1EncodedBytes());
+        assertEq(address(tok.disclosure()), address(dis), "canonical disclosure from the token");
+    }
+
+    /// Z12, định dạng một người nhận: token có auditor, người gửi bỏ auditor (`C_aud = O`, statement `Y_a = O`).
+    function test_singleAuditorOptOut() public {
+        _fund(tok, alice, 500);
+        tok.rollOverPublic(alice.ua);
+        audOut = true;
+        Tx memory t = _proveTransfer(tok, alice, bob, 123, 500, _none(), 0);
+        audOut = false;
+        Tx memory on = _proveTransfer(tok, alice, bob, 123, 500, _none(), 0);
+        // proof của lựa chọn này không qua dưới lựa chọn kia (Y_a nằm trong statement)
+        vm.expectRevert(IZetherToken.ProofRejected.selector);
+        tok.transferConfidentialSingle(t.payload, on.proof, "", _none());
+        vm.expectRevert(IZetherToken.ProofRejected.selector);
+        tok.transferConfidentialSingle(on.payload, t.proof, "", _none());
+        bytes32 ref = _direct(tok, t, _none());
+        assertTrue(_holds(tok, bob, 123, false));
+        assertTrue(_vta(ref, 123, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(t.s)));
+        assertTrue(_vta(ref, 123, ITransferDisclosure.OpeningKind.RECEIVER_X,
+            _cpOpening(bob.x, ref, 123, ITransferDisclosure.OpeningKind.RECEIVER_X)));
+        assertTrue(_vta(ref, 123, ITransferDisclosure.OpeningKind.SENDER_CP,
+            _cpOpening(t.s, ref, 123, ITransferDisclosure.OpeningKind.SENDER_CP)));
+        assertFalse(_vta(ref, 123, ITransferDisclosure.OpeningKind.AUDITOR,
+            _cpOpening(X_AUD, ref, 123, ITransferDisclosure.OpeningKind.AUDITOR)), "auditor reads nothing");
+        assertFalse(_vta(ref, 0, ITransferDisclosure.OpeningKind.AUDITOR,
+            _cpOpening(X_AUD, ref, 0, ITransferDisclosure.OpeningKind.AUDITOR)));
     }
 
     /// limits D1/D5: một transfer > 2^32 đơn vị, số dư > 2^44 được giữ, chi (cả số dư trong một transfer)
@@ -496,6 +500,8 @@ abstract contract ZetherTokenSuite is ZetherFixture {
         assertTrue(_vta(ref, v, ITransferDisclosure.OpeningKind.RECEIVER_X, rx));
         assertTrue(_vta(ref, v, ITransferDisclosure.OpeningKind.AUDITOR,
             _cpOpening(X_AUD, ref, v, ITransferDisclosure.OpeningKind.AUDITOR)));
+        assertTrue(_vta(ref, v, ITransferDisclosure.OpeningKind.SENDER_CP,
+            _cpOpening(s, ref, v, ITransferDisclosure.OpeningKind.SENDER_CP)));
         assertFalse(_vta(ref, v - (uint256(1) << 32), ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(s)));
         assertFalse(_vta(ref, uint256(1) << 64, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(s)));
     }
@@ -518,7 +524,7 @@ abstract contract ZetherTokenSuite is ZetherFixture {
         _fund(tok, alice, 500);
         tok.rollOverPublic(alice.ua);
         bytes32 ref = _direct(tok, _proveTransfer(tok, alice, bob, 321, 500, _none(), 0), _none());
-        (bytes memory ct,) = tok.transferCiphertext(ref, 0, "");
+        (bytes memory ct,) = dis.transferCiphertext(address(tok), ref, 0, "");
         uint256 p = ver.g1EncodedBytes();
         bytes memory dOut = new bytes(p);
         bytes memory cAud = new bytes(p);

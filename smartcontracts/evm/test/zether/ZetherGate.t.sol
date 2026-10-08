@@ -17,7 +17,7 @@ contract ZetherGateTest is ZetherFixture {
     function test_zetherOffByDefault() public {
         OpenFactory f = new OpenFactory(registrar);
         assertFalse(f.zetherEnabled());
-        ZetherToken z = new ZetherToken(address(f));
+        ZetherToken z = new ZetherToken(address(f), dis);
         vm.prank(registrar);
         f.registerImplementation(IOpenFactory.TokenKind.ZETHER, 1, address(z));
         vm.expectRevert(OpenFactory.ZetherDisabled.selector);

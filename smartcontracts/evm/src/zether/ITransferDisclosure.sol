@@ -4,8 +4,10 @@ pragma solidity ^0.8.20;
 /// @title Selective disclosure: chứng minh "tôi đã gửi ĐÚNG số tiền này, trong ĐÚNG
 ///        giao dịch này" mà không công khai gì khác.
 ///
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Hiện thực: `ZetherToken`; định dạng `opening` và
-///         challenge Chaum-Pedersen: `2026-10-03-zether-design.md` §12.
+/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Hiện thực: `ZetherDisclosure` — contract RIÊNG, không
+///         state, một bản phục vụ mọi Zether token trên mọi đường cong (owner Z13); token chỉ xuất bundle thô
+///         (`transferEntry`) và địa chỉ `disclosure()`. Định dạng `opening` và challenge Chaum-Pedersen:
+///         `2026-10-03-zether-design.md` §12, spec multi-recipient §5.1.
 ///
 ///         Yêu cầu gốc của user: *"Kèm thêm thông tin để nếu cần, có thể chứng minh:
 ///         Tôi đã gửi đúng số tiền amount, và đây là bằng chứng."*
@@ -34,18 +36,12 @@ interface ITransferDisclosure {
         /// Quan trọng vì nó cho người nhận chứng minh mà KHÔNG CẦN người gửi hợp tác —
         /// tình huống tranh chấp thực tế thường đúng là vậy.
         RECEIVER_X,
-        /// Auditor được chỉ định mở `C_aud` (biến thể shared-`s`).
-        AUDITOR
+        /// Auditor được chỉ định mở `C_aud` (biến thể shared-`s`). Sai khi `C_aud = O` (người gửi bỏ auditor, Z12).
+        AUDITOR,
+        /// Người GỬI mở MỘT leg mà không giao `s`: Chaum-Pedersen `log_G D_out == log_{Y_t}(C − [v]G)` (Z10).
+        /// `s` mở mọi leg của transfer (Z3); opening này chỉ mở leg `index`.
+        SENDER_CP
     }
-
-    event AmountAttested(
-        bytes32 indexed entryRef,
-        uint256 index,
-        uint256 amount,
-        OpeningKind kind,
-        address indexed attestedBy,
-        uint256 timestamp
-    );
 
     error UnknownEntry(bytes32 entryRef);
     error OpeningMalformed();
@@ -53,14 +49,15 @@ interface ITransferDisclosure {
     error BundlesMismatch(bytes32 entryRef);
     error BadRecipientIndex(uint256 index);
 
-    /// @notice Kiểm một lời khai số tiền. **View — gọi FREE qua `eth_call`.**
+    /// @notice Kiểm một lời khai số tiền. **View — gọi FREE qua `eth_call`**, hoặc on-chain từ contract bất kỳ.
+    /// @param token    Zether token giữ `entryRef`. Người gọi chọn token mình tin: một "token" giả trả gì cũng được.
+    ///        Challenge ràng địa chỉ token (không phải contract này).
     /// @param entryRef BẮT BUỘC. Thiếu nó thì chỉ chứng minh được "có một giao dịch
     ///        trị giá X", không phải "giao dịch NÀY trị giá X".
     /// @param index    người nhận thứ mấy của giao dịch (transfer một người nhận: 0)
     /// @param amount   số tiền được tuyên bố, đơn vị che giấu
     /// @param kind     đường mở nào
-    /// @param opening  `s` cho SENDER_S; `(proof Chaum-Pedersen)` cho RECEIVER_X;
-    ///                 khoá/proof auditor cho AUDITOR
+    /// @param opening  `s` cho SENDER_S; `abi.encode(A1, A2, z)` (Chaum-Pedersen) cho RECEIVER_X, AUDITOR, SENDER_CP
     /// @param bundles  mode HASH: `B_1 ‖ … ‖ B_M` (từ event `TransferBundles` hoặc calldata), khớp hash đã lưu;
     ///                 bỏ qua khi bundle nằm trong storage. Mode NONE: không có gì để kiểm (`UnknownEntry`).
     ///
@@ -69,6 +66,7 @@ interface ITransferDisclosure {
     ///      Đó là điểm thiết kế, không phải tối ưu: một lượt đối soát hàng tháng
     ///      không nên tự nó trở thành dữ liệu công khai.
     function verifyTransferAmount(
+        address token,
         bytes32 entryRef,
         uint256 index,
         uint256 amount,
@@ -77,25 +75,11 @@ interface ITransferDisclosure {
         bytes calldata bundles
     ) external view returns (bool);
 
-    /// @notice Ghi một attestation BẤT BIẾN, có dấu thời gian on-chain. Tốn gas.
-    /// @dev KHÔNG bắt buộc, và không phải đường mặc định. Chỉ gọi khi cần bằng chứng
-    ///      có dấu thời gian không chối được — nộp toà, hoặc chốt một tranh chấp.
-    ///      Tách khỏi `verifyTransferAmount` vì gộp lại sẽ biến mọi lần kiểm tra
-    ///      thường lệ thành một giao dịch đổi trạng thái.
-    function attestTransferAmount(
-        bytes32 entryRef,
-        uint256 index,
-        uint256 amount,
-        OpeningKind kind,
-        bytes calldata opening,
-        bytes calldata bundles
-    ) external returns (bool);
-
     /// @notice Ciphertext gốc của một giao dịch, để bên thứ ba verify ĐỘC LẬP.
     /// @dev Toà án không nên phải tin `verifyTransferAmount` của chính contract bị
     ///      tranh chấp. Hàm này xuất dữ liệu thô để một verifier ngoài chuỗi
     ///      (CLI độc lập, mã nguồn mở) kiểm lại từ đầu.
-    function transferCiphertext(bytes32 entryRef, uint256 index, bytes calldata bundles)
+    function transferCiphertext(address token, bytes32 entryRef, uint256 index, bytes calldata bundles)
         external
         view
         returns (bytes memory encodedCiphertext, bytes memory encodedYTo);

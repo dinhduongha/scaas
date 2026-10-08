@@ -7,6 +7,7 @@ import {ZetherVerifierBn254, ZetherVerifierBls12381} from "../../src/zether/Zeth
 import {IZetherVerifier} from "../../src/zether/IZetherVerifier.sol";
 import {ZetherTranscript as T} from "../../src/zether/ZetherTranscript.sol";
 import {ZetherToken} from "../../src/zether/ZetherToken.sol";
+import {ZetherDisclosure} from "../../src/zether/ZetherDisclosure.sol";
 
 /// @notice Proof do prover Rust của luồng S3 (`r3-zether-prover`, chép vào `test/vectors/zether/s3/`) —
 ///         một hiện thực ĐỘC LẬP của đặc tả. Đúng thì qua verifier Solidity; lật bất kỳ bit nào thì không.
@@ -134,7 +135,7 @@ contract ZetherS3VectorsTest is Test {
     function test_s3OpDataMatchesEnvelopeOp() public {
         string memory j = vm.readFile(string.concat(DIR, "transfer_bn254.json"));
         bytes memory op = j.readBytes(".opData");
-        ZetherToken impl = new ZetherToken(address(this));
+        ZetherToken impl = new ZetherToken(address(this), new ZetherDisclosure());
         assertEq(bytes4(op), impl.OP_ZTRANSFER());
         bytes memory args = new bytes(op.length - 4);
         for (uint256 i; i < args.length; ++i) args[i] = op[4 + i];
@@ -144,26 +145,29 @@ contract ZetherS3VectorsTest is Test {
         assertEq(ben, j.readBytes32(".request.beneficiary"));
     }
 
-    /// Mở tiết lộ của S3 kiểm theo đúng phương trình §12 (chainId/token của vector).
+    /// Mở tiết lộ của S3 kiểm theo đúng phương trình §5.1 (chainId/token của vector): bốn kind trên transfer một
+    ///      người nhận (leg 0) và bốn kind trên leg 1 của transfer nhiều người nhận; đổi leg thì không mở.
     function _checkDisclosure(string memory file) internal view {
         string memory j = vm.readFile(string.concat(DIR, file));
         IZetherVerifier v = _v(j.readString(".curve"));
-        uint256 n = 3;
-        for (uint256 i; i < n; ++i) {
-            string memory c = string.concat(".cases[", vm.toString(i), "]");
+        uint256 n;
+        for (; vm.keyExistsJson(j, string.concat(".cases[", vm.toString(n), "]")); ++n) {
+            string memory c = string.concat(".cases[", vm.toString(n), "]");
             assertTrue(j.readBool(string.concat(c, ".expect")));
-            assertTrue(_disclose(v, j, c), "S3 opening rejected");
+            uint256 idx = j.readUint(string.concat(c, ".index"));
+            assertTrue(_disclose(v, j, c, idx), "S3 opening rejected");
+            if (j.readUint(string.concat(c, ".kind")) != 0) assertFalse(_disclose(v, j, c, idx + 1), "opening moved leg");
         }
+        assertEq(n, 8);
     }
 
-    function _disclose(IZetherVerifier v, string memory j, string memory c) internal view returns (bool) {
+    /// `(K, M, B)`: RECEIVER_X `(Y_t, C_out, D_out)`, AUDITOR `(Y_a, C_aud, D_out)`, SENDER_CP `(D_out, C_out, Y_t)`.
+    function _disclose(IZetherVerifier v, string memory j, string memory c, uint256 idx) internal view returns (bool) {
         uint256 kind = j.readUint(string.concat(c, ".kind"));
         if (kind == 0) return _senderS(v, j, c);
-        bytes memory mMinus = v.g1Sub(
-            j.readBytes(string.concat(c, kind == 2 ? ".Caud" : ".Cout")),
-            v.g1MulBase(j.readUint(string.concat(c, ".amount")))
-        );
-        return _cp(v, j, c, j.readBytes(string.concat(c, kind == 2 ? ".Ya" : ".Yt")), mMinus, j.readBytes(string.concat(c, ".Dout")));
+        if (kind == 2) return _cp(v, j, c, idx, [".Ya", ".Caud", ".Dout"]);
+        if (kind == 3) return _cp(v, j, c, idx, [".Dout", ".Cout", ".Yt"]);
+        return _cp(v, j, c, idx, [".Yt", ".Cout", ".Dout"]);
     }
 
     function _senderS(IZetherVerifier v, string memory j, string memory c) internal view returns (bool) {
@@ -173,21 +177,29 @@ contract ZetherS3VectorsTest is Test {
             && keccak256(cOut) == keccak256(j.readBytes(string.concat(c, ".Cout")));
     }
 
-    /// `[z]G == A1 + [e]K` và `[z]D_out == A2 + [e](M − [amount]G)`.
-    function _cp(IZetherVerifier v, string memory j, string memory c, bytes memory k, bytes memory mMinus, bytes memory dOut)
+    /// `[z]G == A1 + [e]K` và `[z]B == A2 + [e](M − [amount]G)`; `kmb` = tên trường của K, M, B.
+    function _cp(IZetherVerifier v, string memory j, string memory c, uint256 idx, string[3] memory kmb)
         internal view returns (bool)
     {
         (bytes memory a1, bytes memory a2, uint256 z) = abi.decode(j.readBytes(string.concat(c, ".opening")), (bytes, bytes, uint256));
-        uint256 e = _e(v, j, c, bytes.concat(a1, a2));
-        if (keccak256(v.g1MulBase(z)) != keccak256(v.g1Add(a1, v.g1Mul(k, e)))) return false;
-        return keccak256(v.g1Mul(dOut, z)) == keccak256(v.g1Add(a2, v.g1Mul(mMinus, e)));
+        uint256 e = _e(v, j, c, idx, bytes.concat(a1, a2));
+        if (keccak256(v.g1MulBase(z)) != keccak256(v.g1Add(a1, v.g1Mul(j.readBytes(string.concat(c, kmb[0])), e)))) return false;
+        return _cpB(v, j, c, kmb, a2, z, e);
     }
 
-    function _e(IZetherVerifier v, string memory j, string memory c, bytes memory a1a2) internal view returns (uint256) {
+    function _cpB(IZetherVerifier v, string memory j, string memory c, string[3] memory kmb, bytes memory a2, uint256 z, uint256 e)
+        internal view returns (bool)
+    {
+        bytes memory mMinus = v.g1Sub(j.readBytes(string.concat(c, kmb[1])), v.g1MulBase(j.readUint(string.concat(c, ".amount"))));
+        return keccak256(v.g1Mul(j.readBytes(string.concat(c, kmb[2])), z)) == keccak256(v.g1Add(a2, v.g1Mul(mMinus, e)));
+    }
+
+    /// `e = H(DISCLOSE_TAG ‖ chainid ‖ token ‖ entryRef ‖ j ‖ amount ‖ kind ‖ A1 ‖ A2)`.
+    function _e(IZetherVerifier v, string memory j, string memory c, uint256 idx, bytes memory a1a2) internal view returns (uint256) {
         return T.hashToScalar(keccak256(bytes.concat(
             abi.encodePacked("SCAAS-ZETHER-DISCLOSE-V1", j.readUint(string.concat(c, ".chainId")),
                 j.readAddress(string.concat(c, ".token"))),
-            abi.encodePacked(j.readBytes32(string.concat(c, ".entryRef")), j.readUint(string.concat(c, ".amount")),
+            abi.encodePacked(j.readBytes32(string.concat(c, ".entryRef")), idx, j.readUint(string.concat(c, ".amount")),
                 uint8(j.readUint(string.concat(c, ".kind"))), a1a2)
         )), v.groupOrder());
     }

@@ -5,6 +5,7 @@ import {IERC20MetaTx} from "../metatx/IERC20MetaTx.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
 import {IZetherVerifier} from "./IZetherVerifier.sol";
+import {ITransferDisclosure} from "./ITransferDisclosure.sol";
 
 /// @title Token có số dư bí mật (SRS §7, §9.3). Kế thừa TOÀN BỘ meta-transaction từ tầng nền.
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Đặc tả byte-exact:
@@ -65,6 +66,8 @@ interface IZetherToken is IERC20MetaTx {
     error EscrowInvariant(uint256 held, uint256 owed);
     error UnsupportedUnderlying();
     error ZetherOpNotCanonical();
+    /// @notice Token có auditor: các `C_aud_j` phải cùng ≠ O (có auditor) hoặc cùng = O (bỏ auditor, Z12).
+    error AuditorLegsMixed();
 
     // ------------------------------------------------------------------ tham số per-token (bất biến)
 
@@ -76,6 +79,12 @@ interface IZetherToken is IERC20MetaTx {
     function confidentialFee() external view returns (uint256);
     /// @notice Khoá auditor (`ITransferDisclosure.AUDITOR`), rỗng nếu tắt. Bất biến (RS2-8).
     function auditorKey() external view returns (bytes memory);
+    /// @notice Contract tiết lộ chuẩn (`ZetherDisclosure`, không state, dùng chung), bất biến theo implementation.
+    function disclosure() external view returns (ITransferDisclosure);
+    /// @notice Bản ghi thô của `entryRef` cho `disclosure()`: `B_1 ‖ … ‖ B_M` (một người nhận, mode BUNDLE),
+    ///         32 byte `keccak256(B_1 ‖ … ‖ B_M)` (mode HASH), rỗng (mode NONE, ref lạ).
+    ///         `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j`.
+    function transferEntry(bytes32 entryRef) external view returns (bytes memory);
     function totalShielded() external view returns (uint256);
 
     // ------------------------------------------------------------------ vòng đời

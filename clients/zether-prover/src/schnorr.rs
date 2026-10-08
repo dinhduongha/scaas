@@ -95,6 +95,8 @@ pub enum OpeningKind {
     SenderS = 0,
     ReceiverX = 1,
     Auditor = 2,
+    /// The sender opens one leg with a Chaum-Pedersen proof on `s` instead of handing `s` over.
+    SenderCp = 3,
 }
 
 /// `entryRef = keccak256(abi.encode(keccak256("SCAAS-ZETHER-ENTRY-V1"), chainid, token, fromUA, sendCounter))`.
@@ -105,11 +107,13 @@ pub fn entry_ref(chain_id: u64, token: &[u8; 20], from_ua: &[u8; 32], send_count
     )
 }
 
-/// Stored transfer record the opening is checked against.
+/// Stored transfer record the opening is checked against: leg `index` of `entry_ref`
+/// (`B_j = Y_t ‖ C_out ‖ D_out ‖ C_aud`; a single-recipient transfer has `index = 0`).
 pub struct Entry<C: ZCurve> {
     pub chain_id: u64,
     pub token: [u8; 20],
     pub entry_ref: [u8; 32],
+    pub index: u64,
     pub y_t: G<C>,
     pub c_out: G<C>,
     pub d_out: G<C>,
@@ -128,6 +132,7 @@ fn cp_prefix<C: ZCurve>(e: &Entry<C>, amount: u64, kind: OpeningKind) -> Vec<u8>
     b.extend(abi::u256(e.chain_id));
     b.extend_from_slice(&e.token);
     b.extend_from_slice(&e.entry_ref);
+    b.extend(abi::u256(e.index));
     b.extend(abi::u256(amount));
     b.push(kind as u8);
     b
@@ -140,11 +145,33 @@ fn cp_challenge<C: ZCurve>(e: &Entry<C>, amount: u64, kind: OpeningKind, a1: &[u
     hash_to_scalar::<C>(&keccak256(&b))
 }
 
-fn km<C: ZCurve>(e: &Entry<C>, kind: OpeningKind) -> (G<C>, G<C>) {
+/// `(K, M, B)` of the Chaum-Pedersen `log_G(K) == log_B(M − [amount]G)` for `kind`.
+fn kmb<C: ZCurve>(e: &Entry<C>, kind: OpeningKind) -> (G<C>, G<C>, G<C>) {
     match kind {
-        OpeningKind::Auditor => (e.y_a, e.c_aud),
-        _ => (e.y_t, e.c_out),
+        OpeningKind::Auditor => (e.y_a, e.c_aud, e.d_out),
+        OpeningKind::SenderCp => (e.d_out, e.c_out, e.y_t),
+        _ => (e.y_t, e.c_out, e.d_out),
     }
+}
+
+/// Hedged nonce over the secret and everything the challenge covers, then `abi.encode(A1, A2, z)`.
+fn cp_open<C: ZCurve, R: RngCore + CryptoRng>(
+    e: &Entry<C>,
+    amount: u64,
+    kind: OpeningKind,
+    x: &Fr<C>,
+    rng: &mut R,
+) -> Vec<u8> {
+    // With a dead RNG, two kinds (receiver == auditor), two legs or two amounts must not share `k`.
+    let mut secret = zeroize::Zeroizing::new(encode_scalar::<C>(x).to_vec());
+    secret.extend_from_slice(&cp_prefix(e, amount, kind));
+    let k = Nonces::new(&secret, rng).next::<C>();
+    let (_, _, b) = kmb(e, kind);
+    let a1 = encode_point::<C>(&(generator::<C>() * k));
+    let a2 = encode_point::<C>(&(b * k));
+    let c = cp_challenge(e, amount, kind, &a1, &a2);
+    let z = k + c * x;
+    abi::encode(&[Tok::Bytes(a1), Tok::Bytes(a2), Tok::Word(encode_scalar::<C>(&z))])
 }
 
 /// `RECEIVER_X` / `AUDITOR`: Chaum-Pedersen `log_G(K) == log_{D_out}(M − [amount]G)`,
@@ -156,26 +183,37 @@ pub fn open_chaum_pedersen<C: ZCurve, R: RngCore + CryptoRng>(
     key: &ZetherKey<C>,
     rng: &mut R,
 ) -> Result<Vec<u8>, ZError> {
-    let (k_pt, m) = km(e, kind);
+    let (k_pt, m, _) = kmb(e, kind);
     if !crate::zether::value_in_range(amount) {
         return Err(ZError::OutOfRange);
     }
-    if kind == OpeningKind::SenderS || key.y != k_pt {
+    if matches!(kind, OpeningKind::SenderS | OpeningKind::SenderCp) || key.y != k_pt {
         return Err(ZError::BadStatement("opening key does not match the entry"));
     }
     if m - generator::<C>() * Fr::<C>::from(amount) != e.d_out * key.x {
         return Err(ZError::BadStatement("amount does not open this ciphertext"));
     }
-    // Hedge over everything the challenge covers: with a dead RNG, two kinds (receiver == auditor)
-    // or two amounts must not share `k`.
-    let mut secret = zeroize::Zeroizing::new(encode_scalar::<C>(&key.x).to_vec());
-    secret.extend_from_slice(&cp_prefix(e, amount, kind));
-    let k = Nonces::new(&secret, rng).next::<C>();
-    let a1 = encode_point::<C>(&(generator::<C>() * k));
-    let a2 = encode_point::<C>(&(e.d_out * k));
-    let c = cp_challenge(e, amount, kind, &a1, &a2);
-    let z = k + c * key.x;
-    Ok(abi::encode(&[Tok::Bytes(a1), Tok::Bytes(a2), Tok::Word(encode_scalar::<C>(&z))]))
+    Ok(cp_open(e, amount, kind, &key.x, rng))
+}
+
+/// `SENDER_CP`: Chaum-Pedersen on the shared `s`, `log_G(D_out) == log_{Y_t}(C_out − [amount]G)`;
+/// opens leg `e.index` only, where `s` itself opens every leg of the transfer.
+pub fn open_sender_cp<C: ZCurve, R: RngCore + CryptoRng>(
+    e: &Entry<C>,
+    amount: u64,
+    s: &Fr<C>,
+    rng: &mut R,
+) -> Result<Vec<u8>, ZError> {
+    if !crate::zether::value_in_range(amount) {
+        return Err(ZError::OutOfRange);
+    }
+    if generator::<C>() * *s != e.d_out {
+        return Err(ZError::BadStatement("s does not match D_out"));
+    }
+    if e.c_out - generator::<C>() * Fr::<C>::from(amount) != e.y_t * *s {
+        return Err(ZError::BadStatement("amount does not open this ciphertext"));
+    }
+    Ok(cp_open(e, amount, OpeningKind::SenderCp, s, rng))
 }
 
 /// Mirror of `verifyTransferAmount`.
@@ -214,12 +252,13 @@ pub fn verify_opening<C: ZCurve>(e: &Entry<C>, amount: u64, kind: OpeningKind, o
             let a1b = &opening[96 + 32..96 + 32 + pl];
             let a2b = &opening[96 + 64 + padl..96 + 64 + padl + pl];
             let (a1, a2, z) = (decode_point::<C>(a1b)?, decode_point::<C>(a2b)?, decode_scalar::<C>(&opening[64..96])?);
-            let (k_pt, m) = km(e, kind);
-            if k_pt.is_zero() {
+            let (k_pt, m, b) = kmb(e, kind);
+            // AUDITOR is false when the token has no auditor or the sender left it out (C_aud = O, Z12).
+            if k_pt.is_zero() || (kind == OpeningKind::Auditor && e.c_aud.is_zero()) {
                 return Err(bad);
             }
             let c = cp_challenge(e, amount, kind, a1b, a2b);
-            if g * z - a1 - k_pt * c == G::<C>::zero() && e.d_out * z - a2 - (m - va) * c == G::<C>::zero() {
+            if g * z - a1 - k_pt * c == G::<C>::zero() && b * z - a2 - (m - va) * c == G::<C>::zero() {
                 Ok(())
             } else {
                 Err(bad)

@@ -72,23 +72,6 @@ contract ZetherRevertPathsTest is ZetherFixture {
         _deploy(false, false);
     }
 
-    function _vta(bytes32 ref, uint256 amount, ITransferDisclosure.OpeningKind kind, bytes memory opening)
-        internal view returns (bool)
-    {
-        (bool ok, bytes memory ret) = address(tok).staticcall(
-            abi.encodeWithSelector(ITransferDisclosure.verifyTransferAmount.selector, ref, uint256(0), amount, uint8(kind), opening, bytes(""))
-        );
-        if (!ok) assembly { revert(add(ret, 32), mload(ret)) }
-        return abi.decode(ret, (bool));
-    }
-
-    function _ata(bytes32 ref, uint256 amount, ITransferDisclosure.OpeningKind kind, bytes memory opening) internal {
-        (bool ok, bytes memory ret) = address(tok).call(
-            abi.encodeWithSelector(ITransferDisclosure.attestTransferAmount.selector, ref, uint256(0), amount, uint8(kind), opening, bytes(""))
-        );
-        if (!ok) assembly { revert(add(ret, 32), mload(ret)) }
-    }
-
     function test_fundRevertPaths() public {
         bytes memory stranger = ZetherKeys.pub(0x5757, false);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, ZetherTypes.toUA(stranger)));
@@ -320,9 +303,9 @@ contract ZetherRevertPathsTest is ZetherFixture {
 
     function test_unknownEntryReverts() public {
         vm.expectRevert(abi.encodeWithSelector(ITransferDisclosure.UnknownEntry.selector, bytes32("nope")));
-        _vta(bytes32("nope"), 1, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(uint256(1)));
+        _vta(tok, bytes32("nope"), 0, 1, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(uint256(1)), "");
         vm.expectRevert(abi.encodeWithSelector(ITransferDisclosure.UnknownEntry.selector, bytes32("nope")));
-        tok.transferCiphertext(bytes32("nope"), 0, "");
+        dis.transferCiphertext(address(tok), bytes32("nope"), 0, "");
     }
 
     /// Bất biến an ninh #1 (§11, SRS §8.1): với scheme ≠ SELF_SCHNORR, biết `x` (conf_custody) KHÔNG đủ để

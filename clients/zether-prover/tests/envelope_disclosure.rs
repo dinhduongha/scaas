@@ -1,14 +1,15 @@
 //! Envelope binding / EIP-712 digest / op calldata against foundry `cast` (tools/env_ref.sh),
-//! relayed-binding end to end, and the three disclosure openings.
+//! relayed-binding end to end, and the four disclosure openings.
 
 use rand_chacha::rand_core::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use zether_prover::bulletproofs::Gens;
-use zether_prover::curve::{Bls12381, Bn254, Fr, ZCurve};
+use ark_ff::Zero;
+use zether_prover::curve::{Bls12381, Bn254, Fr, ZCurve, G};
 use zether_prover::elgamal::encrypt;
 use zether_prover::envelope::*;
 use zether_prover::keys::ZetherKey;
-use zether_prover::schnorr::{entry_ref, open_chaum_pedersen, open_sender, verify_opening, Entry, OpeningKind};
+use zether_prover::schnorr::{entry_ref, open_chaum_pedersen, open_sender, open_sender_cp, verify_opening, Entry, OpeningKind};
 use zether_prover::zether::{prove_transfer, verify_transfer, Binding, Header};
 
 const TOK: [u8; 20] = [0x11; 20];
@@ -92,11 +93,12 @@ fn relayed_and_disclosure<C: ZCurve>() {
     st2.header.binding = Binding::Direct;
     assert!(verify_transfer(&gens, &st2, &p).is_err());
 
-    // Disclosure of this transfer, three ways.
+    // Disclosure of this transfer, four ways.
     let e = Entry {
         chain_id: 31337,
         token: TOK,
         entry_ref: entry_ref(31337, &TOK, &from.ua(), 3),
+        index: 0,
         y_t: st.y_t,
         c_out: st.c_out,
         d_out: st.d_out,
@@ -125,10 +127,29 @@ fn relayed_and_disclosure<C: ZCurve>() {
     verify_opening(&e3, 1234, OpeningKind::Auditor, &ao).unwrap();
     let a1 = 96 + 32..96 + 32 + 2 * C::COORD_LEN;
     assert_ne!(ro[a1.clone()], ao[a1], "same nonce across opening kinds");
+    // SENDER_CP (Z10): the sender proves the leg on `s` without handing it over.
+    let cp = open_sender_cp(&e, 1234, &w.s, &mut rng).unwrap();
+    verify_opening(&e, 1234, OpeningKind::SenderCp, &cp).unwrap();
+    assert!(verify_opening(&e, 1233, OpeningKind::SenderCp, &cp).is_err());
+    assert!(verify_opening(&e, 1234, OpeningKind::ReceiverX, &cp).is_err());
+    assert!(open_sender_cp(&e, 1233, &w.s, &mut rng).is_err());
+    assert!(open_sender_cp(&e, 1234, &(w.s + Fr::<C>::from(1u64)), &mut rng).is_err());
+    assert!(open_chaum_pedersen(&e, 1234, OpeningKind::SenderCp, &to, &mut rng).is_err());
+    // Every kind is bound to the leg index j.
+    let ej = Entry { index: 1, ..e };
+    for (kind, o) in [(OpeningKind::ReceiverX, &r_open), (OpeningKind::Auditor, &a_open), (OpeningKind::SenderCp, &cp)] {
+        assert!(verify_opening(&ej, 1234, kind, o).is_err(), "{kind:?} moved to another leg");
+    }
+    // Auditor left out of this transfer (Z12, C_aud = O): AUDITOR is false, the others still open.
+    let eo = Entry { c_aud: G::<C>::zero(), ..e };
+    assert!(verify_opening(&eo, 1234, OpeningKind::Auditor, &a_open).is_err());
+    verify_opening(&eo, 1234, OpeningKind::ReceiverX, &r_open).unwrap();
+    verify_opening(&eo, 1234, OpeningKind::SenderCp, &cp).unwrap();
     // Opening bound to entryRef.
     let mut e2 = e;
     e2.entry_ref[0] ^= 1;
     assert!(verify_opening(&e2, 1234, OpeningKind::ReceiverX, &r_open).is_err());
+    assert!(verify_opening(&e2, 1234, OpeningKind::SenderCp, &cp).is_err());
 }
 
 struct DeadRng;
