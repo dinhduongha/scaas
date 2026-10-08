@@ -139,7 +139,9 @@ Further events, same object, same filters (decoders for a new kind ship before t
 - token-verified trade orders (SPECIFIED, [dex-venue.md#trade-orders](dex-venue.md#trade-orders)): on the sell token
   `TradeFilled(orderHash, from, sellFill, receiveFill, dexFee)`, `OrderCancelled(orderHash, from)`,
   `NoncesInvalidated(from, batch, minNonce)`; on the DEX `LegSettled(ref, orderHash, from, destination, sold, received,
-  dexFee, refund, relayerShare, treasuryShare)` (the accounting record of a settled leg), `FeeSplitSet`, `MarketSet`.
+  dexFee, refund, relayerShare, treasuryShare)` (the accounting record of a settled leg), on the exchange path
+  `ExchangeLegSettled(ref, orderHash, from, destination, sold, receivedFloor, surplus, dexFee, refund, limitReceive)`
+  ([CTR-DEX-20](../contracts/dex.md#CTR-DEX-20)), `FeeSplitSet`, `MarketSet`, `ExchangeTargetSet`, `ListedOnlySet`.
   The DEX watcher reads them with its own cursor ([NODE-DEX-04](dex-venue.md#NODE-DEX-04)); a `TradeFilled` alone is
   never booked as a trade (a leg pulled into the DEX for escrow shows the whole amount with nothing received);
 - `ReceiverFeePaid` and the tender events of `chain_contract` rows (indexed like token events; a namespace receives

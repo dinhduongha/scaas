@@ -92,7 +92,7 @@ does with it.
   `batch`, `nonce`, `validUntil`) signed in the **sell token's** EIP-712 domain (`salt = chain_uid`); the token verifies
   it and moves funds only into `dex`, with no allowance. When the sell token is an outside token the same struct is
   signed in the DEX's domain as a `DexOrder` (`dex` = the DEX, `ESCROW` refused) and pulled under the holder's
-  allowance to the DEX. The venue takes each token's kind from the DEX's own market listing (re-checked every poll,
+  allowance to the DEX's `DexPuller` ([CTR-DEX-22](../contracts/dex.md#CTR-DEX-22)); intake reads `allowance(from, puller)`. The venue takes each token's kind from the DEX's own market listing (re-checked every poll,
   [NODE-DEX-08](#NODE-DEX-08)), never from the order or the client.
 - **No role in the order.** The book keeps price-time priority over orders as they arrive; an incoming order that
   crosses is the **taker** of the settlement the venue builds, the resting orders it crosses are its **makers**, and an
@@ -150,6 +150,31 @@ DEX can report any fill and take the signed `amount`; the owner accepted that re
 the defence off chain — clients refuse to sign for an unlisted `dex` ([CLI-SGN-35](../clients/signers-clientkeys.md#CLI-SGN-35))
 and the node never carries such an order. Cost: a new DEX needs a chain-profile entry before the venue serves it.
 
+## TradeEngine
+
+<a id="trade-engine"></a><a id="NODE-DEX-17"></a>**NODE-DEX-17** — **The TradeEngine executes orders against AMMs through
+`mtxExchange`/`mtxExchangeVia`** ([CTR-DEX-20](../contracts/dex.md#CTR-DEX-20)); off unless the chain enables it. Status:
+**SPECIFIED**. Intake: an order on a listed market enters the book; one whose pair is no listed market, or whose
+`receiveToken` is its sell token (a cycle), is **exchange-only** — never in the book, both tokens known to the DEX, else
+`TOKEN_NOT_SERVED`. Each tick (every block or `trade_engine.tick`): (1) book matching first (`mtxSettle`: internal
+liquidity pays no pool fee); (2) coincidences of wants among exchange-only orders, then AMM routes for the rest — quotes
+by `eth_call` to the configured quoters, at most `trade_engine.max_hops` (3) hops, cycles for X→X orders; (3) a resting
+book order is also filled through AMMs when a route reaches its limit (per market `amm_fill`, default on with the
+engine); (4) floor `receiveFill` = quote × (1 − `trade_engine.buffer`), never below the signed limit (the buffer costs the
+signer nothing: the surplus comes back, [CTR-DEX-21](../contracts/dex.md#CTR-DEX-21)); (5) path (a) when routers suffice,
+(b) through the node's own listed executor for callbacks and flash swaps; (6) simulate the whole call, submit it as a
+`call` job, watch the final event. Fees by role: an exchange-only order pays `taker_fee_ppm` (below ⇒ `FEE_TOO_LOW`), a
+resting order filled through an AMM `maker_fee_ppm`. MEV: on a public chain submit through a private relay where one
+exists (a sandwich takes only surplus, never below the signed limit); chain 7622 has no public mempool. Config per
+chain: `trade_engine.enabled` (default `false`), `trade_engine.amm` (`{kind: univ2|univ3, factory, quoter, router}`),
+`max_hops`, `executor`, `tick`, `buffer`. EVM only.
+
+<a id="NODE-DEX-18"></a>**NODE-DEX-18** — **The node keeps no surplus: its income is the relayer share of the signed fee**
+(owner). Every swap the engine builds sends its output to the DEX, so the contract pays all of it to the signers;
+`GET /v1/dex/exchanges/{ref}` returns the quote at decision time beside the settled `ExchangeLegSettled` figures. With
+`relayer = 0` another submitter may exchange the order; the signed limit still holds and only output it routes outside
+the DEX depends on its honesty — clients therefore keep `relayer` = the venue node.
+
 ## Intake
 
 Spam controls at the door: body ≤ 64 KiB; amounts `0 < amount < 2^128`; `expiry ∈ (now + 5 s, now + 30 days]`; a
@@ -205,6 +230,7 @@ own `Router` merged into the gateway router, so the auth layer wraps it without 
 | `GET /v1/dex/trades?chain&market` | recent fills (ring of 200 in memory; history from the feed) |
 | `GET /v1/dex/ticker?chain&market` | last price, best bid/ask, volume in the ring |
 | `GET /v1/dex/orders?chain&maker` | open orders of one wallet |
+| `GET /v1/dex/exchanges/{ref}` | an exchange plan's quote at decision time and its settled `ExchangeLegSettled` figures ([NODE-DEX-18](#NODE-DEX-18)); SPECIFIED |
 | `GET /v1/dex/depth?…&scope=network`, `GET /v1/dex/homes?chain&market` | network depth and DEX homes ([gossip](#gossip)) |
 
 <a id="NODE-DEX-03"></a>**NODE-DEX-03** — **No WebSocket; clients poll** `depth`/`trades`. A WebSocket server would add
@@ -215,7 +241,7 @@ a dependency for no need at the volumes served.
 <a id="watcher"></a><a id="NODE-DEX-04"></a>**NODE-DEX-04** — **The DEX watcher has its own cursor.** One task per
 chain with the same finality helpers as the indexer (`finality::{safe_head, next_range, quorum_ok}`) and a **separate
 cursor** (`dex_cursor`) reads the DEX contract's logs (`OrderFilled`, `Matched`, `MatchFailed`, `OrderCancelled`,
-`NoncesInvalidated`; target: the DEX's `LegSettled` and the listed tokens' `TradeFilled`, `OrderCancelled`,
+`NoncesInvalidated`; target: the DEX's `LegSettled`, `ExchangeLegSettled` and the listed tokens' `TradeFilled`, `OrderCancelled`,
 `NoncesInvalidated`, [indexer-feeds.md#event-normalization](indexer-feeds.md#event-normalization)), writes `dex_range` feed items and advances `dex_cursor`, then removes from the book every order
 closed on chain (cancelled through any relayer, too). `settled` is final: a later `MatchFailed` does not flip it. A
 separate cursor means a DEX ingest fault never blocks payment booking and vice versa.
@@ -481,7 +507,8 @@ match → settle job → balances; cancel ⇒ settle never runs; venue restart �
 skipped; FOK filled across two makers; an IOC remainder never rests; an `ESCROW` taker refunded in the same call;
 signed `fee` below the taker rate ⇒ `FEE_TOO_LOW`; `dex` off the chain's list ⇒ `DEX_NOT_LISTED` at intake and never
 replicated; cancel on the sell token closes the order on the mined `OrderCancelled`; the DEX's balances unchanged after
-every settlement. Managed markets: intake refusals
+every settlement. TradeEngine: route finder (hops, cycles), coincidence of wants, quote → plan → simulation,
+exchange-only intake split, `amm_fill` on resting orders, fee-by-role refusal, `/v1/dex/exchanges/{ref}`. Managed markets: intake refusals
 per reason; drop on `AccountFrozen`/`Paused`/revocation/attester disable; pre-settle re-check; unbound and fee refusals;
 gossip refusal and admin-trust-only listing. Book gossip: merge commutativity/idempotence (proptest over update orders ⇒
 equal replicas and equal `head` digest); restore at higher `home_seq`; `home_seq` after store restore > before; spoofed

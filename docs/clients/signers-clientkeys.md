@@ -238,11 +238,17 @@ the **underlying's** domain with `dex` = `receiveToken` = the wrapper, `receiveA
 `minFill = amount` and `fee` = what the submitting relayer earns from the minted units; it is submitted as an `mtxWrap`
 job ([job-api.md#metatx-entries](../node/job-api.md#metatx-entries)). A wrap of an **outside** underlying (e.g. a
 stablecoin) still needs the holder's allowance on that outside token, to the wrapper only, for the exact amount
-([CLI-APP-23](app.md#CLI-APP-23)); trading an outside token needs the allowance to a listed DEX. A contract account
+([CLI-APP-23](app.md#CLI-APP-23)); trading an outside token needs the allowance to a listed DEX's `DexPuller`, never to the DEX ([CLI-SGN-37](#CLI-SGN-37)). A contract account
 that must approve a SCaaS token for another contract does so through its own call path (`mtxExecuteAsOwner` →
 `execute(token, approve)`, or a Safe transaction), never by a signature the token checks. Why: an EOA allowance is a
 standing permission any later bug or phishing page can spend; the order-based wrap gives the wrapper exactly one
 signed pull at a signed minimum.
+
+<a id="CLI-SGN-37"></a>**CLI-SGN-37** — **Exchange-path orders: listed pools, cycles, the puller, surplus.** Status:
+**SPECIFIED**. The review offers `LISTED_POOLS` ([CTR-DEX-23](../contracts/dex.md#CTR-DEX-23)) as a toggle "only audited
+pools" (default off); allows `receiveToken` = the sell token with a "cycle" label and a warning when `receiveAmount ≤
+amount`; asks an outside-token holder to approve the listed DEX's `DexPuller` ([CTR-DEX-22](../contracts/dex.md#CTR-DEX-22)),
+never the DEX; and checks each `ExchangeLegSettled` against `limitReceive`, showing `surplus` as price improvement.
 
 <a id="portal-signer-rules"></a>**Portal signer rules.** A portal or ERP page that hosts a signer also:
 

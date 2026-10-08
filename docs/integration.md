@@ -563,7 +563,10 @@ relayer fee; each order pays one DEX fee (its signed `fee` rate on what it recei
 call between the submitting relayer and the treasury. The ERP books from the DEX's `LegSettled` record: for a
 company's own order, `received − dexFee` into its token journal and `dexFee` to the market's fee-expense account; for
 the operator, its treasury share (and the relayer share, when its own lane submitted) as market income. A token's
-`TradeFilled` alone is never booked (an escrowed leg shows the whole amount pulled with nothing received).
+`TradeFilled` alone is never booked (an escrowed leg shows the whole amount pulled with nothing received). On the
+exchange path ([CTR-DEX-20](contracts/dex.md#CTR-DEX-20)) the record is `ExchangeLegSettled`: the company books
+`receivedFloor − dexFee + surplus` and shows `surplus` as price improvement on the trade (part of the proceeds, never
+a separate income), after checking `receivedFloor + surplus ≥ limitReceive`.
 
 <a id="confidential-payments"></a><a id="INT-ERP-11"></a>**INT-ERP-11** — **Confidential payment requests are reconciled
 from disclosed amounts, with an audit key per company.** The ERP issues confidential payment requests on Zether tokens,

@@ -1,7 +1,8 @@
 # DEX exchange settlement: `TradeOrder`s executed against AMMs, multi-hop and cycles
 
-**Status:** DRAFT, design approved by the owner in chat 2026-10-08; written spec awaiting owner review.
-Provisional ids `DS-n`; real ids are allocated in `docs/decisions.md` on acceptance (docs/README "Ids").
+**Status:** ACCEPTED by the owner 2026-10-08 and folded into the component docs (rules in `docs/decisions.md`); frozen here as the design record.
+Provisional ids `DS-n` map to: DS-1 → CTR-DEX-20, DS-2 → CTR-DEX-15, DS-3 → CTR-DEX-21, DS-4 → CTR-DEX-22, DS-5/DS-6 → CTR-DEX-23,
+CTR-DEX-03, DS-7 → NODE-DEX-17, NODE-DEX-18, DS-8 → CLI-SGN-37.
 **Date:** 2026-10-08. **Scope:** `OrderBookDex` (EVM), the token side of `TradeOrder` (`ERC20MetaTx.mtxTrade`), a new
 `DexPuller`, the node's DEX venue (a new TradeEngine), clients. Builds on the accepted meta-tx design
 (`docs/history/specs/2026-10-07-metatx-generic.md`, rules in [contracts/dex.md](../../contracts/dex.md)); stream MT-5
@@ -263,3 +264,4 @@ gasless call to any SCaaS contract) is a separate redesign; `TradeOrder` is its 
 |---|---|---|
 | 1 | 2026-10-08 | First draft from the owner's chat answers S1–S6 |
 | 2 | 2026-10-08 | Owner S7: `mtxSolve` → `mtxExchange` and the related names; file renamed from `…-dex-solver-design.md` |
+| — | 2026-10-08 | Accepted and folded |

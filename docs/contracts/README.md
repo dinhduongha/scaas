@@ -11,7 +11,7 @@ the rules every one of them shares. Status tags (**BUILT**, **SPECIFIED**, **PLA
 | [accounts.md](accounts.md) | the three account forms; Universal Account (ids, kinds, registry, verifiers, credentials, migration); passkeys on chain; the optional `SubjectAccount` smart account and its factory, guardians | UA **SPECIFIED**; `SubjectAccount` **BUILT** |
 | [metatx.md](metatx.md) | the one base `ERC20MetaTx`: `MetaTransaction` struct, typehash, `mode`, 2D nonces, `mtxExecute` (generic self-call, ticket, selector allowlist, fee classes), `mtx` names, pay references and the pay-once horizon, receiver-pays | **SPECIFIED** (built as the v1/v2 lines) |
 | [token-wrappers.md](token-wrappers.md) | three token tiers, conversion rates, multi-underlying wrappers, signature wrap, the one `OpenFactory`, allowance rule | tiers **BUILT** (EVM, Hedera); one base and factory **SPECIFIED** |
-| [dex.md](dex.md) | `OrderBookDex` with token-verified `TradeOrder`s, outside-token legs, managed-market venue contract | **SPECIFIED** (built with DEX-signed orders over allowances) |
+| [dex.md](dex.md) | `OrderBookDex` with token-verified `TradeOrder`s, outside-token legs through the `DexPuller`, the exchange path against AMMs (`mtxExchange`), managed-market venue contract | **SPECIFIED** (built with DEX-signed orders over allowances) |
 | [tender.md](tender.md) | `SealedBidTender` | **SPECIFIED** |
 | [asset-suite.md](asset-suite.md) | regulated module, vesting, distributions, corporate actions, templates | **SPECIFIED** |
 | [zether.md](zether.md) | classical Zether, byte-exact; limits; decryption bound | **BUILT, UNAUDITED** (dev chains) |
@@ -133,7 +133,7 @@ power.
 | `SingleUnderlyingToken` / `MultiUnderlyingToken` with an adjustable rate | `rateAdmin` (has code; chosen at creation) | propose / cancel / execute a bounded, timelocked rate change; renounce | [CTR-TOK-06](token-wrappers.md#CTR-TOK-06) |
 | `MultiUnderlyingToken` | `guardian` (optional, chosen at creation) | `disableWrap(underlying)`, one-way; renounce | [CTR-TOK-07](token-wrappers.md#CTR-TOK-07) |
 | `NoUnderlyingToken` | `minter` (optional; `0` = fixed supply) | `mint`, `renounceMinter` | [CTR-TOK-09](token-wrappers.md#CTR-TOK-09) |
-| `OrderBookDex` | immutable `admin` (a multisig in production; the venue operator's multisig for a managed market) | `setMarket` (list or delist a pair), `setFeeSplit` (relayer share and treasury of the signed fee; never the amount) | [CTR-DEX-03](dex.md#CTR-DEX-03) |
+| `OrderBookDex` | immutable `admin` (a multisig in production; the venue operator's multisig for a managed market) | `setMarket` (list or delist a pair), `setFeeSplit` (relayer share and treasury of the signed fee; never the amount), `setExchangeTarget` (list or delist an exchange target or executor), `setListedOnly` (DEX-wide listed-only mode for the exchange path); none touches funds | [CTR-DEX-03](dex.md#CTR-DEX-03), [CTR-DEX-23](dex.md#CTR-DEX-23) |
 | Regulated tokens (kinds 5–7) | `issuer`, `compliance` (contracts, fixed at creation) | the `controls()` bits set at creation: freeze, forced transfer against a recorded order, bounded pause, allowlist; bits can only be cleared | [CTR-AS-03](asset-suite.md#CTR-AS-03) |
 | `ZetherToken` | none after `initialize` (the auditor key is immutable) | — | [CTR-ZTH-09](zether.md#CTR-ZTH-09) |
 | `SealedBidTender`, `VestingGrant`, `Distribution`, `ExchangeOffer`, `UARegistry` | none | — | per file |

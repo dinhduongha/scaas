@@ -20,7 +20,10 @@ Order: contracts first (one heavy build at a time), then node, clients, the Odoo
 - [ ] **MT-4** `salt = chain_uid` in every domain (implementation immutables; SubjectAccount, MandateWallet, OrderBookDex,
       UA registry, Zether digests); deploy scripts on a CREATE2 deployer; deploy gate checks `chainUid()`.
 - [ ] **MT-5** DEX: `TradeOrder` + `mtxTrade`/`mtxCancelOrder`/`mtxInvalidateNonces` in the tokens; `OrderBookDex.mtxSettle`
-      (Path A/B, 1 taker + N makers, 50 % floor, fee split, conservation invariant); outside-token legs.
+      (Path A/B, 1 taker + N makers, 50 % floor, fee split, conservation invariant); outside-token legs through the
+      `DexPuller` (CTR-DEX-22); exchange path `mtxExchange`/`mtxExchangeVia` (CTR-DEX-20), surplus distribution
+      (CTR-DEX-21), interaction blocklist + `LISTED_POOLS`/listed-only (CTR-DEX-23), admin `setExchangeTarget`/
+      `setListedOnly` (CTR-DEX-03); tokens accept `receiveToken == this` and flag 4 (CTR-DEX-15).
 - [ ] **MT-6** Zether: transient envelope binding, `fund` from the public balance, `mtxWrap`; renames (`mtxRollOver`,
       `mtxSetRollOverMode`); envelope binding without `to`/`value` (CTR-ZTH-06); `PqzToken` on the one base like Zether,
       no `PqzMetaTx`, PQZ selectors not batchable (CTR-PQZ-21); prover `Header` gains `chain_uid` as word 3,
@@ -31,14 +34,16 @@ Order: contracts first (one heavy build at a time), then node, clients, the Odoo
 - [ ] **MT-8** Node: two `sol!` structs, `metatx`/`ua_metatx` jobs name their struct (`call` | `transfer`), selector tables for
       every contract on `MetaTxBase` (NODE-JOB-20), call table names, breaker per `(from, selector)` (`MetaTransfer` =
       `transfer`/`pay`), batching via `mtxBatchTransfer`/`mtxBatch` never mixed (NODE-LANE-11), `chainUid()` check
-      (NODE-GW-07), DEX venue `mtxSettle` (NODE-DEX-15/16), NODE-IDX-06 `repeat_of`.
+      (NODE-GW-07), DEX venue `mtxSettle` (NODE-DEX-15/16), intake `allowance(from, puller)`, TradeEngine with
+      `trade_engine.*` config and `/v1/dex/exchanges/{ref}` (NODE-DEX-17/18), NODE-IDX-06 `repeat_of`.
 - [ ] **MT-9** clientkeys/app and the reference ERP's `lib/eip712.py`: both structs (`MetaTransfer` typed in wallets,
       `MetaTransaction` decoded via `mtxSelectors()`), `domain.salt`, refuse an unlisted `dex`, no EOA approve, wrap by
       signature (CLI-SGN-05, CLI-SGN-33…36); `SubjectAccount`/mandate digests as `MetaTransaction`s; vectors/KATs regenerated.
 - [x] Draft for non-EVM families: `docs/superpowers/specs/2026-10-08-nonevm-metacall-design.md` (owner Q1–Q4 open).
 - [x] Meta-tx generic call (GC-1…10) accepted and folded 2026-10-08; record `docs/history/specs/2026-10-08-metatx-generic-call-design.md`.
+- [x] DEX exchange path (DS-1…8) accepted and folded 2026-10-08; record `docs/history/specs/2026-10-08-dex-exchange-design.md`.
 - [ ] **Owner review of two drafts (2026-10-08), then fold into the component docs:**
-      `2026-10-08-dex-exchange-design.md` (DS-1…8; design approved in chat), `2026-10-08-nonevm-metacall-design.md`
+      ~~`2026-10-08-dex-exchange-design.md`~~ (folded, above), `2026-10-08-nonevm-metacall-design.md`
       (NM-1…5). Each changes MT-1…MT-9 scope as listed in its "Changes to current rules" table.
 
 ## 0. Finish the spec phase (5 items left)

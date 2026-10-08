@@ -296,7 +296,8 @@ moves each chain to the push model, and the pull path is removed in one step aft
   (`call`) → `OrderBookDex.settle` → `OrderFilled` / `Matched` → watcher → accounting. Specified: role-free
   `TradeOrder`s signed in each sell token's domain → venue book → the venue arranges one taker against its makers →
   `OrderBookDex.mtxSettle` → each sell token's `mtxTrade` checks its signer's limits and moves the funds into the DEX,
-  which pays every party and the fee split in the same call → `LegSettled` → watcher → accounting. On non-EVM families settlement
+  which pays every party and the fee split in the same call → `LegSettled` → watcher → accounting; orders the book cannot
+  match may instead be exchanged against AMM pools (`mtxExchange`, [CTR-DEX-20](contracts/dex.md#CTR-DEX-20)). On non-EVM families settlement
   is relayer-bound; the venue re-checks the on-chain market every poll (at most 30 s)
   ([node/dex-venue.md](node/dex-venue.md), [contracts/dex.md](contracts/dex.md)).
 - **Mesh.** The origin wraps a bus-eligible intent in `scaas-intent/1.2`, signs `hub.sig`, optionally assigns

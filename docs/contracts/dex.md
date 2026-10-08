@@ -4,7 +4,8 @@ SCaaS runs an order-book exchange whose book lives off chain in the node ([node/
 and whose settlement contract settles signed orders on chain. Users never pay gas: orders and cancels are signed
 messages that a relayer submits, and a SCaaS token needs **no allowance** to trade — its order is verified by the token
 itself, which moves funds only into the DEX the signer named. Status: the target of this file (token-verified
-`TradeOrder`s, `OrderBookDex.mtxSettle`, outside-token legs, one signed fee rate) **SPECIFIED**; the built
+`TradeOrder`s, `OrderBookDex.mtxSettle`, outside-token legs, one signed fee rate, the exchange path against AMMs
+`mtxExchange`, the `DexPuller`) **SPECIFIED**; the built
 `OrderBookDex` (DEX-signed maker/taker orders over allowances, `smartcontracts/evm/src/dex/OrderBookDex.sol`) and the
 legacy `MetaTxDex` are **BUILT** and described under [Transitional (BUILT)](#transitional-built); non-EVM settlement
 programs **BUILT** with the fixes below **SPECIFIED**.
@@ -20,6 +21,8 @@ figures the DEX passes, and the token moves funds **only into the DEX** — no a
 in an **outside** token is the same order checked by the DEX and pulled under an allowance ([CTR-DEX-18](#CTR-DEX-18)).
 One settlement call matches one taker against many makers, pulls every leg into the DEX, pays every party, fee share
 and refund in the same call, and ends with the DEX's balance of every token unchanged ([CTR-DEX-16](#CTR-DEX-16)). The
+same orders can instead be executed against AMM pools — multi-hop routes, cycles X→…→X — with the surplus above each
+signed limit paid to its signer ([exchange settlement](#exchange), [CTR-DEX-20](#CTR-DEX-20)). The
 fee **rate** is the order's signed `fee` (≤ 1 %, on the received part); the DEX distributes it per its admin's split and
 can never change the amount ([CTR-DEX-17](#CTR-DEX-17)). Every user action is a signature; client systems configure
 markets, read the book and book the fees.
@@ -27,8 +30,8 @@ markets, read the book and book the fees.
 | Layer | What it does |
 |---|---|
 | Sell token (SCaaS) | verifies the `TradeOrder` signature, expiry, nonce lane, closed state, and on Path A the fill against every signed bound; moves exactly the pulled amount **to `dex`**; keeps `pulled[orderHash]` and `minNonce` |
-| `OrderBookDex` | checks the match (tokens, listing, self-trade, relayer), computes fills at each maker's price, pulls every leg, enforces Path B and outside-token legs, pays out, splits fees, asserts conservation |
-| Node | the book per market, price-time priority, partial fills, settlement through `call` jobs, its own final-event watcher, intake fee policy per role ([NODE-DEX-01](../node/dex-venue.md#NODE-DEX-01)) |
+| `OrderBookDex` | checks the match (tokens, listing, self-trade, relayer), computes fills at each maker's price, pulls every leg, enforces Path B and outside-token legs, pays out, splits fees, asserts conservation; on the exchange path runs the route's interactions or executor and pays the surplus ([CTR-DEX-20](#CTR-DEX-20)) |
+| Node | the book per market, price-time priority, partial fills, settlement through `call` jobs, its own final-event watcher, intake fee policy per role ([NODE-DEX-01](../node/dex-venue.md#NODE-DEX-01)); the TradeEngine for AMM routes ([NODE-DEX-17](../node/dex-venue.md#NODE-DEX-17)) |
 
 ```mermaid
 sequenceDiagram
@@ -64,7 +67,7 @@ struct TradeOrder {
     address relayer;       // the matching party allowed to submit the settlement (0 = anyone)
     address dex;           // the only contract that may pull this order's funds, and the only place they go; a contract
     address destination;   // receives the proceeds in receiveToken; 0 = from
-    uint8   flags;         // IOC 1 | ESCROW 2 (Path B; implies IOC)
+    uint8   flags;         // IOC 1 | ESCROW 2 (Path B; implies IOC) | LISTED_POOLS 4 (exchange path, CTR-DEX-23)
     uint256 batch;         // order lane (minNonce), not the meta-tx lane of the same name
     uint256 nonce;         // valid while nonce ≥ minNonce[from][batch]
     uint256 validUntil;
@@ -125,11 +128,13 @@ function tradeOrderDigest(TradeOrder calldata o) external view returns (bytes32)
 `mtxTrade` checks, in order (error in brackets; every error carries the order hash where it has one):
 
 1. Caller and identities: `msg.sender == o.dex` (`NotDex`) and `_isContract(o.dex)` (`DexNotContract`);
-   `o.from ≠ address(this)`, `o.dex ≠ address(this)`, `o.receiveToken ≠ address(this)` (`SelfOrder`). The DEX
-   implements no ERC-1271, so it can never be an order's `from`.
+   `o.from ≠ address(this)`, `o.dex ≠ address(this)` (`SelfOrder`); `o.receiveToken == address(this)` is allowed — a
+   cycle order sells X for more X on the exchange path ([CTR-DEX-20](#CTR-DEX-20)). The DEX implements no ERC-1271, so it
+   can never be an order's `from`.
 2. `o.relayer == 0 || o.relayer == f.submitter` (`WrongRelayer`; the DEX reports its own `msg.sender`).
 3. Order shape: `block.timestamp ≤ validUntil` (`OrderExpired`); `o.nonce ≥ minNonce[from][batch]`
-   (`NonceInvalidated`); known flags, `ESCROW` requires `IOC` (`BadFlags`); `amount > 0`, `receiveAmount > 0`
+   (`NonceInvalidated`); known flags (`IOC`, `ESCROW`, `LISTED_POOLS`; the token does not interpret `LISTED_POOLS`), `ESCROW` requires `IOC`
+   (`BadFlags`); `amount > 0`, `receiveAmount > 0`
    (`ZeroAmount`); `minFill ≤ amount` (`BadMinFill`); `fee ≤ 10 000` (`FeeAboveCap`).
 4. Signature over `h` = the order's digest through the virtual `_requireValidSignature` (EOA low-s, ERC-1271 with the
    50 k/400 k cap; Hedera's override adds HIP-632).
@@ -209,7 +214,7 @@ reason)`); if none succeeds the whole call reverts, so the relayer's simulation 
 |---|---|---|
 | SCaaS token, Path A, any role | exactly `sellFill` | the signer's token, against the fill figures the DEX passes (amount, effective minimum, price, `fee`) |
 | SCaaS token, Path B, any role | all of `amount`; the remainder refunded in the same call | the DEX, on the matched part, against the signed order |
-| outside token, any role | exactly the fill, by `safeTransferFrom` under the party's allowance | the DEX, against the `DexOrder` ([CTR-DEX-18](#CTR-DEX-18)) |
+| outside token, any role | exactly the fill, by `DexPuller.pull` under the party's allowance to the puller ([CTR-DEX-22](#CTR-DEX-22)) | the DEX, against the `DexOrder` ([CTR-DEX-18](#CTR-DEX-18)) |
 
 Why everything goes through the DEX: (a) one choke point — a single contract sees every unit that enters and leaves a
 settlement and makes every payment, instead of a token trusting a `receiveFill` it cannot see arrive elsewhere; (b) one
@@ -258,10 +263,12 @@ their per-fill DEX fee the same way (today a floor: Sui `dex.move:250-251`, Apto
 
 <a id="admin"></a>
 <a id="CTR-DEX-03"></a>**CTR-DEX-03** — `admin` is **immutable**, set at deployment; in production a Safe/multisig
-(changing signers happens inside the Safe). The admin can do exactly two things: list or delist a market
+(changing signers happens inside the Safe). The admin can do exactly four things: list or delist a market
 (`setMarket(base, quote, listed)`, which also records each token's kind, [CTR-DEX-18](#CTR-DEX-18); emit
-`MarketSet(base, quote, listed)`) and set the fee split (`setFeeSplit(relayerSharePpm, treasury)`, `treasury ∉ {0,
-DEX}` unless the share is 100 %; emit `FeeSplitSet(relayerSharePpm, treasury)`). It changes who receives fees and in
+`MarketSet(base, quote, listed)`), set the fee split (`setFeeSplit(relayerSharePpm, treasury)`, `treasury ∉ {0,
+DEX}` unless the share is 100 %; emit `FeeSplitSet(relayerSharePpm, treasury)`), list or delist an exchange target or
+executor (`setExchangeTarget(target, listed)`; emit `ExchangeTargetSet`), and switch the DEX-wide listed-only mode
+(`setListedOnly(on)`, default off; emit `ListedOnlySet`) ([CTR-DEX-23](#CTR-DEX-23)). It changes who receives fees and in
 what proportion, **never the amount**: the amount comes only from the signed `fee`. No access to funds, no upgrade, no
 sweep, no global pause (delisting a market stops that pair). No timelock: there is nothing to wait for — no signed
 order can be charged more than it signed.
@@ -278,9 +285,69 @@ by the DEX** (a contract SCaaS does not control cannot verify it):
 | Fill state | on the DEX: `pulled[h]` and `minNonce[from][batch]`, `h` = the `DexOrder` digest |
 | Checks | the full [CTR-DEX-15](#CTR-DEX-15) list, enforced by the DEX: relayer binding, expiry, nonce, flags, zero amounts, `minFill ≤ amount`, fee cap, signature (`_validSig` with the ERC-1271 cap, [CTR-DEX-08](#CTR-DEX-08)), `p < amount`, `sellFill > 0`, overfill, effective minimum, price, fee bound |
 | Flags | `IOC` allowed; **`ESCROW` refused** (`BadFlags`) — the fill is already pulled exactly into the DEX |
-| Pull | `safeTransferFrom(from, DEX, sellFill)` under the party's allowance to the DEX (an EOA may approve a contract on a token SCaaS does not control) |
+| Pull | `DexPuller.pull(token, from, sellFill)` = `safeTransferFrom(from, DEX, sellFill)` under the party's allowance to the **puller**, never to the DEX ([CTR-DEX-22](#CTR-DEX-22)); an EOA may approve a contract on a token SCaaS does not control |
 | Cancel | `mtxCancelOrders(DexOrder[] orders, bytes[] sigs)` (`CancelOrder(bytes32 orderHash)` in the DEX domain; closed or bad-signature items skipped, no revert of the batch) and `mtxInvalidateNonces(from, batch, newMin, sig)` (`InvalidateNonces(address from,uint256 batch,uint256 minNonce)` in the DEX domain) |
 | Backstop | conservation ([CTR-DEX-16](#CTR-DEX-16)) |
+
+## Exchange settlement
+
+<a id="exchange"></a>
+<a id="CTR-DEX-20"></a>**CTR-DEX-20** — **`mtxExchange` executes `TradeOrder`s against outside liquidity — AMM pools,
+multi-hop routes, cycles — instead of `makers[]`; the same order, no new signature** (owner). Beside `mtxSettle`:
+
+```solidity
+struct ExchangeLeg  { address sellToken; TradeOrder o; bytes sig; uint256 sellFill; uint256 receiveFill; } // receiveFill = floor
+struct Interaction  { address target; bytes data; }                       // no value: the DEX holds no native coin
+struct ExchangePlan { bytes32 ref; ExchangeLeg[] legs; address[] extraTokens; } // extraTokens: intermediate hop tokens
+function mtxExchange(ExchangePlan calldata p, Interaction[] calldata interactions) external nonReentrant;  // (a) DEX calls
+function mtxExchangeVia(ExchangePlan calldata p, address executor, bytes calldata data) external nonReentrant; // (b) executor
+interface IExchangeExecutor { function exchangeCallback(bytes32 ref, address[] calldata tokensOut, uint256[] calldata
+    amountsOut, address[] calldata tokensIn, uint256[] calldata amountsIn, bytes calldata data) external; }
+```
+
+A plan is atomic (no `try`: one plan is one route). Steps: (1) **check** each leg — `relayer` 0 or `msg.sender`
+(`WrongRelayer`); `sellToken` and `o.receiveToken` both **known** (a side of a listed market, kind as `setMarket`
+recorded, `TokenNotKnown`); distinct `from`s (`SelfTrade`); price `sellFill · receiveAmount ≤ receiveFill · amount`
+(`PriceLimit`); the minimum fill of [CTR-DEX-14](#CTR-DEX-14) (`BelowMinFill`); `dexFee = ceil(receiveFill · fee / 10⁶)`
+on the floor ([CTR-DEX-11](#CTR-DEX-11)); (2) **snapshot** the DEX's balance of every leg token and `extraTokens`;
+(3) **pull** each leg as in `mtxSettle` (SCaaS: `mtxTrade` with the floor figures, Path A or B; outside: the puller,
+[CTR-DEX-22](#CTR-DEX-22)); (4) **execute** — (a) each interaction under [CTR-DEX-23](#CTR-DEX-23), then
+`target.call(data)`, a failure reverts with its data; (b) `transfer` the pulled sell tokens to `executor` and call
+`exchangeCallback` with, per receive token, the minimum it must send back (Σ floors); the executor may do anything
+(pool callbacks, flash swaps, its own inventory) and pays the DEX before returning; (5) distribute the surplus
+([CTR-DEX-21](#CTR-DEX-21)), pay each `destination` `receiveFill − dexFee + share`, split each fee per
+[CTR-DEX-17](#CTR-DEX-17) (relayer share to `msg.sender`), refund Path B remainders; (6) **conservation** over every
+snapshotted token (`ConservationBroken`) and per leg `ExchangeLegSettled(ref, orderHash, from, destination, sold,
+receivedFloor, surplus, dexFee, refund, limitReceive)`, `limitReceive = ceil(sellFill · receiveAmount / amount)`, so a
+client checks what the signer got against what it signed without trusting the submitter. Not to be confused with
+`ExchangeOffer.exchange` ([CTR-AS-13](asset-suite.md#CTR-AS-13)), another contract. EVM only. Status **SPECIFIED**.
+
+<a id="CTR-DEX-21"></a>**CTR-DEX-21** — **The surplus goes to the signers, on chain** (owner). After step 4, for each
+receive token `T`: `excess_T = balance_T − snapshot_T − Σ receiveFill(legs receiving T) − Σ refund(Path B legs
+selling T)`; `< 0` ⇒ `InsufficientOutput(T)`; otherwise leg `i` receiving `T` gets `floor(excess_T · receiveFill_i /
+Σ receiveFill)`, the last such leg also the rounding remainder. Any other snapshotted token (sold only, intermediate)
+must end at its snapshot plus the refunds still to pay, else `ConservationBroken` — a leftover is a route bug, not
+something to assign. The surplus carries no DEX fee; with (b) everything the executor sends is distributed the same
+way. What the contract cannot see is a swap whose recipient was set outside the DEX: that part is the submitter's
+policy ([NODE-DEX-18](../node/dex-venue.md#NODE-DEX-18)), measurable through `ExchangeLegSettled`.
+
+<a id="puller"></a>
+<a id="CTR-DEX-22"></a>**CTR-DEX-22** — **`DexPuller`: the DEX holds no user allowance.** An immutable contract deployed
+by the DEX's constructor, `pull(token, from, amount)` callable only by the DEX (`safeTransferFrom(from, dex, amount)`).
+Holders of an **outside** token approve the puller, never the DEX; the DEX calls `pull` only after its own checks of the
+`DexOrder`, for `mtxSettle` and the exchange path alike. Why: an interaction runs as the DEX, so any allowance the DEX
+held could be spent by `outsideToken.transferFrom(victim, attacker, x)`. SCaaS tokens need no allowance at all.
+
+<a id="CTR-DEX-23"></a>**CTR-DEX-23** — **What an interaction may call; listed targets** (owner). (a) refuses an
+interaction unless `target ∉ {DEX, puller}` (`ForbiddenTarget`), `data.length ≥ 4` and `bytes4(data) ≠
+mtxTrade.selector` for **every** target (`ForbiddenSelector`; else an interaction could pull a victim's resting order
+that names this DEX with an invented `receiveFill` and move the same amount out, and conservation would balance), and,
+when any leg sets `LISTED_POOLS` **or** the admin's listed-only mode is on, `exchangeTarget[target]`
+(`TargetNotListed`). (b) needs no blocklist — an executor that re-enters hits `nonReentrant`, calls `mtxTrade` is not
+`o.dex`, calls the puller is not the DEX — and the same listing condition applies to `executor`. Default: any target
+(owner). Interactions may `approve` routers (both are contracts, [CTR-TOK-01](token-wrappers.md#CTR-TOK-01)); a
+residual allowance moves nothing, because between calls the DEX holds no user funds. Grief (a target that reverts or
+burns gas) fails only its own plan.
 
 ## The named `dex`
 
@@ -312,7 +379,7 @@ the same cap inside their token. Status **SPECIFIED**.
 
 Intake reads one `eth_call` per order: for a SCaaS leg the sell token's `tradeOrderDigest`, `pulled`, `minNonce` and
 `balanceOf` (no allowance exists to read); for an outside leg the DEX's `pulled`/`minNonce` and the party's balance and
-allowance to the DEX. The DEX never reads or writes the token's meta-tx nonces, and the token's meta-tx lanes never
+allowance to the DEX's puller. The DEX never reads or writes the token's meta-tx nonces, and the token's meta-tx lanes never
 touch order lanes: a hanging or cancelled order never blocks a `pay`, and `pay`/`cancelNonce` never invalidate an order.
 
 Invariants: `pulled[h] ≤ amount` always; the DEX's balance of every token is unchanged across one settlement; each
@@ -440,13 +507,13 @@ What runs today, until the rebuild replaces it (a new deployment; users re-sign 
 
 The rebuild deletes `MetaTxDex` and the trade and approve ops, renames `settle`/`cancel`/`invalidateNonces` to
 `mtxSettle`/`mtxCancelOrders`/`mtxInvalidateNonces`, keeps the DEX-domain `Order` only as `DexOrder`, keeps allowances
-only for outside tokens and turns the relayer fee into the relayer's share of the signed DEX fee.
+only for outside tokens (moved to the `DexPuller`) and turns the relayer fee into the relayer's share of the signed DEX fee; the exchange path ([CTR-DEX-20](#CTR-DEX-20)…[CTR-DEX-23](#CTR-DEX-23)) is not built.
 
 ## Conformance
 
 | Layer | Tests |
 |---|---|
-| forge | Path A and Path B, one taker × many makers; `mtxTrade` on a closed, cancelled or IOC-pulled order and with `sellFill = 0` reverts; Path B `sellFill ≠ amount` reverts; `dex` = EOA refused; caller ≠ `dex` refused; every `mtxTrade` error; effective minimum fill for taker and makers incl. the remainder close and `minFill > amount`; FOK via `minFill = amount`; taker fee charged once on the aggregate; split rounding; conservation (unit + invariant: the DEX holds 0 after every handler sequence); `DexOrder` legs incl. a fallback-only "token" classified outside and `ESCROW` refused; cancel per token and per DEX (signature, replay, lane cap); ERC-1271 maker under the 400 k cap; a 1271 maker that burns gas or returns a returndata bomb inside a multi-settlement call (the others still settle) and inside a cancel batch; replay of an order on another token, another DEX or another chain fails; salted-domain KATs for `TradeOrder`, `DexOrder`, `CancelOrder`, `InvalidateNonces` → `test/vectors/dex_kat.json`; the fee round-up cases above |
+| forge | Path A and Path B, one taker × many makers; `mtxTrade` on a closed, cancelled or IOC-pulled order and with `sellFill = 0` reverts; Path B `sellFill ≠ amount` reverts; `dex` = EOA refused; caller ≠ `dex` refused; every `mtxTrade` error; effective minimum fill for taker and makers incl. the remainder close and `minFill > amount`; FOK via `minFill = amount`; taker fee charged once on the aggregate; split rounding; conservation (unit + invariant: the DEX holds 0 after every handler sequence); `DexOrder` legs incl. a fallback-only "token" classified outside and `ESCROW` refused; cancel per token and per DEX (signature, replay, lane cap); ERC-1271 maker under the 400 k cap; a 1271 maker that burns gas or returns a returndata bomb inside a multi-settlement call (the others still settle) and inside a cancel batch; replay of an order on another token, another DEX or another chain fails; salted-domain KATs for `TradeOrder`, `DexOrder`, `CancelOrder`, `InvalidateNonces` → `test/vectors/dex_kat.json`; the fee round-up cases above; exchange path: an interaction calling `mtxTrade` of a resting order, targeting the DEX or the puller, or `transferFrom(victim, …)` (all refused or failing); surplus split over several legs receiving one token, remainder to the last; a sold-only or intermediate leftover reverts; `InsufficientOutput`; a profitable cycle X→X; multi-hop through mock Uniswap v2/v3 and a fork test with real Uniswap bytecode on anvil; `LISTED_POOLS` × `setListedOnly` on both entry points; an executor returning less (revert) or more (distributed), re-entering, calling `mtxTrade` or the puller; `receiveToken == this` on the token; a Path B leg; an outside leg through the puller in `mtxSettle` and `mtxExchange`; a reverting and a gas-burning target; invariant: between calls the DEX holds 0 of every token and residual allowances move nothing |
 | non-EVM | a third party settling on Cosmos/Soroban/TON fails; `min_nonce` above the cap refused; a dust fill pays fee 1 |
 | e2e (anvil 31950–31959, gateway 18650–18659) | two orders through the gateway → partial match → settle job → balances, no `approve` for SCaaS tokens; cancel ⇒ settle never runs; venue restart ⇒ book intact |
 | managed markets (forge) | one e2e with a regulated equity and an unregulated stablecoin: frozen maker, ineligible taker, ineligible fee recipient, an eligible pair settles |

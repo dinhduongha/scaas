@@ -535,7 +535,8 @@ without any allowance; fields and review per [CLI-SGN-35](signers-clientkeys.md#
 `contracts.dexes` (refused otherwise), `relayer` = `/v1/gateway` `dex.relayer` by default, `fee` = the venue's rate for
 the order's expected role, `minFill` default half the amount (FOK sets it to the amount), cancel on the sell token
 (`CancelOrder` per order, `InvalidateNonces` per order lane); an outside sell token uses a `DexOrder` with an
-allowance to the listed DEX. As built: order fields (`dex.rs:540-580`): `taker` 0 (public book); amounts in `(0, 2^128)`; base amount ≥ the market
+allowance to the listed DEX's `DexPuller` ([CTR-DEX-22](../contracts/dex.md#CTR-DEX-22)); exchange-path options (listed
+pools, cycles, surplus) per [CLI-SGN-37](signers-clientkeys.md#CLI-SGN-37). As built: order fields (`dex.rs:540-580`): `taker` 0 (public book); amounts in `(0, 2^128)`; base amount ≥ the market
 `min_base_amount`; `expiry` default 1 d, within `(now + 5 s, now + 30 d]`; FOK and IOC mutually exclusive; `maxFeePpm` = the
 market fee by default; `relayer` = `/v1/gateway` `dex.relayer` (home-bound), or 0 on `unbound` markets (resting GTC only);
 relayer fee `feeMode` 0 by default, otherwise within `/v1/gateway` `dex.relayer_fee_policy` (`feeMode ≤ 2`, ppm cap 10 000);

@@ -998,6 +998,7 @@ Change: with signed per-order fees the check covers listing, recorded token kind
 **Why.** Owner rulings: SCaaS legs are token-verified orders with no maker allowance; an order carries no role (the node or submitter decides taker and makers at settlement), keeps `relayer` as the matching party, adds `dex` as the only place funds go, signs one `fee` rate, and every order in a settlement fills at least `max(minFill, 50 %)`. The book keeps price-time; per-role pricing is venue intake policy, not an on-chain setting.
 **Cost if wrong.** The venue builds settlements the contracts refuse (minimum fill, fee bound), charges a role rate the signer never accepted, or misses that a one-settlement FOK may span several makers.
 **Source.** [history/specs/2026-10-07-metatx-generic.md](history/specs/2026-10-07-metatx-generic.md) §2 A7, A10, A12–A15; §3 MG-8.1–MG-8.4.
+Change (2026-10-08): outside legs are funded by an allowance to the DEX's `DexPuller`; intake reads `allowance(from, puller)`. Source add: `history/specs/2026-10-08-dex-exchange-design.md` §3 DS-4.
 
 ### NODE-DEX-16 — The venue serves only DEXes on the chain profile's DEX list
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: node/dex-venue.md#NODE-DEX-16 · superseded-by: —
@@ -1007,6 +1008,20 @@ Change: with signed per-order fees the check covers listing, recorded token kind
 **Source.** [history/specs/2026-10-07-metatx-generic.md](history/specs/2026-10-07-metatx-generic.md) §4 (phishing `dex`), §3 MG-6; §8 Q5; §13 N-H1.
 
 Under "Networks — common model":
+
+### NODE-DEX-17 — TradeEngine: exchange-only intake, book first, AMM routes, fees by role
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: node/dex-venue.md#NODE-DEX-17 · superseded-by: —
+
+**Why.** The node runs its own algorithm over the same orders (owner): book matching first, then coincidences of wants and AMM routes (quoted by `eth_call`, at most 3 hops, cycles), resting orders filled through AMMs when a route reaches their limit; a floor below the quote by a buffer costs the signer nothing because the surplus comes back; exchange-only orders (no listed market, or a cycle) never rest in the book. Off unless the chain enables it.
+**Cost if wrong.** Without a book-first rule the venue pays pool fees for liquidity it already holds; without the intake split a cycle order would rest in a book that can never match it.
+**Source.** `history/specs/2026-10-08-dex-exchange-design.md` §2 S3, §3 DS-7.
+
+### NODE-DEX-18 — The node keeps no surplus: income is the relayer share of the signed fee
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: node/dex-venue.md#NODE-DEX-18 · superseded-by: —
+
+**Why.** Owner: the surplus is the signer's and the node's income is only the relayer share. The contract pays all output that reaches the DEX to the signers; what it cannot see is output routed elsewhere, so the node never sets a swap recipient outside the DEX and publishes quote and result per plan (`/v1/dex/exchanges/{ref}`).
+**Cost if wrong.** A node that keeps part of the route output turns its quote into a hidden fee on top of the signed one.
+**Source.** `history/specs/2026-10-08-dex-exchange-design.md` §2 S4, S6, §3 DS-7.
 
 ### NODE-DEX-80 — DEX book persisted in ERP
 - old: RS5-2 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NODE-DEX-14
@@ -1971,6 +1986,7 @@ Change (2026-10-08): the epoch travels in the revoke data, `revoke(token, epoch)
 **Why.** An off-chain persistent book with on-chain settlement gives exchange UX without custody. The owner moved order verification into the sell token (role-free `TradeOrder`, funds only into the named DEX), kept both paths, and made the DEX pay out and end every call with unchanged balances; the fee rate is the signed one.
 **Cost if wrong.** Trusting the book for prices would let the operator fill against users; DEX allowances keep EOA approvals alive.
 **Source.** `history/specs/2026-10-03-blockchain-round3-design.md:554`; `history/specs/2026-10-07-metatx-generic.md` §2 A7, A10, §3 MG-8.
+Change (2026-10-08): the same `TradeOrder`s can also be executed against AMM pools — multi-hop routes, cycles — through `mtxExchange` (CTR-DEX-20), with the surplus paid to the signers (CTR-DEX-21). Source add: `history/specs/2026-10-08-dex-exchange-design.md` §1, §2 S3, §3 DS-1.
 
 ### CTR-DEX-02 — Cancel signatures never expire; per token and per DEX
 - old: RS5-10 · status: current · owner: no · date: 2026-10-08 · normative: contracts/dex.md#CTR-DEX-02 · superseded-by: —
@@ -1985,6 +2001,7 @@ Change (2026-10-08): the epoch travels in the revoke data, `revoke(token, epoch)
 **Why.** The immutable admin has two powers — `setMarket(base, quote, listed)` and `setFeeSplit(relayerSharePpm, treasury)` — and changes who receives fees and in what proportion, never the amount, which comes only from the signed `fee`.
 **Cost if wrong.** An admin that sets the fee amount could raise it on resting orders; any custody power is custody by another name.
 **Source.** `history/specs/2026-10-03-dex-design.md:398`; `history/specs/2026-10-07-metatx-generic.md` §2 A15, §3 MG-8.3.
+Change (2026-10-08): two more powers, `setExchangeTarget` (list or delist an exchange target or executor) and `setListedOnly` (DEX-wide listed-only mode, default off); neither touches funds or a fee amount (CTR-DEX-23). Source add: `history/specs/2026-10-08-dex-exchange-design.md` §2 S1, S2, §3 DS-6.
 
 ### CTR-DEX-04 — IOC closed on chain at its single pull
 - old: RS5-3 · status: current · owner: no · date: 2026-10-08 · normative: contracts/dex.md#CTR-DEX-04 · superseded-by: —
@@ -2069,6 +2086,7 @@ Change (2026-10-08): the epoch travels in the revoke data, `revoke(token, epoch)
 **Why.** `mtxTrade` checks the caller is the named contract `dex`, the relayer binding, expiry, order lane, flags, amounts, the fee cap, the signature and `pulled[h] < amount`; on Path A it also checks fill, overfill, minimum, price and fee figures against the signed values; it moves funds to `dex` only, so no allowance is needed and a signer reads one address to know where its funds can go.
 **Cost if wrong.** A token that trusts a caller-chosen route or recipient turns every order into a permit.
 **Source.** `history/specs/2026-10-07-metatx-generic.md` §2 A7, §3 MG-8.2, §12 (C1, H7, M1), §13 (N-M1).
+Change (2026-10-08): `o.receiveToken == address(this)` is allowed (a cycle order sells X for more X on the exchange path); `SelfOrder` stays for `from` and `dex`; known flags gain `LISTED_POOLS = 4`, which the token does not interpret. Source add: `history/specs/2026-10-08-dex-exchange-design.md` §2 S3, §3 DS-2.
 
 ### CTR-DEX-16 — mtxSettle: everything through the DEX, balances unchanged
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/dex.md#CTR-DEX-16 · superseded-by: —
@@ -2076,6 +2094,7 @@ Change (2026-10-08): the epoch travels in the revoke data, `revoke(token, epoch)
 **Why.** One taker against many makers per settlement: check, match at maker prices, pull every leg into the DEX, pay every destination, fee share and refund in the same call, then assert the DEX's balance of every token unchanged. One choke point and one invariant replace per-party delta checks, which misfire on shared addresses; listing only exact-transfer tokens makes conservation catch a misbehaving token.
 **Cost if wrong.** Payments outside the DEX would leave the token trusting a fill it cannot see; dust or donations could be paid out.
 **Source.** `history/specs/2026-10-07-metatx-generic.md` §3 MG-8.3, §12 (M1, M3), §13 (N-M3).
+Change (2026-10-08): outside-token legs are pulled through the `DexPuller` (CTR-DEX-22). Source add: `history/specs/2026-10-08-dex-exchange-design.md` §3 DS-4.
 
 ### CTR-DEX-17 — One signed fee rate; the DEX distributes it per the admin split
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/dex.md#CTR-DEX-17 · superseded-by: —
@@ -2090,6 +2109,7 @@ Change (2026-10-08): the epoch travels in the revoke data, `revoke(token, epoch)
 **Why.** A token SCaaS does not control cannot verify a `TradeOrder`, so the DEX does, with the same checks, as a `DexOrder` in its own salted domain with `o.dex == this`, its own `pulled`/`minNonce`, no `ESCROW`, and a pull under the party's allowance; token kinds come from the listing (via the factory's provenance), never from the leg.
 **Cost if wrong.** A leg-declared kind could send a fallback-only "token" down the `mtxTrade` path; unchecked outside legs would trade at any price.
 **Source.** `history/specs/2026-10-07-metatx-generic.md` §3 MG-8.4, §13 (N-M2).
+Change (2026-10-08): the pull is `DexPuller.pull` under the party's allowance to the puller, never to the DEX, so an exchange interaction cannot spend a user allowance (CTR-DEX-22). Source add: `history/specs/2026-10-08-dex-exchange-design.md` §3 DS-4.
 
 ### CTR-DEX-19 — dex must be a contract, nothing more (owner-accepted residual risk)
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/dex.md#CTR-DEX-19 · superseded-by: —
@@ -2097,6 +2117,34 @@ Change (2026-10-08): the epoch travels in the revoke data, `revoke(token, epoch)
 **Why.** The owner decided against a factory DEX registry or codehash allowlist: the token requires only that `dex` is a contract. A phishing contract named as `dex` can take the signed amount; the mitigations are off chain — clients warn and by default refuse to build or sign for a `dex` off the chain profile's DEX list (for `mtxWrap`: a registered wrapper), wallets show `dex`, and the node routes only to listed DEXes.
 **Cost if wrong.** A user who overrides the client refusal and signs for a malicious contract loses the signed amount.
 **Source.** `history/specs/2026-10-07-metatx-generic.md` §4, §8 Q5, §13 (N-H1).
+
+### CTR-DEX-20 — mtxExchange: TradeOrders executed against AMMs, multi-hop and cycles
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/dex.md#CTR-DEX-20 · superseded-by: —
+
+**Why.** On a chain with AMM liquidity an order the book cannot match can still fill at or above its signed price, a route through several pools can beat one pool, and a signer may want a cycle X→…→X. The owner wanted no new signed struct: the same `TradeOrder` is executed by the node's own algorithm instead of against `makers[]` — (a) `mtxExchange`, the DEX calling each interaction itself (CoW model), (b) `mtxExchangeVia`, a submitter-named executor (UniswapX model); `receiveFill` is a floor, one plan is atomic, and `ExchangeLegSettled` carries `limitReceive` so a client verifies the result without trusting the submitter. Named `mtxExchange` by the owner (first `mtxSolve`).
+**Cost if wrong.** Without it AMM liquidity stays out of reach and every order without a book counterpart waits; a DEX-specific router per AMM kind would need new contract code for every venue.
+**Source.** `history/specs/2026-10-08-dex-exchange-design.md` §1, §2 S3, S5, S7, §3 DS-1.
+
+### CTR-DEX-21 — The exchange surplus goes to the signers, on chain
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/dex.md#CTR-DEX-21 · superseded-by: —
+
+**Why.** Output above the floors belongs to the signers (owner): per receive token the excess over the floors and Path B refunds is split pro rata by floor, the remainder to the last leg; any other leftover reverts; the surplus pays no DEX fee. With strict conservation and fixed floors alone, a better-than-quoted AMM output would revert the plan.
+**Cost if wrong.** A surplus left to the submitter turns every quote buffer into the submitter's income; a leftover assigned arbitrarily would hide route bugs.
+**Source.** `history/specs/2026-10-08-dex-exchange-design.md` §2 S4, §3 DS-3.
+
+### CTR-DEX-22 — DexPuller: the DEX holds no user allowance
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/dex.md#CTR-DEX-22 · superseded-by: —
+
+**Why.** An exchange interaction runs as the DEX, so any allowance the DEX held could be spent by `outsideToken.transferFrom(victim, attacker, x)`. Outside-token holders approve an immutable puller that only the DEX can call, and the DEX calls it only after its own `DexOrder` checks (CoW's vault-relayer pattern).
+**Cost if wrong.** An allowance on the DEX itself makes every open-mode interaction a theft path for every outside-token holder.
+**Source.** `history/specs/2026-10-08-dex-exchange-design.md` §3 DS-4, §4.
+
+### CTR-DEX-23 — What an exchange interaction may call; listed targets by flag or admin mode
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/dex.md#CTR-DEX-23 · superseded-by: —
+
+**Why.** Interactions may target any contract by default (owner), except the DEX and the puller, and never with the `mtxTrade` selector (else a victim's resting order naming this DEX could be pulled with an invented fill and the amount moved out while conservation balances). The owner wanted both guards on targets: the signer's `LISTED_POOLS` flag per order and the admin's DEX-wide listed-only mode; the listing then applies to every target and to an executor, whose inner calls the DEX cannot see.
+**Cost if wrong.** Without the selector block, any resting order is drainable; without a listing option, a signer who distrusts unknown pools has no on-chain guarantee.
+**Source.** `history/specs/2026-10-08-dex-exchange-design.md` §2 S1, S2, S5, §3 DS-5, DS-6.
 
 ### CTR-DEX-80 — Fill-or-kill two-leg MetaTxDex settlement
 - old: R3 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CTR-DEX-01, NODE-DEX-01, INT-ERP-12
@@ -4473,6 +4521,13 @@ Change (2026-10-08): transfers and payments are shown by the typed `MetaTransfer
 **Cost if wrong.** Clients offer screens the token refuses, or keep standing EOA allowances alive.
 **Source.** [history/specs/2026-10-07-metatx-generic.md](history/specs/2026-10-07-metatx-generic.md) §2 A5, A6, A9; §3 MG-7, MG-7b.
 
+### CLI-SGN-37 — Exchange-path orders: listed-pools toggle, cycle label, approve the puller, surplus check
+- old: — · status: current · owner: no · date: 2026-10-08 · normative: clients/signers-clientkeys.md#CLI-SGN-37 · superseded-by: —
+
+**Why.** Clients expose the signer's `LISTED_POOLS` choice (default off), label and warn on cycle orders, send outside-token approvals to the `DexPuller` instead of the DEX, and check each `ExchangeLegSettled` against its `limitReceive`.
+**Cost if wrong.** An approval to the DEX would reopen the theft path CTR-DEX-22 closes; an unchecked settlement would hide a short payout.
+**Source.** `history/specs/2026-10-08-dex-exchange-design.md` §3 DS-8.
+
 ### CLI-SGN-80 — Vault PIN scrypt N=2^15
 - old: RS4-8(scrypt) · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CLI-SGN-21
 
@@ -4788,6 +4843,7 @@ Change: the app never offers `approve` on a SCaaS token; spenders on outside tok
 - old: R35(erp) · status: current · owner: yes · date: 2026-10-08 · normative: integration.md#INT-ERP-12 · superseded-by: —
 
 Change: no separate relayer fee; bookings from `LegSettled` (received, `dexFee`, relayer and treasury shares). Source add: §3 MG-8.3.
+Change (2026-10-08): on the exchange path the record is `ExchangeLegSettled`; the company books `receivedFloor − dexFee + surplus` and shows the surplus as price improvement. Source add: `history/specs/2026-10-08-dex-exchange-design.md` §3 DS-8.
 
 ### INT-ERP-13 — ERP verifies ED25519 for long-zero payers
 - old: R6-3 · status: current · owner: no · date: 2026-10-03 · normative: integration.md#INT-ERP-13 · superseded-by: —
