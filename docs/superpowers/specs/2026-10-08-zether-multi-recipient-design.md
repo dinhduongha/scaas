@@ -23,7 +23,8 @@ three disclosure-storage modes instead of one.
 | Z3 | **One shared `s`** for every recipient: handing `s` to a checker opens every leg of that transfer, decoys included — accepted |
 | Z4 | Three functions by disclosure storage: **hash only (default)**, full bundle, no bundle |
 | Z5 | The measuring spike is real code and is merged |
-| Z7 | The multi-recipient transfer **is** `transferConfidential` (default, HASH); the single-recipient format is retired — one recipient is `M = 1` (same ABI types, the two cannot coexist; nothing is deployed) |
+| Z7 | The multi-recipient transfer **is** `transferConfidential` (default, HASH) |
+| Z8 | The single-recipient format is **kept, renamed `transferConfidentialSingle`** — same payload, statement, proof, proof system id and full-bundle storage as today; only the name changes |
 | Z6 | `s` of one transfer opens only that transfer (HKDF over `sendCounter`, [CTR-ZTH-30](../../contracts/zether.md#CTR-ZTH-30)); the sender rebuilds `s` from its seed and reads the bundle from calldata when nothing is stored |
 
 ## 3. Relation and proof
@@ -68,7 +69,7 @@ proof     = sigma commitments ‖ sigma responses ‖ BP(v_1) … BP(v_M) ‖ BP
 
 The mode is in `opTag`, so a relayer cannot switch the mode of a signed proof. `1 ≤ M ≤ MAX_RECIPIENTS = 16`
 (`BadRecipientCount`); recipients pairwise distinct, none equal to the sender, all registered (`DuplicateRecipient`,
-`SelfTransfer`, `NotRegistered`). The transfer proof system id is bumped, so a proof of the retired format never matches.
+`SelfTransfer`, `NotRegistered`). The multi-recipient format has its own proof system id, so a single-recipient proof never matches it.
 
 ## 5. Token
 
@@ -79,7 +80,7 @@ function transferConfidentialBundle(…) external returns (bytes32);       // mo
 function transferConfidentialNoBundle(…) external returns (bytes32);     // mode NONE
 ```
 
-Checks and order as the retired single-recipient transfer (cheap first, `accSeq`/`sendCounter`, registry `requireAuthorized` over the
+Checks and order as `transferConfidentialSingle` (cheap first, `accSeq`/`sendCounter`, registry `requireAuthorized` over the
 statement digest, verify). Effects: `acc_f −= (C_deb + [fee]G, D_out)`; per `j` `pending_tj += (C_out_j, D_out)`,
 `pendingSeq_tj++`; fee to the beneficiary as today; `sendCounter_f++` once. `entryRef` as today (one per transfer);
 recipient `j` is addressed as `(entryRef, j)`. Bundle `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j`:
@@ -90,8 +91,8 @@ recipient `j` is addressed as `(entryRef, j)`. Bundle `B_j = Y_tj ‖ C_out_j �
 | BUNDLE | `B_1 ‖ … ‖ B_M` | the summary event | on chain, nothing supplied |
 | NONE | nothing | the summary event | off chain only (calldata) |
 
-`verifyTransferAmount(entryRef, j, amount, kind, opening, bundles)` / `attestTransferAmount(…)` replace the
-single-recipient disclosure (`bundles` ignored in BUNDLE mode, refused in NONE mode). Relaying through the meta-tx
+`verifyTransferAmount(entryRef, j, amount, kind, opening, bundles)` / `attestTransferAmount(…)` serve both formats
+(the token knows each entry's mode; a single entry has `j = 0` and its stored bundle), as the single-recipient disclosure (`bundles` ignored in BUNDLE mode, refused in NONE mode). Relaying through the meta-tx
 envelope follows stream MT-6 (direct calls only here).
 
 ## 6. PQZ (note)
@@ -106,8 +107,7 @@ now: no PQZ code exists (engine spikes E-S0… not started). Not in this spike.
 ## 7. Measurement (gate of the spike)
 
 forge, real proofs from the prover, bn254 and BLS12-381: execution gas of `transferConfidential*` for
-`M ∈ {1, 2, 4, 8}` × the three modes, next to the retired single-recipient transfer (baseline: the measured table of
-`contracts/zether.md`); calldata bytes per case. Prover time per `M`.
+`M ∈ {1, 2, 4, 8}` × the three modes, next to `transferConfidentialSingle` (baseline: the measured table of `contracts/zether.md`); calldata bytes per case. Prover time per `M`.
 Results go into the gas table of `contracts/zether.md` on fold.
 
 ## 8. Revision history
@@ -115,4 +115,5 @@ Results go into the gas table of `contracts/zether.md` on fold.
 | Rev | Date | What |
 |---|---|---|
 | 1 | 2026-10-08 | First draft from the owner's chat decisions Z1–Z6 |
-| 2 | 2026-10-08 | Z7: the multi-recipient transfer replaces `transferConfidential`; names without "Many" |
+| 2 | 2026-10-08 | Z7: the multi-recipient transfer is `transferConfidential`; names without "Many" |
+| 3 | 2026-10-08 | Z8: the single-recipient format stays as `transferConfidentialSingle` |
