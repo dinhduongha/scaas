@@ -312,7 +312,8 @@ anyone writing a class for it.
 
 **Why the owner can only give things up.** There is no upgrade key, so the flags a token is born with are the most it
 can ever do: an optional `owner` grants and revokes the roles of those flags, may clear a flag that was not locked,
-and may renounce, after which nobody administers the token; a role holder exercises only its flag
+and may renounce, after which nobody administers the token (the existing role holders keep their roles; to freeze the
+power set the owner revokes every role first); a role holder exercises only its flag
 ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22), [CTR-TOK-10](contracts/token-wrappers.md#CTR-TOK-10)).
 Wallets read `features()`, `lockedFeatures()` and the role holders, so a holder can see the whole power set before
 accepting a token. Hedera is not a creator's choice but a per-chain parameter of each implementation (`IS_HEDERA`,

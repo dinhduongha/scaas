@@ -3307,6 +3307,7 @@ Change (2026-10-08): EVM rotation runs through `mtxExecute` signed by the accoun
 
 Change: `chain_uid` is a constructor immutable of every SCaaS contract with a signature and the `salt` of every SCaaS EIP-712 domain, also bound into the confidential token's non-EIP-712 digests; CREATE2 deployer stated (addresses per chain for contracts that take `chain_uid`); fork limit stated (NET-ALL-25); Hedera block-0 hash stability check. Source add: §3 MG-4, §7 NET-ALL-22.
 Change (2026-10-08): `chain_uid` (or the family identifier) is the `network` field of `MetaCall`/`MetaTransfer` (NET-ALL-26). Source add: `history/specs/2026-10-08-nonevm-metacall-design.md` §3 NM-1.
+Edit note (2026-10-08): `chain_uid` alone is not unique (Ethereum/ETC, Avalanche C-Chain/Fuji share a genesis), so a chain is `(chainId, chain_uid)`; pruned RPCs may not serve block 0, so deploy scripts and the node read `smartcontracts/evm/chain-uids.json`. Not a new id.
 
 ### NET-ALL-23 — Sui/Solana wallet signatures readable, passkey-first
 - old: CR-WSF-1 · status: current · owner: no · date: 2026-10-08 · normative: networks/README.md#NET-ALL-23 · superseded-by: —

@@ -1,6 +1,28 @@
 # HANDOFF — scaas
 
-## Session 2026-10-08 (afternoon) — read this first
+## Session 2026-10-08 (evening) — read this first
+
+Token-tree design accepted by the owner and folded (P0 done); record frozen at `docs/history/specs/2026-10-08-token-tree-design.md`
+(Status line holds the id map). The Zether multi-recipient record is frozen too. Code is unchanged: every affected
+section carries a "Transitional (BUILT)" note naming the phase.
+
+- **Tree:** `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase` → four kinds by code (`NONE`, `UNDERLYING`, `NONE_ZETHER`,
+  `UNDERLYING_ZETHER`; `*_PQZ` reserved), features by flags (payable, mint, burn, adjustable rate, wrap-disable, freeze,
+  force, pause, allowlist); one owner model; Hedera as an `IS_HEDERA` branch; the native coin as an underlying leg; libraries
+  `AdminLib`, `PayLib`, `UnderlyingLib`, `HederaLib`, `TradeLib`, `ZetherLib`; `OrderBookDex` as a clone. Ids CTR-TOK-21…26,
+  CTR-MTX-25, CTR-AS-17, CTR-DEX-24, CTR-ZTH-37…47, CTR-ACC-11, CTR-PQZ-22.
+- **TODO §00 is now phases P1–P5** (P1 = MT-1…MT-4 on the new tree, P2 = MT-5, P3 = MT-6, P4 = MT-7 + rename, P5 = MT-8/9).
+- **Owner decisions for P1:** (1) keep the old code for reference: git tag `ref/pre-token-tree` on the last commit before
+  P1, plus the v1/v2 token sources and the old `ZetherToken` copied to `smartcontracts/evm/legacy/` (not built, not
+  tested; README "reference only"); (2) P1 refactors in place (`git mv` + edit), not a rewrite — reuse map in TODO §00;
+  `TradeLib` (P2) reuses the prototype in `/home/ha/work/blockchain/metatx/contracts`.
+- **`smartcontracts/evm/chain-uids.json`** (genesis hashes of live EVM chains, two sources each) is linked from NET-ALL-22;
+  a chain is identified by `(chainId, chain_uid)`.
+- PQZ multi-recipient and PQZ Z9/Z10/Z12 are not owner-ruled: recorded as `open` only.
+
+Next: P1 plan (one plan per phase, written against the folded rules), then P1 code.
+
+## Session 2026-10-08 (afternoon)
 
 Three designs accepted by the owner and folded (drafts frozen in `docs/history/specs/`), root README updated:
 

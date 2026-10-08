@@ -876,10 +876,10 @@ names its kind, `initData` builder, required inputs, defaults, follow-up actions
 
 | Template | Kind | Defaults | Follow-ups |
 |---|---|---|---|
-| **Equity** (shares, units of a fund) | `NONE` + flags 5–8 | `decimals 0`; `initialSupply` to the issuer treasury Safe (the Safe calls `createTiered`); `minter` = issuance multisig or 0 (fixed); `features` include `FREEZE|FORCE|PAUSE|ALLOWLIST`; `requiredFlags = KYC_DONE|SANCTIONS_CLEAR` (+ `ACCREDITED` for restricted offerings); fee `NONE` | dividends, splits/buybacks, managed market, vesting of employee grants |
+| **Equity** (shares, units of a fund) | `NONE` + flags 5–8 | `decimals 0`; `initialSupply` to the issuer treasury Safe (the Safe calls `createToken`); `minter` = issuance multisig or 0 (fixed); `features` include `FREEZE|FORCE|PAUSE|ALLOWLIST`; `requiredFlags = KYC_DONE|SANCTIONS_CLEAR` (+ `ACCREDITED` for restricted offerings); fee `NONE` | dividends, splits/buybacks, managed market, vesting of employee grants |
 | **Bond** | `NONE` + flags 5–8 | `decimals 0` (1 unit = 1 denomination); supply minted at issuance, **minter renounced** after (required by the redemption offer); controls as equity; `termsHash` covers face, coupon dates and rate, maturity, redemption offer address and any prescription date | one `Distribution` per coupon date; one `ExchangeOffer` (redemption, burn, `opensAt = maturity`) created at issuance |
-| **Loyalty points** | `META_NONE` | `decimals 0`; `minter` = the issuer's mint contract (rate limits live there); fee `NONE`; no regulated module. Prepaid points: `META_SINGLE` with a rate (1 USDC → 100 points, [token-wrappers.md](token-wrappers.md#CTR-TOK-08)) | campaigns as `Distribution` of points; redemption = `pay` to the merchant |
-| **Voucher** (gift card, coupon) | `META_NONE` (or `META_SINGLE` for prepaid value) | `decimals 0`, 1 unit = 1 voucher of the stated face value; issuer minter; validity = the redemption offer's window | issuance by mint or `Distribution` (campaign); merchants accept by `pay`; the issuer redeems merchants' vouchers by a **closable** `ExchangeOffer` (voucher → payout, burn) whose `closesAt` is the expiry |
+| **Loyalty points** | `NONE` | `decimals 0`; `minter` = the issuer's mint contract (rate limits live there); fee `NONE`; no regulated module. Prepaid points: `UNDERLYING` with one leg and a rate (1 USDC → 100 points, [token-wrappers.md](token-wrappers.md#CTR-TOK-08)) | campaigns as `Distribution` of points; redemption = `pay` to the merchant |
+| **Voucher** (gift card, coupon) | `NONE` (or `UNDERLYING` with one leg for prepaid value) | `decimals 0`, 1 unit = 1 voucher of the stated face value; issuer minter; validity = the redemption offer's window | issuance by mint or `Distribution` (campaign); merchants accept by `pay`; the issuer redeems merchants' vouchers by a **closable** `ExchangeOffer` (voucher → payout, burn) whose `closesAt` is the expiry |
 
 Points and vouchers do not expire on chain (balances never change); expiry is the end of the issuer's redemption
 offer, disclosed as such. A loyalty or voucher issuer who needs freeze or allowlist sets flags 5–8 on the same kind;
@@ -890,11 +890,11 @@ The configuration wizard (in the app and any client system) works over `IOpenFac
 
 | Template | Factory call | Parameters | Status of primitive |
 |---|---|---|---|
-| Loyalty / rewards | `createTiered(META_NONE, 1, [], initData, salt)` (built: `createMetaToken(1, 0, initData, salt)`) | name, symbol, decimals, `minter` = issuer's mint contract or treasury multisig, fee 0 | **BUILT** |
-| Internal 1:1 money | `createTiered(META_SINGLE, 1, [underlying], …)` with `num = den = 1` (built: `createMetaToken(1, underlying, …)`) | underlying stablecoin; wrap/unwrap through the clone | **BUILT** |
-| Wrapper with a rate | `createTiered(META_SINGLE, …)` | underlying, `num/den`, fixed or adjustable (admin, delay, step) | **BUILT** |
+| Loyalty / rewards | `createToken` kind `NONE` (built: `createTiered(META_NONE, 1, [], initData, salt)`, `createMetaToken(1, 0, initData, salt)`) | name, symbol, decimals, `minter` = issuer's mint contract or treasury multisig, fee 0 | **BUILT** |
+| Internal 1:1 money | `createToken` kind `UNDERLYING`, one leg, `num = den = 1` (built: `createTiered(META_SINGLE, 1, [underlying], …)`, `createMetaToken(1, underlying, …)`) | underlying stablecoin; wrap/unwrap through the clone | **BUILT** |
+| Wrapper with a rate | `createToken` kind `UNDERLYING` (built: `createTiered(META_SINGLE, …)`) | underlying, `num/den`, fixed or adjustable (rate role, delay, step) | **BUILT** |
 | Confidential money | `createZetherToken(1, underlying, verifier, initData, salt)` | `registry`, `shieldScale`, `maxDecryptableShielded ≤ 2^54`, `confidentialFee`, auditor key | **BUILT** (dev chains only) |
-| Multi-underlying money (e.g. xDAI/USDC/USDT) | `createTiered(META_MULTI, …)` | 2–8 underlyings, per-leg rates, guardian | **BUILT** |
+| Multi-underlying money (e.g. xDAI/USDC/USDT) | `createToken` kind `UNDERLYING` with 2–8 legs (built: `createTiered(META_MULTI, …)`) | 2–8 underlyings, per-leg rates, guardian | **BUILT** |
 | Vesting / streaming | `VestingGrant` clone per grant | cliff, duration, interval or tranches, approver, revocability | **SPECIFIED** |
 | Controlled / security / bond | `createToken` with flags 5–8 + `Distribution` / `ExchangeOffer` | issuer and compliance contracts, the flags, `ComplianceRegistry` + `requiredFlags`, `termsHash` | **SPECIFIED** |
 | Non-fungible in-app assets (ERC-721/1155 with meta-tx) | new kinds | — | **PLANNED** |

@@ -46,7 +46,7 @@ is always the hard value. Gas is never assumed: Zether-sized transactions do not
 (chain id 7622, genesis hash `0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464`), profile
 `private7622`.** Owner ruling 2026-10-07. Chain id `0x1dc6`; the chain was reset with a new genesis when it moved
 from 9000, which is also Evmos Testnet — replay protection is only as good as the chain id, so every signer and node
-also binds the genesis hash ([NET-ALL-22](README.md#NET-ALL-22)). Nodes bind the profile to the genesis hash, not to
+also binds the genesis hash ([NET-ALL-22](README.md#NET-ALL-22)). Genesis hashes of the live EVM chains, two sources each, are in [`chain-uids.json`](../../smartcontracts/evm/chain-uids.json). Nodes bind the profile to the genesis hash, not to
 the chain id alone. The profile, seeds, environment variable names and test vectors use `private7622`; the chain's
 directory is `src/chains/private7622`.
 

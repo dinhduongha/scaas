@@ -53,7 +53,7 @@ receiver-pays, the approve rule and the UA ledger; `MetaTokenBase` holds trade (
 (`PayLib`), features and roles (`AdminLib`), init and provenance. Trade and pay live in `MetaTokenBase`, **not** in
 `ERC20MetaTx`. The kinds (`NoUnderlyingToken`, `UnderlyingToken`, and the two Zether kinds) sit on `MetaTokenBase`;
 Hedera is the immutable `IS_HEDERA` ([CTR-TOK-23](token-wrappers.md#CTR-TOK-23)), not a child contract.
-The v1 line (the built `ERC20MetaTx` mixin, `MetaToken`, `HederaMetaToken` and factory v1) is deleted: issuer tokens
+The v1 line (the built `ERC20MetaTx` mixin, `MetaToken`, `HederaMetaToken` and factory v1) is removed from the product; kept for reference under the tag `ref/pre-token-tree` and `smartcontracts/evm/legacy/` (not built): issuer tokens
 use `NoUnderlyingToken`, 1:1 wrappers use an `UnderlyingToken` with one leg and `num = den = 1`; Zether's separate mixin
 `ZetherMetaTx` disappears into the base, and so does `PqzToken`'s `PqzMetaTx` ([CTR-PQZ-21](pq-zether.md#CTR-PQZ-21)).
 One domain version, `"1"`, for every token.

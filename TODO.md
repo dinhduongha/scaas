@@ -6,9 +6,35 @@ Max 3 agents, one heavy build at a time (`scripts/capped`). The Odoo side lives 
 ## 00. Meta-transaction redesign — code streams (accepted 2026-10-08; rules in the component docs)
 
 Order: contracts first (one heavy build at a time), then node, clients, the Odoo connector (bamboo-dms).
+Design record: `docs/history/specs/2026-10-08-token-tree-design.md` (accepted and folded 2026-10-08; rules CTR-TOK-21…26,
+CTR-MTX-25, CTR-AS-17, CTR-DEX-24, CTR-ZTH-37…47, CTR-ACC-11, CTR-PQZ-22). The MT-1…MT-9 streams are regrouped into
+phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TOK-24) and the full forge suite.
+
+| Phase | Content | Streams |
+|---|---|---|
+| P0 | Spec and fold into the component docs and `decisions.md` | done |
+| P1 | The complete base on the new tree: `MetaTxBase`, `ERC20MetaTx`, `MetaTokenBase`; both structs, allowlist, ticket; approve rule; `salt = chain_uid`; CREATE2 deployer; kinds `NONE`, `UNDERLYING`; factory `createToken`; delete the v1/v2 lines | MT-1, MT-2, MT-3, MT-4 |
+| P2 | `TradeLib`; `OrderBookDex` as a clone; `createDex`, DEX registry | MT-5 |
+| P3 | `*_ZETHER` kinds: `ZetherLayer`, `ZetherLib`, `ZetherStatements`, shield / unshield paths; delete `ZetherToken` | MT-6 |
+| P4 | `MandateWallet`, `SmartKeyAccount` (rename, every family) on `MetaTxBase` | MT-7 (+ rename in NM-*) |
+| P5 | Node, clientkeys, encoders for the new ABI | MT-8, MT-9 |
+
+**P1 start checklist (owner decisions 2026-10-08):**
+- [ ] Keep the old code for reference: git tag `ref/pre-token-tree` on the last commit before P1, and copy the v1/v2 token
+      sources and the old `ZetherToken` to `smartcontracts/evm/legacy/` (not built, not tested; a README says "reference only").
+- [ ] P1 refactors in place (`git mv` + edit), not a rewrite. Reuse map: `MetaTxCore` → `MetaTxBase`/`ERC20MetaTx`;
+      `MetaTokenBase` pay → `PayLib`; `Single`+`Multi` → `UnderlyingLib`/`UnderlyingToken`; `HederaV2Lib` → `HederaLib`;
+      `ZetherToken` → `ZetherLib`/`ZetherLayer` (P3); tests ported. `TradeLib` (P2) reuses the owner's prototype
+      `/home/ha/work/blockchain/metatx/contracts` (`MtxTradeOrderLib`, `ERC1776Tradeable.mtxTradeOrder`,
+      `ERC1776Dex.mtxTrade`) and the `OP_TRADE` legs of `MetaToken`/`MetaTokenBase`/`MetaTxDex`.
+
+**P1 — MT-1…MT-4**
 - [ ] **MT-1** Two bases: generic `MetaTxBase` (any SCaaS contract; `_chargeFee` refuses all but `NONE`, CTR-MTX-22) and
-      the token base `ERC20MetaTx is MetaTxBase` (rename `MetaTxCore`); delete `ERC20MetaTx`(v1)/`MetaToken`/`HederaMetaToken`/
-      v1 `OpenFactory`/`MetaTxDex`; v2 factory renamed `OpenFactory`; Hedera children on the tiers.
+      the token base `ERC20MetaTx is MetaTxBase` (absorbs `MetaTxCore`) with `MetaTokenBase` on top; kinds `NONE` and
+      `UNDERLYING` with `AdminLib`, `PayLib`, `UnderlyingLib`, `HederaLib`, `SigCheck` (CTR-TOK-21…24); factory
+      `createToken` (CTR-TOK-25). Delete what token-tree spec §8 deletes: `ERC20MetaTx`(v1), `MetaToken`, `HederaMetaToken`,
+      v1 `OpenFactory`, `MetaTxDex`, `MetaTxCore`, `Single`/`MultiUnderlyingToken` (merged), the `Hedera*UnderlyingToken`
+      children, `SigLib`, `OpenFactoryV2.createMetaToken`, the regulated children (flags instead, CTR-AS-17).
 - [ ] **MT-2** Two structs, one lane space (CTR-MTX-15): `MetaTransaction{from, data, …}` + `mtxExecute` (+ alias), `mtxBatch`;
       tokens' typed `MetaTransfer{from, to, value, entryRef, …}` + `mtxExecuteTransfer`, `mtxBatchTransfer` (CTR-MTX-23/24);
       named functions keep their signatures and build their struct (CTR-MTX-09); receiver-pays on `MetaTransfer`;
@@ -17,20 +43,28 @@ Order: contracts first (one heavy build at a time), then node, clients, the Odoo
       `msg.sender` directly except the allowed spots; UA path split into `UAMetaTransaction`/`UAMetaTransfer` +
       `uaExecuteTransfer`/`uaBatchTransfer` (CTR-UA-26); KATs `metatx_kat.json`, `metatransfer_kat.json`, v3 pair.
 - [ ] **MT-3** `approve` only by contracts (caller and spender); `mtxWrap` for a SCaaS underlying.
-- [ ] **MT-4** `salt = chain_uid` in every domain (implementation immutables; SubjectAccount, MandateWallet, OrderBookDex,
+- [ ] **MT-4** `salt = chain_uid` in every domain (implementation immutables; SmartKeyAccount, MandateWallet, OrderBookDex,
       UA registry, Zether digests); deploy scripts on a CREATE2 deployer; deploy gate checks `chainUid()`.
+
+**P2 — MT-5**
 - [ ] **MT-5** DEX: `TradeOrder` + `mtxTrade`/`mtxCancelOrder`/`mtxInvalidateNonces` in the tokens; `OrderBookDex.mtxSettle`
       (Path A/B, 1 taker + N makers, 50 % floor, fee split, conservation invariant); outside-token legs through the
       `DexPuller` (CTR-DEX-22); exchange path `mtxExchange`/`mtxExchangeVia` (CTR-DEX-20), surplus distribution
       (CTR-DEX-21), interaction blocklist + `LISTED_POOLS`/listed-only (CTR-DEX-23), admin `setExchangeTarget`/
       `setListedOnly` (CTR-DEX-03); tokens accept `receiveToken == this` and flag 4 (CTR-DEX-15).
-- [ ] **MT-6** Zether: transient envelope binding, `fund` from the public balance, `mtxWrap`; renames (`mtxRollOver`,
+
+**P3 — MT-6**
+- [ ] **MT-6** Zether: transient envelope binding, `zetherShield` from the public balance (CTR-ZTH-45), `mtxWrap`; renames (`mtxRollOver`,
       `mtxSetRollOverMode`); envelope binding without `to`/`value` (CTR-ZTH-06); `PqzToken` on the one base like Zether,
       no `PqzMetaTx`, PQZ selectors not batchable (CTR-PQZ-21); prover `Header` gains `chain_uid` as word 3,
       `HEADER_LEN` 384 → 416 (`clients/zether-prover/src/zether.rs`).
-- [ ] **MT-7** `MandateWallet` and `SubjectAccount` on `MetaTxBase` (CTR-ACC-06/07/10): delegate/owner calls as
-      `MetaTransaction` self-calls, `SubjectAccount` signs as itself, typed `PayUnderMandate`/`RevokeMandate`/`OwnerCall`
+
+**P4 — MT-7**
+- [ ] **MT-7** `MandateWallet` and `SmartKeyAccount` (renamed from `SubjectAccount`, CTR-ACC-11) on `MetaTxBase` (CTR-ACC-06/07/10): delegate/owner calls as
+      `MetaTransaction` self-calls, `SmartKeyAccount` signs as itself, typed `PayUnderMandate`/`RevokeMandate`/`OwnerCall`
       removed, named entries derive their lanes; Hedera `mtxExecuteAsOwnerRaw` over the same owner digest; `mtx…` renames.
+
+**P5 — MT-8, MT-9**
 - [ ] **MT-8** Node: two `sol!` structs, `metatx`/`ua_metatx` jobs name their struct (`call` | `transfer`), selector tables for
       every contract on `MetaTxBase` (NODE-JOB-20), call table names, breaker per `(from, selector)` (`MetaTransfer` =
       `transfer`/`pay`), batching via `mtxBatchTransfer`/`mtxBatch` never mixed (NODE-LANE-11), `chainUid()` check
@@ -38,7 +72,9 @@ Order: contracts first (one heavy build at a time), then node, clients, the Odoo
       `trade_engine.*` config and `/v1/dex/exchanges/{ref}` (NODE-DEX-17/18), NODE-IDX-06 `repeat_of`.
 - [ ] **MT-9** clientkeys/app and the reference ERP's `lib/eip712.py`: both structs (`MetaTransfer` typed in wallets,
       `MetaTransaction` decoded via `mtxSelectors()`), `domain.salt`, refuse an unlisted `dex`, no EOA approve, wrap by
-      signature (CLI-SGN-05, CLI-SGN-33…36); `SubjectAccount`/mandate digests as `MetaTransaction`s; vectors/KATs regenerated.
+      signature (CLI-SGN-05, CLI-SGN-33…36); `SmartKeyAccount`/mandate digests as `MetaTransaction`s; vectors/KATs regenerated.
+
+**Non-EVM families (NM-*)**
 - [ ] **NM-APT** Aptos: `MetaCall`/`MetaTransfer` (BCS), public `scaas::metacall::verify`, `mtx_` entries incl. key and
       mandate entries, `KeyOp`/`MandateInit`/`key_nonce` removed; new immutable package (NET-APT-27, NET-ALL-26…29).
 - [ ] **NM-SUI** Sui: as Aptos plus `mtx_forward` (no `ForwardOp`), client encoders byte-identical (NET-SUI-18, NET-SUI-16).

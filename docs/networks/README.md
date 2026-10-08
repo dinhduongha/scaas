@@ -229,7 +229,7 @@ EIP-712 domain: `(name, version, chainId, verifyingContract, salt = chain_uid)`,
 mode, disclosure and `entryRef` digests beside `chainId`, since those are not EIP-712 domains. The EVM cannot read its
 own genesis hash after block 256, so a contract cannot *prove* `chain_uid`; the deploy script reads it from the RPC,
 and the deploy gate and the node require each contract's `chainUid()` = the RPC's genesis hash = the chain profile
-([NODE-GW-07](../node/gateway.md#NODE-GW-07), [NET-EVM-05](evm.md#NET-EVM-05)). A wrong value makes correct signatures
+([NODE-GW-07](../node/gateway.md#NODE-GW-07), [NET-EVM-05](evm.md#NET-EVM-05)). `chain_uid` alone is not unique — Ethereum and ETC, Avalanche C-Chain and Fuji share a genesis — a chain is identified by `(chainId, chain_uid)` together; pruned RPCs (EIP-4444) may not serve block 0, so deploy scripts and the node read [`chain-uids.json`](../../smartcontracts/evm/chain-uids.json). A wrong value makes correct signatures
 fail; it is unsafe only if it equals another chain's `chain_uid`, which that comparison excludes. The guarantee is that
 honest contracts on two chains sharing a chain id (7622 or any other) never accept each other's signatures, whichever
 wallet produced them. A replica deployed elsewhere from a copy of our profile is trusted by nothing of ours: tokens

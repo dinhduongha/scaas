@@ -1038,7 +1038,7 @@ linearly `b = 0 … B_MAX` with `B_MAX = 4294967295` (`B_MAX = 2^32 − 1`); its
 1. A balance is ElGamal `(C, D) = (g^b·y^r, g^r)`; the owner computes only `g^b = C·D^{-x}` and must solve a discrete
    logarithm, solvable only when `b` is known to lie in a small range — `MAX` is that range (linear search, or BSGS /
    kangaroo in O(√MAX), still bounded by MAX).
-2. The contract enforces the bound by capping the **total** (`fund` checks `bTransfer + bTotal <= MAX`): every balance
+2. The contract enforces the bound by capping the **total** (`zetherShield` checks `bTransfer + bTotal <= MAX`; the original ZSC's `fund`): every balance
    ≤ the total ≤ MAX, so every wallet can read its balance.
 3. It is not "the maximum per transfer"; it only coincides with the original 32-bit range proofs, and the "amount out
    of range" messages caused that misreading. Per transfer the limit is the range proof and the balance; MAX is the

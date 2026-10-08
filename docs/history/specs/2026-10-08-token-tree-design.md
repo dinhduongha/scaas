@@ -1,7 +1,6 @@
 # EVM token tree: one base, kinds by code, features by flags
 
-**Status:** DRAFT; owner decisions recorded (T1–T16). Provisional ids `TT-n`; real ids are allocated in
-`docs/decisions.md` on acceptance.
+**Status:** ACCEPTED by the owner 2026-10-08 and folded; frozen here. Ids: T1/T10/T13 (kinds) → CTR-TOK-21, T2/T8 → CTR-TOK-22 (T8 rev 2, the owner model, → CTR-TOK-22), T3/T13 (Hedera) → CTR-TOK-23, §4 → CTR-TOK-24, CTR-MTX-25, §7 → CTR-TOK-25, T11 → CTR-AS-17, CTR-ZTH-47, T12 → CTR-DEX-24, T4/T5 → CTR-ZTH-44, T6 → CTR-ZTH-45, CTR-PQZ-22, T14 → CTR-ZTH-46, T15 → CTR-ACC-11, T16 (native-coin leg) → CTR-TOK-26; T7/T9 need no rule.
 **Date:** 2026-10-08. **Scope:** every EVM token contract, the factory, `OrderBookDex` deployment, the Zether token
 layer, the account contracts' base. Replaces the **structural** part of stream MT-1 and re-orders streams MT-1…MT-9
 (§9). Builds on the accepted meta-tx v3 design (`contracts/metatx.md`, `token-wrappers.md`, `dex.md`, `zether.md`);
