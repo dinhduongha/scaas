@@ -97,8 +97,11 @@ envelope follows stream MT-6 (direct calls only here).
 ## 6. PQZ (note)
 
 The PQZ encryption is already multi-recipient with shared randomness ([CTR-PQZ-04](../../contracts/pq-zether.md#CTR-PQZ-04)):
-one `u`, one `v_j` per recipient (≈ 16 KB each), so each extra recipient costs ≈ 0.6 M gas of calldata floor plus its
-part of the proof. Not in this spike.
+one `u` (16,384 B) for all recipients and one `v_j` (128 B, plus 128 B when the auditor is on) per recipient, so an
+extra recipient adds little calldata at send time; the LNP22 proof growth with `M` is unknown until `pqz-core` exists.
+The real per-recipient cost comes later: each credit — decoys included — enters the receiver's rollover as a full
+`u ‖ v_j` ciphertext (≈ 16.5 KB, ≈ 0.52 M gas, [CTR-PQZ-11](../../contracts/pq-zether.md#CTR-PQZ-11)). Not measurable
+now: no PQZ code exists (engine spikes E-S0… not started). Not in this spike.
 
 ## 7. Measurement (gate of the spike)
 
