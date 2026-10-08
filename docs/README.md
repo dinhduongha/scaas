@@ -1,15 +1,113 @@
-# SCaaS documentation
+# SCaaS — SmartContract as a Service
 
-SCaaS (SmartContract as a Service): the smart contracts are the API services; `scaas-node` is the open relayer and
-indexer anyone can run in front of them. Start with [SCaaS-v2.md](SCaaS-v2.md) (product introduction) and
-[architecture.md](architecture.md) (system overview). Neither is normative: the rules live in the component docs
-below, and every rule's id, aliases and rationale are in [decisions.md](decisions.md).
+SCaaS: the smart contracts are the API services; `scaas-node` is the open relayer and indexer anyone can run in front
+of them. This page is the entry point: the product introduction first, then the doc map. It is not normative; the rules
+live in the component docs, and every rule's id, aliases and rationale are in [decisions.md](decisions.md).
+
+## What SCaaS is
+
+**In SCaaS the smart contracts themselves are the API services.** A payment, a spending mandate, a token, a wrapper
+around an existing token, a DEX order, a sealed-bid tender, a vesting schedule, a dividend distribution or a
+confidential transfer is a function of a contract. The contract checks the subject's signature, nonce, expiry and
+limits on every call, and it is immutable from the moment it is deployed: nobody, including the people who wrote it,
+can change what it does, and nobody can move a user's funds beyond the bounded, published powers listed in
+[contracts/README](contracts/README.md#admin-powers-complete-list).
+
+ERPs, web portals, mobile apps and AI agents call these contracts the way they call any API. The difference from an
+ordinary web API is who authorizes a valuable write: **the subject signs it on its own device** (a passkey or a wallet
+key), and a server only carries the signed write to the chain and reads the result back.
+
+**Anyone can run `scaas-node` as a relayer, with their own policies.** The node is the open infrastructure in front of
+the contracts: it accepts signed intents, pays their gas, journals every submission, waits for finality and serves
+finalized facts back as feeds. Each operator decides what to accept, what to charge, what to sponsor, whom to peer
+with and how to monitor. Operators are independent of each other and of SCaaS; the guarantees (signatures, nonces,
+contract rules) never depend on any of them. A relayer can refuse or delay a request, never forge or alter one —
+and the subject can always go to another relayer, or submit itself.
+
+**The parts.** Contract families: gasless meta-transactions, tokens, accounts, mandates, a DEX, tenders, an asset
+suite and the confidential layer. The node (`scaas-node`). Clients: signers, wallet connectors, a console and dApp.
+
+**The EVM token model in one paragraph.** One base tree serves every token. A token has one of four kinds: `NONE` (a
+plain issuer token), `UNDERLYING` (a wrapper of one to eight legs, each an ERC-20 or the native coin), or the same two
+with the confidential layer, `NONE_ZETHER` and `UNDERLYING_ZETHER`
+([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)). Features are chosen at creation and then fixed: `PAYABLE`,
+`MINTABLE`, `BURNABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE`, and for regulated tokens `FREEZE`, `FORCE`, `PAUSE`,
+`ALLOWLIST`. One owner administers a token, grants roles and may renounce
+([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). An open factory creates tokens and DEX clones.
+
+## Who it is for
+
+- **Businesses that settle with partners** — brands, distributors, suppliers, marketplaces — that want payments,
+  mandates and settlement on chain without giving any server the power to move funds.
+- **Issuers of loyalty points, stablecoin wrappers and regulated assets** — tokens with transparent rules, an open
+  factory and, where needed, regulated features with issuer and compliance roles.
+- **ERP and back-office teams** that need on-chain payments booked only once final, with idempotent submission and
+  reconciliation built in.
+- **Application and wallet developers** who want passkey sign-in-and-sign, gasless transactions for their users, and
+  one signing model across many chains.
+- **AI agents and automated workflows** that must act within signed, capped, revocable authority, and leave a
+  tamper-evident trail.
+- **Node operators** — from a company running its own relayer to a consortium of members or an open public relayer.
+
+## What it offers
+
+| Area | What you get | Read |
+|---|---|---|
+| Gasless meta-transactions | Users sign typed data; a relayer submits and pays gas; 2D nonces and lanes so one stuck operation never blocks another; fee policies from "free" (B2B) to fee-paying | [contracts/metatx.md](contracts/metatx.md) |
+| Tokens and wrappers | Issuer tokens and wrappers of one to eight underlying legs (ERC-20 or the native coin) at fixed or adjustable rates; features chosen at creation; an open factory of immutable clones; contract-only allowances | [contracts/token-wrappers.md](contracts/token-wrappers.md) |
+| Accounts | Universal Account: one account identifier derived from any key type (secp256k1, ed25519, P-256, BLS, post-quantum…), registered per chain with proof of possession, registration relayable; `SmartKeyAccount` with many keys (ERC-1271); passkey-controlled smart accounts with guardians and recovery | [contracts/accounts.md](contracts/accounts.md) |
+| Mandates | `MandateWallet`: per-payment and per-period caps, approved payees and expiry | [contracts/mandates.md](contracts/mandates.md) |
+| Payments | Payment references, idempotent submission, booking once final | [integration.md](integration.md) |
+| Trading | A signed-order, price-time order book; settlement in one transaction; managed markets for regulated assets; DEX clones from the open factory | [contracts/dex.md](contracts/dex.md), [node/dex-venue.md](node/dex-venue.md) |
+| Procurement | Sealed-bid tenders with deposits, commit/reveal and refunds | [contracts/tender.md](contracts/tender.md) |
+| Asset tokenization | Regulated tokens, vesting and streaming, distributions, corporate actions, templates | [contracts/asset-suite.md](contracts/asset-suite.md) |
+| Confidential amounts | Zether: identities visible, amounts and balances hidden; shield, multi-recipient transfer with decoys, unshield; disclosure to an auditor through four openings. A post-quantum variant (PQZ) waits for a lattice precompile on public chains | [contracts/zether.md](contracts/zether.md), [contracts/pq-zether.md](contracts/pq-zether.md) |
+| Many chains | Six families — EVM (including Hedera), Cosmos, Soroban (Stellar, Pi Network), Move (Aptos, Sui), TON, Solana — with one signing and relaying model | [networks/README.md](networks/README.md) |
+| The node | Job API for server-side clients, a public gateway, finality-gated event feeds, gas breakers, sponsorship policies, an admin API with built-in users or OIDC | [node/README.md](node/README.md) |
+| Relayer mesh | Relayers that share intents with admitted partners or an open gossip network; private chains never leave the admitted set | [node/mesh.md](node/mesh.md), [node/gossip.md](node/gossip.md) |
+| Operations | SLOs, metrics and alerts, FinOps usage reports, incident runbooks, backup and disaster recovery | [node/ops.md](node/ops.md), [node/runbooks.md](node/runbooks.md) |
+| Client software | Passkey and seed-vault signers, wallet connectors, a console and dApp | [clients/signers-clientkeys.md](clients/signers-clientkeys.md), [clients/app.md](clients/app.md) |
+| ERP integration | Outbox, push and sync, payment references, reconciliation, data protection by design | [integration.md](integration.md) |
+
+What SCaaS is **not**: a custodian, a mixer, a database replacement, an upgradeable platform, a token gatekeeper or a
+single-ERP product ([architecture.md](architecture.md#what-scaas-is-not)).
+
+## Deployment shapes
+
+- **Public chains** — your relayer, partners' relayers and open relayers serve the same contracts; nothing is hidden
+  except what Zether hides.
+- **Private or permissioned chain** — your own nodes and admitted peers only; intents never reach the public.
+- **Consortium** — every member runs a node; members exchange intents over pinned, authenticated links.
+
+See [architecture.md](architecture.md#profiles).
+
+## How to start
+
+1. **Understand the model** — read [architecture.md](architecture.md): the authority model (who signs), the service
+   model (write out, read in, finality), and the trust model.
+2. **Pick your path:**
+   - *Integrating an ERP or back office:* [integration.md](integration.md) — onboarding, pushing jobs, feeds,
+     reconciliation, the integration checklist; one worked connector in
+     [integration-odoo-example.md](integration-odoo-example.md).
+   - *Running a node:* [node/README.md](node/README.md) → [node/store.md](node/store.md) (configuration) →
+     [node/runbooks.md](node/runbooks.md) (production gates, backup, incidents).
+   - *Building a wallet or app:* [clients/signers-clientkeys.md](clients/signers-clientkeys.md) and
+     [clients/app.md](clients/app.md).
+   - *Reviewing or deploying contracts:* [contracts/README.md](contracts/README.md) (immutability, admin powers,
+     production gates) and the network page of your chain under [networks/](networks/README.md).
+3. **Check the status tags** — every section says whether it is BUILT, SPECIFIED or PLANNED
+   ([status tags](#status-tags)). Confidential-amount contracts stay behind their production gate until an
+   independent audit. The built code still has some older lines; the component docs mark them **Transitional (BUILT)**.
+4. **Look up why** — every rule links to its entry in [decisions.md](decisions.md), with the reason and the cost of
+   getting it wrong.
+5. **Build and test** — `smartcontracts/scripts/{build,test}.sh <family>`; docs check:
+   `python3 scripts/docs_check.py check`.
 
 ## Reading order
 
 0. [../README.md](../README.md) — the idea from the ground up: a smart chain as infrastructure, contracts as API
    services, meta-transactions and fee models, open relayers, Zether and PQ Zether.
-1. [SCaaS-v2.md](SCaaS-v2.md) — what SCaaS is, who it is for, how to start.
+1. This page — what SCaaS is, who it is for, how to start.
 2. [architecture.md](architecture.md) — positioning, authority model, service model, components, trust model,
    families, economics, data protection, glossary.
 3. The component docs for your role (map below). Integrators: [integration.md](integration.md). Node operators:
@@ -21,7 +119,7 @@ below, and every rule's id, aliases and rationale are in [decisions.md](decision
 
 | Area | Docs |
 |---|---|
-| Overview | [SCaaS-v2.md](SCaaS-v2.md) · [architecture.md](architecture.md) · [decisions.md](decisions.md) (register, `ARCH-POS` system-wide positions) |
+| Overview | [architecture.md](architecture.md) · [decisions.md](decisions.md) (register, `ARCH-POS` system-wide positions) |
 | Node (`NODE-*`) | [README](node/README.md) (roles, listeners, invariants) · [store](node/store.md) · [job API](node/job-api.md) · [submit lanes](node/submit-lanes.md) · [indexer and feeds](node/indexer-feeds.md) · [gateway](node/gateway.md) · [admin and auth](node/admin-auth.md) · [sponsorship](node/sponsorship.md) · [DEX venue](node/dex-venue.md) · [mesh](node/mesh.md) · [gossip](node/gossip.md) · [operations](node/ops.md) · [runbooks](node/runbooks.md) · [threat model](node/threat-model.md) |
 | Contracts (`CTR-*`) | [README](contracts/README.md) (immutability, admin powers, production gates, build pins) · [meta-transactions](contracts/metatx.md) · [token wrappers](contracts/token-wrappers.md) · [accounts](contracts/accounts.md) (native, Universal Account, smart account) · [mandates](contracts/mandates.md) · [DEX](contracts/dex.md) · [tender](contracts/tender.md) · [asset suite](contracts/asset-suite.md) · [Zether](contracts/zether.md) · [PQ Zether](contracts/pq-zether.md) |
 | Networks (`NET-*`) | [README](networks/README.md) (common model, signing domains, passkeys, head-of-line, availability) · [EVM](networks/evm.md) · [Hedera](networks/hedera.md) · [Cosmos](networks/cosmos.md) · [Soroban](networks/soroban.md) · [Sui](networks/sui.md) · [Aptos](networks/aptos.md) · [Solana](networks/solana.md) · [TON](networks/ton.md) |
@@ -42,7 +140,7 @@ When two sources disagree, the higher one wins ([ARCH-POS-01](decisions.md#ARCH-
 4. **History** — `history/` (frozen designs and their review dispositions).
 5. **Research** — `research/`, background only.
 
-[SCaaS-v2.md](SCaaS-v2.md), [architecture.md](architecture.md) and this page define no rules.
+[architecture.md](architecture.md) and this page define no rules.
 
 ## Status tags
 

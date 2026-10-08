@@ -14,7 +14,7 @@ hand:
 | `docs/superpowers/specs/<file>.md`, `superpowers/specs/<file>.md`, `specs/<file>.md` | `docs/history/specs/<file>.md` |
 | `docs/superpowers/specs/blockchain-research/<file>.md`, `blockchain-research/<file>.md` | `docs/research/<file>.md` (the wallet-signing-formats note: `docs/history/specs/round3-wallet-signing-formats.md`) |
 | `docs/superpowers/plans/<file>.md` | `docs/history/plans/<file>.md` |
-| `docs/SCaaS.md`, `SCaaS.md` | `docs/history/SCaaS-2026-10-07.md` (frozen); the product introduction is now [../SCaaS-v2.md](../SCaaS-v2.md) and the overview [../architecture.md](../architecture.md) |
+| `docs/SCaaS.md`, `SCaaS.md` | `docs/history/SCaaS-2026-10-07.md` (frozen); the product introduction is now [../README.md](../README.md) and the overview [../architecture.md](../architecture.md) |
 | `docs/integration.md` (before 2026-10-07) | `docs/history/integration-2026-10-07.md`; the current guide is [../integration.md](../integration.md) |
 | `docs/blockchain.md`, `scaas/blockchain.md` | `docs/history/blockchain.md` |
 | `docs/superpowers/HANDOFF-blockchain.md` | `docs/history/HANDOFF-blockchain.md` |

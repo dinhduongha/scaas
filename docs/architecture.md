@@ -3,8 +3,7 @@
 **Not normative.** This page explains how the parts of SCaaS fit together and why. It defines no rules: every rule
 it mentions is defined once in a component doc (linked) and its rationale is in [decisions.md](decisions.md).
 Where this page and a component doc disagree, the component doc wins ([ARCH-POS-01](decisions.md#ARCH-POS-01)).
-For the doc map and reading order see [README.md](README.md); for a short product introduction see
-[SCaaS-v2.md](SCaaS-v2.md).
+For the product introduction, the doc map and reading order see [README.md](README.md).
 
 **Contents:** [Positioning](#positioning) · [Authority model](#authority-model) · [What SCaaS is not](#what-scaas-is-not) ·
 [Profiles](#profiles) · [Service model](#service-model) · [Components](#components) · [Node roles](#node-roles) ·

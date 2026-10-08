@@ -28,7 +28,7 @@ AREAS = {'node': (['node/'], ['NODE-']), 'contracts': (['contracts/'], ['CTR-'])
          'netcli': (['networks/', 'clients/', 'integration.md', 'integration-odoo-example.md'], ['NET-', 'CLI-', 'INT-'])}
 NOT_CURRENT = ('history/', 'research/', 'reviews/', 'superpowers/')
 REORG = ('history', 'reorg')          # reorg ledgers: id-map.tsv, section-map.tsv, facts/ (were docs/_work/ until Phase 2)
-BUDGET = {'README.md': 100, 'SCaaS-v2.md': 150, 'architecture.md': 450, 'decisions.md': 3000, 'integration.md': 950,
+BUDGET = {'README.md': 250, 'architecture.md': 450, 'decisions.md': 3000, 'integration.md': 950,
           'node/README.md': 250, 'node/store.md': 600, 'node/job-api.md': 550, 'node/submit-lanes.md': 550,
           'node/indexer-feeds.md': 400, 'node/gateway.md': 300, 'node/admin-auth.md': 400, 'node/sponsorship.md': 250,
           'node/dex-venue.md': 400, 'node/mesh.md': 650, 'node/gossip.md': 600, 'node/ops.md': 550,
@@ -428,7 +428,7 @@ def run_checks(area=None):
             if m.group(1) not in ('mermaid', 'text') and len(BOX_ART.findall(m.group(2))) >= 4:
                 errs.append(f'C11 {r}:{text[:m.start()].count(chr(10)) + 1}: ASCII-art block: '
                             'use ```mermaid for a diagram, ```text for a layout or pseudocode')
-        if r in ('architecture.md', 'README.md', 'SCaaS-v2.md') and ANCHOR.search(text):
+        if r in ('architecture.md', 'README.md') and ANCHOR.search(text):
             errs.append(f'C8 {r}: defines ruling ids (non-normative file)')
         lim = BUDGET.get(r)
         if lim and text.count('\n') > lim * 1.3:

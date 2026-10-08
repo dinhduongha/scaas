@@ -32,7 +32,7 @@ These entries define themselves (`normative: decisions.md`): they are system-wid
 **Rule.** When two sources disagree, the higher one wins: (1) owner rulings, i.e. entries of this register with
 `owner: yes`; (2) the component docs under `node/`, `contracts/`, `networks/`, `clients/` and `integration.md`, each
 for its own subject; (3) code, but only for pinned byte formats (typehashes, KAT and conformance vectors); (4)
-`history/`; (5) `research/`, which is background only. [architecture.md](architecture.md), [SCaaS-v2.md](SCaaS-v2.md)
+`history/`; (5) `research/`, which is background only. [architecture.md](architecture.md)
 and [README.md](README.md) are not normative. A difference between code and an owner ruling is a bug in the code, not
 in the ruling.
 **Why.** The earlier system specification ranked itself above the component specs while restating them, and the
@@ -173,7 +173,7 @@ feeds prevents it.
 
 **Rule.** The docs are English throughout and self-contained. Rulings carry new component ids with the old ids as
 aliases in this register. The old system specification is frozen as `history/SCaaS-2026-10-07.md` for reference;
-[SCaaS-v2.md](SCaaS-v2.md) is a short, non-normative product introduction. Line-budget overruns of the Zether, PQ
+[README.md](README.md) is the entry page and product introduction (non-normative). Line-budget overruns of the Zether, PQ
 Zether, network pages and the node overview are accepted, and so is the overrun of this register (owner
 2026-10-07).
 **Why.** One language and one id scheme for a product used worldwide; the old ids stay resolvable for code comments

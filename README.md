@@ -189,7 +189,7 @@ sequenceDiagram
 
 Read more: the authority model and why it differs from IaaS/BaaS —
 [docs/architecture.md](docs/architecture.md#authority-model); the product overview —
-[docs/SCaaS-v2.md](docs/SCaaS-v2.md).
+[docs/README.md](docs/README.md).
 
 ---
 
@@ -729,7 +729,7 @@ clients as feeds.
 | Component | What it is | Read |
 |---|---|---|
 | **Docs map** | Reading order, precedence, status tags | [docs/README.md](docs/README.md) |
-| Product overview | Who SCaaS is for, what it offers | [docs/SCaaS-v2.md](docs/SCaaS-v2.md) |
+| Product overview | Who SCaaS is for, what it offers | [docs/README.md](docs/README.md) |
 | Architecture | Authority, service and trust models, topology, economics, glossary | [docs/architecture.md](docs/architecture.md) |
 | **Smart contracts** | Meta-transactions, tokens and wrappers, accounts and mandates, DEX, tender, asset suite, Zether, PQ Zether, Universal Account | [docs/contracts/README.md](docs/contracts/README.md) |
 | **Node** (`scaas-node`) | Relayer and indexer: job API, gateway, submit lanes, finality-gated feeds, admin, sponsorship, DEX venue, mesh, gossip, operations | [docs/node/README.md](docs/node/README.md) |
