@@ -104,6 +104,11 @@ pub fn proof_system_id<C: ZCurve>() -> [u8; 32] {
     keccak256(C::PROOF_SYSTEM_LABEL)
 }
 
+/// The multi-recipient transfer's id: the single label plus `/multi` (the statement layouts differ).
+pub fn proof_system_id_multi<C: ZCurve>() -> [u8; 32] {
+    keccak256(&[C::PROOF_SYSTEM_LABEL, b"/multi"].concat())
+}
+
 pub type Bn254 = ark_bn254::g1::Config;
 pub type Bls12381 = ark_bls12_381::g1::Config;
 

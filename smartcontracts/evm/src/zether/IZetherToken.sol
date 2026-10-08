@@ -33,6 +33,18 @@ interface IZetherToken is IERC20MetaTx {
         uint256 sendCounter,
         bytes32 entryRef
     );
+    /// @notice Transfer nhiều người nhận; người nhận công khai (calldata), số tiền mã hoá.
+    event ConfidentialTransferMulti(
+        ZetherTypes.UA indexed from,
+        ZetherTypes.UA indexed beneficiary,
+        uint256 fee,
+        uint256 sendCounter,
+        bytes32 entryRef,
+        ZetherTypes.UA[] recipients,
+        ZetherTypes.TransferMode mode
+    );
+    /// @notice Mode HASH: `B_1 ‖ … ‖ B_M` mà `entryRef` lưu hash của nó.
+    event TransferBundles(bytes32 indexed entryRef, bytes bundles);
     event Burned(ZetherTypes.UA indexed account, uint256 amount, address indexed recipient);
     event RolledOver(ZetherTypes.UA indexed account, uint256 accSeq);
     event RollOverModeChanged(ZetherTypes.UA indexed account, ZetherTypes.RollOverMode mode);
@@ -43,6 +55,8 @@ interface IZetherToken is IERC20MetaTx {
     error StaleAccSeq(uint256 expected, uint256 got);
     error StaleSendCounter(uint256 expected, uint256 got);
     error SelfTransfer();
+    error BadRecipientCount(uint256 count);
+    error DuplicateRecipient(ZetherTypes.UA recipient);
     error BadPayload(uint256 length);
     error RollOverOwnerOnly(ZetherTypes.UA account);
     error RollOverExpired(uint256 validUntilBlock);
@@ -89,7 +103,32 @@ interface IZetherToken is IERC20MetaTx {
 
     /// @notice Chuyển bí mật, lời gọi thẳng (§10): `msg.sender` tự trả gas nên không có phí ngoài —
     ///         phí ngoài sống trong phong bì meta-tx (RS2-14).
+    /// @notice `M` người nhận, một proof, mode HASH (mặc định).
     function transferConfidential(
+        bytes calldata payload,
+        bytes calldata proof,
+        bytes calldata authSig,
+        ZetherTypes.UA beneficiary
+    ) external returns (bytes32 entryRef);
+
+    /// @notice Như `transferConfidential`, mode BUNDLE.
+    function transferConfidentialBundle(
+        bytes calldata payload,
+        bytes calldata proof,
+        bytes calldata authSig,
+        ZetherTypes.UA beneficiary
+    ) external returns (bytes32 entryRef);
+
+    /// @notice Như `transferConfidential`, mode NONE.
+    function transferConfidentialNoBundle(
+        bytes calldata payload,
+        bytes calldata proof,
+        bytes calldata authSig,
+        ZetherTypes.UA beneficiary
+    ) external returns (bytes32 entryRef);
+
+    /// @notice Một người nhận, định dạng gốc.
+    function transferConfidentialSingle(
         bytes calldata payload,
         bytes calldata proof,
         bytes calldata authSig,
@@ -113,7 +152,9 @@ interface IZetherToken is IERC20MetaTx {
     // ------------------------------------------------------------------ cho prover / SDK
 
     /// @notice Statement §6 mà token sẽ dựng tại block này. `envelopeBinding = 0` ⇒ DIRECT.
-    function transferStatement(bytes calldata payload, ZetherTypes.UA beneficiary, bytes32 envelopeBinding)
+    function transferStatement(bytes calldata payload, ZetherTypes.UA beneficiary, ZetherTypes.TransferMode mode)
+        external view returns (bytes memory);
+    function transferStatementSingle(bytes calldata payload, ZetherTypes.UA beneficiary, bytes32 envelopeBinding)
         external view returns (bytes memory);
     function burnStatement(
         bytes calldata payload,

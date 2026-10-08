@@ -72,6 +72,10 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
 
     bytes32 private constant OP_TRANSFER = keccak256("SCAAS-ZETHER-OP-TRANSFER-V1");
     bytes32 private constant OP_BURN = keccak256("SCAAS-ZETHER-OP-BURN-V1");
+    bytes32 private constant OP_MULTI_HASH = keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/HASH");
+    bytes32 private constant OP_MULTI_BUNDLE = keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/BUNDLE");
+    bytes32 private constant OP_MULTI_NONE = keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/NONE");
+    uint256 private constant MAX_RECIPIENTS = 16;
     bytes32 private constant TAG_DIRECT = keccak256("ZTX_V1_DIRECT");
     bytes32 private constant TAG_RELAYED = keccak256("ZTX_V1_RELAYED");
     bytes32 private constant TAG_ENVELOPE = keccak256("SCAAS-ZETHER-ENVELOPE-V1");
@@ -107,7 +111,10 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
     uint256 private _r;
 
     mapping(ZetherTypes.UA => Account) private _acct;
-    mapping(bytes32 => bytes) private _entries; // Y_t ‖ C_out ‖ D_out ‖ C_aud
+    /// @dev Bundle tiết lộ theo `entryRef`: `B_1 ‖ … ‖ B_M` với `B_j = Y_t ‖ C_out ‖ D_out ‖ C_aud` (transfer một
+    ///      người nhận và mode BUNDLE), hoặc đúng 32 byte `keccak256(B_1 ‖ … ‖ B_M)` (mode HASH; 4P ≥ 256 nên
+    ///      không lẫn). Mode NONE không ghi gì.
+    mapping(bytes32 => bytes) private _entries;
 
     error NotFactory();
     error AlreadyInitialized();
@@ -279,13 +286,44 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
 
     // ------------------------------------------------------------------ transfer
 
-    function transferConfidential(
+    /// @notice Một người nhận, định dạng gốc (§5–§9), bundle lưu đầy đủ. Đường phong bì meta-tx dùng đúng hàm này.
+    function transferConfidentialSingle(
         bytes calldata payload,
         bytes calldata proof,
         bytes calldata authSig,
         ZetherTypes.UA beneficiary
     ) external nonReentrant returns (bytes32) {
         return _transferConfidential(payload, proof, authSig, beneficiary, bytes32(0), OuterFee(msg.sender, address(0), 0));
+    }
+
+    /// @notice `M` người nhận (mồi nhận 0), một proof; lưu `keccak256` của các bundle, bundle phát trong event.
+    function transferConfidential(
+        bytes calldata payload,
+        bytes calldata proof,
+        bytes calldata authSig,
+        ZetherTypes.UA beneficiary
+    ) external nonReentrant returns (bytes32) {
+        return _transferMulti(payload, proof, authSig, beneficiary, ZetherTypes.TransferMode.HASH);
+    }
+
+    /// @notice Như `transferConfidential`, lưu nguyên các bundle.
+    function transferConfidentialBundle(
+        bytes calldata payload,
+        bytes calldata proof,
+        bytes calldata authSig,
+        ZetherTypes.UA beneficiary
+    ) external nonReentrant returns (bytes32) {
+        return _transferMulti(payload, proof, authSig, beneficiary, ZetherTypes.TransferMode.BUNDLE);
+    }
+
+    /// @notice Như `transferConfidential`, không lưu gì: tiết lộ chỉ off-chain từ calldata.
+    function transferConfidentialNoBundle(
+        bytes calldata payload,
+        bytes calldata proof,
+        bytes calldata authSig,
+        ZetherTypes.UA beneficiary
+    ) external nonReentrant returns (bytes32) {
+        return _transferMulti(payload, proof, authSig, beneficiary, ZetherTypes.TransferMode.NONE);
     }
 
     function burn(
@@ -347,7 +385,7 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
         Account storage a = _acct[pp.from];
         pp.sendCounter = _checkSeqs(a, payload);
         pp.statement = bytes.concat(
-            _header(OP_TRANSFER, binding, a, pp.fee, beneficiary, 0, address(0)),
+            _header(OP_TRANSFER, _psid, binding, a, pp.fee, beneficiary, 0, address(0)),
             pts[0:2 * p], _auditorPoint(), _pt(a.accC), _pt(a.accD), pts[2 * p:6 * p]
         );
     }
@@ -368,6 +406,7 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
 
     function _header(
         bytes32 op,
+        bytes32 psid,
         bytes32 binding,
         Account storage a,
         uint256 fee,
@@ -376,9 +415,123 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
         address recipient
     ) private view returns (bytes memory) {
         return abi.encode(
-            op, _psid, block.chainid, address(this), binding == bytes32(0) ? TAG_DIRECT : TAG_RELAYED, binding,
+            op, psid, block.chainid, address(this), binding == bytes32(0) ? TAG_DIRECT : TAG_RELAYED, binding,
             uint256(a.sendCounter), uint256(a.accSeq), fee, beneficiary, amount, recipient
         );
+    }
+
+    // ------------------------------------------------------------------ transfer nhiều người nhận
+
+    /// @dev Như `_transferConfidential`, trực tiếp (phong bì meta-tx: stream MT-6). Payload
+    ///      `be32(accSeq) ‖ be32(sendCounter) ‖ be32(M) ‖ Y_f ‖ D_out ‖ C_deb ‖ (Y_tj ‖ C_out_j ‖ C_aud_j)_j`.
+    function _transferMulti(
+        bytes calldata payload,
+        bytes calldata proof,
+        bytes calldata authSig,
+        ZetherTypes.UA beneficiary,
+        ZetherTypes.TransferMode mode
+    ) private returns (bytes32 entryRef) {
+        (Prepared memory pp, ZetherTypes.UA[] memory to) = _prepareMulti(payload, beneficiary, mode);
+        IUniversalAccountRegistry(registry).requireAuthorized(
+            pp.from, keccak256(abi.encodePacked(AUTH_TAG, keccak256(pp.statement))), authSig, true
+        );
+        if (!verifier.verifyTransferMulti(pp.statement, proof)) revert ProofRejected();
+        _applyMulti(pp, to, payload, beneficiary);
+        entryRef = keccak256(abi.encode(TAG_ENTRY, block.chainid, address(this), pp.from, pp.sendCounter));
+        _acct[pp.from].sendCounter = pp.sendCounter + 1;
+        if (mode != ZetherTypes.TransferMode.NONE) _storeBundles(entryRef, payload, to.length, mode);
+        emit ConfidentialTransferMulti(pp.from, beneficiary, pp.fee, pp.sendCounter, entryRef, to, mode);
+    }
+
+    /// @dev acc_f −= (C_deb + [fee]G, D_out); pend_tj += (C_out_j, D_out); pend_ben += [fee]G.
+    function _applyMulti(Prepared memory pp, ZetherTypes.UA[] memory to, bytes calldata payload, ZetherTypes.UA beneficiary)
+        private
+    {
+        uint256 p = _p;
+        bytes calldata dOut = payload[96 + p:96 + 2 * p];
+        Account storage a = _acct[pp.from];
+        bytes memory c = verifier.g1Sub(_pt(a.accC), payload[96 + 2 * p:96 + 3 * p]);
+        if (pp.fee != 0) c = verifier.g1Sub(c, verifier.g1MulBase(pp.fee));
+        a.accC = c;
+        a.accD = verifier.g1Sub(_pt(a.accD), dOut);
+        for (uint256 j; j < to.length; ++j) {
+            uint256 o = 96 + 3 * p * (j + 1);
+            _credit(to[j], payload[o + p:o + 2 * p], dOut);
+        }
+        if (pp.fee != 0) _credit(beneficiary, verifier.g1MulBase(pp.fee), "");
+    }
+
+    function _storeBundles(bytes32 entryRef, bytes calldata payload, uint256 m, ZetherTypes.TransferMode mode) private {
+        uint256 p = _p;
+        bytes memory bundles = _bundles(payload[96 + 3 * p:], payload[96 + p:96 + 2 * p], m);
+        if (mode == ZetherTypes.TransferMode.BUNDLE) {
+            _entries[entryRef] = bundles;
+        } else {
+            _entries[entryRef] = abi.encodePacked(keccak256(bundles));
+            emit TransferBundles(entryRef, bundles);
+        }
+    }
+
+    /// @dev Kiểm rẻ trước verify: độ dài, số người nhận, đăng ký, trùng/tự chuyển, `accSeq`, `sendCounter`.
+    function _prepareMulti(bytes calldata payload, ZetherTypes.UA beneficiary, ZetherTypes.TransferMode mode)
+        private view returns (Prepared memory pp, ZetherTypes.UA[] memory to)
+    {
+        uint256 p = _p;
+        if (payload.length < 96 + 3 * p) revert BadPayload(payload.length);
+        uint256 m = uint256(bytes32(payload[64:96]));
+        if (m == 0 || m > MAX_RECIPIENTS) revert BadRecipientCount(m);
+        if (payload.length != 96 + 3 * p * (1 + m)) revert BadPayload(payload.length);
+        pp.from = ZetherTypes.toUA(payload[96:96 + p]);
+        _requireRegistered(pp.from);
+        to = _recipients(payload, pp.from, m);
+        pp.fee = _innerFee(beneficiary);
+        Account storage a = _acct[pp.from];
+        pp.sendCounter = _checkSeqs(a, payload);
+        pp.statement = _multiStatement(payload, a, pp.fee, beneficiary, mode);
+    }
+
+    /// @dev UA của từng người nhận: khác người gửi, đôi một khác nhau, đã đăng ký.
+    function _recipients(bytes calldata payload, ZetherTypes.UA from, uint256 m)
+        private view returns (ZetherTypes.UA[] memory to)
+    {
+        uint256 p = _p;
+        to = new ZetherTypes.UA[](m);
+        for (uint256 j; j < m; ++j) {
+            uint256 o = 96 + 3 * p * (j + 1);
+            to[j] = ZetherTypes.toUA(payload[o:o + p]);
+            bytes32 t = ZetherTypes.UA.unwrap(to[j]);
+            if (t == ZetherTypes.UA.unwrap(from)) revert SelfTransfer();
+            for (uint256 k; k < j; ++k) if (ZetherTypes.UA.unwrap(to[k]) == t) revert DuplicateRecipient(to[j]);
+            _requireRegistered(to[j]);
+        }
+    }
+
+    /// @dev `header ‖ Y_f ‖ Y_a ‖ C_acc ‖ D_acc ‖ D_out ‖ C_deb ‖ be32(M) ‖ legs`.
+    function _multiStatement(
+        bytes calldata payload,
+        Account storage a,
+        uint256 fee,
+        ZetherTypes.UA beneficiary,
+        ZetherTypes.TransferMode mode
+    ) private view returns (bytes memory) {
+        uint256 p = _p;
+        bytes32 op = mode == ZetherTypes.TransferMode.HASH
+            ? OP_MULTI_HASH
+            : mode == ZetherTypes.TransferMode.BUNDLE ? OP_MULTI_BUNDLE : OP_MULTI_NONE;
+        bytes memory head = bytes.concat(
+            _header(op, verifier.proofSystemIdMulti(), bytes32(0), a, fee, beneficiary, 0, address(0)),
+            payload[96:96 + p], _auditorPoint(), _pt(a.accC), _pt(a.accD)
+        );
+        return bytes.concat(head, payload[96 + p:96 + 3 * p], payload[64:96], payload[96 + 3 * p:]);
+    }
+
+    /// @dev `B_1 ‖ … ‖ B_M`, `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j`.
+    function _bundles(bytes calldata legs, bytes calldata dOut, uint256 m) private view returns (bytes memory b) {
+        uint256 p = _p;
+        for (uint256 j; j < m; ++j) {
+            uint256 o = 3 * p * j;
+            b = bytes.concat(b, legs[o:o + 2 * p], dOut, legs[o + 2 * p:o + 3 * p]);
+        }
     }
 
     // ------------------------------------------------------------------ burn
@@ -421,7 +574,7 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
         Account storage a = _acct[pp.from];
         pp.sendCounter = _checkSeqs(a, payload);
         pp.statement = bytes.concat(
-            _header(OP_BURN, b.binding, a, pp.fee, b.beneficiary, b.amount, b.recipient),
+            _header(OP_BURN, _psid, b.binding, a, pp.fee, b.beneficiary, b.amount, b.recipient),
             payload[64:64 + p], _pt(a.accC), _pt(a.accD)
         );
     }
@@ -501,10 +654,17 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
         ));
     }
 
-    function transferStatement(bytes calldata payload, ZetherTypes.UA beneficiary, bytes32 binding)
+    function transferStatementSingle(bytes calldata payload, ZetherTypes.UA beneficiary, bytes32 binding)
         external view returns (bytes memory)
     {
         return _prepareTransfer(payload, beneficiary, binding).statement;
+    }
+
+    function transferStatement(bytes calldata payload, ZetherTypes.UA beneficiary, ZetherTypes.TransferMode mode)
+        external view returns (bytes memory)
+    {
+        (Prepared memory pp,) = _prepareMulti(payload, beneficiary, mode);
+        return pp.statement;
     }
 
     function burnStatement(
@@ -519,13 +679,16 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
 
     // ------------------------------------------------------------------ tiết lộ (§12, SRS §9.4)
 
-    function verifyTransferAmount(bytes32 entryRef, uint256 amount, OpeningKind kind, bytes calldata opening)
-        public view returns (bool)
-    {
-        bytes storage e = _entries[entryRef];
-        if (e.length == 0) revert UnknownEntry(entryRef);
+    function verifyTransferAmount(
+        bytes32 entryRef,
+        uint256 index,
+        uint256 amount,
+        OpeningKind kind,
+        bytes calldata opening,
+        bytes calldata bundles
+    ) public view returns (bool) {
+        bytes memory ent = _bundle(entryRef, index, bundles);
         if (amount >= VALUE_BOUND) return false; // [amount]G chỉ phụ thuộc amount mod r
-        bytes memory ent = e;
         uint256 p = _p;
         bytes memory yt = _cut(ent, 0, p);
         bytes memory cOut = _cut(ent, p, p);
@@ -582,21 +745,39 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, ITransferDisclosure, IFactor
         )), _r);
     }
 
-    function attestTransferAmount(bytes32 entryRef, uint256 amount, OpeningKind kind, bytes calldata opening)
-        external returns (bool)
-    {
-        if (!verifyTransferAmount(entryRef, amount, kind, opening)) revert OpeningMalformed();
-        emit AmountAttested(entryRef, amount, kind, msg.sender, block.timestamp);
+    function attestTransferAmount(
+        bytes32 entryRef,
+        uint256 index,
+        uint256 amount,
+        OpeningKind kind,
+        bytes calldata opening,
+        bytes calldata bundles
+    ) external returns (bool) {
+        if (!verifyTransferAmount(entryRef, index, amount, kind, opening, bundles)) revert OpeningMalformed();
+        emit AmountAttested(entryRef, index, amount, kind, msg.sender, block.timestamp);
         return true;
     }
 
-    function transferCiphertext(bytes32 entryRef)
+    function transferCiphertext(bytes32 entryRef, uint256 index, bytes calldata bundles)
         external view returns (bytes memory encodedCiphertext, bytes memory encodedYTo)
     {
-        bytes memory ent = _entries[entryRef];
-        if (ent.length == 0) revert UnknownEntry(entryRef);
+        bytes memory ent = _bundle(entryRef, index, bundles);
         uint256 p = _p;
         return (_cut(ent, p, 3 * p), _cut(ent, 0, p));
+    }
+
+    /// @dev `B_index` của `entryRef`: từ storage, hoặc (mode HASH) từ `bundles` sau khi khớp hash. Không có gì
+    ///      lưu (mode NONE, ref lạ) ⇒ `UnknownEntry`. Transfer một người nhận: chỉ `index = 0`.
+    function _bundle(bytes32 entryRef, uint256 index, bytes calldata bundles) private view returns (bytes memory) {
+        bytes memory all = _entries[entryRef];
+        if (all.length == 0) revert UnknownEntry(entryRef);
+        if (all.length == 32) {
+            if (keccak256(bundles) != bytes32(all)) revert BundlesMismatch(entryRef);
+            all = bundles;
+        }
+        uint256 len = 4 * _p;
+        if ((index + 1) * len > all.length) revert BadRecipientIndex(index);
+        return _cut(all, index * len, len);
     }
 
     // ------------------------------------------------------------------ tiện ích

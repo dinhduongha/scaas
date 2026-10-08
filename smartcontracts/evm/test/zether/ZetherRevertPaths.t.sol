@@ -76,7 +76,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         internal view returns (bool)
     {
         (bool ok, bytes memory ret) = address(tok).staticcall(
-            abi.encodeWithSelector(ITransferDisclosure.verifyTransferAmount.selector, ref, amount, uint8(kind), opening)
+            abi.encodeWithSelector(ITransferDisclosure.verifyTransferAmount.selector, ref, uint256(0), amount, uint8(kind), opening, bytes(""))
         );
         if (!ok) assembly { revert(add(ret, 32), mload(ret)) }
         return abi.decode(ret, (bool));
@@ -84,7 +84,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
 
     function _ata(bytes32 ref, uint256 amount, ITransferDisclosure.OpeningKind kind, bytes memory opening) internal {
         (bool ok, bytes memory ret) = address(tok).call(
-            abi.encodeWithSelector(ITransferDisclosure.attestTransferAmount.selector, ref, amount, uint8(kind), opening)
+            abi.encodeWithSelector(ITransferDisclosure.attestTransferAmount.selector, ref, uint256(0), amount, uint8(kind), opening, bytes(""))
         );
         if (!ok) assembly { revert(add(ret, 32), mload(ret)) }
     }
@@ -108,7 +108,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
 
     function _call(bytes memory payload, bytes memory proof, ZetherTypes.UA ben, bytes memory err) internal {
         vm.expectRevert(err);
-        tok.transferConfidential(payload, proof, "", ben);
+        tok.transferConfidentialSingle(payload, proof, "", ben);
     }
 
     function test_transferBadPayloadLength() public {
@@ -322,7 +322,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         vm.expectRevert(abi.encodeWithSelector(ITransferDisclosure.UnknownEntry.selector, bytes32("nope")));
         _vta(bytes32("nope"), 1, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(uint256(1)));
         vm.expectRevert(abi.encodeWithSelector(ITransferDisclosure.UnknownEntry.selector, bytes32("nope")));
-        tok.transferCiphertext(bytes32("nope"));
+        tok.transferCiphertext(bytes32("nope"), 0, "");
     }
 
     /// Bất biến an ninh #1 (§11, SRS §8.1): với scheme ≠ SELF_SCHNORR, biết `x` (conf_custody) KHÔNG đủ để
@@ -333,13 +333,13 @@ contract ZetherRevertPathsTest is ZetherFixture {
         tok.rollOverPublic(dave.ua);
         Tx memory t = _proveTransfer(tok, dave, bob, 10, 100, _none(), 0);
         vm.expectRevert(); // proof hợp lệ, nhưng không có chữ ký của chủ multisig
-        tok.transferConfidential(t.payload, t.proof, "", _none());
+        tok.transferConfidentialSingle(t.payload, t.proof, "", _none());
         bytes32 authDigest = keccak256(abi.encodePacked(
-            "SCAAS-ZETHER-AUTH-V1", keccak256(tok.transferStatement(t.payload, _none(), 0))
+            "SCAAS-ZETHER-AUTH-V1", keccak256(tok.transferStatementSingle(t.payload, _none(), 0))
         ));
         bytes[] memory sigs = new bytes[](1);
         sigs[0] = _ecdsa(0x0DD, authDigest);
-        tok.transferConfidential(t.payload, t.proof, abi.encode(sigs), _none());
+        tok.transferConfidentialSingle(t.payload, t.proof, abi.encode(sigs), _none());
         assertEq(tok.sendCounter(dave.ua), 1);
     }
 

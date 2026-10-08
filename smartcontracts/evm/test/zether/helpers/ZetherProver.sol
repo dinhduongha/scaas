@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {IZetherVerifier} from "../../../src/zether/IZetherVerifier.sol";
 import {ZetherTranscript as T} from "../../../src/zether/ZetherTranscript.sol";
+import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
 /// @notice Prover THAM CHIẾU CHỈ CHO TEST, viết thẳng từ đặc tả §7–§9, chạy trong EVM qua phép nhóm của
 ///         verifier. Không bao giờ dùng ngoài test: nonce dẫn xuất tất định từ `seed` (không hedged), và
@@ -125,6 +126,111 @@ contract ZetherProver {
         return e.v.g1Msm(bytes.concat(e.g, _sp(e, s, 4), _sp(e, s, 6)), sc); // [k_b]G + [k_x](D_acc − D_out)
     }
 
+    // ------------------------------------------------------------------ nhiều người nhận
+
+    struct MultiWitness {
+        uint256 x;
+        uint256 s;
+        uint256[] v;
+        uint256 bPrime;
+        uint256[] gammaV;
+        uint256 gammaB;
+        bytes32 seed;
+    }
+
+    /// @notice Σ (E1–E8, E3/E6/E7 theo từng người nhận) + BP(v_j) cho từng người + BP(b') trên một transcript.
+    function proveTransferMulti(IZetherVerifier v, bytes calldata statement, MultiWitness calldata w)
+        external view returns (bytes memory)
+    {
+        Env memory e = _env(v, w.seed);
+        uint256 m = w.v.length;
+        uint256[] memory k = new uint256[](4 + 2 * m); // k_x k_s k_b k_gb (k_vj k_gvj)_j
+        for (uint256 i; i < k.length; ++i) k[i] = _rand(e, "multi.k", i);
+        bytes memory commits = _multiCommits(e, statement, w, k);
+        bytes32 st = T.absorb(T.init(), "statement", statement);
+        st = T.absorb(st, "sigma.commit", commits);
+        uint256 c;
+        (st, c) = T.challenge(st, "sigma.c", e.r);
+        bytes memory out = bytes.concat(commits, _multiResponses(e.r, c, k, w));
+        for (uint256 j; j < m; ++j) {
+            e.rid = 100 + j;
+            bytes memory bp;
+            (bp, st) = _proveRange(e, st, 64, w.v[j], w.gammaV[j]);
+            out = bytes.concat(out, bp);
+        }
+        e.rid = 64;
+        bytes memory bpB;
+        (bpB, st) = _proveRange(e, st, 64, w.bPrime, w.gammaB);
+        return bytes.concat(out, bpB);
+    }
+
+    function _multiResponses(uint256 r, uint256 c, uint256[] memory k, MultiWitness calldata w)
+        internal pure returns (bytes memory out)
+    {
+        out = abi.encodePacked(
+            addmod(k[0], mulmod(c, w.x, r), r), addmod(k[1], mulmod(c, w.s, r), r),
+            addmod(k[2], mulmod(c, w.bPrime, r), r), addmod(k[3], mulmod(c, w.gammaB, r), r)
+        );
+        for (uint256 j; j < w.v.length; ++j) {
+            out = bytes.concat(out, abi.encodePacked(
+                addmod(k[4 + 2 * j], mulmod(c, w.v[j], r), r), addmod(k[5 + 2 * j], mulmod(c, w.gammaV[j], r), r)
+            ));
+        }
+    }
+
+    /// @dev Statement: Y_f Y_a C_acc D_acc D_out C_deb be32(M) (Y_tj C_out_j C_aud_j)_j.
+    function _multiCommits(Env memory e, bytes memory s, MultiWitness calldata w, uint256[] memory k)
+        internal view returns (bytes memory commits)
+    {
+        uint256 kvSum;
+        for (uint256 j; j < w.v.length; ++j) kvSum = addmod(kvSum, k[4 + 2 * j], e.r);
+        commits = _multiHead(e, s, w.bPrime, w.gammaB, k, kvSum);
+        for (uint256 j; j < w.v.length; ++j) {
+            commits = bytes.concat(commits, _multiLeg(e, s, j, w.v[j], w.gammaV[j], k));
+        }
+    }
+
+    /// @dev V_b A_y A_D A_deb A_bal A_Vb (k = k_x k_s k_b k_gb …).
+    function _multiHead(Env memory e, bytes memory s, uint256 bPrime, uint256 gammaB, uint256[] memory k, uint256 kvSum)
+        internal view returns (bytes memory head)
+    {
+        bytes memory hb = _slice(e.gens, 0, e.p);
+        head = bytes.concat(
+            _m2(e.v, e.g, bPrime, hb, gammaB),               // V_b
+            e.v.g1MulBase(k[0]),                             // A_y
+            e.v.g1MulBase(k[1]),                             // A_D
+            _m2(e.v, e.g, kvSum, _sp(e, s, 0), k[1])         // A_deb
+        );
+        uint256[] memory sc = new uint256[](3);
+        (sc[0], sc[1], sc[2]) = (k[2], k[0], k[0] == 0 ? 0 : e.r - k[0]);
+        head = bytes.concat(
+            head,
+            e.v.g1Msm(bytes.concat(e.g, _sp(e, s, 3), _sp(e, s, 4)), sc), // A_bal = [k_b]G + [k_x](D_acc − D_out)
+            _m2(e.v, e.g, k[2], hb, k[3])                                  // A_Vb
+        );
+    }
+
+    /// @dev V_vj A_out_j A_aud_j A_Vvj.
+    function _multiLeg(Env memory e, bytes memory s, uint256 j, uint256 v, uint256 gammaV, uint256[] memory k)
+        internal view returns (bytes memory leg)
+    {
+        bytes memory hb = _slice(e.gens, 0, e.p);
+        leg = bytes.concat(
+            _m2(e.v, e.g, v, hb, gammaV),                                // V_vj
+            _m2(e.v, e.g, k[4 + 2 * j], _lp(e, s, j), k[1])              // A_out_j
+        );
+        bytes memory ya = _sp(e, s, 1);
+        leg = bytes.concat(
+            leg,
+            _isZero(ya) ? new bytes(e.p) : _m2(e.v, e.g, k[4 + 2 * j], ya, k[1]), // A_aud_j
+            _m2(e.v, e.g, k[4 + 2 * j], hb, k[5 + 2 * j])                         // A_Vvj
+        );
+    }
+
+    function _lp(Env memory e, bytes memory s, uint256 j) internal pure returns (bytes memory) {
+        return _slice(s, HEADER + 6 * e.p + 32 + 3 * j * e.p, e.p);
+    }
+
     struct BurnWitness {
         uint256 x;
         uint256 bPrime;
@@ -245,7 +351,7 @@ contract ZetherProver {
     }
 
     function _n(uint256 n) internal pure returns (string memory) {
-        return n == 32 ? "32" : "64";
+        return Strings.toString(n);
     }
 
     /// @dev l0 = a_L − z, r0 = y^n∘(a_R + z) + z²2^n; T1, T2 với t1 = <l0,r1> + <l1,r0>, t2 = <l1,r1>.

@@ -344,3 +344,137 @@ fn transfer_large_values_bn254() {
 fn transfer_large_values_bls12_381() {
     large_values::<Bls12381>();
 }
+
+// ---------------------------------------------------------------------------------------------
+// Multi-recipient transfer
+// ---------------------------------------------------------------------------------------------
+
+fn multi<C: ZCurve>(
+    f: &Fx<C>,
+    h: Header,
+    mode: TransferMode,
+    aud: bool,
+    vs: &[u64],
+) -> (MultiTransferStatement<C>, MultiTransferProof<C>, MultiTransferWitness<C>) {
+    let ya = if aud { f.aud.y } else { G::<C>::zero() };
+    let rs: Vec<(G<C>, u64)> = vs.iter().enumerate().map(|(j, v)| (key::<C>(10 + j as u32).y, *v)).collect();
+    prove_transfer_multi(&f.gens, &f.from, h, mode, &rs, ya, f.acc, BAL, &mut rng()).unwrap()
+}
+
+fn multi_valid_and_effects<C: ZCurve>() {
+    let f = fx::<C>();
+    for (vs, aud, mode) in [
+        (vec![250_000u64], true, TransferMode::Hash),
+        (vec![0, 7, 0, 100], false, TransferMode::Bundle),
+        (vec![1, 2, 3, 4, 5, 6, 7, 8], true, TransferMode::NoBundle),
+    ] {
+        let (st, p, _) = multi(&f, header(300), mode, aud, &vs);
+        verify_transfer_multi(&f.gens, &st, &p).unwrap();
+        let m = vs.len();
+        let enc = p.encode();
+        assert_eq!(enc.len(), MultiTransferProof::<C>::wire_len(m));
+        assert!(MultiTransferProof::<C>::decode(&enc, m).unwrap() == p);
+        assert!(MultiTransferStatement::<C>::decode(&st.encode()).unwrap() == st);
+        assert_eq!(st.payload().len(), 96 + (3 + 3 * m) * point_len::<C>());
+        assert_eq!(st.bundles().len(), 4 * m * point_len::<C>());
+        // Effects: the sender loses Σv + fee, each recipient decrypts its own v (decoys: 0).
+        let g = generator::<C>();
+        let acc2 = Ciphertext { c: st.acc.c - st.c_deb - g * Fr::<C>::from(300u64), d: st.acc.d - st.d_out };
+        assert_eq!(decrypt(&acc2, &f.from.x), BAL - vs.iter().sum::<u64>() - 300);
+        for (j, l) in st.legs.iter().enumerate() {
+            assert_eq!(decrypt(&Ciphertext { c: l.c_out, d: st.d_out }, &key::<C>(10 + j as u32).x), vs[j]);
+            if aud {
+                assert_eq!(decrypt(&Ciphertext { c: l.c_aud, d: st.d_out }, &f.aud.x), vs[j]);
+            } else {
+                assert!(l.c_aud.is_zero() && p.legs[j].a_aud.is_zero());
+            }
+        }
+    }
+    // M = 1 has exactly the single transfer's proof size (42P + 512).
+    assert_eq!(MultiTransferProof::<C>::wire_len(1), TransferProof::<C>::wire_len());
+}
+
+#[test]
+fn multi_valid_bn254() {
+    multi_valid_and_effects::<Bn254>();
+}
+
+#[test]
+fn multi_valid_bls12_381() {
+    multi_valid_and_effects::<Bls12381>();
+}
+
+fn multi_negatives<C: ZCurve>() {
+    let f = fx::<C>();
+    let mut r = rng();
+    let ya = f.aud.y;
+    let y = |i: u32| key::<C>(i).y;
+    let bad = |e: Result<_, ZError>| assert!(e.is_err());
+    let pm = |rs: &[(G<C>, u64)], h: Header, r: &mut ChaCha20Rng| {
+        prove_transfer_multi(&f.gens, &f.from, h, TransferMode::Hash, rs, ya, f.acc, BAL, r).map(|_| ())
+    };
+    bad(pm(&[], header(0), &mut r)); // no recipient
+    let many = |n: u32| (10..10 + n).map(|i| (y(i), 1)).collect::<Vec<_>>();
+    bad(pm(&many(17), header(0), &mut r)); // above the cap
+    bad(pm(&[(y(10), 1), (y(10), 2)], header(0), &mut r)); // duplicate
+    bad(pm(&[(y(10), 1), (f.from.y, 2)], header(0), &mut r)); // self
+    bad(pm(&[(y(10), BAL), (y(11), 1)], header(0), &mut r)); // Σv > balance
+    pm(&many(16), header(0), &mut r).unwrap(); // 16 is the cap
+
+    let (st, _, w) = multi(&f, header(300), TransferMode::Hash, true, &[0, 500, 0]);
+    let one = Fr::<C>::one();
+    let g = generator::<C>();
+    let reject = |st: &MultiTransferStatement<C>, w: &MultiTransferWitness<C>, what: &str| {
+        let p = prove_transfer_multi_core(&f.gens, st, w, &mut rng()).unwrap();
+        assert!(verify_transfer_multi(&f.gens, st, &p).is_err(), "{what} must be rejected");
+    };
+    // A decoy's commitment opens to 1 while its ciphertexts hold 0 (E3_j/E7_j link).
+    let mut w2 = w.clone();
+    w2.v[0] += one;
+    reject(&st, &w2, "v_j mismatch");
+    // Credit one recipient more than the debit carries.
+    let mut s2 = st.clone();
+    s2.legs[2].c_out += g;
+    reject(&s2, &w, "credit != debit");
+    // Debit Σv − 1: the sender keeps one unit (E4).
+    let mut s2 = st.clone();
+    s2.c_deb -= g;
+    reject(&s2, &w, "debit != Σv");
+    // Auditor ciphertext of one leg encrypts another value (E6_j).
+    let mut s2 = st.clone();
+    s2.legs[1].c_aud += g;
+    reject(&s2, &w, "auditor mismatch");
+    // Wrong balance, wrong key.
+    let mut w2 = w.clone();
+    w2.b_prime += one;
+    reject(&st, &w2, "wrong b'");
+    let mut w2 = w.clone();
+    w2.x = key::<C>(9).x;
+    reject(&st, &w2, "wrong x");
+
+    // A valid proof does not move to another mode, recipient order or recipient.
+    let p = prove_transfer_multi_core(&f.gens, &st, &w, &mut rng()).unwrap();
+    verify_transfer_multi(&f.gens, &st, &p).unwrap();
+    let mut s = st.clone();
+    s.mode = TransferMode::Bundle;
+    assert!(verify_transfer_multi(&f.gens, &s, &p).is_err(), "mode switch");
+    let mut s = st.clone();
+    s.legs.swap(0, 2);
+    assert!(verify_transfer_multi(&f.gens, &s, &p).is_err(), "reordered legs");
+    let mut s = st.clone();
+    s.legs[1].y_t = key::<C>(30).y;
+    assert!(verify_transfer_multi(&f.gens, &s, &p).is_err(), "swapped recipient");
+    // A single-recipient statement never decodes as a multi one (other opTag, psid, layout).
+    let (single, _, _) = transfer(&f, header(0), true, 5);
+    assert!(MultiTransferStatement::<C>::decode(&single.encode()).is_err());
+}
+
+#[test]
+fn multi_negatives_bn254() {
+    multi_negatives::<Bn254>();
+}
+
+#[test]
+fn multi_negatives_bls12_381() {
+    multi_negatives::<Bls12381>();
+}

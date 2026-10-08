@@ -21,6 +21,13 @@ library ZetherTypes {
         OWNER_ONLY  // treasury / B2B R3–R4: chỉ rollOverSigned
     }
 
+    /// Nơi giữ bundle tiết lộ của một transfer nhiều người nhận (nằm trong opTag, relayer không đổi được).
+    enum TransferMode {
+        HASH,   // mặc định: lưu keccak256(B_1 ‖ … ‖ B_M), bundle phát trong event
+        BUNDLE, // lưu B_1 ‖ … ‖ B_M
+        NONE    // không lưu: tiết lộ off-chain từ calldata
+    }
+
     function toUA(bytes memory encodedY) internal pure returns (UA) {
         return UA.wrap(keccak256(encodedY));
     }

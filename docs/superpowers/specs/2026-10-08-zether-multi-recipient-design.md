@@ -110,6 +110,38 @@ forge, real proofs from the prover, bn254 and BLS12-381: execution gas of `trans
 `M ∈ {1, 2, 4, 8}` × the three modes, next to `transferConfidentialSingle` (baseline: the measured table of `contracts/zether.md`); calldata bytes per case. Prover time per `M`.
 Results go into the gas table of `contracts/zether.md` on fold.
 
+**Measured 2026-10-08** (owner Z7/Z8 names: the multi-recipient entry points are `transferConfidential` (HASH),
+`transferConfidentialBundle`, `transferConfidentialNoBundle`; the single format is `transferConfidentialSingle`).
+`test/zether/ZetherMulti.t.sol` `test_gas*`, forge 1.3.5, Prague, `gasleft()` around the call — execution gas
+without the 21,000 intrinsic and calldata, each cell from a fresh state (every recipient and the beneficiary get their
+first credit, as in the single-recipient figure), auditor on, inner fee to a beneficiary, one real recipient and
+`M − 1` decoys at 0. Calldata = the ABI-encoded call in bytes.
+
+| Curve | Entry | M = 1 | M = 2 | M = 4 | M = 8 | Calldata (M = 1 / 2 / 4 / 8) |
+|---|---|---|---|---|---|---|
+| bn254 | `transferConfidentialSingle` | 3,286,811 | — | — | — | 3,876 (derived: payload 32 B shorter, same proof) |
+| bn254 | HASH (default) | 3,144,613 | 4,649,839 | 7,671,625 | 13,761,419 | 3,908 / 5,604 / 8,996 / 15,780 |
+| bn254 | BUNDLE | 3,295,898 | 4,976,484 | 8,348,990 | 15,139,891 | same |
+| bn254 | NONE | 3,093,384 | 4,595,117 | 7,609,845 | 13,684,495 | same |
+| BLS12-381 | `transferConfidentialSingle` | 3,920,276 | — | — | — | 6,948 (derived) |
+| BLS12-381 | HASH (default) | 3,584,305 | 5,309,455 | 8,820,900 | 16,090,549 | 6,980 / 10,148 / 16,484 / 29,156 |
+| BLS12-381 | BUNDLE | 3,910,950 | 5,986,820 | 10,199,705 | **18,871,249** | same |
+| BLS12-381 | NONE | 3,530,932 | 5,250,421 | 8,750,400 | 15,994,832 | same |
+
+- **Per extra recipient** (slope M = 1 → 8): bn254 HASH ≈ 1.52 M, BUNDLE ≈ 1.69 M, NONE ≈ 1.51 M; BLS12-381 HASH
+  ≈ 1.79 M, BUNDLE ≈ 2.14 M, NONE ≈ 1.78 M — against ≈ 3.29 M / 3.92 M for another separate transfer. The slope is
+  one 64-bit range proof (≈ 1.2–1.4 M), E3/E6/E7, the recipient's `pending` write and its share of the bundle.
+- **M = 1 vs the single format** (bn254): BUNDLE stores the same 256 B and costs +9 k (the `proofSystemIdMulti` call,
+  the count word, the recipient loop); HASH saves 142 k, NONE 193 k. BLS12-381: HASH −336 k, NONE −389 k.
+- **EIP-7825 cap (16,777,216 per transaction, intrinsic + calldata included):** every bn254 cell fits; on BLS12-381
+  M = 8 BUNDLE does not (18.9 M execution), M = 8 HASH ≈ 16.6 M and NONE ≈ 16.5 M fit with < 2 % headroom.
+- **Prover** (release `zether-cli proveTransferMulti`, one process per call — includes process start and generator
+  setup; median of 3 on the chain-7622 host, AMD Ryzen 5 7235HS): bn254 single 74 ms, M = 1/2/4/8 = 75 / 114 / 181 /
+  322 ms; BLS12-381 single 162 ms, M = 1/2/4/8 = 159 / 231 / 361 / 660 ms.
+- **Sizes:** `ZetherToken` runtime 31,911 B (27,353 B before this change — already over the EIP-170 limit of 24,576 B
+  on `main`); verifiers 15,955 B (bn254) / 16,312 B (BLS12-381). Optimizer runs = 1 does not bring the token under the
+  limit (31,548 B); see the implementation notes.
+
 ## 8. Revision history
 
 | Rev | Date | What |

@@ -17,6 +17,11 @@ import {G1Bn254, G1Bls12381} from "./ZetherCurves.sol";
 abstract contract ZetherVerifierBase is IZetherVerifier {
     bytes32 internal constant OP_TRANSFER = keccak256("SCAAS-ZETHER-OP-TRANSFER-V1");
     bytes32 internal constant OP_BURN = keccak256("SCAAS-ZETHER-OP-BURN-V1");
+    // Multi-recipient transfer: the storage mode is part of opTag (spec 2026-10-08-zether-multi-recipient §4).
+    bytes32 internal constant OP_MULTI_HASH = keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/HASH");
+    bytes32 internal constant OP_MULTI_BUNDLE = keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/BUNDLE");
+    bytes32 internal constant OP_MULTI_NONE = keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/NONE");
+    uint256 internal constant MAX_RECIPIENTS = 16;
     uint256 internal constant NV = 64; // limits D1 (RS-NV64-1)
     uint256 internal constant NB = 64;
     uint256 internal constant HEADER = 384;
@@ -48,7 +53,8 @@ abstract contract ZetherVerifierBase is IZetherVerifier {
 
     // ------------------------------------------------------------------ móc theo đường cong
 
-    function proofSystemId() public pure virtual returns (bytes32);
+    /// @dev Nhãn proof system của đường cong; id = keccak của nhãn, transfer nhiều người nhận thêm "/multi".
+    function _psidLabel() internal pure virtual returns (string memory);
     function _pointBytes() internal pure virtual returns (uint256);
     function _order() internal pure virtual returns (uint256);
     function _gen(string memory label, uint32 index) internal view virtual returns (bytes memory);
@@ -59,6 +65,9 @@ abstract contract ZetherVerifierBase is IZetherVerifier {
     function _valid(bytes memory a) internal view virtual returns (bool);
 
     // ------------------------------------------------------------------ IZetherVerifier: phép nhóm
+
+    function proofSystemId() public pure returns (bytes32) { return keccak256(bytes(_psidLabel())); }
+    function proofSystemIdMulti() public pure returns (bytes32) { return keccak256(abi.encodePacked(_psidLabel(), "/multi")); }
 
     function groupOrder() external pure returns (uint256) { return _order(); }
     function ringSize() external pure returns (uint256) { return 2; }
@@ -104,6 +113,32 @@ abstract contract ZetherVerifierBase is IZetherVerifier {
         (ok, x.st) = _bulletproof(x, NV, _pf(x, 0), off1);
         if (!ok) return false;
         (ok, x.st) = _bulletproof(x, NB, _pf(x, 1), off1 + 16 * p + 160);
+        return ok;
+    }
+
+    /// @notice Transfer tới `M` người nhận, một proof: Σ (E1–E8, E3/E6/E7 theo từng người) + BP(v_j) cho từng
+    ///         người + BP(b'). Statement `Y_f Y_a C_acc D_acc D_out C_deb be32(M) (Y_tj C_out_j C_aud_j)_j`.
+    function verifyTransferMulti(bytes calldata statement, bytes calldata proof) external view returns (bool) {
+        uint256 p = _pointBytes();
+        uint256 at = HEADER + 6 * p;
+        if (statement.length < at + 32) return false;
+        uint256 m = uint256(bytes32(statement[at:at + 32]));
+        if (m == 0 || m > MAX_RECIPIENTS || statement.length != at + 32 + 3 * p * m) return false;
+        bytes32 op = bytes32(statement[0:32]);
+        if (op != OP_MULTI_HASH && op != OP_MULTI_BUNDLE && op != OP_MULTI_NONE) return false;
+        if (bytes32(statement[32:64]) != proofSystemIdMulti()) return false;
+        // Σ (6 + 4M)P + (4 + 2M)·32 ‖ BP(v_1) … BP(v_M) ‖ BP(b'), mỗi BP 16P + 160
+        uint256 bpLen = 16 * p + 160;
+        uint256 off = (6 + 4 * m) * p + (4 + 2 * m) * 32;
+        if (proof.length != off + (m + 1) * bpLen) return false;
+        Ctx memory x = _ctx(statement, proof, (6 + 4 * m) * p);
+        if (x.c == 0 || !_sigmaTransferMulti(x, m)) return false;
+        bool ok;
+        for (uint256 j; j < m; ++j) {
+            (ok, x.st) = _bulletproof(x, NV, _pf(x, 6 + 4 * j), off + j * bpLen);
+            if (!ok) return false;
+        }
+        (ok, x.st) = _bulletproof(x, NB, _pf(x, 0), off + m * bpLen);
         return ok;
     }
 
@@ -203,6 +238,92 @@ abstract contract ZetherVerifierBase is IZetherVerifier {
         if (!_z4([g, hb, _pf(x, 0), _pf(x, 8)], [z[1], z[4], nc, r - 1])) return false;
         // E8  [z_b]G + [z_gb]Hb − [c]V_b − A_Vb
         return _z4([g, hb, _pf(x, 1), _pf(x, 9)], [z[3], z[5], nc, r - 1]);
+    }
+
+    /// @dev Statement: Y_f Y_a C_acc D_acc D_out C_deb, rồi các leg. Proof: V_b A_y A_D A_deb A_bal A_Vb
+    ///      (V_vj A_out_j A_aud_j A_Vvj)_j z_x z_s z_b z_gb (z_vj z_gvj)_j.
+    function _sigmaTransferMulti(Ctx memory x, uint256 m) private view returns (bool) {
+        uint256[] memory z = new uint256[](4 + 2 * m);
+        for (uint256 i; i < z.length; ++i) {
+            bool ok;
+            (z[i], ok) = _ps(x, 6 + 4 * m, i);
+            if (!ok) return false;
+        }
+        if (_isZero(_sp(x, 0)) || _isZero(_sp(x, 4))) return false;
+        uint256 r = x.r;
+        uint256 nc = r - x.c;
+        bytes memory g = _base();
+        // E1  [z_x]G − [c]Y_f − A_y
+        if (!_z3([g, _sp(x, 0), _pf(x, 1)], [z[0], nc, r - 1])) return false;
+        // E2  [z_s]G − [c]D_out − A_D
+        if (!_z3([g, _sp(x, 4), _pf(x, 2)], [z[1], nc, r - 1])) return false;
+        if (!_sigmaLegs(x, m, z)) return false;
+        // E4  [Σz_vj]G + [z_s]Y_f − [c]C_deb − A_deb
+        uint256 zv;
+        for (uint256 j; j < m; ++j) zv = addmod(zv, z[4 + 2 * j], r);
+        if (!_z4([g, _sp(x, 0), _sp(x, 5), _pf(x, 3)], [zv, z[1], nc, r - 1])) return false;
+        // E5  [z_b + c·fee]G + [z_x]D_acc − [z_x]D_out − [c]C_acc + [c]C_deb − A_bal
+        {
+            uint256[] memory sc = new uint256[](6);
+            sc[0] = addmod(z[2], mulmod(x.c, _word(x.s, 256), r), r);
+            sc[1] = z[0];
+            sc[2] = _negS(z[0], r);
+            sc[3] = nc;
+            sc[4] = x.c;
+            sc[5] = r - 1;
+            bytes memory pts = bytes.concat(g, _sp(x, 3), _sp(x, 4), _sp(x, 2), _sp(x, 5), _pf(x, 4));
+            if (!_isZero(_msm(pts, sc))) return false;
+        }
+        // E8  [z_b]G + [z_gb]Hb − [c]V_b − A_Vb
+        return _z4([g, _slice(x.gens, 0, x.p), _pf(x, 0), _pf(x, 5)], [z[2], z[3], nc, r - 1]);
+    }
+
+    /// @dev Những gì mọi leg dùng chung (gom vào memory cho khỏi tràn stack).
+    struct Legs {
+        bytes g;
+        bytes hb;
+        bytes ya;
+        bool aud;
+        bytes32 yf;
+        uint256 nc; // r − c
+        uint256 zs;
+    }
+
+    /// @dev E3_j, E6_j, E7_j của từng người nhận; Y_tj ≠ O, ≠ Y_f.
+    function _sigmaLegs(Ctx memory x, uint256 m, uint256[] memory z) private view returns (bool) {
+        Legs memory l;
+        l.g = _base();
+        l.hb = _slice(x.gens, 0, x.p);
+        l.ya = _sp(x, 1);
+        l.aud = !_isZero(l.ya);
+        l.yf = keccak256(_sp(x, 0));
+        l.nc = x.r - x.c;
+        l.zs = z[1];
+        for (uint256 j; j < m; ++j) {
+            if (!_sigmaLeg(x, l, j, z[4 + 2 * j], z[5 + 2 * j])) return false;
+        }
+        return true;
+    }
+
+    function _sigmaLeg(Ctx memory x, Legs memory l, uint256 j, uint256 zv, uint256 zgv) private view returns (bool) {
+        uint256 r1 = x.r - 1;
+        bytes memory yt = _lp(x, j, 0);
+        if (_isZero(yt) || keccak256(yt) == l.yf) return false;
+        // E3_j  [z_vj]G + [z_s]Y_tj − [c]C_out_j − A_out_j
+        if (!_z4([l.g, yt, _lp(x, j, 1), _pf(x, 7 + 4 * j)], [zv, l.zs, l.nc, r1])) return false;
+        // E6_j  auditor bật ⇒ [z_vj]G + [z_s]Y_a − [c]C_aud_j − A_aud_j; tắt ⇒ C_aud_j = A_aud_j = O
+        if (!l.aud) {
+            if (!_isZero(_lp(x, j, 2)) || !_isZero(_pf(x, 8 + 4 * j))) return false;
+        } else if (!_z4([l.g, l.ya, _lp(x, j, 2), _pf(x, 8 + 4 * j)], [zv, l.zs, l.nc, r1])) {
+            return false;
+        }
+        // E7_j  [z_vj]G + [z_gvj]Hb − [c]V_vj − A_Vvj
+        return _z4([l.g, l.hb, _pf(x, 6 + 4 * j), _pf(x, 9 + 4 * j)], [zv, zgv, l.nc, r1]);
+    }
+
+    /// @dev Điểm thứ `k` (Y_t, C_out, C_aud) của người nhận `j`.
+    function _lp(Ctx memory x, uint256 j, uint256 k) private pure returns (bytes memory) {
+        return _slice(x.s, HEADER + 6 * x.p + 32 + (3 * j + k) * x.p, x.p);
     }
 
     /// @dev §7.2. Statement: Y_f C_acc D_acc. Proof: V_b A_y A_bal A_Vb z_x z_b z_gb.
@@ -450,8 +571,8 @@ abstract contract ZetherVerifierBase is IZetherVerifier {
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** ~100 bit sau exTNFS (canon C6.1): mọi số tiền
 ///         confidential trên public chain phải được giả định giải mã được trong khoảng 2035–2045.
 contract ZetherVerifierBn254 is ZetherVerifierBase {
-    function proofSystemId() public pure override returns (bytes32) {
-        return keccak256("scaas/zether/sigma-bullets/bn254/n64-n64/v1");
+    function _psidLabel() internal pure override returns (string memory) {
+        return "scaas/zether/sigma-bullets/bn254/n64-n64/v1";
     }
 
     function curveName() external pure returns (string memory) { return "bn254"; }
@@ -493,8 +614,8 @@ contract ZetherVerifierBn254 is ZetherVerifierBase {
 contract ZetherVerifierBls12381 is ZetherVerifierBase {
     bytes internal constant GEN_DST = "SCAAS-ZETHER-GEN-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_";
 
-    function proofSystemId() public pure override returns (bytes32) {
-        return keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v1");
+    function _psidLabel() internal pure override returns (string memory) {
+        return "scaas/zether/sigma-bullets/bls12-381/n64-n64/v1";
     }
 
     function curveName() external pure returns (string memory) { return "bls12-381"; }

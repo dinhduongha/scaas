@@ -7,7 +7,7 @@ use rand_chacha::rand_core::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use serde_json::{json, Value};
 
-use crate::api::{hx, prove_burn_json, prove_transfer_json};
+use crate::api::{hx, prove_burn_json, prove_transfer_json, prove_transfer_multi_json};
 use crate::bulletproofs::Gens;
 use crate::curve::{decode_scalar, encode_point, encode_scalar, Bls12381, Bn254, Fr, ZCurve};
 use crate::elgamal::encrypt;
@@ -164,6 +164,25 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
             "z": hx(&encode_scalar::<C>(&z)), "sig": hx(&sig),
         }),
     ));
+
+    // multi-recipient: one real recipient and two decoys (amount 0), auditor on, inner fee, HASH.
+    let (d1, d2) = (conf::<C>(2), conf::<C>(3));
+    let req = with(json!({
+        "recipients": [{"yTo": hx(&d1.encoded_y()), "amount": 0}, {"yTo": hx(&to.encoded_y()), "amount": AMOUNT},
+                       {"yTo": hx(&d2.encoded_y()), "amount": 0}],
+        "yAud": hx(&aud.encoded_y()), "fee": 300, "beneficiary": hx(&[0x22; 32]),
+    }));
+    let mut mv = prove_transfer_multi_json::<C, _>(&gens, &req, &mut rng).unwrap();
+    mv["expect"] = json!(true);
+    mv["request"] = req;
+    files.push((format!("transfer_multi_{}.json", C::NAME), mv));
+
+    // multi-recipient, M = 1, auditor off, no fee, NoBundle.
+    let req = with(json!({"recipients": [{"yTo": hx(&to.encoded_y()), "amount": 1}], "mode": "none"}));
+    let mut mv = prove_transfer_multi_json::<C, _>(&gens, &req, &mut rng).unwrap();
+    mv["expect"] = json!(true);
+    mv["request"] = req;
+    files.push((format!("transfer_multi_noaud_{}.json", C::NAME), mv));
 }
 
 fn r33_curve<C: ZCurve>() -> Value {

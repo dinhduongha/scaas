@@ -31,7 +31,7 @@ abstract contract ZetherTokenSuite is ZetherFixture {
         internal view returns (bool)
     {
         (bool ok, bytes memory ret) = address(tok).staticcall(
-            abi.encodeWithSelector(ITransferDisclosure.verifyTransferAmount.selector, ref, amount, uint8(kind), opening)
+            abi.encodeWithSelector(ITransferDisclosure.verifyTransferAmount.selector, ref, uint256(0), amount, uint8(kind), opening, bytes(""))
         );
         if (!ok) assembly { revert(add(ret, 32), mload(ret)) }
         return abi.decode(ret, (bool));
@@ -39,7 +39,7 @@ abstract contract ZetherTokenSuite is ZetherFixture {
 
     function _ata(bytes32 ref, uint256 amount, ITransferDisclosure.OpeningKind kind, bytes memory opening) internal {
         (bool ok, bytes memory ret) = address(tok).call(
-            abi.encodeWithSelector(ITransferDisclosure.attestTransferAmount.selector, ref, amount, uint8(kind), opening)
+            abi.encodeWithSelector(ITransferDisclosure.attestTransferAmount.selector, ref, uint256(0), amount, uint8(kind), opening, bytes(""))
         );
         if (!ok) assembly { revert(add(ret, 32), mload(ret)) }
     }
@@ -61,7 +61,7 @@ abstract contract ZetherTokenSuite is ZetherFixture {
         Tx memory t1 = _proveTransfer(tok, alice, bob, 300, 1000, carol.ua, 0);
         uint256 g0 = gasleft();
         bytes32 ref = _direct(tok, t1, carol.ua);
-        console2.log(bls ? "bls12-381" : "bn254", "transferConfidential (direct, auditor, fee) gas", g0 - gasleft());
+        console2.log(bls ? "bls12-381" : "bn254", "transferConfidentialSingle (direct, auditor, fee) gas", g0 - gasleft());
         (a,) = _bal(alice);
         assertEq(a, 1000 - 300 - FEE, "sender acc debited v + fee");
         (, p) = _bal(bob);
@@ -321,7 +321,7 @@ abstract contract ZetherTokenSuite is ZetherFixture {
         vm.prank(relayer);
         uint256 g0 = gasleft();
         tok.executeMetaTransaction(m, sig);
-        console2.log(bls ? "bls12-381" : "bn254", "relayed transferConfidential gas", g0 - gasleft());
+        console2.log(bls ? "bls12-381" : "bn254", "relayed transferConfidentialSingle gas", g0 - gasleft());
         assertEq(tok.balanceOf(relayer), 25, "outer fee: public ERC-20 to relayer");
         assertEq(tok.balanceOf(payer), 975);
         (, uint256 p) = _bal(carol);
@@ -336,7 +336,7 @@ abstract contract ZetherTokenSuite is ZetherFixture {
         _relayedSetup();
         (, Tx memory t) = _relayedTx(7, 25);
         vm.expectRevert(IZetherToken.ProofRejected.selector); // statement DIRECT ≠ RELAYED
-        tok.transferConfidential(t.payload, t.proof, "", carol.ua);
+        tok.transferConfidentialSingle(t.payload, t.proof, "", carol.ua);
     }
 
     function test_proofMovedToAnotherEnvelopeRejected() public {
@@ -419,7 +419,7 @@ abstract contract ZetherTokenSuite is ZetherFixture {
     }
 
     function _dOut(bytes32 ref) internal view returns (bytes memory) {
-        (bytes memory ct,) = tok.transferCiphertext(ref);
+        (bytes memory ct,) = tok.transferCiphertext(ref, 0, "");
         return _cut(ct, ver.g1EncodedBytes(), ver.g1EncodedBytes());
     }
 
@@ -450,7 +450,7 @@ abstract contract ZetherTokenSuite is ZetherFixture {
         assertFalse(_vta(ref, 1 << 64, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(t.s)));
         // attestation có dấu thời gian
         vm.expectEmit(true, true, false, true, address(tok));
-        emit ITransferDisclosure.AmountAttested(ref, 123, ITransferDisclosure.OpeningKind.RECEIVER_X, address(this), block.timestamp);
+        emit ITransferDisclosure.AmountAttested(ref, 0, 123, ITransferDisclosure.OpeningKind.RECEIVER_X, address(this), block.timestamp);
         _ata(ref, 123, ITransferDisclosure.OpeningKind.RECEIVER_X, rx);
         vm.expectRevert(ITransferDisclosure.OpeningMalformed.selector);
         _ata(ref, 99, ITransferDisclosure.OpeningKind.RECEIVER_X, rx);
@@ -463,7 +463,7 @@ abstract contract ZetherTokenSuite is ZetherFixture {
         bytes memory zBig = abi.encode(a1, a2, ver.groupOrder());
         vm.expectRevert(ITransferDisclosure.OpeningMalformed.selector);
         _vta(ref, 123, ITransferDisclosure.OpeningKind.RECEIVER_X, zBig);
-        (bytes memory ct, bytes memory yTo) = tok.transferCiphertext(ref);
+        (bytes memory ct, bytes memory yTo) = tok.transferCiphertext(ref, 0, "");
         assertEq(yTo, bob.y);
         assertEq(ct.length, 3 * ver.g1EncodedBytes());
     }
@@ -480,7 +480,7 @@ abstract contract ZetherTokenSuite is ZetherFixture {
         Tx memory t = _proveTransfer(tok, alice, bob, v, b0, carol.ua, 0);
         uint256 g0 = gasleft();
         bytes32 ref = _direct(tok, t, carol.ua);
-        console2.log(bls ? "bls12-381" : "bn254", "transferConfidential v > 2^32 (direct, auditor, fee) gas", g0 - gasleft());
+        console2.log(bls ? "bls12-381" : "bn254", "transferConfidentialSingle v > 2^32 (direct, auditor, fee) gas", g0 - gasleft());
         uint256 b1 = b0 - v - FEE;
         assertTrue(_holds(tok, alice, b1, true), "sender acc = b - v - fee");
         assertTrue(_holds(tok, bob, v, false), "receiver pending = v");
@@ -518,7 +518,7 @@ abstract contract ZetherTokenSuite is ZetherFixture {
         _fund(tok, alice, 500);
         tok.rollOverPublic(alice.ua);
         bytes32 ref = _direct(tok, _proveTransfer(tok, alice, bob, 321, 500, _none(), 0), _none());
-        (bytes memory ct,) = tok.transferCiphertext(ref);
+        (bytes memory ct,) = tok.transferCiphertext(ref, 0, "");
         uint256 p = ver.g1EncodedBytes();
         bytes memory dOut = new bytes(p);
         bytes memory cAud = new bytes(p);

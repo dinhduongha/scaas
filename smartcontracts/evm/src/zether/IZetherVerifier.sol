@@ -16,6 +16,9 @@ interface IZetherVerifier {
     /// @notice Khoá cứng bộ ba (curve, mạch, mã hoá điểm). Nằm trong statement (§6) ⇒ trong transcript.
     function proofSystemId() external pure returns (bytes32);
 
+    /// @notice Id của transfer nhiều người nhận: nhãn của `proofSystemId` thêm "/multi".
+    function proofSystemIdMulti() external pure returns (bytes32);
+
     /// @notice `"bn254"` | `"bls12-381"`.
     function curveName() external pure returns (string memory);
 
@@ -39,6 +42,8 @@ interface IZetherVerifier {
     function verifyTransfer(bytes calldata statement, bytes calldata proof) external view returns (bool);
 
     /// @notice Kiểm proof rút ra dạng công khai. `amount`, `recipient` nằm trong `statement`.
+    function verifyTransferMulti(bytes calldata statement, bytes calldata proof) external view returns (bool);
+
     function verifyBurn(bytes calldata statement, bytes calldata proof) external view returns (bool);
 
     /// @notice Blob generator NUMS `h ‖ U ‖ G_0..G_63 ‖ H_0..H_63` (§3), tính trong constructor.

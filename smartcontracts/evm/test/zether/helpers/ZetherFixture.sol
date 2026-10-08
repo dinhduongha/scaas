@@ -104,7 +104,7 @@ abstract contract ZetherFixture is Test {
         r.s = uint256(keccak256(abi.encode(from.x, st.sendCounter, v, address(t)))) % ver.groupOrder();
         r.payload = _payload(t, from, to, v, r.s, st);
         ZetherProver.TransferWitness memory w = _witness(from.x, v, r.s, b - v - (ZetherTypes.UA.unwrap(ben) == 0 ? 0 : t.confidentialFee()));
-        r.proof = _proveT(t.transferStatement(r.payload, ben, binding), w);
+        r.proof = _proveT(t.transferStatementSingle(r.payload, ben, binding), w);
     }
 
     function _witness(uint256 x, uint256 v, uint256 s, uint256 bPrime) internal pure returns (ZetherProver.TransferWitness memory) {
@@ -128,6 +128,61 @@ abstract contract ZetherFixture is Test {
         return bytes.concat(cOut, dOut, cDeb, cAud);
     }
 
+    /// @dev Transfer `from → to[j]` giá trị `vs[j]` (mồi: 0), một `s` chung, số dư acc hiện tại `b`.
+    function _proveMulti(
+        ZetherToken t,
+        User memory from,
+        User[] memory to,
+        uint256[] memory vs,
+        uint256 b,
+        ZetherTypes.UA ben,
+        ZetherTypes.TransferMode mode
+    ) internal view returns (Tx memory r) {
+        IZetherToken.AccountState memory st = t.accountState(from.ua);
+        r.s = uint256(keccak256(abi.encode(from.x, st.sendCounter, vs, address(t), "multi"))) % ver.groupOrder();
+        r.payload = _multiPayload(t, from, to, vs, r.s, st);
+        uint256 fee = ZetherTypes.UA.unwrap(ben) == 0 ? 0 : t.confidentialFee();
+        bytes memory statement = t.transferStatement(r.payload, ben, mode);
+        r.proof = prover.proveTransferMulti(ver, statement, _multiWitness(from.x, r.s, vs, b - fee));
+    }
+
+    /// @dev `bAfterFee` = số dư trừ phí tầng trong; `b' = bAfterFee − Σv`.
+    function _multiWitness(uint256 x, uint256 s, uint256[] memory vs, uint256 bAfterFee)
+        internal pure returns (ZetherProver.MultiWitness memory w)
+    {
+        uint256[] memory gv = new uint256[](vs.length);
+        uint256 bPrime = bAfterFee;
+        for (uint256 j; j < vs.length; ++j) {
+            gv[j] = 0x1234 + 7 * j + vs[j];
+            bPrime -= vs[j];
+        }
+        w = ZetherProver.MultiWitness(x, s, vs, bPrime, gv, 0x5678 + bPrime, keccak256(abi.encode(s)));
+    }
+
+    /// @dev `be32(accSeq) ‖ be32(sendCounter) ‖ be32(M) ‖ Y_f ‖ D_out ‖ C_deb ‖ (Y_tj ‖ C_out_j ‖ C_aud_j)_j`.
+    function _multiPayload(
+        ZetherToken t,
+        User memory from,
+        User[] memory to,
+        uint256[] memory vs,
+        uint256 s,
+        IZetherToken.AccountState memory st
+    ) internal view returns (bytes memory payload) {
+        bytes memory aud = t.auditorKey();
+        if (aud.length == 0) aud = ver.identity();
+        bytes memory legs;
+        uint256 total;
+        for (uint256 j; j < to.length; ++j) {
+            (bytes memory cOut,,, bytes memory cAud) = prover.ciphertexts(ver, from.y, to[j].y, aud, vs[j], s);
+            legs = bytes.concat(legs, to[j].y, cOut, cAud);
+            total += vs[j];
+        }
+        (,bytes memory dOut, bytes memory cDeb,) = prover.ciphertexts(ver, from.y, from.y, aud, total, s);
+        payload = bytes.concat(
+            abi.encode(uint256(st.accSeq), uint256(st.sendCounter), to.length), from.y, dOut, cDeb, legs
+        );
+    }
+
     function _proveBurn(ZetherToken t, User memory from, uint256 amount, uint256 b, address recipient, ZetherTypes.UA ben, bytes32 binding)
         internal view returns (bytes memory payload, bytes memory proof)
     {
@@ -143,7 +198,7 @@ abstract contract ZetherFixture is Test {
     }
 
     function _direct(ZetherToken t, Tx memory r, ZetherTypes.UA ben) internal returns (bytes32) {
-        return t.transferConfidential(r.payload, r.proof, "", ben);
+        return t.transferConfidentialSingle(r.payload, r.proof, "", ben);
     }
 
     function _none() internal pure returns (ZetherTypes.UA) {

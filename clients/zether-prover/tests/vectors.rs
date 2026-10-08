@@ -13,7 +13,9 @@ fn committed_vectors_are_current_and_verify() {
         )
         .unwrap();
         assert_eq!(on_disk, v, "{name} drifted: run `cargo run --bin zether-cli vectors vectors`");
-        let cmd = if name.starts_with("transfer_") {
+        let cmd = if name.starts_with("transfer_multi_") {
+            "verifyTransferMulti"
+        } else if name.starts_with("transfer_") {
             "verifyTransfer"
         } else if name.starts_with("burn_") {
             "verifyBurn"
@@ -50,7 +52,8 @@ fn api_roundtrip_mnemonic_keygen_prove_decrypt() {
             "sendCounter": 0, "accSeq": 1, "acc": acc, "balance": 5000, "yTo": b["Y"], "amount": 1200,
         }));
         assert!(t.get("witness").is_none(), "secrets must not leave the API unless asked");
-        assert!(t["directCalldata"].as_str().unwrap().starts_with("0x7c947e8e"), "RS2-14 direct selector");
+        let single = hex::encode(zether_prover::envelope::selector("transferConfidentialSingle(bytes,bytes,bytes,bytes32)"));
+        assert!(t["directCalldata"].as_str().unwrap().starts_with(&format!("0x{single}")), "RS2-14 direct selector");
         let ok = call("verifyTransfer", json!({"curve": curve, "statement": t["statement"], "proof": t["proof"]}));
         assert_eq!(ok["ok"], json!(true));
         let d = call("decrypt", json!({"curve": curve, "key": k0, "ct": acc, "tableBits": 18, "boundBits": 20}));

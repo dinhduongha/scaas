@@ -40,6 +40,7 @@ interface ITransferDisclosure {
 
     event AmountAttested(
         bytes32 indexed entryRef,
+        uint256 index,
         uint256 amount,
         OpeningKind kind,
         address indexed attestedBy,
@@ -48,14 +49,20 @@ interface ITransferDisclosure {
 
     error UnknownEntry(bytes32 entryRef);
     error OpeningMalformed();
+    /// @notice Mode HASH: `bundles` không khớp hash đã lưu.
+    error BundlesMismatch(bytes32 entryRef);
+    error BadRecipientIndex(uint256 index);
 
     /// @notice Kiểm một lời khai số tiền. **View — gọi FREE qua `eth_call`.**
     /// @param entryRef BẮT BUỘC. Thiếu nó thì chỉ chứng minh được "có một giao dịch
     ///        trị giá X", không phải "giao dịch NÀY trị giá X".
+    /// @param index    người nhận thứ mấy của giao dịch (transfer một người nhận: 0)
     /// @param amount   số tiền được tuyên bố, đơn vị che giấu
     /// @param kind     đường mở nào
     /// @param opening  `s` cho SENDER_S; `(proof Chaum-Pedersen)` cho RECEIVER_X;
     ///                 khoá/proof auditor cho AUDITOR
+    /// @param bundles  mode HASH: `B_1 ‖ … ‖ B_M` (từ event `TransferBundles` hoặc calldata), khớp hash đã lưu;
+    ///                 bỏ qua khi bundle nằm trong storage. Mode NONE: không có gì để kiểm (`UnknownEntry`).
     ///
     /// @dev Phần lớn nhu cầu — kiểm toán, đối soát ERP, trả lời cơ quan thuế — chỉ
     ///      cần hàm này: miễn phí, không giới hạn số lần, KHÔNG để lại vết on-chain.
@@ -63,9 +70,11 @@ interface ITransferDisclosure {
     ///      không nên tự nó trở thành dữ liệu công khai.
     function verifyTransferAmount(
         bytes32 entryRef,
+        uint256 index,
         uint256 amount,
         OpeningKind kind,
-        bytes calldata opening
+        bytes calldata opening,
+        bytes calldata bundles
     ) external view returns (bool);
 
     /// @notice Ghi một attestation BẤT BIẾN, có dấu thời gian on-chain. Tốn gas.
@@ -75,16 +84,18 @@ interface ITransferDisclosure {
     ///      thường lệ thành một giao dịch đổi trạng thái.
     function attestTransferAmount(
         bytes32 entryRef,
+        uint256 index,
         uint256 amount,
         OpeningKind kind,
-        bytes calldata opening
+        bytes calldata opening,
+        bytes calldata bundles
     ) external returns (bool);
 
     /// @notice Ciphertext gốc của một giao dịch, để bên thứ ba verify ĐỘC LẬP.
     /// @dev Toà án không nên phải tin `verifyTransferAmount` của chính contract bị
     ///      tranh chấp. Hàm này xuất dữ liệu thô để một verifier ngoài chuỗi
     ///      (CLI độc lập, mã nguồn mở) kiểm lại từ đầu.
-    function transferCiphertext(bytes32 entryRef)
+    function transferCiphertext(bytes32 entryRef, uint256 index, bytes calldata bundles)
         external
         view
         returns (bytes memory encodedCiphertext, bytes memory encodedYTo);
