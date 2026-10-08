@@ -57,7 +57,11 @@ The node binds registry, `chainUid()` and the RPC genesis hash per chain profile
 `OpenFactory.pqzEnabled` defaults to `false`. NatSpec and docs: **UNAUDITED — NOT FOR PRODUCTION FUNDS**. Chain 7622 is
 the owner's named target and runs our client. The owner moved the private chain off its former id 9000 because 9000
 is also Evmos Testnet, a public chain; 7622 is not assumed unique either, hence `chain_uid`. The self-test is what
-keeps PQZ off chains whose client is not ours.
+keeps PQZ off chains whose client is not ours. **Public chains** (owner, 2026-10-08): PQZ is meant for public
+chains too, and the route there is a lattice-verification precompile **on that chain**, which SCaaS waits for — no
+Solidity verifier split over transactions, no STARK-wrapped proof and no SCaaS appchain is planned. Until a public chain
+offers such a precompile, the allowlist and the self-test stay; adding that chain is then a code change with review, as
+above, plus a price calibration of its precompile ([CTR-PQZ-11](#CTR-PQZ-11)).
 
 **Release gates before any production or commercial use** (owner): **licence/patent clearance**, gate **G-LIC** (LaZer is MIT without
 an explicit patent grant; LNP22-family techniques come from IBM Research; GMP/MPFR are LGPL and must be absent from

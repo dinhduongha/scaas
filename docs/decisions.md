@@ -2850,6 +2850,7 @@ Change (2026-10-08): both UA structs (`UAMetaTransaction`, `UAMetaTransfer`) sha
 **Why.** PQZ is a separate token class gated by a hard-coded allowlist, a constructor precompile self-test and the registry `chain_uid`, with two release gates before any production or commercial use (owner): the licence/patent gate **G-LIC** and the independent audit.
 **Cost if wrong.** Without the self-test a chain with the same id but another client would accept PQZ deployments.
 **Source.** `history/specs/2026-10-06-pq-zether-design.md:208`
+Change (2026-10-08): owner — PQZ is meant for public chains too; the route is a lattice-verification precompile on that chain, which SCaaS waits for (rejected: a Solidity verifier split over transactions, a STARK-wrapped proof, a SCaaS appchain). Until then the allowlist and self-test stay. Source add: owner chat 2026-10-08.
 
 ### CTR-PQZ-02 — Additive-only MLWE with BFV-style encoding
 - old: R271 · status: current · owner: no · date: 2026-10-06 · normative: contracts/pq-zether.md#CTR-PQZ-02 · superseded-by: —
