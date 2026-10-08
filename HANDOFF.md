@@ -1,5 +1,11 @@
 # HANDOFF — scaas
 
+**Repo moved 2026-10-08** from `bamboo-dms/scaas/` to `/home/ha/work/ainative/scaas` (standalone). The bamboo-dms
+`dms_blockchain` tests read vectors via env `SCAAS_ROOT` (fallback `../../scaas`); the Odoo container mounts the repo
+read-only at `/mnt/scaas` with `SCAAS_ROOT=/mnt/scaas` (`/home/dockers/odoo19/docker-compose.yml`). Older sections
+below still say `bamboo-dms/scaas/`. The move also surfaced two never-committed Phase 4 fix worktrees (`fix-cnc`,
+`fix-node`); their fixes are now on `main` (`9476617`), so "28 findings fixed" below holds only from that commit.
+
 ## Shutdown 2026-10-08 — read this first
 
 **Meta-transaction redesign accepted and folded.** Design record: `docs/history/specs/2026-10-07-metatx-generic.md`
