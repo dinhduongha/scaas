@@ -29,6 +29,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
       `ERC1776Dex.mtxTrade`) and the `OP_TRADE` legs of `MetaToken`/`MetaTokenBase`/`MetaTxDex`.
 
 **P1 — MT-1…MT-4**
+- P1 is split into five plans, written one at a time: **P1a** (MetaTxBase, SigCheck, SaltedEIP712, tag + legacy) — plan `docs/superpowers/plans/2026-10-09-p1a-metatxbase.md`, ready to execute; **P1b** ERC20MetaTx; **P1c** MetaTokenBase + AdminLib/PayLib/HederaLib + kind NONE; **P1d** UnderlyingLib + UnderlyingToken; **P1e** factory, deployer, deletions, size gate (HANDOFF 2026-10-09).
 - [ ] **MT-1** Two bases: generic `MetaTxBase` (any SCaaS contract; `_chargeFee` refuses all but `NONE`, CTR-MTX-22) and
       the token base `ERC20MetaTx is MetaTxBase` (absorbs `MetaTxCore`) with `MetaTokenBase` on top; kinds `NONE` and
       `UNDERLYING` (the native-coin leg, CTR-TOK-26) with `AdminLib`, `PayLib`, `UnderlyingLib`, `HederaLib`, `SigCheck` (CTR-TOK-21…24); factory
@@ -93,6 +94,14 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
 - [x] DEX exchange path (DS-1…8) accepted and folded 2026-10-08; record `docs/history/specs/2026-10-08-dex-exchange-design.md`.
 
 ## 0. Finish the spec phase (5 items left)
+
+- [ ] **P0 follow-ups (minor, deferred by the final review):** `zether.md` gas-cap / 2.5 M paragraphs quote only
+      single-recipient figures; `zether.md` ~1327 `recipient` vs target `to`, ~216/220/238 informal `zetherShield(Y…)`
+      prose; architecture sequence 5 lacks `UnderlyingLib`; `asset-suite.md` 893–897 "BUILT" next to `createToken`, Equity
+      row `createTiered`, `IRegulatedToken` block old names (`issuer()`, `compliance()`, `ControlsDisabled`, `RoleRenounced`);
+      `clients/app.md` CLI-APP-26 cites CTR-TOK-21 for built kinds; `node/store.md`:157 SQL comments; `node/job-api.md`:328
+      unlabelled `SmartKeyAccount.mtxExecuteAsOwner`; CTR-TOK-26 "the invariant" wording; `dropped-artifacts.tsv` duplicates
+      and the bare token `273`; CTR-ACC-80 "(then named SubjectAccount)"; budget warnings `token-wrappers.md`, `dex.md` (owner).
 
 - [ ] **Rewrite `docs/integration.md`** (owner 2026-10-09: later). Goal to settle when started: shorten/restructure, align with the token tree and meta-tx v3, ERP-neutral; then `integration-odoo-example.md`. Keep the 27 `INT-ERP-*` ids (supersede, never renumber). No code dependency; PQZ parts stay open.
 

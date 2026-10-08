@@ -1,6 +1,55 @@
 # HANDOFF — scaas
 
-## Session 2026-10-08 (evening) — read this first
+## Shutdown 2026-10-09 — read this first
+
+**State:** `main` = P0 merged and pushed (`4bad99b`) + 3 local commits (TODO note, P1a plan). Tree clean. Nothing of P1 started:
+no tag `ref/pre-token-tree`, no `legacy/` yet (Task 1 of the P1a plan does both).
+
+**Next action:** execute `docs/superpowers/plans/2026-10-09-p1a-metatxbase.md` (9 tasks; the owner has not yet chosen
+subagent-driven vs native — recommended subagent-driven). Then write P1b…P1e one at a time, each against the code P1a/b/… left:
+
+| Plan | Scope |
+|---|---|
+| P1a | tag + `legacy/`; `SigCheck`; `SaltedEIP712` (salt = chain_uid); `MetaTxBase` (MetaTransaction, lanes, transient sender + ticket, allowlist, `mtxExecute`/`mtxBatch`/`cancelNonce`, fee NONE only); KAT — **plan written** |
+| P1b | `ERC20MetaTx` on `MetaTxBase` (`git mv MetaTxCore`): `MetaTransfer`, `mtxExecuteTransfer`/`mtxBatchTransfer`, fee classes, receiver-pays, approve-only-by-contracts, UA path, KATs |
+| P1c | `MetaTokenBase`: features + owner model (`AdminLib`, regulated flags), `PayLib`, init/provenance, `IS_HEDERA` + `HederaLib`; kind `NONE` |
+| P1d | `UnderlyingLib` + `UnderlyingToken` (Single+Multi merged, native-coin leg, `mtxWrap`) |
+| P1e | factory `createToken`, CREATE2 deployer, deploy scripts + `chainUid()` gate, delete v1/v2 lines, CI size gate |
+
+**P1a plan notes:** the plan's code was run in a scratch copy (692 tests pass, KAT matches `cast`). (1) The bare
+`MetaTxBase` mock is 9,410 B — almost half the 20,480 B token budget (CTR-TOK-24): watch it in P1b. (2) `metatx_kat.json`
+becomes the v3 vector; the v1 vector moves to `metatx_v1_kat.json` and in-repo readers are repointed — the bamboo-dms test
+`dms_blockchain/tests/test_eip712.py:14` breaks until repointed there. (3) Defaults taken in the plan: fee classes
+1 = ABSOLUTE, 2 = AMOUNT; refusal error `MetaTxUnknownMode`; ERC-1271 starvation margin 5,000 gas + error
+`SigCheckGasStarved`; KAT on a mock (P1b regenerates it on a real token).
+
+**Done today (2026-10-08/09):**
+- Zether code: multi-recipient transfer + three storage modes; Z9–Z13 (no attestation, `SENDER_CP`, per-transfer auditor
+  opt-out, threshold auditor key = docs only, disclosure in a stateless `ZetherDisclosure`). `ZetherToken` still 28,939 B
+  (over EIP-170) — solved by P3 (`ZetherLib`).
+- P0 docs fold (9 tasks, each reviewed, plus a whole-branch review): ids CTR-ZTH-37…47, CTR-TOK-21…26, CTR-MTX-25,
+  CTR-AS-17, CTR-DEX-24, CTR-ACC-11, CTR-PQZ-22; `docs/README.md` absorbed `SCaaS-v2.md`; `architecture.md` 421 → 879 lines.
+- `smartcontracts/evm/chain-uids.json`: genesis hashes of 26 live EVM chains (two RPC sources each). ETH/ETC and
+  Avalanche/Fuji share a genesis (a chain = `(chainId, chain_uid)`); Base Sepolia / Celo Sepolia official RPCs prune block 0;
+  Hedera values derived from the mirror node (first 32 bytes) — confirm against the relay; Holesky and Alfajores are dead.
+
+**Owner rulings 2026-10-08/09 (all folded):** features chosen at creation; one owner grants/revokes per-flag roles,
+disables disableable flags, `renounceOwnership` (role holders keep roles; full lock = revoke all, then renounce);
+`PAYABLE` default off; Hedera = per-chain parameter; Single+Multi merged; native-coin leg (some chains lack WETH-like
+tokens); confidential layer over the public balance with direct wrap-shield / unshield-unwrap; minter never mints shielded;
+regulated flags refused on confidential kinds; factory creates DEX clones, `isDex` advisory only (tokens never consult it);
+`SubjectAccount` → `SmartKeyAccount`; keep old code (tag + `legacy/`); refactor in place.
+
+**Controller rulings during P0 (review if you disagree):** R4/R8 budget warnings left as warnings (`token-wrappers.md`
+986 > 845, `dex.md` 538 > 520 — owner to accept or ask for a split); R7 native leg on every `UNDERLYING*` kind incl.
+`UNDERLYING_ZETHER`; R10 target `zetherUnshield(payload, proof, authSig, beneficiary, to, amount)` order; R12 target EIP-712
+domain `"SCaaS SmartKeyAccount"` (P4); R14 `PAYABLE`/`BURNABLE` always locked (`disableFeature` reverts `FeatureLocked`);
+R5 owner acts on a flag only by granting itself the role, OZ `AccessControlDefaultAdminRules` is the P1 candidate.
+
+**Open (owner):** PQZ multi-recipient (hint-count risk with shared randomness) and PQZ Z9/Z10/Z12; the two budget
+warnings; `docs/integration.md` rewrite (TODO §0, later). Deferred P0 minors are listed in TODO §0 ("P0 follow-ups").
+
+## Session 2026-10-08 (evening)
 
 Token-tree design accepted by the owner and folded (P0 done); record frozen at `docs/history/specs/2026-10-08-token-tree-design.md`
 (Status line holds the id map). The Zether multi-recipient record is frozen too. Code is unchanged: every affected
