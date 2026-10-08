@@ -28,7 +28,7 @@ are normative targets for future versions and keep the built conventions: custom
 contract itself, lane nonces, contract-only allowances, no proxy upgrades.
 
 EIP-712 domains: name per implementation (`"SCaaS MetaToken"`, `"SCaaS ZetherToken"`, `"SCaaS MandateWallet"`,
-`"SCaaS SubjectAccount"`, `"SCaaS OrderBookDex"`, `"SCaaS PqzToken"`, `"SCaaS UARegistry"`), version `"1"` (the UA
+`"SCaaS SubjectAccount"` (built; target `SCaaS SmartKeyAccount`, P4), `"SCaaS OrderBookDex"`, `"SCaaS PqzToken"`, `"SCaaS UARegistry"`), version `"1"` (the UA
 registry: its generation), `chainId`,
 `verifyingContract` = the clone or contract itself, `salt` = the chain's `chain_uid` ([CTR-GEN-05](#CTR-GEN-05)). All
 clones of one implementation share the name; replay safety comes from `verifyingContract` and the salt

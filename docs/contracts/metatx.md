@@ -144,7 +144,7 @@ signature; a `MetaTransfer` shows its typed fields.
 `verifyingContract` = the clone and `salt` = the chain's `chain_uid`: `("SCaaS MetaToken", "1", chainId, clone,
 chain_uid)` for every kind, `("SCaaS ZetherToken", "1", chainId, clone, chain_uid)` for Zether; every other SCaaS
 contract on `MetaTxBase` uses `("SCaaS <Contract>", "1", chainId, contract, chain_uid)` (e.g. `"SCaaS MandateWallet"`,
-`"SCaaS SubjectAccount"`; a contract built on SCaaS names its own); both structs of a contract share its domain; `eip712Domain()`
+`"SCaaS SubjectAccount"` (built; target `SCaaS SmartKeyAccount`, P4); a contract built on SCaaS names its own); both structs of a contract share its domain; `eip712Domain()`
 (ERC-5267) reports fields `0x1f`. `chain_uid` is the implementation's constructor immutable, so a clone (which runs the
 implementation's code by `DELEGATECALL`) uses it with no storage and cannot declare another value
 ([CTR-GEN-05](README.md#CTR-GEN-05)). There is no cross-token replay because `verifyingContract` differs, and no

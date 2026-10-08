@@ -1324,7 +1324,7 @@ a seed key; precompile and Solidity gas; end to end: add a second key (seed when
 
 Status: **BUILT** (`smartcontracts/evm/src/account/`).
 
-<a id="CTR-ACC-11"></a>**CTR-ACC-11** — **The multi-key ERC-1271 contract account is named `SmartKeyAccount` (factory `SmartKeyAccountFactory`) in every chain family**: "smart" marks a contract account, "key" its many keys. **Transitional:** built code and non-EVM programs still use `SubjectAccount`; renamed in P4 (every family at once).
+<a id="CTR-ACC-11"></a>**CTR-ACC-11** — **The multi-key ERC-1271 contract account is named `SmartKeyAccount` (factory `SmartKeyAccountFactory`) in every chain family**: "smart" marks a contract account, "key" its many keys. **Transitional:** built code and non-EVM programs still use `SubjectAccount`; including the EIP-712 domain name, built `SCaaS SubjectAccount`, target `SCaaS SmartKeyAccount`; the vectors change with it; renamed in P4 (every family at once).
 
 <a id="subjectaccount"></a>
 <a id="CTR-ACC-09"></a>**CTR-ACC-09** — **`SmartKeyAccount` is option (b), kept as built**: an optional ERC-1271 smart
@@ -1352,7 +1352,7 @@ identifier features. Tokens verify a `SmartKeyAccount` through ERC-1271 with the
   Its keys include P-256 passkeys that have no address, so the signer of the `MetaTransaction` is **the account**:
   `from = address(this)` is allowed here (the `SelfSender` guard of tokens is overridden) and `_requireValidSignature`
   checks the signature against the account's own key set (its ERC-1271 logic), signed by an existing key. Domain
-  `("SCaaS SubjectAccount", "1", chainId, account, chain_uid)`, the 2D lane nonce, fee mode `NONE` (the relayer pays
+  `("SCaaS SubjectAccount", "1", chainId, account, chain_uid)` (built; target `SCaaS SmartKeyAccount`, P4), the 2D lane nonce, fee mode `NONE` (the relayer pays
   gas). `mtxExecuteAsOwner(data, nonce, validUntil, signature)` keeps its signature as the named builder of that
   `MetaTransaction` with `batch = 0`. A plain EOA never rotates. **Transitional (BUILT):** `executeAsOwner` verifies
   its own `OwnerCall(bytes data,uint256 nonce,uint256 validUntil)` with a single nonce.
@@ -1398,7 +1398,7 @@ implementation pins the chain's `SmartKeyAccount` implementation (constructor pa
 gas on chains without the precompile. Other contract wallets (Safe, …) keep 50 k. `Deploy.s.sol` deploys
 `SmartKeyAccountFactory` before the token and records its address in `deployments/<chainid>.json`. The same rule is
 applied by `OrderBookDex` ([CTR-DEX-08](dex.md#CTR-DEX-08)) and to Zether envelopes ([CTR-ZTH-21](zether.md#CTR-ZTH-21)).
-`SmartKeyAccount` has its own salted domain `("SCaaS SubjectAccount","1", chainId, account, chain_uid)`; the factory
+`SmartKeyAccount` has its own salted domain `("SCaaS SubjectAccount","1", chainId, account, chain_uid)` (built; target `SCaaS SmartKeyAccount`, P4); the factory
 takes `chain_uid` as a constructor argument and passes it to `new SmartKeyAccount(chainUid)`, so a user's account has a
 different address on each chain and the node and app predict it per chain ([CTR-GEN-05](README.md#CTR-GEN-05)).
 
