@@ -40,7 +40,7 @@ BUDGET = {'README.md': 100, 'SCaaS-v2.md': 150, 'architecture.md': 450, 'decisio
           'networks/sui.md': 300, 'networks/aptos.md': 500, 'networks/solana.md': 550, 'networks/ton.md': 280,
           'clients/app.md': 750, 'clients/signers-clientkeys.md': 650}
 # Owner 2026-10-07: these overruns are accepted (reported as notes, not warnings).
-BUDGET_ACCEPTED = {'contracts/accounts.md', 'contracts/pq-zether.md', 'contracts/zether.md', 'node/README.md', 'decisions.md'} | {
+BUDGET_ACCEPTED = {'contracts/accounts.md', 'contracts/metatx.md', 'contracts/pq-zether.md', 'contracts/zether.md', 'node/README.md', 'decisions.md'} | {
     f'networks/{x}.md' for x in ('README', 'evm', 'hedera', 'cosmos', 'soroban', 'sui', 'aptos', 'solana', 'ton')}
 BANNER = '> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**'
 
