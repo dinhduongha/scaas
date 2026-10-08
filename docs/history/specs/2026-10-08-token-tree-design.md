@@ -1,6 +1,6 @@
 # EVM token tree: one base, kinds by code, features by flags
 
-**Status:** DRAFT; owner decisions recorded (T1–T15). Provisional ids `TT-n`; real ids are allocated in
+**Status:** DRAFT; owner decisions recorded (T1–T16). Provisional ids `TT-n`; real ids are allocated in
 `docs/decisions.md` on acceptance.
 **Date:** 2026-10-08. **Scope:** every EVM token contract, the factory, `OrderBookDex` deployment, the Zether token
 layer, the account contracts' base. Replaces the **structural** part of stream MT-1 and re-orders streams MT-1…MT-9
@@ -45,6 +45,7 @@ three Hedera children) and `ZetherMetaTx` → `ZetherToken`. The v3 design exist
 | T13 | Single and Multi merge into one `UnderlyingToken` (1–8 legs); Hedera becomes an implementation constructor parameter (no Hedera child contracts) |
 | T14 | The prover-only views move to a stateless `ZetherStatements` contract (pairs with `ZetherDisclosure`) |
 | T15 | `SubjectAccount` is renamed **`SmartKeyAccount`** (and its factory): "smart" marks a contract account, "key" its many keys. Every chain family at once, in phase P4 |
+| T16 | A leg of `UnderlyingToken` may be the chain's native coin (`address(0)` convention), wrapped like WETH/WXDAI: some chains have no standard wrapped native token |
 
 ## 3. Tree
 
@@ -70,6 +71,8 @@ Outside the tokens, unchanged in role: the Zether verifiers (one per curve), `Un
   (`wrap(amount)`, `unwrap(amount, recipient[, minOut])`) works only when the token has exactly one leg
   (`UnderlyingRequired` otherwise); the per-leg ABI works for every count. The kind labels `META_SINGLE`/`META_MULTI`
   disappear: the leg count says it.
+  A leg may be the chain's native coin (T16): `underlying = address(0)`, wrapped like WETH/WXDAI, for chains that have no
+  standard wrapped native token.
 - **Hedera (T3, T13).** Each implementation is deployed with an immutable `IS_HEDERA`. When set, the signature check
   takes the HIP-632 path and `UnderlyingLib` associates HTS underlyings fail-closed (`HederaLib`). The Hedera children
   and their four copies of the override go; every implementation carries the ≈ 0.5–1 KB of Hedera branches.
@@ -199,6 +202,7 @@ struct TokenConfig {
     Roles roles;                               // initial holders (optional, each only for a set flag): minter, rateAdmin, guardian, issuer, compliance
     uint256 initialSupply; address initialHolder;   // NONE* only
     Leg[] legs;                                // underlying, num, den — UNDERLYING* only, 1..8
+                                               // Leg note (T16): underlying = address(0) = the native coin
     RateConfig rate;                           // with RATE_ADJUSTABLE
     ConfidentialConfig conf;                   // verifier, auditorKey (empty = no auditor), shieldScale — *_ZETHER only
 }
@@ -259,3 +263,4 @@ vectors of the meta-tx and Zether formats regenerated per phase.
 |---|---|---|
 | 1 | 2026-10-08 | First draft from the owner's chat decisions T1–T15 |
 | 2 | 2026-10-08 | T8: one owner grants/revokes roles, disables disableable flags, renounces ownership; role holders keep roles after renounce |
+| 3 | 2026-10-08 | T16: native-coin leg in UnderlyingToken |

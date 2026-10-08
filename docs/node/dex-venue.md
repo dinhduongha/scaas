@@ -140,7 +140,7 @@ with `settle(Match[])`; the legacy `MetaTxDex` is not served. Both go when the t
 
 <a id="NODE-DEX-16"></a>**NODE-DEX-16** — **The venue serves only DEXes on the chain profile's DEX list.** Status:
 **SPECIFIED**. An order whose `dex` is not on the chain's DEX list ([NET-ALL-24](../networks/README.md#NET-ALL-24)) is
-refused at intake (`422 DEX_NOT_LISTED`), whatever the market; an order for a listed DEX that this venue does not run
+refused at intake (`422 DEX_NOT_LISTED`), whatever the market (a listed DEX is `isDex` and of a non-deprecated version, [CTR-DEX-24](../contracts/dex.md#CTR-DEX-24)); an order for a listed DEX that this venue does not run
 is answered with that DEX's home ([gossip](#gossip)) or refused. The node never builds, simulates or submits
 `mtxSettle` for an unlisted DEX, never relays an `mtxWrap` whose wrapper is not a registered wrapper of that
 underlying, never routes or replicates a gossiped order naming an unlisted `dex` (validation V4, Ignore), and never

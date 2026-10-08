@@ -121,8 +121,8 @@ Checks (all revert at init, so a bad token is never born):
 
 | Check | Error |
 |---|---|
-| underlying `≠ 0`, `≠ address(this)`, has code | `UnderlyingInvalid(u)` |
-| `decimals()` returns a `uint8` (staticcall) | `DecimalsUnreadable(u)` |
+| underlying `≠ address(this)`, and has code, or is `address(0)` = the native coin ([CTR-TOK-26](#CTR-TOK-26)) | `UnderlyingInvalid(u)` |
+| `decimals()` returns a `uint8` (staticcall); not checked for the native leg (18) | `DecimalsUnreadable(u)` |
 | `1 ≤ num, den < 2^96` | `RateInvalid(num, den)` |
 | rates fixed ⇒ no rate role, `rateDelay == 0 && maxRateStepBps == 0` | `RateConfigInvalid()` |
 | rates adjustable ⇒ the rate role is a contract (the `_isContract` of the allowance lockdown), `2 days ≤ rateDelay ≤ 30 days`, `1 ≤ maxRateStepBps ≤ 1000` | `RateAdminNotContract(a)`, `RateConfigInvalid()` |
@@ -187,6 +187,25 @@ Views: `underlying()` (a one-leg token: the single underlying), `underlyings() r
 `previewUnwrap(u, wrapped) returns (out, burned)`, `rateAdjustable()`, `rateAdmin()`, `rateDelay()`,
 `maxRateStepBps()`, `pendingRate() returns (address u, uint96 num, uint96 den, uint64 eta)` (all zero when nothing is
 pending or the pending change has expired). Previews ignore fee-on-transfer (they assume `received == amount`).
+
+<a id="CTR-TOK-26"></a>**CTR-TOK-26** — **A leg may be the chain's native coin** (owner), wrapped like WETH or WXDAI, because some chains have
+no standard wrapped native token. `underlying = address(0)` in a `Leg` is the native coin; the per-leg rules above and
+[CTR-TOK-05](#CTR-TOK-05) hold, with these differences:
+
+- **Wrap** for the native leg is `payable` and takes `msg.value`, which must equal `amount`; a non-native leg refuses
+  `msg.value != 0`. A native wrap cannot be gasless (the caller sends the value); gasless unwrap and every other path
+  are unchanged.
+- **Unwrap** pays the native coin with checks-effects-interactions (burn and `reserve -= out` before the send) under
+  the token's reentrancy guard, to a recipient that may be a contract (no gas-stipend limit); a recipient that fails to
+  receive reverts the unwrap.
+- **At most one native leg** per token; its rate math uses 18 decimals.
+- **Reserve** is internal ([CTR-TOK-05](#CTR-TOK-05)): the invariant counts `reserve_i` for the native leg, never
+  `address(this).balance`; coins forced in by `selfdestruct` or as a block reward are not reserve.
+- **Provenance:** the factory's index ([CTR-TOK-25](#CTR-TOK-25), [CTR-TOK-17](#CTR-TOK-17)) records `address(0)` as the
+  native underlying; `underlying()` of a one-leg native token therefore returns `address(0)` too, and clients read
+  `underlyings()`. Libraries and size budget: [CTR-TOK-24](#CTR-TOK-24).
+
+**Transitional (BUILT).** Built wrappers have no native leg (`underlying ≠ 0` is checked); replaced in P1.
 
 #### More than one leg
 
@@ -612,6 +631,7 @@ implementation whose `chainUid()` differs, so a clone's domain `salt` has exactl
 ```solidity
 function createToken(TokenKind kind, uint64 version, TokenConfig calldata cfg, bytes32 salt) external returns (address);
 function createTokenUnregistered(TokenKind kind, address implementation, TokenConfig calldata cfg, bytes32 salt) external returns (address);
+function createDex(uint64 version, DexConfig calldata cfg, bytes32 salt) external returns (address);
 
 struct TokenConfig {
     string name; string symbol; uint8 decimals;
@@ -619,10 +639,11 @@ struct TokenConfig {
     address owner;                             // 0 = no administration ever
     Roles roles;                               // initial holders (optional, each only for a set flag): minter, rateAdmin, guardian, issuer, compliance
     uint256 initialSupply; address initialHolder;   // NONE* only
-    Leg[] legs;                                // underlying, num, den — UNDERLYING* only, 1..8
+    Leg[] legs;                                // underlying (address(0) = native coin, CTR-TOK-26), num, den — UNDERLYING* only, 1..8
     RateConfig rate;                           // with RATE_ADJUSTABLE
     ConfidentialConfig conf;                   // verifier, auditorKey (empty = no auditor), shieldScale — *_ZETHER only
 }
+struct DexConfig { address admin; uint32 relayerSharePpm; address treasury; bool listedOnly; }
 ```
 
 - **Creation (unchanged pattern).** `CREATE2` of an EIP-1167 clone, then `initialize(cfg)` **in the same call** (no
@@ -632,8 +653,10 @@ struct TokenConfig {
   `NONE_PQZ`, `UNDERLYING_PQZ`, `NONE_ZETHER_PQZ`, `UNDERLYING_ZETHER_PQZ`. The implementation registry keeps
   versions per kind (register, deprecate) as before; the catalogue is append-only.
 - **One event per creation:** `TokenCreated(token, creator, kind, version, implementation, features, lockedFeatures,
-  owner, underlyings)`.
-- **Registry views:** `isToken(addr)`, `versionOf(addr)`.
+  owner, underlyings)`; `DexCreated(dex, creator, version, implementation, admin)` for a DEX clone
+  ([CTR-DEX-24](dex.md#CTR-DEX-24)).
+- **Registry views:** `isToken(addr)`, `isDex(addr)`, `versionOf(addr)`. `isDex` is advisory: clients and the node use it,
+  tokens never consult it ([CTR-DEX-24](dex.md#CTR-DEX-24)).
 - `IFactoryToken`, `IFactoryTokenV2`, `IOpenFactory`, `IOpenFactoryV2` are replaced by one `IOpenFactory` and one
   `IFactoryToken`.
 

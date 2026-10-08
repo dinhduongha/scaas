@@ -262,7 +262,7 @@ their per-fill DEX fee the same way (today a floor: Sui `dex.move:250-251`, Apto
 **SPECIFIED** (EVM: with the rebuild; non-EVM: new program versions).
 
 <a id="admin"></a>
-<a id="CTR-DEX-03"></a>**CTR-DEX-03** — `admin` is **immutable**, set at deployment; in production a Safe/multisig
+<a id="CTR-DEX-03"></a>**CTR-DEX-03** — `admin` is set once at creation ([CTR-DEX-24](#CTR-DEX-24)) and has no setter; in production a Safe/multisig
 (changing signers happens inside the Safe). The admin can do exactly four things: list or delist a market
 (`setMarket(base, quote, listed)`, which also records each token's kind, [CTR-DEX-18](#CTR-DEX-18); emit
 `MarketSet(base, quote, listed)`), set the fee split (`setFeeSplit(relayerSharePpm, treasury)`, `treasury ∉ {0,
@@ -272,6 +272,25 @@ executor (`setExchangeTarget(target, listed)`; emit `ExchangeTargetSet`), and sw
 what proportion, **never the amount**: the amount comes only from the signed `fee`. No access to funds, no upgrade, no
 sweep, no global pause (delisting a market stops that pair). No timelock: there is nothing to wait for — no signed
 order can be charged more than it signed.
+
+<a id="CTR-DEX-24"></a>**CTR-DEX-24** — **`OpenFactory.createDex(version, DexConfig, salt)` makes an `OrderBookDex` clone; `admin` is written once by
+`initialize`; the `DexPuller` is deployed by `initialize`; `isDex(addr)` is advisory: tokens never consult it** (owner).
+
+```solidity
+struct DexConfig { address admin; uint32 relayerSharePpm; address treasury; bool listedOnly; }
+function createDex(uint64 version, DexConfig calldata cfg, bytes32 salt) external returns (address);
+// event DexCreated(address dex, address creator, uint64 version, address implementation, address admin)
+```
+
+- **Clone.** `CREATE2` of an EIP-1167 clone and `initialize(cfg)` in the same call, as for tokens
+  ([CTR-TOK-25](token-wrappers.md#CTR-TOK-25)); the implementation locks its own `initialize`. `admin` moves from an
+  immutable to storage written once by `initialize` (same behaviour: no setter, [CTR-DEX-03](#CTR-DEX-03)); the
+  `DexPuller` is deployed by `initialize`; the EIP-712 `verifyingContract` is the clone.
+- **Registry.** The factory keeps `isDex(addr)` and `versionOf(addr)`. Clients and the node use them with the
+  implementation version to warn about or refuse an unlisted `dex`; tokens do not consult them.
+
+**Transitional (BUILT).** The built `OrderBookDex` has a constructor and an immutable `admin`, and is deployed directly;
+replaced in P2.
 
 ## Outside-token legs
 
@@ -359,6 +378,7 @@ or sign**, a `TradeOrder` whose `dex` is not on the chain profile's DEX list (fo
 that underlying); the wallet's EIP-712 view shows `dex`; the node routes orders only to DEXes on the chain profile's
 DEX list and never for an unlisted `dex` ([node/dex-venue.md](../node/dex-venue.md)). A contract is not proof of
 honesty; the rule only guarantees that an EOA can never be granted a pull ([CTR-TOK-01](token-wrappers.md#CTR-TOK-01)).
+`isDex` ([CTR-DEX-24](#CTR-DEX-24)) feeds the client and node checks; tokens do not consult it, so the factory admin gains no power over trades (owner).
 
 ## Signature checks
 

@@ -1933,9 +1933,16 @@ Change (2026-10-08): the non-EVM exception is gone — non-EVM families name sig
 ### CTR-TOK-25 — Creation API: createToken, createTokenUnregistered, TokenConfig, TokenCreated
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/token-wrappers.md#CTR-TOK-25 · superseded-by: —
 
-**Why.** One `TokenConfig` (name, symbol, decimals, features, lockedFeatures, owner, roles, initial supply, legs, rate, confidential parameters) replaces the per-kind `initData`; `CREATE2` clone and `initialize` in one call; one `TokenCreated` event; registry views `isToken` and `versionOf`; one `IOpenFactory` and one `IFactoryToken`.
+**Why.** One `TokenConfig` (name, symbol, decimals, features, lockedFeatures, owner, roles, initial supply, legs, rate, confidential parameters) replaces the per-kind `initData`; `CREATE2` clone and `initialize` in one call; one `TokenCreated` event; registry views `isToken`, `isDex` and `versionOf`; `createDex` and `DexConfig` (CTR-DEX-24); one `IOpenFactory` and one `IFactoryToken`.
 **Cost if wrong.** Per-kind encodings keep a second parsing surface in the factory, node and clients; a deployed-but-uninitialized clone can be front-run.
 **Source.** `history/specs/2026-10-08-token-tree-design.md` §7.
+
+### CTR-TOK-26 — A leg may be the native coin
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/token-wrappers.md#CTR-TOK-26 · superseded-by: —
+
+**Why.** Owner: wrap like the standard wrapped coins (WETH, WXDAI), because some chains have no standard wrapped native token.
+**Cost if wrong.** Issuers on such chains cannot back a token by the native coin.
+**Source.** `history/specs/2026-10-08-token-tree-design.md` T16.
 
 ### CTR-TOK-80 — No EOA approve lockdown
 - old: R4 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CTR-TOK-01
@@ -2038,13 +2045,13 @@ Change (2026-10-08): the same `TradeOrder`s can also be executed against AMM poo
 **Cost if wrong.** An expiring cancel could resurrect an order the signer withdrew.
 **Source.** `history/specs/2026-10-03-dex-design.md:119`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-8.2, MG-8.4.
 
-### CTR-DEX-03 — Immutable admin: list markets and set the fee split
+### CTR-DEX-03 — Admin set once at creation: list markets and set the fee split
 - old: RS5-1 · status: current · owner: yes · date: 2026-10-08 · normative: contracts/dex.md#CTR-DEX-03 · superseded-by: —
 
-**Why.** The immutable admin has two powers — `setMarket(base, quote, listed)` and `setFeeSplit(relayerSharePpm, treasury)` — and changes who receives fees and in what proportion, never the amount, which comes only from the signed `fee`.
+**Why.** The admin, set once at creation (CTR-DEX-24) with no setter, has two powers — `setMarket(base, quote, listed)` and `setFeeSplit(relayerSharePpm, treasury)` — and changes who receives fees and in what proportion, never the amount, which comes only from the signed `fee`.
 **Cost if wrong.** An admin that sets the fee amount could raise it on resting orders; any custody power is custody by another name.
 **Source.** `history/specs/2026-10-03-dex-design.md:398`; `history/specs/2026-10-07-metatx-generic.md` §2 A15, §3 MG-8.3.
-Change (2026-10-08): two more powers, `setExchangeTarget` (list or delist an exchange target or executor) and `setListedOnly` (DEX-wide listed-only mode, default off); neither touches funds or a fee amount (CTR-DEX-23). Source add: `history/specs/2026-10-08-dex-exchange-design.md` §2 S1, S2, §3 DS-6.
+Change (2026-10-08): `admin` is written once by `initialize` of a factory-made clone, no longer an immutable (CTR-DEX-24); two more powers, `setExchangeTarget` (list or delist an exchange target or executor) and `setListedOnly` (DEX-wide listed-only mode, default off); neither touches funds or a fee amount (CTR-DEX-23). Source add: `history/specs/2026-10-08-dex-exchange-design.md` §2 S1, S2, §3 DS-6.
 
 ### CTR-DEX-04 — IOC closed on chain at its single pull
 - old: RS5-3 · status: current · owner: no · date: 2026-10-08 · normative: contracts/dex.md#CTR-DEX-04 · superseded-by: —
@@ -2188,6 +2195,13 @@ Change (2026-10-08): the pull is `DexPuller.pull` under the party's allowance to
 **Why.** Interactions may target any contract by default (owner), except the DEX and the puller, and never with the `mtxTrade` selector (else a victim's resting order naming this DEX could be pulled with an invented fill and the amount moved out while conservation balances). The owner wanted both guards on targets: the signer's `LISTED_POOLS` flag per order and the admin's DEX-wide listed-only mode; the listing then applies to every target and to an executor, whose inner calls the DEX cannot see.
 **Cost if wrong.** Without the selector block, any resting order is drainable; without a listing option, a signer who distrusts unknown pools has no on-chain guarantee.
 **Source.** `history/specs/2026-10-08-dex-exchange-design.md` §2 S1, S2, S5, §3 DS-5, DS-6.
+
+### CTR-DEX-24 — Factory-made DEX clones; the DEX registry is advisory
+- old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/dex.md#CTR-DEX-24 · superseded-by: —
+
+**Why.** `OpenFactory.createDex` makes an `OrderBookDex` clone with `admin` written once by `initialize` and the `DexPuller` deployed by `initialize`; `isDex` serves clients and the node, and tokens never consult it, because requiring a factory-made DEX would give the factory admin too much power over trades (CTR-DEX-19 unchanged).
+**Cost if wrong.** If tokens required `isDex`, the factory admin could stop trading; without the registry, clients and the node have no on-chain list of genuine DEX versions.
+**Source.** `history/specs/2026-10-08-token-tree-design.md` T12, §7.
 
 ### CTR-DEX-80 — Fill-or-kill two-leg MetaTxDex settlement
 - old: R3 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CTR-DEX-01, NODE-DEX-01, INT-ERP-12

@@ -223,7 +223,7 @@ to build and sign it.** Status: **SPECIFIED**. Before signing a `TradeOrder` (in
 the review shows `dex`, `relayer`, `destination`, the price limit both ways, the signed `fee` rate and the effective
 minimum fill per settlement (`max(minFill, ceil(amount / 2))`; a `minFill` below half is shown as half; `minFill =
 amount` as fill-or-kill). By default the client **refuses** to build or sign when `dex` is not on its pinned chain
-profile's DEX list ([NET-ALL-24](../networks/README.md#NET-ALL-24)) — for a signature wrap, when `dex` is not a
+profile's DEX list ([NET-ALL-24](../networks/README.md#NET-ALL-24); a listed DEX is `isDex` and of a non-deprecated version, [CTR-DEX-24](../contracts/dex.md#CTR-DEX-24)) — for a signature wrap, when `dex` is not a
 registered wrapper of that underlying — with a warning that a contract named there can take the signed amount;
 overriding needs an explicit expert setting and is never offered in a portal. It warns when `destination ≠ from`
 (someone else receives the proceeds), and it defaults `relayer` to the venue node's lane from the gateway profile
