@@ -45,12 +45,11 @@ chainId 9000 → **7622**; `PqzToken` implements `IERC20MetaTx` (PQZ rev 1.4 R28
       lock per `(from, pay_ref)` (R8-9), DEX needs relayer binding (R8-10); §7.2 `associateUnderlying()` superseded
       (R6-8, TW2 R144); §7.5 add lane-horizon client obligation (RS7-11, RS11-24, RS12-24) + Aptos multisig-wrap risk;
       §1.2/§1.3 immutability now true by ruling; admin-exception list; outbox rules into integration.md.
-- [ ] **NODE-IDX-06** (owner 2026-10-07: node flags *and* client checks a repeated `entryRef`): node store keeps the
-      first `PaymentSettled` per `(chain_key, token, entryRef)`, `/v1/events` items carry `repeat_of`; client books the
-      repeat as an overpayment exception for a refund decision. Code stream, not built.
-- [ ] Cross-spec nits: DEX RS5-15 "relayer 0 = open" needs a note — no open form on Soroban (net-soroban R8-10);
-      merge PAY-FIX6 into DX-FIX3 (same 1271 cap); PAY-FIX7 (DEX fee-per-fill round-up) needs a DEX ruling;
-      spec B's NI-amends row should list `job.sponsor_fallback`.
+- [x] **NODE-IDX-06** rules in the docs (`node/indexer-feeds.md`, `integration.md`); the code is stream MT-8 (node) and the
+      client refund check.
+- [x] Cross-spec nits, closed by the reorg and the meta-tx fold (checked 2026-10-08): Soroban has no open form
+      (`networks/README.md`, [NET-SOR-10]); PAY-FIX6 = the 1271 cap [CTR-DEX-08]; PAY-FIX7 = fee round-up [CTR-DEX-11];
+      `job.sponsor_fallback` in `node/job-api.md`, `node/sponsorship.md`.
 - [ ] **Codex reviews still owed** (credit ran out after 4): AS, TW2, app, OPS, S4F, mesh, A2 (SCaaS.md and integration.md
       dropped: frozen in `docs/history/`; reorg Phase 4 reviews the new docs). Review the current component doc of each
       area (map in `docs/README.md`), not the frozen spec.
@@ -60,8 +59,8 @@ chainId 9000 → **7622**; `PqzToken` implements `IERC20MetaTx` (PQZ rev 1.4 R28
       foundry profile, KAT/mesh vectors regenerated, node examples, Odoo chain record + tests. Left: `private9000`
       mentions in `docs/history/SCaaS-2026-10-07.md` + `docs/history/integration-2026-10-07.md` (history: the reorg writes 7622 only); `chain_uid` = genesis hash binding (UA R330, not built);
       redeploy the dev contracts on the empty chain.
-- [ ] Doc nits: `wasm-smoke.sh` needs `--target web`; node default `max_gas_per_tx` 3M < classical Zether transfer 3.36M
-      (Zether rev 1.1 says ≥ 4.2M on Zether chains).
+- [x] Doc nits: Zether chains set `max_gas_per_tx` ≥ 4.2 M (`contracts/zether.md` gas table). Left as code: `wasm-smoke.sh`
+      builds `--target nodejs` only; a `--target web` build for the app is client work (S4F/app).
 
 ## 1. Code streams (after §0)
 
