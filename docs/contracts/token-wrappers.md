@@ -92,10 +92,10 @@ first-come); classical Zether refuses fee-on-transfer underlyings (`UnsupportedU
 <a id="CTR-TOK-09"></a>**CTR-TOK-09** — `NoUnderlyingToken` (kind `NONE`) mints `initialSupply` to `initialHolder` at
 init (`NONE*` kinds only). Further supply and burning are features, not class: `mint` by the `minter` with `MINTABLE`
 (`minter == 0` and no flag ⇒ fixed supply), holder `burn` with `BURNABLE`, and the role and its lifecycle are in
-[CTR-TOK-22](#CTR-TOK-22). (Built: `renounceMinter`.)
+[CTR-TOK-22](#CTR-TOK-22). (Built: `renounceMinter`, the holder's `renounceRole(MINTABLE)`.)
 
 `underlyings.length == 0`. The creation parameters are the `TokenConfig` fields of [CTR-TOK-25](#CTR-TOK-25)
-(`name`, `symbol`, `decimals`, `features`, `lockedFeatures`, `roles`, `initialSupply`, `initialHolder`).
+(`name`, `symbol`, `decimals`, `features`, `lockedFeatures`, `owner`, `roles`, `initialSupply`, `initialHolder`).
 
 | Function | Rule |
 |---|---|
@@ -195,7 +195,7 @@ pending or the pending change has expired). Previews ignore fee-on-transfer (the
 <a id="CTR-TOK-07"></a>**CTR-TOK-07** — A token with more than one leg is **any-of**: the underlying set (≤ 8, no duplicates) and
 each leg's initial rate are set at creation and never added to or removed (rates themselves may be adjustable,
 [CTR-TOK-13](#CTR-TOK-13)); a user wraps one chosen underlying and unwraps into one chosen underlying, bounded by that
-leg's reserve (`InsufficientReserve`). The `guardian` (role of the `WRAP_DISABLEABLE` flag, [CTR-TOK-22](#CTR-TOK-22); set at creation, may be an EOA) has exactly one power:
+leg's reserve (`InsufficientReserve`). The `guardian` (role of the `WRAP_DISABLEABLE` flag, [CTR-TOK-22](#CTR-TOK-22); granted by the owner, may be an EOA) has exactly one power:
 `disableWrap(underlying, reason)` — one-way; unwrap from a disabled leg stays open. A disabled leg refuses
 `addReserve`, and no rate change that lowers `collateralValue()` executes while any leg is disabled. A re-enable power
 would let a compromised guardian reopen a depegged inflow and drain the good legs.
@@ -276,12 +276,13 @@ lockdown; meant to be a multisig or timelock, which the contract cannot prove); 
 the execution with its own wraps); **one pending change per token**, and while it is pending **wrap is paused on
 every leg** (unwrap stays open); each step ≤ `maxRateStepBps` (default 100 = 1 %, bounds [1, 1 000]); every execution
 requires `balanceOf_i ≥ reserve_i` on every leg and `collateralValue() ≥ totalSupply()` afterwards; balances never
-change (no rebase). `rateAdmin` can renounce (one-way, drops a pending change, the rate becomes fixed); it cannot be
-transferred. Delay, step and admin are set once. A holder who disagrees has at least `rateDelay` to unwrap at the old
+change (no rebase). The rate role is granted and revoked by the owner and may be renounced by its holder; revoking or renouncing it leaves
+the rate as it is, and only `disableFeature(RATE_ADJUSTABLE)` fixes the rate and cancels a pending change
+([CTR-TOK-22](#CTR-TOK-22)). Delay, step and admin are set once. A holder who disagrees has at least `rateDelay` to unwrap at the old
 rate, bound by `minOut`, and loses at most one step per delay.
 
 One pending change per token (`PendingRate` in one slot). A change is **pending** from `proposeRate` until it is
-executed, cancelled, dropped by `renounceRateAdmin`, or its window (`eta + 7 days`) has passed; an expired change
+executed, cancelled (also by `disableFeature(RATE_ADJUSTABLE)`; built: dropped by `renounceRateAdmin`), or its window (`eta + 7 days`) has passed; an expired change
 counts as no change everywhere (`proposeRate`, `pendingRate()`, the wrap pause).
 
 ```
@@ -438,14 +439,16 @@ Clients refuse by default to build or sign such an order when `dex` is not a reg
 
 ## Features
 
-<a id="CTR-TOK-10"></a>**CTR-TOK-10** — "No one alters a deployed token" holds with only the creation-time, visible
-exceptions of the feature flags ([CTR-TOK-22](#CTR-TOK-22)). The factory and its registrar have no power over any
-token, and no role can mint into a shielded balance, move balances (except under the forced-transfer flag), touch
-reserves, pause unwrap or add or remove an underlying.
+<a id="CTR-TOK-10"></a>**CTR-TOK-10** — "No one alters a deployed token" holds with only visible exceptions: the feature flags are
+fixed at creation ([CTR-TOK-22](#CTR-TOK-22)) and the roles are held by the accounts the owner granted them to; an owner
+can give everything up. The factory and its registrar have no power over any token, and no role can mint into a shielded
+balance, move balances (except under the forced-transfer flag), touch reserves, pause unwrap or add or remove an
+underlying.
 
 <a id="CTR-TOK-22"></a>**CTR-TOK-22** — **Features are flags chosen at creation.** `features` and `lockedFeatures` are
 two immutable words written by `initialize`, with `lockedFeatures ⊆ features`. Per flag the creator chooses **locked**
-(exists forever) or **disableable** (its role may clear it once, never set it again).
+(exists forever) or **disableable** (the owner may clear it once, never set it again). Roles and the owner are not
+immutable: see the administration bullet below.
 
 | Bit | Flag | Role | Valid kinds | Meaning |
 |---|---|---|---|---|
@@ -459,16 +462,25 @@ two immutable words written by `initialize`, with `lockedFeatures ⊆ features`.
 | 7 | `PAUSE` | `issuer` | non-confidential | as [CTR-AS-06](asset-suite.md#CTR-AS-06) |
 | 8 | `ALLOWLIST` | `compliance` | non-confidential | receivers checked against a `ComplianceRegistry` ([CTR-AS-07](asset-suite.md#CTR-AS-07)) |
 
+- **Administration: one `owner`.** Each token has one `owner` (0 at creation = no administration ever). Candidate
+  implementation, decided in P1: OpenZeppelin `AccessControlDefaultAdminRules` (owner = default admin, delayed two-step
+  transfer, renounce). The owner can: `grantRole(bit, account)` / `revokeRole(bit, account)` for the role of a flag set
+  in `features` (a role may have several holders; the contract-only roles stay contract-only); `disableFeature(bit)`,
+  one-way, only for a flag not in `lockedFeatures` (reverts `FeatureLocked(bit)`; `FeatureNotSet(bit)` when already
+  clear); two-step `transferOwnership`; `renounceOwnership()`, after which the owner is 0 forever. After
+  `renounceOwnership()` the existing role holders **keep** their roles; to make a token unchangeable the owner revokes
+  every role, then renounces. A role holder performs the flag's actions (mint, rate change, freeze, …) and may
+  `renounceRole(bit)` itself. The owner only administers: it acts on a flag only if it grants itself the role.
+  `PAYABLE` and `BURNABLE` have no role and are therefore immutable. Events: `RoleGranted`/`RoleRevoked`,
+  `FeatureDisabled(bit, by)`, the ownership events.
 - **Validation in the token**, in `initialize` through `AdminLib` (the factory only forwards; `createTokenUnregistered`
-  lets anyone bring an implementation, so the token is the one authority): each flag valid for the kind;
-  `lockedFeatures ⊆ features`; a role is non-zero **iff** its flag is set; the contract-only roles stay contract-only.
-  Errors `FeatureInvalidForKind(bit)`, `LockedNotSubset()`, `RoleMismatch(bit)`.
-- **`disableFeature(bit)`**: callable by the flag's role; clears the bit one-way; reverts `FeatureLocked(bit)` on a
-  locked bit and `FeatureNotSet(bit)` when already clear; the role loses its power with the bit. Emits
-  `FeatureDisabled(bit, by)`. `PAYABLE` and `BURNABLE` have no role and are therefore immutable.
-- **Views:** `features()`, `lockedFeatures()`, `roles()`, `kind()`, `version()`. `supportsInterface(IERC20Payment)` is
-  true iff `PAYABLE` is set. `rateAdjustable()`, `rateAdmin()` and `guardian()` stay public so wallets and indexers
-  flag them. (The wrap pause during a pending rate change is a consequence of that change, not a separate power.)
+  lets anyone bring an implementation, so the token is the one authority): each flag valid for the kind
+  (`FeatureInvalidForKind(bit)`); `lockedFeatures ⊆ features` (`LockedNotSubset()`); a role holder in `roles` only for a
+  set flag (`RoleWithoutFeature(bit)`); contract-only roles are contracts. Roles may also be granted later by the owner.
+- **Views:** `features()`, `lockedFeatures()`, `owner()`, `hasRole(bit, account)`, `kind()`, `version()`.
+  `supportsInterface(IERC20Payment)` is true iff `PAYABLE` is set. `rateAdjustable()` and the role holders stay public so
+  wallets and indexers flag them. (The wrap pause during a pending rate change is a consequence of that change, not a
+  separate power.)
 - **The four regulated controls are flags 5–8** on the ordinary kinds, not separate kinds (the regulated kinds 5–7 are
   superseded); their rules (caps, cooldowns, orders, receiver-only allowlist, the shape-step plus `_update` check) are
   unchanged and live in `AdminLib`. A token with none of the flags is fully permissionless. Confidential kinds refuse
@@ -480,13 +492,14 @@ two immutable words written by `initialize`, with `lockedFeatures ⊆ features`.
 
 | | No regulated flag | Any of flags 5–8 |
 |---|---|---|
-| Admin powers | None beyond the creation-time flags 1, 3, 4: no owner, pause, blacklist, freeze, confiscation | The flags chosen at creation; each can only be cleared later, never set; no power mints, changes a rate or touches the reserve |
+| Admin powers | None beyond the creation-time flags 1, 3, 4: no pause, blacklist, freeze, confiscation | The flags chosen at creation; a flag can only be disabled later (where not locked), never set; no power mints, changes a rate or touches the reserve |
 | Use | Loyalty, internal units, B2B settlement tokens, wrapped stablecoins | Central-bank digital currency, licensed stablecoins, digital securities and bonds, real-world-asset claims |
 | Guarantee | "Your key, your funds": neither the issuer nor the factory can touch balances | Due-process intervention against a recorded order, permanently evidenced on chain; mandatory disclosure (`termsHash`) |
 
-**Transitional (BUILT).** The built tokens fix these powers by class: `renounceMinter`, `renounceRateAdmin`, the
-guardian renounce and `rateAdjustable`/`guardian` set through `initData`; the regulated controls are specified only
-(`RegulatedControls`, kinds 5–7). Replaced in P1 by the flags above.
+**Transitional (BUILT).** The built tokens fix these powers by class and at creation: the minter, rate admin and
+guardian are set through `initData` and cannot be changed; `renounceMinter`, `renounceRateAdmin` and `renounceGuardian`
+correspond to the holder's `renounceRole(bit)`, and `disableControls` to `disableFeature(bit)`; there is no owner. The
+regulated controls are specified only (`RegulatedControls`, kinds 5–7). Replaced in P1 by the flags and the owner above.
 
 ## Allowance lockdown
 
@@ -604,7 +617,8 @@ function createTokenUnregistered(TokenKind kind, address implementation, TokenCo
 struct TokenConfig {
     string name; string symbol; uint8 decimals;
     uint256 features; uint256 lockedFeatures;
-    Roles roles;                               // minter, rateAdmin, guardian, issuer, compliance
+    address owner;                             // 0 = no administration ever
+    Roles roles;                               // initial holders (optional, each only for a set flag): minter, rateAdmin, guardian, issuer, compliance
     uint256 initialSupply; address initialHolder;   // NONE* only
     Leg[] legs;                                // underlying, num, den — UNDERLYING* only, 1..8
     RateConfig rate;                           // with RATE_ADJUSTABLE
@@ -619,7 +633,7 @@ struct TokenConfig {
   `NONE_PQZ`, `UNDERLYING_PQZ`, `NONE_ZETHER_PQZ`, `UNDERLYING_ZETHER_PQZ`. The implementation registry keeps
   versions per kind (register, deprecate) as before; the catalogue is append-only.
 - **One event per creation:** `TokenCreated(token, creator, kind, version, implementation, features, lockedFeatures,
-  underlyings)`.
+  owner, underlyings)`.
 - **Registry views:** `isToken(addr)`, `versionOf(addr)`.
 - `IFactoryToken`, `IFactoryTokenV2`, `IOpenFactory`, `IOpenFactoryV2` are replaced by one `IOpenFactory` and one
   `IFactoryToken`.
@@ -737,7 +751,7 @@ contracts: [asset-suite.md](asset-suite.md#templates).
 
 The block is the **built** function set, grouped by the built contracts; in the target the `UnderlyingToken`, `NoUnderlyingToken`
 and `MetaTokenBase` rows carry the same functions, `renounceMinter`/`renounceRateAdmin`/`renounceGuardian` become
-`disableFeature(bit)` and the factory is [CTR-TOK-25](#CTR-TOK-25) (replaced in P1).
+the holder's `renounceRole(bit)` and the factory is [CTR-TOK-25](#CTR-TOK-25) (replaced in P1).
 
 ```solidity
 // built v2 line also has executeMetaTransactionWithFee, mtxUnwrap(…, validUntil, …), mtxUnwrapWithFee(…, feeRecipient, …)
@@ -910,10 +924,10 @@ Unit (forge, `test/v2/`):
 | Named | `testFuzz_namedDigestEqualsGeneric` over random struct fields for every named function; a signature consumed by a named call fails on the generic path and vice versa; every `MtxModeShape` case; a no-fee struct signed with a leftover `fee ≠ 0` fails through `mtxTransfer`; `mtxPay` lane equals `payLane`; second `mtxPay` of a `payId` reverts `MetaTxBadNonce`; `payWithFee` with the same `entryRef` still emits `PaymentSettled` (documents the per-path limit); `mtxBatch` atomic (one bad item reverts all), length mismatch, empty |
 | `NONE` | init mint to `initialHolder`; `mint` with `MINTABLE` and `NotMinter`; `burn` with `BURNABLE`; fixed supply without `MINTABLE`; `disableFeature(MINTABLE)` |
 | `UNDERLYING`, one leg | rate 1:1 equals the deleted v1 wrapper's behaviour; rounding down on wrap/unwrap; `burned = ⌈out·q⌉`; `previewWrap` `used`; `WrapTooSmall`/`UnwrapTooSmall`/`UnwrapBelowMin`; two-argument `unwrap` = `minOut 0`; fee-on-transfer inbound measured; sender-pays fee-on-transfer reverts `UnderlyingTransferMismatch`; donation not counted; `ReserveShortfall` after a negative-rebase mock stops wrap and not unwrap; `addReserve`; decimals snapshot; init refusals |
-| Rates | fixed ⇒ `RateFixed`; propose/cancel/execute; only the admin executes (`NotRateAdmin` for anyone else); delay and window bounds; an expired change counts as none for `proposeRate`, `pendingRate()` and the pause; step bound both directions at the exact edge; decrease refused without collateral, accepted after `addReserve`; execute refused with `ReserveShortfall` when any leg's balance is below its reserve (shock, then decrease); `collateralValue` saturates and `executeRate` exits early on a huge leg; giving up the rate role (built: `renounceRateAdmin`) drops pending, as [CTR-TOK-22](#CTR-TOK-22) rules; EOA admin refused at init; wrap paused on **every** leg while anything is pending, reopens on execute/cancel/expiry, unwrap and `addReserve` open |
+| Rates | fixed ⇒ `RateFixed`; propose/cancel/execute; only the admin executes (`NotRateAdmin` for anyone else); delay and window bounds; an expired change counts as none for `proposeRate`, `pendingRate()` and the pause; step bound both directions at the exact edge; decrease refused without collateral, accepted after `addReserve`; execute refused with `ReserveShortfall` when any leg's balance is below its reserve (shock, then decrease); `collateralValue` saturates and `executeRate` exits early on a huge leg; revoking or renouncing the rate role leaves the rate, `disableFeature(RATE_ADJUSTABLE)` cancels a pending change; EOA admin refused at init; wrap paused on **every** leg while anything is pending, reopens on execute/cancel/expiry, unwrap and `addReserve` open |
 | `UNDERLYING`, several legs | 2–8 legs, duplicates, zero; per-leg reserves; unwrap bounded by `reserve_i`; guardian disable one-way and idempotence error; unwrap open on a disabled leg; `addReserve` refused on it; `RateDecreaseWithDisabledLeg`; the cross-leg scenario (pending decrease on leg `i`, flash-wrap of leg `j`) reverts `WrapPausedForRateChange` and a third-party `executeRate` reverts `NotRateAdmin`; single-asset ABI reverts `UnderlyingRequired` with more than one leg |
 | Factory | kind ⇒ leg count (`NONE` 0, `UNDERLYING` 1–8); `createToken` and `createTokenUnregistered`; `VersionKindMismatch`; `ImplementationFactoryMismatch`; append-only catalogue; unregistered version 0; salt scoped by creator; every underlying indexed; exactly one `TokenCreated`; the factory only forwards flags (the token validates) |
-| Features | every invalid combination of [CTR-TOK-22](#CTR-TOK-22) reverts with its error (`FeatureInvalidForKind`, `LockedNotSubset`, `RoleMismatch`); `disableFeature` on a locked, a disableable and an already-clear bit, and the role loses its power; `PAYABLE` off ⇒ `supportsInterface(IERC20Payment)` false and pay reverts; rate fixed vs adjustable; guardian; the four regulated flags (existing asset-suite cases on the ordinary kinds) |
+| Features | every invalid combination of [CTR-TOK-22](#CTR-TOK-22) reverts with its error (`FeatureInvalidForKind`, `LockedNotSubset`, `RoleWithoutFeature`); owner grant/revoke, holder `renounceRole`, `renounceOwnership` (holders keep roles), `disableFeature` on a locked, a disableable and an already-clear bit; `PAYABLE` off ⇒ `supportsInterface(IERC20Payment)` false and pay reverts; rate fixed vs adjustable; guardian; the four regulated flags (existing asset-suite cases on the ordinary kinds) |
 | Layout | `test_storageLayoutIsPinned` per implementation; library storage isolation (a write through one library never changes another namespace); the size gate ([CTR-TOK-24](#CTR-TOK-24)) |
 | Hedera | HIP-632 path under `IS_HEDERA` (mocked precompile, as in `test/hedera/`); association at init; fail-closed custom-fee check: `isToken` rc ≠ SUCCESS, `getTokenCustomFees` rc ≠ SUCCESS, and a non-empty fee list each refuse the underlying |
 

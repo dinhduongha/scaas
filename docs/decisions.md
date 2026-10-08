@@ -1728,7 +1728,7 @@ Change (2026-10-08): the non-EVM exception is gone — non-EVM families name sig
 ### CTR-MTX-25 — One SigCheck
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-25 · superseded-by: —
 
-**Why.** One internal `SigCheck` (ECDSA low-s, ERC-1271 with the gas-cap rule, the HIP-632 hook) serves `MetaTxBase`, `OrderBookDex`, `MandateWallet` and `SmartKeyAccount`; `SigLib`, which has no importer, is deleted. Today the check is written five times and the HIP-632 override four times.
+**Why.** One internal `SigCheck` (ECDSA low-s, ERC-1271 with the gas-cap rule, the HIP-632 hook) serves `MetaTxBase`, `OrderBookDex`, `MandateWallet` and `SmartKeyAccount`; `SigLib`, which has no importer, is deleted. Today the check is written six times and the HIP-632 override four times.
 **Cost if wrong.** Copies drift: a fix to the gas cap or the low-s rule lands in one contract and not in the others.
 **Source.** `history/specs/2026-10-08-token-tree-design.md` §1, §4.
 
@@ -1821,14 +1821,14 @@ Change (2026-10-08): the non-EVM exception is gone — non-EVM families name sig
 ### CTR-TOK-09 — NoUnderlyingToken holder burn, renounceable minter
 - old: R141 · status: current · owner: no · date: 2026-10-06 · normative: contracts/token-wrappers.md#CTR-TOK-09 · superseded-by: —
 
-**Why.** A `NoUnderlyingToken` lets holders burn and its minter retire, which matches self-issued tokens; both are now the flags `BURNABLE` and `MINTABLE` ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)).
+**Why.** A `NoUnderlyingToken` lets holders burn and its minter retire, which matches self-issued tokens; both are now the flags `BURNABLE` and `MINTABLE`, the minter a granted role whose holder may `renounceRole` ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)).
 **Cost if wrong.** A non-renounceable minter is a permanent admin key.
 **Source.** `history/specs/2026-10-06-token-wrappers-v2.md:135`
 
 ### CTR-TOK-10 — Only creation-time visible admin exceptions
 - old: R142 · status: current · owner: no · date: 2026-10-06 · normative: contracts/token-wrappers.md#CTR-TOK-10 · superseded-by: —
 
-**Why.** Only creation-time, publicly visible admin exceptions exist, so a holder can read every power over a token before acquiring it; the exceptions are the feature flags of [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22).
+**Why.** Only publicly visible admin exceptions exist, so a holder can read every power over a token before acquiring it. Features stay creation-time ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)); the earlier creation-time-only roles are superseded by roles the owner grants and revokes (owner ruling), all public on chain.
 **Cost if wrong.** Hidden or later-added powers would make provenance meaningless.
 **Source.** `history/specs/2026-10-06-token-wrappers-v2.md:138`
 
@@ -1909,10 +1909,10 @@ Change (2026-10-08): the non-EVM exception is gone — non-EVM families name sig
 **Cost if wrong.** Per-combination contracts multiply audits and overflow EIP-170 (today `ZetherToken` is 4,363 B over); a creator could not pick "single underlying, payable off, confidential".
 **Source.** `history/specs/2026-10-08-token-tree-design.md` §1, §2 (T1, T3, T9, T10, T13), §3.
 
-### CTR-TOK-22 — Features are flags: features, lockedFeatures, disableFeature
+### CTR-TOK-22 — Features are flags: features, lockedFeatures, owner, roles, disableFeature
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/token-wrappers.md#CTR-TOK-22 · superseded-by: —
 
-**Why.** One administration word chosen at creation (bits 0–8: `PAYABLE`, `MINTABLE`, `BURNABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE`, `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`); per flag the creator picks locked or disableable (its role may clear it once, never set it). Validation lives in the token's `initialize`; `PAYABLE` is default off and immutable; the factory refuses flags 5–8 on a confidential kind; a minter never mints into a shielded balance.
+**Why.** One administration word chosen at creation (bits 0–8: `PAYABLE`, `MINTABLE`, `BURNABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE`, `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`); per flag the creator picks locked or disableable (the owner may clear it once, never set it). Owner ruling: issuers administer through one `owner` (optional; candidate OpenZeppelin `AccessControlDefaultAdminRules`, decided in P1) who grants and revokes the roles and disables disableable flags, and can give everything up: after `renounceOwnership()` role holders keep their roles, so an unchangeable token means revoking every role first. The built `renounceMinter`, `renounceRateAdmin`, `renounceGuardian` correspond to the holder's `renounceRole`, `disableControls` to `disableFeature`. Validation lives in the token's `initialize` (`FeatureInvalidForKind`, `LockedNotSubset`, `RoleWithoutFeature`); `PAYABLE` is default off and immutable; the token refuses flags 5–8 on a confidential kind; a minter never mints into a shielded balance.
 **Cost if wrong.** Per-class powers cannot express a mix; an unvalidated factory-side check would let `createTokenUnregistered` bring a token with inconsistent roles.
 **Source.** `history/specs/2026-10-08-token-tree-design.md` §2 (T2, T5, T8, T11), §5.
 
@@ -1933,7 +1933,7 @@ Change (2026-10-08): the non-EVM exception is gone — non-EVM families name sig
 ### CTR-TOK-25 — Creation API: createToken, createTokenUnregistered, TokenConfig, TokenCreated
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/token-wrappers.md#CTR-TOK-25 · superseded-by: —
 
-**Why.** One `TokenConfig` (name, symbol, decimals, features, lockedFeatures, roles, initial supply, legs, rate, confidential parameters) replaces the per-kind `initData`; `CREATE2` clone and `initialize` in one call; one `TokenCreated` event; registry views `isToken` and `versionOf`; one `IOpenFactory` and one `IFactoryToken`.
+**Why.** One `TokenConfig` (name, symbol, decimals, features, lockedFeatures, owner, roles, initial supply, legs, rate, confidential parameters) replaces the per-kind `initData`; `CREATE2` clone and `initialize` in one call; one `TokenCreated` event; registry views `isToken` and `versionOf`; one `IOpenFactory` and one `IFactoryToken`.
 **Cost if wrong.** Per-kind encodings keep a second parsing surface in the factory, node and clients; a deployed-but-uninitialized clone can be front-run.
 **Source.** `history/specs/2026-10-08-token-tree-design.md` §7.
 

@@ -37,7 +37,7 @@ three Hedera children) and `ZetherMetaTx` → `ZetherToken`. The v3 design exist
 | T5 | A minter never mints into a shielded balance |
 | T6 | Explicit names with the layer prefix `zether…` / `pqz…` (§6.2). No registration function on any token: a UA registers once in the registry and is usable by every token of its curve |
 | T7 | Implement v3. Delete the v1 line; the v2 code is material, not a design; no "v2" name survives |
-| T8 | One common set of administration flags (§5), chosen at creation; per flag the creator chooses **locked** (exists forever) or **disableable** (its role may clear it once, never set it again) |
+| T8 | One common set of administration flags (§5), chosen at creation; per flag the creator chooses **locked** (exists forever) or **disableable** (the owner may clear it once, never set it again). One `owner` per token (0 = no administration) grants and revokes the roles, disables disableable flags, transfers or renounces ownership; role holders keep their roles after the owner renounces |
 | T9 | Confidentiality per token: none / Zether (bn254 or BLS12-381, chosen at creation) / PQZ. Zether + PQZ on one token: room in the design (kind ids reserved), not built |
 | T10 | Tree `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase` (trade, pay behind `PAYABLE`, flags, init) → kinds (§3) |
 | T11 | The factory refuses `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST` on a confidential kind (as today: confidential tokens are not regulated) |
@@ -118,15 +118,22 @@ contract exceeds its budget (`forge build --sizes`).
 | 7 | `PAUSE` | `issuer` | non-confidential | as CTR-AS-06 |
 | 8 | `ALLOWLIST` | `compliance` | non-confidential | receivers checked against a `ComplianceRegistry` (CTR-AS-07) |
 
-- **Validation in the token**, in `initialize` through `AdminLib` (the factory only forwards; `createUnregistered`
-  lets anyone bring an implementation, so the token is the one authority): each flag valid for the kind; `lockedFeatures
-  ⊆ features`; a role is non-zero **iff** its flag is set; the contract-only roles stay contract-only. Errors
-  `FeatureInvalidForKind(bit)`, `LockedNotSubset()`, `RoleMismatch(bit)`.
-- **`disableFeature(bit)`**: callable by the flag's role; clears the bit one-way; reverts `FeatureLocked(bit)` on a
-  locked bit and `FeatureNotSet(bit)` when already clear; the role loses its power with the bit. Emits
-  `FeatureDisabled(bit, by)`. It replaces `renounceMinter`, `renounceRateAdmin`, the guardian renounce and
-  `disableControls`. `PAYABLE` and `BURNABLE` have no role and are therefore immutable.
-- **Views:** `features()`, `lockedFeatures()`, `roles()`, `kind()`, `version()`. `supportsInterface(IERC20Payment)` is
+- **Administration: one `owner`.** Each token has one `owner` (0 at creation = no administration ever). Candidate
+  implementation, decided in P1: OpenZeppelin `AccessControlDefaultAdminRules` (owner = default admin, delayed two-step
+  transfer, renounce). The owner can: `grantRole(bit, account)` / `revokeRole(bit, account)` for the role of a flag set
+  in `features` (a role may have several holders; the contract-only roles stay contract-only); `disableFeature(bit)`,
+  one-way, only for a flag not in `lockedFeatures` (reverts `FeatureLocked(bit)`; `FeatureNotSet(bit)` when already
+  clear); two-step `transferOwnership`; `renounceOwnership()`, after which the owner is 0 forever. After
+  `renounceOwnership()` the existing role holders **keep** their roles; to make a token unchangeable the owner revokes
+  every role, then renounces. A role holder performs the flag's actions (mint, rate change, freeze, …) and may
+  `renounceRole(bit)` itself. The owner only administers: it acts on a flag only if it grants itself the role.
+  `PAYABLE` and `BURNABLE` have no role and are therefore immutable. Events: `RoleGranted`/`RoleRevoked`,
+  `FeatureDisabled(bit, by)`, the ownership events.
+- **Validation in the token**, in `initialize` through `AdminLib` (the factory only forwards; `createTokenUnregistered`
+  lets anyone bring an implementation, so the token is the one authority): each flag valid for the kind
+  (`FeatureInvalidForKind(bit)`); `lockedFeatures ⊆ features` (`LockedNotSubset()`); a role holder in `roles` only for a
+  set flag (`RoleWithoutFeature(bit)`); contract-only roles are contracts. Roles may also be granted later by the owner.
+- **Views:** `features()`, `lockedFeatures()`, `owner()`, `hasRole(bit, account)`, `kind()`, `version()`. `supportsInterface(IERC20Payment)` is
   true iff `PAYABLE` is set.
 - **Regulated kinds 5–7 are superseded.** The four controls of `RegulatedControls` become flags 5–8 on the ordinary
   kinds; their rules (caps, cooldowns, orders, receiver-only allowlist, the shape-step plus `_update` check) are
@@ -188,7 +195,8 @@ function createDex(uint64 version, DexConfig calldata cfg, bytes32 salt) externa
 struct TokenConfig {
     string name; string symbol; uint8 decimals;
     uint256 features; uint256 lockedFeatures;
-    Roles roles;                               // minter, rateAdmin, guardian, issuer, compliance
+    address owner;                             // 0 = no administration ever
+    Roles roles;                               // initial holders (optional, each only for a set flag): minter, rateAdmin, guardian, issuer, compliance
     uint256 initialSupply; address initialHolder;   // NONE* only
     Leg[] legs;                                // underlying, num, den — UNDERLYING* only, 1..8
     RateConfig rate;                           // with RATE_ADJUSTABLE
@@ -204,7 +212,7 @@ struct DexConfig { address admin; uint32 relayerSharePpm; address treasury; bool
   `NONE_PQZ`, `UNDERLYING_PQZ`, `NONE_ZETHER_PQZ`, `UNDERLYING_ZETHER_PQZ`. The implementation registry keeps
   versions per kind (register, deprecate) as today.
 - **One event per creation:** `TokenCreated(token, creator, kind, version, implementation, features, lockedFeatures,
-  underlyings)`; `DexCreated(dex, creator, version, implementation, admin)`.
+  owner, underlyings)`; `DexCreated(dex, creator, version, implementation, admin)`.
 - **DEX as a clone.** `OrderBookDex` moves `admin` from an immutable to storage written once by `initialize` (same
   behaviour: no setter); its `DexPuller` is deployed by `initialize`; the EIP-712 `verifyingContract` is the clone.
 - **Registry views:** `isToken(addr)`, `isDex(addr)`, `versionOf(addr)`. `isDex` is advisory (T12): clients and the
@@ -239,7 +247,7 @@ ends with the size gate of §4 and the full forge suite.
 ## 10. Testing
 
 Per kind × flag set: creation validation (every invalid combination of §5 reverts with its error), `disableFeature`
-(locked, disableable, role loses power), pay on/off, mint/burn on/off, rate fixed vs adjustable, guardian, the four
+(locked, disableable; owner grant/revoke, holder renounce, renounceOwnership keeps holders' roles), pay on/off, mint/burn on/off, rate fixed vs adjustable, guardian, the four
 regulated flags (existing asset-suite cases moved onto the ordinary kinds), Hedera branch under `IS_HEDERA`, the reserve
 invariant with shielded supply (fuzz: wrap, wrap-shield, unshield, unshield-unwrap never break it), library storage
 isolation (a write through one library never changes another namespace), the size gate, and the cross-language
@@ -250,3 +258,4 @@ vectors of the meta-tx and Zether formats regenerated per phase.
 | Rev | Date | What |
 |---|---|---|
 | 1 | 2026-10-08 | First draft from the owner's chat decisions T1–T15 |
+| 2 | 2026-10-08 | T8: one owner grants/revokes roles, disables disableable flags, renounces ownership; role holders keep roles after renounce |
