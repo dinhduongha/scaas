@@ -122,8 +122,10 @@ deploy-script gate **SPECIFIED**.
 ## Admin powers (complete list)
 
 "Your key, your funds" holds for every value-holding contract except the powers listed here. Each is fixed at
-creation or deployment, public on chain, and none can mint arbitrarily, move a balance, touch a reserve, pause an
-exit or upgrade code.
+creation or deployment and public on chain. None can touch a reserve or upgrade code. None can move, freeze or pause
+a subject's balance, except the regulated class's controls chosen at its creation (freeze, forced transfer against a
+recorded order, bounded pause). Minting is a supply power of a token's own `minter`/admin only, never a balance
+power.
 
 | Contract | Holder | Powers | Rule |
 |---|---|---|---|
@@ -135,7 +137,13 @@ exit or upgrade code.
 | Regulated tokens (kinds 5–7) | `issuer`, `compliance` (contracts, fixed at creation) | the `controls()` bits set at creation: freeze, forced transfer against a recorded order, bounded pause, allowlist; bits can only be cleared | [CTR-AS-03](asset-suite.md#CTR-AS-03) |
 | `ZetherToken` | none after `initialize` (the auditor key is immutable) | — | [CTR-ZTH-09](zether.md#CTR-ZTH-09) |
 | `SealedBidTender`, `VestingGrant`, `Distribution`, `ExchangeOffer`, `UARegistry` | none | — | per file |
-| Non-EVM DEX programs | market admin | set markets only; no sweep of user funds, no admin refund of bounced payouts ([NET-TON-03](../networks/ton.md#NET-TON-03)) | [networks/](../networks/README.md) |
+| Non-EVM tier-1 tokens: Soroban `scaas-token`, TON `ScaasJettonMaster`, CosmWasm CW20 | Soroban and TON `admin`, CW20 `minter` (optional) | `mint` / `Mint`, unlimited on that token (a supply power, not a balance power) | [soroban](../networks/soroban.md#contracts), [ton](../networks/ton.md#overview), [cosmos](../networks/cosmos.md#contracts) |
+| Soroban `scaas-dex` | `admin` | `set_market` (per-pair fees ≤ 1 %, on/off) | [soroban](../networks/soroban.md#dex) |
+| TON `ScaasDex` | admin | `SetMarket` (fees ≤ 1 %, on/off); `WithdrawFees` (fees only, never bounced or unclaimed value; no admin refund of bounced payouts) | [NET-TON-19](../networks/ton.md#NET-TON-19), [NET-TON-03](../networks/ton.md#NET-TON-03) |
+| Cosmos DEX | admin | `SetMarket` only; the `Sweep` of the built version is removed (SPECIFIED) | [NET-COS-04](../networks/cosmos.md#NET-COS-04) |
+| Sui | `meta::AdminCap` | `set_network` once, create `Dex`, `set_market` (fees, listing) | [sui](../networks/sui.md#objects) |
+| Aptos | `Root.admin` (the code-object owner) | `create_dex`, `list_market`, `set_market` (fee, on/off), `admin_sweep` of an asset sent by mistake to Root, the Dex or a Market (refuses every Account and Mandate) | [aptos](../networks/aptos.md#dex) |
+| Solana | `Config.admin` | `list_market`, `set_market` (fee, on/off); never a SubjectAccount or Mandate | [solana](../networks/solana.md#dex) |
 
 ## Production gates (UNAUDITED)
 
@@ -154,7 +162,7 @@ families carry stronger gates, enforced in code:
 | Production curve for classical Zether | bn254 vs BLS12-381; BLS12-381 is more secure and **not** cheaper ([CTR-ZTH-32](zether.md#CTR-ZTH-32)) | open |
 | Cryptographic audit | independent audit of the Σ-Bulletproofs protocol, the transcript, the inner-product argument and the registry PoP **before** any dev gate is lifted | open |
 | Gas before public chains | the bn254 transfer (3.29 M execution gas) exceeds the 2.5 M per-transfer kill criterion; optimization is required before a public chain | open |
-| PQ Zether gate | hard-coded allowlist (31337, 1337 and the private chain 7622) **and** a constructor precompile self-test; `OpenFactory.pqzEnabled = false` by default; release gates: licences/patents and audit ([CTR-PQZ-01](pq-zether.md#CTR-PQZ-01)) | **SPECIFIED** |
+| PQ Zether gate | hard-coded allowlist (31337, 1337 and the private chain 7622) **and** a constructor precompile self-test; `OpenFactory.pqzEnabled = false` by default; release gates: **G-LIC** (licences/patents) and audit ([CTR-PQZ-01](pq-zether.md#CTR-PQZ-01)) | **SPECIFIED** |
 | Clients | every Zether and PQ Zether contract carries **UNAUDITED — NOT FOR PRODUCTION FUNDS** in its NatSpec; client chain/token screens show an UNAUDITED warning | **BUILT** (NatSpec) |
 
 ## Build, CI and pins

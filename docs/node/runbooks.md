@@ -490,7 +490,8 @@ verification detects one edited row.
 ## Cutover
 
 <a id="cutover"></a>Moving a chain from the legacy pull path to the store ([NODE-JOB-10](job-api.md#NODE-JOB-10)).
-Preconditions (checked by the client before it flips the chain, [migration from pull](../integration-odoo-example.md#migration-from-pull)):
+Preconditions (checked by the client before it flips the chain, [integration.md](../integration.md); worked example:
+[migration from pull](../integration-odoo-example.md#migration-from-pull)):
 
 1. Every client entity with a non-terminal job **or an approved receiving/paying wallet** on the chain has a route to
    the node; the chain's event node is set; secrets are set; the client's copy-protection binding matches.
@@ -501,6 +502,10 @@ Preconditions (checked by the client before it flips the chain, [migration from 
    from each legacy configuration read), so this holds exactly, not "as of the last read".
 4. DEX chain: every market paused, no `pending` trade; wait for `pending` trades to settle or fail on the legacy path,
    flip the chain, the transitional node imports open orders once via the legacy book load, resume markets in the node.
+5. TON chain: the forward-TON cap ([NET-TON-14](../networks/ton.md#NET-TON-14)) is enforced, and payload-sourced
+   fields, cost metering, value-out and deposit caps ([NODE-LANE-13](submit-lanes.md#NODE-LANE-13),
+   [NODE-LANE-16](submit-lanes.md#NODE-LANE-16)–[NODE-LANE-18](submit-lanes.md#NODE-LANE-18)) are live before the
+   first push cutover.
 
 Effects: the chain flag becomes `push`. The legacy poll serves nothing for the chain; queued jobs are pushed; legacy
 in-flight jobs keep reporting through the legacy report until terminal; a legacy job the old path requeues is pushed

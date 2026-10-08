@@ -67,7 +67,7 @@ Parameters:
 | Consensus | Clique PoA, one signer, `period` 5 s, `epoch` 30000 |
 | Forks | live through Fusaka + BPO2: EIP-2537 (BLS12-381), EIP-7951 P-256 at `0x100`, EIP-7825 per-transaction gas cap 16,777,216, EIP-7623, EIP-7934 |
 | Base fee | 0 (gas free; `MinGasPrice` 0) |
-| Block gas limit | `TargetBlockGasLimit` 80 M for post-quantum Zether ([CTR-PQZ-11](../contracts/pq-zether.md#CTR-PQZ-11)) |
+| Block gas limit | 16,777,216 today (`0x1000000`); 80 M `TargetBlockGasLimit` target for post-quantum Zether ([CTR-PQZ-11](../contracts/pq-zether.md#CTR-PQZ-11)) (SPECIFIED) |
 | Finality | depth 1, quorum 1 (single-provider trust, reported as such) |
 | Classical Zether | not on the dev-chain allowlist ({31337, 1337}, [CTR-ZTH-02](../contracts/zether.md#CTR-ZTH-02)); whether 7622 becomes a dev chain for it is an open owner question |
 | Post-quantum Zether | the only PQZ chain: precompile in our client image ([chain integration](../contracts/pq-zether.md#chain-integration)) |
@@ -79,8 +79,8 @@ BLS12-381 precompiles `0x0b`/`0x0c`/`0x0f`/`0x10` were empty while `alt_bn128` `
 Forks must be written with Nethermind's own keys (`eip1559TransitionTimestamp`, `eip2537TransitionTimestamp`, …),
 and changing them changes the genesis hash (chain reset). The only detection is to inspect a block header or call
 the precompile — the deployment checklist does both. The chainspec was fixed on 2026-08-31 before the reset to
-7622. Also measured then: a 16,777,216 block gas limit admits only ~8 classical confidential transfers per block
-(~1.9 M gas each, ~1.7 tx/s at 5-s blocks), the reason the limit was raised.
+7622. The 16,777,216 block gas limit admits only ~5 classical confidential transfers per block (3.29 M gas each,
+measured); post-quantum Zether raises the target to 80 M ([CTR-PQZ-11](../contracts/pq-zether.md#CTR-PQZ-11)).
 
 ## Precompiles
 
@@ -136,7 +136,9 @@ pinned profiles in the same release; the node re-checks every `chainUid()` at ac
 Transitional (BUILT): `smartcontracts/scripts/deploy.sh evm <rpc>` runs the forge script `script/Deploy.s.sol` (reads
 `PRIVATE_KEY` and `REGISTRAR`) with plain CREATE and no `chain_uid`: `OpenFactory`, the `MetaToken` implementation (its
 constructor takes the factory address) registered as `registerImplementation(META, 1)`, `SubjectAccountFactory`,
-`MetaTxDex`, `OrderBookDex`, optionally a tier-1 demo token; it writes `deployments/<chainid>.json`, which seeds the
+`OpenFactoryV2` with the three tier implementations (`NoUnderlyingToken`, `SingleUnderlyingToken`,
+`MultiUnderlyingToken`) as version 1 of their kinds, `MetaTxDex`, `OrderBookDex`, optionally a tier-1 demo token
+([deploy](../contracts/README.md#build-ci-and-pins)); it writes `deployments/<chainid>.json`, which seeds the
 client and the node configuration. The single `ERC20MetaTx` base replaces the `MetaToken` line, and `MetaTxDex` is
 deleted. Zether and the registry are not in the deploy script (dev chains only). Integration tests use `anvil
 --hardfork prague`.

@@ -59,14 +59,14 @@ the owner's named target and runs our client. The owner moved the private chain 
 is also Evmos Testnet, a public chain; 7622 is not assumed unique either, hence `chain_uid`. The self-test is what
 keeps PQZ off chains whose client is not ours.
 
-**Release gates before any production or commercial use** (owner): **licence/patent clearance** (LaZer is MIT without
+**Release gates before any production or commercial use** (owner): **licence/patent clearance**, gate **G-LIC** (LaZer is MIT without
 an explicit patent grant; LNP22-family techniques come from IBM Research; GMP/MPFR are LGPL and must be absent from
 every shipped artifact after the engine rewrite; plus the chosen ML-DSA implementations' licences) **and** an
 independent cryptographic audit. Development and research continue without them; nothing deploys outside the
 allowlist or holds real funds until both are recorded as passed. Classical Zether's own gate on chain 7622 is
 unaffected ([CTR-ZTH-33](zether.md#CTR-ZTH-33)).
 
-The licence gate: legal review of LaZer (MIT, no patent grant) and any code retained from it; LNP22-family IP (IBM
+The licence gate **G-LIC**: legal review of LaZer (MIT, no patent grant) and any code retained from it; LNP22-family IP (IBM
 Research); GMP (LGPLv3/GPLv2) and MPFR (LGPLv3): confirm from link maps that no shipped artifact (`libpqz.so`, WASM
 module, iOS/Android libraries) contains them, or else record the static-linking/relinking duties — the CI-only
 upstream cross-check runner ships nothing; HEXL Apache-2.0 notice if any of its code is retained; ML-DSA and WASM
@@ -175,7 +175,7 @@ PQZ parameters.
 | Fact | Value | Consequence |
 |---|---|---|
 | Client | Nethermind 1.39.0, Clique, one signer, 5 s, base fee 0 (chainspec 2026-08-31) | gas is free in money, but still meters block capacity |
-| Forks live | through Fusaka + BPO2, incl. EIP-2537, EIP-7951 (secp256r1 at `0x100`), **EIP-7825**, **EIP-7623**, **EIP-7934** | `smartcontracts/evm/src/chains/private7622/README.md` still says "pre-London" — stale |
+| Forks live | through Fusaka + BPO2, incl. EIP-2537, EIP-7951 (secp256r1 at `0x100`), **EIP-7825**, **EIP-7623**, **EIP-7934** | — |
 | [EIP-7825](https://eips.ethereum.org/EIPS/eip-7825) tx gas cap | 16,777,216 per transaction, independent of block limit | rules out a Solidity lattice verifier ([verifier](#verifier)) |
 | Chain id | **7622** (owner, 2026-10-07; formerly 9000, which is **also Evmos Testnet**, a public chain: [chainlist](https://chainlist.org/chain/9000), [Sequence chainlist](https://docs.sequence.xyz/solutions/chainlist/non-integrated/evmos-testnet)). Chain ids are a registry convention, so 7622 is not assumed unique either | `chainid == 7622` does not prove "our chain"; the precompile self-test, the registry's `chain_uid` (genesis hash) in every statement and the node's genesis-hash binding do |
 | Block gas limit | 16,777,216 (Clique signer can move it without reset) | ~5 transfers per block unless raised ([CTR-PQZ-11](#CTR-PQZ-11)) |
@@ -1319,7 +1319,7 @@ no production funds (dev-only gate), so only pilots migrate.
 | H0 (today) | classical Zether on dev chains only ([CTR-ZTH-02](zether.md#CTR-ZTH-02)); the owner decides chain 7622 for classical Zether ([CTR-ZTH-33](zether.md#CTR-ZTH-33)) | exposed, but no production funds |
 | H1 | PQZ on chain 7622 behind [CTR-PQZ-01](#CTR-PQZ-01), dev and pilot only | amounts PQ-safe from first use |
 | H2 | pilots migrate classical → PQZ: `ZetherToken.burn(amount, ownerAddress)` then `PqzToken.fund(ua, amount)` with `approve(PqzToken)` (spender is a contract, [CTR-TOK-01](token-wrappers.md#CTR-TOK-01)) | each migrated amount is public once on chain 7622 |
-| H3 | release gates licence/patent clearance and independent audit ([CTR-PQZ-01](#CTR-PQZ-01)) — both before any production or commercial use | — |
+| H3 | release gates **G-LIC** (licence/patent clearance) and independent audit ([CTR-PQZ-01](#CTR-PQZ-01)) — both before any production or commercial use | — |
 
 No dual-stack ciphertexts (ElGamal ⊕ lattice secret-sharing of every balance) and no cross-system equality proof: both
 would make every transfer carry two proof systems for the benefit of balances that, by gate, do not exist.

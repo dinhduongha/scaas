@@ -142,7 +142,7 @@ process ([NODE-JOB-06](node/job-api.md#NODE-JOB-06)). Why: one lane journal per 
 | `origin.key` | Natural key of the business event (e.g. the payment `entryRef`, `invoice:42:attempt:1`) |
 | `origin.generation` | `0` initially; `+1` on an operator requeue of a dead job |
 | `client_ref` | Echoed in feeds; for the client's own lookup |
-| `kind` | `metatx` (EVM meta-tx, incl. v1 envelopes of a `PqzToken`), `signed_op` (non-EVM `MetaOp` or Soroban auth payload), `call` (calldata to a contract, needs `allow_call` **and** a [call table](#call-targets) row); planned `ua_metatx` (UA; incl. v3 envelopes of a `PqzToken`) and `pqz_call` (direct PQZ calls, private chain) |
+| `kind` | `metatx` (EVM meta-tx, incl. v1 envelopes of a `PqzToken`), `signed_op` (non-EVM `MetaOp` or Soroban auth payload), `call` (calldata to a contract, needs `allow_call` **and** a [call table](#call-targets) row); `ua_metatx` (UA; incl. v3 envelopes of a `PqzToken`) and `pqz_call` (direct PQZ calls, private chain), both **SPECIFIED** |
 | `payload.digest` / `op.digest` | Optional; if present must equal the node's digest |
 | `bus.scope` | `restricted` (company lanes only; default), `open` (admitted peers after the window), `public` (also the open mesh) — see [bus scope](#bus-scope) |
 
@@ -155,37 +155,18 @@ process ([NODE-JOB-06](node/job-api.md#NODE-JOB-06)). Why: one lane journal per 
 | `pqz_call` (SPECIFIED; private chain only) | **Direct open calls only**: `{chain, contract, selector ∈ {pqzTransfer, pqzBurn, rollOver}, calldata}` to a configured PQZ token (direct `fund` pulls the caller's underlying and is never a node job) |
 | PQZ envelopes (SPECIFIED) | **No new kind**: a `PqzToken` is an `IERC20MetaTx` token, so its envelope ops travel as ordinary `metatx` (v1 domain `("SCaaS PqzToken", "1", chainId, token)`) or `ua_metatx` (v3, `salt = chainUid`) jobs, `m.to = 0`, `m.value = 0`, `m.data` = the direct calldata of `pqzTransfer`/`pqzBurn`/`fund`/`rollOver` (opaque to the client); outer fee `NONE`/`FIXED` only; never batched, never on the mesh; 1 MiB job body on the `pqz` profile; a gasless exit is the envelope `pqzBurn` paying the underlying to `recipient` |
 
-**Accept checks** (in order; no RPC):
+**Accept checks.** The node checks every item in a fixed order without RPC and answers per item; the rules and their
+order are [job-api.md#intake](node/job-api.md#intake). What a client must get right before it pushes:
 
-1. Scope `submit`, namespace active, chain granted ⇒ `403 CHAIN_NOT_GRANTED`.
-2. Payload decodes; node computes `digest` (per family) and `payload_hash` = SHA-256 of RFC 8785 (JCS) of the payload
-   ⇒ `422 BAD_PAYLOAD`. Every field the signed payload carries (`contract`, `valid_until`, `from`, lane, nonce,
-   relayer binding, value or forward floors) is taken from the payload; a job-JSON copy that differs ⇒
-   `422 BAD_PAYLOAD`; unsigned fields may only narrow, never widen.
-3. Token registered, active and in the namespace subset ⇒ `422 UNKNOWN_TOKEN`.
-4. `kind = call` needs `allow_call` ⇒ `403 CALL_NOT_ALLOWED`, **and** its selector and target must match the call
-   table ⇒ `403 CALL_TARGET_REFUSED` (re-checked at lease).
-5. Native value the job makes the lane send beyond fees ≤ `chain.max_value_out` (TON 0.05 TON above the fixed attach,
-   every other family 0) ⇒ `422 VALUE_OUT_TOO_HIGH` (also at lease, config is hot;
-   [NODE-LANE-17](node/submit-lanes.md#NODE-LANE-17)). A lane-funded deposit a third party can reclaim (e.g. a Solana
-   ATA of an unconfigured recipient) ⇒ `422 DEPOSIT_NOT_ALLOWED` (re-checked before signing;
-   [NODE-LANE-18](node/submit-lanes.md#NODE-LANE-18)).
-6. The payload's `from` is over the grief threshold (≥ 10 billed failures in 24 h, or cost ≥ `chain.grief_cost_cap`)
-   ⇒ `429 SUBJECT_THROTTLED {retry_after}`; from 3 in 24 h it gets one live job per chain
-   ([NODE-LANE-15](node/submit-lanes.md#NODE-LANE-15)).
-7. `now < valid_until ≤ now + 3600` ⇒ `422 EXPIRED` / `VALID_TOO_LONG`.
-8. Bound relayer must be one of the chain's lanes ⇒ `422 RELAYER_NOT_OURS` (else `lane_hint` pins the job).
-9. Normalization of unbound `relayer`/`feeRecipient` (stored work only; `payload_hash` is over the client's payload);
-   denylist (`403 SUBJECT_DENIED`); sponsorship match on job data ([node/sponsorship](node/sponsorship.md)): a matched
-   job needs `valid_until ≥ now + min_valid_secs` (default 120) to be sponsored.
-10. Idempotency (one transaction): same key + same hash ⇒ `created: false` + current snapshot; tombstone ⇒
-   `created: false, state: cancelled`; different hash ⇒ `409 IDEMPOTENCY_MISMATCH {uid}`; lower generation still live
-   ⇒ `409 PREVIOUS_GENERATION_LIVE {uid}`; same digest live under another key ⇒ `409 DUPLICATE_DIGEST`; the same `call`
-   (target + calldata) live in this namespace ⇒ `409 DUPLICATE_CALL {uid}` (follow that job or cancel it; other
-   namespaces are not blocked, [NODE-JOB-13](node/job-api.md#NODE-JOB-13)); quota ⇒ `429 QUOTA`; a matched sponsor
-   policy reserves its day budget and takes its hour / payer-hour counts here (released if the job ends before
-   broadcast) ⇒ `429 SPONSOR_BUDGET | SPONSOR_RATE | SPONSOR_TOO_SHORT {policy}`, or the job goes unsponsored when the
-   policy says `on_exhausted = unsponsored`.
+- Every field the signed payload carries (`contract`, `valid_until`, `from`, lane, nonce, relayer binding, value or
+  forward floors) is read from the payload; a job-JSON copy that differs is `422 BAD_PAYLOAD`.
+- `now < valid_until ≤ now + chain.max_valid_for_secs` (default 3600; read it from `GET /v1/info` or `GET /v1/gateway`),
+  else `422 EXPIRED` / `VALID_TOO_LONG`. A sponsored job needs `valid_until ≥ now + min_valid_secs` of its policy
+  (default 120).
+- The token subset is pushed before the first job on a chain ([NODE-JOB-12](node/job-api.md#NODE-JOB-12)), else
+  `422 UNKNOWN_TOKEN`; a `call` job needs `allow_call` and a [call table](#call-targets) row.
+
+Which code means what for the client is in the push algorithm below.
 
 Response `200`:
 
@@ -266,11 +247,15 @@ outside the table is `dead` with `CALL_TARGET_REFUSED` before simulation on the 
 becomes `final` only from its `PaymentSettled` — the node is never a "blind signer" of client calldata.
 
 <a id="call-targets"></a>**Call targets.** `allow_call` on the namespace is necessary, not sufficient: the node runs a
-`call` job only if it matches a row of the node's call table ([NODE-JOB-01](node/job-api.md#NODE-JOB-01)), which also
-lists the permissionless and self-authenticating rows (tender, vesting and distribution, exchange offers) and routes
-every role-restricted call through the role holder's own contract ([NODE-JOB-19](node/job-api.md#NODE-JOB-19)).
-Anything else a client wants to call on chain needs a table row first (node release) or is sent by the subject's or
-treasury's own wallet.
+`call` job only for a selector and target in its call table ([NODE-JOB-01](node/job-api.md#NODE-JOB-01),
+[NODE-JOB-19](node/job-api.md#NODE-JOB-19)). Client producers of `call` jobs: subject-account deploys and key changes
+([accounts](#accounts)), mandate payments and revokes ([auto-pay](#auto-pay)), DEX settles, the permissionless tender
+steps ([tender](#tender)), vesting releases, distribution claims and `ExchangeOffer` legs. Lane keys never hold a role:
+a role-restricted call (`createTender`, bond calls, issuer and compliance interventions, factory `create*`) reaches
+its target only through the role holder's own contract — `SubjectAccount.executeAsOwner`, or a `Safe.execTransaction`
+the owners already signed, pushed as a `call` job to a registered role-holder contract
+(`chain_contract.kind = role_holder`). Any other call shape needs a table row first (a node release) or is sent by the
+subject's or treasury's own wallet.
 
 ## Feeds and reconciliation
 
@@ -658,15 +643,18 @@ payload of the family ([NET-ALL-02](networks/README.md#NET-ALL-02)).
 <a id="tender"></a>
 
 The contract is [contracts/tender](contracts/tender.md). The commit is the deposit token's own `pay` intent; reveal,
-withdraw and settle need no signature and can be run by any keeper. Which tender calls run as `call` jobs, and how the
-buyer's role-restricted calls reach the contract, is [NODE-JOB-19](node/job-api.md#NODE-JOB-19).
+withdraw and settle need no signature and can be run by any keeper. `commitBid`, `revealBid`, `withdrawDeposit` and
+`settleTender` are rows of the node's call table ([NODE-JOB-19](node/job-api.md#NODE-JOB-19); target
+`chain_contract.kind = tender`), so they run as ordinary `call` jobs. The buyer's role-restricted calls (`createTender`,
+`cancelTender`, `disqualifyWinner`, bond release and claim) go through the buyer's own contract
+([call targets](#call-targets)).
 
 **Buyer (ERP):**
 
 | # | Buyer ERP | Chain |
 |---|---|---|
 | 1 | Tender record linked to the RFQ; documents normalised (JCS), `documentRef` = salted commitment ([data protection](#data-protection)); deposit token, `minDeposit`, deadlines, public reserve, `minBidders`, bond policy, `slashSink`, allowlist root, `dqWindow`, `maxDisqualifications`, `forfeitClasses` | — |
-| 2 | Chain check: refuses, or warns with a recorded reason, on a chain whose validators the buyer organization controls alone; then `createTender(config)` through the buyer's role-holder contract (`Safe.execTransaction` or `SubjectAccount.executeAsOwner`, relayed as a `call` job from a namespace with `allow_call`, [NODE-JOB-09](node/job-api.md#NODE-JOB-09), [NODE-JOB-19](node/job-api.md#NODE-JOB-19)); stores `tenderId` from `TenderCreated` | `TenderCreated` |
+| 2 | Chain check: refuses, or warns with a recorded reason, on a chain whose validators the buyer organization controls alone; then `createTender(config)` sent through the buyer's `SubjectAccount.executeAsOwner` or its registered role-holder Safe (a `Safe.execTransaction` `call` job, namespace with `allow_call`, [NODE-JOB-09](node/job-api.md#NODE-JOB-09), [NODE-JOB-19](node/job-api.md#NODE-JOB-19)); stores `tenderId` from `TenderCreated` | `TenderCreated` |
 | 3 | Publishes tender id, deadlines, deposit terms, eligibility proofs; may offer a sponsored portal path, never as the bidders' only path | — |
 | 4 | Watches commits (count only); may cancel until `commitDeadline` (all deposits refund) | `BidCommitted`, `TenderCancelled` |
 | 5 | Inside the award window: due diligence on the leader; if it fails, `disqualifyWinner(reasonRef, class)` (through the same role-holder contract) with the reason document committed and retained for audit and dispute (leader only, only while a next valid bid exists) | `BidDisqualified` |
@@ -813,7 +801,7 @@ flowchart LR
 3. The compliance contract (multisig) records the order `{subject, beneficiary, maxAmount, freezeUntil}`.
 4. The issuer contract (multisig) freezes the subject, then force-transfers ≤ `maxAmount` to the beneficiary. Members
    sign on their devices; the client pushes the members' signed `Safe.execTransaction` on the registered role-holder
-   contract as a `call` job from a namespace with `allow_call` — a lane is never `msg.sender` of the privileged call
+   contract (`chain_contract.kind = role_holder`) as a `call` job from a namespace with `allow_call` — a lane is never `msg.sender` of the privileged call
    ([NODE-JOB-19](node/job-api.md#NODE-JOB-19)).
 5. The freeze, order, forced-transfer and pause events become final.
 6. The client books the effect (reclassify the frozen balance, post the forced transfer) and links the order document
@@ -830,8 +818,9 @@ layer). An issuer wizard (templates, inputs, human-rate preview, mandatory discl
 **builds** Safe transactions for orders, freezes, forced transfers, pauses and relaxations are client tooling; signing
 stays with the multisig members.
 
-**Asset-suite configuration.** Creating a token is a subject-signed (or treasury-multisig) factory call sent directly by
-the creator's wallet; a `call` job to the factory is refused by the node. Templates are off-chain presets mapping to one
+**Asset-suite configuration.** Creating a token is a subject-signed (or treasury-multisig) factory call sent by the
+creator's wallet or relayed through its own contract ([call targets](#call-targets)); a direct `call` job to the factory
+is refused by the node. Templates are off-chain presets mapping to one
 factory call plus optional action contracts ([CTR-AS-14](contracts/asset-suite.md#CTR-AS-14)).
 
 | Template | Call | Client configuration | Status |
@@ -963,7 +952,7 @@ commitment computationally unlinkable (2^256 preimage space); the on-chain value
 | Chain paused | Jobs accepted and held `queued`; events continue | None; resumes automatically |
 | Chain halted | `409 CHAIN_HALTED`; no new ranges | Wait for the operator; do not re-route to another node for the same (company, chain) |
 | Chain halted for an upgradeable program | `409 CHAIN_HALTED`; operator reason `PROGRAM_UPGRADEABLE` (Aptos/Sui/Solana package or program still upgradeable, [NODE-STO-07](node/store.md#NODE-STO-07)) | Nothing to fix client-side; the operator redeploys immutable and the client updates the chain profile (new package/program and account ids) |
-| `CALL_TARGET_REFUSED` | `403` per item (push) or `dead` with that error (pull) | Permanent: the call shape is not in the node's table. Do not retry; send the call from the subject's/treasury's wallet or ask for a table row |
+| `CALL_TARGET_REFUSED` | `403` per item (push) or `dead` with that error (pull) | Permanent: the call shape is not in the node's table. Do not retry; route a role-restricted call through the role holder's contract ([call targets](#call-targets)), send it from the subject's/treasury's wallet, or ask for a table row |
 | `VALUE_OUT_TOO_HIGH` | `422` per item | Permanent for this payload: the signed forward/value floor exceeds `chain.max_value_out` (TON); have the payer re-sign with a floor ≤ the cap |
 | `DEPOSIT_NOT_ALLOWED` | `422` per item | The lane would fund a deposit a third party can reclaim (Solana: destination ATA missing for an unconfigured receiver); the receiver creates its ATA, or the operator configures the receiving wallet |
 | `SUBJECT_THROTTLED` | `429 {retry_after}` | Retry after `retry_after`; the subject's intents keep failing after simulation (balance moved, nonce burnt, key changed) — investigate before re-pushing |
@@ -1006,8 +995,8 @@ commitment computationally unlinkable (2^256 preimage space); the on-chain value
 - [ ] Idempotency tuple stable across retries; generation bumped only by operator requeue.
 - [ ] Outbox rows immutable after create (kind, target, calldata, payload links, origin); operators read-only, requeue
       through one checked method; a different call is a new row.
-- [ ] `call` jobs only for selectors/targets in the call table; everything else sent from the subject's or treasury's
-      wallet.
+- [ ] `call` jobs only for selectors/targets in the call table; role-restricted calls through the role holder's
+      `executeAsOwner` or Safe; everything else sent from the subject's or treasury's wallet.
 - [ ] Every signature on a pay lane inside the 30-day lane horizon; new request (new `entryRef`) instead of re-issuing
       old terms.
 - [ ] Error handling covers `CALL_TARGET_REFUSED`, `VALUE_OUT_TOO_HIGH`, `DEPOSIT_NOT_ALLOWED` (permanent),

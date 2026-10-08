@@ -477,3 +477,7 @@ fee.granter	obsolete	Cosmos feegrant/authz path rejected; contract-level Relay{p
 executeAsOwnerRaw	obsolete	renamed mtxExecuteAsOwnerRaw (every signed entry point starts with mtx): networks/hedera.md#NET-HED-03
 HederaMandateWallet.executeAsOwnerRaw	obsolete	renamed HederaMandateWallet.mtxExecuteAsOwnerRaw: networks/hedera.md#NET-HED-03
 executeAsOwnerRaw(execute(token, payWithFee…))	obsolete	renamed mtxExecuteAsOwnerRaw(execute(token, payWithFee…)): networks/hedera.md
+smartcontracts/evm/src/chains/private7622/README.md	obsolete	the README now says through Fusaka + BPO2; the stale-README note in contracts/pq-zether.md is gone
+{"error": "<text>"}	obsolete	pre-NODE-GW-06 error bodies; node/gateway.md#NODE-GW-06
+Debug	obsolete	Rust Debug reverts replaced by stable codes; node/gateway.md#NODE-GW-06
+, or the job goes unsponsored when the policy says 	extraction-artifact	node/job-api.md#intake (on_exhausted)

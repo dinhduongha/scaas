@@ -386,7 +386,7 @@ intent. Cost: one `eth_call` per stuck tx per `stuck_after_secs` (60 s) and per 
 | EVM/Hedera | `eth_getLogs` on `token`, topic0 `MetaTransactionExecuted`, topic1 `from`, topic3 `batch`, from the row's `from_block` (mesh) or the block at job claim (kept with the `Sent`) to `latest`; pick the log with `nonce == m.nonce` | `digest == intent_id` and `relayer` ∈ our lanes ⇒ `landed` (an earlier hash of ours); `digest == intent_id` otherwise ⇒ `landed_elsewhere`; different digest ⇒ `superseded`; no log yet (lagging RPC) ⇒ `unknown` |
 | others | `unknown` in v1 (the adapter `events()` scan is per block range and belongs to the indexer) | resolved at finality from the event feed |
 
-After `valid_until` the subject nonce of TON/Solana/Aptos lanes may be pruned and read as 0; consumption checks are
+After `valid_until` the subject nonce of TON/Solana/Aptos/Sui lanes may be pruned (Sui: permissionless `prune`) and read as 0; consumption checks are
 only made while `now ≤ valid_until + clock_skew_secs`, and expiry decides after that.
 
 EVM view names: the target tokens expose the nonce and digest views as `mtxNonce(from, batch)` and `mtxDigest(m)`, and

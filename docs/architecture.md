@@ -61,19 +61,21 @@ back.
 | Reads | Served by the server | Served by the backend with row-level security | **Unsigned**: through the node feeds, an indexer or the ERP, with ordinary JWT or session auth. Only valuable writes need client signatures |
 | Land (booking into the ERP) | — | — | The ERP trusts **its own node** and, through it, the **RPC quorum**: an event is booked only when at least `quorum` independent providers return the same event set for a final range ([NODE-IDX-01](node/indexer-feeds.md#NODE-IDX-01)); `quorum = 1` is single-provider trust, and a compromised node can lie on `/v1/events`. "Verifiable without trusting a server" holds for **signatures**, not automatically for ERP bookings |
 | Privacy | Data inside the operator's infrastructure | Same | Public ledger: both parties' identities are visible by design; amounts and balances can be hidden with Zether |
-| Typical failure | A leaked JWT signing key or IAM credential = every user impersonated | A leaked JWT secret or `service_role` key = every user impersonated | A leaked key of **one** subject = only that subject, bounded by its mandate limits; a lost relayer = delay, never loss; no upgrade key exists to leak; a leaked admin key reaches only the bounded powers below, never subject balances |
+| Typical failure | A leaked JWT signing key or IAM credential = every user impersonated | A leaked JWT secret or `service_role` key = every user impersonated | A leaked key of **one** subject = only that subject, bounded by its mandate limits; a lost relayer = delay, never loss; no upgrade key exists to leak; a leaked admin key reaches only the bounded powers below, never subject balances outside the regulated class |
 
 **Admin-power exceptions.** The complete list is in [contracts/README.md](contracts/README.md#admin-powers-complete-list);
-each power is public, set at creation or bounded, and none moves a subject's balance. In short: the adjustable-rate
-`rateAdmin` and the multi-underlying `guardian` (step-capped, timelocked rate changes; the guardian may only
-`disableWrap`; [CTR-TOK-10](contracts/token-wrappers.md#CTR-TOK-10)); `OrderBookDex.admin` `setMarket` (as built a
+each power is public, set at creation or bounded, and none moves a subject's balance except the regulated class's
+forced transfer against a recorded order. Among them: the adjustable-rate `rateAdmin` and the multi-underlying
+`guardian` (step-capped, timelocked rate changes; the guardian may only `disableWrap`;
+[CTR-TOK-10](contracts/token-wrappers.md#CTR-TOK-10)); `OrderBookDex.admin` `setMarket` (as built a
 market fee of at most 1 %, bounded by each order's signed `maxFeePpm`; specified: listing only, plus the split of each
-order's signed fee between relayer and treasury — recipients and proportions, never the amount); the Soroban token admin `mint` (a supply power, not a balance
-power); the TON DEX admin `WithdrawFees` (fees only; bounced payouts are claimed by their owners,
-[NET-TON-03](networks/ton.md#NET-TON-03)); the Solana program `Config.admin` (creates DEX markets only); and the
-`issuer`/`compliance` roles of regulated tokens (only that class, against a recorded order,
-[CTR-AS-01](contracts/asset-suite.md#CTR-AS-01)). The Cosmos DEX holds no balances between transactions, so it has
-no `Sweep` ([NET-COS-04](networks/cosmos.md#NET-COS-04)). There is **no upgrade key** on any family.
+order's signed fee between relayer and treasury — recipients and proportions, never the amount); the tier-1 token admin `mint` on Soroban, TON and CosmWasm (a supply
+power, not a balance power); the TON DEX admin `WithdrawFees` (fees only; bounced payouts are claimed by their owners,
+[NET-TON-03](networks/ton.md#NET-TON-03)); the market admins of the other DEX programs (Soroban, Sui `AdminCap`, which
+also sets the network once, Aptos, which may also sweep assets sent by mistake to its own objects, and Solana
+`Config.admin`: market listing and fees); and the `issuer`/`compliance` roles of regulated tokens (only that class,
+against a recorded order, [CTR-AS-01](contracts/asset-suite.md#CTR-AS-01)). The Cosmos DEX holds no balances between
+transactions, so it has no `Sweep` ([NET-COS-04](networks/cosmos.md#NET-COS-04)). There is **no upgrade key** on any family.
 
 Design consequences:
 

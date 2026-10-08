@@ -537,12 +537,12 @@ call; the store snapshot replaces it chain by chain ([job-api.md#legacy-pull](jo
 <a id="config-validation"></a>`Config::validate` and the admin API refuse, besides the listener rules of
 [README.md#listeners](README.md#listeners):
 
-<a id="NODE-STO-01"></a>**NODE-STO-01** — On a family that prunes lane state after expiry (TON, Aptos, Solana), a chain
+<a id="NODE-STO-01"></a>**NODE-STO-01** — On a family that prunes lane state after expiry (TON, Aptos, Solana, Sui), a chain
 must have `max_valid_for_secs ≤ LANE_HORIZON` — `max_valid_for_secs ≤ H` with `H = LANE_HORIZON = 30 d`, so that
 `validUntil ≤ t_first_issue + H` holds (the pay-lane issuance horizon H,
 [CTR-MTX-04](../contracts/metatx.md#CTR-MTX-04)); the node refuses `max_valid_for_secs > LANE_HORIZON`, because pay-once then no longer
 holds ([NET-ALL-01](../networks/README.md#NET-ALL-01)). The constants are pinned equal in tests (TON `LANE_TTL`,
-Aptos/Solana `PRUNE_DELAY_S`, node `LANE_TTL_S`, the issuer's `LANE_HORIZON_S`).
+Aptos/Solana `PRUNE_DELAY_S`, Sui `LANE_HORIZON_S`, node `LANE_TTL_S`, the issuer's `LANE_HORIZON_S`).
 
 <a id="NODE-STO-10"></a>**NODE-STO-10** — `max_gas_per_tx` keeps its default of 3 000 000; registering a confidential
 token (classical Zether or post-quantum Zether) on a chain whose `max_gas_per_tx` is below that token kind's per-chain

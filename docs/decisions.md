@@ -2728,7 +2728,7 @@ It said: separate DB roles per module.
 ### CTR-PQZ-01 — Separate PQZ class gated to private chains
 - old: R270 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/pq-zether.md#CTR-PQZ-01 · superseded-by: —
 
-**Why.** PQZ is a separate token class gated by a hard-coded allowlist, a constructor precompile self-test and the registry `chain_uid`, with licence and audit release gates.
+**Why.** PQZ is a separate token class gated by a hard-coded allowlist, a constructor precompile self-test and the registry `chain_uid`, with two release gates before any production or commercial use (owner): the licence/patent gate **G-LIC** and the independent audit.
 **Cost if wrong.** Without the self-test a chain with the same id but another client would accept PQZ deployments.
 **Source.** `history/specs/2026-10-06-pq-zether-design.md:208`
 

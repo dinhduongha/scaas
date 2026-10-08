@@ -7,9 +7,10 @@
 
 **In SCaaS the smart contracts themselves are the API services.** A payment, a spending mandate, a token, a wrapper
 around an existing token, a DEX order, a sealed-bid tender, a vesting schedule, a dividend distribution or a
-confidential transfer is a function of a contract. The contract checks the caller's signature, nonce, expiry and
+confidential transfer is a function of a contract. The contract checks the subject's signature, nonce, expiry and
 limits on every call, and it is immutable from the moment it is deployed: nobody, including the people who wrote it,
-can change what it does or move a user's funds.
+can change what it does, and nobody can move a user's funds beyond the bounded, published powers listed in
+[contracts/README](contracts/README.md#admin-powers-complete-list).
 
 ERPs, web portals, mobile apps and AI agents call these contracts the way they call any API. The difference from an
 ordinary web API is who authorizes a valuable write: **the subject signs it on its own device** (a passkey or a wallet

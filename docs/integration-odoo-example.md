@@ -450,12 +450,13 @@ receiving/paying wallet** on the chain has a route; `event_node_id` set; secrets
 `api ≥ 1`, chain granted, `state = active`; Odoo's active tokens ⊆ the node's tokens for the chain; every route's token
 subset pushed (`tokens_hash` set); (3) **journal continuity**: for each lane the node reports, `journal_max ≥` Odoo's
 `max(outer_nonce)` for that signer — the transitional node bumps `lane.journal_max` on every successful legacy `signed`
-report and returns it in `node_config` ("as of the last read"); (4) DEX chain: every market paused, no `pending` trade;
+report (and imports it from each legacy `node_config`), so this holds exactly, not "as of the last read"; (4) DEX chain: every market paused, no `pending` trade;
 (5) TON chains: the forward cap is deployed on the node ([NET-TON-14](networks/ton.md#NET-TON-14)); the node's
 payload-sourced fields, cost metering, value-out and deposit caps are live before the first push cutover. Effects:
 `node_transport = 'push'`; `relay_poll` serves nothing for the chain; queued jobs are pushed; legacy in-flight jobs keep
-reporting through `relay_report` until terminal; the legacy indexer stops and the store indexer continues from
-`node_config.indexed_block`. Rollback for a chain: `node_transport = 'pull'`; new jobs go back to the pull path; pushed
+reporting through `relay_report` until terminal; a legacy job the old path requeues is pushed like any other. The store
+indexer has been running for the chain since the transitional binary started (cursor bootstrapped from the legacy
+`node_config.indexed_block`); the straddle rule absorbs any misalignment ([cutover](node/runbooks.md#cutover)). Rollback for a chain: `node_transport = 'pull'`; new jobs go back to the pull path; pushed
 jobs stay with the node and keep syncing. Host bootstrap and the final removal of pull are node runbook steps
 ([node/runbooks](node/runbooks.md)).
 <!-- /example -->

@@ -177,7 +177,10 @@ applies its `min_fee` floor (the mesh policy row's `min_fee`, [mesh.md#acceptanc
 (default 60 per hour, in memory) on top of the reverse-proxy per-IP limit. The hourly gas budget
 ([NODE-LANE-05](submit-lanes.md#NODE-LANE-05)) can then not be filled by unsponsored fee-0 traffic on public chains;
 public fee-0 payers need a sponsor policy row. Every door also applies
-[NODE-MESH-16](mesh.md#NODE-MESH-16) and [NODE-LANE-16](submit-lanes.md#NODE-LANE-16)–[NODE-LANE-18](submit-lanes.md#NODE-LANE-18).
+[NODE-MESH-16](mesh.md#NODE-MESH-16), the node-wide grief score [NODE-LANE-15](submit-lanes.md#NODE-LANE-15) and
+[NODE-LANE-16](submit-lanes.md#NODE-LANE-16)–[NODE-LANE-18](submit-lanes.md#NODE-LANE-18). Tests: `value == 0` ⇒
+`ZERO_VALUE`; fee 0 on a `public` chain refused without a matching sponsor policy, accepted and booked with one; the
+61st intent from one `from` within an hour refused.
 
 The node may refuse fees below its floor; with a fee-taking intent whose `feeRecipient` is **not** bound, whoever
 submits takes the fee — that is the open-relayer design (the signer binds the recipient to prevent it).
@@ -190,8 +193,9 @@ chars>", "revert_data": "0x…"?}`; the legacy `"error"` keeps the code, so old 
 `UNKNOWN_CHAIN`, `TOKEN_NOT_SERVED`, `BREAKER_OPEN`, `SUBMIT_BUSY`, `EXPIRED`, `BAD_SIGNATURE`, `BAD_PAYLOAD`,
 `RELAYER_NOT_OURS`, `SIMULATION_REVERT` (raw `0x…` revert data), `RPC_UNAVAILABLE`, `QUOTA`, `ZERO_VALUE`,
 `SUBJECT_DENIED`, `SPONSOR_BUDGET`, `SPONSOR_RATE`, `SPONSOR_TOO_SHORT`, `UA_NOT_REGISTERED`, `UA_ALREADY_REGISTERED`,
-`UA_KEY_IN_USE`, (SPECIFIED) `SELECTOR_NOT_ALLOWED` ([NODE-JOB-20](job-api.md#NODE-JOB-20)), `DEX_NOT_LISTED` and
-`FEE_TOO_LOW` ([dex-venue.md#trade-orders](dex-venue.md#trade-orders)), and the managed-market codes above. Clients decode revert data with their own ABI and map codes (the console app maps `errors.node.<code>`); it replaces
-the earlier `{"error": "<text>"}` bodies and Rust `Debug` reverts; no
-logic keys on free text. The gateway and the job API keep per-listener code sets over the same checks (gateway
+`UA_KEY_IN_USE`, `VALUE_OUT_TOO_HIGH`, `DEPOSIT_NOT_ALLOWED`, `SUBJECT_THROTTLED` (with `retry_after`), (SPECIFIED) `SELECTOR_NOT_ALLOWED`
+([NODE-JOB-20](job-api.md#NODE-JOB-20)), `DEX_NOT_LISTED` and `FEE_TOO_LOW`
+([dex-venue.md#trade-orders](dex-venue.md#trade-orders)), and the
+managed-market codes above. Clients decode revert data with their own ABI and map codes (the console app maps
+`errors.node.<code>`); no logic keys on free text. The gateway and the job API keep per-listener code sets over the same checks (gateway
 `TOKEN_NOT_SERVED` and `EXPIRED` for too long a validity, job API `UNKNOWN_TOKEN` and `VALID_TOO_LONG`).
