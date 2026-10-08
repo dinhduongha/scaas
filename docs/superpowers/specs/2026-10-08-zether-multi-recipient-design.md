@@ -63,7 +63,7 @@ values is `a = b' + Σv_j + fee < (M + 2)·2^64 ≪ r`, so `Σv_j + fee ≤ a` a
 ```text
 payload   = be32(provedAccSeq) ‖ be32(provedSendCounter) ‖ be32(M) ‖ Y_f ‖ D_out ‖ C_deb ‖ (Y_tj ‖ C_out_j ‖ C_aud_j)_{j=1..M}
 statement = header(opTag) ‖ Y_f ‖ Y_a ‖ C_acc ‖ D_acc ‖ D_out ‖ C_deb ‖ be32(M) ‖ (Y_tj ‖ C_out_j ‖ C_aud_j)_{j=1..M}
-opTag     = keccak256("SCAAS-ZETHER-OP-TRANSFER-MANY-V1/" ‖ mode)     mode ∈ {"HASH", "BUNDLE", "NONE"}
+opTag     = keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/" ‖ mode)     mode ∈ {"HASH", "BUNDLE", "NONE"}
 proof     = sigma commitments ‖ sigma responses ‖ BP(v_1) … BP(v_M) ‖ BP(b')
 ```
 
@@ -87,7 +87,7 @@ recipient `j` is addressed as `(entryRef, j)`. Bundle `B_j = Y_tj ‖ C_out_j �
 
 | Mode | Stored | Event | Disclosure |
 |---|---|---|---|
-| HASH | `keccak256(B_1 ‖ … ‖ B_M)` (one slot) | `ConfidentialTransferMany(from, beneficiary, fee, sendCounter, entryRef, M, mode)` + the bundles in a `TransferBundles(entryRef, bundles)` event | on chain: the caller supplies all bundles, the token checks the hash, then the existing opening checks on `B_j` |
+| HASH | `keccak256(B_1 ‖ … ‖ B_M)` (one slot) | `ConfidentialTransferMulti(from, recipients, beneficiary, fee, sendCounter, entryRef, mode)` + the bundles in a `TransferBundles(entryRef, bundles)` event | on chain: the caller supplies all bundles, the token checks the hash, then the existing opening checks on `B_j` |
 | BUNDLE | `B_1 ‖ … ‖ B_M` | the summary event | on chain, nothing supplied |
 | NONE | nothing | the summary event | off chain only (calldata) |
 
@@ -149,3 +149,4 @@ first credit, as in the single-recipient figure), auditor on, inner fee to a ben
 | 1 | 2026-10-08 | First draft from the owner's chat decisions Z1–Z6 |
 | 2 | 2026-10-08 | Z7: the multi-recipient transfer is `transferConfidential`; names without "Many" |
 | 3 | 2026-10-08 | Z8: the single-recipient format stays as `transferConfidentialSingle` |
+| 4 | 2026-10-08 | Spike merged (`93eddd2` on main as cherry-pick): names aligned with the code (`…-MULTI-V1/…` opTag, `ConfidentialTransferMulti`); measurements in §7 |
