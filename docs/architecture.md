@@ -49,6 +49,14 @@ as equivalent modules or programs elsewhere, and that checks the subject's signa
 every call. ERPs, portals, mobile apps and AI agents call them the way they call any API. The contracts are the
 product; everything else is a way to reach them:
 
+- **Smart contracts** (`smartcontracts/`) — **the product.** One code base per network family: EVM (with Hedera as a
+  per-chain variant), Cosmos, Soroban, Move (Aptos, Sui), TON and Solana ([networks/README.md](networks/README.md)).
+  On EVM: the token tree — one meta-transaction base, kinds by code, features chosen at creation
+  ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21), [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)) — the
+  open factory, the DEX ([contracts/dex.md](contracts/dex.md)), accounts and mandates (Universal Account registry,
+  `SmartKeyAccount`, `MandateWallet`; [contracts/accounts.md](contracts/accounts.md)), confidential balances
+  ([contracts/zether.md](contracts/zether.md)), tender and the asset suite. Contract-level details:
+  [§4 Contract layer](#contract-layer).
 - **`scaas-node`** — infrastructure, not the product. **Anyone can run it**, and it doubles as a relayer: it submits
   subject-signed intents and pays their gas, journals every submission, indexes the chain, waits for finality and
   serves finalized facts back ([node/README.md](node/README.md)). How a node operates is up to whoever runs it: each
