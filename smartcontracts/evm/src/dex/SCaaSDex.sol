@@ -15,7 +15,7 @@ import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 ///         `filled[orderHash]` không bao giờ vượt `sellAmount`, khớp một phần, batch nguyên tử
 ///         từng cặp. Tiền đi thẳng người→người bằng `transferFrom` — DEX là spender (R26) nhưng
 ///         không bao giờ giữ số dư. Không upgrade, không sweep; admin chỉ `setMarket` (RS5-1).
-contract OrderBookDex is EIP712, ReentrancyGuardTransient {
+contract SCaaSDex is EIP712, ReentrancyGuardTransient {
     using SafeERC20 for IERC20;
 
     struct Order {
@@ -134,7 +134,7 @@ contract OrderBookDex is EIP712, ReentrancyGuardTransient {
     error NonceNotIncreasing();
     error NothingSettled();
 
-    constructor(address admin_) EIP712("SCaaS OrderBookDex", "1") {
+    constructor(address admin_) EIP712("SCaaS Dex", "1") {
         admin = admin_;
     }
 

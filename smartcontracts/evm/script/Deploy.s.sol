@@ -7,7 +7,7 @@ import {IOpenFactory} from "../src/common/IOpenFactory.sol";
 import {MetaToken} from "../src/metatx/MetaToken.sol";
 import {MetaTxDex} from "../src/dex/MetaTxDex.sol";
 import {SubjectAccountFactory} from "../src/account/SubjectAccountFactory.sol";
-import {OrderBookDex} from "../src/dex/OrderBookDex.sol";
+import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
 import {OpenFactoryV2} from "../src/factory/OpenFactoryV2.sol";
 import {IOpenFactoryV2} from "../src/common/IOpenFactoryV2.sol";
 import {NoUnderlyingToken} from "../src/metatx/NoUnderlyingToken.sol";
@@ -34,7 +34,7 @@ contract Deploy is Script {
         _deployV2(registrar, registrar == deployer, accounts.IMPLEMENTATION());
         MetaTxDex dex = new MetaTxDex();
         // R35: admin chỉ `setMarket`; production đặt REGISTRAR là một Safe (RS5-1).
-        OrderBookDex obDex = new OrderBookDex(registrar);
+        SCaaSDex obDex = new SCaaSDex(registrar);
         address demo;
         if (demoSupply != 0 && registrar == deployer) {
             demo = factory.createMetaToken(1, address(0),

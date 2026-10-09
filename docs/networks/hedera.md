@@ -8,7 +8,7 @@ Common rules for every family: [networks/README](README.md). Status: contracts, 
 <a id="overview"></a><a id="NET-HED-04"></a>**NET-HED-04** — **Hedera is the EVM family on the Hedera Smart Contract
 Service: the same Solidity contracts behind a Hedera JSON-RPC relay, plus HIP-632 for ED25519 accounts; the
 payer-sponsored path is not used.** HSCS runs EVM bytecode (Besu), so the Solidity set is reused unchanged:
-`MetaToken` (contract-level EIP-712 meta-tx), `MandateWallet`, `MetaTxDex`/`OrderBookDex`. There is **no
+`MetaToken` (contract-level EIP-712 meta-tx), `MandateWallet`, `MetaTxDex`/`SCaaSDex`. There is **no
 `SmartKeyAccount` and no EVM pipeline on Hedera** (as built: `HederaMetaToken.sol:22-24`, `adapters/hedera.rs:4-6`): native Hedera accounts already rotate keys, and the relayer runs
 the one-transaction-per-lane runner ([NET-HED-08](#NET-HED-08)). ED25519 accounts need a raw signer
 ([NET-HED-15](#NET-HED-15)). Payer-account sponsorship (the subject sends a Hedera account transaction whose fee
@@ -253,9 +253,9 @@ The owner's raw call is relayed as a `call` job (selector in the call table,
 ED25519 owner pays a payee through `mtxExecuteAsOwnerRaw` (`token.pay…` as `data`); the same owner's meta-tx with
 `from = wallet` fails ERC-1271. BUILT.
 
-DEX: `MetaTxDex` and `OrderBookDex` are unchanged; each leg is `executeMetaTransaction` on the token, so an ED25519
+DEX: `MetaTxDex` and `SCaaSDex` are unchanged; each leg is `executeMetaTransaction` on the token, so an ED25519
 leg is verified by `HederaMetaToken`. Fees, `filled[orderHash]` and cancel as in [contracts/dex](../contracts/dex.md).
-Target (SPECIFIED): `MetaTxDex` is deleted; `OrderBookDex.mtxSettle` pulls each SCaaS leg through the sell token's
+Target (SPECIFIED): `MetaTxDex` is deleted; `SCaaSDex.mtxSettle` pulls each SCaaS leg through the sell token's
 `mtxTrade`, whose signature check is the Hedera token's own (HIP-632 for a 64-byte ED25519 signature, ECDSA,
 ERC-1271), so an ED25519 subject trades with no allowance ([NODE-DEX-15](../node/dex-venue.md#NODE-DEX-15)). HIP-632
 signers are not contracts, so they can never call `approve` on a SCaaS token

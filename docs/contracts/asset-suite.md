@@ -4,7 +4,7 @@ The asset suite turns the open factory into a tokenization toolkit: optional **r
 freeze, forced transfer against a recorded order, bounded pause, receiver allowlist), a `ComplianceRegistry`
 of eligibility attestations, and three permissionless **action contracts** — `VestingGrant`, `Distribution` and
 `ExchangeOffer` — plus off-chain **templates** and **managed markets** on the existing DEX. Status: **SPECIFIED**
-(EVM and Hedera); nothing is built; the primitives it reuses (token tiers, the factory, `OrderBookDex`) are BUILT.
+(EVM and Hedera); nothing is built; the primitives it reuses (token tiers, the factory, `SCaaSDex`) are BUILT.
 
 ## Scope
 
@@ -27,7 +27,7 @@ flowchart LR
 | `Distribution` | one per dividend/coupon: Merkle root over a node-indexed snapshot |
 | `ExchangeOffer` | one per offer: redemption at maturity, buyback, split/reverse-split exchange |
 | Templates | equity, bond, loyalty, voucher: off-chain presets over the above |
-| Managed markets | `OrderBookDex` unchanged; node intake + gossip rules |
+| Managed markets | `SCaaSDex` unchanged; node intake + gossip rules |
 
 Not covered: confidential (Zether) regulated tokens — a confidential balance can be frozen (stuck) but not seized on
 public chains, and no Zether code changes; non-fungible assets (ERC-721/1155, PLANNED); rebasing, scaled balances or
@@ -35,7 +35,7 @@ balance checkpoints in any token (balances never rebase); on-chain coupon schedu
 (coupons are funded distributions); escrow with an arbiter and the sealed-bid tender (separate, [tender.md](tender.md));
 gasless wrap (PLANNED); HTS-native regulated tokens on Hedera (owner: HSCS contracts only); any country-specific rule
 (eligibility is expressed as attestation flags whose meaning the issuer defines); a new DEX contract (managed markets
-are node policy over `OrderBookDex` plus token-level enforcement).
+are node policy over `SCaaSDex` plus token-level enforcement).
 
 Measured runtime sizes of the base tiers (existing artifacts): `SingleUnderlyingToken` 21 637, `MultiUnderlyingToken`
 22 561, `HederaMultiUnderlyingToken` 23 885 bytes — 2.9 k (Single), 2.0 k (Multi) and 0.7 k (Hedera Multi) bytes of
@@ -138,7 +138,7 @@ allowlist. Otherwise a seizure could drain a leg other holders rely on.
 <a id="eligible-contract"></a>
 <a id="CTR-AS-16"></a>**CTR-AS-16** — `ELIGIBLE_CONTRACT` (the registry flag that satisfies any `requiredFlags`) may be
 set **only by the registry admin**, only on **pass-through** contracts whose every outflow is re-checked by the token
-or goes only to a committed party (`VestingGrant`, `Distribution`, `ExchangeOffer` clones, `OrderBookDex`), with
+or goes only to a committed party (`VestingGrant`, `Distribution`, `ExchangeOffer` clones, `SCaaSDex`), with
 `validUntil = type(uint64).max`. Never on a wrapper, a Safe, a venue fee recipient or an EOA: those get ordinary flags
 for their controller. Otherwise one attestation would be a master key across every token on the registry.
 
@@ -359,7 +359,7 @@ from the optional verifiable-credential layer reach contracts only as these flag
 | Allowance lockdown | unchanged: spenders are contracts; the regulated check binds `from`/`to`, so an allowance to any contract cannot move tokens to an ineligible party |
 | Single/multi wrappers (own reserves) | [CTR-AS-09](#CTR-AS-09); `wrap` is a mint (paused ⇒ refused; receiver check on `msg.sender`); `disableWrap` and the rate timelock unchanged; a pending rate change and a pause can overlap; fee-less unwrap stays open in both |
 | Flags 5–8 on an underlying | refused by the wizard; if forced, freezing the wrapper blocks only that leg and a seizure breaks that wrapper's reserve rule (a test documents it) |
-| `OrderBookDex` | each leg's pull into the DEX and each payout runs the regulated check, so the DEX is attested `ELIGIBLE_CONTRACT` by the registry admin; a failing leg fails only its settlement (`MatchFailed`); intake reads do not see freezes or eligibility, so the venue adds the pre-check above ([NODE-DEX-11](../node/dex-venue.md#NODE-DEX-11)); fee-split recipients on a regulated leg need `R` |
+| `SCaaSDex` | each leg's pull into the DEX and each payout runs the regulated check, so the DEX is attested `ELIGIBLE_CONTRACT` by the registry admin; a failing leg fails only its settlement (`MatchFailed`); intake reads do not see freezes or eligibility, so the venue adds the pre-check above ([NODE-DEX-11](../node/dex-venue.md#NODE-DEX-11)); fee-split recipients on a regulated leg need `R` |
 | `MandateWallet` | it calls `payWithFee`; the wallet is the `from` and must not be frozen; payees need `R` |
 | Vesting / distribution / offer clones | holders like any other; attested `ELIGIBLE_CONTRACT` before funding (the address is known in advance) |
 | Zether | none (not covered) |
@@ -440,7 +440,7 @@ warm (≈ +0.5 k). Control calls add one library `DELEGATECALL` (≈ 2.6 k cold)
 | Pause | 7-day bound, cooldown from actual end, passive expiry, refused while paused (`PauseCooldown`), fee-less gasless unwrap and burn during pause, fee-bearing gasless unwrap refused at the shape step, forced transfer during pause |
 | Relaxations | freeze then every `issuer` holder renounces or is revoked ⇒ holder transfers and unwraps; no `compliance` holder stops `FORCE`; `disableFeature(ALLOWLIST)` with a reverting registry |
 | Wrappers | frozen holder unwrap refused (direct, multi, gasless); a holder with a lapsed attestation unwraps; unwrap works while the registry reverts; reserves untouched by every regulated call; guardian/rate flows unchanged; flags 5–8 on an underlying: freezing the wrapper blocks only that leg |
-| DEX | `OrderBookDex.mtxSettle` with a frozen maker, an ineligible taker, an ineligible fee recipient: only that settlement fails |
+| DEX | `SCaaSDex.mtxSettle` with a frozen maker, an ineligible taker, an ineligible fee recipient: only that settlement fails |
 | Keywords | the kind gas table and layout pins identical after the shape-check hook change |
 | Registry | admin contract only; attester add/remove; disable voids its attestations; batch attest; revoke by flags 0; expiry; `ELIGIBLE_CONTRACT` by admin only |
 | Hedera | the `IS_HEDERA` variants of `NONE` and `UNDERLYING` with flags 5–8 sign via HIP-632; HTS fail-closed checks and association on `UNDERLYING` |
@@ -904,7 +904,7 @@ Provenance metadata published for every asset: `creator`, `underlying`, `version
 
 ## Managed markets
 
-Securities on a licensed venue trade on a managed market of `OrderBookDex` ([CTR-DEX-12](dex.md#CTR-DEX-12)); on chain
+Securities on a licensed venue trade on a managed market of `SCaaSDex` ([CTR-DEX-12](dex.md#CTR-DEX-12)); on chain
 the regulated token's own checks are the arbiter, and the node venue enforces home-bound orders, `NONE` relayer fees on
 regulated legs and eligibility at intake ([NODE-DEX-11](../node/dex-venue.md#NODE-DEX-11)).
 

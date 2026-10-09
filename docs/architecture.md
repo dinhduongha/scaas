@@ -106,7 +106,7 @@ forced transfer against a recorded order. Among them: a token's optional `owner`
 revokes the roles of the flags chosen at creation, disables a flag that was not locked, renounces;
 [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)), and the role holders of those flags, such as the `rateAdmin`
 (step-capped, timelocked rate changes) and the `guardian` (only `disableWrap`)
-([CTR-TOK-10](contracts/token-wrappers.md#CTR-TOK-10)); the `OrderBookDex` `admin` (as built `setMarket` with a
+([CTR-TOK-10](contracts/token-wrappers.md#CTR-TOK-10)); the `SCaaSDex` `admin` (as built `setMarket` with a
 market fee of at most 1 %, bounded by each order's signed `maxFeePpm`; specified: four powers — listing, the split of
 each order's signed fee between relayer and treasury, exchange targets, listed-only mode — never the amount,
 [CTR-DEX-03](contracts/dex.md#CTR-DEX-03)); the admin `mint` of the standalone non-EVM tokens on Soroban, TON and CosmWasm (a supply
@@ -228,7 +228,7 @@ uses Zether; hiding the relationship itself is out of scope by design ("not a mi
 
 When every leg is on chain, use one-transaction settlement. When a leg is off chain, anchor the on-chain leg **after**
 the off-chain leg is irrevocable, or give the saga a funded on-chain compensation path. Atomic settlement is BUILT for
-payments (the `pay` op), the DEX (`OrderBookDex.settle`, legacy `MetaTxDex`; specified: `OrderBookDex.mtxSettle`, one
+payments (the `pay` op), the DEX (`SCaaSDex.settle`, legacy `MetaTxDex`; specified: `SCaaSDex.mtxSettle`, one
 taker against several makers, each leg verified by its sell token) and mandates (`MandateWallet.payUnderMandate`,
 specified name `mtxPayUnderMandate`); generic saga orchestration is a client concern.
 
@@ -241,7 +241,7 @@ agent signs, a relayer pays gas); Zether keeps commercial amounts confidential w
 
 | Component | Path | Role | Status |
 |---|---|---|---|
-| EVM contracts | `smartcontracts/evm/` (Foundry; `src/{common,metatx,factory,dex,wallet,account,registry,zether,hedera,chains}`) | Target: the token tree `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase` → kinds `NONE`, `UNDERLYING`, `NONE_ZETHER`, `UNDERLYING_ZETHER` ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)); the libraries `TradeLib`, `PayLib`, `AdminLib`, `UnderlyingLib`, `ZetherLib`, `HederaLib` ([CTR-TOK-24](contracts/token-wrappers.md#CTR-TOK-24)); `OpenFactory` for tokens and DEX clones ([CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25)); `OrderBookDex`; `MandateWallet`; `SmartKeyAccount`; `UniversalAccountRegistry`; the Zether verifiers (bn254, BLS12-381), `ZetherDisclosure`, `ZetherStatements`. Build profiles `private7622` (the private chain 7622), `zether`, `gnosis`, `celo` | BUILT: the v1/v2 lines and `ZetherToken`; target tree SPECIFIED (phases P1–P5); `PqzToken` SPECIFIED |
+| EVM contracts | `smartcontracts/evm/` (Foundry; `src/{common,metatx,factory,dex,wallet,account,registry,zether,hedera,chains}`) | Target: the token tree `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase` → kinds `NONE`, `UNDERLYING`, `NONE_ZETHER`, `UNDERLYING_ZETHER` ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)); the libraries `TradeLib`, `PayLib`, `AdminLib`, `UnderlyingLib`, `ZetherLib`, `HederaLib` ([CTR-TOK-24](contracts/token-wrappers.md#CTR-TOK-24)); `OpenFactory` for tokens and DEX clones ([CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25)); `SCaaSDex`; `MandateWallet`; `SmartKeyAccount`; `UniversalAccountRegistry`; the Zether verifiers (bn254, BLS12-381), `ZetherDisclosure`, `ZetherStatements`. Build profiles `private7622` (the private chain 7622), `zether`, `gnosis`, `celo` | BUILT: the v1/v2 lines and `ZetherToken`; target tree SPECIFIED (phases P1–P5); `PqzToken` SPECIFIED |
 | Hedera contracts | the EVM implementations | No separate contracts: the EVM implementations deployed with `IS_HEDERA` (HIP-632 signatures, fail-closed HTS checks; [CTR-TOK-23](contracts/token-wrappers.md#CTR-TOK-23)) | BUILT: `HederaMetaToken` and three v2 Hedera children (`smartcontracts/evm/src/hedera/`); target SPECIFIED (P1) |
 | Cosmos contracts | `smartcontracts/cosmos/` (CosmWasm workspace) | `scaas-token` (CW20 + meta-op), `scaas-mandate`, `scaas-dex`, shared `scaas-metaop` | BUILT |
 | Soroban contracts | `smartcontracts/soroban/` | SEP-41 token + `pay`, mandate, DEX; native auth as the meta-tx (Stellar and Pi Network) | BUILT |
@@ -512,7 +512,7 @@ AMM pools instead of makers, with the surplus above each signed limit paid to it
 ([exchange settlement](contracts/dex.md#exchange)). A leg in an outside token is checked by the DEX and pulled through
 the separate `DexPuller`, so the DEX itself never holds a user allowance ([CTR-DEX-22](contracts/dex.md#CTR-DEX-22)).
 
-Each `OrderBookDex` is a clone made by the same factory, with an admin written once at creation
+Each `SCaaSDex` is a clone made by the same factory, with an admin written once at creation
 ([CTR-DEX-24](contracts/dex.md#CTR-DEX-24)). The factory's `isDex` is **advisory**: wallets and the node use it to
 warn about or refuse an unknown DEX, but tokens never consult it, so the factory registrar gains no power over trades
 ([CTR-DEX-19](contracts/dex.md#CTR-DEX-19)). The fee rate is in each signed order; the DEX admin decides only who
@@ -527,7 +527,7 @@ The other families implement the same three pieces — token, mandate, DEX — i
 
 | Family | Meta-tx mechanism (BUILT) | Account model | DEX settlement | Confidential |
 |---|---|---|---|---|
-| EVM, Hedera (reference) | `MetaTransaction` / `MetaTransfer` in the contract (EIP-712, `salt = chain_uid`) | native EOA or ERC-1271, Universal Account ledger in the token, `SmartKeyAccount` | `OrderBookDex` clone, token-verified `TradeOrder`s | Zether kinds (development chains); PQ Zether on chain 7622 ([contracts/pq-zether.md](contracts/pq-zether.md)) |
+| EVM, Hedera (reference) | `MetaTransaction` / `MetaTransfer` in the contract (EIP-712, `salt = chain_uid`) | native EOA or ERC-1271, Universal Account ledger in the token, `SmartKeyAccount` | `SCaaSDex` clone, token-verified `TradeOrder`s | Zether kinds (development chains); PQ Zether on chain 7622 ([contracts/pq-zether.md](contracts/pq-zether.md)) |
 | Cosmos | contract-level `Relay{payload, auth}` | CW20 balances per account; passkey owners as UA ids ([NET-ALL-21](networks/README.md#NET-ALL-21)) | CW20 `TransferFrom` under an allowance to the DEX contract | none |
 | Soroban (Stellar, Pi) | native Soroban authorization entries (nonce + ledger expiry) | native accounts or a custom account (`__check_auth`) | two `require_auth` in one call | none |
 | Move — Aptos | contract-level, one `Account` object per owner with lanes | the `Account` object holds any asset | legs moved inside one transaction | none |
@@ -684,7 +684,7 @@ sequenceDiagram
 
 Role-free `TradeOrder`s rest in the node's book and settle in one call
 that pays every party ([CTR-DEX-15](contracts/dex.md#CTR-DEX-15), [node/dex-venue.md](node/dex-venue.md)); built:
-DEX-signed orders over allowances, `OrderBookDex.settle`, `OrderFilled` / `Matched`.
+DEX-signed orders over allowances, `SCaaSDex.settle`, `OrderFilled` / `Matched`.
 
 ```mermaid
 sequenceDiagram
@@ -692,7 +692,7 @@ sequenceDiagram
     participant TK as Taker wallet
     participant VEN as Node gateway and venue
     participant LANE as Submit lane
-    participant DEX as OrderBookDex
+    participant DEX as SCaaSDex
     participant ST as Sell token (SCaaS)
     participant PUL as DexPuller
     MK->>VEN: POST /v1/dex/orders (TradeOrder, sig)

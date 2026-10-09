@@ -4,9 +4,9 @@ SCaaS runs an order-book exchange whose book lives off chain in the node ([node/
 and whose settlement contract settles signed orders on chain. Users never pay gas: orders and cancels are signed
 messages that a relayer submits, and a SCaaS token needs **no allowance** to trade — its order is verified by the token
 itself, which moves funds only into the DEX the signer named. Status: the target of this file (token-verified
-`TradeOrder`s, `OrderBookDex.mtxSettle`, outside-token legs, one signed fee rate, the exchange path against AMMs
+`TradeOrder`s, `SCaaSDex.mtxSettle`, outside-token legs, one signed fee rate, the exchange path against AMMs
 `mtxExchange`, the `DexPuller`) **SPECIFIED**; the built
-`OrderBookDex` (DEX-signed maker/taker orders over allowances, `smartcontracts/evm/src/dex/OrderBookDex.sol`) and the
+`SCaaSDex` (DEX-signed maker/taker orders over allowances, `smartcontracts/evm/src/dex/SCaaSDex.sol`) and the
 legacy `MetaTxDex` are **BUILT** and described under [Transitional (BUILT)](#transitional-built); non-EVM settlement
 programs **BUILT** with the fixes below **SPECIFIED**.
 
@@ -30,13 +30,13 @@ markets, read the book and book the fees.
 | Layer | What it does |
 |---|---|
 | Sell token (SCaaS) | verifies the `TradeOrder` signature, expiry, nonce lane, closed state, and on Path A the fill against every signed bound; moves exactly the pulled amount **to `dex`**; keeps `pulled[orderHash]` and `minNonce` |
-| `OrderBookDex` | checks the match (tokens, listing, self-trade, relayer), computes fills at each maker's price, pulls every leg, enforces Path B and outside-token legs, pays out, splits fees, asserts conservation; on the exchange path runs the route's interactions or executor and pays the surplus ([CTR-DEX-20](#CTR-DEX-20)) |
+| `SCaaSDex` | checks the match (tokens, listing, self-trade, relayer), computes fills at each maker's price, pulls every leg, enforces Path B and outside-token legs, pays out, splits fees, asserts conservation; on the exchange path runs the route's interactions or executor and pays the surplus ([CTR-DEX-20](#CTR-DEX-20)) |
 | Node | the book per market, price-time priority, partial fills, settlement through `call` jobs, its own final-event watcher, intake fee policy per role ([NODE-DEX-01](../node/dex-venue.md#NODE-DEX-01)); the TradeEngine for AMM routes ([NODE-DEX-17](../node/dex-venue.md#NODE-DEX-17)) |
 
 ```mermaid
 sequenceDiagram
     participant R as Relayer (node)
-    participant D as OrderBookDex
+    participant D as SCaaSDex
     participant T as Sell token (SCaaS)
     participant O as Outside token
     R->>D: mtxSettle(settlements)
@@ -226,7 +226,7 @@ that pays (it adds nothing against a DEX bug), and per-party balance deltas misf
 makers with one `destination`, a relayer or treasury that is also a `destination`). A token that credits less than it
 was told to move is caught by conservation plus listing only **exact-transfer** tokens: SCaaS tokens are exact by
 construction; fee-on-transfer, rebasing and hook (ERC-777) outside tokens are not listed, and if one slips through the
-DEX's own balance moves and conservation reverts the settlement. `OrderBookDex` keeps its book semantics (price-time
+DEX's own balance moves and conservation reverts the settlement. `SCaaSDex` keeps its book semantics (price-time
 priority, limit + IOC/FOK, partial fills above the effective minimum); the execution price is each maker's signed
 price, rounded in the maker's favour, and the node only emits matches that pass the same checks as the contract.
 
@@ -273,7 +273,7 @@ what proportion, **never the amount**: the amount comes only from the signed `fe
 sweep, no global pause (delisting a market stops that pair). No timelock: there is nothing to wait for — no signed
 order can be charged more than it signed.
 
-<a id="CTR-DEX-24"></a>**CTR-DEX-24** — **`OpenFactory.createDex(version, DexConfig, salt)` makes an `OrderBookDex` clone; `admin` is written once by
+<a id="CTR-DEX-24"></a>**CTR-DEX-24** — **`OpenFactory.createDex(version, DexConfig, salt)` makes an `SCaaSDex` clone; `admin` is written once by
 `initialize`; the `DexPuller` is deployed by `initialize`; `isDex(addr)` is advisory: tokens never consult it** (owner).
 
 ```solidity
@@ -289,7 +289,7 @@ function createDex(uint64 version, DexConfig calldata cfg, bytes32 salt) externa
 - **Registry.** The factory keeps `isDex(addr)` and `versionOf(addr)`. Clients and the node use them with the
   implementation version to warn about or refuse an unlisted `dex`; tokens do not consult them.
 
-**Transitional (BUILT).** The built `OrderBookDex` has a constructor and an immutable `admin`, and is deployed directly;
+**Transitional (BUILT).** The built `SCaaSDex` has a constructor and an immutable `admin`, and is deployed directly;
 replaced in P2.
 
 ## Outside-token legs
@@ -300,7 +300,7 @@ by the DEX** (a contract SCaaS does not control cannot verify it):
 | Item | Rule |
 |---|---|
 | Classification | at `setMarket` the DEX records each token's kind: **SCaaS** iff the chain's `OpenFactory` reports it was made from a registered, non-deprecated implementation (`versionOf`, as [CTR-TND-07](tender.md#CTR-TND-07)), else **outside**. Never taken from the leg: a submitter-chosen kind could send a fallback-only "token" down the `mtxTrade` path |
-| Signed struct | the same `TradeOrder`, signed in the **DEX's** domain `("SCaaS OrderBookDex","1", chainId, DEX, chain_uid)` as `DexOrder(address sellToken,TradeOrder order)TradeOrder(…)`; `o.dex == address(this)` is required (the domain already binds the DEX; a different `dex` field would be a second, conflicting truth) |
+| Signed struct | the same `TradeOrder`, signed in the **DEX's** domain `("SCaaS Dex","1", chainId, DEX, chain_uid)` as `DexOrder(address sellToken,TradeOrder order)TradeOrder(…)`; `o.dex == address(this)` is required (the domain already binds the DEX; a different `dex` field would be a second, conflicting truth) |
 | Fill state | on the DEX: `pulled[h]` and `minNonce[from][batch]`, `h` = the `DexOrder` digest |
 | Checks | the full [CTR-DEX-15](#CTR-DEX-15) list, enforced by the DEX: relayer binding, expiry, nonce, flags, zero amounts, `minFill ≤ amount`, fee cap, signature (`_validSig` with the ERC-1271 cap, [CTR-DEX-08](#CTR-DEX-08)), `p < amount`, `sellFill > 0`, overfill, effective minimum, price, fee bound |
 | Flags | `IOC` allowed; **`ESCROW` refused** (`BadFlags`) — the fill is already pulled exactly into the DEX |
@@ -382,14 +382,14 @@ honesty; the rule only guarantees that an EOA can never be granted a pull ([CTR-
 ## Signature checks
 
 <a id="erc1271-cap"></a>
-<a id="CTR-DEX-08"></a>**CTR-DEX-08** — **`OrderBookDex` caps the ERC-1271 call by codehash.** `_validSig`'s contract
+<a id="CTR-DEX-08"></a>**CTR-DEX-08** — **`SCaaSDex` caps the ERC-1271 call by codehash.** `_validSig`'s contract
 branch (outside-token legs and DEX-domain cancels) is an assembly `staticcall` with cap `_erc1271Gas(signer)` = 400 k
 if `signer.codehash` is the `SmartKeyAccount` clone codehash (immutable at deployment, as the token's `_erc1271Gas`
 does, [CTR-ACC-05](accounts.md#CTR-ACC-05)), else 50 k; at most 32 bytes of returndata are copied; before the call it
 requires `gasleft() ≥ cap · 64/63 + margin`, otherwise the whole transaction reverts (EIP-150: a relayer must not
 starve the call to turn a valid signature into an invalid one). `mtxCancelOrders` needs no `try`: a capped `_validSig`
 only returns `false` ⇒ the item is skipped. The node does not restore an ERC-1271 order whose settlement failed out of
-gas. Why: the built contract calls `SignatureChecker` without a cap (`OrderBookDex.sol:383-384`), so a contract maker
+gas. Why: the built contract calls `SignatureChecker` without a cap (`SCaaSDex.sol:383-384`), so a contract maker
 that answers correctly under `eth_call` but burns gas or returns huge returndata in the real block breaks a whole
 `settle` batch (the remaining 1/64 gas is not enough for the next pairs) and **every** `cancel` batch. SCaaS legs get
 the same cap inside their token. Status **SPECIFIED**.
@@ -452,7 +452,7 @@ Accepted differences that the adapter, the matcher and clients must know:
 ## Managed markets
 
 <a id="managed-markets"></a>
-<a id="CTR-DEX-12"></a>**CTR-DEX-12** — **A managed market is a market on an `OrderBookDex` instance whose `admin` is
+<a id="CTR-DEX-12"></a>**CTR-DEX-12** — **A managed market is a market on an `SCaaSDex` instance whose `admin` is
 the licensed venue operator's multisig** ([CTR-DEX-03](#CTR-DEX-03)): the operator deploys its own instance and lists
 only managed pairs; its listing power covers only its venue; the contract is unchanged. On chain the regulated
 token's own checks are the arbiter ([asset-suite.md](asset-suite.md#regulated)): a settlement that slipped through
@@ -476,7 +476,7 @@ intake fails alone (`MatchFailed`). The node side (home-bound orders only, the f
 
 What runs today, until the rebuild replaces it (a new deployment; users re-sign their resting orders):
 
-- **Orders.** The built `OrderBookDex` signs orders on the DEX, `name = "SCaaS OrderBookDex"`, `version = "1"`,
+- **Orders.** The built `SCaaSDex` signs orders on the DEX, `name = "SCaaS Dex"`, `version = "1"`,
   `chainId`, `verifyingContract = DEX`, no salt: `Order(address maker,address taker,address sellToken,address
   buyToken,uint256 sellAmount,uint256 buyAmount,uint256 nonce,uint256 expiry,uint32 maxFeePpm,uint8 flags,address
   relayer,uint8 feeMode,uint256 fee,address feeToken,address feeRecipient)` — `maker` the signer, `taker` 0 = anyone or
@@ -496,10 +496,10 @@ What runs today, until the rebuild replaces it (a new deployment; users re-sign 
   `emit OrderFilled(ref, hash, owner, Fill)` per side and `emit Matched(ref, makerHash, takerHash)`. The book fills at
   the maker's price, `takerFill = ceil(makerFill · M.buy / M.sell)`. IOC remainders are closed after the loop (`filled = sellAmount`).
 - **Fees.** `setMarket(base, quote, listed, feeOn, makerPpm, takerPpm, feeRecipient)`, cap `FeePolicy.MAX_FEE_PPM`,
-  `feeRecipient ∉ {0, DEX}`; the market fee per fill rounds down, `fill * ppm / PPM` (`OrderBookDex.sol:216-217`;
+  `feeRecipient ∉ {0, DEX}`; the market fee per fill rounds down, `fill * ppm / PPM` (`SCaaSDex.sol:216-217`;
   with `ppm > 0` the fix is `Math.mulDiv(fill, ppm, PPM, Math.Rounding.Ceil)`, `ppm ≤ MAX_FEE_PPM` ⇒ `fee ≤ fill`
   and `fee · PPM ≥ fill · ppm`, tested with `ppm = 3_000` and `feeOn = false`; the floor test
-  `test_feeOnSplitsReceivedAmountsWithoutDust`, `OrderBookDex.t.sol:439-454`, changes to round up). The relayer fee
+  `test_feeOnSplitsReceivedAmountsWithoutDust`, `SCaaSDex.t.sol:439-454`, changes to round up). The relayer fee
   uses `FeeMode`: `PERCENT` in `sellToken` (`feeToken ∈ {0, sellToken}`, `FeePolicy.compute(PERCENT, fill, fee)`),
   `FIXED` pro-rata `fee · fill / sellAmount` rounded down (paid in `sellToken` it needs `fee <= 1 % · sellAmount`,
   `FeePolicy.compute(FIXED, sellAmount, fee)`); recipient `feeRecipient` or the sender; `feeRecipient = DEX` reverts
@@ -510,10 +510,10 @@ What runs today, until the rebuild replaces it (a new deployment; users re-sign 
   (`test_approveOpRelayerFeeIsCappedToZero`). Intake read `checkOrder(Order o, bytes sig) view returns (bytes32 hash,
   uint8 status, uint256 remaining, uint256 fundable, uint256 feeFundable)`, `fundable = min(balanceOf,
   allowance(DEX))`, `status` ∈ `OK, BAD_FLAGS, EXPIRED, NONCE_INVALID, BAD_SIG, CLOSED, NOT_LISTED, BAD_FEE`
-  (`OrderBookDex.sol:93-100`); the node compares `maxFeePpm` with the market fee (`dex.rs:565, 616-624`).
+  (`SCaaSDex.sol:93-100`); the node compares `maxFeePpm` with the market fee (`dex.rs:565, 616-624`).
 - **Cancel.** `cancel(CancelReq[])` — `cancel(CancelReq[] reqs)`, `CancelReq = {Order order; bytes sig}`: a `CancelOrder(hash(o))` signature
   sets `filled[h] = o.sellAmount`; `invalidateNonces(maker, newMin, sig)` (signed as `invalidateNonces(maker, minNonce, sig)`) with
-  `minNonce <= 2^128 − 1` (`type(uint128).max`, `OrderBookDex.sol:89`). The 1271 branch has no cap (`MetaToken.sol:141-143` caps the token side only).
+  `minNonce <= 2^128 − 1` (`type(uint128).max`, `SCaaSDex.sol:89`). The 1271 branch has no cap (`MetaToken.sol:141-143` caps the token side only).
 - **Legacy `MetaTxDex`** (no gateway route, `ReentrancyGuardTransient`, no owner or sweep): two `MetaTransaction` legs
   with `data = trade(counterToken, minCounterValue, counterparty)`, `to = relayer = MetaTxDex`,
   `MODE_RESTRICT_RELAYER`, so the token executes a leg only when `relayer == to == msg.sender`. `settle(Leg a, Leg b)`,

@@ -23,7 +23,7 @@ left; then execute subagent-driven like P1a. P1b notes (a)–(h) are in TODO §0
 - **Cross-repo breakage:** bamboo-dms `dms_blockchain/tests/test_eip712.py:14` reads the old path — repoint to
   `metatx_v1_kat.json` there.
 
-**Owner decisions 2026-10-09:** `OrderBookDex` → **`SCaaSDex`** in P2 (domain `"SCaaS Dex"`); integration.md rewrite later
+**Owner decisions 2026-10-09:** `OrderBookDex` → **`SCaaSDex`** (done 2026-10-09, domain `"SCaaS Dex"`); integration.md rewrite later
 (TODO §0); docs: README map as per-area tables, architecture.md numbered sections + contents, §1 lists smart contracts first.
 
 **Controller rulings during P1a** (review if you disagree): RA tag on `dc429c4`; RC/RF/RG/RH/RJ several test gaps upgraded
@@ -90,7 +90,7 @@ section carries a "Transitional (BUILT)" note naming the phase.
 - **Tree:** `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase` → four kinds by code (`NONE`, `UNDERLYING`, `NONE_ZETHER`,
   `UNDERLYING_ZETHER`; `*_PQZ` reserved), features by flags (payable, mint, burn, adjustable rate, wrap-disable, freeze,
   force, pause, allowlist); one owner model; Hedera as an `IS_HEDERA` branch; the native coin as an underlying leg; libraries
-  `AdminLib`, `PayLib`, `UnderlyingLib`, `HederaLib`, `TradeLib`, `ZetherLib`; `OrderBookDex` as a clone. Ids CTR-TOK-21…26,
+  `AdminLib`, `PayLib`, `UnderlyingLib`, `HederaLib`, `TradeLib`, `ZetherLib`; `SCaaSDex` as a clone. Ids CTR-TOK-21…26,
   CTR-MTX-25, CTR-AS-17, CTR-DEX-24, CTR-ZTH-37…47, CTR-ACC-11, CTR-PQZ-22.
 - **TODO §00 is now phases P1–P5** (P1 = MT-1…MT-4 on the new tree, P2 = MT-5, P3 = MT-6, P4 = MT-7 + rename, P5 = MT-8/9).
 - **Owner decisions for P1:** (1) keep the old code for reference: git tag `ref/pre-token-tree` on the last commit before

@@ -27,7 +27,7 @@ pub struct GwChain {
     pub chain: Arc<Chain>,
     pub tx: mpsc::Sender<Work>,
     pub tokens: Arc<RwLock<Vec<Address>>>,
-    /// Sổ lệnh + thanh toán của `OrderBookDex` trên chain này (R35); None = chain không có DEX.
+    /// Sổ lệnh + thanh toán của `SCaaSDex` trên chain này (R35); None = chain không có DEX.
     pub dex: Option<Arc<Venue>>,
     /// Cầu dao của lane nhận việc gateway (R55): mở ⇒ 503 trước khi mô phỏng, không nhận rồi bỏ rơi.
     pub breaker: Option<Arc<Mutex<Breaker>>>,

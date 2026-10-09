@@ -505,7 +505,7 @@ Change: a token's own signed entry points travel only as `metatx` jobs. Source a
 ### NODE-JOB-19 — Call table: permissionless selectors, role-holder Safe row
 - old: reorg:Q1 · status: current · owner: yes · date: 2026-10-08 · normative: node/job-api.md#NODE-JOB-19 · superseded-by: —
 
-Change: rows renamed (`SmartKeyAccount.mtxExecuteAsOwner`, `MandateWallet.mtxPayUnderMandate`/`mtxRevoke`/`mtxExecuteAsOwner`, `OrderBookDex.mtxSettle`/`mtxCancelOrders`/`mtxInvalidateNonces`); the DEX row admits only DEXes on the chain profile's list; chain-bound targets must report `chainUid() = chain_uid`; no role function is on any token allowlist, so role calls stay on the role holder's contract also for gasless token calls (OQ1). Source add: §3 MG-2, MG-3, MG-4, MG-6, §7, §10 OQ1.
+Change: rows renamed (`SmartKeyAccount.mtxExecuteAsOwner`, `MandateWallet.mtxPayUnderMandate`/`mtxRevoke`/`mtxExecuteAsOwner`, `SCaaSDex.mtxSettle`/`mtxCancelOrders`/`mtxInvalidateNonces`); the DEX row admits only DEXes on the chain profile's list; chain-bound targets must report `chainUid() = chain_uid`; no role function is on any token allowlist, so role calls stay on the role holder's contract also for gasless token calls (OQ1). Source add: §3 MG-2, MG-3, MG-4, MG-6, §7, §10 OQ1.
 
 ### NODE-JOB-20 — Meta-tx `data` read through the implementation's selector allowlist
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: node/job-api.md#NODE-JOB-20 · superseded-by: —
@@ -1698,7 +1698,7 @@ Change (2026-10-08): a `MetaTransaction` has no amount field, so the basis alway
 ### CTR-MTX-21 — mtx names for every signature-authorized entry point
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-21 · superseded-by: —
 
-**Why.** Every external function whose authority comes from a subject's signature starts with `mtx` (tokens, `ZetherToken` rollover, `MandateWallet`, `SmartKeyAccount`, `OrderBookDex`), so readers and the node's call table tell signed paths from direct ones at a glance; `executeMetaTransaction` stays as the alias; EIP-712 type names and non-EVM op names are unchanged.
+**Why.** Every external function whose authority comes from a subject's signature starts with `mtx` (tokens, `ZetherToken` rollover, `MandateWallet`, `SmartKeyAccount`, `SCaaSDex`), so readers and the node's call table tell signed paths from direct ones at a glance; `executeMetaTransaction` stays as the alias; EIP-712 type names and non-EVM op names are unchanged.
 **Cost if wrong.** Mixed names hide which entry points need a signature and which only a caller.
 **Source.** `history/specs/2026-10-07-metatx-generic.md` §2 A3, §3 MG-3.
 Change (2026-10-08): entry table: every contract on `MetaTxBase` has `mtxExecute`/`mtxBatch`/`cancelNonce`; tokens add `mtxExecuteTransfer`, `mtxBatchTransfer`; `MandateWallet` and `SmartKeyAccount` named entries build a `MetaTransaction`. The non-EVM line is unchanged here. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G4, §3 GC-5, GC-6.
@@ -1728,7 +1728,7 @@ Change (2026-10-08): the non-EVM exception is gone — non-EVM families name sig
 ### CTR-MTX-25 — One SigCheck
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-25 · superseded-by: —
 
-**Why.** One internal `SigCheck` (ECDSA low-s, ERC-1271 with the gas-cap rule, the HIP-632 hook) serves `MetaTxBase`, `OrderBookDex`, `MandateWallet` and `SmartKeyAccount`; `SigLib`, which has no importer, is deleted. Today the check is written six times and the HIP-632 override four times.
+**Why.** One internal `SigCheck` (ECDSA low-s, ERC-1271 with the gas-cap rule, the HIP-632 hook) serves `MetaTxBase`, `SCaaSDex`, `MandateWallet` and `SmartKeyAccount`; `SigLib`, which has no importer, is deleted. Today the check is written six times and the HIP-632 override four times.
 **Cost if wrong.** Copies drift: a fix to the gas cap or the low-s rule lands in one contract and not in the others.
 **Source.** `history/specs/2026-10-08-token-tree-design.md` §1, §4.
 
@@ -2086,10 +2086,10 @@ Change (2026-10-08): `admin` is written once by `initialize` of a factory-made c
 - old: RS5-7 · status: superseded · owner: no · date: 2026-10-08 · normative: — · superseded-by: CTR-DEX-16, CTR-DEX-01
 
 **What it said.** `MetaTxDex` stayed deployed as an unrouted legacy two-leg settlement over `trade` op legs.
-**Why.** The trade op is gone with the op dispatch; `OrderBookDex.mtxSettle` covers its fill-or-kill case, so `MetaTxDex` is deleted.
+**Why.** The trade op is gone with the op dispatch; `SCaaSDex.mtxSettle` covers its fill-or-kill case, so `MetaTxDex` is deleted.
 **Source.** `history/specs/2026-10-03-dex-design.md:409`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-8.4, §7 (CTR-DEX-07 row).
 
-### CTR-DEX-08 — OrderBookDex caps ERC-1271 gas by codehash
+### CTR-DEX-08 — SCaaSDex caps ERC-1271 gas by codehash
 - old: RS5-14(contract) · status: current · owner: no · date: 2026-10-08 · normative: contracts/dex.md#CTR-DEX-08 · superseded-by: —
 
 **Why.** The DEX's own signature checks (outside-token legs, DEX-domain cancels) cap ERC-1271 gas by codehash (400 k for `SmartKeyAccount` clones, else 50 k) and refuse to run with too little gas left; SCaaS legs get the same cap inside their token.
@@ -2120,7 +2120,7 @@ Change (2026-10-08): `admin` is written once by `initialize` of a factory-made c
 ### CTR-DEX-12 — Managed market venue contract and arbiter
 - old: R214(contract) · status: current · owner: yes · date: 2026-10-08 · normative: contracts/dex.md#CTR-DEX-12 · superseded-by: —
 
-**Why.** A managed market is an `OrderBookDex` instance whose admin is the venue operator's multisig; the regulated token's own checks arbitrate on chain, and a settlement that slipped through intake fails alone.
+**Why.** A managed market is an `SCaaSDex` instance whose admin is the venue operator's multisig; the regulated token's own checks arbitrate on chain, and a settlement that slipped through intake fails alone.
 **Cost if wrong.** Mixing managed rules into the open DEX would gate everyone.
 **Source.** `history/specs/2026-10-06-asset-suite-design.md:176`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-8.3.
 
@@ -2208,7 +2208,7 @@ Change (2026-10-08): wording only — the token consults no registry; the factor
 ### CTR-DEX-24 — Factory-made DEX clones; the DEX registry is advisory
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/dex.md#CTR-DEX-24 · superseded-by: —
 
-**Why.** `OpenFactory.createDex` makes an `OrderBookDex` clone with `admin` written once by `initialize` and the `DexPuller` deployed by `initialize`; `isDex` serves clients and the node, and tokens never consult it, because requiring a factory-made DEX would give the factory admin too much power over trades (CTR-DEX-19 unchanged).
+**Why.** `OpenFactory.createDex` makes an `SCaaSDex` clone with `admin` written once by `initialize` and the `DexPuller` deployed by `initialize`; `isDex` serves clients and the node, and tokens never consult it, because requiring a factory-made DEX would give the factory admin too much power over trades (CTR-DEX-19 unchanged).
 **Cost if wrong.** If tokens required `isDex`, the factory admin could stop trading; without the registry, clients and the node have no on-chain list of genuine DEX versions.
 **Source.** `history/specs/2026-10-08-token-tree-design.md` T12, §7.
 

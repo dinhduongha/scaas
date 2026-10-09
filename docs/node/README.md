@@ -382,6 +382,6 @@ legacy pull path to the store ([job-api.md#legacy-pull](job-api.md#legacy-pull))
 | Job builder | `job.rs` `build(&Job, …)` | unchanged |
 | Keys in one process | relay and indexer keys both loaded (`main.rs:103, 117`) | [threat-model.md#node](threat-model.md#node) T7 |
 | Mesh | `mesh/digest.rs:130-300` (`check_evm`, `:193-195`), `mesh/store.rs`, e2e `tests/e2e.rs`, `tests/e2e_<family>.rs`; adapters `adapters/cosmos.rs`, `adapters/hedera.rs`; wiring `main.rs` | [mesh.md](mesh.md) |
-| DEX venue | `dex/venue.rs:1`, `dex/venue.rs:179-199`, `dex/venue.rs:403-421`, `venue.rs:188-196`, `venue.rs:317-324`, `venue.rs:500, 542`, matching `dex.rs:637-643`, watcher in `indexer.rs`; contract `OrderBookDex.sol:188-198` (`_validSig`, `_erc1271Gas(signer)`), tests `OrderBookDex.t.sol:667`, `OrderBookDexInvariant.t.sol` | [dex-venue.md](dex-venue.md) |
+| DEX venue | `dex/venue.rs:1`, `dex/venue.rs:179-199`, `dex/venue.rs:403-421`, `venue.rs:188-196`, `venue.rs:317-324`, `venue.rs:500, 542`, matching `dex.rs:637-643`, watcher in `indexer.rs`; contract `SCaaSDex.sol:188-198` (`_validSig`, `_erc1271Gas(signer)`), tests `SCaaSDex.t.sol:667`, `SCaaSDexInvariant.t.sol` | [dex-venue.md](dex-venue.md) |
 | Meta-tx contracts | `smartcontracts/src/common/MetaTxLib.sol`, `ERC20MetaTx.sol`, `smartcontracts/src/metatx/ERC20MetaTx.sol`, `smartcontracts/src/hedera/HederaMetaToken.sol` | [contracts/metatx.md](../contracts/metatx.md) |
 | Console app | `scaas/app/` | [clients/app.md](../clients/app.md) |

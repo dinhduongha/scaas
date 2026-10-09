@@ -20,7 +20,7 @@ use tokio::sync::Mutex;
 use tracing::{info, warn};
 
 use super::{
-    cancel_digest, domain, hex_bytes, hex_of, invalidate_digest, order_hash, pair, Book, CancelReq, IOrderBookDex,
+    cancel_digest, domain, hex_bytes, hex_of, invalidate_digest, order_hash, pair, Book, CancelReq, ISCaaSDex,
     MarketCfg, Order, PlannedFill, Resting, Row, WireOrder, FLAG_FOK, FLAG_IOC, ST_OK, relayer_fee,
 };
 use crate::chain::{classify, Chain, SimError};
@@ -226,22 +226,22 @@ impl Venue {
         self.chain.primary().call(tx).await.map_err(|e| classify(&e))
     }
 
-    async fn check(&self, o: &Order, sig: &Bytes) -> Result<IOrderBookDex::checkOrderReturn> {
+    async fn check(&self, o: &Order, sig: &Bytes) -> Result<ISCaaSDex::checkOrderReturn> {
         let out = self
-            .call(IOrderBookDex::checkOrderCall { o: o.clone(), sig: sig.clone() }.abi_encode())
+            .call(ISCaaSDex::checkOrderCall { o: o.clone(), sig: sig.clone() }.abi_encode())
             .await
             .map_err(|e| anyhow!("checkOrder: {e}"))?;
-        Ok(IOrderBookDex::checkOrderCall::abi_decode_returns(&out)?)
+        Ok(ISCaaSDex::checkOrderCall::abi_decode_returns(&out)?)
     }
 
     /// Simulate `settle`: `Ok(vec ok-per-match)`; mọi cặp fail ⇒ `NothingSettled` ⇒ toàn `false`.
     async fn simulate(&self, fills: &[PlannedFill]) -> std::result::Result<Vec<bool>, SimError> {
         let ms = fills.iter().map(PlannedFill::to_match).collect();
-        match self.call(IOrderBookDex::settleCall { ms }.abi_encode()).await {
-            Ok(out) => IOrderBookDex::settleCall::abi_decode_returns(&out)
+        match self.call(ISCaaSDex::settleCall { ms }.abi_encode()).await {
+            Ok(out) => ISCaaSDex::settleCall::abi_decode_returns(&out)
                 .map_err(|e| SimError::Revert(format!("decode: {e}"))),
             Err(SimError::Revert(r))
-                if r.contains(&alloy::hex::encode(<IOrderBookDex::NothingSettled as SolError>::SELECTOR)) =>
+                if r.contains(&alloy::hex::encode(<ISCaaSDex::NothingSettled as SolError>::SELECTOR)) =>
             {
                 Ok(vec![false; fills.len()])
             }
@@ -465,7 +465,7 @@ impl Venue {
         if !self.valid_sig(maker, invalidate_digest(&self.domain, maker, min), &sig).await {
             return Err(bad("bad invalidate signature"));
         }
-        let call = IOrderBookDex::invalidateNoncesCall { maker, newMin: min, sig: sig.clone() }.abi_encode();
+        let call = ISCaaSDex::invalidateNoncesCall { maker, newMin: min, sig: sig.clone() }.abi_encode();
         if let Err(e) = self.call(call.clone()).await {
             return Err(bad(format!("invalidateNonces refused: {e}")));
         }
@@ -717,7 +717,7 @@ fn settle_jobs(dex: Address, fills: &[PlannedFill]) -> Vec<Value> {
                 fills.iter().flat_map(|f| [f.maker.order.expiry, f.taker.order.expiry]).min().unwrap_or_default();
             json!({
                 "kind": "settle", "market_id": fills[0].market_id, "target": format!("{dex:#x}"),
-                "calldata": hex_of(&IOrderBookDex::settleCall { ms }.abi_encode()),
+                "calldata": hex_of(&ISCaaSDex::settleCall { ms }.abi_encode()),
                 "valid_until": valid_until.to_string(),
                 "tags": fills.iter().map(|f| format!("{:#x}", f.tag)).collect::<Vec<_>>(),
             })
@@ -734,7 +734,7 @@ fn cancel_jobs(dex: Address, pending: &[(i64, CancelReq)]) -> Vec<Value> {
             let valid_until = reqs.iter().map(|r| r.order.expiry).max().unwrap_or_default();
             json!({
                 "kind": "cancel", "market_id": chunk[0].0, "target": format!("{dex:#x}"),
-                "calldata": hex_of(&IOrderBookDex::cancelCall { reqs }.abi_encode()),
+                "calldata": hex_of(&ISCaaSDex::cancelCall { reqs }.abi_encode()),
                 "valid_until": valid_until.to_string(), "tags": [],
             })
         })
@@ -759,12 +759,12 @@ fn status_name(s: u8) -> &'static str {
 /// Thị trường Odoo khớp on-chain (niêm yết, cờ phí, ppm, người nhận phí).
 async fn onchain_matches(chain: &Chain, dex: Address, m: &MarketCfg) -> Result<bool> {
     let (a, b) = pair(m.base, m.quote);
-    let key_call = IOrderBookDex::marketKeyCall { a, b }.abi_encode();
+    let key_call = ISCaaSDex::marketKeyCall { a, b }.abi_encode();
     let tx = TransactionRequest::default().to(dex).input(key_call.into());
     let key = B256::from_slice(&chain.primary().call(tx).await?[..32]);
-    let tx = TransactionRequest::default().to(dex).input(IOrderBookDex::marketsCall { key }.abi_encode().into());
+    let tx = TransactionRequest::default().to(dex).input(ISCaaSDex::marketsCall { key }.abi_encode().into());
     let out = chain.primary().call(tx).await?;
-    let r = IOrderBookDex::marketsCall::abi_decode_returns(&out)?;
+    let r = ISCaaSDex::marketsCall::abi_decode_returns(&out)?;
     let fees_ok = if r.feeOn {
         m.fee_on && r.makerFeePpm == m.maker_fee_ppm && r.takerFeePpm == m.taker_fee_ppm && r.feeRecipient == m.fee_recipient
     } else {
@@ -775,7 +775,7 @@ async fn onchain_matches(chain: &Chain, dex: Address, m: &MarketCfg) -> Result<b
 
 /// Tên lỗi DEX đọc được (cho `MatchFailed.reason` ở Odoo); không nhận ra ⇒ bộ giải mã chung.
 pub fn revert_name(data: &[u8]) -> String {
-    match IOrderBookDex::IOrderBookDexErrors::abi_decode(data) {
+    match ISCaaSDex::ISCaaSDexErrors::abi_decode(data) {
         Ok(e) => format!("{e:?}"),
         Err(_) => crate::abi::decode_revert(data),
     }
@@ -783,7 +783,7 @@ pub fn revert_name(data: &[u8]) -> String {
 
 /// Lệnh nghỉ còn settle được `remaining`: OK on-chain và đủ số dư/allowance kể cả phí relayer
 /// (review I2/I3: thiếu 1 wei phí cũng làm mọi cặp với nó fail).
-fn funded(o: &Order, remaining: U256, c: &IOrderBookDex::checkOrderReturn) -> bool {
+fn funded(o: &Order, remaining: U256, c: &ISCaaSDex::checkOrderReturn) -> bool {
     let (ft, fee) = relayer_fee(o, remaining);
     let own = if ft == o.sellToken { fee } else { U256::ZERO };
     c.status == ST_OK && c.fundable >= remaining + own && (ft == o.sellToken || c.feeFundable >= fee)
@@ -800,8 +800,8 @@ pub fn encode_event(log: &Log) -> Option<Value> {
     });
     let topic0 = *log.topic0()?;
     let a = |x: Address| format!("{x:#x}");
-    if topic0 == IOrderBookDex::OrderFilled::SIGNATURE_HASH {
-        let e = log.log_decode::<IOrderBookDex::OrderFilled>().ok()?.inner.data;
+    if topic0 == ISCaaSDex::OrderFilled::SIGNATURE_HASH {
+        let e = log.log_decode::<ISCaaSDex::OrderFilled>().ok()?.inner.data;
         let f = e.fill;
         v["event"] = json!("OrderFilled");
         v["tag"] = json!(format!("{:#x}", e.tag));
@@ -817,24 +817,24 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         v["relayer_fee"] = json!(f.relayerFee.to_string());
         v["relayer_fee_recipient"] = json!(a(f.relayerFeeRecipient));
         v["filled_total"] = json!(f.filledTotal.to_string());
-    } else if topic0 == IOrderBookDex::Matched::SIGNATURE_HASH {
-        let e = log.log_decode::<IOrderBookDex::Matched>().ok()?.inner.data;
+    } else if topic0 == ISCaaSDex::Matched::SIGNATURE_HASH {
+        let e = log.log_decode::<ISCaaSDex::Matched>().ok()?.inner.data;
         v["event"] = json!("Matched");
         v["tag"] = json!(format!("{:#x}", e.tag));
         v["maker_hash"] = json!(format!("{:#x}", e.makerHash));
         v["taker_hash"] = json!(format!("{:#x}", e.takerHash));
-    } else if topic0 == IOrderBookDex::MatchFailed::SIGNATURE_HASH {
-        let e = log.log_decode::<IOrderBookDex::MatchFailed>().ok()?.inner.data;
+    } else if topic0 == ISCaaSDex::MatchFailed::SIGNATURE_HASH {
+        let e = log.log_decode::<ISCaaSDex::MatchFailed>().ok()?.inner.data;
         v["event"] = json!("MatchFailed");
         v["tag"] = json!(format!("{:#x}", e.tag));
         v["reason"] = json!(revert_name(&e.reason));
-    } else if topic0 == IOrderBookDex::OrderCancelled::SIGNATURE_HASH {
-        let e = log.log_decode::<IOrderBookDex::OrderCancelled>().ok()?.inner.data;
+    } else if topic0 == ISCaaSDex::OrderCancelled::SIGNATURE_HASH {
+        let e = log.log_decode::<ISCaaSDex::OrderCancelled>().ok()?.inner.data;
         v["event"] = json!("OrderCancelled");
         v["order_hash"] = json!(format!("{:#x}", e.orderHash));
         v["maker"] = json!(a(e.maker));
-    } else if topic0 == IOrderBookDex::NoncesInvalidated::SIGNATURE_HASH {
-        let e = log.log_decode::<IOrderBookDex::NoncesInvalidated>().ok()?.inner.data;
+    } else if topic0 == ISCaaSDex::NoncesInvalidated::SIGNATURE_HASH {
+        let e = log.log_decode::<ISCaaSDex::NoncesInvalidated>().ok()?.inner.data;
         v["event"] = json!("NoncesInvalidated");
         v["maker"] = json!(a(e.maker));
         v["min_nonce"] = json!(e.minNonce.to_string());
@@ -851,7 +851,7 @@ mod tests {
 
     #[test]
     fn funded_counts_the_relayer_fee_in_either_token() {
-        let c = |status, fundable: u64, fee: u64| IOrderBookDex::checkOrderReturn {
+        let c = |status, fundable: u64, fee: u64| ISCaaSDex::checkOrderReturn {
             h: B256::ZERO,
             status,
             remaining: U256::from(100),
@@ -898,7 +898,7 @@ mod tests {
 
     #[test]
     fn order_filled_is_encoded_for_odoo() {
-        let ev = IOrderBookDex::OrderFilled {
+        let ev = ISCaaSDex::OrderFilled {
             tag: B256::repeat_byte(1),
             orderHash: B256::repeat_byte(2),
             owner: Address::repeat_byte(3),
@@ -924,13 +924,13 @@ mod tests {
 
     #[test]
     fn cancel_and_invalidate_are_encoded() {
-        let ev = IOrderBookDex::OrderCancelled { orderHash: B256::repeat_byte(7), maker: Address::repeat_byte(8) };
+        let ev = ISCaaSDex::OrderCancelled { orderHash: B256::repeat_byte(7), maker: Address::repeat_byte(8) };
         let v = encode_event(&log_of(ev.encode_log_data())).unwrap();
         assert_eq!(v["event"], "OrderCancelled");
-        let ev = IOrderBookDex::NoncesInvalidated { maker: Address::repeat_byte(8), minNonce: U256::from(9) };
+        let ev = ISCaaSDex::NoncesInvalidated { maker: Address::repeat_byte(8), minNonce: U256::from(9) };
         let v = encode_event(&log_of(ev.encode_log_data())).unwrap();
         assert_eq!(v["min_nonce"], "9");
-        let ev = IOrderBookDex::MatchFailed { tag: B256::ZERO, reason: Bytes::from_static(&[1, 2, 3]) };
+        let ev = ISCaaSDex::MatchFailed { tag: B256::ZERO, reason: Bytes::from_static(&[1, 2, 3]) };
         let v = encode_event(&log_of(ev.encode_log_data())).unwrap();
         assert!(v["reason"].as_str().unwrap().starts_with("revert 0x"));
     }

@@ -336,18 +336,18 @@ equals `chain.chain_uid` ([NODE-GW-07](gateway.md#NODE-GW-07)); a mismatch ⇒ `
 | `SmartKeyAccountFactory.deploy((uint8,bytes32,bytes32,bytes32,bytes32),address)` | the chain's account factory (`chain_contract.kind = account_factory`) | client subject-account onboarding |
 | `SmartKeyAccount.mtxExecuteAsOwner(bytes,uint256,uint256,bytes)` (built as `SubjectAccount.mtxExecuteAsOwner`, renamed in P4) | runtime code = EIP-1167 clone of that factory's `IMPLEMENTATION` (checked at lease, cached); the account address is predicted per chain (the factory's constructor takes `chain_uid`, so the same owner has a different account address on each chain) | client subject accounts; role holders that are subject accounts |
 | `MandateWallet.mtxPayUnderMandate`, `mtxRevoke` (epoch-bound, [CTR-ACC-07](../contracts/mandates.md#CTR-ACC-07)), `mtxExecuteAsOwner`; `HederaMandateWallet.mtxExecuteAsOwnerRaw` | any address that is not a registered token and whose `chainUid()` equals `chain.chain_uid` (self-authenticating: the target checks the delegate/owner signature; a wallet is deployed per user with a deployer-chosen value, so it is read at lease and cached) | client payment requests, auto-pay |
-| `OrderBookDex.mtxSettle` / `mtxExchange` / `mtxExchangeVia` ([CTR-DEX-20](../contracts/dex.md#CTR-DEX-20), SPECIFIED) / `mtxCancelOrders` / `mtxInvalidateNonces` | a DEX on the chain profile's DEX list (`chain_contract.kind = dex`, [NET-ALL-24](../networks/README.md#NET-ALL-24)); never any other address | DEX venue (`~dex`) |
+| `SCaaSDex.mtxSettle` / `mtxExchange` / `mtxExchangeVia` ([CTR-DEX-20](../contracts/dex.md#CTR-DEX-20), SPECIFIED) / `mtxCancelOrders` / `mtxInvalidateNonces` | a DEX on the chain profile's DEX list (`chain_contract.kind = dex`, [NET-ALL-24](../networks/README.md#NET-ALL-24)); never any other address | DEX venue (`~dex`) |
 | `UniversalAccountRegistry.register` (`UARegistry.register` once the UA registry is deployed) | `chain.ua_registry`, `~gateway` only ([NODE-GW-03](gateway.md#NODE-GW-03)) | node gateway |
 | `SealedBidTender.commitBid`, `revealBid`, `withdrawDeposit`, `settleTender` | `chain_contract.kind = tender` | client tender flows ([contracts/tender.md](../contracts/tender.md)) |
 | `VestingGrant.release`; `Distribution.claim`, `claimMany` | runtime code = EIP-1167 clone of the registered asset-suite implementation (codehash checked at lease, cached) | client asset-suite flows ([contracts/asset-suite.md](../contracts/asset-suite.md)) |
-| `ExchangeOffer.exchange(MetaTransaction,bytes)` | EIP-1167 clone of the registered `ExchangeOffer` implementation (like `OrderBookDex.mtxSettle`: the leg carries the holder's own signature) | client corporate actions |
+| `ExchangeOffer.exchange(MetaTransaction,bytes)` | EIP-1167 clone of the registered `ExchangeOffer` implementation (like `SCaaSDex.mtxSettle`: the leg carries the holder's own signature) | client corporate actions |
 | `Safe.execTransaction` | a registered role-holder contract (`chain_contract.kind = role_holder`); the owners' signatures are inside the calldata | issuer / compliance / buyer role holders |
 
 `pqz_call` jobs are not `call` jobs: their own selector list is in the kinds table above.
 
 Transitional (BUILT): the deployed contracts and the node's built table use the earlier names —
 `SmartKeyAccount.executeAsOwner(bytes,uint256,uint256,bytes)`, `MandateWallet.payUnderMandate`/`revokeWithSig`/`executeAsOwner`,
-`OrderBookDex.settle`/`cancel`/`invalidateNonces` — and the DEX row also matches the chain's single `dex` field. The
+`SCaaSDex.settle`/`cancel`/`invalidateNonces` — and the DEX row also matches the chain's single `dex` field. The
 renamed rows replace them in the release that deploys the renamed contracts; no deployed chain keeps both.
 
 ## Job states

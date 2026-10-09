@@ -59,7 +59,7 @@ use `NoUnderlyingToken`, 1:1 wrappers use an `UnderlyingToken` with one leg and 
 One domain version, `"1"`, for every token.
 
 <a id="CTR-MTX-25"></a>**CTR-MTX-25** — One internal `SigCheck` (ECDSA low-s, ERC-1271 with the gas-cap rule, the HIP-632
-hook) is used by `MetaTxBase`, `OrderBookDex`, `MandateWallet` and `SmartKeyAccount`; `SigLib` is deleted.
+hook) is used by `MetaTxBase`, `SCaaSDex`, `MandateWallet` and `SmartKeyAccount`; `SigLib` is deleted.
 
 <a id="metatxbase"></a>
 <a id="CTR-MTX-22"></a>**CTR-MTX-22** — **`MetaTxBase`: the generic base of every SCaaS contract** (owner). It holds
@@ -496,7 +496,7 @@ signed, not the entry point, and stay. Non-EVM families follow the same rule in 
 | `NONE_ZETHER` / `UNDERLYING_ZETHER` (built: `ZetherToken`; replaced in P1/P3) | `zetherRollOverSigned`, `zetherSetRollOverMode` ([CTR-ZTH-16](zether.md#CTR-ZTH-16)) |
 | `MandateWallet` | + `mtxPayUnderMandate`, `mtxRevoke`, `mtxExecuteAsOwner`, named builders of a `MetaTransaction` ([mandates.md](mandates.md#mandatewallet)) |
 | `SmartKeyAccount` | + `mtxExecuteAsOwner`, named builder of a `MetaTransaction` ([CTR-ACC-10](accounts.md#CTR-ACC-10)) |
-| `OrderBookDex` | `mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces` ([dex.md](dex.md#CTR-DEX-16)) |
+| `SCaaSDex` | `mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces` ([dex.md](dex.md#CTR-DEX-16)) |
 
 <a id="CTR-MTX-09"></a>**CTR-MTX-09** — The named functions `mtxTransfer`, `mtxTransferWithFee`, `mtxExecuteWithFee`,
 `mtxPay` and the batches `mtxBatch`/`mtxBatchTransfer` live in `MetaTokenBase` (so every kind has them; pay only with `PAYABLE`), keep their
@@ -843,7 +843,7 @@ Until the base is rebuilt, the code runs two lines with a hand-written op dispat
   `abi.decode` would); Zether on `ZetherMetaTx`. Invariants as built: `Σ balance == totalSupply`; wrapper
   `reserve >= totalSupply`, fuzzed as `reserve >= supply`.
 - **Signature checks** ([CTR-MTX-25](#CTR-MTX-25)). Built (P1a): `SigCheck` serves `MetaTxBase` and the built bases
-  `ERC20MetaTx`, `MetaTxCore`, `ZetherMetaTx`; `SigLib` is deleted. `OrderBookDex`, `MandateWallet` and
+  `ERC20MetaTx`, `MetaTxCore`, `ZetherMetaTx`; `SigLib` is deleted. `SCaaSDex`, `MandateWallet` and
   `SmartKeyAccount` keep their own checks until P2/P4, and the HIP-632 override stays in the four Hedera children
   until P1c.
 - **Structs** ([CTR-MTX-15](#CTR-MTX-15), [CTR-MTX-22](#CTR-MTX-22), [CTR-MTX-23](#CTR-MTX-23)). One 11-field

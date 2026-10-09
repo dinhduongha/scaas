@@ -407,7 +407,7 @@ cost real money on public chains (an ML-DSA-65 signature is 53–132 k gas of ca
 <a id="function-kinds"></a>
 <a id="CTR-UA-14"></a>**CTR-UA-14** — **Each function accepts the kinds it needs** (owner): native-address functions (the
 tokens' address-typed paths, DEX, mandates) keep accepting native ids only — the DEX with UA makers (UA holders trade through native
-accounts; it would need a UA-ledger allowance `uaApprove` to contracts and an `OrderBookDex` v2 with `bytes32 maker`),
+accounts; it would need a UA-ledger allowance `uaApprove` to contracts and an `SCaaSDex` v2 with `bytes32 maker`),
 `MandateWallet` with a UA owner or delegate, and regulated tokens with UA receivers are not in v1; the UA-ledger functions of the token base accept a
 native id or a registered SIGNING kind as `from` and as `to`; Zether functions accept Zether kinds only, registered
 first. The kind sets SIGNING, ZETHER and MEMBER are **closed and enforced** at each point that names them: v3
@@ -553,7 +553,7 @@ EVM DEX, mandates, accounts, registry:
 
 | Contract | Function | Subject | Accepts | Note |
 |---|---|---|---|---|
-| `OrderBookDex` | `mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces`; SCaaS legs through the token's `mtxTrade` | `o.from` | N | outside legs: `_validSig`, its ERC-1271 branch with the 50 k/400 k cap ([CTR-DEX-08](dex.md#CTR-DEX-08)); SCaaS legs: the token; UA legs wait for a `bytes32` order |
+| `SCaaSDex` | `mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces`; SCaaS legs through the token's `mtxTrade` | `o.from` | N | outside legs: `_validSig`, its ERC-1271 branch with the 50 k/400 k cap ([CTR-DEX-08](dex.md#CTR-DEX-08)); SCaaS legs: the token; UA legs wait for a `bytes32` order |
 | `MandateWallet` (native 1271 itself) | `setMandate`, `setPayee`, `revoke`, `execute`; `mtxExecuteAsOwner`; `mtxPayUnderMandate`, `mtxRevoke` | owner; delegate | owner N (ECDSA); delegate N (ECDSA) | a UA owner/delegate = a future `MandateWallet` v2 calling `requireAuthorized` |
 | `SmartKeyAccount` (option (b)) | `mtxExecuteAsOwner`, `isValidSignature`, recovery | its keys | P-256 WebAuthn, secp256k1 (account keys) | is itself an N id |
 | `UARegistry` | `register` | — | any derived kind | PoP |
@@ -563,7 +563,7 @@ EVM DEX, mandates, accounts, registry:
 **Transitional (BUILT names).** `SmartKeyAccount` and `MandateWallet` expose `executeAsOwner(data, nonce, validUntil,
 signature)` (recovery cancel: `executeAsOwner(cancelRecovery)`); Zether exposes `rollOverSigned(ua, …, sig)` and
 `setRollOverMode(ua, …, sig)` and verifies envelopes with `ZetherMetaTx._requireValidSignature`; the classifier is
-`MetaTxCore._isContract`; `OrderBookDex` keys orders by `o.maker`; the legacy `MetaTxDex.settle(a, b)` takes legs
+`MetaTxCore._isContract`; `SCaaSDex` keys orders by `o.maker`; the legacy `MetaTxDex.settle(a, b)` takes legs
 signed by `a.m.from` and `b.m.from`. The renames and deletions are [CTR-MTX-21](metatx.md#CTR-MTX-21) and
 [CTR-DEX-16](dex.md#CTR-DEX-16).
 
@@ -1397,7 +1397,7 @@ implementation pins the chain's `SmartKeyAccount` implementation (constructor pa
 `from.codehash` is the EIP-1167 clone code of that implementation, because a Solidity P-256 verifier costs ~200–330 k
 gas on chains without the precompile. Other contract wallets (Safe, …) keep 50 k. `Deploy.s.sol` deploys
 `SmartKeyAccountFactory` before the token and records its address in `deployments/<chainid>.json`. The same rule is
-applied by `OrderBookDex` ([CTR-DEX-08](dex.md#CTR-DEX-08)) and to Zether envelopes ([CTR-ZTH-21](zether.md#CTR-ZTH-21)).
+applied by `SCaaSDex` ([CTR-DEX-08](dex.md#CTR-DEX-08)) and to Zether envelopes ([CTR-ZTH-21](zether.md#CTR-ZTH-21)).
 `SmartKeyAccount` has its own salted domain `("SCaaS SubjectAccount","1", chainId, account, chain_uid)` (built; target `SCaaS SmartKeyAccount`, P4); the factory
 takes `chain_uid` as a constructor argument and passes it to `new SmartKeyAccount(chainUid)`, so a user's account has a
 different address on each chain and the node and app predict it per chain ([CTR-GEN-05](README.md#CTR-GEN-05)).

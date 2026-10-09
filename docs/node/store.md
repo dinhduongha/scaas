@@ -591,7 +591,7 @@ family = "evm"
 evm_chain_number = 7622
 rpc_urls = ["http://rpc-a:8545", "http://rpc-b:8545"]   # ≥ finality.quorum independent endpoints
 finality = { mode = "depth", depth = 1, quorum = 1 }    # 'depth' | 'tag' | 'instant'
-dex = "0x…"                                     # OrderBookDex, optional
+dex = "0x…"                                     # SCaaSDex, optional
 poll_ms = 1000
 stuck_after_secs = 60                           # replace at the same nonce, fee ×1.25
 max_gas_per_tx = 3000000                        # structural breaker
