@@ -53,9 +53,9 @@ contract HederaV2Test is Test {
     }
 
     function _mt(address to, uint256 value, bytes memory data, uint256 batch)
-        internal view returns (MetaTxLib.MetaTransaction memory)
+        internal view returns (MetaTxLib.LegacyMetaTransaction memory)
     {
-        return MetaTxLib.MetaTransaction({from: alice, to: to, value: value, data: data, batch: batch, nonce: 0,
+        return MetaTxLib.LegacyMetaTransaction({from: alice, to: to, value: value, data: data, batch: batch, nonce: 0,
             validUntil: block.timestamp + 300, mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
     }
 
@@ -81,7 +81,7 @@ contract HederaV2Test is Test {
         vm.prank(alice);
         address t = f.createTiered(IOpenFactoryV2.TokenKind.META_NONE, 1, new address[](0),
             abi.encode("Points", "PTS", uint8(0), uint256(1000), address(0)), "n");
-        MetaTxLib.MetaTransaction memory m = _mt(shop, 250, "", 1);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(shop, 250, "", 1);
         bytes memory sig = _edSign(IERC20MetaTx(t).metaTxDigest(m));
         vm.prank(relayer);
         IERC20MetaTx(t).executeMetaTransaction(m, sig);
@@ -94,7 +94,7 @@ contract HederaV2Test is Test {
         _wrapFor(t, usdc, alice, 100e6);
         bytes memory d = abi.encodeWithSelector(bytes4(keccak256("unwrap(address,address,uint256)")),
             address(usdc), shop, 40e6);
-        MetaTxLib.MetaTransaction memory m = _mt(shop, 40e6, d, 2);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(shop, 40e6, d, 2);
         bytes memory sig = _edSign(IERC20MetaTx(t).metaTxDigest(m));
         vm.prank(relayer);
         HederaSingleUnderlyingToken(t).mtxUnwrap(alice, address(usdc), 40e6, shop, 40e6, 2, 0, m.validUntil, RR,
@@ -121,7 +121,7 @@ contract HederaV2Test is Test {
         HederaMultiUnderlyingToken(t).wrap(address(usdt), 10e6);
         vm.stopPrank();
         bytes32 payId = keccak256("inv");
-        MetaTxLib.MetaTransaction memory m = _mt(shop, 3e6, abi.encodeWithSelector(bytes4(keccak256("pay(bytes32)")), payId),
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(shop, 3e6, abi.encodeWithSelector(bytes4(keccak256("pay(bytes32)")), payId),
             HederaMultiUnderlyingToken(t).payLane(payId));
         bytes memory sig = _edSign(IERC20MetaTx(t).metaTxDigest(m));
         vm.prank(relayer);
@@ -132,7 +132,7 @@ contract HederaV2Test is Test {
     function test_otherKeyIsRejected() public {
         address t = _single(address(plain));
         _wrapFor(t, plain, alice, 10);
-        MetaTxLib.MetaTransaction memory m = _mt(shop, 1, "", 1);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(shop, 1, "", 1);
         (bytes32 r, bytes32 vs) = vm.signCompact(0xBAD, IERC20MetaTx(t).metaTxDigest(m));
         vm.prank(relayer);
         vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);

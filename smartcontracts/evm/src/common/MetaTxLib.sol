@@ -60,7 +60,38 @@ library MetaTxLib {
     error ModeFeeInvalid(uint32 mode);
     error ModeUnknownBits(uint32 mode);
 
+    /// @notice v3 (CTR-MTX-15): the signed call of one of THIS contract's allowlisted functions.
     struct MetaTransaction {
+        address from;           // signer; the authority the call runs under
+        bytes   data;           // a call of THIS contract, allowlisted selector
+        uint256 batch;          // nonce dimension 1: lane
+        uint256 nonce;          // nonce dimension 2: sequence inside the lane
+        uint256 validUntil;     // unix seconds
+        uint32  mode;           // constraint flags + fee mode
+        address relayer;        // bound relayer when MODE_RESTRICT_RELAYER
+        uint256 fee;            // only where the contract charges it (tokens); elsewhere fee mode NONE
+        address feeRecipient;   // bound fee recipient when MODE_RESTRICT_FEE_RECIPIENT
+    }
+
+    /// @dev Pinned by `test_metaTxTypehashIsPinned` (test/metatx/MetaTxLib.t.sol).
+    bytes32 internal constant METATX_TYPEHASH = keccak256(
+        "MetaTransaction(address from,bytes data,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
+
+    function canon(MetaTransaction memory m) internal pure returns (address r, address f) {
+        r = (m.mode & MODE_RESTRICT_RELAYER)       != 0 ? m.relayer      : address(0);
+        f = (m.mode & MODE_RESTRICT_FEE_RECIPIENT) != 0 ? m.feeRecipient : address(0);
+    }
+
+    function hashStruct(MetaTransaction memory m) internal pure returns (bytes32) {
+        (address r, address f) = canon(m);
+        return keccak256(abi.encode(
+            METATX_TYPEHASH, m.from, keccak256(m.data), m.batch, m.nonce, m.validUntil, m.mode, r, m.fee, f
+        ));
+    }
+
+    /// @notice v1/v2 struct (Transitional, BUILT): deleted with the v1/v2 lines (P1b) and `ZetherMetaTx` (P3).
+    struct LegacyMetaTransaction {
         address from;           // người ký, người chịu hiệu lực
         address to;             // đích của thao tác trên chính token này
         uint256 value;          // số lượng token cho thao tác (0 nếu chỉ gọi logic)
@@ -106,7 +137,7 @@ library MetaTxLib {
     ///      `TYPEHASH` thứ hai, và ví EIP-712 sẽ hiển thị hai loại giao dịch khác nhau
     ///      cho cùng một hành động. Ngoài ra encoding độ dài thay đổi phá injectivity.
     ///      Một type string, hai giá trị canonical.
-    function canon(MetaTransaction memory m)
+    function canon(LegacyMetaTransaction memory m)
         internal pure returns (address r, address f)
     {
         r = (m.mode & MODE_RESTRICT_RELAYER)       != 0 ? m.relayer      : address(0);
@@ -114,9 +145,9 @@ library MetaTxLib {
     }
 
     /// @dev Thứ tự và kiểu ở đây phải khớp TỪNG KÝ TỰ với chuỗi type trong SDK client.
-    ///      Ghim bởi `test_metaTxTypehashIsPinned` — đổi một ký tự là đổi mọi digest đã
+    ///      Ghim bởi `test_legacyMetaTxTypehashIsPinned` — đổi một ký tự là đổi mọi digest đã
     ///      phát hành, nên test phải fail chứ không được tự chỉnh theo.
-    bytes32 internal constant METATX_TYPEHASH = keccak256(
+    bytes32 internal constant LEGACY_METATX_TYPEHASH = keccak256(
         "MetaTransaction(address from,address to,uint256 value,bytes data,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
 
@@ -124,11 +155,11 @@ library MetaTxLib {
     /// @dev `bytes data` PHẢI được keccak, không encode thẳng. Bỏ là vỡ injectivity:
     ///      `("ab","c")` và `("a","bc")` cho cùng một digest. Fuzz không tìm ra (xác
     ///      suất 0); solver tìm ra trong vài giây.
-    function hashStruct(MetaTransaction memory m) internal pure returns (bytes32) {
+    function hashStruct(LegacyMetaTransaction memory m) internal pure returns (bytes32) {
         (address r, address f) = canon(m);
         return keccak256(
             abi.encode(
-                METATX_TYPEHASH,
+                LEGACY_METATX_TYPEHASH,
                 m.from,
                 m.to,
                 m.value,

@@ -23,7 +23,7 @@ contract MetaTxDex is ReentrancyGuardTransient {
 
     struct Leg {
         IERC20MetaTx token;
-        MetaTxLib.MetaTransaction m;
+        MetaTxLib.LegacyMetaTransaction m;
         bytes sig;
     }
 
@@ -76,7 +76,7 @@ contract MetaTxDex is ReentrancyGuardTransient {
         emit TradeSettled(a.m.from, b.m.from, address(a.token), address(b.token), a.m.value, b.m.value);
     }
 
-    function _terms(MetaTxLib.MetaTransaction calldata m) private pure returns (Terms memory t) {
+    function _terms(MetaTxLib.LegacyMetaTransaction calldata m) private pure returns (Terms memory t) {
         bytes calldata d = m.data;
         if (d.length != 100 || bytes4(d[:4]) != OP_TRADE) revert NotATradeLeg();
         (t.counterToken, t.minCounterValue, t.counterparty) = abi.decode(d[4:], (address, uint256, address));
@@ -84,7 +84,7 @@ contract MetaTxDex is ReentrancyGuardTransient {
 
     /// @dev `ERC20MetaTx` gửi phí cho `msg.sender` khi `feeRecipient == 0`; ở đây
     ///      `msg.sender` là contract này, và nó không có cách nào trả lại.
-    function _checkRouting(MetaTxLib.MetaTransaction calldata m) private view {
+    function _checkRouting(MetaTxLib.LegacyMetaTransaction calldata m) private view {
         if (m.to != address(this) || m.relayer != address(this)
             || m.mode & MetaTxLib.MODE_RESTRICT_RELAYER == 0) {
             revert LegNotRoutedHere();

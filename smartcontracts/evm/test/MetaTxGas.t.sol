@@ -61,26 +61,26 @@ contract MetaTxGasTest is Test {
     }
 
     function _mt(uint32 mode, uint256 batch, uint256 nonce, uint256 fee, address feeRcpt)
-        internal view returns (MetaTxLib.MetaTransaction memory m)
+        internal view returns (MetaTxLib.LegacyMetaTransaction memory m)
     {
-        m = MetaTxLib.MetaTransaction({
+        m = MetaTxLib.LegacyMetaTransaction({
             from: signer, to: recipient, value: 1 ether, data: "",
             batch: batch, nonce: nonce, validUntil: block.timestamp + 600,
             mode: mode, relayer: relayer, fee: fee, feeRecipient: feeRcpt
         });
     }
 
-    function _sign(MetaTxLib.MetaTransaction memory m) internal view returns (bytes memory) {
+    function _sign(MetaTxLib.LegacyMetaTransaction memory m) internal view returns (bytes memory) {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(PK, tok.metaTxDigest(m));
         return abi.encodePacked(r, s, v);
     }
 
-    function _exec(MetaTxLib.MetaTransaction memory m) internal {
+    function _exec(MetaTxLib.LegacyMetaTransaction memory m) internal {
         vm.prank(relayer);
         tok.executeMetaTransaction(m, _sign(m));
     }
 
-    function _measure(MetaTxLib.MetaTransaction memory m, string memory label)
+    function _measure(MetaTxLib.LegacyMetaTransaction memory m, string memory label)
         internal returns (uint256 used)
     {
         bytes memory sig = _sign(m);
@@ -120,13 +120,13 @@ contract MetaTxGasTest is Test {
     }
 
     function test_gasFirstTimeRecipient() public {
-        MetaTxLib.MetaTransaction memory m = _mt(MetaTxLib.MODE_OPEN, WARM_BATCH, 1, 0, address(0));
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(MetaTxLib.MODE_OPEN, WARM_BATCH, 1, 0, address(0));
         m.to = address(0xD00D);   // ví chưa từng giữ token: SSTORE zero->nonzero
         _measure(m, "F warm batch, new recipient");
     }
 
     function test_gasErc1271() public {
-        MetaTxLib.MetaTransaction memory m = _mt(MetaTxLib.MODE_OPEN, COLD_BATCH, 0, 0, address(0));
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(MetaTxLib.MODE_OPEN, COLD_BATCH, 0, 0, address(0));
         m.from = address(acct);
         bytes memory sig = hex"deadbeef";
         vm.prank(relayer);
@@ -155,7 +155,7 @@ contract MetaTxGasTest is Test {
     /// Calldata của giao dịch NGOÀI: phí CẤP GIAO DỊCH, không phải chi phí thực thi.
     /// §C7.2 bản cũ cộng hai thứ này vào một tổng rồi dùng tổng đó cho cả hai việc.
     function test_gasCalldata() public view {
-        MetaTxLib.MetaTransaction memory m = _mt(MetaTxLib.MODE_OPEN, WARM_BATCH, 1, 0, address(0));
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(MetaTxLib.MODE_OPEN, WARM_BATCH, 1, 0, address(0));
         bytes memory cd = abi.encodeCall(tok.executeMetaTransaction, (m, _sign(m)));
         uint256 g;
         for (uint256 i; i < cd.length; ++i) g += cd[i] == 0 ? 4 : 16;

@@ -352,13 +352,13 @@ contract SubjectAccountTest is WebAuthnSoft {
 
     // ------------------------------------------------------------------ MetaToken pay
 
-    function _payment(address from, bytes32 ref) internal view returns (MetaTxLib.MetaTransaction memory m, bytes32 d) {
+    function _payment(address from, bytes32 ref) internal view returns (MetaTxLib.LegacyMetaTransaction memory m, bytes32 d) {
         m = _mt(from, shop, 400, _payData(ref), uint256(ref), MetaTxLib.MODE_RESTRICT_RELAYER);
         d = t.metaTxDigest(m);
     }
 
     function test_metatoken_pay_signed_with_passkey() public {
-        (MetaTxLib.MetaTransaction memory m, bytes32 d) = _payment(address(acct), keccak256("r1"));
+        (MetaTxLib.LegacyMetaTransaction memory m, bytes32 d) = _payment(address(acct), keccak256("r1"));
         bytes memory sig = _pk(0, PASSKEY, d);
         vm.expectEmit(true, true, true, true, address(t));
         emit IERC20Payment.PaymentSettled(address(acct), shop, 400, 0, relayer, keccak256("r1"));
@@ -370,11 +370,11 @@ contract SubjectAccountTest is WebAuthnSoft {
     function test_second_key_then_pay_with_each() public {
         _ownerCall(abi.encodeCall(SubjectAccount.addKey, (_seedKey(SEED))), 0, PASSKEY, true);
         assertEq(acct.keyCount(), 2);
-        (MetaTxLib.MetaTransaction memory m1, bytes32 d1) = _payment(address(acct), keccak256("seed"));
+        (MetaTxLib.LegacyMetaTransaction memory m1, bytes32 d1) = _payment(address(acct), keccak256("seed"));
         bytes memory s1 = _ecdsa(1, SEED, d1);
         vm.prank(relayer);
         t.executeMetaTransaction(m1, s1);
-        (MetaTxLib.MetaTransaction memory m2, bytes32 d2) = _payment(address(acct), keccak256("passkey"));
+        (MetaTxLib.LegacyMetaTransaction memory m2, bytes32 d2) = _payment(address(acct), keccak256("passkey"));
         bytes memory s2 = _pk(0, PASSKEY, d2);
         vm.prank(relayer);
         t.executeMetaTransaction(m2, s2);
@@ -384,7 +384,7 @@ contract SubjectAccountTest is WebAuthnSoft {
     function test_seed_first_account_pays() public {
         SubjectAccount a = SubjectAccount(payable(fac.deploy(_seedKey(SEED), address(0))));
         t.mint(address(a), 500);
-        (MetaTxLib.MetaTransaction memory m, bytes32 d) = _payment(address(a), keccak256("s1"));
+        (MetaTxLib.LegacyMetaTransaction memory m, bytes32 d) = _payment(address(a), keccak256("s1"));
         bytes memory sig = _ecdsa(0, SEED, d);
         vm.prank(relayer);
         t.executeMetaTransaction(m, sig);
@@ -396,7 +396,7 @@ contract SubjectAccountTest is WebAuthnSoft {
         SubjectAccount b = SubjectAccount(payable(fac.deploy(_passkey(PASSKEY), address(0))));
         t.mint(address(b), 1000);
         (, bytes32 dA) = _payment(address(acct), keccak256("x"));
-        (MetaTxLib.MetaTransaction memory mB,) = _payment(address(b), keccak256("x"));
+        (MetaTxLib.LegacyMetaTransaction memory mB,) = _payment(address(b), keccak256("x"));
         bytes memory sig = _pk(0, PASSKEY, dA);
         vm.prank(relayer);
         vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
@@ -406,7 +406,7 @@ contract SubjectAccountTest is WebAuthnSoft {
     function test_removed_key_cannot_pay() public {
         _ownerCall(abi.encodeCall(SubjectAccount.addKey, (_seedKey(SEED))), 0, PASSKEY, true);
         _ownerCall(abi.encodeCall(SubjectAccount.removeKey, (0)), 1, SEED, false);
-        (MetaTxLib.MetaTransaction memory m, bytes32 d) = _payment(address(acct), keccak256("gone"));
+        (MetaTxLib.LegacyMetaTransaction memory m, bytes32 d) = _payment(address(acct), keccak256("gone"));
         bytes memory sig = _pk(0, PASSKEY, d);
         vm.prank(relayer);
         vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
@@ -593,7 +593,7 @@ contract SubjectAccountTest is WebAuthnSoft {
     // ------------------------------------------------------------------ gas
 
     function _gasPay(bytes32 ref) internal returns (uint256 used) {
-        (MetaTxLib.MetaTransaction memory m, bytes32 d) = _payment(address(acct), ref);
+        (MetaTxLib.LegacyMetaTransaction memory m, bytes32 d) = _payment(address(acct), ref);
         bytes memory sig = _pk(0, PASSKEY, d);
         vm.prank(relayer);
         uint256 g = gasleft();
@@ -612,7 +612,7 @@ contract SubjectAccountTest is WebAuthnSoft {
         uint256 used = _gasPay(keccak256("g2"));
         emit log_named_uint("executeMetaTransaction pay, passkey, etched RIP-7212 verifier (Solidity body)", used);
         // Hỏng vẫn hỏng khi có precompile.
-        (MetaTxLib.MetaTransaction memory m, bytes32 d) = _payment(address(acct), keccak256("g3"));
+        (MetaTxLib.LegacyMetaTransaction memory m, bytes32 d) = _payment(address(acct), keccak256("g3"));
         bytes memory sig = _pk(0, PASSKEY2, d);
         vm.prank(relayer);
         vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
@@ -633,7 +633,7 @@ contract SubjectAccountTest is WebAuthnSoft {
 
     function test_gas_pay_seed_key() public {
         _ownerCall(abi.encodeCall(SubjectAccount.addKey, (_seedKey(SEED))), 0, PASSKEY, true);
-        (MetaTxLib.MetaTransaction memory m, bytes32 d) = _payment(address(acct), keccak256("g4"));
+        (MetaTxLib.LegacyMetaTransaction memory m, bytes32 d) = _payment(address(acct), keccak256("g4"));
         bytes memory sig = _ecdsa(1, SEED, d);
         vm.prank(relayer);
         uint256 g = gasleft();
@@ -651,7 +651,7 @@ contract SubjectAccountTest is WebAuthnSoft {
         for (uint256 i; i < 2; i++) {
             address from = i == 0 ? burner : burnerClone;
             t.mint(from, 400);
-            (MetaTxLib.MetaTransaction memory m,) = _payment(from, keccak256(abi.encode("burn", i)));
+            (MetaTxLib.LegacyMetaTransaction memory m,) = _payment(from, keccak256(abi.encode("burn", i)));
             vm.prank(relayer);
             vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
             t.executeMetaTransaction(m, hex"00");

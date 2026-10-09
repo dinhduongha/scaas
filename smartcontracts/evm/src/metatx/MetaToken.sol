@@ -144,7 +144,7 @@ contract MetaToken is ERC20MetaTx, IERC20Payment, IFactoryToken {
     }
 
     /// @dev Bước 6. Mọi thứ fail được thì fail ở đây, TRƯỚC khi thu phí.
-    function _checkOp(MetaTxLib.MetaTransaction calldata m) internal view override {
+    function _checkOp(MetaTxLib.LegacyMetaTransaction calldata m) internal view override {
         uint256 len = m.data.length;
         if (len == 0) return;
         if (len < 4) revert MetaTxUnknownOp(bytes4(0));
@@ -178,7 +178,7 @@ contract MetaToken is ERC20MetaTx, IERC20Payment, IFactoryToken {
     }
 
     /// @dev Bước 8. `approve` đặt allowance; ba op còn lại cùng một chuyển; chỉ `pay` thêm event đối soát.
-    function _executeOp(MetaTxLib.MetaTransaction calldata m, uint256 feeAmount, address feeRecipient)
+    function _executeOp(MetaTxLib.LegacyMetaTransaction calldata m, uint256 feeAmount, address feeRecipient)
         internal override
     {
         if (m.data.length == 68 && bytes4(m.data[:4]) == OP_APPROVE) {

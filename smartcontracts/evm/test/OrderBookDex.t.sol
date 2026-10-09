@@ -556,7 +556,7 @@ contract OrderBookDexTest is Fixtures {
         Mock1271Wallet w = new Mock1271Wallet(carol);
         tA.transfer(address(w), 100 ether);
         // gasless approve via the MetaToken op, signed by the wallet owner, checked through 1271
-        MetaTxLib.MetaTransaction memory m = _mt(address(w), address(dex), 0,
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(address(w), address(dex), 0,
             abi.encodeWithSelector(bytes4(keccak256("approve(address,uint256)")), address(dex), 100 ether),
             uint256(keccak256("scaas.dex.approve")), MetaTxLib.MODE_RESTRICT_RELAYER);
         bytes memory asig = _sign(CAROL_PK, tA, m);
@@ -583,7 +583,7 @@ contract OrderBookDexTest is Fixtures {
         // a resting DEX order and a DEX nonce invalidation ...
         dex.invalidateNonces(alice, 1, _sig(ALICE_PK, dex.invalidateDigest(alice, 1)));
         // ... leave every token lane untouched: a payment on lane 7 still runs at nonce 0
-        MetaTxLib.MetaTransaction memory pay = _mt(alice, address(0x5409), 1 ether,
+        MetaTxLib.LegacyMetaTransaction memory pay = _mt(alice, address(0x5409), 1 ether,
             _payData(bytes32("order-1")), 7, MetaTxLib.MODE_RESTRICT_RELAYER);
         bytes memory psig = _sign(ALICE_PK, tA, pay);
         vm.prank(relayer);

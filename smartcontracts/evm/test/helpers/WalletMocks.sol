@@ -23,7 +23,7 @@ contract ConstructorPuller {
 
 /// Ví ERC-1271 giả: `mode` quyết định câu trả lời.
 contract Mock1271Wallet {
-    enum Mode { Valid, WrongMagic, Reverts, Short }
+    enum Mode { Valid, WrongMagic, Reverts, Short, Long, DirtyTail, Burn }
 
     Mode public mode;
     address public immutable owner;
@@ -39,6 +39,25 @@ contract Mock1271Wallet {
                 mstore(0, 0x1626ba7e00000000000000000000000000000000000000000000000000000000)
                 return(0, 4)
             }
+        }
+        if (mode == Mode.Long) {
+            assembly {
+                mstore(0, 0x1626ba7e00000000000000000000000000000000000000000000000000000000)
+                mstore(0x20, 1)
+                return(0, 0x40)
+            }
+        }
+        if (mode == Mode.DirtyTail) {
+            assembly {
+                mstore(0, or(0x1626ba7e00000000000000000000000000000000000000000000000000000000, 1))
+                return(0, 0x20)
+            }
+        }
+        if (mode == Mode.Burn) {
+            // burn ~48k gas, then answer valid: proves the wallet really received its 50k cap
+            uint256 g = gasleft();
+            while (g - gasleft() < 48_000) {}
+            return 0x1626ba7e;
         }
         if (mode == Mode.WrongMagic) return 0xffffffff;
         (bytes32 r, bytes32 s) = abi.decode(sig[:64], (bytes32, bytes32));

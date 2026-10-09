@@ -23,13 +23,13 @@ contract Erc1271Test is Fixtures {
         t.mint(address(wallet), 1000);
     }
 
-    function _payment(bytes32 ref) internal view returns (MetaTxLib.MetaTransaction memory m, bytes memory sig) {
+    function _payment(bytes32 ref) internal view returns (MetaTxLib.LegacyMetaTransaction memory m, bytes memory sig) {
         m = _mt(address(wallet), shop, 400, _payData(ref), uint256(ref), MetaTxLib.MODE_RESTRICT_RELAYER);
         sig = _sign(ownerPk, t, m);
     }
 
     function test_valid_wallet_pays() public {
-        (MetaTxLib.MetaTransaction memory m, bytes memory sig) = _payment(keccak256("r1"));
+        (MetaTxLib.LegacyMetaTransaction memory m, bytes memory sig) = _payment(keccak256("r1"));
         vm.expectEmit(true, true, true, true, address(t));
         emit IERC20Payment.PaymentSettled(address(wallet), shop, 400, 0, relayer, keccak256("r1"));
         vm.prank(relayer);
@@ -39,7 +39,7 @@ contract Erc1271Test is Fixtures {
 
     function _refused(Mock1271Wallet.Mode mode) internal {
         wallet.setMode(mode);
-        (MetaTxLib.MetaTransaction memory m, bytes memory sig) = _payment(keccak256("r2"));
+        (MetaTxLib.LegacyMetaTransaction memory m, bytes memory sig) = _payment(keccak256("r2"));
         vm.prank(relayer);
         vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
         t.executeMetaTransaction(m, sig);
@@ -54,7 +54,7 @@ contract Erc1271Test is Fixtures {
     function test_short_return_is_refused() public { _refused(Mock1271Wallet.Mode.Short); }
 
     function test_signature_from_someone_else_is_refused() public {
-        (MetaTxLib.MetaTransaction memory m,) = _payment(keccak256("r3"));
+        (MetaTxLib.LegacyMetaTransaction memory m,) = _payment(keccak256("r3"));
         bytes memory sig = _sign(0xB0B, t, m);
         vm.prank(relayer);
         vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);

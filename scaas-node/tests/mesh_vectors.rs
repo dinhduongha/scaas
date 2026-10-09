@@ -62,7 +62,7 @@ fn read(path: &str) -> Value {
 }
 
 fn kat() -> Value {
-    read(concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/evm/test/vectors/metatx_kat.json"))
+    read(concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/evm/test/vectors/metatx_v1_kat.json"))
 }
 
 fn ton_vectors() -> Value {

@@ -89,7 +89,7 @@ contract Handler is Test {
     function _leg(uint256 pk, MetaToken sell, uint256 v, MetaToken buy, uint256 minBuy)
         internal returns (MetaTxDex.Leg memory l)
     {
-        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
+        MetaTxLib.LegacyMetaTransaction memory m = MetaTxLib.LegacyMetaTransaction({
             from: vm.addr(pk), to: address(dex), value: v,
             data: abi.encodeWithSelector(bytes4(keccak256("trade(address,uint256,address)")), address(buy), minBuy, address(0)),
             batch: ++batchSeq, nonce: 0, validUntil: block.timestamp + 300,

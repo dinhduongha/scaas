@@ -18,7 +18,7 @@ contract HederaSmoke {
             abi.encode("Smoke", "SMK", uint8(6), uint256(1e12), address(0)), bytes32("smoke")));
         t.transfer(ecdsaFrom, 1000);
         t.transfer(edAccount, 1000);
-        MetaTxLib.MetaTransaction memory m1 = _m(ecdsaFrom, 1);
+        MetaTxLib.LegacyMetaTransaction memory m1 = _m(ecdsaFrom, 1);
         bytes32 d1 = t.metaTxDigest(m1);
         bytes memory out;
         if (ecdsaSig.length == 0) {
@@ -38,13 +38,13 @@ contract HederaSmoke {
         assembly { return(add(out, 32), mload(out)) }
     }
 
-    function _m(address from, uint256 batch) private pure returns (MetaTxLib.MetaTransaction memory) {
-        return MetaTxLib.MetaTransaction({from: from, to: address(0x5409), value: 100,
+    function _m(address from, uint256 batch) private pure returns (MetaTxLib.LegacyMetaTransaction memory) {
+        return MetaTxLib.LegacyMetaTransaction({from: from, to: address(0x5409), value: 100,
             data: abi.encodeWithSelector(bytes4(keccak256("pay(bytes32)")), bytes32(batch)), batch: batch, nonce: 0,
             validUntil: 4102444800, mode: 0, relayer: address(0), fee: 0, feeRecipient: address(0)});
     }
 
-    function _try(HederaMetaToken t, MetaTxLib.MetaTransaction memory m, bytes memory sig) private returns (bytes memory) {
+    function _try(HederaMetaToken t, MetaTxLib.LegacyMetaTransaction memory m, bytes memory sig) private returns (bytes memory) {
         try t.executeMetaTransaction(m, sig) returns (bool) { return "ok"; } catch (bytes memory e) { return e; }
     }
 }

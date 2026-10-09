@@ -17,8 +17,8 @@ Interface đã chốt cộng các implementation đã có (2026-10-03,
 
 Zether is built (`src/zether/`: `ZetherToken`, `ZetherMetaTx`, `ZetherVerifierBn254`, `ZetherVerifierBls12381`;
 `src/registry/UniversalAccountRegistry.sol`), unaudited and gated to dev chains 31337/1337 (`ZetherSafety`,
-RS2-1); see `docs/contracts/zether.md` (CTR-ZTH-02) and `docs/contracts/README.md`. `test/vectors/metatx_kat.json` là vector digest dùng chung với
-Odoo (`dms_blockchain/lib/eip712.py`) và relayer (`scaas-node`).
+RS2-1); see `docs/contracts/zether.md` (CTR-ZTH-02) and `docs/contracts/README.md`. `test/vectors/metatx_kat.json` là vector v3 `MetaTransaction` (MetaTxBase);
+`test/vectors/metatx_v1_kat.json` là struct v1 đã build, dùng chung với Odoo (`dms_blockchain/lib/eip712.py`) và relayer (`scaas-node`) đến P5.
 
 ## Mô hình: factory mở
 
@@ -133,7 +133,7 @@ Cùng lớp lỗi bắt được khi viết lại: `bytes32 indexed reference` t
 > không" trong EVM: `extcodesize == 0` đúng với ví chưa deploy, với địa chỉ đang
 > trong constructor, và (từ EIP-7702) với EOA có code. Mọi kiểm tra dựa trên nó là
 > một giả định sẽ hỏng. Cần chấp nhận cả hai loại ví thì dùng ERC-1271
-> (`SigLib.requireValid` đã làm), đừng phân loại người gọi.
+> (`SigCheck.isValid` đã làm), đừng phân loại người gọi.
 
 ## Ba thay đổi thiết kế so với code cũ
 

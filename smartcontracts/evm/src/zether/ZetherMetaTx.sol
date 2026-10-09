@@ -4,8 +4,7 @@ pragma solidity ^0.8.20;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
-import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
+import {SigCheck} from "../common/SigCheck.sol";
 import {IERC20MetaTx} from "../metatx/IERC20MetaTx.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
@@ -20,7 +19,7 @@ import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 ///         Bước 6–8 (kiểm đủ → thu phí → thực thi) giao cho `_executeOp`: op Zether phải kiểm số dư phí
 ///         TRƯỚC verify proof, và thu phí SAU verify, TRƯỚC hiệu lực — "phí đã thu ⟺ op đã xảy ra".
 abstract contract ZetherMetaTx is ERC20, EIP712, IERC20MetaTx {
-    using MetaTxLib for MetaTxLib.MetaTransaction;
+    using MetaTxLib for MetaTxLib.LegacyMetaTransaction;
 
     mapping(address => mapping(uint256 => uint256)) private _metaNonce;
 
@@ -44,7 +43,7 @@ abstract contract ZetherMetaTx is ERC20, EIP712, IERC20MetaTx {
         return MetaTxLib.MODE_KNOWN_MASK;
     }
 
-    function metaTxDigest(MetaTxLib.MetaTransaction calldata m) external view returns (bytes32) {
+    function metaTxDigest(MetaTxLib.LegacyMetaTransaction calldata m) external view returns (bytes32) {
         return _hashTypedDataV4(m.hashStruct());
     }
 
@@ -52,7 +51,7 @@ abstract contract ZetherMetaTx is ERC20, EIP712, IERC20MetaTx {
         unchecked { _metaNonce[msg.sender][batch] += 1; }
     }
 
-    function executeMetaTransaction(MetaTxLib.MetaTransaction calldata m, bytes calldata signature)
+    function executeMetaTransaction(MetaTxLib.LegacyMetaTransaction calldata m, bytes calldata signature)
         external nonReentrant returns (bool)
     {
         // 1. relayer
@@ -81,7 +80,7 @@ abstract contract ZetherMetaTx is ERC20, EIP712, IERC20MetaTx {
     }
 
     /// @dev Kiểm, thu phí, thực thi; trả số phí đã thu. Không được thu phí trước khi mọi kiểm tra qua.
-    function _executeOp(MetaTxLib.MetaTransaction calldata m, FeeMode feeMode, address feeRecipient)
+    function _executeOp(MetaTxLib.LegacyMetaTransaction calldata m, FeeMode feeMode, address feeRecipient)
         internal virtual returns (uint256 feeAmount);
 
     /// @dev Bước 6 dùng chung: số dư công khai của `from` đủ `need` — kiểm TRƯỚC mọi thứ đắt.
@@ -106,26 +105,10 @@ abstract contract ZetherMetaTx is ERC20, EIP712, IERC20MetaTx {
 
     /// @dev Như `ERC20MetaTx._isContract`: code rỗng hoặc designator EIP-7702 ⇒ không phải hợp đồng.
     function _isContract(address a) internal view returns (bool) {
-        uint256 len = a.code.length;
-        if (len == 0) return false;
-        if (len == 23) {
-            bytes memory c = a.code;
-            if (c[0] == 0xef && c[1] == 0x01 && c[2] == 0x00) return false;
-        }
-        return true;
+        return SigCheck.isContract(a);
     }
 
     function _requireValidSignature(address from, bytes32 digest, bytes calldata sig) internal view {
-        if (!_isContract(from)) {
-            (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(digest, sig);
-            if (err != ECDSA.RecoverError.NoError || rec != from) revert MetaTxBadSignature();
-        } else {
-            (bool ok, bytes memory ret) = from.staticcall{gas: 50_000}(
-                abi.encodeCall(IERC1271.isValidSignature, (digest, sig))
-            );
-            if (!ok || ret.length != 32 || abi.decode(ret, (bytes4)) != IERC1271.isValidSignature.selector) {
-                revert MetaTxBadSignature();
-            }
-        }
+        if (!SigCheck.isValid(from, digest, sig, SigCheck.ERC1271_GAS)) revert MetaTxBadSignature();
     }
 }

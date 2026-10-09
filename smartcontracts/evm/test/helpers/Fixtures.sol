@@ -37,16 +37,16 @@ abstract contract Fixtures is Test {
     }
 
     function _mt(address from, address to, uint256 value, bytes memory data, uint256 batch, uint32 mode)
-        internal view returns (MetaTxLib.MetaTransaction memory m)
+        internal view returns (MetaTxLib.LegacyMetaTransaction memory m)
     {
-        m = MetaTxLib.MetaTransaction({
+        m = MetaTxLib.LegacyMetaTransaction({
             from: from, to: to, value: value, data: data, batch: batch, nonce: 0,
             validUntil: block.timestamp + 300, mode: mode, relayer: relayer,
             fee: 0, feeRecipient: address(0)
         });
     }
 
-    function _sign(uint256 pk, MetaToken t, MetaTxLib.MetaTransaction memory m)
+    function _sign(uint256 pk, MetaToken t, MetaTxLib.LegacyMetaTransaction memory m)
         internal view returns (bytes memory)
     {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, t.metaTxDigest(m));

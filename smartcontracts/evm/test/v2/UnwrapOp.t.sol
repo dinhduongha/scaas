@@ -66,18 +66,18 @@ contract UnwrapOpTest is V2Fixture {
     }
 
     function _op(address u, uint256 wrapped, address recipient, uint256 minOut)
-        internal view returns (MetaTxLib.MetaTransaction memory m)
+        internal view returns (MetaTxLib.LegacyMetaTransaction memory m)
     {
         m = _mt(alice, recipient, wrapped, _unwrapData(u, recipient, minOut), 9, RR);
     }
 
-    function _run(SingleUnderlyingToken w, MetaTxLib.MetaTransaction memory m) internal {
+    function _run(SingleUnderlyingToken w, MetaTxLib.LegacyMetaTransaction memory m) internal {
         bytes memory s = _sig(PK, address(w), m);
         vm.prank(relayer);
         w.executeMetaTransaction(m, s);
     }
 
-    function _runRevert(SingleUnderlyingToken w, MetaTxLib.MetaTransaction memory m, bytes memory err) internal {
+    function _runRevert(SingleUnderlyingToken w, MetaTxLib.LegacyMetaTransaction memory m, bytes memory err) internal {
         bytes memory s = _sig(PK, address(w), m);
         vm.prank(relayer);
         vm.expectRevert(err);
@@ -86,7 +86,7 @@ contract UnwrapOpTest is V2Fixture {
     }
 
     function test_unwrapOpPaysTheRecipientInUnderlying() public {
-        MetaTxLib.MetaTransaction memory m = _op(address(usdc), 100e6, shop, 100e6);
+        MetaTxLib.LegacyMetaTransaction memory m = _op(address(usdc), 100e6, shop, 100e6);
         bytes32 d = t.metaTxDigest(m);
         vm.expectEmit(address(t));
         emit SingleUnderlyingToken.Unwrapped(alice, address(usdc), shop, 100e6, 100e6);
@@ -103,7 +103,7 @@ contract UnwrapOpTest is V2Fixture {
     function test_feeInWrappedUnitsBeforeTheBurn() public {
         SingleUnderlyingToken q = _single(address(usdc), 18, 1e12, 1, _fixedRate());
         _wrapFor(q, usdc, alice, 10e6);
-        MetaTxLib.MetaTransaction memory m = _op(address(usdc), 2e18 + 5, shop, 2e6);
+        MetaTxLib.LegacyMetaTransaction memory m = _op(address(usdc), 2e18 + 5, shop, 2e6);
         m.mode = RR | RF | PCT;
         m.fee = 10_000; // 1 %
         m.feeRecipient = feeTaker;
@@ -117,7 +117,7 @@ contract UnwrapOpTest is V2Fixture {
     }
 
     function test_stepSixRefusals() public {
-        MetaTxLib.MetaTransaction memory m = _op(address(usdc), 10e6, shop, 0);
+        MetaTxLib.LegacyMetaTransaction memory m = _op(address(usdc), 10e6, shop, 0);
         m.to = address(0xCAFE);
         _runRevert(t, m, abi.encodeWithSelector(MetaTokenBase.UnwrapRecipientMismatch.selector));
         m = _op(address(usdc), 10e6, address(0), 0);
@@ -142,7 +142,7 @@ contract UnwrapOpTest is V2Fixture {
 
     /// R132 không áp cho unwrap: không có người được trả.
     function test_noPayeeCheckOnUnwrap() public {
-        MetaTxLib.MetaTransaction memory m = _op(address(usdc), 10e6, relayer, 0);
+        MetaTxLib.LegacyMetaTransaction memory m = _op(address(usdc), 10e6, relayer, 0);
         m.mode = RR | PCT;
         m.fee = 1_000;
         _run(t, m);
@@ -156,7 +156,7 @@ contract UnwrapOpTest is V2Fixture {
         SingleUnderlyingToken b = _single(address(bl), 6, 1, 1, _fixedRate());
         _wrapFor(b, MockERC20(address(bl)), alice, 100e6);
         bl.setBlocked(shop, true);
-        MetaTxLib.MetaTransaction memory m = _op(address(bl), 50e6, shop, 0);
+        MetaTxLib.LegacyMetaTransaction memory m = _op(address(bl), 50e6, shop, 0);
         m.mode = RR | FIX;
         m.fee = 1e5;
         _runRevert(b, m, abi.encodeWithSelector(BlacklistERC20.Blocked.selector, shop));
@@ -170,7 +170,7 @@ contract UnwrapOpTest is V2Fixture {
         sp.mint(alice, 1 ether); // the sender-side fee of the wrap itself
         _wrapFor(b, MockERC20(address(sp)), alice, 100 ether);
         sp.mint(address(b), 1 ether);
-        MetaTxLib.MetaTransaction memory m = _op(address(sp), 10 ether, shop, 0);
+        MetaTxLib.LegacyMetaTransaction memory m = _op(address(sp), 10 ether, shop, 0);
         _runRevert(b, m, abi.encodeWithSelector(
             SingleUnderlyingToken.UnderlyingTransferMismatch.selector, address(sp), 10 ether, 10.1 ether));
     }
@@ -201,7 +201,7 @@ contract UnwrapOpTest is V2Fixture {
         _wrapFor(h, MockERC20(address(hk)), alice, 10 ether);
         _wrapFor(h, MockERC20(address(hk)), address(r), 1 ether);
         r.arm(alice, 9, true);
-        MetaTxLib.MetaTransaction memory m = _op(address(hk), 3 ether, address(r), 0);
+        MetaTxLib.LegacyMetaTransaction memory m = _op(address(hk), 3 ether, address(r), 0);
         bytes memory s = _sig(PK, address(h), m);
         vm.prank(relayer);
         vm.expectRevert();
@@ -220,7 +220,7 @@ contract UnwrapOpTest is V2Fixture {
         assertEq(usdc.balanceOf(shop), 50);
         vm.warp(block.timestamp + 7 days);
         adm.exec(address(a), abi.encodeCall(SingleUnderlyingToken.executeRate, ()));
-        MetaTxLib.MetaTransaction memory m = _op(address(usdc), 50, shop, 50);
+        MetaTxLib.LegacyMetaTransaction memory m = _op(address(usdc), 50, shop, 50);
         m.batch = 10;
         _runRevert(a, m, abi.encodeWithSelector(SingleUnderlyingToken.UnwrapBelowMin.selector, 49, 50));
     }
@@ -230,7 +230,7 @@ contract UnwrapOpTest is V2Fixture {
         public
     {
         wrapped = bound(wrapped, 1, 900e6);
-        MetaTxLib.MetaTransaction memory m = _op(address(usdc), wrapped, shop, wrapped);
+        MetaTxLib.LegacyMetaTransaction memory m = _op(address(usdc), wrapped, shop, wrapped);
         m.batch = batch;
         if (withFee) {
             m.mode = RR | RF | FIX;
@@ -250,7 +250,7 @@ contract UnwrapOpTest is V2Fixture {
     }
 
     function test_mtxUnwrapWithFeeDecodesLikeTheAbi() public {
-        MetaTxLib.MetaTransaction memory m = _op(address(usdc), 10e6, shop, 0);
+        MetaTxLib.LegacyMetaTransaction memory m = _op(address(usdc), 10e6, shop, 0);
         m.mode = RR | RF | FIX;
         m.fee = 1;
         m.feeRecipient = feeTaker;

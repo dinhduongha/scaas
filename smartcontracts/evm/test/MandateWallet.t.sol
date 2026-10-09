@@ -150,7 +150,7 @@ contract MandateWalletTest is Fixtures {
 
     function test_owner_still_pays_manually_through_meta_tx() public {
         bytes32 ref = keccak256("manual");
-        MetaTxLib.MetaTransaction memory m =
+        MetaTxLib.LegacyMetaTransaction memory m =
             _mt(address(w), npp, 50, _payData(ref), uint256(ref), MetaTxLib.MODE_RESTRICT_RELAYER);
         bytes memory sig = _sign(ownerPk, t, m);
         vm.prank(relayer);

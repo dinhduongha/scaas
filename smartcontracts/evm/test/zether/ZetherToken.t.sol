@@ -296,7 +296,7 @@ abstract contract ZetherTokenSuite is ZetherFixture {
     }
 
     /// Proof ràng `envelopeBinding` ⇒ dựng statement RELAYED trước, rồi mới ký phong bì chứa proof.
-    function _relayedTx(uint256 batch, uint256 fee) internal view returns (MetaTxLib.MetaTransaction memory m, Tx memory t) {
+    function _relayedTx(uint256 batch, uint256 fee) internal view returns (MetaTxLib.LegacyMetaTransaction memory m, Tx memory t) {
         m = _mt(vm.addr(PAYER_PK), "", batch, MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED, fee);
         t = _proveTransfer(tok, alice, bob, 100, 500, carol.ua, tok.envelopeBinding(m));
         m.data = _zData(t, carol.ua);
@@ -304,7 +304,7 @@ abstract contract ZetherTokenSuite is ZetherFixture {
 
     function test_relayedTransferChargesOuterAndInnerFees() public {
         address payer = _relayedSetup();
-        (MetaTxLib.MetaTransaction memory m,) = _relayedTx(uint256(keccak256("lane-1")), 25);
+        (MetaTxLib.LegacyMetaTransaction memory m,) = _relayedTx(uint256(keccak256("lane-1")), 25);
         bytes memory sig = _sign(PAYER_PK, tok, m);
         vm.prank(relayer);
         uint256 g0 = gasleft();
@@ -329,7 +329,7 @@ abstract contract ZetherTokenSuite is ZetherFixture {
 
     function test_proofMovedToAnotherEnvelopeRejected() public {
         _relayedSetup();
-        (MetaTxLib.MetaTransaction memory m,) = _relayedTx(7, 25);
+        (MetaTxLib.LegacyMetaTransaction memory m,) = _relayedTx(7, 25);
         m.batch = 8; // phong bì khác (khác lane), cùng data ⇒ binding khác
         bytes memory sig = _sign(PAYER_PK, tok, m);
         vm.prank(relayer);
@@ -339,7 +339,7 @@ abstract contract ZetherTokenSuite is ZetherFixture {
 
     function test_relayedPercentFeeForbidden() public {
         _relayedSetup();
-        (MetaTxLib.MetaTransaction memory m,) = _relayedTx(7, 25);
+        (MetaTxLib.LegacyMetaTransaction memory m,) = _relayedTx(7, 25);
         m.mode = MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_PERCENT;
         bytes memory sig = _sign(PAYER_PK, tok, m);
         vm.prank(relayer);
@@ -350,7 +350,7 @@ abstract contract ZetherTokenSuite is ZetherFixture {
     /// Phong bì không đủ phí ngoài revert TRƯỚC mọi precompile (relayer không đốt ~2M gas).
     function test_relayedInsufficientFeeFailsBeforeVerify() public {
         _relayedSetup();
-        (MetaTxLib.MetaTransaction memory m,) = _relayedTx(7, 5000);
+        (MetaTxLib.LegacyMetaTransaction memory m,) = _relayedTx(7, 5000);
         bytes memory sig = _sign(PAYER_PK, tok, m);
         vm.prank(relayer);
         uint256 g0 = gasleft();
@@ -361,7 +361,7 @@ abstract contract ZetherTokenSuite is ZetherFixture {
 
     function test_relayedBurn() public {
         address payer = _relayedSetup();
-        MetaTxLib.MetaTransaction memory m =
+        MetaTxLib.LegacyMetaTransaction memory m =
             _mt(payer, "", 11, MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED, 9);
         (bytes memory pl, bytes memory pr) = _proveBurn(tok, alice, 60, 500, address(0xB0C), carol.ua, tok.envelopeBinding(m));
         m.data = abi.encodePacked(tok.OP_ZBURN(), abi.encode(pl, uint256(60), address(0xB0C), ZetherTypes.UA.unwrap(carol.ua), pr, bytes("")));
@@ -380,7 +380,7 @@ abstract contract ZetherTokenSuite is ZetherFixture {
 
     function test_publicMetaTransferStillWorks() public {
         address payer = _relayedSetup();
-        MetaTxLib.MetaTransaction memory m = _mt(payer, "", 1, MetaTxLib.MODE_FEE_PERCENT, 10_000);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(payer, "", 1, MetaTxLib.MODE_FEE_PERCENT, 10_000);
         m.to = address(0x7777);
         m.value = 500;
         bytes memory sig = _sign(PAYER_PK, tok, m);

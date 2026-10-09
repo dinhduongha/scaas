@@ -104,15 +104,15 @@ abstract contract V2Fixture is Test {
     }
 
     function _mt(address from, address to, uint256 value, bytes memory data, uint256 batch, uint32 mode)
-        internal view returns (MetaTxLib.MetaTransaction memory m)
+        internal view returns (MetaTxLib.LegacyMetaTransaction memory m)
     {
-        m = MetaTxLib.MetaTransaction({
+        m = MetaTxLib.LegacyMetaTransaction({
             from: from, to: to, value: value, data: data, batch: batch, nonce: 0,
             validUntil: block.timestamp + 300, mode: mode, relayer: relayer, fee: 0, feeRecipient: address(0)
         });
     }
 
-    function _sig(uint256 pk, address t, MetaTxLib.MetaTransaction memory m) internal view returns (bytes memory) {
+    function _sig(uint256 pk, address t, MetaTxLib.LegacyMetaTransaction memory m) internal view returns (bytes memory) {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, MetaTokenBase(t).metaTxDigest(m));
         return abi.encodePacked(r, s, v);
     }
@@ -123,7 +123,7 @@ abstract contract V2Fixture is Test {
 
     /// Calldata của `mtxUnwrapWithFee` dựng tay (bộ mã hoá ABI không via-IR không chứa nổi 13 giá trị). `m`
     /// mang from, to (= recipient), value (= wrapped), batch, nonce, validUntil, mode, relayer, fee, feeRecipient.
-    function _unwrapFeeCalldata(MetaTxLib.MetaTransaction memory m, address u, uint256 minOut, bytes memory sig)
+    function _unwrapFeeCalldata(MetaTxLib.LegacyMetaTransaction memory m, address u, uint256 minOut, bytes memory sig)
         internal pure returns (bytes memory)
     {
         bytes4 sel = bytes4(keccak256(
@@ -136,7 +136,7 @@ abstract contract V2Fixture is Test {
 
     /// Gọi `mtxUnwrapWithFee`; revert thì đẩy nguyên lý do lên. (Dưới `vm.expectRevert` lời gọi thấp trả
     /// `ok = true` với dữ liệu revert, nên không giải mã kết quả.)
-    function _mtxUnwrapWithFee(address t, MetaTxLib.MetaTransaction memory m, address u, uint256 minOut,
+    function _mtxUnwrapWithFee(address t, MetaTxLib.LegacyMetaTransaction memory m, address u, uint256 minOut,
         bytes memory sig) internal
     {
         (bool ok, bytes memory ret) = t.call(_unwrapFeeCalldata(m, u, minOut, sig));

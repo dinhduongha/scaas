@@ -32,7 +32,7 @@ contract MetaTxDexTest is Fixtures {
     function _leg(uint256 pk, MetaToken sell, uint256 value, MetaToken buy, uint256 minBuy, address cp)
         internal view returns (MetaTxDex.Leg memory l)
     {
-        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
+        MetaTxLib.LegacyMetaTransaction memory m = MetaTxLib.LegacyMetaTransaction({
             from: vm.addr(pk), to: address(dex), value: value,
             data: _tradeData(address(buy), minBuy, cp), batch: uint256(keccak256(abi.encode(pk, value))),
             nonce: 0, validUntil: block.timestamp + 300, mode: R, relayer: address(dex),
@@ -42,7 +42,7 @@ contract MetaTxDexTest is Fixtures {
         l.sig = _signLeg(pk, sell, m);
     }
 
-    function _signLeg(uint256 pk, MetaToken t, MetaTxLib.MetaTransaction memory m) internal view returns (bytes memory) {
+    function _signLeg(uint256 pk, MetaToken t, MetaTxLib.LegacyMetaTransaction memory m) internal view returns (bytes memory) {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, t.metaTxDigest(m));
         return abi.encodePacked(r, s, v);
     }

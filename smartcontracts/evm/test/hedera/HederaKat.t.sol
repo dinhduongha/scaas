@@ -23,7 +23,7 @@ contract HederaKatTest is HederaFixture {
         assertEq(address(tok), j.readAddress(".verifying_contract"));
         assertEq(block.chainid, j.readUint(".chain_id"));
         bytes32 ref = j.readBytes32(".entry_ref");
-        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
+        MetaTxLib.LegacyMetaTransaction memory m = MetaTxLib.LegacyMetaTransaction({
             from: j.readAddress(".from"), to: j.readAddress(".to"), value: j.readUint(".value"),
             data: j.readBytes(".data"), batch: j.readUint(".batch"), nonce: 0,
             validUntil: j.readUint(".valid_until"), mode: uint32(j.readUint(".mode")),

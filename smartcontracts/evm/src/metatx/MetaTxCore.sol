@@ -4,8 +4,7 @@ pragma solidity ^0.8.20;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
-import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
+import {SigCheck} from "../common/SigCheck.sol";
 import {IERC20MetaTx} from "./IERC20MetaTx.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
@@ -20,7 +19,7 @@ import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 ///         - `cancelMetaNonce` phát `MetaNonceCancelled`;
 ///         - slot guard `scaas.metatx.reentrancy.v2`.
 abstract contract MetaTxCore is ERC20, EIP712, IERC20MetaTx {
-    using MetaTxLib for MetaTxLib.MetaTransaction;
+    using MetaTxLib for MetaTxLib.LegacyMetaTransaction;
 
     /// @dev `(from, batch) -> nonce kế tiếp`. 2D: batch nào kẹt thì chỉ kẹt batch đó. Slot 7 (TW2 §10.1).
     mapping(address => mapping(uint256 => uint256)) private _metaNonce;
@@ -52,7 +51,7 @@ abstract contract MetaTxCore is ERC20, EIP712, IERC20MetaTx {
         return MetaTxLib.MODE_KNOWN_MASK;
     }
 
-    function metaTxDigest(MetaTxLib.MetaTransaction calldata m) external view returns (bytes32) {
+    function metaTxDigest(MetaTxLib.LegacyMetaTransaction calldata m) external view returns (bytes32) {
         return _hashTypedDataV4(m.hashStruct());
     }
 
@@ -62,7 +61,7 @@ abstract contract MetaTxCore is ERC20, EIP712, IERC20MetaTx {
         emit MetaNonceCancelled(msg.sender, batch, n);
     }
 
-    function executeMetaTransaction(MetaTxLib.MetaTransaction calldata m, bytes calldata signature)
+    function executeMetaTransaction(MetaTxLib.LegacyMetaTransaction calldata m, bytes calldata signature)
         external nonReentrant returns (bool)
     {
         _execute(m, signature);
@@ -70,7 +69,7 @@ abstract contract MetaTxCore is ERC20, EIP712, IERC20MetaTx {
     }
 
     /// @dev Chín bước (TW2 §3.2). Mọi đường vào (generic, có tên, batch) đi qua đây và chỉ qua đây.
-    function _execute(MetaTxLib.MetaTransaction memory m, bytes calldata signature) internal {
+    function _execute(MetaTxLib.LegacyMetaTransaction memory m, bytes calldata signature) internal {
         // --- 1. relayer ---
         if (m.mode & MetaTxLib.MODE_RESTRICT_RELAYER != 0 && m.relayer != msg.sender) {
             revert MetaTxUnauthorizedRelayer(m.relayer, msg.sender);
@@ -123,29 +122,13 @@ abstract contract MetaTxCore is ERC20, EIP712, IERC20MetaTx {
     /// @dev Như v1: code rỗng (EOA, hoặc hợp đồng đang chạy constructor) hay designator EIP-7702
     ///      `0xef0100‖address` (23 byte) đều không phải hợp đồng.
     function _isContract(address a) internal view returns (bool) {
-        uint256 len = a.code.length;
-        if (len == 0) return false;
-        if (len == 23) {
-            bytes memory c = a.code;
-            if (c[0] == 0xef && c[1] == 0x01 && c[2] == 0x00) return false;
-        }
-        return true;
+        return SigCheck.isContract(a);
     }
 
     /// @dev EOA (65 byte, low-s) hoặc ERC-1271, phân biệt bằng `_isContract(from)` (như v1). `virtual`: Hedera
     ///      thêm HIP-632 (R63, R144).
     function _requireValidSignature(address from, bytes32 digest, bytes calldata sig) internal view virtual {
-        if (!_isContract(from)) {
-            (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(digest, sig);
-            if (err != ECDSA.RecoverError.NoError || rec != from) revert MetaTxBadSignature();
-        } else {
-            (bool ok, bytes memory ret) = from.staticcall{gas: _erc1271Gas(from)}(
-                abi.encodeCall(IERC1271.isValidSignature, (digest, sig))
-            );
-            if (!ok || ret.length != 32 || abi.decode(ret, (bytes4)) != IERC1271.isValidSignature.selector) {
-                revert MetaTxBadSignature();
-            }
-        }
+        if (!SigCheck.isValid(from, digest, sig, _erc1271Gas(from))) revert MetaTxBadSignature();
     }
 
     /// @dev 50k cho mọi ví hợp đồng; implementation nào biết một loại ví cần hơn thì ghi đè.
@@ -154,17 +137,17 @@ abstract contract MetaTxCore is ERC20, EIP712, IERC20MetaTx {
     }
 
     /// @dev R132: op này có người được trả là `m.to` không. Mặc định: chỉ transfer (`data` rỗng).
-    function _hasPayee(MetaTxLib.MetaTransaction memory m) internal pure virtual returns (bool) {
+    function _hasPayee(MetaTxLib.LegacyMetaTransaction memory m) internal pure virtual returns (bool) {
         return m.data.length == 0;
     }
 
     /// @dev Bước 6 riêng của op. Mặc định: chỉ transfer.
-    function _checkOp(MetaTxLib.MetaTransaction memory m) internal view virtual {
+    function _checkOp(MetaTxLib.LegacyMetaTransaction memory m) internal view virtual {
         if (m.data.length != 0) revert MetaTxUnknownMode(m.mode);
     }
 
     /// @dev Bước 8. Không được fail, trừ chuyển underlying của unwrap op (R148), vốn revert cả tx.
-    function _executeOp(MetaTxLib.MetaTransaction memory m, uint256, address) internal virtual {
+    function _executeOp(MetaTxLib.LegacyMetaTransaction memory m, uint256, address) internal virtual {
         _transfer(m.from, m.to, m.value);
     }
 }

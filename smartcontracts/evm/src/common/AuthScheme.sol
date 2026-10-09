@@ -48,7 +48,7 @@ library AuthSchemeLib {
         if (s == AuthScheme.BLS_BN254)           return 3;  // pairing bn254, precompile 0x08
         if (s == AuthScheme.BLS_12381)           return 4;  // Bls12381.sol + HashToCurve.sol
         if (s == AuthScheme.PQ_COMMITMENT)       return 5;  // verify off-chain, on-chain chỉ giữ cam kết
-        if (s == AuthScheme.SMART_ACCOUNT_1271)  return 6;  // SigLib.requireValid -> ERC-1271
+        if (s == AuthScheme.SMART_ACCOUNT_1271)  return 6;  // SigCheck.isValid -> ERC-1271
         return 2;                                           // FROST + MUSIG2 -> CÙNG Schnorr bn254
     }
 

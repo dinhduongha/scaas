@@ -94,14 +94,14 @@ contract MetaTokenTest is Fixtures {
     bytes32 constant REF = keccak256("order-42");
     uint256 constant LANE = uint256(keccak256("lane"));
 
-    function _exec(MetaTxLib.MetaTransaction memory m) internal {
+    function _exec(MetaTxLib.LegacyMetaTransaction memory m) internal {
         bytes memory sig = _sign(ALICE_PK, tok, m);
         vm.prank(relayer);
         tok.executeMetaTransaction(m, sig);
     }
 
     function test_payEmitsPaymentSettled() public {
-        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, 250e6, _payData(REF), LANE,
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, shop, 250e6, _payData(REF), LANE,
             MetaTxLib.MODE_RESTRICT_RELAYER);
         vm.expectEmit(address(tok));
         emit IERC20Payment.PaymentSettled(alice, shop, 250e6, 0, relayer, REF);
@@ -111,7 +111,7 @@ contract MetaTokenTest is Fixtures {
     }
 
     function test_payReportsTheFeeActuallyCharged() public {
-        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, 100e6, _payData(REF), LANE,
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, shop, 100e6, _payData(REF), LANE,
             MetaTxLib.MODE_FEE_FIXED);
         m.fee = 1e6;
         m.feeRecipient = relayer;
@@ -123,8 +123,8 @@ contract MetaTokenTest is Fixtures {
     }
 
     function test_payLaneExecutesAtMostOnce() public {
-        MetaTxLib.MetaTransaction memory m1 = _mt(alice, shop, 10e6, _payData(REF), LANE, 0);
-        MetaTxLib.MetaTransaction memory m2 = _mt(alice, shop, 10e6, _payData(REF), LANE, 0);
+        MetaTxLib.LegacyMetaTransaction memory m1 = _mt(alice, shop, 10e6, _payData(REF), LANE, 0);
+        MetaTxLib.LegacyMetaTransaction memory m2 = _mt(alice, shop, 10e6, _payData(REF), LANE, 0);
         m2.validUntil = m1.validUntil + 60;            // second signature, same lane
         bytes memory s2 = _sign(ALICE_PK, tok, m2);
         _exec(m1);
@@ -135,7 +135,7 @@ contract MetaTokenTest is Fixtures {
     }
 
     function test_payAfterExpiryIsRefused() public {
-        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, 1, _payData(REF), LANE, 0);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, shop, 1, _payData(REF), LANE, 0);
         bytes memory sig = _sign(ALICE_PK, tok, m);
         vm.warp(m.validUntil + 1);
         vm.prank(relayer);
@@ -144,7 +144,7 @@ contract MetaTokenTest is Fixtures {
     }
 
     function test_payToZeroIsRefused() public {
-        MetaTxLib.MetaTransaction memory m = _mt(alice, address(0), 1, _payData(REF), LANE, 0);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, address(0), 1, _payData(REF), LANE, 0);
         bytes memory sig = _sign(ALICE_PK, tok, m);
         vm.prank(relayer);
         vm.expectRevert(MetaToken.PayToZero.selector);
@@ -153,7 +153,7 @@ contract MetaTokenTest is Fixtures {
 
     function test_payWithWrongLengthIsUnknownOp() public {
         bytes memory bad = abi.encodePacked(bytes4(keccak256("pay(bytes32)")), bytes31(0));
-        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, 1, bad, LANE, 0);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, shop, 1, bad, LANE, 0);
         bytes memory sig = _sign(ALICE_PK, tok, m);
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(MetaToken.MetaTxUnknownOp.selector, bytes4(keccak256("pay(bytes32)"))));
@@ -161,7 +161,7 @@ contract MetaTokenTest is Fixtures {
     }
 
     function test_shortDataIsUnknownOpNotPanic() public {
-        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, 1, hex"01", LANE, 0);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, shop, 1, hex"01", LANE, 0);
         bytes memory sig = _sign(ALICE_PK, tok, m);
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(MetaToken.MetaTxUnknownOp.selector, bytes4(0)));
@@ -169,7 +169,7 @@ contract MetaTokenTest is Fixtures {
     }
 
     function test_unknownSelectorIsRefused() public {
-        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, 1, hex"deadbeef", LANE, 0);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, shop, 1, hex"deadbeef", LANE, 0);
         bytes memory sig = _sign(ALICE_PK, tok, m);
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(MetaToken.MetaTxUnknownOp.selector, bytes4(0xdeadbeef)));
@@ -177,7 +177,7 @@ contract MetaTokenTest is Fixtures {
     }
 
     function test_tradeNeedsRestrictedRelayer() public {
-        MetaTxLib.MetaTransaction memory m = _mt(alice, relayer, 1, _tradeData(address(9), 1, address(0)), LANE, 0);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, relayer, 1, _tradeData(address(9), 1, address(0)), LANE, 0);
         bytes memory sig = _sign(ALICE_PK, tok, m);
         vm.prank(relayer);
         vm.expectRevert(MetaToken.TradeLegNotRestricted.selector);
@@ -185,7 +185,7 @@ contract MetaTokenTest is Fixtures {
     }
 
     function test_tradeProceedsGoOnlyToTheExecutor() public {
-        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, 1, _tradeData(address(9), 1, address(0)), LANE,
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, shop, 1, _tradeData(address(9), 1, address(0)), LANE,
             MetaTxLib.MODE_RESTRICT_RELAYER);
         bytes memory sig = _sign(ALICE_PK, tok, m);
         vm.prank(relayer);
@@ -194,7 +194,7 @@ contract MetaTokenTest is Fixtures {
     }
 
     function test_tradeMovesToExecutor() public {
-        MetaTxLib.MetaTransaction memory m = _mt(alice, relayer, 5e6, _tradeData(address(9), 1, address(0)), LANE,
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, relayer, 5e6, _tradeData(address(9), 1, address(0)), LANE,
             MetaTxLib.MODE_RESTRICT_RELAYER);
         _exec(m);
         assertEq(tok.balanceOf(relayer), 5e6);
@@ -212,7 +212,7 @@ contract MetaTokenTest is Fixtures {
     function testFuzz_payConservesSupply(uint96 value, uint16 feePpm) public {
         value = uint96(bound(value, 1, 1_000e6));
         feePpm = uint16(bound(feePpm, 0, 10_000));
-        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, value, _payData(REF), LANE, MetaTxLib.MODE_FEE_PERCENT);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, shop, value, _payData(REF), LANE, MetaTxLib.MODE_FEE_PERCENT);
         m.fee = feePpm;
         m.feeRecipient = relayer;
         uint256 fee = uint256(value) * feePpm / 1_000_000;

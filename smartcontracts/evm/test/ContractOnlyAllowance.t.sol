@@ -78,7 +78,7 @@ contract ContractOnlyAllowanceTest is Fixtures {
         t.transfer(eoa, 100);
         vm.etch(eoa, abi.encodePacked(hex"ef0100", address(puller)));
         bytes32 ref = keccak256("7702");
-        MetaTxLib.MetaTransaction memory m =
+        MetaTxLib.LegacyMetaTransaction memory m =
             _mt(eoa, bob, 40, _payData(ref), uint256(ref), MetaTxLib.MODE_RESTRICT_RELAYER);
         bytes memory sig = _sign(pk, t, m);
         vm.prank(relayer);

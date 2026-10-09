@@ -54,9 +54,9 @@ abstract contract HederaFixture is Test {
     }
 
     function _pay(address from, address to, uint256 value, bytes32 ref) internal view
-        returns (MetaTxLib.MetaTransaction memory)
+        returns (MetaTxLib.LegacyMetaTransaction memory)
     {
-        return MetaTxLib.MetaTransaction({
+        return MetaTxLib.LegacyMetaTransaction({
             from: from, to: to, value: value,
             data: abi.encodeWithSelector(bytes4(keccak256("pay(bytes32)")), ref),
             batch: uint256(keccak256(abi.encodePacked("scaas.pay.lane", ref))), nonce: 0,
@@ -83,13 +83,13 @@ contract HederaMetaTokenTest is HederaFixture {
         tok2.transfer(alice, 1_000e6);
     }
 
-    function _exec(HederaMetaToken t, MetaTxLib.MetaTransaction memory m, bytes memory sig) internal {
+    function _exec(HederaMetaToken t, MetaTxLib.LegacyMetaTransaction memory m, bytes memory sig) internal {
         vm.prank(relayer);
         t.executeMetaTransaction(m, sig);
     }
 
     function test_nativeEd25519AccountPays() public {
-        MetaTxLib.MetaTransaction memory m = _pay(alice, shop, 250e6, bytes32(uint256(0x42)));
+        MetaTxLib.LegacyMetaTransaction memory m = _pay(alice, shop, 250e6, bytes32(uint256(0x42)));
         bytes32 digest = tok.metaTxDigest(m);
         vm.expectEmit(address(tok));
         emit IERC20Payment.PaymentSettled(alice, shop, 250e6, 0, relayer, bytes32(uint256(0x42)));
@@ -101,7 +101,7 @@ contract HederaMetaTokenTest is HederaFixture {
     }
 
     function test_precompileGetsAccountDigestAndSignature() public {
-        MetaTxLib.MetaTransaction memory m = _pay(alice, shop, 1e6, bytes32(uint256(1)));
+        MetaTxLib.LegacyMetaTransaction memory m = _pay(alice, shop, 1e6, bytes32(uint256(1)));
         bytes32 digest = tok.metaTxDigest(m);
         bytes memory sig = _edSign(ALICE_KEY, digest);
         vm.expectCall(HAS, abi.encodeWithSelector(bytes4(0xb2a31da4), alice, abi.encodePacked(digest), sig));
@@ -118,7 +118,7 @@ contract HederaMetaTokenTest is HederaFixture {
     }
 
     function test_otherKeyIsRejected() public {
-        MetaTxLib.MetaTransaction memory m = _pay(alice, shop, 1e6, bytes32(uint256(1)));
+        MetaTxLib.LegacyMetaTransaction memory m = _pay(alice, shop, 1e6, bytes32(uint256(1)));
         bytes memory sig = _edSign(MALLORY_KEY, tok.metaTxDigest(m));
         vm.prank(relayer);
         vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
@@ -127,7 +127,7 @@ contract HederaMetaTokenTest is HederaFixture {
 
     function test_unknownAccountRevertInPrecompileIsBadSignature() public {
         address ghost = address(uint160(9_999_999));
-        MetaTxLib.MetaTransaction memory m = _pay(ghost, shop, 0, bytes32(uint256(1)));
+        MetaTxLib.LegacyMetaTransaction memory m = _pay(ghost, shop, 0, bytes32(uint256(1)));
         bytes memory sig = _edSign(ALICE_KEY, tok.metaTxDigest(m));
         vm.prank(relayer);
         vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
@@ -137,7 +137,7 @@ contract HederaMetaTokenTest is HederaFixture {
     function test_complexKeyAccountIsRejected() public {
         address multi = address(uint160(7_777_777));
         MockHederaAccountService(HAS).setComplexKey(multi);
-        MetaTxLib.MetaTransaction memory m = _pay(multi, shop, 0, bytes32(uint256(1)));
+        MetaTxLib.LegacyMetaTransaction memory m = _pay(multi, shop, 0, bytes32(uint256(1)));
         vm.prank(relayer);
         vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
         tok.executeMetaTransaction(m, new bytes(64));
@@ -146,7 +146,7 @@ contract HederaMetaTokenTest is HederaFixture {
     /// Không có precompile (chain không phải Hedera) ⇒ staticcall vào địa chỉ rỗng trả rỗng ⇒ từ chối.
     function test_failsClosedWithoutPrecompile() public {
         vm.etch(HAS, "");
-        MetaTxLib.MetaTransaction memory m = _pay(alice, shop, 1e6, bytes32(uint256(1)));
+        MetaTxLib.LegacyMetaTransaction memory m = _pay(alice, shop, 1e6, bytes32(uint256(1)));
         bytes memory sig = _edSign(ALICE_KEY, tok.metaTxDigest(m));
         vm.prank(relayer);
         vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
@@ -158,7 +158,7 @@ contract HederaMetaTokenTest is HederaFixture {
     function test_compactEcdsaFromEoaDoesNotBypass() public {
         address eoa = vm.addr(EVM_PK);
         tok.transfer(eoa, 10e6);
-        MetaTxLib.MetaTransaction memory m = _pay(eoa, shop, 1e6, bytes32(uint256(1)));
+        MetaTxLib.LegacyMetaTransaction memory m = _pay(eoa, shop, 1e6, bytes32(uint256(1)));
         (bytes32 r, bytes32 vs) = vm.signCompact(EVM_PK, tok.metaTxDigest(m));
         vm.prank(relayer);
         vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
@@ -168,7 +168,7 @@ contract HederaMetaTokenTest is HederaFixture {
     function test_ecdsaAliasAccountStillPays() public {
         address eoa = vm.addr(EVM_PK);
         tok.transfer(eoa, 10e6);
-        MetaTxLib.MetaTransaction memory m = _pay(eoa, shop, 1e6, bytes32(uint256(1)));
+        MetaTxLib.LegacyMetaTransaction memory m = _pay(eoa, shop, 1e6, bytes32(uint256(1)));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(EVM_PK, tok.metaTxDigest(m));
         _exec(tok, m, abi.encodePacked(r, s, v));
         assertEq(tok.balanceOf(shop), 1e6);
@@ -178,11 +178,11 @@ contract HederaMetaTokenTest is HederaFixture {
     function test_contractWalletStillUsesErc1271() public {
         Mock1271Wallet w = new Mock1271Wallet(vm.addr(EVM_PK));
         tok.transfer(address(w), 10e6);
-        MetaTxLib.MetaTransaction memory m = _pay(address(w), shop, 1e6, bytes32(uint256(1)));
+        MetaTxLib.LegacyMetaTransaction memory m = _pay(address(w), shop, 1e6, bytes32(uint256(1)));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(EVM_PK, tok.metaTxDigest(m));
         _exec(tok, m, abi.encodePacked(r, s, v));
         assertEq(tok.balanceOf(shop), 1e6);
-        MetaTxLib.MetaTransaction memory m2 = _pay(address(w), shop, 1e6, bytes32(uint256(2)));
+        MetaTxLib.LegacyMetaTransaction memory m2 = _pay(address(w), shop, 1e6, bytes32(uint256(2)));
         vm.expectCall(HAS, bytes(""), 0); // không bao giờ gọi precompile cho ví hợp đồng
         vm.prank(relayer);
         vm.expectRevert();
@@ -190,7 +190,7 @@ contract HederaMetaTokenTest is HederaFixture {
     }
 
     function test_replayIsRejected() public {
-        MetaTxLib.MetaTransaction memory m = _pay(alice, shop, 1e6, bytes32(uint256(1)));
+        MetaTxLib.LegacyMetaTransaction memory m = _pay(alice, shop, 1e6, bytes32(uint256(1)));
         bytes memory sig = _edSign(ALICE_KEY, tok.metaTxDigest(m));
         _exec(tok, m, sig);
         vm.prank(relayer);
@@ -200,7 +200,7 @@ contract HederaMetaTokenTest is HederaFixture {
 
     /// Chữ ký cho Hedera mainnet (295) không chạy trên testnet (296): chainId nằm trong domain.
     function test_crossNetworkReplayIsRejected() public {
-        MetaTxLib.MetaTransaction memory m = _pay(alice, shop, 1e6, bytes32(uint256(1)));
+        MetaTxLib.LegacyMetaTransaction memory m = _pay(alice, shop, 1e6, bytes32(uint256(1)));
         vm.chainId(295);
         bytes memory sig = _edSign(ALICE_KEY, tok.metaTxDigest(m));
         vm.chainId(296);
@@ -211,7 +211,7 @@ contract HederaMetaTokenTest is HederaFixture {
 
     /// Chữ ký cho token 1 không chạy trên token 2: verifyingContract nằm trong domain.
     function test_crossContractReplayIsRejected() public {
-        MetaTxLib.MetaTransaction memory m = _pay(alice, shop, 1e6, bytes32(uint256(1)));
+        MetaTxLib.LegacyMetaTransaction memory m = _pay(alice, shop, 1e6, bytes32(uint256(1)));
         bytes memory sig = _edSign(ALICE_KEY, tok.metaTxDigest(m));
         vm.prank(relayer);
         vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
@@ -219,7 +219,7 @@ contract HederaMetaTokenTest is HederaFixture {
     }
 
     function test_expiredIsRejected() public {
-        MetaTxLib.MetaTransaction memory m = _pay(alice, shop, 1e6, bytes32(uint256(1)));
+        MetaTxLib.LegacyMetaTransaction memory m = _pay(alice, shop, 1e6, bytes32(uint256(1)));
         bytes memory sig = _edSign(ALICE_KEY, tok.metaTxDigest(m));
         vm.warp(m.validUntil + 1);
         vm.prank(relayer);
@@ -229,8 +229,8 @@ contract HederaMetaTokenTest is HederaFixture {
 
     /// ANTI-LOCK (R30/R62): X ở contract 1 bị giữ lại, Y ở contract 2 vẫn chạy; sau đó X chạy.
     function test_antiLock_withheldOpOnOneContractDoesNotBlockAnother() public {
-        MetaTxLib.MetaTransaction memory x = _pay(alice, shop, 3e6, bytes32(uint256(0xA)));
-        MetaTxLib.MetaTransaction memory y = _pay(alice, shop, 5e6, bytes32(uint256(0xB)));
+        MetaTxLib.LegacyMetaTransaction memory x = _pay(alice, shop, 3e6, bytes32(uint256(0xA)));
+        MetaTxLib.LegacyMetaTransaction memory y = _pay(alice, shop, 5e6, bytes32(uint256(0xB)));
         bytes memory sx = _edSign(ALICE_KEY, tok.metaTxDigest(x));
         bytes memory sy = _edSign(ALICE_KEY, tok2.metaTxDigest(y));
         _exec(tok2, y, sy);                       // Y trước, X vẫn bị giữ
@@ -243,8 +243,8 @@ contract HederaMetaTokenTest is HederaFixture {
 
     /// Cùng contract, hai lane (`batch` theo entryRef): lane giữ lại không chặn lane khác.
     function test_antiLock_sameContractOtherLane() public {
-        MetaTxLib.MetaTransaction memory x = _pay(alice, shop, 3e6, bytes32(uint256(0xA)));
-        MetaTxLib.MetaTransaction memory y = _pay(alice, shop, 5e6, bytes32(uint256(0xB)));
+        MetaTxLib.LegacyMetaTransaction memory x = _pay(alice, shop, 3e6, bytes32(uint256(0xA)));
+        MetaTxLib.LegacyMetaTransaction memory y = _pay(alice, shop, 5e6, bytes32(uint256(0xB)));
         bytes memory sx = _edSign(ALICE_KEY, tok.metaTxDigest(x));
         bytes memory sy = _edSign(ALICE_KEY, tok.metaTxDigest(y));
         _exec(tok, y, sy);
@@ -257,8 +257,8 @@ contract HederaMetaTokenTest is HederaFixture {
         uint256 bobPk = 0xB0B;
         address bob = vm.addr(bobPk);
         tok2.transfer(bob, 500e6);
-        MetaTxLib.MetaTransaction memory a = _leg(alice, address(dex), 100e6, address(tok2), 60e6, 1);
-        MetaTxLib.MetaTransaction memory b = _leg(bob, address(dex), 60e6, address(tok), 100e6, 2);
+        MetaTxLib.LegacyMetaTransaction memory a = _leg(alice, address(dex), 100e6, address(tok2), 60e6, 1);
+        MetaTxLib.LegacyMetaTransaction memory b = _leg(bob, address(dex), 60e6, address(tok), 100e6, 2);
         MetaTxDex.Leg memory la = MetaTxDex.Leg(IERC20MetaTx(address(tok)), a, _edSign(ALICE_KEY, tok.metaTxDigest(a)));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(bobPk, tok2.metaTxDigest(b));
         MetaTxDex.Leg memory lb = MetaTxDex.Leg(IERC20MetaTx(address(tok2)), b, abi.encodePacked(r, s, v));
@@ -269,9 +269,9 @@ contract HederaMetaTokenTest is HederaFixture {
     }
 
     function _leg(address from, address dex, uint256 value, address counter, uint256 minCounter, uint256 lane)
-        internal view returns (MetaTxLib.MetaTransaction memory)
+        internal view returns (MetaTxLib.LegacyMetaTransaction memory)
     {
-        return MetaTxLib.MetaTransaction({
+        return MetaTxLib.LegacyMetaTransaction({
             from: from, to: dex, value: value,
             data: abi.encodeWithSelector(bytes4(keccak256("trade(address,uint256,address)")), counter, minCounter, address(0)),
             batch: lane, nonce: 0, validUntil: block.timestamp + 300, mode: R, relayer: dex, fee: 0,

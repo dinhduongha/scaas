@@ -108,7 +108,7 @@ abstract contract MetaTokenBase is MetaTxCore, IMetaTokenV2, IFactoryTokenV2 {
         uint32 mode, address relayer, bytes calldata signature
     ) external nonReentrant returns (bool) {
         if (mode & ~MetaTxLib.MODE_RESTRICT_RELAYER != 0) revert MtxModeShape(mode);
-        MetaTxLib.MetaTransaction memory m;
+        MetaTxLib.LegacyMetaTransaction memory m;
         m.from = from;
         m.to = to;
         m.value = amount;
@@ -126,7 +126,7 @@ abstract contract MetaTokenBase is MetaTxCore, IMetaTokenV2, IFactoryTokenV2 {
         uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata signature
     ) external nonReentrant returns (bool) {
         _requireFeeShape(mode, feeRecipient);
-        MetaTxLib.MetaTransaction memory m;
+        MetaTxLib.LegacyMetaTransaction memory m;
         m.from = from;
         m.to = to;
         m.value = amount;
@@ -141,7 +141,7 @@ abstract contract MetaTokenBase is MetaTxCore, IMetaTokenV2, IFactoryTokenV2 {
         return true;
     }
 
-    function executeMetaTransactionWithFee(MetaTxLib.MetaTransaction calldata m, bytes calldata signature)
+    function executeMetaTransactionWithFee(MetaTxLib.LegacyMetaTransaction calldata m, bytes calldata signature)
         external nonReentrant returns (bool)
     {
         if (m.mode & MetaTxLib.MODE_FEE_MASK == 0) revert MtxModeShape(m.mode);
@@ -153,7 +153,7 @@ abstract contract MetaTokenBase is MetaTxCore, IMetaTokenV2, IFactoryTokenV2 {
         address from, address to, uint256 amount, bytes32 payId, uint256 validUntil,
         uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata signature
     ) external nonReentrant returns (bool) {
-        MetaTxLib.MetaTransaction memory m;
+        MetaTxLib.LegacyMetaTransaction memory m;
         m.from = from;
         m.to = to;
         m.value = amount;
@@ -215,7 +215,7 @@ abstract contract MetaTokenBase is MetaTxCore, IMetaTokenV2, IFactoryTokenV2 {
         return abi.encode(true);
     }
 
-    function mtxBatch(MetaTxLib.MetaTransaction[] calldata ms, bytes[] calldata signatures)
+    function mtxBatch(MetaTxLib.LegacyMetaTransaction[] calldata ms, bytes[] calldata signatures)
         external nonReentrant returns (bool)
     {
         uint256 n = ms.length;
@@ -228,7 +228,7 @@ abstract contract MetaTokenBase is MetaTxCore, IMetaTokenV2, IFactoryTokenV2 {
     /// @dev Struct của `mtxUnwrap*` từ các word đầu calldata: from 4, underlying 36, wrapped 68, recipient 100,
     ///      minOut 132, batch 164, nonce 196, validUntil 228, mode 260, relayer 292, [fee 324, feeRecipient 356].
     ///      Trường struct trong memory là các word liên tiếp theo thứ tự khai báo.
-    function _unwrapCall(bool withFee) private pure returns (MetaTxLib.MetaTransaction memory m) {
+    function _unwrapCall(bool withFee) private pure returns (MetaTxLib.LegacyMetaTransaction memory m) {
         address u;
         address r;
         uint256 minOut;
@@ -285,14 +285,14 @@ abstract contract MetaTokenBase is MetaTxCore, IMetaTokenV2, IFactoryTokenV2 {
         return h != bytes32(0) && from.codehash == h ? 400_000 : 50_000;
     }
 
-    function _hasPayee(MetaTxLib.MetaTransaction memory m) internal pure override returns (bool) {
+    function _hasPayee(MetaTxLib.LegacyMetaTransaction memory m) internal pure override returns (bool) {
         uint256 len = m.data.length;
         return len == 0 || (len == 36 && _op(m.data) == OP_PAY);
     }
 
     /// @dev Bước 6. Tham số đọc bằng `mload` ở offset cố định sau khi kiểm độ dài; một word địa chỉ có bit cao
     ///      bẩn ⇒ `MetaTxUnknownOp` (như `abi.decode` sẽ revert), nên mỗi op chỉ có MỘT encoding, MỘT digest.
-    function _checkOp(MetaTxLib.MetaTransaction memory m) internal view override {
+    function _checkOp(MetaTxLib.LegacyMetaTransaction memory m) internal view override {
         bytes memory d = m.data;
         uint256 len = d.length;
         // Transfer tới 0 fail ở ĐÂY, không ở bước 8 (review L2); cùng lỗi OZ mà `_transfer` sẽ ném.
@@ -330,7 +330,7 @@ abstract contract MetaTokenBase is MetaTxCore, IMetaTokenV2, IFactoryTokenV2 {
     }
 
     /// @dev Bước 8. `approve` đặt allowance; `unwrap` cho tầng; còn lại là một transfer, `pay` thêm event đối soát.
-    function _executeOp(MetaTxLib.MetaTransaction memory m, uint256 feeAmount, address feeRecipient)
+    function _executeOp(MetaTxLib.LegacyMetaTransaction memory m, uint256 feeAmount, address feeRecipient)
         internal override
     {
         bytes memory d = m.data;

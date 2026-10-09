@@ -91,7 +91,7 @@ contract Tier1Test is V2Fixture {
     function test_unwrapOpIsUnknownOnTier1() public {
         uint256 pk = 0xA11CE;
         NoUnderlyingToken t = _none(vm.addr(pk), 100, address(0));
-        MetaTxLib.MetaTransaction memory m = _mt(vm.addr(pk), bob, 1, _unwrapData(address(1), bob, 0), 1, RR);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(vm.addr(pk), bob, 1, _unwrapData(address(1), bob, 0), 1, RR);
         bytes memory s = _sig(pk, address(t), m);
         bytes4 op = t.OP_UNWRAP();
         vm.prank(relayer);

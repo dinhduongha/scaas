@@ -584,7 +584,7 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, IFactoryToken {
 
     // ------------------------------------------------------------------ meta-tx (§10)
 
-    function _executeOp(MetaTxLib.MetaTransaction calldata m, FeeMode feeMode, address feeRecipient)
+    function _executeOp(MetaTxLib.LegacyMetaTransaction calldata m, FeeMode feeMode, address feeRecipient)
         internal override returns (uint256 feeAmount)
     {
         if (m.data.length == 0) {
@@ -645,11 +645,11 @@ contract ZetherToken is ZetherMetaTx, IZetherToken, IFactoryToken {
         _burnShielded(payload, proof, authSig, b, f);
     }
 
-    function envelopeBinding(MetaTxLib.MetaTransaction calldata m) external view returns (bytes32) {
+    function envelopeBinding(MetaTxLib.LegacyMetaTransaction calldata m) external view returns (bytes32) {
         return _envelopeBinding(m);
     }
 
-    function _envelopeBinding(MetaTxLib.MetaTransaction calldata m) private view returns (bytes32) {
+    function _envelopeBinding(MetaTxLib.LegacyMetaTransaction calldata m) private view returns (bytes32) {
         (address r, address f) = MetaTxLib.canon(m);
         return keccak256(abi.encode(
             TAG_ENVELOPE, block.chainid, address(this), m.from, m.to, m.value, m.batch, m.nonce, m.validUntil,

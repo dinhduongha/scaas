@@ -94,14 +94,14 @@ contract MetaTxGasV2Test is Test {
     }
 
     function _mt(uint32 mode, uint256 batch, uint256 nonce, uint256 fee, address feeRcpt)
-        internal view returns (MetaTxLib.MetaTransaction memory m)
+        internal view returns (MetaTxLib.LegacyMetaTransaction memory m)
     {
-        m = MetaTxLib.MetaTransaction({from: signer, to: recipient, value: 1 ether, data: "", batch: batch,
+        m = MetaTxLib.LegacyMetaTransaction({from: signer, to: recipient, value: 1 ether, data: "", batch: batch,
             nonce: nonce, validUntil: block.timestamp + 600, mode: mode, relayer: relayer, fee: fee,
             feeRecipient: feeRcpt});
     }
 
-    function _sig(address t, MetaTxLib.MetaTransaction memory m) internal view returns (bytes memory) {
+    function _sig(address t, MetaTxLib.LegacyMetaTransaction memory m) internal view returns (bytes memory) {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(PK, IERC20MetaTx(t).metaTxDigest(m));
         return abi.encodePacked(r, s, v);
     }
@@ -139,17 +139,17 @@ contract MetaTxGasV2Test is Test {
         assertTrue(ok);
     }
 
-    function _cdExec(address t, MetaTxLib.MetaTransaction memory m) internal view returns (bytes memory) {
+    function _cdExec(address t, MetaTxLib.LegacyMetaTransaction memory m) internal view returns (bytes memory) {
         return abi.encodeCall(IERC20MetaTx.executeMetaTransaction, (m, _sig(t, m)));
     }
 
-    function _exec(address t, MetaTxLib.MetaTransaction memory m) internal {
+    function _exec(address t, MetaTxLib.LegacyMetaTransaction memory m) internal {
         vm.prank(relayer);
         (bool ok,) = t.call(_cdExec(t, m));
         assertTrue(ok);
     }
 
-    function _row(string memory label, MetaTxLib.MetaTransaction memory m) internal returns (uint256 g1, uint256 g2) {
+    function _row(string memory label, MetaTxLib.LegacyMetaTransaction memory m) internal returns (uint256 g1, uint256 g2) {
         bytes memory c1 = _cdExec(address(v1), m);
         bytes memory c2 = _cdExec(address(v2), m);
         uint256 s = _snap();
@@ -179,13 +179,13 @@ contract MetaTxGasV2Test is Test {
     }
 
     function test_gasF_newRecipient() public {
-        MetaTxLib.MetaTransaction memory m = _mt(0, WARM, 1, 0, address(0));
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(0, WARM, 1, 0, address(0));
         m.to = address(0xD00D);
         _row("F warm batch, new recipient", m);
     }
 
     function test_gasG_erc1271() public {
-        MetaTxLib.MetaTransaction memory m = _mt(0, COLD, 0, 0, address(0));
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(0, COLD, 0, 0, address(0));
         m.from = address(acct);
         bytes memory cd = abi.encodeCall(IERC20MetaTx.executeMetaTransaction, (m, hex"deadbeef"));
         uint256 s = _snap();
@@ -197,7 +197,7 @@ contract MetaTxGasV2Test is Test {
     }
 
     function test_gasP_payOpColdLane() public {
-        MetaTxLib.MetaTransaction memory m = _mt(MetaTxLib.MODE_RESTRICT_RELAYER, 0, 0, 0, address(0));
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(MetaTxLib.MODE_RESTRICT_RELAYER, 0, 0, 0, address(0));
         bytes32 payId = keccak256("inv");
         m.data = abi.encodeWithSelector(bytes4(keccak256("pay(bytes32)")), payId);
         m.batch = v2.payLane(payId);
@@ -233,7 +233,7 @@ contract MetaTxGasV2Test is Test {
     // ------------------------------------------------------------------ named vs generic (v2)
 
     function test_gasNamedTransferAtOrBelowGeneric() public {
-        MetaTxLib.MetaTransaction memory m = _mt(MetaTxLib.MODE_RESTRICT_RELAYER, WARM, 1, 0, address(0));
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(MetaTxLib.MODE_RESTRICT_RELAYER, WARM, 1, 0, address(0));
         bytes memory cg = _cdExec(address(v2), m);
         bytes memory cn = _named(v2.mtxTransfer.selector, abi.encode(signer, recipient, 1 ether, WARM, 1,
             m.validUntil, m.mode, relayer), _sig(address(v2), m));
@@ -247,7 +247,7 @@ contract MetaTxGasV2Test is Test {
 
     function test_gasNamedTransferWithFeeAtOrBelowGeneric() public {
         uint32 mode = MetaTxLib.MODE_FEE_PERCENT | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT;
-        MetaTxLib.MetaTransaction memory m = _mt(mode, WARM, 1, 5_000, feeTaker);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(mode, WARM, 1, 5_000, feeTaker);
         bytes memory cg = _cdExec(address(v2), m);
         bytes memory cn = _named(v2.mtxTransferWithFee.selector, abi.encode(signer, recipient, 1 ether, WARM, 1,
             m.validUntil, mode, relayer, 5_000, feeTaker), _sig(address(v2), m));
@@ -263,7 +263,7 @@ contract MetaTxGasV2Test is Test {
     }
 
     function test_gasBatchOfThreeVersusThreeSingles() public {
-        MetaTxLib.MetaTransaction[] memory ms = new MetaTxLib.MetaTransaction[](3);
+        MetaTxLib.LegacyMetaTransaction[] memory ms = new MetaTxLib.LegacyMetaTransaction[](3);
         bytes[] memory ss = new bytes[](3);
         for (uint256 i; i < 3; ++i) {
             ms[i] = _mt(MetaTxLib.MODE_RESTRICT_RELAYER, 10 + i, 0, 0, address(0));
@@ -294,7 +294,7 @@ contract MetaTxGasV2Test is Test {
     }
 
     function test_gasGaslessUnwrap() public {
-        MetaTxLib.MetaTransaction memory m = _mt(MetaTxLib.MODE_RESTRICT_RELAYER, WARM, 0, 0, address(0));
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(MetaTxLib.MODE_RESTRICT_RELAYER, WARM, 0, 0, address(0));
         m.value = 10e6;
         m.data = abi.encodeWithSelector(bytes4(keccak256("unwrap(address,address,uint256)")), address(usdc), recipient, 10e6);
         bytes memory cd = _named(w.mtxUnwrap.selector, abi.encode(signer, address(usdc), 10e6, recipient,
@@ -305,7 +305,7 @@ contract MetaTxGasV2Test is Test {
     }
 
     function test_gasCalldata() public view {
-        MetaTxLib.MetaTransaction memory m = _mt(MetaTxLib.MODE_RESTRICT_RELAYER, WARM, 1, 0, address(0));
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(MetaTxLib.MODE_RESTRICT_RELAYER, WARM, 1, 0, address(0));
         bytes memory s = _sig(address(v2), m);
         _cd("I calldata executeMetaTransaction", abi.encodeCall(IERC20MetaTx.executeMetaTransaction, (m, s)));
         _cd("I calldata mtxTransfer", _named(v2.mtxTransfer.selector, abi.encode(signer, recipient, 1 ether, WARM, 1,
