@@ -42,4 +42,29 @@ contract MetaTxLibTest is Test {
         b.mode = MetaTxLib.MODE_RESTRICT_RELAYER;
         assertTrue(a.hashStruct() != b.hashStruct());
     }
+
+    function _h(uint32 mode, address relayer, address feeRecipient) internal pure returns (bytes32) {
+        MetaTxLib.MetaTransaction memory m = _m(mode);
+        m.relayer = relayer;
+        m.feeRecipient = feeRecipient;
+        return m.hashStruct();
+    }
+
+    function test_onlyFeeRecipientFlag_bindsFeeRecipientNotRelayer() public pure {
+        uint32 f = MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT;
+        assertTrue(_h(f, address(1), address(3)) != _h(f, address(1), address(4)));
+        assertEq(_h(f, address(1), address(3)), _h(f, address(2), address(3)));
+    }
+
+    function test_onlyRelayerFlag_bindsRelayerNotFeeRecipient() public pure {
+        uint32 f = MetaTxLib.MODE_RESTRICT_RELAYER;
+        assertTrue(_h(f, address(1), address(3)) != _h(f, address(2), address(3)));
+        assertEq(_h(f, address(1), address(3)), _h(f, address(1), address(4)));
+    }
+
+    function test_bothFlags_bindBoth() public pure {
+        uint32 f = MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT;
+        assertTrue(_h(f, address(1), address(3)) != _h(f, address(2), address(3)));
+        assertTrue(_h(f, address(1), address(3)) != _h(f, address(1), address(4)));
+    }
 }
