@@ -117,16 +117,71 @@ See [architecture.md](architecture.md#profiles).
 
 ## Map
 
-| Area | Docs |
+One table per area; ids in brackets are the rule prefixes each area owns.
+
+**Overview**
+
+| Doc | Covers |
 |---|---|
-| Overview | [architecture.md](architecture.md) · [decisions.md](decisions.md) (register, `ARCH-POS` system-wide positions) |
-| Node (`NODE-*`) | [README](node/README.md) (roles, listeners, invariants) · [store](node/store.md) · [job API](node/job-api.md) · [submit lanes](node/submit-lanes.md) · [indexer and feeds](node/indexer-feeds.md) · [gateway](node/gateway.md) · [admin and auth](node/admin-auth.md) · [sponsorship](node/sponsorship.md) · [DEX venue](node/dex-venue.md) · [mesh](node/mesh.md) · [gossip](node/gossip.md) · [operations](node/ops.md) · [runbooks](node/runbooks.md) · [threat model](node/threat-model.md) |
-| Contracts (`CTR-*`) | [README](contracts/README.md) (immutability, admin powers, production gates, build pins) · [meta-transactions](contracts/metatx.md) · [token wrappers](contracts/token-wrappers.md) · [accounts](contracts/accounts.md) (native, Universal Account, smart account) · [mandates](contracts/mandates.md) · [DEX](contracts/dex.md) · [tender](contracts/tender.md) · [asset suite](contracts/asset-suite.md) · [Zether](contracts/zether.md) · [PQ Zether](contracts/pq-zether.md) |
-| Networks (`NET-*`) | [README](networks/README.md) (common model, signing domains, passkeys, head-of-line, availability) · [EVM](networks/evm.md) · [Hedera](networks/hedera.md) · [Cosmos](networks/cosmos.md) · [Soroban](networks/soroban.md) · [Sui](networks/sui.md) · [Aptos](networks/aptos.md) · [Solana](networks/solana.md) · [TON](networks/ton.md) |
-| Clients (`CLI-*`) | [signers and clientkeys](clients/signers-clientkeys.md) · [app (console + dApp)](clients/app.md) |
-| Integration (`INT-*`) | [integration.md](integration.md) (any ERP or back office) · [integration-odoo-example.md](integration-odoo-example.md) (one worked ERP connector, example only) |
-| History (read-only) | [history/README.md](history/README.md) — frozen designs, the original requirements note and its [trace](history/blockchain-trace.md), the old-id inventory |
-| Research (background) | `research/` — background and rationale only, never normative |
+| [architecture.md](architecture.md) | How the parts fit and why: contract layer, node roles, topology, sequence diagrams, trust model |
+| [decisions.md](decisions.md) | The register: every ruling, its old ids, owner flag and rationale; `ARCH-POS` system-wide positions |
+
+**Contracts** (`CTR-*`)
+
+| Doc | Covers |
+|---|---|
+| [README](contracts/README.md) | Immutability, admin powers, production gates, build pins |
+| [metatx.md](contracts/metatx.md) | `MetaTransaction` / `MetaTransfer`, lanes, `mtxExecute`, fees, names |
+| [token-wrappers.md](contracts/token-wrappers.md) | Token tree and kinds, features and owner, libraries, rates and reserve, factory |
+| [accounts.md](contracts/accounts.md) | Native accounts, Universal Account registry, `SmartKeyAccount` |
+| [mandates.md](contracts/mandates.md) | `MandateWallet`: delegated payments without allowances |
+| [dex.md](contracts/dex.md) | `TradeOrder`, the DEX, AMM exchange path, `DexPuller` |
+| [tender.md](contracts/tender.md) | Sealed-bid tender |
+| [asset-suite.md](contracts/asset-suite.md) | Regulated flags, vesting, distributions, `ExchangeOffer`, templates |
+| [zether.md](contracts/zether.md) | Confidential layer: shield / transfer / unshield, proofs, disclosure |
+| [pq-zether.md](contracts/pq-zether.md) | Post-quantum confidential tokens (lattice; waits for a precompile) |
+
+**Node** (`NODE-*`)
+
+| Doc | Covers |
+|---|---|
+| [README](node/README.md) | Roles, listeners, invariants |
+| [store.md](node/store.md) | Jobs, feeds, configuration, audit tables |
+| [job-api.md](node/job-api.md) | Server-side job intake, cancel, call tables |
+| [submit-lanes.md](node/submit-lanes.md) | Lease, simulate, sign, broadcast, replace |
+| [indexer-feeds.md](node/indexer-feeds.md) | Finality, normalized events, feeds |
+| [gateway.md](node/gateway.md) | Public intake of signed intents |
+| [admin-auth.md](node/admin-auth.md) | Admin endpoints and authentication |
+| [sponsorship.md](node/sponsorship.md) | Who pays gas, sponsor rules |
+| [dex-venue.md](node/dex-venue.md) | Order book, matching, settle jobs, trade engine |
+| [mesh.md](node/mesh.md) · [gossip.md](node/gossip.md) | Relayer mesh envelope, acceptance, gossip |
+| [ops.md](node/ops.md) · [runbooks.md](node/runbooks.md) | Operations, alerts, runbooks |
+| [threat-model.md](node/threat-model.md) | Node threat model |
+
+**Networks** (`NET-*`)
+
+| Doc | Covers |
+|---|---|
+| [README](networks/README.md) | Common model, chain identity (`chain_uid`), signing domains, passkeys, availability |
+| [evm.md](networks/evm.md) · [hedera.md](networks/hedera.md) | EVM chains and Hedera |
+| [cosmos.md](networks/cosmos.md) · [soroban.md](networks/soroban.md) · [ton.md](networks/ton.md) | CosmWasm, Stellar / Pi, TON |
+| [sui.md](networks/sui.md) · [aptos.md](networks/aptos.md) · [solana.md](networks/solana.md) | Move families and Solana |
+
+**Clients** (`CLI-*`) and **integration** (`INT-*`)
+
+| Doc | Covers |
+|---|---|
+| [signers-clientkeys.md](clients/signers-clientkeys.md) | Signers, key vault, what a wallet checks before signing |
+| [app.md](clients/app.md) | Console and dApp |
+| [integration.md](integration.md) | Connecting any ERP or back office |
+| [integration-odoo-example.md](integration-odoo-example.md) | One worked ERP connector (example only) |
+
+**Not normative**
+
+| Where | What |
+|---|---|
+| [history/README.md](history/README.md) | Frozen designs, the original requirements note and its [trace](history/blockchain-trace.md), the old-id inventory (read-only) |
+| `research/` | Background and rationale only |
 
 ## Precedence
 
