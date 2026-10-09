@@ -638,3 +638,4 @@ OrderBookDex.t.sol:667	renamed	contracts/dex.md#CTR-DEX-01
 src/dex/OrderBookDex.sol	renamed	contracts/dex.md#CTR-DEX-01
 name = "SCaaS OrderBookDex	renamed	contracts/dex.md#CTR-DEX-01
 SCaaS OrderBookDex	renamed	contracts/dex.md#CTR-DEX-01
+order_book_dex	renamed	clients/app.md (deployments key is now scaas_dex)

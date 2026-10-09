@@ -88,7 +88,7 @@ rpc_urls = ["http://nethermind:8545"]            # >= finality.quorum independen
 lanes = [0, 1, 2, 3]                             # 4 relayer accounts: hold gas only, never user funds
 # private_key = { env = "SCAAS_RELAYER_KEY_7622" }   # alternative: one raw key = one lane
 finality = { mode = "depth", depth = 1, quorum = 1 }
-# dex = "0x..."                                  # SCaaSDex ("order_book_dex" in smartcontracts/evm/deployments/7622.json)
+# dex = "0x..."                                  # SCaaSDex ("scaas_dex" in smartcontracts/evm/deployments/7622.json)
 # fee_recipient = "0x..."                        # cold wallet for fees of gateway meta-txs that leave feeRecipient
                                                  # unbound (R84); never a lane key. Unset: the fee goes to the sending lane.
 # tokens = [{ address = "0x...", decimals = 6 }] # registered tokens, imported into the store (R95, MESH R86)

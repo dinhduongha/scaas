@@ -180,7 +180,7 @@ Fake wallets are not duplicated: end-to-end tests inject clientkeys `test/wallet
 
 `key` is the node's `chain_key` (`config.rs:746`); non-EVM curated tokens and assets carry `symbol`/`decimals` the same
 way; a chain without `gatewayNode` has the self-paid path only. `npm run config:from-deployments -- <rpc>` reads
-`smartcontracts/evm/deployments/<chainid>.json` and maps `order_book_dex` → `contracts.dex`, `factory` →
+`smartcontracts/evm/deployments/<chainid>.json` and maps `scaas_dex` → `contracts.dex`, `factory` →
 `contracts.factoryV1`, `factory_v2` → `contracts.factoryV2`, `subject_account_factory` → `contracts.subjectAccountFactory`;
 the deployment's `dex` key is `MetaTxDex`, a different contract, and is not mapped; other families are written by hand.
 Target (SPECIFIED): the deployment file also carries `chain_uid` and the DEX list ([NET-EVM-05](../networks/evm.md#NET-EVM-05)),

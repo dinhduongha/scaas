@@ -424,7 +424,7 @@ async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
     let dep = deploy(&rpc, chain_id, alice.address());
     let token_a: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();
     let factory: Address = dep["factory"].as_str().unwrap().parse().unwrap();
-    let dex: Address = dep["order_book_dex"].as_str().unwrap().parse().unwrap();
+    let dex: Address = dep["scaas_dex"].as_str().unwrap().parse().unwrap();
 
     // Quote token B, half to bob — plain txs from the funded deployer (= DEX admin).
     let deployer = key(DEPLOYER);

@@ -34,7 +34,7 @@ contract Deploy is Script {
         _deployV2(registrar, registrar == deployer, accounts.IMPLEMENTATION());
         MetaTxDex dex = new MetaTxDex();
         // R35: admin chỉ `setMarket`; production đặt REGISTRAR là một Safe (RS5-1).
-        SCaaSDex obDex = new SCaaSDex(registrar);
+        SCaaSDex scaasDex = new SCaaSDex(registrar);
         address demo;
         if (demoSupply != 0 && registrar == deployer) {
             demo = factory.createMetaToken(1, address(0),
@@ -49,7 +49,7 @@ contract Deploy is Script {
         vm.serializeAddress(k, "dex", address(dex));
         vm.serializeAddress(k, "subject_account_factory", address(accounts));
         vm.serializeAddress(k, "subject_account_implementation", accounts.IMPLEMENTATION());
-        vm.serializeAddress(k, "order_book_dex", address(obDex));
+        vm.serializeAddress(k, "scaas_dex", address(scaasDex));
         string memory out = vm.serializeAddress(k, "demo_token", demo);
         vm.writeJson(out, string.concat("./deployments/", vm.toString(block.chainid), ".json"));
         console.log(out);
