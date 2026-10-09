@@ -8,6 +8,11 @@ import {MetaTxBase} from "../../src/metatx/MetaTxBase.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
+contract Recorder {
+    uint256 public hits;
+    function ping() external { ++hits; }
+}
+
 /// CTR-MTX-16…19, CTR-MTX-22: the generic pipeline of `MetaTxBase` on a registry-like contract.
 contract MetaTxBaseTest is MtxFixture {
     using MetaTxLib for MetaTxLib.MetaTransaction;
@@ -298,5 +303,62 @@ contract MetaTxBaseTest is MtxFixture {
         assertEq(reg.mtxNonce(alice, 7), 1);
         assertEq(reg.mtxNonce(alice, 8), 1);
         assertEq(reg.mtxNonce(relayer, 7), 0);
+    }
+
+    // ---------------------------------------------------------------- fix round 1: binding end to end, alias conformance
+
+    function test_feeRecipientBound_eventCarriesIt() public {
+        MetaTxLib.MetaTransaction memory m = _m(alice, _setName("a"), 1, 0);
+        m.mode = MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT;
+        m.feeRecipient = address(0xFEE);
+        bytes memory sig = _sign(ALICE_PK, m);
+        vm.expectEmit(true, true, true, true, address(reg));
+        emit IMetaTx.MetaTransactionExecuted(alice, relayer, 1, 0, reg.mtxDigest(m), address(0xFEE), 0);
+        _run(m, sig);
+    }
+
+    function test_feeRecipientBound_rewriteRefused() public {
+        MetaTxLib.MetaTransaction memory m = _m(alice, _setName("a"), 1, 0);
+        m.mode = MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT;
+        m.feeRecipient = address(0xFEE);
+        bytes memory sig = _sign(ALICE_PK, m);
+        m.feeRecipient = bob;
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        _run(m, sig);
+    }
+
+    function test_relayerBound_otherSubmitterRefused_rewriteRefused() public {
+        MetaTxLib.MetaTransaction memory m = _m(alice, _setName("a"), 1, 0);
+        m.mode = MetaTxLib.MODE_RESTRICT_RELAYER;
+        m.relayer = relayer;
+        bytes memory sig = _sign(ALICE_PK, m);
+        vm.prank(bob);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnauthorizedRelayer.selector, relayer, bob));
+        reg.mtxExecute(m, sig);
+        m.relayer = bob;
+        vm.prank(bob);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        reg.mtxExecute(m, sig);
+    }
+
+    function _alias(bytes memory data, uint256 nonce) internal {
+        MetaTxLib.MetaTransaction memory m = _m(alice, data, 1, nonce);
+        bytes memory sig = _sign(ALICE_PK, m);
+        vm.prank(relayer);
+        assertTrue(reg.executeMetaTransaction(m, sig));
+    }
+
+    /// metatx.md Conformance: every allowlisted selector also runs through the alias, each with an observable effect.
+    function test_alias_everyAllowlistedSelector() public {
+        Recorder rec = new Recorder();
+        _alias(abi.encodeCall(IMetaTx.cancelNonce, (9)), 0);
+        assertEq(reg.mtxNonce(alice, 9), 1);
+        _alias(_setName("viaAlias"), 1);
+        assertEq(reg.nameOf(alice), "viaAlias");
+        _alias(abi.encodeCall(MtxRegistryMock.bump, (4)), 2);
+        assertEq(reg.count(alice), 4);
+        _alias(abi.encodeCall(MtxRegistryMock.poke, (address(rec), abi.encodeCall(Recorder.ping, ()))), 3);
+        assertEq(rec.hits(), 1);
+        assertEq(reg.mtxNonce(alice, 1), 4);
     }
 }
