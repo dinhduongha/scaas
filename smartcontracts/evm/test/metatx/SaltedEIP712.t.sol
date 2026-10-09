@@ -70,4 +70,9 @@ contract SaltedEIP712Test is Test {
         vm.expectRevert(abi.encodeWithSelector(ShortStrings.StringTooLong.selector, "SCaaS A Name Longer Than 31 Bytes"));
         new SaltedHarness("SCaaS A Name Longer Than 31 Bytes", UID);
     }
+
+    function test_zeroChainUidRefused() public {
+        vm.expectRevert(SaltedEIP712.ChainUidZero.selector);
+        new SaltedHarness("SCaaS TestRegistry", bytes32(0));
+    }
 }

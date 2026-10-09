@@ -15,6 +15,9 @@ import {ShortString, ShortStrings} from "@openzeppelin/contracts/utils/ShortStri
 abstract contract SaltedEIP712 is IERC5267 {
     using ShortStrings for ShortString;
 
+    /// @notice NET-ALL-22: `chain_uid` is a non-zero bytes32.
+    error ChainUidZero();
+
     bytes32 private constant TYPE_HASH = keccak256(
         "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
     );
@@ -31,6 +34,7 @@ abstract contract SaltedEIP712 is IERC5267 {
     address private immutable _cachedThis;
 
     constructor(string memory name_, string memory version_, bytes32 chainUid_) {
+        if (chainUid_ == bytes32(0)) revert ChainUidZero();
         _name = ShortStrings.toShortString(name_);
         _version = ShortStrings.toShortString(version_);
         _hashedName = keccak256(bytes(name_));
