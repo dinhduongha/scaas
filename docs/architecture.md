@@ -5,14 +5,38 @@ it mentions is defined once in a component doc (linked) and its rationale is in 
 Where this page and a component doc disagree, the component doc wins ([ARCH-POS-01](decisions.md#ARCH-POS-01)).
 For the product introduction, the doc map and reading order see [README.md](README.md).
 
-**Contents:** [Positioning](#positioning) · [Authority model](#authority-model) · [What SCaaS is not](#what-scaas-is-not) ·
-[Profiles](#profiles) · [Service model](#service-model) · [Components](#components) ·
-[Contract layer](#contract-layer) ([EVM token tree](#evm-token-tree) · [Meta-transactions](#meta-transactions) ·
-[Accounts and keys](#accounts-and-keys) · [Confidential balances](#confidential-balances) · [Trading](#trading) ·
-[Non-EVM families](#non-evm-families)) · [Node layer](#node-layer) ([Node roles](#node-roles) ·
-[Topology](#topology)) · [Data flows](#data-flows) · [Trust model](#trust-model)
-([Authority after deployment](#authority-after-deployment)) · [Families](#families) · [Economics](#economics) ·
-[Data protection](#data-protection) · [Glossary](#glossary)
+**Contents**
+
+1. [Positioning](#positioning)
+   - [Authority model](#authority-model)
+   - [What SCaaS is not](#what-scaas-is-not)
+   - [Profiles](#profiles)
+2. [Service model](#service-model)
+3. [Components](#components)
+4. [Contract layer](#contract-layer)
+   - [EVM token tree](#evm-token-tree)
+   - [Meta-transactions](#meta-transactions)
+   - [Accounts and keys](#accounts-and-keys)
+   - [Confidential balances](#confidential-balances)
+   - [Trading](#trading)
+   - [Non-EVM families](#non-evm-families)
+5. [Node layer](#node-layer)
+   - [Node roles](#node-roles)
+   - [Topology](#topology)
+6. [Data flows](#data-flows)
+   - [Client payment](#client-payment)
+   - [Gasless transfer through door A](#gasless-transfer-through-door-a)
+   - [DEX order to settlement (target, P2)](#dex-order-to-settlement-target-p2)
+   - [Universal Account registration submitted by a relayer (SPECIFIED)](#universal-account-registration-submitted-by-a-relayer-specified)
+   - [Confidential: wrap-shield, multi-recipient transfer, unshield-unwrap (target, P3)](#confidential-wrap-shield-multi-recipient-transfer-unshield-unwrap-target-p3)
+   - [Disclosure by `SENDER_CP`](#disclosure-by-sender_cp)
+   - [Mesh (SPECIFIED transports)](#mesh-specified-transports)
+7. [Trust model](#trust-model)
+   - [Authority after deployment](#authority-after-deployment)
+8. [Families](#families)
+9. [Economics](#economics)
+10. [Data protection](#data-protection)
+11. [Glossary](#glossary)
 
 ## Positioning
 
@@ -572,7 +596,9 @@ moves each chain to the push model, and the pull path is removed in one step aft
 Each flow is a caption plus a sequence diagram; the participants are named as in the component docs. Diagrams show
 the target; the caption says what is built.
 
-**1 · Client payment.** The subject signs on its device, the client's outbox pushes the intent to its own node, and
+### Client payment
+
+The subject signs on its device, the client's outbox pushes the intent to its own node, and
 the client books the payment only from the finalized feed ([INT-ERP-18](integration.md#INT-ERP-18),
 [NODE-GEN-08](node/README.md#NODE-GEN-08)); built: the `pay` op of the v1/v2 lines.
 
@@ -598,7 +624,9 @@ sequenceDiagram
     ERP->>ERP: book the payment
 ```
 
-**2 · Gasless transfer through door A.** Anyone posts a signed intent to the public gateway, which simulates before
+### Gasless transfer through door A
+
+Anyone posts a signed intent to the public gateway, which simulates before
 it queues ([NODE-GW-01](node/gateway.md#NODE-GW-01), [node/gateway.md](node/gateway.md)); built for EVM with the
 built digest name `metaTxDigest`.
 
@@ -624,7 +652,9 @@ sequenceDiagram
     GW-->>W: job state
 ```
 
-**3 · DEX order to settlement** (target, P2). Role-free `TradeOrder`s rest in the node's book and settle in one call
+### DEX order to settlement (target, P2)
+
+Role-free `TradeOrder`s rest in the node's book and settle in one call
 that pays every party ([CTR-DEX-15](contracts/dex.md#CTR-DEX-15), [node/dex-venue.md](node/dex-venue.md)); built:
 DEX-signed orders over allowances, `OrderBookDex.settle`, `OrderFilled` / `Matched`.
 
@@ -656,7 +686,9 @@ On non-EVM families settlement is bound to the relayer, and the venue re-checks 
 ([DEX per family](networks/README.md#dex-per-family)). Orders the book cannot match may instead be exchanged against
 AMM pools with `mtxExchange` ([CTR-DEX-20](contracts/dex.md#CTR-DEX-20)).
 
-**4 · Universal Account registration submitted by a relayer** (SPECIFIED). The proof of possession binds the chain,
+### Universal Account registration submitted by a relayer (SPECIFIED)
+
+The proof of possession binds the chain,
 the registry, the id and `authRef` but not the caller, so the gateway can pay for it
 ([CTR-UA-07](contracts/accounts.md#CTR-UA-07), [NODE-GW-03](node/gateway.md#NODE-GW-03)).
 
@@ -681,7 +713,9 @@ sequenceDiagram
     APP->>REG: isRegistered(ua)
 ```
 
-**5 · Confidential: wrap-shield, multi-recipient transfer, unshield-unwrap** (target, P3). Value enters the
+### Confidential: wrap-shield, multi-recipient transfer, unshield-unwrap (target, P3)
+
+Value enters the
 shielded balance straight from an underlying leg and leaves straight to one
 ([CTR-ZTH-45](contracts/zether.md#CTR-ZTH-45), [CTR-ZTH-37](contracts/zether.md#CTR-ZTH-37)); built on development
 chains only: `ZetherToken` with its own underlying, the `OP_ZTRANSFER` envelope op emitting
@@ -711,7 +745,9 @@ sequenceDiagram
     TOK-->>RCV: pay leg u, nothing minted
 ```
 
-**6 · Disclosure by `SENDER_CP`.** The sender proves one leg's amount without handing over `s`; the checker verifies
+### Disclosure by `SENDER_CP`
+
+The sender proves one leg's amount without handing over `s`; the checker verifies
 off chain or through the stateless `ZetherDisclosure`, and no attestation is written
 ([CTR-ZTH-40](contracts/zether.md#CTR-ZTH-40), [CTR-ZTH-43](contracts/zether.md#CTR-ZTH-43),
 [CTR-ZTH-39](contracts/zether.md#CTR-ZTH-39)).
@@ -738,7 +774,9 @@ sequenceDiagram
     CHK->>CHK: record the result in its own books
 ```
 
-**Mesh** (SPECIFIED transports). The origin wraps a bus-eligible intent in `scaas-intent/1.2`, signs `hub.sig`,
+### Mesh (SPECIFIED transports)
+
+The origin wraps a bus-eligible intent in `scaas-intent/1.2`, signs `hub.sig`,
 optionally assigns `exclusive` → peers pull (bus) or receive (gossip) → acceptance levels L0–L3 → store → scheduler →
 a job in the `~mesh` namespace → submit. Landed hints trigger consumption reads ([node/mesh.md](node/mesh.md)).
 
