@@ -3,7 +3,20 @@
 Common rules for every family: [networks/README](README.md). Status: contracts, adapter and client verifier
 **BUILT**; the items marked SPECIFIED below are normative and not yet in code.
 
-## Overview
+**Contents**
+
+1. [Overview](#1-overview)
+2. [Payload](#payload)
+3. [Signatures](#3-signatures)
+4. [Relayer](#4-relayer)
+5. [Finality and events](#5-finality-and-events)
+6. [Mandate and DEX](#6-mandate-and-dex)
+7. [HTS tokens](#7-hts-tokens)
+8. [Wrappers](#wrappers)
+9. [Conformance](#conformance)
+10. [Limitations](#10-limitations)
+
+## 1. Overview
 
 <a id="overview"></a><a id="NET-HED-04"></a>**NET-HED-04** — **Hedera is the EVM family on the Hedera Smart Contract
 Service: the same Solidity contracts behind a Hedera JSON-RPC relay, plus HIP-632 for ED25519 accounts; the
@@ -25,7 +38,7 @@ someone else pays) is **not** used: it orders operations by the subject's accoun
 | Relayer | EVM adapter pointed at the JSON-RPC relay, run under `lane_runner`; fee `eth_gasPrice × 1.2`, priority 0 | `scaas-node/src/adapters/hedera.rs` |
 | Client | long-zero payer `0.0.N` ⇒ native ED25519 path ([client families](../integration.md#families)) | — |
 
-## Payload
+## <a id="payload"></a>2. Payload
 
 <a id="payload"></a>
 
@@ -56,7 +69,7 @@ Cross-network replay: `chainId` in the domain (Hedera mainnet 295 differs from e
 client, Solidity (`metaTxDigest`) and Rust (`metatx::digest`) compute the same value against the shared vectors
 `smartcontracts/evm/test/vectors/hedera_kat.json`.
 
-## Signatures
+## 3. Signatures
 
 <a id="signatures"></a>
 
@@ -138,7 +151,7 @@ ECDSA-alias account. A `MandateWallet` owned by an ED25519 account pays through 
 Passkeys on Hedera go through ERC-1271 smart accounts with OpenZeppelin P-256 (Solidity verifier when the `0x100`
 precompile is absent; `has_p256_precompile` is probed per chain).
 
-## Relayer
+## 4. Relayer
 
 <a id="relayer"></a>
 
@@ -223,7 +236,7 @@ fields from the payload ([NODE-LANE-16](../node/submit-lanes.md#NODE-LANE-16)), 
 ([NODE-LANE-20](../node/submit-lanes.md#NODE-LANE-20)); the lane-deposit and immutable-program rules do not apply
 (no lane-paid rent; factory implementations are already immutable).
 
-## Finality and events
+## 5. Finality and events
 
 <a id="finality"></a>
 
@@ -237,7 +250,7 @@ without alias in long-zero form; tokens and ECDSA accounts at their real EVM add
 allows 1 000 blocks per call, equal to the indexer's step cap. The token list is the node store's per-namespace set
 (no `params.tokens`; the legacy pull path read it from `node_config`); an empty list never advances the cursor ([NET-ALL-06](README.md#NET-ALL-06)).
 
-## Mandate and DEX
+## 6. Mandate and DEX
 
 <a id="mandate"></a><a id="NET-HED-03"></a>**NET-HED-03** — **An ED25519 owner pays from its `MandateWallet` only
 through `mtxExecuteAsOwnerRaw`.** `MandateWallet` is used unchanged with the platform's secp256k1 custody key as
@@ -262,7 +275,7 @@ signers are not contracts, so they can never call `approve` on a SCaaS token
 ([CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)); they wrap a SCaaS underlying by signature
 ([CLI-SGN-36](../clients/signers-clientkeys.md#CLI-SGN-36)).
 
-## HTS tokens
+## 7. HTS tokens
 
 <a id="hts"></a>
 
@@ -280,7 +293,7 @@ the wrapper's balance but is a value risk. None is refused on chain (Hedera USDC
 wallets read `getTokenKey(u, k)` for each of ADMIN, KYC, FREEZE, WIPE, SUPPLY, FEE_SCHEDULE, PAUSE and show the
 warning, which also goes into the wrapper's risk disclosure. SPECIFIED.
 
-## Wrappers
+## <a id="wrappers"></a>8. Wrappers
 
 <a id="wrappers"></a>
 
@@ -325,7 +338,7 @@ estimate), but Hedera charges ≥ 80 % of the gas limit at a fixed price, so a c
 than a plain one; to be measured when a Zether deployment exists. ED25519 accounts sign only the meta-tx envelope, so
 the proof is independent of the signing key.
 
-## Conformance
+## <a id="conformance"></a>9. Conformance
 
 <a id="conformance"></a>
 
@@ -361,7 +374,7 @@ the proof is independent of the signing key.
   account with an alias is the alias, not the long-zero form; confirm the relay returns Hedera codes (`WRONG_NONCE`…)
   in `revertReason` / precheck errors as the adapter reads them.
 
-## Limitations
+## 10. Limitations
 
 <a id="limitations"></a>
 

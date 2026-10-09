@@ -7,7 +7,24 @@ lane keys, journal and nonce plan, simulation, breakers and cost metering, consu
 runner, generic lane runner, simulation, breakers (in memory), consumption checks **BUILT**; store-backed journal,
 `outer_tx`, metering of failures, grief score, batching **SPECIFIED**.
 
-## Adapters
+**Contents**
+
+1. [Adapters](#1-adapters)
+2. [Signer](#2-signer)
+3. [Lane keys](#lane-keys)
+4. [Journal](#journal)
+5. [Nonce plan](#nonce-plan)
+   - 5.1 [EVM runner](#evm-runner)
+6. [Simulation](#simulation)
+7. [Breakers](#7-breakers)
+8. [Cost metering](#8-cost-metering)
+9. [Consumption check](#consumption-check)
+   - 9.1 [Shared submit path](#91-shared-submit-path)
+10. [Normalization](#10-normalization)
+11. [Batching](#batching)
+12. [Unwrap jobs](#unwrap-jobs)
+
+## 1. Adapters
 
 <a id="adapters"></a><a id="NODE-LANE-06"></a>**NODE-LANE-06** — Every family implements one `ChainAdapter` trait and
 is driven by a per-lane runner. EVM keeps its own pipelined runner ([EVM runner](#evm-runner)); every other family
@@ -64,7 +81,7 @@ Code changes when lanes run from the store (current behaviour after the job seam
 | Start / `recover_lane` from the client's in-flight list + `journal_max_nonce` | `store.inflight(chain, lane)` = `leased` job rows plus `signed/broadcast` **`outer_tx` rows** ([NODE-LANE-12](#NODE-LANE-12)); `plan()` tracks/replaces per outer tx, `Inflight.job_id` becomes the outer tx key, a `Work` carries its items; state mapped `leased → "nonce_leased"` at this boundary (`nonce.rs` matches the literal); `journal_max = lane.journal_max`. Transitional: union with the legacy in-flight list; **start refuses** when the legacy journal is unreachable and the chain has ever been `pull` |
 | Gateway: unjournaled `Work`, digest `None`, in-memory `mpsc` | the gateway INSERTs a job in `~gateway` (origin key = `intent_id`, node-computed digest) and fires the chain's `Notify` ([gateway.md](gateway.md)). **Safety gain**: door A becomes journaled and G2-guarded |
 
-## Signer
+## 2. Signer
 
 <a id="signer"></a><a id="NODE-LANE-03"></a>**NODE-LANE-03** — **Outer-transaction keys sit behind the `Signer`
 trait; custody is pluggable and chosen at deployment.** The built `LocalSigner` reads env/file/keystore keys; a custody
@@ -87,7 +104,7 @@ pub trait Signer: Send + Sync {
 `LocalSigner`: secp256k1 via alloy's k256 (deterministic RFC 6979 nonces, constant-time), ed25519 via
 `ed25519-dalek`. The trait in short: `curve()`, `public_key()`, `sign(msg)`.
 
-## Lane keys
+## <a id="lane-keys"></a>3. Lane keys
 
 <a id="lane-keys"></a><a id="NODE-LANE-08"></a>**NODE-LANE-08** — **Lane keys are a raw key or a 24-word mnemonic.**
 
@@ -149,7 +166,7 @@ cross-chain oracle.)
 families `nonce_at(latest) > journal_max + 1 + tracked` ⇒ the lane refuses to lease, `/readyz` reason, metric
 `scaas_lane_foreign_nonce_total`.
 
-## Journal
+## <a id="journal"></a>4. Journal
 
 <a id="journal"></a>The journal is the job row plus its `outer_tx` row. `leased → signed` is the journal write and
 happens **before** the transaction is sent (NODE-GEN-02): CAS `WHERE uid=? AND (state='leased' OR (state='signed' AND
@@ -190,7 +207,7 @@ the work keeps its signed `(raw, hash, n)`; the retry re-reports those values be
 consume `n`, broadcast; `n` is given to no other job while the retry is pending. Transitional (BUILT) pull path only;
 removed with the pull adapter ([NODE-JOB-10](job-api.md#NODE-JOB-10)).
 
-## Nonce plan
+## <a id="nonce-plan"></a>5. Nonce plan
 
 <a id="nonce-plan"></a><a id="NODE-LANE-04"></a>**NODE-LANE-04** — **An outer nonce is never abandoned.** Fees rise to
 the cap; a job that must be dropped (its meta-tx expired) is replaced by a 0-value self-send at that nonce
@@ -220,7 +237,7 @@ later transaction of the lane, and a journal without gap filling leaves a perman
 - After a restore the chain may be ahead of the journal; `lane accept-nonce` adopts those nonces
   ([NODE-RUN-03](runbooks.md#NODE-RUN-03)).
 
-### EVM runner
+### <a id="evm-runner"></a>5.1 EVM runner
 
 <a id="evm-runner"></a>One task per chain **owns** the outer nonce of each lane (one process ⇒ the next nonce is an
 in-memory value). Loop every `poll_ms`:
@@ -250,7 +267,7 @@ chain entry (`[[chains]] max_inflight` in node.toml, column `chain.max_inflight`
 is not a design constant — an operator raises it where the chain's nodes accept deeper per-sender pools and lowers it
 where they accept fewer. As built the runner does not cap it (PLANNED).
 
-## Simulation
+## <a id="simulation"></a>6. Simulation
 
 <a id="simulation"></a><a id="NODE-LANE-23"></a>**NODE-LANE-23** — **Simulation before signing is mandatory**, on the
 node's own RPC endpoints (no third-party simulation service). EVM: `eth_estimateGas` from the lane address at
@@ -275,7 +292,7 @@ Unwrap jobs ([unwrap jobs](#unwrap-jobs)) simulate the full outer transaction an
 signing. A subject that crossed the grief threshold gets a re-simulation right before signing too
 ([NODE-LANE-15](#NODE-LANE-15)).
 
-## Breakers
+## 7. Breakers
 
 <a id="breaker"></a><a id="NODE-LANE-05"></a>**NODE-LANE-05** — **Circuit breakers never block indexing.** Per lane
 and chain, in memory (latched ones in `breaker_latch`), sampled every 15 s; an open breaker stops **new** work only —
@@ -307,7 +324,7 @@ reporting currency (per agent and per enterprise, per hour) are an owner require
 budgets are in the family's smallest native unit ([NODE-SPN-02](sponsorship.md#NODE-SPN-02)) and the node holds no
 prices. The seam is the `gas_budget` breaker plus the FinOps price file ([ops.md#finops](ops.md#finops)).
 
-## Cost metering
+## 8. Cost metering
 
 <a id="cost-metering"></a><a id="NODE-LANE-13"></a>**NODE-LANE-13** — **The gas breaker meters what the lane pays, not
 what succeeds.** Every included outer tx of ours (mined, reverted, or failed and billed) feeds `Breaker::spend` with
@@ -368,7 +385,7 @@ receiving wallet controls, or (c) it is ≤ `chain.max_deposit_per_job` and mete
 Each family doc lists its deposits and their class. First payments to a new, unconfigured recipient on Solana need an
 existing ATA.
 
-## Consumption check
+## <a id="consumption-check"></a>9. Consumption check
 
 <a id="consumption-check"></a><a id="NODE-LANE-09"></a>**NODE-LANE-09** — **Consumption is checked before every bump
 and every resend, and after every reverted receipt/status.** If the subject nonce moved past the intent's nonce, never
@@ -394,7 +411,7 @@ the gateway as `mtxExecute` (the alias `executeMetaTransaction` stays, [contract
 Transitional (BUILT): deployed tokens and the code paths above use `metaNonce`, `metaTxDigest` and
 `executeMetaTransaction`; the adapter switches by implementation when the renamed tokens are deployed.
 
-### Shared submit path
+### 9.1 Shared submit path
 
 <a id="shared-submit"></a>Every origin (job API, gateway, mesh, DEX) uses one submit path:
 
@@ -483,7 +500,7 @@ Generic lane runner (non-EVM, and Hedera):
   terminal or `valid_until + EXPIRY_GRACE`. RPC error ⇒ no resend this round.
 - `Built`/`Signed` carry `origin: Origin` instead of `job_id: i64`; reports go to the outcome sink.
 
-## Normalization
+## 10. Normalization
 
 <a id="normalization"></a><a id="NODE-LANE-10"></a>**NODE-LANE-10** — **The submitter normalizes the fields the
 canonical digest zeroes, for every origin.** Before building any meta-tx — `feeRecipient := chains.fee_recipient or 0` when `mode & MODE_RESTRICT_FEE_RECIPIENT == 0`,
@@ -497,7 +514,7 @@ is built from a request or an envelope** (job API accept, gateway `post_metatx`,
 work through `lane_runner` → the Hedera adapter's `build` gets it too. A job-API job built by an ERP with fee 0 and
 recipient 0 is unchanged in effect.
 
-## Batching
+## <a id="batching"></a>11. Batching
 
 <a id="batching"></a><a id="batches"></a><a id="NODE-LANE-11"></a>**NODE-LANE-11** (PLANNED) — **A batch is several
 jobs journaled together.** `mtxBatchTransfer` groups `metatx` jobs with `struct = transfer`, and `mtxBatch` jobs with
@@ -512,7 +529,7 @@ and resubmitted without the failing item (`dead` with its decoded reason; the it
 (their cap is per tx, [NODE-SPN-02](sponsorship.md#NODE-SPN-02)), PQZ envelopes. Flush: 50 items or 3 s. One journal
 transaction per outer tx keeps journal-before-broadcast and `plan()` unchanged; batched jobs wait ≤ 3 s.
 
-## Unwrap jobs
+## <a id="unwrap-jobs"></a>12. Unwrap jobs
 
 <a id="unwrap-jobs"></a><a id="NODE-LANE-22"></a>**NODE-LANE-22** — **The node simulates unwrap jobs in full and never
 batches them.** For gasless unwrap ops ([CTR-MTX-12](../contracts/metatx.md#CTR-MTX-12)):

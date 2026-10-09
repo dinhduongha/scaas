@@ -25,7 +25,21 @@ built code differs from the target.
 | [runbooks.md](runbooks.md) | RACI, incident runbooks, backup/restore/DR, cutover, production gates |
 | [threat-model.md](threat-model.md) | node, mesh and gossip threats and their controls |
 
-## Scope
+**Contents**
+
+1. [Scope](#1-scope)
+2. [Roles](#roles)
+   - 2.1 [Modules and shapes](#21-modules-and-shapes)
+3. [Listeners](#listeners)
+4. [Invariants](#invariants)
+   - 4.1 [Guarantees](#guarantees)
+   - 4.2 [Where each safety property lives](#42-where-each-safety-property-lives)
+5. [Module map](#module-map)
+6. [Limitations](#limitations)
+7. [Tests](#7-tests)
+8. [Code pointers](#8-code-pointers)
+
+## 1. Scope
 
 <a id="scope"></a>The node is **independent of any client system** ([ARCH-POS-05](../decisions.md#ARCH-POS-05)): it
 keeps every durable fact it relies on in its own store, exposes a job API and an event feed, and never opens a
@@ -66,7 +80,7 @@ Non-goals:
 | Re-importing in-flight jobs of a client's legacy journal into the store | [NODE-JOB-10](job-api.md#NODE-JOB-10): legacy in-flight jobs drain on the legacy path. |
 | Client-side copies of node metrics | Prometheus on the node ([ops.md#metrics](ops.md#metrics)). |
 
-## Roles
+## <a id="roles"></a>2. Roles
 
 <a id="roles"></a>One binary; modules are switched on in configuration. Every role works without any client system.
 
@@ -80,7 +94,7 @@ Non-goals:
 | **mesh** | Envelope `scaas-intent/1.2`, acceptance policy, store, exclusivity, pull bus, gossip, hints, announces, DEX book replication | `[mesh] bind` (HTTPS mTLS), `[gossip] listen` (QUIC/TCP) | Envelope/digest/accept/hubsig/export library **BUILT** (43 conformance cases); transports and pipeline **SPECIFIED** ([mesh.md](mesh.md), [gossip.md](gossip.md)) |
 | **admin** | `/healthz`, `/readyz`, `/metrics` (open); `/v1/admin/*` (roles) | `[modules] admin_bind` (default `127.0.0.1:9108`) | health/metrics **BUILT**; admin API **SPECIFIED** ([admin-auth.md](admin-auth.md)) |
 
-### Modules and shapes
+### 2.1 Modules and shapes
 
 <a id="modules-and-shapes"></a><a id="NODE-MESH-20"></a>**NODE-MESH-20** — The node is a capability matrix, not a
 set of modes: a **module** is switched on in `[modules]`; a **shape** is a set of modules. Supported shapes:
@@ -99,7 +113,7 @@ no promote-to-open of pooled intents and no forward score in v1 ([mesh.md#limita
 daemon tier is a single Rust application. Custody broker and key oracle are **not** roles of this binary: they sit
 behind the signer seam ([NODE-LANE-03](submit-lanes.md#NODE-LANE-03)) as separate processes when used.
 
-## Listeners
+## <a id="listeners"></a>3. Listeners
 
 <a id="listeners"></a>
 
@@ -170,7 +184,7 @@ is imported into the store):
 | `[log] format = "text" \| "json"` | JSON lines in production; fields and redaction in [ops.md#logs](ops.md#logs) |
 | `[[sponsorship.policies]]` | bootstrap rows of `sponsor_policy` (import if absent) |
 
-## Invariants
+## <a id="invariants"></a>4. Invariants
 
 <a id="invariants"></a>Normative for every path into and out of the node.
 
@@ -193,7 +207,7 @@ is imported into the store):
 | <a id="NODE-GEN-15"></a>**NODE-GEN-15** | Adapter state needed across restarts lives in the store. | `outer_tx` signed bytes, object refs, durable-nonce value; no local journal ([NODE-LANE-19](submit-lanes.md#NODE-LANE-19)) | **SPECIFIED** |
 | <a id="NODE-GEN-16"></a>**NODE-GEN-16** | The node serves no upgradeable program and holds each custody key in one family. | Upgradeability read at activation and start ⇒ `halted`, `PROGRAM_UPGRADEABLE` ([NODE-STO-07](store.md#NODE-STO-07)); `Config::validate` refuses one public key in two families ([NODE-LANE-20](submit-lanes.md#NODE-LANE-20)) | **SPECIFIED** |
 
-### Guarantees
+### <a id="guarantees"></a>4.1 Guarantees
 
 Hard (enforced by code or chain):
 
@@ -217,7 +231,7 @@ peers may submit and each loser pays one reverted outer tx (≈ 24–30 k gas on
 the signature); a node learns of a peer's landing from a hint or its own read ([gossip.md#hints](gossip.md#hints)).
 "Never double broadcast" therefore holds per node (G2, G3), and holds network-wide only as best effort.
 
-### Where each safety property lives
+### 4.2 Where each safety property lives
 
 | Property | Mechanism |
 |---|---|
@@ -233,7 +247,7 @@ the signature); a node learns of a peer's landing from a hint or its own read ([
 | Denylist | intake on every door and again at lease; a job requeued from `signed` is re-checked ([NODE-OPS-14](ops.md#NODE-OPS-14)). |
 | Restore | `store restored` pauses every chain; `lane accept-nonce` adopts chain-ahead nonces without lowering `journal_max` ([runbooks.md#backup-dr](runbooks.md#backup-dr)). |
 
-## Module map
+## <a id="module-map"></a>5. Module map
 
 <a id="module-map"></a><a id="NODE-GEN-18"></a>**NODE-GEN-18** — Code layout follows these docs: `docs/node/<x>.md`
 maps to a module. The first steps are pure module moves inside the one crate and the job seam (`trait JobSource`,
@@ -254,7 +268,7 @@ job path runs from the store. No step mixes a move with a behaviour change; test
 | [sponsorship.md](sponsorship.md) | `sponsor.rs` |
 | [ops.md](ops.md) | `ops/` (metrics, usage) |
 
-## Limitations
+## <a id="limitations"></a>6. Limitations
 
 <a id="limitations"></a>PLANNED or deferred:
 
@@ -264,7 +278,7 @@ job path runs from the store. No step mixes a move with a behaviour change; test
 - Admin-API management of RPC URLs with a dial allowlist.
 - Audit retention and export; per-key IP allowlists; signed feed pages (only with a second verifier).
 
-## Tests
+## 7. Tests
 
 <a id="tests"></a>Node-wide test plan for the store-backed node (each item lands with the change it covers; component
 docs add their own: [mesh.md#tests](mesh.md#tests), [gossip.md#tests](gossip.md#tests),
@@ -353,7 +367,7 @@ Additions for the store-backed rulings (each lands with the change it covers):
   requeued alone after `signed`); unwrap terminal reverts; token kinds 0–4 (built) and flags 5–8 ([CTR-AS-17](../contracts/asset-suite.md#CTR-AS-17)), managed-market codes,
   `merkle_dist_vectors.json`.
 
-## Code pointers
+## 8. Code pointers
 
 <a id="code-pointers"></a>Where the behaviour described in these docs sits in `scaas-node` today (orientation only;
 line numbers as of 2026-10-07 and will drift; the module map above is the target layout). "After" = the change from the

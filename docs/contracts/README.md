@@ -21,7 +21,17 @@ the rules every one of them shares. Status tags (**BUILT**, **SPECIFIED**, **PLA
 The node that relays these contracts is specified in [docs/node/](../node/README.md); the per-family programs
 (Hedera, Cosmos, Soroban, Sui, Aptos, Solana, TON) in [docs/networks/](../networks/README.md).
 
-## Conventions
+**Contents**
+
+1. [Conventions](#1-conventions)
+2. [Immutable at deploy](#2-immutable-at-deploy)
+3. [Admin powers (complete list)](#admin-powers-complete-list)
+4. [Production gates (UNAUDITED)](#production-gates-unaudited)
+5. [Build, CI and pins](#build-ci-and-pins)
+6. [Issuer choices are not protocol decisions](#6-issuer-choices-are-not-protocol-decisions)
+7. [Availability](#7-availability)
+
+## 1. Conventions
 
 Built interfaces are quoted from `smartcontracts/evm/src` (Solidity 0.8.28, OpenZeppelin 5.2). Proposed interfaces
 are normative targets for future versions and keep the built conventions: custom errors, EIP-712 domains on the
@@ -70,7 +80,7 @@ replays on both branches, it is a documented residual. On Hedera `chain_uid` is 
 after the Hedera profile confirms it is stable across mirror-node and relay restarts. **Transitional (BUILT):** only
 the UA registry design carries the salt; built token, wallet, account and DEX domains have none.
 
-## Immutable at deploy
+## 2. Immutable at deploy
 
 <a id="CTR-GEN-02"></a>**CTR-GEN-02** — **Every program that holds subject value is immutable from the moment it is
 deployed.** There are no proxy upgrades anywhere (no UUPS, Transparent, Beacon or Diamond proxy). A bug fix is a new
@@ -120,7 +130,7 @@ The same rule on every family:
 Status: EVM, Hedera, TON, Soroban **BUILT**; Aptos, Sui, Solana freeze steps, Cosmos `--no-admin` and the
 deploy-script gate **SPECIFIED**.
 
-## Admin powers (complete list)
+## <a id="admin-powers-complete-list"></a>3. Admin powers (complete list)
 
 "Your key, your funds" holds for every value-holding contract except the powers listed here. Features are fixed at
 creation or deployment (disableable flags can only be cleared); roles are granted and revoked by the owner
@@ -145,7 +155,7 @@ power.
 | Aptos | `Root.admin` (the code-object owner) | `create_dex`, `list_market`, `set_market` (fee, on/off), `admin_sweep` of an asset sent by mistake to Root, the Dex or a Market (refuses every Account and Mandate) | [aptos](../networks/aptos.md#dex) |
 | Solana | `Config.admin` | `list_market`, `set_market` (fee, on/off); never a SmartKeyAccount or Mandate | [solana](../networks/solana.md#dex) |
 
-## Production gates (UNAUDITED)
+## <a id="production-gates-unaudited"></a>4. Production gates (UNAUDITED)
 
 <a id="unaudited"></a>
 
@@ -165,7 +175,7 @@ families carry stronger gates, enforced in code:
 | PQ Zether gate | hard-coded allowlist (31337, 1337 and the private chain 7622) **and** a constructor precompile self-test; `OpenFactory.pqzEnabled = false` by default; release gates: **G-LIC** (licences/patents) and audit ([CTR-PQZ-01](pq-zether.md#CTR-PQZ-01)) | **SPECIFIED** |
 | Clients | every Zether and PQ Zether contract carries **UNAUDITED — NOT FOR PRODUCTION FUNDS** in its NatSpec; client chain/token screens show an UNAUDITED warning | **BUILT** (NatSpec) |
 
-## Build, CI and pins
+## <a id="build-ci-and-pins"></a>5. Build, CI and pins
 
 <a id="build-pins"></a>
 
@@ -223,7 +233,7 @@ smartcontracts/
 
 Shared cross-implementation vectors live in `evm/test/vectors/` (contracts, node, clients) and per family.
 
-## Issuer choices are not protocol decisions
+## 6. Issuer choices are not protocol decisions
 
 <a id="CTR-GEN-04"></a>**CTR-GEN-04** — SCaaS deploys a protocol (an open factory), not tokens. Choices that belong to
 whoever creates a token are not made by the protocol: the curve of a confidential token (chosen by its security
@@ -232,7 +242,7 @@ confidential, which chain and archetype a loyalty programme uses, whether a conf
 (optional per token), and any compliance profile (a property of the client system that chooses which tokens it
 interacts with, not of the contract). The protocol provides the switches; the creator sets them and carries them.
 
-## Availability
+## 7. Availability
 
 Per-family availability of every contract area is one matrix in
 [networks/README.md](../networks/README.md#availability) ([NET-ALL-17](../networks/README.md#NET-ALL-17),

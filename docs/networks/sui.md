@@ -4,7 +4,24 @@ Common rules for every family: [networks/README](README.md). Status: Move packag
 **BUILT** (Move at `smartcontracts/move/sui/`, package `scaas`, edition 2024, Sui 1.81; adapter
 `scaas-node/src/adapters/sui.rs`); items marked SPECIFIED are normative and not yet in code.
 
-## Overview
+**Contents**
+
+1. [Overview](#1-overview)
+2. [Objects](#objects)
+3. [Payload](#3-payload)
+4. [Signatures](#4-signatures)
+5. [Keys](#5-keys)
+6. [Lanes](#6-lanes)
+7. [Mandate](#7-mandate)
+8. [DEX](#8-dex)
+9. [Relayer](#9-relayer)
+10. [Finality and events](#10-finality-and-events)
+11. [Deploy](#11-deploy)
+12. [Client key verification](#12-client-key-verification)
+13. [Conformance](#13-conformance)
+14. [Limitations](#limitations)
+
+## 1. Overview
 
 <a id="overview"></a><a id="NET-SUI-01"></a>**NET-SUI-01** — **Sui = a shared `Account<T>` per subject holding the
 balance, signed through `signPersonalMessage`; DEX settlement is two signed legs.** The subject's balance sits in a
@@ -18,7 +35,7 @@ string set in the root config plus `object::id(account)`. A relayer lane sends a
 the subject sends itself (deposits, creating a mandate) — a seam, never as the gas mechanism of a meta operation. Keys
 move to a per-subject `Keys` object ([NET-SUI-02](#NET-SUI-02)).
 
-## Objects
+## <a id="objects"></a>2. Objects
 
 <a id="objects"></a>
 
@@ -52,7 +69,7 @@ Funds **leave** an account always as `Coin<T>` transferred straight to the recei
 (`transfer::public_transfer`), usable at once by an ordinary Sui wallet. `deposit<T>(account, coin)`: anyone can fund.
 Withdrawal: the owner signs `pay` with `to` = itself.
 
-## Payload
+## 3. Payload
 
 <a id="payload"></a>
 
@@ -98,7 +115,7 @@ public struct MetaOp has copy, drop {
   contracts, networks or op kinds. Expiry: `clock.timestamp_ms() / 1000 <= valid_until`. Replay: `lanes[lane] == nonce`
   then increment (pay); `pay_ref` once (mandate).
 
-## Signatures
+## 4. Signatures
 
 <a id="signatures"></a>
 
@@ -159,7 +176,7 @@ So `open_passkey(registry, pk33, auth)` requires an assertion over the challenge
 `blake2b256("scaas.open.v1" ‖ registry_id ‖ pk33)`; `rp_id_hash` = the first 32 bytes of `authenticatorData`, and the
 `origin` is read from **that assertion's** `client_data_json`. BUILT.
 
-## Keys
+## 5. Keys
 
 <a id="keys"></a>
 
@@ -195,7 +212,7 @@ sent to the account id (e.g. a `Coin<U>` of another type) to the leaked key's ad
 (`mandate.move:118-120`) is not affected: a mandate's owner is the native address that created it. SPECIFIED. Move
 tests: remove the first key ⇒ `forward` aborts; `forward_signed` with a current key ⇒ sent to the right `to`.
 
-## Lanes
+## 6. Lanes
 
 <a id="lanes"></a><a id="NET-SUI-12"></a>**NET-SUI-12** — **The Sui lane table is pruned under an on-chain horizon,
 and the storage rebate returns to the lane.** The lane table stores `{nonce, valid_until}` (the highest executed);
@@ -208,7 +225,7 @@ signs one op per lane; [NET-ALL-01](README.md#NET-ALL-01)). Why: as built there 
 pays and never recovers. SPECIFIED. Move tests: prune before the horizon aborts; after it deletes and rebates;
 `valid_until` beyond the horizon is refused.
 
-## Mandate
+## 7. Mandate
 
 <a id="mandate"></a>
 
@@ -221,7 +238,7 @@ payee, per-payment and per-period caps (reset when the period ends), `pay_ref` o
 `PaymentSettled{contract: registry,…}` + `PaidUnderMandate`. `revoke_with_sig`: the delegate signs
 `MetaOp{op: revoke}` (the platform's kill switch, as `revokeWithSig`).
 
-## DEX
+## 8. DEX
 
 <a id="dex"></a>
 
@@ -254,7 +271,7 @@ side) because balances are per coin type; (4) IOC closes its remainder inside it
 **one** maker per transaction ([NODE-DEX-09](../node/dex-venue.md#NODE-DEX-09)); the Sui matcher groups IOC into one pair.
 BUILT.
 
-## Relayer
+## 9. Relayer
 
 <a id="relayer"></a>
 
@@ -320,7 +337,7 @@ transaction aborts `EBadNonce` after dry-run ⇒ counted in `subject_grief` and 
 `build`). SPECIFIED (as built `mesh/digest.rs:245-255` checks no signature). Signed fields come from the payload
 (`work()` already decodes it).
 
-## Finality and events
+## 10. Finality and events
 
 <a id="events"></a>
 
@@ -337,7 +354,7 @@ transaction of the range must be present with its events, else the range is not 
 addresses `0x` + 64 hex. Every transaction of a checkpoint is scanned (`ponytail:` a ceiling — move to gRPC/GraphQL
 filtered by package under load). BUILT; event-set agreement across the quorum per checkpoint range SPECIFIED.
 
-## Deploy
+## 11. Deploy
 
 <a id="deploy"></a><a id="NET-SUI-15"></a>**NET-SUI-15** — **The Sui package is immutable from deploy.** The deploy
 script (`smartcontracts/move/sui/scripts/`, not yet written) publishes and calls
@@ -349,7 +366,7 @@ new `Root`/`Registry<T>`/`Account<T>` ids, and owners move funds by signing `pay
 running) to the new one; the deployment's vectors are regenerated. Owner ruling 2026-10-07; application of
 [CTR-GEN-02](../contracts/README.md#CTR-GEN-02). SPECIFIED (as built the publisher keeps the `UpgradeCap`).
 
-## Client key verification
+## 12. Client key verification
 
 <a id="key-verification"></a>
 
@@ -404,7 +421,7 @@ Reach: in a portal without chain reads, a non-EVM signer pays with the **owner k
 reverse index from key to account); added keys pay through the app (find-my-account), or through the portal once the
 vault stores `{family, account, owner, key_index}` next to the phrase (optional).
 
-## Conformance
+## 13. Conformance
 
 <a id="conformance"></a>
 
@@ -421,7 +438,7 @@ vault stores `{family, account, owner, key_index}` next to the phrase (optional)
   only page-controlled value is the challenge (base64url, no `"`), every other string is escaped (`\"`); connectors
   refuse malformed hex (`fromHex`).
 
-## Limitations
+## <a id="limitations"></a>14. Limitations
 
 <a id="limitations"></a>
 

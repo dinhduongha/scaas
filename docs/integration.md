@@ -16,7 +16,27 @@ integrations target the push model. The public gateway `POST /v1/metatx` and `/v
 or gateway submission may reach a TON lane, and no TON chain is cut over to push. The legacy pull path is safe: it
 builds `extra = 0` and no `forward_nanoton`.
 
-## Integration model
+**Contents**
+
+1. [Integration model](#1-integration-model)
+2. [Onboarding a client](#2-onboarding-a-client)
+3. [Pushing jobs](#3-pushing-jobs)
+4. [Cancel](#4-cancel)
+5. [Outbox rules](#5-outbox-rules)
+6. [Feeds and reconciliation](#6-feeds-and-reconciliation)
+7. [Payment references](#payment-references)
+8. [Wallets and custody](#8-wallets-and-custody)
+9. [Families and addresses](#9-families-and-addresses)
+10. [Accounting](#accounting)
+11. [Procure-to-pay](#11-procure-to-pay)
+12. [Sealed-bid tender in procurement](#12-sealed-bid-tender-in-procurement)
+13. [Accounts, Universal Accounts and identity](#13-accounts-universal-accounts-and-identity)
+14. [Regulated-token compliance](#14-regulated-token-compliance)
+15. [Data protection](#data-protection)
+16. [Failure handling and reconciliation runbook](#16-failure-handling-and-reconciliation-runbook)
+17. [Integration checklist](#17-integration-checklist)
+
+## 1. Integration model
 
 <a id="model"></a>
 
@@ -59,7 +79,7 @@ Rules every client follows:
 4. **Apply feeds idempotently** and persist cursors together with the node's `store_id`, `incarnation`,
    `restore_epoch`.
 
-## Onboarding a client
+## 2. Onboarding a client
 
 <a id="onboarding"></a>
 
@@ -116,7 +136,7 @@ by a `UNIQUE(company_id, chain_id)` route table. The node has no company notion
 ([NODE-JOB-03](node/job-api.md#NODE-JOB-03)); it claims work by a CAS `queued → leased` inside its single owner
 process ([NODE-JOB-06](node/job-api.md#NODE-JOB-06)). Why: one lane journal per signer is the double-spend guard.
 
-## Pushing jobs
+## 3. Pushing jobs
 
 <a id="push"></a>
 
@@ -205,7 +225,7 @@ The `push_attempted` marker decides cancel semantics: an unmarked row can be kil
 the node and must be cancelled there. HTTP runs after the marker commits and holds no row lock except the batch's own
 rows; other writers of those rows (cancel, dependency failure) lock with `FOR UPDATE` and wait at most one batch.
 
-## Cancel
+## 4. Cancel
 
 <a id="cancel"></a><a id="INT-ERP-17"></a>**INT-ERP-17** — **The client kills a job locally only if it was never pushed;
 otherwise it cancels on the node, by uid or by origin.** `POST /v1/jobs/{uid}/cancel` or `POST /v1/jobs/cancel {origin}`
@@ -224,7 +244,7 @@ request open until final or expiry; transport error ⇒ `cancel_requested`, retr
 always invalidate its own pending intents with `cancelNonce(batch)` (EVM; a direct call, or signed through `mtxExecute`
 on another lane; as built `cancelMetaNonce(batch)`, direct only) — the authoritative cancel.
 
-## Outbox rules
+## 5. Outbox rules
 
 <a id="outbox"></a><a id="INT-ERP-05"></a>**INT-ERP-05** — **Outbox `call` jobs are immutable and operators are
 read-only.** A `call` job is a transaction a node lane signs as `msg.sender`; whoever can edit an outbox row can point it
@@ -257,7 +277,7 @@ the owners already signed, pushed as a `call` job to a registered role-holder co
 (`chain_contract.kind = role_holder`). Any other call shape needs a table row first (a node release) or is sent by the
 subject's or treasury's own wallet.
 
-## Feeds and reconciliation
+## 6. Feeds and reconciliation
 
 <a id="reconciliation"></a>
 
@@ -340,7 +360,7 @@ pending; the default stands.
 non-terminal pushed jobs return to `local`). Node admin mutations are audited separately
 ([NODE-ADM-07](node/admin-auth.md#NODE-ADM-07)).
 
-## Payment references
+## <a id="payment-references"></a>7. Payment references
 
 <a id="payment-references"></a>
 
@@ -412,7 +432,7 @@ admitted peers after a private window (`bus.private_window_secs`, default 120 s)
 leaves the relayer unbound only when the company's scope is `open`; delegated (mandate) payments are `call` jobs and stay
 `restricted`.
 
-## Wallets and custody
+## 8. Wallets and custody
 
 <a id="receiving-wallets"></a>
 
@@ -474,7 +494,7 @@ transaction is done (the accounting module posts and reconciles) or `failed`. Ki
 delegated wallets an `mtxRevoke` job (as built `revokeWithSig`); the revoke is the delegate's `MetaTransaction` with `data =
 revoke(token, epoch)` and the wallet's current `epoch[token]` ([CTR-ACC-07](contracts/mandates.md#CTR-ACC-07)).
 
-## Families and addresses
+## 9. Families and addresses
 
 <a id="addresses"></a><a id="INT-ERP-10"></a>**INT-ERP-10** — **The ERP is family-aware: chains carry a family,
 addresses are stored in the family's normalised form, and non-EVM payments are signed ops.** The ERP verifies ed25519
@@ -542,7 +562,7 @@ passkey branch of `verify_digest` also refuses `b'"crossOrigin":true'` and `b'"t
 the **owner key only**: the portal sends `signer.from` and has no chain reads, and a Sui `Account<T>` has no reverse
 index from key to account, so the signer is `{family, account, owner, key_index}` with `key_index` 0.
 
-## Accounting
+## <a id="accounting"></a>10. Accounting
 
 <a id="accounting"></a><a id="INT-ERP-09"></a>**INT-ERP-09** — **One journal per (company, token); drift A and drift C.**
 The token's journal is company-dependent: each company picks a bank journal per token, and payment transactions of the
@@ -575,7 +595,7 @@ per company. The token keeps ElGamal `acc/pending` balances with a decrypt bound
 [zether design](history/specs/2026-10-03-zether-design.md). Zether is **UNAUDITED — NOT FOR PRODUCTION FUNDS** and runs on dev chains
 ([contracts/zether](contracts/zether.md)).
 
-## Procure-to-pay
+## 11. Procure-to-pay
 
 <a id="procure-to-pay"></a>
 
@@ -642,7 +662,7 @@ Never accept raw subject-signed native transactions (Sui `txBytes`, TON BOC from
 as the integration format: they order operations by the subject's account sequence. Always use the contract-level
 payload of the family ([NET-ALL-02](networks/README.md#NET-ALL-02)).
 
-## Sealed-bid tender in procurement
+## 12. Sealed-bid tender in procurement
 
 <a id="tender"></a>
 
@@ -701,7 +721,7 @@ the bid record; or (b) derived from a high-entropy secret the bidder already bac
 the bid's own data. Either way the salt is unknown to anyone else until reveal, and in particular before
 `commitDeadline`.
 
-## Accounts, Universal Accounts and identity
+## 13. Accounts, Universal Accounts and identity
 
 <a id="accounts"></a>
 
@@ -787,7 +807,7 @@ key under a second kind (`UAKeyInUse`) and a BLS `authRef` on the same curve as 
   never legal evidence: workflows with legal recourse require the account-bound KB-JWT with `nonce` = deal reference /
   `intent_id`.
 
-## Regulated-token compliance
+## 14. Regulated-token compliance
 
 <a id="regulated-assets"></a>
 
@@ -845,7 +865,7 @@ code): the v1 `createMetaToken` rows above become `createToken` of kind `NONE` a
 `num = den = 1` (CTR-TOK-25); gasless token operations other than transfer and payment are `mtxExecute` self-calls on the token's
 allowlist; role calls such as `mint` stay `call` jobs through the role holder's contract.
 
-## Data protection
+## <a id="data-protection"></a>15. Data protection
 
 <a id="data-protection"></a>
 
@@ -942,7 +962,7 @@ amounts are public; reconciliation uses `entryRef`. Zether tokens: the receiver 
 token. The independent verifier CLI (PLANNED) gains `verify-commitment` and `verify-merkle`. Erasure of a salt makes its
 commitment computationally unlinkable (2^256 preimage space); the on-chain value becomes random data.
 
-## Failure handling and reconciliation runbook
+## 16. Failure handling and reconciliation runbook
 
 <a id="runbook"></a>
 
@@ -988,7 +1008,7 @@ commitment computationally unlinkable (2^256 preimage space); the on-chain value
 4. Re-push; idempotency returns `created: false` for jobs the restored store still knows; new jobs are created for the
    rest; consumption checks on the node prevent double execution (the subject nonce is the final guard).
 
-## Integration checklist
+## 17. Integration checklist
 
 <a id="checklist"></a>
 

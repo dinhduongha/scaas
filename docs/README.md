@@ -4,7 +4,21 @@ SCaaS: the smart contracts are the API services; `scaas-node` is the open relaye
 of them. This page is the entry point: the product introduction first, then the doc map. It is not normative; the rules
 live in the component docs, and every rule's id, aliases and rationale are in [decisions.md](decisions.md).
 
-## What SCaaS is
+**Contents**
+
+1. [What SCaaS is](#1-what-scaas-is)
+2. [Who it is for](#2-who-it-is-for)
+3. [What it offers](#3-what-it-offers)
+4. [Deployment shapes](#4-deployment-shapes)
+5. [How to start](#5-how-to-start)
+6. [Reading order](#6-reading-order)
+7. [Map](#7-map)
+8. [Precedence](#precedence)
+9. [Status tags](#status-tags)
+10. [Ids, aliases and history](#10-ids-aliases-and-history)
+11. [Checks](#11-checks)
+
+## 1. What SCaaS is
 
 **In SCaaS the smart contracts themselves are the API services.** A payment, a spending mandate, a token, a wrapper
 around an existing token, a DEX order, a sealed-bid tender, a vesting schedule, a dividend distribution or a
@@ -35,7 +49,7 @@ with the confidential layer, `NONE_ZETHER` and `UNDERLYING_ZETHER`
 `ALLOWLIST`. One owner administers a token, grants roles and may renounce
 ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). An open factory creates tokens and DEX clones.
 
-## Who it is for
+## 2. Who it is for
 
 - **Businesses that settle with partners** — brands, distributors, suppliers, marketplaces — that want payments,
   mandates and settlement on chain without giving any server the power to move funds.
@@ -49,7 +63,7 @@ with the confidential layer, `NONE_ZETHER` and `UNDERLYING_ZETHER`
   tamper-evident trail.
 - **Node operators** — from a company running its own relayer to a consortium of members or an open public relayer.
 
-## What it offers
+## 3. What it offers
 
 | Area | What you get | Read |
 |---|---|---|
@@ -72,7 +86,7 @@ with the confidential layer, `NONE_ZETHER` and `UNDERLYING_ZETHER`
 What SCaaS is **not**: a custodian, a mixer, a database replacement, an upgradeable platform, a token gatekeeper or a
 single-ERP product ([architecture.md](architecture.md#what-scaas-is-not)).
 
-## Deployment shapes
+## 4. Deployment shapes
 
 - **Public chains** — your relayer, partners' relayers and open relayers serve the same contracts; nothing is hidden
   except what Zether hides.
@@ -81,7 +95,7 @@ single-ERP product ([architecture.md](architecture.md#what-scaas-is-not)).
 
 See [architecture.md](architecture.md#profiles).
 
-## How to start
+## 5. How to start
 
 1. **Understand the model** — read [architecture.md](architecture.md): the authority model (who signs), the service
    model (write out, read in, finality), and the trust model.
@@ -103,7 +117,7 @@ See [architecture.md](architecture.md#profiles).
 5. **Build and test** — `smartcontracts/scripts/{build,test}.sh <family>`; docs check:
    `python3 scripts/docs_check.py check`.
 
-## Reading order
+## 6. Reading order
 
 0. [../README.md](../README.md) — the idea from the ground up: a smart chain as infrastructure, contracts as API
    services, meta-transactions and fee models, open relayers, Zether and PQ Zether.
@@ -115,7 +129,7 @@ See [architecture.md](architecture.md#profiles).
    [contracts/README.md](contracts/README.md). Wallet and app developers: [clients/](clients/signers-clientkeys.md).
 4. [decisions.md](decisions.md) — why each rule holds, and the old-id alias index.
 
-## Map
+## 7. Map
 
 One table per area; ids in brackets are the rule prefixes each area owns.
 
@@ -183,7 +197,7 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | [history/README.md](history/README.md) | Frozen designs, the original requirements note and its [trace](history/blockchain-trace.md), the old-id inventory (read-only) |
 | `research/` | Background and rationale only |
 
-## Precedence
+## <a id="precedence"></a>8. Precedence
 
 When two sources disagree, the higher one wins ([ARCH-POS-01](decisions.md#ARCH-POS-01)):
 
@@ -197,7 +211,7 @@ When two sources disagree, the higher one wins ([ARCH-POS-01](decisions.md#ARCH-
 
 [architecture.md](architecture.md) and this page define no rules.
 
-## Status tags
+## <a id="status-tags"></a>9. Status tags
 
 Every section of a component doc carries one tag:
 
@@ -210,7 +224,7 @@ Every section of a component doc carries one tag:
 Where something is partly built, the tag names the built part and the rest separately. Where BUILT code still differs
 from the target, a short **Transitional (BUILT)** paragraph says what runs today and what removes it.
 
-## Ids, aliases and history
+## 10. Ids, aliases and history
 
 - Each rule is defined once, at an HTML anchor carrying its id in its component doc; other docs link it
   (`node/job-api.md#NODE-JOB-04`) and never restate it. Ids are `<AREA>-<TOPIC>-<NN>`, never renumbered.
@@ -226,7 +240,7 @@ from the target, a short **Transitional (BUILT)** paragraph says what runs today
 - New design work starts as a draft under `superpowers/specs/` with provisional ids; on acceptance its rules move
   into the component docs, real ids are allocated in decisions.md, and the draft moves to `history/specs/`.
 
-## Checks
+## 11. Checks
 
 `python3 scripts/docs_check.py check` verifies the register (every old id covered, every current id defined exactly
 once), links, the absence of old ids and client-specific names in current docs, the research banners, and that diagrams are

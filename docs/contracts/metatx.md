@@ -16,7 +16,26 @@ lines, v1 and v2, with a hand-written op dispatch (`smartcontracts/evm/src/metat
 listed under [Transitional (BUILT)](#transitional-built) at the end. Nothing is deployed, so the target replaces the
 built lines in place: no version coexistence, no migration.
 
-## Native mixin, no forwarder
+**Contents**
+
+1. [Native mixin, no forwarder](#1-native-mixin-no-forwarder)
+2. [`MetaTransaction`, `MetaTransfer` and the pinned typehashes](#2-metatransaction-metatransfer-and-the-pinned-typehashes)
+3. [`mode`: constraint flags and fee mode](#3-mode-constraint-flags-and-fee-mode)
+4. [`mtxExecute`](#4-mtxexecute)
+5. [`mtxExecuteTransfer`: transfers and payments (tokens)](#5-mtxexecutetransfer-transfers-and-payments-tokens)
+6. [2D nonces and lanes](#6-2d-nonces-and-lanes)
+7. [Pay-once horizon](#7-pay-once-horizon)
+8. [Gas](#gas)
+9. [FeePolicy](#9-feepolicy)
+10. [Names](#10-names)
+11. [Interfaces](#11-interfaces)
+12. [Payers](#payers)
+13. [Receiver-pays](#receiver-pays)
+14. [Security](#security)
+15. [Conformance](#15-conformance)
+16. [Transitional (BUILT)](#transitional-built)
+
+## 1. Native mixin, no forwarder
 
 <a id="CTR-MTX-16"></a>**CTR-MTX-16** — Meta-transaction logic is embedded in every SCaaS contract (`MetaTxBase`,
 [CTR-MTX-22](#CTR-MTX-22)), not in a forwarder. The subject signs EIP-712 typed data whose `verifyingContract` **is the
@@ -77,7 +96,7 @@ policy ([NODE-SPN-01](../node/sponsorship.md#NODE-SPN-01)) and the node's call t
 transfer is one kind of gasless call, not the only one (owner); a fee field the contract cannot collect would only
 mislead signers.
 
-## `MetaTransaction`, `MetaTransfer` and the pinned typehashes
+## 2. `MetaTransaction`, `MetaTransfer` and the pinned typehashes
 
 <a id="CTR-MTX-15"></a>**CTR-MTX-15** — **Two structs, one nonce space** (owner). `MetaTxLib.MetaTransaction` is the
 generic signed call of **any** SCaaS contract: `data` is one call of one of the contract's own allowlisted functions
@@ -154,7 +173,7 @@ cross-chain replay because `chainId` and `salt` differ. Clients read the domain 
 token whose `chainUid()` differs. The cost: wallets show "SCaaS MetaToken" rather than the token's own name (they read
 `name()` for that).
 
-## `mode`: constraint flags and fee mode
+## 3. `mode`: constraint flags and fee mode
 
 ```text
 bit  31 ........................ 8 | 7  6  5  4 | 3  2  1  0
@@ -189,7 +208,7 @@ every submitter rewrites unbound fields before it builds the outer transaction: 
 lane); unbound `relayer := 0`. Wire values of unbound fields are never submitted; the `intent_id` is unchanged
 ([NODE-LANE-10](../node/submit-lanes.md#NODE-LANE-10)).
 
-## `mtxExecute`
+## 4. `mtxExecute`
 
 <a id="execution-pipeline"></a>
 <a id="CTR-MTX-17"></a>**CTR-MTX-17** — **`mtxExecute` runs the signer's calldata on the contract itself** (owner).
@@ -299,7 +318,7 @@ works on disabled multi-underlying legs (exits stay open) and during a pending r
 node side (simulation, no batching, the narrowed grief exemption) is
 [NODE-LANE-22](../node/submit-lanes.md#NODE-LANE-22).
 
-## `mtxExecuteTransfer`: transfers and payments (tokens)
+## 5. `mtxExecuteTransfer`: transfers and payments (tokens)
 
 <a id="CTR-MTX-23"></a>**CTR-MTX-23** — **The typed path: `mtxExecuteTransfer(MetaTransfer t, bytes sig)`** (owner). A
 token's transfer and payment are signed as a `MetaTransfer` ([CTR-MTX-15](#CTR-MTX-15)) so outside wallets show
@@ -330,7 +349,7 @@ order, `msg.sender` the relayer of every item, `ts.length == sigs.length` (`MtxB
 (`MtxBatchEmpty`), no explicit cap, items of one token. A batch never mixes the two structs; the node batches
 payments through it ([NODE-LANE-11](../node/submit-lanes.md#NODE-LANE-11)).
 
-## 2D nonces and lanes
+## 6. 2D nonces and lanes
 
 Storage `_metaNonce[from][batch]`; an intent — a `MetaTransaction` or a `MetaTransfer` — is valid iff its `nonce ==
 mtxNonce(from, batch)`; execution increments it. Both structs share the one map. Independent lanes remove head-of-line blocking between agents and between business flows of the same subject.
@@ -390,7 +409,7 @@ third party paying 1 unit with someone else's `entryRef` cannot complete a reque
 an overpayment by a stranger is just money received. The full client procedure is in
 [integration.md](../integration.md#payment-references).
 
-## Pay-once horizon
+## 7. Pay-once horizon
 
 <a id="CTR-MTX-04"></a>**CTR-MTX-04** — **Pay-once is conditional and is a protocol rule.** "Each payment request is
 payable at most once" holds iff (1) every signature issued on a pay lane has `validUntil ≤ t_first_issue + H`,
@@ -406,7 +425,7 @@ Solana `PRUNE_DELAY_S`; Sui `prune` after `valid_until + LANE_HORIZON_S`). Issue
 | Contract | Sui `relay_pay` refuses `valid_until > now + LANE_HORIZON_S` on chain; Solana caps `valid_until` and order `expiry` at `MAX_TTL_S = 31 d` ([NET-SOL-22](../networks/solana.md#NET-SOL-22)) | **SPECIFIED** |
 | Node | Refuses `max_valid_for_secs > LANE_HORIZON` on a pruning family ([NODE-STO-01](../node/store.md#NODE-STO-01)); constants pinned equal in tests (TON `LANE_TTL`, Aptos/Solana `PRUNE_DELAY_S`, node `LANE_TTL_S`, client `LANE_HORIZON_S`) | **SPECIFIED** |
 
-## Gas
+## <a id="gas"></a>8. Gas
 
 <a id="gas"></a>Measured gas of the **built v1 path** (Foundry `MetaTxGas.t.sol`, `evm_version = prague`, execution
 gas; full-transaction `gasUsed` from receipts after deploying the same contracts on the private Nethermind reference
@@ -434,7 +453,7 @@ fee-0 sponsored path is the cheapest configuration. Method notes: one scenario p
 state carries over inside one test), and accounts are created and funded in `setUp`; a gas measurement that changes
 with execution order measures the access list, not the code.
 
-## FeePolicy
+## 9. FeePolicy
 
 <a id="CTR-MTX-13"></a>**CTR-MTX-13** — Public fee modes are `NONE`, `PERCENT` and `FIXED`, chosen by the signer per
 intent through `mode`; the percent unit is ppm (1e6), because per mille cannot express 0.05 %:
@@ -479,7 +498,7 @@ The fee mode, amount and recipient stay the signer's choice; the 1 % cap and "pe
 on top" are unchanged. The check costs ~100 gas. `PaymentSettled` keeps its fee amount and recipient because payment
 is the typed path, not a self-call.
 
-## Names
+## 10. Names
 
 <a id="named-functions"></a>
 <a id="CTR-MTX-21"></a>**CTR-MTX-21** — **Every entry point whose authority comes from a subject's signature starts
@@ -577,7 +596,7 @@ v2 path (`test/v2/MetaTxGasV2.t.sol`, clones, warm lane): `mtxTransfer` ≈ 660 
 generic path, `mtxTransferWithFee` ≈ 200 below, the fee-shape entry ≈ 85 above (dispatch + shape check); the v2
 generic path is ≈ 2.2–3.9 k below v1 on every row.
 
-## Interfaces
+## 11. Interfaces
 
 ```solidity
 interface IMetaTx {                       // MetaTxBase: every SCaaS contract
@@ -639,7 +658,7 @@ their errors are in [dex.md](dex.md#CTR-DEX-15); the kind functions (wrap, unwra
 [token-wrappers.md](token-wrappers.md#interfaces). The node's event normaliser decodes `MetaNonceCancelled`;
 `PaymentSettled` and `MetaTransactionExecuted` keep their fields, so payment reconciliation needs no change.
 
-## Payers
+## <a id="payers"></a>12. Payers
 
 <a id="payers"></a>
 
@@ -662,7 +681,7 @@ TON — a relayer W5 lane sends `SignedOp` to the payer's jetton wallet, subject
 Solana — the relayer lane is the fee payer, the subject signature is checked through the Ed25519/Secp256r1 precompile
 instruction ([networks/README.md](../networks/README.md)).
 
-## Receiver-pays
+## <a id="receiver-pays"></a>13. Receiver-pays
 
 <a id="receiver-pays"></a>
 <a id="CTR-MTX-05"></a>**CTR-MTX-05** — A named function `mtxPayReceiverFee(m, payerSig, fee, feeRecipient,
@@ -764,7 +783,7 @@ expired co-signature; replay after the payer intent landed through `mtxExecuteTr
 `restricted` scope. Families: EVM and Hedera only; non-EVM families do not have it (no fee fields off EVM) — there the
 options are payee self-relay and sponsorship.
 
-## Security
+## <a id="security"></a>14. Security
 
 <a id="security"></a>
 
@@ -796,7 +815,7 @@ Relayers never hold user funds: tokens grant no allowance to relayers, a `MetaTr
 and a `MetaTransaction` runs only the signer's own call, and the DEX holds no balance between transactions. Node-side threats are in
 [node/threat-model.md](../node/threat-model.md).
 
-## Conformance
+## 15. Conformance
 
 Foundry (`forge test`, default profile and `private7622`):
 
@@ -826,7 +845,7 @@ Foundry (`forge test`, default profile and `private7622`):
   selectors; the integration tests (`--ignored`, need `anvil` + `forge`) deploy, sign, submit for real and read the
   events back.
 
-## Transitional (BUILT)
+## <a id="transitional-built"></a>16. Transitional (BUILT)
 
 <a id="transitional-built"></a>
 <a id="v1"></a>

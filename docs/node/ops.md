@@ -6,7 +6,24 @@ How a node is observed and measured. Everything here is a **recommendation to no
 own. Status: the metrics marked BUILT exist; everything else **SPECIFIED**. Incident runbooks, RACI and DR are in
 [runbooks.md](runbooks.md).
 
-## Scope
+**Contents**
+
+1. [Scope](#1-scope)
+   - 1.1 [Severities](#11-severities)
+2. [SLOs](#2-slos)
+3. [Health](#health)
+4. [Metrics](#metrics)
+5. [Ops watch](#5-ops-watch)
+6. [Integrity](#6-integrity)
+7. [Denylist](#denylist)
+8. [Alerts](#alerts)
+9. [Traces](#9-traces)
+10. [Logs](#logs)
+11. [FinOps](#finops)
+12. [Capacity](#capacity)
+13. [Post-quantum Zether chains](#13-post-quantum-zether-chains)
+
+## 1. Scope
 
 <a id="scope"></a><a id="NODE-OPS-15"></a>**NODE-OPS-15** — **Operators are independent; operations rules are
 recommendations.** The smart contracts themselves are the API services that run the business; the node is
@@ -30,7 +47,7 @@ capacity limits. Non-goals:
 - Telemetry from the console app. The app sends nothing; W3B-05 is a release benchmark.
 - Multi-leg composition-drift series; leg backing ([NODE-OPS-08](#NODE-OPS-08)) covers the loss case.
 
-### Severities
+### 1.1 Severities
 
 <a id="severities"></a><a id="NODE-OPS-05"></a>**NODE-OPS-05** — **Three severities**; P1 = exactly the `scaas-p1`
 group of the rule file ([alerts](#alerts)). Pages that do not mean "integrity or outage" train people to ignore pages.
@@ -41,7 +58,7 @@ group of the rule file ([alerts](#alerts)). Pages that do not mean "integrity or
 | **P2** | Degraded, or a security-relevant change to verify the same day | page in business hours, ticket otherwise | 4 h | one working half-day; nothing here loses data while waiting |
 | **P3** | Trend, budget or hygiene | ticket | next business day | |
 
-## SLOs
+## 2. SLOs
 
 <a id="slos"></a><a id="NODE-OPS-04"></a>**NODE-OPS-04** — **SLOs, alerts and dashboards are evaluated outside the
 node, by whoever runs it**: Prometheus + Alertmanager on infrastructure that is neither the node's host nor the ERP's,
@@ -129,7 +146,7 @@ Error-budget policy:
 - Budget exhausted: only fixes ship to that node until it recovers (risk-reducing changes — pause, breaker, lane
   retirement — always allowed). One incident consuming > 25 % of a budget ⇒ post-mortem with a regression test.
 
-## Health
+## <a id="health"></a>3. Health
 
 <a id="health"></a><a id="admin-listener"></a><a id="NODE-OPS-01"></a>**NODE-OPS-01** — **`/readyz` and `/metrics` are
 served on the admin port**, separate from the public gateway (`[modules] admin_bind`, default `127.0.0.1:9108`; or the
@@ -150,7 +167,7 @@ optional `metrics_bind`, [NODE-OPS-03](#NODE-OPS-03)). The node has `/readyz` ev
 Transitional (BUILT): readiness reads job counts from the legacy client (`relay_stats`), and `/readyz` also requires
 the client to answer.
 
-## Metrics
+## <a id="metrics"></a>4. Metrics
 
 <a id="metrics"></a><a id="NODE-OPS-03"></a>**NODE-OPS-03** — **Metrics = Prometheus text rendered by the existing
 hand-written renderer (`admin.rs` `render`); no metrics crate.** Prefix `scaas_`; base units (seconds, bytes, smallest
@@ -321,7 +338,7 @@ with `to_block ≥ mined_block` (works for `call` txs and bumped hashes); lost o
 new `job` index for a metric; a restart drops ≤ one finality window of samples. `// ponytail: in-memory finalize map
 (cap 50 000); persist only if restarts make W3B-04 blind.`
 
-## Ops watch
+## 5. Ops watch
 
 <a id="ops-watch"></a><a id="NODE-OPS-08"></a>**NODE-OPS-08** — **Ops watch for registered EVM/Hedera tokens**: (a)
 **in the node**: leg backing (`underlying.balanceOf(token) ÷ reserve_i`, only for legs that exist) polled every 300 s
@@ -334,7 +351,7 @@ file), keeps its pins in its own state file, latches `scaas_watch_code_hash_chan
 Backing needs the node's registry and final head; code hashes need nothing from the node, so they stay out of it. Admin
 view: `GET /v1/admin/chains/{key}/watch` (backing ratios per leg, last watched events).
 
-## Integrity
+## 6. Integrity
 
 <a id="integrity"></a><a id="NODE-OPS-12"></a>**NODE-OPS-12** — **Integrity rechecks**: (a) at indexer start, before
 the first range, and every 600 s (inside the 30-min P1 window, one header read per chain) the indexer re-reads the hash
@@ -347,7 +364,7 @@ lock, audited); clients reset their own event cursor for that chain to the same 
 re-delivered events. A violation is a human-judgement event; holding the indexer stops the damage without a schema
 change; ≤ 10 min of extra ranges to reconcile.
 
-## Denylist
+## <a id="denylist"></a>7. Denylist
 
 <a id="denylist"></a><a id="NODE-OPS-14"></a>**NODE-OPS-14** — **Subject denylist — the operator's choice.** An
 admin-managed list: the node refuses to relay or serve jobs whose subject, payer or recipient is listed, **at intake and
@@ -375,7 +392,7 @@ reversible lever instead of suspending a namespace or pausing a token. Empty by 
   writes `***` for the address); hot ≤ 2 s (in-memory set). Lifted/expired rows kept 400 d.
 - Metrics carry no address; refusal logs carry `deny_id` and the job/intent id.
 
-## Alerts
+## <a id="alerts"></a>8. Alerts
 
 <a id="alerts"></a>Rule file `scaas/ops/prometheus/scaas-rules.yml` (recommended). Every alert carries `severity` and
 `runbook` (anchor in [runbooks.md#incidents](runbooks.md#incidents)). `$STORE_MOUNT` is the filesystem holding the
@@ -527,7 +544,7 @@ families, pre-emitted zeros); promtool `test rules` for every alert, including a
 at process start; `revert_streak` boundary (2 vs 3 in 15 min, `race` excluded) and survival across restart; the
 capacity load test runs alone.
 
-## Traces
+## 9. Traces
 
 <a id="traces"></a><a id="NODE-OPS-09"></a>**NODE-OPS-09** — **Traces: no OpenTelemetry SDK in the v1 binary.**
 Gateway and job API accept a W3C `traceparent` (the `POST /v1/jobs` header applies to every item); the trace id (32
@@ -553,7 +570,7 @@ Trace contract: every submission span carries `chain_key`, `lane` (address), `tx
 subject address or amount ([logs](#logs)). An ERP `traceparent` joins its outbox → push trace to the node's spans.
 Traces never cross nodes (envelopes carry no trace field; a peer's landing shows as `consumed`).
 
-## Logs
+## <a id="logs"></a>10. Logs
 
 <a id="logs"></a><a id="NODE-OPS-10"></a>**NODE-OPS-10** — **Logs = JSON lines in production** (`[log] format = "json"
 | "text"`, default `text`; any deployment holding value runs `json`). Never logged: payloads, signatures, subject
@@ -585,7 +602,7 @@ node-held copy outlives job retention + backup retention. Simulation failures an
 job (the incident log of an operator is its log sink). Log redaction is tested (no payload/address/amount/secret in an
 e2e run, grep-based).
 
-## FinOps
+## <a id="finops"></a>11. FinOps
 
 <a id="finops"></a><a id="NODE-OPS-11"></a>**NODE-OPS-11** — **FinOps measurement**: the cost columns (`gas_used`,
 `gas_price`, `cost_native`) are filled for every job at `mined`/`reverted` and for gap-fillers; the same transaction
@@ -647,7 +664,7 @@ all families): infrastructure ≈ $480–830 per month in year 1; minimum config
 of all contract families is the largest one-off cost ([runbooks.md#production-gates](runbooks.md#production-gates)).
 **Break-even** of independent relayers: [mesh.md#rewards](mesh.md#rewards).
 
-## Capacity
+## <a id="capacity"></a>12. Capacity
 
 <a id="capacity"></a><a id="NODE-OPS-13"></a>**NODE-OPS-13** — **Capacity rating and label caps**: ≤ 16 chains, ≤ 8
 lanes per chain, ≤ 32 namespaces, ≤ 64 registered tokens per chain, ≤ 256 watched wrapper legs per node (`/metrics` ≤
@@ -673,7 +690,7 @@ figures are estimates to be **measured** by a load test run alone.
 
 Above the rated load: a second node on **different chains**, not a bigger store.
 
-## Post-quantum Zether chains
+## 13. Post-quantum Zether chains
 
 <a id="pqz"></a>Operator recommendations for a chain that runs post-quantum Zether tokens
 ([contracts/pq-zether.md](../contracts/pq-zether.md)):

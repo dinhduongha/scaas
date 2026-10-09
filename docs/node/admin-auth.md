@@ -5,7 +5,22 @@ through it. It is served on `[modules] admin_bind` (default `127.0.0.1:9108`), n
 `/metrics`. Status: health/metrics **BUILT**; admin API, built-in users, OIDC, CLI credential commands and audit
 **SPECIFIED** (store tables and the `store init`/`store restored` CLI **BUILT**).
 
-## Modes
+**Contents**
+
+1. [Modes](#1-modes)
+   - 1.1 [Credentials and token validation](#11-credentials-and-token-validation)
+2. [OIDC](#oidc)
+3. [Built-in users](#built-in-users)
+4. [Roles](#4-roles)
+5. [CLI](#cli)
+6. [Routes](#routes)
+   - 6.1 [Mesh peer URL](#mesh-peer-url)
+7. [CORS](#7-cors)
+8. [Audit](#8-audit)
+9. [Errors](#9-errors)
+10. [App serving](#app-serving)
+
+## 1. Modes
 
 <a id="modes"></a><a id="NODE-ADM-02"></a>**NODE-ADM-02** — **Admin authentication has two modes**
 (`[api.admin_auth] modes`, default `["builtin"]`): (1) **built-in users** in the store (`admin_user`: name + Argon2id
@@ -18,7 +33,7 @@ makes the node a password store (Argon2id, lockout, [threat-model.md#node](threa
 requirement was "as simple as possible". Opaque-token
 introspection (RFC 7662), DPoP and mTLS-bound tokens are not supported (follow-up).
 
-### Credentials and token validation
+### 1.1 Credentials and token validation
 
 <a id="credentials"></a>
 
@@ -76,7 +91,7 @@ client apps sign user actions with their own keys (`clientkeys`) through the gat
 screens, and read namespace data through their own backend. The job API sends no CORS headers, so a browser cannot
 call it cross-origin even with a leaked key. Structural separation instead of a grant table.
 
-## OIDC
+## <a id="oidc"></a>2. OIDC
 
 <a id="oidc"></a><a id="NODE-ADM-03"></a>**NODE-ADM-03** — **OIDC mode validates JWT access tokens**: discovery with
 exact `issuer`, JWKS cached by `(iss, kid)` with rotation, `iss` exact, `aud` contains the node audience, `exp` and
@@ -115,7 +130,7 @@ closed`). Removed keys disappear on the next successful refresh. `# ponytail: ha
 crate if a fourth alg or JWE is needed.` The console app logs in with Authorization Code + PKCE `S256`, tokens in
 memory only ([CLI-APP-11](../clients/app.md#CLI-APP-11)).
 
-## Built-in users
+## <a id="built-in-users"></a>3. Built-in users
 
 <a id="built-in-users"></a>
 
@@ -136,7 +151,7 @@ memory only ([CLI-APP-11](../clients/app.md#CLI-APP-11)).
 - **External-client API keys** are managed by `key_custodian` users through `/v1/admin/keys`, the app, or the CLI; the
   secret is shown once; rotate = `generation + 1`; revoke is hot. They authenticate nothing on the admin listener.
 
-## Roles
+## 4. Roles
 
 <a id="roles"></a><a id="NODE-ADM-04"></a>**NODE-ADM-04** — **Roles**: `viewer ⊂ operator ⊂ admin`, plus
 `key_custodian` (not implied by `admin`). **Every admin credential carries roles**: built-in users store them; OIDC maps
@@ -166,7 +181,7 @@ row, so a lone `key_custodian` resetting an admin's password would become admin.
 <a id="NODE-ADM-09"></a>**NODE-ADM-09** (open; default applied) — `LAST_ADMIN` counts built-in users only; OIDC callers
 never count as "last".
 
-## CLI
+## <a id="cli"></a>5. CLI
 
 <a id="cli"></a><a id="NODE-ADM-05"></a>**NODE-ADM-05** — **Bootstrap and break-glass = the host CLI**, which writes
 credential rows straight into the store: `scaas-node admin create <name> --role … --config node.toml` (password
@@ -208,7 +223,7 @@ scaas-node snapshot verify <file>                       # planned: recompute a r
 `keystore new`, `store init`, `store restored` **BUILT**; the rest **SPECIFIED**. The node never creates its store at
 start: a missing store file (unmounted volume, typo'd `[store] url`) refuses to start.
 
-## Routes
+## <a id="routes"></a>6. Routes
 
 <a id="routes"></a>
 
@@ -283,7 +298,7 @@ the address as `***` ([NODE-OPS-10](ops.md#NODE-OPS-10)). Request bodies: chain 
 "active|paused|halted", "reason": "…"}`; breaker reset `{"lane": "<label>|*", "breaker": "<name>|*"}`; chain patch with
 `breaker` merged.
 
-### Mesh peer URL
+### <a id="mesh-peer-url"></a>6.1 Mesh peer URL
 
 <a id="mesh-peer-url"></a>`mesh_peer.url` is a dial target that the admin API may create and change
 (`POST`/`PATCH /v1/admin/mesh/peers`) — the one exception to toml-only dial targets
@@ -304,13 +319,13 @@ before/after, and an **SSRF guard** applied at write and again at every dial (DN
 
 Toml `[[mesh.peers]]` stays `https://` only until the full peer routes with the dial-time check are served.
 
-## CORS
+## 7. CORS
 
 <a id="cors"></a>Admin listener only: `tower-http` (in `Cargo.lock`, direct dependency; feature `cors`): exact `admin_cors_origins` (no `*`, no
 reflection), methods `GET, POST, PATCH, PUT, DELETE` (`GET POST PATCH PUT DELETE`), headers `Authorization, Content-Type`, `allow_credentials =
 false`, `max_age = 600`. Health/metrics are not CORS-enabled. No cookies are ever set or read.
 
-## Audit
+## 8. Audit
 
 <a id="audit"></a><a id="NODE-ADM-07"></a>**NODE-ADM-07** — **Audit and store loss**: every admin mutation appends a
 hash-chained `audit_log` row (actor `user:<name>`, `oidc:<iss>|<sub>` or `cli:<uid>`, roles, route, target,
@@ -333,14 +348,14 @@ before/after (`password_hash`, `secret_sha256` are written as `"***"`). Logins (
 are audited too. `request_id` echoed as `X-Request-Id`. `# ponytail: audit kept forever; add a retention knob when it
 grows.`
 
-## Errors
+## 9. Errors
 
 <a id="errors"></a>`401 UNAUTHORIZED` (no/invalid token or password, locked user, unknown issuer, bad signature,
 expired, wrong aud, stale session epoch — the body never says which); `403 NO_ROLE`/`FORBIDDEN`; `404`;
 `409 CONFLICT`/`LANE_BUSY`/`LAST_ADMIN`/`POLICY_BUSY`; `422 INVALID`/`POLICY_INVALID`/`LIMIT`; `429` (10 rps per
 `sub`); `503 IDP_UNAVAILABLE`.
 
-## App serving
+## <a id="app-serving"></a>10. App serving
 
 <a id="app-serving"></a><a id="NODE-ADM-10"></a>**NODE-ADM-10** — **The node can serve the console app with its
 security headers.** (The node additions the app needs — gateway info route, gateway CORS, error contract, app

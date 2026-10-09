@@ -4,7 +4,20 @@ The node already pays gas for every job it lands. A **sponsorship policy** decid
 to, how much of it is allowed, and whether a door's fee floor is waived. Status: policies, budgets, rate counts, feed
 cost fields, admin routes and metrics **SPECIFIED**; `SponsorshipPool` **PLANNED**.
 
-## Scope
+**Contents**
+
+1. [Scope](#1-scope)
+2. [Policy](#2-policy)
+3. [Budgets](#budgets)
+4. [Evaluation](#evaluation)
+5. [Feed](#feed)
+6. [Admin](#admin)
+   - 6.1 [Metrics](#metrics)
+7. [Security](#7-security)
+8. [Receiver pays](#receiver-pays)
+9. [Pool](#pool)
+
+## 1. Scope
 
 <a id="scope"></a>In scope: node sponsorship policy — matching, fee-floor waiver, budgets, rate caps, accounting,
 metrics, admin API; the node side of receiver-pays (a payee co-signature carried by the job,
@@ -16,7 +29,7 @@ non-EVM families (no fee fields) and Zether tokens (hidden amounts).
 Typical use: "inbound to wallet W, value ≥ X ⇒ accept with fee 0, book gas to account Y" (an inbound-payment subsidy
 by the payee) and a tenant's cost control. Sponsorship is a node policy row, never a contract feature.
 
-## Policy
+## 2. Policy
 
 <a id="policy"></a><a id="NODE-SPN-01"></a>**NODE-SPN-01** — **A sponsorship policy is a node store row that matches
 jobs and (a) waives the fee floor of the door the job came through, (b) books its gas to a sponsor account, (c)
@@ -44,7 +57,7 @@ Store tables `sponsor_policy`, `sponsor_usage` and the job columns `sponsor_poli
 `sponsor_day`, `sponsor_hour`, `sponsor_fallback`, `gas_used`, `gas_price`, `cost_native` are in
 [store.md#schema](store.md#schema).
 
-## Budgets
+## <a id="budgets"></a>3. Budgets
 
 <a id="budgets"></a><a id="NODE-SPN-02"></a>**NODE-SPN-02** — **Budget unit = the family's smallest native unit**
 (wei, tinybar, lamports, uatom-equivalent, MIST, octa, nanoton, stroops), measured from receipts (`gas_used ×
@@ -67,7 +80,7 @@ chain charged to the lane; Solana `meta.fee` (+ priority fee); Soroban `fee_char
 limits at node level; `signed_op` matches on the decoded op; non-EVM families book and limit only (no fee floor to
 waive).
 
-## Evaluation
+## <a id="evaluation"></a>4. Evaluation
 
 <a id="evaluation"></a>Matching and the budget reservation happen at accept on job data only (plus a local signature
 check on public doors), with the rate counts; the fee cap at lease; booking at the end. The result is stored on the
@@ -122,7 +135,7 @@ the matching mesh policy row, compared with the effective fee ([NODE-MESH-13](me
 job's floor is 0. A policy never makes a job acceptable that the job-API intake or mesh acceptance would refuse for any
 other reason (unregistered token, `support = none`, expiry, `allow_call`).
 
-## Feed
+## <a id="feed"></a>5. Feed
 
 <a id="feed"></a>Job feed items in states `mined`, `reverted` (and the final snapshot) add `gas_used`, `gas_price`,
 `cost_native`, `sponsor: {policy, account} | null`, and `sponsor_fallback: <policy name> | null` (a policy matched but
@@ -131,7 +144,7 @@ reporting currency) to the business document of the job ([ops.md#finops](ops.md#
 to the sponsor account named by `account` (e.g. "inbound subsidy, customer programme Y"). The node never receives fiat
 values.
 
-## Admin
+## <a id="admin"></a>6. Admin
 
 <a id="admin"></a><a id="NODE-SPN-03"></a>**NODE-SPN-03** — **Sponsorship admin routes and audit**: create, patch and
 delete need `admin`, state changes `operator`, reads `viewer`; every mutation is audited
@@ -152,14 +165,14 @@ chain.max_valid_for_secs`, and `on_exhausted = unsponsored` on a client namespac
 changes the reservation of live jobs (they keep `sponsor_reserved`). Bootstrap from `node.toml`
 `[[sponsorship.policies]]` follows [NODE-STO-03](store.md#NODE-STO-03) (import if absent, never overwrite).
 
-### Metrics
+### <a id="metrics"></a>6.1 Metrics
 
 <a id="metrics"></a>`scaas_sponsor_jobs_total{policy,chain,result="admitted|rejected_budget|rejected_rate|rejected_too_short|unsponsored|tx_cap|bad_sig"}`,
 `scaas_sponsor_cost_spent{policy,chain}` (gauge, current UTC day, native smallest unit as float),
 `scaas_sponsor_budget_remaining_ratio{policy}`, `scaas_sponsor_reserved{policy}`. No payer labels (cardinality, and
 payers are pseudonymous personal data).
 
-## Security
+## 7. Security
 
 | Threat | Defence |
 |---|---|
@@ -188,7 +201,7 @@ account; the write without `fallback_to_namespace` ⇒ `422`**; the `~gateway` U
 namespace ⇒ `DUPLICATE_CALL {uid}`, the same call in two namespaces accepted in both; concurrent accepts on PostgreSQL
 and MySQL; feed fields per family (EVM, Hedera, one non-EVM); admin route roles and audit rows; toml import precedence.
 
-## Receiver pays
+## <a id="receiver-pays"></a>8. Receiver pays
 
 <a id="receiver-pays"></a>The node side of receiver-pays ([CTR-MTX-05](../contracts/metatx.md#CTR-MTX-05),
 [CTR-MTX-06](../contracts/metatx.md#CTR-MTX-06)):
@@ -219,7 +232,7 @@ and MySQL; feed fields per family (EVM, Hedera, one non-EVM); admin route roles 
   receiving wallet is a **hot collection wallet**: its key controls the wallet, so it holds only incoming
   receiver-pays funds and is swept to a cold treasury.
 
-## Pool
+## <a id="pool"></a>9. Pool
 
 <a id="pool"></a><a id="NODE-SPN-04"></a>**NODE-SPN-04** (PLANNED) — **`SponsorshipPool` is an opt-in application
 contract, not a mesh reward**; the mesh pays only the intent's own fee ([NODE-MESH-05](mesh.md#NODE-MESH-05) is not

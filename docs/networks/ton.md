@@ -9,7 +9,20 @@ are normative and not yet in code.
 > ([NET-TON-14](#NET-TON-14)) is in code.** The transitional ERP pull path is safe today because the client builds
 > `extra = 0` and never sets `forward_nanoton`.
 
-## Overview
+**Contents**
+
+1. [Overview](#overview)
+2. [Payload](#2-payload)
+3. [Signatures](#3-signatures)
+4. [Relayer](#4-relayer)
+5. [Fees and the forward cap](#5-fees-and-the-forward-cap)
+6. [Revoke](#6-revoke)
+7. [DEX](#dex)
+8. [Finality and events](#8-finality-and-events)
+9. [Conformance](#9-conformance)
+10. [Limitations](#10-limitations)
+
+## <a id="overview"></a>1. Overview
 
 <a id="overview"></a><a id="NET-TON-01"></a>**NET-TON-01** — **TON = a Tact jetton whose custom wallet verifies signed
 operations; the DEX is an escrow.** The jetton wallet holds the owner's public key, an optional passkey and a lane table (`lanes: map<uint256, uint64>`),
@@ -55,7 +68,7 @@ it. BUILT.
   in-flight orders). `revoke` / `Withdraw` signed by the subject (TON Connect envelope, `ownerPubkey`, the Mandate's own
   lane/nonce).
 
-## Payload
+## 2. Payload
 
 <a id="payload"></a>
 
@@ -101,7 +114,7 @@ metaop$_ domain:bits120 network:int32 op:uint8 amount:uint128 nonce:uint64 valid
 (`myAddress()`). TON addresses are equal across networks (same code + data), so a network id is mandatory, and config 19
 cannot be faked. BUILT.
 
-## Signatures
+## 3. Signatures
 
 <a id="signatures"></a>
 
@@ -195,7 +208,7 @@ must also carry a signature by the attached key over the Universal Account bindi
 there is no guardian ([NET-ALL-05](README.md#NET-ALL-05)); multiple passkeys, a guardian with delayed passkey rotation and
 Merkle batching are gaps. SPECIFIED for the exact origin and the proof of possession.
 
-## Relayer
+## 4. Relayer
 
 <a id="relayer"></a>
 
@@ -241,7 +254,7 @@ signature locally with `get_owner_pubkey` (or the pubkey from `state_init`), and
 checks `valid_until`, the lane nonce and the TON Connect signature but no balance and no passkey, so each such failure
 costs the lane one bounced `SignedOp`). Tests: insufficient balance ⇒ `Revert` before signing; a wrong passkey ⇒ `Revert`.
 
-## Fees and the forward cap
+## 5. Fees and the forward cap
 
 <a id="fees"></a><a id="NET-TON-13"></a>**NET-TON-13** — **No relayer fee on TON; the DEX ppm fee is signed in the order;
 gas TON is attached per message and the excess returns to the lane; forward TON is capped.** Relayer fees exist only on
@@ -269,7 +282,7 @@ The ERP pull path is safe (`extra = 0`, no `forward_nanoton`; `fam_ton.py:302-30
 never above `max(attach, cap + 0.1 TON)`, the breaker adds the forward; sandbox — `forwardTon` above the constant ⇒
 `E_VALUE`; a broken DEX leg ⇒ tokens to the owner, excess TON to the lane.
 
-## Revoke
+## 6. Revoke
 
 <a id="revoke"></a><a id="NET-TON-18"></a>**NET-TON-18** — **A TON revoke runs exactly once: both forms move the lane to
 `nonce + 2`.** `revoke`: if the order's nonce is unused, consume it and stop (the order never leaves the wallet); if the
@@ -280,7 +293,7 @@ rule. Why: as built the wallet accepts `next == nonce` or `nonce + 1` (`jetton.t
 `next + 1`, so a resend of the **same** signature runs again in the second form, consuming `nonce + 1` and sending a
 `CancelTag`. SPECIFIED. Test: resending the same revoke ⇒ `E_NONCE`, no second `CancelTag`.
 
-## DEX
+## <a id="dex"></a>7. DEX
 
 <a id="dex"></a><a id="NET-TON-09"></a>**NET-TON-09** — **The TON DEX is a fill-or-kill escrow.** An order leg is a signed
 jetton transfer to the DEX; matching `Match{a,b}` is permissionless (or hinted by `matchWith` when the second leg
@@ -319,7 +332,7 @@ separate `bounced[master]` returned by an admin through an evented `RefundBounce
 adds to `fees[master]` (`dex.tact:131-136`), which `WithdrawFees` withdraws (`:43,158`). SPECIFIED. Tests (sandbox): a
 bounced refund lands in `unclaimed`, `WithdrawFees` cannot take it, `Claim` pays the owner.
 
-## Finality and events
+## 8. Finality and events
 
 <a id="events"></a><a id="NET-TON-12"></a>**NET-TON-12** — **TON events are authenticated by the derived wallet
 address.** Events (`emit`, external-out) come from **jetton wallets**: `MetaTransactionExecuted` at the payer's wallet,
@@ -344,7 +357,7 @@ subject wallet's pubkey (`get_public_key`, read once, cached) before simulating
 ([NODE-MESH-16](../node/mesh.md#NODE-MESH-16); as built `mesh/digest.rs:268-279` checks none) — SPECIFIED; mesh v1 carries
 TON `pay` only.
 
-## Conformance
+## 9. Conformance
 
 <a id="conformance"></a>
 
@@ -359,7 +372,7 @@ TON `pay` only.
 - Devnet: end to end on **MyLocalTon** (genesis + API v3) when resources allow, else on an API-v3 shim around
   `@ton/sandbox` (real TVM, fake blocks) — stated in the report of each run.
 
-## Limitations
+## 10. Limitations
 
 <a id="limitations"></a>
 

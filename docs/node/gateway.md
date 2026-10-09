@@ -5,7 +5,18 @@ meta-transaction, a signed family op, a UA meta-transaction or a DEX order. It i
 (default `127.0.0.1:8547`, normally behind a reverse proxy). Status: `/v1/metatx` (EVM) and `/v1/dex/*` **BUILT**;
 durable door-A jobs, `/v1/gateway`, `/v1/ops`, UA routes, CORS and the error contract **SPECIFIED**.
 
-## Auth
+**Contents**
+
+1. [Auth](#auth)
+2. [CORS](#2-cors)
+3. [Routes](#routes)
+   - 3.1 [UA record cache](#31-ua-record-cache)
+   - 3.2 [Chain binding](#chain-binding)
+   - 3.3 [EIP-7702](#eip-7702)
+4. [Intake](#4-intake)
+5. [Errors](#errors)
+
+## <a id="auth"></a>1. Auth
 
 <a id="auth"></a><a id="NODE-GW-02"></a>**NODE-GW-02** — **Gateway auth is `none`, `bearer` or `hmac`** (`bearer|hmac` off loopback)
 (`[modules] gateway_auth = "none" | "bearer" | "hmac"`; secret from `gateway_secret_env`, ≥ 16 bytes). `bearer`:
@@ -22,7 +33,7 @@ Limits: body 64 KiB (1 MiB on the PQZ chain profile only); a global concurrency 
 `ConcurrencyLimitLayer`, default 32) because every request costs a simulation; a per-IP rate limit at the reverse
 proxy in front of an open gateway ([runbooks.md#production-gates](runbooks.md#production-gates)).
 
-## CORS
+## 2. CORS
 
 <a id="cors"></a><a id="NODE-GW-04"></a>**NODE-GW-04** — **Gateway CORS only with gateway auth `none`.**
 `[modules] gateway_cors_origins`: exact list, no `*`, no reflection, methods `GET, POST`, header `Content-Type`, no
@@ -31,7 +42,7 @@ credentials, `max_age = 600`. `Config::validate` refuses a non-empty `gateway_co
 `X-Scaas-*` anyway. Browser apps use an unauthenticated gateway behind a host proxy
 ([CLI-APP-03](../clients/app.md#CLI-APP-03)).
 
-## Routes
+## <a id="routes"></a>3. Routes
 
 <a id="routes"></a><a id="NODE-GW-05"></a>**NODE-GW-05** — **The gateway announces what it serves, allows exact-origin
 CORS and answers with one error contract.** `GET /v1/gateway` lists the served chains, tokens, fee recipient, DEX
@@ -122,7 +133,7 @@ chain.ua_registry`, `selector` = `register`, `max_tx_per_payer_hour = 0`
 ([sponsorship.md#admin](sponsorship.md#admin)). The universal-account migration uses this route
 ([contracts/accounts.md#migration](../contracts/accounts.md#migration)).
 
-### UA record cache
+### 3.1 UA record cache
 
 <a id="ua-cache"></a>Per chain, `recordOf(from)` is read once from `chain.ua_registry`; records are immutable, so hits
 stay in memory with no expiry and misses for 60 s; cheap kinds (webauthn-p256, p256, ed25519, bip340, schnorr-bn254)
@@ -130,7 +141,7 @@ are verified with the shared Rust kind library, the rest by simulation. No store
 `ua_registry` address and generation; enabled kinds are read from the chain at onboarding. The node never holds UA
 keys; lane keys are unaffected.
 
-### Chain binding
+### <a id="chain-binding"></a>3.2 Chain binding
 
 <a id="chain-binding"></a><a id="NODE-GW-07"></a>**NODE-GW-07** — **Every SCaaS contract the node relays for is bound
 to the chain's `chain_uid`.** Status: **SPECIFIED**. At chain activation, at every start and on every RPC (re)connect, the node checks that the RPC's genesis
@@ -157,7 +168,7 @@ Transitional (BUILT): deployed tokens, the DEX, mandate wallets and subject acco
 they are redeployed with the salted domain; until then the binding covers the genesis hash and the UA registry, on
 chains with `ua_registry` only.
 
-### EIP-7702
+### <a id="eip-7702"></a>3.3 EIP-7702
 
 <a id="eip-7702"></a>The node never classifies a native EVM `from` by reading its code at accept
 ([CTR-UA-24](../contracts/accounts.md#CTR-UA-24)). A local ECDSA check that recovers the address passes
@@ -166,7 +177,7 @@ ERC-1271 candidate: refused for sponsoring on public doors (`BAD_SIGNATURE`,
 [sponsorship.md#evaluation](sponsorship.md#evaluation)), otherwise left to simulation, which runs the contract's own
 rule.
 
-## Intake
+## 4. Intake
 
 <a id="intake"></a><a id="door-a-intake"></a><a id="NODE-GW-01"></a>**NODE-GW-01** — **Door A is not a free gas
 faucet.** At gateway intake: (a) a `transfer`/`pay` op with `value == 0` ⇒ `422 ZERO_VALUE`; (b) the `~gateway` door
@@ -185,7 +196,7 @@ public fee-0 payers need a sponsor policy row. Every door also applies
 The node may refuse fees below its floor; with a fee-taking intent whose `feeRecipient` is **not** bound, whoever
 submits takes the fee — that is the open-relayer design (the signer binds the recipient to prevent it).
 
-## Errors
+## <a id="errors"></a>5. Errors
 
 <a id="errors"></a><a id="NODE-GW-06"></a>**NODE-GW-06** — **The gateway error contract is stable.** Every gateway route
 (incl. `/v1/dex/*`, `/v1/ops`, `/v1/ua/*`) answers errors as `{"error": "<CODE>", "code": "<CODE>", "detail": "<≤ 300

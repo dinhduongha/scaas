@@ -28,6 +28,7 @@ AREAS = {'node': (['node/'], ['NODE-']), 'contracts': (['contracts/'], ['CTR-'])
          'netcli': (['networks/', 'clients/', 'integration.md', 'integration-odoo-example.md'], ['NET-', 'CLI-', 'INT-'])}
 NOT_CURRENT = ('history/', 'research/', 'reviews/', 'superpowers/')
 REORG = ('history', 'reorg')          # reorg ledgers: id-map.tsv, section-map.tsv, facts/ (were docs/_work/ until Phase 2)
+CONTENTS = re.compile(r'^\*\*Contents\*\*\n(?:.*\n)*?(?=^## )', re.M)   # generated table of contents
 BUDGET = {'README.md': 250, 'architecture.md': 900, 'decisions.md': 3000, 'integration.md': 950,
           'node/README.md': 250, 'node/store.md': 600, 'node/job-api.md': 550, 'node/submit-lanes.md': 550,
           'node/indexer-feeds.md': 400, 'node/gateway.md': 300, 'node/admin-auth.md': 400, 'node/sponsorship.md': 250,
@@ -431,8 +432,9 @@ def run_checks(area=None):
         if r in ('architecture.md', 'README.md') and ANCHOR.search(text):
             errs.append(f'C8 {r}: defines ruling ids (non-normative file)')
         lim = BUDGET.get(r)
-        if lim and text.count('\n') > lim * 1.3:
-            (notes if r in BUDGET_ACCEPTED else warns).append(("accepted " if r in BUDGET_ACCEPTED else "") + f'budget {r}: {text.count(chr(10))} lines > 1.3 x {lim}')
+        n_lines = text.count('\n') - len(CONTENTS.findall(text)[0].split('\n')) if CONTENTS.search(text) else text.count('\n')
+        if lim and n_lines > lim * 1.3:                          # the generated Contents list does not count
+            (notes if r in BUDGET_ACCEPTED else warns).append(("accepted " if r in BUDGET_ACCEPTED else "") + f'budget {r}: {n_lines} lines > 1.3 x {lim}')
 
     # C5 alias index
     if d('decisions.md').exists() and not area:

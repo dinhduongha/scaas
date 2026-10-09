@@ -7,7 +7,45 @@ measurement before the parameters freeze. Notation: `R = Z[X]/(X^64 + 1)`, `R_q 
 of a ring element; `‖·‖` is the ℓ2 norm over all integer coefficients (centred representatives); `be8(x)` = 8-byte
 big-endian; everything else as in [zether.md](zether.md) (`‖`, `be32`, `u8`, ASCII strings without terminator).
 
-## Overview
+**Contents**
+
+1. [Overview](#1-overview)
+2. [Scope and gate](#2-scope-and-gate)
+3. [Constraints and research](#3-constraints-and-research)
+4. [Encryption scheme MLWE-BFV-add](#4-encryption-scheme-mlwe-bfv-add)
+   - 4.1 [Parameters](#parameters)
+   - 4.2 [Algorithms](#42-algorithms)
+   - 4.3 [Noise and digit budget (worst case)](#43-noise-and-digit-budget-worst-case)
+   - 4.4 [Sizes](#44-sizes)
+   - 4.5 [Shared randomness against malicious recipients](#45-shared-randomness-against-malicious-recipients)
+5. [Encodings shared by contract, precompile and clients](#5-encodings-shared-by-contract-precompile-and-clients)
+6. [Keys, UA kind and authorization](#6-keys-ua-kind-and-authorization)
+7. [Protocol](#7-protocol)
+   - 7.1 [State (per `(UA, token)`)](#71-state-per-ua-token)
+   - 7.2 [Register (the UA registry)](#72-register-the-ua-registry)
+   - 7.3 [Fund](#73-fund)
+   - 7.4 [Transfer](#transfer)
+   - 7.5 [Burn and refresh](#75-burn-and-refresh)
+   - 7.6 [Rollover](#76-rollover)
+   - 7.7 [Statement layout](#77-statement-layout)
+   - 7.8 [Events and indexing](#78-events-and-indexing)
+   - 7.9 [Disclosure](#disclosure)
+   - 7.10 [Authorization check](#authorization-check)
+   - 7.11 [Meta-transactions](#711-meta-transactions)
+8. [Proof engine `pqz-core`](#8-proof-engine-pqz-core)
+9. [On-chain verifier](#9-on-chain-verifier)
+   - 9.1 [Precompile `PQZ` (`0x…0F01`)](#91-precompile-pqz-0x0f01)
+   - 9.2 [Precompile `MLDSA65` (`0x…0F10`)](#92-precompile-mldsa65-0x0f10)
+   - 9.3 [Gas model](#93-gas-model)
+   - 9.4 [Contracts](#94-contracts)
+10. [Chain integration (Nethermind precompile on chain 7622)](#10-chain-integration-nethermind-precompile-on-chain-7622)
+11. [Provers](#11-provers)
+12. [Threats](#threats)
+13. [Hybrid path and migration](#13-hybrid-path-and-migration)
+14. [Vectors and tests](#14-vectors-and-tests)
+15. [References](#15-references)
+
+## 1. Overview
 
 <a id="overview"></a>
 
@@ -40,7 +78,7 @@ MSIS/MLWE instead of discrete log — a quantum adversary against classical Zeth
 block signer, relayer lane keys, public ERC-20 legs, and a v1 envelope signer, which can only spend its public balance
 and nonces).
 
-## Scope and gate
+## 2. Scope and gate
 
 <a id="scope"></a>
 <a id="scope-gate"></a>
@@ -86,7 +124,7 @@ ML-DSA/Falcon verified on chain by precompile; interaction with existing Zether 
 `ITransferDisclosure`, BSGS/balance cache), relayer/meta-tx, node, clientkeys, prover; `PqzToken` follows
 `IERC20MetaTx`; per-family availability, private EVM first.
 
-## Constraints and research
+## 3. Constraints and research
 
 <a id="constraints"></a>
 
@@ -188,7 +226,7 @@ PQZ parameters.
 | Tx-pool size limit | 128 KiB is the common client default (geth/reth); Nethermind `TxPool.MaxTxSize` to be confirmed | transfers with inline credits exceed it ([CTR-PQZ-11](#CTR-PQZ-11)) |
 | Missing transition keys | Nethermind silently ignores unknown keys; `eip1108Transition` was once missing and made `ecMul` 6.4× dearer with no symptom | every PQZ activation is **probed**, never trusted ([CTR-PQZ-10](#CTR-PQZ-10)) |
 
-## Encryption scheme MLWE-BFV-add
+## 4. Encryption scheme MLWE-BFV-add
 
 <a id="encryption"></a>
 <a id="CTR-PQZ-02"></a>**CTR-PQZ-02** — **Encryption = additive-only module-LWE with BFV-style encoding** ("MLWE-BFV-add"),
@@ -197,7 +235,7 @@ Enc/Add/Dec only; a BFV stack brings relinearization keys and failure probabilit
 "BFV/BGV (RLWE)" is met in substance: RLWE `n = 2048` and MLWE `d = 64, k = 32` have the same LWE dimension; the
 module form matches the LNP22 proof ring.
 
-### Parameters
+### <a id="parameters"></a>4.1 Parameters
 
 <a id="parameters"></a>
 <a id="CTR-PQZ-03"></a>**CTR-PQZ-03** — **Parameters**: `d = 64`, `k = 32`, `q = 2^42 − 215` (prime, `q ≡ 9 mod 16`, so
@@ -256,7 +294,7 @@ on the proof's MSIS/MLWE instances, and on Kyber-512 through the same commit as 
 output in `pqz-core/params/estimator.txt`. **Target:** every attack costs ≥ Kyber-512's under both models. A miss is a
 parameter ruling before vectors freeze.
 
-### Algorithms
+### 4.2 Algorithms
 
 ```text
 CBD_η(stream):           per coefficient: a = Σ_{i<η} bit, b = Σ_{i<η} bit;  coeff = a − b    (bits LSB-first, FIPS 203 style)
@@ -288,7 +326,7 @@ owner only and its `noise_i` never leaves the device ([CTR-PQZ-14](#CTR-PQZ-14))
 log, no `zether-read-balance`. A balance cache is a UX convenience only (offline display). The single largest UX
 simplification over classical Zether.
 
-### Noise and digit budget (worst case)
+### 4.3 Noise and digit budget (worst case)
 
 <a id="noise"></a>
 
@@ -325,7 +363,7 @@ fails.
 If the relations work finds that a norm proof has extraction slack `γ > 1` for some bound, every `β` above is
 multiplied by `γ` in this derivation, `K_MAX` is recomputed, and the change is a new `proofSystemId`.
 
-### Sizes
+### 4.4 Sizes
 
 | Object | Bytes | Encoding |
 |---|---|---|
@@ -343,7 +381,7 @@ multiplied by `γ` in this derivation, `K_MAX` is recomputed, and the change is 
 aligned 64-bit lanes, and bytes 0–1 of each word are zero (cheap calldata tokens: ≈ 25.2 tokens per coefficient
 against 32 for random bytes). Boring wins.
 
-### Shared randomness against malicious recipients
+### 4.5 Shared randomness against malicious recipients
 
 <a id="shared-randomness"></a>
 <a id="CTR-PQZ-04"></a>**CTR-PQZ-04** — **Multi-recipient shared randomness.** One `(r, e1)` per operation: the transfer's
@@ -391,7 +429,7 @@ in the worst directions over unit vectors on `r`, unit vectors on `e1`, and maxi
 `(r_f, e1_f)`, `u_f`; `R_TX` gains rows 2'/4' for `u_f`, the transfer output grows by 16,384 B (≈ +0.5 M gas), and the
 change is a new `proofSystemId`. Hints then open only ciphertexts of amounts the hinting parties already know.
 
-## Encodings shared by contract, precompile and clients
+## 5. Encodings shared by contract, precompile and clients
 
 <a id="encodings"></a>
 
@@ -414,7 +452,7 @@ change is a new `proofSystemId`. Hints then open only ciphertexts of amounts the
   `estimator.txt` lists the soundness error of each round (with its repetitions), each ≤ `2^-128`; no parameter of the
   fork may rely on multiplying errors across rounds.
 
-## Keys, UA kind and authorization
+## 6. Keys, UA kind and authorization
 
 <a id="keys"></a>
 <a id="ua-kind"></a>
@@ -484,11 +522,11 @@ with the kind tag in `info` instead of a `kindNo'` level, because PQ seeds are n
 **Record storage.** The record is the UA `Record` plus `authRef`; `keyPtr = SSTORE2(pk)` (16,384 B, ≈ 3.3 M gas once)
 and `UARegistered` carries `pk` (16 KB of log data, ≈ 0.13 M gas). Registration total: [gas](#gas).
 
-## Protocol
+## 7. Protocol
 
 <a id="protocol"></a>
 
-### State (per `(UA, token)`)
+### 7.1 State (per `(UA, token)`)
 
 | Slot | Type | Changed by | Role |
 |---|---|---|---|
@@ -539,7 +577,7 @@ as classical ([CTR-ZTH-04](zether.md#CTR-ZTH-04)). No BSGS bound any more; 2^62 
 states and values in signed 64-bit for clients. The classical 2^54 rationale (the BSGS decryption bound,
 [CTR-ZTH-26](zether.md#CTR-ZTH-26)) does not carry over.
 
-### Register (the UA registry)
+### 7.2 Register (the UA registry)
 
 `register(0x0142, pk, pop, authRef, authPop)` follows the UA register steps ([registry](accounts.md#registry));
 PQZ-specific content of each step:
@@ -565,7 +603,7 @@ PQZ-specific content of each step:
 
 No rotation ([CTR-UA-13](accounts.md#CTR-UA-13)): a new key is a new UA plus a confidential transfer to it.
 
-### Fund
+### 7.3 Fund
 
 `pqzShield(bytes32 ua, uint256 amount)`: `ua` registered, `0 < amount`, `totalShielded + amount ≤ maxShielded`;
 `plainPending[ua] += amount`; `transferFrom(msg.sender, this, amount·shieldScale)` (spender is the token contract,
@@ -574,7 +612,7 @@ No ciphertext, no pending slot, no cap check, no proof, no later rollover. As an
 source: `amount·shieldScale` is burned from the envelope signer's **public** balance (ERC-20 ledger, or `_uaBalance` on
 the v3 path) instead of pulled with `transferFrom`, because the token cannot pull the signer's underlying.
 
-### Transfer
+### <a id="transfer"></a>7.4 Transfer
 
 <a id="transfer"></a>
 
@@ -659,7 +697,7 @@ same counter uses other randomness. Masking randomness *inside* the proof is hed
 CSPRNG)`). Classical Zether uses counter-only derivation ([CTR-ZTH-30](zether.md#CTR-ZTH-30)); reusing `r` across two
 messages here would leak `Δ·(m − m')` up to small noise.
 
-### Burn and refresh
+### 7.5 Burn and refresh
 
 `pqzUnshield(payload, acc, inline, amount, recipient, proof, authSig)` with `payload = be32(p) ‖ be32(validUntilBlock) ‖
 be32(plainUsed) ‖ fromUA ‖ beneficiaryUA ‖ u' ‖ v_f`. `0 < amount ≤ maxShielded` (burn) or `amount = 0` and
@@ -669,7 +707,7 @@ rows 1, 2, 4, 6, 7 with `d = digits(amount)` **public** (no `d` witness, no rows
 `cleared`, `plainPending[from]` as for a transfer; fee to `plainPending[ben]`; `totalShielded −= amount`; underlying
 `amount·shieldScale` to `recipient`; `sendCounter++`.
 
-### Rollover
+### 7.6 Rollover
 
 <a id="rollover-op"></a>
 
@@ -692,7 +730,7 @@ happened in between (`acc' − Σ pending[p..rolled')`) or not, because addition
 creates no pending entries). Honest keepers roll only credits older than `KEEPER_AGE = 24` blocks (2 min), and clients
 prove at `p = pendingCount` and retry once on `InlineTooFar`, so a busy merchant's in-flight phone proof survives.
 
-### Statement layout
+### 7.7 Statement layout
 
 <a id="statement"></a>
 
@@ -726,7 +764,7 @@ builds it from storage, SSTORE2 reads and calldata; the prover builds it identic
 `authDigest = keccak256("SCAAS-PQZ-AUTH-V1" ‖ keccak256(statement))`. The authorization signature is over these 32
 bytes, wrapped as the UA `ua_msg` and signed by ML-DSA with `ctx = kind_tag`, not with EIP-8355's empty context.
 
-### Events and indexing
+### 7.8 Events and indexing
 
 `PqzCredit(bytes32 indexed ua, uint64 indexed index, bytes32 entryRef)` (the bytes `u ‖ v_t` are in that `PqzTransfer`),
 `PqzPlainCredit(bytes32 indexed ua, uint256 amount, uint256 plainPending)`, `PqzTransfer(bytes32 indexed entryRef,
@@ -737,7 +775,7 @@ stored hashes and values before proving. Logs cost 8 gas/byte (≈ 134 k per tra
 indexer for state. The node's indexer normalizes `MetaTransactionExecuted`, `UAMetaTransactionExecuted`, `Transfer` and
 `UATransfer` of a PQZ token like any meta token's, beside the `Pqz*` events.
 
-### Disclosure
+### <a id="disclosure"></a>7.9 Disclosure
 
 <a id="disclosure"></a>
 <a id="CTR-PQZ-14"></a>**CTR-PQZ-14** — **Disclosure by zero-knowledge proof**, never by revealing randomness or noise.
@@ -763,7 +801,7 @@ the bundle bytes come from `PqzTransfer` logs. Nothing reveals `r` (which would 
 decryption noise. Client systems see PQZ like classical Zether: amounts known from their own documents, attestations
 through `attestTransferAmount` ([integration.md](../integration.md#confidential-payments)).
 
-### Authorization check
+### <a id="authorization-check"></a>7.10 Authorization check
 
 <a id="authorization-check"></a>
 
@@ -786,7 +824,7 @@ valid here is valid through `UARegistry.requireAuthorized(authRef, PURPOSE_ZETHE
 versa (vectors). The UA `zether-auth` purpose covers the PQZ digest, which carries its own domain string. Both the
 proof (knowledge of the PQZ key) **and** the signature (the auth UA) are required (classical invariant #1).
 
-### Meta-transactions
+### 7.11 Meta-transactions
 
 <a id="metatx"></a>
 <a id="CTR-PQZ-15"></a>**CTR-PQZ-15** — **`PqzToken` is an ERC-20 + `IERC20MetaTx` token exactly like `ZetherToken`**
@@ -917,7 +955,7 @@ a PQZ token. Node limits and the rollover keeper: [node/ops.md](../node/ops.md#p
 as ordinary `metatx`/`ua_metatx` jobs (`m.data` is opaque to them) and book the outer fee from
 `MetaTransactionExecuted`/`UAMetaTransactionExecuted` like any token's.
 
-## Proof engine `pqz-core`
+## 8. Proof engine `pqz-core`
 
 <a id="proof-engine"></a>
 <a id="CTR-PQZ-09"></a>**CTR-PQZ-09** — **Proof engine = LNP22 through `pqz-core`, a fork of LaZer whose arithmetic layers
@@ -980,7 +1018,7 @@ only ids it implements.
   `estimator.txt`. Soundness of multi-round Fiat–Shamir with aborts in the quantum random-oracle model is less settled
   than for 3-move Σ-protocols; this is an explicit assumption of the threat model (T10).
 
-## On-chain verifier
+## 9. On-chain verifier
 
 <a id="verifier"></a>
 
@@ -1011,7 +1049,7 @@ CI. Operationally a follower node serves all public RPC and pre-simulation, so `
 process; a crashing input inside a transaction would still reach every node at its block, so never-crash is the
 requirement and the follower is only defence in depth. Every node of chain 7622 must run the PQZ client build.
 
-### Precompile `PQZ` (`0x…0F01`)
+### 9.1 Precompile `PQZ` (`0x…0F01`)
 
 Input `u8(op) ‖ be32(len(stmt)) ‖ stmt ‖ proof`; output 32 bytes, `…01` valid, `…00` otherwise; never reverts on
 cryptographic failure; reverts (consumes all gas) only on input `> MAX_INPUT = 262,144` bytes.
@@ -1029,7 +1067,7 @@ For **every** op except 6 the precompile checks, before any cryptography, that `
 belongs to `op` and a `proofSystemId` it implements, and that the total length is one of the op's fixed lengths;
 anything else returns `0`.
 
-### Precompile `MLDSA65` (`0x…0F10`)
+### 9.2 Precompile `MLDSA65` (`0x…0F10`)
 
 Input `pk(1952) ‖ sig(3309) ‖ u8(len(ctx)) ‖ ctx ‖ msg`, FIPS 204 `ML-DSA.Verify(pk, msg, sig, ctx)` (pure ML-DSA);
 output `…01`/`…00`. This is EIP-8355's layout plus the context field, because the UA signs with `ctx = kind_tag` and
@@ -1038,7 +1076,7 @@ EIP-8355 fixes an empty context. A private address because EIP-8051 and EIP-8355
 immutable constructor argument checked by self-test, so a later standard precompile means a new verifier in a new
 registry generation. Elsewhere the UA PQ kinds use a pure-Solidity verifier ([CTR-UA-23](accounts.md#CTR-UA-23)).
 
-### Gas model
+### 9.3 Gas model
 
 <a id="gas"></a>
 <a id="CTR-PQZ-11"></a>**CTR-PQZ-11** — **Gas.** Precompile prices are deterministic functions of the op and input length,
@@ -1104,7 +1142,7 @@ while the floor binds. At the 80 M block target: ≈ 28 transfers per 5 s block 
 growth** at sustained full load: ≈ 430 KB/s of calldata plus ≈ 95 KB/s of logs, ≈ 45 GB/day; operators size archive
 disks for that or prune ([NODE-OPS-15](../node/ops.md#NODE-OPS-15)).
 
-### Contracts
+### 9.4 Contracts
 
 | Contract | Role | Notes |
 |---|---|---|
@@ -1128,7 +1166,7 @@ meta-tx: `executeMetaTransaction`, `metaTxDigest`, `metaNonce`, `cancelMetaNonce
 `UnitsInvariant` (the debit-time `unitsOf(T) > K_MAX` assert; unreachable unless accounting is broken), `PlainOverdraw`
 (`plainUsed > plainPending`), `Expired`, `ProofRejected`, `AuthRejected`, `AmountOutOfRange`, `CiphertextOffState`.
 
-## Chain integration (Nethermind precompile on chain 7622)
+## 10. Chain integration (Nethermind precompile on chain 7622)
 
 <a id="chain-integration"></a>
 
@@ -1184,7 +1222,7 @@ The chain profile, the private-chain runbook and the node's `pqz` profile flag
 registry `chainUid()` == each token's `chainUid`) are in [networks/evm.md](../networks/evm.md#private-chain) and
 [node/ops.md](../node/ops.md#pqz).
 
-## Provers
+## 11. Provers
 
 <a id="provers"></a>
 <a id="prover-platforms"></a>
@@ -1271,7 +1309,7 @@ service is the user's (or the organization's key oracle), never a third party's 
 - JIT-compiled WASM gives no constant-time guarantee; the code avoids secret-dependent branches and indices, the
   residual timing risk is stated (T11), and the native service is the choice for high-value treasury keys.
 
-## Threats
+## <a id="threats"></a>12. Threats
 
 <a id="threats"></a>
 
@@ -1311,7 +1349,7 @@ service is the user's (or the organization's key oracle), never a third party's 
 - Classical Zether tokens on the same chain keep their HNDL exposure; migration moves pilots off them.
 - Metadata: identities and the transaction graph are visible (ring size 2), exactly as classical.
 
-## Hybrid path and migration
+## 13. Hybrid path and migration
 
 <a id="migration"></a>
 <a id="CTR-PQZ-20"></a>**CTR-PQZ-20** — **Migration classical → PQZ** is `ZetherToken.zetherUnshield` to the owner's address then
@@ -1334,7 +1372,7 @@ EVM chains not in v1 (later via the co-processor seam); public EVM never without
 chains feasible later (a Go module calling `libpqz` via cgo); Hedera, Soroban, Sui, Aptos, Solana, TON no
 ([networks/README.md](../networks/README.md#availability)).
 
-## Vectors and tests
+## 14. Vectors and tests
 
 <a id="vectors"></a>
 
@@ -1434,7 +1472,7 @@ frozen vectors → Nethermind precompile → contracts → clients → retail WA
 run beside them. Later: LaBRADOR aggregation, FN-DSA when FIPS 206 is final, the co-processor seam for customer-run
 chains, `pqz-cli serve` LAN mode.
 
-## References
+## 15. References
 
 <a id="references"></a>
 

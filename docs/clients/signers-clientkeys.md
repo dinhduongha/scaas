@@ -6,7 +6,23 @@ keys, the backup-key switch, family encoders and connectors, Zether keys, and th
 on the user's device and never sends secrets anywhere. Status: passkeys, the seed vault (v1) and Zether keys **BUILT**
 (clientkeys 1.0.0, EVM-only family encoders); everything else here **SPECIFIED** unless marked.
 
-## Scope
+**Contents**
+
+1. [Scope](#1-scope)
+2. [Custody axes](#custody-axes)
+3. [Signing policy](#signing-policy)
+4. [Wallet standards](#wallet-standards)
+5. [What a signer may sign](#5-what-a-signer-may-sign)
+   - 5.1 [Meta-transaction calls and trade orders](#51-meta-transaction-calls-and-trade-orders)
+6. [Passkeys](#6-passkeys)
+7. [Seed vault](#7-seed-vault)
+8. [Backup-key switch](#8-backup-key-switch)
+9. [Derivation and role keys](#9-derivation-and-role-keys)
+10. [Connectors](#10-connectors)
+11. [Zether keys](#zether-keys)
+12. [Zether balance reading](#12-zether-balance-reading)
+
+## 1. Scope
 
 <a id="scope"></a>
 
@@ -30,7 +46,7 @@ predicate takes "active key set + guardian" and works unchanged over Universal A
 `derive_address`, Aptos object address, Solana PDA, the Cosmos passkey id); key-management entries ([NET-ALL-29](../networks/README.md#NET-ALL-29)) keep their
 domains now and a `keyop` purpose bumps their version later.
 
-## Custody axes
+## <a id="custody-axes"></a>2. Custody axes
 
 <a id="custody-axes"></a>
 
@@ -97,7 +113,7 @@ security feature. Operations note: restarting the oracle lane voids every proof 
 rebuilds the unfinished proofs at 30–50 ms CPU each; no signed transaction is lost, since transactions are signed only
 after proofs complete). Owner decision. PLANNED.
 
-## Signing policy
+## <a id="signing-policy"></a>3. Signing policy
 
 <a id="signing-policy"></a>
 
@@ -121,7 +137,7 @@ Today an ERP client applies checks 1–4 in process before calling the dev-only 
 ([INT-ERP-08](../integration.md#INT-ERP-08)); the mandate path enforces caps on chain. The service itself (`SigningPolicyService`) is PLANNED; the dev adapter is the
 `env:` custody adapter.
 
-## Wallet standards
+## <a id="wallet-standards"></a>4. Wallet standards
 
 <a id="wallet-standards"></a>
 
@@ -152,7 +168,7 @@ tested in offline CI, and a third-party script inside a payment page is supply-c
 small add-on that registers the factory (pinned `@walletconnect/ethereum-provider` + SRI) first. The same holds for
 Hedera HashPack (also a seam) and the TON Connect HTTP bridge.
 
-## What a signer may sign
+## 5. What a signer may sign
 
 <a id="signing-review"></a><a id="rendering"></a>
 
@@ -191,7 +207,7 @@ server response as the terms, so in a portal the check is internal consistency (
 from a malicious issuer; in the app, `shown` is the user's own input. Why: it closes the gap between checking
 `payload_hex` and signing `text`. Cost: a terms change must land with its `fam/*.js` change (shared KATs catch it).
 
-### Meta-transaction calls and trade orders
+### 5.1 Meta-transaction calls and trade orders
 
 <a id="CLI-SGN-33"></a>**CLI-SGN-33** — **Every SCaaS EIP-712 domain is built with `salt = chain_uid` from the
 signer's own chain profile, and a different salt is refused.** Status: **SPECIFIED**. The app, the portal signer and
@@ -259,7 +275,7 @@ never the DEX; and checks each `ExchangeLegSettled` against `limitReceive`, show
 3. never runs the signer in a cross-origin iframe — assertions with `crossOrigin: true` or a `topOrigin` are refused
    ([NET-ALL-04](../networks/README.md#NET-ALL-04)).
 
-## Passkeys
+## 6. Passkeys
 
 <a id="passkeys"></a>
 
@@ -315,7 +331,7 @@ pairwise prefix-distinct (one credential may serve several chains); JS refusals 
 normalised, cross-origin, wrong pk length); the client verifier's answers on client-encoded vectors; end to end with a
 virtual authenticator per family.
 
-## Seed vault
+## 7. Seed vault
 
 <a id="vault"></a>
 
@@ -443,7 +459,7 @@ browsers** — one Playwright run of create → reload → unlock → migrate on
 `CryptoKey` in IndexedDB is not exercised by a `Map` store); a portal tour (a legacy `localStorage` vault unlocks, becomes
 v2 in IndexedDB, leaves a tombstone; the second unlock opens v2); `bundle.test.js` covers the new module.
 
-## Backup-key switch
+## 8. Backup-key switch
 
 <a id="backup-switch"></a>
 
@@ -550,7 +566,7 @@ key, allowed after a second distinct key, allowed when off, a pending key does n
 authenticator, switch on): payment blocked → paper backup flow → pay; then remove the passkey → value refused, exit
 offered; an app end-to-end test.
 
-## Derivation and role keys
+## 9. Derivation and role keys
 
 <a id="derivation"></a>
 
@@ -664,7 +680,7 @@ verifier (owner key ⇒ `True`); Soroban `C…`: one `Ed25519` ScVal vector from
 `set_auths`), compared byte for byte; every must-check row has a failing case per family; wallet `sign()` throws when given
 anything but a `checked` object.
 
-## Connectors
+## 10. Connectors
 
 <a id="connectors"></a>
 
@@ -744,7 +760,7 @@ chain reads, a non-EVM signer pays with the **owner key only**; added keys pay t
 stops before `sign`, `validUntil` from `start.valid_until`); an issuer test that the options carry family and network;
 tours (Sui and Solana with fake Wallet Standard wallets end to end to a queued `signed_op`; Aptos with one seed-vault tour).
 
-## Zether keys
+## <a id="zether-keys"></a>11. Zether keys
 
 <a id="zether-keys"></a>
 
@@ -794,7 +810,7 @@ existing `MetaTransaction` EIP-712 builder (address path, domain `("SCaaS PqzTok
 vectors (`smartcontracts/vectors/ua/kinds.json`) gain the `pqz-mlwe` row (seed → pk, UA, keyHash). Protocol detail:
 [contracts/pq-zether](../contracts/pq-zether.md). SPECIFIED.
 
-## Zether balance reading
+## 12. Zether balance reading
 
 <a id="zether-balance"></a>
 

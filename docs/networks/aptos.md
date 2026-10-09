@@ -5,7 +5,25 @@ Common rules for every family: [networks/README](README.md). Status: Move packag
 `scaas-node/tests/e2e_aptos.rs`; devnet ports 32010–32019); items marked SPECIFIED are normative and not yet in code.
 Market-neutral: any Fungible Asset (FA) registered by a client works; no asset, country or law is assumed.
 
-## Overview
+**Contents**
+
+1. [Overview](#1-overview)
+2. [Objects and accounts](#2-objects-and-accounts)
+3. [Keys](#3-keys)
+4. [Lanes](#4-lanes)
+5. [Payload](#5-payload)
+6. [Signatures](#6-signatures)
+7. [Move entry points](#7-move-entry-points)
+8. [Relayer](#8-relayer)
+9. [Finality and events](#9-finality-and-events)
+10. [Mandate](#10-mandate)
+11. [DEX](#dex)
+12. [Deploy](#12-deploy)
+13. [Conformance](#13-conformance)
+14. [Limitations](#limitations)
+15. [References](#15-references)
+
+## 1. Overview
 
 <a id="overview"></a>
 
@@ -49,7 +67,7 @@ What Move can verify (checked 2026-10-04; references `aptos-stdlib/sources/crypt
 | secp256r1 / WebAuthn | **no** verify function callable from Move: `aptos_std::secp256r1` has only key types (`ecdsa_raw_public_key_from_64_bytes`, `…_to_bytes`); P-256 is checked only at the **transaction authenticator** layer (AIP-66) — re-checked on framework rev `4f0d278` (`mainnet` head on 2026-10-02): still only two functions | **yes** — pure-Move `scaas::p256` ([NET-APT-14](#NET-APT-14), owner) |
 | keyless (AIP-61) | not verifiable in Move | **no** (seam above) |
 
-## Objects and accounts
+## 2. Objects and accounts
 
 <a id="accounts"></a>
 
@@ -80,7 +98,7 @@ every asset, which travels **explicitly** in `MetaOp.asset`. No `TransferRef` or
 `primary_fungible_store::transfer(&acct_signer, asset, to, amount)` (through dispatchable FA hooks, AIP-73, when the
 asset has them) to any address, usable at once by an ordinary wallet. BUILT.
 
-## Keys
+## 3. Keys
 
 <a id="keys"></a>
 
@@ -132,7 +150,7 @@ inside `Account` itself (`meta.move:103-106`), not in an extra resource. Rules:
 
 BUILT; per-family lifecycle summary in [NET-ALL-05](README.md#NET-ALL-05).
 
-## Lanes
+## 4. Lanes
 
 <a id="lanes"></a>
 
@@ -168,7 +186,7 @@ and **reads** `Root` and `chain_id`; no global counter, no global `SmartTable`, 
 handle/counter). Two subjects never conflict in Block-STM; one subject on two lanes shares only that asset's primary
 store (a read-write conflict that Block-STM re-executes — **never aborts**, unlike Sui congestion).
 
-## Payload
+## 5. Payload
 
 <a id="payload"></a>
 
@@ -233,7 +251,7 @@ the explicit `asset`.** `chain_id` is read **on chain** (cannot be faked, like T
 from `@scaas`, so it differs between two deployments, even two networks sharing chain id 4) + `op` + `asset`. Replay:
 lane/nonce (pay), `pay_ref` once (mandate). Expiry: `now_seconds() <= valid_until`. BUILT.
 
-## Signatures
+## 6. Signatures
 
 <a id="signatures"></a>
 
@@ -312,7 +330,7 @@ declares a 64-byte Secp256r1 key while the TS SDK / AIP-66 use 65-byte uncompres
 computed once at registration): each signature is ~400 gas cheaper, which lets one `dex::settle` matching two passkey
 orders fit the execution-gas limit. BUILT.
 
-## Move entry points
+## 7. Move entry points
 
 <a id="contracts"></a>
 
@@ -343,7 +361,7 @@ entry create_dex(…); entry list_market(…); entry set_market(…); entry admi
 The SCaaS summary form of the pay entry is `package entry relay_pay(lane, owner, asset, …)`. An earlier draft had a
 separate `close_signed`; it is folded into `revoke_signed` (owner or delegate) + `refund`.
 
-## Relayer
+## 8. Relayer
 
 <a id="relayer"></a>
 
@@ -469,7 +487,7 @@ tx_ttl_s = 600
 max_gas_amount = 200000
 ```
 
-## Finality and events
+## 9. Finality and events
 
 <a id="events"></a>
 
@@ -518,7 +536,7 @@ receiver, and the consumed lane stops a replay on the same lane — the client o
 expires with attention). Mitigation if needed (`ponytail:`): hint by `fungible_asset_activities` per `asset_type`
 (expensive for busy assets).
 
-## Mandate
+## 10. Mandate
 
 <a id="mandate"></a>
 
@@ -538,7 +556,7 @@ is created only once); revocation by the delegate OR the owner's Account key (th
 `revoke_signed`); a permissionless `refund` after revocation or expiry returns the whole balance of one asset to the
 owner's Account — funds never stick. BUILT.
 
-## DEX
+## <a id="dex"></a>11. DEX
 
 <a id="dex"></a>
 
@@ -570,7 +588,7 @@ multisig); no admin address is stored. Admin only: `create_dex`, `list_market`, 
 recipient yet) goes to `to`. The admin can **never** touch an Account or a Mandate (`admin_sweep` refuses every other
 holder).
 
-## Deploy
+## 12. Deploy
 
 <a id="deploy"></a>
 
@@ -588,7 +606,7 @@ at a new address with new tokens/Accounts; old Accounts remain spendable through
 (as built `upgrade_policy = "compatible"`, `Move.toml:4`). Test: the publish script on localnet prints policy 2; a node
 with a `compatible` package ⇒ chain `halted`.
 
-## Conformance
+## 13. Conformance
 
 <a id="conformance"></a>
 
@@ -648,7 +666,7 @@ publish`). How the number was reached: a call-per-operation version exceeded the
 (~4 530), a stored key table (~4 070). One passkey signature ≈ 0.4 US cent at 100 octa gas price (≈ 0.0041 APT) — ~27×
 an ed25519 signature, but one transaction still suffices.
 
-## Limitations
+## <a id="limitations"></a>14. Limitations
 
 <a id="limitations"></a>
 
@@ -669,7 +687,7 @@ an ed25519 signature, but one transaction still suffices.
   `sigma_protocols`) exists on the `mainnet` framework branch and hosted testnet runs `confidential_asset_processor`; not
   assessed, not built.
 
-## References
+## 15. References
 
 <a id="references"></a>
 

@@ -9,7 +9,22 @@ account where the chain needs one. This page states what every family shares; ea
 Status tags: **BUILT** (in code, tested), **SPECIFIED** (normative, code pending), **PLANNED** (direction, not yet
 specified in detail).
 
-## Families and chains
+**Contents**
+
+1. [Families and chains](#families-and-chains)
+2. [Principles](#2-principles)
+3. [Common on-chain model](#3-common-on-chain-model)
+4. [Signing domains](#4-signing-domains)
+5. [Passkeys (WebAuthn P-256)](#5-passkeys-webauthn-p-256)
+6. [Universal Account on non-EVM families](#6-universal-account-on-non-evm-families)
+7. [Key lifecycle per family](#7-key-lifecycle-per-family)
+8. [Head-of-line per adapter](#8-head-of-line-per-adapter)
+9. [Finality per family](#9-finality-per-family)
+10. [Design lessons](#10-design-lessons)
+11. [DEX per family](#dex-per-family)
+12. [Availability of component features](#12-availability-of-component-features)
+
+## <a id="families-and-chains"></a>1. Families and chains
 
 The family taxonomy is an owner decision: EVM (Hedera is an EVM chain with its own page), Cosmos (CosmWasm), Soroban
 (Stellar and Pi Network), Move (Sui and Aptos), TON, Solana.
@@ -31,7 +46,7 @@ Lane keys come from one 24-word BIP-39 mnemonic or a raw private key per lane (P
 Soroban is not on the mesh: its replay protection is the host's per-entry auth nonce, so peers have no readable
 per-subject sequential nonce ([NODE-MESH-07](../node/mesh.md#NODE-MESH-07); owner: job API only).
 
-## Principles
+## 2. Principles
 
 <a id="principles"></a>
 
@@ -81,7 +96,7 @@ per-subject sequential nonce ([NODE-MESH-07](../node/mesh.md#NODE-MESH-07); owne
    `drain` entry over the stored `ExtendRef`/PDA seeds for every subject on that chain — the failure mode SCaaS
    exists to remove. Cost: no hotfix in place.
 
-## Common on-chain model
+## 3. Common on-chain model
 
 <a id="model"></a>
 
@@ -196,7 +211,7 @@ client `LANE_HORIZON_S`); a node chain on a pruning family must have `max_valid_
 get no pay-once guarantee. Both conditions hold in the code today (SPECIFIED: the constant-equality tests and the
 node refusal).
 
-## Signing domains
+## 4. Signing domains
 
 <a id="signing-domains"></a>
 
@@ -272,7 +287,7 @@ that is already present in any chain profile. On public chains SCaaS relies on t
 without one is a documented residual (signatures replay on both branches until the profile is withdrawn). Cost: a
 fork of our own chain needs fresh deployments and profiles.
 
-## Passkeys (WebAuthn P-256)
+## 5. Passkeys (WebAuthn P-256)
 
 <a id="webauthn"></a>
 
@@ -358,7 +373,7 @@ whose amount or `to` differs from the `MetaTransfer` is refused; with the policy
 passkey `pay` passes. Status: SPECIFIED (built today: Solana signs `"<label>:" ‖ hex(sha256(MetaOp))`, Sui signs
 BCS). Client rendering: [CLI-SGN-27](../clients/signers-clientkeys.md#CLI-SGN-27).
 
-## Universal Account on non-EVM families
+## 6. Universal Account on non-EVM families
 
 <a id="ua-registries"></a><a id="NET-ALL-20"></a>**NET-ALL-20** — **Per-family registries share the kind table, the
 tags, the derivations and one vector file** (`smartcontracts/vectors/ua/kinds.json`,
@@ -382,7 +397,7 @@ clientkeys refuse a native send to that form. Why: a 20-byte form is exactly the
 account-shaped form invites native sends to a keyless address. Cost: dev passkey accounts re-open; users copy a URN,
 not an address. Owner-confirmed.
 
-## Key lifecycle per family
+## 7. Key lifecycle per family
 
 <a id="key-lifecycle"></a><a id="NET-ALL-05"></a>**NET-ALL-05** — **Key rotation and recovery are stated per family;
 every gap is listed, never implied away.** The subject-account "equivalents per family" are:
@@ -410,7 +425,7 @@ The **backup-key switch** ([CLI-SGN-12](../clients/signers-clientkeys.md#CLI-SGN
 | TON | `ScaasJettonWallet` | 2 (`pubkey` + one passkey) | no | **both keys** (owner) | no | no |
 | Cosmos | none (native; multi-key seam) | 1 | no | seed: native; passkey-only: **unsatisfiable** | no | no |
 
-## Head-of-line per adapter
+## 8. Head-of-line per adapter
 
 <a id="head-of-line"></a><a id="NET-ALL-03"></a>**NET-ALL-03** — **Every adapter states how it avoids head-of-line
 blocking, and every family passes the anti-lock test.**
@@ -430,7 +445,7 @@ Mandatory test per network (**anti-lock**): the subject signs op X on contract 1
 back (not sent, or sent stuck); Y still succeeds; then X succeeds. Soroban is off the mesh, so its anti-lock test runs
 on the job-API path only.
 
-## Finality per family
+## 9. Finality per family
 
 The node's finality gate and event-set quorum are node rules
 ([NODE-IDX-01](../node/indexer-feeds.md#NODE-IDX-01)): `final_head` is the minimum height reported by ≥ `quorum`
@@ -456,7 +471,7 @@ Every adapter normalises events to one shape ([NODE-IDX-05](../node/indexer-feed
 family-specific address forms: EVM lowercase `0x`, bech32, `0x` + 64 hex, `G…`/`C…` strkeys, raw `wc:hex`, base58.
 Heights are block / height / ledger / checkpoint / masterchain seqno / slot.
 
-## Design lessons
+## 10. Design lessons
 
 <a id="design-lessons"></a>
 
@@ -503,7 +518,7 @@ Lessons from the first families' reviews, designed into every family from the st
   `solana` family; addresses never pass through a lower-case normalisation
   ([client address rules](../integration.md#addresses)).
 
-## DEX per family
+## <a id="dex-per-family"></a>11. DEX per family
 
 <a id="dex-per-family"></a>
 
@@ -551,7 +566,7 @@ Accepted differences, which the adapter, matcher and client must know:
 
 Non-EVM books are served after the venue moves into the node store ([CLI-APP-21](../clients/app.md#CLI-APP-21)).
 
-## Availability of component features
+## 12. Availability of component features
 
 <a id="availability"></a>
 

@@ -5,7 +5,26 @@ a **console** for node operators (login to one node's admin API). It depends on 
 the app is built yet (the node store is built; the node's job API, admin API and admin auth are specified). Signer rules:
 [clients/signers-clientkeys](signers-clientkeys.md).
 
-## Scope
+**Contents**
+
+1. [Scope](#1-scope)
+2. [Architecture](#2-architecture)
+3. [Configuration](#3-configuration)
+4. [Family adapters](#4-family-adapters)
+5. [Signing](#5-signing)
+6. [Submission and status](#6-submission-and-status)
+7. [Signing review](#7-signing-review)
+8. [Accounts](#8-accounts)
+9. [Tokens](#9-tokens)
+10. [Screens](#10-screens)
+   - 10.1 [Feature availability](#101-feature-availability)
+11. [Node clients](#11-node-clients)
+12. [Security](#security)
+13. [i18n](#13-i18n)
+14. [Testing](#14-testing)
+15. [Build and deploy](#15-build-and-deploy)
+
+## 1. Scope
 
 <a id="scope"></a>
 
@@ -43,7 +62,7 @@ Non-goals:
 | Celo CIP-64 fee currencies | [NET-EVM-01](../networks/evm.md#NET-EVM-01) |
 | Offline/PWA, analytics, remote fonts, a Prometheus parser | [CLI-APP-15](#CLI-APP-15), [CLI-APP-20](#CLI-APP-20) |
 
-## Architecture
+## 2. Architecture
 
 <a id="architecture"></a>
 
@@ -132,7 +151,7 @@ Fake wallets are not duplicated: end-to-end tests inject clientkeys `test/wallet
 `IERC20MetaTx`, `IERC20Payment`, `IMetaTokenV2`, the tier contracts (and v3 when it lands), `SCaaSDex`,
 `SmartKeyAccount(Factory)`, `IZetherToken`, `IUARegistry`; it is committed, and CI regenerates and diffs it.
 
-## Configuration
+## 3. Configuration
 
 <a id="config"></a>
 
@@ -206,7 +225,7 @@ no SRI. `npm run csp` writes exact headers for the page **and the workers**; a b
 `frame-ancestors` when headers are missing. Why: one build, every host. Cost: a host without headers runs the weaker meta
 CSP.
 
-## Family adapters
+## 4. Family adapters
 
 <a id="family-adapters"></a>
 
@@ -292,7 +311,7 @@ reads `getTokenCustomFees` / `getTokenKey(FEE_SCHEDULE)` through the HTS precomp
 mirror node, with a warning before signing; factory v1/v2 on Hedera needs the Hedera implementations registered in that
 chain's factory (`Deploy.s.sol` registers only the EVM ones).
 
-## Signing
+## 5. Signing
 
 <a id="signing"></a>
 
@@ -357,7 +376,7 @@ unlocked ([vault threat model](signers-clientkeys.md#vault)).
 | Zether | `deriveConfKey` (uses 7/8 only), `sealConfKey`, `openConfKey`, the tagged `zetherPop`, the balance cache |
 | Wallets | `wallets/<family>.js`, `wallets/evm.js` (EIP-6963 + `walletKind`), `wallet-signer.js` entry |
 
-## Submission and status
+## 6. Submission and status
 
 <a id="submission"></a><a id="CLI-APP-07"></a>**CLI-APP-07** — **Two submission paths: the gateway for every family, or
 self-paid.** (1) **Gateway**: EVM and Hedera use `POST /v1/metatx` (Hedera with 64-byte HIP-632 signatures allowed); the six
@@ -382,7 +401,7 @@ node, read-only). Every request uses `credentials: "omit"`, `redirect: "error"`,
 follow the stable error contract ([NODE-GW-06](../node/gateway.md#NODE-GW-06)): the app decodes revert data with its own ABI
 and maps `errors.node.<code>`, and no logic keys on free text.
 
-## Signing review
+## 7. Signing review
 
 <a id="signing-review"></a><a id="CLI-APP-09"></a>**CLI-APP-09** — **The signing review is rendered from the decoded bytes;
 metadata is pinned or cross-checked, the spender is allowlisted, strings are sanitised, and the signature is verified
@@ -431,7 +450,7 @@ lookalike warning; the clipboard is never read (`clipboard-read=()`); secrets ca
 API key secret, cleared from memory when the dialog closes); links go only to configured explorers and `documents[].url` —
 no chain or network string is rendered as a link.
 
-## Accounts
+## 8. Accounts
 
 <a id="accounts"></a><a id="CLI-APP-25"></a>**CLI-APP-25** — **The account model follows the Universal Account design.**
 The default "Create account" makes a **`webauthn-p256` UA** and registers it gaslessly through the gateway (`POST
@@ -467,7 +486,7 @@ bounded, paginated `KeyAdded(keyId)` log search from the factory deployment bloc
 address", verified by `hasKey`. After the first success, the worker stores `{credentialId, x, y, account, origin}` in the
 key metadata. Why: the two deployment modes are two origins.
 
-## Tokens
+## 9. Tokens
 
 <a id="token-kinds"></a><a id="CLI-APP-26"></a>**CLI-APP-26** — **Token kinds are decoded from `versionOf(token)`, values
 as built (0–4, [CTR-TOK-21](../contracts/token-wrappers.md#CTR-TOK-21)).** A token with regulated flags 5–8 ([CTR-AS-17](../contracts/asset-suite.md#CTR-AS-17)) is **view-only** with the regulated-token notice until the regulated flows
@@ -482,7 +501,7 @@ the implementation's allowlist ([CLI-SGN-34](signers-clientkeys.md#CLI-SGN-34));
 data}`) or `MultiSig.sol` submit data, never as an EIP-681 link (an EOA sender reverts); the guardian acts directly. Issuer
 wizards build Safe transactions the same way.
 
-## Screens
+## 10. Screens
 
 <a id="screens"></a><a id="node-screens"></a>
 
@@ -566,7 +585,7 @@ configured ZetherToken ([CTR-ZTH-02](../contracts/zether.md#CTR-ZTH-02); whether
 Post-quantum Zether (PQZ) tokens configured on the private chain 7622 run in the same worker
 ([CTR-PQZ-18](../contracts/pq-zether.md#CTR-PQZ-18)).
 
-### Feature availability
+### 10.1 Feature availability
 
 **G** = gateway (needs `gatewayNode` + `/v1/gateway`); **S** = self-paid; "—" = not available.
 
@@ -591,7 +610,7 @@ Post-quantum Zether (PQZ) tokens configured on the private chain 7622 run in the
 
 `features` is narrowed at runtime by config, by `/v1/gateway` (chain, token, `dex`), by token kind and by the backup policy.
 
-## Node clients
+## 11. Node clients
 
 <a id="node-clients"></a>
 
@@ -633,7 +652,7 @@ policy), gateway CORS, the stable error contract, `POST /v1/ops` for the six non
 UA routes — are defined in [node/gateway](../node/gateway.md#NODE-GW-05); app serving on the admin listener in
 [node/admin-auth](../node/admin-auth.md#NODE-ADM-10).
 
-## Security
+## <a id="security"></a>12. Security
 
 <a id="security"></a>
 
@@ -686,7 +705,7 @@ also passed where an SDK accepts one: viem `http(url, {fetchFn})`, the Sui clien
 suites assert zero requests to unlisted origins; peer URLs typed in the console are validated, never fetched by the browser.
 Why: network-learned URLs are attacker-chosen, and SDKs issue their own requests.
 
-## i18n
+## 13. i18n
 
 <a id="i18n"></a><a id="CLI-APP-16"></a>**CLI-APP-16** — **English is the default and every string has a Vietnamese
 translation; risk disclosures show the English original beside the translation until the owner approves the text.**
@@ -699,7 +718,7 @@ the same key set in both languages, no unused keys, no hard-coded JSX text (lint
 and a release pass reviews them. Disclosures (`tokens.disclosure.depeg`, `.adjustableMulti`, `.regulated`,
 `zether.unaudited`, `accounts.ua.noRecovery`) follow the side-by-side rule.
 
-## Testing
+## 14. Testing
 
 <a id="testing"></a>
 
@@ -734,7 +753,7 @@ Harness: localnet RPCs without CORS (the TON shim, wasmd, possibly quickstart) a
 each localnet suite runs alone under the memory cap (`scripts/capped`); CI runs unit + `evm` + `console` per PR, the rest
 nightly or when their family changes; a keyboard-only pass covers send, review and login.
 
-## Build and deploy
+## 15. Build and deploy
 
 <a id="deploy"></a>
 

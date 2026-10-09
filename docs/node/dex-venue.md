@@ -8,7 +8,22 @@ legacy client; DEX-domain orders settled pair by pair); token-verified orders an
 ([trade orders](#trade-orders)) **SPECIFIED**; store-backed book **SPECIFIED**; book gossip and managed markets
 **SPECIFIED**; non-EVM books **PLANNED**.
 
-## Order book
+**Contents**
+
+1. [Order book](#1-order-book)
+   - 1.1 [Markets and sides](#11-markets-and-sides)
+2. [Matching](#2-matching)
+3. [Token-verified orders](#3-token-verified-orders)
+4. [TradeEngine](#4-tradeengine)
+5. [Intake](#intake)
+6. [Routes](#routes)
+7. [Watcher](#7-watcher)
+8. [Persistence](#persistence)
+9. [Gossip](#gossip)
+10. [Managed markets](#managed-markets)
+11. [Tests](#tests)
+
+## 1. Order book
 
 <a id="order-book"></a><a id="NODE-DEX-01"></a>**NODE-DEX-01** — **A durable off-chain book, price-time priority,
 partial fills.** The venue keeps one book per market, with limit (GTC), IOC and FOK orders and partial fills; the book
@@ -19,7 +34,7 @@ journal before send, replacement, gap-fill — no second send channel). The DEX 
 **Single writer**: the node (one process per chain, book under a `tokio::Mutex`). A client never edits `remaining`; it
 only mirrors order and trade states from feed items ([persistence](#persistence)).
 
-### Markets and sides
+### 1.1 Markets and sides
 
 <a id="markets"></a>Markets `(base, quote)` are admin configuration (`/v1/admin/dex/markets`), cross-checked with the
 on-chain `markets(key)` at load and on every poll.
@@ -37,7 +52,7 @@ price `sellAmount/buyAmount` (for a `TradeOrder`, `sellAmount` = `amount` and `b
 overflow). Each side is a `Vec` sorted by (best price, increasing `seq`); `seq` is assigned monotonically at intake,
 stored, and kept on reload (time priority survives restarts).
 
-## Matching
+## 2. Matching
 
 <a id="matching"></a>Pure, no I/O. An incoming order `O` walks the opposite side in order; against a resting order `R`
 (maker) with `R.rem` left: `x = min(R.rem, floor(O.rem · R.sell / R.buy))`, `y = ceil(x · R.buy / R.sell)`; `x = 0` ⇒
@@ -79,7 +94,7 @@ taken from the transferred amount (so `fundable` is unchanged) and rounds up per
 order's signed `fee` rate, charged once per order per settlement on what it receives, and the venue applies its
 per-role rates at intake ([NODE-DEX-15](#NODE-DEX-15)).
 
-## Token-verified orders
+## 3. Token-verified orders
 
 <a id="trade-orders"></a><a id="NODE-DEX-15"></a>**NODE-DEX-15** — **The venue settles role-free `TradeOrder`s with
 `mtxSettle`, one taker against one or more makers, and arranges the roles itself.** Status: **SPECIFIED**. The
@@ -150,7 +165,7 @@ DEX can report any fill and take the signed `amount`; the owner accepted that re
 the defence off chain — clients refuse to sign for an unlisted `dex` ([CLI-SGN-35](../clients/signers-clientkeys.md#CLI-SGN-35))
 and the node never carries such an order. Cost: a new DEX needs a chain-profile entry before the venue serves it.
 
-## TradeEngine
+## 4. TradeEngine
 
 <a id="trade-engine"></a><a id="NODE-DEX-17"></a>**NODE-DEX-17** — **The TradeEngine executes orders against AMMs through
 `mtxExchange`/`mtxExchangeVia`** ([CTR-DEX-20](../contracts/dex.md#CTR-DEX-20)); off unless the chain enables it. Status:
@@ -175,7 +190,7 @@ chain: `trade_engine.enabled` (default `false`), `trade_engine.amm` (`{kind: uni
 `relayer = 0` another submitter may exchange the order; the signed limit still holds and only output it routes outside
 the DEX depends on its honesty — clients therefore keep `relayer` = the venue node.
 
-## Intake
+## <a id="intake"></a>5. Intake
 
 Spam controls at the door: body ≤ 64 KiB; amounts `0 < amount < 2^128`; `expiry ∈ (now + 5 s, now + 30 days]`; a
 per-market minimum (`min_base_amount`: an ask compares `sellAmount`, a bid compares `buyAmount`); at most
@@ -215,7 +230,7 @@ reason is out-of-gas in that check ⇒ that ERC-1271 order is not restored to th
 branch uses a `staticcall` with cap `_erc1271Gas(signer)`: 400k when `signer.codehash` is the `SmartKeyAccount` clone
 code hash, else 50k; at most 32 bytes of return data.)
 
-## Routes
+## <a id="routes"></a>6. Routes
 
 <a id="routes"></a>On the gateway listener (gateway auth applies, [gateway.md](gateway.md)); `dex_routes()` returns its
 own `Router` merged into the gateway router, so the auth layer wraps it without knowing the DEX routes.
@@ -236,7 +251,7 @@ own `Router` merged into the gateway router, so the auth layer wraps it without 
 <a id="NODE-DEX-03"></a>**NODE-DEX-03** — **No WebSocket; clients poll** `depth`/`trades`. A WebSocket server would add
 a dependency for no need at the volumes served.
 
-## Watcher
+## 7. Watcher
 
 <a id="watcher"></a><a id="NODE-DEX-04"></a>**NODE-DEX-04** — **The DEX watcher has its own cursor.** One task per
 chain with the same finality helpers as the indexer (`finality::{safe_head, next_range, quorum_ok}`) and a **separate
@@ -246,7 +261,7 @@ cursor** (`dex_cursor`) reads the DEX contract's logs (`OrderFilled`, `Matched`,
 closed on chain (cancelled through any relayer, too). `settled` is final: a later `MatchFailed` does not flip it. A
 separate cursor means a DEX ingest fault never blocks payment booking and vice versa.
 
-## Persistence
+## <a id="persistence"></a>8. Persistence
 
 <a id="persistence"></a><a id="book-store"></a><a id="NODE-DEX-14"></a>**NODE-DEX-14** — **The DEX book lives in the
 node store** (`dex_market`, `dex_order`, `dex_trade`); markets are admin config; settle/cancel/invalidate are `job`
@@ -310,7 +325,7 @@ Transitional (BUILT): the book is persisted in the legacy client over the pull p
 `dex_fill_ingest` with the indexer key, `dex_cursor`); on cutover the transitional node imports open orders once
 through the legacy `dex_book_load`, then resumes markets in the node.
 
-## Gossip
+## <a id="gossip"></a>9. Gossip
 
 <a id="gossip"></a><a id="NODE-DEX-12"></a>**NODE-DEX-12** — **DEX book gossip, two order modes per market.**
 **Home-bound** (default; `dex.rs` l.552–554): an order bound to relayer `r` is matched and settled **only by the home** that proved `r` in
@@ -464,7 +479,7 @@ settle tx of a candidate home (within the `checkOrder`-class RPC budget).
 Gossip of the book is built after the store-backed venue; non-EVM books (Sui, Aptos, Solana, Cosmos, Soroban, TON:
 relayer-bound settlement, [networks/README.md](../networks/README.md)) are **PLANNED**.
 
-## Managed markets
+## <a id="managed-markets"></a>10. Managed markets
 
 <a id="managed-markets"></a><a id="NODE-DEX-11"></a>**NODE-DEX-11** — **Managed markets are home-bound and check
 eligibility at intake.** A licensed operator runs its own `SCaaSDex` instance with managed pairs
@@ -494,7 +509,7 @@ Private-profile chains: managed markets are never on gossip ([gossip.md#private-
 | Venue or relayer fee to an ineligible recipient | relayer fees `NONE` on regulated legs; the venue's market fee wallet carries ordinary eligibility flags for its operator |
 | Wash trades by the venue | out of scope of the contract (venue licence, surveillance); every fill is on chain |
 
-## Tests
+## <a id="tests"></a>11. Tests
 
 <a id="tests"></a>cargo: price-time matching, partial fills, IOC, FOK, match limits == contract, snapshot/reload
 (durable), spam controls, digest KAT, event decoding; dust maker at the head + deeper maker ⇒ the taker matches the

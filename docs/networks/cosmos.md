@@ -3,7 +3,20 @@
 Common rules for every family: [networks/README](README.md). Status: contracts, adapter and client verifier
 **BUILT**; items marked SPECIFIED are normative and not yet in code; deploy tooling is PLANNED.
 
-## Overview
+**Contents**
+
+1. [Overview](#1-overview)
+2. [Payload](#2-payload)
+3. [Signatures](#3-signatures)
+4. [Contracts](#contracts)
+5. [DEX](#5-dex)
+6. [Relayer](#6-relayer)
+7. [Finality and events](#7-finality-and-events)
+8. [Deploy](#8-deploy)
+9. [Conformance](#9-conformance)
+10. [Limitations](#limitations)
+
+## 1. Overview
 
 <a id="overview"></a><a id="NET-COS-02"></a>**NET-COS-02** — **Cosmos = a CW20 token with a contract-level meta
 operation signed through ADR-036; `x/authz` is never used and `x/feegrant` is only a seam.** The subject signs a JSON
@@ -20,7 +33,7 @@ Three contracts in `smartcontracts/cosmos/` (own Rust workspace, `cosmwasm-std` 
 Adapter `scaas-node/src/adapters/cosmos.rs`; devnet `cosmwasm/wasmd:v0.61.15` (wasmvm 3, module `x/wasm`), ports 31990–31999. Chains are
 keyed `cosmos:<chain-id>`.
 
-## Payload
+## 2. Payload
 
 <a id="payload"></a>
 
@@ -71,7 +84,7 @@ with the same prefix, so a `pay` signed on one chain would run on a "twin" (`met
 `mandate/src/lib.rs:131-136`). [NET-COS-07](#NET-COS-07) makes the addresses differ and the node refuses duplicate
 chain ids.
 
-## Signatures
+## 3. Signatures
 
 <a id="signatures"></a>
 
@@ -143,7 +156,7 @@ a URN. Until the UA owner ids land, connectors and clients **never** show a pass
 address (a bech32 form invites a bank `MsgSend` or IBC transfer to an address nobody holds a key for). Multi-key
 accounts and key rotation need a dedicated account contract — a gap ([NET-ALL-05](README.md#NET-ALL-05)).
 
-## Contracts
+## <a id="contracts"></a>4. Contracts
 
 <a id="contracts"></a>
 
@@ -171,7 +184,7 @@ contract checks not revoked, mandate and signature unexpired, payee allowed, per
 periods of `period_secs`), `pay_ref` once, then calls `token.Pay`, so `payment_settled` carries the same `pay_ref`.
 `Revoke` and `Withdraw` are owner-only. The client-side mandate path is EVM-only today (seam).
 
-## DEX
+## 5. DEX
 
 <a id="dex"></a>
 
@@ -195,7 +208,7 @@ transactions, as on EVM ("no owner, no sweep"); tokens sent to it directly are l
 `SetMarket` only. SPECIFIED (as built an admin `Sweep` exists, `cosmos/dex/src/lib.rs:137-143`). Test: `Sweep` is no
 longer in the message enum; settle/cancel tests unchanged.
 
-## Relayer
+## 6. Relayer
 
 <a id="relayer"></a>
 
@@ -258,7 +271,7 @@ any `simulate`; as built `mesh/digest.rs:205-225` checks domain, network and con
 pays one REST `simulate` per garbage intent), signed fields from the payload. Cosmos has no value out beyond fees and
 no lane-paid deposits (both 0).
 
-## Finality and events
+## 7. Finality and events
 
 <a id="finality"></a>
 
@@ -273,7 +286,7 @@ log_index, from, to, amount, entry_ref, digest}`; `log_index` = the event's posi
 `quorum` endpoints (`status` + `block` at the minimum height and the tx events of the range) — SPECIFIED; as built a
 single trusted RPC.
 
-## Deploy
+## 8. Deploy
 
 <a id="deploy"></a>
 
@@ -288,7 +301,7 @@ unchanged. Deploy tooling is PLANNED (`deploy.sh` exits 2 for Cosmos); older cla
 the node's duplicate-chain-id refusal. Tests: the deploy script yields different addresses on two devnets with the
 same chain id and different genesis; the node refuses a duplicate chain id.
 
-## Conformance
+## 9. Conformance
 
 <a id="conformance"></a>
 
@@ -299,7 +312,7 @@ all assert the same `digest`, ADR-036 doc bytes and bech32 address. Self-review 
 the payer signs again); wasmvm 3 refuses the bulk-memory feature that Rust ≥ 1.87 emits, so `build-wasm.sh` lowers it
 with binaryen and checks MVP.
 
-## Limitations
+## <a id="limitations"></a>10. Limitations
 
 <a id="limitations"></a>
 

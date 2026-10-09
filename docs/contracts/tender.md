@@ -5,7 +5,27 @@ On a public ledger an open bid is visible to competitors in the mempool and in b
 the deadline), and returns every honest loser's deposit without anyone's approval. Status: **SPECIFIED** (EVM, and
 the same bytecode on Hedera); nothing is built.
 
-## Scope
+**Contents**
+
+1. [Scope](#1-scope)
+2. [Rules](#2-rules)
+3. [Roles and lifecycle](#3-roles-and-lifecycle)
+   - 3.1 [Commit (`now ≤ commitDeadline`)](#31-commit-now--commitdeadline)
+   - 3.2 [Reveal, disqualify, settle](#32-reveal-disqualify-settle)
+   - 3.3 [Payout routing (`withdrawDeposit(tenderId, bidder)`, permissionless, once per bid)](#33-payout-routing-withdrawdeposittenderid-bidder-permissionless-once-per-bid)
+   - 3.4 [Invariants](#34-invariants)
+4. [Interface](#4-interface)
+5. [Storage](#5-storage)
+6. [Flows](#6-flows)
+   - 6.1 [Buyer](#61-buyer)
+   - 6.2 [Bidder](#62-bidder)
+7. [Node and client touchpoints](#7-node-and-client-touchpoints)
+8. [Security](#8-security)
+9. [Gas (estimates, to be measured with the implementation)](#9-gas-estimates-to-be-measured-with-the-implementation)
+10. [Conformance](#10-conformance)
+11. [Families](#11-families)
+
+## 1. Scope
 
 In scope: the `SealedBidTender` contract (EVM; same bytecode on Hedera), the bidder and buyer flows, and the node and
 client touchpoints. The same design family also specifies gas sponsorship ([node/sponsorship.md](../node/sponsorship.md)),
@@ -15,7 +35,7 @@ multi-lot tenders, other auction types (pre-qualification = the eligibility allo
 deposits and anonymous bidders (a fresh `SmartKeyAccount` per tender is possible); hiding the address graph (SCaaS is
 not anonymous: bidder identities are public at commit).
 
-## Rules
+## 2. Rules
 
 <a id="deposit-commitment"></a>
 <a id="CTR-TND-01"></a>**CTR-TND-01** — **Deposit and commitment are one signature: the deposit token's own payment
@@ -114,7 +134,7 @@ refuses the chain; there is no storage-guard fallback.
 | Windows, bonds, admin | reveal window 1 h–30 d; `RETURN_ON_AWARD` or `HOLD_UNTIL_RELEASE`; one immutable contract per chain, no owner, pause or upgrade; `bidder ≠ buyer` |
 | Families | EVM and Hedera first (same bytecode); others PLANNED ([NET-ALL-18](../networks/README.md#NET-ALL-18)) |
 
-## Roles and lifecycle
+## 3. Roles and lifecycle
 
 Buyer: `msg.sender` of `createTender` (in practice a `SmartKeyAccount`, a `MandateWallet` owner call or a multisig,
 submitted as a `call` job). Bidder: `t.from` of the deposit `MetaTransfer`. Keeper: anyone (node, buyer, bidder) running
@@ -144,7 +164,7 @@ stateDiagram-v2
 Stored states: `OPEN`, `SETTLED`, `FAILED`, `CANCELLED`; `REVEAL` and `AWARDABLE` (the award window
 `(revealDeadline, revealDeadline + dqWindow]`, then until someone settles) are derived from `block.timestamp`.
 
-### Commit (`now ≤ commitDeadline`)
+### 3.1 Commit (`now ≤ commitDeadline`)
 
 1. Tender exists and stored state `OPEN`; `bidder = t.from`; `bidder ∉ {buyer, slashSink}`; eligibility proof valid
    when `eligibilityRoot ≠ 0` (OpenZeppelin `MerkleProof`, leaf `keccak256(bytes.concat(keccak256(abi.encode(
@@ -161,7 +181,7 @@ The batch/nonce of `m` is the bidder's choice; clients SHOULD use `payLane(depos
 convention, [CTR-MTX-03](metatx.md#CTR-MTX-03)). A commit and a cancel in the same block at `now == commitDeadline`
 are both valid; their order decides (a cancel after the commit refunds it).
 
-### Reveal, disqualify, settle
+### 3.2 Reveal, disqualify, settle
 
 - `revealBid(tenderId, bidder, price, salt)`: `commitDeadline < now ≤ revealDeadline`, bid `COMMITTED`, the
   recomputed commitment equals the stored one else `CommitmentMismatch`. `valid = minPrice ≤ price ∧ (maxPrice == 0 ∨
@@ -179,7 +199,7 @@ are both valid; their order decides (a cancel after the commit refunds it).
   `FAILED`; emits `TenderSettled(tenderId, winner, price, validReveals, commits)` (`winner = 0` when `FAILED`;
   `validReveals` includes disqualified bids). A second call reverts `WrongPhase`.
 
-### Payout routing (`withdrawDeposit(tenderId, bidder)`, permissionless, once per bid)
+### 3.3 Payout routing (`withdrawDeposit(tenderId, bidder)`, permissionless, once per bid)
 
 It settles first if `now > revealDeadline + dqWindow` and the tender is still `OPEN`; otherwise it requires
 `SETTLED`, `FAILED` or `CANCELLED` — except a `DISQUALIFIED` bid, which pays out at once (it can never lead again).
@@ -199,7 +219,7 @@ at any time after settle, anyone after `bondReleaseTime` ⇒ winner (`BondReleas
 buyer, `HOLD`, `now < bondReleaseTime` ⇒ `slashSink` (`BondClaimed`). Payouts use the token's plain `transfer` (the
 tender is the holder).
 
-### Invariants
+### 3.4 Invariants
 
 <a id="invariants"></a>
 
@@ -217,7 +237,7 @@ tender is the holder).
 - **I7** A deposit is forfeited only for non-reveal, invalid reveal, a declared violation class, or a HOLD bond claim —
   never for an undeclared reason.
 
-## Interface
+## 4. Interface
 
 ```solidity
 interface ISealedBidTender {
@@ -284,7 +304,7 @@ interface ISealedBidTender {
 // constructor(address factoryV1, address factoryV2) — immutable; either may be 0 on a chain without it.
 ```
 
-## Storage
+## 5. Storage
 
 ```
 mapping(uint256 => Tender) tenders;     // Tender = TenderConfig (≈ 7 slots packed) + buyer, State, commits/validReveals
@@ -302,9 +322,9 @@ minPrice ≤ maxPrice`; `minBidders ≥ 1`; HOLD ⇒ `revealDeadline < bondRelea
 `bondReleaseTime == 0`; `slashSink ∉ {0, this}`; `dqWindow ≤ 7 d`, `maxDisqualifications ≤ 2`, `dqWindow == 0 ⇒
 maxDisqualifications == 0 ∧ forfeitClasses == 0`.
 
-## Flows
+## 6. Flows
 
-### Buyer
+### 6.1 Buyer
 
 | # | Buyer system | Chain |
 |---|---|---|
@@ -321,7 +341,7 @@ maxDisqualifications == 0 ∧ forfeitClasses == 0`.
 The payment `entryRef` is never derived from `tenderId`. The buyer system never sees prices before reveal; the
 purchase order is created only from the finalized `TenderSettled`; non-revealers are flagged from `DepositSlashed`.
 
-### Bidder
+### 6.2 Bidder
 
 0. **Independent path (normative).** Before signing a deposit intent, the bidder's system checks that it can submit
    `commitBid` and `revealBid` on that chain **without the buyer**: its own node namespace (own gas or own sponsor
@@ -356,7 +376,7 @@ backup kept with the bid record; or (b) derived from a high-entropy secret the b
 unless the signer is proven deterministic (passkeys are not). The salt is never sent to anyone before
 `commitDeadline`.
 
-## Node and client touchpoints
+## 7. Node and client touchpoints
 
 | Where | What |
 |---|---|
@@ -365,7 +385,7 @@ unless the signer is proven deterministic (passkeys are not). The salt is never 
 | Node submit | `call` jobs to a registered tender: simulation as usual; no batching; live duplicates in the same namespace refused with the live `uid`; `commitBid` jobs pass the registered-token rule because the inner token is registered. The permissionless selectors `commitBid`, `revealBid`, `withdrawDeposit`, `settleTender` are rows of the call table with target rule `chain_contract.kind = tender`; role-restricted calls (`createTender`, `disqualifyWinner`, bond calls) go through the buyer's own account contract ([NODE-JOB-01](../node/job-api.md#NODE-JOB-01)), so tender jobs are no longer refused with `CALL_TARGET_REFUSED` |
 | Clients | bidder view: compute commitment and salt in the client, sign the deposit intent, reveal reminder at `commitDeadline`; buyer: tender and bid records with the secret fields kept server-side only; handlers for the ten events; the independent-path check before signing |
 
-## Security
+## 8. Security
 
 | Threat | Defence |
 |---|---|
@@ -406,7 +426,7 @@ Known limits (stated to users):
 - Bidder identities are public at commit (addresses), prices at reveal, forever. Revealed prices are personal data only
   through the address ↔ party mapping, which is erasable off chain.
 
-## Gas (estimates, to be measured with the implementation)
+## 9. Gas (estimates, to be measured with the implementation)
 
 | Call | Estimate | Notes |
 |---|---|---|
@@ -418,7 +438,7 @@ Known limits (stated to users):
 | `settleTender` | 8–15 k | state write + event |
 | `withdrawDeposit` | 30–45 k | status write + token transfer (cold recipient adds ~20 k) |
 
-## Conformance
+## 10. Conformance
 
 Unit: every `BadConfig` code; commit with each `BadDepositIntent` code; each tier kind; the deposit through
 `mtxExecuteTransfer`; unregistered and deprecated tokens refused; Zether refused; eligibility proof valid/invalid;
@@ -437,7 +457,7 @@ builders): `commitmentOf`, `depositRef`, the deposit `pay` data. Hedera: the sam
 ED25519 deposit intent (HIP-632 on the token). Gas snapshot including an ERC-1271 bidder. Deploy script: the `TSTORE`
 probe refuses a chain without EIP-1153.
 
-## Families
+## 11. Families
 
 | Family | Status | Design notes |
 |---|---|---|

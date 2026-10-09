@@ -4,7 +4,19 @@ Common rules for every family: [networks/README](README.md). Status: contracts, 
 **BUILT**; items marked SPECIFIED are normative and not yet in code. **Soroban is not on the mesh**: jobs reach a
 Soroban lane only through the job API (owner; [NODE-MESH-07](../node/mesh.md#NODE-MESH-07)).
 
-## Overview
+**Contents**
+
+1. [Overview](#1-overview)
+2. [Payload](#2-payload)
+3. [Signatures](#3-signatures)
+4. [Contracts](#contracts)
+5. [DEX](#dex)
+6. [Relayer](#6-relayer)
+7. [Finality and events](#7-finality-and-events)
+8. [Conformance](#8-conformance)
+9. [Limitations](#9-limitations)
+
+## 1. Overview
 
 <a id="overview"></a><a id="NET-SOR-01"></a>**NET-SOR-01** — **On Soroban the contract-level meta operation is the
 native Soroban authorization; a relayer lane is the transaction source, and fee-bump lets one lane pay for all.** The
@@ -19,7 +31,7 @@ requirement). Pi Network is the same family with network passphrases "Pi Testnet
 314159 (passphrases confirmed by the owner at deploy). Networks: Stellar `pubnet`, `testnet`, `standalone`; Pi
 `pi-mainnet`, `pi-testnet`.
 
-## Payload
+## 2. Payload
 
 <a id="payload"></a>
 
@@ -87,7 +99,7 @@ anchor with a new time). An anchor older than 7 days (indexer stopped) ⇒ refus
 `max_entry_ttl`); a chain never indexed ⇒ refuse to issue. Exceeding the bound only lengthens how long the host keeps
 the nonce. BUILT.
 
-## Signatures
+## 3. Signatures
 
 <a id="signatures"></a>
 
@@ -132,7 +144,7 @@ only `type`/`challenge`/`origin`, `account/src/lib.rs:149-153`, so an RP page em
 Permissions-Policy `publickey-credentials-get` — yields valid assertions under an attacker's page). Test: an assertion
 with `crossOrigin:true` ⇒ `BadClientData`.
 
-## Contracts
+## <a id="contracts"></a>4. Contracts
 
 <a id="contracts"></a>
 
@@ -176,7 +188,7 @@ archived ~60 days after its last key change, a payee 60 days after it was allowe
 `pay_under_mandate` / `__check_auth` is raised; end to end: archive ⇒ restore ⇒ `mined`. System relayers may also call
 `extend_ttl` for long-lived state.
 
-## DEX
+## <a id="dex"></a>5. DEX
 
 <a id="dex"></a>
 
@@ -210,7 +222,7 @@ party re-submits both auth entries with `maker_fill = 1` ⇒ fails; the right re
   `extra.auth = [{from, payload, signature, public_key}]` (same rules), so the matcher only queues jobs with two
   signatures. The Soroban book and matcher are a seam.
 
-## Relayer
+## 6. Relayer
 
 <a id="relayer"></a>
 
@@ -266,7 +278,7 @@ a `G…` ed25519 key signs raw 32 bytes like a Hedera ED25519 key, so one key ne
 apply while Soroban is off the mesh (`mesh/digest.rs:146` returns `FamilyNotSupported`); if it joins, the decoder
 verifies a `G…` ed25519 signature locally.
 
-## Finality and events
+## 7. Finality and events
 
 <a id="finality"></a>
 
@@ -278,7 +290,7 @@ op per Soroban transaction). `getEvents` serves only the RPC's retention window 
 created chain must set `indexed_block` near the current ledger (operations). Event-set agreement across the quorum per
 ledger range: SPECIFIED.
 
-## Conformance
+## 8. Conformance
 
 <a id="conformance"></a>
 
@@ -291,7 +303,7 @@ ledger range: SPECIFIED.
   (port 31980): two lanes from a 24-word mnemonic, payment through `lane_step`, finality through `index_step`,
   anti-lock end to end.
 
-## Limitations
+## 9. Limitations
 
 <a id="limitations"></a>
 

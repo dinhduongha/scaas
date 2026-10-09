@@ -5,7 +5,25 @@ metadata, credentials, audit log, DEX book, mesh and gossip tables. It runs on S
 backend is storage only. Status: SQLite store, owner lock, fencing, counters, CAS and audit chain **BUILT**; the job
 source, PostgreSQL/MySQL and the tables marked below **SPECIFIED**.
 
-## One store
+**Contents**
+
+1. [One store](#1-one-store)
+2. [Backends](#backends)
+   - 2.1 [Single owner and fencing](#21-single-owner-and-fencing)
+   - 2.2 [Transactions and outcomes](#22-transactions-and-outcomes)
+   - 2.3 [Per-backend schema rules (normative)](#23-per-backend-schema-rules-normative)
+   - 2.4 [Driver, secrets, tests](#24-driver-secrets-tests)
+3. [Durability](#durability)
+4. [Schema](#schema)
+   - 4.1 [Mesh tables](#mesh-tables)
+   - 4.2 [Gossip tables](#gossip-tables)
+5. [Chain state](#5-chain-state)
+6. [Configuration authority](#6-configuration-authority)
+7. [Config validation](#7-config-validation)
+8. [Immutable programs](#8-immutable-programs)
+9. [Config file](#9-config-file)
+
+## 1. One store
 
 <a id="one-store"></a><a id="NODE-STO-04"></a>**NODE-STO-04** — **One store, always on**, opened by every node (not
 only when the mesh is on); backend per [NODE-STO-06](#NODE-STO-06). It holds jobs, job events, index ranges, config,
@@ -17,7 +35,7 @@ journal is local, so journal-before-broadcast needs no network hop; one writer g
 store loses jobs; recovery is operator-confirmed ([NODE-ADM-07](admin-auth.md#NODE-ADM-07),
 [runbooks.md#backup-dr](runbooks.md#backup-dr)).
 
-## Backends
+## <a id="backends"></a>2. Backends
 
 <a id="backends"></a><a id="NODE-STO-06"></a>**NODE-STO-06** — **The node store runs on SQLite, PostgreSQL or MySQL;
 the backend is storage only.** One `[store] url` (`sqlite:///var/lib/scaas/node.db`, `postgres://…`, `mysql://…`;
@@ -25,7 +43,7 @@ toml/env only) selects it; every backend carries the same logical schema ([schem
 as [NODE-STO-04](#NODE-STO-04). Multi-node HA on a shared database is **not** in scope
 ([README.md#limitations](README.md#limitations)).
 
-### Single owner and fencing
+### 2.1 Single owner and fencing
 
 - Owner lock, backend-native, on a **dedicated** connection: SQLite `flock` on `<db>.lock`; PostgreSQL
   `pg_try_advisory_lock(k)` with `k` = the first 8 bytes of `store_id` as `int8` (no 32-bit `hashtext`); MySQL
@@ -45,7 +63,7 @@ as [NODE-STO-04](#NODE-STO-04). Multi-node HA on a shared database is **not** in
   <!-- example:odoo -->The reference ERP stack runs PgBouncer (`/home/dockers/odoo19/pgbouncer`) for its own database;
   it must not sit in front of the node store.<!-- /example -->
 
-### Transactions and outcomes
+### 2.2 Transactions and outcomes
 
 - SQLite: `max_connections = 1` (the single connection of [NODE-STO-04](#NODE-STO-04)), WAL, `synchronous = FULL`,
   `foreign_keys = ON`, transactions opened with `begin_with("BEGIN IMMEDIATE")`; the owner `flock` replaces
@@ -57,7 +75,7 @@ as [NODE-STO-04](#NODE-STO-04). Multi-node HA on a shared database is **not** in
   re-reads the row before any further action ([submit-lanes.md#journal](submit-lanes.md#journal)). The idempotent
   journal CAS makes the retry safe.
 
-### Per-backend schema rules (normative)
+### 2.3 Per-backend schema rules (normative)
 
 | Logical | SQLite | PostgreSQL | MySQL 8 |
 |---|---|---|---|
@@ -75,7 +93,7 @@ Every query compares bytes; the contract suite asserts `'0xAB' != '0xab'` and ba
 Migrations: `sqlx::migrate!` with `migrations/{sqlite,postgres,mysql}/`; a DDL-equivalence test introspects the three
 schemas and compares tables, columns (logical types), unique and check constraints.
 
-### Driver, secrets, tests
+### 2.4 Driver, secrets, tests
 
 - `sqlx` with features `store-sqlite` (default), `store-postgres`, `store-mysql`; `rusqlite` is not used.
 - A database URL with a password is toml/env-only, never stored in config tables nor returned by the admin API.
@@ -84,7 +102,7 @@ schemas and compares tables, columns (logical types), unique and check constrain
 - Order of delivery: the backend trait + SQLite first; PostgreSQL then MySQL, each green on the contract suite before
   the next.
 
-## Durability
+## <a id="durability"></a>3. Durability
 
 <a id="durability"></a>A claim needs no `FOR UPDATE SKIP LOCKED`: that was required only while several processes
 competed over one shared table. One process owns one store (owner lock + fencing epoch); its lanes compete through the
@@ -97,7 +115,7 @@ does not lease, `/readyz` reason `lane <label> used outside this store`, metric 
 manual wallet send also trips it — the right default ([submit-lanes.md#lane-keys](submit-lanes.md#lane-keys),
 [runbooks.md#incidents](runbooks.md#incidents) RB-04).
 
-## Schema
+## <a id="schema"></a>4. Schema
 
 <a id="schema"></a>Logical schema in SQLite dialect; the per-backend rules above apply. Migrations: `sqlx::migrate!`,
 one directory per backend, `meta.schema_version = '2'`; every implementing change ships one numbered migration per
@@ -349,7 +367,7 @@ The job state machine is in [job-api.md#states](job-api.md#states); DEX tables i
 stand as written here: `chain.max_valid_for_secs`, `token.features` value `ua`, `token.reg_cache`, the `/readyz`
 body ([ops.md#health](ops.md#health)), the client-side event-cursor reset action of the integration guide.
 
-### Mesh tables
+### <a id="mesh-tables"></a>4.1 Mesh tables
 
 <a id="mesh-tables"></a>The mesh intent rows live in the same store; every local submission is a `job` row
 ([NODE-JOB-02](job-api.md#NODE-JOB-02)) and an `intent` row references it by `job_uid` instead of carrying its own
@@ -447,7 +465,7 @@ Retention (janitor, every 60 s):
 
 `peer_cursor` rows of peers no longer in the table are deleted at the next config refresh.
 
-### Gossip tables
+### <a id="gossip-tables"></a>4.2 Gossip tables
 
 ```sql
 CREATE TABLE gossip_announce (peer_id BLOB PRIMARY KEY, version BIGINT NOT NULL, expires_at BIGINT NOT NULL,
@@ -482,7 +500,7 @@ Portable per the backend rules (`BIGINT`/`TEXT`, no backend types); `gossip_peer
 expired announces/bans are deleted by the janitor. `dex_market` gains `gossip INTEGER NOT NULL DEFAULT 0` and
 `unbound INTEGER NOT NULL DEFAULT 0` ([dex-venue.md#gossip](dex-venue.md#gossip)).
 
-## Chain state
+## 5. Chain state
 
 <a id="chain-state"></a><a id="chain-states"></a><a id="NODE-STO-02"></a>**NODE-STO-02** — Chain `state ∈ active|paused|halted`. **`paused` blocks sending only**: no new lease, the gateway refuses new intake for the chain, but
 the indexer and the event feed continue and signed transactions keep being tracked, so a customer who has paid is
@@ -497,7 +515,7 @@ inputs ([NODE-IDX-02](indexer-feeds.md#NODE-IDX-02)).
 <a id="NODE-STO-08"></a>**NODE-STO-08** (open; default applied) — A paused chain **accepts** jobs on the job API and
 holds them `queued` until it is resumed; a `halted` chain refuses intake (`409 CHAIN_HALTED`).
 
-## Configuration authority
+## 6. Configuration authority
 
 <a id="config-authority"></a><a id="NODE-STO-03"></a>**NODE-STO-03** — **Config authority = the node store.**
 `node.toml` bootstraps: entries absent from the store are imported; present ones are not overwritten (drift warning
@@ -531,7 +549,7 @@ chain state, mesh peers/policy, the deny set, sponsor policies, `chain_contract`
 Transitional (BUILT): the legacy pull path reads the token list and chain parameters from the client's `node_config`
 call; the store snapshot replaces it chain by chain ([job-api.md#legacy-pull](job-api.md#legacy-pull)).
 
-## Config validation
+## 7. Config validation
 
 <a id="config-validation"></a>`Config::validate` and the admin API refuse, besides the listener rules of
 [README.md#listeners](README.md#listeners):
@@ -556,7 +574,7 @@ open`; `submit` on `contract = "*"`; a mesh peer of class `private` without chai
 (SPECIFIED) an EVM or Hedera chain without `chain_uid`, a `chain_uid` already used by another chain row, and a
 `chain_contract` row of kind `dex` whose `chainUid()` differs ([NODE-GW-07](gateway.md#NODE-GW-07)).
 
-## Immutable programs
+## 8. Immutable programs
 
 <a id="immutable-programs"></a><a id="NODE-STO-07"></a>**NODE-STO-07** — **Sui, Aptos and Solana programs are
 immutable at deploy** ([CTR-GEN-02](../contracts/README.md#CTR-GEN-02)); the node verifies it. Sui
@@ -566,7 +584,7 @@ at start (Sui: the configured `UpgradeCap` id no longer exists; Solana: ProgramD
 `None`; Aptos: `PackageRegistry` policy = immutable) and holds an upgradeable chain `halted` with
 `PROGRAM_UPGRADEABLE`.
 
-## Config file
+## 9. Config file
 
 <a id="config-file"></a>`node.toml` holds the bootstrap rows, secrets (as references: `{ env = … }`, `{ file = … }`,
 `{ keystore = …, passphrase_env = … }`) and dial targets. Example (other sections:

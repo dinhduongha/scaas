@@ -14,7 +14,30 @@ Passkeys can serve either way: as a `webauthn-p256` Universal Account, or as a k
 [mandates.md](mandates.md).
 
 <a id="universal-account"></a>
-## Universal Account (UA)
+**Contents**
+
+1. [Universal Account (UA)](#1-universal-account-ua)
+   - 1.1 [Scope](#11-scope)
+   - 1.2 [Model](#12-model)
+   - 1.3 [Identity](#13-identity)
+   - 1.4 [Registration and proof of possession](#14-registration-and-proof-of-possession)
+   - 1.5 [Keys, purposes, tags](#15-keys-purposes-tags)
+   - 1.6 [Kinds](#kinds)
+   - 1.7 [Function → accepted kinds](#17-function--accepted-kinds)
+   - 1.8 [Registry](#registry)
+   - 1.9 [Verifiers](#19-verifiers)
+   - 1.10 [EIP-7702 and chain identity](#110-eip-7702-and-chain-identity)
+   - 1.11 [Credentials (optional)](#111-credentials-optional)
+   - 1.12 [Touchpoints](#112-touchpoints)
+   - 1.13 [Migration from the built registry](#113-migration-from-the-built-registry)
+   - 1.14 [Security](#114-security)
+   - 1.15 [Gas and calldata (estimates; measured numbers replace them in `test/ua/UAGas.t.sol`)](#115-gas-and-calldata-estimates-measured-numbers-replace-them-in-testuauagastsol)
+   - 1.16 [Vectors and tests](#116-vectors-and-tests)
+2. [Passkeys on chain](#2-passkeys-on-chain)
+3. [Smart account (optional): `SmartKeyAccount`](#3-smart-account-optional-smartkeyaccount)
+   - 3.1 [Smart-account limitations](#smart-account-limitations)
+
+## 1. Universal Account (UA)
 
 A Universal Account is an account identifier for every signature scheme SCaaS supports: a native account of a chain,
 or a 32-byte id derived from key data or from a policy (a multisig structure). A per-chain, admin-free registry stores
@@ -22,7 +45,7 @@ what the chain needs to verify derived ids; per-kind verifiers check signatures;
 function needs. An optional verifiable-credential layer sits on top. Status: **SPECIFIED**; nothing is built. The
 built Zether-only registry is replaced by it ([legacy registry](#legacy-registry), [migration](#migration)).
 
-### Scope
+### 1.1 Scope
 
 <a id="scope"></a>
 
@@ -43,7 +66,7 @@ function); registry-level freeze, revocation or compliance status (compliance st
 cryptography ([pq-zether.md](pq-zether.md) — this file defines only the PQ **signing** kinds and how a Zether UA points
 to an authorization UA); a DID method, a credential issuer, or an on-chain credential parser.
 
-### Model
+### 1.2 Model
 
 <a id="model"></a>
 
@@ -75,7 +98,7 @@ flowchart TD
 - The registry call is `registry.requireAuthorized(ua, purpose, digest, auth)`.
 - Optional: VC (issuer-signed) + VP / KB-JWT (signed by the identity UA, purpose `vp`) → relying party / attester.
 
-### Identity
+### 1.3 Identity
 
 <a id="ua-identifier"></a>
 <a id="CTR-UA-02"></a>**CTR-UA-02** — **A Universal Account is an identifier derived from key data, never a contract**
@@ -114,7 +137,7 @@ vectors. A kind is enabled on a chain only if the registry generation was deploy
 part of the id; a mutable kind table would be an admin key over every account. New schemes wait for a new registry
 generation and new token implementations that point to it.
 
-### Registration and proof of possession
+### 1.4 Registration and proof of possession
 
 <a id="registration"></a>
 <a id="CTR-UA-06"></a>**CTR-UA-06** — **Native kinds are never registered; every other kind must be registered before
@@ -169,7 +192,7 @@ cycles, a simple audit. Two-level governance uses `SmartKeyAccount` or Safe (nat
 the node's sponsorship limits ([NODE-SPN-01](../node/sponsorship.md#NODE-SPN-01)); self-paid spam pays its own gas. An
 immutable `IRegistrationPolicy` (invite / attested) per registry generation is the alternative if ever needed.
 
-### Keys, purposes, tags
+### 1.5 Keys, purposes, tags
 
 <a id="purposes"></a>
 <a id="CTR-UA-10"></a>**CTR-UA-10** — **One key = one purpose, enforced in four layers** (owner): (1) wallets/clientkeys
@@ -233,7 +256,7 @@ digest)` under the registry's domain, never a raw hash; native kinds on token-lo
 signing (EIP-712 / family envelope) untouched. Cross-kind and cross-purpose replay die at the hash; native wallets
 display what they sign, and no raw-hash (`eth_sign`) signature is ever asked of an EOA. Cost: one extra keccak (~60 gas).
 
-### Kinds
+### <a id="kinds"></a>1.6 Kinds
 
 <a id="kinds"></a>
 
@@ -324,7 +347,7 @@ still need a new UA.
 | SIGNING | every derived kind not in ZETHER: single-key `0x0100`–`0x0107`, `0x0110`–`0x0113`, `0x0130`–`0x0132`, and the structure `0x0120` | `requireAuthorized` (native or SIGNING; ZETHER ⇒ `UAUnauthorized`); v3 `from`/`to` (native or registered SIGNING, else `UAKindNotAccepted(kind)`); Zether `authRef` (native or SIGNING; the PQ Zether kind narrows it) |
 | MEMBER | SIGNING single-key kinds, plus the native kinds the chain profile can verify, all with `id >> 160 == 0` — on EVM `0x0001`–`0x0002`; `0x0003` **only** in a Hedera-profile registry (constructor immutable `hederaNative`, HIP-632) | `msig` members (`UAMemberUnknown`); no other family's native kind, no `hedera-native` outside Hedera and no structure is ever an EVM member |
 
-#### MuSig2 and FROST: what the registry checks
+#### <a id="musig2-and-frost-what-the-registry-checks"></a>1.6.1 MuSig2 and FROST: what the registry checks
 
 The kinds stay separate from `bip340` / `schnorr-bn254` (owner) and are made sound: every claim the id makes about the
 group is either **checked at registration** or listed as **attestation-only**. The checked group key is stored
@@ -401,7 +424,7 @@ the FIPS 206 draft encoding in the vectors; a final FIPS 206 with a different en
 (`…fndsa512.v2`), never a silent change. The earlier `PQ_COMMITMENT` scheme ("verify off chain") is retired. PQ checks
 cost real money on public chains (an ML-DSA-65 signature is 53–132 k gas of calldata alone, plus 1.2–8.1 M execution).
 
-### Function → accepted kinds
+### 1.7 Function → accepted kinds
 
 <a id="functions"></a>
 <a id="function-kinds"></a>
@@ -582,7 +605,7 @@ Families keep their entry points (`mtx_pay`, `MtxExecute`…, [NET-ALL-28](../ne
 the registry check where an account opens for a derived owner. Every non-EVM owner field gains an explicit
 `owner_kind`: on these families a native 32-byte key and a derived id cannot be told apart by shape.
 
-### Registry
+### <a id="registry"></a>1.8 Registry
 
 <a id="registry"></a>
 
@@ -767,7 +790,7 @@ Other families:
 On every family, records, account owners and subject accounts store an explicit **`owner_kind`** next to the id and
 dispatch verification by that kind; id shape (`>> 160`) is an EVM/Cosmos-20-byte rule only.
 
-### Verifiers
+### 1.9 Verifiers
 
 <a id="verifiers"></a>
 
@@ -815,7 +838,7 @@ The enabled set, each kind's measured `verifyCap` and the chain's `verifyBudget`
 address 0 = disabled); the chain profile publishes them; clients read `kindEnabled` and the caps before offering a kind
 or building a structure.
 
-### EIP-7702 and chain identity
+### 1.10 EIP-7702 and chain identity
 
 <a id="eip7702"></a>
 <a id="CTR-UA-24"></a>**CTR-UA-24** — **EIP-7702 delegated EOAs are native EOAs whose key stays root; native
@@ -842,7 +865,7 @@ deployed elsewhere with a copy of our profile's arguments is trusted by nothing 
 address at `initialize`, and the node binds the registry address, its `chainUid()` and the RPC's genesis hash per chain
 profile and refuses a mismatch. A chain reset (new genesis) needs a new registry; dev chains redeploy anyway.
 
-### Credentials (optional)
+### 1.11 Credentials (optional)
 
 <a id="credentials"></a>
 <a id="CTR-UA-20"></a>**CTR-UA-20** — **The VC/eKYC layer is optional and never mandatory** (owner). Any account, native or
@@ -949,7 +972,7 @@ keeps an **evidence bundle**:
 of the applicable data-protection regime (market-neutral): erasure requests are honoured after the claim period, by DEK
 destruction.
 
-### Touchpoints
+### 1.12 Touchpoints
 
 - **Mesh**: UA intents travel as a new EVM body `evm.ua_meta_tx` under `scaas-intent/1.3`
   ([NODE-MESH-18](../node/mesh.md#NODE-MESH-18)); the node verifies every single-key UA kind natively before gossip
@@ -963,7 +986,7 @@ destruction.
   `webauthn-p256` UA and registers it gaslessly ([clients/app.md](../clients/app.md)).
 - **ERP**: UAs are stored as addresses of a new kind, never as off-chain policy ([integration.md](../integration.md#accounts)).
 
-### Migration from the built registry
+### 1.13 Migration from the built registry
 
 <a id="migration"></a>
 <a id="CTR-UA-22"></a>**CTR-UA-22** — **Migration is breaking, dev chains only**: `UniversalAccountRegistry`,
@@ -1011,7 +1034,7 @@ are shared; a partial landing breaks the cross-language tests); dev chains 31337
 dev `SmartKeyAccount` secp256k1 keys rotate to the role path with `rotateKey` (script); non-EVM owner derivations move
 with their family work.
 
-#### Legacy registry
+#### <a id="legacy-registry"></a>1.13.1 Legacy registry
 
 <a id="legacy-registry"></a>
 
@@ -1076,7 +1099,7 @@ enum AuthScheme { SELF_SCHNORR, ECDSA_MULTISIG, FROST_BN254, MUSIG2_BN254, BLS_B
 There is no `EVMLinkUpdated` (no relinking). An earlier `attributes(UA)` extension proposal is withdrawn: compliance flags
 live in the separate `ComplianceRegistry`. This interface is deleted and replaced by `IUARegistry` at migration.
 
-#### Threshold and aggregate signatures (status)
+#### 1.13.2 Threshold and aggregate signatures (status)
 
 | Scheme | Where | Property | Status |
 |---|---|---|---|
@@ -1087,7 +1110,7 @@ live in the separate `ComplianceRegistry`. This interface is deleted and replace
 | Threshold ECDSA (MPC providers) | not a kind: the output is an ordinary ECDSA signature ⇒ native EOA ([CTR-UA-08](#CTR-UA-08)) | — | — |
 | Smart-account policies (Safe, `SmartKeyAccount`) | legacy scheme 7; UA: native contract id (never registered) | arbitrary policy via ERC-1271 | **BUILT** |
 
-### Security
+### 1.14 Security
 
 <a id="security"></a>
 
@@ -1123,7 +1146,7 @@ live in the separate `ComplianceRegistry`. This interface is deleted and replace
 | S28 | Foreign-family native member (`hedera-native` on a non-Hedera EVM chain) | MEMBER per chain profile; `0x0003` only where `hederaNative()` | — |
 | S29 | Forwarded/brokered BBS presentation as legal evidence | bbs never accepted where the evidence trail applies; KB-JWT bound to the account and `intent_id` | — |
 
-### Gas and calldata (estimates; measured numbers replace them in `test/ua/UAGas.t.sol`)
+### 1.15 Gas and calldata (estimates; measured numbers replace them in `test/ua/UAGas.t.sol`)
 
 <a id="gas"></a>
 
@@ -1188,7 +1211,7 @@ shown to the user before they choose a PQ kind on such a chain. On rollups and l
 private/PoA chains with zero gas price it is not money. EIP-7825 (16.78 M per transaction) bounds a single check, hence
 `UA_VERIFY_BUDGET` (min(12 M, 0.7 × chain cap)) and the structure bound.
 
-### Vectors and tests
+### 1.16 Vectors and tests
 
 <a id="vectors"></a>
 
@@ -1266,7 +1289,7 @@ bucket; pre-gossip rejection of bad UA signatures (garbage PQ intents never reac
 systems: `ua_id` canonicalised on write (a padded EOA ⇒ 20-byte form, upper-case ⇒ lower) so a UNIQUE constraint holds;
 vectors pass in Python.
 
-## Passkeys on chain
+## 2. Passkeys on chain
 
 <a id="passkeys"></a>
 <a id="CTR-ACC-08"></a>**CTR-ACC-08** — Portal and mobile subjects sign with **WebAuthn P-256 passkeys** (owner). An
@@ -1320,7 +1343,7 @@ Tests: real WebAuthn vectors — generated by a software authenticator (fixed P-
 published vector suite; failure cases; batch; key lifecycle; recovery; a token `pay` signed by a passkey and by
 a seed key; precompile and Solidity gas; end to end: add a second key (seed when a passkey exists) and sign with each.
 
-## Smart account (optional): `SmartKeyAccount`
+## 3. Smart account (optional): `SmartKeyAccount`
 
 Status: **BUILT** (`smartcontracts/evm/src/account/`).
 
@@ -1428,7 +1451,7 @@ Key lifecycle per family ([NET-ALL-05](../networks/README.md#NET-ALL-05) is norm
 | TON | wallet key follows the owner's wallet; **a passkey cannot rotate** | **none** | guardian + delayed passkey rotation planned |
 | Solana | KeyOp add/remove/policy | `start_recovery` / `finish_recovery` | — |
 
-### Smart-account limitations
+### <a id="smart-account-limitations"></a>3.1 Smart-account limitations
 
 <a id="smart-account-limitations"></a>
 

@@ -8,7 +8,27 @@ the `createToken` factory **SPECIFIED** (accepted 2026-10-08, implemented in pha
 [Transitional (BUILT)](#transitional-built-tokens)); node and client support **SPECIFIED**; the regulated controls
 as flags ([asset-suite.md](asset-suite.md)) **SPECIFIED**.
 
-## Overview
+**Contents**
+
+1. [Overview](#1-overview)
+2. [Kinds](#2-kinds)
+   - 2.1 [NONE — `NoUnderlyingToken`](#21-none--nounderlyingtoken)
+   - 2.2 [UNDERLYING — `UnderlyingToken` (1–8 legs)](#22-underlying--underlyingtoken-18-legs)
+3. [Rates](#rates)
+4. [Features](#4-features)
+5. [Allowance lockdown](#5-allowance-lockdown)
+6. [Factory](#factory)
+   - 6.1 [`OpenFactory`](#61-openfactory)
+   - 6.2 [Transitional (BUILT)](#62-transitional-built)
+7. [Interfaces](#interfaces)
+8. [Storage layout (clones)](#8-storage-layout-clones)
+9. [Gas](#9-gas)
+10. [Hedera](#10-hedera)
+11. [No migration](#11-no-migration)
+12. [Conformance](#conformance)
+13. [Limitations](#13-limitations)
+
+## 1. Overview
 
 ```mermaid
 classDiagram
@@ -70,7 +90,7 @@ The `MetaTransaction` struct, its typehash and the digest rule are one for every
 `verifyingContract` differs per clone. Not covered: baskets (proportional, weighted multi-asset redemption), oracle
 rates, rebasing/share wrappers (ERC-4626 style).
 
-## Kinds
+## 2. Kinds
 
 The kinds are in [CTR-TOK-21](#CTR-TOK-21). The two public kinds without a Zether layer:
 
@@ -87,7 +107,7 @@ transfer exactly on the way out; rebasing underlyings are unsupported (a negativ
 first-come); built `ZetherToken` refuses fee-on-transfer underlyings (`UnsupportedUnderlying`,
 [CTR-ZTH-14](zether.md#CTR-ZTH-14)); target: the confidential kinds use UnderlyingLib ([CTR-TOK-11](#CTR-TOK-11)). Weighted baskets (proportional redemption) are not planned.
 
-### NONE — `NoUnderlyingToken`
+### 2.1 NONE — `NoUnderlyingToken`
 
 <a id="CTR-TOK-09"></a>**CTR-TOK-09** — `NoUnderlyingToken` (kind `NONE`) mints `initialSupply` to `initialHolder` at
 init (`NONE*` kinds only). Further supply and burning are features, not class: `mint` by the `minter` with `MINTABLE`
@@ -106,7 +126,7 @@ init (`NONE*` kinds only). Further supply and burning are features, not class: `
 Invariant: `Σ balances == totalSupply`. A supply cap or mint-rate limit, if an issuer wants one, belongs in the
 minter contract it controls, not in this kind.
 
-### UNDERLYING — `UnderlyingToken` (1–8 legs)
+### 2.2 UNDERLYING — `UnderlyingToken` (1–8 legs)
 
 `UnderlyingToken` (kind `UNDERLYING`) takes 1–8 legs at creation; a one-leg token is what the earlier design called a
 single-underlying wrapper and a multi-leg token a multi-underlying wrapper, so there are no separate single/multi
@@ -213,7 +233,7 @@ no standard wrapped native token. `underlying = address(0)` in a `Leg` is the na
 
 **Transitional (BUILT).** Built wrappers have no native leg (`underlying ≠ 0` is checked); replaced in P1.
 
-#### More than one leg
+#### 2.2.1 More than one leg
 
 <a id="multi"></a>
 
@@ -274,7 +294,7 @@ expected behaviour of an any-of wrapper, not a bug.
   a multi-underlying token should show the per-leg backing before a wrap. (Checking every leg on a multi `wrap` and
   `addReserve` — at most 8 `balanceOf`, as `executeRate` already does — was considered and not adopted.)
 
-## Rates
+## <a id="rates"></a>3. Rates
 
 <a id="CTR-TOK-04"></a>**CTR-TOK-04** — A conversion rate is `(num, den)`, `uint96` each, `1 ≤ num, den < 2^96`,
 meaning **wrapped raw units per underlying raw unit**. Every output rounds **down** (in the contract's favour):
@@ -462,7 +482,7 @@ allowlisted (`msg.sender` must be a contract other than the token); the node run
 Clients refuse by default to build or sign such an order when `dex` is not a registered wrapper of that underlying
 ([CTR-DEX-19](dex.md#CTR-DEX-19)).
 
-## Features
+## 4. Features
 
 <a id="CTR-TOK-10"></a>**CTR-TOK-10** — "No one alters a deployed token" holds with only visible exceptions: the feature flags are
 fixed at creation ([CTR-TOK-22](#CTR-TOK-22)) and the roles are held by the accounts the owner granted them to; an owner
@@ -525,7 +545,7 @@ guardian are set through `initData` and cannot be changed; `renounceMinter`, `re
 correspond to the holder's `renounceRole(bit)`, and `disableControls` to `disableFeature(bit)`; there is no owner. The
 regulated controls are specified only. Replaced in P1 by the flags and the owner above.
 
-## Allowance lockdown
+## 5. Allowance lockdown
 
 <a id="CTR-TOK-01"></a>**CTR-TOK-01** — **Only a contract may call `approve`, an `approve`/allowance spender must be a
 contract, and only a contract may call `transferFrom`. An EOA never holds or grants an allowance on a SCaaS token** —
@@ -570,7 +590,7 @@ check was dropped); the rule handles each one explicitly:
 An earlier "EOA caller" form (`msg.sender == tx.origin && extcodesize == 0`) was dropped because `tx.origin` misjudges
 contracts in their constructor and 7702-delegated EOAs; the caller check uses the classifier above.
 
-## Factory
+## <a id="factory"></a>6. Factory
 
 <a id="CTR-TOK-15"></a>**CTR-TOK-15** — **The factory is open to everyone.** Anyone creates tokens; anyone wraps any
 ERC-20 into a meta token (or a confidential token where enabled); the market decides which one is used. SCaaS deploys
@@ -619,7 +639,7 @@ Clients add their own pinning where needed ([CTR-ZTH-20](zether.md#CTR-ZTH-20)).
 every asset: `creator`, `underlying`, `version`, `implementation`, creation block (issuance timestamp), and for
 wrappers the live reserve `underlying.balanceOf(token)` — readable by anyone for free.
 
-### `OpenFactory`
+### 6.1 `OpenFactory`
 
 <a id="factory-v1"></a>
 <a id="factory-v2"></a>
@@ -669,7 +689,7 @@ struct DexConfig { address admin; uint32 relayerSharePpm; address treasury; bool
 Flag validation is the token's ([CTR-TOK-22](#CTR-TOK-22)): the factory only forwards `features`, `lockedFeatures`
 and `roles`.
 
-### Transitional (BUILT)
+### 6.2 Transitional (BUILT)
 
 <a id="transitional-built-tokens"></a>
 
@@ -765,7 +785,7 @@ with `new`. Factory v2's `OpenFactoryV2._createTiered` admits kinds through `_is
 and adds the `chainUid` check. Separate `AssetFactory` for action
 contracts: [asset-suite.md](asset-suite.md#templates).
 
-## Interfaces
+## <a id="interfaces"></a>7. Interfaces
 
 The block is the **built** function set, grouped by the built contracts; in the target the `UnderlyingToken`, `NoUnderlyingToken`
 and `MetaTokenBase` rows carry the same functions, `renounceMinter`/`renounceRateAdmin`/`renounceGuardian` become
@@ -816,7 +836,7 @@ The node's event normaliser adds `Wrapped`, `Unwrapped`, `ReserveAdded`, `RateCh
 `MetaNonceCancelled`, `TieredTokenDeployed`, `TradeFilled`; `PaymentSettled` and `MetaTransactionExecuted` keep their
 fields. A gasless unwrap emits the same `Unwrapped` as a direct unwrap, plus `MetaTransactionExecuted`.
 
-## Storage layout (clones)
+## 8. Storage layout (clones)
 
 <a id="CTR-TOK-24"></a>**CTR-TOK-24** — **Libraries, namespaces and size budget.** Heavy logic lives in **external**
 libraries, linked at deploy and called by `DELEGATECALL` (≈ 2.6 k gas on the first call of a transaction, 100 after);
@@ -879,7 +899,7 @@ the rate admin sets `rateAdjustable = false`, `rateAdmin = 0` and drops the pend
 copy stays set (wrap then reads an empty `_pending`, one extra SLOAD), so fixed-at-creation tokens keep the cheap path.
 The controls of flags 5–8 live in the `scaas.admin` namespace ([asset-suite.md](asset-suite.md#storage), [CTR-TOK-24](#CTR-TOK-24)).
 
-## Gas
+## 9. Gas
 
 - Hot path (transfer, `pay`, fees, named functions) touches no kind-specific storage: the same SLOAD/SSTORE set as the measured
   built path, plus the payee comparison (< 100 gas). Budget: every row of the gas table ([metatx.md](metatx.md#gas))
@@ -903,7 +923,7 @@ The controls of flags 5–8 live in the `scaas.admin` namespace ([asset-suite.md
 - Size: each implementation ≤ 20,480 B and each library ≤ 24,576 B, enforced in CI ([CTR-TOK-24](#CTR-TOK-24)); the rate
   timelock lives in `UnderlyingLib` (clone → implementation → library delegatecall keeps the clone's storage).
 
-## Hedera
+## 10. Hedera
 
 <a id="CTR-TOK-23"></a>**CTR-TOK-23** — **Hedera is a per-chain variant, not a creator's choice, and has no child
 contracts.** Each implementation is deployed with an immutable `IS_HEDERA`. When set, the signature check takes the
@@ -920,7 +940,7 @@ hash, confirmed stable across mirror-node and relay restarts before it is fixed)
 ones. A plain transfer to `address(0)` fails at the shape step with OpenZeppelin's `ERC20InvalidReceiver` (as built: at
 step 6 instead of step 8, "step 8 must not fail"; `mtxUnwrapWithFee` is decoded in `MetaTokenBase.fallback`, `dataEnd` too deep).
 
-## No migration
+## 11. No migration
 
 Nothing is deployed, so the one base and the one factory replace the built lines in place: there is no version
 coexistence and no migration path. Clients still read the domain (`eip712Domain()`) and the pay lane (`payLane(payId)`)
@@ -930,7 +950,7 @@ per token, never from a constant ([CTR-MTX-02](metatx.md#CTR-MTX-02)). Client to
 is a new implementation version in the factory and a voluntary move of value by its holders
 ([CTR-GEN-02](README.md#CTR-GEN-02)).
 
-## Conformance
+## <a id="conformance"></a>12. Conformance
 
 Unit (forge, `test/v2/`):
 
@@ -976,7 +996,7 @@ Cross-family vectors: `test/vectors/wrap_rate_vectors.json` — `(num, den, in) 
 `test_writeRateVectors` and later replayed by the Cosmos, Soroban and TON wrappers. `metatx_kat.json` (v3, `MetaTxBase`) and `metatx_v1_kat.json` (built v1) are EVM/Hedera
 only.
 
-## Limitations
+## 13. Limitations
 
 - Non-EVM wrappers: Cosmos, Soroban and TON keep their standalone (`NONE`) tokens; wrappers there (a bank denom or CW20 on Cosmos,
   a Stellar Asset Contract on Soroban, third-party jettons through a wrapper minter on TON) are **PLANNED** with the

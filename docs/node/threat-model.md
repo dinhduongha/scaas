@@ -4,7 +4,15 @@ Threats to the node, its APIs, the mesh and gossip, with their controls. Contrac
 [contracts/metatx.md#security](../contracts/metatx.md#security) and the other contract docs. Ids are local to this file
 (T* node, PT* payment path, MT* mesh bus, G-* gossip).
 
-## Trust
+**Contents**
+
+1. [Trust](#1-trust)
+2. [Node](#node)
+3. [Payment path](#3-payment-path)
+4. [Mesh](#mesh)
+5. [Gossip](#gossip)
+
+## 1. Trust
 
 The node is trusted for **liveness and for the truth of the event feed it serves** (a compromised node can lie on
 `/v1/events`, T7). It is never trusted with subject funds or subject keys ([NODE-GEN-01](README.md#NODE-GEN-01)). The
@@ -17,7 +25,7 @@ only, secrets and dial targets stay in toml/keystores, each listener accepts exa
 hold gas only. A compromise of one listener's credential (an API key, an admin session, a peer key) is bounded to that
 listener's powers.
 
-## Node
+## <a id="node"></a>2. Node
 
 <a id="node"></a>
 
@@ -51,7 +59,7 @@ listener's powers.
 | T26 | **Admin-listener app files as an attack surface** | served only with `[app] enabled`, static paths only, CSP + Trusted Types, never on gateway/job/mesh listeners ([NODE-ADM-11](admin-auth.md#NODE-ADM-11)) |
 | T27 | **Restore re-executes stopped work; denylist misuse** | chains start paused, clients cancel before resume ([NODE-RUN-02](runbooks.md#NODE-RUN-02)); deny add/lift `admin`, audited with order hash, address masked in logs ([NODE-OPS-14](ops.md#NODE-OPS-14)) |
 
-## Payment path
+## 3. Payment path
 
 <a id="payment-path"></a>
 
@@ -69,7 +77,7 @@ listener's powers.
 In the reference ERP client (Odoo) the booking that PT8 could force is `payment.transaction._set_done`.
 <!-- /example -->
 
-## Mesh
+## <a id="mesh"></a>4. Mesh
 
 <a id="mesh"></a>
 
@@ -90,7 +98,7 @@ In the reference ERP client (Odoo) the booking that PT8 could force is `payment.
 | MT13 | **Compromised peer key** | suspend the row: takes effect at the next config refresh (≤ 60 s) for new handshakes **and** for every request on open connections (per-request check), and connections are recycled every `max_conn_age_secs`; rotate by adding a new row |
 | MT14 | **Compromised node** | it holds no user funds and no subject keys; lane keys hold gas only; the node key can only sign `hub.sig`, announces and gossip messages and authenticate TLS |
 
-## Gossip
+## <a id="gossip"></a>5. Gossip
 
 <a id="gossip"></a>
 

@@ -3,7 +3,16 @@
 Common rules for every family: [networks/README](README.md). Contracts: [contracts/](../contracts/README.md).
 Status: **BUILT** on the private chain 7622 and anvil; public chains are seeded as `draft` profiles.
 
-## Chains
+**Contents**
+
+1. [Chains](#1-chains)
+2. [Private reference chain 7622](#2-private-reference-chain-7622)
+3. [Precompiles](#3-precompiles)
+4. [Deployment](#4-deployment)
+5. [EIP-7702 accounts](#5-eip-7702-accounts)
+6. [Limitations](#6-limitations)
+
+## 1. Chains
 
 <a id="chains"></a>
 
@@ -38,7 +47,7 @@ to be re-measured before use: Ethereum L1 12-s slots, finality = 2 epochs (~12.8
 confirmation ~1 s (soft) vs L1 batch finalization ~15 min (hard); Polygon PoS checkpoint ~25–30 min. A finality gate
 is always the hard value. Gas is never assumed: Zether-sized transactions do not fit every L2 block.
 
-## Private reference chain 7622
+## 2. Private reference chain 7622
 
 <a id="private-chain"></a><a id="private-7622"></a>
 
@@ -82,7 +91,7 @@ the precompile — the deployment checklist does both. The chainspec was fixed o
 7622. The 16,777,216 block gas limit admits only ~5 classical confidential transfers per block (3.29 M gas each,
 measured); post-quantum Zether raises the target to 80 M ([CTR-PQZ-11](../contracts/pq-zether.md#CTR-PQZ-11)).
 
-## Precompiles
+## 3. Precompiles
 
 <a id="precompiles"></a>
 
@@ -103,7 +112,7 @@ measured); post-quantum Zether raises the target to 80 M ([CTR-PQZ-11](../contra
 - **P-256** (RIP-7212 / EIP-7951 at `0x100`): present on 7622; probed per chain (`has_p256_precompile`); without it
   OpenZeppelin's Solidity verifier costs ~200–330 k gas ([passkeys](README.md#webauthn)).
 
-## Deployment
+## 4. Deployment
 
 <a id="deployments"></a>
 
@@ -147,14 +156,14 @@ Every contract is a non-upgradeable clone or a fixed deployment ([CTR-GEN-02](..
 upgradeable proxies (UUPS / ERC-1822) are not used, and a fix is a new implementation version registered on the factory
 plus a voluntary migration.
 
-## EIP-7702 accounts
+## 5. EIP-7702 accounts
 
 <a id="eip7702"></a>
 
 An EOA that delegated its code through EIP-7702 is still a native account: SCaaS classifies `from` by its code
 ([CTR-UA-24](../contracts/accounts.md#CTR-UA-24)).
 
-## Limitations
+## 6. Limitations
 
 <a id="limitations"></a>
 

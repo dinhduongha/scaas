@@ -25,7 +25,37 @@ replicas merged by `home_seq`, last-writer-wins, joined with chain facts `filled
 offers only the PQ group; DEX homes are auto-trusted on chain evidence. UA intents travel as `scaas-intent/1.3`
 (`evm.ua_meta_tx` body only, same topic; 1.2 nodes ignore them).
 
-## Scope
+**Contents**
+
+1. [Scope](#scope)
+2. [Bus](#bus)
+   - 2.1 [Authentication and connection limits](#21-authentication-and-connection-limits)
+   - 2.2 [Routes](#22-routes)
+   - 2.3 [Errors](#23-errors)
+   - 2.4 [Forwarding, hops, idempotency](#24-forwarding-hops-idempotency)
+3. [Envelope](#envelope)
+   - 3.1 [Family qualification](#31-family-qualification)
+   - 3.2 [Wire encoding](#32-wire-encoding)
+   - 3.3 [Fields](#33-fields)
+   - 3.4 [`intent_id` and decoded fields per family](#34-intent_id-and-decoded-fields-per-family)
+   - 3.5 [hub.sig](#hubsig)
+   - 3.6 [Conformance vectors](#36-conformance-vectors)
+4. [Acceptance](#acceptance)
+   - 4.1 [Evaluation order (no RPC before L4)](#41-evaluation-order-no-rpc-before-l4)
+   - 4.2 [Forward vs submit vs reject](#42-forward-vs-submit-vs-reject)
+5. [Exclusivity](#exclusivity)
+   - 5.1 [Sources](#51-sources)
+   - 5.2 [Assignment (origin only)](#52-assignment-origin-only)
+   - 5.3 [Scheduler (every 250 ms, `mesh/sched.rs`)](#53-scheduler-every-250-ms-meshschedrs)
+6. [Numbers](#6-numbers)
+7. [Bus scope](#bus-scope)
+8. [Private profile](#private-profile)
+9. [Reward](#9-reward)
+10. [Tests](#tests)
+11. [Limitations](#limitations)
+   - 11.1 [Open questions](#111-open-questions)
+
+## <a id="scope"></a>1. Scope
 
 <a id="scope"></a>In scope:
 
@@ -63,7 +93,7 @@ Non-goals (v1):
 <a id="NODE-MESH-24"></a>**NODE-MESH-24** (open; default applied) — Soroban stays on the job API, not the mesh, until a
 contract-level per-subject nonce (or acceptance of the host authorization nonce as equivalent) qualifies it.
 
-## Bus
+## <a id="bus"></a>2. Bus
 
 <a id="bus"></a><a id="NODE-MESH-01"></a>**NODE-MESH-01** — **The pull bus is the transport for admitted peers.** Each
 node serves `GET /v1/mesh/intents` and pulls its peers'. No push, no publish/claim/receipt routes between peers. Pull
@@ -81,7 +111,7 @@ Served by the mesh module on `[mesh] bind` (HTTPS) and as `/scaas/bus/1.2` on QU
 **Every** route requires mTLS (or the QUIC peer identity) of an active peer. JSON responses, `Content-Type:
 application/json`, no cookies, no redirects. Version prefix `/v1/mesh` follows the spec major.
 
-### Authentication and connection limits
+### 2.1 Authentication and connection limits
 
 - TLS 1.3 only, X25519MLKEM768 only ([NODE-GSP-03](gossip.md#NODE-GSP-03)). Server: `rustls::ServerConfig` built with
   the process-wide provider and a custom `ClientCertVerifier` that **requires** a client cert, accepts self-signed certs
@@ -111,9 +141,9 @@ SHA-256 of the DER SubjectPublicKeyInfo. Admission is checked at the handshake *
 signatures are deterministic (the vectors need fixed `hub.sig` bytes) and keys are 32 bytes; secp256k1 is not a TLS
 signature scheme, so lane keys cannot double as peer keys. An HSM that only does P-256 cannot hold this key.
 
-### Routes
+### 2.2 Routes
 
-#### `GET /v1/mesh/policy`
+#### 2.2.1 `GET /v1/mesh/policy`
 
 What this node accepts and how it serves, filtered for the caller (an `open` peer never sees a private chain). Callers
 cache it 60 s.
@@ -130,7 +160,7 @@ cache it 60 s.
 ([NODE-MESH-13](#NODE-MESH-13)); it is what an origin uses to build the round-robin set ([exclusivity](#exclusivity)).
 `mode_known_mask` / `fee_modes_supported` are fixed by the contract (`0xF3`, NONE/PERCENT/FIXED) and are not repeated.
 
-#### `GET /v1/mesh/intents?since=<seq>&limit=<n>`
+#### 2.2.2 `GET /v1/mesh/intents?since=<seq>&limit=<n>`
 
 (Summary form `GET /v1/mesh/intents?since=&limit=`.)
 
@@ -160,7 +190,7 @@ Gateway additions: rows written by door A carry `source = 'gateway'`; `POST /v1/
 published, `exclusive` (`202`); a duplicate returns `200` with the stored state. `GET /v1/intents/{intent_id}` serves
 only gateway-origin rows ([gateway.md#routes](gateway.md#routes)).
 
-### Errors
+### 2.3 Errors
 
 Body `{"error": "<CODE>", "detail": "<text>"}`.
 
@@ -178,7 +208,7 @@ Ingest outcome codes (local; metrics label `code`; also returned by the gateway 
 `HOP_LIMIT`, `DIGEST_MISMATCH`, `BAD_SIGNATURE`, `RELAYER_BOUND_ZERO`, `BAD_HUB_SIG`, `PRIVATE_FROM_OPEN_PEER`,
 `UNSUPPORTED` (policy `support = none`), `STORE_FULL`, `RATE_LIMITED`. `DUPLICATE` is not a rejection (no-op).
 
-### Forwarding, hops, idempotency
+### 2.4 Forwarding, hops, idempotency
 
 - The origin stores `hop_count = 0`. A receiver stores `served hop_count + 1` and rejects `> max_hops` (`HOP_LIMIT`); a
   node never serves a row whose stored `hop_count ≥ max_hops`. "Forwarding" in a pull bus = holding the row and serving
@@ -189,7 +219,7 @@ Ingest outcome codes (local; metrics label `code`; also returned by the gateway 
   Gossip loops are broken by the message-id and store dedup ([gossip.md#wire](gossip.md#wire)).
 - Pull latency per hop ≤ `poll_ms + publish_lag_ms` (1.5 s); 4 hops ≤ 6 s.
 
-## Envelope
+## <a id="envelope"></a>3. Envelope
 
 <a id="envelope"></a><a id="NODE-MESH-09"></a>**NODE-MESH-09** — **Envelope spec `scaas-intent/1.2`.** JSON on the
 wire: `spec`, `intent_id`, `chain_key`, `family`, `contract`, `visibility`, the family body (`evm` with domain,
@@ -214,7 +244,7 @@ structure natively ([NODE-GSP-15](gossip.md#NODE-GSP-15)); only ERC-1271 goes to
 simulated, without penalising the forwarder. Rate limits and freshness reads key on the **canonical** `from` (an EOA is
 the same 20-byte key whether it arrives via 1.2 or padded via 1.3); `uaNonce(from, batch)` is the freshness source.
 
-### Family qualification
+### 3.1 Family qualification
 
 <a id="families"></a><a id="NODE-MESH-07"></a>**NODE-MESH-07** — **Families on the mesh v1: EVM (`evm`, and `hedera`
 which runs the same Solidity), Cosmos, Sui, Aptos, TON, Solana. Soroban is out.** Criterion: our contract computes a
@@ -242,7 +272,7 @@ lanes l.121, l.226–230 (revoke l.229), getter l.359; Solana `chains/solana/pro
 (`lib.rs` l.125), lane check l.159–161, l.202; Soroban `chains/soroban/contracts/token/src/lib.rs` l.102, `pay_ref`
 l.203–206.
 
-### Wire encoding
+### 3.2 Wire encoding
 
 - UTF-8 JSON object, at most 32 KiB per envelope.
 - Receivers **ignore unknown top-level fields** (minor bump rule) and reject an unknown major. The family body (`evm` /
@@ -260,7 +290,7 @@ l.203–206.
   (default `BTreeMap`, no `preserve_order` feature). Python: `json.dumps(o, sort_keys=True, separators=(',', ':'))`.
   Vector cases pin the bytes.
 
-### Fields
+### 3.3 Fields
 
 ```json
 {
@@ -304,7 +334,7 @@ Not in the envelope: `tokenContract`, `bus_seq` (in the page wrapper, a property
 `published_at` (signed inside `hub`), `beacon`, `pow`, `sponsor`, `zether`, `hints` (a receiver re-simulates anyway;
 hints would leak shape on public chains).
 
-### `intent_id` and decoded fields per family
+### 3.4 `intent_id` and decoded fields per family
 
 <a id="intent-id"></a><a id="NODE-MESH-08"></a>**NODE-MESH-08** — **`intent_id` is the digest the contract emits** in
 `MetaTransactionExecuted.digest`: EIP-712 `_hashTypedDataV4(hashStruct(m))` on EVM, the family digest otherwise. It
@@ -360,7 +390,7 @@ ed25519 against the wallet key, Sui against the `Account` keys (one cached state
 `BAD_SIGNATURE`, never simulated, and counts against the publishing peer (peer score). Otherwise every peer pays a
 simulation or view per garbage intent. Status: EVM `eoa` **BUILT**; the rest **SPECIFIED**.
 
-### hub.sig
+### <a id="hubsig"></a>3.5 hub.sig
 
 <a id="hubsig"></a>
 
@@ -383,7 +413,7 @@ the signature, `sig_kind`, wire `relayer`/`feeRecipient` or native params. It do
 re-originating someone else's intent under its own `hub` — first-seen-wins dedup, the `exclusive_ms` clamp and
 failed-row deletion bound that ([threat-model.md#mesh](threat-model.md#mesh) MT6).
 
-### Conformance vectors
+### 3.6 Conformance vectors
 
 `scaas-node/tests/vectors/mesh-envelope-v1.2.json`, published with the node so any second implementation (including
 client libraries that compute the same digests) checks against it; clients keep byte-identical copies (CI `cmp`).
@@ -445,7 +475,7 @@ A client library uses the file to check that its own digest functions produce th
 and that `json.dumps(sort_keys=True, separators=(',', ':'))` gives the same `body_hash` (a third implementation of the
 digest). The built library has 43 cases (the list above plus the per-family twins and gossip-era splits).
 
-## Acceptance
+## <a id="acceptance"></a>4. Acceptance
 
 <a id="acceptance"></a><a id="acceptance-policy"></a><a id="NODE-MESH-21"></a>**NODE-MESH-21** — **One policy lookup
 table with static columns**, in the node store (`mesh_policy`, managed through the admin API,
@@ -484,7 +514,7 @@ node before we submit for them; the gateway and the job API apply the same regis
 set `min_fee = 0`; relayers are mostly paid outside the intent ([NODE-MESH-05](#NODE-MESH-05)). No rule filters fee 0
 by itself.
 
-### Evaluation order (no RPC before L4)
+### 4.1 Evaluation order (no RPC before L4)
 
 ```text
 accept(env, source, peer?) -> Result<Row, Code>          // mesh/accept.rs, pure except store + clock
@@ -523,7 +553,7 @@ L4 (RPC) happens only on the submit path ([submit-lanes.md#shared-submit](submit
 `metaTxDigest(m) == intent_id` on EVM, consumption check. L5 (`debug_traceCall`) is not used. The gossip validator runs
 the same `accept()` with its own rate stages ([gossip.md#validation](gossip.md#validation)).
 
-### Forward vs submit vs reject
+### 4.2 Forward vs submit vs reject
 
 | Outcome | Condition | Store |
 |---|---|---|
@@ -535,7 +565,7 @@ the same `accept()` with its own rate stages ([gossip.md#validation](gossip.md#v
 Submit and serve are not exclusive: a `submittable`/`submitting`/`broadcast` row is still served (if visible), so the
 network keeps the intent if this node dies ("still forward, but with `exclusive_until`").
 
-## Exclusivity
+## <a id="exclusivity"></a>5. Exclusivity
 
 <a id="exclusivity"></a><a id="NODE-MESH-04"></a>**NODE-MESH-04** — **Signed round-robin exclusivity.** The origin node
 signs `exclusive{relayer_id, until}` in `hub.sig`, choosing `relayer_id` round-robin over the eligible set = admitted
@@ -547,7 +577,7 @@ store; only still-`queued` jobs are published. Deterministic assignment needs no
 not a lock: a peer that ignores it causes at most one reverted outer tx per loser
 ([README.md#guarantees](README.md#guarantees)).
 
-### Sources
+### 5.1 Sources
 
 | Source | Origin of envelope | Exclusive | Who submits |
 |---|---|---|---|
@@ -562,7 +592,7 @@ When publication of an own job hits a `DUPLICATE` (the same digest already arriv
 also posted it elsewhere), the existing row is flipped to `may_submit = 0`, `source = 'job'`, `job_uid = …` (first draft: `may_submit = 0,
 source = 'outbox', odoo_job_id = …`): the job path owns it from then on.
 
-### Assignment (origin only)
+### 5.2 Assignment (origin only)
 
 ```
 eligible(chain_key, contract, selector, visibility) =
@@ -578,7 +608,7 @@ So `until = published_at + exclusive_ms`, and the post-window jitter is keyed by
 Receivers honour `exclusive` only if `hub.sig` verified and `0 < until − published_at ≤ exclusive_ms/1000` of the
 **receiver's** config; otherwise they store `exclusive_until = NULL` (clamp, vector 24).
 
-### Scheduler (every 250 ms, `mesh/sched.rs`)
+### 5.3 Scheduler (every 250 ms, `mesh/sched.rs`)
 
 ```text
 for row in pooled where may_submit and (exclusive_until IS NULL or now ≥ exclusive_until + jitter(row)):
@@ -594,7 +624,7 @@ The first draft handed the work to the lane channel with `try_send`; inserting a
 submission goes through the job store. `exclusive_self` rows go straight to `submittable`. The `job_live_digest` index is the single admission point for every
 submission path, so the mesh adds no path around G2.
 
-## Numbers
+## 6. Numbers
 
 <a id="numbers"></a><a id="NODE-MESH-10"></a>**NODE-MESH-10** — **Mesh numbers, all configuration**: `MAX_HOPS = 4`,
 `cursor_overlap = 200`, `publish_lag_ms = 500` (**arbitrary**); receiver clamp `exclusive_ms = 10 000` (**arbitrary**);
@@ -606,7 +636,7 @@ after a real multi-site run. Gossip numbers: [gossip.md#numbers](gossip.md#numbe
 
 <a id="NODE-MESH-23"></a>**NODE-MESH-23** (open) — `MAX_HOPS = 4` is arbitrary; it is re-tuned after a multi-site run.
 
-## Bus scope
+## <a id="bus-scope"></a>7. Bus scope
 
 <a id="bus-scope"></a><a id="NODE-MESH-15"></a>**NODE-MESH-15** — **Bus scope arrives per job** (`bus.scope`,
 `bus.private_window_secs`), set by the client from its own per-tenant setting ([INT-ERP-15](../integration.md#INT-ERP-15)):
@@ -621,7 +651,7 @@ timing to admitted peers of the matching class (or the world, for `public`).
 the envelope has no slot for the payee co-signature ([sponsorship.md#receiver-pays](sponsorship.md#receiver-pays)), so
 the job API forces `bus.scope = restricted`.
 
-## Private profile
+## <a id="private-profile"></a>8. Private profile
 
 <a id="private-profile"></a><a id="NODE-MESH-06"></a>**NODE-MESH-06** — **Chain profile, default private.** A chain's
 `profile` = `public` | `private`, **default `private`** (the default must be derived, not a flag someone remembers;
@@ -663,7 +693,7 @@ Rules:
 7. Private data travels only on carriers with an X25519MLKEM768-only offer (HTTPS, QUIC); see
    [gossip.md#private-isolation](gossip.md#private-isolation).
 
-## Reward
+## 9. Reward
 
 <a id="reward"></a><a id="rewards"></a><a id="NODE-MESH-05"></a>**NODE-MESH-05** — **The mesh reward is the intent's
 own `fee` / `feeRecipient` only.** No sponsorship pool reward, no statement payouts, forwarders unpaid. A non-EVM
@@ -692,7 +722,7 @@ month ⇒ break-even ≈ $60 / $0.0015 = **40 000 tx per month**. Most enterpris
    0, booked to account Y") is a node policy row, never a contract feature ([sponsorship.md](sponsorship.md)).
 5. Metric W3B-06 (relayer fee spread) may be negative by design.
 
-## Tests
+## <a id="tests"></a>10. Tests
 
 <a id="tests"></a><a id="NODE-MESH-11"></a>**NODE-MESH-11** — **The wire spec is public with conformance vectors, and
 the test topology is several processes of one binary**: N `scaas-node` processes with different configs + one anvil +
@@ -757,7 +787,7 @@ by the test with `openssl`, skipped with a clear message if absent). Each scenar
 Non-EVM multi-node e2e is not in v1 (each family needs its own localnet, several GB of RAM); non-EVM coverage =
 vectors + adapter unit tests with fakes.
 
-## Limitations
+## <a id="limitations"></a>11. Limitations
 
 <a id="limitations"></a>Deferred (PLANNED unless noted):
 
@@ -775,7 +805,7 @@ vectors + adapter unit tests with fakes.
 - Ban-list sharing between operators.
 - ML-DSA identities and NAT traversal ([gossip.md#limitations](gossip.md#limitations)).
 
-### Open questions
+### 11.1 Open questions
 
 <a id="open-questions"></a><a id="NODE-MESH-22"></a>**NODE-MESH-22** (open) — Two lifecycle questions remain open: the
 hop limit value ([NODE-MESH-23](#NODE-MESH-23)) and Sybil resistance of forward scoring

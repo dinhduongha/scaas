@@ -20,7 +20,49 @@ entries), **Why.**, **Cost if wrong.** and **Source.** Superseded entries keep o
   id to its new id(s); from a shell: `python3 scripts/docs_check.py resolve R91`.
 - **Source** lines point into `history/` (frozen designs) and `research/` (background); both are read-only.
 
-## Architecture and register policy
+**Contents**
+
+1. [Architecture and register policy](#1-architecture-and-register-policy)
+2. [Node — General](#2-node--general)
+3. [Node — Store](#3-node--store)
+4. [Node — Job API](#4-node--job-api)
+5. [Node — Submit lanes](#5-node--submit-lanes)
+6. [Node — Indexer and feeds](#6-node--indexer-and-feeds)
+7. [Node — Gateway](#7-node--gateway)
+8. [Node — Admin and auth](#8-node--admin-and-auth)
+9. [Node — Sponsorship](#9-node--sponsorship)
+10. [Node — DEX venue](#10-node--dex-venue)
+11. [Node — Mesh](#11-node--mesh)
+12. [Node — Gossip](#12-node--gossip)
+13. [Node — Operations](#13-node--operations)
+14. [Node — Runbooks](#14-node--runbooks)
+15. [Node — Threat model](#15-node--threat-model)
+16. [Contracts — General](#16-contracts--general)
+17. [Contracts — Meta-transactions](#17-contracts--meta-transactions)
+18. [Contracts — Token wrappers and factory](#18-contracts--token-wrappers-and-factory)
+19. [Contracts — Accounts and mandates](#19-contracts--accounts-and-mandates)
+20. [Contracts — DEX](#20-contracts--dex)
+21. [Contracts — Sealed-bid tender](#21-contracts--sealed-bid-tender)
+22. [Contracts — Asset suite](#22-contracts--asset-suite)
+23. [Contracts — Zether (classical)](#23-contracts--zether-classical)
+24. [Contracts — Universal Account](#24-contracts--universal-account)
+25. [Contracts — Post-quantum Zether](#25-contracts--post-quantum-zether)
+26. [Networks — common model](#26-networks--common-model)
+27. [Networks — EVM](#27-networks--evm)
+28. [Networks — Hedera](#28-networks--hedera)
+29. [Networks — Cosmos](#29-networks--cosmos)
+30. [Networks — Soroban](#30-networks--soroban)
+31. [Networks — Sui](#31-networks--sui)
+32. [Networks — Aptos](#32-networks--aptos)
+33. [Networks — Solana](#33-networks--solana)
+34. [Networks — TON](#34-networks--ton)
+35. [Clients — signers and clientkeys](#35-clients--signers-and-clientkeys)
+36. [Clients — SCaaS app](#36-clients--scaas-app)
+37. [Integration — ERP](#37-integration--erp)
+38. [Integration — example connector](#38-integration--example-connector)
+39. [Alias index](#alias-index)
+
+## 1. Architecture and register policy
 
 These entries define themselves (`normative: decisions.md`): they are system-wide positions, and
 [architecture.md](architecture.md) and [README.md](README.md) only explain them.
@@ -193,7 +235,7 @@ and the mesh are out of scope.
 It said: legal questions are deferred to a separate chapter that does not block the buildable parts.
 **Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 47.
 
-## Node — General
+## 2. Node — General
 
 ### NODE-GEN-01 — Node holds no subject funds or keys
 - old: SCaaS:N1, UD:§23.2 · status: current · owner: yes · date: 2026-10-07 · normative: node/README.md#NODE-GEN-01 · superseded-by: —
@@ -323,7 +365,7 @@ It said: lane diagram with ERP control plane.
 It said: eRP addon is control plane, not a node.
 **Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 2319.
 
-## Node — Store
+## 3. Node — Store
 
 ### NODE-STO-01 — Node refuses max_valid_for_secs above horizon
 - old: CR-PD-4(node), CR-R3-8(node) · status: current · owner: no · date: 2026-10-07 · normative: node/store.md#NODE-STO-01 · superseded-by: —
@@ -391,7 +433,7 @@ It said: eRP addon is control plane, not a node.
 It said: in-memory gateway queue and DEX book.
 **Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 718.
 
-## Node — Job API
+## 4. Node — Job API
 
 ### NODE-JOB-01 — Call jobs limited to selector/target table
 - old: CR-PD-1(c) · status: current · owner: yes · date: 2026-10-08 · normative: node/job-api.md#NODE-JOB-01 · superseded-by: —
@@ -530,7 +572,7 @@ It said: node talks to ERP only over json/2.
 It said: result queue default, node-configured callbacks.
 **Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1955.
 
-## Node — Submit lanes
+## 5. Node — Submit lanes
 
 ### NODE-LANE-01 — USD-denominated gas velocity limits
 - old: req:blockchain.md:usd-velocity · status: open · owner: yes · date: 2026-10-07 · normative: node/submit-lanes.md#NODE-LANE-01 · superseded-by: —
@@ -694,7 +736,7 @@ Under "Node — Gateway":
 It said: six-member Family enum.
 **Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 531.
 
-## Node — Indexer and feeds
+## 6. Node — Indexer and feeds
 
 ### NODE-IDX-01 — Finality quorum over normalized event sets
 - old: CR-PD-2, CR-R3-2 · status: current · owner: no · date: 2026-10-07 · normative: node/indexer-feeds.md#NODE-IDX-01 · superseded-by: —
@@ -748,7 +790,7 @@ It said: six-member Family enum.
 It said: quorum on one block hash.
 **Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 699.
 
-## Node — Gateway
+## 7. Node — Gateway
 
 ### NODE-GW-01 — Door A is not a free gas faucet
 - old: CR-PD-3 · status: current · owner: no · date: 2026-10-07 · normative: node/gateway.md#NODE-GW-01 · superseded-by: —
@@ -802,7 +844,7 @@ Under "Node — DEX venue":
 It said: three intake doors with trust levels.
 **Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1750.
 
-## Node — Admin and auth
+## 8. Node — Admin and auth
 
 ### NODE-ADM-01 — Gossip admin routes and columns
 - old: R127(admin) · status: current · owner: no · date: 2026-10-06 · normative: node/admin-auth.md#NODE-ADM-01 · superseded-by: —
@@ -881,7 +923,7 @@ It said: three intake doors with trust levels.
 It said: jWS verification on ring.
 **Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 131.
 
-## Node — Sponsorship
+## 9. Node — Sponsorship
 
 ### NODE-SPN-01 — Sponsorship policy is a node store row
 - old: R189 · status: current · owner: yes · date: 2026-10-07 · normative: node/sponsorship.md#NODE-SPN-01 · superseded-by: —
@@ -908,7 +950,7 @@ It said: jWS verification on ring.
 **Cost if wrong.** Planned.
 **Source.** [history/specs/2026-10-06-tender-sponsorship-shredding.md](history/specs/2026-10-06-tender-sponsorship-shredding.md) line 199.
 
-## Node — DEX venue
+## 10. Node — DEX venue
 
 ### NODE-DEX-01 — Durable off-chain book, price-time, partial fills
 - old: R35(book) · status: current · owner: yes · date: 2026-10-08 · normative: node/dex-venue.md#NODE-DEX-01 · superseded-by: —
@@ -1042,7 +1084,7 @@ It said: book accepts only own-relayer orders.
 It said: dEX chains run one lane only.
 **Source.** [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 414; [history/specs/2026-10-03-dex-design.md](history/specs/2026-10-03-dex-design.md) line 16.
 
-## Node — Mesh
+## 11. Node — Mesh
 
 ### NODE-MESH-01 — Pull bus for admitted peers
 - old: R70 · status: current · owner: yes · date: 2026-10-06 · normative: node/mesh.md#NODE-MESH-01 · superseded-by: —
@@ -1243,7 +1285,7 @@ It said: promote_after vs 300 s ERC-20 expiry.
 It said: callback subject registry on public nodes.
 **Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 2008.
 
-## Node — Gossip
+## 12. Node — Gossip
 
 ### NODE-GSP-01 — Gossip required alongside the pull bus
 - old: R112, UD:§6 · status: current · owner: yes · date: 2026-10-06 · normative: node/gossip.md#NODE-GSP-01 · superseded-by: —
@@ -1348,7 +1390,7 @@ It said: callback subject registry on public nodes.
 
 An earlier design used the rustls ring provider for TLS; replaced by aws-lc-rs for PQ key exchange.
 
-## Node — Operations
+## 13. Node — Operations
 
 ### NODE-OPS-01 — readyz and metrics on admin port
 - old: R51 · status: current · owner: no · date: 2026-10-06 · normative: node/ops.md#NODE-OPS-01 · superseded-by: —
@@ -1447,7 +1489,7 @@ An earlier design used the rustls ring provider for TLS; replaced by aws-lc-rs f
 **Why.** Defaults are needed to start; each stays operator-tunable.
 **Source.** [history/plans/2026-10-07-docs-reorg.md](history/plans/2026-10-07-docs-reorg.md) line 1222.
 
-## Node — Runbooks
+## 14. Node — Runbooks
 
 ### NODE-RUN-01 — RACI roles
 - old: R239 · status: current · owner: no · date: 2026-10-06 · normative: node/runbooks.md#NODE-RUN-01 · superseded-by: —
@@ -1480,7 +1522,7 @@ An earlier design used the rustls ring provider for TLS; replaced by aws-lc-rs f
 **Why.** The accountable role of the failing component leads; evidence first, no silent rewinds.
 **Source.** [history/specs/2026-10-06-operations-design.md](history/specs/2026-10-06-operations-design.md) line 180.
 
-## Node — Threat model
+## 15. Node — Threat model
 
 ### NODE-SEC-01 — Merge processes, not privileges
 - old: — · status: current · owner: no · date: 2026-10-07 · normative: node/threat-model.md#NODE-SEC-01 · superseded-by: —
@@ -1493,7 +1535,7 @@ An earlier design used the rustls ring provider for TLS; replaced by aws-lc-rs f
 It said: separate DB roles per module.
 **Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 2211.
 
-## Contracts — General
+## 16. Contracts — General
 
 ### CTR-GEN-01 — Separate blockchain CI; forge libs pinned by tag
 - old: R52 · status: current · owner: no · date: 2026-10-03 · normative: contracts/README.md#CTR-GEN-01 · superseded-by: —
@@ -1537,7 +1579,7 @@ It said: separate DB roles per module.
 **Cost if wrong.** CREATE addresses depend on deployer nonces and drift between chains and redeploys.
 **Source.** `history/specs/2026-10-07-metatx-generic.md` §2 A11, §3 MG-4.
 
-## Contracts — Meta-transactions
+## 17. Contracts — Meta-transactions
 
 ### CTR-MTX-01 — Payment is a MetaTransfer with entryRef ≠ 0
 - old: R2(op) · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-01 · superseded-by: —
@@ -1762,7 +1804,7 @@ Change (2026-10-08): the non-EVM exception is gone — non-EVM families name sig
 
 **What it said.** From 2026-10-07 to 2026-10-08 one 11-field `MetaTransaction{from, to, value, data, …}` carried a transfer (`data` empty), a payment (`data = pay(bytes32)`) and self-calls (`to = value = 0`).
 
-## Contracts — Token wrappers and factory
+## 18. Contracts — Token wrappers and factory
 
 ### CTR-TOK-01 — Only contracts call approve, are spenders, or call transferFrom
 - old: R26 · status: current · owner: yes · date: 2026-10-08 · normative: contracts/token-wrappers.md#CTR-TOK-01 · superseded-by: —
@@ -1950,7 +1992,7 @@ Change (2026-10-09): `PAYABLE` and `BURNABLE` have no role and are always treate
 
 **What it said.** An earlier design did not lock EOA approvals.
 
-## Contracts — Accounts and mandates
+## 19. Contracts — Accounts and mandates
 
 ### CTR-ACC-01 — SmartKeyAccount clones; salt binds key and guardian
 - old: RS4-1 · status: current · owner: no · date: 2026-10-03 · normative: contracts/accounts.md#CTR-ACC-01 · superseded-by: —
@@ -2036,7 +2078,7 @@ Change (2026-10-08): the epoch travels in the revoke data, `revoke(token, epoch)
 
 **What it said.** `SmartKeyAccount` and `MandateWallet` each verified their own EIP-712 structs (`OwnerCall(bytes data,uint256 nonce,uint256 validUntil)`, `PayUnderMandate(…)`, `RevokeMandate(…)`) with their own nonce rules.
 
-## Contracts — DEX
+## 20. Contracts — DEX
 
 ### CTR-DEX-01 — Complete DEX with token-verified orders and no allowances for SCaaS tokens
 - old: R35(contract) · status: current · owner: yes · date: 2026-10-08 · normative: contracts/dex.md#CTR-DEX-01 · superseded-by: —
@@ -2222,7 +2264,7 @@ Change (2026-10-08): wording only — the token consults no registry; the factor
 
 **What it said.** An earlier rule rounded the DEX fee on the received side down.
 
-## Contracts — Sealed-bid tender
+## 21. Contracts — Sealed-bid tender
 
 ### CTR-TND-01 — Deposit and commitment are one pay signature
 - old: R180 · status: current · owner: no · date: 2026-10-08 · normative: contracts/tender.md#CTR-TND-01 · superseded-by: —
@@ -2281,7 +2323,7 @@ Change (2026-10-08): the deposit is a payment `MetaTransfer` (`entryRef = deposi
 **Cost if wrong.** An admin-adjustable window can be bent for a favoured bidder.
 **Source.** `history/specs/2026-10-06-tender-sponsorship-shredding.md:114`
 
-## Contracts — Asset suite
+## 22. Contracts — Asset suite
 
 ### CTR-AS-01 — Regulated module as separate implementations, kinds 5-7
 - old: R200 · status: superseded · owner: yes · date: 2026-10-08 · normative: — · superseded-by: CTR-AS-17
@@ -2393,7 +2435,7 @@ Change (2026-10-08): the deposit is a payment `MetaTransfer` (`entryRef = deposi
 **Cost if wrong.** Eligible contracts that hold and release value would bypass the receiver check.
 **Source.** `history/specs/2026-10-06-asset-suite-design.md:193`
 
-## Contracts — Zether (classical)
+## 23. Contracts — Zether (classical)
 
 ### CTR-AS-17 — Regulated controls are flags 5-8 on the ordinary kinds
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/asset-suite.md#CTR-AS-17 · superseded-by: —
@@ -2804,7 +2846,7 @@ Change (2026-10-08): `m.to`/`m.value` are gone from the struct; a public transfe
 
 **What it said.** Conditions under which the curve decision would reopen.
 
-## Contracts — Universal Account
+## 24. Contracts — Universal Account
 
 ### CTR-UA-01 — Refuse BLS keys and signatures at infinity
 - old: RS2-18 · status: current · owner: no · date: 2026-10-03 · normative: contracts/accounts.md#CTR-UA-01 · superseded-by: —
@@ -2989,7 +3031,7 @@ Change (2026-10-08): both UA structs (`UAMetaTransaction`, `UAMetaTransfer`) sha
 **Cost if wrong.** Two meta-tx models — split on the address path, mixed on the UA path — for clients, node and vectors.
 **Source.** `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G8, §3 GC-9.
 
-## Contracts — Post-quantum Zether
+## 25. Contracts — Post-quantum Zether
 
 ### CTR-PQZ-01 — Separate PQZ class gated to private chains
 - old: R270 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/pq-zether.md#CTR-PQZ-01 · superseded-by: —
@@ -3152,7 +3194,7 @@ Change (2026-10-08): `PqzToken` sits on the one token base and relays like `Zeth
 
 **What it said.** `PqzToken` relayed through its own mixin `PqzMetaTx` with an `_executeOp` reading `m.data` as calldata slices (no self-call, `m.to = m.value = 0` else `PqzOpNotCanonical`), nonce spent with the fee after verify.
 
-## Networks — common model
+## 26. Networks — common model
 
 ### NET-ALL-01 — Pruning families keep executed lanes for H
 - old: CR-PD-4(pruning), CR-R3-8(pruning) · status: current · owner: no · date: 2026-10-07 · normative: networks/README.md#NET-ALL-01 · superseded-by: —
@@ -3380,7 +3422,7 @@ R36-R49 reserved for the third design batch, never used.
 **What it said.** `KeyOp` (`scaas.keyop.v1`), `ForwardOp`, `MandateInit`, mandate close/revoke messages, the Cosmos mandate JSON and TON `MandatePay` were separate signed structs with their own nonces.
 **Source.** `history/specs/2026-10-08-nonevm-metacall-design.md` §3 NM-3, §6 Q3.
 
-## Networks — EVM
+## 27. Networks — EVM
 
 ### NET-EVM-01 — Celo fee currency (CIP-64)
 - old: req:blockchain.md:celo-fee-currency · status: open · owner: yes · date: 2026-10-07 · normative: networks/evm.md#NET-EVM-01 · superseded-by: —
@@ -3438,7 +3480,7 @@ It said: Raise the private chain block gas limit; replaced by CTR-PQZ-11.
 It said: Chain 9000 genesis keys silently ignored; replaced by NET-EVM-02.
 **Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 997.
 
-## Networks — Hedera
+## 28. Networks — Hedera
 
 ### NET-HED-01 — Hedera HCS anchoring
 - old: req:blockchain.md:hcs-anchoring · status: open · owner: yes · date: 2026-10-07 · normative: networks/hedera.md#NET-HED-01 · superseded-by: —
@@ -3553,7 +3595,7 @@ It said: Chain 9000 genesis keys silently ignored; replaced by NET-EVM-02.
 It said: Permissionless associateUnderlying; replaced by NET-HED-06, NET-HED-14.
 **Source.** [history/specs/2026-10-03-net-hedera.md](history/specs/2026-10-03-net-hedera.md) line 296.
 
-## Networks — Cosmos
+## 29. Networks — Cosmos
 
 ### NET-COS-01 — IBC ICS-20/27 transfers
 - old: req:blockchain.md:ibc · status: open · owner: yes · date: 2026-10-07 · normative: networks/cosmos.md#NET-COS-01 · superseded-by: —
@@ -3655,7 +3697,7 @@ It said: Cosmos passkey v1 derived address; replaced by NET-ALL-21.
 It said: Cosmos passkey v2 20-byte derived address; replaced by NET-ALL-21.
 **Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 630.
 
-## Networks — Soroban
+## 30. Networks — Soroban
 
 ### NET-SOR-01 — Soroban native auth as meta-tx; fee-bump
 - old: R65 · status: current · owner: no · date: 2026-10-07 · normative: networks/soroban.md#NET-SOR-01 · superseded-by: —
@@ -3775,7 +3817,7 @@ Change (2026-10-08): no longer a seam — `__check_auth` checks every auth conte
 It said: Non-positive pay refused with ZeroAmount; replaced by NET-SOR-09.
 **Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 658.
 
-## Networks — Sui
+## 31. Networks — Sui
 
 ### NET-SUI-01 — Sui shared Account<T> + personal message
 - old: R64 · status: current · owner: no · date: 2026-10-07 · normative: networks/sui.md#NET-SUI-01 · superseded-by: —
@@ -3902,7 +3944,7 @@ Change (2026-10-08): the rule covers every signed Sui payload, the target `MetaC
 **Cost if wrong.** Clients, node and contract drift on names and encodings per family.
 **Source.** `history/specs/2026-10-08-nonevm-metacall-design.md` §3 NM-2, NM-3, NM-5.
 
-## Networks — Aptos
+## 32. Networks — Aptos
 
 ### NET-APT-01 — Object code deployment, one address
 - old: RS11-13(deploy) · status: current · owner: no · date: 2026-10-04 · normative: networks/aptos.md#NET-APT-01 · superseded-by: —
@@ -4104,7 +4146,7 @@ It said: Upgrade policy compatible; replaced by NET-APT-20.
 It said: Committed OOG requeued without limit; replaced by NET-APT-21.
 **Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 21.
 
-## Networks — Solana
+## 33. Networks — Solana
 
 ### NET-SOL-01 — Solana network = build-time genesis hash
 - old: CR-R3-4 · status: current · owner: no · date: 2026-10-07 · normative: networks/solana.md#NET-SOL-01 · superseded-by: —
@@ -4347,7 +4389,7 @@ It said: Out of CU requeued without limit; replaced by NET-SOL-23.
 It said: Signed text is domain plus hex digest; replaced by NET-ALL-23.
 **Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 708.
 
-## Networks — TON
+## 34. Networks — TON
 
 ### NET-TON-01 — TON Tact jetton wallet; escrow DEX
 - old: R67(core) · status: current · owner: no · date: 2026-10-07 · normative: networks/ton.md#NET-TON-01 · superseded-by: —
@@ -4511,7 +4553,7 @@ It said: domainHash pinned in wallet init; replaced by NET-TON-02.
 It said: Bounced payouts via admin RefundBounced; replaced by NET-TON-03.
 **Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 250.
 
-## Clients — signers and clientkeys
+## 35. Clients — signers and clientkeys
 
 ### CLI-SGN-01 — Ephemeral agent session keys (1-8 h)
 - old: req:blockchain.md:session-keys · status: open · owner: yes · date: 2026-10-07 · normative: clients/signers-clientkeys.md#CLI-SGN-01 · superseded-by: —
@@ -4823,7 +4865,7 @@ It said: Seed vault scrypt N=2^15 with PIN; replaced by CLI-SGN-21.
 It said: Custody tier A/B, HSM or MPC; replaced by CLI-SGN-32.
 **Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 861.
 
-## Clients — SCaaS app
+## 36. Clients — SCaaS app
 
 ### CLI-APP-01 — One SPA, two halves, one build
 - old: R150 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-01 · superseded-by: —
@@ -5006,7 +5048,7 @@ Change: the app never offers `approve` on a SCaaS token; spenders on outside tok
 **Why.** With an open factory anyone can deploy "USDC".
 **Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 133.
 
-## Integration — ERP
+## 37. Integration — ERP
 
 ### INT-ERP-01 — 24 h cooling-off for new receiving wallets
 - old: R22 · status: current · owner: no · date: 2026-10-03 · normative: integration.md#INT-ERP-01 · superseded-by: —
@@ -5199,7 +5241,7 @@ Change (2026-10-08): on the exchange path the record is `ExchangeLegSettled`; th
 **Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 45.
 
 <!-- example:odoo -->
-## Integration — example connector
+## 38. Integration — example connector
 
 ### INT-ODOO-01 — Deploy job precedes pay via prerequisite
 - old: RS4-6 · status: current · owner: no · date: 2026-10-06 · normative: integration-odoo-example.md#INT-ODOO-01 · superseded-by: —
@@ -5309,7 +5351,7 @@ It said: Host company configuration parameter; replaced by INT-ODOO-11.
 
 <!-- /example -->
 
-## Alias index
+## <a id="alias-index"></a>39. Alias index
 
 <!-- BEGIN alias-index (generated by scripts/docs_check.py --write) -->
 | Old id | New id(s) | Status |

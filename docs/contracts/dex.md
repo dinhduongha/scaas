@@ -10,7 +10,25 @@ itself, which moves funds only into the DEX the signer named. Status: the target
 legacy `MetaTxDex` are **BUILT** and described under [Transitional (BUILT)](#transitional-built); non-EVM settlement
 programs **BUILT** with the fixes below **SPECIFIED**.
 
-## Overview
+**Contents**
+
+1. [Overview](#1-overview)
+2. [Signed orders](#2-signed-orders)
+3. [The token's side: `mtxTrade`](#3-the-tokens-side-mtxtrade)
+   - 3.1 [Cancel](#31-cancel)
+4. [The DEX's side: `mtxSettle`](#4-the-dexs-side-mtxsettle)
+5. [Fees and admin](#5-fees-and-admin)
+6. [Outside-token legs](#6-outside-token-legs)
+7. [Exchange settlement](#7-exchange-settlement)
+8. [The named `dex`](#8-the-named-dex)
+9. [Signature checks](#9-signature-checks)
+10. [Intake reads and invariants](#10-intake-reads-and-invariants)
+11. [Non-EVM DEX programs](#11-non-evm-dex-programs)
+12. [Managed markets](#12-managed-markets)
+13. [Transitional (BUILT)](#transitional-built)
+14. [Conformance](#14-conformance)
+
+## 1. Overview
 
 <a id="scaasdex"></a>
 <a id="CTR-DEX-01"></a>**CTR-DEX-01** — **A complete DEX** (owner): an off-chain **persistent** book, markets per pair,
@@ -49,7 +67,7 @@ sequenceDiagram
     D->>D: assert DEX balances unchanged
 ```
 
-## Signed orders
+## 2. Signed orders
 
 <a id="CTR-DEX-13"></a>**CTR-DEX-13** — **One struct, `TradeOrder`, for every leg** (owner). A signed order is one blob
 with **no role** in it: whether it acts as taker or maker is decided at settlement time by the node or whoever submits
@@ -110,7 +128,7 @@ for 1 % would have to re-create its order. Consequences: a Path A order fills in
 can only be matched against counterparts that take at least half of it; the last remainder of a Path A order may close
 below the minimum.
 
-## The token's side: `mtxTrade`
+## 3. The token's side: `mtxTrade`
 
 <a id="CTR-DEX-15"></a>**CTR-DEX-15** — **The sell token verifies the order and moves funds only into `dex`.** In the
 base `ERC20MetaTx` ([CTR-MTX-07](metatx.md#CTR-MTX-07)):
@@ -166,7 +184,7 @@ instead; the book handles that per family ([NODE-DEX-01](../node/dex-venue.md#NO
 (Path A) or the DEX (Path B, outside legs) refuses any smaller fill. Partial fills, each at least the effective minimum,
 are the default.
 
-### Cancel
+### 3.1 Cancel
 
 <a id="cancel-no-expiry"></a>
 <a id="CTR-DEX-02"></a>**CTR-DEX-02** — **Cancel signatures never expire** (`CancelOrder`, `InvalidateNonces`) — a
@@ -179,7 +197,7 @@ increasing and capped at `2^128` (emit `NoncesInvalidated(from, batch, minNonce)
 lock an address out forever. A signer with orders on several tokens cancels per token; the off-chain book drops them
 at once. For outside-token orders the DEX keeps the same state and entry points ([CTR-DEX-18](#CTR-DEX-18)).
 
-## The DEX's side: `mtxSettle`
+## 4. The DEX's side: `mtxSettle`
 
 <a id="CTR-DEX-16"></a>**CTR-DEX-16** — **Everything goes through the DEX, and the DEX ends every settlement with
 unchanged balances** (owner).
@@ -230,7 +248,7 @@ DEX's own balance moves and conservation reverts the settlement. `SCaaSDex` keep
 priority, limit + IOC/FOK, partial fills above the effective minimum); the execution price is each maker's signed
 price, rounded in the maker's favour, and the node only emits matches that pass the same checks as the contract.
 
-## Fees and admin
+## 5. Fees and admin
 
 <a id="relayer-fee"></a>
 <a id="CTR-DEX-17"></a>**CTR-DEX-17** — **One fee: the signed `fee` rate, collected and distributed by the DEX in the
@@ -292,7 +310,7 @@ function createDex(uint64 version, DexConfig calldata cfg, bytes32 salt) externa
 **Transitional (BUILT).** The built `SCaaSDex` has a constructor and an immutable `admin`, and is deployed directly;
 replaced in P2.
 
-## Outside-token legs
+## 6. Outside-token legs
 
 <a id="CTR-DEX-18"></a>**CTR-DEX-18** — **A leg in a token that is not a SCaaS token is the same `TradeOrder`, checked
 by the DEX** (a contract SCaaS does not control cannot verify it):
@@ -308,7 +326,7 @@ by the DEX** (a contract SCaaS does not control cannot verify it):
 | Cancel | `mtxCancelOrders(DexOrder[] orders, bytes[] sigs)` (`CancelOrder(bytes32 orderHash)` in the DEX domain; closed or bad-signature items skipped, no revert of the batch) and `mtxInvalidateNonces(from, batch, newMin, sig)` (`InvalidateNonces(address from,uint256 batch,uint256 minNonce)` in the DEX domain) |
 | Backstop | conservation ([CTR-DEX-16](#CTR-DEX-16)) |
 
-## Exchange settlement
+## 7. Exchange settlement
 
 <a id="exchange"></a>
 <a id="CTR-DEX-20"></a>**CTR-DEX-20** — **`mtxExchange` executes `TradeOrder`s against outside liquidity — AMM pools,
@@ -368,7 +386,7 @@ when any leg sets `LISTED_POOLS` **or** the admin's listed-only mode is on, `exc
 residual allowance moves nothing, because between calls the DEX holds no user funds. Grief (a target that reverts or
 burns gas) fails only its own plan.
 
-## The named `dex`
+## 8. The named `dex`
 
 <a id="CTR-DEX-19"></a>**CTR-DEX-19** — **`dex` must be a contract, nothing more: an owner-accepted residual risk with
 off-chain mitigations** (owner). The token checks only `msg.sender == o.dex` and `_isContract(o.dex)`; the token consults no DEX registry and no codehash allowlist (the factory's `isDex`, [CTR-DEX-24](#CTR-DEX-24), is advisory, for clients and the node). A phishing contract named as `dex` can report any `receiveFill` and
@@ -379,7 +397,7 @@ DEX list and never for an unlisted `dex` ([node/dex-venue.md](../node/dex-venue.
 honesty; the rule only guarantees that an EOA can never be granted a pull ([CTR-TOK-01](token-wrappers.md#CTR-TOK-01)).
 `isDex` ([CTR-DEX-24](#CTR-DEX-24)) feeds the client and node checks; tokens do not consult it, so the factory admin gains no power over trades (owner).
 
-## Signature checks
+## 9. Signature checks
 
 <a id="erc1271-cap"></a>
 <a id="CTR-DEX-08"></a>**CTR-DEX-08** — **`SCaaSDex` caps the ERC-1271 call by codehash.** `_validSig`'s contract
@@ -394,7 +412,7 @@ that answers correctly under `eth_call` but burns gas or returns huge returndata
 `settle` batch (the remaining 1/64 gas is not enough for the next pairs) and **every** `cancel` batch. SCaaS legs get
 the same cap inside their token. Status **SPECIFIED**.
 
-## Intake reads and invariants
+## 10. Intake reads and invariants
 
 Intake reads one `eth_call` per order: for a SCaaS leg the sell token's `tradeOrderDigest`, `pulled`, `minNonce` and
 `balanceOf` (no allowance exists to read); for an outside leg the DEX's `pulled`/`minNonce` and the party's balance and
@@ -406,7 +424,7 @@ token's Σ balances is unchanged; a settlement that violates price, minimum fill
 signature ⇒ only that settlement fails; per leg `received + dexFee == receiveFill` and `relayerShare + treasuryShare ==
 dexFee`.
 
-## Non-EVM DEX programs
+## 11. Non-EVM DEX programs
 
 The book, matcher, client booking and gateway are shared (nothing EVM-specific beyond addresses and hashes). Each
 family provides a settlement program with the same invariants and keeps its own leg shape ([networks/README.md](../networks/README.md)):
@@ -449,7 +467,7 @@ Accepted differences that the adapter, the matcher and clients must know:
 | No on-chain self-trade check (the node still skips them) | Cosmos, Soroban |
 | DEX-signed maker/taker orders over allowances or escrow, a separate relayer fee, no 50 % minimum fill | every non-EVM family |
 
-## Managed markets
+## 12. Managed markets
 
 <a id="managed-markets"></a>
 <a id="CTR-DEX-12"></a>**CTR-DEX-12** — **A managed market is a market on an `SCaaSDex` instance whose `admin` is
@@ -468,7 +486,7 @@ intake fails alone (`MatchFailed`). The node side (home-bound orders only, the f
   buybacks and splits are exchange offers ([asset-suite.md](asset-suite.md)). The DEX already provides signed limit
   orders, price-time priority off chain, partial fills, IOC/FOK, `pulled[orderHash]` and fees capped at 1 %.
 
-## Transitional (BUILT)
+## <a id="transitional-built"></a>13. Transitional (BUILT)
 
 <a id="transitional-built"></a>
 <a id="legacy-metatxdex"></a>
@@ -528,7 +546,7 @@ The rebuild deletes `MetaTxDex` and the trade and approve ops, renames `settle`/
 `mtxSettle`/`mtxCancelOrders`/`mtxInvalidateNonces`, keeps the DEX-domain `Order` only as `DexOrder`, keeps allowances
 only for outside tokens (moved to the `DexPuller`) and turns the relayer fee into the relayer's share of the signed DEX fee; the exchange path ([CTR-DEX-20](#CTR-DEX-20)…[CTR-DEX-23](#CTR-DEX-23)) is not built.
 
-## Conformance
+## 14. Conformance
 
 | Layer | Tests |
 |---|---|

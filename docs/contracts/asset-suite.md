@@ -6,7 +6,31 @@ of eligibility attestations, and three permissionless **action contracts** — `
 `ExchangeOffer` — plus off-chain **templates** and **managed markets** on the existing DEX. Status: **SPECIFIED**
 (EVM and Hedera); nothing is built; the primitives it reuses (token tiers, the factory, `SCaaSDex`) are BUILT.
 
-## Scope
+**Contents**
+
+1. [Scope](#1-scope)
+2. [Regulated controls](#2-regulated-controls)
+   - 2.1 [Shape](#21-shape)
+   - 2.2 [Configuration and init](#22-configuration-and-init)
+   - 2.3 [Interface](#23-interface)
+   - 2.4 [Semantics per path](#24-semantics-per-path)
+   - 2.5 [Freeze, order records and forced transfer](#25-freeze-order-records-and-forced-transfer)
+   - 2.6 [`ComplianceRegistry`](#26-complianceregistry)
+   - 2.7 [Interactions](#27-interactions)
+   - 2.8 [Disclosure](#disclosure)
+   - 2.9 [Security](#29-security)
+   - 2.10 [Tests (`test/as/`)](#210-tests-testas)
+3. [Vesting and streaming](#3-vesting-and-streaming)
+4. [Dividend and coupon distribution](#4-dividend-and-coupon-distribution)
+5. [Corporate actions: `ExchangeOffer`](#5-corporate-actions-exchangeoffer)
+6. [Action contracts](#6-action-contracts)
+7. [Templates](#templates)
+8. [Managed markets](#8-managed-markets)
+9. [Touchpoints](#9-touchpoints)
+10. [Storage layout pins](#10-storage-layout-pins)
+11. [Families](#11-families)
+
+## 1. Scope
 
 <a id="scope"></a>
 
@@ -42,7 +66,7 @@ Measured runtime sizes of the base tiers (existing artifacts): `SingleUnderlying
 headroom below 24 576, less than the control surface; hence the controls live in `AdminLib`, an external library
 ([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)).
 
-## Regulated controls
+## 2. Regulated controls
 
 <a id="regulated"></a>
 <a id="regulated-kinds"></a>
@@ -151,7 +175,7 @@ for their controller. Otherwise one attestation would be a master key across eve
 | 5 | Transfer eligibility through a separate `ComplianceRegistry` (address → flags, `validUntil`, attester; no personal data); only **receivers** are checked; checks run at the pipeline's shape step |
 | 6 | Confidential tokens: a confidential balance can be frozen (stuck) but not seized on public chains |
 
-### Shape
+### 2.1 Shape
 
 - **In the token** (every non-confidential kind): the overrides of `_update`, the shape check and `payWithFee`, the
   cheap getters, one-line external stubs for every control function, and `forceTransfer` (it needs `ERC20._update`,
@@ -163,7 +187,7 @@ for their controller. Otherwise one attestation would be a master key across eve
 - **Storage**: the controls live in the `scaas.admin` ERC-7201 namespace ([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)).
 - The build gates on `forge build --sizes` within the per-implementation cap of CTR-TOK-24.
 
-### Configuration and init
+### 2.2 Configuration and init
 
 **P1-open:** the placement of the parameters below in `TokenConfig` ([CTR-TOK-25](token-wrappers.md#CTR-TOK-25)) is decided in P1; the field list is the requirement of what must be configurable. The flags and roles
 are `features`, `lockedFeatures` and `roles`. `initialize` validates them through `AdminLib` ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)),
@@ -192,7 +216,7 @@ Storage (namespace): **hot slot** `registry (20) ‖ active controls u8 ‖ paus
 `FreezeState = {slot a: until u64 ‖ episodeStart u64 ‖ issuerCooldownUntil u64; slot b: recordId bytes32}` (the hot path
 reads slot a only); `mapping(bytes32 ⇒ OrderRecord)`.
 
-### Interface
+### 2.3 Interface
 
 In the token, `disableControls(bits)` is `disableFeature(bit)` (owner) and `renounceRole()` is `renounceRole(bit)`, and the events
 `ControlsDisabled` and `RoleRenounced` are `FeatureDisabled` and `RoleRevoked` ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)); the names below are the control surface.
@@ -259,7 +283,7 @@ The node, venue and wallet compose a transfer pre-check from `isFrozen`, `canRec
 on-chain `checkTransfer` (size). This interface replaces an earlier `IRegulatedToken` proposal (court-ruling ids,
 `courtOrderBurn`, automatic reopening after a pause).
 
-### Semantics per path
+### 2.4 Semantics per path
 
 `R(a)` = receiver check (`ALLOWLIST` off ⇒ true; else `registry.hasFlags(a, requiredFlags)`). `F(a)` = `CTRL_FREEZE`
 set and `frozenUntil(a) > now`. `P` = `CTRL_PAUSE` set and `pausedUntil > now`.
@@ -280,7 +304,7 @@ Shape-step placement: the override computes the resolved fee recipient and fee a
 in `m.data`, then calls `super` (built: `super._checkOp(m)`). The `_update` override re-applies the transfer/mint/burn
 rows for direct paths, self-calls and `mtxTrade`; on the meta-tx path its reads are warm.
 
-### Freeze, order records and forced transfer
+### 2.5 Freeze, order records and forced transfer
 
 ```
 issuer:     freeze(account, ref, 0)            issuer-only episode: ref ≠ 0; not frozen ⇒ now ≥ issuerCooldownUntil
@@ -320,7 +344,7 @@ unpause(ref)        issuer; paused; pausedUntil = now; cooldownUntil = now + 7 d
 
 Expiry is passive. Integrators read `pausedUntil()`.
 
-### `ComplianceRegistry`
+### 2.6 `ComplianceRegistry`
 
 ```solidity
 interface IComplianceRegistry {
@@ -350,7 +374,7 @@ clone's attestation would expire (it should not: [CTR-AS-16](#CTR-AS-16) mandate
 from the optional verifiable-credential layer reach contracts only as these flags
 ([CTR-UA-20](accounts.md#CTR-UA-20)).
 
-### Interactions
+### 2.7 Interactions
 
 | With | Rule |
 |---|---|
@@ -364,7 +388,7 @@ from the optional verifiable-credential layer reach contracts only as these flag
 | Vesting / distribution / offer clones | holders like any other; attested `ELIGIBLE_CONTRACT` before funding (the address is known in advance) |
 | Zether | none (not covered) |
 
-### Disclosure
+### <a id="disclosure"></a>2.8 Disclosure
 
 <a id="disclosure"></a>
 
@@ -387,7 +411,7 @@ these statements, kept to the enabled bits:
 
 Wallets mark accounts named in a live `OrderRecorded`.
 
-### Security
+### 2.9 Security
 
 Invariants (each an invariant test):
 
@@ -428,7 +452,7 @@ overhead) ≈ **+8 k**; a meta-tx with a fee checks two receivers ≈ +16 k. The
 warm (≈ +0.5 k). Control calls add one library `DELEGATECALL` (≈ 2.6 k cold). Unregulated kinds: **0**. `recordOrder`
 ≈ 95 k (4 new slots), `forceTransfer` ≈ 60 k, `freeze` ≈ 27–50 k.
 
-### Tests (`test/as/`)
+### 2.10 Tests (`test/as/`)
 
 | Area | Tests |
 |---|---|
@@ -447,7 +471,7 @@ warm (≈ +0.5 k). Control calls add one library `DELEGATECALL` (≈ 2.6 k cold)
 | Sizes | `--sizes` within the cap of CTR-TOK-24 with flags 5–8 compiled in |
 | Invariant | handlers: transfers, meta-tx with fees, wraps/unwraps, freezes (both kinds), records, forced transfers, pauses with `warp`, role grants, revokes and renounces, `disableFeature`, attester disable and attestation expiry by the registry admin; invariants I1–I7 |
 
-## Vesting and streaming
+## 3. Vesting and streaming
 
 <a id="vesting"></a>
 <a id="CTR-AS-10"></a>**CTR-AS-10** — **One EIP-1167 clone per grant** (`VestingGrant`, owner), not a vault. Funding
@@ -606,7 +630,7 @@ beneficiary frozen ⇒ release credits; seize half, then release, revoke and swe
 and ≤ total; `Σ released + returned + swept ≤ funded`. Invariant: handlers release/revoke/approve/warp/stray
 transfers/seizure.
 
-## Dividend and coupon distribution
+## 4. Dividend and coupon distribution
 
 <a id="distributions"></a>
 <a id="CTR-AS-11"></a>**CTR-AS-11** — **Merkle distribution off a node-indexed snapshot** (owner), no balance
@@ -742,7 +766,7 @@ seizure then claims (first-come), hook token, regulated payout token (frozen acc
 refused — the policy must exclude or the issuer attest), fuzz over random trees (≤ 2¹⁰ leaves), invariant handlers
 claim/cancel/sweep/warp.
 
-## Corporate actions: `ExchangeOffer`
+## 5. Corporate actions: `ExchangeOffer`
 
 <a id="corporate-actions"></a>
 <a id="CTR-AS-12"></a>**CTR-AS-12** — **Split and reverse split are a migration to a new token** through an
@@ -848,7 +872,7 @@ by `obligation` before `closesAt` and full after, rescue, regulated `tokenIn` (o
 refused by the shape check; paused ⇒ refused) and regulated `tokenOut` (ineligible holder refused), fuzz `num/den` ∈ [1, 2⁹⁶)
 with the rate vectors' edge set.
 
-## Action contracts
+## 6. Action contracts
 
 <a id="action-contracts"></a>
 <a id="CTR-AS-15"></a>**CTR-AS-15** — Action contracts (grants, distributions, offers) have **no owner and no
@@ -865,7 +889,7 @@ catalogue (a new implementation = a new `AssetFactory`); events `GrantCreated`, 
 Deploy scripts: `AdminLib` is deployed and linked per chain ([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)); `AssetFactory` and one `ComplianceRegistry` per operator are
 deployed separately.
 
-## Templates
+## <a id="templates"></a>7. Templates
 
 <a id="templates"></a>
 <a id="CTR-AS-14"></a>**CTR-AS-14** — **Templates are off-chain presets** (owner): versioned JSON in the client library
@@ -902,13 +926,13 @@ The configuration wizard (in the app and any client system) works over `IOpenFac
 Provenance metadata published for every asset: `creator`, `underlying`, `version`, `implementation`, creation block
 (issuance timestamp), and for wrappers the live reserve `underlying.balanceOf(token)` — readable by anyone for free.
 
-## Managed markets
+## 8. Managed markets
 
 Securities on a licensed venue trade on a managed market of `SCaaSDex` ([CTR-DEX-12](dex.md#CTR-DEX-12)); on chain
 the regulated token's own checks are the arbiter, and the node venue enforces home-bound orders, `NONE` relayer fees on
 regulated legs and eligibility at intake ([NODE-DEX-11](../node/dex-venue.md#NODE-DEX-11)).
 
-## Touchpoints
+## 9. Touchpoints
 
 - Node: the event normaliser adds `OrderRecorded`, `OrderRevoked`, `AccountFrozen`, `AccountUnfrozen`,
   `ForcedTransfer`, `Paused`, `Unpaused`, `FeatureDisabled`, `RoleGranted`, `RoleRevoked`, `Attested`, `AttesterSet`,
@@ -931,7 +955,7 @@ regulated legs and eligibility at intake ([NODE-DEX-11](../node/dex-venue.md#NOD
   key; the app never holds a role key), holder pages (regulated status with freeze end dates, vesting, claimable
   distributions, open offers with their prescription dates, managed markets).
 
-## Storage layout pins
+## 10. Storage layout pins
 
 <a id="storage"></a>
 
@@ -939,7 +963,7 @@ New implementations get `test/as/layout/*.json` pins. The controls live in the `
 ([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)), so the kind's own slots are unchanged by flags 5–8; `VestingGrant`, `Distribution`,
 `ExchangeOffer` pinned in full. Indexers that read `reserve` by slot keep working on wrappers with flags 5–8.
 
-## Families
+## 11. Families
 
 | Component | EVM | Hedera | Cosmos | Soroban (Stellar, Pi) | Move (Aptos, Sui) | TON | Solana |
 |---|---|---|---|---|---|---|---|

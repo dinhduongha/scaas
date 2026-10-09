@@ -5,7 +5,7 @@ to approved payees, until an expiry, revocable at any time. It is a payment auth
 its own account ([accounts.md](accounts.md)) and the funds sit in its `MandateWallet`. Status: **BUILT**
 (`smartcontracts/evm/src/wallet/`); revocation epoch, the `mtx` names and the salted domain **SPECIFIED**.
 
-## `MandateWallet`
+## <a id="mandatewallet"></a>1. `MandateWallet`
 
 <a id="mandatewallet"></a>
 <a id="CTR-ACC-06"></a>**CTR-ACC-06** — **Delegated payment uses a dedicated `MandateWallet`, never an allowance.** One
@@ -64,7 +64,7 @@ vector. Status **SPECIFIED**.
 | `revoke(token, epoch)` | delegate-signed `MetaTransaction` (`mtxExecute`, or the named `mtxRevoke`) |
 | `mtxExecuteAsOwner` (owner-signed `MetaTransaction`), `isValidSignature` | owner |
 
-### Client integration (auto-pay)
+### 1.1 Client integration (auto-pay)
 
 How a client system uses mandates (the reference ERP implements it; the contract does not depend on it):
 

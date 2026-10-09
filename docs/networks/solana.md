@@ -6,7 +6,25 @@ Common rules for every family: [networks/README](README.md). Status: program, ad
 SPECIFIED are normative and not yet in code. Any SPL Token / Token-2022 mint registered by a client and passing the
 extension policy ([NET-SOL-09](#NET-SOL-09)) works; market-neutral.
 
-## Overview
+**Contents**
+
+1. [Overview](#1-overview)
+2. [Accounts](#2-accounts)
+3. [Keys](#3-keys)
+4. [Lanes](#4-lanes)
+5. [Payload](#5-payload)
+6. [Signatures](#6-signatures)
+7. [Tokens](#7-tokens)
+8. [Mandate](#8-mandate)
+9. [DEX](#dex)
+10. [Relayer](#10-relayer)
+11. [Finality and events](#11-finality-and-events)
+12. [Deploy and toolchain](#12-deploy-and-toolchain)
+13. [Conformance](#13-conformance)
+14. [Limitations](#limitations)
+15. [References](#15-references)
+
+## 1. Overview
 
 <a id="overview"></a>
 
@@ -83,7 +101,7 @@ unavoidable shared write; 12M CU/block ≈ a few hundred payments per block to o
 disjoint; same asset ⇒ the shared source token account (the balance itself — sequential within a block, no lock across
 blocks).
 
-## Accounts
+## 2. Accounts
 
 <a id="accounts"></a>
 
@@ -118,7 +136,7 @@ Lamports sent by mistake to the PDA (above rent exemption) are withdrawn by KeyO
 alternative: funds in the wallet's ATA with an `Approve` to the PDA — a token account has only **one** delegate
 (conflicts with other dApps), re-approval needs a native transaction, and there is no multi-key/recovery. BUILT.
 
-## Keys
+## 3. Keys
 
 <a id="keys"></a>
 
@@ -180,7 +198,7 @@ own** key (the admin never touches an Account); turning it on without a backup i
 `set_policy`; a client cannot read on-chain state, so a missing backup surfaces in simulation (the job `dead` with a
 clear reason). Owner decision ("only an on/off option"). BUILT.
 
-## Lanes
+## 4. Lanes
 
 <a id="lanes"></a>
 
@@ -214,7 +232,7 @@ SPECIFIED. LiteSVM tests: `cancel_signed` with `expiry = u64::MAX` ⇒ error; `r
 expiry, `util.rs:134-138`): the `solana.js` connector and `clientkeys` refuse to sign an op with `valid_until > now +
 LANE_HORIZON_S` and re-issue on one lane only within the horizon of its first op. SPECIFIED; JS test.
 
-## Payload
+## 5. Payload
 
 <a id="payload"></a>
 
@@ -278,7 +296,7 @@ cross-check, third-party relayers are not. Cost: one build per cluster (already 
 **Operator invariant until it lands:** never reuse a Solana program id across clusters, and keep the node's genesis
 cross-check on. Chains are keyed `solana:<genesis hash>`.
 
-## Signatures
+## 6. Signatures
 
 <a id="signatures"></a>
 
@@ -338,7 +356,7 @@ Cross vectors: `smartcontracts/solana/scripts/gen_vectors.py` generates `program
 T, OCMS, real signatures from fixed keys, PDAs of Account/lane/mandate/fill, ATA); the client and adapter tests pin
 **the same** hex.
 
-## Tokens
+## 7. Tokens
 
 <a id="tokens"></a>
 
@@ -381,7 +399,7 @@ has no `CloseAccount` path), so they are a one-time cost per (PDA, mint), metere
 existing ATA ⇒ runs, the lane pays no rent. Rust: missing destination + unconfigured `to` ⇒ `422`; configured `to` ⇒ the
 transaction carries the ATA creation; the pay → close → pay loop never creates a second ATA on lane money.
 
-## Mandate
+## 8. Mandate
 
 <a id="mandate"></a>
 
@@ -403,7 +421,7 @@ Account key, `"scaas.mclose.v1" ‖ network ‖ account ‖ mandate ‖ key_nonc
 in back to the Account's ATA and closes the PDA (rent to `rent_payer`); a leftover token account still belongs to the PDA
 — reopen the same seed and close again. Withdrawable after revoke or expiry. BUILT.
 
-## DEX
+## <a id="dex"></a>9. DEX
 
 <a id="dex"></a>
 
@@ -433,7 +451,7 @@ mint)` moves every token account of the Market (including the vault) to `fee_rec
 Admin: `Config.admin` (production: a multisig). Admin only: `list_market`, `set_market` (fee, on/off); the admin **never**
 touches a SmartKeyAccount or Mandate; `initialize` only by the upgrade authority (no front-run of init).
 
-## Relayer
+## 10. Relayer
 
 <a id="relayer"></a>
 
@@ -570,7 +588,7 @@ max_cu = 600000
 max_priority_lamports = 2000000
 ```
 
-## Finality and events
+## 11. Finality and events
 
 <a id="events"></a>
 
@@ -604,7 +622,7 @@ window; `Config` is read at `confirmed`.** `getBlocks(s−2048, s)`'s last eleme
 {transactionDetails:"none", rewards:false})`; skipped slots are normal on Solana; empty ⇒ `Err`. `Config` is immutable after
 `initialize`, so `confirmed` suffices. BUILT.
 
-## Deploy and toolchain
+## 12. Deploy and toolchain
 
 <a id="deploy"></a>
 
@@ -635,7 +653,7 @@ includes the secp256r1 precompile (`agave-precompiles` 4.3, feature `enable_secp
 tests (real vectors, high-S, origin, UV) run in LiteSVM. Builds are memory-heavy: `CARGO_BUILD_JOBS=2`, never in parallel
 with another heavy build. BUILT.
 
-## Conformance
+## 13. Conformance
 
 <a id="conformance"></a>
 
@@ -680,7 +698,7 @@ dynamic [32024, 32050)). The local validator enables every feature from epoch 0 
 `solana feature status -u http://127.0.0.1:32020`); mainnet: secp256r1 epoch 800, SIMD-0242 epoch 890, transaction v1 epoch
 1035. One validator at a time; check free memory (`free -g`) first. The public test program id is refused on public clusters.
 
-## Limitations
+## <a id="limitations"></a>14. Limitations
 
 <a id="limitations"></a>
 
@@ -702,7 +720,7 @@ dynamic [32024, 32050)). The local validator enables every feature from epoch 0 
   It would be Solana's native confidential-balance path (another curve than EVM Zether, so its own key tree; heavy
   client-side proofs); not built.
 
-## References
+## 15. References
 
 <a id="references"></a>
 

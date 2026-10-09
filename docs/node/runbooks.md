@@ -4,7 +4,17 @@ Recommended procedures for whoever runs a node ([NODE-OPS-15](ops.md#NODE-OPS-15
 defaults ([NODE-OPS-16](ops.md#NODE-OPS-16)). Status: **SPECIFIED** (the CLIs `store init`/`store restored` and the
 cold-start `plan()` are BUILT).
 
-## RACI
+**Contents**
+
+1. [RACI](#raci)
+2. [Incidents](#incidents)
+   - 2.1 [Common](#21-common)
+3. [Emergency](#emergency)
+4. [Backup and DR](#4-backup-and-dr)
+5. [Cutover](#cutover)
+6. [Production gates](#production-gates)
+
+## <a id="raci"></a>1. RACI
 
 <a id="raci"></a><a id="NODE-RUN-01"></a>**NODE-RUN-01** — **RACI roles**: node operator, key_custodian, issuer,
 compliance, guardian, rateAdmin, ERP admin, owner/SCaaS team. Recommended in production: `key_custodian` and `admin`
@@ -87,7 +97,7 @@ Organisation-level view (security = CISO, legal and compliance, finance = CFO):
 Human approval is mandatory (never delegated to an agent) for: opening the land gate, the confidentiality horizon,
 credit/gas budgets per agent, registering a new factory implementation, controlled-token interventions.
 
-## Incidents
+## <a id="incidents"></a>2. Incidents
 
 <a id="incidents"></a><a id="NODE-RUN-05"></a>**NODE-RUN-05** — **Incident command = the accountable role of the
 failing component**: node operator for node, store, chain and lane; issuer (with compliance for regulated tokens) for
@@ -123,7 +133,7 @@ Normal failure behaviour (no runbook needed):
 | RPC endpoints disagree | quorum not met ⇒ the indexer holds, `/readyz` red |
 | Lost race / consumed jobs | not incidents; they resolve to `final` (landed elsewhere) or `dead` (superseded) by the normal rules |
 
-### Common
+### 2.1 Common
 
 Evidence first (T+1 min), before any change. The evidence directory is mode 0700 on an encrypted volume and deleted
 when the incident closes (≤ 30 d):
@@ -146,7 +156,7 @@ adm() { m=$1 p=$2; shift 2; curl -fsS -X "$m" "$NODE$p" -H "Authorization: Beare
 Request bodies: chain state `{"state": "active|paused|halted", "reason": "…"}`; breaker reset `{"lane": "<label>|*",
 "breaker": "<name>|*"}`; chain patch with `breaker` merged (JSON merge patch).
 
-#### RB-01 node down or not ready
+#### 2.1.1 RB-01 node down or not ready
 
 <a id="rb-01-node-down-or-not-ready"></a>
 
@@ -158,7 +168,7 @@ Request bodies: chain state `{"state": "active|paused|halted", "reason": "…"}`
 3. Disk low: grow the volume, never delete store files. Restart loop or memory: evidence, roll back to the previous
    release (OW informed), open a defect.
 
-#### RB-02 breaker open
+#### 2.1.2 RB-02 breaker open
 
 <a id="rb-02-breaker-open"></a>
 
@@ -169,7 +179,7 @@ Request bodies: chain state `{"state": "active|paused|halted", "reason": "…"}`
    '{"lane":"*","breaker":"base_fee_spike"}'`. `revert_streak` ⇒ RB-16 first (it survives restarts).
 3. All lanes open (P1): work is held, nothing is lost; tell clients via the status page if > 30 min.
 
-#### RB-03 stuck lane
+#### 2.1.3 RB-03 stuck lane
 
 <a id="rb-03-stuck-lane"></a>Symptom: `scaas_lane_head_stuck_seconds` high, `ScaasFeeCapReached`, W3B-01 burn.
 
@@ -186,7 +196,7 @@ Request bodies: chain state `{"state": "active|paused|halted", "reason": "…"}`
 6. Lane unrecoverable: `adm PUT /v1/admin/chains/$C/lanes -d '{"lanes":[…without it…]}'` (`409 LANE_BUSY` until its rows
    are terminal), restart, drain its balance to treasury.
 
-#### RB-04 foreign nonce
+#### 2.1.4 RB-04 foreign nonce
 
 <a id="rb-04-foreign-nonce"></a>Symptom: `ScaasLaneForeignNonce`, `/readyz` "lane … used outside this store". The lane
 refuses to lease (correct).
@@ -200,7 +210,7 @@ refuses to lease (correct).
    store and no tx we sent ⇒ step 2**. Otherwise rerun with `--confirm <pending−1>`.
 4. `ScaasConsumedOnPrivate` (P3) is the soft version: find the relayer from `MetaTransactionExecuted.relayer`.
 
-#### RB-05 RPC divergence
+#### 2.1.5 RB-05 RPC divergence
 
 <a id="rb-05-rpc-divergence"></a>
 
@@ -210,7 +220,7 @@ refuses to lease (correct).
    restart. Divergence with a correct endpoint set ⇒ RB-06.
 4. The indexer holds while the quorum disagrees (NODE-GEN-08): nothing is booked; submission continues.
 
-#### RB-06 chain halt or finality violation
+#### 2.1.6 RB-06 chain halt or finality violation
 
 <a id="rb-06-chain-halt-or-finality-violation"></a>Chain halt (network stalled, `ScaasIndexerStalled`, final-head age
 rising on every endpoint):
@@ -230,7 +240,7 @@ Finality violation (`ScaasFinalityViolated`, `/readyz` "finality violated at <bl
    `store restored`), start. Every client resets its event cursor for the chain to `<block>` first; dedup by
    `(chain_key, tx_hash, log_index)` absorbs the rest.
 
-#### RB-07 store owner loss
+#### 2.1.7 RB-07 store owner loss
 
 <a id="rb-07-store-owner-loss"></a>Symptom: `ScaasFencingLost`, `NOT_OWNER` (503), `ScaasStoreCommitUnknown`.
 
@@ -242,13 +252,13 @@ Finality violation (`ScaasFinalityViolated`, `/readyz` "finality violated at <bl
    `scaas_store_owner_epoch` increases. PgBouncer in front of PostgreSQL is refused by design.
 3. Repeated commit-unknown: database or network fault; re-read-before-act keeps it safe; fix the transport.
 
-#### RB-08 restore
+#### 2.1.8 RB-08 restore
 
 <a id="rb-08-restore"></a>Only when the store is lost or corrupt (not for a bad config change). Sequence
 [NODE-RUN-02](#NODE-RUN-02), commands in [backup and DR](#backup-dr). Clients halt; chains stay paused until their ERP
 admins have acknowledged.
 
-#### RB-09 compromised API key
+#### 2.1.9 RB-09 compromised API key
 
 <a id="rb-09-compromised-api-key"></a>
 
@@ -260,7 +270,7 @@ admins have acknowledged.
 4. KC issues a new key (`scaas-node key create --namespace $NS --scopes "submit read"`), EA enters it. Client server
    compromised ⇒ `adm PATCH /v1/admin/namespaces/$NS -d '{"state":"suspended"}'` until cleaned.
 
-#### RB-10 compromised admin
+#### 2.1.10 RB-10 compromised admin
 
 <a id="rb-10-compromised-admin"></a>
 
@@ -272,7 +282,7 @@ admins have acknowledged.
    rotate lane keys, restore from a backup older than the break if config was altered (RB-08), security incident.
 4. Rotating `master_key` revokes every client API key and session at once: EA re-enters new keys.
 
-#### RB-11 wrapper shortfall or depeg
+#### 2.1.11 RB-11 wrapper shortfall or depeg
 
 <a id="rb-11-wrapper-shortfall-or-depeg"></a>Shortfall (`scaas_wrapper_leg_backing_ratio < 1`: blacklist burn,
 negative rebase, confiscation, bug):
@@ -290,7 +300,7 @@ Depeg on a multi-underlying leg (external price signal):
 2. Exits stay open; no re-enable exists (a new token if the leg must return). RA cancels pending rate changes during the
    incident (`RateDecreaseWithDisabledLeg` blocks decreases anyway).
 
-#### RB-12 code-hash change
+#### 2.1.12 RB-12 code-hash change
 
 <a id="rb-12-code-hash-change"></a>
 
@@ -303,7 +313,7 @@ Depeg on a multi-underlying leg (external price signal):
    --repin --chain $C --token $TOKEN`.
 4. Token or registry code changed: impossible for EIP-1167 clones ⇒ wrong address or lying RPC ⇒ RB-05.
 
-#### RB-13 regulator order
+#### 2.1.13 RB-13 regulator order
 
 <a id="rb-13-regulator-order"></a>Regulated token:
 
@@ -323,7 +333,7 @@ validates the order, the operator lists the party ([NODE-OPS-14](ops.md#NODE-OPS
 /v1/admin/deny/$ID/lift -d '{"lift_ref":"…"}'`. Other operators and self-submission still reach the contract; legal
 answers with that limit stated. `ScaasDenylistChanged` is checked against the order register.
 
-#### RB-14 runway
+#### 2.1.14 RB-14 runway
 
 <a id="rb-14-runway"></a>
 
@@ -333,7 +343,7 @@ answers with that limit stated. `ScaasDenylistChanged` is checked against the or
 3. Sponsor budget exhausted: the policy follows `on_exhausted`; the sponsor owner raises it (`adm PATCH
    /v1/admin/sponsorship/policies/$ID`) or accepts rejects.
 
-#### RB-15 feed client stalled
+#### 2.1.15 RB-15 feed client stalled
 
 <a id="rb-15-feed-client-stalled"></a>
 
@@ -342,7 +352,7 @@ answers with that limit stated. `ScaasDenylistChanged` is checked against the or
 2. Client side: its push and sync jobs active, its node record's attention flag (store change ⇒ acknowledge after RB-08
    confirmation), the last error ([integration.md#runbook](../integration.md#runbook)).
 
-#### RB-16 simulation-gap revert
+#### 2.1.16 RB-16 simulation-gap revert
 
 <a id="rb-16-simulation-gap-revert"></a>
 
@@ -352,7 +362,7 @@ answers with that limit stated. `ScaasDenylistChanged` is checked against the or
    `revert_streak` open, pause the chain if needed.
 3. Reset after explanation: `adm POST /v1/admin/chains/$C/breaker/reset -d '{"lane":"*","breaker":"revert_streak"}'`.
 
-#### RB-17 gossip degraded
+#### 2.1.17 RB-17 gossip degraded
 
 <a id="rb-17-gossip-degraded"></a>
 
@@ -361,7 +371,7 @@ answers with that limit stated. `ScaasDenylistChanged` is checked against the or
    QUIC vs classical peers). Thin mesh with healthy peers: graylisting from our own rejects (version skew) — upgrade or
    check the clock.
 
-## Emergency
+## <a id="emergency"></a>3. Emergency
 
 <a id="emergency"></a>Circuit breakers and emergency procedures:
 
@@ -378,7 +388,7 @@ answers with that limit stated. `ScaasDenylistChanged` is checked against the or
   permissionless token — migration to a new version is the remedy.
 - **Lost race / consumed jobs:** not incidents; they resolve to `final` (landed elsewhere) or `dead` (superseded).
 
-## Backup and DR
+## 4. Backup and DR
 
 <a id="backup-dr"></a><a id="NODE-RUN-02"></a>**NODE-RUN-02** — **Restore is one fixed sequence and starts paused**:
 stop → evidence → restore → integrity check → `store restored` (bumps `restore_epoch`, **sets every chain `paused`**,
@@ -487,7 +497,7 @@ or with a wrong `--confirm`, and lists an unmatched digest; an adopted head is r
 a job cancelled after the backup point is never leased; start-time final-hash recheck on a forked devnet; audit
 verification detects one edited row.
 
-## Cutover
+## <a id="cutover"></a>5. Cutover
 
 <a id="cutover"></a>Moving a chain from the legacy pull path to the store ([NODE-JOB-10](job-api.md#NODE-JOB-10)).
 Preconditions (checked by the client before it flips the chain, [integration.md](../integration.md); worked example:
@@ -518,7 +528,7 @@ Proof criterion and one-step removal: all chains `push` ≥ 14 days; zero client
 release candidate. Then one node release and one client upgrade delete everything marked legacy; the client's
 pre-migration aborts when any chain is still `pull`, and the final node refuses the legacy config section.
 
-## Production gates
+## <a id="production-gates"></a>6. Production gates
 
 <a id="production-gates"></a>Standing rules before production funds (operator and owner steps; tasks are tracked
 outside these docs):

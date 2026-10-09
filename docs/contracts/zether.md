@@ -17,7 +17,35 @@ the standard generator of G1, `r` = the group order (scalar field), `p` = the ba
 `be32(x)` = 32 bytes big-endian, `be4(x)` = 4 bytes big-endian, `u8(x)` = 1 byte; a string `"…"` is ASCII without a
 terminator.
 
-## Scope
+**Contents**
+
+1. [Scope](#1-scope)
+2. [Parameters](#2-parameters)
+3. [Curves, encoding, point checks](#3-curves-encoding-point-checks)
+4. [NUMS generators](#4-nums-generators)
+5. [Hash-to-scalar and the Fiat-Shamir transcript](#5-hash-to-scalar-and-the-fiat-shamir-transcript)
+6. [ElGamal state and lifecycle](#6-elgamal-state-and-lifecycle)
+7. [Statement (byte layout)](#statement-byte-layout)
+8. [Σ-protocol](#8-σ-protocol)
+   - 8.1 [Transfer](#81-transfer)
+   - 8.2 [Burn](#burn)
+9. [Bulletproofs — exactly two range statements](#9-bulletproofs--exactly-two-range-statements)
+10. [Proof wire format](#10-proof-wire-format)
+11. [Multi-recipient transfer](#11-multi-recipient-transfer)
+12. [Meta-transaction envelope and replay protection](#12-meta-transaction-envelope-and-replay-protection)
+   - 12.1 [Fees](#121-fees)
+13. [Authorization and the built registry](#13-authorization-and-the-built-registry)
+14. [Disclosure](#disclosure)
+15. [Confidential layer](#15-confidential-layer)
+16. [Safety gate](#safety-gate)
+17. [Client decryption and limits](#17-client-decryption-and-limits)
+18. [Decryption bound](#decryption-bound)
+19. [Gas (measured)](#gas-measured)
+20. [Vectors](#20-vectors)
+21. [Interfaces](#21-interfaces)
+22. [Keys and families](#22-keys-and-families)
+
+## 1. Scope
 
 <a id="scope"></a>
 <a id="CTR-ZTH-01"></a>**CTR-ZTH-01** — **Full classical Zether** (owner): `ZetherToken` clones through the factory,
@@ -45,7 +73,7 @@ BLS12-381 only when the security horizon exceeds bn254's (~100 vs ~126 bit); it 
 | Relayer fee | hidden in the pool | public scalar |
 | Travel-rule / audit | incompatible | compatible: disclosure by sender, receiver or auditor ([disclosure](#disclosure)) |
 
-## Parameters
+## 2. Parameters
 
 | Constant | Value | Where |
 |---|---|---|
@@ -96,7 +124,7 @@ Rust prover computes `b' = b − v − fee` with checked `u128`, the JS client w
 **The argument holds for E1–E8, unshield, rollOver, shield and disclosure.** `proofSystemId` changed to `…/n64-n64/v1` so
 that an old `n_v = 32` proof never matches the new transcript. The earlier rule "`2^n_b > total × 1024`" is superseded; `n_b = 128` would add ≈ 1.06 M gas (≈ +32 %) per transfer and ≈ +76 % per burn and is not planned.
 
-## Curves, encoding, point checks
+## 3. Curves, encoding, point checks
 
 In one paragraph: lifted ElGamal on G1, key `x ∈ [1, r)`, `Y = [x]G`; balance `(C, D) = ([b]G + [ρ]Y, [ρ]G)`;
 homomorphic add/sub on ciphertexts; decryption `[b]G = C − [x]D` then a discrete log by client-side BSGS. Proofs: one
@@ -134,7 +162,7 @@ all-zero `pad16`. The prover **never** outputs a non-canonical point; `UA = kecc
   registry forces the key `Y` through a G1MSM with k=1 at registration.
 - `D_out ≠ O` (if `O`, then `C_out = [v]G` reveals `v`). `Y ≠ O` for every key. `Y_from ≠ Y_to` (no self-transfer).
 
-## NUMS generators
+## 4. NUMS generators
 
 The verifier **computes** the generators in its constructor (not hard-coded) and writes the blob into a data contract
 (SSTORE2, read with `extcodecopy` at verification). Anyone can recompute them from this specification ⇒ verifiable
@@ -166,7 +194,7 @@ BLS12-381 — RFC 9380: `gen(label, index) = hash_to_curve(msg, DST)`, suite **`
 `MapToCurveBasedHasher<G1Projective, DefaultFieldHasher<Sha256,128>, WBMap<g1::Config>>`). Vectors:
 `smartcontracts/test/vectors/zether/generators_{bn254,bls12381}.json`.
 
-## Hash-to-scalar and the Fiat-Shamir transcript
+## 5. Hash-to-scalar and the Fiat-Shamir transcript
 
 ```
 hashToScalar(seed: bytes32) = ( uint256(keccak256(seed ‖ 0x02)) · 2^256
@@ -186,7 +214,7 @@ challenge(label):     st = keccak256(st ‖ 0x01 ‖ u8(len(label)) ‖ label)
 prover message (strong Fiat-Shamir, against Frozen Heart). A challenge never travels in the proof — the verifier
 recomputes it. Vector: `transcript.json`.
 
-## ElGamal state and lifecycle
+## 6. ElGamal state and lifecycle
 
 Key: `x ∈ [1, r)`, `Y = [x]G`, `UA = keccak256(encodedY)` (the built identifier; the Universal Account form is
 [CTR-UA-16](accounts.md#CTR-UA-16)). Lifted ElGamal: `(C, D) = ([b]G + [ρ]Y, [ρ]G)` (with `r` for the randomness: `(C, D) = ([b]G + [r]Y, [r]G)`);
@@ -283,7 +311,7 @@ rule: never hold a signed rollOver while a transfer is in flight; short `validUn
 fallback is to accept a stale `accSeq` for **credits only** (a debit proof stays bound to the exact `accSeq`). It is a
 protocol change that needs its own cryptographic review; epochs are not the fallback.
 
-## Statement (byte layout)
+## <a id="statement-byte-layout"></a>7. Statement (byte layout)
 
 The token **builds** the statement from storage + payload; the prover builds exactly the same. `P` = the bytes of one
 point. Header (416 bytes, common to every op; **SPECIFIED** — the built header is 384 bytes, without the `chainUid`
@@ -329,9 +357,9 @@ in [Multi-recipient transfer](#multi-recipient).
 
 `fee = confidentialFee()` if `beneficiary ≠ 0`, else `0` (a fixed fee per token, never a function of `v`).
 
-## Σ-protocol
+## 8. Σ-protocol
 
-### Transfer
+### 8.1 Transfer
 
 Witness: `x, v, s, b' = b − v − fee, γ_v, γ_b`. Bulletproof commitments: `V_v = [v]G + [γ_v]Hb`, `V_b = [b']G +
 [γ_b]Hb`. The prover builds `C_out = [v]G + [s]Y_t`, `D_out = [s]G`, `C_deb = [v]G + [s]Y_f`, `C_aud = [v]G + [s]Y_a`
@@ -370,7 +398,7 @@ E8  [z_b]G + [z_gb]Hb − [c]V_b − A_Vb
 E5 is `T = C_acc − C_deb − [fee]G = [b']G + [x](D_acc − D_out)`. E7/E8 share `z_v`, `z_b` with E3/E4/E5 — that is the
 Σ-Bullets link; removing E7 or E8 prints money.
 
-### Burn
+### <a id="burn"></a>8.2 Burn
 
 Witness `x, b' = b − amount − fee, γ_b`; `V_b = [b']G + [γ_b]Hb`.
 
@@ -388,7 +416,7 @@ E8  [z_b]G + [z_gb]Hb − [c]V_b − A_Vb
 
 `recipient` and `amount` are in the statement ⇒ a relayer cannot change where a burn pays out.
 
-## Bulletproofs — exactly two range statements
+## 9. Bulletproofs — exactly two range statements
 
 Transfer: `BP(n=64, V_v)` then `BP(n=64, V_b)`, **in the same transcript**, right after `c`. Burn: only `BP(n=64,
 V_b)`. `k = log2(n) = 6`. `be4(n)` in `"bp.AS"` is still absorbed, so the two BPs differ only by their position in the
@@ -433,7 +461,7 @@ BP-2  A + [x]S + Σ[−z − a·s_i]G_i + Σ[z + y^{-i}·(z²·2^i − b·s_i⁻
 
 Every challenge `y, z, x, w, u_j, c` must be `≠ 0`. Every scalar in the proof `< r`. Inverses by Fermat (`MODEXP 0x05`).
 
-## Proof wire format
+## 10. Proof wire format
 
 Points as above (P bytes), scalars 32 bytes BE. No length fields, no challenges. Inside `BP(n)` every point precedes
 every scalar; the transcript absorption order **differs** from the byte order (`τ_x ‖ μ ‖ t̂` are absorbed before `L_1 ‖
@@ -457,7 +485,7 @@ transfer payload = be32(provedAccSeq) ‖ be32(provedSendCounter) ‖ Y_f ‖ Y_
 burn payload     = be32(provedAccSeq) ‖ be32(provedSendCounter) ‖ Y_f                                       (64 + P)
 ```
 
-## Multi-recipient transfer
+## 11. Multi-recipient transfer
 
 <a id="multi-recipient"></a>
 <a id="CTR-ZTH-37"></a>**CTR-ZTH-37** — **One transfer, `M ≥ 1` recipients, one proof; `zetherTransfer` is the
@@ -546,7 +574,7 @@ consequence: on such a transfer the auditor reads nothing, and the opt-out is pu
 ([CTR-PQZ-04](pq-zether.md#CTR-PQZ-04)); an extra recipient there costs a full `u ‖ v_j` credit at rollover
 ([CTR-PQZ-11](pq-zether.md#CTR-PQZ-11)), and no PQZ multi-recipient proof exists yet. Not in this section.
 
-## Meta-transaction envelope and replay protection
+## 12. Meta-transaction envelope and replay protection
 
 <a id="envelope"></a>
 
@@ -637,7 +665,7 @@ guarantees `amount + fee < 2^65 < r`, no alias mod `r`.
 `entryRef = keccak256(abi.encode(keccak256("SCAAS-ZETHER-ENTRY-V1"), chainid, chainUid, token, fromUA, sendCounter))`
 (`sendCounter` before the increment).
 
-### Fees
+### 12.1 Fees
 
 <a id="fees"></a>
 <a id="CTR-ZTH-05"></a>**CTR-ZTH-05** — **Two fee layers.** The **inner** fee is a public scalar `fee` in the statement,
@@ -695,7 +723,7 @@ for its fee reverts before any precompile.
 <a id="CTR-ZTH-12"></a>**CTR-ZTH-12** — **No AEAD memo**; the client decrypts balances itself, with the configurable BSGS
 and the device balance cache of [CTR-ZTH-19](#CTR-ZTH-19) (there is no `DECRYPT_BOUND` constant).
 
-## Authorization and the built registry
+## 13. Authorization and the built registry
 
 <a id="registry"></a>
 
@@ -764,7 +792,7 @@ account's level); a replay needs that same `msg.sender` and yields the same reco
 
 The built interface is quoted in [accounts.md](accounts.md#legacy-registry).
 
-## Disclosure
+## <a id="disclosure"></a>14. Disclosure
 
 <a id="disclosure"></a>
 <a id="CTR-ZTH-43"></a>**CTR-ZTH-43** — **Disclosure lives in a separate stateless `ZetherDisclosure`** (owner): no
@@ -845,7 +873,7 @@ cannot deny the amount (its own key opens it). The CLI takes `(entryRef, v, s)`,
 export, and prints PASS/FAIL with every intermediate value, deterministically (two examiners get the same result); the
 client exports a standalone evidence file `(entryRef, v, s, chainId, tokenAddress)` that the CLI checks without the app.
 
-## Confidential layer
+## 15. Confidential layer
 
 <a id="underlying"></a>
 <a id="CTR-ZTH-44"></a>**CTR-ZTH-44** — **Zether is a layer over the public balance** (owner, T4–T6; supersedes the
@@ -917,7 +945,7 @@ classical Zether is gated to the dev chain ids 31337/1337 ([CTR-ZTH-02](#CTR-ZTH
 chain is open ([CTR-ZTH-33](#CTR-ZTH-33)). Post-quantum Zether serves the private chain instead
 ([pq-zether.md](pq-zether.md)).
 
-## Safety gate
+## <a id="safety-gate"></a>16. Safety gate
 
 <a id="safety-gate"></a>
 <a id="dev-gate"></a>
@@ -959,7 +987,7 @@ argument, registry PoP) **before** the dev gate is lifted; the curve decision ([
 optimization before public chains (the bn254 transfer exceeds the 2.5 M kill criterion); client screens show the
 UNAUDITED warning ([README](README.md#production-gates-unaudited)).
 
-## Client decryption and limits
+## 17. Client decryption and limits
 
 <a id="client-decryption"></a>
 <a id="CTR-ZTH-19"></a>**CTR-ZTH-19** — **Configurable client BSGS plus a device balance cache** (owner; replaces the
@@ -1026,7 +1054,7 @@ Limits (shielded units; for a 6-decimal stablecoin kept to 2 decimals, `shieldSc
 Beyond the mobile `pending` limit nothing is lost: roll over more often, or read on a desktop/CLI. When the cache is
 lost: a balance ≤ the device's BSGS bound is read again; a larger one needs a desktop or the CLI.
 
-## Decryption bound
+## <a id="decryption-bound"></a>18. Decryption bound
 
 <a id="decryption-bound"></a>
 
@@ -1083,7 +1111,7 @@ that needs more opens a separate change (a new `MAX_TOTAL_SHIELDED` up to `2^64 
 GPU kangaroo tool, measured first). Separate **series** are separate, non-fungible tokens with their own escrow; no
 factory path creates linked series.
 
-## Gas (measured)
+## <a id="gas-measured"></a>19. Gas (measured)
 
 <a id="gas"></a>
 
@@ -1211,7 +1239,7 @@ The 2.5 M per-transfer kill criterion of the original plan is exceeded by the bn
 is an unoptimized reference: open optimizations are one randomized MSM for Σ, points stored as `bytes32[2]`, and moving
 the disclosure bundle out of storage.
 
-## Vectors
+## 20. Vectors
 
 Common format: JSON, numbers as hex strings `0x…` (32-byte scalars, points in the encoding above), bytes as `0x…`.
 
@@ -1245,7 +1273,7 @@ totalShielded·shieldScale` ([CTR-ZTH-18](#CTR-ZTH-18)); (b) BLS points outside 
 statement/proof (`C_out`, `D_out`, `A_*`, `L_j`) ⇒ `verifyTransfer` false/revert (the implicit subgroup check through
 MSM); (c) `D_out = O` is refused (the check exists at `ZetherVerifier.sol:170`). Status **SPECIFIED** (the built suite has none of the three).
 
-## Interfaces
+## 21. Interfaces
 
 ```solidity
 interface IZetherToken is IERC20MetaTx {
@@ -1328,7 +1356,7 @@ only in the envelope); the built names are listed in [CTR-ZTH-45](#CTR-ZTH-45); 
 token (no `Registered` event); `RolledOver` carries `accSeq` (no epoch). `IZetherVerifier`: `proofSystemId`,
 `curveName`, `isSupportedOnThisChain`, `verifyTransfer(statement, proof)`, `verifyBurn` (the unshield statement), `generators`, point ops.
 
-## Keys and families
+## 22. Keys and families
 
 Keys: the confidential key `x` is derived from the same 24-word seed on a separate path — BLS12-381 EIP-2333
 `m/12381/<coin>/<account>/7`; bn254 EIP-2333-style with salt `"SCAAS-ZETHER-BN254-v1"` on `m/254/<coin>/<account>/7`;

@@ -6,7 +6,19 @@ finality, [NODE-GEN-08](README.md#NODE-GEN-08)). Status: finality gate, ranges �
 drift on EVM **BUILT** (written to the legacy client sink); store-backed feeds and the event-set quorum on every family
 **SPECIFIED**.
 
-## Finality
+**Contents**
+
+1. [Finality](#finality)
+   - 1.1 [Event-set quorum](#11-event-set-quorum)
+2. [Event normalization](#event-normalization)
+3. [Feeds](#feeds)
+4. [Event items](#event-items)
+   - 4.1 [Cursors](#cursors)
+5. [Drift and readiness](#5-drift-and-readiness)
+6. [Snapshots](#snapshots)
+7. [Limitations](#limitations)
+
+## <a id="finality"></a>1. Finality
 
 <a id="finality"></a><a id="finality-gate"></a><a id="NODE-IDX-02"></a>**NODE-IDX-02** — **The node decides finality;
 clients receive only final ranges.** Each chain has `finality = {mode, depth, quorum}` in the node store
@@ -78,7 +90,7 @@ not reorg); a booked entry would need a manual reversal. Before finality a reorg
 ranges are sent. A suspected violation is detected and held, never rewound automatically
 ([NODE-OPS-12](ops.md#NODE-OPS-12)).
 
-### Event-set quorum
+### 1.1 Event-set quorum
 
 <a id="event-set-quorum"></a><a id="quorum"></a><a id="NODE-IDX-01"></a>**NODE-IDX-01** — **Finality authenticates the
 events, not one block hash, on every family.** `final_head` = the minimum height reported by ≥ `quorum` endpoints,
@@ -106,7 +118,7 @@ between endpoints. Residual trust: clients trust their node's feed (a compromise
 At start and every 600 s the indexer re-reads the hash at `indexed_block` from ≥ quorum endpoints; a mismatch holds that
 chain (`finality violated at <block>`, [NODE-OPS-12](ops.md#NODE-OPS-12)).
 
-## Event normalization
+## <a id="event-normalization"></a>2. Event normalization
 
 <a id="event-normalization"></a>Every adapter emits one normalized event object; the feed changes nothing in it:
 `{event, contract, block_number, block_hash, tx_hash, log_index, from, to, amount, fee, fee_recipient, entry_ref |
@@ -157,7 +169,7 @@ Further events, same object, same filters (decoders for a new kind ship before t
   `RevocationRenounced`, `MilestoneApproved`, `ExcessSwept`, `DistributionCreated`, `Claimed`, `Cancelled`, `Swept`,
   `OfferCreated`, `Exchanged`, `Closed`, `Rescued`; `TieredTokenDeployed` (flags 5–8 are fields of the token, [CTR-AS-17](../contracts/asset-suite.md#CTR-AS-17)).
 
-## Feeds
+## <a id="feeds"></a>3. Feeds
 
 <a id="feeds"></a><a id="NODE-IDX-04"></a>**NODE-IDX-04** — **Change feeds** (a client's data platform may land them in its own
 `raw` tables; that platform is outside the node): `GET /v1/jobs?cursor=` (job state
@@ -188,7 +200,7 @@ decoded contract errors (`MetaTxBadNonce`, `MetaTxExpired`, …), `ATTEMPTS_EXHA
 subject could make deterministic, e.g. Hedera `INSUFFICIENT_GAS`, Aptos out-of-gas, Solana CU exhaustion — the subject
 must re-sign; [NODE-LANE-14](submit-lanes.md#NODE-LANE-14)).
 
-## Event items
+## <a id="event-items"></a>4. Event items
 
 <a id="event-items"></a><a id="NODE-IDX-05"></a>**NODE-IDX-05** — **Event feed items are the indexer's normalized
 ranges, unchanged**: `kind = range` = `{chain_key, from_block, to_block, to_block_hash, events}`, one finalized block
@@ -237,7 +249,7 @@ indexed (a new or restored node may start after the first payment). A repeat kee
 transaction so that the business can decide a refund to the payer; a refund is a business decision and a new,
 separate payment, never automatic. Status: SPECIFIED.
 
-### Cursors
+### <a id="cursors"></a>4.1 Cursors
 
 <a id="cursors"></a>Both feeds:
 
@@ -256,7 +268,7 @@ separate payment, never automatic. Status: SPECIFIED.
   for each non-terminal pushed job, then `cursor = -1`; events — reset to 0 (idempotent by block range: a client drops
   events at or below its indexed block when a range straddles it).
 
-## Drift and readiness
+## 5. Drift and readiness
 
 Drift A (inbound transfers that match no payment) and drift C (balances of watched receiving wallets at the indexed
 height) are computed by the indexer from the watch lists and delivered as events; the client compares them with its
@@ -264,7 +276,7 @@ books ([INT-ERP-09](../integration.md#INT-ERP-09)). Non-EVM drift needs a family
 (PLANNED per family). `/readyz` per chain: ≥ quorum RPCs answer within 3 s, indexer lag ≤ `max_index_lag`, finality
 not violated ([ops.md#health](ops.md#health)).
 
-## Snapshots
+## <a id="snapshots"></a>6. Snapshots
 
 <a id="snapshots"></a>(PLANNED) Deterministic Merkle snapshot of a token at a final block, for distributions
 ([contracts/asset-suite.md#snapshot](../contracts/asset-suite.md#snapshot), format there). Input: `(chain_key,
@@ -284,7 +296,7 @@ CLI `scaas-node snapshot verify <file>` recomputes a root from chain without tru
 trusted for the root: the review window and independent recomputation are the control. Vectors
 `test/vectors/merkle_dist_vectors.json` (Solidity, Rust node, client) include 1, 2, 3, 7 and 2¹⁰ + 1 leaves.
 
-## Limitations
+## <a id="limitations"></a>7. Limitations
 
 <a id="limitations"></a><a id="NODE-IDX-07"></a>**NODE-IDX-07** (open; PLANNED) — **A second, independent event
 source.** The event-set quorum bounds what one dishonest RPC provider can inject; it does not bound a compromised node,

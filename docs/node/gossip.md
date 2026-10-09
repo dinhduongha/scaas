@@ -5,7 +5,29 @@ node announces over libp2p gossipsub. It feeds the same pipeline as the pull bus
 **SPECIFIED** (the envelope library it reuses is BUILT; the node has no TLS server, QUIC, Noise or libp2p yet, only an
 outbound rustls client).
 
-## Scope
+**Contents**
+
+1. [Scope](#scope)
+2. [Architecture](#architecture)
+3. [Transport](#transport)
+4. [Identity](#identity)
+5. [Names](#5-names)
+6. [Wire](#wire)
+   - 6.1 [Sync](#61-sync)
+7. [Validation](#validation)
+8. [Numbers](#numbers)
+   - 8.1 [Discovery](#81-discovery)
+9. [Intents](#intents)
+   - 9.1 [Exclusivity](#91-exclusivity)
+   - 9.2 [Scoring](#92-scoring)
+10. [Hints](#hints)
+11. [Announce](#announce)
+12. [Private isolation](#private-isolation)
+13. [Crates](#13-crates)
+14. [Tests](#tests)
+15. [Limitations](#limitations)
+
+## <a id="scope"></a>1. Scope
 
 <a id="scope"></a><a id="NODE-GSP-01"></a>**NODE-GSP-01** — **Gossip is required alongside the pull bus.** The pull bus
 is no longer "transport v1, libp2p later"; it is the **admitted-peer** transport (consortium/private); libp2p gossipsub v1.1 is the **open-mesh** transport. Same
@@ -43,7 +65,7 @@ Non-goals:
 | ML-DSA / hybrid signatures | libp2p has no ML-DSA key type; seam only ([NODE-GSP-03](#NODE-GSP-03)) |
 | Compression (snappy) of gossip payloads | ≤ 32 KiB messages at ~10 msg/s; decompression bombs are a cost with no gain |
 
-## Architecture
+## <a id="architecture"></a>2. Architecture
 
 <a id="architecture"></a>
 
@@ -116,7 +138,7 @@ All other numbers of [numbers](#numbers) have defaults in code and are overridab
 listen/external/bootstrap/direct/allow_private_addrs. Hot from the store: per-chain/per-policy/per-market `gossip`
 switches, `exclusive_ms`, `gossip_trusted`, bans.
 
-## Transport
+## <a id="transport"></a>3. Transport
 
 <a id="transport"></a><a id="NODE-GSP-02"></a>**NODE-GSP-02** — **Carriers are selectable in `[transport]`**: `quic`
 (default on), `tcp` (Noise, default on), `https` (default on). Open-mesh gossip runs on `quic` and `tcp`. The pull bus
@@ -182,7 +204,7 @@ Consequence for the private profile: admitted peers (bus) are reachable only ove
 QUIC). Private-chain and private-visibility rows travel only on the bus. Hence **every byte of private data on the wire
 is under a hybrid ML-KEM key exchange.**
 
-## Identity
+## <a id="identity"></a>4. Identity
 
 <a id="identity"></a><a id="NODE-GSP-05"></a>**NODE-GSP-05** — **One node key** (Ed25519, 32-byte seed) is: the
 `hub.sig` key, the self-signed TLS cert key of the HTTPS bus ([NODE-MESH-03](mesh.md#NODE-MESH-03)), the libp2p
@@ -211,14 +233,14 @@ Signing contexts with the one key:
 
 All prefixes are distinct and none is a prefix of another, so no signature is valid in two contexts.
 
-## Names
+## 5. Names
 
 <a id="names"></a><a id="NODE-GSP-04"></a>**NODE-GSP-04** — **Wire names use `scaas` and topics use the `chain_key`**:
 envelope `scaas-intent/1.2`, `hub_msg` domain tag `scaas-hub/v1` (12 bytes), protocol ids `/scaas/…`, topics below,
 env `SCAAS_*`, metrics `scaas_*`, store/key paths `/var/lib/scaas`, `/etc/scaas`. Topics carry the **`chain_key`**
 (`evm:100`), not CAIP-2: every wire object already keys on `chain_key`.
 
-## Wire
+## <a id="wire"></a>6. Wire
 
 <a id="wire"></a><a id="NODE-GSP-06"></a>**NODE-GSP-06** — **The gossip wire is the bus JSON, with a content
 message-id.** Every gossip payload is the **same UTF-8 JSON** as on the pull bus, one object per message, kind
@@ -324,7 +346,7 @@ denies a TCP connection for any `PeerId` in the bus peer table, and the swarm di
 `multiaddr`; the puller sends `/scaas/bus/1.2` only on a QUIC `ConnectionId` and the server re-checks the carrier
 (`TRANSPORT_NOT_PQ`). A bus peer may still take part in gossip over that same QUIC connection.
 
-### Sync
+### 6.1 Sync
 
 <a id="sync"></a><a id="NODE-GSP-13"></a>**NODE-GSP-13** — **Anti-entropy protocol** `/scaas/sync/1` (libp2p
 request-response, JSON codec): `intents` (stored gossip-eligible rows, cursor = store `seq`), `announces`, `book` (one
@@ -339,7 +361,7 @@ budget of 2 MiB/s. gossipsub only caches ~6 heartbeats; the cursor catch-up of t
 | `{"kind": "announces"}` | `{"items": [announce…]}`, live only, ≤ 1 MiB |
 | `{"kind": "book", "chain_key", "dex", "base", "quote", "home", "after_seq": n}` | `{"items": [book…], "more": bool}` ordered by `home_seq`, ≤ 200 per page |
 
-## Validation
+## <a id="validation"></a>7. Validation
 
 <a id="validation"></a><a id="NODE-GSP-07"></a>**NODE-GSP-07** — **Validation pipeline and the Reject rule.** gossipsub
 `validate_messages()`; every message is held until the node reports `Accept` (forward), `Reject` (drop + P4 penalty)
@@ -402,7 +424,7 @@ reads the registry record once (cached), recomputes the id and verifies every si
 the shared kind library; only ERC-1271 kinds go to simulation; a failed check is `Ignore` (no penalty)
 ([mesh.md#ua-intents](mesh.md#ua-intents)).
 
-## Numbers
+## <a id="numbers"></a>8. Numbers
 
 <a id="numbers"></a><a id="NODE-GSP-08"></a>**NODE-GSP-08** — **Peer scoring and limits** are the numbers below, all
 configuration, **all arbitrary** except where a source is cited. Score thresholds gossip −10 / publish −50 / graylist
@@ -472,7 +494,7 @@ Connections and DHT: `max_established` 50 (inbound 30, outbound 20, ≤ 10 outbo
 in the pinned version). Kad: k = 20, α = 3, record/provider TTL 48 h, republish 12 h, max packet 16 KiB, ≤ 2 peers per
 /24 (/48) per bucket, store ≤ 1 024 records / 1 024 provider keys, inbound requests ≤ 10/s per peer.
 
-### Discovery
+### 8.1 Discovery
 
 <a id="discovery"></a><a id="NODE-GSP-09"></a>**NODE-GSP-09** — **Own Kademlia DHT with a dial filter.** Protocol
 **`/scaas/kad/1.0.0`** (its own DHT, never the IPFS one); bootstrap multiaddrs are **toml-only** (dial targets); DHT
@@ -487,7 +509,7 @@ trusted beyond "this PeerId may be reachable here". Identify (`/ipfs/id/1.0.0`, 
 table and the outbound slots; address filtering is the libp2p form of "never dial a network-supplied URL". A LAN-only
 deployment must set `allow_private_addrs`.
 
-## Intents
+## <a id="intents"></a>9. Intents
 
 <a id="intents"></a>`bus_scope = public` is a separate opt-in from `open`: the consent behind `open` (it "exposes … to admitted
 peers") covered partners, not the world. Publish rule — `may_gossip`, the second and last exit (the first is `may_export`,
@@ -522,7 +544,7 @@ admitted partners is not consent to the world); `mesh_policy.gossip`, `chain.gos
 forces `gossip = 0`), `chain.exclusive_ms` (default 7000), `dex_market.gossip`/`unbound` (`unbound = 1` requires
 `gossip = 1` and a public chain). Tables in [store.md#gossip-tables](store.md#gossip-tables).
 
-### Exclusivity
+### 9.1 Exclusivity
 
 <a id="exclusivity"></a><a id="NODE-GSP-10"></a>**NODE-GSP-10** — **Exclusivity over gossip, with automatic trust.**
 *Origin side*: the eligible set ([mesh.md#exclusivity](mesh.md#exclusivity)) adds gossip peers that (a) have a live
@@ -566,13 +588,13 @@ until = published_at + chain.exclusive_ms / 1000            # default 7 000 ms; 
 - Jitter after `until` unchanged. On the open mesh exclusivity binds only nodes that follow this spec; bots that submit
   without announcing are bounded only by G1 and normalization ([threat-model.md#gossip](threat-model.md#gossip) G-F1).
 
-### Scoring
+### 9.2 Scoring
 
 <a id="scoring"></a><a id="NODE-GSP-16"></a>**NODE-GSP-16** (open) — Sybil resistance of forward scoring is not solved:
 forward scores are not built; the exclusivity credit counts only landings of intents the peer did not originate, from
 ≥ 3 distinct subjects — a partial answer.
 
-## Hints
+## <a id="hints"></a>10. Hints
 
 <a id="hints"></a><a id="NODE-GSP-11"></a>**NODE-GSP-11** — **Landed hints only trigger a chain read** (this closes the earlier "no receipt gossip in v1" with
 no new trust). Hints are
@@ -603,7 +625,7 @@ the hint only saves the wait. Cost: one nonce read per hinted intent (deduped, r
 7. Hints are forwarded only by nodes that know the intent, so forward-only and RPC-less nodes leave holes in hint
    propagation. Accepted: a hint only saves a wait; the scheduler's own consumption reads still happen.
 
-## Announce
+## <a id="announce"></a>11. Announce
 
 <a id="announce"></a><a id="NODE-GSP-12"></a>**NODE-GSP-12** — **Signed, versioned announces.** `scaas-announce/1`,
 signed by the node key, `version` strictly increasing, `expires_at ≤ issued_at + 24 h`, re-published every 10 min and
@@ -644,7 +666,7 @@ A node uses an announce to build exclusivity eligibility, the DEX home map (DEX-
 view, and nothing else. It never dials `endpoints.gateway`; it may hand it to clients (gateway `GET /v1/dex/homes`).
 Multiaddrs are added to Kademlia through the discovery filter.
 
-## Private isolation
+## <a id="private-isolation"></a>12. Private isolation
 
 <a id="private-isolation"></a>Claim: no byte derived from a private-visibility row or from a private-profile chain
 leaves the node on a libp2p gossip topic, on `/scaas/sync/1`, in an announce or in a hint; it leaves only on the bus,
@@ -672,7 +694,7 @@ PQ-protected, to admitted private peers, from the origin. Proof sketch:
 
 Each step is a unit test and E-G5 is the end-to-end check.
 
-## Crates
+## 13. Crates
 
 <a id="crates"></a><a id="NODE-GSP-14"></a>**NODE-GSP-14** — **Gossip crates and resource budget**: `libp2p` **0.56.x**
 pinned, `default-features = false`, features below; `rustls` with `aws_lc_rs` + `prefer-post-quantum`; reqwest switched
@@ -700,7 +722,7 @@ No CBOR/protobuf crate of our own; `serde_json` canonical body unchanged. Store 
 | CPU | Ed25519 verify ≈ 50 µs, ecrecover (alloy, pure-Rust k256) ≈ 100–150 µs, parse + canonical check ≈ 20 µs / 2 KiB ⇒ < 5 % of one core at 200 msg/s (estimates) |
 | build | first build with `libp2p` + `aws-lc-sys` (C, cmake): one long compile; run alone with `CARGO_BUILD_JOBS=4`; peak RAM not measured — **measure** at first build and record it here |
 
-## Tests
+## <a id="tests"></a>14. Tests
 
 <a id="tests"></a>In-process tests use one tokio runtime, loopback, ephemeral ports, `allow_private_addrs = true`, P6
 weight 0. Heavy runs one at a time.
@@ -760,7 +782,7 @@ Multi-node e2e (`tests/e2e_gossip.rs`, `--ignored`, anvil + forge, in-process no
 
 Bus cases E1–E12 ([mesh.md#tests](mesh.md#tests)) also run with the bus over QUIC (parameterized carrier).
 
-## Limitations
+## <a id="limitations"></a>15. Limitations
 
 <a id="limitations"></a>Not built in v1: NAT traversal; ML-DSA (or hybrid) identities and payload signatures (seam in
 [NODE-GSP-03](#NODE-GSP-03)); forward scoring ([NODE-GSP-16](#NODE-GSP-16)); Zether on gossip.

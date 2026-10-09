@@ -11,7 +11,28 @@ leaked key). Authentication [NODE-JOB-05](#NODE-JOB-05) on every route. Errors:
 plus code-specific fields (the gateway's contract is
 `{error, code, detail, revert_data?}`, [NODE-GW-06](gateway.md#NODE-GW-06)).
 
-## Namespaces
+**Contents**
+
+1. [Namespaces](#namespaces)
+2. [Authentication](#2-authentication)
+3. [Journal and digests](#3-journal-and-digests)
+4. [Idempotency](#4-idempotency)
+5. [Routes](#5-routes)
+   - 5.1 [`POST /v1/jobs`](#post-v1jobs)
+   - 5.2 [Meta-transaction data](#52-meta-transaction-data)
+6. [Intake](#intake)
+7. [Lease](#7-lease)
+8. [Lane pinning](#8-lane-pinning)
+9. [Token subsets](#9-token-subsets)
+10. [Call jobs](#10-call-jobs)
+11. [Call table](#call-table)
+12. [Job states](#12-job-states)
+13. [Cancel](#cancel)
+14. [Errors and limits](#14-errors-and-limits)
+15. [Client conformance](#15-client-conformance)
+16. [Legacy pull](#legacy-pull)
+
+## <a id="namespaces"></a>1. Namespaces
 
 <a id="namespaces"></a><a id="NODE-JOB-03"></a>**NODE-JOB-03** — **Namespaces are the node's tenant unit**
 (`[a-z0-9-]{3,40}`; names starting `~` are reserved: `~gateway`, `~mesh`, `~dex`, and `~lane` — a booking label only,
@@ -23,7 +44,7 @@ combined feed; the client routes by `origin`.
 <a id="NODE-JOB-16"></a>**NODE-JOB-16** (open; default applied) — Several entities of one client may share one
 namespace by using distinct `origin.scope` values; the default is one namespace per client database.
 
-## Authentication
+## 2. Authentication
 
 <a id="auth"></a><a id="NODE-JOB-05"></a>**NODE-JOB-05** — **Machine credentials are namespaced HMAC keys.** The
 signing scheme is the gateway's `hmac` mode ([NODE-GW-02](gateway.md#NODE-GW-02)) plus header `X-Scaas-Key:
@@ -51,7 +72,7 @@ routes, never in a browser, mobile or desktop app or extension. Keys are created
 revoked (hot, ≤ 2 s) by a `key_custodian` (`POST /v1/admin/keys`, `POST /v1/admin/keys/{id}/rotate`, CLI,
 [admin-auth.md#cli](admin-auth.md#cli)); the secret (64 hex) is shown once.
 
-## Journal and digests
+## 3. Journal and digests
 
 <a id="journal"></a><a id="NODE-JOB-02"></a>**NODE-JOB-02** — **One journal, node-computed digests.** Every local
 submission — job API, gateway door A, mesh scheduler, DEX `mtxSettle` — is a `job` row; mesh `intent` rows reference
@@ -63,7 +84,7 @@ live-digest index (`(chain_key, digest)` over live states; emulated on MySQL) ma
 `plan()` inputs and two outcome sinks; a client-supplied digest would let one tenant squat another's intent or bypass
 G2.
 
-## Idempotency
+## 4. Idempotency
 
 <a id="idempotency"></a><a id="NODE-JOB-04"></a>**NODE-JOB-04** — **Idempotency key** = `(namespace, origin.scope,
 origin.producer, origin.key, origin.generation)`, plus `payload_hash` = SHA-256 of **RFC 8785 (JCS)** of the parsed
@@ -74,7 +95,7 @@ create a **tombstone** under the key ([NODE-JOB-07](#NODE-JOB-07), bounded by [N
 sends a stable `scope` (e.g. `"<database uuid>:<legal entity id>"`) matching its own unique outbox key. A mismatch
 means "the node holds a job under this key", never "dead".
 
-## Routes
+## 5. Routes
 
 <a id="routes"></a>
 
@@ -90,7 +111,7 @@ means "the node holds a job under this key", never "dead".
 | `GET/PUT /v1/tokens/{chain_key}` | read / submit | namespace's token subset (full replace; ∩ node registry incl. `chain_contract` rows; unknown ones listed in the response as `missing`) |
 | planned: `POST /v1/snapshots {chain, token, block, policy}` → `{id}`; `GET /v1/snapshots/{id}` → `{state, root, total, leaf_count, policy_hash}`; `GET …/{id}/leaves`; `GET …/{id}/proof?account=` | submit / read | deterministic Merkle snapshot of a token at a final block ([indexer-feeds.md#snapshots](indexer-feeds.md#snapshots)), namespace-scoped |
 
-### `POST /v1/jobs`
+### <a id="post-v1jobs"></a>5.1 `POST /v1/jobs`
 
 ```json
 {"jobs": [{
@@ -128,7 +149,7 @@ Payload by kind:
 `payload` is exactly what every adapter `build` consumes today; `work_from_job` and the family adapters are
 unchanged. A W3C `traceparent` header applies to every item of the batch ([NODE-OPS-09](ops.md#NODE-OPS-09)).
 
-### Meta-transaction data
+### 5.2 Meta-transaction data
 
 <a id="selector-table"></a><a id="NODE-JOB-20"></a>**NODE-JOB-20** — **The node reads a meta-transaction's `data`
 through the implementation's published selector allowlist.** Status: **SPECIFIED**. On EVM and Hedera every SCaaS
@@ -176,7 +197,7 @@ signature and run as `metatx` jobs, `payload.entry` naming them (default `mtxExe
 `mtxWrap` requires `order.dex = order.receiveToken = token` and `order.relayer ∈ {0, the lane}`; the wrapper pays the
 submitting lane the order's `fee` from minted units. `mtxTrade` is never a job: only a DEX or a wrapper calls it.
 
-## Intake
+## <a id="intake"></a>6. Intake
 
 <a id="intake"></a>Accept checks, in order (no RPC except a cached UA record read,
 [gateway.md#ua-cache](gateway.md#ua-cache); simulation stays at lease time,
@@ -252,7 +273,7 @@ Response `200` for a well-formed batch; each accepted item carries its **current
 A fresh accept answers `{"client_ref": "erp:1234", "uid": 17, "created": true, "state": "queued", "last_seq": 902}`.
 Paused chain: accepted, waits `queued` ([NODE-STO-08](store.md#NODE-STO-08)). Halted: `409 CHAIN_HALTED`.
 
-## Lease
+## 7. Lease
 
 <a id="lease"></a><a id="NODE-JOB-06"></a>**NODE-JOB-06** — **A claim is a CAS inside the one owner process**:
 `queued → leased` inside the single owner of the store ([NODE-STO-04](store.md#NODE-STO-04)); no `SKIP LOCKED` is
@@ -265,14 +286,14 @@ The lane scheduler leases queued rows of its chain with `hold = 0` and `lane_hin
 ≤ 10 per round, skipping digests already in flight; after a restart, queued jobs are not leased for
 `lease_hold_after_start_secs` (15 s), so queued cancels land first.
 
-## Lane pinning
+## 8. Lane pinning
 
 <a id="lane-pinning"></a><a id="NODE-JOB-08"></a>**NODE-JOB-08** — **Relayer-bound jobs are pinned to their lane**: a
 meta-tx with `MODE_RESTRICT_RELAYER` (or a family op that binds the relayer) gets `lane_hint`; only that lane leases
 it; a relayer that is none of the chain's lanes ⇒ `422 RELAYER_NOT_OURS`. Otherwise any lane could claim a bound job
 and it would revert in simulation; with pinning a DEX chain may run several lanes.
 
-## Token subsets
+## 9. Token subsets
 
 <a id="token-subsets"></a><a id="NODE-JOB-12"></a>**NODE-JOB-12** — **An empty namespace token subset means no
 tokens.** `namespace.all_tokens` (default 0; `admin` only, audited) is the one way to serve every registered token of
@@ -281,7 +302,7 @@ the granted chains; `store init` creates the reserved `~gateway`, `~mesh`, `~dex
 hash of the last pushed subset, is set); until then its jobs get `422 UNKNOWN_TOKEN`.
 ("Empty ⇒ all" would give a new, copied or misconfigured namespace every token of its chains until the first sync.)
 
-## Call jobs
+## 10. Call jobs
 
 <a id="call-jobs"></a><a id="NODE-JOB-09"></a>**NODE-JOB-09** — **`call` jobs are a namespace capability**
 (`allow_call`, default `false`). **Precondition**: a target qualifies only if it enforces its own replay protection
@@ -302,7 +323,7 @@ refuses the second.
 <a id="NODE-JOB-15"></a>**NODE-JOB-15** (open; default applied) — The namespace created for an ERP client that
 migrates from the legacy pull path gets `allow_call = true` (mandates and subject accounts need it).
 
-## Call table
+## <a id="call-table"></a>11. Call table
 
 <a id="call-table"></a><a id="NODE-JOB-01"></a>**NODE-JOB-01** — **`call` jobs are limited to a selector/target
 table.** A `call` job carries calldata the client built; a lane signs it as `msg.sender`. The node executes one only
@@ -350,7 +371,7 @@ Transitional (BUILT): the deployed contracts and the node's built table use the 
 `SCaaSDex.settle`/`cancel`/`invalidateNonces` — and the DEX row also matches the chain's single `dex` field. The
 renamed rows replace them in the release that deploys the renamed contracts; no deployed chain keeps both.
 
-## Job states
+## 12. Job states
 
 <a id="states"></a>Node job states (store; one transaction = CAS + `job_event` INSERT + `job.last_seq` + fencing
 check). The table mirrors the client-side transition table (`TRANSITIONS`) and late-no-op table (`LATE_NOOP`); both
@@ -414,7 +435,7 @@ it — `MODE_OPEN`, payee self-relay, a mesh peer). Node `cancelled` is reported
 Tombstones skip the 30 d ([NODE-JOB-11](#NODE-JOB-11)). `plan()` never aggregates over job rows (they are purgeable):
 it reads `lane.journal_max`.
 
-## Cancel
+## <a id="cancel"></a>13. Cancel
 
 <a id="cancel"></a><a id="NODE-JOB-07"></a>**NODE-JOB-07** — **Cancel is a node CAS, by uid or by origin.**
 `POST /v1/jobs/{uid}/cancel` or `POST /v1/jobs/cancel {origin}` succeeds from `queued`/`leased` only if the job was
@@ -449,7 +470,7 @@ effects; `TOO_LATE` ⇒ already sent; transport error ⇒ `cancel_requested`, re
 <a id="NODE-JOB-18"></a>**NODE-JOB-18** (open; default applied) — Defaults: `max_tombstones = 1000`, tombstone
 cancels 2 rps (burst 10).
 
-## Errors and limits
+## 14. Errors and limits
 
 <a id="errors"></a>
 
@@ -469,7 +490,7 @@ cancels 2 rps (burst 10).
 Terminal reasons that are not HTTP codes: job `dead` with `error = ATTEMPTS_EXHAUSTED` (`attempt_count >
 chain.max_attempts`); chain `halted` with reason `PROGRAM_UPGRADEABLE` ([NODE-STO-07](store.md#NODE-STO-07)).
 
-## Client conformance
+## 15. Client conformance
 
 <a id="client-tests"></a>What a client of this API must test (the reference client's suite runs against a fake node):
 
@@ -495,7 +516,7 @@ local cancel, `bound_*` mismatch, `default_*` context, `action_switch_to_push` p
 nightly `scripts/e2e_odoo_node.sh` (real Odoo test DB + node + anvil).
 <!-- /example -->
 
-## Legacy pull
+## <a id="legacy-pull"></a>16. Legacy pull
 
 <a id="legacy-pull"></a><a id="NODE-JOB-10"></a>**NODE-JOB-10** — **Per-chain pull/push flag, then one-step removal** (the decision on "flag or hard cut").
 A client chain flag `node_transport ∈ pull|push` (default `pull`) selects the path. A transitional node runs both
