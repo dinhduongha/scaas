@@ -135,7 +135,7 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
     {
         bytes32 digest = _checkIntent(m, signature);            // 1, 2
         uint256 basis = _checkCall(m);                          // 3
-        unchecked { _mtxStorage().nonce[m.from][m.batch] = m.nonce + 1; }   // 4
+        _useNonce(m.from, m.batch);                             // 4
         ret = _selfCall(m);                                     // 5
         uint256 fee = _chargeFee(m.from, basis, m);             // 6
         emit MetaTransactionExecuted(m.from, msg.sender, m.batch, m.nonce, digest, _feeRecipientOf(m), fee); // 7
@@ -145,18 +145,31 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
     function _checkIntent(MetaTxLib.MetaTransaction memory m, bytes calldata signature)
         internal view returns (bytes32 digest)
     {
-        if (m.mode & MetaTxLib.MODE_RESTRICT_RELAYER != 0 && m.relayer != msg.sender) {
-            revert MetaTxUnauthorizedRelayer(m.relayer, msg.sender);
-        }
-        if (block.timestamp > m.validUntil) revert MetaTxExpired(m.validUntil, block.timestamp);
-        if (m.mode & ~MetaTxLib.MODE_KNOWN_MASK != 0 || m.mode & MetaTxLib.MODE_FEE_MASK > MetaTxLib.MODE_FEE_FIXED) {
-            revert MetaTxUnknownMode(m.mode);
-        }
-        uint256 expected = _mtxStorage().nonce[m.from][m.batch];
-        if (expected != m.nonce) revert MetaTxBadNonce(expected, m.nonce);
-        if (m.from == address(this)) revert SelfSender();
+        _checkEnvelope(m.from, m.batch, m.nonce, m.validUntil, m.mode, m.relayer);
         digest = _hashTypedDataV4(m.hashStruct());
         _requireValidSignature(m.from, digest, signature);
+    }
+
+    /// @dev Step 1 on the shared lane space (CTR-MTX-15): the common envelope of every signed struct
+    ///      (`MetaTransaction`, and P1b's `MetaTransfer`). Not virtual: one lane, one nonce sequence.
+    function _checkEnvelope(
+        address from, uint256 batch, uint256 nonce, uint256 validUntil, uint32 mode, address relayer
+    ) internal view {
+        if (mode & MetaTxLib.MODE_RESTRICT_RELAYER != 0 && relayer != msg.sender) {
+            revert MetaTxUnauthorizedRelayer(relayer, msg.sender);
+        }
+        if (block.timestamp > validUntil) revert MetaTxExpired(validUntil, block.timestamp);
+        if (mode & ~MetaTxLib.MODE_KNOWN_MASK != 0 || mode & MetaTxLib.MODE_FEE_MASK > MetaTxLib.MODE_FEE_FIXED) {
+            revert MetaTxUnknownMode(mode);
+        }
+        uint256 expected = _mtxStorage().nonce[from][batch];
+        if (expected != nonce) revert MetaTxBadNonce(expected, nonce);
+        if (from == address(this)) revert SelfSender();
+    }
+
+    /// @dev Step 4: consume the lane's current nonce (call after `_checkEnvelope` passed).
+    function _useNonce(address from, uint256 batch) internal {
+        unchecked { ++_mtxStorage().nonce[from][batch]; }
     }
 
     /// @dev Step 3: shape, allowlist, fee class, `supportedModes()`. Returns the fee basis.
@@ -184,9 +197,11 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         _tstore(_TICKET, 1);
         bool ok;
         (ok, ret) = address(this).call(m.data);
+        bool guarded = _tload(_TICKET) == 2;    // the target was `nonReentrant` and consumed the ticket
         _tstore(_TICKET, 0);
         _tstore(_SENDER, 0);
         if (!ok) assembly ("memory-safe") { revert(add(ret, 0x20), mload(ret)) }
+        if (!guarded) revert Reentrancy();      // fail closed: an allowlisted function must be `nonReentrant`
     }
 
     // ------------------------------------------------------------------ hooks

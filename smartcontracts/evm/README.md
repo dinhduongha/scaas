@@ -133,7 +133,7 @@ Cùng lớp lỗi bắt được khi viết lại: `bytes32 indexed reference` t
 > không" trong EVM: `extcodesize == 0` đúng với ví chưa deploy, với địa chỉ đang
 > trong constructor, và (từ EIP-7702) với EOA có code. Mọi kiểm tra dựa trên nó là
 > một giả định sẽ hỏng. Cần chấp nhận cả hai loại ví thì dùng ERC-1271
-> (`SigLib.requireValid` đã làm), đừng phân loại người gọi.
+> (`SigCheck.isValid` đã làm), đừng phân loại người gọi.
 
 ## Ba thay đổi thiết kế so với code cũ
 

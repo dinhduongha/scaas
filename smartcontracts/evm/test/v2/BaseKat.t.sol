@@ -9,7 +9,7 @@ import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
 /// @title KAT v2 (TW2 §10.4): `test/vectors/metatx_v2_kat.json`.
-/// @notice Vector gốc = ĐÚNG struct của `metatx_kat.json` v1 (cùng `struct_hash`), digest mới vì domain version
+/// @notice Vector gốc = ĐÚNG struct của `metatx_v1_kat.json` (cùng `struct_hash`), digest mới vì domain version
 ///         "2". Thêm `mtxpay` (lane `payLane(payId)`, nonce 0) và `mtxunwrap` (T2). Python (Odoo `lib/eip712.py`)
 ///         và Rust (node) đọc cùng file; đổi typehash, `canon` hay domain là họ đỏ.
 contract BaseKatTest is V2Fixture {
