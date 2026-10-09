@@ -1,6 +1,38 @@
 # HANDOFF — scaas
 
-## Shutdown 2026-10-09 — read this first
+## Shutdown 2026-10-09 (evening) — read this first
+
+**State:** `main` = `1d51d22` (P1a merged), pushed; tag `ref/pre-token-tree` (→ `dc429c4`) pushed. Tree clean. 712 forge
+tests pass; docs checker 0 errors (2 known budget warnings: `token-wrappers.md` 986 > 845, `dex.md` 538 > 520 — owner call).
+
+**Next action:** write the **P1b** plan (`ERC20MetaTx` on `MetaTxBase`: `MetaTransfer` + `mtxExecuteTransfer`/`mtxBatchTransfer`,
+fee classes on tokens, receiver-pays, approve only by contracts, UA path, KATs `metatransfer_kat.json`), against the code P1a
+left; then execute subagent-driven like P1a. P1b notes (a)–(h) are in TODO §00 under P1.
+
+**P1a delivered** (plan `docs/superpowers/plans/2026-10-09-p1a-metatxbase.md`, 9 tasks + final review):
+- `legacy/` (27 reference copies, not built) + tag `ref/pre-token-tree`.
+- `src/common/SigCheck.sol` — one signature check (ECDSA low-s; ERC-1271 capped, ≤32 B returndata, starvation guard
+  `SigCheckGasStarved`; 7702 designator = EOA); the three built bases use it; `SigLib` deleted.
+- `src/common/SaltedEIP712.sol` — salt = chain_uid, clone-safe, `eip712Domain()` 0x1f, `ChainUidZero()`.
+- `MetaTxLib`: v3 `MetaTransaction` (typehash pinned); built struct renamed `LegacyMetaTransaction` (digests unchanged).
+- `src/metatx/MetaTxBase.sol` + `IMetaTx.sol` — `mtxExecute` (+ alias), `mtxBatch`, lanes, `cancelNonce`, transient sender +
+  one-shot ticket (fail-closed: an allowlisted target without `nonReentrant` reverts), allowlist + fee classes
+  (1 = ABSOLUTE, 2 = AMOUNT), `_chargeFee` NONE only, `_checkEnvelope`/`_useNonce` for the P1b `MetaTransfer` path.
+  Mock `MtxRegistryMock` ≈ 9.4 KB — the 20,480 B token budget needs care in P1b/P1c.
+- KAT: `metatx_kat.json` = v3; `metatx_v1_kat.json` = built v1 (node + clientkeys repointed).
+- **Cross-repo breakage:** bamboo-dms `dms_blockchain/tests/test_eip712.py:14` reads the old path — repoint to
+  `metatx_v1_kat.json` there.
+
+**Owner decisions 2026-10-09:** `OrderBookDex` → **`SCaaSDex`** in P2 (domain `"SCaaS Dex"`); integration.md rewrite later
+(TODO §0); docs: README map as per-area tables, architecture.md numbered sections + contents, §1 lists smart contracts first.
+
+**Controller rulings during P1a** (review if you disagree): RA tag on `dc429c4`; RC/RF/RG/RH/RJ several test gaps upgraded
+to required (signature refusal branches, per-flag canon, end-to-end binding, alias coverage, batch replay/rollback, fee
+basis offset, fee after call, per-item fees); RE refuse zero chain_uid (NET-ALL-22); RJ feeClass ≥ 3 refused; RK
+`_checkEnvelope`/`_useNonce` + fail-closed ticket added in the final review. Plan defaults: refusal error
+`MetaTxUnknownMode`, ERC-1271 margin 5,000 gas, fee class checked before `supportedModes()`.
+
+## Shutdown 2026-10-09
 
 **State:** `main` = P0 merged and pushed (`4bad99b`) + 3 local commits (TODO note, P1a plan). Tree clean. Nothing of P1 started:
 no tag `ref/pre-token-tree`, no `legacy/` yet (Task 1 of the P1a plan does both).
