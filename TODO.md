@@ -20,7 +20,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
 | P5 | Node, clientkeys, encoders for the new ABI | MT-8, MT-9 |
 
 **P1 start checklist (owner decisions 2026-10-08):**
-- [ ] Keep the old code for reference: git tag `ref/pre-token-tree` on the last commit before P1, and copy the v1/v2 token
+- [x] Keep the old code for reference: git tag `ref/pre-token-tree` on the last commit before P1, and copy the v1/v2 token
       sources and the old `ZetherToken` to `smartcontracts/evm/legacy/` (not built, not tested; a README says "reference only").
 - [ ] P1 refactors in place (`git mv` + edit), not a rewrite. Reuse map: `MetaTxCore` → `MetaTxBase`/`ERC20MetaTx`;
       `MetaTokenBase` pay → `PayLib`; `Single`+`Multi` → `UnderlyingLib`/`UnderlyingToken`; `HederaV2Lib` → `HederaLib`;
