@@ -215,18 +215,18 @@ contract ZetherRevertPathsTest is ZetherFixture {
 
     // ------------------------------------------------------------------ phong bì
 
-    function _m(bytes memory data) internal view returns (MetaTxLib.MetaTransaction memory m) {
+    function _m(bytes memory data) internal view returns (MetaTxLib.LegacyMetaTransaction memory m) {
         m = _mt(vm.addr(PK), data, 1, MetaTxLib.MODE_RESTRICT_RELAYER, 0);
     }
 
-    function _exec(MetaTxLib.MetaTransaction memory m, bytes memory sig, bytes memory err) internal {
+    function _exec(MetaTxLib.LegacyMetaTransaction memory m, bytes memory sig, bytes memory err) internal {
         vm.prank(relayer);
         vm.expectRevert(err);
         tok.executeMetaTransaction(m, sig);
     }
 
     function test_envelopeRevertPaths() public {
-        MetaTxLib.MetaTransaction memory m = _m(hex"deadbeef");
+        MetaTxLib.LegacyMetaTransaction memory m = _m(hex"deadbeef");
         bytes memory sig = _sign(PK, tok, m);
         // relayer không được phép
         vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.MetaTxUnauthorizedRelayer.selector, relayer, address(this)));
@@ -263,7 +263,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
 
     function test_smartAccountEnvelopeSignature() public {
         Mock1271Wallet w = new Mock1271Wallet(vm.addr(PK));
-        MetaTxLib.MetaTransaction memory m = _mt(address(w), "", 1, MetaTxLib.MODE_RESTRICT_RELAYER, 0);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(address(w), "", 1, MetaTxLib.MODE_RESTRICT_RELAYER, 0);
         m.to = address(0x1); // chuyển công khai value 0 — hợp lệ
         bytes memory sig = _sign(PK, tok, m);
         vm.prank(relayer);

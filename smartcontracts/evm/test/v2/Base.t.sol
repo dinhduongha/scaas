@@ -26,13 +26,13 @@ contract BaseTest is V2Fixture {
         t.mint(alice, 1_000e6);
     }
 
-    function _exec(MetaTxLib.MetaTransaction memory m) internal {
+    function _exec(MetaTxLib.LegacyMetaTransaction memory m) internal {
         bytes memory s = _sig(PK, address(t), m);
         vm.prank(relayer);
         t.executeMetaTransaction(m, s);
     }
 
-    function _expectExecRevert(MetaTxLib.MetaTransaction memory m, bytes memory err) internal {
+    function _expectExecRevert(MetaTxLib.LegacyMetaTransaction memory m, bytes memory err) internal {
         bytes memory s = _sig(PK, address(t), m);
         vm.prank(relayer);
         vm.expectRevert(err);
@@ -68,7 +68,7 @@ contract BaseTest is V2Fixture {
     // ------------------------------------------------------------------ pipeline
 
     function test_transferThroughTheGenericPath() public {
-        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, 100e6, "", 7, RR);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, shop, 100e6, "", 7, RR);
         bytes32 d = t.metaTxDigest(m);
         vm.expectEmit(address(t));
         emit IERC20MetaTx.MetaTransactionExecuted(alice, relayer, 7, 0, d, relayer, 0);
@@ -125,7 +125,7 @@ contract BaseTest is V2Fixture {
         address clone = Clones.clone(address(burner));
         tk.mint(clone, 10);
         tk.mint(address(burner), 10);
-        MetaTxLib.MetaTransaction memory m = _mt(clone, shop, 1, "", 1, RR);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(clone, shop, 1, "", 1, RR);
         vm.prank(relayer);
         tk.executeMetaTransaction(m, hex"00");
         assertEq(tk.balanceOf(shop), 1);
@@ -192,7 +192,7 @@ contract BaseTest is V2Fixture {
         bytes4 op = bytes4(keccak256("unwrap(address,address,uint256)"));
         _expectExecRevert(_mt(alice, shop, 1, _unwrapData(address(1), shop, 0), 1, RR),
             abi.encodeWithSelector(MetaTokenBase.MetaTxUnknownOp.selector, op));
-        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, 1, _unwrapData(address(1), shop, 0), 1, RR);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, shop, 1, _unwrapData(address(1), shop, 0), 1, RR);
         bytes memory s = _sig(PK, address(t), m);
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(MetaTokenBase.MetaTxUnknownOp.selector, op));
@@ -202,7 +202,7 @@ contract BaseTest is V2Fixture {
     // ------------------------------------------------------------------ phí, R132
 
     function test_percentFeeOnValueChargedOnTop() public {
-        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, 100e6, "", 1, RR | RF | PCT);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, shop, 100e6, "", 1, RR | RF | PCT);
         m.fee = 5_000; // 0,5 %
         m.feeRecipient = feeTaker;
         _exec(m);
@@ -212,7 +212,7 @@ contract BaseTest is V2Fixture {
     }
 
     function test_feeCapOnePercentBothModes() public {
-        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, 100e6, "", 1, PCT);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, shop, 100e6, "", 1, PCT);
         m.fee = 10_001;
         _expectExecRevert(m, abi.encodeWithSelector(FeePolicy.FeeExceedsCap.selector, 10_001, 10_000));
         m.mode = FIX;
@@ -226,7 +226,7 @@ contract BaseTest is V2Fixture {
     function test_feeNeverGoesToThePayee() public {
         bytes memory err = abi.encodeWithSelector(MetaTxCore.FeeRecipientIsPayee.selector);
         // bound recipient == to, transfer
-        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, 100e6, "", 1, RR | RF | PCT);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, shop, 100e6, "", 1, RR | RF | PCT);
         m.fee = 1_000;
         m.feeRecipient = shop;
         _expectExecRevert(m, err);
@@ -255,7 +255,7 @@ contract BaseTest is V2Fixture {
     function test_payeeCheckDoesNotApplyToTrade() public {
         bytes memory d = abi.encodeWithSelector(bytes4(keccak256("trade(address,uint256,address)")),
             address(1), uint256(1), address(0));
-        MetaTxLib.MetaTransaction memory m = _mt(alice, relayer, 100e6, d, 1, RR | PCT);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, relayer, 100e6, d, 1, RR | PCT);
         m.fee = 1_000;
         _exec(m);
         assertEq(t.balanceOf(relayer), 100.1e6);
@@ -265,7 +265,7 @@ contract BaseTest is V2Fixture {
         uint256 v = bound(value, 0, 900e6);
         uint256 f = bound(feePpm, 0, 10_000);
         uint256 supply = t.totalSupply();
-        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, v, _payData(bytes32(uint256(1))), 1, RR | RF | PCT);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, shop, v, _payData(bytes32(uint256(1))), 1, RR | RF | PCT);
         m.fee = f;
         m.feeRecipient = feeTaker;
         _exec(m);
@@ -283,7 +283,7 @@ contract BaseTest is V2Fixture {
     ) public {
         which = uint8(bound(which, 0, 3));
         amount = bound(amount, 0, 900e6);
-        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, amount, "", batch, restrict ? RR : 0);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, shop, amount, "", batch, restrict ? RR : 0);
         m.validUntil = block.timestamp + ttl;
         if (which == 1 || which == 2) {
             m.mode |= RF | PCT;
@@ -310,7 +310,7 @@ contract BaseTest is V2Fixture {
     }
 
     function test_oneSignatureOneLaneAcrossPaths() public {
-        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, 1e6, "", 3, RR);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, shop, 1e6, "", 3, RR);
         bytes memory s = _sig(PK, address(t), m);
         vm.prank(relayer);
         t.mtxTransfer(alice, shop, 1e6, 3, 0, m.validUntil, RR, relayer, s);
@@ -341,7 +341,7 @@ contract BaseTest is V2Fixture {
         for (uint256 i; i < 3; ++i) {
             vm.expectRevert(abi.encodeWithSelector(e, badFee[i]));
             t.mtxTransferWithFee(alice, shop, 1, 1, 0, vu, badFee[i], relayer, 1, feeTaker, "");
-            MetaTxLib.MetaTransaction memory u = _mt(alice, shop, 1, "", 1, badFee[i]);
+            MetaTxLib.LegacyMetaTransaction memory u = _mt(alice, shop, 1, "", 1, badFee[i]);
             u.fee = 1;
             u.feeRecipient = feeTaker;
             vm.expectRevert(abi.encodeWithSelector(e, badFee[i]));
@@ -349,11 +349,11 @@ contract BaseTest is V2Fixture {
         }
         vm.expectRevert(abi.encodeWithSelector(e, RF | PCT));
         t.mtxTransferWithFee(alice, shop, 1, 1, 0, vu, RF | PCT, relayer, 1, address(0), "");
-        MetaTxLib.MetaTransaction memory u0 = _mt(alice, shop, 1, "", 1, RF | FIX);
+        MetaTxLib.LegacyMetaTransaction memory u0 = _mt(alice, shop, 1, "", 1, RF | FIX);
         u0.fee = 1;
         vm.expectRevert(abi.encodeWithSelector(e, RF | FIX));
         _mtxUnwrapWithFee(address(t), u0, address(1), 0, "");
-        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, 1, "", 1, RR | RF);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, shop, 1, "", 1, RR | RF);
         vm.expectRevert(abi.encodeWithSelector(e, RR | RF));
         t.executeMetaTransactionWithFee(m, "");
     }
@@ -361,7 +361,7 @@ contract BaseTest is V2Fixture {
     /// L5: `fee` không bị canonical-zero hoá dưới `NONE`. Đường chung nhận; `mtxTransfer` đặt `fee = 0` nên
     /// chữ ký không khớp.
     function test_leftoverFeeUnderNoneFailsTheNamedPath() public {
-        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, 1e6, "", 1, RR);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, shop, 1e6, "", 1, RR);
         m.fee = 5;
         bytes memory s = _sig(PK, address(t), m);
         vm.prank(relayer);
@@ -375,7 +375,7 @@ contract BaseTest is V2Fixture {
     function test_mtxPayDerivesTheLaneAndPaysOnce() public {
         bytes32 p = keccak256("invoice-1");
         assertEq(t.payLane(p), uint256(keccak256(abi.encodePacked("scaas.pay.lane", p))));
-        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, 25e6, _payData(p), t.payLane(p), RR);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, shop, 25e6, _payData(p), t.payLane(p), RR);
         bytes memory s = _sig(PK, address(t), m);
         vm.expectEmit(address(t));
         emit IERC20Payment.PaymentSettled(alice, shop, 25e6, 0, relayer, p);
@@ -391,7 +391,7 @@ contract BaseTest is V2Fixture {
     /// reconciler coi lần hai là ngoại lệ, không phải khoản thứ hai.
     function test_payWithFeeSameEntryRefStillSettles() public {
         bytes32 p = keccak256("invoice-1");
-        MetaTxLib.MetaTransaction memory m = _mt(alice, shop, 1e6, _payData(p), t.payLane(p), RR);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, shop, 1e6, _payData(p), t.payLane(p), RR);
         bytes memory s = _sig(PK, address(t), m);
         vm.prank(relayer);
         t.mtxPay(alice, shop, 1e6, p, m.validUntil, RR, relayer, 0, address(0), s);
@@ -401,8 +401,8 @@ contract BaseTest is V2Fixture {
         t.payWithFee(shop, 1e6, FeeMode.NONE, 0, address(0), p);
     }
 
-    function _batchItems(uint256 n) internal view returns (MetaTxLib.MetaTransaction[] memory ms, bytes[] memory ss) {
-        ms = new MetaTxLib.MetaTransaction[](n);
+    function _batchItems(uint256 n) internal view returns (MetaTxLib.LegacyMetaTransaction[] memory ms, bytes[] memory ss) {
+        ms = new MetaTxLib.LegacyMetaTransaction[](n);
         ss = new bytes[](n);
         for (uint256 i; i < n; ++i) {
             ms[i] = _mt(alice, shop, 1e6, _payData(bytes32(i)), 100 + i, RR);
@@ -411,14 +411,14 @@ contract BaseTest is V2Fixture {
     }
 
     function test_mtxBatchRunsEveryItem() public {
-        (MetaTxLib.MetaTransaction[] memory ms, bytes[] memory ss) = _batchItems(3);
+        (MetaTxLib.LegacyMetaTransaction[] memory ms, bytes[] memory ss) = _batchItems(3);
         vm.prank(relayer);
         t.mtxBatch(ms, ss);
         assertEq(t.balanceOf(shop), 3e6);
     }
 
     function test_mtxBatchIsAtomic() public {
-        (MetaTxLib.MetaTransaction[] memory ms, bytes[] memory ss) = _batchItems(3);
+        (MetaTxLib.LegacyMetaTransaction[] memory ms, bytes[] memory ss) = _batchItems(3);
         ss[2] = ss[0];
         vm.prank(relayer);
         vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
@@ -428,10 +428,10 @@ contract BaseTest is V2Fixture {
     }
 
     function test_mtxBatchShape() public {
-        (MetaTxLib.MetaTransaction[] memory ms, bytes[] memory ss) = _batchItems(2);
+        (MetaTxLib.LegacyMetaTransaction[] memory ms, bytes[] memory ss) = _batchItems(2);
         vm.expectRevert(MetaTokenBase.MtxBatchLengthMismatch.selector);
         t.mtxBatch(ms, new bytes[](1));
         vm.expectRevert(MetaTokenBase.MtxBatchEmpty.selector);
-        t.mtxBatch(new MetaTxLib.MetaTransaction[](0), ss);
+        t.mtxBatch(new MetaTxLib.LegacyMetaTransaction[](0), ss);
     }
 }

@@ -13,7 +13,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 ///         "2". Thêm `mtxpay` (lane `payLane(payId)`, nonce 0) và `mtxunwrap` (T2). Python (Odoo `lib/eip712.py`)
 ///         và Rust (node) đọc cùng file; đổi typehash, `canon` hay domain là họ đỏ.
 contract BaseKatTest is V2Fixture {
-    using MetaTxLib for MetaTxLib.MetaTransaction;
+    using MetaTxLib for MetaTxLib.LegacyMetaTransaction;
     using stdJson for string;
 
     uint256 constant PK = 0xA11CE;
@@ -24,7 +24,7 @@ contract BaseKatTest is V2Fixture {
             keccak256("SCaaS MetaToken"), keccak256("2"), uint256(7622), vc));
     }
 
-    function _vector(string memory k, address vc, MetaTxLib.MetaTransaction memory m)
+    function _vector(string memory k, address vc, MetaTxLib.LegacyMetaTransaction memory m)
         internal returns (string memory out)
     {
         bytes32 structHash = m.hashStruct();
@@ -60,7 +60,7 @@ contract BaseKatTest is V2Fixture {
         tok.mint(from, 1_000e6);
 
         // 1. the v1 struct, unchanged
-        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
+        MetaTxLib.LegacyMetaTransaction memory m = MetaTxLib.LegacyMetaTransaction({
             from: from, to: address(0x5409), value: 250e6,
             data: _payData(bytes32(uint256(0x42))), batch: uint256(keccak256("scaas.pay.lane")),
             nonce: 0, validUntil: 1_800_000_300, mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0xFEE)
@@ -71,7 +71,7 @@ contract BaseKatTest is V2Fixture {
 
         // 2. mtxPay: lane on chain, nonce 0, a bound percent fee
         bytes32 payId = bytes32(uint256(0x42));
-        MetaTxLib.MetaTransaction memory p = MetaTxLib.MetaTransaction({
+        MetaTxLib.LegacyMetaTransaction memory p = MetaTxLib.LegacyMetaTransaction({
             from: from, to: address(0x5409), value: 250e6, data: _payData(payId), batch: tok.payLane(payId),
             nonce: 0, validUntil: 1_800_000_300, mode: RR | RF | PCT, relayer: relayer, fee: 2_500,
             feeRecipient: address(0xFEE)
@@ -94,7 +94,7 @@ contract BaseKatTest is V2Fixture {
         u.approve(address(w), 100e6);
         w.wrap(100e6);
         vm.stopPrank();
-        MetaTxLib.MetaTransaction memory x = MetaTxLib.MetaTransaction({
+        MetaTxLib.LegacyMetaTransaction memory x = MetaTxLib.LegacyMetaTransaction({
             from: from, to: address(0x5409), value: 40e6, data: _unwrapData(address(u), address(0x5409), 40e6),
             batch: 7, nonce: 0, validUntil: 1_800_000_300, mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)
         });

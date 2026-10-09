@@ -178,7 +178,7 @@ contract MultiTest is V2Fixture {
         _wrap(t, usdt, alice, 10e6);
         vm.prank(guardian);
         t.disableWrap(address(usdt), "depeg");
-        MetaTxLib.MetaTransaction memory m = _mt(alice, bob, 3e18, _unwrapData(address(usdt), bob, 3e6), 1, RR);
+        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, bob, 3e18, _unwrapData(address(usdt), bob, 3e6), 1, RR);
         bytes memory s = _sig(PK, address(t), m);
         vm.prank(relayer);
         t.mtxUnwrap(alice, address(usdt), 3e18, bob, 3e6, 1, 0, m.validUntil, RR, relayer, s);

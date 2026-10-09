@@ -19,7 +19,7 @@ import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 ///         Bước 6–8 (kiểm đủ → thu phí → thực thi) giao cho `_executeOp`: op Zether phải kiểm số dư phí
 ///         TRƯỚC verify proof, và thu phí SAU verify, TRƯỚC hiệu lực — "phí đã thu ⟺ op đã xảy ra".
 abstract contract ZetherMetaTx is ERC20, EIP712, IERC20MetaTx {
-    using MetaTxLib for MetaTxLib.MetaTransaction;
+    using MetaTxLib for MetaTxLib.LegacyMetaTransaction;
 
     mapping(address => mapping(uint256 => uint256)) private _metaNonce;
 
@@ -43,7 +43,7 @@ abstract contract ZetherMetaTx is ERC20, EIP712, IERC20MetaTx {
         return MetaTxLib.MODE_KNOWN_MASK;
     }
 
-    function metaTxDigest(MetaTxLib.MetaTransaction calldata m) external view returns (bytes32) {
+    function metaTxDigest(MetaTxLib.LegacyMetaTransaction calldata m) external view returns (bytes32) {
         return _hashTypedDataV4(m.hashStruct());
     }
 
@@ -51,7 +51,7 @@ abstract contract ZetherMetaTx is ERC20, EIP712, IERC20MetaTx {
         unchecked { _metaNonce[msg.sender][batch] += 1; }
     }
 
-    function executeMetaTransaction(MetaTxLib.MetaTransaction calldata m, bytes calldata signature)
+    function executeMetaTransaction(MetaTxLib.LegacyMetaTransaction calldata m, bytes calldata signature)
         external nonReentrant returns (bool)
     {
         // 1. relayer
@@ -80,7 +80,7 @@ abstract contract ZetherMetaTx is ERC20, EIP712, IERC20MetaTx {
     }
 
     /// @dev Kiểm, thu phí, thực thi; trả số phí đã thu. Không được thu phí trước khi mọi kiểm tra qua.
-    function _executeOp(MetaTxLib.MetaTransaction calldata m, FeeMode feeMode, address feeRecipient)
+    function _executeOp(MetaTxLib.LegacyMetaTransaction calldata m, FeeMode feeMode, address feeRecipient)
         internal virtual returns (uint256 feeAmount);
 
     /// @dev Bước 6 dùng chung: số dư công khai của `from` đủ `need` — kiểm TRƯỚC mọi thứ đắt.

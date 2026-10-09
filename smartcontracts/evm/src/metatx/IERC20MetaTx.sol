@@ -47,7 +47,7 @@ interface IERC20MetaTx is IERC20 {
 
     /// @notice Digest EIP-712 mà `from` phải ký. Public để SDK và relayer kiểm
     ///         chéo được trước khi gửi — mesh cần validate-before-gossip.
-    function metaTxDigest(MetaTxLib.MetaTransaction calldata m) external view returns (bytes32);
+    function metaTxDigest(MetaTxLib.LegacyMetaTransaction calldata m) external view returns (bytes32);
 
     /// @notice Thực thi một meta-transaction đã ký.
     /// @param m         intent
@@ -76,7 +76,7 @@ interface IERC20MetaTx is IERC20 {
     ///      KHÔNG `payable`: token này không nhận native coin. Trả gas là việc của
     ///      relayer ở tầng vỏ tx.
     function executeMetaTransaction(
-        MetaTxLib.MetaTransaction calldata m,
+        MetaTxLib.LegacyMetaTransaction calldata m,
         bytes calldata signature
     ) external returns (bool success);
 

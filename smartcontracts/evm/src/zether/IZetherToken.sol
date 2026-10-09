@@ -173,7 +173,7 @@ interface IZetherToken is IERC20MetaTx {
         bytes32 envelopeBinding
     ) external view returns (bytes memory);
     /// @notice §10: binding của một phong bì (mọi trường trừ `data`).
-    function envelopeBinding(MetaTxLib.MetaTransaction calldata m) external view returns (bytes32);
+    function envelopeBinding(MetaTxLib.LegacyMetaTransaction calldata m) external view returns (bytes32);
 
     // ------------------------------------------------------------------ xuất xứ
 

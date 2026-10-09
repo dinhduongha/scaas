@@ -27,12 +27,12 @@ contract MetaApproveTest is Fixtures {
         return abi.encodeWithSelector(bytes4(keccak256("approve(address,uint256)")), s, amount);
     }
 
-    function _approveTx(address s, uint256 amount) internal view returns (MetaTxLib.MetaTransaction memory m) {
+    function _approveTx(address s, uint256 amount) internal view returns (MetaTxLib.LegacyMetaTransaction memory m) {
         m = _mt(alice, s, 0, _approveData(s, amount), 7, R);
     }
 
     function test_approveOpSetsAllowanceGasless() public {
-        MetaTxLib.MetaTransaction memory m = _approveTx(spender, 50 ether);
+        MetaTxLib.LegacyMetaTransaction memory m = _approveTx(spender, 50 ether);
         bytes memory sig = _sign(PK, t, m);
         vm.prank(relayer);
         t.executeMetaTransaction(m, sig);
@@ -44,7 +44,7 @@ contract MetaApproveTest is Fixtures {
     /// Phí relayer của chính approve bị trần 1 % của `value = 0` chặn về 0: relayer tài trợ
     /// approve (một lần cho mỗi token), thu phí ở lệnh DEX.
     function test_approveOpRelayerFeeIsCappedToZero() public {
-        MetaTxLib.MetaTransaction memory m = _approveTx(spender, 50 ether);
+        MetaTxLib.LegacyMetaTransaction memory m = _approveTx(spender, 50 ether);
         m.mode = R | MetaTxLib.MODE_FEE_FIXED;
         m.fee = 1;
         m.feeRecipient = relayer;
@@ -55,7 +55,7 @@ contract MetaApproveTest is Fixtures {
     }
 
     function test_approveOpToAnEoaIsRefused() public {
-        MetaTxLib.MetaTransaction memory m = _approveTx(address(0xE0A), 50 ether);
+        MetaTxLib.LegacyMetaTransaction memory m = _approveTx(address(0xE0A), 50 ether);
         bytes memory sig = _sign(PK, t, m);
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.SpenderNotContract.selector, address(0xE0A)));
@@ -65,7 +65,7 @@ contract MetaApproveTest is Fixtures {
     function test_approveOpToA7702DelegatedEoaIsRefused() public {
         address eoa = address(0x7702);
         vm.etch(eoa, abi.encodePacked(hex"ef0100", spender));
-        MetaTxLib.MetaTransaction memory m = _approveTx(eoa, 1);
+        MetaTxLib.LegacyMetaTransaction memory m = _approveTx(eoa, 1);
         bytes memory sig = _sign(PK, t, m);
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.SpenderNotContract.selector, eoa));
@@ -73,7 +73,7 @@ contract MetaApproveTest is Fixtures {
     }
 
     function test_approveOpWithValueIsRefused() public {
-        MetaTxLib.MetaTransaction memory m = _approveTx(spender, 50 ether);
+        MetaTxLib.LegacyMetaTransaction memory m = _approveTx(spender, 50 ether);
         m.value = 1;
         bytes memory sig = _sign(PK, t, m);
         vm.prank(relayer);
@@ -82,7 +82,7 @@ contract MetaApproveTest is Fixtures {
     }
 
     function test_approveOpToMustNameTheSpender() public {
-        MetaTxLib.MetaTransaction memory m = _approveTx(spender, 50 ether);
+        MetaTxLib.LegacyMetaTransaction memory m = _approveTx(spender, 50 ether);
         m.to = address(0xCAFE);
         bytes memory sig = _sign(PK, t, m);
         vm.prank(relayer);
@@ -91,7 +91,7 @@ contract MetaApproveTest is Fixtures {
     }
 
     function test_approveOpWrongLengthIsUnknown() public {
-        MetaTxLib.MetaTransaction memory m = _approveTx(spender, 50 ether);
+        MetaTxLib.LegacyMetaTransaction memory m = _approveTx(spender, 50 ether);
         m.data = abi.encodePacked(_approveData(spender, 1), uint8(0));
         bytes memory sig = _sign(PK, t, m);
         vm.prank(relayer);
@@ -100,7 +100,7 @@ contract MetaApproveTest is Fixtures {
     }
 
     function test_approveOpCanRevokeToZero() public {
-        MetaTxLib.MetaTransaction memory m = _approveTx(spender, 50 ether);
+        MetaTxLib.LegacyMetaTransaction memory m = _approveTx(spender, 50 ether);
         bytes memory sig = _sign(PK, t, m);
         vm.prank(relayer);
         t.executeMetaTransaction(m, sig);

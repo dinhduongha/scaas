@@ -9,7 +9,7 @@ import {MetaTxLib} from "../src/common/MetaTxLib.sol";
 /// @notice Sinh `test/vectors/metatx_kat.json`. File được commit; đổi typehash, đổi quy
 ///         tắc canonical-zeroing hay đổi domain là test Python và Rust đỏ ngay.
 contract MetaTxKatTest is Fixtures {
-    using MetaTxLib for MetaTxLib.MetaTransaction;
+    using MetaTxLib for MetaTxLib.LegacyMetaTransaction;
 
     function test_writeKat() public {
         vm.chainId(7622);
@@ -17,7 +17,7 @@ contract MetaTxKatTest is Fixtures {
         _deployFactory();
         MetaToken tok = _standalone(address(this), "BUSD", 6, 0, address(0));
         uint256 pk = 0xA11CE;
-        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
+        MetaTxLib.LegacyMetaTransaction memory m = MetaTxLib.LegacyMetaTransaction({
             from: vm.addr(pk), to: address(0x5409), value: 250e6,
             data: _payData(bytes32(uint256(0x42))), batch: uint256(keccak256("scaas.pay.lane")),
             nonce: 0, validUntil: 1_800_000_300, mode: MetaTxLib.MODE_RESTRICT_RELAYER,

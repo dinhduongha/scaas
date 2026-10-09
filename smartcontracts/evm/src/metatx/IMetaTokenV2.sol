@@ -29,7 +29,7 @@ interface IMetaTokenV2 is IERC20Payment {
     ) external returns (bool);
 
     /// @notice ≡ `executeMetaTransaction(m, signature)` cho mọi op, thêm điều kiện fee nibble ≠ `NONE`.
-    function executeMetaTransactionWithFee(MetaTxLib.MetaTransaction calldata m, bytes calldata signature)
+    function executeMetaTransactionWithFee(MetaTxLib.LegacyMetaTransaction calldata m, bytes calldata signature)
         external returns (bool);
 
     /// @notice ≡ `executeMetaTransaction({from,to,amount,pay(payId),payLane(payId),0,validUntil,mode,relayer,fee,
@@ -47,7 +47,7 @@ interface IMetaTokenV2 is IERC20Payment {
     ) external returns (bool);
 
     /// @notice Nhiều intent trong một tx ngoài, NGUYÊN TỬ: một item revert thì cả lô revert (R140).
-    function mtxBatch(MetaTxLib.MetaTransaction[] calldata ms, bytes[] calldata signatures) external returns (bool);
+    function mtxBatch(MetaTxLib.LegacyMetaTransaction[] calldata ms, bytes[] calldata signatures) external returns (bool);
 
     /// @notice Lane mà client phải dùng cho `payId` trên token này:
     ///         `uint256(keccak256(abi.encodePacked("scaas.pay.lane", payId)))` — cùng giá trị client v1 tự suy

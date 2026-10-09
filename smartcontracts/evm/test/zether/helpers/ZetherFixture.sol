@@ -293,15 +293,15 @@ abstract contract ZetherFixture is Test {
     // ------------------------------------------------------------------ meta-tx
 
     function _mt(address from, bytes memory data, uint256 batch, uint32 mode, uint256 fee)
-        internal view returns (MetaTxLib.MetaTransaction memory m)
+        internal view returns (MetaTxLib.LegacyMetaTransaction memory m)
     {
-        m = MetaTxLib.MetaTransaction({
+        m = MetaTxLib.LegacyMetaTransaction({
             from: from, to: address(0), value: 0, data: data, batch: batch, nonce: 0,
             validUntil: block.timestamp + 300, mode: mode, relayer: relayer, fee: fee, feeRecipient: address(0)
         });
     }
 
-    function _sign(uint256 pk, ZetherToken t, MetaTxLib.MetaTransaction memory m) internal view returns (bytes memory) {
+    function _sign(uint256 pk, ZetherToken t, MetaTxLib.LegacyMetaTransaction memory m) internal view returns (bytes memory) {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, t.metaTxDigest(m));
         return abi.encodePacked(r, s, v);
     }
