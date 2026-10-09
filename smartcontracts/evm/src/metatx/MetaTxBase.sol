@@ -107,6 +107,17 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         return true;
     }
 
+    /// @notice Atomic: items run in order, each with a fresh ticket; any failure reverts all (CTR-MTX-11).
+    function mtxBatch(MetaTxLib.MetaTransaction[] calldata ms, bytes[] calldata signatures)
+        external nonReentrant returns (bool)
+    {
+        uint256 n = ms.length;
+        if (n == 0) revert MtxBatchEmpty();
+        if (n != signatures.length) revert MtxBatchLengthMismatch();
+        for (uint256 i; i < n; ++i) _execute(ms[i], signatures[i]);
+        return true;
+    }
+
     /// @notice Direct, or signed through `mtxExecute` on another lane (a subject without gas can cancel).
     function cancelNonce(uint256 batch) external nonReentrant {
         address from = _msgSender();

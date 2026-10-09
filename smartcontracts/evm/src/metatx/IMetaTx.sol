@@ -19,12 +19,15 @@ interface IMetaTx {
     error MtxFeeClass(bytes4 selector, uint32 mode);
     error Reentrancy();
     error SelfSender();
+    error MtxBatchEmpty();
+    error MtxBatchLengthMismatch();
 
     function mtxNonce(address from, uint256 batch) external view returns (uint256);
     function mtxDigest(MetaTxLib.MetaTransaction calldata m) external view returns (bytes32);
     function mtxExecute(MetaTxLib.MetaTransaction calldata m, bytes calldata signature) external returns (bytes memory);
     function executeMetaTransaction(MetaTxLib.MetaTransaction calldata m, bytes calldata signature)
         external returns (bool success);
+    function mtxBatch(MetaTxLib.MetaTransaction[] calldata ms, bytes[] calldata signatures) external returns (bool);
     function mtxSelectors()
         external view returns (bytes4[] memory selectors, uint8[] memory feeClass, uint8[] memory amountArg);
     function chainUid() external view returns (bytes32);
