@@ -30,6 +30,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
 
 **P1 — MT-1…MT-4**
 - P1 is split into five plans, written one at a time: **P1a** (MetaTxBase, SigCheck, SaltedEIP712, tag + legacy) — plan `docs/superpowers/plans/2026-10-09-p1a-metatxbase.md`, ready to execute; **P1b** ERC20MetaTx; **P1c** MetaTokenBase + AdminLib/PayLib/HederaLib + kind NONE; **P1d** UnderlyingLib + UnderlyingToken; **P1e** factory, deployer, deletions, size gate (HANDOFF 2026-10-09).
+- P1b notes: (a) `MetaTxBase` alone is ≈ 9.4 KB on the mock — watch the 20,480 B token budget; (b) pin 'every allowlisted function is nonReentrant' without the mock's `poke` forwarder; (c) relayer gas estimate for SubjectAccount/SmartKeyAccount signers must cover 400k·64/63 + 5k for the ERC-1271 call (P5 node); (d) bamboo-dms `dms_blockchain/tests/test_eip712.py:14` must be repointed to `metatx_v1_kat.json` (other repo).
 - [ ] **MT-1** Two bases: generic `MetaTxBase` (any SCaaS contract; `_chargeFee` refuses all but `NONE`, CTR-MTX-22) and
       the token base `ERC20MetaTx is MetaTxBase` (absorbs `MetaTxCore`) with `MetaTokenBase` on top; kinds `NONE` and
       `UNDERLYING` (the native-coin leg, CTR-TOK-26) with `AdminLib`, `PayLib`, `UnderlyingLib`, `HederaLib`, `SigCheck` (CTR-TOK-21…24); factory
@@ -48,6 +49,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
       UA registry, Zether digests); deploy scripts on a CREATE2 deployer; deploy gate checks `chainUid()`.
 
 **P2 — MT-5**
+- [ ] Rename `OrderBookDex` → `SCaaSDex` (owner 2026-10-09; EIP-712 domain name `SCaaS Dex`); git mv + docs + node names.
 - [ ] **MT-5** DEX: `TradeOrder` + `mtxTrade`/`mtxCancelOrder`/`mtxInvalidateNonces` in the tokens; `OrderBookDex.mtxSettle`
       (Path A/B, 1 taker + N makers, 50 % floor, fee split, conservation invariant); outside-token legs through the
       `DexPuller` (CTR-DEX-22); exchange path `mtxExchange`/`mtxExchangeVia` (CTR-DEX-20), surplus distribution
@@ -55,6 +57,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
       `setListedOnly` (CTR-DEX-03); tokens accept `receiveToken == this` and flag 4 (CTR-DEX-15).
 
 **P3 — MT-6**
+- [ ] `mtxBatch` needs a not-batchable hook for PQZ selectors (`MtxNotBatchable(selector)`, pq-zether.md CTR-PQZ-21): a batchable flag in `MtxRule` or a `_mtxBatchable(sel)` check in the loop.
 - [ ] **MT-6** Zether: transient envelope binding, `zetherShield` from the public balance (CTR-ZTH-45), `mtxWrap`; renames (`zetherRollOverSigned`,
       `zetherSetRollOverMode`, CTR-ZTH-45; built: `rollOverSigned`, `setRollOverMode`); envelope binding without `to`/`value` (CTR-ZTH-06); `PqzToken` on the one base like Zether,
       no `PqzMetaTx`, PQZ selectors not batchable (CTR-PQZ-21); prover `Header` gains `chain_uid` as word 3,

@@ -17,8 +17,8 @@ Interface đã chốt cộng các implementation đã có (2026-10-03,
 
 Zether is built (`src/zether/`: `ZetherToken`, `ZetherMetaTx`, `ZetherVerifierBn254`, `ZetherVerifierBls12381`;
 `src/registry/UniversalAccountRegistry.sol`), unaudited and gated to dev chains 31337/1337 (`ZetherSafety`,
-RS2-1); see `docs/contracts/zether.md` (CTR-ZTH-02) and `docs/contracts/README.md`. `test/vectors/metatx_kat.json` là vector digest dùng chung với
-Odoo (`dms_blockchain/lib/eip712.py`) và relayer (`scaas-node`).
+RS2-1); see `docs/contracts/zether.md` (CTR-ZTH-02) and `docs/contracts/README.md`. `test/vectors/metatx_kat.json` là vector v3 `MetaTransaction` (MetaTxBase);
+`test/vectors/metatx_v1_kat.json` là struct v1 đã build, dùng chung với Odoo (`dms_blockchain/lib/eip712.py`) và relayer (`scaas-node`) đến P5.
 
 ## Mô hình: factory mở
 
