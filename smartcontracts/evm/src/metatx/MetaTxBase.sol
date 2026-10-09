@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 import {IMetaTx} from "./IMetaTx.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
+import {FeeMode} from "../common/FeePolicy.sol";
 import {SaltedEIP712} from "../common/SaltedEIP712.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 
@@ -133,10 +134,11 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         internal returns (bytes memory ret)
     {
         bytes32 digest = _checkIntent(m, signature);            // 1, 2
-        _checkCall(m);                                          // 3
+        uint256 basis = _checkCall(m);                          // 3
         unchecked { _mtxStorage().nonce[m.from][m.batch] = m.nonce + 1; }   // 4
         ret = _selfCall(m);                                     // 5
-        emit MetaTransactionExecuted(m.from, msg.sender, m.batch, m.nonce, digest, _feeRecipientOf(m), 0); // 7
+        uint256 fee = _chargeFee(m.from, basis, m);             // 6
+        emit MetaTransactionExecuted(m.from, msg.sender, m.batch, m.nonce, digest, _feeRecipientOf(m), fee); // 7
     }
 
     /// @dev Steps 1 (cheap) and 2 (signature).
@@ -157,15 +159,23 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         _requireValidSignature(m.from, digest, signature);
     }
 
-    /// @dev Step 3: shape, allowlist, `supportedModes()`.
-    function _checkCall(MetaTxLib.MetaTransaction memory m) internal view {
+    /// @dev Step 3: shape, allowlist, fee class, `supportedModes()`. Returns the fee basis.
+    function _checkCall(MetaTxLib.MetaTransaction memory m) internal view returns (uint256 basis) {
         bytes memory data = m.data;
         bytes4 sel = bytes4(data);
         if (data.length < 4) revert MtxDataShape(sel);
         MtxRule memory r = _mtxRule(sel);
         if (r.feeClass == 0) revert MtxSelectorNotAllowed(sel);
-        if (r.staticLen != 0 && data.length != r.staticLen) revert MtxDataShape(sel);
+        uint256 basisEnd = 36 + 32 * uint256(r.amountArg);
+        if ((r.staticLen != 0 && data.length != r.staticLen)
+            || (r.feeClass == FEE_CLASS_AMOUNT && data.length < basisEnd)) revert MtxDataShape(sel);
+        if (r.feeClass == FEE_CLASS_ABSOLUTE && MetaTxLib.feeModeOf(m.mode) == FeeMode.PERCENT) {
+            revert MtxFeeClass(sel, m.mode);
+        }
         if (m.mode & ~supportedModes() != 0) revert MetaTxUnknownMode(m.mode);
+        if (r.feeClass == FEE_CLASS_AMOUNT) {
+            assembly ("memory-safe") { basis := mload(add(data, basisEnd)) }
+        }
     }
 
     /// @dev Step 5: store the ticket, call self, clear; a failed call reverts with its own revert data.
@@ -184,6 +194,13 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
     /// @notice The rule of `sel`; feeClass 0 = not allowlisted. Overrides end with `return super._mtxRule(sel);`.
     function _mtxRule(bytes4 sel) internal view virtual returns (MtxRule memory r) {
         if (sel == IMetaTx.cancelNonce.selector) r = MtxRule(FEE_CLASS_ABSOLUTE, 0, 36);
+    }
+
+    /// @notice Step 6, after the call. Default: no balance to charge => every mode but `NONE` reverts (CTR-MTX-22).
+    ///         A token overrides it to charge `fee` in this token (P1b, `ERC20MetaTx`).
+    function _chargeFee(address, uint256, MetaTxLib.MetaTransaction memory m) internal virtual returns (uint256) {
+        if (MetaTxLib.feeModeOf(m.mode) != FeeMode.NONE) revert MetaTxUnknownMode(m.mode);
+        return 0;
     }
 
     /// @notice EOA, ERC-1271 or (P1c) HIP-632, through `SigCheck` (CTR-MTX-25).
