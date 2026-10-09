@@ -4,8 +4,7 @@ pragma solidity ^0.8.20;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
-import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
+import {SigCheck} from "../common/SigCheck.sol";
 import {IERC20MetaTx} from "./IERC20MetaTx.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
@@ -129,13 +128,7 @@ abstract contract ERC20MetaTx is ERC20, EIP712, IERC20MetaTx {
     ///      đúng là designator EIP-7702 `0xef0100‖address` (23 byte): khoá riêng của EOA vẫn ký
     ///      được mọi thứ, nên nó vẫn là EOA.
     function _isContract(address a) internal view returns (bool) {
-        uint256 len = a.code.length;
-        if (len == 0) return false;
-        if (len == 23) {
-            bytes memory c = a.code;
-            if (c[0] == 0xef && c[1] == 0x01 && c[2] == 0x00) return false;
-        }
-        return true;
+        return SigCheck.isContract(a);
     }
 
     /// @dev Hai đường: EOA (65 byte, low-s) và ERC-1271. Phân biệt bằng `_isContract(from)`
@@ -147,18 +140,7 @@ abstract contract ERC20MetaTx is ERC20, EIP712, IERC20MetaTx {
     function _requireValidSignature(address from, bytes32 digest, bytes calldata sig)
         internal view virtual
     {
-        if (!_isContract(from)) {
-            (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(digest, sig);
-            if (err != ECDSA.RecoverError.NoError || rec != from) revert MetaTxBadSignature();
-        } else {
-            (bool ok, bytes memory ret) = from.staticcall{gas: _erc1271Gas(from)}(
-                abi.encodeCall(IERC1271.isValidSignature, (digest, sig))
-            );
-            if (!ok || ret.length != 32 ||
-                abi.decode(ret, (bytes4)) != IERC1271.isValidSignature.selector) {
-                revert MetaTxBadSignature();
-            }
-        }
+        if (!SigCheck.isValid(from, digest, sig, _erc1271Gas(from))) revert MetaTxBadSignature();
     }
 
     /// @dev Gas cho `isValidSignature` của một ví hợp đồng: 50k (đủ cho Safe/ECDSA). Implementation

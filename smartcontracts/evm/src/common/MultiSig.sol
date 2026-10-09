@@ -7,7 +7,7 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 /// @notice **Đọc mục này trước khi dùng: phần lớn trường hợp KHÔNG cần nó.**
 ///
 /// Ở tầng meta-transaction, `m.from` là một địa chỉ EVM, nên multisig đã được phục vụ
-/// **miễn phí** bởi ERC-1271: đặt `from` là một Safe, và `SigLib.requireValid` gọi
+/// **miễn phí** bởi ERC-1271: đặt `from` là một Safe, và `SigCheck.isValid` gọi
 /// `isValidSignature` của Safe. Safe đã được audit, xử lý xoay chủ sở hữu, đổi ngưỡng,
 /// và thu hồi — ba thứ mà library này **không** làm.
 ///
