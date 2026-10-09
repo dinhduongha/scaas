@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.24;
 
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Test} from "forge-std/Test.sol";
 import {SigCheck} from "../../src/common/SigCheck.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
@@ -53,6 +54,7 @@ contract SigCheckTest is Test {
     function test_eoa_64byteCompact_refused() public view {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(PK, D);
         bytes32 vs = bytes32(uint256(s) | (uint256(v - 27) << 255));
+        assertEq(ECDSA.recover(D, r, vs), signer); // the compact form is otherwise valid
         assertFalse(h.isValid(signer, D, abi.encodePacked(r, vs), SigCheck.ERC1271_GAS));
     }
 
@@ -89,5 +91,23 @@ contract SigCheckTest is Test {
         vm.expectPartialRevert(SigCheck.SigCheckGasStarved.selector);
         h.isValid{gas: 52_000}(address(wallet), D, sig, SigCheck.ERC1271_GAS);
         assertTrue(h.isValid{gas: 80_000}(address(wallet), D, sig, SigCheck.ERC1271_GAS));
+    }
+
+    /// Returndata shape: exactly 32 bytes, clean tail.
+    function test_1271_longReturndata_refused() public {
+        wallet.setMode(Mock1271Wallet.Mode.Long);
+        assertFalse(h.isValid(address(wallet), D, _sig(PK, D), SigCheck.ERC1271_GAS));
+    }
+
+    function test_1271_dirtyTail_refused() public {
+        wallet.setMode(Mock1271Wallet.Mode.DirtyTail);
+        assertFalse(h.isValid(address(wallet), D, _sig(PK, D), SigCheck.ERC1271_GAS));
+    }
+
+    /// When the guard passes, the wallet gets the full cap: a wallet burning ~48k still answers valid.
+    function test_1271_guardPassed_walletGetsFullCap() public {
+        wallet.setMode(Mock1271Wallet.Mode.Burn);
+        bytes memory sig = _sig(PK, D);
+        assertTrue(h.isValid{gas: 58_000}(address(wallet), D, sig, SigCheck.ERC1271_GAS));
     }
 }
