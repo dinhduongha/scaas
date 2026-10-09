@@ -8,37 +8,38 @@ For the product introduction, the doc map and reading order see [README.md](READ
 **Contents**
 
 1. [Positioning](#positioning)
-   - [Authority model](#authority-model)
-   - [What SCaaS is not](#what-scaas-is-not)
-   - [Profiles](#profiles)
+   - 1.1 [Authority model](#authority-model)
+   - 1.2 [What SCaaS is not](#what-scaas-is-not)
+   - 1.3 [Profiles](#profiles)
 2. [Service model](#service-model)
 3. [Components](#components)
 4. [Contract layer](#contract-layer)
-   - [EVM token tree](#evm-token-tree)
-   - [Meta-transactions](#meta-transactions)
-   - [Accounts and keys](#accounts-and-keys)
-   - [Confidential balances](#confidential-balances)
-   - [Trading](#trading)
-   - [Non-EVM families](#non-evm-families)
+   - 4.1 [EVM token tree](#evm-token-tree)
+   - 4.2 [Meta-transactions](#meta-transactions)
+   - 4.3 [Accounts and keys](#accounts-and-keys)
+   - 4.4 [Confidential balances](#confidential-balances)
+   - 4.5 [Trading](#trading)
+   - 4.6 [Non-EVM families](#non-evm-families)
 5. [Node layer](#node-layer)
-   - [Node roles](#node-roles)
-   - [Topology](#topology)
+   - 5.1 [Node roles](#node-roles)
+   - 5.2 [Topology](#topology)
 6. [Data flows](#data-flows)
-   - [Client payment](#client-payment)
-   - [Gasless transfer through door A](#gasless-transfer-through-door-a)
-   - [DEX order to settlement (target, P2)](#dex-order-to-settlement-target-p2)
-   - [Universal Account registration submitted by a relayer (SPECIFIED)](#universal-account-registration-submitted-by-a-relayer-specified)
-   - [Confidential: wrap-shield, multi-recipient transfer, unshield-unwrap (target, P3)](#confidential-wrap-shield-multi-recipient-transfer-unshield-unwrap-target-p3)
-   - [Disclosure by `SENDER_CP`](#disclosure-by-sender_cp)
-   - [Mesh (SPECIFIED transports)](#mesh-specified-transports)
+   - 6.1 [Client payment](#client-payment)
+   - 6.2 [Gasless transfer through door A](#gasless-transfer-through-door-a)
+   - 6.3 [DEX order to settlement (target, P2)](#dex-order-to-settlement-target-p2)
+   - 6.4 [Universal Account registration submitted by a relayer (SPECIFIED)](#universal-account-registration-submitted-by-a-relayer-specified)
+   - 6.5 [Confidential: wrap-shield, multi-recipient transfer, unshield-unwrap (target, P3)](#confidential-wrap-shield-multi-recipient-transfer-unshield-unwrap-target-p3)
+   - 6.6 [Disclosure by `SENDER_CP`](#disclosure-by-sender_cp)
+   - 6.7 [Mesh (SPECIFIED transports)](#mesh-specified-transports)
 7. [Trust model](#trust-model)
-   - [Authority after deployment](#authority-after-deployment)
+   - 7.1 [Authority after deployment](#authority-after-deployment)
 8. [Families](#families)
 9. [Economics](#economics)
 10. [Data protection](#data-protection)
 11. [Glossary](#glossary)
 
-## Positioning
+<a id="positioning"></a>
+## 1. Positioning
 
 **SCaaS (SmartContract as a Service) means that the smart contracts themselves are the API services that run the
 business services.** Payments, mandates, tokens and wrappers, the DEX, sealed-bid tenders, vesting, distributions and
@@ -69,7 +70,8 @@ SCaaS depends on no ERP. Every ERP is one client of the node's job API, and ever
 suppliers, and end-user payments — all three configurable from the first deployment; the technical focus is
 meta-transactions, confidential amounts and stablecoins ([ARCH-POS-06](decisions.md#ARCH-POS-06)).
 
-### Authority model
+<a id="authority-model"></a>
+### 1.1 Authority model
 
 The difference between SCaaS and IaaS or BaaS is **who signs a valuable write**. In IaaS and BaaS the service is the
 operator's server; in SCaaS the service is the contract, and a node only carries signed writes to it and reads facts
@@ -127,7 +129,8 @@ Design consequences:
 5. **Reads, reports and workflow** keep using JWT or session auth as in IaaS/BaaS. SCaaS is the layer for write
    authority and value; it does not replace the application database.
 
-### What SCaaS is not
+<a id="what-scaas-is-not"></a>
+### 1.2 What SCaaS is not
 
 | Not | Why |
 |---|---|
@@ -140,7 +143,8 @@ Design consequences:
 | A single-ERP product | Any ERP integrates through the same job API ([integration.md](integration.md)) |
 | A market maker or profit-seeking relayer market | Relayer economics are cost recovery between parties with aligned interests; fee = 0 is the B2B default ([Economics](#economics)) |
 
-### Profiles
+<a id="profiles"></a>
+### 1.3 Profiles
 
 | Profile | Chains | Mesh | Typical relayers | Data exposure |
 |---|---|---|---|---|
@@ -151,7 +155,8 @@ Design consequences:
 The single-node relayer that serves all three profiles without a mesh is BUILT; the mesh transports are SPECIFIED
 ([node/mesh.md](node/mesh.md), [node/gossip.md](node/gossip.md)).
 
-## Service model
+<a id="service-model"></a>
+## 2. Service model
 
 **Dual loop: write out (anchor or settle), read in (land).**
 
@@ -223,7 +228,8 @@ specified name `mtxPayUnderMandate`); generic saga orchestration is a client con
 decision or commitment existed at a time, without publishing it; the relayers make agent payments frictionless (the
 agent signs, a relayer pays gas); Zether keeps commercial amounts confidential while disclosure keeps them auditable.
 
-## Components
+<a id="components"></a>
+## 3. Components
 
 | Component | Path | Role | Status |
 |---|---|---|---|
@@ -251,7 +257,8 @@ base; P5 node and client support for the new ABI ([contracts/token-wrappers.md](
 [contracts/metatx.md](contracts/metatx.md#transitional-built)). Nothing is deployed, so the target replaces the built
 lines in place; there is no migration between them.
 
-## Contract layer
+<a id="contract-layer"></a>
+## 4. Contract layer
 
 The contracts are the product ([Positioning](#positioning)), so most of the design work sits here. Four pressures
 shape every EVM contract: code is **immutable** once deployed, so every power must be visible at creation and can
@@ -260,7 +267,8 @@ bytecode; subjects hold **no gas**, so every write must be relayable without giv
 amounts may need to be **private yet auditable**. The subsections show how each part answers them. Rules live in the
 linked docs; this page only explains the fit.
 
-### EVM token tree
+<a id="evm-token-tree"></a>
+### 4.1 EVM token tree
 
 ```mermaid
 classDiagram
@@ -344,7 +352,8 @@ accepting a token. Hedera is not a creator's choice but a per-chain parameter of
 [CTR-TOK-23](contracts/token-wrappers.md#CTR-TOK-23)); a wrapper leg may be the native coin
 ([CTR-TOK-26](contracts/token-wrappers.md#CTR-TOK-26)).
 
-### Meta-transactions
+<a id="meta-transactions"></a>
+### 4.2 Meta-transactions
 
 ```mermaid
 flowchart LR
@@ -380,7 +389,8 @@ the token to an open relayer, the payee submitting the payer's signed cheque its
 the fee ([payers](contracts/metatx.md#payers), [receiver-pays](contracts/metatx.md#receiver-pays)). A sponsorship
 policy is node configuration ([node/sponsorship.md](node/sponsorship.md)).
 
-### Accounts and keys
+<a id="accounts-and-keys"></a>
+### 4.3 Accounts and keys
 
 ```mermaid
 flowchart LR
@@ -429,7 +439,8 @@ is not an account form: a **`MandateWallet`** holds the payer's funds and lets a
 per-payment and per-period caps, revocable at once. It replaces an allowance: a bug in one mandate reaches only
 the funds in that wallet, and the payer pays no gas for an `approve` ([CTR-ACC-06](contracts/mandates.md#CTR-ACC-06)).
 
-### Confidential balances
+<a id="confidential-balances"></a>
+### 4.4 Confidential balances
 
 ```mermaid
 flowchart LR
@@ -480,7 +491,8 @@ Verification and disclosure sit **outside** the token: one verifier per curve, t
 contract to call. Confidential kinds refuse the regulated flags ([CTR-ZTH-47](contracts/zether.md#CTR-ZTH-47)), and
 classical Zether is gated to development chains until its audit ([CTR-ZTH-02](contracts/zether.md#CTR-ZTH-02)).
 
-### Trading
+<a id="trading"></a>
+### 4.5 Trading
 
 The order book lives in the node; on chain a DEX call matches or routes signed orders, pays every party in the same
 call and ends holding nothing ([CTR-DEX-01](contracts/dex.md#CTR-DEX-01); sequence 3 in [Data flows](#data-flows)).
@@ -498,7 +510,8 @@ warn about or refuse an unknown DEX, but tokens never consult it, so the factory
 ([CTR-DEX-19](contracts/dex.md#CTR-DEX-19)). The fee rate is in each signed order; the DEX admin decides only who
 shares it ([CTR-DEX-03](contracts/dex.md#CTR-DEX-03)).
 
-### Non-EVM families
+<a id="non-evm-families"></a>
+### 4.6 Non-EVM families
 
 The other families implement the same three pieces — token, mandate, DEX — in their own idiom
 ([common model](networks/README.md#model)); the target signed kinds are `MetaCall` and `MetaTransfer` everywhere
@@ -517,12 +530,14 @@ The other families implement the same three pieces — token, mandate, DEX — i
 *Details per family: [networks/README.md](networks/README.md#families-and-chains),
 [DEX per family](networks/README.md#dex-per-family), [availability](networks/README.md#availability).*
 
-## Node layer
+<a id="node-layer"></a>
+## 5. Node layer
 
 The node carries signed writes to the contracts and finalized facts back; it never holds a subject key
 ([node/README.md](node/README.md)).
 
-### Node roles
+<a id="node-roles"></a>
+### 5.1 Node roles
 
 One binary; modules are switched in configuration ([node/README.md](node/README.md#roles)). Shapes: full node (all
 roles), mesh relayer (submit + mesh), forwarder (mesh only) — every shape is ERP-free.
@@ -537,7 +552,8 @@ roles), mesh relayer (submit + mesh), forwarder (mesh only) — every shape is E
 | **mesh** | Envelope `scaas-intent/1.2`, acceptance policy, exclusivity, pull bus, gossip, landed hints, announces, DEX book replication ([node/mesh.md](node/mesh.md), [node/gossip.md](node/gossip.md)); the envelope library is BUILT with 43 conformance vectors | `[mesh] bind` (HTTPS mTLS), `[gossip] listen` (QUIC/TCP) |
 | **admin** | `/healthz`, `/readyz`, `/metrics` (open); `/v1/admin/*` (roles) ([node/admin-auth.md](node/admin-auth.md)) | `[modules] admin_bind` (default `127.0.0.1:9108`); optional separate `[modules] metrics_bind` |
 
-### Topology
+<a id="topology"></a>
+### 5.2 Topology
 
 ```mermaid
 flowchart TB
@@ -591,12 +607,14 @@ Transitional (BUILT): today the node pulls work from one ERP and writes indexed 
 moves each chain to the push model, and the pull path is removed in one step afterwards
 ([NODE-JOB-10](node/job-api.md#NODE-JOB-10), [node/runbooks.md](node/runbooks.md#cutover)).
 
-## Data flows
+<a id="data-flows"></a>
+## 6. Data flows
 
 Each flow is a caption plus a sequence diagram; the participants are named as in the component docs. Diagrams show
 the target; the caption says what is built.
 
-### Client payment
+<a id="client-payment"></a>
+### 6.1 Client payment
 
 The subject signs on its device, the client's outbox pushes the intent to its own node, and
 the client books the payment only from the finalized feed ([INT-ERP-18](integration.md#INT-ERP-18),
@@ -624,7 +642,8 @@ sequenceDiagram
     ERP->>ERP: book the payment
 ```
 
-### Gasless transfer through door A
+<a id="gasless-transfer-through-door-a"></a>
+### 6.2 Gasless transfer through door A
 
 Anyone posts a signed intent to the public gateway, which simulates before
 it queues ([NODE-GW-01](node/gateway.md#NODE-GW-01), [node/gateway.md](node/gateway.md)); built for EVM with the
@@ -652,7 +671,8 @@ sequenceDiagram
     GW-->>W: job state
 ```
 
-### DEX order to settlement (target, P2)
+<a id="dex-order-to-settlement-target-p2"></a>
+### 6.3 DEX order to settlement (target, P2)
 
 Role-free `TradeOrder`s rest in the node's book and settle in one call
 that pays every party ([CTR-DEX-15](contracts/dex.md#CTR-DEX-15), [node/dex-venue.md](node/dex-venue.md)); built:
@@ -686,7 +706,8 @@ On non-EVM families settlement is bound to the relayer, and the venue re-checks 
 ([DEX per family](networks/README.md#dex-per-family)). Orders the book cannot match may instead be exchanged against
 AMM pools with `mtxExchange` ([CTR-DEX-20](contracts/dex.md#CTR-DEX-20)).
 
-### Universal Account registration submitted by a relayer (SPECIFIED)
+<a id="universal-account-registration-submitted-by-a-relayer-specified"></a>
+### 6.4 Universal Account registration submitted by a relayer (SPECIFIED)
 
 The proof of possession binds the chain,
 the registry, the id and `authRef` but not the caller, so the gateway can pay for it
@@ -713,7 +734,8 @@ sequenceDiagram
     APP->>REG: isRegistered(ua)
 ```
 
-### Confidential: wrap-shield, multi-recipient transfer, unshield-unwrap (target, P3)
+<a id="confidential-wrap-shield-multi-recipient-transfer-unshield-unwrap-target-p3"></a>
+### 6.5 Confidential: wrap-shield, multi-recipient transfer, unshield-unwrap (target, P3)
 
 Value enters the
 shielded balance straight from an underlying leg and leaves straight to one
@@ -745,7 +767,8 @@ sequenceDiagram
     TOK-->>RCV: pay leg u, nothing minted
 ```
 
-### Disclosure by `SENDER_CP`
+<a id="disclosure-by-sender_cp"></a>
+### 6.6 Disclosure by `SENDER_CP`
 
 The sender proves one leg's amount without handing over `s`; the checker verifies
 off chain or through the stateless `ZetherDisclosure`, and no attestation is written
@@ -774,13 +797,15 @@ sequenceDiagram
     CHK->>CHK: record the result in its own books
 ```
 
-### Mesh (SPECIFIED transports)
+<a id="mesh-specified-transports"></a>
+### 6.7 Mesh (SPECIFIED transports)
 
 The origin wraps a bus-eligible intent in `scaas-intent/1.2`, signs `hub.sig`,
 optionally assigns `exclusive` → peers pull (bus) or receive (gossip) → acceptance levels L0–L3 → store → scheduler →
 a job in the `~mesh` namespace → submit. Landed hints trigger consumption reads ([node/mesh.md](node/mesh.md)).
 
-## Trust model
+<a id="trust-model"></a>
+## 7. Trust model
 
 | Boundary | Crossing | Control |
 |---|---|---|
@@ -816,7 +841,8 @@ chain_uid`, the genesis hash) and expires at `validUntil`; a subject can revoke 
 `cancelMetaNonce(batch)` (specified name `cancelNonce`). On private chains the B2B fee mode is `NONE`
 with `MODE_RESTRICT_RELAYER` and `fee = 0`; on public chains the gateway also accepts fee-paying intents from anyone.
 
-### Authority after deployment
+<a id="authority-after-deployment"></a>
+### 7.1 Authority after deployment
 
 No contract has an upgrade key, so what each party can still do after deployment is fixed at creation and public.
 The table is a map of the [complete admin-power list](contracts/README.md#admin-powers-complete-list) for the EVM
@@ -832,7 +858,8 @@ target; the rules are at the linked anchors.
 | Relayers and nodes | submit, delay or refuse an intent; choose the fee recipient where the intent leaves it unbound | change any signed field, move funds, sign for a subject | [CTR-MTX-17](contracts/metatx.md#CTR-MTX-17), [NODE-LANE-16](node/submit-lanes.md#NODE-LANE-16) |
 | `UniversalAccountRegistry`, `ZetherDisclosure`, `ZetherStatements` | nobody administers them | — | [CTR-UA-15](contracts/accounts.md#CTR-UA-15), [CTR-ZTH-43](contracts/zether.md#CTR-ZTH-43) |
 
-## Families
+<a id="families"></a>
+## 8. Families
 
 SCaaS groups chains into six families, each with one contract code base and one node adapter
 ([ARCH-POS-02](decisions.md#ARCH-POS-02)): `evm` (EVM chains including Hedera), `cosmos`, `soroban` (Stellar, Pi
@@ -841,7 +868,8 @@ family; open relayers form the mesh. How each family realises the meta-tx, the a
 is summarised in [Non-EVM families](#non-evm-families); per-family detail, the head-of-line table and the availability
 matrices are in [networks/README.md](networks/README.md).
 
-## Economics
+<a id="economics"></a>
+## 9. Economics
 
 **Break-even of a fee-earning relayer** (an order-of-magnitude argument): a meta-tx on Gnosis costs about $0.00015 of
 gas; at a 10× markup the margin is about $0.0015 per transaction; a relayer with an SLA RPC, a small VPS and gas float
@@ -860,7 +888,8 @@ enterprises do not reach this early. Hence:
    ([node/sponsorship.md](node/sponsorship.md)).
 5. The relayer fee-spread metric (SLI W3B-06) may be negative by design ([node/ops.md](node/ops.md)).
 
-## Data protection
+<a id="data-protection"></a>
+## 10. Data protection
 
 SCaaS takes no position on any one country's law ([ARCH-POS-04](decisions.md#ARCH-POS-04)). Deployments map these
 technical controls to their own regime (GDPR-class: lawful basis, minimization, erasure, retention, cross-border
@@ -880,7 +909,8 @@ transfer, processor agreements):
 Crypto-shredding, disclosure for reconciliation and the land gate are in
 [integration.md](integration.md#data-protection).
 
-## Glossary
+<a id="glossary"></a>
+## 11. Glossary
 
 | Term | Meaning |
 |---|---|
