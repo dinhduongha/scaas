@@ -65,7 +65,7 @@ contract BaseKatTest is V2Fixture {
             data: _payData(bytes32(uint256(0x42))), batch: uint256(keccak256("scaas.pay.lane")),
             nonce: 0, validUntil: 1_800_000_300, mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0xFEE)
         });
-        string memory v1 = vm.readFile("./test/vectors/metatx_kat.json");
+        string memory v1 = vm.readFile("./test/vectors/metatx_v1_kat.json");
         assertEq(m.hashStruct(), v1.readBytes32(".struct_hash"));
         string memory base = _vector("v2kat", address(tok), m);
 

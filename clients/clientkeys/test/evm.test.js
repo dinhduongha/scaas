@@ -13,7 +13,7 @@ const vectors = new URL('../../../smartcontracts/evm/test/vectors/', import.meta
 const read = (f) => JSON.parse(readFileSync(new URL(f, vectors)));
 
 test('EIP-712 digest of the typed data Odoo issues = MetaTx KAT (MetaTxKat.t.sol)', () => {
-  const k = read('metatx_kat.json');
+  const k = read('metatx_v1_kat.json');
   const td = {
     types: {
       EIP712Domain: [{ name: 'name', type: 'string' }, { name: 'version', type: 'string' },
@@ -141,7 +141,7 @@ function concatSel(sig) {
 
 /** MetaTransaction exactly as Odoo `eip712.typed_data` issues it for a pay. */
 function odooPayment(over = {}, dom = {}) {
-  const k = read('metatx_kat.json');
+  const k = read('metatx_v1_kat.json');
   return {
     types: {
       EIP712Domain: [{ name: 'name', type: 'string' }, { name: 'version', type: 'string' },
