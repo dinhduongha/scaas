@@ -165,7 +165,7 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         bytes4 sel = bytes4(data);
         if (data.length < 4) revert MtxDataShape(sel);
         MtxRule memory r = _mtxRule(sel);
-        if (r.feeClass == 0) revert MtxSelectorNotAllowed(sel);
+        if (r.feeClass == 0 || r.feeClass > FEE_CLASS_AMOUNT) revert MtxSelectorNotAllowed(sel);
         uint256 basisEnd = 36 + 32 * uint256(r.amountArg);
         if ((r.staticLen != 0 && data.length != r.staticLen)
             || (r.feeClass == FEE_CLASS_AMOUNT && data.length < basisEnd)) revert MtxDataShape(sel);

@@ -21,6 +21,17 @@ contract FeeProbe is MtxRegistryMock {
 
     uint256 public lastBasis;
     uint256 public calls;
+    uint256 public lastCount; // count[from] seen inside the hook: proves the call already ran
+    uint256[] public bases;
+
+    function f(address, uint256) external nonReentrant {}
+    function g() external nonReentrant {}
+
+    function _mtxRule(bytes4 sel) internal view override returns (MtxRule memory) {
+        if (sel == this.f.selector) return MtxRule(FEE_CLASS_AMOUNT, 1, 0);
+        if (sel == this.g.selector) return MtxRule(3, 0, 0);
+        return super._mtxRule(sel);
+    }
 
     constructor(bytes32 uid) MtxRegistryMock("SCaaS TestRegistry", uid) {}
 
@@ -28,11 +39,13 @@ contract FeeProbe is MtxRegistryMock {
         return MetaTxLib.MODE_KNOWN_MASK;
     }
 
-    function _chargeFee(address, uint256 basis, MetaTxLib.MetaTransaction memory m)
+    function _chargeFee(address from, uint256 basis, MetaTxLib.MetaTransaction memory m)
         internal override returns (uint256)
     {
         if (m.fee == 99) revert FeeFailed();
         lastBasis = basis;
+        lastCount = count[from];
+        bases.push(basis);
         calls += 1;
         return m.fee;
     }
@@ -128,5 +141,69 @@ contract MetaTxBaseFeeTest is MtxFixture {
         p.mtxExecute(m, sig);
         assertEq(p.nameOf(alice), "");
         assertEq(p.mtxNonce(alice, 1), 0);
+    }
+
+    function test_amountArg1_basisAndShortData() public {
+        FeeProbe p = new FeeProbe(UID);
+        reg = p;
+        MetaTxLib.MetaTransaction memory m = _m(alice, abi.encodeCall(FeeProbe.f, (bob, 42)), 1, 0);
+        m.mode = MetaTxLib.MODE_FEE_FIXED;
+        bytes memory sig = _sign(ALICE_PK, m);
+        vm.prank(relayer);
+        p.mtxExecute(m, sig);
+        assertEq(p.lastBasis(), 42);
+
+        bytes memory shortData = abi.encodePacked(FeeProbe.f.selector, bytes32(uint256(uint160(bob))));
+        MetaTxLib.MetaTransaction memory s = _m(alice, shortData, 1, 1);
+        s.mode = MetaTxLib.MODE_FEE_FIXED;
+        sig = _sign(ALICE_PK, s);
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxDataShape.selector, FeeProbe.f.selector));
+        p.mtxExecute(s, sig);
+    }
+
+    function test_feeRunsAfterCall() public {
+        FeeProbe p = new FeeProbe(UID);
+        reg = p;
+        MetaTxLib.MetaTransaction memory m = _m(alice, abi.encodeCall(MtxRegistryMock.bump, (5)), 1, 0);
+        m.mode = MetaTxLib.MODE_FEE_FIXED;
+        bytes memory sig = _sign(ALICE_PK, m);
+        vm.prank(relayer);
+        p.mtxExecute(m, sig);
+        assertEq(p.lastCount(), 5);
+    }
+
+    function test_batch_chargesPerItem() public {
+        FeeProbe p = new FeeProbe(UID);
+        reg = p;
+        MetaTxLib.MetaTransaction[] memory ms = new MetaTxLib.MetaTransaction[](2);
+        bytes[] memory sigs = new bytes[](2);
+        uint256[2] memory by = [uint256(7), 9];
+        for (uint256 i; i < 2; ++i) {
+            ms[i] = _m(alice, abi.encodeCall(MtxRegistryMock.bump, (by[i])), 1, i);
+            ms[i].mode = MetaTxLib.MODE_FEE_FIXED;
+            ms[i].fee = 3 + i;
+            sigs[i] = _sign(ALICE_PK, ms[i]);
+        }
+        for (uint256 i; i < 2; ++i) {
+            vm.expectEmit(true, true, true, true, address(p));
+            emit IMetaTx.MetaTransactionExecuted(alice, relayer, 1, i, p.mtxDigest(ms[i]), relayer, 3 + i);
+        }
+        vm.prank(relayer);
+        p.mtxBatch(ms, sigs);
+        assertEq(p.calls(), 2);
+        assertEq(p.bases(0), 7);
+        assertEq(p.bases(1), 9);
+        assertEq(p.lastCount(), 16);
+    }
+
+    function test_feeClassAboveAmount_refused() public {
+        FeeProbe p = new FeeProbe(UID);
+        reg = p;
+        MetaTxLib.MetaTransaction memory m = _m(alice, abi.encodeCall(FeeProbe.g, ()), 1, 0);
+        bytes memory sig = _sign(ALICE_PK, m);
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, FeeProbe.g.selector));
+        p.mtxExecute(m, sig);
     }
 }
