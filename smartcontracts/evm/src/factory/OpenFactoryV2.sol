@@ -158,7 +158,8 @@ contract OpenFactoryV2 is IOpenFactoryV2 {
         return (i.kind, i.version);
     }
 
-    /// @notice Có thể trả một token Multi (ABI một tài sản của nó revert): client đọc `versionOf(token).kind` trước.
+    /// @notice Có thể trả một token nhiều chân (ABI một tài sản của nó revert): client đọc `underlyings().length` trước
+    ///         (`underlying() == 0` cũng là token một chân native).
     function getWrapper(address creator, address underlying) external view returns (address) {
         address[] storage w = _wrappers[creator][underlying];
         return w.length == 0 ? address(0) : w[0];

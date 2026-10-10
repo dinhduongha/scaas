@@ -145,8 +145,8 @@ pinned profiles in the same release; the node re-checks every `chainUid()` at ac
 Transitional (BUILT): `smartcontracts/scripts/deploy.sh evm <rpc>` runs the forge script `script/Deploy.s.sol` (reads
 `PRIVATE_KEY` and `REGISTRAR`) with plain CREATE and no `chain_uid`: `OpenFactory`, the `MetaToken` implementation (its
 constructor takes the factory address) registered as `registerImplementation(META, 1)`, `SmartKeyAccountFactory`,
-`OpenFactoryV2` with the three tier implementations (`NoUnderlyingToken`, `SingleUnderlyingToken`,
-`MultiUnderlyingToken`) as version 1 of their kinds, `MetaTxDex`, `SCaaSDex`, optionally a tier-1 demo token
+`OpenFactoryV2` with `NoUnderlyingToken` as version 1 of `META_NONE` (`UnderlyingToken` is over EIP-170 and is not deployed
+until the size work), `MetaTxDex`, `SCaaSDex`, optionally a tier-1 demo token
 ([deploy](../contracts/README.md#build-ci-and-pins)); it writes `deployments/<chainid>.json`, which seeds the
 client and the node configuration. The single `ERC20MetaTx` base replaces the `MetaToken` line, and `MetaTxDex` is
 deleted. Zether and the registry are not in the deploy script (dev chains only). Integration tests use `anvil

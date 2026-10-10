@@ -73,6 +73,10 @@ interface IUnderlyingToken {
     error WrapPausedForRateChange(address u);
     /// @notice `msg.value` must equal `amount` on the native leg and be 0 on any other leg (CTR-TOK-26).
     error NativeValueMismatch(uint256 value, uint256 expected);
+    /// @notice Raised by OpenZeppelin inside UnderlyingLib (same selectors), listed for the ABI.
+    error FailedCall();
+    error SafeERC20FailedOperation(address token);
+    error InsufficientBalance(uint256 balance, uint256 needed);
     /// @notice Raised by `HederaLib` at init on Hedera (same selectors), listed here for the ABI.
     error HtsQueryFailed(address u, int64 responseCode);
     error AssociateFailed(int64 responseCode);

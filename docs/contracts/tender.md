@@ -100,7 +100,7 @@ discretion. A tender that wants no discretion sets `dqWindow = 0`.
 
 <a id="deposit-token"></a>
 <a id="CTR-TND-07"></a>**CTR-TND-07** — **Deposit token** = a token deployed by the chain's one `OpenFactory`
-([CTR-TOK-03](token-wrappers.md#CTR-TOK-03)) as kind `NONE` or `UNDERLYING` (built: `META_NONE`, `META_SINGLE` or `META_MULTI`; regulated = flags 5–8)
+([CTR-TOK-03](token-wrappers.md#CTR-TOK-03)) as kind `NONE` or `UNDERLYING` (built: `META_NONE` or `META_SINGLE`; regulated = flags 5–8)
 through a **registered, non-deprecated** implementation (unregistered clones have version 0 ⇒
 `implementationOf == 0` ⇒ refused; Zether kinds refused), checked at `createTender`. `versionOf` is decoded with the
 factory's one `TokenKind` enum. **Transitional (BUILT):** two factories exist (v1 `META`, v2 tiers, with enums that

@@ -712,3 +712,5 @@ GuardianRenounced()	renamed	P1d: renounceRole(WRAP_DISABLEABLE) (contracts/token
 _legCount	obsolete	P1d: legCount lives in scaas.underlying (contracts/token-wrappers.md#CTR-TOK-24)
 _legs	obsolete	P1d: legs live in scaas.underlying (contracts/token-wrappers.md#CTR-TOK-24)
 HederaSingleUnderlyingToken	obsolete	P1d: deleted; UnderlyingLib init under IS_HEDERA (contracts/token-wrappers.md#CTR-TOK-23)
+META_MULTI	obsolete	P1d: no implementation; META_SINGLE takes 1–8 legs (contracts/token-wrappers.md#CTR-TOK-25)
+createTiered(META_MULTI, …)	obsolete	P1d: createTiered(META_SINGLE, …) with 1–8 legs (contracts/asset-suite.md#CTR-AS-17)

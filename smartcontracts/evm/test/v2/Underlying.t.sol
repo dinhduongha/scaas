@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
+import {stdJson} from "forge-std/StdJson.sol";
 import {V2Fixture, Rate, underlyingInit} from "./helpers/V2Fixture.sol";
 import {RateAdminForwarder} from "./helpers/V2Mocks.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
@@ -14,6 +15,8 @@ import {AdminLib} from "../../src/metatx/AdminLib.sol";
 /// `disableFeature(RATE_ADJUSTABLE)` cancels a pending change, the single-asset ABI rule, init vs the factory's
 /// `underlyings`, and `UnderlyingLib` writing only its own namespace.
 contract UnderlyingTest is V2Fixture {
+    using stdJson for string;
+
     uint8 constant RATE = 3;
     uint8 constant GUARD = 4;
     bytes32 constant NS_UNDERLYING = 0x38d6f7edefffa65376a58a6aced8a2c86698d3a0b5d15a785f69ed89d0cd1000;
@@ -230,5 +233,46 @@ contract UnderlyingTest is V2Fixture {
         assertEq(uint256(vm.load(address(t), bytes32(uint256(leg0) + 2))), 1_000);
         // nothing below slot 6 except the ERC-20 state: no `_legCount` in the linear layout
         for (uint256 s = 3; s < 8; ++s) assertEq(vm.load(address(t), bytes32(s)), bytes32(0));
+    }
+
+    /// Errors raised inside the external `UnderlyingLib` (OpenZeppelin's `FailedCall`, `SafeERC20FailedOperation`,
+    /// `InsufficientBalance`) are in the token ABI only if `IUnderlyingToken` declares them.
+    function test_libraryErrorsAreInTheTokenAbi() public view {
+        string memory lib = vm.readFile("./out/UnderlyingLib.sol/UnderlyingLib.json");
+        string memory tok = vm.readFile("./out/UnderlyingToken.sol/UnderlyingToken.json");
+        bytes4[] memory have = _errorSelectors(tok);
+        bytes4[] memory want = _errorSelectors(lib);
+        assertGt(want.length, 0);
+        for (uint256 i; i < want.length; ++i) {
+            bool found;
+            for (uint256 j; j < have.length; ++j) found = found || have[j] == want[i];
+            assertTrue(found, vm.toString(want[i]));
+        }
+    }
+
+    function _errorSelectors(string memory art) internal view returns (bytes4[] memory out) {
+        uint256 n;
+        while (vm.keyExistsJson(art, _at(".abi[", n, "]"))) ++n;
+        bytes4[] memory tmp = new bytes4[](n);
+        uint256 k;
+        for (uint256 i; i < n; ++i) {
+            if (!_eq(art.readString(_at(".abi[", i, "].type")), "error")) continue;
+            string memory sig = string.concat(art.readString(_at(".abi[", i, "].name")), "(");
+            for (uint256 j; vm.keyExistsJson(art, _at(".abi[", i, string.concat("].inputs[", vm.toString(j), "]"))); ++j) {
+                sig = string.concat(sig, j == 0 ? "" : ",", art.readString(
+                    _at(".abi[", i, string.concat("].inputs[", vm.toString(j), "].type"))));
+            }
+            tmp[k++] = bytes4(keccak256(bytes(string.concat(sig, ")"))));
+        }
+        out = new bytes4[](k);
+        for (uint256 i; i < k; ++i) out[i] = tmp[i];
+    }
+
+    function _at(string memory a, uint256 i, string memory b) internal pure returns (string memory) {
+        return string.concat(a, vm.toString(i), b);
+    }
+
+    function _eq(string memory a, string memory b) internal pure returns (bool) {
+        return keccak256(bytes(a)) == keccak256(bytes(b));
     }
 }

@@ -299,7 +299,7 @@ warning, which also goes into the wrapper's risk disclosure. SPECIFIED.
 
 <a id="NET-HED-14"></a>**NET-HED-14** — **Hedera v2 wrappers check every underlying in `initialize`, fail-closed,
 through the HTS precompile `0x167`.** There are no Hedera wrapper children (P1d): `UnderlyingLib` init calls
-`HederaLib.checkAndAssociate` under `IS_HEDERA`, and a native (HBAR) leg has 8 decimals, the tinybar (controller ruling, pending the owner); the HIP-632 signature rule is the `IS_HEDERA` branch in `MetaTokenBase`
+`HederaLib.checkAndAssociate` under `IS_HEDERA`, and a native (HBAR) leg has 8 decimals, the tinybar (controller ruling, pending the owner): a native wrap's `amount` is in tinybars while the relay's transaction `value` is in weibars (18 decimals), so a client passing an 18-decimal amount gets `NativeValueMismatch` (it fails safe); the HIP-632 signature rule is the `IS_HEDERA` branch in `MetaTokenBase`
 (`HederaLib.requireValid`), exactly as `HederaMetaToken` does, and kind `NONE` on Hedera is `NoUnderlyingToken` with `IS_HEDERA`. In `initialize`, for every underlying `u`:
 
 1. `isToken(u)` → `(rc, isHts)`; `rc ≠ SUCCESS` ⇒ `HtsQueryFailed(u, rc)`.
