@@ -567,9 +567,8 @@ check was dropped); the rule handles each one explicitly:
 - EVM `ERC20MetaTx` (the root of every token): `approve` reverts `CallerNotContract(caller)` for an EOA caller and
   `SpenderNotContract(spender)` for an EOA spender; `transferFrom` reverts `CallerNotContract(caller)` **before** the
   allowance check. No `permit`, no `increaseAllowance`, no meta-tx `approve`. Errors: `SpenderNotContract(address)`,
-  `CallerNotContract(address)`. **Transitional (BUILT):** today `approve` checks only the spender, and a meta-tx op
-  `approve(address spender, uint256)` (value 0, `to == spender`, spender a contract; `MetaToken.sol:167-176`,
-  `MetaTokenBase.sol:316-323`) lets an EOA grant an allowance gaslessly; both go with the base rebuild.
+  `CallerNotContract(address)`. **Transitional (BUILT):** the rule is built on the v2 tokens (P1b); EOA `approve` and the meta-tx
+  `approve` op remain only on the v1 line (removed in P1e).
 - Contract accounts approve through **their own call path**: `SmartKeyAccount.mtxExecuteAsOwner → execute(token,
   approve)`, a Safe `execTransaction`, or a Safe MultiSend that approves and uses the allowance in one transaction. The
   token sees `msg.sender` = the account. A signature check (`isValidSignature`) is not the account's execution policy
@@ -859,7 +858,9 @@ each library ≤ 24,576 B.
   its storage pointer from the fixed slot, so libraries never overlap; a test proves that a write through one library
   never changes another namespace.
 - **Size budget:** each token implementation ≤ 20,480 B (≈ 4 KB left for later streams); CI fails the build when a
-  contract exceeds its budget (`forge build --sizes`).
+  contract exceeds its budget (`forge build --sizes`). **Transitional (BUILT, P1b):** `NoUnderlyingToken` 17,568 B and
+  `HederaNoUnderlyingToken` 18,023 B pass; `Single` 26,068, `Multi` 26,917, `HederaSingle` 27,374, `HederaMulti`
+  28,223 (and `ZetherToken` 28,849) exceed EIP-170 until P1d (`UnderlyingLib`); `FactoryV2.t.sol` pins their ceilings.
 
 **Transitional (BUILT).** The layout below is the built one (non-namespaced OpenZeppelin order); the namespaces replace
 it in P1.
@@ -872,17 +873,14 @@ implementation (the same data as `forge inspect <Contract> storageLayout`, witho
 
 | Slot | Owner | Variable |
 |---|---|---|
-| 0–4 | `ERC20` | `_balances`, `_allowances`, `_totalSupply`, `_name`, `_symbol` (last two unused; getters overridden) |
-| 5–6 | `EIP712` | `_nameFallback`, `_versionFallback` (unused: a name < 32 bytes lives in immutables; the separator is rebuilt for each clone because `address(this) != _cachedThis`) |
-| 7 | `ERC20MetaTx` | `_metaNonce` `mapping(address ⇒ mapping(uint256 ⇒ uint256))`; the trade maps `pulled`, `minNonce` and the UA ledger follow the base's slots, pinned anew when the base is rebuilt |
-| 8 | `MetaTokenBase` | packed: `creator` (20) ‖ `version` u64 ‖ `_tokenDecimals` u8 ‖ `_initialized` bool ‖ `_legCount` u8 (31 bytes; 0 on tier 1) |
-| 9–10 | `MetaTokenBase` | `_tokenName`, `_tokenSymbol` |
-| 11 | `NoUnderlyingToken` | `minter` |
-| 11 | `SingleUnderlyingToken` | `_legs` `mapping(uint256 ⇒ Leg)` (a mapping, not an array: no length SLOAD for a bounds check; leg 0 is read directly) |
-| 12 | 〃 | `_legIndex` `mapping(address ⇒ uint256)` (index + 1) |
-| 13 | 〃 | `_pending` `PendingRate` (one per token) |
-| 14 | 〃 | packed `RateConfig`: `rateAdmin` (20) ‖ `rateDelay` u32 ‖ `maxRateStepBps` u16 ‖ `adjustable` bool (27 bytes; read only by rate functions) |
-| 15 | `MultiUnderlyingToken` | `guardian` |
+| 0–4 | `ERC20` | `_balances`, `_allowances`, `_totalSupply`, `_name`, `_symbol` (last two unused; getters overridden); nonces live in ERC-7201 `scaas.metatx` |
+| 5 | `MetaTokenBase` | packed: `creator` (20) ‖ `version` u64 ‖ `_tokenDecimals` u8 ‖ `_initialized` bool ‖ `_legCount` u8 (0 on tier 1) |
+| 6–7 | `MetaTokenBase` | `_tokenName`, `_tokenSymbol` |
+| 8 | `NoUnderlyingToken` | `minter` |
+| 8 | `SingleUnderlyingToken` | `_legs` `mapping(uint256 ⇒ Leg)` (a mapping: no length SLOAD; leg 0 read directly) |
+| 9–10 | 〃 | `_legIndex` `mapping(address ⇒ uint256)` (index + 1); `_pending` `PendingRate` (one per token) |
+| 11 | 〃 | packed `RateConfig`: `rateAdmin` (20) ‖ `rateDelay` u32 ‖ `maxRateStepBps` u16 ‖ `adjustable` bool |
+| 12 | `MultiUnderlyingToken` | `guardian` |
 
 ```solidity
 struct Leg { address token; uint8 decimals; bool wrapEnabled; bool adjustable;   // slot a (adjustable copied here so a
@@ -892,7 +890,7 @@ struct Leg { address token; uint8 decimals; bool wrapEnabled; bool adjustable;  
 struct PendingRate { uint8 leg; uint96 num; uint96 den; uint56 eta; }           // one slot; eta == 0 ⇒ none
 ```
 
-Immutables (implementation): `FACTORY`, `_SELF`, `SUBJECT_ACCOUNT_IMPL`, `_SUBJECT_CLONE_CODEHASH`, `CHAIN_UID`;
+Immutables (implementation): `FACTORY`, `_SELF`, `SMART_KEY_ACCOUNT_IMPL`, `_SMART_KEY_CLONE_CODEHASH`, `CHAIN_UID`;
 constant `KIND`. The ticket and sender live in transient storage, never in a slot.
 The constructor sets `_initialized = true` on the implementation's own storage (it cannot be initialized). Renouncing
 the rate admin sets `rateAdjustable = false`, `rateAdmin = 0` and drops the pending change; the per-leg `adjustable`

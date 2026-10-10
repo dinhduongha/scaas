@@ -1416,7 +1416,7 @@ compromised guardian (the 2-day delay plus cancel by key).
 <a id="erc1271-cap"></a>
 <a id="CTR-ACC-05"></a>**CTR-ACC-05** — **The 400 k ERC-1271 gas cap is only for `SmartKeyAccount` clones.** Every token
 implementation pins the chain's `SmartKeyAccount` implementation (constructor parameter, immutable,
-`SUBJECT_ACCOUNT_IMPL`); `ERC20MetaTx._erc1271Gas(from)` defaults to 50 k and grants 400 k **only** when
+`SMART_KEY_ACCOUNT_IMPL`); `ERC20MetaTx._erc1271Gas(from)` defaults to 50 k and grants 400 k **only** when
 `from.codehash` is the EIP-1167 clone code of that implementation, because a Solidity P-256 verifier costs ~200–330 k
 gas on chains without the precompile. Other contract wallets (Safe, …) keep 50 k. `Deploy.s.sol` deploys
 `SmartKeyAccountFactory` before the token and records its address in `deployments/<chainid>.json`. The same rule is
