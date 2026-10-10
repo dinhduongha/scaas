@@ -2,7 +2,7 @@
 
 ## Session 2026-10-11 (P1d)
 
-**State:** P1d on branch `p1d-underlying`, merge pending the final review (813 forge tests; e2e 4/4 and e2e_hedera 1/1;
+**State:** P1d merged into `main` as `d03d894` (814 forge tests; e2e 4/4 and e2e_hedera 1/1;
 docs checker 0 errors). Not pushed. Plan `docs/superpowers/plans/2026-10-11-p1d-underlyingtoken.md`.
 
 **P1d delivered:** one `UnderlyingToken` (kind `UNDERLYING`, 1–8 legs) over the external `UnderlyingLib`
@@ -32,7 +32,7 @@ implements `META_MULTI`.
 `UnderlyingTransferMismatch`, native `addReserve` with value > amount, guardian revoke); `OpenFactoryV2` `META_MULTI`
 count branch is dead until P1e.
 
-**Next action:** after the final review, merge `p1d-underlying` (`--no-ff`, local), then write the P1e plan (factory
+**Next action:** write the P1e plan (factory
 `createToken`/`TokenConfig`, CREATE2 deployer, deletions of the v1/v2 lines, size gate; D2 lands here at the latest).
 
 ## Session 2026-10-10 (P1c)
