@@ -2,8 +2,8 @@
 
 ## Session 2026-10-11 (P1e)
 
-**State:** P1e on branch `p1e-factory`, merge pending the final review (819 forge tests; e2e 4/4 and e2e_hedera 1/1;
-docs checker 0 errors). Not pushed. Plan `docs/superpowers/plans/2026-10-11-p1e-openfactory.md`. P1 is complete except these
+**State:** P1e merged into `main` as `e433bf5` and pushed (819 forge tests; e2e 4/4 and e2e_hedera 1/1;
+docs checker 0 errors). Plan `docs/superpowers/plans/2026-10-11-p1e-openfactory.md`. P1 is complete except these
 parked items: MT-1 (the v1 line is kept as `…V1` until P3/P5), MT-3 (the v1 approve rule), MT-4 (`salt = chain_uid` in the other
 domains, E10), and the P1d test gaps in TODO.
 
