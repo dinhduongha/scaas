@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.24;
 
 import {SingleUnderlyingToken} from "./SingleUnderlyingToken.sol";
+import {MetaTxBase} from "./MetaTxBase.sol";
 import {IOpenFactoryV2} from "../common/IOpenFactoryV2.sol";
 
 /// @title Tầng 3 v2 (kind `META_MULTI`, TW2 §8, R136): wrapper ANY-OF của 2–8 underlying.
@@ -18,7 +19,7 @@ import {IOpenFactoryV2} from "../common/IOpenFactoryV2.sol";
 contract MultiUnderlyingToken is SingleUnderlyingToken {
     uint256 internal constant MAX_LEGS = 8;
 
-    /// @dev Slot 15.
+    /// @dev Slot 12.
     address public guardian;
 
     event WrapDisabled(address indexed underlying, address indexed guardian, bytes32 reason);
@@ -27,7 +28,12 @@ contract MultiUnderlyingToken is SingleUnderlyingToken {
     error UnderlyingRequired();
     error NotGuardian();
 
-    constructor(address factory_, address subjectAccountImpl_) SingleUnderlyingToken(factory_, subjectAccountImpl_) {}
+    bytes4 internal constant SEL_WRAP_LEG = bytes4(keccak256("wrap(address,uint256)"));
+    bytes4 internal constant SEL_UNWRAP_LEG = bytes4(keccak256("unwrap(address,uint256,address,uint256)"));
+
+    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_)
+        SingleUnderlyingToken(factory_, smartKeyAccountImpl_, chainUid_)
+    {}
 
     function tokenKind() external pure override returns (IOpenFactoryV2.TokenKind) {
         return IOpenFactoryV2.TokenKind.META_MULTI;
@@ -79,6 +85,30 @@ contract MultiUnderlyingToken is SingleUnderlyingToken {
         return address(0);
     }
 
+    // ------------------------------------------------------------------ allowlist (CTR-MTX-19)
+
+    /// @notice `cancelNonce` (base); `wrap(address,uint256)` `ABSOLUTE`; `unwrap(address,uint256,address,uint256)`
+    ///         `AMOUNT(1)`; `addReserve` `ABSOLUTE`. The inherited single-asset selectors (always revert) are not.
+    function mtxSelectors()
+        public pure override returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+    {
+        s = new bytes4[](4);
+        c = new uint8[](4);
+        a = new uint8[](4);
+        (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
+        (s[1], c[1]) = (SEL_WRAP_LEG, FEE_CLASS_ABSOLUTE);
+        (s[2], c[2], a[2]) = (SEL_UNWRAP_LEG, FEE_CLASS_AMOUNT, 1);
+        (s[3], c[3]) = (SEL_ADD_RESERVE, FEE_CLASS_ABSOLUTE);
+    }
+
+    /// @dev Skips the single-asset rules of `SingleUnderlyingToken` on purpose.
+    function _mtxRule(bytes4 sel) internal view override returns (MtxRule memory) {
+        if (sel == SEL_WRAP_LEG) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 68);
+        if (sel == SEL_UNWRAP_LEG) return MtxRule(FEE_CLASS_AMOUNT, 1, 132);
+        if (sel == SEL_ADD_RESERVE) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 68);
+        return MetaTxBase._mtxRule(sel);
+    }
+
     // ------------------------------------------------------------------ guardian
 
     /// @notice Một chiều. Không mở lại: một guardian bị chiếm mà mở lại được một dòng vào đã mất giá thì rút
@@ -88,7 +118,7 @@ contract MultiUnderlyingToken is SingleUnderlyingToken {
         Leg storage L = _legs[_legOf(u)];
         if (!L.wrapEnabled) revert WrapDisabledFor(u);
         L.wrapEnabled = false;
-        emit WrapDisabled(u, msg.sender, reason);
+        emit WrapDisabled(u, _msgSender(), reason);
     }
 
     function renounceGuardian() external {
@@ -98,6 +128,6 @@ contract MultiUnderlyingToken is SingleUnderlyingToken {
     }
 
     function _onlyGuardian() private view {
-        if (guardian == address(0) || msg.sender != guardian) revert NotGuardian();
+        if (guardian == address(0) || _msgSender() != guardian) revert NotGuardian();
     }
 }

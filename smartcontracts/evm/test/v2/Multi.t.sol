@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {V2Fixture} from "./helpers/V2Fixture.sol";
+import {V2Fixture, UID_} from "./helpers/V2Fixture.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {RateAdminForwarder} from "./helpers/V2Mocks.sol";
 import {SingleUnderlyingToken} from "../../src/metatx/SingleUnderlyingToken.sol";
 import {MultiUnderlyingToken} from "../../src/metatx/MultiUnderlyingToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
-import {IERC20MetaTxV1} from "../../src/metatx/IERC20MetaTxV1.sol";
+import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IOpenFactoryV2} from "../../src/common/IOpenFactoryV2.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
@@ -174,14 +174,12 @@ contract MultiTest is V2Fixture {
         assertEq(usdt.balanceOf(alice), 5e6);
     }
 
-    function test_unwrapOpWorksOnADisabledLeg() public {
+    function test_gaslessUnwrapWorksOnADisabledLeg() public {
         _wrap(t, usdt, alice, 10e6);
         vm.prank(guardian);
         t.disableWrap(address(usdt), "depeg");
-        MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, bob, 3e18, _unwrapData(address(usdt), bob, 3e6), 1, RR);
-        bytes memory s = _sig(PK, address(t), m);
-        vm.prank(relayer);
-        t.mtxUnwrap(alice, address(usdt), 3e18, bob, 3e6, 1, 0, m.validUntil, RR, relayer, s);
+        bytes memory d = abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(usdt), 3e18, bob, 3e6);
+        _execCall(PK, address(t), _call(alice, d, 1, RR));
         assertEq(usdt.balanceOf(bob), 3e6);
     }
 
@@ -243,8 +241,11 @@ contract MultiTest is V2Fixture {
     }
 
     function test_allowanceOnlyBetweenContracts() public {
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.SpenderNotContract.selector, bob));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.SpenderNotContract.selector, bob));
         t.approve(bob, 1);
+        vm.prank(bob);
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.CallerNotContract.selector, bob));
+        t.approve(address(this), 1);
     }
 
     MockERC20 fa;

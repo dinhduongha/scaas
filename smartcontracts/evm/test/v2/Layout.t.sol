@@ -37,19 +37,19 @@ contract LayoutTest is V2Fixture {
         _pin("HederaTokensV2", "HederaMultiUnderlyingToken");
     }
 
-    /// Thứ indexer thật sự đọc: `reserve` của chân i ở `keccak256(i ‖ 11) + 2`, `num ‖ den` ở `+ 1`.
+    /// Thứ indexer thật sự đọc: `reserve` của chân i ở `keccak256(i ‖ 8) + 2`, `num ‖ den` ở `+ 1`.
     function test_reserveSlotIsWhereIndexersReadIt() public {
         MockERC20 u = new MockERC20("U", "U", 6);
         SingleUnderlyingToken t = _single(address(u), 6, 3, 7, _fixedRate());
         u.mint(address(this), 1_000);
         u.approve(address(t), 1_000);
         t.wrap(1_000);
-        bytes32 base = keccak256(abi.encode(uint256(0), uint256(11)));
+        bytes32 base = keccak256(abi.encode(uint256(0), uint256(8)));
         assertEq(uint256(vm.load(address(t), bytes32(uint256(base) + 2))), 1_000);
         uint256 b = uint256(vm.load(address(t), bytes32(uint256(base) + 1)));
         assertEq(b & type(uint96).max, 3);
         assertEq(b >> 96, 7);
         assertEq(address(uint160(uint256(vm.load(address(t), base)))), address(u));
-        assertEq(uint256(vm.load(address(t), bytes32(uint256(8)))) >> 240 & 0xff, 1); // _legCount
+        assertEq(uint256(vm.load(address(t), bytes32(uint256(5)))) >> 240 & 0xff, 1); // _legCount
     }
 }

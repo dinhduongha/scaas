@@ -60,9 +60,10 @@ contract Deploy is Script {
     /// hết chỗ trên stack).
     function _deployV2(address registrar, bool register, address subjectImpl) internal {
         OpenFactoryV2 f = new OpenFactoryV2(registrar);
-        address none = address(new NoUnderlyingToken(address(f), subjectImpl));
-        address single = address(new SingleUnderlyingToken(address(f), subjectImpl));
-        address multi = address(new MultiUnderlyingToken(address(f), subjectImpl));
+        bytes32 uid = vm.envBytes32("CHAIN_UID"); // genesis hash, chain-uids.json (CTR-GEN-05)
+        address none = address(new NoUnderlyingToken(address(f), subjectImpl, uid));
+        address single = address(new SingleUnderlyingToken(address(f), subjectImpl, uid));
+        address multi = address(new MultiUnderlyingToken(address(f), subjectImpl, uid));
         if (register) {
             f.registerImplementation(IOpenFactoryV2.TokenKind.META_NONE, 1, none);
             f.registerImplementation(IOpenFactoryV2.TokenKind.META_SINGLE, 1, single);

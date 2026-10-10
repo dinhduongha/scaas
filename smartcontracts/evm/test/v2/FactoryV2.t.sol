@@ -9,6 +9,7 @@ import {SingleUnderlyingToken} from "../../src/metatx/SingleUnderlyingToken.sol"
 import {MultiUnderlyingToken} from "../../src/metatx/MultiUnderlyingToken.sol";
 import {MetaToken} from "../../src/metatx/MetaToken.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
+import {UID_} from "./helpers/V2Fixture.sol";
 
 /// T4: factory v2 (TW2 §9, R130).
 contract FactoryV2Test is Test {
@@ -31,9 +32,9 @@ contract FactoryV2Test is Test {
 
     function setUp() public {
         f = new OpenFactoryV2(registrar);
-        noneImpl = new NoUnderlyingToken(address(f), address(0));
-        singleImpl = new SingleUnderlyingToken(address(f), address(0));
-        multiImpl = new MultiUnderlyingToken(address(f), address(0));
+        noneImpl = new NoUnderlyingToken(address(f), address(0), UID_);
+        singleImpl = new SingleUnderlyingToken(address(f), address(0), UID_);
+        multiImpl = new MultiUnderlyingToken(address(f), address(0), UID_);
         vm.startPrank(registrar);
         f.registerImplementation(NONE, 1, address(noneImpl));
         f.registerImplementation(SINGLE, 1, address(singleImpl));
@@ -128,7 +129,7 @@ contract FactoryV2Test is Test {
         MetaToken v1 = new MetaToken(address(f), address(0));
         vm.expectRevert(abi.encodeWithSelector(e, NONE, META));
         f.registerImplementation(NONE, 2, address(v1));
-        NoUnderlyingToken foreign = new NoUnderlyingToken(address(0xBAD), address(0));
+        NoUnderlyingToken foreign = new NoUnderlyingToken(address(0xBAD), address(0), UID_);
         vm.expectRevert(abi.encodeWithSelector(OpenFactoryV2.ImplementationFactoryMismatch.selector, address(foreign)));
         f.registerImplementation(NONE, 2, address(foreign));
         // append-only, version 0 reserved
@@ -158,7 +159,7 @@ contract FactoryV2Test is Test {
     }
 
     function test_unregisteredTieredIsVersionZeroAndChecked() public {
-        SingleUnderlyingToken own = new SingleUnderlyingToken(address(f), address(0));
+        SingleUnderlyingToken own = new SingleUnderlyingToken(address(f), address(0), UID_);
         vm.prank(bob);
         address t = f.createTieredUnregistered(SINGLE, address(own), _us(1), _singleInit(), "u");
         (, uint64 v) = f.versionOf(t);
@@ -206,10 +207,11 @@ contract FactoryV2Test is Test {
         assertEq(tiered, 1);
     }
 
-    function test_implementationSizesFitEip170() public view {
-        assertLe(address(noneImpl).code.length, 24_576);
-        assertLe(address(singleImpl).code.length, 24_576);
-        assertLe(address(multiImpl).code.length, 24_576);
+    function test_implementationSizes() public view {
+        assertLe(address(noneImpl).code.length, 20_480); // CTR-TOK-24
         assertLe(address(f).code.length, 24_576);
+        // Transitional (R3): wrappers over EIP-170 until P1d (`UnderlyingLib`)
+        assertLe(address(singleImpl).code.length, 26_624);
+        assertLe(address(multiImpl).code.length, 27_648);
     }
 }

@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
-import {IERC20PaymentV1} from "../metatx/IERC20PaymentV1.sol";
+import {IERC20Payment} from "../metatx/IERC20Payment.sol";
 import {FeeMode} from "../common/FeePolicy.sol";
 
 /// @title Ví của MỘT người trả, uỷ quyền có giới hạn cho thanh toán tự động (ruling R25).
@@ -13,7 +13,7 @@ import {FeeMode} from "../common/FeePolicy.sol";
 ///         on-chain: hạn mức mỗi lần, hạn mức mỗi kỳ, danh sách người nhận, hạn dùng, và
 ///         một `entryRef` chỉ trả được một lần.
 ///
-///         Không allowance: tiền nằm trong ví, và ví trả bằng `IERC20PaymentV1.payWithFee`
+///         Không allowance: tiền nằm trong ví, và ví trả bằng `IERC20Payment.payWithFee`
 ///         với chính nó là `msg.sender`. `PaymentSettled` vẫn mang `entryRef`, nên Odoo đối
 ///         soát y hệt một thanh toán tay. Owner vẫn trả tay được từ ví này qua meta-tx: ví
 ///         hiện thực ERC-1271 cho chữ ký của owner.
@@ -138,7 +138,7 @@ contract MandateWallet is EIP712, IERC1271 {
         if (spent > md.maxPerPeriod) revert OverPeriodCap(spent, md.maxPerPeriod);
         md.spentInPeriod = uint128(spent);
         refUsed[entryRef] = true;
-        if (!IERC20PaymentV1(token).payWithFee(payee, amount, FeeMode.NONE, 0, address(0), entryRef)) {
+        if (!IERC20Payment(token).payWithFee(payee, amount, FeeMode.NONE, 0, address(0), entryRef)) {
             revert PayFailed();
         }
         emit PaidUnderMandate(token, payee, amount, entryRef);

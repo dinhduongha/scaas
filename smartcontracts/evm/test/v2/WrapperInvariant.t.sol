@@ -170,23 +170,24 @@ contract WrapperHandler is Test {
         }
     }
 
-    /// R148: gasless unwrap qua op, phí theo phần trăm cho `feeTaker`.
+    /// Gasless unwrap = `mtxExecute(unwrap(address,uint256,address,uint256))`, `AMOUNT(1)`: percent fee on `wrapped`
+    ///  for `feeTaker`, after the call.
     function unwrapOp(uint256 who, uint256 leg, uint256 frac, uint256 feePpm, uint256 recipientSeed)
         external tracked(false)
     {
         Ctx memory c = _ctx(who, leg, false);
         address r = recipientSeed % 5 == 0 ? address(t) : (recipientSeed % 5 == 1 ? outsider : c.w);
-        MetaTxLib.LegacyMetaTransaction memory m = MetaTxLib.LegacyMetaTransaction({
-            from: c.w, to: r, value: bound(frac, 0, c.wBefore / 2),
-            data: abi.encodeWithSelector(bytes4(keccak256("unwrap(address,address,uint256)")), address(c.u), r,
-                uint256(0)),
+        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
+            from: c.w,
+            data: abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(c.u),
+                bound(frac, 0, c.wBefore / 2), r, uint256(0)),
             batch: ++seq, nonce: 0, validUntil: block.timestamp + 1, mode: MetaTxLib.MODE_RESTRICT_RELAYER
                 | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT | MetaTxLib.MODE_FEE_PERCENT,
             relayer: relayer, fee: bound(feePpm, 0, 10_000), feeRecipient: feeTaker
         });
-        bytes memory sig = _sign(pks[who % 3], m);
+        (uint8 v, bytes32 rr, bytes32 ss) = vm.sign(pks[who % 3], t.mtxDigest(m));
         vm.prank(relayer);
-        try t.executeMetaTransaction(m, sig) {
+        try t.mtxExecute(m, abi.encodePacked(rr, ss, v)) {
             ghostReserve[c.i] -= c.balBefore - c.u.balanceOf(address(t));
         } catch (bytes memory err) {
             _expect(err, _sels(SingleUnderlyingToken.UnwrapTooSmall.selector,
@@ -195,8 +196,8 @@ contract WrapperHandler is Test {
         }
     }
 
-    function _sign(uint256 pk, MetaTxLib.LegacyMetaTransaction memory m) internal view returns (bytes memory) {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, t.metaTxDigest(m));
+    function _sign(uint256 pk, MetaTxLib.MetaTransfer memory x) internal view returns (bytes memory) {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, t.mtxTransferDigest(x));
         return abi.encodePacked(r, s, v);
     }
 
@@ -234,14 +235,14 @@ contract WrapperHandler is Test {
     function transferMeta(uint256 from, uint256 to, uint256 frac, uint256 feePpm) external tracked(false) {
         uint256 pk = pks[from % 3];
         address f = vm.addr(pk);
-        MetaTxLib.LegacyMetaTransaction memory m = MetaTxLib.LegacyMetaTransaction({
-            from: f, to: actor(to), value: bound(frac, 0, t.balanceOf(f) / 2), data: "", batch: ++seq, nonce: 0,
+        MetaTxLib.MetaTransfer memory x = MetaTxLib.MetaTransfer({
+            from: f, to: actor(to), value: bound(frac, 0, t.balanceOf(f) / 2), entryRef: 0, batch: ++seq, nonce: 0,
             validUntil: block.timestamp + 1, mode: MetaTxLib.MODE_FEE_PERCENT | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT,
             relayer: address(0), fee: bound(feePpm, 0, 10_000), feeRecipient: feeTaker
         });
-        bytes memory sig = _sign(pk, m);
+        bytes memory sig = _sign(pk, x);
         vm.prank(relayer);
-        try t.executeMetaTransaction(m, sig) {} catch (bytes memory err) {
+        try t.mtxExecuteTransfer(x, sig) {} catch (bytes memory err) {
             _expect(err, new bytes4[](0));
         }
     }

@@ -57,9 +57,10 @@ contract DeployHedera is Script {
     /// TW2 §9/§11: factory v2 + ba tầng Hedera, version 1 của từng kind; ghi thẳng vào object JSON "deploy".
     function _deployV2(address registrar, bool register) internal {
         OpenFactoryV2 f = new OpenFactoryV2(registrar);
-        address none = address(new HederaNoUnderlyingToken(address(f)));
-        address single = address(new HederaSingleUnderlyingToken(address(f)));
-        address multi = address(new HederaMultiUnderlyingToken(address(f)));
+        bytes32 uid = vm.envBytes32("CHAIN_UID"); // genesis hash, chain-uids.json (CTR-GEN-05)
+        address none = address(new HederaNoUnderlyingToken(address(f), uid));
+        address single = address(new HederaSingleUnderlyingToken(address(f), uid));
+        address multi = address(new HederaMultiUnderlyingToken(address(f), uid));
         if (register) {
             f.registerImplementation(IOpenFactoryV2.TokenKind.META_NONE, 1, none);
             f.registerImplementation(IOpenFactoryV2.TokenKind.META_SINGLE, 1, single);

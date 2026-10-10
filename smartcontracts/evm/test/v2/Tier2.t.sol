@@ -2,13 +2,14 @@
 pragma solidity ^0.8.20;
 
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
-import {V2Fixture} from "./helpers/V2Fixture.sol";
+import {V2Fixture, UID_} from "./helpers/V2Fixture.sol";
 import {MockERC20, FeeOnTransferERC20} from "../helpers/Mocks.sol";
 import {SenderPaysFeeERC20, SlashableERC20, NoDecimals, BadDecimals, RateAdminForwarder} from "./helpers/V2Mocks.sol";
 import {SingleUnderlyingToken} from "../../src/metatx/SingleUnderlyingToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
-import {IERC20MetaTxV1} from "../../src/metatx/IERC20MetaTxV1.sol";
+import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IOpenFactoryV2} from "../../src/common/IOpenFactoryV2.sol";
+import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
 /// T2: tầng 2 `SingleUnderlyingToken` — wrap/unwrap/reserve, tỉ lệ, làm tròn (TW2 §5, R133, R134, R137, R143).
 contract Tier2Test is V2Fixture {
@@ -184,6 +185,22 @@ contract Tier2Test is V2Fixture {
         assertEq(sl.balanceOf(address(t)), 10);
     }
 
+    /// `wrap(uint256)` is allowlisted `ABSOLUTE`: pulls from and mints to the signer, the signed fee comes out of the
+    /// minted units after the call.
+    function test_gaslessWrapPaysAbsoluteFeeFromMinted() public {
+        uint256 pk = 0xA11CE;
+        address signer = vm.addr(pk);
+        SingleUnderlyingToken t = _single(address(usdc), 6, 1, 1, _fixedRate());
+        _fund(usdc, signer, 100e6, address(t));
+        MetaTxLib.MetaTransaction memory m = _call(signer, abi.encodeWithSignature("wrap(uint256)", 100e6), 1, RR | FIX);
+        m.fee = 2e6; // ABSOLUTE: uncapped
+        _execCall(pk, address(t), m);
+        assertEq(t.balanceOf(signer), 98e6);
+        assertEq(t.balanceOf(relayer), 2e6);
+        assertEq(usdc.balanceOf(signer), 0);
+        assertEq(t.collateralValue(), t.totalSupply());
+    }
+
     function test_addReserveRaisesBackingNotSupply() public {
         SingleUnderlyingToken t = _single(address(usdc), 6, 1, 1, _fixedRate());
         _wrap(t, usdc, alice, 100);
@@ -211,14 +228,17 @@ contract Tier2Test is V2Fixture {
 
     function test_allowanceOnlyBetweenContracts() public {
         SingleUnderlyingToken t = _single(address(usdc), 6, 1, 1, _fixedRate());
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.SpenderNotContract.selector, bob));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.SpenderNotContract.selector, bob));
         t.approve(bob, 1);
+        vm.prank(bob);
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.CallerNotContract.selector, bob));
+        t.approve(address(this), 1);
     }
 
     // ------------------------------------------------------------------ init refusals
 
     function initExt(address[] memory us, bytes memory d) external returns (address) {
-        if (singleImpl == address(0)) singleImpl = address(new SingleUnderlyingToken(address(this), address(0)));
+        if (singleImpl == address(0)) singleImpl = address(new SingleUnderlyingToken(address(this), address(0), UID_));
         return _clone(singleImpl, address(this), us, d);
     }
 
@@ -271,7 +291,7 @@ contract Tier2Test is V2Fixture {
     }
 
     function test_initRefusesItselfAsUnderlying() public {
-        singleImpl = address(new SingleUnderlyingToken(address(this), address(0)));
+        singleImpl = address(new SingleUnderlyingToken(address(this), address(0), UID_));
         address predicted = Clones.predictDeterministicAddress(singleImpl, bytes32("self"));
         address c = Clones.cloneDeterministic(singleImpl, bytes32("self"));
         assertEq(c, predicted);
