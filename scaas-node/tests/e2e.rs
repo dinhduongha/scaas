@@ -36,6 +36,8 @@ use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
 const DEPLOYER: &str = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+/// Address of `DEPLOYER`: forge needs `--sender` when a script links libraries and deploys by CREATE2.
+const DEPLOYER_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 const RELAYER: &str = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
 
 struct Anvil(Child);
@@ -80,7 +82,7 @@ fn deploy(rpc: &str, chain_id: u64, holder: Address) -> Value {
     let sc = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/evm");
     let status = Command::new("forge")
         .current_dir(sc)
-        .args(["script", "script/Deploy.s.sol", "--rpc-url", rpc, "--broadcast", "--silent"])
+        .args(["script", "script/Deploy.s.sol", "--rpc-url", rpc, "--broadcast", "--silent", "--sender", DEPLOYER_ADDRESS])
         .env("PRIVATE_KEY", DEPLOYER)
         .env("DEMO_SUPPLY", "1000000000000")
         .env("DEMO_HOLDER", format!("{holder:#x}"))

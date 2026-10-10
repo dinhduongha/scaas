@@ -2,8 +2,8 @@
 pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
-import {OpenFactory} from "../../../src/factory/OpenFactory.sol";
-import {IOpenFactory} from "../../../src/common/IOpenFactory.sol";
+import {OpenFactoryV1} from "../../../src/factory/OpenFactoryV1.sol";
+import {IOpenFactoryV1} from "../../../src/common/IOpenFactoryV1.sol";
 import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 import {AuthScheme} from "../../../src/common/AuthScheme.sol";
 import {UniversalAccountRegistry} from "../../../src/registry/UniversalAccountRegistry.sol";
@@ -29,7 +29,7 @@ abstract contract ZetherFixture is Test {
         address evm;
     }
 
-    OpenFactory internal factory;
+    OpenFactoryV1 internal factory;
     ZetherToken internal impl;
     UniversalAccountRegistry internal reg;
     MockERC20 internal usd;
@@ -53,7 +53,7 @@ abstract contract ZetherFixture is Test {
 
     function _deploy(bool useBls, bool auditor) internal {
         bls = useBls;
-        factory = new OpenFactory(registrar);
+        factory = new OpenFactoryV1(registrar);
         dis = new ZetherDisclosure();
         impl = new ZetherToken(address(factory), dis);
         reg = new UniversalAccountRegistry();
@@ -61,7 +61,7 @@ abstract contract ZetherFixture is Test {
         prover = new ZetherProver();
         ver = useBls ? IZetherVerifier(address(new ZetherVerifierBls12381())) : IZetherVerifier(address(new ZetherVerifierBn254()));
         vm.startPrank(registrar);
-        factory.registerImplementation(IOpenFactory.TokenKind.ZETHER, 1, address(impl));
+        factory.registerImplementation(IOpenFactoryV1.TokenKind.ZETHER, 1, address(impl));
         factory.setZetherEnabled(true);
         vm.stopPrank();
         tok = _newToken(auditor, "zusd");

@@ -1,40 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.24;
 
-import {AdminLib} from "./AdminLib.sol";
-
 /// @title Kind `UNDERLYING` (CTR-TOK-21): 1–8 legs, each an ERC-20 or the native coin (`address(0)`, CTR-TOK-26).
 /// @notice Events and errors raised by `UnderlyingLib` (an external library) are declared here so that they are in the
-///         token ABI.
+///         token ABI. The creation config is `IFactoryToken.TokenConfig` (`legs`, `rate`).
 interface IUnderlyingToken {
-    /// @notice One leg at creation: `underlying` (`address(0)` = the native coin), rate `num/den` (CTR-TOK-04).
-    ///         `uint256` so a value `≥ 2^96` reverts `RateInvalid` instead of failing to decode.
-    struct LegInit {
-        address underlying;
-        uint256 num;
-        uint256 den;
-    }
-
-    /// @notice With `RATE_ADJUSTABLE`: `2 days ≤ rateDelay ≤ 30 days`, `1 ≤ maxRateStepBps ≤ 1000`; without: both 0.
-    struct RateConfig {
-        uint32 rateDelay;
-        uint16 maxRateStepBps;
-    }
-
-    /// @notice The UNDERLYING subset of `TokenConfig` (CTR-TOK-25); `legs[i].underlying == underlyings[i]` of the
-    ///         factory call.
-    struct UnderlyingInit {
-        string name;
-        string symbol;
-        uint8 decimals;
-        uint256 features;
-        uint256 lockedFeatures;
-        address owner;
-        AdminLib.Roles roles;
-        LegInit[] legs;
-        RateConfig rate;
-    }
-
     event Wrapped(address indexed account, address indexed underlying, uint256 underlyingIn, uint256 minted);
     event Unwrapped(address indexed account, address indexed underlying, address recipient, uint256 burned,
         uint256 underlyingOut);

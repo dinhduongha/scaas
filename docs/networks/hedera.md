@@ -321,7 +321,7 @@ taken from the wrapper again (`balanceOf(this) < totalSupply`, the last redeemer
 makes every `unwrap` revert (the wrapper holds no HBAR), locking the reserve. v2 refuses these; the built v1
 `HederaMetaToken` only associates (the permissionless `associateUnderlying()` calling `0x167
 associateToken(this, underlying)`), is still registered as `META v1` (`DeployHedera.s.sol:29-30`), and anyone may create
-it through the open factory (`OpenFactory.createMetaToken`, permissionless, `:91-96`; `deprecate` does not block
+it through the open factory (`OpenFactoryV1.createMetaToken`, permissionless, `:91-96`; `deprecate` does not block
 creation — `_registered` checks only non-zero, `:167-170`). Fix (SPECIFIED): `MetaToken.initialize` calls an
 `internal virtual _checkUnderlying(u)` hook (empty by default); `HederaMetaToken` overrides it with
 `HederaLib.checkAndAssociate(u)` and reverts `UnderlyingInvalid` on any fee; `associateUnderlying()` is deleted

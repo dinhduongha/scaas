@@ -100,10 +100,10 @@ discretion. A tender that wants no discretion sets `dqWindow = 0`.
 
 <a id="deposit-token"></a>
 <a id="CTR-TND-07"></a>**CTR-TND-07** — **Deposit token** = a token deployed by the chain's one `OpenFactory`
-([CTR-TOK-03](token-wrappers.md#CTR-TOK-03)) as kind `NONE` or `UNDERLYING` (built: `META_NONE` or `META_SINGLE`; regulated = flags 5–8)
+([CTR-TOK-03](token-wrappers.md#CTR-TOK-03)) as kind `NONE` or `UNDERLYING` (regulated = flags 5–8)
 through a **registered, non-deprecated** implementation (unregistered clones have version 0 ⇒
 `implementationOf == 0` ⇒ refused; Zether kinds refused), checked at `createTender`. `versionOf` is decoded with the
-factory's one `TokenKind` enum. **Transitional (BUILT):** two factories exist (v1 `META`, v2 tiers, with enums that
+factory's one `TokenKind` enum. **Transitional (BUILT):** two factories exist (`OpenFactory` and the v1 `OpenFactoryV1` with kind `META`, with enums that
 differ); the tender is not built yet and follows the one factory. The tender also checks that the
 balance delta equals `minDeposit` (redundant for META tokens, kept as defence). Bidders sign an intent on this token;
 an attacker-chosen "token" could fake `mtxExecuteTransfer`. Other tokens are wrapped first.
@@ -316,8 +316,7 @@ uint256 nextTenderId;                   // starts at 1
 ```
 
 No bidder list: clients enumerate bids from `BidCommitted` events. `createTender` checks (`BadConfig`): deposit token
-acceptance (`isDeployedHere`, `versionOf` per factory type, `implementationOf ≠ 0`, `!isDeprecated`, kind in the META
-set); `minDeposit > 0`; `now < commitDeadline ≤ now + 365 d`; reveal window in `[1 h, 30 d]`; `maxPrice == 0 ∨
+acceptance (`isToken`, `versionOf`, `implementationOf ≠ 0`, `!isDeprecated`, kind `NONE` or `UNDERLYING`); `minDeposit > 0`; `now < commitDeadline ≤ now + 365 d`; reveal window in `[1 h, 30 d]`; `maxPrice == 0 ∨
 minPrice ≤ maxPrice`; `minBidders ≥ 1`; HOLD ⇒ `revealDeadline < bondReleaseTime ≤ revealDeadline + 730 d`, RETURN ⇒
 `bondReleaseTime == 0`; `slashSink ∉ {0, this}`; `dqWindow ≤ 7 d`, `maxDisqualifications ≤ 2`, `dqWindow == 0 ⇒
 maxDisqualifications == 0 ∧ forfeitClasses == 0`.

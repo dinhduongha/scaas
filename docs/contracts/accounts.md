@@ -516,7 +516,7 @@ chainUid)` and copied `registry.chainUid()` into the clone at `initialize`; neit
 structs whose `from` cannot be an `address`. Clients build the UA struct shapes beside the address ones (vectors
 below).
 
-The `ua*` functions live in the one base, so every kind (built kinds `META_NONE`, `META_SINGLE`) has them. Storage adds `_uaBalance[bytes32]` and `_uaNonce[bytes32][batch]` (the v3 nonce map is keyed by `bytes32` for
+The `ua*` functions live in the one base, so every kind (built kinds `NONE`, `UNDERLYING`) has them. Storage adds `_uaBalance[bytes32]` and `_uaNonce[bytes32][batch]` (the v3 nonce map is keyed by `bytes32` for
 both paths; native ids are zero-padded).
 
 <a id="CTR-UA-26"></a>**CTR-UA-26** — **The UA path splits like the address path** (owner): a generic

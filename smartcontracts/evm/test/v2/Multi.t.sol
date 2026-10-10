@@ -9,7 +9,7 @@ import {IUnderlyingToken} from "../../src/metatx/IUnderlyingToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
-import {IOpenFactoryV2} from "../../src/common/IOpenFactoryV2.sol";
+import {AdminLib} from "../../src/metatx/AdminLib.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
 /// T3: tầng 3 `UnderlyingToken` — any-of, reserve theo chân, guardian chỉ tắt wrap (TW2 §8, R136, R147).
@@ -53,7 +53,7 @@ contract MultiTest is V2Fixture {
     }
 
     function test_kindAndLegs() public view {
-        assertEq(uint8(t.tokenKind()), uint8(IOpenFactoryV2.TokenKind.META_SINGLE)); // D9: every leg count
+        assertEq(t.kind(), AdminLib.KIND_UNDERLYING); // D9: every leg count
         assertEq(t.underlying(), address(0));
         address[] memory us = t.underlyings();
         assertEq(us.length, 3);
@@ -118,10 +118,6 @@ contract MultiTest is V2Fixture {
         vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.DuplicateUnderlying.selector, address(usdc)));
         this.multiExt(dup, n2, n2);
         dup[1] = address(usdt);
-        // init data with one leg against the factory's two underlyings
-        bytes memory d1 = _multiInit(one, n1, n1, _fixedRate(), address(0));
-        vm.expectRevert(abi.encodeWithSelector(MetaTokenBase.UnderlyingCountInvalid.selector, 1));
-        this.initExt(dup, d1);
         n2[1] = 0;
         vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.RateInvalid.selector, 0, 1));
         this.multiExt(dup, n2, _ones(2));
@@ -134,10 +130,6 @@ contract MultiTest is V2Fixture {
 
     function multiExt(address[] memory us, uint256[] memory nums, uint256[] memory dens) external returns (address) {
         return address(_multi(us, nums, dens, _fixedRate(), address(0)));
-    }
-
-    function initExt(address[] memory us, bytes memory d) external returns (address) {
-        return _clone(_underlyingImpl(), address(this), us, d);
     }
 
     function test_inheritedSingleAssetAbiReverts() public {

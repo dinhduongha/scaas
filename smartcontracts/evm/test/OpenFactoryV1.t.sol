@@ -3,37 +3,37 @@ pragma solidity ^0.8.20;
 
 import {Fixtures} from "./helpers/Fixtures.sol";
 import {SupportedVerifier, UnsupportedVerifier, MockZetherImpl, MockERC20} from "./helpers/Mocks.sol";
-import {IOpenFactory} from "../src/common/IOpenFactory.sol";
-import {OpenFactory} from "../src/factory/OpenFactory.sol";
+import {IOpenFactoryV1} from "../src/common/IOpenFactoryV1.sol";
+import {OpenFactoryV1} from "../src/factory/OpenFactoryV1.sol";
 import {MetaToken} from "../src/metatx/MetaToken.sol";
 
 contract OpenFactoryTest is Fixtures {
-    IOpenFactory.TokenKind constant META = IOpenFactory.TokenKind.META;
-    IOpenFactory.TokenKind constant ZETHER = IOpenFactory.TokenKind.ZETHER;
+    IOpenFactoryV1.TokenKind constant META = IOpenFactoryV1.TokenKind.META;
+    IOpenFactoryV1.TokenKind constant ZETHER = IOpenFactoryV1.TokenKind.ZETHER;
     bytes init = abi.encode("Points", "PTS", uint8(0), uint256(100), address(0));
 
     function setUp() public { _deployFactory(); }
 
     function test_onlyRegistrarRegisters() public {
-        vm.expectRevert(OpenFactory.NotRegistrar.selector);
+        vm.expectRevert(OpenFactoryV1.NotRegistrar.selector);
         factory.registerImplementation(META, 2, address(impl));
     }
 
     function test_catalogueIsAppendOnly() public {
         vm.prank(registrar);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionAlreadyRegistered.selector, META, 1, address(impl)));
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactoryV1.VersionAlreadyRegistered.selector, META, 1, address(impl)));
         factory.registerImplementation(META, 1, address(0x1234));
     }
 
     function test_versionZeroIsReservedForUnregistered() public {
         vm.prank(registrar);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, META, 0));
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactoryV1.VersionUnknown.selector, META, 0));
         factory.registerImplementation(META, 0, address(impl));
     }
 
     function test_implementationMustHaveCode() public {
         vm.prank(registrar);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ImplementationNotAContract.selector, address(0x1234)));
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactoryV1.ImplementationNotAContract.selector, address(0x1234)));
         factory.registerImplementation(META, 2, address(0x1234));
     }
 
@@ -47,12 +47,12 @@ contract OpenFactoryTest is Fixtures {
 
     function test_deprecateUnknownVersionReverts() public {
         vm.prank(registrar);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, META, 7));
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactoryV1.VersionUnknown.selector, META, 7));
         factory.deprecate(META, 7, "x");
     }
 
     function test_unknownVersionReverts() public {
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, META, 9));
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactoryV1.VersionUnknown.selector, META, 9));
         factory.createMetaToken(9, address(0), init, bytes32("s"));
     }
 
@@ -61,7 +61,7 @@ contract OpenFactoryTest is Fixtures {
         address t = factory.createMetaToken(1, address(0), init, bytes32("s"));
         assertEq(t, predicted);
         assertEq(factory.creatorOf(t), address(this));
-        (IOpenFactory.TokenKind k, uint64 v) = factory.versionOf(t);
+        (IOpenFactoryV1.TokenKind k, uint64 v) = factory.versionOf(t);
         assertEq(uint8(k), uint8(META));
         assertEq(v, 1);
         assertEq(factory.latestVersion(META), 1);
@@ -73,7 +73,7 @@ contract OpenFactoryTest is Fixtures {
         vm.prank(address(0xB0B));
         address b = factory.createMetaToken(1, address(0), init, bytes32("s"));
         assertTrue(a != b);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.SaltAlreadyUsed.selector, a));
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactoryV1.SaltAlreadyUsed.selector, a));
         factory.createMetaToken(1, address(0), init, bytes32("s"));
     }
 
@@ -107,7 +107,7 @@ contract OpenFactoryTest is Fixtures {
     }
 
     function test_createUnregisteredNeedsCode() public {
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ImplementationNotAContract.selector, address(0x77)));
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactoryV1.ImplementationNotAContract.selector, address(0x77)));
         factory.createUnregistered(META, address(0x77), address(0), address(0), init, bytes32("u"));
     }
 
@@ -121,7 +121,7 @@ contract OpenFactoryTest is Fixtures {
         _enableZether();
         vm.prank(registrar);
         factory.registerImplementation(ZETHER, 1, address(z));
-        vm.expectRevert(IOpenFactory.VerifierRequiredForZether.selector);
+        vm.expectRevert(IOpenFactoryV1.VerifierRequiredForZether.selector);
         factory.createZetherToken(1, address(0), address(0), "", bytes32("z"));
     }
 
@@ -132,7 +132,7 @@ contract OpenFactoryTest is Fixtures {
         vm.prank(registrar);
         factory.registerImplementation(ZETHER, 1, address(z));
         vm.expectRevert(abi.encodeWithSelector(
-            IOpenFactory.VerifierUnsupportedOnThisChain.selector, address(bad), "bls12-381"));
+            IOpenFactoryV1.VerifierUnsupportedOnThisChain.selector, address(bad), "bls12-381"));
         factory.createZetherToken(1, address(0), address(bad), "", bytes32("z"));
     }
 
@@ -142,7 +142,7 @@ contract OpenFactoryTest is Fixtures {
         vm.prank(registrar);
         factory.registerImplementation(ZETHER, 1, address(z));
         vm.expectRevert(abi.encodeWithSelector(
-            IOpenFactory.VerifierUnsupportedOnThisChain.selector, address(0x99), ""));
+            IOpenFactoryV1.VerifierUnsupportedOnThisChain.selector, address(0x99), ""));
         factory.createZetherToken(1, address(0), address(0x99), "", bytes32("z"));
     }
 

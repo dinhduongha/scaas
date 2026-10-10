@@ -110,7 +110,7 @@ first-come); built `ZetherToken` refuses fee-on-transfer underlyings (`Unsupport
 ### 2.1 NONE — `NoUnderlyingToken`
 
 <a id="CTR-TOK-09"></a>**CTR-TOK-09** — `NoUnderlyingToken` (kind `NONE`) mints `initialSupply` to `initialHolder` at
-init (`NONE*` kinds only). Further supply and burning are features, not class: `mint` by the `minter` with `MINTABLE`
+init (`NONE*` kinds only; with `initialSupply == 0` nothing is minted and `initialHolder` is ignored). Further supply and burning are features, not class: `mint` by the `minter` with `MINTABLE`
 (`minter == 0` and no flag ⇒ fixed supply), holder `burn` with `BURNABLE`, and the role and its lifecycle are in
 [CTR-TOK-22](#CTR-TOK-22). (Built: the holder's `renounceRole(MINTABLE)`.)
 
@@ -152,9 +152,7 @@ Client defaults (UI and ERP wizard): `decimals = d_u`, `num = den = 1` (a plain 
 issuer makes them adjustable: `rateDelay = 7 days`, `maxRateStepBps = 100`. Role and its lifecycle:
 [CTR-TOK-22](#CTR-TOK-22).
 
-**Transitional (BUILT, P1d).** Built encoding, any leg count: `initData = abi.encode(IUnderlyingToken.UnderlyingInit)` =
-`name, symbol, decimals, features, lockedFeatures, owner, roles, legs[] (underlying, num, den as uint256), rate (rateDelay,
-maxRateStepBps)`; `legs[i].underlying` equals the factory's `underlyings[i]` (`UnknownUnderlying(u)`; length `UnderlyingCountInvalid(n)`); `rate` is zero without `RATE_ADJUSTABLE`, in bounds with it. Replaced in P1e by `TokenConfig`.
+**Transitional (BUILT, P1e).** Built: `initialize(creator, version, TokenConfig)` ([CTR-TOK-25](#CTR-TOK-25)); the factory indexes `cfg.legs` and the token reads the same legs (`UnderlyingCountInvalid(n)`); `rate` is zero without `RATE_ADJUSTABLE`, in bounds with it.
 
 ```
 wrap(uint256 amount) returns (uint256 minted)                  // sender = _msgSender() (the signer under mtxExecute)
@@ -260,7 +258,7 @@ matters in a depeg; role and lifecycle: [CTR-TOK-22](#CTR-TOK-22). The leg order
 | rate functions | as for one leg with the leg named in `proposeRate` (default fixed; adjustable per [CTR-TOK-13](#CTR-TOK-13)); one pending change per token; admin-only execution; `RateDecreaseWithDisabledLeg()` if a change lowers `C` while any leg is disabled |
 | gasless unwrap (`mtxExecute`) | with the leg chosen by the signer; works on disabled legs |
 
-**Transitional (BUILT, P1d).** One `UnderlyingToken` takes 1–8 legs with the encoding of §2.2 (`META_MULTI` is implemented by nothing); the guardian is optional at init.
+**Transitional (BUILT, P1d).** One `UnderlyingToken` takes 1–8 legs with the encoding of §2.2; the guardian is optional at init.
 `renounceRole(bit)` replaces `renounceGuardian()`/`renounceRateAdmin()` (`RoleNotContract(3, a)` for a non-contract rate role); `rateAdmin()` and `guardian()` are gone (several holders: `hasRole`, `RoleGranted`/`RoleRevoked`).
 
 Invariant and solvency: `C = Σ_i ⌊reserve_i·num_i/den_i⌋ ≥ totalSupply()` is the aggregate invariant; the one-leg
@@ -567,7 +565,7 @@ check was dropped); the rule handles each one explicitly:
   `SpenderNotContract(spender)` for an EOA spender; `transferFrom` reverts `CallerNotContract(caller)` **before** the
   allowance check. No `permit`, no `increaseAllowance`, no meta-tx `approve`. Errors: `SpenderNotContract(address)`,
   `CallerNotContract(address)`. **Transitional (BUILT):** the rule is built on the v2 tokens (P1b); EOA `approve` and the meta-tx
-  `approve` op remain only on the v1 line (removed in P1e).
+  `approve` op remain only on the v1 line (`…V1`, until P3/P5).
 - Contract accounts approve through **their own call path**: `SmartKeyAccount.mtxExecuteAsOwner → execute(token,
   approve)`, a Safe `execTransaction`, or a Safe MultiSend that approves and uses the allowance in one transaction. The
   token sees `msg.sender` = the account. A signature check (`isValidSignature`) is not the account's execution policy
@@ -606,16 +604,17 @@ empty output — with no symptom until someone has deposited funds.
   every token is a 45-byte EIP-1167 clone (`363d3d373d3d3d363d73<impl>5af43d82803e903d91602b57fd5bf3`) that
   `DELEGATECALL`s it with its own storage. A clone costs ~45 000 gas instead of ~2.5 M.
 - **Versions live in the factory**: `registerImplementation(kind, version, impl)` (registrar only, append-only,
-  version 0 forbidden), `deprecate` marks but never blocks, `createUnregistered` deploys an off-catalogue
+  version 0 forbidden), `deprecate` marks but never blocks, `createTokenUnregistered` deploys an off-catalogue
   implementation with `version() == 0` (visibly). A bug in a version is permanent for that version's tokens; the remedy is
   voluntary migration (unwrap the old token, wrap the new one).
 - **Atomic init**: CREATE2 salt = `keccak256(abi.encode(msg.sender, salt))` (nobody can take another creator's
   address); `initialize` runs in the same call and requires `msg.sender == FACTORY`; implementations lock themselves
   in the constructor.
 - **Zether gate**: `zetherEnabled` default `false`; enabling and creating Zether tokens revert outside chain ids
-  31337/1337 (`ZetherSafety`, [CTR-ZTH-02](zether.md#CTR-ZTH-02)).
+  31337/1337 (`ZetherSafety`, [CTR-ZTH-02](zether.md#CTR-ZTH-02)). Built on `OpenFactoryV1` (`:33`, `:65-69`, `:172-175`);
+  `OpenFactory` gets it with P3.
 - **Registrar** is an EOA by default (deployer); it must become a multisig before mainnet. Its only powers are
-  `registerImplementation`, `deprecate`, `setZetherEnabled`.
+  `registerImplementation`, `deprecate`, and (`OpenFactoryV1` today) `setZetherEnabled`.
 - **Same rule on every family**: a fix to an Aptos package, Sui package, Solana program, Cosmos contract, TON or
   Soroban contract is a new deployment at a new address plus voluntary migration by the owners of the balances;
   accounts on the old deployment keep working with the old code ([CTR-GEN-02](README.md#CTR-GEN-02)).
@@ -630,7 +629,7 @@ uniqueness on the underlying alone, no name or symbol vetting. The ranking signa
 
 <a id="CTR-TOK-17"></a>**CTR-TOK-17** — **Provenance instead of gatekeeping.** Every token answers, immutably,
 `factory()`, `creator()`, `underlying()`, `verifier()`, `implementation()`, `version()`, and the factory keeps
-`isDeployedHere(token)` for the reverse check — a contract that claims a `factory()` the factory does not confirm is
+`isToken(token)` for the reverse check — a contract that claims a `factory()` the factory does not confirm is
 only a self-declared string. This answers "is this contract really a wrap of xDAI with verifier X created by Y"; it
 does **not** answer "is this the token I should use" — that has no on-chain answer (reputation and liquidity decide).
 Clients add their own pinning where needed ([CTR-ZTH-20](zether.md#CTR-ZTH-20)). Provenance metadata published for
@@ -662,7 +661,7 @@ struct TokenConfig {
     uint256 features; uint256 lockedFeatures;
     address owner;                             // 0 = no administration ever
     Roles roles;                               // initial holders (optional, each only for a set flag): minter, rateAdmin, guardian, issuer, compliance
-    uint256 initialSupply; address initialHolder;   // NONE* only
+    uint256 initialSupply; address initialHolder;   // NONE* only; initialHolder is ignored when initialSupply == 0
     Leg[] legs;                                // underlying (address(0) = native coin, CTR-TOK-26), num, den — UNDERLYING* only, 1..8
     RateConfig rate;                           // with RATE_ADJUSTABLE
     ConfidentialConfig conf;                   // verifier, auditorKey (empty = no auditor), shieldScale — *_ZETHER only
@@ -677,12 +676,13 @@ struct DexConfig { address admin; uint32 relayerSharePpm; address treasury; bool
   `NONE_PQZ`, `UNDERLYING_PQZ`, `NONE_ZETHER_PQZ`, `UNDERLYING_ZETHER_PQZ`. The implementation registry keeps
   versions per kind (register, deprecate) as before; the catalogue is append-only.
 - **One event per creation:** `TokenCreated(token, creator, kind, version, implementation, features, lockedFeatures,
-  owner, underlyings)`; `DexCreated(dex, creator, version, implementation, admin)` for a DEX clone
+  owner, underlyings)`, where `lockedFeatures` is the value the token stored (`locked | (features & ALWAYS_LOCKED)`, read
+  back from `lockedFeatures()` after `initialize`), not the requested one; `DexCreated(dex, creator, version, implementation, admin)` for a DEX clone
   ([CTR-DEX-24](dex.md#CTR-DEX-24)).
 - **Registry views:** `isToken(addr)`, `isDex(addr)`, `versionOf(addr)`. `isDex` is advisory: clients and the node use it,
   tokens never consult it ([CTR-DEX-24](dex.md#CTR-DEX-24)).
-- `IFactoryToken`, `IFactoryTokenV2`, `IOpenFactory`, `IOpenFactoryV2` are replaced by one `IOpenFactory` and one
-  `IFactoryToken`.
+- One `IOpenFactory` and one `IFactoryToken` (the v2 interfaces are gone; the v1 ones are `IOpenFactoryV1` and
+  `IFactoryTokenV1`).
 
 Flag validation is the token's ([CTR-TOK-22](#CTR-TOK-22)): the factory only forwards `features`, `lockedFeatures`
 and `roles`.
@@ -691,101 +691,53 @@ and `roles`.
 
 <a id="transitional-built-tokens"></a>
 
-**Transitional (BUILT).** Built: the v1 line (`ERC20MetaTxV1` mixin, `MetaToken`, `HederaMetaToken`, v1 `OpenFactory`,
-`MetaTxDex`), the v2 line (`ERC20MetaTx`/`MetaTokenBase`, `UnderlyingToken` over `UnderlyingLib`) and `OpenFactoryV2.createTiered`; replaced in P1 — removed from the product; kept for reference under the tag `ref/pre-token-tree` and `smartcontracts/evm/legacy/` (not built). The rest of this section is that built factory; the enum
-and the kind-count table below are the built `TokenKind` (`META`, `ZETHER`, `META_NONE`, `META_SINGLE`, `META_MULTI`),
-superseded by [CTR-TOK-21](#CTR-TOK-21). The built factory fixed `META_NONE = 2`, `META_SINGLE = 3`,
-`META_MULTI = 4`, Zether `ZETHER = 1`; `META = 0` got no implementation.
+**Transitional (BUILT, P1e).** `OpenFactory` (`src/factory/OpenFactory.sol`, `IOpenFactory.sol`, `IFactoryToken.sol`) is
+built as [CTR-TOK-03](#CTR-TOK-03) and [CTR-TOK-25](#CTR-TOK-25) specify, except that it creates no Zether token,
+DEX (`createDex`, `isDex`, `DexCreated`: P2) and has no `setZetherEnabled` (P3). `NoUnderlyingToken` and
+`UnderlyingToken` implement `initialize(creator, version, TokenConfig)` and a constant `kind()` (0 and 1). The v1 line
+(`ERC20MetaTxV1`, `MetaToken`, `HederaMetaToken`, `ZetherToken`, `MetaTxDex`) stays in the build as `OpenFactoryV1`,
+`IOpenFactoryV1` and `IFactoryTokenV1` (`createMetaToken`, `createZetherToken`) until the node, clientkeys (P5) and Zether (P3) move; it then goes to
+`smartcontracts/evm/legacy/`, not deleted (controller ruling, pending the owner). Factory v2 is backed up in
+`smartcontracts/evm/legacy/p1e/` (not built).
 
-- `constructor(address registrar, bytes32 chainUid)`. `registerImplementation` and `deprecate` are registrar-only;
-  the catalogue is **append-only** (`VersionAlreadyRegistered`); `deprecate` only marks.
-- Effective salt `keccak256(abi.encode(creator, salt))` with `creator = msg.sender`, so nobody can take another
-  creator's address; `predictAddress(impl, creator, salt)` is a pure function.
-- `createTiered` / `createZetherToken` / `createTieredUnregistered` / `createUnregistered`: `Clones.cloneDeterministic`
-  then `initialize(...)` **in the same function**. `createZetherToken` calls `verifier.isSupportedOnThisChain()`
-  (try/catch → `VerifierUnsupportedOnThisChain`). The unregistered paths record `version == 0` and require code at
-  `implementation`.
-- Lookups: `isDeployedHere`, `creatorOf`, `versionOf`, `getWrapper(creator, underlying)` (the first),
-  `getWrapperCount/At`, `deployCountFor/deployedFor(underlying)`.
-- `IFactoryToken` (`src/factory/IFactoryToken.sol`) keeps only `initialize(...)` and, for the Zether kind, `verifier()`;
-  the tiers implement `IFactoryTokenV2` (`tokenKind()`, `initialize(creator, underlyings, version, initData)`).
+- `constructor(address registrar, bytes32 chainUid)`, `chainUid` non-zero (`ChainUidZero`). `registerImplementation` and
+  `deprecate` are registrar-only; the catalogue is append-only (`VersionAlreadyRegistered`); version 0 is refused.
+- **Registration** requires `implementation.code.length > 0` and reads `kind(), `factory()` and `chainUid()` by staticcall: `ImplementationNotAContract`,
+  `VersionKindMismatch(expected, got)` (`got = type(uint256).max` when there is no answer),
+  `ImplementationFactoryMismatch`, `ChainUidMismatch`. `NONE_PQZ`…`UNDERLYING_ZETHER_PQZ` (4–7) revert `KindReserved`;
+  kinds 2 and 3 are accepted before P3 (controller ruling, pending the owner).
+- **Creation:** `createToken` (registered version) and `createTokenUnregistered` (same four checks, recorded with
+  `version == 0`) take the leg count from `cfg.legs` (`NONE*` 0, `UNDERLYING*` 1–8, else `UnderlyingCountInvalid`),
+  clone with salt `keccak256(abi.encode(msg.sender, salt))` (`SaltAlreadyUsed` when the predicted address is already in the
+  index or has code: an unregistered implementation may self-destruct its clone in `initialize`), call `initialize` in the same call, and
+  emit only `TokenCreated`. The token reads the same `cfg.legs` that the factory indexed. A field of another kind reverts
+  `ConfigFieldForOtherKind(field)`: 1 `initialSupply`/`initialHolder` (not `NONE*`), 2 `legs`, 3 `rate` (not
+  `UNDERLYING*`), 4 `conf` (not `*_ZETHER`).
+- **Views:** `registrar`, `chainUid`, `implementationOf`, `isDeprecated`, `latestVersion`, `predictAddress`, `isToken`,
+  `creatorOf`, `versionOf`, `getWrapper(creator, underlying)` (the first; it may be a multi-leg token: read
+  `underlyings()`), `getWrapperCount/At`, `deployCountFor/deployedFor`. Every leg is indexed, `address(0)` for the
+  native coin.
+- **Zether creation on the v1 factory (BUILT).** `OpenFactoryV1.createZetherToken` and `createUnregistered(ZETHER)` call
+  `_checkVerifier(verifier)` (`OpenFactoryV1.sol:179-190`): a zero verifier reverts `VerifierRequiredForZether`; no code, or
+  `verifier.isSupportedOnThisChain()` false or unanswered, reverts `VerifierUnsupportedOnThisChain(verifier, curveName)`
+  with the verifier's `curveName()` (empty when it has no code or no answer), so a BLS12-381 verifier cannot be paired
+  with a chain without EIP-2537. `OpenFactory` has no such path before P3.
+- **Trust the index only for registered versions** (`versionOf(token).version != 0`): the factory indexes what the
+  config says, and an unregistered implementation (version 0) may do anything else with it.
 
 <a id="factory-interface"></a>
 
-```solidity
-enum TokenKind { META, ZETHER, META_NONE, META_SINGLE, META_MULTI }   // append only; META has no implementation
-
-interface IOpenFactory {
-    event ImplementationRegistered(TokenKind indexed kind, uint64 indexed version, address indexed implementation, address registrar);
-    event ImplementationDeprecated(TokenKind indexed kind, uint64 indexed version, string reason);
-    event TokenDeployed(address indexed token, address indexed creator, address indexed underlying,
-                        TokenKind kind, uint64 version, address implementation, address verifier);   // Zether
-    event TieredTokenDeployed(address indexed token, address indexed creator, TokenKind kind, uint64 version,
-                              address implementation, address[] underlyings);
-    error VersionAlreadyRegistered(TokenKind kind, uint64 version, address existing);
-    error VersionUnknown(TokenKind kind, uint64 version);
-    error VersionKindMismatch(TokenKind expected, TokenKind got);
-    error ImplementationNotAContract(address implementation);
-    error ImplementationFactoryMismatch(address implementation);
-    error ChainUidMismatch(bytes32 expected, bytes32 got);
-    error VerifierUnsupportedOnThisChain(address verifier, string curveName);
-    error VerifierRequiredForZether();
-    error SaltAlreadyUsed(address existing);
-    error UnderlyingCountInvalid(uint256 n);          // META_NONE 0, META_SINGLE 1..8 (built: UnderlyingToken; META_MULTI has no implementation)
-
-    function registerImplementation(TokenKind kind, uint64 version, address implementation) external; // registrar
-    function deprecate(TokenKind kind, uint64 version, string calldata reason) external;             // registrar
-    function implementationOf(TokenKind kind, uint64 version) external view returns (address);
-    function isDeprecated(TokenKind kind, uint64 version) external view returns (bool);
-    function latestVersion(TokenKind kind) external view returns (uint64);
-    function chainUid() external view returns (bytes32);
-
-    function createTiered(TokenKind kind, uint64 version, address[] calldata underlyings,
-                          bytes calldata initData, bytes32 salt) external returns (address token);
-    function createTieredUnregistered(TokenKind kind, address implementation, address[] calldata underlyings,
-                                      bytes calldata initData, bytes32 salt) external returns (address token); // version 0
-    function createZetherToken(uint64 version, address underlying, address verifier, bytes calldata initData, bytes32 salt) external returns (address);
-    function createUnregistered(TokenKind kind, address implementation, address underlying, address verifier,
-                                bytes calldata initData, bytes32 salt) external returns (address);   // Zether, version 0
-
-    function predictAddress(address implementation, address creator, bytes32 salt) external view returns (address);
-    function isDeployedHere(address token) external view returns (bool);
-    function creatorOf(address token) external view returns (address);
-    function versionOf(address token) external view returns (TokenKind kind, uint64 version);
-    function getWrapper(address creator, address underlying) external view returns (address);       // first one
-    function getWrapperCount(address creator, address underlying) external view returns (uint256);
-    function getWrapperAt(address creator, address underlying, uint256 index) external view returns (address);
-    function deployCountFor(address underlying) external view returns (uint256);
-    function deployedFor(address underlying, uint256 index) external view returns (address);
-}
-// also: address public immutable registrar; bool public zetherEnabled; event ZetherEnabled(bool enabled);
-//   error NotRegistrar(); error ZetherDisabled(); function setZetherEnabled(bool on) external;   // on ⇒ dev chain only
-```
-
-| Rule | Detail |
-|---|---|
-| Kind ⇒ count | `META_NONE` 0, `META_SINGLE` 1–8 (transitional: `UnderlyingToken`; `META_MULTI` has no implementation), else `UnderlyingCountInvalid(n)` (the token re-checks; the factory checks so its indexes are meaningful) |
-| Registration | `registerImplementation(kind, v, impl)` calls `impl.tokenKind()`, `impl.factory()` and `impl.chainUid()` (try/catch) and reverts `VersionKindMismatch(kind, got)` on a kind mismatch or "No answer" (`got = META`), `ImplementationFactoryMismatch(impl)` unless `factory() == address(this)`, `ChainUidMismatch` unless `chainUid() == chainUid` (the catalogue is append-only, so a wrong entry would be dead forever) |
-| Kind ⇔ entry point | `createZetherToken`/`createUnregistered` take only `ZETHER`, `createTiered*` refuse it (`VersionKindMismatch`, `expected = META_NONE` on the tiered path), so neither the count check nor `tokenKind()` can be bypassed |
-| Creation | CREATE2 salt `keccak256(abi.encode(msg.sender, salt))`, `Clones.cloneDeterministic`, `initialize` in the same call; tiers emit **only** `TieredTokenDeployed`, Zether emits `TokenDeployed` |
-| Provenance | every underlying of a tier-2/3 token is indexed: `_wrappers[creator][u]`, `_byUnderlying[u]`. `getWrapper(creator, u)` can return a multi-leg token, whose single-asset ABI reverts: clients read `underlyings().length` first (`underlying() == 0` also means a one-leg native token); for a token with flags 5–8, the regulated views ([asset-suite.md](asset-suite.md#regulated)) |
-| Registrar | `registerImplementation`, `deprecate`, `setZetherEnabled`; none over tokens |
-| Deploy script | `Deploy.s.sol` deploys the factory and the implementation of each kind (each with `chain_uid`) through the CREATE2 deployer and registers them as version 1 of their kind (`version()` of a clone is the catalogue version; the domain version string is `"1"`) |
-
-**Transitional (BUILT).** Two factories exist: `OpenFactory` v1 (`src/factory/OpenFactory.sol`, `IOpenFactory.sol`,
-`constructor(address registrar)`, `createMetaToken` then `IFactoryToken(token).initialize(...)`, `createUnregistered`
-checking `implementation.code.length > 0`, enum `IOpenFactory.TokenKind { META, ZETHER }`) and `OpenFactoryV2`
-(`src/factory/OpenFactoryV2.sol`, enum `IOpenFactoryV2.TokenKind` in `src/common/IOpenFactoryV2.sol`, which can also
-create the v1 `META` kind, `OpenFactoryV2.sol:103`, once registered); neither takes `chain_uid`, and both are deployed
-with `new`. Factory v2's `OpenFactoryV2._createTiered` admits kinds through `_isTiered` (`kind ≥ META_NONE`) and emits
-`TieredTokenDeployed(token, creator, kind, version, implementation, underlyings)`. The rebuild deletes v1, renames v2
-and adds the `chainUid` check. Separate `AssetFactory` for action
+The built interface is `IOpenFactory.sol` and the `TokenConfig` block of [CTR-TOK-25](#CTR-TOK-25); the event is
+`TokenCreated(token, creator, kind, version, implementation, features, lockedFeatures, owner, underlyings)`, the
+enum `TokenKind { NONE, UNDERLYING, NONE_ZETHER, UNDERLYING_ZETHER, NONE_PQZ, UNDERLYING_PQZ, NONE_ZETHER_PQZ,
+UNDERLYING_ZETHER_PQZ }`. The deploy scripts register `NoUnderlyingToken` as version 1 of `NONE`; `UnderlyingToken` is over EIP-170 and is not
+deployed ([CTR-GEN-06](README.md#CTR-GEN-06), [CTR-TOK-24](#CTR-TOK-24)). Separate `AssetFactory` for action
 contracts: [asset-suite.md](asset-suite.md#templates).
 
 ## <a id="interfaces"></a>7. Interfaces
 
 The block is the **built** function set, grouped by the built contracts; the role holder's `renounceRole(bit)` replaces
-`renounceRateAdmin`/`renounceGuardian` (P1d) and the factory is [CTR-TOK-25](#CTR-TOK-25) (replaced in P1e).
+`renounceRateAdmin`/`renounceGuardian` (P1d) and the factory is [CTR-TOK-25](#CTR-TOK-25) (built in P1e).
 
 ```solidity
 // built v2 line also has executeMetaTransactionWithFee, mtxUnwrap(…, validUntil, …), mtxUnwrapWithFee(…, feeRecipient, …)
@@ -822,10 +774,10 @@ function disableWrap(address underlying, bytes32 reason) external;           // 
 | `ITokenAdmin` (on `MetaTokenBase`) | `RoleGranted`, `RoleRevoked`, `FeatureDisabled`, `OwnershipTransferStarted`, `OwnershipTransferred` | `FeatureInvalidForKind`, `FeatureNotBuilt`, `LockedNotSubset`, `RoleWithoutFeature`, `RoleNotContract`, `NoSuchRole`, `FeatureLocked`, `FeatureNotSet`, `NotOwner`, `NotPendingOwner`, `MissingRole`, `RoleAccountZero(uint8)` |
 | `NoUnderlyingToken` | — (no `MinterRenounced`) | — (no `NotMinter`) |
 | `UnderlyingToken` (events and errors declared in `IUnderlyingToken`) | `Wrapped(address indexed account, address indexed underlying, uint256 underlyingIn, uint256 minted)`, `Unwrapped(address indexed account, address indexed underlying, address recipient, uint256 burned, uint256 underlyingOut)`, `ReserveAdded(address indexed from, address indexed underlying, uint256 amount)`, `RateChangeProposed(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen, uint64 eta)`, `RateChangeCancelled(address indexed underlying)`, `RateChanged(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen)`, `WrapDisabled(address indexed underlying, address indexed guardian, bytes32 reason)` | `UnderlyingInvalid(address)`, `DecimalsUnreadable(address)`, `RateInvalid(uint256,uint256)`, `RateConfigInvalid()`, `WrapTooSmall()`, `UnwrapTooSmall()`, `UnwrapBelowMin(uint256 out, uint256 minOut)`, `UnwrapRecipientInvalid(address)`, `InsufficientReserve(address,uint256,uint256)`, `ReserveShortfall(address,uint256,uint256)`, `UnderlyingTransferMismatch(address,uint256,uint256)`, `UnknownUnderlying(address)`, `RateFixed()`, `NotRateAdmin()`, `RateChangePending()`, `NoRateChangePending()`, `RateChangeNotReady(uint64)`, `RateChangeExpired(uint64)`, `RateStepTooLarge()`, `RateChangeUndercollateralized(uint256,uint256)`, `WrapPausedForRateChange(address)`, `WrapDisabledFor(address)`, `DuplicateUnderlying(address)`, `RateDecreaseWithDisabledLeg()`, `UnderlyingRequired()`, `NotGuardian()`, `NativeValueMismatch(uint256 value, uint256 expected)`, `FailedCall()`, `SafeERC20FailedOperation(address)`, `InsufficientBalance(uint256,uint256)`, `HtsQueryFailed(address u, int64 responseCode)`, `AssociateFailed(int64)` |
-| `OpenFactory` | `TokenCreated(…)` ([CTR-TOK-25](#CTR-TOK-25)); built: `TieredTokenDeployed(…)`, `TokenDeployed(…)` (Zether) | as [above](#factory-interface) |
+| `OpenFactory` | `TokenCreated(…)` ([CTR-TOK-25](#CTR-TOK-25)); built; the v1 factory keeps `TokenDeployed(…)` (Zether) | as [above](#factory-interface) |
 
 The node's event normaliser adds `Wrapped`, `Unwrapped`, `ReserveAdded`, `RateChange*`, `WrapDisabled`,
-`MetaNonceCancelled`, `TieredTokenDeployed`, `TradeFilled`; `PaymentSettled` and `MetaTransactionExecuted` keep their
+`MetaNonceCancelled`, `TokenCreated`, `TradeFilled`; `PaymentSettled` and `MetaTransactionExecuted` keep their
 fields. A gasless unwrap emits the same `Unwrapped` as a direct unwrap, plus `MetaTransactionExecuted`.
 
 ## 8. Storage layout (clones)
@@ -838,7 +790,7 @@ each library ≤ 24,576 B.
 |---|---|---|
 | `TradeLib` | `TradeOrder` checks, `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces`, the token side of fills | all |
 | `AdminLib` | flag validation, roles, owner, `disableFeature` (built, 3,406 B); later freeze / force / pause / allowlist | all |
-| `UnderlyingLib` (built, 11,018 B) | legs; the core of wrap and unwrap **without a destination** (pull, rate, reserve; pay out); rate changes with timelock; `disableWrap`; the reserve invariant | `UNDERLYING*` |
+| `UnderlyingLib` (built, 10,096 B) | legs; the core of wrap and unwrap **without a destination** (pull, rate, reserve; pay out); rate changes with timelock; `disableWrap`; the reserve invariant | `UNDERLYING*` |
 | `ZetherLib` | statements, verifier calls, account updates, roll-over, shield / unshield, disclosure entries | `*_ZETHER` |
 | `HederaLib` | HIP-632 signature path (`requireValid`, public view, linked; 753 B), HTS associate | all (branch on `IS_HEDERA`, [CTR-TOK-23](#CTR-TOK-23)) |
 
@@ -851,9 +803,12 @@ each library ≤ 24,576 B.
   its storage pointer from the fixed slot, so libraries never overlap; a test proves that a write through one library
   never changes another namespace.
 - **Size budget:** each token implementation ≤ 20,480 B (≈ 4 KB left for later streams); CI fails the build when a
-  contract exceeds its budget (`forge build --sizes`). **Transitional (BUILT, P1c):** `NoUnderlyingToken` 20,038 B passes
-  (442 B left: P2 must find room, controller ruling, pending the owner); `UnderlyingToken` 25,408 B and `ZetherToken` 28,849 B
-  exceed EIP-170 until the size work (owner: optimise later, controller ruling, pending the owner); the size tests pin ceilings.
+  contract exceeds its budget. **Transitional (BUILT, P1e):** `scripts/size_gate.py` runs in CI over
+  `forge build src --sizes --json` as a ratchet (controller ruling, pending the owner): token implementations ≤ 20,480 B,
+  other contracts ≤ 24,576 B, init code ≤ 49,152 B, and a contract named in `smartcontracts/evm/size-baseline.json`
+  may exceed its limit but never its recorded size (`UnderlyingToken` 26,449 B, `ZetherToken` 28,849 B; owner: optimise
+  later); the baseline does not tighten itself, so a smaller contract's entry is lowered by hand.
+  `NoUnderlyingToken` is 20,196 B (284 B left: P2 must find room).
 
 **Transitional (BUILT, P1d).** `MetaTokenBase` state is in `scaas.token`, the legs in `scaas.underlying`
 (`0x38d6f7ed…cd1000`); the rest is OpenZeppelin ERC-20 slots 0–4 only.
@@ -951,7 +906,7 @@ Unit (forge, `test/v2/`):
 | `UNDERLYING`, one leg | rate 1:1 equals the removed v1 wrapper's behaviour; rounding down on wrap/unwrap; `burned = ⌈out·q⌉`; `previewWrap` `used`; `WrapTooSmall`/`UnwrapTooSmall`/`UnwrapBelowMin`; two-argument `unwrap` = `minOut 0`; fee-on-transfer inbound measured; sender-pays fee-on-transfer reverts `UnderlyingTransferMismatch`; donation not counted; `ReserveShortfall` after a negative-rebase mock stops wrap and not unwrap; `addReserve`; decimals snapshot; init refusals |
 | Rates | fixed ⇒ `RateFixed`; propose/cancel/execute; only the admin executes (`NotRateAdmin` for anyone else); delay and window bounds; an expired change counts as none for `proposeRate`, `pendingRate()` and the pause; step bound both directions at the exact edge; decrease refused without collateral, accepted after `addReserve`; execute refused with `ReserveShortfall` when any leg's balance is below its reserve (shock, then decrease); `collateralValue` saturates and `executeRate` exits early on a huge leg; revoking or renouncing the rate role leaves the rate, `disableFeature(RATE_ADJUSTABLE)` cancels a pending change; EOA admin refused at init; wrap paused on **every** leg while anything is pending, reopens on execute/cancel/expiry, unwrap and `addReserve` open |
 | `UNDERLYING`, several legs | 2–8 legs, duplicates, zero; per-leg reserves; unwrap bounded by `reserve_i`; guardian disable one-way and idempotence error; unwrap open on a disabled leg; `addReserve` refused on it; `RateDecreaseWithDisabledLeg`; the cross-leg scenario (pending decrease on leg `i`, flash-wrap of leg `j`) reverts `WrapPausedForRateChange` and a third-party `executeRate` reverts `NotRateAdmin`; single-asset ABI reverts `UnderlyingRequired` with more than one leg |
-| Factory | kind ⇒ leg count (`NONE` 0, `UNDERLYING` 1–8); `createToken` and `createTokenUnregistered`; `VersionKindMismatch`; `ImplementationFactoryMismatch`; append-only catalogue; unregistered version 0; salt scoped by creator; every underlying indexed; exactly one `TokenCreated`; the factory only forwards flags (the token validates) |
+| Factory (`Factory.t.sol`) | zero `chain_uid` refused; registration checks `kind()`, `factory()` and `chainUid()` and refuses reserved kinds; `deprecate` only marks; one `TokenCreated` with provenance; every leg indexed, native included; leg count by kind (`NONE` 0, `UNDERLYING` 1–8); unknown version; salt scoped by creator and not reusable; `createTokenUnregistered` checked and recorded as version 0; the factory only forwards, the token validates flags and fields (`ConfigFieldForOtherKind`); only the factory initialises, once; `kind()` constant; sizes |
 | Features | every invalid combination of [CTR-TOK-22](#CTR-TOK-22) reverts with its error (`FeatureInvalidForKind`, `LockedNotSubset`, `RoleWithoutFeature`); owner grant/revoke, holder `renounceRole`, `renounceOwnership` (holders keep roles), `disableFeature` on a locked, a disableable and an already-clear bit; `PAYABLE` off ⇒ `supportsInterface(IERC20Payment)` false and pay reverts; rate fixed vs adjustable; guardian; the four regulated flags (existing asset-suite cases on the ordinary kinds) |
 | Layout | `test_storageLayoutIsPinned` per implementation; library storage isolation (a write through one library never changes another namespace); the size gate ([CTR-TOK-24](#CTR-TOK-24)) |
 | Hedera | HIP-632 path under `IS_HEDERA` (mocked precompile, as in `test/hedera/`); association at init; fail-closed custom-fee check: `isToken` rc ≠ SUCCESS, `getTokenCustomFees` rc ≠ SUCCESS, and a non-empty fee list each refuse the underlying |

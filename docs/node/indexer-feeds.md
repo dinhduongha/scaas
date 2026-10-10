@@ -147,7 +147,7 @@ Further events, same object, same filters (decoders for a new kind ship before t
 
 - token wrappers: `Wrapped`, `Unwrapped`, `ReserveAdded`, `RateChangeProposed`, `RateChanged`, `RateChangeCancelled`,
   `RateAdminRenounced`, `WrapDisabled`, `GuardianRenounced`, `MinterRenounced`, `MetaNonceCancelled`; factory
-  `TieredTokenDeployed` (built kinds 0–4), `ImplementationRegistered`, `ImplementationDeprecated`;
+  `TokenCreated` (built; the node still reads the v1 `TokenDeployed`), `ImplementationRegistered`, `ImplementationDeprecated`;
 - token-verified trade orders (SPECIFIED, [dex-venue.md#trade-orders](dex-venue.md#trade-orders)): on the sell token
   `TradeFilled(orderHash, from, sellFill, receiveFill, dexFee)`, `OrderCancelled(orderHash, from)`,
   `NoncesInvalidated(from, batch, minNonce)`; on the DEX `LegSettled(ref, orderHash, from, destination, sold, received,
@@ -167,7 +167,7 @@ Further events, same object, same filters (decoders for a new kind ship before t
 - planned asset suite: `OrderRecorded`, `OrderRevoked`, `AccountFrozen`, `AccountUnfrozen`, `ForcedTransfer`, `Paused`,
   `Unpaused`, `FeatureDisabled`, `RoleGranted`, `RoleRevoked`, `Attested`, `AttesterSet`, `GrantCreated`, `Released`, `Revoked`,
   `RevocationRenounced`, `MilestoneApproved`, `ExcessSwept`, `DistributionCreated`, `Claimed`, `Cancelled`, `Swept`,
-  `OfferCreated`, `Exchanged`, `Closed`, `Rescued`; `TieredTokenDeployed` (flags 5–8 are fields of the token, [CTR-AS-17](../contracts/asset-suite.md#CTR-AS-17)).
+  `OfferCreated`, `Exchanged`, `Closed`, `Rescued`; `TokenCreated` (flags 5–8 are fields of the token, [CTR-AS-17](../contracts/asset-suite.md#CTR-AS-17)).
 
 ## <a id="feeds"></a>3. Feeds
 

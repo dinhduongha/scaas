@@ -7,6 +7,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IUnderlyingToken} from "./IUnderlyingToken.sol";
+import {IFactoryToken} from "../factory/IFactoryToken.sol";
 import {AdminLib} from "./AdminLib.sol";
 import {MetaTokenBase} from "./MetaTokenBase.sol";
 import {HederaLib} from "../hedera/HederaLib.sol";
@@ -69,17 +70,11 @@ library UnderlyingLib {
 
     // ------------------------------------------------------------------ init
 
-    /// @notice The token's `_init`: decode `UnderlyingInit`, check it against the factory's `underlyings` (1–8, same
-    ///         order), write the metadata, the flags/owner/roles (`AdminLib.init`), the rate config and the legs in the
-    ///         factory's order (which never changes).
-    function initToken(address[] calldata underlyings, bytes calldata initData, bool isHedera) public {
-        IUnderlyingToken.UnderlyingInit memory c = abi.decode(initData, (IUnderlyingToken.UnderlyingInit));
-        uint256 n = underlyings.length;
+    /// @notice The token's `_init`: legs 1–8 (the factory's index reads the same `legs`), the metadata, the
+    ///         flags/owner/roles (`AdminLib.init`), the rate config, then the legs in their given order (never changes).
+    function initToken(IFactoryToken.TokenConfig calldata c, bool isHedera) public {
+        uint256 n = c.legs.length;
         if (n == 0 || n > MAX_LEGS) revert MetaTokenBase.UnderlyingCountInvalid(n);
-        if (c.legs.length != n) revert MetaTokenBase.UnderlyingCountInvalid(c.legs.length);
-        for (uint256 i; i < n; ++i) {
-            if (c.legs[i].underlying != underlyings[i]) revert IUnderlyingToken.UnknownUnderlying(underlyings[i]);
-        }
         AdminLib.TokenStorage storage t = AdminLib.$();
         t.name = c.name;
         t.symbol = c.symbol;
@@ -87,7 +82,7 @@ library UnderlyingLib {
         AdminLib.init(AdminLib.KIND_UNDERLYING, c.features, c.lockedFeatures, c.owner, c.roles);
         bool adjustable = AdminLib.hasFeature(AdminLib.RATE_ADJUSTABLE);
         UnderlyingStorage storage s = $();
-        IUnderlyingToken.RateConfig memory rate = c.rate;
+        IFactoryToken.RateConfig calldata rate = c.rate;
         if (!adjustable) {
             if (rate.rateDelay != 0 || rate.maxRateStepBps != 0) revert IUnderlyingToken.RateConfigInvalid();
         } else {
@@ -99,7 +94,7 @@ library UnderlyingLib {
         for (uint256 i; i < n; ++i) _addLeg(s, c.legs[i], adjustable, isHedera);
     }
 
-    function _addLeg(UnderlyingStorage storage s, IUnderlyingToken.LegInit memory l, bool adjustable, bool isHedera)
+    function _addLeg(UnderlyingStorage storage s, IFactoryToken.Leg calldata l, bool adjustable, bool isHedera)
         private
     {
         address u = l.underlying;

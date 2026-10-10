@@ -31,8 +31,7 @@ contract ReceiverPaysTest is Test {
         vm.warp(1_800_000_000);
         address impl = address(new NoUnderlyingToken(address(this), address(0), UID, false));
         t = NoUnderlyingToken(Clones.clone(impl));
-        t.initialize(address(this), new address[](0), 1,
-            abi.encode(noneInit("Points", "PTS", 6, 0, address(this), address(this))));
+        t.initialize(address(this), 1, noneInit("Points", "PTS", 6, 0, address(this), address(this)));
         t.mint(payer, 1_000e6);
     }
 

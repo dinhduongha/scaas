@@ -36,6 +36,8 @@ use scaas_node::signer::LocalSigner;
 use serde_json::{json, Value};
 
 const DEPLOYER: &str = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+/// Address of `DEPLOYER`: forge needs `--sender` when a script links libraries and deploys by CREATE2.
+const DEPLOYER_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 const CHAIN_ID: u64 = 298;
 const PORT: u16 = 31960;
 const NATIVE: u64 = 1_234_567; // 0.0.1234567
@@ -75,10 +77,9 @@ async fn start_anvil() -> (Anvil, String) {
 }
 
 fn deploy(rpc: &str) -> Value {
-    std::fs::create_dir_all(format!("{}/deployments", sc())).unwrap();
     let status = Command::new("forge")
         .current_dir(sc())
-        .args(["script", "script/hedera/DeployHedera.s.sol", "--rpc-url", rpc, "--broadcast", "--silent"])
+        .args(["script", "script/hedera/DeployHedera.s.sol", "--rpc-url", rpc, "--broadcast", "--silent", "--sender", DEPLOYER_ADDRESS])
         .env("PRIVATE_KEY", DEPLOYER)
         .env("DEMO_SUPPLY", "1000000000000")
         .env("FOUNDRY_PROFILE", "private7622")
