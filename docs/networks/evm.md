@@ -20,7 +20,7 @@ Status: **BUILT** on the private chain 7622 and anvil; public chains are seeded 
 |---|---|---|---|---|---|
 | Private reference chain | 7622 | `private7622` (Solidity `prague`) | free (base fee 0) | depth 1, quorum 1 | BUILT, first target |
 | Anvil (tests) | 31337 (also 1337) | — | — | depth | BUILT (dev only) |
-| Gnosis Chain | 100 | `gnosis` (Cancun) | native xDAI (stable value) | `tag finalized` (~160–240 s), quorum ≥ 2 independent RPCs | seeded `draft` until the operator gate passes |
+| Gnosis Chain | 100 | `gnosis` (Prague target; the chain runs Pectra since 2025-04-30, and Fusaka) | native xDAI (stable value) | `tag finalized` (~160–240 s), quorum ≥ 2 independent RPCs | seeded `draft` until the operator gate passes |
 | Celo | 42220 | `celo` (Cancun) | CELO; fee currencies optional | `l1_batch` (PLANNED) | seeded `draft` |
 
 - **Gnosis Chain (100)** is the recommended public chain for B2B: native gas is xDAI, a stable-value coin, so gas

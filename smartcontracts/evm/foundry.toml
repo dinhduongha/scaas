@@ -41,8 +41,11 @@ evm_version = "prague"
 [profile.zether]
 evm_version = "prague"
 
+# Gnosis Chain: Pectra since 2025-04-30 14:03:40 UTC, then Fusaka (EIP-2537 measured live, docs/networks/evm.md §3).
+# "prague" is the highest target of the pinned solc 0.8.28; Fusaka features used at run time (P-256 at 0x100,
+# the 16,777,216 per-transaction gas cap) need no compiler support.
 [profile.gnosis]
-evm_version = "cancun"
+evm_version = "prague"
 
 [profile.celo]
 evm_version = "cancun"

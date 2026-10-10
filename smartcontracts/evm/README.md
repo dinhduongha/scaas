@@ -115,7 +115,7 @@ forge install OpenZeppelin/openzeppelin-contracts   # cần v5.2+
 | Profile | EVM | Lý do |
 |---|---|---|
 | `private7622` | **prague** | Private Nethermind chain (Clique, one signer). Since the 2026-08-31 chainspec fix it runs through Fusaka + BPO2 (PUSH0, TSTORE, EIP-2537 live, base fee 0); it was `berlin` before, when Nethermind silently ignored the Geth-style fork keys. Chain id 7622, formerly 9000 (owner 2026-10-07: 9000 is also Evmos Testnet; genesis reset). See `src/chains/private7622/README.md`, `TRAPS.md` §"Private chain". |
-| `gnosis` | cancun | Có EIP-2537 (đã đo: `0x0b/0x0c/0x0f/0x10` sống) |
+| `gnosis` | prague | Pectra từ 2025-04-30, rồi Fusaka; có EIP-2537 (đã đo: `0x0b/0x0c/0x0f/0x10` sống) |
 | `celo` | cancun | Như trên |
 
 ## Ba bug chặn build đã sửa so với code cũ
