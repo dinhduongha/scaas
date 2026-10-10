@@ -41,7 +41,7 @@ left; then execute subagent-driven like P1a. P1b notes (a)–(h) are in TODO §0
   Mock `MtxRegistryMock` ≈ 9.4 KB — the 20,480 B token budget needs care in P1b/P1c.
 - KAT: `metatx_kat.json` = v3; `metatx_v1_kat.json` = built v1 (node + clientkeys repointed).
 - **Cross-repo breakage:** bamboo-dms `dms_blockchain/tests/test_eip712.py:14` reads the old path — repoint to
-  `metatx_v1_kat.json` there.
+  `metatx_v1_kat.json` there (resolved 2026-10-10: branch `scaas-metatx-v1-kat`).
 
 **Owner decisions 2026-10-09:** `OrderBookDex` → **`SCaaSDex`** (done 2026-10-09, domain `"SCaaS Dex"`); integration.md rewrite later
 (TODO §0); docs: README map as per-area tables, architecture.md numbered sections + contents, §1 lists smart contracts first.
@@ -71,7 +71,7 @@ subagent-driven vs native — recommended subagent-driven). Then write P1b…P1e
 **P1a plan notes:** the plan's code was run in a scratch copy (692 tests pass, KAT matches `cast`). (1) The bare
 `MetaTxBase` mock is 9,410 B — almost half the 20,480 B token budget (CTR-TOK-24): watch it in P1b. (2) `metatx_kat.json`
 becomes the v3 vector; the v1 vector moves to `metatx_v1_kat.json` and in-repo readers are repointed — the bamboo-dms test
-`dms_blockchain/tests/test_eip712.py:14` breaks until repointed there. (3) Defaults taken in the plan: fee classes
+`dms_blockchain/tests/test_eip712.py:14` breaks until repointed there (resolved 2026-10-10: branch `scaas-metatx-v1-kat`). (3) Defaults taken in the plan: fee classes
 1 = ABSOLUTE, 2 = AMOUNT; refusal error `MetaTxUnknownMode`; ERC-1271 starvation margin 5,000 gas + error
 `SigCheckGasStarved`; KAT on a mock (P1b regenerates it on a real token).
 

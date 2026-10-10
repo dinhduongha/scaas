@@ -646,11 +646,11 @@ MetaToken.sol:167-176	removed	P1b: v1-line-only text or replaced by the typed v2
 MetaTokenBase.sol:316-323	removed	P1b: v1-line-only text or replaced by the typed v2 path (contracts/metatx.md#transitional-built)
 MetaTxUnknownOp(0)	removed	P1b: v1-line-only text or replaced by the typed v2 path (contracts/metatx.md#transitional-built)
 OP_PAY = bytes4(keccak256("pay(bytes32)"))	removed	P1b: v1-line-only text or replaced by the typed v2 path (contracts/metatx.md#transitional-built)
-SUBJECT_ACCOUNT_IMPL	removed	P1b: v1-line-only text or replaced by the typed v2 path (contracts/metatx.md#transitional-built)
+SUBJECT_ACCOUNT_IMPL	renamed	on the v2 line (SMART_KEY_ACCOUNT_IMPL, token-wrappers.md §8); kept on v1 MetaToken until P1e
 UnwrapRecipientMismatch()	removed	P1b: v1-line-only text or replaced by the typed v2 path (contracts/metatx.md#transitional-built)
 UnwrapRecipientMismatch	removed	P1b: v1-line-only text or replaced by the typed v2 path (contracts/metatx.md#transitional-built)
 Unwrapped(from, u, recipient, burned, out)	removed	P1b: v1-line-only text or replaced by the typed v2 path (contracts/metatx.md#transitional-built)
-_SUBJECT_CLONE_CODEHASH	removed	P1b: v1-line-only text or replaced by the typed v2 path (contracts/metatx.md#transitional-built)
+_SUBJECT_CLONE_CODEHASH	renamed	on the v2 line (SMART_KEY_ACCOUNT_IMPL, token-wrappers.md §8); kept on v1 MetaToken until P1e
 _burn(from, burned)	removed	P1b: v1-line-only text or replaced by the typed v2 path (contracts/metatx.md#transitional-built)
 _execute(MetaTransaction memory m, bytes calldata sig)	removed	P1b: v1-line-only text or replaced by the typed v2 path (contracts/metatx.md#transitional-built)
 _nameFallback	removed	P1b: v1-line-only text or replaced by the typed v2 path (contracts/metatx.md#transitional-built)

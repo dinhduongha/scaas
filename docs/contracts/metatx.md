@@ -59,7 +59,7 @@ fields instead of 32 opaque bytes. The pinned typehash below is the only payment
 (65 bytes, low-s).
 
 <a id="CTR-MTX-07"></a>**CTR-MTX-07** — **One meta-tx tree: `MetaTxBase`, `ERC20MetaTx`, `MetaTokenBase`.** The meta-transaction base of
-every SCaaS EVM and Hedera token is the abstract contract `ERC20MetaTx` (the built `MetaTxCore`, renamed) on the
+every SCaaS EVM and Hedera token is the abstract contract `ERC20MetaTx` (P1b: a new file on `MetaTxBase`; `MetaTxCore` is removed, its text is in `legacy/`) on the
 generic `MetaTxBase` ([CTR-MTX-22](#CTR-MTX-22)): it adds the fee in this token (`_chargeFee`, `FeePolicy`), the typed
 `MetaTransfer` path (`mtxExecuteTransfer`, `mtxBatchTransfer`, [CTR-MTX-23](#CTR-MTX-23), [CTR-MTX-24](#CTR-MTX-24)),
 `payLane`, `mtxTrade`/cancels ([dex.md](dex.md#CTR-DEX-15)), the allowance rule
@@ -73,7 +73,7 @@ the approve rule and the UA ledger; `MetaTokenBase` holds receiver-pays (`mtxPay
 (`PayLib`), features and roles (`AdminLib`), init and provenance. Trade and pay live in `MetaTokenBase`, **not** in
 `ERC20MetaTx`. The kinds (`NoUnderlyingToken`, `UnderlyingToken`, and the two Zether kinds) sit on `MetaTokenBase`;
 Hedera is the immutable `IS_HEDERA` ([CTR-TOK-23](token-wrappers.md#CTR-TOK-23)), not a child contract.
-The v1 line (the built `ERC20MetaTx` mixin, `MetaToken`, `HederaMetaToken` and factory v1) is removed from the product; kept for reference under the tag `ref/pre-token-tree` and `smartcontracts/evm/legacy/` (not built): issuer tokens
+The v1 line (the built `ERC20MetaTxV1` mixin, `MetaToken`, `HederaMetaToken` and factory v1) is removed from the product; kept for reference under the tag `ref/pre-token-tree` and `smartcontracts/evm/legacy/` (not built): issuer tokens
 use `NoUnderlyingToken`, 1:1 wrappers use an `UnderlyingToken` with one leg and `num = den = 1`; Zether's separate mixin
 `ZetherMetaTx` disappears into the base, and so does `PqzToken`'s `PqzMetaTx` ([CTR-PQZ-21](pq-zether.md#CTR-PQZ-21)).
 One domain version, `"1"`, for every token.

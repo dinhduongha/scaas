@@ -692,8 +692,8 @@ and `roles`.
 
 <a id="transitional-built-tokens"></a>
 
-**Transitional (BUILT).** Built: the v1 line (`ERC20MetaTx` mixin, `MetaToken`, `HederaMetaToken`, v1 `OpenFactory`,
-`MetaTxDex`), the v2 line (`MetaTxCore`/`MetaTokenBase`, `SingleUnderlyingToken`/`MultiUnderlyingToken`, three Hedera
+**Transitional (BUILT).** Built: the v1 line (`ERC20MetaTxV1` mixin, `MetaToken`, `HederaMetaToken`, v1 `OpenFactory`,
+`MetaTxDex`), the v2 line (`ERC20MetaTx`/`MetaTokenBase`, `SingleUnderlyingToken`/`MultiUnderlyingToken`, three Hedera
 children) and `OpenFactoryV2.createTiered`; replaced in P1 — removed from the product; kept for reference under the tag `ref/pre-token-tree` and `smartcontracts/evm/legacy/` (not built). The rest of this section is that built factory; the enum
 and the kind-count table below are the built `TokenKind` (`META`, `ZETHER`, `META_NONE`, `META_SINGLE`, `META_MULTI`),
 superseded by [CTR-TOK-21](#CTR-TOK-21). The built factory fixed `META_NONE = 2`, `META_SINGLE = 3`,
