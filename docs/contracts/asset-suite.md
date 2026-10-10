@@ -79,6 +79,8 @@ flags 5–8 in `initialize` (`FeatureInvalidForKind`; the token validates, not t
 can be frozen (stuck) but not seized on public chains. Otherwise every control combination would need its own
 implementation.
 
+**Transitional (BUILT, P1c).** The flags exist; `initialize` refuses 5–8 with `FeatureNotBuilt` until this stream builds the controls.
+
 <a id="regulated-exception"></a>
 <a id="CTR-AS-02"></a>**CTR-AS-02** — **Third exception to "Nobody alters a deployed token"** (owner;
 [CTR-TOK-10](token-wrappers.md#CTR-TOK-10)). Besides the rate admin and the guardian, the **regulated controls** of a

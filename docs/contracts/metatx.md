@@ -549,7 +549,8 @@ executeMetaTransaction(m,s)                    ≡ mtxExecute(m,s)              
 So: same digest, same events (`MetaTransactionExecuted`; `PaymentSettled` for `mtxPay`), same nonce space (a
 signature consumed through one path fails `MetaTxBadNonce` on the other), same KAT. A named function never accepts an
 intent that the generic path would refuse, and refuses some the generic path accepts (wrong shape), never the other
-way round. The gasless unwrap has no named function: it is `mtxExecute` with the real `unwrap` calldata
+way round. Gas (P1c): named `mtxTransfer` is +9 execution gas over `mtxExecuteTransfer` (33,681 vs 33,672; logged, not
+asserted), and `mtxPay` on a fresh lane is +2.6 k (56,182 vs 53,568), the `PAYABLE` gate's cold SLOAD. The gasless unwrap has no named function: it is `mtxExecute` with the real `unwrap` calldata
 ([CTR-MTX-12](#CTR-MTX-12)).
 
 `fee` is not canonicalised under fee mode `NONE` (only `relayer`/`feeRecipient` are, by `canon`): a struct signed
@@ -903,6 +904,10 @@ named in brackets). The v2 tiers run on the new tree (last bullet).
   does; the earlier gas deltas (≈ 660, 140, 85) are replaced by the measurements in §10.
 - **P1b (BUILT):** the v2 tiers run on `ERC20MetaTx` / `MetaTxBase` — typed path, allowlists, fee classes,
   receiver-pays (`TransferToSelf` refuses the token as fee recipient before the payer pipeline); not yet:
-  features/roles/`PayLib` (P1c), `UnderlyingToken` (P1d), factory/deployer (P1e), UA ledger (UA F-stream, owner ruling).
+  `UnderlyingToken` (P1d), factory/deployer (P1e), UA ledger (UA F-stream, owner ruling).
   Wrapper tiers `Single`/`Multi` and their Hedera children exceed EIP-170 until P1d (controller ruling 2026-10-09,
   pending the owner, HANDOFF); the deploy scripts deploy only `META_NONE` until then.
+- **P1c (BUILT):** `MetaTokenBase` on `AdminLib` (namespace `scaas.token`; `ITokenAdmin` carries the admin functions, events
+  and errors): flags, owner and roles on kind `NONE`; `mtxPay`, `payWithFee` and `mtxPayReceiverFee` are gated by `PAYABLE`
+  and stay inline (no `PayLib`, controller ruling, pending the owner); `MetaTransfer` is never gated; `IS_HEDERA` with
+  `HederaLib` replaces the `NONE` Hedera child.

@@ -1,5 +1,27 @@
 # HANDOFF — scaas
 
+## Session 2026-10-10 (P1c)
+
+**State:** P1c complete on branch `p1c-metatokenbase`, not yet merged (791 forge tests, e2e 4/4 + e2e_hedera 1/1, KAT vectors
+unchanged, docs checker 0 errors). Base `d827062`; not pushed.
+
+**P1c delivered:** `AdminLib` (flags, owner, roles in `scaas.token`; CTR-TOK-22) with all events and errors in the new
+`ITokenAdmin` (`src/metatx/ITokenAdmin.sol`), so they are in the token ABI; new `RoleAccountZero(uint8)`. `MetaTokenBase`
+on `AdminLib`: `PAYABLE` gate on `mtxPay`/`payWithFee`/`mtxPayReceiverFee`, ERC-165, `IS_HEDERA`. `HederaLib` replaces
+`HederaV2Lib` (`requireValid` public view, linked); `HederaNoUnderlyingToken` deleted. `NoUnderlyingToken` uses the
+`MINTABLE`/`BURNABLE` flags and roles (no `minter()`, `MinterRenounced`, `NotMinter`). Wrappers report legacy powers as flags (C5).
+`test/v2/Features.t.sol` (13 tests).
+
+**Rulings for the owner:** C1 own `AdminLib`, not OZ `AccessControlDefaultAdminRules` (two-step owner, no delay); C2 flags
+5–8 refused at init with `FeatureNotBuilt` until the asset suite; C3 no external `PayLib` (pay is inline over the
+`MetaTransfer` core, gated by `PAYABLE`; +2.6 k gas on a fresh lane); C9 NONE has 442 B left, P2 must find room;
+`ITokenAdmin` carries the admin functions, events and errors; `RoleAccountZero` refuses granting a role to address 0.
+
+**Sizes (runtime B):** `NoUnderlyingToken` 20,038 (<= 20,480); over EIP-170: `Single` 28,296, `Multi` 29,147, `HederaSingle`
+29,201, `HederaMulti` 30,052, `ZetherToken` 28,849 (until P1d); `AdminLib` 3,403, `HederaLib` 753.
+
+**Next action:** write the **P1d** plan (`UnderlyingLib` + `UnderlyingToken`).
+
 ## Shutdown 2026-10-10 — read this first
 
 **State:** P1b merged into `main` as `fb2a234` (branch `p1b-erc20metatx`, 758 forge tests, e2e 4/4 + e2e_hedera 1/1); not pushed.
