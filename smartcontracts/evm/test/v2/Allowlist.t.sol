@@ -6,12 +6,12 @@ import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
-import {SingleUnderlyingToken} from "../../src/metatx/SingleUnderlyingToken.sol";
-import {MultiUnderlyingToken} from "../../src/metatx/MultiUnderlyingToken.sol";
+import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
+import {IUnderlyingToken} from "../../src/metatx/IUnderlyingToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
-import {noneInit} from "./helpers/V2Fixture.sol";
+import {noneInit, underlyingInit, Rate} from "./helpers/V2Fixture.sol";
 import {FeePolicy} from "../../src/common/FeePolicy.sol";
 import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
 
@@ -21,7 +21,7 @@ contract ReenteringERC20 is MockERC20 {
     constructor() MockERC20("Re", "RE", 6) {}
     function arm(address t) external { target = t; }
     function transferFrom(address from, address to, uint256 v) public override returns (bool) {
-        if (target != address(0)) SingleUnderlyingToken(target).wrap(1);
+        if (target != address(0)) UnderlyingToken(target).wrap(1);
         return super.transferFrom(from, to, v);
     }
 }
@@ -38,8 +38,8 @@ contract AllowlistTest is Test {
     uint32 internal constant PCT = MetaTxLib.MODE_FEE_PERCENT;
 
     NoUnderlyingToken internal none;
-    SingleUnderlyingToken internal single;
-    MultiUnderlyingToken internal multi;
+    UnderlyingToken internal single;
+    UnderlyingToken internal multi;
     MockERC20 internal u;
     MockERC20 internal u2;
 
@@ -51,19 +51,22 @@ contract AllowlistTest is Test {
         none = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), UID, false))));
         none.initialize(address(this), new address[](0), 1,
             abi.encode(noneInit("P", "P", 6, 0, address(this), address(this))));
-        single = SingleUnderlyingToken(
-            Clones.clone(address(new SingleUnderlyingToken(address(this), address(0), UID, false))));
-        SingleUnderlyingToken.RateConfig memory cfg;
+        single = UnderlyingToken(
+            Clones.clone(address(new UnderlyingToken(address(this), address(0), UID, false))));
+        Rate memory cfg;
         address[] memory one = new address[](1);
         one[0] = address(u);
-        single.initialize(address(this), one, 1, abi.encode("W", "W", uint8(6), uint256(1), uint256(1), cfg));
-        multi = MultiUnderlyingToken(
-            Clones.clone(address(new MultiUnderlyingToken(address(this), address(0), UID, false))));
+        uint256[] memory r1 = new uint256[](1);
+        r1[0] = 1;
+        single.initialize(address(this), one, 1,
+            abi.encode(underlyingInit(one, r1, r1, 6, cfg, address(0), address(0))));
+        multi = UnderlyingToken(
+            Clones.clone(address(new UnderlyingToken(address(this), address(0), UID, false))));
         address[] memory two = new address[](2);
         (two[0], two[1]) = (address(u), address(u2));
         uint256[] memory r = new uint256[](2);
         (r[0], r[1]) = (1, 1);
-        multi.initialize(address(this), two, 1, abi.encode("M", "M", uint8(6), r, r, cfg, address(0)));
+        multi.initialize(address(this), two, 1, abi.encode(underlyingInit(two, r, r, 6, cfg, address(0), address(0))));
         none.mint(alice, 1_000e6);
         u.mint(alice, 1_000e6);
         u2.mint(alice, 1_000e6);
@@ -121,25 +124,26 @@ contract AllowlistTest is Test {
         _pin(address(none), s, c, new uint8[](2));
     }
 
-    function test_single_allowlistPinned() public view {
-        bytes4[] memory s = new bytes4[](4);
-        uint8[] memory c = new uint8[](4);
+    /// P1d: one implementation for 1–8 legs, so one list (the single-asset ABI and the per-leg ABI).
+    function _pinUnderlying(address t) internal view {
+        bytes4[] memory s = new bytes4[](6);
+        uint8[] memory c = new uint8[](6);
+        uint8[] memory a = new uint8[](6);
         (s[0], c[0]) = (IMetaTx.cancelNonce.selector, 1);
         (s[1], c[1]) = (bytes4(keccak256("wrap(uint256)")), 1);
         (s[2], c[2]) = (bytes4(keccak256("unwrap(uint256,address,uint256)")), 2);
-        (s[3], c[3]) = (bytes4(keccak256("addReserve(address,uint256)")), 1);
-        _pin(address(single), s, c, new uint8[](4));
+        (s[3], c[3]) = (bytes4(keccak256("wrap(address,uint256)")), 1);
+        (s[4], c[4], a[4]) = (bytes4(keccak256("unwrap(address,uint256,address,uint256)")), 2, 1);
+        (s[5], c[5]) = (bytes4(keccak256("addReserve(address,uint256)")), 1);
+        _pin(t, s, c, a);
+    }
+
+    function test_single_allowlistPinned() public view {
+        _pinUnderlying(address(single));
     }
 
     function test_multi_allowlistPinned() public view {
-        bytes4[] memory s = new bytes4[](4);
-        uint8[] memory c = new uint8[](4);
-        uint8[] memory a = new uint8[](4);
-        (s[0], c[0]) = (IMetaTx.cancelNonce.selector, 1);
-        (s[1], c[1]) = (bytes4(keccak256("wrap(address,uint256)")), 1);
-        (s[2], c[2], a[2]) = (bytes4(keccak256("unwrap(address,uint256,address,uint256)")), 2, 1);
-        (s[3], c[3]) = (bytes4(keccak256("addReserve(address,uint256)")), 1);
-        _pin(address(multi), s, c, a);
+        _pinUnderlying(address(multi));
     }
 
     // ------------------------------------------------------------------ every listed selector runs
@@ -154,11 +158,14 @@ contract AllowlistTest is Test {
         _run(address(single), abi.encodeCall(IMetaTx.cancelNonce, (99)));
         _run(address(single), abi.encodeWithSignature("wrap(uint256)", 10e6));
         _run(address(single), abi.encodeWithSignature("unwrap(uint256,address,uint256)", 1e6, alice, 1e6));
+        _run(address(single), abi.encodeWithSignature("wrap(address,uint256)", address(u), 10e6));
+        _run(address(single), abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(u), 1e6, alice, 0));
         _run(address(single), abi.encodeWithSignature("addReserve(address,uint256)", address(u), 1e6));
-        assertEq(single.balanceOf(alice), 18e6);
-        assertEq(u.balanceOf(address(single)), 20e6);       // 20 wrapped − 2 unwrapped + 2 by addReserve
+        assertEq(single.balanceOf(alice), 36e6);
+        assertEq(u.balanceOf(address(single)), 38e6);       // 40 wrapped − 4 unwrapped + 2 by addReserve
     }
 
+    /// The single-asset entries are listed but revert `UnderlyingRequired` with two legs.
     function test_multi_everyListedSelectorRuns() public {
         _run(address(multi), abi.encodeCall(IMetaTx.cancelNonce, (99)));
         _run(address(multi), abi.encodeWithSignature("wrap(address,uint256)", address(u2), 10e6));
@@ -202,29 +209,21 @@ contract AllowlistTest is Test {
         _crossCheck(address(none), k, b);
     }
 
-    function test_single_classAndBasisMatchTheRule() public {
+    /// P1d: one implementation, so one rule for every leg count; all six entries need a one-leg token (with more
+    /// legs the single-asset rows revert `UnderlyingRequired` before the AMOUNT cap is checked).
+    function test_underlying_classAndBasisMatchTheRule() public {
         vm.prank(alice);
         single.wrap(10e6);
-        bytes[] memory k = new bytes[](4);
-        uint256[] memory b = new uint256[](4);
+        bytes[] memory k = new bytes[](6);
+        uint256[] memory b = new uint256[](6);
         k[0] = abi.encodeCall(IMetaTx.cancelNonce, (99));
         k[1] = abi.encodeWithSignature("wrap(uint256)", 10e6);
         (k[2], b[2]) = (abi.encodeWithSignature("unwrap(uint256,address,uint256)", 3e6, alice, 1e6), 3e6);
-        k[3] = abi.encodeWithSignature("addReserve(address,uint256)", address(u), 1e6);
-        _crossCheck(address(single), k, b);
-    }
-
-    function test_multi_classAndBasisMatchTheRule() public {
-        vm.prank(alice);
-        multi.wrap(address(u2), 10e6);
-        bytes[] memory k = new bytes[](4);
-        uint256[] memory b = new uint256[](4);
-        k[0] = abi.encodeCall(IMetaTx.cancelNonce, (99));
-        k[1] = abi.encodeWithSignature("wrap(address,uint256)", address(u2), 10e6);
+        k[3] = abi.encodeWithSignature("wrap(address,uint256)", address(u), 10e6);
         // basis = arg 1 (`wrapped`), not arg 0 (an address) or arg 3 (`minOut`)
-        (k[2], b[2]) = (abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(u2), 3e6, alice, 1e6), 3e6);
-        k[3] = abi.encodeWithSignature("addReserve(address,uint256)", address(u), 1e6);
-        _crossCheck(address(multi), k, b);
+        (k[4], b[4]) = (abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(u), 3e6, alice, 1e6), 3e6);
+        k[5] = abi.encodeWithSignature("addReserve(address,uint256)", address(u), 1e6);
+        _crossCheck(address(single), k, b);
     }
 
     // ------------------------------------------------------------------ never allowlisted
@@ -257,16 +256,14 @@ contract AllowlistTest is Test {
         _refused(address(single), abi.encodeWithSignature("proposeRate(address,uint96,uint96)", address(u), 1, 1));
         _refused(address(single), abi.encodeWithSignature("cancelRate()"));
         _refused(address(single), abi.encodeWithSignature("executeRate()"));
-        _refused(address(single), abi.encodeWithSignature("renounceRateAdmin()"));
-        _refused(address(multi), abi.encodeWithSignature("wrap(uint256)", 1));
+        _refused(address(single), abi.encodeCall(ITokenAdmin.renounceRole, (3)));
         _refused(address(multi), abi.encodeWithSignature("unwrap(uint256,address)", 1, alice));
-        _refused(address(multi), abi.encodeWithSignature("unwrap(uint256,address,uint256)", 1, alice, 0));
         _refused(address(multi), abi.encodeWithSignature("proposeRate(address,uint96,uint96)", address(u), 1, 1));
         _refused(address(multi), abi.encodeWithSignature("cancelRate()"));
         _refused(address(multi), abi.encodeWithSignature("executeRate()"));
-        _refused(address(multi), abi.encodeWithSignature("renounceRateAdmin()"));
+        _refused(address(multi), abi.encodeCall(ITokenAdmin.renounceRole, (3)));
         _refused(address(multi), abi.encodeWithSignature("disableWrap(address,bytes32)", address(u), bytes32(0)));
-        _refused(address(multi), abi.encodeWithSignature("renounceGuardian()"));
+        _refused(address(multi), abi.encodeCall(ITokenAdmin.renounceRole, (4)));
     }
 
     function test_wrongStaticLength_refused() public {
@@ -295,19 +292,21 @@ contract AllowlistTest is Test {
         (MetaTxLib.MetaTransaction memory m, bytes memory sig) =
             _m(address(single), abi.encodeWithSignature("unwrap(uint256,address,uint256)", 1e6, alice, 2e6), RR, 0);
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(SingleUnderlyingToken.UnwrapBelowMin.selector, 1e6, 2e6));
+        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnwrapBelowMin.selector, 1e6, 2e6));
         single.mtxExecute(m, sig);
         assertEq(single.mtxNonce(alice, m.batch), 0);
     }
 
     function test_reentryFromUnderlyingHook_reverts() public {
         ReenteringERC20 bad = new ReenteringERC20();
-        SingleUnderlyingToken w = SingleUnderlyingToken(
-            Clones.clone(address(new SingleUnderlyingToken(address(this), address(0), UID, false))));
-        SingleUnderlyingToken.RateConfig memory cfg;
+        UnderlyingToken w = UnderlyingToken(
+            Clones.clone(address(new UnderlyingToken(address(this), address(0), UID, false))));
+        Rate memory cfg;
         address[] memory one = new address[](1);
         one[0] = address(bad);
-        w.initialize(address(this), one, 1, abi.encode("W", "W", uint8(6), uint256(1), uint256(1), cfg));
+        uint256[] memory r1 = new uint256[](1);
+        r1[0] = 1;
+        w.initialize(address(this), one, 1, abi.encode(underlyingInit(one, r1, r1, 6, cfg, address(0), address(0))));
         bad.mint(alice, 10e6);
         vm.prank(alice);
         bad.approve(address(w), 10e6);

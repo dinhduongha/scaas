@@ -4,19 +4,16 @@
     "_allowances",
     "_totalSupply",
     "_name",
-    "_symbol",
-    "_legCount"
+    "_symbol"
   ],
   "slots": [
     "0",
     "1",
     "2",
     "3",
-    "4",
-    "5"
+    "4"
   ],
   "offsets": [
-    0,
     0,
     0,
     0,

@@ -245,9 +245,11 @@ contract OpenFactoryV2 is IOpenFactoryV2 {
         bytes calldata initData, bytes32 salt) private returns (address token)
     {
         uint256 n = underlyings.length;
-        if (kind == TokenKind.META_NONE ? n != 0 : kind == TokenKind.META_SINGLE ? n != 1 : n < 2 || n > MAX_LEGS) {
-            revert UnderlyingCountInvalid(n);
-        }
+        // Transitional (P1d): `META_SINGLE` is kind UNDERLYING (`UnderlyingToken`, 1–8 legs); nothing implements
+        // `META_MULTI` any more. P1e replaces the enum (CTR-TOK-25).
+        bool countBad = kind == TokenKind.META_NONE ? n != 0
+            : kind == TokenKind.META_SINGLE ? n == 0 || n > MAX_LEGS : n < 2 || n > MAX_LEGS;
+        if (countBad) revert UnderlyingCountInvalid(n);
         token = _clone(impl, salt);
         IFactoryTokenV2(token).initialize(msg.sender, underlyings, version, initData);
         _info[token] = Info({creator: msg.sender, kind: kind, version: version, exists: true});

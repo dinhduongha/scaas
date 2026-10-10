@@ -8,8 +8,8 @@ import {AdminLib} from "../../../src/metatx/AdminLib.sol";
 import {IOpenFactoryV2} from "../../../src/common/IOpenFactoryV2.sol";
 import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 import {NoUnderlyingToken} from "../../../src/metatx/NoUnderlyingToken.sol";
-import {SingleUnderlyingToken} from "../../../src/metatx/SingleUnderlyingToken.sol";
-import {MultiUnderlyingToken} from "../../../src/metatx/MultiUnderlyingToken.sol";
+import {UnderlyingToken} from "../../../src/metatx/UnderlyingToken.sol";
+import {IUnderlyingToken} from "../../../src/metatx/IUnderlyingToken.sol";
 
 bytes32 constant UID_ = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
 
@@ -48,6 +48,34 @@ function noneInit(string memory n, string memory s, uint8 d, uint256 supply, add
     c.initialHolder = holder;
 }
 
+/// Test-side rate setup (the shape of the removed `Rate`): `adjustable` sets
+/// `RATE_ADJUSTABLE` and grants `rateAdmin` the role.
+struct Rate {
+    bool adjustable;
+    address rateAdmin;
+    uint32 rateDelay;
+    uint16 maxRateStepBps;
+}
+
+/// `UnderlyingInit` for legs `us` at `nums/dens`: `PAYABLE` (as built), `RATE_ADJUSTABLE` with `cfg.adjustable`,
+/// `WRAP_DISABLEABLE` with a non-zero `guardian`; nothing locked; `owner` (0 = none).
+function underlyingInit(address[] memory us, uint256[] memory nums, uint256[] memory dens, uint8 dec, Rate memory cfg,
+    address guardian, address owner) pure returns (IUnderlyingToken.UnderlyingInit memory c)
+{
+    c.name = "Wrapped";
+    c.symbol = "WRP";
+    c.decimals = dec;
+    c.features = 1 << AdminLib.PAYABLE;
+    if (cfg.adjustable) c.features |= 1 << AdminLib.RATE_ADJUSTABLE;
+    if (guardian != address(0)) c.features |= 1 << AdminLib.WRAP_DISABLEABLE;
+    c.owner = owner;
+    c.roles.rateAdmin = cfg.rateAdmin;
+    c.roles.guardian = guardian;
+    c.legs = new IUnderlyingToken.LegInit[](us.length);
+    for (uint256 i; i < us.length; ++i) c.legs[i] = IUnderlyingToken.LegInit(us[i], nums[i], dens[i]);
+    c.rate = IUnderlyingToken.RateConfig(cfg.rateDelay, cfg.maxRateStepBps);
+}
+
 /// ERC-1271 đốt ~100k gas rồi trả magic: qua được với 400k, không qua với 50k.
 contract GasBurner1271 {
     function isValidSignature(bytes32, bytes calldata) external view returns (bytes4) {
@@ -79,7 +107,9 @@ abstract contract V2Fixture is Test {
     }
 
     address internal noneImpl;
-    address internal singleImpl;
+    address internal underlyingImpl;
+    /// Owner the fixture gives every wrapper it builds (`disableFeature`, `grantRole` in tests).
+    address internal wrapperOwner = address(0x0A11);
 
     function _none(address creator_, uint256 supply, address minter) internal returns (NoUnderlyingToken) {
         if (noneImpl == address(0)) {
@@ -89,44 +119,52 @@ abstract contract V2Fixture is Test {
             abi.encode(noneInit("Points", "PTS", 0, supply, creator_, minter))));
     }
 
-    function _fixedRate() internal pure returns (SingleUnderlyingToken.RateConfig memory c) {}
+    function _fixedRate() internal pure returns (Rate memory c) {}
 
-    function _adjustable(address admin) internal pure returns (SingleUnderlyingToken.RateConfig memory c) {
-        c = SingleUnderlyingToken.RateConfig({adjustable: true, rateAdmin: admin, rateDelay: 7 days, maxRateStepBps: 100});
+    function _adjustable(address admin) internal pure returns (Rate memory c) {
+        c = Rate({adjustable: true, rateAdmin: admin, rateDelay: 7 days, maxRateStepBps: 100});
     }
 
-    function _singleInit(uint8 dec, uint256 num, uint256 den, SingleUnderlyingToken.RateConfig memory cfg)
-        internal pure returns (bytes memory)
-    {
-        return abi.encode("Wrapped", "WRP", dec, num, den, cfg);
+    function _one(address a) internal pure returns (address[] memory us) {
+        us = new address[](1);
+        us[0] = a;
     }
 
-    function _single(address u, uint8 dec, uint256 num, uint256 den, SingleUnderlyingToken.RateConfig memory cfg)
-        internal returns (SingleUnderlyingToken)
+    function _oneU(uint256 x) internal pure returns (uint256[] memory xs) {
+        xs = new uint256[](1);
+        xs[0] = x;
+    }
+
+    /// `abi.encode(UnderlyingInit)` for one leg `u`.
+    function _singleInit(address u, uint8 dec, uint256 num, uint256 den, Rate memory cfg)
+        internal view returns (bytes memory)
     {
-        if (singleImpl == address(0)) {
-            singleImpl = address(new SingleUnderlyingToken(address(this), address(0), UID_, false));
+        return abi.encode(underlyingInit(_one(u), _oneU(num), _oneU(den), dec, cfg, address(0), wrapperOwner));
+    }
+
+    function _underlyingImpl() internal returns (address) {
+        if (underlyingImpl == address(0)) {
+            underlyingImpl = address(new UnderlyingToken(address(this), address(0), UID_, false));
         }
-        address[] memory us = new address[](1);
-        us[0] = u;
-        return SingleUnderlyingToken(_clone(singleImpl, address(this), us, _singleInit(dec, num, den, cfg)));
+        return underlyingImpl;
     }
 
-    address internal multiImpl;
-
-    function _multiInit(uint256[] memory nums, uint256[] memory dens, SingleUnderlyingToken.RateConfig memory cfg,
-        address guardian) internal pure returns (bytes memory)
+    function _single(address u, uint8 dec, uint256 num, uint256 den, Rate memory cfg)
+        internal returns (UnderlyingToken)
     {
-        return abi.encode("Any USD", "aUSD", uint8(18), nums, dens, cfg, guardian);
+        return UnderlyingToken(_clone(_underlyingImpl(), address(this), _one(u), _singleInit(u, dec, num, den, cfg)));
     }
 
-    function _multi(address[] memory us, uint256[] memory nums, uint256[] memory dens,
-        SingleUnderlyingToken.RateConfig memory cfg, address guardian) internal returns (MultiUnderlyingToken)
+    function _multiInit(address[] memory us, uint256[] memory nums, uint256[] memory dens, Rate memory cfg,
+        address guardian) internal view returns (bytes memory)
     {
-        if (multiImpl == address(0)) {
-            multiImpl = address(new MultiUnderlyingToken(address(this), address(0), UID_, false));
-        }
-        return MultiUnderlyingToken(_clone(multiImpl, address(this), us, _multiInit(nums, dens, cfg, guardian)));
+        return abi.encode(underlyingInit(us, nums, dens, 18, cfg, guardian, wrapperOwner));
+    }
+
+    function _multi(address[] memory us, uint256[] memory nums, uint256[] memory dens, Rate memory cfg,
+        address guardian) internal returns (UnderlyingToken)
+    {
+        return UnderlyingToken(_clone(_underlyingImpl(), address(this), us, _multiInit(us, nums, dens, cfg, guardian)));
     }
 
     /// A `MetaTransfer` from `from` on lane `batch`, nonce 0, valid 300 s, relayer `relayer`, no fee.
