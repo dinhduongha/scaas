@@ -245,7 +245,7 @@ contract MetaTxGasV2Test is Test {
         uint256 gn = _measure(address(v2), cn);
         console.log("P pay, fresh lane  v1 op / v2 mtxExecuteTransfer / mtxPay", g1, g2, gn);
         assertLe(g2, g1 + BUDGET);
-        // no longer holds on `ERC20MetaTx` (mtxPay ≈ +255 over mtxExecuteTransfer): logged, not asserted
+        // no longer holds on `ERC20MetaTx` (mtxPay ≈ +2.6k over mtxExecuteTransfer on a fresh lane: the PAYABLE gate's cold SLOAD): logged, not asserted
         emit log_named_uint("P mtxPay", gn);
         emit log_named_uint("P mtxExecuteTransfer", g2);
     }
