@@ -238,7 +238,9 @@ contract Tier2Test is V2Fixture {
     // ------------------------------------------------------------------ init refusals
 
     function initExt(address[] memory us, bytes memory d) external returns (address) {
-        if (singleImpl == address(0)) singleImpl = address(new SingleUnderlyingToken(address(this), address(0), UID_));
+        if (singleImpl == address(0)) {
+            singleImpl = address(new SingleUnderlyingToken(address(this), address(0), UID_, false));
+        }
         return _clone(singleImpl, address(this), us, d);
     }
 
@@ -291,7 +293,7 @@ contract Tier2Test is V2Fixture {
     }
 
     function test_initRefusesItselfAsUnderlying() public {
-        singleImpl = address(new SingleUnderlyingToken(address(this), address(0), UID_));
+        singleImpl = address(new SingleUnderlyingToken(address(this), address(0), UID_, false));
         address predicted = Clones.predictDeterministicAddress(singleImpl, bytes32("self"));
         address c = Clones.cloneDeterministic(singleImpl, bytes32("self"));
         assertEq(c, predicted);

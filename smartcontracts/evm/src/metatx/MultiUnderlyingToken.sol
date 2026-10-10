@@ -19,7 +19,7 @@ import {IOpenFactoryV2} from "../common/IOpenFactoryV2.sol";
 contract MultiUnderlyingToken is SingleUnderlyingToken {
     uint256 internal constant MAX_LEGS = 8;
 
-    /// @dev Slot 12.
+    /// @dev Slot 10.
     address public guardian;
 
     event WrapDisabled(address indexed underlying, address indexed guardian, bytes32 reason);
@@ -31,8 +31,8 @@ contract MultiUnderlyingToken is SingleUnderlyingToken {
     bytes4 internal constant SEL_WRAP_LEG = bytes4(keccak256("wrap(address,uint256)"));
     bytes4 internal constant SEL_UNWRAP_LEG = bytes4(keccak256("unwrap(address,uint256,address,uint256)"));
 
-    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_)
-        SingleUnderlyingToken(factory_, smartKeyAccountImpl_, chainUid_)
+    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, bool isHedera_)
+        SingleUnderlyingToken(factory_, smartKeyAccountImpl_, chainUid_, isHedera_)
     {}
 
     function tokenKind() external pure override returns (IOpenFactoryV2.TokenKind) {
@@ -51,6 +51,7 @@ contract MultiUnderlyingToken is SingleUnderlyingToken {
         if (dens.length != n) revert UnderlyingCountInvalid(dens.length);
         _setMetadata(nm, sy, d);
         _setRateConfig(cfg);
+        _initLegacyFeatures(guardian_ != address(0));
         for (uint256 i; i < n; ++i) _addLeg(underlyings[i], nums[i], dens[i]);
         guardian = guardian_;
     }

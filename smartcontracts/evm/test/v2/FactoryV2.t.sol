@@ -9,7 +9,7 @@ import {SingleUnderlyingToken} from "../../src/metatx/SingleUnderlyingToken.sol"
 import {MultiUnderlyingToken} from "../../src/metatx/MultiUnderlyingToken.sol";
 import {MetaToken} from "../../src/metatx/MetaToken.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
-import {UID_} from "./helpers/V2Fixture.sol";
+import {UID_, noneInit} from "./helpers/V2Fixture.sol";
 
 /// T4: factory v2 (TW2 §9, R130).
 contract FactoryV2Test is Test {
@@ -32,9 +32,9 @@ contract FactoryV2Test is Test {
 
     function setUp() public {
         f = new OpenFactoryV2(registrar);
-        noneImpl = new NoUnderlyingToken(address(f), address(0), UID_);
-        singleImpl = new SingleUnderlyingToken(address(f), address(0), UID_);
-        multiImpl = new MultiUnderlyingToken(address(f), address(0), UID_);
+        noneImpl = new NoUnderlyingToken(address(f), address(0), UID_, false);
+        singleImpl = new SingleUnderlyingToken(address(f), address(0), UID_, false);
+        multiImpl = new MultiUnderlyingToken(address(f), address(0), UID_, false);
         vm.startPrank(registrar);
         f.registerImplementation(NONE, 1, address(noneImpl));
         f.registerImplementation(SINGLE, 1, address(singleImpl));
@@ -51,8 +51,9 @@ contract FactoryV2Test is Test {
         for (uint256 i; i < n; ++i) us[i] = i < 3 ? pool[i] : address(new MockERC20("X", "X", 6));
     }
 
-    function _noneInit() internal pure returns (bytes memory) {
-        return abi.encode("Points", "PTS", uint8(0), uint256(1000), address(0));
+    /// 1000 to `holder` (the creator; before P1c the token minted to `creator`), no minter.
+    function _noneInit(address holder) internal pure returns (bytes memory) {
+        return abi.encode(noneInit("Points", "PTS", 0, 1000, holder, address(0)));
     }
 
     function _singleInit() internal pure returns (bytes memory) {
@@ -69,7 +70,7 @@ contract FactoryV2Test is Test {
 
     function test_createsEachTierWithProvenance() public {
         vm.prank(alice);
-        address a = f.createTiered(NONE, 1, new address[](0), _noneInit(), "s");
+        address a = f.createTiered(NONE, 1, new address[](0), _noneInit(alice), "s");
         assertEq(NoUnderlyingToken(a).balanceOf(alice), 1000);
         assertEq(NoUnderlyingToken(a).version(), 1);
         assertEq(NoUnderlyingToken(a).factory(), address(f));
@@ -95,7 +96,7 @@ contract FactoryV2Test is Test {
     function test_kindImpliesUnderlyingCount() public {
         bytes4 e = OpenFactoryV2.UnderlyingCountInvalid.selector;
         vm.expectRevert(abi.encodeWithSelector(e, 1));
-        f.createTiered(NONE, 1, _us(1), _noneInit(), "a");
+        f.createTiered(NONE, 1, _us(1), _noneInit(alice), "a");
         vm.expectRevert(abi.encodeWithSelector(e, 0));
         f.createTiered(SINGLE, 1, _us(0), _singleInit(), "a");
         vm.expectRevert(abi.encodeWithSelector(e, 2));
@@ -129,7 +130,7 @@ contract FactoryV2Test is Test {
         MetaToken v1 = new MetaToken(address(f), address(0));
         vm.expectRevert(abi.encodeWithSelector(e, NONE, META));
         f.registerImplementation(NONE, 2, address(v1));
-        NoUnderlyingToken foreign = new NoUnderlyingToken(address(0xBAD), address(0), UID_);
+        NoUnderlyingToken foreign = new NoUnderlyingToken(address(0xBAD), address(0), UID_, false);
         vm.expectRevert(abi.encodeWithSelector(OpenFactoryV2.ImplementationFactoryMismatch.selector, address(foreign)));
         f.registerImplementation(NONE, 2, address(foreign));
         // append-only, version 0 reserved
@@ -159,7 +160,7 @@ contract FactoryV2Test is Test {
     }
 
     function test_unregisteredTieredIsVersionZeroAndChecked() public {
-        SingleUnderlyingToken own = new SingleUnderlyingToken(address(f), address(0), UID_);
+        SingleUnderlyingToken own = new SingleUnderlyingToken(address(f), address(0), UID_, false);
         vm.prank(bob);
         address t = f.createTieredUnregistered(SINGLE, address(own), _us(1), _singleInit(), "u");
         (, uint64 v) = f.versionOf(t);
@@ -173,14 +174,14 @@ contract FactoryV2Test is Test {
 
     function test_saltIsScopedByCreator() public {
         vm.prank(alice);
-        address a = f.createTiered(NONE, 1, new address[](0), _noneInit(), "same");
+        address a = f.createTiered(NONE, 1, new address[](0), _noneInit(alice), "same");
         vm.prank(bob);
-        address b = f.createTiered(NONE, 1, new address[](0), _noneInit(), "same");
+        address b = f.createTiered(NONE, 1, new address[](0), _noneInit(bob), "same");
         assertTrue(a != b);
         assertEq(a, f.predictAddress(address(noneImpl), alice, "same"));
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactoryV2.SaltAlreadyUsed.selector, a));
-        f.createTiered(NONE, 1, new address[](0), _noneInit(), "same");
+        f.createTiered(NONE, 1, new address[](0), _noneInit(alice), "same");
     }
 
     function test_exactlyOneTieredTokenDeployedEvent() public {
@@ -208,10 +209,10 @@ contract FactoryV2Test is Test {
     }
 
     function test_implementationSizes() public view {
-        assertLe(address(noneImpl).code.length, 20_480); // CTR-TOK-24
+        assertLe(address(noneImpl).code.length, 20_480); // CTR-TOK-24 (measured 20,038)
         assertLe(address(f).code.length, 24_576);
-        // Transitional (R3): wrappers over EIP-170 until P1d (`UnderlyingLib`)
-        assertLe(address(singleImpl).code.length, 26_624);
-        assertLe(address(multiImpl).code.length, 27_648);
+        // Transitional (R3): wrappers over EIP-170 until P1d (`UnderlyingLib`); measured 28,296 / 29,147
+        assertLe(address(singleImpl).code.length, 28_672);
+        assertLe(address(multiImpl).code.length, 29_696);
     }
 }

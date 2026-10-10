@@ -72,7 +72,7 @@ contract Deploy is Script {
         require(uid != bytes32(0), "set CHAIN_UID (chain-uids.json)");
         // Transitional (R3): Single/Multi are over EIP-170 until P1d (UnderlyingToken + UnderlyingLib); only META_NONE
         // is deployed and registered, and the JSON has no implementation_meta_single/_multi keys.
-        address none = address(new NoUnderlyingToken(address(f), subjectImpl, uid));
+        address none = address(new NoUnderlyingToken(address(f), subjectImpl, uid, false));
         if (register) f.registerImplementation(IOpenFactoryV2.TokenKind.META_NONE, 1, none);
         vm.serializeAddress("deploy", "factory_v2", address(f));
         vm.serializeAddress("deploy", "implementation_meta_none", none);

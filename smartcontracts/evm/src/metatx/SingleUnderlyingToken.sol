@@ -6,6 +6,7 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {MetaTokenBase} from "./MetaTokenBase.sol";
+import {AdminLib} from "./AdminLib.sol";
 import {MetaTxBase} from "./MetaTxBase.sol";
 import {IMetaTx} from "./IMetaTx.sol";
 import {IOpenFactoryV2} from "../common/IOpenFactoryV2.sol";
@@ -55,10 +56,10 @@ contract SingleUnderlyingToken is MetaTokenBase {
     /// @notice Cửa sổ thực thi sau `eta`. Hết cửa sổ thì thay đổi coi như không có, ở mọi nơi.
     uint256 public constant RATE_WINDOW = 7 days;
 
-    mapping(uint256 => Leg) internal _legs;           // slot 8: mapping, không mảng — không SLOAD độ dài
-    mapping(address => uint256) internal _legIndex;   // slot 9: index + 1
-    PendingRate internal _pending;                    // slot 10
-    // slot 11 (đọc chỉ bởi hàm tỉ lệ)
+    mapping(uint256 => Leg) internal _legs;           // slot 6: mapping, không mảng — không SLOAD độ dài
+    mapping(address => uint256) internal _legIndex;   // slot 7: index + 1
+    PendingRate internal _pending;                    // slot 8
+    // slot 9 (đọc chỉ bởi hàm tỉ lệ)
     address public rateAdmin;
     uint32 public rateDelay;
     uint16 public maxRateStepBps;
@@ -104,8 +105,8 @@ contract SingleUnderlyingToken is MetaTokenBase {
     bytes4 internal constant SEL_UNWRAP_MIN = bytes4(keccak256("unwrap(uint256,address,uint256)"));
     bytes4 internal constant SEL_ADD_RESERVE = bytes4(keccak256("addReserve(address,uint256)"));
 
-    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_)
-        MetaTokenBase(factory_, smartKeyAccountImpl_, chainUid_)
+    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, bool isHedera_)
+        MetaTokenBase(factory_, smartKeyAccountImpl_, chainUid_, isHedera_)
     {}
 
     function tokenKind() external pure virtual override returns (IOpenFactoryV2.TokenKind) {
@@ -120,7 +121,19 @@ contract SingleUnderlyingToken is MetaTokenBase {
             abi.decode(initData, (string, string, uint8, uint256, uint256, RateConfig));
         _setMetadata(n, s, d);
         _setRateConfig(cfg);
+        _initLegacyFeatures(false);
         _addLeg(underlyings[0], num, den);
+    }
+
+    /// @dev Transitional (P1d replaces the wrapper tiers with `UnderlyingToken`): the rate admin and the guardian stay
+    ///      in this contract's storage and are not `AdminLib` roles; the flags only report them, locked, with
+    ///      `PAYABLE` on as built and no owner.
+    function _initLegacyFeatures(bool wrapDisableable) internal {
+        uint256 f = 1 << AdminLib.PAYABLE;
+        if (rateAdjustable) f |= 1 << AdminLib.RATE_ADJUSTABLE;
+        if (wrapDisableable) f |= 1 << AdminLib.WRAP_DISABLEABLE;
+        AdminLib.Roles memory none;
+        AdminLib.init(AdminLib.KIND_UNDERLYING, f, f, address(0), none);
     }
 
     function _setRateConfig(RateConfig memory cfg) internal {

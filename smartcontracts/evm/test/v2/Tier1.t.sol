@@ -2,9 +2,10 @@
 pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {V2Fixture, UID_} from "./helpers/V2Fixture.sol";
+import {V2Fixture, UID_, noneInit} from "./helpers/V2Fixture.sol";
 import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
+import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IOpenFactoryV2} from "../../src/common/IOpenFactoryV2.sol";
@@ -23,7 +24,7 @@ contract Tier1Test is V2Fixture {
         NoUnderlyingToken t = _none(address(this), 500, minter);
         assertEq(t.balanceOf(address(this)), 500);
         assertEq(t.totalSupply(), 500);
-        assertEq(t.minter(), minter);
+        assertTrue(t.hasRole(1, minter));
         assertEq(t.decimals(), 0);
         assertEq(uint8(t.tokenKind()), uint8(IOpenFactoryV2.TokenKind.META_NONE));
     }
@@ -34,28 +35,32 @@ contract Tier1Test is V2Fixture {
         t.mint(bob, 7);
         assertEq(t.balanceOf(bob), 7);
         vm.prank(bob);
-        vm.expectRevert(NoUnderlyingToken.NotMinter.selector);
+        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.MissingRole.selector, uint8(1), bob));
         t.mint(bob, 1);
     }
 
-    function test_zeroMinterMeansFixedSupply() public {
-        NoUnderlyingToken t = _none(address(this), 100, address(0));
+    /// P1c: "zero minter means fixed supply" is now "no `MINTABLE` flag".
+    function test_noMintableMeansFixedSupply() public {
+        noneImpl = address(new NoUnderlyingToken(address(this), address(0), UID_, false));
+        NoUnderlyingToken.NoneInit memory c = noneInit("Points", "PTS", 0, 100, address(this), address(0));
+        c.features &= ~uint256(1 << 1); // no MINTABLE
+        NoUnderlyingToken t = NoUnderlyingToken(_clone(noneImpl, address(this), new address[](0), abi.encode(c)));
         vm.prank(address(0));
-        vm.expectRevert(NoUnderlyingToken.NotMinter.selector);
+        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, uint8(1)));
         t.mint(bob, 1);
-        vm.expectRevert(NoUnderlyingToken.NotMinter.selector);
-        t.renounceMinter();
+        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.MissingRole.selector, uint8(1), address(this)));
+        t.renounceRole(1);
     }
 
     function test_renounceMinterIsOneWay() public {
         NoUnderlyingToken t = _none(address(this), 0, minter);
         vm.expectEmit(address(t));
-        emit NoUnderlyingToken.MinterRenounced();
+        emit ITokenAdmin.RoleRevoked(1, minter, minter);
         vm.prank(minter);
-        t.renounceMinter();
-        assertEq(t.minter(), address(0));
+        t.renounceRole(1);
+        assertFalse(t.hasRole(1, minter));
         vm.prank(minter);
-        vm.expectRevert(NoUnderlyingToken.NotMinter.selector);
+        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.MissingRole.selector, uint8(1), minter));
         t.mint(bob, 1);
     }
 
@@ -89,11 +94,11 @@ contract Tier1Test is V2Fixture {
     }
 
     function test_initRefusesUnderlyings() public {
-        noneImpl = address(new NoUnderlyingToken(address(this), address(0), UID_));
+        noneImpl = address(new NoUnderlyingToken(address(this), address(0), UID_, false));
         address[] memory us = new address[](1);
         us[0] = address(0x1234);
         vm.expectRevert(abi.encodeWithSelector(MetaTokenBase.UnderlyingCountInvalid.selector, 1));
-        this.cloneExt(noneImpl, us, abi.encode("P", "P", uint8(0), uint256(0), address(0)));
+        this.cloneExt(noneImpl, us, abi.encode(noneInit("P", "P", 0, 0, address(this), address(0))));
     }
 
     function cloneExt(address impl, address[] memory us, bytes memory d) external returns (address) {

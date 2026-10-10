@@ -6,6 +6,7 @@ import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {noneInit} from "../v2/helpers/V2Fixture.sol";
 
 /// KATs of the two structs on a real token (metatx.md "One rule, four places"): `metatx_kat.json` (v3
 /// `MetaTransaction`, `cancelNonce(42)`) and `metatransfer_kat.json` (`MetaTransfer`, a payment on its pay lane
@@ -25,8 +26,9 @@ contract TokenKatTest is Test {
     function setUp() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        tok = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), UID))));
-        tok.initialize(address(this), new address[](0), 1, abi.encode("Points", "PTS", uint8(6), uint256(0), address(this)));
+        tok = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), UID, false))));
+        tok.initialize(address(this), new address[](0), 1,
+            abi.encode(noneInit("Points", "PTS", 6, 0, address(this), address(this))));
         tok.mint(vm.addr(ALICE_PK), 1_000e6);
     }
 

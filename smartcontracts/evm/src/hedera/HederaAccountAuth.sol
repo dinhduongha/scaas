@@ -27,8 +27,9 @@ library HederaAccountAuth {
     }
 
     /// @notice Cùng hàm, kiểu `view`, cho chỗ gọi bị ràng `view` (`ERC20MetaTx._requireValidSignature`). An toàn vì
-    ///         chỗ gọi duy nhất là `executeMetaTransaction` (không phải view, frame không tĩnh) và 0x16a không ghi
-    ///         state, không gọi ngược. ponytail: bỏ khi `_requireValidSignature` của lớp cha thôi là `view`.
+    ///         mọi chỗ gọi là entry point không-view (`mtxExecute`, `mtxExecuteTransfer`, các hàm có tên; frame không
+    ///         tĩnh) và 0x16a không ghi state, không gọi ngược. ponytail: bỏ khi `_requireValidSignature` của lớp cha
+    ///         thôi là `view`.
     function asView()
         internal pure returns (function (address, bytes32, bytes calldata) internal view returns (bool) f)
     {

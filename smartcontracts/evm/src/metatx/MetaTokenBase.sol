@@ -1,7 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.24;
 
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20MetaTx} from "./ERC20MetaTx.sol";
+import {AdminLib} from "./AdminLib.sol";
+import {ITokenAdmin} from "./ITokenAdmin.sol";
+import {IMetaTx} from "./IMetaTx.sol";
+import {IERC20MetaTx} from "./IERC20MetaTx.sol";
+import {IERC20Payment} from "./IERC20Payment.sol";
+import {HederaLib} from "../hedera/HederaLib.sol";
 import {IMetaTokenV2} from "./IMetaTokenV2.sol";
 import {IFactoryTokenV2} from "../factory/IFactoryTokenV2.sol";
 import {IOpenFactoryV2} from "../common/IOpenFactoryV2.sol";
@@ -9,11 +17,12 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 
 /// @title Common root of the v2 tiers on `ERC20MetaTx` (TW2 §3.3, §7; CTR-MTX-07). EIP-1167 clones.
-/// @notice The named functions (CTR-MTX-09) only build the struct of their kind and run its pipeline; receiver-pays (CTR-MTX-05/06). Transitional: features, roles, `PayLib` and provenance land in P1c.
-///
-///         No owner, no pause, no upgrade. The two init-time exceptions (R142) live in the wrapper tiers: the rate
-///         admin (only when `adjustable`) and the guardian (only `disableWrap`).
-abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryTokenV2 {
+/// @notice The named functions (CTR-MTX-09) only build the struct of their kind and run its pipeline; receiver-pays
+///         (CTR-MTX-05/06). Features, owner and roles (CTR-TOK-22) live in `AdminLib`, init and provenance in the
+///         ERC-7201 namespace `scaas.token`. Pay (`mtxPay`, `payWithFee`, `mtxPayReceiverFee`) works only with
+///         `PAYABLE`; a `MetaTransfer` (with or without `entryRef`) is never gated. Hedera is the immutable
+///         `IS_HEDERA` (CTR-TOK-23): HIP-632 signatures through `HederaLib`.
+abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryTokenV2, IERC165, ITokenAdmin {
     using MetaTxLib for MetaTxLib.MetaTransfer;
 
     bytes32 internal constant RECEIVER_FEE_TYPEHASH =
@@ -26,15 +35,12 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryTokenV2 {
     address public immutable SMART_KEY_ACCOUNT_IMPL;
     bytes32 private immutable _SMART_KEY_CLONE_CODEHASH;
 
-    // one slot: creator ‖ version ‖ _tokenDecimals ‖ _initialized ‖ _legCount
-    address public creator;
-    uint64 public version;
-    uint8 private _tokenDecimals;
-    bool private _initialized;
-    /// @dev Number of underlying legs (0 on tier 1); here so it shares the init slot.
+    /// @notice Set on implementations deployed for Hedera (CTR-TOK-23): 64-byte signatures from accounts without code
+    ///         take the HIP-632 path.
+    bool public immutable IS_HEDERA;
+
+    /// @dev Transitional (P1d moves it to `scaas.underlying`): number of underlying legs, 0 on tier 1.
     uint8 internal _legCount;
-    string private _tokenName;
-    string private _tokenSymbol;
 
     error NotFactory();
     error AlreadyInitialized();
@@ -43,13 +49,16 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryTokenV2 {
     error UnderlyingCountInvalid(uint256 n);
 
     /// @dev Runs ONCE on the implementation and locks it, so nobody can `initialize` it.
-    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_) ERC20MetaTx(chainUid_) {
+    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, bool isHedera_)
+        ERC20MetaTx(chainUid_)
+    {
         FACTORY = factory_;
         _SELF = address(this);
         SMART_KEY_ACCOUNT_IMPL = smartKeyAccountImpl_;
         _SMART_KEY_CLONE_CODEHASH = smartKeyAccountImpl_ == address(0) ? bytes32(0) : keccak256(abi.encodePacked(
             hex"363d3d373d3d3d363d73", smartKeyAccountImpl_, hex"5af43d82803e903d91602b57fd5bf3"));
-        _initialized = true;
+        IS_HEDERA = isHedera_;
+        AdminLib.$().initialized = true;
     }
 
     /// @notice The factory calls it in the SAME call as CREATE2. `initData` per tier (TW2 §4, §5.1, §8.1).
@@ -57,30 +66,59 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryTokenV2 {
         external
     {
         if (msg.sender != FACTORY) revert NotFactory();
-        if (_initialized) revert AlreadyInitialized();
-        _initialized = true;
-        creator = creator_;
-        version = version_;
+        AdminLib.TokenStorage storage t = AdminLib.$();
+        if (t.initialized) revert AlreadyInitialized();
+        t.initialized = true;
+        t.creator = creator_;
+        t.version = version_;
         _init(creator_, underlyings, initData);
     }
 
-    /// @dev The tier decodes `initData`, calls `_setMetadata`, checks `underlyings`.
+    /// @dev The tier decodes `initData`, calls `_setMetadata` and `AdminLib.init`, checks `underlyings`.
     function _init(address creator_, address[] calldata underlyings, bytes calldata initData) internal virtual;
 
-    function _setMetadata(string memory n, string memory s, uint8 d) internal {
-        _tokenName = n;
-        _tokenSymbol = s;
-        _tokenDecimals = d;
+    function _setMetadata(string memory n, string memory sym, uint8 d) internal {
+        AdminLib.TokenStorage storage t = AdminLib.$();
+        t.name = n;
+        t.symbol = sym;
+        t.decimals = d;
     }
 
     function tokenKind() external pure virtual returns (IOpenFactoryV2.TokenKind);
 
-    function name() public view override returns (string memory) { return _tokenName; }
-    function symbol() public view override returns (string memory) { return _tokenSymbol; }
-    function decimals() public view override returns (uint8) { return _tokenDecimals; }
+    function name() public view override returns (string memory) { return AdminLib.$().name; }
+    function symbol() public view override returns (string memory) { return AdminLib.$().symbol; }
+    function decimals() public view override returns (uint8) { return AdminLib.$().decimals; }
 
     function factory() external view returns (address) { return FACTORY; }
     function implementation() external view returns (address) { return _SELF; }
+    function creator() external view returns (address) { return AdminLib.$().creator; }
+    function version() external view returns (uint64) { return AdminLib.$().version; }
+    /// @notice CTR-TOK-21 kind: 0 `NONE`, 1 `UNDERLYING`, 2 `NONE_ZETHER`, 3 `UNDERLYING_ZETHER`.
+    function kind() external view returns (uint8) { return AdminLib.$().kind; }
+
+    // ------------------------------------------------------------------ features, owner, roles (CTR-TOK-22)
+
+    function features() external view returns (uint256) { return AdminLib.$().features; }
+    function lockedFeatures() external view returns (uint256) { return AdminLib.$().lockedFeatures; }
+    function owner() external view returns (address) { return AdminLib.$().owner; }
+    function pendingOwner() external view returns (address) { return AdminLib.$().pendingOwner; }
+    function hasRole(uint8 bit, address account) external view returns (bool) { return AdminLib.hasRole(bit, account); }
+
+    function grantRole(uint8 bit, address account) external { AdminLib.grantRole(bit, account, _msgSender()); }
+    function revokeRole(uint8 bit, address account) external { AdminLib.revokeRole(bit, account, _msgSender()); }
+    function renounceRole(uint8 bit) external { AdminLib.renounceRole(bit, _msgSender()); }
+    function disableFeature(uint8 bit) external { AdminLib.disableFeature(bit, _msgSender()); }
+    function transferOwnership(address newOwner) external { AdminLib.transferOwnership(newOwner, _msgSender()); }
+    function acceptOwnership() external { AdminLib.acceptOwnership(_msgSender()); }
+    function renounceOwnership() external { AdminLib.renounceOwnership(_msgSender()); }
+
+    /// @notice ERC-165; `IERC20Payment` only while `PAYABLE` is set.
+    function supportsInterface(bytes4 id) external view returns (bool) {
+        return id == type(IERC165).interfaceId || id == type(IERC20).interfaceId || id == type(IMetaTx).interfaceId
+            || id == type(IERC20MetaTx).interfaceId
+            || (id == type(IERC20Payment).interfaceId && AdminLib.hasFeature(AdminLib.PAYABLE));
+    }
 
     function payLane(bytes32 payId) public pure returns (uint256) {
         return uint256(keccak256(abi.encodePacked("scaas.pay.lane", payId)));
@@ -139,6 +177,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryTokenV2 {
         address from, address to, uint256 amount, bytes32 payId, uint256 validUntil,
         uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata signature
     ) external nonReentrant returns (bool) {
+        AdminLib.requireFeature(AdminLib.PAYABLE);
         MetaTxLib.MetaTransfer memory t;
         t.from = from;
         t.to = to;
@@ -168,6 +207,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryTokenV2 {
         MetaTxLib.MetaTransfer calldata t, bytes calldata payerSig,
         uint256 fee, address feeRecipient, uint256 rfValidUntil, bytes calldata payeeSig
     ) external nonReentrant returns (bool) {
+        AdminLib.requireFeature(AdminLib.PAYABLE);
         if (t.entryRef == 0 || t.mode & MetaTxLib.MODE_FEE_MASK != 0 || t.fee != 0
             || t.mode & MetaTxLib.MODE_RESTRICT_RELAYER == 0 || t.batch != payLane(t.entryRef) || t.nonce != 0
             || feeRecipient == address(0)) revert ReceiverFeeShape();
@@ -197,6 +237,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryTokenV2 {
     function payWithFee(
         address to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient, bytes32 entryRef
     ) external returns (bool) {
+        AdminLib.requireFeature(AdminLib.PAYABLE);
         address payer = _msgSender();
         uint256 feeAmount = FeePolicy.compute(feeMode, amount, fee);
         FeePolicy.validateRecipient(feeMode, feeRecipient);
@@ -207,6 +248,12 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryTokenV2 {
         _transfer(payer, to, amount);
         emit PaymentSettled(payer, to, amount, feeAmount, feeRecipient, entryRef);
         return true;
+    }
+
+    /// @dev Hedera (CTR-TOK-23): a 64-byte signature from an account without code is HIP-632; all else is EVM.
+    function _requireValidSignature(address from, bytes32 digest, bytes calldata sig) internal view override {
+        if (IS_HEDERA && sig.length == 64 && !_isContract(from)) return HederaLib.requireValid(from, digest, sig);
+        super._requireValidSignature(from, digest, sig);
     }
 
     function _erc1271Gas(address from) internal view override returns (uint256) {
