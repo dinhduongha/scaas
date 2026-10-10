@@ -278,7 +278,7 @@ contract MetaTxGasV2Test is Test {
         assertLe(gn, gc);
     }
 
-    function test_gasNamedTransferWithFeeAtOrBelowGeneric() public {
+    function test_gasNamedTransferWithFeeVersusGeneric_logOnly() public {
         uint32 mode = MetaTxLib.MODE_FEE_PERCENT | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT;
         MetaTxLib.MetaTransfer memory x = _x(_mt(mode, WARM, 1, 5_000, feeTaker));
         bytes memory cg = _cdT(address(v2), x);
