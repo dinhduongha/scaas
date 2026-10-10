@@ -70,7 +70,7 @@ generic `MetaTxBase` ([CTR-MTX-22](#CTR-MTX-22)): it adds the fee in this token 
 `mtxExecute`/`mtxBatch`/`cancelNonce`; `ERC20MetaTx` holds the ERC-20, `MetaTransfer` (`entryRef`), the fee,
 the approve rule and the UA ledger; `MetaTokenBase` holds receiver-pays (`mtxPayReceiverFee`, beside `mtxPay` and
 `payLane`, which it uses), trade (`TradeLib`), pay behind `PAYABLE`
-(`PayLib`), features and roles (`AdminLib`), init and provenance. Trade and pay live in `MetaTokenBase`, **not** in
+(inline: no external `PayLib` built, controller ruling pending the owner), features and roles (`AdminLib`), init and provenance. Trade and pay live in `MetaTokenBase`, **not** in
 `ERC20MetaTx`. The kinds (`NoUnderlyingToken`, `UnderlyingToken`, and the two Zether kinds) sit on `MetaTokenBase`;
 Hedera is the immutable `IS_HEDERA` ([CTR-TOK-23](token-wrappers.md#CTR-TOK-23)), not a child contract.
 The v1 line (the built `ERC20MetaTxV1` mixin, `MetaToken`, `HederaMetaToken` and factory v1) is removed from the product; kept for reference under the tag `ref/pre-token-tree` and `smartcontracts/evm/legacy/` (not built): issuer tokens
@@ -297,7 +297,7 @@ Transfer and payment are `MetaTransfer`s ([CTR-MTX-23](#CTR-MTX-23)); neither `t
 allowlisted, so one transfer has one encoding and one digest. Single's two-argument `unwrap(uint256,address)` is not listed (the same intent with a
 second digest and no `minOut`), nor are Multi's single-asset overrides that always revert. **Never allowlisted:**
 `approve` and `transferFrom` (contract accounts approve and spend through their own call path,
-[CTR-TOK-01](token-wrappers.md#CTR-TOK-01)); every role function — `mint`, `renounceMinter`, `proposeRate`,
+[CTR-TOK-01](token-wrappers.md#CTR-TOK-01)); every role function — `mint`, the `ITokenAdmin` functions (`grantRole`, `revokeRole`, `renounceRole`, `disableFeature`, the ownership functions), `proposeRate`,
 `cancelRate`, `executeRate`, `renounceRateAdmin`, `disableWrap`, `renounceGuardian` (role holders act through their own
 contract, [NODE-JOB-01](../node/job-api.md#NODE-JOB-01); a signature check would skip a minter contract's caps or a
 Safe's guards); `transfer` and `pay` (they are `MetaTransfer`s); `payWithFee` (it charges its own fee); `mtxExecute`, its alias and every other `mtx…` entry
@@ -549,8 +549,8 @@ executeMetaTransaction(m,s)                    ≡ mtxExecute(m,s)              
 So: same digest, same events (`MetaTransactionExecuted`; `PaymentSettled` for `mtxPay`), same nonce space (a
 signature consumed through one path fails `MetaTxBadNonce` on the other), same KAT. A named function never accepts an
 intent that the generic path would refuse, and refuses some the generic path accepts (wrong shape), never the other
-way round. Gas (P1c): named `mtxTransfer` is +9 execution gas over `mtxExecuteTransfer` (33,681 vs 33,672; logged, not
-asserted), and `mtxPay` on a fresh lane is +2.6 k (56,182 vs 53,568), the `PAYABLE` gate's cold SLOAD. The gasless unwrap has no named function: it is `mtxExecute` with the real `unwrap` calldata
+way round. Gas (P1c): named `mtxTransfer` costs +9 execution gas over `mtxExecuteTransfer` (33,681 vs 33,672; logged, not
+asserted). `mtxPay` on a fresh lane costs +2.6 k (56,182 vs 53,568), the `PAYABLE` gate's cold SLOAD. The gasless unwrap has no named function: it is `mtxExecute` with the real `unwrap` calldata
 ([CTR-MTX-12](#CTR-MTX-12)).
 
 `fee` is not canonicalised under fee mode `NONE` (only `relayer`/`feeRecipient` are, by `canon`): a struct signed

@@ -781,7 +781,7 @@ the old token, buyable by a cash offer.
 <a id="CTR-AS-13"></a>**CTR-AS-13** — `ExchangeOffer` is gasless through a `TradeOrder` leg it pulls as its `dex` (as
 `mtxWrap`, [CTR-TOK-20](token-wrappers.md#CTR-TOK-20)), plus a direct `transferFrom` path. Exact multiples only
 (`in·num % den == 0`, else `NotExactMultiple`). A **non-closable** offer must burn what it receives, requires
-`tokenIn.minter() == 0` at exchange time, and its `sweep()` never takes `tokenOut` below the live obligation
+that `tokenIn.features()` has `MINTABLE` clear at exchange time (a cleared flag can never be set again), and its `sweep()` never takes `tokenOut` below the live obligation
 `quote(tokenIn.totalSupply())` before `closesAt`; a non-zero `closesAt` on it is ≥ `opensAt + 365 days` (prescription is
 the issuer's terms, disclosed with a blocking notice). Otherwise a short window or a live minter would let the issuer
 take unexchanged holders' new shares or redemption money.
@@ -813,7 +813,7 @@ interface IExchangeOffer {
     error InsufficientOut(uint256 have, uint256 need); error NotATradeLeg(); error LegNotRoutedHere();
     error CounterTokenMismatch(); error PriceNotMet(uint256 out, uint256 min);
     error DeltaMismatch(uint256 got, uint256 expected); error NotAdmin(); error NotClosable(); error SinkRequired();
-    error MinterLive(address minter); error ParamsInvalid(); error OwnToken();
+    error MinterLive(address tokenIn); error ParamsInvalid(); error OwnToken();
 
     function exchange(TradeOrder calldata leg, bytes calldata sig) external returns (uint256 out);
     function exchangeDirect(uint256 amountIn, uint256 minOut) external returns (uint256 out);
@@ -829,7 +829,7 @@ interface IExchangeOffer {
 `exchange` (gasless): `leg` is a `TradeOrder` on `tokenIn` signed by the holder with `dex = this` (`LegNotRoutedHere`),
 `receiveToken = tokenOut` (`CounterTokenMismatch`), `receiveAmount` = its minimum out, `minFill = amount`, `flags` 0
 (`NotATradeLeg`), `relayer ∈ {0, msg.sender}`. The offer computes `out`, requires `out ≥ receiveAmount` (`PriceNotMet`),
-`filledIn + amount ≤ capIn`, the window open, non-closable ⇒ `tokenIn.minter() == 0` (`MinterLive`),
+`filledIn + amount ≤ capIn`, the window open, non-closable ⇒ `tokenIn.features()` has `MINTABLE` clear (`MinterLive`),
 `tokenOut.balanceOf(this) ≥ out`; calls `tokenIn.mtxTrade(leg, sig, TradeFill(amount, out, fee, msg.sender))` with `fee
 = ⌈out · leg.fee / 10⁶⌉`, requires the measured delta `== amount`; writes `filledIn`, burns (`NoUnderlyingToken.burn`)
 or forwards to `sink`, pays `out − fee` to `destination` (or `from`) and `fee` to `msg.sender`, the relayer.
@@ -866,9 +866,9 @@ except to a holder or to `sweepTo` within the sweep rule; a non-closable offer's
 `obligation()` through `sweep` before `closesAt`; `tokenIn` is burned or at `sink`. Abuse: a leg replayed (token
 nonce), a leg routed to another offer (`LegNotRoutedHere`), a fake token delta (measured), reentrancy via hooks
 (transient guard, checks-effects-interactions), early close of a non-closable redemption (`NotClosable`), the issuer
-sweeping unexchanged entitlement (bounded by `obligation`), a live minter diluting the pool (`MinterLive`), a rate typo
+sweeping unexchanged entitlement (bounded by `obligation`), a live `MINTABLE` flag diluting the pool (`MinterLive`), a rate typo
 (bounded by the funded balance; the wizard shows the human rate). Gas (estimate): ≈ `mtxTrade` leg (≈ 60 k) + burn
-(≈ 8 k) + minter read (2.1 k) + payout (≈ 30–55 k) ≈ 110–130 k. Tests: both paths, exact-multiple edges, cap edge,
+(≈ 8 k) + `features()` read (2.1 k) + payout (≈ 30–55 k) ≈ 110–130 k. Tests: both paths, exact-multiple edges, cap edge,
 window edges, sink vs burn, `predictOffer` refusals, `SinkRequired` for a wrapper `tokenIn`, `MinterLive`, sweep bounded
 by `obligation` before `closesAt` and full after, rescue, regulated `tokenIn` (offer `ELIGIBLE_CONTRACT`; frozen holder
 refused by the shape check; paused ⇒ refused) and regulated `tokenOut` (ineligible holder refused), fuzz `num/den` ∈ [1, 2⁹⁶)

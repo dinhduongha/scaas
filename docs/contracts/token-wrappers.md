@@ -51,7 +51,7 @@ classDiagram
     }
     class MetaTokenBase {
         <<abstract>>
-        trade (TradeLib), pay behind PAYABLE (PayLib)
+        trade (TradeLib), pay behind PAYABLE (inline, no external PayLib built)
         features + roles (AdminLib)
         init, provenance (factory, implementation, kind, version, IS_HEDERA)
     }
@@ -80,7 +80,7 @@ is a per-chain variant, not a creator's choice ([CTR-TOK-23](#CTR-TOK-23)).
 |---|---|
 | `MetaTxBase` | any SCaaS contract (`MandateWallet`, `SmartKeyAccount`, third parties): [CTR-MTX-22](metatx.md#CTR-MTX-22) |
 | `ERC20MetaTx` | every token is gasless ([CTR-MTX-07](metatx.md#CTR-MTX-07)); UA ledger, `UAMetaTransaction` ([CTR-UA-18](accounts.md#CTR-UA-18)) |
-| `MetaTokenBase` | `TradeLib`, `PayLib` behind `PAYABLE`, `AdminLib`, init, provenance |
+| `MetaTokenBase` | `TradeLib`, pay behind `PAYABLE` (no external `PayLib` built: pay is inline, controller ruling pending the owner), `AdminLib`, init, provenance |
 | Zether verifiers (one per curve), `UniversalAccountRegistry`, `ZetherDisclosure`, `ZetherStatements`, `OpenFactory` | outside the tokens; roles unchanged |
 
 Confidential tokens are kinds of the same tree, not a parallel branch: every one is relayable through the same
@@ -120,7 +120,7 @@ init (`NONE*` kinds only). Further supply and burning are features, not class: `
 | Function | Rule |
 |---|---|
 | `initialize` | mints `initialSupply` to `initialHolder`; validates the flags ([CTR-TOK-22](#CTR-TOK-22)) |
-| `mint(to, amount)` | `MINTABLE` set and the caller holds the `MINTABLE` role (read through `_msgSender()`), else `MissingRole(MINTABLE, caller)` (not allowlisted: the minter acts through its own contract); to a public balance only |
+| `mint(to, amount)` | `FeatureNotSet(MINTABLE)` when the flag is clear, `MissingRole(MINTABLE, caller)` when the caller (read through `_msgSender()`) lacks the role (not allowlisted: the minter acts through its own contract); to a public balance only |
 | `burn(amount)` | `BURNABLE`; any holder, own public balance (`_msgSender()`; gasless through `mtxExecute`); `Transfer(from, 0, amount)` |
 
 Invariant: `Σ balances == totalSupply`. A supply cap or mint-rate limit, if an issuer wants one, belongs in the
@@ -497,7 +497,7 @@ immutable: see the administration bullet below.
 
 | Bit | Flag | Role | Valid kinds | Meaning |
 |---|---|---|---|---|
-| 0 | `PAYABLE` | — | all | `IERC20Payment` works (`mtxPay`, `payWithFee`, `payLane`, `PaymentSettled`); **default off**; immutable (no role). `MetaTransfer` is never gated |
+| 0 | `PAYABLE` | — | all | `IERC20Payment` works (`mtxPay`, `payWithFee`, `payLane`, `PaymentSettled`); **default off**; immutable (no role). `MetaTransfer` is never gated (`PaymentSettled` is also emitted by any `MetaTransfer` with `entryRef ≠ 0`, whatever the flag; the flag gates `mtxPay`, `payWithFee`, `mtxPayReceiverFee` and `supportsInterface(IERC20Payment)`) |
 | 1 | `MINTABLE` | `minter` | `NONE*` | `mint` to a public balance (a minter never mints into a shielded balance) |
 | 2 | `BURNABLE` | — (holder) | `NONE*` | holder `burn` of its public balance |
 | 3 | `RATE_ADJUSTABLE` | `rateAdmin` (contract) | `UNDERLYING*` | rate change with timelock; off ⇒ rates fixed at creation |
@@ -786,9 +786,8 @@ contracts: [asset-suite.md](asset-suite.md#templates).
 
 ## <a id="interfaces"></a>7. Interfaces
 
-The block is the **built** function set, grouped by the built contracts; in the target the `UnderlyingToken`, `NoUnderlyingToken`
-and `MetaTokenBase` rows carry the same functions, `renounceMinter`/`renounceRateAdmin`/`renounceGuardian` become
-the holder's `renounceRole(bit)` and the factory is [CTR-TOK-25](#CTR-TOK-25) (replaced in P1).
+The block is the **built** function set, grouped by the built contracts; in the target the `UnderlyingToken` row carries the Single/Multi
+functions, `renounceRateAdmin`/`renounceGuardian` become the holder's `renounceRole(bit)` (P1d) and the factory is [CTR-TOK-25](#CTR-TOK-25) (replaced in P1).
 
 ```solidity
 // built v2 line also has executeMetaTransactionWithFee, mtxUnwrap(…, validUntil, …), mtxUnwrapWithFee(…, feeRecipient, …)
@@ -796,8 +795,10 @@ the holder's `renounceRole(bit)` and the factory is [CTR-TOK-25](#CTR-TOK-25) (r
 // ERC20MetaTx / MetaTokenBase (all kinds), domain ("SCaaS MetaToken", "1", chainId, clone, chain_uid):
 //   mtxExecute, the named functions and the trade entry points — metatx.md#interfaces, dex.md#CTR-DEX-15
 function mtxSelectors() external view returns (bytes4[] memory, uint8[] memory, uint8[] memory);   // per kind, CTR-MTX-19
+// MetaTokenBase: kind(), creator(), version(), supportsInterface(bytes4), IS_HEDERA; ITokenAdmin: features(), lockedFeatures(), owner(),
+//   pendingOwner(), hasRole(uint8,address), grantRole, revokeRole, renounceRole, disableFeature, transferOwnership, acceptOwnership, renounceOwnership
 // NoUnderlyingToken
-function mint(address to, uint256 amount) external;  function burn(uint256 amount) external;  function renounceMinter() external;
+function mint(address to, uint256 amount) external;  function burn(uint256 amount) external;
 // SingleUnderlyingToken (MultiUnderlyingToken overrides the single-asset ABI to revert UnderlyingRequired);
 //   the target UnderlyingToken (CTR-TOK-21) has one leg-count rule instead: UnderlyingRequired unless exactly one leg
 function wrap(uint256 amount) external returns (uint256 minted);
@@ -889,9 +890,9 @@ struct Leg { address token; uint8 decimals; bool wrapEnabled; bool adjustable;  
 struct PendingRate { uint8 leg; uint96 num; uint96 den; uint56 eta; }           // one slot; eta == 0 ⇒ none
 ```
 
-Immutables (implementation): `FACTORY`, `_SELF`, `SMART_KEY_ACCOUNT_IMPL`, `_SMART_KEY_CLONE_CODEHASH`, `CHAIN_UID`;
+Immutables (implementation): `FACTORY`, `_SELF`, `SMART_KEY_ACCOUNT_IMPL`, `_SMART_KEY_CLONE_CODEHASH`, `CHAIN_UID`, `IS_HEDERA`;
 constant `KIND`. The ticket and sender live in transient storage, never in a slot.
-The constructor sets `_initialized = true` on the implementation's own storage (it cannot be initialized). Renouncing
+The constructor sets `scaas.token.initialized` on the implementation's own storage (it cannot be initialized). Renouncing
 the rate admin sets `rateAdjustable = false`, `rateAdmin = 0` and drops the pending change; the per-leg `adjustable`
 copy stays set (wrap then reads an empty `_pending`, one extra SLOAD), so fixed-at-creation tokens keep the cheap path.
 The controls of flags 5–8 live in the `scaas.admin` namespace ([asset-suite.md](asset-suite.md#storage), [CTR-TOK-24](#CTR-TOK-24)).
@@ -926,14 +927,13 @@ The controls of flags 5–8 live in the `scaas.admin` namespace ([asset-suite.md
 <a id="CTR-TOK-23"></a>**CTR-TOK-23** — **Hedera is a per-chain variant, not a creator's choice, and has no child
 contracts.** Each implementation is deployed with an immutable `IS_HEDERA`. When set, the signature check takes the
 HIP-632 path and `UnderlyingLib` associates HTS underlyings fail-closed (`HederaLib`); the rules are
-[NET-HED-14](../networks/hedera.md#NET-HED-14). The four copies of the HIP-632 override go; every implementation
-carries the ≈ 0.5–1 KB of Hedera branches.
+[NET-HED-14](../networks/hedera.md#NET-HED-14). The four copies of the HIP-632 override become one `IS_HEDERA` branch in `MetaTokenBase`
+calling `HederaLib.requireValid`; every implementation carries the ≈ 0.5–1 KB of Hedera branches.
 
-**Transitional (BUILT, P1c).** `IS_HEDERA` is built (kind `NONE` on Hedera is `NoUnderlyingToken`; `HederaNoUnderlyingToken` is
+**Transitional (BUILT, P1c).** `IS_HEDERA` is built (kind `NONE` on Hedera is `NoUnderlyingToken`; its Hedera child is
 deleted). Two Hedera children (`HederaSingleUnderlyingToken`, `HederaMultiUnderlyingToken`) remain until P1d and add fail-closed HTS checks at init.
-The signature rule is `HederaLib.requireValid` (`src/hedera/HederaLib.sol`, `HederaTokensV2.sol`) rather
-than an `abstract HederaSigMixin is MetaTxCore` (a mixin on the base would form a diamond with the tier and force
-seven unrelated overrides per child); the same override serves `mtxTrade`. Domain (with `salt` = the relay's block-0
+The signature rule is one `IS_HEDERA` branch in `MetaTokenBase` calling `HederaLib.requireValid` (`src/hedera/HederaLib.sol`, `HederaTokensV2.sol`),
+not a per-child override or an abstract mixin on the base (a diamond with the tier); it serves `mtxTrade` too. Domain (with `salt` = the relay's block-0
 hash, confirmed stable across mirror-node and relay restarts before it is fixed), ABI, events and tests are the EVM
 ones. A plain transfer to `address(0)` fails at the shape step with OpenZeppelin's `ERC20InvalidReceiver` (as built: at
 step 6 instead of step 8, "step 8 must not fail"; `mtxUnwrapWithFee` is decoded in `MetaTokenBase.fallback`, `dataEnd` too deep).
@@ -958,7 +958,7 @@ Unit (forge, `test/v2/`):
 | Fees | percent on the basis, fee on top, 1 % cap on transfer, payment and `AMOUNT` selectors; `ABSOLUTE` selectors uncapped and `PERCENT` refused; `FeeRecipientIsPayee` for transfer, `pay`, `payWithFee`, bound and relayer-default |
 | Gasless unwrap and wrap | `mtxExecute(unwrap(…))`: fee in wrapped units after the call; `UnwrapRecipientInvalid` for 0 and `address(this)`; `UnwrapBelowMin`; underlying revert (blacklist mock) reverts fee and nonce; sender-pays fee-on-transfer ⇒ `UnderlyingTransferMismatch`; ERC-777 mock whose hook re-enters (`cancelNonce`, `transfer`) mid-unwrap ⇒ `Reentrancy`; not allowlisted on tier 1; works on a disabled leg and during a pending rate change. `mtxExecute(wrap(…))` pays its fee from minted units. `mtxWrap` on Single, Multi and Zether: price, minimum, fee to the relayer, `WrapReceivedMismatch`, unknown underlying refused |
 | Named | `testFuzz_namedDigestEqualsGeneric` over random struct fields for every named function; a signature consumed by a named call fails on the generic path and vice versa; every `MtxModeShape` case; a no-fee struct signed with a leftover `fee ≠ 0` fails through `mtxTransfer`; `mtxPay` lane equals `payLane`; second `mtxPay` of a `payId` reverts `MetaTxBadNonce`; `payWithFee` with the same `entryRef` still emits `PaymentSettled` (documents the per-path limit); `mtxBatch` atomic (one bad item reverts all), length mismatch, empty |
-| `NONE` | init mint to `initialHolder`; `mint` with `MINTABLE` and `NotMinter`; `burn` with `BURNABLE`; fixed supply without `MINTABLE`; `disableFeature(MINTABLE)` |
+| `NONE` | init mint to `initialHolder`; `mint` with `MINTABLE` and `MissingRole`; `burn` with `BURNABLE`; fixed supply without `MINTABLE`; `disableFeature(MINTABLE)` |
 | `UNDERLYING`, one leg | rate 1:1 equals the removed v1 wrapper's behaviour; rounding down on wrap/unwrap; `burned = ⌈out·q⌉`; `previewWrap` `used`; `WrapTooSmall`/`UnwrapTooSmall`/`UnwrapBelowMin`; two-argument `unwrap` = `minOut 0`; fee-on-transfer inbound measured; sender-pays fee-on-transfer reverts `UnderlyingTransferMismatch`; donation not counted; `ReserveShortfall` after a negative-rebase mock stops wrap and not unwrap; `addReserve`; decimals snapshot; init refusals |
 | Rates | fixed ⇒ `RateFixed`; propose/cancel/execute; only the admin executes (`NotRateAdmin` for anyone else); delay and window bounds; an expired change counts as none for `proposeRate`, `pendingRate()` and the pause; step bound both directions at the exact edge; decrease refused without collateral, accepted after `addReserve`; execute refused with `ReserveShortfall` when any leg's balance is below its reserve (shock, then decrease); `collateralValue` saturates and `executeRate` exits early on a huge leg; revoking or renouncing the rate role leaves the rate, `disableFeature(RATE_ADJUSTABLE)` cancels a pending change; EOA admin refused at init; wrap paused on **every** leg while anything is pending, reopens on execute/cancel/expiry, unwrap and `addReserve` open |
 | `UNDERLYING`, several legs | 2–8 legs, duplicates, zero; per-leg reserves; unwrap bounded by `reserve_i`; guardian disable one-way and idempotence error; unwrap open on a disabled leg; `addReserve` refused on it; `RateDecreaseWithDisabledLeg`; the cross-leg scenario (pending decrease on leg `i`, flash-wrap of leg `j`) reverts `WrapPausedForRateChange` and a third-party `executeRate` reverts `NotRateAdmin`; single-asset ABI reverts `UnderlyingRequired` with more than one leg |
