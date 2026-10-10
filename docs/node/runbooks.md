@@ -58,7 +58,7 @@ consulted · I informed · — not involved):
 | Regulated token pause / unpause | I | — | A/R | C | — | — | I | — |
 | `disableWrap` on a multi-underlying leg | I | — | A | — | R | — | I | I |
 | Rate change propose / execute / cancel | I | — | A | C | — | R | I | — |
-| `renounceRateAdmin` / `renounceGuardian` | — | — | A | C | R (own role) | R (own role) | — | — |
+| `renounceRole(bit)` (rate admin, guardian, minter) | — | — | A | C | R (own role) | R (own role) | — | — |
 | Token registration / intake pause (`active`) on a node | A/R | — | C | — | — | — | I | — |
 | `fee_recipient` change | A/R | C (second person, procedural) | — | — | — | — | — | — |
 | Node policies (acceptance, fees, sponsorship, gossip, peers, mesh peer URLs) | A/R | — | C (own tokens) | — | — | — | C | — |
