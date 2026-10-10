@@ -53,7 +53,7 @@ the implementation's immutables). `chain_uid` is the chain's genesis block hash 
 
 | Contract | Source of `chain_uid` |
 |---|---|
-| token implementations (`NoUnderlyingToken`, `UnderlyingToken`, `ZetherToken`) | constructor immutable of the **implementation**; a clone runs its code by `DELEGATECALL`, so it uses the value with no storage and no `initialize` argument and cannot declare another one |
+| token implementations (`NoUnderlyingToken`, `UnderlyingToken`; `ZetherToken` with P3) | constructor immutable of the **implementation**; a clone runs its code by `DELEGATECALL`, so it uses the value with no storage and no `initialize` argument and cannot declare another one |
 | `OpenFactory` | constructor immutable; `registerImplementation` refuses an implementation whose `chainUid()` differs ([CTR-TOK-03](token-wrappers.md#CTR-TOK-03)) |
 | `SmartKeyAccount` | the factory's constructor argument, passed to `new SmartKeyAccount(chainUid)` |
 | `MandateWallet`, `HederaMandateWallet` | constructor argument from the chain profile; the node checks it before relaying for that wallet |
@@ -95,8 +95,8 @@ Versions live in the factory, immutability lives in the token, including its `fe
 
 Three catalogue invariants: (1) **append-only** — a registered `(kind, version)` never points elsewhere
 (`VersionAlreadyRegistered`), so "I want v1" is never a moving target; (2) **`deprecate()` marks, never blocks** —
-`createUnregistered` bypasses the catalogue anyway, so a block would buy only the power to stop others from
-deploying; the real job is a signal (event, wallet warning, indexer flag); (3) **`createUnregistered` exists** — a
+`createTokenUnregistered` bypasses the catalogue anyway, so a block would buy only the power to stop others from
+deploying; the real job is a signal (event, wallet warning, indexer flag); (3) **`createTokenUnregistered` exists** — a
 token created this way has `version() == 0`, visibly, so wallets can tell "runs published v2" from "runs code its
 creator brought". A bug in v1 is permanent for every v1 token; the only remedy is migration (unwrap v1, wrap v2),
 one holder at a time, nobody forced. With EIP-1167 clones the `init_code` depends only on the implementation, so
@@ -141,7 +141,7 @@ power.
 
 | Contract | Holder | Powers | Rule |
 |---|---|---|---|
-| `OpenFactory` | `registrar` (immutable; an EOA by default — the deployer — and a multisig before mainnet) | `registerImplementation`, `deprecate`, `setZetherEnabled` (dev chains only); none over any token | [token-wrappers](token-wrappers.md#factory) |
+| `OpenFactory` | `registrar` (immutable; an EOA by default — the deployer — and a multisig before mainnet) | `registerImplementation`, `deprecate`, and on `OpenFactoryV1` `setZetherEnabled` (dev chains only); none over any token | [token-wrappers](token-wrappers.md#factory) |
 | Any token (EVM) | the `owner` (optional; 0 = none) | `grantRole` / `revokeRole` for the roles of set flags, `disableFeature(bit)` one-way on a flag not locked at creation, two-step `transferOwnership`, `renounceOwnership` (role holders keep their roles); no power touches a reserve or upgrades code | [CTR-TOK-22](token-wrappers.md#CTR-TOK-22) |
 | Any token (EVM), role holders | the holders of `minter`, `rateAdmin` (has code), `guardian`, `issuer`, `compliance` (the role column of the flag table; several holders allowed, may `renounceRole`) | the power of the flag only (mint to a public balance, a bounded timelocked rate change, `disableWrap`, freeze / forced transfer against a recorded order / bounded pause / allowlist); none touches a reserve or upgrades code | [CTR-TOK-22](token-wrappers.md#CTR-TOK-22), [CTR-TOK-06](token-wrappers.md#CTR-TOK-06), [CTR-TOK-07](token-wrappers.md#CTR-TOK-07) |
 | `SCaaSDex` | `admin` set once at creation ([CTR-DEX-24](dex.md#CTR-DEX-24); built: immutable) (a multisig in production; the venue operator's multisig for a managed market) | `setMarket` (list or delist a pair), `setFeeSplit` (relayer share and treasury of the signed fee; never the amount), `setExchangeTarget` (list or delist an exchange target or executor), `setListedOnly` (DEX-wide listed-only mode for the exchange path); none touches funds | [CTR-DEX-03](dex.md#CTR-DEX-03), [CTR-DEX-23](dex.md#CTR-DEX-23) |
@@ -166,7 +166,7 @@ families carry stronger gates, enforced in code:
 
 | Gate | Rule | Status |
 |---|---|---|
-| Classical Zether dev gate | `ZetherSafety.isDevChain()`: `chainid ∈ {31337 (anvil/hardhat), 1337 (geth --dev)}`, a hard-coded allowlist; `OpenFactory.zetherEnabled` defaults to `false`; `setZetherEnabled(true)` (registrar) reverts outside a dev chain; `createZetherToken`/`createUnregistered(ZETHER)` revert when the flag is off **or** the chain is not a dev chain; `ZetherToken.initialize`, both verifier constructors and the built `UniversalAccountRegistry` revert outside a dev chain too, so a manual deploy cannot bypass it ([CTR-ZTH-02](zether.md#CTR-ZTH-02)) | **BUILT** |
+| Classical Zether dev gate | `ZetherSafety.isDevChain()`: `chainid ∈ {31337 (anvil/hardhat), 1337 (geth --dev)}`, a hard-coded allowlist; `OpenFactoryV1.zetherEnabled` defaults to `false`; `setZetherEnabled(true)` (registrar) reverts outside a dev chain; `OpenFactoryV1.createZetherToken`/`createUnregistered(ZETHER)` revert when the flag is off **or** the chain is not a dev chain; `ZetherToken.initialize`, both verifier constructors and the built `UniversalAccountRegistry` revert outside a dev chain too, so a manual deploy cannot bypass it ([CTR-ZTH-02](zether.md#CTR-ZTH-02)) | **BUILT** |
 | Adding a chain to the classical allowlist | a code change of `ZetherSafety` plus a new deployment, after the cryptographic audit | — |
 | Chain 7622 as a classical Zether dev chain | whether chain 7622 counts as "dev": not a dev chain until the owner decides ([CTR-ZTH-33](zether.md#CTR-ZTH-33)) | open |
 | Production curve for classical Zether | bn254 vs BLS12-381; BLS12-381 is more secure and **not** cheaper ([CTR-ZTH-32](zether.md#CTR-ZTH-32)) | open |
@@ -197,18 +197,19 @@ own job (Move test, Soroban, CosmWasm, Tact, Solana) as the family is added.
 
 <a id="deploy"></a>Deploy (EVM): `script/Deploy.s.sol` (forge script; env `PRIVATE_KEY` = deployer and default registrar,
 `REGISTRAR` optional, `DEMO_SUPPLY`/`DEMO_HOLDER` optional) reads the genesis hash from the RPC and deploys, through
-the CREATE2 deployer ([CTR-GEN-06](#CTR-GEN-06)), `SmartKeyAccountFactory`, `OpenFactory` with the three tier
+the CREATE2 deployer ([CTR-GEN-06](#CTR-GEN-06)), `SmartKeyAccountFactory`, `OpenFactory` with the token
 implementations (each taking the factory address and `chain_uid`) registered as version 1 of their kinds, and
 `SCaaSDex(registrar, chainUid)`; optionally a tier-1 demo token (**SPECIFIED**). It writes
 `deployments/<chainid>.json` to seed the node's chain configuration and client chain data. Production: every contract
 owner/admin is a Safe from the first block, and deployer keys come from a hardware wallet or KMS. **Transitional
 (BUILT, P1e):** every contract is deployed by `new X{salt: DEPLOY_SALT}` through forge's deterministic deployer (default
 salt `keccak256("scaas.deploy.v1")`; a re-run on the same chain collides, so a new version needs a new salt), the script
-stops without the deployer and checks `chainUid()` of the factory and each implementation against `chain_uid` (`CHAIN_UID`
-or block 0's hash). It deploys `OpenFactory` with `NoUnderlyingToken` as version 1 of `NONE` (`UnderlyingToken` is over
+stops without the deployer and checks `chainUid()` of the token factory and of the `NONE` implementation against `chain_uid` (the v1 contracts have no
+`chainUid()`; controller ruling, pending the owner). `CHAIN_UID`, when set, must equal the RPC's block 0 hash (read at any head
+by rolling to block 1), else the script stops; unset it defaults to that hash. The script creates `deployments/` itself. It deploys `OpenFactory` with `NoUnderlyingToken` as version 1 of `NONE` (`UnderlyingToken` is over
 EIP-170 and waits for the size work) and, for the node until P5, the v1 line: `OpenFactoryV1` with `MetaToken` (version 1
 of `META`, when the registrar is the deployer), `SubjectAccountFactory`, `MetaTxDex` and `SCaaSDex`. The JSON gains
-`token_factory`, `implementation_none` and `chain_uid`. `forge script … --broadcast` needs `--sender <deployer address>`.
+`token_factory`, `implementation_none` and `chain_uid`. `forge script … --broadcast` needs `--sender <deployer address>`; `DEPLOY_SALT` is optional.
 
 <a id="CTR-GEN-06"></a>**CTR-GEN-06** — **Every SCaaS EVM contract is deployed through a deterministic CREATE2
 deployer with a fixed salt** (owner): implementations, factories, registries and the DEX, instead of `new` (CREATE,

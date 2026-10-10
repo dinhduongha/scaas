@@ -5,7 +5,7 @@
 the Rust prover `zether-prover` exist with tests (`smartcontracts/evm/src/zether/**`, `src/registry/**`; paths of the
 form `smartcontracts/src/…` (e.g. `smartcontracts/src/zether/**`) and `smartcontracts/test/…` in older references now live under `smartcontracts/evm/`). Every
 Zether contract and the registry refuse to deploy or initialize outside chain ids 31337/1337, and
-`OpenFactory.zetherEnabled` defaults to `false` ([safety gate](#safety-gate)). Post-quantum confidential balances are a
+`OpenFactoryV1.zetherEnabled` defaults to `false` ([safety gate](#safety-gate)). Post-quantum confidential balances are a
 separate class ([pq-zether.md](pq-zether.md)). The relaying target — `ZetherToken` on the one meta-transaction base,
 confidential ops through the generic self-call, `zetherShield` from the public balance, `chainUid` in every chain-bound
 digest — is **SPECIFIED** ([relaying](#envelope)); the built `ZetherMetaTx` envelope ops are its transitional form.
@@ -954,8 +954,8 @@ chain is open ([CTR-ZTH-33](#CTR-ZTH-33)). Post-quantum Zether serves the privat
 default; the check is repeated in `initialize` and in the verifier and registry constructors. Adding a chain = a change
 of `ZetherSafety` + a new deployment, after the cryptographic audit.
 
-- `OpenFactory.zetherEnabled` defaults to `false`; `setZetherEnabled(true)` (registrar) reverts outside a dev chain;
-  `createZetherToken`/`createUnregistered(ZETHER)` revert when the flag is off **or** the chain is not a dev chain.
+- `OpenFactoryV1.zetherEnabled` defaults to `false` (`OpenFactoryV1.sol:33`); `setZetherEnabled(true)` (registrar) reverts outside a dev chain;
+  `createZetherToken`/`createUnregistered(ZETHER)` on `OpenFactoryV1` revert when the flag is off **or** the chain is not a dev chain.
 - `ZetherToken.initialize`, the constructors of both verifiers and `UniversalAccountRegistry` also revert outside a dev
   chain (a manual deploy cannot bypass it).
 - The NatSpec of every Zether contract carries **UNAUDITED — NOT FOR PRODUCTION FUNDS**.
@@ -972,7 +972,7 @@ both stay supported per token meanwhile.
 <a id="CTR-ZTH-20"></a>**CTR-ZTH-20** — **Clients and the gateway pin the canonical verifier and registry.** A wallet
 (the client library) and the node gateway accept a Zether token only when `verifier()` is in the chain's published list
 of **canonical** verifiers and `registry()` equals the chain's canonical registry. The factory does not refuse others
-(`_checkVerifier` only requires code + `isSupportedOnThisChain()`, `OpenFactory.sol:179-190`; `initialize` only
+(`_checkVerifier` only requires code + `isSupportedOnThisChain()`, `OpenFactoryV1.sol:179-190`; `initialize` only
 requires the registry to have code, `ZetherToken.sol:136`) — "provenance instead of gatekeeping"
 ([CTR-TOK-17](token-wrappers.md#CTR-TOK-17)) — so a v1 token from a registered implementation could still carry a fake
 verifier (returning `true` for every proof ⇒ `zetherUnshield` drains the escrow) or a fake registry (`requireAuthorized` a no-op).

@@ -110,7 +110,7 @@ first-come); built `ZetherToken` refuses fee-on-transfer underlyings (`Unsupport
 ### 2.1 NONE — `NoUnderlyingToken`
 
 <a id="CTR-TOK-09"></a>**CTR-TOK-09** — `NoUnderlyingToken` (kind `NONE`) mints `initialSupply` to `initialHolder` at
-init (`NONE*` kinds only). Further supply and burning are features, not class: `mint` by the `minter` with `MINTABLE`
+init (`NONE*` kinds only; with `initialSupply == 0` nothing is minted and `initialHolder` is ignored). Further supply and burning are features, not class: `mint` by the `minter` with `MINTABLE`
 (`minter == 0` and no flag ⇒ fixed supply), holder `burn` with `BURNABLE`, and the role and its lifecycle are in
 [CTR-TOK-22](#CTR-TOK-22). (Built: the holder's `renounceRole(MINTABLE)`.)
 
@@ -604,16 +604,17 @@ empty output — with no symptom until someone has deposited funds.
   every token is a 45-byte EIP-1167 clone (`363d3d373d3d3d363d73<impl>5af43d82803e903d91602b57fd5bf3`) that
   `DELEGATECALL`s it with its own storage. A clone costs ~45 000 gas instead of ~2.5 M.
 - **Versions live in the factory**: `registerImplementation(kind, version, impl)` (registrar only, append-only,
-  version 0 forbidden), `deprecate` marks but never blocks, `createUnregistered` deploys an off-catalogue
+  version 0 forbidden), `deprecate` marks but never blocks, `createTokenUnregistered` deploys an off-catalogue
   implementation with `version() == 0` (visibly). A bug in a version is permanent for that version's tokens; the remedy is
   voluntary migration (unwrap the old token, wrap the new one).
 - **Atomic init**: CREATE2 salt = `keccak256(abi.encode(msg.sender, salt))` (nobody can take another creator's
   address); `initialize` runs in the same call and requires `msg.sender == FACTORY`; implementations lock themselves
   in the constructor.
 - **Zether gate**: `zetherEnabled` default `false`; enabling and creating Zether tokens revert outside chain ids
-  31337/1337 (`ZetherSafety`, [CTR-ZTH-02](zether.md#CTR-ZTH-02)).
+  31337/1337 (`ZetherSafety`, [CTR-ZTH-02](zether.md#CTR-ZTH-02)). Built on `OpenFactoryV1` (`:33`, `:65-69`, `:172-175`);
+  `OpenFactory` gets it with P3.
 - **Registrar** is an EOA by default (deployer); it must become a multisig before mainnet. Its only powers are
-  `registerImplementation`, `deprecate`, `setZetherEnabled`.
+  `registerImplementation`, `deprecate`, and (`OpenFactoryV1` today) `setZetherEnabled`.
 - **Same rule on every family**: a fix to an Aptos package, Sui package, Solana program, Cosmos contract, TON or
   Soroban contract is a new deployment at a new address plus voluntary migration by the owners of the balances;
   accounts on the old deployment keep working with the old code ([CTR-GEN-02](README.md#CTR-GEN-02)).
@@ -628,7 +629,7 @@ uniqueness on the underlying alone, no name or symbol vetting. The ranking signa
 
 <a id="CTR-TOK-17"></a>**CTR-TOK-17** — **Provenance instead of gatekeeping.** Every token answers, immutably,
 `factory()`, `creator()`, `underlying()`, `verifier()`, `implementation()`, `version()`, and the factory keeps
-`isDeployedHere(token)` for the reverse check — a contract that claims a `factory()` the factory does not confirm is
+`isToken(token)` for the reverse check — a contract that claims a `factory()` the factory does not confirm is
 only a self-declared string. This answers "is this contract really a wrap of xDAI with verifier X created by Y"; it
 does **not** answer "is this the token I should use" — that has no on-chain answer (reputation and liquidity decide).
 Clients add their own pinning where needed ([CTR-ZTH-20](zether.md#CTR-ZTH-20)). Provenance metadata published for
@@ -660,7 +661,7 @@ struct TokenConfig {
     uint256 features; uint256 lockedFeatures;
     address owner;                             // 0 = no administration ever
     Roles roles;                               // initial holders (optional, each only for a set flag): minter, rateAdmin, guardian, issuer, compliance
-    uint256 initialSupply; address initialHolder;   // NONE* only
+    uint256 initialSupply; address initialHolder;   // NONE* only; initialHolder is ignored when initialSupply == 0
     Leg[] legs;                                // underlying (address(0) = native coin, CTR-TOK-26), num, den — UNDERLYING* only, 1..8
     RateConfig rate;                           // with RATE_ADJUSTABLE
     ConfidentialConfig conf;                   // verifier, auditorKey (empty = no auditor), shieldScale — *_ZETHER only
@@ -675,12 +676,13 @@ struct DexConfig { address admin; uint32 relayerSharePpm; address treasury; bool
   `NONE_PQZ`, `UNDERLYING_PQZ`, `NONE_ZETHER_PQZ`, `UNDERLYING_ZETHER_PQZ`. The implementation registry keeps
   versions per kind (register, deprecate) as before; the catalogue is append-only.
 - **One event per creation:** `TokenCreated(token, creator, kind, version, implementation, features, lockedFeatures,
-  owner, underlyings)`; `DexCreated(dex, creator, version, implementation, admin)` for a DEX clone
+  owner, underlyings)`, where `lockedFeatures` is the value the token stored (`locked | (features & ALWAYS_LOCKED)`, read
+  back from `lockedFeatures()` after `initialize`), not the requested one; `DexCreated(dex, creator, version, implementation, admin)` for a DEX clone
   ([CTR-DEX-24](dex.md#CTR-DEX-24)).
 - **Registry views:** `isToken(addr)`, `isDex(addr)`, `versionOf(addr)`. `isDex` is advisory: clients and the node use it,
   tokens never consult it ([CTR-DEX-24](dex.md#CTR-DEX-24)).
-- `IFactoryToken`, `IFactoryTokenV2`, `IOpenFactory`, `IOpenFactoryV2` are replaced by one `IOpenFactory` and one
-  `IFactoryToken`.
+- One `IOpenFactory` and one `IFactoryToken` (the v2 interfaces are gone; the v1 ones are `IOpenFactoryV1` and
+  `IFactoryTokenV1`).
 
 Flag validation is the token's ([CTR-TOK-22](#CTR-TOK-22)): the factory only forwards `features`, `lockedFeatures`
 and `roles`.
@@ -700,13 +702,14 @@ DEX (`createDex`, `isDex`, `DexCreated`: P2) and has no `setZetherEnabled` (P3).
 
 - `constructor(address registrar, bytes32 chainUid)`, `chainUid` non-zero (`ChainUidZero`). `registerImplementation` and
   `deprecate` are registrar-only; the catalogue is append-only (`VersionAlreadyRegistered`); version 0 is refused.
-- **Registration** reads `kind()`, `factory()` and `chainUid()` by staticcall: `ImplementationNotAContract`,
+- **Registration** requires `implementation.code.length > 0` and reads `kind(), `factory()` and `chainUid()` by staticcall: `ImplementationNotAContract`,
   `VersionKindMismatch(expected, got)` (`got = type(uint256).max` when there is no answer),
   `ImplementationFactoryMismatch`, `ChainUidMismatch`. `NONE_PQZ`…`UNDERLYING_ZETHER_PQZ` (4–7) revert `KindReserved`;
   kinds 2 and 3 are accepted before P3 (controller ruling, pending the owner).
 - **Creation:** `createToken` (registered version) and `createTokenUnregistered` (same four checks, recorded with
   `version == 0`) take the leg count from `cfg.legs` (`NONE*` 0, `UNDERLYING*` 1–8, else `UnderlyingCountInvalid`),
-  clone with salt `keccak256(abi.encode(msg.sender, salt))` (`SaltAlreadyUsed`), call `initialize` in the same call, and
+  clone with salt `keccak256(abi.encode(msg.sender, salt))` (`SaltAlreadyUsed` when the predicted address is already in the
+  index or has code: an unregistered implementation may self-destruct its clone in `initialize`), call `initialize` in the same call, and
   emit only `TokenCreated`. The token reads the same `cfg.legs` that the factory indexed. A field of another kind reverts
   `ConfigFieldForOtherKind(field)`: 1 `initialSupply`/`initialHolder` (not `NONE*`), 2 `legs`, 3 `rate` (not
   `UNDERLYING*`), 4 `conf` (not `*_ZETHER`).
@@ -714,6 +717,11 @@ DEX (`createDex`, `isDex`, `DexCreated`: P2) and has no `setZetherEnabled` (P3).
   `creatorOf`, `versionOf`, `getWrapper(creator, underlying)` (the first; it may be a multi-leg token: read
   `underlyings()`), `getWrapperCount/At`, `deployCountFor/deployedFor`. Every leg is indexed, `address(0)` for the
   native coin.
+- **Zether creation on the v1 factory (BUILT).** `OpenFactoryV1.createZetherToken` and `createUnregistered(ZETHER)` call
+  `_checkVerifier(verifier)` (`OpenFactoryV1.sol:179-190`): a zero verifier reverts `VerifierRequiredForZether`; no code, or
+  `verifier.isSupportedOnThisChain()` false or unanswered, reverts `VerifierUnsupportedOnThisChain(verifier, curveName)`
+  with the verifier's `curveName()` (empty when it has no code or no answer), so a BLS12-381 verifier cannot be paired
+  with a chain without EIP-2537. `OpenFactory` has no such path before P3.
 - **Trust the index only for registered versions** (`versionOf(token).version != 0`): the factory indexes what the
   config says, and an unregistered implementation (version 0) may do anything else with it.
 

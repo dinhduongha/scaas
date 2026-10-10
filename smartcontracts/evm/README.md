@@ -51,11 +51,11 @@ Ba hệ quả xuyên suốt cây này:
    đổi được contract đang giữ tiền bạn.
 
    Catalogue là **danh mục, không phải cổng**: append-only (`v1` không bao giờ trỏ lại
-   chỗ khác), `deprecate()` chỉ đánh dấu chứ không chặn, và `createUnregistered` cho
+   chỗ khác), `deprecate()` chỉ đánh dấu chứ không chặn, và `createTokenUnregistered` cho
    phép deploy implementation ngoài catalogue — token đó mang `version() == 0`, cố ý
    nhìn thấy được.
 3. **Bỏ gác cổng thì bù bằng xuất xứ.** `factory()`, `creator()`, `underlying()`,
-   `verifier()` bất biến và công khai, `isDeployedHere()` để đối chiếu ngược. Đủ để
+   `verifier()` bất biến và công khai, `isToken()` để đối chiếu ngược. Đủ để
    trả lời "cái này wrap gì, ai tạo, verifier nào" — không đủ để trả lời "cái này có
    phải bản nên dùng không", và đó là câu hỏi của thị trường.
 

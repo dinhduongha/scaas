@@ -2,9 +2,10 @@
 
 ## Session 2026-10-11 (P1e)
 
-**State:** P1e on branch `p1e-factory`, merge pending the final review (818 forge tests; e2e 4/4 and e2e_hedera 1/1;
-docs checker 0 errors). Not pushed. Plan `docs/superpowers/plans/2026-10-11-p1e-openfactory.md`. With P1e, P1 is
-complete except the parked items in TODO.
+**State:** P1e on branch `p1e-factory`, merge pending the final review (819 forge tests; e2e 4/4 and e2e_hedera 1/1;
+docs checker 0 errors). Not pushed. Plan `docs/superpowers/plans/2026-10-11-p1e-openfactory.md`. P1 is complete except these
+parked items: MT-1 (the v1 line is kept as `…V1` until P3/P5), MT-3 (the v1 approve rule), MT-4 (`salt = chain_uid` in the other
+domains, E10), and the P1d test gaps in TODO.
 
 **P1e delivered:** `OpenFactory(registrar, chainUid)` (`createToken`, `createTokenUnregistered`, `TokenConfig`, one
 `TokenCreated`, `isToken`; registration reads `kind()`, `factory()`, `chainUid()`); both token kinds implement
@@ -26,7 +27,7 @@ E5 `ConfigFieldForOtherKind`; E6 one source for the legs (the P1d D8 cross-check
 domains' `salt = chain_uid` is not in P1e (MT-4 stays open for them).
 
 **Sizes (forge build src --sizes, runtime B):** `NoUnderlyingToken` 20,196 (284 left of 20,480), `UnderlyingToken` 26,449
-(over EIP-170), `UnderlyingLib` 10,096, `OpenFactory` 6,715, `OpenFactoryV1` 6,057, `ZetherToken` 28,849.
+(over EIP-170), `UnderlyingLib` 10,096, `OpenFactory` 6,850, `OpenFactoryV1` 6,057, `ZetherToken` 28,849.
 
 **For integrators:** the factory's underlying index is only as truthful as the implementation; trust it for registered
 versions (`versionOf(token).version != 0`); `createTokenUnregistered` records version 0.

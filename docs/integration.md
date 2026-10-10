@@ -850,19 +850,18 @@ factory call plus optional action contracts ([CTR-AS-14](contracts/asset-suite.m
 
 | Template | Call | Client configuration | Status |
 |---|---|---|---|
-| Loyalty points (tier 1) | `createMetaToken(1, address(0), abi.encode(name, symbol, decimals, initialSupply, minter), salt)` or `createToken(NONE, version, cfg, salt)` on `OpenFactory` (built, P1e) | `minter` = the issuer's mint contract or multisig; earn rules in the ERP trigger `mint` jobs; fee 0 | **BUILT** |
-| Internal 1:1 money (tier 2) | `createMetaToken(1, underlying, abi.encode(name, symbol, 0, 0, address(0)), salt)` | Journal per (company, token) for accounting; wrap/unwrap by holders | **BUILT** |
+| Loyalty points (tier 1) | `createToken(NONE, version, cfg, salt)` on `OpenFactory` (built, P1e; the v1 `OpenFactoryV1.createMetaToken(1, address(0), abi.encode(name, symbol, decimals, initialSupply, minter), salt)` is still built) | `minter` = the issuer's mint contract or multisig; earn rules in the ERP trigger `mint` jobs; fee 0 | **BUILT** |
+| Internal 1:1 money (tier 2) | `createToken(UNDERLYING, version, cfg, salt)` with one leg, `num = den = 1` (built; the v1 `createMetaToken(1, underlying, …)` is still built) | Journal per (company, token) for accounting; wrap/unwrap by holders | **BUILT** |
 | Wrapper with a rate, multi-underlying (tiers 2/3, v2) | `createToken(UNDERLYING, version, cfg, salt)` with 1–8 `cfg.legs` (built: `UnderlyingToken`, not yet deployed by the script: over EIP-170) | rates fixed or adjustable (contract rate-role holder), optional guardian | **BUILT** (contracts; client fields SPECIFIED) |
 | Confidential money | `createZetherToken(1, underlying, verifier, abi.encode(name, symbol, registry, shieldScale, maxDecryptableShielded, confidentialFee, auditorKey), salt)` | dev chains only until audit; curve decision; auditor key custody | **BUILT** (dev chains) |
 | Regulated tokens (flags 5–8, [CTR-AS-17](contracts/asset-suite.md#CTR-AS-17)), vesting (`VestingGrant`), distributions, `ExchangeOffer` | `createToken` with flags 5–8 ([CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25)); counterfactual clones via `predict*` | issuer/compliance contracts, `ComplianceRegistry`, `termsHash` disclosure | **SPECIFIED** |
 | NFT kinds | — | — | **PLANNED** |
 
-After creation: read `predictAddress` before, verify `isDeployedHere`, `creatorOf`, `versionOf` after (decoders know
+After creation: read `predictAddress` before, verify `isToken`, `creatorOf`, `versionOf` after (decoders know
 the built kinds 0–4; flags 5–8 are fields, [CTR-AS-17](contracts/asset-suite.md#CTR-AS-17)); register the token on the node (`POST /v1/admin/chains/{key}/tokens`) and in the client
 (`PUT /v1/tokens/{chain}`), record the EIP-712 domain from `eip712Domain()` (target: with `salt` = the chain's
-`chain_uid`, checked against the chain profile). Target (SPECIFIED): one factory, `OpenFactory` (the tiered factory's
-code): the v1 `createMetaToken` rows above become `createToken` of kind `NONE` and of kind `UNDERLYING` with one leg and
-`num = den = 1` (CTR-TOK-25); gasless token operations other than transfer and payment are `mtxExecute` self-calls on the token's
+`chain_uid`, checked against the chain profile). Built: one factory, `OpenFactory` (CTR-TOK-25), with `createToken` of kind `NONE` and of kind `UNDERLYING`; the v1 factory
+(`OpenFactoryV1`: `createMetaToken`, `createZetherToken`) stays until the node and clientkeys (P5) and Zether (P3) move. Gasless token operations other than transfer and payment are `mtxExecute` self-calls on the token's
 allowlist; role calls such as `mint` stay `call` jobs through the role holder's contract.
 
 ## <a id="data-protection"></a>15. Data protection

@@ -459,7 +459,7 @@ warm (≈ +0.5 k). Control calls add one library `DELEGATECALL` (≈ 2.6 k cold)
 | Area | Tests |
 |---|---|
 | Init | every init refusal; EOA and 7702 roles refused; `FORCE` without `FREEZE`; config stored before the initial-supply mint (allowlist refuses an unattested `creator`) |
-| Factory | `FactoryV2.t.sol`: flags 5–8 on `NONE` and `UNDERLYING` with counts 0/1/2/8/9; flags 5–8 refused on both confidential kinds in `initialize`, including through `createTokenUnregistered` |
+| Factory | `Factory.t.sol`: flags 5–8 on `NONE` and `UNDERLYING` with counts 0/1/2/8/9; flags 5–8 refused on both confidential kinds in `initialize`, including through `createTokenUnregistered` |
 | Paths | each row of the path table on both kinds, direct and meta-tx (generic, named, `mtxBatch`), refused at the shape step (gas of a refused intent < 40 k); `payWithFee` override emits exactly the base events |
 | Freeze | issuer-only 30 d, extension to 60 d from episode start, `FreezeTooLong`, `FreezeCooldown` after expiry and after unfreeze, record-backed freeze to `freezeUntil`, ended by `revokeOrder`, open-ended record |
 | Orders | record/revoke/execute; `SubjectNotFrozen`; `OrderExceeded` at the exact edge; beneficiary frozen/ineligible; same `orderId` with two subjects |
@@ -916,11 +916,11 @@ The configuration wizard (in the app and any client system) works over `IOpenFac
 
 | Template | Factory call | Parameters | Status of primitive |
 |---|---|---|---|
-| Loyalty / rewards | `createToken` kind `NONE` (built: `createTiered(META_NONE, 1, [], initData, salt)`, `createMetaToken(1, 0, initData, salt)`) | name, symbol, decimals, `minter` = issuer's mint contract or treasury multisig, fee 0 | **BUILT** |
-| Internal 1:1 money | `createToken` kind `UNDERLYING`, one leg, `num = den = 1` (built: `createTiered(META_SINGLE, 1, [underlying], …)`, `createMetaToken(1, underlying, …)`) | underlying stablecoin; wrap/unwrap through the clone | **BUILT** |
-| Wrapper with a rate | `createToken` kind `UNDERLYING` (built: `createTiered(META_SINGLE, …)`) | underlying, `num/den`, fixed or adjustable (rate role, delay, step) | **BUILT** |
-| Confidential money | `createZetherToken(1, underlying, verifier, initData, salt)` | `registry`, `shieldScale`, `maxDecryptableShielded ≤ 2^54`, `confidentialFee`, auditor key | **BUILT** (dev chains only) |
-| Multi-underlying money (e.g. xDAI/USDC/USDT) | `createToken` kind `UNDERLYING` with 2–8 legs (built: `createTiered(META_SINGLE, …)`, 1–8 legs) | 2–8 underlyings, per-leg rates, guardian | **BUILT** |
+| Loyalty / rewards | `createToken` kind `NONE` (built; the v1 factory also has `createMetaToken(1, 0, initData, salt)`) | name, symbol, decimals, `minter` = issuer's mint contract or treasury multisig, fee 0 | **BUILT** |
+| Internal 1:1 money | `createToken` kind `UNDERLYING`, one leg, `num = den = 1` (built; the v1 factory also has `createMetaToken(1, underlying, …)`) | underlying stablecoin; wrap/unwrap through the clone | **BUILT** |
+| Wrapper with a rate | `createToken` kind `UNDERLYING` (built) | underlying, `num/den`, fixed or adjustable (rate role, delay, step) | **BUILT** |
+| Confidential money | `createZetherToken(1, underlying, verifier, initData, salt)` on `OpenFactoryV1` (`createToken` of kind `NONE_ZETHER`/`UNDERLYING_ZETHER` with P3) | `registry`, `shieldScale`, `maxDecryptableShielded ≤ 2^54`, `confidentialFee`, auditor key | **BUILT** (dev chains only) |
+| Multi-underlying money (e.g. xDAI/USDC/USDT) | `createToken` kind `UNDERLYING` with 2–8 legs (built: 1–8 legs) | 2–8 underlyings, per-leg rates, guardian | **BUILT** |
 | Vesting / streaming | `VestingGrant` clone per grant | cliff, duration, interval or tranches, approver, revocability | **SPECIFIED** |
 | Controlled / security / bond | `createToken` with flags 5–8 + `Distribution` / `ExchangeOffer` | issuer and compliance contracts, the flags, `ComplianceRegistry` + `requiredFlags`, `termsHash` | **SPECIFIED** |
 | Non-fungible in-app assets (ERC-721/1155 with meta-tx) | new kinds | — | **PLANNED** |

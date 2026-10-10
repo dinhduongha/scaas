@@ -40,7 +40,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
       `UNDERLYING` (the native-coin leg, CTR-TOK-26) with `AdminLib`, `UnderlyingLib`, `HederaLib`, `SigCheck` (CTR-TOK-21…24); factory
       `createToken` (CTR-TOK-25). Delete what token-tree spec §8 deletes: `ERC20MetaTx`(v1), `MetaToken`, `HederaMetaToken`,
       v1 `OpenFactory`, `MetaTxDex`, `MetaTxCore`, `Single`/`MultiUnderlyingToken` (merged), the `Hedera*UnderlyingToken`
-      children, `SigLib`, `OpenFactoryV2.createMetaToken`, the regulated children (flags instead, CTR-AS-17).
+      children, `SigLib`, `OpenFactoryV2.createMetaToken` (gone with factory v2, P1e), the regulated children (flags instead, CTR-AS-17).
 - [ ] **MT-2** (P1b built all but the UA split and `mtxWrap`; open: UA path, see UA F1) Two structs, one lane space (CTR-MTX-15): `MetaTransaction{from, data, …}` + `mtxExecute` (+ alias), `mtxBatch`;
       tokens' typed `MetaTransfer{from, to, value, entryRef, …}` + `mtxExecuteTransfer`, `mtxBatchTransfer` (CTR-MTX-23/24);
       named functions keep their signatures and build their struct (CTR-MTX-09); receiver-pays on `MetaTransfer`;
@@ -48,7 +48,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
       all-or-nothing; `_msgSender()` everywhere per the `msg.sender` inventory; lint/test that no token reads
       `msg.sender` directly except the allowed spots; UA path split into `UAMetaTransaction`/`UAMetaTransfer` +
       `uaExecuteTransfer`/`uaBatchTransfer` (CTR-UA-26); KATs `metatx_kat.json`, `metatransfer_kat.json`, v3 pair.
-- [ ] **MT-3** `approve` only by contracts (caller and spender) — built in P1b on the v2 line; open: v1 line (P1e) and `mtxWrap` for a SCaaS underlying (P2, D1).
+- [ ] **MT-3** `approve` only by contracts (caller and spender) — built in P1b on the v2 line; open: v1 line (P3/P5, E1) and `mtxWrap` for a SCaaS underlying (P2, D1).
 - [~] **MT-4** (built in P1e for tokens and the token factory: both deploy scripts on CREATE2, gate on `chainUid()`; open for the other domains: SmartKeyAccount, MandateWallet P4, SCaaSDex P2, UA registry UA F1, Zether digests P3) `salt = chain_uid` in every domain (implementation immutables; SmartKeyAccount, MandateWallet, SCaaSDex,
       UA registry, Zether digests); deploy scripts on a CREATE2 deployer; deploy gate checks `chainUid()`.
 
@@ -113,8 +113,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
 
 - [ ] **P0 follow-ups (minor, deferred by the final review):** `zether.md` gas-cap / 2.5 M paragraphs quote only
       single-recipient figures; `zether.md` ~1327 `recipient` vs target `to`, ~216/220/238 informal `zetherShield(Y…)`
-      prose; architecture sequence 5 lacks `UnderlyingLib`; `asset-suite.md` 893–897 "BUILT" next to `createToken`, Equity
-      row `createTiered`, `IRegulatedToken` block old names (`issuer()`, `compliance()`, `ControlsDisabled`, `RoleRenounced`);
+      prose; architecture sequence 5 lacks `UnderlyingLib`; `asset-suite.md` 893–897 "BUILT" next to `createToken`, `IRegulatedToken` block old names (`issuer()`, `compliance()`, `ControlsDisabled`, `RoleRenounced`);
       `clients/app.md` CLI-APP-26 cites CTR-TOK-21 for built kinds; `node/store.md`:157 SQL comments; `node/job-api.md`:328
       unlabelled `SmartKeyAccount.mtxExecuteAsOwner`; CTR-TOK-26 "the invariant" wording; `dropped-artifacts.tsv` duplicates
       and the bare token `273`; CTR-ACC-80 "(then named SubjectAccount)"; budget warnings `token-wrappers.md`, `dex.md` (owner).

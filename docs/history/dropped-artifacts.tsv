@@ -714,50 +714,55 @@ _legs	obsolete	P1d: legs live in scaas.underlying (contracts/token-wrappers.md#C
 HederaSingleUnderlyingToken	obsolete	P1d: deleted; UnderlyingLib init under IS_HEDERA (contracts/token-wrappers.md#CTR-TOK-23)
 META_MULTI	obsolete	P1d: no implementation; META_SINGLE takes 1–8 legs (contracts/token-wrappers.md#CTR-TOK-25)
 createTiered(META_MULTI, …)	obsolete	P1d: createTiered(META_SINGLE, …) with 1–8 legs (contracts/asset-suite.md#CTR-AS-17)
-constructor(address registrar)	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-keccak256(abi.encode(creator, salt))	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-predictAddress(impl, creator, salt)	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-IFactoryToken(token).initialize(...)	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-verifier.isSupportedOnThisChain()	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-VerifierUnsupportedOnThisChain	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-implementation.code.length > 0	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-deployCountFor/deployedFor(underlying)	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-src/factory/IFactoryToken.sol	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-initialize(...)	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-registerImplementation(META, 1)	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-_createTiered	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-tokenKind()	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-createTieredUnregistered	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-TieredTokenDeployed	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-OpenFactoryV2._createTiered	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-_isTiered	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-kind ≥ META_NONE	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-META_NONE = 2	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-META_SINGLE = 3	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-META_MULTI = 4	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-META = 0	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-address[] underlyings	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-registerImplementation(kind, v, impl)	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-impl.tokenKind()	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-impl.factory()	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-VersionKindMismatch(kind, got)	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-ImplementationFactoryMismatch(impl)	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-factory() == address(this)	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-createTiered*	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-TieredTokenDeployed(token, creator, kind, version, implementation, underlyings)	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-_wrappers[creator][u]	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-_byUnderlying[u]	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-getWrapper(creator, u)	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-IOpenFactoryV2.TokenKind	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-src/common/IOpenFactoryV2.sol	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-got = META	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-expected = META	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-src/factory/OpenFactoryV2.sol	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
- or v2 	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-createTiered(kind, version, underlyings[], initData, salt)	obsolete	P1e: factory v2/v1 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); the v1 line is OpenFactoryV1 (legacy/)
-createTiered	obsolete	P1e: factory v2 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25)
-META_NONE	obsolete	P1e: factory v2 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25)
-META_SINGLE	obsolete	P1e: factory v2 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25)
-tokenKind	obsolete	P1e: factory v2 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25)
-curveName	obsolete	P1e: factory v2 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25)
-No answer	obsolete	P1e: factory v2 replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25)
+constructor(address registrar)	renamed	P1e: OpenFactory now takes (registrar, chainUid), contracts/token-wrappers.md#CTR-TOK-25; OpenFactoryV1.sol keeps (registrar)
+keccak256(abi.encode(creator, salt))	renamed	P1e: the salt formula is unchanged, written keccak256(abi.encode(msg.sender, salt)) in CTR-TOK-25 and CTR-TOK-03; OpenFactoryV1.sol:193-195 has it too
+predictAddress(impl, creator, salt)	renamed	P1e: predictAddress(implementation, creator, salt) on OpenFactory, listed in the views of contracts/token-wrappers.md#CTR-TOK-25; also on OpenFactoryV1
+IFactoryToken(token).initialize(...)	renamed	P1e: initialize(creator, version, TokenConfig) of src/factory/IFactoryToken.sol, contracts/token-wrappers.md#CTR-TOK-25
+deployCountFor/deployedFor(underlying)	renamed	P1e: deployCountFor(underlying) / deployedFor(underlying, i), contracts/token-wrappers.md#CTR-TOK-16 and the views of CTR-TOK-25
+src/factory/IFactoryToken.sol	renamed	P1e: same path, new content: TokenConfig, initialize, kind(), ConfigFieldForOtherKind (contracts/token-wrappers.md#CTR-TOK-25); v1 is src/common/IFactoryTokenV1.sol
+initialize(...)	renamed	P1e: initialize(creator, version, TokenConfig), contracts/token-wrappers.md#CTR-TOK-25; v1 tokens keep initialize(...) via IFactoryTokenV1
+registerImplementation(META, 1)	renamed	P1e: registerImplementation(NONE, 1, impl) on OpenFactory (script/DeployBase.sol); the scripts still register META v1 on OpenFactoryV1
+_createTiered	obsolete	P1e: factory v2 removed, replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); backed up in smartcontracts/evm/legacy/p1e/, not built
+tokenKind()	renamed	P1e: kind(), a pure constant of each implementation, contracts/token-wrappers.md#CTR-TOK-25
+createTieredUnregistered	obsolete	P1e: factory v2 removed, replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); backed up in smartcontracts/evm/legacy/p1e/, not built
+TieredTokenDeployed	obsolete	P1e: factory v2 removed, replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); backed up in smartcontracts/evm/legacy/p1e/, not built
+OpenFactoryV2._createTiered	obsolete	P1e: factory v2 removed, replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); backed up in smartcontracts/evm/legacy/p1e/, not built
+_isTiered	obsolete	P1e: factory v2 removed, replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); backed up in smartcontracts/evm/legacy/p1e/, not built
+kind ≥ META_NONE	obsolete	P1e: factory v2 removed, replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); backed up in smartcontracts/evm/legacy/p1e/, not built
+META_NONE = 2	obsolete	P1e: factory v2 removed, replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); backed up in smartcontracts/evm/legacy/p1e/, not built
+META_SINGLE = 3	obsolete	P1e: factory v2 removed, replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); backed up in smartcontracts/evm/legacy/p1e/, not built
+META_MULTI = 4	obsolete	P1e: factory v2 removed, replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); backed up in smartcontracts/evm/legacy/p1e/, not built
+META = 0	renamed	P1e: v1 TokenKind.META is src/common/IOpenFactoryV1.sol, still built; OpenFactory kinds start NONE = 0, contracts/token-wrappers.md#CTR-TOK-25
+address[] underlyings	renamed	P1e: TokenCreated(..., address[] underlyings), contracts/token-wrappers.md#CTR-TOK-25
+registerImplementation(kind, v, impl)	renamed	P1e: registerImplementation(kind, version, implementation), contracts/token-wrappers.md#CTR-TOK-25
+impl.tokenKind()	renamed	P1e: kind() read by staticcall at registration, contracts/token-wrappers.md#CTR-TOK-25
+impl.factory()	renamed	P1e: factory() read by staticcall at registration, contracts/token-wrappers.md#CTR-TOK-25
+VersionKindMismatch(kind, got)	renamed	P1e: VersionKindMismatch(expected, got), got = type(uint256).max when there is no answer, contracts/token-wrappers.md#CTR-TOK-25
+ImplementationFactoryMismatch(impl)	renamed	P1e: ImplementationFactoryMismatch(implementation), contracts/token-wrappers.md#CTR-TOK-25
+factory() == address(this)	renamed	P1e: registration check, contracts/token-wrappers.md#CTR-TOK-25
+createTiered*	obsolete	P1e: factory v2 removed, replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); backed up in smartcontracts/evm/legacy/p1e/, not built
+TieredTokenDeployed(token, creator, kind, version, implementation, underlyings)	obsolete	P1e: factory v2 removed, replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); backed up in smartcontracts/evm/legacy/p1e/, not built
+_wrappers[creator][u]	renamed	P1e: the index is the getWrapper* views of OpenFactory, contracts/token-wrappers.md#CTR-TOK-25; same storage in OpenFactoryV1
+_byUnderlying[u]	renamed	P1e: the index is deployCountFor/deployedFor of OpenFactory, contracts/token-wrappers.md#CTR-TOK-25; same storage in OpenFactoryV1
+getWrapper(creator, u)	renamed	P1e: getWrapper(creator, underlying), contracts/token-wrappers.md#CTR-TOK-16
+IOpenFactoryV2.TokenKind	obsolete	P1e: factory v2 removed, replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); backed up in smartcontracts/evm/legacy/p1e/, not built
+src/common/IOpenFactoryV2.sol	obsolete	P1e: factory v2 removed, replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); backed up in smartcontracts/evm/legacy/p1e/, not built
+got = META	obsolete	P1e: factory v2 removed, replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); backed up in smartcontracts/evm/legacy/p1e/, not built
+expected = META	obsolete	P1e: factory v2 removed, replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); backed up in smartcontracts/evm/legacy/p1e/, not built
+src/factory/OpenFactoryV2.sol	obsolete	P1e: factory v2 removed, replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); backed up in smartcontracts/evm/legacy/p1e/, not built
+ or v2 	obsolete	P1e: factory v2 removed, replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); backed up in smartcontracts/evm/legacy/p1e/, not built
+createTiered(kind, version, underlyings[], initData, salt)	obsolete	P1e: factory v2 removed, replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); backed up in smartcontracts/evm/legacy/p1e/, not built
+createTiered	obsolete	P1e: factory v2 removed, replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); backed up in smartcontracts/evm/legacy/p1e/, not built
+META_NONE	obsolete	P1e: factory v2 removed, replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); backed up in smartcontracts/evm/legacy/p1e/, not built
+META_SINGLE	obsolete	P1e: factory v2 removed, replaced by OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); backed up in smartcontracts/evm/legacy/p1e/, not built
+tokenKind	renamed	P1e: kind(), contracts/token-wrappers.md#CTR-TOK-25
+No answer	renamed	P1e: a missing answer reports got = type(uint256).max, contracts/token-wrappers.md#CTR-TOK-25
+isDeployedHere	renamed	P1e: isToken(token) on OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); OpenFactoryV1.isDeployedHere stays on the v1 line
+isDeployedHere(token)	renamed	P1e: isToken(token) on OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); OpenFactoryV1.isDeployedHere stays on the v1 line
+OpenFactory.zetherEnabled	renamed	P1e: the v1 factory, OpenFactoryV1.zetherEnabled (src/factory/OpenFactoryV1.sol:33), contracts/zether.md#safety-gate; OpenFactory gets it with P3
+OpenFactory.sol:179-190	renamed	P1e: OpenFactoryV1.sol:179-190 (_checkVerifier), contracts/zether.md and contracts/token-wrappers.md section 6.2
+OpenFactoryV2	obsolete	P1e: factory v2 renamed OpenFactory (contracts/token-wrappers.md#CTR-TOK-25); backed up in smartcontracts/evm/legacy/p1e/, not built
+IOpenFactoryV2	obsolete	P1e: replaced by IOpenFactory (contracts/token-wrappers.md#CTR-TOK-25); backed up in smartcontracts/evm/legacy/p1e/, not built
+FactoryV2.t.sol	renamed	P1e: smartcontracts/evm/test/v2/Factory.t.sol, contracts/token-wrappers.md section 8
+createTiered(META_SINGLE, …)	obsolete	P1e: createToken(UNDERLYING, version, cfg, salt), contracts/token-wrappers.md#CTR-TOK-25
+createMetaToken(1, underlying, abi.encode(name, symbol, 0, 0, address(0)), salt)	obsolete	P1e: createToken(UNDERLYING, version, cfg, salt) with one leg, contracts/token-wrappers.md#CTR-TOK-25; the v1 createMetaToken stays on OpenFactoryV1
