@@ -118,6 +118,7 @@ contract ReceiverPaysTest is Test {
         _runRevert(x, 1, feeTo, block.timestamp - 1,
             abi.encodeWithSelector(IMetaTokenV2.ReceiverFeeExpired.selector, block.timestamp - 1, block.timestamp));
         _runRevert(x, 1, payee, block.timestamp, abi.encodeWithSelector(IERC20MetaTx.FeeRecipientIsPayee.selector));
+        _runRevert(x, 1, address(t), block.timestamp, abi.encodeWithSelector(IERC20MetaTx.TransferToSelf.selector));
     }
 
     function test_coSignatureOverAnotherDigest_refused() public {
@@ -162,5 +163,19 @@ contract ReceiverPaysTest is Test {
         assertEq(t.balanceOf(payer), 1_000e6 - n);
         assertEq(t.balanceOf(payee), n - fee);
         assertEq(t.balanceOf(feeTo), fee);
+    }
+
+    /// The `ReceiverFee` typehash and domain are pinned independently of the contract.
+    function test_receiverFeeDigestIsPinned() public view {
+        assertEq(keccak256("ReceiverFee(bytes32 paymentDigest,uint256 fee,address feeRecipient,uint256 validUntil)"),
+            0x0128f09c9f096f23f7540465cf85cf756ab725cb552bf61e040433a9b20a9bdf);
+        bytes32 domainSep = keccak256(abi.encode(
+            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
+            keccak256("SCaaS MetaToken"), keccak256("1"), uint256(7622), address(t), UID));
+        bytes32 d = keccak256("payment");
+        bytes32 expected = keccak256(abi.encodePacked(hex"1901", domainSep, keccak256(abi.encode(
+            bytes32(0x0128f09c9f096f23f7540465cf85cf756ab725cb552bf61e040433a9b20a9bdf), d, uint256(3e6), feeTo,
+            uint256(1_800_000_060)))));
+        assertEq(t.receiverFeeDigest(d, 3e6, feeTo, 1_800_000_060), expected);
     }
 }

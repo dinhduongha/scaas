@@ -7,6 +7,7 @@ import {IOpenFactoryV2} from "../../src/common/IOpenFactoryV2.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
+import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
 import {SingleUnderlyingToken} from "../../src/metatx/SingleUnderlyingToken.sol";
 import {HederaHts} from "../../src/hedera/HederaV2Lib.sol";
 import {HederaNoUnderlyingToken, HederaSingleUnderlyingToken, HederaMultiUnderlyingToken}
@@ -88,6 +89,32 @@ contract HederaV2Test is Test {
         vm.prank(relayer);
         IERC20MetaTx(t).mtxExecuteTransfer(x, sig);
         assertEq(IERC20MetaTx(t).balanceOf(shop), 250);
+    }
+
+    /// HIP-632 payee: a native Hedera account co-signs the `ReceiverFee` (64-byte ed25519) for an EVM payer's payment.
+    function test_tier1NativeAccountPayeeCoSignsReceiverFee() public {
+        vm.prank(alice);
+        address t = f.createTiered(IOpenFactoryV2.TokenKind.META_NONE, 1, new address[](0),
+            abi.encode("Points", "PTS", uint8(0), uint256(1000), address(0)), "n");
+        uint256 payerPk = 0xB0B;
+        address payer = vm.addr(payerPk);
+        address feeTo = address(0xFEE);
+        vm.prank(alice);
+        IERC20MetaTx(t).transfer(payer, 500);
+        bytes32 ref = keccak256("request-1");
+        MetaTxLib.MetaTransfer memory x = MetaTxLib.MetaTransfer({from: payer, to: alice, value: 200, entryRef: ref,
+            batch: IMetaTokenV2(t).payLane(ref), nonce: 0, validUntil: block.timestamp + 300, mode: RR,
+            relayer: relayer, fee: 0, feeRecipient: address(0)});
+        bytes32 d = IERC20MetaTx(t).mtxTransferDigest(x);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(payerPk, d);
+        bytes memory payerSig = abi.encodePacked(r, s, v);
+        bytes memory payeeSig = _edSign(IMetaTokenV2(t).receiverFeeDigest(d, 30, feeTo, block.timestamp));
+        uint256 aliceBefore = IERC20MetaTx(t).balanceOf(alice);
+        vm.prank(relayer);
+        IMetaTokenV2(t).mtxPayReceiverFee(x, payerSig, 30, feeTo, block.timestamp, payeeSig);
+        assertEq(IERC20MetaTx(t).balanceOf(payer), 300);
+        assertEq(IERC20MetaTx(t).balanceOf(alice), aliceBefore + 200 - 30);
+        assertEq(IERC20MetaTx(t).balanceOf(feeTo), 30);
     }
 
     function test_tier2NativeAccountUnwrapsGasless() public {
