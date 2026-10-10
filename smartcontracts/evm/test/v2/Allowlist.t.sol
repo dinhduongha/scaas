@@ -11,6 +11,7 @@ import {MultiUnderlyingToken} from "../../src/metatx/MultiUnderlyingToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {FeePolicy} from "../../src/common/FeePolicy.sol";
 
 /// Underlying whose `transferFrom` re-enters the wrapper while the self-call is live.
 contract ReenteringERC20 is MockERC20 {
@@ -32,6 +33,7 @@ contract AllowlistTest is Test {
     address internal relayer = address(0xBEEF);
     uint32 internal constant RR = MetaTxLib.MODE_RESTRICT_RELAYER;
     uint32 internal constant FIX = MetaTxLib.MODE_FEE_FIXED;
+    uint32 internal constant PCT = MetaTxLib.MODE_FEE_PERCENT;
 
     NoUnderlyingToken internal none;
     SingleUnderlyingToken internal single;
@@ -149,6 +151,7 @@ contract AllowlistTest is Test {
         _run(address(single), abi.encodeWithSignature("unwrap(uint256,address,uint256)", 1e6, alice, 1e6));
         _run(address(single), abi.encodeWithSignature("addReserve(address,uint256)", address(u), 1e6));
         assertEq(single.balanceOf(alice), 18e6);
+        assertEq(u.balanceOf(address(single)), 20e6);       // 20 wrapped − 2 unwrapped + 2 by addReserve
     }
 
     function test_multi_everyListedSelectorRuns() public {
@@ -157,6 +160,66 @@ contract AllowlistTest is Test {
         _run(address(multi), abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(u2), 1e6, alice, 0));
         _run(address(multi), abi.encodeWithSignature("addReserve(address,uint256)", address(u), 1e6));
         assertEq(multi.balanceOf(alice), 18e6);
+        assertEq(u.balanceOf(address(multi)), 2e6);         // addReserve(u) twice
+        assertEq(u2.balanceOf(address(multi)), 18e6);
+    }
+
+    // ------------------------------------------------------------------ published list vs enforced rule
+
+    /// For each listed selector, the class and basis argument `mtxSelectors()` publishes are the ones `_mtxRule`
+    /// enforces: ABSOLUTE refuses `PERCENT` at step 3; AMOUNT caps a `FIXED` fee at 1 % of the named argument, so
+    /// `basis/100 + 1` trips `FeeExceedsCap(basis/100 + 1, basis/100)` (the basis is passed here independently).
+    function _crossCheck(address t, bytes[] memory calls, uint256[] memory basis) internal {
+        (bytes4[] memory s, uint8[] memory c,) = MetaTokenBase(t).mtxSelectors();
+        assertEq(calls.length, s.length);
+        for (uint256 i; i < s.length; ++i) {
+            assertEq(bytes4(calls[i]), s[i]);
+            MetaTxLib.MetaTransaction memory m;
+            bytes memory sig;
+            if (c[i] == 1) {
+                (m, sig) = _m(t, calls[i], RR | PCT, 1);
+                vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxFeeClass.selector, s[i], RR | PCT));
+            } else {
+                assertEq(c[i], 2);
+                (m, sig) = _m(t, calls[i], RR | FIX, basis[i] / 100 + 1);
+                vm.expectRevert(abi.encodeWithSelector(FeePolicy.FeeExceedsCap.selector, basis[i] / 100 + 1, basis[i] / 100));
+            }
+            vm.prank(relayer);
+            MetaTokenBase(t).mtxExecute(m, sig);
+        }
+    }
+
+    function test_none_classAndBasisMatchTheRule() public {
+        bytes[] memory k = new bytes[](2);
+        uint256[] memory b = new uint256[](2);
+        k[0] = abi.encodeCall(IMetaTx.cancelNonce, (99));
+        (k[1], b[1]) = (abi.encodeCall(NoUnderlyingToken.burn, (3e6)), 3e6);
+        _crossCheck(address(none), k, b);
+    }
+
+    function test_single_classAndBasisMatchTheRule() public {
+        vm.prank(alice);
+        single.wrap(10e6);
+        bytes[] memory k = new bytes[](4);
+        uint256[] memory b = new uint256[](4);
+        k[0] = abi.encodeCall(IMetaTx.cancelNonce, (99));
+        k[1] = abi.encodeWithSignature("wrap(uint256)", 10e6);
+        (k[2], b[2]) = (abi.encodeWithSignature("unwrap(uint256,address,uint256)", 3e6, alice, 1e6), 3e6);
+        k[3] = abi.encodeWithSignature("addReserve(address,uint256)", address(u), 1e6);
+        _crossCheck(address(single), k, b);
+    }
+
+    function test_multi_classAndBasisMatchTheRule() public {
+        vm.prank(alice);
+        multi.wrap(address(u2), 10e6);
+        bytes[] memory k = new bytes[](4);
+        uint256[] memory b = new uint256[](4);
+        k[0] = abi.encodeCall(IMetaTx.cancelNonce, (99));
+        k[1] = abi.encodeWithSignature("wrap(address,uint256)", address(u2), 10e6);
+        // basis = arg 1 (`wrapped`), not arg 0 (an address) or arg 3 (`minOut`)
+        (k[2], b[2]) = (abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(u2), 3e6, alice, 1e6), 3e6);
+        k[3] = abi.encodeWithSignature("addReserve(address,uint256)", address(u), 1e6);
+        _crossCheck(address(multi), k, b);
     }
 
     // ------------------------------------------------------------------ never allowlisted
@@ -176,6 +239,7 @@ contract AllowlistTest is Test {
             _refused(t, abi.encodeWithSelector(IMetaTx.executeMetaTransaction.selector));
             _refused(t, abi.encodeWithSelector(IMetaTx.mtxBatch.selector));
             _refused(t, abi.encodeWithSelector(MetaTokenBase.mtxTransfer.selector));
+            _refused(t, abi.encodeWithSelector(MetaTokenBase.mtxTransferWithFee.selector));
             _refused(t, abi.encodeWithSelector(MetaTokenBase.mtxPay.selector));
             _refused(t, abi.encodeWithSelector(MetaTokenBase.mtxExecuteWithFee.selector));
             _refused(t, abi.encodeWithSelector(IERC20MetaTx.mtxExecuteTransfer.selector));
@@ -190,7 +254,12 @@ contract AllowlistTest is Test {
         _refused(address(single), abi.encodeWithSignature("executeRate()"));
         _refused(address(single), abi.encodeWithSignature("renounceRateAdmin()"));
         _refused(address(multi), abi.encodeWithSignature("wrap(uint256)", 1));
+        _refused(address(multi), abi.encodeWithSignature("unwrap(uint256,address)", 1, alice));
         _refused(address(multi), abi.encodeWithSignature("unwrap(uint256,address,uint256)", 1, alice, 0));
+        _refused(address(multi), abi.encodeWithSignature("proposeRate(address,uint96,uint96)", address(u), 1, 1));
+        _refused(address(multi), abi.encodeWithSignature("cancelRate()"));
+        _refused(address(multi), abi.encodeWithSignature("executeRate()"));
+        _refused(address(multi), abi.encodeWithSignature("renounceRateAdmin()"));
         _refused(address(multi), abi.encodeWithSignature("disableWrap(address,bytes32)", address(u), bytes32(0)));
         _refused(address(multi), abi.encodeWithSignature("renounceGuardian()"));
     }
