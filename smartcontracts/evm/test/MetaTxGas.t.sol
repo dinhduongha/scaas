@@ -5,10 +5,10 @@ import {Test, console} from "forge-std/Test.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
-import {ERC20MetaTx} from "../src/metatx/ERC20MetaTx.sol";
+import {ERC20MetaTxV1} from "../src/metatx/ERC20MetaTxV1.sol";
 import {MetaTxLib} from "../src/common/MetaTxLib.sol";
 
-contract DemoToken is ERC20MetaTx {
+contract DemoToken is ERC20MetaTxV1 {
     constructor() ERC20("Demo", "DEMO") EIP712("Demo", "1") {}
     function mint(address to, uint256 v) external { _mint(to, v); }
 }

@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import {Fixtures} from "./helpers/Fixtures.sol";
 import {MetaToken} from "../src/metatx/MetaToken.sol";
 import {MetaTxLib} from "../src/common/MetaTxLib.sol";
-import {IERC20MetaTx} from "../src/metatx/IERC20MetaTx.sol";
+import {IERC20MetaTxV1} from "../src/metatx/IERC20MetaTxV1.sol";
 
 /// Op meta-tx `approve(address,uint256)` (R26 + R35): người dùng cấp allowance cho DEX không cần gas.
 contract MetaApproveTest is Fixtures {
@@ -58,7 +58,7 @@ contract MetaApproveTest is Fixtures {
         MetaTxLib.LegacyMetaTransaction memory m = _approveTx(address(0xE0A), 50 ether);
         bytes memory sig = _sign(PK, t, m);
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.SpenderNotContract.selector, address(0xE0A)));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.SpenderNotContract.selector, address(0xE0A)));
         t.executeMetaTransaction(m, sig);
     }
 
@@ -68,7 +68,7 @@ contract MetaApproveTest is Fixtures {
         MetaTxLib.LegacyMetaTransaction memory m = _approveTx(eoa, 1);
         bytes memory sig = _sign(PK, t, m);
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.SpenderNotContract.selector, eoa));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.SpenderNotContract.selector, eoa));
         t.executeMetaTransaction(m, sig);
     }
 

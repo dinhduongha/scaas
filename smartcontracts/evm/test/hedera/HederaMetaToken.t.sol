@@ -6,8 +6,8 @@ import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/common/IOpenFactory.sol";
 import {MetaToken} from "../../src/metatx/MetaToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
-import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
-import {IERC20Payment} from "../../src/metatx/IERC20Payment.sol";
+import {IERC20MetaTxV1} from "../../src/metatx/IERC20MetaTxV1.sol";
+import {IERC20PaymentV1} from "../../src/metatx/IERC20PaymentV1.sol";
 import {MetaTxDex} from "../../src/dex/MetaTxDex.sol";
 import {HederaMetaToken} from "../../src/hedera/HederaMetaToken.sol";
 import {HederaMandateWallet} from "../../src/hedera/HederaMandateWallet.sol";
@@ -92,9 +92,9 @@ contract HederaMetaTokenTest is HederaFixture {
         MetaTxLib.LegacyMetaTransaction memory m = _pay(alice, shop, 250e6, bytes32(uint256(0x42)));
         bytes32 digest = tok.metaTxDigest(m);
         vm.expectEmit(address(tok));
-        emit IERC20Payment.PaymentSettled(alice, shop, 250e6, 0, relayer, bytes32(uint256(0x42)));
+        emit IERC20PaymentV1.PaymentSettled(alice, shop, 250e6, 0, relayer, bytes32(uint256(0x42)));
         vm.expectEmit(address(tok));
-        emit IERC20MetaTx.MetaTransactionExecuted(alice, relayer, m.batch, 0, digest, relayer, 0);
+        emit IERC20MetaTxV1.MetaTransactionExecuted(alice, relayer, m.batch, 0, digest, relayer, 0);
         _exec(tok, m, _edSign(ALICE_KEY, digest));
         assertEq(tok.balanceOf(shop), 250e6);
         assertEq(tok.metaNonce(alice, m.batch), 1);
@@ -121,7 +121,7 @@ contract HederaMetaTokenTest is HederaFixture {
         MetaTxLib.LegacyMetaTransaction memory m = _pay(alice, shop, 1e6, bytes32(uint256(1)));
         bytes memory sig = _edSign(MALLORY_KEY, tok.metaTxDigest(m));
         vm.prank(relayer);
-        vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
+        vm.expectRevert(IERC20MetaTxV1.MetaTxBadSignature.selector);
         tok.executeMetaTransaction(m, sig);
     }
 
@@ -130,7 +130,7 @@ contract HederaMetaTokenTest is HederaFixture {
         MetaTxLib.LegacyMetaTransaction memory m = _pay(ghost, shop, 0, bytes32(uint256(1)));
         bytes memory sig = _edSign(ALICE_KEY, tok.metaTxDigest(m));
         vm.prank(relayer);
-        vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
+        vm.expectRevert(IERC20MetaTxV1.MetaTxBadSignature.selector);
         tok.executeMetaTransaction(m, sig);
     }
 
@@ -139,7 +139,7 @@ contract HederaMetaTokenTest is HederaFixture {
         MockHederaAccountService(HAS).setComplexKey(multi);
         MetaTxLib.LegacyMetaTransaction memory m = _pay(multi, shop, 0, bytes32(uint256(1)));
         vm.prank(relayer);
-        vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
+        vm.expectRevert(IERC20MetaTxV1.MetaTxBadSignature.selector);
         tok.executeMetaTransaction(m, new bytes(64));
     }
 
@@ -149,7 +149,7 @@ contract HederaMetaTokenTest is HederaFixture {
         MetaTxLib.LegacyMetaTransaction memory m = _pay(alice, shop, 1e6, bytes32(uint256(1)));
         bytes memory sig = _edSign(ALICE_KEY, tok.metaTxDigest(m));
         vm.prank(relayer);
-        vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
+        vm.expectRevert(IERC20MetaTxV1.MetaTxBadSignature.selector);
         tok.executeMetaTransaction(m, sig);
     }
 
@@ -161,7 +161,7 @@ contract HederaMetaTokenTest is HederaFixture {
         MetaTxLib.LegacyMetaTransaction memory m = _pay(eoa, shop, 1e6, bytes32(uint256(1)));
         (bytes32 r, bytes32 vs) = vm.signCompact(EVM_PK, tok.metaTxDigest(m));
         vm.prank(relayer);
-        vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
+        vm.expectRevert(IERC20MetaTxV1.MetaTxBadSignature.selector);
         tok.executeMetaTransaction(m, abi.encodePacked(r, vs));
     }
 
@@ -194,7 +194,7 @@ contract HederaMetaTokenTest is HederaFixture {
         bytes memory sig = _edSign(ALICE_KEY, tok.metaTxDigest(m));
         _exec(tok, m, sig);
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.MetaTxBadNonce.selector, 1, 0));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.MetaTxBadNonce.selector, 1, 0));
         tok.executeMetaTransaction(m, sig);
     }
 
@@ -205,7 +205,7 @@ contract HederaMetaTokenTest is HederaFixture {
         bytes memory sig = _edSign(ALICE_KEY, tok.metaTxDigest(m));
         vm.chainId(296);
         vm.prank(relayer);
-        vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
+        vm.expectRevert(IERC20MetaTxV1.MetaTxBadSignature.selector);
         tok.executeMetaTransaction(m, sig);
     }
 
@@ -214,7 +214,7 @@ contract HederaMetaTokenTest is HederaFixture {
         MetaTxLib.LegacyMetaTransaction memory m = _pay(alice, shop, 1e6, bytes32(uint256(1)));
         bytes memory sig = _edSign(ALICE_KEY, tok.metaTxDigest(m));
         vm.prank(relayer);
-        vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
+        vm.expectRevert(IERC20MetaTxV1.MetaTxBadSignature.selector);
         tok2.executeMetaTransaction(m, sig);
     }
 
@@ -223,7 +223,7 @@ contract HederaMetaTokenTest is HederaFixture {
         bytes memory sig = _edSign(ALICE_KEY, tok.metaTxDigest(m));
         vm.warp(m.validUntil + 1);
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.MetaTxExpired.selector, m.validUntil, m.validUntil + 1));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.MetaTxExpired.selector, m.validUntil, m.validUntil + 1));
         tok.executeMetaTransaction(m, sig);
     }
 
@@ -259,9 +259,9 @@ contract HederaMetaTokenTest is HederaFixture {
         tok2.transfer(bob, 500e6);
         MetaTxLib.LegacyMetaTransaction memory a = _leg(alice, address(dex), 100e6, address(tok2), 60e6, 1);
         MetaTxLib.LegacyMetaTransaction memory b = _leg(bob, address(dex), 60e6, address(tok), 100e6, 2);
-        MetaTxDex.Leg memory la = MetaTxDex.Leg(IERC20MetaTx(address(tok)), a, _edSign(ALICE_KEY, tok.metaTxDigest(a)));
+        MetaTxDex.Leg memory la = MetaTxDex.Leg(IERC20MetaTxV1(address(tok)), a, _edSign(ALICE_KEY, tok.metaTxDigest(a)));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(bobPk, tok2.metaTxDigest(b));
-        MetaTxDex.Leg memory lb = MetaTxDex.Leg(IERC20MetaTx(address(tok2)), b, abi.encodePacked(r, s, v));
+        MetaTxDex.Leg memory lb = MetaTxDex.Leg(IERC20MetaTxV1(address(tok2)), b, abi.encodePacked(r, s, v));
         vm.prank(relayer);
         dex.settle(la, lb);
         assertEq(tok2.balanceOf(alice), 1_000e6 + 60e6);

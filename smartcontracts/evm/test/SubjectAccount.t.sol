@@ -8,8 +8,8 @@ import {P256} from "@openzeppelin/contracts/utils/cryptography/P256.sol";
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import {Fixtures} from "./helpers/Fixtures.sol";
 import {MetaToken} from "../src/metatx/MetaToken.sol";
-import {IERC20MetaTx} from "../src/metatx/IERC20MetaTx.sol";
-import {IERC20Payment} from "../src/metatx/IERC20Payment.sol";
+import {IERC20MetaTxV1} from "../src/metatx/IERC20MetaTxV1.sol";
+import {IERC20PaymentV1} from "../src/metatx/IERC20PaymentV1.sol";
 import {MetaTxLib} from "../src/common/MetaTxLib.sol";
 import {SubjectAccount, SubjectKey, KeyKind} from "../src/account/SubjectAccount.sol";
 import {SubjectAccountFactory} from "../src/account/SubjectAccountFactory.sol";
@@ -361,7 +361,7 @@ contract SubjectAccountTest is WebAuthnSoft {
         (MetaTxLib.LegacyMetaTransaction memory m, bytes32 d) = _payment(address(acct), keccak256("r1"));
         bytes memory sig = _pk(0, PASSKEY, d);
         vm.expectEmit(true, true, true, true, address(t));
-        emit IERC20Payment.PaymentSettled(address(acct), shop, 400, 0, relayer, keccak256("r1"));
+        emit IERC20PaymentV1.PaymentSettled(address(acct), shop, 400, 0, relayer, keccak256("r1"));
         vm.prank(relayer);
         t.executeMetaTransaction(m, sig);
         assertEq(t.balanceOf(shop), 400);
@@ -399,7 +399,7 @@ contract SubjectAccountTest is WebAuthnSoft {
         (MetaTxLib.LegacyMetaTransaction memory mB,) = _payment(address(b), keccak256("x"));
         bytes memory sig = _pk(0, PASSKEY, dA);
         vm.prank(relayer);
-        vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
+        vm.expectRevert(IERC20MetaTxV1.MetaTxBadSignature.selector);
         t.executeMetaTransaction(mB, sig);
     }
 
@@ -409,7 +409,7 @@ contract SubjectAccountTest is WebAuthnSoft {
         (MetaTxLib.LegacyMetaTransaction memory m, bytes32 d) = _payment(address(acct), keccak256("gone"));
         bytes memory sig = _pk(0, PASSKEY, d);
         vm.prank(relayer);
-        vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
+        vm.expectRevert(IERC20MetaTxV1.MetaTxBadSignature.selector);
         t.executeMetaTransaction(m, sig);
     }
 
@@ -615,7 +615,7 @@ contract SubjectAccountTest is WebAuthnSoft {
         (MetaTxLib.LegacyMetaTransaction memory m, bytes32 d) = _payment(address(acct), keccak256("g3"));
         bytes memory sig = _pk(0, PASSKEY2, d);
         vm.prank(relayer);
-        vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
+        vm.expectRevert(IERC20MetaTxV1.MetaTxBadSignature.selector);
         t.executeMetaTransaction(m, sig);
     }
 
@@ -653,7 +653,7 @@ contract SubjectAccountTest is WebAuthnSoft {
             t.mint(from, 400);
             (MetaTxLib.LegacyMetaTransaction memory m,) = _payment(from, keccak256(abi.encode("burn", i)));
             vm.prank(relayer);
-            vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
+            vm.expectRevert(IERC20MetaTxV1.MetaTxBadSignature.selector);
             t.executeMetaTransaction(m, hex"00");
         }
         // The same burner code given 400k would pass: it is the allowance, not the code, that fails.

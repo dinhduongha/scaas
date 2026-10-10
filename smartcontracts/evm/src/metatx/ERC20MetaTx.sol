@@ -1,164 +1,139 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.24;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
-import {SigCheck} from "../common/SigCheck.sol";
-import {IERC20MetaTx} from "./IERC20MetaTx.sol";
+import {Context} from "@openzeppelin/contracts/utils/Context.sol";
+import {MetaTxBase} from "./MetaTxBase.sol";
+import {IMetaTx} from "./IMetaTx.sol";
+import {IERC20Payment} from "./IERC20Payment.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
+import {SigCheck} from "../common/SigCheck.sol";
 
-/// @title Mixin meta-transaction cho mọi token trong hệ.
-/// @notice Đây là bản cài đặt tham chiếu của thứ tự chín bước ở §04.6.1, và nó tồn
-///         tại vì một lý do cụ thể: **đo gas**. `00-CANON.md` §C7 dẫn số phong bì
-///         bằng phép tính tay quanh một `innerGasLimit` không còn tồn tại; số đúng
-///         phải đo, và không đo được nếu không có contract để đo.
-///
-/// Không có `CALL` tới contract lạ ở bất kỳ đâu trong file này — đó là toàn bộ luận
-/// điểm của §04.1. Thao tác nằm trong chính contract, nên bước 6 kiểm được đủ điều
-/// kiện và sau bước 7 không gì fail được nữa.
-abstract contract ERC20MetaTx is ERC20, EIP712, IERC20MetaTx {
-    using MetaTxLib for MetaTxLib.LegacyMetaTransaction;
+/// @title The token base of every SCaaS token (CTR-MTX-07): ERC-20 on `MetaTxBase`.
+/// @notice Adds to the generic base: the fee in this token (`_chargeFee` by fee class, CTR-MTX-20), the typed
+///         `MetaTransfer` path (`mtxExecuteTransfer`, `mtxBatchTransfer`, CTR-MTX-23/24) on the same lanes, the
+///         allowance rule (CTR-TOK-01) and "no tokens at the token's own address" (CTR-MTX-18). Domain
+///         `("SCaaS MetaToken", "1", chainId, clone, chain_uid)` for every kind (CTR-MTX-02).
+abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment {
+    using MetaTxLib for MetaTxLib.MetaTransfer;
 
-    /// @dev `(from, batch) -> nonce kế tiếp`. 2D: batch nào kẹt thì chỉ kẹt batch đó.
-    mapping(address => mapping(uint256 => uint256)) private _metaNonce;
+    constructor(bytes32 chainUid_) ERC20("", "") MetaTxBase("SCaaS MetaToken", chainUid_) {}
 
-    /// @dev Guard theo CONTRACT, không theo hàm (§04.6.3). Transient storage: chain
-    ///      7622 (formerly 9000) đã có Cancun/Prague sau khi sửa chainspec, Gnosis và Celo cũng vậy.
-    /// keccak256("scaas.metatx.reentrancy.v1") — hằng số phải viết thẳng số:
-    /// inline assembly của solc 0.8 không nhận một constant tính bằng keccak256().
-    bytes32 private constant _REENTRANCY_SLOT =
-        0x27c50dd30ecb71eab142d768eee7a467a52b3c225acce12341323902fcd7aa51;
+    // ------------------------------------------------------------------ views
 
-    modifier nonReentrant() {
-        assembly ("memory-safe") {
-            if tload(_REENTRANCY_SLOT) { revert(0, 0) }
-            tstore(_REENTRANCY_SLOT, 1)
-        }
-        _;
-        assembly ("memory-safe") { tstore(_REENTRANCY_SLOT, 0) }
-    }
-
-    function metaNonce(address from, uint256 batch) public view returns (uint256) {
-        return _metaNonce[from][batch];
-    }
-
-    function supportedModes() external pure returns (uint32) {
+    /// @notice `0xF3`: both flags and every fee mode (a token holds the charged balance).
+    function supportedModes() public pure override(IMetaTx, MetaTxBase) returns (uint32) {
         return MetaTxLib.MODE_KNOWN_MASK;
     }
 
-    function metaTxDigest(MetaTxLib.LegacyMetaTransaction calldata m)
-        external view returns (bytes32)
+    function mtxTransferDigest(MetaTxLib.MetaTransfer calldata t) external view returns (bytes32) {
+        return _hashTypedDataV4(t.hashStruct());
+    }
+
+    // ------------------------------------------------------------------ typed path (CTR-MTX-23, CTR-MTX-24)
+
+    function mtxExecuteTransfer(MetaTxLib.MetaTransfer calldata t, bytes calldata signature)
+        external nonReentrant returns (bool)
     {
-        return _hashTypedDataV4(m.hashStruct());
-    }
-
-    function cancelMetaNonce(uint256 batch) external {
-        unchecked { _metaNonce[msg.sender][batch] += 1; }
-    }
-
-    function executeMetaTransaction(
-        MetaTxLib.LegacyMetaTransaction calldata m,
-        bytes calldata signature
-    ) external nonReentrant returns (bool) {
-        // --- 1. relayer (0 gas) ---
-        if (m.mode & MetaTxLib.MODE_RESTRICT_RELAYER != 0 && m.relayer != msg.sender) {
-            revert MetaTxUnauthorizedRelayer(m.relayer, msg.sender);
-        }
-        // --- 2. validUntil (0 gas) ---
-        if (block.timestamp > m.validUntil) {
-            revert MetaTxExpired(m.validUntil, block.timestamp);
-        }
-        // --- 3. mode (0 gas) ---
-        MetaTxLib.validateMode(m.mode);
-        FeeMode feeMode = MetaTxLib.feeModeOf(m.mode);
-
-        // --- 4. nonce (1 sload) ---
-        uint256 expected = _metaNonce[m.from][m.batch];
-        if (expected != m.nonce) revert MetaTxBadNonce(expected, m.nonce);
-
-        // --- 5. chữ ký ---
-        bytes32 digest = _hashTypedDataV4(m.hashStruct());
-        _requireValidSignature(m.from, digest, signature);
-
-        // --- 6. KIỂM ĐỦ. Sau bước này không gì được phép fail ---
-        address feeRecipient = m.feeRecipient == address(0) ? msg.sender : m.feeRecipient;
-        uint256 feeAmount = FeePolicy.compute(feeMode, m.value, m.fee);
-        FeePolicy.validateRecipient(feeMode, feeRecipient);
-        uint256 need = m.value + feeAmount;
-        uint256 have = balanceOf(m.from);
-        if (have < need) revert MetaTxInsufficientForFee(need, have);
-        _checkOp(m);
-
-        // --- 7. thu phí ---
-        if (feeAmount != 0) _transfer(m.from, feeRecipient, feeAmount);
-
-        // --- 8. thực thi ---
-        _executeOp(m, feeAmount, feeRecipient);
-
-        // --- 9. nonce++ và emit ---
-        unchecked { _metaNonce[m.from][m.batch] = expected + 1; }
-        emit MetaTransactionExecuted(
-            m.from, msg.sender, m.batch, m.nonce, digest, feeRecipient, feeAmount
-        );
+        _executeTransfer(t, signature);
         return true;
     }
 
-    // ------------------------------------------------------------------ allowance (R26)
+    /// @notice Atomic, items in order; never mixed with `MetaTransaction`s (CTR-MTX-24).
+    function mtxBatchTransfer(MetaTxLib.MetaTransfer[] calldata ts, bytes[] calldata signatures)
+        external nonReentrant returns (bool)
+    {
+        uint256 n = ts.length;
+        if (n == 0) revert MtxBatchEmpty();
+        if (n != signatures.length) revert MtxBatchLengthMismatch();
+        for (uint256 i; i < n; ++i) _executeTransfer(ts[i], signatures[i]);
+        return true;
+    }
 
-    /// @notice Spender phải là hợp đồng. Phishing kiểu "approve vô hạn cho một ví lạ" không
-    ///         còn đường: không EOA nào giữ được allowance (SRS kiến trúc §3.2).
+    /// @dev Every typed entry (struct, batch, the named builders, receiver-pays) goes through here. Everything is
+    ///      checked before the nonce and the transfers, which cannot fail afterwards. Returns the digest.
+    function _executeTransfer(MetaTxLib.MetaTransfer memory t, bytes calldata signature)
+        internal returns (bytes32 digest)
+    {
+        _checkEnvelope(t.from, t.batch, t.nonce, t.validUntil, t.mode, t.relayer);              // 1
+        digest = _hashTypedDataV4(t.hashStruct());                                              // 2
+        _requireValidSignature(t.from, digest, signature);
+        (uint256 fee, address feeTo) = _checkTransfer(t);                                       // 3
+        _useNonce(t.from, t.batch);                                                             // 4
+        if (fee != 0) _transfer(t.from, feeTo, fee);                                            // 5
+        _transfer(t.from, t.to, t.value);
+        if (t.entryRef != 0) emit PaymentSettled(t.from, t.to, t.value, fee, feeTo, t.entryRef);
+        emit MetaTransactionExecuted(t.from, msg.sender, t.batch, t.nonce, digest, feeTo, fee); // 6
+    }
+
+    /// @dev Step 3: payee, fee on `value` (capped, CTR-MTX-13), the payee check (CTR-MTX-08), balance.
+    function _checkTransfer(MetaTxLib.MetaTransfer memory t) private view returns (uint256 fee, address feeTo) {
+        if (t.to == address(0)) revert PayToZero();
+        if (t.to == address(this)) revert TransferToSelf();
+        FeeMode fm = MetaTxLib.feeModeOf(t.mode);
+        feeTo = t.feeRecipient == address(0) ? msg.sender : t.feeRecipient;
+        fee = FeePolicy.compute(fm, t.value, t.fee);
+        FeePolicy.validateRecipient(fm, feeTo);
+        if (fee != 0) {
+            if (feeTo == t.to) revert FeeRecipientIsPayee();
+            if (feeTo == address(this)) revert TransferToSelf();
+        }
+        uint256 need = t.value + fee;
+        uint256 have = balanceOf(t.from);
+        if (have < need) revert MetaTxInsufficientForFee(need, have);
+    }
+
+    // ------------------------------------------------------------------ fee of a self-call (CTR-MTX-20)
+
+    /// @notice After the call: `ABSOLUTE` + `FIXED` = the signed amount, uncapped (step 3 refused `ABSOLUTE` +
+    ///         `PERCENT`); anything else = `FeePolicy.compute` on the basis (≤ 1 %), so a `PERCENT` fee is never
+    ///         taken as a raw amount whatever class the rule reports here. A failing transfer reverts the call.
+    function _chargeFee(address from, uint256 basis, MetaTxLib.MetaTransaction memory m)
+        internal override returns (uint256 fee)
+    {
+        FeeMode fm = MetaTxLib.feeModeOf(m.mode);
+        if (fm == FeeMode.NONE) return 0;
+        bool absoluteFixed = fm == FeeMode.FIXED && _mtxRule(bytes4(m.data)).feeClass == FEE_CLASS_ABSOLUTE;
+        fee = absoluteFixed ? m.fee : FeePolicy.compute(fm, basis, m.fee);
+        address feeTo = _feeRecipientOf(m);
+        FeePolicy.validateRecipient(fm, feeTo);
+        if (fee != 0) _transfer(from, feeTo, fee);
+    }
+
+    // ------------------------------------------------------------------ allowance (CTR-TOK-01)
+
+    /// @notice Caller and spender must both be contracts: no EOA grants or holds an allowance.
     function approve(address spender, uint256 value) public virtual override(ERC20, IERC20) returns (bool) {
-        if (!_isContract(spender)) revert SpenderNotContract(spender);
+        address caller = _msgSender();
+        if (!SigCheck.isContract(caller)) revert CallerNotContract(caller);
+        if (!SigCheck.isContract(spender)) revert SpenderNotContract(spender);
         return super.approve(spender, value);
     }
 
-    /// @notice Chỉ hợp đồng tiêu được allowance. Kiểm TRƯỚC allowance, nên một EOA nhận lỗi
-    ///         này kể cả khi `value == 0`.
+    /// @notice Only a contract spends an allowance; checked before the allowance.
     function transferFrom(address from, address to, uint256 value)
         public virtual override(ERC20, IERC20) returns (bool)
     {
-        if (!_isContract(msg.sender)) revert CallerNotContract(msg.sender);
+        address caller = _msgSender();
+        if (!SigCheck.isContract(caller)) revert CallerNotContract(caller);
         return super.transferFrom(from, to, value);
     }
 
-    /// @dev Không phải hợp đồng nếu: code rỗng (EOA — hoặc hợp đồng ĐANG chạy constructor:
-    ///      nó không được approve hay tiêu allowance từ constructor của chính mình), hoặc code
-    ///      đúng là designator EIP-7702 `0xef0100‖address` (23 byte): khoá riêng của EOA vẫn ký
-    ///      được mọi thứ, nên nó vẫn là EOA.
+    // ------------------------------------------------------------------ internals
+
+    /// @dev Tokens parked at the token's own address are what a spoofed self-call would spend (CTR-MTX-18).
+    function _update(address from, address to, uint256 value) internal virtual override {
+        if (to == address(this)) revert TransferToSelf();
+        super._update(from, to, value);
+    }
+
     function _isContract(address a) internal view returns (bool) {
         return SigCheck.isContract(a);
     }
 
-    /// @dev Hai đường: EOA (65 byte, low-s) và ERC-1271. Phân biệt bằng `_isContract(from)`
-    ///      chứ không bằng độ dài chữ ký — một smart account hoàn toàn có thể trả về một
-    ///      blob 65 byte, và đoán theo độ dài thì nó bị verify nhầm bằng `ecrecover`. EOA uỷ
-    ///      quyền EIP-7702 đi đường ECDSA: khoá của nó vẫn ký được (R26, review W3).
-    /// @dev `virtual`: một mạng có cách xác thực tài khoản riêng (Hedera HIP-632 cho khoá ED25519 —
-    ///      R63) ghi đè ở implementation của mạng đó; thứ tự 9 bước không đổi.
-    function _requireValidSignature(address from, bytes32 digest, bytes calldata sig)
-        internal view virtual
-    {
-        if (!SigCheck.isValid(from, digest, sig, _erc1271Gas(from))) revert MetaTxBadSignature();
-    }
-
-    /// @dev Gas cho `isValidSignature` của một ví hợp đồng: 50k (đủ cho Safe/ECDSA). Implementation
-    ///      nào biết một loại ví cần hơn (SubjectAccount: P-256 Solidity ~300k) thì ghi đè, chỉ cho
-    ///      đúng code đó — relayer trả gas cho mọi thứ chạy trong lời gọi này (review S4-L1).
-    function _erc1271Gas(address) internal view virtual returns (uint256) {
-        return 50_000;
-    }
-
-    /// @dev Bước 6 riêng của thao tác. Mặc định: `data` rỗng ⇒ chuyển token thường, và
-    ///      số dư đã được kiểm ở trên nên không còn gì để kiểm.
-    function _checkOp(MetaTxLib.LegacyMetaTransaction calldata m) internal view virtual {
-        if (m.data.length != 0) revert MetaTxUnknownMode(m.mode);
-    }
-
-    /// @dev Bước 8. Không được fail — mọi điều kiện đã kiểm ở `_checkOp`. Nhận phí đã
-    ///      thu để op nào cần báo phí trong event (`pay`) không phải tính lại.
-    function _executeOp(MetaTxLib.LegacyMetaTransaction calldata m, uint256, address) internal virtual {
-        _transfer(m.from, m.to, m.value);
+    function _msgSender() internal view virtual override(Context, MetaTxBase) returns (address) {
+        return MetaTxBase._msgSender();
     }
 }

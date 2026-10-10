@@ -8,7 +8,7 @@ import {MockERC20, FeeOnTransferERC20} from "./helpers/Mocks.sol";
 import {MetaToken} from "../src/metatx/MetaToken.sol";
 import {MetaTxDex} from "../src/dex/MetaTxDex.sol";
 import {MetaTxLib} from "../src/common/MetaTxLib.sol";
-import {IERC20MetaTx} from "../src/metatx/IERC20MetaTx.sol";
+import {IERC20MetaTxV1} from "../src/metatx/IERC20MetaTxV1.sol";
 
 /// Handler: thao tác ngẫu nhiên trên một wrapper, hai token standalone và DEX.
 contract Handler is Test {
@@ -96,7 +96,7 @@ contract Handler is Test {
             mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: address(dex), fee: 0, feeRecipient: address(0)
         });
         (uint8 vv, bytes32 r, bytes32 s) = vm.sign(pk, sell.metaTxDigest(m));
-        l = MetaTxDex.Leg({token: IERC20MetaTx(address(sell)), m: m, sig: abi.encodePacked(r, s, vv)});
+        l = MetaTxDex.Leg({token: IERC20MetaTxV1(address(sell)), m: m, sig: abi.encodePacked(r, s, vv)});
     }
 }
 

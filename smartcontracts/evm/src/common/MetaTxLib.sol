@@ -90,6 +90,38 @@ library MetaTxLib {
         ));
     }
 
+    /// @notice CTR-MTX-15/23 (tokens only): the typed transfer (`entryRef == 0`) or payment (`entryRef != 0`).
+    struct MetaTransfer {
+        address from;           // signer and payer
+        address to;             // payee
+        uint256 value;          // amount moved
+        bytes32 entryRef;       // 0 = transfer; != 0 = payment reference (PaymentSettled)
+        uint256 batch;          // lane, shared with MetaTransaction (one nonce space)
+        uint256 nonce;
+        uint256 validUntil;
+        uint32  mode;
+        address relayer;
+        uint256 fee;
+        address feeRecipient;
+    }
+
+    /// @dev Pinned by `test_metaTransferTypehashIsPinned` (test/metatx/MetaTxLib.t.sol).
+    bytes32 internal constant METATRANSFER_TYPEHASH = keccak256(
+        "MetaTransfer(address from,address to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
+
+    function canon(MetaTransfer memory t) internal pure returns (address r, address f) {
+        r = (t.mode & MODE_RESTRICT_RELAYER)       != 0 ? t.relayer      : address(0);
+        f = (t.mode & MODE_RESTRICT_FEE_RECIPIENT) != 0 ? t.feeRecipient : address(0);
+    }
+
+    function hashStruct(MetaTransfer memory t) internal pure returns (bytes32) {
+        (address r, address f) = canon(t);
+        return keccak256(abi.encode(
+            METATRANSFER_TYPEHASH, t.from, t.to, t.value, t.entryRef, t.batch, t.nonce, t.validUntil, t.mode, r, t.fee, f
+        ));
+    }
+
     /// @notice v1/v2 struct (Transitional, BUILT): deleted with the v1/v2 lines (P1b) and `ZetherMetaTx` (P3).
     struct LegacyMetaTransaction {
         address from;           // người ký, người chịu hiệu lực

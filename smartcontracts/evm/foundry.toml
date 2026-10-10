@@ -18,6 +18,7 @@ fs_permissions = [
   { access = "read-write", path = "./deployments" },
   { access = "read", path = "./test/v2/layout" },
   { access = "read", path = "./out" },
+  { access = "read", path = "./src" },
 ]
 
 [invariant]

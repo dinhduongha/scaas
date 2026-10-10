@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {IERC20MetaTx} from "../metatx/IERC20MetaTx.sol";
+import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {HederaAccountAuth} from "./HederaAccountAuth.sol";
 
 /// @title Chữ ký HIP-632 cho mọi tầng v2 trên Hedera (R63, R144) — như `HederaMetaToken` v1.
 /// @notice Chữ ký 64 byte từ một địa chỉ KHÔNG có code (tài khoản Hedera khoá ED25519, `0.0.N`) đi qua
 ///         `isAuthorizedRaw`: precompile đọc khoá của tài khoản trong state Hedera, khoá client gửi không bao giờ là
-///         căn cứ. Mọi thứ khác (EOA ECDSA 65 byte, ERC-1271) đi đường EVM của `MetaTxCore`.
-///         Thư viện, không phải mixin `is MetaTxCore`: mixin đó tạo một kim cương với tầng (Single/Multi đều
-///         `is MetaTxCore`) và bắt mỗi con ghi đè lại bảy hàm chỉ để chọn bên; ở đây mỗi con ghi đè đúng một hàm.
+///         căn cứ. Mọi thứ khác (EOA ECDSA 65 byte, ERC-1271) đi đường EVM của `MetaTxBase`.
+///         Thư viện, không phải mixin `is MetaTxBase`: mixin đó tạo một kim cương với tầng (Single/Multi đều
+///         `is MetaTxBase`) và bắt mỗi con ghi đè lại bảy hàm chỉ để chọn bên; ở đây mỗi con ghi đè đúng một hàm.
 library HederaSig {
     function requireValid(address from, bytes32 digest, bytes calldata sig) internal view {
-        if (!HederaAccountAuth.asView()(from, digest, sig)) revert IERC20MetaTx.MetaTxBadSignature();
+        if (!HederaAccountAuth.asView()(from, digest, sig)) revert IMetaTx.MetaTxBadSignature();
     }
 }
 

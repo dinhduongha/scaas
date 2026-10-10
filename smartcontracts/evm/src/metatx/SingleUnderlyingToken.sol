@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {MetaTokenBase} from "./MetaTokenBase.sol";
+import {MetaTxBase} from "./MetaTxBase.sol";
+import {IMetaTx} from "./IMetaTx.sol";
 import {IOpenFactoryV2} from "../common/IOpenFactoryV2.sol";
 
 /// @title Tầng 2 v2 (kind `META_SINGLE`, TW2 §5–§6): wrapper một underlying, tỉ lệ `num/den`, reserve nội bộ.
@@ -53,10 +55,10 @@ contract SingleUnderlyingToken is MetaTokenBase {
     /// @notice Cửa sổ thực thi sau `eta`. Hết cửa sổ thì thay đổi coi như không có, ở mọi nơi.
     uint256 public constant RATE_WINDOW = 7 days;
 
-    mapping(uint256 => Leg) internal _legs;           // slot 11: mapping, không mảng — không SLOAD độ dài
-    mapping(address => uint256) internal _legIndex;   // slot 12: index + 1
-    PendingRate internal _pending;                    // slot 13
-    // slot 14 (đọc chỉ bởi hàm tỉ lệ)
+    mapping(uint256 => Leg) internal _legs;           // slot 8: mapping, không mảng — không SLOAD độ dài
+    mapping(address => uint256) internal _legIndex;   // slot 9: index + 1
+    PendingRate internal _pending;                    // slot 10
+    // slot 11 (đọc chỉ bởi hàm tỉ lệ)
     address public rateAdmin;
     uint32 public rateDelay;
     uint16 public maxRateStepBps;
@@ -98,7 +100,13 @@ contract SingleUnderlyingToken is MetaTokenBase {
     error RateDecreaseWithDisabledLeg();
     error WrapPausedForRateChange(address u);
 
-    constructor(address factory_, address subjectAccountImpl_) MetaTokenBase(factory_, subjectAccountImpl_) {}
+    bytes4 internal constant SEL_WRAP = bytes4(keccak256("wrap(uint256)"));
+    bytes4 internal constant SEL_UNWRAP_MIN = bytes4(keccak256("unwrap(uint256,address,uint256)"));
+    bytes4 internal constant SEL_ADD_RESERVE = bytes4(keccak256("addReserve(address,uint256)"));
+
+    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_)
+        MetaTokenBase(factory_, smartKeyAccountImpl_, chainUid_)
+    {}
 
     function tokenKind() external pure virtual override returns (IOpenFactoryV2.TokenKind) {
         return IOpenFactoryV2.TokenKind.META_SINGLE;
@@ -176,7 +184,7 @@ contract SingleUnderlyingToken is MetaTokenBase {
     function addReserve(address u, uint256 amount) external nonReentrant {
         Leg storage L = _legs[_legOf(u)];
         if (!L.wrapEnabled) revert WrapDisabledFor(u);
-        emit ReserveAdded(msg.sender, u, _pull(L, amount));
+        emit ReserveAdded(_msgSender(), u, _pull(L, amount));
     }
 
     function _wrap(uint256 i, uint256 amount) internal returns (uint256 minted) {
@@ -186,18 +194,19 @@ contract SingleUnderlyingToken is MetaTokenBase {
         uint256 received = _pull(L, amount);
         minted = Math.mulDiv(received, L.num, L.den);
         if (minted == 0) revert WrapTooSmall();
-        _mint(msg.sender, minted);
-        emit Wrapped(msg.sender, L.token, received, minted);
+        address account = _msgSender();
+        _mint(account, minted);
+        emit Wrapped(account, L.token, received, minted);
     }
 
-    /// @dev Kéo `amount` từ `msg.sender`, ghi phần đo được vào reserve. Một `balanceOf` trước phục vụ cả kiểm
+    /// @dev Kéo `amount` từ `_msgSender()`, ghi phần đo được vào reserve. Một `balanceOf` trước phục vụ cả kiểm
     ///      thiếu hụt (R134: không wrap/nạp khi `balanceOf < reserve`) lẫn phép đo.
     function _pull(Leg storage L, uint256 amount) private returns (uint256 received) {
         IERC20 u = IERC20(L.token);
         uint256 reserve = L.reserve;
         uint256 before = u.balanceOf(address(this));
         if (before < reserve) revert ReserveShortfall(address(u), before, reserve);
-        u.safeTransferFrom(msg.sender, address(this), amount);
+        u.safeTransferFrom(_msgSender(), address(this), amount);
         received = u.balanceOf(address(this)) - before;
         L.reserve = reserve + received;
     }
@@ -207,7 +216,7 @@ contract SingleUnderlyingToken is MetaTokenBase {
     {
         _checkRecipient(recipient);
         out = _quoteUnwrap(_legs[i], wrapped, minOut);
-        burned = _settleUnwrap(i, msg.sender, recipient, out);
+        burned = _settleUnwrap(i, _msgSender(), recipient, out);
     }
 
     function _checkRecipient(address recipient) private view {
@@ -239,28 +248,35 @@ contract SingleUnderlyingToken is MetaTokenBase {
         emit Unwrapped(from, address(u), recipient, burned, out);
     }
 
-    // ------------------------------------------------------------------ R148: op unwrap
+    // ------------------------------------------------------------------ allowlist (CTR-MTX-19)
 
-    function _checkUnwrap(address u, address recipient, address to, uint256 wrapped, uint256 minOut)
-        internal view override
+    /// @notice `cancelNonce` (base); `wrap(uint256)` `ABSOLUTE` (fee from minted units);
+    ///         `unwrap(uint256,address,uint256)` `AMOUNT(0)` (gasless unwrap, CTR-MTX-12); `addReserve` `ABSOLUTE`.
+    ///         The two-argument `unwrap` is not listed (same intent, second digest, no `minOut`).
+    function mtxSelectors()
+        public pure virtual override(IMetaTx, MetaTxBase) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
-        uint256 i = _legOf(u);
-        _checkRecipient(recipient);
-        if (to != recipient) revert UnwrapRecipientMismatch();
-        _quoteUnwrap(_legs[i], wrapped, minOut);
+        s = new bytes4[](4);
+        c = new uint8[](4);
+        a = new uint8[](4);
+        (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
+        (s[1], c[1]) = (SEL_WRAP, FEE_CLASS_ABSOLUTE);
+        (s[2], c[2]) = (SEL_UNWRAP_MIN, FEE_CLASS_AMOUNT);
+        (s[3], c[3]) = (SEL_ADD_RESERVE, FEE_CLASS_ABSOLUTE);
     }
 
-    function _executeUnwrap(address from, address u, address recipient, uint256 wrapped) internal override {
-        uint256 i = _legIndex[u] - 1;
-        Leg storage L = _legs[i];
-        _settleUnwrap(i, from, recipient, Math.mulDiv(wrapped, L.den, L.num));
+    function _mtxRule(bytes4 sel) internal view virtual override returns (MtxRule memory) {
+        if (sel == SEL_WRAP) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 36);
+        if (sel == SEL_UNWRAP_MIN) return MtxRule(FEE_CLASS_AMOUNT, 0, 100);
+        if (sel == SEL_ADD_RESERVE) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 68);
+        return super._mtxRule(sel);
     }
 
     // ------------------------------------------------------------------ tỉ lệ (§6.2)
 
     modifier onlyRateAdmin() {
         if (!rateAdjustable) revert RateFixed();
-        if (msg.sender != rateAdmin) revert NotRateAdmin();
+        if (_msgSender() != rateAdmin) revert NotRateAdmin();
         _;
     }
 

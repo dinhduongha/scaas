@@ -11,12 +11,11 @@ import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
 import {OpenFactoryV2} from "../src/factory/OpenFactoryV2.sol";
 import {IOpenFactoryV2} from "../src/common/IOpenFactoryV2.sol";
 import {NoUnderlyingToken} from "../src/metatx/NoUnderlyingToken.sol";
-import {SingleUnderlyingToken} from "../src/metatx/SingleUnderlyingToken.sol";
-import {MultiUnderlyingToken} from "../src/metatx/MultiUnderlyingToken.sol";
 
 /// forge script script/Deploy.s.sol --rpc-url $RPC --broadcast
 /// env: PRIVATE_KEY (deployer; registrar mặc định), REGISTRAR (tuỳ chọn),
-///      DEMO_SUPPLY (tuỳ chọn; 0 = không tạo token demo), DEMO_HOLDER (tuỳ chọn, nhận một nửa).
+///      DEMO_SUPPLY (tuỳ chọn; 0 = không tạo token demo), DEMO_HOLDER (tuỳ chọn, nhận một nửa),
+///      CHAIN_UID (genesis hash, chain-uids.json; tuỳ chọn trên chain local mới — mặc định blockhash(0)).
 /// Ghi `deployments/<chainid>.json` để seed Odoo (`blockchain.token`) và config node (`dex`).
 contract Deploy is Script {
     function run() external {
@@ -55,22 +54,27 @@ contract Deploy is Script {
         console.log(out);
     }
 
-    /// TW2 §9: factory v2 + ba tầng, mỗi tầng là version 1 của kind riêng (số version theo kind; chuỗi domain "2"
+    /// TW2 §9: factory v2 + tầng None (Single/Multi chờ P1d, R3), version 1 của kind riêng (số version theo kind; chuỗi domain "2"
     /// là thế hệ hợp đồng). Factory v2 không đăng ký MetaToken v1. Ghi thẳng vào object JSON "deploy" (run() đã
     /// hết chỗ trên stack).
     function _deployV2(address registrar, bool register, address subjectImpl) internal {
         OpenFactoryV2 f = new OpenFactoryV2(registrar);
-        address none = address(new NoUnderlyingToken(address(f), subjectImpl));
-        address single = address(new SingleUnderlyingToken(address(f), subjectImpl));
-        address multi = address(new MultiUnderlyingToken(address(f), subjectImpl));
-        if (register) {
-            f.registerImplementation(IOpenFactoryV2.TokenKind.META_NONE, 1, none);
-            f.registerImplementation(IOpenFactoryV2.TokenKind.META_SINGLE, 1, single);
-            f.registerImplementation(IOpenFactoryV2.TokenKind.META_MULTI, 1, multi);
+        // chain_uid = genesis hash (CTR-GEN-05, chain-uids.json). Default: block 0's hash as the RPC reports it. The
+        // script runs at the head block and BLOCKHASH of the current block is 0, so roll one ahead to read it on a
+        // fresh chain (head 0); past block 256 BLOCKHASH(0) is 0 and CHAIN_UID is required.
+        bytes32 uid = vm.envOr("CHAIN_UID", bytes32(0));
+        if (uid == bytes32(0)) {
+            uint256 head = block.number;
+            vm.roll(head + 1);
+            uid = blockhash(0);
+            vm.roll(head);
         }
+        require(uid != bytes32(0), "set CHAIN_UID (chain-uids.json)");
+        // Transitional (R3): Single/Multi are over EIP-170 until P1d (UnderlyingToken + UnderlyingLib); only META_NONE
+        // is deployed and registered, and the JSON has no implementation_meta_single/_multi keys.
+        address none = address(new NoUnderlyingToken(address(f), subjectImpl, uid));
+        if (register) f.registerImplementation(IOpenFactoryV2.TokenKind.META_NONE, 1, none);
         vm.serializeAddress("deploy", "factory_v2", address(f));
         vm.serializeAddress("deploy", "implementation_meta_none", none);
-        vm.serializeAddress("deploy", "implementation_meta_single", single);
-        vm.serializeAddress("deploy", "implementation_meta_multi", multi);
     }
 }

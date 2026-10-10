@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Fixtures} from "./helpers/Fixtures.sol";
 import {MetaToken} from "../src/metatx/MetaToken.sol";
-import {IERC20Payment} from "../src/metatx/IERC20Payment.sol";
+import {IERC20PaymentV1} from "../src/metatx/IERC20PaymentV1.sol";
 import {MetaTxLib} from "../src/common/MetaTxLib.sol";
 import {MandateWallet} from "../src/wallet/MandateWallet.sol";
 
@@ -48,7 +48,7 @@ contract MandateWalletTest is Fixtures {
 
     function test_pays_within_mandate_and_settles_like_a_manual_payment() public {
         vm.expectEmit(true, true, true, true, address(t));
-        emit IERC20Payment.PaymentSettled(address(w), npp, 700, 0, address(0), keccak256("inv-1"));
+        emit IERC20PaymentV1.PaymentSettled(address(w), npp, 700, 0, address(0), keccak256("inv-1"));
         _pay(npp, 700, keccak256("inv-1"));
         assertEq(t.balanceOf(npp), 700);
     }

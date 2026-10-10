@@ -5,20 +5,20 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {SigCheck} from "../common/SigCheck.sol";
-import {IERC20MetaTx} from "../metatx/IERC20MetaTx.sol";
+import {IERC20MetaTxV1} from "../metatx/IERC20MetaTxV1.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 
 /// @title Mixin meta-transaction native cho Zether token (RS2-7).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Cùng struct/typehash `MetaTxLib` (chỉ đọc), cùng
-///         2D nonce, cùng R26, cùng chín bước rẻ-trước-đắt-sau của `ERC20MetaTx` — nhưng là bản riêng vì
-///         `ERC20MetaTx` (luồng S4/S5 sở hữu) tính phí `FIXED` có trần 1% của `m.value`, mà op Zether có
+///         2D nonce, cùng R26, cùng chín bước rẻ-trước-đắt-sau của `ERC20MetaTxV1` — nhưng là bản riêng vì
+///         `ERC20MetaTxV1` (luồng S4/S5 sở hữu) tính phí `FIXED` có trần 1% của `m.value`, mà op Zether có
 ///         `m.value = 0` (số tiền nằm trong ciphertext). Ở đây phí của op Zether là tuyệt đối, `PERCENT`
 ///         bị cấm (`FeePolicy.requireConfidentialSafe`, RS2-6).
 ///
 ///         Bước 6–8 (kiểm đủ → thu phí → thực thi) giao cho `_executeOp`: op Zether phải kiểm số dư phí
 ///         TRƯỚC verify proof, và thu phí SAU verify, TRƯỚC hiệu lực — "phí đã thu ⟺ op đã xảy ra".
-abstract contract ZetherMetaTx is ERC20, EIP712, IERC20MetaTx {
+abstract contract ZetherMetaTx is ERC20, EIP712, IERC20MetaTxV1 {
     using MetaTxLib for MetaTxLib.LegacyMetaTransaction;
 
     mapping(address => mapping(uint256 => uint256)) private _metaNonce;
@@ -103,7 +103,7 @@ abstract contract ZetherMetaTx is ERC20, EIP712, IERC20MetaTx {
         return super.transferFrom(from, to, value);
     }
 
-    /// @dev Như `ERC20MetaTx._isContract`: code rỗng hoặc designator EIP-7702 ⇒ không phải hợp đồng.
+    /// @dev Như `ERC20MetaTxV1._isContract`: code rỗng hoặc designator EIP-7702 ⇒ không phải hợp đồng.
     function _isContract(address a) internal view returns (bool) {
         return SigCheck.isContract(a);
     }

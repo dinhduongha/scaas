@@ -10,7 +10,7 @@ import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {ITransferDisclosure} from "../../src/zether/ITransferDisclosure.sol";
 import {ZetherSafety} from "../../src/zether/ZetherSafety.sol";
 import {G1Bn254} from "../../src/zether/ZetherCurves.sol";
-import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
+import {IERC20MetaTxV1} from "../../src/metatx/IERC20MetaTxV1.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {FeeMode, FeePolicy} from "../../src/common/FeePolicy.sol";
 import {FeeOnTransferERC20} from "../helpers/Mocks.sol";
@@ -229,7 +229,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         MetaTxLib.LegacyMetaTransaction memory m = _m(hex"deadbeef");
         bytes memory sig = _sign(PK, tok, m);
         // relayer không được phép
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.MetaTxUnauthorizedRelayer.selector, relayer, address(this)));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.MetaTxUnauthorizedRelayer.selector, relayer, address(this)));
         tok.executeMetaTransaction(m, sig);
         // op không biết
         _exec(m, sig, abi.encodeWithSelector(IZetherToken.ZetherOpNotCanonical.selector));
@@ -240,14 +240,14 @@ contract ZetherRevertPathsTest is ZetherFixture {
         // hết hạn
         m = _m("");
         m.validUntil = block.timestamp - 1;
-        _exec(m, _sign(PK, tok, m), abi.encodeWithSelector(IERC20MetaTx.MetaTxExpired.selector, m.validUntil, block.timestamp));
+        _exec(m, _sign(PK, tok, m), abi.encodeWithSelector(IERC20MetaTxV1.MetaTxExpired.selector, m.validUntil, block.timestamp));
         // nonce sai
         m = _m("");
         m.nonce = 3;
-        _exec(m, _sign(PK, tok, m), abi.encodeWithSelector(IERC20MetaTx.MetaTxBadNonce.selector, 0, 3));
+        _exec(m, _sign(PK, tok, m), abi.encodeWithSelector(IERC20MetaTxV1.MetaTxBadNonce.selector, 0, 3));
         // chữ ký của người khác
         m = _m("");
-        _exec(m, _sign(PK + 1, tok, m), abi.encodeWithSelector(IERC20MetaTx.MetaTxBadSignature.selector));
+        _exec(m, _sign(PK + 1, tok, m), abi.encodeWithSelector(IERC20MetaTxV1.MetaTxBadSignature.selector));
         // mode lạ / phí lạ
         m = _m("");
         m.mode = 0x100;
@@ -270,7 +270,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         tok.executeMetaTransaction(m, sig);
         m.batch = 2;
         w.setMode(Mock1271Wallet.Mode.WrongMagic);
-        _exec(m, _sign(PK, tok, m), abi.encodeWithSelector(IERC20MetaTx.MetaTxBadSignature.selector));
+        _exec(m, _sign(PK, tok, m), abi.encodeWithSelector(IERC20MetaTxV1.MetaTxBadSignature.selector));
         tok.cancelMetaNonce(9);
         assertEq(tok.metaNonce(address(this), 9), 1);
         assertEq(tok.supportedModes(), MetaTxLib.MODE_KNOWN_MASK);
@@ -287,10 +287,10 @@ contract ZetherRevertPathsTest is ZetherFixture {
 
     /// R26 trên lớp ERC-20 công khai của Zether token: chỉ hợp đồng giữ/tiêu allowance.
     function test_contractOnlyAllowance() public {
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.SpenderNotContract.selector, address(0xE0A)));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.SpenderNotContract.selector, address(0xE0A)));
         tok.approve(address(0xE0A), 1);
         vm.prank(address(0xE0A));
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.CallerNotContract.selector, address(0xE0A)));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.CallerNotContract.selector, address(0xE0A)));
         tok.transferFrom(address(1), address(2), 0);
         Puller pl = new Puller();
         usd.mint(address(this), 10);
@@ -362,7 +362,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
     function test_eip7702DelegatedEoaIsNotASpender() public {
         address eoa = address(0x7702);
         vm.etch(eoa, abi.encodePacked(hex"ef0100", address(0x1234)));
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.SpenderNotContract.selector, eoa));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.SpenderNotContract.selector, eoa));
         tok.approve(eoa, 1);
     }
 

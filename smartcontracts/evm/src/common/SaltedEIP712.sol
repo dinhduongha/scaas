@@ -46,7 +46,7 @@ abstract contract SaltedEIP712 is IERC5267 {
     }
 
     function eip712Domain()
-        public view virtual returns (
+        public view returns (
             bytes1 fields, string memory name, string memory version, uint256 chainId,
             address verifyingContract, bytes32 salt, uint256[] memory extensions
         )
