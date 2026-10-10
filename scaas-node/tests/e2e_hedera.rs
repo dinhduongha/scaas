@@ -61,7 +61,7 @@ fn sc() -> &'static str {
 
 async fn start_anvil() -> (Anvil, String) {
     let child = Command::new("anvil")
-        .args(["--chain-id", &CHAIN_ID.to_string(), "--hardfork", "prague", "--port", &PORT.to_string(), "--silent"])
+        .args(["--chain-id", &CHAIN_ID.to_string(), "--hardfork", "osaka", "--gas-limit", "16777216", "--port", &PORT.to_string(), "--silent"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()

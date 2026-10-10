@@ -33,7 +33,7 @@ The node that relays these contracts is specified in [docs/node/](../node/README
 
 ## 1. Conventions
 
-Built interfaces are quoted from `smartcontracts/evm/src` (Solidity 0.8.28, OpenZeppelin 5.2). Proposed interfaces
+Built interfaces are quoted from `smartcontracts/evm/src` (Solidity 0.8.37, EVM `osaka`, OpenZeppelin 5.2). Proposed interfaces
 are normative targets for future versions and keep the built conventions: custom errors, EIP-712 domains on the
 contract itself, lane nonces, contract-only allowances, no proxy upgrades.
 
@@ -187,9 +187,9 @@ own job (Move test, Soroban, CosmWasm, Tact, Solana) as the family is added.
 
 | Pin | Value |
 |---|---|
-| Solidity | `solc_version = "0.8.28"`, `optimizer_runs = 200`, `via_ir = false` (the 13-parameter named function is decoded by hand instead, see [metatx.md](metatx.md#named-functions)) |
+| Solidity | `solc_version = "0.8.37"`, `evm_version = "osaka"`, `optimizer_runs = 200`, `via_ir = false` (the 13-parameter named function is decoded by hand instead, see [metatx.md](metatx.md#named-functions)) |
 | OpenZeppelin, forge-std | `v5.2.0`, `v1.16.2` |
-| EVM profiles | `private7622` = `evm_version = "prague"` (the private reference chain, [NET-EVM-02](../networks/evm.md#NET-EVM-02)); `zether` = Prague (BLS12-381 needs EIP-2537); test chains run anvil `--hardfork prague` |
+| EVM profiles | every profile is `osaka` (owner 2026-10-11): `private7622` (the private reference chain, [NET-EVM-02](../networks/evm.md#NET-EVM-02)), `zether`, `gnosis`, `celo`, `bsc`, `polygon`, `base`; test chains run anvil `--hardfork osaka` |
 | Invariant runs | `[invariant] runs = 64, depth = 32, fail_on_revert = true` |
 | Storage layout | `extra_output = ["storageLayout"]`; the v2 layout is pinned by `test_storageLayoutIsPinned` against committed JSON |
 | Size | CI runs `scripts/size_gate.py` ([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)): token implementations ≤ 20,480 B, other contracts ≤ 24,576 B (EIP-170), init code ≤ 49,152 B (EIP-3860); a contract in `size-baseline.json` may not exceed its recorded size |

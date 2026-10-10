@@ -18,10 +18,13 @@ Status: **BUILT** on the private chain 7622 and anvil; public chains are seeded 
 
 | Chain | Chain id | Profile | Gas | Finality gate | Status |
 |---|---|---|---|---|---|
-| Private reference chain | 7622 | `private7622` (Solidity `prague`) | free (base fee 0) | depth 1, quorum 1 | BUILT, first target |
+| Private reference chain | 7622 | `private7622` (Solidity `osaka`) | free (base fee 0) | depth 1, quorum 1 | BUILT, first target |
 | Anvil (tests) | 31337 (also 1337) | — | — | depth | BUILT (dev only) |
-| Gnosis Chain | 100 | `gnosis` (Prague target; the chain runs Pectra since 2025-04-30, and Fusaka) | native xDAI (stable value) | `tag finalized` (~160–240 s), quorum ≥ 2 independent RPCs | seeded `draft` until the operator gate passes |
-| Celo | 42220 | `celo` (Cancun) | CELO; fee currencies optional | `l1_batch` (PLANNED) | seeded `draft` |
+| Gnosis Chain | 100 | `gnosis` (`osaka`; Pectra since 2025-04-30, then Fusaka) | native xDAI (stable value) | `tag finalized` (~160–240 s), quorum ≥ 2 independent RPCs | seeded `draft` until the operator gate passes |
+| Celo | 42220 | `celo` (`osaka`, owner 2026-10-11; the chain's fork level is not re-measured) | CELO; fee currencies optional | `l1_batch` (PLANNED) | seeded `draft` |
+| BNB Smart Chain | 56 | `bsc` (`osaka`; Mendel = Osaka since 2026-04-28) | BNB (~0.05 gwei) | `tag finalized` (BEP-126 fast finality, ~1 s), quorum ≥ 2 | seeded `draft` |
+| Polygon PoS | 137 | `polygon` (`osaka` opcode set; no named Osaka fork) | POL (~250–300 gwei) | `tag finalized` (milestones, ~3–6 s); `safe` unsupported | seeded `draft` |
+| Base | 8453 | `base` (`osaka`; Azul since 2026-05-28) | ETH (~0.005 gwei) + L1 data fee | `l1_batch`: `safe` ~90 s, `finalized` ~16 min | seeded `draft` |
 
 - **Gnosis Chain (100)** is the recommended public chain for B2B: native gas is xDAI, a stable-value coin, so gas
   costs are predictable in unit, though their size still follows the gas price (the often-quoted < $0.001/tx is not a
@@ -40,7 +43,22 @@ Status: **BUILT** on the private chain 7622 and anvil; public chains are seeded 
 - <a id="NET-EVM-01"></a>**NET-EVM-01** — **Celo fee-currency support (CIP-64) for relayer lanes is an open owner
   requirement.** Lanes pay native CELO; paying gas in an allowed stablecoin is a seam, not specified. Status `open`.
 
-Other EVM chains (Ethereum L1, Arbitrum, Optimism, Base, Polygon PoS, BNB Chain) are **unsupported until
+- **BNB Smart Chain (56), Polygon PoS (137), Base (8453)** are seeded `draft` (owner 2026-10-11) from a sourced and
+  RPC-probed survey of 2026-10-11 (live `eth_call`/`eth_estimateGas` probes): EIP-2537 (`0x0b`–`0x11`), EIP-7702 and
+  P-256 at `0x100` (EIP-7951) are live on all three, and the deterministic CREATE2 deployer `0x4e59…956c` exists on each
+  mainnet and its main testnet (97, 80002, 84532). Differences that matter: **Polygon** allows 32,768-byte contracts
+  (chain-specific, since Ahmedabad 2024-09-26) and a 33,554,432 per-transaction gas cap (2^25), while BSC and Base keep
+  24,576 and 16,777,216 — SCaaS stays within the smaller values so CREATE2 addresses and transactions are the same
+  everywhere; Polygon has no `safe` tag and its 2025 history includes milestone stalls and reorgs, so a stalled
+  `finalized` pauses crediting instead of falling back to a shallow depth; **Base** has a single sequencer whose
+  `latest`/Flashblocks confirmations are preconfirmations only, and its fee adds an L1 data fee that `eth_estimateGas`
+  does not include (relayers budget it from calldata size); **BSC** blocks come almost entirely from two builders
+  (BEP-322 PBS), so private submission goes through builder RPCs. Public RPCs that worked on 2026-10-11:
+  `bsc-dataseed.bnbchain.org`, `bsc-rpc.publicnode.com`; `polygon-bor-rpc.publicnode.com`, `polygon.drpc.org`
+  (`polygon-rpc.com` answered 401/403); `mainnet.base.org` (rate-limited), `base-rpc.publicnode.com`. The switch to
+  `enabled` follows the same operator gate as Gnosis (measured finality p99 over 7 days, RPC quorum, a passing deployment).
+
+Other EVM chains (Ethereum L1, Arbitrum, Optimism, Avalanche, Linea) are **unsupported until
 configured**: no profile, no finality gate, no tested deployment. A chain becomes supported only through a chain
 profile with a measured finality gate, an RPC quorum and a passing deployment. Reference values for such a profile,
 to be re-measured before use: Ethereum L1 12-s slots, finality = 2 epochs (~12.8 min); Arbitrum One / Base sequencer
@@ -155,7 +173,7 @@ P5, the v1 line (`OpenFactoryV1` with `MetaToken` as version 1 of `META`, `MetaT
 `SCaaSDex`, optionally a tier-1 demo token ([deploy](../contracts/README.md#build-ci-and-pins)). It writes
 `deployments/<chainid>.json` (`factory`, `implementation`, `dex`, `subject_account_factory`,
 `subject_account_implementation`, `scaas_dex`, `demo_token`, and `token_factory`, `implementation_none`, `chain_uid`),
-which seeds the client and the node configuration. Zether and the registry are not in the deploy script (dev chains only). Integration tests use `anvil --hardfork prague`.
+which seeds the client and the node configuration. Zether and the registry are not in the deploy script (dev chains only). Integration tests use `anvil --hardfork osaka`.
 
 Every contract is a non-upgradeable clone or a fixed deployment ([CTR-GEN-02](../contracts/README.md#CTR-GEN-02)):
 upgradeable proxies (UUPS / ERC-1822) are not used, and a fix is a new implementation version registered on the factory
