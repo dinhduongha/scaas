@@ -112,6 +112,21 @@ contract Tier1Test is V2Fixture {
         t.transferFrom(address(this), bob, 0);
     }
 
+    /// An EOA with an EIP-7702 designator (`0xef0100 ‖ addr`) has code but is not a contract here (CTR-TOK-01).
+    function test_allowance_7702DelegatedEoaRefused() public {
+        NoUnderlyingToken t = _none(address(this), 100, address(0));
+        vm.etch(bob, abi.encodePacked(hex"ef0100", address(this)));
+        assertEq(bob.code.length, 23);
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.SpenderNotContract.selector, bob));
+        t.approve(bob, 1);
+        vm.prank(bob);
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.CallerNotContract.selector, bob));
+        t.approve(address(this), 1);
+        vm.prank(bob);
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.CallerNotContract.selector, bob));
+        t.transferFrom(address(this), bob, 0);
+    }
+
     function test_unwrapIsNotListedOnTier1() public {
         uint256 pk = 0xA11CE;
         NoUnderlyingToken t = _none(vm.addr(pk), 100, address(0));
