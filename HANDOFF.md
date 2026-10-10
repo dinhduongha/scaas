@@ -2,7 +2,7 @@
 
 ## Shutdown 2026-10-10 — read this first
 
-**State:** branch `p1b-erc20metatx` (worktree `.claude/worktrees/p1b`), P1b complete and committed; **not yet merged into `main`**.
+**State:** P1b merged into `main` as `fb2a234` (branch `p1b-erc20metatx`, 758 forge tests, e2e 4/4 + e2e_hedera 1/1); not pushed.
 758 forge tests pass; docs checker 0 errors; the node e2e suites (`e2e`, `e2e_hedera`) pass against the deploy scripts,
 which deploy only `META_NONE` on factory v2 until P1d and default `CHAIN_UID` to block 0's hash. The bamboo-dms repoint
 is done on branch `scaas-metatx-v1-kat` (commit `81cea08`) in `/home/dockers/odoo19/custom-addons/bamboo-dms` — not
