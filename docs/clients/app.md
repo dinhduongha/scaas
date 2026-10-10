@@ -31,7 +31,7 @@ the app is built yet (the node store is built; the node's job API, admin API and
 **dApp** (no login): accounts (the Universal Account default, `SmartKeyAccount` option (b), the seed vault, extension
 wallets); balances and the token catalogue; token creation (factory v1 and v2) and wrapping an existing token into a
 meta-tx token; wrap/unwrap including gasless unwrap (target: `mtxExecute` with the token's `unwrap` calldata, and
-`mtxWrap` by signature for a SCaaS underlying; as built `mtxUnwrap`); meta-tx transfers and payments submitted through a node gateway
+`mtxWrap` by signature for a SCaaS underlying; as built on the v2 line `mtxExecute(unwrap…)`); meta-tx transfers and payments submitted through a node gateway
 (all families) or self-paid; the DEX order book (home-bound and relayer-unbound markets) with place/cancel; Zether
 (register, deposit/shield, confidential transfer, withdraw, balance via the device cache + BSGS).
 
@@ -268,7 +268,7 @@ the terms. Every adapter receives transports wired to the guarded `fetch` ([CLI-
 
 | Family | Encoders (clientkeys `fam/`) | Subject signs | Gateway | Self-paid | Reads | Events / status |
 |---|---|---|---|---|---|---|
-| **EVM** | `evm.js` + DEX `Order`/`CancelOrder`/`InvalidateNonces`, v2 calldata, `payLane`; v3 `UAMetaTransaction`/`UAMetaTransfer`; KAT `metatx_kat` (v3), `metatx_v1_kat` (built v1, until P5), `metatransfer_kat`, `dex_kat`, `vectors/ua/*` | EIP-712 (`eip712Domain()` checked); EOA, ERC-1271 SmartKeyAccount, or `UAKey.signUA("metatx", digest)` for a UA | `/v1/metatx`; `/v1/ua-metatx` | `executeMetaTransaction` / named `mtx*` / `ua*`; the direct function when signer = submitter | `balanceOf`, `balanceOfUA`, `metaNonce`, `uaNonce`, `payLane`, `versionOf` | `eth_getLogs` (bounded) |
+| **EVM** | `evm.js` + DEX `Order`/`CancelOrder`/`InvalidateNonces`, v2 calldata, `payLane`; v3 `UAMetaTransaction`/`UAMetaTransfer`; KAT `metatx_kat` (v3), `metatx_v1_kat` (built v1, until P5), `metatransfer_kat`, `dex_kat`, `vectors/ua/*` | EIP-712 (`eip712Domain()` checked); EOA, ERC-1271 SmartKeyAccount, or `UAKey.signUA("metatx", digest)` for a UA | `/v1/metatx`; `/v1/ua-metatx` | `executeMetaTransaction` / named `mtx*` / `ua*`; the direct function when signer = submitter | `balanceOf`, `balanceOfUA`, `mtxNonce` (v1 line: `metaNonce`), `uaNonce`, `payLane`, `versionOf` | `eth_getLogs` (bounded) |
 | **Hedera** | EVM + `hedera_kat` | ECDSA alias via extension; ED25519 `0.0.N` raw over the digest via seed (`hedera_ed25519`) | `/v1/metatx` (64-byte signatures allowed) | as EVM via the relay | as EVM; mirror for `0.0.N` ⇄ address, associations, HTS info | relay logs; mirror tx |
 | **Cosmos** | `fam/cosmos.js` | ADR-036 via Keplr/Leap or seed `m/44'/118'/0'/0/i` | `/v1/ops` | `MsgExecuteContract{Relay}` signed + broadcast by the user | CW20 `Balance`, `Nonce{owner, lane}` | tx search; `getTx` |
 | **Soroban** | `fam/soroban.js` | Freighter `signAuthEntry`, or seed `m/44'/148'/i'` (Pi coin 314159): sha256 of the auth preimage (`G…`) / `Ed25519{key_id, sig}` (`C…`) | `/v1/ops` | user = transaction source: simulate, attach auth, sign the envelope hash (only via `buildSelfPaid`) | SEP-41 `balance`; random nonce | `getEvents`, `getTransaction` |
@@ -388,7 +388,7 @@ the non-EVM families: `/v1/ops`, Hedera on `/v1/metatx`). Why: with gateway subm
 family. Cost: until those routes exist, Hedera and non-EVM are self-paid only.
 
 <a id="intent-status"></a><a id="CLI-APP-08"></a>**CLI-APP-08** — **Intent status is chain truth.** A `202` means "accepted by
-relayer". *Done* = the nonce is consumed (`metaNonce` / `uaNonce` / the family lane read), plus `PaymentSettled` /
+relayer". *Done* = the nonce is consumed (`mtxNonce` (v1 line: `metaNonce`) / `uaNonce` / the family lane read), plus `PaymentSettled` /
 `MetaTransactionExecuted` / `UAMetaTransactionExecuted` when present. *Expired* = `validUntil` passed with the nonce
 unconsumed. `GET /v1/intents/{id}` is used when the node returns an id. Why: the node is trusted for liveness, not truth.
 Cost: one read per poll.
@@ -514,7 +514,7 @@ wizards build Safe transactions the same way.
 | 5 | Accounts & keys | account state, backup status, key metadata (BE/BS, origins), vault state | create UA / SmartKeyAccount / Approvers; register (`/v1/ua/register`); add key/origin; guardian; vault create/import/unlock/rewrap/PRF; find my account | per account kind |
 | 6 | Token catalogue | factory versions, `versionOf` kind, views (`legOf`, `collateralValue`, `pendingRate`, `rateAdmin`, guardian), per-leg `balanceOf ≥ reserve` | add token (explicit); revoke approval | EVM, Hedera; read-only lists elsewhere |
 | 7 | Create token | factory, catalogue, `predictAddress`, underlying `decimals` (cross-checked), HTS checks, existing wrappers of the underlying shown first | `createToken` (built: `createMetaToken`, `createTiered`, `createZetherToken` (dev); P1) | EVM, Hedera |
-| 8 | Wrap / unwrap | `previewWrap`, `previewUnwrap`, `legOf`, allowance, `pendingRate` | `approve` + `wrap`; `unwrap(…, minOut)`; `addReserve`; gasless `mtxUnwrap` (target: gasless wrap/unwrap/addReserve via `mtxExecute`; `mtxWrap` for a SCaaS underlying, no approve) | EVM, Hedera |
+| 8 | Wrap / unwrap | `previewWrap`, `previewUnwrap`, `legOf`, allowance, `pendingRate` | `approve` + `wrap`; `unwrap(…, minOut)`; `addReserve`; gasless unwrap via `mtxExecute(unwrap…)` (target: gasless wrap/unwrap/addReserve via `mtxExecute`; `mtxWrap` for a SCaaS underlying, no approve) | EVM, Hedera |
 | 9 | Rate & guardian | as 6 | guardian direct; rate ops as Safe JSON | EVM, Hedera |
 | 10 | Sui coin type enable | derived `Registry<T>` id | `new_registry<T>` | Sui |
 | 11 | Fund meta account | owned coins / FA / SPL | deposit transfer; `transferToUA` | Sui, Aptos, Solana, EVM v3 |
@@ -599,7 +599,7 @@ Post-quantum Zether (PQZ) tokens configured on the private chain 7622 run in the
 | Factory v1 (`META`, wrap or mint) | ✓ | ✓ (Hedera implementation registered) | — PLANNED | — PLANNED | n/a | n/a | — PLANNED | n/a |
 | Factory v2 tiers, rates, guardian | ✓ | ✓ (Hedera children) | — | — | — | — | — | — |
 | Wrap / unwrap / addReserve | ✓ | ✓ | — | — | — | — | — | — |
-| Gasless `mtxUnwrap` | G + S | G + S | — | — | — | — | — | — |
+| Gasless unwrap (`mtxExecute(unwrap…)`) | G + S | G + S | — | — | — | — | — | — |
 | Rate admin (calldata) / guardian | ✓ | ✓ | — | — | — | — | — | — |
 | Regulated tokens (flags 5–8) | view-only | view-only | — | — | — | — | — | — |
 | DEX book, place, cancel | G (venue); on-chain cancel S | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable |
@@ -741,7 +741,7 @@ End to end (Playwright, Chromium):
 
 | Suite | Against | Covers |
 |---|---|---|
-| `evm` | anvil + `deploy.sh evm` + `scaas-node` (gateway, CORS, DEX venue on one lane) | send/pay via gateway and self-paid; v2 tiers; wrap/unwrap/`mtxUnwrap`; spender refusals; DEX place/cancel/fill across two contexts; passkey SmartKeyAccount (CDP virtual authenticator); find-my-account; vault v2; backup switch on (receive hidden, value refused, add-key allowed); EIP-6963 fake |
+| `evm` | anvil + `deploy.sh evm` + `scaas-node` (gateway, CORS, DEX venue on one lane) | send/pay via gateway and self-paid; v2 tiers; wrap/unwrap/gasless `mtxExecute(unwrap…)`; spender refusals; DEX place/cancel/fill across two contexts; passkey SmartKeyAccount (CDP virtual authenticator); find-my-account; vault v2; backup switch on (receive hidden, value refused, add-key allowed); EIP-6963 fake |
 | `ua` | anvil + the UA deployment | passkey-UA create + gasless register; v3 send; Approvers |
 | `zether` | anvil + **`script/DeployZether.s.sol`** (dev only: registry, verifiers, ZetherToken) | register (gasless), fund, transfer, rollOver, burn, cache/BSGS |
 | `console` | `mock-node.mjs` + `mock-idp.mjs`; a real node once its admin API exists | login flows, roles, secret shown once, peer URL checks, 409/422 |
