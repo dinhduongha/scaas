@@ -14,7 +14,8 @@ import {HederaNoUnderlyingToken} from "../../src/hedera/HederaTokensV2.sol";
 /// Như `script/Deploy.s.sol` nhưng implementation META là `HederaMetaToken` (R63).
 /// Hedera JSON-RPC Relay: `forge script script/hedera/DeployHedera.s.sol --rpc-url $RELAY --broadcast --slow`
 /// (relay không có mempool: `--slow` gửi tuần tự, mỗi tx chờ receipt). Deployer = tài khoản ECDSA có alias EVM.
-/// env: PRIVATE_KEY, REGISTRAR?, DEMO_SUPPLY?, DEMO_HOLDER?, CHAIN_UID? (mặc định blockhash(0)). Ghi `deployments/hedera-<chainid>.json`.
+/// env: PRIVATE_KEY, REGISTRAR?, DEMO_SUPPLY?, DEMO_HOLDER?, CHAIN_UID? (mặc định blockhash(0)).
+/// Ghi `deployments/hedera-<chainid>.json`.
 contract DeployHedera is Script {
     function run() external {
         uint256 pk = vm.envUint("PRIVATE_KEY");
