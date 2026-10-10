@@ -52,6 +52,6 @@ contract MetaTxKatTest is Fixtures {
         vm.serializeString(k, "digest", vm.toString(digest));
         vm.serializeString(k, "signer", vm.toString(m.from));
         string memory out = vm.serializeString(k, "signature", vm.toString(abi.encodePacked(r, s, v)));
-        vm.writeJson(out, "./test/vectors/metatx_v1_kat.json");
+        if (vm.envOr("WRITE_KAT", false)) vm.writeJson(out, "./test/vectors/metatx_v1_kat.json");
     }
 }
