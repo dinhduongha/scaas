@@ -53,8 +53,8 @@ contract HederaV2Test is Test {
     function test_implementationSizes() public view {
         IOpenFactoryV2.TokenKind[3] memory k = [IOpenFactoryV2.TokenKind.META_NONE, IOpenFactoryV2.TokenKind.META_SINGLE,
             IOpenFactoryV2.TokenKind.META_MULTI];
-        assertLe(f.implementationOf(k[0], 1).code.length, 20_480); // CTR-TOK-24 (measured 18,023)
-        // Transitional (R3): Hedera wrappers over EIP-170 until P1d (`UnderlyingLib`); measured 27,374 / 28,223
+        assertLe(f.implementationOf(k[0], 1).code.length, 20_480); // CTR-TOK-24 (measured 18,057)
+        // Transitional (R3): Hedera wrappers over EIP-170 until P1d (`UnderlyingLib`); measured 27,417 / 28,266
         assertLe(f.implementationOf(k[1], 1).code.length, 27_648);
         assertLe(f.implementationOf(k[2], 1).code.length, 28_672);
     }

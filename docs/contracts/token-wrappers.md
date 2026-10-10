@@ -858,8 +858,8 @@ each library ≤ 24,576 B.
   its storage pointer from the fixed slot, so libraries never overlap; a test proves that a write through one library
   never changes another namespace.
 - **Size budget:** each token implementation ≤ 20,480 B (≈ 4 KB left for later streams); CI fails the build when a
-  contract exceeds its budget (`forge build --sizes`). **Transitional (BUILT, P1b):** `NoUnderlyingToken` 17,568 B and
-  `HederaNoUnderlyingToken` 18,023 B pass; `Single` 26,068, `Multi` 26,917, `HederaSingle` 27,374, `HederaMulti` 28,223
+  contract exceeds its budget (`forge build --sizes`). **Transitional (BUILT, P1b):** `NoUnderlyingToken` 17,602 B and
+  `HederaNoUnderlyingToken` 18,057 B pass; `Single` 26,102, `Multi` 26,951, `HederaSingle` 27,417, `HederaMulti` 28,266
   (and `ZetherToken` 28,849) exceed EIP-170 until P1d (`UnderlyingLib`); `FactoryV2.t.sol`/`HederaV2.t.sol` pin the tiers.
 
 **Transitional (BUILT).** The layout below is the built one (non-namespaced OpenZeppelin order); the namespaces replace

@@ -3,8 +3,10 @@
 ## Shutdown 2026-10-10 — read this first
 
 **State:** branch `p1b-erc20metatx` (worktree `.claude/worktrees/p1b`), P1b complete and committed; **not yet merged into `main`**.
-750 forge tests pass; docs checker 0 errors. The bamboo-dms repoint is done on branch `scaas-metatx-v1-kat` (commit `81cea08`) in
-`/home/dockers/odoo19/custom-addons/bamboo-dms` — not merged into its main; the owner merges.
+758 forge tests pass; docs checker 0 errors; the node e2e suites (`e2e`, `e2e_hedera`) pass against the deploy scripts,
+which deploy only `META_NONE` on factory v2 until P1d and default `CHAIN_UID` to block 0's hash. The bamboo-dms repoint
+is done on branch `scaas-metatx-v1-kat` (commit `81cea08`) in `/home/dockers/odoo19/custom-addons/bamboo-dms` — not
+merged into its main; the owner merges.
 
 **P1b delivered:** v1 names suffixed `…V1`; `MetaTransfer` + `IERC20MetaTx`/`IERC20Payment`; `ERC20MetaTx` on `MetaTxBase`; the v2
 line moved onto it (named builders, per-kind allowlists, gasless burn/wrap/unwrap; `MetaTxCore` and the op dispatch removed);
@@ -15,8 +17,8 @@ test); conformance + `msg.sender` lint; KATs `metatx_kat.json` (unchanged) and `
 **Rulings for the owner:** R3 wrappers over EIP-170 until P1d; R4 UA ledger split moved to UA F1; R7 SmartKeyAccount name on the
 token side now (`SMART_KEY_ACCOUNT_IMPL`; the account contract stays `SubjectAccount` until P4).
 
-**Sizes (runtime B):** `NoUnderlyingToken` 17,568, `HederaNoUnderlyingToken` 18,023 (both <= 20,480); over EIP-170: `Single` 26,068,
-`Multi` 26,917, `HederaSingle` 27,374, `HederaMulti` 28,223, `ZetherToken` 28,849.
+**Sizes (runtime B):** `NoUnderlyingToken` 17,602, `HederaNoUnderlyingToken` 18,057 (both <= 20,480); over EIP-170: `Single` 26,102,
+`Multi` 26,951, `HederaSingle` 27,417, `HederaMulti` 28,266, `ZetherToken` 28,849.
 
 **Next action:** write the **P1c** plan (`MetaTokenBase` features/roles, `AdminLib`/`PayLib`/`HederaLib`, kind NONE).
 
