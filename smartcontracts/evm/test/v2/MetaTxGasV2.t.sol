@@ -10,7 +10,7 @@ import {IOpenFactoryV2} from "../../src/common/IOpenFactoryV2.sol";
 import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
 import {SingleUnderlyingToken} from "../../src/metatx/SingleUnderlyingToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
-import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
+import {IERC20MetaTxV1} from "../../src/metatx/IERC20MetaTxV1.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 
@@ -102,7 +102,7 @@ contract MetaTxGasV2Test is Test {
     }
 
     function _sig(address t, MetaTxLib.LegacyMetaTransaction memory m) internal view returns (bytes memory) {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PK, IERC20MetaTx(t).metaTxDigest(m));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PK, IERC20MetaTxV1(t).metaTxDigest(m));
         return abi.encodePacked(r, s, v);
     }
 
@@ -140,7 +140,7 @@ contract MetaTxGasV2Test is Test {
     }
 
     function _cdExec(address t, MetaTxLib.LegacyMetaTransaction memory m) internal view returns (bytes memory) {
-        return abi.encodeCall(IERC20MetaTx.executeMetaTransaction, (m, _sig(t, m)));
+        return abi.encodeCall(IERC20MetaTxV1.executeMetaTransaction, (m, _sig(t, m)));
     }
 
     function _exec(address t, MetaTxLib.LegacyMetaTransaction memory m) internal {
@@ -187,7 +187,7 @@ contract MetaTxGasV2Test is Test {
     function test_gasG_erc1271() public {
         MetaTxLib.LegacyMetaTransaction memory m = _mt(0, COLD, 0, 0, address(0));
         m.from = address(acct);
-        bytes memory cd = abi.encodeCall(IERC20MetaTx.executeMetaTransaction, (m, hex"deadbeef"));
+        bytes memory cd = abi.encodeCall(IERC20MetaTxV1.executeMetaTransaction, (m, hex"deadbeef"));
         uint256 s = _snap();
         uint256 g1 = _measure(address(v1), cd);
         vm.revertToState(s);
@@ -307,13 +307,13 @@ contract MetaTxGasV2Test is Test {
     function test_gasCalldata() public view {
         MetaTxLib.LegacyMetaTransaction memory m = _mt(MetaTxLib.MODE_RESTRICT_RELAYER, WARM, 1, 0, address(0));
         bytes memory s = _sig(address(v2), m);
-        _cd("I calldata executeMetaTransaction", abi.encodeCall(IERC20MetaTx.executeMetaTransaction, (m, s)));
+        _cd("I calldata executeMetaTransaction", abi.encodeCall(IERC20MetaTxV1.executeMetaTransaction, (m, s)));
         _cd("I calldata mtxTransfer", _named(v2.mtxTransfer.selector, abi.encode(signer, recipient, 1 ether, WARM, 1,
             m.validUntil, m.mode, relayer), s));
         bytes32 p = keccak256("inv");
         m.data = abi.encodeWithSelector(bytes4(keccak256("pay(bytes32)")), p);
         m.batch = v2.payLane(p);
-        _cd("I calldata executeMetaTransaction(pay)", abi.encodeCall(IERC20MetaTx.executeMetaTransaction, (m, s)));
+        _cd("I calldata executeMetaTransaction(pay)", abi.encodeCall(IERC20MetaTxV1.executeMetaTransaction, (m, s)));
         _cd("I calldata mtxPay", _named(v2.mtxPay.selector, abi.encode(signer, recipient, 1 ether, p, m.validUntil,
             m.mode, relayer, 0, address(0)), s));
     }

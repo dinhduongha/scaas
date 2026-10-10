@@ -7,7 +7,7 @@ import {RateAdminForwarder} from "./helpers/V2Mocks.sol";
 import {SingleUnderlyingToken} from "../../src/metatx/SingleUnderlyingToken.sol";
 import {MultiUnderlyingToken} from "../../src/metatx/MultiUnderlyingToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
-import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
+import {IERC20MetaTxV1} from "../../src/metatx/IERC20MetaTxV1.sol";
 import {IOpenFactoryV2} from "../../src/common/IOpenFactoryV2.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
@@ -243,7 +243,7 @@ contract MultiTest is V2Fixture {
     }
 
     function test_allowanceOnlyBetweenContracts() public {
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.SpenderNotContract.selector, bob));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.SpenderNotContract.selector, bob));
         t.approve(bob, 1);
     }
 

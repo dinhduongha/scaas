@@ -5,7 +5,7 @@ import {Fixtures} from "./helpers/Fixtures.sol";
 import {MetaToken} from "../src/metatx/MetaToken.sol";
 import {MetaTxDex} from "../src/dex/MetaTxDex.sol";
 import {MetaTxLib} from "../src/common/MetaTxLib.sol";
-import {IERC20MetaTx} from "../src/metatx/IERC20MetaTx.sol";
+import {IERC20MetaTxV1} from "../src/metatx/IERC20MetaTxV1.sol";
 
 contract MetaTxDexTest is Fixtures {
     uint256 constant ALICE_PK = 0xA11CE;
@@ -38,7 +38,7 @@ contract MetaTxDexTest is Fixtures {
             nonce: 0, validUntil: block.timestamp + 300, mode: R, relayer: address(dex),
             fee: 0, feeRecipient: address(0)
         });
-        l = MetaTxDex.Leg({token: IERC20MetaTx(address(sell)), m: m, sig: ""});
+        l = MetaTxDex.Leg({token: IERC20MetaTxV1(address(sell)), m: m, sig: ""});
         l.sig = _signLeg(pk, sell, m);
     }
 
@@ -100,7 +100,7 @@ contract MetaTxDexTest is Fixtures {
         MetaTxDex.Leg memory a = _leg(ALICE_PK, tA, 100 ether, tB, 50 ether, address(0));
         MetaTxDex.Leg memory b = _leg(BOB_PK, tB, 60 ether, tA, 100 ether, address(0));
         b.sig = a.sig;                                   // wrong signer for b
-        vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
+        vm.expectRevert(IERC20MetaTxV1.MetaTxBadSignature.selector);
         dex.settle(a, b);
         assertEq(tA.metaNonce(alice, a.m.batch), 0);
         assertEq(tA.balanceOf(alice), 500 ether);
@@ -118,7 +118,7 @@ contract MetaTxDexTest is Fixtures {
     function test_leakedLegCannotRunOutsideTheDex() public {
         MetaTxDex.Leg memory a = _leg(ALICE_PK, tA, 100 ether, tB, 50 ether, address(0));
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.MetaTxUnauthorizedRelayer.selector, address(dex), relayer));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.MetaTxUnauthorizedRelayer.selector, address(dex), relayer));
         tA.executeMetaTransaction(a.m, a.sig);
     }
 

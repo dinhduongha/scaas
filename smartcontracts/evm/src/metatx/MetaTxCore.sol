@@ -5,7 +5,7 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {SigCheck} from "../common/SigCheck.sol";
-import {IERC20MetaTx} from "./IERC20MetaTx.sol";
+import {IERC20MetaTxV1} from "./IERC20MetaTxV1.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 
@@ -18,7 +18,7 @@ import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 ///           chưa tiêu; event vẫn ở bước 9;
 ///         - `cancelMetaNonce` phát `MetaNonceCancelled`;
 ///         - slot guard `scaas.metatx.reentrancy.v2`.
-abstract contract MetaTxCore is ERC20, EIP712, IERC20MetaTx {
+abstract contract MetaTxCore is ERC20, EIP712, IERC20MetaTxV1 {
     using MetaTxLib for MetaTxLib.LegacyMetaTransaction;
 
     /// @dev `(from, batch) -> nonce kế tiếp`. 2D: batch nào kẹt thì chỉ kẹt batch đó. Slot 7 (TW2 §10.1).

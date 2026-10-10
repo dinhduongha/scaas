@@ -8,7 +8,7 @@ import {BlacklistERC20, SenderPaysFeeERC20, HookERC20, ITokensReceived, RateAdmi
 import {SingleUnderlyingToken} from "../../src/metatx/SingleUnderlyingToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {MetaTxCore} from "../../src/metatx/MetaTxCore.sol";
-import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
+import {IERC20MetaTxV1} from "../../src/metatx/IERC20MetaTxV1.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
 /// Người nhận có hook (ERC-777): trong lúc unwrap op đang chạy, đọc nonce của người ký, gọi `cancelMetaNonce`
@@ -91,7 +91,7 @@ contract UnwrapOpTest is V2Fixture {
         vm.expectEmit(address(t));
         emit SingleUnderlyingToken.Unwrapped(alice, address(usdc), shop, 100e6, 100e6);
         vm.expectEmit(address(t));
-        emit IERC20MetaTx.MetaTransactionExecuted(alice, relayer, 9, 0, d, relayer, 0);
+        emit IERC20MetaTxV1.MetaTransactionExecuted(alice, relayer, 9, 0, d, relayer, 0);
         _run(t, m);
         assertEq(usdc.balanceOf(shop), 100e6);
         assertEq(t.balanceOf(alice), 900e6);
@@ -131,7 +131,7 @@ contract UnwrapOpTest is V2Fixture {
         m = _op(address(usdc), 0, shop, 0);
         _runRevert(t, m, abi.encodeWithSelector(SingleUnderlyingToken.UnwrapTooSmall.selector));
         m = _op(address(usdc), 2_000e6, shop, 0);
-        _runRevert(t, m, abi.encodeWithSelector(IERC20MetaTx.MetaTxInsufficientForFee.selector, 2_000e6, 1_000e6));
+        _runRevert(t, m, abi.encodeWithSelector(IERC20MetaTxV1.MetaTxInsufficientForFee.selector, 2_000e6, 1_000e6));
         bytes4 op = t.OP_UNWRAP();
         m.data = abi.encodePacked(op, uint256(uint160(address(usdc))) | (1 << 170), uint256(uint160(shop)), uint256(0));
         m.value = 1;
@@ -240,12 +240,12 @@ contract UnwrapOpTest is V2Fixture {
         bytes32 d = t.metaTxDigest(m);
         bytes memory s = _sig(PK, address(t), m);
         vm.expectEmit(address(t));
-        emit IERC20MetaTx.MetaTransactionExecuted(alice, relayer, batch, 0, d, withFee ? feeTaker : relayer, m.fee);
+        emit IERC20MetaTxV1.MetaTransactionExecuted(alice, relayer, batch, 0, d, withFee ? feeTaker : relayer, m.fee);
         vm.prank(relayer);
         if (withFee) _mtxUnwrapWithFee(address(t), m, address(usdc), wrapped, s);
         else t.mtxUnwrap(alice, address(usdc), wrapped, shop, wrapped, batch, 0, m.validUntil, RR, relayer, s);
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.MetaTxBadNonce.selector, 1, 0));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.MetaTxBadNonce.selector, 1, 0));
         t.executeMetaTransaction(m, s);
     }
 

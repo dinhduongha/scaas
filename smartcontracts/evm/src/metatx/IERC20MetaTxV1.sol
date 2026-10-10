@@ -8,14 +8,14 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 /// @notice Cây kế thừa (quyết định của user — "Zether là child của MetaTransaction"):
 ///
 ///     IERC20
-///      └── IERC20MetaTx          <- ĐÂY. Tầng nền.
-///           ├── IERC20Payment    <- token thanh toán công khai
+///      └── IERC20MetaTxV1          <- ĐÂY. Tầng nền.
+///           ├── IERC20PaymentV1    <- token thanh toán công khai
 ///           └── IZetherToken     <- token bảo mật, kế thừa TOÀN BỘ meta-tx
 ///
 /// Không phải hai nhánh song song. Hệ quả trực tiếp: một Zether token tự động có
 /// meta-transaction, nên `transferConfidential` gọi được cả hai đường — EOA có
 /// native gas gọi thẳng, hoặc bọc trong MetaTransaction qua relayer.
-interface IERC20MetaTx is IERC20 {
+interface IERC20MetaTxV1 is IERC20 {
     /// @dev `relayer` và `feeRecipient` phát ra đây là giá trị ĐÃ RESOLVE tại runtime
     ///      (`msg.sender` và địa chỉ thực nhận phí), KHÔNG phải `m.relayer`/`m.feeRecipient`
     ///      thô — trong MODE_OPEN hai ô đó là rác do relayer điền.

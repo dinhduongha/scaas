@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {IERC20MetaTx} from "./IERC20MetaTx.sol";
+import {IERC20MetaTxV1} from "./IERC20MetaTxV1.sol";
 import {FeeMode} from "../common/FeePolicy.sol";
 
 /// @title Token thanh toán CÔNG KHAI. Số dư nhìn thấy được, cả ba mode phí đều dùng được.
-interface IERC20Payment is IERC20MetaTx {
+interface IERC20PaymentV1 is IERC20MetaTxV1 {
     event PaymentSettled(
         address indexed from,
         address indexed to,

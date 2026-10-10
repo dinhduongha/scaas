@@ -6,8 +6,8 @@ import {V2Fixture, BaseHarness, GasBurner1271} from "./helpers/V2Fixture.sol";
 import {Puller} from "../helpers/WalletMocks.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {MetaTxCore} from "../../src/metatx/MetaTxCore.sol";
-import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
-import {IERC20Payment} from "../../src/metatx/IERC20Payment.sol";
+import {IERC20MetaTxV1} from "../../src/metatx/IERC20MetaTxV1.sol";
+import {IERC20PaymentV1} from "../../src/metatx/IERC20PaymentV1.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {FeePolicy, FeeMode} from "../../src/common/FeePolicy.sol";
 
@@ -71,11 +71,11 @@ contract BaseTest is V2Fixture {
         MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, shop, 100e6, "", 7, RR);
         bytes32 d = t.metaTxDigest(m);
         vm.expectEmit(address(t));
-        emit IERC20MetaTx.MetaTransactionExecuted(alice, relayer, 7, 0, d, relayer, 0);
+        emit IERC20MetaTxV1.MetaTransactionExecuted(alice, relayer, 7, 0, d, relayer, 0);
         _exec(m);
         assertEq(t.balanceOf(shop), 100e6);
         assertEq(t.metaNonce(alice, 7), 1);
-        _expectExecRevert(m, abi.encodeWithSelector(IERC20MetaTx.MetaTxBadNonce.selector, 1, 0));
+        _expectExecRevert(m, abi.encodeWithSelector(IERC20MetaTxV1.MetaTxBadNonce.selector, 1, 0));
     }
 
     function test_cancelMetaNonceEmits() public {
@@ -94,7 +94,7 @@ contract BaseTest is V2Fixture {
 
     function test_allowanceOnlyBetweenContracts() public {
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.SpenderNotContract.selector, shop));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.SpenderNotContract.selector, shop));
         t.approve(shop, 1);
         Puller p = new Puller();
         vm.prank(alice);
@@ -102,12 +102,12 @@ contract BaseTest is V2Fixture {
         p.pull(address(t), alice, shop, 5);
         assertEq(t.balanceOf(shop), 5);
         vm.prank(shop);
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.CallerNotContract.selector, shop));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.CallerNotContract.selector, shop));
         t.transferFrom(alice, shop, 0);
         // approve op: spender EOA refused at step 6
         bytes memory a = abi.encodeWithSelector(bytes4(keccak256("approve(address,uint256)")), shop, 1);
         _expectExecRevert(_mt(alice, shop, 0, a, 1, RR),
-            abi.encodeWithSelector(IERC20MetaTx.SpenderNotContract.selector, shop));
+            abi.encodeWithSelector(IERC20MetaTxV1.SpenderNotContract.selector, shop));
     }
 
     function test_approveOpSetsAllowance() public {
@@ -131,7 +131,7 @@ contract BaseTest is V2Fixture {
         assertEq(tk.balanceOf(shop), 1);
         m.from = address(burner);
         vm.prank(relayer);
-        vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
+        vm.expectRevert(IERC20MetaTxV1.MetaTxBadSignature.selector);
         tk.executeMetaTransaction(m, hex"00");
     }
 
@@ -298,7 +298,7 @@ contract BaseTest is V2Fixture {
         bytes32 d = t.metaTxDigest(m);
         bytes memory s = _sig(PK, address(t), m);
         vm.expectEmit(address(t));
-        emit IERC20MetaTx.MetaTransactionExecuted(alice, relayer, m.batch, 0, d,
+        emit IERC20MetaTxV1.MetaTransactionExecuted(alice, relayer, m.batch, 0, d,
             m.feeRecipient == address(0) ? relayer : m.feeRecipient, m.value * m.fee / 1e6);
         vm.prank(relayer);
         if (which == 0) t.mtxTransfer(alice, shop, amount, m.batch, 0, m.validUntil, m.mode, relayer, s);
@@ -315,7 +315,7 @@ contract BaseTest is V2Fixture {
         vm.prank(relayer);
         t.mtxTransfer(alice, shop, 1e6, 3, 0, m.validUntil, RR, relayer, s);
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.MetaTxBadNonce.selector, 1, 0));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.MetaTxBadNonce.selector, 1, 0));
         t.executeMetaTransaction(m, s);
         // the other way round
         m.batch = 4;
@@ -323,7 +323,7 @@ contract BaseTest is V2Fixture {
         vm.prank(relayer);
         t.executeMetaTransaction(m, s);
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.MetaTxBadNonce.selector, 1, 0));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.MetaTxBadNonce.selector, 1, 0));
         t.mtxTransfer(alice, shop, 1e6, 4, 0, m.validUntil, RR, relayer, s);
     }
 
@@ -365,7 +365,7 @@ contract BaseTest is V2Fixture {
         m.fee = 5;
         bytes memory s = _sig(PK, address(t), m);
         vm.prank(relayer);
-        vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
+        vm.expectRevert(IERC20MetaTxV1.MetaTxBadSignature.selector);
         t.mtxTransfer(alice, shop, 1e6, 1, 0, m.validUntil, RR, relayer, s);
         vm.prank(relayer);
         t.executeMetaTransaction(m, s);
@@ -378,12 +378,12 @@ contract BaseTest is V2Fixture {
         MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, shop, 25e6, _payData(p), t.payLane(p), RR);
         bytes memory s = _sig(PK, address(t), m);
         vm.expectEmit(address(t));
-        emit IERC20Payment.PaymentSettled(alice, shop, 25e6, 0, relayer, p);
+        emit IERC20PaymentV1.PaymentSettled(alice, shop, 25e6, 0, relayer, p);
         vm.prank(relayer);
         t.mtxPay(alice, shop, 25e6, p, m.validUntil, RR, relayer, 0, address(0), s);
         assertEq(t.metaNonce(alice, t.payLane(p)), 1);
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.MetaTxBadNonce.selector, 1, 0));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.MetaTxBadNonce.selector, 1, 0));
         t.mtxPay(alice, shop, 25e6, p, m.validUntil, RR, relayer, 0, address(0), s);
     }
 
@@ -396,7 +396,7 @@ contract BaseTest is V2Fixture {
         vm.prank(relayer);
         t.mtxPay(alice, shop, 1e6, p, m.validUntil, RR, relayer, 0, address(0), s);
         vm.expectEmit(address(t));
-        emit IERC20Payment.PaymentSettled(alice, shop, 1e6, 0, address(0), p);
+        emit IERC20PaymentV1.PaymentSettled(alice, shop, 1e6, 0, address(0), p);
         vm.prank(alice);
         t.payWithFee(shop, 1e6, FeeMode.NONE, 0, address(0), p);
     }
@@ -421,7 +421,7 @@ contract BaseTest is V2Fixture {
         (MetaTxLib.LegacyMetaTransaction[] memory ms, bytes[] memory ss) = _batchItems(3);
         ss[2] = ss[0];
         vm.prank(relayer);
-        vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
+        vm.expectRevert(IERC20MetaTxV1.MetaTxBadSignature.selector);
         t.mtxBatch(ms, ss);
         assertEq(t.balanceOf(shop), 0);
         assertEq(t.metaNonce(alice, 100), 0);

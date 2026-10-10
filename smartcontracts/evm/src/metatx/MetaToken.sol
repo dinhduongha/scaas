@@ -5,9 +5,9 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
-import {ERC20MetaTx} from "./ERC20MetaTx.sol";
+import {ERC20MetaTxV1} from "./ERC20MetaTxV1.sol";
 import {IFactoryToken} from "../factory/IFactoryToken.sol";
-import {IERC20Payment} from "./IERC20Payment.sol";
+import {IERC20PaymentV1} from "./IERC20PaymentV1.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 
@@ -21,7 +21,7 @@ import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 ///         `eip712Domain()` (ERC-5267) chứ không đoán.
 ///
 ///         Không owner, không pause, không upgrade: token tự do (SRS §3.5.1).
-contract MetaToken is ERC20MetaTx, IERC20Payment, IFactoryToken {
+contract MetaToken is ERC20MetaTxV1, IERC20PaymentV1, IFactoryToken {
     using SafeERC20 for IERC20;
 
     /// @dev Op là `data` có tag selector, nằm TRONG struct đã ghim — không typehash thứ

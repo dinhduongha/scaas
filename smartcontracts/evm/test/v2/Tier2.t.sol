@@ -7,7 +7,7 @@ import {MockERC20, FeeOnTransferERC20} from "../helpers/Mocks.sol";
 import {SenderPaysFeeERC20, SlashableERC20, NoDecimals, BadDecimals, RateAdminForwarder} from "./helpers/V2Mocks.sol";
 import {SingleUnderlyingToken} from "../../src/metatx/SingleUnderlyingToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
-import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
+import {IERC20MetaTxV1} from "../../src/metatx/IERC20MetaTxV1.sol";
 import {IOpenFactoryV2} from "../../src/common/IOpenFactoryV2.sol";
 
 /// T2: tầng 2 `SingleUnderlyingToken` — wrap/unwrap/reserve, tỉ lệ, làm tròn (TW2 §5, R133, R134, R137, R143).
@@ -211,7 +211,7 @@ contract Tier2Test is V2Fixture {
 
     function test_allowanceOnlyBetweenContracts() public {
         SingleUnderlyingToken t = _single(address(usdc), 6, 1, 1, _fixedRate());
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.SpenderNotContract.selector, bob));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.SpenderNotContract.selector, bob));
         t.approve(bob, 1);
     }
 

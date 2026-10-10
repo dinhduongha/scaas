@@ -5,7 +5,7 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {SigCheck} from "../common/SigCheck.sol";
-import {IERC20MetaTx} from "./IERC20MetaTx.sol";
+import {IERC20MetaTxV1} from "./IERC20MetaTxV1.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 
@@ -18,7 +18,7 @@ import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 /// Không có `CALL` tới contract lạ ở bất kỳ đâu trong file này — đó là toàn bộ luận
 /// điểm của §04.1. Thao tác nằm trong chính contract, nên bước 6 kiểm được đủ điều
 /// kiện và sau bước 7 không gì fail được nữa.
-abstract contract ERC20MetaTx is ERC20, EIP712, IERC20MetaTx {
+abstract contract ERC20MetaTxV1 is ERC20, EIP712, IERC20MetaTxV1 {
     using MetaTxLib for MetaTxLib.LegacyMetaTransaction;
 
     /// @dev `(from, batch) -> nonce kế tiếp`. 2D: batch nào kẹt thì chỉ kẹt batch đó.

@@ -4,11 +4,11 @@ pragma solidity ^0.8.20;
 import {Fixtures} from "./helpers/Fixtures.sol";
 import {Mock1271Wallet} from "./helpers/WalletMocks.sol";
 import {MetaToken} from "../src/metatx/MetaToken.sol";
-import {IERC20MetaTx} from "../src/metatx/IERC20MetaTx.sol";
-import {IERC20Payment} from "../src/metatx/IERC20Payment.sol";
+import {IERC20MetaTxV1} from "../src/metatx/IERC20MetaTxV1.sol";
+import {IERC20PaymentV1} from "../src/metatx/IERC20PaymentV1.sol";
 import {MetaTxLib} from "../src/common/MetaTxLib.sol";
 
-/// Ví hợp đồng (EIP-1271) trả qua đúng pipeline meta-tx: `ERC20MetaTx._requireValidSignature`
+/// Ví hợp đồng (EIP-1271) trả qua đúng pipeline meta-tx: `ERC20MetaTxV1._requireValidSignature`
 /// đi đường `isValidSignature` khi `from` có code. Không có verifier thứ hai.
 contract Erc1271Test is Fixtures {
     MetaToken internal t;
@@ -31,7 +31,7 @@ contract Erc1271Test is Fixtures {
     function test_valid_wallet_pays() public {
         (MetaTxLib.LegacyMetaTransaction memory m, bytes memory sig) = _payment(keccak256("r1"));
         vm.expectEmit(true, true, true, true, address(t));
-        emit IERC20Payment.PaymentSettled(address(wallet), shop, 400, 0, relayer, keccak256("r1"));
+        emit IERC20PaymentV1.PaymentSettled(address(wallet), shop, 400, 0, relayer, keccak256("r1"));
         vm.prank(relayer);
         t.executeMetaTransaction(m, sig);
         assertEq(t.balanceOf(shop), 400);
@@ -41,7 +41,7 @@ contract Erc1271Test is Fixtures {
         wallet.setMode(mode);
         (MetaTxLib.LegacyMetaTransaction memory m, bytes memory sig) = _payment(keccak256("r2"));
         vm.prank(relayer);
-        vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
+        vm.expectRevert(IERC20MetaTxV1.MetaTxBadSignature.selector);
         t.executeMetaTransaction(m, sig);
         assertEq(t.metaNonce(address(wallet), m.batch), 0);
         assertEq(t.balanceOf(shop), 0);
@@ -57,7 +57,7 @@ contract Erc1271Test is Fixtures {
         (MetaTxLib.LegacyMetaTransaction memory m,) = _payment(keccak256("r3"));
         bytes memory sig = _sign(0xB0B, t, m);
         vm.prank(relayer);
-        vm.expectRevert(IERC20MetaTx.MetaTxBadSignature.selector);
+        vm.expectRevert(IERC20MetaTxV1.MetaTxBadSignature.selector);
         t.executeMetaTransaction(m, sig);
     }
 }

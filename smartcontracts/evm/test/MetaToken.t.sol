@@ -5,8 +5,8 @@ import {Fixtures} from "./helpers/Fixtures.sol";
 import {MockERC20, FeeOnTransferERC20} from "./helpers/Mocks.sol";
 import {MetaToken} from "../src/metatx/MetaToken.sol";
 import {MetaTxLib} from "../src/common/MetaTxLib.sol";
-import {IERC20MetaTx} from "../src/metatx/IERC20MetaTx.sol";
-import {IERC20Payment} from "../src/metatx/IERC20Payment.sol";
+import {IERC20MetaTxV1} from "../src/metatx/IERC20MetaTxV1.sol";
+import {IERC20PaymentV1} from "../src/metatx/IERC20PaymentV1.sol";
 import {FeeMode} from "../src/common/FeePolicy.sol";
 
 contract MetaTokenTest is Fixtures {
@@ -104,7 +104,7 @@ contract MetaTokenTest is Fixtures {
         MetaTxLib.LegacyMetaTransaction memory m = _mt(alice, shop, 250e6, _payData(REF), LANE,
             MetaTxLib.MODE_RESTRICT_RELAYER);
         vm.expectEmit(address(tok));
-        emit IERC20Payment.PaymentSettled(alice, shop, 250e6, 0, relayer, REF);
+        emit IERC20PaymentV1.PaymentSettled(alice, shop, 250e6, 0, relayer, REF);
         _exec(m);
         assertEq(tok.balanceOf(shop), 250e6);
         assertEq(tok.balanceOf(alice), 750e6);
@@ -116,7 +116,7 @@ contract MetaTokenTest is Fixtures {
         m.fee = 1e6;
         m.feeRecipient = relayer;
         vm.expectEmit(address(tok));
-        emit IERC20Payment.PaymentSettled(alice, shop, 100e6, 1e6, relayer, REF);
+        emit IERC20PaymentV1.PaymentSettled(alice, shop, 100e6, 1e6, relayer, REF);
         _exec(m);
         assertEq(tok.balanceOf(relayer), 1e6);
         assertEq(tok.balanceOf(alice), 899e6);
@@ -129,7 +129,7 @@ contract MetaTokenTest is Fixtures {
         bytes memory s2 = _sign(ALICE_PK, tok, m2);
         _exec(m1);
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.MetaTxBadNonce.selector, 1, 0));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.MetaTxBadNonce.selector, 1, 0));
         tok.executeMetaTransaction(m2, s2);
         assertEq(tok.balanceOf(shop), 10e6);
     }
@@ -139,7 +139,7 @@ contract MetaTokenTest is Fixtures {
         bytes memory sig = _sign(ALICE_PK, tok, m);
         vm.warp(m.validUntil + 1);
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.MetaTxExpired.selector, m.validUntil, block.timestamp));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.MetaTxExpired.selector, m.validUntil, block.timestamp));
         tok.executeMetaTransaction(m, sig);
     }
 
@@ -203,7 +203,7 @@ contract MetaTokenTest is Fixtures {
     function test_payWithFeeDirectPath() public {
         vm.prank(alice);
         vm.expectEmit(address(tok));
-        emit IERC20Payment.PaymentSettled(alice, shop, 100e6, 1e6, relayer, REF);
+        emit IERC20PaymentV1.PaymentSettled(alice, shop, 100e6, 1e6, relayer, REF);
         tok.payWithFee(shop, 100e6, FeeMode.FIXED, 1e6, relayer, REF);
         assertEq(tok.balanceOf(shop), 100e6);
         assertEq(tok.balanceOf(relayer), 1e6);

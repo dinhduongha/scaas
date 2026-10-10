@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {IERC20MetaTx} from "../metatx/IERC20MetaTx.sol";
+import {IERC20MetaTxV1} from "../metatx/IERC20MetaTxV1.sol";
 import {HederaAccountAuth} from "./HederaAccountAuth.sol";
 
 /// @title Chữ ký HIP-632 cho mọi tầng v2 trên Hedera (R63, R144) — như `HederaMetaToken` v1.
@@ -12,7 +12,7 @@ import {HederaAccountAuth} from "./HederaAccountAuth.sol";
 ///         `is MetaTxCore`) và bắt mỗi con ghi đè lại bảy hàm chỉ để chọn bên; ở đây mỗi con ghi đè đúng một hàm.
 library HederaSig {
     function requireValid(address from, bytes32 digest, bytes calldata sig) internal view {
-        if (!HederaAccountAuth.asView()(from, digest, sig)) revert IERC20MetaTx.MetaTxBadSignature();
+        if (!HederaAccountAuth.asView()(from, digest, sig)) revert IERC20MetaTxV1.MetaTxBadSignature();
     }
 }
 

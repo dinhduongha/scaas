@@ -5,7 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {V2Fixture} from "./helpers/V2Fixture.sol";
 import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
-import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
+import {IERC20MetaTxV1} from "../../src/metatx/IERC20MetaTxV1.sol";
 import {IOpenFactoryV2} from "../../src/common/IOpenFactoryV2.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
@@ -81,10 +81,10 @@ contract Tier1Test is V2Fixture {
 
     function test_allowanceOnlyBetweenContracts() public {
         NoUnderlyingToken t = _none(address(this), 100, address(0));
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.SpenderNotContract.selector, bob));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.SpenderNotContract.selector, bob));
         t.approve(bob, 1);
         vm.prank(bob);
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.CallerNotContract.selector, bob));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.CallerNotContract.selector, bob));
         t.transferFrom(address(this), bob, 0);
     }
 

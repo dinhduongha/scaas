@@ -5,7 +5,7 @@ import {stdJson} from "forge-std/StdJson.sol";
 import {V2Fixture, BaseHarness} from "./helpers/V2Fixture.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {SingleUnderlyingToken} from "../../src/metatx/SingleUnderlyingToken.sol";
-import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
+import {IERC20MetaTxV1} from "../../src/metatx/IERC20MetaTxV1.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
 /// @title KAT v2 (TW2 §10.4): `test/vectors/metatx_v2_kat.json`.
@@ -29,7 +29,7 @@ contract BaseKatTest is V2Fixture {
     {
         bytes32 structHash = m.hashStruct();
         bytes32 digest = keccak256(abi.encodePacked(hex"1901", _domainSep(vc), structHash));
-        assertEq(digest, IERC20MetaTx(vc).metaTxDigest(m));
+        assertEq(digest, IERC20MetaTxV1(vc).metaTxDigest(m));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(PK, digest);
         vm.serializeString(k, "domain_name", "SCaaS MetaToken");
         vm.serializeString(k, "domain_version", "2");
@@ -79,7 +79,7 @@ contract BaseKatTest is V2Fixture {
         string memory pj = _vector("mtxpay", address(tok), p);
         pj = vm.serializeString("mtxpay", "pay_id", vm.toString(payId));
         vm.expectEmit(address(tok));
-        emit IERC20MetaTx.MetaTransactionExecuted(from, relayer, p.batch, 0, tok.metaTxDigest(p), address(0xFEE), 625_000);
+        emit IERC20MetaTxV1.MetaTransactionExecuted(from, relayer, p.batch, 0, tok.metaTxDigest(p), address(0xFEE), 625_000);
         vm.prank(relayer);
         tok.mtxPay(from, p.to, p.value, payId, p.validUntil, p.mode, relayer, p.fee, p.feeRecipient,
             vm.parseJsonBytes(pj, ".signature"));
@@ -102,7 +102,7 @@ contract BaseKatTest is V2Fixture {
         vm.serializeString("mtxunwrap", "underlying", vm.toString(address(u)));
         uj = vm.serializeString("mtxunwrap", "min_out", vm.toString(uint256(40e6)));
         vm.expectEmit(address(w));
-        emit IERC20MetaTx.MetaTransactionExecuted(from, relayer, 7, 0, w.metaTxDigest(x), relayer, 0);
+        emit IERC20MetaTxV1.MetaTransactionExecuted(from, relayer, 7, 0, w.metaTxDigest(x), relayer, 0);
         vm.prank(relayer);
         w.mtxUnwrap(from, address(u), 40e6, x.to, 40e6, 7, 0, x.validUntil, RR, relayer,
             vm.parseJsonBytes(uj, ".signature"));

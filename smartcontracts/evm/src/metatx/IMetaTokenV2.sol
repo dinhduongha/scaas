@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {IERC20Payment} from "./IERC20Payment.sol";
+import {IERC20PaymentV1} from "./IERC20PaymentV1.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 
 /// @title Hàm meta-tx có tên (TW2 §7, R138–R140). Chỉ là đường vào mỏng: mỗi hàm DỰNG một
@@ -12,7 +12,7 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 ///
 ///         Client PHẢI ký `fee = 0` và `feeRecipient = 0` cho mọi intent không phí: `fee` không bị
 ///         canonical-zero hoá dưới fee `NONE`, và `mtxTransfer`/`mtxUnwrap` đặt `fee = 0` (review L5).
-interface IMetaTokenV2 is IERC20Payment {
+interface IMetaTokenV2 is IERC20PaymentV1 {
     /// @notice ≡ `executeMetaTransaction({from,to,amount,"",batch,nonce,validUntil,mode,relayer,0,0})`.
     ///         `mode`: chỉ `MODE_RESTRICT_RELAYER` được bật (fee `NONE`).
     function mtxTransfer(

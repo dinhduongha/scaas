@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
-import {IERC20MetaTx} from "../metatx/IERC20MetaTx.sol";
+import {IERC20MetaTxV1} from "../metatx/IERC20MetaTxV1.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {FeeMode} from "../common/FeePolicy.sol";
 
@@ -22,7 +22,7 @@ contract MetaTxDex is ReentrancyGuardTransient {
     bytes4 public constant OP_TRADE = bytes4(keccak256("trade(address,uint256,address)"));
 
     struct Leg {
-        IERC20MetaTx token;
+        IERC20MetaTxV1 token;
         MetaTxLib.LegacyMetaTransaction m;
         bytes sig;
     }
@@ -82,7 +82,7 @@ contract MetaTxDex is ReentrancyGuardTransient {
         (t.counterToken, t.minCounterValue, t.counterparty) = abi.decode(d[4:], (address, uint256, address));
     }
 
-    /// @dev `ERC20MetaTx` gửi phí cho `msg.sender` khi `feeRecipient == 0`; ở đây
+    /// @dev `ERC20MetaTxV1` gửi phí cho `msg.sender` khi `feeRecipient == 0`; ở đây
     ///      `msg.sender` là contract này, và nó không có cách nào trả lại.
     function _checkRouting(MetaTxLib.LegacyMetaTransaction calldata m) private view {
         if (m.to != address(this) || m.relayer != address(this)

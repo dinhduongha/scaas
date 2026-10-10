@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import {Fixtures} from "./helpers/Fixtures.sol";
 import {Puller, ConstructorPuller} from "./helpers/WalletMocks.sol";
 import {MetaToken} from "../src/metatx/MetaToken.sol";
-import {IERC20MetaTx} from "../src/metatx/IERC20MetaTx.sol";
+import {IERC20MetaTxV1} from "../src/metatx/IERC20MetaTxV1.sol";
 import {MetaTxLib} from "../src/common/MetaTxLib.sol";
 
 /// R26: allowance chỉ tồn tại giữa hợp đồng. EOA không bao giờ là spender, và chỉ hợp đồng
@@ -25,14 +25,14 @@ contract ContractOnlyAllowanceTest is Fixtures {
 
     function test_approve_to_eoa_reverts() public {
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.SpenderNotContract.selector, bob));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.SpenderNotContract.selector, bob));
         t.approve(bob, 1);
     }
 
     function test_approve_to_counterfactual_address_reverts() public {
         address future = vm.computeCreateAddress(address(this), vm.getNonce(address(this)));
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.SpenderNotContract.selector, future));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.SpenderNotContract.selector, future));
         t.approve(future, 1);
     }
 
@@ -54,7 +54,7 @@ contract ContractOnlyAllowanceTest is Fixtures {
 
     function test_eoa_cannot_call_transferFrom() public {
         vm.prank(bob);
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.CallerNotContract.selector, bob));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.CallerNotContract.selector, bob));
         t.transferFrom(alice, bob, 0);
     }
 
@@ -63,10 +63,10 @@ contract ContractOnlyAllowanceTest is Fixtures {
         vm.etch(bob, abi.encodePacked(hex"ef0100", address(puller)));
         assertEq(bob.code.length, 23);
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.SpenderNotContract.selector, bob));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.SpenderNotContract.selector, bob));
         t.approve(bob, 1);
         vm.prank(bob);
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.CallerNotContract.selector, bob));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.CallerNotContract.selector, bob));
         t.transferFrom(alice, bob, 0);
     }
 
@@ -95,7 +95,7 @@ contract ContractOnlyAllowanceTest is Fixtures {
 
     function test_constructor_cannot_spend() public {
         address future = vm.computeCreateAddress(address(this), vm.getNonce(address(this)));
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.CallerNotContract.selector, future));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.CallerNotContract.selector, future));
         new ConstructorPuller(address(t), alice, 1);
     }
 }
