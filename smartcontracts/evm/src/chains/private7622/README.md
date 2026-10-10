@@ -18,7 +18,7 @@ chạy private trước).
 The chain runs every fork through Fusaka + BPO2: PUSH0, TSTORE/TLOAD, MCOPY, BASEFEE and CLZ are live; all seven
 BLS12-381 precompiles (EIP-2537) answer with the right byte counts; EIP-7951 (secp256r1 at `0x100`), EIP-7825
 (16,777,216 gas per-transaction cap), EIP-7623 and EIP-7934 are active. Build with `FOUNDRY_PROFILE=private7622`
-(`evm_version = "prague"`, `foundry.toml`). The precompiles for both Zether curves (bn254 and BLS12-381) are available.
+(`evm_version = "osaka"`, `foundry.toml`). The precompiles for both Zether curves (bn254 and BLS12-381) are available.
 
 History: before 2026-08-31 the genesis declared Geth-style fork keys (`londonBlock: 0`, `pragueBlock: 0`, …) that
 Nethermind silently ignores, so the chain ran pre-London (no base fee, no PUSH0, no EIP-2537) and this profile had to

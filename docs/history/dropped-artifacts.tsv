@@ -766,3 +766,4 @@ IOpenFactoryV2	obsolete	P1e: replaced by IOpenFactory (contracts/token-wrappers.
 FactoryV2.t.sol	renamed	P1e: smartcontracts/evm/test/v2/Factory.t.sol, contracts/token-wrappers.md section 8
 createTiered(META_SINGLE, …)	obsolete	P1e: createToken(UNDERLYING, version, cfg, salt), contracts/token-wrappers.md#CTR-TOK-25
 createMetaToken(1, underlying, abi.encode(name, symbol, 0, 0, address(0)), salt)	obsolete	P1e: createToken(UNDERLYING, version, cfg, salt) with one leg, contracts/token-wrappers.md#CTR-TOK-25; the v1 createMetaToken stays on OpenFactoryV1
+28	obsolete	solc 0.8.28 pin; the pin is 0.8.37 with evm_version osaka since 2026-10-11 (contracts/README.md build pins)

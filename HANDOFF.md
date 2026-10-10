@@ -1,5 +1,17 @@
 # HANDOFF — scaas
 
+## Session 2026-10-11 (toolchain + chains)
+
+**State:** on `main` (pushed): solc **0.8.37**, `evm_version = "osaka"` for every profile (owner: all chains Osaka,
+Celo included); BSC (56), Polygon PoS (137), Base (8453) seeded `draft` in `docs/networks/evm.md` §1 with profiles
+`bsc`/`polygon`/`base` (survey of 2026-10-11, RPC-probed: EIP-2537, EIP-7702, P-256 `0x100` and the CREATE2 deployer live
+on all three; Polygon: 32,768-byte code and 2^25 tx gas cap, no `safe` tag; Base: L1 data fee, `l1_batch` finality).
+e2e runs anvil `--hardfork osaka --gas-limit 16777216` (EIP-7825: a tx without a gas field got the 30M block limit and
+was refused). Under Osaka, forge has native P256VERIFY at `0x100`: the passkey gas tests use it (no etched stub).
+Size baseline: `ZetherToken` 28,860 (solc 0.8.37). 817 forge tests (two stub/estimate passkey tests merged into one).
+Not done: the Odoo `blockchain.chain` seeds for the three chains (bamboo-dms; owner asked why it matters — not needed
+for SCaaS itself); EIP-7954 (64 KiB code) is a draft, chain 7622 keeps `maxCodeSize` 24,576.
+
 ## Session 2026-10-11 (P1e)
 
 **State:** P1e merged into `main` as `e433bf5` and pushed (819 forge tests; e2e 4/4 and e2e_hedera 1/1;

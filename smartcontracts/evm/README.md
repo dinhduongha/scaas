@@ -100,7 +100,7 @@ Zether token tự động gọi được qua relayer, không cần đường ri�
 ```bash
 forge build                              # profile default (forge's default EVM)
 forge test
-FOUNDRY_PROFILE=private7622 forge build  # evm prague — see the table below
+FOUNDRY_PROFILE=private7622 forge build  # evm osaka — see the table below
 ```
 
 `lib/` không commit (`.gitignore`). Dựng lại:
@@ -114,9 +114,10 @@ forge install OpenZeppelin/openzeppelin-contracts   # cần v5.2+
 
 | Profile | EVM | Lý do |
 |---|---|---|
-| `private7622` | **prague** | Private Nethermind chain (Clique, one signer). Since the 2026-08-31 chainspec fix it runs through Fusaka + BPO2 (PUSH0, TSTORE, EIP-2537 live, base fee 0); it was `berlin` before, when Nethermind silently ignored the Geth-style fork keys. Chain id 7622, formerly 9000 (owner 2026-10-07: 9000 is also Evmos Testnet; genesis reset). See `src/chains/private7622/README.md`, `TRAPS.md` §"Private chain". |
-| `gnosis` | prague | Pectra từ 2025-04-30, rồi Fusaka; có EIP-2537 (đã đo: `0x0b/0x0c/0x0f/0x10` sống) |
-| `celo` | cancun | Như trên |
+| `private7622` | **osaka** | Private Nethermind chain (Clique, one signer). Since the 2026-08-31 chainspec fix it runs through Fusaka + BPO2 (PUSH0, TSTORE, EIP-2537 live, base fee 0); it was `berlin` before, when Nethermind silently ignored the Geth-style fork keys. Chain id 7622, formerly 9000 (owner 2026-10-07: 9000 is also Evmos Testnet; genesis reset). See `src/chains/private7622/README.md`, `TRAPS.md` §"Private chain". |
+| `gnosis` | osaka | Pectra từ 2025-04-30, rồi Fusaka; có EIP-2537 (đã đo: `0x0b/0x0c/0x0f/0x10` sống) |
+| `celo` | osaka | Owner 2026-10-11: mọi chain osaka |
+| `bsc` / `polygon` / `base` | osaka | Draft (docs/networks/evm.md §1): BSC Mendel, Polygon Lisovo (bộ opcode Osaka), Base Azul |
 
 ## Ba bug chặn build đã sửa so với code cũ
 

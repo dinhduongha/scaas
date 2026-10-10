@@ -14,17 +14,6 @@ import {MetaTxLib} from "../src/common/MetaTxLib.sol";
 import {SubjectAccount, SubjectKey, KeyKind} from "../src/account/SubjectAccount.sol";
 import {SubjectAccountFactory} from "../src/account/SubjectAccountFactory.sol";
 
-/// RIP-7212 / EIP-7951 tương thích: input 160 byte `h‖r‖s‖x‖y`, ra `uint256(1)` khi hợp lệ, rỗng khi
-/// không. Etch vào 0x100 để đi đường "có precompile" của `P256.verify`.
-contract P256PrecompileStub {
-    fallback(bytes calldata input) external returns (bytes memory) {
-        if (input.length != 160) return "";
-        (bytes32 h, bytes32 r, bytes32 s, bytes32 x, bytes32 y) =
-            abi.decode(input, (bytes32, bytes32, bytes32, bytes32, bytes32));
-        return P256.verifySolidity(h, r, s, x, y) ? abi.encode(uint256(1)) : bytes("");
-    }
-}
-
 /// ERC-1271 wallet that says "valid" to anything after ~100k gas of work: what a contract payer
 /// could do on-chain after passing the relayer's simulation (review S4-L1).
 contract GasBurner1271 {
@@ -601,34 +590,16 @@ contract SubjectAccountTest is WebAuthnSoft {
         used = g - gasleft();
     }
 
-    function test_gas_pay_passkey_solidity_fallback() public {
-        assertEq(address(0x100).code.length, 0);
+    /// Osaka EVM (Fusaka): `P256.verify` takes the native EIP-7951 P256VERIFY precompile at 0x100.
+    function test_gas_pay_passkey_native_p256() public {
         uint256 used = _gasPay(keccak256("g1"));
-        emit log_named_uint("executeMetaTransaction pay, passkey, Solidity P-256", used);
-    }
-
-    function test_gas_pay_passkey_precompile_stub() public {
-        vm.etch(address(0x100), type(P256PrecompileStub).runtimeCode);
-        uint256 used = _gasPay(keccak256("g2"));
-        emit log_named_uint("executeMetaTransaction pay, passkey, etched RIP-7212 verifier (Solidity body)", used);
-        // Hỏng vẫn hỏng khi có precompile.
+        emit log_named_uint("executeMetaTransaction pay, passkey, native EIP-7951 P256VERIFY", used);
+        // A bad signature still fails with the precompile.
         (MetaTxLib.LegacyMetaTransaction memory m, bytes32 d) = _payment(address(acct), keccak256("g3"));
         bytes memory sig = _pk(0, PASSKEY2, d);
         vm.prank(relayer);
         vm.expectRevert(IERC20MetaTxV1.MetaTxBadSignature.selector);
         t.executeMetaTransaction(m, sig);
-    }
-
-    /// forge 1.3.5 có `--evm-version osaka` nhưng không có P256VERIFY native (đo ra y hệt đường
-    /// Solidity). Ước lượng precompile thật: etch một stub luôn trả 1 (PUSH1 1 PUSH1 0 MSTORE
-    /// PUSH1 32 PUSH1 0 RETURN, ~18 gas) rồi cộng giá precompile: EIP-7951 = 6900, RIP-7212 = 3450;
-    /// trừ 2500 (địa chỉ etch là cold 2600, precompile luôn warm 100).
-    function test_gas_pay_passkey_precompile_estimate() public {
-        vm.etch(address(0x100), hex"600160005260206000f3");
-        uint256 used = _gasPay(keccak256("g5"));
-        emit log_named_uint("executeMetaTransaction pay, passkey, constant stub at 0x100 (raw)", used);
-        emit log_named_uint("  => estimate with EIP-7951 P256VERIFY (6900)", used - 2500 - 18 + 6900);
-        emit log_named_uint("  => estimate with RIP-7212 (3450)", used - 2500 - 18 + 3450);
     }
 
     function test_gas_pay_seed_key() public {
