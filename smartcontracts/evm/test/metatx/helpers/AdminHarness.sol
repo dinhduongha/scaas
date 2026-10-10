@@ -5,8 +5,8 @@ import {AdminLib} from "../../../src/metatx/AdminLib.sol";
 
 /// Exposes `AdminLib` on its own storage, for every kind (the built tokens use NONE and, transitionally, UNDERLYING).
 contract AdminHarness {
-    function init(uint8 kind, uint256 features, uint256 locked, address owner_, AdminLib.Roles memory roles) external {
-        AdminLib.init(kind, features, locked, owner_, roles);
+    function init(uint8 kind, uint256 features_, uint256 locked, address owner_, AdminLib.Roles memory roles) external {
+        AdminLib.init(kind, features_, locked, owner_, roles);
     }
 
     function grantRole(uint8 bit, address account) external { AdminLib.grantRole(bit, account, msg.sender); }

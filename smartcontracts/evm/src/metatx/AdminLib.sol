@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {SigCheck} from "../common/SigCheck.sol";
+import {ITokenAdmin} from "./ITokenAdmin.sol";
 
 /// @title Features, owner and roles of every SCaaS token (CTR-TOK-22), in the ERC-7201 namespace `scaas.token`.
 /// @notice External library: the token keeps one-line wrappers, the logic is linked at deploy (CTR-TOK-24).
@@ -61,23 +62,7 @@ library AdminLib {
     // keccak256(abi.encode(uint256(keccak256("scaas.token")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant _STORAGE = 0x83083067f3d1caf66741d4eeefa9d3f4f0e5b0793677731d6fee7e67b774ac00;
 
-    event RoleGranted(uint8 indexed bit, address indexed account, address indexed sender);
-    event RoleRevoked(uint8 indexed bit, address indexed account, address indexed sender);
-    event FeatureDisabled(uint8 indexed bit, address indexed by);
-    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
-    error FeatureInvalidForKind(uint8 bit);
-    error FeatureNotBuilt(uint8 bit);
-    error LockedNotSubset();
-    error RoleWithoutFeature(uint8 bit);
-    error RoleNotContract(uint8 bit, address account);
-    error NoSuchRole(uint8 bit);
-    error FeatureLocked(uint8 bit);
-    error FeatureNotSet(uint8 bit);
-    error NotOwner(address caller);
-    error NotPendingOwner(address caller);
-    error MissingRole(uint8 bit, address account);
 
     function $() internal pure returns (TokenStorage storage s) {
         assembly ("memory-safe") { s.slot := _STORAGE }
@@ -89,21 +74,21 @@ library AdminLib {
     ///         token's `initialize` (the factory only forwards; anyone may bring an implementation).
     function init(uint8 kind, uint256 features, uint256 locked, address owner, Roles memory roles) public {
         uint256 bad = features & ~_validFor(kind);
-        if (bad != 0) revert FeatureInvalidForKind(_lowest(bad));
-        if (features & REGULATED != 0) revert FeatureNotBuilt(_lowest(features & REGULATED));
-        if (locked & ~features != 0) revert LockedNotSubset();
+        if (bad != 0) revert ITokenAdmin.FeatureInvalidForKind(_lowest(bad));
+        if (features & REGULATED != 0) revert ITokenAdmin.FeatureNotBuilt(_lowest(features & REGULATED));
+        if (locked & ~features != 0) revert ITokenAdmin.LockedNotSubset();
         TokenStorage storage s = $();
         s.kind = kind;
         s.features = features;
         s.lockedFeatures = locked | (features & ALWAYS_LOCKED);
-        if (roles.issuer != address(0)) revert RoleWithoutFeature(FREEZE);
-        if (roles.compliance != address(0)) revert RoleWithoutFeature(ALLOWLIST);
+        if (roles.issuer != address(0)) revert ITokenAdmin.RoleWithoutFeature(FREEZE);
+        if (roles.compliance != address(0)) revert ITokenAdmin.RoleWithoutFeature(ALLOWLIST);
         if (roles.minter != address(0)) _grant(s, MINTABLE, roles.minter, address(0));
         if (roles.rateAdmin != address(0)) _grant(s, RATE_ADJUSTABLE, roles.rateAdmin, address(0));
         if (roles.guardian != address(0)) _grant(s, WRAP_DISABLEABLE, roles.guardian, address(0));
         if (owner != address(0)) {
             s.owner = owner;
-            emit OwnershipTransferred(address(0), owner);
+            emit ITokenAdmin.OwnershipTransferred(address(0), owner);
         }
     }
 
@@ -118,41 +103,41 @@ library AdminLib {
         TokenStorage storage s = _onlyOwner(caller);
         if (s.roles[bit][account]) {
             s.roles[bit][account] = false;
-            emit RoleRevoked(bit, account, caller);
+            emit ITokenAdmin.RoleRevoked(bit, account, caller);
         }
     }
 
     /// @notice A holder gives up its own role (replaces `renounceMinter`/`renounceRateAdmin`/`renounceGuardian`).
     function renounceRole(uint8 bit, address caller) public {
         TokenStorage storage s = $();
-        if (!s.roles[bit][caller]) revert MissingRole(bit, caller);
+        if (!s.roles[bit][caller]) revert ITokenAdmin.MissingRole(bit, caller);
         s.roles[bit][caller] = false;
-        emit RoleRevoked(bit, caller, caller);
+        emit ITokenAdmin.RoleRevoked(bit, caller, caller);
     }
 
     /// @notice One-way: clears a set, unlocked flag (replaces `disableControls`).
     function disableFeature(uint8 bit, address caller) public {
         TokenStorage storage s = _onlyOwner(caller);
         uint256 m = _bit(bit);
-        if (s.lockedFeatures & m != 0) revert FeatureLocked(bit);
-        if (s.features & m == 0) revert FeatureNotSet(bit);
+        if (s.lockedFeatures & m != 0) revert ITokenAdmin.FeatureLocked(bit);
+        if (s.features & m == 0) revert ITokenAdmin.FeatureNotSet(bit);
         s.features &= ~m;
-        emit FeatureDisabled(bit, caller);
+        emit ITokenAdmin.FeatureDisabled(bit, caller);
     }
 
     function transferOwnership(address newOwner, address caller) public {
         TokenStorage storage s = _onlyOwner(caller);
         s.pendingOwner = newOwner;
-        emit OwnershipTransferStarted(caller, newOwner);
+        emit ITokenAdmin.OwnershipTransferStarted(caller, newOwner);
     }
 
     function acceptOwnership(address caller) public {
         TokenStorage storage s = $();
-        if (caller != s.pendingOwner || caller == address(0)) revert NotPendingOwner(caller);
+        if (caller != s.pendingOwner || caller == address(0)) revert ITokenAdmin.NotPendingOwner(caller);
         address previous = s.owner;
         s.owner = caller;
         s.pendingOwner = address(0);
-        emit OwnershipTransferred(previous, caller);
+        emit ITokenAdmin.OwnershipTransferred(previous, caller);
     }
 
     /// @notice The owner becomes 0 forever; role holders keep their roles (to freeze everything, revoke first).
@@ -160,7 +145,7 @@ library AdminLib {
         TokenStorage storage s = _onlyOwner(caller);
         s.owner = address(0);
         s.pendingOwner = address(0);
-        emit OwnershipTransferred(caller, address(0));
+        emit ITokenAdmin.OwnershipTransferred(caller, address(0));
     }
 
     // ------------------------------------------------------------------ checks used inline by the token
@@ -176,28 +161,29 @@ library AdminLib {
     /// @dev The flag is set and `account` holds its role.
     function requireRole(uint8 bit, address account) internal view {
         TokenStorage storage s = $();
-        if (s.features & _bit(bit) == 0) revert FeatureNotSet(bit);
-        if (!s.roles[bit][account]) revert MissingRole(bit, account);
+        if (s.features & _bit(bit) == 0) revert ITokenAdmin.FeatureNotSet(bit);
+        if (!s.roles[bit][account]) revert ITokenAdmin.MissingRole(bit, account);
     }
 
     function requireFeature(uint8 bit) internal view {
-        if ($().features & _bit(bit) == 0) revert FeatureNotSet(bit);
+        if ($().features & _bit(bit) == 0) revert ITokenAdmin.FeatureNotSet(bit);
     }
 
     // ------------------------------------------------------------------ internals
 
     function _grant(TokenStorage storage s, uint8 bit, address account, address caller) private {
-        if (ROLE_BITS & _bit(bit) == 0) revert NoSuchRole(bit);
-        if (s.features & _bit(bit) == 0) revert RoleWithoutFeature(bit);
-        if (bit == RATE_ADJUSTABLE && !SigCheck.isContract(account)) revert RoleNotContract(bit, account);
+        if (account == address(0)) revert ITokenAdmin.RoleAccountZero(bit);
+        if (ROLE_BITS & _bit(bit) == 0) revert ITokenAdmin.NoSuchRole(bit);
+        if (s.features & _bit(bit) == 0) revert ITokenAdmin.RoleWithoutFeature(bit);
+        if (bit == RATE_ADJUSTABLE && !SigCheck.isContract(account)) revert ITokenAdmin.RoleNotContract(bit, account);
         if (s.roles[bit][account]) return;
         s.roles[bit][account] = true;
-        emit RoleGranted(bit, account, caller);
+        emit ITokenAdmin.RoleGranted(bit, account, caller);
     }
 
     function _onlyOwner(address caller) private view returns (TokenStorage storage s) {
         s = $();
-        if (caller != s.owner || caller == address(0)) revert NotOwner(caller);
+        if (caller != s.owner || caller == address(0)) revert ITokenAdmin.NotOwner(caller);
     }
 
     /// @dev Valid flags per kind (CTR-TOK-22 table): NONE* mint/burn, UNDERLYING* rate/wrap, regulated only on
