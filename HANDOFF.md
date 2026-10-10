@@ -1,5 +1,44 @@
 # HANDOFF — scaas
 
+## Session 2026-10-11 (P1e)
+
+**State:** P1e on branch `p1e-factory`, merge pending the final review (818 forge tests; e2e 4/4 and e2e_hedera 1/1;
+docs checker 0 errors). Not pushed. Plan `docs/superpowers/plans/2026-10-11-p1e-openfactory.md`. With P1e, P1 is
+complete except the parked items in TODO.
+
+**P1e delivered:** `OpenFactory(registrar, chainUid)` (`createToken`, `createTokenUnregistered`, `TokenConfig`, one
+`TokenCreated`, `isToken`; registration reads `kind()`, `factory()`, `chainUid()`); both token kinds implement
+`initialize(creator, version, TokenConfig)` and a constant `kind()`; a field of another kind reverts
+`ConfigFieldForOtherKind`; the factory indexes the same `cfg.legs` the token reads. The v1 line is renamed
+`OpenFactoryV1`/`IOpenFactoryV1`/`IFactoryTokenV1`; factory v2 is backed up in `smartcontracts/evm/legacy/p1e/`.
+`script/DeployBase.sol`: every contract by CREATE2 through forge's deterministic deployer (`DEPLOY_SALT`), `_setup`
+requires the deployer, `_gate` checks `chainUid()`; both deploy scripts on it; JSON keys `token_factory`,
+`implementation_none`, `chain_uid` (`factory_v2` and `implementation_meta_none` are gone). CI size gate
+`scripts/size_gate.py` with `smartcontracts/evm/size-baseline.json`.
+
+**Rulings E1–E10 (plan header).** For the owner: **E1** the v1 line stays in the build as `…V1` until the node and
+clientkeys (P5) and Zether (P3) move, then `git mv` to `legacy/` (backup, not delete). **E7** CREATE2 for every deployed
+contract, `forge script --broadcast` needs `--sender` (`deploy.sh` and the e2e pass it); linked libraries are still
+placed by forge from the sender, not by CREATE2. **E9** the size gate is a ratchet: token implementations ≤ 20,480 B,
+others ≤ 24,576 B, init ≤ 49,152 B; baseline `UnderlyingToken` 26,449, `ZetherToken` 28,849; it does not tighten itself.
+Also: E2 v2 becomes `OpenFactory` (`git mv`); E3 no Zether or DEX creation yet (P3, P2); E4 `kind()` is a pure constant;
+E5 `ConfigFieldForOtherKind`; E6 one source for the legs (the P1d D8 cross-check is gone); E8 the deploy gate; E10 other
+domains' `salt = chain_uid` is not in P1e (MT-4 stays open for them).
+
+**Sizes (forge build src --sizes, runtime B):** `NoUnderlyingToken` 20,196 (284 left of 20,480), `UnderlyingToken` 26,449
+(over EIP-170), `UnderlyingLib` 10,096, `OpenFactory` 6,715, `OpenFactoryV1` 6,057, `ZetherToken` 28,849.
+
+**For integrators:** the factory's underlying index is only as truthful as the implementation; trust it for registered
+versions (`versionOf(token).version != 0`); `createTokenUnregistered` records version 0.
+
+**Parked (TODO, P1e follow-ups):** the ratchet does not auto-tighten; `deploy.sh` requires `PRIVATE_KEY`; the P1d parked
+test gaps stay; `OpenFactory` accepts registration of kinds 2 and 3 before P3 (only the PQZ kinds 4–7 are reserved).
+Main has a newer commit (`7c90483`, Gnosis profile `prague`, `docs/networks/evm.md` table row) that this branch lacks;
+the merge should be clean (that table row was not touched).
+
+**Next action:** write the **P2** plan (`TradeLib`, `SCaaSDex` as a clone, `createDex`): find room in `NoUnderlyingToken`
+first (284 B left).
+
 ## Session 2026-10-11 (P1d)
 
 **State:** P1d merged into `main` as `d03d894` (814 forge tests; e2e 4/4 and e2e_hedera 1/1;
@@ -24,9 +63,9 @@ implements `META_MULTI`.
 **Sizes (forge build --sizes):** `UnderlyingToken` 25,408, `UnderlyingLib` 11,018, `NoUnderlyingToken` 20,038,
 `AdminLib` 3,406, `HederaLib` 753; over 24,576: `UnderlyingToken` and `ZetherToken` (28,849) only.
 
-**e2e:** the first `e2e` run failed all four ("forge script failed", 0.6 s); a second run and each test alone passed 4/4
-(the Deploy script also ran by hand against anvil). Cause not found; likely a cold forge build for profile
-`private7622`. `e2e_hedera` 1/1.
+**e2e:** the first `e2e` run failed all four ("forge script failed", 0.6 s); a second run and each test alone passed 4/4.
+Cause found in P1e: `e2e.rs` did not create `deployments/` on a fresh checkout, so the script's `writeJson` failed on the
+first run (not a cold forge build); fixed in P1e. `e2e_hedera` 1/1.
 
 **Parked (TODO, P1d follow-ups):** test gaps (single-asset selector through `mtxExecute` on a two-leg token, native
 `UnderlyingTransferMismatch`, native `addReserve` with value > amount, guardian revoke); `OpenFactoryV2` `META_MULTI`

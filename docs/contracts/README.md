@@ -53,7 +53,7 @@ the implementation's immutables). `chain_uid` is the chain's genesis block hash 
 
 | Contract | Source of `chain_uid` |
 |---|---|
-| token implementations (the tiers, their Hedera children, `ZetherToken`) | constructor immutable of the **implementation**; a clone runs its code by `DELEGATECALL`, so it uses the value with no storage and no `initialize` argument and cannot declare another one |
+| token implementations (`NoUnderlyingToken`, `UnderlyingToken`, `ZetherToken`) | constructor immutable of the **implementation**; a clone runs its code by `DELEGATECALL`, so it uses the value with no storage and no `initialize` argument and cannot declare another one |
 | `OpenFactory` | constructor immutable; `registerImplementation` refuses an implementation whose `chainUid()` differs ([CTR-TOK-03](token-wrappers.md#CTR-TOK-03)) |
 | `SmartKeyAccount` | the factory's constructor argument, passed to `new SmartKeyAccount(chainUid)` |
 | `MandateWallet`, `HederaMandateWallet` | constructor argument from the chain profile; the node checks it before relaying for that wallet |
@@ -192,7 +192,7 @@ own job (Move test, Soroban, CosmWasm, Tact, Solana) as the family is added.
 | EVM profiles | `private7622` = `evm_version = "prague"` (the private reference chain, [NET-EVM-02](../networks/evm.md#NET-EVM-02)); `zether` = Prague (BLS12-381 needs EIP-2537); test chains run anvil `--hardfork prague` |
 | Invariant runs | `[invariant] runs = 64, depth = 32, fail_on_revert = true` |
 | Storage layout | `extra_output = ["storageLayout"]`; the v2 layout is pinned by `test_storageLayoutIsPinned` against committed JSON |
-| Size | CI fails if any implementation exceeds 24 576 bytes (`forge build --sizes`, EIP-170) |
+| Size | CI runs `scripts/size_gate.py` ([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)): token implementations ≤ 20,480 B, other contracts ≤ 24,576 B (EIP-170), init code ≤ 49,152 B (EIP-3860); a contract in `size-baseline.json` may not exceed its recorded size |
 | EIP-1153 | `TLOAD`/`TSTORE` is a prerequisite of every token (transient reentrancy guard); a chain without it cannot hold an eligible token |
 
 <a id="deploy"></a>Deploy (EVM): `script/Deploy.s.sol` (forge script; env `PRIVATE_KEY` = deployer and default registrar,
@@ -202,8 +202,13 @@ implementations (each taking the factory address and `chain_uid`) registered as 
 `SCaaSDex(registrar, chainUid)`; optionally a tier-1 demo token (**SPECIFIED**). It writes
 `deployments/<chainid>.json` to seed the node's chain configuration and client chain data. Production: every contract
 owner/admin is a Safe from the first block, and deployer keys come from a hardware wallet or KMS. **Transitional
-(BUILT):** the script deploys with `new` and also deploys factory v1 with the `MetaToken` implementation
-(`registerImplementation(META, 1)` when the registrar is the deployer) and the legacy `MetaTxDex`.
+(BUILT, P1e):** every contract is deployed by `new X{salt: DEPLOY_SALT}` through forge's deterministic deployer (default
+salt `keccak256("scaas.deploy.v1")`; a re-run on the same chain collides, so a new version needs a new salt), the script
+stops without the deployer and checks `chainUid()` of the factory and each implementation against `chain_uid` (`CHAIN_UID`
+or block 0's hash). It deploys `OpenFactory` with `NoUnderlyingToken` as version 1 of `NONE` (`UnderlyingToken` is over
+EIP-170 and waits for the size work) and, for the node until P5, the v1 line: `OpenFactoryV1` with `MetaToken` (version 1
+of `META`, when the registrar is the deployer), `SubjectAccountFactory`, `MetaTxDex` and `SCaaSDex`. The JSON gains
+`token_factory`, `implementation_none` and `chain_uid`. `forge script … --broadcast` needs `--sender <deployer address>`.
 
 <a id="CTR-GEN-06"></a>**CTR-GEN-06** — **Every SCaaS EVM contract is deployed through a deterministic CREATE2
 deployer with a fixed salt** (owner): implementations, factories, registries and the DEX, instead of `new` (CREATE,
@@ -213,6 +218,9 @@ code differs; so does every clone, whose CREATE2 address depends on the implemen
 user's `SmartKeyAccount` (the node and app predict it per chain). A contract with no chain-specific constructor
 argument gets the **same address on every chain**. Safety never rests on the address: the salt is in every digest
 ([CTR-GEN-05](#CTR-GEN-05)).
+
+**Transitional (BUILT, P1e).** Linked libraries (`AdminLib`, `HederaLib`, `UnderlyingLib`) are still placed by forge from
+the sender's nonce, not by CREATE2 (controller ruling, pending the owner), so their addresses differ per deployer.
 
 <a id="CTR-GEN-03"></a>**CTR-GEN-03** — On-chain code lives in its own tree at the repository root, one directory
 per network family, each with its native layout and tool; `smartcontracts/scripts/` is the one place to build,

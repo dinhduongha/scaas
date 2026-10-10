@@ -142,15 +142,20 @@ chain, then the implementations, the factory, the subject-account factory, the r
 pinned profiles in the same release; the node re-checks every `chainUid()` at activation and every start
 ([NODE-GW-07](../node/gateway.md#NODE-GW-07)).
 
-Transitional (BUILT): `smartcontracts/scripts/deploy.sh evm <rpc>` runs the forge script `script/Deploy.s.sol` (reads
-`PRIVATE_KEY` and `REGISTRAR`) with plain CREATE and no `chain_uid`: `OpenFactory`, the `MetaToken` implementation (its
-constructor takes the factory address) registered as `registerImplementation(META, 1)`, `SmartKeyAccountFactory`,
-`OpenFactoryV2` with `NoUnderlyingToken` as version 1 of `META_NONE` (`UnderlyingToken` is over EIP-170 and is not deployed
-until the size work), `MetaTxDex`, `SCaaSDex`, optionally a tier-1 demo token
-([deploy](../contracts/README.md#build-ci-and-pins)); it writes `deployments/<chainid>.json`, which seeds the
-client and the node configuration. The single `ERC20MetaTx` base replaces the `MetaToken` line, and `MetaTxDex` is
-deleted. Zether and the registry are not in the deploy script (dev chains only). Integration tests use `anvil
---hardfork prague`.
+Transitional (BUILT, P1e): `smartcontracts/scripts/deploy.sh evm <rpc>` runs the forge script `script/Deploy.s.sol` (reads
+`PRIVATE_KEY`, `REGISTRAR`, `DEPLOY_SALT`, `CHAIN_UID`) through the deterministic deployer at
+`0x4e59b44847b379578588920ca78fbf26c0b4956c` (`new X{salt: DEPLOY_SALT}`; default salt `keccak256("scaas.deploy.v1")`) and
+the gate of `DeployBase.sol`: `chainUid()` of the factory and of each implementation equals `chain_uid` (`CHAIN_UID` or
+block 0's hash; past block 256 `CHAIN_UID` is required). The script stops when the deployer has no code: on such a
+chain, deploy it first (the keyless presigned deployment transaction of that proxy, funded by a transfer to its signer)
+and re-run. `forge script … --broadcast` needs `--sender <deployer address>`, which `deploy.sh` and the e2e pass; forge
+places the linked libraries from that sender, not by CREATE2. It deploys `OpenFactory` with `NoUnderlyingToken` as
+version 1 of `NONE` (`UnderlyingToken` is over EIP-170 and is not deployed until the size work) and, for the node until
+P5, the v1 line (`OpenFactoryV1` with `MetaToken` as version 1 of `META`, `MetaTxDex`), `SubjectAccountFactory` and
+`SCaaSDex`, optionally a tier-1 demo token ([deploy](../contracts/README.md#build-ci-and-pins)). It writes
+`deployments/<chainid>.json` (`factory`, `implementation`, `dex`, `subject_account_factory`,
+`subject_account_implementation`, `scaas_dex`, `demo_token`, and `token_factory`, `implementation_none`, `chain_uid`),
+which seeds the client and the node configuration. Zether and the registry are not in the deploy script (dev chains only). Integration tests use `anvil --hardfork prague`.
 
 Every contract is a non-upgradeable clone or a fixed deployment ([CTR-GEN-02](../contracts/README.md#CTR-GEN-02)):
 upgradeable proxies (UUPS / ERC-1822) are not used, and a fix is a new implementation version registered on the factory
