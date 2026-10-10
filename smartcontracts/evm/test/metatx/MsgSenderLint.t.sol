@@ -5,12 +5,17 @@ import {Test} from "forge-std/Test.sol";
 
 /// CTR-MTX-18: authority and balance owners are read through `_msgSender()`; the reads that stay `msg.sender`
 /// are exactly: the reentrancy guard and `_msgSender()` itself, the relayer binding, the default fee recipient and
-/// the event `relayer` (both pipelines), and the factory check in `initialize`. Comment lines are skipped. A change
-/// here is deliberate: update the pin in the same commit and say why.
+/// the event `relayer` (both pipelines), and the factory check in `initialize`. Lines whose first non-blank characters
+/// are `//` are skipped (block comments are not). A change here is deliberate: update the pin in the same commit and
+/// say why.
 contract MsgSenderLintTest is Test {
-    function _count(string memory path) internal view returns (uint256 n) {
+    string[7] internal FILES = ["src/metatx/MetaTxBase.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
+        "src/metatx/NoUnderlyingToken.sol", "src/metatx/SingleUnderlyingToken.sol", "src/metatx/MultiUnderlyingToken.sol",
+        "src/hedera/HederaTokensV2.sol"];
+
+    /// Occurrences of `pat` (not preceded by an identifier character); `exceptSelector` skips `pat<ident>.selector`.
+    function _count(string memory path, bytes memory pat, bool exceptSelector) internal view returns (uint256 n) {
         bytes memory s = bytes(vm.readFile(path));
-        bytes memory pat = bytes("msg.sender");
         bool lineStart = true;
         bool comment;
         for (uint256 i; i < s.length; ++i) {
@@ -26,17 +31,45 @@ contract MsgSenderLintTest is Test {
             for (uint256 j; j < pat.length; ++j) {
                 if (s[i + j] != pat[j]) { hit = false; break; }
             }
-            if (hit) ++n;
+            if (hit && (i == 0 || !_ident(s[i - 1])) && !(exceptSelector && _selectorRead(s, i + pat.length))) ++n;
         }
     }
 
+    function _ident(bytes1 c) internal pure returns (bool) {
+        return (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || (c >= "0" && c <= "9") || c == "_" || c == "$";
+    }
+
+    /// `s[k..]` is `<identifier>.selector`.
+    function _selectorRead(bytes memory s, uint256 k) internal pure returns (bool) {
+        uint256 start = k;
+        while (k < s.length && _ident(s[k])) ++k;
+        bytes memory sel = ".selector";
+        if (k == start || k + sel.length > s.length) return false;
+        for (uint256 j; j < sel.length; ++j) {
+            if (s[k + j] != sel[j]) return false;
+        }
+        return true;
+    }
+
     function test_msgSenderReadsArePinned() public view {
-        assertEq(_count("src/metatx/MetaTxBase.sol"), 7, "MetaTxBase: guard, event, relayer binding x2, _msgSender x2, fee default");
-        assertEq(_count("src/metatx/ERC20MetaTx.sol"), 2, "ERC20MetaTx: event relayer, fee default");
-        assertEq(_count("src/metatx/MetaTokenBase.sol"), 1, "MetaTokenBase: factory check in initialize");
-        assertEq(_count("src/metatx/NoUnderlyingToken.sol"), 0, "NoUnderlyingToken");
-        assertEq(_count("src/metatx/SingleUnderlyingToken.sol"), 0, "SingleUnderlyingToken");
-        assertEq(_count("src/metatx/MultiUnderlyingToken.sol"), 0, "MultiUnderlyingToken");
-        assertEq(_count("src/hedera/HederaTokensV2.sol"), 0, "HederaTokensV2");
+        assertEq(_count("src/metatx/MetaTxBase.sol", "msg.sender", false), 7, "MetaTxBase: guard, event, relayer binding x2, _msgSender x2, fee default");
+        assertEq(_count("src/metatx/ERC20MetaTx.sol", "msg.sender", false), 2, "ERC20MetaTx: event relayer, fee default");
+        assertEq(_count("src/metatx/MetaTokenBase.sol", "msg.sender", false), 1, "MetaTokenBase: factory check in initialize");
+        assertEq(_count("src/metatx/NoUnderlyingToken.sol", "msg.sender", false), 0, "NoUnderlyingToken");
+        assertEq(_count("src/metatx/SingleUnderlyingToken.sol", "msg.sender", false), 0, "SingleUnderlyingToken");
+        assertEq(_count("src/metatx/MultiUnderlyingToken.sol", "msg.sender", false), 0, "MultiUnderlyingToken");
+        assertEq(_count("src/hedera/HederaTokensV2.sol", "msg.sender", false), 0, "HederaTokensV2");
+    }
+
+    /// CTR-MTX-18: an external self-call (`this.f(…)`) inside an allowlisted body would let a guarded callee consume
+    /// the ticket for an unguarded body and defeat `_selfCall`'s fail-closed check. The only `this.` uses are
+    /// `this.<fn>.selector` reads (counted too, so the scan is not vacuous).
+    function test_noExternalSelfCalls() public view {
+        uint256 all;
+        for (uint256 i; i < FILES.length; ++i) {
+            assertEq(_count(FILES[i], "this.", true), 0, FILES[i]);
+            all += _count(FILES[i], "this.", false);
+        }
+        assertGt(all, 0);
     }
 }
