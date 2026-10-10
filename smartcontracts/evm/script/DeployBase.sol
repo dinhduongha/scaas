@@ -26,18 +26,17 @@ abstract contract DeployBase is Script {
             "no deterministic CREATE2 deployer at 0x4e59b44847b379578588920ca78fbf26c0b4956c (runbook NET-EVM-05)");
     }
 
-    /// @notice `CHAIN_UID` env (chain-uids.json), default block 0's hash as the RPC reports it. The script runs at the
-    ///         head block and BLOCKHASH of the current block is 0, so roll one ahead to read it on a fresh chain (head
-    ///         0); past block 256 BLOCKHASH(0) is 0 and `CHAIN_UID` is required.
+    /// @notice `CHAIN_UID` env (chain-uids.json), default block 0's hash as the RPC reports it; either way it must
+    ///         equal that hash (CTR-GEN-05). BLOCKHASH only sees the 256 blocks before the current one, and a script
+    ///         runs at the head, so roll to block 1: the fork database then fetches block 0 from the RPC at any head.
     function _chainUid() internal returns (bytes32 u) {
-        u = vm.envOr("CHAIN_UID", bytes32(0));
-        if (u == bytes32(0)) {
-            uint256 head = block.number;
-            vm.roll(head + 1);
-            u = blockhash(0);
-            vm.roll(head);
-        }
-        require(u != bytes32(0), "set CHAIN_UID (chain-uids.json)");
+        uint256 head = block.number;
+        vm.roll(1);
+        bytes32 rpcGenesis = blockhash(0);
+        vm.roll(head);
+        u = vm.envOr("CHAIN_UID", rpcGenesis);
+        require(u == rpcGenesis, "CHAIN_UID differs from the RPC's block 0 hash");
+        require(u != bytes32(0), "RPC gave no block 0 hash");
     }
 
     /// @notice The token factory and the `NONE` implementation by CREATE2, `NONE` registered as version 1 when the

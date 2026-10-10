@@ -10,10 +10,11 @@ import {SubjectAccountFactory} from "../src/account/SubjectAccountFactory.sol";
 import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
 import {DeployBase} from "./DeployBase.sol";
 
-/// forge script script/Deploy.s.sol --rpc-url $RPC --broadcast
+/// forge script script/Deploy.s.sol --rpc-url $RPC --broadcast --sender <địa chỉ deployer = vm.addr(PRIVATE_KEY)>
 /// env: PRIVATE_KEY (deployer; registrar mặc định), REGISTRAR (tuỳ chọn),
 ///      DEMO_SUPPLY (tuỳ chọn; 0 = không tạo token demo), DEMO_HOLDER (tuỳ chọn, nhận một nửa),
-///      CHAIN_UID (genesis hash, chain-uids.json; tuỳ chọn trên chain local mới — mặc định blockhash(0)).
+///      DEPLOY_SALT (tuỳ chọn; mặc định keccak256("scaas.deploy.v1"); chạy lại trên cùng chain cần salt mới),
+///      CHAIN_UID (genesis hash, chain-uids.json; tuỳ chọn; phải bằng hash block 0 của RPC, mặc định chính hash đó).
 /// Ghi `deployments/<chainid>.json` để seed Odoo (`blockchain.token`) và config node (`dex`).
 contract Deploy is DeployBase {
     function run() external {
@@ -49,6 +50,7 @@ contract Deploy is DeployBase {
         vm.serializeAddress(k, "subject_account_implementation", accounts.IMPLEMENTATION());
         vm.serializeAddress(k, "scaas_dex", address(scaasDex));
         string memory out = vm.serializeAddress(k, "demo_token", demo);
+        vm.createDir("./deployments", true);
         vm.writeJson(out, string.concat("./deployments/", vm.toString(block.chainid), ".json"));
         console.log(out);
     }

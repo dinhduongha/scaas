@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IOpenFactory} from "./IOpenFactory.sol";
 import {IFactoryToken} from "./IFactoryToken.sol";
+import {ITokenAdmin} from "../metatx/ITokenAdmin.sol";
 
 /// @title `OpenFactory` (CTR-TOK-03, CTR-TOK-25): the one token factory of a chain.
 /// @notice Anyone creates tokens; the registrar only appends implementations to the catalogue (and marks versions
@@ -157,7 +158,8 @@ contract OpenFactory is IOpenFactory {
         if (wrapper ? n == 0 || n > MAX_LEGS : n != 0) revert UnderlyingCountInvalid(n);
         bytes32 s = _salt(msg.sender, salt);
         address predicted = Clones.predictDeterministicAddress(impl, s);
-        if (predicted.code.length != 0) revert SaltAlreadyUsed(predicted);
+        // a registered clone is never deleted; an unregistered implementation could self-destruct its clone in `initialize`
+        if (_info[predicted].exists || predicted.code.length != 0) revert SaltAlreadyUsed(predicted);
         token = Clones.cloneDeterministic(impl, s);
         IFactoryToken(token).initialize(msg.sender, version, cfg);
         _info[token] = Info({creator: msg.sender, kind: kind, version: version, exists: true});
@@ -168,6 +170,7 @@ contract OpenFactory is IOpenFactory {
             _wrappers[msg.sender][u].push(token);
             _byUnderlying[u].push(token);
         }
-        emit TokenCreated(token, msg.sender, kind, version, impl, cfg.features, cfg.lockedFeatures, cfg.owner, us);
+        emit TokenCreated(token, msg.sender, kind, version, impl, cfg.features,
+            ITokenAdmin(token).lockedFeatures(), cfg.owner, us);
     }
 }

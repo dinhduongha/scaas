@@ -17,6 +17,24 @@ contract KindOnly {
     function kind() external pure returns (uint8) { return 0; }
 }
 
+/// Unregistered implementation whose `initialize` self-destructs the clone (same transaction as its creation: post-Cancun
+/// SELFDESTRUCT still deletes the account then). Answers what `createTokenUnregistered` and `TokenCreated` read.
+contract SelfDestructImpl {
+    address immutable F;
+    bytes32 immutable U;
+
+    constructor(address f_, bytes32 u_) { F = f_; U = u_; }
+
+    function kind() external pure returns (uint8) { return 0; }
+    function factory() external view returns (address) { return F; }
+    function chainUid() external view returns (bytes32) { return U; }
+    function lockedFeatures() external pure returns (uint256) { return 0; }
+
+    function initialize(address, uint64, IFactoryToken.TokenConfig calldata) external {
+        selfdestruct(payable(address(0)));
+    }
+}
+
 /// `OpenFactory` (CTR-TOK-03, CTR-TOK-25): catalogue checks, `createToken`/`createTokenUnregistered` with
 /// `TokenConfig`, one `TokenCreated`, provenance, salt scoped by the creator; the token validates flags and fields.
 contract FactoryTest is Test {
@@ -136,7 +154,9 @@ contract FactoryTest is Test {
                 (uint64 v, address impl, uint256 feat, uint256 locked, address owner, address[] memory us) =
                     abi.decode(logs[i].data, (uint64, address, uint256, uint256, address, address[]));
                 assertEq(abi.encode(v, impl, feat, locked, owner, us.length),
-                    abi.encode(uint64(1), address(noneImpl), uint256(7), uint256(0), address(0), uint256(0)));
+                    abi.encode(uint64(1), address(noneImpl), uint256(7), uint256(5), address(0), uint256(0)));
+                // not `cfg.lockedFeatures` (0): the token stores `locked | (features & ALWAYS_LOCKED)`
+                assertEq(locked, NoUnderlyingToken(t).lockedFeatures());
             }
         }
         assertEq(created, 1);
@@ -200,6 +220,22 @@ contract FactoryTest is Test {
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.SaltAlreadyUsed.selector, a));
         f.createToken(NONE, 1, _none(alice), "same");
+    }
+
+    function test_unregisteredImplementationThatSelfDestructs_cannotReuseTheSalt() public {
+        SelfDestructImpl bad = new SelfDestructImpl(address(f), UID_);
+        address predicted = f.predictAddress(address(bad), alice, "x");
+        vm.prank(alice);
+        address t = f.createTokenUnregistered(NONE, address(bad), _none(alice), "x");
+        assertEq(t, predicted);
+        assertTrue(f.isToken(t));
+        // the clone's code is gone at the end of its creating transaction: a test is one transaction, so apply it
+        assertGt(t.code.length, 0, "still there within the creating tx");
+        vm.etch(t, "");
+        assertEq(t.code.length, 0);
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.SaltAlreadyUsed.selector, t));
+        f.createTokenUnregistered(NONE, address(bad), _none(alice), "x");
     }
 
     function test_createTokenUnregistered_isCheckedAndRecordedAsVersion0() public {

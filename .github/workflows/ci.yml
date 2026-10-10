@@ -9,10 +9,10 @@ name: scaas-ci
 
 on:
   pull_request:
-    paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', '.github/workflows/ci.yml']
+    paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', 'scripts/size_gate.py', '.github/workflows/ci.yml']
   push:
     branches: [main]
-    paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', '.github/workflows/ci.yml']
+    paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', 'scripts/size_gate.py', '.github/workflows/ci.yml']
 
 env:
   OZ_TAG: v5.2.0

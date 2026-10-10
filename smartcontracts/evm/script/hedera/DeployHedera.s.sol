@@ -10,9 +10,10 @@ import {HederaMetaToken} from "../../src/hedera/HederaMetaToken.sol";
 import {DeployBase} from "../DeployBase.sol";
 
 /// Như `script/Deploy.s.sol` nhưng implementation META là `HederaMetaToken` (R63).
-/// Hedera JSON-RPC Relay: `forge script script/hedera/DeployHedera.s.sol --rpc-url $RELAY --broadcast --slow`
+/// Hedera JSON-RPC Relay: `forge script script/hedera/DeployHedera.s.sol --rpc-url $RELAY --broadcast --slow --sender <địa chỉ deployer>`
 /// (relay không có mempool: `--slow` gửi tuần tự, mỗi tx chờ receipt). Deployer = tài khoản ECDSA có alias EVM.
-/// env: PRIVATE_KEY, REGISTRAR?, DEMO_SUPPLY?, DEMO_HOLDER?, CHAIN_UID? (mặc định blockhash(0)).
+/// env: PRIVATE_KEY, REGISTRAR?, DEMO_SUPPLY?, DEMO_HOLDER?, CHAIN_UID? (mặc định hash block 0 của RPC),
+///      DEPLOY_SALT? (mặc định keccak256("scaas.deploy.v1"); chạy lại trên cùng chain cần salt mới).
 /// Ghi `deployments/hedera-<chainid>.json`.
 contract DeployHedera is DeployBase {
     function run() external {
@@ -49,6 +50,7 @@ contract DeployHedera is DeployBase {
         vm.serializeAddress(k, "dex", address(dex));
         vm.serializeAddress(k, "demo_token_2", demo2);
         string memory out = vm.serializeAddress(k, "demo_token", demo);
+        vm.createDir("./deployments", true);
         vm.writeJson(out, string.concat("./deployments/hedera-", vm.toString(block.chainid), ".json"));
         console.log(out);
     }

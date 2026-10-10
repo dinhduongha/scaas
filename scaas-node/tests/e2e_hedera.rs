@@ -77,7 +77,6 @@ async fn start_anvil() -> (Anvil, String) {
 }
 
 fn deploy(rpc: &str) -> Value {
-    std::fs::create_dir_all(format!("{}/deployments", sc())).unwrap();
     let status = Command::new("forge")
         .current_dir(sc())
         .args(["script", "script/hedera/DeployHedera.s.sol", "--rpc-url", rpc, "--broadcast", "--silent", "--sender", DEPLOYER_ADDRESS])
