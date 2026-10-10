@@ -10,6 +10,7 @@ import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IERC20Payment} from "../../src/metatx/IERC20Payment.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {noneInit} from "./helpers/V2Fixture.sol";
 
 /// Receiver-pays (CTR-MTX-05, CTR-MTX-06): the payer's `MetaTransfer` runs untouched, the payee's co-signed
 /// `ReceiverFee` moves `fee` from the payee in the same transaction.
@@ -28,9 +29,10 @@ contract ReceiverPaysTest is Test {
     function setUp() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        address impl = address(new NoUnderlyingToken(address(this), address(0), UID));
+        address impl = address(new NoUnderlyingToken(address(this), address(0), UID, false));
         t = NoUnderlyingToken(Clones.clone(impl));
-        t.initialize(address(this), new address[](0), 1, abi.encode("Points", "PTS", uint8(6), uint256(0), address(this)));
+        t.initialize(address(this), new address[](0), 1,
+            abi.encode(noneInit("Points", "PTS", 6, 0, address(this), address(this))));
         t.mint(payer, 1_000e6);
     }
 

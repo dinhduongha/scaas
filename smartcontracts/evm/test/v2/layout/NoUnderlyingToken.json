@@ -5,14 +5,7 @@
     "_totalSupply",
     "_name",
     "_symbol",
-    "creator",
-    "version",
-    "_tokenDecimals",
-    "_initialized",
-    "_legCount",
-    "_tokenName",
-    "_tokenSymbol",
-    "minter"
+    "_legCount"
   ],
   "slots": [
     "0",
@@ -20,26 +13,12 @@
     "2",
     "3",
     "4",
-    "5",
-    "5",
-    "5",
-    "5",
-    "5",
-    "6",
-    "7",
-    "8"
+    "5"
   ],
   "offsets": [
     0,
     0,
     0,
-    0,
-    0,
-    0,
-    20,
-    28,
-    29,
-    30,
     0,
     0,
     0

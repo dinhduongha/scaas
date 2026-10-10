@@ -9,10 +9,11 @@ import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
 import {SingleUnderlyingToken} from "../../src/metatx/SingleUnderlyingToken.sol";
-import {HederaHts} from "../../src/hedera/HederaV2Lib.sol";
-import {HederaNoUnderlyingToken, HederaSingleUnderlyingToken, HederaMultiUnderlyingToken}
-    from "../../src/hedera/HederaTokensV2.sol";
+import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {HederaLib} from "../../src/hedera/HederaLib.sol";
+import {HederaSingleUnderlyingToken, HederaMultiUnderlyingToken} from "../../src/hedera/HederaTokensV2.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
+import {noneInit} from "../v2/helpers/V2Fixture.sol";
 import {MockHederaAccountService, MockHts} from "./HederaMocks.sol";
 
 /// T5: con Hedera của ba tầng (TW2 §11, R144) — HIP-632 trên mỗi tầng, associate lúc init, kiểm phí HTS fail-closed.
@@ -39,7 +40,8 @@ contract HederaV2Test is Test {
         MockHederaAccountService(HAS).setEdKey(alice, vm.addr(ALICE_KEY));
         f = new OpenFactoryV2(registrar);
         vm.startPrank(registrar);
-        f.registerImplementation(IOpenFactoryV2.TokenKind.META_NONE, 1, address(new HederaNoUnderlyingToken(address(f), UID)));
+        f.registerImplementation(IOpenFactoryV2.TokenKind.META_NONE, 1,
+            address(new NoUnderlyingToken(address(f), address(0), UID, true)));
         f.registerImplementation(IOpenFactoryV2.TokenKind.META_SINGLE, 1,
             address(new HederaSingleUnderlyingToken(address(f), UID)));
         f.registerImplementation(IOpenFactoryV2.TokenKind.META_MULTI, 1,
@@ -53,10 +55,10 @@ contract HederaV2Test is Test {
     function test_implementationSizes() public view {
         IOpenFactoryV2.TokenKind[3] memory k = [IOpenFactoryV2.TokenKind.META_NONE, IOpenFactoryV2.TokenKind.META_SINGLE,
             IOpenFactoryV2.TokenKind.META_MULTI];
-        assertLe(f.implementationOf(k[0], 1).code.length, 20_480); // CTR-TOK-24 (measured 18,057)
-        // Transitional (R3): Hedera wrappers over EIP-170 until P1d (`UnderlyingLib`); measured 27,417 / 28,266
-        assertLe(f.implementationOf(k[1], 1).code.length, 27_648);
-        assertLe(f.implementationOf(k[2], 1).code.length, 28_672);
+        assertLe(f.implementationOf(k[0], 1).code.length, 20_480); // CTR-TOK-24 (measured 20,038)
+        // Transitional (R3): Hedera wrappers over EIP-170 until P1d (`UnderlyingLib`); measured 29,201 / 30,052
+        assertLe(f.implementationOf(k[1], 1).code.length, 29_696);
+        assertLe(f.implementationOf(k[2], 1).code.length, 30_720);
     }
 
     function _edSign(bytes32 digest) internal pure returns (bytes memory) {
@@ -92,7 +94,7 @@ contract HederaV2Test is Test {
     function test_tier1NativeAccountPays() public {
         vm.prank(alice);
         address t = f.createTiered(IOpenFactoryV2.TokenKind.META_NONE, 1, new address[](0),
-            abi.encode("Points", "PTS", uint8(0), uint256(1000), address(0)), "n");
+            abi.encode(noneInit("Points", "PTS", 0, 1000, alice, address(0))), "n");
         MetaTxLib.MetaTransfer memory x = _tr(shop, 250, 0, 1);
         bytes memory sig = _edSign(IERC20MetaTx(t).mtxTransferDigest(x));
         vm.prank(relayer);
@@ -104,7 +106,7 @@ contract HederaV2Test is Test {
     function test_tier1NativeAccountPayeeCoSignsReceiverFee() public {
         vm.prank(alice);
         address t = f.createTiered(IOpenFactoryV2.TokenKind.META_NONE, 1, new address[](0),
-            abi.encode("Points", "PTS", uint8(0), uint256(1000), address(0)), "n");
+            abi.encode(noneInit("Points", "PTS", 0, 1000, alice, address(0))), "n");
         uint256 payerPk = 0xB0B;
         address payer = vm.addr(payerPk);
         address feeTo = address(0xFEE);
@@ -188,17 +190,17 @@ contract HederaV2Test is Test {
 
     function test_isTokenFailureRefuses() public {
         MockHts(HTS).setIsTokenRc(address(usdc), 21);
-        _refuse(abi.encodeWithSelector(HederaHts.HtsQueryFailed.selector, address(usdc), int64(21)));
+        _refuse(abi.encodeWithSelector(HederaLib.HtsQueryFailed.selector, address(usdc), int64(21)));
     }
 
     function test_customFeeQueryFailureRefuses() public {
         MockHts(HTS).setFeesRc(address(usdc), 167);
-        _refuse(abi.encodeWithSelector(HederaHts.HtsQueryFailed.selector, address(usdc), int64(167)));
+        _refuse(abi.encodeWithSelector(HederaLib.HtsQueryFailed.selector, address(usdc), int64(167)));
     }
 
     function test_undecodableCustomFeesRefuse() public {
         MockHts(HTS).setFees(address(usdc), MockHts.Fees.Malformed);
-        _refuse(abi.encodeWithSelector(HederaHts.HtsQueryFailed.selector, address(usdc), int64(22)));
+        _refuse(abi.encodeWithSelector(HederaLib.HtsQueryFailed.selector, address(usdc), int64(22)));
     }
 
     function test_anyCustomFeeRefuses() public {
@@ -213,11 +215,11 @@ contract HederaV2Test is Test {
 
     function test_associationFailureRefuses() public {
         MockHts(HTS).force(15);
-        _refuse(abi.encodeWithSelector(HederaHts.AssociateFailed.selector, int64(15)));
+        _refuse(abi.encodeWithSelector(HederaLib.AssociateFailed.selector, int64(15)));
     }
 
     function test_absentPrecompileRefuses() public {
         vm.etch(HTS, "");
-        _refuse(abi.encodeWithSelector(HederaHts.HtsQueryFailed.selector, address(usdc), int64(-1)));
+        _refuse(abi.encodeWithSelector(HederaLib.HtsQueryFailed.selector, address(usdc), int64(-1)));
     }
 }

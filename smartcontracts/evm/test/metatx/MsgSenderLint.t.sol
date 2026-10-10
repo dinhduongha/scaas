@@ -9,9 +9,9 @@ import {Test} from "forge-std/Test.sol";
 /// are `//` are skipped (block comments are not). A change here is deliberate: update the pin in the same commit and
 /// say why.
 contract MsgSenderLintTest is Test {
-    string[7] internal FILES = ["src/metatx/MetaTxBase.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
+    string[9] internal FILES = ["src/metatx/MetaTxBase.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
         "src/metatx/NoUnderlyingToken.sol", "src/metatx/SingleUnderlyingToken.sol", "src/metatx/MultiUnderlyingToken.sol",
-        "src/hedera/HederaTokensV2.sol"];
+        "src/hedera/HederaTokensV2.sol", "src/metatx/AdminLib.sol", "src/hedera/HederaLib.sol"];
 
     /// Occurrences of `pat` (not preceded by an identifier character); `exceptSelector` skips `pat<ident>.selector`.
     function _count(string memory path, bytes memory pat, bool exceptSelector) internal view returns (uint256 n) {
@@ -59,6 +59,8 @@ contract MsgSenderLintTest is Test {
         assertEq(_count("src/metatx/SingleUnderlyingToken.sol", "msg.sender", false), 0, "SingleUnderlyingToken");
         assertEq(_count("src/metatx/MultiUnderlyingToken.sol", "msg.sender", false), 0, "MultiUnderlyingToken");
         assertEq(_count("src/hedera/HederaTokensV2.sol", "msg.sender", false), 0, "HederaTokensV2");
+        assertEq(_count("src/metatx/AdminLib.sol", "msg.sender", false), 0, "AdminLib");
+        assertEq(_count("src/hedera/HederaLib.sol", "msg.sender", false), 0, "HederaLib");
     }
 
     /// CTR-MTX-18: an external self-call (`this.f(…)`) inside an allowlisted body would let a guarded callee consume

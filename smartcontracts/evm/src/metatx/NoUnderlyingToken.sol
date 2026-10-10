@@ -2,55 +2,55 @@
 pragma solidity ^0.8.24;
 
 import {MetaTokenBase} from "./MetaTokenBase.sol";
+import {AdminLib} from "./AdminLib.sol";
 import {MetaTxBase} from "./MetaTxBase.sol";
 import {IMetaTx} from "./IMetaTx.sol";
 import {IOpenFactoryV2} from "../common/IOpenFactoryV2.sol";
 
-/// @title Tầng 1 v2 (kind `META_NONE`, TW2 §4): token tự phát hành, không underlying.
-/// @notice Ngữ nghĩa tầng 1 của v1 (`initialSupply` cho `creator`, `minter` tuỳ chọn, `minter == 0` ⇒ cung cố
-///         định) cộng `burn` của người giữ và `renounceMinter` một chiều (R141). Trần cung hay giới hạn tốc độ mint
-///         nếu issuer cần thì nằm trong hợp đồng minter của họ, không ở đây.
+/// @title Kind `NONE` (CTR-TOK-21): a standalone token, no underlying.
+/// @notice Flags valid here: `PAYABLE`, `MINTABLE` (role `minter`), `BURNABLE` (holder burn). A supply cap or a mint
+///         rate limit, if an issuer needs one, lives in its minter contract. Built by the factory through
+///         `initialize(creator, [], version, abi.encode(NoneInit))`; P1e switches to `TokenConfig`.
 contract NoUnderlyingToken is MetaTokenBase {
-    /// @dev Slot 8.
-    address public minter;
+    /// @notice The NONE subset of `TokenConfig` (CTR-TOK-25).
+    struct NoneInit {
+        string name;
+        string symbol;
+        uint8 decimals;
+        uint256 features;
+        uint256 lockedFeatures;
+        address owner;
+        AdminLib.Roles roles;
+        uint256 initialSupply;
+        address initialHolder;
+    }
 
-    event MinterRenounced();
-
-    error NotMinter();
-
-    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_)
-        MetaTokenBase(factory_, smartKeyAccountImpl_, chainUid_)
+    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, bool isHedera_)
+        MetaTokenBase(factory_, smartKeyAccountImpl_, chainUid_, isHedera_)
     {}
 
     function tokenKind() external pure override returns (IOpenFactoryV2.TokenKind) {
         return IOpenFactoryV2.TokenKind.META_NONE;
     }
 
-    /// @param initData `abi.encode(string name, string symbol, uint8 decimals, uint256 initialSupply,
-    ///        address minter)` — ABI của v1.
-    function _init(address creator_, address[] calldata underlyings, bytes calldata initData) internal override {
+    /// @param initData `abi.encode(NoneInit)`.
+    function _init(address, address[] calldata underlyings, bytes calldata initData) internal override {
         if (underlyings.length != 0) revert UnderlyingCountInvalid(underlyings.length);
-        (string memory n, string memory s, uint8 d, uint256 supply, address minter_) =
-            abi.decode(initData, (string, string, uint8, uint256, address));
-        _setMetadata(n, s, d);
-        minter = minter_;
-        if (supply != 0) _mint(creator_, supply);
+        NoneInit memory c = abi.decode(initData, (NoneInit));
+        _setMetadata(c.name, c.symbol, c.decimals);
+        AdminLib.init(AdminLib.KIND_NONE, c.features, c.lockedFeatures, c.owner, c.roles);
+        if (c.initialSupply != 0) _mint(c.initialHolder, c.initialSupply);
     }
 
+    /// @notice `MINTABLE` and the `minter` role; never allowlisted (a minter contract's caps run on its own call).
     function mint(address to, uint256 amount) external {
-        _onlyMinter();
+        AdminLib.requireRole(AdminLib.MINTABLE, _msgSender());
         _mint(to, amount);
-    }
-
-    /// @notice Một chiều: sau đó cung cố định mãi mãi.
-    function renounceMinter() external {
-        _onlyMinter();
-        minter = address(0);
-        emit MinterRenounced();
     }
 
     /// @notice Allowlisted `AMOUNT(0)` (CTR-MTX-19): gasless through `mtxExecute`.
     function burn(uint256 amount) external nonReentrant {
+        AdminLib.requireFeature(AdminLib.BURNABLE);
         _burn(_msgSender(), amount);
     }
 
@@ -68,9 +68,5 @@ contract NoUnderlyingToken is MetaTokenBase {
     function _mtxRule(bytes4 sel) internal view override returns (MtxRule memory) {
         if (sel == this.burn.selector) return MtxRule(FEE_CLASS_AMOUNT, 0, 36);
         return super._mtxRule(sel);
-    }
-
-    function _onlyMinter() private view {
-        if (minter == address(0) || _msgSender() != minter) revert NotMinter();
     }
 }

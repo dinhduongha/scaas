@@ -1,49 +1,29 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.24;
 
-import {NoUnderlyingToken} from "../metatx/NoUnderlyingToken.sol";
 import {SingleUnderlyingToken} from "../metatx/SingleUnderlyingToken.sol";
 import {MultiUnderlyingToken} from "../metatx/MultiUnderlyingToken.sol";
-import {HederaSig, HederaHts} from "./HederaV2Lib.sol";
+import {HederaLib} from "./HederaLib.sol";
 
-/// @title Ba tầng v2 trên Hedera (HSCS, TW2 §11, R144): thừa kế toàn bộ tầng EVM, thêm HIP-632.
-/// @notice Không SmartKeyAccount trên Hedera ⇒ `SMART_KEY_ACCOUNT_IMPL = 0`: mọi ví hợp đồng giữ trần 50k cho ERC-1271.
-///         Tầng wrapper kiểm mọi underlying lúc `initialize`, fail-closed (`HederaHts`), và associate từng chân HTS:
-///         không có hàm `associateUnderlying` — một token mà chân không associate được thì không bao giờ ra đời.
-///         Domain, ABI, event là của EVM.
-contract HederaNoUnderlyingToken is NoUnderlyingToken {
-    constructor(address factory_, bytes32 chainUid_) NoUnderlyingToken(factory_, address(0), chainUid_) {}
-
-    function _requireValidSignature(address from, bytes32 digest, bytes calldata sig) internal view override {
-        if (sig.length == 64 && !_isContract(from)) return HederaSig.requireValid(from, digest, sig);
-        super._requireValidSignature(from, digest, sig);
-    }
-}
-
+/// @title Transitional Hedera wrapper tiers (CTR-TOK-23): `IS_HEDERA = true` gives them HIP-632 signatures from
+///        `MetaTokenBase`; what is left here is the fail-closed HTS check and association of every leg at init
+///        (`HederaLib.checkAndAssociate`), which moves into `UnderlyingLib` with `UnderlyingToken` in P1d. Kind `NONE`
+///        on Hedera is a `NoUnderlyingToken` deployed with `isHedera_ = true`. No SmartKeyAccount on Hedera:
+///        `SMART_KEY_ACCOUNT_IMPL = 0`, every contract wallet keeps the 50k ERC-1271 cap.
 contract HederaSingleUnderlyingToken is SingleUnderlyingToken {
-    constructor(address factory_, bytes32 chainUid_) SingleUnderlyingToken(factory_, address(0), chainUid_) {}
-
-    function _requireValidSignature(address from, bytes32 digest, bytes calldata sig) internal view override {
-        if (sig.length == 64 && !_isContract(from)) return HederaSig.requireValid(from, digest, sig);
-        super._requireValidSignature(from, digest, sig);
-    }
+    constructor(address factory_, bytes32 chainUid_) SingleUnderlyingToken(factory_, address(0), chainUid_, true) {}
 
     function _checkUnderlying(address u) internal override {
         super._checkUnderlying(u);
-        if (!HederaHts.checkAndAssociate(u)) revert UnderlyingInvalid(u);
+        if (!HederaLib.checkAndAssociate(u)) revert UnderlyingInvalid(u);
     }
 }
 
 contract HederaMultiUnderlyingToken is MultiUnderlyingToken {
-    constructor(address factory_, bytes32 chainUid_) MultiUnderlyingToken(factory_, address(0), chainUid_) {}
-
-    function _requireValidSignature(address from, bytes32 digest, bytes calldata sig) internal view override {
-        if (sig.length == 64 && !_isContract(from)) return HederaSig.requireValid(from, digest, sig);
-        super._requireValidSignature(from, digest, sig);
-    }
+    constructor(address factory_, bytes32 chainUid_) MultiUnderlyingToken(factory_, address(0), chainUid_, true) {}
 
     function _checkUnderlying(address u) internal override {
         super._checkUnderlying(u);
-        if (!HederaHts.checkAndAssociate(u)) revert UnderlyingInvalid(u);
+        if (!HederaLib.checkAndAssociate(u)) revert UnderlyingInvalid(u);
     }
 }

@@ -9,7 +9,7 @@ import {MetaTxDex} from "../../src/dex/MetaTxDex.sol";
 import {HederaMetaToken} from "../../src/hedera/HederaMetaToken.sol";
 import {OpenFactoryV2} from "../../src/factory/OpenFactoryV2.sol";
 import {IOpenFactoryV2} from "../../src/common/IOpenFactoryV2.sol";
-import {HederaNoUnderlyingToken} from "../../src/hedera/HederaTokensV2.sol";
+import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
 
 /// Như `script/Deploy.s.sol` nhưng implementation META là `HederaMetaToken` (R63).
 /// Hedera JSON-RPC Relay: `forge script script/hedera/DeployHedera.s.sol --rpc-url $RELAY --broadcast --slow`
@@ -70,7 +70,7 @@ contract DeployHedera is Script {
         require(uid != bytes32(0), "set CHAIN_UID (chain-uids.json)");
         // Transitional (R3): Single/Multi are over EIP-170 until P1d (UnderlyingToken + UnderlyingLib); only META_NONE
         // is deployed and registered, and the JSON has no implementation_meta_single/_multi keys.
-        address none = address(new HederaNoUnderlyingToken(address(f), uid));
+        address none = address(new NoUnderlyingToken(address(f), address(0), uid, true));
         if (register) f.registerImplementation(IOpenFactoryV2.TokenKind.META_NONE, 1, none);
         vm.serializeAddress("deploy", "factory_v2", address(f));
         vm.serializeAddress("deploy", "implementation_meta_none", none);

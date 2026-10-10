@@ -1,6 +1,29 @@
 # HANDOFF — scaas
 
-## Shutdown 2026-10-10 — read this first
+## Session 2026-10-10 (P1c)
+
+**State:** P1c complete on branch `p1c-metatokenbase`, not yet merged (792 forge tests, e2e 4/4 + e2e_hedera 1/1, KAT vectors
+unchanged, docs checker 0 errors). Base `d827062`; not pushed.
+
+**P1c delivered:** `AdminLib` (flags, owner, roles in `scaas.token`; CTR-TOK-22) with all events and errors in the new
+`ITokenAdmin` (`src/metatx/ITokenAdmin.sol`), so they are in the token ABI; new `RoleAccountZero(uint8)`. `MetaTokenBase`
+on `AdminLib`: `PAYABLE` gate on `mtxPay`/`payWithFee`/`mtxPayReceiverFee`, ERC-165, `IS_HEDERA`. `HederaLib` replaces
+`HederaV2Lib` (`requireValid` public view, linked); `HederaNoUnderlyingToken` deleted. `NoUnderlyingToken` uses the
+`MINTABLE`/`BURNABLE` flags and roles (no `minter()`, `MinterRenounced`, `NotMinter`). Wrappers report legacy powers as flags (C5).
+`test/v2/Features.t.sol` (13 tests).
+
+**Rulings for the owner:** C1 own `AdminLib`, not OZ `AccessControlDefaultAdminRules` (two-step owner, no delay); C2 flags
+5–8 refused at init with `FeatureNotBuilt` until the asset suite; C3 no external `PayLib` (pay is inline over the
+`MetaTransfer` core, gated by `PAYABLE`; +2.6 k gas on a fresh lane), so PAYABLE is advisory for payments (a signed payment still settles
+through `mtxExecuteTransfer`); gating `entryRef ≠ 0` would contradict T2 — owner to decide; C9 NONE has 442 B left, P2 must find room;
+`ITokenAdmin` carries the admin functions, events and errors; `RoleAccountZero` refuses granting a role to address 0.
+
+**Sizes (runtime B):** `NoUnderlyingToken` 20,038 (<= 20,480); over EIP-170: `Single` 28,296, `Multi` 29,147, `HederaSingle`
+29,201, `HederaMulti` 30,052, `ZetherToken` 28,849 (until P1d); `AdminLib` 3,403, `HederaLib` 753.
+
+**Next action:** write the **P1d** plan (`UnderlyingLib` + `UnderlyingToken`).
+
+## Shutdown 2026-10-10
 
 **State:** P1b merged into `main` as `fb2a234` (branch `p1b-erc20metatx`, 758 forge tests, e2e 4/4 + e2e_hedera 1/1); not pushed.
 758 forge tests pass; docs checker 0 errors; the node e2e suites (`e2e`, `e2e_hedera`) pass against the deploy scripts,
@@ -19,8 +42,6 @@ token side now (`SMART_KEY_ACCOUNT_IMPL`; the account contract stays `SubjectAcc
 
 **Sizes (runtime B):** `NoUnderlyingToken` 17,602, `HederaNoUnderlyingToken` 18,057 (both <= 20,480); over EIP-170: `Single` 26,102,
 `Multi` 26,951, `HederaSingle` 27,417, `HederaMulti` 28,266, `ZetherToken` 28,849.
-
-**Next action:** write the **P1c** plan (`MetaTokenBase` features/roles, `AdminLib`/`PayLib`/`HederaLib`, kind NONE).
 
 ## Shutdown 2026-10-09 (evening)
 

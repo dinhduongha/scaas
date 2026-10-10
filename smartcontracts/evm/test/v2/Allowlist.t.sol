@@ -11,7 +11,9 @@ import {MultiUnderlyingToken} from "../../src/metatx/MultiUnderlyingToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {noneInit} from "./helpers/V2Fixture.sol";
 import {FeePolicy} from "../../src/common/FeePolicy.sol";
+import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
 
 /// Underlying whose `transferFrom` re-enters the wrapper while the self-call is live.
 contract ReenteringERC20 is MockERC20 {
@@ -46,14 +48,17 @@ contract AllowlistTest is Test {
         vm.warp(1_800_000_000);
         u = new MockERC20("U", "U", 6);
         u2 = new MockERC20("U2", "U2", 6);
-        none = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), UID))));
-        none.initialize(address(this), new address[](0), 1, abi.encode("P", "P", uint8(6), uint256(0), address(this)));
-        single = SingleUnderlyingToken(Clones.clone(address(new SingleUnderlyingToken(address(this), address(0), UID))));
+        none = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), UID, false))));
+        none.initialize(address(this), new address[](0), 1,
+            abi.encode(noneInit("P", "P", 6, 0, address(this), address(this))));
+        single = SingleUnderlyingToken(
+            Clones.clone(address(new SingleUnderlyingToken(address(this), address(0), UID, false))));
         SingleUnderlyingToken.RateConfig memory cfg;
         address[] memory one = new address[](1);
         one[0] = address(u);
         single.initialize(address(this), one, 1, abi.encode("W", "W", uint8(6), uint256(1), uint256(1), cfg));
-        multi = MultiUnderlyingToken(Clones.clone(address(new MultiUnderlyingToken(address(this), address(0), UID))));
+        multi = MultiUnderlyingToken(
+            Clones.clone(address(new MultiUnderlyingToken(address(this), address(0), UID, false))));
         address[] memory two = new address[](2);
         (two[0], two[1]) = (address(u), address(u2));
         uint256[] memory r = new uint256[](2);
@@ -247,7 +252,7 @@ contract AllowlistTest is Test {
             _refused(t, abi.encodeWithSelector(MetaTokenBase.mtxPayReceiverFee.selector));
         }
         _refused(address(none), abi.encodeCall(NoUnderlyingToken.mint, (alice, 1)));
-        _refused(address(none), abi.encodeCall(NoUnderlyingToken.renounceMinter, ()));
+        _refused(address(none), abi.encodeCall(ITokenAdmin.renounceRole, (1)));
         _refused(address(single), abi.encodeWithSignature("unwrap(uint256,address)", 1, alice));
         _refused(address(single), abi.encodeWithSignature("proposeRate(address,uint96,uint96)", address(u), 1, 1));
         _refused(address(single), abi.encodeWithSignature("cancelRate()"));
@@ -297,8 +302,8 @@ contract AllowlistTest is Test {
 
     function test_reentryFromUnderlyingHook_reverts() public {
         ReenteringERC20 bad = new ReenteringERC20();
-        SingleUnderlyingToken w =
-            SingleUnderlyingToken(Clones.clone(address(new SingleUnderlyingToken(address(this), address(0), UID))));
+        SingleUnderlyingToken w = SingleUnderlyingToken(
+            Clones.clone(address(new SingleUnderlyingToken(address(this), address(0), UID, false))));
         SingleUnderlyingToken.RateConfig memory cfg;
         address[] memory one = new address[](1);
         one[0] = address(bad);

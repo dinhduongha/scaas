@@ -1,28 +1,27 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.24;
 
 import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {HederaAccountAuth} from "./HederaAccountAuth.sol";
 
-/// @title Chữ ký HIP-632 cho mọi tầng v2 trên Hedera (R63, R144) — như `HederaMetaToken` v1.
-/// @notice Chữ ký 64 byte từ một địa chỉ KHÔNG có code (tài khoản Hedera khoá ED25519, `0.0.N`) đi qua
-///         `isAuthorizedRaw`: precompile đọc khoá của tài khoản trong state Hedera, khoá client gửi không bao giờ là
-///         căn cứ. Mọi thứ khác (EOA ECDSA 65 byte, ERC-1271) đi đường EVM của `MetaTxBase`.
-///         Thư viện, không phải mixin `is MetaTxBase`: mixin đó tạo một kim cương với tầng (Single/Multi đều
-///         `is MetaTxBase`) và bắt mỗi con ghi đè lại bảy hàm chỉ để chọn bên; ở đây mỗi con ghi đè đúng một hàm.
-library HederaSig {
-    function requireValid(address from, bytes32 digest, bytes calldata sig) internal view {
-        if (!HederaAccountAuth.asView()(from, digest, sig)) revert IMetaTx.MetaTxBadSignature();
-    }
-}
-
-/// @title Kiểm underlying HTS lúc init, FAIL-CLOSED (TW2 §11, review M5).
-/// @notice 1. `isToken(u)` ≠ SUCCESS ⇒ `HtsQueryFailed`. 2. Nếu là HTS: `getTokenCustomFees(u)` ≠ SUCCESS hoặc không
+/// @title Hedera branches of every token (CTR-TOK-23, NET-HED-14), behind the implementation's immutable `IS_HEDERA`.
+/// @notice `requireValid`: a 64-byte signature from an address without code (a native ED25519 account `0.0.N`) goes
+///         through `isAuthorizedRaw` (HIP-632): the precompile reads the account's key from Hedera state, a key sent by
+///         the client is never the basis. Every other signature (ECDSA 65 bytes, ERC-1271) takes the EVM path.
+///         `checkAndAssociate`: HTS underlying check at init, FAIL-CLOSED (TW2 §11, review M5):
+///         1. `isToken(u)` ≠ SUCCESS ⇒ `HtsQueryFailed`. 2. Nếu là HTS: `getTokenCustomFees(u)` ≠ SUCCESS hoặc không
 ///         giải mã được ⇒ `HtsQueryFailed`; có bất kỳ phí fixed/fractional/royalty nào ⇒ người gọi từ chối
 ///         (`UnderlyingInvalid`). 3. Nếu là HTS: `associateToken(this, u)` ≠ SUCCESS/ALREADY ⇒ `AssociateFailed`.
 ///         Precompile vắng mặt (lời gọi "thành công" với returndata rỗng) cũng là `HtsQueryFailed(u, -1)`.
 ///         Một fee-schedule key vẫn thêm được phí về sau: không chặn on-chain, ví và wizard cảnh báo (§6.6).
-library HederaHts {
+library HederaLib {
+    /// @dev Public (linked, DELEGATECALL): keeps the HIP-632 call out of every token's bytecode. Declared `view` for the
+    ///      `view` caller; `HederaAccountAuth.asView` issues a plain CALL, and every call site is a non-view entry point
+    ///      (CTR-TOK-23), so the frame is never static.
+    function requireValid(address from, bytes32 digest, bytes calldata sig) public view {
+        if (!HederaAccountAuth.asView()(from, digest, sig)) revert IMetaTx.MetaTxBadSignature();
+    }
+
     address internal constant HTS = address(0x167);
     int64 internal constant SUCCESS = 22;
     int64 internal constant ALREADY_ASSOCIATED = 194; // TOKEN_ALREADY_ASSOCIATED_TO_ACCOUNT

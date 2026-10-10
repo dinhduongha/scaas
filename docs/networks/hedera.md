@@ -31,7 +31,7 @@ someone else pays) is **not** used: it orders operations by the subject's accoun
 
 | Piece | Hedera-specific part | File |
 |---|---|---|
-| Token | `HederaMetaToken is MetaToken`: a Hedera account's **ED25519** signature verified through HIP-632 `isAuthorizedRaw` (`0x16a`); tier-2 wrappers on HTS tokens ([wrappers](#wrappers)) | `smartcontracts/evm/src/hedera/HederaMetaToken.sol` (v1), `HederaTokensV2.sol` + `HederaV2Lib.sol` (v2) |
+| Token | `HederaMetaToken is MetaToken`: a Hedera account's **ED25519** signature verified through HIP-632 `isAuthorizedRaw` (`0x16a`); tier-2 wrappers on HTS tokens ([wrappers](#wrappers)) | `smartcontracts/evm/src/hedera/HederaMetaToken.sol` (v1), `HederaTokensV2.sol` + `HederaLib.sol` (v2) |
 | Account auth | library calling `isAuthorizedRaw` with `CALL` (100 000 gas cap); a revert or garbage ⇒ `false` | `smartcontracts/evm/src/hedera/HederaAccountAuth.sol` |
 | Mandate | `HederaMandateWallet is MandateWallet` adds `mtxExecuteAsOwnerRaw` for ED25519 owners ([NET-HED-03](#NET-HED-03)) | `smartcontracts/evm/src/hedera/HederaMandateWallet.sol` |
 | DEX | unchanged — every leg is a meta-tx on the token, so an ED25519 leg goes through `HederaMetaToken` (target: a `TradeOrder` verified by the Hedera token's signature check, [Mandate and DEX](#mandate)) | — |
@@ -130,7 +130,7 @@ system contract in a static frame. Tested on testnet (initcode through `eth_call
 only caller is `executeMetaTransaction` (non-view) and `0x16a` writes no state and calls back nothing; the forge
 mock writes storage, so it too HALTs under STATICCALL (a regression test). BUILT. Removing `view` from the parent so
 the cast disappears is an open clean-up item, done only when the parent signature changes for another reason (the
-cast sits in v1, `HederaMetaToken.sol:28`, and in every v2 child, `HederaV2Lib.sol:14-16`, `HederaTokensV2.sol:17, 26`;
+cast sits in v1, `HederaMetaToken.sol:28`, and in `HederaLib.sol` (`requireValid`) and `HederaTokensV2.sol`;
 marked in `HederaAccountAuth.sol:31`).
 
 <a id="NET-HED-15"></a>**NET-HED-15** — **Hedera ED25519 subjects need a raw signer.** The contracts accept raw
@@ -282,7 +282,7 @@ signers are not contracts, so they can never call `approve` on a SCaaS token
 An HTS token (e.g. USDC on Hedera) has an ERC-20 facade at its long-zero address (HIP-218/376). It is used only
 behind a **tier-2 wrapper** (`HederaMetaToken(underlying = token HTS)` in v1) with the HTS token as `underlying`; the
 contract must **associate** the HTS token before receiving it (`SUCCESS (22)` or `TOKEN_ALREADY_ASSOCIATED_TO_ACCOUNT (194)`;
-v1 `HederaMetaToken.sol:34-42`, v2 `HederaV2Lib.sol:34-49`, [wrappers](#wrappers)); users grant the HTS allowance **to the wrapper
+v1 `HederaMetaToken.sol:34-42`, v2 `HederaLib.sol` (`checkAndAssociate`), [wrappers](#wrappers)); users grant the HTS allowance **to the wrapper
 contract** (valid under [CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)). Risk, stated: protocol-level HTS
 allowances cannot be restricted to contracts, so the system never uses an HTS allowance outside a wrapper.
 
@@ -298,9 +298,9 @@ warning, which also goes into the wrapper's risk disclosure. SPECIFIED.
 <a id="wrappers"></a>
 
 <a id="NET-HED-14"></a>**NET-HED-14** — **Hedera v2 wrappers check every underlying in `initialize`, fail-closed,
-through the HTS precompile `0x167`.** `HederaNoUnderlyingToken`, `HederaSingleUnderlyingToken` and
-`HederaMultiUnderlyingToken` each inherit their tier and an abstract `HederaSigMixin is MetaTxCore` that overrides
-`_requireValidSignature` exactly as `HederaMetaToken` does. In `initialize`, for every underlying `u`:
+through the HTS precompile `0x167`.** `HederaSingleUnderlyingToken` and
+`HederaMultiUnderlyingToken` inherit their tier; the HIP-632 signature rule is the `IS_HEDERA` branch in `MetaTokenBase`
+(`HederaLib.requireValid`), exactly as `HederaMetaToken` does, and kind `NONE` on Hedera is `NoUnderlyingToken` with `IS_HEDERA`. In `initialize`, for every underlying `u`:
 
 1. `isToken(u)` → `(rc, isHts)`; `rc ≠ SUCCESS` ⇒ `HtsQueryFailed(u, rc)`.
 2. If `isHts`: `getTokenCustomFees(u)` with `rc ≠ SUCCESS` or an undecodable result ⇒ `HtsQueryFailed(u, rc)`; any
@@ -324,7 +324,7 @@ associateToken(this, underlying)`), is still registered as `META v1` (`DeployHed
 it through the open factory (`OpenFactory.createMetaToken`, permissionless, `:91-96`; `deprecate` does not block
 creation — `_registered` checks only non-zero, `:167-170`). Fix (SPECIFIED): `MetaToken.initialize` calls an
 `internal virtual _checkUnderlying(u)` hook (empty by default); `HederaMetaToken` overrides it with
-`HederaHts.checkAndAssociate(u)` and reverts `UnderlyingInvalid` on any fee; `associateUnderlying()` is deleted
+`HederaLib.checkAndAssociate(u)` and reverts `UnderlyingInvalid` on any fee; `associateUnderlying()` is deleted
 (association inside `initialize` means a token that cannot associate is never born, and the auto-association slot is
 no longer a detour); a new implementation is deployed, registered as a new META version on the Hedera factory, and
 `deprecate(META, 1)` follows. Until then the wizard and the node's token registry refuse a v1 Hedera token whose
