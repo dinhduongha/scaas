@@ -1,23 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {Script, console} from "forge-std/Script.sol";
+import {console} from "forge-std/Script.sol";
 import {OpenFactoryV1} from "../src/factory/OpenFactoryV1.sol";
 import {IOpenFactoryV1} from "../src/common/IOpenFactoryV1.sol";
 import {MetaToken} from "../src/metatx/MetaToken.sol";
 import {MetaTxDex} from "../src/dex/MetaTxDex.sol";
 import {SubjectAccountFactory} from "../src/account/SubjectAccountFactory.sol";
 import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
-import {OpenFactory} from "../src/factory/OpenFactory.sol";
-import {IOpenFactory} from "../src/factory/IOpenFactory.sol";
-import {NoUnderlyingToken} from "../src/metatx/NoUnderlyingToken.sol";
+import {DeployBase} from "./DeployBase.sol";
 
 /// forge script script/Deploy.s.sol --rpc-url $RPC --broadcast
 /// env: PRIVATE_KEY (deployer; registrar mặc định), REGISTRAR (tuỳ chọn),
 ///      DEMO_SUPPLY (tuỳ chọn; 0 = không tạo token demo), DEMO_HOLDER (tuỳ chọn, nhận một nửa),
 ///      CHAIN_UID (genesis hash, chain-uids.json; tuỳ chọn trên chain local mới — mặc định blockhash(0)).
 /// Ghi `deployments/<chainid>.json` để seed Odoo (`blockchain.token`) và config node (`dex`).
-contract Deploy is Script {
+contract Deploy is DeployBase {
     function run() external {
         uint256 pk = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(pk);
@@ -25,15 +23,16 @@ contract Deploy is Script {
         uint256 demoSupply = vm.envOr("DEMO_SUPPLY", uint256(0));
         address demoHolder = vm.envOr("DEMO_HOLDER", deployer);
 
+        _setup();
         vm.startBroadcast(pk);
-        OpenFactoryV1 factory = new OpenFactoryV1(registrar);
-        SubjectAccountFactory accounts = new SubjectAccountFactory();
-        MetaToken impl = new MetaToken(address(factory), accounts.IMPLEMENTATION());
+        OpenFactoryV1 factory = new OpenFactoryV1{salt: salt}(registrar);
+        SubjectAccountFactory accounts = new SubjectAccountFactory{salt: salt}();
+        MetaToken impl = new MetaToken{salt: salt}(address(factory), accounts.IMPLEMENTATION());
         if (registrar == deployer) factory.registerImplementation(IOpenFactoryV1.TokenKind.META, 1, address(impl));
-        _deployV2(registrar, registrar == deployer, accounts.IMPLEMENTATION());
-        MetaTxDex dex = new MetaTxDex();
+        _deployTokenFactory(registrar, registrar == deployer, accounts.IMPLEMENTATION(), false);
+        MetaTxDex dex = new MetaTxDex{salt: salt}();
         // R35: admin chỉ `setMarket`; production đặt REGISTRAR là một Safe (RS5-1).
-        SCaaSDex scaasDex = new SCaaSDex(registrar);
+        SCaaSDex scaasDex = new SCaaSDex{salt: salt}(registrar);
         address demo;
         if (demoSupply != 0 && registrar == deployer) {
             demo = factory.createMetaToken(1, address(0),
@@ -52,29 +51,5 @@ contract Deploy is Script {
         string memory out = vm.serializeAddress(k, "demo_token", demo);
         vm.writeJson(out, string.concat("./deployments/", vm.toString(block.chainid), ".json"));
         console.log(out);
-    }
-
-    /// TW2 §9: factory v2 + tầng None (UnderlyingToken chờ việc tối ưu kích thước, P1d D2), version 1 của kind riêng (số version theo kind; chuỗi domain "2"
-    /// là thế hệ hợp đồng). Factory v2 không đăng ký MetaToken v1. Ghi thẳng vào object JSON "deploy" (run() đã
-    /// hết chỗ trên stack).
-    function _deployV2(address registrar, bool register, address subjectImpl) internal {
-        // chain_uid = genesis hash (CTR-GEN-05, chain-uids.json). Default: block 0's hash as the RPC reports it. The
-        // script runs at the head block and BLOCKHASH of the current block is 0, so roll one ahead to read it on a
-        // fresh chain (head 0); past block 256 BLOCKHASH(0) is 0 and CHAIN_UID is required.
-        bytes32 uid = vm.envOr("CHAIN_UID", bytes32(0));
-        if (uid == bytes32(0)) {
-            uint256 head = block.number;
-            vm.roll(head + 1);
-            uid = blockhash(0);
-            vm.roll(head);
-        }
-        require(uid != bytes32(0), "set CHAIN_UID (chain-uids.json)");
-        OpenFactory f = new OpenFactory(registrar, uid);
-        // Transitional (P1d, D2): `UnderlyingToken` is over EIP-170 until the size work; only NONE
-        // is deployed and registered, and the JSON has no implementation_meta_single/_multi keys.
-        address none = address(new NoUnderlyingToken(address(f), subjectImpl, uid, false));
-        if (register) f.registerImplementation(IOpenFactory.TokenKind.NONE, 1, none);
-        vm.serializeAddress("deploy", "factory_v2", address(f));
-        vm.serializeAddress("deploy", "implementation_meta_none", none);
     }
 }

@@ -3,9 +3,9 @@
 # usage: deploy.sh <family> <network> [args…]   (args go to the native tool)
 #   evm     <rpc-url>        forge script script/Deploy.s.sol --broadcast; env PRIVATE_KEY, REGISTRAR?, DEMO_SUPPLY?,
 #                            DEMO_HOLDER?, CHAIN_UID? (genesis hash from evm/chain-uids.json; defaults to blockhash(0),
-#                            which is 0 past block 256, so a long-running chain needs it); FOUNDRY_PROFILE=private7622|
-#                            gnosis|celo picks the EVM version. Writes evm/deployments/<chainid>.json. Factory v2 gets
-#                            only META_NONE until P1d: Single/Multi are over EIP-170 (R3).
+#                            which is 0 past block 256, so a long-running chain needs it), DEPLOY_SALT? (CREATE2 salt);
+#                            FOUNDRY_PROFILE=private7622|gnosis|celo picks the EVM version. Needs the deterministic
+#                            CREATE2 deployer on the chain (NET-EVM-05). Writes evm/deployments/<chainid>.json.
 #   hedera  <relay-url>      same, script/hedera/DeployHedera.s.sol --slow (writes deployments/hedera-<chainid>.json)
 #   aptos   <cli-profile>    aptos move deploy-object --address-name scaas
 #   sui     <client-env>     sui client --client.env <env> publish
@@ -15,8 +15,10 @@ set -euo pipefail
 SC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FAMILY="${1:?usage: $0 <family> <network> [args…]}"; NET="${2:?network}"; shift 2
 case "$FAMILY" in
-  evm)     cd "$SC/evm" && exec forge script script/Deploy.s.sol --rpc-url "$NET" --broadcast "$@" ;;
-  hedera)  cd "$SC/evm" && exec forge script script/hedera/DeployHedera.s.sol --rpc-url "$NET" --broadcast --slow "$@" ;;
+  evm)     cd "$SC/evm" && exec forge script script/Deploy.s.sol --rpc-url "$NET" --broadcast \
+             --sender "$(cast wallet address --private-key "$PRIVATE_KEY")" "$@" ;;
+  hedera)  cd "$SC/evm" && exec forge script script/hedera/DeployHedera.s.sol --rpc-url "$NET" --broadcast --slow \
+             --sender "$(cast wallet address --private-key "$PRIVATE_KEY")" "$@" ;;
   aptos)   exec aptos move deploy-object --package-dir "$SC/move/aptos" --address-name scaas --profile "$NET" "$@" ;;
   sui)     exec sui client --client.env "$NET" publish "$@" "$SC/move/sui" ;;
   soroban) C="${1:?contract (token|mandate|dex|account)}"; shift
