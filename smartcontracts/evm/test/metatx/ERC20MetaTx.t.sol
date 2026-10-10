@@ -140,6 +140,12 @@ contract ERC20MetaTxTest is MtxFixture {
         assertEq(t.mtxNonce(alice, 1), 0); // nothing consumed
     }
 
+    function test_feeToTheTokenRefused_typedPath() public {
+        _xferRevert(_t(shop, 100e6, 0, 1, FIX | RF, 1e5, address(t)),
+            abi.encodeWithSelector(IERC20MetaTx.TransferToSelf.selector));
+        assertEq(t.mtxNonce(alice, 1), 0);
+    }
+
     function test_restrictedRelayer_otherCallerRefused() public {
         MetaTxLib.MetaTransfer memory x = _t(shop, 1, 0, 1, RR, 0, address(0));
         bytes memory s = _signT(x);
@@ -210,6 +216,13 @@ contract ERC20MetaTxTest is MtxFixture {
         bytes4 sel = ERC20MetaTxHarness.touch.selector;
         _execRevert(_call(abi.encodeCall(ERC20MetaTxHarness.touch, ()), 2, RR | PCT, 1),
             abi.encodeWithSelector(IMetaTx.MtxFeeClass.selector, sel, RR | PCT));
+    }
+
+    function test_feeToTheTokenRefused_genericPath() public {
+        _execRevert(_call(abi.encodeCall(ERC20MetaTxHarness.touch, ()), 1, RR | FIX | RF, 1e6)
+            .withFeeRecipient(address(t)), abi.encodeWithSelector(IERC20MetaTx.TransferToSelf.selector));
+        assertEq(t.balanceOf(alice), 1_000e6);
+        assertEq(t.mtxNonce(alice, 1), 0);
     }
 
     function test_feeFailureAfterTheCall_revertsTheCall() public {

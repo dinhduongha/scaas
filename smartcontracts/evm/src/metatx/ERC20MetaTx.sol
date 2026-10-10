@@ -87,14 +87,16 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment {
 
     // ------------------------------------------------------------------ fee of a self-call (CTR-MTX-20)
 
-    /// @notice After the call: `ABSOLUTE` = the signed amount, uncapped (step 3 refused `PERCENT`); `AMOUNT(i)` =
-    ///         `FeePolicy.compute` on the basis (≤ 1 %). A failing transfer reverts the call too.
+    /// @notice After the call: `ABSOLUTE` + `FIXED` = the signed amount, uncapped (step 3 refused `ABSOLUTE` +
+    ///         `PERCENT`); anything else = `FeePolicy.compute` on the basis (≤ 1 %), so a `PERCENT` fee is never
+    ///         taken as a raw amount whatever class the rule reports here. A failing transfer reverts the call.
     function _chargeFee(address from, uint256 basis, MetaTxLib.MetaTransaction memory m)
         internal override returns (uint256 fee)
     {
         FeeMode fm = MetaTxLib.feeModeOf(m.mode);
         if (fm == FeeMode.NONE) return 0;
-        fee = _mtxRule(bytes4(m.data)).feeClass == FEE_CLASS_ABSOLUTE ? m.fee : FeePolicy.compute(fm, basis, m.fee);
+        bool absoluteFixed = fm == FeeMode.FIXED && _mtxRule(bytes4(m.data)).feeClass == FEE_CLASS_ABSOLUTE;
+        fee = absoluteFixed ? m.fee : FeePolicy.compute(fm, basis, m.fee);
         address feeTo = _feeRecipientOf(m);
         FeePolicy.validateRecipient(fm, feeTo);
         if (fee != 0) _transfer(from, feeTo, fee);
