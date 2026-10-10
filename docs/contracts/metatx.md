@@ -280,10 +280,9 @@ it. Nothing else is reachable through `mtxExecute`.
 |---|---|---|
 | every token | `cancelNonce(uint256)` | `ABSOLUTE` |
 | `NoUnderlyingToken` | `burn(uint256)` | `AMOUNT(0)` |
-| `SingleUnderlyingToken` | `wrap(uint256)` | `ABSOLUTE` (fee from minted units) |
-| | `unwrap(uint256,address,uint256)` | `AMOUNT(0)` |
-| | `addReserve(address,uint256)` | `ABSOLUTE` |
-| `MultiUnderlyingToken` | `wrap(address,uint256)` | `ABSOLUTE` |
+| `UnderlyingToken` | `wrap(uint256)` (fee from minted units; reverts `UnderlyingRequired` unless one leg) | `ABSOLUTE` |
+| | `unwrap(uint256,address,uint256)` (reverts `UnderlyingRequired` unless one leg) | `AMOUNT(0)` |
+| | `wrap(address,uint256)` | `ABSOLUTE` |
 | | `unwrap(address,uint256,address,uint256)` | `AMOUNT(1)` |
 | | `addReserve(address,uint256)` | `ABSOLUTE` |
 | `NONE_ZETHER` / `UNDERLYING_ZETHER` (built: `ZetherToken`; replaced in P1/P3) | `wrap(uint256)` (UnderlyingLib surface of `UNDERLYING_ZETHER`), `zetherShield(bytes,uint256)` | `ABSOLUTE` |
@@ -294,11 +293,11 @@ it. Nothing else is reachable through `mtxExecute`.
 | `SmartKeyAccount` | `addKey`, `removeKey`, `rotateKey`, `setGuardian`, `execute`, signed by the account itself ([CTR-ACC-10](accounts.md#CTR-ACC-10)) | fee `NONE` only |
 
 Transfer and payment are `MetaTransfer`s ([CTR-MTX-23](#CTR-MTX-23)); neither `transfer` nor `pay` is ever
-allowlisted, so one transfer has one encoding and one digest. Single's two-argument `unwrap(uint256,address)` is not listed (the same intent with a
-second digest and no `minOut`), nor are Multi's single-asset overrides that always revert. **Never allowlisted:**
+allowlisted, so one transfer has one encoding and one digest. `UnderlyingToken`'s two-argument `unwrap(uint256,address)` is not listed (the same intent with a
+second digest and no `minOut`). **Never allowlisted:**
 `approve` and `transferFrom` (contract accounts approve and spend through their own call path,
 [CTR-TOK-01](token-wrappers.md#CTR-TOK-01)); every role function — `mint`, the `ITokenAdmin` functions (`grantRole`, `revokeRole`, `renounceRole`, `disableFeature`, the ownership functions), `proposeRate`,
-`cancelRate`, `executeRate`, `renounceRateAdmin`, `disableWrap`, `renounceGuardian` (role holders act through their own
+`cancelRate`, `executeRate`, `disableWrap` (role holders act through their own
 contract, [NODE-JOB-01](../node/job-api.md#NODE-JOB-01); a signature check would skip a minter contract's caps or a
 Safe's guards); `transfer` and `pay` (they are `MetaTransfer`s); `payWithFee` (it charges its own fee); `mtxExecute`, its alias and every other `mtx…` entry
 (no nesting); `initialize`; views; Zether `zetherRollOverSigned`/`zetherSetRollOverMode` (they carry their
@@ -308,8 +307,8 @@ non-canonical duplicate on chain is harmless, because only the signer can produc
 sequential nonce lets only one variant execute.
 
 <a id="CTR-MTX-12"></a>**CTR-MTX-12** — **Gasless unwrap** is `mtxExecute` with the wrapper's real `unwrap` calldata:
-`unwrap(uint256 wrapped, address recipient, uint256 minOut)` on `SingleUnderlyingToken`, `unwrap(address underlying,
-uint256 wrapped, address recipient, uint256 minOut)` on `MultiUnderlyingToken`, `unwrap(uint256, address)` (public
+`unwrap(uint256 wrapped, address recipient, uint256 minOut)` on `UnderlyingToken` with one leg, `unwrap(address underlying,
+uint256 wrapped, address recipient, uint256 minOut)` with one or several legs, `unwrap(uint256, address)` (public
 balance) on `UNDERLYING_ZETHER` (built: `ZetherToken`; replaced in P1/P3). The function runs exactly as a direct call by `from` (checks, burn
 `⌈out·q⌉`, reserve debit, the underlying's exact-amount transfer, `Unwrapped`), and `minOut` protects the signer
 against rate moves between signing and execution. Its fee class is `AMOUNT` with the wrapped amount as basis, taken
@@ -824,7 +823,7 @@ Foundry (`forge test`, default profile and `private7622`):
 
 - Every allowlisted selector through `mtxExecute` and through the alias; `mtxSelectors()` pinned; every allowlisted
   function `nonReentrant`; a non-allowlisted selector (incl. `transfer` and `pay`), a short `data`, a wrong static
-  length, and a fee mode outside the class or outside `supportedModes()` each revert with their error; Single's
+  length, and a fee mode outside the class or outside `supportedModes()` each revert with their error; `UnderlyingToken`'s
   `unwrap(uint256,address)` refused; a contract on `MetaTxBase` without a fee override refuses every fee mode but
   `NONE`.
 - Typed path: transfer and payment through `mtxExecuteTransfer`, the named functions and `mtxBatchTransfer`; a

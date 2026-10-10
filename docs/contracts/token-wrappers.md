@@ -461,7 +461,7 @@ relayer's rate. (P2, controller ruling, pending the owner: not on the built `Und
 function mtxWrap(address underlying, TradeOrder calldata o, bytes calldata sig) external nonReentrant returns (uint256 minted);
 ```
 
-1. resolve the leg: `_legOf(underlying)` (Single/Multi; Zether: `underlying == this.underlying()`), which refuses an
+1. resolve the leg: `_legOf(underlying)` (UnderlyingToken; Zether: `underlying == this.underlying()`), which refuses an
    unknown "underlying" whose `mtxTrade` could be a no-op (`UnderlyingInvalid`); require `wrapEnabled`, no pending
    rate change and no reserve shortfall;
 2. require `o.receiveToken == address(this)` and `o.relayer == 0 || o.relayer == msg.sender`;
@@ -769,7 +769,7 @@ interface IOpenFactory {
 | Creation | CREATE2 salt `keccak256(abi.encode(msg.sender, salt))`, `Clones.cloneDeterministic`, `initialize` in the same call; tiers emit **only** `TieredTokenDeployed`, Zether emits `TokenDeployed` |
 | Provenance | every underlying of a tier-2/3 token is indexed: `_wrappers[creator][u]`, `_byUnderlying[u]`. `getWrapper(creator, u)` can return a multi-underlying token, whose single-asset ABI reverts: clients read `versionOf(token).kind` first; for a token with flags 5–8, the regulated views ([asset-suite.md](asset-suite.md#regulated)) |
 | Registrar | `registerImplementation`, `deprecate`, `setZetherEnabled`; none over tokens |
-| Deploy script | `Deploy.s.sol` deploys the factory and the three tier implementations (each with `chain_uid`) through the CREATE2 deployer and registers them as version 1 of their kind (`version()` of a clone is the catalogue version; the domain version string is `"1"`) |
+| Deploy script | `Deploy.s.sol` deploys the factory and the implementation of each kind (each with `chain_uid`) through the CREATE2 deployer and registers them as version 1 of their kind (`version()` of a clone is the catalogue version; the domain version string is `"1"`) |
 
 **Transitional (BUILT).** Two factories exist: `OpenFactory` v1 (`src/factory/OpenFactory.sol`, `IOpenFactory.sol`,
 `constructor(address registrar)`, `createMetaToken` then `IFactoryToken(token).initialize(...)`, `createUnregistered`
