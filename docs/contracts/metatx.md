@@ -62,7 +62,7 @@ fields instead of 32 opaque bytes. The pinned typehash below is the only payment
 every SCaaS EVM and Hedera token is the abstract contract `ERC20MetaTx` (P1b: a new file on `MetaTxBase`; `MetaTxCore` is removed, its text is in `legacy/`) on the
 generic `MetaTxBase` ([CTR-MTX-22](#CTR-MTX-22)): it adds the fee in this token (`_chargeFee`, `FeePolicy`), the typed
 `MetaTransfer` path (`mtxExecuteTransfer`, `mtxBatchTransfer`, [CTR-MTX-23](#CTR-MTX-23), [CTR-MTX-24](#CTR-MTX-24)),
-`payLane`, `mtxTrade`/cancels ([dex.md](dex.md#CTR-DEX-15)), the allowance rule
+`mtxTrade`/cancels ([dex.md](dex.md#CTR-DEX-15)), the allowance rule
 ([CTR-TOK-01](token-wrappers.md#CTR-TOK-01)) and the `ua*` Universal Account path ([CTR-UA-19](accounts.md#CTR-UA-19),
 [CTR-UA-26](accounts.md#CTR-UA-26)). The tree is `MetaTxBase → ERC20MetaTx → MetaTokenBase`
 ([CTR-TOK-21](token-wrappers.md#CTR-TOK-21)): `MetaTxBase` holds the `MetaTransaction`, nonce lanes, signature check
@@ -331,7 +331,7 @@ shape — and returns `bool`. Steps, all or nothing and cheap first as [CTR-MTX-
 |---|---|---|
 | 1 | as [CTR-MTX-17](#CTR-MTX-17) step 1 on `t` (`from ≠ address(this)` always) | as there |
 | 2 | signature over the `MetaTransfer` digest, as step 2 there | `MetaTxBadSignature` |
-| 3 | `to ≠ 0`; fee on `value` (`FeePolicy.compute`, `validateRecipient`, the payee check of [CTR-MTX-08](#CTR-MTX-08) with payee = `t.to`); balance ≥ value + fee | `PayToZero`, `FeeExceedsCap`, `FeeRecipientRequired`, `FeeRecipientIsPayee`, `MetaTxInsufficientForFee` |
+| 3 | `to ≠ 0`; fee on `value` (`FeePolicy.compute`, `validateRecipient`, the payee check of [CTR-MTX-08](#CTR-MTX-08) with payee = `t.to`; `to`, fee recipient ≠ the token); balance ≥ value + fee | `PayToZero`, `TransferToSelf`, `FeeExceedsCap`, `FeeRecipientRequired`, `FeeRecipientIsPayee`, `MetaTxInsufficientForFee` |
 | 4 | write `mtxNonce = expected + 1` | — |
 | 5 | transfer the fee, then the value (cannot fail after step 3); `entryRef ≠ 0` ⇒ `PaymentSettled(from, to, value, feeAmount, feeRecipient, entryRef)` | — |
 | 6 | `MetaTransactionExecuted(from, relayer, batch, nonce, digest, feeRecipient, fee)` | — |
@@ -898,10 +898,11 @@ named in brackets). The v2 tiers run on the new tree (last bullet).
   to `feeRecipient ∈ {0, dex}` reverts), the v1 KAT `test/vectors/metatx_v1_kat.json`.
 - **Removed with the legacy v2 pipeline (P1b).** `executeMetaTransactionWithFee`, `mtxUnwrap` and `mtxUnwrapWithFee`
   (gasless unwrap is `mtxExecute(unwrap…)`); the v2 domain `name = "SCaaS MetaToken"` with `eip712Domain().version == "2"`
-  (now version 1 plus the salt); "At most once" through `mtxPay` holds per path; the hand-decoded ops refused an address
-  word with any of its upper 96 bits set, as `abi.decode` does; the earlier gas deltas (≈ 660, 140, 85) are replaced by the
-  measurements in §10.
+  (now version 1 plus the salt); its note "At most once through `mtxPay` holds per path" ([CTR-MTX-10](#CTR-MTX-10)
+  keeps the rule); the hand-decoded ops refused an address word with any of its upper 96 bits set, as `abi.decode`
+  does; the earlier gas deltas (≈ 660, 140, 85) are replaced by the measurements in §10.
 - **P1b (BUILT):** the v2 tiers run on `ERC20MetaTx` / `MetaTxBase` — typed path, allowlists, fee classes,
   receiver-pays (`TransferToSelf` refuses the token as fee recipient before the payer pipeline); not yet:
   features/roles/`PayLib` (P1c), `UnderlyingToken` (P1d), factory/deployer (P1e), UA ledger (UA F-stream, owner ruling).
-  Wrapper tiers `Single`/`Multi` and their Hedera children exceed EIP-170 until P1d (owner ruling, 2026-10-09).
+  Wrapper tiers `Single`/`Multi` and their Hedera children exceed EIP-170 until P1d (controller ruling 2026-10-09,
+  pending the owner, HANDOFF); the deploy scripts deploy only `META_NONE` until then.
