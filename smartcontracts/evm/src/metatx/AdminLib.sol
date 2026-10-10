@@ -119,7 +119,7 @@ library AdminLib {
     function disableFeature(uint8 bit, address caller) public {
         TokenStorage storage s = _onlyOwner(caller);
         uint256 m = _bit(bit);
-        if (s.lockedFeatures & m != 0) revert ITokenAdmin.FeatureLocked(bit);
+        if ((s.lockedFeatures | ALWAYS_LOCKED) & m != 0) revert ITokenAdmin.FeatureLocked(bit);
         if (s.features & m == 0) revert ITokenAdmin.FeatureNotSet(bit);
         s.features &= ~m;
         emit ITokenAdmin.FeatureDisabled(bit, caller);

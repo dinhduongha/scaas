@@ -157,6 +157,16 @@ contract AdminLibTest is Test {
         vm.stopPrank();
     }
 
+    function test_disableFeature_alwaysLockedEvenWhenNeverSet() public {
+        h.init(AdminLib.KIND_NONE, 0, 0, ownerA, _roles(address(0)));
+        vm.startPrank(ownerA);
+        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureLocked.selector, uint8(0)));
+        h.disableFeature(0);
+        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureLocked.selector, uint8(2)));
+        h.disableFeature(2);
+        vm.stopPrank();
+    }
+
     function test_disableFeature_oneWay_lockedRefused() public {
         h.init(AdminLib.KIND_NONE, PAYABLE | MINTABLE | BURNABLE, 0, ownerA, _roles(minter));
         vm.startPrank(ownerA);

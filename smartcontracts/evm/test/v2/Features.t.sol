@@ -242,6 +242,12 @@ contract FeaturesTest is Test {
         assertEq(vm.load(address(t), lane), laneBefore);
         assertEq(vm.load(address(t), bal), balBefore);
         assertEq(t.balanceOf(alice), 100);
+        // the admin state landed in `scaas.token`: features word (MINTABLE disabled) and pendingOwner at slot + 3
+        bytes32 tok = 0x83083067f3d1caf66741d4eeefa9d3f4f0e5b0793677731d6fee7e67b774ac00;
+        assertEq(uint256(vm.load(address(t), tok)), t.features());
+        assertEq(t.features(), 0);
+        assertEq(address(uint160(uint256(vm.load(address(t), bytes32(uint256(tok) + 3))))), minter);
+        assertEq(t.pendingOwner(), minter);
     }
 
     // ------------------------------------------------------------------ IS_HEDERA (CTR-TOK-23)
