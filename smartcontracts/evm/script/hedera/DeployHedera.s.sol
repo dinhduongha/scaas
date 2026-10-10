@@ -54,7 +54,7 @@ contract DeployHedera is Script {
         console.log(out);
     }
 
-    /// TW2 §9/§11: factory v2 + tầng None Hedera (Single/Multi chờ P1d, R3), version 1; ghi thẳng vào object JSON "deploy".
+    /// TW2 §9/§11: factory v2 + tầng None Hedera (UnderlyingToken chờ việc tối ưu kích thước, P1d D2), version 1; ghi thẳng vào object JSON "deploy".
     function _deployV2(address registrar, bool register) internal {
         OpenFactoryV2 f = new OpenFactoryV2(registrar);
         // chain_uid = genesis hash (CTR-GEN-05, chain-uids.json). Default: block 0's hash as the RPC reports it. The
@@ -68,7 +68,7 @@ contract DeployHedera is Script {
             vm.roll(head);
         }
         require(uid != bytes32(0), "set CHAIN_UID (chain-uids.json)");
-        // Transitional (R3): Single/Multi are over EIP-170 until P1d (UnderlyingToken + UnderlyingLib); only META_NONE
+        // Transitional (P1d, D2): `UnderlyingToken` is over EIP-170 until the size work; only META_NONE
         // is deployed and registered, and the JSON has no implementation_meta_single/_multi keys.
         address none = address(new NoUnderlyingToken(address(f), address(0), uid, true));
         if (register) f.registerImplementation(IOpenFactoryV2.TokenKind.META_NONE, 1, none);

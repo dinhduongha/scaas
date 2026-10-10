@@ -905,9 +905,14 @@ named in brackets). The v2 tiers run on the new tree (last bullet).
 - **P1b (BUILT):** the v2 tiers run on `ERC20MetaTx` / `MetaTxBase` — typed path, allowlists, fee classes,
   receiver-pays (`TransferToSelf` refuses the token as fee recipient before the payer pipeline); not yet:
   `UnderlyingToken` (P1d), factory/deployer (P1e), UA ledger (UA F-stream, owner ruling).
-  Wrapper tiers `Single`/`Multi` and their Hedera children exceed EIP-170 until P1d (controller ruling 2026-10-09,
-  pending the owner, HANDOFF); the deploy scripts deploy only `META_NONE` until then.
+  Wrapper tiers `Single`/`Multi` and their Hedera children exceeded EIP-170 until P1d (controller ruling 2026-10-09,
+  pending the owner, HANDOFF); the deploy scripts deploy only `META_NONE`.
 - **P1c (BUILT):** `MetaTokenBase` on `AdminLib` (namespace `scaas.token`; `ITokenAdmin` carries the admin functions, events
   and errors): flags, owner and roles on kind `NONE`; `mtxPay`, `payWithFee` and `mtxPayReceiverFee` are gated by `PAYABLE`
   and stay inline (no `PayLib`, controller ruling, pending the owner); `MetaTransfer` is never gated; `IS_HEDERA` with
   `HederaLib` replaces the `NONE` Hedera child.
+- **P1d (BUILT):** one `UnderlyingToken` (kind `UNDERLYING`) replaces the tiers; its allowlist is six selectors
+  `cancelNonce`, `wrap(uint256)`, `unwrap(uint256,address,uint256)`, `wrap(address,uint256)`,
+  `unwrap(address,uint256,address,uint256)`, `addReserve(address,uint256)`, and `_mtxRule` falls back to the base rule
+  (closes P1c note (c)). `UnderlyingToken` is 25,408 B, over EIP-170 until the size work (controller ruling, pending the
+  owner); the deploy scripts still deploy only `META_NONE`.

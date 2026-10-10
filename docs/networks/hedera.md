@@ -31,7 +31,7 @@ someone else pays) is **not** used: it orders operations by the subject's accoun
 
 | Piece | Hedera-specific part | File |
 |---|---|---|
-| Token | `HederaMetaToken is MetaToken`: a Hedera account's **ED25519** signature verified through HIP-632 `isAuthorizedRaw` (`0x16a`); tier-2 wrappers on HTS tokens ([wrappers](#wrappers)) | `smartcontracts/evm/src/hedera/HederaMetaToken.sol` (v1), `HederaTokensV2.sol` + `HederaLib.sol` (v2) |
+| Token | `HederaMetaToken is MetaToken`: a Hedera account's **ED25519** signature verified through HIP-632 `isAuthorizedRaw` (`0x16a`); tier-2 wrappers on HTS tokens ([wrappers](#wrappers)) | `smartcontracts/evm/src/hedera/HederaMetaToken.sol` (v1), `HederaLib.sol` (v2) |
 | Account auth | library calling `isAuthorizedRaw` with `CALL` (100 000 gas cap); a revert or garbage ⇒ `false` | `smartcontracts/evm/src/hedera/HederaAccountAuth.sol` |
 | Mandate | `HederaMandateWallet is MandateWallet` adds `mtxExecuteAsOwnerRaw` for ED25519 owners ([NET-HED-03](#NET-HED-03)) | `smartcontracts/evm/src/hedera/HederaMandateWallet.sol` |
 | DEX | unchanged — every leg is a meta-tx on the token, so an ED25519 leg goes through `HederaMetaToken` (target: a `TradeOrder` verified by the Hedera token's signature check, [Mandate and DEX](#mandate)) | — |
@@ -130,7 +130,7 @@ system contract in a static frame. Tested on testnet (initcode through `eth_call
 only caller is `executeMetaTransaction` (non-view) and `0x16a` writes no state and calls back nothing; the forge
 mock writes storage, so it too HALTs under STATICCALL (a regression test). BUILT. Removing `view` from the parent so
 the cast disappears is an open clean-up item, done only when the parent signature changes for another reason (the
-cast sits in v1, `HederaMetaToken.sol:28`, and in `HederaLib.sol` (`requireValid`) and `HederaTokensV2.sol`;
+cast sits in v1, `HederaMetaToken.sol:28`, and in `HederaLib.sol` (`requireValid`);
 marked in `HederaAccountAuth.sol:31`).
 
 <a id="NET-HED-15"></a>**NET-HED-15** — **Hedera ED25519 subjects need a raw signer.** The contracts accept raw
@@ -298,8 +298,8 @@ warning, which also goes into the wrapper's risk disclosure. SPECIFIED.
 <a id="wrappers"></a>
 
 <a id="NET-HED-14"></a>**NET-HED-14** — **Hedera v2 wrappers check every underlying in `initialize`, fail-closed,
-through the HTS precompile `0x167`.** `HederaSingleUnderlyingToken` and
-`HederaMultiUnderlyingToken` inherit their tier; the HIP-632 signature rule is the `IS_HEDERA` branch in `MetaTokenBase`
+through the HTS precompile `0x167`.** There are no Hedera wrapper children (P1d): `UnderlyingLib` init calls
+`HederaLib.checkAndAssociate` under `IS_HEDERA`, and a native (HBAR) leg has 8 decimals, the tinybar (controller ruling, pending the owner); the HIP-632 signature rule is the `IS_HEDERA` branch in `MetaTokenBase`
 (`HederaLib.requireValid`), exactly as `HederaMetaToken` does, and kind `NONE` on Hedera is `NoUnderlyingToken` with `IS_HEDERA`. In `initialize`, for every underlying `u`:
 
 1. `isToken(u)` → `(rc, isHts)`; `rc ≠ SUCCESS` ⇒ `HtsQueryFailed(u, rc)`.

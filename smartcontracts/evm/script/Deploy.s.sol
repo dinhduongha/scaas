@@ -54,7 +54,7 @@ contract Deploy is Script {
         console.log(out);
     }
 
-    /// TW2 §9: factory v2 + tầng None (Single/Multi chờ P1d, R3), version 1 của kind riêng (số version theo kind; chuỗi domain "2"
+    /// TW2 §9: factory v2 + tầng None (UnderlyingToken chờ việc tối ưu kích thước, P1d D2), version 1 của kind riêng (số version theo kind; chuỗi domain "2"
     /// là thế hệ hợp đồng). Factory v2 không đăng ký MetaToken v1. Ghi thẳng vào object JSON "deploy" (run() đã
     /// hết chỗ trên stack).
     function _deployV2(address registrar, bool register, address subjectImpl) internal {
@@ -70,7 +70,7 @@ contract Deploy is Script {
             vm.roll(head);
         }
         require(uid != bytes32(0), "set CHAIN_UID (chain-uids.json)");
-        // Transitional (R3): Single/Multi are over EIP-170 until P1d (UnderlyingToken + UnderlyingLib); only META_NONE
+        // Transitional (P1d, D2): `UnderlyingToken` is over EIP-170 until the size work; only META_NONE
         // is deployed and registered, and the JSON has no implementation_meta_single/_multi keys.
         address none = address(new NoUnderlyingToken(address(f), subjectImpl, uid, false));
         if (register) f.registerImplementation(IOpenFactoryV2.TokenKind.META_NONE, 1, none);
