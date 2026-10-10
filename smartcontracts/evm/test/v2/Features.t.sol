@@ -8,10 +8,6 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
 import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
-import {SingleUnderlyingToken} from "../../src/metatx/SingleUnderlyingToken.sol";
-import {MultiUnderlyingToken} from "../../src/metatx/MultiUnderlyingToken.sol";
-import {MockERC20} from "../helpers/Mocks.sol";
-import {Puller} from "../helpers/WalletMocks.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IERC20Payment} from "../../src/metatx/IERC20Payment.sol";
@@ -276,48 +272,5 @@ contract FeaturesTest is Test {
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         e.mtxExecuteTransfer(x, abi.encodePacked(rr, vs));
-    }
-
-    // ------------------------------------------------------------------ legacy wrappers (ruling C5)
-
-    function _checkWrapper(address tok, uint256 extra) internal view {
-        NoUnderlyingToken t = NoUnderlyingToken(tok);   // same ABI for the admin getters
-        assertEq(t.kind(), 1);
-        assertEq(t.owner(), address(0));
-        assertEq(t.features(), t.lockedFeatures());
-        assertEq(t.features(), PAYABLE | extra);
-    }
-
-    function test_wrappersReportLegacyFeatures() public {
-        MockERC20 u = new MockERC20("U", "U", 6);
-        address[] memory us = new address[](1);
-        us[0] = address(u);
-        address[] memory us2 = new address[](2);
-        us2[0] = address(u);
-        us2[1] = address(new MockERC20("V", "V", 6));
-        uint256[] memory n = new uint256[](2);
-        uint256[] memory d = new uint256[](2);
-        n[0] = n[1] = d[0] = d[1] = 1;
-        SingleUnderlyingToken.RateConfig memory fixedRate;
-        SingleUnderlyingToken.RateConfig memory adj = SingleUnderlyingToken.RateConfig({adjustable: true,
-            rateAdmin: address(new Puller()), rateDelay: 7 days, maxRateStepBps: 100});
-
-        address sImpl = address(new SingleUnderlyingToken(address(this), address(0), UID, false));
-        address s1 = Clones.clone(sImpl);
-        SingleUnderlyingToken(s1).initialize(address(this), us, 1, abi.encode("Wrapped", "WRP", uint8(6), 1, 1, fixedRate));
-        _checkWrapper(s1, 0);
-        address s2 = Clones.clone(sImpl);
-        SingleUnderlyingToken(s2).initialize(address(this), us, 1, abi.encode("Wrapped", "WRP", uint8(6), 1, 1, adj));
-        _checkWrapper(s2, 1 << 3);
-
-        address mImpl = address(new MultiUnderlyingToken(address(this), address(0), UID, false));
-        address m1 = Clones.clone(mImpl);
-        MultiUnderlyingToken(m1).initialize(address(this), us2, 1,
-            abi.encode("Any USD", "aUSD", uint8(18), n, d, fixedRate, address(0xCAFE)));
-        _checkWrapper(m1, 1 << 4);
-        address m2 = Clones.clone(mImpl);
-        MultiUnderlyingToken(m2).initialize(address(this), us2, 1,
-            abi.encode("Any USD", "aUSD", uint8(18), n, d, fixedRate, address(0)));
-        _checkWrapper(m2, 0);
     }
 }

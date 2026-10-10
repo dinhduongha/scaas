@@ -5,19 +5,17 @@ import {Test, Vm} from "forge-std/Test.sol";
 import {OpenFactoryV2} from "../../src/factory/OpenFactoryV2.sol";
 import {IOpenFactoryV2} from "../../src/common/IOpenFactoryV2.sol";
 import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
-import {SingleUnderlyingToken} from "../../src/metatx/SingleUnderlyingToken.sol";
-import {MultiUnderlyingToken} from "../../src/metatx/MultiUnderlyingToken.sol";
+import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
 import {MetaToken} from "../../src/metatx/MetaToken.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
-import {UID_, noneInit} from "./helpers/V2Fixture.sol";
+import {UID_, noneInit, underlyingInit, Rate} from "./helpers/V2Fixture.sol";
 
 /// T4: factory v2 (TW2 §9, R130).
 contract FactoryV2Test is Test {
     OpenFactoryV2 f;
     address registrar = address(0xF00D);
     NoUnderlyingToken noneImpl;
-    SingleUnderlyingToken singleImpl;
-    MultiUnderlyingToken multiImpl;
+    UnderlyingToken underlyingImpl;
     MockERC20 usdc;
     MockERC20 usdt;
     MockERC20 dai;
@@ -33,12 +31,10 @@ contract FactoryV2Test is Test {
     function setUp() public {
         f = new OpenFactoryV2(registrar);
         noneImpl = new NoUnderlyingToken(address(f), address(0), UID_, false);
-        singleImpl = new SingleUnderlyingToken(address(f), address(0), UID_, false);
-        multiImpl = new MultiUnderlyingToken(address(f), address(0), UID_, false);
+        underlyingImpl = new UnderlyingToken(address(f), address(0), UID_, false);
         vm.startPrank(registrar);
         f.registerImplementation(NONE, 1, address(noneImpl));
-        f.registerImplementation(SINGLE, 1, address(singleImpl));
-        f.registerImplementation(MULTI, 1, address(multiImpl));
+        f.registerImplementation(SINGLE, 1, address(underlyingImpl));
         vm.stopPrank();
         usdc = new MockERC20("USD Coin", "USDC", 6);
         usdt = new MockERC20("Tether", "USDT", 6);
@@ -56,16 +52,12 @@ contract FactoryV2Test is Test {
         return abi.encode(noneInit("Points", "PTS", 0, 1000, holder, address(0)));
     }
 
-    function _singleInit() internal pure returns (bytes memory) {
-        SingleUnderlyingToken.RateConfig memory c;
-        return abi.encode("Wrapped USDC", "wUSDC", uint8(6), uint256(1), uint256(1), c);
-    }
-
-    function _multiInit(uint256 n) internal pure returns (bytes memory) {
-        SingleUnderlyingToken.RateConfig memory c;
-        uint256[] memory nums = new uint256[](n);
-        for (uint256 i; i < n; ++i) nums[i] = 1;
-        return abi.encode("Any USD", "aUSD", uint8(18), nums, nums, c, address(0));
+    /// `UnderlyingInit` for legs `us` at 1:1, rates fixed, no guardian, no owner.
+    function _init(address[] memory us) internal pure returns (bytes memory) {
+        Rate memory c;
+        uint256[] memory nums = new uint256[](us.length);
+        for (uint256 i; i < us.length; ++i) nums[i] = 1;
+        return abi.encode(underlyingInit(us, nums, nums, 6, c, address(0), address(0)));
     }
 
     function test_createsEachTierWithProvenance() public {
@@ -75,13 +67,13 @@ contract FactoryV2Test is Test {
         assertEq(NoUnderlyingToken(a).version(), 1);
         assertEq(NoUnderlyingToken(a).factory(), address(f));
         vm.prank(alice);
-        address b = f.createTiered(SINGLE, 1, _us(1), _singleInit(), "s2");
+        address b = f.createTiered(SINGLE, 1, _us(1), _init(_us(1)), "s2");
         vm.prank(alice);
-        address c = f.createTiered(MULTI, 1, _us(3), _multiInit(3), "s3");
+        address c = f.createTiered(SINGLE, 1, _us(3), _init(_us(3)), "s3"); // D9: SINGLE takes 1–8 legs
         assertTrue(f.isDeployedHere(c));
         assertEq(f.creatorOf(c), alice);
         (IOpenFactoryV2.TokenKind k, uint64 v) = f.versionOf(c);
-        assertEq(uint8(k), uint8(MULTI));
+        assertEq(uint8(k), uint8(SINGLE));
         assertEq(v, 1);
         // every underlying of a wrapper is indexed; tier 1 is not a wrapper of anything
         assertEq(f.getWrapper(alice, address(usdc)), b);
@@ -98,27 +90,28 @@ contract FactoryV2Test is Test {
         vm.expectRevert(abi.encodeWithSelector(e, 1));
         f.createTiered(NONE, 1, _us(1), _noneInit(alice), "a");
         vm.expectRevert(abi.encodeWithSelector(e, 0));
-        f.createTiered(SINGLE, 1, _us(0), _singleInit(), "a");
-        vm.expectRevert(abi.encodeWithSelector(e, 2));
-        f.createTiered(SINGLE, 1, _us(2), _singleInit(), "a");
-        vm.expectRevert(abi.encodeWithSelector(e, 1));
-        f.createTiered(MULTI, 1, _us(1), _multiInit(1), "a");
+        f.createTiered(SINGLE, 1, _us(0), _init(_us(0)), "a");
+        // D9: SINGLE takes 1–8 legs; nothing implements MULTI any more
+        address two = f.createTiered(SINGLE, 1, _us(2), _init(_us(2)), "a");
+        assertEq(UnderlyingToken(two).underlyings().length, 2);
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactoryV2.VersionUnknown.selector, MULTI, 1));
+        f.createTiered(MULTI, 1, _us(2), _init(_us(2)), "b");
         address[] memory nine = _us(9);
         vm.expectRevert(abi.encodeWithSelector(e, 9));
-        f.createTiered(MULTI, 1, nine, _multiInit(9), "a");
+        f.createTiered(SINGLE, 1, nine, _init(nine), "b");
         address[] memory eight = new address[](8);
         for (uint256 i; i < 8; ++i) eight[i] = nine[i];
-        f.createTiered(MULTI, 1, eight, _multiInit(8), "a");
+        f.createTiered(SINGLE, 1, eight, _init(eight), "b");
     }
 
     function test_entryPointsMatchTheirKinds() public {
         bytes4 e = IOpenFactoryV2.VersionKindMismatch.selector;
         vm.expectRevert(abi.encodeWithSelector(e, META, SINGLE));
-        f.createUnregistered(SINGLE, address(singleImpl), address(usdc), address(0), _singleInit(), "a");
+        f.createUnregistered(SINGLE, address(underlyingImpl), address(usdc), address(0), _init(_us(1)), "a");
         vm.expectRevert(abi.encodeWithSelector(e, NONE, META));
         f.createTiered(META, 1, new address[](0), "", "a");
         vm.expectRevert(abi.encodeWithSelector(e, NONE, ZETHER));
-        f.createTieredUnregistered(ZETHER, address(singleImpl), new address[](0), "", "a");
+        f.createTieredUnregistered(ZETHER, address(underlyingImpl), new address[](0), "", "a");
     }
 
     function test_registrationChecksKindAndFactory() public {
@@ -126,6 +119,9 @@ contract FactoryV2Test is Test {
         vm.startPrank(registrar);
         vm.expectRevert(abi.encodeWithSelector(e, SINGLE, NONE));
         f.registerImplementation(SINGLE, 2, address(noneImpl));
+        // D9: `UnderlyingToken` reports META_SINGLE for every leg count
+        vm.expectRevert(abi.encodeWithSelector(e, MULTI, SINGLE));
+        f.registerImplementation(MULTI, 1, address(underlyingImpl));
         // no answer (a v1 MetaToken has no tokenKind())
         MetaToken v1 = new MetaToken(address(f), address(0));
         vm.expectRevert(abi.encodeWithSelector(e, NONE, META));
@@ -145,7 +141,7 @@ contract FactoryV2Test is Test {
         vm.expectRevert(OpenFactoryV2.NotRegistrar.selector);
         f.registerImplementation(NONE, 3, address(noneImpl));
         assertEq(f.latestVersion(NONE), 1);
-        assertEq(f.implementationOf(SINGLE, 1), address(singleImpl));
+        assertEq(f.implementationOf(SINGLE, 1), address(underlyingImpl));
     }
 
     function test_v1PathStillWorksInFactoryV2() public {
@@ -160,16 +156,16 @@ contract FactoryV2Test is Test {
     }
 
     function test_unregisteredTieredIsVersionZeroAndChecked() public {
-        SingleUnderlyingToken own = new SingleUnderlyingToken(address(f), address(0), UID_, false);
+        UnderlyingToken own = new UnderlyingToken(address(f), address(0), UID_, false);
         vm.prank(bob);
-        address t = f.createTieredUnregistered(SINGLE, address(own), _us(1), _singleInit(), "u");
+        address t = f.createTieredUnregistered(SINGLE, address(own), _us(1), _init(_us(1)), "u");
         (, uint64 v) = f.versionOf(t);
         assertEq(v, 0);
-        assertEq(SingleUnderlyingToken(t).version(), 0);
+        assertEq(UnderlyingToken(t).version(), 0);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactoryV2.ImplementationNotAContract.selector, address(0xDEAD)));
-        f.createTieredUnregistered(SINGLE, address(0xDEAD), _us(1), _singleInit(), "u");
+        f.createTieredUnregistered(SINGLE, address(0xDEAD), _us(1), _init(_us(1)), "u");
         vm.expectRevert(abi.encodeWithSelector(IOpenFactoryV2.VersionKindMismatch.selector, MULTI, SINGLE));
-        f.createTieredUnregistered(MULTI, address(own), _us(2), _multiInit(2), "u");
+        f.createTieredUnregistered(MULTI, address(own), _us(2), _init(_us(2)), "u");
     }
 
     function test_saltIsScopedByCreator() public {
@@ -188,7 +184,7 @@ contract FactoryV2Test is Test {
         address[] memory us = _us(2);
         vm.recordLogs();
         vm.prank(alice);
-        address t = f.createTiered(MULTI, 1, us, _multiInit(2), "e");
+        address t = f.createTiered(SINGLE, 1, us, _init(us), "e");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 tiered;
         for (uint256 i; i < logs.length; ++i) {
@@ -199,9 +195,9 @@ contract FactoryV2Test is Test {
             assertEq(address(uint160(uint256(logs[i].topics[2]))), alice);
             (IOpenFactoryV2.TokenKind k, uint64 v, address impl, address[] memory got) =
                 abi.decode(logs[i].data, (IOpenFactoryV2.TokenKind, uint64, address, address[]));
-            assertEq(uint8(k), uint8(MULTI));
+            assertEq(uint8(k), uint8(SINGLE));
             assertEq(v, 1);
-            assertEq(impl, address(multiImpl));
+            assertEq(impl, address(underlyingImpl));
             assertEq(got.length, 2);
             assertEq(got[1], us[1]);
         }
@@ -211,8 +207,7 @@ contract FactoryV2Test is Test {
     function test_implementationSizes() public view {
         assertLe(address(noneImpl).code.length, 20_480); // CTR-TOK-24 (measured 20,038)
         assertLe(address(f).code.length, 24_576);
-        // Transitional (R3): wrappers over EIP-170 until P1d (`UnderlyingLib`); measured 28,296 / 29,147
-        assertLe(address(singleImpl).code.length, 28_672);
-        assertLe(address(multiImpl).code.length, 29_696);
+        // Transitional (P1d, D2): over EIP-170 until the size work; measured 25,408
+        assertLe(address(underlyingImpl).code.length, 26_624);
     }
 }

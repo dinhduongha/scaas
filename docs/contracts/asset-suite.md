@@ -61,7 +61,7 @@ gasless wrap (PLANNED); HTS-native regulated tokens on Hedera (owner: HSCS contr
 (eligibility is expressed as attestation flags whose meaning the issuer defines); a new DEX contract (managed markets
 are node policy over `SCaaSDex` plus token-level enforcement).
 
-Measured runtime sizes of the base tiers (existing artifacts): `SingleUnderlyingToken` 21 637, `MultiUnderlyingToken`
+Measured runtime sizes of the base tiers (before `UnderlyingToken` replaced them): `SingleUnderlyingToken` 21 637, `MultiUnderlyingToken`
 22 561, `HederaMultiUnderlyingToken` 23 885 bytes — 2.9 k (Single), 2.0 k (Multi) and 0.7 k (Hedera Multi) bytes of
 headroom below 24 576, less than the control surface; hence the controls live in `AdminLib`, an external library
 ([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)).
@@ -920,7 +920,7 @@ The configuration wizard (in the app and any client system) works over `IOpenFac
 | Internal 1:1 money | `createToken` kind `UNDERLYING`, one leg, `num = den = 1` (built: `createTiered(META_SINGLE, 1, [underlying], …)`, `createMetaToken(1, underlying, …)`) | underlying stablecoin; wrap/unwrap through the clone | **BUILT** |
 | Wrapper with a rate | `createToken` kind `UNDERLYING` (built: `createTiered(META_SINGLE, …)`) | underlying, `num/den`, fixed or adjustable (rate role, delay, step) | **BUILT** |
 | Confidential money | `createZetherToken(1, underlying, verifier, initData, salt)` | `registry`, `shieldScale`, `maxDecryptableShielded ≤ 2^54`, `confidentialFee`, auditor key | **BUILT** (dev chains only) |
-| Multi-underlying money (e.g. xDAI/USDC/USDT) | `createToken` kind `UNDERLYING` with 2–8 legs (built: `createTiered(META_MULTI, …)`) | 2–8 underlyings, per-leg rates, guardian | **BUILT** |
+| Multi-underlying money (e.g. xDAI/USDC/USDT) | `createToken` kind `UNDERLYING` with 2–8 legs (built: `createTiered(META_SINGLE, …)`, 1–8 legs) | 2–8 underlyings, per-leg rates, guardian | **BUILT** |
 | Vesting / streaming | `VestingGrant` clone per grant | cliff, duration, interval or tranches, approver, revocability | **SPECIFIED** |
 | Controlled / security / bond | `createToken` with flags 5–8 + `Distribution` / `ExchangeOffer` | issuer and compliance contracts, the flags, `ComplianceRegistry` + `requiredFlags`, `termsHash` | **SPECIFIED** |
 | Non-fungible in-app assets (ERC-721/1155 with meta-tx) | new kinds | — | **PLANNED** |

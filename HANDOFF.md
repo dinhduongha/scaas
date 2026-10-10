@@ -1,5 +1,40 @@
 # HANDOFF — scaas
 
+## Session 2026-10-11 (P1d)
+
+**State:** P1d on branch `p1d-underlying`, merge pending the final review (813 forge tests; e2e 4/4 and e2e_hedera 1/1;
+docs checker 0 errors). Not pushed. Plan `docs/superpowers/plans/2026-10-11-p1d-underlyingtoken.md`.
+
+**P1d delivered:** one `UnderlyingToken` (kind `UNDERLYING`, 1–8 legs) over the external `UnderlyingLib`
+(`scaas.underlying`, slot formula in CTR-TOK-24); `SingleUnderlyingToken`, `MultiUnderlyingToken`, `HederaTokensV2` and the
+Hedera children are gone (HTS check and association run in `UnderlyingLib` init under `IS_HEDERA`). Native-coin leg
+(CTR-TOK-26). Rate admin and guardian are `AdminLib` roles (`renounceRole(bit)`; `rateAdmin()`, `guardian()`,
+`renounceRateAdmin`, `renounceGuardian` removed). `IUnderlyingToken` carries the events and errors. `_legCount` is removed:
+linear layout is ERC-20 slots 0–4. Tests: `Underlying.t.sol` (9), `NativeLeg.t.sol` (13), the rest ported.
+
+**Rulings D1–D12 (plan header).** For the owner: **D2** size is out of scope: `UnderlyingToken` 25,408 B is over EIP-170
+(24,576) and the 20,480 B budget, so it cannot be deployed on a real chain; the deploy scripts still deploy only
+`META_NONE`; the size work (at the latest the P1e CI gate) must bring it down. **D4** rate admin and guardian are roles,
+a role may have several holders, `renounceRole` leaves the rate and a pending change. **D6** native leg has 18 decimals,
+8 on Hedera (tinybars; display only). Also: D1 `mtxWrap` and `NativeNotGasless` move to P2; D5
+`disableFeature(RATE_ADJUSTABLE)` cancels a pending change; D7 `NativeValueMismatch(value, expected)`; D8 init =
+`abi.encode(UnderlyingInit)`, legs must equal the factory's `underlyings`; D9 `META_SINGLE` takes 1–8 legs, nothing
+implements `META_MULTI`.
+
+**Sizes (forge build --sizes):** `UnderlyingToken` 25,408, `UnderlyingLib` 11,018, `NoUnderlyingToken` 20,038,
+`AdminLib` 3,406, `HederaLib` 753; over 24,576: `UnderlyingToken` and `ZetherToken` (28,849) only.
+
+**e2e:** the first `e2e` run failed all four ("forge script failed", 0.6 s); a second run and each test alone passed 4/4
+(the Deploy script also ran by hand against anvil). Cause not found; likely a cold forge build for profile
+`private7622`. `e2e_hedera` 1/1.
+
+**Parked (TODO, P1d follow-ups):** test gaps (single-asset selector through `mtxExecute` on a two-leg token, native
+`UnderlyingTransferMismatch`, native `addReserve` with value > amount, guardian revoke); `OpenFactoryV2` `META_MULTI`
+count branch is dead until P1e.
+
+**Next action:** after the final review, merge `p1d-underlying` (`--no-ff`, local), then write the P1e plan (factory
+`createToken`/`TokenConfig`, CREATE2 deployer, deletions of the v1/v2 lines, size gate; D2 lands here at the latest).
+
 ## Session 2026-10-10 (P1c)
 
 **State:** P1c merged into `main` as `3a43c2e`, not pushed (792 forge tests, e2e 4/4 + e2e_hedera 1/1, KAT vectors
@@ -21,7 +56,7 @@ through `mtxExecuteTransfer`); gating `entryRef ≠ 0` would contradict T2 — o
 **Sizes (runtime B):** `NoUnderlyingToken` 20,038 (<= 20,480); over EIP-170: `Single` 28,296, `Multi` 29,147, `HederaSingle`
 29,201, `HederaMulti` 30,052, `ZetherToken` 28,849 (until P1d); `AdminLib` 3,403, `HederaLib` 753.
 
-**Next action:** write the **P1d** plan (`UnderlyingLib` + `UnderlyingToken`).
+**Next action:** (superseded by the P1d section above) write the **P1d** plan (`UnderlyingLib` + `UnderlyingToken`).
 
 ## Shutdown 2026-10-10
 

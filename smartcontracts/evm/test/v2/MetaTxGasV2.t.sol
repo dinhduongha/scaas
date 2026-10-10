@@ -8,14 +8,14 @@ import {MetaToken} from "../../src/metatx/MetaToken.sol";
 import {OpenFactoryV2} from "../../src/factory/OpenFactoryV2.sol";
 import {IOpenFactoryV2} from "../../src/common/IOpenFactoryV2.sol";
 import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
-import {SingleUnderlyingToken} from "../../src/metatx/SingleUnderlyingToken.sol";
+import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {IERC20MetaTxV1} from "../../src/metatx/IERC20MetaTxV1.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
-import {noneInit} from "./helpers/V2Fixture.sol";
+import {noneInit, underlyingInit, Rate} from "./helpers/V2Fixture.sol";
 
 contract Always1271 {
     function isValidSignature(bytes32, bytes memory) external pure returns (bytes4) { return 0x1626ba7e; }
@@ -44,7 +44,7 @@ contract MetaTxGasV2Test is Test {
     NoUnderlyingToken v2b; // same state as v2, for the named-vs-generic rows
     NoUnderlyingToken v2c;
     Always1271 acct;
-    SingleUnderlyingToken w;
+    UnderlyingToken w;
     MockERC20 usdc;
 
     function setUp() public {
@@ -57,7 +57,7 @@ contract MetaTxGasV2Test is Test {
         f2.registerImplementation(IOpenFactoryV2.TokenKind.META_NONE, 1,
             address(new NoUnderlyingToken(address(f2), address(0), UID, false)));
         f2.registerImplementation(IOpenFactoryV2.TokenKind.META_SINGLE, 1,
-            address(new SingleUnderlyingToken(address(f2), address(0), UID, false)));
+            address(new UnderlyingToken(address(f2), address(0), UID, false)));
         acct = new Always1271();
         v2 = _v2(f2, "a");
         v2b = _v2(f2, "b");
@@ -67,9 +67,11 @@ contract MetaTxGasV2Test is Test {
         usdc = new MockERC20("USD Coin", "USDC", 6);
         address[] memory us = new address[](1);
         us[0] = address(usdc);
-        SingleUnderlyingToken.RateConfig memory c;
-        w = SingleUnderlyingToken(f2.createTiered(IOpenFactoryV2.TokenKind.META_SINGLE, 1, us,
-            abi.encode("W", "W", uint8(6), uint256(1), uint256(1), c), "w"));
+        uint256[] memory one = new uint256[](1);
+        one[0] = 1;
+        Rate memory c;
+        w = UnderlyingToken(f2.createTiered(IOpenFactoryV2.TokenKind.META_SINGLE, 1, us,
+            abi.encode(underlyingInit(us, one, one, 6, c, address(0), address(0))), "w"));
         usdc.mint(signer, 1_000e6);
         vm.startPrank(signer);
         usdc.approve(address(w), type(uint256).max);

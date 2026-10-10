@@ -39,9 +39,6 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryTokenV2, I
     ///         take the HIP-632 path.
     bool public immutable IS_HEDERA;
 
-    /// @dev Transitional (P1d moves it to `scaas.underlying`): number of underlying legs, 0 on tier 1.
-    uint8 internal _legCount;
-
     error NotFactory();
     error AlreadyInitialized();
     error MtxModeShape(uint32 mode);
@@ -108,7 +105,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryTokenV2, I
     function grantRole(uint8 bit, address account) external { AdminLib.grantRole(bit, account, _msgSender()); }
     function revokeRole(uint8 bit, address account) external { AdminLib.revokeRole(bit, account, _msgSender()); }
     function renounceRole(uint8 bit) external { AdminLib.renounceRole(bit, _msgSender()); }
-    function disableFeature(uint8 bit) external { AdminLib.disableFeature(bit, _msgSender()); }
+    function disableFeature(uint8 bit) external virtual { AdminLib.disableFeature(bit, _msgSender()); }
     function transferOwnership(address newOwner) external { AdminLib.transferOwnership(newOwner, _msgSender()); }
     function acceptOwnership() external { AdminLib.acceptOwnership(_msgSender()); }
     function renounceOwnership() external { AdminLib.renounceOwnership(_msgSender()); }

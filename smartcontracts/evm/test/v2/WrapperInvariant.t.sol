@@ -8,15 +8,15 @@ import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.so
 import {V2Fixture} from "./helpers/V2Fixture.sol";
 import {MockERC20, FeeOnTransferERC20} from "../helpers/Mocks.sol";
 import {SlashableERC20, RateAdminForwarder} from "./helpers/V2Mocks.sol";
-import {SingleUnderlyingToken} from "../../src/metatx/SingleUnderlyingToken.sol";
-import {MultiUnderlyingToken} from "../../src/metatx/MultiUnderlyingToken.sol";
+import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
+import {IUnderlyingToken} from "../../src/metatx/IUnderlyingToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
-/// @notice Handler cho `MultiUnderlyingToken` ba chân (thường / phí-chuyển / chịu sốc âm), tỉ lệ điều chỉnh được,
+/// @notice Handler cho `UnderlyingToken` ba chân (thường / phí-chuyển / chịu sốc âm), tỉ lệ điều chỉnh được,
 ///         có guardian (TW2 §10.4, review M6). Mọi revert CÓ CHỦ ĐÍCH được bắt và phân loại; revert ngoài danh sách
 ///         ghi vào `unexpected`, nên `fail_on_revert` không bao giờ nuốt một lỗi thật.
 contract WrapperHandler is Test {
-    MultiUnderlyingToken public t;
+    UnderlyingToken public t;
     MockERC20[3] public legs;
     RateAdminForwarder public adm;
     uint256[3] public pks = [uint256(0xA1), 0xB2, 0xC3];
@@ -47,7 +47,7 @@ contract WrapperHandler is Test {
         adm = new RateAdminForwarder();
     }
 
-    function init(MultiUnderlyingToken t_, MockERC20[3] memory legs_) external {
+    function init(UnderlyingToken t_, MockERC20[3] memory legs_) external {
         t = t_;
         legs = legs_;
         lastSlack = _slack();
@@ -142,9 +142,9 @@ contract WrapperHandler is Test {
             if (c.w == attacker && !_le(t.balanceOf(c.w) - c.wBefore, c.den, amount, c.num)) attackerProfited = true;
         } catch (bytes memory err) {
             vm.stopPrank();
-            _expect(err, _sels(SingleUnderlyingToken.WrapTooSmall.selector,
-                SingleUnderlyingToken.WrapPausedForRateChange.selector, SingleUnderlyingToken.WrapDisabledFor.selector,
-                SingleUnderlyingToken.ReserveShortfall.selector, NONE));
+            _expect(err, _sels(IUnderlyingToken.WrapTooSmall.selector,
+                IUnderlyingToken.WrapPausedForRateChange.selector, IUnderlyingToken.WrapDisabledFor.selector,
+                IUnderlyingToken.ReserveShortfall.selector, NONE));
         }
     }
 
@@ -164,8 +164,8 @@ contract WrapperHandler is Test {
                 attackerProfited = true;
             }
         } catch (bytes memory err) {
-            _expect(err, _sels(SingleUnderlyingToken.UnwrapTooSmall.selector,
-                SingleUnderlyingToken.InsufficientReserve.selector, SingleUnderlyingToken.UnwrapRecipientInvalid.selector,
+            _expect(err, _sels(IUnderlyingToken.UnwrapTooSmall.selector,
+                IUnderlyingToken.InsufficientReserve.selector, IUnderlyingToken.UnwrapRecipientInvalid.selector,
                 IERC20Errors.ERC20InsufficientBalance.selector, NONE));
         }
     }
@@ -190,8 +190,8 @@ contract WrapperHandler is Test {
         try t.mtxExecute(m, abi.encodePacked(rr, ss, v)) {
             ghostReserve[c.i] -= c.balBefore - c.u.balanceOf(address(t));
         } catch (bytes memory err) {
-            _expect(err, _sels(SingleUnderlyingToken.UnwrapTooSmall.selector,
-                SingleUnderlyingToken.InsufficientReserve.selector, SingleUnderlyingToken.UnwrapRecipientInvalid.selector,
+            _expect(err, _sels(IUnderlyingToken.UnwrapTooSmall.selector,
+                IUnderlyingToken.InsufficientReserve.selector, IUnderlyingToken.UnwrapRecipientInvalid.selector,
                 IERC20Errors.ERC20InsufficientBalance.selector, NONE));
         }
     }
@@ -212,8 +212,8 @@ contract WrapperHandler is Test {
         try t.addReserve(address(u), amount) {
             ghostReserve[i] += u.balanceOf(address(t)) - balBefore;
         } catch (bytes memory err) {
-            _expect(err, _sels(SingleUnderlyingToken.WrapDisabledFor.selector,
-                SingleUnderlyingToken.ReserveShortfall.selector, NONE, NONE, NONE));
+            _expect(err, _sels(IUnderlyingToken.WrapDisabledFor.selector,
+                IUnderlyingToken.ReserveShortfall.selector, NONE, NONE, NONE));
         }
         vm.stopPrank();
     }
@@ -256,7 +256,7 @@ contract WrapperHandler is Test {
         (uint256 n2, uint256 d2) = _candidate(n, d, bound(stepSeed, 0, t.maxRateStepBps()), up);
         if (n2 == 0 || d2 == 0 || n2 > type(uint96).max || d2 > type(uint96).max) return;
         if (!_withinStep(n, d, n2, d2)) return; // outside the bound: not this handler's business
-        adm.exec(address(t), abi.encodeCall(SingleUnderlyingToken.proposeRate, (address(legs[i]), uint96(n2), uint96(d2))));
+        adm.exec(address(t), abi.encodeCall(UnderlyingToken.proposeRate, (address(legs[i]), uint96(n2), uint96(d2))));
         proposedAt = block.timestamp;
         (pOldNum, pOldDen) = (uint96(n), uint96(d));
     }
@@ -277,8 +277,8 @@ contract WrapperHandler is Test {
     }
 
     function cancel() external tracked(false) {
-        try adm.exec(address(t), abi.encodeCall(SingleUnderlyingToken.cancelRate, ())) {} catch (bytes memory err) {
-            _expect(err, _sels(SingleUnderlyingToken.NoRateChangePending.selector, NONE, NONE, NONE, NONE));
+        try adm.exec(address(t), abi.encodeCall(UnderlyingToken.cancelRate, ())) {} catch (bytes memory err) {
+            _expect(err, _sels(IUnderlyingToken.NoRateChangePending.selector, NONE, NONE, NONE, NONE));
         }
     }
 
@@ -292,15 +292,15 @@ contract WrapperHandler is Test {
         // only the admin executes
         vm.prank(attacker);
         try t.executeRate() { badExecution = true; } catch {}
-        try adm.exec(address(t), abi.encodeCall(SingleUnderlyingToken.executeRate, ())) {
+        try adm.exec(address(t), abi.encodeCall(UnderlyingToken.executeRate, ())) {
             if (u == address(0) || shortfall || block.timestamp < eta || eta != proposedAt + t.rateDelay()) {
                 badExecution = true;
             }
             if (!_withinStep(pOldNum, pOldDen, num, den)) badExecution = true;
         } catch (bytes memory err) {
-            _expect(err, _sels(SingleUnderlyingToken.NoRateChangePending.selector,
-                SingleUnderlyingToken.RateChangeNotReady.selector, SingleUnderlyingToken.RateChangeUndercollateralized.selector,
-                SingleUnderlyingToken.ReserveShortfall.selector, SingleUnderlyingToken.RateDecreaseWithDisabledLeg.selector));
+            _expect(err, _sels(IUnderlyingToken.NoRateChangePending.selector,
+                IUnderlyingToken.RateChangeNotReady.selector, IUnderlyingToken.RateChangeUndercollateralized.selector,
+                IUnderlyingToken.ReserveShortfall.selector, IUnderlyingToken.RateDecreaseWithDisabledLeg.selector));
         }
     }
 
@@ -330,7 +330,7 @@ contract WrapperHandler is Test {
 ///         `3:7` — cả ba chân cùng tỉ lệ ban đầu.
 abstract contract WrapperInvariantBase is StdInvariant, V2Fixture {
     WrapperHandler h;
-    MultiUnderlyingToken t;
+    UnderlyingToken t;
     MockERC20[3] legs;
 
     function _rate() internal pure virtual returns (uint256 num, uint256 den);

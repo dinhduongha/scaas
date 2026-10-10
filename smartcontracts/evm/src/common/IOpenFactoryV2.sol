@@ -11,8 +11,8 @@ interface IOpenFactoryV2 {
         META,        // v1 MetaToken gộp hai tầng
         ZETHER,      // số dư bí mật
         META_NONE,   // v2 tầng 1: không underlying
-        META_SINGLE, // v2 tầng 2: một underlying
-        META_MULTI   // v2 tầng 3: 2–8 underlying, any-of
+        META_SINGLE, // v2 kind UNDERLYING: 1–8 legs (P1d)
+        META_MULTI   // retired in P1d: no implementation
     }
 
     event ImplementationRegistered(
@@ -37,7 +37,7 @@ interface IOpenFactoryV2 {
     error VerifierRequiredForZether();
     error SaltAlreadyUsed(address existing);
 
-    /// @notice `META_NONE` 0, `META_SINGLE` 1, `META_MULTI` 2–8 (token kiểm lại; factory kiểm để chỉ mục có nghĩa).
+    /// @notice `META_NONE` 0, `META_SINGLE` 1–8 (token kiểm lại; factory kiểm để chỉ mục có nghĩa).
     function createTiered(
         TokenKind kind, uint64 version, address[] calldata underlyings, bytes calldata initData, bytes32 salt
     ) external returns (address token);
