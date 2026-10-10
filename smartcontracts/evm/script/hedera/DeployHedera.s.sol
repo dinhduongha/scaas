@@ -9,13 +9,12 @@ import {MetaTxDex} from "../../src/dex/MetaTxDex.sol";
 import {HederaMetaToken} from "../../src/hedera/HederaMetaToken.sol";
 import {OpenFactoryV2} from "../../src/factory/OpenFactoryV2.sol";
 import {IOpenFactoryV2} from "../../src/common/IOpenFactoryV2.sol";
-import {HederaNoUnderlyingToken, HederaSingleUnderlyingToken, HederaMultiUnderlyingToken}
-    from "../../src/hedera/HederaTokensV2.sol";
+import {HederaNoUnderlyingToken} from "../../src/hedera/HederaTokensV2.sol";
 
 /// Như `script/Deploy.s.sol` nhưng implementation META là `HederaMetaToken` (R63).
 /// Hedera JSON-RPC Relay: `forge script script/hedera/DeployHedera.s.sol --rpc-url $RELAY --broadcast --slow`
 /// (relay không có mempool: `--slow` gửi tuần tự, mỗi tx chờ receipt). Deployer = tài khoản ECDSA có alias EVM.
-/// env: PRIVATE_KEY, REGISTRAR?, DEMO_SUPPLY?, DEMO_HOLDER?. Ghi `deployments/hedera-<chainid>.json`.
+/// env: PRIVATE_KEY, REGISTRAR?, DEMO_SUPPLY?, DEMO_HOLDER?, CHAIN_UID? (mặc định blockhash(0)). Ghi `deployments/hedera-<chainid>.json`.
 contract DeployHedera is Script {
     function run() external {
         uint256 pk = vm.envUint("PRIVATE_KEY");
@@ -54,21 +53,25 @@ contract DeployHedera is Script {
         console.log(out);
     }
 
-    /// TW2 §9/§11: factory v2 + ba tầng Hedera, version 1 của từng kind; ghi thẳng vào object JSON "deploy".
+    /// TW2 §9/§11: factory v2 + tầng None Hedera (Single/Multi chờ P1d, R3), version 1; ghi thẳng vào object JSON "deploy".
     function _deployV2(address registrar, bool register) internal {
         OpenFactoryV2 f = new OpenFactoryV2(registrar);
-        bytes32 uid = vm.envBytes32("CHAIN_UID"); // genesis hash, chain-uids.json (CTR-GEN-05)
-        address none = address(new HederaNoUnderlyingToken(address(f), uid));
-        address single = address(new HederaSingleUnderlyingToken(address(f), uid));
-        address multi = address(new HederaMultiUnderlyingToken(address(f), uid));
-        if (register) {
-            f.registerImplementation(IOpenFactoryV2.TokenKind.META_NONE, 1, none);
-            f.registerImplementation(IOpenFactoryV2.TokenKind.META_SINGLE, 1, single);
-            f.registerImplementation(IOpenFactoryV2.TokenKind.META_MULTI, 1, multi);
+        // chain_uid = genesis hash (CTR-GEN-05, chain-uids.json). Default: block 0's hash as the RPC reports it. The
+        // script runs at the head block and BLOCKHASH of the current block is 0, so roll one ahead to read it on a
+        // fresh chain (head 0); past block 256 BLOCKHASH(0) is 0 and CHAIN_UID is required.
+        bytes32 uid = vm.envOr("CHAIN_UID", bytes32(0));
+        if (uid == bytes32(0)) {
+            uint256 head = block.number;
+            vm.roll(head + 1);
+            uid = blockhash(0);
+            vm.roll(head);
         }
+        require(uid != bytes32(0), "set CHAIN_UID (chain-uids.json)");
+        // Transitional (R3): Single/Multi are over EIP-170 until P1d (UnderlyingToken + UnderlyingLib); only META_NONE
+        // is deployed and registered, and the JSON has no implementation_meta_single/_multi keys.
+        address none = address(new HederaNoUnderlyingToken(address(f), uid));
+        if (register) f.registerImplementation(IOpenFactoryV2.TokenKind.META_NONE, 1, none);
         vm.serializeAddress("deploy", "factory_v2", address(f));
         vm.serializeAddress("deploy", "implementation_meta_none", none);
-        vm.serializeAddress("deploy", "implementation_meta_single", single);
-        vm.serializeAddress("deploy", "implementation_meta_multi", multi);
     }
 }

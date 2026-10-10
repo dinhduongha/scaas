@@ -2,8 +2,10 @@
 # Deploy one family's contracts with its native tool. Keys/credentials come from the tool's own config or env.
 # usage: deploy.sh <family> <network> [args…]   (args go to the native tool)
 #   evm     <rpc-url>        forge script script/Deploy.s.sol --broadcast; env PRIVATE_KEY, REGISTRAR?, DEMO_SUPPLY?,
-#                            DEMO_HOLDER?; FOUNDRY_PROFILE=private7622|gnosis|celo picks the EVM version.
-#                            Writes evm/deployments/<chainid>.json.
+#                            DEMO_HOLDER?, CHAIN_UID? (genesis hash from evm/chain-uids.json; defaults to blockhash(0),
+#                            which is 0 past block 256, so a long-running chain needs it); FOUNDRY_PROFILE=private7622|
+#                            gnosis|celo picks the EVM version. Writes evm/deployments/<chainid>.json. Factory v2 gets
+#                            only META_NONE until P1d: Single/Multi are over EIP-170 (R3).
 #   hedera  <relay-url>      same, script/hedera/DeployHedera.s.sol --slow (writes deployments/hedera-<chainid>.json)
 #   aptos   <cli-profile>    aptos move deploy-object --address-name scaas
 #   sui     <client-env>     sui client --client.env <env> publish
