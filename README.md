@@ -619,7 +619,7 @@ Because authorization and payment are separate, SCaaS can offer every reasonable
 use the same signed intent; only the fee fields and the submitter differ.
 
 <p align="center">
-  <img src="docs/assets/fee-models.svg" width="900" alt="Who pays the fee: one signed intent, grouped by who bears the cost. The subject: self-paid (built) or a fee in the token capped at 1 percent (built). The company: its relayer at fee 0 (built, portal default) or an enterprise inbound gateway (built on EVM). The payee: direct settlement (built on EVM) or receiver pays the fee (specified). A sponsor: a gas sponsorship policy (specified; on-chain pool planned) or a sponsored call of a non-token contract (specified).">
+  <img src="docs/assets/fee-models.svg" width="900" alt="Who pays the fee: one signed intent, grouped by who bears the cost. The subject: self-paid (built) or a fee in the token capped at 1 percent (built). The company: its relayer at fee 0 (built, portal default) or an enterprise inbound gateway (built on EVM). The payee: direct settlement (built on EVM) or receiver pays the fee (built on EVM). A sponsor: a gas sponsorship policy (specified; on-chain pool planned) or a sponsored call of a non-token contract (specified).">
 </p>
 
 <details>
@@ -631,7 +631,7 @@ use the same signed intent; only the fee fields and the submitter differ.
 | **Sponsored by a company relayer** | Subject signs with `fee = 0`, bound to the company's relayer. Gas is the company's operating cost | Company | BUILT (portal default) |
 | **Fee in the token** | Subject offers a fee in the token (percentage or fixed, capped at 1 %); any relayer that submits earns it | Subject, in the token it already holds | BUILT |
 | **Direct settlement (payee self-relay)** | The payer signs offline and hands the signature to the payee — QR, NFC, message, file. The payee submits it and pays the gas. The signature works like an expiring electronic cheque | Payee | BUILT on EVM ([inbound](docs/integration.md#inbound)) |
-| **Receiver pays the fee** | The payer signs a payment of `N`; the payee co-signs a fee authorization from its own balance; one transaction delivers `N` and pays the relayer | Payee | SPECIFIED ([receiver-pays](docs/contracts/metatx.md#receiver-pays)) |
+| **Receiver pays the fee** | The payer signs a payment of `N`; the payee co-signs a fee authorization from its own balance; one transaction delivers `N` and pays the relayer | Payee | BUILT on EVM (`mtxPayReceiverFee`, [receiver-pays](docs/contracts/metatx.md#receiver-pays)) |
 | **Gas sponsorship policy** | A node rule such as "inbound to wallet W, value ≥ X ⇒ accept at fee 0, book the gas to account Y" | The sponsor | SPECIFIED ([docs/node/sponsorship.md](docs/node/sponsorship.md)); an on-chain sponsorship pool is PLANNED |
 | **Sponsored call of a non-token contract** | A service company relays the user's signed call of, say, a family-tree contract and pays the native gas; the contract takes no fee (`NONE`), the company bills off chain | The service company | SPECIFIED ([CTR-MTX-22](docs/contracts/metatx.md#CTR-MTX-22)) |
 | **Enterprise inbound gateway** | Partners post signed intents to the company's gateway; the company relays them with its own lanes | Company | BUILT on EVM ([docs/node/gateway.md](docs/node/gateway.md)) |

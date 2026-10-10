@@ -77,7 +77,7 @@
   <text class="b" x="500" y="327">Receiver pays the fee</text>
   <text class="s" x="500" y="347">the payee co-signs a fee from its</text>
   <text class="s" x="500" y="363">own balance; one transaction</text>
-  <rect x="500" y="374" width="84" height="18" rx="9" fill="#ddf4ff"/><text class="chip" x="542" y="387" text-anchor="middle" fill="#0969da">SPECIFIED</text>
+  <rect x="500" y="374" width="96" height="18" rx="9" fill="#dafbe1"/><text class="chip" x="548" y="387" text-anchor="middle" fill="#1a7f37">BUILT on EVM</text>
 
   <!-- sponsor -->
   <rect class="card" x="717" y="198" width="219" height="96" rx="8"/>

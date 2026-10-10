@@ -36,7 +36,7 @@
   <rect class="built" x="190" y="172" width="320" height="64" rx="8"/>
   <text class="b" x="350" y="194" text-anchor="middle">ERC20MetaTx</text>
   <text class="s" x="350" y="212" text-anchor="middle">every token: ERC-20, MetaTransfer, fee in the</text>
-  <text class="s" x="350" y="227" text-anchor="middle">token, approve only by contracts, UA ledger</text>
+  <text class="s" x="350" y="227" text-anchor="middle">token, approve only by contracts</text>
   <line class="flow" x1="350" y1="237" x2="350" y2="258" marker-end="url(#ah)"/>
 
   <rect class="built" x="190" y="260" width="320" height="64" rx="8"/>
