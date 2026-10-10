@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="600" viewBox="0 0 960 600" role="img" aria-labelledby="t d">
+  <title id="t">SCaaS at a glance</title>
+  <desc id="d">Four layers. Clients (ERP or back office, wallets and signers, console and dApp, apps and AI agents) send subject-signed intents to relayers. Relayers (scaas-node, which anyone can run, plus partner and open relayers linked by mesh and gossip) submit them and pay gas. Smart contracts, the API services (tokens and wrappers, accounts and mandates, DEX, tender and asset suite, Zether and PQ Zether), run on smart chains grouped in six families: EVM, Cosmos, Soroban, Move, TON and Solana. Finalized events travel back to clients as feeds.</desc>
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#57606a"/>
+    </marker>
+    <style>
+      text { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2328; }
+      .h { font-size: 22px; font-weight: 700; }
+      .sub { font-size: 13px; fill: #57606a; }
+      .tier { font-size: 15px; font-weight: 700; }
+      .tiers { font-size: 12px; fill: #57606a; }
+      .b { font-size: 13.5px; font-weight: 600; }
+      .s { font-size: 11.5px; fill: #57606a; }
+      .lab { font-size: 12px; fill: #424a53; }
+      .flow { stroke: #57606a; stroke-width: 1.6; fill: none; }
+      .back { stroke: #57606a; stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
+    </style>
+  </defs>
+
+  <rect x="0.5" y="0.5" width="959" height="599" rx="16" fill="#f8fafc" stroke="#d0d7de"/>
+  <text class="h" x="24" y="40">SCaaS at a glance</text>
+  <text class="sub" x="24" y="61">The subject signs · relayers carry the call and pay gas · the contract checks everything itself</text>
+
+  <!-- Tier 1: clients -->
+  <rect x="16" y="80" width="928" height="86" rx="12" fill="#dbeafe" stroke="#3b82f6"/>
+  <text class="tier" x="30" y="117">Clients</text>
+  <text class="tiers" x="30" y="136">subjects sign on</text>
+  <text class="tiers" x="30" y="151">their own device</text>
+  <g>
+    <rect x="190" y="92" width="176" height="62" rx="8" fill="#ffffff" stroke="#3b82f6"/>
+    <text class="b" x="278" y="118" text-anchor="middle">ERP / back office</text>
+    <text class="s" x="278" y="137" text-anchor="middle">outbox, push and sync</text>
+    <rect x="380" y="92" width="176" height="62" rx="8" fill="#ffffff" stroke="#3b82f6"/>
+    <text class="b" x="468" y="118" text-anchor="middle">Wallets and signers</text>
+    <text class="s" x="468" y="137" text-anchor="middle">passkeys, seed vault</text>
+    <rect x="570" y="92" width="176" height="62" rx="8" fill="#ffffff" stroke="#3b82f6"/>
+    <text class="b" x="658" y="118" text-anchor="middle">Console and dApp</text>
+    <text class="s" x="658" y="137" text-anchor="middle">wallets, DEX, node admin</text>
+    <rect x="760" y="92" width="176" height="62" rx="8" fill="#ffffff" stroke="#3b82f6"/>
+    <text class="b" x="848" y="118" text-anchor="middle">Apps and AI agents</text>
+    <text class="s" x="848" y="137" text-anchor="middle">call contracts like any API</text>
+  </g>
+
+  <!-- flow 1 -->
+  <line class="flow" x1="278" y1="167" x2="278" y2="208" marker-end="url(#ah)"/>
+  <text class="lab" x="290" y="192">1 · signed intents</text>
+  <line class="back" x1="848" y1="208" x2="848" y2="168" marker-end="url(#ah)"/>
+  <text class="lab" x="836" y="192" text-anchor="end">finalized events, served as feeds</text>
+
+  <!-- Tier 2: relayers -->
+  <rect x="16" y="210" width="928" height="86" rx="12" fill="#fef3c7" stroke="#d97706"/>
+  <text class="tier" x="30" y="247">Relayers</text>
+  <text class="tiers" x="30" y="266">open: anyone can</text>
+  <text class="tiers" x="30" y="281">run one</text>
+  <rect x="190" y="222" width="366" height="62" rx="8" fill="#ffffff" stroke="#d97706"/>
+  <text class="b" x="373" y="248" text-anchor="middle">scaas-node</text>
+  <text class="s" x="373" y="267" text-anchor="middle">gateway · job API · submit lanes · finality-gated indexer</text>
+  <line class="flow" x1="560" y1="253" x2="636" y2="253" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <text class="lab" x="598" y="243" text-anchor="middle">mesh /</text>
+  <text class="lab" x="598" y="272" text-anchor="middle">gossip</text>
+  <rect x="640" y="222" width="296" height="62" rx="8" fill="#ffffff" stroke="#d97706"/>
+  <text class="b" x="788" y="248" text-anchor="middle">Partner and open relayers</text>
+  <text class="s" x="788" y="267" text-anchor="middle">compete on price and speed</text>
+
+  <!-- flow 2 -->
+  <line class="flow" x1="278" y1="297" x2="278" y2="338" marker-end="url(#ah)"/>
+  <text class="lab" x="290" y="322">2 · submit, pay gas</text>
+  <line class="back" x1="848" y1="338" x2="848" y2="298" marker-end="url(#ah)"/>
+  <text class="lab" x="836" y="322" text-anchor="end">events, indexed after finality</text>
+
+  <!-- Tier 3: contracts -->
+  <rect x="16" y="340" width="928" height="86" rx="12" fill="#dcfce7" stroke="#16a34a"/>
+  <text class="tier" x="30" y="377">Smart contracts</text>
+  <text class="tiers" x="30" y="396">= API services,</text>
+  <text class="tiers" x="30" y="411">immutable at deploy</text>
+  <rect x="190" y="352" width="176" height="62" rx="8" fill="#ffffff" stroke="#16a34a"/>
+  <text class="b" x="278" y="378" text-anchor="middle">Tokens and wrappers</text>
+  <text class="s" x="278" y="397" text-anchor="middle">gasless ERC-20, four kinds</text>
+  <rect x="380" y="352" width="176" height="62" rx="8" fill="#ffffff" stroke="#16a34a"/>
+  <text class="b" x="468" y="378" text-anchor="middle">Accounts, mandates</text>
+  <text class="s" x="468" y="397" text-anchor="middle">UA registry, MandateWallet</text>
+  <rect x="570" y="352" width="176" height="62" rx="8" fill="#ffffff" stroke="#16a34a"/>
+  <text class="b" x="658" y="378" text-anchor="middle">DEX, tender, assets</text>
+  <text class="s" x="658" y="397" text-anchor="middle">trades, tenders, vesting</text>
+  <rect x="760" y="352" width="176" height="62" rx="8" fill="#ffffff" stroke="#16a34a"/>
+  <text class="b" x="848" y="378" text-anchor="middle">Zether, PQ Zether</text>
+  <text class="s" x="848" y="397" text-anchor="middle">confidential amounts</text>
+
+  <!-- flow 3 -->
+  <line class="flow" x1="278" y1="427" x2="278" y2="468" marker-end="url(#ah)"/>
+  <text class="lab" x="290" y="452">3 · run on</text>
+
+  <!-- Tier 4: chains -->
+  <rect x="16" y="470" width="928" height="110" rx="12" fill="#ede9fe" stroke="#7c3aed"/>
+  <text class="tier" x="30" y="507">Smart chains</text>
+  <text class="tiers" x="30" y="526">= infrastructure,</text>
+  <text class="tiers" x="30" y="541">six families</text>
+  <g>
+    <rect x="190" y="482" width="116" height="86" rx="8" fill="#ffffff" stroke="#7c3aed"/>
+    <text class="b" x="248" y="510" text-anchor="middle">EVM</text>
+    <text class="s" x="248" y="530" text-anchor="middle">Gnosis, Celo,</text>
+    <text class="s" x="248" y="546" text-anchor="middle">chain 7622, Hedera</text>
+    <rect x="316" y="482" width="116" height="86" rx="8" fill="#ffffff" stroke="#7c3aed"/>
+    <text class="b" x="374" y="510" text-anchor="middle">Cosmos</text>
+    <text class="s" x="374" y="530" text-anchor="middle">CosmWasm chains</text>
+    <rect x="442" y="482" width="116" height="86" rx="8" fill="#ffffff" stroke="#7c3aed"/>
+    <text class="b" x="500" y="510" text-anchor="middle">Soroban</text>
+    <text class="s" x="500" y="530" text-anchor="middle">Stellar,</text>
+    <text class="s" x="500" y="546" text-anchor="middle">Pi Network</text>
+    <rect x="568" y="482" width="116" height="86" rx="8" fill="#ffffff" stroke="#7c3aed"/>
+    <text class="b" x="626" y="510" text-anchor="middle">Move</text>
+    <text class="s" x="626" y="530" text-anchor="middle">Aptos, Sui</text>
+    <rect x="694" y="482" width="116" height="86" rx="8" fill="#ffffff" stroke="#7c3aed"/>
+    <text class="b" x="752" y="510" text-anchor="middle">TON</text>
+    <text class="s" x="752" y="530" text-anchor="middle">Tact</text>
+    <rect x="820" y="482" width="116" height="86" rx="8" fill="#ffffff" stroke="#7c3aed"/>
+    <text class="b" x="878" y="510" text-anchor="middle">Solana</text>
+    <text class="s" x="878" y="530" text-anchor="middle">SVM, Rust</text>
+  </g>
+</svg>

@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="620" viewBox="0 0 960 620" role="img" aria-labelledby="t d">
+  <title id="t">EVM token tree</title>
+  <desc id="d">The EVM token tree: MetaTxBase, then ERC20MetaTx, then MetaTokenBase, then four kinds by code: NONE (NoUnderlyingToken) and UNDERLYING (UnderlyingToken, 1 to 8 legs, the native coin allowed), built in phase P1; NONE_ZETHER and UNDERLYING_ZETHER, target in phase P3. External libraries: AdminLib, UnderlyingLib and HederaLib built; TradeLib (P2) and ZetherLib (P3) target. Features are flags chosen at creation. The post-quantum kinds are reserved, not built.</desc>
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#57606a"/>
+    </marker>
+    <style>
+      text { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2328; }
+      .h { font-size: 22px; font-weight: 700; }
+      .sub { font-size: 13px; fill: #57606a; }
+      .b { font-size: 14px; font-weight: 700; }
+      .k { font-size: 12px; font-weight: 700; fill: #0b5cad; }
+      .s { font-size: 11.5px; fill: #57606a; }
+      .m { font-size: 11.5px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #1f2328; }
+      .sec { font-size: 13px; font-weight: 700; fill: #424a53; }
+      .flow { stroke: #57606a; stroke-width: 1.6; fill: none; }
+      .built { fill: #ffffff; stroke: #16a34a; stroke-width: 1.6; }
+      .target { fill: #ffffff; stroke: #8250df; stroke-width: 1.6; stroke-dasharray: 6 4; }
+      .okc { fill: #1a7f37; font-size: 11px; font-weight: 600; }
+      .tgc { fill: #8250df; font-size: 11px; font-weight: 600; }
+    </style>
+  </defs>
+
+  <rect x="0.5" y="0.5" width="959" height="619" rx="16" fill="#f8fafc" stroke="#d0d7de"/>
+  <text class="h" x="24" y="40">EVM token tree</text>
+  <text class="sub" x="24" y="61">One base tree for every token: the kind is code, the features are flags chosen at creation (CTR-TOK-21, CTR-TOK-24)</text>
+
+  <!-- base chain -->
+  <rect class="built" x="190" y="84" width="320" height="64" rx="8"/>
+  <text class="b" x="350" y="106" text-anchor="middle">MetaTxBase</text>
+  <text class="s" x="350" y="124" text-anchor="middle">any SCaaS contract: MetaTransaction,</text>
+  <text class="s" x="350" y="139" text-anchor="middle">nonce lanes, SigCheck, mtxExecute</text>
+  <line class="flow" x1="350" y1="149" x2="350" y2="170" marker-end="url(#ah)"/>
+
+  <rect class="built" x="190" y="172" width="320" height="64" rx="8"/>
+  <text class="b" x="350" y="194" text-anchor="middle">ERC20MetaTx</text>
+  <text class="s" x="350" y="212" text-anchor="middle">every token: ERC-20, MetaTransfer, fee in the</text>
+  <text class="s" x="350" y="227" text-anchor="middle">token, approve only by contracts, UA ledger</text>
+  <line class="flow" x1="350" y1="237" x2="350" y2="258" marker-end="url(#ah)"/>
+
+  <rect class="built" x="190" y="260" width="320" height="64" rx="8"/>
+  <text class="b" x="350" y="282" text-anchor="middle">MetaTokenBase</text>
+  <text class="s" x="350" y="300" text-anchor="middle">features + owner + roles, trade (P2), pay behind</text>
+  <text class="s" x="350" y="315" text-anchor="middle">PAYABLE (inline), init, provenance, IS_HEDERA</text>
+
+  <!-- bus to kinds -->
+  <path class="flow" d="M350 325 V350 M102 350 H600 M102 350 V378 M268 350 V378 M434 350 V378 M600 350 V378"/>
+  <line class="flow" x1="102" y1="366" x2="102" y2="378" marker-end="url(#ah)"/>
+  <line class="flow" x1="268" y1="366" x2="268" y2="378" marker-end="url(#ah)"/>
+  <line class="flow" x1="434" y1="366" x2="434" y2="378" marker-end="url(#ah)"/>
+  <line class="flow" x1="600" y1="366" x2="600" y2="378" marker-end="url(#ah)"/>
+
+  <!-- kinds -->
+  <rect class="built" x="24" y="380" width="156" height="96" rx="8"/>
+  <text class="k" x="102" y="401" text-anchor="middle">NONE</text>
+  <text class="m" x="102" y="420" text-anchor="middle">NoUnderlyingToken</text>
+  <text class="s" x="102" y="438" text-anchor="middle">standalone: loyalty,</text>
+  <text class="s" x="102" y="453" text-anchor="middle">internal units</text>
+  <text class="okc" x="102" y="469" text-anchor="middle">built (P1)</text>
+
+  <rect class="built" x="190" y="380" width="156" height="96" rx="8"/>
+  <text class="k" x="268" y="401" text-anchor="middle">UNDERLYING</text>
+  <text class="m" x="268" y="420" text-anchor="middle">UnderlyingToken</text>
+  <text class="s" x="268" y="438" text-anchor="middle">wrapper of 1–8 legs,</text>
+  <text class="s" x="268" y="453" text-anchor="middle">ERC-20s or native coin</text>
+  <text class="okc" x="268" y="469" text-anchor="middle">built (P1)</text>
+
+  <rect class="target" x="356" y="380" width="156" height="96" rx="8"/>
+  <text class="k" x="434" y="401" text-anchor="middle">NONE_ZETHER</text>
+  <text class="m" x="434" y="420" text-anchor="middle" font-size="10.5">NoUnderlyingZetherToken</text>
+  <text class="s" x="434" y="438" text-anchor="middle">standalone +</text>
+  <text class="s" x="434" y="453" text-anchor="middle">Zether layer</text>
+  <text class="tgc" x="434" y="469" text-anchor="middle">target (P3)</text>
+
+  <rect class="target" x="522" y="380" width="156" height="96" rx="8"/>
+  <text class="k" x="600" y="401" text-anchor="middle">UNDERLYING_ZETHER</text>
+  <text class="m" x="600" y="420" text-anchor="middle" font-size="10.5">UnderlyingZetherToken</text>
+  <text class="s" x="600" y="438" text-anchor="middle">wrapper + Zether layer,</text>
+  <text class="s" x="600" y="453" text-anchor="middle">wrap-shield from a leg</text>
+  <text class="tgc" x="600" y="469" text-anchor="middle">target (P3)</text>
+
+  <text class="s" x="24" y="500">Reserved, not built: NONE_PQZ, UNDERLYING_PQZ, NONE_ZETHER_PQZ, UNDERLYING_ZETHER_PQZ (post-quantum layer).</text>
+
+  <!-- libraries -->
+  <text class="sec" x="712" y="98">External libraries</text>
+  <text class="s" x="712" y="114">linked at deploy, called by DELEGATECALL</text>
+  <path class="flow" stroke-dasharray="3 3" d="M511 292 H688 M688 155 V427"/>
+  <path class="flow" d="M688 155 H700 M688 223 H700 M688 291 H700 M688 359 H700 M688 427 H700"/>
+  <text class="s" x="604" y="284" text-anchor="middle">calls</text>
+
+  <rect class="built" x="702" y="126" width="234" height="58" rx="8"/>
+  <text class="b" x="716" y="148">AdminLib</text>
+  <text class="okc" x="922" y="148" text-anchor="end">built</text>
+  <text class="s" x="716" y="168">flags, roles, owner · all kinds</text>
+
+  <rect class="built" x="702" y="194" width="234" height="58" rx="8"/>
+  <text class="b" x="716" y="216">UnderlyingLib</text>
+  <text class="okc" x="922" y="216" text-anchor="end">built</text>
+  <text class="s" x="716" y="236">legs, wrap, rates · UNDERLYING*</text>
+
+  <rect class="built" x="702" y="262" width="234" height="58" rx="8"/>
+  <text class="b" x="716" y="284">HederaLib</text>
+  <text class="okc" x="922" y="284" text-anchor="end">built</text>
+  <text class="s" x="716" y="304">HIP-632, HTS · when IS_HEDERA</text>
+
+  <rect class="target" x="702" y="330" width="234" height="58" rx="8"/>
+  <text class="b" x="716" y="352">TradeLib</text>
+  <text class="tgc" x="922" y="352" text-anchor="end">target (P2)</text>
+  <text class="s" x="716" y="372">TradeOrder, mtxTrade · all kinds</text>
+
+  <rect class="target" x="702" y="398" width="234" height="58" rx="8"/>
+  <text class="b" x="716" y="420">ZetherLib</text>
+  <text class="tgc" x="922" y="420" text-anchor="end">target (P3)</text>
+  <text class="s" x="716" y="440">proofs, shielding · *_ZETHER</text>
+
+  <!-- features strip -->
+  <rect x="24" y="522" width="912" height="62" rx="10" fill="#eef2f6" stroke="#d0d7de"/>
+  <text class="sec" x="40" y="545">Features: flags chosen at creation, never set later</text>
+  <text class="m" x="40" y="567">PAYABLE · MINTABLE · BURNABLE · RATE_ADJUSTABLE · WRAP_DISABLEABLE · regulated: FREEZE · FORCE · PAUSE · ALLOWLIST</text>
+
+  <!-- legend -->
+  <rect class="built" x="24" y="596" width="22" height="12" rx="3"/>
+  <text class="s" x="52" y="607">built (as of P1)</text>
+  <rect class="target" x="160" y="596" width="22" height="12" rx="3"/>
+  <text class="s" x="188" y="607">target, not built yet (phase)</text>
+  <text class="s" x="936" y="607" text-anchor="end">UnderlyingToken is built but still over the EIP-170 size limit</text>
+</svg>

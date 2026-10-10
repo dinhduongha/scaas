@@ -1,42 +1,26 @@
 # SCaaS architecture overview
 
-**Not normative.** This page explains how the parts of SCaaS fit together and why. It defines no rules: every rule
-it mentions is defined once in a component doc (linked) and its rationale is in [decisions.md](decisions.md).
-Where this page and a component doc disagree, the component doc wins ([ARCH-POS-01](decisions.md#ARCH-POS-01)).
-For the product introduction, the doc map and reading order see [README.md](README.md).
+> [!NOTE]
+> **Not normative.** This page explains how the parts of SCaaS fit together and why. It defines no rules: every rule
+> it mentions is defined once in a component doc (linked) and its rationale is in [decisions.md](decisions.md).
+> Where this page and a component doc disagree, the component doc wins ([ARCH-POS-01](decisions.md#ARCH-POS-01)).
+> For the product introduction, the doc map and reading order see [README.md](README.md).
 
 **Contents**
 
-1. [Positioning](#positioning)
-   - 1.1 [Authority model](#authority-model)
-   - 1.2 [What SCaaS is not](#what-scaas-is-not)
-   - 1.3 [Profiles](#profiles)
-2. [Service model](#service-model)
-3. [Components](#components)
-4. [Contract layer](#contract-layer)
-   - 4.1 [EVM token tree](#evm-token-tree)
-   - 4.2 [Meta-transactions](#meta-transactions)
-   - 4.3 [Accounts and keys](#accounts-and-keys)
-   - 4.4 [Confidential balances](#confidential-balances)
-   - 4.5 [Trading](#trading)
-   - 4.6 [Non-EVM families](#non-evm-families)
-5. [Node layer](#node-layer)
-   - 5.1 [Node roles](#node-roles)
-   - 5.2 [Topology](#topology)
-6. [Data flows](#data-flows)
-   - 6.1 [Client payment](#client-payment)
-   - 6.2 [Gasless transfer through door A](#gasless-transfer-through-door-a)
-   - 6.3 [DEX order to settlement (target, P2)](#dex-order-to-settlement-target-p2)
-   - 6.4 [Universal Account registration submitted by a relayer (SPECIFIED)](#universal-account-registration-submitted-by-a-relayer-specified)
-   - 6.5 [Confidential: wrap-shield, multi-recipient transfer, unshield-unwrap (target, P3)](#confidential-wrap-shield-multi-recipient-transfer-unshield-unwrap-target-p3)
-   - 6.6 [Disclosure by `SENDER_CP`](#disclosure-by-sender_cp)
-   - 6.7 [Mesh (SPECIFIED transports)](#mesh-specified-transports)
-7. [Trust model](#trust-model)
-   - 7.1 [Authority after deployment](#authority-after-deployment)
-8. [Families](#families)
-9. [Economics](#economics)
-10. [Data protection](#data-protection)
-11. [Glossary](#glossary)
+| Section | Subsections |
+|---|---|
+| 1. [Positioning](#positioning) | [Authority model](#authority-model) · [What SCaaS is not](#what-scaas-is-not) · [Profiles](#profiles) |
+| 2. [Service model](#service-model) | |
+| 3. [Components](#components) | |
+| 4. [Contract layer](#contract-layer) | [EVM token tree](#evm-token-tree) · [Meta-transactions](#meta-transactions) · [Accounts and keys](#accounts-and-keys) · [Confidential balances](#confidential-balances) · [Trading](#trading) · [Non-EVM families](#non-evm-families) |
+| 5. [Node layer](#node-layer) | [Node roles](#node-roles) · [Topology](#topology) |
+| 6. [Data flows](#data-flows) | [Client payment](#client-payment) · [Gasless transfer through door A](#gasless-transfer-through-door-a) · [DEX order to settlement](#dex-order-to-settlement-target-p2) · [UA registration by a relayer](#universal-account-registration-submitted-by-a-relayer-specified) · [Confidential wrap-shield, transfer, unshield-unwrap](#confidential-wrap-shield-multi-recipient-transfer-unshield-unwrap-target-p3) · [Disclosure by `SENDER_CP`](#disclosure-by-sender_cp) · [Mesh](#mesh-specified-transports) |
+| 7. [Trust model](#trust-model) | [Authority after deployment](#authority-after-deployment) |
+| 8. [Families](#families) | |
+| 9. [Economics](#economics) | |
+| 10. [Data protection](#data-protection) | |
+| 11. [Glossary](#glossary) | |
 
 <a id="positioning"></a>
 ## 1. Positioning
@@ -83,9 +67,14 @@ meta-transactions, confidential amounts and stablecoins ([ARCH-POS-06](decisions
 
 The difference between SCaaS and IaaS or BaaS is **who signs a valuable write**. In IaaS and BaaS the service is the
 operator's server; in SCaaS the service is the contract, and a node only carries signed writes to it and reads facts
-back.
+back. The three columns below:
 
-| Criterion | IaaS: cloud VM (e.g. EC2, Compute Engine) — the app issues JWTs, the server signs | BaaS: hosted backend (e.g. Supabase, Firebase) — the backend's auth issues JWTs, the server writes; row-level security reads `auth.uid()` | SCaaS — the client signs every valuable create/update |
+- **IaaS**: cloud VM (e.g. EC2, Compute Engine) — the app issues JWTs, the server signs.
+- **BaaS**: hosted backend (e.g. Supabase, Firebase) — the backend's auth issues JWTs, the server writes; row-level
+  security reads `auth.uid()`.
+- **SCaaS** — the client signs every valuable create/update.
+
+| Criterion | IaaS | BaaS | SCaaS |
 |---|---|---|---|
 | Who signs a write | The application server; the client holds a server-signed JWT and the server writes on its behalf | The backend's auth service signs the JWT; the database executes; row-level security checks the `uid` | **The subject**: its device signs each operation with a passkey (WebAuthn P-256) or a wallet key. The relayer pays gas and holds no subject key |
 | Trust root | The operator, the cloud provider (IAM, hypervisor), anyone holding the JWT signing key | The operator plus the project owner holding the JWT secret or the `service_role` key | The subject's authenticator or secure element, chain consensus, and contract code that is immutable at deploy on every family (no upgrade key in the trust root) |
@@ -102,20 +91,23 @@ back.
 
 **Admin-power exceptions.** The complete list is in [contracts/README.md](contracts/README.md#admin-powers-complete-list);
 each power is public, set at creation or bounded, and none moves a subject's balance except the regulated class's
-forced transfer against a recorded order. Among them: a token's optional `owner`, who only administers (grants and
-revokes the roles of the flags chosen at creation, disables a flag that was not locked, renounces;
-[CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)), and the role holders of those flags, such as the `rateAdmin`
-(step-capped, timelocked rate changes) and the `guardian` (only `disableWrap`)
-([CTR-TOK-10](contracts/token-wrappers.md#CTR-TOK-10)); the `SCaaSDex` `admin` (as built `setMarket` with a
-market fee of at most 1 %, bounded by each order's signed `maxFeePpm`; specified: four powers — listing, the split of
-each order's signed fee between relayer and treasury, exchange targets, listed-only mode — never the amount,
-[CTR-DEX-03](contracts/dex.md#CTR-DEX-03)); the admin `mint` of the standalone non-EVM tokens on Soroban, TON and CosmWasm (a supply
-power, not a balance power); the TON DEX admin `WithdrawFees` (fees only; bounced payouts are claimed by their owners,
-[NET-TON-03](networks/ton.md#NET-TON-03)); the market admins of the other DEX programs (Soroban, Sui `AdminCap`, which
-also sets the network once, Aptos, which may also sweep assets sent by mistake to its own objects, and Solana
-`Config.admin`: market listing and fees); and the `issuer`/`compliance` roles of regulated tokens (only that class,
-against a recorded order, [CTR-AS-17](contracts/asset-suite.md#CTR-AS-17)). The Cosmos DEX holds no balances between
-transactions, so it has no `Sweep` ([NET-COS-04](networks/cosmos.md#NET-COS-04)). There is **no upgrade key** on any family.
+forced transfer against a recorded order. Among them:
+
+- a token's optional `owner`, who only administers (grants and revokes the roles of the flags chosen at creation,
+  disables a flag that was not locked, renounces; [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)), and the role
+  holders of those flags, such as the `rateAdmin` (step-capped, timelocked rate changes) and the `guardian` (only
+  `disableWrap`) ([CTR-TOK-10](contracts/token-wrappers.md#CTR-TOK-10));
+- the `SCaaSDex` `admin` (as built `setMarket` with a market fee of at most 1 %, bounded by each order's signed
+  `maxFeePpm`; specified: four powers — listing, the split of each order's signed fee between relayer and treasury,
+  exchange targets, listed-only mode — never the amount, [CTR-DEX-03](contracts/dex.md#CTR-DEX-03));
+- the admin `mint` of the standalone non-EVM tokens on Soroban, TON and CosmWasm (a supply power, not a balance power);
+- the TON DEX admin `WithdrawFees` (fees only; bounced payouts are claimed by their owners, [NET-TON-03](networks/ton.md#NET-TON-03));
+- the market admins of the other DEX programs (Soroban, Sui `AdminCap`, which also sets the network once, Aptos,
+  which may also sweep assets sent by mistake to its own objects, and Solana `Config.admin`: market listing and fees);
+- the `issuer`/`compliance` roles of regulated tokens (only that class, against a recorded order, [CTR-AS-17](contracts/asset-suite.md#CTR-AS-17)).
+
+The Cosmos DEX holds no balances between transactions, so it has no `Sweep` ([NET-COS-04](networks/cosmos.md#NET-COS-04)).
+There is **no upgrade key** on any family.
 
 Design consequences:
 
@@ -239,6 +231,9 @@ agent signs, a relayer pays gas); Zether keeps commercial amounts confidential w
 <a id="components"></a>
 ## 3. Components
 
+<details>
+<summary><b>Every component</b> — path, role and status (EVM, Hedera and non-EVM contracts, scripts, node, store, prover, clients, CI)</summary>
+
 | Component | Path | Role | Status |
 |---|---|---|---|
 | EVM contracts | `smartcontracts/evm/` (Foundry; `src/{common,metatx,factory,dex,wallet,account,registry,zether,hedera,chains}`) | Target: the token tree `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase` → kinds `NONE`, `UNDERLYING`, `NONE_ZETHER`, `UNDERLYING_ZETHER` ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)); the libraries `TradeLib`, `PayLib`, `AdminLib`, `UnderlyingLib`, `ZetherLib`, `HederaLib` ([CTR-TOK-24](contracts/token-wrappers.md#CTR-TOK-24)); `OpenFactory` for tokens and DEX clones ([CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25)); `SCaaSDex`; `MandateWallet`; `SmartKeyAccount`; `UniversalAccountRegistry`; the Zether verifiers (bn254, BLS12-381), `ZetherDisclosure`, `ZetherStatements`. Build profiles `private7622` (the private chain 7622), `zether`, `gnosis`, `celo` | BUILT: the v1/v2 lines and `ZetherToken`; target tree SPECIFIED (phases P1–P5); `PqzToken` SPECIFIED |
@@ -256,6 +251,8 @@ agent signs, a relayer pays gas); Zether keeps commercial amounts confidential w
 | `clients/app/` | `scaas/clients/app/` (React + Vite) | Console and dApp over every family: contracts, wallets, DEX book, Zether, node administration (built-in login or OIDC) | SPECIFIED ([clients/app.md](clients/app.md)) |
 | ERP connectors | in the client's codebase | Outbox, push and sync jobs, payment provider, portal, DEX accounting | one worked example: [integration-odoo-example.md](integration-odoo-example.md) |
 | CI | `.github/workflows/ci.yml` (`scaas-ci`) | forge tests (pinned OpenZeppelin v5.2.0, forge-std v1.16.2), `private7622` build, cargo clippy `-D warnings`, cargo test, EVM end-to-end on anvil | BUILT; CI for the prover, clientkeys and non-EVM end-to-end PLANNED |
+
+</details>
 
 **Target and built.** The contract sections below describe the target that the component docs specify. The built EVM
 code still carries the older lines (v1/v2 tokens, `ZetherToken`, `SubjectAccount`); every component doc says what is
@@ -624,8 +621,8 @@ the target; the caption says what is built.
 <a id="client-payment"></a>
 ### 6.1 Client payment
 
-The subject signs on its device, the client's outbox pushes the intent to its own node, and
-the client books the payment only from the finalized feed ([INT-ERP-18](integration.md#INT-ERP-18),
+The subject signs on its device, the client's outbox pushes the intent to its own node, and the client books the
+payment only from the finalized feed ([INT-ERP-18](integration.md#INT-ERP-18),
 [NODE-GEN-08](node/README.md#NODE-GEN-08)); built: the `pay` op of the v1/v2 lines.
 
 ```mermaid
@@ -653,9 +650,9 @@ sequenceDiagram
 <a id="gasless-transfer-through-door-a"></a>
 ### 6.2 Gasless transfer through door A
 
-Anyone posts a signed intent to the public gateway, which simulates before
-it queues ([NODE-GW-01](node/gateway.md#NODE-GW-01), [node/gateway.md](node/gateway.md)); built for EVM with the
-built digest name `metaTxDigest`.
+Anyone posts a signed intent to the public gateway, which simulates before it queues
+([NODE-GW-01](node/gateway.md#NODE-GW-01), [node/gateway.md](node/gateway.md)); built for EVM with the built digest
+name `metaTxDigest`.
 
 ```mermaid
 sequenceDiagram
@@ -682,9 +679,9 @@ sequenceDiagram
 <a id="dex-order-to-settlement-target-p2"></a>
 ### 6.3 DEX order to settlement (target, P2)
 
-Role-free `TradeOrder`s rest in the node's book and settle in one call
-that pays every party ([CTR-DEX-15](contracts/dex.md#CTR-DEX-15), [node/dex-venue.md](node/dex-venue.md)); built:
-DEX-signed orders over allowances, `SCaaSDex.settle`, `OrderFilled` / `Matched`.
+Role-free `TradeOrder`s rest in the node's book and settle in one call that pays every party
+([CTR-DEX-15](contracts/dex.md#CTR-DEX-15), [node/dex-venue.md](node/dex-venue.md)); built: DEX-signed orders over
+allowances, `SCaaSDex.settle`, `OrderFilled` / `Matched`.
 
 ```mermaid
 sequenceDiagram
@@ -717,9 +714,8 @@ AMM pools with `mtxExchange` ([CTR-DEX-20](contracts/dex.md#CTR-DEX-20)).
 <a id="universal-account-registration-submitted-by-a-relayer-specified"></a>
 ### 6.4 Universal Account registration submitted by a relayer (SPECIFIED)
 
-The proof of possession binds the chain,
-the registry, the id and `authRef` but not the caller, so the gateway can pay for it
-([CTR-UA-07](contracts/accounts.md#CTR-UA-07), [NODE-GW-03](node/gateway.md#NODE-GW-03)).
+The proof of possession binds the chain, the registry, the id and `authRef` but not the caller, so the gateway can pay
+for it ([CTR-UA-07](contracts/accounts.md#CTR-UA-07), [NODE-GW-03](node/gateway.md#NODE-GW-03)).
 
 ```mermaid
 sequenceDiagram
@@ -745,8 +741,7 @@ sequenceDiagram
 <a id="confidential-wrap-shield-multi-recipient-transfer-unshield-unwrap-target-p3"></a>
 ### 6.5 Confidential: wrap-shield, multi-recipient transfer, unshield-unwrap (target, P3)
 
-Value enters the
-shielded balance straight from an underlying leg and leaves straight to one
+Value enters the shielded balance straight from an underlying leg and leaves straight to one
 ([CTR-ZTH-45](contracts/zether.md#CTR-ZTH-45), [CTR-ZTH-37](contracts/zether.md#CTR-ZTH-37)); built on development
 chains only: `ZetherToken` with its own underlying, the `OP_ZTRANSFER` envelope op emitting
 `ConfidentialTransfer(entryRef)`, and `ITransferDisclosure`.
@@ -778,10 +773,9 @@ sequenceDiagram
 <a id="disclosure-by-sender_cp"></a>
 ### 6.6 Disclosure by `SENDER_CP`
 
-The sender proves one leg's amount without handing over `s`; the checker verifies
-off chain or through the stateless `ZetherDisclosure`, and no attestation is written
-([CTR-ZTH-40](contracts/zether.md#CTR-ZTH-40), [CTR-ZTH-43](contracts/zether.md#CTR-ZTH-43),
-[CTR-ZTH-39](contracts/zether.md#CTR-ZTH-39)).
+The sender proves one leg's amount without handing over `s`; the checker verifies off chain or through the stateless
+`ZetherDisclosure`, and no attestation is written ([CTR-ZTH-40](contracts/zether.md#CTR-ZTH-40),
+[CTR-ZTH-43](contracts/zether.md#CTR-ZTH-43), [CTR-ZTH-39](contracts/zether.md#CTR-ZTH-39)).
 
 ```mermaid
 sequenceDiagram
@@ -808,9 +802,9 @@ sequenceDiagram
 <a id="mesh-specified-transports"></a>
 ### 6.7 Mesh (SPECIFIED transports)
 
-The origin wraps a bus-eligible intent in `scaas-intent/1.2`, signs `hub.sig`,
-optionally assigns `exclusive` → peers pull (bus) or receive (gossip) → acceptance levels L0–L3 → store → scheduler →
-a job in the `~mesh` namespace → submit. Landed hints trigger consumption reads ([node/mesh.md](node/mesh.md)).
+The origin wraps a bus-eligible intent in `scaas-intent/1.2`, signs `hub.sig`, optionally assigns `exclusive` → peers
+pull (bus) or receive (gossip) → acceptance levels L0–L3 → store → scheduler → a job in the `~mesh` namespace →
+submit. Landed hints trigger consumption reads ([node/mesh.md](node/mesh.md)).
 
 <a id="trust-model"></a>
 ## 7. Trust model
@@ -920,6 +914,9 @@ Crypto-shredding, disclosure for reconciliation and the land gate are in
 <a id="glossary"></a>
 ## 11. Glossary
 
+<details>
+<summary><b>Terms</b> — subject, intent, relayer, lane, namespace, finality gate, UA, kind, feature flag, opening and more</summary>
+
 | Term | Meaning |
 |---|---|
 | **Subject** | The party whose value moves or whose authority is exercised: a person, a company, an AI agent, a device. Subjects sign; nobody signs for them. |
@@ -954,3 +951,5 @@ Crypto-shredding, disclosure for reconciliation and the land gate are in
 | **Decoy** | A recipient leg of a confidential transfer that receives an encryption of 0, added by the sender to hide the real recipient ([CTR-ZTH-37](contracts/zether.md#CTR-ZTH-37)). |
 | **Opening** | Data that proves the amount of one confidential transfer leg to a checker without revealing a key: `SENDER_S`, `RECEIVER_X`, `AUDITOR`, `SENDER_CP` ([CTR-ZTH-40](contracts/zether.md#CTR-ZTH-40)). |
 | **`chain_uid`** | The chain's genesis block hash: with `chain_key` it identifies a chain (a chain id alone is not unique), and it is the `salt` of every SCaaS signing domain ([NET-ALL-22](networks/README.md#NET-ALL-22)). |
+
+</details>

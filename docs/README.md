@@ -1,22 +1,21 @@
-# SCaaS — SmartContract as a Service
+# SCaaS documentation
 
-SCaaS: the smart contracts are the API services; `scaas-node` is the open relayer and indexer anyone can run in front
-of them. This page is the entry point: the product introduction first, then the doc map. It is not normative; the rules
-live in the component docs, and every rule's id, aliases and rationale are in [decisions.md](decisions.md).
+**SCaaS: the smart contracts are the API services; `scaas-node` is the open relayer and indexer anyone can run in
+front of them.**
+
+> [!NOTE]
+> This page is the entry point: the product introduction first, then the doc map. It is not normative; the rules
+> live in the component docs, and every rule's id, aliases and rationale are in [decisions.md](decisions.md). The idea
+> from the ground up, with diagrams, is in the [project README](../README.md).
 
 **Contents**
 
-1. [What SCaaS is](#1-what-scaas-is)
-2. [Who it is for](#2-who-it-is-for)
-3. [What it offers](#3-what-it-offers)
-4. [Deployment shapes](#4-deployment-shapes)
-5. [How to start](#5-how-to-start)
-6. [Reading order](#6-reading-order)
-7. [Map](#7-map)
-8. [Precedence](#precedence)
-9. [Status tags](#status-tags)
-10. [Ids, aliases and history](#10-ids-aliases-and-history)
-11. [Checks](#11-checks)
+| Product | Finding your way | Rules |
+|---|---|---|
+| 1. [What SCaaS is](#1-what-scaas-is) | 5. [How to start](#5-how-to-start) | 8. [Precedence](#precedence) |
+| 2. [Who it is for](#2-who-it-is-for) | 6. [Reading order](#6-reading-order) | 9. [Status tags](#status-tags) |
+| 3. [What it offers](#3-what-it-offers) | 7. [Map](#7-map) | 10. [Ids, aliases and history](#10-ids-aliases-and-history) |
+| 4. [Deployment shapes](#4-deployment-shapes) | | 11. [Checks](#11-checks) |
 
 ## 1. What SCaaS is
 
@@ -41,13 +40,17 @@ and the subject can always go to another relayer, or submit itself.
 **The parts.** Contract families: gasless meta-transactions, tokens, accounts, mandates, a DEX, tenders, an asset
 suite and the confidential layer. The node (`scaas-node`). Clients: signers, wallet connectors, a console and dApp.
 
-**The EVM token model in one paragraph.** One base tree serves every token. A token has one of four kinds: `NONE` (a
-plain issuer token), `UNDERLYING` (a wrapper of one to eight legs, each an ERC-20 or the native coin), or the same two
-with the confidential layer, `NONE_ZETHER` and `UNDERLYING_ZETHER`
-([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)). Features are chosen at creation and never set later (disableable flags can be cleared): `PAYABLE`,
-`MINTABLE`, `BURNABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE`, and for regulated tokens `FREEZE`, `FORCE`, `PAUSE`,
-`ALLOWLIST`. One owner administers a token, grants roles and may renounce
-([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). An open factory creates tokens and DEX clones.
+**The EVM token model.** One base tree serves every token.
+
+<p align="center"><img src="assets/token-tree.svg" width="860" alt="EVM token tree: MetaTxBase, ERC20MetaTx, MetaTokenBase, then the kinds NONE and UNDERLYING (built in P1) and NONE_ZETHER and UNDERLYING_ZETHER (target, P3); libraries AdminLib, UnderlyingLib, HederaLib (built), TradeLib (P2) and ZetherLib (P3) (target)."></p>
+
+- **Kinds.** A token has one of four kinds: `NONE` (a plain issuer token), `UNDERLYING` (a wrapper of one to eight
+  legs, each an ERC-20 or the native coin), or the same two with the confidential layer, `NONE_ZETHER` and
+  `UNDERLYING_ZETHER` ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)).
+- **Features** are chosen at creation and never set later (disableable flags can be cleared): `PAYABLE`, `MINTABLE`,
+  `BURNABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE`, and for regulated tokens `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`.
+- **Owner.** One owner administers a token, grants roles and may renounce
+  ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). An open factory creates tokens and DEX clones.
 
 ## 2. Who it is for
 
@@ -100,15 +103,14 @@ See [architecture.md](architecture.md#profiles).
 1. **Understand the model** — read [architecture.md](architecture.md): the authority model (who signs), the service
    model (write out, read in, finality), and the trust model.
 2. **Pick your path:**
-   - *Integrating an ERP or back office:* [integration.md](integration.md) — onboarding, pushing jobs, feeds,
-     reconciliation, the integration checklist; one worked connector in
-     [integration-odoo-example.md](integration-odoo-example.md).
-   - *Running a node:* [node/README.md](node/README.md) → [node/store.md](node/store.md) (configuration) →
-     [node/runbooks.md](node/runbooks.md) (production gates, backup, incidents).
-   - *Building a wallet or app:* [clients/signers-clientkeys.md](clients/signers-clientkeys.md) and
-     [clients/app.md](clients/app.md).
-   - *Reviewing or deploying contracts:* [contracts/README.md](contracts/README.md) (immutability, admin powers,
-     production gates) and the network page of your chain under [networks/](networks/README.md).
+
+   | You are | Read |
+   |---|---|
+   | Integrating an ERP or back office | [integration.md](integration.md) — onboarding, pushing jobs, feeds, reconciliation, the integration checklist; one worked connector in [integration-odoo-example.md](integration-odoo-example.md) |
+   | Running a node | [node/README.md](node/README.md) → [node/store.md](node/store.md) (configuration) → [node/runbooks.md](node/runbooks.md) (production gates, backup, incidents) |
+   | Building a wallet or app | [clients/signers-clientkeys.md](clients/signers-clientkeys.md) and [clients/app.md](clients/app.md) |
+   | Reviewing or deploying contracts | [contracts/README.md](contracts/README.md) (immutability, admin powers, production gates) and the network page of your chain under [networks/](networks/README.md) |
+
 3. **Check the status tags** — every section says whether it is BUILT, SPECIFIED or PLANNED
    ([status tags](#status-tags)). Confidential-amount contracts stay behind their production gate until an
    independent audit. The built code still has some older lines; the component docs mark them **Transitional (BUILT)**.
@@ -133,14 +135,14 @@ See [architecture.md](architecture.md#profiles).
 
 One table per area; ids in brackets are the rule prefixes each area owns.
 
-**Overview**
+### Overview
 
 | Doc | Covers |
 |---|---|
 | [architecture.md](architecture.md) | How the parts fit and why: contract layer, node roles, topology, sequence diagrams, trust model |
 | [decisions.md](decisions.md) | The register: every ruling, its old ids, owner flag and rationale; `ARCH-POS` system-wide positions |
 
-**Contracts** (`CTR-*`)
+### Contracts (`CTR-*`)
 
 | Doc | Covers |
 |---|---|
@@ -155,7 +157,7 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | [zether.md](contracts/zether.md) | Confidential layer: shield / transfer / unshield, proofs, disclosure |
 | [pq-zether.md](contracts/pq-zether.md) | Post-quantum confidential tokens (lattice; waits for a precompile) |
 
-**Node** (`NODE-*`)
+### Node (`NODE-*`)
 
 | Doc | Covers |
 |---|---|
@@ -172,7 +174,7 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | [ops.md](node/ops.md) · [runbooks.md](node/runbooks.md) | Operations, alerts, runbooks |
 | [threat-model.md](node/threat-model.md) | Node threat model |
 
-**Networks** (`NET-*`)
+### Networks (`NET-*`)
 
 | Doc | Covers |
 |---|---|
@@ -181,7 +183,7 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | [cosmos.md](networks/cosmos.md) · [soroban.md](networks/soroban.md) · [ton.md](networks/ton.md) | CosmWasm, Stellar / Pi, TON |
 | [sui.md](networks/sui.md) · [aptos.md](networks/aptos.md) · [solana.md](networks/solana.md) | Move families and Solana |
 
-**Clients** (`CLI-*`) and **integration** (`INT-*`)
+### Clients (`CLI-*`) and integration (`INT-*`)
 
 | Doc | Covers |
 |---|---|
@@ -190,7 +192,7 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | [integration.md](integration.md) | Connecting any ERP or back office |
 | [integration-odoo-example.md](integration-odoo-example.md) | One worked ERP connector (example only) |
 
-**Not normative**
+### Not normative
 
 | Where | What |
 |---|---|
@@ -230,8 +232,7 @@ from the target, a short **Transitional (BUILT)** paragraph says what runs today
   (`node/job-api.md#NODE-JOB-04`) and never restate it. Ids are `<AREA>-<TOPIC>-<NN>`, never renumbered.
 - Ids used before 2026-10-07 still appear in code comments. They resolve through the alias index at the end of
   [decisions.md](decisions.md#alias-index), or from a shell (old id in, new id, status and link out):
-
-  ```
+  ```bash
   python3 scripts/docs_check.py resolve R91
   ```
 
@@ -242,8 +243,8 @@ from the target, a short **Transitional (BUILT)** paragraph says what runs today
 
 ## 11. Checks
 
-`python3 scripts/docs_check.py check` verifies the register (every old id covered, every current id defined exactly
-once), links, the absence of old ids and client-specific names in current docs, the research banners, and that diagrams are
-Mermaid (C11: an ASCII-art block must become ```mermaid, or ```text when it is a layout or pseudocode);
-`python3 scripts/docs_check.py facts check` verifies that every fact of the frozen sources landed in a current doc or
-is classified as history. `python3 scripts/test_docs_check.py` tests the checker itself.
+| Command | Verifies |
+|---|---|
+| `python3 scripts/docs_check.py check` | The register (every old id covered, every current id defined exactly once), links, the absence of old ids and client-specific names in current docs, the research banners, and that diagrams are Mermaid (C11: an ASCII-art block must become `` ```mermaid ``, or `` ```text `` when it is a layout or pseudocode) |
+| `python3 scripts/docs_check.py facts check` | That every fact of the frozen sources landed in a current doc or is classified as history |
+| `python3 scripts/test_docs_check.py` | The checker itself |
