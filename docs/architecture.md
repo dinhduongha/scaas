@@ -236,8 +236,8 @@ agent signs, a relayer pays gas); Zether keeps commercial amounts confidential w
 
 | Component | Path | Role | Status |
 |---|---|---|---|
-| EVM contracts | `smartcontracts/evm/` (Foundry; `src/{common,metatx,factory,dex,wallet,account,registry,zether,hedera,chains}`) | Target: the token tree `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase` → kinds `NONE`, `UNDERLYING`, `NONE_ZETHER`, `UNDERLYING_ZETHER` ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)); the libraries `TradeLib`, `PayLib`, `AdminLib`, `UnderlyingLib`, `ZetherLib`, `HederaLib` ([CTR-TOK-24](contracts/token-wrappers.md#CTR-TOK-24)); `OpenFactory` for tokens and DEX clones ([CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25)); `SCaaSDex`; `MandateWallet`; `SmartKeyAccount`; `UniversalAccountRegistry`; the Zether verifiers (bn254, BLS12-381), `ZetherDisclosure`, `ZetherStatements`. Build profiles `private7622` (the private chain 7622), `zether`, `gnosis`, `celo` | BUILT: the v1/v2 lines and `ZetherToken`; target tree SPECIFIED (phases P1–P5); `PqzToken` SPECIFIED |
-| Hedera contracts | the EVM implementations | No separate contracts: the EVM implementations deployed with `IS_HEDERA` (HIP-632 signatures, fail-closed HTS checks; [CTR-TOK-23](contracts/token-wrappers.md#CTR-TOK-23)) | BUILT: `HederaMetaToken` and three v2 Hedera children (`smartcontracts/evm/src/hedera/`); target SPECIFIED (P1) |
+| EVM contracts | `smartcontracts/evm/` (Foundry; `src/{common,metatx,factory,dex,wallet,account,registry,zether,hedera,chains}`) | Target: the token tree `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase` → kinds `NONE`, `UNDERLYING`, `NONE_ZETHER`, `UNDERLYING_ZETHER` ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)); the libraries `TradeLib`, `AdminLib`, `UnderlyingLib`, `ZetherLib`, `HederaLib`, with pay inline behind the `PAYABLE` flag in `MetaTokenBase` (no `PayLib`; [CTR-TOK-24](contracts/token-wrappers.md#CTR-TOK-24)); `OpenFactory` for tokens and DEX clones ([CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25)); `SCaaSDex`; `MandateWallet`; `SmartKeyAccount`; `UniversalAccountRegistry`; the Zether verifiers (bn254, BLS12-381), `ZetherDisclosure`, `ZetherStatements`. Build profiles `private7622` (the private chain 7622), `zether`, `gnosis`, `celo` | BUILT (P1a–P1d): `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase`, kind `NONE` = `NoUnderlyingToken`, kind `UNDERLYING` = `UnderlyingToken` (1–8 legs, native-coin leg) + `UnderlyingLib`, `AdminLib`, `HederaLib`; still built: the older v1 line and `ZetherToken`. SPECIFIED: `createToken` (P1e), `TradeLib` (P2), the `*_ZETHER` kinds and `ZetherLib` (P3), P4–P5; `PqzToken` |
+| Hedera contracts | the EVM implementations | No separate contracts: the EVM implementations deployed with `IS_HEDERA` (HIP-632 signatures, fail-closed HTS checks; [CTR-TOK-23](contracts/token-wrappers.md#CTR-TOK-23)) | BUILT (P1c–P1d): `IS_HEDERA` is an immutable of every implementation; `HederaLib` (`smartcontracts/evm/src/hedera/`) holds the HIP-632 path, and the HTS association is called from `UnderlyingLib` init; the Hedera wrapper children are deleted (the v1 `HederaMetaToken` goes with the v1 line) |
 | Cosmos contracts | `smartcontracts/cosmos/` (CosmWasm workspace) | `scaas-token` (CW20 + meta-op), `scaas-mandate`, `scaas-dex`, shared `scaas-metaop` | BUILT |
 | Soroban contracts | `smartcontracts/soroban/` | SEP-41 token + `pay`, mandate, DEX; native auth as the meta-tx (Stellar and Pi Network) | BUILT |
 | Move contracts | `smartcontracts/move/{aptos,sui}/` | Package `scaas`: `meta` (per-subject account + lanes), mandate, DEX | BUILT |
@@ -255,9 +255,9 @@ agent signs, a relayer pays gas); Zether keeps commercial amounts confidential w
 </details>
 
 **Target and built.** The contract sections below describe the target that the component docs specify. The built EVM
-code still carries the older lines (v1/v2 tokens, `ZetherToken`, `SubjectAccount`); every component doc says what is
-built in a *Transitional (BUILT)* note naming the phase that replaces it: P1 the base, the two public kinds and
-`createToken`; P2 `TradeLib` and the DEX clone; P3 the Zether kinds; P4 `MandateWallet` and `SmartKeyAccount` on the
+code already has the P1 base and the two public kinds (P1a–P1d) and still carries the older lines (the v1 tokens,
+`ZetherToken`, `SubjectAccount`); every component doc says what is built in a *Transitional (BUILT)* note naming the
+phase that replaces it: P1 the base, the two public kinds and `createToken` (P1e); P2 `TradeLib` and the DEX clone; P3 the Zether kinds; P4 `MandateWallet` and `SmartKeyAccount` on the
 base; P5 node and client support for the new ABI ([contracts/token-wrappers.md](contracts/token-wrappers.md#transitional-built-tokens),
 [contracts/metatx.md](contracts/metatx.md#transitional-built)). Nothing is deployed, so the target replaces the built
 lines in place; there is no migration between them.
@@ -286,7 +286,6 @@ classDiagram
     ZetherLayer <|-- NoUnderlyingZetherToken
     ZetherLayer <|-- UnderlyingZetherToken
     MetaTokenBase ..> TradeLib : trade
-    MetaTokenBase ..> PayLib : pay if PAYABLE
     MetaTokenBase ..> AdminLib : flags and roles
     MetaTokenBase ..> HederaLib : if IS_HEDERA
     UnderlyingToken ..> UnderlyingLib : legs
@@ -304,13 +303,13 @@ classDiagram
     class MetaTokenBase {
         <<abstract>>
         features, owner, roles, provenance
+        pay inline if PAYABLE
     }
     class ZetherLayer {
         <<abstract>>
         acc and pending per UA, totalShielded
     }
     class TradeLib { <<library>> }
-    class PayLib { <<library>> }
     class AdminLib { <<library>> }
     class UnderlyingLib { <<library>> }
     class ZetherLib { <<library>> }
@@ -623,7 +622,7 @@ the target; the caption says what is built.
 
 The subject signs on its device, the client's outbox pushes the intent to its own node, and the client books the
 payment only from the finalized feed ([INT-ERP-18](integration.md#INT-ERP-18),
-[NODE-GEN-08](node/README.md#NODE-GEN-08)); built: the `pay` op of the v1/v2 lines.
+[NODE-GEN-08](node/README.md#NODE-GEN-08)); built: `mtxPay` on `MetaTokenBase` and the `pay` op of the v1 line.
 
 ```mermaid
 sequenceDiagram
