@@ -10,10 +10,11 @@ import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
 import {IUnderlyingToken} from "../../src/metatx/IUnderlyingToken.sol";
 import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 
 /// Kind `UNDERLYING` on `AdminLib` (CTR-TOK-22): flags valid for the kind, the rate role and the guardian as roles,
-/// `disableFeature(RATE_ADJUSTABLE)` cancels a pending change, the single-asset ABI rule, init vs the factory's
-/// `underlyings`, and `UnderlyingLib` writing only its own namespace.
+/// `disableFeature(RATE_ADJUSTABLE)` cancels a pending change, the single-asset ABI rule, the leg count, and
+/// `UnderlyingLib` writing only its own namespace.
 contract UnderlyingTest is V2Fixture {
     using stdJson for string;
 
@@ -51,7 +52,7 @@ contract UnderlyingTest is V2Fixture {
     function test_validFlags_underlyingKind() public {
         (address[] memory us, uint256[] memory one) = _two();
         Rate memory fixedRate;
-        IUnderlyingToken.UnderlyingInit memory c = underlyingInit(us, one, one, 6, fixedRate, address(0), address(0));
+        IFactoryToken.TokenConfig memory c = underlyingInit(us, one, one, 6, fixedRate, address(0), address(0));
         c.features |= 1 << AdminLib.MINTABLE;
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.MINTABLE));
         this.initExt(us, abi.encode(c));
@@ -70,21 +71,19 @@ contract UnderlyingTest is V2Fixture {
         assertEq(t.features(), (1 << AdminLib.PAYABLE) | (1 << RATE));
     }
 
-    function test_init_legsMustMatchTheFactoryUnderlyings() public {
-        (address[] memory us, uint256[] memory one) = _two();
+    /// E6: the factory indexes the same `legs` the token reads; a direct `initialize` with 0 or 9 legs is refused by
+    /// the token.
+    function test_init_legCount() public {
         Rate memory fixedRate;
-        bytes memory d = abi.encode(underlyingInit(us, one, one, 6, fixedRate, address(0), address(0)));
-        address[] memory swapped = new address[](2);
-        (swapped[0], swapped[1]) = (us[1], us[0]);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnknownUnderlying.selector, address(usdt)));
-        this.initExt(swapped, d);
-        vm.expectRevert(abi.encodeWithSelector(MetaTokenBase.UnderlyingCountInvalid.selector, 2));
-        this.initExt(_one(address(usdc)), d);
+        uint256[] memory none;
         vm.expectRevert(abi.encodeWithSelector(MetaTokenBase.UnderlyingCountInvalid.selector, 0));
-        this.initExt(new address[](0), d);
+        this.initExt(new address[](0),
+            abi.encode(underlyingInit(new address[](0), none, none, 6, fixedRate, address(0), address(0))));
         address[] memory nine = new address[](9);
+        uint256[] memory ones = new uint256[](9);
+        for (uint256 i; i < 9; ++i) (nine[i], ones[i]) = (address(new MockERC20("X", "X", 6)), 1);
         vm.expectRevert(abi.encodeWithSelector(MetaTokenBase.UnderlyingCountInvalid.selector, 9));
-        this.initExt(nine, d);
+        this.initExt(nine, abi.encode(underlyingInit(nine, ones, ones, 6, fixedRate, address(0), address(0))));
     }
 
     // ------------------------------------------------------------------ rate role (RATE_ADJUSTABLE)

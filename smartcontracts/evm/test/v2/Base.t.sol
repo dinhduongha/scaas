@@ -5,6 +5,7 @@ import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {V2Fixture, BaseHarness, GasBurner1271, UID_} from "./helpers/V2Fixture.sol";
 import {Puller} from "../helpers/WalletMocks.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
+import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IERC20Payment} from "../../src/metatx/IERC20Payment.sol";
@@ -63,14 +64,15 @@ contract BaseTest is V2Fixture {
 
     function test_implementationIsLockedAndCloneInitializesOnce() public {
         address impl = t.implementation();
+        IFactoryToken.TokenConfig memory cfg;
         vm.expectRevert(MetaTokenBase.AlreadyInitialized.selector);
-        MetaTokenBase(impl).initialize(address(this), new address[](0), 1, "");
+        MetaTokenBase(impl).initialize(address(this), 1, cfg);
         vm.expectRevert(MetaTokenBase.AlreadyInitialized.selector);
-        t.initialize(address(this), new address[](0), 1, "");
+        t.initialize(address(this), 1, cfg);
         address c = Clones.clone(impl);
         vm.prank(address(0xBAD));
         vm.expectRevert(MetaTokenBase.NotFactory.selector);
-        MetaTokenBase(c).initialize(address(0xBAD), new address[](0), 1, "");
+        MetaTokenBase(c).initialize(address(0xBAD), 1, cfg);
     }
 
     // ------------------------------------------------------------------ pipeline
@@ -133,8 +135,9 @@ contract BaseTest is V2Fixture {
     function test_erc1271Gets400kOnlyAsSmartKeyAccountClone() public {
         GasBurner1271 burner = new GasBurner1271();
         BaseHarness impl = new BaseHarness(address(this), address(burner));
-        BaseHarness tk = BaseHarness(_clone(address(impl), address(this), new address[](0),
-            abi.encode("H", "H", uint8(0), uint256(0))));
+        IFactoryToken.TokenConfig memory c;
+        (c.name, c.symbol, c.initialHolder) = ("H", "H", address(this)); // the harness mints `initialSupply` (0)
+        BaseHarness tk = BaseHarness(_clone(address(impl), address(this), new address[](0), abi.encode(c)));
         address clone = Clones.clone(address(burner));
         tk.mint(clone, 10);
         tk.mint(address(burner), 10);

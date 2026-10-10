@@ -5,39 +5,36 @@ import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {MetaTokenBase} from "../../../src/metatx/MetaTokenBase.sol";
 import {AdminLib} from "../../../src/metatx/AdminLib.sol";
-import {IOpenFactoryV2} from "../../../src/common/IOpenFactoryV2.sol";
+import {IFactoryToken} from "../../../src/factory/IFactoryToken.sol";
 import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 import {NoUnderlyingToken} from "../../../src/metatx/NoUnderlyingToken.sol";
 import {UnderlyingToken} from "../../../src/metatx/UnderlyingToken.sol";
-import {IUnderlyingToken} from "../../../src/metatx/IUnderlyingToken.sol";
 
 bytes32 constant UID_ = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
 
-/// Tầng tối thiểu trên `MetaTokenBase` cho test của T1: `initData = (name, symbol, decimals, supply)`; `PAYABLE` bật
-/// như khi build (P1c).
+/// Minimal kind on `MetaTokenBase` for the base tests: name, symbol, decimals, `initialSupply` to `initialHolder`;
+/// `PAYABLE` set as built (P1c), whatever `cfg.features` says.
 contract BaseHarness is MetaTokenBase {
     constructor(address f, address s) MetaTokenBase(f, s, UID_, false) {}
 
-    function tokenKind() external pure override returns (IOpenFactoryV2.TokenKind) {
-        return IOpenFactoryV2.TokenKind.META_NONE;
+    function kind() public pure override returns (uint8) {
+        return AdminLib.KIND_NONE;
     }
 
-    function _init(address creator_, address[] calldata, bytes calldata initData) internal override {
-        (string memory n, string memory s, uint8 d, uint256 supply) =
-            abi.decode(initData, (string, string, uint8, uint256));
-        _setMetadata(n, s, d);
+    function _init(TokenConfig calldata cfg) internal override {
+        _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         AdminLib.Roles memory none;
         AdminLib.init(AdminLib.KIND_NONE, 1 << AdminLib.PAYABLE, 0, address(0), none);
-        _mint(creator_, supply);
+        _mint(cfg.initialHolder, cfg.initialSupply);
     }
 
     function mint(address to, uint256 v) external { _mint(to, v); }
 }
 
-/// Kind-NONE init (P1c `NoneInit`) with the behaviour built before P1c: `PAYABLE | MINTABLE | BURNABLE`, nothing
-/// locked, no owner, `minter` (0 = none), `supply` to `holder`. Callers `abi.encode` it (after adjusting fields).
+/// Kind-NONE `TokenConfig` with the behaviour built before P1c: `PAYABLE | MINTABLE | BURNABLE`, nothing locked, no
+/// owner, `minter` (0 = none), `supply` to `holder`. Callers `abi.encode` it (after adjusting fields).
 function noneInit(string memory n, string memory s, uint8 d, uint256 supply, address holder, address minter)
-    pure returns (NoUnderlyingToken.NoneInit memory c)
+    pure returns (IFactoryToken.TokenConfig memory c)
 {
     c.name = n;
     c.symbol = s;
@@ -57,10 +54,10 @@ struct Rate {
     uint16 maxRateStepBps;
 }
 
-/// `UnderlyingInit` for legs `us` at `nums/dens`: `PAYABLE` (as built), `RATE_ADJUSTABLE` with `cfg.adjustable`,
+/// `TokenConfig` of kind UNDERLYING for legs `us` at `nums/dens`: `PAYABLE` (as built), `RATE_ADJUSTABLE` with `cfg.adjustable`,
 /// `WRAP_DISABLEABLE` with a non-zero `guardian`; nothing locked; `owner` (0 = none).
 function underlyingInit(address[] memory us, uint256[] memory nums, uint256[] memory dens, uint8 dec, Rate memory cfg,
-    address guardian, address owner) pure returns (IUnderlyingToken.UnderlyingInit memory c)
+    address guardian, address owner) pure returns (IFactoryToken.TokenConfig memory c)
 {
     c.name = "Wrapped";
     c.symbol = "WRP";
@@ -71,9 +68,9 @@ function underlyingInit(address[] memory us, uint256[] memory nums, uint256[] me
     c.owner = owner;
     c.roles.rateAdmin = cfg.rateAdmin;
     c.roles.guardian = guardian;
-    c.legs = new IUnderlyingToken.LegInit[](us.length);
-    for (uint256 i; i < us.length; ++i) c.legs[i] = IUnderlyingToken.LegInit(us[i], nums[i], dens[i]);
-    c.rate = IUnderlyingToken.RateConfig(cfg.rateDelay, cfg.maxRateStepBps);
+    c.legs = new IFactoryToken.Leg[](us.length);
+    for (uint256 i; i < us.length; ++i) c.legs[i] = IFactoryToken.Leg(us[i], nums[i], dens[i]);
+    c.rate = IFactoryToken.RateConfig(cfg.rateDelay, cfg.maxRateStepBps);
 }
 
 /// ERC-1271 đốt ~100k gas rồi trả magic: qua được với 400k, không qua với 50k.
@@ -85,7 +82,7 @@ contract GasBurner1271 {
     }
 }
 
-/// Test đóng vai factory: clone + `initialize` trong cùng lời gọi, như `OpenFactoryV2`.
+/// The test plays the factory: clone + `initialize` in the same call, as `OpenFactory`.
 abstract contract V2Fixture is Test {
     address internal relayer = address(0xBEEF);
     uint32 internal constant RR = MetaTxLib.MODE_RESTRICT_RELAYER;
@@ -93,17 +90,22 @@ abstract contract V2Fixture is Test {
     uint32 internal constant PCT = MetaTxLib.MODE_FEE_PERCENT;
     uint32 internal constant FIX = MetaTxLib.MODE_FEE_FIXED;
 
-    function _clone(address impl, address creator_, address[] memory us, bytes memory initData)
+    /// `cfgData` = `abi.encode(TokenConfig)`; `us` must equal its legs (what the factory would index).
+    function _clone(address impl, address creator_, address[] memory us, bytes memory cfgData)
         internal returns (address t)
     {
+        IFactoryToken.TokenConfig memory cfg = abi.decode(cfgData, (IFactoryToken.TokenConfig));
+        assertEq(cfg.legs.length, us.length, "fixture: legs vs underlyings");
+        for (uint256 i; i < us.length; ++i) assertEq(cfg.legs[i].underlying, us[i], "fixture: leg order");
         t = Clones.clone(impl);
-        MetaTokenBase(t).initialize(creator_, us, 1, initData);
+        MetaTokenBase(t).initialize(creator_, 1, cfg);
     }
 
     function _harness(address creator_, uint256 supply) internal returns (BaseHarness) {
         BaseHarness impl = new BaseHarness(address(this), address(0));
-        return BaseHarness(_clone(address(impl), creator_, new address[](0),
-            abi.encode("Harness", "HRN", uint8(6), supply)));
+        IFactoryToken.TokenConfig memory c;
+        (c.name, c.symbol, c.decimals, c.initialSupply, c.initialHolder) = ("Harness", "HRN", 6, supply, creator_);
+        return BaseHarness(_clone(address(impl), creator_, new address[](0), abi.encode(c)));
     }
 
     address internal noneImpl;
@@ -135,7 +137,7 @@ abstract contract V2Fixture is Test {
         xs[0] = x;
     }
 
-    /// `abi.encode(UnderlyingInit)` for one leg `u`.
+    /// `abi.encode(TokenConfig)` for one leg `u`.
     function _singleInit(address u, uint8 dec, uint256 num, uint256 den, Rate memory cfg)
         internal view returns (bytes memory)
     {

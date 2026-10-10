@@ -2,11 +2,11 @@
 pragma solidity ^0.8.20;
 
 import {Test, console} from "forge-std/Test.sol";
-import {OpenFactory} from "../../src/factory/OpenFactory.sol";
-import {IOpenFactory} from "../../src/common/IOpenFactory.sol";
+import {OpenFactoryV1} from "../../src/factory/OpenFactoryV1.sol";
+import {IOpenFactoryV1} from "../../src/common/IOpenFactoryV1.sol";
 import {MetaToken} from "../../src/metatx/MetaToken.sol";
-import {OpenFactoryV2} from "../../src/factory/OpenFactoryV2.sol";
-import {IOpenFactoryV2} from "../../src/common/IOpenFactoryV2.sol";
+import {OpenFactory} from "../../src/factory/OpenFactory.sol";
+import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
 import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
@@ -50,13 +50,13 @@ contract MetaTxGasV2Test is Test {
     function setUp() public {
         vm.warp(1_800_000_000);
         signer = vm.addr(PK);
-        OpenFactory f1 = new OpenFactory(address(this));
-        f1.registerImplementation(IOpenFactory.TokenKind.META, 1, address(new MetaToken(address(f1), address(0))));
+        OpenFactoryV1 f1 = new OpenFactoryV1(address(this));
+        f1.registerImplementation(IOpenFactoryV1.TokenKind.META, 1, address(new MetaToken(address(f1), address(0))));
         v1 = MetaToken(f1.createMetaToken(1, address(0), abi.encode("V1", "V1", uint8(18), uint256(0), address(this)), "a"));
-        OpenFactoryV2 f2 = new OpenFactoryV2(address(this));
-        f2.registerImplementation(IOpenFactoryV2.TokenKind.META_NONE, 1,
+        OpenFactory f2 = new OpenFactory(address(this), UID);
+        f2.registerImplementation(IOpenFactory.TokenKind.NONE, 1,
             address(new NoUnderlyingToken(address(f2), address(0), UID, false)));
-        f2.registerImplementation(IOpenFactoryV2.TokenKind.META_SINGLE, 1,
+        f2.registerImplementation(IOpenFactory.TokenKind.UNDERLYING, 1,
             address(new UnderlyingToken(address(f2), address(0), UID, false)));
         acct = new Always1271();
         v2 = _v2(f2, "a");
@@ -70,8 +70,8 @@ contract MetaTxGasV2Test is Test {
         uint256[] memory one = new uint256[](1);
         one[0] = 1;
         Rate memory c;
-        w = UnderlyingToken(f2.createTiered(IOpenFactoryV2.TokenKind.META_SINGLE, 1, us,
-            abi.encode(underlyingInit(us, one, one, 6, c, address(0), address(0))), "w"));
+        w = UnderlyingToken(f2.createToken(IOpenFactory.TokenKind.UNDERLYING, 1,
+            underlyingInit(us, one, one, 6, c, address(0), address(0)), "w"));
         usdc.mint(signer, 1_000e6);
         vm.startPrank(signer);
         usdc.approve(address(w), type(uint256).max);
@@ -80,9 +80,9 @@ contract MetaTxGasV2Test is Test {
         usdc.mint(recipient, 1); // recipient already holds the underlying
     }
 
-    function _v2(OpenFactoryV2 f2, bytes32 salt) internal returns (NoUnderlyingToken t) {
-        t = NoUnderlyingToken(f2.createTiered(IOpenFactoryV2.TokenKind.META_NONE, 1, new address[](0),
-            abi.encode(noneInit("V2", "V2", 18, 0, address(this), address(this))), salt));
+    function _v2(OpenFactory f2, bytes32 salt) internal returns (NoUnderlyingToken t) {
+        t = NoUnderlyingToken(f2.createToken(IOpenFactory.TokenKind.NONE, 1,
+            noneInit("V2", "V2", 18, 0, address(this), address(this)), salt));
         _fund(address(t));
     }
 

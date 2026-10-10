@@ -7,16 +7,15 @@ import {UnderlyingLib} from "./UnderlyingLib.sol";
 import {IUnderlyingToken} from "./IUnderlyingToken.sol";
 import {MetaTxBase} from "./MetaTxBase.sol";
 import {IMetaTx} from "./IMetaTx.sol";
-import {IOpenFactoryV2} from "../common/IOpenFactoryV2.sol";
 
 /// @title Kind `UNDERLYING` (CTR-TOK-21): a wrapper of 1–8 legs, each an ERC-20 or the native coin (CTR-TOK-26), at
 ///        per-leg rates `num/den`, with internal per-leg reserves; the logic is in `UnderlyingLib`.
 /// @notice Any-of (CTR-TOK-07): wrap one chosen leg, unwrap into one chosen leg, bounded by that leg's reserve. The
 ///         single-asset ABI (`wrap(amount)`, `unwrap(amount, recipient[, minOut])`) works only with exactly one leg
 ///         (`UnderlyingRequired`). Flags (CTR-TOK-22): `PAYABLE`, `RATE_ADJUSTABLE` (role rateAdmin, a contract:
-///         timelocked rate changes), `WRAP_DISABLEABLE` (role guardian: one-way `disableWrap`). Built by the factory
-///         through `initialize(creator, underlyings, version, abi.encode(UnderlyingInit))`; P1e switches to
-///         `TokenConfig`.
+///         timelocked rate changes), `WRAP_DISABLEABLE` (role guardian: one-way `disableWrap`). Built by
+///         `OpenFactory.createToken` (CTR-TOK-25) from `legs` and `rate`; `initialSupply`, `initialHolder`, `conf`
+///         must be empty.
 contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
     uint256 public constant RATE_WINDOW = UnderlyingLib.RATE_WINDOW;
 
@@ -30,14 +29,14 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
         MetaTokenBase(factory_, smartKeyAccountImpl_, chainUid_, isHedera_)
     {}
 
-    /// @dev Transitional: factory v2's `META_SINGLE` takes 1–8 legs (P1e replaces the enum).
-    function tokenKind() external pure override returns (IOpenFactoryV2.TokenKind) {
-        return IOpenFactoryV2.TokenKind.META_SINGLE;
+    function kind() public pure override returns (uint8) {
+        return AdminLib.KIND_UNDERLYING;
     }
 
-    /// @param initData `abi.encode(UnderlyingInit)`; decoded and checked in `UnderlyingLib.initToken`.
-    function _init(address, address[] calldata us, bytes calldata initData) internal override {
-        UnderlyingLib.initToken(us, initData, IS_HEDERA);
+    /// @dev `initialSupply`, `initialHolder`, `conf` must be empty; legs and rate are checked in `UnderlyingLib`.
+    function _init(TokenConfig calldata cfg) internal override {
+        _requireUnused(cfg, true, false, false);
+        UnderlyingLib.initToken(cfg, IS_HEDERA);
     }
 
     // ------------------------------------------------------------------ wrap / unwrap / reserve

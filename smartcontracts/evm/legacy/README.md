@@ -10,3 +10,6 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
 - **Not tested, not maintained, never deployed.** Relative imports point at their old neighbours and may not resolve.
 - The authoritative copy is the tag: `git show ref/pre-token-tree:smartcontracts/evm/src/<path>`.
 - Why it exists: owner decision of 2026-10-08 (CTR-MTX-07; TODO.md §00, P1 start checklist).
+- `p1e/`: `OpenFactoryV2`, `IOpenFactoryV2`, `IFactoryTokenV2` as they stood on `main` before P1e (the factory v2 that
+  P1e rewrote into `OpenFactory`); not built. (The v1 line follows into `legacy/` when node/clientkeys (P5) and Zether
+  (P3) stop using it, E1.)

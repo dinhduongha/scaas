@@ -43,7 +43,7 @@ pragma solidity ^0.8.20;
 /// Đó chính xác là thứ được mua bằng việc bỏ upgrade: **không tồn tại một nút bấm nào,
 /// của bất kỳ ai, thay đổi được contract đang giữ tiền của bạn.** Không có nút thì
 /// không có ai để tin, và không có gì để bị đánh cắp quyền.
-interface IOpenFactory {
+interface IOpenFactoryV1 {
     enum TokenKind {
         META,   // ERC-20 gasless, số dư công khai
         ZETHER  // số dư bí mật

@@ -10,7 +10,8 @@ import {IUnderlyingToken} from "../../src/metatx/IUnderlyingToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
-import {IOpenFactoryV2} from "../../src/common/IOpenFactoryV2.sol";
+import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
 /// T2: tầng 2 `UnderlyingToken` — wrap/unwrap/reserve, tỉ lệ, làm tròn (TW2 §5, R133, R134, R137, R143).
@@ -38,7 +39,7 @@ contract Tier2Test is V2Fixture {
 
     function test_oneToOneIsV1Behaviour() public {
         UnderlyingToken t = _single(address(usdc), 6, 1, 1, _fixedRate());
-        assertEq(uint8(t.tokenKind()), uint8(IOpenFactoryV2.TokenKind.META_SINGLE));
+        assertEq(t.kind(), AdminLib.KIND_UNDERLYING);
         assertEq(t.underlying(), address(usdc));
         assertEq(t.underlyings().length, 1);
         _fund(usdc, alice, 100e6, address(t));
@@ -292,7 +293,7 @@ contract Tier2Test is V2Fixture {
         uint256[] memory one = new uint256[](2);
         one[0] = one[1] = 1;
         UnderlyingToken t = UnderlyingToken(this.initExt(two, _multiInit(two, one, one, _fixedRate(), address(0))));
-        assertEq(uint8(t.tokenKind()), uint8(IOpenFactoryV2.TokenKind.META_SINGLE));
+        assertEq(t.kind(), AdminLib.KIND_UNDERLYING);
         assertEq(t.underlying(), address(0));
         assertEq(t.underlyings().length, 2);
         vm.expectRevert(IUnderlyingToken.UnderlyingRequired.selector);
@@ -306,10 +307,10 @@ contract Tier2Test is V2Fixture {
         address predicted = Clones.predictDeterministicAddress(impl, bytes32("self"));
         address c = Clones.cloneDeterministic(impl, bytes32("self"));
         assertEq(c, predicted);
-        address[] memory us = new address[](1);
-        us[0] = c;
+        IFactoryToken.TokenConfig memory cfg =
+            abi.decode(_singleInit(c, 6, 1, 1, _fixedRate()), (IFactoryToken.TokenConfig));
         vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnderlyingInvalid.selector, c));
-        MetaTokenBase(c).initialize(address(this), us, 1, _singleInit(c, 6, 1, 1, _fixedRate()));
+        MetaTokenBase(c).initialize(address(this), 1, cfg);
     }
 
     function test_boundsAreInclusive() public {

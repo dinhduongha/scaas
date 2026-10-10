@@ -2,8 +2,8 @@
 pragma solidity ^0.8.20;
 
 import {ZetherFixture} from "./helpers/ZetherFixture.sol";
-import {OpenFactory} from "../../src/factory/OpenFactory.sol";
-import {IOpenFactory} from "../../src/common/IOpenFactory.sol";
+import {OpenFactoryV1} from "../../src/factory/OpenFactoryV1.sol";
+import {IOpenFactoryV1} from "../../src/common/IOpenFactoryV1.sol";
 import {ZetherToken} from "../../src/zether/ZetherToken.sol";
 import {ZetherSafety} from "../../src/zether/ZetherSafety.sol";
 import {ZetherVerifierBn254, ZetherVerifierBls12381} from "../../src/zether/ZetherVerifier.sol";
@@ -15,22 +15,22 @@ contract ZetherGateTest is ZetherFixture {
     }
 
     function test_zetherOffByDefault() public {
-        OpenFactory f = new OpenFactory(registrar);
+        OpenFactoryV1 f = new OpenFactoryV1(registrar);
         assertFalse(f.zetherEnabled());
         ZetherToken z = new ZetherToken(address(f), dis);
         vm.prank(registrar);
-        f.registerImplementation(IOpenFactory.TokenKind.ZETHER, 1, address(z));
-        vm.expectRevert(OpenFactory.ZetherDisabled.selector);
+        f.registerImplementation(IOpenFactoryV1.TokenKind.ZETHER, 1, address(z));
+        vm.expectRevert(OpenFactoryV1.ZetherDisabled.selector);
         f.createZetherToken(1, address(usd), address(ver), "", "s");
-        vm.expectRevert(OpenFactory.ZetherDisabled.selector);
-        f.createUnregistered(IOpenFactory.TokenKind.ZETHER, address(z), address(usd), address(ver), "", "s");
+        vm.expectRevert(OpenFactoryV1.ZetherDisabled.selector);
+        f.createUnregistered(IOpenFactoryV1.TokenKind.ZETHER, address(z), address(usd), address(ver), "", "s");
     }
 
     function test_cannotEnableOnNonDevChain() public {
         uint256[4] memory prod = [uint256(1), 100, 42220, 7622];
         for (uint256 i; i < prod.length; ++i) {
             vm.chainId(prod[i]);
-            OpenFactory f = new OpenFactory(registrar);
+            OpenFactoryV1 f = new OpenFactoryV1(registrar);
             vm.prank(registrar);
             vm.expectRevert(abi.encodeWithSelector(ZetherSafety.ZetherNotDevChain.selector, prod[i]));
             f.setZetherEnabled(true);
@@ -40,7 +40,7 @@ contract ZetherGateTest is ZetherFixture {
     }
 
     function test_onlyRegistrarToggles() public {
-        vm.expectRevert(OpenFactory.NotRegistrar.selector);
+        vm.expectRevert(OpenFactoryV1.NotRegistrar.selector);
         factory.setZetherEnabled(false);
     }
 
@@ -61,7 +61,7 @@ contract ZetherGateTest is ZetherFixture {
 
     function test_devChain1337Allowed() public {
         vm.chainId(1337);
-        OpenFactory f = new OpenFactory(registrar);
+        OpenFactoryV1 f = new OpenFactoryV1(registrar);
         vm.prank(registrar);
         f.setZetherEnabled(true);
         assertTrue(f.zetherEnabled());
@@ -82,8 +82,8 @@ contract ZetherGateTest is ZetherFixture {
         assertEq(tok.auditorKey().length, 0);
         assertEq(tok.name(), "Zether USD");
         assertEq(tok.symbol(), "zUSD");
-        (IOpenFactory.TokenKind k, uint64 v) = factory.versionOf(address(tok));
-        assertEq(uint8(k), uint8(IOpenFactory.TokenKind.ZETHER));
+        (IOpenFactoryV1.TokenKind k, uint64 v) = factory.versionOf(address(tok));
+        assertEq(uint8(k), uint8(IOpenFactoryV1.TokenKind.ZETHER));
         assertEq(v, 1);
     }
 }

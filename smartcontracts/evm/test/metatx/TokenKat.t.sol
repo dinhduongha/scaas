@@ -27,8 +27,7 @@ contract TokenKatTest is Test {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
         tok = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), UID, false))));
-        tok.initialize(address(this), new address[](0), 1,
-            abi.encode(noneInit("Points", "PTS", 6, 0, address(this), address(this))));
+        tok.initialize(address(this), 1, noneInit("Points", "PTS", 6, 0, address(this), address(this)));
         tok.mint(vm.addr(ALICE_PK), 1_000e6);
     }
 

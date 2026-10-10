@@ -49,8 +49,7 @@ contract AllowlistTest is Test {
         u = new MockERC20("U", "U", 6);
         u2 = new MockERC20("U2", "U2", 6);
         none = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), UID, false))));
-        none.initialize(address(this), new address[](0), 1,
-            abi.encode(noneInit("P", "P", 6, 0, address(this), address(this))));
+        none.initialize(address(this), 1, noneInit("P", "P", 6, 0, address(this), address(this)));
         single = UnderlyingToken(
             Clones.clone(address(new UnderlyingToken(address(this), address(0), UID, false))));
         Rate memory cfg;
@@ -58,15 +57,14 @@ contract AllowlistTest is Test {
         one[0] = address(u);
         uint256[] memory r1 = new uint256[](1);
         r1[0] = 1;
-        single.initialize(address(this), one, 1,
-            abi.encode(underlyingInit(one, r1, r1, 6, cfg, address(0), address(0))));
+        single.initialize(address(this), 1, underlyingInit(one, r1, r1, 6, cfg, address(0), address(0)));
         multi = UnderlyingToken(
             Clones.clone(address(new UnderlyingToken(address(this), address(0), UID, false))));
         address[] memory two = new address[](2);
         (two[0], two[1]) = (address(u), address(u2));
         uint256[] memory r = new uint256[](2);
         (r[0], r[1]) = (1, 1);
-        multi.initialize(address(this), two, 1, abi.encode(underlyingInit(two, r, r, 6, cfg, address(0), address(0))));
+        multi.initialize(address(this), 1, underlyingInit(two, r, r, 6, cfg, address(0), address(0)));
         none.mint(alice, 1_000e6);
         u.mint(alice, 1_000e6);
         u2.mint(alice, 1_000e6);
@@ -306,7 +304,7 @@ contract AllowlistTest is Test {
         one[0] = address(bad);
         uint256[] memory r1 = new uint256[](1);
         r1[0] = 1;
-        w.initialize(address(this), one, 1, abi.encode(underlyingInit(one, r1, r1, 6, cfg, address(0), address(0))));
+        w.initialize(address(this), 1, underlyingInit(one, r1, r1, 6, cfg, address(0), address(0)));
         bad.mint(alice, 10e6);
         vm.prank(alice);
         bad.approve(address(w), 10e6);

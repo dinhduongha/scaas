@@ -2,8 +2,9 @@
 pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
-import {OpenFactoryV2} from "../../src/factory/OpenFactoryV2.sol";
-import {IOpenFactoryV2} from "../../src/common/IOpenFactoryV2.sol";
+import {OpenFactory} from "../../src/factory/OpenFactory.sol";
+import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
+import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
@@ -27,7 +28,7 @@ contract HederaV2Test is Test {
     address registrar = address(0xF00D);
     address shop = address(0x5409);
     address alice; // 0.0.1234567, ED25519 key (simulated, see MockHederaAccountService)
-    OpenFactoryV2 f;
+    OpenFactory f;
     MockERC20 usdc;   // stands in for an HTS token's ERC-20 facade
     MockERC20 plain;  // a plain EVM ERC-20 on Hedera
 
@@ -38,11 +39,11 @@ contract HederaV2Test is Test {
         vm.etch(HTS, type(MockHts).runtimeCode);
         alice = address(uint160(1_234_567));
         MockHederaAccountService(HAS).setEdKey(alice, vm.addr(ALICE_KEY));
-        f = new OpenFactoryV2(registrar);
+        f = new OpenFactory(registrar, UID);
         vm.startPrank(registrar);
-        f.registerImplementation(IOpenFactoryV2.TokenKind.META_NONE, 1,
+        f.registerImplementation(IOpenFactory.TokenKind.NONE, 1,
             address(new NoUnderlyingToken(address(f), address(0), UID, true)));
-        f.registerImplementation(IOpenFactoryV2.TokenKind.META_SINGLE, 1,
+        f.registerImplementation(IOpenFactory.TokenKind.UNDERLYING, 1,
             address(new UnderlyingToken(address(f), address(0), UID, true)));
         vm.stopPrank();
         usdc = new MockERC20("USD Coin", "USDC", 6);
@@ -51,9 +52,9 @@ contract HederaV2Test is Test {
     }
 
     function test_implementationSizes() public view {
-        assertLe(f.implementationOf(IOpenFactoryV2.TokenKind.META_NONE, 1).code.length, 20_480); // CTR-TOK-24
-        // Transitional (P1d, D2): over EIP-170 until the size work; measured 25,408
-        assertLe(f.implementationOf(IOpenFactoryV2.TokenKind.META_SINGLE, 1).code.length, 26_624);
+        assertLe(f.implementationOf(IOpenFactory.TokenKind.NONE, 1).code.length, 20_480); // CTR-TOK-24
+        // Transitional (P1d D2): over EIP-170 until the size work
+        assertLe(f.implementationOf(IOpenFactory.TokenKind.UNDERLYING, 1).code.length, 27_648);
     }
 
     function _edSign(bytes32 digest) internal pure returns (bytes memory) {
@@ -71,15 +72,15 @@ contract HederaV2Test is Test {
     function _single(address u) internal returns (address) {
         address[] memory us = new address[](1);
         us[0] = u;
-        return f.createTiered(IOpenFactoryV2.TokenKind.META_SINGLE, 1, us, _init(us), keccak256(abi.encode(u)));
+        return f.createToken(IOpenFactory.TokenKind.UNDERLYING, 1, _init(us), keccak256(abi.encode(u)));
     }
 
     /// One leg at 1:1, rates fixed, no owner.
-    function _init(address[] memory us) internal pure returns (bytes memory) {
+    function _init(address[] memory us) internal pure returns (IFactoryToken.TokenConfig memory) {
         uint256[] memory one = new uint256[](1);
         one[0] = 1;
         Rate memory c;
-        return abi.encode(underlyingInit(us, one, one, 6, c, address(0), address(0)));
+        return underlyingInit(us, one, one, 6, c, address(0), address(0));
     }
 
     function _wrapFor(address t, MockERC20 u, address who, uint256 v) internal {
@@ -94,8 +95,8 @@ contract HederaV2Test is Test {
 
     function test_tier1NativeAccountPays() public {
         vm.prank(alice);
-        address t = f.createTiered(IOpenFactoryV2.TokenKind.META_NONE, 1, new address[](0),
-            abi.encode(noneInit("Points", "PTS", 0, 1000, alice, address(0))), "n");
+        address t = f.createToken(IOpenFactory.TokenKind.NONE, 1,
+            noneInit("Points", "PTS", 0, 1000, alice, address(0)), "n");
         MetaTxLib.MetaTransfer memory x = _tr(shop, 250, 0, 1);
         bytes memory sig = _edSign(IERC20MetaTx(t).mtxTransferDigest(x));
         vm.prank(relayer);
@@ -106,8 +107,8 @@ contract HederaV2Test is Test {
     /// HIP-632 payee: a native Hedera account co-signs the `ReceiverFee` (64-byte ed25519) for an EVM payer's payment.
     function test_tier1NativeAccountPayeeCoSignsReceiverFee() public {
         vm.prank(alice);
-        address t = f.createTiered(IOpenFactoryV2.TokenKind.META_NONE, 1, new address[](0),
-            abi.encode(noneInit("Points", "PTS", 0, 1000, alice, address(0))), "n");
+        address t = f.createToken(IOpenFactory.TokenKind.NONE, 1,
+            noneInit("Points", "PTS", 0, 1000, alice, address(0)), "n");
         uint256 payerPk = 0xB0B;
         address payer = vm.addr(payerPk);
         address feeTo = address(0xFEE);
@@ -150,8 +151,8 @@ contract HederaV2Test is Test {
         uint256[] memory n = new uint256[](3);
         (n[0], n[1], n[2]) = (1, 1, 1);
         Rate memory c;
-        address t = f.createTiered(IOpenFactoryV2.TokenKind.META_SINGLE, 1, us,
-            abi.encode(underlyingInit(us, n, n, 6, c, address(0), address(0))), "m");
+        address t = f.createToken(IOpenFactory.TokenKind.UNDERLYING, 1,
+            underlyingInit(us, n, n, 6, c, address(0), address(0)), "m");
         assertTrue(MockHts(HTS).associated(t, address(usdc)));
         assertTrue(MockHts(HTS).associated(t, address(usdt)));
         assertFalse(MockHts(HTS).associated(t, address(plain))); // not an HTS token: nothing to associate
@@ -183,9 +184,9 @@ contract HederaV2Test is Test {
     function _refuse(bytes memory err) internal {
         address[] memory us = new address[](1);
         us[0] = address(usdc);
-        bytes memory init = _init(us);
+        IFactoryToken.TokenConfig memory init = _init(us);
         vm.expectRevert(err);
-        f.createTiered(IOpenFactoryV2.TokenKind.META_SINGLE, 1, us, init, "x");
+        f.createToken(IOpenFactory.TokenKind.UNDERLYING, 1, init, "x");
     }
 
     function test_isTokenFailureRefuses() public {

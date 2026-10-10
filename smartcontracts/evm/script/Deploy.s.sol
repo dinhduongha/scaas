@@ -2,14 +2,14 @@
 pragma solidity ^0.8.20;
 
 import {Script, console} from "forge-std/Script.sol";
-import {OpenFactory} from "../src/factory/OpenFactory.sol";
-import {IOpenFactory} from "../src/common/IOpenFactory.sol";
+import {OpenFactoryV1} from "../src/factory/OpenFactoryV1.sol";
+import {IOpenFactoryV1} from "../src/common/IOpenFactoryV1.sol";
 import {MetaToken} from "../src/metatx/MetaToken.sol";
 import {MetaTxDex} from "../src/dex/MetaTxDex.sol";
 import {SubjectAccountFactory} from "../src/account/SubjectAccountFactory.sol";
 import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
-import {OpenFactoryV2} from "../src/factory/OpenFactoryV2.sol";
-import {IOpenFactoryV2} from "../src/common/IOpenFactoryV2.sol";
+import {OpenFactory} from "../src/factory/OpenFactory.sol";
+import {IOpenFactory} from "../src/factory/IOpenFactory.sol";
 import {NoUnderlyingToken} from "../src/metatx/NoUnderlyingToken.sol";
 
 /// forge script script/Deploy.s.sol --rpc-url $RPC --broadcast
@@ -26,10 +26,10 @@ contract Deploy is Script {
         address demoHolder = vm.envOr("DEMO_HOLDER", deployer);
 
         vm.startBroadcast(pk);
-        OpenFactory factory = new OpenFactory(registrar);
+        OpenFactoryV1 factory = new OpenFactoryV1(registrar);
         SubjectAccountFactory accounts = new SubjectAccountFactory();
         MetaToken impl = new MetaToken(address(factory), accounts.IMPLEMENTATION());
-        if (registrar == deployer) factory.registerImplementation(IOpenFactory.TokenKind.META, 1, address(impl));
+        if (registrar == deployer) factory.registerImplementation(IOpenFactoryV1.TokenKind.META, 1, address(impl));
         _deployV2(registrar, registrar == deployer, accounts.IMPLEMENTATION());
         MetaTxDex dex = new MetaTxDex();
         // R35: admin chỉ `setMarket`; production đặt REGISTRAR là một Safe (RS5-1).
@@ -58,7 +58,6 @@ contract Deploy is Script {
     /// là thế hệ hợp đồng). Factory v2 không đăng ký MetaToken v1. Ghi thẳng vào object JSON "deploy" (run() đã
     /// hết chỗ trên stack).
     function _deployV2(address registrar, bool register, address subjectImpl) internal {
-        OpenFactoryV2 f = new OpenFactoryV2(registrar);
         // chain_uid = genesis hash (CTR-GEN-05, chain-uids.json). Default: block 0's hash as the RPC reports it. The
         // script runs at the head block and BLOCKHASH of the current block is 0, so roll one ahead to read it on a
         // fresh chain (head 0); past block 256 BLOCKHASH(0) is 0 and CHAIN_UID is required.
@@ -70,10 +69,11 @@ contract Deploy is Script {
             vm.roll(head);
         }
         require(uid != bytes32(0), "set CHAIN_UID (chain-uids.json)");
-        // Transitional (P1d, D2): `UnderlyingToken` is over EIP-170 until the size work; only META_NONE
+        OpenFactory f = new OpenFactory(registrar, uid);
+        // Transitional (P1d, D2): `UnderlyingToken` is over EIP-170 until the size work; only NONE
         // is deployed and registered, and the JSON has no implementation_meta_single/_multi keys.
         address none = address(new NoUnderlyingToken(address(f), subjectImpl, uid, false));
-        if (register) f.registerImplementation(IOpenFactoryV2.TokenKind.META_NONE, 1, none);
+        if (register) f.registerImplementation(IOpenFactory.TokenKind.NONE, 1, none);
         vm.serializeAddress("deploy", "factory_v2", address(f));
         vm.serializeAddress("deploy", "implementation_meta_none", none);
     }

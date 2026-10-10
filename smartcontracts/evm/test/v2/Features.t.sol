@@ -6,7 +6,7 @@ import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
-import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
@@ -39,19 +39,19 @@ contract FeaturesTest is Test {
     }
 
     function _cfg(uint256 features, uint256 locked, address owner_, address minter_, uint256 supply)
-        internal view returns (bytes memory)
+        internal view returns (IFactoryToken.TokenConfig memory c)
     {
-        AdminLib.Roles memory r;
-        r.minter = minter_;
-        return abi.encode(NoUnderlyingToken.NoneInit({
-            name: "Points", symbol: "PTS", decimals: 6, features: features, lockedFeatures: locked, owner: owner_,
-            roles: r, initialSupply: supply, initialHolder: alice
-        }));
+        (c.name, c.symbol, c.decimals, c.features, c.lockedFeatures, c.owner) =
+            ("Points", "PTS", 6, features, locked, owner_);
+        c.roles.minter = minter_;
+        (c.initialSupply, c.initialHolder) = (supply, alice);
     }
 
-    function _token(address implementation, bytes memory cfg) internal returns (NoUnderlyingToken t) {
+    function _token(address implementation, IFactoryToken.TokenConfig memory cfg)
+        internal returns (NoUnderlyingToken t)
+    {
         t = NoUnderlyingToken(Clones.clone(implementation));
-        t.initialize(address(this), new address[](0), 1, cfg);
+        t.initialize(address(this), 1, cfg);
     }
 
     function _sig(bytes32 d) internal pure returns (bytes memory) {
@@ -80,9 +80,9 @@ contract FeaturesTest is Test {
     function test_initRefusesFlagsOfAnotherKind() public {
         NoUnderlyingToken t = NoUnderlyingToken(Clones.clone(impl));
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, uint8(3)));
-        t.initialize(address(this), new address[](0), 1, _cfg(1 << 3, 0, address(0), address(0), 0));
+        t.initialize(address(this), 1, _cfg(1 << 3, 0, address(0), address(0), 0));
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureNotBuilt.selector, uint8(7)));
-        t.initialize(address(this), new address[](0), 1, _cfg(1 << 7, 0, address(0), address(0), 0));
+        t.initialize(address(this), 1, _cfg(1 << 7, 0, address(0), address(0), 0));
     }
 
     // ------------------------------------------------------------------ MINTABLE, BURNABLE
@@ -255,9 +255,8 @@ contract FeaturesTest is Test {
         address native = address(uint160(1_234_567));
         MockHederaAccountService(has).setEdKey(native, vm.addr(edKey));
         address hImpl = address(new NoUnderlyingToken(address(this), address(0), UID, true));
-        AdminLib.Roles memory r;
-        bytes memory cfg = abi.encode(NoUnderlyingToken.NoneInit({name: "P", symbol: "P", decimals: 0, features: 0,
-            lockedFeatures: 0, owner: address(0), roles: r, initialSupply: 100, initialHolder: native}));
+        IFactoryToken.TokenConfig memory cfg;
+        (cfg.name, cfg.symbol, cfg.initialSupply, cfg.initialHolder) = ("P", "P", 100, native);
         NoUnderlyingToken h = _token(hImpl, cfg);
         NoUnderlyingToken e = _token(impl, cfg);
         assertTrue(h.IS_HEDERA());

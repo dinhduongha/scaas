@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.24;
 
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
-import {IOpenFactory} from "../common/IOpenFactory.sol";
+import {IOpenFactory} from "./IOpenFactory.sol";
 import {IFactoryToken} from "./IFactoryToken.sol";
-import {IZetherVerifier} from "../zether/IZetherVerifier.sol";
-import {ZetherSafety} from "../zether/ZetherSafety.sol";
 
-/// @title Factory mở — hiện thực `IOpenFactory`. Đọc docstring của interface trước.
-/// @notice Catalogue là DANH MỤC, không phải cổng: `registrar` chỉ thêm được version
-///         mới, không sửa được version cũ, và `createUnregistered` đi vòng hoàn toàn.
-///         Không có quyền nào ở đây chạm được một token đã deploy.
+/// @title `OpenFactory` (CTR-TOK-03, CTR-TOK-25): the one token factory of a chain.
+/// @notice Anyone creates tokens; the registrar only appends implementations to the catalogue (and marks versions
+///         deprecated): it has no power over any token. A registered implementation must answer `kind()`,
+///         `factory() == this` and `chainUid() == chainUid` (so a clone's domain salt has one source, CTR-GEN-05);
+///         the catalogue is append-only, so a wrong entry would be dead forever. Creation clones by `CREATE2` with
+///         the salt scoped by the creator and calls `initialize` in the same call; flag validation is the token's.
+///         Built kinds: `NONE`, `UNDERLYING` (the `*_ZETHER` implementations come with P3, the DEX with P2).
 contract OpenFactory is IOpenFactory {
     struct Info {
         address creator;
@@ -19,7 +20,10 @@ contract OpenFactory is IOpenFactory {
         bool exists;
     }
 
+    uint256 internal constant MAX_LEGS = 8;
+
     address public immutable registrar;
+    bytes32 public immutable chainUid;
 
     mapping(TokenKind => mapping(uint64 => address)) private _impl;
     mapping(TokenKind => mapping(uint64 => bool)) private _deprecated;
@@ -28,47 +32,27 @@ contract OpenFactory is IOpenFactory {
     mapping(address => mapping(address => address[])) private _wrappers;
     mapping(address => address[]) private _byUnderlying;
 
-    /// @notice Cổng Zether của owner (R34, RS2-1): **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Mặc định tắt;
-    ///         chỉ bật được trên chain dev (`ZetherSafety`), và tạo token Zether kiểm lại cả hai mỗi lần.
-    bool public zetherEnabled;
-
-    event ZetherEnabled(bool enabled);
-
-    error NotRegistrar();
-    error ZetherDisabled();
-
-    constructor(address registrar_) {
+    constructor(address registrar_, bytes32 chainUid_) {
+        if (chainUid_ == bytes32(0)) revert ChainUidZero();
         registrar = registrar_;
-    }
-
-    modifier onlyRegistrar() {
-        if (msg.sender != registrar) revert NotRegistrar();
-        _;
+        chainUid = chainUid_;
     }
 
     // ------------------------------------------------------------------ catalogue
 
-    function registerImplementation(TokenKind kind, uint64 version, address implementation)
-        external onlyRegistrar
-    {
-        // version 0 là dấu của `createUnregistered`; cho đăng ký thì nó mất nghĩa.
+    function registerImplementation(TokenKind kind, uint64 version, address implementation) external {
+        if (msg.sender != registrar) revert NotRegistrar();
         if (version == 0) revert VersionUnknown(kind, 0);
         address existing = _impl[kind][version];
         if (existing != address(0)) revert VersionAlreadyRegistered(kind, version, existing);
-        if (implementation.code.length == 0) revert ImplementationNotAContract(implementation);
+        _checkImplementation(kind, implementation);
         _impl[kind][version] = implementation;
         if (version > _latest[kind]) _latest[kind] = version;
         emit ImplementationRegistered(kind, version, implementation, msg.sender);
     }
 
-    /// @notice Bật/tắt tạo token Zether. Bật revert `ZetherNotDevChain` ngoài allowlist dev; tắt luôn được.
-    function setZetherEnabled(bool on) external onlyRegistrar {
-        if (on) ZetherSafety.requireDevChain();
-        zetherEnabled = on;
-        emit ZetherEnabled(on);
-    }
-
-    function deprecate(TokenKind kind, uint64 version, string calldata reason) external onlyRegistrar {
+    function deprecate(TokenKind kind, uint64 version, string calldata reason) external {
+        if (msg.sender != registrar) revert NotRegistrar();
         if (_impl[kind][version] == address(0)) revert VersionUnknown(kind, version);
         _deprecated[kind][version] = true;
         emit ImplementationDeprecated(kind, version, reason);
@@ -88,51 +72,28 @@ contract OpenFactory is IOpenFactory {
 
     // ------------------------------------------------------------------ create
 
-    function createMetaToken(uint64 version, address underlying, bytes calldata initData, bytes32 salt)
+    function createToken(TokenKind kind, uint64 version, IFactoryToken.TokenConfig calldata cfg, bytes32 salt)
         external returns (address)
     {
-        return _create(TokenKind.META, version, _registered(TokenKind.META, version),
-                       underlying, address(0), initData, salt);
+        address impl = _impl[kind][version];
+        if (impl == address(0)) revert VersionUnknown(kind, version);
+        return _create(kind, version, impl, cfg, salt);
     }
 
-    function createZetherToken(
-        uint64 version,
-        address underlying,
-        address verifier,
-        bytes calldata initData,
-        bytes32 salt
+    function createTokenUnregistered(
+        TokenKind kind, address implementation, IFactoryToken.TokenConfig calldata cfg, bytes32 salt
     ) external returns (address) {
-        _requireZether();
-        address impl = _registered(TokenKind.ZETHER, version);
-        _checkVerifier(verifier);
-        return _create(TokenKind.ZETHER, version, impl, underlying, verifier, initData, salt);
+        _checkImplementation(kind, implementation);
+        return _create(kind, 0, implementation, cfg, salt);
     }
 
-    function createUnregistered(
-        TokenKind kind,
-        address implementation,
-        address underlying,
-        address verifier,
-        bytes calldata initData,
-        bytes32 salt
-    ) external returns (address) {
-        if (implementation.code.length == 0) revert ImplementationNotAContract(implementation);
-        if (kind == TokenKind.ZETHER) {
-            _requireZether();
-            _checkVerifier(verifier);
-        }
-        return _create(kind, 0, implementation, underlying, verifier, initData, salt);
-    }
-
-    function predictAddress(address implementation, address creator, bytes32 salt)
-        public view returns (address)
-    {
+    function predictAddress(address implementation, address creator, bytes32 salt) public view returns (address) {
         return Clones.predictDeterministicAddress(implementation, _salt(creator, salt));
     }
 
     // ------------------------------------------------------------------ provenance
 
-    function isDeployedHere(address token) external view returns (bool) { return _info[token].exists; }
+    function isToken(address token) external view returns (bool) { return _info[token].exists; }
 
     function creatorOf(address token) external view returns (address) { return _info[token].creator; }
 
@@ -164,57 +125,49 @@ contract OpenFactory is IOpenFactory {
 
     // ------------------------------------------------------------------ internal
 
-    function _registered(TokenKind kind, uint64 version) private view returns (address impl) {
-        impl = _impl[kind][version];
-        if (impl == address(0)) revert VersionUnknown(kind, version);
+    /// @dev Code, `kind()`, `factory()`, `chainUid()`: each read by staticcall, a missing or short answer refused.
+    function _checkImplementation(TokenKind kind, address implementation) private view {
+        if (uint8(kind) > uint8(TokenKind.UNDERLYING_ZETHER)) revert KindReserved(kind);
+        if (implementation.code.length == 0) revert ImplementationNotAContract(implementation);
+        (bool ok, uint256 got) = _word(implementation, IFactoryToken.kind.selector);
+        if (!ok) got = type(uint256).max;
+        if (got != uint256(kind)) revert VersionKindMismatch(kind, got);
+        (ok, got) = _word(implementation, bytes4(keccak256("factory()")));
+        if (!ok || got != uint256(uint160(address(this)))) revert ImplementationFactoryMismatch(implementation);
+        (ok, got) = _word(implementation, bytes4(keccak256("chainUid()")));
+        if (!ok || bytes32(got) != chainUid) revert ChainUidMismatch(chainUid, ok ? bytes32(got) : bytes32(0));
     }
 
-    function _requireZether() private view {
-        if (!zetherEnabled) revert ZetherDisabled();
-        ZetherSafety.requireDevChain(); // cờ bật trên một chain dev rồi chain đổi id (fork) vẫn không lọt
+    function _word(address target, bytes4 sel) private view returns (bool ok, uint256 w) {
+        bytes memory ret;
+        (ok, ret) = target.staticcall(abi.encodeWithSelector(sel));
+        ok = ok && ret.length == 32;
+        if (ok) w = abi.decode(ret, (uint256));
     }
 
-    /// @dev Precompile vắng mặt không revert — nó trả rỗng. Hỏi verifier trước khi có
-    ///      ai nạp tiền vào một token bất biến không bao giờ verify được (IOpenFactory).
-    function _checkVerifier(address verifier) private view {
-        if (verifier == address(0)) revert VerifierRequiredForZether();
-        // Không code ⇒ lời gọi "thành công" với returndata rỗng, và lỗi giải mã nổ ở
-        // frame NÀY — ngoài tầm `catch`. Phải chặn trước.
-        if (verifier.code.length == 0) revert VerifierUnsupportedOnThisChain(verifier, "");
-        bool ok;
-        try IZetherVerifier(verifier).isSupportedOnThisChain() returns (bool s) { ok = s; } catch {}
-        if (ok) return;
-        string memory curve;
-        try IZetherVerifier(verifier).curveName() returns (string memory c) { curve = c; } catch {}
-        revert VerifierUnsupportedOnThisChain(verifier, curve);
-    }
-
-    /// @dev `creator` là `msg.sender` trong salt: không ai chiếm được địa chỉ của người khác.
     function _salt(address creator, bytes32 salt) private pure returns (bytes32) {
         return keccak256(abi.encode(creator, salt));
     }
 
-    function _create(
-        TokenKind kind,
-        uint64 version,
-        address impl,
-        address underlying,
-        address verifier,
-        bytes calldata initData,
-        bytes32 salt
-    ) private returns (address token) {
+    function _create(TokenKind kind, uint64 version, address impl, IFactoryToken.TokenConfig calldata cfg,
+        bytes32 salt) private returns (address token)
+    {
+        uint256 n = cfg.legs.length;
+        bool wrapper = kind == TokenKind.UNDERLYING || kind == TokenKind.UNDERLYING_ZETHER;
+        if (wrapper ? n == 0 || n > MAX_LEGS : n != 0) revert UnderlyingCountInvalid(n);
         bytes32 s = _salt(msg.sender, salt);
         address predicted = Clones.predictDeterministicAddress(impl, s);
         if (predicted.code.length != 0) revert SaltAlreadyUsed(predicted);
         token = Clones.cloneDeterministic(impl, s);
-        // CÙNG hàm với CREATE2: không có khe nào để front-run initialize().
-        IFactoryToken(token).initialize(msg.sender, underlying, verifier, version, initData);
+        IFactoryToken(token).initialize(msg.sender, version, cfg);
         _info[token] = Info({creator: msg.sender, kind: kind, version: version, exists: true});
-        // Tầng 1 (underlying 0) không phải wrapper của gì cả: không vào sổ wrapper.
-        if (underlying != address(0)) {
-            _wrappers[msg.sender][underlying].push(token);
-            _byUnderlying[underlying].push(token);
+        address[] memory us = new address[](n);
+        for (uint256 i; i < n; ++i) {
+            address u = cfg.legs[i].underlying;
+            us[i] = u;
+            _wrappers[msg.sender][u].push(token);
+            _byUnderlying[u].push(token);
         }
-        emit TokenDeployed(token, msg.sender, underlying, kind, version, impl, verifier);
+        emit TokenCreated(token, msg.sender, kind, version, impl, cfg.features, cfg.lockedFeatures, cfg.owner, us);
     }
 }

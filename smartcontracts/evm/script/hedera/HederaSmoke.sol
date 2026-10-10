@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
-import {OpenFactory} from "../../src/factory/OpenFactory.sol";
-import {IOpenFactory} from "../../src/common/IOpenFactory.sol";
+import {OpenFactoryV1} from "../../src/factory/OpenFactoryV1.sol";
+import {IOpenFactoryV1} from "../../src/common/IOpenFactoryV1.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {HederaMetaToken} from "../../src/hedera/HederaMetaToken.sol";
 
@@ -11,9 +11,9 @@ import {HederaMetaToken} from "../../src/hedera/HederaMetaToken.sol";
 /// docs/history/specs/2026-10-03-net-hedera.md §9 (current rules: docs/networks/hedera.md).
 contract HederaSmoke {
     constructor(address ecdsaFrom, bytes memory ecdsaSig, address edAccount, bytes memory edSig) {
-        OpenFactory f = new OpenFactory(address(this));
+        OpenFactoryV1 f = new OpenFactoryV1(address(this));
         HederaMetaToken impl = new HederaMetaToken(address(f));
-        f.registerImplementation(IOpenFactory.TokenKind.META, 1, address(impl));
+        f.registerImplementation(IOpenFactoryV1.TokenKind.META, 1, address(impl));
         HederaMetaToken t = HederaMetaToken(f.createMetaToken(1, address(0),
             abi.encode("Smoke", "SMK", uint8(6), uint256(1e12), address(0)), bytes32("smoke")));
         t.transfer(ecdsaFrom, 1000);

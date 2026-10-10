@@ -5,41 +5,25 @@ import {MetaTokenBase} from "./MetaTokenBase.sol";
 import {AdminLib} from "./AdminLib.sol";
 import {MetaTxBase} from "./MetaTxBase.sol";
 import {IMetaTx} from "./IMetaTx.sol";
-import {IOpenFactoryV2} from "../common/IOpenFactoryV2.sol";
 
 /// @title Kind `NONE` (CTR-TOK-21): a standalone token, no underlying.
 /// @notice Flags valid here: `PAYABLE`, `MINTABLE` (role `minter`), `BURNABLE` (holder burn). A supply cap or a mint
-///         rate limit, if an issuer needs one, lives in its minter contract. Built by the factory through
-///         `initialize(creator, [], version, abi.encode(NoneInit))`; P1e switches to `TokenConfig`.
+///         rate limit, if an issuer needs one, lives in its minter contract. Built by `OpenFactory.createToken`
+///         (CTR-TOK-25): `initialSupply` is minted to `initialHolder`; `legs`, `rate`, `conf` must be empty.
 contract NoUnderlyingToken is MetaTokenBase {
-    /// @notice The NONE subset of `TokenConfig` (CTR-TOK-25).
-    struct NoneInit {
-        string name;
-        string symbol;
-        uint8 decimals;
-        uint256 features;
-        uint256 lockedFeatures;
-        address owner;
-        AdminLib.Roles roles;
-        uint256 initialSupply;
-        address initialHolder;
-    }
-
     constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, bool isHedera_)
         MetaTokenBase(factory_, smartKeyAccountImpl_, chainUid_, isHedera_)
     {}
 
-    function tokenKind() external pure override returns (IOpenFactoryV2.TokenKind) {
-        return IOpenFactoryV2.TokenKind.META_NONE;
+    function kind() public pure override returns (uint8) {
+        return AdminLib.KIND_NONE;
     }
 
-    /// @param initData `abi.encode(NoneInit)`.
-    function _init(address, address[] calldata underlyings, bytes calldata initData) internal override {
-        if (underlyings.length != 0) revert UnderlyingCountInvalid(underlyings.length);
-        NoneInit memory c = abi.decode(initData, (NoneInit));
-        _setMetadata(c.name, c.symbol, c.decimals);
-        AdminLib.init(AdminLib.KIND_NONE, c.features, c.lockedFeatures, c.owner, c.roles);
-        if (c.initialSupply != 0) _mint(c.initialHolder, c.initialSupply);
+    function _init(TokenConfig calldata cfg) internal override {
+        _requireUnused(cfg, false, true, true);
+        _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
+        AdminLib.init(AdminLib.KIND_NONE, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);
+        if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
     }
 
     /// @notice `MINTABLE` and the `minter` role; never allowlisted (a minter contract's caps run on its own call).

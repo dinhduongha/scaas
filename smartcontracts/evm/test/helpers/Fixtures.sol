@@ -2,13 +2,13 @@
 pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
-import {OpenFactory} from "../../src/factory/OpenFactory.sol";
-import {IOpenFactory} from "../../src/common/IOpenFactory.sol";
+import {OpenFactoryV1} from "../../src/factory/OpenFactoryV1.sol";
+import {IOpenFactoryV1} from "../../src/common/IOpenFactoryV1.sol";
 import {MetaToken} from "../../src/metatx/MetaToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
 abstract contract Fixtures is Test {
-    OpenFactory internal factory;
+    OpenFactoryV1 internal factory;
     MetaToken internal impl;
     address internal registrar = address(0xF00D);
     address internal relayer = address(0xBEEF);
@@ -16,10 +16,10 @@ abstract contract Fixtures is Test {
     address internal subjectImpl;
 
     function _deployFactory() internal {
-        factory = new OpenFactory(registrar);
+        factory = new OpenFactoryV1(registrar);
         impl = new MetaToken(address(factory), subjectImpl);
         vm.prank(registrar);
-        factory.registerImplementation(IOpenFactory.TokenKind.META, 1, address(impl));
+        factory.registerImplementation(IOpenFactoryV1.TokenKind.META, 1, address(impl));
     }
 
     function _standalone(address creator, string memory sym, uint8 dec, uint256 supply, address minter)

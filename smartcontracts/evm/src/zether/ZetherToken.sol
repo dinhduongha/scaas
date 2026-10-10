@@ -8,7 +8,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
-import {IFactoryToken} from "../factory/IFactoryToken.sol";
+import {IFactoryTokenV1} from "../factory/IFactoryTokenV1.sol";
 import {IUniversalAccountRegistry} from "../registry/IUniversalAccountRegistry.sol";
 import {ZetherMetaTx} from "./ZetherMetaTx.sol";
 import {IZetherToken} from "./IZetherToken.sol";
@@ -18,7 +18,7 @@ import {ZetherTypes} from "./ZetherTypes.sol";
 import {ZetherTranscript} from "./ZetherTranscript.sol";
 import {ZetherSafety} from "./ZetherSafety.sol";
 
-/// @title ZetherToken v1 — implementation kind ZETHER, deploy bằng clone EIP-1167 qua `OpenFactory`.
+/// @title ZetherToken v1 — implementation kind ZETHER, deploy bằng clone EIP-1167 qua `OpenFactoryV1`.
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Chỉ khởi tạo được trên chain dev (RS2-1).
 ///
 ///         Một implementation cho MỌI đường cong: điểm là `bytes`, phép nhóm và proof đi qua `verifier`
@@ -30,7 +30,7 @@ import {ZetherSafety} from "./ZetherSafety.sol";
 ///         Hai lớp số dư: ERC-20 công khai (wrap 1:1 underlying, dùng trả phí ngoài) và số dư mã hoá.
 ///         Bất biến escrow: `underlying.balanceOf(this) ≥ totalSupply() + totalShielded·shieldScale`,
 ///         kiểm sau mọi lần tiền rời contract.
-contract ZetherToken is ZetherMetaTx, IZetherToken, IFactoryToken {
+contract ZetherToken is ZetherMetaTx, IZetherToken, IFactoryTokenV1 {
     using SafeERC20 for IERC20;
 
     struct Account {

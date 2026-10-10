@@ -2,13 +2,13 @@
 pragma solidity ^0.8.20;
 
 import {Script, console} from "forge-std/Script.sol";
-import {OpenFactory} from "../../src/factory/OpenFactory.sol";
-import {IOpenFactory} from "../../src/common/IOpenFactory.sol";
+import {OpenFactoryV1} from "../../src/factory/OpenFactoryV1.sol";
+import {IOpenFactoryV1} from "../../src/common/IOpenFactoryV1.sol";
 import {MetaToken} from "../../src/metatx/MetaToken.sol";
 import {MetaTxDex} from "../../src/dex/MetaTxDex.sol";
 import {HederaMetaToken} from "../../src/hedera/HederaMetaToken.sol";
-import {OpenFactoryV2} from "../../src/factory/OpenFactoryV2.sol";
-import {IOpenFactoryV2} from "../../src/common/IOpenFactoryV2.sol";
+import {OpenFactory} from "../../src/factory/OpenFactory.sol";
+import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
 
 /// Như `script/Deploy.s.sol` nhưng implementation META là `HederaMetaToken` (R63).
@@ -25,9 +25,9 @@ contract DeployHedera is Script {
         address demoHolder = vm.envOr("DEMO_HOLDER", deployer);
 
         vm.startBroadcast(pk);
-        OpenFactory factory = new OpenFactory(registrar);
+        OpenFactoryV1 factory = new OpenFactoryV1(registrar);
         HederaMetaToken impl = new HederaMetaToken(address(factory));
-        if (registrar == deployer) factory.registerImplementation(IOpenFactory.TokenKind.META, 1, address(impl));
+        if (registrar == deployer) factory.registerImplementation(IOpenFactoryV1.TokenKind.META, 1, address(impl));
         _deployV2(registrar, registrar == deployer);
         MetaTxDex dex = new MetaTxDex();
         address demo;
@@ -56,7 +56,6 @@ contract DeployHedera is Script {
 
     /// TW2 §9/§11: factory v2 + tầng None Hedera (UnderlyingToken chờ việc tối ưu kích thước, P1d D2), version 1; ghi thẳng vào object JSON "deploy".
     function _deployV2(address registrar, bool register) internal {
-        OpenFactoryV2 f = new OpenFactoryV2(registrar);
         // chain_uid = genesis hash (CTR-GEN-05, chain-uids.json). Default: block 0's hash as the RPC reports it. The
         // script runs at the head block and BLOCKHASH of the current block is 0, so roll one ahead to read it on a
         // fresh chain (head 0); past block 256 BLOCKHASH(0) is 0 and CHAIN_UID is required.
@@ -68,10 +67,11 @@ contract DeployHedera is Script {
             vm.roll(head);
         }
         require(uid != bytes32(0), "set CHAIN_UID (chain-uids.json)");
-        // Transitional (P1d, D2): `UnderlyingToken` is over EIP-170 until the size work; only META_NONE
+        OpenFactory f = new OpenFactory(registrar, uid);
+        // Transitional (P1d, D2): `UnderlyingToken` is over EIP-170 until the size work; only NONE
         // is deployed and registered, and the JSON has no implementation_meta_single/_multi keys.
         address none = address(new NoUnderlyingToken(address(f), address(0), uid, true));
-        if (register) f.registerImplementation(IOpenFactoryV2.TokenKind.META_NONE, 1, none);
+        if (register) f.registerImplementation(IOpenFactory.TokenKind.NONE, 1, none);
         vm.serializeAddress("deploy", "factory_v2", address(f));
         vm.serializeAddress("deploy", "implementation_meta_none", none);
     }

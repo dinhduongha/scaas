@@ -11,8 +11,7 @@ import {IERC20MetaTx} from "./IERC20MetaTx.sol";
 import {IERC20Payment} from "./IERC20Payment.sol";
 import {HederaLib} from "../hedera/HederaLib.sol";
 import {IMetaTokenV2} from "./IMetaTokenV2.sol";
-import {IFactoryTokenV2} from "../factory/IFactoryTokenV2.sol";
-import {IOpenFactoryV2} from "../common/IOpenFactoryV2.sol";
+import {IFactoryToken} from "../factory/IFactoryToken.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 
@@ -22,7 +21,7 @@ import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 ///         ERC-7201 namespace `scaas.token`. Pay (`mtxPay`, `payWithFee`, `mtxPayReceiverFee`) works only with
 ///         `PAYABLE`; a `MetaTransfer` (with or without `entryRef`) is never gated. Hedera is the immutable
 ///         `IS_HEDERA` (CTR-TOK-23): HIP-632 signatures through `HederaLib`.
-abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryTokenV2, IERC165, ITokenAdmin {
+abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IERC165, ITokenAdmin {
     using MetaTxLib for MetaTxLib.MetaTransfer;
 
     bytes32 internal constant RECEIVER_FEE_TYPEHASH =
@@ -58,21 +57,30 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryTokenV2, I
         AdminLib.$().initialized = true;
     }
 
-    /// @notice The factory calls it in the SAME call as CREATE2. `initData` per tier (TW2 §4, §5.1, §8.1).
-    function initialize(address creator_, address[] calldata underlyings, uint64 version_, bytes calldata initData)
-        external
-    {
+    /// @notice The factory calls it in the SAME call as CREATE2 (CTR-TOK-25).
+    function initialize(address creator_, uint64 version_, TokenConfig calldata cfg) external {
         if (msg.sender != FACTORY) revert NotFactory();
         AdminLib.TokenStorage storage t = AdminLib.$();
         if (t.initialized) revert AlreadyInitialized();
         t.initialized = true;
         t.creator = creator_;
         t.version = version_;
-        _init(creator_, underlyings, initData);
+        _init(cfg);
     }
 
-    /// @dev The tier decodes `initData`, calls `_setMetadata` and `AdminLib.init`, checks `underlyings`.
-    function _init(address creator_, address[] calldata underlyings, bytes calldata initData) internal virtual;
+    /// @dev The kind checks its fields of `cfg` (`ConfigFieldForOtherKind` for another kind's), calls `_setMetadata`
+    ///      and `AdminLib.init`.
+    function _init(TokenConfig calldata cfg) internal virtual;
+
+    /// @dev `ConfigFieldForOtherKind` for a set field the kind does not use; `conf` is used only by `*_ZETHER`.
+    function _requireUnused(TokenConfig calldata cfg, bool supply, bool legs, bool rate) internal pure {
+        if (supply && (cfg.initialSupply != 0 || cfg.initialHolder != address(0))) revert ConfigFieldForOtherKind(1);
+        if (legs && cfg.legs.length != 0) revert ConfigFieldForOtherKind(2);
+        if (rate && (cfg.rate.rateDelay != 0 || cfg.rate.maxRateStepBps != 0)) revert ConfigFieldForOtherKind(3);
+        if (cfg.conf.verifier != address(0) || cfg.conf.auditorKey.length != 0 || cfg.conf.shieldScale != 0) {
+            revert ConfigFieldForOtherKind(4);
+        }
+    }
 
     function _setMetadata(string memory n, string memory sym, uint8 d) internal {
         AdminLib.TokenStorage storage t = AdminLib.$();
@@ -80,8 +88,6 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryTokenV2, I
         t.symbol = sym;
         t.decimals = d;
     }
-
-    function tokenKind() external pure virtual returns (IOpenFactoryV2.TokenKind);
 
     function name() public view override returns (string memory) { return AdminLib.$().name; }
     function symbol() public view override returns (string memory) { return AdminLib.$().symbol; }
@@ -91,8 +97,9 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryTokenV2, I
     function implementation() external view returns (address) { return _SELF; }
     function creator() external view returns (address) { return AdminLib.$().creator; }
     function version() external view returns (uint64) { return AdminLib.$().version; }
-    /// @notice CTR-TOK-21 kind: 0 `NONE`, 1 `UNDERLYING`, 2 `NONE_ZETHER`, 3 `UNDERLYING_ZETHER`.
-    function kind() external view returns (uint8) { return AdminLib.$().kind; }
+    /// @notice CTR-TOK-21 kind: 0 `NONE`, 1 `UNDERLYING`, 2 `NONE_ZETHER`, 3 `UNDERLYING_ZETHER`; a constant of the
+    ///         implementation, so the factory can check it before any clone exists.
+    function kind() public pure virtual returns (uint8);
 
     // ------------------------------------------------------------------ features, owner, roles (CTR-TOK-22)
 
