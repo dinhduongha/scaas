@@ -2,7 +2,7 @@
 
 ## Session 2026-10-10 (P1c)
 
-**State:** P1c complete on branch `p1c-metatokenbase`, not yet merged (792 forge tests, e2e 4/4 + e2e_hedera 1/1, KAT vectors
+**State:** P1c merged into `main` as `3a43c2e`, not pushed (792 forge tests, e2e 4/4 + e2e_hedera 1/1, KAT vectors
 unchanged, docs checker 0 errors). Base `d827062`; not pushed.
 
 **P1c delivered:** `AdminLib` (flags, owner, roles in `scaas.token`; CTR-TOK-22) with all events and errors in the new
