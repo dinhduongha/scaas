@@ -9,12 +9,15 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 
 /// @title Common root of the v2 tiers on `ERC20MetaTx` (TW2 §3.3, §7; CTR-MTX-07). EIP-1167 clones.
-/// @notice The named functions (CTR-MTX-09) only build the struct of their kind and run its pipeline. Transitional: features, roles, `PayLib` and provenance land in P1c.
+/// @notice The named functions (CTR-MTX-09) only build the struct of their kind and run its pipeline; receiver-pays (CTR-MTX-05/06). Transitional: features, roles, `PayLib` and provenance land in P1c.
 ///
 ///         No owner, no pause, no upgrade. The two init-time exceptions (R142) live in the wrapper tiers: the rate
 ///         admin (only when `adjustable`) and the guardian (only `disableWrap`).
 abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryTokenV2 {
     using MetaTxLib for MetaTxLib.MetaTransfer;
+
+    bytes32 internal constant RECEIVER_FEE_TYPEHASH =
+        keccak256("ReceiverFee(bytes32 paymentDigest,uint256 fee,address feeRecipient,uint256 validUntil)");
 
     address public immutable FACTORY;
     address private immutable _SELF;
@@ -148,6 +151,33 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryTokenV2 {
         t.fee = fee;
         t.feeRecipient = feeRecipient;
         _executeTransfer(t, signature);
+        return true;
+    }
+
+    // ------------------------------------------------------------------ receiver-pays (CTR-MTX-05, CTR-MTX-06)
+
+    function receiverFeeDigest(bytes32 paymentDigest, uint256 fee, address feeRecipient, uint256 validUntil)
+        public view returns (bytes32)
+    {
+        return _hashTypedDataV4(keccak256(abi.encode(RECEIVER_FEE_TYPEHASH, paymentDigest, fee, feeRecipient, validUntil)));
+    }
+
+    /// @notice The payer's payment runs untouched; then the payee, who co-signed `ReceiverFee` over the payer's
+    ///         digest, pays `fee` to `feeRecipient` in the same transaction.
+    function mtxPayReceiverFee(
+        MetaTxLib.MetaTransfer calldata t, bytes calldata payerSig,
+        uint256 fee, address feeRecipient, uint256 rfValidUntil, bytes calldata payeeSig
+    ) external nonReentrant returns (bool) {
+        if (t.entryRef == 0 || t.mode & MetaTxLib.MODE_FEE_MASK != 0 || t.fee != 0
+            || t.mode & MetaTxLib.MODE_RESTRICT_RELAYER == 0 || t.batch != payLane(t.entryRef) || t.nonce != 0
+            || feeRecipient == address(0)) revert ReceiverFeeShape();
+        if (block.timestamp > rfValidUntil) revert ReceiverFeeExpired(rfValidUntil, block.timestamp);
+        if (fee == 0 || fee > t.value) revert ReceiverFeeAmount(fee, t.value);
+        if (feeRecipient == t.to) revert FeeRecipientIsPayee();
+        bytes32 d = _executeTransfer(t, payerSig);
+        _requireValidSignature(t.to, receiverFeeDigest(d, fee, feeRecipient, rfValidUntil), payeeSig);
+        _transfer(t.to, feeRecipient, fee);
+        emit ReceiverFeePaid(d, t.to, feeRecipient, fee);
         return true;
     }
 
