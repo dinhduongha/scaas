@@ -58,6 +58,20 @@ for (const curve of ["bn254", "bls12381"]) {
   assert.equal(call("verifyTransfer", { curve, statement: vec.statement, proof: vec.proof }).ok, true);
   n++;
 
+  // Storage-only recovery of a commit-reveal transfer (CTR-ZTH-50): entry = keccak256(R) ‖ memo (the commitment from
+  // the calldata path), openMemo → the keys registry.keyOf would return → recoverTransfer rebuilds R.
+  const chain = { curve, key: k0, chainId: 31337, chainUid: "0x" + "24".repeat(32), token, sendCounter: 0 };
+  const mt = call("proveTransferMulti", {
+    ...chain, accSeq: 1, acc, balance: 50000, disclosureMode: "compact", recipients: [{ yTo: to.Y, amount: 1234 }],
+  });
+  assert.equal(mt.mode, "compact");
+  const entry = call("recoverTransfer", { ...chain, payload: mt.payload }).commitment + mt.memo.slice(2);
+  const memo = call("openMemo", { ...chain, entry });
+  assert.deepEqual([memo.needKeys, memo.legs[0].amount, memo.salt], [[to.UA], "1234", mt.salt]);
+  assert.equal(call("recoverTransfer", { ...chain, entry, keys: [to.Y] }).bundles, mt.bundles);
+  assert.throws(() => zetherCall("recoverTransfer", JSON.stringify({ ...chain, entry })), /keyOf/);
+  n++;
+
   const pop = call("pop", { curve, key: k0, registry: "0x" + "aa".repeat(20), account: "0x" + "bb".repeat(20) });
   assert.equal(pop.UA, from.UA);
   n++;

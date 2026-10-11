@@ -2709,9 +2709,9 @@ Change (2026-10-08): `m.to`/`m.value` are gone from the struct; a public transfe
 ### CTR-ZTH-38 — Three transfer entries; the plain name is the mode's default
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-38 · superseded-by: —
 
-Change (2026-10-11): owner — `zetherTransfer` stores the full record on a BUNDLE token and is commit-reveal on a COMPACT token (CTR-ZTH-48); `zetherTransferCompact` is commit-reveal on both; `zetherTransferNoBundle` is BUNDLE-only; `zetherTransferBundle` goes. Salt and memo travel inside `payload`. Built (P3): `zetherTransfer` = HASH (default), `zetherTransferBundle` = BUNDLE. Source add: owner, 2026-10-11.
+Change (2026-10-11): owner — `zetherTransfer` stores the full record on a BUNDLE token and is commit-reveal on a COMPACT token (CTR-ZTH-48); `zetherTransferCompact` is commit-reveal on both; `zetherTransferNoBundle` is BUNDLE-only; `zetherTransferBundle` goes. Salt and memo travel inside `payload`. Built (P3b; P3's `zetherTransfer` = HASH and `zetherTransferBundle` = BUNDLE are superseded): `zetherTransfer` = BUNDLE on a BUNDLE token, commit-reveal on a COMPACT token; `zetherTransferCompact` = commit-reveal; `zetherTransferNoBundle` = NONE. Source add: owner, 2026-10-11.
 
-**Why.** Disclosure storage is the per-transfer cost the sender should choose: only `keccak256` of the bundles (default, bundles in an event), the full bundle, or nothing (off-chain disclosure from calldata). The mode is in the statement `opTag`, so a relayer cannot switch it.
+**Why.** Disclosure storage is the per-transfer cost the sender should choose: the full record (the BUNDLE token's default), only `keccak256` of it plus the sender memo (commit-reveal, the COMPACT token's default; bundles in an event), or nothing (off-chain disclosure from calldata). The mode is in the statement `opTag`, so a relayer cannot switch it.
 **Cost if wrong.** Always storing the full bundle costs ≈ +375 k gas (BLS) per leg; storing nothing makes on-chain disclosure impossible.
 **Source.** `history/specs/2026-10-08-zether-multi-recipient-design.md` §2 (Z4, Z6), §5.
 

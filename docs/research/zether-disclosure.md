@@ -65,10 +65,10 @@ debit encrypt the same `v_j` with the same `s` (`ZetherVerifier.sol:230-235`, `:
 
 | Mode | Entry point (built name) | Stored | Bundles also in |
 |---|---|---|---|
-| single | `zetherTransferSingle` (`transferConfidentialSingle`; the only relayed path built) | full `B_0` | calldata |
-| BUNDLE | `zetherTransferBundle` | full `B_1 ‖ … ‖ B_M` | calldata |
-| HASH (default) | `zetherTransfer` | `keccak256(B_1 ‖ … ‖ B_M)` | `TransferBundles` event, calldata |
-| NONE | `zetherTransferNoBundle` | nothing | calldata only |
+| single | `zetherTransferSingle` (`transferConfidentialSingle`; BUNDLE tokens) | full `R = salt ‖ B_0` | calldata |
+| BUNDLE (default on a BUNDLE token) | `zetherTransfer` | full `R = salt ‖ B_1 ‖ … ‖ B_M` | calldata |
+| commit-reveal (default on a COMPACT token) | `zetherTransferCompact`; `zetherTransfer` on a COMPACT token | `keccak256(R)` ‖ sender memo | `TransferBundles` event, calldata |
+| NONE | `zetherTransferNoBundle` (BUNDLE tokens) | nothing | calldata only |
 
 Who holds which secret, and which opening it yields:
 

@@ -264,21 +264,22 @@ fn modes_in_the_request() {
     ok("proveTransferMulti", &a);
 }
 
-/// Review T1 I1: over the EIP-7825 cap the refusal names the cap, the estimate at this `M`, the most recipients the form
-/// takes and the cheaper forms that fit (here BLS12-381 commit-reveal with the auditor at M = 8: none fits, at most 7).
+/// Review T1 I1, final review I1: over the EIP-7825 cap the refusal names the cap, the measured gas limit at this `M`,
+/// the most recipients the form takes and the cheaper forms that fit (here BLS12-381 commit-reveal with the auditor at
+/// M = 8, direct: none fits, at most 7).
 #[test]
 fn gas_cap_message() {
     let mut req = multi("bls12381");
     req["recipients"] = json!((1..=8).map(|a| json!({"yTo": y("bls12381", a), "amount": 1})).collect::<Vec<_>>());
     let e = err("proveTransferMulti", &req);
-    for part in ["EIP-7825", "16777216", "M = 8", "17027455", "at most 7 recipients", "bls12381 compact with the auditor",
-        "none without the auditor (~16316347)"] {
+    for part in ["EIP-7825", "16777216", "M = 8", "17535556", "at most 7 recipients", "bls12381 compact with the auditor, direct",
+        "a cheaper form: none ("] {
         assert!(e.contains(part), "{part}: {e}");
     }
     let mut bn = multi("bn254");
     bn["disclosureMode"] = Value::Null;
     bn["recipients"] = json!((1..=9).map(|a| json!({"yTo": y("bn254", a), "amount": 1})).collect::<Vec<_>>());
     let e = err("proveTransferMulti", &bn);
-    assert!(e.contains("bn254 bundle with the auditor, M = 9") && e.contains("at most 8"), "{e}");
-    assert!(e.contains("compact with the auditor (~16076281)") && e.contains("none without the auditor"), "{e}");
+    assert!(e.contains("bn254 bundle with the auditor, direct, M = 9") && e.contains("at most 8"), "{e}");
+    assert!(e.contains("compact without the auditor (~16364440), none with the auditor (~16275709)"), "{e}");
 }

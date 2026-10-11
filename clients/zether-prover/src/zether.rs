@@ -704,59 +704,73 @@ pub fn prove_transfer<C: ZCurve, R: RngCore + CryptoRng>(
 
 /// `1 ≤ M ≤ MAX_RECIPIENTS` recipients per transfer.
 pub const MAX_RECIPIENTS: usize = 16;
-/// EIP-7825: the per-transaction gas cap (2^24), intrinsic and calldata included.
+/// EIP-7825: the cap on a transaction's gas LIMIT (2^24), intrinsic and calldata included.
 pub const TX_GAS_CAP: u64 = 16_777_216;
-/// Headroom the prover keeps under [`TX_GAS_CAP`]: 1 % (167,772 gas). It covers the relayed envelope (+85 k execution,
-/// zether.md §19, and its few hundred calldata bytes), the straight-line interpolation between the measured `M` and
-/// a few hundred gas of bytecode drift; the measured cells are already the dear case (every recipient's first credit).
+/// Headroom the prover keeps under [`TX_GAS_CAP`]: 1 % (167,772 gas) for bytecode, calldata and state drift; the
+/// measured limits are already the dear case (cold accounts, every account's first credit).
 pub const GAS_MARGIN: u64 = TX_GAS_CAP / 100;
 
-/// zether.md §19 (a), measured execution gas (`gasleft()` around the call, fresh state, inner fee) at `M = 1, 2, 4, 8`
-/// and the call's calldata bytes, per stored form and auditor in / out. Re-measure with §19 and the edges move
-/// (`gas_table_edges` pins them).
-const GAS_AT: [usize; 4] = [1, 2, 4, 8];
-fn gas_cells(bls: bool, mode: TransferMode, auditor: bool) -> ([u64; 4], [u64; 4]) {
+/// zether.md §19 (a): the smallest transaction gas limit that settles a transfer to `M = 1, 2, …` recipients
+/// (`ZetherGasLimit.t.sol`, `ZETHER_GAS_PROBE=1`): every call its own transaction (cold accounts and slots, 21,000 +
+/// calldata with the EIP-7623 floor), binary search on the limit, inner fee paid. Relayed = through `mtxExecute`, which
+/// adds the envelope and two more frames that each keep 1/64 (EIP-150). A row ends at the first `M` over the cap less
+/// the margin. Re-measure with §19 and the edges move (`gas_table_edges` pins them).
+fn gas_limits(bls: bool, mode: TransferMode, auditor: bool, relayed: bool) -> &'static [u64] {
     use TransferMode::*;
-    match (bls, mode, auditor) {
-        (false, Hash, true) => ([3_239_635, 4_809_467, 7_916_175, 14_198_340], [4_004, 5_732, 9_220, 16_164]),
-        (false, Hash, false) => ([3_212_449, 4_754_406, 7_804_810, 13_972_187], [4_004, 5_732, 9_220, 16_164]),
-        (false, Bundle, true) => ([3_368_038, 5_068_803, 8_481_710, 15_353_653], [3_940, 5_636, 9_028, 15_812]),
-        (false, Bundle, false) => ([3_301_051, 4_954_040, 8_270_846, 14_948_398], [3_940, 5_636, 9_028, 15_812]),
-        (false, NoBundle, true) => ([3_142_904, 4_664_842, 7_720_023, 13_875_749], [3_940, 5_636, 9_028, 15_812]),
-        (false, NoBundle, false) => ([3_115_717, 4_609_779, 7_608_659, 13_649_593], [3_940, 5_636, 9_028, 15_812]),
-        (true, Hash, true) => ([3_680_488, 5_470_832, 9_068_513, 16_533_815], [7_076, 10_276, 16_708, 29_540]),
-        (true, Hash, false) => ([3_639_184, 5_386_415, 8_894_955, 16_170_317], [7_076, 10_276, 16_708, 29_540]),
-        (true, Bundle, true) => ([3_984_226, 6_080_832, 10_335_337, 19_090_805], [7_012, 10_180, 16_516, 29_188]),
-        (true, Bundle, false) => ([3_863_321, 5_837_216, 9_843_379, 18_090_504], [7_012, 10_180, 16_516, 29_188]),
-        (true, NoBundle, true) => ([3_581_588, 5_321_839, 8_863_490, 16_191_841], [7_012, 10_180, 16_516, 29_188]),
-        (true, NoBundle, false) => ([3_540_283, 5_237_423, 8_689_932, 15_828_339], [7_012, 10_180, 16_516, 29_188]),
+    match (bls, mode, auditor, relayed) {
+        (false, Hash, true, false) => &[3_478_200, 5_127_191, 6_757_333, 8_391_120, 10_028_787, 11_672_911, 13_339_034, 14_988_311, 16_641_769],
+        (false, Hash, true, true) => &[3_631_311, 5_333_664, 7_016_459, 8_703_431, 10_394_341, 12_091_786, 13_811_970, 15_515_275, 17_222_681],
+        (false, Hash, false, false) => &[3_448_616, 5_067_362, 6_666_998, 8_270_124, 9_876_934, 11_489_853, 13_124_849, 14_742_559, 16_364_440, 18_012_699],
+        (false, Hash, false, true) => &[3_600_794, 5_272_053, 6_923_390, 8_578_782, 10_237_824, 11_903_226, 13_591_309, 15_262_054, 16_936_814],
+        (false, Bundle, true, false) => &[3_609_610, 5_393_165, 7_180_560, 8_971_885, 10_766_855, 12_565_789, 14_368_615, 16_175_389, 17_986_008],
+        (false, Bundle, true, true) => &[3_766_809, 5_608_032, 7_453_356, 9_302_535, 11_155_836, 13_013_253, 14_874_606, 16_739_892],
+        (false, Bundle, false, false) => &[3_538_940, 5_271_739, 7_008_161, 8_748_026, 10_491_746, 12_239_058, 13_990_088, 15_744_842, 17_503_407],
+        (false, Bundle, false, true) => &[3_693_950, 5_482_779, 7_275_523, 9_071_916, 10_872_083, 12_676_303, 14_484_274, 16_295_902, 18_111_911],
+        (false, NoBundle, true, false) => &[3_377_330, 4_976_325, 6_579_193, 8_185_824, 9_796_159, 11_410_630, 13_028_468, 14_650_074, 16_275_709, 17_905_215],
+        (false, NoBundle, true, true) => &[3_527_161, 5_177_930, 6_832_869, 8_491_412, 10_154_291, 11_820_917, 13_491_606, 15_166_166, 16_844_747],
+        (false, NoBundle, false, false) => &[3_347_734, 4_916_520, 6_488_845, 8_064_756, 9_644_318, 11_227_464, 12_814_331, 14_404_524, 15_998_568, 17_595_998],
+        (false, NoBundle, false, true) => &[3_496_667, 5_116_235, 6_739_562, 8_366_775, 9_997_617, 11_632_490, 13_270_836, 14_913_003, 16_559_080, 18_208_894],
+        (true, Hash, true, false) => &[3_980_739, 5_870_893, 7_759_065, 9_668_131, 11_597_793, 13_550_800, 15_542_949, 17_535_556],
+        (true, Hash, true, true) => &[4_151_576, 6_104_001, 8_054_379, 10_026_595, 12_020_210, 14_038_108, 16_096_752, 18_155_759],
+        (true, Hash, false, false) => &[3_935_776, 5_779_178, 7_619_618, 9_479_769, 11_359_561, 13_261_911, 15_202_174, 17_142_001],
+        (true, Hash, false, true) => &[4_105_286, 6_009_450, 7_910_723, 9_832_513, 11_774_798, 13_740_510, 15_745_625, 17_750_224],
+        (true, Bundle, true, false) => &[4_293_033, 6_498_853, 8_725_439, 10_972_723, 13_240_686, 15_529_396, 17_838_917],
+        (true, Bundle, true, true) => &[4_473_865, 6_751_940, 9_051_611, 11_372_729, 13_715_493, 16_079_862, 18_465_985],
+        (true, Bundle, false, false) => &[4_165_995, 6_242_964, 8_339_442, 10_455_737, 12_591_803, 14_747_469, 16_923_160],
+        (true, Bundle, false, true) => &[4_342_846, 6_487_922, 8_653_484, 10_839_557, 13_046_035, 15_273_371, 17_521_427],
+        (true, NoBundle, true, false) => &[3_877_522, 5_715_741, 7_574_603, 9_453_850, 11_353_954, 13_274_710, 15_215_864, 17_177_775],
+        (true, NoBundle, true, true) => &[4_045_125, 5_943_722, 7_863_722, 9_805_273, 11_768_369, 13_753_189, 15_759_174, 17_786_510],
+        (true, NoBundle, false, false) => &[3_832_679, 5_623_833, 7_434_987, 9_265_452, 11_115_794, 12_985_761, 14_875_267, 16_784_409],
+        (true, NoBundle, false, true) => &[3_998_893, 5_849_170, 7_720_078, 9_611_179, 11_523_029, 13_455_278, 15_407_985, 17_381_188],
     }
 }
 
-/// Straight line between the measured `M` (above 8: the 4 → 8 slope).
-fn interp(y: &[u64; 4], m: usize) -> u64 {
-    let i = GAS_AT[1..].iter().position(|&x| m <= x).unwrap_or(2);
-    let (m0, m1) = (GAS_AT[i] as i128, GAS_AT[i + 1] as i128);
-    (y[i] as i128 + (y[i + 1] as i128 - y[i] as i128) * (m as i128 - m0) / (m1 - m0)) as u64
-}
-
-/// The transaction gas of a multi-recipient transfer: §19 execution + 21,000 intrinsic + 16 gas per calldata byte.
-pub fn transfer_gas<C: ZCurve>(mode: TransferMode, auditor: bool, m: usize) -> u64 {
-    let (exec, cd) = gas_cells(C::NAME == "bls12381", mode, auditor);
-    interp(&exec, m) + 21_000 + 16 * interp(&cd, m)
+/// The transaction gas limit of a multi-recipient transfer (`1 ≤ m`), [`gas_limits`]; past its row, the row's last step
+/// per extra recipient (an estimate for the refusal's message only: those `M` are refused either way).
+pub fn transfer_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usize) -> u64 {
+    let t = gas_limits(C::NAME == "bls12381", mode, auditor, relayed);
+    let n = t.len();
+    if m <= n {
+        t[m - 1]
+    } else {
+        t[n - 1] + (t[n - 1] - t[n - 2]) * (m - n) as u64
+    }
 }
 
 /// The largest `M` whose [`transfer_gas`] fits [`TX_GAS_CAP`] less [`GAS_MARGIN`] (`zetherTransfer*` builds above it
 /// are refused, [`ZError::GasCap`]).
-pub fn max_recipients<C: ZCurve>(mode: TransferMode, auditor: bool) -> usize {
-    (1..=MAX_RECIPIENTS).rev().find(|&m| transfer_gas::<C>(mode, auditor, m) <= TX_GAS_CAP - GAS_MARGIN).unwrap_or(0)
+pub fn max_recipients<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool) -> usize {
+    (1..=MAX_RECIPIENTS)
+        .rev()
+        .find(|&m| transfer_gas::<C>(mode, auditor, relayed, m) <= TX_GAS_CAP - GAS_MARGIN)
+        .unwrap_or(0)
 }
 
 /// Refuse a build over the cap, naming the estimate, the most recipients this form takes and the cheaper forms that
 /// fit at this `M` (leaving the auditor out is the sender's choice on an `OPTIONAL` token only; `bundle` and `none`
-/// need a `BUNDLE` token).
-fn check_gas<C: ZCurve>(mode: TransferMode, auditor: bool, m: usize) -> Result<(), ZError> {
-    let gas = transfer_gas::<C>(mode, auditor, m);
+/// need a `BUNDLE` token). `relayed`: the build carries an envelope binding, so the relayed column applies.
+fn check_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usize) -> Result<(), ZError> {
+    let gas = transfer_gas::<C>(mode, auditor, relayed, m);
     if gas <= TX_GAS_CAP - GAS_MARGIN {
         return Ok(());
     }
@@ -766,18 +780,18 @@ fn check_gas<C: ZCurve>(mode: TransferMode, auditor: bool, m: usize) -> Result<(
         .flat_map(|f| [(f, true), (f, false)])
         .filter(|&(f, a)| (a <= auditor) && (f, a) != (mode, auditor))
         .filter_map(|(f, a)| {
-            let g = transfer_gas::<C>(f, a, m);
+            let g = transfer_gas::<C>(f, a, relayed, m);
             (g <= TX_GAS_CAP - GAS_MARGIN).then(|| format!("{} {} (~{g})", f.name(), aud(a)))
         })
         .collect::<Vec<_>>()
         .join(", ");
     Err(ZError::GasCap {
-        what: format!("{} {} {}", C::NAME, mode.name(), aud(auditor)),
+        what: format!("{} {} {}, {}", C::NAME, mode.name(), aud(auditor), if relayed { "relayed" } else { "direct" }),
         m,
         gas,
         cap: TX_GAS_CAP,
         margin: GAS_MARGIN,
-        max_m: max_recipients::<C>(mode, auditor),
+        max_m: max_recipients::<C>(mode, auditor, relayed),
         alternatives: if alternatives.is_empty() { "none".into() } else { alternatives },
     })
 }
@@ -1180,7 +1194,7 @@ pub fn prove_transfer_multi<C: ZCurve, R: RngCore + CryptoRng>(
     if recipients.is_empty() || recipients.len() > MAX_RECIPIENTS {
         return Err(ZError::BadStatement("recipient count"));
     }
-    check_gas::<C>(mode, !y_aud.is_zero(), recipients.len())?;
+    check_gas::<C>(mode, !y_aud.is_zero(), matches!(header.binding, Binding::Relayed(_)), recipients.len())?;
     let (salt, s) = draw_salt::<C, R>(&key.x, &header, &key.ua(), rng);
     header.salt = salt;
     let memo = if mode == TransferMode::Hash {

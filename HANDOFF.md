@@ -7,7 +7,7 @@ the spec rules CTR-ZTH-30/38/42/48/49/50 flipped to built, §19 re-measured, PQZ
 
 **Rulings to confirm (controller, pending the owner):** the commitment `keccak256(R)` over `R = salt ‖ B_1 ‖ … ‖ B_M` (the spec table now says so), the `…/v2` proof system id label, `seed_zether` = the R33 conf key `x`, `AuditorForbidden` for NONE, the registry's `keyOf`, the `uint8` config fields with typed errors.
 
-**Not done / next:** R6 (archive of `TransferBundles` for receiver and auditor), transfers over the EIP-7825 cap (the prover refuses them by its largest-`M` table per curve, form and auditor, zether.md §19; no contract cap), the client ABI (P5).
+**Not done / next:** R6 (archive of `TransferBundles` for receiver and auditor), transfers over the EIP-7825 cap (the prover refuses them by its measured transaction gas limits per curve, form, auditor and direct / relayed, zether.md §19; no contract cap), the node's gas padding clamped to 2^24 (P5), the client ABI (P5).
 
 ## Session 2026-10-11 (P4)
 

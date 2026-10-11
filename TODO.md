@@ -92,6 +92,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
       `transfer`/`pay`), batching via `mtxBatchTransfer`/`mtxBatch` never mixed (NODE-LANE-11), `chainUid()` check
       (NODE-GW-07), DEX venue `mtxSettle` (NODE-DEX-15/16), intake `allowance(from, puller)`, TradeEngine with
       `trade_engine.*` config and `/v1/dex/exchanges/{ref}` (NODE-DEX-17/18), NODE-IDX-06 `repeat_of`.
+      Gas: `submit.rs` sends `eth_estimateGas` + 20 % unclamped; on EIP-7825 chains send `min(g + g/5, 2^24)` (zether.md §19).
 - [ ] **MT-9** clientkeys/app and the reference ERP's `lib/eip712.py`: both structs (`MetaTransfer` typed in wallets,
       `MetaTransaction` decoded via `mtxSelectors()`), `domain.salt`, refuse an unlisted `dex`, no EOA approve, wrap by
       signature (CLI-SGN-05, CLI-SGN-33…36); `SmartKeyAccount`/mandate digests as `MetaTransaction`s; vectors/KATs regenerated.
@@ -157,7 +158,7 @@ chainId 9000 → **7622**; `PqzToken` implements `IERC20MetaTx` (PQZ rev 1.4 R28
       foundry profile, KAT/mesh vectors regenerated, node examples, Odoo chain record + tests. Left: `private9000`
       mentions in `docs/history/SCaaS-2026-10-07.md` + `docs/history/integration-2026-10-07.md` (history: the reorg writes 7622 only); `chain_uid` = genesis hash binding (UA R330, not built);
       redeploy the dev contracts on the empty chain.
-- [x] Doc nits: Zether chains set `max_gas_per_tx` ≥ 4.2 M (`contracts/zether.md` gas table). Left as code: `wasm-smoke.sh`
+- [x] Doc nits: Zether chains set `max_gas_per_tx` ≥ 4.5 M (`contracts/zether.md` §19, re-measured in P3b as a gas limit). Left as code: `wasm-smoke.sh`
       builds `--target nodejs` only; a `--target web` build for the app is client work (S4F/app).
 
 ## 1. Code streams (after §0)

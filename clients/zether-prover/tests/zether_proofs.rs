@@ -513,26 +513,33 @@ fn single_has_no_memo_hash() {
     assert!(st.validate().is_err());
 }
 
-/// Review T1 I1: the most recipients per (stored form, auditor in / out) under the EIP-7825 cap less the 1 % margin, from
-/// the measured §19 cells: the edge builds, one more is refused with the estimate. Columns: compact, bundle, none; each
-/// (auditor in, out).
-fn gas_table_edges<C: ZCurve>(want: [[usize; 2]; 3]) {
+/// Review T1 I1, final review I1: the most recipients per (stored form, auditor in / out) under the EIP-7825 cap less
+/// the 1 % margin, from the measured transaction gas limits (zether.md §19), direct and relayed (a build with an
+/// envelope binding takes the relayed column): the edge builds, one more is refused with the estimate. Columns:
+/// compact, bundle, none; each (auditor in, out).
+fn gas_table_edges<C: ZCurve>(relayed: bool, want: [[usize; 2]; 3]) {
     let f = fx::<C>();
     let ya = f.aud.y;
+    let mut h = header(0);
+    if relayed {
+        h.binding = Binding::Relayed([0x33; 32]);
+    }
     for (mode, row) in [TransferMode::Hash, TransferMode::Bundle, TransferMode::NoBundle].into_iter().zip(want) {
         for (aud, max) in [(true, row[0]), (false, row[1])] {
-            assert_eq!(max_recipients::<C>(mode, aud), max, "{} {mode:?} auditor {aud}", C::NAME);
-            assert!(transfer_gas::<C>(mode, aud, max) <= TX_GAS_CAP - GAS_MARGIN);
-            assert!(transfer_gas::<C>(mode, aud, max + 1) > TX_GAS_CAP - GAS_MARGIN);
+            let what = format!("{} {mode:?} auditor {aud} relayed {relayed}", C::NAME);
+            assert_eq!(max_recipients::<C>(mode, aud, relayed), max, "{what}");
+            assert!(transfer_gas::<C>(mode, aud, relayed, max) <= TX_GAS_CAP - GAS_MARGIN);
+            assert!(transfer_gas::<C>(mode, aud, relayed, max + 1) > TX_GAS_CAP - GAS_MARGIN);
             let rs = |n: usize| (0..n as u32).map(|i| (key::<C>(10 + i).y, 1)).collect::<Vec<_>>();
             let y_a = if aud { ya } else { G::<C>::zero() };
-            let build = |n| prove_transfer_multi(&f.gens, &f.from, header(0), mode, &rs(n), y_a, f.acc, BAL, &mut rng());
-            assert!(build(max).is_ok(), "{} {mode:?} auditor {aud}: M = {max} builds", C::NAME);
+            let build = |n| prove_transfer_multi(&f.gens, &f.from, h.clone(), mode, &rs(n), y_a, f.acc, BAL, &mut rng());
+            assert!(build(max).is_ok(), "{what}: M = {max} builds");
             match build(max + 1).map(|_| ()) {
                 Err(ZError::GasCap { m, gas, cap, max_m, .. }) => {
-                    assert_eq!((m, gas, cap, max_m), (max + 1, transfer_gas::<C>(mode, aud, max + 1), TX_GAS_CAP, max));
+                    let want = (max + 1, transfer_gas::<C>(mode, aud, relayed, max + 1), TX_GAS_CAP, max);
+                    assert_eq!((m, gas, cap, max_m), want, "{what}");
                 }
-                other => panic!("{} {mode:?} auditor {aud}: M = {} not refused: {other:?}", C::NAME, max + 1),
+                other => panic!("{what}: M = {} not refused: {other:?}", max + 1),
             }
         }
     }
@@ -540,12 +547,31 @@ fn gas_table_edges<C: ZCurve>(want: [[usize; 2]; 3]) {
 
 #[test]
 fn gas_table_edges_bn254() {
-    gas_table_edges::<Bn254>([[9, 9], [8, 8], [9, 9]]);
+    gas_table_edges::<Bn254>(false, [[8, 9], [8, 8], [9, 9]]);
+    gas_table_edges::<Bn254>(true, [[8, 8], [7, 8], [8, 9]]);
 }
 
 #[test]
 fn gas_table_edges_bls12_381() {
-    gas_table_edges::<Bls12381>([[7, 7], [6, 7], [7, 8]]);
+    gas_table_edges::<Bls12381>(false, [[7, 7], [6, 6], [7, 7]]);
+    gas_table_edges::<Bls12381>(true, [[7, 7], [6, 6], [7, 7]]);
+}
+
+/// The relayed column is the dearer one: at `M` = 9 a bn254 compact transfer without the auditor fits direct, not
+/// relayed; past a measured row the estimate grows by the row's last step.
+#[test]
+fn gas_relayed_column_and_extrapolation() {
+    assert_eq!(transfer_gas::<Bn254>(TransferMode::Hash, false, false, 9), 16_364_440);
+    assert_eq!(transfer_gas::<Bn254>(TransferMode::Hash, false, true, 9), 16_936_814);
+    assert_eq!(transfer_gas::<Bn254>(TransferMode::Hash, false, true, 11), 16_936_814 + 2 * (16_936_814 - 15_262_054));
+    let f = fx::<Bn254>();
+    let rs = (0..9).map(|i| (key::<Bn254>(10 + i).y, 1)).collect::<Vec<_>>();
+    let h = Header { binding: Binding::Relayed([0x33; 32]), ..header(0) };
+    let msg = prove_transfer_multi(&f.gens, &f.from, h, TransferMode::Hash, &rs, G::<Bn254>::zero(), f.acc, BAL, &mut rng())
+    .map(|_| ())
+    .unwrap_err()
+    .to_string();
+    assert!(msg.contains("compact without the auditor, relayed, M = 9") && msg.contains("none without the auditor (~16559080)"), "{msg}");
 }
 
 #[test]

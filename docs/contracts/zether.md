@@ -564,7 +564,7 @@ matches it. Relaying through the meta-transaction envelope is the generic self-c
 once. `entryRef` as in the single format (one per transfer); recipient `j` is addressed as `(entryRef, j)`.
 
 <a id="storage-modes"></a>
-<a id="CTR-ZTH-38"></a>**CTR-ZTH-38** — **Three transfer entries; the plain name is the mode's default** (owner 2026-10-08, 2026-10-11; built in P3b). `zetherTransfer`, `zetherTransferCompact`, `zetherTransferNoBundle`, all `(bytes payload, bytes proof, bytes authSig, UA beneficiary) returns (bytes32 entryRef)`; the salt ([CTR-ZTH-30](#CTR-ZTH-30)) and the sender memo ([CTR-ZTH-50](#CTR-ZTH-50)) travel inside `payload`, so they are signed and the ABI shape is the same for every entry. The bundle of leg `j` is `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j` (bn254 256 B, BLS12-381 512 B per leg); the record is `R = salt ‖ B_1 ‖ … ‖ B_M`. Commit-reveal stores `keccak256(R)` (one slot) ‖ `memo` and emits `TransferBundles(entryRef, R)`; on-chain disclosure then takes `R` from the caller and `ZetherDisclosure` checks the hash (the commitment is over `R`, salt included: controller ruling, pending the owner). A large `M` exceeds the EIP-7825 per-transaction cap (from `M = 7` to `10` by curve, form and auditor, [§19](#gas)): the prover refuses such a build against its table of the largest `M` per form, the contract has no cap. Every entry emits `ZetherTransferMulti(from, beneficiary, fee, sendCounter, entryRef, recipients, mode)`; `mode` in the event and the `opTag` names what is stored:
+<a id="CTR-ZTH-38"></a>**CTR-ZTH-38** — **Three transfer entries; the plain name is the mode's default** (owner 2026-10-08, 2026-10-11; built in P3b). `zetherTransfer`, `zetherTransferCompact`, `zetherTransferNoBundle`, all `(bytes payload, bytes proof, bytes authSig, UA beneficiary) returns (bytes32 entryRef)`; the salt ([CTR-ZTH-30](#CTR-ZTH-30)) and the sender memo ([CTR-ZTH-50](#CTR-ZTH-50)) travel inside `payload`, so they are signed and the ABI shape is the same for every entry. The bundle of leg `j` is `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j` (bn254 256 B, BLS12-381 512 B per leg); the record is `R = salt ‖ B_1 ‖ … ‖ B_M`. Commit-reveal stores `keccak256(R)` (one slot) ‖ `memo` and emits `TransferBundles(entryRef, R)`; on-chain disclosure then takes `R` from the caller and `ZetherDisclosure` checks the hash (the commitment is over `R`, salt included: controller ruling, pending the owner). A large `M` exceeds the EIP-7825 cap on a transaction's gas limit: the prover takes at most 6 to 9 recipients by curve, form, auditor and direct or relayed ([§19](#gas)) and refuses a larger build against its table of measured gas limits; the contract has no cap. Every entry emits `ZetherTransferMulti(from, beneficiary, fee, sendCounter, entryRef, recipients, mode)`; `mode` in the event and the `opTag` names what is stored:
 
 | Entry | BUNDLE token ([CTR-ZTH-48](#CTR-ZTH-48)): stored per transfer | COMPACT token: stored per transfer |
 |---|---|---|
@@ -1073,7 +1073,7 @@ Limits (shielded units; for a 6-decimal stablecoin kept to 2 decimals, `shieldSc
 | Withdrawal (`zetherUnshield`) | `0 < amount ≤ maxDecryptableShielded` | ≤ the supply |
 | Confidential fee | `confidentialFee < 2^n_v` **and** `< maxDecryptableShielded` (else `BadInit`, `ZetherLib.init`) | < 2^64 and < `maxDecryptableShielded` |
 | Amount provable by disclosure | `amount < 2^n_v` | < 2^64 |
-| Node gas cap per transaction | `max_gas_per_tx`, default 3,000,000 | **below** a direct transfer (3,329,831) and a relayed one (3,414,283), bn254 ⇒ a chain with Zether sets ≥ 4.2 M |
+| Node gas cap per transaction | `max_gas_per_tx`, default 3,000,000 | **below** every transfer (single, minimum gas limit: bn254 3,593,875 direct / 3,750,726 relayed, BLS12-381 4,277,302 / 4,457,625) ⇒ a chain with Zether sets ≥ 4.5 M, up to 2^24 to relay large `M` ([§19](#gas)) |
 
 | Client limit (defaults) | Value |
 |---|---|
@@ -1222,18 +1222,24 @@ BUNDLE token, NONE = `zetherTransferNoBundle`.
 - **The auditor scan:** the multi cells carry ≈ 1 k per leg for the `C_aud` scan that picks `Y_a` ([CTR-ZTH-42](#CTR-ZTH-42)).
 - **Leaving the auditor out** (OPTIONAL only) saves E6 per leg (bn254 ≈ 27–28 k, BLS12-381 ≈ 41–45 k) and, where the
   record is stored, the zero `C_aud` words: single −68 k / −122 k, BUNDLE M = 8 −405 k / −1.0 M (bn254 / BLS12-381).
-- **EIP-7825 cap (16,777,216 per transaction, intrinsic + calldata included):** the prover estimates a build as the cell above (straight line between the measured `M`; above 8 the 4 → 8 slope) + 21 k + 16 gas/B of calldata and refuses one over the cap less a 1 % margin (167,772 — the relayed envelope ≈ +85 k, interpolation and drift), naming the cheaper forms that fit (controller ruling, pending the owner). Largest `M` per transaction, with the estimate at that `M` and at `M + 1`:
+- **EIP-7825 cap (16,777,216 on a transaction's gas limit, intrinsic + calldata included):** the cells above are gas used; a transaction needs a higher limit. The clone runs clone → implementation → `ZetherLib` → verifier, and frames that hold back 1/64 of their gas (EIP-150) put the gas needed ≈ 3 % above the gas used (cold); `mtxExecute` adds the envelope and two more such frames (≈ 6 %). Measured (`ZetherGasLimit.t.sol`, `ZETHER_GAS_PROBE=1`): each call its own transaction (forge `isolate`: cold accounts and slots, 21,000 + calldata with the EIP-7623 floor), binary search on the gas limit, inner fee paid, every account's first credit. The prover keeps these limits per `M` (`gas_limits`), takes the relayed column when the request carries an `envelopeBinding`, and refuses a build over the cap less a 1 % margin (167,772), naming the cheaper forms that fit (controller ruling, pending the owner); `test_edge_*` sends every largest `M` at a limit of exactly 2^24. Largest `M`, and the minimum gas limit at that `M` and at `M + 1`, direct / relayed:
 
-| Curve | Form | Aud. | max `M` | est. at max | est. at max + 1 |
+| Curve | Form | Aud. | max `M` | limit at max | limit at max + 1 |
 |---|---|---|---|---|---|
-| bn254 | Compact | on / out | 9 / 9 | 16.08 M / 15.82 M | 17.67 M / 17.39 M |
-| bn254 | BUNDLE | on / out | 8 / 8 | 15.63 M / 15.22 M | 17.37 M / 16.92 M |
-| bn254 | NONE | on / out | 9 / 9 | 15.72 M / 15.46 M | 17.28 M / 17.00 M |
-| BLS12-381 | Compact | on / out | 7 / 7 | 15.11 M / 14.79 M | 17.03 M / 16.66 M |
-| BLS12-381 | BUNDLE | on / out | 6 / 7 | 15.10 M / 16.47 M | 17.34 M / 18.58 M |
-| BLS12-381 | NONE | on / out | 7 / 8 | 14.80 M / 16.32 M | 16.68 M / 18.15 M |
+| bn254 | Compact | on | 8 / 8 | 14,988,311 / 15,515,275 | 16,641,769 / 17,222,681 |
+| bn254 | Compact | out | 9 / 8 | 16,364,440 / 15,262,054 | 18,012,699 / 16,936,814 |
+| bn254 | BUNDLE | on | 8 / 7 | 16,175,389 / 14,874,606 | 17,986,008 / 16,739,892 |
+| bn254 | BUNDLE | out | 8 / 8 | 15,744,842 / 16,295,902 | 17,503,407 / 18,111,911 |
+| bn254 | NONE | on | 9 / 8 | 16,275,709 / 15,166,166 | 17,905,215 / 16,844,747 |
+| bn254 | NONE | out | 9 / 9 | 15,998,568 / 16,559,080 | 17,595,998 / 18,208,894 |
+| BLS12-381 | Compact | on | 7 / 7 | 15,542,949 / 16,096,752 | 17,535,556 / 18,155,759 |
+| BLS12-381 | Compact | out | 7 / 7 | 15,202,174 / 15,745,625 | 17,142,001 / 17,750,224 |
+| BLS12-381 | BUNDLE | on | 6 / 6 | 15,529,396 / 16,079,862 | 17,838,917 / 18,465,985 |
+| BLS12-381 | BUNDLE | out | 6 / 6 | 14,747,469 / 15,273,371 | 16,923,160 / 17,521,427 |
+| BLS12-381 | NONE | on | 7 / 7 | 15,215,864 / 15,759,174 | 17,177,775 / 17,786,510 |
+| BLS12-381 | NONE | out | 7 / 7 | 14,875,267 / 15,407,985 | 16,784,409 / 17,381,188 |
 
-  More recipients go in separate transfers; the statement itself allows `M ≤ 16`.
+  A limit under 2^24 at `M + 1` is refused by the margin. More recipients go in separate transfers; the statement itself allows `M ≤ 16`.
 - **Prover** (release `zether-cli proveTransferMulti`, one process per call; median of 3 on the chain-7622 host, AMD
   Ryzen 5 7235HS): bn254 single 74 ms, M = 1/2/4/8 = 75 / 114 / 181 / 322 ms; BLS12-381 single 162 ms, M = 1/2/4/8 =
   159 / 231 / 361 / 660 ms.
@@ -1271,9 +1277,7 @@ calldata — its size in the last column, its transaction calldata cost (≤ 16 
 | `ZetherVerifierBn254` / `ZetherVerifierBls12381` | 15,955 / 16,312 |
 
 
-**Node gas cap:** the default `max_gas_per_tx = 3,000,000` (`scaas-node/src/config.rs:415-416`) is below a classical transfer (3.35 M direct / 3.44 M relayed, bn254), so the node refuses to relay Zether with the default; a chain with Zether sets `max_gas_per_tx` ≥ 4.2 M (BLS direct 3.99 M, `test_lifecycleShieldTransferRollOverUnshield`; a BLS
-relayed transfer was not re-measured: ≈ 3.99 M + the envelope delta (bn254 +85 k) + 21 k + ≈ 99 k calldata ≈ 4.2 M). The node's configuration check warns when a
-Zether token is registered on a chain whose cap is below that ([NODE-STO-01](../node/store.md#NODE-STO-01)).
+**Node gas cap:** the default `max_gas_per_tx = 3,000,000` (`scaas-node/src/config.rs:415-416`) is below every Zether transfer. The node compares `eth_estimateGas` (the minimum gas limit) with it, so a chain with Zether sets `max_gas_per_tx` ≥ 4.5 M for single transfers (minimum limit, auditor on, measured as above: bn254 3,593,875 direct / 3,750,726 relayed, BLS12-381 4,277,302 / 4,457,625) and, to relay larger `M`, raises it to the relayed limit of that `M` in the table above (at most 2^24). The node's configuration check warns when a Zether token is registered on a chain whose cap is below that ([NODE-STO-01](../node/store.md#NODE-STO-01)). P5 (TODO): the node pads the estimate by 20 % (`g + g/5`) without clamping; on an EIP-7825 chain it sends `min(g + g/5, 2^24)`.
 
 The 2.5 M per-transfer kill criterion of the original plan is exceeded by the bn254 transfer (3.33 M direct after
 `n_v = 64`; 2.75 M before) — accepted by the owner for v1 in exchange for one transaction per payment of any size. This
