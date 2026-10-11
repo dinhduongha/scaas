@@ -28,10 +28,10 @@ import {DexPuller} from "./DexPuller.sol";
 ///         capped by codehash, CTR-DEX-08) and pulls the fill through its `DexPuller` (CTR-DEX-22); `ESCROW` is refused.
 ///         Exchange path (CTR-DEX-20): the same orders against AMM routes instead of makers, each at a floor the
 ///         submitter commits to; every output above the floors is paid to the signers (CTR-DEX-21); interactions may
-///         not call the DEX, the puller or any `mtxTrade`, nor raise an allowance outside `approve`
-///         (`increaseAllowance`, Permit2 `approve`: controller ruling, pending the owner), listed targets only when a
-///         leg or the admin asks (CTR-DEX-23), and every allowance an `approve` interaction grants is set back to 0
-///         before the payout.
+///         not call the DEX, the puller or any `mtxTrade`, nor call `increaseAllowance` or Permit2 `approve`
+///         (controller ruling, pending the owner; other allowance-raising calls are not tracked),
+///         listed targets only when a leg or the admin asks (CTR-DEX-23), and every allowance an `approve` interaction
+///         grants is set back to 0 before the payout.
 contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     using SafeERC20 for IERC20;
 
@@ -410,6 +410,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     /// @notice Path (b): the sold fills go to `executor` (listed when a leg or the admin asks), which must transfer at
     ///         least the floors to the DEX inside `exchangeCallback`; re-entry hits `nonReentrant`, a `mtxTrade` or a
     ///         puller call from it fails (it is neither `o.dex` nor the DEX).
+    // At the stack limit (via_ir off): add no locals here; move _flows + hand-out + callback into a helper first.
     function mtxExchangeVia(ExchangePlan calldata p, address executor, bytes calldata data) external nonReentrant {
         (Tok[] memory t, Calc[] memory c, bool onlyListed) = _exchangeIn(p);
         if (onlyListed && !_s().exchangeTarget[executor]) revert TargetNotListed(executor);

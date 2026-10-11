@@ -88,6 +88,18 @@ contract MockExecutor is IExchangeExecutor {
     }
 }
 
+/// Records the `ref` it is told and pays the floors back.
+contract RefExecutor is IExchangeExecutor {
+    bytes32 public ref;
+
+    function exchangeCallback(bytes32 r, address[] calldata, uint256[] calldata, address[] calldata tokensIn,
+        uint256[] calldata amountsIn, bytes calldata) external
+    {
+        ref = r;
+        for (uint256 i; i < tokensIn.length; ++i) IERC20(tokensIn[i]).transfer(msg.sender, amountsIn[i]);
+    }
+}
+
 /// Credits one unit more than it moves when the recipient is `sink` (a token that rebases up on arrival).
 contract BonusERC20 is MockERC20 {
     address public sink;
@@ -736,5 +748,89 @@ contract DexExchangeTest is Test {
         vm.stopPrank();
         assertTrue(dex.exchangeTarget(address(router)));
         assertTrue(dex.listedOnly());
+    }
+
+    // ------------------------------------------------------------------ final-review pins
+
+    /// Three legs receive B and the last B receiver (Dave) is not the last leg (Bob receives A): the
+    /// split is pro rata over all floors and the remainder goes to the last receiver, not the last leg. Excess 250 B
+    /// over floors 1900/1800/3800: 63, 60 and the remainder 127.
+    function test_exchange_surplusSplit_threeReceivers_lastReceiverNotLastLeg() public {
+        ISCaaSDex.ExchangePlan memory p;
+        p.ref = "x";
+        p.legs = new ISCaaSDex.ExchangeLeg[](4);
+        ISCaaSDex.ExchangePlan memory two = _twoLegs();
+        p.legs[0] = two.legs[0];
+        p.legs[1] = two.legs[1];
+        p.legs[2] = _leg(DAVE_PK, address(usdc), _order(dave, address(b), 2000, 3800, 0), 2000, 3800);
+        p.legs[3] = _leg(BOB_PK, address(b), _order(bob, address(a), 1000, 500, 0), 1000, 500);
+        ISCaaSDex.Interaction[] memory xs =
+            _cat(_swap(address(a), address(b), 1500, 2850), _swap(address(usdc), address(b), 2000, 3900));
+        uint256 bobA = a.balanceOf(bob);
+        _exchange(p, xs);
+        assertEq(b.balanceOf(alice), 1900 - 6 + 63);
+        assertEq(b.balanceOf(carol), 1800 - 2 + 60);
+        assertEq(b.balanceOf(dave), 3800 + 127);
+        assertEq(a.balanceOf(bob) - bobA, 500);
+    }
+
+    /// `LISTED_POOLS` on the second leg only still requires listed targets.
+    function test_exchange_listedPools_onTheSecondLeg() public {
+        ITradeToken.TradeOrder memory oc = _order(carol, address(b), 1999, 3597, 1_000);
+        oc.flags = 4;
+        ISCaaSDex.ExchangePlan memory p = _plan2(_alice(), _leg(CAROL_PK, address(a), oc, 1000, 1800));
+        _expectExchange(p, _swap(address(a), address(b), 2000, 3800), _err(ISCaaSDex.TargetNotListed.selector, address(a)));
+    }
+
+    /// Delisting every market of the quote token makes it unknown.
+    function test_exchange_delistQuote_makesItUnknown() public {
+        vm.startPrank(admin);
+        dex.setMarket(address(a), address(b), false);
+        dex.setMarket(address(usdc), address(b), false);
+        vm.stopPrank();
+        assertFalse(dex.tokenKnown(address(b)));
+    }
+
+    /// An `approve` with trailing calldata is reset too.
+    function test_exchange_approveWithTrailingBytes_isReset() public {
+        ISCaaSDex.Interaction[] memory xs = _swap(address(a), address(b), 1000, 2000);
+        xs[0].data = abi.encodePacked(abi.encodeCall(IERC20.approve, (address(router), type(uint256).max)), bytes32(0));
+        _exchange(_plan(_alice()), xs);
+        assertEq(a.allowance(address(dex), address(router)), 0);
+    }
+
+    /// The event's `ref` and `from` topics.
+    function test_exchange_legEvent_refAndFromTopics() public {
+        ITradeToken.TradeOrder memory o = _order(alice, address(b), 1000, 1900, 3_000);
+        o.destination = address(0xD0D0);
+        ISCaaSDex.ExchangePlan memory p = _plan(_leg(ALICE_PK, address(a), o, 1000, 1900));
+        vm.recordLogs();
+        _exchange(p, _swap(address(a), address(b), 1000, 2000));
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 k; k < logs.length; ++k) {
+            if (logs[k].topics[0] != ISCaaSDex.ExchangeLegSettled.selector) continue;
+            assertEq(logs[k].topics[1], bytes32("x"));
+            assertEq(logs[k].topics[3], bytes32(uint256(uint160(alice))));
+            return;
+        }
+        revert("no event");
+    }
+
+    /// The executor is told the plan's `ref`.
+    function test_exchange_executorGetsTheRef() public {
+        RefExecutor e = new RefExecutor();
+        vm.prank(bob);
+        b.transfer(address(e), 10_000);
+        vm.prank(relayer);
+        dex.mtxExchangeVia(_plan(_alice()), address(e), "");
+        assertEq(e.ref(), bytes32("x"));
+    }
+
+    /// A relayer-bound order settles on the exchange path when its relayer submits.
+    function test_exchange_relayerBoundOrder_settles() public {
+        ITradeToken.TradeOrder memory o = _order(alice, address(b), 1000, 1900, 0);
+        o.relayer = relayer;
+        _exchange(_plan(_leg(ALICE_PK, address(a), o, 1000, 1900)), _swap(address(a), address(b), 1000, 2000));
+        assertEq(b.balanceOf(alice), 2000);
     }
 }

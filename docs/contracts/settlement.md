@@ -232,8 +232,8 @@ token. A plan is atomic with no `try`. Interactions may not call the DEX, the pu
 listed ([CTR-DEX-23](dex.md#CTR-DEX-23)); the holder approves the puller, never the DEX
 ([CTR-DEX-22](dex.md#CTR-DEX-22)). Node: the TradeEngine, off unless enabled, EVM only
 ([NODE-DEX-17](../node/dex-venue.md#NODE-DEX-17)); it keeps no surplus ([NODE-DEX-18](../node/dex-venue.md#NODE-DEX-18)).
-Status **BUILT** (P2c, `SCaaSDex`): the DEX also refuses a sell token that arrives inexact, and resets every allowance an
-`approve` interaction granted (controller ruling, pending the owner; [dex.md](dex.md#CTR-DEX-23)).
+Status **BUILT** (P2c, `SCaaSDex`): the DEX also refuses a sell token that arrives inexact, resets every allowance an
+`approve` interaction granted and refuses `increaseAllowance` and Permit2 `approve` (controller ruling, pending the owner; [dex.md](dex.md#CTR-DEX-23)).
 
 ### 3.7 Confidential settlement (Zether, PQZ)
 

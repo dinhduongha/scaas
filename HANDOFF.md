@@ -3,13 +3,13 @@
 ## Session 2026-10-11 (P2c)
 
 **State:** P2c on branch `p2c-dex`, merge pending the final review (code `dbf27a5`, tests `ae23be1`). Plan `docs/superpowers/plans/2026-10-11-p2c-dex-exchange-path.md`.
-942 forge tests.
+949 forge tests.
 
 **Built:** the exchange path on `SCaaSDex` (`src/dex/SCaaSDex.sol`, `ISCaaSDex.sol` with `IExchangeExecutor`): `mtxExchange`
 (interactions), `mtxExchangeVia` (executor), `setExchangeTarget`, `setListedOnly`, `exchangeTarget`, `tokenKnown`;
 `ExchangeLegSettled`, `ExchangeTargetSet`, `ListedOnlySet`; `NoLegs`, `TokenNotKnown`, `ForbiddenTarget`, `ForbiddenSelector`,
-`TargetNotListed`, `InsufficientOutput`. Tests `test/v2/DexExchange.t.sol` 29 (mock router, v2-style pairs, executor,
-hostile targets). Sizes: `SCaaSDex` 21,761 B (was 14,722); tokens unchanged; no deploy change.
+`TargetNotListed`, `InsufficientOutput`. Tests `test/v2/DexExchange.t.sol` 36 (mock router, v2-style pairs, executor,
+hostile targets). Sizes: `SCaaSDex` 21,826 B (was 14,722); tokens unchanged; no deploy change.
 
 **Rulings J1-J11 (plan header).** **J1** Path A bounds at the pull (token or `TradeLib`), Path B by the DEX, as in
 `mtxSettle`. **J2** known = a side of a listed market, counted per market. **J3** a pull check refuses an inexact sell
