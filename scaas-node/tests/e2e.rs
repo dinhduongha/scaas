@@ -350,7 +350,7 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     assert_eq!(reports[0]["outer_nonce"], 0);
     assert_eq!(balance(&rpc, token, shop).await, U256::from(250_000_000u64));
 
-    let ichain = Chain::with_signer(&cfg, relayer).unwrap();
+    let ichain = Chain::with_signer(&cfg, relayer.clone()).unwrap();
     assert!(scaas_node::indexer::step(&ichain, &odoo).await.unwrap());
     let ingested = state.lock().unwrap().ingested.clone();
     let pay = ingested.iter().find(|e| e["event"] == "PaymentSettled").expect("PaymentSettled ingested");
@@ -383,6 +383,50 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     s.poll_outbox().await;
     let last = state.lock().unwrap().reports.last().cloned().unwrap();
     assert_eq!((last["job_id"].as_i64(), last["chain_state"].as_str(), last["error"].as_str()), (Some(2), Some("consumed"), Some("landed")), "{last}");
+
+    // PAY-FIX2 on a real chain: the lane holds fee income in the token, and a `call` job that would move it is refused
+    // before simulation; a meta-transaction to a contract not bound to this chain (here: no contract) too (NODE-GW-07).
+    let steal = IToken::transferCall { to: Address::repeat_byte(0x7e), value: U256::from(1u64) }.abi_encode();
+    let mut jobs = vec![json!({"id": 3, "kind": "call", "call": {"target": format!("{token:#x}"),
+        "calldata": format!("0x{}", alloy::hex::encode(steal)), "validUntil": (now() + 300).to_string()}})];
+    let elsewhere = Address::repeat_byte(0x99);
+    jobs.push(job(4, elsewhere, &m, "0x", sign(&payer, &token_domain(&dep, chain_id, elsewhere), &m)));
+    state.lock().unwrap().jobs.extend(jobs);
+    let nonce = ProviderBuilder::new().connect_http(rpc.parse().unwrap()).get_transaction_count(relayer.address()).await.unwrap();
+    s.poll_outbox().await;
+    let reports = state.lock().unwrap().reports.clone();
+    let of = |id: i64| reports.iter().rev().find(|r| r["job_id"] == id).unwrap().clone();
+    assert_eq!(of(3)["chain_state"], "dead");
+    assert!(of(3)["error"].as_str().unwrap().starts_with("CALL_TARGET_REFUSED"), "{}", of(3));
+    assert_eq!(of(4)["chain_state"], "dead");
+    assert!(of(4)["error"].as_str().unwrap().starts_with("CHAIN_UID_MISMATCH"), "{}", of(4));
+    let p = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
+    assert_eq!(p.get_transaction_count(relayer.address()).await.unwrap(), nonce, "nothing signed or sent");
+
+    // NODE-JOB-20 against the real token: a `call` struct runs only a selector of its published allowlist. A self-call
+    // of `transfer` is refused before simulation; `cancelNonce(99)` lands and moves the payer's lane 99.
+    let call = |data: Vec<u8>, batch: u64| Mtx::Call(scaas_node::abi::MetaTransaction { from: payer.address(), data: data.into(),
+        batch: U256::from(batch), nonce: U256::ZERO, validUntil: U256::from(now() + 300), mode: 0, relayer: Address::ZERO,
+        fee: U256::ZERO, feeRecipient: Address::ZERO });
+    let bad = call(IToken::transferCall { to: Address::repeat_byte(0x7e), value: U256::from(1u64) }.abi_encode(), 5);
+    let good = call(alloy::hex::decode(format!("cfdd7aea{:064x}", 99)).unwrap(), 6);
+    state.lock().unwrap().jobs.extend([job(5, token, &bad, "0x", sign(&payer, &d, &bad)), job(6, token, &good, "0x", sign(&payer, &d, &good))]);
+    s.poll_outbox().await;
+    for _ in 0..50 {
+        s.track().await;
+        if s.inflight_count() == 0 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    let reports = state.lock().unwrap().reports.clone();
+    let of = |id: i64| reports.iter().rev().find(|r| r["job_id"] == id).unwrap().clone();
+    assert_eq!(of(5)["chain_state"], "dead");
+    assert!(of(5)["error"].as_str().unwrap().starts_with("SELECTOR_NOT_ALLOWED"), "{}", of(5));
+    assert_eq!(of(6)["chain_state"], "mined", "{}", of(6));
+    let lane99 = IToken::mtxNonceCall { from: payer.address(), batch: U256::from(99) }.abi_encode();
+    let out = p.call(TransactionRequest::default().to(token).input(lane99.into())).await.unwrap();
+    assert_eq!(U256::abi_decode(&out).unwrap(), U256::from(1u64));
 }
 
 fn sign_hash(signer: &PrivateKeySigner, h: B256) -> String {

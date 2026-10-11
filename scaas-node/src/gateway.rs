@@ -155,7 +155,7 @@ fn work_of(r: SignedReq, fee_recipient: Option<Address>) -> Result<Work, Reply> 
     }
     let valid_until = m.valid_until().saturating_to();
     let meta = Some(MetaRef::of(r.token, &m, None));
-    Ok(Work { job_id: None, to: r.token, data: m.calldata(sig), valid_until, meta })
+    Ok(Work { job_id: None, to: r.token, data: m.calldata(sig), valid_until, meta, entry: false })
 }
 
 async fn post_metatx(State(s): State<AppState>, Json(r): Json<SignedReq>) -> Reply {

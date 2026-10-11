@@ -296,6 +296,8 @@ mod tests {
         let ok = |r: Value| json!({"jsonrpc": "2.0", "id": id, "result": r});
         axum::Json(match b["method"].as_str().unwrap_or_default() {
             "eth_getBalance" => ok(json!(n.balance)),
+            "eth_getBlockByNumber" => ok(Value::Null),
+            "eth_getCode" => ok(json!("0x")),
             "eth_call" => ok(json!(format!("0x{:064x}", n.mtx_nonce))),
             "eth_estimateGas" => ok(json!("0x186a0")),
             "eth_gasPrice" => ok(json!(format!("0x{GAS_PRICE:x}"))),
@@ -346,6 +348,8 @@ mod tests {
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
         let mut cfg: ChainCfg = toml::from_str("family = \"hedera\"\nevm_chain_number = 296\nrpc_urls = [\"http://x\"]\n").unwrap();
         cfg.rpc_urls = vec![url.clone()];
+        // every `eth_call` of the fake answers the same word: `chainUid()` too, so the pinned chain_uid is that word
+        cfg.chain_uid = Some(B256::from(U256::from(s.lock().unwrap().mtx_nonce)));
         let signer = LocalSigner::new(crate::signer::Curve::Secp256k1, &[7u8; 32]).unwrap();
         let a = HederaAdapter::from_cfg(&cfg, &[signer]).unwrap();
         let oc = crate::config::OdooCfg { url, database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };

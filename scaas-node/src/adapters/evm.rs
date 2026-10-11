@@ -16,6 +16,7 @@ use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Signed, TxStatus};
 use crate::chain::{Chain, SimError};
 use crate::config::ChainCfg;
 use crate::finality::{quorum_ok, safe_head, Mode};
+use crate::guard::{self, Guard};
 use crate::indexer::encode_event;
 use crate::odoo::Job;
 use crate::submit::work_from_job;
@@ -30,6 +31,8 @@ pub struct EvmAdapter {
     max_gas: u64,
     /// Token đã đăng ký (làm mới từ `node_config`); event của contract lạ không bao giờ gửi Odoo.
     pub tokens: Arc<RwLock<Vec<Address>>>,
+    /// PAY-FIX2, NODE-GW-07, NODE-JOB-20: checked before every simulation.
+    guard: Guard,
 }
 
 impl EvmAdapter {
@@ -44,6 +47,7 @@ impl EvmAdapter {
             .collect();
         let mode = if cfg.finality.mode == "tag" { Mode::Tag } else { Mode::Depth(cfg.finality.depth) };
         Ok(Self {
+            guard: Guard::new(cfg, tokens.clone()),
             key: cfg.chain_key(),
             family: if cfg.family == "hedera" { Family::Hedera } else { Family::Evm },
             chains,
@@ -77,15 +81,13 @@ impl ChainAdapter for EvmAdapter {
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
         let w = work_from_job(job).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
         let chain = self.lane(lane).map_err(|e| SimError::Transport(e.to_string()))?;
-        let gas = chain.simulate(w.to, w.data.clone()).await?;
-        if gas > self.max_gas {
-            return Err(SimError::Revert(format!("gas {gas} above max_gas_per_tx")));
-        }
+        self.guard.check(chain, &w).await?;
+        let gas = guard::gas(chain, &w, self.max_gas).await?;
         Ok(Built {
             job_id: job.id,
             body: w.data.to_vec(),
             valid_until: w.valid_until,
-            meta: json!({"to": format!("{:#x}", w.to), "gas": gas + gas / 5}),
+            meta: json!({"to": format!("{:#x}", w.to), "gas": gas}),
         })
     }
 

@@ -996,6 +996,11 @@ mod tests {
         assert!(!limits_ok(&m, &t, U256::from(1), U256::from(4)));
         assert!(!limits_ok(&m, &t, U256::from(4), U256::from(14)), "overfill");
         assert!(!limits_ok(&m, &t, U256::from(3), U256::from(9)), "y is the maker's ceiling receive, not less");
+        // a taker that would pay more than the maker's ceiling: within both price limits, yet the DEX computes the
+        // maker's receive itself (FillMismatch), so the leg is refused here too
+        let rich = Resting { order: bid(2, 12, 3, 1), remaining: U256::from(12), ..t.clone() };
+        assert!(limits_ok(&m, &rich, U256::from(3), U256::from(10)));
+        assert!(!limits_ok(&m, &rich, U256::from(3), U256::from(11)));
         let s = |makers: Vec<(Resting, U256, U256)>, fill: u64| PlannedSettlement {
             tag: B256::ZERO, market_id: 1, taker: t.clone(), taker_fill: U256::from(fill), makers };
         assert!(settlement_ok(&s(vec![(m.clone(), U256::from(3), U256::from(10))], 10)));

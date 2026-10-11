@@ -19,6 +19,7 @@ use crate::breaker::Breaker;
 use crate::chain::{Chain, SimError};
 use crate::abi::IToken;
 use crate::config::ChainCfg;
+use crate::guard::{self, Guard, Refusal};
 use crate::metatx::{addr, uint, Mtx};
 use crate::nonce::{bump, plan, Inflight};
 use crate::odoo::{Job, Odoo, Report};
@@ -42,6 +43,8 @@ pub struct Work {
     pub valid_until: u64,
     /// `None` cho job `call`.
     pub meta: Option<MetaRef>,
+    /// A token's order or wrap entry (`metatx` job naming `entry`), not a `call` (`guard`).
+    pub entry: bool,
 }
 
 /// Meta-tx bên trong `Work`: đủ để đọc nonce chủ thể (R80) và nhận ra digest trong event (§8.5).
@@ -112,7 +115,7 @@ pub fn work_from_job(job: &Job) -> Result<Work> {
     if let Some(c) = &job.call {
         let data = alloy::hex::decode(c.calldata.strip_prefix("0x").unwrap_or(&c.calldata))?;
         let valid_until = c.valid_until.parse::<u64>()?;
-        return Ok(Work { job_id: Some(job.id), to: c.target, data: data.into(), valid_until, meta: None });
+        return Ok(Work { job_id: Some(job.id), to: c.target, data: data.into(), valid_until, meta: None, entry: false });
     }
     let (Some(m), Some(token), Some(sig)) = (&job.metatx, job.token, &job.signature) else {
         anyhow::bail!("job {} has neither a meta-transaction nor a call", job.id);
@@ -121,7 +124,7 @@ pub fn work_from_job(job: &Job) -> Result<Work> {
     let sig = alloy::hex::decode(sig.strip_prefix("0x").unwrap_or(sig))?;
     let valid_until = m.valid_until().saturating_to();
     let meta = Some(MetaRef::of(token, &m, job_digest(job)));
-    Ok(Work { job_id: Some(job.id), to: token, data: m.calldata(sig.into()), valid_until, meta })
+    Ok(Work { job_id: Some(job.id), to: token, data: m.calldata(sig.into()), valid_until, meta, entry: false })
 }
 
 /// A token's other signed entry point as a `metatx` job (job-api.md, order and wrap entries): the signature is in the
@@ -155,7 +158,7 @@ fn entry_work(job: &Job, entry: &str) -> Result<Work> {
         }
         e => anyhow::bail!("unknown entry {e:?}"),
     };
-    Ok(Work { job_id: Some(job.id), to: token, data: data.into(), valid_until, meta: None })
+    Ok(Work { job_id: Some(job.id), to: token, data: data.into(), valid_until, meta: None, entry: true })
 }
 
 pub fn now() -> u64 {
@@ -175,6 +178,8 @@ pub struct Submitter {
     breaker: Arc<Mutex<Breaker>>,
     sampled: Option<Instant>,
     tripped: Option<&'static str>,
+    /// PAY-FIX2, NODE-GW-07, NODE-JOB-20: checked before every simulation.
+    guard: Guard,
 }
 
 impl Submitter {
@@ -184,6 +189,8 @@ impl Submitter {
         let nc = odoo
             .node_config_ref(serde_json::json!(cfg.evm_chain_number), Some(format!("{:#x}", chain.address())), Some(node_id.clone()))
             .await?;
+        // NODE-GW-07: a lane of a chain whose block 0 is not the configured chain_uid never starts.
+        let uid = chain.uid().await?;
         let pending = chain.pending_nonce().await?;
         let jobs: Vec<Inflight> = nc
             .inflight
@@ -192,6 +199,8 @@ impl Submitter {
             .collect();
         let p = plan(pending, nc.journal_max_nonce, &jobs);
         let breaker = Arc::new(Mutex::new(Breaker::new(cfg.breaker.clone())));
+        let tokens = std::sync::RwLock::new(nc.tokens.iter().filter_map(crate::odoo::TokenCfg::evm).collect());
+        let guard = Guard::new(&cfg, Arc::new(tokens));
         let mut me = Self {
             chain,
             odoo,
@@ -204,6 +213,7 @@ impl Submitter {
             breaker,
             sampled: None,
             tripped: None,
+            guard,
         };
         for n in &p.gap_fill {
             me.gap_fill(*n).await?;
@@ -221,7 +231,7 @@ impl Submitter {
             let gas = me.cfg.max_gas_per_tx;
             me.inflight.insert(n, Sent { work, hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard });
         }
-        info!(chain = me.cfg.evm_chain_number, next = me.next, tracked = me.inflight.len(), "submit ready");
+        info!(chain = me.cfg.evm_chain_number, chain_uid = %uid, next = me.next, tracked = me.inflight.len(), "submit ready");
         Ok(me)
     }
 
@@ -327,9 +337,13 @@ impl Submitter {
             }
             return;
         }
-        let gas = match self.chain.simulate(w.to, w.data.clone()).await {
-            Ok(g) if g <= self.cfg.max_gas_per_tx => g + g / 5,
-            Ok(g) => return self.fail(&w, format!("gas {g} above max_gas_per_tx")).await,
+        match self.guard.check(&self.chain, &w).await {
+            Ok(()) => {}
+            Err(Refusal::Policy(reason)) => return self.fail(&w, reason).await,
+            Err(Refusal::Transport(reason)) => return self.requeue(&w, reason).await,
+        }
+        let gas = match guard::gas(&self.chain, &w, self.cfg.max_gas_per_tx).await {
+            Ok(g) => g,
             Err(SimError::Revert(reason)) => return self.refused(&w, reason).await,
             Err(SimError::Transport(reason)) => return self.requeue(&w, format!("simulate: {reason}")).await,
         };
@@ -364,8 +378,14 @@ impl Submitter {
     }
 
     /// Mô phỏng revert. Meta-tx mà nonce chủ thể đã qua ⇒ `consumed` (R80: relayer khác có thể đã đưa nó lên chain),
-    /// không `dead`; không đọc được nonce ⇒ tạm thời.
+    /// không `dead`; không đọc được nonce ⇒ tạm thời. An invalidation already in force is done, never dead (MT-8).
     async fn refused(&self, w: &Work, reason: String) {
+        if guard::already_invalidated(&w.data, &reason) {
+            if let Some(id) = w.job_id {
+                self.report(id, "consumed", None, None, Some("already_invalidated".into())).await;
+            }
+            return;
+        }
         match self.consumed(w).await {
             Ok(true) => self.report_consumed(w).await,
             Ok(false) => self.fail(w, reason).await,
@@ -639,6 +659,8 @@ mod tests {
     use crate::adapter::tests::{fake_odoo, Fake, Shared};
 
     const D: &str = "0x7777777777777777777777777777777777777777777777777777777777777777";
+    /// The fake chain's `chain_uid`: pinned in the config (the fake serves no block 0) and answered by `chainUid()`.
+    const UID: u64 = 0x24;
     const TOKEN: Address = Address::repeat_byte(0xcd);
 
     /// Chain EVM giả qua JSON-RPC thật (alloy nói chuyện với nó như với node thật).
@@ -653,6 +675,14 @@ mod tests {
         receipts: HashMap<B256, bool>,
         /// (hash, to, input) mỗi lần `eth_sendRawTransaction`.
         sent: Vec<(B256, Address, Bytes)>,
+        /// The gas limit of each sent tx.
+        gas: Vec<u64>,
+        /// `chainUid()` answers this instead of `UID` (a contract of another chain).
+        uid: Option<u64>,
+        /// `eth_getCode` of every address is non-empty (a contract signer).
+        contract_signer: bool,
+        /// `mtxSettle` settles everything only from this much gas (below: one `ok` false, an empty `MatchFailed`).
+        settle_from: u64,
     }
     type Rpc = Arc<Mutex<Evm>>;
 
@@ -674,15 +704,38 @@ mod tests {
                     "gasUsedRatio": [0.5], "reward": [["0x3b9aca00"]]})),
                 "eth_blockNumber" => Ok(json!("0x10")),
                 "eth_getLogs" => Ok(json!([])),
+                "eth_getBlockByNumber" => Ok(Value::Null),
+                "eth_getCode" => Ok(json!(if e.contract_signer { "0x6001" } else { "0x" })),
                 "eth_call" => {
                     let input = p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap();
                     let sel = alloy::hex::decode(&input[2..10]).unwrap();
-                    if sel == IToken::mtxNonceCall::SELECTOR {
+                    if sel == IToken::mtxSelectorsCall::SELECTOR {
+                        // the published allowlist: cancelNonce, ABSOLUTE
+                        let out = IToken::mtxSelectorsCall::abi_encode_returns(&IToken::mtxSelectorsReturn {
+                            selectors: vec![alloy::primitives::FixedBytes::<4>::from([0xcf, 0xdd, 0x7a, 0xea])],
+                            feeClass: vec![1],
+                            amountArg: vec![0],
+                        });
+                        Ok(json!(format!("0x{}", alloy::hex::encode(out))))
+                    } else if sel == IToken::supportedModesCall::SELECTOR {
+                        Ok(word(U256::from(0xF3)))
+                    } else if sel == IToken::chainUidCall::SELECTOR {
+                        Ok(word(U256::from(e.uid.unwrap_or(UID))))
+                    } else if sel == guard::SEL_MTX_SETTLE {
+                        let gas = p[0]["gas"].as_str().map_or(u64::MAX, |g| u64::from_str_radix(&g[2..], 16).unwrap());
+                        let ok = vec![true, gas >= e.settle_from];
+                        Ok(json!(format!("0x{}", alloy::hex::encode(<Vec<bool> as SolValue>::abi_encode(&ok)))))
+                    } else if sel == IToken::mtxNonceCall::SELECTOR {
                         e.mtx_nonce.map(|n| word(U256::from(n))).ok_or_else(|| err(-32000, "upstream timeout", None))
                     } else {
                         match e.sim {
                             Some("revert") => {
                                 let data = IToken::MetaTxBadNonce { expected: U256::from(1), got: U256::ZERO };
+                                let data = alloy::sol_types::SolError::abi_encode(&data);
+                                Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
+                            }
+                            Some("min_nonce") => {
+                                let data = IToken::MinNonceNotIncreasing { current: U256::from(9), requested: U256::from(9) };
                                 let data = alloy::sol_types::SolError::abi_encode(&data);
                                 Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
                             }
@@ -696,6 +749,7 @@ mod tests {
                     let tx = TxEnvelope::decode_2718(&mut raw.as_slice()).unwrap();
                     let h = *tx.tx_hash();
                     e.sent.push((h, tx.to().unwrap(), tx.input().clone()));
+                    e.gas.push(tx.gas_limit());
                     Ok(json!(format!("{h:#x}")))
                 }
                 "eth_getTransactionReceipt" => {
@@ -748,6 +802,10 @@ mod tests {
     }
 
     async fn lane(rpc: &str, odoo: crate::odoo::Odoo, key: u8, set: InflightSet) -> Submitter {
+        lane_with(rpc, odoo, key, set, None).await
+    }
+
+    async fn lane_with(rpc: &str, odoo: crate::odoo::Odoo, key: u8, set: InflightSet, dex: Option<Address>) -> Submitter {
         let cfg = ChainCfg {
             family: "evm".into(),
             evm_chain_number: 31337,
@@ -755,6 +813,8 @@ mod tests {
             stuck_after_secs: 0,
             max_gas_per_tx: 3_000_000,
             max_fee_cap_gwei: 500,
+            chain_uid: Some(B256::from(U256::from(UID))),
+            dex,
             ..Default::default()
         };
         let signer = PrivateKeySigner::from_bytes(&B256::repeat_byte(key)).unwrap();
@@ -849,6 +909,73 @@ mod tests {
             lane(&url, odoo, 1, InflightSet::default()).await.poll_outbox().await;
             assert_eq!(states(&o), [want], "mtxNonce {nonce:?}");
         }
+    }
+
+    /// PAY-FIX2 / NODE-GW-07 / MT-8, wired into the submitter: refusals come before any simulation or signature.
+    #[tokio::test]
+    async fn the_guard_runs_before_simulation_and_signing() {
+        let run = |e: Evm, jobs: Vec<Value>, dex: Option<Address>| async move {
+            let (url, rpc) = fake_evm(e).await;
+            let (odoo, o) = fake_odoo(Fake { jobs, tokens: json!([{"address": format!("{TOKEN:#x}"), "decimals": 6}]), ..Default::default() }).await;
+            lane_with(&url, odoo, 1, InflightSet::default(), dex).await.poll_outbox().await;
+            let last = o.lock().unwrap().reports.last().cloned().unwrap();
+            let sent = rpc.lock().unwrap().sent.len();
+            (last["chain_state"].as_str().unwrap().to_string(), last["error"].as_str().unwrap_or_default().to_string(), sent, rpc)
+        };
+        let call = |target: Address, data: Vec<u8>| json!({"id": 9, "kind": "call", "call": {"target": format!("{target:#x}"),
+            "calldata": format!("0x{}", alloy::hex::encode(data)), "validUntil": (now() + 300).to_string()}});
+        // a lane's own token balance never leaves through a `call` job
+        let steal = IToken::transferCall { to: Address::repeat_byte(0x7e), value: U256::from(1) }.abi_encode();
+        let (st, err, sent, _) = run(Evm { mtx_nonce: Some(0), ..Default::default() }, vec![call(TOKEN, steal)], None).await;
+        assert_eq!((st.as_str(), sent), ("dead", 0));
+        assert!(err.starts_with("CALL_TARGET_REFUSED"), "{err}");
+        // a call-table row on a target it does not name: `mtxSettle` on a registered token
+        let settle = [&guard::SEL_MTX_SETTLE[..], &[0u8; 32]].concat();
+        let (st, err, ..) = run(Evm::default(), vec![call(TOKEN, settle.clone())], Some(TOKEN)).await;
+        assert_eq!(st, "dead");
+        assert!(err.starts_with("CALL_TARGET_REFUSED"), "{err}");
+        // a meta-transaction on a contract of another chain
+        let (st, err, sent, _) = run(Evm { uid: Some(0x25), mtx_nonce: Some(0), ..Default::default() }, vec![job(7)], None).await;
+        assert_eq!((st.as_str(), sent), ("dead", 0));
+        assert!(err.starts_with("CHAIN_UID_MISMATCH"), "{err}");
+        // an order entry on a contract of another chain
+        let inv_on = |token: Address| json!({"id": 8, "kind": "metatx", "entry": "mtxInvalidateNonces", "token": format!("{token:#x}"),
+            "from": format!("{:#x}", Address::repeat_byte(0xab)), "batch": "1", "newMin": "9",
+            "signature": format!("0x{}", "11".repeat(65)), "validUntil": (now() + 300).to_string()});
+        let (st, err, sent, _) = run(Evm { uid: Some(0x25), ..Default::default() }, vec![inv_on(TOKEN)], None).await;
+        assert_eq!((st.as_str(), sent), ("dead", 0));
+        assert!(err.starts_with("CHAIN_UID_MISMATCH"), "{err}");
+        // a self-call outside the token's published allowlist (NODE-JOB-20); on it, it goes
+        let self_call = |data: &str| {
+            let m = Mtx::Call(crate::abi::MetaTransaction { from: Address::repeat_byte(0xab), data: alloy::hex::decode(data).unwrap().into(),
+                batch: U256::from(7), nonce: U256::ZERO, validUntil: U256::from(now() + 600), mode: 0, relayer: Address::ZERO,
+                fee: U256::ZERO, feeRecipient: Address::ZERO });
+            let (kind, wire) = m.to_wire();
+            json!({"id": 7, "kind": "metatx", "token": format!("{TOKEN:#x}"), "digest": D, "struct": kind,
+                   "signature": format!("0x{}", "11".repeat(65)), "metatx": wire})
+        };
+        let (st, err, sent, _) = run(Evm { mtx_nonce: Some(0), ..Default::default() }, vec![self_call("12345678")], None).await;
+        assert_eq!((st.as_str(), sent), ("dead", 0));
+        assert!(err.starts_with("SELECTOR_NOT_ALLOWED"), "{err}");
+        let cancel = format!("cfdd7aea{}", "00".repeat(32));
+        let (st, err, sent, _) = run(Evm { mtx_nonce: Some(0), ..Default::default() }, vec![self_call(&cancel)], None).await;
+        assert_eq!((st.as_str(), sent), ("broadcast", 1), "{err}");
+        // an invalidation already in force is done, never dead
+        let inv = json!({"id": 8, "kind": "metatx", "entry": "mtxInvalidateNonces", "token": format!("{TOKEN:#x}"),
+            "from": format!("{:#x}", Address::repeat_byte(0xab)), "batch": "1", "newMin": "9",
+            "signature": format!("0x{}", "11".repeat(65)), "validUntil": (now() + 300).to_string()});
+        let (st, err, sent, _) = run(Evm { sim: Some("min_nonce"), ..Default::default() }, vec![inv], None).await;
+        assert_eq!((st.as_str(), err.as_str(), sent), ("consumed", "already_invalidated", 0));
+        // mtxSettle on the chain's DEX: gas raised until every settlement settles (an empty MatchFailed is gas)
+        let dex = Address::repeat_byte(0xd0);
+        let (st, _, sent, rpc) = run(Evm { settle_from: 300_000, ..Default::default() }, vec![call(dex, settle)], Some(dex)).await;
+        assert_eq!((st.as_str(), sent), ("broadcast", 1));
+        let g = rpc.lock().unwrap().gas[0];
+        assert!(g >= 300_000 && g == 0x30000 * 6 / 5 * 3 / 2, "estimate +20 %, then ×1.5 once: {g}");
+        // a contract signer's meta-tx gets the ERC-1271 floor
+        let (st, _, _, rpc) = run(Evm { mtx_nonce: Some(0), contract_signer: true, ..Default::default() }, vec![job(7)], None).await;
+        assert_eq!(st, "broadcast");
+        assert_eq!(rpc.lock().unwrap().gas[0], guard::ERC1271_FLOOR);
     }
 
     /// The token's order entries as `metatx` jobs (job-api.md): byte-identical with the forge KAT's relayed calldata.

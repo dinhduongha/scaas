@@ -11,6 +11,7 @@ pub mod dex;
 pub mod drift;
 pub mod finality;
 pub mod gateway;
+pub mod guard;
 pub mod gwauth;
 pub mod indexer;
 pub mod keys;

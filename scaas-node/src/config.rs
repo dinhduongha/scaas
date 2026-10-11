@@ -3,7 +3,7 @@ use std::path::Path;
 use crate::keys::{self, SecretSource, Seed};
 use crate::signer::LocalSigner;
 
-use alloy::primitives::Address;
+use alloy::primitives::{Address, B256};
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
@@ -267,6 +267,17 @@ pub struct ChainCfg {
     pub finality: FinalityCfg,
     #[serde(default)]
     pub dex: Option<Address>,
+    /// `chain_uid` (genesis hash, `smartcontracts/evm/chain-uids.json`): the salt of every SCaaS domain on this chain
+    /// (NODE-GW-07). Set ⇒ the RPC's block 0 hash must equal it (a pruned RPC that has no block 0 trusts it); unset ⇒
+    /// the RPC's block 0 hash.
+    #[serde(default)]
+    pub chain_uid: Option<B256>,
+    /// The chain's `SmartKeyAccountFactory`: the target of the call-table row `deploy` (NODE-JOB-19).
+    #[serde(default)]
+    pub account_factory: Option<Address>,
+    /// The token factory (`OpenFactory`): never a `call` target (NODE-JOB-01).
+    #[serde(default)]
+    pub token_factory: Option<Address>,
     /// Ví lạnh nhận phí của meta-tx không ràng buộc `feeRecipient` (R84, EVM/Hedera); không phải khoá lane.
     /// Không đặt ⇒ ghi 0: contract trả phí cho `msg.sender` (lane gửi).
     #[serde(default)]
@@ -367,6 +378,9 @@ impl Default for ChainCfg {
             params: Default::default(),
             finality: default_finality(),
             dex: None,
+            chain_uid: None,
+            account_factory: None,
+            token_factory: None,
             fee_recipient: None,
             poll_ms: default_poll(),
             stuck_after_secs: default_stuck(),
