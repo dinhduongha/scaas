@@ -1,5 +1,5 @@
-//! Envelope binding / EIP-712 digest / op calldata against foundry `cast` (tools/env_ref.sh),
-//! relayed-binding end to end, and the four disclosure openings.
+//! Envelope binding / EIP-712 digest / calldata / entryRef / unwrap binding against foundry `cast`
+//! (tools/env_ref.sh), relayed-binding end to end, and the four disclosure openings.
 
 use rand_chacha::rand_core::SeedableRng;
 use rand_chacha::ChaCha20Rng;
@@ -10,15 +10,28 @@ use zether_prover::elgamal::encrypt;
 use zether_prover::envelope::*;
 use zether_prover::keys::ZetherKey;
 use zether_prover::schnorr::{entry_ref, open_chaum_pedersen, open_sender, open_sender_cp, verify_opening, Entry, OpeningKind};
-use zether_prover::zether::{prove_transfer, verify_transfer, Binding, Header};
+use zether_prover::zether::{prove_transfer, verify_transfer, Binding, Header, TransferStatement};
 
 const TOK: [u8; 20] = [0x11; 20];
+const UID: [u8; 32] = hex_literal(b"24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464");
+
+const fn hex_literal(s: &[u8; 64]) -> [u8; 32] {
+    let mut o = [0u8; 32];
+    let mut i = 0;
+    while i < 32 {
+        o[i] = nib(s[2 * i]) << 4 | nib(s[2 * i + 1]);
+        i += 1;
+    }
+    o
+}
+
+const fn nib(c: u8) -> u8 {
+    if c <= b'9' { c - b'0' } else { c - b'a' + 10 }
+}
 
 fn mtx() -> MetaTx {
     MetaTx {
         from: [0xaa; 20],
-        to: [0; 20],
-        value: 0,
         data: hex::decode("deadbeef").unwrap(),
         batch: [1; 32],
         nonce: 7,
@@ -33,29 +46,37 @@ fn mtx() -> MetaTx {
 #[test]
 fn envelope_matches_cast() {
     let m = mtx();
-    assert_eq!(hex::encode(envelope_binding(31337, &TOK, &m)), "4d183691f11a44b9d055aaed42a4b26d9c7b4de5b72619c6ad1f83c5675a83aa");
-    assert_eq!(hex::encode(digest(31337, &TOK, &m)), "63cc8309bee1be82025aa9f74b24113d13d2b1c3a2dfbe8003521b246d89087d");
-    // data is outside the binding, inside the digest.
+    assert_eq!(hex::encode(envelope_binding(31337, &UID, &TOK, &m)), "29764986e75d275afefd0f799cae4e8ea5b1c9771e9ed9b43ffa9cc26d81350d");
+    assert_eq!(hex::encode(digest(31337, &UID, &TOK, &m)), "0f6659afa867aae303e5e90723cdc6c803ec597a777d686a91fcd2226e962509");
+    // data is outside the binding, inside the digest; chainUid is in both.
     let mut m2 = m.clone();
     m2.data = vec![1];
-    assert_eq!(envelope_binding(31337, &TOK, &m), envelope_binding(31337, &TOK, &m2));
-    assert_ne!(digest(31337, &TOK, &m), digest(31337, &TOK, &m2));
+    assert_eq!(envelope_binding(31337, &UID, &TOK, &m), envelope_binding(31337, &UID, &TOK, &m2));
+    assert_ne!(digest(31337, &UID, &TOK, &m), digest(31337, &UID, &TOK, &m2));
+    assert_ne!(envelope_binding(31337, &UID, &TOK, &m), envelope_binding(31337, &[0x24; 32], &TOK, &m));
+    assert_ne!(digest(31337, &UID, &TOK, &m), digest(31337, &[0x24; 32], &TOK, &m));
     // Unbound feeRecipient does not move the binding; a bound one does.
     m2.fee_recipient = [0xcd; 20];
-    assert_eq!(envelope_binding(31337, &TOK, &m), envelope_binding(31337, &TOK, &m2));
+    assert_eq!(envelope_binding(31337, &UID, &TOK, &m), envelope_binding(31337, &UID, &TOK, &m2));
     m2.mode |= MODE_RESTRICT_FEE_RECIPIENT;
-    assert_ne!(envelope_binding(31337, &TOK, &m), envelope_binding(31337, &TOK, &m2));
+    assert_ne!(envelope_binding(31337, &UID, &TOK, &m), envelope_binding(31337, &UID, &TOK, &m2));
     assert_eq!(
-        hex::encode(transfer_data(&[0xaa, 0xbb], &[0xcc, 0xdd, 0xee], &[], &[0x22; 32])),
-        "d228e5c0000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000010022222222222222222222222222222222222222222222222222222222222222220000000000000000000000000000000000000000000000000000000000000002aabb0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003ccddee00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        hex::encode(transfer_call("zetherTransferSingle(bytes,bytes,bytes,bytes32)", &[0xaa, 0xbb], &[0xcc, 0xdd, 0xee], &[], &[0x22; 32])),
+        "4d2e578f000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000010022222222222222222222222222222222222222222222222222222222222222220000000000000000000000000000000000000000000000000000000000000002aabb0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003ccddee00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
     );
     assert_eq!(
-        hex::encode(burn_data(&[0xaa, 0xbb], 400_000, &[0x44; 20], &[0; 32], &[0xcc, 0xdd], &[])),
-        "1d0a6c7c00000000000000000000000000000000000000000000000000000000000000c00000000000000000000000000000000000000000000000000000000000061a8000000000000000000000000044444444444444444444444444444444444444440000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001400000000000000000000000000000000000000000000000000000000000000002aabb0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002ccdd0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        hex::encode(unshield_call(&[0xaa, 0xbb], &[0xcc, 0xdd], &[], &[0; 32], &[0x44; 20], 400_000)),
+        "983c784200000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000140000000000000000000000000000000000000000000000000000000000000000000000000000000000000000044444444444444444444444444444444444444440000000000000000000000000000000000000000000000000000000000061a800000000000000000000000000000000000000000000000000000000000000002aabb0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002ccdd0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
     );
     assert_eq!(
-        hex::encode(entry_ref(31337, &TOK, &[0x55; 32], 3)),
-        "77b2ecc949e3ee4236bb158750916d10eaa531605fe2f3dbe790b26ee11c1643"
+        hex::encode(entry_ref(31337, &UID, &TOK, &[0x55; 32], 3)),
+        "a23a980f358bbb47c48881a7a3307f419df074facb84ed878f881d623bf7bb7e"
+    );
+    let mut min_out = [0u8; 32];
+    min_out[30..].copy_from_slice(&1000u16.to_be_bytes());
+    assert_eq!(
+        hex::encode(unwrap_binding(&[0x44; 20], &min_out)),
+        "2c9fb536a22f965b443581f392be9ed8757762610e687fd2e4f73d2da7202591"
     );
 }
 
@@ -68,9 +89,10 @@ fn relayed_and_disclosure<C: ZCurve>() {
     let acc = encrypt(&from.y, 5000, &Fr::<C>::from(77u64));
     let mut m = mtx();
     m.data.clear();
-    let binding = envelope_binding(31337, &TOK, &m);
+    let binding = envelope_binding(31337, &UID, &TOK, &m);
     let h = Header {
         chain_id: 31337,
+        chain_uid: UID,
         token: TOK,
         binding: Binding::Relayed(binding),
         send_counter: 3,
@@ -82,22 +104,30 @@ fn relayed_and_disclosure<C: ZCurve>() {
     };
     let (st, p, w) = prove_transfer(&gens, &from, h, to.y, aud.y, acc, 5000, 1234, &mut rng).unwrap();
     verify_transfer(&gens, &st, &p).unwrap();
-    m.data = transfer_data(&st.payload(), &p.encode(), &[], &[0; 32]);
+    m.data = transfer_call("zetherTransferSingle(bytes,bytes,bytes,bytes32)", &st.payload(), &p.encode(), &[], &[0; 32]);
     // Same proof inside a different envelope (other nonce) → different binding → rejected.
     let mut m2 = m.clone();
     m2.nonce += 1;
     let mut st2 = st.clone();
-    st2.header.binding = Binding::Relayed(envelope_binding(31337, &TOK, &m2));
+    st2.header.binding = Binding::Relayed(envelope_binding(31337, &UID, &TOK, &m2));
     assert!(verify_transfer(&gens, &st2, &p).is_err());
-    // Lifted out and called directly → DIRECT statement → rejected.
+    // Lifted out and called directly → DIRECT statement → rejected; a DIRECT word that is not 0 decodes as Unwrap.
     st2.header.binding = Binding::Direct;
     assert!(verify_transfer(&gens, &st2, &p).is_err());
+    st2.header.binding = Binding::Unwrap(binding);
+    assert!(verify_transfer(&gens, &st2, &p).is_err());
+    assert_eq!(TransferStatement::<C>::decode(&st2.encode()).unwrap().header.binding, Binding::Unwrap(binding));
+    // Another chain with the same chain id (a re-created chain): chainUid differs → rejected.
+    let mut st3 = st.clone();
+    st3.header.chain_uid[0] ^= 1;
+    assert!(verify_transfer(&gens, &st3, &p).is_err());
 
     // Disclosure of this transfer, four ways.
     let e = Entry {
         chain_id: 31337,
+        chain_uid: UID,
         token: TOK,
-        entry_ref: entry_ref(31337, &TOK, &from.ua(), 3),
+        entry_ref: entry_ref(31337, &UID, &TOK, &from.ua(), 3),
         index: 0,
         y_t: st.y_t,
         c_out: st.c_out,
@@ -145,6 +175,10 @@ fn relayed_and_disclosure<C: ZCurve>() {
     assert!(verify_opening(&eo, 1234, OpeningKind::Auditor, &a_open).is_err());
     verify_opening(&eo, 1234, OpeningKind::ReceiverX, &r_open).unwrap();
     verify_opening(&eo, 1234, OpeningKind::SenderCp, &cp).unwrap();
+    // Opening bound to chainUid (CTR-ZTH-36).
+    let eu = Entry { chain_uid: [0x24; 32], ..e };
+    assert!(verify_opening(&eu, 1234, OpeningKind::ReceiverX, &r_open).is_err());
+    assert!(verify_opening(&eu, 1234, OpeningKind::SenderCp, &cp).is_err());
     // Opening bound to entryRef.
     let mut e2 = e;
     e2.entry_ref[0] ^= 1;
@@ -181,11 +215,11 @@ fn relayed_and_disclosure_bls12_381() {
 }
 
 #[test]
-fn direct_call_selectors_match_s2_spec() {
-    // zether-design §9 (RS2-14): direct transfers have 4 args, no outer fee. The selector of
-    // `transferConfidential` now belongs to the multi-recipient HASH entry; the single format is
-    // `transferConfidentialSingle` (same arguments).
-    assert_eq!(hex::encode(selector("transferConfidential(bytes,bytes,bytes,bytes32)")), "7c947e8e");
-    assert_eq!(hex::encode(selector("transferConfidentialSingle(bytes,bytes,bytes,bytes32)")), "663f4320");
-    assert_eq!(hex::encode(selector("burn(bytes,uint256,address,bytes32,bytes,bytes)")), "8938052e");
+fn entry_point_selectors_match_the_spec() {
+    // CTR-ZTH-45: the zether-prefixed names; the multi-recipient HASH transfer is `zetherTransfer`, the single format
+    // `zetherTransferSingle` (same four arguments, no outer fee on a direct call).
+    assert_eq!(hex::encode(selector("zetherTransfer(bytes,bytes,bytes,bytes32)")), "d228e5c0");
+    assert_eq!(hex::encode(selector("zetherTransferSingle(bytes,bytes,bytes,bytes32)")), "4d2e578f");
+    assert_eq!(hex::encode(selector("zetherUnshield(bytes,bytes,bytes,bytes32,address,uint256)")), "983c7842");
+    assert_eq!(hex::encode(selector("zetherShield(bytes,uint256)")), "1ca6ee72");
 }

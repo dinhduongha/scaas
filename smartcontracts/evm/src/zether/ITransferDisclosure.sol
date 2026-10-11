@@ -23,7 +23,8 @@ pragma solidity ^0.8.20;
 ///     D_transfer = g^s
 ///
 /// nên mở nó là chứng minh số tiền, và nó ràng buộc TUYỆT ĐỐI vào đúng giao dịch đó.
-/// **Chi phí thêm lúc chuyển: bằng không.** Không thêm trường, không thêm gas.
+/// Chi phí lúc chuyển: token lưu bản ghi để mở on-chain — bundle đầy đủ (định dạng một người nhận, mode BUNDLE,
+/// 4 điểm mỗi leg), một slot hash (mode HASH), hoặc không gì (mode NONE: chỉ off-chain), CTR-ZTH-14/38.
 interface ITransferDisclosure {
     /// Ba đường mở, ba chủ thể khác nhau. Giữ cả ba — mỗi cái giải một tình huống
     /// tranh chấp mà hai cái kia không giải được.

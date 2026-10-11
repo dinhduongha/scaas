@@ -27,7 +27,10 @@ fn pt(v: &Value) -> G<Bn254> {
 fn read_balance(args: &[&str], key: &Value) -> Result<Value, String> {
     let mut child = Command::new(CLI).args(args).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
         .spawn().unwrap();
-    child.stdin.take().unwrap().write_all(key.to_string().as_bytes()).unwrap();
+    // A CLI that refuses its arguments exits before reading stdin: the pipe breaks, the exit status carries the verdict.
+    if let Err(e) = child.stdin.take().unwrap().write_all(key.to_string().as_bytes()) {
+        assert_eq!(e.kind(), std::io::ErrorKind::BrokenPipe, "{e}");
+    }
     let out = child.wait_with_output().unwrap();
     if out.status.success() {
         Ok(serde_json::from_slice(&out.stdout).unwrap())
@@ -56,7 +59,8 @@ fn big_balance_cache_spend_and_cli_recovery() {
     let v: u64 = (1 << 33) + 7;
     let fee: u64 = 300;
     let t = api("proveTransfer", json!({
-        "curve": "bn254", "key": k0, "chainId": 31337, "token": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+        "curve": "bn254", "key": k0, "chainId": 31337, "chainUid": hx(&[0x24; 32]),
+        "token": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
         "sendCounter": 0, "accSeq": 1, "acc": acc, "balance": bal.to_string(), "yTo": b["Y"],
         "amount": v.to_string(), "fee": fee, "beneficiary": hx(&[0x22; 32]),
     })).unwrap();

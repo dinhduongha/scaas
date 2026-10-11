@@ -3,12 +3,13 @@ pragma solidity ^0.8.20;
 
 import {ITransferDisclosure} from "./ITransferDisclosure.sol";
 import {IZetherToken} from "./IZetherToken.sol";
+import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {IZetherVerifier} from "./IZetherVerifier.sol";
 import {ZetherTranscript} from "./ZetherTranscript.sol";
 
 /// @title Tiết lộ có chọn lọc cho MỌI Zether token (owner Z13): không state, không admin, không nâng cấp.
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Đọc từ token qua view (`transferEntry`, `verifier`,
-///         `auditorKey`); đường cong do verifier của token quyết. Tách khỏi `ZetherToken` để token vừa EIP-170.
+///         `auditorKey`, `chainUid`); đường cong do verifier của token quyết. Tách khỏi token (CTR-ZTH-43).
 ///         Challenge ràng địa chỉ TOKEN, không phải contract này: opening không phụ thuộc nơi deploy.
 contract ZetherDisclosure is ITransferDisclosure {
     bytes private constant DISCLOSE_TAG = "SCAAS-ZETHER-DISCLOSE-V1";
@@ -59,7 +60,9 @@ contract ZetherDisclosure is ITransferDisclosure {
             if (ya.length == 0 || _isO(l.cAud)) return false; // token không auditor, hoặc người gửi bỏ auditor (Z12)
             (l.k, l.m, l.b) = (ya, l.cAud, l.dOut);
         }
-        bytes memory pre = abi.encodePacked(DISCLOSE_TAG, block.chainid, token, entryRef, index, amount, uint8(kind));
+        bytes memory pre = abi.encodePacked(
+            DISCLOSE_TAG, block.chainid, IMetaTx(token).chainUid(), token, entryRef, index, amount, uint8(kind)
+        );
         return _chaumPedersen(l, pre, amount, opening);
     }
 
@@ -71,7 +74,7 @@ contract ZetherDisclosure is ITransferDisclosure {
     }
 
     /// @dev `[z]G − A1 − [e]K == O` và `[z]B − A2 − [e]M + [e·amount]G == O`,
-    ///      `e = H(DISCLOSE_TAG ‖ chainid ‖ token ‖ entryRef ‖ index ‖ amount ‖ kind ‖ A1 ‖ A2)`.
+    ///      `e = H(DISCLOSE_TAG ‖ chainid ‖ chainUid ‖ token ‖ entryRef ‖ index ‖ amount ‖ kind ‖ A1 ‖ A2)` (CTR-ZTH-36).
     function _chaumPedersen(Leg memory l, bytes memory pre, uint256 amount, bytes calldata opening)
         private view returns (bool)
     {

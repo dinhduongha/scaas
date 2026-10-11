@@ -56,7 +56,7 @@ intent is a booked fact. Every kind below shares these properties:
 | Signature wrap | `mtxWrap` | holder signs a `TradeOrder` in the underlying's domain; any relayer | underlying and wrapper | order `fee` to the relayer, out of the minted units | tx | **BUILT** (P2a, `UnderlyingToken`) | [CTR-TOK-20](token-wrappers.md#CTR-TOK-20) |
 | DEX order book | `SCaaSDex.mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces`; token side `mtxTrade` | each party signs a `TradeOrder`; the venue lane | token (Path A) or DEX (Path B, outside legs); DEX conservation | one signed rate, split relayer / treasury by the DEX | tx, then the DEX watcher | token side **BUILT** (P2a); `SCaaSDex` **BUILT** (P2b-1 SCaaS legs, P2b-2 outside legs); `SCaaSDexV1` pair `settle` **BUILT** | [CTR-DEX-13](dex.md#CTR-DEX-13) to [-19](dex.md#CTR-DEX-19), [-22](dex.md#CTR-DEX-22), [-24](dex.md#CTR-DEX-24) |
 | Exchange against AMMs | `mtxExchange`, `mtxExchangeVia` | the same signed orders; the venue lane | token or DEX, DEX conservation | signed rate on the floor; surplus to the signers | tx, then the DEX watcher | **BUILT** (P2c, `SCaaSDex`) | [CTR-DEX-20](dex.md#CTR-DEX-20) to [-23](dex.md#CTR-DEX-23) |
-| Confidential (Zether) | target `zetherTransfer*`, `zetherShield`, `zetherUnshield`, roll-over; built `transferConfidential*`, `fund`, `burn` | owner signs the call, the proof binds the envelope; any relayer | token verifier | outer NONE / FIXED (never PERCENT), inner `confidentialFee` | tx (dev chains) | **BUILT, UNAUDITED** (dev chains only); target kinds P3 **SPECIFIED**; PQZ **SPECIFIED** | [zether.md](zether.md), [pq-zether.md](pq-zether.md) |
+| Confidential (Zether) | `zetherTransfer*`, `zetherShield`, `zetherUnshield`, roll-over; `zetherWrapShield`, `zetherUnshieldUnwrap` (`UNDERLYING_ZETHER`) | owner signs the call, the proof binds the envelope; any relayer | token verifier | outer NONE / FIXED (never PERCENT), inner `confidentialFee` | tx (dev chains) | **BUILT, UNAUDITED** (the `*_ZETHER` kinds, P3; dev chains only); PQZ **SPECIFIED** | [zether.md](zether.md), [pq-zether.md](pq-zether.md) |
 | Mandate | `payUnderMandate` (named `mtxPayUnderMandate`), `revoke` | delegate signs; any relayer | `MandateWallet` | NONE; relayer pays gas | tx | **BUILT**; epoch and `mtx` names **SPECIFIED** | [CTR-ACC-06](mandates.md#CTR-ACC-06), [-07](mandates.md#CTR-ACC-07) |
 | Asset-suite action | forced transfer, freeze, `VestingGrant.release`, `Distribution` claim, `ExchangeOffer` | issuer / compliance role, or a permissionless claim | token or action contract | by action | tx | **SPECIFIED**, nothing built | [asset-suite.md](asset-suite.md) |
 | Tender | `commitBid` (deposit is a `MetaTransfer`), `revealBid`, `withdrawDeposit` | bidder signs only the deposit | tender and token | NONE | tx | **SPECIFIED**, nothing built | [CTR-TND-01](tender.md#CTR-TND-01), [-03](tender.md#CTR-TND-03) |
@@ -99,7 +99,7 @@ sequenceDiagram
   batching is [NODE-LANE-11](../node/submit-lanes.md#NODE-LANE-11) (**PLANNED**). `PaymentSettled` reaches clients
   only in a final range ([indexer-feeds.md](../node/indexer-feeds.md#event-items)); booking and reconciliation are in
   [integration.md](../integration.md#payment-references).
-- **Transitional (BUILT):** the v1 token line and Zether still use the single 11-field struct with `data` ops
+- **Transitional (BUILT):** the v1 token line still uses the single 11-field struct with `data` ops (Zether left it in P3)
   ([metatx.md Transitional](metatx.md#transitional-built)).
 
 ### 3.2 Receiver pays
@@ -166,7 +166,7 @@ sequenceDiagram
 ```
 
 - **Atomic:** the wrapper requires `received == o.amount`; any failure reverts the order's `pulled` state with it.
-  `NativeNotGasless` for the native coin; Zether wrapper gets it in P3.
+  `NativeNotGasless` for the native coin; `UnderlyingZetherToken` inherits it (P3).
 - **Node:** a `metatx` job entry point. Clients refuse to build an order whose `dex` is not a registered wrapper of the
   underlying ([CTR-DEX-19](dex.md#CTR-DEX-19)).
 
@@ -251,10 +251,9 @@ fails ([CTR-ZTH-06](zether.md#CTR-ZTH-06)). PQZ mirrors the names with `pqz` and
   fee ([CTR-ZTH-13](zether.md#CTR-ZTH-13)).
 - **Node:** re-encodes the dynamic arguments and refuses non-canonical `data` before computing the mesh `intent_id`
   ([NODE-JOB-20](../node/job-api.md#NODE-JOB-20)).
-- **Status / Transitional (BUILT):** `ZetherToken` is BUILT, UNAUDITED and refuses to deploy outside chain ids 31337 and
-  1337 ([CTR-ZTH-02](zether.md#CTR-ZTH-02)); chain 7622 is not on that list. It carries its own `ZetherMetaTx`
-  envelope with the built names `transferConfidential*`, `burn`, `fund`, `rollOver*`; the rename and the move onto the
-  base are P3.
+- **Status:** BUILT (P3), UNAUDITED: the `*_ZETHER` kinds refuse to initialize outside chain ids 31337 and 1337
+  ([CTR-ZTH-02](zether.md#CTR-ZTH-02)); chain 7622 is not on that list. The old `ZetherToken` with its own envelope and
+  names is backed up in `smartcontracts/evm/legacy/p3/`.
 
 ### 3.8 Mandates
 

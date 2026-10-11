@@ -22,6 +22,7 @@ fn key<C: ZCurve>(account: u32) -> ZetherKey<C> {
 fn header(fee: u64) -> Header {
     Header {
         chain_id: 31337,
+        chain_uid: [0x24; 32],
         token: [0x11; 20],
         binding: Binding::Direct,
         send_counter: 3,
@@ -207,6 +208,7 @@ fn header_binding<C: ZCurve>() {
     verify_transfer(&f.gens, &st, &p).unwrap();
     let muts: Vec<fn(&mut Header)> = vec![
         |h| h.chain_id += 1,
+        |h| h.chain_uid[31] ^= 1,
         |h| h.token[19] ^= 1,
         |h| h.binding = Binding::Direct,
         |h| h.binding = Binding::Relayed([0x34; 32]),
@@ -477,4 +479,14 @@ fn multi_negatives_bn254() {
 #[test]
 fn multi_negatives_bls12_381() {
     multi_negatives::<Bls12381>();
+}
+
+/// K1: `s` is chain-specific — the same transfer on a re-created chain (same chainId, other chainUid) never reuses it.
+#[test]
+fn s_depends_on_chain_uid() {
+    let (x, y) = (Fr::<Bn254>::from(7u64), generator::<Bn254>());
+    let mut other = header(0);
+    other.chain_uid[31] ^= 1;
+    assert_ne!(derive_s::<Bn254>(&x, &header(0), &y, 5), derive_s::<Bn254>(&x, &other, &y, 5));
+    assert_ne!(derive_s_multi::<Bn254>(&x, &header(0), &[(y, 5)]), derive_s_multi::<Bn254>(&x, &other, &[(y, 5)]));
 }

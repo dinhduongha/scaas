@@ -24,7 +24,10 @@ abstract contract ZetherVerifierBase is IZetherVerifier {
     uint256 internal constant MAX_RECIPIENTS = 16;
     uint256 internal constant NV = 64; // limits D1 (RS-NV64-1)
     uint256 internal constant NB = 64;
-    uint256 internal constant HEADER = 384;
+    /// @dev Statement header (zether.md §7): 13 words, `chainUid` the 4th (CTR-ZTH-36); `fee` and `amount` are read here.
+    uint256 internal constant HEADER = 416;
+    uint256 internal constant FEE_AT = 288;
+    uint256 internal constant AMOUNT_AT = 352;
     uint256 internal constant NGEN = 130; // h, U, G_0..63, H_0..63
 
     address public immutable generatorStore;
@@ -177,7 +180,7 @@ abstract contract ZetherVerifierBase is IZetherVerifier {
         (x.st, x.c) = T.challenge(x.st, "sigma.c", x.r);
     }
 
-    /// @dev Điểm thứ `i` của phần điểm statement (sau header 384 byte).
+    /// @dev Điểm thứ `i` của phần điểm statement (sau header 416 byte).
     function _sp(Ctx memory x, uint256 i) private pure returns (bytes memory) {
         return _slice(x.s, HEADER + i * x.p, x.p);
     }
@@ -218,7 +221,7 @@ abstract contract ZetherVerifierBase is IZetherVerifier {
         // E5  [z_b + c·fee]G + [z_x]D_acc − [z_x]D_out − [c]C_acc + [c]C_deb − A_bal
         {
             uint256[] memory sc = new uint256[](6);
-            sc[0] = addmod(z[3], mulmod(x.c, _word(x.s, 256), r), r);
+            sc[0] = addmod(z[3], mulmod(x.c, _word(x.s, FEE_AT), r), r);
             sc[1] = z[0];
             sc[2] = _negS(z[0], r);
             sc[3] = nc;
@@ -265,7 +268,7 @@ abstract contract ZetherVerifierBase is IZetherVerifier {
         // E5  [z_b + c·fee]G + [z_x]D_acc − [z_x]D_out − [c]C_acc + [c]C_deb − A_bal
         {
             uint256[] memory sc = new uint256[](6);
-            sc[0] = addmod(z[2], mulmod(x.c, _word(x.s, 256), r), r);
+            sc[0] = addmod(z[2], mulmod(x.c, _word(x.s, FEE_AT), r), r);
             sc[1] = z[0];
             sc[2] = _negS(z[0], r);
             sc[3] = nc;
@@ -341,7 +344,7 @@ abstract contract ZetherVerifierBase is IZetherVerifier {
         // E1  [z_x]G − [c]Y_f − A_y
         if (!_z3([g, _sp(x, 0), _pf(x, 1)], [z[0], nc, r - 1])) return false;
         // E5  [z_b + c·(amount + fee)]G + [z_x]D_acc − [c]C_acc − A_bal
-        uint256 debit = addmod(_word(x.s, 320), _word(x.s, 256), r);
+        uint256 debit = addmod(_word(x.s, AMOUNT_AT), _word(x.s, FEE_AT), r);
         if (!_z4([g, _sp(x, 2), _sp(x, 1), _pf(x, 2)], [addmod(z[1], mulmod(x.c, debit, r), r), z[0], nc, r - 1])) {
             return false;
         }

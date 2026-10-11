@@ -1,8 +1,36 @@
 # HANDOFF — scaas
 
+## Session 2026-10-11 (P3)
+
+**State:** P3 on branch `p3-zether`, merge pending; head is the fix-wave-2 commit on `f847471` (final review I1, m1–m7). Plan `docs/superpowers/plans/2026-10-11-p3-zether-kinds.md`.
+977 forge tests; `zether-prover` `cargo test` 53 green (the `read_balance` BrokenPipe flake fixed); e2e 4/4 and 1/1; real `deploy.sh evm` broadcasts on anvil 31337 green both default and with `DEPLOY_ZETHER=1` (27 txs, BLS verifier 14.08 M gas). Fix wave 2: the Zether deploy is opt-in (`DEPLOY_ZETHER`), `deploy.sh` adds `--code-size-limit 65536 --gas-estimate-multiplier 105` and keeps the previous JSON on a failed broadcast, `ZetherDeploy.t` checks JSON keys, the SmartKeyAccount implementation and per-tx gas under EIP-7825, kind 3 `initialSupply` pinned, stale docs. Fix wave 1 (review follow-ups): S3 disclosure vectors through `ZetherDisclosure` (chain-B negative), every published selector relayed once on both kinds, the stronger invariant (legs 1:1 and 3/7, rate changes, surplus never drops), `OpenFactory._checkZether` probes low level (typed error on a permissive fallback), the prover API refuses `unwrapBinding` outside `proveBurn`.
+
+**Built:** `src/zether/ZetherLib.sol` (external, `scaas.zether`), `ZetherLayer.sol`, `NoUnderlyingZetherToken.sol` (kind 2),
+`UnderlyingZetherToken.sol` (kind 3: `zetherWrapShield`, `zetherUnshieldUnwrap`), `ZetherStatements.sol`, the new
+`IZetherToken.sol`; `MetaTxBase._envelopeBinding` / `_ticketBinding` (transient `scaas.mtx.binding`); `ERC20MetaTx._domainName`
+(`"SCaaS ZetherToken"`); `ConfidentialConfig.maxShielded` / `confidentialFee`; `OpenFactory` Zether gate and verifier check;
+verifier header 416 B and `ZetherDisclosure` challenge with `chainUid`; `DeployBase` deploys the Zether stack on dev chains when `DEPLOY_ZETHER=1` (opt-in; `deploy.sh` adds the forge flags);
+the Rust prover on the new header, digests and ABI (vectors regenerated, `envelope.json`); from the disclosure review,
+HASH stored in one `bytes32` slot and the `ITransferDisclosure` NatSpec corrected (G2, G5). Tests: `ZetherNone.t`,
+`ZetherMulti.t`, `ZetherRevertPaths.t`, `ZetherRelay.t`, `ZetherUnderlying.t`, `ZetherInvariant.t`, `ZetherDeploy.t`,
+`v2/FactoryZether.t`. The old `ZetherToken` line is in `smartcontracts/evm/legacy/p3/` (not built). Sizes:
+`NoUnderlyingZetherToken` 30,659 B, `UnderlyingZetherToken` 40,381 B, `ZetherLib` 15,662 B (ratchet baseline).
+
+**Rulings K1-K18 (plan header).** **K1** `chainUid` in every token-side digest, the prover's `s` too; registry unchanged.
+**K2** the kinds are the public kinds plus the layer. **K3** domain `"SCaaS ZetherToken"` by a hook. **K4** two config
+fields. **K5** the gate on `OpenFactory`. **K6** every confidential op allowlisted `ABSOLUTE`. **K7** the ticket binding
+hook, not cleared. **K8** a direct unshield-unwrap binds its leg and `minOut`. **K9** reserve invariant by construction,
+`executeRate` counts the shielded part. **K10** events. **K11** shapes, standalone `IZetherToken`. **K12** statement views
+take `envelopeBinding`. **K13** `TransferToSelf` for a fee to the token. **K14** old line to `legacy/p3/`, no node change.
+**K15** prover ABI. **K16** deploy on dev chains. **K17** size. **K18** not built (PQZ batch hook, registry `chainUid`).
+**K19** disclosure carried over, the review's G2–G5 folded (HASH one slot, relayed HASH, `chainUid` in the challenge).
+
+**Not done / next:** P4 (`MandateWallet`, `SmartKeyAccount` on `MetaTxBase`); the disclosure review's answers (open
+questions in the plan); a real-passkey Zether envelope test; gas of `zetherWrapShield` / `zetherUnshieldUnwrap` (the zether.md tables were re-measured on the new kinds, these two are not in them); open questions for the owner: the prover's `s` derivation (SHA-512, not the spec's HKDF), binding the leg and `minOut` in a relayed unshield-unwrap.
+
 ## Session 2026-10-11 (P2c)
 
-**State:** P2c on branch `p2c-dex`, merge pending the final review (code `dbf27a5`, tests `ae23be1`). Plan `docs/superpowers/plans/2026-10-11-p2c-dex-exchange-path.md`.
+**State:** P2c on branch `p2c-dex`, merged `d85fc8b` (code `dbf27a5`, tests `ae23be1`). Plan `docs/superpowers/plans/2026-10-11-p2c-dex-exchange-path.md`.
 949 forge tests.
 
 **Built:** the exchange path on `SCaaSDex` (`src/dex/SCaaSDex.sol`, `ISCaaSDex.sol` with `IExchangeExecutor`): `mtxExchange`

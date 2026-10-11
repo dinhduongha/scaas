@@ -259,7 +259,7 @@ prefix:
 | 2 | Signature over the digest (`_hashTypedDataV4(hashStruct(m))`) through the virtual `_requireValidSignature`: EOA ⇒ `ECDSA.tryRecover` (65 bytes, low-s); contract ⇒ ERC-1271 `isValidSignature` staticcall (50 000 gas; 400 000 for `SmartKeyAccount` clones, which verify P-256 in Solidity when no precompile, [CTR-ACC-05](accounts.md#CTR-ACC-05)) | `MetaTxBadSignature` |
 | 3 | Shape: `data.length ≥ 4`; `bytes4(data)` allowlisted; `data.length` equals the selector's static ABI length where it has one; the fee mode is allowed by the selector's fee class ([CTR-MTX-20](#CTR-MTX-20)) and by `supportedModes()` | `MtxSelectorNotAllowed(bytes4)`, `MtxDataShape(bytes4)`, `MtxFeeClass(bytes4, uint32 mode)`, `MetaTxUnknownMode` |
 | 4 | Write `mtxNonce = expected + 1` | — |
-| 5 | Execute: store the ticket (`sender = from`, `ticket = 1`, `binding = envelopeBinding(m)`), `address(this).call(data)`, clear all three; a failed call reverts **with its revert data** | inner errors, bubbled raw |
+| 5 | Execute: store the ticket (`sender = from`, `ticket = 1`, `binding = envelopeBinding(m)`), `address(this).call(data)`, clear the ticket and sender (the binding is read only under a live ticket and needs no clearing); a failed call reverts **with its revert data** | inner errors, bubbled raw |
 | 6 | Fee through `_chargeFee`, **after** the call: a token transfers it from `from` in this token; any other contract has already refused every mode but `NONE`; a failing fee transfer reverts everything | ERC-20 errors |
 | 7 | Emit `MetaTransactionExecuted(from, relayer, batch, nonce, digest, feeRecipient, fee)` (the selector is in the transaction input) | — |
 
@@ -315,9 +315,9 @@ it. Nothing else is reachable through `mtxExecute`.
 | | `wrap(address,uint256)` | `ABSOLUTE` |
 | | `unwrap(address,uint256,address,uint256)` | `AMOUNT(1)` |
 | | `addReserve(address,uint256)` | `ABSOLUTE` |
-| `NONE_ZETHER` / `UNDERLYING_ZETHER` (built: `ZetherToken`; replaced in P1/P3) | `wrap(uint256)` (UnderlyingLib surface of `UNDERLYING_ZETHER`), `zetherShield(bytes,uint256)` | `ABSOLUTE` |
-| | `unwrap(uint256,address)` (public balance; `UNDERLYING_ZETHER`) | `AMOUNT(0)` |
-| | `zetherTransfer(bytes,bytes,bytes,bytes32)`, `zetherUnshield(bytes,bytes,bytes,bytes32,address,uint256)` | `ABSOLUTE`; envelope binding through the ticket ([CTR-ZTH-34](zether.md#CTR-ZTH-34)) |
+| `NONE_ZETHER` / `UNDERLYING_ZETHER` (built, P3) | the kind's public entries (`burn`; or `UnderlyingToken`'s six, without `unwrap(uint256,address)`) | as above |
+| | `zetherShield(bytes,uint256)`, `zetherWrapShield(address,uint256,bytes32)` (`UNDERLYING_ZETHER`) | `ABSOLUTE` |
+| | `zetherTransfer`, `…Bundle`, `…NoBundle`, `…Single` `(bytes,bytes,bytes,bytes32)`, `zetherUnshield(bytes,bytes,bytes,bytes32,address,uint256)`, `zetherUnshieldUnwrap` | `ABSOLUTE`; envelope binding through the ticket ([CTR-ZTH-34](zether.md#CTR-ZTH-34)) |
 | `PqzToken` | `pqzTransfer(bytes,bytes,bytes[],bytes,bytes)`, `pqzUnshield(bytes,bytes,bytes[],uint256,address,bytes,bytes)`, `pqzShield(bytes32,uint256)`, `pqzRollOver(bytes32,bytes,bytes[])` | `ABSOLUTE`; not batchable ([CTR-PQZ-21](pq-zether.md#CTR-PQZ-21)) |
 | `MandateWallet` | delegate: `payUnderMandate(address,address,uint256,bytes32)`, `revoke(address,uint64)`; owner: `setMandate`, `setPayee`, `revoke(address)`, `execute` ([CTR-ACC-06](mandates.md#CTR-ACC-06)) | fee `NONE` only |
 | `SmartKeyAccount` | `addKey`, `removeKey`, `rotateKey`, `setGuardian`, `execute`, signed by the account itself ([CTR-ACC-10](accounts.md#CTR-ACC-10)) | fee `NONE` only |
@@ -339,7 +339,7 @@ sequential nonce lets only one variant execute.
 <a id="CTR-MTX-12"></a>**CTR-MTX-12** — **Gasless unwrap** is `mtxExecute` with the wrapper's real `unwrap` calldata:
 `unwrap(uint256 wrapped, address recipient, uint256 minOut)` on `UnderlyingToken` with one leg, `unwrap(address underlying,
 uint256 wrapped, address recipient, uint256 minOut)` with one or several legs, `unwrap(uint256, address)` (public
-balance) on `UNDERLYING_ZETHER` (built: `ZetherToken`; replaced in P1/P3). The function runs exactly as a direct call by `from` (checks, burn
+balance) on `UNDERLYING_ZETHER` (built in P3 with `UnderlyingToken`'s `minOut` forms only). The function runs exactly as a direct call by `from` (checks, burn
 `⌈out·q⌉`, reserve debit, the underlying's exact-amount transfer, `Unwrapped`), and `minOut` protects the signer
 against rate moves between signing and execution. Its fee class is `AMOUNT` with the wrapped amount as basis, taken
 in wrapped units after the call. The underlying's transfer failing reverts everything, fee and nonce included. The fee
@@ -560,8 +560,8 @@ signed, not the entry point, and stay. Non-EVM families follow the same rule in 
 | every contract on `MetaTxBase` | `mtxExecute` (+ alias `executeMetaTransaction`), `mtxBatch`; `cancelNonce(uint256 batch)` (direct, or signed through `mtxExecute`); views `mtxNonce`, `mtxDigest`, `mtxSelectors`, `chainUid`, `supportedModes` |
 | tokens | + `mtxExecuteWithFee`, `mtxExecuteTransfer`, `mtxBatchTransfer`, `mtxTransfer`, `mtxTransferWithFee`, `mtxPay`, `mtxPayReceiverFee`; views `mtxTransferDigest`, `payLane` |
 | tokens (trade) | `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces` ([dex.md](dex.md#CTR-DEX-15)) |
-| wrappers, `UNDERLYING_ZETHER` (built on `UnderlyingToken`; `ZetherToken` in P3) | `mtxWrap` ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)) |
-| `NONE_ZETHER` / `UNDERLYING_ZETHER` (built: `ZetherToken`; replaced in P1/P3) | `zetherRollOverSigned`, `zetherSetRollOverMode` ([CTR-ZTH-16](zether.md#CTR-ZTH-16)) |
+| wrappers, `UNDERLYING_ZETHER` (built on `UnderlyingToken`, inherited in P3) | `mtxWrap` ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)) |
+| `NONE_ZETHER` / `UNDERLYING_ZETHER` (built, P3) | `zetherRollOverSigned`, `zetherSetRollOverMode` ([CTR-ZTH-16](zether.md#CTR-ZTH-16)) |
 | `MandateWallet` | + `mtxPayUnderMandate`, `mtxRevoke`, `mtxExecuteAsOwner`, named builders of a `MetaTransaction` ([mandates.md](mandates.md#mandatewallet)) |
 | `SmartKeyAccount` | + `mtxExecuteAsOwner`, named builder of a `MetaTransaction` ([CTR-ACC-10](accounts.md#CTR-ACC-10)) |
 | `SCaaSDex` | `mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces` ([dex.md](dex.md#CTR-DEX-16)) |
@@ -903,19 +903,19 @@ Foundry (`forge test`, default profile and `private7622`):
 <a id="transitional-built"></a>
 <a id="v1"></a>
 
-The v1 line and Zether still run on the legacy base with a hand-written op dispatch (each item is removed by the rule
+The v1 line still runs on the legacy base with a hand-written op dispatch, as Zether did until P3 (each item is removed by the rule
 named in brackets). The v2 tiers run on the new tree (last bullet).
 
 - **Bases** ([CTR-MTX-07](#CTR-MTX-07)). v1: the `ERC20MetaTxV1` mixin + `MetaToken` (kind `META`, tiers 1 and 2 in one
   implementation; tier 2 reads `IERC20Metadata(underlying).decimals()` at init, mints only through `wrap` and keeps
   `underlying.balanceOf(this) >= totalSupply`; `unwrap(amount, recipient)`; `initialSupply == 0 && minter == 0` else
-  `WrapperHasNoMint`; errors `NotMinter`, `NotAWrapper`) and `HederaMetaToken`; Zether on `ZetherMetaTx`. Invariants as
+  `WrapperHasNoMint`; errors `NotMinter`, `NotAWrapper`) and `HederaMetaToken`; the Zether kinds are on `MetaTokenBase` (P3; the old `ZetherMetaTx` is in `legacy/p3/`). Invariants as
   built: `Σ balance == totalSupply`; wrapper `reserve >= totalSupply`, fuzzed as `reserve >= supply`.
 - **Signature checks** ([CTR-MTX-25](#CTR-MTX-25)). Built (P1a): `SigCheck` serves `MetaTxBase` and the built bases
-  `ERC20MetaTxV1`, `ERC20MetaTx`, `ZetherMetaTx`; `SigLib` is deleted. `SCaaSDex`, `MandateWallet` and
+  `ERC20MetaTxV1`, `ERC20MetaTx` (and the Zether kinds through `MetaTokenBase`, P3); `SigLib` is deleted. `SCaaSDex`, `MandateWallet` and
   `SmartKeyAccount` keep their own checks until P2/P4, and the HIP-632 override stays in the four Hedera children
   until P1c.
-- **Structs** ([CTR-MTX-15](#CTR-MTX-15), [CTR-MTX-23](#CTR-MTX-23)). v1 and Zether: one 11-field
+- **Structs** ([CTR-MTX-15](#CTR-MTX-15), [CTR-MTX-23](#CTR-MTX-23)). v1 (and the pre-P3 Zether line, `legacy/p3/`): one 11-field
   `MetaTransaction{from, to, value, data, batch, nonce, validUntil, mode, relayer, fee, feeRecipient}` (typehash
   `MetaTransaction(address from,address to,uint256 value,bytes data,…)`) carries transfers (`data` empty), payments
   (`data = pay(bytes32)`) and the ops below, named `MetaTxLib.LegacyMetaTransaction` (typehash unchanged, vector

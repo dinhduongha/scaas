@@ -10,7 +10,7 @@ usage: size_gate.py <sizes.json> <size-baseline.json>     exit 1 on a violation
 import json
 import sys
 
-TOKENS = {'NoUnderlyingToken', 'UnderlyingToken'}
+TOKENS = {'NoUnderlyingToken', 'UnderlyingToken', 'NoUnderlyingZetherToken', 'UnderlyingZetherToken'}
 TOKEN_LIMIT, EIP170, EIP3860 = 20_480, 24_576, 49_152
 
 
@@ -49,6 +49,7 @@ if __name__ == '__main__':
         assert check({'A': s(24_576)}, {}) == ([], [])
         assert check({'A': s(24_577)}, {})[0]
         assert check({'NoUnderlyingToken': s(20_481)}, {})[0]
+        assert check({'UnderlyingZetherToken': s(20_481)}, {})[0]
         assert check({'X': s(26_000)}, {'X': 26_000}) == ([], [])
         assert check({'X': s(26_001)}, {'X': 26_000})[0]
         assert check({'X': s(20_000)}, {'X': 26_000})[1]

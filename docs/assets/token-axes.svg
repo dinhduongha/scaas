@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="600" viewBox="0 0 960 600" role="img" aria-labelledby="t d">
   <title id="t">Token model: two axes</title>
-  <desc id="d">Axis 1, the kind, fixes the confidential layer: rows NONE (standalone) and UNDERLYING (wrapper of one to eight legs), columns plain (NONE and UNDERLYING, built in P1), ZETHER (NONE_ZETHER and UNDERLYING_ZETHER, target P3; classical Zether built and unaudited on dev chains), PQZ (NONE_PQZ and UNDERLYING_PQZ, reserved, not built; post-quantum Zether specified and unaudited) and ZETHER_PQZ (NONE_ZETHER_PQZ and UNDERLYING_ZETHER_PQZ, reserved, not built; room in the kind ids only). Axis 2, who signs, belongs to the account: an EOA (ECDSA), a SmartKeyAccount (ERC-1271), or a Universal Account with a post-quantum key (mldsa44, mldsa65, fndsa512) through the UA ledger in the token base (specified, not built). Every kind accepts the same intents from every signer.</desc>
+  <desc id="d">Axis 1, the kind, fixes the confidential layer: rows NONE (standalone) and UNDERLYING (wrapper of one to eight legs), columns plain (NONE and UNDERLYING, built in P1), ZETHER (NONE_ZETHER and UNDERLYING_ZETHER, built in P3, unaudited, dev chains only), PQZ (NONE_PQZ and UNDERLYING_PQZ, reserved, not built; post-quantum Zether specified and unaudited) and ZETHER_PQZ (NONE_ZETHER_PQZ and UNDERLYING_ZETHER_PQZ, reserved, not built; room in the kind ids only). Axis 2, who signs, belongs to the account: an EOA (ECDSA), a SmartKeyAccount (ERC-1271), or a Universal Account with a post-quantum key (mldsa44, mldsa65, fndsa512) through the UA ledger in the token base (specified, not built). Every kind accepts the same intents from every signer.</desc>
   <defs>
     <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#57606a"/>
@@ -30,7 +30,7 @@
   <text class="b" x="170" y="132">plain</text>
   <rect x="170" y="140" width="42" height="16" rx="8" fill="#dafbe1"/><text class="chip" x="191" y="152" text-anchor="middle" fill="#1a7f37">BUILT</text><text class="s" x="218" y="152">NONE, UNDERLYING in P1</text>
   <text class="b" x="366" y="132">ZETHER</text>
-  <text class="s" x="366" y="152">target, P3</text>
+  <rect x="366" y="140" width="42" height="16" rx="8" fill="#dafbe1"/><text class="chip" x="387" y="152" text-anchor="middle" fill="#1a7f37">BUILT</text><text class="s" x="414" y="152">in P3, unaudited</text>
   <text class="b" x="562" y="132">PQZ</text>
   <text class="s" x="562" y="152">reserved, not built</text>
   <text class="b" x="758" y="132">ZETHER_PQZ</text>

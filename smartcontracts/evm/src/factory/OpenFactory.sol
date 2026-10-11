@@ -6,6 +6,8 @@ import {IOpenFactory} from "./IOpenFactory.sol";
 import {IFactoryToken} from "./IFactoryToken.sol";
 import {ISCaaSDex} from "../dex/ISCaaSDex.sol";
 import {ITokenAdmin} from "../metatx/ITokenAdmin.sol";
+import {IZetherVerifier} from "../zether/IZetherVerifier.sol";
+import {ZetherSafety} from "../zether/ZetherSafety.sol";
 
 /// @title `OpenFactory` (CTR-TOK-03, CTR-TOK-25): the one token factory of a chain.
 /// @notice Anyone creates tokens; the registrar only appends implementations to the catalogue (and marks versions
@@ -13,7 +15,8 @@ import {ITokenAdmin} from "../metatx/ITokenAdmin.sol";
 ///         `factory() == this` and `chainUid() == chainUid` (so a clone's domain salt has one source, CTR-GEN-05);
 ///         the catalogue is append-only, so a wrong entry would be dead forever. Creation clones by `CREATE2` with
 ///         the salt scoped by the creator and calls `initialize` in the same call; flag validation is the token's.
-///         Built kinds: `NONE`, `UNDERLYING` (the `*_ZETHER` implementations come with P3, the DEX with P2).
+///         Kinds `NONE`, `UNDERLYING`, `NONE_ZETHER`, `UNDERLYING_ZETHER`; a `*_ZETHER` creation passes the Zether gate
+///         (`zetherEnabled`, a dev chain, a verifier this chain runs). **Zether is UNAUDITED — NOT FOR PRODUCTION FUNDS.**
 contract OpenFactory is IOpenFactory {
     struct Info {
         address creator;
@@ -36,6 +39,7 @@ contract OpenFactory is IOpenFactory {
     mapping(uint64 => address) private _dexImpl;
     uint64 private _latestDex;
     mapping(address => uint64) private _dexVersion; // 0 = not a DEX made here
+    bool public zetherEnabled;
 
     constructor(address registrar_, bytes32 chainUid_) {
         if (chainUid_ == bytes32(0)) revert ChainUidZero();
@@ -73,6 +77,13 @@ contract OpenFactory is IOpenFactory {
 
     function latestVersion(TokenKind kind) external view returns (uint64) {
         return _latest[kind];
+    }
+
+    function setZetherEnabled(bool on) external {
+        if (msg.sender != registrar) revert NotRegistrar();
+        if (on) ZetherSafety.requireDevChain();
+        zetherEnabled = on;
+        emit ZetherEnabled(on);
     }
 
     // ------------------------------------------------------------------ create
@@ -180,6 +191,20 @@ contract OpenFactory is IOpenFactory {
         if (!ok || bytes32(got) != chainUid) revert ChainUidMismatch(chainUid, ok ? bytes32(got) : bytes32(0));
     }
 
+    /// @dev The gate, then the verifier: an absent precompile does not revert, it returns success with empty output,
+    ///      so a verifier this chain cannot run is refused before anyone deposits (CTR-TOK-03).
+    function _checkZether(address verifier) private view {
+        if (!zetherEnabled) revert ZetherDisabled();
+        ZetherSafety.requireDevChain(); // a flag set on a dev chain does not survive a chain id change (fork)
+        if (verifier == address(0)) revert VerifierRequiredForZether();
+        // low level: no code, or a fallback answering with empty data, fails typed rather than with a decode revert
+        (bool answered, uint256 w) = _word(verifier, IZetherVerifier.isSupportedOnThisChain.selector);
+        if (answered && w == 1) return;
+        string memory curve;
+        if (answered) try IZetherVerifier(verifier).curveName() returns (string memory c) { curve = c; } catch {}
+        revert VerifierUnsupportedOnThisChain(verifier, curve);
+    }
+
     function _word(address target, bytes4 sel) private view returns (bool ok, uint256 w) {
         bytes memory ret;
         (ok, ret) = target.staticcall(abi.encodeWithSelector(sel));
@@ -194,6 +219,7 @@ contract OpenFactory is IOpenFactory {
     function _create(TokenKind kind, uint64 version, address impl, IFactoryToken.TokenConfig calldata cfg,
         bytes32 salt) private returns (address token)
     {
+        if (kind == TokenKind.NONE_ZETHER || kind == TokenKind.UNDERLYING_ZETHER) _checkZether(cfg.conf.verifier);
         uint256 n = cfg.legs.length;
         bool wrapper = kind == TokenKind.UNDERLYING || kind == TokenKind.UNDERLYING_ZETHER;
         if (wrapper ? n == 0 || n > MAX_LEGS : n != 0) revert UnderlyingCountInvalid(n);

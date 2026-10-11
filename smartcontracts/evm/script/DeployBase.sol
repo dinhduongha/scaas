@@ -6,6 +6,13 @@ import {OpenFactory} from "../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../src/factory/IOpenFactory.sol";
 import {NoUnderlyingToken} from "../src/metatx/NoUnderlyingToken.sol";
 import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
+import {UniversalAccountRegistry} from "../src/registry/UniversalAccountRegistry.sol";
+import {ZetherSafety} from "../src/zether/ZetherSafety.sol";
+import {ZetherDisclosure} from "../src/zether/ZetherDisclosure.sol";
+import {ZetherStatements} from "../src/zether/ZetherStatements.sol";
+import {ZetherVerifierBn254, ZetherVerifierBls12381} from "../src/zether/ZetherVerifier.sol";
+import {NoUnderlyingZetherToken} from "../src/zether/NoUnderlyingZetherToken.sol";
+import {UnderlyingZetherToken} from "../src/zether/UnderlyingZetherToken.sol";
 
 /// @title Shared deploy steps (CTR-GEN-05, CTR-GEN-06, NET-EVM-05): `chain_uid` from the RPC, the deterministic CREATE2
 ///        deployer, the token factory with its implementations, the `chainUid()` gate.
@@ -18,10 +25,13 @@ abstract contract DeployBase is Script {
     bytes32 internal salt;
     /// @notice The chain's genesis hash (`_chainUid`).
     bytes32 internal uid;
+    /// @notice `DEPLOY_ZETHER` env (default false): also deploy the Zether stack (`_deployZether`, dev chains only).
+    bool internal deployZether;
 
     /// @notice Call first in `run()`, before the broadcast.
     function _setup() internal {
         salt = vm.envOr("DEPLOY_SALT", keccak256("scaas.deploy.v1"));
+        deployZether = vm.envOr("DEPLOY_ZETHER", false);
         uid = _chainUid();
         require(CREATE2_FACTORY.code.length != 0,
             "no deterministic CREATE2 deployer at 0x4e59b44847b379578588920ca78fbf26c0b4956c (runbook NET-EVM-05)");
@@ -42,8 +52,9 @@ abstract contract DeployBase is Script {
 
     /// @notice The token factory, the `NONE` implementation and the `SCaaSDex` implementation by CREATE2, each
     ///         registered as version 1 when the deployer is the registrar; writes `token_factory`,
-    ///         `implementation_none`, `dex_implementation`, `chain_uid` into the JSON object `"deploy"`. `UNDERLYING` is
-    ///         not deployed: over EIP-170 on real chains (owner: wait for Glamsterdam).
+    ///         `implementation_none`, `dex_implementation`, `chain_uid` into the JSON object `"deploy"`; with `DEPLOY_ZETHER`
+    ///         also the Zether stack (`_deployZether`, dev chains only). `UNDERLYING` is not deployed: over EIP-170 on real chains
+    ///         (owner: wait for Glamsterdam).
     function _deployTokenFactory(address registrar, bool register, address smartKeyAccountImpl, bool isHedera)
         internal returns (OpenFactory f)
     {
@@ -60,7 +71,43 @@ abstract contract DeployBase is Script {
         if (register) f.registerDexImplementation(1, address(dexImpl));
         _gate(address(dexImpl));
         vm.serializeAddress("deploy", "dex_implementation", address(dexImpl));
+        if (deployZether) {
+            require(ZetherSafety.isDevChain(), "DEPLOY_ZETHER: dev chains only (CTR-ZTH-02)");
+            _deployZether(f, register, smartKeyAccountImpl);
+        }
         vm.serializeBytes32("deploy", "chain_uid", uid);
+    }
+
+    /// @notice Dev chains only (CTR-ZTH-02; elsewhere the registry and the verifiers refuse to deploy): the account
+    ///         registry, `ZetherDisclosure`, `ZetherStatements`, both verifiers, the two confidential implementations
+    ///         registered as version 1 of `NONE_ZETHER` and `UNDERLYING_ZETHER`, and the factory's Zether gate switched on
+    ///         when the deployer is the registrar. **UNAUDITED — NOT FOR PRODUCTION FUNDS.** The implementations exceed
+    ///         EIP-170 and the BLS verifier takes ~14.1 M gas: anvil `--code-size-limit 65536`, forge script
+    ///         `--code-size-limit 65536 --gas-estimate-multiplier 105` (deploy.sh adds both; docs/networks/evm.md).
+    function _deployZether(OpenFactory f, bool register, address smartKeyAccountImpl) internal {
+        UniversalAccountRegistry reg = new UniversalAccountRegistry{salt: salt}();
+        ZetherDisclosure dis = new ZetherDisclosure{salt: salt}();
+        ZetherStatements stm = new ZetherStatements{salt: salt}();
+        ZetherVerifierBn254 bn = new ZetherVerifierBn254{salt: salt}();
+        ZetherVerifierBls12381 bls = new ZetherVerifierBls12381{salt: salt}();
+        NoUnderlyingZetherToken none =
+            new NoUnderlyingZetherToken{salt: salt}(address(f), smartKeyAccountImpl, uid, address(reg), dis);
+        UnderlyingZetherToken und =
+            new UnderlyingZetherToken{salt: salt}(address(f), smartKeyAccountImpl, uid, address(reg), dis);
+        if (register) {
+            f.registerImplementation(IOpenFactory.TokenKind.NONE_ZETHER, 1, address(none));
+            f.registerImplementation(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, address(und));
+            f.setZetherEnabled(true);
+        }
+        _gate(address(none));
+        _gate(address(und));
+        vm.serializeAddress("deploy", "zether_registry", address(reg));
+        vm.serializeAddress("deploy", "zether_disclosure", address(dis));
+        vm.serializeAddress("deploy", "zether_statements", address(stm));
+        vm.serializeAddress("deploy", "zether_verifier_bn254", address(bn));
+        vm.serializeAddress("deploy", "zether_verifier_bls12381", address(bls));
+        vm.serializeAddress("deploy", "implementation_none_zether", address(none));
+        vm.serializeAddress("deploy", "implementation_underlying_zether", address(und));
     }
 
     /// @notice The deploy gate (CTR-GEN-05): `chainUid()` of the deployed contract equals the RPC's genesis hash.

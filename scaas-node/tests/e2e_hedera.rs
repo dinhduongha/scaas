@@ -79,7 +79,7 @@ async fn start_anvil() -> (Anvil, String) {
 fn deploy(rpc: &str) -> Value {
     let status = Command::new("forge")
         .current_dir(sc())
-        .args(["script", "script/hedera/DeployHedera.s.sol", "--rpc-url", rpc, "--broadcast", "--silent", "--sender", DEPLOYER_ADDRESS])
+        .args(["script", "script/hedera/DeployHedera.s.sol", "--rpc-url", rpc, "--broadcast", "--slow", "--silent", "--sender", DEPLOYER_ADDRESS])
         .env("PRIVATE_KEY", DEPLOYER)
         .env("DEMO_SUPPLY", "1000000000000")
         .env("FOUNDRY_PROFILE", "private7622")

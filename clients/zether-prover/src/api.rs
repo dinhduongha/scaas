@@ -129,14 +129,20 @@ fn ct_json<C: ZCurve>(c: &Ciphertext<C>) -> Value {
     json!({"C": hx(&encode_point::<C>(&c.c)), "D": hx(&encode_point::<C>(&c.d))})
 }
 
-fn header(v: &Value, amount: u64, recipient: [u8; 20]) -> R<Header> {
-    let binding = if v.get("envelopeBinding").is_some_and(|x| !x.is_null()) {
-        Binding::Relayed(fixed(v, "envelopeBinding")?)
-    } else {
-        Binding::Direct
+/// `envelopeBinding` (relayed), or `unwrapBinding` (a direct `zetherUnshieldUnwrap`, burns only), or direct.
+/// Both at once, or `unwrapBinding` on a transfer, is refused: the token never builds such a statement.
+fn header(v: &Value, amount: u64, recipient: [u8; 20], burn: bool) -> R<Header> {
+    let has = |k: &str| v.get(k).is_some_and(|x| !x.is_null());
+    let binding = match (has("envelopeBinding"), has("unwrapBinding")) {
+        (true, true) => return Err("`envelopeBinding` and `unwrapBinding` are exclusive".into()),
+        (true, false) => Binding::Relayed(fixed(v, "envelopeBinding")?),
+        (false, true) if burn => Binding::Unwrap(fixed(v, "unwrapBinding")?),
+        (false, true) => return Err("`unwrapBinding` is for `proveBurn` only".into()),
+        (false, false) => Binding::Direct,
     };
     Ok(Header {
         chain_id: num(v, "chainId")?,
+        chain_uid: fixed(v, "chainUid")?,
         token: fixed(v, "token")?,
         binding,
         send_counter: num(v, "sendCounter")?,
@@ -158,36 +164,21 @@ fn sc<C: ZCurve>(s: &Fr<C>) -> String {
     hx(&encode_scalar::<C>(s))
 }
 
-/// `transferConfidentialSingle(bytes,bytes,bytes,bytes32)` — direct call has no outer fee (S2 RS2-14).
-fn direct_transfer(payload: &[u8], proof: &[u8], beneficiary: &[u8; 32]) -> Vec<u8> {
-    direct_call("transferConfidentialSingle(bytes,bytes,bytes,bytes32)", payload, proof, beneficiary)
-}
+/// `zetherTransferSingle` — a direct call has no outer fee; relayed, the same bytes are the envelope's `data`.
+const TRANSFER_SINGLE: &str = "zetherTransferSingle(bytes,bytes,bytes,bytes32)";
 
-/// `transferConfidential` (HASH), `transferConfidentialBundle`, `transferConfidentialNoBundle`.
-fn direct_transfer_multi(mode: TransferMode, payload: &[u8], proof: &[u8], beneficiary: &[u8; 32]) -> Vec<u8> {
-    let f = match mode {
-        TransferMode::Hash => "transferConfidential(bytes,bytes,bytes,bytes32)",
-        TransferMode::Bundle => "transferConfidentialBundle(bytes,bytes,bytes,bytes32)",
-        TransferMode::NoBundle => "transferConfidentialNoBundle(bytes,bytes,bytes,bytes32)",
-    };
-    direct_call(f, payload, proof, beneficiary)
-}
-
-fn direct_call(sig: &str, payload: &[u8], proof: &[u8], beneficiary: &[u8; 32]) -> Vec<u8> {
-    let mut d = envelope::selector(sig).to_vec();
-    d.extend_from_slice(&envelope::transfer_data(payload, proof, &[], beneficiary)[4..]);
-    d
-}
-
-fn direct_burn(payload: &[u8], amount: u64, recipient: &[u8; 20], beneficiary: &[u8; 32], proof: &[u8]) -> Vec<u8> {
-    let mut d = envelope::selector("burn(bytes,uint256,address,bytes32,bytes,bytes)").to_vec();
-    d.extend_from_slice(&envelope::burn_data(payload, amount, recipient, beneficiary, proof, &[])[4..]);
-    d
+/// `zetherTransfer` (HASH), `zetherTransferBundle`, `zetherTransferNoBundle` (CTR-ZTH-38).
+fn transfer_multi_sig(mode: TransferMode) -> &'static str {
+    match mode {
+        TransferMode::Hash => "zetherTransfer(bytes,bytes,bytes,bytes32)",
+        TransferMode::Bundle => "zetherTransferBundle(bytes,bytes,bytes,bytes32)",
+        TransferMode::NoBundle => "zetherTransferNoBundle(bytes,bytes,bytes,bytes32)",
+    }
 }
 
 pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value, rng: &mut Rn) -> R<Value> {
     let k = key::<C>(v)?;
-    let h = header(v, 0, [0; 20])?;
+    let h = header(v, 0, [0; 20], false)?;
     let y_aud = if v.get("yAud").is_some_and(|x| !x.is_null()) { point::<C>(v, "yAud")? } else { G::<C>::zero() };
     let (st, p, w) = zether::prove_transfer(
         gens,
@@ -208,9 +199,8 @@ pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v
         "proof": hx(&proof),
         "payload": hx(&payload),
         "authDigest": hx(&zether::auth_digest(&stmt)),
-        "entryRef": hx(&schnorr::entry_ref(h.chain_id, &h.token, &k.ua(), h.send_counter)),
-        "opData": hx(&envelope::transfer_data(&payload, &proof, &[], &h.beneficiary)),
-        "directCalldata": hx(&direct_transfer(&payload, &proof, &h.beneficiary)),
+        "entryRef": hx(&schnorr::entry_ref(h.chain_id, &h.chain_uid, &h.token, &k.ua(), h.send_counter)),
+        "directCalldata": hx(&envelope::transfer_call(TRANSFER_SINGLE, &payload, &proof, &[], &h.beneficiary)),
     });
     if include_witness(v) {
         out["witness"] = json!({"x": sc::<C>(&w.x), "v": sc::<C>(&w.v), "s": sc::<C>(&w.s), "b": sc::<C>(&w.b),
@@ -222,13 +212,10 @@ pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v
 /// `recipients`: `[{"yTo", "amount"}, …]` (decoys with amount 0), `mode`: `hash` (default) | `bundle` | `none`.
 /// `yAud` absent or null leaves the auditor out (statement `Y_a = O`, every `C_aud = O`): required on a token
 /// without auditor, the sender's choice on one with it (Z12); the same holds for `proveTransfer`.
-/// Direct calls only: the meta-tx envelope carries single-recipient transfers (stream MT-6).
+/// Relayed like the single format (`envelopeBinding`, CTR-ZTH-34).
 pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value, rng: &mut Rn) -> R<Value> {
     let k = key::<C>(v)?;
-    let h = header(v, 0, [0; 20])?;
-    if h.binding != Binding::Direct {
-        return Err("multi-recipient transfers are direct calls only (no envelopeBinding)".into());
-    }
+    let h = header(v, 0, [0; 20], false)?;
     let mode = match v.get("mode").filter(|x| !x.is_null()) {
         None => TransferMode::Hash,
         Some(m) => m.as_str().and_then(TransferMode::from_name).ok_or("`mode` must be \"hash\", \"bundle\" or \"none\"")?,
@@ -253,8 +240,8 @@ pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens
         "payload": hx(&payload),
         "bundles": hx(&st.bundles()),
         "authDigest": hx(&zether::auth_digest(&stmt)),
-        "entryRef": hx(&schnorr::entry_ref(h.chain_id, &h.token, &k.ua(), h.send_counter)),
-        "directCalldata": hx(&direct_transfer_multi(mode, &payload, &proof, &h.beneficiary)),
+        "entryRef": hx(&schnorr::entry_ref(h.chain_id, &h.chain_uid, &h.token, &k.ua(), h.send_counter)),
+        "directCalldata": hx(&envelope::transfer_call(transfer_multi_sig(mode), &payload, &proof, &[], &h.beneficiary)),
     });
     if include_witness(v) {
         out["witness"] = json!({"x": sc::<C>(&w.x), "s": sc::<C>(&w.s), "b": sc::<C>(&w.b), "bPrime": sc::<C>(&w.b_prime),
@@ -268,7 +255,7 @@ pub fn prove_burn_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &V
     let k = key::<C>(v)?;
     let amount = num(v, "amount")?;
     let recipient: [u8; 20] = fixed(v, "recipient")?;
-    let h = header(v, amount, recipient)?;
+    let h = header(v, amount, recipient, true)?;
     let (st, p, w) =
         zether::prove_burn(gens, &k, h.clone(), ct::<C>(v, "acc")?, num(v, "balance")?, rng).map_err(e)?;
     let (stmt, proof, payload) = (st.encode(), p.encode(), st.payload());
@@ -278,9 +265,11 @@ pub fn prove_burn_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &V
         "proof": hx(&proof),
         "payload": hx(&payload),
         "authDigest": hx(&zether::auth_digest(&stmt)),
-        "opData": hx(&envelope::burn_data(&payload, amount, &recipient, &h.beneficiary, &proof, &[])),
-        "directCalldata": hx(&direct_burn(&payload, amount, &recipient, &h.beneficiary, &proof)),
     });
+    // An unwrap-bound proof fits only `zetherUnshieldUnwrap` (no builder yet, K15): `zetherUnshield` would refuse it.
+    if !matches!(h.binding, Binding::Unwrap(_)) {
+        out["directCalldata"] = hx(&envelope::unshield_call(&payload, &proof, &[], &h.beneficiary, &recipient, amount)).into();
+    }
     if include_witness(v) {
         out["witness"] = json!({"x": sc::<C>(&w.x), "b": sc::<C>(&w.b), "amount": amount.to_string(),
             "bPrime": sc::<C>(&w.b_prime), "gammaB": sc::<C>(&w.gamma_b)});
@@ -318,8 +307,6 @@ fn meta(v: &Value) -> R<MetaTx> {
     let m = get(v, "meta")?;
     Ok(MetaTx {
         from: fixed(m, "from")?,
-        to: opt_fixed(m, "to")?,
-        value: opt_num(m, "value")? as u128,
         data: if m.get("data").is_some() { bytes(m, "data")? } else { vec![] },
         batch: fixed(m, "batch")?,
         nonce: num(m, "nonce")?,
@@ -389,8 +376,8 @@ fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
                 "popSignature": hx(&schnorr::pop_signature(&pop, &[])),
             }))
         }
-        "fundCalldata" => {
-            let mut d = envelope::selector("fund(bytes,uint256)").to_vec();
+        "shieldCalldata" => {
+            let mut d = envelope::selector("zetherShield(bytes,uint256)").to_vec();
             d.extend(abi::encode(&[Tok::Bytes(encode_point::<C>(&point::<C>(v, "Y")?)), Tok::Word(abi::u256(num(v, "amount")?))]));
             Ok(json!({"calldata": hx(&d)}))
         }
@@ -403,10 +390,10 @@ pub fn call(cmd: &str, input: &str) -> R<String> {
     let v: Value = serde_json::from_str(input).map_err(e)?;
     let out = match cmd {
         "envelope" => {
-            let (chain, token) = (num(&v, "chainId")?, fixed::<20>(&v, "token")?);
+            let (chain, uid, token) = (num(&v, "chainId")?, fixed::<32>(&v, "chainUid")?, fixed::<20>(&v, "token")?);
             let m = meta(&v)?;
-            json!({"binding": hx(&envelope::envelope_binding(chain, &token, &m)),
-                   "digest": hx(&envelope::digest(chain, &token, &m))})
+            json!({"binding": hx(&envelope::envelope_binding(chain, &uid, &token, &m)),
+                   "digest": hx(&envelope::digest(chain, &uid, &token, &m))})
         }
         _ => match get(&v, "curve")?.as_str() {
             Some("bn254") => by_curve::<Bn254>(cmd, &v, &mut OsRng)?,

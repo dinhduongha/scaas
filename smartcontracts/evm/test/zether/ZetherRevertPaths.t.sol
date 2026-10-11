@@ -1,97 +1,72 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.24;
 
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {ZetherFixture} from "./helpers/ZetherFixture.sol";
-import {ZetherToken} from "../../src/zether/ZetherToken.sol";
+import {ZetherFixture, ZUID} from "./helpers/ZetherFixture.sol";
+import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
+import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
+import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
+import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
+import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
+import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {NoUnderlyingZetherToken} from "../../src/zether/NoUnderlyingZetherToken.sol";
+import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {IZetherToken} from "../../src/zether/IZetherToken.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {ITransferDisclosure} from "../../src/zether/ITransferDisclosure.sol";
 import {ZetherSafety} from "../../src/zether/ZetherSafety.sol";
 import {G1Bn254} from "../../src/zether/ZetherCurves.sol";
-import {IERC20MetaTxV1} from "../../src/metatx/IERC20MetaTxV1.sol";
-import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
-import {FeeMode, FeePolicy} from "../../src/common/FeePolicy.sol";
-import {FeeOnTransferERC20} from "../helpers/Mocks.sol";
-import {Mock1271Wallet, Puller} from "../helpers/WalletMocks.sol";
+import {ZetherVerifierBn254, ZetherVerifierBls12381} from "../../src/zether/ZetherVerifier.sol";
+import {Puller} from "../helpers/WalletMocks.sol";
 import {ZetherKeys} from "./helpers/ZetherKeys.sol";
 import {AuthScheme} from "../../src/common/AuthScheme.sol";
+import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 
-/// Underlying có thể bị "rút ngầm" (rebase âm / blacklist trừ dần) — để bất biến escrow có việc làm.
-contract SlashableERC20 is ERC20 {
-    constructor() ERC20("Slash", "SL") {}
-    function decimals() public pure override returns (uint8) { return 6; }
-    function mint(address to, uint256 v) external { _mint(to, v); }
-    function slash(address from, uint256 v) external { _burn(from, v); }
-}
+/// `NONE_ZETHER` with one guarded call-out to the caller (`reenter`): a frame that holds the guard.
+contract GuardHarness is NoUnderlyingZetherToken {
+    constructor(address f, bytes32 uid, address r, ITransferDisclosure d) NoUnderlyingZetherToken(f, address(0), uid, r, d) {}
 
-/// Underlying gọi ngược vào token trong lúc token chuyển tiền ra (ERC-777 / hook độc hại).
-contract ReentrantERC20 is ERC20 {
-    address public target;
-    bytes public payload;
-    constructor() ERC20("Re", "RE") {}
-    function decimals() public pure override returns (uint8) { return 6; }
-    function mint(address to, uint256 v) external { _mint(to, v); }
-    function arm(address t, bytes calldata p) external { target = t; payload = p; }
-    function _update(address from, address to, uint256 v) internal override {
-        super._update(from, to, v);
-        if (target != address(0) && from == target) {
-            (bool ok, bytes memory ret) = target.call(payload);
-            if (!ok) assembly { revert(add(ret, 32), mload(ret)) }
-        }
+    function holdGuard(bytes calldata data) external nonReentrant {
+        ZetherRevertPathsTest(msg.sender).reenter(data);
     }
 }
 
-/// @notice Danh mục đường revert (yêu cầu coverage của brief). Mỗi lỗi tuỳ biến của contract Zether
-///         được chạm ít nhất một lần — ở đây, hoặc ở file ghi trong bảng:
-///
-/// | Lỗi | Ở đâu |
-/// |---|---|
-/// | AccountNotRegistered, AmountOutOfRange, SelfTransfer, BadPayload, ZeroRecipient, EscrowInvariant,
-/// |   UnsupportedUnderlying, ZetherOpNotCanonical, NotFactory, AlreadyInitialized, BadInit,
-/// |   ZetherNotDevChain (initialize), MetaTx{Expired,BadNonce,BadSignature,UnauthorizedRelayer},
-/// |   ModeUnknownBits, ModeFeeInvalid, FeeExceedsCap, SpenderNotContract, CallerNotContract | file này |
-/// | ProofRejected, StaleAccSeq, StaleSendCounter, RollOverOwnerOnly, RollOverExpired, PendingSeqMismatch,
-/// |   UnknownEntry, OpeningMalformed, PercentFeeForbiddenOnConfidential, MetaTxInsufficientForFee | ZetherToken.t.sol |
-/// | ZetherDisabled, NotRegistrar, ZetherNotDevChain (factory/verifier/registry) | ZetherGate.t.sol, registry test |
-/// | registry: AccountAlreadyRegistered, InvalidProofOfPossession, UnauthorizedScheme, EVMAlreadyLinked,
-/// |   InvalidPublicKey, InvalidAuthData, Unauthorized | UniversalAccountRegistry.t.sol |
-/// | G1Bn254/G1Bls12381 BadPoint, BadLength | ZetherKat.t.sol + file này |
-/// | Không chạm được (phòng thủ): `GeneratorStoreFailed` (CREATE chỉ fail khi hết gas), `ModexpFailed`
-/// |   (precompile 0x05 có từ Byzantium), `require(ok)` trong `_inv` (cùng lý do), `mapToG` hết vòng. |
-///
-/// Theo từng **chỗ** revert (không chỉ từng lỗi): `forge coverage --ir-minimum` + đối chiếu BRDA của mọi dòng
-/// `revert`/`require` trong `src/zether`, `src/registry` — mọi chỗ đều bị chạm trừ 4 chỗ phòng thủ trên và
-/// `G1*.mul` (chỉ prover test dùng, không có trong contract). Khoá reentrancy (assembly) không hiện trong
-/// coverage nhưng trace xác nhận `test_reentrancyBlocked` revert ở `tload`.
+/// @notice The revert paths of the confidential layer on `NONE_ZETHER` (the relaying ones are in `ZetherRelay.t`, the
+///         underlying ones in `ZetherUnderlying.t`): shield, transfer and unshield shapes, the confidential config at
+///         creation, the approve rule on the public side (CTR-TOK-01), the spending authority beside the proof.
 contract ZetherRevertPathsTest is ZetherFixture {
-    uint256 constant PK = 0x5EC12E7;
-
     function setUp() public {
         _deploy(false, false);
     }
 
-    function test_fundRevertPaths() public {
+    function test_shieldRevertPaths() public {
         bytes memory stranger = ZetherKeys.pub(0x5757, false);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, ZetherTypes.toUA(stranger)));
-        tok.fund(stranger, 1);
+        tok.zetherShield(stranger, 1);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AmountOutOfRange.selector, 0, uint256(1) << 40));
-        tok.fund(alice.y, 0);
+        tok.zetherShield(alice.y, 0);
         uint256 over = (uint256(1) << 40) + 1;
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AmountOutOfRange.selector, over, uint256(1) << 40));
-        tok.fund(alice.y, over);
+        tok.zetherShield(alice.y, over);
+        // a curve the token does not run: a BLS key on a bn254 token is not registered here
+        bytes memory blsKey = ZetherKeys.pub(0x7777, true);
+        bytes memory pop = abi.encode(ZetherKeys.schnorr(0x7777, reg.popChallenge(blsKey, address(0xB15)), true), bytes(""));
+        vm.prank(address(0xB15));
+        ZetherTypes.UA blsUa = reg.register(blsKey, AuthScheme.SELF_SCHNORR, "", pop, false);
+        assertFalse(tok.registered(blsUa));
+        vm.expectRevert(abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, blsUa));
+        tok.zetherShield(blsKey, 1);
     }
 
     function _aliceTx() internal returns (Tx memory) {
         _fund(tok, alice, 100);
-        tok.rollOverPublic(alice.ua);
+        tok.zetherRollOver(alice.ua);
         return _proveTransfer(tok, alice, bob, 10, 100, _none(), 0);
     }
 
     function _call(bytes memory payload, bytes memory proof, ZetherTypes.UA ben, bytes memory err) internal {
         vm.expectRevert(err);
-        tok.transferConfidentialSingle(payload, proof, "", ben);
+        tok.zetherTransferSingle(payload, proof, "", ben);
     }
 
     function test_transferBadPayloadLength() public {
@@ -114,26 +89,79 @@ contract ZetherRevertPathsTest is ZetherFixture {
             abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, ZetherTypes.toUA(gy)));
     }
 
-    /// Phí không phải cửa sau để "đăng ký hộ": beneficiary phải đã đăng ký.
+    /// The fee is no back door to register an account: the beneficiary must be registered.
     function test_unregisteredBeneficiaryRejected() public {
         Tx memory t = _aliceTx();
         ZetherTypes.UA ghost = ZetherTypes.toUA(ZetherKeys.pub(0x6057, false));
         _call(t.payload, t.proof, ghost, abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, ghost));
     }
 
-    function test_burnRevertPaths() public {
+    /// The beneficiary is in the statement: a valid fee-bearing proof made for carol is refused with another registered
+    /// beneficiary, and passes with carol (review T3 m2).
+    function test_otherBeneficiaryRejected() public {
         _fund(tok, alice, 100);
-        tok.rollOverPublic(alice.ua);
-        (bytes memory pl, bytes memory pr) = _proveBurn(tok, alice, 10, 100, address(0xD), _none(), 0);
+        tok.zetherRollOver(alice.ua);
+        Tx memory t = _proveTransfer(tok, alice, bob, 10, 100, carol.ua, 0);
+        _call(t.payload, t.proof, bob.ua, abi.encodeWithSelector(IZetherToken.ProofRejected.selector));
+        _direct(tok, t, carol.ua);
+        assertTrue(_holds(tok, carol, FEE, false));
+    }
+
+    /// Every confidential entry point is `nonReentrant` (review T3 m1). The NONE kind makes no outside call inside a
+    /// guarded frame, so a harness (this implementation plus one guarded call-out) is etched over the implementation:
+    /// a call back into any entry point from that frame hits the guard before its body.
+    function test_everyEntryPointNonReentrant() public {
+        vm.etch(address(noneImpl), address(new GuardHarness(address(factory), ZUID, address(reg), dis)).code);
+        ZetherTypes.UA n = _none();
+        bytes[10] memory calls = [
+            abi.encodeCall(ZetherLayer.zetherShield, (alice.y, 1)),
+            abi.encodeCall(ZetherLayer.zetherTransfer, ("", "", "", n)),
+            abi.encodeCall(ZetherLayer.zetherTransferBundle, ("", "", "", n)),
+            abi.encodeCall(ZetherLayer.zetherTransferNoBundle, ("", "", "", n)),
+            abi.encodeCall(ZetherLayer.zetherTransferSingle, ("", "", "", n)),
+            abi.encodeCall(ZetherLayer.zetherUnshield, ("", "", "", n, address(0xD), 1)),
+            abi.encodeCall(ZetherLayer.zetherRollOver, (alice.ua)),
+            abi.encodeCall(ZetherLayer.zetherRollOverBatch, (new ZetherTypes.UA[](0))),
+            abi.encodeCall(ZetherLayer.zetherRollOverSigned, (alice.ua, 1, 1, "")),
+            abi.encodeCall(ZetherLayer.zetherSetRollOverMode, (alice.ua, ZetherTypes.RollOverMode.PUBLIC, 1, ""))
+        ];
+        for (uint256 i; i < calls.length; ++i) {
+            vm.expectRevert(IMetaTx.Reentrancy.selector);
+            GuardHarness(address(tok)).holdGuard(calls[i]);
+        }
+    }
+
+    /// The harness's call-out: back into the token.
+    function reenter(bytes calldata data) external {
+        (bool ok, bytes memory ret) = address(tok).call(data);
+        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+    }
+
+    /// Amount and recipient are in the statement; checks before any precompile.
+    function test_unshieldRevertPaths() public {
+        _fund(tok, alice, 100);
+        tok.zetherRollOver(alice.ua);
+        (bytes memory pl, bytes memory pr) = _proveUnshield(tok, alice, 10, 100, address(0xD), _none(), 0);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AmountOutOfRange.selector, 0, uint256(1) << 40));
-        tok.burn(pl, 0, address(0xD), _none(), pr, "");
+        tok.zetherUnshield(pl, pr, "", _none(), address(0xD), 0);
+        uint256 over = (uint256(1) << 40) + 1;
+        vm.expectRevert(abi.encodeWithSelector(IZetherToken.AmountOutOfRange.selector, over, uint256(1) << 40));
+        tok.zetherUnshield(pl, pr, "", _none(), address(0xD), over);
         vm.expectRevert(IZetherToken.ZeroRecipient.selector);
-        tok.burn(pl, 10, address(0), _none(), pr, "");
+        tok.zetherUnshield(pl, pr, "", _none(), address(0), 10);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.BadPayload.selector, pl.length - 1));
-        tok.burn(_trim(pl), 10, address(0xD), _none(), pr, "");
-        vm.expectRevert(IZetherToken.ProofRejected.selector); // recipient khác cái đã chứng minh
-        tok.burn(pl, 10, address(0xE), _none(), pr, "");
-        tok.burn(pl, 10, address(0xD), _none(), pr, "");
+        tok.zetherUnshield(_trim(pl), pr, "", _none(), address(0xD), 10);
+        vm.expectRevert(IZetherToken.ProofRejected.selector); // another recipient than the proven one
+        tok.zetherUnshield(pl, pr, "", _none(), address(0xE), 10);
+        vm.expectRevert(IZetherToken.ProofRejected.selector); // another amount
+        tok.zetherUnshield(pl, pr, "", _none(), address(0xD), 11);
+        // to the token itself: the proof passes, the mint is refused (CTR-MTX-18)
+        (bytes memory pl2, bytes memory pr2) = _proveUnshield(tok, alice, 10, 100, address(tok), _none(), 0);
+        vm.expectRevert(IERC20MetaTx.TransferToSelf.selector);
+        tok.zetherUnshield(pl2, pr2, "", _none(), address(tok), 10);
+        tok.zetherUnshield(pl, pr, "", _none(), address(0xD), 10);
+        assertEq(tok.balanceOf(address(0xD)), 10 * SCALE);
+        assertEq(tok.totalShielded(), 90);
     }
 
     function _trim(bytes memory a) internal pure returns (bytes memory out) {
@@ -141,164 +169,116 @@ contract ZetherRevertPathsTest is ZetherFixture {
         for (uint256 i; i < out.length; ++i) out[i] = a[i];
     }
 
-    function test_wrapUnwrapAndEscrowInvariant() public {
-        SlashableERC20 sl = new SlashableERC20();
-        bytes memory init = abi.encode("Z", "Z", address(reg), uint256(1), uint256(1) << 40, uint256(0), bytes(""));
-        ZetherToken z = ZetherToken(factory.createZetherToken(1, address(sl), address(ver), init, "slash"));
-        sl.mint(address(this), 100);
-        sl.approve(address(z), 100);
-        z.wrap(100);
-        assertEq(z.balanceOf(address(this)), 100);
-        vm.expectRevert(IZetherToken.ZeroRecipient.selector);
-        z.unwrap(10, address(0));
-        sl.slash(address(z), 1); // issuer trừ ngầm số dư escrow
-        vm.expectRevert(abi.encodeWithSelector(IZetherToken.EscrowInvariant.selector, 49, 50));
-        z.unwrap(50, address(this));
-    }
-
-    function test_feeOnTransferUnderlyingRefused() public {
-        FeeOnTransferERC20 fot = new FeeOnTransferERC20();
-        bytes memory init = abi.encode("Z", "Z", address(reg), uint256(1), uint256(1) << 40, uint256(0), bytes(""));
-        ZetherToken z = ZetherToken(factory.createZetherToken(1, address(fot), address(ver), init, "fot"));
-        fot.mint(address(this), 1000);
-        fot.approve(address(z), 1000);
-        vm.expectRevert(IZetherToken.UnsupportedUnderlying.selector);
-        z.wrap(1000);
-    }
-
-    /// Phí tầng trong `< 2^n_v` (n_v = 64) VÀ `< maxDecryptableShielded` (review I3: phí ≥ trần làm mọi transfer
-    /// có beneficiary không chứng minh được). 2^32 (trước đây bị từ chối) và trần − 1 tạo được; trần, 2^64 − 1 thì không.
+    /// The inner fee `< 2^n_v` (n_v = 64) and `< maxShielded` (a fee at the cap would make every transfer with a
+    /// beneficiary unprovable): 2^32 and cap − 1 create, the cap and 2^64 − 1 do not.
     function test_confidentialFeeBound() public {
         uint256 max = uint256(1) << 40;
         uint256[2] memory ok = [uint256(1) << 32, max - 1];
         for (uint256 i; i < ok.length; ++i) {
-            bytes memory init = abi.encode("Z", "Z", address(reg), uint256(1), max, ok[i], bytes(""));
-            ZetherToken z = ZetherToken(factory.createZetherToken(1, address(usd), address(ver), init, bytes32(i + 900)));
+            IFactoryToken.TokenConfig memory c = _cfg(false, max);
+            c.conf.confidentialFee = ok[i];
+            ZetherLayer z = ZetherLayer(factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, c, bytes32(i + 900)));
             assertEq(z.confidentialFee(), ok[i]);
         }
         uint256[2] memory bad = [max, (uint256(1) << 64) - 1];
         for (uint256 i; i < bad.length; ++i) {
-            bytes memory init = abi.encode("Z", "Z", address(reg), uint256(1), max, bad[i], bytes(""));
-            vm.expectRevert(ZetherToken.BadInit.selector);
-            factory.createZetherToken(1, address(usd), address(ver), init, bytes32(i + 910));
+            IFactoryToken.TokenConfig memory c = _cfg(false, max);
+            c.conf.confidentialFee = bad[i];
+            vm.expectRevert(IZetherToken.BadInit.selector);
+            factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, c, bytes32(i + 910));
         }
     }
 
+    /// The confidential config at creation (CTR-ZTH-04, -09, -26); the kind's flags (CTR-ZTH-47); the dev-chain gate in
+    /// `initialize` (a clone made by hand, around the factory).
     function test_initializeRevertPaths() public {
-        vm.expectRevert(ZetherToken.NotFactory.selector);
-        impl.initialize(address(this), address(usd), address(ver), 1, "");
+        IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
+        vm.expectRevert(MetaTokenBase.NotFactory.selector);
+        noneImpl.initialize(address(this), 1, c);
         vm.prank(address(factory));
-        vm.expectRevert(ZetherToken.AlreadyInitialized.selector);
-        tok.initialize(address(this), address(usd), address(ver), 1, "");
-        bytes[5] memory bad = [
-            abi.encode("Z", "Z", address(reg), uint256(0), uint256(1) << 40, uint256(0), bytes("")),          // scale 0
-            abi.encode("Z", "Z", address(reg), uint256(1), (uint256(1) << 54) + 1, uint256(0), bytes("")),   // > 2^54
-            abi.encode("Z", "Z", address(reg), uint256(1), uint256(1) << 40, uint256(1) << 64, bytes("")),   // fee ≥ 2^n_v = 2^64
-            abi.encode("Z", "Z", address(0x1234), uint256(1), uint256(1) << 40, uint256(0), bytes("")),      // registry
-            abi.encode("Z", "Z", address(reg), uint256(1), uint256(1) << 40, uint256(0), new bytes(64))      // auditor = O
-        ];
+        vm.expectRevert(MetaTokenBase.AlreadyInitialized.selector);
+        NoUnderlyingZetherToken(address(tok)).initialize(address(this), 1, c);
+        IFactoryToken.TokenConfig[6] memory bad;
+        for (uint256 i; i < 6; ++i) bad[i] = _cfg(false, uint256(1) << 40);
+        bad[0].conf.shieldScale = 0;
+        bad[1].conf.maxShielded = (uint256(1) << 54) + 1;               // > 2^54
+        bad[2].conf.maxShielded = 0;
+        bad[3].conf.auditorKey = new bytes(64);                         // auditor = O
+        bad[4].conf.auditorKey = abi.encodePacked(uint256(1), uint256(3)); // not on the curve
+        bad[5].conf.auditorKey = ZetherKeys.pub(X_AUD, true);           // a BLS key on a bn254 token
         for (uint256 i; i < bad.length; ++i) {
-            vm.expectRevert(ZetherToken.BadInit.selector);
-            factory.createZetherToken(1, address(usd), address(ver), bad[i], bytes32(i + 100));
+            vm.expectRevert(IZetherToken.BadInit.selector);
+            factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, bad[i], bytes32(i + 100));
         }
-        // underlying = chính clone sắp sinh (địa chỉ đoán trước được, đã có code lúc initialize)
-        address self_ = factory.predictAddress(address(impl), address(this), "self");
-        vm.expectRevert(ZetherToken.BadInit.selector);
-        factory.createZetherToken(1, self_, address(ver), abi.encode("Z", "Z", address(reg), uint256(1), uint256(1) << 40, uint256(0), bytes("")), "self");
-        // initialize ngoài chain dev (deploy tay, vòng qua factory flag)
-        address c = Clones.clone(address(impl));
+        // cap · scale must not overflow
+        IFactoryToken.TokenConfig memory big = _cfg(false, uint256(1) << 40);
+        big.conf.shieldScale = type(uint256).max / (uint256(1) << 40) + 1;
+        vm.expectRevert(IZetherToken.BadInit.selector);
+        factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, big, "overflow");
+        // the kind's fields: legs and rate belong to other kinds; the regulated flags are refused
+        IFactoryToken.TokenConfig memory r = _cfg(false, uint256(1) << 40);
+        r.rate.rateDelay = 2 days;
+        vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 3));
+        factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, r, "rate");
+        r = _cfg(false, uint256(1) << 40);
+        r.features |= 1 << AdminLib.PAUSE;
+        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.PAUSE));
+        factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, r, "pause");
+        r = _cfg(false, uint256(1) << 40);
+        r.features |= 1 << AdminLib.WRAP_DISABLEABLE;
+        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.WRAP_DISABLEABLE));
+        factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, r, "wrap");
+        // initialize outside a dev chain (a hand-made clone, around the factory gate)
+        address cl = Clones.clone(address(noneImpl));
         vm.chainId(1);
         vm.prank(address(factory));
         vm.expectRevert(abi.encodeWithSelector(ZetherSafety.ZetherNotDevChain.selector, 1));
-        ZetherToken(c).initialize(address(this), address(usd), address(ver), 1, bad[0]);
+        NoUnderlyingZetherToken(cl).initialize(address(this), 1, c);
     }
 
-    // ------------------------------------------------------------------ phong bì
-
-    function _m(bytes memory data) internal view returns (MetaTxLib.LegacyMetaTransaction memory m) {
-        m = _mt(vm.addr(PK), data, 1, MetaTxLib.MODE_RESTRICT_RELAYER, 0);
+    /// The implementation's immutables need code: a registry and a disclosure contract.
+    function test_constructorNeedsRegistryAndDisclosure() public {
+        vm.expectRevert(IZetherToken.BadInit.selector);
+        new NoUnderlyingZetherToken(address(factory), address(0), ZUID, address(0x1234), dis);
+        vm.expectRevert(IZetherToken.BadInit.selector);
+        new NoUnderlyingZetherToken(address(factory), address(0), ZUID, address(reg), ITransferDisclosure(address(0x1234)));
     }
 
-    function _exec(MetaTxLib.LegacyMetaTransaction memory m, bytes memory sig, bytes memory err) internal {
-        vm.prank(relayer);
-        vm.expectRevert(err);
-        tok.executeMetaTransaction(m, sig);
+    /// The minter never mints shielded value (CTR-ZTH-44): `mint` and the initial supply only add public units.
+    function test_minterMintsPublicUnitsOnly() public {
+        IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
+        (c.initialSupply, c.initialHolder) = (7 * SCALE, address(0xA77));
+        ZetherLayer z = ZetherLayer(factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, c, "supply"));
+        assertEq(z.balanceOf(address(0xA77)), 7 * SCALE);
+        assertEq(z.totalShielded(), 0);
+        _public(tok, address(0xA77), 5 * SCALE);
+        assertEq(tok.balanceOf(address(0xA77)), 5 * SCALE);
+        assertEq(tok.totalShielded(), 0);
+        vm.prank(address(0xBAD));
+        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.MissingRole.selector, AdminLib.MINTABLE, address(0xBAD)));
+        NoUnderlyingZetherToken(address(tok)).mint(address(0xBAD), 1);
     }
 
-    function test_envelopeRevertPaths() public {
-        MetaTxLib.LegacyMetaTransaction memory m = _m(hex"deadbeef");
-        bytes memory sig = _sign(PK, tok, m);
-        // relayer không được phép
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.MetaTxUnauthorizedRelayer.selector, relayer, address(this)));
-        tok.executeMetaTransaction(m, sig);
-        // op không biết
-        _exec(m, sig, abi.encodeWithSelector(IZetherToken.ZetherOpNotCanonical.selector));
-        // op Zether với `to` ≠ 0
-        m = _m(abi.encodePacked(tok.OP_ZTRANSFER()));
-        m.to = address(1);
-        _exec(m, _sign(PK, tok, m), abi.encodeWithSelector(IZetherToken.ZetherOpNotCanonical.selector));
-        // hết hạn
-        m = _m("");
-        m.validUntil = block.timestamp - 1;
-        _exec(m, _sign(PK, tok, m), abi.encodeWithSelector(IERC20MetaTxV1.MetaTxExpired.selector, m.validUntil, block.timestamp));
-        // nonce sai
-        m = _m("");
-        m.nonce = 3;
-        _exec(m, _sign(PK, tok, m), abi.encodeWithSelector(IERC20MetaTxV1.MetaTxBadNonce.selector, 0, 3));
-        // chữ ký của người khác
-        m = _m("");
-        _exec(m, _sign(PK + 1, tok, m), abi.encodeWithSelector(IERC20MetaTxV1.MetaTxBadSignature.selector));
-        // mode lạ / phí lạ
-        m = _m("");
-        m.mode = 0x100;
-        _exec(m, _sign(PK, tok, m), abi.encodeWithSelector(MetaTxLib.ModeUnknownBits.selector, uint32(0x100)));
-        m.mode = 0x30;
-        _exec(m, _sign(PK, tok, m), abi.encodeWithSelector(MetaTxLib.ModeFeeInvalid.selector, uint32(0x30)));
-        // chuyển công khai: PERCENT vượt trần 1%
-        m = _m("");
-        m.mode = MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_PERCENT;
-        m.fee = 10_001;
-        _exec(m, _sign(PK, tok, m), abi.encodeWithSelector(FeePolicy.FeeExceedsCap.selector, 10_001, 10_000));
-    }
-
-    function test_smartAccountEnvelopeSignature() public {
-        Mock1271Wallet w = new Mock1271Wallet(vm.addr(PK));
-        MetaTxLib.LegacyMetaTransaction memory m = _mt(address(w), "", 1, MetaTxLib.MODE_RESTRICT_RELAYER, 0);
-        m.to = address(0x1); // chuyển công khai value 0 — hợp lệ
-        bytes memory sig = _sign(PK, tok, m);
-        vm.prank(relayer);
-        tok.executeMetaTransaction(m, sig);
-        m.batch = 2;
-        w.setMode(Mock1271Wallet.Mode.WrongMagic);
-        _exec(m, _sign(PK, tok, m), abi.encodeWithSelector(IERC20MetaTxV1.MetaTxBadSignature.selector));
-        tok.cancelMetaNonce(9);
-        assertEq(tok.metaNonce(address(this), 9), 1);
-        assertEq(tok.supportedModes(), MetaTxLib.MODE_KNOWN_MASK);
-    }
-
-    function test_relayedEntryPointsOnlySelf() public {
-        vm.expectRevert(IZetherToken.ZetherOpNotCanonical.selector);
-        tok.relayedTransfer("", "", "", _none(), bytes32(0), ZetherToken.OuterFee(address(this), address(0), 0));
-        vm.expectRevert(IZetherToken.ZetherOpNotCanonical.selector);
-        tok.relayedBurn("", bytes32(0), ZetherToken.OuterFee(address(this), address(0), 0));
-        vm.expectRevert(IZetherToken.ZetherOpNotCanonical.selector);
-        tok.relayedBurnDecoded("", "", "", ZetherToken.BurnArgs(0, address(0), _none(), 0), ZetherToken.OuterFee(address(this), address(0), 0));
-    }
-
-    /// R26 trên lớp ERC-20 công khai của Zether token: chỉ hợp đồng giữ/tiêu allowance.
+    /// CTR-TOK-01 (MT-3) on the public side of a Zether token: only contracts grant and spend allowances.
     function test_contractOnlyAllowance() public {
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.SpenderNotContract.selector, address(0xE0A)));
+        vm.prank(address(0xE0A));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.CallerNotContract.selector, address(0xE0A)));
+        tok.approve(address(this), 1);
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.SpenderNotContract.selector, address(0xE0A)));
         tok.approve(address(0xE0A), 1);
         vm.prank(address(0xE0A));
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.CallerNotContract.selector, address(0xE0A)));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.CallerNotContract.selector, address(0xE0A)));
         tok.transferFrom(address(1), address(2), 0);
         Puller pl = new Puller();
-        usd.mint(address(this), 10);
-        usd.approve(address(tok), 10);
-        tok.wrap(10);
+        _public(tok, address(this), 10);
         tok.approve(address(pl), 10);
         pl.pull(address(tok), address(this), address(0xF1), 10);
         assertEq(tok.balanceOf(address(0xF1)), 10);
+        // an EIP-7702 delegated EOA (code = 0xef0100 ‖ addr) is still an EOA: it holds no allowance
+        address eoa = address(0x7702);
+        vm.etch(eoa, abi.encodePacked(hex"ef0100", address(0x1234)));
+        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.SpenderNotContract.selector, eoa));
+        tok.approve(eoa, 1);
     }
 
     function test_unknownEntryReverts() public {
@@ -308,21 +288,21 @@ contract ZetherRevertPathsTest is ZetherFixture {
         dis.transferCiphertext(address(tok), bytes32("nope"), 0, "");
     }
 
-    /// Bất biến an ninh #1 (§11, SRS §8.1): với scheme ≠ SELF_SCHNORR, biết `x` (conf_custody) KHÔNG đủ để
-    ///      chi — cần thêm chữ ký auth_custody trên `authDigest`.
+    /// Security invariant: with a scheme other than SELF_SCHNORR, knowing `x` is not enough to spend; the account's
+    /// authority must sign `authDigest` (over the statement, `chainUid` included).
     function test_confKeyAloneCannotSpendMultisigAccount() public {
         User memory dave = _multisigUser(0xDA7E, 0x0DD, address(0xD4));
         _fund(tok, dave, 100);
-        tok.rollOverPublic(dave.ua);
+        tok.zetherRollOver(dave.ua);
         Tx memory t = _proveTransfer(tok, dave, bob, 10, 100, _none(), 0);
-        vm.expectRevert(); // proof hợp lệ, nhưng không có chữ ký của chủ multisig
-        tok.transferConfidentialSingle(t.payload, t.proof, "", _none());
+        vm.expectRevert(); // a valid proof, but no signature of the multisig owner
+        tok.zetherTransferSingle(t.payload, t.proof, "", _none());
         bytes32 authDigest = keccak256(abi.encodePacked(
-            "SCAAS-ZETHER-AUTH-V1", keccak256(tok.transferStatementSingle(t.payload, _none(), 0))
+            "SCAAS-ZETHER-AUTH-V1", keccak256(stm.transferStatementSingle(address(tok), t.payload, _none(), 0))
         ));
         bytes[] memory sigs = new bytes[](1);
         sigs[0] = _ecdsa(0x0DD, authDigest);
-        tok.transferConfidentialSingle(t.payload, t.proof, abi.encode(sigs), _none());
+        tok.zetherTransferSingle(t.payload, t.proof, abi.encode(sigs), _none());
         assertEq(tok.sendCounter(dave.ua), 1);
     }
 
@@ -345,27 +325,6 @@ contract ZetherRevertPathsTest is ZetherFixture {
         return abi.encodePacked(r, s, v);
     }
 
-    /// Khoá reentrancy theo contract (transient): hook của underlying gọi lại token giữa `unwrap` ⇒ revert.
-    function test_reentrancyBlocked() public {
-        ReentrantERC20 re = new ReentrantERC20();
-        bytes memory init = abi.encode("Z", "Z", address(reg), uint256(1), uint256(1) << 40, uint256(0), bytes(""));
-        ZetherToken z = ZetherToken(factory.createZetherToken(1, address(re), address(ver), init, "re"));
-        re.mint(address(this), 100);
-        re.approve(address(z), 100);
-        z.wrap(100);
-        re.arm(address(z), abi.encodeCall(ZetherToken.rollOverPublic, (alice.ua)));
-        vm.expectRevert(bytes(""));
-        z.unwrap(10, address(this));
-    }
-
-    /// EOA uỷ quyền EIP-7702 (code = 0xef0100‖addr) vẫn là EOA: không giữ allowance (R26).
-    function test_eip7702DelegatedEoaIsNotASpender() public {
-        address eoa = address(0x7702);
-        vm.etch(eoa, abi.encodePacked(hex"ef0100", address(0x1234)));
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTxV1.SpenderNotContract.selector, eoa));
-        tok.approve(eoa, 1);
-    }
-
     function test_curveLibBadLength() public {
         vm.expectRevert(abi.encodeWithSelector(G1Bn254.BadLength.selector, 63));
         ver.g1Add(new bytes(63), new bytes(64));
@@ -374,5 +333,58 @@ contract ZetherRevertPathsTest is ZetherFixture {
         ver.g1Sub(g, new bytes(63)); // neg
         vm.expectRevert(abi.encodeWithSelector(G1Bn254.BadLength.selector, 128));
         ver.g1Msm(bytes.concat(g, g), new uint256[](1)); // msm: pts ≠ k·64
+    }
+
+    /// ERC-7201 `scaas.zether` (CTR-TOK-24): where an indexer reads the verifier, the scale, `totalShielded`.
+    function test_zetherNamespaceSlot() public {
+        _fund(tok, alice, 30);
+        bytes32 ns = 0xd1eef6cbeb7b383e0a92b3cb723053d5c39c76707d89da6b14ff91b83198ce00;
+        assertEq(ns, keccak256(abi.encode(uint256(keccak256("scaas.zether")) - 1)) & ~bytes32(uint256(0xff)));
+        assertEq(address(uint160(uint256(vm.load(address(tok), ns)))), address(ver));
+        assertEq(uint256(vm.load(address(tok), bytes32(uint256(ns) + 1))), SCALE);
+        assertEq(uint256(vm.load(address(tok), bytes32(uint256(ns) + 4))), 30);
+        // review T3 m4: maxShielded, confidentialFee, auditorKey (none here), psid, p, then acct[alice].pendingSeq
+        assertEq(uint256(vm.load(address(tok), bytes32(uint256(ns) + 2))), uint256(1) << 40);
+        assertEq(uint256(vm.load(address(tok), bytes32(uint256(ns) + 3))), FEE);
+        assertEq(uint256(vm.load(address(tok), bytes32(uint256(ns) + 5))), 0);
+        assertEq(vm.load(address(tok), bytes32(uint256(ns) + 6)), ver.proofSystemId());
+        assertEq(uint256(vm.load(address(tok), bytes32(uint256(ns) + 7))), 64);
+        bytes32 a = keccak256(abi.encode(alice.ua, uint256(ns) + 8)); // accC, accD, pendC, pendD, then the seqs
+        assertEq(uint64(uint256(vm.load(address(tok), bytes32(uint256(a) + 4))) >> 64), 1, "pendingSeq");
+    }
+
+    /// CTR-ZTH-02: the verifiers refuse to deploy outside the dev chains (as the registry and `initialize`).
+    function test_verifiersOnlyDeployOnDevChain() public {
+        vm.chainId(1);
+        vm.expectRevert(abi.encodeWithSelector(ZetherSafety.ZetherNotDevChain.selector, 1));
+        new ZetherVerifierBn254();
+        vm.expectRevert(abi.encodeWithSelector(ZetherSafety.ZetherNotDevChain.selector, 1));
+        new ZetherVerifierBls12381();
+    }
+
+    /// Provenance (CTR-TOK-17): the kind, the factory's record, the immutables, the curve, the parameters.
+    function test_provenanceRecorded() public view {
+        assertEq(address(tok.verifier()), address(ver));
+        assertEq(tok.registry(), address(reg));
+        NoUnderlyingZetherToken z = NoUnderlyingZetherToken(address(tok));
+        assertEq(z.factory(), address(factory));
+        assertEq(z.implementation(), address(noneImpl));
+        assertEq(z.version(), 1);
+        assertEq(z.creator(), address(this));
+        assertEq(z.kind(), AdminLib.KIND_NONE_ZETHER);
+        assertEq(z.decimals(), 6);
+        assertEq(tok.shieldScale(), SCALE);
+        assertEq(tok.confidentialFee(), FEE);
+        assertEq(tok.maxDecryptableShielded(), uint256(1) << 40);
+        assertEq(tok.auditorKey().length, 0);
+        assertEq(z.name(), "Zether USD");
+        assertEq(z.symbol(), "zUSD");
+        (, string memory n,,, address vc, bytes32 salt,) = z.eip712Domain();
+        assertEq(n, "SCaaS ZetherToken");
+        assertEq(vc, address(tok));
+        assertEq(salt, ZUID);
+        (IOpenFactory.TokenKind k, uint64 v) = factory.versionOf(address(tok));
+        assertEq(uint8(k), uint8(IOpenFactory.TokenKind.NONE_ZETHER));
+        assertEq(v, 1);
     }
 }
