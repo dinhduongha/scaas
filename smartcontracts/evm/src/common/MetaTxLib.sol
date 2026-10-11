@@ -78,6 +78,17 @@ library MetaTxLib {
         "MetaTransaction(address from,bytes data,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
 
+    /// @notice Chuẩn hoá hai trường do relayer điền, trước khi băm.
+    /// @dev Đây là quy tắc PHẢI giống hệt nhau ở ba nơi: verifier Solidity, SDK client,
+    ///      và builder phía Odoo. Lệch một chỗ thì mọi chữ ký fail — fail-closed nên
+    ///      không mất tiền, nhưng là một nguy cơ tích hợp phải nhớ mãi.
+    ///
+    ///      Chọn "băm với address(0)" chứ KHÔNG phải "bỏ trường khỏi struct". Lý do
+    ///      quyết định: `TYPEHASH` là hash của type string, và type string phải cố
+    ///      định. Bỏ trường ra khi MODE_OPEN nghĩa là một type KHÁC, cần một
+    ///      `TYPEHASH` thứ hai, và ví EIP-712 sẽ hiển thị hai loại giao dịch khác nhau
+    ///      cho cùng một hành động. Ngoài ra encoding độ dài thay đổi phá injectivity.
+    ///      Một type string, hai giá trị canonical.
     function canon(MetaTransaction memory m) internal pure returns (address r, address f) {
         r = (m.mode & MODE_RESTRICT_RELAYER)       != 0 ? m.relayer      : address(0);
         f = (m.mode & MODE_RESTRICT_FEE_RECIPIENT) != 0 ? m.feeRecipient : address(0);
@@ -122,21 +133,6 @@ library MetaTxLib {
         ));
     }
 
-    /// @notice v1/v2 struct (Transitional, BUILT): deleted with the v1/v2 lines (P1b) and `ZetherMetaTx` (P3).
-    struct LegacyMetaTransaction {
-        address from;           // người ký, người chịu hiệu lực
-        address to;             // đích của thao tác trên chính token này
-        uint256 value;          // số lượng token cho thao tác (0 nếu chỉ gọi logic)
-        bytes   data;           // payload của thao tác
-        uint256 batch;          // nonce chiều 1 — luồng độc lập
-        uint256 nonce;          // nonce chiều 2 — thứ tự trong luồng
-        uint256 validUntil;     // hạn, giây epoch
-        uint32  mode;           // hai nửa byte: cờ ràng buộc + cách tính phí. Xem trên
-        address relayer;        // chỉ ràng buộc khi mode & MODE_RESTRICT_RELAYER
-        uint256 fee;            // ppm nếu PERCENT, tuyệt đối nếu FIXED, bỏ qua nếu NONE
-        address feeRecipient;   // chỉ ràng buộc khi mode & MODE_RESTRICT_FEE_RECIPIENT
-    }
-
     /// @notice Đọc cách tính phí từ nửa byte sau của `mode`.
     /// @dev Trả về `FeeMode` để `FeePolicy` dùng nguyên như cũ — enum vẫn là kiểu
     ///      chuẩn tắc của tầng phí, chỉ không còn là một trường riêng trong struct.
@@ -156,54 +152,5 @@ library MetaTxLib {
     function validateMode(uint32 mode) internal pure {
         if (mode & ~MODE_KNOWN_MASK != 0) revert ModeUnknownBits(mode);
         feeModeOf(mode);  // revert ModeFeeInvalid nếu nửa byte sau > 2
-    }
-
-    /// @notice Chuẩn hoá hai trường do relayer điền, trước khi băm.
-    /// @dev Đây là quy tắc PHẢI giống hệt nhau ở ba nơi: verifier Solidity, SDK client,
-    ///      và builder phía Odoo. Lệch một chỗ thì mọi chữ ký fail — fail-closed nên
-    ///      không mất tiền, nhưng là một nguy cơ tích hợp phải nhớ mãi.
-    ///
-    ///      Chọn "băm với address(0)" chứ KHÔNG phải "bỏ trường khỏi struct". Lý do
-    ///      quyết định: `TYPEHASH` là hash của type string, và type string phải cố
-    ///      định. Bỏ trường ra khi MODE_OPEN nghĩa là một type KHÁC, cần một
-    ///      `TYPEHASH` thứ hai, và ví EIP-712 sẽ hiển thị hai loại giao dịch khác nhau
-    ///      cho cùng một hành động. Ngoài ra encoding độ dài thay đổi phá injectivity.
-    ///      Một type string, hai giá trị canonical.
-    function canon(LegacyMetaTransaction memory m)
-        internal pure returns (address r, address f)
-    {
-        r = (m.mode & MODE_RESTRICT_RELAYER)       != 0 ? m.relayer      : address(0);
-        f = (m.mode & MODE_RESTRICT_FEE_RECIPIENT) != 0 ? m.feeRecipient : address(0);
-    }
-
-    /// @dev Thứ tự và kiểu ở đây phải khớp TỪNG KÝ TỰ với chuỗi type trong SDK client.
-    ///      Ghim bởi `test_legacyMetaTxTypehashIsPinned` — đổi một ký tự là đổi mọi digest đã
-    ///      phát hành, nên test phải fail chứ không được tự chỉnh theo.
-    bytes32 internal constant LEGACY_METATX_TYPEHASH = keccak256(
-        "MetaTransaction(address from,address to,uint256 value,bytes data,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
-    );
-
-    /// @notice structHash theo EIP-712.
-    /// @dev `bytes data` PHẢI được keccak, không encode thẳng. Bỏ là vỡ injectivity:
-    ///      `("ab","c")` và `("a","bc")` cho cùng một digest. Fuzz không tìm ra (xác
-    ///      suất 0); solver tìm ra trong vài giây.
-    function hashStruct(LegacyMetaTransaction memory m) internal pure returns (bytes32) {
-        (address r, address f) = canon(m);
-        return keccak256(
-            abi.encode(
-                LEGACY_METATX_TYPEHASH,
-                m.from,
-                m.to,
-                m.value,
-                keccak256(m.data),
-                m.batch,
-                m.nonce,
-                m.validUntil,
-                m.mode,
-                r,
-                m.fee,
-                f
-            )
-        );
     }
 }

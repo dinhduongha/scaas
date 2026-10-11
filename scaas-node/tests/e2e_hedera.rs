@@ -1,7 +1,8 @@
 //! cargo test --test e2e_hedera -- --ignored --nocapture
 //!
 //! Hedera (R63) end to end on a LOCAL devnet stand-in: anvil `--chain-id 298` (Hedera localnet id) with the
-//! HIP-632 precompile 0x16a replaced by `MockHederaAccountService` (smartcontracts/evm/test/hedera/HederaMocks.sol).
+//! HIP-632 precompile 0x16a replaced by `MockHederaAccountService` (smartcontracts/evm/test/hedera/HederaMocks.sol), the
+//! tokens `IS_HEDERA` `NoUnderlyingToken` clones from `OpenFactory` (`DeployHedera.s.sol`), payments `MetaTransfer`s.
 //! hedera-local-node / solo (≥ 8 GB, many containers) does not run on the shared machine — gap recorded in
 //! docs/history/specs/2026-10-03-net-hedera.md §9. Proven here through the real `HederaAdapter`:
 //! 1. two relayer lanes from a 24-word mnemonic (`m/44'/3030'/0'/0/i`), each with its own key;
@@ -16,7 +17,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use alloy::network::EthereumWallet;
-use alloy::primitives::{keccak256, Address, Bytes, U256};
+use alloy::primitives::{keccak256, Address, Bytes, B256, U256};
 use alloy::providers::{Provider, ProviderBuilder};
 use alloy::rpc::types::TransactionRequest;
 use alloy::signers::local::PrivateKeySigner;
@@ -25,12 +26,12 @@ use alloy::sol_types::{SolCall, SolValue};
 use axum::extract::{Path, State};
 use axum::routing::post;
 use axum::{Json, Router};
-use scaas_node::abi::{IMetaToken, MetaTransaction};
-use scaas_node::adapter::{index_step, lane_step, Family};
+use scaas_node::abi::{IToken, MetaTransfer};
+use scaas_node::adapter::{index_step, lane_step, recover_lane, Family};
 use scaas_node::adapters;
 use scaas_node::config::{ChainCfg, FinalityCfg, OdooCfg};
 use scaas_node::keys::{lane_secret, Seed};
-use scaas_node::metatx::{digest, Domain, WireMetaTx};
+use scaas_node::metatx::{Domain, Mtx};
 use scaas_node::odoo::Odoo;
 use scaas_node::signer::LocalSigner;
 use serde_json::{json, Value};
@@ -201,21 +202,23 @@ fn cfg(rpc: &str) -> ChainCfg {
 
 async fn balance(rpc: &str, token: Address, who: Address) -> U256 {
     let p = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
-    let data = IMetaToken::balanceOfCall { who }.abi_encode();
+    let data = IToken::balanceOfCall { who }.abi_encode();
     let out = p.call(TransactionRequest::default().to(token).input(data.into())).await.unwrap();
     U256::abi_decode(&out).unwrap()
 }
 
-/// Một thanh toán của tài khoản gốc ký bằng "khoá ED" của nó (mock: chữ ký compact 64 byte).
-fn native_pay(key: &PrivateKeySigner, token: Address, id: i64, tag: &[u8]) -> (Value, MetaTransaction) {
+fn domain(uid: B256, token: Address) -> Domain {
+    Domain { name: "SCaaS MetaToken".into(), version: "1".into(), chain_id: CHAIN_ID, verifying_contract: token, salt: uid }
+}
+
+/// A payment `MetaTransfer` of the native account, signed with its "ED key" (mock: 64-byte compact signature).
+fn native_pay(key: &PrivateKeySigner, uid: B256, token: Address, id: i64, tag: &[u8]) -> (Value, Mtx) {
     let entry_ref = keccak256(tag);
-    let mut data = keccak256(b"pay(bytes32)")[..4].to_vec();
-    data.extend_from_slice(entry_ref.as_slice());
-    let m = MetaTransaction {
+    let m = Mtx::Transfer(MetaTransfer {
         from: Address::left_padding_from(&NATIVE.to_be_bytes()),
         to: Address::repeat_byte(0x5e),
         value: U256::from(1_000u64),
-        data: data.into(),
+        entryRef: entry_ref,
         batch: U256::from_be_bytes(keccak256([b"scaas.pay.lane".as_slice(), entry_ref.as_slice()].concat()).0),
         nonce: U256::ZERO,
         validUntil: U256::from(now() + 300),
@@ -223,12 +226,12 @@ fn native_pay(key: &PrivateKeySigner, token: Address, id: i64, tag: &[u8]) -> (V
         relayer: Address::ZERO,
         fee: U256::ZERO,
         feeRecipient: Address::ZERO,
-    };
-    let d = Domain { name: "SCaaS MetaToken".into(), version: "1".into(), chain_id: CHAIN_ID, verifying_contract: token };
-    let sig = key.sign_hash_sync(&digest(&d, &m)).unwrap().as_erc2098();
+    });
+    let sig = key.sign_hash_sync(&m.digest(&domain(uid, token))).unwrap().as_erc2098();
     assert_eq!(sig.len(), 64);
-    let job = json!({"id": id, "token": format!("{token:#x}"), "digest": "0x",
-                     "signature": format!("0x{}", alloy::hex::encode(sig)), "metatx": WireMetaTx::from_sol(&m)});
+    let (kind, wire) = m.to_wire();
+    let job = json!({"id": id, "token": format!("{token:#x}"), "digest": "0x", "struct": kind,
+                     "signature": format!("0x{}", alloy::hex::encode(sig)), "metatx": wire});
     (job, m)
 }
 
@@ -246,6 +249,7 @@ async fn hedera_native_account_pays_through_two_lanes_and_never_locks_itself() {
     let dep = deploy(&rpc);
     let t1: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();
     let t2: Address = dep["demo_token_2"].as_str().unwrap().parse().unwrap();
+    let uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
     let native = Address::left_padding_from(&NATIVE.to_be_bytes());
     let native_key = PrivateKeySigner::from_bytes(&keccak256(b"hedera native account key")).unwrap();
 
@@ -282,9 +286,12 @@ async fn hedera_native_account_pays_through_two_lanes_and_never_locks_itself() {
     let tokens = vec![format!("{t1:#x}"), format!("{t2:#x}")];
     let state = Arc::new(Mutex::new(FakeOdoo { tokens, ..Default::default() }));
     let odoo = odoo_at(start_fake(state.clone()).await);
+    // as `lane_runner` starts a lane: the chain_uid check (NODE-GW-07), then recovery, which loads the registered tokens
+    adapter.start_check().await.unwrap();
+    recover_lane(adapter, &odoo, 0, "e2e#0").await.unwrap();
 
     // An unfunded lane does not take the job: back to the queue (Hedera accounts must exist and hold HBAR).
-    let (job, m0) = native_pay(&native_key, t1, 20, b"hedera-0");
+    let (job, m0) = native_pay(&native_key, uid, t1, 20, b"hedera-0");
     state.lock().unwrap().jobs.push(job);
     assert!(lane_step(adapter, &odoo, 0, "e2e#0").await.unwrap());
     assert_eq!(states_of(&state, 20), ["queued"]);
@@ -294,15 +301,15 @@ async fn hedera_native_account_pays_through_two_lanes_and_never_locks_itself() {
     for s in &signers {
         let _: Value = p.raw_request("anvil_setBalance".into(), (s.address_hex(), "0xde0b6b3a7640000")).await.unwrap();
     }
-    let (job, _) = native_pay(&native_key, t1, 21, b"hedera-0");
+    let (job, _) = native_pay(&native_key, uid, t1, 21, b"hedera-0");
     state.lock().unwrap().jobs.push(job);
     assert!(lane_step(adapter, &odoo, 0, "e2e#0").await.unwrap());
     assert_eq!(states_of(&state, 21), ["signed", "broadcast", "mined"]);
     assert_eq!(balance(&rpc, t1, Address::repeat_byte(0x5e)).await, U256::from(1_000u64));
 
     // ANTI-LOCK: X (token 1) and Y (token 2) signed by the same subject; X withheld; Y lands; then X.
-    let (x, mx) = native_pay(&native_key, t1, 31, b"hedera-x");
-    let (y, my) = native_pay(&native_key, t2, 32, b"hedera-y");
+    let (x, mx) = native_pay(&native_key, uid, t1, 31, b"hedera-x");
+    let (y, my) = native_pay(&native_key, uid, t2, 32, b"hedera-y");
     state.lock().unwrap().jobs.push(y);
     assert!(lane_step(adapter, &odoo, 1, "e2e#1").await.unwrap());
     assert_eq!(states_of(&state, 32), ["signed", "broadcast", "mined"]);
@@ -318,7 +325,7 @@ async fn hedera_native_account_pays_through_two_lanes_and_never_locks_itself() {
         .filter(|r| r["chain_state"] == "signed").map(|r| r["signer_address"].as_str().unwrap().to_string()).collect();
     assert_eq!(signed_by, signers.iter().map(|s| s.address_hex()).collect());
 
-    // Replay of X: the token's lane nonce is spent, simulation refuses → `consumed` (R80, metaNonce), nothing sent.
+    // Replay of X: the token's lane nonce is spent, simulation refuses → `consumed` (R80, mtxNonce), nothing sent.
     let mut replay = x;
     replay["id"] = json!(33);
     state.lock().unwrap().jobs.push(replay);
@@ -336,8 +343,7 @@ async fn hedera_native_account_pays_through_two_lanes_and_never_locks_itself() {
     let digests: Vec<String> = ingested.iter().filter(|e| e["event"] == "MetaTransactionExecuted")
         .map(|e| e["digest"].as_str().unwrap().to_string()).collect();
     for (t, m) in [(t1, &mx), (t2, &my)] {
-        let d = Domain { name: "SCaaS MetaToken".into(), version: "1".into(), chain_id: CHAIN_ID, verifying_contract: t };
-        assert!(digests.contains(&format!("{:#x}", digest(&d, m))));
+        assert!(digests.contains(&format!("{:#x}", m.digest(&domain(uid, t)))));
     }
     let _ = m0;
 }

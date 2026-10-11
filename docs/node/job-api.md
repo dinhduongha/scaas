@@ -139,7 +139,7 @@ Payload by kind:
 
 | Kind | Payload |
 |---|---|
-| `metatx` | `{token, signature, struct: "call"\|"transfer", metatx: {…}}`: `struct = call` carries the 9 fields of `MetaTransaction` (`data` = an allowlisted self-call, [NODE-JOB-20](#NODE-JOB-20)), `struct = transfer` the 11 fields of `MetaTransfer` (`entryRef = 0` transfer, else payment) ([CTR-MTX-15](../contracts/metatx.md#CTR-MTX-15)); `uint256` as decimal strings; addresses lowercase; `token` is any registered SCaaS contract on `MetaTxBase` for `call` (tokens, `MandateWallet`, `SmartKeyAccount`, contracts built on SCaaS), a token for `transfer`. Idempotency and the mesh `intent_id` are the struct's digest; one `(from, batch, nonce)` lane space spans both structs. The token's other signed entry points travel as `metatx` jobs too, with `entry` naming them ([order and wrap entries](#metatx-entries)). May carry `receiver_fee: {fee, feeRecipient, validUntil, signature}` ([sponsorship.md#receiver-pays](sponsorship.md#receiver-pays)); incl. v1 envelopes of a `PqzToken` |
+| `metatx` | `{token, signature, struct: "call"\|"transfer", metatx: {…}}`: `struct = call` carries the 9 fields of `MetaTransaction` (`data` = an allowlisted self-call, [NODE-JOB-20](#NODE-JOB-20)), `struct = transfer` the 11 fields of `MetaTransfer` (`entryRef = 0` transfer, else payment) ([CTR-MTX-15](../contracts/metatx.md#CTR-MTX-15)); `uint256` as decimal strings; addresses lowercase; `token` is any registered SCaaS contract on `MetaTxBase` for `call` (tokens, `MandateWallet`, `SmartKeyAccount`, contracts built on SCaaS), a token for `transfer`. Idempotency and the mesh `intent_id` are the struct's digest; one `(from, batch, nonce)` lane space spans both structs. The token's other signed entry points travel as `metatx` jobs too, with `entry` naming them ([order and wrap entries](#metatx-entries)). May carry `receiver_fee: {fee, feeRecipient, validUntil, signature}` ([sponsorship.md#receiver-pays](sponsorship.md#receiver-pays); not built in the node: such a job is `dead`, never relayed without it); incl. v1 envelopes of a `PqzToken` |
 | `signed_op` | `{op: {op_kind: "call"\|"transfer", function?, payload: "0x<exact signed bytes>", signature, public_key, auth_kind: "wallet"\|"passkey", extra: {…native params}}}`; `from`, lane, nonce, `valid_until`, relayer are decoded from `payload` (non-EVM `MetaCall`/`MetaTransfer`, [NET-ALL-26](../networks/README.md#NET-ALL-26), or Soroban auth payload); as built `op_kind: "pay"` over `MetaOp` v1 |
 | `call` | `{call: {target, calldata, validUntil}}` — e.g. `MandateWallet.mtxPayUnderMandate(...)`, `SmartKeyAccountFactory.deploy(...)`; the signature lives inside the calldata; selector and target must match a row of the [call table](#call-table); no native value |
 | `ua_metatx` (SPECIFIED; `kind = ua_metatx`) | MetaToken v3 `UAMetaTransaction` or `UAMetaTransfer` ([CTR-UA-26](../contracts/accounts.md#CTR-UA-26)) with `from: bytes32` and its `auth`: `{token, struct: "call"\|"transfer", m: WireUAMetaTransaction\|WireUAMetaTransfer, auth}`; same lifecycle as `metatx`; idempotency on `(chain, token, from, batch, nonce)`; digest = `uaDigest` (incl. v3 envelopes of a `PqzToken`) |
@@ -152,7 +152,7 @@ unchanged. A W3C `traceparent` header applies to every item of the batch ([NODE-
 ### 5.2 Meta-transaction data
 
 <a id="selector-table"></a><a id="NODE-JOB-20"></a>**NODE-JOB-20** — **The node reads a meta-transaction's `data`
-through the implementation's published selector allowlist.** Status: **SPECIFIED**. On EVM and Hedera every SCaaS
+through the implementation's published selector allowlist.** Status: intake **BUILT** (P5). On EVM and Hedera every SCaaS
 contract's `mtxExecute` (alias `executeMetaTransaction`) runs a **self-call** of one of the contract's own functions
 whose selector is on that implementation's fixed allowlist ([CTR-MTX-17](../contracts/metatx.md#CTR-MTX-17)); a
 token's transfers and payments are `MetaTransfer`s with no `data` to read ([CTR-MTX-23](../contracts/metatx.md#CTR-MTX-23)). The node keeps, per registered implementation, the table
@@ -181,12 +181,12 @@ token's gateway: it acts through its own contract ([NODE-JOB-19](#NODE-JOB-19)).
 operation (wrap, burn, reserve top-up, confidential funding) impossible to relay; a published per-implementation table
 keeps the node's view exact without a node release per operation. Cost: one table read per registered implementation.
 
-Transitional (BUILT): deployed tokens accept a fixed op list (`pay`, `trade`, `approve`, the `unwrap` pseudo-op; the
-confidential token adds its transfer and burn ops) and reject any other selector; the node's built intake and pricing
-decode exactly that list, and `approve` and `trade` ops are no longer accepted once the allowlist tokens replace them.
+Built (P5, `scaas-node/src/guard.rs`): before simulation, cached per contract — the selector listed, an `AMOUNT`
+selector's basis argument present, no `PERCENT` fee on an `ABSOLUTE` selector, the mode inside `supportedModes()` (the
+static length stays the contract's check); it runs in `Submitter::submit` and again on jobs rebuilt after a restart, and a `MetaTransfer` or an order or wrap entry on an unregistered token (an entry: or unlisted DEX) is `TOKEN_NOT_SERVED`. Not built: canonical re-encoding of dynamic `data`, pricing, the breaker.
 
-<a id="metatx-entries"></a>**Order and wrap entries.** Besides `mtxExecute`, three token entry points carry their own
-signature and run as `metatx` jobs, `payload.entry` naming them (default `mtxExecute`):
+<a id="metatx-entries"></a>**Order and wrap entries** (BUILT, P5). Besides `mtxExecute`, three token entry points carry their
+own signature and run as `metatx` jobs, `payload.entry` naming them (default `mtxExecute`; a deadline in `validUntil`):
 
 | `entry` | Target | Payload | Node digest (idempotency) |
 |---|---|---|---|
@@ -391,10 +391,10 @@ equals `chain.chain_uid` ([NODE-GW-07](gateway.md#NODE-GW-07)); a mismatch ⇒ `
 
 `pqz_call` jobs are not `call` jobs: their own selector list is in the kinds table above.
 
-Transitional (BUILT): the contracts are renamed (P4: `SmartKeyAccount`, `MandateWallet` on `MetaTxBase`); chains deployed
-before P4 and the node's built table use the earlier names — `SubjectAccount.executeAsOwner`, `MandateWallet.payUnderMandate`/`revokeWithSig`/`executeAsOwner`,
-`SCaaSDexV1.settle`/`cancel`/`invalidateNonces` — and the DEX row also matches the chain's single `dex` field. The
-renamed rows replace them in the release that deploys the renamed contracts; no deployed chain keeps both.
+Built (P5, `guard.rs`, every lane before simulation; refusal `dead` with `CALL_TARGET_REFUSED` on the pull path): the
+account factory, wallet and DEX rows (`mtxExecuteAsOwner` is one selector on the account and the wallet: the wallet's
+rule), the DEX rows on the chain's `dex`, each target bound (`chainUid()`). Rows whose contracts are not built (UA
+registry, tender, vesting, distribution, `ExchangeOffer`, `Safe`) are absent, so their selectors are refused.
 
 ## 12. Job states
 

@@ -11,7 +11,8 @@ use alloy::signers::local::PrivateKeySigner;
 use alloy::transports::TransportError;
 use anyhow::{anyhow, Result};
 
-use crate::abi::{decode_revert, IMetaToken, MetaTransaction};
+use crate::abi::{decode_revert, IToken};
+use crate::metatx::Mtx;
 use crate::config::ChainCfg;
 
 /// Simulation fail vì hợp đồng revert (vĩnh viễn với state này) hay vì đường truyền (tạm thời).
@@ -51,6 +52,9 @@ pub struct Chain {
     providers: Vec<DynProvider>,
     wallet: EthereumWallet,
     address: Address,
+    /// `chain_uid` from the config, checked against the RPC's block 0 (NODE-GW-07).
+    pinned_uid: Option<B256>,
+    uid: tokio::sync::OnceCell<B256>,
 }
 
 impl Chain {
@@ -69,7 +73,14 @@ impl Chain {
         if providers.is_empty() {
             return Err(anyhow!("chain {}: no rpc_urls", cfg.evm_chain_number));
         }
-        Ok(Self { number: cfg.evm_chain_number, providers, wallet: EthereumWallet::from(signer), address })
+        Ok(Self {
+            number: cfg.evm_chain_number,
+            providers,
+            wallet: EthereumWallet::from(signer),
+            address,
+            pinned_uid: cfg.chain_uid,
+            uid: Default::default(),
+        })
     }
 
     pub fn primary(&self) -> &DynProvider {
@@ -96,6 +107,42 @@ impl Chain {
         self.primary().estimate_gas(tx).await.map_err(|e| classify(&e))
     }
 
+    /// This chain's `chain_uid`: the RPC's block 0 hash, which must equal the configured `chain_uid` when one is set
+    /// (a pruned RPC without block 0 trusts the configured one). Read once; an error is not remembered.
+    pub async fn uid(&self) -> Result<B256> {
+        self.uid
+            .get_or_try_init(|| async {
+                // an RPC error is not "no block 0": nothing is cached, the next call asks again (review T4 m3)
+                let genesis = self.primary().get_block_by_number(BlockNumberOrTag::Number(0)).await
+                    .map_err(|e| anyhow!("chain {}: block 0: {e}", self.number))?.map(|b| b.header.hash);
+                match (self.pinned_uid, genesis) {
+                    (Some(p), Some(g)) if p != g => Err(anyhow!("chain {}: RPC block 0 {g:#x} is not chain_uid {p:#x}", self.number)),
+                    (Some(p), _) | (None, Some(p)) => Ok(p),
+                    (None, None) => Err(anyhow!("chain {}: the RPC gives no block 0 hash; set chain_uid", self.number)),
+                }
+            })
+            .await
+            .copied()
+    }
+
+    /// A view call; a revert is the contract's answer (`SimError::Revert`), anything else the transport's.
+    pub async fn call_view<C: SolCall>(&self, to: Address, call: C) -> std::result::Result<C::Return, SimError> {
+        let tx = TransactionRequest::default().with_to(to).with_input(call.abi_encode());
+        let out = self.primary().call(tx).await.map_err(|e| classify(&e))?;
+        C::abi_decode_returns(&out).map_err(|e| SimError::Revert(format!("decode: {e}")))
+    }
+
+    /// `eth_call` from the lane with exactly `gas` (sizing `mtxSettle`, `guard::settle_gas`).
+    pub async fn call_with_gas(&self, to: Address, data: Bytes, gas: u64) -> std::result::Result<Bytes, SimError> {
+        let tx = TransactionRequest::default().with_from(self.address).with_to(to).with_input(data).with_gas_limit(gas);
+        self.primary().call(tx).await.map_err(|e| classify(&e))
+    }
+
+    /// `who` has code (a contract signer: ERC-1271, `guard::ERC1271_FLOOR`).
+    pub async fn has_code(&self, who: Address) -> Result<bool> {
+        Ok(!self.primary().get_code_at(who).await?.is_empty())
+    }
+
     pub async fn fees(&self) -> Result<(u128, u128)> {
         let est = self.primary().estimate_eip1559_fees().await?;
         Ok((est.max_fee_per_gas.max(1), est.max_priority_fee_per_gas))
@@ -115,14 +162,17 @@ impl Chain {
         Ok(C::abi_decode_returns(&self.primary().call(tx).await?)?)
     }
 
-    /// `metaNonce(from, batch)` của token: nonce chủ thể kế tiếp (R80).
-    pub async fn meta_nonce(&self, token: Address, from: Address, batch: U256) -> Result<U256> {
-        self.view(token, IMetaToken::metaNonceCall { from, batch }).await
+    /// `mtxNonce(from, batch)`: the subject's next nonce on that lane, shared by both structs (R80, CTR-MTX-15).
+    pub async fn mtx_nonce(&self, token: Address, from: Address, batch: U256) -> Result<U256> {
+        self.view(token, IToken::mtxNonceCall { from, batch }).await
     }
 
-    /// `metaTxDigest(m)` — đúng digest token phát trong `MetaTransactionExecuted` (R78).
-    pub async fn meta_digest(&self, token: Address, m: MetaTransaction) -> Result<B256> {
-        self.view(token, IMetaToken::metaTxDigestCall { m }).await
+    /// `mtxDigest(m)` / `mtxTransferDigest(t)`: exactly the digest the contract emits in `MetaTransactionExecuted` (R78).
+    pub async fn mtx_digest(&self, token: Address, m: Mtx) -> std::result::Result<B256, SimError> {
+        match m {
+            Mtx::Call(m) => self.call_view(token, IToken::mtxDigestCall { m }).await,
+            Mtx::Transfer(t) => self.call_view(token, IToken::mtxTransferDigestCall { t }).await,
+        }
     }
 
     /// `MetaTransactionExecuted` của `(from, batch, nonce)` trong `lookback` khối gần nhất ⇒ `(digest, relayer)` (§8.5).
@@ -130,13 +180,13 @@ impl Chain {
         let latest = self.primary().get_block_number().await?;
         let filter = Filter::new()
             .address(token)
-            .event_signature(IMetaToken::MetaTransactionExecuted::SIGNATURE_HASH)
+            .event_signature(IToken::MetaTransactionExecuted::SIGNATURE_HASH)
             .topic1(from.into_word())
             .topic3(B256::from(batch))
             .from_block(latest.saturating_sub(lookback))
             .to_block(latest);
         for log in self.primary().get_logs(&filter).await? {
-            let Ok(e) = log.log_decode::<IMetaToken::MetaTransactionExecuted>().map(|l| l.inner.data) else { continue };
+            let Ok(e) = log.log_decode::<IToken::MetaTransactionExecuted>().map(|l| l.inner.data) else { continue };
             if e.nonce == nonce {
                 return Ok(Some((e.digest, e.relayer)));
             }
@@ -177,5 +227,52 @@ impl Chain {
 
     pub async fn block_hash(p: &DynProvider, n: u64) -> Option<B256> {
         p.get_block_by_number(BlockNumberOrTag::Number(n)).await.ok().flatten().map(|b| b.header.hash)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::{json, Value};
+
+    /// An RPC whose block 0 is the recorded Hedera testnet block (any block will do: only its hash is read).
+    async fn rpc() -> (String, B256) {
+        let block: Value = serde_json::from_str::<Value>(include_str!("../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone();
+        let hash = block["hash"].as_str().unwrap().parse().unwrap();
+        let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
+            let block = block.clone();
+            async move { axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": block})) }
+        }));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        (url, hash)
+    }
+
+    fn chain(url: &str, pin: Option<B256>) -> Chain {
+        let cfg = ChainCfg { evm_chain_number: 296, rpc_urls: vec![url.into()], chain_uid: pin, ..Default::default() };
+        Chain::with_signer(&cfg, PrivateKeySigner::random()).unwrap()
+    }
+
+    /// NODE-GW-07: the chain's `chain_uid` is its block 0 hash; a configured one that differs refuses the chain.
+    #[tokio::test]
+    async fn chain_uid_is_block_zero_and_a_wrong_pin_is_refused() {
+        let (url, genesis) = rpc().await;
+        assert_eq!(chain(&url, None).uid().await.unwrap(), genesis);
+        assert_eq!(chain(&url, Some(genesis)).uid().await.unwrap(), genesis);
+        assert!(chain(&url, Some(B256::repeat_byte(1))).uid().await.is_err());
+        // a pruned RPC (no block 0) trusts the pin, and without one there is no chain_uid
+        let app = axum::Router::new().route("/", axum::routing::post(|axum::Json(r): axum::Json<Value>| async move {
+            axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": null}))
+        }));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let pruned = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        assert_eq!(chain(&pruned, Some(B256::repeat_byte(1))).uid().await.unwrap(), B256::repeat_byte(1));
+        assert!(chain(&pruned, None).uid().await.is_err());
+        // review T4 m3: an unreachable RPC is not a pruned one — no pin is trusted, nothing is cached, it asks again
+        let c = chain("http://127.0.0.1:9", Some(genesis));
+        assert!(c.uid().await.is_err() && c.uid().await.is_err());
+        assert!(c.uid.get().is_none());
     }
 }

@@ -2,7 +2,6 @@
 pragma solidity ^0.8.20;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {IFactoryTokenV1} from "../../src/factory/IFactoryTokenV1.sol";
 
 contract MockERC20 is ERC20 {
     uint8 private immutable _d;
@@ -32,18 +31,4 @@ contract SupportedVerifier {
 contract UnsupportedVerifier {
     function isSupportedOnThisChain() external pure returns (bool) { return false; }
     function curveName() external pure returns (string memory) { return "bls12-381"; }
-}
-
-/// Implementation ZETHER giả: chỉ để chứng minh factory xử lý kind ZETHER qua cùng
-/// `IFactoryTokenV1`. Không có gì bảo mật ở đây.
-contract MockZetherImpl is IFactoryTokenV1 {
-    address public immutable FACTORY;
-    address public verifier;
-    bool private _done;
-    constructor(address f) { FACTORY = f; _done = true; }
-    function initialize(address, address, address verifier_, uint64, bytes calldata) external {
-        require(msg.sender == FACTORY && !_done, "init");
-        _done = true;
-        verifier = verifier_;
-    }
 }

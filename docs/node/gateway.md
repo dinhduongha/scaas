@@ -83,7 +83,7 @@ A duplicate returns `200` with the stored state (idempotent).
 | Route | Body / answer | Accept checks, in order |
 |---|---|---|
 | `GET /v1/gateway` | above | — |
-| `POST /v1/metatx {chain, token, struct?, m, signature}` (`struct` = `call` \| `transfer`, default `transfer`; [CTR-MTX-15](../contracts/metatx.md#CTR-MTX-15)) | `202 {"status":"queued"}` today; the target adds `"intent_id"` (+ `exclusive` when published on the mesh) | token registered and active (`TOKEN_NOT_SERVED`); strict parse; normalization ([NODE-LANE-10](submit-lanes.md#NODE-LANE-10)) before simulation; `data` shape and selector ([NODE-JOB-20](job-api.md#NODE-JOB-20)); `metaTxDigest` (target `mtxDigest`) + simulation; [door A rules](#door-a-intake). On Hedera chains (295–298) `sig_bytes` may be **64** bytes (HIP-632 ED25519); 65–2048 bytes elsewhere |
+| `POST /v1/metatx {chain, token, struct?, m, signature}` (`struct` = `call` \| `transfer`, default `transfer`; [CTR-MTX-15](../contracts/metatx.md#CTR-MTX-15)) | `202 {"status":"queued"}` today; the target adds `"intent_id"` (+ `exclusive` when published on the mesh) | token registered and active (`TOKEN_NOT_SERVED`); strict parse; normalization ([NODE-LANE-10](submit-lanes.md#NODE-LANE-10)) before simulation; the lanes' guard: chain binding, `data` shape and selector ([NODE-JOB-20](job-api.md#NODE-JOB-20)), refused ⇒ `400`; simulation, then `mtxDigest` / `mtxTransferDigest`; [door A rules](#door-a-intake). On Hedera chains (295–298) `sig_bytes` may be **64** bytes (HIP-632 ED25519); 65–2048 bytes elsewhere |
 | `POST /v1/ops {chain, op}` | `op` = the job API `signed_op` payload; `202 {"status": "queued", "intent_id": "<digest hex>"}` | below |
 | `POST /v1/ua-metatx {chain, token, struct?, m: WireUAMetaTransaction \| WireUAMetaTransfer, auth}` | `ua_metatx` job | token `features ∋ ua` (v3: `registry() ≠ 0`); `from >> 160 ≠ 0` ⇒ registry record ([UA record cache](#ua-cache), `UA_NOT_REGISTERED`); cheap kinds verified locally ([NODE-GSP-15](gossip.md#NODE-GSP-15)); node computes `uaDigest` |
 | `POST /v1/ua/register {chain, kind, keyData, pop, authRef}` (`{chain, kind, keyData: 0x…, pop: 0x…, authRef: 0x…32}`) | `call` job to `chain.ua_registry` ([NODE-GW-03](#NODE-GW-03)) | id recomputed, `>> 160 ≠ 0`; not registered (`UA_ALREADY_REGISTERED`, `UA_KEY_IN_USE`); PoP verified for cheap kinds over `pop_digest` with `chain.chain_uid`; per-chain registration quota |
@@ -192,9 +192,9 @@ signatures fail, and is unsafe only if it equals another chain's `chain_uid`, wh
 genesis hash excludes. Cost: one `chainUid()` read per contract at start, and one per user-deployed wallet or
 account.
 
-Transitional (BUILT): deployed tokens, the DEX, mandate wallets and subject accounts expose no `chainUid()` until
-they are redeployed with the salted domain; until then the binding covers the genesis hash and the UA registry, on
-chains with `ua_registry` only.
+Built (P5, legacy pull path): a lane does not start when the RPC's block 0 differs from `[[chains]] chain_uid` (unset:
+block 0 is the `chain_uid`); every contract a meta-transaction, order entry or `call` targets is checked at lease
+(`chainUid()`, cached once equal; a mismatch is `dead` with `CHAIN_UID_MISMATCH`). The multi-endpoint quorum is not built.
 
 ### <a id="eip-7702"></a>3.3 EIP-7702
 

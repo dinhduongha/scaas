@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::config::OdooCfg;
-use crate::metatx::WireMetaTx;
 
 #[derive(Clone)]
 pub struct Odoo {
@@ -73,7 +72,8 @@ impl NodeConfig {
     }
 }
 
-/// Một job outbox. `kind = "metatx"`: `token`/`signature`/`metatx` có mặt. `kind = "call"`:
+/// Một job outbox. `kind = "metatx"`: `token`/`signature`/`metatx` có mặt, `struct` names the signed struct
+/// (`call` = `MetaTransaction`, `transfer` = `MetaTransfer`; absent = `transfer`, CTR-MTX-15). `kind = "call"`:
 /// chỉ `call` — calldata Odoo đã dựng (MandateWallet, R25), node chỉ gửi.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Job {
@@ -84,10 +84,33 @@ pub struct Job {
     pub digest: Option<String>,
     #[serde(default)]
     pub signature: Option<String>,
+    #[serde(default, rename = "struct")]
+    pub struct_: Option<String>,
     #[serde(default)]
-    pub metatx: Option<WireMetaTx>,
+    pub metatx: Option<Value>,
     #[serde(default)]
     pub call: Option<WireCall>,
+    /// A token's other signed entry point (job-api.md, order and wrap entries): `mtxCancelOrder` (`order`),
+    /// `mtxInvalidateNonces` (`from`, `batch`, `newMin`), `mtxWrap` (`underlying`, `order`); `token` is the target.
+    #[serde(default)]
+    pub entry: Option<String>,
+    #[serde(default)]
+    pub order: Option<Value>,
+    #[serde(default)]
+    pub from: Option<String>,
+    #[serde(default)]
+    pub batch: Option<String>,
+    #[serde(default, rename = "newMin")]
+    pub new_min: Option<String>,
+    #[serde(default)]
+    pub underlying: Option<Address>,
+    /// Deadline of an entry job that carries none of its own (cancels never expire on chain).
+    #[serde(default, rename = "validUntil")]
+    pub valid_until: Option<String>,
+    /// Receiver-pays (job-api.md): not built in the node, so a job carrying it is refused (`work_from_job`), never
+    /// relayed as a plain transfer that drops the payee's fee authorization (review T2 m5).
+    #[serde(default)]
+    pub receiver_fee: Option<Value>,
     /// `metatx` | `call` | `signed_op` (họ không phải EVM: payload ký + chữ ký + khoá công khai, adapter tự đọc).
     #[serde(default)]
     pub kind: Option<String>,
@@ -227,15 +250,17 @@ mod tests {
     #[test]
     fn job_payload_from_odoo_decodes() {
         let raw = r#"{"id": 3, "token": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
-            "digest": "0x33", "signature": "0x44",
+            "digest": "0x33", "signature": "0x44", "struct": "transfer",
             "metatx": {"from": "0xabababababababababababababababababababab",
                        "to": "0x0101010101010101010101010101010101010101", "value": "100",
-                       "data": "0x", "batch": "7", "nonce": "0", "validUntil": "1800000300",
+                       "entryRef": "0x0000000000000000000000000000000000000000000000000000000000000042",
+                       "batch": "7", "nonce": "0", "validUntil": "1800000300",
                        "mode": 1, "relayer": "0x0202020202020202020202020202020202020202",
                        "fee": "0", "feeRecipient": "0x0000000000000000000000000000000000000000"}}"#;
         let job: Job = serde_json::from_str(raw).unwrap();
         assert_eq!(job.id, 3);
-        assert_eq!(job.metatx.unwrap().to_sol().unwrap().batch, alloy::primitives::U256::from(7));
+        let m = crate::metatx::Mtx::from_wire(job.struct_.as_deref(), job.metatx.as_ref().unwrap()).unwrap();
+        assert_eq!(m.batch(), alloy::primitives::U256::from(7));
     }
 
     #[test]
@@ -244,7 +269,7 @@ mod tests {
             "calldata": "0xdeadbeef", "validUntil": "1800000300"}}"#;
         let job: Job = serde_json::from_str(raw).unwrap();
         assert!(job.metatx.is_none());
-        let w = crate::submit::work_from_job(&job).unwrap();
+        let w = crate::submit::work_from_job(&job, None).unwrap();
         assert_eq!(w.data.as_ref(), &[0xde, 0xad, 0xbe, 0xef]);
         assert_eq!(w.valid_until, 1_800_000_300);
     }

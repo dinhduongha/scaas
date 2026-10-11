@@ -291,7 +291,8 @@ where they accept fewer. As built the runner does not cap it (PLANNED).
 
 <a id="simulation"></a><a id="NODE-LANE-23"></a>**NODE-LANE-23** — **Simulation before signing is mandatory**, on the
 node's own RPC endpoints (no third-party simulation service). EVM: `eth_estimateGas` from the lane address at
-`pending` (gas limit = estimate + 20 %); non-EVM: `ChainAdapter::build` = build + family simulation (Soroban
+`pending` (gas limit = estimate + 20 %; a contract signer's meta-tx at least 21 000 + 400 k·64/63 + 5 000 for its
+ERC-1271 check; `mtxSettle` raised ×1.5 until an `eth_call` at that gas settles every settlement); non-EVM: `ChainAdapter::build` = build + family simulation (Soroban
 `simulateTransaction`, Sui dry-run/dev-inspect (`sui_dryRun`), Cosmos `tx/simulate`, Aptos simulate, TON emulation, Solana
 `simulateTransaction`; per-family details in [networks/](../networks/README.md)). Simulation narrows but cannot rule out
 a revert: state can change between simulation and inclusion (a race, an allowance spent, a pause switched on, a
@@ -428,10 +429,8 @@ intent. Cost: one `eth_call` per stuck tx per `stuck_after_secs` (60 s) and per 
 After `valid_until` the subject nonce of TON/Solana/Aptos/Sui lanes may be pruned (Sui: permissionless `prune`) and read as 0; consumption checks are
 only made while `now ≤ valid_until + clock_skew_secs`, and expiry decides after that.
 
-EVM view names: the target tokens expose the nonce and digest views as `mtxNonce(from, batch)` and `mtxDigest(m)`, and
-the gateway as `mtxExecute` (the alias `executeMetaTransaction` stays, [contracts/metatx.md](../contracts/metatx.md)).
-Transitional (BUILT): deployed tokens and the code paths above use `metaNonce`, `metaTxDigest` and
-`executeMetaTransaction`; the adapter switches by implementation when the renamed tokens are deployed.
+EVM view names (BUILT, P5): `mtxNonce(from, batch)`, `mtxDigest(m)` / `mtxTransferDigest(t)`; the node relays
+`mtxExecute` / `mtxExecuteTransfer` (the alias `executeMetaTransaction` stays, [contracts/metatx.md](../contracts/metatx.md)).
 
 ### 9.1 Shared submit path
 
@@ -531,10 +530,15 @@ canonical digest zeroes, for every origin.** Before building any meta-tx — `fe
 `MODE_RESTRICT_RELAYER` off ⇒ `relayer := 0`. Wire values of unbound fields are never submitted (NODE-GEN-07);
 `intent_id` is unchanged. The token pays `m.feeRecipient` whenever it is non-zero (`ERC20MetaTx.sol` l.87), but the digest zeroes it when
 unbound (`MetaTxLib.canon`, the fields `canon()` zeroes), so without this a client or forwarder would take the fee while we pay gas. `metatx.rs`
-has `pub fn normalize(m: &mut MetaTransaction, fee_recipient: Option<Address>)`, called **once, where the `Work`/`Job`
-is built from a request or an envelope** (job API accept, gateway `post_metatx`, mesh work builder), not in the runner, so Hedera
-work through `lane_runner` → the Hedera adapter's `build` gets it too. A job-API job built by an ERP with fee 0 and
-recipient 0 is unchanged in effect.
+has `Mtx::normalize(&mut self, fee_recipient: Option<Address>)`, called **once, where the `Work` is built from a
+request, a job or an envelope**: BUILT in gateway `post_metatx` (`work_of`) and in `submit::work_from_job` (the outbox submitter and
+the EVM/Hedera adapters' `build`, with `[[chains]] fee_recipient`); the mesh work builder is SPECIFIED. The outbox's
+in-flight key is the token's `mtxDigest`, never the job's `digest`. A job-API job built by an ERP with fee 0 and
+recipient 0 is unchanged in effect. A job carrying `receiver_fee` is refused (`dead`), never relayed without it. BUILT: the guard
+([NODE-JOB-20](job-api.md#NODE-JOB-20)) runs in `Submitter::submit` before the digest read, simulation or signing; a `MetaTransfer` and the
+order and wrap entries need a registered token (an entry also a listed DEX), else `TOKEN_NOT_SERVED`; the token lists refresh every
+15 s with the breaker sample. Jobs rebuilt from the tracked journal after a restart pass the guard and the 2^24 gas clamp too; a refused
+one is only logged and its nonce gap-filled (the ERP gets no report). Hedera runs the same lane checks at start ([NET-HED-08](../networks/hedera.md#NET-HED-08)).
 
 ## <a id="batching"></a>11. Batching
 
@@ -562,10 +566,8 @@ batches them.** For gasless unwrap ops ([CTR-MTX-12](../contracts/metatx.md#CTR-
   calldata — single-underlying `unwrap(uint256 amount, address recipient, uint256 minOut)`, multi-underlying
   `unwrap(address underlying, uint256 amount, address recipient, uint256 minOut)`, confidential-token public
   `unwrap(uint256, address)` — with `m.to = m.value = 0` ([NODE-JOB-20](job-api.md#NODE-JOB-20)); the contract checks
-  `recipient ∉ {0, address(this)}`, `0 < out ≤ reserve`, `out ≥ minOut`, burns `⌈out·q⌉`. Transitional (BUILT): the
-  deployed tokens use the `unwrap(address underlying, address recipient, uint256 minOut)` pseudo-op (100 bytes, amount =
-  `m.value`, `m.to == recipient`) with the entry points `mtxUnwrap` and `mtxUnwrapWithFee`, which the allowlist tokens
-  delete.
+  `recipient ∉ {0, address(this)}`, `0 < out ≤ reserve`, `out ≥ minOut`, burns `⌈out·q⌉`; built (P1d, P5: the
+  node relays it as any self-call).
 - The simulation gate runs the full outer transaction (`eth_call`/`eth_estimateGas` at `pending`), so it executes the
   underlying's transfer, `balanceOf` reads and the exact-amount check; it re-simulates immediately before signing the
   outer transaction, as for every job.

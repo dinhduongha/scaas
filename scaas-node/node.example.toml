@@ -89,6 +89,10 @@ lanes = [0, 1, 2, 3]                             # 4 relayer accounts: hold gas 
 # private_key = { env = "SCAAS_RELAYER_KEY_7622" }   # alternative: one raw key = one lane
 finality = { mode = "depth", depth = 1, quorum = 1 }
 # dex = "0x..."                                  # SCaaSDex ("scaas_dex" in smartcontracts/evm/deployments/7622.json)
+chain_uid = "0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464"  # block 0 (evm/chain-uids.json):
+                                                 # a lane whose RPC block 0 differs never starts (NODE-GW-07)
+# account_factory = "0x..."                      # SmartKeyAccountFactory: the only `deploy` call target (unset: refused)
+# token_factory = "0x..."                        # the token factory: never a call target
 # fee_recipient = "0x..."                        # cold wallet for fees of gateway meta-txs that leave feeRecipient
                                                  # unbound (R84); never a lane key. Unset: the fee goes to the sending lane.
 # tokens = [{ address = "0x...", decimals = 6 }] # registered tokens, imported into the store (R95, MESH R86)
@@ -117,6 +121,8 @@ lanes = [0, 1]                                   # ECDSA accounts (HIP-583 alias
 finality = { mode = "instant", quorum = 1 }      # aBFT: a record file is final
 max_gas_per_tx = 3000000
 max_fee_cap_gwei = 2000                         # fixed fee schedule: testnet eth_gasPrice ~870 gwei-equivalent
+# chain_uid = "0x5699954170cc8177692691d15368cad54f1e7a90c9e16b782f989de1b8d19358"  # DERIVED (chain-uids.json):
+                                                 # confirm on the relay first; an RPC error on block 0 keeps the lane stopped
 
 [[chains]]                                       # Cosmos SDK + CosmWasm
 family = "cosmos"

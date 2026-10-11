@@ -11,14 +11,15 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde_json::{json, Value};
 
-use crate::abi::IMetaToken;
+use crate::abi::IToken;
 use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Signed, TxStatus};
 use crate::chain::{Chain, SimError};
 use crate::config::ChainCfg;
 use crate::finality::{quorum_ok, safe_head, Mode};
+use crate::guard::{self, Guard};
 use crate::indexer::encode_event;
 use crate::odoo::Job;
-use crate::submit::work_from_job;
+use crate::submit::{job_digest, work_from_job};
 
 pub struct EvmAdapter {
     key: String,
@@ -30,6 +31,10 @@ pub struct EvmAdapter {
     max_gas: u64,
     /// Token đã đăng ký (làm mới từ `node_config`); event của contract lạ không bao giờ gửi Odoo.
     pub tokens: Arc<RwLock<Vec<Address>>>,
+    /// PAY-FIX2, NODE-GW-07, NODE-JOB-20: checked before every simulation.
+    guard: Guard,
+    /// `[[chains]] fee_recipient`: NODE-LANE-10 normalizes every job with it (`work_from_job`).
+    pub(crate) fee_recipient: Option<Address>,
 }
 
 impl EvmAdapter {
@@ -44,6 +49,7 @@ impl EvmAdapter {
             .collect();
         let mode = if cfg.finality.mode == "tag" { Mode::Tag } else { Mode::Depth(cfg.finality.depth) };
         Ok(Self {
+            guard: Guard::new(cfg, tokens.clone()),
             key: cfg.chain_key(),
             family: if cfg.family == "hedera" { Family::Hedera } else { Family::Evm },
             chains,
@@ -52,6 +58,7 @@ impl EvmAdapter {
             quorum: cfg.finality.quorum,
             max_gas: cfg.max_gas_per_tx,
             tokens,
+            fee_recipient: cfg.fee_recipient,
         })
     }
 
@@ -74,18 +81,40 @@ impl ChainAdapter for EvmAdapter {
         &self.lanes
     }
 
-    async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
-        let w = work_from_job(job).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
-        let chain = self.lane(lane).map_err(|e| SimError::Transport(e.to_string()))?;
-        let gas = chain.simulate(w.to, w.data.clone()).await?;
-        if gas > self.max_gas {
-            return Err(SimError::Revert(format!("gas {gas} above max_gas_per_tx")));
+    async fn start_check(&self) -> Result<()> {
+        for c in &self.chains {
+            c.uid().await?;
         }
+        Ok(())
+    }
+
+    fn refresh_tokens(&self, nc: &crate::odoo::NodeConfig) {
+        if let Ok(mut t) = self.tokens.write() {
+            *t = nc.tokens.iter().filter_map(crate::odoo::TokenCfg::evm).collect();
+        }
+    }
+
+    fn already_done(&self, job: &Job, reason: &str) -> bool {
+        work_from_job(job, self.fee_recipient).is_ok_and(|w| guard::already_invalidated(&w.data, reason))
+    }
+
+    async fn digest(&self, job: &Job) -> std::result::Result<Option<B256>, SimError> {
+        let Ok(w) = work_from_job(job, self.fee_recipient) else { return Ok(None) };
+        let Some((m, _)) = crate::metatx::Mtx::from_calldata(&w.data) else { return Ok(job_digest(job)) };
+        let chain = self.lane(0).map_err(|e| SimError::Transport(e.to_string()))?;
+        chain.mtx_digest(w.to, m).await.map(Some)
+    }
+
+    async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
+        let w = work_from_job(job, self.fee_recipient).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
+        let chain = self.lane(lane).map_err(|e| SimError::Transport(e.to_string()))?;
+        self.guard.check(chain, &w).await?;
+        let gas = guard::gas(chain, &w, self.max_gas).await?;
         Ok(Built {
             job_id: job.id,
             body: w.data.to_vec(),
             valid_until: w.valid_until,
-            meta: json!({"to": format!("{:#x}", w.to), "gas": gas + gas / 5}),
+            meta: json!({"to": format!("{:#x}", w.to), "gas": gas}),
         })
     }
 
@@ -148,8 +177,8 @@ impl ChainAdapter for EvmAdapter {
             return Ok(vec![]);
         }
         let f = Filter::new().from_block(from).to_block(to).address(addrs).event_signature(vec![
-            IMetaToken::PaymentSettled::SIGNATURE_HASH,
-            IMetaToken::MetaTransactionExecuted::SIGNATURE_HASH,
+            IToken::PaymentSettled::SIGNATURE_HASH,
+            IToken::MetaTransactionExecuted::SIGNATURE_HASH,
         ]);
         Ok(self.chains[0].primary().get_logs(&f).await?.iter().filter_map(encode_event).collect())
     }

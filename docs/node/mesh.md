@@ -5,7 +5,7 @@ behind one relayer. Two transports feed **one pipeline**: the **pull bus** for a
 data) and **libp2p gossip** for the open mesh ([gossip.md](gossip.md)). Same envelope, same `accept()`, same store,
 same dedup, same scheduler. This file covers the envelope, the bus, the acceptance policy, exclusivity and the private
 profile. Status: envelope, per-family digests, hub signature, acceptance L0–L3 and export filter **BUILT** as a library
-(43 conformance cases); bus, scheduler and pipeline **SPECIFIED**.
+(46 conformance cases; 43 in the design); bus, scheduler and pipeline **SPECIFIED**.
 
 | Aspect | Pull bus (admitted peers) | Open mesh (gossip) |
 |---|---|---|
@@ -343,7 +343,7 @@ sender-chosen id; with id = digest the two are one value).
 
 | Family | `intent_id` = | Routing fields decoded from | Implementations that must agree |
 |---|---|---|---|
-| `evm`, `hedera` | `keccak256(0x1901 ‖ domainSeparator(name, version, chainId, contract, salt) ‖ hashStruct(canonical(m)))`; `chainId` = number in `chain_key`; `salt` = the receiver's own `chain.chain_uid`, never a value from the envelope (target; deployed tokens have no salt yet, [NODE-GW-07](gateway.md#NODE-GW-07)); a self-call `data` must be canonical before hashing ([NODE-JOB-20](job-api.md#NODE-JOB-20)) | `meta_tx` (all signed) | `MetaTxLib.hashStruct` (`smartcontracts/src/common/MetaTxLib.sol`), `metatx.rs` `digest()`, client libraries |
+| `evm`, `hedera` | `keccak256(0x1901 ‖ domainSeparator(name, version, chainId, contract, salt) ‖ hashStruct(canonical(m)))`; `chainId` = number in `chain_key`; `salt` = the receiver's own `chain.chain_uid`, never a value from the envelope ([NODE-GW-07](gateway.md#NODE-GW-07); a chain known only from the policy table has none ⇒ `UNKNOWN_CHAIN`); a self-call `data` must be canonical before hashing ([NODE-JOB-20](job-api.md#NODE-JOB-20)) | `meta_tx` (all signed) | `MetaTxLib.hashStruct` (`smartcontracts/src/common/MetaTxLib.sol`), `metatx.rs` `digest()`, client libraries |
 | `cosmos` | `sha256(payload)` | payload JSON (`MetaOp`) | contract `metaop` (`metaop/src/lib.rs` = `chains/cosmos/metaop/src/lib.rs`), client libraries |
 | `sui` | `blake2b256([3,0,0] ‖ bcs(vector<u8>(payload)))` | `adapters/sui.rs` `MetaOp::decode` (l.136) | `meta.move` `op_digest`, `adapters/sui.rs` `personal_digest`, client libraries |
 | `aptos` | `sha3_256(payload)` | `adapters/aptos.rs` `MetaOp::decode` (l.149) | `meta.move`, client libraries |
@@ -434,15 +434,15 @@ also checks that the client's own digest functions (`build_terms`/`digest` per f
 `submit_meta_tx` is the struct the submitter would encode after normalization. Required cases (accept unless a code is
 given):
 
-1. EVM open FIXED fee, a payment `MetaTransfer` (`entryRef ≠ 0`) — intent_id equal to the `metatransfer_kat.json` vector in `smartcontracts/evm/test/vectors`.
+1. EVM open FIXED fee, a payment `MetaTransfer` (`entryRef ≠ 0`); case 3a is the `metatransfer_kat.json` vector verbatim.
 2. EVM open mode with garbage in `relayer` and `feeRecipient` ⇒ **same** `intent_id` as case 1;
    `submit_meta_tx.feeRecipient` = `fee_recipient`, `relayer` = 0.
 3. EVM `MODE_RESTRICT_RELAYER` with a lane address (accepted; `may_submit` only for that lane's node).
 4. EVM `MODE_RESTRICT_RELAYER`, `relayer = 0` ⇒ `RELAYER_BOUND_ZERO`.
-5. EVM `MetaTransfer` ⇒ selector `"transfer"` (`entryRef = 0`) or `"pay"`.
+5. EVM `MetaTransfer` ⇒ selector `"transfer"` (`entryRef = 0`) or `"pay"`; a `MetaTransaction` ⇒ its 4-byte selector.
 6. EVM `sig_kind = erc1271` (no local recover, accepted).
 7. EVM high-s signature ⇒ `BAD_SIGNATURE`.
-8. Hedera `hedera:296` (chain id 296 in the domain).
+8. Hedera `hedera:296` (chain id 296 in the domain); an EVM chain whose `chain_uid` the receiver lacks ⇒ `UNKNOWN_CHAIN`.
 9–13. Cosmos, Sui, Aptos, TON, Solana `pay` ops whose payload/digest are the existing cross-language vectors
    (`chains/cosmos/tests`, `adapters/aptos.rs` `payload_and_digest_match_move_and_python`, `adapters/solana.rs`
    `payload_digest_and_addresses_match_python_and_the_program`, `adapters/sui.rs` tests,
@@ -465,7 +465,7 @@ given):
 27. Non-EVM `extra` changed after signing ⇒ `BAD_HUB_SIG`.
 28. `published_at = now − 3000`, `validUntil = now + 300` ⇒ accepted (catch-up); `published_at = now + 60` ⇒
     `BAD_ENVELOPE`.
-29. NONE-mode intent with `fee = 10^30`, policy `min_fee = 1` ⇒ accepted, `fee_effective = "0"`, `may_submit = false`.
+29. NONE-mode intent with `fee = 10^30`, or a PERCENT `MetaTransaction`, policy `min_fee = 1` ⇒ accepted, `fee_effective = "0"`, `may_submit = false`.
 30. Unregistered contract with a `full`/`submit` policy ⇒ accepted, `may_submit = false`.
 31. Body string with a non-ASCII character ⇒ `BAD_ENVELOPE`.
 32. Body whose object keys are deliberately **unsorted** on the wire ⇒ the expected `body_hash` is that of the sorted
@@ -473,7 +473,7 @@ given):
 
 A client library uses the file to check that its own digest functions produce the same `intent_id` for cases 1–13
 and that `json.dumps(sort_keys=True, separators=(',', ':'))` gives the same `body_hash` (a third implementation of the
-digest). The built library has 43 cases (the list above plus the per-family twins and gossip-era splits).
+digest). The built library has 46 cases (the list above plus the per-family twins and gossip-era splits).
 
 ## <a id="acceptance"></a>4. Acceptance
 

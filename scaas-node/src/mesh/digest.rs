@@ -10,14 +10,14 @@ use super::accept::ChainInfo;
 use super::envelope::Envelope;
 use super::Code;
 use crate::adapters::{aptos, solana, sui, ton};
-use crate::metatx::{self, Domain, MetaTransaction, WireMetaTx, MODE_FEE_MASK, MODE_RESTRICT_FEE_RECIPIENT, MODE_RESTRICT_RELAYER};
+use crate::metatx::{Domain, Mtx, MODE_FEE_MASK, MODE_RESTRICT_FEE_RECIPIENT, MODE_RESTRICT_RELAYER};
 
 const METAOP_DOMAIN: &str = "scaas.metaop.v1";
 
 /// Phần EVM mà L2 còn kiểm sau hạn (§7.2) và submitter dùng để dựng `Work`.
 #[derive(Debug, Clone)]
 pub struct Evm {
-    pub meta: MetaTransaction,
+    pub meta: Mtx,
     pub signature: Bytes,
     pub eoa: bool,
 }
@@ -49,10 +49,13 @@ struct EvmName {
     version: String,
 }
 
+/// `evm` body (mesh.md §3.3): `struct` = `call` | `transfer` (absent = `transfer`), `meta_tx` its wire form.
 #[derive(Deserialize)]
 struct EvmBody {
     domain: EvmName,
-    meta_tx: WireMetaTx,
+    #[serde(default, rename = "struct")]
+    struct_: Option<String>,
+    meta_tx: Value,
     signature: String,
     sig_kind: String,
 }
@@ -99,10 +102,12 @@ fn bytes0x(s: &str) -> Result<Vec<u8>, Code> {
 }
 
 /// `FeePolicy.compute` (NONE ⇒ 0, PERCENT ⇒ value × fee / 10^6, FIXED ⇒ fee); chặn trên khi tràn — mô phỏng phân xử.
-pub fn fee_effective(m: &MetaTransaction) -> U256 {
-    match (m.mode & MODE_FEE_MASK) >> 4 {
-        1 => m.value.saturating_mul(m.fee) / U256::from(1_000_000u64),
-        2 => m.fee,
+/// A PERCENT `MetaTransaction`'s basis is an argument of its selector (`mtxSelectors()`, NODE-JOB-20), which this pure
+/// layer does not read: it counts 0, so a `min_fee` floor never over-admits it.
+pub fn fee_effective(m: &Mtx) -> U256 {
+    match ((m.mode() & MODE_FEE_MASK) >> 4, m) {
+        (1, Mtx::Transfer(t)) => t.value.saturating_mul(t.fee) / U256::from(1_000_000u64),
+        (2, _) => m.fee(),
         _ => U256::ZERO,
     }
 }
@@ -129,7 +134,7 @@ fn nonzero(a: &[u8; 32], show: impl Fn(&[u8; 32]) -> String) -> Option<String> {
 /// `chain_key`/`contract` của envelope.
 pub fn decode(env: &Envelope, chain: &ChainInfo) -> Result<Decoded, Code> {
     match env.family.as_str() {
-        "evm" | "hedera" => evm(env),
+        "evm" | "hedera" => evm(env, chain),
         _ => {
             let body: OpBody = serde_json::from_value(env.body().clone()).map_err(|_| BAD)?;
             if body.op_kind != "pay" {
@@ -149,9 +154,11 @@ pub fn decode(env: &Envelope, chain: &ChainInfo) -> Result<Decoded, Code> {
     }
 }
 
-fn evm(env: &Envelope) -> Result<Decoded, Code> {
+fn evm(env: &Envelope, chain: &ChainInfo) -> Result<Decoded, Code> {
     let b: EvmBody = serde_json::from_value(env.body().clone()).map_err(|_| BAD)?;
-    let m = b.meta_tx.to_sol().map_err(|_| BAD)?; // MODE_KNOWN_MASK, nibble phí ≤ 2
+    let m = Mtx::from_wire(b.struct_.as_deref(), &b.meta_tx).map_err(|_| BAD)?; // MODE_KNOWN_MASK, nibble phí ≤ 2
+    // The salt is the receiver's own `chain_uid`, never a value from the envelope (NODE-MESH-08).
+    let salt = chain.chain_uid.ok_or(Code::UnknownChain)?;
     let contract: Address = env.contract.parse().map_err(|_| BAD)?;
     if format!("{contract:#x}") != env.contract {
         return Err(BAD);
@@ -166,18 +173,23 @@ fn evm(env: &Envelope) -> Result<Decoded, Code> {
         version: b.domain.version,
         chain_id: env.network().parse().map_err(|_| BAD)?,
         verifying_contract: contract,
+        salt,
     };
-    let data = &m.data;
+    let selector = match &m {
+        Mtx::Call(c) => hex0x(&c.data[..c.data.len().min(4)]),
+        Mtx::Transfer(t) if t.entryRef.is_zero() => "transfer".into(),
+        Mtx::Transfer(_) => "pay".into(),
+    };
     Ok(Decoded {
-        intent_id: metatx::digest(&domain, &m).0,
-        from: format!("{:#x}", m.from),
-        lane: m.batch.to_string(),
-        nonce: m.nonce.to_string(),
-        valid_until: u64::try_from(m.validUntil).unwrap_or(u64::MAX),
-        relayer: (m.mode & MODE_RESTRICT_RELAYER != 0).then(|| format!("{:#x}", m.relayer)),
-        fee_recipient: (m.mode & MODE_RESTRICT_FEE_RECIPIENT != 0).then(|| format!("{:#x}", m.feeRecipient)),
+        intent_id: m.digest(&domain).0,
+        from: format!("{:#x}", m.from()),
+        lane: m.batch().to_string(),
+        nonce: m.nonce().to_string(),
+        valid_until: u64::try_from(m.valid_until()).unwrap_or(u64::MAX),
+        relayer: (m.mode() & MODE_RESTRICT_RELAYER != 0).then(|| format!("{:#x}", m.relayer())),
+        fee_recipient: (m.mode() & MODE_RESTRICT_FEE_RECIPIENT != 0).then(|| format!("{:#x}", m.fee_recipient())),
         fee_effective: fee_effective(&m),
-        selector: hex0x(&data[..data.len().min(4)]),
+        selector,
         token: env.contract.clone(),
         account_ok: true,
         evm: Some(Evm { signature: bytes0x(&b.signature)?.into(), meta: m, eoa }),
@@ -187,7 +199,7 @@ fn evm(env: &Envelope) -> Result<Decoded, Code> {
 /// L2 EVM sau kiểm hạn (§4.4): relayer ràng buộc mà bằng 0 là intent chết; `eoa` ⇒ `ecrecover == from`, low-s,
 /// `v ∈ {27, 28}` như `ECDSA.tryRecover` của contract.
 pub fn check_evm(e: &Evm, intent_id: &[u8; 32]) -> Result<(), Code> {
-    if e.meta.mode & MODE_RESTRICT_RELAYER != 0 && e.meta.relayer == Address::ZERO {
+    if e.meta.mode() & MODE_RESTRICT_RELAYER != 0 && e.meta.relayer() == Address::ZERO {
         return Err(Code::RelayerBoundZero);
     }
     if !e.eoa {
@@ -197,7 +209,7 @@ pub fn check_evm(e: &Evm, intent_id: &[u8; 32]) -> Result<(), Code> {
     let ok = s.len() == 65
         && matches!(s[64], 27 | 28)
         && Signature::try_from(s.as_ref()).is_ok_and(|sig| {
-            sig.normalize_s().is_none() && sig.recover_address_from_prehash(&B256::from(*intent_id)).ok() == Some(e.meta.from)
+            sig.normalize_s().is_none() && sig.recover_address_from_prehash(&B256::from(*intent_id)).ok() == Some(e.meta.from())
         });
     ok.then_some(()).ok_or(Code::BadSignature)
 }
@@ -305,15 +317,18 @@ mod tests {
 
     #[test]
     fn effective_fee_per_mode() {
-        let mut m = WireMetaTx { from: format!("{:#x}", Address::ZERO), to: format!("{:#x}", Address::ZERO), value: "2000000".into(),
-            data: "0x".into(), batch: "0".into(), nonce: "0".into(), valid_until: "1".into(), mode: 0, relayer: format!("{:#x}", Address::ZERO),
-            fee: "1000000000000000000000000000000".into(), fee_recipient: format!("{:#x}", Address::ZERO) };
-        assert_eq!(fee_effective(&m.to_sol().unwrap()), U256::ZERO, "NONE ignores fee");
-        m.mode = 0x10;
-        m.fee = "2500".into();
-        assert_eq!(fee_effective(&m.to_sol().unwrap()), U256::from(5000u64), "PERCENT: 2e6 × 2500 / 1e6");
-        m.mode = 0x20;
-        assert_eq!(fee_effective(&m.to_sol().unwrap()), U256::from(2500u64));
+        let z = format!("{:#x}", Address::ZERO);
+        let w = |mode: u32| serde_json::json!({"from": z, "to": z, "value": "2000000",
+            "entryRef": format!("{:#x}", B256::ZERO), "batch": "0", "nonce": "0", "validUntil": "1", "mode": mode,
+            "relayer": z, "fee": if mode == 0 { "1000000000000000000000000000000" } else { "2500" }, "feeRecipient": z});
+        let t = |mode| Mtx::from_wire(Some("transfer"), &w(mode)).unwrap();
+        assert_eq!(fee_effective(&t(0)), U256::ZERO, "NONE ignores fee");
+        assert_eq!(fee_effective(&t(0x10)), U256::from(5000u64), "PERCENT: 2e6 × 2500 / 1e6");
+        assert_eq!(fee_effective(&t(0x20)), U256::from(2500u64));
+        let call = |mode: u32| Mtx::from_wire(Some("call"), &serde_json::json!({"from": z, "data": "0x", "batch": "0",
+            "nonce": "0", "validUntil": "1", "mode": mode, "relayer": z, "fee": "2500", "feeRecipient": z})).unwrap();
+        assert_eq!(fee_effective(&call(0x10)), U256::ZERO, "a PERCENT call's basis is not read here");
+        assert_eq!(fee_effective(&call(0x20)), U256::from(2500u64));
     }
 
     proptest! {

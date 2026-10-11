@@ -4,6 +4,9 @@ pragma solidity ^0.8.24;
 import {Script} from "forge-std/Script.sol";
 import {OpenFactory} from "../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../src/factory/IOpenFactory.sol";
+import {IFactoryToken} from "../src/factory/IFactoryToken.sol";
+import {AdminLib} from "../src/metatx/AdminLib.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {NoUnderlyingToken} from "../src/metatx/NoUnderlyingToken.sol";
 import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
 import {UniversalAccountRegistry} from "../src/registry/UniversalAccountRegistry.sol";
@@ -108,6 +111,34 @@ abstract contract DeployBase is Script {
         vm.serializeAddress("deploy", "zether_verifier_bls12381", address(bls));
         vm.serializeAddress("deploy", "implementation_none_zether", address(none));
         vm.serializeAddress("deploy", "implementation_underlying_zether", address(und));
+    }
+
+    /// @notice Two kind-`NONE` demo tokens from `f` (dev chains; only when the deployer is the registrar): 6 decimals,
+    ///         `PAYABLE`, `supply` each to the deployer, half of each to `holder`; JSON `demo_token`, `demo_token_2`.
+    function _demoTokens(OpenFactory f, uint256 supply, address deployer, address holder)
+        internal returns (address demo, address demo2)
+    {
+        demo = _demoToken(f, "SCaaS Demo USD", "bUSD", supply, deployer, "demo");
+        demo2 = _demoToken(f, "SCaaS Demo Points", "bPTS", supply, deployer, "demo2");
+        if (holder != deployer) {
+            IERC20(demo).transfer(holder, supply / 2);
+            IERC20(demo2).transfer(holder, supply / 2);
+        }
+        vm.serializeAddress("deploy", "demo_token_2", demo2);
+        vm.serializeAddress("deploy", "demo_token", demo);
+    }
+
+    function _demoToken(OpenFactory f, string memory name, string memory symbol, uint256 supply, address holder,
+        bytes32 tokenSalt) private returns (address)
+    {
+        IFactoryToken.TokenConfig memory c;
+        c.name = name;
+        c.symbol = symbol;
+        c.decimals = 6;
+        c.features = 1 << AdminLib.PAYABLE;
+        c.initialSupply = supply;
+        c.initialHolder = holder;
+        return f.createToken(IOpenFactory.TokenKind.NONE, 1, c, tokenSalt);
     }
 
     /// @notice The deploy gate (CTR-GEN-05): `chainUid()` of the deployed contract equals the RPC's genesis hash.

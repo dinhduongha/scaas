@@ -5,9 +5,8 @@ and whose settlement contract settles signed orders on chain. Users never pay ga
 messages that a relayer submits, and a SCaaS token needs **no allowance** to trade — its order is verified by the token
 itself, which moves funds only into the DEX the signer named. Status: the target of this file (token-verified
 `TradeOrder`s, `SCaaSDex.mtxSettle`, outside-token legs, one signed fee rate, the exchange path against AMMs
-`mtxExchange`, the `DexPuller`) **SPECIFIED**, **BUILT** (`SCaaSDex`, P2b-1, P2b-2, P2c);
-`SCaaSDexV1` (DEX-signed orders over allowances, the node's DEX until P5) and the legacy `MetaTxDex` are **BUILT**
-([Transitional](#transitional-built)); non-EVM settlement programs **BUILT** with the fixes below **SPECIFIED**.
+`mtxExchange`, the `DexPuller`) **BUILT** (`SCaaSDex`, P2b-1, P2b-2, P2c; the node's venue on it, P5); `SCaaSDexV1` and
+`MetaTxDex` are in `legacy/p5/` ([Transitional](#transitional-built)); non-EVM settlement programs **BUILT** with the fixes below **SPECIFIED**.
 
 **Contents**
 
@@ -418,8 +417,8 @@ if `signer.codehash` is the `SmartKeyAccount` clone codehash (immutable at deplo
 does, [CTR-ACC-05](accounts.md#CTR-ACC-05)), else 50 k; at most 32 bytes of returndata are copied; before the call it
 requires `gasleft() ≥ cap · 64/63 + margin`, otherwise the whole transaction reverts (EIP-150: a relayer must not
 starve the call to turn a valid signature into an invalid one). `mtxCancelOrders` needs no `try`: a capped check
-only returns `false` ⇒ the item is skipped. The node does not restore an ERC-1271 order whose settlement failed out of
-gas. Why: the built contract calls `SignatureChecker` without a cap (`SCaaSDexV1.sol:383-384`), so a contract maker
+only returns `false` ⇒ the item is skipped. Not built (Q2 open): the node not restoring an ERC-1271 order whose
+settlement failed out of gas; today it restores every failed leg still open and funded. Why: the v1 DEX called `SignatureChecker` without a cap (`SCaaSDexV1.sol:383-384`, `legacy/p5/`), so a contract maker
 that answers correctly under `eth_call` but burns gas or returns huge returndata in the real block breaks a whole
 `settle` batch (the remaining 1/64 gas is not enough for the next pairs) and **every** `cancel` batch. SCaaS legs get
 the same cap inside their token. Status **BUILT** (P2b-2).
@@ -502,54 +501,20 @@ intake fails alone (`MatchFailed`). The node side (home-bound orders only, the f
 
 <a id="legacy-metatxdex"></a><a id="relayer-fee-rounding"></a>
 
-`SCaaSDexV1` (`src/dex/SCaaSDexV1.sol`, the DEX built before P2b, renamed; the new `SCaaSDex` is a different contract) is still deployed by the script for the node (`dex.rs`, `dex_kat.json`, e2e key `scaas_dex`) until P5, then moves to `legacy/` (owner: backup, not delete). The rest of this section is `SCaaSDexV1`; the rebuild replaces it (a new deployment; users re-sign their resting orders):
-
-- **Orders.** `SCaaSDexV1` signs orders on the DEX, `name = "SCaaS Dex"`, `version = "1"`, `chainId`, `verifyingContract = DEX`, no salt: `Order(address
-  maker,address taker,address sellToken,address buyToken,uint256 sellAmount,uint256 buyAmount,uint256 nonce,uint256 expiry,uint32 maxFeePpm,uint8 flags,address
-  relayer,uint8 feeMode,uint256 fee,address feeToken,address feeRecipient)` — `maker` the signer, `taker` 0 = anyone or only this counterparty (RFQ), `nonce` unique
-  per maker (clients use `unix_ms·2^20 + random20`), valid while `nonce >= minNonce[maker]`, `maxFeePpm` the highest market fee accepted in any role, flags bit0
-  `FOK`, bit1 `IOC`.
-- **`settle(Match[]) returns (bool[])`**, `Match = {ref, maker, makerSig, taker, takerSig, makerFill, takerFill}` (`makerFill` of `maker.sellToken`, `takerFill` of
-  `taker.sellToken`), one pair per `try this.settleOne(m, msg.sender)` — atomic per pair, a failing pair emits `MatchFailed`, none ⇒ `NothingSettled`; the real
-  relayer is passed in because inside the self-call `msg.sender == DEX`. Checks before any transfer: flags valid, `block.timestamp <= expiry`, nonce, relayer,
-  `taker` ∈ {0, counterparty}, signature; `M.sellToken == T.buyToken`, `M.buyToken == T.sellToken`, `sellToken != buyToken`, `M.maker != T.maker`, market listed;
-  `makerFill > 0`, `takerFill > 0`, `filled[h] + fill <= sellAmount`, FOK ⇒ `filled[h] == 0 && fill == sellAmount`; price `takerFill · M.sellAmount >= makerFill ·
-  M.buyAmount` and `makerFill · T.sellAmount >= takerFill · T.buyAmount`; `feeOn ⇒ makerPpm <= M.maxFeePpm && takerPpm <= T.maxFeePpm`. Then direct
-  `transferFrom(payer → payee)`: M → T `makerFill − takerDexFee`, T → M `takerFill − makerDexFee`, `takerDexFee = makerFill · takerPpm / 1e6` and `makerDexFee =
-  takerFill · makerPpm / 1e6` to the market fee recipient, each order's relayer fee on top; events `emit OrderFilled(ref, hash, owner, Fill)` per side and `emit
-  Matched(ref, makerHash, takerHash)`. The book fills at the maker's price, `takerFill = ceil(makerFill · M.buy / M.sell)`. IOC remainders are closed after the loop
-  (`filled = sellAmount`).
-- **Fees.** `setMarket(base, quote, listed, feeOn, makerPpm, takerPpm, feeRecipient)`, cap `FeePolicy.MAX_FEE_PPM`, `feeRecipient ∉ {0, DEX}`; the market fee per
-  fill rounds down, `fill * ppm / PPM` (`SCaaSDexV1.sol:216-217`; with `ppm > 0` the fix is `Math.mulDiv(fill, ppm, PPM, Math.Rounding.Ceil)`, `ppm ≤ MAX_FEE_PPM` ⇒
-  `fee ≤ fill` and `fee · PPM ≥ fill · ppm`, tested with `ppm = 3_000` and `feeOn = false`; the floor test `test_feeOnSplitsReceivedAmountsWithoutDust`,
-  `SCaaSDexV1.t.sol:439-454`, changes to round up). The relayer fee uses `FeeMode`: `PERCENT` in `sellToken` (`feeToken ∈ {0, sellToken}`,
-  `FeePolicy.compute(PERCENT, fill, fee)`), `FIXED` pro-rata `fee · fill / sellAmount` rounded down (paid in `sellToken` it needs `fee <= 1 % · sellAmount`,
-  `FeePolicy.compute(FIXED, sellAmount, fee)`); recipient `feeRecipient` or the sender; `feeRecipient = DEX` reverts `FeeWouldStick`. Invariants: `filled[h] <=
-  sellAmount`; `received + fee == fill` per leg.
-- **Allowance.** The DEX is the only spender; users approve it gaslessly with the token's meta-tx op `approve(address spender,uint256)`, `data = approve(address
-  spender,uint256 amount)` (68 bytes; `m.value == 0`, `m.to == spender`, spender a contract; executed as `_approve(from, spender, amount)`), on a random lane
-  (`keccak("scaas.dex.approve" ‖ rand)`), relayer fee forced to 0 (`test_approveOpRelayerFeeIsCappedToZero`). Intake read `checkOrder(Order o, bytes sig) view
-  returns (bytes32 hash, uint8 status, uint256 remaining, uint256 fundable, uint256 feeFundable)`, `fundable = min(balanceOf, allowance(DEX))`, `status` ∈ `OK,
-  BAD_FLAGS, EXPIRED, NONCE_INVALID, BAD_SIG, CLOSED, NOT_LISTED, BAD_FEE` (`SCaaSDexV1.sol:93-100`); the node compares `maxFeePpm` with the market fee (`dex.rs:565,
-  616-624`).
-- **Cancel.** `cancel(CancelReq[])` — `cancel(CancelReq[] reqs)`, `CancelReq = {Order order; bytes sig}`: a `CancelOrder(hash(o))` signature sets `filled[h] =
-  o.sellAmount`; `invalidateNonces(maker, newMin, sig)` (signed as `invalidateNonces(maker, minNonce, sig)`) with `minNonce <= 2^128 − 1` (`type(uint128).max`,
-  `SCaaSDexV1.sol:89`). The 1271 branch has no cap (`MetaToken.sol:141-143` caps the token side only).
-- **Legacy `MetaTxDex`** (no gateway route, `ReentrancyGuardTransient`, no owner or sweep): two `MetaTransaction` legs with `data = trade(counterToken,
-  minCounterValue, counterparty)`, `to = relayer = MetaTxDex`, `MODE_RESTRICT_RELAYER`, so the token executes a leg only when `relayer == to == msg.sender`.
-  `settle(Leg a, Leg b)`, `Leg = {IERC20MetaTx token; MetaTransaction m; bytes sig}`: `a.token != b.token`, `a.m.from != b.m.from`, `termsA.counterToken == b.token`,
-  `b.m.value >= termsA.minCounterValue` (and symmetrically); a leg with `feeMode != NONE` needs `feeRecipient != 0` and `!= this` (else the default `feeRecipient =
-  msg.sender` would strand it); `executeMetaTransaction` on both tokens, the measured delta must equal `m.value`; it pays `a.m.value` to `b.m.from` and `b.m.value`
-  to `a.m.from` with `SafeERC20.safeTransfer` and `emit TradeSettled(a.m.from, b.m.from, a.token, b.token, a.m.value, b.m.value)`. Fill-or-kill; the surplus
-  `b.m.value > minCounterValue` belongs to the seller of leg A.
-
-`MetaTxDex` stays (built and deployed) until its planned removal (P5, to `legacy/`). The rebuild (`SCaaSDex`, P2b-1, P2b-2, P2c) drops its trade and approve ops, renames `settle`/`cancel`/`invalidateNonces` to `mtxSettle`/`mtxCancelOrders`/`mtxInvalidateNonces`, keeps the DEX-domain `Order` only as `DexOrder`, allowances only to the `DexPuller`, the relayer fee only as its share of the signed DEX fee, and adds the exchange path ([CTR-DEX-20](#CTR-DEX-20)…[-23](#CTR-DEX-23)).
+`SCaaSDexV1` (DEX-signed `Order(address maker,address taker,address sellToken,address buyToken,uint256 sellAmount,uint256 buyAmount,uint256 nonce,uint256 expiry,uint32 maxFeePpm,uint8 flags,address relayer,uint8 feeMode,uint256 fee,address feeToken,address feeRecipient)` over allowances to the DEX, `settle(Match[])` pair by pair, a market fee per side
+rounded down plus a separate relayer fee in `feeToken`, `checkOrder`, `cancel`, `invalidateNonces`, an uncapped ERC-1271
+check) and the legacy `MetaTxDex` (two `MetaTransaction` legs with the token's `trade` op; the 68-byte `approve` op) left the build in P5 with the
+v1 token line (`smartcontracts/evm/legacy/p5/`, with their tests and the vector `dex_kat.json`; owner: backup, not
+delete); the node's venue moved to `SCaaSDex` in the same release. The rebuild (`SCaaSDex`, P2b-1, P2b-2, P2c) dropped
+the trade and approve ops, renamed `settle`/`cancel`/`invalidateNonces` to `mtxSettle`/`mtxCancelOrders`/`mtxInvalidateNonces`,
+keeps the DEX-domain `Order` only as `DexOrder`, allowances only to the `DexPuller`, the relayer fee only as its share
+of the signed DEX fee, and adds the exchange path ([CTR-DEX-20](#CTR-DEX-20)…[-23](#CTR-DEX-23)).
 
 ## 14. Conformance
 
 | Layer | Tests |
 |---|---|
-| forge | Path A and Path B, one taker × many makers; `mtxTrade` on a closed, cancelled or IOC-pulled order and with `sellFill = 0` reverts; Path B `sellFill ≠ amount` reverts; `dex` = EOA refused; caller ≠ `dex` refused; every `mtxTrade` error; effective minimum fill for taker and makers incl. the remainder close and `minFill > amount`; FOK via `minFill = amount`; taker fee charged once on the aggregate; split rounding; conservation (unit + invariant: the DEX holds 0 after every handler sequence; for the new DEX the unit tests are built in `test/v2/Dex.t.sol` (P2b-1: settle with two makers, maker rounding, aggregate fee, Path B fee, signed `minFill` and refund, Path A figures seen by the token, isolated failure, arrangement checks, `createDex` and the DEX catalogue, registry, fee split, salted domain) and `test/v2/DexOutside.t.sol` (P2b-2: outside legs through the puller, `DexOrder` digest, `ESCROW` refused, DEX cancels, the ERC-1271 cap by codehash, hostile 1271 signers in settle and cancel batches, the bounded `MatchFailed` reason, a starved check reverting the call, fee-on-transfer, rebasing and no-return tokens) and `test/v2/DexExchange.t.sol` (P2c: routes through mock routers, v2-style pairs and executors, cycles, Path B and outside legs, surplus and remainder, leftovers, `InsufficientOutput`, the interaction blocklist, `LISTED_POOLS` × `setListedOnly`, hostile targets and executors, allowances reset, a fee-on-transfer sell token; the Uniswap fork test is open), and the invariant suite is open); `DexOrder` legs incl. a fallback-only "token" classified outside and `ESCROW` refused; cancel per token and per DEX (signature, replay, lane cap); ERC-1271 maker under the 400 k cap; a 1271 maker that burns gas or returns a returndata bomb inside a multi-settlement call (the others still settle) and inside a cancel batch; replay of an order on another token, another DEX or another chain fails; salted-domain KATs for `TradeOrder`, `CancelOrder`, `InvalidateNonces` → `test/vectors/trade_kat.json` (built, P2a); `DexOrder` → `test/vectors/dex_kat.json`, which stays the `SCaaSDexV1` `Order` vector the node reads (controller ruling, pending the owner); the fee round-up cases above; exchange path: an interaction calling `mtxTrade` of a resting order, targeting the DEX or the puller, or `transferFrom(victim, …)` (all refused or failing); surplus split over several legs receiving one token, remainder to the last; a sold-only or intermediate leftover reverts; `InsufficientOutput`; a profitable cycle X→X; multi-hop through mock Uniswap v2/v3 and a fork test with real Uniswap bytecode on anvil; `LISTED_POOLS` × `setListedOnly` on both entry points; an executor returning less (revert) or more (distributed), re-entering, calling `mtxTrade` or the puller; `receiveToken == this` on the token; a Path B leg; an outside leg through the puller in `mtxSettle` and `mtxExchange`; a reverting and a gas-burning target; invariant: between calls the DEX holds 0 of every token and residual allowances move nothing |
+| forge | Path A and Path B, one taker × many makers; `mtxTrade` on a closed, cancelled or IOC-pulled order and with `sellFill = 0` reverts; Path B `sellFill ≠ amount` reverts; `dex` = EOA refused; caller ≠ `dex` refused; every `mtxTrade` error; effective minimum fill for taker and makers incl. the remainder close and `minFill > amount`; FOK via `minFill = amount`; taker fee charged once on the aggregate; split rounding; conservation (unit + invariant: the DEX holds 0 after every handler sequence; for the new DEX the unit tests are built in `test/v2/Dex.t.sol` (P2b-1: settle with two makers, maker rounding, aggregate fee, Path B fee, signed `minFill` and refund, Path A figures seen by the token, isolated failure, arrangement checks, `createDex` and the DEX catalogue, registry, fee split, salted domain) and `test/v2/DexOutside.t.sol` (P2b-2: outside legs through the puller, `DexOrder` digest, `ESCROW` refused, DEX cancels, the ERC-1271 cap by codehash, hostile 1271 signers in settle and cancel batches, the bounded `MatchFailed` reason, a starved check reverting the call, fee-on-transfer, rebasing and no-return tokens) and `test/v2/DexExchange.t.sol` (P2c: routes through mock routers, v2-style pairs and executors, cycles, Path B and outside legs, surplus and remainder, leftovers, `InsufficientOutput`, the interaction blocklist, `LISTED_POOLS` × `setListedOnly`, hostile targets and executors, allowances reset, a fee-on-transfer sell token; the Uniswap fork test is open), and the invariant suite is open); `DexOrder` legs incl. a fallback-only "token" classified outside and `ESCROW` refused; cancel per token and per DEX (signature, replay, lane cap); ERC-1271 maker under the 400 k cap; a 1271 maker that burns gas or returns a returndata bomb inside a multi-settlement call (the others still settle) and inside a cancel batch; replay of an order on another token, another DEX or another chain fails; salted-domain KATs for `TradeOrder`, `CancelOrder`, `InvalidateNonces` → `test/vectors/trade_kat.json` (built, P2a); `DexOrder`, the DEX cancels and the `mtxSettle` calldata → `test/vectors/dex_order_kat.json` (built, P5; read by the node and clientkeys); the fee round-up cases above; exchange path: an interaction calling `mtxTrade` of a resting order, targeting the DEX or the puller, or `transferFrom(victim, …)` (all refused or failing); surplus split over several legs receiving one token, remainder to the last; a sold-only or intermediate leftover reverts; `InsufficientOutput`; a profitable cycle X→X; multi-hop through mock Uniswap v2/v3 and a fork test with real Uniswap bytecode on anvil; `LISTED_POOLS` × `setListedOnly` on both entry points; an executor returning less (revert) or more (distributed), re-entering, calling `mtxTrade` or the puller; `receiveToken == this` on the token; a Path B leg; an outside leg through the puller in `mtxSettle` and `mtxExchange`; a reverting and a gas-burning target; invariant: between calls the DEX holds 0 of every token and residual allowances move nothing |
 | non-EVM | a third party settling on Cosmos/Soroban/TON fails; `min_nonce` above the cap refused; a dust fill pays fee 1 |
 | e2e (anvil 31950–31959, gateway 18650–18659) | two orders through the gateway → partial match → settle job → balances, no `approve` for SCaaS tokens; cancel ⇒ settle never runs; venue restart ⇒ book intact |
 | managed markets (forge) | one e2e with a regulated equity and an unregulated stablecoin: frozen maker, ineligible taker, ineligible fee recipient, an eligible pair settles |

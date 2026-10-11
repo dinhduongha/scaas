@@ -276,7 +276,8 @@ async fn main() -> Result<()> {
                 }
                 _ => None,
             };
-            gw_chains.insert(num, gateway::GwChain { chain: shared, tx, tokens, dex: venue, breaker: first_breaker, fee_recipient: cc.fee_recipient });
+            let guard = Arc::new(scaas_node::guard::Guard::new(cc, tokens.clone()));
+            gw_chains.insert(num, gateway::GwChain { chain: shared, tx, tokens, dex: venue, breaker: first_breaker, fee_recipient: cc.fee_recipient, guard });
         }
     }
     if cfg.modules.gateway {

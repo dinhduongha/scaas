@@ -11,15 +11,16 @@ use std::time::{Duration, Instant};
 use alloy::primitives::{Address, Bytes, B256, U256};
 use alloy::providers::Provider;
 use alloy::rpc::types::TransactionReceipt;
-use alloy::sol_types::SolCall;
 use anyhow::Result;
 use tokio::sync::mpsc;
 use tracing::{info, warn};
 
-use crate::abi::{IMetaToken, MetaTransaction};
 use crate::breaker::Breaker;
 use crate::chain::{Chain, SimError};
+use crate::abi::IToken;
 use crate::config::ChainCfg;
+use crate::guard::{self, Guard, Refusal};
+use crate::metatx::{addr, uint, Mtx};
 use crate::nonce::{bump, plan, Inflight};
 use crate::odoo::{Job, Odoo, Report};
 
@@ -42,6 +43,8 @@ pub struct Work {
     pub valid_until: u64,
     /// `None` cho job `call`.
     pub meta: Option<MetaRef>,
+    /// A token's order or wrap entry (`metatx` job naming `entry`), not a `call` (`guard`).
+    pub entry: bool,
 }
 
 /// Meta-tx bên trong `Work`: đủ để đọc nonce chủ thể (R80) và nhận ra digest trong event (§8.5).
@@ -56,8 +59,8 @@ pub struct MetaRef {
 }
 
 impl MetaRef {
-    pub fn of(token: Address, m: &MetaTransaction, digest: Option<B256>) -> Self {
-        Self { token, from: m.from, batch: m.batch, nonce: m.nonce, digest }
+    pub fn of(token: Address, m: &Mtx, digest: Option<B256>) -> Self {
+        Self { token, from: m.from(), batch: m.batch(), nonce: m.nonce(), digest }
     }
 }
 
@@ -103,23 +106,69 @@ struct Sent {
     fees: (u128, u128),
     at: Instant,
     _guard: Option<InflightGuard>,
+    /// A job tracked after a restart whose payload is not re-signed (refused by the guard, or unreadable): reported
+    /// from its own hash (`hashes[0]`) or from the gap-fill that takes its nonce (review P5 m7).
+    orphan: Option<i64>,
 }
 
-pub fn work_from_job(job: &Job) -> Result<Work> {
+/// NODE-LANE-10 (R84) for the outbox: the unbound `relayer`/`feeRecipient` are normalized here as the gateway does
+/// (`fee_recipient` = `[[chains]] fee_recipient`), never relayed as the job carries them. The digest is left `None`:
+/// the dedup key is the token's own `mtxDigest`, read before submit (`Submitter::with_chain_digest`), never the job's.
+pub fn work_from_job(job: &Job, fee_recipient: Option<Address>) -> Result<Work> {
+    if job.receiver_fee.is_some() {
+        anyhow::bail!("receiver-pays (receiver_fee) is not built in the node; refused, never relayed without it");
+    }
+    if let Some(e) = job.entry.as_deref() {
+        return entry_work(job, e);
+    }
     if let Some(c) = &job.call {
         let data = alloy::hex::decode(c.calldata.strip_prefix("0x").unwrap_or(&c.calldata))?;
         let valid_until = c.valid_until.parse::<u64>()?;
-        return Ok(Work { job_id: Some(job.id), to: c.target, data: data.into(), valid_until, meta: None });
+        return Ok(Work { job_id: Some(job.id), to: c.target, data: data.into(), valid_until, meta: None, entry: false });
     }
     let (Some(m), Some(token), Some(sig)) = (&job.metatx, job.token, &job.signature) else {
         anyhow::bail!("job {} has neither a meta-transaction nor a call", job.id);
     };
-    let m = m.to_sol()?;
+    let mut m = Mtx::from_wire(job.struct_.as_deref(), m)?;
+    m.normalize(fee_recipient);
     let sig = alloy::hex::decode(sig.strip_prefix("0x").unwrap_or(sig))?;
-    let valid_until = m.validUntil.saturating_to();
-    let meta = Some(MetaRef::of(token, &m, job_digest(job)));
-    let data = IMetaToken::executeMetaTransactionCall { m, signature: sig.into() }.abi_encode();
-    Ok(Work { job_id: Some(job.id), to: token, data: data.into(), valid_until, meta })
+    let valid_until = m.valid_until().saturating_to();
+    let meta = Some(MetaRef::of(token, &m, None));
+    Ok(Work { job_id: Some(job.id), to: token, data: m.calldata(sig.into()), valid_until, meta, entry: false })
+}
+
+/// A token's other signed entry point as a `metatx` job (job-api.md, order and wrap entries): the signature is in the
+/// calldata, the target is `token`, no meta-tx lane is involved (`meta` None).
+fn entry_work(job: &Job, entry: &str) -> Result<Work> {
+    use alloy::sol_types::SolCall;
+    let (Some(token), Some(sig)) = (job.token, &job.signature) else {
+        anyhow::bail!("entry job {} without token or signature", job.id);
+    };
+    let sig: Bytes = alloy::hex::decode(sig.strip_prefix("0x").unwrap_or(sig))?.into();
+    let order = || -> Result<crate::abi::TradeOrder> {
+        let w = job.order.clone().ok_or_else(|| anyhow::anyhow!("entry {entry} without order"))?;
+        serde_json::from_value::<crate::dex::WireOrder>(w)?.to_sol()
+    };
+    let deadline = || -> Result<u64> {
+        Ok(job.valid_until.as_deref().ok_or_else(|| anyhow::anyhow!("entry {entry} without validUntil"))?.parse()?)
+    };
+    let text = |v: &Option<String>, f: &str| v.clone().ok_or_else(|| anyhow::anyhow!("entry {entry} without {f}"));
+    let (data, valid_until) = match entry {
+        "mtxCancelOrder" => (IToken::mtxCancelOrderCall { o: order()?, sig }.abi_encode(), deadline()?),
+        "mtxInvalidateNonces" => {
+            let (from, batch, new_min) = (addr(&text(&job.from, "from")?)?, uint(&text(&job.batch, "batch")?)?,
+                uint(&text(&job.new_min, "newMin")?)?);
+            (IToken::mtxInvalidateNoncesCall { from, batch, newMin: new_min, sig }.abi_encode(), deadline()?)
+        }
+        "mtxWrap" => {
+            let o = order()?;
+            let until = o.validUntil.saturating_to();
+            let underlying = job.underlying.ok_or_else(|| anyhow::anyhow!("mtxWrap without underlying"))?;
+            (IToken::mtxWrapCall { underlying, o, sig }.abi_encode(), until)
+        }
+        e => anyhow::bail!("unknown entry {e:?}"),
+    };
+    Ok(Work { job_id: Some(job.id), to: token, data: data.into(), valid_until, meta: None, entry: true })
 }
 
 pub fn now() -> u64 {
@@ -139,6 +188,8 @@ pub struct Submitter {
     breaker: Arc<Mutex<Breaker>>,
     sampled: Option<Instant>,
     tripped: Option<&'static str>,
+    /// PAY-FIX2, NODE-GW-07, NODE-JOB-20: checked before every simulation.
+    guard: Guard,
 }
 
 impl Submitter {
@@ -148,6 +199,8 @@ impl Submitter {
         let nc = odoo
             .node_config_ref(serde_json::json!(cfg.evm_chain_number), Some(format!("{:#x}", chain.address())), Some(node_id.clone()))
             .await?;
+        // NODE-GW-07: a lane of a chain whose block 0 is not the configured chain_uid never starts.
+        let uid = chain.uid().await?;
         let pending = chain.pending_nonce().await?;
         let jobs: Vec<Inflight> = nc
             .inflight
@@ -156,6 +209,8 @@ impl Submitter {
             .collect();
         let p = plan(pending, nc.journal_max_nonce, &jobs);
         let breaker = Arc::new(Mutex::new(Breaker::new(cfg.breaker.clone())));
+        let tokens = std::sync::RwLock::new(nc.tokens.iter().filter_map(crate::odoo::TokenCfg::evm).collect());
+        let guard = Guard::new(&cfg, Arc::new(tokens));
         let mut me = Self {
             chain,
             odoo,
@@ -168,6 +223,7 @@ impl Submitter {
             breaker,
             sampled: None,
             tripped: None,
+            guard,
         };
         for n in &p.gap_fill {
             me.gap_fill(*n).await?;
@@ -179,13 +235,34 @@ impl Submitter {
             let (Some(n), Some(h)) = (j.nonce, j.tx_hash.as_deref()) else { continue };
             let Ok(hash) = h.parse::<B256>() else { continue };
             let fees = me.chain.fees().await?;
-            let work = work_from_job(&j.payload).ok();
+            let work = match work_from_job(&j.payload, me.cfg.fee_recipient) {
+                Ok(w) => Some(match me.with_chain_digest(w.clone()).await {
+                    Ok(w) => w,
+                    Err(SimError::Revert(_)) => w, // no dedup key; its simulation answers for it
+                    Err(SimError::Transport(e)) => anyhow::bail!("mtxDigest: {e}"),
+                }),
+                Err(_) => None,
+            };
+            // review T4 m2: a rebuilt payload is re-signed by `track`, so it passes the guard too; refused ⇒ that
+            // nonce is only ever gap-filled
+            let work = match work {
+                Some(w) => match me.guard.check(&me.chain, &w).await {
+                    Ok(()) => Some(w),
+                    Err(Refusal::Policy(r)) => {
+                        warn!(job = j.job_id, nonce = n, "tracked job refused by the guard: {r}; its nonce is only gap-filled");
+                        None
+                    }
+                    Err(Refusal::Transport(r)) => anyhow::bail!("guard: {r}"),
+                },
+                None => None,
+            };
+            let gas = me.cfg.max_gas_per_tx.min(guard::MAX_TX_GAS);
             // Tập in-flight dựng lại từ việc đang theo dõi (§8.6).
             let guard = work.as_ref().and_then(|w| w.meta?.digest).and_then(|d| me.digests.try_acquire(d));
-            let gas = me.cfg.max_gas_per_tx;
-            me.inflight.insert(n, Sent { work, hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard });
+            let orphan = work.is_none().then_some(j.job_id);
+            me.inflight.insert(n, Sent { work, hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard, orphan });
         }
-        info!(chain = me.cfg.evm_chain_number, next = me.next, tracked = me.inflight.len(), "submit ready");
+        info!(chain = me.cfg.evm_chain_number, chain_uid = %uid, next = me.next, tracked = me.inflight.len(), "submit ready");
         Ok(me)
     }
 
@@ -218,6 +295,15 @@ impl Submitter {
                 None
             }
         };
+        // review T4 m1: the guard's registered tokens follow the client (same cadence as the breaker sample)
+        match self.odoo.node_config(self.cfg.evm_chain_number, None).await {
+            Ok(nc) => {
+                if let Ok(mut t) = self.guard.tokens.write() {
+                    *t = nc.tokens.iter().filter_map(crate::odoo::TokenCfg::evm).collect();
+                }
+            }
+            Err(e) => warn!("token refresh: {e:#}"),
+        }
         if let Ok(mut k) = self.breaker.lock() {
             if let Some(f) = base {
                 k.base_fee(now(), f.into());
@@ -266,13 +352,36 @@ impl Submitter {
         if let Err(e) = self.chain.send_raw(&raw).await {
             warn!(nonce, "gap-fill send: {e:#}");
         }
-        self.inflight.insert(nonce, Sent { work: None, hashes: vec![hash], gas: GAP_FILL_GAS, fees, at: Instant::now(), _guard: None });
+        self.inflight.insert(nonce, Sent { work: None, hashes: vec![hash], gas: GAP_FILL_GAS, fees, at: Instant::now(), _guard: None, orphan: None });
         warn!(nonce, "gap-filled");
         Ok(())
     }
 
-    /// G2: digest đã có tx vỏ sống ở đường khác (lane khác, gateway) ⇒ không ký lần hai.
+    /// The in-flight key of a meta-tx job: the token's own digest (`mtxDigest`/`mtxTransferDigest`, as the gateway
+    /// reads it), never the job's `digest` field (review T2 m6). Other work passes unchanged.
+    async fn with_chain_digest(&self, mut w: Work) -> std::result::Result<Work, SimError> {
+        let (Some(r), Some((m, _))) = (w.meta, Mtx::from_calldata(&w.data)) else { return Ok(w) };
+        w.meta = Some(MetaRef { digest: Some(self.chain.mtx_digest(w.to, m).await?), ..r });
+        Ok(w)
+    }
+
+    /// The guard first (PAY-FIX2, NODE-GW-07, NODE-JOB-20: before any read of the target, simulation or signature),
+    /// then the outbox job's token digest; G2: digest đã có tx vỏ sống ở đường khác (lane khác, gateway) ⇒ không ký
+    /// lần hai.
     pub async fn submit(&mut self, w: Work) {
+        match self.guard.check(&self.chain, &w).await {
+            Ok(()) => {}
+            Err(Refusal::Policy(reason)) => return self.fail(&w, reason).await,
+            Err(Refusal::Transport(reason)) => return self.requeue(&w, reason).await,
+        }
+        let w = match w.meta.filter(|m| m.digest.is_none()) {
+            None => w,
+            Some(_) => match self.with_chain_digest(w.clone()).await {
+                Ok(w) => w,
+                Err(SimError::Revert(r)) => return self.fail(&w, format!("mtxDigest: {r}")).await,
+                Err(SimError::Transport(r)) => return self.requeue(&w, format!("mtxDigest: {r}")).await,
+            },
+        };
         let guard = match w.meta.and_then(|m| m.digest) {
             None => None,
             Some(d) => match self.digests.try_acquire(d) {
@@ -291,9 +400,8 @@ impl Submitter {
             }
             return;
         }
-        let gas = match self.chain.simulate(w.to, w.data.clone()).await {
-            Ok(g) if g <= self.cfg.max_gas_per_tx => g + g / 5,
-            Ok(g) => return self.fail(&w, format!("gas {g} above max_gas_per_tx")).await,
+        let gas = match guard::gas(&self.chain, &w, self.cfg.max_gas_per_tx).await {
+            Ok(g) => g,
             Err(SimError::Revert(reason)) => return self.refused(&w, reason).await,
             Err(SimError::Transport(reason)) => return self.requeue(&w, format!("simulate: {reason}")).await,
         };
@@ -324,24 +432,30 @@ impl Submitter {
             // Không trả nonce lại: tx đã ký nằm trong journal; vòng `track` sẽ thay thế nó.
             Err(e) => warn!(nonce, "send failed, will replace: {e:#}"),
         }
-        self.inflight.insert(nonce, Sent { work: Some(w), hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard });
+        self.inflight.insert(nonce, Sent { work: Some(w), hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard, orphan: None });
     }
 
     /// Mô phỏng revert. Meta-tx mà nonce chủ thể đã qua ⇒ `consumed` (R80: relayer khác có thể đã đưa nó lên chain),
-    /// không `dead`; không đọc được nonce ⇒ tạm thời.
+    /// không `dead`; không đọc được nonce ⇒ tạm thời. An invalidation already in force is done, never dead (MT-8).
     async fn refused(&self, w: &Work, reason: String) {
+        if guard::already_invalidated(&w.data, &reason) {
+            if let Some(id) = w.job_id {
+                self.report(id, "consumed", None, None, Some("already_invalidated".into())).await;
+            }
+            return;
+        }
         match self.consumed(w).await {
             Ok(true) => self.report_consumed(w).await,
             Ok(false) => self.fail(w, reason).await,
-            Err(e) => self.requeue(w, format!("metaNonce: {e:#}")).await,
+            Err(e) => self.requeue(w, format!("mtxNonce: {e:#}")).await,
         }
     }
 
-    /// R80: `metaNonce(from, batch) > nonce` ⇔ nonce chủ thể của meta-tx đã bị dùng (bởi ai thì `classify`).
+    /// R80: `mtxNonce(from, batch) > nonce` ⇔ nonce chủ thể của meta-tx đã bị dùng (bởi ai thì `classify`).
     /// `Ok(false)` cho job `call`. Lỗi RPC ⇒ `Err`: người gọi không bump, không kết luận (fail closed).
     async fn consumed(&self, w: &Work) -> Result<bool> {
         let Some(m) = &w.meta else { return Ok(false) };
-        Ok(self.chain.meta_nonce(m.token, m.from, m.batch).await? > m.nonce)
+        Ok(self.chain.mtx_nonce(m.token, m.from, m.batch).await? > m.nonce)
     }
 
     /// §8.5 — chỉ là nhãn cho `last_error` ở Odoo; `landed_elsewhere` do indexer quyết khi `final`.
@@ -431,7 +545,7 @@ impl Submitter {
             if let Some(w) = s.work.clone().filter(|w| w.meta.is_some()) {
                 match self.consumed(&w).await {
                     Err(e) => {
-                        warn!(nonce = n, "metaNonce: {e:#}; no bump this round");
+                        warn!(nonce = n, "mtxNonce: {e:#}; no bump this round");
                         continue;
                     }
                     Ok(true) => {
@@ -513,11 +627,12 @@ impl Submitter {
     /// `consumed`, không `reverted` (Odoo đặt `failed` và chạy `_fail_dependents`); không đọc được ⇒ giữ, vòng sau.
     async fn settle(&mut self, n: u64, h: B256, rc: TransactionReceipt) {
         let work = self.inflight.get(&n).and_then(|s| s.work.clone());
+        let orphan = self.inflight.get(&n).and_then(|s| Some((s.orphan?, s.hashes.first() == Some(&h))));
         let consumed = match &work {
             Some(w) if !rc.status() => match self.consumed(w).await {
                 Ok(c) => c,
                 Err(e) => {
-                    warn!(nonce = n, "reverted receipt, metaNonce unreadable; retry: {e:#}");
+                    warn!(nonce = n, "reverted receipt, mtxNonce unreadable; retry: {e:#}");
                     return;
                 }
             },
@@ -528,7 +643,18 @@ impl Submitter {
         if let Ok(mut k) = self.breaker.lock() {
             k.spend(now(), paid);
         }
-        let Some(w) = work else { return };
+        let Some(w) = work else {
+            match orphan {
+                Some((id, true)) if rc.status() => _ = self.report(id, "mined", Some(h), None, None).await,
+                Some((id, true)) => _ = self.report(id, "reverted", None, None, None).await,
+                Some((id, false)) => {
+                    let why = "not re-signed after a restart (refused by the guard or unreadable); nonce gap-filled";
+                    _ = self.report(id, "dead", None, None, Some(why.into())).await;
+                }
+                None => {}
+            }
+            return;
+        };
         match (rc.status(), consumed, w.job_id) {
             (false, true, _) => self.report_consumed(&w).await,
             (true, _, Some(id)) => _ = self.report(id, "mined", Some(h), None, None).await,
@@ -558,7 +684,7 @@ impl Submitter {
                     continue;
                 }
             }
-            match work_from_job(&job) {
+            match work_from_job(&job, self.cfg.fee_recipient) {
                 Ok(w) => self.submit(w).await,
                 Err(e) => {
                     let _ = self.report(job.id, "dead", None, None, Some(format!("bad payload: {e:#}"))).await;
@@ -595,28 +721,46 @@ mod tests {
     use alloy::consensus::{Transaction as _, TxEnvelope};
     use alloy::eips::eip2718::Decodable2718;
     use alloy::signers::local::PrivateKeySigner;
-    use alloy::sol_types::SolValue;
+    use alloy::sol_types::{SolCall, SolValue};
     use serde_json::{json, Value};
 
     use super::*;
+    use crate::abi::{IToken, MetaTransfer};
     use crate::adapter::tests::{fake_odoo, Fake, Shared};
-    use crate::metatx::WireMetaTx;
 
     const D: &str = "0x7777777777777777777777777777777777777777777777777777777777777777";
+    /// The fake chain's `chain_uid`: pinned in the config (the fake serves no block 0) and answered by `chainUid()`.
+    const UID: u64 = 0x24;
     const TOKEN: Address = Address::repeat_byte(0xcd);
 
     /// Chain EVM giả qua JSON-RPC thật (alloy nói chuyện với nó như với node thật).
     #[derive(Default)]
     struct Evm {
-        /// Mô phỏng `executeMetaTransaction`: `None` ok, `"revert"`, `"transport"`.
+        /// Mô phỏng `mtxExecuteTransfer`: `None` ok, `"revert"`, `"transport"`.
         sim: Option<&'static str>,
-        /// `metaNonce`: `None` ⇒ lỗi RPC.
-        meta_nonce: Option<u64>,
+        /// `mtxNonce`: `None` ⇒ lỗi RPC.
+        mtx_nonce: Option<u64>,
         /// Số tx của lane đã vào khối (`latest` = `pending`).
         count: u64,
         receipts: HashMap<B256, bool>,
         /// (hash, to, input) mỗi lần `eth_sendRawTransaction`.
         sent: Vec<(B256, Address, Bytes)>,
+        /// The gas limit of each sent tx.
+        gas: Vec<u64>,
+        /// `chainUid()` answers this instead of `UID` (a contract of another chain).
+        uid: Option<u64>,
+        /// `eth_getCode` of every address is non-empty (a contract signer).
+        contract_signer: bool,
+        /// `mtxSettle` settles everything only from this much gas (below: one `ok` false, an empty `MatchFailed`).
+        settle_from: u64,
+        /// `chainUid()`: `"revert"` (no such function) or `"transport"`.
+        uid_err: Option<&'static str>,
+        /// `eth_estimateGas` answers this (default 0x30000).
+        estimate: Option<u64>,
+        /// Only this address has code (`contract_signer` = every address).
+        code_only: Option<Address>,
+        /// Block 0 is the recorded Hedera testnet block, not the pinned `UID` (default: a pruned RPC).
+        genesis: bool,
     }
     type Rpc = Arc<Mutex<Evm>>;
 
@@ -633,20 +777,56 @@ mod tests {
             let word = |v: U256| Value::String(format!("0x{}", alloy::hex::encode(v.abi_encode())));
             let out: Result<Value, Value> = match r["method"].as_str().unwrap() {
                 "eth_getTransactionCount" => Ok(json!(format!("{:#x}", e.count))),
-                "eth_estimateGas" => Ok(json!("0x30000")),
+                "eth_estimateGas" => Ok(json!(format!("{:#x}", e.estimate.unwrap_or(0x30000)))),
                 "eth_feeHistory" => Ok(json!({"oldestBlock": "0x1", "baseFeePerGas": ["0x3b9aca00", "0x3b9aca00"],
                     "gasUsedRatio": [0.5], "reward": [["0x3b9aca00"]]})),
                 "eth_blockNumber" => Ok(json!("0x10")),
                 "eth_getLogs" => Ok(json!([])),
+                "eth_getBalance" => Ok(json!("0xde0b6b3a7640000")),
+                "eth_getBlockByNumber" if e.genesis => {
+                    Ok(serde_json::from_str::<Value>(include_str!("../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone())
+                }
+                "eth_getBlockByNumber" => Ok(Value::Null),
+                "eth_getCode" => {
+                    let a: Address = p[0].as_str().unwrap().parse().unwrap();
+                    Ok(json!(if e.contract_signer || e.code_only == Some(a) { "0x6001" } else { "0x" }))
+                }
                 "eth_call" => {
                     let input = p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap();
                     let sel = alloy::hex::decode(&input[2..10]).unwrap();
-                    if sel == IMetaToken::metaNonceCall::SELECTOR {
-                        e.meta_nonce.map(|n| word(U256::from(n))).ok_or_else(|| err(-32000, "upstream timeout", None))
+                    if sel == IToken::mtxSelectorsCall::SELECTOR {
+                        // the published allowlist: cancelNonce, ABSOLUTE
+                        let out = IToken::mtxSelectorsCall::abi_encode_returns(&IToken::mtxSelectorsReturn {
+                            selectors: vec![alloy::primitives::FixedBytes::<4>::from([0xcf, 0xdd, 0x7a, 0xea])],
+                            feeClass: vec![1],
+                            amountArg: vec![0],
+                        });
+                        Ok(json!(format!("0x{}", alloy::hex::encode(out))))
+                    } else if sel == IToken::supportedModesCall::SELECTOR {
+                        Ok(word(U256::from(0xF3)))
+                    } else if sel == IToken::chainUidCall::SELECTOR {
+                        match e.uid_err {
+                            Some("revert") => Err(err(3, "execution reverted", Some("0x".into()))),
+                            Some(_) => Err(err(-32000, "upstream timeout", None)),
+                            None => Ok(word(U256::from(e.uid.unwrap_or(UID)))),
+                        }
+                    } else if sel == guard::SEL_MTX_SETTLE {
+                        let gas = p[0]["gas"].as_str().map_or(u64::MAX, |g| u64::from_str_radix(&g[2..], 16).unwrap());
+                        let ok = vec![true, gas >= e.settle_from];
+                        Ok(json!(format!("0x{}", alloy::hex::encode(<Vec<bool> as SolValue>::abi_encode(&ok)))))
+                    } else if sel == IToken::mtxTransferDigestCall::SELECTOR || sel == IToken::mtxDigestCall::SELECTOR {
+                        Ok(json!(D))
+                    } else if sel == IToken::mtxNonceCall::SELECTOR {
+                        e.mtx_nonce.map(|n| word(U256::from(n))).ok_or_else(|| err(-32000, "upstream timeout", None))
                     } else {
                         match e.sim {
                             Some("revert") => {
-                                let data = IMetaToken::MetaTxBadNonce { expected: U256::from(1), got: U256::ZERO };
+                                let data = IToken::MetaTxBadNonce { expected: U256::from(1), got: U256::ZERO };
+                                let data = alloy::sol_types::SolError::abi_encode(&data);
+                                Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
+                            }
+                            Some("min_nonce") => {
+                                let data = IToken::MinNonceNotIncreasing { current: U256::from(9), requested: U256::from(9) };
                                 let data = alloy::sol_types::SolError::abi_encode(&data);
                                 Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
                             }
@@ -660,6 +840,7 @@ mod tests {
                     let tx = TxEnvelope::decode_2718(&mut raw.as_slice()).unwrap();
                     let h = *tx.tx_hash();
                     e.sent.push((h, tx.to().unwrap(), tx.input().clone()));
+                    e.gas.push(tx.gas_limit());
                     Ok(json!(format!("{h:#x}")))
                 }
                 "eth_getTransactionReceipt" => {
@@ -689,12 +870,12 @@ mod tests {
         (url, s)
     }
 
-    fn meta(batch: u64) -> MetaTransaction {
-        MetaTransaction {
+    fn meta(batch: u64) -> Mtx {
+        Mtx::Transfer(MetaTransfer {
             from: Address::repeat_byte(0xab),
             to: Address::repeat_byte(0x5e),
             value: U256::from(1_000u64),
-            data: Default::default(),
+            entryRef: B256::repeat_byte(0x42),
             batch: U256::from(batch),
             nonce: U256::ZERO,
             validUntil: U256::from(now() + 600),
@@ -702,32 +883,54 @@ mod tests {
             relayer: Address::ZERO,
             fee: U256::ZERO,
             feeRecipient: Address::ZERO,
-        }
+        })
+    }
+
+    /// The fake client's registered tokens: `TOKEN`.
+    fn toks() -> Value {
+        json!([{"address": format!("{TOKEN:#x}"), "decimals": 6}])
     }
 
     fn job(id: i64) -> Value {
-        json!({"id": id, "kind": "metatx", "token": format!("{TOKEN:#x}"), "digest": D,
-               "signature": format!("0x{}", "11".repeat(65)), "metatx": WireMetaTx::from_sol(&meta(7))})
+        let (kind, wire) = meta(7).to_wire();
+        json!({"id": id, "kind": "metatx", "token": format!("{TOKEN:#x}"), "digest": D, "struct": kind,
+               "signature": format!("0x{}", "11".repeat(65)), "metatx": wire})
     }
 
     async fn lane(rpc: &str, odoo: crate::odoo::Odoo, key: u8, set: InflightSet) -> Submitter {
-        let cfg = ChainCfg {
+        lane_with(rpc, odoo, key, set, None).await
+    }
+
+    async fn lane_with(rpc: &str, odoo: crate::odoo::Odoo, key: u8, set: InflightSet, dex: Option<Address>) -> Submitter {
+        lane_cfg(rpc, odoo, key, set, |c| c.dex = dex).await.unwrap()
+    }
+
+    fn test_cfg(rpc: &str) -> ChainCfg {
+        ChainCfg {
             family: "evm".into(),
             evm_chain_number: 31337,
             rpc_urls: vec![rpc.into()],
             stuck_after_secs: 0,
             max_gas_per_tx: 3_000_000,
             max_fee_cap_gwei: 500,
+            chain_uid: Some(B256::from(U256::from(UID))),
             ..Default::default()
-        };
+        }
+    }
+
+    async fn lane_cfg(rpc: &str, odoo: crate::odoo::Odoo, key: u8, set: InflightSet, tweak: impl FnOnce(&mut ChainCfg))
+        -> Result<Submitter>
+    {
+        let mut cfg = test_cfg(rpc);
+        tweak(&mut cfg);
         let signer = PrivateKeySigner::from_bytes(&B256::repeat_byte(key)).unwrap();
-        Submitter::start(Chain::with_signer(&cfg, signer).unwrap(), odoo, cfg, format!("t#{key}"), set).await.unwrap()
+        Submitter::start(Chain::with_signer(&cfg, signer).unwrap(), odoo, cfg, format!("t#{key}"), set).await
     }
 
     /// Một lane đã gửi job 7 (`signed`, `broadcast`).
     async fn sent_one(e: Evm) -> (Submitter, Rpc, Shared, InflightSet) {
         let (url, rpc) = fake_evm(e).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: json!([]), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
         let set = InflightSet::default();
         let mut s = lane(&url, odoo, 1, set.clone()).await;
         s.poll_outbox().await;
@@ -742,8 +945,8 @@ mod tests {
     /// R80: kẹt mà nonce chủ thể đã bị dùng ⇒ `consumed`, nonce vỏ lấp bằng gap-filler, meta-tx KHÔNG bao giờ gửi lại.
     #[tokio::test]
     async fn consumed_before_bump_gap_fills_and_never_resends_the_metatx() {
-        let (mut s, rpc, o, set) = sent_one(Evm { meta_nonce: Some(0), ..Default::default() }).await;
-        rpc.lock().unwrap().meta_nonce = Some(1);
+        let (mut s, rpc, o, set) = sent_one(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+        rpc.lock().unwrap().mtx_nonce = Some(1);
         let before = BUMP_SKIPPED_CONSUMED.load(Ordering::Relaxed);
         s.track().await;
         s.track().await;
@@ -760,11 +963,11 @@ mod tests {
         assert!(!set.contains(&D.parse().unwrap()));
     }
 
-    /// R80 fail closed: `metaNonce` không đọc được ⇒ không bump vòng này.
+    /// R80 fail closed: `mtxNonce` không đọc được ⇒ không bump vòng này.
     #[tokio::test]
-    async fn unreadable_meta_nonce_means_no_bump() {
-        let (mut s, rpc, o, _) = sent_one(Evm { meta_nonce: Some(0), ..Default::default() }).await;
-        rpc.lock().unwrap().meta_nonce = None;
+    async fn unreadable_mtx_nonce_means_no_bump() {
+        let (mut s, rpc, o, _) = sent_one(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+        rpc.lock().unwrap().mtx_nonce = None;
         s.track().await;
         assert_eq!(rpc.lock().unwrap().sent.len(), 1);
         assert_eq!(states(&o), ["signed", "broadcast"]);
@@ -773,7 +976,7 @@ mod tests {
     /// `Sent.hashes`: bản đã bị thay thế mà vào khối vẫn được nhận ra (trước đây bị thử lại mãi).
     #[tokio::test]
     async fn an_earlier_replaced_hash_that_mines_settles_the_nonce() {
-        let (mut s, rpc, o, _) = sent_one(Evm { meta_nonce: Some(0), ..Default::default() }).await;
+        let (mut s, rpc, o, _) = sent_one(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
         s.track().await;
         let sent = rpc.lock().unwrap().sent.clone();
         assert_eq!((sent.len(), &sent[1].2), (2, &sent[0].2), "live and unconsumed ⇒ the meta-tx is bumped");
@@ -787,16 +990,16 @@ mod tests {
     /// Review H3: tx của ta revert vì người khác đã dùng nonce ⇒ `consumed`, không `reverted`. Đọc nonce hỏng ⇒ giữ, thử lại.
     #[tokio::test]
     async fn a_reverted_receipt_of_a_consumed_metatx_reports_consumed() {
-        let (mut s, rpc, o, _) = sent_one(Evm { meta_nonce: Some(0), ..Default::default() }).await;
+        let (mut s, rpc, o, _) = sent_one(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
         let h = rpc.lock().unwrap().sent[0].0;
         rpc.lock().unwrap().receipts.insert(h, false);
-        rpc.lock().unwrap().meta_nonce = None;
+        rpc.lock().unwrap().mtx_nonce = None;
         s.track().await;
         assert_eq!((s.inflight_count(), states(&o).len()), (1, 2), "unreadable ⇒ kept, nothing reported");
-        rpc.lock().unwrap().meta_nonce = Some(1);
+        rpc.lock().unwrap().mtx_nonce = Some(1);
         s.track().await;
         assert_eq!(states(&o), ["signed", "broadcast", "consumed"]);
-        let (mut s, rpc, o, _) = sent_one(Evm { meta_nonce: Some(0), ..Default::default() }).await;
+        let (mut s, rpc, o, _) = sent_one(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
         let h = rpc.lock().unwrap().sent[0].0;
         rpc.lock().unwrap().receipts.insert(h, false);
         s.track().await;
@@ -807,10 +1010,106 @@ mod tests {
     #[tokio::test]
     async fn simulation_revert_is_classified_by_the_subject_nonce() {
         for (nonce, want) in [(Some(1), "consumed"), (Some(0), "dead"), (None, "queued")] {
-            let (url, _) = fake_evm(Evm { sim: Some("revert"), meta_nonce: nonce, ..Default::default() }).await;
-            let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: json!([]), ..Default::default() }).await;
+            let (url, _) = fake_evm(Evm { sim: Some("revert"), mtx_nonce: nonce, ..Default::default() }).await;
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
             lane(&url, odoo, 1, InflightSet::default()).await.poll_outbox().await;
-            assert_eq!(states(&o), [want], "metaNonce {nonce:?}");
+            assert_eq!(states(&o), [want], "mtxNonce {nonce:?}");
+        }
+    }
+
+    /// PAY-FIX2 / NODE-GW-07 / MT-8, wired into the submitter: refusals come before any simulation or signature.
+    #[tokio::test]
+    async fn the_guard_runs_before_simulation_and_signing() {
+        let run = |e: Evm, jobs: Vec<Value>, dex: Option<Address>| async move {
+            let (url, rpc) = fake_evm(e).await;
+            let (odoo, o) = fake_odoo(Fake { jobs, tokens: json!([{"address": format!("{TOKEN:#x}"), "decimals": 6}]), ..Default::default() }).await;
+            lane_with(&url, odoo, 1, InflightSet::default(), dex).await.poll_outbox().await;
+            let last = o.lock().unwrap().reports.last().cloned().unwrap();
+            let sent = rpc.lock().unwrap().sent.len();
+            (last["chain_state"].as_str().unwrap().to_string(), last["error"].as_str().unwrap_or_default().to_string(), sent, rpc)
+        };
+        let call = |target: Address, data: Vec<u8>| json!({"id": 9, "kind": "call", "call": {"target": format!("{target:#x}"),
+            "calldata": format!("0x{}", alloy::hex::encode(data)), "validUntil": (now() + 300).to_string()}});
+        // a lane's own token balance never leaves through a `call` job
+        let steal = IToken::transferCall { to: Address::repeat_byte(0x7e), value: U256::from(1) }.abi_encode();
+        let (st, err, sent, _) = run(Evm { mtx_nonce: Some(0), ..Default::default() }, vec![call(TOKEN, steal)], None).await;
+        assert_eq!((st.as_str(), sent), ("dead", 0));
+        assert!(err.starts_with("CALL_TARGET_REFUSED"), "{err}");
+        // a call-table row on a target it does not name: `mtxSettle` on a registered token
+        let settle = [&guard::SEL_MTX_SETTLE[..], &[0u8; 32]].concat();
+        let (st, err, ..) = run(Evm::default(), vec![call(TOKEN, settle.clone())], Some(TOKEN)).await;
+        assert_eq!(st, "dead");
+        assert!(err.starts_with("CALL_TARGET_REFUSED"), "{err}");
+        // a meta-transaction on a contract of another chain
+        let (st, err, sent, _) = run(Evm { uid: Some(0x25), mtx_nonce: Some(0), ..Default::default() }, vec![job(7)], None).await;
+        assert_eq!((st.as_str(), sent), ("dead", 0));
+        assert!(err.starts_with("CHAIN_UID_MISMATCH"), "{err}");
+        // an order entry on a contract of another chain
+        let inv_on = |token: Address| json!({"id": 8, "kind": "metatx", "entry": "mtxInvalidateNonces", "token": format!("{token:#x}"),
+            "from": format!("{:#x}", Address::repeat_byte(0xab)), "batch": "1", "newMin": "9",
+            "signature": format!("0x{}", "11".repeat(65)), "validUntil": (now() + 300).to_string()});
+        let (st, err, sent, _) = run(Evm { uid: Some(0x25), ..Default::default() }, vec![inv_on(TOKEN)], None).await;
+        assert_eq!((st.as_str(), sent), ("dead", 0));
+        assert!(err.starts_with("CHAIN_UID_MISMATCH"), "{err}");
+        // a self-call outside the token's published allowlist (NODE-JOB-20); on it, it goes
+        let self_call = |data: &str| {
+            let m = Mtx::Call(crate::abi::MetaTransaction { from: Address::repeat_byte(0xab), data: alloy::hex::decode(data).unwrap().into(),
+                batch: U256::from(7), nonce: U256::ZERO, validUntil: U256::from(now() + 600), mode: 0, relayer: Address::ZERO,
+                fee: U256::ZERO, feeRecipient: Address::ZERO });
+            let (kind, wire) = m.to_wire();
+            json!({"id": 7, "kind": "metatx", "token": format!("{TOKEN:#x}"), "digest": D, "struct": kind,
+                   "signature": format!("0x{}", "11".repeat(65)), "metatx": wire})
+        };
+        let (st, err, sent, _) = run(Evm { mtx_nonce: Some(0), ..Default::default() }, vec![self_call("12345678")], None).await;
+        assert_eq!((st.as_str(), sent), ("dead", 0));
+        assert!(err.starts_with("SELECTOR_NOT_ALLOWED"), "{err}");
+        let cancel = format!("cfdd7aea{}", "00".repeat(32));
+        let (st, err, sent, _) = run(Evm { mtx_nonce: Some(0), ..Default::default() }, vec![self_call(&cancel)], None).await;
+        assert_eq!((st.as_str(), sent), ("broadcast", 1), "{err}");
+        // an invalidation already in force is done, never dead
+        let inv = json!({"id": 8, "kind": "metatx", "entry": "mtxInvalidateNonces", "token": format!("{TOKEN:#x}"),
+            "from": format!("{:#x}", Address::repeat_byte(0xab)), "batch": "1", "newMin": "9",
+            "signature": format!("0x{}", "11".repeat(65)), "validUntil": (now() + 300).to_string()});
+        let (st, err, sent, _) = run(Evm { sim: Some("min_nonce"), ..Default::default() }, vec![inv], None).await;
+        assert_eq!((st.as_str(), err.as_str(), sent), ("consumed", "already_invalidated", 0));
+        // mtxSettle on the chain's DEX: gas raised until every settlement settles (an empty MatchFailed is gas)
+        let dex = Address::repeat_byte(0xd0);
+        let (st, _, sent, rpc) = run(Evm { settle_from: 300_000, ..Default::default() }, vec![call(dex, settle)], Some(dex)).await;
+        assert_eq!((st.as_str(), sent), ("broadcast", 1));
+        let g = rpc.lock().unwrap().gas[0];
+        assert!(g >= 300_000 && g == 0x30000 * 6 / 5 * 3 / 2, "estimate +20 %, then ×1.5 once: {g}");
+        // a contract signer's meta-tx gets the ERC-1271 floor
+        let (st, _, _, rpc) = run(Evm { mtx_nonce: Some(0), contract_signer: true, ..Default::default() }, vec![job(7)], None).await;
+        assert_eq!(st, "broadcast");
+        assert_eq!(rpc.lock().unwrap().gas[0], guard::ERC1271_FLOOR);
+    }
+
+    /// The token's order entries as `metatx` jobs (job-api.md): byte-identical with the forge KAT's relayed calldata.
+    #[test]
+    fn entry_jobs_encode_as_the_token_reads_them() {
+        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/evm/test/vectors/trade_kat.json");
+        let k: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+        let s = |f: &str| k[f].as_str().unwrap().to_string();
+        let o = <crate::abi::TradeOrder as SolValue>::abi_decode(&alloy::hex::decode(&s("order_abi")[2..]).unwrap()).unwrap();
+        let token = s("verifying_contract");
+        let job = |v: Value| -> crate::odoo::Job { serde_json::from_value(v).unwrap() };
+        let cancel = job(json!({"id": 1, "kind": "metatx", "entry": "mtxCancelOrder", "token": token,
+            "order": crate::dex::WireOrder::from_sol(&o), "signature": s("cancel_signature"), "validUntil": "1800000300"}));
+        let w = work_from_job(&cancel, None).unwrap();
+        assert_eq!((format!("0x{}", alloy::hex::encode(&w.data)), w.valid_until, w.meta), (s("cancel_calldata").to_lowercase(), 1_800_000_300, None));
+        let inv = job(json!({"id": 2, "kind": "metatx", "entry": "mtxInvalidateNonces", "token": token,
+            "from": s("signer").to_lowercase(), "batch": s("invalidate_batch"), "newMin": s("invalidate_min_nonce"),
+            "signature": s("invalidate_signature"), "validUntil": "1800000300"}));
+        assert_eq!(format!("0x{}", alloy::hex::encode(&work_from_job(&inv, None).unwrap().data)), s("invalidate_calldata").to_lowercase());
+        let wrap = job(json!({"id": 3, "kind": "metatx", "entry": "mtxWrap", "token": token, "underlying": format!("{:#x}", TOKEN),
+            "order": crate::dex::WireOrder::from_sol(&o), "signature": s("order_signature")}));
+        let w = work_from_job(&wrap, None).unwrap();
+        assert_eq!((&w.data[..4], w.valid_until), (&[0x3e, 0xd1, 0x8b, 0xa8][..], o.validUntil.saturating_to()));
+        for bad in [json!({"id": 4, "kind": "metatx", "entry": "mtxTrade", "token": token, "signature": "0x00"}),
+                    json!({"id": 5, "kind": "metatx", "entry": "mtxCancelOrder", "token": token, "signature": "0x00", "validUntil": "1"}),
+                    json!({"id": 6, "kind": "metatx", "entry": "mtxCancelOrder", "token": token, "signature": "0x00",
+                           "order": crate::dex::WireOrder::from_sol(&o)})] {
+            assert!(work_from_job(&job(bad), None).is_err(), "mtxTrade is never a job; an order and a deadline are needed");
         }
     }
 
@@ -818,13 +1117,14 @@ mod tests {
     /// Lỗi tạm thời nhả digest ngay (không ai bị chặn tới hết hạn).
     #[tokio::test]
     async fn one_digest_is_signed_once_across_lanes_and_released_on_transient_errors() {
-        let (url, rpc) = fake_evm(Evm { meta_nonce: Some(0), ..Default::default() }).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: json!([]), ..Default::default() }).await;
+        let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
         let set = InflightSet::default();
         let mut a = lane(&url, odoo.clone(), 1, set.clone()).await;
         let mut b = lane(&url, odoo, 2, set.clone()).await;
-        let mut w = work_from_job(&serde_json::from_value(job(0)).unwrap()).unwrap();
-        w.job_id = None; // gateway
+        let mut w = work_from_job(&serde_json::from_value(job(0)).unwrap(), None).unwrap();
+        w.job_id = None; // gateway: `post_metatx` read the digest from the token
+        w.meta = w.meta.map(|m| MetaRef { digest: Some(D.parse().unwrap()), ..m });
         a.submit(w.clone()).await;
         b.poll_outbox().await;
         a.submit(w).await;
@@ -833,10 +1133,212 @@ mod tests {
         assert_eq!((claims, states(&o).len()), (0, 0), "skipped before relay_claim");
 
         let (url, _) = fake_evm(Evm { sim: Some("transport"), ..Default::default() }).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(8)], tokens: json!([]), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(8)], tokens: toks(), ..Default::default() }).await;
         let set = InflightSet::default();
         lane(&url, odoo, 1, set.clone()).await.poll_outbox().await;
         assert_eq!(states(&o), ["queued"]);
         assert!(!set.contains(&D.parse().unwrap()));
+    }
+
+    /// NODE-LANE-10 for every origin (review T2 I1): an outbox job's unbound `feeRecipient`/`relayer` never reach the
+    /// chain as the job carries them; receiver-pays is refused, not dropped (m5); the in-flight key is the token's
+    /// digest, never the job's `digest` (m6).
+    #[tokio::test]
+    async fn outbox_jobs_are_normalized_and_keyed_by_the_token_digest() {
+        let (thief, ours) = (Address::repeat_byte(0x7e), Address::repeat_byte(0x99));
+        let Mtx::Transfer(mut t) = meta(7) else { unreachable!() };
+        (t.mode, t.fee, t.feeRecipient, t.relayer) = (0x20, U256::from(1_000u64), thief, thief); // FIXED fee, nothing bound
+        let raw = |t: &MetaTransfer| {
+            let (kind, wire) = Mtx::Transfer(t.clone()).to_wire();
+            json!({"id": 1, "kind": "metatx", "token": format!("{TOKEN:#x}"), "digest": format!("0x{}", "99".repeat(32)), "struct": kind,
+                   "signature": format!("0x{}", "11".repeat(65)), "metatx": wire})
+        };
+        let sent = |v: Value, fr: Option<Address>| {
+            let w = work_from_job(&serde_json::from_value(v).unwrap(), fr).unwrap();
+            assert_eq!(w.meta.unwrap().digest, None, "never the job's digest");
+            Mtx::from_calldata(&w.data).unwrap().0
+        };
+        let m = sent(raw(&t), Some(ours));
+        assert_eq!((m.fee_recipient(), m.relayer()), (ours, Address::ZERO));
+        let m = sent(raw(&t), None);
+        assert_eq!((m.fee_recipient(), m.relayer()), (Address::ZERO, Address::ZERO), "unset: the contract pays msg.sender");
+        let bound = MetaTransfer { mode: 0x23, ..t.clone() };
+        assert_eq!(sent(raw(&bound), Some(ours)), Mtx::Transfer(bound.clone()), "bound fields are the signer's");
+        let mut rf = raw(&t);
+        rf["receiver_fee"] = json!({"fee": "1", "feeRecipient": format!("{thief:#x}"), "validUntil": "1", "signature": "0x"});
+        assert!(work_from_job(&serde_json::from_value(rf).unwrap(), None).is_err(), "receiver-pays is not built");
+        // through the lane: normalized on chain, keyed by `mtxTransferDigest` (the fake answers D)
+        let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![raw(&t)], tokens: toks(), ..Default::default() }).await;
+        let set = InflightSet::default();
+        let mut s = lane(&url, odoo, 1, set.clone()).await;
+        s.poll_outbox().await;
+        assert_eq!(states(&o), ["signed", "broadcast"]);
+        assert!(set.contains(&D.parse().unwrap()), "held while in flight");
+        assert!(!set.contains(&B256::repeat_byte(0x99)), "the job's own digest is no key");
+        let m = Mtx::from_calldata(&rpc.lock().unwrap().sent[0].2).unwrap().0;
+        assert_eq!((m.fee_recipient(), m.relayer()), (Address::ZERO, Address::ZERO));
+    }
+
+    /// Every report of one poll on a lane built with `tweak`, and the fake chain.
+    async fn outcomes(e: Evm, jobs: Vec<Value>, tweak: impl FnOnce(&mut ChainCfg)) -> (Vec<(String, String)>, Rpc) {
+        let (url, rpc) = fake_evm(e).await;
+        let (odoo, o) = fake_odoo(Fake { jobs, tokens: toks(), ..Default::default() }).await;
+        lane_cfg(&url, odoo, 1, InflightSet::default(), tweak).await.unwrap().poll_outbox().await;
+        let r = o.lock().unwrap().reports.iter()
+            .map(|r| (r["chain_state"].as_str().unwrap().to_string(), r["error"].as_str().unwrap_or_default().to_string()))
+            .collect();
+        (r, rpc)
+    }
+
+    fn call_job(id: i64, target: Address, data: Vec<u8>) -> Value {
+        json!({"id": id, "kind": "call", "call": {"target": format!("{target:#x}"),
+               "calldata": format!("0x{}", alloy::hex::encode(data)), "validUntil": (now() + 300).to_string()}})
+    }
+
+    fn states_of(r: &[(String, String)]) -> Vec<&str> {
+        r.iter().map(|x| x.0.as_str()).collect()
+    }
+
+    /// Review T4 I1 (the reviewer's PoC `poc_unregistered_targets_are_relayed`, inverted): a transfer meta-tx or an
+    /// order entry on a contract outside the registered tokens is never relayed, however it answers `chainUid()`.
+    #[tokio::test]
+    async fn unregistered_targets_are_refused() {
+        let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: json!([]), ..Default::default() }).await;
+        lane(&url, odoo, 1, InflightSet::default()).await.poll_outbox().await;
+        assert_eq!(rpc.lock().unwrap().sent.len(), 0);
+        assert_eq!(states(&o), ["dead"]);
+        let other = Address::repeat_byte(0x99);
+        let inv = json!({"id": 8, "kind": "metatx", "entry": "mtxInvalidateNonces", "token": format!("{other:#x}"),
+            "from": format!("{:#x}", Address::repeat_byte(0xab)), "batch": "1", "newMin": "9",
+            "signature": format!("0x{}", "11".repeat(65)), "validUntil": (now() + 300).to_string()});
+        let (r, rpc) = outcomes(Evm::default(), vec![inv], |_| {}).await;
+        assert_eq!(rpc.lock().unwrap().sent.len(), 0);
+        assert!(r[0].0 == "dead" && r[0].1.starts_with("TOKEN_NOT_SERVED"), "{r:?}");
+    }
+
+    /// Review T4 I3: the guard's chain facts — binding (mismatch never cached, a revert or no `chainUid()` unbound, a
+    /// transport error transient), the factories and the DEX list by address, the gas bounds and the 1271 floor's
+    /// signer — each pinned on the lane.
+    #[tokio::test]
+    async fn the_guard_derives_its_facts_from_the_chain_and_the_config() {
+        let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
+        // two jobs to a contract of another chain: both refused (a mismatch is never cached as bound)
+        let mut j8 = job(8);
+        j8["metatx"]["batch"] = json!("8");
+        let (r, rpc) = outcomes(Evm { uid: Some(0x25), ..ok() }, vec![job(7), j8], |_| {}).await;
+        assert_eq!((states_of(&r), rpc.lock().unwrap().sent.len()), (vec!["dead", "dead"], 0), "{r:?}");
+        // no `chainUid()` (it reverts): not bound
+        let (r, _) = outcomes(Evm { uid_err: Some("revert"), ..ok() }, vec![job(7)], |_| {}).await;
+        assert!(r[0].0 == "dead" && r[0].1.starts_with("CHAIN_UID_MISMATCH"), "{r:?}");
+        // an unreadable chain is transient: queued, never dead
+        let (r, _) = outcomes(Evm { uid_err: Some("transport"), ..ok() }, vec![job(7)], |_| {}).await;
+        assert_eq!(states_of(&r), ["queued"], "{r:?}");
+        // the factories and the DEX are known by address, never assumed
+        let (x, af, tf, dex) = (Address::repeat_byte(0x31), Address::repeat_byte(0x32), Address::repeat_byte(0x33), Address::repeat_byte(0x34));
+        let cfg = move |c: &mut ChainCfg| {
+            (c.account_factory, c.token_factory, c.dex) = (Some(af), Some(tf), Some(dex));
+        };
+        let deploy = [&[0x45, 0x9b, 0x5b, 0x50][..], &[0u8; 32]].concat();
+        let as_owner = [&[0xfd, 0xf2, 0xd3, 0x38][..], &[0u8; 32]].concat();
+        let settle = [&guard::SEL_MTX_SETTLE[..], &[0u8; 32]].concat();
+        for (target, data, want) in [(x, &deploy, "dead"), (af, &deploy, "broadcast"), (x, &settle, "dead"),
+                                     (dex, &settle, "broadcast"), (tf, &as_owner, "dead"), (x, &as_owner, "broadcast")] {
+            let (r, _) = outcomes(ok(), vec![call_job(9, target, data.clone())], cfg).await;
+            assert_eq!(r.last().unwrap().0, want, "{target:#x} 0x{}: {r:?}", alloy::hex::encode(&data[..4]));
+        }
+        // gas: an estimate above max_gas_per_tx is refused
+        let (r, _) = outcomes(Evm { estimate: Some(3_000_001), ..ok() }, vec![job(7)], |_| {}).await;
+        assert!(r[0].0 == "dead" && r[0].1.contains("above max_gas_per_tx"), "{r:?}");
+        // the first settle try never passes max
+        let (r, rpc) = outcomes(ok(), vec![call_job(9, dex, settle.clone())], move |c| { cfg(c); c.max_gas_per_tx = 200_000; }).await;
+        assert_eq!((states_of(&r).last().copied(), rpc.lock().unwrap().gas.clone()), (Some("broadcast"), vec![200_000]));
+        // max_gas_per_tx above 2^24 is clamped: a settlement needing more never goes
+        let (r, rpc) = outcomes(Evm { settle_from: guard::MAX_TX_GAS + 1, ..ok() }, vec![call_job(9, dex, settle)],
+            move |c| { cfg(c); c.max_gas_per_tx = 1 << 25; }).await;
+        assert_eq!((r[0].0.as_str(), rpc.lock().unwrap().sent.len()), ("dead", 0), "{r:?}");
+        // the 1271 floor follows the signer, not the target
+        let (_, rpc) = outcomes(Evm { code_only: Some(TOKEN), ..ok() }, vec![job(7)], |_| {}).await;
+        assert_eq!(rpc.lock().unwrap().gas, vec![0x30000 * 6 / 5], "an EOA signer on a contract token");
+        let (_, rpc) = outcomes(Evm { code_only: Some(Address::repeat_byte(0xab)), ..ok() }, vec![job(7)], |_| {}).await;
+        assert_eq!(rpc.lock().unwrap().gas, vec![guard::ERC1271_FLOOR]);
+    }
+
+    /// NODE-GW-07: a lane whose RPC block 0 is not the pinned chain_uid never starts (review T4 I3).
+    #[tokio::test]
+    async fn a_lane_never_starts_on_a_chain_whose_block_zero_is_not_the_pin() {
+        let (url, _) = fake_evm(Evm { genesis: true, ..Default::default() }).await;
+        let (odoo, _) = fake_odoo(Fake { tokens: toks(), ..Default::default() }).await;
+        assert!(lane_cfg(&url, odoo, 1, InflightSet::default(), |_| {}).await.is_err());
+    }
+
+    /// The adapter path (Hedera and the generic runner) runs the same guard before simulating (review T4 I3).
+    #[tokio::test]
+    async fn the_adapter_path_runs_the_guard() {
+        use crate::adapter::ChainAdapter;
+        let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+        let cfg = test_cfg(&url);
+        let chain = Chain::with_signer(&cfg, PrivateKeySigner::from_bytes(&B256::repeat_byte(1)).unwrap()).unwrap();
+        let a = crate::adapters::evm::EvmAdapter::new(&cfg, vec![chain], Arc::new(std::sync::RwLock::new(vec![TOKEN]))).unwrap();
+        let steal = IToken::transferCall { to: Address::repeat_byte(0x7e), value: U256::from(1) }.abi_encode();
+        let j: Job = serde_json::from_value(call_job(9, TOKEN, steal)).unwrap();
+        assert!(matches!(a.build(&j, 0).await, Err(SimError::Revert(r)) if r.starts_with("CALL_TARGET_REFUSED")));
+        let j: Job = serde_json::from_value(job(7)).unwrap();
+        assert!(a.build(&j, 0).await.is_ok(), "a registered token's transfer builds");
+    }
+
+    /// Review T4 m1/m2: the registered tokens follow the client; a job rebuilt after a restart passes the guard (a
+    /// refused one is only gap-filled) and is tracked with gas clamped to 2^24.
+    #[tokio::test]
+    async fn tokens_refresh_and_rebuilt_jobs_pass_the_guard() {
+        let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { tokens: json!([]), ..Default::default() }).await;
+        let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+        o.lock().unwrap().tokens = toks();
+        s.sample().await;
+        o.lock().unwrap().jobs = vec![job(7)];
+        s.poll_outbox().await;
+        assert_eq!((states(&o), rpc.lock().unwrap().sent.len()), (vec!["signed".to_string(), "broadcast".into()], 1));
+        let tracked = |payload: Value| json!([{"job_id": 7, "nonce": 0, "state": "broadcast",
+            "tx_hash": format!("{:#x}", B256::repeat_byte(0x77)), "payload": payload}]);
+        let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), count: 1, ..Default::default() }).await;
+        for (toks, kept) in [(toks(), true), (json!([]), false)] {
+            let (odoo, _) = fake_odoo(Fake { tokens: toks, inflight: tracked(job(7)), ..Default::default() }).await;
+            let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| c.max_gas_per_tx = 1 << 25).await.unwrap();
+            let sent = s.inflight.get(&0).expect("tracked");
+            assert_eq!((sent.work.is_some(), sent.gas), (kept, guard::MAX_TX_GAS));
+        }
+    }
+
+    /// Review P5 m7: a job tracked after a restart and refused by the guard is still reported: `mined` when its own
+    /// transaction lands, `dead` when the gap-fill takes its nonce.
+    #[tokio::test]
+    async fn a_refused_rebuilt_job_is_reported_from_its_hash_or_the_gap_fill() {
+        let tracked = json!([{"job_id": 7, "nonce": 0, "state": "broadcast",
+            "tx_hash": format!("{:#x}", B256::repeat_byte(0x77)), "payload": job(7)}]);
+        for original in [true, false] {
+            let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), count: 1, ..Default::default() }).await;
+            let (odoo, o) = fake_odoo(Fake { tokens: json!([]), inflight: tracked.clone(), ..Default::default() }).await;
+            let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+            assert!(s.inflight.get(&0).expect("tracked").work.is_none(), "refused: only gap-filled");
+            if original {
+                rpc.lock().unwrap().receipts.insert(B256::repeat_byte(0x77), true);
+            } else {
+                rpc.lock().unwrap().count = 0; // still pending: the stuck nonce is replaced by a gap-fill
+                s.track().await;
+                let fill = rpc.lock().unwrap().sent.last().cloned().expect("gap-fill");
+                assert_eq!((fill.1, fill.2.len()), (s.address(), 0));
+                rpc.lock().unwrap().receipts.insert(fill.0, true);
+            }
+            s.track().await;
+            assert_eq!(s.inflight_count(), 0);
+            let last = o.lock().unwrap().reports.last().cloned().unwrap();
+            match original {
+                true => assert_eq!((last["chain_state"].as_str(), last["tx_hash"].as_str()),
+                                   (Some("mined"), Some(&*format!("{:#x}", B256::repeat_byte(0x77))))),
+                false => assert!(last["chain_state"] == "dead" && last["error"].as_str().unwrap().contains("gap-filled"), "{last}"),
+            }
+        }
     }
 }

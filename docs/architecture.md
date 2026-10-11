@@ -97,8 +97,7 @@ forced transfer against a recorded order. Among them:
   disables a flag that was not locked, renounces; [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)), and the role
   holders of those flags, such as the `rateAdmin` (step-capped, timelocked rate changes) and the `guardian` (only
   `disableWrap`) ([CTR-TOK-10](contracts/token-wrappers.md#CTR-TOK-10));
-- the `SCaaSDexV1` `admin` (as built `setMarket` with a market fee of at most 1 %, bounded by each order's signed
-  `maxFeePpm`; specified: four powers — listing, the split of each order's signed fee between relayer and treasury,
+- the `SCaaSDex` `admin` (four powers — listing, the split of each order's signed fee between relayer and treasury,
   exchange targets, listed-only mode — never the amount, [CTR-DEX-03](contracts/dex.md#CTR-DEX-03));
 - the admin `mint` of the standalone non-EVM tokens on Soroban, TON and CosmWasm (a supply power, not a balance power);
 - the TON DEX admin `WithdrawFees` (fees only; bounced payouts are claimed by their owners, [NET-TON-03](networks/ton.md#NET-TON-03));
@@ -220,8 +219,8 @@ uses Zether; hiding the relationship itself is out of scope by design ("not a mi
 
 When every leg is on chain, use one-transaction settlement. When a leg is off chain, anchor the on-chain leg **after**
 the off-chain leg is irrevocable, or give the saga a funded on-chain compensation path. Atomic settlement is BUILT for
-payments (the `pay` op), the DEX (`SCaaSDexV1.settle`, legacy `MetaTxDex`; specified: `SCaaSDex.mtxSettle`, one
-taker against several makers, each leg verified by its sell token) and mandates (`MandateWallet.payUnderMandate`,
+payments (a `MetaTransfer` with `entryRef`), the DEX (`SCaaSDex.mtxSettle`, one taker against several makers, each leg
+verified by its sell token) and mandates (`MandateWallet.payUnderMandate`,
 named `mtxPayUnderMandate`); generic saga orchestration is a client concern.
 
 **Anchoring as proof of action.** For automated agents and workflows the anchor gives a tamper-evident proof that a
@@ -236,8 +235,8 @@ agent signs, a relayer pays gas); Zether keeps commercial amounts confidential w
 
 | Component | Path | Role | Status |
 |---|---|---|---|
-| EVM contracts | `smartcontracts/evm/` (Foundry; `src/{common,metatx,factory,dex,wallet,account,registry,zether,hedera,chains}`) | Target: the token tree `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase` → kinds `NONE`, `UNDERLYING`, `NONE_ZETHER`, `UNDERLYING_ZETHER` ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)); the libraries `TradeLib`, `AdminLib`, `UnderlyingLib`, `ZetherLib`, `HederaLib`, with pay inline behind the `PAYABLE` flag in `MetaTokenBase` (no `PayLib`; [CTR-TOK-24](contracts/token-wrappers.md#CTR-TOK-24)); `OpenFactory` for tokens and DEX clones ([CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25)); `SCaaSDex`; `MandateWallet`; `SmartKeyAccount`; `UniversalAccountRegistry`; the Zether verifiers (bn254, BLS12-381), `ZetherDisclosure`, `ZetherStatements`. Build profiles `private7622` (the private chain 7622), `zether`, `gnosis`, `celo` | BUILT (P1a–P1e): `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase`, kind `NONE` = `NoUnderlyingToken`, kind `UNDERLYING` = `UnderlyingToken` (1–8 legs, native-coin leg) + `UnderlyingLib`, `AdminLib`, `HederaLib`, and `OpenFactory` with `createToken`/`TokenConfig`; still built: the older v1 line (`OpenFactoryV1`) and `ZetherToken`. SPECIFIED: `TradeLib` (P2), the `*_ZETHER` kinds and `ZetherLib` (P3), P4–P5; `PqzToken` |
-| Hedera contracts | the EVM implementations | No separate contracts: the EVM implementations deployed with `IS_HEDERA` (HIP-632 signatures, fail-closed HTS checks; [CTR-TOK-23](contracts/token-wrappers.md#CTR-TOK-23)) | BUILT (P1c–P1d): `IS_HEDERA` is an immutable of every implementation; `HederaLib` (`smartcontracts/evm/src/hedera/`) holds the HIP-632 path, and the HTS association is called from `UnderlyingLib` init; the Hedera wrapper children are deleted (the v1 `HederaMetaToken` goes with the v1 line) |
+| EVM contracts | `smartcontracts/evm/` (Foundry; `src/{common,metatx,factory,dex,wallet,account,registry,zether,hedera,chains}`) | Target: the token tree `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase` → kinds `NONE`, `UNDERLYING`, `NONE_ZETHER`, `UNDERLYING_ZETHER` ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)); the libraries `TradeLib`, `AdminLib`, `UnderlyingLib`, `ZetherLib`, `HederaLib`, with pay inline behind the `PAYABLE` flag in `MetaTokenBase` (no `PayLib`; [CTR-TOK-24](contracts/token-wrappers.md#CTR-TOK-24)); `OpenFactory` for tokens and DEX clones ([CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25)); `SCaaSDex`; `MandateWallet`; `SmartKeyAccount`; `UniversalAccountRegistry`; the Zether verifiers (bn254, BLS12-381), `ZetherDisclosure`, `ZetherStatements`. Build profiles `private7622` (the private chain 7622), `zether`, `gnosis`, `celo` | BUILT (P1a–P1e): `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase`, kind `NONE` = `NoUnderlyingToken`, kind `UNDERLYING` = `UnderlyingToken` (1–8 legs, native-coin leg) + `UnderlyingLib`, `AdminLib`, `HederaLib`, and `OpenFactory` with `createToken`/`TokenConfig`; `TradeLib` and the `SCaaSDex` clone (P2), the `*_ZETHER` kinds and `ZetherLib` (P3), `MandateWallet` and `SmartKeyAccount` (P4); the v1 line, the old `ZetherToken` and the typed structs in `legacy/` (P3–P5). SPECIFIED: `PqzToken` |
+| Hedera contracts | the EVM implementations | No separate contracts: the EVM implementations deployed with `IS_HEDERA` (HIP-632 signatures, fail-closed HTS checks; [CTR-TOK-23](contracts/token-wrappers.md#CTR-TOK-23)) | BUILT (P1c–P1d): `IS_HEDERA` is an immutable of every implementation; `HederaLib` (`smartcontracts/evm/src/hedera/`) holds the HIP-632 path, and the HTS association is called from `UnderlyingLib` init; the Hedera wrapper children are deleted (the v1 `HederaMetaToken` is in `legacy/p5/`) |
 | Cosmos contracts | `smartcontracts/cosmos/` (CosmWasm workspace) | `scaas-token` (CW20 + meta-op), `scaas-mandate`, `scaas-dex`, shared `scaas-metaop` | BUILT |
 | Soroban contracts | `smartcontracts/soroban/` | SEP-41 token + `pay`, mandate, DEX; native auth as the meta-tx (Stellar and Pi Network) | BUILT |
 | Move contracts | `smartcontracts/move/{aptos,sui}/` | Package `scaas`: `meta` (per-subject account + lanes), mandate, DEX | BUILT |
@@ -255,10 +254,10 @@ agent signs, a relayer pays gas); Zether keeps commercial amounts confidential w
 </details>
 
 **Target and built.** The contract sections below describe the target that the component docs specify. The built EVM
-code already has the P1 base and the two public kinds (P1a–P1d) and still carries the older lines (the v1 tokens; the old `ZetherToken`
-is in `legacy/p3/`, the typed-struct `SubjectAccount` and `MandateWallet` in `legacy/p4/`); every component doc says what is built in a *Transitional (BUILT)* note naming the
-phase that replaces it: P1 the base, the two public kinds and `createToken` (P1e); P2 `TradeLib` and the DEX clone; P3 the Zether kinds; P4 `MandateWallet` and `SmartKeyAccount` on the
-base (built); P5 node and client support for the new ABI ([contracts/token-wrappers.md](contracts/token-wrappers.md#transitional-built-tokens),
+code has the P1 base, the kinds, the DEX clone, `MandateWallet` and `SmartKeyAccount` on the base (P1–P4), and the node
+and clientkeys on that ABI (P5); the older lines are in `legacy/` (the old `ZetherToken` in `legacy/p3/`, the typed
+structs in `legacy/p4/`, the v1 line in `legacy/p5/`); every component doc says what is built in a *Transitional (BUILT)*
+note naming the phase ([contracts/token-wrappers.md](contracts/token-wrappers.md#transitional-built-tokens),
 [contracts/metatx.md](contracts/metatx.md#transitional-built)). Nothing is deployed, so the target replaces the built
 lines in place; there is no migration between them.
 
@@ -622,7 +621,7 @@ the target; the caption says what is built.
 
 The subject signs on its device, the client's outbox pushes the intent to its own node, and the client books the
 payment only from the finalized feed ([INT-ERP-18](integration.md#INT-ERP-18),
-[NODE-GEN-08](node/README.md#NODE-GEN-08)); built: `mtxPay` on `MetaTokenBase` and the `pay` op of the v1 line.
+[NODE-GEN-08](node/README.md#NODE-GEN-08)); built: the payment `MetaTransfer` and `mtxPay` on `MetaTokenBase` (P1b–P5).
 
 ```mermaid
 sequenceDiagram
@@ -679,8 +678,8 @@ sequenceDiagram
 ### 6.3 DEX order to settlement (target, P2)
 
 Role-free `TradeOrder`s rest in the node's book and settle in one call that pays every party
-([CTR-DEX-15](contracts/dex.md#CTR-DEX-15), [node/dex-venue.md](node/dex-venue.md)); built: DEX-signed orders over
-allowances, `SCaaSDexV1.settle`, `OrderFilled` / `Matched`.
+([CTR-DEX-15](contracts/dex.md#CTR-DEX-15), [node/dex-venue.md](node/dex-venue.md)); built (P2b–P5): `mtxSettle`,
+`LegSettled` / `MatchFailed`.
 
 ```mermaid
 sequenceDiagram
@@ -688,7 +687,7 @@ sequenceDiagram
     participant TK as Taker wallet
     participant VEN as Node gateway and venue
     participant LANE as Submit lane
-    participant DEX as SCaaSDexV1
+    participant DEX as SCaaSDex
     participant ST as Sell token (SCaaS)
     participant PUL as DexPuller
     MK->>VEN: POST /v1/dex/orders (TradeOrder, sig)

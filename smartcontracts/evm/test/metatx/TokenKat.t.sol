@@ -5,13 +5,15 @@ import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
+import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {noneInit} from "../v2/helpers/V2Fixture.sol";
 
 /// KATs of the two structs on a real token (metatx.md "One rule, four places"): `metatx_kat.json` (v3
 /// `MetaTransaction`, `cancelNonce(42)`) and `metatransfer_kat.json` (`MetaTransfer`, a payment on its pay lane
 /// with a bound FIXED fee), both in the token domain "SCaaS MetaToken" of a `NoUnderlyingToken` clone on chain
-/// 7622 with its real `chain_uid`. `WRITE_KAT=true forge test --match-contract TokenKatTest` rewrites them.
+/// 7622 with its real `chain_uid`, each with the relayed `calldata` (`mtxExecute` / `mtxExecuteTransfer`) that scaas-node
+/// and clientkeys must encode byte for byte. `WRITE_KAT=true forge test --match-contract TokenKatTest` rewrites them.
 contract TokenKatTest is Test {
     using MetaTxLib for MetaTxLib.MetaTransaction;
     using MetaTxLib for MetaTxLib.MetaTransfer;
@@ -52,10 +54,11 @@ contract TokenKatTest is Test {
         vm.serializeString(k, "signer", vm.toString(vm.addr(ALICE_PK)));
     }
 
-    function _check(string memory path, bytes32 typeHash, bytes32 structHash, bytes32 digest, bytes memory sig)
-        internal view
+    function _check(string memory path, bytes32 typeHash, bytes32 structHash, bytes32 digest, bytes memory sig,
+        bytes memory data) internal view
     {
         string memory onDisk = vm.readFile(path);
+        assertEq(vm.parseJsonBytes(onDisk, ".calldata"), data);
         assertEq(vm.parseJsonBytes32(onDisk, ".type_hash"), typeHash);
         assertEq(vm.parseJsonBytes32(onDisk, ".salt"), UID);
         assertEq(vm.parseJsonAddress(onDisk, ".verifying_contract"), address(tok));
@@ -75,8 +78,10 @@ contract TokenKatTest is Test {
         bytes32 digest = keccak256(abi.encodePacked(hex"1901", domainSep, structHash));
         assertEq(digest, tok.mtxDigest(m));
         bytes memory sig = _sign(digest);
-        vm.prank(RELAYER);                                                // the vector really executes
-        tok.mtxExecute(m, sig);
+        bytes memory data = abi.encodeCall(IMetaTx.mtxExecute, (m, sig));
+        vm.prank(RELAYER);                                                // the vector really executes, as calldata
+        (bool ok,) = address(tok).call(data);
+        assertTrue(ok);
         assertEq(tok.mtxNonce(m.from, 7), 1);
 
         string memory k = "tx";
@@ -93,9 +98,10 @@ contract TokenKatTest is Test {
         vm.serializeString(k, "type_hash", vm.toString(MetaTxLib.METATX_TYPEHASH));
         vm.serializeString(k, "struct_hash", vm.toString(structHash));
         vm.serializeString(k, "digest", vm.toString(digest));
+        vm.serializeString(k, "calldata", vm.toString(data));
         string memory out = vm.serializeString(k, "signature", vm.toString(sig));
         if (vm.envOr("WRITE_KAT", false)) vm.writeJson(out, OUT_TX);
-        _check(OUT_TX, MetaTxLib.METATX_TYPEHASH, structHash, digest, sig);
+        _check(OUT_TX, MetaTxLib.METATX_TYPEHASH, structHash, digest, sig, data);
     }
 
     function test_metaTransferKat() public {
@@ -111,8 +117,10 @@ contract TokenKatTest is Test {
         bytes32 digest = keccak256(abi.encodePacked(hex"1901", domainSep, structHash));
         assertEq(digest, tok.mtxTransferDigest(t));
         bytes memory sig = _sign(digest);
+        bytes memory data = abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (t, sig));
         vm.prank(RELAYER);
-        tok.mtxExecuteTransfer(t, sig);
+        (bool ok,) = address(tok).call(data);
+        assertTrue(ok);
         assertEq(tok.balanceOf(address(0x5409)), 100e6);
         assertEq(tok.balanceOf(address(0xFEE)), 1e5);
 
@@ -132,8 +140,9 @@ contract TokenKatTest is Test {
         vm.serializeString(k, "type_hash", vm.toString(MetaTxLib.METATRANSFER_TYPEHASH));
         vm.serializeString(k, "struct_hash", vm.toString(structHash));
         vm.serializeString(k, "digest", vm.toString(digest));
+        vm.serializeString(k, "calldata", vm.toString(data));
         string memory out = vm.serializeString(k, "signature", vm.toString(sig));
         if (vm.envOr("WRITE_KAT", false)) vm.writeJson(out, OUT_TRANSFER);
-        _check(OUT_TRANSFER, MetaTxLib.METATRANSFER_TYPEHASH, structHash, digest, sig);
+        _check(OUT_TRANSFER, MetaTxLib.METATRANSFER_TYPEHASH, structHash, digest, sig, data);
     }
 }

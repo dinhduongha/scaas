@@ -625,16 +625,16 @@ family = "evm"
 evm_chain_number = 7622
 rpc_urls = ["http://rpc-a:8545", "http://rpc-b:8545"]   # ≥ finality.quorum independent endpoints
 finality = { mode = "depth", depth = 1, quorum = 1 }    # 'depth' | 'tag' | 'instant'
-dex = "0x…"                                     # SCaaSDexV1 (the node reads `settle`), optional
+dex = "0x…"                                     # a SCaaSDex clone (the venue's DEX, the call table's DEX rows), optional
+chain_uid = "0x…"                               # NODE-GW-07; also account_factory, token_factory (call table), optional
 poll_ms = 1000
 stuck_after_secs = 60                           # replace at the same nonce, fee ×1.25
 max_gas_per_tx = 3000000                        # structural breaker
 max_fee_cap_gwei = 500                          # fee ceiling for replacements
 max_inflight = 16                               # per-lane in-flight depth, tunable default (NODE-LANE-24)
 profile = "public"                              # chain_profile; default "private" (NODE-MESH-06)
-fee_recipient = "0x…"                           # optional, EVM/Hedera. Cold wallet: normalization target, published
-                                                # in /v1/mesh/policy, used by fee_recipient_allow = "self_or_zero".
-                                                # Never a lane key. Unset ⇒ normalization writes 0 (fee to the lane).
+fee_recipient = "0x…"                           # optional, EVM/Hedera cold wallet (never a lane key): normalization
+                                                # target, in /v1/mesh/policy; unset ⇒ 0 (fee to the lane).
 tokens = ["0x…"]                                # bootstrap token rows (NODE-MESH-13)
 lanes = [0, 1]                                  # account indexes (submit-lanes.md#lane-keys)
 

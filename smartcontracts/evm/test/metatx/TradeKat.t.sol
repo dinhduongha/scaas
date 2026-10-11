@@ -10,8 +10,9 @@ import {noneInit} from "../v2/helpers/V2Fixture.sol";
 
 /// KATs of the token-side DEX structs (CTR-DEX-13, CTR-DEX-02) on a real token: `trade_kat.json` holds a
 /// `TradeOrder`, its `CancelOrder` and an `InvalidateNonces`, in the token domain "SCaaS MetaToken" of a
-/// `NoUnderlyingToken` clone on chain 7622 with its real `chain_uid`. (`dex_kat.json` stays the built `SCaaSDexV1`
-/// `Order` vector the node reads.) `WRITE_KAT=true forge test --match-contract TradeKatTest` rewrites the file.
+/// `NoUnderlyingToken` clone on chain 7622 with its real `chain_uid`, with the relayed `mtxCancelOrder` and
+/// `mtxInvalidateNonces` calldata (both executed here). The DEX-domain `DexOrder` is `dex_order_kat.json` (DexKat.t.sol).
+/// `WRITE_KAT=true forge test --match-contract TradeKatTest` rewrites the file.
 contract TradeKatTest is Test {
     bytes32 internal constant UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
     uint256 internal constant ALICE_PK = 0xA11CE;
@@ -34,6 +35,22 @@ contract TradeKatTest is Test {
     function _sign(bytes32 digest) internal pure returns (bytes memory) {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, digest);
         return abi.encodePacked(r, s, v);
+    }
+
+    /// The relayed calldata of the cancel and the invalidate, executed (a separate frame: stack depth).
+    function _relayed(string memory k, ITradeToken.TradeOrder memory o, bytes32 h, bytes32 cancelDigest,
+        bytes32 invDigest) internal
+    {
+        bytes memory cancelData = abi.encodeCall(ITradeToken.mtxCancelOrder, (o, _sign(cancelDigest)));
+        bytes memory invData = abi.encodeCall(ITradeToken.mtxInvalidateNonces, (o.from, 7, 43, _sign(invDigest)));
+        (bool ok,) = address(tok).call(cancelData);
+        assertTrue(ok);
+        assertEq(tok.pulled(h), o.amount);
+        (ok,) = address(tok).call(invData);
+        assertTrue(ok);
+        assertEq(tok.minNonce(o.from, 7), 43);
+        vm.serializeString(k, "cancel_calldata", vm.toString(cancelData));
+        vm.serializeString(k, "invalidate_calldata", vm.toString(invData));
     }
 
     function test_tradeKat() public {
@@ -75,6 +92,7 @@ contract TradeKatTest is Test {
         vm.serializeString(k, "invalidate_batch", "7");
         vm.serializeString(k, "invalidate_min_nonce", "43");
         vm.serializeString(k, "invalidate_digest", vm.toString(invDigest));
+        _relayed(k, o, h, cancelDigest, invDigest);
         string memory out = vm.serializeString(k, "invalidate_signature", vm.toString(_sign(invDigest)));
         if (vm.envOr("WRITE_KAT", false)) vm.writeJson(out, OUT);
 
@@ -82,7 +100,7 @@ contract TradeKatTest is Test {
         string memory onDisk = vm.readFile(OUT);
         string[] memory keys = vm.parseJsonKeys(out, "$");
         assertEq(vm.parseJsonKeys(onDisk, "$").length, keys.length);
-        assertEq(keys.length, 20);
+        assertEq(keys.length, 22);
         for (uint256 i; i < keys.length; ++i) {
             assertEq(
                 vm.parseJsonString(onDisk, string.concat(".", keys[i])),

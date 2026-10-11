@@ -2,12 +2,8 @@
 pragma solidity ^0.8.20;
 
 import {console} from "forge-std/Script.sol";
-import {OpenFactoryV1} from "../src/factory/OpenFactoryV1.sol";
-import {IOpenFactoryV1} from "../src/common/IOpenFactoryV1.sol";
-import {MetaToken} from "../src/metatx/MetaToken.sol";
-import {MetaTxDex} from "../src/dex/MetaTxDex.sol";
+import {OpenFactory} from "../src/factory/OpenFactory.sol";
 import {SmartKeyAccountFactory} from "../src/account/SmartKeyAccountFactory.sol";
-import {SCaaSDexV1} from "../src/dex/SCaaSDexV1.sol";
 import {DeployBase} from "./DeployBase.sol";
 
 /// forge script script/Deploy.s.sol --rpc-url $RPC --broadcast --sender <địa chỉ deployer = vm.addr(PRIVATE_KEY)>
@@ -16,7 +12,10 @@ import {DeployBase} from "./DeployBase.sol";
 ///      DEPLOY_SALT (tuỳ chọn; mặc định keccak256("scaas.deploy.v1"); chạy lại trên cùng chain cần salt mới),
 ///      CHAIN_UID (genesis hash, chain-uids.json; tuỳ chọn; phải bằng hash block 0 của RPC, mặc định chính hash đó).
 ///      DEPLOY_ZETHER (tuỳ chọn, true/false; chỉ dev chain; cần cờ forge trong deploy.sh, docs/networks/evm.md).
-/// Ghi `deployments/<chainid>.json` để seed Odoo (`blockchain.token`) và config node (`dex`).
+/// Ghi `deployments/<chainid>.json` (token factory, implementations, the DEX implementation, the SmartKeyAccount
+/// factory, `chain_uid`, the demo tokens) để seed client (`blockchain.token`) và config node; a DEX is a clone from
+/// `OpenFactory.createDex` (CTR-DEX-24). The v1 line (`OpenFactoryV1`, `MetaToken`, `MetaTxDex`, `SCaaSDexV1`) is in
+/// `legacy/p5/` (P5).
 contract Deploy is DeployBase {
     function run() external {
         uint256 pk = vm.envUint("PRIVATE_KEY");
@@ -27,31 +26,15 @@ contract Deploy is DeployBase {
 
         _setup();
         vm.startBroadcast(pk);
-        OpenFactoryV1 factory = new OpenFactoryV1{salt: salt}(registrar);
         SmartKeyAccountFactory accounts = new SmartKeyAccountFactory{salt: salt}(uid);
         _gate(address(accounts));
-        MetaToken impl = new MetaToken{salt: salt}(address(factory), accounts.IMPLEMENTATION());
-        if (registrar == deployer) factory.registerImplementation(IOpenFactoryV1.TokenKind.META, 1, address(impl));
-        _deployTokenFactory(registrar, registrar == deployer, accounts.IMPLEMENTATION(), false);
-        MetaTxDex dex = new MetaTxDex{salt: salt}();
-        // R35: admin chỉ `setMarket`; production đặt REGISTRAR là một Safe (RS5-1).
-        SCaaSDexV1 scaasDex = new SCaaSDexV1{salt: salt}(registrar);
-        address demo;
-        if (demoSupply != 0 && registrar == deployer) {
-            demo = factory.createMetaToken(1, address(0),
-                abi.encode("SCaaS Demo USD", "bUSD", uint8(6), demoSupply, deployer), bytes32("demo"));
-            if (demoHolder != deployer) MetaToken(demo).transfer(demoHolder, demoSupply / 2);
-        }
+        OpenFactory tokens = _deployTokenFactory(registrar, registrar == deployer, accounts.IMPLEMENTATION(), false);
+        if (demoSupply != 0 && registrar == deployer) _demoTokens(tokens, demoSupply, deployer, demoHolder);
         vm.stopBroadcast();
 
         string memory k = "deploy";
-        vm.serializeAddress(k, "factory", address(factory));
-        vm.serializeAddress(k, "implementation", address(impl));
-        vm.serializeAddress(k, "dex", address(dex));
         vm.serializeAddress(k, "smart_key_account_factory", address(accounts));
-        vm.serializeAddress(k, "smart_key_account_implementation", accounts.IMPLEMENTATION());
-        vm.serializeAddress(k, "scaas_dex", address(scaasDex));
-        string memory out = vm.serializeAddress(k, "demo_token", demo);
+        string memory out = vm.serializeAddress(k, "smart_key_account_implementation", accounts.IMPLEMENTATION());
         vm.createDir("./deployments", true);
         vm.writeJson(out, string.concat("./deployments/", vm.toString(block.chainid), ".json"));
         console.log(out);

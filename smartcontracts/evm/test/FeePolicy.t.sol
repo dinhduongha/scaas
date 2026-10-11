@@ -40,18 +40,6 @@ contract FeePolicyTest is Test {
         assertEq(FeePolicy.compute(FeeMode.NONE, 1_000_000, 999_999), 0);
     }
 
-    /// Typehash là hợp đồng giữa contract và SDK client. Lệch một ký tự ⇒ hai digest
-    /// khác nhau ⇒ 100% chữ ký fail, và triệu chứng là "chữ ký sai" chứ không phải
-    /// "typehash lệch". Pin nó bằng test.
-    function test_legacyMetaTxTypehashIsPinned() public pure {
-        assertEq(
-            MetaTxLib.LEGACY_METATX_TYPEHASH,
-            keccak256(
-                "MetaTransaction(address from,address to,uint256 value,bytes data,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
-            )
-        );
-    }
-
     /// Nửa byte sau của `mode` là cách tính phí. Ba giá trị hợp lệ, phần còn lại phải
     /// revert — nếu không thì `0x30` hôm nay bị bỏ qua và ngữ nghĩa của nó ngày mai
     /// bị khoá chết bởi những chữ ký đã phát hành.

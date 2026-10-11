@@ -1,5 +1,50 @@
 # HANDOFF — scaas
 
+## Session 2026-10-11 (P5)
+
+**State:** P5 on branch `p5-node` (main's P3b merged in), final review done, fix wave 3 in. Plan `docs/superpowers/plans/2026-10-11-p5-node-clients-new-abi.md`.
+890 forge tests (main 1047 + `DexKatTest` 1 − 158 v1 tests moved to `legacy/p5/`; 10 skipped, P3b's env-gated measurements); size gate 0 errors; `scaas-node` lib 278, mesh vectors (46 cases, sha256 `bde85091870f6bea608d6e3430b70fcf00b34f73c6e6d3dc659009582b39c4ad`) + fuzz, clippy clean; e2e 4/4 and e2e_hedera 1/1; clientkeys 62 (60 pass, 2 skipped); node mutation probe 110/110 killed (fix-wave-1 95, final review W1–W10, fix wave 3 5) (private `CARGO_TARGET_DIR`; a shared target gave false survivors).
+
+**Built:** `scaas-node` on the new tree: `src/abi.rs` (`MetaTransaction`, `MetaTransfer`, `TradeOrder`, `Leg`, `DexOrder`,
+`Settlement`, `IToken`, `ISCaaSDex`, `IMandateWallet` errors), `src/metatx.rs` (`Mtx { Call, Transfer }`, salted
+`Domain`, wire forms with `struct`), `src/guard.rs` (call table with the P4 rows, `chainUid()` binding, selector tables
+from `mtxSelectors()`, `mtxSettle` gas by simulation, ERC-1271 floor 432,349, `already_invalidated`), `src/dex.rs` and
+`src/dex/venue.rs` on the `SCaaSDex` clone (`TradeOrder`/`DexOrder`, `mtxSettle`, outside legs, cancels where the order
+lives, `SigCheckGasStarved` split, empty `MatchFailed` = `out_of_gas`), the mesh EVM body with `salt`, `Chain::uid()`
+(block 0 or `chain_uid`; a wrong pin refuses the lane); clientkeys `checkPayment` on `MetaTransfer` with `chainUid`,
+`checkCall`, `tradeOrderTypedData`, `orderCancelTypedData`, `checkTradeOrder`; KATs with relayed calldata and the new
+`dex_order_kat.json`, `hedera_kat.json` v3; deploy: two demo tokens from `OpenFactory` (`demo_token`, `demo_token_2`),
+v1 keys gone. The v1 line (`MetaToken`, `HederaMetaToken`, `OpenFactoryV1`, `MetaTxDex`, `SCaaSDexV1`, their tests and
+vectors, the Hedera smoke) is in `smartcontracts/evm/legacy/p5/`; the node's and clientkeys' v1 encoders in their
+`legacy/p5/` (not built).
+
+**After the reviews (fix wave).** The outbox normalizes `feeRecipient`/`relayer` for every origin (`work_from_job`) and keys
+in-flight work by the token's own digest, read after the guard; the guard runs in `Submitter::submit`, and metatx/entry
+targets must be registered tokens (entry: or a listed DEX), else `TOKEN_NOT_SERVED`; token lists refresh every 15 s; a job
+with `receiver_fee` is refused. The venue's signature check mirrors `SigCheck` (7702 designators ECDSA only, ERC-1271 capped
+by codehash, exactly 32 bytes returned); a revert naming no order probes each SCaaS leg for evidence, else 503, never 400;
+pending amount per order, closing fills wait for it; drops are committed before the 503. The Hedera lane checks `chain_uid`
+at start and reports `already_invalidated`; jobs rebuilt after a restart pass the guard and the 2^24 gas clamp (a refused
+one is only logged and gap-filled).
+Fix wave 2 changed the clientkeys API: every check takes the client-built intent (`checkPayment` needs `payee`, `entryRef`,
+`expectedToken`, `amount`; `checkCall` takes `call = {contract, data}`; `checkTradeOrder` the client's `order`; new
+`checkCancel`, `payLane`), pins the payment lane and returns the fee. Fix wave 3 (final review): venue/guard/adapter
+chain-I/O tests; a lane whose `chain_uid` check fails stays stopped and retries with backoff (the node keeps running);
+the gateway runs the guard before simulating; settle refusals name the failing settlements; a guard-refused rebuilt
+job is reported (`mined` from its hash, `dead` when the gap-fill lands); `node.example.toml` pins `chain_uid`.
+
+**Rulings N1–N18 (plan header).** **N1** `struct` absent = `transfer`, unknown fields refused; **N2** `chain_uid` from block 0
+or config, a mismatch stops the lane; **N3** call table only for built contracts, `mtxExecuteAsOwner` under the wallet rule,
+token entries as `metatx` jobs; **N5** `mtxSettle` gas ×1.5 until every settlement settles, a whole-call revert is final;
+**N6** `MinNonceNotIncreasing` = consumed `already_invalidated`; **N7** venue rules (one settlement per taker, crossing
+remainder dropped, makers restored first, `ESCROW` refused, fee rate by role); **N13** deploy without v1; **N14** v1 to
+`legacy/p5/`, `MetaTxGasV2.t` against frozen v1 numbers.
+
+**Not done / next:** bamboo-dms follows before the P5 node reaches a chain Odoo uses (TODO P5: jobs with `struct` and
+salted digests, KAT repoints, DEX book shapes, events, `already_invalidated`, mesh vectors, deploy keys, the portal
+bundle); deferred (TODO MT-8): batching and the per-selector breaker (NODE-LANE-11, -25), TradeEngine (P7),
+NODE-IDX-06 `repeat_of`, `ua_metatx`, client Zether encoders after P3b, the per-poll market re-check; open questions in
+the plan.
 ## Session 2026-10-11 (P3b)
 
 **State:** P3b (Zether storage and auditor modes, owner 2026-10-11) built from the plan `docs/superpowers/plans/2026-10-11-p3b-zether-modes.md`;
@@ -7,7 +52,7 @@ the spec rules CTR-ZTH-30/38/42/48/49/50 flipped to built, §19 re-measured, PQZ
 
 **Rulings to confirm (controller, pending the owner):** the commitment `keccak256(R)` over `R = salt ‖ B_1 ‖ … ‖ B_M` (the spec table now says so), the `…/v2` proof system id label, `seed_zether` = the R33 conf key `x`, `AuditorForbidden` for NONE, the registry's `keyOf`, the `uint8` config fields with typed errors.
 
-**Not done / next:** R6 (archive of `TransferBundles` for receiver and auditor), transfers over the EIP-7825 cap (the prover refuses them by its measured transaction gas limits per curve, form, auditor and direct / relayed, zether.md §19; no contract cap), the node's gas padding clamped to 2^24 (P5), the client ABI (P5).
+**Not done / next:** R6 (archive of `TransferBundles` for receiver and auditor), transfers over the EIP-7825 cap (the prover refuses them by its measured transaction gas limits per curve, form, auditor and direct / relayed, zether.md §19; no contract cap), the client ABI (P5). Done in P5: the node's gas padding clamped to 2^24.
 
 ## Session 2026-10-11 (P4)
 

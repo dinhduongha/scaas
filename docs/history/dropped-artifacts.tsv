@@ -838,6 +838,171 @@ scaas-account.__check_auth	renamed	`SmartKeyAccount.__check_auth`, networks/soro
 ownerNonce	removed	the owner call is a MetaTransaction lane 0 (P4), networks/hedera.md#NET-HED-03
 subjectAccountFactory	renamed	`smartKeyAccountFactory` (P4), clients/app.md
 bundle = u ‖ v_t ‖ v_a ‖ toUA	renamed	the PQZ bundle gains the build salt: `R = salt ‖ u ‖ v_t ‖ v_a ‖ toUA`, contracts/pq-zether.md#CTR-PQZ-23
+pub fn normalize(m: &mut MetaTransaction, fee_recipient: Option<Address>)	renamed	`Mtx::normalize(&mut self, fee_recipient)` covers both structs (P5), node/submit-lanes.md#NODE-LANE-10
+HederaMetaToken.sol:22-24	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+IERC20Metadata(underlying).decimals()	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+unwrap(amount, recipient)	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+Σ balance == totalSupply	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+underlying.balanceOf(this) >= totalSupply	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+constructor(address factory_)	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+require(msg.sender == FACTORY)	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+verifier == 0	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+symbol()	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+transfer(from → to, value)	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+pay(bytes32 entryRef)	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+to != 0	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+trade(address counterToken, uint256 minCounterValue, address counterparty)	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+to == msg.sender	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+from → msg.sender	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+MetaTxUnknownOp(bytes4)	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+settle(Leg a, Leg b)	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+Leg = {IERC20MetaTx token; MetaTransaction m; bytes sig}	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+a.token != b.token	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+a.m.from != b.m.from	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+termsA.counterToken == b.token	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+b.m.value >= termsA.minCounterValue	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+feeMode != NONE	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+feeRecipient != 0	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+!= this	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+feeRecipient = msg.sender	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+a.m.value	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+b.m.value	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+SafeERC20.safeTransfer	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+emit TradeSettled(a.m.from, b.m.from, a.token, b.token, a.m.value, b.m.value)	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+ReentrancyGuardTransient	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+b.m.value > minCounterValue	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+feeRecipient ∈ {0, dex}	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+relayer == to == msg.sender	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+counterToken	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+reserve >= totalSupply	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+MetaToken.t.sol	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+OpenFactory.t.sol	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+MetaTxDex.t.sol	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+reserve >= supply	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+HederaMetaToken is MetaToken	obsolete	HederaMetaToken (v1) moved to smartcontracts/evm/legacy/p5 (P5); Hedera runs the clone tree, networks/hedera.md
+approve(address spender,uint256)	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+verifyingContract = DEX	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+nonce >= minNonce[maker]	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+unix_ms·2^20 + random20	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+block.timestamp <= expiry	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+makerFill	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+maker.sellToken	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+takerFill	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+taker.sellToken	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+try this.settleOne(m, msg.sender)	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+filled = sellAmount	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+msg.sender == DEX	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+relayer ∈ {0, sender}	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+M.sellToken == T.buyToken	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+M.buyToken == T.sellToken	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+sellToken != buyToken	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+M.maker != T.maker	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+makerFill > 0	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+takerFill > 0	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+filled[h] + fill <= sellAmount	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+filled[h] == 0 && fill == sellAmount	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+takerFill · M.sellAmount >= makerFill · M.buyAmount	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+makerFill · T.sellAmount >= takerFill · T.buyAmount	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+feeOn ⇒ makerPpm <= M.maxFeePpm && takerPpm <= T.maxFeePpm	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+transferFrom(payer → payee)	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+makerFill − takerDexFee	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+takerDexFee = makerFill · takerPpm / 1e6	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+takerFill − makerDexFee	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+makerDexFee = takerFill · makerPpm / 1e6	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+emit OrderFilled(ref, hash, owner, Fill)	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+emit Matched(ref, makerHash, takerHash)	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+takerFill = ceil(makerFill · M.buy / M.sell)	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+cancel(CancelReq[] reqs)	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+CancelReq = {Order order; bytes sig}	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+CancelOrder(hash(o))	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+filled[h] = o.sellAmount	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+invalidateNonces(maker, minNonce, sig)	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+<= 2^128 − 1	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+type(uint128).max	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+setMarket(base, quote, listed, feeOn, makerPpm, takerPpm, feeRecipient)	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+FeePolicy.MAX_FEE_PPM	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+feeOn	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+feeRecipient ∉ {0, DEX}	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+feeToken ∈ {0, sellToken}	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+FeePolicy.compute(PERCENT, fill, fee)	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+fee · fill / sellAmount	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+fee <= 1 % · sellAmount	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+FeePolicy.compute(FIXED, sellAmount, fee)	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+feeRecipient = DEX	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+BAD_FEE	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+fundable = min(balanceOf, allowance(DEX))	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+feeFundable	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+MetaToken.sol:141-143	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+data = approve(address spender,uint256 amount)	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+m.value == 0	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+m.to == spender	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+_approve(from, spender, amount)	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+test_approveOpRelayerFeeIsCappedToZero	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+keccak("scaas.dex.approve" ‖ rand)	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+filled[h] <= sellAmount	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+received + fee == fill	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+venue.rs:188-196	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+dex.rs:637-643	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+dex.rs:449-462	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+feeToken ∈ {0, sellToken, buyToken}	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+venue.rs:317-324	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+cancel(...)	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+{chain, order, signature}	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+{hash, status: resting/partial/filled/cancelled, fills[]}	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+{chain, orderHash, validUntil, signature}	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+{chain, maker, minNonce, validUntil, signature}	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+test/vectors/dex_kat.json	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+eth_call settleOne(m, relayer)	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+SafeERC20FailedOperation(token)	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+venue.rs:500, 542	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+fill * ppm / PPM	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+ppm > 0	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+Math.mulDiv(fill, ppm, PPM, Math.Rounding.Ceil)	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+ppm ≤ MAX_FEE_PPM	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+dex.rs:565, 616-624	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+ppm = 3_000	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+fee ≤ fill	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+fee · PPM ≥ fill · ppm	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+feeOn = false	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+test_feeOnSplitsReceivedAmountsWithoutDust	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+smartcontracts/evm/src/hedera/HederaMetaToken.sol	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+smartcontracts/evm/script/hedera/HederaSmoke.sol	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+filled + fill ≤ sellAmount	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+try settleOne	obsolete	SCaaSDexV1 / v1 venue design, moved to legacy/p5 (P5); the DEX is contracts/dex.md, the venue node/dex-venue.md
+dex/venue.rs:1	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+dex/venue.rs:179-199	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+dex/venue.rs:403-421	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+contracts.factoryV1	obsolete	v1/v2 factory deploy keys left the deploy in P5; the deploy JSON keys are networks/evm.md#NET-EVM-05
+factory_v2	obsolete	v1/v2 factory deploy keys left the deploy in P5; the deploy JSON keys are networks/evm.md#NET-EVM-05
+contracts.factoryV2	obsolete	v1/v2 factory deploy keys left the deploy in P5; the deploy JSON keys are networks/evm.md#NET-EVM-05
+subject_account_factory	obsolete	v1/v2 factory deploy keys left the deploy in P5; the deploy JSON keys are networks/evm.md#NET-EVM-05
+ (100 bytes, 	obsolete	v2 MetaTransaction(to, value) superseded by the v3 MetaTransaction/MetaTransfer (P5 removed the v1/v2 restatement), contracts/metatx.md
+m.to == recipient	obsolete	v2 MetaTransaction(to, value) superseded by the v3 MetaTransaction/MetaTransfer (P5 removed the v1/v2 restatement), contracts/metatx.md
+keccak256("scaas.metatx.reentrancy.v1")	obsolete	v2 MetaTransaction(to, value) superseded by the v3 MetaTransaction/MetaTransfer (P5 removed the v1/v2 restatement), contracts/metatx.md
+m.nonce == metaNonce(from, batch)	obsolete	v2 MetaTransaction(to, value) superseded by the v3 MetaTransaction/MetaTransfer (P5 removed the v1/v2 restatement), contracts/metatx.md
+to == spender	obsolete	v2 MetaTransaction(to, value) superseded by the v3 MetaTransaction/MetaTransfer (P5 removed the v1/v2 restatement), contracts/metatx.md
+unwrap(address underlying, address recipient, uint256 minOut)	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+executeMetaTransaction(m, signature)	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+PaymentSettled(from, to, amount, feeAmount, feeRecipient, entryRef)	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+TradeLegNotRestricted	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+approve(address spender, uint256 amount)	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+metaNonce[msg.sender][batch]	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+WrapperHasNoMint	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+NotAWrapper	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+ApproveCarriesValue	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+ApproveSpenderMismatch	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+settle(Match[]) returns (bool[])	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+cancel(CancelReq[])	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+invalidateNonces(maker, newMin, sig)	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
 keccak256("scaas/zether/sigma-bullets/bn254/n64-n64/v1")	renamed	the `…/n64-n64/v2` proof system id with the 480-byte header (P3b), contracts/zether.md#statement-byte-layout
 keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v1")	renamed	the `…/n64-n64/v2` proof system id with the 480-byte header (P3b), contracts/zether.md#statement-byte-layout
 4200000	superseded	the classical-Zether node cap is ≥ 4 500 000 after P3b (measured relayed single-transfer limits), node/submit-lanes.md#NODE-LANE-09
+MetaToken.sol:141-144	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+HederaMetaToken.sol:34-42	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+:34-42	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+HederaMetaToken.sol:28	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+MetaToken._erc1271Gas	renamed	MetaTokenBase._erc1271Gas (v2, cap SigCheck.ERC1271_GAS); v1 in smartcontracts/evm/legacy/p5 (P5), networks/hedera.md
+HederaMetaToken._requireValidSignature	renamed	MetaTokenBase._requireValidSignature under IS_HEDERA (HederaLib.requireValid); v1 in smartcontracts/evm/legacy/p5 (P5), networks/hedera.md#NET-HED-11
+HederaMetaToken(underlying = token HTS)	renamed	an UNDERLYING token with IS_HEDERA (v2); v1 in smartcontracts/evm/legacy/p5 (P5), networks/hedera.md#hts
+scaas-node/src/config.rs:415-416	internal-path	the max_gas_per_tx default moved to scaas-node/src/config.rs:429-430, contracts/zether.md
+2^255	obsolete	the v1 SCaaSDexV1 relayer-fee-token limit; the SCaaSDex clone has no separate relayer fee token (P5), node/dex-venue.md#NODE-DEX-02

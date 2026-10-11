@@ -36,6 +36,8 @@ pub struct ChainInfo {
     pub lanes: Vec<String>,
     /// `[[chains]] fee_recipient` (EVM/Hedera).
     pub fee_recipient: Option<String>,
+    /// EVM/Hedera: this chain's `chain_uid`, the salt of every SCaaS domain (NODE-GW-07); `None` ⇒ `UNKNOWN_CHAIN`.
+    pub chain_uid: Option<alloy::primitives::B256>,
     /// Aptos: package; Solana: program id — để kiểm dẫn xuất account (§4.4).
     pub program: Option<String>,
     /// TON: master (raw) → (hash, depth) của wallet code.
@@ -233,7 +235,7 @@ mod tests {
     }
 
     // --- một envelope EVM thật (ký bằng khoá secp256k1 + khoá hub) cho các mã không có trong vector §4.6.
-    use crate::metatx::{Domain, WireMetaTx};
+    use crate::metatx::{Domain, Mtx};
     use crate::signer::{Curve, LocalSigner, Signer};
     use ed25519_dalek::SigningKey;
     use serde_json::json;
@@ -241,15 +243,18 @@ mod tests {
 
     const TOKEN: &str = "0x00000000000000000000000000000000000070c0";
     const NOW: u64 = 1_800_000_000;
+    const UID: alloy::primitives::B256 = alloy::primitives::B256::repeat_byte(0x24);
 
     fn envelope(mode: u32, fee_recipient: &str, exclusive: Option<([u8; 32], u64)>) -> Vec<u8> {
         let user = LocalSigner::new(Curve::Secp256k1, &[9; 32]).unwrap();
         let z = format!("{:#x}", alloy::primitives::Address::ZERO);
-        let m = WireMetaTx { from: user.address_hex(), to: z.clone(), value: "1".into(), data: "0x".into(), batch: "1".into(),
-            nonce: "0".into(), valid_until: (NOW + 300).to_string(), mode, relayer: z, fee: "7".into(), fee_recipient: fee_recipient.into() };
-        let d = Domain { name: "T".into(), version: "1".into(), chain_id: 1, verifying_contract: TOKEN.parse().unwrap() };
-        let id = crate::metatx::digest(&d, &m.to_sol().unwrap()).0;
-        let body = json!({"domain": {"name": "T", "version": "1"}, "meta_tx": m, "signature": format!("0x{}", alloy::hex::encode(user.sign(&id).unwrap())), "sig_kind": "eoa"});
+        let m = json!({"from": user.address_hex(), "to": z, "value": "1", "entryRef": format!("{:#x}", alloy::primitives::B256::ZERO),
+            "batch": "1", "nonce": "0", "validUntil": (NOW + 300).to_string(), "mode": mode, "relayer": z, "fee": "7",
+            "feeRecipient": fee_recipient});
+        let d = Domain { name: "T".into(), version: "1".into(), chain_id: 1, verifying_contract: TOKEN.parse().unwrap(), salt: UID };
+        let id = Mtx::from_wire(Some("transfer"), &m).unwrap().digest(&d).0;
+        let body = json!({"domain": {"name": "T", "version": "1"}, "struct": "transfer", "meta_tx": m,
+            "signature": format!("0x{}", alloy::hex::encode(user.sign(&id).unwrap())), "sig_kind": "eoa"});
         let key = SigningKey::from_bytes(&[1; 32]);
         let hub = hubsig::peer_id(&key.verifying_key().to_bytes());
         let bh: [u8; 32] = Sha256::digest(envelope::canonical_body(&body).unwrap()).into();
@@ -273,7 +278,8 @@ mod tests {
 
     fn run(bytes: &[u8], source: Source, rows: &[PolicyRow], seen: bool, chain: &str) -> Result<Accepted, Code> {
         let info = ChainInfo { public: true, tokens: vec![TOKEN.into()], lanes: vec!["0xlane".into()],
-                               fee_recipient: Some("0x000000000000000000000000000000000000c01d".into()), ..Default::default() };
+                               fee_recipient: Some("0x000000000000000000000000000000000000c01d".into()), chain_uid: Some(UID),
+                               ..Default::default() };
         let chains = HashMap::from([(chain.to_string(), info)]);
         accept(bytes, source, &Ctx { now: NOW, params: MeshParams::default(), self_id: [5; 32], chains: &chains, policies: rows, seen: &Known(seen) })
     }
@@ -292,7 +298,8 @@ mod tests {
         assert_eq!((a.may_submit, a.state, a.hop_count), (true, State::Submittable, 1));
         assert_eq!(run(&open, peer, &rows, true, "evm:1").err(), Some(Code::Duplicate));
         assert_eq!(run(&open, peer, &[], false, "evm:2").err(), Some(Code::UnknownChain));
-        assert!(run(&open, peer, &rows, false, "evm:2").is_ok(), "a policy row makes the chain known (private by default)");
+        // a policy row makes a chain known, but an EVM intent needs the receiver's own chain_uid for its digest
+        assert_eq!(run(&open, peer, &rows, false, "evm:2").err(), Some(Code::UnknownChain));
         let none = vec![PolicyRow { support: Support::None, ..rows[0].clone() }];
         assert_eq!(run(&open, peer, &none, false, "evm:1").err(), Some(Code::Unsupported));
         // no matching row ⇒ forward_only, visibility from the chain profile

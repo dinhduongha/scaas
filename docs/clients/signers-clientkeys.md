@@ -178,18 +178,18 @@ Hedera HashPack (also a seam) and the TON Connect HTTP bridge.
 <a id="signing-review"></a><a id="rendering"></a>
 
 <a id="CLI-SGN-05"></a>**CLI-SGN-05** — **A client never signs server-built typed data as is; it rebuilds the operation
-first.** `checkPayment` rebuilds the payment `MetaTransfer` (`entryRef` = the request's reference, `value` = the displayed
-amount × 10^`tokenDecimals`, `from` = the account, the right chain, fee 0, expiry ≤ 1 day, the right type);
-`checkOwnerCall` accepts only a `SmartKeyAccount` `MetaTransaction` (`from` = the account itself,
+first.** The server supplies only the nonce, a `validUntil` inside the window and a fee within the user's `maxFee`.
+`checkPayment` rebuilds the payment `MetaTransfer` from the required `payee`, `entryRef` (the request's, on lane
+`payLane(entryRef)` with nonce 0), `expectedToken` and `amount` (× 10^`tokenDecimals`): `from` = the account, the right
+chain, fee ≤ `maxFee` (default 0), expiry ≤ 1 day, the right type; `checkOwnerCall` accepts only a `SmartKeyAccount` `MetaTransaction` (`from` = the account itself,
 [CTR-ACC-10](../contracts/accounts.md#CTR-ACC-10)) whose `data` is `addKey(the key just created)` on the right
-account/chain with expiry ≤ 1 hour; anything else ⇒ refused. An owner call
-is signed only after a form showing the account, the selector and value 0. BUILT.
+account/chain with expiry ≤ 1 hour; anything else ⇒ refused. An owner call is signed only after a form showing the account, the selector and value 0. BUILT.
 
 <a id="CLI-SGN-08"></a>**CLI-SGN-08** — **`checkPayment` pins the expected token client-side.** It takes `expectedToken`
-(with its `decimals` and `symbol`) from the signer's own chain profile (an app/extension build-time or user-pinned
+(required, with its `decimals` and `symbol`) from the signer's own chain profile (an app/extension build-time or user-pinned
 registry), never from the server response, and refuses `verifyingContract ≠ expectedToken`. A portal page served by the
 same server that serves the typed data cannot be defended this way (it ships the signer code); that case is out of scope.
-Test: server data with a different token but the expected symbol ⇒ refused.
+Test: server data with a different token but the expected symbol ⇒ refused. BUILT in clientkeys (P5, `expectedToken`).
 
 <a id="CLI-SGN-27"></a>**CLI-SGN-27** — **Check, then sign exactly what was checked.** `fam.checkTerms(start, shown)`
 rebuilds the payload with `fam/<family>.js` and returns a frozen `checked` object `{ payload, walletInput, signingBytes
@@ -215,18 +215,18 @@ from a malicious issuer; in the app, `shown` is the user's own input. Why: it cl
 ### 5.1 Meta-transaction calls and trade orders
 
 <a id="CLI-SGN-33"></a>**CLI-SGN-33** — **Every SCaaS EIP-712 domain is built with `salt = chain_uid` from the
-signer's own chain profile, and a different salt is refused.** Status: **SPECIFIED**. The app, the portal signer and
+signer's own chain profile, and a different salt is refused.** Status: clientkeys **BUILT** (P5), the app **SPECIFIED**. The app, the portal signer and
 clientkeys fill `domain.salt` with the chain profile's `chain_uid` ([NET-ALL-24](../networks/README.md#NET-ALL-24)),
 which works offline, or from the contract's `eip712Domain()` read once and cached; clientkeys refuses typed data whose
 `salt` differs from its pinned profile, or a domain without one for a SCaaS contract. This covers tokens (transfers,
 payments, self-calls, trade orders), mandate wallets, subject accounts, the DEX and the registry. What protects the
 user is the contract — a contract on another chain computes its digest with that chain's `chain_uid`, so the signature
 fails there whichever wallet made it; the client check catches a wrong profile or a hostile server before the user is
-asked. Transitional (BUILT): clientkeys builds and checks `salt` for the Universal Account (PoP flow,
-[integration.md](../integration.md)) and, since P4, the `SmartKeyAccount` owner call; the v1 token checks stay unsalted (P5).
+asked. Built (P5): clientkeys builds and checks `salt` for the Universal Account (PoP flow,
+[integration.md](../integration.md)), the owner call, payments, self-calls and trade orders; no unsalted check is left.
 
 <a id="CLI-SGN-34"></a>**CLI-SGN-34** — **A meta-transaction's `data` is decoded and shown before the user signs;
-a selector outside the token's allowlist is refused.** Status: **SPECIFIED**. clientkeys and the app encode
+a selector outside the token's allowlist is refused.** Status: clientkeys `checkCall` **BUILT** (P5: the allowlist pinned by the caller; the `call = {contract, data}` the client built must equal `verifyingContract` and `data`; fee ≤ `maxFee`, PERCENT only on an `AMOUNT` selector, a bound `feeRecipient`/`relayer` the one named; the fee is returned for the review). clientkeys and the app encode
 `mtxExecute` calldata themselves, and before any signature decode `data` against the implementation's published
 allowlist (`mtxSelectors()`, pinned per implementation version in the chain profile, cross-checked with the chain):
 the selector's function name and every argument in human terms (amounts with the token's decimals, recipients,
@@ -240,7 +240,7 @@ with no override. The same applies to `MandateWallet`, `SmartKeyAccount` and any
 the meta-transaction) and an order lane (`batch` of a trade order) are labelled differently wherever both appear.
 
 <a id="CLI-SGN-35"></a>**CLI-SGN-35** — **A trade order names a DEX on the chain profile's list, or the client refuses
-to build and sign it.** Status: **SPECIFIED**. Before signing a `TradeOrder` (in the app, clientkeys or a portal)
+to build and sign it.** Status: clientkeys `checkTradeOrder` **BUILT** (P5: the `order` and `sellToken` the client built from the user's input must hash to the server's order, which adds only the nonce and an in-window `validUntil`; no ESCROW on an outside token; a cancel is the user's own `orderHash` or lane, `checkCancel`). Before signing a `TradeOrder` (in the app, clientkeys or a portal)
 the review shows `dex`, `relayer`, `destination`, the price limit both ways, the signed `fee` rate and the effective
 minimum fill per settlement (`max(minFill, ceil(amount / 2))`; a `minFill` below half is shown as half; `minFill =
 amount` as fill-or-kill). By default the client **refuses** to build or sign when `dex` is not on its pinned chain
@@ -254,7 +254,7 @@ the signer is the last place a phishing `dex` can be stopped. Cost: a new DEX ne
 trade on it.
 
 <a id="CLI-SGN-36"></a>**CLI-SGN-36** — **A client never asks an EOA to approve a SCaaS token; wrapping a SCaaS
-underlying is signed, not approved.** Status: **SPECIFIED**. On a SCaaS token only a contract may call `approve`
+underlying is signed, not approved.** Status: **BUILT** in clientkeys (P5: no approve builder; `checkTradeOrder` with `wrappers`, a flat list: defence in depth, the wrapper itself checks the underlying). On a SCaaS token only a contract may call `approve`
 ([CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)), and `approve` is on no token allowlist, so no client offers
 an approve screen, typed data or permit for one. A wrap whose underlying is a SCaaS token is a `TradeOrder` signed in
 the **underlying's** domain with `dex` = `receiveToken` = the wrapper, `receiveAmount` = the minimum to mint,
@@ -703,7 +703,7 @@ Built entry points (BUILT; load only what the chosen signer needs):
 
 | Entry | Exports (main) | Use |
 |---|---|---|
-| `passkey-signer.js` | `passkeySupported`, `creationOptions` (PRF on), `requestOptions`, `publicKeyFromSpki`, `derToRS`, `encodeAssertion`, `hashTypedData`, `passkeySubjectKey`, `accountSignature`, `merkleBatch`, `checkOwnerCall`, `checkPayment` | create a passkey, sign `challenge = digest`, encode for `SmartKeyAccount.isValidSignature` |
+| `passkey-signer.js` | `passkeySupported`, `creationOptions` (PRF on), `requestOptions`, `publicKeyFromSpki`, `derToRS`, `encodeAssertion`, `hashTypedData`, `passkeySubjectKey`, `accountSignature`, `merkleBatch`, `checkOwnerCall`, `checkPayment`, `checkCall`, `checkTradeOrder`, `checkCancel`, `payLane`, `metaTransferTypedData`, `tradeOrderTypedData`, `orderCancelTypedData` (both bundles) | create a passkey, sign `challenge = digest`, encode for `SmartKeyAccount.isValidSignature` |
 | `seed-signer.js` | `normalizeMnemonic`, `wordsToEntropy`, `seedFromEntropy`, `deriveKey`, `signDigest`, `NETWORKS`, `createVault`, `openVault`, `enablePrf`, `rewrapPin`, `SeedBackup`, `wipe` | 24-word vault: generate, back up (3-word challenge), unlock by PRF or PIN, derive per family, sign digests |
 | `zether-keys.js` (`zether.js`) | `deriveConfKey`, `confPublic` (returns the tagged UA once Universal Accounts land), `zetherPop` (signs the new PoP; `popMessage` removed), `sealConfKey`/`openConfKey`, `checkBalance`, cache helpers, `readBalance` | confidential keys and balance cache; proofs via the prover WASM `zetherCall(cmd, json)` (`keygen`, `encrypt`, `decrypt`, `decryptPending`, `checkBalance`, `proveTransfer`, `proveBurn`, `verifyTransfer`, `verifyBurn`, `pop`, `fundCalldata`, `envelope`) |
 
