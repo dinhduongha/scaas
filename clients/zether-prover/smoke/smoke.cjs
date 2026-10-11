@@ -35,7 +35,7 @@ for (const curve of ["bn254", "bls12381"]) {
 
   const t0 = Date.now();
   const tx = call("proveTransfer", {
-    curve, key: k0, chainId: 31337, token, sendCounter: 0, accSeq: 1, acc, balance: 50000,
+    curve, key: k0, chainId: 31337, chainUid: "0x" + "24".repeat(32), token, sendCounter: 0, accSeq: 1, acc, balance: 50000,
     yTo: to.Y, amount: 1234, fee: 10, beneficiary: "0x" + "22".repeat(32),
   });
   const ms = Date.now() - t0;

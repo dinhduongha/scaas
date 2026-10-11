@@ -19,6 +19,8 @@ use crate::zether::{self, BurnProof, BurnStatement, MultiTransferStatement, Tran
 pub const MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
 abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 const CHAIN: u64 = 31337;
+/// `chainUid` of the vectors (the forge tests' `UID_`): every chain-bound digest carries it (CTR-ZTH-36).
+const CHAIN_UID: &str = "0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464";
 const TOKEN: &str = "0x5fbdb2315678afecb367f032d93f642f64180aa3";
 /// > 2^44 and a transfer > 2^32 (limits D1/D5): the Solidity side checks both through these files.
 const BAL: u64 = (1 << 44) + 1_000_000;
@@ -69,7 +71,7 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
     let acc = encrypt(&from.y, BAL, &Fr::<C>::from(0x1234_5678_9abc_def0u64));
     let acc_j = json!({"C": hx(&encode_point::<C>(&acc.c)), "D": hx(&encode_point::<C>(&acc.d))});
     let base = json!({
-        "curve": C::NAME, "key": key_json(0, USE_CONF), "chainId": CHAIN, "token": TOKEN,
+        "curve": C::NAME, "key": key_json(0, USE_CONF), "chainId": CHAIN, "chainUid": CHAIN_UID, "token": TOKEN,
         "sendCounter": 3, "accSeq": 5, "acc": acc_j, "balance": BAL, "includeWitness": true,
     });
     let with = |extra: Value| {
@@ -97,11 +99,13 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
     // RNG so the files after this one keep their bytes.
     let s = decode_scalar::<C>(&hex::decode(&tv["witness"]["s"].as_str().unwrap()[2..]).unwrap()).unwrap();
     let token: [u8; 20] = hex::decode(&TOKEN[2..]).unwrap().try_into().unwrap();
+    let uid: [u8; 32] = hex::decode(&CHAIN_UID[2..]).unwrap().try_into().unwrap();
     let mut cp_rng = ChaCha20Rng::seed_from_u64(0x5e9d_e7c9);
     let e = Entry {
         chain_id: CHAIN,
+        chain_uid: uid,
         token,
-        entry_ref: entry_ref(CHAIN, &token, &from.ua(), 3),
+        entry_ref: entry_ref(CHAIN, &uid, &token, &from.ua(), 3),
         index: 0,
         y_t: st.y_t,
         c_out: st.c_out,
@@ -173,8 +177,9 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
     let leg = &st.legs[1];
     let e = Entry {
         chain_id: CHAIN,
+        chain_uid: uid,
         token,
-        entry_ref: entry_ref(CHAIN, &token, &from.ua(), 3),
+        entry_ref: entry_ref(CHAIN, &uid, &token, &from.ua(), 3),
         index: 1,
         y_t: leg.y_t,
         c_out: leg.c_out,
@@ -206,7 +211,8 @@ fn disclosure_cases<C: ZCurve>(e: &Entry<C>, amount: u64, openings: &[(OpeningKi
         .map(|(kind, opening)| {
             schnorr::verify_opening(e, amount, *kind, opening).unwrap();
             json!({
-                "entryRef": hx(&e.entry_ref), "chainId": CHAIN, "token": TOKEN, "index": e.index, "amount": amount,
+                "entryRef": hx(&e.entry_ref), "chainId": CHAIN, "chainUid": CHAIN_UID, "token": TOKEN, "index": e.index,
+                "amount": amount,
                 "kind": *kind as u8, "Yt": hx(&encode_point::<C>(&e.y_t)), "Cout": hx(&encode_point::<C>(&e.c_out)),
                 "Dout": hx(&encode_point::<C>(&e.d_out)), "Ya": hx(&encode_point::<C>(&e.y_a)),
                 "Caud": hx(&encode_point::<C>(&e.c_aud)), "opening": hx(opening), "expect": true,
@@ -325,5 +331,21 @@ pub fn generate() -> Vec<(String, Value)> {
         }),
     ));
     files.push(("r33_inputs.json".into(), r33_inputs()));
+    files.push(("envelope.json".into(), envelope_vector()));
     files
+}
+
+/// A relayed `zetherTransfer` envelope (CTR-ZTH-34): its binding and digest through the JSON API, for the forge KAT.
+fn envelope_vector() -> Value {
+    let mut req = json!({
+        "chainId": CHAIN, "chainUid": CHAIN_UID, "token": TOKEN,
+        "meta": {"from": "0x".to_string() + &"aa".repeat(20), "data": "0xdeadbeef",
+                 "batch": "0x".to_string() + &"01".repeat(32), "nonce": 7, "validUntil": 1_800_000_000u64,
+                 "mode": 0x21, "relayer": "0x".to_string() + &"bb".repeat(20), "fee": 1000,
+                 "feeRecipient": "0x".to_string() + &"cc".repeat(20)},
+    });
+    let out: Value = serde_json::from_str(&crate::api::call("envelope", &req.to_string()).unwrap()).unwrap();
+    req["binding"] = out["binding"].clone();
+    req["digest"] = out["digest"].clone();
+    req
 }

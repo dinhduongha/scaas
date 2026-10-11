@@ -1,5 +1,5 @@
 //! Statements, Σ-protocol and proofs for `transfer` and `burn`, byte-exact per zether-design
-//! §6 (statement), §7 (Σ), §8 (Bulletproofs), §9 (wire + payload). `fund` carries no proof
+//! §6 (statement), §7 (Σ), §8 (Bulletproofs), §9 (wire + payload). `zetherShield` carries no proof
 //! (public amount, §5). The verifier here mirrors the Solidity verifier for tests/vectors.
 
 use ark_ff::{PrimeField, Zero};
@@ -22,7 +22,7 @@ use crate::ZError;
 /// soundness comes from `MAX_TOTAL_SHIELDED` instead (zether-design ruling RS-NV64-1).
 pub const N_V: usize = 64;
 pub const N_B: usize = 64;
-pub const HEADER_LEN: usize = 384;
+pub const HEADER_LEN: usize = 416;
 /// `MAX_TOTAL_SHIELDED` (§1): ceiling of `maxDecryptableShielded`.
 pub const MAX_TOTAL_SHIELDED: u64 = 1 << 54;
 
@@ -39,19 +39,24 @@ pub fn op_tag_burn() -> [u8; 32] {
     keccak256(b"SCAAS-ZETHER-OP-BURN-V1")
 }
 
-/// `bindingTag` + `envelopeBinding` (§6, §10).
+/// `bindingTag` + `envelopeBinding` (zether.md §7, §12).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Binding {
     /// `ZTX_V1_DIRECT`, binding 0: the subject calls the token itself.
     Direct,
     /// `ZTX_V1_RELAYED` with `envelopeBinding` from [`crate::envelope::envelope_binding`].
     Relayed([u8; 32]),
+    /// `ZTX_V1_DIRECT` with [`crate::envelope::unwrap_binding`]: a direct `zetherUnshieldUnwrap` binds its leg and
+    /// `minOut` (controller ruling, pending the owner).
+    Unwrap([u8; 32]),
 }
 
-/// The 384-byte statement header (§6).
+/// The 416-byte statement header (zether.md §7): `chainUid` is word 3 (CTR-ZTH-36).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Header {
     pub chain_id: u64,
+    /// The token's `chainUid()`: the chain's genesis hash (CTR-GEN-05).
+    pub chain_uid: [u8; 32],
     pub token: [u8; 20],
     pub binding: Binding,
     pub send_counter: u64,
@@ -100,11 +105,13 @@ impl Header {
         let (tag, binding) = match self.binding {
             Binding::Direct => (keccak256(b"ZTX_V1_DIRECT"), [0u8; 32]),
             Binding::Relayed(b) => (keccak256(b"ZTX_V1_RELAYED"), b),
+            Binding::Unwrap(b) => (keccak256(b"ZTX_V1_DIRECT"), b),
         };
-        let words: [[u8; 32]; 12] = [
+        let words: [[u8; 32]; 13] = [
             op_tag,
             psid,
             be32_u64(self.chain_id),
+            self.chain_uid,
             be32_addr(&self.token),
             tag,
             binding,
@@ -133,26 +140,25 @@ impl Header {
         if w(1) != psid {
             return Err(ZError::BadStatement("proofSystemId"));
         }
-        let binding = if w(4) == keccak256(b"ZTX_V1_DIRECT") {
-            if w(5) != [0u8; 32] {
-                return Err(ZError::BadStatement("DIRECT with non-zero envelopeBinding"));
-            }
-            Binding::Direct
-        } else if w(4) == keccak256(b"ZTX_V1_RELAYED") {
-            Binding::Relayed(w(5).try_into().unwrap())
+        let binding = if w(5) == keccak256(b"ZTX_V1_DIRECT") {
+            let b: [u8; 32] = w(6).try_into().unwrap();
+            if b == [0u8; 32] { Binding::Direct } else { Binding::Unwrap(b) }
+        } else if w(5) == keccak256(b"ZTX_V1_RELAYED") {
+            Binding::Relayed(w(6).try_into().unwrap())
         } else {
             return Err(ZError::BadStatement("bindingTag"));
         };
         Ok(Self {
             chain_id: u64_of(w(2))?,
-            token: addr_of(w(3))?,
+            chain_uid: w(3).try_into().unwrap(),
+            token: addr_of(w(4))?,
             binding,
-            send_counter: u64_of(w(6))?,
-            acc_seq: u64_of(w(7))?,
-            fee: u64_of(w(8))?,
-            beneficiary: w(9).try_into().unwrap(),
-            amount: u64_of(w(10))?,
-            recipient: addr_of(w(11))?,
+            send_counter: u64_of(w(7))?,
+            acc_seq: u64_of(w(8))?,
+            fee: u64_of(w(9))?,
+            beneficiary: w(10).try_into().unwrap(),
+            amount: u64_of(w(11))?,
+            recipient: addr_of(w(12))?,
         })
     }
 
@@ -508,6 +514,7 @@ pub fn derive_s<C: ZCurve>(x: &Fr<C>, h: &Header, y_to: &G<C>, v: u64) -> Fr<C> 
     d.update(b"SCAAS-ZETHER-S-V1");
     d.update(encode_scalar::<C>(x));
     d.update(h.chain_id.to_be_bytes());
+    d.update(h.chain_uid);
     d.update(h.token);
     d.update(h.send_counter.to_be_bytes());
     d.update(encode_point::<C>(y_to));
@@ -599,7 +606,7 @@ impl TransferMode {
         })
     }
 
-    /// The JSON name, also the token function suffix (`transferConfidential`, `…Bundle`, `…NoBundle`).
+    /// The JSON name (the token functions are `zetherTransfer`, `…Bundle`, `…NoBundle`).
     pub fn name(self) -> &'static str {
         match self {
             Self::Hash => "hash",
@@ -945,6 +952,7 @@ pub fn derive_s_multi<C: ZCurve>(x: &Fr<C>, h: &Header, recipients: &[(G<C>, u64
     d.update(b"SCAAS-ZETHER-S-MULTI-V1");
     d.update(encode_scalar::<C>(x));
     d.update(h.chain_id.to_be_bytes());
+    d.update(h.chain_uid);
     d.update(h.token);
     d.update(h.send_counter.to_be_bytes());
     for (y, v) in recipients {

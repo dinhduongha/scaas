@@ -48,12 +48,13 @@ fn api_roundtrip_mnemonic_keygen_prove_decrypt() {
         let b = call("keygen", json!({"curve": curve, "key": k1}));
         let acc = call("encrypt", json!({"curve": curve, "Y": a["Y"], "amount": 5000}));
         let t = call("proveTransfer", json!({
-            "curve": curve, "key": k0, "chainId": 31337, "token": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+            "curve": curve, "key": k0, "chainId": 31337, "chainUid": "0x".to_string() + &"24".repeat(32),
+            "token": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
             "sendCounter": 0, "accSeq": 1, "acc": acc, "balance": 5000, "yTo": b["Y"], "amount": 1200,
         }));
         assert!(t.get("witness").is_none(), "secrets must not leave the API unless asked");
-        let single = hex::encode(zether_prover::envelope::selector("transferConfidentialSingle(bytes,bytes,bytes,bytes32)"));
-        assert!(t["directCalldata"].as_str().unwrap().starts_with(&format!("0x{single}")), "RS2-14 direct selector");
+        let single = hex::encode(zether_prover::envelope::selector("zetherTransferSingle(bytes,bytes,bytes,bytes32)"));
+        assert!(t["directCalldata"].as_str().unwrap().starts_with(&format!("0x{single}")), "direct selector (CTR-ZTH-45)");
         let ok = call("verifyTransfer", json!({"curve": curve, "statement": t["statement"], "proof": t["proof"]}));
         assert_eq!(ok["ok"], json!(true));
         let d = call("decrypt", json!({"curve": curve, "key": k0, "ct": acc, "tableBits": 18, "boundBits": 20}));
@@ -78,5 +79,5 @@ fn api_roundtrip_mnemonic_keygen_prove_decrypt() {
     assert!(enc(json!(9007199254740991u64)).is_ok());
     assert!(enc(json!("9007199254740993")).is_ok());
     let bad_y = json!({"curve": "bn254", "Y": "0x".to_string() + &"11".repeat(64), "amount": 1});
-    assert!(zether_prover::api::call("fundCalldata", &bad_y.to_string()).is_err());
+    assert!(zether_prover::api::call("shieldCalldata", &bad_y.to_string()).is_err());
 }

@@ -6,8 +6,6 @@ import {stdJson} from "forge-std/StdJson.sol";
 import {ZetherVerifierBn254, ZetherVerifierBls12381} from "../../src/zether/ZetherVerifier.sol";
 import {IZetherVerifier} from "../../src/zether/IZetherVerifier.sol";
 import {ZetherTranscript as T} from "../../src/zether/ZetherTranscript.sol";
-import {ZetherToken} from "../../src/zether/ZetherToken.sol";
-import {ZetherDisclosure} from "../../src/zether/ZetherDisclosure.sol";
 
 /// @notice Proof do prover Rust của luồng S3 (`r3-zether-prover`, chép vào `test/vectors/zether/s3/`) —
 ///         một hiện thực ĐỘC LẬP của đặc tả. Đúng thì qua verifier Solidity; lật bất kỳ bit nào thì không.
@@ -55,14 +53,15 @@ contract ZetherS3VectorsTest is Test {
         for (uint256 k = 1; k <= 7; ++k) {
             assertFalse(_ok(v, st, _flip(pr, (pr.length * k) / 8 - 1), op), "tampered proof accepted");
         }
-        uint256[5] memory fields = [uint256(95), 191, 223, 255, 287]; // chainId, binding, sendCounter, accSeq, fee
-        for (uint256 k; k < 5; ++k) {
+        // chainId, chainUid, binding, sendCounter, accSeq, fee
+        uint256[6] memory fields = [uint256(95), 127, 223, 255, 287, 319];
+        for (uint256 k; k < 6; ++k) {
             assertFalse(_ok(v, _flip(st, fields[k]), pr, op), "tampered statement accepted");
         }
         if (op == Op.MULTI) {
             // every leg point of the statement is bound; so is the mode (opTag)
             for (uint256 k = 1; k <= 5; ++k) {
-                assertFalse(_ok(v, _flip(st, st.length - (st.length - 384) * k / 6), pr, op), "tampered leg accepted");
+                assertFalse(_ok(v, _flip(st, st.length - (st.length - 416) * k / 6), pr, op), "tampered leg accepted");
             }
             assertFalse(_ok(v, _flip(st, 31), pr, op), "mode switch accepted");
         }
@@ -93,35 +92,36 @@ contract ZetherS3VectorsTest is Test {
         assertEq(op, keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/NONE"));
     }
 
-    /// Header statement của S3 đúng bố cục §6 với các trường của `request`.
+    /// Header statement của S3 đúng bố cục zether.md §7 (416 byte, `chainUid` là word 3) với các trường của `request`.
     function test_s3StatementHeaderMatchesRequest() public view {
         string memory j = vm.readFile(string.concat(DIR, "transfer_bn254.json"));
         bytes memory st = j.readBytes(".statement");
-        (bytes32 op, bytes32 psid, uint256 chainId, address token, bytes32 tag, bytes32 binding) =
-            abi.decode(_head(st, 0), (bytes32, bytes32, uint256, address, bytes32, bytes32));
+        (bytes32 op, bytes32 psid, uint256 chainId, bytes32 uid, address token, bytes32 tag) =
+            abi.decode(_head(st, 0), (bytes32, bytes32, uint256, bytes32, address, bytes32));
         assertEq(op, keccak256("SCAAS-ZETHER-OP-TRANSFER-V1"));
         assertEq(psid, bn.proofSystemId());
         assertEq(chainId, j.readUint(".request.chainId"));
+        assertEq(uid, j.readBytes32(".request.chainUid"));
         assertEq(token, j.readAddress(".request.token"));
         assertEq(tag, keccak256("ZTX_V1_RELAYED"));
-        assertEq(binding, j.readBytes32(".request.envelopeBinding"));
+        assertEq(bytes32(_head(st, 192)), j.readBytes32(".request.envelopeBinding"));
     }
 
     function test_s3StatementCountersAndEntryRef() public view {
         string memory j = vm.readFile(string.concat(DIR, "transfer_bn254.json"));
         bytes memory st = j.readBytes(".statement");
         (uint256 sc, uint256 accSeq, uint256 fee, bytes32 ben,,) =
-            abi.decode(_head(st, 192), (uint256, uint256, uint256, bytes32, uint256, address));
+            abi.decode(_head(st, 224), (uint256, uint256, uint256, bytes32, uint256, address));
         assertEq(sc, j.readUint(".request.sendCounter"));
         assertEq(accSeq, j.readUint(".request.accSeq"));
         assertEq(fee, j.readUint(".request.fee"));
         assertEq(ben, j.readBytes32(".request.beneficiary"));
-        // entryRef §10 = keccak(tag, chainId, token, keccak(Y_f), sendCounter)
+        // entryRef (CTR-ZTH-36) = keccak(tag, chainId, chainUid, token, keccak(Y_f), sendCounter)
         bytes memory yf = new bytes(64);
-        for (uint256 i; i < 64; ++i) yf[i] = st[384 + i];
+        for (uint256 i; i < 64; ++i) yf[i] = st[416 + i];
         assertEq(
             keccak256(abi.encode(keccak256("SCAAS-ZETHER-ENTRY-V1"), j.readUint(".request.chainId"),
-                j.readAddress(".request.token"), keccak256(yf), sc)),
+                j.readBytes32(".request.chainUid"), j.readAddress(".request.token"), keccak256(yf), sc)),
             j.readBytes32(".entryRef")
         );
     }
@@ -131,12 +131,12 @@ contract ZetherS3VectorsTest is Test {
         for (uint256 i; i < 192; ++i) out[i] = st[off + i];
     }
 
-    /// `opData` của S3 = `OP_ZTRANSFER ‖ abi.encode(payload, proof, authSig, beneficiary)` (§10).
-    function test_s3OpDataMatchesEnvelopeOp() public {
+    /// `directCalldata` = `zetherTransferSingle(payload, proof, authSig, beneficiary)`: the direct call, and unchanged the
+    /// envelope's `data` (CTR-ZTH-34).
+    function test_s3DirectCalldataIsTheEntryPointCall() public view {
         string memory j = vm.readFile(string.concat(DIR, "transfer_bn254.json"));
-        bytes memory op = j.readBytes(".opData");
-        ZetherToken impl = new ZetherToken(address(this), new ZetherDisclosure());
-        assertEq(bytes4(op), impl.OP_ZTRANSFER());
+        bytes memory op = j.readBytes(".directCalldata");
+        assertEq(bytes4(op), bytes4(keccak256("zetherTransferSingle(bytes,bytes,bytes,bytes32)")));
         bytes memory args = new bytes(op.length - 4);
         for (uint256 i; i < args.length; ++i) args[i] = op[4 + i];
         (bytes memory pl, bytes memory pr,, bytes32 ben) = abi.decode(args, (bytes, bytes, bytes, bytes32));
@@ -194,11 +194,11 @@ contract ZetherS3VectorsTest is Test {
         return keccak256(v.g1Mul(j.readBytes(string.concat(c, kmb[2])), z)) == keccak256(v.g1Add(a2, v.g1Mul(mMinus, e)));
     }
 
-    /// `e = H(DISCLOSE_TAG ‖ chainid ‖ token ‖ entryRef ‖ j ‖ amount ‖ kind ‖ A1 ‖ A2)`.
+    /// `e = H(DISCLOSE_TAG ‖ chainid ‖ chainUid ‖ token ‖ entryRef ‖ j ‖ amount ‖ kind ‖ A1 ‖ A2)` (CTR-ZTH-36).
     function _e(IZetherVerifier v, string memory j, string memory c, uint256 idx, bytes memory a1a2) internal view returns (uint256) {
         return T.hashToScalar(keccak256(bytes.concat(
             abi.encodePacked("SCAAS-ZETHER-DISCLOSE-V1", j.readUint(string.concat(c, ".chainId")),
-                j.readAddress(string.concat(c, ".token"))),
+                j.readBytes32(string.concat(c, ".chainUid")), j.readAddress(string.concat(c, ".token"))),
             abi.encodePacked(j.readBytes32(string.concat(c, ".entryRef")), idx, j.readUint(string.concat(c, ".amount")),
                 uint8(j.readUint(string.concat(c, ".kind"))), a1a2)
         )), v.groupOrder());

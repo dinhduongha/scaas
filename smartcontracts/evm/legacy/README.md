@@ -11,5 +11,8 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
 - The authoritative copy is the tag: `git show ref/pre-token-tree:smartcontracts/evm/src/<path>`.
 - Why it exists: owner decision of 2026-10-08 (CTR-MTX-07; TODO.md §00, P1 start checklist).
 - `p1e/`: `OpenFactoryV2`, `IOpenFactoryV2`, `IFactoryTokenV2` as they stood on `main` before P1e (the factory v2 that
-  P1e rewrote into `OpenFactory`); not built. (The v1 line follows into `legacy/` when node/clientkeys (P5) and Zether
-  (P3) stop using it, E1.)
+  P1e rewrote into `OpenFactory`); not built. (The v1 line follows into `legacy/` when node/clientkeys stop using it, P5, E1.)
+- `p3/`: the built `ZetherToken`, `ZetherMetaTx` and the old `IZetherToken` (384-byte statement header, own envelope,
+  own underlying) with their tests (`ZetherToken.t`, `ZetherMulti.t`, `ZetherRevertPaths.t`, `ZetherGate.t` and the
+  fixture), as they stood on `main` before P3 replaced them by the `*_ZETHER` kinds; not built. Nothing in the node or
+  the e2e read them. `OpenFactoryV1` keeps its `ZETHER` kind (mock-tested) until the v1 line moves (P5).

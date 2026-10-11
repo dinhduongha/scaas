@@ -99,11 +99,18 @@ pub enum OpeningKind {
     SenderCp = 3,
 }
 
-/// `entryRef = keccak256(abi.encode(keccak256("SCAAS-ZETHER-ENTRY-V1"), chainid, token, fromUA, sendCounter))`.
-pub fn entry_ref(chain_id: u64, token: &[u8; 20], from_ua: &[u8; 32], send_counter: u64) -> [u8; 32] {
+/// `entryRef = keccak256(abi.encode(keccak256("SCAAS-ZETHER-ENTRY-V1"), chainid, chainUid, token, fromUA, sendCounter))`.
+pub fn entry_ref(chain_id: u64, chain_uid: &[u8; 32], token: &[u8; 20], from_ua: &[u8; 32], send_counter: u64) -> [u8; 32] {
     keccak256(
-        &[keccak256(b"SCAAS-ZETHER-ENTRY-V1"), abi::u256(chain_id), abi::addr(token), *from_ua, abi::u256(send_counter)]
-            .concat(),
+        &[
+            keccak256(b"SCAAS-ZETHER-ENTRY-V1"),
+            abi::u256(chain_id),
+            *chain_uid,
+            abi::addr(token),
+            *from_ua,
+            abi::u256(send_counter),
+        ]
+        .concat(),
     )
 }
 
@@ -111,6 +118,7 @@ pub fn entry_ref(chain_id: u64, token: &[u8; 20], from_ua: &[u8; 32], send_count
 /// (`B_j = Y_t ‖ C_out ‖ D_out ‖ C_aud`; a single-recipient transfer has `index = 0`).
 pub struct Entry<C: ZCurve> {
     pub chain_id: u64,
+    pub chain_uid: [u8; 32],
     pub token: [u8; 20],
     pub entry_ref: [u8; 32],
     pub index: u64,
@@ -130,6 +138,7 @@ pub fn open_sender<C: ZCurve>(s: &Fr<C>) -> Vec<u8> {
 fn cp_prefix<C: ZCurve>(e: &Entry<C>, amount: u64, kind: OpeningKind) -> Vec<u8> {
     let mut b = b"SCAAS-ZETHER-DISCLOSE-V1".to_vec();
     b.extend(abi::u256(e.chain_id));
+    b.extend_from_slice(&e.chain_uid);
     b.extend_from_slice(&e.token);
     b.extend_from_slice(&e.entry_ref);
     b.extend(abi::u256(e.index));

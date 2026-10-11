@@ -1,0 +1,18 @@
+{
+  "binding": "0xb74f3db0b5e07fd5aa314cd1cfd3dd9bfc0fcb9c5a713bf9c5455823a6d3311f",
+  "chainId": 31337,
+  "chainUid": "0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464",
+  "digest": "0x966812f8750c0680ac1b215191372f584154d16a90206852d4da2351b93678de",
+  "meta": {
+    "batch": "0x0101010101010101010101010101010101010101010101010101010101010101",
+    "data": "0xdeadbeef",
+    "fee": 1000,
+    "feeRecipient": "0xcccccccccccccccccccccccccccccccccccccccc",
+    "from": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "mode": 33,
+    "nonce": 7,
+    "relayer": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "validUntil": 1800000000
+  },
+  "token": "0x5fbdb2315678afecb367f032d93f642f64180aa3"
+}

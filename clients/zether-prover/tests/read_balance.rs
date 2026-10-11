@@ -56,7 +56,8 @@ fn big_balance_cache_spend_and_cli_recovery() {
     let v: u64 = (1 << 33) + 7;
     let fee: u64 = 300;
     let t = api("proveTransfer", json!({
-        "curve": "bn254", "key": k0, "chainId": 31337, "token": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+        "curve": "bn254", "key": k0, "chainId": 31337, "chainUid": hx(&[0x24; 32]),
+        "token": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
         "sendCounter": 0, "accSeq": 1, "acc": acc, "balance": bal.to_string(), "yTo": b["Y"],
         "amount": v.to_string(), "fee": fee, "beneficiary": hx(&[0x22; 32]),
     })).unwrap();

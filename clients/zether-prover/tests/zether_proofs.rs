@@ -22,6 +22,7 @@ fn key<C: ZCurve>(account: u32) -> ZetherKey<C> {
 fn header(fee: u64) -> Header {
     Header {
         chain_id: 31337,
+        chain_uid: [0x24; 32],
         token: [0x11; 20],
         binding: Binding::Direct,
         send_counter: 3,
@@ -207,6 +208,7 @@ fn header_binding<C: ZCurve>() {
     verify_transfer(&f.gens, &st, &p).unwrap();
     let muts: Vec<fn(&mut Header)> = vec![
         |h| h.chain_id += 1,
+        |h| h.chain_uid[31] ^= 1,
         |h| h.token[19] ^= 1,
         |h| h.binding = Binding::Direct,
         |h| h.binding = Binding::Relayed([0x34; 32]),

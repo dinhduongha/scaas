@@ -7,7 +7,8 @@ import {IZetherVerifier} from "../../src/zether/IZetherVerifier.sol";
 import {ZetherProver} from "./helpers/ZetherProver.sol";
 
 /// @notice Verifier đứng một mình: proof đúng qua, mọi thay đổi một bit / một trường / một witness sai
-///         đều bị từ chối. Statement dựng tay theo §6 (token dựng y hệt — xem ZetherToken.t.sol).
+///         đều bị từ chối. Statement dựng tay theo zether.md §7 (header 416 byte, `chainUid` là word 3; token và
+///         `ZetherStatements` dựng y hệt — xem ZetherNone.t.sol).
 contract ZetherVerifierTest is Test {
     bytes32 constant OP_T = keccak256("SCAAS-ZETHER-OP-TRANSFER-V1");
     bytes32 constant OP_B = keccak256("SCAAS-ZETHER-OP-BURN-V1");
@@ -41,7 +42,7 @@ contract ZetherVerifierTest is Test {
         internal view returns (bytes memory)
     {
         return abi.encode(
-            op, v.proofSystemId(), block.chainid, address(0x70CE), DIRECT, bytes32(0),
+            op, v.proofSystemId(), block.chainid, keccak256("verifier test chain"), address(0x70CE), DIRECT, bytes32(0),
             uint256(7), uint256(3), fee, fee == 0 ? bytes32(0) : bytes32(uint256(0xBE)), amount, recipient
         );
     }
@@ -152,8 +153,8 @@ contract ZetherVerifierTest is Test {
         bytes memory st = _transferStatement(k, k.amount);
         bytes memory pr = _proveTransfer(k, st, k.amount);
         assertTrue(bls.verifyTransfer(st, pr));
-        // chainId, token, bindingTag, binding, sendCounter, accSeq, fee, beneficiary, rồi một bit trong C_acc
-        uint256[9] memory offs = [uint256(95), 127, 159, 191, 223, 255, 287, 319, 384 + 3 * 128 + 100];
+        // chainId, chainUid, token, bindingTag, binding, sendCounter, accSeq, fee, beneficiary, rồi một bit trong C_acc
+        uint256[10] memory offs = [uint256(95), 127, 159, 191, 223, 255, 287, 319, 351, 416 + 3 * 128 + 100];
         for (uint256 i; i < offs.length; ++i) {
             bytes memory t = bytes.concat(st);
             t[offs[i]] = bytes1(uint8(t[offs[i]]) ^ 0x01);
@@ -181,7 +182,7 @@ contract ZetherVerifierTest is Test {
         bytes memory st = _transferStatement(k, k.amount);
         bytes memory lie = _cts(Case(bls, 1000, 1, 5, true), 1); // C_aud của v = 1
         uint256 p = 128;
-        for (uint256 i; i < p; ++i) st[384 + 8 * p + i] = lie[3 * p + i];
+        for (uint256 i; i < p; ++i) st[416 + 8 * p + i] = lie[3 * p + i];
         assertFalse(_ok(bls, st, _proveTransfer(k, st, k.amount), true));
     }
 
@@ -199,8 +200,45 @@ contract ZetherVerifierTest is Test {
         // nhét một C_aud khác O khi auditor tắt
         bytes memory t = bytes.concat(st);
         bytes memory junk = bn.g1MulBase(42);
-        for (uint256 i; i < 64; ++i) t[384 + 8 * 64 + i] = junk[i];
+        for (uint256 i; i < 64; ++i) t[416 + 8 * 64 + i] = junk[i];
         assertFalse(_ok(bn, t, pr, true));
+    }
+
+    /// CTR-ZTH-22 (c): `s = 0` gives `D_out = O` and `C_out = [v]G` (the amount in the clear); refused even with an
+    /// otherwise honest proof.
+    function test_dOutIdentityRejected() public view {
+        bytes memory st = _zeroSStatement(bn, 1000, 300, 5);
+        bytes memory pr = prover.proveTransfer(bn, st, ZetherProver.TransferWitness({
+            x: XF, v: 300, s: 0, bPrime: 1000 - 300 - 5, gammaV: 0x77, gammaB: 0x88, seed: keccak256("t")
+        }));
+        assertFalse(_ok(bn, st, pr, true));
+    }
+
+    function _zeroSStatement(IZetherVerifier v, uint256 b, uint256 amount, uint256 fee) internal view returns (bytes memory) {
+        (bytes memory cAcc, bytes memory dAcc) = _acc(v, b);
+        bytes memory head = bytes.concat(
+            _header(v, OP_T, fee, 0, address(0)), v.g1MulBase(XF), v.g1MulBase(XT), v.identity(), cAcc, dAcc
+        );
+        return bytes.concat(head, _zeroSCts(v, amount));
+    }
+
+    function _zeroSCts(IZetherVerifier v, uint256 amount) internal view returns (bytes memory) {
+        (bytes memory cOut, bytes memory dOut, bytes memory cDeb, bytes memory cAud) =
+            prover.ciphertexts(v, v.g1MulBase(XF), v.g1MulBase(XT), v.identity(), amount, 0);
+        require(keccak256(dOut) == keccak256(v.identity()), "D_out = O");
+        return bytes.concat(cOut, dOut, cDeb, cAud);
+    }
+
+    /// CTR-ZTH-22 (b): a BLS12-381 point on the curve but outside the subgroup in the statement is refused (the MSM
+    /// precompile checks the subgroup).
+    function test_blsNonSubgroupPointRejected() public view {
+        Case memory k = Case(bls, 1000, 300, 5, true);
+        bytes memory st = _transferStatement(k, k.amount);
+        bytes memory pr = _proveTransfer(k, st, k.amount);
+        assertTrue(_ok(bls, st, pr, true));
+        bytes memory bad = vm.parseJsonBytes(vm.readFile("test/vectors/zether/curve_misc.json"), ".blsNonSubgroup");
+        for (uint256 i; i < 128; ++i) st[416 + 5 * 128 + i] = bad[i]; // C_out
+        assertFalse(_ok(bls, st, pr, true));
     }
 
     function test_nonCanonicalScalarRejected() public view {
