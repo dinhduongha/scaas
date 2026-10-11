@@ -1251,6 +1251,7 @@ mod tests {
         let p1 = put(&mut b, bid(2, 120, 60, 1));
         assert_eq!(makers(&p1)[0].1, U256::from(60));
         assert_eq!(b.pending_of(ah), U256::from(60));
+        assert_eq!(b.pending_of(hash_of(&bid(2, 120, 60, 1))), U256::from(120), "the taker's fill is pending too");
         let p2 = put(&mut b, bid(3, 80, 40, 1));
         assert!(p2.settlement.is_none(), "40 != 100 − 0 and 40 < 50 on chain: BelowMinFill, so never planned");
         assert_eq!(b.get(ah).unwrap().remaining, U256::from(40), "the honest maker stays");

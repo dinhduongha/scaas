@@ -1466,6 +1466,13 @@ mod tests {
         assert!(!ecdsa_ok(k.address(), d, &v01), "v must be 27 or 28 (ecrecover)");
         assert!(!ecdsa_ok(k.address(), d, &sig[..64]), "65 bytes only");
         assert!(!ecdsa_ok(Address::repeat_byte(1), d, &sig));
+        // the high-s twin recovers the same signer; `ECDSA.tryRecover` refuses it
+        let n = U256::from_str_radix("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141", 16).unwrap();
+        let mut high = sig.to_vec();
+        high[32..64].copy_from_slice(&(n - U256::from_be_slice(&sig[32..64])).to_be_bytes::<32>());
+        high[64] = if high[64] == 27 { 28 } else { 27 };
+        assert_eq!(Signature::try_from(&high[..]).unwrap().recover_address_from_prehash(&d).unwrap(), k.address());
+        assert!(!ecdsa_ok(k.address(), d, &high), "high-s");
         let mut designator = vec![0xef, 0x01, 0x00];
         designator.extend_from_slice(&[0x55; 20]);
         assert!(!is_contract(&designator), "an EIP-7702 EOA signs with its key");
@@ -1502,6 +1509,10 @@ mod tests {
         let mut reloaded = Book::load(vec![market()], &v.rows().await).unwrap();
         v.load_pending(&mut reloaded).await.unwrap();
         assert_eq!(reloaded.pending_of(oh(&ask)), U256::from(60));
+        // the order handed in again (out of the book, e.g. cancelled here only) is credited only what is not pending
+        let rest = v.book.lock().await.remove(oh(&ask)).unwrap();
+        let again = v.place(BASE, &WireOrder::from_sol(&ask), &hex_of(&rest.sig)).await.unwrap();
+        assert_eq!((again.status, again.remaining.as_str()), ("resting", "40"));
         // the settlement dies: the client reports it failed; the maker gets its 60 back (nothing pending any more)
         let row = Row::of(&Resting { hash: oh(&ask), sell: BASE, order: ask.clone(), sig: sig_of(&maker, oh(&ask)),
                                      remaining: U256::from(100), seq: 1 });

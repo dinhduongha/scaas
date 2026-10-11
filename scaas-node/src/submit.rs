@@ -1134,7 +1134,7 @@ mod tests {
         (t.mode, t.fee, t.feeRecipient, t.relayer) = (0x20, U256::from(1_000u64), thief, thief); // FIXED fee, nothing bound
         let raw = |t: &MetaTransfer| {
             let (kind, wire) = Mtx::Transfer(t.clone()).to_wire();
-            json!({"id": 1, "kind": "metatx", "token": format!("{TOKEN:#x}"), "digest": "0x00", "struct": kind,
+            json!({"id": 1, "kind": "metatx", "token": format!("{TOKEN:#x}"), "digest": format!("0x{}", "99".repeat(32)), "struct": kind,
                    "signature": format!("0x{}", "11".repeat(65)), "metatx": wire})
         };
         let sent = |v: Value, fr: Option<Address>| {
@@ -1159,6 +1159,7 @@ mod tests {
         s.poll_outbox().await;
         assert_eq!(states(&o), ["signed", "broadcast"]);
         assert!(set.contains(&D.parse().unwrap()), "held while in flight");
+        assert!(!set.contains(&B256::repeat_byte(0x99)), "the job's own digest is no key");
         let m = Mtx::from_calldata(&rpc.lock().unwrap().sent[0].2).unwrap().0;
         assert_eq!((m.fee_recipient(), m.relayer()), (Address::ZERO, Address::ZERO));
     }
