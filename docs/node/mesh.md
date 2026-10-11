@@ -5,7 +5,7 @@ behind one relayer. Two transports feed **one pipeline**: the **pull bus** for a
 data) and **libp2p gossip** for the open mesh ([gossip.md](gossip.md)). Same envelope, same `accept()`, same store,
 same dedup, same scheduler. This file covers the envelope, the bus, the acceptance policy, exclusivity and the private
 profile. Status: envelope, per-family digests, hub signature, acceptance L0–L3 and export filter **BUILT** as a library
-(43 conformance cases); bus, scheduler and pipeline **SPECIFIED**.
+(46 conformance cases; 43 in the design); bus, scheduler and pipeline **SPECIFIED**.
 
 | Aspect | Pull bus (admitted peers) | Open mesh (gossip) |
 |---|---|---|
@@ -343,7 +343,7 @@ sender-chosen id; with id = digest the two are one value).
 
 | Family | `intent_id` = | Routing fields decoded from | Implementations that must agree |
 |---|---|---|---|
-| `evm`, `hedera` | `keccak256(0x1901 ‖ domainSeparator(name, version, chainId, contract, salt) ‖ hashStruct(canonical(m)))`; `chainId` = number in `chain_key`; `salt` = the receiver's own `chain.chain_uid`, never a value from the envelope (target; deployed tokens have no salt yet, [NODE-GW-07](gateway.md#NODE-GW-07)); a self-call `data` must be canonical before hashing ([NODE-JOB-20](job-api.md#NODE-JOB-20)) | `meta_tx` (all signed) | `MetaTxLib.hashStruct` (`smartcontracts/src/common/MetaTxLib.sol`), `metatx.rs` `digest()`, client libraries |
+| `evm`, `hedera` | `keccak256(0x1901 ‖ domainSeparator(name, version, chainId, contract, salt) ‖ hashStruct(canonical(m)))`; `chainId` = number in `chain_key`; `salt` = the receiver's own `chain.chain_uid`, never a value from the envelope ([NODE-GW-07](gateway.md#NODE-GW-07); a chain known only from the policy table has none ⇒ `UNKNOWN_CHAIN`); a self-call `data` must be canonical before hashing ([NODE-JOB-20](job-api.md#NODE-JOB-20)) | `meta_tx` (all signed) | `MetaTxLib.hashStruct` (`smartcontracts/src/common/MetaTxLib.sol`), `metatx.rs` `digest()`, client libraries |
 | `cosmos` | `sha256(payload)` | payload JSON (`MetaOp`) | contract `metaop` (`metaop/src/lib.rs` = `chains/cosmos/metaop/src/lib.rs`), client libraries |
 | `sui` | `blake2b256([3,0,0] ‖ bcs(vector<u8>(payload)))` | `adapters/sui.rs` `MetaOp::decode` (l.136) | `meta.move` `op_digest`, `adapters/sui.rs` `personal_digest`, client libraries |
 | `aptos` | `sha3_256(payload)` | `adapters/aptos.rs` `MetaOp::decode` (l.149) | `meta.move`, client libraries |
@@ -434,7 +434,7 @@ also checks that the client's own digest functions (`build_terms`/`digest` per f
 `submit_meta_tx` is the struct the submitter would encode after normalization. Required cases (accept unless a code is
 given):
 
-1. EVM open FIXED fee, a payment `MetaTransfer` (`entryRef ≠ 0`) — intent_id equal to the `metatransfer_kat.json` vector in `smartcontracts/evm/test/vectors`.
+1. EVM open FIXED fee, a payment `MetaTransfer` (`entryRef ≠ 0`); case 3a is the `metatransfer_kat.json` vector verbatim.
 2. EVM open mode with garbage in `relayer` and `feeRecipient` ⇒ **same** `intent_id` as case 1;
    `submit_meta_tx.feeRecipient` = `fee_recipient`, `relayer` = 0.
 3. EVM `MODE_RESTRICT_RELAYER` with a lane address (accepted; `may_submit` only for that lane's node).

@@ -21,8 +21,8 @@ Common rules for every family: [networks/README](README.md). Status: contracts, 
 <a id="overview"></a><a id="NET-HED-04"></a>**NET-HED-04** — **Hedera is the EVM family on the Hedera Smart Contract
 Service: the same Solidity contracts behind a Hedera JSON-RPC relay, plus HIP-632 for ED25519 accounts; the
 payer-sponsored path is not used.** HSCS runs EVM bytecode (Besu), so the Solidity set is reused unchanged:
-`MetaToken` (contract-level EIP-712 meta-tx), `MandateWallet`, `MetaTxDex`/`SCaaSDexV1`. There is **no
-`SmartKeyAccount` and no EVM pipeline on Hedera** (as built: `HederaMetaToken.sol:22-24`, `adapters/hedera.rs:4-6`): native Hedera accounts already rotate keys, and the relayer runs
+the token kinds with `IS_HEDERA`, `HederaMandateWallet`, `SCaaSDex` (P5; the v1 line is in `legacy/p5/`). There is **no
+`SmartKeyAccount` and no EVM pipeline on Hedera** (as built: `DeployHedera.s.sol`, `adapters/hedera.rs:4-6`): native Hedera accounts already rotate keys, and the relayer runs
 the one-transaction-per-lane runner ([NET-HED-08](#NET-HED-08)). ED25519 accounts need a raw signer
 ([NET-HED-15](#NET-HED-15)). Payer-account sponsorship (the subject sends a Hedera account transaction whose fee
 someone else pays) is **not** used: it orders operations by the subject's account, exactly the lock
@@ -31,10 +31,10 @@ someone else pays) is **not** used: it orders operations by the subject's accoun
 
 | Piece | Hedera-specific part | File |
 |---|---|---|
-| Token | `HederaMetaToken is MetaToken`: a Hedera account's **ED25519** signature verified through HIP-632 `isAuthorizedRaw` (`0x16a`); `UnderlyingToken` on HTS tokens ([wrappers](#wrappers)) | `smartcontracts/evm/src/hedera/HederaMetaToken.sol` (v1), `HederaLib.sol` (v2) |
+| Token | every kind with `IS_HEDERA`: a Hedera account's **ED25519** signature verified through HIP-632 `isAuthorizedRaw` (`0x16a`); `UnderlyingToken` on HTS tokens ([wrappers](#wrappers)) | `smartcontracts/evm/src/hedera/HederaLib.sol` (v1 `HederaMetaToken` in `legacy/p5/`) |
 | Account auth | library calling `isAuthorizedRaw` with `CALL` (100 000 gas cap); a revert or garbage ⇒ `false` | `smartcontracts/evm/src/hedera/HederaAccountAuth.sol` |
 | Mandate | `HederaMandateWallet is MandateWallet` checks HIP-632 signatures on every entry ([NET-HED-03](#NET-HED-03)) | `smartcontracts/evm/src/hedera/HederaMandateWallet.sol` |
-| DEX | unchanged — every leg is a meta-tx on the token, so an ED25519 leg goes through `HederaMetaToken` (target: a `TradeOrder` verified by the Hedera token's signature check, [Mandate and DEX](#mandate)) | — |
+| DEX | a SCaaS leg's `TradeOrder` is checked by the Hedera token (HIP-632 included); `DexOrder` and DEX cancels have no HIP-632 branch ([Mandate and DEX](#mandate)) | — |
 | Relayer | EVM adapter pointed at the JSON-RPC relay, run under `lane_runner`; fee `eth_gasPrice × 1.2`, priority 0 | `scaas-node/src/adapters/hedera.rs` |
 | Client | long-zero payer `0.0.N` ⇒ native ED25519 path ([client families](../integration.md#families)) | — |
 
@@ -42,9 +42,9 @@ someone else pays) is **not** used: it orders operations by the subject's accoun
 
 <a id="payload"></a>
 
-On Hedera the `MetaOp` v1 **is** the EIP-712 `MetaTransaction` of `MetaToken` — there is no second format:
+On Hedera the `MetaOp` v1 **is** the token's EIP-712 `MetaTransfer` (P5; salted domain) — there is no second format:
 
-| `MetaOp` v1 | EIP-712 (`MetaToken`) |
+| `MetaOp` v1 | EIP-712 (`MetaTransfer`) |
 |---|---|
 | `domain="scaas.metaop.v1"` | `EIP712Domain{name:"SCaaS MetaToken", version:"1"}` |
 | `network` | `chainId` = 295 / 296 / 297 / 298 |
@@ -66,7 +66,7 @@ assumed); an unstable value keeps the profile `draft`.
 Cross-network replay: `chainId` in the domain (Hedera mainnet 295 differs from every other EVM chain). Cross-contract:
 `verifyingContract`. Cross-use: the token's own `(from, batch) → nonce`. Expiry: `validUntil` against
 `block.timestamp` (Hedera consensus seconds). Digest = `keccak256(0x1901 ‖ domainSeparator ‖ structHash)`; the
-client, Solidity (`metaTxDigest`) and Rust (`metatx::digest`) compute the same value against the shared vectors
+client, Solidity (`mtxTransferDigest`) and Rust (`Mtx::digest`) compute the same value against the shared vectors
 `smartcontracts/evm/test/vectors/hedera_kat.json`.
 
 ## 3. Signatures
@@ -79,9 +79,9 @@ client, Solidity (`metaTxDigest`) and Rust (`metatx::digest`) compute the same v
 | Hedera account with a **single ED25519** key (seed key `m/44'/3030'/0'/0'/i'`) | long-zero `0x000…N` (= `0.0.N`) | **64 bytes** ed25519 over **exactly the 32-byte digest** | HIP-632 `isAuthorizedRaw(from, digest, sig)` |
 | Smart account (wallet contract) | contract address | the account's blob | ERC-1271 |
 
-<a id="NET-HED-09"></a>**NET-HED-09** — **`HederaMetaToken` verifies a 64-byte signature from an account without code
-through HIP-632 `isAuthorizedRaw`; a precompile revert means "not authorised"; everything else is `MetaToken`.**
-Branching in `HederaMetaToken._requireValidSignature`: `from` has code ⇒ ERC-1271 (unchanged); no code **and** exactly 64 bytes ⇒
+<a id="NET-HED-09"></a>**NET-HED-09** — **A token with `IS_HEDERA` verifies a 64-byte signature from an account without code
+through HIP-632 `isAuthorizedRaw`; a precompile revert means "not authorised"; everything else is the common check.**
+Branching in `MetaTokenBase._requireValidSignature` (as in v1 `HederaMetaToken`): `from` has code ⇒ ERC-1271; no code **and** exactly 64 bytes ⇒
 HIP-632; otherwise the parent's `ecrecover`. The length is unambiguous: OZ 5.2 `ECDSA.tryRecover(bytes)` accepts
 only 65 bytes (no EIP-2098), so 64 bytes are never ECDSA here, and the precompile itself classifies by length (65–72
 = EC, 64 = ED). Key ↔ account is bound **on chain** by the precompile (it reads the account's key from Hedera state),
@@ -186,7 +186,7 @@ pipeline, replacement or gap-fill.** Hedera has **no mempool**: the relay forwar
 node; it reaches consensus in seconds or is refused at precheck. So there is no replacement of a stuck transaction and no
 gap-fill (a nonce never hangs in a mempool), and pipelining several nonces in one lane is dangerous: nonce N+1 can
 reach consensus (through another node) before N ⇒ `WRONG_NONCE`, and the relayer still pays the node fee — so Hedera does not run the EVM runner (`submit.rs`). The runner
-reads the committed nonce before each job; lanes run in parallel.
+reads the committed nonce before each job; lanes run in parallel. The lane checks `chain_uid` at start (a mismatch stops it), refreshes the token list every 15 s and reports a `MinNonceNotIncreasing` revert on an invalidation already in force as consumed `already_invalidated` (P5).
 
 The subject has no sequence on the path: the
 meta-tx lane is `batch = H(entryRef)` inside each contract, so an op held back on contract 1 does not block the same
@@ -275,9 +275,7 @@ The owner's raw call is relayed as a `call` job (selector in the call table,
 ED25519 owner sets the mandate and pays by hand (`token.pay…` inside the owner call), an ED25519 delegate pays and revokes, and the owner works through the batch and the alias; a meta-tx with
 `from = wallet` fails ERC-1271. BUILT.
 
-DEX: `MetaTxDex` and `SCaaSDexV1` are unchanged; each leg is `executeMetaTransaction` on the token, so an ED25519
-leg is verified by `HederaMetaToken`. Fees, `filled[orderHash]` and cancel as in [contracts/dex](../contracts/dex.md).
-Target (SPECIFIED): `MetaTxDex` is deleted; `SCaaSDex.mtxSettle` pulls each SCaaS leg through the sell token's
+DEX (BUILT, P2b–P5; `MetaTxDex` and `SCaaSDexV1` are in `legacy/p5/`): `SCaaSDex.mtxSettle` pulls each SCaaS leg through the sell token's
 `mtxTrade`, whose signature check is the Hedera token's own (HIP-632 for a 64-byte ED25519 signature, ECDSA,
 ERC-1271), so an ED25519 subject trades with no allowance ([NODE-DEX-15](../node/dex-venue.md#NODE-DEX-15)). HIP-632
 signers are not contracts, so they can never call `approve` on a SCaaS token
@@ -366,8 +364,8 @@ the proof is independent of the signing key.
 - **Results (2026-10-03):** forge 24 Hedera tests (157 overall) green; client verifier suite 118 tests green (4 Hedera); Rust
   9 adapter tests (including proptests of 2 × 2 000 cases) + `e2e_hedera` green (anvil 298, port 31960); connector
   `node --test` 4 green — a Node.js ed25519 signature equals the Python one byte for byte on the shared vector.
-- **Smoke on real Hedera EVM without an account or HBAR** (`smartcontracts/evm/script/hedera/HederaSmoke.sol` +
-  `testnet_smoke.py`): constructors run as initcode through `eth_call` on the testnet relay (the mirror node's web3
+- **Smoke on real Hedera EVM without an account or HBAR** (v1, `legacy/p5/script/hedera/HederaSmoke.sol` +
+  `testnet_smoke.py`; not ported to the token tree): constructors run as initcode through `eth_call` on the testnet relay (the mirror node's web3
   runs the services' EVM library and system contracts). Result 2026-10-03: `OpenFactory` + `HederaMetaToken` + clone
   deploy (TSTORE/MCOPY available); an ECDSA meta-tx payment ⇒ `ok`, the shop receives 100; a wrong ED25519 signature
   for the real ED25519 account `0.0.6000019` through the real `0x16a` ⇒ `MetaTxBadSignature`; a non-existent account

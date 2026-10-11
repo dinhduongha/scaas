@@ -8,9 +8,9 @@ Interface đã chốt cộng các implementation đã có (2026-10-03,
 
 | Contract | File | Ghi chú |
 |---|---|---|
-| `MetaToken` v1 (kind META) | `src/metatx/MetaToken.sol` | clone EIP-1167; tầng 1 standalone / tầng 2 wrapper 1:1; op `pay(bytes32)` và `trade(address,uint256,address)` trong `data` của meta-tx |
+| `NoUnderlyingToken` / `UnderlyingToken` (kinds `NONE`, `UNDERLYING`) | `src/metatx/` | clone EIP-1167 trên `MetaTokenBase` (`MetaTxBase`, `ERC20MetaTx`); `MetaTransaction` + `MetaTransfer` |
 | `OpenFactory` | `src/factory/OpenFactory.sol` | hiện thực `IOpenFactory`; salt theo người tạo |
-| `MetaTxDex` | `src/dex/MetaTxDex.sol` | khớp hai chân meta-tx, không allowance, fill-or-kill |
+| `SCaaSDex` | `src/dex/SCaaSDex.sol` | clone per DEX (`createDex`): `mtxSettle` một taker nhiều maker, outside legs qua `DexPuller` |
 | Allowance chỉ giữa hợp đồng | `src/metatx/ERC20MetaTx.sol` | `approve` từ chối spender không phải hợp đồng, `transferFrom` từ chối caller không phải hợp đồng; EOA uỷ quyền EIP-7702 (`0xef0100‖addr`) = EOA; hợp đồng đang chạy constructor = EOA (R26) |
 | `MandateWallet` | `src/wallet/MandateWallet.sol` | ví một người trả cho auto-pay delegated: mandate on-chain (hạn mức lần/kỳ, payee, hạn), ERC-1271 cho chủ ví, trả bằng `payWithFee`. Deploy ngoài Odoo: `forge create src/wallet/MandateWallet.sol:MandateWallet --constructor-args <owner>` (R29) |
 | Deploy | `script/Deploy.s.sol` | ghi `deployments/<chainid>.json` |
@@ -18,7 +18,7 @@ Interface đã chốt cộng các implementation đã có (2026-10-03,
 Zether is built (P3: the kinds `NONE_ZETHER` and `UNDERLYING_ZETHER` in `src/zether/` as `NoUnderlyingZetherToken`, `UnderlyingZetherToken`, `ZetherLayer`, `ZetherLib`, `ZetherStatements`, `ZetherVerifierBn254`, `ZetherVerifierBls12381`;
 `src/registry/UniversalAccountRegistry.sol`; the old `ZetherToken` line is in `legacy/p3/`, not built), unaudited and gated to dev chains 31337/1337 (`ZetherSafety`,
 RS2-1); see `docs/contracts/zether.md` (CTR-ZTH-02) and `docs/contracts/README.md`. `test/vectors/metatx_kat.json` là vector v3 `MetaTransaction` (MetaTxBase);
-`test/vectors/metatx_v1_kat.json` là struct v1 đã build, dùng chung với Odoo (`dms_blockchain/lib/eip712.py`) và relayer (`scaas-node`) đến P5.
+The v1 line (`MetaToken`, `HederaMetaToken`, `OpenFactoryV1`, `MetaTxDex`, `SCaaSDexV1`, `metatx_v1_kat.json`, `dex_kat.json`) is in `legacy/p5/`, not built (P5).
 
 ## Mô hình: factory mở
 

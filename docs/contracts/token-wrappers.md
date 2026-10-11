@@ -564,8 +564,7 @@ check was dropped); the rule handles each one explicitly:
 - EVM `ERC20MetaTx` (the root of every token): `approve` reverts `CallerNotContract(caller)` for an EOA caller and
   `SpenderNotContract(spender)` for an EOA spender; `transferFrom` reverts `CallerNotContract(caller)` **before** the
   allowance check. No `permit`, no `increaseAllowance`, no meta-tx `approve`. Errors: `SpenderNotContract(address)`,
-  `CallerNotContract(address)`. **Transitional (BUILT):** the rule is built on the v2 tokens (P1b); EOA `approve` and the meta-tx
-  `approve` op remain only on the v1 line (`…V1`, until P3/P5).
+  `CallerNotContract(address)`. Built on every kind (P1b); the v1 line with its EOA `approve` is in `legacy/p5/` (P5).
 - Contract accounts approve through **their own call path**: `SmartKeyAccount.mtxExecuteAsOwner → execute(token,
   approve)`, a Safe `execTransaction`, or a Safe MultiSend that approves and uses the allowance in one transaction. The
   token sees `msg.sender` = the account. A signature check (`isValidSignature`) is not the account's execution policy
@@ -612,7 +611,7 @@ empty output — with no symptom until someone has deposited funds.
   in the constructor.
 - **Zether gate**: `zetherEnabled` default `false`; enabling and creating Zether tokens revert outside chain ids
   31337/1337 (`ZetherSafety`, [CTR-ZTH-02](zether.md#CTR-ZTH-02)). Built on `OpenFactory` (P3), with the verifier check;
-  `OpenFactoryV1` keeps its own until the v1 line moves (P5).
+  `OpenFactoryV1` (with its own) is in `legacy/p5/` (P5).
 - **Registrar** is an EOA by default (deployer); it must become a multisig before mainnet. Its only powers are
   `registerImplementation`, `deprecate`, and `setZetherEnabled`.
 - **Same rule on every family**: a fix to an Aptos package, Sui package, Solana program, Cosmos contract, TON or
@@ -681,8 +680,7 @@ struct DexConfig { address admin; uint32 relayerSharePpm; address treasury; bool
   ([CTR-DEX-24](dex.md#CTR-DEX-24)).
 - **Registry views:** `isToken`, `versionOf`; for a DEX `isDex`, `dexVersionOf` (advisory, tokens never consult them,
   [CTR-DEX-24](dex.md#CTR-DEX-24)); catalogue `registerDexImplementation`, `dexImplementationOf`, `latestDexVersion`.
-- One `IOpenFactory` and one `IFactoryToken` (the v2 interfaces are gone; the v1 ones are `IOpenFactoryV1` and
-  `IFactoryTokenV1`).
+- One `IOpenFactory` and one `IFactoryToken` (the v1 and v2 interfaces are in `legacy/`).
 
 Flag validation is the token's ([CTR-TOK-22](#CTR-TOK-22)): the factory only forwards `features`, `lockedFeatures`
 and `roles`.
@@ -695,8 +693,8 @@ and `roles`.
 built as [CTR-TOK-03](#CTR-TOK-03) and [CTR-TOK-25](#CTR-TOK-25) specify, the Zether gate and kinds 2–3 included (P3);
 `createDex` and the DEX catalogue are built (P2b-1, [CTR-DEX-24](dex.md#CTR-DEX-24)). Every kind implements
 `initialize(creator, version, TokenConfig)` and a constant `kind()`. The v1 line (`ERC20MetaTxV1`, `MetaToken`,
-`HederaMetaToken`, `MetaTxDex`) stays as `OpenFactoryV1`, `IOpenFactoryV1`, `IFactoryTokenV1` (`createMetaToken`) until the node and
-clientkeys move (P5); it then goes to `smartcontracts/evm/legacy/`, not deleted (controller ruling, pending the owner).
+`HederaMetaToken`, `MetaTxDex`, `OpenFactoryV1` with `createMetaToken`) went to `smartcontracts/evm/legacy/p5/` once the
+node and clientkeys moved (P5), not deleted.
 Factory v2 is backed up in `smartcontracts/evm/legacy/p1e/` (not built).
 
 - `constructor(address registrar, bytes32 chainUid)`, `chainUid` non-zero (`ChainUidZero`). `registerImplementation` and
@@ -717,7 +715,7 @@ Factory v2 is backed up in `smartcontracts/evm/legacy/p1e/` (not built).
   `underlyings()`), `getWrapperCount/At`, `deployCountFor/deployedFor`. Every leg is indexed, `address(0)` for the
   native coin.
 - **Zether creation (BUILT, P3).** `createToken` / `createTokenUnregistered` of kinds 2–3 check `cfg.conf.verifier` (`_checkZether`)
-  as `OpenFactoryV1.createZetherToken` / `createUnregistered(ZETHER)` do: zero reverts `VerifierRequiredForZether`; no code, or
+  as `OpenFactoryV1.createZetherToken` / `createUnregistered(ZETHER)` did: zero reverts `VerifierRequiredForZether`; no code, or
   `verifier.isSupportedOnThisChain()` false or unanswered, reverts `VerifierUnsupportedOnThisChain(verifier, curveName)`
   with the verifier's `curveName()` (empty when it has no code or no answer), so a BLS12-381 verifier cannot be paired
   with a chain without EIP-2537; the token's `initialize` repeats the dev-chain check.
@@ -898,7 +896,7 @@ Unit (forge, `test/v2/`):
 
 | Area | Tests |
 |---|---|
-| Base | both typehashes pinned (`test_metaTxTypehashIsPinned`, `test_metaTransferTypehashIsPinned`, [CTR-MTX-15](metatx.md#CTR-MTX-15)); salted-domain KATs `test/vectors/metatx_kat.json` (v3 `MetaTransaction`, `MetaTxBase`; the built v1 struct is `metatx_v1_kat.json`, read by scaas-node and clientkeys until P5) and `metatransfer_kat.json` plus an `mtxpay` vector with `batch = payLane(payId)`, `nonce = 0` and `mtxExecute` calldata vectors per allowlisted selector, all checked by Solidity, node and the client library (its lane derivation already equals `payLane`); `MetaNonceCancelled`; the allowance rule on every kind (EOA caller and EOA spender of `approve` refused); ERC-1271 400 k only for `SmartKeyAccount` clones; `chainUid()` equals the implementation's; the factory refuses an implementation with another `chainUid()` |
+| Base | both typehashes pinned (`test_metaTxTypehashIsPinned`, `test_metaTransferTypehashIsPinned`, [CTR-MTX-15](metatx.md#CTR-MTX-15)); salted-domain KATs `test/vectors/metatx_kat.json` (v3 `MetaTransaction`, `MetaTxBase`; with the relayed calldata, P5; the v1 vector is in `legacy/p5/`) and `metatransfer_kat.json` plus an `mtxpay` vector with `batch = payLane(payId)`, `nonce = 0` and `mtxExecute` calldata vectors per allowlisted selector, all checked by Solidity, node and the client library (its lane derivation already equals `payLane`); `MetaNonceCancelled`; the allowance rule on every kind (EOA caller and EOA spender of `approve` refused); ERC-1271 400 k only for `SmartKeyAccount` clones; `chainUid()` equals the implementation's; the factory refuses an implementation with another `chainUid()` |
 | Fees | percent on the basis, fee on top, 1 % cap on transfer, payment and `AMOUNT` selectors; `ABSOLUTE` selectors uncapped and `PERCENT` refused; `FeeRecipientIsPayee` for transfer, `pay`, `payWithFee`, bound and relayer-default |
 | Gasless unwrap and wrap | `mtxExecute(unwrap(…))`: fee in wrapped units after the call; `UnwrapRecipientInvalid` for 0 and `address(this)`; `UnwrapBelowMin`; underlying revert (blacklist mock) reverts fee and nonce; sender-pays fee-on-transfer ⇒ `UnderlyingTransferMismatch`; ERC-777 mock whose hook re-enters (`cancelNonce`, `transfer`) mid-unwrap ⇒ `Reentrancy`; not allowlisted on tier 1; works on a disabled leg and during a pending rate change. `mtxExecute(wrap(…))` pays its fee from minted units. `mtxWrap` on `UnderlyingToken` (built, P2a; `UNDERLYING_ZETHER` P3): price, minimum, fee to the relayer, `WrapReceivedMismatch`, unknown underlying refused |
 | Named | `testFuzz_namedDigestEqualsGeneric` over random struct fields for every named function; a signature consumed by a named call fails on the generic path and vice versa; every `MtxModeShape` case; a no-fee struct signed with a leftover `fee ≠ 0` fails through `mtxTransfer`; `mtxPay` lane equals `payLane`; second `mtxPay` of a `payId` reverts `MetaTxBadNonce`; `payWithFee` with the same `entryRef` still emits `PaymentSettled` (documents the per-path limit); `mtxBatch` atomic (one bad item reverts all), length mismatch, empty |
