@@ -165,7 +165,7 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         }
         uint256 expected = _mtxStorage().nonce[from][batch];
         if (expected != nonce) revert MetaTxBadNonce(expected, nonce);
-        if (from == address(this)) revert SelfSender();
+        if (from == address(this)) _selfSender();
     }
 
     /// @dev Step 4: consume the lane's current nonce (call after `_checkEnvelope` passed).
@@ -231,6 +231,12 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
     /// @notice 50 000 for every contract wallet; `SmartKeyAccount` clones get 400 000 where an override knows them.
     function _erc1271Gas(address) internal view virtual returns (uint256) {
         return SigCheck.ERC1271_GAS;
+    }
+
+    /// @notice Step 1 for `from == address(this)`: the `SelfSender` guard by default; `SmartKeyAccount`, which signs its
+    ///         own `MetaTransaction`s and checks them against its own key set, overrides it with nothing (CTR-ACC-10).
+    function _selfSender() internal pure virtual {
+        revert SelfSender();
     }
 
     /// @notice The envelope binding a proof inside the self-call carries (CTR-ZTH-34): every envelope field except

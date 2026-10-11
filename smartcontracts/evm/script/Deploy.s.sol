@@ -6,7 +6,7 @@ import {OpenFactoryV1} from "../src/factory/OpenFactoryV1.sol";
 import {IOpenFactoryV1} from "../src/common/IOpenFactoryV1.sol";
 import {MetaToken} from "../src/metatx/MetaToken.sol";
 import {MetaTxDex} from "../src/dex/MetaTxDex.sol";
-import {SubjectAccountFactory} from "../src/account/SubjectAccountFactory.sol";
+import {SmartKeyAccountFactory} from "../src/account/SmartKeyAccountFactory.sol";
 import {SCaaSDexV1} from "../src/dex/SCaaSDexV1.sol";
 import {DeployBase} from "./DeployBase.sol";
 
@@ -28,7 +28,8 @@ contract Deploy is DeployBase {
         _setup();
         vm.startBroadcast(pk);
         OpenFactoryV1 factory = new OpenFactoryV1{salt: salt}(registrar);
-        SubjectAccountFactory accounts = new SubjectAccountFactory{salt: salt}();
+        SmartKeyAccountFactory accounts = new SmartKeyAccountFactory{salt: salt}(uid);
+        _gate(address(accounts));
         MetaToken impl = new MetaToken{salt: salt}(address(factory), accounts.IMPLEMENTATION());
         if (registrar == deployer) factory.registerImplementation(IOpenFactoryV1.TokenKind.META, 1, address(impl));
         _deployTokenFactory(registrar, registrar == deployer, accounts.IMPLEMENTATION(), false);
@@ -47,8 +48,8 @@ contract Deploy is DeployBase {
         vm.serializeAddress(k, "factory", address(factory));
         vm.serializeAddress(k, "implementation", address(impl));
         vm.serializeAddress(k, "dex", address(dex));
-        vm.serializeAddress(k, "subject_account_factory", address(accounts));
-        vm.serializeAddress(k, "subject_account_implementation", accounts.IMPLEMENTATION());
+        vm.serializeAddress(k, "smart_key_account_factory", address(accounts));
+        vm.serializeAddress(k, "smart_key_account_implementation", accounts.IMPLEMENTATION());
         vm.serializeAddress(k, "scaas_dex", address(scaasDex));
         string memory out = vm.serializeAddress(k, "demo_token", demo);
         vm.createDir("./deployments", true);

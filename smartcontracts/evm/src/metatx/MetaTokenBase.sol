@@ -29,7 +29,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
 
     address public immutable FACTORY;
     address private immutable _SELF;
-    /// @notice SmartKeyAccount implementation of this chain (built: `SubjectAccount`, renamed in P4; 0 = none). Only its EIP-1167 clones get 400k gas for
+    /// @notice SmartKeyAccount implementation of this chain (0 = none). Only its EIP-1167 clones get 400k gas for
     ///         ERC-1271; every other contract wallet 50k.
     address public immutable SMART_KEY_ACCOUNT_IMPL;
     bytes32 private immutable _SMART_KEY_CLONE_CODEHASH;

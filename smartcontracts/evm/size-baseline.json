@@ -1,7 +1,7 @@
 {
   "_comment": "CTR-TOK-24 size gate (scripts/size_gate.py). Contracts allowed over their limit, with the measured runtime size they may not exceed. Owner 2026-10-11: size optimised later; remove an entry once the contract fits.",
-  "NoUnderlyingToken": 22978,
-  "UnderlyingToken": 30036,
-  "NoUnderlyingZetherToken": 30659,
-  "UnderlyingZetherToken": 40381
+  "NoUnderlyingToken": 22986,
+  "UnderlyingToken": 30044,
+  "NoUnderlyingZetherToken": 30667,
+  "UnderlyingZetherToken": 40389
 }
