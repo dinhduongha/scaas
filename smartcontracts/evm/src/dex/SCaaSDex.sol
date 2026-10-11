@@ -28,8 +28,10 @@ import {DexPuller} from "./DexPuller.sol";
 ///         capped by codehash, CTR-DEX-08) and pulls the fill through its `DexPuller` (CTR-DEX-22); `ESCROW` is refused.
 ///         Exchange path (CTR-DEX-20): the same orders against AMM routes instead of makers, each at a floor the
 ///         submitter commits to; every output above the floors is paid to the signers (CTR-DEX-21); interactions may
-///         not call the DEX, the puller or any `mtxTrade`, listed targets only when a leg or the admin asks
-///         (CTR-DEX-23), and every allowance an `approve` interaction grants is set back to 0 before the payout.
+///         not call the DEX, the puller or any `mtxTrade`, nor raise an allowance outside `approve`
+///         (`increaseAllowance`, Permit2 `approve`: controller ruling, pending the owner), listed targets only when a
+///         leg or the admin asks (CTR-DEX-23), and every allowance an `approve` interaction grants is set back to 0
+///         before the payout.
 contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     using SafeERC20 for IERC20;
 
@@ -384,8 +386,9 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
 
     // ------------------------------------------------------------------ exchange path (CTR-DEX-20, -21, -23)
 
-    /// @notice Path (a): the DEX makes each interaction (never on itself or its puller, never `mtxTrade`, listed when a
-    ///         leg or the admin asks); a failing one reverts the plan with its data. Every allowance an `approve`
+    /// @notice Path (a): the DEX makes each interaction (never on itself or its puller, never `mtxTrade`,
+    ///         `increaseAllowance` or Permit2 `approve` (controller ruling, pending the owner), listed when a leg or
+    ///         the admin asks); a failing one reverts the plan with its data. Every allowance an `approve`
     ///         interaction granted is set back to 0 after the last interaction (controller ruling: the DEX keeps no
     ///         allowance past the route).
     function mtxExchange(ExchangePlan calldata p, Interaction[] calldata xs) external nonReentrant {

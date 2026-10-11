@@ -88,6 +88,20 @@ contract MockExecutor is IExchangeExecutor {
     }
 }
 
+/// Credits one unit more than it moves when the recipient is `sink` (a token that rebases up on arrival).
+contract BonusERC20 is MockERC20 {
+    address public sink;
+
+    constructor() MockERC20("Bonus", "BON", 6) {}
+
+    function setSink(address s) external { sink = s; }
+
+    function _update(address from, address to, uint256 v) internal override {
+        super._update(from, to, v);
+        if (from != address(0) && to == sink) super._update(address(0), to, 1);
+    }
+}
+
 /// Interaction targets that misbehave.
 contract Hostile {
     error Boom(uint256 code);
@@ -293,6 +307,35 @@ contract DexExchangeTest is Test {
         assertEq(abi.encode(v), abi.encode([uint256(uint160(carol)), 1000, 1800, 49, 2, 0, 1800]));
     }
 
+    /// The signed `destination` (not the signer) gets the floor less the fee plus the surplus, and the event names it:
+    /// floor 1900, fee 6, surplus 100.
+    function test_exchange_destination_getsProceedsAndSurplus() public {
+        address dest = address(0xD0D0);
+        ITradeToken.TradeOrder memory o = _order(alice, address(b), 1000, 1900, 3_000);
+        o.destination = dest;
+        ISCaaSDex.ExchangePlan memory p = _plan(_leg(ALICE_PK, address(a), o, 1000, 1900));
+        ISCaaSDex.Interaction[] memory xs = _swap(address(a), address(b), 1000, 2000);
+        vm.recordLogs();
+        _exchange(p, xs);
+        assertEq(b.balanceOf(dest), 1900 - 6 + 100);
+        assertEq(b.balanceOf(alice), 0);
+        assertEq(b.balanceOf(address(dex)), 0);
+        (, uint256[7] memory v) = _legEvent(vm.getRecordedLogs(), 0);
+        assertEq(v[0], uint256(uint160(dest)));
+    }
+
+    /// A floor above the limit: `receivedFloor` is the committed floor (1950), `limitReceive` the signed price at the
+    /// sold amount (1900); the surplus is measured over the floor (2000 - 1950).
+    function test_exchange_floorAboveLimit_eventFields() public {
+        ISCaaSDex.ExchangePlan memory p = _plan(_leg(ALICE_PK, address(a), _order(alice, address(b), 1000, 1900, 3_000), 1000, 1950));
+        ISCaaSDex.Interaction[] memory xs = _swap(address(a), address(b), 1000, 2000);
+        vm.recordLogs();
+        _exchange(p, xs);
+        assertEq(b.balanceOf(alice), 1950 - 6 + 50);
+        (, uint256[7] memory v) = _legEvent(vm.getRecordedLogs(), 0);
+        assertEq(abi.encode(v), abi.encode([uint256(uint160(alice)), 1000, 1950, 50, 6, 0, 1900]));
+    }
+
     /// A cycle X→X (`receiveToken` = the sell token, accepted by the token): 1000 A → 2000 B → 1050 A, floor 1010, B a
     /// declared intermediate token back at its snapshot.
     function test_exchange_profitableCycle_xToX() public {
@@ -419,6 +462,23 @@ contract DexExchangeTest is Test {
             _plan(_leg(DAVE_PK, address(fot), _order(dave, address(b), 1000, 1000, 0), 1000, 1000));
         _expectExchange(p, _swap(address(fot), address(b), 990, 1000),
             _err(ISCaaSDex.ConservationBroken.selector, address(fot)));
+    }
+
+    /// A sell token that credits one unit more than the puller moved is refused at the pull too (the pull check is
+    /// exact, not a lower bound), even though a route spending the extra unit would end at the snapshot.
+    function test_exchange_excessCreditedSellToken_failsAtThePull() public {
+        BonusERC20 bon = new BonusERC20();
+        bon.mint(dave, 1e6);
+        bon.mint(address(router), 1e6);
+        bon.setSink(address(dex));
+        vm.prank(dave);
+        bon.approve(puller, type(uint256).max);
+        vm.prank(admin);
+        dex.setMarket(address(bon), address(b), true);
+        ISCaaSDex.ExchangePlan memory p =
+            _plan(_leg(DAVE_PK, address(bon), _order(dave, address(b), 1000, 1900, 0), 1000, 1900));
+        _expectExchange(p, _swap(address(bon), address(b), 1001, 2000),
+            _err(ISCaaSDex.ConservationBroken.selector, address(bon)));
     }
 
     /// Every allowance an `approve` interaction grants (to the router, and to any other spender) is back to 0 after the
