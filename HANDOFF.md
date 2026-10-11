@@ -9,7 +9,7 @@
 `0x2c9c6bfc…2f00`; `precheck` → the token's signature check → `record`); in `ERC20MetaTx` (every kind) `mtxTrade`,
 `mtxCancelOrder`, `mtxInvalidateNonces`, `tradeOrderDigest`, `cancelOrderDigest`, `invalidateNoncesDigest`, `pulled`,
 `minNonce`; on `UnderlyingToken` `mtxWrap` (`UnderlyingLib.wrapBySig`) with `NativeNotGasless`, `WrapOrderInvalid`,
-`WrapReceivedMismatch`. Tests `Trade.t` (13), `MtxWrap.t` (9), `TradeKat.t` (1, `test/vectors/trade_kat.json`).
+`WrapReceivedMismatch`. Tests `Trade.t` (21), `MtxWrap.t` (16), `TradeKat.t` (1, `test/vectors/trade_kat.json`).
 Neither `mtx…` trade entry nor `mtxWrap` is allowlisted; `MsgSenderLint` pins their direct `msg.sender` reads.
 
 **Rulings F1–F6 (plan header).** **F1** `TradeLib` is split around the signature (two delegatecalls) because the
@@ -18,9 +18,9 @@ signature check, with the Hedera branch, stays the token's. **F2** error names t
 **F3** `mtxWrap` errors; the relayer binding is the underlying's `mtxTrade` (the wrapper passes `msg.sender` as
 `submitter`). **F4 (flag to the owner):** size. `NoUnderlyingToken` 22,951 B is **over its 20,480 B budget** (under
 EIP-170), `UnderlyingToken` 29,974 B, `ZetherToken` 28,860 B; all in the ratchet baseline, size-pin tests NONE ≤ 23,552 and
-UNDERLYING ≤ 30,720; `TradeLib` 3,129 B, `UnderlyingLib` 11,654 B. Optimise later (owner). **F5** the new KAT is
+UNDERLYING ≤ 30,720; `TradeLib` 3,104 B, `UnderlyingLib` 11,654 B. Optimise later (owner). **F5** the new KAT is
 `trade_kat.json`; `dex_kat.json` stays the built `SCaaSDex` `Order` vector the node reads until P2b/P5. **F6** the trade
-entries live in `ERC20MetaTx`, so every kind has them.
+entries live in `ERC20MetaTx`, so every kind on `MetaTokenBase` (NONE, UNDERLYING) has them; `ZetherToken` (on `ZetherMetaTx`) and v1 `MetaToken` have no `mtxTrade` (Zether in P3). `EscrowFillShape`, `NotDex`, `DexNotContract` are named by the spec; only the arguments of the last two were open. Fix commits: 341e3eb and the final-review wave.
 
 **Not done / next = P2b plan:** `SCaaSDex` as a clone, `createDex`, DEX registry, `mtxSettle` (Path A/B), `DexPuller`;
 the old `SCaaSDex` is kept as `SCaaSDexV1` for the node until P5. Then P2c (exchange path). `mtxWrap` on `ZetherToken`

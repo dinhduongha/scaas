@@ -337,4 +337,26 @@ contract TradeTest is V2Fixture {
             MetaTokenBase(address(t)).mtxExecute(m, sig);
         }
     }
+
+    function test_minFillPpm_halvingEncodesIt() public pure {
+        // TradeLib.record writes ceil(x * MIN_FILL_PPM / PPM) as x - x / 2; that is only right while this holds
+        assertEq(2 * TradeLib.MIN_FILL_PPM, TradeLib.PPM);
+    }
+
+    function test_tradeNamespace_pulledSlot_andBaseNamespacesUntouched() public {
+        bytes32 nsTrade = 0x2c9c6bfc4d8563261a812845f5cbef41fd06d0e8f173455fd0e077ab420e2f00;
+        bytes32 nsToken = 0x83083067f3d1caf66741d4eeefa9d3f4f0e5b0793677731d6fee7e67b774ac00;
+        bytes32 nsMeta = 0x06b01547c739946503c06c80685cc72ae2fec5074fd602f84cd2fa888722ac00;
+        bytes32[12] memory before_;
+        for (uint256 i; i < 12; i++) before_[i] = vm.load(address(t), bytes32(uint256(nsToken) + i));
+        bytes32 metaBefore = vm.load(address(t), nsMeta);
+        ITradeToken.TradeOrder memory o = _order(1000, 2000);
+        bytes32 h = t.tradeOrderDigest(o);
+        _trade(o, _fill(600, 1200, 0));
+        assertEq(uint256(vm.load(address(t), keccak256(abi.encode(h, nsTrade)))), 600);
+        for (uint256 i; i < 12; i++) {
+            assertEq(vm.load(address(t), bytes32(uint256(nsToken) + i)), before_[i], "scaas.token slot moved");
+        }
+        assertEq(vm.load(address(t), nsMeta), metaBefore, "scaas.metatx slot moved");
+    }
 }

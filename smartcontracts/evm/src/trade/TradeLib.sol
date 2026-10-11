@@ -79,7 +79,10 @@ library TradeLib {
             if (move != o.amount - p) {
                 // effective minimum: max(minFill, ceil(amount/2)); received side: receiveFill >= ceil(receiveAmount/2).
                 // Written as halves, not products, so a huge amount cannot overflow: equal to the MIN_FILL_PPM =
-                // 500_000 form (ceil(x * 500_000 / 1e6) = x - x / 2); the constants stay for the spec's reading.
+                // 500_000 form (ceil(x * 500_000 / 1e6) = x - x / 2); the halving encodes MIN_FILL_PPM = PPM / 2 (pinned by
+                // test_minFillPpm_halvingEncodesIt). The received-side term is implied by the PriceLimit check below
+                // (move >= ceil(amount/2) and move*R <= receiveFill*amount give receiveFill >= R/2, an integer, so
+                // >= ceil(R/2)): it never binds on its own and is kept as a defensive floor.
                 uint256 half = o.amount - o.amount / 2;
                 uint256 m = o.minFill > half ? o.minFill : half;
                 if (move < m || f.receiveFill < o.receiveAmount - o.receiveAmount / 2) {
