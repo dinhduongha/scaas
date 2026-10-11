@@ -9,12 +9,15 @@ import {ZetherLib} from "./ZetherLib.sol";
 /// @title The prover views of every Zether token (CTR-ZTH-46): the statement a token will build at this block.
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Stateless, no admin, no upgrade, one instance for every token on
 ///         every curve (as `ZetherDisclosure`). It reads the token's views (`verifier`, `registry`, `chainUid`,
-///         `confidentialFee`, `maxDecryptableShielded`, `auditorKey`, `accountState`) and runs the token's own
-///         builders (`ZetherLib`, internal), so the bytes are the token's, with the same cheap checks. The caller picks
-///         the token it trusts. `envelopeBinding` 0 = a direct call (`ZTX_V1_DIRECT`), else the envelope's binding
+///         `confidentialFee`, `maxDecryptableShielded`, `auditorKey`, `auditorMode`, `disclosureMode`, `accountState`)
+///         and runs the token's own builders (`ZetherLib`, internal), so the bytes are the token's, with the same cheap
+///         checks. The caller picks the token it trusts. `envelopeBinding` 0 = a direct call (`ZTX_V1_DIRECT`), else the envelope's binding
 ///         (`ZTX_V1_RELAYED`, `IZetherToken.envelopeBinding`).
 contract ZetherStatements {
-    /// @notice The multi-recipient statement (`zetherTransfer`, `…Bundle`, `…NoBundle` by `mode`).
+    /// @notice The multi-recipient statement by its stored form `mode`: BUNDLE (`zetherTransfer` on a `BUNDLE` token), HASH
+    ///         (`zetherTransferCompact`, and `zetherTransfer` on a `COMPACT` token; the payload ends with the memo), NONE
+    ///         (`zetherTransferNoBundle`); `TransferEntryDisabled` for a form other than HASH on a `COMPACT` token, the
+    ///         auditor errors by `auditorMode`.
     function transferStatement(
         address token,
         bytes calldata payload,
@@ -99,6 +102,8 @@ contract ZetherStatements {
         c.fee = t.confidentialFee();
         c.maxShielded = t.maxDecryptableShielded();
         c.auditorKey = t.auditorKey();
+        c.auditorMode = t.auditorMode();
+        c.disclosureMode = t.disclosureMode();
         c.tag = tag;
         c.binding = binding;
     }

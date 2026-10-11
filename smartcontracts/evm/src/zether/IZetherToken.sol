@@ -47,7 +47,7 @@ interface IZetherToken {
         ZetherTypes.UA[] recipients,
         ZetherTypes.TransferMode mode
     );
-    /// @notice Mode HASH: `B_1 ‖ … ‖ B_M`, whose hash `entryRef` stores.
+    /// @notice Commit-reveal (HASH): the record `R = salt ‖ B_1 ‖ … ‖ B_M`, whose hash `entryRef` stores.
     event TransferBundles(bytes32 indexed entryRef, bytes bundles);
     /// @notice `recipient` received `amount · shieldScale` public units (`zetherUnshield`) or the underlying they are
     ///         worth (`zetherUnshieldUnwrap`).
@@ -68,8 +68,20 @@ interface IZetherToken {
     error RollOverExpired(uint256 validUntilBlock);
     error PendingSeqMismatch(uint256 expected, uint256 got);
     error ZeroRecipient();
-    /// @notice With the token's auditor on, every `C_aud_j` is `O` (left out) or none is (CTR-ZTH-42).
+    /// @notice `OPTIONAL` auditor: every `C_aud_j` is `O` (left out) or none is (CTR-ZTH-42).
     error AuditorLegsMixed();
+    /// @notice `FULL` auditor: a transfer left the auditor out (some `C_aud_j = O`).
+    error AuditorRequired();
+    /// @notice `NONE` auditor: a transfer carries an auditor leg (some `C_aud_j ≠ O`).
+    error AuditorForbidden();
+    /// @notice Commit-reveal: the memo's clear salt is not the payload's (storage-only recovery needs it, CTR-ZTH-50).
+    error MemoSaltMismatch();
+    /// @notice A `COMPACT` token refuses `zetherTransferNoBundle` and `zetherTransferSingle` (CTR-ZTH-48).
+    error TransferEntryDisabled(uint8 disclosureMode);
+    /// @notice `ConfidentialConfig.disclosureMode` is neither BUNDLE nor COMPACT (CTR-ZTH-48).
+    error BadDisclosureMode(uint8 mode);
+    /// @notice `ConfidentialConfig.auditorMode` unknown, FULL or OPTIONAL without a key, or NONE with one (CTR-ZTH-49).
+    error BadAuditorMode(uint8 mode);
     /// @notice A `ConfidentialConfig` the token refuses (CTR-ZTH-04, CTR-ZTH-26).
     error BadInit();
     /// @notice `zetherWrapShield`: the public-equivalent of the deposit is not a whole number of shielded units.
@@ -83,8 +95,13 @@ interface IZetherToken {
     function shieldScale() external view returns (uint256);
     /// @notice The inner fee, `< 2^64` and `< maxDecryptableShielded`; never a function of `v` (CTR-ZTH-07).
     function confidentialFee() external view returns (uint256);
-    /// @notice The auditor key (`ITransferDisclosure.AUDITOR`), empty when off (CTR-ZTH-09).
+    /// @notice The auditor key (`ITransferDisclosure.AUDITOR`), empty exactly when `auditorMode()` is `NONE` (CTR-ZTH-09).
     function auditorKey() external view returns (bytes memory);
+    /// @notice `NONE`, `FULL` (every transfer includes the auditor) or `OPTIONAL` (the sender's choice per transfer).
+    function auditorMode() external view returns (ZetherTypes.AuditorMode);
+    /// @notice `BUNDLE` (`zetherTransfer` stores the record; `zetherTransferCompact`, `zetherTransferNoBundle` save gas)
+    ///         or `COMPACT` (`zetherTransfer` and `zetherTransferCompact` are commit-reveal; no-bundle and single refused).
+    function disclosureMode() external view returns (ZetherTypes.DisclosureMode);
     /// @notice The canonical `ZetherDisclosure` (stateless, shared), an implementation immutable (CTR-ZTH-43).
     function disclosure() external view returns (ITransferDisclosure);
     function verifier() external view returns (IZetherVerifier);
@@ -93,8 +110,8 @@ interface IZetherToken {
 
     // ------------------------------------------------------------------ state
 
-    /// @notice Raw record of `entryRef` for `disclosure()`: `B_1 ‖ … ‖ B_M` (single format, BUNDLE), the 32-byte hash
-    ///         (HASH), empty (NONE, unknown). `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j`.
+    /// @notice Raw record of `entryRef` for `disclosure()`: `R = salt ‖ B_1 ‖ … ‖ B_M` (BUNDLE, the single format),
+    ///         `keccak256(R) ‖ memo` (commit-reveal, CTR-ZTH-50), empty (NONE, unknown). `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j`.
     function transferEntry(bytes32 entryRef) external view returns (bytes memory);
     /// @notice Σ of every `acc` and `pending` exponent (shielded units); `totalSupply()` counts public units only.
     function totalShielded() external view returns (uint256);
@@ -123,14 +140,18 @@ interface IZetherToken {
 
     /// @notice Burns `amount · shieldScale` public units of the caller; `pending[ua] += [amount]G` (CTR-ZTH-35).
     function zetherShield(bytes calldata encodedY, uint256 amount) external;
-    /// @notice `M` recipients, one proof; stores the hash of the bundles (HASH, the default, CTR-ZTH-38).
+    /// @notice `M` recipients, one proof, the token's default (CTR-ZTH-38): the record stored (BUNDLE) on a `BUNDLE`
+    ///         token, commit-reveal (HASH: the commitment and the sender memo stored, the record in `TransferBundles`) on
+    ///         a `COMPACT` token.
     function zetherTransfer(bytes calldata payload, bytes calldata proof, bytes calldata authSig, ZetherTypes.UA beneficiary)
         external returns (bytes32 entryRef);
-    function zetherTransferBundle(bytes calldata payload, bytes calldata proof, bytes calldata authSig, ZetherTypes.UA beneficiary)
+    /// @notice Commit-reveal (HASH) on every token: the commitment and the sender memo stored, the record in the event.
+    function zetherTransferCompact(bytes calldata payload, bytes calldata proof, bytes calldata authSig, ZetherTypes.UA beneficiary)
         external returns (bytes32 entryRef);
+    /// @notice Stores nothing (NONE, disclosure off chain from calldata); `TransferEntryDisabled` on a `COMPACT` token.
     function zetherTransferNoBundle(bytes calldata payload, bytes calldata proof, bytes calldata authSig, ZetherTypes.UA beneficiary)
         external returns (bytes32 entryRef);
-    /// @notice The single-recipient format, its bundle stored in full.
+    /// @notice The single-recipient format, its record stored in full; `TransferEntryDisabled` on a `COMPACT` token.
     function zetherTransferSingle(bytes calldata payload, bytes calldata proof, bytes calldata authSig, ZetherTypes.UA beneficiary)
         external returns (bytes32 entryRef);
     /// @notice Proves the unshield statement, then mints `amount · shieldScale` public units to `to`.

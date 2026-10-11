@@ -24,8 +24,9 @@ abstract contract ZetherVerifierBase is IZetherVerifier {
     uint256 internal constant MAX_RECIPIENTS = 16;
     uint256 internal constant NV = 64; // limits D1 (RS-NV64-1)
     uint256 internal constant NB = 64;
-    /// @dev Statement header (zether.md §7): 13 words, `chainUid` the 4th (CTR-ZTH-36); `fee` and `amount` are read here.
-    uint256 internal constant HEADER = 416;
+    /// @dev Statement header (zether.md §7): 15 words, `chainUid` the 4th (CTR-ZTH-36), the salt the 14th (CTR-ZTH-30),
+    ///      `memoHash` the 15th (CTR-ZTH-50); `fee` and `amount` are read here.
+    uint256 internal constant HEADER = 480;
     uint256 internal constant FEE_AT = 288;
     uint256 internal constant AMOUNT_AT = 352;
     uint256 internal constant NGEN = 130; // h, U, G_0..63, H_0..63
@@ -180,7 +181,7 @@ abstract contract ZetherVerifierBase is IZetherVerifier {
         (x.st, x.c) = T.challenge(x.st, "sigma.c", x.r);
     }
 
-    /// @dev Điểm thứ `i` của phần điểm statement (sau header 416 byte).
+    /// @dev Điểm thứ `i` của phần điểm statement (sau header 480 byte).
     function _sp(Ctx memory x, uint256 i) private pure returns (bytes memory) {
         return _slice(x.s, HEADER + i * x.p, x.p);
     }
@@ -575,7 +576,7 @@ abstract contract ZetherVerifierBase is IZetherVerifier {
 ///         confidential trên public chain phải được giả định giải mã được trong khoảng 2035–2045.
 contract ZetherVerifierBn254 is ZetherVerifierBase {
     function _psidLabel() internal pure override returns (string memory) {
-        return "scaas/zether/sigma-bullets/bn254/n64-n64/v1";
+        return "scaas/zether/sigma-bullets/bn254/n64-n64/v2";
     }
 
     function curveName() external pure returns (string memory) { return "bn254"; }
@@ -618,7 +619,7 @@ contract ZetherVerifierBls12381 is ZetherVerifierBase {
     bytes internal constant GEN_DST = "SCAAS-ZETHER-GEN-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_";
 
     function _psidLabel() internal pure override returns (string memory) {
-        return "scaas/zether/sigma-bullets/bls12-381/n64-n64/v1";
+        return "scaas/zether/sigma-bullets/bls12-381/n64-n64/v2";
     }
 
     function curveName() external pure returns (string memory) { return "bls12-381"; }

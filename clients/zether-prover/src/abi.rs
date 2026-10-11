@@ -40,6 +40,11 @@ pub fn encode(toks: &[Tok]) -> Vec<u8> {
     head
 }
 
+/// The `uint64` in the 32-byte word at `at`, `None` when out of range or wider.
+pub fn word_u64(b: &[u8], at: usize) -> Option<u64> {
+    word_at(b, at)
+}
+
 fn word_at(b: &[u8], at: usize) -> Option<u64> {
     let w = b.get(at..at.checked_add(32)?)?;
     if w[..24].iter().any(|&x| x != 0) {

@@ -59,7 +59,7 @@ contract NoUnderlyingZetherToken is NoUnderlyingToken, ZetherLayer {
         (s[1], c[1]) = (this.burn.selector, FEE_CLASS_AMOUNT);
         (s[2], c[2]) = (this.zetherShield.selector, FEE_CLASS_ABSOLUTE);
         (s[3], c[3]) = (this.zetherTransfer.selector, FEE_CLASS_ABSOLUTE);
-        (s[4], c[4]) = (this.zetherTransferBundle.selector, FEE_CLASS_ABSOLUTE);
+        (s[4], c[4]) = (this.zetherTransferCompact.selector, FEE_CLASS_ABSOLUTE);
         (s[5], c[5]) = (this.zetherTransferNoBundle.selector, FEE_CLASS_ABSOLUTE);
         (s[6], c[6]) = (this.zetherTransferSingle.selector, FEE_CLASS_ABSOLUTE);
         (s[7], c[7]) = (this.zetherUnshield.selector, FEE_CLASS_ABSOLUTE);

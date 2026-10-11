@@ -106,7 +106,8 @@ contract ZetherUnderlyingTest is ZetherFixture {
         c.legs = new IFactoryToken.Leg[](legs.length);
         for (uint256 i; i < legs.length; ++i) c.legs[i] = IFactoryToken.Leg(legs[i], nums[i], dens[i]);
         c.conf = IFactoryToken.ConfidentialConfig(
-            address(ver), auditor ? ZetherKeys.pub(X_AUD, false) : bytes(""), SCALE, uint256(1) << 40, FEE
+            address(ver), auditor ? ZetherKeys.pub(X_AUD, false) : bytes(""), SCALE, uint256(1) << 40, FEE, dMode,
+            auditor ? aMode : 0
         );
         return UnderlyingZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, c, salt)));
     }
@@ -204,7 +205,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
         c.rate = IFactoryToken.RateConfig(2 days, 1000);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
-        c.conf = IFactoryToken.ConfidentialConfig(address(ver), "", SCALE, 100, FEE);
+        c.conf = IFactoryToken.ConfidentialConfig(address(ver), "", SCALE, 100, FEE, 0, 0);
         z = UnderlyingZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, c, "small")));
     }
 
@@ -312,7 +313,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
         bytes32 ref = _direct(tok, t, _none());
         assertEq(address(w.disclosure()), address(dis));
         assertEq(w.auditorKey(), ZetherKeys.pub(X_AUD, false));
-        assertEq(w.transferEntry(ref).length, 4 * 64, "the single format stores its bundle");
+        assertEq(w.transferEntry(ref).length, 16 + 4 * 64, "the single format stores R = salt, then B");
         (bytes memory ct,) = dis.transferCiphertext(address(w), ref, 0, "");
         bytes memory dOut = new bytes(64);
         for (uint256 i; i < 64; ++i) dOut[i] = ct[64 + i];
@@ -356,7 +357,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
         (c.name, c.symbol, c.decimals, c.features) = ("F", "F", 6, 1 << AdminLib.FREEZE);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
-        c.conf = IFactoryToken.ConfidentialConfig(address(ver), "", SCALE, 100, FEE);
+        c.conf = IFactoryToken.ConfidentialConfig(address(ver), "", SCALE, 100, FEE, 0, 0);
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.FREEZE));
         factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, c, "freeze");
         c.features = 1 << AdminLib.MINTABLE;
@@ -487,6 +488,10 @@ contract ZetherUnderlyingTest is ZetherFixture {
         assertEq(s[12], UnderlyingZetherToken.zetherWrapShield.selector);
         assertEq(s[13], UnderlyingZetherToken.zetherUnshieldUnwrap.selector);
         assertEq(s[6], ZetherLayer.zetherShield.selector);
+        assertEq(s[7], ZetherLayer.zetherTransfer.selector);
+        assertEq(s[8], ZetherLayer.zetherTransferCompact.selector);
+        assertEq(s[9], ZetherLayer.zetherTransferNoBundle.selector);
+        assertEq(s[10], ZetherLayer.zetherTransferSingle.selector);
         assertEq(s[11], ZetherLayer.zetherUnshield.selector);
         for (uint256 i = 6; i < 14; ++i) {
             assertEq(c[i], 1, "ABSOLUTE");

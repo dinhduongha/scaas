@@ -102,8 +102,8 @@ def generators(curve):
     H = [g("H", i) for i in range(64)]
     blob = h + u + b"".join(G) + b"".join(H)
     psid = keccak(
-        b"scaas/zether/sigma-bullets/bn254/n64-n64/v1" if curve == "bn254"
-        else b"scaas/zether/sigma-bullets/bls12-381/n64-n64/v1")  # n_v = n_b = 64 (RS-NV64-1)
+        b"scaas/zether/sigma-bullets/bn254/n64-n64/v2" if curve == "bn254"
+        else b"scaas/zether/sigma-bullets/bls12-381/n64-n64/v2")  # n_v = n_b = 64 (RS-NV64-1); v2: the 480-byte header (P3b)
     return {
         "curve": curve, "proofSystemId": hx(psid), "h": hx(h), "U": hx(u),
         "G": [hx(p) for p in G], "H": [hx(p) for p in H], "blobKeccak": hx(keccak(blob)),

@@ -31,7 +31,7 @@ contract ZetherProver {
         bytes32 seed;
     }
 
-    uint256 constant HEADER = 416; // zether.md §7: chainUid is word 3
+    uint256 constant HEADER = 480; // zether.md §7: chainUid is word 3, salt word 13, memoHash word 14
 
     function _env(IZetherVerifier v, bytes32 seed) internal view returns (Env memory e) {
         e.v = v;
