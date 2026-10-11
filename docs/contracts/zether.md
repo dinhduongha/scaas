@@ -1222,8 +1222,18 @@ BUNDLE token, NONE = `zetherTransferNoBundle`.
 - **The auditor scan:** the multi cells carry ≈ 1 k per leg for the `C_aud` scan that picks `Y_a` ([CTR-ZTH-42](#CTR-ZTH-42)).
 - **Leaving the auditor out** (OPTIONAL only) saves E6 per leg (bn254 ≈ 27–28 k, BLS12-381 ≈ 41–45 k) and, where the
   record is stored, the zero `C_aud` words: single −68 k / −122 k, BUNDLE M = 8 −405 k / −1.0 M (bn254 / BLS12-381).
-- **EIP-7825 cap (16,777,216 per transaction, intrinsic + calldata included):** the prover estimates a build as the cell (straight line between the measured `M`) + 21 k + 16 gas/B of calldata and refuses one over the cap less a 1 % margin (167,772: the relayed envelope, interpolation, drift), naming the estimate, the largest `M` of the form and the cheaper forms that fit (`ZError::GasCap`, `max_recipients`); the contract has no cap. Largest `M`, auditor on / out: bn254 Compact 9 / 9, BUNDLE 8 / 8, NONE 9 / 9; BLS12-381 Compact 7 / 7, BUNDLE 6 / 7, NONE 7 / 8 (BLS M = 8: Compact on ≈ 17.03 M, out ≈ 16.66 M, NONE on ≈ 16.68 M, out ≈ 16.32 M). `MAX_RECIPIENTS = 16` stays the statement's bound. The node gas cap below applies to M = 1; a chain that relays larger `M` raises it to the cell plus
-  intrinsic and calldata.
+- **EIP-7825 cap (16,777,216 per transaction, intrinsic + calldata included):** the prover estimates a build as the cell above (straight line between the measured `M`; above 8 the 4 → 8 slope) + 21 k + 16 gas/B of calldata and refuses one over the cap less a 1 % margin (167,772 — the relayed envelope ≈ +85 k, interpolation and drift), naming the cheaper forms that fit (controller ruling, pending the owner). Largest `M` per transaction, with the estimate at that `M` and at `M + 1`:
+
+| Curve | Form | Aud. | max `M` | est. at max | est. at max + 1 |
+|---|---|---|---|---|---|
+| bn254 | Compact | on / out | 9 / 9 | 16.08 M / 15.82 M | 17.67 M / 17.39 M |
+| bn254 | BUNDLE | on / out | 8 / 8 | 15.63 M / 15.22 M | 17.37 M / 16.92 M |
+| bn254 | NONE | on / out | 9 / 9 | 15.72 M / 15.46 M | 17.28 M / 17.00 M |
+| BLS12-381 | Compact | on / out | 7 / 7 | 15.11 M / 14.79 M | 17.03 M / 16.66 M |
+| BLS12-381 | BUNDLE | on / out | 6 / 7 | 15.10 M / 16.47 M | 17.34 M / 18.58 M |
+| BLS12-381 | NONE | on / out | 7 / 8 | 14.80 M / 16.32 M | 16.68 M / 18.15 M |
+
+  More recipients go in separate transfers; the statement itself allows `M ≤ 16`.
 - **Prover** (release `zether-cli proveTransferMulti`, one process per call; median of 3 on the chain-7622 host, AMD
   Ryzen 5 7235HS): bn254 single 74 ms, M = 1/2/4/8 = 75 / 114 / 181 / 322 ms; BLS12-381 single 162 ms, M = 1/2/4/8 =
   159 / 231 / 361 / 660 ms.
