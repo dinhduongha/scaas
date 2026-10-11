@@ -31,6 +31,8 @@ fn header(fee: u64) -> Header {
         beneficiary: if fee > 0 { [0x22; 32] } else { [0; 32] },
         amount: 0,
         recipient: [0; 20],
+        salt: [0; 16],
+        memo_hash: [0; 32],
     }
 }
 
@@ -72,7 +74,9 @@ fn valid_and_effects<C: ZCurve>() {
         assert_eq!(enc.len(), if point_len::<C>() == 64 { 3200 } else { 5888 });
         assert!(TransferProof::<C>::decode(&enc).unwrap() == p);
         assert!(TransferStatement::<C>::decode(&st.encode()).unwrap() == st);
-        assert_eq!(st.payload().len(), 64 + 6 * point_len::<C>());
+        assert_eq!(st.payload().len(), 80 + 6 * point_len::<C>(), "accSeq ‖ sendCounter ‖ salt ‖ points");
+        assert_eq!(st.record().len(), 16 + 4 * point_len::<C>(), "R = salt ‖ B");
+        assert_eq!(&st.record()[..16], &st.header.salt);
         // On-chain effects (§5), then decrypt both sides.
         let g = generator::<C>();
         let fee = g * Fr::<C>::from(300u64);
@@ -251,6 +255,12 @@ fn burn_suite<C: ZCurve>() {
     let mut h = header(300);
     h.amount = 400_000;
     h.recipient = [0x44; 20];
+    let mut memo = h.clone();
+    memo.memo_hash = [1; 32];
+    assert!(prove_burn(&f.gens, &f.from, memo, f.acc, BAL, &mut rng()).is_err(), "a burn has no memo");
+    let mut salted = h.clone();
+    salted.salt = [1; 16];
+    assert!(prove_burn(&f.gens, &f.from, salted, f.acc, BAL, &mut rng()).is_err(), "a burn has no salt");
     let (st, p, w) = prove_burn(&f.gens, &f.from, h.clone(), f.acc, BAL, &mut rng()).unwrap();
     verify_burn(&f.gens, &st, &p).unwrap();
     let enc = p.encode();
@@ -370,15 +380,18 @@ fn multi_valid_and_effects<C: ZCurve>() {
         (vec![0, 7, 0, 100], false, TransferMode::Bundle),
         (vec![1, 2, 3, 4, 5, 6, 7, 8], true, TransferMode::NoBundle),
     ] {
-        let (st, p, _) = multi(&f, header(300), mode, aud, &vs);
+        let (st, p, w) = multi(&f, header(300), mode, aud, &vs);
         verify_transfer_multi(&f.gens, &st, &p).unwrap();
         let m = vs.len();
         let enc = p.encode();
         assert_eq!(enc.len(), MultiTransferProof::<C>::wire_len(m));
         assert!(MultiTransferProof::<C>::decode(&enc, m).unwrap() == p);
         assert!(MultiTransferStatement::<C>::decode(&st.encode()).unwrap() == st);
-        assert_eq!(st.payload().len(), 96 + (3 + 3 * m) * point_len::<C>());
-        assert_eq!(st.bundles().len(), 4 * m * point_len::<C>());
+        let memo = if mode == TransferMode::Hash { memo_len(m) } else { 0 };
+        assert_eq!(w.memo.len(), memo, "a memo on commit-reveal only");
+        assert_eq!(st.header.memo_hash == [0; 32], memo == 0, "memoHash in the header exactly then");
+        assert_eq!(st.payload(&w.memo).len(), 112 + (3 + 3 * m) * point_len::<C>() + memo, "… ‖ legs [‖ memo]");
+        assert_eq!(st.bundles().len(), 16 + 4 * m * point_len::<C>(), "R = salt ‖ B_1 ‖ … ‖ B_M");
         // Effects: the sender loses Σv + fee, each recipient decrypts its own v (decoys: 0).
         let g = generator::<C>();
         let acc2 = Ciphertext { c: st.acc.c - st.c_deb - g * Fr::<C>::from(300u64), d: st.acc.d - st.d_out };
@@ -421,7 +434,8 @@ fn multi_negatives<C: ZCurve>() {
     bad(pm(&[(y(10), 1), (y(10), 2)], header(0), &mut r)); // duplicate
     bad(pm(&[(y(10), 1), (f.from.y, 2)], header(0), &mut r)); // self
     bad(pm(&[(y(10), BAL), (y(11), 1)], header(0), &mut r)); // Σv > balance
-    pm(&many(16), header(0), &mut r).unwrap(); // 16 is the cap
+    // 16 is the cap (BUNDLE: commit-reveal + auditor at M >= 8 on BLS12-381 is over the EIP-7825 gas cap, refused)
+    prove_transfer_multi(&f.gens, &f.from, header(0), TransferMode::Bundle, &many(16), ya, f.acc, BAL, &mut r).unwrap();
 
     let (st, _, w) = multi(&f, header(300), TransferMode::Hash, true, &[0, 500, 0]);
     let one = Fr::<C>::one();
@@ -481,12 +495,48 @@ fn multi_negatives_bls12_381() {
     multi_negatives::<Bls12381>();
 }
 
-/// K1: `s` is chain-specific — the same transfer on a re-created chain (same chainId, other chainUid) never reuses it.
+/// CTR-ZTH-30: `s` depends on the chain (K1: a re-created chain keeps chainId and the CREATE2 token address), the
+/// salt (a retry at the same counter), the token, the sender, the counter and the key — and on nothing else: not on
+/// the amounts, the recipients, the fee or the binding (so the sender rebuilds it from its key and chain data alone).
 #[test]
-fn s_depends_on_chain_uid() {
-    let (x, y) = (Fr::<Bn254>::from(7u64), generator::<Bn254>());
-    let mut other = header(0);
-    other.chain_uid[31] ^= 1;
-    assert_ne!(derive_s::<Bn254>(&x, &header(0), &y, 5), derive_s::<Bn254>(&x, &other, &y, 5));
-    assert_ne!(derive_s_multi::<Bn254>(&x, &header(0), &[(y, 5)]), derive_s_multi::<Bn254>(&x, &other, &[(y, 5)]));
+fn s_inputs() {
+    let (x, ua, salt) = (Fr::<Bn254>::from(7u64), [0x77u8; 32], [0x5a; 16]);
+    let base = derive_s::<Bn254>(&x, &header(0), &ua, &salt);
+    let mut h = header(0);
+    h.chain_uid[31] ^= 1;
+    assert_ne!(derive_s::<Bn254>(&x, &h, &ua, &salt), base, "chainUid");
+    assert_ne!(derive_s::<Bn254>(&x, &header(0), &ua, &[0x5b; 16]), base, "salt");
+    let mut h = header(0);
+    h.token[0] ^= 1;
+    assert_ne!(derive_s::<Bn254>(&x, &h, &ua, &salt), base, "token");
+    let mut h = header(0);
+    h.send_counter += 1;
+    assert_ne!(derive_s::<Bn254>(&x, &h, &ua, &salt), base, "sendCounter");
+    assert_ne!(derive_s::<Bn254>(&x, &header(0), &[0x78; 32], &salt), base, "fromUA");
+    assert_ne!(derive_s::<Bn254>(&Fr::<Bn254>::from(8u64), &header(0), &ua, &salt), base, "the key");
+    let mut h = header(300);
+    (h.chain_id, h.acc_seq, h.binding, h.memo_hash, h.salt) = (1, 9, Binding::Relayed([1; 32]), [2; 32], [3; 16]);
+    assert_eq!(derive_s::<Bn254>(&x, &h, &ua, &salt), base, "chainId, accSeq, fee, beneficiary, binding, the header fields are not inputs (the salt argument is)");
+}
+
+/// CTR-ZTH-50: the memo opens under the sender's key and header to the flag and the legs, and under nothing else.
+#[test]
+fn memo_roundtrip() {
+    let (x, ua, salt) = (Fr::<Bn254>::from(7u64), [0x77u8; 32], [0x5a; 16]);
+    let (y1, y2) = (generator::<Bn254>() * Fr::<Bn254>::from(3u64), generator::<Bn254>());
+    let memo = seal_memo::<Bn254>(&x, &header(0), &ua, &salt, true, &[(y1, 1200u64), (y2, 0)]);
+    assert_eq!(memo.len(), memo_len(2));
+    assert_eq!(memo.len(), 17 + 2 * 40);
+    assert_eq!(&memo[..16], &salt, "the salt in clear");
+    let (s2, aud, legs) = open_memo::<Bn254>(&x, &header(0), &ua, &memo).unwrap();
+    assert!(s2 == salt && aud);
+    assert_eq!(legs[0], MemoLeg { amount: 1200, to_ua: zether_prover::curve::ua_of::<Bn254>(&y1) });
+    assert_eq!(legs[1].amount, 0);
+    let mut h = header(0);
+    h.chain_uid[0] ^= 1;
+    assert_ne!(open_memo::<Bn254>(&x, &h, &ua, &memo).unwrap().2, legs, "another chain: garbage");
+    assert_ne!(open_memo::<Bn254>(&Fr::<Bn254>::from(8u64), &header(0), &ua, &memo).unwrap().2, legs, "another key");
+    assert!(open_memo::<Bn254>(&x, &header(0), &ua, &memo[..memo.len() - 1]).is_err(), "length");
+    let off = seal_memo::<Bn254>(&x, &header(0), &ua, &salt, false, &[(y1, 1200u64)]);
+    assert!(!open_memo::<Bn254>(&x, &header(0), &ua, &off).unwrap().1, "the auditor flag");
 }

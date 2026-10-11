@@ -41,4 +41,6 @@ pub enum ZError {
     BadStatement(&'static str),
     #[error("verification failed: {0}")]
     Verify(&'static str),
+    #[error("the transfer's known gas ({gas}) exceeds the EIP-7825 per-transaction cap ({cap}): BLS12-381, commit-reveal, auditor included, M >= {min_m}; use a bundle or no-bundle form, leave the auditor out, or send fewer recipients")]
+    GasCap { gas: u64, cap: u64, min_m: usize },
 }

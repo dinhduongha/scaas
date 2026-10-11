@@ -65,9 +65,9 @@ fn big_balance_cache_spend_and_cli_recovery() {
         "amount": v.to_string(), "fee": fee, "beneficiary": hx(&[0x22; 32]),
     })).unwrap();
     assert_eq!(api("verifyTransfer", json!({"curve": "bn254", "statement": t["statement"], "proof": t["proof"]})).unwrap()["ok"], json!(true));
-    // The token's debit: acc −= (C_deb + [fee]G, D_out). Payload = 64 B ‖ Y_f ‖ Y_t ‖ C_out ‖ D_out ‖ C_deb ‖ C_aud.
+    // The token's debit: acc −= (C_deb + [fee]G, D_out). Payload = 64 B ‖ salt(16) ‖ Y_f ‖ Y_t ‖ C_out ‖ D_out ‖ C_deb ‖ C_aud.
     let pl = hex::decode(&t["payload"].as_str().unwrap()[2..]).unwrap();
-    let at = |i: usize| decode_point::<Bn254>(&pl[64 + 64 * i..128 + 64 * i]).unwrap();
+    let at = |i: usize| decode_point::<Bn254>(&pl[80 + 64 * i..144 + 64 * i]).unwrap();
     let (d_out, c_deb) = (at(3), at(4));
     let g = generator::<Bn254>();
     let acc2 = Ciphertext::<Bn254> { c: pt(&acc["C"]) - c_deb - g * Fr::<Bn254>::from(fee), d: pt(&acc["D"]) - d_out };

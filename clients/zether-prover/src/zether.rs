@@ -3,13 +3,14 @@
 //! (public amount, §5). The verifier here mirrors the Solidity verifier for tests/vectors.
 
 use ark_ff::{PrimeField, Zero};
+use hkdf::Hkdf;
 use zeroize::Zeroize;
 use rand_core::{CryptoRng, RngCore};
-use sha2::{Digest, Sha512};
+use sha2::Sha256;
 
 use crate::bulletproofs::{self as bp, msm, nz_challenge, Gens, RangeProof};
 use crate::curve::{
-    decode_point, decode_scalar, encode_point, encode_scalar, generator, keccak256, point_len, proof_system_id,
+    decode_point, decode_scalar, encode_point, encode_scalar, generator, keccak256, point_len, proof_system_id, ua_of,
     proof_system_id_multi, Fr, ZCurve, G,
 };
 use crate::elgamal::Ciphertext;
@@ -22,7 +23,7 @@ use crate::ZError;
 /// soundness comes from `MAX_TOTAL_SHIELDED` instead (zether-design ruling RS-NV64-1).
 pub const N_V: usize = 64;
 pub const N_B: usize = 64;
-pub const HEADER_LEN: usize = 416;
+pub const HEADER_LEN: usize = 480;
 /// `MAX_TOTAL_SHIELDED` (§1): ceiling of `maxDecryptableShielded`.
 pub const MAX_TOTAL_SHIELDED: u64 = 1 << 54;
 
@@ -51,7 +52,8 @@ pub enum Binding {
     Unwrap([u8; 32]),
 }
 
-/// The 416-byte statement header (zether.md §7): `chainUid` is word 3 (CTR-ZTH-36).
+/// The 480-byte statement header (zether.md §7): `chainUid` is word 3 (CTR-ZTH-36), the build salt word 13
+/// (`16 zero bytes ‖ salt`, CTR-ZTH-30), `memoHash` word 14 (`keccak256(memo)` on commit-reveal, CTR-ZTH-50; else 0).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Header {
     pub chain_id: u64,
@@ -68,6 +70,16 @@ pub struct Header {
     pub amount: u64,
     /// Burn only (transfer: zero address).
     pub recipient: [u8; 20],
+    /// Transfer only (burn: 0): 16 fresh random bytes per build, an input of [`derive_s`]; the prove functions draw it.
+    pub salt: [u8; 16],
+    /// Commit-reveal only (else 0): `keccak256` of the sender memo the payload ends with ([`seal_memo`]).
+    pub memo_hash: [u8; 32],
+}
+
+fn salt_word(salt: &[u8; 16]) -> [u8; 32] {
+    let mut o = [0u8; 32];
+    o[16..].copy_from_slice(salt);
+    o
 }
 
 fn be32_u64(v: u64) -> [u8; 32] {
@@ -107,7 +119,7 @@ impl Header {
             Binding::Relayed(b) => (keccak256(b"ZTX_V1_RELAYED"), b),
             Binding::Unwrap(b) => (keccak256(b"ZTX_V1_DIRECT"), b),
         };
-        let words: [[u8; 32]; 13] = [
+        let words: [[u8; 32]; 15] = [
             op_tag,
             psid,
             be32_u64(self.chain_id),
@@ -121,6 +133,8 @@ impl Header {
             self.beneficiary,
             be32_u64(self.amount),
             be32_addr(&self.recipient),
+            salt_word(&self.salt),
+            self.memo_hash,
         ];
         words.concat()
     }
@@ -148,6 +162,9 @@ impl Header {
         } else {
             return Err(ZError::BadStatement("bindingTag"));
         };
+        if w(13)[..16].iter().any(|&b| b != 0) {
+            return Err(ZError::BadStatement("salt word has dirty high bytes"));
+        }
         Ok(Self {
             chain_id: u64_of(w(2))?,
             chain_uid: w(3).try_into().unwrap(),
@@ -159,6 +176,8 @@ impl Header {
             beneficiary: w(10).try_into().unwrap(),
             amount: u64_of(w(11))?,
             recipient: addr_of(w(12))?,
+            salt: w(13)[16..].try_into().unwrap(),
+            memo_hash: w(14).try_into().unwrap(),
         })
     }
 
@@ -276,11 +295,19 @@ impl<C: ZCurve> TransferStatement<C> {
         Ok(st)
     }
 
-    /// `be32(accSeq) ‖ be32(sendCounter) ‖ Y_f ‖ Y_t ‖ C_out ‖ D_out ‖ C_deb ‖ C_aud` (§9).
+    /// `be32(accSeq) ‖ be32(sendCounter) ‖ salt(16) ‖ Y_f ‖ Y_t ‖ C_out ‖ D_out ‖ C_deb ‖ C_aud` (§9).
     pub fn payload(&self) -> Vec<u8> {
         let mut b = be32_u64(self.header.acc_seq).to_vec();
         b.extend(be32_u64(self.header.send_counter));
+        b.extend_from_slice(&self.header.salt);
         b.extend(cat::<C>(&[&self.y_f, &self.y_t, &self.c_out, &self.d_out, &self.c_deb, &self.c_aud]));
+        b
+    }
+
+    /// The record the token stores, `R = salt ‖ Y_t ‖ C_out ‖ D_out ‖ C_aud` (CTR-ZTH-38).
+    pub fn record(&self) -> Vec<u8> {
+        let mut b = self.header.salt.to_vec();
+        b.extend(cat::<C>(&[&self.y_t, &self.c_out, &self.d_out, &self.c_aud]));
         b
     }
 
@@ -506,20 +533,109 @@ pub fn verify_transfer<C: ZCurve>(
     Ok(tr)
 }
 
-/// Transfer randomness `s` as a PRF of the conf key (zether-design §5 "PRF `s` phía client"):
-/// the sender can re-derive `s` for a `SENDER_S` disclosure, re-proving the same transfer gives
-/// the same ciphertexts, and two different transfers never share `s` (which would leak `v1 - v2`).
-pub fn derive_s<C: ZCurve>(x: &Fr<C>, h: &Header, y_to: &G<C>, v: u64) -> Fr<C> {
-    let mut d = Sha512::new();
-    d.update(b"SCAAS-ZETHER-S-V1");
-    d.update(encode_scalar::<C>(x));
-    d.update(h.chain_id.to_be_bytes());
-    d.update(h.chain_uid);
-    d.update(h.token);
-    d.update(h.send_counter.to_be_bytes());
-    d.update(encode_point::<C>(y_to));
-    d.update(v.to_be_bytes());
-    Fr::<C>::from_be_bytes_mod_order(&d.finalize())
+/// `info = tag ‖ chainUid ‖ token(20) ‖ fromUA ‖ be32(sendCounter) ‖ salt` (CTR-ZTH-30, CTR-ZTH-50).
+fn sender_info(tag: &[u8], h: &Header, from_ua: &[u8; 32], salt: &[u8; 16]) -> Vec<u8> {
+    [tag, &h.chain_uid, &h.token, from_ua, &be32_u64(h.send_counter), salt].concat()
+}
+
+/// `HKDF-SHA256(IKM = seed_zether, salt = ∅, info, L)`; `seed_zether` is the R33 conf key `x` (the per-account Zether
+/// secret the wallet seed determines; controller ruling, pending the owner).
+fn sender_hkdf<C: ZCurve>(x: &Fr<C>, info: &[u8], out: &mut [u8]) {
+    let mut ikm = encode_scalar::<C>(x);
+    Hkdf::<Sha256>::new(None, &ikm).expand(info, out).expect("L <= 255*32");
+    ikm.zeroize();
+}
+
+/// The transfer randomness `s` (CTR-ZTH-30): `OKM mod r`, `OKM = HKDF-SHA256(seed_zether, "ZTX/s/v2" ‖ chainUid ‖ token
+/// ‖ fromUA ‖ be32(sendCounter) ‖ salt, L = 64)`. The salt (16 fresh random bytes per build, re-drawn on `s = 0`) and
+/// `sendCounter` are on chain, so the sender rebuilds `s` from its key and chain data alone, remembers no amount, and two
+/// builds at one counter (a retry after a failed transaction) never share `s` (which would leak `v1 − v2` through
+/// `C_aud`). One `s` per transfer, every recipient (owner Z3).
+pub fn derive_s<C: ZCurve>(x: &Fr<C>, h: &Header, from_ua: &[u8; 32], salt: &[u8; 16]) -> Fr<C> {
+    let mut okm = [0u8; 64];
+    sender_hkdf::<C>(x, &sender_info(b"ZTX/s/v2", h, from_ua, salt), &mut okm);
+    let s = Fr::<C>::from_be_bytes_mod_order(&okm);
+    okm.zeroize();
+    s
+}
+
+/// A fresh salt whose `s` is not 0 (CTR-ZTH-30: re-drawn on 0), and that `s`.
+fn draw_salt<C: ZCurve, R: RngCore>(x: &Fr<C>, h: &Header, from_ua: &[u8; 32], rng: &mut R) -> ([u8; 16], Fr<C>) {
+    loop {
+        let mut salt = [0u8; 16];
+        rng.fill_bytes(&mut salt);
+        let s = derive_s::<C>(x, h, from_ua, &salt);
+        if !s.is_zero() {
+            return (salt, s);
+        }
+    }
+}
+
+/// Length of the sender memo of `m` legs: `17 + 40·m` (CTR-ZTH-50).
+pub fn memo_len(m: usize) -> usize {
+    17 + 40 * m
+}
+
+/// The memo keystream: `key = HKDF-SHA256(seed_zether, "ZTX/memo/v1" ‖ chainUid ‖ token ‖ fromUA ‖ be32(sendCounter) ‖
+/// salt)` (32 B), `ks = HKDF-Expand-SHA256(key, "ZTX/memo/ks/v1", L)`.
+fn memo_stream<C: ZCurve>(x: &Fr<C>, h: &Header, from_ua: &[u8; 32], salt: &[u8; 16], len: usize) -> Vec<u8> {
+    let mut key = [0u8; 32];
+    sender_hkdf::<C>(x, &sender_info(b"ZTX/memo/v1", h, from_ua, salt), &mut key);
+    let mut ks = vec![0u8; len];
+    Hkdf::<Sha256>::from_prk(&key).expect("32-byte PRK").expand(b"ZTX/memo/ks/v1", &mut ks).expect("L <= 255*32");
+    key.zeroize();
+    ks
+}
+
+/// The sender memo (CTR-ZTH-50): `salt ‖ ((flags ‖ (be8(v_j) ‖ toUA_j)_j) XOR ks)`, `flags` bit0 = the auditor included.
+/// The token stores it next to the commitment; with it, the key and `sendCounter` the sender rebuilds every bundle from
+/// storage alone (the recipients' keys from the registry). No MAC: a wrong key or a tampered memo rebuilds a record that
+/// misses the commitment.
+pub fn seal_memo<C: ZCurve>(
+    x: &Fr<C>,
+    h: &Header,
+    from_ua: &[u8; 32],
+    salt: &[u8; 16],
+    auditor: bool,
+    legs: &[(G<C>, u64)],
+) -> Vec<u8> {
+    let mut plain = vec![u8::from(auditor)];
+    for (y, v) in legs {
+        plain.extend_from_slice(&v.to_be_bytes());
+        plain.extend_from_slice(&ua_of::<C>(y));
+    }
+    let ks = memo_stream::<C>(x, h, from_ua, salt, plain.len());
+    let mut memo = salt.to_vec();
+    memo.extend(plain.iter().zip(&ks).map(|(a, b)| a ^ b));
+    memo
+}
+
+/// One leg of an opened memo.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MemoLeg {
+    pub amount: u64,
+    pub to_ua: [u8; 32],
+}
+
+/// [`seal_memo`] backwards: the salt, the auditor flag and every `(v_j, toUA_j)`; `h` needs `chainUid`, `token` and
+/// `sendCounter`. A wrong key gives garbage, caught by the commitment.
+pub fn open_memo<C: ZCurve>(
+    x: &Fr<C>,
+    h: &Header,
+    from_ua: &[u8; 32],
+    memo: &[u8],
+) -> Result<([u8; 16], bool, Vec<MemoLeg>), ZError> {
+    if memo.len() < memo_len(1) || (memo.len() - 17) % 40 != 0 {
+        return Err(ZError::BadStatement("memo length"));
+    }
+    let salt: [u8; 16] = memo[..16].try_into().unwrap();
+    let ks = memo_stream::<C>(x, h, from_ua, &salt, memo.len() - 16);
+    let plain: Vec<u8> = memo[16..].iter().zip(&ks).map(|(a, b)| a ^ b).collect();
+    let legs = plain[1..]
+        .chunks(40)
+        .map(|c| MemoLeg { amount: u64::from_be_bytes(c[..8].try_into().unwrap()), to_ua: c[8..].try_into().unwrap() })
+        .collect();
+    Ok((salt, plain[0] & 1 == 1, legs))
 }
 
 /// Build the statement from the sender's state and prove it.
@@ -539,6 +655,7 @@ pub fn prove_transfer<C: ZCurve, R: RngCore + CryptoRng>(
     v: u64,
     rng: &mut R,
 ) -> Result<(TransferStatement<C>, TransferProof<C>, TransferWitness<C>), ZError> {
+    let mut header = header;
     let g = generator::<C>();
     if !value_in_range(v) {
         return Err(ZError::OutOfRange);
@@ -549,7 +666,8 @@ pub fn prove_transfer<C: ZCurve, R: RngCore + CryptoRng>(
     let b_prime = (balance as u128)
         .checked_sub(v as u128 + header.fee as u128)
         .ok_or(ZError::BadStatement("insufficient balance"))? as u64;
-    let s = derive_s::<C>(&key.x, &header, &y_to, v);
+    let (salt, s) = draw_salt::<C, R>(&key.x, &header, &key.ua(), rng);
+    header.salt = salt;
     let (vf, sf) = (Fr::<C>::from(v), s);
     let st = TransferStatement {
         y_f: key.y,
@@ -583,13 +701,20 @@ pub fn prove_transfer<C: ZCurve, R: RngCore + CryptoRng>(
 
 /// `1 ≤ M ≤ MAX_RECIPIENTS` recipients per transfer.
 pub const MAX_RECIPIENTS: usize = 16;
+/// EIP-7825: the per-transaction gas cap (2^24).
+pub const TX_GAS_CAP: u64 = 16_777_216;
+/// Measured gas of a BLS12-381 commit-reveal transfer with the auditor at `M = GAS_CAP_MIN_M` (~17.03M, controller
+/// ruling P3b): over [`TX_GAS_CAP`], so the prover refuses to build it; fewer recipients fit.
+pub const GAS_CAP_MIN_M: usize = 8;
+const GAS_CAP_KNOWN: u64 = 17_030_000;
 
 /// Where the token keeps the disclosure bundles; part of `opTag`, so a relayer cannot switch it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TransferMode {
-    /// `keccak256(B_1 ‖ … ‖ B_M)` stored, the bundles in an event (the default).
+    /// Commit-reveal: `keccak256(R)` and the sender memo stored, `R` in an event
+    /// (`zetherTransferCompact`; `zetherTransfer` on a `COMPACT` token, its only form). JSON `compact`.
     Hash,
-    /// `B_1 ‖ … ‖ B_M` stored.
+    /// `B_1 ‖ … ‖ B_M` stored (`zetherTransfer` on a `BUNDLE` token, the default).
     Bundle,
     /// Nothing stored; disclosure off chain from calldata.
     NoBundle,
@@ -606,10 +731,10 @@ impl TransferMode {
         })
     }
 
-    /// The JSON name (the token functions are `zetherTransfer`, `…Bundle`, `…NoBundle`).
+    /// The JSON name (the entries: `zetherTransfer` the token's default, `…Compact`, `…NoBundle`).
     pub fn name(self) -> &'static str {
         match self {
-            Self::Hash => "hash",
+            Self::Hash => "compact",
             Self::Bundle => "bundle",
             Self::NoBundle => "none",
         }
@@ -683,19 +808,24 @@ impl<C: ZCurve> MultiTransferStatement<C> {
         Ok(Self { header, mode, y_f, y_a, acc, d_out, c_deb, legs })
     }
 
-    /// `be32(accSeq) ‖ be32(sendCounter) ‖ be32(M) ‖ Y_f ‖ D_out ‖ C_deb ‖ (Y_tj ‖ C_out_j ‖ C_aud_j)_j`.
-    pub fn payload(&self) -> Vec<u8> {
+    /// `be32(accSeq) ‖ be32(sendCounter) ‖ salt(16) ‖ be32(M) ‖ Y_f ‖ D_out ‖ C_deb ‖ (Y_tj ‖ C_out_j ‖ C_aud_j)_j`, then
+    /// `memo` (the witness's: commit-reveal only, empty otherwise).
+    pub fn payload(&self, memo: &[u8]) -> Vec<u8> {
         let mut b = be32_u64(self.header.acc_seq).to_vec();
         b.extend(be32_u64(self.header.send_counter));
+        b.extend_from_slice(&self.header.salt);
         b.extend(be32_u64(self.legs.len() as u64));
         b.extend(cat::<C>(&[&self.y_f, &self.d_out, &self.c_deb]));
         b.extend(self.leg_bytes());
+        b.extend_from_slice(memo);
         b
     }
 
-    /// `B_1 ‖ … ‖ B_M`, `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j` — what the token stores or hashes.
+    /// The record `R = salt ‖ B_1 ‖ … ‖ B_M`, `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j` — what the token stores or hashes.
     pub fn bundles(&self) -> Vec<u8> {
-        self.legs.iter().flat_map(|l| cat::<C>(&[&l.y_t, &l.c_out, &self.d_out, &l.c_aud])).collect()
+        let mut b = self.header.salt.to_vec();
+        b.extend(self.legs.iter().flat_map(|l| cat::<C>(&[&l.y_t, &l.c_out, &self.d_out, &l.c_aud])));
+        b
     }
 
     pub fn auditor_on(&self) -> bool {
@@ -739,6 +869,8 @@ pub struct MultiTransferWitness<C: ZCurve> {
     pub b_prime: Fr<C>,
     pub gamma_v: Vec<Fr<C>>,
     pub gamma_b: Fr<C>,
+    /// The sender memo a commit-reveal payload ends with ([`seal_memo`]); empty for the other forms.
+    pub memo: Vec<u8>,
 }
 
 impl<C: ZCurve> Drop for MultiTransferWitness<C> {
@@ -945,23 +1077,6 @@ pub fn verify_transfer_multi<C: ZCurve>(
     Ok(tr)
 }
 
-/// One `s` for the whole transfer (owner Z3): a PRF of the conf key over the header and every
-/// `(Y_to, v)`, as [`derive_s`] is for one recipient.
-pub fn derive_s_multi<C: ZCurve>(x: &Fr<C>, h: &Header, recipients: &[(G<C>, u64)]) -> Fr<C> {
-    let mut d = Sha512::new();
-    d.update(b"SCAAS-ZETHER-S-MULTI-V1");
-    d.update(encode_scalar::<C>(x));
-    d.update(h.chain_id.to_be_bytes());
-    d.update(h.chain_uid);
-    d.update(h.token);
-    d.update(h.send_counter.to_be_bytes());
-    for (y, v) in recipients {
-        d.update(encode_point::<C>(y));
-        d.update(v.to_be_bytes());
-    }
-    Fr::<C>::from_be_bytes_mod_order(&d.finalize())
-}
-
 /// Build the statement for `recipients` (`(Y_to, v)`, decoys with `v = 0`) and prove it; the
 /// same checks as [`prove_transfer`], with `balance ≥ Σv + fee`.
 #[allow(clippy::too_many_arguments)]
@@ -976,6 +1091,7 @@ pub fn prove_transfer_multi<C: ZCurve, R: RngCore + CryptoRng>(
     balance: u64,
     rng: &mut R,
 ) -> Result<(MultiTransferStatement<C>, MultiTransferProof<C>, MultiTransferWitness<C>), ZError> {
+    let mut header = header;
     let g = generator::<C>();
     if acc.c - acc.d * key.x != g * Fr::<C>::from(balance) {
         return Err(ZError::BadStatement("balance does not decrypt from acc"));
@@ -984,7 +1100,20 @@ pub fn prove_transfer_multi<C: ZCurve, R: RngCore + CryptoRng>(
     let b_prime = (balance as u128)
         .checked_sub(total + header.fee as u128)
         .ok_or(ZError::BadStatement("insufficient balance"))? as u64;
-    let s = derive_s_multi::<C>(&key.x, &header, recipients);
+    if recipients.is_empty() || recipients.len() > MAX_RECIPIENTS {
+        return Err(ZError::BadStatement("recipient count"));
+    }
+    if C::NAME == "bls12381" && mode == TransferMode::Hash && !y_aud.is_zero() && recipients.len() >= GAS_CAP_MIN_M {
+        return Err(ZError::GasCap { gas: GAS_CAP_KNOWN, cap: TX_GAS_CAP, min_m: GAS_CAP_MIN_M });
+    }
+    let (salt, s) = draw_salt::<C, R>(&key.x, &header, &key.ua(), rng);
+    header.salt = salt;
+    let memo = if mode == TransferMode::Hash {
+        seal_memo::<C>(&key.x, &header, &key.ua(), &salt, !y_aud.is_zero(), recipients)
+    } else {
+        Vec::new()
+    };
+    header.memo_hash = if memo.is_empty() { [0; 32] } else { keccak256(&memo) };
     let vs: Vec<Fr<C>> = recipients.iter().map(|(_, v)| Fr::<C>::from(*v)).collect();
     let legs = recipients
         .iter()
@@ -1015,6 +1144,7 @@ pub fn prove_transfer_multi<C: ZCurve, R: RngCore + CryptoRng>(
         b: Fr::<C>::from(balance),
         b_prime: Fr::<C>::from(b_prime),
         gamma_b: n.next::<C>(),
+        memo,
     };
     let p = prove_transfer_multi_core(gens, &st, &w, rng)?;
     Ok((st, p, w))
@@ -1060,6 +1190,9 @@ impl<C: ZCurve> BurnStatement<C> {
         // §10: 0 < amount <= maxDecryptableShielded (<= 2^54) — with fee < 2^64, amount + fee < r.
         if self.header.amount == 0 || self.header.amount > MAX_TOTAL_SHIELDED {
             return Err(ZError::BadStatement("burn amount outside (0, 2^54]"));
+        }
+        if self.header.salt != [0u8; 16] || self.header.memo_hash != [0u8; 32] {
+            return Err(ZError::BadStatement("salt or memo on a burn"));
         }
         if self.y_f.is_zero() {
             return Err(ZError::BadStatement("Y = O"));
