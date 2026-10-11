@@ -29,7 +29,7 @@ case "$FAMILY" in
              --sender "$(cast wallet address --private-key "$PRIVATE_KEY")" "$@" ;;
   aptos)   exec aptos move deploy-object --package-dir "$SC/move/aptos" --address-name scaas --profile "$NET" "$@" ;;
   sui)     exec sui client --client.env "$NET" publish "$@" "$SC/move/sui" ;;
-  soroban) C="${1:?contract (token|mandate|dex|account)}"; shift
+  soroban) C="${1:?contract (token|mandate|dex|smart_key_account)}"; shift
            exec "${STELLAR_BIN:-stellar}" contract deploy --network "$NET" --wasm "$SC/soroban/target/wasm32v1-none/release/scaas_$C.wasm" "$@" ;;
   solana)  exec "$SC/solana/scripts/deploy.sh" "$NET" "$@" ;;
   cosmos|ton) echo "$FAMILY: no deploy tooling in this repo yet (build artifacts: build.sh $FAMILY)" >&2; exit 2 ;;

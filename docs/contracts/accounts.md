@@ -625,7 +625,7 @@ Non-EVM families ([NET-ALL-20](../networks/README.md#NET-ALL-20)):
 
 | Family | Today (subject) | With UA |
 |---|---|---|
-| Soroban | `Address` (`G…`, `C…`); `scaas-account` keys `Ed25519`, `Passkey` (1-of-N) | native kinds unchanged; `webauthn-p256` key ids follow the derivation when the account binds them; seed role keys of a `C…` account use `kindNo` 18; registry = the account factory's persistent map |
+| Soroban | `Address` (`G…`, `C…`); `SmartKeyAccount` keys `Ed25519`, `Passkey` (1-of-N) | native kinds unchanged; `webauthn-p256` key ids follow the derivation when the account binds them; seed role keys of a `C…` account use `kindNo` 18; registry = the account factory's persistent map |
 | Aptos | `owner: address`; account keys ed25519 / WebAuthn | native unchanged; non-native owner keys keyed by UA id; `account_of(ua)` for passkey-first accounts |
 | Sui | native address (flags 0/1/2/6) | native unchanged (Sui passkeys are native, flag 6); `Registry<T>` gains a `key_owner` table |
 | Solana | `owner: [u8;32]`; passkey owner `sha256("scaas.owner.p256" ‖ pk33)` | passkey owner = `webauthn-p256` UA id, stored with `owner_kind`, shown only as URN; PDA `["acct", ua]`; PDA `["ukey", keyHash]` enforces keyHash uniqueness |
@@ -812,7 +812,7 @@ Other families:
 |---|---|---|---|
 | Hedera | the EVM registry with `hederaNative = true` (`0x0003` members via HIP-632) | yes | HSCS has the bn254 precompiles; EIP-2537 per probe; budget 10.5 M (15 M cap) |
 | Cosmos | `ua-registry` CosmWasm contract; tokens query it (`WasmQuery::Smart`) | yes | software keccak; secp256k1/P-256 host verify; derived ids shown as URN, never the account HRP |
-| Soroban | persistent entries in the `scaas-account` factory (`UA(ua)`, `KEY(keyHash)`), TTL extended by the node like other persistent state | yes | `secp256r1_verify`, `ed25519_verify` host functions |
+| Soroban | persistent entries in the `SmartKeyAccount` factory (`UA(ua)`, `KEY(keyHash)`), TTL extended by the node like other persistent state | yes | `secp256r1_verify`, `ed25519_verify` host functions |
 | Sui | `Registry<T>`: `Table<vector<u8>, address>` for `key_owner`; account objects keyed by UA | yes | native verify functions |
 | Aptos | resource under the package root: `Table<vector<u8>, address>` | yes | pure-Move P-256 (UNAUDITED) |
 | Solana | PDAs `["ua", ua]` (record) and `["ukey", keyHash]` (claim) | yes | precompile-instruction verification |
@@ -1388,7 +1388,7 @@ a seed key; precompile and Solidity gas; end to end: add a second key (seed when
 
 Status: **BUILT** (`smartcontracts/evm/src/account/`).
 
-<a id="CTR-ACC-11"></a>**CTR-ACC-11** — **The multi-key ERC-1271 contract account is named `SmartKeyAccount` (factory `SmartKeyAccountFactory`) in every chain family**: "smart" marks a contract account, "key" its many keys. The rename covers every family: done in P4 for the EVM contract, factory, domain `SCaaS SmartKeyAccount` and vectors, and the Solana PDA type; Sui/Aptos `meta::Account<T>`, Soroban `scaas-account` and any TON/Cosmos equivalent follow in the next task ([networks](../networks/README.md)); the built `SubjectAccount` is in `smartcontracts/evm/legacy/p4/`.
+<a id="CTR-ACC-11"></a>**CTR-ACC-11** — **The multi-key ERC-1271 contract account is named `SmartKeyAccount` (factory `SmartKeyAccountFactory`) in every chain family that has a contract account**: "smart" marks a contract account, "key" its many keys. Done for EVM (contract, factory, domain `SCaaS SmartKeyAccount`, vectors), the Solana PDA type and the Soroban contract (crate `scaas-smart-key-account`); Sui/Aptos keep `meta::Account<T>`, a per-token balance object and not a contract account, and TON/Cosmos have none ([networks](../networks/README.md)); the built `SubjectAccount` is in `smartcontracts/evm/legacy/p4/`.
 
 <a id="subjectaccount"></a>
 <a id="CTR-ACC-09"></a>**CTR-ACC-09** — **`SmartKeyAccount` is option (b), kept as built**: an optional ERC-1271 smart

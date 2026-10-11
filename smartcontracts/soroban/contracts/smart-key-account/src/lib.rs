@@ -1,4 +1,4 @@
-//! Account chủ thể nhiều khoá (R31 + R32): passkey P-256 WebAuthn và khoá ed25519 dẫn xuất từ seed. Host gọi
+//! SmartKeyAccount, account chủ thể nhiều khoá (R31 + R32): passkey P-256 WebAuthn và khoá ed25519 dẫn xuất từ seed. Host gọi
 //! `__check_auth` với `signature_payload` = sha256(HashIdPreimage::SorobanAuthorization) — nonce/hạn/replay do
 //! host giữ (không tuần tự, R30). Thêm/xoá khoá cần chính account uỷ quyền (một khoá hiện có ký).
 //! Guardian + trễ khôi phục: seam (R8-2).
@@ -166,10 +166,10 @@ fn verify_webauthn(env: &Env, pk: &Passkey, payload: &BytesN<32>, sig: &WebAuthn
 }
 
 #[contract]
-pub struct Account;
+pub struct SmartKeyAccount;
 
 #[contractimpl]
-impl Account {
+impl SmartKeyAccount {
     /// Deploy không cần quyền: cùng khoá đầu ⇒ cùng hành vi (địa chỉ do salt của người deploy).
     pub fn __constructor(env: Env, first: Key) {
         let mut m = Map::new(&env);
@@ -207,7 +207,7 @@ impl Account {
 }
 
 #[contractimpl]
-impl CustomAccountInterface for Account {
+impl CustomAccountInterface for SmartKeyAccount {
     type Signature = Signature;
     type Error = Error;
 

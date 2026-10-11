@@ -314,7 +314,7 @@ by `fam/*`; passkeys stay origin-bound ([CLI-APP-14](app.md#CLI-APP-14)).
 | EVM, Hedera | RIP-7212 `0x100` or OZ Solidity | `SmartKeyAccount` | `(x, y)` + `rpIdHash`, `keccak(origin)` | per key | BUILT |
 | Sui | native `secp256r1_verify`, flag 6 | `Account<T>` (`open_passkey`) | 33 B | `origins` ≤ 8 | contract BUILT; signer first |
 | Solana | precompile `Secp256r1SigVerify1111…` (SIMD-0075), low-S, ≤ 8 per instruction | PDA (`open_passkey`) | 33 B | `origins` ≤ 8, same-rpId rule | contract BUILT; second |
-| Soroban | host `secp256r1_verify` (CAP-51) | `scaas-account` `C…` | 65 B | per key | contract BUILT; third |
+| Soroban | host `secp256r1_verify` (CAP-51) | `SmartKeyAccount` `C…` | 65 B | per key | contract BUILT; third |
 | Aptos | pure-Move `scaas::p256` (UNAUDITED, ≈ 4 100 gas per signature) | `Account` object | 65 B | `origins` | contract BUILT (unaudited); fourth |
 | Cosmos | cosmwasm `secp256r1_verify` | none (passkey id only) | 33 B | none | not yet |
 | TON | TVM `P256_CHKSIGNS` | jetton wallet, one passkey | 33 B + `rpIdHash` + `originPrefix` | prefix | not yet |
@@ -526,7 +526,7 @@ Reading the key set (clients re-read after any key change reaches finality and c
 | Sui | `Account<T>` fields `keys`, `guardian` (`sui_getObject`) | `keys` | `guardian != @0x0` |
 | Aptos | `Account` resource | `keys` | `option::is_some(guardian)` |
 | Solana | `SmartKeyAccount` PDA (Borsh) | `keys` | `guardian`; also `policy & 1` |
-| Soroban | `scaas-account` key map | values (no duplicate check on chain) | none |
+| Soroban | `SmartKeyAccount` key map | values (no duplicate check on chain) | none |
 | TON | jetton wallet `pubkey`, `passkey` | the bound ones | none |
 
 Per-family applicability is in [networks/README](../networks/README.md#key-lifecycle) (Soroban and TON are satisfied by
@@ -614,7 +614,7 @@ decryption-adjacent oracle; untagged digests replay across protocols. Owner deci
 
 <a id="CLI-SGN-30"></a>**CLI-SGN-30** — **The EVM seed path is the EOA only; every subject-account key that is not the
 native owner and every derived kind comes from the UA tree `m/7622'/0'/<account>'/<kindNo>'/<i>'`.** The role `kindNo` is
-the kind of the account the key serves: EVM/Hedera `SmartKeyAccount` 2, Solana 16, Soroban `scaas-account` `C…` 18
+the kind of the account the key serves: EVM/Hedera `SmartKeyAccount` 2, Solana 16, Soroban `SmartKeyAccount` `C…` 18
 (`soroban-contract`), Aptos 19, Sui 20. Owner decisions (one chain-independent tree under purpose `7622'`; Soroban
 `kindNo` 18). Existing dev accounts whose SECP256K1 key is the EOA key rotate at the UA migration.
 

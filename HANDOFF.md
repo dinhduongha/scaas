@@ -18,13 +18,12 @@ Solana 42, Sui 68, Aptos 105 (+ entry check), Soroban 28, Cosmos 10, TON 28; e2e
 **Rulings L1–L18 (plan header).** **L1** the `_selfSender` hook; **L2** the account checks itself through its own
 `isValidSignature`; **L3** `cancelRecovery` allowlisted; **L4** `SubjectKey` keeps its name; **L6** pre-P4 clones and wallets are
 redeployed (every chain is a test chain); **L7** `NotDelegate`, lane encodings; **L11** Hedera HIP-632 on every wallet entry; **L12** (reversed by the owner) the rename
-covers every family: done for Solana, a follow-up task renames Sui, Aptos, Soroban and any TON/Cosmos equivalent; **L13** Solana discriminator follows
+covers the contract accounts (EVM, Solana, Soroban); Sui/Aptos keep `meta::Account<T>` (a per-token balance object), TON/Cosmos have none; **L13** Solana discriminator follows
 the name, no state migration; **L14** deploy JSON keys renamed.
 Controller rulings after the reviews, pending the owner (mandates.md CTR-ACC-07): the delegate's pay names the mandate epoch (`StaleEpoch(current, signed)`; a revoke, and any `setMandate` even a plain expiry extension, voids queued delegate pays; the pay job re-reads `epoch(token)` and re-signs); `setMandate` keeps `periodStart`/`spentInPeriod` when the delegate and `periodSeconds` are unchanged. Documented, no code: an owner hand-pay plus a delegate pay of the same `entryRef` can pay twice; the kill-switch revoke job must re-read the epoch after a `setMandate`. M1/M2 are EVM-only (TODO: one follow-up per other family).
 
 **Not done / next:** bamboo-dms follows before P4 contracts reach a chain Odoo uses (owner call with `chainUid`, mandate digests and the pay calldata with the epoch, its relay job still on pre-P4 names like `revokeWithSig`, CREATE2 file, JSON key; TODO P4); the node's
-call table for the renamed rows (P5); open questions in the plan (agent mandates from `docs/research/node-ai-agents.md`, the
-the follow-up family rename).
+call table for the renamed rows (P5); open questions in the plan (agent mandates from `docs/research/node-ai-agents.md`).
 
 ## Session 2026-10-11 (P3)
 
