@@ -191,4 +191,5 @@ Owner/operator gates from `docs/history/HANDOFF-blockchain.md` §1 (O1–O8 are 
 - [ ] O11 — Every collecting entity that receives on-chain needs a `chain` payment provider, a journal and an approved
   receiving wallet (after the territory consolidation; GA 2.4#4).
 
+- [ ] P5 leftovers: an EVM chain whose RPC errors on block 0 at boot still fails `Submitter::start` (adapter lanes retry with backoff); a guard-refused job rebuilt after a restart whose nonce was taken by a transaction the node no longer holds gets no report.
 - [ ] Zether prover gas cap: add an authorization allowance by UA scheme to `check_gas` (re-review of P3b: a BLS_12381 UA authorization adds ≈ 186 k direct / 192 k relayed, a passkey/1271 envelope payer ≈ +48 k; the tightest edge, bn254 NONE no-auditor relayed M = 9, has 218 k of room); proposed: 0 SELF_SCHNORR/PQ, 50 k FROST/MuSig2, 70 k 1271, 160 k BLS_BN254, 200 k BLS_12381, 10 k per multisig signature, +60 k contract payer when relayed; the node cap note likewise (≈ 4.7 M for a BLS UA on a BLS12-381 relay).
