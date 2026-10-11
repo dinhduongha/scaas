@@ -57,7 +57,7 @@ pub struct MandateOpen<'info> {
     #[account(seeds = [b"config"], bump = config.bump)]
     pub config: Account<'info, Config>,
     #[account(mut, seeds = [b"acct", subject.owner.as_ref()], bump = subject.bump)]
-    pub subject: Account<'info, SubjectAccount>,
+    pub subject: Account<'info, SmartKeyAccount>,
     #[account(init, payer = lane, space = 8 + Mandate::INIT_SPACE,
               seeds = [b"mandate", subject.key().as_ref(), init.seed.as_ref()], bump)]
     pub mandate: Account<'info, Mandate>,
@@ -239,7 +239,7 @@ pub struct MandateClose<'info> {
     #[account(seeds = [b"config"], bump = config.bump)]
     pub config: Account<'info, Config>,
     #[account(mut, seeds = [b"acct", subject.owner.as_ref()], bump = subject.bump)]
-    pub subject: Account<'info, SubjectAccount>,
+    pub subject: Account<'info, SmartKeyAccount>,
     #[account(mut, close = rent_payer, seeds = [b"mandate", mandate.account.as_ref(), mandate.seed.as_ref()],
               bump = mandate.bump, has_one = rent_payer, constraint = mandate.account == subject.key() @ ScaasError::BadOwner)]
     pub mandate: Account<'info, Mandate>,

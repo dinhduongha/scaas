@@ -1,7 +1,7 @@
 //! `scaas` — meta-transaction cấp program trên Solana (S12, `docs/networks/solana.md`;
 //! bản đóng băng `docs/history/specs/2026-10-04-net-solana.md`).
 //! Chủ thể ký thông điệp tách miền (ed25519 raw/OCMS qua precompile Ed25519, passkey qua precompile Secp256r1); relayer
-//! gửi tx từ lane của chính nó. Số dư = token account của SubjectAccount PDA. Đường nóng chỉ GHI account riêng của thao
+//! gửi tx từ lane của chính nó. Số dư = token account của SmartKeyAccount PDA. Đường nóng chỉ GHI account riêng của thao
 //! tác (RS12-2).
 #![allow(unexpected_cfgs, ambiguous_glob_reexports)]
 use anchor_lang::prelude::*;

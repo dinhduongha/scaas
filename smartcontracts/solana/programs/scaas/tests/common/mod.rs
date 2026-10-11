@@ -420,7 +420,7 @@ impl Env {
         self.send(&[ed_ix(&[e]), ix], &[])
     }
 
-    pub fn subject(&self, addr: &Pubkey) -> scaas::state::SubjectAccount {
+    pub fn subject(&self, addr: &Pubkey) -> scaas::state::SmartKeyAccount {
         self.account(addr).expect("subject account")
     }
 

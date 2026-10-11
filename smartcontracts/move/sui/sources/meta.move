@@ -30,7 +30,7 @@ const SET_GUARDIAN: u8 = 4;
 const CANCEL_RECOVERY: u8 = 5;
 const MAX_KEYS: u64 = 8;
 const MAX_ORIGINS: u64 = 8;
-/// `RECOVERY_DELAY` của `SubjectAccount` EVM (round-3 §C): guardian chờ 2 ngày, khoá hiện có huỷ được.
+/// `RECOVERY_DELAY` của `SmartKeyAccount` EVM (round-3 §C): guardian chờ 2 ngày, khoá hiện có huỷ được.
 const RECOVERY_DELAY_S: u64 = 172_800;
 
 #[error]

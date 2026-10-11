@@ -35,7 +35,7 @@ module scaas::meta {
     const RESET_KEYS: u8 = 6;
     const MAX_KEYS: u64 = 8;
     const MAX_ORIGINS: u64 = 8;
-    /// `RECOVERY_DELAY` của `SubjectAccount` EVM: guardian chờ 2 ngày, khoá hiện có / chủ huỷ được.
+    /// `RECOVERY_DELAY` của `SmartKeyAccount` EVM: guardian chờ 2 ngày, khoá hiện có / chủ huỷ được.
     const RECOVERY_DELAY_S: u64 = 172_800;
     /// `prune` chỉ xoá lane/pay_ref sau `valid_until + PRUNE_DELAY_S` (review M2). Odoo phát mọi `valid_until` của
     /// một request trong `LANE_HORIZON_S` (= 30 ngày) kể từ lúc tạo request ⇒ khi lane bị xoá, mọi op khác đã ký cho

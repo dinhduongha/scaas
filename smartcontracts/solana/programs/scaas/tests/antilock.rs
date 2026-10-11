@@ -1,5 +1,5 @@
 //! R30 trên Solana (L8, L12): thao tác khác contract của cùng chủ thể không chung khoá — không nonce chung, không
-//! account GHI chung (trừ lane relayer); Config/Market/SubjectAccount chỉ đọc trên đường nóng.
+//! account GHI chung (trừ lane relayer); Config/Market/SmartKeyAccount chỉ đọc trên đường nóng.
 mod common;
 
 use std::collections::BTreeSet;
@@ -77,7 +77,7 @@ fn two_assets_two_lanes_in_any_order() {
     assert_eq!((w.env.balance(&ata(&bob, &w.usd, &TOKEN)), w.env.balance(&ata(&bob, &w.eur, &TOKEN))), (7, 3));
 }
 
-/// L12: tập account GHI của hai thao tác khác contract (trừ lane) rời nhau; Config/Market/SubjectAccount readonly.
+/// L12: tập account GHI của hai thao tác khác contract (trừ lane) rời nhau; Config/Market/SmartKeyAccount readonly.
 #[test]
 fn hot_path_write_sets_are_disjoint() {
     let w = setup();
@@ -118,7 +118,7 @@ fn hot_path_write_sets_are_disjoint() {
     assert!(wx.is_disjoint(&wx2), "two assets of one Account");
     let fixed = [env.config(), w.market, w.alice.account(), account_of(&bob.pk())];
     for (name, ix) in [("pay", &x), ("pay2", &x2), ("mandate_pay", &y), ("cancel", &z), ("settle", &s)] {
-        assert!(readonly(ix, &fixed), "{name} writes Config/Market/SubjectAccount");
+        assert!(readonly(ix, &fixed), "{name} writes Config/Market/SmartKeyAccount");
     }
     assert_eq!(wz.len(), 1);
     println!("pay writes {} accounts besides the lane: {:?}", wx.len(), wx);

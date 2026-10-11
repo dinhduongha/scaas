@@ -1,4 +1,4 @@
-//! Config, SubjectAccount, `relay_pay`, quản trị khoá (KeyOp), khôi phục, `prune` (spec §3, §5.1).
+//! Config, SmartKeyAccount, `relay_pay`, quản trị khoá (KeyOp), khôi phục, `prune` (spec §3, §5.1).
 use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
@@ -35,16 +35,16 @@ pub fn initialize(ctx: Context<Initialize>, network: [u8; 32], admin: Pubkey) ->
 
 // ------------------------------------------------------------------ open
 
-fn new_subject(owner: [u8; 32], bump: u8, key: AuthKey, origins: Vec<String>) -> SubjectAccount {
-    SubjectAccount { owner, bump, keys: vec![key], origins, guardian: None, recovery: None, key_nonce: 0, policy: 0 }
+fn new_subject(owner: [u8; 32], bump: u8, key: AuthKey, origins: Vec<String>) -> SmartKeyAccount {
+    SmartKeyAccount { owner, bump, keys: vec![key], origins, guardian: None, recovery: None, key_nonce: 0, policy: 0 }
 }
 
-fn write_subject(info: &AccountInfo, s: &SubjectAccount) -> Result<()> {
+fn write_subject(info: &AccountInfo, s: &SmartKeyAccount) -> Result<()> {
     let mut data = info.try_borrow_mut_data()?;
     s.try_serialize(&mut &mut data[..])
 }
 
-fn create_subject<'info>(payer: &AccountInfo<'info>, info: &AccountInfo<'info>, system: &AccountInfo<'info>, s: &SubjectAccount) -> Result<()> {
+fn create_subject<'info>(payer: &AccountInfo<'info>, info: &AccountInfo<'info>, system: &AccountInfo<'info>, s: &SmartKeyAccount) -> Result<()> {
     require!(info.data_is_empty(), ScaasError::AlreadyOpen);
     util::create_pda(payer, info, system, &[b"acct", &s.owner, &[s.bump]], s.space())?;
     write_subject(info, s)
@@ -57,7 +57,7 @@ pub struct Open<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
     pub owner: Signer<'info>,
-    /// CHECK: SubjectAccount PDA, created here.
+    /// CHECK: SmartKeyAccount PDA, created here.
     #[account(mut, seeds = [b"acct", owner.key().as_ref()], bump)]
     pub subject: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
@@ -79,7 +79,7 @@ pub fn p256_owner(pk33: &[u8; 33]) -> [u8; 32] {
 pub struct OpenPasskey<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
-    /// CHECK: SubjectAccount PDA of `sha256("scaas.owner.p256" ‖ pk33)`, created here.
+    /// CHECK: SmartKeyAccount PDA of `sha256("scaas.owner.p256" ‖ pk33)`, created here.
     #[account(mut, seeds = [b"acct", owner.as_ref()], bump)]
     pub subject: UncheckedAccount<'info>,
     /// CHECK: instructions sysvar.
@@ -153,7 +153,7 @@ pub struct RelayPay<'info> {
     pub lane: Signer<'info>,
     #[account(seeds = [b"config"], bump = config.bump)]
     pub config: Account<'info, Config>,
-    /// CHECK: SubjectAccount PDA; opened lazily on the first pay (writable only then), else read in the handler.
+    /// CHECK: SmartKeyAccount PDA; opened lazily on the first pay (writable only then), else read in the handler.
     #[account(seeds = [b"acct", owner.as_ref()], bump)]
     pub subject: UncheckedAccount<'info>,
     #[account(init_if_needed, payer = lane, space = 8 + LanePda::INIT_SPACE,
@@ -190,7 +190,7 @@ pub fn relay_pay(ctx: Context<RelayPay>, owner: [u8; 32], args: PayArgs, auth: A
         s
     } else {
         require_keys_eq!(*info.owner, crate::ID, ScaasError::BadOwner);
-        SubjectAccount::try_deserialize(&mut &info.try_borrow_data()?[..])?
+        SmartKeyAccount::try_deserialize(&mut &info.try_borrow_data()?[..])?
     };
     subject.check_policy()?;
     let op = args.metaop(a.config.network, a.subject.key(), a.mint.key(), OP_PAY, owner);
@@ -287,7 +287,7 @@ pub struct ManageSigned<'info> {
     #[account(seeds = [b"config"], bump = config.bump)]
     pub config: Account<'info, Config>,
     #[account(mut, seeds = [b"acct", subject.owner.as_ref()], bump = subject.bump)]
-    pub subject: Account<'info, SubjectAccount>,
+    pub subject: Account<'info, SmartKeyAccount>,
     /// CHECK: destination of `withdraw_lamports` (must equal the signed `to`).
     #[account(mut)]
     pub to: Option<UncheckedAccount<'info>>,
@@ -297,7 +297,7 @@ pub struct ManageSigned<'info> {
     pub system_program: Program<'info, System>,
 }
 
-fn add_origin(s: &mut SubjectAccount, origin: &str) -> Result<()> {
+fn add_origin(s: &mut SmartKeyAccount, origin: &str) -> Result<()> {
     require!(!origin.is_empty() && origin.len() <= MAX_ORIGIN_LEN, ScaasError::BadOrigin);
     if !s.origins.iter().any(|o| o == origin) {
         require!(s.origins.len() < MAX_ORIGINS, ScaasError::TooMany);
@@ -373,7 +373,7 @@ pub struct StartRecovery<'info> {
     pub guardian: Signer<'info>,
     #[account(mut, seeds = [b"acct", subject.owner.as_ref()], bump = subject.bump,
               constraint = subject.guardian == Some(guardian.key()) @ ScaasError::NotGuardian)]
-    pub subject: Account<'info, SubjectAccount>,
+    pub subject: Account<'info, SmartKeyAccount>,
     pub system_program: Program<'info, System>,
 }
 
@@ -391,7 +391,7 @@ pub fn start_recovery(ctx: Context<StartRecovery>, key: AuthKey, origin: String)
 #[derive(Accounts)]
 pub struct FinishRecovery<'info> {
     #[account(mut, seeds = [b"acct", subject.owner.as_ref()], bump = subject.bump)]
-    pub subject: Account<'info, SubjectAccount>,
+    pub subject: Account<'info, SmartKeyAccount>,
 }
 
 /// Sau trễ: khoá khôi phục thay MỌI khoá cũ (khoá mất/bị lộ). Không cần quyền — đã hẹn trước 2 ngày, khoá hiện có huỷ

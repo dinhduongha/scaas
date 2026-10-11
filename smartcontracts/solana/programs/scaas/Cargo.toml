@@ -3,7 +3,7 @@ name = "scaas"
 version = "0.1.0"
 edition = "2021"
 publish = false
-description = "SCaaS meta-transaction program: SubjectAccount PDA, lanes, mandates, DEX settlement (S12)"
+description = "SCaaS meta-transaction program: SmartKeyAccount PDA, lanes, mandates, DEX settlement (S12)"
 
 [lib]
 crate-type = ["cdylib", "lib"]
