@@ -123,7 +123,7 @@ pub trait ChainAdapter: Send + Sync {
     }
     /// R80: `Some(true)` ⇔ nonce lane của chủ thể đã qua nonce của op (ai đó đã dùng nó). `Ok(None)` = không biết
     /// ⇒ không bao giờ dừng job vì nó: mọi loại op mà replay guard không phải nonce lane (review M6). v1 chỉ trả lời
-    /// cho `pay` (và meta-tx Hedera qua `metaNonce`). Lỗi RPC ⇒ `Err`: không gửi lại vòng này (fail closed).
+    /// cho `pay` (và meta-tx Hedera qua `mtxNonce`). Lỗi RPC ⇒ `Err`: không gửi lại vòng này (fail closed).
     async fn op_consumed(&self, _job: &Job) -> Result<Option<bool>> {
         Ok(None)
     }

@@ -11,15 +11,14 @@ use std::time::{Duration, Instant};
 use alloy::primitives::{Address, Bytes, B256, U256};
 use alloy::providers::Provider;
 use alloy::rpc::types::TransactionReceipt;
-use alloy::sol_types::SolCall;
 use anyhow::Result;
 use tokio::sync::mpsc;
 use tracing::{info, warn};
 
-use crate::abi::{IMetaToken, MetaTransaction};
 use crate::breaker::Breaker;
 use crate::chain::{Chain, SimError};
 use crate::config::ChainCfg;
+use crate::metatx::Mtx;
 use crate::nonce::{bump, plan, Inflight};
 use crate::odoo::{Job, Odoo, Report};
 
@@ -56,8 +55,8 @@ pub struct MetaRef {
 }
 
 impl MetaRef {
-    pub fn of(token: Address, m: &MetaTransaction, digest: Option<B256>) -> Self {
-        Self { token, from: m.from, batch: m.batch, nonce: m.nonce, digest }
+    pub fn of(token: Address, m: &Mtx, digest: Option<B256>) -> Self {
+        Self { token, from: m.from(), batch: m.batch(), nonce: m.nonce(), digest }
     }
 }
 
@@ -114,12 +113,11 @@ pub fn work_from_job(job: &Job) -> Result<Work> {
     let (Some(m), Some(token), Some(sig)) = (&job.metatx, job.token, &job.signature) else {
         anyhow::bail!("job {} has neither a meta-transaction nor a call", job.id);
     };
-    let m = m.to_sol()?;
+    let m = Mtx::from_wire(job.struct_.as_deref(), m)?;
     let sig = alloy::hex::decode(sig.strip_prefix("0x").unwrap_or(sig))?;
-    let valid_until = m.validUntil.saturating_to();
+    let valid_until = m.valid_until().saturating_to();
     let meta = Some(MetaRef::of(token, &m, job_digest(job)));
-    let data = IMetaToken::executeMetaTransactionCall { m, signature: sig.into() }.abi_encode();
-    Ok(Work { job_id: Some(job.id), to: token, data: data.into(), valid_until, meta })
+    Ok(Work { job_id: Some(job.id), to: token, data: m.calldata(sig.into()), valid_until, meta })
 }
 
 pub fn now() -> u64 {
@@ -333,15 +331,15 @@ impl Submitter {
         match self.consumed(w).await {
             Ok(true) => self.report_consumed(w).await,
             Ok(false) => self.fail(w, reason).await,
-            Err(e) => self.requeue(w, format!("metaNonce: {e:#}")).await,
+            Err(e) => self.requeue(w, format!("mtxNonce: {e:#}")).await,
         }
     }
 
-    /// R80: `metaNonce(from, batch) > nonce` ⇔ nonce chủ thể của meta-tx đã bị dùng (bởi ai thì `classify`).
+    /// R80: `mtxNonce(from, batch) > nonce` ⇔ nonce chủ thể của meta-tx đã bị dùng (bởi ai thì `classify`).
     /// `Ok(false)` cho job `call`. Lỗi RPC ⇒ `Err`: người gọi không bump, không kết luận (fail closed).
     async fn consumed(&self, w: &Work) -> Result<bool> {
         let Some(m) = &w.meta else { return Ok(false) };
-        Ok(self.chain.meta_nonce(m.token, m.from, m.batch).await? > m.nonce)
+        Ok(self.chain.mtx_nonce(m.token, m.from, m.batch).await? > m.nonce)
     }
 
     /// §8.5 — chỉ là nhãn cho `last_error` ở Odoo; `landed_elsewhere` do indexer quyết khi `final`.
@@ -431,7 +429,7 @@ impl Submitter {
             if let Some(w) = s.work.clone().filter(|w| w.meta.is_some()) {
                 match self.consumed(&w).await {
                     Err(e) => {
-                        warn!(nonce = n, "metaNonce: {e:#}; no bump this round");
+                        warn!(nonce = n, "mtxNonce: {e:#}; no bump this round");
                         continue;
                     }
                     Ok(true) => {
@@ -517,7 +515,7 @@ impl Submitter {
             Some(w) if !rc.status() => match self.consumed(w).await {
                 Ok(c) => c,
                 Err(e) => {
-                    warn!(nonce = n, "reverted receipt, metaNonce unreadable; retry: {e:#}");
+                    warn!(nonce = n, "reverted receipt, mtxNonce unreadable; retry: {e:#}");
                     return;
                 }
             },
@@ -595,12 +593,12 @@ mod tests {
     use alloy::consensus::{Transaction as _, TxEnvelope};
     use alloy::eips::eip2718::Decodable2718;
     use alloy::signers::local::PrivateKeySigner;
-    use alloy::sol_types::SolValue;
+    use alloy::sol_types::{SolCall, SolValue};
     use serde_json::{json, Value};
 
     use super::*;
+    use crate::abi::{IToken, MetaTransfer};
     use crate::adapter::tests::{fake_odoo, Fake, Shared};
-    use crate::metatx::WireMetaTx;
 
     const D: &str = "0x7777777777777777777777777777777777777777777777777777777777777777";
     const TOKEN: Address = Address::repeat_byte(0xcd);
@@ -608,10 +606,10 @@ mod tests {
     /// Chain EVM giả qua JSON-RPC thật (alloy nói chuyện với nó như với node thật).
     #[derive(Default)]
     struct Evm {
-        /// Mô phỏng `executeMetaTransaction`: `None` ok, `"revert"`, `"transport"`.
+        /// Mô phỏng `mtxExecuteTransfer`: `None` ok, `"revert"`, `"transport"`.
         sim: Option<&'static str>,
-        /// `metaNonce`: `None` ⇒ lỗi RPC.
-        meta_nonce: Option<u64>,
+        /// `mtxNonce`: `None` ⇒ lỗi RPC.
+        mtx_nonce: Option<u64>,
         /// Số tx của lane đã vào khối (`latest` = `pending`).
         count: u64,
         receipts: HashMap<B256, bool>,
@@ -641,12 +639,12 @@ mod tests {
                 "eth_call" => {
                     let input = p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap();
                     let sel = alloy::hex::decode(&input[2..10]).unwrap();
-                    if sel == IMetaToken::metaNonceCall::SELECTOR {
-                        e.meta_nonce.map(|n| word(U256::from(n))).ok_or_else(|| err(-32000, "upstream timeout", None))
+                    if sel == IToken::mtxNonceCall::SELECTOR {
+                        e.mtx_nonce.map(|n| word(U256::from(n))).ok_or_else(|| err(-32000, "upstream timeout", None))
                     } else {
                         match e.sim {
                             Some("revert") => {
-                                let data = IMetaToken::MetaTxBadNonce { expected: U256::from(1), got: U256::ZERO };
+                                let data = IToken::MetaTxBadNonce { expected: U256::from(1), got: U256::ZERO };
                                 let data = alloy::sol_types::SolError::abi_encode(&data);
                                 Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
                             }
@@ -689,12 +687,12 @@ mod tests {
         (url, s)
     }
 
-    fn meta(batch: u64) -> MetaTransaction {
-        MetaTransaction {
+    fn meta(batch: u64) -> Mtx {
+        Mtx::Transfer(MetaTransfer {
             from: Address::repeat_byte(0xab),
             to: Address::repeat_byte(0x5e),
             value: U256::from(1_000u64),
-            data: Default::default(),
+            entryRef: B256::repeat_byte(0x42),
             batch: U256::from(batch),
             nonce: U256::ZERO,
             validUntil: U256::from(now() + 600),
@@ -702,12 +700,13 @@ mod tests {
             relayer: Address::ZERO,
             fee: U256::ZERO,
             feeRecipient: Address::ZERO,
-        }
+        })
     }
 
     fn job(id: i64) -> Value {
-        json!({"id": id, "kind": "metatx", "token": format!("{TOKEN:#x}"), "digest": D,
-               "signature": format!("0x{}", "11".repeat(65)), "metatx": WireMetaTx::from_sol(&meta(7))})
+        let (kind, wire) = meta(7).to_wire();
+        json!({"id": id, "kind": "metatx", "token": format!("{TOKEN:#x}"), "digest": D, "struct": kind,
+               "signature": format!("0x{}", "11".repeat(65)), "metatx": wire})
     }
 
     async fn lane(rpc: &str, odoo: crate::odoo::Odoo, key: u8, set: InflightSet) -> Submitter {
@@ -742,8 +741,8 @@ mod tests {
     /// R80: kẹt mà nonce chủ thể đã bị dùng ⇒ `consumed`, nonce vỏ lấp bằng gap-filler, meta-tx KHÔNG bao giờ gửi lại.
     #[tokio::test]
     async fn consumed_before_bump_gap_fills_and_never_resends_the_metatx() {
-        let (mut s, rpc, o, set) = sent_one(Evm { meta_nonce: Some(0), ..Default::default() }).await;
-        rpc.lock().unwrap().meta_nonce = Some(1);
+        let (mut s, rpc, o, set) = sent_one(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+        rpc.lock().unwrap().mtx_nonce = Some(1);
         let before = BUMP_SKIPPED_CONSUMED.load(Ordering::Relaxed);
         s.track().await;
         s.track().await;
@@ -760,11 +759,11 @@ mod tests {
         assert!(!set.contains(&D.parse().unwrap()));
     }
 
-    /// R80 fail closed: `metaNonce` không đọc được ⇒ không bump vòng này.
+    /// R80 fail closed: `mtxNonce` không đọc được ⇒ không bump vòng này.
     #[tokio::test]
-    async fn unreadable_meta_nonce_means_no_bump() {
-        let (mut s, rpc, o, _) = sent_one(Evm { meta_nonce: Some(0), ..Default::default() }).await;
-        rpc.lock().unwrap().meta_nonce = None;
+    async fn unreadable_mtx_nonce_means_no_bump() {
+        let (mut s, rpc, o, _) = sent_one(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+        rpc.lock().unwrap().mtx_nonce = None;
         s.track().await;
         assert_eq!(rpc.lock().unwrap().sent.len(), 1);
         assert_eq!(states(&o), ["signed", "broadcast"]);
@@ -773,7 +772,7 @@ mod tests {
     /// `Sent.hashes`: bản đã bị thay thế mà vào khối vẫn được nhận ra (trước đây bị thử lại mãi).
     #[tokio::test]
     async fn an_earlier_replaced_hash_that_mines_settles_the_nonce() {
-        let (mut s, rpc, o, _) = sent_one(Evm { meta_nonce: Some(0), ..Default::default() }).await;
+        let (mut s, rpc, o, _) = sent_one(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
         s.track().await;
         let sent = rpc.lock().unwrap().sent.clone();
         assert_eq!((sent.len(), &sent[1].2), (2, &sent[0].2), "live and unconsumed ⇒ the meta-tx is bumped");
@@ -787,16 +786,16 @@ mod tests {
     /// Review H3: tx của ta revert vì người khác đã dùng nonce ⇒ `consumed`, không `reverted`. Đọc nonce hỏng ⇒ giữ, thử lại.
     #[tokio::test]
     async fn a_reverted_receipt_of_a_consumed_metatx_reports_consumed() {
-        let (mut s, rpc, o, _) = sent_one(Evm { meta_nonce: Some(0), ..Default::default() }).await;
+        let (mut s, rpc, o, _) = sent_one(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
         let h = rpc.lock().unwrap().sent[0].0;
         rpc.lock().unwrap().receipts.insert(h, false);
-        rpc.lock().unwrap().meta_nonce = None;
+        rpc.lock().unwrap().mtx_nonce = None;
         s.track().await;
         assert_eq!((s.inflight_count(), states(&o).len()), (1, 2), "unreadable ⇒ kept, nothing reported");
-        rpc.lock().unwrap().meta_nonce = Some(1);
+        rpc.lock().unwrap().mtx_nonce = Some(1);
         s.track().await;
         assert_eq!(states(&o), ["signed", "broadcast", "consumed"]);
-        let (mut s, rpc, o, _) = sent_one(Evm { meta_nonce: Some(0), ..Default::default() }).await;
+        let (mut s, rpc, o, _) = sent_one(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
         let h = rpc.lock().unwrap().sent[0].0;
         rpc.lock().unwrap().receipts.insert(h, false);
         s.track().await;
@@ -807,10 +806,10 @@ mod tests {
     #[tokio::test]
     async fn simulation_revert_is_classified_by_the_subject_nonce() {
         for (nonce, want) in [(Some(1), "consumed"), (Some(0), "dead"), (None, "queued")] {
-            let (url, _) = fake_evm(Evm { sim: Some("revert"), meta_nonce: nonce, ..Default::default() }).await;
+            let (url, _) = fake_evm(Evm { sim: Some("revert"), mtx_nonce: nonce, ..Default::default() }).await;
             let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: json!([]), ..Default::default() }).await;
             lane(&url, odoo, 1, InflightSet::default()).await.poll_outbox().await;
-            assert_eq!(states(&o), [want], "metaNonce {nonce:?}");
+            assert_eq!(states(&o), [want], "mtxNonce {nonce:?}");
         }
     }
 
@@ -818,7 +817,7 @@ mod tests {
     /// Lỗi tạm thời nhả digest ngay (không ai bị chặn tới hết hạn).
     #[tokio::test]
     async fn one_digest_is_signed_once_across_lanes_and_released_on_transient_errors() {
-        let (url, rpc) = fake_evm(Evm { meta_nonce: Some(0), ..Default::default() }).await;
+        let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
         let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: json!([]), ..Default::default() }).await;
         let set = InflightSet::default();
         let mut a = lane(&url, odoo.clone(), 1, set.clone()).await;

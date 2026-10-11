@@ -11,7 +11,7 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde_json::{json, Value};
 
-use crate::abi::IMetaToken;
+use crate::abi::IToken;
 use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Signed, TxStatus};
 use crate::chain::{Chain, SimError};
 use crate::config::ChainCfg;
@@ -148,8 +148,8 @@ impl ChainAdapter for EvmAdapter {
             return Ok(vec![]);
         }
         let f = Filter::new().from_block(from).to_block(to).address(addrs).event_signature(vec![
-            IMetaToken::PaymentSettled::SIGNATURE_HASH,
-            IMetaToken::MetaTransactionExecuted::SIGNATURE_HASH,
+            IToken::PaymentSettled::SIGNATURE_HASH,
+            IToken::MetaTransactionExecuted::SIGNATURE_HASH,
         ]);
         Ok(self.chains[0].primary().get_logs(&f).await?.iter().filter_map(encode_event).collect())
     }

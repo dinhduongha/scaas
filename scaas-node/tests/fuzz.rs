@@ -1,7 +1,7 @@
 //! R54 (GA 2.1#8, spec T15): mọi decoder nhận dữ liệu không tin cậy — body gateway, payload job từ
 //! Odoo, mã hoá meta-tx — không bao giờ panic; dữ liệu xấu là `Err`.
 use scaas_node::dex::WireOrder;
-use scaas_node::metatx::WireMetaTx;
+use scaas_node::metatx::Mtx;
 use scaas_node::odoo::Job;
 use scaas_node::submit::work_from_job;
 use proptest::prelude::*;
@@ -24,13 +24,26 @@ fn any_json() -> impl Strategy<Value = Value> {
     })
 }
 
+/// Either struct's fields (`MetaTransaction` has `data`, `MetaTransfer` has `to`/`value`/`entryRef`), sometimes with a
+/// stray key.
 fn metatx_fields() -> impl Strategy<Value = Value> {
     let s = || prop_oneof!["0x[0-9a-fA-F]{0,70}", "[0-9]{0,90}", ".{0,20}"];
     (s(), s(), s(), s(), s(), s(), s(), s(), any::<u32>(), s(), s(), s()).prop_map(
         |(from, to, value, data, batch, nonce, vu, relayer, mode, fee, fr, extra)| {
-            json!({"from": from, "to": to, "value": value, "data": data, "batch": batch, "nonce": nonce,
-                   "validUntil": vu, "mode": mode, "relayer": relayer, "fee": fee, "feeRecipient": fr,
-                   "x": extra})
+            let shape = extra.len();
+            let mut v = json!({"from": from, "batch": batch, "nonce": nonce, "validUntil": vu, "mode": mode,
+                               "relayer": relayer, "fee": fee, "feeRecipient": fr});
+            if shape & 1 == 0 {
+                v["data"] = json!(data);
+            } else {
+                v["to"] = json!(to);
+                v["value"] = json!(value);
+                v["entryRef"] = json!(extra.clone());
+            }
+            if shape & 6 == 6 {
+                v["x"] = json!(extra);
+            }
+            v
         },
     )
 }
@@ -39,17 +52,17 @@ proptest! {
     #![proptest_config(ProptestConfig { cases: 2000, ..ProptestConfig::default() })]
 
     #[test]
-    fn wire_metatx_never_panics(v in metatx_fields()) {
-        if let Ok(w) = serde_json::from_value::<WireMetaTx>(v) {
-            let _ = w.to_sol();
-        }
+    fn wire_metatx_never_panics(v in metatx_fields(), kind in prop_oneof![Just("call".to_string()),
+                                Just("transfer".to_string()), ".{0,8}"]) {
+        let _ = Mtx::from_wire(Some(&kind), &v);
+        let _ = Mtx::from_wire(None, &v);
     }
 
     #[test]
-    fn job_payloads_never_panic(v in any_json(), m in metatx_fields(), sig in ".{0,300}") {
+    fn job_payloads_never_panic(v in any_json(), m in metatx_fields(), sig in ".{0,300}", kind in ".{0,8}") {
         let _ = serde_json::from_value::<Job>(v.clone());
         let shaped = json!({"id": 1, "token": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd", "signature": sig,
-                            "metatx": m, "call": v});
+                            "struct": kind, "metatx": m, "call": v});
         if let Ok(job) = serde_json::from_value::<Job>(shaped) {
             let _ = work_from_job(&job);
         }
@@ -78,7 +91,8 @@ proptest! {
         use tower::ServiceExt;
         let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
         let app = scaas_node::gateway::router(scaas_node::gateway::AppState::default());
-        let shaped = json!({"chain": 1, "token": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd", "m": m, "signature": "0x00"});
+        let shaped = json!({"chain": 1, "token": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd", "m": m, "signature": "0x00",
+                            "struct": "call"});
         for path in ["/v1/metatx", "/v1/dex/orders"] {
             for body in [v.to_string(), shaped.to_string(), raw.clone()] {
                 let req = Request::builder().method("POST").uri(path)

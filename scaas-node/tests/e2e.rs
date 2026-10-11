@@ -23,13 +23,13 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::routing::post;
 use axum::{Json, Router};
-use scaas_node::abi::{IMetaToken, IOpenFactory, MetaTransaction};
+use scaas_node::abi::{IToken, MetaTransfer};
 use scaas_node::chain::Chain;
 use scaas_node::config::{ChainCfg, FinalityCfg, OdooCfg};
 use scaas_node::dex::venue::Venue;
 use scaas_node::dex::{cancel_digest, domain, order_hash, Order, WireOrder};
 use scaas_node::gateway::{router, AppState, GwChain};
-use scaas_node::metatx::{digest, Domain, WireMetaTx, MODE_RESTRICT_RELAYER};
+use scaas_node::metatx::{Domain, Mtx, MODE_RESTRICT_RELAYER};
 use scaas_node::odoo::Odoo;
 use scaas_node::submit::{work_from_job, Submitter, Work, BUMP_SKIPPED_CONSUMED};
 use serde_json::{json, Value};
@@ -256,15 +256,37 @@ fn odoo_at(addr: SocketAddr) -> Odoo {
 
 async fn balance(rpc: &str, token: Address, who: Address) -> U256 {
     let p = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
-    let data = IMetaToken::balanceOfCall { who }.abi_encode();
+    let data = IToken::balanceOfCall { who }.abi_encode();
     let out = p.call(TransactionRequest::default().to(token).input(data.into())).await.unwrap();
     U256::abi_decode(&out).unwrap()
 }
 
-fn sign(signer: &PrivateKeySigner, chain_id: u64, token: Address, m: &MetaTransaction) -> String {
-    let d = Domain { name: "SCaaS MetaToken".into(), version: "1".into(), chain_id, verifying_contract: token };
-    let sig = signer.sign_hash_sync(&digest(&d, m)).unwrap();
+/// The token's salted domain: `chain_uid` from the deploy JSON (the script checked it against block 0).
+fn token_domain(dep: &Value, chain_id: u64, token: Address) -> Domain {
+    Domain { name: "SCaaS MetaToken".into(), version: "1".into(), chain_id, verifying_contract: token,
+             salt: dep["chain_uid"].as_str().unwrap().parse().unwrap() }
+}
+
+fn sign(signer: &PrivateKeySigner, d: &Domain, m: &Mtx) -> String {
+    let sig = signer.sign_hash_sync(&m.digest(d)).unwrap();
     format!("0x{}", alloy::hex::encode(sig.as_bytes()))
+}
+
+/// A payment `MetaTransfer` (`entryRef` = `r`) on lane `batch`.
+#[allow(clippy::too_many_arguments)]
+fn payment(from: Address, to: Address, value: u64, r: B256, batch: U256, mode: u32, relayer: Address, fee: u64,
+    fee_recipient: Address) -> Mtx
+{
+    Mtx::Transfer(MetaTransfer {
+        from, to, value: U256::from(value), entryRef: r, batch, nonce: U256::ZERO, validUntil: U256::from(now() + 300),
+        mode, relayer, fee: U256::from(fee), feeRecipient: fee_recipient,
+    })
+}
+
+/// An outbox job as the client stores it: `struct` names the signed struct (CTR-MTX-15).
+fn job(id: i64, token: Address, m: &Mtx, digest: &str, signature: String) -> Value {
+    let (kind, wire) = m.to_wire();
+    json!({"id": id, "token": format!("{token:#x}"), "digest": digest, "signature": signature, "struct": kind, "metatx": wire})
 }
 
 #[tokio::test]
@@ -279,30 +301,16 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     let relayer = key(RELAYER);
     let shop = Address::repeat_byte(0x5e);
     let entry_ref = keccak256(b"order-1");
-    let mut data = keccak256(b"pay(bytes32)")[..4].to_vec();
-    data.extend_from_slice(entry_ref.as_slice());
-    let m = MetaTransaction {
-        from: payer.address(),
-        to: shop,
-        value: U256::from(250_000_000u64),
-        data: data.into(),
-        batch: U256::from_be_bytes(keccak256(b"lane").0),
-        nonce: U256::ZERO,
-        validUntil: U256::from(now() + 300),
-        mode: MODE_RESTRICT_RELAYER,
-        relayer: relayer.address(),
-        fee: U256::ZERO,
-        feeRecipient: Address::ZERO,
-    };
-    let signature = sign(&payer, chain_id, token, &m);
+    let d = token_domain(&dep, chain_id, token);
+    let m = payment(payer.address(), shop, 250_000_000, entry_ref, U256::from_be_bytes(keccak256(b"lane").0),
+        MODE_RESTRICT_RELAYER, relayer.address(), 0, Address::ZERO);
+    let signature = sign(&payer, &d, &m);
     let state = Arc::new(Mutex::new(FakeOdoo {
         tokens: vec![format!("{token:#x}")],
         receiving: vec![json!({"token": format!("{token:#x}"), "address": format!("{shop:#x}")})],
         ..Default::default()
     }));
-    state.lock().unwrap().jobs.push(json!({
-        "id": 1, "token": format!("{token:#x}"), "digest": "0x", "signature": signature,
-        "metatx": WireMetaTx::from_sol(&m)}));
+    state.lock().unwrap().jobs.push(job(1, token, &m, "0x", signature));
     let addr = start_fake(state.clone()).await;
     let odoo = odoo_at(addr);
     let cfg = chain_cfg(chain_id, &rpc, None);
@@ -335,8 +343,7 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     assert_eq!(pay["entry_ref"], format!("{entry_ref:#x}"));
     assert_eq!(pay["amount"], "250000000");
     let exe = ingested.iter().find(|e| e["event"] == "MetaTransactionExecuted").expect("executed ingested");
-    let d = Domain { name: "SCaaS MetaToken".into(), version: "1".into(), chain_id, verifying_contract: token };
-    assert_eq!(exe["digest"], format!("{:#x}", digest(&d, &m)));
+    assert_eq!(exe["digest"], format!("{:#x}", m.digest(&d)));
     // Drift A (R56): the ERC-20 Transfer to the receiving wallet rides along with the same tx hash, so
     // Odoo can see it is matched by the PaymentSettled.
     let tr = ingested.iter().find(|e| e["event"] == "Transfer").expect("Transfer to the receiving wallet");
@@ -358,9 +365,7 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
 
     // Replay of the same signed job: simulation refuses it, but the subject nonce is spent by this very intent (R80)
     // -> `consumed` (classified from the MetaTransactionExecuted log: our lane landed it), never `dead`; no gas spent.
-    state.lock().unwrap().jobs.push(json!({
-        "id": 2, "token": format!("{token:#x}"), "digest": format!("{:#x}", digest(&d, &m)), "signature": sign(&payer, chain_id, token, &m),
-        "metatx": WireMetaTx::from_sol(&m)}));
+    state.lock().unwrap().jobs.push(job(2, token, &m, &format!("{:#x}", m.digest(&d)), sign(&payer, &d, &m)));
     s.poll_outbox().await;
     let last = state.lock().unwrap().reports.last().cloned().unwrap();
     assert_eq!((last["job_id"].as_i64(), last["chain_state"].as_str(), last["error"].as_str()), (Some(2), Some("consumed"), Some("landed")), "{last}");
@@ -417,6 +422,8 @@ async fn drain(s: &mut Submitter, rx: &mut mpsc::Receiver<Work>) {
 alloy::sol! {
     function setMarket(address tokenA, address tokenB, (bool,bool,uint32,uint32,address) m) external;
     function filled(bytes32 h) external view returns (uint256);
+    function createMetaToken(uint64 version, address underlying, bytes initData, bytes32 salt) external returns (address token);
+    function approve(address spender, uint256 value) external returns (bool);
 }
 
 #[tokio::test]
@@ -428,19 +435,27 @@ async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
     let alice = small_key(0xA11CE);
     let bob = small_key(0xB0B);
     let dep = deploy(&rpc, chain_id, alice.address());
-    let token_a: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();
+    let demo: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();
     let factory: Address = dep["factory"].as_str().unwrap().parse().unwrap();
     let dex: Address = dep["scaas_dex"].as_str().unwrap().parse().unwrap();
 
-    // Quote token B, half to bob — plain txs from the funded deployer (= DEX admin).
+    // Base A (half to alice) and quote B (half to bob): v1 MetaTokens, because the built venue settles `SCaaSDexV1`
+    // over allowances until it moves to `SCaaSDex` (Task 4). Plain txs from the funded deployer (= DEX admin).
     let deployer = key(DEPLOYER);
     let p = ProviderBuilder::new().wallet(EthereumWallet::from(deployer.clone())).connect_http(rpc.parse().unwrap());
-    let init = ("Token BBB".to_string(), "BBB".to_string(), U256::from(6u8), U256::from(1_000_000_000u64), Address::ZERO).abi_encode_params();
-    let create = IOpenFactory::createMetaTokenCall { version: 1, underlying: Address::ZERO, initData: init.into(), salt: B256::repeat_byte(0xbb) };
-    let out = p.call(TransactionRequest::default().to(factory).input(create.abi_encode().into())).await.unwrap();
-    let token_b = Address::abi_decode(&out).unwrap();
-    send(&rpc, &deployer, factory, create.abi_encode()).await;
-    send(&rpc, &deployer, token_b, IMetaToken::transferCall { to: bob.address(), value: U256::from(500_000_000u64) }.abi_encode()).await;
+    let mut v1 = vec![];
+    for (name, supply, salt, holder) in [("AAA", 1_000_000_000_000u64, 0xaa, &alice), ("BBB", 1_000_000_000, 0xbb, &bob)] {
+        let init = (format!("Token {name}"), name.to_string(), U256::from(6u8), U256::from(supply), Address::ZERO).abi_encode_params();
+        let create = createMetaTokenCall { version: 1, underlying: Address::ZERO, initData: init.into(), salt: B256::repeat_byte(salt) };
+        let out = p.call(TransactionRequest::default().to(factory).input(create.abi_encode().into())).await.unwrap();
+        let t = Address::abi_decode(&out).unwrap();
+        send(&rpc, &deployer, factory, create.abi_encode()).await;
+        send(&rpc, &deployer, t, IToken::transferCall { to: holder.address(), value: U256::from(supply / 2) }.abi_encode()).await;
+        let _: Value = p.raw_request("anvil_setBalance".into(), (holder.address(), "0xde0b6b3a7640000")).await.unwrap();
+        send(&rpc, holder, t, approveCall { spender: dex, value: U256::MAX }.abi_encode()).await;
+        v1.push(t);
+    }
+    let (token_a, token_b) = (v1[0], v1[1]);
     let fee_to = Address::repeat_byte(0xfe);
     send(&rpc, &deployer, dex, setMarketCall { tokenA: token_a, tokenB: token_b, m: (true, true, 1_000, 2_000, fee_to) }.abi_encode()).await;
 
@@ -462,7 +477,7 @@ async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
     let venue = Venue::start(shared.clone(), odoo.clone(), Some(odoo.clone()), dex).await.unwrap();
     let (tx, mut rx) = mpsc::channel::<Work>(16);
     let fee_wallet = Address::repeat_byte(0xfa);
-    let gw = GwChain { chain: shared.clone(), tx, tokens: Arc::new(RwLock::new(vec![token_a, token_b])), dex: Some(venue.clone()), breaker: None, fee_recipient: Some(fee_wallet) };
+    let gw = GwChain { chain: shared.clone(), tx, tokens: Arc::new(RwLock::new(vec![token_a, token_b, demo])), dex: Some(venue.clone()), breaker: None, fee_recipient: Some(fee_wallet) };
     let app = router(AppState { chains: Arc::new([(chain_id, gw)].into_iter().collect()) });
     let listener = tokio::net::TcpListener::bind("127.0.0.1:18651").await.unwrap();
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -477,36 +492,17 @@ async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
         }
     };
 
-    // 1. Gasless approve (MetaToken op, R26/R35) through the open gateway.
-    for (who, token) in [(&alice, token_a), (&bob, token_b)] {
-        let mut data = keccak256(b"approve(address,uint256)")[..4].to_vec();
-        data.extend((dex, U256::MAX).abi_encode_params());
-        let m = MetaTransaction {
-            from: who.address(), to: dex, value: U256::ZERO, data: data.into(),
-            batch: U256::from_be_bytes(keccak256(b"scaas.dex.approve").0), nonce: U256::ZERO,
-            validUntil: U256::from(now() + 300), mode: MODE_RESTRICT_RELAYER, relayer: relayer.address(),
-            fee: U256::ZERO, feeRecipient: Address::ZERO,
-        };
-        let (st, body) = post("/v1/metatx", json!({"chain": chain_id, "token": token, "m": WireMetaTx::from_sol(&m),
-            "signature": sign(who, chain_id, token, &m)})).await;
-        assert_eq!(st, 202, "{body}");
-    }
-    drain(&mut s, &mut rx).await;
-
-    // 1b. R84 (review C1): `feeRecipient`/`relayer` of an open-mode intent are not signed, so a client can put
-    //     anything there; the fee still lands in our configured wallet.
+    // 1. R84 (review C1): `feeRecipient`/`relayer` of an open-mode `MetaTransfer` are not signed, so a client can put
+    //    anything there; through the open gateway the fee still lands in our configured wallet.
     let thief = Address::repeat_byte(0x7e);
-    let m = MetaTransaction {
-        from: alice.address(), to: Address::repeat_byte(0x5e), value: U256::from(1_000_000u64), data: Default::default(),
-        batch: U256::from_be_bytes(keccak256(b"e2e.r84").0), nonce: U256::ZERO, validUntil: U256::from(now() + 300),
-        mode: 0x20, // FIXED fee, neither relayer nor fee recipient bound
-        relayer: thief, fee: U256::from(1_000u64), feeRecipient: thief,
-    };
-    let (st, body) = post("/v1/metatx", json!({"chain": chain_id, "token": token_a, "m": WireMetaTx::from_sol(&m),
-        "signature": sign(&alice, chain_id, token_a, &m)})).await;
+    let m = payment(alice.address(), Address::repeat_byte(0x5e), 1_000_000, B256::ZERO,
+        U256::from_be_bytes(keccak256(b"e2e.r84").0), 0x20, thief, 1_000, thief); // FIXED fee, nothing bound
+    let (kind, wire) = m.to_wire();
+    let (st, body) = post("/v1/metatx", json!({"chain": chain_id, "token": demo, "struct": kind, "m": wire,
+        "signature": sign(&alice, &token_domain(&dep, chain_id, demo), &m)})).await;
     assert_eq!(st, 202, "{body}");
     drain(&mut s, &mut rx).await;
-    assert_eq!((balance(&rpc, token_a, fee_wallet).await, balance(&rpc, token_a, thief).await), (U256::from(1_000u64), U256::ZERO));
+    assert_eq!((balance(&rpc, demo, fee_wallet).await, balance(&rpc, demo, thief).await), (U256::from(1_000u64), U256::ZERO));
 
     let d = domain(chain_id, dex);
     let place = |o: Order, signer: &PrivateKeySigner| {
@@ -633,26 +629,12 @@ async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
     assert_eq!(venue3.rows().await, rows);
 }
 
-fn pay_job(payer: &PrivateKeySigner, chain_id: u64, token: Address, id: i64, tag: &[u8]) -> Value {
+fn pay_job(payer: &PrivateKeySigner, dep: &Value, chain_id: u64, token: Address, id: i64, tag: &[u8]) -> Value {
     let entry_ref = keccak256(tag);
-    let mut data = keccak256(b"pay(bytes32)")[..4].to_vec();
-    data.extend_from_slice(entry_ref.as_slice());
-    let m = MetaTransaction {
-        from: payer.address(),
-        to: Address::repeat_byte(0x5e),
-        value: U256::from(1_000u64),
-        data: data.into(),
-        batch: U256::from_be_bytes(entry_ref.0),
-        nonce: U256::ZERO,
-        validUntil: U256::from(now() + 300),
-        mode: 0,
-        relayer: Address::ZERO,
-        fee: U256::ZERO,
-        feeRecipient: Address::ZERO,
-    };
-    let d = Domain { name: "SCaaS MetaToken".into(), version: "1".into(), chain_id, verifying_contract: token };
-    json!({"id": id, "token": format!("{token:#x}"), "digest": format!("{:#x}", digest(&d, &m)),
-           "signature": sign(payer, chain_id, token, &m), "metatx": WireMetaTx::from_sol(&m)})
+    let m = payment(payer.address(), Address::repeat_byte(0x5e), 1_000, entry_ref, U256::from_be_bytes(entry_ref.0), 0,
+        Address::ZERO, 0, Address::ZERO);
+    let d = token_domain(dep, chain_id, token);
+    job(id, token, &m, &format!("{:#x}", m.digest(&d)), sign(payer, &d, &m))
 }
 
 /// R80 (S2, review H3): another relayer lands OUR intent. (1) While our tx is pending (dropped from anvil's pool so the
@@ -692,7 +674,7 @@ async fn a_peer_landing_our_intent_makes_the_job_consumed_never_dead() {
     let error = |id: i64| state.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == id).unwrap()["error"].clone();
 
     // (1) Ours pending, the peer's lands.
-    let j1 = pay_job(&payer, chain_id, token, 41, b"r80-stuck");
+    let j1 = pay_job(&payer, &dep, chain_id, token, 41, b"r80-stuck");
     state.lock().unwrap().jobs.push(j1.clone());
     s.poll_outbox().await;
     assert_eq!(states(41), ["signed", "broadcast"]);
@@ -724,7 +706,7 @@ async fn a_peer_landing_our_intent_makes_the_job_consumed_never_dead() {
     assert_eq!(p.get_transaction_count(relayer.address()).await.unwrap(), 1, "R18: no outer nonce abandoned");
 
     // (2) Same block, the peer outbids our tip: our tx is mined and reverts.
-    let j2 = pay_job(&payer, chain_id, token, 42, b"r80-race");
+    let j2 = pay_job(&payer, &dep, chain_id, token, 42, b"r80-race");
     state.lock().unwrap().jobs.push(j2.clone());
     s.poll_outbox().await;
     assert_eq!(states(42), ["signed", "broadcast"]);
@@ -784,9 +766,9 @@ async fn evm_adapter_runs_the_generic_lane_runner_on_two_mnemonic_lanes() {
 
     let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
     let odoo = odoo_at(start_fake(state.clone()).await);
-    state.lock().unwrap().jobs.push(pay_job(&payer, chain_id, token, 11, b"generic-1"));
+    state.lock().unwrap().jobs.push(pay_job(&payer, &dep, chain_id, token, 11, b"generic-1"));
     assert!(lane_step(&adapter, &odoo, 0, "e2e#0").await.unwrap());
-    state.lock().unwrap().jobs.push(pay_job(&payer, chain_id, token, 12, b"generic-2"));
+    state.lock().unwrap().jobs.push(pay_job(&payer, &dep, chain_id, token, 12, b"generic-2"));
     assert!(lane_step(&adapter, &odoo, 1, "e2e#1").await.unwrap());
     assert!(!lane_step(&adapter, &odoo, 1, "e2e#1").await.unwrap(), "nothing left");
 

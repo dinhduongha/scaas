@@ -12,7 +12,7 @@ use anyhow::Result;
 use serde_json::{json, Value};
 use tracing::info;
 
-use crate::abi::IMetaToken;
+use crate::abi::IToken;
 use crate::chain::Chain;
 use crate::indexer::receiving_pairs;
 use crate::odoo::Odoo;
@@ -38,9 +38,9 @@ pub async fn step(chain: &Chain, odoo: &Odoo, chain_key: &str) -> Result<bool> {
     for (token, who) in pairs {
         let tx = TransactionRequest::default()
             .with_to(token)
-            .with_input(IMetaToken::balanceOfCall { who }.abi_encode());
+            .with_input(IToken::balanceOfCall { who }.abi_encode());
         let out = chain.primary().call(tx).block(BlockId::number(height)).await?;
-        rows.push((token, who, IMetaToken::balanceOfCall::abi_decode_returns(&out)?));
+        rows.push((token, who, IToken::balanceOfCall::abi_decode_returns(&out)?));
     }
     let r = odoo.balance_report(chain_key, height, &report_rows(&rows)).await?;
     if !r.stale {

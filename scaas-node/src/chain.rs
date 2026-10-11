@@ -11,7 +11,8 @@ use alloy::signers::local::PrivateKeySigner;
 use alloy::transports::TransportError;
 use anyhow::{anyhow, Result};
 
-use crate::abi::{decode_revert, IMetaToken, MetaTransaction};
+use crate::abi::{decode_revert, IToken};
+use crate::metatx::Mtx;
 use crate::config::ChainCfg;
 
 /// Simulation fail vì hợp đồng revert (vĩnh viễn với state này) hay vì đường truyền (tạm thời).
@@ -115,14 +116,17 @@ impl Chain {
         Ok(C::abi_decode_returns(&self.primary().call(tx).await?)?)
     }
 
-    /// `metaNonce(from, batch)` của token: nonce chủ thể kế tiếp (R80).
-    pub async fn meta_nonce(&self, token: Address, from: Address, batch: U256) -> Result<U256> {
-        self.view(token, IMetaToken::metaNonceCall { from, batch }).await
+    /// `mtxNonce(from, batch)`: the subject's next nonce on that lane, shared by both structs (R80, CTR-MTX-15).
+    pub async fn mtx_nonce(&self, token: Address, from: Address, batch: U256) -> Result<U256> {
+        self.view(token, IToken::mtxNonceCall { from, batch }).await
     }
 
-    /// `metaTxDigest(m)` — đúng digest token phát trong `MetaTransactionExecuted` (R78).
-    pub async fn meta_digest(&self, token: Address, m: MetaTransaction) -> Result<B256> {
-        self.view(token, IMetaToken::metaTxDigestCall { m }).await
+    /// `mtxDigest(m)` / `mtxTransferDigest(t)`: exactly the digest the contract emits in `MetaTransactionExecuted` (R78).
+    pub async fn mtx_digest(&self, token: Address, m: Mtx) -> Result<B256> {
+        match m {
+            Mtx::Call(m) => self.view(token, IToken::mtxDigestCall { m }).await,
+            Mtx::Transfer(t) => self.view(token, IToken::mtxTransferDigestCall { t }).await,
+        }
     }
 
     /// `MetaTransactionExecuted` của `(from, batch, nonce)` trong `lookback` khối gần nhất ⇒ `(digest, relayer)` (§8.5).
@@ -130,13 +134,13 @@ impl Chain {
         let latest = self.primary().get_block_number().await?;
         let filter = Filter::new()
             .address(token)
-            .event_signature(IMetaToken::MetaTransactionExecuted::SIGNATURE_HASH)
+            .event_signature(IToken::MetaTransactionExecuted::SIGNATURE_HASH)
             .topic1(from.into_word())
             .topic3(B256::from(batch))
             .from_block(latest.saturating_sub(lookback))
             .to_block(latest);
         for log in self.primary().get_logs(&filter).await? {
-            let Ok(e) = log.log_decode::<IMetaToken::MetaTransactionExecuted>().map(|l| l.inner.data) else { continue };
+            let Ok(e) = log.log_decode::<IToken::MetaTransactionExecuted>().map(|l| l.inner.data) else { continue };
             if e.nonce == nonce {
                 return Ok(Some((e.digest, e.relayer)));
             }

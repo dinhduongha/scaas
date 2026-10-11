@@ -9,7 +9,7 @@ use alloy::sol_types::SolEvent;
 use serde_json::{json, Value};
 use tracing::{info, warn};
 
-use crate::abi::IMetaToken;
+use crate::abi::IToken;
 use crate::chain::Chain;
 use crate::finality::{next_range, quorum_ok, safe_head, Mode};
 use crate::odoo::Odoo;
@@ -27,8 +27,8 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         "log_index": log.log_index?,
     });
     let topic0 = *log.topic0()?;
-    if topic0 == IMetaToken::PaymentSettled::SIGNATURE_HASH {
-        let e = log.log_decode::<IMetaToken::PaymentSettled>().ok()?.inner.data;
+    if topic0 == IToken::PaymentSettled::SIGNATURE_HASH {
+        let e = log.log_decode::<IToken::PaymentSettled>().ok()?.inner.data;
         v["event"] = json!("PaymentSettled");
         v["from"] = json!(format!("{:#x}", e.from));
         v["to"] = json!(format!("{:#x}", e.to));
@@ -36,14 +36,14 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         v["fee"] = json!(e.feeAmount.to_string());
         v["fee_recipient"] = json!(format!("{:#x}", e.feeRecipient));
         v["entry_ref"] = json!(format!("{:#x}", e.entryRef));
-    } else if topic0 == IMetaToken::Transfer::SIGNATURE_HASH {
-        let e = log.log_decode::<IMetaToken::Transfer>().ok()?.inner.data;
+    } else if topic0 == IToken::Transfer::SIGNATURE_HASH {
+        let e = log.log_decode::<IToken::Transfer>().ok()?.inner.data;
         v["event"] = json!("Transfer");
         v["from"] = json!(format!("{:#x}", e.from));
         v["to"] = json!(format!("{:#x}", e.to));
         v["amount"] = json!(e.value.to_string());
-    } else if topic0 == IMetaToken::MetaTransactionExecuted::SIGNATURE_HASH {
-        let e = log.log_decode::<IMetaToken::MetaTransactionExecuted>().ok()?.inner.data;
+    } else if topic0 == IToken::MetaTransactionExecuted::SIGNATURE_HASH {
+        let e = log.log_decode::<IToken::MetaTransactionExecuted>().ok()?.inner.data;
         v["event"] = json!("MetaTransactionExecuted");
         v["from"] = json!(format!("{:#x}", e.from));
         v["relayer"] = json!(format!("{:#x}", e.relayer));
@@ -125,8 +125,8 @@ pub async fn step(chain: &Chain, odoo: &Odoo) -> anyhow::Result<bool> {
         return Ok(false);
     }
     let f = Filter::new().from_block(from).to_block(to).address(addrs).event_signature(vec![
-        IMetaToken::PaymentSettled::SIGNATURE_HASH,
-        IMetaToken::MetaTransactionExecuted::SIGNATURE_HASH,
+        IToken::PaymentSettled::SIGNATURE_HASH,
+        IToken::MetaTransactionExecuted::SIGNATURE_HASH,
     ]);
     let mut events: Vec<Value> = chain.primary().get_logs(&f).await?.iter().filter_map(encode_event).collect();
     let pairs = receiving_pairs(&nc);
@@ -137,7 +137,7 @@ pub async fn step(chain: &Chain, odoo: &Odoo) -> anyhow::Result<bool> {
             .from_block(from)
             .to_block(to)
             .address(tokens)
-            .event_signature(IMetaToken::Transfer::SIGNATURE_HASH)
+            .event_signature(IToken::Transfer::SIGNATURE_HASH)
             .topic2(wallets);
         let logs = chain.primary().get_logs(&f).await?;
         events.extend(inbound(logs.iter().filter_map(encode_event).collect(), &pairs));
@@ -165,7 +165,7 @@ mod tests {
 
     #[test]
     fn payment_settled_is_encoded_for_odoo() {
-        let ev = IMetaToken::PaymentSettled {
+        let ev = IToken::PaymentSettled {
             from: Address::repeat_byte(1),
             to: Address::repeat_byte(2),
             amount: U256::from(250u64),
@@ -183,7 +183,7 @@ mod tests {
 
     #[test]
     fn executed_carries_the_digest() {
-        let ev = IMetaToken::MetaTransactionExecuted {
+        let ev = IToken::MetaTransactionExecuted {
             from: Address::repeat_byte(1),
             relayer: Address::repeat_byte(2),
             batch: U256::from(7u64),
@@ -202,7 +202,7 @@ mod tests {
     fn transfers_are_kept_only_to_the_receiving_wallet_of_that_token() {
         let (token, shop) = (Address::repeat_byte(9), Address::repeat_byte(0x5a));
         let ev = |to: Address| {
-            let t = IMetaToken::Transfer { from: Address::repeat_byte(7), to, value: U256::from(5u64) };
+            let t = IToken::Transfer { from: Address::repeat_byte(7), to, value: U256::from(5u64) };
             encode_event(&log_of(t.encode_log_data())).unwrap()
         };
         let v = ev(shop);
@@ -221,7 +221,7 @@ mod tests {
 
     #[test]
     fn pending_or_foreign_logs_are_dropped() {
-        let ev = IMetaToken::PaymentSettled {
+        let ev = IToken::PaymentSettled {
             from: Address::ZERO,
             to: Address::ZERO,
             amount: U256::ZERO,

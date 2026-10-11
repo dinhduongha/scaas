@@ -1,4 +1,4 @@
-//! Hedera HSCS qua Hedera JSON-RPC Relay (R63). Contract là Solidity (`HederaMetaToken`), tx là tx Ethereum
+//! Hedera HSCS qua Hedera JSON-RPC Relay (R63). Contract là Solidity (the token kinds with `IS_HEDERA`), tx là tx Ethereum
 //! ký ECDSA từ lane (alias EVM, `m/44'/3030'/0'/0/i`), nên phần lớn đi nhờ `EvmAdapter`. Riêng Hedera:
 //!
 //! - **R6-1**: không mempool — tx vào đồng thuận trong vài giây hoặc bị từ chối; nonce tương lai có thể tới
@@ -148,10 +148,10 @@ impl ChainAdapter for HederaAdapter {
         self.inner.lanes()
     }
 
-    /// R80: meta-tx ⇒ `metaNonce(from, batch)` (mọi op của meta-tx dùng chung nonce này); job `call` ⇒ không biết.
+    /// R80: meta-tx ⇒ `mtxNonce(from, batch)` (both structs share the lane); job `call` ⇒ không biết.
     async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
         let Some(m) = work_from_job(job).ok().and_then(|w| w.meta) else { return Ok(None) };
-        Ok(Some(self.inner.lane(0)?.meta_nonce(m.token, m.from, m.batch).await? > m.nonce))
+        Ok(Some(self.inner.lane(0)?.mtx_nonce(m.token, m.from, m.batch).await? > m.nonce))
     }
 
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
@@ -281,8 +281,8 @@ mod tests {
         balance: &'static str,
         receipt: Value,
         send_error: Option<Value>,
-        /// `eth_call` trả về word này (mô phỏng bỏ qua nó; `metaNonce` đọc nó).
-        meta_nonce: u64,
+        /// `eth_call` trả về word này (mô phỏng bỏ qua nó; `mtxNonce` đọc nó).
+        mtx_nonce: u64,
         sent: Vec<String>,
         jobs: Vec<Value>,
         reports: Vec<Value>,
@@ -296,7 +296,7 @@ mod tests {
         let ok = |r: Value| json!({"jsonrpc": "2.0", "id": id, "result": r});
         axum::Json(match b["method"].as_str().unwrap_or_default() {
             "eth_getBalance" => ok(json!(n.balance)),
-            "eth_call" => ok(json!(format!("0x{:064x}", n.meta_nonce))),
+            "eth_call" => ok(json!(format!("0x{:064x}", n.mtx_nonce))),
             "eth_estimateGas" => ok(json!("0x186a0")),
             "eth_gasPrice" => ok(json!(format!("0x{GAS_PRICE:x}"))),
             "eth_getTransactionCount" => ok(json!("0x7")),
@@ -330,9 +330,10 @@ mod tests {
     fn job(valid_until: u64) -> Value {
         let z = format!("{:#x}", Address::ZERO);
         json!({"id": 7, "token": format!("{:#x}", Address::repeat_byte(0x70)), "signature": format!("0x{}", "ab".repeat(64)),
+               "struct": "transfer",
                "metatx": {"from": format!("{:#x}", Address::repeat_byte(1)), "to": format!("{:#x}", Address::repeat_byte(2)),
-                          "value": "1", "data": "0x", "batch": "1", "nonce": "0", "validUntil": valid_until.to_string(),
-                          "mode": 0, "relayer": z, "fee": "0", "feeRecipient": z}})
+                          "value": "1", "entryRef": format!("{:#x}", B256::ZERO), "batch": "1", "nonce": "0",
+                          "validUntil": valid_until.to_string(), "mode": 0, "relayer": z, "fee": "0", "feeRecipient": z}})
     }
 
     /// Chạy MỘT `lane_step` của `HederaAdapter` thật; trả các `chain_state` đã báo và trạng thái mạng giả.
@@ -385,10 +386,10 @@ mod tests {
         assert_eq!(step(net, now() + 600).await.0, ["signed", "broadcast", "reverted"]);
     }
 
-    /// R80/H3: revert vì relayer khác đã dùng nonce chủ thể (`metaNonce` đã qua) ⇒ `consumed`, không `reverted`.
+    /// R80/H3: revert vì relayer khác đã dùng nonce chủ thể (`mtxNonce` đã qua) ⇒ `consumed`, không `reverted`.
     #[tokio::test]
     async fn revert_after_a_lost_race_is_consumed() {
-        let net = Net { balance: "0x1", receipt: receipt("0x0", "CONTRACT_REVERT_EXECUTED"), meta_nonce: 1, ..Default::default() };
+        let net = Net { balance: "0x1", receipt: receipt("0x0", "CONTRACT_REVERT_EXECUTED"), mtx_nonce: 1, ..Default::default() };
         assert_eq!(step(net, now() + 600).await.0, ["signed", "broadcast", "consumed"]);
     }
 
@@ -415,34 +416,33 @@ mod tests {
         assert_eq!(states, ["queued"]);
     }
 
-    /// Cùng vector với forge (`HederaKat.t.sol`) và Odoo (`test_hedera.py`): digest EIP-712 và chữ ký ed25519
-    /// thật của tài khoản 0.0.1234567 trên đúng 32 byte đó (phép HIP-632 kiểm).
+    /// The Hedera vector (`HederaKat.t.sol` + `gen_hedera_kat.py`): the salted `MetaTransfer` digest of an `IS_HEDERA`
+    /// token and a real ed25519 signature of the account 0.0.1234567 over those 32 bytes (what HIP-632 checks).
     #[test]
     fn kat_digest_and_ed25519_signature() {
-        use crate::metatx::{digest, Domain, WireMetaTx};
+        use crate::metatx::{Domain, Mtx};
         use ed25519_dalek::{Signature, Verifier, VerifyingKey};
         let k: Value = serde_json::from_str(KAT).unwrap();
         let s = |f: &str| k[f].as_str().unwrap().to_string();
-        let wire: WireMetaTx = serde_json::from_value(json!({
-            "from": s("from"), "to": s("to"), "value": s("value"), "data": s("data"), "batch": s("batch"),
-            "nonce": s("nonce"), "validUntil": s("valid_until"), "mode": s("mode").parse::<u32>().unwrap(),
-            "relayer": s("relayer"), "fee": "0", "feeRecipient": format!("{:#x}", Address::ZERO)}))
-        .unwrap();
-        let m = wire.to_sol().unwrap();
+        let wire = json!({"from": s("from"), "to": s("to"), "value": s("value"), "entryRef": s("entry_ref"),
+            "batch": s("batch"), "nonce": s("nonce"), "validUntil": s("valid_until"), "mode": s("mode").parse::<u32>().unwrap(),
+            "relayer": s("relayer"), "fee": "0", "feeRecipient": format!("{:#x}", Address::ZERO)});
+        let m = Mtx::from_wire(Some("transfer"), &wire).unwrap();
         let d = Domain {
             name: "SCaaS MetaToken".into(),
             version: "1".into(),
-            chain_id: k["chain_id"].as_u64().unwrap(),
+            chain_id: s("chain_id").parse().unwrap(),
             verifying_contract: s("verifying_contract").parse().unwrap(),
+            salt: s("salt").parse().unwrap(),
         };
-        let dg = digest(&d, &m);
+        let dg = m.digest(&d);
         assert_eq!(dg, s("digest").parse::<B256>().unwrap());
         let pk: [u8; 32] = alloy::hex::decode(&s("ed25519_public_key")[2..]).unwrap().try_into().unwrap();
         let sig: [u8; 64] = alloy::hex::decode(&s("ed25519_signature")[2..]).unwrap().try_into().unwrap();
         let vk = VerifyingKey::from_bytes(&pk).unwrap();
         vk.verify(dg.as_slice(), &Signature::from_bytes(&sig)).expect("ed25519 over the digest");
         // Hedera account 0.0.1234567 ⇒ long-zero `from`.
-        assert_eq!(m.from, Address::left_padding_from(&1_234_567u64.to_be_bytes()));
+        assert_eq!(m.from(), Address::left_padding_from(&1_234_567u64.to_be_bytes()));
     }
 
     /// Review H1/M1: a Hedera chain from `node.toml` (EVM-style: `evm_chain_number`, no `network`, finality

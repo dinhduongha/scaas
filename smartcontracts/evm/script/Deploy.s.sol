@@ -9,6 +9,7 @@ import {MetaTxDex} from "../src/dex/MetaTxDex.sol";
 import {SmartKeyAccountFactory} from "../src/account/SmartKeyAccountFactory.sol";
 import {SCaaSDexV1} from "../src/dex/SCaaSDexV1.sol";
 import {DeployBase} from "./DeployBase.sol";
+import {OpenFactory} from "../src/factory/OpenFactory.sol";
 
 /// forge script script/Deploy.s.sol --rpc-url $RPC --broadcast --sender <địa chỉ deployer = vm.addr(PRIVATE_KEY)>
 /// env: PRIVATE_KEY (deployer; registrar mặc định), REGISTRAR (tuỳ chọn),
@@ -32,16 +33,11 @@ contract Deploy is DeployBase {
         _gate(address(accounts));
         MetaToken impl = new MetaToken{salt: salt}(address(factory), accounts.IMPLEMENTATION());
         if (registrar == deployer) factory.registerImplementation(IOpenFactoryV1.TokenKind.META, 1, address(impl));
-        _deployTokenFactory(registrar, registrar == deployer, accounts.IMPLEMENTATION(), false);
+        OpenFactory tokens = _deployTokenFactory(registrar, registrar == deployer, accounts.IMPLEMENTATION(), false);
         MetaTxDex dex = new MetaTxDex{salt: salt}();
         // R35: admin chỉ `setMarket`; production đặt REGISTRAR là một Safe (RS5-1).
         SCaaSDexV1 scaasDex = new SCaaSDexV1{salt: salt}(registrar);
-        address demo;
-        if (demoSupply != 0 && registrar == deployer) {
-            demo = factory.createMetaToken(1, address(0),
-                abi.encode("SCaaS Demo USD", "bUSD", uint8(6), demoSupply, deployer), bytes32("demo"));
-            if (demoHolder != deployer) MetaToken(demo).transfer(demoHolder, demoSupply / 2);
-        }
+        if (demoSupply != 0 && registrar == deployer) _demoTokens(tokens, demoSupply, deployer, demoHolder);
         vm.stopBroadcast();
 
         string memory k = "deploy";
@@ -50,8 +46,7 @@ contract Deploy is DeployBase {
         vm.serializeAddress(k, "dex", address(dex));
         vm.serializeAddress(k, "smart_key_account_factory", address(accounts));
         vm.serializeAddress(k, "smart_key_account_implementation", accounts.IMPLEMENTATION());
-        vm.serializeAddress(k, "scaas_dex", address(scaasDex));
-        string memory out = vm.serializeAddress(k, "demo_token", demo);
+        string memory out = vm.serializeAddress(k, "scaas_dex", address(scaasDex));
         vm.createDir("./deployments", true);
         vm.writeJson(out, string.concat("./deployments/", vm.toString(block.chainid), ".json"));
         console.log(out);
