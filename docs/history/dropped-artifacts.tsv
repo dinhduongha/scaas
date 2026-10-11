@@ -838,3 +838,4 @@ scaas-account.__check_auth	renamed	`SmartKeyAccount.__check_auth`, networks/soro
 ownerNonce	removed	the owner call is a MetaTransaction lane 0 (P4), networks/hedera.md#NET-HED-03
 subjectAccountFactory	renamed	`smartKeyAccountFactory` (P4), clients/app.md
 bundle = u ‖ v_t ‖ v_a ‖ toUA	renamed	the PQZ bundle gains the build salt: `R = salt ‖ u ‖ v_t ‖ v_a ‖ toUA`, contracts/pq-zether.md#CTR-PQZ-23
+pub fn normalize(m: &mut MetaTransaction, fee_recipient: Option<Address>)	renamed	`Mtx::normalize(&mut self, fee_recipient)` covers both structs (P5), node/submit-lanes.md#NODE-LANE-10

@@ -439,10 +439,10 @@ given):
    `submit_meta_tx.feeRecipient` = `fee_recipient`, `relayer` = 0.
 3. EVM `MODE_RESTRICT_RELAYER` with a lane address (accepted; `may_submit` only for that lane's node).
 4. EVM `MODE_RESTRICT_RELAYER`, `relayer = 0` ⇒ `RELAYER_BOUND_ZERO`.
-5. EVM `MetaTransfer` ⇒ selector `"transfer"` (`entryRef = 0`) or `"pay"`.
+5. EVM `MetaTransfer` ⇒ selector `"transfer"` (`entryRef = 0`) or `"pay"`; a `MetaTransaction` ⇒ its 4-byte selector.
 6. EVM `sig_kind = erc1271` (no local recover, accepted).
 7. EVM high-s signature ⇒ `BAD_SIGNATURE`.
-8. Hedera `hedera:296` (chain id 296 in the domain).
+8. Hedera `hedera:296` (chain id 296 in the domain); an EVM chain whose `chain_uid` the receiver lacks ⇒ `UNKNOWN_CHAIN`.
 9–13. Cosmos, Sui, Aptos, TON, Solana `pay` ops whose payload/digest are the existing cross-language vectors
    (`chains/cosmos/tests`, `adapters/aptos.rs` `payload_and_digest_match_move_and_python`, `adapters/solana.rs`
    `payload_digest_and_addresses_match_python_and_the_program`, `adapters/sui.rs` tests,
@@ -465,7 +465,7 @@ given):
 27. Non-EVM `extra` changed after signing ⇒ `BAD_HUB_SIG`.
 28. `published_at = now − 3000`, `validUntil = now + 300` ⇒ accepted (catch-up); `published_at = now + 60` ⇒
     `BAD_ENVELOPE`.
-29. NONE-mode intent with `fee = 10^30`, policy `min_fee = 1` ⇒ accepted, `fee_effective = "0"`, `may_submit = false`.
+29. NONE-mode intent with `fee = 10^30`, or a PERCENT `MetaTransaction`, policy `min_fee = 1` ⇒ accepted, `fee_effective = "0"`, `may_submit = false`.
 30. Unregistered contract with a `full`/`submit` policy ⇒ accepted, `may_submit = false`.
 31. Body string with a non-ASCII character ⇒ `BAD_ENVELOPE`.
 32. Body whose object keys are deliberately **unsorted** on the wire ⇒ the expected `body_hash` is that of the sorted
@@ -473,7 +473,7 @@ given):
 
 A client library uses the file to check that its own digest functions produce the same `intent_id` for cases 1–13
 and that `json.dumps(sort_keys=True, separators=(',', ':'))` gives the same `body_hash` (a third implementation of the
-digest). The built library has 43 cases (the list above plus the per-family twins and gossip-era splits).
+digest). The built library has 46 cases (the list above plus the per-family twins and gossip-era splits).
 
 ## <a id="acceptance"></a>4. Acceptance
 

@@ -531,9 +531,10 @@ canonical digest zeroes, for every origin.** Before building any meta-tx — `fe
 `MODE_RESTRICT_RELAYER` off ⇒ `relayer := 0`. Wire values of unbound fields are never submitted (NODE-GEN-07);
 `intent_id` is unchanged. The token pays `m.feeRecipient` whenever it is non-zero (`ERC20MetaTx.sol` l.87), but the digest zeroes it when
 unbound (`MetaTxLib.canon`, the fields `canon()` zeroes), so without this a client or forwarder would take the fee while we pay gas. `metatx.rs`
-has `pub fn normalize(m: &mut MetaTransaction, fee_recipient: Option<Address>)`, called **once, where the `Work`/`Job`
-is built from a request or an envelope** (job API accept, gateway `post_metatx`, mesh work builder), not in the runner, so Hedera
-work through `lane_runner` → the Hedera adapter's `build` gets it too. A job-API job built by an ERP with fee 0 and
+has `Mtx::normalize(&mut self, fee_recipient: Option<Address>)`, called **once, where the `Work` is built from a
+request, a job or an envelope**: BUILT in gateway `post_metatx` (`work_of`) and in `submit::work_from_job` (the outbox submitter and
+the EVM/Hedera adapters' `build`, with `[[chains]] fee_recipient`); the mesh work builder is SPECIFIED. The outbox's
+in-flight key is the token's `mtxDigest`, never the job's `digest`. A job-API job built by an ERP with fee 0 and
 recipient 0 is unchanged in effect.
 
 ## <a id="batching"></a>11. Batching

@@ -140,9 +140,10 @@ does with it.
 - **Committed balance.** [NODE-DEX-07](#NODE-DEX-07) counts `amount − pulled` of every open order of the same
   `(from, sell token)` plus unsettled fills; the fee is on the received side, so it adds nothing there.
 - **Simulation and attribution.** Before the job is written the venue simulates the whole `mtxSettle` from its lane;
-  token and DEX errors carry the `orderHash` (`BelowMinFill`, `PriceLimit`, `FeeAboveSigned`, `OrderClosed`,
-  `NonceInvalidated`, `WrongRelayer`, …), so the order at fault is known ([NODE-DEX-02](#NODE-DEX-02)); a failing
-  settlement in a multi-settlement call fails alone.
+  token and DEX errors carry the `orderHash` (`BelowMinFill`, `PriceLimit`, `OrderClosed`, `WrongRelayer`, …), so the
+  order at fault is known ([NODE-DEX-02](#NODE-DEX-02)); a failing settlement fails alone. BUILT: named orders and
+  unhealthy makers (signature checked as `SigCheck` does) drop in one round, else each SCaaS leg's `mtxTrade` is probed;
+  no evidence ⇒ `503` (drops written first), never the taker's `400`. A remainder closes only with no fill unmined.
 
 Why: the token verifies the signer's own limits against the fill figures, so a maker needs no allowance and an EOA
 never grants one ([CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)); orders without roles let the same signed
@@ -226,9 +227,8 @@ attribution: only the side at fault is not restored.
 
 <a id="oog-pairs"></a><a id="NODE-DEX-06"></a>**NODE-DEX-06** — **ERC-1271 orders whose check ran out of gas are never
 restored.** The contract caps an ERC-1271 signature check ([CTR-DEX-08](../contracts/dex.md#CTR-DEX-08)); a pair whose
-reason is out-of-gas in that check ⇒ that ERC-1271 order is not restored to the book. (The contract's `_validSig`
-branch uses a `staticcall` with cap `_erc1271Gas(signer)`: 400k when `signer.codehash` is the `SmartKeyAccount` clone
-code hash, else 50k; at most 32 bytes of return data.)
+reason is out-of-gas in that check ⇒ that ERC-1271 order is not restored to the book. (`_erc1271Gas(signer)`: 400k for the
+`SmartKeyAccount` clone codehash, else 50k; exactly 32 bytes of return data; a 7702 designator signs as an EOA.)
 
 ## <a id="routes"></a>6. Routes
 
