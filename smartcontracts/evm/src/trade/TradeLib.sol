@@ -46,13 +46,14 @@ library TradeLib {
             o.destination, o.flags, o.batch, o.nonce, o.validUntil));
     }
 
-    /// @notice Steps 1–3 (before the signature): caller and identities, relayer, shape.
-    function precheck(ITradeToken.TradeOrder calldata o, ITradeToken.TradeFill calldata f, bytes32 h, address caller)
-        public view
+    /// @notice Steps 1–3 (before the signature): caller and identities, relayer, shape. `token` is the sell token:
+    ///         `address(this)` in a token; the leg's token in the DEX, which runs the same checks for outside tokens.
+    function precheck(ITradeToken.TradeOrder calldata o, ITradeToken.TradeFill calldata f, bytes32 h, address caller,
+        address token) public view
     {
         if (caller != o.dex) revert ITradeToken.NotDex(caller);
         if (!SigCheck.isContract(o.dex)) revert ITradeToken.DexNotContract(o.dex);
-        if (o.from == address(this) || o.dex == address(this)) revert ITradeToken.SelfOrder(h);
+        if (o.from == token || o.dex == token) revert ITradeToken.SelfOrder(h);
         if (o.relayer != address(0) && o.relayer != f.submitter) revert ITradeToken.WrongRelayer(h, f.submitter);
         if (block.timestamp > o.validUntil) revert ITradeToken.OrderExpired(h);
         if (o.nonce < $().minNonce[o.from][o.batch]) revert ITradeToken.NonceInvalidated(h);

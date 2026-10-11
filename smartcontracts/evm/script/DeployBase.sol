@@ -55,7 +55,7 @@ abstract contract DeployBase is Script {
         vm.serializeAddress("deploy", "token_factory", address(f));
         vm.serializeAddress("deploy", "implementation_none", address(none));
         // The DEX implementation (CTR-DEX-24): clones come from `createDex`; registered as DEX version 1.
-        SCaaSDex dexImpl = new SCaaSDex{salt: salt}(address(f), uid);
+        SCaaSDex dexImpl = new SCaaSDex{salt: salt}(address(f), uid, smartKeyAccountImpl);
         if (register) f.registerDexImplementation(1, address(dexImpl));
         _gate(address(dexImpl));
         vm.serializeAddress("deploy", "dex_implementation", address(dexImpl));

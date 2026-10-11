@@ -2,27 +2,43 @@
 pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 import {ISCaaSDex} from "./ISCaaSDex.sol";
 import {ITradeToken} from "../trade/ITradeToken.sol";
 import {IOpenFactory} from "../factory/IOpenFactory.sol";
 import {SaltedEIP712} from "../common/SaltedEIP712.sol";
+import {SigCheck} from "../common/SigCheck.sol";
+import {TradeLib} from "../trade/TradeLib.sol";
+import {DexPuller} from "./DexPuller.sol";
 
-/// @title `SCaaSDex` (CTR-DEX-16, -17, -11, -03, -24): an EIP-1167 clone made by `OpenFactory.createDex`.
+/// @title `SCaaSDex` (CTR-DEX-16, -17, -11, -03, -24, -18, -22, -08): an EIP-1167 clone made by `OpenFactory.createDex`.
 /// @notice One settlement = one taker against 1..n makers at each maker's signed price (rounded in the maker's favour).
 ///         Every leg is pulled into the DEX through its sell token's `mtxTrade` (Path A: the exact fill, the token
 ///         checks every signed bound; Path B, `ESCROW`: the whole amount, the DEX checks the matched part and refunds
 ///         the rest), every party is paid in the same call, each order's fee `⌈receiveFill·fee/10⁶⌉` is charged once on
 ///         its aggregate receive and split between the submitter and the treasury, and the DEX's balance of both
 ///         tokens is unchanged at the end (`ConservationBroken`). Each settlement is atomic; one that fails emits
-///         `MatchFailed` and the others still run. The admin lists markets and sets the fee split, never an amount.
-///         Built: SCaaS legs only (outside legs, `DexOrder`, `DexPuller`: P2b-2; exchange path: P2c).
+///         `MatchFailed` (its first 256 bytes of revert data) and the others still run; a starved ERC-1271 check
+///         (`SigCheckGasStarved`) reverts the whole call. The admin lists markets and sets the fee split, never an amount.
+///         An outside-token leg (CTR-DEX-18) is the same `TradeOrder` signed in this DEX's domain as `DexOrder`: the DEX
+///         runs the token's checks (`TradeLib`, its own `scaas.trade` state), the signature (`SigCheck`, ERC-1271
+///         capped by codehash, CTR-DEX-08) and pulls the fill through its `DexPuller` (CTR-DEX-22); `ESCROW` is refused.
+///         Exchange path: P2c.
 contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
+    using SafeERC20 for IERC20;
+
     uint256 internal constant PPM = 1_000_000;
     uint8 internal constant ESCROW = 2;
     uint8 internal constant KIND_SCAAS = 1;
     uint8 internal constant KIND_OUTSIDE = 2;
+    /// @dev Bytes of a failed settlement's revert data kept for `MatchFailed`: the copy costs this frame at most this
+    ///      much, so a returnbomb (an outside token reverting with megabytes) cannot take the other settlements down.
+    uint256 internal constant MAX_REASON = 256;
+    /// @dev ERC-1271 gas cap for this chain's `SmartKeyAccount` clones (CTR-ACC-05); other contracts get
+    ///      `SigCheck.ERC1271_GAS` (50 000).
+    uint256 internal constant SMART_KEY_1271_GAS = 400_000;
 
     /// @custom:storage-location erc7201:scaas.dex
     struct DexStorage {
@@ -33,12 +49,21 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         bool listedOnly;
         mapping(bytes32 pair => bool) listed;
         mapping(address token => uint8) kind;
+        address puller;
     }
+
+    bytes32 internal constant DEX_ORDER_TYPEHASH = keccak256(
+        "DexOrder(address sellToken,TradeOrder order)TradeOrder(address from,address receiveToken,uint256 amount,"
+        "uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,address destination,uint8 flags,"
+        "uint256 batch,uint256 nonce,uint256 validUntil)"
+    );
 
     // keccak256(abi.encode(uint256(keccak256("scaas.dex")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant _STORAGE = 0xb144ea5327f344ea7e3b34dd1898f534c8ce28f9f54d0d89a1b78f8fcf7dac00;
 
     address public immutable FACTORY;
+    /// @dev EIP-1167 runtime codehash of this chain's `SmartKeyAccount` clones (0 = none), as the token's.
+    bytes32 private immutable _SMART_KEY_CLONE_CODEHASH;
 
     /// @dev Per leg, computed before any transfer.
     struct Calc {
@@ -47,11 +72,16 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         uint256 recv;    // gross receive
         uint256 fee;     // dexFee on recv
         uint256 refund;  // Path B: amount - sold
+        bool outside;    // an outside-token leg (`DexOrder`), from the DEX's listing
     }
 
     /// @dev Runs once on the implementation and locks it.
-    constructor(address factory_, bytes32 chainUid_) SaltedEIP712("SCaaS Dex", "1", chainUid_) {
+    constructor(address factory_, bytes32 chainUid_, address smartKeyAccountImpl_)
+        SaltedEIP712("SCaaS Dex", "1", chainUid_)
+    {
         FACTORY = factory_;
+        _SMART_KEY_CLONE_CODEHASH = smartKeyAccountImpl_ == address(0) ? bytes32(0) : keccak256(abi.encodePacked(
+            hex"363d3d373d3d3d363d73", smartKeyAccountImpl_, hex"5af43d82803e903d91602b57fd5bf3"));
         _s().initialized = true;
     }
 
@@ -68,6 +98,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         s.initialized = true;
         s.admin = cfg.admin;
         s.listedOnly = cfg.listedOnly;
+        s.puller = address(new DexPuller());
         _setFeeSplit(s, cfg.relayerSharePpm, cfg.treasury);
     }
 
@@ -118,19 +149,76 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     function tokenKind(address token) external view returns (uint8) { return _s().kind[token]; }
     function factory() external view returns (address) { return FACTORY; }
     function chainUid() external view returns (bytes32) { return CHAIN_UID; }
+    function puller() external view returns (address) { return _s().puller; }
+    function pulled(bytes32 orderHash) external view returns (uint256) { return TradeLib.$().pulled[orderHash]; }
+    function minNonce(address from, uint256 batch) external view returns (uint256) {
+        return TradeLib.$().minNonce[from][batch];
+    }
+
+    function dexOrderDigest(address sellToken, ITradeToken.TradeOrder calldata o) public view returns (bytes32) {
+        return _hashTypedDataV4(keccak256(abi.encode(DEX_ORDER_TYPEHASH, sellToken, TradeLib.hashStruct(o))));
+    }
+
+    function cancelOrderDigest(bytes32 orderHash) public view returns (bytes32) {
+        return _hashTypedDataV4(keccak256(abi.encode(TradeLib.CANCEL_ORDER_TYPEHASH, orderHash)));
+    }
+
+    function invalidateNoncesDigest(address from, uint256 batch, uint256 newMin) public view returns (bytes32) {
+        return _hashTypedDataV4(keccak256(abi.encode(TradeLib.INVALIDATE_NONCES_TYPEHASH, from, batch, newMin)));
+    }
+
+    // ------------------------------------------------------------------ outside-token cancels (CTR-DEX-18, -02)
+
+    /// @notice Never expire; a closed order or a bad signature skips that item (the batch does not revert); a starved
+    ///         ERC-1271 check reverts the call (CTR-DEX-08).
+    function mtxCancelOrders(DexOrder[] calldata orders, bytes[] calldata sigs) external nonReentrant {
+        if (orders.length != sigs.length) revert LengthMismatch();
+        for (uint256 i; i < orders.length; ++i) {
+            ITradeToken.TradeOrder calldata o = orders[i].order;
+            bytes32 h = dexOrderDigest(orders[i].sellToken, o);
+            if (SigCheck.isValid(o.from, cancelOrderDigest(h), sigs[i], _cap(o.from))) TradeLib.cancel(o, h);
+        }
+    }
+
+    function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes calldata sig) external nonReentrant {
+        bytes32 d = invalidateNoncesDigest(from, batch, newMin);
+        if (!SigCheck.isValid(from, d, sig, _cap(from))) revert BadSignature(d);
+        TradeLib.invalidate(from, batch, newMin);
+    }
+
+    /// @dev CTR-DEX-08: 400 k for a `SmartKeyAccount` clone, else 50 k.
+    function _cap(address signer) private view returns (uint256) {
+        bytes32 h = _SMART_KEY_CLONE_CODEHASH;
+        return h != bytes32(0) && signer.codehash == h ? SMART_KEY_1271_GAS : SigCheck.ERC1271_GAS;
+    }
 
     // ------------------------------------------------------------------ settle (CTR-DEX-16)
 
     /// @notice Each settlement atomic; at least one must succeed, else the call reverts (the relayer's simulation
-    ///         catches it).
+    ///         catches it). A failed settlement emits `MatchFailed` with at most `MAX_REASON` bytes of its revert data;
+    ///         `SigCheckGasStarved` reverts the whole call (CTR-DEX-08: the submitter's gas, not the signature, failed).
     function mtxSettle(Settlement[] calldata ss) external nonReentrant returns (bool[] memory ok) {
         ok = new bool[](ss.length);
         bool any;
         for (uint256 i; i < ss.length; ++i) {
-            try this.settleOne(ss[i], msg.sender) {
+            bytes memory data = abi.encodeCall(this.settleOne, (ss[i], msg.sender));
+            bool success;
+            bytes memory reason;
+            assembly ("memory-safe") {
+                success := call(gas(), address(), 0, add(data, 0x20), mload(data), 0, 0)
+                let n := returndatasize()
+                if gt(n, MAX_REASON) { n := MAX_REASON }
+                reason := mload(0x40)
+                mstore(reason, n)
+                returndatacopy(add(reason, 0x20), 0, n)
+                mstore(0x40, add(add(reason, 0x20), and(add(n, 0x1f), not(0x1f))))
+            }
+            if (success) {
                 ok[i] = true;
                 any = true;
-            } catch (bytes memory reason) {
+            } else if (reason.length >= 4 && bytes4(reason) == SigCheckGasStarved.selector) {
+                assembly ("memory-safe") { revert(add(reason, 0x20), mload(reason)) }
+            } else {
                 emit MatchFailed(ss[i].ref, reason);
             }
         }
@@ -173,8 +261,6 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         DexStorage storage s = _s();
         if (a == b) revert TokenMismatch();
         if (!s.listed[_pair(a, b)]) revert MarketNotListed(a, b);
-        if (s.kind[a] != KIND_SCAAS) revert OutsideLegNotBuilt(a);
-        if (s.kind[b] != KIND_SCAAS) revert OutsideLegNotBuilt(b);
     }
 
     /// @dev A maker sells `fill` at its own price: it receives `⌈fill·receiveAmount/amount⌉` (in its favour).
@@ -183,12 +269,15 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         c = _calc(m, submitter, m.fill, recv);
     }
 
-    /// @dev Relayer binding, `dex`, the fee on the aggregate receive; Path B: the DEX's own checks on the matched part.
+    /// @dev Relayer binding, `dex`, the leg's kind from the listing (an outside leg is a `DexOrder`, never `ESCROW`),
+    ///      the fee on the aggregate receive; Path B: the DEX's own checks on the matched part.
     function _calc(Leg calldata l, address submitter, uint256 sold, uint256 recv) private view returns (Calc memory c) {
         ITradeToken.TradeOrder calldata o = l.o;
         if (o.relayer != address(0) && o.relayer != submitter) revert WrongRelayer(submitter);
         if (o.dex != address(this)) revert DexMismatch(o.dex);
-        c.h = ITradeToken(l.sellToken).tradeOrderDigest(o);
+        c.outside = _s().kind[l.sellToken] != KIND_SCAAS;
+        c.h = c.outside ? dexOrderDigest(l.sellToken, o) : ITradeToken(l.sellToken).tradeOrderDigest(o);
+        if (c.outside && o.flags & ESCROW != 0) revert BadFlags(c.h); // pulled exactly into the DEX: nothing to escrow
         c.sold = sold;
         c.recv = recv;
         c.fee = Math.mulDiv(recv, o.fee, PPM, Math.Rounding.Ceil);
@@ -208,7 +297,11 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         ITradeToken.TradeFill memory f = l.o.flags & ESCROW != 0
             ? ITradeToken.TradeFill(l.o.amount, 0, 0, submitter)
             : ITradeToken.TradeFill(c.sold, c.recv, c.fee, submitter);
-        ITradeToken(l.sellToken).mtxTrade(l.o, l.sig, f);
+        if (!c.outside) return ITradeToken(l.sellToken).mtxTrade(l.o, l.sig, f);
+        // outside token: the DEX runs the token's checks on its own state, then pulls through the puller
+        TradeLib.precheck(l.o, f, c.h, address(this), l.sellToken);
+        if (!SigCheck.isValid(l.o.from, c.h, l.sig, _cap(l.o.from))) revert BadSignature(c.h);
+        DexPuller(_s().puller).pull(l.sellToken, l.o.from, TradeLib.record(l.o, f, c.h));
     }
 
     /// @dev Proceeds net of the fee to `destination` (or `from`), the fee split, the Path B refund.
@@ -225,6 +318,6 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     }
 
     function _send(address token, address to, uint256 amount) private {
-        if (amount != 0) IERC20(token).transfer(to, amount);
+        if (amount != 0) IERC20(token).safeTransfer(to, amount);
     }
 }

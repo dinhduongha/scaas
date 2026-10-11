@@ -3,9 +3,10 @@ pragma solidity ^0.8.24;
 
 import {ITradeToken} from "../trade/ITradeToken.sol";
 
-/// @title The DEX side of `TradeOrder` (CTR-DEX-16, -17, -11, -03, -24): one taker against many makers per settlement,
-///        every leg pulled into the DEX through its token's `mtxTrade`, every party, fee share and refund paid in the
-///        same call, and the DEX's balance of every token unchanged at the end.
+/// @title The DEX side of `TradeOrder` (CTR-DEX-16, -17, -11, -03, -24, -18, -22, -08): one taker against many makers
+///        per settlement, every leg pulled into the DEX (a SCaaS token through its `mtxTrade`, an outside token through
+///        the `DexPuller` against a `DexOrder`), every party, fee share and refund paid in the same call, and the DEX's
+///        balance of every token unchanged at the end.
 interface ISCaaSDex {
     /// @notice Written once by `initialize` (CTR-DEX-24). `relayerSharePpm` of every fee goes to the submitter, the
     ///         rest to `treasury`. `listedOnly` belongs to the exchange path (P2c).
@@ -24,6 +25,13 @@ interface ISCaaSDex {
         uint256 fill;
     }
 
+    /// @notice An outside-token order (CTR-DEX-18): the same `TradeOrder`, signed in the DEX's domain as
+    ///         `DexOrder(address sellToken,TradeOrder order)`, `order.dex` = this DEX.
+    struct DexOrder {
+        address sellToken;
+        ITradeToken.TradeOrder order;
+    }
+
     /// @notice `ref` is the submitter's, echoed in events only; taker/makers is a call-time arrangement.
     struct Settlement {
         bytes32 ref;
@@ -37,7 +45,13 @@ interface ISCaaSDex {
     ///         and `relayerShare + treasuryShare == dexFee`. `destination` is where `received` went.
     event LegSettled(bytes32 indexed ref, bytes32 indexed orderHash, address indexed from, address destination,
         uint256 sold, uint256 received, uint256 dexFee, uint256 refund, uint256 relayerShare, uint256 treasuryShare);
+    /// @notice `reason` = the failed settlement's revert data, at most its first 256 bytes.
     event MatchFailed(bytes32 indexed ref, bytes reason);
+    /// @notice Raised by `TradeLib` on outside-token legs and DEX-side cancels (same as `ITradeToken`), listed for the ABI.
+    event TradeFilled(bytes32 indexed orderHash, address indexed from, uint256 sellFill, uint256 receiveFill,
+        uint256 dexFee);
+    event OrderCancelled(bytes32 indexed orderHash, address indexed from);
+    event NoncesInvalidated(address indexed from, uint256 indexed batch, uint256 minNonce);
 
     error NotFactory();
     error AlreadyInitialized();
@@ -52,8 +66,29 @@ interface ISCaaSDex {
     error SelfTrade(address from);
     error DuplicateOrder(bytes32 orderHash);
     error MarketNotListed(address tokenA, address tokenB);
-    /// @notice An outside (non-SCaaS) token leg: `DexOrder` + `DexPuller` come with P2b-2.
-    error OutsideLegNotBuilt(address token);
+    /// @notice An outside leg or a DEX-side cancel whose signature does not verify (ECDSA, or ERC-1271 under its cap);
+    ///         the argument is the digest that was checked.
+    error BadSignature(bytes32 digest);
+    error LengthMismatch();
+    /// @notice Raised by `TradeLib` on outside-token legs (same selectors as `ITradeToken`), listed for the ABI.
+    error NotDex(address caller);
+    error DexNotContract(address dex);
+    error SelfOrder(bytes32 orderHash);
+    error OrderExpired(bytes32 orderHash);
+    error NonceInvalidated(bytes32 orderHash);
+    error BadFlags(bytes32 orderHash);
+    error ZeroAmount(bytes32 orderHash);
+    error BadMinFill(bytes32 orderHash);
+    error FeeAboveCap(bytes32 orderHash);
+    error OrderClosed(bytes32 orderHash);
+    error ZeroFill(bytes32 orderHash);
+    error FeeAboveSigned(bytes32 orderHash);
+    error EscrowFillShape(bytes32 orderHash);
+    error MinNonceNotIncreasing(uint256 current, uint256 requested);
+    error MinNonceAboveCap(uint256 requested);
+    /// @notice `SigCheck`'s: the submitter left too little gas for a capped ERC-1271 call (CTR-DEX-08); it reverts the
+    ///         whole `mtxSettle`, never only one settlement.
+    error SigCheckGasStarved(uint256 cap, uint256 gasLeft);
     error FillMismatch(uint256 expected, uint256 got);
     /// @notice Path B checks the DEX makes on the matched part (the token checks Path A itself).
     error BelowMinFill(bytes32 orderHash);
@@ -65,6 +100,18 @@ interface ISCaaSDex {
     function setMarket(address base, address quote, bool listed) external;
     function setFeeSplit(uint32 relayerSharePpm, address treasury) external;
     function mtxSettle(Settlement[] calldata s) external returns (bool[] memory ok);
+    /// @notice Outside-token orders (CTR-DEX-18, CTR-DEX-02): closed or bad-signature items are skipped.
+    function mtxCancelOrders(DexOrder[] calldata orders, bytes[] calldata sigs) external;
+    function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes calldata sig) external;
+
+    function dexOrderDigest(address sellToken, ITradeToken.TradeOrder calldata o) external view returns (bytes32);
+    function cancelOrderDigest(bytes32 orderHash) external view returns (bytes32);
+    function invalidateNoncesDigest(address from, uint256 batch, uint256 newMin) external view returns (bytes32);
+    /// @notice Fill state of outside-token orders, kept by the DEX (`h` = the `DexOrder` digest).
+    function pulled(bytes32 orderHash) external view returns (uint256);
+    function minNonce(address from, uint256 batch) external view returns (uint256);
+    /// @notice The `DexPuller` holders of outside tokens approve (CTR-DEX-22), deployed by `initialize`.
+    function puller() external view returns (address);
 
     function admin() external view returns (address);
     function relayerSharePpm() external view returns (uint32);

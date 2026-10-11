@@ -9,6 +9,7 @@ import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
+import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {UID_, noneInit} from "./helpers/V2Fixture.sol";
 
@@ -45,7 +46,7 @@ contract DexTest is Test {
     function setUp() public {
         f = new OpenFactory(registrar, UID_);
         address noneImpl = address(new NoUnderlyingToken(address(f), address(0), UID_, false));
-        dexImpl = new SCaaSDex(address(f), UID_);
+        dexImpl = new SCaaSDex(address(f), UID_, address(0));
         vm.startPrank(registrar);
         f.registerImplementation(IOpenFactory.TokenKind.NONE, 1, noneImpl);
         f.registerDexImplementation(1, address(dexImpl));
@@ -523,25 +524,57 @@ contract DexTest is Test {
     function test_gasBurning1271Maker_othersStillSettle() public { _hostileMaker(address(new Burner1271())); }
     function test_returndataBomb1271Maker_othersStillSettle() public { _hostileMaker(address(new Bomb1271())); }
 
-    function test_outsideTokenLegsAreNotBuiltYet() public {
-        MockERC20 usdc = new MockERC20("USD Coin", "USDC", 6);
+    /// The kind is the DEX's listing, never the leg's: once the version is deprecated and the market listed again, `a`
+    /// and `b` are outside, a leg signed on the token is checked against its `DexOrder` digest, and the fill is pulled
+    /// through the puller (EOAs cannot approve a SCaaS token, CTR-TOK-01, so it fails on the allowance).
+    function test_deprecatedTokenListedAsOutside_isADexOrderPulledByThePuller() public {
+        vm.prank(registrar);
+        f.deprecate(IOpenFactory.TokenKind.NONE, 1, "x");
         vm.prank(admin);
-        dex.setMarket(address(a), address(usdc), true);
-        assertEq(dex.tokenKind(address(usdc)), 2);
-        assertEq(dex.tokenKind(address(a)), 1);
+        dex.setMarket(address(a), address(b), true);
         ISCaaSDex.Settlement memory s = _book();
-        s.taker.o.receiveToken = address(usdc);
-        s.taker = _leg(ALICE_PK, a, s.taker.o, 1020);
-        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.OutsideLegNotBuilt.selector, address(usdc)));
+        bytes32 h = dex.dexOrderDigest(address(a), s.taker.o);
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.BadSignature.selector, h));
+        s.taker = _dexLeg(ALICE_PK, address(a), s.taker.o, 1020);
+        address p = dex.puller();
+        _expectOne(s, abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, p, 0, 1020));
     }
 
-    function test_takerSellsAnOutsideToken_notBuilt() public {
+    /// Alice sells 1020 of an outside token (a `DexOrder`, pulled by the puller) against the SCaaS makers of `_book`.
+    function test_takerSellsAnOutsideToken_settles() public {
         MockERC20 usdc = new MockERC20("USD Coin", "USDC", 6);
+        usdc.mint(alice, 5000);
         vm.prank(admin);
         dex.setMarket(address(usdc), address(b), true);
+        assertEq(dex.tokenKind(address(usdc)), 2);
+        assertEq(dex.tokenKind(address(b)), 1);
+        address p = dex.puller();
+        vm.prank(alice);
+        usdc.approve(p, 1020);
         ISCaaSDex.Settlement memory s = _book();
-        s.taker.sellToken = address(usdc);
-        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.OutsideLegNotBuilt.selector, address(usdc)));
+        for (uint256 i; i < 2; ++i) {
+            ITradeToken.TradeOrder memory mo = s.makers[i].o;
+            mo.receiveToken = address(usdc);
+            s.makers[i] = _leg(i == 0 ? BOB_PK : CAROL_PK, b, mo, 1000);
+        }
+        s.taker = _dexLeg(ALICE_PK, address(usdc), s.taker.o, 1020);
+        bytes32 h = dex.dexOrderDigest(address(usdc), s.taker.o);
+        ISCaaSDex.Settlement[] memory ss = _one(s);
+        vm.prank(relayer);
+        dex.mtxSettle(ss);
+        assertEq(b.balanceOf(alice), 1994);
+        assertEq(usdc.balanceOf(alice), 5000 - 1020);
+        assertEq(usdc.balanceOf(bob), 499); // 500 less ceil(0.5) fee
+        assertEq(usdc.balanceOf(carol), 519);
+        assertEq(usdc.balanceOf(address(dex)), 0);
+        assertEq(dex.pulled(h), 1020);
+    }
+
+    function _dexLeg(uint256 pk, address sellToken, ITradeToken.TradeOrder memory o, uint256 fill)
+        internal view returns (ISCaaSDex.Leg memory)
+    {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, dex.dexOrderDigest(sellToken, o));
+        return ISCaaSDex.Leg(sellToken, o, abi.encodePacked(r, s, v), fill);
     }
 
     function test_settleOneOnlyThroughSettle() public {
@@ -579,8 +612,8 @@ contract DexTest is Test {
 
     function test_dexCatalogue_versionZeroRefused_latestTracksTheHighest() public {
         assertEq(f.latestDexVersion(), 1);
-        SCaaSDex v5 = new SCaaSDex(address(f), UID_);
-        SCaaSDex v2 = new SCaaSDex(address(f), UID_);
+        SCaaSDex v5 = new SCaaSDex(address(f), UID_, address(0));
+        SCaaSDex v2 = new SCaaSDex(address(f), UID_, address(0));
         vm.startPrank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.DexVersionUnknown.selector, 0));
         f.registerDexImplementation(0, address(v2));
@@ -618,11 +651,11 @@ contract DexTest is Test {
     }
 
     function test_registerDex_checksFactoryAndChain() public {
-        SCaaSDex other = new SCaaSDex(address(0xFAC), UID_);
+        SCaaSDex other = new SCaaSDex(address(0xFAC), UID_, address(0));
         vm.startPrank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ImplementationFactoryMismatch.selector, address(other)));
         f.registerDexImplementation(2, address(other));
-        SCaaSDex wrongChain = new SCaaSDex(address(f), keccak256("x"));
+        SCaaSDex wrongChain = new SCaaSDex(address(f), keccak256("x"), address(0));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ChainUidMismatch.selector, UID_, keccak256("x")));
         f.registerDexImplementation(2, address(wrongChain));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.DexVersionAlreadyRegistered.selector, 1, address(dexImpl)));
