@@ -174,6 +174,8 @@ The token has exactly one recipient, `o.dex`; it splits nothing and pays no fee 
 (`msg.sender` must be a contract other than the token) and stays a direct read of `msg.sender`
 ([CTR-MTX-18](metatx.md#CTR-MTX-18)); a wrapper calls it to wrap by signature ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)).
 
+**Transitional (BUILT, P2a).** The token side is built on every token kind: `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces`, `pulled`, `minNonce`, `tradeOrderDigest`, `cancelOrderDigest`, `invalidateNoncesDigest` and the events, in `ERC20MetaTx` through the external `TradeLib` (namespace `scaas.trade`, `precheck` → the token's signature check → `record`). Errors the list leaves open (controller ruling, pending the owner): `NotDex(caller)`, `DexNotContract(dex)`, `MinNonceNotIncreasing(current, requested)`, `MinNonceAboveCap(requested)`, `EscrowFillShape`; the others carry the order hash. The DEX side stays the built `SCaaSDex` until P2b.
+
 <a id="CTR-DEX-04"></a>**CTR-DEX-04** — **IOC is closed on chain at its single pull.** An `IOC` order is pulled **once**:
 the token (or, for an outside leg, the DEX) sets `pulled[h] = amount` at that pull, whatever was matched, so an IOC
 order means "only in this settlement", even when it meets several makers in one call; Path B (`ESCROW`) implies IOC. A
@@ -488,9 +490,7 @@ intake fails alone (`MatchFailed`). The node side (home-bound orders only, the f
 
 ## <a id="transitional-built"></a>13. Transitional (BUILT)
 
-<a id="transitional-built"></a>
-<a id="legacy-metatxdex"></a>
-<a id="relayer-fee-rounding"></a>
+<a id="legacy-metatxdex"></a><a id="relayer-fee-rounding"></a>
 
 What runs today, until the rebuild replaces it (a new deployment; users re-sign their resting orders):
 
@@ -544,7 +544,7 @@ What runs today, until the rebuild replaces it (a new deployment; users re-sign 
 
 The rebuild deletes `MetaTxDex` and the trade and approve ops, renames `settle`/`cancel`/`invalidateNonces` to
 `mtxSettle`/`mtxCancelOrders`/`mtxInvalidateNonces`, keeps the DEX-domain `Order` only as `DexOrder`, keeps allowances
-only for outside tokens (moved to the `DexPuller`) and turns the relayer fee into the relayer's share of the signed DEX fee; the exchange path ([CTR-DEX-20](#CTR-DEX-20)…[CTR-DEX-23](#CTR-DEX-23)) is not built.
+only for outside tokens (moved to the `DexPuller`) and turns the relayer fee into the relayer's share of the signed DEX fee; the exchange path ([CTR-DEX-20](#CTR-DEX-20)…[CTR-DEX-23](#CTR-DEX-23)) is not built (the token side of `TradeOrder` is: [CTR-DEX-15](#CTR-DEX-15)).
 
 ## 14. Conformance
 

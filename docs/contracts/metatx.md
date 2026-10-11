@@ -267,7 +267,9 @@ or the ticket is spent), and no allowlisted function runs with a live ticket; `m
 Authority and balance owners are read through `_msgSender()` everywhere; the reads that **stay** `msg.sender` are
 exactly: the relayer binding, the default fee recipient and the event `relayer` of the pipeline; the factory check in
 `initialize`; `mtxTrade`'s `msg.sender == o.dex` ([CTR-DEX-15](dex.md#CTR-DEX-15)); and `mtxWrap`'s relayer binding
-and fee payee ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)). A lint test greps the sources and pins that set. Defence in
+and fee payee ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)). A lint test greps the sources and pins that set
+(built in P2a: `msg.sender` appears 3 times in `ERC20MetaTx` including the `mtxTrade` caller, twice in `UnderlyingToken`
+for `mtxWrap`, never in `TradeLib`, whose caller is a parameter). Defence in
 depth: `from ≠ address(this)` (step 1), and `_update` refuses transfers and mints **to** `address(this)`
 (`TransferToSelf()`), because tokens parked at the token's own address are what a spoofed self-call would spend.
 
