@@ -3034,6 +3034,8 @@ Change (2026-10-08): both UA structs (`UAMetaTransaction`, `UAMetaTransfer`) sha
 ### CTR-UA-23 — PQ and ed25519 kinds on every EVM chain
 - old: R313, UA:Q9 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/accounts.md#CTR-UA-23 · superseded-by: —
 
+Change (2026-10-11): owner — (1) ML-DSA signs `pq_msg = keccak256(TAG(kind) ‖ ua_msg)` with the empty FIPS 204 context instead of `ua_msg` with `ctx = kind_tag`: EIP-8355 always uses the empty context and EIP-8051 takes a 32-byte message, so only a 32-byte digest carrying the tag fits both; key data and UA ids unchanged, vectors change in P6; chain 7622's `MLDSA65` becomes EIP-8355's layout. (2) New kind `slhdsa128s` (0x0133, SLH-DSA-SHA2-128s, FIPS 205, pk 32 B, sig 7,856 B, same `pq_msg`), the hash-based backup if lattices fall: pure Solidity on SHA-256 `0x02` (no SLH-DSA precompile EIP), enabled on public chains only after P6 measures its gas against the per-transaction cap and `UA_VERIFY_BUDGET`. Both SPECIFIED (P6). Source add: owner, 2026-10-11; `research/pq-eips-vs-scaas.md` Q1, Q4.
+
 **Why.** PQ signing kinds and ed25519 are enabled on every EVM chain (owner), verified by precompile where probed or pure Solidity, each within a measured per-chain cap; an over-budget kind is disabled, never registrable-but-unusable.
 **Cost if wrong.** PQ checks cost real money on public L1s (≈ $36–240 per ML-DSA-65 check at 10 gwei).
 **Source.** `history/specs/2026-10-06-universal-account-design.md:281`, `history/specs/2026-10-06-universal-account-design.md:1404`

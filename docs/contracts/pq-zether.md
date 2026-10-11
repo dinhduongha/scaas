@@ -769,7 +769,7 @@ Body: `pk_f ‖ [pk_t] ‖ [pk_a] ‖ T ‖ out` (`T` already includes the plain
 builds it from storage, SSTORE2 reads and calldata; the prover builds it identically (vector `statement_*.json`).
 
 `authDigest = keccak256("SCAAS-PQZ-AUTH-V1" ‖ keccak256(statement))`. The authorization signature is over these 32
-bytes, wrapped as the UA `ua_msg` and signed by ML-DSA with `ctx = kind_tag`, not with EIP-8355's empty context.
+bytes, wrapped as the UA `ua_msg` and signed by ML-DSA as `pq_msg` with the empty context, as EIP-8355 requires ([CTR-UA-23](accounts.md#CTR-UA-23), SPECIFIED (P6); transitional: `ua_msg` with `ctx = kind_tag`).
 
 ### 7.8 Events and indexing
 
@@ -821,10 +821,10 @@ computed by the registry from the `authRef` record's **actual** kind, never a ki
 
 ```
 ua_msg = keccak256(MSG_TAG ‖ TAG(authKind) ‖ PURPOSE_ZETHER_AUTH ‖ authDigest)
-MSG_TAG = keccak256("scaas.ua.msg.v1");   authKind = kindOf(authRef) ∈ {mldsa65, mldsa44, fndsa512, msig}
+MSG_TAG = keccak256("scaas.ua.msg.v1");   authKind = kindOf(authRef) ∈ {mldsa65, mldsa44, fndsa512, slhdsa128s, msig}
 ```
 
-`mldsa65`/`mldsa44` sign `ua_msg` with `ctx = kind_tag`, `fndsa512` as the UA PQ kinds; for an `msig` `authRef` each
+`mldsa65`/`mldsa44`/`slhdsa128s` sign `pq_msg = keccak256(TAG(authKind) ‖ ua_msg)` with the empty context ([CTR-UA-23](accounts.md#CTR-UA-23), SPECIFIED (P6); transitional: ML-DSA over `ua_msg` with `ctx = kind_tag`; `slhdsa128s` only where enabled), `fndsa512` as the UA PQ kinds; for an `msig` `authRef` each
 member signs the UA `member` purpose over `keccak256(structureUA ‖ ua_msg)` with its own kind (native members inside
 `UAAuth`), and the UA threshold rule plus the PQ-weight rule apply. PQZ adds no signing domain of its own: a signature
 valid here is valid through `UARegistry.requireAuthorized(authRef, PURPOSE_ZETHER_AUTH, authDigest, authSig)` and vice
@@ -1047,8 +1047,8 @@ only ids it implements.
 
 <a id="precompile"></a>
 <a id="CTR-PQZ-10"></a>**CTR-PQZ-10** — **On-chain verification is a native precompile on chain 7622**: `PQZ` at
-`0x0000000000000000000000000000000000000F01` (first input byte = op) and `MLDSA65` at `…0F10` (EIP-8355 layout plus a
-context string). **v1 runs only on our Nethermind chain** (owner). Other private chains (customer-run Besu/geth/reth)
+`0x0000000000000000000000000000000000000F01` (first input byte = op) and `MLDSA65` at `…0F10` (EIP-8355's layout from
+P6; transitional: plus a context string; moving both out of the EIP-1352 range is a P6 item). **v1 runs only on our Nethermind chain** (owner). Other private chains (customer-run Besu/geth/reth)
 get the off-chain co-processor attestation seam later; **no client ports in v1**; the co-processor is rejected on chain
 7622 itself. **Determinism and probing:** integer-only code, no threads, no floating point, no CPU-feature-dependent
 results, bounded loops (a capped rejection loop that hits its cap ⇒ invalid); any parse error, panic or failed check ⇒
@@ -1085,9 +1085,9 @@ anything else returns `0`.
 
 ### 9.2 Precompile `MLDSA65` (`0x…0F10`)
 
-Input `pk(1952) ‖ sig(3309) ‖ u8(len(ctx)) ‖ ctx ‖ msg`, FIPS 204 `ML-DSA.Verify(pk, msg, sig, ctx)` (pure ML-DSA);
-output `…01`/`…00`. This is EIP-8355's layout plus the context field, because the UA signs with `ctx = kind_tag` and
-EIP-8355 fixes an empty context. A private address because EIP-8051 and EIP-8355 both claim `0x12/0x13`. The UA
+Input `pk(1952) ‖ sig(3309) ‖ msg`, FIPS 204 `ML-DSA.Verify(pk, msg, sig)` with the empty context (pure ML-DSA); output `…01`/`…00`:
+exactly EIP-8355's layout, because the UA signs the 32-byte `pq_msg` with the empty context ([CTR-UA-23](accounts.md#CTR-UA-23), SPECIFIED (P6)). *Transitional:* the
+current spec and prototype take `pk(1952) ‖ sig(3309) ‖ u8(len(ctx)) ‖ ctx ‖ msg` and run `ML-DSA.Verify(pk, msg, sig, ctx)` with `ctx = kind_tag`. Moving `0x…0F10`/`0x…0F01` outside the EIP-1352 range is a P6 item. A private address because EIP-8051 and EIP-8355 both claim `0x12/0x13`. The UA
 `mldsa44`/`mldsa65` verifier for chain 7622 (`UAMldsaVerifier`, an `IUAKindVerifier`) calls it; the address is an
 immutable constructor argument checked by self-test, so a later standard precompile means a new verifier in a new
 registry generation. Elsewhere the UA PQ kinds use a pure-Solidity verifier ([CTR-UA-23](accounts.md#CTR-UA-23)).

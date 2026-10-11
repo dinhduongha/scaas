@@ -587,7 +587,7 @@ offered; an app end-to-end test.
 | Identity UA for credentials | its own `<account>'` in the UA tree, never the paying account's | per kind |
 | `bls12381-minsig`, `schnorr-bls12381` | EIP-2333 `m/12381/0/<account>/<kindNo>` | BLS12-381 |
 | Zether conf key / viewing key | `m/254|12381/<coin>/<account>/7`, `…/8` ([CLI-SGN-10](#CLI-SGN-10)) | bn254 / BLS12-381 |
-| PQ seeds | `ξ = HKDF-SHA256(ikm = BIP-39 seed, salt = "scaas.ua.pq.v1", info = kind_tag ‖ u32 account ‖ u32 i)` → FIPS 204 `KeyGen_internal(ξ)` / seeded FN-DSA keygen | ML-DSA, FN-DSA |
+| PQ seeds | `ξ = HKDF-SHA256(ikm = BIP-39 seed, salt = "scaas.ua.pq.v1", info = kind_tag ‖ u32 account ‖ u32 i)` → FIPS 204 `KeyGen_internal(ξ)` / seeded FN-DSA keygen; `slhdsa128s` (SPECIFIED (P6)): the same HKDF with output length 48 → `SK.seed ‖ SK.prf ‖ PK.seed` (16 B each) → FIPS 205 `slh_keygen_internal`. `signUA` signs `pq_msg = keccak256(TAG(kind) ‖ ua_msg)` with the empty FIPS 204/205 context ([CTR-UA-23](../contracts/accounts.md#CTR-UA-23), P6; transitional: ML-DSA over `ua_msg` with `ctx = kind_tag`) | ML-DSA, FN-DSA, SLH-DSA |
 | Passkeys | one credential per `rpId`; the same credential on several chains is the same kind (`webauthn-p256` or a family's native passkey) — allowed, the challenges are domain-separated digests | P-256 |
 
 In general form the tree is `m/7622'/0'/<account>'/<kind>'/<i>'`. `7622'` is the SCaaS BIP-43 purpose for UA trees (owner); the coin level is `0'` because a UA id is chain-independent
