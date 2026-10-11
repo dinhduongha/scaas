@@ -63,6 +63,20 @@ as [NODE-STO-04](#NODE-STO-04). Multi-node HA on a shared database is **not** in
   <!-- example:odoo -->The reference ERP stack runs PgBouncer (`/home/dockers/odoo19/pgbouncer`) for its own database;
   it must not sit in front of the node store.<!-- /example -->
 
+```mermaid
+flowchart TD
+    S["start"] --> LK{"owner lock obtained?"}
+    LK -->|no| RF["refuse to start"]
+    LK -->|yes| EP["epoch = epoch + 1,<br/>mine = epoch"]
+    EP --> TX["journal-bearing transaction:<br/>SELECT epoch FROM store_owner FOR UPDATE"]
+    TX --> CH{"epoch = mine?"}
+    CH -->|no| NO["abort NOT_OWNER:<br/>no journal, no broadcast"]
+    CH -->|yes| CM["commit"]
+    EP --> PG["ping lock connection every ≤ 2 s"]
+    PG -->|ping fails| ST["stop leasing and submission,<br/>re-take lock (new epoch),<br/>replay plan()"]
+    ST --> EP
+```
+
 ### 2.2 Transactions and outcomes
 
 - SQLite: `max_connections = 1` (the single connection of [NODE-STO-04](#NODE-STO-04)), WAL, `synchronous = FULL`,

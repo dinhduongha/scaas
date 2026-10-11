@@ -160,6 +160,18 @@ Request bodies: chain state `{"state": "active|paused|halted", "reason": "…"}`
 
 <a id="rb-01-node-down-or-not-ready"></a>
 
+Step 1 as a map from the `/readyz` reason to the runbook:
+
+```mermaid
+flowchart LR
+    R["/readyz reasons"] --> A["rpc:"] --> RB05["RB-05 RPC divergence"]
+    R --> B["indexer lag,<br/>finality violated"] --> RB06["RB-06 chain halt or<br/>finality violation"]
+    R --> C["store, not owner"] --> RB07["RB-07 store owner loss"]
+    R --> D["lane … used<br/>outside this store"] --> RB04["RB-04 foreign nonce"]
+    R --> E["audit chain broken"] --> RB10["RB-10 compromised admin"]
+    R --> F["issuer failed closed"] --> OIDC["fix the IdP or modes"]
+```
+
 1. `curl -sS $NODE/readyz | jq .reasons` — `rpc:` ⇒ RB-05; `indexer lag`/`finality violated` ⇒ RB-06; `store` /
    `not owner` ⇒ RB-07; `lane … used outside this store` ⇒ RB-04; `audit chain broken` ⇒ RB-10; `issuer failed
    closed` ⇒ OIDC (fix the IdP or `modes`). A single chain not ready is P2 (`ScaasChainNotReady`), not a node page.
@@ -401,6 +413,17 @@ holds as dead/cancelled whose node snapshot is live → the node operator resume
 it has acknowledged. A restored store holds as `queued` jobs that were cancelled after the backup point, and
 `max_valid_for_secs` (3 600 s) outlives the RTO; leasing before the client reconciles would execute stopped payments.
 Cost: one manual resume per chain.
+
+```mermaid
+flowchart LR
+    A["stop"] --> B["evidence"] --> C["restore"] --> D["integrity check"]
+    D --> E["store restored:<br/>restore_epoch + 1,<br/>every chain paused"]
+    E --> F["lane accept-nonce<br/>(sequence families)"]
+    F --> G["start:<br/>paused chains accept,<br/>index, track, never lease"]
+    G --> H["re-apply post-backup<br/>mutations from audit events,<br/>or rotate master_key"]
+    H --> I["each ERP admin<br/>acknowledges + cancels"]
+    I --> J["operator resumes<br/>each chain"]
+```
 
 <a id="NODE-RUN-03"></a>**NODE-RUN-03** — **CLI `scaas-node lane accept-nonce --chain <key> --lane <label> --confirm
 <n> --config node.toml`** (sequence families; node stopped; owner lock, epoch + 1). Reads `nonce_at(latest)` and

@@ -86,6 +86,24 @@ waive).
 check on public doors), with the rate counts; the fee cap at lease; booking at the end. The result is stored on the
 job.
 
+```mermaid
+flowchart TD
+    subgraph accept["Accept (step 8 transaction)"]
+        M{"match(job):<br/>first policy that fits"}
+        M -->|none| NS["no sponsor:<br/>door fee floor applies"]
+        M -->|policy p| AD{"admit(job, p):<br/>signature, TOO_SHORT,<br/>BUDGET, RATE"}
+        AD -->|ok| RES["reserve max_cost_per_tx,<br/>count day, hour, payer-hour"]
+        AD -->|not ok, reject| REJ["429 SPONSOR_BUDGET /<br/>SPONSOR_RATE / SPONSOR_TOO_SHORT"]
+        AD -->|not ok, unsponsored| NS
+    end
+    RES --> L{"lease, after simulation:<br/>max fee above reserved?"}
+    L -->|yes| DEAD["dead SPONSOR_TX_CAP"]
+    L -->|no| SEND["broadcast"]
+    SEND --> BOOK["mined / reverted:<br/>reservation becomes cost_spent"]
+    DEAD --> REL["release reservation<br/>and tx_count"]
+    RES -.->|"dead, consumed or cancelled<br/>before broadcast"| REL
+```
+
 ```
 match(job) -> Option<policy>:                                  -- accept, after intake step 7
   candidates = active policies of job.chain_key, now within [valid_from, valid_to], ordered (priority, id)

@@ -47,6 +47,21 @@ loop:
   cursor = to
 ```
 
+The same loop as a picture:
+
+```mermaid
+flowchart TD
+    S["cursor = chain_index.indexed_block"] --> H["head_final from ≥ quorum endpoints<br/>(tag, depth or instant)"]
+    H --> T["to = min(head_final, cursor + 1000)"]
+    T --> W{"to > cursor?"}
+    W -->|no| SL["sleep poll_ms"] --> H
+    W -->|yes| Q{"≥ quorum endpoints agree<br/>on the hash at to?"}
+    Q -->|no| RED["no progress, warning,<br/>/readyz red"]
+    Q -->|yes| E["events(cursor+1, to) from ≥ quorum endpoints,<br/>same normalized list"]
+    E --> TX["one transaction:<br/>INSERT feed_item(range) + UPDATE chain_index"]
+    TX --> C["cursor = to"] --> H
+```
+
 Finality per family (values re-checked per chain before it is enabled, [runbooks.md#production-gates](runbooks.md#production-gates);
 family details in [networks/](../networks/README.md)):
 

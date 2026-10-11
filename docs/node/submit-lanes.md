@@ -258,6 +258,26 @@ loop every poll_ms:
                    expired) is replaced by a 0-value self-send to the lane at that nonce (gap-filler)
 ```
 
+One job through the runner, in order:
+
+```mermaid
+flowchart TD
+    Q["queued"] -->|"lease (CAS)"| L["leased"]
+    L --> SIM{"simulate on the<br/>node's own RPC"}
+    SIM -->|"transport error, timeout"| Q
+    SIM -->|"gas > max_gas_per_tx"| DEAD["dead"]
+    SIM -->|"revert, nonce consumed"| CON["consumed"]
+    SIM -->|"revert, not consumed"| DEAD
+    SIM -->|ok| SIGN["sign (nonce = next++),<br/>tx_hash known"]
+    SIGN --> J["journal: signed"]
+    J --> SEND["eth_sendRawTransaction:<br/>broadcast"]
+    SEND --> R{"receipt?"}
+    R -->|"status 1"| MINED["mined"]
+    R -->|"status 0"| CC["consumption check:<br/>reverted or consumed"]
+    R -->|"stuck_after_secs"| REP["replace at the same nonce,<br/>maxFee x1.25 up to cap"]
+    REP --> SEND
+```
+
 The gateway's and the mesh scheduler's work go through the same runner, the same nonce counter and the same simulation
 gate. `final` of a job never comes from the runner: it comes from the event feed
 ([job-api.md#states](job-api.md#states)), so a job is final also when someone else executed it.

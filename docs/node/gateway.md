@@ -106,6 +106,30 @@ A duplicate returns `200` with the stored state (idempotent).
 `op` is exactly the `signed_op` payload of a job and what every adapter's `build` consumes; `op.family` must be the
 chain's. Accept checks, in order:
 
+```mermaid
+flowchart TD
+    A["POST /v1/ops"] --> C1{"1 chain served?"}
+    C1 -->|no| E1["UNKNOWN_CHAIN"]
+    C1 -->|yes| C2{"2 family = chain family?"}
+    C2 -->|no| E2["BAD_PAYLOAD"]
+    C2 -->|yes| C3{"3 payload decodes, digest matches?"}
+    C3 -->|no| E2
+    C3 -->|yes| C4{"4 token or asset registered?"}
+    C4 -->|no| E4["TOKEN_NOT_SERVED"]
+    C4 -->|yes| C5{"5 now < valid_until within max?"}
+    C5 -->|no| E5["EXPIRED"]
+    C5 -->|yes| C6{"6 family signature verify"}
+    C6 -->|bad| E6["BAD_SIGNATURE"]
+    C6 -->|ok or no verifier| C7{"7 bound relayer is a lane?"}
+    C7 -->|no| E7["RELAYER_NOT_OURS"]
+    C7 -->|yes| C8{"8 simulation passes?"}
+    C8 -->|revert| E8["SIMULATION_REVERT"]
+    C8 -->|yes| C9["9 INSERT signed_op job in ~gateway"]
+    C9 --> OK["202 queued, intent_id"]
+```
+
+In words:
+
 1. `chain` is served (`UNKNOWN_CHAIN`).
 2. `family` equals the chain's family (`BAD_PAYLOAD`).
 3. The payload decodes; the node computes the digest; a client digest that differs fails (`BAD_PAYLOAD`).
