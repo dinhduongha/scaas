@@ -36,6 +36,7 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
     bytes32 private constant _GUARD = 0xf92fce36488cd980109789c37ce44669ca2ec8fc93bcd6d944c3a5544f9ce252; // keccak256("scaas.mtx.guard")
     bytes32 private constant _SENDER = 0x6f8cf97d962f34e862325b04dcb64b0eb0b06cf30b06b61c33210ec760df0f0b; // keccak256("scaas.mtx.sender")
     bytes32 private constant _TICKET = 0xdea51947149e025e6ed748bbba150c788d4bf051fa2851715a58709dbd31a816; // keccak256("scaas.mtx.ticket")
+    bytes32 private constant _BINDING = 0x7a352a4ca0b7d094432a2dbe626c3b7c08a75c6b3464420d2516ca3859c7c12e; // keccak256("scaas.mtx.binding")
 
     /// @custom:storage-location erc7201:scaas.metatx
     struct MetaTxStorage {
@@ -191,10 +192,14 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         }
     }
 
-    /// @dev Step 5: store the ticket, call self, clear; a failed call reverts with its own revert data.
+    /// @dev Step 5: store the ticket (and the envelope binding, when the contract has one), call self, clear the ticket;
+    ///      a failed call reverts with its own revert data. The binding is read only under a live ticket, and every
+    ///      self-call of a contract that has one writes it first, so it needs no clearing.
     function _selfCall(MetaTxLib.MetaTransaction memory m) private returns (bytes memory ret) {
         _tstore(_SENDER, uint256(uint160(m.from)));
         _tstore(_TICKET, 1);
+        bytes32 binding = _envelopeBinding(m);
+        if (binding != bytes32(0)) _tstore(_BINDING, uint256(binding));
         bool ok;
         (ok, ret) = address(this).call(m.data);
         bool guarded = _tload(_TICKET) == 2;    // the target was `nonReentrant` and consumed the ticket
@@ -226,6 +231,18 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
     /// @notice 50 000 for every contract wallet; `SmartKeyAccount` clones get 400 000 where an override knows them.
     function _erc1271Gas(address) internal view virtual returns (uint256) {
         return SigCheck.ERC1271_GAS;
+    }
+
+    /// @notice The envelope binding a proof inside the self-call carries (CTR-ZTH-34): every envelope field except
+    ///         `data`. 0 (none) by default; a confidential token returns its own (Zether, and PQZ with its own tag).
+    function _envelopeBinding(MetaTxLib.MetaTransaction memory) internal view virtual returns (bytes32) {
+        return bytes32(0);
+    }
+
+    /// @notice The envelope binding inside the one self-call of step 5 (live ticket), else 0: a direct call.
+    function _ticketBinding() internal view returns (bytes32) {
+        if (msg.sender == address(this) && _tload(_TICKET) != 0) return bytes32(_tload(_BINDING));
+        return bytes32(0);
     }
 
     /// @notice The signer inside the one self-call of step 5 (live ticket), else `msg.sender` (CTR-MTX-18).

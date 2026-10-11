@@ -10,6 +10,7 @@ import {AdminLib} from "../metatx/AdminLib.sol";
 import {ITransferDisclosure} from "./ITransferDisclosure.sol";
 import {ZetherLayer} from "./ZetherLayer.sol";
 import {ZetherLib} from "./ZetherLib.sol";
+import {MetaTxLib} from "../common/MetaTxLib.sol";
 
 /// @title Kind `NONE_ZETHER` (CTR-TOK-21): the standalone token with the Zether layer (CTR-ZTH-44).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Dev chains only. `MINTABLE` mints public units only; shielded
@@ -39,15 +40,33 @@ contract NoUnderlyingZetherToken is NoUnderlyingToken, ZetherLayer {
         return ZetherLayer._domainName();
     }
 
-    /// @notice The public allowlist until the layer's entries are relayed (`cancelNonce`, `burn`).
+    function _envelopeBinding(MetaTxLib.MetaTransaction memory m)
+        internal view override(MetaTxBase, ZetherLayer) returns (bytes32)
+    {
+        return ZetherLayer._envelopeBinding(m);
+    }
+
+    /// @notice The allowlist (CTR-MTX-19, CTR-ZTH-34): `cancelNonce` (base), `burn(uint256)` `AMOUNT(0)`, then the
+    ///         Zether ops, each `ABSOLUTE`.
     function mtxSelectors()
         public pure override(NoUnderlyingToken, IMetaTx, MetaTxBase)
-        returns (bytes4[] memory, uint8[] memory, uint8[] memory)
+        returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
-        return NoUnderlyingToken.mtxSelectors();
+        s = new bytes4[](8);
+        c = new uint8[](8);
+        a = new uint8[](8);
+        (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
+        (s[1], c[1]) = (this.burn.selector, FEE_CLASS_AMOUNT);
+        (s[2], c[2]) = (this.zetherShield.selector, FEE_CLASS_ABSOLUTE);
+        (s[3], c[3]) = (this.zetherTransfer.selector, FEE_CLASS_ABSOLUTE);
+        (s[4], c[4]) = (this.zetherTransferBundle.selector, FEE_CLASS_ABSOLUTE);
+        (s[5], c[5]) = (this.zetherTransferNoBundle.selector, FEE_CLASS_ABSOLUTE);
+        (s[6], c[6]) = (this.zetherTransferSingle.selector, FEE_CLASS_ABSOLUTE);
+        (s[7], c[7]) = (this.zetherUnshield.selector, FEE_CLASS_ABSOLUTE);
     }
 
     function _mtxRule(bytes4 sel) internal view override(NoUnderlyingToken, MetaTxBase) returns (MtxRule memory) {
+        if (_isZetherOp(sel)) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 0);
         return NoUnderlyingToken._mtxRule(sel);
     }
 }

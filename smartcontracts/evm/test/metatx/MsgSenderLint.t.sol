@@ -53,7 +53,8 @@ contract MsgSenderLintTest is Test {
     }
 
     function test_msgSenderReadsArePinned() public view {
-        assertEq(_count("src/metatx/MetaTxBase.sol", "msg.sender", false), 7, "MetaTxBase: guard, event, relayer binding x2, _msgSender x2, fee default");
+        assertEq(_count("src/metatx/MetaTxBase.sol", "msg.sender", false), 8,
+            "MetaTxBase: guard, event, relayer binding x2, _msgSender x2, fee default, ticket binding (CTR-ZTH-34)");
         assertEq(_count("src/metatx/ERC20MetaTx.sol", "msg.sender", false), 3, "ERC20MetaTx: event relayer, fee default, mtxTrade caller (CTR-DEX-15)");
         assertEq(_count("src/metatx/MetaTokenBase.sol", "msg.sender", false), 1, "MetaTokenBase: factory check in initialize");
         assertEq(_count("src/metatx/NoUnderlyingToken.sol", "msg.sender", false), 0, "NoUnderlyingToken");

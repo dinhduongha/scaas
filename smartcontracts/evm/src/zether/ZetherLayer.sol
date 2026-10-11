@@ -147,10 +147,25 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
 
     // ------------------------------------------------------------------ internals
 
-    /// @dev The statement binding of a direct call: `ZTX_V1_DIRECT`, binding 0. The envelope binding of a relayed call
-    ///      needs the base's ticket binding (next step of the plan).
+    /// @dev The statement binding of this call (CTR-ZTH-34): the envelope's inside `mtxExecute` (`ZTX_V1_RELAYED`),
+    ///      else 0 (`ZTX_V1_DIRECT`), so a proof lifted out of a pending envelope fails as a direct call.
     function _env() internal view returns (ZetherLib.Env memory) {
-        return ZetherLib.Env(_REGISTRY, CHAIN_UID, ZetherLib.TAG_DIRECT, bytes32(0));
+        bytes32 b = _ticketBinding();
+        return ZetherLib.Env(_REGISTRY, CHAIN_UID, ZetherLib.tagOf(b), b);
+    }
+
+    /// @dev The base stores it in the ticket for the self-call of every `mtxExecute` on this token.
+    function _envelopeBinding(MetaTxLib.MetaTransaction memory m) internal view virtual override returns (bytes32) {
+        return _zetherBinding(m);
+    }
+
+    /// @dev The allowlist entries of the layer (CTR-ZTH-34, CTR-MTX-19): every signer-authorised confidential op,
+    ///      `ABSOLUTE` (no percentage of a hidden amount, CTR-ZTH-07), dynamic arguments; the roll-over functions are not
+    ///      listed (they carry their own signature or none).
+    function _isZetherOp(bytes4 sel) internal pure returns (bool) {
+        return sel == this.zetherShield.selector || sel == this.zetherTransfer.selector
+            || sel == this.zetherTransferBundle.selector || sel == this.zetherTransferNoBundle.selector
+            || sel == this.zetherTransferSingle.selector || sel == this.zetherUnshield.selector;
     }
 
     function _zetherBinding(MetaTxLib.MetaTransaction memory m) internal view returns (bytes32) {
