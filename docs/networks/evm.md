@@ -158,7 +158,7 @@ version needs a new salt or new code).
 
 Runbook notes: (1) read the genesis hash from every configured RPC and stop if they differ; (2) on a private chain,
 confirm the genesis carries its unique `extraData` nonce before deploying; (3) deploy the CREATE2 deployer once per
-chain, then the implementations, the factory, the subject-account factory, the registry and the DEX; (4) run the gate;
+chain, then the implementations, the factory, the `SmartKeyAccountFactory`, the registry and the DEX; (4) run the gate;
 (5) publish the profile update (`chain_uid`, contract addresses, DEX list) to the node's chain row and the clients'
 pinned profiles in the same release; the node re-checks every `chainUid()` at activation and every start
 ([NODE-GW-07](../node/gateway.md#NODE-GW-07)).

@@ -177,7 +177,7 @@ Fake wallets are not duplicated: end-to-end tests inject clientkeys `test/wallet
       "chainUid": "0x…",                                     // genesis hash = every domain salt (NET-ALL-24)
       "contracts": { "factoryV1": "0x…", "factoryV2": "0x…", "dex": "0x…",           // dex = SCaaSDexV1
                      "dexes": ["0x…"],                         // the DEX list (NET-ALL-24, SPECIFIED)
-                     "subjectAccountFactory": "0x…", "uaRegistry": null },
+                     "smartKeyAccountFactory": "0x…", "uaRegistry": null },
       "tokens": [ { "address": "0x…", "symbol": "EUR-M", "decimals": 6, "label": "Euro meta" } ],  // pinned
       "zetherTokens": [] },
     { "key": "hedera:296", "family": "hedera", "rpc": ["https://testnet.hashio.io/api"],

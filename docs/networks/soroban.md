@@ -155,7 +155,7 @@ StellarAsset, Account }` — `Some(Executable::Account)` for classic `G...` acco
 
 <a id="NET-SOR-13"></a>**NET-SOR-13** — **The Soroban passkey verifier refuses `"crossOrigin":true` and any
 `topOrigin`** (the common grammar, [NET-ALL-04](README.md#NET-ALL-04)). SPECIFIED (as built `verify_webauthn` checks
-only `type`/`challenge`/`origin`, `account/src/lib.rs:149-153`, so an RP page embeddable in a cross-origin iframe —
+only `type`/`challenge`/`origin`, `smart-key-account/src/lib.rs:149-153`, so an RP page embeddable in a cross-origin iframe —
 Permissions-Policy `publickey-credentials-get` — yields valid assertions under an attacker's page). Test: an assertion
 with `crossOrigin:true` ⇒ `BadClientData`.
 
@@ -198,7 +198,7 @@ submits `RestoreFootprintOp` with the preamble's footprint and fee, then rebuild
 lane-paid deposit bounded by `chain.max_deposit_per_job` and charged to the `from` subject
 ([NODE-LANE-18](../node/submit-lanes.md#NODE-LANE-18)). SPECIFIED (as built a `restorePreamble` ⇒ `Revert` ⇒ job `dead`,
 `soroban.rs:325-327`; only `set_payee` extends the payee, `mandate/src/lib.rs:131-140`, `:167` only `has`; the account
-extends only on `save`, `account/src/lib.rs:75-78`, `__check_auth` `:215-229` does not — so an account in daily use is
+extends only on `save`, `smart-key-account/src/lib.rs:75-78`, `__check_auth` `:215-229` does not — so an account in daily use is
 archived ~60 days after its last key change, a payee 60 days after it was allowed). Tests: TTL after
 `pay_under_mandate` / `__check_auth` is raised; end to end: archive ⇒ restore ⇒ `mined`. System relayers may also call
 `extend_ttl` for long-lived state.
@@ -328,7 +328,7 @@ ledger range: SPECIFIED.
   (owner 2026-10-08, [NET-ALL-27](README.md#NET-ALL-27)). Each key of `SmartKeyAccount` carries the `(contract, function)`
   pairs it may authorise (a passkey that pays, only a seed key changes keys…), aligned with Universal Account key
   purposes ([CTR-UA-10](../contracts/accounts.md#CTR-UA-10)); a context outside it fails. SPECIFIED. Transitional
-  (BUILT): `_contexts` is ignored (`account/src/lib.rs:215`), so any one passkey can `add_key` an attacker's key.
+  (BUILT): `_contexts` is ignored (`smart-key-account/src/lib.rs:215`), so any one passkey can `add_key` an attacker's key.
 - Not on the mesh (above). Seed role keys of a `C…` account use `kindNo` 18
   ([CLI-SGN-30](../clients/signers-clientkeys.md#CLI-SGN-30)).
 - Confidential payments: Soroban has BLS12-381 (CAP-59) and BN254 (CAP-74, protocol 25) host functions plus Poseidon, so

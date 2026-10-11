@@ -835,3 +835,5 @@ SCaaS SubjectAccount	renamed	SCaaS SmartKeyAccount (P4, CTR-ACC-11), contracts/a
 payUnderMandate(token, payee, amount, entryRef, validUntil, sig)	renamed	payUnderMandate(token, payee, amount, entryRef, epoch), named mtxPayUnderMandate(…, epoch, validUntil, sig) (P4), contracts/mandates.md
 scaas-account	renamed	`SmartKeyAccount` (crate scaas-smart-key-account; P4, CTR-ACC-11), networks/soroban.md
 scaas-account.__check_auth	renamed	`SmartKeyAccount.__check_auth`, networks/soroban.md#NET-SOR-04
+ownerNonce	removed	the owner call is a MetaTransaction lane 0 (P4), networks/hedera.md#NET-HED-03
+subjectAccountFactory	renamed	`smartKeyAccountFactory` (P4), clients/app.md
