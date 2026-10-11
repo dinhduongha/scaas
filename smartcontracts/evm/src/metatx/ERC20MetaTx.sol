@@ -22,7 +22,12 @@ import {TradeLib} from "../trade/TradeLib.sol";
 abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken {
     using MetaTxLib for MetaTxLib.MetaTransfer;
 
-    constructor(bytes32 chainUid_) ERC20("", "") MetaTxBase("SCaaS MetaToken", chainUid_) {}
+    constructor(bytes32 chainUid_) ERC20("", "") MetaTxBase(_domainName(), chainUid_) {}
+
+    /// @notice The EIP-712 domain name (CTR-MTX-02): `"SCaaS MetaToken"`; a confidential kind overrides it.
+    function _domainName() internal pure virtual returns (string memory) {
+        return "SCaaS MetaToken";
+    }
 
     // ------------------------------------------------------------------ views
 

@@ -21,11 +21,14 @@ interface IFactoryToken {
         uint16 maxRateStepBps;
     }
 
-    /// @notice `*_ZETHER` kinds only (P3); every other kind requires it empty.
+    /// @notice `*_ZETHER` kinds only; every other kind requires it empty. `maxShielded` (the total cap, `≤ 2^54`) and
+    ///         `confidentialFee` (the inner fee, `< 2^64` and `< maxShielded`) are per token (CTR-ZTH-04, CTR-ZTH-05).
     struct ConfidentialConfig {
         address verifier;
         bytes auditorKey;
         uint256 shieldScale;
+        uint256 maxShielded;
+        uint256 confidentialFee;
     }
 
     /// @notice CTR-TOK-25. Fields of another kind must be empty (`ConfigFieldForOtherKind`), so a token never carries a

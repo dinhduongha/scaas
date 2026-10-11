@@ -44,6 +44,19 @@ interface IOpenFactory {
     error DexVersionUnknown(uint64 version);
     error DexVersionAlreadyRegistered(uint64 version, address existing);
 
+    /// @notice The Zether gate (CTR-ZTH-02, CTR-TOK-03): off by default, switched by the registrar, on only on a dev
+    ///         chain (`ZetherSafety`); creating a `*_ZETHER` token needs it on, a dev chain, and a verifier this chain
+    ///         can run (`isSupportedOnThisChain()`).
+    event ZetherEnabled(bool enabled);
+    error ZetherDisabled();
+    error VerifierRequiredForZether();
+    /// @notice `curve` is the verifier's `curveName()`, empty when it has no code or no answer.
+    error VerifierUnsupportedOnThisChain(address verifier, string curve);
+
+    function zetherEnabled() external view returns (bool);
+    /// @notice Registrar only; `true` reverts `ZetherNotDevChain` outside chain ids 31337/1337, `false` always works.
+    function setZetherEnabled(bool on) external;
+
     /// @notice DEX catalogue (CTR-DEX-24): append-only, versions from 1; the implementation must answer
     ///         `factory() == this` and `chainUid() == chainUid`.
     event DexImplementationRegistered(uint64 indexed version, address indexed implementation, address registrar);

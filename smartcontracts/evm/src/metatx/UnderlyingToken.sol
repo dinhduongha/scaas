@@ -29,14 +29,14 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
         MetaTokenBase(factory_, smartKeyAccountImpl_, chainUid_, isHedera_)
     {}
 
-    function kind() public pure override returns (uint8) {
+    function kind() public pure virtual override returns (uint8) {
         return AdminLib.KIND_UNDERLYING;
     }
 
     /// @dev `initialSupply`, `initialHolder`, `conf` must be empty; legs and rate are checked in `UnderlyingLib`.
-    function _init(TokenConfig calldata cfg) internal override {
-        _requireUnused(cfg, true, false, false);
-        UnderlyingLib.initToken(cfg, IS_HEDERA);
+    function _init(TokenConfig calldata cfg) internal virtual override {
+        _requireUnused(cfg, true, false, false, true);
+        UnderlyingLib.initToken(cfg, IS_HEDERA, AdminLib.KIND_UNDERLYING);
     }
 
     // ------------------------------------------------------------------ wrap / unwrap / reserve
@@ -117,12 +117,12 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
         UnderlyingLib.cancelRate(_msgSender());
     }
 
-    function executeRate() external {
+    function executeRate() external virtual {
         UnderlyingLib.executeRate(_msgSender(), totalSupply());
     }
 
     /// @notice `disableFeature(RATE_ADJUSTABLE)` also cancels a pending rate change (CTR-TOK-06).
-    function disableFeature(uint8 bit) external override {
+    function disableFeature(uint8 bit) external virtual override {
         AdminLib.disableFeature(bit, _msgSender());
         if (bit == AdminLib.RATE_ADJUSTABLE) UnderlyingLib.dropPending();
     }
@@ -134,7 +134,7 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
     ///         `unwrap(address,uint256,address,uint256)` `AMOUNT(1)` (gasless unwrap, CTR-MTX-12). The two-argument
     ///         `unwrap` is not listed (same intent, second digest, no `minOut`).
     function mtxSelectors()
-        public pure override(IMetaTx, MetaTxBase) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+        public pure virtual override(IMetaTx, MetaTxBase) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         s = new bytes4[](6);
         c = new uint8[](6);
@@ -147,7 +147,7 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
         (s[5], c[5]) = (SEL_ADD_RESERVE, FEE_CLASS_ABSOLUTE);
     }
 
-    function _mtxRule(bytes4 sel) internal view override returns (MtxRule memory) {
+    function _mtxRule(bytes4 sel) internal view virtual override returns (MtxRule memory) {
         if (sel == SEL_WRAP) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 36);
         if (sel == SEL_UNWRAP_MIN) return MtxRule(FEE_CLASS_AMOUNT, 0, 100);
         if (sel == SEL_WRAP_LEG) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 68);

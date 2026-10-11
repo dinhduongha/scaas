@@ -15,12 +15,12 @@ contract NoUnderlyingToken is MetaTokenBase {
         MetaTokenBase(factory_, smartKeyAccountImpl_, chainUid_, isHedera_)
     {}
 
-    function kind() public pure override returns (uint8) {
+    function kind() public pure virtual override returns (uint8) {
         return AdminLib.KIND_NONE;
     }
 
-    function _init(TokenConfig calldata cfg) internal override {
-        _requireUnused(cfg, false, true, true);
+    function _init(TokenConfig calldata cfg) internal virtual override {
+        _requireUnused(cfg, false, true, true, true);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         AdminLib.init(AdminLib.KIND_NONE, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);
         if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
@@ -40,7 +40,7 @@ contract NoUnderlyingToken is MetaTokenBase {
 
     /// @notice The allowlist (CTR-MTX-19): `cancelNonce` (base), `burn(uint256)` `AMOUNT(0)`.
     function mtxSelectors()
-        public pure override(IMetaTx, MetaTxBase) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+        public pure virtual override(IMetaTx, MetaTxBase) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         s = new bytes4[](2);
         c = new uint8[](2);
@@ -49,7 +49,7 @@ contract NoUnderlyingToken is MetaTokenBase {
         (s[1], c[1]) = (this.burn.selector, FEE_CLASS_AMOUNT);
     }
 
-    function _mtxRule(bytes4 sel) internal view override returns (MtxRule memory) {
+    function _mtxRule(bytes4 sel) internal view virtual override returns (MtxRule memory) {
         if (sel == this.burn.selector) return MtxRule(FEE_CLASS_AMOUNT, 0, 36);
         return super._mtxRule(sel);
     }

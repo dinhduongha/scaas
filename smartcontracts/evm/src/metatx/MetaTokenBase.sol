@@ -73,13 +73,13 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     function _init(TokenConfig calldata cfg) internal virtual;
 
     /// @dev `ConfigFieldForOtherKind` for a set field the kind does not use; `conf` is used only by `*_ZETHER`.
-    function _requireUnused(TokenConfig calldata cfg, bool supply, bool legs, bool rate) internal pure {
+    function _requireUnused(TokenConfig calldata cfg, bool supply, bool legs, bool rate, bool conf) internal pure {
         if (supply && (cfg.initialSupply != 0 || cfg.initialHolder != address(0))) revert ConfigFieldForOtherKind(1);
         if (legs && cfg.legs.length != 0) revert ConfigFieldForOtherKind(2);
         if (rate && (cfg.rate.rateDelay != 0 || cfg.rate.maxRateStepBps != 0)) revert ConfigFieldForOtherKind(3);
-        if (cfg.conf.verifier != address(0) || cfg.conf.auditorKey.length != 0 || cfg.conf.shieldScale != 0) {
-            revert ConfigFieldForOtherKind(4);
-        }
+        ConfidentialConfig calldata c = cfg.conf;
+        if (conf && (c.verifier != address(0) || c.auditorKey.length != 0 || c.shieldScale != 0 || c.maxShielded != 0
+            || c.confidentialFee != 0)) revert ConfigFieldForOtherKind(4);
     }
 
     function _setMetadata(string memory n, string memory sym, uint8 d) internal {

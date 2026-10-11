@@ -72,15 +72,16 @@ library UnderlyingLib {
     // ------------------------------------------------------------------ init
 
     /// @notice The token's `_init`: legs 1–8 (the factory's index reads the same `legs`), the metadata, the
-    ///         flags/owner/roles (`AdminLib.init`), the rate config, then the legs in their given order (never changes).
-    function initToken(IFactoryToken.TokenConfig calldata c, bool isHedera) public {
+    ///         flags/owner/roles of `kind` (`AdminLib.init`: `UNDERLYING` or `UNDERLYING_ZETHER`), the rate config, then
+    ///         the legs in their given order (never changes).
+    function initToken(IFactoryToken.TokenConfig calldata c, bool isHedera, uint8 kind) public {
         uint256 n = c.legs.length;
         if (n == 0 || n > MAX_LEGS) revert MetaTokenBase.UnderlyingCountInvalid(n);
         AdminLib.TokenStorage storage t = AdminLib.$();
         t.name = c.name;
         t.symbol = c.symbol;
         t.decimals = c.decimals;
-        AdminLib.init(AdminLib.KIND_UNDERLYING, c.features, c.lockedFeatures, c.owner, c.roles);
+        AdminLib.init(kind, c.features, c.lockedFeatures, c.owner, c.roles);
         bool adjustable = AdminLib.hasFeature(AdminLib.RATE_ADJUSTABLE);
         UnderlyingStorage storage s = $();
         IFactoryToken.RateConfig calldata rate = c.rate;
