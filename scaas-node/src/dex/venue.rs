@@ -903,7 +903,8 @@ fn restorable(fill: U256, on_chain: U256, in_book: U256, pending: U256) -> U256 
 
 /// `SigCheck.isContract`: code, and not an EIP-7702 designator (`0xef0100 ‖ address`, whose key still signs).
 fn is_contract(code: &[u8]) -> bool {
-    !code.is_empty() && !(code.len() == 23 && code.starts_with(&[0xef, 0x01, 0x00]))
+    let designator = code.len() == 23 && code.starts_with(&[0xef, 0x01, 0x00]);
+    !code.is_empty() && !designator
 }
 
 /// The ERC-1271 cap (CTR-DEX-08): 400 k for this chain's `SmartKeyAccount` clone, by codehash; 50 k for any other.
@@ -1485,6 +1486,35 @@ mod tests {
         assert_eq!(sig_cap(&clone, None), ERC1271_GAS);
         assert_eq!(clone_codehash(Address::ZERO), None);
         assert_eq!(intrinsic(&[0, 1, 0]), 21_000 + 4 + 16 + 4);
+    }
+
+    /// Review T3 I1 at the I/O edges: a reload counts the unmined part of a partly filled order as pending (from the
+    /// chain's `amount − pulled`), and a failed trade releases its pending fill before the order is handed back.
+    #[tokio::test]
+    async fn pending_fills_are_loaded_from_chain_and_released_by_a_failed_trade() {
+        let (maker, taker) = (PrivateKeySigner::random(), PrivateKeySigner::random());
+        let ask = order(maker.address(), QUOTE, 100, 200, 1); // min 50 base
+        let (v, _) = venue(World::default(), vec![(ask.clone(), sig_of(&maker, oh(&ask)))]).await;
+        let r = take(&v, &taker, 120, 60, 1).await.unwrap();
+        assert_eq!(r.status, "filled");
+        assert_eq!(v.book.lock().await.pending_of(oh(&ask)), U256::from(60));
+        // a reload (or restart) reads the chain: pulled is still 0, so 60 of the 40-left order is unmined
+        let mut reloaded = Book::load(vec![market()], &v.rows().await).unwrap();
+        v.load_pending(&mut reloaded).await.unwrap();
+        assert_eq!(reloaded.pending_of(oh(&ask)), U256::from(60));
+        // the settlement dies: the client reports it failed; the maker gets its 60 back (nothing pending any more)
+        let row = Row::of(&Resting { hash: oh(&ask), sell: BASE, order: ask.clone(), sig: sig_of(&maker, oh(&ask)),
+                                     remaining: U256::from(100), seq: 1 });
+        let tag = r.fills[0]["tag"].clone();
+        let (relay, _) = crate::adapter::tests::fake_odoo(crate::adapter::tests::Fake {
+            dex_sync: json!({"failed": [{"tag": tag, "taker": {"row": null, "fill": "120"},
+                                          "makers": [{"row": row, "fill": "60"}]}]}),
+            ..Default::default()
+        }).await;
+        let v = Venue { relay, ..v };
+        v.sync_once().await.unwrap();
+        let book = v.book.lock().await;
+        assert_eq!((book.get(oh(&ask)).unwrap().remaining, book.pending_of(oh(&ask))), (U256::from(100), U256::ZERO));
     }
 
     /// A failed fill hands back no more than the chain still has open after the book and the other planned fills.

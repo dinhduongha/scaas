@@ -158,6 +158,18 @@ impl ChainAdapter for HederaAdapter {
         self.inner.digest(job).await
     }
 
+    async fn start_check(&self) -> Result<()> {
+        self.inner.start_check().await
+    }
+
+    fn refresh_tokens(&self, nc: &crate::odoo::NodeConfig) {
+        self.inner.refresh_tokens(nc)
+    }
+
+    fn already_done(&self, job: &Job, reason: &str) -> bool {
+        self.inner.already_done(job, reason)
+    }
+
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
         let w = work_from_job(job, self.inner.fee_recipient).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
         if now() > w.valid_until {
@@ -277,6 +289,9 @@ mod tests {
     // ---- lane_step over a fake JSON-RPC Relay + fake Odoo (Hedera outcomes anvil cannot produce) ----
 
     use axum::extract::{Path, State};
+    use alloy::sol_types::SolError;
+    use crate::abi::IToken;
+    use crate::guard;
     use axum::routing::post;
     use std::sync::{Arc, Mutex};
 
@@ -290,6 +305,10 @@ mod tests {
         sent: Vec<String>,
         jobs: Vec<Value>,
         reports: Vec<Value>,
+        /// `eth_getBlockByNumber` (Null = a pruned RPC: the pin is trusted).
+        block0: Value,
+        /// Revert data of an `mtxInvalidateNonces` simulation.
+        invalidate_revert: Option<Vec<u8>>,
     }
     type Shared = Arc<Mutex<Net>>;
     const GAS_PRICE: u128 = 0xca900a7c00; // testnet eth_gasPrice (spec §4)
@@ -300,9 +319,16 @@ mod tests {
         let ok = |r: Value| json!({"jsonrpc": "2.0", "id": id, "result": r});
         axum::Json(match b["method"].as_str().unwrap_or_default() {
             "eth_getBalance" => ok(json!(n.balance)),
-            "eth_getBlockByNumber" => ok(Value::Null),
+            "eth_getBlockByNumber" => ok(n.block0.clone()),
             "eth_getCode" => ok(json!("0x")),
-            "eth_call" => ok(json!(format!("0x{:064x}", n.mtx_nonce))),
+            "eth_call" => {
+                let input = b["params"][0]["input"].as_str().or(b["params"][0]["data"].as_str()).unwrap_or_default().to_string();
+                match &n.invalidate_revert {
+                    Some(d) if input.starts_with(&format!("0x{}", alloy::hex::encode(guard::SEL_MTX_INVALIDATE_NONCES))) => json!(
+                        {"jsonrpc": "2.0", "id": id, "error": {"code": 3, "message": "execution reverted", "data": format!("0x{}", alloy::hex::encode(d))}}),
+                    _ => ok(json!(format!("0x{:064x}", n.mtx_nonce))),
+                }
+            }
             "eth_estimateGas" => ok(json!("0x186a0")),
             "eth_gasPrice" => ok(json!(format!("0x{GAS_PRICE:x}"))),
             "eth_getTransactionCount" => ok(json!("0x7")),
@@ -343,8 +369,12 @@ mod tests {
     }
 
     /// Chạy MỘT `lane_step` của `HederaAdapter` thật; trả các `chain_state` đã báo và trạng thái mạng giả.
-    async fn step(mut net: Net, valid_until: u64) -> (Vec<String>, Shared) {
-        net.jobs = vec![job(valid_until)];
+    async fn step(net: Net, valid_until: u64) -> (Vec<String>, Shared) {
+        step_with(net, job(valid_until)).await
+    }
+
+    /// The adapter on the fake Relay/client: `(adapter, client, network)`. The job's token 0x70… is registered.
+    async fn adapter(net: Net) -> (HederaAdapter, crate::odoo::Odoo, Shared) {
         let s: Shared = Arc::new(Mutex::new(net));
         let app = axum::Router::new().route("/", post(fake_relay)).route("/json/2/{m}/{method}", post(odoo)).with_state(s.clone());
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -356,8 +386,17 @@ mod tests {
         cfg.chain_uid = Some(B256::from(U256::from(s.lock().unwrap().mtx_nonce)));
         let signer = LocalSigner::new(crate::signer::Curve::Secp256k1, &[7u8; 32]).unwrap();
         let a = HederaAdapter::from_cfg(&cfg, &[signer]).unwrap();
+        let nc: crate::odoo::NodeConfig = serde_json::from_value(json!({"evm_chain_number": 296, "finality_mode": "instant",
+            "finality_depth": 0, "finality_quorum": 1, "indexed_block": 0, "journal_max_nonce": null,
+            "tokens": [{"address": format!("{:#x}", Address::repeat_byte(0x70)), "decimals": 6}]})).unwrap();
+        a.refresh_tokens(&nc);
         let oc = crate::config::OdooCfg { url, database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
-        let o = crate::odoo::Odoo::with_key(&oc, "k".into()).unwrap();
+        (a, crate::odoo::Odoo::with_key(&oc, "k".into()).unwrap(), s)
+    }
+
+    async fn step_with(mut net: Net, job: Value) -> (Vec<String>, Shared) {
+        net.jobs = vec![job];
+        let (a, o, s) = adapter(net).await;
         let fut = crate::adapter::lane_step(&a, &o, 0, "t#0");
         assert!(tokio::time::timeout(std::time::Duration::from_secs(10), fut).await.expect("lane held").unwrap());
         let states = s.lock().unwrap().reports.iter().map(|r| r["chain_state"].as_str().unwrap().to_string()).collect();
@@ -422,6 +461,31 @@ mod tests {
         assert!(last_error(&s).contains("expired"));
         let (states, _) = step(Net { balance: "0x0", ..Default::default() }, now() + 600).await;
         assert_eq!(states, ["queued"]);
+    }
+
+    /// Review T4 I2: the Hedera lane path keeps N6 (an invalidation already in force is done, never dead), N2 (a lane
+    /// whose RPC block 0 is not the pinned chain_uid never starts) and I1 (only registered tokens).
+    #[tokio::test]
+    async fn the_hedera_lane_keeps_n6_n2_and_registration() {
+        let inv = |token: Address| json!({"id": 8, "kind": "metatx", "entry": "mtxInvalidateNonces", "token": format!("{token:#x}"),
+            "from": format!("{:#x}", Address::repeat_byte(1)), "batch": "1", "newMin": "9",
+            "signature": format!("0x{}", "11".repeat(65)), "validUntil": (now() + 300).to_string()});
+        let already = IToken::MinNonceNotIncreasing { current: U256::from(9), requested: U256::from(9) }.abi_encode();
+        let net = || Net { balance: "0x1", invalidate_revert: Some(already.clone()), ..Default::default() };
+        let (states, s) = step_with(net(), inv(Address::repeat_byte(0x70))).await;
+        assert_eq!((states, last_error(&s)), (vec!["consumed".to_string()], "already_invalidated".to_string()));
+        let (states, s) = step_with(net(), inv(Address::repeat_byte(0x71))).await;
+        assert_eq!(states, ["dead"]);
+        assert!(last_error(&s).contains("TOKEN_NOT_SERVED"), "{}", last_error(&s));
+        // N2: the recorded testnet block 0 is not the pinned word
+        let block: Value = serde_json::from_str::<Value>(include_str!("../../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone();
+        let (a, o, _) = adapter(Net { balance: "0x1", block0: block, ..Default::default() }).await;
+        assert!(a.start_check().await.is_err());
+        let run = crate::adapter::lane_runner(Arc::new(a), o, 0, "t#0".into(), std::time::Duration::from_millis(10),
+            Arc::new(Mutex::new(crate::breaker::Breaker::new(Default::default()))), Default::default());
+        tokio::time::timeout(std::time::Duration::from_secs(5), run).await.expect("the lane stops at start");
+        let (a, _, _) = adapter(Net { balance: "0x1", ..Default::default() }).await;
+        a.start_check().await.expect("a pruned RPC trusts the pin");
     }
 
     /// The Hedera vector (`HederaKat.t.sol` + `gen_hedera_kat.py`): the salted `MetaTransfer` digest of an `IS_HEDERA`

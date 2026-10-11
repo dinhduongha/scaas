@@ -112,7 +112,10 @@ impl Chain {
     pub async fn uid(&self) -> Result<B256> {
         self.uid
             .get_or_try_init(|| async {
-                match (self.pinned_uid, Self::block_hash(self.primary(), 0).await) {
+                // an RPC error is not "no block 0": nothing is cached, the next call asks again (review T4 m3)
+                let genesis = self.primary().get_block_by_number(BlockNumberOrTag::Number(0)).await
+                    .map_err(|e| anyhow!("chain {}: block 0: {e}", self.number))?.map(|b| b.header.hash);
+                match (self.pinned_uid, genesis) {
                     (Some(p), Some(g)) if p != g => Err(anyhow!("chain {}: RPC block 0 {g:#x} is not chain_uid {p:#x}", self.number)),
                     (Some(p), _) | (None, Some(p)) => Ok(p),
                     (None, None) => Err(anyhow!("chain {}: the RPC gives no block 0 hash; set chain_uid", self.number)),
@@ -259,8 +262,17 @@ mod tests {
         assert_eq!(chain(&url, Some(genesis)).uid().await.unwrap(), genesis);
         assert!(chain(&url, Some(B256::repeat_byte(1))).uid().await.is_err());
         // a pruned RPC (no block 0) trusts the pin, and without one there is no chain_uid
-        let dead = "http://127.0.0.1:9";
-        assert_eq!(chain(dead, Some(B256::repeat_byte(1))).uid().await.unwrap(), B256::repeat_byte(1));
-        assert!(chain(dead, None).uid().await.is_err());
+        let app = axum::Router::new().route("/", axum::routing::post(|axum::Json(r): axum::Json<Value>| async move {
+            axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": null}))
+        }));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let pruned = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        assert_eq!(chain(&pruned, Some(B256::repeat_byte(1))).uid().await.unwrap(), B256::repeat_byte(1));
+        assert!(chain(&pruned, None).uid().await.is_err());
+        // review T4 m3: an unreachable RPC is not a pruned one — no pin is trusted, nothing is cached, it asks again
+        let c = chain("http://127.0.0.1:9", Some(genesis));
+        assert!(c.uid().await.is_err() && c.uid().await.is_err());
+        assert!(c.uid.get().is_none());
     }
 }

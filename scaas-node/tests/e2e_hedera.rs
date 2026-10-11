@@ -27,7 +27,7 @@ use axum::extract::{Path, State};
 use axum::routing::post;
 use axum::{Json, Router};
 use scaas_node::abi::{IToken, MetaTransfer};
-use scaas_node::adapter::{index_step, lane_step, Family};
+use scaas_node::adapter::{index_step, lane_step, recover_lane, Family};
 use scaas_node::adapters;
 use scaas_node::config::{ChainCfg, FinalityCfg, OdooCfg};
 use scaas_node::keys::{lane_secret, Seed};
@@ -286,6 +286,9 @@ async fn hedera_native_account_pays_through_two_lanes_and_never_locks_itself() {
     let tokens = vec![format!("{t1:#x}"), format!("{t2:#x}")];
     let state = Arc::new(Mutex::new(FakeOdoo { tokens, ..Default::default() }));
     let odoo = odoo_at(start_fake(state.clone()).await);
+    // as `lane_runner` starts a lane: the chain_uid check (NODE-GW-07), then recovery, which loads the registered tokens
+    adapter.start_check().await.unwrap();
+    recover_lane(adapter, &odoo, 0, "e2e#0").await.unwrap();
 
     // An unfunded lane does not take the job: back to the queue (Hedera accounts must exist and hold HBAR).
     let (job, m0) = native_pay(&native_key, uid, t1, 20, b"hedera-0");

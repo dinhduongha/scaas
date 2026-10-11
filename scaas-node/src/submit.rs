@@ -240,9 +240,22 @@ impl Submitter {
                 }),
                 Err(_) => None,
             };
+            // review T4 m2: a rebuilt payload is re-signed by `track`, so it passes the guard too; refused ⇒ that
+            // nonce is only ever gap-filled
+            let work = match work {
+                Some(w) => match me.guard.check(&me.chain, &w).await {
+                    Ok(()) => Some(w),
+                    Err(Refusal::Policy(r)) => {
+                        warn!(job = j.job_id, nonce = n, "tracked job refused by the guard: {r}; its nonce is only gap-filled");
+                        None
+                    }
+                    Err(Refusal::Transport(r)) => anyhow::bail!("guard: {r}"),
+                },
+                None => None,
+            };
+            let gas = me.cfg.max_gas_per_tx.min(guard::MAX_TX_GAS);
             // Tập in-flight dựng lại từ việc đang theo dõi (§8.6).
             let guard = work.as_ref().and_then(|w| w.meta?.digest).and_then(|d| me.digests.try_acquire(d));
-            let gas = me.cfg.max_gas_per_tx;
             me.inflight.insert(n, Sent { work, hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard });
         }
         info!(chain = me.cfg.evm_chain_number, chain_uid = %uid, next = me.next, tracked = me.inflight.len(), "submit ready");
@@ -278,6 +291,15 @@ impl Submitter {
                 None
             }
         };
+        // review T4 m1: the guard's registered tokens follow the client (same cadence as the breaker sample)
+        match self.odoo.node_config(self.cfg.evm_chain_number, None).await {
+            Ok(nc) => {
+                if let Ok(mut t) = self.guard.tokens.write() {
+                    *t = nc.tokens.iter().filter_map(crate::odoo::TokenCfg::evm).collect();
+                }
+            }
+            Err(e) => warn!("token refresh: {e:#}"),
+        }
         if let Ok(mut k) = self.breaker.lock() {
             if let Some(f) = base {
                 k.base_fee(now(), f.into());
@@ -339,8 +361,23 @@ impl Submitter {
         Ok(w)
     }
 
-    /// G2: digest đã có tx vỏ sống ở đường khác (lane khác, gateway) ⇒ không ký lần hai.
+    /// The guard first (PAY-FIX2, NODE-GW-07, NODE-JOB-20: before any read of the target, simulation or signature),
+    /// then the outbox job's token digest; G2: digest đã có tx vỏ sống ở đường khác (lane khác, gateway) ⇒ không ký
+    /// lần hai.
     pub async fn submit(&mut self, w: Work) {
+        match self.guard.check(&self.chain, &w).await {
+            Ok(()) => {}
+            Err(Refusal::Policy(reason)) => return self.fail(&w, reason).await,
+            Err(Refusal::Transport(reason)) => return self.requeue(&w, reason).await,
+        }
+        let w = match w.meta.filter(|m| m.digest.is_none()) {
+            None => w,
+            Some(_) => match self.with_chain_digest(w.clone()).await {
+                Ok(w) => w,
+                Err(SimError::Revert(r)) => return self.fail(&w, format!("mtxDigest: {r}")).await,
+                Err(SimError::Transport(r)) => return self.requeue(&w, format!("mtxDigest: {r}")).await,
+            },
+        };
         let guard = match w.meta.and_then(|m| m.digest) {
             None => None,
             Some(d) => match self.digests.try_acquire(d) {
@@ -358,11 +395,6 @@ impl Submitter {
                 self.report(id, "dead", None, None, Some("expired before submit".into())).await;
             }
             return;
-        }
-        match self.guard.check(&self.chain, &w).await {
-            Ok(()) => {}
-            Err(Refusal::Policy(reason)) => return self.fail(&w, reason).await,
-            Err(Refusal::Transport(reason)) => return self.requeue(&w, reason).await,
         }
         let gas = match guard::gas(&self.chain, &w, self.cfg.max_gas_per_tx).await {
             Ok(g) => g,
@@ -637,11 +669,7 @@ impl Submitter {
                 }
             }
             match work_from_job(&job, self.cfg.fee_recipient) {
-                Ok(w) => match self.with_chain_digest(w.clone()).await {
-                    Ok(w) => self.submit(w).await,
-                    Err(SimError::Revert(r)) => self.fail(&w, format!("mtxDigest: {r}")).await,
-                    Err(SimError::Transport(r)) => self.requeue(&w, format!("mtxDigest: {r}")).await,
-                },
+                Ok(w) => self.submit(w).await,
                 Err(e) => {
                     let _ = self.report(job.id, "dead", None, None, Some(format!("bad payload: {e:#}"))).await;
                 }
@@ -709,6 +737,14 @@ mod tests {
         contract_signer: bool,
         /// `mtxSettle` settles everything only from this much gas (below: one `ok` false, an empty `MatchFailed`).
         settle_from: u64,
+        /// `chainUid()`: `"revert"` (no such function) or `"transport"`.
+        uid_err: Option<&'static str>,
+        /// `eth_estimateGas` answers this (default 0x30000).
+        estimate: Option<u64>,
+        /// Only this address has code (`contract_signer` = every address).
+        code_only: Option<Address>,
+        /// Block 0 is the recorded Hedera testnet block, not the pinned `UID` (default: a pruned RPC).
+        genesis: bool,
     }
     type Rpc = Arc<Mutex<Evm>>;
 
@@ -725,13 +761,20 @@ mod tests {
             let word = |v: U256| Value::String(format!("0x{}", alloy::hex::encode(v.abi_encode())));
             let out: Result<Value, Value> = match r["method"].as_str().unwrap() {
                 "eth_getTransactionCount" => Ok(json!(format!("{:#x}", e.count))),
-                "eth_estimateGas" => Ok(json!("0x30000")),
+                "eth_estimateGas" => Ok(json!(format!("{:#x}", e.estimate.unwrap_or(0x30000)))),
                 "eth_feeHistory" => Ok(json!({"oldestBlock": "0x1", "baseFeePerGas": ["0x3b9aca00", "0x3b9aca00"],
                     "gasUsedRatio": [0.5], "reward": [["0x3b9aca00"]]})),
                 "eth_blockNumber" => Ok(json!("0x10")),
                 "eth_getLogs" => Ok(json!([])),
+                "eth_getBalance" => Ok(json!("0xde0b6b3a7640000")),
+                "eth_getBlockByNumber" if e.genesis => {
+                    Ok(serde_json::from_str::<Value>(include_str!("../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone())
+                }
                 "eth_getBlockByNumber" => Ok(Value::Null),
-                "eth_getCode" => Ok(json!(if e.contract_signer { "0x6001" } else { "0x" })),
+                "eth_getCode" => {
+                    let a: Address = p[0].as_str().unwrap().parse().unwrap();
+                    Ok(json!(if e.contract_signer || e.code_only == Some(a) { "0x6001" } else { "0x" }))
+                }
                 "eth_call" => {
                     let input = p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap();
                     let sel = alloy::hex::decode(&input[2..10]).unwrap();
@@ -746,7 +789,11 @@ mod tests {
                     } else if sel == IToken::supportedModesCall::SELECTOR {
                         Ok(word(U256::from(0xF3)))
                     } else if sel == IToken::chainUidCall::SELECTOR {
-                        Ok(word(U256::from(e.uid.unwrap_or(UID))))
+                        match e.uid_err {
+                            Some("revert") => Err(err(3, "execution reverted", Some("0x".into()))),
+                            Some(_) => Err(err(-32000, "upstream timeout", None)),
+                            None => Ok(word(U256::from(e.uid.unwrap_or(UID)))),
+                        }
                     } else if sel == guard::SEL_MTX_SETTLE {
                         let gas = p[0]["gas"].as_str().map_or(u64::MAX, |g| u64::from_str_radix(&g[2..], 16).unwrap());
                         let ok = vec![true, gas >= e.settle_from];
@@ -823,6 +870,11 @@ mod tests {
         })
     }
 
+    /// The fake client's registered tokens: `TOKEN`.
+    fn toks() -> Value {
+        json!([{"address": format!("{TOKEN:#x}"), "decimals": 6}])
+    }
+
     fn job(id: i64) -> Value {
         let (kind, wire) = meta(7).to_wire();
         json!({"id": id, "kind": "metatx", "token": format!("{TOKEN:#x}"), "digest": D, "struct": kind,
@@ -834,7 +886,11 @@ mod tests {
     }
 
     async fn lane_with(rpc: &str, odoo: crate::odoo::Odoo, key: u8, set: InflightSet, dex: Option<Address>) -> Submitter {
-        let cfg = ChainCfg {
+        lane_cfg(rpc, odoo, key, set, |c| c.dex = dex).await.unwrap()
+    }
+
+    fn test_cfg(rpc: &str) -> ChainCfg {
+        ChainCfg {
             family: "evm".into(),
             evm_chain_number: 31337,
             rpc_urls: vec![rpc.into()],
@@ -842,17 +898,23 @@ mod tests {
             max_gas_per_tx: 3_000_000,
             max_fee_cap_gwei: 500,
             chain_uid: Some(B256::from(U256::from(UID))),
-            dex,
             ..Default::default()
-        };
+        }
+    }
+
+    async fn lane_cfg(rpc: &str, odoo: crate::odoo::Odoo, key: u8, set: InflightSet, tweak: impl FnOnce(&mut ChainCfg))
+        -> Result<Submitter>
+    {
+        let mut cfg = test_cfg(rpc);
+        tweak(&mut cfg);
         let signer = PrivateKeySigner::from_bytes(&B256::repeat_byte(key)).unwrap();
-        Submitter::start(Chain::with_signer(&cfg, signer).unwrap(), odoo, cfg, format!("t#{key}"), set).await.unwrap()
+        Submitter::start(Chain::with_signer(&cfg, signer).unwrap(), odoo, cfg, format!("t#{key}"), set).await
     }
 
     /// Một lane đã gửi job 7 (`signed`, `broadcast`).
     async fn sent_one(e: Evm) -> (Submitter, Rpc, Shared, InflightSet) {
         let (url, rpc) = fake_evm(e).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: json!([]), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
         let set = InflightSet::default();
         let mut s = lane(&url, odoo, 1, set.clone()).await;
         s.poll_outbox().await;
@@ -933,7 +995,7 @@ mod tests {
     async fn simulation_revert_is_classified_by_the_subject_nonce() {
         for (nonce, want) in [(Some(1), "consumed"), (Some(0), "dead"), (None, "queued")] {
             let (url, _) = fake_evm(Evm { sim: Some("revert"), mtx_nonce: nonce, ..Default::default() }).await;
-            let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: json!([]), ..Default::default() }).await;
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
             lane(&url, odoo, 1, InflightSet::default()).await.poll_outbox().await;
             assert_eq!(states(&o), [want], "mtxNonce {nonce:?}");
         }
@@ -1040,7 +1102,7 @@ mod tests {
     #[tokio::test]
     async fn one_digest_is_signed_once_across_lanes_and_released_on_transient_errors() {
         let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: json!([]), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
         let set = InflightSet::default();
         let mut a = lane(&url, odoo.clone(), 1, set.clone()).await;
         let mut b = lane(&url, odoo, 2, set.clone()).await;
@@ -1055,7 +1117,7 @@ mod tests {
         assert_eq!((claims, states(&o).len()), (0, 0), "skipped before relay_claim");
 
         let (url, _) = fake_evm(Evm { sim: Some("transport"), ..Default::default() }).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(8)], tokens: json!([]), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(8)], tokens: toks(), ..Default::default() }).await;
         let set = InflightSet::default();
         lane(&url, odoo, 1, set.clone()).await.poll_outbox().await;
         assert_eq!(states(&o), ["queued"]);
@@ -1091,7 +1153,7 @@ mod tests {
         assert!(work_from_job(&serde_json::from_value(rf).unwrap(), None).is_err(), "receiver-pays is not built");
         // through the lane: normalized on chain, keyed by `mtxTransferDigest` (the fake answers D)
         let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![raw(&t)], tokens: json!([]), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![raw(&t)], tokens: toks(), ..Default::default() }).await;
         let set = InflightSet::default();
         let mut s = lane(&url, odoo, 1, set.clone()).await;
         s.poll_outbox().await;
@@ -1099,5 +1161,136 @@ mod tests {
         assert!(set.contains(&D.parse().unwrap()), "held while in flight");
         let m = Mtx::from_calldata(&rpc.lock().unwrap().sent[0].2).unwrap().0;
         assert_eq!((m.fee_recipient(), m.relayer()), (Address::ZERO, Address::ZERO));
+    }
+
+    /// Every report of one poll on a lane built with `tweak`, and the fake chain.
+    async fn outcomes(e: Evm, jobs: Vec<Value>, tweak: impl FnOnce(&mut ChainCfg)) -> (Vec<(String, String)>, Rpc) {
+        let (url, rpc) = fake_evm(e).await;
+        let (odoo, o) = fake_odoo(Fake { jobs, tokens: toks(), ..Default::default() }).await;
+        lane_cfg(&url, odoo, 1, InflightSet::default(), tweak).await.unwrap().poll_outbox().await;
+        let r = o.lock().unwrap().reports.iter()
+            .map(|r| (r["chain_state"].as_str().unwrap().to_string(), r["error"].as_str().unwrap_or_default().to_string()))
+            .collect();
+        (r, rpc)
+    }
+
+    fn call_job(id: i64, target: Address, data: Vec<u8>) -> Value {
+        json!({"id": id, "kind": "call", "call": {"target": format!("{target:#x}"),
+               "calldata": format!("0x{}", alloy::hex::encode(data)), "validUntil": (now() + 300).to_string()}})
+    }
+
+    fn states_of(r: &[(String, String)]) -> Vec<&str> {
+        r.iter().map(|x| x.0.as_str()).collect()
+    }
+
+    /// Review T4 I1 (the reviewer's PoC `poc_unregistered_targets_are_relayed`, inverted): a transfer meta-tx or an
+    /// order entry on a contract outside the registered tokens is never relayed, however it answers `chainUid()`.
+    #[tokio::test]
+    async fn unregistered_targets_are_refused() {
+        let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: json!([]), ..Default::default() }).await;
+        lane(&url, odoo, 1, InflightSet::default()).await.poll_outbox().await;
+        assert_eq!(rpc.lock().unwrap().sent.len(), 0);
+        assert_eq!(states(&o), ["dead"]);
+        let other = Address::repeat_byte(0x99);
+        let inv = json!({"id": 8, "kind": "metatx", "entry": "mtxInvalidateNonces", "token": format!("{other:#x}"),
+            "from": format!("{:#x}", Address::repeat_byte(0xab)), "batch": "1", "newMin": "9",
+            "signature": format!("0x{}", "11".repeat(65)), "validUntil": (now() + 300).to_string()});
+        let (r, rpc) = outcomes(Evm::default(), vec![inv], |_| {}).await;
+        assert_eq!(rpc.lock().unwrap().sent.len(), 0);
+        assert!(r[0].0 == "dead" && r[0].1.starts_with("TOKEN_NOT_SERVED"), "{r:?}");
+    }
+
+    /// Review T4 I3: the guard's chain facts — binding (mismatch never cached, a revert or no `chainUid()` unbound, a
+    /// transport error transient), the factories and the DEX list by address, the gas bounds and the 1271 floor's
+    /// signer — each pinned on the lane.
+    #[tokio::test]
+    async fn the_guard_derives_its_facts_from_the_chain_and_the_config() {
+        let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
+        // two jobs to a contract of another chain: both refused (a mismatch is never cached as bound)
+        let mut j8 = job(8);
+        j8["metatx"]["batch"] = json!("8");
+        let (r, rpc) = outcomes(Evm { uid: Some(0x25), ..ok() }, vec![job(7), j8], |_| {}).await;
+        assert_eq!((states_of(&r), rpc.lock().unwrap().sent.len()), (vec!["dead", "dead"], 0), "{r:?}");
+        // no `chainUid()` (it reverts): not bound
+        let (r, _) = outcomes(Evm { uid_err: Some("revert"), ..ok() }, vec![job(7)], |_| {}).await;
+        assert!(r[0].0 == "dead" && r[0].1.starts_with("CHAIN_UID_MISMATCH"), "{r:?}");
+        // an unreadable chain is transient: queued, never dead
+        let (r, _) = outcomes(Evm { uid_err: Some("transport"), ..ok() }, vec![job(7)], |_| {}).await;
+        assert_eq!(states_of(&r), ["queued"], "{r:?}");
+        // the factories and the DEX are known by address, never assumed
+        let (x, af, tf, dex) = (Address::repeat_byte(0x31), Address::repeat_byte(0x32), Address::repeat_byte(0x33), Address::repeat_byte(0x34));
+        let cfg = move |c: &mut ChainCfg| {
+            (c.account_factory, c.token_factory, c.dex) = (Some(af), Some(tf), Some(dex));
+        };
+        let deploy = [&[0x45, 0x9b, 0x5b, 0x50][..], &[0u8; 32]].concat();
+        let as_owner = [&[0xfd, 0xf2, 0xd3, 0x38][..], &[0u8; 32]].concat();
+        let settle = [&guard::SEL_MTX_SETTLE[..], &[0u8; 32]].concat();
+        for (target, data, want) in [(x, &deploy, "dead"), (af, &deploy, "broadcast"), (x, &settle, "dead"),
+                                     (dex, &settle, "broadcast"), (tf, &as_owner, "dead"), (x, &as_owner, "broadcast")] {
+            let (r, _) = outcomes(ok(), vec![call_job(9, target, data.clone())], cfg).await;
+            assert_eq!(r.last().unwrap().0, want, "{target:#x} 0x{}: {r:?}", alloy::hex::encode(&data[..4]));
+        }
+        // gas: an estimate above max_gas_per_tx is refused
+        let (r, _) = outcomes(Evm { estimate: Some(3_000_001), ..ok() }, vec![job(7)], |_| {}).await;
+        assert!(r[0].0 == "dead" && r[0].1.contains("above max_gas_per_tx"), "{r:?}");
+        // the first settle try never passes max
+        let (r, rpc) = outcomes(ok(), vec![call_job(9, dex, settle.clone())], move |c| { cfg(c); c.max_gas_per_tx = 200_000; }).await;
+        assert_eq!((states_of(&r).last().copied(), rpc.lock().unwrap().gas.clone()), (Some("broadcast"), vec![200_000]));
+        // max_gas_per_tx above 2^24 is clamped: a settlement needing more never goes
+        let (r, rpc) = outcomes(Evm { settle_from: guard::MAX_TX_GAS + 1, ..ok() }, vec![call_job(9, dex, settle)],
+            move |c| { cfg(c); c.max_gas_per_tx = 1 << 25; }).await;
+        assert_eq!((r[0].0.as_str(), rpc.lock().unwrap().sent.len()), ("dead", 0), "{r:?}");
+        // the 1271 floor follows the signer, not the target
+        let (_, rpc) = outcomes(Evm { code_only: Some(TOKEN), ..ok() }, vec![job(7)], |_| {}).await;
+        assert_eq!(rpc.lock().unwrap().gas, vec![0x30000 * 6 / 5], "an EOA signer on a contract token");
+        let (_, rpc) = outcomes(Evm { code_only: Some(Address::repeat_byte(0xab)), ..ok() }, vec![job(7)], |_| {}).await;
+        assert_eq!(rpc.lock().unwrap().gas, vec![guard::ERC1271_FLOOR]);
+    }
+
+    /// NODE-GW-07: a lane whose RPC block 0 is not the pinned chain_uid never starts (review T4 I3).
+    #[tokio::test]
+    async fn a_lane_never_starts_on_a_chain_whose_block_zero_is_not_the_pin() {
+        let (url, _) = fake_evm(Evm { genesis: true, ..Default::default() }).await;
+        let (odoo, _) = fake_odoo(Fake { tokens: toks(), ..Default::default() }).await;
+        assert!(lane_cfg(&url, odoo, 1, InflightSet::default(), |_| {}).await.is_err());
+    }
+
+    /// The adapter path (Hedera and the generic runner) runs the same guard before simulating (review T4 I3).
+    #[tokio::test]
+    async fn the_adapter_path_runs_the_guard() {
+        use crate::adapter::ChainAdapter;
+        let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+        let cfg = test_cfg(&url);
+        let chain = Chain::with_signer(&cfg, PrivateKeySigner::from_bytes(&B256::repeat_byte(1)).unwrap()).unwrap();
+        let a = crate::adapters::evm::EvmAdapter::new(&cfg, vec![chain], Arc::new(std::sync::RwLock::new(vec![TOKEN]))).unwrap();
+        let steal = IToken::transferCall { to: Address::repeat_byte(0x7e), value: U256::from(1) }.abi_encode();
+        let j: Job = serde_json::from_value(call_job(9, TOKEN, steal)).unwrap();
+        assert!(matches!(a.build(&j, 0).await, Err(SimError::Revert(r)) if r.starts_with("CALL_TARGET_REFUSED")));
+        let j: Job = serde_json::from_value(job(7)).unwrap();
+        assert!(a.build(&j, 0).await.is_ok(), "a registered token's transfer builds");
+    }
+
+    /// Review T4 m1/m2: the registered tokens follow the client; a job rebuilt after a restart passes the guard (a
+    /// refused one is only gap-filled) and is tracked with gas clamped to 2^24.
+    #[tokio::test]
+    async fn tokens_refresh_and_rebuilt_jobs_pass_the_guard() {
+        let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { tokens: json!([]), ..Default::default() }).await;
+        let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+        o.lock().unwrap().tokens = toks();
+        s.sample().await;
+        o.lock().unwrap().jobs = vec![job(7)];
+        s.poll_outbox().await;
+        assert_eq!((states(&o), rpc.lock().unwrap().sent.len()), (vec!["signed".to_string(), "broadcast".into()], 1));
+        let tracked = |payload: Value| json!([{"job_id": 7, "nonce": 0, "state": "broadcast",
+            "tx_hash": format!("{:#x}", B256::repeat_byte(0x77)), "payload": payload}]);
+        let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), count: 1, ..Default::default() }).await;
+        for (toks, kept) in [(toks(), true), (json!([]), false)] {
+            let (odoo, _) = fake_odoo(Fake { tokens: toks, inflight: tracked(job(7)), ..Default::default() }).await;
+            let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| c.max_gas_per_tx = 1 << 25).await.unwrap();
+            let sent = s.inflight.get(&0).expect("tracked");
+            assert_eq!((sent.work.is_some(), sent.gas), (kept, guard::MAX_TX_GAS));
+        }
     }
 }

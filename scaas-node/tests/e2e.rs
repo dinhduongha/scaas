@@ -385,7 +385,7 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     assert_eq!((last["job_id"].as_i64(), last["chain_state"].as_str(), last["error"].as_str()), (Some(2), Some("consumed"), Some("landed")), "{last}");
 
     // PAY-FIX2 on a real chain: the lane holds fee income in the token, and a `call` job that would move it is refused
-    // before simulation; a meta-transaction to a contract not bound to this chain (here: no contract) too (NODE-GW-07).
+    // before simulation; a meta-transaction to a contract that is not a registered token (here: no contract) too.
     let steal = IToken::transferCall { to: Address::repeat_byte(0x7e), value: U256::from(1u64) }.abi_encode();
     let mut jobs = vec![json!({"id": 3, "kind": "call", "call": {"target": format!("{token:#x}"),
         "calldata": format!("0x{}", alloy::hex::encode(steal)), "validUntil": (now() + 300).to_string()}})];
@@ -399,7 +399,7 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     assert_eq!(of(3)["chain_state"], "dead");
     assert!(of(3)["error"].as_str().unwrap().starts_with("CALL_TARGET_REFUSED"), "{}", of(3));
     assert_eq!(of(4)["chain_state"], "dead");
-    assert!(of(4)["error"].as_str().unwrap().starts_with("CHAIN_UID_MISMATCH"), "{}", of(4));
+    assert!(of(4)["error"].as_str().unwrap().starts_with("TOKEN_NOT_SERVED"), "{}", of(4));
     let p = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
     assert_eq!(p.get_transaction_count(relayer.address()).await.unwrap(), nonce, "nothing signed or sent");
 

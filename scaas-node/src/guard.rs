@@ -4,10 +4,11 @@
 //! - a `call` job runs only when its selector is a row of the call table and its target meets the row's rule —
 //!   never a registered token or the token factory (a `transfer` of the lane's own balance is no row);
 //! - a token's order entry (`mtxCancelOrder`, `mtxInvalidateNonces`, `mtxWrap`, a `metatx` job naming its `entry`)
-//!   runs only on a contract bound to this chain;
+//!   runs only on a registered token (or a listed DEX) bound to this chain;
 //! - a meta-transaction runs only on a contract bound to this chain (`chainUid()`, the salt every signature on it
-//!   commits to), and a self-call only with a selector, fee mode and mode bits the contract's published allowlist
-//!   accepts (`mtxSelectors()`, `supportedModes()`);
+//!   commits to); a `MetaTransfer` only on a registered token (answering `chainUid()` costs nothing to deploy); a
+//!   self-call only with a selector, fee mode and mode bits the contract's published allowlist accepts
+//!   (`mtxSelectors()`, `supportedModes()`);
 //! - `mtxSettle` gas is sized by a simulation that settles every planned settlement (success is not monotonic in gas,
 //!   P2b-2), and a contract signer's meta-tx gets at least the ERC-1271 floor (P1b note c).
 //!
@@ -187,8 +188,18 @@ impl Guard {
         }
     }
 
+    /// A token of the chain's registered list (refreshed from the client, review T4 m1); an unreadable list is none.
+    fn registered(&self, a: Address) -> bool {
+        self.tokens.read().is_ok_and(|t| t.contains(&a))
+    }
+
     pub async fn check(&self, chain: &Chain, w: &Work) -> Result<(), Refusal> {
+        let not_served = |to: Address| Refusal::Policy(format!("TOKEN_NOT_SERVED: {to:#x} is not a registered token of this chain"));
         if w.meta.is_some() {
+            // review T4 I1: a transfer or payment only on a registered token
+            if !matches!(Mtx::from_calldata(&w.data), Some((Mtx::Call(_), _))) && !self.registered(w.to) {
+                return Err(not_served(w.to));
+            }
             self.require_bound(chain, w.to).await?;
             if let Some((Mtx::Call(m), _)) = Mtx::from_calldata(&w.data) {
                 let t = self.table(chain, w.to).await?;
@@ -203,6 +214,9 @@ impl Guard {
         if w.entry {
             if !ENTRIES.contains(&sel) {
                 return Err(Refusal::Policy("CALL_TARGET_REFUSED: not an order or wrap entry".into()));
+            }
+            if !self.registered(w.to) && !self.dexes.contains(&w.to) {
+                return Err(not_served(w.to));
             }
             return self.require_bound(chain, w.to).await;
         }
@@ -352,9 +366,14 @@ mod tests {
         let transfer = IToken::transferCall { to: Address::repeat_byte(2), value: alloy::primitives::U256::from(1) }.abi_encode();
         assert!(matches!(g.check(&chain, &w(transfer)).await, Err(Refusal::Policy(r)) if r.starts_with("CALL_TARGET_REFUSED")));
         assert!(matches!(g.check(&chain, &w(vec![])).await, Err(Refusal::Policy(_))));
-        // an entry passes the selector check and then needs the chain (unreachable here: transient, never dead)
+        // review T4 I1: an entry on a contract that is neither a registered token nor a listed DEX
         let cancel = [&SEL_MTX_CANCEL_ORDER[..], &[0u8; 32]].concat();
-        assert!(matches!(g.check(&chain, &w(cancel)).await, Err(Refusal::Transport(_))));
+        assert!(matches!(g.check(&chain, &w(cancel.clone())).await, Err(Refusal::Policy(r)) if r.starts_with("TOKEN_NOT_SERVED")));
+        // on a registered token it passes the selector check and then needs the chain (unreachable: transient)
+        let g = Guard::new(&cfg, Arc::new(RwLock::new(vec![Address::repeat_byte(1)])));
+        assert!(matches!(g.check(&chain, &w(cancel.clone())).await, Err(Refusal::Transport(_))));
+        let g = Guard::new(&ChainCfg { dex: Some(Address::repeat_byte(1)), ..cfg.clone() }, Default::default());
+        assert!(matches!(g.check(&chain, &w(cancel)).await, Err(Refusal::Transport(_))), "or on a listed DEX");
     }
 
     #[test]

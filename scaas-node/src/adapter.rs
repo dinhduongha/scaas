@@ -132,6 +132,18 @@ pub trait ChainAdapter: Send + Sync {
     async fn digest(&self, job: &Job) -> std::result::Result<Option<alloy::primitives::B256>, SimError> {
         Ok(job_digest(job))
     }
+    /// NODE-GW-07 at lane start: an EVM chain whose RPC's block 0 is not the configured `chain_uid` never runs a
+    /// lane (review T4 I2). Default: nothing to check.
+    async fn start_check(&self) -> Result<()> {
+        Ok(())
+    }
+    /// The chain's registered tokens from the client, for the guard (review T4 I2, m1). Default: unused.
+    fn refresh_tokens(&self, _nc: &crate::odoo::NodeConfig) {}
+    /// The job's simulation refused it because what it asks already holds (`mtxInvalidateNonces` past its minimum,
+    /// MT-8): done, never dead. Default: no such job.
+    fn already_done(&self, _job: &Job, _reason: &str) -> bool {
+        false
+    }
 }
 
 /// Lỗi `submit` khi mạng TỪ CHỐI tx trước mempool (sequence lệch, thiếu phí, chữ ký sai…): gửi lại cùng bytes
@@ -182,6 +194,10 @@ pub async fn lane_runner(
     inflight: InflightSet,
 ) {
     let key = adapter.chain_key().to_string();
+    if let Err(e) = adapter.start_check().await {
+        tracing::error!(chain = %key, lane, "lane not started: {e:#}");
+        return;
+    }
     info!(chain = %key, lane, address = %adapter.lanes()[lane].address, "lane ready");
     let mut backoff = BACKOFF_MIN;
     while let Err(e) = recover_lane(adapter.as_ref(), &odoo, lane, &worker).await {
@@ -194,6 +210,10 @@ pub async fn lane_runner(
     loop {
         if sampled.is_none_or(|t| t.elapsed() >= Duration::from_secs(15)) {
             sampled = Some(std::time::Instant::now());
+            match odoo.node_config_ref(key.clone().into(), None, None).await {
+                Ok(nc) => adapter.refresh_tokens(&nc),
+                Err(e) => warn!(chain = %key, lane, "token refresh: {e:#}"),
+            }
             match adapter.lane_balance(lane).await {
                 Ok(Some(b)) => breaker.lock().map(|mut k| k.balance(b)).unwrap_or(()),
                 Ok(None) => {}
@@ -241,6 +261,7 @@ pub async fn recover_lane(adapter: &dyn ChainAdapter, odoo: &Odoo, lane: usize, 
     adapter.resend_journaled(lane).await?;
     let address = adapter.lanes()[lane].address.clone();
     let nc = odoo.node_config_ref(adapter.chain_key().into(), Some(address), Some(worker.into())).await?;
+    adapter.refresh_tokens(&nc);
     for j in nc.inflight {
         let Some(tx_id) = j.tx_hash else {
             // Chưa ký ⇒ chưa gửi gì: journal `signed` luôn có trước lần gửi đầu.
@@ -411,6 +432,10 @@ async fn step_once(
     };
     let built = match adapter.build(&job, lane).await {
         Ok(b) => b,
+        Err(SimError::Revert(r)) if adapter.already_done(&job, &r) => {
+            report(odoo, Report { error: Some("already_invalidated".into()), ..rep(job.id, "consumed") }).await;
+            return Ok(Step::Done);
+        }
         Err(SimError::Revert(r)) => {
             // R80: op đã bị tiêu thụ (relayer khác đưa lên trước) ⇒ `consumed`, không `dead`.
             let (state, error) = match adapter.op_consumed(&job).await {
@@ -540,6 +565,8 @@ pub(crate) mod tests {
         /// `relay_poll` keeps returning `jobs` instead of draining them.
         pub repeat: bool,
         pub claims: u32,
+        /// `dex_sync`'s answer (Null = the generic reply).
+        pub dex_sync: Value,
     }
     pub(crate) type Shared = Arc<std::sync::Mutex<Fake>>;
 
@@ -562,6 +589,7 @@ pub(crate) mod tests {
                     o.reports.push(b);
                     serde_json::json!({"ok": true})
                 }
+                "dex_sync" if !o.dex_sync.is_null() => std::mem::take(&mut o.dex_sync),
                 _ => {
                     o.ingests += 1;
                     serde_json::json!({"indexed_block": 5, "created": 0})

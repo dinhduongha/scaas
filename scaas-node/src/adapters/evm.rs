@@ -81,6 +81,23 @@ impl ChainAdapter for EvmAdapter {
         &self.lanes
     }
 
+    async fn start_check(&self) -> Result<()> {
+        for c in &self.chains {
+            c.uid().await?;
+        }
+        Ok(())
+    }
+
+    fn refresh_tokens(&self, nc: &crate::odoo::NodeConfig) {
+        if let Ok(mut t) = self.tokens.write() {
+            *t = nc.tokens.iter().filter_map(crate::odoo::TokenCfg::evm).collect();
+        }
+    }
+
+    fn already_done(&self, job: &Job, reason: &str) -> bool {
+        work_from_job(job, self.fee_recipient).is_ok_and(|w| guard::already_invalidated(&w.data, reason))
+    }
+
     async fn digest(&self, job: &Job) -> std::result::Result<Option<B256>, SimError> {
         let Ok(w) = work_from_job(job, self.fee_recipient) else { return Ok(None) };
         let Some((m, _)) = crate::metatx::Mtx::from_calldata(&w.data) else { return Ok(job_digest(job)) };
