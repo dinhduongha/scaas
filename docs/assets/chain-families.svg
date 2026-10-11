@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-labelledby="t d">
+  <title id="t">Chain families</title>
+  <desc id="d">Six chain families. EVM: private chain 7622 (built, first target) and anvil 31337 (built, dev only); Hedera 295 to 298 (built, own page); Gnosis 100, Celo 42220, BNB Smart Chain 56, Polygon PoS 137 and Base 8453 seeded as draft profiles until the operator gate passes. Cosmos (CosmWasm chains), Soroban (Stellar and Pi Network, not on the mesh), Move (Sui and Aptos), TON (blocked for every path except the ERP pull path until the forward-TON cap lands) and Solana are built.</desc>
+  <defs>
+    <style>
+      text { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2328; }
+      .h { font-size: 22px; font-weight: 700; }
+      .sub { font-size: 13px; fill: #57606a; }
+      .tier { font-size: 15px; font-weight: 700; }
+      .tiers { font-size: 12px; fill: #57606a; }
+      .b { font-size: 13.5px; font-weight: 700; }
+      .s { font-size: 11.5px; fill: #424a53; }
+      .grp { font-size: 11px; font-weight: 700; fill: #57606a; letter-spacing: .5px; }
+      .card { fill: #ffffff; }
+      .chip { font-size: 11px; font-weight: 700; }
+    </style>
+  </defs>
+
+  <rect x="0.5" y="0.5" width="959" height="539" rx="16" fill="#f8fafc" stroke="#d0d7de"/>
+  <text class="h" x="24" y="40">Chain families</text>
+  <text class="sub" x="24" y="61">One common model on six families; each family page states only what differs</text>
+
+  <!-- EVM -->
+  <rect x="16" y="78" width="928" height="232" rx="12" fill="#dbeafe" stroke="#3b82f6"/>
+  <text class="tier" x="30" y="103">EVM</text>
+  <text class="tiers" x="72" y="103">contract-level EIP-712 (ERC20MetaTx) · BUILT on the private chain 7622 and anvil</text>
+
+  <text class="grp" x="30" y="128">PRIVATE AND TEST</text>
+  <rect class="card" x="30" y="136" width="200" height="72" rx="8" stroke="#3b82f6"/>
+  <text class="b" x="44" y="157">Private chain 7622</text>
+  <text class="s" x="44" y="175">free gas, depth 1</text>
+  <rect x="44" y="183" width="50" height="18" rx="9" fill="#dafbe1"/><text class="chip" x="69" y="196" text-anchor="middle" fill="#1a7f37">BUILT</text>
+  <text class="s" x="102" y="196">first target</text>
+
+  <rect class="card" x="240" y="136" width="200" height="72" rx="8" stroke="#3b82f6"/>
+  <text class="b" x="254" y="157">Anvil 31337</text>
+  <text class="s" x="254" y="175">tests</text>
+  <rect x="254" y="183" width="50" height="18" rx="9" fill="#dafbe1"/><text class="chip" x="279" y="196" text-anchor="middle" fill="#1a7f37">BUILT</text>
+  <text class="s" x="312" y="196">dev only</text>
+
+  <text class="grp" x="464" y="128">EVM CHAIN WITH ITS OWN PAGE</text>
+  <rect class="card" x="464" y="136" width="466" height="72" rx="8" stroke="#3b82f6"/>
+  <text class="b" x="478" y="157">Hedera 295 / 296 / 297 / 298</text>
+  <text class="s" x="478" y="175">the same Solidity on HSCS through a JSON-RPC relay; ED25519 via HIP-632</text>
+  <rect x="478" y="183" width="50" height="18" rx="9" fill="#dafbe1"/><text class="chip" x="503" y="196" text-anchor="middle" fill="#1a7f37">BUILT</text>
+
+  <text class="grp" x="30" y="230">PUBLIC: SEEDED DRAFT UNTIL THE OPERATOR GATE PASSES (MEASURED FINALITY, RPC QUORUM, PASSING DEPLOYMENT)</text>
+  <g>
+    <rect class="card" x="30" y="238" width="172" height="60" rx="8" stroke="#3b82f6"/>
+    <text class="b" x="44" y="259">Gnosis 100</text>
+    <text class="s" x="44" y="277">gas in xDAI</text>
+    <rect x="148" y="266" width="44" height="18" rx="9" fill="#eaeef2"/><text class="chip" x="170" y="279" text-anchor="middle" fill="#57606a">draft</text>
+    <rect class="card" x="210" y="238" width="172" height="60" rx="8" stroke="#3b82f6"/>
+    <text class="b" x="224" y="259">Celo 42220</text>
+    <text class="s" x="224" y="277">OP Stack L2</text>
+    <rect x="328" y="266" width="44" height="18" rx="9" fill="#eaeef2"/><text class="chip" x="350" y="279" text-anchor="middle" fill="#57606a">draft</text>
+    <rect class="card" x="390" y="238" width="172" height="60" rx="8" stroke="#3b82f6"/>
+    <text class="b" x="404" y="259">BNB Smart Chain 56</text>
+    <text class="s" x="404" y="277">fast finality</text>
+    <rect x="508" y="266" width="44" height="18" rx="9" fill="#eaeef2"/><text class="chip" x="530" y="279" text-anchor="middle" fill="#57606a">draft</text>
+    <rect class="card" x="570" y="238" width="172" height="60" rx="8" stroke="#3b82f6"/>
+    <text class="b" x="584" y="259">Polygon PoS 137</text>
+    <text class="s" x="584" y="277">milestones</text>
+    <rect x="688" y="266" width="44" height="18" rx="9" fill="#eaeef2"/><text class="chip" x="710" y="279" text-anchor="middle" fill="#57606a">draft</text>
+    <rect class="card" x="750" y="238" width="180" height="60" rx="8" stroke="#3b82f6"/>
+    <text class="b" x="764" y="259">Base 8453</text>
+    <text class="s" x="764" y="277">+ L1 data fee</text>
+    <rect x="876" y="266" width="44" height="18" rx="9" fill="#eaeef2"/><text class="chip" x="898" y="279" text-anchor="middle" fill="#57606a">draft</text>
+  </g>
+
+  <!-- other families -->
+  <g>
+    <rect x="16" y="326" width="176" height="150" rx="12" fill="#ede9fe" stroke="#7c3aed"/>
+    <text class="tier" x="30" y="352">Cosmos</text>
+    <text class="s" x="30" y="374">CosmWasm chains</text>
+    <text class="s" x="30" y="392">contract-level</text>
+    <text class="s" x="30" y="408">Relay{payload, auth}</text>
+    <rect x="30" y="446" width="50" height="18" rx="9" fill="#dafbe1"/><text class="chip" x="55" y="459" text-anchor="middle" fill="#1a7f37">BUILT</text>
+
+    <rect x="204" y="326" width="176" height="150" rx="12" fill="#ede9fe" stroke="#7c3aed"/>
+    <text class="tier" x="218" y="352">Soroban</text>
+    <text class="s" x="218" y="374">Stellar, Pi Network</text>
+    <text class="s" x="218" y="392">native Soroban</text>
+    <text class="s" x="218" y="408">authorization</text>
+    <rect x="218" y="420" width="88" height="18" rx="9" fill="#eaeef2"/><text class="chip" x="262" y="433" text-anchor="middle" fill="#57606a">not on mesh</text>
+    <rect x="218" y="446" width="50" height="18" rx="9" fill="#dafbe1"/><text class="chip" x="243" y="459" text-anchor="middle" fill="#1a7f37">BUILT</text>
+
+    <rect x="392" y="326" width="176" height="150" rx="12" fill="#ede9fe" stroke="#7c3aed"/>
+    <text class="tier" x="406" y="352">Move</text>
+    <text class="s" x="406" y="374">Sui: shared Account&lt;T&gt;</text>
+    <text class="s" x="406" y="390">per subject</text>
+    <text class="s" x="406" y="408">Aptos: one Account</text>
+    <text class="s" x="406" y="424">object per owner</text>
+    <rect x="406" y="446" width="50" height="18" rx="9" fill="#dafbe1"/><text class="chip" x="431" y="459" text-anchor="middle" fill="#1a7f37">BUILT</text>
+
+    <rect x="580" y="326" width="176" height="150" rx="12" fill="#ede9fe" stroke="#7c3aed"/>
+    <text class="tier" x="594" y="352">TON</text>
+    <text class="s" x="594" y="374">-239 / -3</text>
+    <text class="s" x="594" y="392">custom jetton wallet</text>
+    <text class="s" x="594" y="408">verifies SignedOp</text>
+    <rect x="594" y="420" width="64" height="18" rx="9" fill="#fff1e5"/><text class="chip" x="626" y="433" text-anchor="middle" fill="#bc4c00">blocked</text>
+    <rect x="594" y="446" width="50" height="18" rx="9" fill="#dafbe1"/><text class="chip" x="619" y="459" text-anchor="middle" fill="#1a7f37">BUILT</text>
+
+    <rect x="768" y="326" width="176" height="150" rx="12" fill="#ede9fe" stroke="#7c3aed"/>
+    <text class="tier" x="782" y="352">Solana</text>
+    <text class="s" x="782" y="374">solana:&lt;genesis hash&gt;</text>
+    <text class="s" x="782" y="392">SmartKeyAccount PDA</text>
+    <text class="s" x="782" y="408">+ LanePda</text>
+    <rect x="782" y="446" width="50" height="18" rx="9" fill="#dafbe1"/><text class="chip" x="807" y="459" text-anchor="middle" fill="#1a7f37">BUILT</text>
+  </g>
+
+  <!-- legend -->
+  <rect x="24" y="494" width="50" height="18" rx="9" fill="#dafbe1"/><text class="chip" x="49" y="507" text-anchor="middle" fill="#1a7f37">BUILT</text>
+  <text class="s" x="82" y="507">in code, tested</text>
+  <rect x="184" y="494" width="44" height="18" rx="9" fill="#eaeef2"/><text class="chip" x="206" y="507" text-anchor="middle" fill="#57606a">draft</text>
+  <text class="s" x="236" y="507">seeded chain profile, not yet enabled</text>
+  <rect x="472" y="494" width="64" height="18" rx="9" fill="#fff1e5"/><text class="chip" x="504" y="507" text-anchor="middle" fill="#bc4c00">blocked</text>
+  <text class="s" x="544" y="507">every TON path but the ERP pull path, until the forward-TON cap lands</text>
+</svg>

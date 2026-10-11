@@ -13,6 +13,8 @@ Passkeys can serve either way: as a `webauthn-p256` Universal Account, or as a k
 ([passkeys on chain](#passkeys)). Delegated, capped payment from a payer's own wallet is a separate contract:
 [mandates.md](mandates.md).
 
+<p align="center"><img src="../assets/account-forms.svg" width="860" alt="Accounts and keys: a native account (the chain’s own account, no registration); a Universal Account, the default (specified, nothing built: an id derived from key data or a policy, registered once per chain in the UARegistry with proof of possession); a SmartKeyAccount, optional (built: an ERC-1271 clone from SmartKeyAccountFactory with P-256 passkeys and secp256k1 keys, guardian recovery, key changes signed by the account itself). A passkey can be a webauthn-p256 UA or a SmartKeyAccount key. Every token kind accepts all three and checks the signature itself. MandateWallet (built; revocation epoch specified) is a payment authority, not an account: the payer deposits, a delegate pays approved payees within per-payment and per-period caps."></p>
+
 <a id="universal-account"></a>
 **Contents**
 

@@ -29,6 +29,8 @@ specified in detail).
 The family taxonomy is an owner decision: EVM (Hedera is an EVM chain with its own page), Cosmos (CosmWasm), Soroban
 (Stellar and Pi Network), Move (Sui and Aptos), TON, Solana.
 
+<p align="center"><img src="../assets/chain-families.svg" width="860" alt="Chain families: EVM with the private chain 7622 (built, first target) and anvil 31337 (built, dev only), Hedera 295 to 298 (built, own page), and Gnosis 100, Celo 42220, BNB Smart Chain 56, Polygon PoS 137 and Base 8453 seeded as draft until the operator gate passes; Cosmos (CosmWasm), Soroban (Stellar, Pi Network; not on the mesh), Move (Sui, Aptos), TON (built, blocked for every path but the ERP pull path until the forward-TON cap lands) and Solana, all built."></p>
+
 | Family | Chains | Meta-tx mechanism | Subject signature | Relayer lane key | Mesh v1 | Status |
 |---|---|---|---|---|---|---|
 | EVM | Gnosis (100), Celo (42220), private chain 7622, anvil 31337 | contract-level EIP-712 (`ERC20MetaTx`) | ECDSA secp256k1 (EOA) / ERC-1271 (`SmartKeyAccount`: P-256 WebAuthn, secp256k1) | secp256k1 `m/44'/60'/0'/0/i` | yes | BUILT |

@@ -84,6 +84,8 @@ Non-goals:
 
 <a id="roles"></a>One binary; modules are switched on in configuration. Every role works without any client system.
 
+<p align="center"><img src="../assets/node-architecture.svg" width="860" alt="Inside scaas-node: five doors (gateway door A with /v1/metatx and DEX routes built and the rest specified; job API specified; admin with health and metrics built and the admin API specified; mesh bus with the envelope library built and transports specified; gossip specified) write to one store (SQLite, owner lock, fencing, counters, CAS and audit chain built; job source and PostgreSQL or MySQL specified); workers use it: submit lanes (runners, simulation, breakers built; store journal and batching specified) sign, broadcast and pay gas on the chains, the indexer (finality gate built, legacy sink; store-backed feeds specified) reads final events back, the DEX venue (book built in the legacy client; store-backed specified) and sponsorship (policies specified; SponsorshipPool planned)."></p>
+
 | Role | What it does | Listener | Status |
 |---|---|---|---|
 | **gateway** (door A) | Public intake of signed meta-txs, signed family ops and DEX orders from anyone; normalize ([NODE-LANE-10](submit-lanes.md#NODE-LANE-10)), simulate, enqueue | `[modules] gateway_bind` (default `127.0.0.1:8547`), auth `none` (loopback only) / `bearer` / `hmac` | `/v1/metatx`, `/v1/dex/*` **BUILT**; durable, journaled door A, `/v1/gateway`, `/v1/ops`, `/v1/ua-metatx`, `/v1/ua/register`, error contract **SPECIFIED** ([gateway.md](gateway.md)) |
