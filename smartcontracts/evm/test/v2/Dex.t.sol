@@ -278,15 +278,15 @@ contract DexTest is Test {
 
     function test_pathB_takerPartialMatch_refundsInA() public {
         ISCaaSDex.Settlement memory s = _book();
-        ITradeToken.TradeOrder memory o = _order(alice, b, 1200, 2000, 0);
-        o.flags = 3; // IOC | ESCROW: pulls 1200, matched 1020
+        ITradeToken.TradeOrder memory o = _order(alice, b, 1200, 2000, 3_000);
+        o.flags = 3; // IOC | ESCROW: pulls 1200, matched 1020; fee 0.3 % on the 2000 B received
         s.taker = _leg(ALICE_PK, a, o, 1020);
         ISCaaSDex.Settlement[] memory ss = _one(s);
         vm.recordLogs();
         vm.prank(relayer);
         dex.mtxSettle(ss);
         assertEq(a.balanceOf(alice), 1e6 - 1020); // 180 came back
-        assertEq(b.balanceOf(alice), 2000);
+        assertEq(b.balanceOf(alice), 1994); // 2000 gross, fee 6
         assertEq(a.balanceOf(address(dex)), 0);
         assertEq(b.balanceOf(address(dex)), 0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -296,6 +296,104 @@ contract DexTest is Test {
             assertEq(sold, 1020);
             assertEq(refund, 180);
         }
+    }
+
+    // What only the DEX enforces on a Path B leg (the token sees `TradeFill(amount, 0, 0, submitter)`): the signed
+    // minFill above 50 %, the signed fee rate, the refund recipient.
+
+    function _escrowMaker(ITradeToken.TradeOrder memory mo, uint256 fill) internal view returns (ISCaaSDex.Settlement memory s) {
+        mo.flags = 3; // IOC | ESCROW
+        s.ref = "r";
+        s.makers = new ISCaaSDex.Leg[](1);
+        s.makers[0] = _leg(BOB_PK, b, mo, fill);
+        s.taker = _leg(ALICE_PK, a, _order(alice, b, 300, 600, 0), 300);
+    }
+
+    function test_pathB_signedMinFillAboveHalf_isEnforced() public {
+        ITradeToken.TradeOrder memory mo = _order(bob, a, 1000, 500, 0);
+        mo.minFill = 1000; // fill-or-kill
+        ISCaaSDex.Settlement memory s = _escrowMaker(mo, 600);
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.BelowMinFill.selector, b.tradeOrderDigest(mo)));
+    }
+
+    function test_pathB_makerFeeIsAtTheSignedRate() public {
+        ISCaaSDex.Settlement[] memory ss = _one(_escrowMaker(_order(bob, a, 1000, 500, 10_000), 600)); // 1 %
+        vm.prank(relayer);
+        dex.mtxSettle(ss);
+        assertEq(a.balanceOf(bob), 297); // 300 gross, fee ceil(3) = 3 (not 6, not on the signed 500)
+        assertEq(a.balanceOf(relayer) + a.balanceOf(treasury), 3);
+    }
+
+    function test_pathB_refundGoesToFrom_proceedsToDestination() public {
+        address dest = address(0xDE57);
+        ITradeToken.TradeOrder memory mo = _order(bob, a, 1000, 500, 0);
+        mo.destination = dest;
+        ISCaaSDex.Settlement[] memory ss = _one(_escrowMaker(mo, 600));
+        uint256 bobB = b.balanceOf(bob);
+        vm.prank(relayer);
+        dex.mtxSettle(ss);
+        assertEq(b.balanceOf(bob), bobB - 600); // the 400 refund came back to `from`
+        assertEq(b.balanceOf(dest), 0);
+        assertEq(a.balanceOf(dest), 300);
+    }
+
+    // Path A: the token checks price and fee against the figures the DEX hands it, so they must be what it pays.
+
+    function test_pathA_takerLimitOneAboveTheFill_tokenRefuses() public {
+        ISCaaSDex.Settlement memory s = _book(); // the taker receives 2000 B for 1020 A
+        ITradeToken.TradeOrder memory o = _order(alice, b, 1020, 2001, 3_000);
+        s.taker = _leg(ALICE_PK, a, o, 1020);
+        _expectOne(s, abi.encodeWithSelector(ITradeToken.PriceLimit.selector, a.tradeOrderDigest(o)));
+    }
+
+    function test_pathA_takerExactlyAtItsLimit_settles() public {
+        ISCaaSDex.Settlement memory s = _book();
+        s.taker = _leg(ALICE_PK, a, _order(alice, b, 1020, 2000, 3_000), 1020);
+        ISCaaSDex.Settlement[] memory ss = _one(s);
+        vm.prank(relayer);
+        assertTrue(dex.mtxSettle(ss)[0]);
+        assertEq(b.balanceOf(alice), 1994);
+    }
+
+    function test_pathA_tokenSeesTheSettledFigures() public {
+        ISCaaSDex.Settlement[] memory ss = _one(_book());
+        vm.recordLogs();
+        vm.prank(relayer);
+        dex.mtxSettle(ss);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 seen;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] != ITradeToken.TradeFilled.selector) continue;
+            (, uint256 rf, uint256 fee) = abi.decode(logs[i].data, (uint256, uint256, uint256));
+            if (logs[i].emitter == address(a)) {
+                assertEq(rf, 2000); // the taker's gross receive and fee
+                assertEq(fee, 6);
+            } else {
+                assertEq(rf, address(uint160(uint256(logs[i].topics[2]))) == bob ? 500 : 520);
+                assertEq(fee, 1);
+            }
+            ++seen;
+        }
+        assertEq(seen, 3);
+    }
+
+    function test_reverseDirectionOfAListedMarket() public {
+        assertTrue(dex.marketListed(address(a), address(b)));
+        assertTrue(dex.marketListed(address(b), address(a)));
+        // and it settles with the roles swapped: Bob (sells B) is the taker, Alice and a second A-seller the makers
+        ISCaaSDex.Settlement memory s;
+        s.ref = "rv";
+        s.makers = new ISCaaSDex.Leg[](1);
+        s.makers[0] = _leg(ALICE_PK, a, _order(alice, b, 500, 1000, 0), 500);
+        s.taker = _leg(BOB_PK, b, _order(bob, a, 1000, 500, 0), 1000);
+        ISCaaSDex.Settlement[] memory ss = _one(s);
+        vm.prank(relayer);
+        assertTrue(dex.mtxSettle(ss)[0]);
+        assertEq(a.balanceOf(bob), 500);
+        assertEq(b.balanceOf(alice), 1000);
+        vm.prank(admin);
+        dex.setMarket(address(b), address(a), false);
+        assertFalse(dex.marketListed(address(a), address(b)));
     }
 
     function test_makerReceiveTokenIsNotTheTakersSellToken_tokenMismatch() public {
@@ -437,6 +535,15 @@ contract DexTest is Test {
         _expectOne(s, abi.encodeWithSelector(ISCaaSDex.OutsideLegNotBuilt.selector, address(usdc)));
     }
 
+    function test_takerSellsAnOutsideToken_notBuilt() public {
+        MockERC20 usdc = new MockERC20("USD Coin", "USDC", 6);
+        vm.prank(admin);
+        dex.setMarket(address(usdc), address(b), true);
+        ISCaaSDex.Settlement memory s = _book();
+        s.taker.sellToken = address(usdc);
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.OutsideLegNotBuilt.selector, address(usdc)));
+    }
+
     function test_settleOneOnlyThroughSettle() public {
         ISCaaSDex.Settlement memory s = _book();
         vm.expectRevert(ISCaaSDex.NotSelf.selector);
@@ -468,6 +575,46 @@ contract DexTest is Test {
         dexImpl.initialize(address(this), 1, ISCaaSDex.DexConfig(admin, 0, treasury, false));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.DexVersionUnknown.selector, 2));
         f.createDex(2, ISCaaSDex.DexConfig(admin, 0, treasury, false), "x");
+    }
+
+    function test_dexCatalogue_versionZeroRefused_latestTracksTheHighest() public {
+        assertEq(f.latestDexVersion(), 1);
+        SCaaSDex v5 = new SCaaSDex(address(f), UID_);
+        SCaaSDex v2 = new SCaaSDex(address(f), UID_);
+        vm.startPrank(registrar);
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.DexVersionUnknown.selector, 0));
+        f.registerDexImplementation(0, address(v2));
+        f.registerDexImplementation(5, address(v5));
+        assertEq(f.latestDexVersion(), 5);
+        f.registerDexImplementation(2, address(v2)); // an older version does not lower it
+        vm.stopPrank();
+        assertEq(f.latestDexVersion(), 5);
+        assertEq(f.dexImplementationOf(2), address(v2));
+        assertEq(f.dexImplementationOf(5), address(v5));
+        address d = f.createDex(2, ISCaaSDex.DexConfig(admin, 0, treasury, false), "v2");
+        assertEq(f.dexVersionOf(d), 2); // the requested version, not the latest
+        assertEq(f.dexVersionOf(address(dex)), 1);
+    }
+
+    function test_createDex_saltScopedByCreator_andNotReusable() public {
+        ISCaaSDex.DexConfig memory cfg = ISCaaSDex.DexConfig(admin, 0, treasury, false);
+        vm.prank(address(0xA1));
+        address d1 = f.createDex(1, cfg, "same");
+        vm.prank(address(0xA2));
+        address d2 = f.createDex(1, cfg, "same");
+        assertTrue(d1 != d2);
+        vm.prank(address(0xA1));
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.SaltAlreadyUsed.selector, d1));
+        f.createDex(1, cfg, "same");
+    }
+
+    function test_createDex_emitsDexCreated() public {
+        address creator = address(0xA1);
+        vm.expectEmit(false, true, false, true, address(f)); // the clone address is derived, not asserted
+        emit IOpenFactory.DexCreated(address(0), creator, 1, address(dexImpl), address(0xADD));
+        vm.prank(creator);
+        address d = f.createDex(1, ISCaaSDex.DexConfig(address(0xADD), 0, treasury, false), "ev");
+        assertEq(SCaaSDex(d).admin(), address(0xADD));
     }
 
     function test_registerDex_checksFactoryAndChain() public {

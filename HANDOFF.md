@@ -3,14 +3,14 @@
 ## Session 2026-10-11 (P2b-1)
 
 **State:** P2b-1 on branch `p2b-dex`, merge pending the final review (code `27b9e92`, plan `80303f9`). Plan
-`docs/superpowers/plans/2026-10-11-p2b1-scaasdex-clone.md`. 868 forge tests.
+`docs/superpowers/plans/2026-10-11-p2b1-scaasdex-clone.md`. 891 forge tests.
 
 **Built:** `src/dex/ISCaaSDex.sol`, `SCaaSDex.sol` (clone implementation, ERC-7201 `scaas.dex`, salted domain `("SCaaS
 Dex","1",chainId,clone,chain_uid)`): `mtxSettle` (one taker, many makers, each settlement a self-call `settleOne`),
 `setMarket(base, quote, listed)` classifying tokens from the factory, `setFeeSplit`, `LegSettled`/`MatchFailed`;
 `OpenFactory` DEX catalogue (`registerDexImplementation`, `dexImplementationOf`, `latestDexVersion`, `createDex`, `isDex`,
 `dexVersionOf`, events `DexImplementationRegistered`, `DexCreated`); `script/DeployBase.sol` deploys and registers the DEX
-implementation (JSON `dex_implementation`, no clone). Tests `test/v2/Dex.t.sol` (13). The built DEX is `SCaaSDexV1`
+implementation (JSON `dex_implementation`, no clone). Tests `test/v2/Dex.t.sol` (36). The built DEX is `SCaaSDexV1`
 (contract and its two test files renamed), still deployed for the node (`dex.rs`, `dex_kat.json`, `scaas_dex`) until P5.
 
 **Rulings G1–G7 (plan header).** **G1** P2b is split: P2b-1 SCaaS legs, P2b-2 outside legs, P2c exchange path; an
@@ -20,7 +20,7 @@ outside-token market lists but settles `OutsideLegNotBuilt(token)`. **G2** `SCaa
 the taker's), `DuplicateOrder`, `WrongRelayer`, `DexMismatch`, `NoMakers`, `FillMismatch`. **G5** registry names with
 `dexVersionOf` (the token `versionOf` stays the token one); the implementation answers `factory()`/`chainUid()`. **G6**
 conservation on the settlement's two tokens, `LegSettled` per leg. **G7** scripts register the implementation, no clone.
-Sizes (owner: not a concern, waiting for Glamsterdam): `SCaaSDex` 9,570 B, `OpenFactory` 8,476 B, `SCaaSDexV1` 13,204 B.
+Sizes (owner: not a concern, waiting for Glamsterdam): `SCaaSDex` 9,574 B, `OpenFactory` 8,476 B, `SCaaSDexV1` 13,204 B.
 
 **Not done / next = P2b-2 plan:** outside-token legs (`DexOrder`, `DexPuller`), DEX-side `mtxCancelOrders` and
 `mtxInvalidateNonces`, `checkOrder`, the ERC-1271 cap; then P2c (exchange path, `setExchangeTarget`, `setListedOnly`). The

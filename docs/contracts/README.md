@@ -57,7 +57,7 @@ the implementation's immutables). `chain_uid` is the chain's genesis block hash 
 | `OpenFactory` | constructor immutable; `registerImplementation` refuses an implementation whose `chainUid()` differs ([CTR-TOK-03](token-wrappers.md#CTR-TOK-03)) |
 | `SmartKeyAccount` | the factory's constructor argument, passed to `new SmartKeyAccount(chainUid)` |
 | `MandateWallet`, `HederaMandateWallet` | constructor argument from the chain profile; the node checks it before relaying for that wallet |
-| `SCaaSDex` (implementation; `SCaaSDexV1`) | constructor immutable of the implementation, checked at `registerDexImplementation`; `SCaaSDexV1` takes it by constructor argument |
+| `SCaaSDex` (implementation; `SCaaSDexV1`) | constructor immutable of the implementation, checked at `registerDexImplementation`; `SCaaSDexV1` has none (its domain is unsalted; constructor `(admin)`) |
 | built `UniversalAccountRegistry` | constructor immutable, in its PoP challenge; it checks raw digests, so every caller's digest carries `chainUid` ([CTR-ZTH-36](zether.md#CTR-ZTH-36)) |
 | `UARegistry` | constructor immutable ([CTR-UA-07](accounts.md#CTR-UA-07)) |
 | any later contract with a signature (tender, asset suite) | the same helper, constructor argument |
@@ -199,12 +199,12 @@ own job (Move test, Soroban, CosmWasm, Tact, Solana) as the family is added.
 `REGISTRAR` optional, `DEMO_SUPPLY`/`DEMO_HOLDER` optional) reads the genesis hash from the RPC and deploys, through
 the CREATE2 deployer ([CTR-GEN-06](#CTR-GEN-06)), `SmartKeyAccountFactory`, `OpenFactory` with the token
 implementations (each taking the factory address and `chain_uid`) registered as version 1 of their kinds, and
-the `SCaaSDex` implementation (registered as DEX version 1; built, no clone) and `SCaaSDexV1(registrar, chainUid)`; optionally a tier-1 demo token (**SPECIFIED**). It writes
+the `SCaaSDex` implementation (registered as DEX version 1; built, no clone) and `SCaaSDexV1(registrar)` (its constructor takes the admin, here the registrar; unsalted domain); optionally a tier-1 demo token (**SPECIFIED**). It writes
 `deployments/<chainid>.json` to seed the node's chain configuration and client chain data. Production: every contract
 owner/admin is a Safe from the first block, and deployer keys come from a hardware wallet or KMS. **Transitional
 (BUILT, P1e):** every contract is deployed by `new X{salt: DEPLOY_SALT}` through forge's deterministic deployer (default
 salt `keccak256("scaas.deploy.v1")`; a re-run on the same chain collides, so a new version needs a new salt), the script
-stops without the deployer and checks `chainUid()` of the token factory and of the `NONE` implementation against `chain_uid` (the v1 contracts have no
+stops without the deployer and checks `chainUid()` of the token factory, of the `NONE` implementation and of the `SCaaSDex` implementation against `chain_uid` (the v1 contracts have no
 `chainUid()`; controller ruling, pending the owner). `CHAIN_UID`, when set, must equal the RPC's block 0 hash (read at any head
 by rolling to block 1), else the script stops; unset it defaults to that hash. The script creates `deployments/` itself. It deploys `OpenFactory` with `NoUnderlyingToken` as version 1 of `NONE` (`UnderlyingToken` is over
 EIP-170 and waits for the size work) and, for the node until P5, the v1 line: `OpenFactoryV1` with `MetaToken` (version 1

@@ -1,4 +1,4 @@
-//! DEX sổ lệnh (R35, `2026-10-03-dex-design.md` §3): kiểu lệnh EIP-712 của `SCaaSDex`, sổ theo
+//! DEX sổ lệnh (R35, `2026-10-03-dex-design.md` §3): kiểu lệnh EIP-712 của `SCaaSDexV1`, sổ theo
 //! thị trường với ưu tiên giá-thời gian, khớp một phần / IOC / FOK, chặn spam. Phần này THUẦN (không
 //! I/O, test được từng bit); RPC, Odoo, gateway nằm ở `dex::venue`.
 pub mod venue;
@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use crate::metatx::{addr, uint};
 
 sol! {
-    /// Phải khớp TỪNG KÝ TỰ với `SCaaSDex.ORDER_TYPEHASH` (khoá bằng `dex_kat.json`).
+    /// Phải khớp TỪNG KÝ TỰ với `SCaaSDexV1.ORDER_TYPEHASH` (khoá bằng `dex_kat.json`).
     #[derive(Debug, PartialEq, Eq)]
     struct Order {
         address maker; address taker; address sellToken; address buyToken;
@@ -323,7 +323,7 @@ fn crosses(rest: &Order, inc: &Order) -> bool {
     mul(rest.buyAmount, inc.buyAmount) <= mul(inc.sellAmount, rest.sellAmount)
 }
 
-/// Bản sao đúng điều kiện của `SCaaSDex._checkMatch` + `_accept` cho lượng và giá: book không
+/// Bản sao đúng điều kiện của `SCaaSDexV1._checkMatch` + `_accept` cho lượng và giá: book không
 /// bao giờ phát một cặp contract sẽ từ chối (review D2).
 pub fn limits_ok(maker: &Resting, taker: &Resting, x: U256, y: U256) -> bool {
     let (m, t) = (&maker.order, &taker.order);
@@ -347,7 +347,7 @@ fn to256(v: U512) -> U256 {
     U256::from_limbs_slice(&v.as_limbs()[..4])
 }
 
-/// Phí relayer của `o` cho lượng `sold` — đúng như `SCaaSDex._relayerFee`. `(token, amount)`.
+/// Phí relayer của `o` cho lượng `sold` — đúng như `SCaaSDexV1._relayerFee`. `(token, amount)`.
 pub fn relayer_fee(o: &Order, sold: U256) -> (Address, U256) {
     let token = if o.feeToken == Address::ZERO { o.sellToken } else { o.feeToken };
     match o.feeMode {
