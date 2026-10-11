@@ -154,8 +154,8 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | [dex.md](contracts/dex.md) | `TradeOrder`, the DEX, AMM exchange path, `DexPuller` |
 | [tender.md](contracts/tender.md) | Sealed-bid tender |
 | [asset-suite.md](contracts/asset-suite.md) | Regulated flags, vesting, distributions, `ExchangeOffer`, templates |
-| [zether.md](contracts/zether.md) | Confidential layer: shield / transfer / unshield, proofs, disclosure |
-| [pq-zether.md](contracts/pq-zether.md) | Post-quantum confidential tokens (lattice; waits for a precompile) |
+| [zether.md](contracts/zether.md) · [pq-zether.md](contracts/pq-zether.md) | Confidential layer: shield / transfer / unshield, proofs, disclosure; post-quantum variant (waits for a precompile) |
+| [settlement.md](contracts/settlement.md) | Map of every settlement kind: entry points, who checks what, fees, finality |
 
 ### Node (`NODE-*`)
 
