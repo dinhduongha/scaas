@@ -1,0 +1,23 @@
+{
+  "labels": [
+    "_balances",
+    "_allowances",
+    "_totalSupply",
+    "_name",
+    "_symbol"
+  ],
+  "slots": [
+    "0",
+    "1",
+    "2",
+    "3",
+    "4"
+  ],
+  "offsets": [
+    0,
+    0,
+    0,
+    0,
+    0
+  ]
+}

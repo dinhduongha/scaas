@@ -31,6 +31,7 @@ contract LayoutTest is V2Fixture {
     function test_storageLayoutIsPinned() public view {
         _pin("NoUnderlyingToken", "NoUnderlyingToken");
         _pin("UnderlyingToken", "UnderlyingToken");
+        _pin("NoUnderlyingZetherToken", "NoUnderlyingZetherToken"); // the Zether layer lives in `scaas.zether`
     }
 
     /// Thứ indexer thật sự đọc (ERC-7201 `scaas.underlying`): chân i ở `keccak256(i ‖ NS)`: `token`, `+ 1` `num ‖ den`,
