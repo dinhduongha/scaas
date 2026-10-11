@@ -43,3 +43,4 @@ output) are kept while the repository is private and are dropped before a public
 | [eip7702-eip8141-vs-metatx.md](eip7702-eip8141-vs-metatx.md) | EIP-7702 and EIP-8141 compared with the SCaaS meta-transaction (2026-10-11) |
 | [pq-eips-vs-scaas.md](pq-eips-vs-scaas.md) | Post-quantum EIP drafts and SCaaS (2026-10-11) |
 | [node-ai-agents.md](node-ai-agents.md) | scaas-node and AI agents — direction (2026-10-11) |
+| [zether-disclosure.md](zether-disclosure.md) | Zether disclosure — who can reveal what, under which conditions (2026-10-11) |
