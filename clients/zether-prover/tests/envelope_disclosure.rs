@@ -101,6 +101,8 @@ fn relayed_and_disclosure<C: ZCurve>() {
         beneficiary: [0; 32],
         amount: 0,
         recipient: [0; 20],
+        salt: [0; 16],
+        memo_hash: [0; 32],
     };
     let (st, p, w) = prove_transfer(&gens, &from, h, to.y, aud.y, acc, 5000, 1234, &mut rng).unwrap();
     verify_transfer(&gens, &st, &p).unwrap();
@@ -216,8 +218,8 @@ fn relayed_and_disclosure_bls12_381() {
 
 #[test]
 fn entry_point_selectors_match_the_spec() {
-    // CTR-ZTH-45: the zether-prefixed names; the multi-recipient HASH transfer is `zetherTransfer`, the single format
-    // `zetherTransferSingle` (same four arguments, no outer fee on a direct call).
+    // CTR-ZTH-45: the zether-prefixed names; the multi-recipient default is `zetherTransfer`, commit-reveal
+    // `zetherTransferCompact`, the single format `zetherTransferSingle` (same four arguments, no outer fee on a direct call).
     assert_eq!(hex::encode(selector("zetherTransfer(bytes,bytes,bytes,bytes32)")), "d228e5c0");
     assert_eq!(hex::encode(selector("zetherTransferSingle(bytes,bytes,bytes,bytes32)")), "4d2e578f");
     assert_eq!(hex::encode(selector("zetherUnshield(bytes,bytes,bytes,bytes32,address,uint256)")), "983c7842");

@@ -138,7 +138,7 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer {
         (s[5], c[5]) = (SEL_ADD_RESERVE, FEE_CLASS_ABSOLUTE);
         (s[6], c[6]) = (this.zetherShield.selector, FEE_CLASS_ABSOLUTE);
         (s[7], c[7]) = (this.zetherTransfer.selector, FEE_CLASS_ABSOLUTE);
-        (s[8], c[8]) = (this.zetherTransferBundle.selector, FEE_CLASS_ABSOLUTE);
+        (s[8], c[8]) = (this.zetherTransferCompact.selector, FEE_CLASS_ABSOLUTE);
         (s[9], c[9]) = (this.zetherTransferNoBundle.selector, FEE_CLASS_ABSOLUTE);
         (s[10], c[10]) = (this.zetherTransferSingle.selector, FEE_CLASS_ABSOLUTE);
         (s[11], c[11]) = (this.zetherUnshield.selector, FEE_CLASS_ABSOLUTE);

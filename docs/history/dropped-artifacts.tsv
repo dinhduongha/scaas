@@ -994,3 +994,6 @@ ApproveSpenderMismatch	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, m
 settle(Match[]) returns (bool[])	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
 cancel(CancelReq[])	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
 invalidateNonces(maker, newMin, sig)	obsolete	v1 MetaToken / MetaTxDex / OpenFactoryV1 line, moved to smartcontracts/evm/legacy/p5 (P5); current contracts/token-wrappers.md, contracts/dex.md, contracts/metatx.md
+keccak256("scaas/zether/sigma-bullets/bn254/n64-n64/v1")	renamed	the `…/n64-n64/v2` proof system id with the 480-byte header (P3b), contracts/zether.md#statement-byte-layout
+keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v1")	renamed	the `…/n64-n64/v2` proof system id with the 480-byte header (P3b), contracts/zether.md#statement-byte-layout
+4200000	superseded	the classical-Zether node cap is ≥ 4 500 000 after P3b (measured relayed single-transfer limits), node/submit-lanes.md#NODE-LANE-09

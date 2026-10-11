@@ -161,12 +161,13 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
         }),
     ));
 
-    // multi-recipient: one real recipient and two decoys (amount 0), auditor on, inner fee, HASH.
+    // multi-recipient: one real recipient and two decoys (amount 0), auditor on, inner fee, commit-reveal
+    // (named: a BUNDLE token's default is `bundle`).
     let (d1, d2) = (conf::<C>(2), conf::<C>(3));
     let req = with(json!({
         "recipients": [{"yTo": hx(&d1.encoded_y()), "amount": 0}, {"yTo": hx(&to.encoded_y()), "amount": AMOUNT},
                        {"yTo": hx(&d2.encoded_y()), "amount": 0}],
-        "yAud": hx(&aud.encoded_y()), "fee": 300, "beneficiary": hx(&[0x22; 32]),
+        "yAud": hx(&aud.encoded_y()), "fee": 300, "beneficiary": hx(&[0x22; 32]), "mode": "compact"
     }));
     let mut mv = prove_transfer_multi_json::<C, _>(&gens, &req, &mut rng).unwrap();
     mv["expect"] = json!(true);

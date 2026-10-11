@@ -119,7 +119,7 @@ pub fn selector(sig: &str) -> [u8; 4] {
     keccak256(sig.as_bytes())[..4].try_into().unwrap()
 }
 
-/// Calldata of a confidential transfer (`zetherTransfer`, `…Bundle`, `…NoBundle`, `…Single`, all
+/// Calldata of a confidential transfer (`zetherTransfer`, `…Compact`, `…NoBundle`, `…Single`, all
 /// `(bytes payload, bytes proof, bytes authSig, bytes32 beneficiary)`): the direct call and, unchanged, the envelope's `data`.
 pub fn transfer_call(sig: &str, payload: &[u8], proof: &[u8], auth_sig: &[u8], beneficiary: &[u8; 32]) -> Vec<u8> {
     let mut d = selector(sig).to_vec();

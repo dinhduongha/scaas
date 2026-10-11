@@ -663,7 +663,7 @@ struct TokenConfig {
     uint256 initialSupply; address initialHolder;   // NONE* only; initialHolder is ignored when initialSupply == 0
     Leg[] legs;                                // underlying (address(0) = native coin, CTR-TOK-26), num, den — UNDERLYING* only, 1..8
     RateConfig rate;                           // with RATE_ADJUSTABLE
-    ConfidentialConfig conf;                   // verifier, auditorKey (empty = none), shieldScale, maxShielded, confidentialFee, disclosureMode {BUNDLE, COMPACT}, auditorMode {NONE, FULL, OPTIONAL} — *_ZETHER only (modes: CTR-ZTH-48/49, specified for P3b; the factory refuses a key that does not match auditorMode)
+    ConfidentialConfig conf;                   // verifier, auditorKey (empty = none), shieldScale, maxShielded, confidentialFee, disclosureMode {BUNDLE, COMPACT}, auditorMode {NONE, FULL, OPTIONAL} — *_ZETHER only (modes: CTR-ZTH-48/49, built in P3b; the factory refuses a key that does not match auditorMode)
 }
 struct DexConfig { address admin; uint32 relayerSharePpm; address treasury; bool listedOnly; }
 ```

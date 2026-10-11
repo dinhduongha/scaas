@@ -2,7 +2,7 @@
 
 # Zether disclosure — who can reveal what, under which conditions (2026-10-11)
 
-**Status (owner decisions, 2026-10-11; SPECIFIED for P3b, see [contracts/zether.md](../contracts/zether.md) CTR-ZTH-30, -38, -42, -48 to -50, and CTR-PQZ-19, -23, -24):**
+**Status (owner decisions, 2026-10-11; built in P3b, see [contracts/zether.md](../contracts/zether.md) CTR-ZTH-30, -38, -42, -48 to -50, and CTR-PQZ-19, -23, -24):**
 - **R3** (opt-out undermines compliance, Q1) is addressed by `auditorMode = FULL` (no opt-out); the opt-out is kept by choice under `OPTIONAL`.
 - **G1 / R7** (`s` derivation) are closed by the salt rule: `s = HKDF(seed_zether, "ZTX/s/v2" ‖ chainUid ‖ token ‖ fromUA ‖ sendCounter ‖ salt)` with a fresh published 16-byte salt per build.
 - **§7** (alternatives to storing the bundle) is superseded by the sender-memo rule: commit-reveal stores the commitment plus a 17 + 40·M byte memo (a flags byte records the auditor choice), and the sender recovers from seed + storage alone; tokens choose `disclosureMode ∈ {BUNDLE, COMPACT}` at creation.
@@ -65,10 +65,10 @@ debit encrypt the same `v_j` with the same `s` (`ZetherVerifier.sol:230-235`, `:
 
 | Mode | Entry point (built name) | Stored | Bundles also in |
 |---|---|---|---|
-| single | `zetherTransferSingle` (`transferConfidentialSingle`; the only relayed path built) | full `B_0` | calldata |
-| BUNDLE | `zetherTransferBundle` | full `B_1 ‖ … ‖ B_M` | calldata |
-| HASH (default) | `zetherTransfer` | `keccak256(B_1 ‖ … ‖ B_M)` | `TransferBundles` event, calldata |
-| NONE | `zetherTransferNoBundle` | nothing | calldata only |
+| single | `zetherTransferSingle` (`transferConfidentialSingle`; BUNDLE tokens) | full `R = salt ‖ B_0` | calldata |
+| BUNDLE (default on a BUNDLE token) | `zetherTransfer` | full `R = salt ‖ B_1 ‖ … ‖ B_M` | calldata |
+| commit-reveal (default on a COMPACT token) | `zetherTransferCompact`; `zetherTransfer` on a COMPACT token | `keccak256(R)` ‖ sender memo | `TransferBundles` event, calldata |
+| NONE | `zetherTransferNoBundle` (BUNDLE tokens) | nothing | calldata only |
 
 Who holds which secret, and which opening it yields:
 

@@ -79,7 +79,7 @@ contract ZetherS3VectorsTest is Test {
         if (op == Op.MULTI) {
             // every leg point of the statement is bound; so is the mode (opTag)
             for (uint256 k = 1; k <= 5; ++k) {
-                assertFalse(_ok(v, _flip(st, st.length - (st.length - 416) * k / 6), pr, op), "tampered leg accepted");
+                assertFalse(_ok(v, _flip(st, st.length - (st.length - 448) * k / 6), pr, op), "tampered leg accepted");
             }
             assertFalse(_ok(v, _flip(st, 31), pr, op), "mode switch accepted");
         }
@@ -104,13 +104,13 @@ contract ZetherS3VectorsTest is Test {
         (bytes32 op, bytes32 psid) = abi.decode(_head(j.readBytes(".statement"), 0), (bytes32, bytes32));
         assertEq(op, keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/HASH"));
         assertEq(psid, bn.proofSystemIdMulti());
-        assertEq(bn.proofSystemIdMulti(), keccak256("scaas/zether/sigma-bullets/bn254/n64-n64/v1/multi"));
+        assertEq(bn.proofSystemIdMulti(), keccak256("scaas/zether/sigma-bullets/bn254/n64-n64/v2/multi"));
         string memory k = vm.readFile(string.concat(DIR, "transfer_multi_noaud_bls12381.json"));
         (op,) = abi.decode(_head(k.readBytes(".statement"), 0), (bytes32, bytes32));
         assertEq(op, keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/NONE"));
     }
 
-    /// Header statement của S3 đúng bố cục zether.md §7 (416 byte, `chainUid` là word 3) với các trường của `request`.
+    /// Header statement của S3 đúng bố cục zether.md §7 (448 byte, `chainUid` là word 3) với các trường của `request`.
     function test_s3StatementHeaderMatchesRequest() public view {
         string memory j = vm.readFile(string.concat(DIR, "transfer_bn254.json"));
         bytes memory st = j.readBytes(".statement");
@@ -134,14 +134,34 @@ contract ZetherS3VectorsTest is Test {
         assertEq(accSeq, j.readUint(".request.accSeq"));
         assertEq(fee, j.readUint(".request.fee"));
         assertEq(ben, j.readBytes32(".request.beneficiary"));
+        _checkMemo(j, st);
+        _checkMemo(vm.readFile(string.concat(DIR, "transfer_multi_bls12381.json")), "");
         // entryRef (CTR-ZTH-36) = keccak(tag, chainId, chainUid, token, keccak(Y_f), sendCounter)
         bytes memory yf = new bytes(64);
-        for (uint256 i; i < 64; ++i) yf[i] = st[416 + i];
+        for (uint256 i; i < 64; ++i) yf[i] = st[480 + i];
         assertEq(
             keccak256(abi.encode(keccak256("SCAAS-ZETHER-ENTRY-V1"), j.readUint(".request.chainId"),
                 j.readBytes32(".request.chainUid"), j.readAddress(".request.token"), keccak256(yf), sc)),
             j.readBytes32(".entryRef")
         );
+    }
+
+    /// Header word 13 is the salt (16 zero bytes ‖ salt), the payload's bytes 64..80 too (CTR-ZTH-30); word 14 is
+    /// `keccak256(memo)` on commit-reveal, the payload then ending with the memo of `17 + 40·M` bytes, else 0
+    /// (CTR-ZTH-50).
+    function _checkMemo(string memory j, bytes memory st) internal view {
+        if (st.length == 0) st = j.readBytes(".statement");
+        bytes memory pl = j.readBytes(".payload");
+        bytes16 salt = bytes16(j.readBytes(".salt"));
+        assertEq(bytes32(_head(st, 416)), bytes32(uint256(uint128(salt))), "salt, word 13");
+        assertEq(bytes16(_head(pl, 64)), salt, "salt after sendCounter");
+        bytes memory memo = vm.keyExistsJson(j, ".memo") ? j.readBytes(".memo") : bytes("");
+        assertEq(bytes32(_head(st, 448)), memo.length == 0 ? bytes32(0) : keccak256(memo), "memoHash, word 14");
+        if (memo.length == 0) return;
+        bytes memory tail = new bytes(memo.length);
+        for (uint256 i; i < memo.length; ++i) tail[i] = pl[pl.length - memo.length + i];
+        assertEq(tail, memo, "the payload ends with the memo");
+        assertEq((memo.length - 17) % 40, 0);
     }
 
     function _head(bytes memory st, uint256 off) internal pure returns (bytes memory out) {
@@ -180,7 +200,7 @@ contract ZetherS3VectorsTest is Test {
             bytes memory leg = bytes.concat(j.readBytes(string.concat(c, ".Yt")), j.readBytes(string.concat(c, ".Cout")),
                 j.readBytes(string.concat(c, ".Dout")), j.readBytes(string.concat(c, ".Caud")));
             S3Token(tok).set(v, uid == 0 ? j.readBytes32(string.concat(c, ".chainUid")) : uid,
-                j.readBytes(string.concat(c, ".Ya")), bytes.concat(new bytes(idx * leg.length), leg, leg));
+                j.readBytes(string.concat(c, ".Ya")), bytes.concat(new bytes(16 + idx * leg.length), leg, leg)); // R = salt ‖ …
             vm.chainId(j.readUint(string.concat(c, ".chainId")));
             if (!_disclose(j, c, tok, idx)) continue;
             ++ok;
@@ -203,6 +223,14 @@ contract ZetherS3VectorsTest is Test {
     function test_s3DisclosureRefusedOnAnotherChainUid() public {
         assertEq(_checkDisclosure("disclosure_bn254.json", keccak256("chain B")), 2);
         assertEq(_checkDisclosure("disclosure_bls12381.json", keccak256("chain B")), 2);
+    }
+
+    /// Review T2 m4: a foreign token's entry shorter than the salt is not a record: `BundlesMismatch`, not a panic.
+    function test_shortEntryIsNotARecord() public {
+        S3Token t = new S3Token();
+        t.set(bn, bytes32(0), "", hex"0102");
+        vm.expectRevert(abi.encodeWithSelector(ITransferDisclosure.BundlesMismatch.selector, bytes32("ref")));
+        disc.verifyTransferAmount(address(t), "ref", 0, 1, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(1), "");
     }
 
     function test_s3SchnorrMatches() public view {

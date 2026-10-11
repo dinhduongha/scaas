@@ -130,19 +130,21 @@ abstract contract ZetherNoneSuite is ZetherFixture {
 
     // ------------------------------------------------------------------ the statement (zether.md §7)
 
-    /// The token's statement carries the 13-word header with `chainUid` at word 3 (CTR-ZTH-36), the token, the
-    /// binding tag; the view and the token build the very same bytes (a proof of the view's statement passes).
+    /// The token's statement carries the 15-word header with `chainUid` at word 3 (CTR-ZTH-36), the token, the
+    /// binding tag, the salt at word 13 (CTR-ZTH-30) and `memoHash` at word 14 (0 off commit-reveal and on an unshield,
+    /// CTR-ZTH-50); the view and the token build the very same bytes (a proof of the view's statement passes); a salt
+    /// changed after proving is refused.
     function test_statementHeaderCarriesChainUid() public {
         _fund(tok, alice, 500);
         tok.zetherRollOver(alice.ua);
         Tx memory t = _proveTransfer(tok, alice, bob, 100, 500, carol.ua, 0);
         bytes memory st = stm.transferStatementSingle(address(tok), t.payload, carol.ua, 0);
-        bytes memory head = new bytes(416);
-        for (uint256 i; i < 416; ++i) head[i] = st[i];
+        bytes memory head = new bytes(480);
+        for (uint256 i; i < 480; ++i) head[i] = st[i];
         bytes memory expected = bytes.concat(
             abi.encode(keccak256("SCAAS-ZETHER-OP-TRANSFER-V1"), ver.proofSystemId(), block.chainid, ZUID, address(tok),
                 keccak256("ZTX_V1_DIRECT"), bytes32(0)),
-            abi.encode(uint256(0), uint256(1), FEE, carol.ua, uint256(0), address(0))
+            abi.encode(uint256(0), uint256(1), FEE, carol.ua, uint256(0), address(0), uint256(uint128(salt)), bytes32(0))
         );
         assertEq(head, expected);
         assertEq(tok.chainUid(), ZUID);
@@ -154,6 +156,16 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         assertEq(rcp, address(0xD00D));
         assertEq(bytes32(_cut(st, 0, 32)), keccak256("SCAAS-ZETHER-OP-BURN-V1"));
         assertEq(bytes32(_cut(st, 96, 32)), ZUID);
+        assertEq(_cut(st, 416, 64), new bytes(64), "no salt, no memo on an unshield");
+        bytes memory tampered = bytes.concat(t.payload);
+        tampered[70] ^= 0x01; // the salt
+        vm.expectRevert(IZetherToken.ProofRejected.selector);
+        tok.zetherTransferSingle(tampered, t.proof, "", carol.ua);
+        vm.expectRevert(abi.encodeWithSelector(IZetherToken.BadPayload.selector, t.payload.length - 1));
+        tok.zetherTransferSingle(_cut(t.payload, 0, t.payload.length - 1), t.proof, "", carol.ua);
+        bytes32 ref = _ref(tok, alice, 0);
+        vm.expectEmit(true, true, true, true, address(tok));
+        emit IZetherToken.ZetherTransfer(alice.ua, bob.ua, carol.ua, FEE, 0, ref);
         _direct(tok, t, carol.ua);
     }
 

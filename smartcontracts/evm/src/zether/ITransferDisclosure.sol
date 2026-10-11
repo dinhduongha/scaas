@@ -23,8 +23,9 @@ pragma solidity ^0.8.20;
 ///     D_transfer = g^s
 ///
 /// nên mở nó là chứng minh số tiền, và nó ràng buộc TUYỆT ĐỐI vào đúng giao dịch đó.
-/// Chi phí lúc chuyển: token lưu bản ghi để mở on-chain — bundle đầy đủ (định dạng một người nhận, mode BUNDLE,
-/// 4 điểm mỗi leg), một slot hash (mode HASH), hoặc không gì (mode NONE: chỉ off-chain), CTR-ZTH-14/38.
+/// Chi phí lúc chuyển: token lưu bản ghi để mở on-chain — `R = salt ‖ B_1 ‖ … ‖ B_M` đầy đủ (định dạng một người nhận,
+/// mode BUNDLE, 4 điểm mỗi leg), một slot hash cộng memo người gửi (commit-reveal, CTR-ZTH-50), hoặc không gì (mode
+/// NONE: chỉ off-chain), CTR-ZTH-14/38.
 interface ITransferDisclosure {
     /// Ba đường mở, ba chủ thể khác nhau. Giữ cả ba — mỗi cái giải một tình huống
     /// tranh chấp mà hai cái kia không giải được.
@@ -59,7 +60,8 @@ interface ITransferDisclosure {
     /// @param amount   số tiền được tuyên bố, đơn vị che giấu
     /// @param kind     đường mở nào
     /// @param opening  `s` cho SENDER_S; `abi.encode(A1, A2, z)` (Chaum-Pedersen) cho RECEIVER_X, AUDITOR, SENDER_CP
-    /// @param bundles  mode HASH: `B_1 ‖ … ‖ B_M` (từ event `TransferBundles` hoặc calldata), khớp hash đã lưu;
+    /// @param bundles  commit-reveal: `R = salt ‖ B_1 ‖ … ‖ B_M` (từ event `TransferBundles`, calldata, hoặc người gửi
+    ///                 dựng lại từ memo), khớp hash đã lưu;
     ///                 bỏ qua khi bundle nằm trong storage. Mode NONE: không có gì để kiểm (`UnknownEntry`).
     ///
     /// @dev Phần lớn nhu cầu — kiểm toán, đối soát ERP, trả lời cơ quan thuế — chỉ

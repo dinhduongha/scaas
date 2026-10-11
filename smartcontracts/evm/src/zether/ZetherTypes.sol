@@ -23,9 +23,23 @@ library ZetherTypes {
 
     /// Nơi giữ bundle tiết lộ của một transfer nhiều người nhận (nằm trong opTag, relayer không đổi được).
     enum TransferMode {
-        HASH,   // mặc định: lưu keccak256(B_1 ‖ … ‖ B_M), bundle phát trong event
-        BUNDLE, // lưu B_1 ‖ … ‖ B_M
-        NONE    // không lưu: tiết lộ off-chain từ calldata
+        HASH,   // commit-reveal (`zetherTransferCompact`; `zetherTransfer` trên token COMPACT): keccak256(R) một slot +
+                // memo người gửi, R = salt ‖ B_1 ‖ … ‖ B_M phát trong event
+        BUNDLE, // `zetherTransfer` trên token BUNDLE: lưu R
+        NONE    // `zetherTransferNoBundle`: không lưu, tiết lộ off-chain từ calldata
+    }
+
+    /// Cách lưu bundle của token, cố định từ `initialize` (CTR-ZTH-38).
+    enum DisclosureMode {
+        BUNDLE, // mặc định: `zetherTransfer` lưu R, `…Compact` / `…NoBundle` tiết kiệm gas; single lưu R
+        COMPACT // mọi transfer là commit-reveal (`zetherTransfer` = `…Compact`); `…NoBundle` và single bị từ chối
+    }
+
+    /// Auditor của token, cố định từ `initialize` (CTR-ZTH-09, CTR-ZTH-42).
+    enum AuditorMode {
+        NONE,    // không khoá auditor: mọi C_aud = O
+        FULL,    // có khoá: mọi transfer phải có auditor (mọi C_aud ≠ O)
+        OPTIONAL // có khoá: người gửi được bỏ auditor theo transfer (mọi C_aud = O hoặc không cái nào)
     }
 
     function toUA(bytes memory encodedY) internal pure returns (UA) {

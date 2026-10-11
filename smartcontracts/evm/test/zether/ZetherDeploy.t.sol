@@ -66,7 +66,7 @@ contract ZetherDeployTest is Test {
         // a token from the deployed catalogue, on the deployed verifier
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features) = ("Z", "Z", 6, 1 << AdminLib.PAYABLE);
-        c.conf = IFactoryToken.ConfidentialConfig(bn, "", 1, 1 << 40, 0);
+        c.conf = IFactoryToken.ConfidentialConfig(bn, "", 1, 1 << 40, 0, 0, 0);
         ZetherLayer t = ZetherLayer(f.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, c, "z"));
         assertEq(address(t.verifier()), bn);
         assertEq(t.chainUid(), ZUID);

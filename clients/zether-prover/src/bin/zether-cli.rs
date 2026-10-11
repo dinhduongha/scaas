@@ -3,8 +3,8 @@
 //!   zether-cli vectors <dir>      write the deterministic vector files
 //!   zether-cli <command>          JSON request on stdin, JSON result on stdout
 //!
-//! Commands: keygen, encrypt, decrypt, proveTransfer, verifyTransfer, proveBurn, verifyBurn,
-//! pop, shieldCalldata, envelope (see `zether_prover::api`).
+//! Commands: keygen, encrypt, decrypt, proveTransfer, verifyTransfer, proveTransferMulti, verifyTransferMulti,
+//! proveBurn, verifyBurn, openMemo, recoverTransfer, pop, shieldCalldata, envelope (see `zether_prover::api`).
 
 use std::io::Read;
 use std::process::ExitCode;

@@ -39,6 +39,14 @@ salted digests, KAT repoints, DEX book shapes, events, `already_invalidated`, me
 bundle); deferred (TODO MT-8): batching and the per-selector breaker (NODE-LANE-11, -25), TradeEngine (P7),
 NODE-IDX-06 `repeat_of`, `ua_metatx`, client Zether encoders after P3b, the per-poll market re-check; open questions in
 the plan.
+## Session 2026-10-11 (P3b)
+
+**State:** P3b (Zether storage and auditor modes, owner 2026-10-11) built from the plan `docs/superpowers/plans/2026-10-11-p3b-zether-modes.md`;
+the spec rules CTR-ZTH-30/38/42/48/49/50 flipped to built, §19 re-measured, PQZ (CTR-PQZ-19/23/24) spec only.
+
+**Rulings to confirm (controller, pending the owner):** the commitment `keccak256(R)` over `R = salt ‖ B_1 ‖ … ‖ B_M` (the spec table now says so), the `…/v2` proof system id label, `seed_zether` = the R33 conf key `x`, `AuditorForbidden` for NONE, the registry's `keyOf`, the `uint8` config fields with typed errors.
+
+**Not done / next:** R6 (archive of `TransferBundles` for receiver and auditor), transfers over the EIP-7825 cap (the prover refuses them by its measured transaction gas limits per curve, form, auditor and direct / relayed, zether.md §19; no contract cap), the node's gas padding clamped to 2^24 (P5), the client ABI (P5).
 
 ## Session 2026-10-11 (P4)
 

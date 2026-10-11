@@ -13,7 +13,10 @@ use zeroize::Zeroizing;
 
 use crate::abi::{self, Tok};
 use crate::bulletproofs::Gens;
-use crate::curve::{decode_point, decode_scalar, encode_point, encode_scalar, Bls12381, Bn254, Fr, ZCurve, G};
+use crate::curve::{
+    decode_point, decode_scalar, encode_point, encode_scalar, generator, keccak256, point_len, ua_of, Bls12381, Bn254,
+    Fr, ZCurve, G,
+};
 use crate::elgamal::{
     cached_table, cached_table_bits, check_balance, check_ram, encrypt, mem_available, BsgsParams, Ciphertext,
 };
@@ -130,7 +133,8 @@ fn ct_json<C: ZCurve>(c: &Ciphertext<C>) -> Value {
 }
 
 /// `envelopeBinding` (relayed), or `unwrapBinding` (a direct `zetherUnshieldUnwrap`, burns only), or direct.
-/// Both at once, or `unwrapBinding` on a transfer, is refused: the token never builds such a statement.
+/// Both at once, or `unwrapBinding` on a transfer, is refused: the token never builds such a statement. The memo word
+/// is the prove functions' (0 on a burn).
 fn header(v: &Value, amount: u64, recipient: [u8; 20], burn: bool) -> R<Header> {
     let has = |k: &str| v.get(k).is_some_and(|x| !x.is_null());
     let binding = match (has("envelopeBinding"), has("unwrapBinding")) {
@@ -151,6 +155,8 @@ fn header(v: &Value, amount: u64, recipient: [u8; 20], burn: bool) -> R<Header> 
         beneficiary: opt_fixed(v, "beneficiary")?,
         amount,
         recipient,
+        salt: [0; 16],
+        memo_hash: [0; 32],
     })
 }
 
@@ -167,19 +173,53 @@ fn sc<C: ZCurve>(s: &Fr<C>) -> String {
 /// `zetherTransferSingle` — a direct call has no outer fee; relayed, the same bytes are the envelope's `data`.
 const TRANSFER_SINGLE: &str = "zetherTransferSingle(bytes,bytes,bytes,bytes32)";
 
-/// `zetherTransfer` (HASH), `zetherTransferBundle`, `zetherTransferNoBundle` (CTR-ZTH-38).
-fn transfer_multi_sig(mode: TransferMode) -> &'static str {
+fn opt_str<'a>(v: &'a Value, k: &str) -> R<Option<&'a str>> {
+    match v.get(k).filter(|x| !x.is_null()) {
+        None => Ok(None),
+        Some(x) => x.as_str().map(Some).ok_or_else(|| format!("`{k}` must be a string")),
+    }
+}
+
+/// The token's `disclosureMode()` (CTR-ZTH-48): `"bundle"` (the default) or `"compact"` (commit-reveal only).
+fn compact_token(v: &Value) -> R<bool> {
+    match opt_str(v, "disclosureMode")? {
+        None | Some("bundle") => Ok(false),
+        Some("compact") => Ok(true),
+        _ => Err("`disclosureMode` must be \"bundle\" or \"compact\"".into()),
+    }
+}
+
+/// `yAud` (absent or null: the auditor left out, every `C_aud = O`), checked against the token's `auditorMode()`
+/// when the request names it (CTR-ZTH-42): `"full"` needs it, `"none"` refuses it, `"optional"` takes either; the
+/// token would revert `AuditorRequired` / `AuditorForbidden` after the proving work.
+fn y_aud<C: ZCurve>(v: &Value) -> R<G<C>> {
+    let y = if v.get("yAud").is_some_and(|x| !x.is_null()) { point::<C>(v, "yAud")? } else { G::<C>::zero() };
+    match (opt_str(v, "auditorMode")?, y.is_zero()) {
+        (None | Some("optional"), _) | (Some("full"), false) | (Some("none"), true) => Ok(y),
+        (Some("full"), true) => Err("a FULL auditor token needs `yAud` (AuditorRequired)".into()),
+        (Some("none"), false) => Err("a token without auditor takes no `yAud` (AuditorForbidden)".into()),
+        _ => Err("`auditorMode` must be \"none\", \"full\" or \"optional\"".into()),
+    }
+}
+
+/// The entry of a stored form (CTR-ZTH-38): `zetherTransfer` is the token's default (BUNDLE, or commit-reveal on a
+/// COMPACT token), `zetherTransferCompact` commit-reveal on every token, `zetherTransferNoBundle` NONE.
+fn transfer_multi_sig(mode: TransferMode, compact: bool) -> &'static str {
     match mode {
-        TransferMode::Hash => "zetherTransfer(bytes,bytes,bytes,bytes32)",
-        TransferMode::Bundle => "zetherTransferBundle(bytes,bytes,bytes,bytes32)",
+        TransferMode::Bundle => "zetherTransfer(bytes,bytes,bytes,bytes32)",
+        TransferMode::Hash if compact => "zetherTransfer(bytes,bytes,bytes,bytes32)",
+        TransferMode::Hash => "zetherTransferCompact(bytes,bytes,bytes,bytes32)",
         TransferMode::NoBundle => "zetherTransferNoBundle(bytes,bytes,bytes,bytes32)",
     }
 }
 
 pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value, rng: &mut Rn) -> R<Value> {
+    if compact_token(v)? {
+        return Err("a COMPACT token refuses the single format (TransferEntryDisabled)".into());
+    }
     let k = key::<C>(v)?;
     let h = header(v, 0, [0; 20], false)?;
-    let y_aud = if v.get("yAud").is_some_and(|x| !x.is_null()) { point::<C>(v, "yAud")? } else { G::<C>::zero() };
+    let y_aud = y_aud::<C>(v)?;
     let (st, p, w) = zether::prove_transfer(
         gens,
         &k,
@@ -200,6 +240,8 @@ pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v
         "payload": hx(&payload),
         "authDigest": hx(&zether::auth_digest(&stmt)),
         "entryRef": hx(&schnorr::entry_ref(h.chain_id, &h.chain_uid, &h.token, &k.ua(), h.send_counter)),
+        "salt": hx(&st.header.salt),
+        "record": hx(&st.record()),
         "directCalldata": hx(&envelope::transfer_call(TRANSFER_SINGLE, &payload, &proof, &[], &h.beneficiary)),
     });
     if include_witness(v) {
@@ -209,29 +251,35 @@ pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v
     Ok(out)
 }
 
-/// `recipients`: `[{"yTo", "amount"}, …]` (decoys with amount 0), `mode`: `hash` (default) | `bundle` | `none`.
-/// `yAud` absent or null leaves the auditor out (statement `Y_a = O`, every `C_aud = O`): required on a token
-/// without auditor, the sender's choice on one with it (Z12); the same holds for `proveTransfer`.
-/// Relayed like the single format (`envelopeBinding`, CTR-ZTH-34).
+/// `recipients`: `[{"yTo", "amount"}, …]` (decoys with amount 0); `mode`, the stored form: `bundle` | `compact` |
+/// `none`, by default the token's (`disclosureMode` `"bundle"`, the default: `bundle`; `"compact"`: `compact`, the only
+/// form it takes), so the calldata calls `zetherTransfer` unless a gas-saving form is asked for. `yAud` absent or null leaves the auditor out (statement `Y_a = O`, every `C_aud = O`): required on a token
+/// without auditor, refused on a `FULL` one, the sender's choice on an `OPTIONAL` one (`auditorMode`, checked when
+/// given); the same holds for `proveTransfer`. Relayed like the single format (`envelopeBinding`, CTR-ZTH-34).
 pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value, rng: &mut Rn) -> R<Value> {
     let k = key::<C>(v)?;
     let h = header(v, 0, [0; 20], false)?;
+    let compact = compact_token(v)?;
     let mode = match v.get("mode").filter(|x| !x.is_null()) {
-        None => TransferMode::Hash,
-        Some(m) => m.as_str().and_then(TransferMode::from_name).ok_or("`mode` must be \"hash\", \"bundle\" or \"none\"")?,
+        None if compact => TransferMode::Hash,
+        None => TransferMode::Bundle,
+        Some(m) => m.as_str().and_then(TransferMode::from_name).ok_or("`mode` must be \"bundle\", \"compact\" or \"none\"")?,
     };
+    if compact && mode != TransferMode::Hash {
+        return Err("a COMPACT token takes commit-reveal only (TransferEntryDisabled)".into());
+    }
     let recipients = get(v, "recipients")?
         .as_array()
         .ok_or("`recipients` must be an array")?
         .iter()
         .map(|r| Ok((point::<C>(r, "yTo")?, num(r, "amount")?)))
         .collect::<R<Vec<_>>>()?;
-    let y_aud = if v.get("yAud").is_some_and(|x| !x.is_null()) { point::<C>(v, "yAud")? } else { G::<C>::zero() };
+    let y_aud = y_aud::<C>(v)?;
     let (st, p, w) = zether::prove_transfer_multi(
         gens, &k, h.clone(), mode, &recipients, y_aud, ct::<C>(v, "acc")?, num(v, "balance")?, rng,
     )
     .map_err(e)?;
-    let (stmt, proof, payload) = (st.encode(), p.encode(), st.payload());
+    let (stmt, proof, payload) = (st.encode(), p.encode(), st.payload(&w.memo));
     let mut out = json!({
         "curve": C::NAME,
         "mode": mode.name(),
@@ -241,7 +289,9 @@ pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens
         "bundles": hx(&st.bundles()),
         "authDigest": hx(&zether::auth_digest(&stmt)),
         "entryRef": hx(&schnorr::entry_ref(h.chain_id, &h.chain_uid, &h.token, &k.ua(), h.send_counter)),
-        "directCalldata": hx(&envelope::transfer_call(transfer_multi_sig(mode), &payload, &proof, &[], &h.beneficiary)),
+        "salt": hx(&st.header.salt),
+        "memo": hx(&w.memo),
+        "directCalldata": hx(&envelope::transfer_call(transfer_multi_sig(mode, compact), &payload, &proof, &[], &h.beneficiary)),
     });
     if include_witness(v) {
         out["witness"] = json!({"x": sc::<C>(&w.x), "s": sc::<C>(&w.s), "b": sc::<C>(&w.b), "bPrime": sc::<C>(&w.b_prime),
@@ -275,6 +325,221 @@ pub fn prove_burn_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &V
             "bPrime": sc::<C>(&w.b_prime), "gammaB": sc::<C>(&w.gamma_b)});
     }
     Ok(out)
+}
+
+/// The source of a recovery: `payload` (the transfer's calldata argument, any entry) or `entry` =
+/// `transferEntry(entryRef)` with `sendCounter`: the record `R` (BUNDLE, single) or `keccak256(R) ‖ memo` (commit-reveal).
+/// Returns the counter, `R` when the source carries it, the memo and the commitment when it has them.
+fn recovery_source<C: ZCurve>(v: &Value) -> R<(u64, Option<Vec<u8>>, Option<Vec<u8>>, Option<[u8; 32]>)> {
+    if v.get("payload").is_some_and(|x| !x.is_null()) {
+        let b = bytes(v, "payload")?;
+        let (rec, memo) = payload_record::<C>(&b)?;
+        return Ok((abi::word_u64(&b, 32).ok_or("payload: sendCounter")?, Some(rec), memo, None));
+    }
+    let e = bytes(v, "entry")?;
+    let p = point_len::<C>();
+    if e.len() > 16 && (e.len() - 16) % (4 * p) == 0 {
+        Ok((num(v, "sendCounter")?, Some(e), None, None))
+    } else if e.len() >= 32 + zether::memo_len(1) {
+        Ok((num(v, "sendCounter")?, None, Some(e[32..].to_vec()), Some(e[..32].try_into().unwrap())))
+    } else {
+        Err("`entry`: neither a record nor a commitment with its memo (an unknown or no-bundle entry)".into())
+    }
+}
+
+/// What `s`, the memo key and the openings need: `chainId`, `chainUid`, `token` and the counter.
+fn recovery_header(v: &Value, send_counter: u64) -> R<Header> {
+    Ok(Header {
+        chain_id: num(v, "chainId")?,
+        chain_uid: fixed(v, "chainUid")?,
+        token: fixed(v, "token")?,
+        binding: Binding::Direct,
+        send_counter,
+        acc_seq: 0,
+        fee: 0,
+        beneficiary: [0; 32],
+        amount: 0,
+        recipient: [0; 20],
+        salt: [0; 16],
+        memo_hash: [0; 32],
+    })
+}
+
+/// Step 1 of a storage-only recovery (CTR-ZTH-50): open the memo of a commit-reveal entry (`entry` =
+/// `transferEntry(entryRef)`, `sendCounter`, `chainId`, `chainUid`, `token`). Returns the `salt`, `auditorIncluded`
+/// (the flag), the legs (`toUA`, `amount`) and `needKeys`, the UAs to look up with `registry.keyOf(toUA)` (and
+/// `auditorKey()` when the flag is set) before `recoverTransfer`. Unverified: a wrong key or a tampered memo gives
+/// garbage here, which `recoverTransfer` then refuses against the commitment.
+pub fn open_memo_json<C: ZCurve>(v: &Value) -> R<Value> {
+    let k = key::<C>(v)?;
+    let (send_counter, _, memo, _) = recovery_source::<C>(v)?;
+    let memo = memo.ok_or("`entry`/`payload` carries no memo (not commit-reveal): `recoverTransfer` needs no keys")?;
+    let h = recovery_header(v, send_counter)?;
+    let (salt, aud, legs) = zether::open_memo::<C>(&k.x, &h, &k.ua(), &memo).map_err(e)?;
+    Ok(json!({
+        "salt": hx(&salt), "auditorIncluded": aud,
+        "legs": legs.iter().map(|l| json!({"toUA": hx(&l.to_ua), "amount": l.amount.to_string()})).collect::<Vec<_>>(),
+        "needKeys": legs.iter().map(|l| hx(&l.to_ua)).collect::<Vec<_>>(),
+    }))
+}
+
+/// Recovery of one of the sender's transfers from its key and chain data only (CTR-ZTH-30, CTR-ZTH-50; disclosure
+/// review G1/R7): no amount, recipient or log remembered. `keys` (optional) are the recipients' `encodedY`; see
+/// [`recover_transfer_with`]. A storage-only commit-reveal recovery is `openMemo`, then `registry.keyOf(toUA)` for each
+/// of its `needKeys`, then this call with those `keys`.
+pub fn recover_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(v: &Value, rng: &mut Rn) -> R<Value> {
+    recover_transfer_with::<C, Rn>(v, &mut |_| None, rng)
+}
+
+/// [`recover_transfer_json`] with a key-lookup source, `key_of(toUA)` = the registry's `keyOf(toUA)` (`encodedY`; `None`
+/// or empty: not registered), asked for each recipient of a memo that `keys` does not cover. The source is either
+/// - `entry` = `transferEntry(entryRef)` with `sendCounter` (the sender walks `0 … sendCounter(fromUA) − 1`): the record
+///   `R` (BUNDLE, single) or `keccak256(R) ‖ memo` (commit-reveal). A memo gives the amounts and the recipient UAs, their
+///   keys (`keys`, else `key_of`) and, when its flag says so, `yAud` (`auditorKey()`) rebuild `R`, which must hash to
+///   the commitment;
+/// - `payload`, the transfer's calldata argument (any entry, the no-bundle one included): it carries every `Y_tj`, so no
+///   key is needed; its memo, if any, gives the amounts.
+///
+/// Without a memo the amounts come by BSGS on `C_out_j − [s]Y_tj` (`tableBits`, `boundBits` as `decrypt`). Returns `s`,
+/// `salt`, `entryRef`, the legs (`toUA`, `yTo`, `amount`), `bundles` (= `R`, the argument of a disclosure on a
+/// commitment), `commitment` (`keccak256(R)`), `auditorIncluded`, and the sender's openings `senderS` (every leg) and
+/// `senderCp[j]` (leg `j`). Needs `chainId`, `chainUid`, `token`.
+pub fn recover_transfer_with<C: ZCurve, Rn: RngCore + CryptoRng>(
+    v: &Value,
+    key_of: &mut dyn FnMut(&[u8; 32]) -> Option<Vec<u8>>,
+    rng: &mut Rn,
+) -> R<Value> {
+    let k = key::<C>(v)?;
+    let p = point_len::<C>();
+    let (send_counter, rec, memo, commitment) = recovery_source::<C>(v)?;
+    let h = recovery_header(v, send_counter)?;
+    let salt: [u8; 16] = rec.as_ref().or(memo.as_ref()).ok_or("no record")?[..16].try_into().unwrap();
+    let s = zether::derive_s::<C>(&k.x, &h, &k.ua(), &salt);
+    let g = generator::<C>();
+    let d_out = g * s;
+    let ys = |r: &[u8]| (16..r.len()).step_by(4 * p).map(|o| decode_point::<C>(&r[o..o + p]).map_err(e)).collect::<R<Vec<_>>>();
+    let (legs, aud): (Vec<(G<C>, u64)>, bool) = match (&rec, &memo) {
+        (Some(r), Some(m)) => {
+            // calldata, commit-reveal: the keys from the payload, the amounts from the memo
+            let (_, aud, ml) = zether::open_memo::<C>(&k.x, &h, &k.ua(), m).map_err(e)?;
+            let ys = ys(r)?;
+            if ys.len() != ml.len() || ys.iter().zip(&ml).any(|(y, l)| ua_of::<C>(y) != l.to_ua) {
+                return Err("the memo's recipients are not the payload's (another key, chainUid, token or a tampered memo)".into());
+            }
+            (ys.into_iter().zip(ml.iter().map(|l| l.amount)).collect(), aud)
+        }
+        (None, Some(m)) => {
+            let (_, aud, ml) = zether::open_memo::<C>(&k.x, &h, &k.ua(), m).map_err(e)?;
+            let mut given = std::collections::HashMap::new();
+            let keys = match v.get("keys").filter(|x| !x.is_null()) {
+                None => &[][..],
+                Some(x) => x.as_array().ok_or("`keys` must be an array")?.as_slice(),
+            };
+            for y in keys {
+                let s = y.as_str().ok_or("`keys` must be hex strings")?;
+                let pt = decode_point::<C>(&hex::decode(s.strip_prefix("0x").unwrap_or(s)).map_err(e)?).map_err(e)?;
+                given.insert(ua_of::<C>(&pt), pt);
+            }
+            let mut missing = Vec::new();
+            let mut legs = Vec::new();
+            for l in &ml {
+                let fetched = || key_of(&l.to_ua).and_then(|b| decode_point::<C>(&b).ok()).filter(|y| ua_of::<C>(y) == l.to_ua);
+                match given.get(&l.to_ua).copied().or_else(fetched) {
+                    Some(y) => legs.push((y, l.amount)),
+                    None => missing.push(hx(&l.to_ua)),
+                }
+            }
+            if !missing.is_empty() {
+                return Err(format!("`keys`: no key for {} (`openMemo` lists them; `registry.keyOf(toUA)` returns each)", missing.join(", ")));
+            }
+            (legs, aud)
+        }
+        (Some(r), None) => {
+            let bsgs = BsgsParams::for_target();
+            let bp = BsgsParams::new(opt_bits(v, "tableBits", bsgs.table_bits)?, opt_bits(v, "boundBits", bsgs.bound_bits)?)
+                .map_err(e)?;
+            if !cfg!(target_arch = "wasm32") && cached_table_bits::<C>() != Some(bp.table_bits) {
+                check_ram(bp.table_bits, mem_available()).map_err(e)?;
+            }
+            let pt = |o: usize| decode_point::<C>(&r[o..o + p]).map_err(e);
+            let mut legs = Vec::new();
+            let mut aud = false;
+            for o in (16..r.len()).step_by(4 * p) {
+                let (y, c_out, d, c_aud) = (pt(o)?, pt(o + p)?, pt(o + 2 * p)?, pt(o + 3 * p)?);
+                if d != d_out {
+                    return Err("D_out != [s]G: not this key's transfer (or another chainUid / token)".into());
+                }
+                let a = cached_table::<C>(bp.table_bits).map_err(e)?.decrypt(&Ciphertext { c: c_out, d: y }, &s, bp.bound_bits);
+                legs.push((y, a.map_err(e)?));
+                aud |= !c_aud.is_zero();
+            }
+            (legs, aud)
+        }
+        (None, None) => return Err("no record".into()),
+    };
+    let y_a = if aud { point::<C>(v, "yAud")? } else { G::<C>::zero() };
+    let c_aud = |a: u64| if y_a.is_zero() { G::<C>::zero() } else { g * Fr::<C>::from(a) + y_a * s };
+    let mut bundles = salt.to_vec();
+    for (y, a) in &legs {
+        for pt in [*y, g * Fr::<C>::from(*a) + *y * s, d_out, c_aud(*a)] {
+            bundles.extend(encode_point::<C>(&pt));
+        }
+    }
+    if rec.as_ref().is_some_and(|r| *r != bundles) || commitment.is_some_and(|c| c != keccak256(&bundles)) {
+        return Err("the rebuilt record misses the chain's (another key, chainUid, token or counter, a tampered memo, or a wrong `yAud`/`keys`)".into());
+    }
+    let entry_ref = schnorr::entry_ref(h.chain_id, &h.chain_uid, &h.token, &k.ua(), send_counter);
+    let mut cps = Vec::new();
+    for (j, (y, a)) in legs.iter().enumerate() {
+        let entry = schnorr::Entry {
+            chain_id: h.chain_id,
+            chain_uid: h.chain_uid,
+            token: h.token,
+            entry_ref,
+            index: j as u64,
+            y_t: *y,
+            c_out: g * Fr::<C>::from(*a) + *y * s,
+            d_out,
+            y_a,
+            c_aud: c_aud(*a),
+        };
+        cps.push(hx(&schnorr::open_sender_cp(&entry, *a, &s, rng).map_err(e)?));
+    }
+    let legs: Vec<Value> = legs
+        .iter()
+        .map(|(y, a)| json!({"toUA": hx(&ua_of::<C>(y)), "yTo": hx(&encode_point::<C>(y)), "amount": a.to_string()}))
+        .collect();
+    Ok(json!({
+        "s": sc::<C>(&s), "salt": hx(&salt), "sendCounter": send_counter, "entryRef": hx(&entry_ref), "legs": legs,
+        "auditorIncluded": !y_a.is_zero(), "bundles": hx(&bundles), "commitment": hx(&keccak256(&bundles)),
+        "senderS": hx(&schnorr::open_sender::<C>(&s)), "senderCp": cps,
+    }))
+}
+
+/// `R = salt ‖ B_1 ‖ … ‖ B_M` as a transfer payload carries it, and its memo (commit-reveal) if any.
+fn payload_record<C: ZCurve>(b: &[u8]) -> R<(Vec<u8>, Option<Vec<u8>>)> {
+    let p = point_len::<C>();
+    let salt = b.get(64..80).ok_or("payload: too short")?;
+    let cut = |o: usize| &b[o..o + p];
+    let mut r = salt.to_vec();
+    if b.len() == 80 + 6 * p {
+        for o in [80 + p, 80 + 2 * p, 80 + 3 * p, 80 + 5 * p] {
+            r.extend_from_slice(cut(o));
+        }
+        return Ok((r, None));
+    }
+    let m = abi::word_u64(b, 80).ok_or("payload: M")? as usize;
+    let end = 112 + 3 * p * (1 + m);
+    if m == 0 || m > zether::MAX_RECIPIENTS || (b.len() != end && b.len() != end + zether::memo_len(m)) {
+        return Err("payload: neither format".into());
+    }
+    for j in 0..m {
+        let o = 112 + 3 * p * (j + 1);
+        for at in [o, o + p, 112 + p, o + 2 * p] {
+            r.extend_from_slice(cut(at));
+        }
+    }
+    Ok((r, (b.len() > end).then(|| b[end..].to_vec())))
 }
 
 fn verify_multi_json<C: ZCurve>(gens: &Gens<C>, v: &Value) -> R<Value> {
@@ -362,6 +627,8 @@ fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
         "proveTransfer" => prove_transfer_json::<C, _>(&gens(), v, rng),
         "proveTransferMulti" => prove_transfer_multi_json::<C, _>(&gens(), v, rng),
         "proveBurn" => prove_burn_json::<C, _>(&gens(), v, rng),
+        "openMemo" => open_memo_json::<C>(v),
+        "recoverTransfer" => recover_transfer_json::<C, _>(v, rng),
         "verifyTransfer" => verify_json::<C>(&gens(), v, false),
         "verifyTransferMulti" => verify_multi_json::<C>(&gens(), v),
         "verifyBurn" => verify_json::<C>(&gens(), v, true),

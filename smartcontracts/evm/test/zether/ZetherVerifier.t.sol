@@ -8,7 +8,7 @@ import {G1Bls12381} from "../../src/zether/ZetherCurves.sol";
 import {ZetherProver} from "./helpers/ZetherProver.sol";
 
 /// @notice Verifier đứng một mình: proof đúng qua, mọi thay đổi một bit / một trường / một witness sai
-///         đều bị từ chối. Statement dựng tay theo zether.md §7 (header 416 byte, `chainUid` là word 3; token và
+///         đều bị từ chối. Statement dựng tay theo zether.md §7 (header 480 byte, `chainUid` là word 3; token và
 ///         `ZetherStatements` dựng y hệt — xem ZetherNone.t.sol `test_statementHeaderCarriesChainUid`).
 contract ZetherVerifierTest is Test {
     bytes32 constant OP_T = keccak256("SCAAS-ZETHER-OP-TRANSFER-V1");
@@ -42,9 +42,10 @@ contract ZetherVerifierTest is Test {
     function _header(IZetherVerifier v, bytes32 op, uint256 fee, uint256 amount, address recipient)
         internal view returns (bytes memory)
     {
-        return abi.encode(
-            op, v.proofSystemId(), block.chainid, keccak256("verifier test chain"), address(0x70CE), DIRECT, bytes32(0),
-            uint256(7), uint256(3), fee, fee == 0 ? bytes32(0) : bytes32(uint256(0xBE)), amount, recipient
+        return bytes.concat(
+            abi.encode(op, v.proofSystemId(), block.chainid, keccak256("verifier test chain"), address(0x70CE), DIRECT),
+            abi.encode(bytes32(0), uint256(7), uint256(3), fee, fee == 0 ? bytes32(0) : bytes32(uint256(0xBE))),
+            abi.encode(amount, recipient, op == OP_B ? bytes32(0) : bytes32(uint256(0x5A17)), bytes32(0))
         );
     }
 
@@ -155,7 +156,7 @@ contract ZetherVerifierTest is Test {
         bytes memory pr = _proveTransfer(k, st, k.amount);
         assertTrue(bls.verifyTransfer(st, pr));
         // chainId, chainUid, token, bindingTag, binding, sendCounter, accSeq, fee, beneficiary, rồi một bit trong C_acc
-        uint256[10] memory offs = [uint256(95), 127, 159, 191, 223, 255, 287, 319, 351, 416 + 3 * 128 + 100];
+        uint256[12] memory offs = [uint256(95), 127, 159, 191, 223, 255, 287, 319, 351, 447, 479, 480 + 3 * 128 + 100];
         for (uint256 i; i < offs.length; ++i) {
             bytes memory t = bytes.concat(st);
             t[offs[i]] = bytes1(uint8(t[offs[i]]) ^ 0x01);
@@ -183,7 +184,7 @@ contract ZetherVerifierTest is Test {
         bytes memory st = _transferStatement(k, k.amount);
         bytes memory lie = _cts(Case(bls, 1000, 1, 5, true), 1); // C_aud của v = 1
         uint256 p = 128;
-        for (uint256 i; i < p; ++i) st[416 + 8 * p + i] = lie[3 * p + i];
+        for (uint256 i; i < p; ++i) st[480 + 8 * p + i] = lie[3 * p + i];
         assertFalse(_ok(bls, st, _proveTransfer(k, st, k.amount), true));
     }
 
@@ -201,7 +202,7 @@ contract ZetherVerifierTest is Test {
         // nhét một C_aud khác O khi auditor tắt
         bytes memory t = bytes.concat(st);
         bytes memory junk = bn.g1MulBase(42);
-        for (uint256 i; i < 64; ++i) t[416 + 8 * 64 + i] = junk[i];
+        for (uint256 i; i < 64; ++i) t[480 + 8 * 64 + i] = junk[i];
         assertFalse(_ok(bn, t, pr, true));
     }
 
@@ -239,10 +240,10 @@ contract ZetherVerifierTest is Test {
         bytes memory pr = _proveTransfer(k, st, k.amount);
         assertTrue(_ok(bls, st, pr, true));
         bytes memory good = bls.g1MulBase(7);
-        for (uint256 i; i < 128; ++i) st[416 + i] = good[i]; // Y_f
+        for (uint256 i; i < 128; ++i) st[480 + i] = good[i]; // Y_f
         assertFalse(bls.verifyTransfer(st, pr));
         bytes memory bad = vm.parseJsonBytes(vm.readFile("test/vectors/zether/curve_misc.json"), ".blsNonSubgroup");
-        for (uint256 i; i < 128; ++i) st[416 + i] = bad[i];
+        for (uint256 i; i < 128; ++i) st[480 + i] = bad[i];
         vm.expectRevert(G1Bls12381.BadPoint.selector);
         bls.verifyTransfer(st, pr);
         uint256[] memory one = new uint256[](1);

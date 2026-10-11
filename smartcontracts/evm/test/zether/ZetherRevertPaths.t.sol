@@ -77,14 +77,14 @@ contract ZetherRevertPathsTest is ZetherFixture {
 
     function test_transferToSelfRejected() public {
         Tx memory t = _aliceTx();
-        for (uint256 i; i < 64; ++i) t.payload[128 + i] = t.payload[64 + i]; // Y_to := Y_from
+        for (uint256 i; i < 64; ++i) t.payload[144 + i] = t.payload[80 + i]; // Y_to := Y_from
         _call(t.payload, t.proof, _none(), abi.encodeWithSelector(IZetherToken.SelfTransfer.selector));
     }
 
     function test_transferToUnregisteredRejected() public {
         Tx memory t = _aliceTx();
         bytes memory gy = ZetherKeys.pub(0x6057, false);
-        for (uint256 i; i < 64; ++i) t.payload[128 + i] = gy[i];
+        for (uint256 i; i < 64; ++i) t.payload[144 + i] = gy[i];
         _call(t.payload, t.proof, _none(),
             abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, ZetherTypes.toUA(gy)));
     }
@@ -116,7 +116,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         bytes[10] memory calls = [
             abi.encodeCall(ZetherLayer.zetherShield, (alice.y, 1)),
             abi.encodeCall(ZetherLayer.zetherTransfer, ("", "", "", n)),
-            abi.encodeCall(ZetherLayer.zetherTransferBundle, ("", "", "", n)),
+            abi.encodeCall(ZetherLayer.zetherTransferCompact, ("", "", "", n)),
             abi.encodeCall(ZetherLayer.zetherTransferNoBundle, ("", "", "", n)),
             abi.encodeCall(ZetherLayer.zetherTransferSingle, ("", "", "", n)),
             abi.encodeCall(ZetherLayer.zetherUnshield, ("", "", "", n, address(0xD), 1)),
@@ -340,7 +340,10 @@ contract ZetherRevertPathsTest is ZetherFixture {
         _fund(tok, alice, 30);
         bytes32 ns = 0xd1eef6cbeb7b383e0a92b3cb723053d5c39c76707d89da6b14ff91b83198ce00;
         assertEq(ns, keccak256(abi.encode(uint256(keccak256("scaas.zether")) - 1)) & ~bytes32(uint256(0xff)));
-        assertEq(address(uint160(uint256(vm.load(address(tok), ns)))), address(ver));
+        uint256 w0 = uint256(vm.load(address(tok), ns));
+        assertEq(address(uint160(w0)), address(ver));
+        // review T2 m5: disclosureMode at byte 20, auditorMode at byte 21 (this token: BUNDLE, NONE), nothing above
+        assertEq(w0 >> 160, 0, "modes BUNDLE / NONE, packed after the verifier");
         assertEq(uint256(vm.load(address(tok), bytes32(uint256(ns) + 1))), SCALE);
         assertEq(uint256(vm.load(address(tok), bytes32(uint256(ns) + 4))), 30);
         // review T3 m4: maxShielded, confidentialFee, auditorKey (none here), psid, p, then acct[alice].pendingSeq
