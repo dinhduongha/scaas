@@ -342,6 +342,24 @@ purchase order is created only from the finalized `TenderSettled`; non-revealers
 
 ### 6.2 Bidder
 
+```mermaid
+sequenceDiagram
+    participant B as Bidder system
+    participant N as Node (own or neutral path)
+    participant T as SealedBidTender
+    B->>B: salt and commitment, store (tenderId, price, salt) before signing
+    B->>N: commitBid call job + signed deposit MetaTransfer
+    N->>T: commitBid (now ≤ commitDeadline)
+    T-->>B: BidCommitted (check final)
+    Note over B,T: after commitDeadline
+    B->>N: revealBid(tenderId, bidder, price, salt)
+    N->>T: revealBid (now ≤ revealDeadline)
+    T-->>B: BidRevealed (check final)
+    Note over B,T: settleTender by the buyer or any keeper
+    N->>T: withdrawDeposit (any keeper)
+    T-->>B: DepositRefunded
+```
+
 0. **Independent path (normative).** Before signing a deposit intent, the bidder's system checks that it can submit
    `commitBid` and `revealBid` on that chain **without the buyer**: its own node namespace (own gas or own sponsor
    policy), a door run by a neutral operator, or a direct transaction from a wallet holding native coin. If none is

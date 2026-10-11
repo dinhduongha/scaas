@@ -165,6 +165,24 @@ nothing once the record is caller-independent; `authRef` is the one record field
 unsigned `authRef` would let a front-runner freeze a Zether account or strip its separate authority. A future field
 taken from `msg.sender` or left unsigned would turn front-running into capture; tests T-REG-3/3b guard it.
 
+Registration as a flow:
+
+```mermaid
+sequenceDiagram
+    participant K as Key holder
+    participant R as Anyone (relayer)
+    participant G as UA registry
+    K->>K: sign pop_digest as a tagged message of the kind
+    K->>R: kind, keyData, pop, authRef
+    R->>G: register (gasless, relayable)
+    G->>G: verify PoP, one key one purpose
+    opt authRef is not 0
+        G->>G: authority co-signs, requireAuthorized(authRef, authref, pop_digest, authPop)
+    end
+    G-->>R: record derived only from signed data
+    Note over K,G: a front-runner gets the identical record or a revert
+```
+
 <a id="rogue-key"></a>
 <a id="CTR-UA-08"></a>**CTR-UA-08** — **Rogue-key protection is decided per aggregate kind** (owner: the MuSig2/FROST
 kinds stay and are made checkable):
@@ -1409,6 +1427,14 @@ raw message.
 recovery). An existing key cancels through `mtxExecuteAsOwner(cancelRecovery)`; `setGuardian` cancels a pending recovery.
 The guardian may be a multisig contract. Watching `RecoveryInitiated` events is the owner's defence against a
 compromised guardian (the 2-day delay plus cancel by key).
+
+```mermaid
+stateDiagram-v2
+    [*] --> Normal
+    Normal --> RecoveryPending: guardian initiateRecovery(newKey)
+    RecoveryPending --> Normal: existing key cancelRecovery, or setGuardian
+    RecoveryPending --> Normal: anyone completeRecovery after RECOVERY_DELAY, newKey added
+```
 
 <a id="signcount"></a>
 <a id="CTR-ACC-04"></a>**CTR-ACC-04** — The authenticator `signCount` is not checked: synced passkeys always return 0.

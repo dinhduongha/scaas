@@ -17,29 +17,55 @@ owner sets the payees — the partner's approved receiving addresses. The wallet
 delegate signs `MetaTransaction{from: delegate, data: payUnderMandate(token, payee, amount, entryRef), …}`; the
 function checks on chain `_msgSender() == mandate.delegate`, not revoked, not expired, payee allowed, ≤ the per-payment
 cap, ≤ the per-period cap and `entryRef` unused (it stays the payment reference and single-use per wallet), then pays
-through
-`IERC20Payment.payWithFee(to, amount, NONE, 0, 0, entryRef)` — the direct payment path that `IERC20Payment` already
+through `IERC20Payment.payWithFee(to, amount, NONE, 0, 0, entryRef)` — the direct payment path that `IERC20Payment` already
 has, `msg.sender` = the wallet — no allowance. Kill switch: `revoke(token)` by the owner (directly or signed with
 `from` = the owner), or `revoke(token, epoch)` signed by the delegate (so a platform revokes at once through a relayer,
-[CTR-ACC-07](#CTR-ACC-07)). The named entry points `mtxPayUnderMandate(token, payee, amount, entryRef, validUntil, sig)`,
+[CTR-ACC-07](#CTR-ACC-07)).
+
+**Named entry points.** `mtxPayUnderMandate(token, payee, amount, entryRef, validUntil, sig)`,
 `mtxRevoke(token, epoch, validUntil, sig)` and `mtxExecuteAsOwner(data, nonce, validUntil, sig)` keep their signatures
 and only build the matching `MetaTransaction`; their signatures carry no lane, so they derive it as `mtxPay` does:
 `mtxPayUnderMandate` → `batch = uint256(keccak256("scaas.mandate.pay" ‖ entryRef))`, `nonce = 0` (one payment per
 `entryRef`); `mtxRevoke` → `batch = uint256(keccak256("scaas.mandate.revoke" ‖ token ‖ epoch))`, `nonce = 0`;
 `mtxExecuteAsOwner` → `batch = 0`. The lane nonce replaces the replay checks of the earlier typed structs. `PaymentSettled` still carries `entryRef`, so
-reconciliation is exactly that of a manual payment (the design sketch was `payUnderMandate(order, delegateSig)`). Why a wallet per payer rather than an allowance to one shared mandate contract: a
+reconciliation is exactly that of a manual payment (the design sketch was `payUnderMandate(order, delegateSig)`).
+
+**Why a wallet per payer** rather than an allowance to one shared mandate contract: a
 bug in one mandate touches only the funds deposited in that wallet, and no `approve` step for which the EOA would pay
 gas is needed; the cost is that the payer deposits into the wallet instead of keeping funds in its EOA. Equivalent
 mandates exist on Cosmos, Soroban, Sui, Aptos, TON and Solana. The wallet is deployed outside the client system (for
-example `forge create … --constructor-args <owner> <chain_uid>`); clients record only its address. Its EIP-712 domain
+example `forge create … --constructor-args <owner> <chain_uid>`); clients record only its address.
+
+**Domain.** Its EIP-712 domain
 is `("SCaaS MandateWallet","1", chainId, wallet, salt = chain_uid)` with `chain_uid` a constructor argument from the
 chain profile ([CTR-GEN-05](README.md#CTR-GEN-05)); because the deployer chooses that value per wallet, the node checks
-the wallet's `chainUid()` against the chain profile before relaying anything for it. **Transitional (BUILT):** the
+the wallet's `chainUid()` against the chain profile before relaying anything for it.
+
+**Transitional (BUILT):** the
 entry points are named `payUnderMandate(token, payee, amount, entryRef, validUntil, sig)`, `revokeWithSig` and
 `executeAsOwner`, each verifying its own typed struct (`PayUnderMandate(address token,address payee,uint256
 amount,bytes32 entryRef,uint256 validUntil)`, `RevokeMandate(…)`, the owner call) instead of a `MetaTransaction`, and
 the domain has no `salt`; the renames follow [CTR-MTX-21](metatx.md#CTR-MTX-21), the move onto `MetaTxBase`
 [CTR-MTX-22](metatx.md#CTR-MTX-22).
+
+Delegated payment and the kill switch, as a sequence:
+
+```mermaid
+sequenceDiagram
+    participant O as Payer (owner)
+    participant D as Delegate
+    participant R as Relayer
+    participant W as MandateWallet
+    O->>W: deposit funds, setMandate, setPayee
+    D->>R: signed MetaTransaction payUnderMandate(token, payee, amount, entryRef)
+    R->>W: mtxExecute (anyone may submit)
+    W->>W: delegate, not revoked, not expired, payee, caps, entryRef unused
+    W->>W: payWithFee(to, amount, NONE, 0, 0, entryRef), no allowance
+    W-->>R: PaymentSettled (entryRef)
+    D->>R: signed revoke(token, epoch)
+    R->>W: mtxExecute
+    Note over W: mandate removed, epoch[token] incremented
+```
 
 <a id="revocation-epoch"></a>
 <a id="CTR-ACC-07"></a>**CTR-ACC-07** — **A signed mandate revocation is bound to the mandate's epoch.** `MandateWallet`

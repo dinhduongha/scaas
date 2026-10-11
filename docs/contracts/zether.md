@@ -236,6 +236,17 @@ State per `(UA, token)`:
 
 A new account has `acc = pending = (O, O)`, every counter `0`, `mode = PUBLIC`.
 
+How value moves between the two slots:
+
+```mermaid
+flowchart LR
+    SH["zetherShield:<br/>public units in"] -->|"pending.C += amount G<br/>pendingSeq++"| P["pending"]
+    IN["incoming transfer,<br/>inner fee"] -->|"credit, pendingSeq++"| P
+    P -->|"rollOver:<br/>acc += pending, accSeq++"| A["acc<br/>(source of every proof)"]
+    A -->|"transfer: proof over acc,<br/>sendCounter++"| R["recipient pending"]
+    A -->|"zetherUnshield:<br/>acc -= amount + fee"| U["underlying paid<br/>to recipient"]
+```
+
 <a id="no-epoch"></a>
 <a id="CTR-ZTH-03"></a>**CTR-ZTH-03** — **No epochs.** `IZetherVerifier.verifyTransfer/verifyBurn` take the full
 `statement` instead of `(payload, epoch)`; per-account state is read with `accountState(UA)` (there is no
@@ -806,6 +817,21 @@ single entry has `j = 0`; `bundles` is ignored when the record is stored, checke
 `UnknownEntry` in NONE mode). `transferCiphertext(token, entryRef, j, bundles)` exports the raw leg for an independent
 verifier. The caller picks the token it trusts (a fake "token" can answer anything); the challenge binds the token
 address, not the disclosure contract's.
+
+A verifier checks an opening like this:
+
+```mermaid
+sequenceDiagram
+    participant V as Verifier (auditor, third party)
+    participant D as ZetherDisclosure
+    participant T as Zether token
+    V->>T: disclosure()
+    T-->>V: ZetherDisclosure address
+    V->>D: verifyTransferAmount(token, entryRef, j, amount, kind, opening, bundles)
+    D->>T: transferEntry(entryRef), verifier(), auditorKey()
+    T-->>D: record, verifier, auditor key
+    D-->>V: true or false (a free view)
+```
 
 <a id="CTR-ZTH-39"></a>**CTR-ZTH-39** — **There is no on-chain attestation** (owner). `attestTransferAmount` and
 `AmountAttested` are removed; `verifyTransferAmount` is a view that any contract, third-party ones included, can call,

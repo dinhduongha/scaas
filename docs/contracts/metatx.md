@@ -223,6 +223,24 @@ function mtxExecute(MetaTransaction calldata m, bytes calldata signature) extern
 function executeMetaTransaction(MetaTransaction calldata m, bytes calldata signature) external returns (bool); // alias
 ```
 
+The flow from signature to event:
+
+```mermaid
+sequenceDiagram
+    participant S as Subject
+    participant R as Relayer
+    participant C as SCaaS contract
+    S->>R: signed MetaTransaction (EIP-712)
+    R->>R: simulate
+    R->>C: mtxExecute(m, signature)
+    C->>C: 1-3 cheap checks: relayer, expiry, mode, nonce, signature, shape
+    C->>C: 4 mtxNonce = expected + 1
+    C->>C: 5 self-call of the allowlisted function
+    C->>C: 6 fee through _chargeFee, after the call
+    C-->>R: 7 MetaTransactionExecuted
+    Note over C: any failure reverts everything, fee and nonce included
+```
+
 The pipeline is one transaction, all or nothing; cheap checks first, so a relayer that loses a race pays only the
 prefix:
 
@@ -396,6 +414,23 @@ nonce    = 0
 - Splitting: classical Zether with `n_v = 64` removed the need to split large payments; for transparent tokens one
   payment per request. If a business case needs partial payments, issue one request (one `entryRef`) per
   instalment.
+
+```mermaid
+sequenceDiagram
+    participant E as Client (ERP)
+    participant P as Payer
+    participant N as Node
+    participant T as Token
+    E->>E: entryRef = 32 random bytes, lane = keccak256("scaas.pay.lane" ‖ entryRef)
+    E->>P: MetaTransfer typed data (to, value, entryRef, validUntil)
+    P-->>E: signature
+    E->>N: push the signed intent
+    N->>N: recompute digest, simulate
+    N->>T: mtxExecuteTransfer
+    T-->>N: PaymentSettled(…, entryRef), MetaTransactionExecuted(digest)
+    N-->>E: finalized range
+    E->>E: match contract, to, entry_ref, then sum amount against amount_base
+```
 
 Two-way verification. **Client → chain** (before signing and at push): (1) the `MetaTransfer` typed data is built server-side
 from the request: `to = receiving_address`, `value = amount_base`, `entryRef`, `batch` as above, `validUntil =

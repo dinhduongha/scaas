@@ -19,6 +19,22 @@ the rules every one of them shares. Status tags (**BUILT**, **SPECIFIED**, **PLA
 | [mandates.md](mandates.md) | `MandateWallet`: delegated, capped payment from the payer's own wallet; auto-pay client integration | **BUILT**; revocation epoch **SPECIFIED** |
 | [settlement.md](settlement.md) | map of every settlement kind: entry points, who checks what, fees, finality (adds no rules) | overview |
 
+How the families relate:
+
+```mermaid
+flowchart TD
+    MTB["MetaTxBase<br/>signed self-calls, 2D nonces, selector allowlist"]
+    MTB --> TOK["ERC20MetaTx → MetaTokenBase<br/>tokens and wrappers (token-wrappers)"]
+    MTB --> MW["MandateWallet (mandates)"]
+    MTB --> SKA["SmartKeyAccount (accounts)"]
+    FAC["OpenFactory"] -->|creates clones| TOK
+    FAC -->|creates clones| DEX["SCaaSDex (dex)"]
+    TOK --> ZT["Zether kinds (zether, pq-zether)"]
+    DEX -->|"mtxTrade on the token"| TOK
+    TND["SealedBidTender (tender)"] -->|"mtxExecuteTransfer"| TOK
+    UA["UARegistry (accounts)"] -.->|"ua* path"| TOK
+```
+
 The node that relays these contracts is specified in [docs/node/](../node/README.md); the per-family programs
 (Hedera, Cosmos, Soroban, Sui, Aptos, Solana, TON) in [docs/networks/](../networks/README.md).
 
