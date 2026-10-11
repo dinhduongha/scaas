@@ -46,7 +46,12 @@ suite and the confidential layer. The node (`scaas-node`). Clients: signers, wal
 
 - **Kinds.** A token has one of four kinds: `NONE` (a plain issuer token), `UNDERLYING` (a wrapper of one to eight
   legs, each an ERC-20 or the native coin), or the same two with the confidential layer, `NONE_ZETHER` and
-  `UNDERLYING_ZETHER` ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)).
+  `UNDERLYING_ZETHER` ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)). The post-quantum confidential kinds
+  `NONE_PQZ`, `UNDERLYING_PQZ`, `NONE_ZETHER_PQZ`, `UNDERLYING_ZETHER_PQZ` are reserved, not built
+  ([pq-zether.md](contracts/pq-zether.md)).
+- **Signing is not a kind.** Every token accepts the same intents from an EOA, a `SmartKeyAccount` (ERC-1271) or a
+  Universal Account with a PQ key (`mldsa44`, `mldsa65`, `fndsa512`) through the UA ledger in the token base
+  ([CTR-UA-18](contracts/accounts.md#CTR-UA-18), [CTR-UA-23](contracts/accounts.md#CTR-UA-23); specified, not built).
 - **Features** are chosen at creation and never set later (disableable flags can be cleared): `PAYABLE`, `MINTABLE`,
   `BURNABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE`, and for regulated tokens `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`.
 - **Owner.** One owner administers a token, grants roles and may renounce
