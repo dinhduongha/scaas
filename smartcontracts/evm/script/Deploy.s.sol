@@ -7,7 +7,7 @@ import {IOpenFactoryV1} from "../src/common/IOpenFactoryV1.sol";
 import {MetaToken} from "../src/metatx/MetaToken.sol";
 import {MetaTxDex} from "../src/dex/MetaTxDex.sol";
 import {SubjectAccountFactory} from "../src/account/SubjectAccountFactory.sol";
-import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
+import {SCaaSDexV1} from "../src/dex/SCaaSDexV1.sol";
 import {DeployBase} from "./DeployBase.sol";
 
 /// forge script script/Deploy.s.sol --rpc-url $RPC --broadcast --sender <địa chỉ deployer = vm.addr(PRIVATE_KEY)>
@@ -33,7 +33,7 @@ contract Deploy is DeployBase {
         _deployTokenFactory(registrar, registrar == deployer, accounts.IMPLEMENTATION(), false);
         MetaTxDex dex = new MetaTxDex{salt: salt}();
         // R35: admin chỉ `setMarket`; production đặt REGISTRAR là một Safe (RS5-1).
-        SCaaSDex scaasDex = new SCaaSDex{salt: salt}(registrar);
+        SCaaSDexV1 scaasDex = new SCaaSDexV1{salt: salt}(registrar);
         address demo;
         if (demoSupply != 0 && registrar == deployer) {
             demo = factory.createMetaToken(1, address(0),

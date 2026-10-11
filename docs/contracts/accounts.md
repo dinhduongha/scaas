@@ -586,7 +586,7 @@ EVM DEX, mandates, accounts, registry:
 **Transitional (BUILT names).** `SmartKeyAccount` and `MandateWallet` expose `executeAsOwner(data, nonce, validUntil,
 signature)` (recovery cancel: `executeAsOwner(cancelRecovery)`); Zether exposes `rollOverSigned(ua, …, sig)` and
 `setRollOverMode(ua, …, sig)` and verifies envelopes with `ZetherMetaTx._requireValidSignature`; the classifier is
-`MetaTxCore._isContract`; `SCaaSDex` keys orders by `o.maker`; the legacy `MetaTxDex.settle(a, b)` takes legs
+`MetaTxCore._isContract`; `SCaaSDexV1` keys orders by `o.maker`; the legacy `MetaTxDex.settle(a, b)` takes legs
 signed by `a.m.from` and `b.m.from`. The renames and deletions are [CTR-MTX-21](metatx.md#CTR-MTX-21) and
 [CTR-DEX-16](dex.md#CTR-DEX-16).
 

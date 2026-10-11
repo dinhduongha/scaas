@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IFactoryToken} from "./IFactoryToken.sol";
+import {ISCaaSDex} from "../dex/ISCaaSDex.sol";
 
 /// @title The one token factory of a chain (CTR-TOK-03, CTR-TOK-25): an append-only catalogue of implementations per
 ///        kind, EIP-1167 clones by `CREATE2` initialised in the same call, no power over any token it created.
@@ -40,6 +41,13 @@ interface IOpenFactory {
     /// @notice `NONE*` 0 legs, `UNDERLYING*` 1–8.
     error UnderlyingCountInvalid(uint256 n);
     error SaltAlreadyUsed(address existing);
+    error DexVersionUnknown(uint64 version);
+    error DexVersionAlreadyRegistered(uint64 version, address existing);
+
+    /// @notice DEX catalogue (CTR-DEX-24): append-only, versions from 1; the implementation must answer
+    ///         `factory() == this` and `chainUid() == chainUid`.
+    event DexImplementationRegistered(uint64 indexed version, address indexed implementation, address registrar);
+    event DexCreated(address indexed dex, address indexed creator, uint64 version, address implementation, address admin);
 
     function registrar() external view returns (address);
     function chainUid() external view returns (bytes32);
@@ -67,4 +75,13 @@ interface IOpenFactory {
     function getWrapperAt(address creator, address underlying, uint256 index) external view returns (address);
     function deployCountFor(address underlying) external view returns (uint256);
     function deployedFor(address underlying, uint256 index) external view returns (address);
+
+    function registerDexImplementation(uint64 version, address implementation) external;
+    function dexImplementationOf(uint64 version) external view returns (address);
+    function latestDexVersion() external view returns (uint64);
+    /// @notice An `SCaaSDex` clone, `initialize(cfg)` in the same call (CTR-DEX-24).
+    function createDex(uint64 version, ISCaaSDex.DexConfig calldata cfg, bytes32 salt) external returns (address dex);
+    /// @notice Advisory (clients and the node); tokens never consult it (CTR-DEX-19).
+    function isDex(address dex) external view returns (bool);
+    function dexVersionOf(address dex) external view returns (uint64);
 }

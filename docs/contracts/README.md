@@ -11,7 +11,7 @@ the rules every one of them shares. Status tags (**BUILT**, **SPECIFIED**, **PLA
 | [accounts.md](accounts.md) | the three account forms; Universal Account (ids, kinds, registry, verifiers, credentials, migration); passkeys on chain; the optional `SmartKeyAccount` smart account and its factory, guardians | UA **SPECIFIED**; `SmartKeyAccount` **BUILT** |
 | [metatx.md](metatx.md) | the one base `ERC20MetaTx`: `MetaTransaction` struct, typehash, `mode`, 2D nonces, `mtxExecute` (generic self-call, ticket, selector allowlist, fee classes), `mtx` names, pay references and the pay-once horizon, receiver-pays | **SPECIFIED** (built as the v1/v2 lines) |
 | [token-wrappers.md](token-wrappers.md) | three token tiers, conversion rates, multi-underlying wrappers, signature wrap, the one `OpenFactory`, allowance rule | tiers **BUILT** (EVM, Hedera); one base and factory **SPECIFIED** |
-| [dex.md](dex.md) | `SCaaSDex` with token-verified `TradeOrder`s, outside-token legs through the `DexPuller`, the exchange path against AMMs (`mtxExchange`), managed-market venue contract | **SPECIFIED** (built with DEX-signed orders over allowances) |
+| [dex.md](dex.md) | `SCaaSDex` with token-verified `TradeOrder`s, outside-token legs through the `DexPuller`, the exchange path against AMMs (`mtxExchange`), managed-market venue contract | **SPECIFIED** (built: `SCaaSDex` with SCaaS legs, P2b-1; `SCaaSDexV1` with DEX-signed orders over allowances) |
 | [tender.md](tender.md) | `SealedBidTender` | **SPECIFIED** |
 | [asset-suite.md](asset-suite.md) | regulated module, vesting, distributions, corporate actions, templates | **SPECIFIED** |
 | [zether.md](zether.md) | classical Zether, byte-exact; limits; decryption bound | **BUILT, UNAUDITED** (dev chains) |
@@ -58,7 +58,7 @@ the implementation's immutables). `chain_uid` is the chain's genesis block hash 
 | `OpenFactory` | constructor immutable; `registerImplementation` refuses an implementation whose `chainUid()` differs ([CTR-TOK-03](token-wrappers.md#CTR-TOK-03)) |
 | `SmartKeyAccount` | the factory's constructor argument, passed to `new SmartKeyAccount(chainUid)` |
 | `MandateWallet`, `HederaMandateWallet` | constructor argument from the chain profile; the node checks it before relaying for that wallet |
-| `SCaaSDex` | constructor argument |
+| `SCaaSDex` (implementation; `SCaaSDexV1`) | constructor immutable of the implementation, checked at `registerDexImplementation`; `SCaaSDexV1` has none (its domain is unsalted; constructor `(admin)`) |
 | built `UniversalAccountRegistry` | constructor immutable, in its PoP challenge; it checks raw digests, so every caller's digest carries `chainUid` ([CTR-ZTH-36](zether.md#CTR-ZTH-36)) |
 | `UARegistry` | constructor immutable ([CTR-UA-07](accounts.md#CTR-UA-07)) |
 | any later contract with a signature (tender, asset suite) | the same helper, constructor argument |
@@ -145,7 +145,7 @@ power.
 | `OpenFactory` | `registrar` (immutable; an EOA by default — the deployer — and a multisig before mainnet) | `registerImplementation`, `deprecate`, and on `OpenFactoryV1` `setZetherEnabled` (dev chains only); none over any token | [token-wrappers](token-wrappers.md#factory) |
 | Any token (EVM) | the `owner` (optional; 0 = none) | `grantRole` / `revokeRole` for the roles of set flags, `disableFeature(bit)` one-way on a flag not locked at creation, two-step `transferOwnership`, `renounceOwnership` (role holders keep their roles); no power touches a reserve or upgrades code | [CTR-TOK-22](token-wrappers.md#CTR-TOK-22) |
 | Any token (EVM), role holders | the holders of `minter`, `rateAdmin` (has code), `guardian`, `issuer`, `compliance` (the role column of the flag table; several holders allowed, may `renounceRole`) | the power of the flag only (mint to a public balance, a bounded timelocked rate change, `disableWrap`, freeze / forced transfer against a recorded order / bounded pause / allowlist); none touches a reserve or upgrades code | [CTR-TOK-22](token-wrappers.md#CTR-TOK-22), [CTR-TOK-06](token-wrappers.md#CTR-TOK-06), [CTR-TOK-07](token-wrappers.md#CTR-TOK-07) |
-| `SCaaSDex` | `admin` set once at creation ([CTR-DEX-24](dex.md#CTR-DEX-24); built: immutable) (a multisig in production; the venue operator's multisig for a managed market) | `setMarket` (list or delist a pair), `setFeeSplit` (relayer share and treasury of the signed fee; never the amount), `setExchangeTarget` (list or delist an exchange target or executor), `setListedOnly` (DEX-wide listed-only mode for the exchange path); none touches funds | [CTR-DEX-03](dex.md#CTR-DEX-03), [CTR-DEX-23](dex.md#CTR-DEX-23) |
+| `SCaaSDex` | `admin` set once at creation ([CTR-DEX-24](dex.md#CTR-DEX-24); built: written once by `initialize`; `SCaaSDexV1`: immutable) (a multisig in production; the venue operator's multisig for a managed market) | `setMarket` (list or delist a pair), `setFeeSplit` (relayer share and treasury of the signed fee; never the amount), `setExchangeTarget` (list or delist an exchange target or executor), `setListedOnly` (DEX-wide listed-only mode for the exchange path); none touches funds | [CTR-DEX-03](dex.md#CTR-DEX-03), [CTR-DEX-23](dex.md#CTR-DEX-23) |
 | `NONE_ZETHER` / `UNDERLYING_ZETHER` | the token `owner` and role holders per kind and flags ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)); the auditor key is immutable (built, `ZetherToken`: no admin after `initialize`; replaced in P1/P3) | as the flags — nothing touches a reserve or a shielded balance | [CTR-ZTH-09](zether.md#CTR-ZTH-09) |
 | `SealedBidTender`, `VestingGrant`, `Distribution`, `ExchangeOffer`, `UARegistry` | none | — | per file |
 | Non-EVM tier-1 tokens: Soroban `scaas-token`, TON `ScaasJettonMaster`, CosmWasm CW20 | Soroban and TON `admin`, CW20 `minter` (optional) | `mint` / `Mint`, unlimited on that token (a supply power, not a balance power) | [soroban](../networks/soroban.md#contracts), [ton](../networks/ton.md#overview), [cosmos](../networks/cosmos.md#contracts) |
@@ -200,17 +200,17 @@ own job (Move test, Soroban, CosmWasm, Tact, Solana) as the family is added.
 `REGISTRAR` optional, `DEMO_SUPPLY`/`DEMO_HOLDER` optional) reads the genesis hash from the RPC and deploys, through
 the CREATE2 deployer ([CTR-GEN-06](#CTR-GEN-06)), `SmartKeyAccountFactory`, `OpenFactory` with the token
 implementations (each taking the factory address and `chain_uid`) registered as version 1 of their kinds, and
-`SCaaSDex(registrar, chainUid)`; optionally a tier-1 demo token (**SPECIFIED**). It writes
+the `SCaaSDex` implementation (registered as DEX version 1; built, no clone) and `SCaaSDexV1(registrar)` (its constructor takes the admin, here the registrar; unsalted domain); optionally a tier-1 demo token (**SPECIFIED**). It writes
 `deployments/<chainid>.json` to seed the node's chain configuration and client chain data. Production: every contract
 owner/admin is a Safe from the first block, and deployer keys come from a hardware wallet or KMS. **Transitional
 (BUILT, P1e):** every contract is deployed by `new X{salt: DEPLOY_SALT}` through forge's deterministic deployer (default
 salt `keccak256("scaas.deploy.v1")`; a re-run on the same chain collides, so a new version needs a new salt), the script
-stops without the deployer and checks `chainUid()` of the token factory and of the `NONE` implementation against `chain_uid` (the v1 contracts have no
+stops without the deployer and checks `chainUid()` of the token factory, of the `NONE` implementation and of the `SCaaSDex` implementation against `chain_uid` (the v1 contracts have no
 `chainUid()`; controller ruling, pending the owner). `CHAIN_UID`, when set, must equal the RPC's block 0 hash (read at any head
 by rolling to block 1), else the script stops; unset it defaults to that hash. The script creates `deployments/` itself. It deploys `OpenFactory` with `NoUnderlyingToken` as version 1 of `NONE` (`UnderlyingToken` is over
 EIP-170 and waits for the size work) and, for the node until P5, the v1 line: `OpenFactoryV1` with `MetaToken` (version 1
-of `META`, when the registrar is the deployer), `SubjectAccountFactory`, `MetaTxDex` and `SCaaSDex`. The JSON gains
-`token_factory`, `implementation_none` and `chain_uid`. `forge script … --broadcast` needs `--sender <deployer address>`; `DEPLOY_SALT` is optional.
+of `META`, when the registrar is the deployer), `SubjectAccountFactory`, `MetaTxDex` and `SCaaSDexV1`. The JSON gains
+`token_factory`, `implementation_none`, `dex_implementation` (the `SCaaSDex` implementation) and `chain_uid`. `forge script … --broadcast` needs `--sender <deployer address>`; `DEPLOY_SALT` is optional.
 
 <a id="CTR-GEN-06"></a>**CTR-GEN-06** — **Every SCaaS EVM contract is deployed through a deterministic CREATE2
 deployer with a fixed salt** (owner): implementations, factories, registries and the DEX, instead of `new` (CREATE,

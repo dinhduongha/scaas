@@ -14,7 +14,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
 |---|---|---|
 | P0 | Spec and fold into the component docs and `decisions.md` | done |
 | P1 | The complete base on the new tree: `MetaTxBase`, `ERC20MetaTx`, `MetaTokenBase`; both structs, allowlist, ticket; approve rule; `salt = chain_uid`; CREATE2 deployer; kinds `NONE`, `UNDERLYING`; factory `createToken`; the v1/v2 lines to the backup (v2 done in P1e, v1 renamed `…V1` until P3/P5) | MT-1, MT-2, MT-3, MT-4 |
-| P2 | **P2a** `TradeLib` token side + `mtxWrap` (done, merged `6a5c6b0`); **P2b** `SCaaSDex` as a clone, `createDex`, DEX registry, `mtxSettle`, `DexPuller` (old `SCaaSDex` kept as `SCaaSDexV1` for the node until P5); **P2c** exchange path | MT-5 |
+| P2 | **P2a** `TradeLib` token side + `mtxWrap` (done, merged `6a5c6b0`); **P2b-1** `SCaaSDex` as a clone, `createDex`, DEX registry, `mtxSettle` for SCaaS legs (done on branch `p2b-dex`, merge pending the final review; old `SCaaSDex` kept as `SCaaSDexV1` for the node until P5); **P2b-2** outside legs (`DexOrder`, `DexPuller`, DEX-side cancels, `checkOrder`, ERC-1271 cap); **P2c** exchange path | MT-5 |
 | P3 | `*_ZETHER` kinds: `ZetherLayer`, `ZetherLib`, `ZetherStatements`, shield / unshield paths; delete `ZetherToken` | MT-6 |
 | P4 | `MandateWallet`, `SmartKeyAccount` (rename, every family) on `MetaTxBase` | MT-7 (+ rename in NM-*) |
 | P5 | Node, clientkeys, encoders for the new ABI | MT-8, MT-9 |
@@ -49,7 +49,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
       `msg.sender` directly except the allowed spots; UA path split into `UAMetaTransaction`/`UAMetaTransfer` +
       `uaExecuteTransfer`/`uaBatchTransfer` (CTR-UA-26); KATs `metatx_kat.json`, `metatransfer_kat.json`, v3 pair.
 - [ ] **MT-3** `approve` only by contracts (caller and spender) — built in P1b on the v2 line; open: v1 line (P3/P5, E1); `mtxWrap` for a SCaaS underlying done in P2a (UnderlyingToken; `ZetherToken` in P3).
-- [~] **MT-4** (built in P1e for tokens and the token factory: both deploy scripts on CREATE2, gate on `chainUid()`; open for the other domains: SmartKeyAccount, MandateWallet P4, SCaaSDex P2, UA registry UA F1, Zether digests P3) `salt = chain_uid` in every domain (implementation immutables; SmartKeyAccount, MandateWallet, SCaaSDex,
+- [~] **MT-4** (built in P1e for tokens and the token factory: both deploy scripts on CREATE2, gate on `chainUid()`; open for the other domains: SmartKeyAccount, MandateWallet P4, UA registry UA F1, Zether digests P3) `salt = chain_uid` in every domain (implementation immutables; SmartKeyAccount, MandateWallet, SCaaSDex,
       UA registry, Zether digests); deploy scripts on a CREATE2 deployer; deploy gate checks `chainUid()`.
 
 - UA ledger split (CTR-UA-26: `UAMetaTransaction`/`UAMetaTransfer`, `uaExecuteTransfer`/`uaBatchTransfer`) moved from P1b to UA F1 (R4).
@@ -60,6 +60,8 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
 
 **P2 — MT-5**
 - P2a (done, merged `6a5c6b0`): `TradeLib` (`scaas.trade`) and the trade entries on every token, `mtxWrap` + `NativeNotGasless` on `UnderlyingToken` (D1 closed; a native wrap by `mtxExecute(wrap(…))` still reverts `NativeValueMismatch(0, amount)`); 855 tests. Plan `docs/superpowers/plans/2026-10-11-p2a-trade-token-side.md`. Open for P2b/P2c: the DEX side below. **F4 (owner): `NoUnderlyingToken` is 22,951 B, over its 20,480 B budget (ratchet baseline), `UnderlyingToken` 29,974 B: owner — code size is not a concern, the product waits for the Glamsterdam fork (larger code limit); the ratchet baseline records sizes.**
+- P2b-1 (done on branch `p2b-dex`, merge pending the final review): `SCaaSDex` clone (`scaas.dex`, salted domain `SCaaS Dex`; MT-4 domain done for the new DEX), `OpenFactory` DEX catalogue and `createDex`/`isDex`/`dexVersionOf`, deploy key `dex_implementation`, built DEX kept as `SCaaSDexV1`; 891 tests. Plan `docs/superpowers/plans/2026-10-11-p2b1-scaasdex-clone.md`. Open for P2b-2: `DexOrder` legs and the `DexPuller` (a market with an outside token lists but settles `OutsideLegNotBuilt`), DEX-side `mtxCancelOrders`/`mtxInvalidateNonces`, `checkOrder`, the CTR-DEX-08 ERC-1271 cap. Open for P2c: `mtxExchange`/`mtxExchangeVia`, `setExchangeTarget`, `setListedOnly` (stored, not read). `SCaaSDexV1` moves to `legacy/` at P5 (owner: backup, not delete).
+- P2b-2 note: mtxSettle try/catch turns SigCheckGasStarved into MatchFailed; CTR-DEX-08 wants the whole tx to revert — re-raise it (P2b-2).
 - P2 notes (from P1c, P1d): (2) Named `mtxTransfer` is +9 execution gas over `mtxExecuteTransfer` (33,681 vs 33,672): the row is logged, not asserted; `mtxPay` on a fresh lane is +2.6 k (the `PAYABLE` gate's cold SLOAD, C3). (3) The asset suite's inline per-transfer admin check (CTR-TOK-24) also needs NONE bytes: it competes with the size debt in F4.
 - [x] Rename `OrderBookDex` → `SCaaSDex` (owner 2026-10-09; EIP-712 domain name `SCaaS Dex`); git mv + docs + node names. (done 2026-10-09)
 - [~] **MT-5** DEX (P2a done: `TradeOrder` + `mtxTrade`/`mtxCancelOrder`/`mtxInvalidateNonces` in the tokens, `receiveToken == this` accepted, flag 4 not read by the token; open: P2b/P2c): `SCaaSDex.mtxSettle`

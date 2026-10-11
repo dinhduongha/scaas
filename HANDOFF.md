@@ -1,5 +1,31 @@
 # HANDOFF — scaas
 
+## Session 2026-10-11 (P2b-1)
+
+**State:** P2b-1 on branch `p2b-dex`, merge pending the final review (code `27b9e92`, plan `80303f9`). Plan
+`docs/superpowers/plans/2026-10-11-p2b1-scaasdex-clone.md`. 891 forge tests.
+
+**Built:** `src/dex/ISCaaSDex.sol`, `SCaaSDex.sol` (clone implementation, ERC-7201 `scaas.dex`, salted domain `("SCaaS
+Dex","1",chainId,clone,chain_uid)`): `mtxSettle` (one taker, many makers, each settlement a self-call `settleOne`),
+`setMarket(base, quote, listed)` classifying tokens from the factory, `setFeeSplit`, `LegSettled`/`MatchFailed`;
+`OpenFactory` DEX catalogue (`registerDexImplementation`, `dexImplementationOf`, `latestDexVersion`, `createDex`, `isDex`,
+`dexVersionOf`, events `DexImplementationRegistered`, `DexCreated`); `script/DeployBase.sol` deploys and registers the DEX
+implementation (JSON `dex_implementation`, no clone). Tests `test/v2/Dex.t.sol` (36). The built DEX is `SCaaSDexV1`
+(contract and its two test files renamed), still deployed for the node (`dex.rs`, `dex_kat.json`, `scaas_dex`) until P5.
+
+**Rulings G1–G7 (plan header).** **G1** P2b is split: P2b-1 SCaaS legs, P2b-2 outside legs, P2c exchange path; an
+outside-token market lists but settles `OutsideLegNotBuilt(token)`. **G2** `SCaaSDexV1` kept for the node until P5, then
+`legacy/` (owner: backup, not delete). **G3** Path A bounds are the token's; the DEX checks Path B on the matched part
+(`Overfill`, `BelowMinFill`, `PriceLimit`). **G4** arrangement checks `TokenMismatch`, `SelfTrade` (a maker's `from` =
+the taker's), `DuplicateOrder`, `WrongRelayer`, `DexMismatch`, `NoMakers`, `FillMismatch`. **G5** registry names with
+`dexVersionOf` (the token `versionOf` stays the token one); the implementation answers `factory()`/`chainUid()`. **G6**
+conservation on the settlement's two tokens, `LegSettled` per leg. **G7** scripts register the implementation, no clone.
+Sizes (owner: not a concern, waiting for Glamsterdam): `SCaaSDex` 9,574 B, `OpenFactory` 8,476 B, `SCaaSDexV1` 13,204 B.
+
+**Not done / next = P2b-2 plan:** outside-token legs (`DexOrder`, `DexPuller`), DEX-side `mtxCancelOrders` and
+`mtxInvalidateNonces`, `checkOrder`, the ERC-1271 cap; then P2c (exchange path, `setExchangeTarget`, `setListedOnly`). The
+spec's `FeeWouldStick` is not a named error in `SCaaSDex` (the split is validated at `setFeeSplit`/`initialize`).
+
 ## Session 2026-10-11 (P2a)
 
 **State:** P2a merged into `main` as `6a5c6b0` and pushed (code `a78d4d8`, fixes `341e3eb`, `a930c27`; plan `dbbaed5`). Plan `docs/superpowers/plans/2026-10-11-p2a-trade-token-side.md`. 855 forge tests.
@@ -22,7 +48,7 @@ UNDERLYING ≤ 30,720; `TradeLib` 3,104 B, `UnderlyingLib` 11,654 B. Optimise la
 entries live in `ERC20MetaTx`, so every kind on `MetaTokenBase` (NONE, UNDERLYING) has them; `ZetherToken` (on `ZetherMetaTx`) and v1 `MetaToken` have no `mtxTrade` (Zether in P3). `EscrowFillShape`, `NotDex`, `DexNotContract` are named by the spec; only the arguments of the last two were open. Fix commits: 341e3eb and the final-review wave.
 
 **Not done / next = P2b plan:** `SCaaSDex` as a clone, `createDex`, DEX registry, `mtxSettle` (Path A/B), `DexPuller`;
-the old `SCaaSDex` is kept as `SCaaSDexV1` for the node until P5. Then P2c (exchange path). `mtxWrap` on `ZetherToken`
+the old `SCaaSDex` is kept as `SCaaSDexV1` for the node until P5 (done in P2b-1 except `DexPuller`). Then P2c (exchange path). `mtxWrap` on `ZetherToken`
 comes with P3.
 
 ## Session 2026-10-11 (toolchain + chains)

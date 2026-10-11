@@ -10,7 +10,7 @@ import {noneInit} from "../v2/helpers/V2Fixture.sol";
 
 /// KATs of the token-side DEX structs (CTR-DEX-13, CTR-DEX-02) on a real token: `trade_kat.json` holds a
 /// `TradeOrder`, its `CancelOrder` and an `InvalidateNonces`, in the token domain "SCaaS MetaToken" of a
-/// `NoUnderlyingToken` clone on chain 7622 with its real `chain_uid`. (`dex_kat.json` stays the built `SCaaSDex`
+/// `NoUnderlyingToken` clone on chain 7622 with its real `chain_uid`. (`dex_kat.json` stays the built `SCaaSDexV1`
 /// `Order` vector the node reads.) `WRITE_KAT=true forge test --match-contract TradeKatTest` rewrites the file.
 contract TradeKatTest is Test {
     bytes32 internal constant UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;

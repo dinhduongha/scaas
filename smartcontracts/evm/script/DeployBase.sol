@@ -5,6 +5,7 @@ import {Script} from "forge-std/Script.sol";
 import {OpenFactory} from "../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../src/factory/IOpenFactory.sol";
 import {NoUnderlyingToken} from "../src/metatx/NoUnderlyingToken.sol";
+import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
 
 /// @title Shared deploy steps (CTR-GEN-05, CTR-GEN-06, NET-EVM-05): `chain_uid` from the RPC, the deterministic CREATE2
 ///        deployer, the token factory with its implementations, the `chainUid()` gate.
@@ -39,10 +40,10 @@ abstract contract DeployBase is Script {
         require(u != bytes32(0), "RPC gave no block 0 hash");
     }
 
-    /// @notice The token factory and the `NONE` implementation by CREATE2, `NONE` registered as version 1 when the
-    ///         deployer is the registrar; writes `token_factory`, `implementation_none`, `chain_uid` into the JSON
-    ///         object `"deploy"`. Transitional (P1d ruling D2): `UnderlyingToken` is over EIP-170 until the size work,
-    ///         so `UNDERLYING` is not deployed yet.
+    /// @notice The token factory, the `NONE` implementation and the `SCaaSDex` implementation by CREATE2, each
+    ///         registered as version 1 when the deployer is the registrar; writes `token_factory`,
+    ///         `implementation_none`, `dex_implementation`, `chain_uid` into the JSON object `"deploy"`. `UNDERLYING` is
+    ///         not deployed: over EIP-170 on real chains (owner: wait for Glamsterdam).
     function _deployTokenFactory(address registrar, bool register, address smartKeyAccountImpl, bool isHedera)
         internal returns (OpenFactory f)
     {
@@ -53,6 +54,11 @@ abstract contract DeployBase is Script {
         _gate(address(none));
         vm.serializeAddress("deploy", "token_factory", address(f));
         vm.serializeAddress("deploy", "implementation_none", address(none));
+        // The DEX implementation (CTR-DEX-24): clones come from `createDex`; registered as DEX version 1.
+        SCaaSDex dexImpl = new SCaaSDex{salt: salt}(address(f), uid);
+        if (register) f.registerDexImplementation(1, address(dexImpl));
+        _gate(address(dexImpl));
+        vm.serializeAddress("deploy", "dex_implementation", address(dexImpl));
         vm.serializeBytes32("deploy", "chain_uid", uid);
     }
 
