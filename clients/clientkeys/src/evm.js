@@ -1,4 +1,4 @@
-// EVM pieces: EIP-712 digests, addresses, SubjectAccount key/salt/CREATE2, Merkle batch.
+// EVM pieces: EIP-712 digests, addresses, SmartKeyAccount key/salt/CREATE2, Merkle batch.
 import {
   keccak_256, sha256, concatBytes, utf8ToBytes, bytesToHex, fromHex, hex, word, addressWord, abiEncode,
 } from './bytes.js';
@@ -47,7 +47,7 @@ export function hashTypedData(td) {
   ));
 }
 
-// ------------------------------------------------------------------ SubjectAccount
+// ------------------------------------------------------------------ SmartKeyAccount (CTR-ACC-01, CTR-ACC-02)
 
 export const KEY_P256_WEBAUTHN = 1;
 export const KEY_SECP256K1 = 2;
@@ -78,7 +78,7 @@ export function predictAccount(implementation, salt, factory) {
   return checksumAddress(hex(h.subarray(12)));
 }
 
-/** `abi.encode(keyIndex, proof, sig)` — what `SubjectAccount.isValidSignature` decodes (RS4-3). */
+/** `abi.encode(keyIndex, proof, sig)` — what `SmartKeyAccount.isValidSignature` decodes (CTR-ACC-02). */
 export function accountSignature(keyIndex, proof, inner) {
   return abiEncode(['uint256', 'bytes32[]', 'bytes'], [keyIndex, proof, inner]);
 }
@@ -122,8 +122,12 @@ export function processProof(proof, leaf) {
 
 const DOMAIN_TYPE = [{ name: 'name', type: 'string' }, { name: 'version', type: 'string' },
   { name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' }];
-const OWNER_CALL_TYPES = { EIP712Domain: DOMAIN_TYPE, OwnerCall: [{ name: 'data', type: 'bytes' },
-  { name: 'nonce', type: 'uint256' }, { name: 'validUntil', type: 'uint256' }] };
+// The salted domain of every contract on `MetaTxBase` (CTR-MTX-02, CLI-SGN-33) and its generic struct (CTR-MTX-15).
+const SALTED_DOMAIN_TYPE = [...DOMAIN_TYPE, { name: 'salt', type: 'bytes32' }];
+const MTX_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, MetaTransaction: ['from:address', 'data:bytes', 'batch:uint256',
+  'nonce:uint256', 'validUntil:uint256', 'mode:uint32', 'relayer:address', 'fee:uint256', 'feeRecipient:address']
+  .map((s) => ({ name: s.split(':')[0], type: s.split(':')[1] })) };
+const ZERO_ADDRESS = '0x' + '00'.repeat(20);
 const PAY_TYPES = { EIP712Domain: DOMAIN_TYPE, MetaTransaction: ['from:address', 'to:address', 'value:uint256',
   'data:bytes', 'batch:uint256', 'nonce:uint256', 'validUntil:uint256', 'mode:uint32', 'relayer:address', 'fee:uint256',
   'feeRecipient:address'].map((s) => ({ name: s.split(':')[0], type: s.split(':')[1] })) };
@@ -159,21 +163,34 @@ export function addKeyCalldata(key) {
   return concatBytes(ADD_KEY_SELECTOR, abiEncode([KEY_TUPLE], [key]));
 }
 
-export function ownerCallTypedData({ account, chainId, data, nonce, validUntil }) {
+/** A `MetaTransaction` (CTR-MTX-15) of the SCaaS contract `contract` in its salted domain `(name, "1", chainId,
+ *  contract, chainUid)`; unset fields are 0 (no relayer or fee binding, fee mode NONE). */
+export function metaTxTypedData({ name, contract, chainId, chainUid, message }) {
+  const m = { from: ZERO_ADDRESS, data: '0x', batch: '0', nonce: '0', validUntil: '0', mode: 0, relayer: ZERO_ADDRESS,
+    fee: '0', feeRecipient: ZERO_ADDRESS, ...message };
   return {
-    types: OWNER_CALL_TYPES, primaryType: 'OwnerCall',
-    domain: { name: 'SCaaS SubjectAccount', version: '1', chainId: Number(chainId), verifyingContract: account },
-    message: { data: hex(data), nonce: String(nonce), validUntil: String(validUntil) },
+    types: MTX_TYPES, primaryType: 'MetaTransaction',
+    domain: { name, version: '1', chainId: Number(chainId), verifyingContract: contract, salt: hex(fromHex(chainUid)) },
+    message: { ...m, data: typeof m.data === 'string' ? m.data : hex(m.data), batch: String(m.batch),
+      nonce: String(m.nonce), validUntil: String(m.validUntil), fee: String(m.fee) },
   };
 }
 
-/** The server's OwnerCall must be exactly `addKey(newKey)` on `account`/`chainId`; nonce and a
- *  near deadline come from the server. Returns the digest to sign, or throws. */
-export function checkOwnerCall(td, { account, chainId, newKey, now = Math.floor(Date.now() / 1000), maxWindow = 3600 }) {
+/** The account's own call (CTR-ACC-10): `MetaTransaction{from: account, data, batch: 0, nonce, validUntil}` in the
+ *  domain `SCaaS SmartKeyAccount`, exactly what `mtxExecuteAsOwner(data, nonce, validUntil, sig)` builds. */
+export function ownerCallTypedData({ account, chainId, chainUid, data, nonce, validUntil }) {
+  return metaTxTypedData({ name: 'SCaaS SmartKeyAccount', contract: account, chainId, chainUid,
+    message: { from: account, data, nonce, validUntil } });
+}
+
+/** The server's owner call must be exactly `addKey(newKey)` signed by `account` itself on lane 0, on `chainId` and the
+ *  signer's own pinned `chainUid` (a missing or different salt is refused, CLI-SGN-33); nonce and a near deadline come
+ *  from the server. Returns the digest to sign, or throws (CLI-SGN-05). */
+export function checkOwnerCall(td, { account, chainId, chainUid, newKey, now = Math.floor(Date.now() / 1000), maxWindow = 3600 }) {
   const m = (td && td.message) || {};
   const nonce = uint(m.nonce, 'the nonce');
   const until = deadline(m.validUntil, now, maxWindow);
-  const mine = digestOf(ownerCallTypedData({ account, chainId, data: addKeyCalldata(newKey), nonce, validUntil: until }));
+  const mine = digestOf(ownerCallTypedData({ account, chainId, chainUid, data: addKeyCalldata(newKey), nonce, validUntil: until }));
   if (hex(digestOf(td)) !== hex(mine)) refuse('this is not the key change you asked for');
   return mine;
 }

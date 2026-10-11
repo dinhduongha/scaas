@@ -1,4 +1,4 @@
-// WebAuthn (passkey) helpers for SubjectAccount (R31). Nothing secret: the private key never
+// WebAuthn (passkey) helpers for SmartKeyAccount (R31). Nothing secret: the private key never
 // leaves the authenticator; we only shape options and re-encode what it returns.
 import { abiEncode, fromHex, fromB64url } from './bytes.js';
 

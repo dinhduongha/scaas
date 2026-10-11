@@ -5,7 +5,7 @@ import { secp256k1 } from '@noble/curves/secp256k1.js';
 import {
   hashTypedData, secpSubjectKey, accountSalt, predictAccount, accountSignature, merkleBatch, processProof,
   batchLeaf, evmAddress, passkeySubjectKey, addKeyCalldata, ownerCallTypedData, checkOwnerCall, checkPayment,
-  keyProofMessage,
+  keyProofMessage, metaTxTypedData,
 } from '../src/evm.js';
 import { abiEncode, hex, fromHex, keccak_256, utf8ToBytes } from '../src/bytes.js';
 
@@ -31,18 +31,37 @@ test('EIP-712 digest of the typed data Odoo issues = MetaTx KAT (MetaTxKat.t.sol
   assert.equal(hex(hashTypedData(td)), k.digest);
 });
 
-test('OwnerCall typed data (as Odoo issues it) hashes to the digest pinned in SubjectAccount.t.sol', () => {
-  const td = {
-    types: {
-      EIP712Domain: [{ name: 'name', type: 'string' }, { name: 'version', type: 'string' },
-        { name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' }],
-      OwnerCall: [{ name: 'data', type: 'bytes' }, { name: 'nonce', type: 'uint256' }, { name: 'validUntil', type: 'uint256' }],
-    },
-    primaryType: 'OwnerCall',
-    domain: { name: 'SCaaS SubjectAccount', version: '1', chainId: 31337, verifyingContract: '0x' + '00'.repeat(18) + 'acc0' },
-    message: { data: '0x1234', nonce: '3', validUntil: '1800000000' },
-  };
-  assert.equal(hex(hashTypedData(td)), '0xcb4f8a0d408df2dc182b5e27404206cffebb38f25930b952979fb368425931e6');
+test('SmartKeyAccount owner call = forge KAT (AccountKat.t.sol, smart_key_account_kat.json)', () => {
+  const k = read('smart_key_account_kat.json');
+  assert.equal(hex(addKeyCalldata(secpSubjectKey('0x' + '77'.repeat(20)))), k.data);
+  const td = ownerCallTypedData({ account: k.verifying_contract, chainId: Number(k.chain_id), chainUid: k.salt,
+    data: k.data, nonce: k.nonce, validUntil: k.valid_until });
+  assert.equal(hex(hashTypedData(td)), k.digest);
+  assert.equal(hex(checkOwnerCall(td, { account: k.verifying_contract, chainId: 7622, chainUid: k.salt,
+    newKey: secpSubjectKey('0x' + '77'.repeat(20)), now: 1_800_000_000 })), k.digest);
+  // the account encoding of the seed key's ECDSA signature (key index 0, no batch proof)
+  const sig = fromHex(k.signature).subarray(160, 225);
+  assert.equal(hex(accountSignature(0, [], sig)), k.signature);
+  const r = secp256k1.Signature.fromBytes(sig.subarray(0, 64), 'compact').addRecoveryBit(sig[64] - 27);
+  assert.equal(evmAddress(r.recoverPublicKey(fromHex(k.digest)).toBytes(false)), k.signer_key);
+});
+
+test('MandateWallet pay and revoke = forge KATs (mandate_pay_kat.json, mandate_revoke_kat.json)', () => {
+  for (const f of ['mandate_pay_kat.json', 'mandate_revoke_kat.json']) {
+    const k = read(f);
+    const td = metaTxTypedData({ name: k.domain_name, contract: k.verifying_contract, chainId: Number(k.chain_id),
+      chainUid: k.salt, message: { from: k.from, data: k.data, batch: k.batch, nonce: k.nonce, validUntil: k.valid_until } });
+    assert.equal(hex(hashTypedData(td)), k.digest, f);
+  }
+  // the derived lanes: keccak256("scaas.mandate.pay" ‖ entryRef), keccak256("scaas.mandate.revoke" ‖ token ‖ uint64 epoch)
+  const pay = read('mandate_pay_kat.json');
+  const ref = fromHex(pay.data).subarray(100, 132);
+  assert.equal(BigInt(hex(keccak_256(new Uint8Array([...utf8ToBytes('scaas.mandate.pay'), ...ref])))), BigInt(pay.batch));
+  const rev = read('mandate_revoke_kat.json');
+  const token = fromHex(rev.data).subarray(16, 36);
+  const epoch = new Uint8Array(8); epoch[7] = 1;
+  assert.equal(BigInt(hex(keccak_256(new Uint8Array([...utf8ToBytes('scaas.mandate.revoke'), ...token, ...epoch])))),
+    BigInt(rev.batch));
 });
 
 test('passkey keyId = keccak(abi.encode(SubjectKey)) as cast computes it', async () => {
@@ -54,8 +73,8 @@ test('passkey keyId = keccak(abi.encode(SubjectKey)) as cast computes it', async
   assert.equal(hex(keyId(key)), '0xe01e0b8f122754973202cd330eb728c9d9b19f4f31bbe7e33d012e745be6f631');
 });
 
-test('SubjectAccount CREATE2: salt and clone address match the forge-pinned vector', () => {
-  const v = read('subject_account_create2.json');
+test('SmartKeyAccount CREATE2: salt and clone address match the forge-pinned vector', () => {
+  const v = read('smart_key_account_create2.json');
   const addr = evmAddress(secp256k1.getPublicKey(fromHex(v.seedPrivateKey.slice(2).padStart(64, '0')), false));
   const salt = accountSalt(secpSubjectKey(addr), v.guardian);
   assert.equal(hex(salt), v.salt);
@@ -90,49 +109,59 @@ const ACCOUNT = '0x' + 'ac'.repeat(20);
 const NOW = 1_800_000_000;
 const NEW_KEY = secpSubjectKey('0x' + '77'.repeat(20));
 
-/** OwnerCall exactly as Odoo `_owner_call_typed_data` issues it. */
-function odooOwnerCall(data, { account = ACCOUNT, chainId = 31337, nonce = '2', validUntil = String(NOW + 600) } = {}) {
-  return {
-    types: {
-      EIP712Domain: [{ name: 'name', type: 'string' }, { name: 'version', type: 'string' },
-        { name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' }],
-      OwnerCall: [{ name: 'data', type: 'bytes' }, { name: 'nonce', type: 'uint256' }, { name: 'validUntil', type: 'uint256' }],
-    },
-    primaryType: 'OwnerCall',
-    domain: { name: 'SCaaS SubjectAccount', version: '1', chainId, verifyingContract: account },
-    message: { data: hex(data), nonce, validUntil },
-  };
+const UID = '0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464';   // chain 7622 (chain-uids.json)
+
+/** The account's owner call as a server issues it: a `MetaTransaction` in the salted `SCaaS SmartKeyAccount` domain. */
+function serverOwnerCall(data, { account = ACCOUNT, chainId = 7622, salt = UID, nonce = '2', validUntil = String(NOW + 600),
+  ...over } = {}) {
+  const td = metaTxTypedData({ name: 'SCaaS SmartKeyAccount', contract: account, chainId, chainUid: salt,
+    message: { from: account, data, nonce, validUntil, ...over } });
+  td.message.nonce = nonce;
+  return td;
 }
 
-test('OwnerCall: the client signs only addKey(the key it just made) on its own account', () => {
-  const want = { account: ACCOUNT, chainId: 31337, newKey: NEW_KEY, now: NOW };
-  const td = odooOwnerCall(addKeyCalldata(NEW_KEY));
+test('owner call: the client signs only addKey(the key it just made) as its own account, on its chain', () => {
+  const want = { account: ACCOUNT, chainId: 7622, chainUid: UID, newKey: NEW_KEY, now: NOW };
+  const td = serverOwnerCall(addKeyCalldata(NEW_KEY));
   assert.equal(hex(checkOwnerCall(td, want)), hex(hashTypedData(td)));
-  assert.equal(hex(hashTypedData(ownerCallTypedData({ account: ACCOUNT, chainId: 31337, data: addKeyCalldata(NEW_KEY),
-    nonce: '2', validUntil: String(NOW + 600) }))), hex(hashTypedData(td)));
+  assert.equal(hex(hashTypedData(ownerCallTypedData({ account: ACCOUNT, chainId: 7622, chainUid: UID,
+    data: addKeyCalldata(NEW_KEY), nonce: '2', validUntil: String(NOW + 600) }))), hex(hashTypedData(td)));
   // addKey(abi.encode(key)): selector of addKey((uint8,bytes32,bytes32,bytes32,bytes32)) + 5 words.
   assert.equal(hex(addKeyCalldata(NEW_KEY).subarray(0, 4)),
     hex(keccak_256(utf8ToBytes('addKey((uint8,bytes32,bytes32,bytes32,bytes32))')).subarray(0, 4)));
   const drain = concatSel('execute(address,uint256,bytes)');
+  const unsalted = serverOwnerCall(addKeyCalldata(NEW_KEY));
+  unsalted.types = { ...unsalted.types, EIP712Domain: unsalted.types.EIP712Domain.slice(0, 4) };
+  delete unsalted.domain.salt;
+  const oldShape = serverOwnerCall(addKeyCalldata(NEW_KEY));
+  oldShape.domain.name = 'SCaaS SubjectAccount';
   const refused = [
-    odooOwnerCall(drain),                                                      // any other call
-    odooOwnerCall(addKeyCalldata(secpSubjectKey('0x' + '66'.repeat(20)))),     // someone else's key
-    odooOwnerCall(addKeyCalldata(NEW_KEY), { account: '0x' + 'bd'.repeat(20) }),
-    odooOwnerCall(addKeyCalldata(NEW_KEY), { chainId: 1 }),
-    odooOwnerCall(addKeyCalldata(NEW_KEY), { validUntil: String(NOW - 1) }),
-    odooOwnerCall(addKeyCalldata(NEW_KEY), { validUntil: String(NOW + 7200) }),
-    odooOwnerCall(addKeyCalldata(NEW_KEY), { nonce: '-1' }),
-    { ...odooOwnerCall(addKeyCalldata(NEW_KEY)), primaryType: 'MetaTransaction' },
+    serverOwnerCall(drain),                                                      // any other call
+    serverOwnerCall(addKeyCalldata(secpSubjectKey('0x' + '66'.repeat(20)))),     // someone else's key
+    serverOwnerCall(addKeyCalldata(NEW_KEY), { account: '0x' + 'bd'.repeat(20) }),
+    serverOwnerCall(addKeyCalldata(NEW_KEY), { from: '0x' + 'bd'.repeat(20) }),  // signed as another party
+    serverOwnerCall(addKeyCalldata(NEW_KEY), { chainId: 1 }),
+    serverOwnerCall(addKeyCalldata(NEW_KEY), { salt: '0x' + '11'.repeat(32) }),  // another chain_uid
+    unsalted,                                                                    // no salt (CLI-SGN-33)
+    oldShape,                                                                    // the built domain name
+    serverOwnerCall(addKeyCalldata(NEW_KEY), { batch: '1' }),
+    serverOwnerCall(addKeyCalldata(NEW_KEY), { mode: 1, relayer: '0x' + '02'.repeat(20) }),
+    serverOwnerCall(addKeyCalldata(NEW_KEY), { fee: '1' }),
+    serverOwnerCall(addKeyCalldata(NEW_KEY), { validUntil: String(NOW - 1) }),
+    serverOwnerCall(addKeyCalldata(NEW_KEY), { validUntil: String(NOW + 7200) }),
+    serverOwnerCall(addKeyCalldata(NEW_KEY), { nonce: '-1' }),
+    { ...serverOwnerCall(addKeyCalldata(NEW_KEY)), primaryType: 'OwnerCall' },
   ];
-  const extra = odooOwnerCall(addKeyCalldata(NEW_KEY));
-  extra.types.OwnerCall.push({ name: 'value', type: 'uint256' });
+  const extra = serverOwnerCall(addKeyCalldata(NEW_KEY));
+  extra.types = { ...extra.types, MetaTransaction: [...extra.types.MetaTransaction, { name: 'value', type: 'uint256' }] };
   extra.message.value = '1';
   refused.push(extra);
   for (const [i, bad] of refused.entries()) assert.throws(() => checkOwnerCall(bad, want), /Refusing to sign/, `case ${i}`);
+  assert.throws(() => checkOwnerCall(td, { ...want, chainUid: '0x' + '11'.repeat(32) }), /Refusing to sign/);
   // A passkey key is rebuilt from the server's rpId/origin and the coordinates the device returned.
   const pk = passkeySubjectKey({ x: new Uint8Array(32).fill(1), y: new Uint8Array(32).fill(2), rpId: 'pay.example.com',
     origin: 'https://pay.example.com' });
-  checkOwnerCall(odooOwnerCall(addKeyCalldata(pk)), { ...want, newKey: pk });
+  checkOwnerCall(serverOwnerCall(addKeyCalldata(pk)), { ...want, newKey: pk });
 });
 
 function concatSel(sig) {
@@ -171,7 +200,7 @@ test('payment: the client signs only a pay of the amount it showed, from its own
   checkPayment(odooPayment({ value: '125000000000' }), { ...intent, amount: 125000 });
   checkPayment(odooPayment({ mode: 0, relayer: '0x' + '00'.repeat(20) }), intent);
   const refused = [
-    odooOwnerCall(addKeyCalldata(NEW_KEY)),                       // an owner call disguised as a payment
+    serverOwnerCall(addKeyCalldata(NEW_KEY)),                     // an owner call disguised as a payment
     odooPayment({ value: '125000500001' }),                       // more than shown
     odooPayment({ from: '0x' + 'bd'.repeat(20) }),
     odooPayment({ data: hex(concatSel('trade(address,uint256,address)')) }),
