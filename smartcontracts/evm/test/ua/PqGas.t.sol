@@ -3,6 +3,8 @@ pragma solidity ^0.8.24;
 
 import {Test, console2} from "forge-std/Test.sol";
 import {SlhDsaSha2128s, UASlhdsaVerifier} from "../../src/ua/SlhDsa.sol";
+import {Shake} from "../../src/ua/Shake.sol";
+import {UAFndsaVerifier} from "../../src/ua/FnDsa.sol";
 
 /// SLH-DSA with every hypertree layer's WOTS+ message forced to 0: 510 chain steps per layer, the most work any input
 /// can force (a valid signature reaching it needs seven 2^-128 events). Same code as `verify` otherwise.
@@ -23,6 +25,13 @@ contract SlhWorstCase {
             }
             node = SlhDsaSha2128s.xmssPk(sig, SlhDsaSha2128s.HT_OFF + j * SlhDsaSha2128s.XMSS_LEN, 0, j, idxTree, idxLeaf, b, t);
         }
+    }
+}
+
+contract Permuter {
+    function run(uint256 n) external pure {
+        Shake.reserve();
+        for (uint256 i; i < n; ++i) Shake.permute();
     }
 }
 
@@ -60,5 +69,19 @@ contract PqGasTest is Test {
         console2.log("slhdsa128s worst case (510 steps x 7 layers)", worst);
         assertLt(valid, worst);
         assertLt(worst, 1_460_000, "SLH-DSA gas gate: the worst case stays far inside 6,000,000");
+    }
+
+    function test_gas_fndsa() public {
+        Permuter p = new Permuter();
+        uint256 g0 = gasleft();
+        p.run(1);
+        uint256 g1 = gasleft();
+        p.run(11);
+        uint256 perm = ((g1 - gasleft()) - (g0 - g1)) / 10;
+        uint256 fn = _one(_kat(), "fndsa512", address(new UAFndsaVerifier()));
+        console2.log("keccak-f[1600] permutation", perm);
+        console2.log("fndsa512 verify (valid)", fn);
+        assertLt(perm, 73_000);
+        assertLt(fn, 2_500_000);
     }
 }
