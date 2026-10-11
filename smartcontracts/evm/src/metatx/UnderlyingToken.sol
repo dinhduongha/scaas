@@ -71,6 +71,19 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
         emit ReserveAdded(from, u, UnderlyingLib.addReserve(UnderlyingLib.indexOf(u), amount, from, msg.value));
     }
 
+    /// @notice Signature wrap of a SCaaS underlying (CTR-TOK-20): mints `minted − fee` to `o.destination` (or
+    ///         `o.from`) and `fee` to the submitter. Not allowlisted: a direct read of the caller (the submitter).
+    function mtxWrap(address u, TradeOrder calldata o, bytes calldata sig)
+        external nonReentrant returns (uint256 minted)
+    {
+        uint256 received;
+        uint256 fee;
+        (received, minted, fee) = UnderlyingLib.wrapBySig(u, o, sig, msg.sender);
+        _mint(o.destination == address(0) ? o.from : o.destination, minted - fee);
+        if (fee != 0) _mint(msg.sender, fee);
+        emit Wrapped(o.from, u, received, minted);
+    }
+
     function _wrap(uint256 i, uint256 amount) private returns (uint256 minted) {
         address account = _msgSender();
         (address u, uint256 received, uint256 m) = UnderlyingLib.wrap(i, amount, account, msg.value);

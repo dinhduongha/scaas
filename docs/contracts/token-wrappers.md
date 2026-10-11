@@ -229,7 +229,7 @@ no standard wrapped native token. `underlying = address(0)` in a `Leg` is the na
   native underlying; `underlying()` of a one-leg native token therefore returns `address(0)` too, and clients read
   `underlyings()`. Libraries and size budget: [CTR-TOK-24](#CTR-TOK-24).
 
-**Transitional (BUILT, P1d).** The native leg is built, with `NativeValueMismatch(value, expected)` for `msg.value ≠ amount` (and `≠ 0` on an ERC-20 leg), 8 decimals on Hedera; `mtxWrap` and `NativeNotGasless` come with P2 (controller ruling, pending the owner): a native wrap through `mtxExecute(wrap(…))` reverts `NativeValueMismatch(0, amount)`.
+**Transitional (BUILT, P1d).** The native leg is built, with `NativeValueMismatch(value, expected)` for `msg.value ≠ amount` (and `≠ 0` on an ERC-20 leg), 8 decimals on Hedera; `mtxWrap` and `NativeNotGasless` followed in P2a (CTR-TOK-20); `mtxExecute(wrap(…))` on a native leg still reverts `NativeValueMismatch(0, amount)` (tested in `NativeLeg.t`).
 
 #### 2.2.1 More than one leg
 
@@ -454,28 +454,27 @@ cannot approve anything ([CTR-TOK-01](#CTR-TOK-01)) and wraps by signature:
 <a id="CTR-TOK-20"></a>**CTR-TOK-20** — **Signature wrap of a SCaaS underlying** (owner). The holder signs a
 `TradeOrder` ([CTR-DEX-13](dex.md#CTR-DEX-13)) in the **underlying's** domain with `dex` = the wrapper, `receiveToken`
 = the wrapper, `receiveAmount` = the minimum it accepts to receive (its `minOut`), `minFill = amount`, `fee` = the
-relayer's rate. (P2, controller ruling, pending the owner: not on the built `UnderlyingToken`.) `UnderlyingToken` and `ZetherToken` expose
+relayer's rate. **BUILT (P2a) on `UnderlyingToken`**; `ZetherToken` gets it with P3. `UnderlyingToken` exposes
 
 ```solidity
 function mtxWrap(address underlying, TradeOrder calldata o, bytes calldata sig) external nonReentrant returns (uint256 minted);
 ```
 
-1. resolve the leg: `_legOf(underlying)` (UnderlyingToken; Zether: `underlying == this.underlying()`), which refuses an
-   unknown "underlying" whose `mtxTrade` could be a no-op (`UnderlyingInvalid`); require `wrapEnabled`, no pending
+1. `address(0)` ⇒ `NativeNotGasless()` (checked first); resolve the leg: `_legOf(underlying)` (UnderlyingToken; Zether: `underlying == this.underlying()`), which refuses an
+   unknown "underlying" whose `mtxTrade` could be a no-op (built: `UnknownUnderlying(u)`, controller ruling, pending the owner); require `wrapEnabled`, no pending
    rate change and no reserve shortfall;
-2. require `o.receiveToken == address(this)` and `o.relayer == 0 || o.relayer == msg.sender`;
+2. require `o.receiveToken == address(this)` (`WrapOrderInvalid`); the relayer binding is the underlying's (`submitter` = `msg.sender`, `WrongRelayer`; controller ruling, pending the owner: the wrapper does not repeat it); `o.receiveAmount` is gross, the holder receives `minted − wrapFee`;
 3. quote `minted = ⌊o.amount · num / den⌋` (Zether: `o.amount`, 1:1) and `wrapFee = ⌈minted · o.fee / 10⁶⌉`
    ([CTR-DEX-11](dex.md#CTR-DEX-11) rounding; `fee = 0` ⇒ 0);
 4. call `underlying.mtxTrade(o, sig, TradeFill(o.amount, minted, wrapFee, msg.sender))` — the underlying checks the
    signature, that the wrapper is `o.dex`, the price `amount·receiveAmount ≤ minted·amount` and the fee bound, and moves
    the funds **only into the wrapper** ([CTR-DEX-15](dex.md#CTR-DEX-15));
-5. require `received == o.amount` (balance delta, as the direct wrap; else `WrapReceivedMismatch(expected,
-   received)`), record the reserve, mint `minted − wrapFee` to `destination` (or `from`) and `wrapFee` to `msg.sender`,
+5. require `received == o.amount` (balance delta, as the direct wrap; else `WrapReceivedMismatch(expected, received)`), record the reserve, mint `minted − wrapFee` to `destination` (or `from`) and `wrapFee` to `msg.sender`,
    the submitting relayer — the order's `fee` is how a gasless wrap pays its relayer.
 
 No allowance; only the named wrapper can pull, and only at the signed minimum. The call to the underlying is a wrap
 talking to its underlying, as the direct wrap's pull is, not the meta-tx pipeline calling out. `mtxWrap` is not
-allowlisted (`msg.sender` must be a contract other than the token); the node runs it as a metatx-job entry point.
+allowlisted, so never a self-call; the submitter may be any address, an EOA relayer included; the node runs it as a metatx-job entry point.
 Clients refuse by default to build or sign such an order when `dex` is not a registered wrapper of that underlying
 ([CTR-DEX-19](dex.md#CTR-DEX-19)).
 
@@ -763,8 +762,9 @@ function collateralValue() external view returns (uint256);                  // 
 function wrap(address underlying, uint256 amount) external payable returns (uint256 minted);
 function unwrap(address underlying, uint256 wrapped, address recipient, uint256 minOut)
     external returns (uint256 out, uint256 burned);
+function mtxWrap(address underlying, TradeOrder calldata o, bytes calldata sig) external returns (uint256 minted);  // CTR-TOK-20
 function disableWrap(address underlying, bytes32 reason) external;           // guardian, one-way
-// errors: WrapPausedForRateChange(address), UnwrapBelowMin(uint256 out, uint256 minOut), UnwrapRecipientInvalid(address)
+// errors: WrapPausedForRateChange(address), UnwrapBelowMin(uint256 out, uint256 minOut), UnwrapRecipientInvalid(address), NativeNotGasless(), WrapOrderInvalid(address), WrapReceivedMismatch(uint256,uint256)
 ```
 
 | Contract | Events | Errors |
@@ -773,7 +773,7 @@ function disableWrap(address underlying, bytes32 reason) external;           // 
 | `MetaTokenBase` | `PaymentSettled` | `PayToZero()`, `MtxModeShape(uint32 mode)`, `MtxBatchEmpty()`, `MtxBatchLengthMismatch()`, `NotFactory()`, `AlreadyInitialized()`, `UnderlyingCountInvalid(uint256)` |
 | `ITokenAdmin` (on `MetaTokenBase`) | `RoleGranted`, `RoleRevoked`, `FeatureDisabled`, `OwnershipTransferStarted`, `OwnershipTransferred` | `FeatureInvalidForKind`, `FeatureNotBuilt`, `LockedNotSubset`, `RoleWithoutFeature`, `RoleNotContract`, `NoSuchRole`, `FeatureLocked`, `FeatureNotSet`, `NotOwner`, `NotPendingOwner`, `MissingRole`, `RoleAccountZero(uint8)` |
 | `NoUnderlyingToken` | — (no `MinterRenounced`) | — (no `NotMinter`) |
-| `UnderlyingToken` (events and errors declared in `IUnderlyingToken`) | `Wrapped(address indexed account, address indexed underlying, uint256 underlyingIn, uint256 minted)`, `Unwrapped(address indexed account, address indexed underlying, address recipient, uint256 burned, uint256 underlyingOut)`, `ReserveAdded(address indexed from, address indexed underlying, uint256 amount)`, `RateChangeProposed(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen, uint64 eta)`, `RateChangeCancelled(address indexed underlying)`, `RateChanged(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen)`, `WrapDisabled(address indexed underlying, address indexed guardian, bytes32 reason)` | `UnderlyingInvalid(address)`, `DecimalsUnreadable(address)`, `RateInvalid(uint256,uint256)`, `RateConfigInvalid()`, `WrapTooSmall()`, `UnwrapTooSmall()`, `UnwrapBelowMin(uint256 out, uint256 minOut)`, `UnwrapRecipientInvalid(address)`, `InsufficientReserve(address,uint256,uint256)`, `ReserveShortfall(address,uint256,uint256)`, `UnderlyingTransferMismatch(address,uint256,uint256)`, `UnknownUnderlying(address)`, `RateFixed()`, `NotRateAdmin()`, `RateChangePending()`, `NoRateChangePending()`, `RateChangeNotReady(uint64)`, `RateChangeExpired(uint64)`, `RateStepTooLarge()`, `RateChangeUndercollateralized(uint256,uint256)`, `WrapPausedForRateChange(address)`, `WrapDisabledFor(address)`, `DuplicateUnderlying(address)`, `RateDecreaseWithDisabledLeg()`, `UnderlyingRequired()`, `NotGuardian()`, `NativeValueMismatch(uint256 value, uint256 expected)`, `FailedCall()`, `SafeERC20FailedOperation(address)`, `InsufficientBalance(uint256,uint256)`, `HtsQueryFailed(address u, int64 responseCode)`, `AssociateFailed(int64)` |
+| `UnderlyingToken` (events and errors declared in `IUnderlyingToken`) | `Wrapped(address indexed account, address indexed underlying, uint256 underlyingIn, uint256 minted)`, `Unwrapped(address indexed account, address indexed underlying, address recipient, uint256 burned, uint256 underlyingOut)`, `ReserveAdded(address indexed from, address indexed underlying, uint256 amount)`, `RateChangeProposed(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen, uint64 eta)`, `RateChangeCancelled(address indexed underlying)`, `RateChanged(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen)`, `WrapDisabled(address indexed underlying, address indexed guardian, bytes32 reason)` | `UnderlyingInvalid(address)`, `DecimalsUnreadable(address)`, `RateInvalid(uint256,uint256)`, `RateConfigInvalid()`, `WrapTooSmall()`, `UnwrapTooSmall()`, `UnwrapBelowMin(uint256 out, uint256 minOut)`, `UnwrapRecipientInvalid(address)`, `InsufficientReserve(address,uint256,uint256)`, `ReserveShortfall(address,uint256,uint256)`, `UnderlyingTransferMismatch(address,uint256,uint256)`, `UnknownUnderlying(address)`, `RateFixed()`, `NotRateAdmin()`, `RateChangePending()`, `NoRateChangePending()`, `RateChangeNotReady(uint64)`, `RateChangeExpired(uint64)`, `RateStepTooLarge()`, `RateChangeUndercollateralized(uint256,uint256)`, `WrapPausedForRateChange(address)`, `WrapDisabledFor(address)`, `DuplicateUnderlying(address)`, `RateDecreaseWithDisabledLeg()`, `UnderlyingRequired()`, `NotGuardian()`, `NativeValueMismatch(uint256 value, uint256 expected)`, `NativeNotGasless()`, `WrapOrderInvalid(address)`, `WrapReceivedMismatch(uint256,uint256)`, `FailedCall()`, `SafeERC20FailedOperation(address)`, `InsufficientBalance(uint256,uint256)`, `HtsQueryFailed(address u, int64 responseCode)`, `AssociateFailed(int64)` |
 | `OpenFactory` | `TokenCreated(…)` ([CTR-TOK-25](#CTR-TOK-25)); built; the v1 factory keeps `TokenDeployed(…)` (Zether) | as [above](#factory-interface) |
 
 The node's event normaliser adds `Wrapped`, `Unwrapped`, `ReserveAdded`, `RateChange*`, `WrapDisabled`,
@@ -788,9 +788,9 @@ each library ≤ 24,576 B.
 
 | Library | Content | Kinds |
 |---|---|---|
-| `TradeLib` | `TradeOrder` checks, `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces`, the token side of fills | all |
+| `TradeLib` (built, 3,104 B) | `TradeOrder` checks, `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces`, the token side of fills; `scaas.trade` | all |
 | `AdminLib` | flag validation, roles, owner, `disableFeature` (built, 3,406 B); later freeze / force / pause / allowlist | all |
-| `UnderlyingLib` (built, 10,096 B) | legs; the core of wrap and unwrap **without a destination** (pull, rate, reserve; pay out); rate changes with timelock; `disableWrap`; the reserve invariant | `UNDERLYING*` |
+| `UnderlyingLib` (built, 11,654 B) | legs; the core of wrap and unwrap **without a destination** (pull, rate, reserve; pay out); rate changes with timelock; `disableWrap`; the reserve invariant | `UNDERLYING*` |
 | `ZetherLib` | statements, verifier calls, account updates, roll-over, shield / unshield, disclosure entries | `*_ZETHER` |
 | `HederaLib` | HIP-632 signature path (`requireValid`, public view, linked; 753 B), HTS associate | all (branch on `IS_HEDERA`, [CTR-TOK-23](#CTR-TOK-23)) |
 
@@ -806,9 +806,9 @@ each library ≤ 24,576 B.
   contract exceeds its budget. **Transitional (BUILT, P1e):** `scripts/size_gate.py` runs in CI over
   `forge build src --sizes --json` as a ratchet (controller ruling, pending the owner): token implementations ≤ 20,480 B,
   other contracts ≤ 24,576 B, init code ≤ 49,152 B, and a contract named in `smartcontracts/evm/size-baseline.json`
-  may exceed its limit but never its recorded size (`UnderlyingToken` 26,449 B, `ZetherToken` 28,849 B; owner: optimise
-  later); the baseline does not tighten itself, so a smaller contract's entry is lowered by hand.
-  `NoUnderlyingToken` is 20,196 B (284 B left: P2 must find room).
+  may exceed its limit but never its recorded size (`NoUnderlyingToken` 22,951 B, `UnderlyingToken` 29,974 B, `ZetherToken` 28,860 B; owner decision 2026-10-11: optimise
+  later, wait for the Glamsterdam fork, code size is not a concern); the baseline does not tighten itself, so a smaller contract's entry is lowered by hand.
+  **Flag:** with P2a `NoUnderlyingToken` is over its 20,480 B budget (still under EIP-170).
 
 **Transitional (BUILT, P1d).** `MetaTokenBase` state is in `scaas.token`, the legs in `scaas.underlying`
 (`0x38d6f7ed…cd1000`); the rest is OpenZeppelin ERC-20 slots 0–4 only.
@@ -900,7 +900,7 @@ Unit (forge, `test/v2/`):
 |---|---|
 | Base | both typehashes pinned (`test_metaTxTypehashIsPinned`, `test_metaTransferTypehashIsPinned`, [CTR-MTX-15](metatx.md#CTR-MTX-15)); salted-domain KATs `test/vectors/metatx_kat.json` (v3 `MetaTransaction`, `MetaTxBase`; the built v1 struct is `metatx_v1_kat.json`, read by scaas-node and clientkeys until P5) and `metatransfer_kat.json` plus an `mtxpay` vector with `batch = payLane(payId)`, `nonce = 0` and `mtxExecute` calldata vectors per allowlisted selector, all checked by Solidity, node and the client library (its lane derivation already equals `payLane`); `MetaNonceCancelled`; the allowance rule on every kind (EOA caller and EOA spender of `approve` refused); ERC-1271 400 k only for `SmartKeyAccount` clones; `chainUid()` equals the implementation's; the factory refuses an implementation with another `chainUid()` |
 | Fees | percent on the basis, fee on top, 1 % cap on transfer, payment and `AMOUNT` selectors; `ABSOLUTE` selectors uncapped and `PERCENT` refused; `FeeRecipientIsPayee` for transfer, `pay`, `payWithFee`, bound and relayer-default |
-| Gasless unwrap and wrap | `mtxExecute(unwrap(…))`: fee in wrapped units after the call; `UnwrapRecipientInvalid` for 0 and `address(this)`; `UnwrapBelowMin`; underlying revert (blacklist mock) reverts fee and nonce; sender-pays fee-on-transfer ⇒ `UnderlyingTransferMismatch`; ERC-777 mock whose hook re-enters (`cancelNonce`, `transfer`) mid-unwrap ⇒ `Reentrancy`; not allowlisted on tier 1; works on a disabled leg and during a pending rate change. `mtxExecute(wrap(…))` pays its fee from minted units. `mtxWrap` on Zether (`UnderlyingToken`: P2): price, minimum, fee to the relayer, `WrapReceivedMismatch`, unknown underlying refused |
+| Gasless unwrap and wrap | `mtxExecute(unwrap(…))`: fee in wrapped units after the call; `UnwrapRecipientInvalid` for 0 and `address(this)`; `UnwrapBelowMin`; underlying revert (blacklist mock) reverts fee and nonce; sender-pays fee-on-transfer ⇒ `UnderlyingTransferMismatch`; ERC-777 mock whose hook re-enters (`cancelNonce`, `transfer`) mid-unwrap ⇒ `Reentrancy`; not allowlisted on tier 1; works on a disabled leg and during a pending rate change. `mtxExecute(wrap(…))` pays its fee from minted units. `mtxWrap` on `UnderlyingToken` (built, P2a; Zether: P3): price, minimum, fee to the relayer, `WrapReceivedMismatch`, unknown underlying refused |
 | Named | `testFuzz_namedDigestEqualsGeneric` over random struct fields for every named function; a signature consumed by a named call fails on the generic path and vice versa; every `MtxModeShape` case; a no-fee struct signed with a leftover `fee ≠ 0` fails through `mtxTransfer`; `mtxPay` lane equals `payLane`; second `mtxPay` of a `payId` reverts `MetaTxBadNonce`; `payWithFee` with the same `entryRef` still emits `PaymentSettled` (documents the per-path limit); `mtxBatch` atomic (one bad item reverts all), length mismatch, empty |
 | `NONE` | init mint to `initialHolder`; `mint` with `MINTABLE` and `MissingRole`; `burn` with `BURNABLE`; fixed supply without `MINTABLE`; `disableFeature(MINTABLE)` |
 | `UNDERLYING`, one leg | rate 1:1 equals the removed v1 wrapper's behaviour; rounding down on wrap/unwrap; `burned = ⌈out·q⌉`; `previewWrap` `used`; `WrapTooSmall`/`UnwrapTooSmall`/`UnwrapBelowMin`; two-argument `unwrap` = `minOut 0`; fee-on-transfer inbound measured; sender-pays fee-on-transfer reverts `UnderlyingTransferMismatch`; donation not counted; `ReserveShortfall` after a negative-rebase mock stops wrap and not unwrap; `addReserve`; decimals snapshot; init refusals |

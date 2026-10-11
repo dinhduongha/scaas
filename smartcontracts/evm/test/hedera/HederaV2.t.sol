@@ -52,9 +52,9 @@ contract HederaV2Test is Test {
     }
 
     function test_implementationSizes() public view {
-        assertLe(f.implementationOf(IOpenFactory.TokenKind.NONE, 1).code.length, 20_480); // CTR-TOK-24
+        assertLe(f.implementationOf(IOpenFactory.TokenKind.NONE, 1).code.length, 23_552); // owner: size later; budget 20,480 (P2a ruling)
         // Transitional (P1d D2): over EIP-170 until the size work
-        assertLe(f.implementationOf(IOpenFactory.TokenKind.UNDERLYING, 1).code.length, 27_648);
+        assertLe(f.implementationOf(IOpenFactory.TokenKind.UNDERLYING, 1).code.length, 30_720);
     }
 
     function _edSign(bytes32 digest) internal pure returns (bytes memory) {

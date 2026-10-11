@@ -14,7 +14,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
 |---|---|---|
 | P0 | Spec and fold into the component docs and `decisions.md` | done |
 | P1 | The complete base on the new tree: `MetaTxBase`, `ERC20MetaTx`, `MetaTokenBase`; both structs, allowlist, ticket; approve rule; `salt = chain_uid`; CREATE2 deployer; kinds `NONE`, `UNDERLYING`; factory `createToken`; the v1/v2 lines to the backup (v2 done in P1e, v1 renamed `…V1` until P3/P5) | MT-1, MT-2, MT-3, MT-4 |
-| P2 | `TradeLib`; `SCaaSDex` as a clone; `createDex`, DEX registry | MT-5 |
+| P2 | **P2a** `TradeLib` token side + `mtxWrap` (done, branch `p2a-trade`); **P2b** `SCaaSDex` as a clone, `createDex`, DEX registry, `mtxSettle`, `DexPuller` (old `SCaaSDex` kept as `SCaaSDexV1` for the node until P5); **P2c** exchange path | MT-5 |
 | P3 | `*_ZETHER` kinds: `ZetherLayer`, `ZetherLib`, `ZetherStatements`, shield / unshield paths; delete `ZetherToken` | MT-6 |
 | P4 | `MandateWallet`, `SmartKeyAccount` (rename, every family) on `MetaTxBase` | MT-7 (+ rename in NM-*) |
 | P5 | Node, clientkeys, encoders for the new ABI | MT-8, MT-9 |
@@ -48,7 +48,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
       all-or-nothing; `_msgSender()` everywhere per the `msg.sender` inventory; lint/test that no token reads
       `msg.sender` directly except the allowed spots; UA path split into `UAMetaTransaction`/`UAMetaTransfer` +
       `uaExecuteTransfer`/`uaBatchTransfer` (CTR-UA-26); KATs `metatx_kat.json`, `metatransfer_kat.json`, v3 pair.
-- [ ] **MT-3** `approve` only by contracts (caller and spender) — built in P1b on the v2 line; open: v1 line (P3/P5, E1) and `mtxWrap` for a SCaaS underlying (P2, D1).
+- [ ] **MT-3** `approve` only by contracts (caller and spender) — built in P1b on the v2 line; open: v1 line (P3/P5, E1); `mtxWrap` for a SCaaS underlying done in P2a (UnderlyingToken; `ZetherToken` in P3).
 - [~] **MT-4** (built in P1e for tokens and the token factory: both deploy scripts on CREATE2, gate on `chainUid()`; open for the other domains: SmartKeyAccount, MandateWallet P4, SCaaSDex P2, UA registry UA F1, Zether digests P3) `salt = chain_uid` in every domain (implementation immutables; SmartKeyAccount, MandateWallet, SCaaSDex,
       UA registry, Zether digests); deploy scripts on a CREATE2 deployer; deploy gate checks `chainUid()`.
 
@@ -59,9 +59,10 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
 - P1e follow-ups (parked): (a) the size ratchet does not tighten itself: when a baselined contract shrinks, lower its entry in `smartcontracts/evm/size-baseline.json` by hand (the gate only notes an entry that now fits); (b) `smartcontracts/scripts/deploy.sh` requires `PRIVATE_KEY` (it derives `--sender` from it), so a KMS or hardware-wallet deployer needs a script change; (c) `OpenFactory` accepts the registration of kinds 2 and 3 (`*_ZETHER`) before P3: only the PQZ kinds 4–7 are `KindReserved`; (d) integrators: the factory's underlying index is only as truthful as the implementation, trust it for registered versions (`versionOf(token).version != 0`); `createTokenUnregistered` records version 0; (e) libraries stay placed by forge from the sender's nonce, not by CREATE2 (E7); (f) the P1d parked test gaps above stay.
 
 **P2 — MT-5**
-- P2 notes (from P1c, P1d): (0) D1: `mtxWrap` (CTR-TOK-20) and `NativeNotGasless()` come with P2, because `mtxTrade` does not exist before `TradeLib`; a native wrap by `mtxExecute(wrap(…))` reverts `NativeValueMismatch(0, amount)`. (1) C9: `NoUnderlyingToken` is 20,196 / 20,480 B, 284 B left (P1e); `TradeLib`'s token side and the three `mtx…` entries will not fit, so P2 starts by finding room (slimmer `MetaTxBase`, more behind libraries, or a budget change; owner). (2) Named `mtxTransfer` is +9 execution gas over `mtxExecuteTransfer` (33,681 vs 33,672): the row is logged, not asserted; `mtxPay` on a fresh lane is +2.6 k (the `PAYABLE` gate's cold SLOAD, C3). (3) The asset suite's inline per-transfer admin check (CTR-TOK-24) also needs NONE bytes: two streams compete for the 284 B.
+- P2a (done, branch `p2a-trade`, merge pending the final review): `TradeLib` (`scaas.trade`) and the trade entries on every token, `mtxWrap` + `NativeNotGasless` on `UnderlyingToken` (D1 closed; a native wrap by `mtxExecute(wrap(…))` still reverts `NativeValueMismatch(0, amount)`); 855 tests. Plan `docs/superpowers/plans/2026-10-11-p2a-trade-token-side.md`. Open for P2b/P2c: the DEX side below. **F4 (owner): `NoUnderlyingToken` is 22,951 B, over its 20,480 B budget (ratchet baseline), `UnderlyingToken` 29,974 B: optimise later (slimmer `MetaTxBase`, more behind libraries, or a budget change).**
+- P2 notes (from P1c, P1d): (2) Named `mtxTransfer` is +9 execution gas over `mtxExecuteTransfer` (33,681 vs 33,672): the row is logged, not asserted; `mtxPay` on a fresh lane is +2.6 k (the `PAYABLE` gate's cold SLOAD, C3). (3) The asset suite's inline per-transfer admin check (CTR-TOK-24) also needs NONE bytes: it competes with the size debt in F4.
 - [x] Rename `OrderBookDex` → `SCaaSDex` (owner 2026-10-09; EIP-712 domain name `SCaaS Dex`); git mv + docs + node names. (done 2026-10-09)
-- [ ] **MT-5** DEX: `TradeOrder` + `mtxTrade`/`mtxCancelOrder`/`mtxInvalidateNonces` in the tokens; `SCaaSDex.mtxSettle`
+- [~] **MT-5** DEX (P2a done: `TradeOrder` + `mtxTrade`/`mtxCancelOrder`/`mtxInvalidateNonces` in the tokens, `receiveToken == this` accepted, flag 4 not read by the token; open: P2b/P2c): `SCaaSDex.mtxSettle`
       (Path A/B, 1 taker + N makers, 50 % floor, fee split, conservation invariant); outside-token legs through the
       `DexPuller` (CTR-DEX-22); exchange path `mtxExchange`/`mtxExchangeVia` (CTR-DEX-20), surplus distribution
       (CTR-DEX-21), interaction blocklist + `LISTED_POOLS`/listed-only (CTR-DEX-23), admin `setExchangeTarget`/
@@ -82,7 +83,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
 
 **P5 — MT-8, MT-9**
 - [ ] v1 line to backup: once the node (`src/abi.rs` v1 struct, `executeMetaTransaction`, salt-less domain; e2e v1 `MetaToken` demo tokens) and clientkeys (`metatx_v1_kat.json`) are on the new ABI, move the v1 contracts and the v1 deploy path to `smartcontracts/evm/legacy/` (E1).
-- [ ] **MT-8** Node: two `sol!` structs, `metatx`/`ua_metatx` jobs name their struct (`call` | `transfer`), selector tables for
+- [ ] **MT-8** Node: `mtxInvalidateNonces` replay reverts `MinNonceNotIncreasing` (strictly increasing): the cancel job treats that revert as success; two `sol!` structs, `metatx`/`ua_metatx` jobs name their struct (`call` | `transfer`), selector tables for
       every contract on `MetaTxBase` (NODE-JOB-20), call table names, breaker per `(from, selector)` (`MetaTransfer` =
       `transfer`/`pay`), batching via `mtxBatchTransfer`/`mtxBatch` never mixed (NODE-LANE-11), `chainUid()` check
       (NODE-GW-07), DEX venue `mtxSettle` (NODE-DEX-15/16), intake `allowance(from, puller)`, TradeEngine with

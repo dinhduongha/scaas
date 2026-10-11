@@ -68,10 +68,10 @@ generic `MetaTxBase` ([CTR-MTX-22](#CTR-MTX-22)): it adds the fee in this token 
 ([CTR-TOK-21](token-wrappers.md#CTR-TOK-21)): `MetaTxBase` holds the `MetaTransaction`, nonce lanes, signature check
 (`SigCheck`, [CTR-MTX-25](#CTR-MTX-25)), the transient sender and ticket, the selector allowlist and
 `mtxExecute`/`mtxBatch`/`cancelNonce`; `ERC20MetaTx` holds the ERC-20, `MetaTransfer` (`entryRef`), the fee,
-the approve rule and the UA ledger; `MetaTokenBase` holds receiver-pays (`mtxPayReceiverFee`, beside `mtxPay` and
-`payLane`, which it uses), trade (`TradeLib`), pay behind `PAYABLE`
-(inline: no external `PayLib` built, controller ruling pending the owner), features and roles (`AdminLib`), init and provenance. Trade and pay live in `MetaTokenBase`, **not** in
-`ERC20MetaTx`. The kinds (`NoUnderlyingToken`, `UnderlyingToken`, and the two Zether kinds) sit on `MetaTokenBase`;
+the approve rule and the UA ledger; `ERC20MetaTx` also holds trade (`TradeLib`: `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces`; [CTR-DEX-15](dex.md#CTR-DEX-15); built in P2a, controller ruling, pending the owner), so every kind has it; `MetaTokenBase` holds receiver-pays (`mtxPayReceiverFee`, beside `mtxPay` and
+`payLane`, which it uses), pay behind `PAYABLE`
+(inline: no external `PayLib` built, controller ruling pending the owner), features and roles (`AdminLib`), init and provenance. Pay lives in `MetaTokenBase`, **not** in
+`ERC20MetaTx`; trade lives in `ERC20MetaTx`. The kinds (`NoUnderlyingToken`, `UnderlyingToken`, and the two Zether kinds) sit on `MetaTokenBase`;
 Hedera is the immutable `IS_HEDERA` ([CTR-TOK-23](token-wrappers.md#CTR-TOK-23)), not a child contract.
 The v1 line (the built `ERC20MetaTxV1` mixin, `MetaToken`, `HederaMetaToken` and factory v1) is removed from the product; kept for reference under the tag `ref/pre-token-tree` and `smartcontracts/evm/legacy/` (not built): issuer tokens
 use `NoUnderlyingToken`, 1:1 wrappers use an `UnderlyingToken` with one leg and `num = den = 1`; Zether's separate mixin
@@ -267,7 +267,9 @@ or the ticket is spent), and no allowlisted function runs with a live ticket; `m
 Authority and balance owners are read through `_msgSender()` everywhere; the reads that **stay** `msg.sender` are
 exactly: the relayer binding, the default fee recipient and the event `relayer` of the pipeline; the factory check in
 `initialize`; `mtxTrade`'s `msg.sender == o.dex` ([CTR-DEX-15](dex.md#CTR-DEX-15)); and `mtxWrap`'s relayer binding
-and fee payee ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)). A lint test greps the sources and pins that set. Defence in
+and fee payee ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)). A lint test greps the sources and pins that set
+(built in P2a: `msg.sender` appears 3 times in `ERC20MetaTx` including the `mtxTrade` caller, twice in `UnderlyingToken`
+for `mtxWrap`, never in `TradeLib`, whose caller is a parameter). Defence in
 depth: `from ≠ address(this)` (step 1), and `_update` refuses transfers and mints **to** `address(this)`
 (`TransferToSelf()`), because tokens parked at the token's own address are what a spoofed self-call would spend.
 
@@ -511,7 +513,7 @@ signed, not the entry point, and stay. Non-EVM families follow the same rule in 
 | every contract on `MetaTxBase` | `mtxExecute` (+ alias `executeMetaTransaction`), `mtxBatch`; `cancelNonce(uint256 batch)` (direct, or signed through `mtxExecute`); views `mtxNonce`, `mtxDigest`, `mtxSelectors`, `chainUid`, `supportedModes` |
 | tokens | + `mtxExecuteWithFee`, `mtxExecuteTransfer`, `mtxBatchTransfer`, `mtxTransfer`, `mtxTransferWithFee`, `mtxPay`, `mtxPayReceiverFee`; views `mtxTransferDigest`, `payLane` |
 | tokens (trade) | `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces` ([dex.md](dex.md#CTR-DEX-15)) |
-| wrappers, `UNDERLYING_ZETHER` (built: `ZetherToken`; replaced in P1/P3) | `mtxWrap` ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)) |
+| wrappers, `UNDERLYING_ZETHER` (built on `UnderlyingToken`; `ZetherToken` in P3) | `mtxWrap` ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)) |
 | `NONE_ZETHER` / `UNDERLYING_ZETHER` (built: `ZetherToken`; replaced in P1/P3) | `zetherRollOverSigned`, `zetherSetRollOverMode` ([CTR-ZTH-16](zether.md#CTR-ZTH-16)) |
 | `MandateWallet` | + `mtxPayUnderMandate`, `mtxRevoke`, `mtxExecuteAsOwner`, named builders of a `MetaTransaction` ([mandates.md](mandates.md#mandatewallet)) |
 | `SmartKeyAccount` | + `mtxExecuteAsOwner`, named builder of a `MetaTransaction` ([CTR-ACC-10](accounts.md#CTR-ACC-10)) |

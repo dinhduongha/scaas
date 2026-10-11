@@ -8,6 +8,7 @@ import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IUnderlyingToken} from "./IUnderlyingToken.sol";
 import {IFactoryToken} from "../factory/IFactoryToken.sol";
+import {ITradeToken} from "../trade/ITradeToken.sol";
 import {AdminLib} from "./AdminLib.sol";
 import {MetaTokenBase} from "./MetaTokenBase.sol";
 import {HederaLib} from "../hedera/HederaLib.sol";
@@ -162,6 +163,45 @@ library UnderlyingLib {
             IERC20(u).safeTransferFrom(from, address(this), amount);
             received = IERC20(u).balanceOf(address(this)) - before;
         }
+        L.reserve = reserve + received;
+    }
+
+    /// @notice `mtxWrap` (CTR-TOK-20): the leg must accept a wrap (enabled, no pending change, no shortfall); the
+    ///         underlying's `mtxTrade` checks the holder's signature, that this token is `o.dex`, the price
+    ///         (`receiveAmount <= minted`), the relayer (`submitter`) and the fee bound, and moves `o.amount` here.
+    /// @return received the measured delta (must be `o.amount`)
+    /// @return minted `⌊o.amount·num/den⌋`
+    /// @return fee `⌈minted·o.fee/10⁶⌉`, the submitter's part of `minted`
+    function wrapBySig(address u, ITradeToken.TradeOrder calldata o, bytes calldata sig, address submitter)
+        public returns (uint256 received, uint256 minted, uint256 fee)
+    {
+        Leg storage L = _wrapLeg(u, o);
+        minted = Math.mulDiv(o.amount, L.num, L.den);
+        if (minted == 0) revert IUnderlyingToken.WrapTooSmall();
+        fee = Math.mulDiv(minted, o.fee, 1_000_000, Math.Rounding.Ceil);
+        received = _pullBySig(L, o, sig, ITradeToken.TradeFill(o.amount, minted, fee, submitter));
+    }
+
+    function _wrapLeg(address u, ITradeToken.TradeOrder calldata o) private view returns (Leg storage L) {
+        if (u == NATIVE) revert IUnderlyingToken.NativeNotGasless();
+        UnderlyingStorage storage s = $();
+        L = s.legs[indexOf(u)];
+        if (!L.wrapEnabled) revert IUnderlyingToken.WrapDisabledFor(u);
+        if (L.adjustable && _isPending(s)) revert IUnderlyingToken.WrapPausedForRateChange(u);
+        if (o.receiveToken != address(this)) revert IUnderlyingToken.WrapOrderInvalid(o.receiveToken);
+    }
+
+    /// @dev One balance read before serves the shortfall check and the measurement, as in `_pull`.
+    function _pullBySig(Leg storage L, ITradeToken.TradeOrder calldata o, bytes calldata sig,
+        ITradeToken.TradeFill memory f) private returns (uint256 received)
+    {
+        address u = L.token;
+        uint256 reserve = L.reserve;
+        uint256 before = IERC20(u).balanceOf(address(this));
+        if (before < reserve) revert IUnderlyingToken.ReserveShortfall(u, before, reserve);
+        ITradeToken(u).mtxTrade(o, sig, f);
+        received = IERC20(u).balanceOf(address(this)) - before;
+        if (received != o.amount) revert IUnderlyingToken.WrapReceivedMismatch(o.amount, received);
         L.reserve = reserve + received;
     }
 

@@ -9,9 +9,9 @@ import {Test} from "forge-std/Test.sol";
 /// are `//` are skipped (block comments are not). A change here is deliberate: update the pin in the same commit and
 /// say why.
 contract MsgSenderLintTest is Test {
-    string[8] internal FILES = ["src/metatx/MetaTxBase.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
+    string[9] internal FILES = ["src/metatx/MetaTxBase.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
         "src/metatx/NoUnderlyingToken.sol", "src/metatx/UnderlyingToken.sol", "src/metatx/UnderlyingLib.sol",
-        "src/metatx/AdminLib.sol", "src/hedera/HederaLib.sol"];
+        "src/metatx/AdminLib.sol", "src/hedera/HederaLib.sol", "src/trade/TradeLib.sol"];
 
     /// Occurrences of `pat` (not preceded by an identifier character); `exceptSelector` skips `pat<ident>.selector`.
     function _count(string memory path, bytes memory pat, bool exceptSelector) internal view returns (uint256 n) {
@@ -53,11 +53,12 @@ contract MsgSenderLintTest is Test {
 
     function test_msgSenderReadsArePinned() public view {
         assertEq(_count("src/metatx/MetaTxBase.sol", "msg.sender", false), 7, "MetaTxBase: guard, event, relayer binding x2, _msgSender x2, fee default");
-        assertEq(_count("src/metatx/ERC20MetaTx.sol", "msg.sender", false), 2, "ERC20MetaTx: event relayer, fee default");
+        assertEq(_count("src/metatx/ERC20MetaTx.sol", "msg.sender", false), 3, "ERC20MetaTx: event relayer, fee default, mtxTrade caller (CTR-DEX-15)");
         assertEq(_count("src/metatx/MetaTokenBase.sol", "msg.sender", false), 1, "MetaTokenBase: factory check in initialize");
         assertEq(_count("src/metatx/NoUnderlyingToken.sol", "msg.sender", false), 0, "NoUnderlyingToken");
-        assertEq(_count("src/metatx/UnderlyingToken.sol", "msg.sender", false), 0, "UnderlyingToken");
+        assertEq(_count("src/metatx/UnderlyingToken.sol", "msg.sender", false), 2, "UnderlyingToken: mtxWrap submitter x2 (CTR-TOK-20)");
         assertEq(_count("src/metatx/UnderlyingLib.sol", "msg.sender", false), 0, "UnderlyingLib");
+        assertEq(_count("src/trade/TradeLib.sol", "msg.sender", false), 0, "TradeLib: the caller is a parameter");
         assertEq(_count("src/metatx/AdminLib.sol", "msg.sender", false), 0, "AdminLib");
         assertEq(_count("src/hedera/HederaLib.sol", "msg.sender", false), 0, "HederaLib");
     }
