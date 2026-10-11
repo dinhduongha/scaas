@@ -1,0 +1,307 @@
+// SPDX-License-Identifier: Apache-2.0
+pragma solidity ^0.8.20;
+
+import {Test, Vm} from "forge-std/Test.sol";
+import {OpenFactory} from "../../src/factory/OpenFactory.sol";
+import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
+import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
+import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
+import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
+import {ITradeToken} from "../../src/trade/ITradeToken.sol";
+import {MockERC20} from "../helpers/Mocks.sol";
+import {UID_, noneInit} from "./helpers/V2Fixture.sol";
+
+/// `SCaaSDex` as a factory clone (CTR-DEX-24) settling SCaaS legs (CTR-DEX-16, -17, -11): one taker against many makers,
+/// every leg pulled through its token's `mtxTrade`, every party paid in the same call, the fee split, conservation.
+contract DexTest is Test {
+    uint256 constant ALICE_PK = 0xA11CE;
+    uint256 constant BOB_PK = 0xB0B;
+    uint256 constant CAROL_PK = 0xCA401;
+    address alice = vm.addr(ALICE_PK);
+    address bob = vm.addr(BOB_PK);
+    address carol = vm.addr(CAROL_PK);
+    address registrar = address(0xF00D);
+    address admin = address(0xAD);
+    address treasury = address(0x7EA5);
+    address relayer = address(0xBEEF);
+
+    OpenFactory f;
+    SCaaSDex dexImpl;
+    SCaaSDex dex;
+    NoUnderlyingToken a; // the taker sells A
+    NoUnderlyingToken b; // the makers sell B
+
+    function setUp() public {
+        f = new OpenFactory(registrar, UID_);
+        address noneImpl = address(new NoUnderlyingToken(address(f), address(0), UID_, false));
+        dexImpl = new SCaaSDex(address(f), UID_);
+        vm.startPrank(registrar);
+        f.registerImplementation(IOpenFactory.TokenKind.NONE, 1, noneImpl);
+        f.registerDexImplementation(1, address(dexImpl));
+        vm.stopPrank();
+        a = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 1, noneInit("A", "A", 0, 1e6, alice, address(0)), "a"));
+        IFactoryToken.TokenConfig memory cb = noneInit("B", "B", 0, 1e6, bob, address(0));
+        b = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 1, cb, "b"));
+        vm.prank(bob);
+        b.transfer(carol, 500_000);
+        dex = SCaaSDex(f.createDex(1, ISCaaSDex.DexConfig(admin, 200_000, treasury, false), "dex"));
+        vm.prank(admin);
+        dex.setMarket(address(a), address(b), true);
+    }
+
+    // ------------------------------------------------------------------ helpers
+
+    function _order(address from, NoUnderlyingToken receiveToken, uint256 amount, uint256 receiveAmount, uint256 fee)
+        internal view returns (ITradeToken.TradeOrder memory o)
+    {
+        o.from = from;
+        o.receiveToken = address(receiveToken);
+        o.amount = amount;
+        o.receiveAmount = receiveAmount;
+        o.fee = fee;
+        o.dex = address(dex);
+        o.batch = 1;
+        o.nonce = 1;
+        o.validUntil = block.timestamp + 300;
+    }
+
+    function _leg(uint256 pk, NoUnderlyingToken sell, ITradeToken.TradeOrder memory o, uint256 fill)
+        internal view returns (ISCaaSDex.Leg memory l)
+    {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, sell.tradeOrderDigest(o));
+        l = ISCaaSDex.Leg(address(sell), o, abi.encodePacked(r, s, v), fill);
+    }
+
+    function _one(ISCaaSDex.Settlement memory s) internal pure returns (ISCaaSDex.Settlement[] memory ss) {
+        ss = new ISCaaSDex.Settlement[](1);
+        ss[0] = s;
+    }
+
+    /// Alice sells 1000 A for at least 1900 B (fee 0.3 %); Bob sells 1000 B for 500 A, Carol 1000 B for 520 A (fee 0.1 %).
+    function _book() internal view returns (ISCaaSDex.Settlement memory s) {
+        s.ref = "r1";
+        s.makers = new ISCaaSDex.Leg[](2);
+        s.makers[0] = _leg(BOB_PK, b, _order(bob, a, 1000, 500, 1_000), 1000);
+        s.makers[1] = _leg(CAROL_PK, b, _order(carol, a, 1000, 520, 1_000), 1000);
+        s.taker = _leg(ALICE_PK, a, _order(alice, b, 1020, 1900, 3_000), 1020); // 500 + 520 at the makers' prices
+    }
+
+    // ------------------------------------------------------------------ settle
+
+    function test_settle_oneTakerTwoMakers_paysEveryone_splitsFees_conserves() public {
+        ISCaaSDex.Settlement[] memory ss = _one(_book()); // before the prank: _book makes external calls
+        vm.recordLogs();
+        vm.prank(relayer);
+        bool[] memory ok = dex.mtxSettle(ss);
+        assertTrue(ok[0]);
+        // taker: receives 2000 B gross, fee ceil(2000·0.3 %) = 6 → 1994; relayer share 20 % of 6 = 1, treasury 5
+        assertEq(b.balanceOf(alice), 1994);
+        assertEq(a.balanceOf(alice), 1e6 - 1020);
+        // makers: 500 A and 520 A gross, fee ceil(0.5) = 1 each → 499 and 519; relayer floor(0.2) = 0
+        assertEq(a.balanceOf(bob), 499);
+        assertEq(a.balanceOf(carol), 519);
+        assertEq(b.balanceOf(relayer), 1);
+        assertEq(b.balanceOf(treasury), 5);
+        assertEq(a.balanceOf(treasury), 2);
+        assertEq(a.balanceOf(address(dex)), 0);
+        assertEq(b.balanceOf(address(dex)), 0);
+        uint256 legs;
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == ISCaaSDex.LegSettled.selector) ++legs;
+        assertEq(legs, 3);
+    }
+
+    function test_makerPriceRoundsInTheMakersFavour() public {
+        ISCaaSDex.Settlement memory s;
+        s.ref = "r";
+        s.makers = new ISCaaSDex.Leg[](1);
+        s.makers[0] = _leg(BOB_PK, b, _order(bob, a, 1000, 333, 0), 1000); // 1000 B for 333 A
+        // a 600 B fill would pay ceil(600·333/1000) = ceil(199.8) = 200 A, but 600 < half-of-1000 floor? 600 ≥ 500: ok
+        s.makers[0] = _leg(BOB_PK, b, _order(bob, a, 1000, 333, 0), 600);
+        s.taker = _leg(ALICE_PK, a, _order(alice, b, 200, 600, 0), 200);
+        vm.prank(relayer);
+        dex.mtxSettle(_one(s));
+        assertEq(a.balanceOf(bob), 200);
+        assertEq(b.balanceOf(alice), 600);
+    }
+
+    function test_takerFeeChargedOnceOnTheAggregate() public {
+        // each maker leg alone would give the taker 1000 B → ceil(3) = 3 + 3 = 6; on the aggregate 2000 → 6: same here,
+        // so use a rate where the per-maker ceilings exceed the aggregate: 0.15 % → per-maker ceil(1.5)=2+2=4, aggregate 3
+        ISCaaSDex.Settlement memory s = _book();
+        s.taker = _leg(ALICE_PK, a, _order(alice, b, 1020, 1900, 1_500), 1020);
+        vm.prank(relayer);
+        dex.mtxSettle(_one(s));
+        assertEq(b.balanceOf(alice), 1997);
+    }
+
+    function test_pathB_escrowMakerRefundsTheRest() public {
+        ISCaaSDex.Settlement memory s;
+        s.ref = "r";
+        s.makers = new ISCaaSDex.Leg[](1);
+        ITradeToken.TradeOrder memory mo = _order(bob, a, 1000, 500, 0);
+        mo.flags = 3; // IOC | ESCROW
+        s.makers[0] = _leg(BOB_PK, b, mo, 600);
+        s.taker = _leg(ALICE_PK, a, _order(alice, b, 300, 600, 0), 300);
+        uint256 bobB = b.balanceOf(bob);
+        vm.prank(relayer);
+        dex.mtxSettle(_one(s));
+        assertEq(b.balanceOf(bob), bobB - 600); // pulled 1000, refunded 400
+        assertEq(a.balanceOf(bob), 300);
+        assertEq(b.balanceOf(address(dex)), 0);
+    }
+
+    function test_pathB_dexChecksTheMatchedPart() public {
+        ITradeToken.TradeOrder memory mo = _order(bob, a, 1000, 500, 0);
+        mo.flags = 3;
+        ISCaaSDex.Settlement memory s;
+        s.ref = "r";
+        s.makers = new ISCaaSDex.Leg[](1);
+        s.makers[0] = _leg(BOB_PK, b, mo, 400); // below the 50 % floor
+        s.taker = _leg(ALICE_PK, a, _order(alice, b, 200, 400, 0), 200);
+        bytes32 h = b.tradeOrderDigest(mo);
+        vm.prank(relayer);
+        vm.expectRevert(ISCaaSDex.NothingSettled.selector);
+        dex.mtxSettle(_one(s));
+        vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.BelowMinFill.selector, h));
+        vm.prank(address(dex));
+        dex.settleOne(s, relayer);
+    }
+
+    function test_aFailingSettlementIsIsolated() public {
+        ISCaaSDex.Settlement[] memory ss = new ISCaaSDex.Settlement[](2);
+        ss[0] = _book();
+        ss[0].makers[0].sig[0] = bytes1(uint8(ss[0].makers[0].sig[0]) ^ 1); // a bad maker signature
+        ss[1] = _book();
+        ss[1].ref = "r2";
+        ss[1].makers[0].o.nonce = 2;
+        ss[1].makers[0] = _leg(BOB_PK, b, ss[1].makers[0].o, 1000);
+        ss[1].makers[1].o.nonce = 2;
+        ss[1].makers[1] = _leg(CAROL_PK, b, ss[1].makers[1].o, 1000);
+        ss[1].taker.o.nonce = 2;
+        ss[1].taker = _leg(ALICE_PK, a, ss[1].taker.o, 1020);
+        vm.prank(relayer);
+        bool[] memory ok = dex.mtxSettle(ss);
+        assertFalse(ok[0]);
+        assertTrue(ok[1]);
+        assertEq(b.balanceOf(alice), 1994);
+    }
+
+    function test_checks() public {
+        ISCaaSDex.Settlement memory s = _book();
+        s.taker.fill = 1019;
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.FillMismatch.selector, 1020, 1019));
+        s = _book();
+        s.makers[1] = s.makers[0];
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.DuplicateOrder.selector, b.tradeOrderDigest(s.makers[0].o)));
+        s = _book();
+        s.makers[0] = _leg(ALICE_PK, b, _order(alice, a, 1000, 500, 1_000), 1000);
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.SelfTrade.selector, alice));
+        s = _book();
+        s.makers[0].sellToken = address(a);
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.TokenMismatch.selector));
+        s = _book();
+        ITradeToken.TradeOrder memory o = _order(alice, b, 1020, 1900, 3_000);
+        o.relayer = address(0x5E1);
+        s.taker = _leg(ALICE_PK, a, o, 1020);
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.WrongRelayer.selector, relayer));
+        s = _book();
+        s.makers = new ISCaaSDex.Leg[](0);
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.NoMakers.selector));
+        vm.prank(admin);
+        dex.setMarket(address(a), address(b), false);
+        _expectOne(_book(), abi.encodeWithSelector(ISCaaSDex.MarketNotListed.selector, address(a), address(b)));
+    }
+
+    function test_outsideTokenLegsAreNotBuiltYet() public {
+        MockERC20 usdc = new MockERC20("USD Coin", "USDC", 6);
+        vm.prank(admin);
+        dex.setMarket(address(a), address(usdc), true);
+        assertEq(dex.tokenKind(address(usdc)), 2);
+        assertEq(dex.tokenKind(address(a)), 1);
+        ISCaaSDex.Settlement memory s = _book();
+        s.taker.o.receiveToken = address(usdc);
+        s.taker = _leg(ALICE_PK, a, s.taker.o, 1020);
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.OutsideLegNotBuilt.selector, address(usdc)));
+    }
+
+    function test_settleOneOnlyThroughSettle() public {
+        ISCaaSDex.Settlement memory s = _book();
+        vm.expectRevert(ISCaaSDex.NotSelf.selector);
+        dex.settleOne(s, relayer);
+    }
+
+    function _expectOne(ISCaaSDex.Settlement memory s, bytes memory err) internal {
+        vm.prank(address(dex));
+        vm.expectRevert(err);
+        dex.settleOne(s, relayer);
+    }
+
+    // ------------------------------------------------------------------ factory and admin (CTR-DEX-24, CTR-DEX-03)
+
+    function test_createDex_registry_andInitializeOnce() public {
+        assertTrue(f.isDex(address(dex)));
+        assertEq(f.dexVersionOf(address(dex)), 1);
+        assertFalse(f.isDex(address(dexImpl)));
+        assertEq(dex.admin(), admin);
+        assertEq(dex.treasury(), treasury);
+        assertEq(dex.relayerSharePpm(), 200_000);
+        vm.expectRevert(ISCaaSDex.NotFactory.selector);
+        dex.initialize(address(this), 1, ISCaaSDex.DexConfig(admin, 0, treasury, false));
+        vm.prank(address(f));
+        vm.expectRevert(ISCaaSDex.AlreadyInitialized.selector);
+        dex.initialize(address(this), 1, ISCaaSDex.DexConfig(admin, 0, treasury, false));
+        vm.prank(address(f));
+        vm.expectRevert(ISCaaSDex.AlreadyInitialized.selector);
+        dexImpl.initialize(address(this), 1, ISCaaSDex.DexConfig(admin, 0, treasury, false));
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.DexVersionUnknown.selector, 2));
+        f.createDex(2, ISCaaSDex.DexConfig(admin, 0, treasury, false), "x");
+    }
+
+    function test_registerDex_checksFactoryAndChain() public {
+        SCaaSDex other = new SCaaSDex(address(0xFAC), UID_);
+        vm.startPrank(registrar);
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ImplementationFactoryMismatch.selector, address(other)));
+        f.registerDexImplementation(2, address(other));
+        SCaaSDex wrongChain = new SCaaSDex(address(f), keccak256("x"));
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ChainUidMismatch.selector, UID_, keccak256("x")));
+        f.registerDexImplementation(2, address(wrongChain));
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.DexVersionAlreadyRegistered.selector, 1, address(dexImpl)));
+        f.registerDexImplementation(1, address(dexImpl));
+        vm.stopPrank();
+        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
+        f.registerDexImplementation(3, address(dexImpl));
+    }
+
+    function test_adminOnly_feeSplitBounds() public {
+        vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.NotAdmin.selector, address(this)));
+        dex.setMarket(address(a), address(b), false);
+        vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.NotAdmin.selector, address(this)));
+        dex.setFeeSplit(0, treasury);
+        vm.startPrank(admin);
+        vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.FeeSplitInvalid.selector, 1, address(0)));
+        dex.setFeeSplit(1, address(0));
+        vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.FeeSplitInvalid.selector, 1, address(dex)));
+        dex.setFeeSplit(1, address(dex));
+        vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.FeeSplitInvalid.selector, 1_000_001, treasury));
+        dex.setFeeSplit(1_000_001, treasury);
+        dex.setFeeSplit(1_000_000, address(0)); // all to the relayer: no treasury needed
+        vm.stopPrank();
+        ISCaaSDex.Settlement[] memory ss = _one(_book());
+        vm.prank(relayer);
+        dex.mtxSettle(ss);
+        assertEq(b.balanceOf(relayer), 6);
+    }
+
+    function test_domainIsTheClone_saltedWithTheChain() public view {
+        (, string memory name, string memory version, uint256 chainId, address vc, bytes32 salt,) = dex.eip712Domain();
+        assertEq(name, "SCaaS Dex");
+        assertEq(version, "1");
+        assertEq(chainId, block.chainid);
+        assertEq(vc, address(dex));
+        assertEq(salt, UID_);
+        assertEq(dex.chainUid(), UID_);
+        assertEq(dex.factory(), address(f));
+    }
+}

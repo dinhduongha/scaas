@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IOpenFactory} from "./IOpenFactory.sol";
 import {IFactoryToken} from "./IFactoryToken.sol";
+import {ISCaaSDex} from "../dex/ISCaaSDex.sol";
 import {ITokenAdmin} from "../metatx/ITokenAdmin.sol";
 
 /// @title `OpenFactory` (CTR-TOK-03, CTR-TOK-25): the one token factory of a chain.
@@ -32,6 +33,9 @@ contract OpenFactory is IOpenFactory {
     mapping(address => Info) private _info;
     mapping(address => mapping(address => address[])) private _wrappers;
     mapping(address => address[]) private _byUnderlying;
+    mapping(uint64 => address) private _dexImpl;
+    uint64 private _latestDex;
+    mapping(address => uint64) private _dexVersion; // 0 = not a DEX made here
 
     constructor(address registrar_, bytes32 chainUid_) {
         if (chainUid_ == bytes32(0)) revert ChainUidZero();
@@ -123,6 +127,43 @@ contract OpenFactory is IOpenFactory {
     function deployedFor(address underlying, uint256 index) external view returns (address) {
         return _byUnderlying[underlying][index];
     }
+
+    // ------------------------------------------------------------------ DEX (CTR-DEX-24)
+
+    function registerDexImplementation(uint64 version, address implementation) external {
+        if (msg.sender != registrar) revert NotRegistrar();
+        if (version == 0) revert DexVersionUnknown(0);
+        address existing = _dexImpl[version];
+        if (existing != address(0)) revert DexVersionAlreadyRegistered(version, existing);
+        if (implementation.code.length == 0) revert ImplementationNotAContract(implementation);
+        (bool ok, uint256 got) = _word(implementation, bytes4(keccak256("factory()")));
+        if (!ok || got != uint256(uint160(address(this)))) revert ImplementationFactoryMismatch(implementation);
+        (ok, got) = _word(implementation, bytes4(keccak256("chainUid()")));
+        if (!ok || bytes32(got) != chainUid) revert ChainUidMismatch(chainUid, ok ? bytes32(got) : bytes32(0));
+        _dexImpl[version] = implementation;
+        if (version > _latestDex) _latestDex = version;
+        emit DexImplementationRegistered(version, implementation, msg.sender);
+    }
+
+    function dexImplementationOf(uint64 version) external view returns (address) { return _dexImpl[version]; }
+
+    function latestDexVersion() external view returns (uint64) { return _latestDex; }
+
+    function createDex(uint64 version, ISCaaSDex.DexConfig calldata cfg, bytes32 salt) external returns (address dex) {
+        address impl = _dexImpl[version];
+        if (impl == address(0)) revert DexVersionUnknown(version);
+        bytes32 s = _salt(msg.sender, salt);
+        address predicted = Clones.predictDeterministicAddress(impl, s);
+        if (predicted.code.length != 0 || _dexVersion[predicted] != 0) revert SaltAlreadyUsed(predicted);
+        dex = Clones.cloneDeterministic(impl, s);
+        ISCaaSDex(dex).initialize(msg.sender, version, cfg);
+        _dexVersion[dex] = version;
+        emit DexCreated(dex, msg.sender, version, impl, cfg.admin);
+    }
+
+    function isDex(address dex) external view returns (bool) { return _dexVersion[dex] != 0; }
+
+    function dexVersionOf(address dex) external view returns (uint64) { return _dexVersion[dex]; }
 
     // ------------------------------------------------------------------ internal
 
