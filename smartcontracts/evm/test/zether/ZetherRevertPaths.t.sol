@@ -77,14 +77,14 @@ contract ZetherRevertPathsTest is ZetherFixture {
 
     function test_transferToSelfRejected() public {
         Tx memory t = _aliceTx();
-        for (uint256 i; i < 64; ++i) t.payload[128 + i] = t.payload[64 + i]; // Y_to := Y_from
+        for (uint256 i; i < 64; ++i) t.payload[144 + i] = t.payload[80 + i]; // Y_to := Y_from
         _call(t.payload, t.proof, _none(), abi.encodeWithSelector(IZetherToken.SelfTransfer.selector));
     }
 
     function test_transferToUnregisteredRejected() public {
         Tx memory t = _aliceTx();
         bytes memory gy = ZetherKeys.pub(0x6057, false);
-        for (uint256 i; i < 64; ++i) t.payload[128 + i] = gy[i];
+        for (uint256 i; i < 64; ++i) t.payload[144 + i] = gy[i];
         _call(t.payload, t.proof, _none(),
             abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, ZetherTypes.toUA(gy)));
     }
@@ -116,7 +116,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         bytes[10] memory calls = [
             abi.encodeCall(ZetherLayer.zetherShield, (alice.y, 1)),
             abi.encodeCall(ZetherLayer.zetherTransfer, ("", "", "", n)),
-            abi.encodeCall(ZetherLayer.zetherTransferBundle, ("", "", "", n)),
+            abi.encodeCall(ZetherLayer.zetherTransferCompact, ("", "", "", n)),
             abi.encodeCall(ZetherLayer.zetherTransferNoBundle, ("", "", "", n)),
             abi.encodeCall(ZetherLayer.zetherTransferSingle, ("", "", "", n)),
             abi.encodeCall(ZetherLayer.zetherUnshield, ("", "", "", n, address(0xD), 1)),

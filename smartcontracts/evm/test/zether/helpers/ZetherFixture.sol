@@ -46,6 +46,15 @@ abstract contract ZetherFixture is Test {
     bool internal bls;
     /// @dev CTR-ZTH-42: the sender leaves the auditor out (every `C_aud = O`) on a token with an auditor.
     bool internal audOut;
+    /// @dev The sender puts the auditor key in (every `C_aud ≠ O`) even on a token without one.
+    bool internal audForce;
+    /// @dev The modes of the next token (`ZetherTypes`): disclosure `BUNDLE` (the default); with a key, auditor
+    ///      `OPTIONAL` (the opt-out tests), set to `FULL` where a test needs it.
+    uint8 internal dMode;
+    /// @dev The sender's salt (CTR-ZTH-30) of every transfer the fixture builds; the memo of a commit-reveal transfer
+    ///      starts with it, the rest is filler here (the token never reads it, CTR-ZTH-50).
+    bytes16 internal salt = bytes16(uint128(0x5A17));
+    uint8 internal aMode = uint8(ZetherTypes.AuditorMode.OPTIONAL);
     /// @dev Public units the fixture created per token (`mint` or wrap): `totalSupply + totalShielded·SCALE` stays equal.
     mapping(address => uint256) internal minted;
 
@@ -94,7 +103,8 @@ abstract contract ZetherFixture is Test {
         c.features = (1 << AdminLib.PAYABLE) | (1 << AdminLib.MINTABLE) | (1 << AdminLib.BURNABLE);
         c.roles.minter = address(this);
         c.conf = IFactoryToken.ConfidentialConfig(
-            address(ver), auditor ? ZetherKeys.pub(X_AUD, bls) : bytes(""), SCALE, maxShielded, FEE
+            address(ver), auditor ? ZetherKeys.pub(X_AUD, bls) : bytes(""), SCALE, maxShielded, FEE, dMode,
+            auditor ? aMode : 0
         );
     }
 
@@ -157,14 +167,27 @@ abstract contract ZetherFixture is Test {
     function _payload(ZetherLayer t, User memory from, User memory to, uint256 v, uint256 s, IZetherToken.AccountState memory st)
         internal view returns (bytes memory)
     {
-        return bytes.concat(abi.encode(uint256(st.accSeq), uint256(st.sendCounter)), from.y, to.y, _cts(t, from.y, to.y, v, s));
+        return bytes.concat(
+            abi.encode(uint256(st.accSeq), uint256(st.sendCounter)), salt, from.y, to.y, _cts(t, from.y, to.y, v, s)
+        );
     }
 
     function _cts(ZetherLayer t, bytes memory yf, bytes memory yt, uint256 v, uint256 s) internal view returns (bytes memory) {
-        bytes memory aud = t.auditorKey();
-        if (aud.length == 0 || audOut) aud = ver.identity();
+        bytes memory aud = _aud(t);
         (bytes memory cOut, bytes memory dOut, bytes memory cDeb, bytes memory cAud) = prover.ciphertexts(ver, yf, yt, aud, v, s);
         return bytes.concat(cOut, dOut, cDeb, cAud);
+    }
+
+    /// @dev A memo of `m` legs (CTR-ZTH-50): the salt, then `1 + 40·m` filler bytes.
+    function _memo(uint256 m) internal view returns (bytes memory memo) {
+        memo = bytes.concat(salt, new bytes(1 + 40 * m));
+        for (uint256 i = 16; i < memo.length; ++i) memo[i] = bytes1(uint8(i));
+    }
+
+    /// @dev The `Y_a` the sender encrypts to: the token's key, `O` without one or when left out, the test key if forced.
+    function _aud(ZetherLayer t) internal view returns (bytes memory aud) {
+        aud = audForce ? ZetherKeys.pub(X_AUD, bls) : t.auditorKey();
+        if (aud.length == 0 || audOut) aud = ver.identity();
     }
 
     /// @dev `from → to[j]`, value `vs[j]` (decoys 0), one shared `s`, from the acc balance `b`.
@@ -193,6 +216,7 @@ abstract contract ZetherFixture is Test {
         IZetherToken.AccountState memory st = t.accountState(from.ua);
         r.s = uint256(keccak256(abi.encode(from.x, st.sendCounter, vs, address(t), "multi"))) % ver.groupOrder();
         r.payload = _multiPayload(t, from, to, vs, r.s, st);
+        if (mode == ZetherTypes.TransferMode.HASH) r.payload = bytes.concat(r.payload, _memo(to.length));
         if (ZetherTypes.UA.unwrap(ben) != 0) b -= t.confidentialFee();
         r.proof = prover.proveTransferMulti(
             ver, stm.transferStatement(address(t), r.payload, ben, mode, binding), _multiWitness(from.x, r.s, vs, b)
@@ -212,7 +236,7 @@ abstract contract ZetherFixture is Test {
         w = ZetherProver.MultiWitness(x, s, vs, bPrime, gv, 0x5678 + bPrime, keccak256(abi.encode(s)));
     }
 
-    /// @dev `be32(accSeq) ‖ be32(sendCounter) ‖ be32(M) ‖ Y_f ‖ D_out ‖ C_deb ‖ (Y_tj ‖ C_out_j ‖ C_aud_j)_j`.
+    /// @dev `be32(accSeq) ‖ be32(sendCounter) ‖ be32(M) ‖ Y_f ‖ D_out ‖ C_deb ‖ (Y_tj ‖ C_out_j ‖ C_aud_j)_j` (`salt(16)` after `sendCounter`); `_proveMulti` appends the memo on commit-reveal.
     function _multiPayload(
         ZetherLayer t,
         User memory from,
@@ -221,8 +245,7 @@ abstract contract ZetherFixture is Test {
         uint256 s,
         IZetherToken.AccountState memory st
     ) internal view returns (bytes memory payload) {
-        bytes memory aud = t.auditorKey();
-        if (aud.length == 0 || audOut) aud = ver.identity();
+        bytes memory aud = _aud(t);
         bytes memory legs;
         uint256 total;
         for (uint256 j; j < to.length; ++j) {
@@ -232,7 +255,7 @@ abstract contract ZetherFixture is Test {
         }
         (,bytes memory dOut, bytes memory cDeb,) = prover.ciphertexts(ver, from.y, from.y, aud, total, s);
         payload = bytes.concat(
-            abi.encode(uint256(st.accSeq), uint256(st.sendCounter), to.length), from.y, dOut, cDeb, legs
+            abi.encode(uint256(st.accSeq), uint256(st.sendCounter)), salt, abi.encode(to.length), from.y, dOut, cDeb, legs
         );
     }
 
@@ -269,10 +292,16 @@ abstract contract ZetherFixture is Test {
             Tx memory t = _proveTransfer(tok, alice, bob, 10, bal, _none(), b);
             return abi.encodeCall(ZetherLayer.zetherTransferSingle, (t.payload, t.proof, bytes(""), _none()));
         }
-        ZetherTypes.TransferMode mode = sel == ZetherLayer.zetherTransfer.selector ? ZetherTypes.TransferMode.HASH
-            : sel == ZetherLayer.zetherTransferBundle.selector ? ZetherTypes.TransferMode.BUNDLE : ZetherTypes.TransferMode.NONE;
+        ZetherTypes.TransferMode mode = sel == ZetherLayer.zetherTransferCompact.selector ? ZetherTypes.TransferMode.HASH
+            : sel == ZetherLayer.zetherTransfer.selector ? _defaultForm(tok) : ZetherTypes.TransferMode.NONE;
         require(mode != ZetherTypes.TransferMode.NONE || sel == ZetherLayer.zetherTransferNoBundle.selector, "not a Zether op");
         return _multiCall(sel, mode, bal, b);
+    }
+
+    /// @dev The stored form of `zetherTransfer` on `t` (CTR-ZTH-38): BUNDLE, or HASH on a `COMMIT` token.
+    function _defaultForm(ZetherLayer t) internal view returns (ZetherTypes.TransferMode) {
+        return t.disclosureMode() == ZetherTypes.DisclosureMode.COMPACT ? ZetherTypes.TransferMode.HASH
+            : ZetherTypes.TransferMode.BUNDLE;
     }
 
     function _multiCall(bytes4 sel, ZetherTypes.TransferMode mode, uint256 bal, bytes32 b) internal view returns (bytes memory) {

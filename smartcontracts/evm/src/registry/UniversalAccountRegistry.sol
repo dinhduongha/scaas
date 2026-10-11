@@ -31,6 +31,8 @@ contract UniversalAccountRegistry is IUniversalAccountRegistry {
         uint16 keyLength;
         address linked;
         bytes authData;
+        /// @dev `encodedY`: a sender rebuilds its commit-reveal record from the memo's recipient UAs (zether.md CTR-ZTH-50).
+        bytes key;
     }
 
     bytes private constant SCHNORR_TAG = "SCAAS-ZETHER-SCHNORR-V1"; // ASCII thô, 23 byte (§11.1)
@@ -87,7 +89,8 @@ contract UniversalAccountRegistry is IUniversalAccountRegistry {
             linked = msg.sender;
         }
         _accounts[ua] = Account({
-            registered: true, scheme: authScheme, keyLength: uint16(len), linked: linked, authData: authData
+            registered: true, scheme: authScheme, keyLength: uint16(len), linked: linked, authData: authData,
+            key: encodedY
         });
         emit AccountRegistered(ua, authScheme, linked, authData);
     }
@@ -111,6 +114,10 @@ contract UniversalAccountRegistry is IUniversalAccountRegistry {
 
     function keyLengthOf(ZetherTypes.UA ua) external view returns (uint256) {
         return _accounts[ua].keyLength;
+    }
+
+    function keyOf(ZetherTypes.UA ua) external view returns (bytes memory) {
+        return _accounts[ua].key;
     }
 
     // ------------------------------------------------------------------ uỷ quyền

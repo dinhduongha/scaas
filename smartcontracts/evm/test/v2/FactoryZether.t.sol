@@ -178,7 +178,7 @@ contract FactoryZetherTest is Test {
         f.createToken(UZ, 1, c, "a");
     }
 
-    /// A public kind refuses every `conf` field, the two new ones included.
+    /// A public kind refuses every `conf` field, the two modes included.
     function test_publicKinds_refuseEveryConfField() public {
         OpenFactory g = new OpenFactory(registrar, UID_);
         NoUnderlyingToken none = new NoUnderlyingToken(address(g), address(0), UID_, false);
@@ -194,6 +194,14 @@ contract FactoryZetherTest is Test {
         g.createToken(IOpenFactory.TokenKind.NONE, 1, c, "a");
         c.conf.confidentialFee = 0;
         c.conf.verifier = address(okVer);
+        vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 4));
+        g.createToken(IOpenFactory.TokenKind.NONE, 1, c, "a");
+        c.conf.verifier = address(0);
+        c.conf.disclosureMode = 1;
+        vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 4));
+        g.createToken(IOpenFactory.TokenKind.NONE, 1, c, "a");
+        c.conf.disclosureMode = 0;
+        c.conf.auditorMode = 1;
         vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 4));
         g.createToken(IOpenFactory.TokenKind.NONE, 1, c, "a");
     }

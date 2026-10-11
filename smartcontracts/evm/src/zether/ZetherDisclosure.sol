@@ -97,8 +97,9 @@ contract ZetherDisclosure is ITransferDisclosure {
         return _isO(l.v.g1Msm(pts, sc));
     }
 
-    /// @dev `B_index` của `entryRef`: bản ghi của token, hoặc (mode HASH, 32 byte) `bundles` sau khi khớp hash.
-    ///      Token không ghi gì (mode NONE, ref lạ) ⇒ `UnknownEntry`. Transfer một người nhận: chỉ `index = 0`.
+    /// @dev `B_index` của `entryRef` trong `R = salt(16) ‖ B_1 ‖ … ‖ B_M`: bản ghi của token, hoặc (commit-reveal: token trả
+    ///      `keccak256(R) ‖ memo`, độ dài `49 + 40·M` không bao giờ bằng `16 + 4P·M`) `R` do người gọi đưa sau khi khớp
+    ///      hash. Token không ghi gì (NONE, ref lạ) ⇒ `UnknownEntry`. Transfer một người nhận: chỉ `index = 0`.
     function _leg(address token, bytes32 entryRef, uint256 index, bytes calldata bundles)
         private view returns (Leg memory l)
     {
@@ -107,13 +108,13 @@ contract ZetherDisclosure is ITransferDisclosure {
         l.r = l.v.groupOrder();
         bytes memory all = IZetherToken(token).transferEntry(entryRef);
         if (all.length == 0) revert UnknownEntry(entryRef);
-        if (all.length == 32) {
+        uint256 len = 4 * l.p;
+        if ((all.length - 16) % len != 0) {
             if (keccak256(bundles) != bytes32(all)) revert BundlesMismatch(entryRef);
             all = bundles;
         }
-        uint256 len = 4 * l.p;
-        if ((index + 1) * len > all.length) revert BadRecipientIndex(index);
-        uint256 o = index * len;
+        if (16 + (index + 1) * len > all.length) revert BadRecipientIndex(index);
+        uint256 o = 16 + index * len;
         (l.yt, l.cOut, l.dOut, l.cAud) =
             (_cut(all, o, l.p), _cut(all, o + l.p, l.p), _cut(all, o + 2 * l.p, l.p), _cut(all, o + 3 * l.p, l.p));
     }

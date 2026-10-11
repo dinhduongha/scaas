@@ -16,7 +16,8 @@ import {ZetherLib} from "./ZetherLib.sol";
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Dev chains only (`ZetherSafety`, CTR-ZTH-02). A layer over the
 ///         public ERC-20 balance: `zetherShield` burns public units, `zetherUnshield` mints them; the confidential layer
 ///         keeps no underlying of its own. The registry and the disclosure contract are implementation immutables; the
-///         verifier (the curve) and the auditor key are chosen at creation. Every entry point is `nonReentrant`.
+///         verifier (the curve), the auditor key and the two modes (`disclosureMode`, `auditorMode`) are chosen at
+///         creation and never change. Every entry point is `nonReentrant`.
 abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     address internal immutable _REGISTRY;
     ITransferDisclosure private immutable _DISCLOSURE;
@@ -41,12 +42,14 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     function maxDecryptableShielded() external view returns (uint256) { return ZetherLib.$().maxShielded; }
     function confidentialFee() external view returns (uint256) { return ZetherLib.$().confidentialFee; }
     function auditorKey() external view returns (bytes memory) { return ZetherLib.$().auditorKey; }
+    function auditorMode() external view returns (ZetherTypes.AuditorMode) { return ZetherLib.$().auditorMode; }
+    function disclosureMode() external view returns (ZetherTypes.DisclosureMode) { return ZetherLib.$().disclosureMode; }
     function totalShielded() external view returns (uint256) { return ZetherLib.$().totalShielded; }
-    /// @notice The raw record for `disclosure()`: the bundles (single format, BUNDLE), the 32-byte hash (HASH, stored in
+    /// @notice The raw record for `disclosure()`: `R` (BUNDLE, single), `keccak256(R) ‖ memo` (commit-reveal; the hash in
     ///         one slot), empty (NONE, unknown).
     function transferEntry(bytes32 entryRef) external view returns (bytes memory) {
         bytes32 h = ZetherLib.$().entryHashes[entryRef];
-        return h != bytes32(0) ? abi.encodePacked(h) : ZetherLib.$().entries[entryRef];
+        return h != bytes32(0) ? abi.encodePacked(h, ZetherLib.$().memos[entryRef]) : ZetherLib.$().entries[entryRef];
     }
     function sendCounter(ZetherTypes.UA ua) external view returns (uint256) { return ZetherLib.$().acct[ua].sendCounter; }
 
@@ -81,16 +84,17 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
 
     // ------------------------------------------------------------------ transfer (CTR-ZTH-37, CTR-ZTH-38)
 
+    /// @notice The token's default: the record stored (`BUNDLE` token) or commit-reveal (`COMPACT` token).
     function zetherTransfer(bytes calldata payload, bytes calldata proof, bytes calldata authSig, ZetherTypes.UA beneficiary)
         external nonReentrant returns (bytes32)
     {
-        return ZetherLib.transferMulti(payload, proof, authSig, beneficiary, ZetherTypes.TransferMode.HASH, _env());
+        return ZetherLib.transferMulti(payload, proof, authSig, beneficiary, ZetherLib.defaultMode(), _env());
     }
 
-    function zetherTransferBundle(bytes calldata payload, bytes calldata proof, bytes calldata authSig, ZetherTypes.UA beneficiary)
+    function zetherTransferCompact(bytes calldata payload, bytes calldata proof, bytes calldata authSig, ZetherTypes.UA beneficiary)
         external nonReentrant returns (bytes32)
     {
-        return ZetherLib.transferMulti(payload, proof, authSig, beneficiary, ZetherTypes.TransferMode.BUNDLE, _env());
+        return ZetherLib.transferMulti(payload, proof, authSig, beneficiary, ZetherTypes.TransferMode.HASH, _env());
     }
 
     function zetherTransferNoBundle(bytes calldata payload, bytes calldata proof, bytes calldata authSig, ZetherTypes.UA beneficiary)
@@ -164,7 +168,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     ///      listed (they carry their own signature or none).
     function _isZetherOp(bytes4 sel) internal pure returns (bool) {
         return sel == this.zetherShield.selector || sel == this.zetherTransfer.selector
-            || sel == this.zetherTransferBundle.selector || sel == this.zetherTransferNoBundle.selector
+            || sel == this.zetherTransferCompact.selector || sel == this.zetherTransferNoBundle.selector
             || sel == this.zetherTransferSingle.selector || sel == this.zetherUnshield.selector;
     }
 

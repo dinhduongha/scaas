@@ -54,6 +54,10 @@ interface IUniversalAccountRegistry {
     /// @notice 64 (bn254) | 128 (BLS12-381) | 0 (chưa đăng ký). Token so với `verifier.g1EncodedBytes()`.
     function keyLengthOf(ZetherTypes.UA ua) external view returns (uint256);
 
+    /// @notice `encodedY` of a registered UA (empty otherwise): the recipient keys of a sender's storage-only recovery
+    ///         (zether.md CTR-ZTH-50).
+    function keyOf(ZetherTypes.UA ua) external view returns (bytes memory);
+
     /// @notice Thông điệp PoP mà `account` phải ký cho `encodedY`.
     function popChallenge(bytes calldata encodedY, address account) external view returns (bytes32);
 

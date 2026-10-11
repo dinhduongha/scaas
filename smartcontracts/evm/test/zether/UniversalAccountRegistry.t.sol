@@ -47,6 +47,10 @@ contract UniversalAccountRegistryTest is Test {
         assertTrue(reg.isRegistered(a) && reg.isRegistered(b));
         assertEq(reg.keyLengthOf(a), 64);
         assertEq(reg.keyLengthOf(b), 128);
+        // the key itself, for a sender's storage-only recovery of a commit-reveal transfer (zether.md CTR-ZTH-50)
+        assertEq(keccak256(reg.keyOf(a)), ZetherTypes.UA.unwrap(a));
+        assertEq(keccak256(reg.keyOf(b)), ZetherTypes.UA.unwrap(b));
+        assertEq(reg.keyOf(ZetherTypes.UA.wrap(bytes32(uint256(1)))).length, 0, "unregistered: empty");
         assertEq(ZetherTypes.UA.unwrap(reg.links(address(this))), ZetherTypes.UA.unwrap(a));
         assertEq(reg.link_eth(a), address(this));
         assertEq(reg.link_eth(b), address(0));

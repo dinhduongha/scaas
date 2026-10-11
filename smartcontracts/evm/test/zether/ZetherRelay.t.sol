@@ -82,14 +82,14 @@ contract ZetherRelayTest is ZetherFixture {
     }
 
     function test_relayedMultiTransfer_unshield_shield() public {
-        // zetherTransfer (HASH), relayed
+        // zetherTransferCompact (HASH), relayed
         MetaTxLib.MetaTransaction memory m = _mt("", 1, RR | FIX, 3);
         User[] memory to = new User[](2);
         (to[0], to[1]) = (bob, carol);
         uint256[] memory vs = new uint256[](2);
         (vs[0], vs[1]) = (40, 0);
         Tx memory t = _proveMulti(tok, alice, to, vs, 500, _none(), ZetherTypes.TransferMode.HASH, tok.envelopeBinding(m));
-        m.data = abi.encodeCall(ZetherLayer.zetherTransfer, (t.payload, t.proof, bytes(""), _none()));
+        m.data = abi.encodeCall(ZetherLayer.zetherTransferCompact, (t.payload, t.proof, bytes(""), _none()));
         _exec(m, _sign(PAYER_PK, m));
         assertTrue(_holds(tok, bob, 40, false));
         assertTrue(_holds(tok, alice, 460, true));
@@ -115,6 +115,43 @@ contract ZetherRelayTest is ZetherFixture {
         _direct(tok, _proveTransfer(tok, alice, carol, 5, 400 - FEE, _none(), 0), _none());
         assertTrue(_holds(tok, alice, 400 - FEE - 5, true));
         _assertConservation(tok, 1100);
+    }
+
+    /// The modes hold relayed: on a `COMPACT` / `FULL` token `zetherTransfer` relays as commit-reveal, the no-bundle entry
+    /// reverts `TransferEntryDisabled`, an opt-out reverts `AuditorRequired` (the refusal reverts the envelope: nonce
+    /// unused).
+    function test_relayedUnderTheModes() public {
+        (dMode, aMode) = (1, 1);
+        tok = _newToken(true, "commit-full");
+        _public(tok, payer, 1000);
+        _fund(tok, alice, 500);
+        tok.zetherRollOver(alice.ua);
+        User[] memory to = new User[](2);
+        (to[0], to[1]) = (bob, carol);
+        uint256[] memory vs = new uint256[](2);
+        vs[0] = 40;
+        MetaTxLib.MetaTransaction memory m = _mt("", 1, RR | FIX, 3);
+        Tx memory t = _proveMulti(tok, alice, to, vs, 500, _none(), ZetherTypes.TransferMode.HASH, tok.envelopeBinding(m));
+        m.data = abi.encodeCall(ZetherLayer.zetherTransfer, (t.payload, t.proof, bytes(""), _none()));
+        _exec(m, _sign(PAYER_PK, m));
+        assertTrue(_holds(tok, bob, 40, false));
+        bytes memory entry = tok.transferEntry(_ref(tok, alice, 0));
+        assertEq(entry.length, 32 + 17 + 40 * 2, "the commitment, then the sender memo");
+        bytes memory pl = _multiPayload(tok, alice, to, vs, 7, tok.accountState(alice.ua));
+        m = _mt(abi.encodeCall(ZetherLayer.zetherTransferNoBundle, (pl, bytes(""), bytes(""), _none())), 2, RR, 0);
+        bytes memory sig = _sign(PAYER_PK, m);
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSelector(IZetherToken.TransferEntryDisabled.selector, uint8(1)));
+        tok.mtxExecute(m, sig);
+        audOut = true;
+        pl = bytes.concat(_multiPayload(tok, alice, to, vs, 7, tok.accountState(alice.ua)), _memo(2));
+        audOut = false;
+        m = _mt(abi.encodeCall(ZetherLayer.zetherTransfer, (pl, bytes(""), bytes(""), _none())), 2, RR, 0);
+        sig = _sign(PAYER_PK, m);
+        vm.prank(relayer);
+        vm.expectRevert(IZetherToken.AuditorRequired.selector);
+        tok.mtxExecute(m, sig);
+        assertEq(tok.mtxNonce(payer, 2), 0, "nonce not consumed");
     }
 
     function test_proofLiftedOutOfEnvelopeRejected() public {
@@ -225,7 +262,7 @@ contract ZetherRelayTest is ZetherFixture {
         (bytes4[] memory s, uint8[] memory c, uint8[] memory a) = tok.mtxSelectors();
         bytes4[8] memory want = [
             IMetaTx.cancelNonce.selector, NoUnderlyingToken.burn.selector, ZetherLayer.zetherShield.selector,
-            ZetherLayer.zetherTransfer.selector, ZetherLayer.zetherTransferBundle.selector,
+            ZetherLayer.zetherTransfer.selector, ZetherLayer.zetherTransferCompact.selector,
             ZetherLayer.zetherTransferNoBundle.selector, ZetherLayer.zetherTransferSingle.selector,
             ZetherLayer.zetherUnshield.selector
         ];
@@ -237,6 +274,7 @@ contract ZetherRelayTest is ZetherFixture {
         }
         assertEq(bytes4(keccak256("zetherShield(bytes,uint256)")), ZetherLayer.zetherShield.selector);
         assertEq(bytes4(keccak256("zetherTransfer(bytes,bytes,bytes,bytes32)")), ZetherLayer.zetherTransfer.selector);
+        assertEq(bytes4(keccak256("zetherTransferCompact(bytes,bytes,bytes,bytes32)")), ZetherLayer.zetherTransferCompact.selector);
         assertEq(bytes4(keccak256("zetherUnshield(bytes,bytes,bytes,bytes32,address,uint256)")),
             ZetherLayer.zetherUnshield.selector);
         bytes[4] memory refused = [
