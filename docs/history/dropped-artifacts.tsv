@@ -837,3 +837,4 @@ scaas-account	renamed	`SmartKeyAccount` (crate scaas-smart-key-account; P4, CTR-
 scaas-account.__check_auth	renamed	`SmartKeyAccount.__check_auth`, networks/soroban.md#NET-SOR-04
 ownerNonce	removed	the owner call is a MetaTransaction lane 0 (P4), networks/hedera.md#NET-HED-03
 subjectAccountFactory	renamed	`smartKeyAccountFactory` (P4), clients/app.md
+bundle = u ‖ v_t ‖ v_a ‖ toUA	renamed	the PQZ bundle gains the build salt: `R = salt ‖ u ‖ v_t ‖ v_a ‖ toUA`, contracts/pq-zether.md#CTR-PQZ-23

@@ -2,6 +2,12 @@
 
 # Zether disclosure — who can reveal what, under which conditions (2026-10-11)
 
+**Status (owner decisions, 2026-10-11; SPECIFIED for P3b, see [contracts/zether.md](../contracts/zether.md) CTR-ZTH-30, -38, -42, -48 to -50, and CTR-PQZ-19, -23, -24):**
+- **R3** (opt-out undermines compliance, Q1) is addressed by `auditorMode = FULL` (no opt-out); the opt-out is kept by choice under `OPTIONAL`.
+- **G1 / R7** (`s` derivation) are closed by the salt rule: `s = HKDF(seed_zether, "ZTX/s/v2" ‖ chainUid ‖ token ‖ fromUA ‖ sendCounter ‖ salt)` with a fresh published 16-byte salt per build.
+- **§7** (alternatives to storing the bundle) is superseded by the sender-memo rule: commit-reveal stores the commitment plus a 17 + 40·M byte memo (a flags byte records the auditor choice), and the sender recovers from seed + storage alone; tokens choose `disclosureMode ∈ {BUNDLE, COMMIT}` at creation.
+- **R6** (data availability of `TransferBundles` logs for receiver and auditor under commit-reveal) is still open.
+
 Written 2026-10-11 for the owner: "With Zether, can the sender, the receiver and the auditor reveal part or all of a
 transaction, or every transaction of the token? This matters; it needs a document and a careful review. Give a table
 plus conditions." A follow-up asked whether there is an alternative to storing the 256-byte bundle, for example a
