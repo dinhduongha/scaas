@@ -100,7 +100,9 @@ primary fungible store of the Account address — no internal ledger.** An Aptos
 the module derives from the Account's `ExtendRef`. So the Account's balance of asset X =
 `primary_fungible_store::balance(account, X)`, and anything sent to the Account address (FA, or a legacy coin with its
 paired FA — AIP-63), even before the Account exists, is spendable at once by meta-tx; funding = an ordinary transfer
-from Petra to the address the portal shows. Unlike Sui's `Account<T>` per coin type, one key set and one rotation cover
+from Petra to the address the portal shows.
+
+Unlike Sui's `Account<T>` per coin type, one key set and one rotation cover
 every asset, which travels **explicitly** in `MetaOp.asset`. No `TransferRef` or allowance is used: only module
 `scaas` derives the Account signer, through `public(package)` functions that `mandate`/`dex` of the same package call
 ([CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01) at module level). Funds **leave** through
@@ -169,7 +171,9 @@ one lane = one entry; `next == nonce` then increments; `valid_until` = the maxim
 `prune(account, lanes: vector<vector<u8>>)` is **permissionless**: it deletes entries with `valid_until +
 PRUNE_DELAY_S < now` (`PRUNE_DELAY_S` = 30 days ≥ the client's `LANE_HORIZON_S`; `mandate::prune` uses the same rule
 for `pay_ref`), and the storage refund goes to the sender of the `prune` transaction (a relayer lane), which therefore
-has a reason to clean up. Why the delay: a lane's `valid_until` is only the expiry of the op that RAN. The client
+has a reason to clean up.
+
+Why the delay: a lane's `valid_until` is only the expiry of the op that RAN. The client
 re-issues terms on the SAME lane/nonce 0 at every issue (signing timed out, retry), so one request can have several
 signed ops: only one can run while the lane exists (`next = 1`); if the lane were deleted right after the executed
 op's expiry, a later, still-valid op would run a second time (double pay). The rule: the client issues every
@@ -519,7 +523,9 @@ for localnet/private chains a self-hosted indexer stack with the same schema, `a
 --with-indexer-api`, same client). Neither the hosted Indexer API (testnet) nor the localnet stack has an `events`
 table (checked 2026-10-04: `__type(name: "events")` = null; localnet 9.6.0: `field 'events' not found in type:
 'query_root'`; running processors: fungible_asset, account_restoration, token_v2, stake, default, objects,
-user_transaction, account_transactions). The hint is `user_transactions(where: {entry_function_contract_address: {_eq:
+user_transaction, account_transactions).
+
+The hint is `user_transactions(where: {entry_function_contract_address: {_eq:
 <package long form>}, block_height: {_gte, _lte}})` (processor `user_transaction_processor`, running on hosted testnet;
 the old `parquet_…` one stalled at version 6.65 billion); per version: `GET /v1/transactions/by_version/{v}` (success,
 hash, events) + `GET /v1/blocks/by_height/{h}` (hash; the version must lie in `first_version..last_version`), then
@@ -577,7 +583,9 @@ envelope with `message = "scaas.order.v1:0x<hash>"`. `entry settle(lane, market,
 fields…, taker_sig…, maker_fill, taker_fill)` checks flags, expiry, `nonce >= min_nonce[(maker)]` of the market,
 relayer, taker, signatures (keys ∈ `Account.keys` of maker/taker), cross-matching pair, distinct parties, listed
 market; `fill > 0`, `filled + fill <= sell_amount`, FOK; cross-multiplied price on u128; fee `ppm <= max_fee_ppm`, cap
-10 000 ppm checked at `set_market`. Funds move Account → Account (store → store), the fee to `fee_recipient`; the fills
+10 000 ppm checked at `set_market`.
+
+Funds move Account → Account (store → store), the fee to `fee_recipient`; the fills
 are the relayer's choice but bounded by the signed limit price and amounts ([NET-ALL-08](README.md#NET-ALL-08)).
 Events `OrderFilled` ×2 + `Matched`. Cancel: `cancel_signed` (`Cancel{domain=b"scaas.cancel.v1", chain_id, market,
 order_hash}` ⇒ `filled = sell_amount`) and `invalidate_nonces_signed` (`min_nonce` per (maker, market), strictly

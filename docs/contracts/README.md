@@ -86,7 +86,9 @@ after block 256, so this is checked off chain. A wrong value makes correct signa
 equals **another** chain's `chain_uid`, which the per-contract check against the RPC excludes. Signing clients fill
 `domain.salt` from the chain profile (works offline) or from `eip712Domain()` (read once, cached); wallets such as
 MetaMask sign the domain they are given and check only `chainId`, and clientkeys refuses a `salt` that differs from the
-profile. What protects is the contract: on chain B the digest uses B's `chain_uid`, so a signature for chain A reverts
+profile.
+
+What protects is the contract: on chain B the digest uses B's `chain_uid`, so a signature for chain A reverts
 there, whichever wallet produced it. **Limit:** a genesis hash separates chains with different genesis blocks that
 share a chain id (another network on 7622, a private chain re-created with a new genesis). It does not separate two
 branches of a fork (they share genesis) nor a PoA chain re-created from the **same** genesis file. The second is closed
@@ -216,14 +218,18 @@ own job (Move test, Soroban, CosmWasm, Tact, Solana) as the family is added.
 `REGISTRAR` optional, `DEMO_SUPPLY`/`DEMO_HOLDER` optional) reads the genesis hash from the RPC and deploys, through
 the CREATE2 deployer ([CTR-GEN-06](#CTR-GEN-06)), `SmartKeyAccountFactory`, `OpenFactory` with the token
 implementations (each taking the factory address and `chain_uid`) registered as version 1 of their kinds, and
-the `SCaaSDex` implementation (registered as DEX version 1; built, no clone) and `SCaaSDexV1(registrar)` (its constructor takes the admin, here the registrar; unsalted domain); optionally a tier-1 demo token (**SPECIFIED**). It writes
+the `SCaaSDex` implementation (registered as DEX version 1; built, no clone) and `SCaaSDexV1(registrar)` (its constructor takes the admin, here the registrar; unsalted domain); optionally a tier-1 demo token (**SPECIFIED**).
+
+It writes
 `deployments/<chainid>.json` to seed the node's chain configuration and client chain data. Production: every contract
 owner/admin is a Safe from the first block, and deployer keys come from a hardware wallet or KMS. **Transitional
 (BUILT, P1e):** every contract is deployed by `new X{salt: DEPLOY_SALT}` through forge's deterministic deployer (default
 salt `keccak256("scaas.deploy.v1")`; a re-run on the same chain collides, so a new version needs a new salt), the script
 stops without the deployer and checks `chainUid()` of the token factory, of the `NONE` implementation and of the `SCaaSDex` implementation against `chain_uid` (the v1 contracts have no
 `chainUid()`; controller ruling, pending the owner). `CHAIN_UID`, when set, must equal the RPC's block 0 hash (read at any head
-by rolling to block 1), else the script stops; unset it defaults to that hash. The script creates `deployments/` itself. It deploys `OpenFactory` with `NoUnderlyingToken` as version 1 of `NONE` (`UnderlyingToken` is over
+by rolling to block 1), else the script stops; unset it defaults to that hash.
+
+The script creates `deployments/` itself. It deploys `OpenFactory` with `NoUnderlyingToken` as version 1 of `NONE` (`UnderlyingToken` is over
 EIP-170 and waits for the size work) and, for the node until P5, the v1 line: `OpenFactoryV1` with `MetaToken` (version 1
 of `META`, when the registrar is the deployer), `SubjectAccountFactory`, `MetaTxDex` and `SCaaSDexV1`. The JSON gains
 `token_factory`, `implementation_none`, `dex_implementation` (the `SCaaSDex` implementation) and `chain_uid`. `forge script … --broadcast` needs `--sender <deployer address>`; `DEPLOY_SALT` is optional.

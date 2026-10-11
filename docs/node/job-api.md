@@ -332,7 +332,9 @@ registered token of the chain (any kind) or the token factory (a token's own sig
 `metatx` jobs, [NODE-JOB-20](#NODE-JOB-20)); `call` jobs carry no native value. Lane keys never hold
 a role on any contract ([NODE-GEN-01](README.md#NODE-GEN-01), owner 2026-10-07): a role-restricted call reaches its
 target only through a Safe of the role holders (the `Safe.execTransaction` row, [NODE-JOB-19](#NODE-JOB-19)), and the
-lane only relays an `execTransaction` the role holders already signed. Refusal: `403 CALL_TARGET_REFUSED` at accept (step 4), re-checked at lease; on the legacy
+lane only relays an `execTransaction` the role holders already signed.
+
+Refusal: `403 CALL_TARGET_REFUSED` at accept (step 4), re-checked at lease; on the legacy
 pull path `dead` with `CALL_TARGET_REFUSED` before simulation. A new call shape needs a table row (a node release).
 Selector matching suffices outside the token/role set: a lane's authority is only `msg.sender` of the direct call,
 never of calls the target makes. One operator session (or a stolen one) could otherwise turn a lane that holds fee
@@ -343,7 +345,9 @@ immutable after creation ([INT-ERP-05](../integration.md#INT-ERP-05)).
 through their own contract.** Besides the account, mandate, DEX and UA rows, the table has rows only for
 permissionless or self-authenticating selectors on registered targets: tender `commitBid` (carries the signed deposit
 intent), `revealBid`, `withdrawDeposit`, `settleTender` (anyone after the award window); vesting `release` and
-distribution `claim`, `claimMany`; `ExchangeOffer.exchange` legs. Every **role-restricted** call (`createTender`,
+distribution `claim`, `claimMany`; `ExchangeOffer.exchange` legs.
+
+Every **role-restricted** call (`createTender`,
 `cancelTender`, `disqualifyWinner`, bond release/claim, issuer and compliance interventions, `attest`, factory
 `create*`, a token's `mint`, rate administration and guardian calls) goes through the role holder's own contract —
 `SmartKeyAccount.mtxExecuteAsOwner`, or `Safe.execTransaction` on a registered role-holder contract — so a lane is never

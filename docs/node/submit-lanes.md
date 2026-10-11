@@ -376,7 +376,9 @@ job never published on the bus (only the subject or someone it gave the payload 
 exemptions of unwrap jobs ([unwrap jobs](#unwrap-jobs)) and of regulated-token compliance refusals
 ([contracts/asset-suite.md](../contracts/asset-suite.md)). ≥ 3 in 24 h ⇒ the subject gets one live job per chain and
 a re-simulation right before signing; ≥ 10 in 24 h, or `cost ≥ chain.grief_cost_cap` ⇒ intake refuses `429
-SUBJECT_THROTTLED` until 24 h after the last count. A namespace aggregate feeds a `scaas_grief_*` metric and alert; the
+SUBJECT_THROTTLED` until 24 h after the last count.
+
+A namespace aggregate feeds a `scaas_grief_*` metric and alert; the
 chain-level breaker stays `revert_streak`. Fresh lanes per request (Cosmos, Sui, Solana, Aptos) make per-lane counting
 useless, and a new signature costs the subject nothing: only a counter keyed by subject bounds post-simulation flips
 (balance moved, nonce burnt, key changed). Fresh subjects are cheap on some families; the namespace aggregate and
@@ -542,7 +544,9 @@ jobs journaled together.** `mtxBatchTransfer` groups `metatx` jobs with `struct 
 one batch ([CTR-MTX-11](../contracts/metatx.md#CTR-MTX-11), [CTR-MTX-24](../contracts/metatx.md#CTR-MTX-24)), so no other relayer can consume an item between
 simulation and inclusion; a subject's `cancelNonce` remains the only race. One `leased → signed` transaction writes
 the batch's `outer_tx` row, journals every item with the same `lane_label`, `outer_nonce`, `tx_hash` and bumps
-`lane.journal_max` once; each item keeps its own digest (G2), state and `job_event`. A failing batch is re-simulated
+`lane.journal_max` once; each item keeps its own digest (G2), state and `job_event`.
+
+A failing batch is re-simulated
 and resubmitted without the failing item (`dead` with its decoded reason; the item counts toward
 [NODE-LANE-15](#NODE-LANE-15)). Measured cost is split evenly over the items (remainder to the lowest `uid`), so
 `usage_day` sums to the fee paid. **Never batched**: unwrap ops, `receiver_fee` jobs, `call` jobs, sponsored jobs

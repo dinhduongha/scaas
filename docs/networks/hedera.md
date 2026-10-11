@@ -186,7 +186,9 @@ pipeline, replacement or gap-fill.** Hedera has **no mempool**: the relay forwar
 node; it reaches consensus in seconds or is refused at precheck. So there is no replacement of a stuck transaction and no
 gap-fill (a nonce never hangs in a mempool), and pipelining several nonces in one lane is dangerous: nonce N+1 can
 reach consensus (through another node) before N ⇒ `WRONG_NONCE`, and the relayer still pays the node fee — so Hedera does not run the EVM runner (`submit.rs`). The runner
-reads the committed nonce before each job; lanes run in parallel. The subject has no sequence on the path: the
+reads the committed nonce before each job; lanes run in parallel.
+
+The subject has no sequence on the path: the
 meta-tx lane is `batch = H(entryRef)` inside each contract, so an op held back on contract 1 does not block the same
 subject on contract 2 (anti-lock test in forge and end to end). Routing: `main.rs` picks the runner by
 `ChainCfg::uses_adapter()` (= `family != "evm"`), so Hedera goes through `adapters::build` → `HederaAdapter` +
@@ -269,7 +271,9 @@ delegate. An ED25519 owner cannot use `executeAsOwner` (ECDSA; target name `mtxE
 owner through HIP-632 over the same owner digest as `mtxExecuteAsOwner` (target: the owner's `MetaTransaction` digest
 in the wallet's domain, [CTR-ACC-06](../contracts/mandates.md#CTR-ACC-06); as built the `OwnerCall` digest with
 `ownerNonce`); `isValidSignature` (ERC-1271 for
-the owner) stays ECDSA, and an ED25519 owner pays manually with `mtxExecuteAsOwnerRaw(execute(token, payWithFee…))`. ERC-1271 runs under
+the owner) stays ECDSA, and an ED25519 owner pays manually with `mtxExecuteAsOwnerRaw(execute(token, payWithFee…))`.
+
+ERC-1271 runs under
 STATICCALL, where HIP-632 halts, so `isValidSignature` cannot cover ED25519; the token is not special-cased (one more
 Hedera-only path in the signature pipeline for a rare case). Paying manually by meta-tx holds for ECDSA owners only.
 The owner's raw call is relayed as a `call` job (selector in the call table,
@@ -333,7 +337,9 @@ makes every `unwrap` revert (the wrapper holds no HBAR), locking the reserve. v2
 `HederaMetaToken` only associates (the permissionless `associateUnderlying()` calling `0x167
 associateToken(this, underlying)`), is still registered as `META v1` (`DeployHedera.s.sol:29-30`), and anyone may create
 it through the open factory (`OpenFactoryV1.createMetaToken`, permissionless, `:91-96`; `deprecate` does not block
-creation — `_registered` checks only non-zero, `:167-170`). Fix (SPECIFIED): `MetaToken.initialize` calls an
+creation — `_registered` checks only non-zero, `:167-170`).
+
+Fix (SPECIFIED): `MetaToken.initialize` calls an
 `internal virtual _checkUnderlying(u)` hook (empty by default); `HederaMetaToken` overrides it with
 `HederaLib.checkAndAssociate(u)` and reverts `UnderlyingInvalid` on any fee; `associateUnderlying()` is deleted
 (association inside `initialize` means a token that cannot associate is never born, and the auto-association slot is

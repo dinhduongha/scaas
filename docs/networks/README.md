@@ -254,12 +254,16 @@ digest to a chain — token implementations (a clone runs its implementation's c
 value and cannot declare another), the factory (which registers only implementations with its own value), the subject
 account factory, mandate wallets, the DEX and the Universal Account registry — and it is the `salt` of every SCaaS
 EIP-712 domain: `(name, version, chainId, verifyingContract, salt = chain_uid)`, ERC-5267 `eip712Domain()` fields
-`0x1f`. It is also bound into the registry's proof-of-possession digest and the `metatx-cancel` digest
+`0x1f`.
+
+It is also bound into the registry's proof-of-possession digest and the `metatx-cancel` digest
 ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07)) and into the confidential token's statement, envelope, rollover,
 mode, disclosure and `entryRef` digests beside `chainId`, since those are not EIP-712 domains. The EVM cannot read its
 own genesis hash after block 256, so a contract cannot *prove* `chain_uid`; the deploy script reads it from the RPC,
 and the deploy gate and the node require each contract's `chainUid()` = the RPC's genesis hash = the chain profile
-([NODE-GW-07](../node/gateway.md#NODE-GW-07), [NET-EVM-05](evm.md#NET-EVM-05)). `chain_uid` alone is not unique — Ethereum and ETC, Avalanche C-Chain and Fuji share a genesis — a chain is identified by `(chainId, chain_uid)` together; pruned RPCs (EIP-4444) may not serve block 0, so deploy scripts and the node read [`chain-uids.json`](../../smartcontracts/evm/chain-uids.json). A wrong value makes correct signatures
+([NODE-GW-07](../node/gateway.md#NODE-GW-07), [NET-EVM-05](evm.md#NET-EVM-05)). `chain_uid` alone is not unique — Ethereum and ETC, Avalanche C-Chain and Fuji share a genesis — a chain is identified by `(chainId, chain_uid)` together; pruned RPCs (EIP-4444) may not serve block 0, so deploy scripts and the node read [`chain-uids.json`](../../smartcontracts/evm/chain-uids.json).
+
+A wrong value makes correct signatures
 fail; it is unsafe only if it equals another chain's `chain_uid`, which that comparison excludes. The guarantee is that
 honest contracts on two chains sharing a chain id (7622 or any other) never accept each other's signatures, whichever
 wallet produced them. A replica deployed elsewhere from a copy of our profile is trusted by nothing of ours: tokens
@@ -267,7 +271,9 @@ bind the registry address at `initialize`, and the node binds every contract's `
 per chain profile and refuses a mismatch. Because contracts are deployed through a CREATE2 deployer with a fixed salt
 ([NET-EVM-05](evm.md#NET-EVM-05)), a contract whose constructor takes `chain_uid` — and every clone made from it — has
 a **different address on each chain**, so a user's subject account does too; a contract with no chain-specific
-constructor argument has the same address everywhere. Safety does not rest on the address: the salt is in every
+constructor argument has the same address everywhere.
+
+Safety does not rest on the address: the salt is in every
 digest. Limit: a genesis hash does not separate the two branches of a fork, which share genesis
 ([NET-ALL-25](#NET-ALL-25)). Non-EVM families take the family's genesis or network identifier where the runtime
 exposes it (Soroban network id, Solana genesis hash), else a chain-profile constant, each fixed with vectors; it is the `network` field of `MetaCall`/`MetaTransfer`
@@ -283,7 +289,9 @@ deployed with CREATE, until the salted contracts replace them (nothing is deploy
 and its list of SCaaS DEX contracts.** Status: **SPECIFIED**. Every EVM and Hedera chain profile — the node's chain row
 with its registered contracts ([store.md](../node/store.md)), the signer's own pinned profile
 ([CLI-SGN-08](../clients/signers-clientkeys.md#CLI-SGN-08)) and the app's chain configuration — holds `chain_uid` and
-the list of DEX contracts deployed by SCaaS on that chain (each with its `chainUid()` checked). Clients fill
+the list of DEX contracts deployed by SCaaS on that chain (each with its `chainUid()` checked).
+
+Clients fill
 `domain.salt` from `chain_uid` and refuse to build or sign a trade order whose `dex` is not on the list
 ([CLI-SGN-33](../clients/signers-clientkeys.md#CLI-SGN-33), [CLI-SGN-35](../clients/signers-clientkeys.md#CLI-SGN-35));
 the node routes and settles orders only for listed DEXes ([NODE-DEX-16](../node/dex-venue.md#NODE-DEX-16)). A

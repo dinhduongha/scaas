@@ -91,6 +91,7 @@ public chain) fails it. **And** the chain is identified by `(chainid, chain_uid)
 `PqzToken.initialize` copies `registry.chainUid()` (the genesis hash, a registry constructor immutable, `≠ 0`) into an
 immutable `chainUid`, which enters every statement and `entryRef`, so no proof, authorization or disclosure verifies on
 another chain with the same chain id; the UA PoPs bind it through `popDigest` ([CTR-UA-07](accounts.md#CTR-UA-07)).
+
 The node binds registry, `chainUid()` and the RPC genesis hash per chain profile and refuses a mismatch.
 `OpenFactory.pqzEnabled` defaults to `false`. NatSpec and docs: **UNAUDITED — NOT FOR PRODUCTION FUNDS**. Chain 7622 is
 the owner's named target and runs our client. The owner moved the private chain off its former id 9000 because 9000
@@ -844,19 +845,25 @@ proof (knowledge of the PQZ key) **and** the signature (the auth UA) are require
 allowances per [CTR-TOK-01](token-wrappers.md#CTR-TOK-01), escrow invariant) on the one token base `ERC20MetaTx`
 ([CTR-MTX-07](metatx.md#CTR-MTX-07)): the two structs, the 2D nonce, `cancelNonce`, `mtxExecute` and its alias,
 `supportedModes() = MODE_KNOWN_MASK` (`0xF3`), `MetaTransactionExecuted` and the base's errors, EIP-712 domain
-`("SCaaS PqzToken", "1", chainId, token, salt = chainUid)` ([CTR-GEN-05](README.md#CTR-GEN-05)). Every PQZ op —
+`("SCaaS PqzToken", "1", chainId, token, salt = chainUid)` ([CTR-GEN-05](README.md#CTR-GEN-05)).
+
+Every PQZ op —
 `pqzShield`, `pqzTransfer`, `pqzUnshield`, refresh, `pqzRollOver` — is reachable as a direct open call **and** as an allowlisted self-call
 whose `m.data` is byte-identical to the direct call's calldata ([CTR-PQZ-21](#CTR-PQZ-21)), so a client builds one
 calldata and either submits it or wraps it. Envelope ops take outer fee `NONE` or `FIXED` only, absolute; `PERCENT`
 reverts (`FeePolicy.requireConfidentialSafe`, [CTR-ZTH-07](zether.md#CTR-ZTH-07)) and stays available only for plain
 public transfers and payments, which are `MetaTransfer`s as on every token ([CTR-MTX-23](metatx.md#CTR-MTX-23)). The
-outer fee is the base's step 6, after the call; a failing fee reverts everything. Proof-carrying ops bind their
+outer fee is the base's step 6, after the call; a failing fee reverts everything.
+
+Proof-carrying ops bind their
 envelope as classical Zether ([CTR-ZTH-06](zether.md#CTR-ZTH-06)): `envelopeBinding` is a statement header field (0 for
 a direct call), read from the ticket, so the proof and the PQ `authSig` cover exactly one envelope. The inner
 confidential fee (`beneficiaryUA`, `confidentialFee`) stays beside it, as classical. **Authority is split:**
 confidential balances move only on the PQ `authSig` over the statement plus the PQZ proof
 ([CTR-PQZ-12](#CTR-PQZ-12), unchanged); the envelope signer authorizes only the public-ledger part — the outer fee
-from its own public balance, its nonce, and for `pqzShield` the public amount it shields from that balance. **PQ-complete
+from its own public balance, its nonce, and for `pqzShield` the public amount it shields from that balance.
+
+**PQ-complete
 path:** the same selectors through `uaExecute` with a `UAMetaTransaction` ([CTR-UA-26](accounts.md#CTR-UA-26)) on
 `PqzToken`'s own `bytes32` UA ledger ([CTR-UA-18](accounts.md#CTR-UA-18)), whose UA allowlist holds the four PQZ
 selectors, so an `mldsa65`/`mldsa44` UA or a PQ-dominant `msig` pays the outer fee and signs the nonce, and no
@@ -975,7 +982,9 @@ are rewritten**: integer-only, constant-time C99 for the fixed parameters, with 
 `int_t`, no GMP), an incomplete negacyclic NTT of our own (no HEXL), an integer discrete-Gaussian or uniform-mask sampler
 (no `double`), rejection in fixed-point integer arithmetic (no MPFR), a caller-provided arena (no `malloc`), and error
 returns (no `abort`); optional AVX2 backend. LaZer's protocol logic, LaZer-format specifications and codegen are kept.
-One implementation serves the prover, the client-side verifier mirror and the precompile. No Solidity verifier.
+One implementation serves the prover, the client-side verifier mirror and the precompile.
+
+No Solidity verifier.
 LaBRADOR/Greyhound deferred to aggregation work. **Kill criterion**: stop and re-plan with the hash-based fallback if
 the transfer proof exceeds 96 KB, if p99 adversarial verify exceeds 50 ms on the chain host, or if the rewritten layers
 cannot reach arithmetic-layer KAT equality with upstream. Single implementation; LaZer is MIT and protocol logic stays
@@ -1051,7 +1060,9 @@ get the off-chain co-processor attestation seam later; **no client ports in v1**
 7622 itself. **Determinism and probing:** integer-only code, no threads, no floating point, no CPU-feature-dependent
 results, bounded loops (a capped rejection loop that hits its cap ⇒ invalid); any parse error, panic or failed check ⇒
 output `0x00…00`; gas by formula regardless of validity; activation by `pqzTransitionTimestamp`; contracts self-test and
-the node probes (`has_pqz_precompile`), because a missing transition key looks exactly like an enabled one. **The verify
+the node probes (`has_pqz_precompile`), because a missing transition key looks exactly like an enabled one.
+
+**The verify
 path never crashes the node**: `pqz_verify` runs in-process, chain 7622 has one Clique signer, and every
 `eth_call`/`eth_estimateGas` reaches the precompile, so one abort, out-of-bounds access or stack overflow on crafted
 input is a chain halt, not a split. Requirements: every upstream `ERR`/`ASSERT` becomes `return 0`; a bounds-checked
@@ -1096,7 +1107,9 @@ calibrated on the p99 verify time over adversarial inputs against `ecMul` on the
 `OP_SELFTEST` has a fixed price of its own and is computed once per process. EIP-7623 and EIP-7825 stay enabled.
 Operator change: Clique `TargetBlockGasLimit` **80,000,000** on chain 7622 (no data reset): at the calldata floor a
 block then carries at most 8.0 MB of calldata, under EIP-7934's 8,388,608-byte RLP limit even for all-zero calldata, so
-no block the producer builds can be oversized. Node and client limits on chain 7622: Nethermind `TxPool.MaxTxSize`
+no block the producer builds can be oversized.
+
+Node and client limits on chain 7622: Nethermind `TxPool.MaxTxSize`
 ≥ 1 MiB (or the key the precompile work finds), node `max_gas_per_tx = 16_000_000`, gateway body limit 1 MiB on job
 submissions to the `pqz` chain profile only (64 KiB elsewhere) — recommendations to node operators
 ([NODE-OPS-15](../node/ops.md#NODE-OPS-15)). This keeps gas an honest capacity meter: ≈ 28 transfers per 5 s block while
@@ -1172,7 +1185,9 @@ proof, authSig), `pqzUnshield(bytes,bytes,bytes[],uint256,address,bytes,bytes)`,
 uint64 cleared, uint64 sendCounter, uint256 plainPending)`, `pendingHash(bytes32,uint64)`, `transferCiphertextHash(bytes32)`;
 meta-tx: `executeMetaTransaction`, `metaTxDigest`, `metaNonce`, `cancelMetaNonce`, `supportedModes`, `envelopeBinding`,
 `uaExecute`, `uaDigest`, `uaNonce`, `uaCancelNonce`, `uaEnvelopeBinding`, `transferToUA`, `balanceOfUA`, `wrap(uint256)`,
-`unwrap(uint256,address)`, and `transferStatement`/`burnStatement` views taking `binding`. Errors (plus
+`unwrap(uint256,address)`, and `transferStatement`/`burnStatement` views taking `binding`.
+
+Errors (plus
 `IERC20MetaTx`'s, the UA `UA*`, `PercentFeeForbiddenOnConfidential`, `MtxNotBatchable`): `NotAllowedChain`,
 `SelfTestFailed`, `NonCanonical`, `StaleSendCounter`, `AccMismatch`, `InlineMismatch`, `InlineTooFar`, `RefreshRequired`,
 `UnitsInvariant` (the debit-time `unitsOf(T) > K_MAX` assert; unreachable unless accounting is broken), `PlainOverdraw`

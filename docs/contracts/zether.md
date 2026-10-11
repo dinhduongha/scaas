@@ -55,7 +55,9 @@ verifier at `initialize`, there is no setter and no system-wide curve; the prove
 `accSeq`), shield/transfer/unshield, Bulletproofs with exactly two range statements, envelope binding to the meta-tx, public
 fee scalars, the `ITransferDisclosure` selective-disclosure interface (open the transfer ciphertext; three openings —
 `SENDER_S`, `RECEIVER_X`, `AUDITOR` — all kept; verification is a free view, attestation an optional event; the bundle is
-stored per transfer), a Rust prover compiled to WASM for client proving, relayer support, and **mandatory tests**. The
+stored per transfer), a Rust prover compiled to WASM for client proving, relayer support, and **mandatory tests**.
+
+The
 `UNAUDITED — NOT FOR PRODUCTION FUNDS` gate applies: the factory/deploy flag is off by default on non-dev chains, and
 NatSpec and client screens carry the warning. Non-EVM families: feasibility only. The statement and transcript are
 frozen byte-exact in this file. Two curves cost twice the verifier audit and ~1.3× prover work; there is no interop
@@ -105,18 +107,24 @@ relaxed: safety comes from the total cap `2^54` and `r > 2^253`, not from the ga
 equation.** Take every ElGamal exponent at its canonical representative in `[0, r)`; `r > 2^253` (bn254 ≈ 2^253.6,
 BLS12-381 ≈ 2^254.9). A valid proof extracts `x, v, s, b', γ_v, γ_b` with `v, b' ∈ [0, 2^64)` (BP#1, BP#2, tied to Σ
 through E7/E8 sharing `z_v`, `z_b`). E1: `Y_f = [x]G`. E2: `D_out = [s]G`. E3/E4/E6: `C_out`, `C_deb`, `C_aud` encrypt
-the same `v` with the same `s` (no sums). E5: `C_acc − C_deb − [fee]G = [b']G + [x](D_acc − D_out)`; with E4 + E2 this
+the same `v` with the same `s` (no sums).
+
+E5: `C_acc − C_deb − [fee]G = [b']G + [x](D_acc − D_out)`; with E4 + E2 this
 gives `C_acc − [x]D_acc = [b' + v + fee]G`, i.e. `a ≡ b' + v + fee (mod r)`. This is **the only sum of proven values**
 in a transfer: `b' + v + fee < 3·2^64 < 2^66 ≪ r` (also written `b' + v + fee < 3·2^64 ≪ r`; `r` ≈ 2^254 on bn254, ≈ 2^255 on BLS12-381) (`fee < 2^64` is checked at `initialize`), so the balance `a` of `acc` equals `b' + v + fee` **as an
 integer**, with no alias mod `r` — i.e. `v + fee ≤ a`: overspending is impossible. Burn (E5 burn): `a = b' + amount +
 fee`, `amount ≤ 2^54`, `< 2^66` — the same conclusion; `amount + fee` is also the term `c·(amount+fee)` the verifier
-computes with `addmod`, which never wraps. Integer invariant: the sum of all `acc`/`pending` exponents of a token
+computes with `addmod`, which never wraps.
+
+Integer invariant: the sum of all `acc`/`pending` exponents of a token
 `= totalShielded ≤ maxDecryptableShielded ≤ 2^54` — `zetherShield` adds exactly `amount` with the cap checked; a transfer moves
 exactly `v` to the receiver's `pending` and `fee` to the beneficiary's `pending`, and leaves the sender exactly `b'`;
 rollOver adds two numbers `≤ totalShielded`; burn removes exactly `amount`. No homomorphic addition (`pending += v`,
 `+= fee`, `acc += pending`) reaches `r`, because every term and every sum is `≤ 2^54`. Because `b' = b − fee − v ≥ 0` is proven `< 2^64` at the same time, `v ≤ b ≤ 2^54`. Consequences: (a) every real
 balance is `≤ 2^54 < 2^64`, so `b'` is always provable (completeness); (b) `v` never exceeds `2^54` in practice although
-the proof allows up to `2^64`; (c) every balance is decryptable by BSGS up to `2^54`. Other sums and bounds: `δ(y,z)`
+the proof allows up to `2^64`; (c) every balance is decryptable by BSGS up to `2^54`.
+
+Other sums and bounds: `δ(y,z)`
 uses `2^n − 1 = 2^64 − 1 < r`; disclosure takes `amount < 2^64 < r`, so one `[amount]G` opens to exactly one number; the
 Rust prover computes `b' = b − v − fee` with checked `u128`, the JS client with BigInt. Wrap resistance comes from
 `r / 2^66 > 2^187` and holds for every balance `< r`, cap or not; the `2^54` cap gives completeness, anti-grief (the
@@ -349,7 +357,9 @@ the statement header (above), the envelope binding ([CTR-ZTH-06](#CTR-ZTH-06)), 
 ([disclosure](#disclosure)), the rollover digest `ZETHER_ROLLOVER_V1` and the mode digest
 `ZETHER_SET_ROLLOVER_MODE_V1` ([rollover](#rollover)) and `entryRef` (`SCAAS-ZETHER-ENTRY-V1`). `chainUid` is the
 implementation's constructor immutable, exposed as `chainUid()` and equal to the chain's genesis hash
-([CTR-GEN-05](README.md#CTR-GEN-05)). Without it a re-created chain restarts `modeNonce`, `accSeq`, `sendCounter` and
+([CTR-GEN-05](README.md#CTR-GEN-05)).
+
+Without it a re-created chain restarts `modeNonce`, `accSeq`, `sendCounter` and
 block numbers, so a captured mode or rollover signature, a proof or a disclosure would verify there; `entryRef` gains
 it so that references never collide across chains (client reconciliation still keys by `(chain_key, entryRef)`). The
 built `UniversalAccountRegistry` takes `chainUid` as a constructor immutable and adds it to its PoP challenge; because
@@ -642,7 +652,9 @@ a public ERC-20 transfer is a `MetaTransfer` like on every token ([CTR-MTX-23](m
 relays the same way ([CTR-PQZ-21](pq-zether.md#CTR-PQZ-21)). `zetherTransfer` and `zetherUnshield` compute
 `binding = (msg.sender == address(this) && ticket live) ? ticketBinding : 0`, so the statement tag is
 `ZTX_V1_RELAYED` with the envelope's binding inside `mtxExecute` and `ZTX_V1_DIRECT` with binding 0 otherwise: a proof
-lifted from a pending meta-tx fails as a direct call, and the envelope-stripping attack stays closed. The outer fee is
+lifted from a pending meta-tx fails as a direct call, and the envelope-stripping attack stays closed.
+
+The outer fee is
 the base's step 6, `FIXED` absolute or `NONE` (fee class `ABSOLUTE`, [CTR-MTX-20](metatx.md#CTR-MTX-20)); the inner fee
 (`confidentialFee` to the beneficiary) is unchanged. The dynamic arguments are re-encoded canonically by the node
 before it computes the mesh `intent_id`. The `rollOver*` functions stay outside the allowlist: `zetherRollOver` needs no
@@ -908,7 +920,9 @@ storage (per-UA `acc`/`pending`, counters, `totalShielded`, disclosure entries) 
 [CTR-ZTH-45](#CTR-ZTH-45); the logic is `ZetherLib`. The verifier (curve) and the auditor key are chosen at creation and
 immutable; the registry address is an implementation immutable; the dev-chain gate `ZetherSafety` stays
 ([safety gate](#safety-gate)). `ZetherDisclosure` stays as built ([CTR-ZTH-43](#CTR-ZTH-43)); the prover views move to
-`ZetherStatements` ([CTR-ZTH-46](#CTR-ZTH-46)). All rules of the multi-recipient design (Z1–Z13,
+`ZetherStatements` ([CTR-ZTH-46](#CTR-ZTH-46)).
+
+All rules of the multi-recipient design (Z1–Z13,
 [CTR-ZTH-37](#CTR-ZTH-37)…[CTR-ZTH-43](#CTR-ZTH-43)) carry over unchanged except the names.
 The confidential layer keeps **no underlying of its own**: it reuses `UnderlyingLib` on kind `UNDERLYING_ZETHER`, so a
 leg may be the native coin like on every `UNDERLYING*` kind ([CTR-TOK-26](token-wrappers.md#CTR-TOK-26)) and
@@ -1002,6 +1016,7 @@ of **canonical** verifiers and `registry()` equals the chain's canonical registr
 requires the registry to have code, `ZetherToken.sol:136`) — "provenance instead of gatekeeping"
 ([CTR-TOK-17](token-wrappers.md#CTR-TOK-17)) — so a v1 token from a registered implementation could still carry a fake
 verifier (returning `true` for every proof ⇒ `zetherUnshield` drains the escrow) or a fake registry (`requireAuthorized` a no-op).
+
 Pin by **address**, not codehash: a verifier embeds its `generatorStore` address as an immutable, so its codehash differs
 per deployment. The built `clients/clientkeys/src/zether.js` does not read `verifier()`/`registry()` yet. Tests: the client
 refuses a token with a foreign `verifier()`/`registry()`; the gateway errors when relaying a Zether op of an unpinned
@@ -1021,13 +1036,17 @@ constant `DECRYPT_BOUND = 2^40`). BSGS `BsgsParams(table_bits 18–27, bound_bit
 2^table_bits; the multiples `[j]G`, identical for every account) is public data (regenerated, or loaded from a file and then checked: correct shape, sorted, each `j`
 exactly once, 64 random entries recomputed); a result is returned only when `[v]G == target`, so a wrong table can only
 miss, never mislead. Defaults: WASM/mobile `table_bits 22, bound_bits 44`, desktop 24–26 with `bound_bits 54` by RAM; WASM refuses a 2^27 table (2 GiB — a 32-bit
-`Vec` cannot hold it) and stops at 2^24 unless called with `allowLargeTable`; the native API checks RAM. The balance cache
+`Vec` cannot hold it) and stops at 2^24 unless called with `allowLargeTable`; the native API checks RAM.
+
+The balance cache
 `{ua, token, accSeq, balance}` lives in an AES-GCM box whose key is derived from `x` (opened only after the confidential
 vault is opened), is checked with `check_balance` on every use, and is updated on rollOver (`b += pending`, i.e. `+pending`, BSGS only on
 `pending`) and on own spending (`b −= v + fee`, i.e. `−v−fee`). When `acc` changes outside the wallet's view (someone else's public rollOver,
 a late credit, an unrecorded own spend), the last verified value is the anchor and the wallet BSGS-searches the
 **difference** `(C − [x]D) − [b_cache]G` (up, then down) within the device bound; `accSeq` only increases — an `acc` with an `accSeq` below the
-anchor is refused. Only when the difference also exceeds the bound does the wallet ask for `zether-read-balance` (native,
+anchor is refused.
+
+Only when the difference also exceeds the bound does the wallet ask for `zether-read-balance` (native,
 `--table-bits` default 24, 20–27, refuses without enough RAM; it reads `acc` through an RPC `eth_call` — the URL through
 curl's stdin (`-q`, ignoring `~/.curlrc`), result `"verified": false` (`"source": "rpc"`), `true` when it matches a `--ct`
 from a second source — or only a pasted ciphertext (`"verified": null`, `"source": "pasted"`); the key only through a
@@ -1130,7 +1149,9 @@ completeness needs only `total ≤ 2^64 − 1` with `n_b = 64` (the other code b
 total `≥ 2^64` needs `n_b = 128` (BP-2 grows by `2·64 + 2 = 130` points, 144 → 274, × ≈ 8.2 k gas per point ≈ **+1.06 M**
 ⇒ transfer ≈ **+32 %**, 3.29 M → ≈ 4.35 M; burn ≈ +76 %, 1.40 M → ≈ 2.46 M; estimates); (2) mobile devices have no
 usable GPU — they keep the cache and a small BSGS; (3) outsourcing the search to a GPU machine does not reveal the key
-(only `g^b` is needed) but that machine **learns the balance `b`** — use only machines the account owner controls. The
+(only `g^b` is needed) but that machine **learns the balance `b`** — use only machines the account owner controls.
+
+The
 shipped client BSGS would need ~2^33 steps with a 2^27 table to reach 2^60 (~50 min on one desktop core), unusable for
 recovery; a kangaroo tool is not built (`elgamal.rs` has BSGS only). Recommendation: keep the 2^54 total for v1; a token
 that needs more opens a separate change (a new `MAX_TOTAL_SHIELDED` up to `2^64 − 1` with `n_b = 64`, plus an internal

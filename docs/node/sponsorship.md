@@ -65,7 +65,9 @@ effective price`, or the family's fee field). Budget per UTC day; rate caps per 
 Admission reserves `max_cost_per_tx` per sponsored job and stores the reserved amount and day on the job; the
 reservation is replaced by the measured cost, booked to that same day, at `mined`/`reverted`. A sponsored transaction
 is built so that its maximum chargeable fee (`gas_limit × max_fee_cap` on EVM, fee bumps included) is `≤
-max_cost_per_tx`, so measured ≤ reserved and a day's spend never exceeds its budget. **Rate counters are taken at
+max_cost_per_tx`, so measured ≤ reserved and a day's spend never exceeds its budget.
+
+**Rate counters are taken at
 accept with the reservation**: the job stores `sponsor_hour`, the hour and payer-hour `tx_count` are checked and
 incremented in the same transaction as the day reservation, and a job that ends before broadcast releases all three
 (otherwise one payer could reserve a whole day's budget with jobs that never reach lease). A sponsored job needs

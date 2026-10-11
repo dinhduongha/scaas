@@ -81,7 +81,9 @@ anti-lock property (X held, Y passes) follows structurally when X and Y share no
 breaks. The real risk is a **hot account**: any account many transactions write (a global counter, a `Market` storing
 its book/`filled`, a shared fee vault, `Config` written on the hot path, `SmartKeyAccount` written per op) serialises
 those transactions within a block, hits 12M CU/account/block, raises the local priority fee and drops under congestion —
-a "lock" between two **unrelated** ops of one subject. Rule: on the hot path each transaction **writes** only the relayer
+a "lock" between two **unrelated** ops of one subject.
+
+Rule: on the hot path each transaction **writes** only the relayer
 lane + the lane's nonce account; one **new** op-specific PDA (lane / mref / fill PDA); the token accounts of exactly the
 two parties; the Mandate PDA (mandate ops only — period caps are sequential anyway); the fee vault of **one** market (only
 when the fee is on). Everything else (`Config`, `Market`, `SmartKeyAccount`, mints, min-nonce PDA) is **read-only**. The
@@ -129,7 +131,9 @@ with `owner` = the Account PDA and `mint` = X. The standard one is ATA(Account P
 off-curve owners), but the program accepts **any** token account owned by the PDA as a source, so funds sent to an odd
 token account of the PDA are still spendable. Funding = an ordinary SPL transfer to that ATA (the portal builds a
 `createIdempotent + transferChecked` transaction for the wallet, since many wallets refuse off-curve owners — a one-off
-native transaction off the hot path). One Account for every asset (as on Aptos): one key set, one rotation; the asset
+native transaction off the hot path).
+
+One Account for every asset (as on Aptos): one key set, one rotation; the asset
 travels explicitly in `MetaOp.asset`. No SPL `Approve` to an ordinary account: the token accounts' authority is the PDA,
 only the program signs for it (`invoke_signed` with the Account seeds; [CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)).
 Lamports sent by mistake to the PDA (above rent exemption) are withdrawn by KeyOp `withdraw_lamports{to}`. Rejected
@@ -209,7 +213,9 @@ clear reason). Owner decision ("only an on/off option"). BUILT.
 practice every request is a new PDA and no account is shared between two ops. `prune(pdas)` is **permissionless**: it
 closes a LanePda / `MandateRef` when `valid_until + PRUNE_DELAY_S < Clock.unix_timestamp` (`PRUNE_DELAY_S` = 30 days ≥ the
 client's `LANE_HORIZON_S`) and a `Fill` when `valid_until < now` (the expiry is inside the order hash); the lamports go to
-the **`rent_payer` stored in the PDA** (not to the caller, so nobody steals rent). Safety: `valid_until` is the expiry of
+the **`rent_payer` stored in the PDA** (not to the caller, so nobody steals rent).
+
+Safety: `valid_until` is the expiry of
 the op that RAN; the client re-issues a request's terms on the SAME lane, nonce 0, every expiry within 30 days of the
 request's creation, so when the PDA is deleted every other signed op of that request has expired (no double pay;
 [NET-ALL-01](README.md#NET-ALL-01)). Cost (rent-exempt, refunded on prune): a lane PDA ~0.0012 SOL; until pruned the rent
@@ -219,7 +225,9 @@ stays there; the node does not yet crank `prune` automatically (a script/cron ca
 program refuses `valid_until` (LanePda, MandateRef) and order `expiry` (`Fill` in `settle`/`cancel_signed`) beyond `now +
 MAX_TTL_S` (`MAX_TTL_S = 31 d`; `expiry > now + MAX_TTL_S` ⇒ error) (the 30-day DEX book cap + 1 day of clock skew); the Mandate's own `expiry` is unchanged (a Mandate PDA has a
 `rent_payer` and can be closed). Why: `u64::MAX` makes a PDA never prunable (`account.rs:204`, `dex.rs:199, 312`) — one
-`cancel_signed` for an invented order hash locks a `Fill`'s rent forever. Rent that never returns (lazy SmartKeyAccount
+`cancel_signed` for an invented order hash locks a `Fill`'s rent forever.
+
+Rent that never returns (lazy SmartKeyAccount
 open, `account.rs:189`, no close path; KeyOp growth through `util::grow`, `account.rs:365`, bounded by 8 keys + 8 origins
 and never shrinking, so once per Account; `MinNonce`, `dex.rs:327`; DEX ATAs of the PDA and vaults) stays lane-paid —
 subjects are gasless — but is metered ([NODE-LANE-13](../node/submit-lanes.md#NODE-LANE-13)) and bounded per job
@@ -240,7 +248,9 @@ LANE_HORIZON_S` and re-issue on one lane only within the horizon of its first op
 ([NET-ALL-26](README.md#NET-ALL-26)–[NET-ALL-29](README.md#NET-ALL-29); owner 2026-10-08). Status: **SPECIFIED**. Both
 kinds are fixed little-endian layouts (domains `"scaas.metacall.v1"`/`"scaas.metatransfer.v1"`, `network` = the genesis
 hash, `function` = the 8-byte discriminator; lengths pinned by vectors), digest `sha256`, signed as today
-([NET-SOL-11](#NET-SOL-11)); the `scaas-metacall` crate verifies them. Instructions: `relay_pay` → `mtx_pay` (+
+([NET-SOL-11](#NET-SOL-11)); the `scaas-metacall` crate verifies them.
+
+Instructions: `relay_pay` → `mtx_pay` (+
 `mtx_transfer`, `mtx_execute_transfer`; a batch is a multi-instruction transaction); `manage_signed` + `KeyOp` actions →
 `mtx_add_key`, `mtx_remove_key`, `mtx_add_origin`, `mtx_remove_origin`, `mtx_set_guardian`, `mtx_cancel_recovery`,
 `mtx_set_policy`, `mtx_withdraw_lamports`; `mandate_open` + `MandateInit` → `mtx_mandate_open`; `mandate_pay` →
@@ -289,7 +299,9 @@ an admin.** The runtime exposes no genesis hash (no syscall, no sysvar), so the 
 `SCAAS_PROGRAM_ID`; `initialize` loses its `network` argument and stores the constant; `deploy.sh` records `(program id,
 genesis hash)` in the deployments file and refuses to deploy a program id already recorded for another genesis. The
 chain profile's `chain_uid` ([NET-ALL-22](README.md#NET-ALL-22)) for Solana **is** the genesis hash as the RPC reports
-it, and the node keeps [NET-SOL-10](#NET-SOL-10) (RPC genesis == `chain_uid` == `Config.network`). Why: today
+it, and the node keeps [NET-SOL-10](#NET-SOL-10) (RPC genesis == `chain_uid` == `Config.network`).
+
+Why: today
 `initialize(network, admin)` stores any 32 bytes (`account.rs:28-34`), so a Config initialised with another cluster's
 hash makes that cluster's signatures valid here for the same PDA, for any relayer; our node is protected by the
 cross-check, third-party relayers are not. Cost: one build per cluster (already one per program id). SPECIFIED.
@@ -334,7 +346,9 @@ binds `address = sysvar::instructions::ID`, closing the fake-sysvar class of exp
 Ed25519 (`kind 0/1`) or Secp256r1 (`kind 2`); `precompile_ix < load_current_index_checked()`; (2) parses the header —
 `num_signatures`, the offsets of signature `sig_index`; **all three** `*_instruction_index` must be `u16::MAX` (data inside
 the precompile instruction itself) and every offset inside the data; (3) the extracted pk = `account.keys[key_index].pubkey`
-and the extracted message = the expected one (`T`, `OCMS(pk,T)`, or the WebAuthn check above). The runtime has already
+and the extracted message = the expected one (`T`, `OCMS(pk,T)`, or the WebAuthn check above).
+
+The runtime has already
 verified the signature (a wrong one fails the whole transaction). Two of our instructions pointing at one signature only
 re-check one op, and the second hits replay. The "absolute index" flaw (Improper Instruction Introspection) does not
 apply because pk + message are compared verbatim, not merely "an ed25519 instruction exists". Every precompile signature
@@ -380,7 +394,9 @@ account (`mint.owner`) and ATAs derive with that token program. Extension policy
 (reading the mint TLV): abort on `NonTransferable`; `TransferHook` with a non-null `program_id` (a hook runs arbitrary code
 and needs extra accounts — a seam); `TransferFeeConfig` whose fee for the current epoch is > 0 for this `amount` (the
 receiver would get less than signed — breaking [NET-ALL-08](README.md#NET-ALL-08); fees change after 2 epochs, so the
-check is at transfer time, not at registration). Accepted as **issuer risk** (stated to operators and in the UI; the
+check is at transfer time, not at registration).
+
+Accepted as **issuer risk** (stated to operators and in the UI; the
 client warns at token registration): `PermanentDelegate` (the issuer can withdraw from the Account's token accounts),
 freeze authority, `DefaultAccountState=Frozen`, `Pausable` (transfers abort while paused ⇒ `reverted`),
 `ScaledUiAmount`/`InterestBearing` (base units stay right, only display differs). `MemoTransfer` on the receiver's ATA ⇒
@@ -404,7 +420,9 @@ Why: an ATA owner can `CloseAccount` it at zero balance and recover ~0.00204 SOL
 extensions), and `to` is signer-chosen — loop: the SmartKeyAccount holds 1 unit; sign `pay(1, to = W)`; the lane creates
 ATA(W) (as built, `account.rs:210-218`, `util.rs:55-73`; `mandate.rs:170-178` likewise); W sends the unit back, closes
 ATA(W), keeps the rent; repeat — ≈ 0.002 SOL profit per round, stopped only by `min_relayer_balance` (the hourly breaker
-sees only fees, `adapter.rs:270-276`). The ERP path is safe (`to` = a fixed receiving wallet); mesh `pay` and the job API
+sees only fees, `adapter.rs:270-276`).
+
+The ERP path is safe (`to` = a fixed receiving wallet); mesh `pay` and the job API
 are not. Taking the rent from the SmartKeyAccount's lamports was rejected (gasless subjects hold no SOL). DEX ATAs owned by
 a SmartKeyAccount PDA (`dex.rs:252-254`) and the fee vault owned by the Market (`:264-265`) cannot be closed (the program
 has no `CloseAccount` path), so they are a one-time cost per (PDA, mint), metered and bounded by
@@ -445,7 +463,9 @@ buy_amount u64, nonce u64, expiry, max_fee_ppm u32, flags u8 (bit0 FOK, bit1 IOC
 signed text `"scaas.order.v1:" ‖ hex(order_hash)`. `settle(a, b, hash_a, hash_b, fill_a, fill_b, auth_a, auth_b)` checks,
 per pair: flags, expiry, `nonce >= MinNonce`, relayer, taker, keys ∈ maker/taker keys, cross-matching pair, distinct
 parties, market enabled; `fill > 0`, `Fill.filled + fill <= sell_amount`, FOK; cross-multiplied price on u128; ppm ≤
-`max_fee_ppm`, cap 10 000 ppm checked at `set_market`. Funds go token account → token account between Accounts, the fee
+`max_fee_ppm`, cap 10 000 ppm checked at `set_market`.
+
+Funds go token account → token account between Accounts, the fee
 to the market vault; the fills are the relayer's choice bounded by the signed price and amounts. Events `OrderFilled` ×2
 + `Matched`. IOC closes its remainder (`filled = sell_amount`) inside its own `settle`. Cancel: `cancel_signed`
 (`Cancel{domain="scaas.cancel.v1", network, market, order_hash}`) ⇒ `Fill.filled = sell_amount` (creating the Fill if
@@ -473,7 +493,9 @@ durable nonce account; `sequence` = the nonce value; one transaction in flight.*
 SLIP-10, coin 501, every level hardened — the Phantom/Solflare convention and `solana-keygen … prompt://?full-path=m/44'/501'/0'/0'`
 (Phantom's second wallet is `m/44'/501'/1'/0'`; Ledger Live's three-level `m/44'/501'/i'` is not used); vector: `solana-keygen
 pubkey prompt://?full-path=m/44'/501'/{0,1}'/0'` with "abandon … art" = `3Cy3YNTF…aSnx`, `5frqxtii…hcTA` (test
-`keys::solana_path_matches_solana_keygen`). Lane address = the pk in base58; lanes need SOL; start-up prints them. The nonce
+`keys::solana_path_matches_solana_keygen`).
+
+Lane address = the pk in base58; lanes need SOL; start-up prints them. The nonce
 account = `create_with_seed(lane, "scaas-nonce-v1", SystemProgram)` (in short `create_with_seed(lane,"scaas-nonce-v1")`) (deterministic, no extra keypair), authority = lane;
 when missing, the adapter creates it (one setup transaction paid by the lane) at the first `sequence(lane)`: `Transfer`
 (top up to rent) + `AllocateWithSeed` + `InitializeNonceAccount` — so a public address pre-funded by someone still works
@@ -482,7 +504,9 @@ blockhash: the shared runner (`recover_lane` / `follow`) treats "the lane sequen
 unseen ⇒ it will never land"; with a nonce account that is **literally** true (the nonce changes ⇔ a transaction using it
 landed, success or failure); with a blockhash, "never lands" means `block_height > lastValidBlockHeight`, which the
 runner's `!=` cannot express without changing shared code; and every rebuild of one job uses **the same** nonce value, so
-at most one transaction lands (as with an EVM nonce) even if old bytes still float around. Fallback if durable nonces are
+at most one transaction lands (as with an EVM nonce) even if old bytes still float around.
+
+Fallback if durable nonces are
 deprecated: recent blockhash + a default trait hook `async fn sequence_moved(&self, lane, journaled) -> Result<bool>`
 (default `sequence != journaled`; Solana: `finalized block_height > journaled` with `journaled = lastValidBlockHeight`); not
 built. `sequence(lane)` = the nonce value's first 8 bytes (commitment `confirmed`) read LE, `& 0x7FFF_FFFF_FFFF_FFFF` (the
@@ -495,14 +519,18 @@ since 2026-09-15, mainnet epoch 1035, devnet epoch 1140): byte 0 = `0x81`; CU / 
 **header** (mandatory); ≤ 64 inline addresses, no ALT, no duplicates; signatures **at the end**; the `LifetimeSpecifier` (the
 old recent-blockhash field) holds the durable nonce value. Layout: `0x81 ‖ header(3) ‖ config mask u32 ‖ lifetime 32 ‖ n_ix u8
 ‖ n_keys u8 ‖ keys ‖ values (priority u64, CU u32, loaded bytes u32, heap u32 per mask bits 0-1/2/3/4) ‖ ix headers (program
-u8, n_acc u8, len u16) ‖ payloads`; the transaction = the message **then** the signatures. Sent with `encoding: "base64"`
+u8, n_acc u8, len u16) ‖ payloads`; the transaction = the message **then** the signatures.
+
+Sent with `encoding: "base64"`
 (base58 is still capped at 1 232 B). Why v1: passkey transactions (Chrome's clientDataJSON may carry an
 `other_keys_can_be_added_here` member of ~110 B) and two-leg `settle` exceed the 1 232 B of v0/legacy. Hand-written (no
 `solana-sdk` — a large dependency tree, an OOM risk on a shared build host): header, config, addresses, lifetime,
 instructions (`AdvanceNonceAccount` first, the precompile, `scaas::*` with the Anchor discriminator
 `sha256("global:<name>")[..8]`), the lane signature; existing crates only: `ed25519-dalek` (signing + off-curve check for
 PDAs through `VerifyingKey::from_bytes`), `sha2`, `bs58`, `base64`. `tx_id` = `0x` + hex(the lane's 64-byte signature),
-computed before sending; base58 when calling RPC. Vector: the v1 message + signature pinned from `@solana/kit` ≥ 8.0
+computed before sending; base58 when calling RPC.
+
+Vector: the v1 message + signature pinned from `@solana/kit` ≥ 8.0
 (8.4.0 installed locally with `npm i` in `smartcontracts/solana/scripts/`, script `tx_vector.mjs`, `node_modules` not committed),
 matching the kit codec byte for byte (account order is the adapter's choice; kit sorts by string collation, the validator
 does not require it); end to end compares with the RPC's signature. Durable nonce in a v1 transaction runs on a local
@@ -611,7 +639,9 @@ authority and the registered tokens; missing history is an error.** Owner decisi
 later seam). `finalized` = rooted by a supermajority (TowerBFT ~12.8 s); Alpenglow (SIMD-0326, ~150 ms) was voted in
 09/2025 and is active on devnet (epoch 1167) but **not yet** on mainnet (target H2 2026) — commitment semantics stay the
 same, no design change. `final_head` = `getSlot({commitment:"finalized"})` + that block's hash; several `rpc_urls` ⇒ the
-quorum's minimum slot with matching hashes, as on EVM. Source: `getSignaturesForAddress(program_id, {commitment:"finalized",
+quorum's minimum slot with matching hashes, as on EVM.
+
+Source: `getSignaturesForAddress(program_id, {commitment:"finalized",
 before, limit:1000})` paged backwards until a slot `< from`, then `getTransaction(sig, {commitment:"finalized",
 maxSupportedTransactionVersion: 1, encoding:"json"})` — works on `solana-test-validator`, self-hosted RPC and any hosted RPC
 with transaction history, **no proprietary API**. Rejected: Geyser/Yellowstone (needs our own RPC node + plugin — heavy;
@@ -619,7 +649,9 @@ the mainnet upgrade path), provider webhooks / "enhanced APIs" (push, vendor loc
 Completeness: a short page is NOT the end of history (hosted RPCs cap `limit`) — page until an empty page or a slot `<
 from`; an unparseable registered token ⇒ `Err`; an empty page whose smallest slot is still `≥ from` ⇒ require
 `getFirstAvailableBlock() <= from`, else `Err` (the RPC pruned history); any error ⇒ `Err`, the range not committed; never
-a slot > `finalized`. Filter: only `meta.err = null`; only **inner instructions** with program id = `params.program_id`,
+a slot > `finalized`.
+
+Filter: only `meta.err = null`; only **inner instructions** with program id = `params.program_id`,
 first account = the event-authority PDA, data starting with Anchor's event-CPI tag (`0xe445a52e51cb9a1d`) + the event
 discriminator; events `MetaTransactionExecuted` / `PaymentSettled` / `PaidUnderMandate` with `contract ∈ contracts` (mints).
 Only our program can sign with its event authority, so a copied program at another id is ignored. Normalised:
@@ -657,7 +689,9 @@ no Anchor v2 alpha, no native/Pinocchio.** The largest bug class of Solana progr
 signer, seeds/bump, discriminator — "type cosplay", fake sysvars); Anchor generates those checks from declared constraints,
 `token_interface` covers both token programs, and `emit_cpi!` gives events that logs cannot truncate. Native/Pinocchio save
 CU but every check is hand-written (higher audit risk), and our CU budget has room (estimate: pay 40–80k CU, a settle pair
-~150–250k, cap 1.4M; measured `relay_pay` 51 580 CU). No `anchor` CLI (Anchor 1.0's `anchor test` uses Surfpool; we do not need it): `cargo build-sbf`, LiteSVM inside `cargo test` (no
+~150–250k, cap 1.4M; measured `relay_pay` 51 580 CU).
+
+No `anchor` CLI (Anchor 1.0's `anchor test` uses Surfpool; we do not need it): `cargo build-sbf`, LiteSVM inside `cargo test` (no
 validator, low RAM). Versions (user space, no sudo): Agave **4.3.0** (`solana-release-x86_64-unknown-linux-gnu.tar.bz2`, sha256 `c97289a8…3611e8` matching the
 GitHub release digest) in `~/.local/share/solana/install/releases/4.3.0`; `cargo build-sbf` 4.3.0 + platform-tools **v1.57**
 (rustc 1.95 sbpf); **Anchor 1.2.0** (`anchor-lang`/`anchor-spl` crates); **LiteSVM 0.17.0** (`precompiles`), whose Agave 4.3
@@ -683,7 +717,9 @@ orders), `MinNonce` per market, two independent markets, a 2-pair batch; **anti-
 A) and Y (`mandate_pay` / DEX `cancel_signed`); X held; Y passes; then X — plus one Account, two assets, two lanes;
 **write-set** ([NET-SOL-04](#NET-SOL-04)); **coin anti-lock**: SPL to the Account's ATA (before and after the Account
 exists), to an extra token account of the PDA, to a Mandate; market `sweep`; surplus lamports ⇒ `withdraw_lamports`;
-`prune` only after expiry, rent to `rent_payer`, an old op cannot replay. Self-reviewed facts kept: the open of
+`prune` only after expiry, rent to `rent_payer`, an old op cannot replay.
+
+Self-reviewed facts kept: the open of
 [NET-SOL-27](#NET-SOL-27); base fee counts precompile signatures (`python_signatures_pay…`); `#[event_cpi]` adds
 `event_authority` + `program`, and the ATA program checks derivation in `create_idempotent` (`recipient_and_destination…`);
 the SmartKeyAccount is an `UncheckedAccount` without `mut` and marked writable only for a lazy open; `set_guardian(other)`

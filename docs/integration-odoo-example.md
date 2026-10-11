@@ -199,7 +199,9 @@ signature is stored `signature_verified = False` and judged by simulation ([INT-
 in a multi-company deployment `res.company._dms_document_company()`); every lookup of provider, receiving wallet and staff note
 goes through it (`_dms_chain_offered`, `_dms_chain_start`, `sale_order`, `payment_transaction`). One wallet-admin seam:
 `res.users._blockchain_wallet_admin(company)` (`group_blockchain_treasury`, members with the company in
-`user.company_ids`, or `base.group_system`). The former "Host" is the **"platform company"**: parameter
+`user.company_ids`, or `base.group_system`).
+
+The former "Host" is the **"platform company"**: parameter
 `dms_blockchain.platform_company_id` (the old `dms_blockchain.host_company_id`, defaulting to `base.main_company`, is read
 once on upgrade; `host_company_id` stays read-only, `blockchain_receiving_wallet.py:9-10`), method
 `_blockchain_platform_company()` (replacing `_blockchain_host_company()`); records with `company_id = False` belong to
@@ -213,7 +215,9 @@ list is an `ir.model.fields` selection, secrets in `ir.config_parameter`); `env:
 `dms_blockchain.allow_dev_custody` = `1` and `is_dev_chain = True`, and signs through `cryptography`, not `secp256k1.py`.
 Auto-pay: `blockchain.autopay.policy` → `_cron_autopay` → one `blockchain.autopay.run` per (policy, invoice, event);
 `payment.transaction` provider `chain`, `invoice_ids`, `operation='offline'`; kill switch `revokeWithSig` job
-(`eip712.revoke_mandate_digest`, `_enqueue_revoke`; target selector `mtxRevoke`). The outbox generalisation added `job_kind`, `target_address`,
+(`eip712.revoke_mandate_digest`, `_enqueue_revoke`; target selector `mtxRevoke`).
+
+The outbox generalisation added `job_kind`, `target_address`,
 `calldata_hex`, `payment_request_id` to `blockchain.relay.job` and made `metatx_id` optional. Accounting:
 `blockchain.token.journal_id` (company-dependent); drift A `blockchain.chain.event` with `event_name = 'Transfer'` ⇒
 `unmatched_inbound`; drift C `blockchain.chain.balance_report(chain_key, height, [{token, address, balance}])` (pull) or
@@ -241,6 +245,7 @@ tests `TestAptosPayments.test_reissue_*`), Solana (`dms_blockchain/lib/fam_solan
 `solana_token_program`, `blockchain.chain.solana_start_slot`, `addresses.canonical('solana')`; `relay_report` path), TON (`fam_ton.py`,
 `blockchain_ton.py`, `connectors/ton.js`, `ton_global_id`, `ton_app_domain`, `ton_manifest_url`,
 `ton_wallet_code_hash`, `ton_wallet_code_depth`, `blockchain.token.address` = the jetton master, `batch_hex` lanes).
+
 Contracts and adapters per family: `smartcontracts/move/aptos/` (package `scaas`), `scaas-node/src/adapters/aptos.rs`,
 `scaas-node/tests/e2e_aptos.rs`; `smartcontracts/solana/` (program `scaas`), `scaas-node/src/adapters/solana.rs`,
 `scaas-node/tests/e2e_solana.rs`. Test databases: `dms_test_chain_6` (Hedera), `dms_test_chain_8` (Soroban),
@@ -250,7 +255,9 @@ and `blockchain_relay_job.py:137` are shared. Sui verifier tests (`test_fam_sui.
 `test_recovered_key_signature_is_left_to_the_node` (⇒ `None`), `test_flipped_byte_from_added_key_is_refused` (`False`),
 `test_own_key_still_verified`, `test_passkey_cross_origin_refused`, `test_keyop_bytes_match_move`,
 `test_vectors_file_matches_move`, `test_signature_from_another_wallet_is_refused` (narrowed to "invalid under its own
-key"); clientkeys mirrors them in `fam_sui.test.js`. Mandate payments through the connector
+key"); clientkeys mirrors them in `fam_sui.test.js`.
+
+Mandate payments through the connector
 (`_enqueue_mandate_payment`) are EVM-only; for other families the contract exists and the connector path is a seam. Portal glue (`connectors/*.js` call each family's `fam_<f>.verify` mirror on the server): `chain_pay.js` and `subject_signers.js` call
 `window.dmsChainConnectors` and `dms_portal_chain_payment_options/start/submit`
 (`test_options_carry_family_and_network`). The multi-family `chain_pay.js` flow: `options` (now with `family` and
@@ -334,7 +341,9 @@ regenerated with it. Call-job calldata uses `mtxPayUnderMandate`, `mtxRevoke` an
 envelope becomes a `MetaTransfer` with `entryRef` (new typehash and KAT, `metatransfer_kat.json`) through `mtxPay` or
 `mtxExecuteTransfer` (as built: `pay(bytes32)` through `executeMetaTransaction`); mandate and subject-account calls are
 `MetaTransaction`s in those contracts' domains ([CTR-MTX-22](contracts/metatx.md#CTR-MTX-22)); the subject-side
-cancel is `cancelNonce(batch)`. The connector never builds an `approve` on a SCaaS token. DEX mirrors: an order row
+cancel is `cancelNonce(batch)`.
+
+The connector never builds an `approve` on a SCaaS token. DEX mirrors: an order row
 stores the `TradeOrder` fields (`from`, `receiveToken`, `amount`, `receiveAmount`, `minFill`, `fee`, `relayer`, `dex`,
 `destination`, `flags`, order lane `batch`, `nonce`, `validUntil`); `maker_fee_ppm`/`taker_fee_ppm` become the venue's
 intake rates and `fee_recipient_address` the DEX treasury; trades are booked from `LegSettled`
@@ -454,7 +463,9 @@ subset pushed (`tokens_hash` set); (3) **journal continuity**: for each lane the
 `max(outer_nonce)` for that signer — the transitional node bumps `lane.journal_max` on every successful legacy `signed`
 report (and imports it from each legacy `node_config`), so this holds exactly, not "as of the last read"; (4) DEX chain: every market paused, no `pending` trade;
 (5) TON chains: the forward cap is deployed on the node ([NET-TON-14](networks/ton.md#NET-TON-14)); the node's
-payload-sourced fields, cost metering, value-out and deposit caps are live before the first push cutover. Effects:
+payload-sourced fields, cost metering, value-out and deposit caps are live before the first push cutover.
+
+Effects:
 `node_transport = 'push'`; `relay_poll` serves nothing for the chain; queued jobs are pushed; legacy in-flight jobs keep
 reporting through `relay_report` until terminal; a legacy job the old path requeues is pushed like any other. The store
 indexer has been running for the chain since the transitional binary started (cursor bootstrapped from the legacy

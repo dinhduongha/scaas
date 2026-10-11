@@ -537,7 +537,9 @@ holds them `queued` until it is resumed; a `halted` chain refuses intake (`409 C
 keys/mnemonic, `rpc_urls`, `[store] url`, `master_key`, OIDC issuers, binds (incl. `metrics_bind`), CORS origin
 lists, `[app]`, `[log]`, `[api.admin_auth]` modes and session parameters, `[identity]`, `[transport]`, `[gossip]`
 listen/external/bootstrap/direct addresses. RPC endpoints are therefore only in node configuration: clients never call
-an RPC, provider URLs often embed keys, and two places holding one list would be two truths. **Hot (≤ 2 s)**: chain
+an RPC, provider URLs often embed keys, and two places holding one list would be two truths.
+
+**Hot (≤ 2 s)**: chain
 state, tokens (incl. `active`, `features`), `fee_recipient`, breaker, `max_valid_for_secs`, `max_attempts`,
 `max_value_out`, `max_deposit_per_job`, `grief_cost_cap`, policy, peers, namespaces, keys, watch lists, namespace
 token subsets, DEX markets, deny list, sponsor policies, chain contracts, per-chain/per-policy/per-market `gossip`

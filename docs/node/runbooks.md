@@ -431,7 +431,9 @@ flowchart LR
 Aptos, Soroban and TON `pending` = the committed sequence). **Refuses unless `pending − 1 > lane.journal_max`**
 (monotonicity). Prints every nonce in `[journal_max + 1, pending)` with its tx hash, `to`, and whether its meta-tx
 digest matches a job of the restored store; requires `--confirm` = `pending − 1`; sets `lane.journal_max` and inserts one
-`lane_adopted (chain_key, lane_label, nonce, tx_hash, adopted_at)` row per adopted nonce, audited. The lane tracks
+`lane_adopted (chain_key, lane_label, nonce, tx_hash, adopted_at)` row per adopted nonce, audited.
+
+The lane tracks
 adopted nonces like journaled ones: a stuck adopted head is replaced by a 0-value self-send at that nonce, bumped ×1.25
 over the observed fee (the lost intents were re-pushed by clients and stay protected by subject nonces); rows are
 deleted once `latest` passes them. Sui and Solana have no lane nonce: after `store restored` the lane re-reads its gas

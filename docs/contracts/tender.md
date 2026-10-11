@@ -89,7 +89,9 @@ salted commitment); every deposit then refunds 100 %; prices are still hidden, s
 + 1` (≤ 3) valid bids** sorted by price (`rule`), then `seq`; the head leads. For `dqWindow` seconds after
 `revealDeadline` (fixed at creation, `≤ 7 d`, client default 72 h, `0` = off) the buyer may `disqualifyWinner` **the
 current leader only**, with a non-zero `reasonRef` (a salted commitment of the document), a violation class, and
-**only while a next valid bid exists** (never a price-informed abort); the next bid leads. Only the top `k` can ever
+**only while a next valid bid exists** (never a price-informed abort); the next bid leads.
+
+Only the top `k` can ever
 lead, so nothing else is stored. The disqualified deposit refunds in full unless the class is one of the
 `forfeitClasses` declared at creation (a bitmask of ≤ 8 classes defined in the tender documents, e.g. forged bid
 documents) — then it goes to `slashSink`. At most `maxDisqualifications ≤ 2`; each emits `BidDisqualified`.
@@ -464,7 +466,9 @@ window; ties broken by `seq`; both rules; `minBidders` ⇒ `FAILED`; cancel befo
 cancel in the same block at `now == commitDeadline`; every routing row and double withdraw; bond release by buyer, by
 anyone after `bondReleaseTime`, claim before it. **I6 front-running:** a third party submits the deposit intent through
 `mtxPay`, `mtxBatchTransfer` and `mtxExecuteTransfer` ⇒ `MetaTxUnauthorizedRelayer`;
-the intent replayed into another `tenderId` and another tender contract ⇒ `BadDepositIntent(3)`. Disqualification:
+the intent replayed into another `tenderId` and another tender contract ⇒ `BadDepositIntent(3)`.
+
+Disqualification:
 outside the window (before `revealDeadline`, after `revealDeadline + dqWindow`), non-buyer, `dqWindow = 0`, cap
 reached, `NoNextBid` on the last candidate, zero `reasonRef`, undeclared class, class 0 ⇒ refund, declared class ⇒
 forfeit; next leader correct for both rules with ties, invalid bids never in `top`, `top` truncation at `k`; settle by
