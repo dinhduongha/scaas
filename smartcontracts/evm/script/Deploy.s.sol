@@ -15,6 +15,7 @@ import {DeployBase} from "./DeployBase.sol";
 ///      DEMO_SUPPLY (tuỳ chọn; 0 = không tạo token demo), DEMO_HOLDER (tuỳ chọn, nhận một nửa),
 ///      DEPLOY_SALT (tuỳ chọn; mặc định keccak256("scaas.deploy.v1"); chạy lại trên cùng chain cần salt mới),
 ///      CHAIN_UID (genesis hash, chain-uids.json; tuỳ chọn; phải bằng hash block 0 của RPC, mặc định chính hash đó).
+///      DEPLOY_ZETHER (tuỳ chọn, true/false; chỉ dev chain; cần cờ forge trong deploy.sh, docs/networks/evm.md).
 /// Ghi `deployments/<chainid>.json` để seed Odoo (`blockchain.token`) và config node (`dex`).
 contract Deploy is DeployBase {
     function run() external {

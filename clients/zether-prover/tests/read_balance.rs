@@ -27,7 +27,10 @@ fn pt(v: &Value) -> G<Bn254> {
 fn read_balance(args: &[&str], key: &Value) -> Result<Value, String> {
     let mut child = Command::new(CLI).args(args).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
         .spawn().unwrap();
-    child.stdin.take().unwrap().write_all(key.to_string().as_bytes()).unwrap();
+    // A CLI that refuses its arguments exits before reading stdin: the pipe breaks, the exit status carries the verdict.
+    if let Err(e) = child.stdin.take().unwrap().write_all(key.to_string().as_bytes()) {
+        assert_eq!(e.kind(), std::io::ErrorKind::BrokenPipe, "{e}");
+    }
     let out = child.wait_with_output().unwrap();
     if out.status.success() {
         Ok(serde_json::from_slice(&out.stdout).unwrap())

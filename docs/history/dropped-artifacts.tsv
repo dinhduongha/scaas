@@ -822,3 +822,9 @@ max_gas_per_tx ≥ 4.2 M	obsolete	contracts/zether.md#gas-measured: the node gas
 3.36	obsolete	old ZetherToken envelope gas (M); re-measured on the P3 kinds, contracts/zether.md#gas-measured
 3.98	obsolete	old ZetherToken envelope gas (M); re-measured on the P3 kinds, contracts/zether.md#gas-measured
 4.10	obsolete	old ZetherToken envelope gas (M); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+ZetherToken.initialize	renamed	the kinds' initialize (P3; old ZetherToken in legacy/p3); contracts/README.md#production-gates-unaudited
+ZetherToken.t.sol	obsolete	moved to legacy/p3 (P3); the kinds' tests are test/zether/ZetherNone.t.sol and ZetherUnderlying.t.sol
+script/DeployZether.s.sol	obsolete	never built; the Zether stack deploys with DEPLOY_ZETHER=1, networks/evm.md#deployments
+ZetherMetaTx._requireValidSignature	renamed	MetaTxBase._requireValidSignature (P3), contracts/accounts.md
+ZetherToken.registered(ua)	renamed	ZetherLayer.registered(ua) (P3), contracts/accounts.md
+ConfidentialTransfer(entryRef)	obsolete	old ZetherToken OP_ZTRANSFER event (legacy/p3); the kinds emit ZetherTransfer with entryRef, contracts/zether.md

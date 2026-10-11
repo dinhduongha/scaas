@@ -362,6 +362,14 @@ contract ZetherUnderlyingTest is ZetherFixture {
         c.features = 1 << AdminLib.MINTABLE;
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.MINTABLE));
         factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, c, "mint");
+        // `initialSupply` / `initialHolder` are the `NONE*` kinds' (CTR-TOK-25): refused, never silently ignored
+        c.features = 0;
+        c.initialSupply = 1;
+        vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 1));
+        factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, c, "supply");
+        (c.initialSupply, c.initialHolder) = (0, address(this));
+        vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 1));
+        factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, c, "holder");
     }
 
     // ------------------------------------------------------------------ mtxWrap and shield, gasless (CTR-TOK-20, MT-3)

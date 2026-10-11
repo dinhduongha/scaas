@@ -767,7 +767,7 @@ End to end (Playwright, Chromium):
 |---|---|---|
 | `evm` | anvil + `deploy.sh evm` + `scaas-node` (gateway, CORS, DEX venue on one lane) | send/pay via gateway and self-paid; v2 tiers; wrap/unwrap/gasless `mtxExecute(unwrap…)`; spender refusals; DEX place/cancel/fill across two contexts; passkey SmartKeyAccount (CDP virtual authenticator); find-my-account; vault v2; backup switch on (receive hidden, value refused, add-key allowed); EIP-6963 fake |
 | `ua` | anvil + the UA deployment | passkey-UA create + gasless register; v3 send; Approvers |
-| `zether` | anvil + **`script/DeployZether.s.sol`** (dev only: registry, verifiers, ZetherToken) | register (gasless), fund, transfer, rollOver, burn, cache/BSGS |
+| `zether` | anvil `--code-size-limit 65536` + `DEPLOY_ZETHER=1 deploy.sh evm` (dev only: registry, verifiers, the `*_ZETHER` kinds, P3; [evm](../networks/evm.md#deployments)) | register (gasless), fund, transfer, rollOver, burn, cache/BSGS |
 | `console` | `mock-node.mjs` + `mock-idp.mjs`; a real node once its admin API exists | login flows, roles, secret shown once, peer URL checks, 409/422 |
 | `cosmos`, `soroban`, `sui`, `aptos`, `ton`, `solana` | `wasmd`; `stellar/quickstart --local`; `sui start --localnet`; `devnet.sh aptos`; the TON shim; `devnet.sh solana` (`~/.local/share/solana/install/active_release/bin` on PATH) | first: self-paid with seed + the clientkeys fake wallet; then via `/v1/ops` |
 | `node-served` | `scaas-node` with `[app]` | header bytes **and** behaviour (no CSP violations), same-origin console |

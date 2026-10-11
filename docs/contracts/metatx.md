@@ -909,13 +909,13 @@ named in brackets). The v2 tiers run on the new tree (last bullet).
 - **Bases** ([CTR-MTX-07](#CTR-MTX-07)). v1: the `ERC20MetaTxV1` mixin + `MetaToken` (kind `META`, tiers 1 and 2 in one
   implementation; tier 2 reads `IERC20Metadata(underlying).decimals()` at init, mints only through `wrap` and keeps
   `underlying.balanceOf(this) >= totalSupply`; `unwrap(amount, recipient)`; `initialSupply == 0 && minter == 0` else
-  `WrapperHasNoMint`; errors `NotMinter`, `NotAWrapper`) and `HederaMetaToken`; Zether on `ZetherMetaTx`. Invariants as
+  `WrapperHasNoMint`; errors `NotMinter`, `NotAWrapper`) and `HederaMetaToken`; the Zether kinds are on `MetaTokenBase` (P3; the old `ZetherMetaTx` is in `legacy/p3/`). Invariants as
   built: `Σ balance == totalSupply`; wrapper `reserve >= totalSupply`, fuzzed as `reserve >= supply`.
 - **Signature checks** ([CTR-MTX-25](#CTR-MTX-25)). Built (P1a): `SigCheck` serves `MetaTxBase` and the built bases
-  `ERC20MetaTxV1`, `ERC20MetaTx`, `ZetherMetaTx`; `SigLib` is deleted. `SCaaSDex`, `MandateWallet` and
+  `ERC20MetaTxV1`, `ERC20MetaTx` (and the Zether kinds through `MetaTokenBase`, P3); `SigLib` is deleted. `SCaaSDex`, `MandateWallet` and
   `SmartKeyAccount` keep their own checks until P2/P4, and the HIP-632 override stays in the four Hedera children
   until P1c.
-- **Structs** ([CTR-MTX-15](#CTR-MTX-15), [CTR-MTX-23](#CTR-MTX-23)). v1 and Zether: one 11-field
+- **Structs** ([CTR-MTX-15](#CTR-MTX-15), [CTR-MTX-23](#CTR-MTX-23)). v1 (and the pre-P3 Zether line, `legacy/p3/`): one 11-field
   `MetaTransaction{from, to, value, data, batch, nonce, validUntil, mode, relayer, fee, feeRecipient}` (typehash
   `MetaTransaction(address from,address to,uint256 value,bytes data,…)`) carries transfers (`data` empty), payments
   (`data = pay(bytes32)`) and the ops below, named `MetaTxLib.LegacyMetaTransaction` (typehash unchanged, vector

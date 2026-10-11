@@ -367,7 +367,7 @@ still need a new UA.
 
 | Set | Members | Enforced at |
 |---|---|---|
-| ZETHER | `0x0140`, `0x0141`, `0x0142` | Zether functions only (`requireZetherAuthorized`, `kindOf` in `ZetherToken`) |
+| ZETHER | `0x0140`, `0x0141`, `0x0142` | Zether functions only (`requireZetherAuthorized`, `kindOf` in `ZetherLib`) |
 | SIGNING | every derived kind not in ZETHER: single-key `0x0100`–`0x0107`, `0x0110`–`0x0113`, `0x0130`–`0x0132`, and the structure `0x0120` | `requireAuthorized` (native or SIGNING; ZETHER ⇒ `UAUnauthorized`); v3 `from`/`to` (native or registered SIGNING, else `UAKindNotAccepted(kind)`); Zether `authRef` (native or SIGNING; the PQ Zether kind narrows it) |
 | MEMBER | SIGNING single-key kinds, plus the native kinds the chain profile can verify, all with `id >> 160 == 0` — on EVM `0x0001`–`0x0002`; `0x0003` **only** in a Hedera-profile registry (constructor immutable `hederaNative`, HIP-632) | `msig` members (`UAMemberUnknown`); no other family's native kind, no `hedera-native` outside Hedera and no structure is ever an EVM member |
 
@@ -486,7 +486,7 @@ EVM tokens, address-typed paths:
 | Hedera children | as above | as above | N incl. `hedera-native` | HIP-632 for 64-byte sigs from codeless accounts |
 | regulated tokens (planned) | transfers, `recordOrder`, `freeze`, … | `to`, `account` | N (address-keyed `ComplianceRegistry`) | — |
 
-EVM Zether (`ZetherToken`, re-pointed at migration):
+EVM Zether (the `*_ZETHER` kinds, built P3, re-pointed at migration):
 
 | Function | Subject | Accepts | Verified by |
 |---|---|---|---|
@@ -616,7 +616,7 @@ EVM DEX, mandates, accounts, registry:
 
 **Transitional (BUILT names).** `SmartKeyAccount` and `MandateWallet` expose `executeAsOwner(data, nonce, validUntil,
 signature)` (recovery cancel: `executeAsOwner(cancelRecovery)`); Zether exposes `rollOverSigned(ua, …, sig)` and
-`setRollOverMode(ua, …, sig)` and verifies envelopes with `ZetherMetaTx._requireValidSignature`; the classifier is
+`setRollOverMode(ua, …, sig)` and verifies envelopes with `MetaTxBase._requireValidSignature` (P3); the classifier is
 `MetaTxCore._isContract`; `SCaaSDexV1` keys orders by `o.maker`; the legacy `MetaTxDex.settle(a, b)` takes legs
 signed by `a.m.from` and `b.m.from`. The renames and deletions are [CTR-MTX-21](metatx.md#CTR-MTX-21) and
 [CTR-DEX-16](dex.md#CTR-DEX-16).
@@ -1030,13 +1030,13 @@ accounts re-register; no data migration. Only dev chains ([CTR-ZTH-02](zether.md
 dev balances are recreated by scripts.
 
 What exists: `UniversalAccountRegistry` (Zether-only, `UA = keccak256(encodedY)`, untagged; `AuthScheme` 8 values; PoP
-binds `msg.sender`; `links`/`link_eth`; no rotation). Consumers: `ZetherToken` (`registered` via `keyLengthOf`,
-`requireAuthorized` ×4, `toUA` on fund/transfer/burn), `IZetherToken`, `ITransferDisclosure`, tests
-(`UniversalAccountRegistry.t.sol`, `ZetherFixture`, `ZetherToken.t.sol`, `ZetherRevertPaths.t.sol`, `AuthScheme.t.sol`,
+binds `msg.sender`; `links`/`link_eth`; no rotation). Consumers: the Zether kinds, P3 (`ZetherLayer.registered` via `keyLengthOf`,
+`ZetherLib` `requireAuthorized`, `toUA` on shield/transfer/unshield), `IZetherToken`, `ITransferDisclosure`, tests
+(`UniversalAccountRegistry.t.sol`, `ZetherFixture`, `ZetherNone.t.sol`, `ZetherRevertPaths.t.sol`, `AuthScheme.t.sol`,
 vectors `test/vectors/zether/*`), `zether-prover` (`keys.rs` `ua()`, `curve.rs` `ua_of`, `schnorr.rs` PoP and `entryRef`,
 `api.rs`, `vectors.rs`, `r33_keys.json` + copies), clientkeys `zether.js` (`confPublic`, `popMessage`, `zetherPop`,
-balance cache key `ua:token`), the built client bundle, the app's account and Zether screens. Not used by deploy
-scripts, the node, client-system code or non-EVM contracts.
+balance cache key `ua:token`), the built client bundle, the app's account and Zether screens; `DeployBase` with `DEPLOY_ZETHER=1` (dev chains). Not used by
+the node, client-system code or non-EVM contracts.
 
 | Item | Change |
 |---|---|
@@ -1044,8 +1044,8 @@ scripts, the node, client-system code or non-EVM contracts.
 | `src/common/AuthScheme.sol` + `test/AuthScheme.t.sol` | deleted (kinds replace schemes) |
 | `src/common/MultiSig.sol` | kept as the EOA-member path of `msig` (sorted, low-s, threshold) |
 | `ZetherTypes.toUA(encodedY)` | `keccak256(keccak256("scaas.ua.zether-<curve>.v1") ‖ Y)` = `keccak256(abi.encodePacked(TAG_ZETHER_<curve>, encodedY))`; curve from length |
-| `ZetherToken.registered(ua)` | `registry.kindOf(ua) == ZETHER_<verifier curve>` |
-| `ZetherToken` auth calls | `requireZetherAuthorized(ua, digest, sig, zkCovered)` |
+| `ZetherLayer.registered(ua)` | `registry.kindOf(ua) == ZETHER_<verifier curve>` |
+| `ZetherLib` auth calls | `requireZetherAuthorized(ua, digest, sig, zkCovered)` |
 | `entryRef` | unchanged formula; `fromUA` is the new id (vectors regenerate) |
 | zether-prover | `ua_of` tagged; PoP per [CTR-UA-07](#CTR-UA-07); vectors regenerated |
 | clientkeys | `zether.js` (`confPublic` returns the tagged UA; `zetherPop` signs the new PoP; `popMessage` removed); `r33_keys.json` regenerated |

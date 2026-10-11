@@ -256,7 +256,7 @@ agent signs, a relayer pays gas); Zether keeps commercial amounts confidential w
 
 **Target and built.** The contract sections below describe the target that the component docs specify. The built EVM
 code already has the P1 base and the two public kinds (P1a–P1d) and still carries the older lines (the v1 tokens,
-`ZetherToken`, `SubjectAccount`); every component doc says what is built in a *Transitional (BUILT)* note naming the
+`SubjectAccount`; the old `ZetherToken` is in `legacy/p3/`); every component doc says what is built in a *Transitional (BUILT)* note naming the
 phase that replaces it: P1 the base, the two public kinds and `createToken` (P1e); P2 `TradeLib` and the DEX clone; P3 the Zether kinds; P4 `MandateWallet` and `SmartKeyAccount` on the
 base; P5 node and client support for the new ABI ([contracts/token-wrappers.md](contracts/token-wrappers.md#transitional-built-tokens),
 [contracts/metatx.md](contracts/metatx.md#transitional-built)). Nothing is deployed, so the target replaces the built
@@ -338,7 +338,7 @@ registered implementation, initialized in the same call, and answers its own pro
 regulated flags 5–8 are [CTR-AS-17](contracts/asset-suite.md#CTR-AS-17).*
 
 **Why kinds are code and features are flags.** EIP-170 caps every implementation at 24,576 bytes, and the built
-`ZetherToken` is already over it ([CTR-ZTH-46](contracts/zether.md#CTR-ZTH-46)): one contract per combination of
+Zether kinds are already over it ([CTR-ZTH-46](contracts/zether.md#CTR-ZTH-46)): one contract per combination of
 features would not fit, and one contract with everything would not either. So the large, structural differences
 (underlying legs or not, a confidential layer or not) are separate implementations, each audited for only what it
 holds, while the small switches are bits chosen at creation; the code behind each switch exists once, in an external
@@ -741,9 +741,9 @@ sequenceDiagram
 ### 6.5 Confidential: wrap-shield, multi-recipient transfer, unshield-unwrap (target, P3)
 
 Value enters the shielded balance straight from an underlying leg and leaves straight to one
-([CTR-ZTH-45](contracts/zether.md#CTR-ZTH-45), [CTR-ZTH-37](contracts/zether.md#CTR-ZTH-37)); built on development
-chains only: `ZetherToken` with its own underlying, the `OP_ZTRANSFER` envelope op emitting
-`ConfidentialTransfer(entryRef)`, and `ITransferDisclosure`.
+([CTR-ZTH-45](contracts/zether.md#CTR-ZTH-45), [CTR-ZTH-37](contracts/zether.md#CTR-ZTH-37)); built (P3) on development
+chains only: `UnderlyingZetherToken` (`zetherWrapShield`, `zetherUnshieldUnwrap`), Zether ops relayed through `mtxExecute`,
+and `ITransferDisclosure`.
 
 ```mermaid
 sequenceDiagram

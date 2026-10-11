@@ -2,14 +2,14 @@
 
 ## Session 2026-10-11 (P3)
 
-**State:** P3 on branch `p3-zether`, merge pending the final review (code `bfee47d`). Plan `docs/superpowers/plans/2026-10-11-p3-zether-kinds.md`.
-976 forge tests; `zether-prover` `cargo test` 53 green; e2e 4/4 and 1/1. Fix wave 1 (review follow-ups): S3 disclosure vectors through `ZetherDisclosure` (chain-B negative), every published selector relayed once on both kinds, the stronger invariant (legs 1:1 and 3/7, rate changes, surplus never drops), `OpenFactory._checkZether` probes low level (typed error on a permissive fallback), the prover API refuses `unwrapBinding` outside `proveBurn`.
+**State:** P3 on branch `p3-zether`, merge pending; head is the fix-wave-2 commit on `f847471` (final review I1, m1–m7). Plan `docs/superpowers/plans/2026-10-11-p3-zether-kinds.md`.
+977 forge tests; `zether-prover` `cargo test` 53 green (the `read_balance` BrokenPipe flake fixed); e2e 4/4 and 1/1; real `deploy.sh evm` broadcasts on anvil 31337 green both default and with `DEPLOY_ZETHER=1` (27 txs, BLS verifier 14.08 M gas). Fix wave 2: the Zether deploy is opt-in (`DEPLOY_ZETHER`), `deploy.sh` adds `--code-size-limit 65536 --gas-estimate-multiplier 105` and keeps the previous JSON on a failed broadcast, `ZetherDeploy.t` checks JSON keys, the SmartKeyAccount implementation and per-tx gas under EIP-7825, kind 3 `initialSupply` pinned, stale docs. Fix wave 1 (review follow-ups): S3 disclosure vectors through `ZetherDisclosure` (chain-B negative), every published selector relayed once on both kinds, the stronger invariant (legs 1:1 and 3/7, rate changes, surplus never drops), `OpenFactory._checkZether` probes low level (typed error on a permissive fallback), the prover API refuses `unwrapBinding` outside `proveBurn`.
 
 **Built:** `src/zether/ZetherLib.sol` (external, `scaas.zether`), `ZetherLayer.sol`, `NoUnderlyingZetherToken.sol` (kind 2),
 `UnderlyingZetherToken.sol` (kind 3: `zetherWrapShield`, `zetherUnshieldUnwrap`), `ZetherStatements.sol`, the new
 `IZetherToken.sol`; `MetaTxBase._envelopeBinding` / `_ticketBinding` (transient `scaas.mtx.binding`); `ERC20MetaTx._domainName`
 (`"SCaaS ZetherToken"`); `ConfidentialConfig.maxShielded` / `confidentialFee`; `OpenFactory` Zether gate and verifier check;
-verifier header 416 B and `ZetherDisclosure` challenge with `chainUid`; `DeployBase` deploys the Zether stack on dev chains;
+verifier header 416 B and `ZetherDisclosure` challenge with `chainUid`; `DeployBase` deploys the Zether stack on dev chains when `DEPLOY_ZETHER=1` (opt-in; `deploy.sh` adds the forge flags);
 the Rust prover on the new header, digests and ABI (vectors regenerated, `envelope.json`); from the disclosure review,
 HASH stored in one `bytes32` slot and the `ITransferDisclosure` NatSpec corrected (G2, G5). Tests: `ZetherNone.t`,
 `ZetherMulti.t`, `ZetherRevertPaths.t`, `ZetherRelay.t`, `ZetherUnderlying.t`, `ZetherInvariant.t`, `ZetherDeploy.t`,

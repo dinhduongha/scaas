@@ -162,11 +162,11 @@ power.
 
 | Contract | Holder | Powers | Rule |
 |---|---|---|---|
-| `OpenFactory` | `registrar` (immutable; an EOA by default — the deployer — and a multisig before mainnet) | `registerImplementation`, `deprecate`, and on `OpenFactoryV1` `setZetherEnabled` (dev chains only); none over any token | [token-wrappers](token-wrappers.md#factory) |
+| `OpenFactory` | `registrar` (immutable; an EOA by default — the deployer — and a multisig before mainnet) | `registerImplementation`, `deprecate`, `setZetherEnabled` (dev chains only); none over any token | [token-wrappers](token-wrappers.md#factory) |
 | Any token (EVM) | the `owner` (optional; 0 = none) | `grantRole` / `revokeRole` for the roles of set flags, `disableFeature(bit)` one-way on a flag not locked at creation, two-step `transferOwnership`, `renounceOwnership` (role holders keep their roles); no power touches a reserve or upgrades code | [CTR-TOK-22](token-wrappers.md#CTR-TOK-22) |
 | Any token (EVM), role holders | the holders of `minter`, `rateAdmin` (has code), `guardian`, `issuer`, `compliance` (the role column of the flag table; several holders allowed, may `renounceRole`) | the power of the flag only (mint to a public balance, a bounded timelocked rate change, `disableWrap`, freeze / forced transfer against a recorded order / bounded pause / allowlist); none touches a reserve or upgrades code | [CTR-TOK-22](token-wrappers.md#CTR-TOK-22), [CTR-TOK-06](token-wrappers.md#CTR-TOK-06), [CTR-TOK-07](token-wrappers.md#CTR-TOK-07) |
 | `SCaaSDex` | `admin` set once at creation ([CTR-DEX-24](dex.md#CTR-DEX-24); built: written once by `initialize`; `SCaaSDexV1`: immutable) (a multisig in production; the venue operator's multisig for a managed market) | `setMarket` (list or delist a pair), `setFeeSplit` (relayer share and treasury of the signed fee; never the amount), `setExchangeTarget` (list or delist an exchange target or executor), `setListedOnly` (DEX-wide listed-only mode for the exchange path); none touches funds | [CTR-DEX-03](dex.md#CTR-DEX-03), [CTR-DEX-23](dex.md#CTR-DEX-23) |
-| `NONE_ZETHER` / `UNDERLYING_ZETHER` | the token `owner` and role holders per kind and flags ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)); the auditor key is immutable (built, `ZetherToken`: no admin after `initialize`; replaced in P1/P3) | as the flags — nothing touches a reserve or a shielded balance | [CTR-ZTH-09](zether.md#CTR-ZTH-09) |
+| `NONE_ZETHER` / `UNDERLYING_ZETHER` | the token `owner` and role holders per kind and flags ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)); the auditor key is immutable (built, P3: set once by `initialize`; the old `ZetherToken` is in `legacy/p3/`) | as the flags — nothing touches a reserve or a shielded balance | [CTR-ZTH-09](zether.md#CTR-ZTH-09) |
 | `SealedBidTender`, `VestingGrant`, `Distribution`, `ExchangeOffer`, `UARegistry` | none | — | per file |
 | Non-EVM tier-1 tokens: Soroban `scaas-token`, TON `ScaasJettonMaster`, CosmWasm CW20 | Soroban and TON `admin`, CW20 `minter` (optional) | `mint` / `Mint`, unlimited on that token (a supply power, not a balance power) | [soroban](../networks/soroban.md#contracts), [ton](../networks/ton.md#overview), [cosmos](../networks/cosmos.md#contracts) |
 | Soroban `scaas-dex` | `admin` | `set_market` (per-pair fees ≤ 1 %, on/off) | [soroban](../networks/soroban.md#dex) |
@@ -187,7 +187,7 @@ families carry stronger gates, enforced in code:
 
 | Gate | Rule | Status |
 |---|---|---|
-| Classical Zether dev gate | `ZetherSafety.isDevChain()`: `chainid ∈ {31337 (anvil/hardhat), 1337 (geth --dev)}`, a hard-coded allowlist; `OpenFactoryV1.zetherEnabled` defaults to `false`; `setZetherEnabled(true)` (registrar) reverts outside a dev chain; `OpenFactoryV1.createZetherToken`/`createUnregistered(ZETHER)` revert when the flag is off **or** the chain is not a dev chain; `ZetherToken.initialize`, both verifier constructors and the built `UniversalAccountRegistry` revert outside a dev chain too, so a manual deploy cannot bypass it ([CTR-ZTH-02](zether.md#CTR-ZTH-02)) | **BUILT** |
+| Classical Zether dev gate | `ZetherSafety.isDevChain()`: `chainid ∈ {31337 (anvil/hardhat), 1337 (geth --dev)}`, a hard-coded allowlist; `OpenFactory.zetherEnabled` defaults to `false`; `setZetherEnabled(true)` (registrar) reverts outside a dev chain; `createToken`/`createTokenUnregistered` of kinds 2–3 revert when the flag is off **or** the chain is not a dev chain; the kinds' `initialize`, both verifier constructors and the built `UniversalAccountRegistry` revert outside a dev chain too, so a manual deploy cannot bypass it ([CTR-ZTH-02](zether.md#CTR-ZTH-02)) | **BUILT** |
 | Adding a chain to the classical allowlist | a code change of `ZetherSafety` plus a new deployment, after the cryptographic audit | — |
 | Chain 7622 as a classical Zether dev chain | whether chain 7622 counts as "dev": not a dev chain until the owner decides ([CTR-ZTH-33](zether.md#CTR-ZTH-33)) | open |
 | Production curve for classical Zether | bn254 vs BLS12-381; BLS12-381 is more secure and **not** cheaper ([CTR-ZTH-32](zether.md#CTR-ZTH-32)) | open |
@@ -220,7 +220,7 @@ own job (Move test, Soroban, CosmWasm, Tact, Solana) as the family is added.
 `REGISTRAR` optional, `DEMO_SUPPLY`/`DEMO_HOLDER` optional) reads the genesis hash from the RPC and deploys, through
 the CREATE2 deployer ([CTR-GEN-06](#CTR-GEN-06)), `SmartKeyAccountFactory`, `OpenFactory` with the token
 implementations (each taking the factory address and `chain_uid`) registered as version 1 of their kinds, and
-the `SCaaSDex` implementation (registered as DEX version 1; built, no clone) and `SCaaSDexV1(registrar)` (its constructor takes the admin, here the registrar; unsalted domain); optionally a tier-1 demo token (**SPECIFIED**).
+the `SCaaSDex` implementation (registered as DEX version 1; built, no clone) and `SCaaSDexV1(registrar)` (its constructor takes the admin, here the registrar; unsalted domain); optionally a tier-1 demo token (**SPECIFIED**); with `DEPLOY_ZETHER=1`, dev chains only, also the Zether stack (built, P3; [flags](../networks/evm.md#deployments)).
 
 It writes
 `deployments/<chainid>.json` to seed the node's chain configuration and client chain data. Production: every contract

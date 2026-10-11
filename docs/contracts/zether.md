@@ -360,9 +360,9 @@ implementation's constructor immutable, exposed as `chainUid()` and equal to the
 Without it a re-created chain restarts `modeNonce`, `accSeq`, `sendCounter` and
 block numbers, so a captured mode or rollover signature, a proof or a disclosure would verify there; `entryRef` gains
 it so that references never collide across chains (client reconciliation still keys by `(chain_key, entryRef)`). The
-built `UniversalAccountRegistry` takes `chainUid` as a constructor immutable and adds it to its PoP challenge; because
+UA registry (target) takes `chainUid` as a constructor immutable and adds it to its PoP challenge; because
 it checks raw digests, every caller's digest carries `chainUid` itself. **Built (P3)** for every token-side digest and
-the prover (which also mixes `chainUid` into its `s`); the vectors are regenerated. **Transitional:** the built registry
+the prover (which also mixes `chainUid` into its `s`); the vectors are regenerated. **Transitional:** the built `UniversalAccountRegistry` is unchanged and
 takes no `chainUid` until the UA registry replaces it ([CTR-UA-22](accounts.md#CTR-UA-22); controller ruling, pending the owner).
 
 Points:
@@ -1316,7 +1316,7 @@ MSM); (c) `D_out = O` is refused (`ZetherVerifier.sol`). **Built (P3):** (a) `Ze
 ## 21. Interfaces
 
 ```solidity
-interface IZetherToken is IERC20MetaTx {
+interface IZetherToken is IERC20MetaTx {  // target; built (P3): standalone, the ops both kinds share (wrap-shield / unshield-unwrap on UnderlyingZetherToken)
     struct AccountState { bytes accC; bytes accD; bytes pendingC; bytes pendingD; uint64 accSeq; uint64 pendingSeq;
                           uint64 sendCounter; uint64 modeNonce; ZetherTypes.RollOverMode mode; }
     event ZetherShielded(ZetherTypes.UA indexed account, uint256 amount);

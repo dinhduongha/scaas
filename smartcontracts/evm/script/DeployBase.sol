@@ -25,10 +25,13 @@ abstract contract DeployBase is Script {
     bytes32 internal salt;
     /// @notice The chain's genesis hash (`_chainUid`).
     bytes32 internal uid;
+    /// @notice `DEPLOY_ZETHER` env (default false): also deploy the Zether stack (`_deployZether`, dev chains only).
+    bool internal deployZether;
 
     /// @notice Call first in `run()`, before the broadcast.
     function _setup() internal {
         salt = vm.envOr("DEPLOY_SALT", keccak256("scaas.deploy.v1"));
+        deployZether = vm.envOr("DEPLOY_ZETHER", false);
         uid = _chainUid();
         require(CREATE2_FACTORY.code.length != 0,
             "no deterministic CREATE2 deployer at 0x4e59b44847b379578588920ca78fbf26c0b4956c (runbook NET-EVM-05)");
@@ -49,8 +52,8 @@ abstract contract DeployBase is Script {
 
     /// @notice The token factory, the `NONE` implementation and the `SCaaSDex` implementation by CREATE2, each
     ///         registered as version 1 when the deployer is the registrar; writes `token_factory`,
-    ///         `implementation_none`, `dex_implementation`, `chain_uid` into the JSON object `"deploy"`; on a dev chain
-    ///         also the Zether stack (`_deployZether`). `UNDERLYING` is not deployed: over EIP-170 on real chains
+    ///         `implementation_none`, `dex_implementation`, `chain_uid` into the JSON object `"deploy"`; with `DEPLOY_ZETHER`
+    ///         also the Zether stack (`_deployZether`, dev chains only). `UNDERLYING` is not deployed: over EIP-170 on real chains
     ///         (owner: wait for Glamsterdam).
     function _deployTokenFactory(address registrar, bool register, address smartKeyAccountImpl, bool isHedera)
         internal returns (OpenFactory f)
@@ -68,7 +71,10 @@ abstract contract DeployBase is Script {
         if (register) f.registerDexImplementation(1, address(dexImpl));
         _gate(address(dexImpl));
         vm.serializeAddress("deploy", "dex_implementation", address(dexImpl));
-        if (ZetherSafety.isDevChain()) _deployZether(f, register, smartKeyAccountImpl);
+        if (deployZether) {
+            require(ZetherSafety.isDevChain(), "DEPLOY_ZETHER: dev chains only (CTR-ZTH-02)");
+            _deployZether(f, register, smartKeyAccountImpl);
+        }
         vm.serializeBytes32("deploy", "chain_uid", uid);
     }
 
@@ -76,7 +82,8 @@ abstract contract DeployBase is Script {
     ///         registry, `ZetherDisclosure`, `ZetherStatements`, both verifiers, the two confidential implementations
     ///         registered as version 1 of `NONE_ZETHER` and `UNDERLYING_ZETHER`, and the factory's Zether gate switched on
     ///         when the deployer is the registrar. **UNAUDITED — NOT FOR PRODUCTION FUNDS.** The implementations exceed
-    ///         EIP-170: an anvil needs `--code-size-limit 65536` (owner: code size waits for Glamsterdam).
+    ///         EIP-170 and the BLS verifier takes ~14.1 M gas: anvil `--code-size-limit 65536`, forge script
+    ///         `--code-size-limit 65536 --gas-estimate-multiplier 105` (deploy.sh adds both; docs/networks/evm.md).
     function _deployZether(OpenFactory f, bool register, address smartKeyAccountImpl) internal {
         UniversalAccountRegistry reg = new UniversalAccountRegistry{salt: salt}();
         ZetherDisclosure dis = new ZetherDisclosure{salt: salt}();
