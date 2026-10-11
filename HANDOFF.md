@@ -1,8 +1,29 @@
 # HANDOFF — scaas
 
+## Session 2026-10-11 (P2c)
+
+**State:** P2c on branch `p2c-dex`, merge pending the final review (code `dbf27a5`, tests `ae23be1`). Plan `docs/superpowers/plans/2026-10-11-p2c-dex-exchange-path.md`.
+949 forge tests.
+
+**Built:** the exchange path on `SCaaSDex` (`src/dex/SCaaSDex.sol`, `ISCaaSDex.sol` with `IExchangeExecutor`): `mtxExchange`
+(interactions), `mtxExchangeVia` (executor), `setExchangeTarget`, `setListedOnly`, `exchangeTarget`, `tokenKnown`;
+`ExchangeLegSettled`, `ExchangeTargetSet`, `ListedOnlySet`; `NoLegs`, `TokenNotKnown`, `ForbiddenTarget`, `ForbiddenSelector`,
+`TargetNotListed`, `InsufficientOutput`. Tests `test/v2/DexExchange.t.sol` 36 (mock router, v2-style pairs, executor,
+hostile targets). Sizes: `SCaaSDex` 21,826 B (was 14,722); tokens unchanged; no deploy change.
+
+**Rulings J1-J11 (plan header).** **J1** Path A bounds at the pull (token or `TradeLib`), Path B by the DEX, as in
+`mtxSettle`. **J2** known = a side of a listed market, counted per market. **J3** a pull check refuses an inexact sell
+token before any interaction. **J4** every `approve` interaction reset to 0 after the last one (stricter than the spec), and `increaseAllowance` and Permit2 `approve` are refused (controller ruling, pending the owner; other raising selectors such as `increaseApproval` stay open).
+**J5** leftovers fail the final conservation check. **J6** error arguments. **J7** under the listing condition the tokens
+an interaction calls are targets too. **J8** `NoLegs`. **J9** `receivedFloor` is gross. **J10** no Uniswap fork test yet.
+**J11** no deploy change; two storage fields appended.
+
+**Not done / next:** the Uniswap fork test and the DEX invariant suite (dex.md section 14); the node's TradeEngine (P7);
+`checkOrder` (H7) and the Hedera ED25519 limitation stay as in P2b-2.
+
 ## Session 2026-10-11 (P2b-2)
 
-**State:** P2b-2 on branch `p2b2-dex`, merge pending the final review (code `f4afbca`, plan `7b77cd1`, tests `6b9c645`). Plan
+**State:** P2b-2 on branch `p2b2-dex`, merged `7049c78` (code `f4afbca`, plan `7b77cd1`, tests `6b9c645`). Plan
 `docs/superpowers/plans/2026-10-11-p2b2-dex-outside-legs.md`. 913 forge tests.
 
 **Built:** `src/dex/DexPuller.sol` (`pull(token, from, amount)`, only the DEX), `ISCaaSDex.sol` and `SCaaSDex.sol` extended: outside

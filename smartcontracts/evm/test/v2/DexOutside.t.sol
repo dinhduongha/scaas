@@ -86,6 +86,9 @@ contract Reenter {
         try dex.mtxInvalidateNonces(address(1), 0, 1, "") { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
         ISCaaSDex.Settlement memory st;
         try SCaaSDex(address(dex)).settleOne(st, address(this)) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        ISCaaSDex.ExchangePlan memory ep;
+        try dex.mtxExchange(ep, new ISCaaSDex.Interaction[](0)) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.mtxExchangeVia(ep, address(this), "") { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
     }
 }
 
@@ -536,7 +539,7 @@ contract DexOutsideTest is Test {
     }
 
     /// A hook token re-entering the DEX during a pull is refused on every entry: `nonReentrant` on `mtxSettle`,
-    /// `mtxCancelOrders` and `mtxInvalidateNonces`, `NotSelf` on `settleOne`.
+    /// `mtxCancelOrders`, `mtxInvalidateNonces`, `mtxExchange` and `mtxExchangeVia`, `NotSelf` on `settleOne`.
     function test_hookTokenReentry_isRefused() public {
         HookERC20 hk = new HookERC20();
         _list(MockERC20(address(hk)));
@@ -547,12 +550,14 @@ contract DexOutsideTest is Test {
         vm.prank(relayer);
         bool[] memory ok = dex.mtxSettle(ss);
         assertTrue(ok[0]);
-        assertEq(r.n(), 4);
+        assertEq(r.n(), 6);
         bytes4 guard = bytes4(keccak256("ReentrancyGuardReentrantCall()"));
         assertEq(r.errs(0), guard);
         assertEq(r.errs(1), guard);
         assertEq(r.errs(2), guard);
         assertEq(r.errs(3), ISCaaSDex.NotSelf.selector);
+        assertEq(r.errs(4), guard);
+        assertEq(r.errs(5), guard);
     }
 
     /// `SigCheckGasStarved` raised by a SCaaS token's own check (Path A taker that is a `SmartKeyAccount` clone, so the

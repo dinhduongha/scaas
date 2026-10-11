@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-labelledby="t d">
   <title id="t">Settlement kinds</title>
-  <desc id="d">Twelve settlement kinds grouped by who checks them. The token checks: typed transfer and payment (built, v2 tiers), receiver pays (built on EVM and Hedera), signature wrap (built, P2a), confidential Zether (built, unaudited, dev chains only). Other contracts take part: generic gasless call through the selector allowlist (built), DEX order book (token side built, P2a), exchange against AMMs (specified, P2c), mandate through MandateWallet (built), asset-suite actions (specified, nothing built), tender (specified, nothing built). Elsewhere: gas sponsorship by node policy (specified; SponsorshipPool planned) and the non-EVM families (built as MetaOp v1; target specified).</desc>
+  <desc id="d">Twelve settlement kinds grouped by who checks them. The token checks: typed transfer and payment (built, v2 tiers), receiver pays (built on EVM and Hedera), signature wrap (built, P2a), confidential Zether (built, unaudited, dev chains only). Other contracts take part: generic gasless call through the selector allowlist (built), DEX order book (token side built, P2a), exchange against AMMs (built, P2c), mandate through MandateWallet (built), asset-suite actions (specified, nothing built), tender (specified, nothing built). Elsewhere: gas sponsorship by node policy (specified; SponsorshipPool planned) and the non-EVM families (built as MetaOp v1; target specified).</desc>
   <defs>
     <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#57606a"/>
@@ -60,8 +60,8 @@
   <rect class="card" stroke="#3b82f6" x="344" y="195" width="288" height="76" rx="8"/>
   <text class="b" x="356" y="216">Exchange against AMMs</text>
   <text class="s" x="356" y="238">mtxExchange, mtxExchangeVia</text>
-  <rect x="356" y="248" width="70" height="16" rx="8" fill="#ddf4ff"/><text class="chip" x="391" y="260" text-anchor="middle" fill="#0969da">SPECIFIED</text>
-  <text class="s" x="432" y="260">P2c</text>
+  <rect x="356" y="248" width="42" height="16" rx="8" fill="#dafbe1"/><text class="chip" x="377" y="260" text-anchor="middle" fill="#1a7f37">BUILT</text>
+  <text class="s" x="404" y="260">P2c, SCaaSDex</text>
   <rect class="card" stroke="#3b82f6" x="641" y="195" width="288" height="76" rx="8"/>
   <text class="b" x="653" y="216">Mandate</text>
   <text class="s" x="653" y="238">payUnderMandate, checked by MandateWallet</text>

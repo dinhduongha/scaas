@@ -6,7 +6,7 @@
 > [docs/README.md](../README.md#status-tags): **BUILT**, **SPECIFIED**, **PLANNED**, and **Transitional (BUILT)** for
 > built code that still differs from the target.
 
-<p align="center"><img src="../assets/settlement-kinds.svg" width="860" alt="Settlement kinds by who checks them. The token: typed transfer and payment (built, v2 tiers), receiver pays (built, EVM and Hedera), signature wrap (built, P2a), confidential Zether (built, unaudited, dev chains only). Another contract takes part: generic gasless call through the selector allowlist (built), DEX order book (token side built, P2a), exchange against AMMs (specified, P2c), mandate through MandateWallet (built), asset-suite action (specified, nothing built), tender (specified, nothing built). Also: gas sponsorship by node policy (specified; SponsorshipPool planned) and the non-EVM families (built as MetaOp v1; target specified)."></p>
+<p align="center"><img src="../assets/settlement-kinds.svg" width="860" alt="Settlement kinds by who checks them. The token: typed transfer and payment (built, v2 tiers), receiver pays (built, EVM and Hedera), signature wrap (built, P2a), confidential Zether (built, unaudited, dev chains only). Another contract takes part: generic gasless call through the selector allowlist (built), DEX order book (token side built, P2a), exchange against AMMs (built, P2c), mandate through MandateWallet (built), asset-suite action (specified, nothing built), tender (specified, nothing built). Also: gas sponsorship by node policy (specified; SponsorshipPool planned) and the non-EVM families (built as MetaOp v1; target specified)."></p>
 
 **Contents**
 
@@ -55,7 +55,7 @@ intent is a booked fact. Every kind below shares these properties:
 | Generic gasless call | `mtxExecute`, `mtxBatch`, `executeMetaTransaction` | subject signs `MetaTransaction`; any relayer | the contract's selector allowlist | per fee class, after the call | tx | **BUILT** | [CTR-MTX-12](metatx.md#CTR-MTX-12), [-19](metatx.md#CTR-MTX-19), [-20](metatx.md#CTR-MTX-20) |
 | Signature wrap | `mtxWrap` | holder signs a `TradeOrder` in the underlying's domain; any relayer | underlying and wrapper | order `fee` to the relayer, out of the minted units | tx | **BUILT** (P2a, `UnderlyingToken`) | [CTR-TOK-20](token-wrappers.md#CTR-TOK-20) |
 | DEX order book | `SCaaSDex.mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces`; token side `mtxTrade` | each party signs a `TradeOrder`; the venue lane | token (Path A) or DEX (Path B, outside legs); DEX conservation | one signed rate, split relayer / treasury by the DEX | tx, then the DEX watcher | token side **BUILT** (P2a); `SCaaSDex` **BUILT** (P2b-1 SCaaS legs, P2b-2 outside legs); `SCaaSDexV1` pair `settle` **BUILT** | [CTR-DEX-13](dex.md#CTR-DEX-13) to [-19](dex.md#CTR-DEX-19), [-22](dex.md#CTR-DEX-22), [-24](dex.md#CTR-DEX-24) |
-| Exchange against AMMs | `mtxExchange`, `mtxExchangeVia` | the same signed orders; the venue lane | token or DEX, DEX conservation | signed rate on the floor; surplus to the signers | tx, then the DEX watcher | **SPECIFIED** (P2c) | [CTR-DEX-20](dex.md#CTR-DEX-20) to [-23](dex.md#CTR-DEX-23) |
+| Exchange against AMMs | `mtxExchange`, `mtxExchangeVia` | the same signed orders; the venue lane | token or DEX, DEX conservation | signed rate on the floor; surplus to the signers | tx, then the DEX watcher | **BUILT** (P2c, `SCaaSDex`) | [CTR-DEX-20](dex.md#CTR-DEX-20) to [-23](dex.md#CTR-DEX-23) |
 | Confidential (Zether) | target `zetherTransfer*`, `zetherShield`, `zetherUnshield`, roll-over; built `transferConfidential*`, `fund`, `burn` | owner signs the call, the proof binds the envelope; any relayer | token verifier | outer NONE / FIXED (never PERCENT), inner `confidentialFee` | tx (dev chains) | **BUILT, UNAUDITED** (dev chains only); target kinds P3 **SPECIFIED**; PQZ **SPECIFIED** | [zether.md](zether.md), [pq-zether.md](pq-zether.md) |
 | Mandate | `payUnderMandate` (named `mtxPayUnderMandate`), `revoke` | delegate signs; any relayer | `MandateWallet` | NONE; relayer pays gas | tx | **BUILT**; epoch and `mtx` names **SPECIFIED** | [CTR-ACC-06](mandates.md#CTR-ACC-06), [-07](mandates.md#CTR-ACC-07) |
 | Asset-suite action | forced transfer, freeze, `VestingGrant.release`, `Distribution` claim, `ExchangeOffer` | issuer / compliance role, or a permissionless claim | token or action contract | by action | tx | **SPECIFIED**, nothing built | [asset-suite.md](asset-suite.md) |
@@ -232,7 +232,8 @@ token. A plan is atomic with no `try`. Interactions may not call the DEX, the pu
 listed ([CTR-DEX-23](dex.md#CTR-DEX-23)); the holder approves the puller, never the DEX
 ([CTR-DEX-22](dex.md#CTR-DEX-22)). Node: the TradeEngine, off unless enabled, EVM only
 ([NODE-DEX-17](../node/dex-venue.md#NODE-DEX-17)); it keeps no surplus ([NODE-DEX-18](../node/dex-venue.md#NODE-DEX-18)).
-Status **SPECIFIED** (P2c): not built.
+Status **BUILT** (P2c, `SCaaSDex`): the DEX also refuses a sell token that arrives inexact, resets every allowance an
+`approve` interaction granted and refuses `increaseAllowance` and Permit2 `approve` (controller ruling, pending the owner; [dex.md](dex.md#CTR-DEX-23)).
 
 ### 3.7 Confidential settlement (Zether, PQZ)
 
