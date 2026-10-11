@@ -1,9 +1,13 @@
-//! DEX venue: phần I/O quanh `Book` (design §2–§3). Một venue mỗi chain, người ghi DUY NHẤT của sổ.
+//! DEX venue: the I/O around `Book` (NODE-DEX-01, -15, -16). One venue per chain and DEX, the book's ONLY writer.
 //!
-//! - Lưu bền ở Odoo qua `/json/2` (RS5-2): mỗi thay đổi sổ là MỘT `dex_book_commit` (lệnh + trade +
-//!   relay job `call`), thành công mới thay sổ trong bộ nhớ; lỗi ⇒ nạp lại sổ từ Odoo (review D20).
-//! - Settle đi qua outbox Odoo như mọi job khác: `submit` claim, journal `signed`, thay thế, lấp nonce.
-//! - Watcher event final có cursor riêng (RS5-8): DEX lỗi không chặn chốt thanh toán.
+//! - Persisted in the client over `/json/2` (RS5-2): every book change is ONE `dex_book_commit` (orders + trades +
+//!   jobs); only success replaces the book in memory; a failure reloads the book from the client (review D20).
+//! - Settlements go through the client outbox like every job: `mtxSettle` and the DEX-side cancels as `call` jobs to
+//!   the DEX, the token-side cancels as `metatx` jobs naming their `entry` (job-api.md, order and wrap entries).
+//! - Intake reads the order's state where it lives (NODE-DEX-15, dex.md §10): a SCaaS sell token keeps a
+//!   `TradeOrder`'s fill state and cancels (`tradeOrderDigest`, `pulled`, `minNonce`, `balanceOf`), the DEX keeps an
+//!   outside token's `DexOrder` (`dexOrderDigest`, `pulled`, `minNonce`, and `allowance(from, puller)`).
+//! - The final-event watcher has its own cursor (RS5-8): a DEX failure never blocks payment finality.
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
@@ -12,7 +16,7 @@ use alloy::primitives::{Address, Bytes, B256, U256};
 use alloy::providers::Provider;
 use alloy::rpc::types::{Filter, Log, TransactionRequest};
 use alloy::signers::Signature;
-use alloy::sol_types::{Eip712Domain, SolCall, SolError, SolEvent, SolInterface};
+use alloy::sol_types::{SolCall, SolEvent};
 use anyhow::{anyhow, bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -20,23 +24,26 @@ use tokio::sync::Mutex;
 use tracing::{info, warn};
 
 use super::{
-    cancel_digest, domain, hex_bytes, hex_of, invalidate_digest, order_hash, pair, Book, CancelReq, ISCaaSDex,
-    MarketCfg, Order, PlannedFill, Resting, Row, WireOrder, FLAG_FOK, FLAG_IOC, ST_OK, relayer_fee,
+    hex_bytes, hex_of, pair, Book, DexOrder, ISCaaSDex, MarketCfg, PlannedSettlement, Resting, Row,
+    TradeOrder, WireOrder, FLAG_IOC, KIND_OUTSIDE, KIND_SCAAS,
 };
+use crate::abi::IToken;
 use crate::chain::{classify, Chain, SimError};
 use crate::finality::{next_range, quorum_ok, safe_head, Mode};
 use crate::odoo::Odoo;
 use crate::submit::now;
 
-/// Lần thử lại khi simulate loại lệnh nghỉ hỏng (design §2 bước 2).
+/// Rounds of "drop the maker at fault and match again" before giving up (NODE-DEX-02).
 const MAX_ROUNDS: usize = 3;
 const RECENT_TRADES: usize = 200;
-/// Huỷ on-chain tốn gas relayer: mỗi maker tối đa chừng này mỗi giờ (review D14).
+/// On-chain cancels cost relayer gas: at most this many per signer per hour (review D14).
 const ONCHAIN_CANCELS_PER_HOUR: usize = 20;
 const CANCEL_BATCH: usize = 50;
 const MAX_LOG_SPAN: u64 = 1000;
+/// Cancels and invalidations never expire on chain; the job carrying one is given a day.
+const CANCEL_JOB_SECS: u64 = 86_400;
 
-/// Lỗi trả cho client: `Bad` = 400 (lỗi của lệnh), `Unavailable` = 503 (RPC/Odoo).
+/// Error for the client: `Bad` = 400 (the order's fault), `Unavailable` = 503 (RPC or client store).
 #[derive(Debug)]
 pub enum VenueError {
     Bad(String),
@@ -88,14 +95,19 @@ struct LoadReply {
     rows: Vec<Row>,
 }
 
+/// One leg of a failed trade; `row` None = the order is closed in the client (cancelled/expired/invalid): never
+/// handed back (review I3).
+#[derive(Debug, Deserialize)]
+struct FailedLeg {
+    row: Option<Row>,
+    fill: String,
+}
+
 #[derive(Debug, Deserialize)]
 struct FailedTrade {
     tag: String,
-    /// None: lệnh đã đóng ở Odoo (huỷ/hết hạn/invalid) — không bao giờ trả về sổ (review I3).
-    maker: Option<Row>,
-    taker: Option<Row>,
-    maker_fill: String,
-    taker_fill: String,
+    taker: FailedLeg,
+    makers: Vec<FailedLeg>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -108,7 +120,7 @@ struct CursorReply {
     indexed_block: u64,
 }
 
-/// Một thay đổi sổ, ghi vào Odoo trong MỘT transaction (`dex_book_commit`).
+/// One book change, written to the client in ONE transaction (`dex_book_commit`).
 #[derive(Debug, Default, Serialize)]
 pub struct Commit {
     pub orders: Vec<Value>,
@@ -125,7 +137,7 @@ impl Commit {
     fn order(&mut self, market_id: i64, r: &Resting, state: &str) {
         let row = Row::of(r);
         self.orders.push(json!({
-            "market_id": market_id, "order_hash": row.order_hash, "order": row.order,
+            "market_id": market_id, "order_hash": row.order_hash, "sell_token": row.sell_token, "order": row.order,
             "signature": row.signature, "remaining": row.remaining, "seq": row.seq, "state": state,
         }));
     }
@@ -134,37 +146,29 @@ impl Commit {
 fn state_of(r: &Resting) -> &'static str {
     if r.remaining.is_zero() {
         "filled"
-    } else if r.remaining < r.order.sellAmount {
+    } else if r.remaining < r.order.amount {
         "partial"
     } else {
         "open"
     }
 }
 
-pub struct Venue {
-    pub chain: Arc<Chain>,
-    relay: Odoo,
-    indexer: Option<Odoo>,
-    pub dex: Address,
-    domain: Eip712Domain,
-    book: Mutex<Book>,
-    trades: std::sync::Mutex<VecDeque<TradeView>>,
-    cancels: std::sync::Mutex<CancelQueue>,
-}
+/// An on-chain cancel waiting for the next sync: `(market, sell token, its kind, order, CancelOrder signature)`.
+type PendingCancel = (i64, Address, u8, TradeOrder, Bytes);
 
 #[derive(Default)]
 struct CancelQueue {
-    // ponytail: hàng đợi trong bộ nhớ — node chết trước khi flush thì lệnh đã gỡ khỏi sổ (và Odoo ghi
-    // `cancelled`) nhưng chưa đóng on-chain; vì RS5-9 chỉ relayer này settle được nó nên an toàn.
-    // Muốn bền: lưu chữ ký huỷ vào `blockchain.dex.order` và flush từ Odoo.
-    pending: Vec<(i64, CancelReq)>,
+    // ponytail: in memory — a node that dies before the flush has the order out of the book (the client records
+    // `cancelled`) but not closed on chain; with RS5-9 only this relayer can settle it, so it is safe. Durable: keep
+    // the cancel signature on the client's order row and flush from there.
+    pending: Vec<PendingCancel>,
     recent: HashMap<Address, Vec<u64>>,
 }
 
 impl CancelQueue {
-    /// Có được huỷ on-chain lần nữa trong giờ này không (và ghi nhận nếu có).
-    fn allow(&mut self, maker: Address, at: u64) -> bool {
-        let v = self.recent.entry(maker).or_default();
+    /// May `from` cancel on chain once more this hour (and record it if so).
+    fn allow(&mut self, from: Address, at: u64) -> bool {
+        let v = self.recent.entry(from).or_default();
         v.retain(|t| at < t + 3600);
         if v.len() >= ONCHAIN_CANCELS_PER_HOUR {
             return false;
@@ -174,8 +178,27 @@ impl CancelQueue {
     }
 }
 
+/// An order's state on chain: what is left to fill and what the signer can still deliver.
+struct OnChain {
+    remaining: U256,
+    fundable: U256,
+}
+
+pub struct Venue {
+    pub chain: Arc<Chain>,
+    relay: Odoo,
+    indexer: Option<Odoo>,
+    pub dex: Address,
+    puller: Address,
+    /// `tokenKind` per token, from the DEX's listing (never from the order or the client).
+    kinds: HashMap<Address, u8>,
+    book: Mutex<Book>,
+    trades: std::sync::Mutex<VecDeque<TradeView>>,
+    cancels: std::sync::Mutex<CancelQueue>,
+}
+
 impl Venue {
-    /// Nạp thị trường + sổ từ Odoo, đối chiếu thị trường với chain (design §3.1).
+    /// Load the markets and the book from the client; serve only markets the DEX lists with both tokens classified.
     pub async fn start(chain: Arc<Chain>, relay: Odoo, indexer: Option<Odoo>, dex: Address) -> Result<Arc<Self>> {
         let n = chain.number;
         let mr: MarketsReply = relay
@@ -183,13 +206,19 @@ impl Venue {
             .await
             .context("dex_markets")?;
         if mr.dex != dex {
-            bail!("chain {n}: Odoo DEX {:#x} != node config {dex:#x}", mr.dex);
+            bail!("chain {n}: client DEX {:#x} != node config {dex:#x}", mr.dex);
         }
+        let puller = view(&chain, dex, ISCaaSDex::pullerCall {}).await.context("puller()")?;
         let mut markets = vec![];
+        let mut kinds = HashMap::new();
         for m in mr.markets {
-            match onchain_matches(&chain, dex, &m).await {
-                Ok(true) => markets.push(m),
-                Ok(false) => warn!(chain = n, market = m.id, "on-chain market differs from Odoo; not served"),
+            match onchain_market(&chain, dex, &m).await {
+                Ok(Some((kb, kq))) => {
+                    kinds.insert(m.base, kb);
+                    kinds.insert(m.quote, kq);
+                    markets.push(m);
+                }
+                Ok(None) => warn!(chain = n, market = m.id, "market not listed on the DEX; not served"),
                 Err(e) => warn!(chain = n, market = m.id, "market check: {e:#}; not served"),
             }
         }
@@ -200,11 +229,12 @@ impl Venue {
         let book = Book::load(markets, &load.rows)?;
         info!(chain = n, orders = book.len(), "dex book loaded");
         Ok(Arc::new(Self {
-            domain: domain(n, dex),
             chain,
             relay,
             indexer,
             dex,
+            puller,
+            kinds,
             book: Mutex::new(book),
             trades: Default::default(),
             cancels: Default::default(),
@@ -215,46 +245,89 @@ impl Venue {
         self.chain.address()
     }
 
-    pub fn hash(&self, o: &Order) -> B256 {
-        order_hash(&self.domain, o)
+    fn kind(&self, token: Address) -> u8 {
+        self.kinds.get(&token).copied().unwrap_or_default()
     }
 
     // ------------------------------------------------------------------------------ chain reads
 
-    async fn call(&self, data: Vec<u8>) -> std::result::Result<Bytes, SimError> {
-        let tx = TransactionRequest::default().from(self.relayer()).to(self.dex).input(data.into());
+    async fn call(&self, from: Address, to: Address, data: Vec<u8>) -> std::result::Result<Bytes, SimError> {
+        let tx = TransactionRequest::default().from(from).to(to).input(data.into());
         self.chain.primary().call(tx).await.map_err(|e| classify(&e))
     }
 
-    async fn check(&self, o: &Order, sig: &Bytes) -> Result<ISCaaSDex::checkOrderReturn> {
-        let out = self
-            .call(ISCaaSDex::checkOrderCall { o: o.clone(), sig: sig.clone() }.abi_encode())
-            .await
-            .map_err(|e| anyhow!("checkOrder: {e}"))?;
-        Ok(ISCaaSDex::checkOrderCall::abi_decode_returns(&out)?)
+    /// The order's hash where it is checked: the sell token (`TradeOrder`) or the DEX (`DexOrder`).
+    async fn order_hash(&self, sell: Address, o: &TradeOrder) -> Result<B256> {
+        match self.kind(sell) {
+            KIND_SCAAS => view(&self.chain, sell, IToken::tradeOrderDigestCall { o: o.clone() }).await,
+            KIND_OUTSIDE => view(&self.chain, self.dex, ISCaaSDex::dexOrderDigestCall { sellToken: sell, o: o.clone() }).await,
+            _ => bail!("TOKEN_NOT_SERVED: {sell:#x} is not a side of a listed market"),
+        }
     }
 
-    /// Simulate `settle`: `Ok(vec ok-per-match)`; mọi cặp fail ⇒ `NothingSettled` ⇒ toàn `false`.
-    async fn simulate(&self, fills: &[PlannedFill]) -> std::result::Result<Vec<bool>, SimError> {
-        let ms = fills.iter().map(PlannedFill::to_match).collect();
-        match self.call(ISCaaSDex::settleCall { ms }.abi_encode()).await {
-            Ok(out) => ISCaaSDex::settleCall::abi_decode_returns(&out)
-                .map_err(|e| SimError::Revert(format!("decode: {e}"))),
-            Err(SimError::Revert(r))
-                if r.contains(&alloy::hex::encode(<ISCaaSDex::NothingSettled as SolError>::SELECTOR)) =>
-            {
-                Ok(vec![false; fills.len()])
+    /// `amount − pulled` (0 when the lane's `minNonce` passed the order) and the signer's deliverable balance.
+    async fn on_chain(&self, sell: Address, h: B256, o: &TradeOrder) -> Result<OnChain> {
+        let outside = self.kind(sell) == KIND_OUTSIDE;
+        let state = if outside { self.dex } else { sell };
+        let (pulled, min) = if outside {
+            (view(&self.chain, state, ISCaaSDex::pulledCall { orderHash: h }).await?,
+             view(&self.chain, state, ISCaaSDex::minNonceCall { from: o.from, batch: o.batch }).await?)
+        } else {
+            (view(&self.chain, state, IToken::pulledCall { orderHash: h }).await?,
+             view(&self.chain, state, IToken::minNonceCall { from: o.from, batch: o.batch }).await?)
+        };
+        let remaining = if o.nonce < min { U256::ZERO } else { o.amount.saturating_sub(pulled) };
+        let mut fundable = view(&self.chain, sell, IToken::balanceOfCall { who: o.from }).await?;
+        if outside {
+            fundable = fundable.min(view(&self.chain, sell, IToken::allowanceCall { owner: o.from, spender: self.puller }).await?);
+        }
+        Ok(OnChain { remaining, fundable })
+    }
+
+    /// A resting order can still settle `r.remaining`: open on chain for that much, funded, signature valid.
+    async fn healthy(&self, r: &Resting) -> Result<bool> {
+        let c = self.on_chain(r.sell, r.hash, &r.order).await?;
+        Ok(c.remaining >= r.remaining && c.fundable >= r.remaining && self.valid_sig(r.order.from, r.hash, &r.sig).await)
+    }
+
+    /// Simulate `mtxSettle` from the lane: `Ok(ok per settlement)`; all failed ⇒ `NothingSettled` ⇒ all `false`. A
+    /// whole-call `SigCheckGasStarved` (CTR-DEX-08) is split and each settlement simulated alone, never retried whole
+    /// with more gas: a party's hook-token destination can forge that selector (P2b-2 H5).
+    async fn simulate(&self, ps: &[PlannedSettlement]) -> std::result::Result<Vec<bool>, SimError> {
+        let s: Vec<_> = ps.iter().map(PlannedSettlement::to_settlement).collect();
+        match self.call(self.relayer(), self.dex, ISCaaSDex::mtxSettleCall { s: s.clone() }.abi_encode()).await {
+            Ok(out) => {
+                ISCaaSDex::mtxSettleCall::abi_decode_returns(&out).map_err(|e| SimError::Revert(format!("decode: {e}")))
             }
+            Err(SimError::Revert(r)) if r.starts_with("NothingSettled") => Ok(vec![false; ps.len()]),
+            Err(SimError::Revert(r)) if r.starts_with("SigCheckGasStarved") && ps.len() > 1 => {
+                let mut ok = vec![];
+                for p in ps {
+                    ok.push(Box::pin(self.simulate(std::slice::from_ref(p))).await?.first().copied().unwrap_or(false));
+                }
+                Ok(ok)
+            }
+            Err(SimError::Revert(r)) if r.starts_with("SigCheckGasStarved") => Ok(vec![false]),
             Err(e) => Err(e),
         }
     }
 
-    /// Chữ ký EOA (khôi phục cục bộ) hoặc ERC-1271 (gọi `isValidSignature` của ví hợp đồng).
+    /// The order a failed settlement blames: its revert data from `settleOne(s, lane)` called as the DEX names an
+    /// order hash (token and DEX errors carry it, NODE-DEX-15); `None` when it names none of them.
+    async fn fault(&self, p: &PlannedSettlement) -> Option<B256> {
+        let data = ISCaaSDex::settleOneCall { s: p.to_settlement(), submitter: self.relayer() }.abi_encode();
+        let tx = TransactionRequest::default().from(self.dex).to(self.dex).input(data.into());
+        let err = self.chain.primary().call(tx).await.err()?;
+        let raw = err.as_error_resp()?.as_revert_data()?;
+        let hashes: Vec<B256> = p.makers.iter().map(|(m, _, _)| m.hash).chain([p.taker.hash]).collect();
+        raw.get(4..)?.chunks_exact(32).map(B256::from_slice).find(|w| hashes.contains(w))
+    }
+
+    /// EOA signature (recovered here, low-s as the contract requires) or ERC-1271 (`isValidSignature`).
     async fn valid_sig(&self, signer: Address, digest: B256, sig: &Bytes) -> bool {
         if sig.len() == 65 {
             if let Ok(s) = Signature::try_from(sig.as_ref()) {
-                // High-s: contract `tryRecover` từ chối ⇒ `cancel` bỏ qua im lặng (review I4). Không trả
-                // false ngay: ví hợp đồng vẫn đi ERC-1271 như contract (phân biệt bằng code, không độ dài).
+                // High-s: `ECDSA.tryRecover` refuses it (review I4). A contract wallet still goes the ERC-1271 way.
                 if s.normalize_s().is_none() && s.recover_address_from_prehash(&digest).ok() == Some(signer) {
                     return true;
                 }
@@ -273,94 +346,99 @@ impl Venue {
 
     // ------------------------------------------------------------------------------ intake
 
-    pub async fn place(&self, wire: &WireOrder, signature: &str) -> std::result::Result<PlaceReply, VenueError> {
+    /// `POST /v1/dex/orders {chain, sellToken, order, signature}`: the order is a `TradeOrder` for a SCaaS sell token
+    /// and a `DexOrder` for an outside one, by the DEX's listing.
+    pub async fn place(&self, sell: Address, wire: &WireOrder, signature: &str) -> std::result::Result<PlaceReply, VenueError> {
         let o = wire.to_sol().map_err(bad)?;
         let sig = sig_bytes(signature)?;
-        let h = self.hash(&o);
-        let c = self.check(&o, &sig).await.map_err(down)?;
-        if c.h != h {
-            // KAT lệch giữa node và contract: không bao giờ nhận lệnh mà chain băm khác.
-            return Err(down(format!("order hash mismatch: node {h:#x}, chain {:#x}", c.h)));
+        if self.kind(sell) == 0 {
+            return Err(bad(format!("TOKEN_NOT_SERVED: {sell:#x} is not a side of a listed market")));
         }
-        if c.status != ST_OK {
-            return Err(bad(format!("order refused on-chain: {}", status_name(c.status))));
+        let h = self.order_hash(sell, &o).await.map_err(down)?;
+        if !self.valid_sig(o.from, h, &sig).await {
+            return Err(bad("bad order signature"));
         }
+        let c = self.on_chain(sell, h, &o).await.map_err(down)?;
         let mut book = self.book.lock().await;
         book.purge(now());
-        book.admit(h, &o, c.remaining, c.fundable, c.feeFundable, self.relayer(), now()).map_err(bad)?;
+        book.admit(h, sell, &o, c.remaining, c.fundable, self.relayer(), self.dex, now()).map_err(bad)?;
 
         let mut commit = Commit::default();
         let mut dropped_makers: Vec<B256> = vec![];
-        let mut trial;
-        let mut placed;
+        let (mut trial, mut placed);
         let mut round = 0;
         loop {
             trial = book.clone();
             for d in &dropped_makers {
                 trial.remove(*d);
             }
-            placed = trial.place(h, o.clone(), sig.clone(), c.remaining);
-            if placed.fills.is_empty() {
-                break;
-            }
-            let ok = self.simulate(&placed.fills).await.map_err(|e| match e {
+            placed = trial.place(h, sell, o.clone(), sig.clone(), c.remaining);
+            let Some(s) = &placed.settlement else { break };
+            let ok = self.simulate(std::slice::from_ref(s)).await.map_err(|e| match e {
                 SimError::Revert(r) => bad(format!("settlement simulation: {r}")),
                 SimError::Transport(r) => down(format!("rpc: {r}")),
             })?;
-            let failed: Vec<&PlannedFill> = placed.fills.iter().zip(&ok).filter(|(_, ok)| !**ok).map(|(f, _)| f).collect();
-            if failed.is_empty() {
+            if ok.first() == Some(&true) {
                 break;
             }
-            round += 1;
-            for f in failed {
-                let m = &f.maker;
-                let healthy = match self.check(&m.order, &m.sig).await {
-                    Ok(mc) => funded(&m.order, m.remaining, &mc),
-                    Err(e) => return Err(down(e)),
-                };
-                if healthy {
-                    // Lệnh nghỉ còn tốt mà cặp vẫn fail ⇒ lỗi nằm ở lệnh mới.
-                    return Err(bad("settlement simulation refused this order"));
+            // NODE-DEX-02: blame by evidence. An order hash in the revert names the order at fault; otherwise each
+            // maker's state is read, and a maker that can no longer settle is the one dropped.
+            let at_fault = match self.fault(s).await {
+                Some(f) if f == h => return Err(bad("settlement simulation refused this order")),
+                Some(f) => vec![f],
+                None => {
+                    let mut v = vec![];
+                    for (m, _, _) in &s.makers {
+                        if !self.healthy(m).await.map_err(down)? {
+                            v.push(m.hash);
+                        }
+                    }
+                    v
                 }
-                if let Some(mk) = book.market(&m.order) {
-                    commit.order(mk.id, m, "invalid");
-                }
-                dropped_makers.push(m.hash);
+            };
+            if at_fault.is_empty() {
+                return Err(bad("settlement simulation refused this order"));
             }
+            for f in at_fault {
+                if let Some((m, _, _)) = s.makers.iter().find(|(m, _, _)| m.hash == f) {
+                    commit.order(s.market_id, m, "invalid");
+                }
+                dropped_makers.push(f);
+            }
+            round += 1;
             if round >= MAX_ROUNDS {
                 return Err(down("order book unstable; retry"));
             }
         }
 
-        let (market_id, base) = book.market(&o).map(|m| (m.id, m.base)).ok_or_else(|| bad("no market"))?;
-        self.add_fills(&mut commit, &trial, &placed.fills);
-        let filled_here: U256 = placed.fills.iter().map(|f| f.taker_fill).sum();
-        let taker_after = Resting {
-            hash: h,
-            order: o.clone(),
-            sig: sig.clone(),
-            remaining: c.remaining - filled_here,
-            seq: placed.seq,
-        };
+        let (market_id, base) =
+            book.market_of(sell, o.receiveToken).map(|m| (m.id, m.base)).ok_or_else(|| bad("no market"))?;
+        for d in &placed.dust {
+            commit.order(market_id, &Resting { remaining: U256::ZERO, ..d.clone() }, "filled");
+        }
+        let settlement: Vec<PlannedSettlement> = placed.settlement.iter().cloned().collect();
+        self.add_settlements(&mut commit, &trial, &settlement);
+        let filled_here = placed.settlement.as_ref().map(|s| s.taker_fill).unwrap_or_default();
+        let taker_after = Resting { hash: h, sell, order: o.clone(), sig: sig.clone(), remaining: c.remaining - filled_here, seq: placed.seq };
         let taker_state = match (&placed.rested, placed.dropped.is_zero()) {
             (Some(_), _) => state_of(&taker_after),
             (None, true) => "filled",
-            (None, false) => "cancelled", // IOC/FOK: phần còn lại huỷ, không nghỉ
+            (None, false) => "cancelled", // IOC, or a remainder that would rest crossed
         };
         commit.order(market_id, &taker_after, taker_state);
         self.commit_or_reload(&mut book, trial, commit).await?;
         drop(book);
 
         let fills: Vec<Value> = placed
-            .fills
+            .settlement
             .iter()
-            .map(|f| {
-                json!({"tag": format!("{:#x}", f.tag), "maker_hash": format!("{:#x}", f.maker.hash),
-                       "maker_fill": f.maker_fill.to_string(), "taker_fill": f.taker_fill.to_string()})
-            })
+            .flat_map(|s| s.makers.iter().map(move |(m, x, y)| {
+                json!({"tag": format!("{:#x}", s.tag), "maker_hash": format!("{:#x}", m.hash),
+                       "maker_fill": x.to_string(), "taker_fill": y.to_string()})
+            }))
             .collect();
-        self.remember(&placed.fills, base);
-        let status = match (placed.rested.is_some(), placed.fills.is_empty(), placed.dropped.is_zero()) {
+        self.remember(&settlement, base);
+        let status = match (placed.rested.is_some(), placed.settlement.is_none(), placed.dropped.is_zero()) {
             (true, true, _) => "resting",
             (true, false, _) => "partial",
             (false, _, true) => "filled",
@@ -374,26 +452,24 @@ impl Venue {
         })
     }
 
-    /// Lệnh maker sau khớp + trade + một job `settle` mỗi thị trường (nguyên tử từng cặp on-chain).
-    fn add_fills(&self, commit: &mut Commit, after: &Book, fills: &[PlannedFill]) {
-        for f in fills {
-            let mk = after.get(f.maker.hash).cloned().unwrap_or_else(|| Resting { remaining: U256::ZERO, ..f.maker.clone() });
-            commit.order(f.market_id, &mk, state_of(&mk));
+    /// The makers after matching, one trade per settlement, and one `mtxSettle` job per market.
+    fn add_settlements(&self, commit: &mut Commit, after: &Book, ss: &[PlannedSettlement]) {
+        for s in ss {
+            for (m, _, _) in &s.makers {
+                let now_m = after.get(m.hash).cloned().unwrap_or_else(|| Resting { remaining: U256::ZERO, ..m.clone() });
+                commit.order(s.market_id, &now_m, state_of(&now_m));
+            }
             commit.trades.push(json!({
-                "tag": format!("{:#x}", f.tag), "market_id": f.market_id,
-                "maker_hash": format!("{:#x}", f.maker.hash), "taker_hash": format!("{:#x}", f.taker.hash),
-                "maker_fill": f.maker_fill.to_string(), "taker_fill": f.taker_fill.to_string(),
+                "tag": format!("{:#x}", s.tag), "market_id": s.market_id,
+                "taker_hash": format!("{:#x}", s.taker.hash), "taker_fill": s.taker_fill.to_string(),
+                "makers": s.makers.iter().map(|(m, x, _)| json!({"hash": format!("{:#x}", m.hash), "fill": x.to_string()}))
+                    .collect::<Vec<_>>(),
             }));
         }
-        commit.jobs.extend(settle_jobs(self.dex, fills));
+        commit.jobs.extend(settle_jobs(self.dex, ss));
     }
 
-    async fn commit_or_reload(
-        &self,
-        book: &mut Book,
-        next: Book,
-        commit: Commit,
-    ) -> std::result::Result<(), VenueError> {
+    async fn commit_or_reload(&self, book: &mut Book, next: Book, commit: Commit) -> std::result::Result<(), VenueError> {
         if commit.is_empty() {
             *book = next;
             return Ok(());
@@ -406,8 +482,8 @@ impl Venue {
                 Ok(())
             }
             Err(e) => {
-                // Timeout có thể là "Odoo đã commit": không đoán, nạp lại sự thật (review D20).
-                warn!(chain = self.chain.number, "dex_book_commit: {e:#}; reloading the book from Odoo");
+                // A timeout may be "the client committed": never guess, reload the truth (review D20).
+                warn!(chain = self.chain.number, "dex_book_commit: {e:#}; reloading the book from the client");
                 if let Err(e2) = self.reload(book).await {
                     warn!(chain = self.chain.number, "reload: {e2:#}");
                 }
@@ -423,139 +499,166 @@ impl Venue {
         Ok(())
     }
 
-    fn remember(&self, fills: &[PlannedFill], base: Address) {
+    fn remember(&self, ss: &[PlannedSettlement], base: Address) {
         let Ok(mut t) = self.trades.lock() else { return };
-        for f in fills {
-            t.push_front(trade_view(f, base, now()));
+        for s in ss {
+            t.push_front(trade_view(s, base, now()));
             t.truncate(RECENT_TRADES);
         }
     }
 
     // ------------------------------------------------------------------------------ cancel
 
-    /// Huỷ một lệnh bằng chữ ký `CancelOrder(orderHash)`: gỡ khỏi sổ NGAY + xếp huỷ on-chain.
+    /// Cancel one order with a `CancelOrder(orderHash)` signature (the sell token's domain, or the DEX's for an
+    /// outside token): out of the book NOW, then closed on chain at the next sync.
     pub async fn cancel(&self, h: B256, signature: &str) -> std::result::Result<(), VenueError> {
         let sig = sig_bytes(signature)?;
         let mut book = self.book.lock().await;
         let r = book.get(h).cloned().ok_or_else(|| bad("order is not in the book"))?;
-        if !self.valid_sig(r.order.maker, cancel_digest(&self.domain, h), &sig).await {
+        let kind = self.kind(r.sell);
+        let digest = match kind {
+            KIND_SCAAS => view(&self.chain, r.sell, IToken::cancelOrderDigestCall { orderHash: h }).await,
+            _ => view(&self.chain, self.dex, ISCaaSDex::cancelOrderDigestCall { orderHash: h }).await,
+        }
+        .map_err(down)?;
+        if !self.valid_sig(r.order.from, digest, &sig).await {
             return Err(bad("bad cancel signature"));
         }
-        let market_id = book.market(&r.order).map(|m| m.id).unwrap_or_default();
+        let market_id = book.market_of(r.sell, r.order.receiveToken).map(|m| m.id).unwrap_or_default();
         let mut next = book.clone();
         next.remove(h);
         let mut commit = Commit::default();
         commit.order(market_id, &r, "cancelled");
         self.commit_or_reload(&mut book, next, commit).await?;
         if let Ok(mut q) = self.cancels.lock() {
-            if q.allow(r.order.maker, now()) {
-                q.pending.push((market_id, CancelReq { order: r.order, sig }));
+            if q.allow(r.order.from, now()) {
+                q.pending.push((market_id, r.sell, kind, r.order, sig));
             }
         }
         Ok(())
     }
 
-    /// Huỷ-hết: `InvalidateNonces(maker, minNonce)`. Chỉ khi maker còn ≥ 1 lệnh mở (chặn spam gas).
-    pub async fn cancel_all(&self, maker: Address, min: U256, signature: &str) -> std::result::Result<usize, VenueError> {
+    /// Cancel-all of a lane: `InvalidateNonces(from, batch, minNonce)` in the sell token's domain (its SCaaS orders)
+    /// or the DEX's (every outside-token order). Only while the signer has an open order there (gas spam).
+    pub async fn cancel_all(&self, sell: Address, from: Address, batch: U256, min: U256, signature: &str)
+        -> std::result::Result<usize, VenueError>
+    {
         let sig = sig_bytes(signature)?;
+        let kind = self.kind(sell);
+        let outside = kind == KIND_OUTSIDE;
+        let in_scope = |s: Address| if outside { self.kind(s) == KIND_OUTSIDE } else { s == sell };
         let mut book = self.book.lock().await;
-        let open = book.open_of(maker);
-        let Some(first) = open.first() else { return Err(bad("maker has no open orders")) };
-        let market_id = book.market(&first.order).map(|m| m.id).unwrap_or_default();
-        if !self.valid_sig(maker, invalidate_digest(&self.domain, maker, min), &sig).await {
+        let open: Vec<Resting> = book.open_of(from).into_iter().filter(|r| r.order.batch == batch && in_scope(r.sell)).cloned().collect();
+        let Some(first) = open.first() else { return Err(bad("no open order of this signer on that lane")) };
+        let market_id = book.market_of(first.sell, first.order.receiveToken).map(|m| m.id).unwrap_or_default();
+        let (target, digest, call) = if outside {
+            (self.dex, view(&self.chain, self.dex, ISCaaSDex::invalidateNoncesDigestCall { from, batch, newMin: min }).await,
+             ISCaaSDex::mtxInvalidateNoncesCall { from, batch, newMin: min, sig: sig.clone() }.abi_encode())
+        } else {
+            (sell, view(&self.chain, sell, IToken::invalidateNoncesDigestCall { from, batch, newMin: min }).await,
+             IToken::mtxInvalidateNoncesCall { from, batch, newMin: min, sig: sig.clone() }.abi_encode())
+        };
+        if !self.valid_sig(from, digest.map_err(down)?, &sig).await {
             return Err(bad("bad invalidate signature"));
         }
-        let call = ISCaaSDex::invalidateNoncesCall { maker, newMin: min, sig: sig.clone() }.abi_encode();
-        if let Err(e) = self.call(call.clone()).await {
-            return Err(bad(format!("invalidateNonces refused: {e}")));
-        }
+        // already at or past `min` on chain (MinNonceNotIncreasing): the orders are closed, no job needed
+        let job_needed = match self.call(self.relayer(), target, call.clone()).await {
+            Ok(_) => true,
+            Err(SimError::Revert(r)) if r.starts_with("MinNonceNotIncreasing(") => false,
+            Err(e) => return Err(bad(format!("mtxInvalidateNonces refused: {e}"))),
+        };
         let mut next = book.clone();
+        let gone = next.drop_below(from, batch, min, &in_scope);
         let mut commit = Commit::default();
-        for r in book.open_of(maker).into_iter().filter(|r| r.order.nonce < min) {
-            commit.order(book.market(&r.order).map(|m| m.id).unwrap_or_default(), r, "cancelled");
+        for r in &gone {
+            commit.order(book.market_of(r.sell, r.order.receiveToken).map(|m| m.id).unwrap_or_default(), r, "cancelled");
         }
-        let n = next.drop_below(maker, min).len();
-        let allowed = self.cancels.lock().map(|mut q| q.allow(maker, now())).unwrap_or(false);
-        if allowed {
-            commit.jobs.push(json!({
-                "kind": "invalidate", "market_id": market_id, "target": format!("{:#x}", self.dex),
-                "calldata": hex_of(&call), "valid_until": (now() + 86_400).to_string(), "tags": [],
-            }));
+        let allowed = self.cancels.lock().map(|mut q| q.allow(from, now())).unwrap_or(false);
+        if job_needed && allowed {
+            let valid_until = (now() + CANCEL_JOB_SECS).to_string();
+            commit.jobs.push(if outside {
+                json!({"kind": "invalidate", "market_id": market_id, "target": format!("{:#x}", self.dex),
+                       "calldata": hex_of(&call), "valid_until": valid_until, "tags": []})
+            } else {
+                json!({"kind": "metatx", "entry": "mtxInvalidateNonces", "market_id": market_id,
+                       "token": format!("{sell:#x}"), "from": format!("{from:#x}"), "batch": batch.to_string(),
+                       "newMin": min.to_string(), "signature": hex_of(&sig), "validUntil": valid_until})
+            });
         }
         self.commit_or_reload(&mut book, next, commit).await?;
-        Ok(n)
+        Ok(gone.len())
     }
 
     // ------------------------------------------------------------------------------ loops
 
-    /// Trade fail ⇒ trả lại sổ; huỷ chờ ⇒ một tx `cancel`; hết hạn ⇒ bỏ khỏi bộ nhớ.
+    /// Failed trades back to the book; pending cancels to the chain; expired orders out of memory.
     pub async fn sync_once(&self) -> Result<()> {
         let sr: SyncReply =
             self.relay.call("blockchain.dex.trade", "dex_sync", json!({"evm_chain_number": self.chain.number})).await?;
         let mut book = self.book.lock().await;
         book.purge(now());
         let mut commit = Commit::default();
-        // Khớp lại; cặp không simulate được ⇒ hai bên của nó không được trả về trong vòng này
-        // (vẫn ack): không bao giờ kẹt cả chain vì một lệnh hỏng (review I3).
-        // ponytail: bỏ cả bên khoẻ của cặp hỏng; đo trước khi tách từng bên.
+        // Match again; a settlement that does not simulate leaves its orders out of this round (still acked): one bad
+        // order never jams the chain (review I3). ponytail: drops the healthy legs of a bad settlement too; split
+        // per leg if that ever costs real fills.
         let mut skip: Vec<B256> = vec![];
-        let (mut next, mut fills, mut touched);
+        let (mut next, mut settlements, mut touched);
         let (mut round, mut give_up) = (0, false);
         loop {
             next = book.clone();
-            fills = Vec::<PlannedFill>::new();
+            settlements = Vec::<PlannedSettlement>::new();
             touched = Vec::<(i64, Resting)>::new();
             for ft in &sr.failed {
-                for (row, fill) in [(&ft.maker, &ft.maker_fill), (&ft.taker, &ft.taker_fill)] {
-                    let Some(row) = row else { continue };
+                // makers first: each goes back as it rested, then the taker takes again in its original role
+                for leg in ft.makers.iter().chain(std::iter::once(&ft.taker)) {
+                    let Some(row) = &leg.row else { continue };
                     let r = row.resting()?;
-                    let fill = crate::metatx::uint(fill)?;
-                    if give_up
-                        || skip.contains(&r.hash)
-                        || r.order.flags & (FLAG_IOC | FLAG_FOK) != 0
-                        || r.order.expiry < U256::from(now())
-                    {
+                    let fill = crate::metatx::uint(&leg.fill)?;
+                    if give_up || skip.contains(&r.hash) || r.order.flags & FLAG_IOC != 0 || r.order.validUntil < U256::from(now()) {
                         continue;
                     }
+                    let Some(market_id) = next.market_of(r.sell, r.order.receiveToken).map(|m| m.id) else { continue };
                     let in_book = next.get(r.hash).map(|x| x.remaining).unwrap_or_default();
-                    let c = self.check(&r.order, &r.sig).await?;
+                    let c = self.on_chain(r.sell, r.hash, &r.order).await?;
                     let add = fill.min(c.remaining.saturating_sub(in_book));
-                    let Some(market_id) = next.market(&r.order).map(|m| m.id) else { continue };
-                    if add.is_zero() || !funded(&r.order, in_book + add, &c) {
+                    if add.is_zero() || c.fundable < in_book + add {
                         continue;
                     }
-                    // Đi lại qua matcher: hai bên cùng khoẻ thì khớp lại, không để sổ chéo.
-                    fills.extend(next.restore(r.clone(), add).fills);
+                    // Through the matcher: two healthy sides trade again, never a crossed book.
+                    settlements.extend(next.restore(r.clone(), add).settlement);
                     touched.push((market_id, r));
                 }
             }
-            if fills.is_empty() {
+            if settlements.is_empty() {
                 break;
             }
-            let ok = self.simulate(&fills).await.map_err(|e| anyhow!("re-match simulation: {e}"))?;
-            let bad: Vec<B256> =
-                fills.iter().zip(&ok).filter(|(_, ok)| !**ok).flat_map(|(f, _)| [f.maker.hash, f.taker.hash]).collect();
-            if bad.is_empty() {
+            let ok = self.simulate(&settlements).await.map_err(|e| anyhow!("re-match simulation: {e}"))?;
+            let failed: Vec<B256> = settlements
+                .iter()
+                .zip(&ok)
+                .filter(|(_, ok)| !**ok)
+                .flat_map(|(s, _)| s.makers.iter().map(|(m, _, _)| m.hash).chain([s.taker.hash]))
+                .collect();
+            if failed.is_empty() {
                 break;
             }
-            warn!(chain = self.chain.number, n = bad.len() / 2, "re-matched fills do not simulate; not restoring them");
-            skip.extend(bad);
+            warn!(chain = self.chain.number, n = failed.len(), "re-matched settlements do not simulate; not restoring them");
+            skip.extend(failed);
             round += 1;
-            give_up = round >= MAX_ROUNDS; // vòng cuối không trả gì về: ack, không kẹt
+            give_up = round >= MAX_ROUNDS; // the last round hands nothing back: ack, never jam
         }
         commit.acks.extend(sr.failed.iter().map(|ft| ft.tag.clone()));
-        self.add_fills(&mut commit, &next, &fills);
-        // Mọi lệnh trả về sổ (kể cả không khớp lại) phải ghi xuống Odoo, nếu không restart sẽ mất nó.
+        self.add_settlements(&mut commit, &next, &settlements);
+        // Every order handed back (re-matched or not) is written to the client, or a restart loses it.
         for (market_id, r) in &touched {
             let now_r = next.get(r.hash).cloned().unwrap_or_else(|| Resting { remaining: U256::ZERO, ..r.clone() });
             commit.order(*market_id, &now_r, state_of(&now_r));
         }
-        let pending: Vec<(i64, CancelReq)> =
-            self.cancels.lock().map(|mut q| std::mem::take(&mut q.pending)).unwrap_or_default();
+        let pending: Vec<PendingCancel> = self.cancels.lock().map(|mut q| std::mem::take(&mut q.pending)).unwrap_or_default();
         commit.jobs.extend(cancel_jobs(self.dex, &pending));
         let res = self.commit_or_reload(&mut book, next, commit).await;
         if res.is_err() && !pending.is_empty() {
-            // Không mất huỷ on-chain khi Odoo lỗi; gửi trùng thì `origin_key` + `cancel` no-op chặn.
+            // Never lose an on-chain cancel when the client store fails; a duplicate is a no-op on chain.
             if let Ok(mut q) = self.cancels.lock() {
                 q.pending.extend(pending);
             }
@@ -563,8 +666,8 @@ impl Venue {
         res.map_err(|e| anyhow!("{e}"))
     }
 
-    /// Một vòng watcher: log DEX trong vùng final ⇒ `dex_fill_ingest` ⇒ gỡ lệnh bị đóng on-chain.
-    /// `true` = đã tiến.
+    /// One watcher round: the DEX's and the market tokens' logs in the final range ⇒ `dex_fill_ingest` ⇒ orders
+    /// closed on chain leave the book. `true` = progressed.
     pub async fn watch_once(&self) -> Result<bool> {
         let Some(idx) = &self.indexer else { return Ok(false) };
         let nc = idx.node_config(self.chain.number, None).await?;
@@ -583,7 +686,14 @@ impl Venue {
         if !quorum_ok(hash, &others, nc.finality_quorum) {
             return Ok(false);
         }
-        let f = Filter::new().from_block(from).to_block(to).address(self.dex);
+        let mut contracts: Vec<Address> = self.kinds.keys().copied().collect();
+        contracts.push(self.dex);
+        let f = Filter::new().from_block(from).to_block(to).address(contracts).event_signature(vec![
+            ISCaaSDex::LegSettled::SIGNATURE_HASH,
+            ISCaaSDex::MatchFailed::SIGNATURE_HASH,
+            ISCaaSDex::OrderCancelled::SIGNATURE_HASH,
+            ISCaaSDex::NoncesInvalidated::SIGNATURE_HASH,
+        ]);
         let logs = self.chain.primary().get_logs(&f).await?;
         let events: Vec<Value> = logs.iter().filter_map(encode_event).collect();
         let _: Value = idx
@@ -594,9 +704,10 @@ impl Venue {
                        "to_block_hash": format!("{hash:#x}"), "events": events}),
             )
             .await?;
-        // Odoo đã đánh dấu lệnh đóng; sổ trong bộ nhớ theo sau (review D13).
+        // The client closed the orders; the book in memory follows (review D13).
         let mut book = self.book.lock().await;
         for e in &events {
+            let addr_of = |k: &str| e[k].as_str().unwrap_or_default().parse::<Address>();
             match e["event"].as_str() {
                 Some("OrderCancelled") => {
                     if let Ok(h) = e["order_hash"].as_str().unwrap_or_default().parse::<B256>() {
@@ -604,11 +715,14 @@ impl Venue {
                     }
                 }
                 Some("NoncesInvalidated") => {
-                    if let (Ok(m), Ok(n)) = (
-                        e["maker"].as_str().unwrap_or_default().parse::<Address>(),
+                    if let (Ok(c), Ok(from), Ok(batch), Ok(min)) = (
+                        addr_of("contract"),
+                        addr_of("from"),
+                        crate::metatx::uint(e["batch"].as_str().unwrap_or_default()),
                         crate::metatx::uint(e["min_nonce"].as_str().unwrap_or_default()),
                     ) {
-                        book.drop_below(m, n);
+                        let dex_lane = c == self.dex;
+                        book.drop_below(from, batch, min, &|s| if dex_lane { self.kind(s) == KIND_OUTSIDE } else { s == c });
                     }
                 }
                 _ => {}
@@ -667,31 +781,48 @@ impl Venue {
         }))
     }
 
-    pub async fn orders_of(&self, maker: Address) -> Vec<Value> {
+    pub async fn orders_of(&self, from: Address) -> Vec<Value> {
         let book = self.book.lock().await;
-        book.open_of(maker)
+        book.open_of(from)
             .into_iter()
             .map(|r| {
-                json!({"order_hash": format!("{:#x}", r.hash), "order": WireOrder::from_sol(&r.order),
-                       "remaining": r.remaining.to_string(), "state": state_of(r)})
+                json!({"order_hash": format!("{:#x}", r.hash), "sell_token": format!("{:#x}", r.sell),
+                       "order": WireOrder::from_sol(&r.order), "remaining": r.remaining.to_string(), "state": state_of(r)})
             })
             .collect()
     }
 
-    /// Test/vận hành: hàng sổ hiện tại.
+    /// Tests and operations: the book's rows now.
     pub async fn rows(&self) -> Vec<Row> {
         self.book.lock().await.rows()
     }
 }
 
-/// Một dòng trên băng giao dịch: giá quote/base, lượng base, phía của taker.
-/// Không suy phía từ cặp lệnh: maker luôn bán đúng thứ taker mua, nên chỉ `base` của thị trường phân biệt.
-fn trade_view(f: &PlannedFill, base: Address, at: u64) -> TradeView {
-    let taker_buys_base = f.taker.order.buyToken == base;
-    let (quote, base_amt) = if taker_buys_base { (f.taker_fill, f.maker_fill) } else { (f.maker_fill, f.taker_fill) };
+async fn view<C: SolCall>(chain: &Chain, to: Address, call: C) -> Result<C::Return> {
+    let tx = TransactionRequest::default().to(to).input(call.abi_encode().into());
+    Ok(C::abi_decode_returns(&chain.primary().call(tx).await?)?)
+}
+
+/// The market as the DEX lists it: `Some((kind of base, kind of quote))` when listed and both classified.
+async fn onchain_market(chain: &Chain, dex: Address, m: &MarketCfg) -> Result<Option<(u8, u8)>> {
+    let (a, b) = pair(m.base, m.quote);
+    if !view(chain, dex, ISCaaSDex::marketListedCall { a, b }).await? {
+        return Ok(None);
+    }
+    let kb = view(chain, dex, ISCaaSDex::tokenKindCall { token: m.base }).await?;
+    let kq = view(chain, dex, ISCaaSDex::tokenKindCall { token: m.quote }).await?;
+    Ok((kb != 0 && kq != 0).then_some((kb, kq)))
+}
+
+/// One line on the tape: quote/base price, base amount, the taker's side. The side is read from the market's base:
+/// the makers sell exactly what the taker buys.
+fn trade_view(s: &PlannedSettlement, base: Address, at: u64) -> TradeView {
+    let taker_buys_base = s.taker.order.receiveToken == base;
+    let (quote, base_amt) =
+        if taker_buys_base { (s.taker_fill, s.taker_receives()) } else { (s.taker_receives(), s.taker_fill) };
     TradeView {
-        market_id: f.market_id,
-        tag: format!("{:#x}", f.tag),
+        market_id: s.market_id,
+        tag: format!("{:#x}", s.tag),
         price: format!("{quote}/{base_amt}"),
         base_amount: base_amt.to_string(),
         taker_side: if taker_buys_base { "buy" } else { "sell" },
@@ -699,46 +830,55 @@ fn trade_view(f: &PlannedFill, base: Address, at: u64) -> TradeView {
     }
 }
 
-/// Thứ tự id thị trường, giữ thứ tự trong mỗi thị trường (sort ổn định).
+/// By market id, keeping the order inside each market (stable sort).
 fn by_market<T: Clone>(items: &[T], market: impl Fn(&T) -> i64) -> Vec<Vec<T>> {
     let mut v = items.to_vec();
     v.sort_by_key(&market);
     v.chunk_by(|a, b| market(a) == market(b)).map(<[T]>::to_vec).collect()
 }
 
-/// Một job mỗi thị trường: Odoo gắn job vào company của thị trường (review agy F3 — lô sync trộn
-/// nhiều thị trường từng gắn trade của company B vào job của company A).
-fn settle_jobs(dex: Address, fills: &[PlannedFill]) -> Vec<Value> {
-    by_market(fills, |f| f.market_id)
+/// One `mtxSettle` job per market: the client attaches a job to its market's company (review agy F3).
+fn settle_jobs(dex: Address, ss: &[PlannedSettlement]) -> Vec<Value> {
+    by_market(ss, |s| s.market_id)
         .into_iter()
-        .map(|fills| {
-            let ms = fills.iter().map(PlannedFill::to_match).collect();
-            let valid_until =
-                fills.iter().flat_map(|f| [f.maker.order.expiry, f.taker.order.expiry]).min().unwrap_or_default();
+        .map(|ss| {
+            let s = ss.iter().map(PlannedSettlement::to_settlement).collect();
+            let valid_until = ss.iter().map(PlannedSettlement::valid_until).min().unwrap_or_default();
             json!({
-                "kind": "settle", "market_id": fills[0].market_id, "target": format!("{dex:#x}"),
-                "calldata": hex_of(&ISCaaSDex::settleCall { ms }.abi_encode()),
+                "kind": "settle", "market_id": ss[0].market_id, "target": format!("{dex:#x}"),
+                "calldata": hex_of(&ISCaaSDex::mtxSettleCall { s }.abi_encode()),
                 "valid_until": valid_until.to_string(),
-                "tags": fills.iter().map(|f| format!("{:#x}", f.tag)).collect::<Vec<_>>(),
+                "tags": ss.iter().map(|s| format!("{:#x}", s.tag)).collect::<Vec<_>>(),
             })
         })
         .collect()
 }
 
-fn cancel_jobs(dex: Address, pending: &[(i64, CancelReq)]) -> Vec<Value> {
-    by_market(pending, |p| p.0)
+/// SCaaS-token orders: one `mtxCancelOrder` entry job each, on the sell token. Outside-token orders: one
+/// `mtxCancelOrders` call on the DEX per market, at most `CANCEL_BATCH` orders.
+fn cancel_jobs(dex: Address, pending: &[PendingCancel]) -> Vec<Value> {
+    let valid_until = (now() + CANCEL_JOB_SECS).to_string();
+    let mut jobs: Vec<Value> = pending
         .iter()
-        .flat_map(|m| m.chunks(CANCEL_BATCH))
-        .map(|chunk| {
-            let reqs: Vec<CancelReq> = chunk.iter().map(|(_, r)| r.clone()).collect();
-            let valid_until = reqs.iter().map(|r| r.order.expiry).max().unwrap_or_default();
-            json!({
-                "kind": "cancel", "market_id": chunk[0].0, "target": format!("{dex:#x}"),
-                "calldata": hex_of(&ISCaaSDex::cancelCall { reqs }.abi_encode()),
-                "valid_until": valid_until.to_string(), "tags": [],
-            })
+        .filter(|p| p.2 == KIND_SCAAS)
+        .map(|(m, sell, _, o, sig)| {
+            json!({"kind": "metatx", "entry": "mtxCancelOrder", "market_id": m, "token": format!("{sell:#x}"),
+                   "order": WireOrder::from_sol(o), "signature": hex_of(sig), "validUntil": valid_until})
         })
-        .collect()
+        .collect();
+    let outside: Vec<PendingCancel> = pending.iter().filter(|p| p.2 != KIND_SCAAS).cloned().collect();
+    for m in by_market(&outside, |p| p.0) {
+        for chunk in m.chunks(CANCEL_BATCH) {
+            let orders = chunk.iter().map(|(_, s, _, o, _)| DexOrder { sellToken: *s, order: o.clone() }).collect();
+            let sigs = chunk.iter().map(|p| p.4.clone()).collect();
+            jobs.push(json!({
+                "kind": "cancel", "market_id": chunk[0].0, "target": format!("{dex:#x}"),
+                "calldata": hex_of(&ISCaaSDex::mtxCancelOrdersCall { orders, sigs }.abi_encode()),
+                "valid_until": valid_until, "tags": [],
+            }));
+        }
+    }
+    jobs
 }
 
 fn sig_bytes(s: &str) -> std::result::Result<Bytes, VenueError> {
@@ -749,47 +889,16 @@ fn sig_bytes(s: &str) -> std::result::Result<Bytes, VenueError> {
     Ok(b)
 }
 
-fn status_name(s: u8) -> &'static str {
-    ["ok", "bad flags", "expired", "nonce invalidated", "bad signature", "closed", "market not listed", "bad fee"]
-        .get(usize::from(s))
-        .copied()
-        .unwrap_or("unknown")
-}
-
-/// Thị trường Odoo khớp on-chain (niêm yết, cờ phí, ppm, người nhận phí).
-async fn onchain_matches(chain: &Chain, dex: Address, m: &MarketCfg) -> Result<bool> {
-    let (a, b) = pair(m.base, m.quote);
-    let key_call = ISCaaSDex::marketKeyCall { a, b }.abi_encode();
-    let tx = TransactionRequest::default().to(dex).input(key_call.into());
-    let key = B256::from_slice(&chain.primary().call(tx).await?[..32]);
-    let tx = TransactionRequest::default().to(dex).input(ISCaaSDex::marketsCall { key }.abi_encode().into());
-    let out = chain.primary().call(tx).await?;
-    let r = ISCaaSDex::marketsCall::abi_decode_returns(&out)?;
-    let fees_ok = if r.feeOn {
-        m.fee_on && r.makerFeePpm == m.maker_fee_ppm && r.takerFeePpm == m.taker_fee_ppm && r.feeRecipient == m.fee_recipient
-    } else {
-        !m.fee_on
-    };
-    Ok(r.listed && fees_ok)
-}
-
-/// Tên lỗi DEX đọc được (cho `MatchFailed.reason` ở Odoo); không nhận ra ⇒ bộ giải mã chung.
+/// Readable DEX error (for `MatchFailed.reason` in the client); an EMPTY reason is the settlement's self-call
+/// running out of gas, never an order's fault (P2b-2: success is not monotonic in gas).
 pub fn revert_name(data: &[u8]) -> String {
-    match ISCaaSDex::ISCaaSDexErrors::abi_decode(data) {
-        Ok(e) => format!("{e:?}"),
-        Err(_) => crate::abi::decode_revert(data),
+    if data.is_empty() {
+        return "out_of_gas".into();
     }
+    crate::abi::decode_revert(data)
 }
 
-/// Lệnh nghỉ còn settle được `remaining`: OK on-chain và đủ số dư/allowance kể cả phí relayer
-/// (review I2/I3: thiếu 1 wei phí cũng làm mọi cặp với nó fail).
-fn funded(o: &Order, remaining: U256, c: &ISCaaSDex::checkOrderReturn) -> bool {
-    let (ft, fee) = relayer_fee(o, remaining);
-    let own = if ft == o.sellToken { fee } else { U256::ZERO };
-    c.status == ST_OK && c.fundable >= remaining + own && (ft == o.sellToken || c.feeFundable >= fee)
-}
-
-/// Log DEX ⇒ JSON đúng khoá `dex_fill_ingest` đọc. None = không phải event ta theo dõi / log pending.
+/// A DEX or token log ⇒ JSON with the keys `dex_fill_ingest` reads. None = not ours, or a pending log.
 pub fn encode_event(log: &Log) -> Option<Value> {
     let mut v = json!({
         "contract": format!("{:#x}", log.address()),
@@ -800,43 +909,34 @@ pub fn encode_event(log: &Log) -> Option<Value> {
     });
     let topic0 = *log.topic0()?;
     let a = |x: Address| format!("{x:#x}");
-    if topic0 == ISCaaSDex::OrderFilled::SIGNATURE_HASH {
-        let e = log.log_decode::<ISCaaSDex::OrderFilled>().ok()?.inner.data;
-        let f = e.fill;
-        v["event"] = json!("OrderFilled");
-        v["tag"] = json!(format!("{:#x}", e.tag));
+    if topic0 == ISCaaSDex::LegSettled::SIGNATURE_HASH {
+        let e = log.log_decode::<ISCaaSDex::LegSettled>().ok()?.inner.data;
+        v["event"] = json!("LegSettled");
+        v["tag"] = json!(format!("{:#x}", e.r#ref));
         v["order_hash"] = json!(format!("{:#x}", e.orderHash));
-        v["owner"] = json!(a(e.owner));
-        v["sell_token"] = json!(a(f.sellToken));
-        v["sold"] = json!(f.sold.to_string());
-        v["buy_token"] = json!(a(f.buyToken));
-        v["received"] = json!(f.received.to_string());
-        v["dex_fee"] = json!(f.dexFee.to_string());
-        v["dex_fee_recipient"] = json!(a(f.dexFeeRecipient));
-        v["relayer_fee_token"] = json!(a(f.relayerFeeToken));
-        v["relayer_fee"] = json!(f.relayerFee.to_string());
-        v["relayer_fee_recipient"] = json!(a(f.relayerFeeRecipient));
-        v["filled_total"] = json!(f.filledTotal.to_string());
-    } else if topic0 == ISCaaSDex::Matched::SIGNATURE_HASH {
-        let e = log.log_decode::<ISCaaSDex::Matched>().ok()?.inner.data;
-        v["event"] = json!("Matched");
-        v["tag"] = json!(format!("{:#x}", e.tag));
-        v["maker_hash"] = json!(format!("{:#x}", e.makerHash));
-        v["taker_hash"] = json!(format!("{:#x}", e.takerHash));
+        v["from"] = json!(a(e.from));
+        v["destination"] = json!(a(e.destination));
+        v["sold"] = json!(e.sold.to_string());
+        v["received"] = json!(e.received.to_string());
+        v["dex_fee"] = json!(e.dexFee.to_string());
+        v["refund"] = json!(e.refund.to_string());
+        v["relayer_share"] = json!(e.relayerShare.to_string());
+        v["treasury_share"] = json!(e.treasuryShare.to_string());
     } else if topic0 == ISCaaSDex::MatchFailed::SIGNATURE_HASH {
         let e = log.log_decode::<ISCaaSDex::MatchFailed>().ok()?.inner.data;
         v["event"] = json!("MatchFailed");
-        v["tag"] = json!(format!("{:#x}", e.tag));
+        v["tag"] = json!(format!("{:#x}", e.r#ref));
         v["reason"] = json!(revert_name(&e.reason));
     } else if topic0 == ISCaaSDex::OrderCancelled::SIGNATURE_HASH {
         let e = log.log_decode::<ISCaaSDex::OrderCancelled>().ok()?.inner.data;
         v["event"] = json!("OrderCancelled");
         v["order_hash"] = json!(format!("{:#x}", e.orderHash));
-        v["maker"] = json!(a(e.maker));
+        v["from"] = json!(a(e.from));
     } else if topic0 == ISCaaSDex::NoncesInvalidated::SIGNATURE_HASH {
         let e = log.log_decode::<ISCaaSDex::NoncesInvalidated>().ok()?.inner.data;
         v["event"] = json!("NoncesInvalidated");
-        v["maker"] = json!(a(e.maker));
+        v["from"] = json!(a(e.from));
+        v["batch"] = json!(e.batch.to_string());
         v["min_nonce"] = json!(e.minNonce.to_string());
     } else {
         return None;
@@ -848,42 +948,7 @@ pub fn encode_event(log: &Log) -> Option<Value> {
 mod tests {
     use super::*;
     use alloy::primitives::LogData;
-
-    #[test]
-    fn funded_counts_the_relayer_fee_in_either_token() {
-        let c = |status, fundable: u64, fee: u64| ISCaaSDex::checkOrderReturn {
-            h: B256::ZERO,
-            status,
-            remaining: U256::from(100),
-            fundable: U256::from(fundable),
-            feeFundable: U256::from(fee),
-        };
-        let mut o = Order {
-            maker: Address::ZERO,
-            taker: Address::ZERO,
-            sellToken: Address::repeat_byte(1),
-            buyToken: Address::repeat_byte(3),
-            sellAmount: U256::from(100),
-            buyAmount: U256::from(100),
-            nonce: U256::ZERO,
-            expiry: U256::ZERO,
-            maxFeePpm: 0,
-            flags: 0,
-            relayer: Address::ZERO,
-            feeMode: 0,
-            fee: U256::ZERO,
-            feeToken: Address::ZERO,
-            feeRecipient: Address::ZERO,
-        };
-        o.feeMode = 2; // FIXED 5, paid in the sell token
-        o.fee = U256::from(5);
-        assert!(funded(&o, U256::from(100), &c(ST_OK, 105, 0)));
-        assert!(!funded(&o, U256::from(100), &c(ST_OK, 104, 0)), "1 wei short of the fee");
-        assert!(!funded(&o, U256::from(100), &c(ST_OK + 1, 1_000, 0)));
-        o.feeToken = Address::repeat_byte(2); // separate fee token
-        assert!(funded(&o, U256::from(100), &c(ST_OK, 100, 5)));
-        assert!(!funded(&o, U256::from(100), &c(ST_OK, 100, 4)));
-    }
+    use alloy::sol_types::SolError;
 
     fn log_of(data: LogData) -> Log {
         Log {
@@ -897,46 +962,43 @@ mod tests {
     }
 
     #[test]
-    fn order_filled_is_encoded_for_odoo() {
-        let ev = ISCaaSDex::OrderFilled {
-            tag: B256::repeat_byte(1),
+    fn leg_settled_is_encoded_for_the_client() {
+        let ev = ISCaaSDex::LegSettled {
+            r#ref: B256::repeat_byte(1),
             orderHash: B256::repeat_byte(2),
-            owner: Address::repeat_byte(3),
-            fill: super::super::Fill {
-                sellToken: Address::repeat_byte(4),
-                sold: U256::from(100),
-                buyToken: Address::repeat_byte(5),
-                received: U256::from(199),
-                dexFee: U256::from(1),
-                dexFeeRecipient: Address::repeat_byte(6),
-                relayerFeeToken: Address::ZERO,
-                relayerFee: U256::ZERO,
-                relayerFeeRecipient: Address::ZERO,
-                filledTotal: U256::from(100),
-            },
+            from: Address::repeat_byte(3),
+            destination: Address::repeat_byte(4),
+            sold: U256::from(100),
+            received: U256::from(199),
+            dexFee: U256::from(1),
+            refund: U256::ZERO,
+            relayerShare: U256::ZERO,
+            treasuryShare: U256::from(1),
         };
         let v = encode_event(&log_of(ev.encode_log_data())).unwrap();
-        assert_eq!(v["event"], "OrderFilled");
-        assert_eq!(v["received"], "199");
-        assert_eq!(v["dex_fee"], "1");
-        assert_eq!(v["owner"], format!("{:#x}", Address::repeat_byte(3)));
+        assert_eq!((v["event"].as_str(), v["received"].as_str(), v["dex_fee"].as_str()), (Some("LegSettled"), Some("199"), Some("1")));
+        assert_eq!(v["tag"], format!("{:#x}", B256::repeat_byte(1)));
+        assert_eq!(v["from"], format!("{:#x}", Address::repeat_byte(3)));
     }
 
     #[test]
-    fn cancel_and_invalidate_are_encoded() {
-        let ev = ISCaaSDex::OrderCancelled { orderHash: B256::repeat_byte(7), maker: Address::repeat_byte(8) };
+    fn cancels_invalidations_and_failures_are_encoded() {
+        let ev = ISCaaSDex::OrderCancelled { orderHash: B256::repeat_byte(7), from: Address::repeat_byte(8) };
+        assert_eq!(encode_event(&log_of(ev.encode_log_data())).unwrap()["event"], "OrderCancelled");
+        let ev = ISCaaSDex::NoncesInvalidated { from: Address::repeat_byte(8), batch: U256::from(2), minNonce: U256::from(9) };
         let v = encode_event(&log_of(ev.encode_log_data())).unwrap();
-        assert_eq!(v["event"], "OrderCancelled");
-        let ev = ISCaaSDex::NoncesInvalidated { maker: Address::repeat_byte(8), minNonce: U256::from(9) };
-        let v = encode_event(&log_of(ev.encode_log_data())).unwrap();
-        assert_eq!(v["min_nonce"], "9");
-        let ev = ISCaaSDex::MatchFailed { tag: B256::ZERO, reason: Bytes::from_static(&[1, 2, 3]) };
-        let v = encode_event(&log_of(ev.encode_log_data())).unwrap();
-        assert!(v["reason"].as_str().unwrap().starts_with("revert 0x"));
+        assert_eq!((v["batch"].as_str(), v["min_nonce"].as_str()), (Some("2"), Some("9")));
+        let ev = ISCaaSDex::MatchFailed { r#ref: B256::ZERO, reason: Bytes::from_static(&[1, 2, 3]) };
+        assert!(encode_event(&log_of(ev.encode_log_data())).unwrap()["reason"].as_str().unwrap().starts_with("revert 0x"));
+        // P2b-2: an empty reason is out of gas inside the settlement, never an order's fault
+        let ev = ISCaaSDex::MatchFailed { r#ref: B256::ZERO, reason: Bytes::new() };
+        assert_eq!(encode_event(&log_of(ev.encode_log_data())).unwrap()["reason"], "out_of_gas");
+        let reason = IToken::BelowMinFill { orderHash: B256::repeat_byte(5) }.abi_encode();
+        assert!(revert_name(&reason).starts_with("BelowMinFill"));
     }
 
     #[test]
-    fn cancel_rate_limit_is_per_maker_and_per_hour() {
+    fn cancel_rate_limit_is_per_signer_and_per_hour() {
         let mut q = CancelQueue::default();
         let m = Address::repeat_byte(1);
         for _ in 0..ONCHAIN_CANCELS_PER_HOUR {
@@ -950,66 +1012,60 @@ mod tests {
     const BASE: Address = Address::repeat_byte(0xaa);
     const QUOTE: Address = Address::repeat_byte(0xbb);
 
-    fn rest(maker: u8, sell: Address, buy: Address) -> Resting {
-        let order = Order {
-            maker: Address::repeat_byte(maker),
-            taker: Address::ZERO,
-            sellToken: sell,
-            buyToken: buy,
-            sellAmount: U256::from(1000),
-            buyAmount: U256::from(1000),
-            nonce: U256::ZERO,
-            expiry: U256::from(maker),
-            maxFeePpm: 0,
-            flags: 0,
-            relayer: Address::ZERO,
-            feeMode: 0,
+    fn rest(from: u8, sell: Address, receive: Address) -> Resting {
+        let order = TradeOrder {
+            from: Address::repeat_byte(from),
+            receiveToken: receive,
+            amount: U256::from(1000),
+            receiveAmount: U256::from(1000),
+            minFill: U256::ZERO,
             fee: U256::ZERO,
-            feeToken: Address::ZERO,
-            feeRecipient: Address::ZERO,
+            relayer: Address::ZERO,
+            dex: Address::ZERO,
+            destination: Address::ZERO,
+            flags: 0,
+            batch: U256::ZERO,
+            nonce: U256::ZERO,
+            validUntil: U256::from(from),
         };
-        Resting { hash: B256::repeat_byte(maker), order, sig: Bytes::new(), remaining: U256::from(1000), seq: 0 }
+        Resting { hash: B256::repeat_byte(from), sell, order, sig: Bytes::new(), remaining: U256::from(1000), seq: 0 }
     }
 
-    fn fill(market_id: i64, tag: u8, maker: Resting, taker: Resting, maker_fill: u64, taker_fill: u64) -> PlannedFill {
-        PlannedFill {
-            tag: B256::repeat_byte(tag),
-            market_id,
-            maker,
-            taker,
-            maker_fill: U256::from(maker_fill),
-            taker_fill: U256::from(taker_fill),
-        }
+    fn settlement(market_id: i64, tag: u8, maker: Resting, taker: Resting, x: u64, y: u64) -> PlannedSettlement {
+        PlannedSettlement { tag: B256::repeat_byte(tag), market_id, taker, taker_fill: U256::from(y),
+                            makers: vec![(maker, U256::from(x), U256::from(y))] }
     }
 
     #[test]
     fn trade_tape_reads_side_and_price_from_the_market_base() {
-        // taker buys base: maker sells 10 base for 20 quote ⇒ price 20/10, base 10, "buy"
-        let buy = fill(1, 1, rest(1, BASE, QUOTE), rest(2, QUOTE, BASE), 10, 20);
+        // the taker buys base: the maker sells 10 base for 20 quote ⇒ 20/10, base 10, "buy"
+        let buy = settlement(1, 1, rest(1, BASE, QUOTE), rest(2, QUOTE, BASE), 10, 20);
         let t = trade_view(&buy, BASE, 7);
         assert_eq!((t.price.as_str(), t.base_amount.as_str(), t.taker_side), ("20/10", "10", "buy"));
-        // taker sells base: maker (bid) sells 20 quote, taker gives 10 base ⇒ same price, "sell"
-        let sell = fill(1, 2, rest(1, QUOTE, BASE), rest(2, BASE, QUOTE), 20, 10);
+        // the taker sells base: the maker (a bid) sells 20 quote, the taker gives 10 base ⇒ same price, "sell"
+        let sell = settlement(1, 2, rest(1, QUOTE, BASE), rest(2, BASE, QUOTE), 20, 10);
         let t = trade_view(&sell, BASE, 7);
         assert_eq!((t.price.as_str(), t.base_amount.as_str(), t.taker_side), ("20/10", "10", "sell"));
     }
 
     #[test]
-    fn settle_and_cancel_jobs_are_one_per_market() {
+    fn settle_jobs_are_one_per_market_and_cancels_go_where_the_order_lives() {
         let dex = Address::repeat_byte(0xd);
-        let fills = [
-            fill(1, 1, rest(1, BASE, QUOTE), rest(2, QUOTE, BASE), 10, 20),
-            fill(2, 2, rest(3, BASE, QUOTE), rest(4, QUOTE, BASE), 10, 20),
-            fill(1, 3, rest(5, BASE, QUOTE), rest(6, QUOTE, BASE), 10, 20),
+        let ss = [
+            settlement(1, 1, rest(1, BASE, QUOTE), rest(2, QUOTE, BASE), 10, 20),
+            settlement(2, 2, rest(3, BASE, QUOTE), rest(4, QUOTE, BASE), 10, 20),
+            settlement(1, 3, rest(5, BASE, QUOTE), rest(6, QUOTE, BASE), 10, 20),
         ];
-        let jobs = settle_jobs(dex, &fills);
+        let jobs = settle_jobs(dex, &ss);
         let seen: Vec<(i64, usize)> =
             jobs.iter().map(|j| (j["market_id"].as_i64().unwrap(), j["tags"].as_array().unwrap().len())).collect();
         assert_eq!(seen, vec![(1, 2), (2, 1)]);
-        let req = |m: u8| CancelReq { order: rest(m, BASE, QUOTE).order, sig: Bytes::new() };
-        let pending = vec![(1, req(1)), (2, req(2)), (1, req(3))];
-        let jobs = cancel_jobs(dex, &pending);
-        let seen: Vec<i64> = jobs.iter().map(|j| j["market_id"].as_i64().unwrap()).collect();
-        assert_eq!(seen, vec![1, 2]);
+        assert_eq!(jobs[0]["valid_until"], "1", "the earliest leg's deadline");
+        let c = |m: i64, from: u8, kind: u8| (m, BASE, kind, rest(from, BASE, QUOTE).order, Bytes::from_static(&[1]));
+        let jobs = cancel_jobs(dex, &[c(1, 1, KIND_SCAAS), c(2, 2, KIND_OUTSIDE), c(1, 3, KIND_OUTSIDE)]);
+        let kinds: Vec<(&str, i64)> = jobs.iter().map(|j| (j["kind"].as_str().unwrap(), j["market_id"].as_i64().unwrap())).collect();
+        assert_eq!(kinds, vec![("metatx", 1), ("cancel", 1), ("cancel", 2)]);
+        assert_eq!((jobs[0]["entry"].as_str(), jobs[0]["token"].as_str()), (Some("mtxCancelOrder"), Some(&*format!("{BASE:#x}"))));
+        assert_eq!(jobs[1]["target"], format!("{dex:#x}"));
     }
 }

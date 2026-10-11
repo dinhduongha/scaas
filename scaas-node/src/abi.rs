@@ -1,6 +1,9 @@
 //! ABI — copied from `smartcontracts/evm/src` (`IMetaTx`, `IERC20MetaTx`, `IERC20Payment`, `ITradeToken`, `MetaTxLib`,
-//! `MandateWallet`), never inferred: one wrong `indexed` is one wrong topic. Pinned by the forge KATs
-//! (`metatx_kat.json`, `metatransfer_kat.json`, `trade_kat.json`: digests and relayed calldata).
+//! `ISCaaSDex`, `MandateWallet`), never inferred: one wrong `indexed` is one wrong topic. Pinned by the forge KATs
+//! (`metatx_kat.json`, `metatransfer_kat.json`, `trade_kat.json`, `dex_order_kat.json`: digests and relayed calldata).
+// `sol!` builds a constructor per event; `LegSettled` has ten fields.
+#![allow(clippy::too_many_arguments)]
+
 use alloy::sol;
 use alloy::sol_types::SolInterface;
 
@@ -27,6 +30,59 @@ sol! {
         uint256 validUntil;
     }
 
+    /// `ISCaaSDex.Leg`: one order in one settlement; `fill` = its sell fill in this call.
+    #[derive(Debug, PartialEq, Eq)]
+    struct Leg { address sellToken; TradeOrder o; bytes sig; uint256 fill; }
+
+    /// An outside-token order (CTR-DEX-18): the `TradeOrder` signed in the DEX's domain with its sell token.
+    #[derive(Debug, PartialEq, Eq)]
+    struct DexOrder { address sellToken; TradeOrder order; }
+
+    /// One taker against one or more makers (CTR-DEX-16); `ref` is the submitter's (the venue's trade tag).
+    #[derive(Debug, PartialEq, Eq)]
+    struct Settlement { bytes32 ref; Leg taker; Leg[] makers; }
+
+    struct CancelOrder { bytes32 orderHash; }
+    struct InvalidateNonces { address from; uint256 batch; uint256 minNonce; }
+
+    /// `SCaaSDex` (a clone per DEX, `createDex`): what the venue sends and reads.
+    #[derive(Debug)]
+    interface ISCaaSDex {
+        function mtxSettle(Settlement[] s) external returns (bool[] ok);
+        function settleOne(Settlement s, address submitter) external;
+        function mtxCancelOrders(DexOrder[] orders, bytes[] sigs) external;
+        function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes sig) external;
+        function dexOrderDigest(address sellToken, TradeOrder o) external view returns (bytes32);
+        function cancelOrderDigest(bytes32 orderHash) external view returns (bytes32);
+        function invalidateNoncesDigest(address from, uint256 batch, uint256 newMin) external view returns (bytes32);
+        function pulled(bytes32 orderHash) external view returns (uint256);
+        function minNonce(address from, uint256 batch) external view returns (uint256);
+        function puller() external view returns (address);
+        function marketListed(address a, address b) external view returns (bool);
+        function tokenKind(address token) external view returns (uint8);
+        function chainUid() external view returns (bytes32);
+        event LegSettled(bytes32 indexed ref, bytes32 indexed orderHash, address indexed from, address destination,
+            uint256 sold, uint256 received, uint256 dexFee, uint256 refund, uint256 relayerShare, uint256 treasuryShare);
+        event MatchFailed(bytes32 indexed ref, bytes reason);
+        event TradeFilled(bytes32 indexed orderHash, address indexed from, uint256 sellFill, uint256 receiveFill,
+            uint256 dexFee);
+        event OrderCancelled(bytes32 indexed orderHash, address indexed from);
+        event NoncesInvalidated(address indexed from, uint256 indexed batch, uint256 minNonce);
+        error NothingSettled();
+        error NoMakers();
+        error WrongRelayer(address submitter);
+        error DexMismatch(address dex);
+        error TokenMismatch();
+        error SelfTrade(address from);
+        error DuplicateOrder(bytes32 orderHash);
+        error MarketNotListed(address tokenA, address tokenB);
+        error BadSignature(bytes32 digest);
+        error LengthMismatch();
+        error FillMismatch(uint256 expected, uint256 got);
+        error ConservationBroken(address token);
+        error NotSelf();
+    }
+
     /// Every SCaaS contract on `MetaTxBase` (`IMetaTx`) plus the token surface the node reads or relays.
     #[derive(Debug)]
     interface IToken {
@@ -42,6 +98,8 @@ sol! {
         function transfer(address to, uint256 value) external returns (bool);
         function mtxCancelOrder(TradeOrder o, bytes sig) external;
         function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes sig) external;
+        function mtxWrap(address underlying, TradeOrder o, bytes sig) external;
+        function allowance(address owner, address spender) external view returns (uint256);
         function tradeOrderDigest(TradeOrder o) external view returns (bytes32);
         function cancelOrderDigest(bytes32 orderHash) external view returns (bytes32);
         function invalidateNoncesDigest(address from, uint256 batch, uint256 newMin) external view returns (bytes32);
@@ -111,6 +169,9 @@ sol! {
 /// Readable error name for `last_error` on the client; raw hex when it is none of ours.
 pub fn decode_revert(data: &[u8]) -> String {
     if let Ok(e) = IToken::ITokenErrors::abi_decode(data) {
+        return format!("{e:?}");
+    }
+    if let Ok(e) = ISCaaSDex::ISCaaSDexErrors::abi_decode(data) {
         return format!("{e:?}");
     }
     if let Ok(e) = IMandateWallet::IMandateWalletErrors::abi_decode(data) {

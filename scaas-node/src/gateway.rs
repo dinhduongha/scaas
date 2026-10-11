@@ -49,9 +49,13 @@ pub struct SignedReq {
     pub signature: String,
 }
 
+/// `POST /v1/dex/orders`: the `TradeOrder` and its sell token (the token's domain signs a SCaaS order, the DEX's an
+/// outside one, NODE-DEX-15).
 #[derive(Deserialize)]
 pub struct OrderReq {
     pub chain: u64,
+    #[serde(rename = "sellToken")]
+    pub sell_token: Address,
     pub order: WireOrder,
     pub signature: String,
 }
@@ -64,10 +68,15 @@ pub struct CancelReqBody {
     pub signature: String,
 }
 
+/// `POST /v1/dex/cancel-all`: `InvalidateNonces(from, batch, minNonce)` in the sell token's domain (its SCaaS orders)
+/// or the DEX's (outside-token orders).
 #[derive(Deserialize)]
 pub struct CancelAllReq {
     pub chain: u64,
-    pub maker: Address,
+    #[serde(rename = "sellToken")]
+    pub sell_token: Address,
+    pub from: Address,
+    pub batch: String,
     #[serde(rename = "minNonce")]
     pub min_nonce: String,
     pub signature: String,
@@ -200,7 +209,7 @@ async fn dex_place(State(s): State<AppState>, Json(r): Json<OrderReq>) -> Reply 
         Ok(v) => v,
         Err(e) => return e,
     };
-    match v.place(&r.order, &r.signature).await {
+    match v.place(r.sell_token, &r.order, &r.signature).await {
         Ok(p) => (StatusCode::ACCEPTED, Json(serde_json::to_value(p).unwrap_or_default())),
         Err(e) => venue_err(e),
     }
@@ -222,8 +231,10 @@ async fn dex_cancel_all(State(s): State<AppState>, Json(r): Json<CancelAllReq>) 
         Ok(v) => v,
         Err(e) => return e,
     };
-    let Ok(min) = r.min_nonce.parse::<U256>() else { return bad("minNonce is not a uint256") };
-    match v.cancel_all(r.maker, min, &r.signature).await {
+    let (Ok(batch), Ok(min)) = (crate::metatx::uint(&r.batch), crate::metatx::uint(&r.min_nonce)) else {
+        return bad("batch and minNonce are decimal uint256");
+    };
+    match v.cancel_all(r.sell_token, r.from, batch, min, &r.signature).await {
         Ok(n) => (StatusCode::ACCEPTED, Json(json!({"status": "cancelled", "orders": n}))),
         Err(e) => venue_err(e),
     }

@@ -17,8 +17,9 @@ use tracing::{info, warn};
 
 use crate::breaker::Breaker;
 use crate::chain::{Chain, SimError};
+use crate::abi::IToken;
 use crate::config::ChainCfg;
-use crate::metatx::Mtx;
+use crate::metatx::{addr, uint, Mtx};
 use crate::nonce::{bump, plan, Inflight};
 use crate::odoo::{Job, Odoo, Report};
 
@@ -105,6 +106,9 @@ struct Sent {
 }
 
 pub fn work_from_job(job: &Job) -> Result<Work> {
+    if let Some(e) = job.entry.as_deref() {
+        return entry_work(job, e);
+    }
     if let Some(c) = &job.call {
         let data = alloy::hex::decode(c.calldata.strip_prefix("0x").unwrap_or(&c.calldata))?;
         let valid_until = c.valid_until.parse::<u64>()?;
@@ -118,6 +122,40 @@ pub fn work_from_job(job: &Job) -> Result<Work> {
     let valid_until = m.valid_until().saturating_to();
     let meta = Some(MetaRef::of(token, &m, job_digest(job)));
     Ok(Work { job_id: Some(job.id), to: token, data: m.calldata(sig.into()), valid_until, meta })
+}
+
+/// A token's other signed entry point as a `metatx` job (job-api.md, order and wrap entries): the signature is in the
+/// calldata, the target is `token`, no meta-tx lane is involved (`meta` None).
+fn entry_work(job: &Job, entry: &str) -> Result<Work> {
+    use alloy::sol_types::SolCall;
+    let (Some(token), Some(sig)) = (job.token, &job.signature) else {
+        anyhow::bail!("entry job {} without token or signature", job.id);
+    };
+    let sig: Bytes = alloy::hex::decode(sig.strip_prefix("0x").unwrap_or(sig))?.into();
+    let order = || -> Result<crate::abi::TradeOrder> {
+        let w = job.order.clone().ok_or_else(|| anyhow::anyhow!("entry {entry} without order"))?;
+        serde_json::from_value::<crate::dex::WireOrder>(w)?.to_sol()
+    };
+    let deadline = || -> Result<u64> {
+        Ok(job.valid_until.as_deref().ok_or_else(|| anyhow::anyhow!("entry {entry} without validUntil"))?.parse()?)
+    };
+    let text = |v: &Option<String>, f: &str| v.clone().ok_or_else(|| anyhow::anyhow!("entry {entry} without {f}"));
+    let (data, valid_until) = match entry {
+        "mtxCancelOrder" => (IToken::mtxCancelOrderCall { o: order()?, sig }.abi_encode(), deadline()?),
+        "mtxInvalidateNonces" => {
+            let (from, batch, new_min) = (addr(&text(&job.from, "from")?)?, uint(&text(&job.batch, "batch")?)?,
+                uint(&text(&job.new_min, "newMin")?)?);
+            (IToken::mtxInvalidateNoncesCall { from, batch, newMin: new_min, sig }.abi_encode(), deadline()?)
+        }
+        "mtxWrap" => {
+            let o = order()?;
+            let until = o.validUntil.saturating_to();
+            let underlying = job.underlying.ok_or_else(|| anyhow::anyhow!("mtxWrap without underlying"))?;
+            (IToken::mtxWrapCall { underlying, o, sig }.abi_encode(), until)
+        }
+        e => anyhow::bail!("unknown entry {e:?}"),
+    };
+    Ok(Work { job_id: Some(job.id), to: token, data: data.into(), valid_until, meta: None })
 }
 
 pub fn now() -> u64 {
@@ -810,6 +848,35 @@ mod tests {
             let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: json!([]), ..Default::default() }).await;
             lane(&url, odoo, 1, InflightSet::default()).await.poll_outbox().await;
             assert_eq!(states(&o), [want], "mtxNonce {nonce:?}");
+        }
+    }
+
+    /// The token's order entries as `metatx` jobs (job-api.md): byte-identical with the forge KAT's relayed calldata.
+    #[test]
+    fn entry_jobs_encode_as_the_token_reads_them() {
+        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/evm/test/vectors/trade_kat.json");
+        let k: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+        let s = |f: &str| k[f].as_str().unwrap().to_string();
+        let o = <crate::abi::TradeOrder as SolValue>::abi_decode(&alloy::hex::decode(&s("order_abi")[2..]).unwrap()).unwrap();
+        let token = s("verifying_contract");
+        let job = |v: Value| -> crate::odoo::Job { serde_json::from_value(v).unwrap() };
+        let cancel = job(json!({"id": 1, "kind": "metatx", "entry": "mtxCancelOrder", "token": token,
+            "order": crate::dex::WireOrder::from_sol(&o), "signature": s("cancel_signature"), "validUntil": "1800000300"}));
+        let w = work_from_job(&cancel).unwrap();
+        assert_eq!((format!("0x{}", alloy::hex::encode(&w.data)), w.valid_until, w.meta), (s("cancel_calldata").to_lowercase(), 1_800_000_300, None));
+        let inv = job(json!({"id": 2, "kind": "metatx", "entry": "mtxInvalidateNonces", "token": token,
+            "from": s("signer").to_lowercase(), "batch": s("invalidate_batch"), "newMin": s("invalidate_min_nonce"),
+            "signature": s("invalidate_signature"), "validUntil": "1800000300"}));
+        assert_eq!(format!("0x{}", alloy::hex::encode(&work_from_job(&inv).unwrap().data)), s("invalidate_calldata").to_lowercase());
+        let wrap = job(json!({"id": 3, "kind": "metatx", "entry": "mtxWrap", "token": token, "underlying": format!("{:#x}", TOKEN),
+            "order": crate::dex::WireOrder::from_sol(&o), "signature": s("order_signature")}));
+        let w = work_from_job(&wrap).unwrap();
+        assert_eq!((&w.data[..4], w.valid_until), (&[0x3e, 0xd1, 0x8b, 0xa8][..], o.validUntil.saturating_to()));
+        for bad in [json!({"id": 4, "kind": "metatx", "entry": "mtxTrade", "token": token, "signature": "0x00"}),
+                    json!({"id": 5, "kind": "metatx", "entry": "mtxCancelOrder", "token": token, "signature": "0x00", "validUntil": "1"}),
+                    json!({"id": 6, "kind": "metatx", "entry": "mtxCancelOrder", "token": token, "signature": "0x00",
+                           "order": crate::dex::WireOrder::from_sol(&o)})] {
+            assert!(work_from_job(&job(bad)).is_err(), "mtxTrade is never a job; an order and a deadline are needed");
         }
     }
 

@@ -68,14 +68,13 @@ proptest! {
         }
     }
 
-    /// Lệnh DEX (R35) từ body gateway / sổ Odoo: chuỗi bất kỳ ⇒ `Err`, không panic.
+    /// A DEX order (NODE-DEX-15) from a gateway body or the client's book: any strings ⇒ `Err`, never a panic.
     #[test]
-    fn dex_wire_order_never_panics(f in prop::collection::vec(prop_oneof!["0x[0-9a-fA-F]{0,70}", "[0-9]{0,90}", ".{0,20}"], 11),
-                                   ppm in any::<u32>(), flags in any::<u8>(), mode in any::<u8>()) {
-        let w = WireOrder { maker: f[0].clone(), taker: f[1].clone(), sell_token: f[2].clone(), buy_token: f[3].clone(),
-            sell_amount: f[4].clone(), buy_amount: f[5].clone(), nonce: f[6].clone(), expiry: f[7].clone(),
-            max_fee_ppm: ppm, flags, relayer: f[8].clone(), fee_mode: mode, fee: f[9].clone(),
-            fee_token: f[10].clone(), fee_recipient: f[0].clone() };
+    fn dex_wire_order_never_panics(f in prop::collection::vec(prop_oneof!["0x[0-9a-fA-F]{0,70}", "[0-9]{0,90}", ".{0,20}"], 12),
+                                   flags in any::<u8>()) {
+        let w = WireOrder { from: f[0].clone(), receive_token: f[1].clone(), amount: f[2].clone(), receive_amount: f[3].clone(),
+            min_fill: f[4].clone(), fee: f[5].clone(), relayer: f[6].clone(), dex: f[7].clone(), destination: f[8].clone(),
+            flags, batch: f[9].clone(), nonce: f[10].clone(), valid_until: f[11].clone() };
         let _ = w.to_sol();
     }
 }

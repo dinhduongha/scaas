@@ -90,6 +90,23 @@ pub struct Job {
     pub metatx: Option<Value>,
     #[serde(default)]
     pub call: Option<WireCall>,
+    /// A token's other signed entry point (job-api.md, order and wrap entries): `mtxCancelOrder` (`order`),
+    /// `mtxInvalidateNonces` (`from`, `batch`, `newMin`), `mtxWrap` (`underlying`, `order`); `token` is the target.
+    #[serde(default)]
+    pub entry: Option<String>,
+    #[serde(default)]
+    pub order: Option<Value>,
+    #[serde(default)]
+    pub from: Option<String>,
+    #[serde(default)]
+    pub batch: Option<String>,
+    #[serde(default, rename = "newMin")]
+    pub new_min: Option<String>,
+    #[serde(default)]
+    pub underlying: Option<Address>,
+    /// Deadline of an entry job that carries none of its own (cancels never expire on chain).
+    #[serde(default, rename = "validUntil")]
+    pub valid_until: Option<String>,
     /// `metatx` | `call` | `signed_op` (họ không phải EVM: payload ký + chữ ký + khoá công khai, adapter tự đọc).
     #[serde(default)]
     pub kind: Option<String>,
