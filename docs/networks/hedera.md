@@ -33,7 +33,7 @@ someone else pays) is **not** used: it orders operations by the subject's accoun
 |---|---|---|
 | Token | `HederaMetaToken is MetaToken`: a Hedera account's **ED25519** signature verified through HIP-632 `isAuthorizedRaw` (`0x16a`); `UnderlyingToken` on HTS tokens ([wrappers](#wrappers)) | `smartcontracts/evm/src/hedera/HederaMetaToken.sol` (v1), `HederaLib.sol` (v2) |
 | Account auth | library calling `isAuthorizedRaw` with `CALL` (100 000 gas cap); a revert or garbage ⇒ `false` | `smartcontracts/evm/src/hedera/HederaAccountAuth.sol` |
-| Mandate | `HederaMandateWallet is MandateWallet` adds `mtxExecuteAsOwnerRaw` for ED25519 owners ([NET-HED-03](#NET-HED-03)) | `smartcontracts/evm/src/hedera/HederaMandateWallet.sol` |
+| Mandate | `HederaMandateWallet is MandateWallet` checks HIP-632 signatures on every entry ([NET-HED-03](#NET-HED-03)) | `smartcontracts/evm/src/hedera/HederaMandateWallet.sol` |
 | DEX | unchanged — every leg is a meta-tx on the token, so an ED25519 leg goes through `HederaMetaToken` (target: a `TradeOrder` verified by the Hedera token's signature check, [Mandate and DEX](#mandate)) | — |
 | Relayer | EVM adapter pointed at the JSON-RPC relay, run under `lane_runner`; fee `eth_gasPrice × 1.2`, priority 0 | `scaas-node/src/adapters/hedera.rs` |
 | Client | long-zero payer `0.0.N` ⇒ native ED25519 path ([client families](../integration.md#families)) | — |
@@ -265,20 +265,14 @@ allows 1 000 blocks per call, equal to the indexer's step cap. The token list is
 
 ## 6. Mandate and DEX
 
-<a id="mandate"></a><a id="NET-HED-03"></a>**NET-HED-03** — **An ED25519 owner pays from its `MandateWallet` only
-through `mtxExecuteAsOwnerRaw`.** `MandateWallet` is used unchanged with the platform's secp256k1 custody key as
-delegate. An ED25519 owner cannot use `executeAsOwner` (ECDSA; target name `mtxExecuteAsOwner`), so `HederaMandateWallet.mtxExecuteAsOwnerRaw` checks the
-owner through HIP-632 over the same owner digest as `mtxExecuteAsOwner` (target: the owner's `MetaTransaction` digest
-in the wallet's domain, [CTR-ACC-06](../contracts/mandates.md#CTR-ACC-06); as built the `OwnerCall` digest with
-`ownerNonce`); `isValidSignature` (ERC-1271 for
-the owner) stays ECDSA, and an ED25519 owner pays manually with `mtxExecuteAsOwnerRaw(execute(token, payWithFee…))`.
-
-ERC-1271 runs under
-STATICCALL, where HIP-632 halts, so `isValidSignature` cannot cover ED25519; the token is not special-cased (one more
-Hedera-only path in the signature pipeline for a rare case). Paying manually by meta-tx holds for ECDSA owners only.
+<a id="mandate"></a><a id="NET-HED-03"></a>**NET-HED-03** — **`HederaMandateWallet` checks HIP-632 64-byte signatures on every entry** (controller ruling, pending the owner). A signer
+without code (a native ED25519 account), owner or delegate, is checked through HIP-632 `isAuthorizedRaw` over the `MetaTransaction` digest and lane
+([CTR-ACC-06](../contracts/mandates.md#CTR-ACC-06)); every other signature takes the EVM path. `mtxExecuteAsOwnerRaw` is the owner entry under its
+Hedera name (equal to `mtxExecuteAsOwner`). `isValidSignature` (ERC-1271) stays ECDSA: it runs under STATICCALL, where HIP-632 halts, and the token
+is not special-cased. So an ED25519 owner pays by hand with an owner call `execute(token, payWithFee…)`, never with `from = wallet`.
 The owner's raw call is relayed as a `call` job (selector in the call table,
 [NODE-JOB-01](../node/job-api.md#NODE-JOB-01)) or submitted by the owner. Tests: forge with a `vm.etch` HAS mock — an
-ED25519 owner pays a payee through `mtxExecuteAsOwnerRaw` (`token.pay…` as `data`); the same owner's meta-tx with
+ED25519 owner sets the mandate and pays by hand (`token.pay…` inside the owner call), an ED25519 delegate pays and revokes, and the owner works through the batch and the alias; a meta-tx with
 `from = wallet` fails ERC-1271. BUILT.
 
 DEX: `MetaTxDex` and `SCaaSDexV1` are unchanged; each leg is `executeMetaTransaction` on the token, so an ED25519

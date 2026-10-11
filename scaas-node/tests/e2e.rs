@@ -91,7 +91,11 @@ fn deploy(rpc: &str, chain_id: u64, holder: Address) -> Value {
         .expect("forge in PATH");
     assert!(status.success(), "forge script failed");
     let raw = std::fs::read_to_string(format!("{sc}/deployments/{chain_id}.json")).expect("deployments json");
-    serde_json::from_str(&raw).unwrap()
+    let dep: Value = serde_json::from_str(&raw).unwrap();
+    // P4: the account keys are `smart_key_account_*` (the node reads neither; Odoo seeds from them)
+    assert!(dep["smart_key_account_factory"].is_string() && dep["smart_key_account_implementation"].is_string());
+    assert!(dep.get("subject_account_factory").is_none(), "pre-P4 deploy JSON key");
+    dep
 }
 
 /// Bản sao bảng chuyển trạng thái của `dms_blockchain` (`blockchain_relay_job.TRANSITIONS`):

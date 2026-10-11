@@ -53,7 +53,7 @@ pub struct Recovery {
 
 /// Chủ thể (RS12-3/4/5). Số dư = token account có owner = PDA này. Kích thước theo số khoá/origin (lớn dần).
 #[account]
-pub struct SubjectAccount {
+pub struct SmartKeyAccount {
     pub owner: [u8; 32],
     pub bump: u8,
     pub keys: Vec<AuthKey>,
@@ -64,7 +64,7 @@ pub struct SubjectAccount {
     pub policy: u8,
 }
 
-impl SubjectAccount {
+impl SmartKeyAccount {
     pub fn space(&self) -> usize {
         8 + borsh::to_vec(self).map(|v| v.len()).unwrap_or(0)
     }

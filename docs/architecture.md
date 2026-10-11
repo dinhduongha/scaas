@@ -222,7 +222,7 @@ When every leg is on chain, use one-transaction settlement. When a leg is off ch
 the off-chain leg is irrevocable, or give the saga a funded on-chain compensation path. Atomic settlement is BUILT for
 payments (the `pay` op), the DEX (`SCaaSDexV1.settle`, legacy `MetaTxDex`; specified: `SCaaSDex.mtxSettle`, one
 taker against several makers, each leg verified by its sell token) and mandates (`MandateWallet.payUnderMandate`,
-specified name `mtxPayUnderMandate`); generic saga orchestration is a client concern.
+named `mtxPayUnderMandate`); generic saga orchestration is a client concern.
 
 **Anchoring as proof of action.** For automated agents and workflows the anchor gives a tamper-evident proof that a
 decision or commitment existed at a time, without publishing it; the relayers make agent payments frictionless (the
@@ -255,10 +255,10 @@ agent signs, a relayer pays gas); Zether keeps commercial amounts confidential w
 </details>
 
 **Target and built.** The contract sections below describe the target that the component docs specify. The built EVM
-code already has the P1 base and the two public kinds (P1a–P1d) and still carries the older lines (the v1 tokens,
-`SubjectAccount`; the old `ZetherToken` is in `legacy/p3/`); every component doc says what is built in a *Transitional (BUILT)* note naming the
+code already has the P1 base and the two public kinds (P1a–P1d) and still carries the older lines (the v1 tokens; the old `ZetherToken`
+is in `legacy/p3/`, the typed-struct `SubjectAccount` and `MandateWallet` in `legacy/p4/`); every component doc says what is built in a *Transitional (BUILT)* note naming the
 phase that replaces it: P1 the base, the two public kinds and `createToken` (P1e); P2 `TradeLib` and the DEX clone; P3 the Zether kinds; P4 `MandateWallet` and `SmartKeyAccount` on the
-base; P5 node and client support for the new ABI ([contracts/token-wrappers.md](contracts/token-wrappers.md#transitional-built-tokens),
+base (built); P5 node and client support for the new ABI ([contracts/token-wrappers.md](contracts/token-wrappers.md#transitional-built-tokens),
 [contracts/metatx.md](contracts/metatx.md#transitional-built)). Nothing is deployed, so the target replaces the built
 lines in place; there is no migration between them.
 

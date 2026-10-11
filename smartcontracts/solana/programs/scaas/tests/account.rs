@@ -348,3 +348,14 @@ fn two_signed_ops_for_one_request_pay_once_before_and_after_prune() {
     expect_err(env.pay(&alice, &usd, TOKEN, &op2), E::Expired);
     assert_eq!(env.balance(&src), 90, "paid exactly once");
 }
+
+/// CTR-ACC-11 (P4): the account type is `SmartKeyAccount`; Anchor's discriminator follows the name. A deployed program
+/// is immutable (upgrade authority None, NET-SOL-20), so no `SubjectAccount` data ever meets this code: a new build is
+/// a new deployment. The PDA (`["acct", owner]`) and its layout are unchanged.
+#[test]
+fn smart_key_account_discriminator_follows_the_name() {
+    use sha2::{Digest, Sha256};
+    let d = <scaas::state::SmartKeyAccount as anchor_lang::Discriminator>::DISCRIMINATOR;
+    assert_eq!(d, &Sha256::digest(b"account:SmartKeyAccount")[..8]);
+    assert_ne!(d, &Sha256::digest(b"account:SubjectAccount")[..8]);
+}

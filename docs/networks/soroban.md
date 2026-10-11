@@ -121,7 +121,7 @@ the nonce. BUILT.
 | `from` kind | Signer | Signature in the auth entry | Client check |
 |---|---|---|---|
 | `G…` (Freighter, seed key `m/44'/148'/i'`) | the account's ed25519 key (the host checks threshold/signers) | `Vec[Map{public_key: Bytes32, signature: Bytes64}]` (the relayer builds it from the 64 bytes) | real ed25519 with the master key inside the strkey ([INT-ERP-14](../integration.md#INT-ERP-14)) |
-| `C…` = `scaas-account` (multi-key subject account) | a P-256 WebAuthn passkey or an ed25519 seed key | the account's ScVal `Signature` (XDR hex, inserted verbatim by the relayer) | none (`None`) — the node's simulation decides |
+| `C…` = `SmartKeyAccount` (multi-key subject account) | a P-256 WebAuthn passkey or an ed25519 seed key | the account's ScVal `Signature` (XDR hex, inserted verbatim by the relayer) | none (`None`) — the node's simulation decides |
 
 **Freighter `signAuthEntry`** (`@stellar/freighter-api`; `@stellar/stellar-sdk`, `stellar/rs-soroban-sdk`):
 
@@ -141,7 +141,7 @@ StellarAsset, Account }` — `Some(Executable::Account)` for classic `G...` acco
 `Address::to_string(&self) -> String` returns the StrKey (`C...` for contracts, `G...` for accounts). Soroban SDK major version at the time of writing: **`28.0.0`** (protocol 22 /
 23+); the contracts build with soroban-sdk 25.3.0 and Rust 1.90.
 
-**`scaas-account.__check_auth(signature_payload, Signature, contexts)`:**
+**`SmartKeyAccount.__check_auth(signature_payload, Signature, contexts)`:**
 
 - `Ed25519{key_id, signature}`: `ed25519_verify(pk, signature_payload, sig)`.
 - `WebAuthn{key_id, authenticator_data, client_data_json, signature (r‖s, low-s), proof}`: the challenge is
@@ -155,7 +155,7 @@ StellarAsset, Account }` — `Some(Executable::Account)` for classic `G...` acco
 
 <a id="NET-SOR-13"></a>**NET-SOR-13** — **The Soroban passkey verifier refuses `"crossOrigin":true` and any
 `topOrigin`** (the common grammar, [NET-ALL-04](README.md#NET-ALL-04)). SPECIFIED (as built `verify_webauthn` checks
-only `type`/`challenge`/`origin`, `account/src/lib.rs:149-153`, so an RP page embeddable in a cross-origin iframe —
+only `type`/`challenge`/`origin`, `smart-key-account/src/lib.rs:149-153`, so an RP page embeddable in a cross-origin iframe —
 Permissions-Policy `publickey-credentials-get` — yields valid assertions under an attacker's page). Test: an assertion
 with `crossOrigin:true` ⇒ `BadClientData`.
 
@@ -177,7 +177,7 @@ with `crossOrigin:true` ⇒ `BadClientData`.
   reconciles it like a manual payment); `pay_ref` once (its own `Key::Ref(pay_ref)`; only the delegate spends it);
   `revoke(token, by)` by the owner **or** the delegate (kill switch); owner `withdraw`. The owner is gasless naturally:
   its native authorization goes through a relayer (no `executeAsOwner` needed).
-- **`scaas-account`** — the multi-key subject account above.
+- **`SmartKeyAccount`** — the multi-key subject account above.
 
 <a id="pay-ref"></a><a id="NET-SOR-09"></a>**NET-SOR-09** — **`pay_ref` is one-shot per `(from, pay_ref)`, not
 globally, and `pay` moves a positive amount.** `Token::pay` keys `Key::PayRef(from, pay_ref)`; `ref_used(from,
@@ -193,12 +193,12 @@ signatures) ⇒ `RefUsed`; `pay_under_mandate` cannot be burnt by a third party.
 
 <a id="ttl"></a><a id="NET-SOR-11"></a>**NET-SOR-11** — **Entries in daily use extend their TTL, and an archived
 footprint is restored by the lane and retried.** `pay_under_mandate` extends `Key::Payee` on every use;
-`scaas-account.__check_auth` extends the account instance; when simulation returns a `restorePreamble`, the lane
+`SmartKeyAccount.__check_auth` extends the account instance; when simulation returns a `restorePreamble`, the lane
 submits `RestoreFootprintOp` with the preamble's footprint and fee, then rebuilds the job; the restore rent is a
 lane-paid deposit bounded by `chain.max_deposit_per_job` and charged to the `from` subject
 ([NODE-LANE-18](../node/submit-lanes.md#NODE-LANE-18)). SPECIFIED (as built a `restorePreamble` ⇒ `Revert` ⇒ job `dead`,
 `soroban.rs:325-327`; only `set_payee` extends the payee, `mandate/src/lib.rs:131-140`, `:167` only `has`; the account
-extends only on `save`, `account/src/lib.rs:75-78`, `__check_auth` `:215-229` does not — so an account in daily use is
+extends only on `save`, `smart-key-account/src/lib.rs:75-78`, `__check_auth` `:215-229` does not — so an account in daily use is
 archived ~60 days after its last key change, a payee 60 days after it was allowed). Tests: TTL after
 `pay_under_mandate` / `__check_auth` is raised; end to end: archive ⇒ restore ⇒ `mined`. System relayers may also call
 `extend_ttl` for long-lived state.
@@ -325,10 +325,10 @@ ledger range: SPECIFIED.
 - <a id="NET-SOR-03"></a>**NET-SOR-03** — **Soroban guardian recovery is a seam.** Guardian + delayed recovery is not
   built on Soroban; SPECIFIED as a gap ([NET-ALL-05](README.md#NET-ALL-05)).
 - <a id="NET-SOR-04"></a>**NET-SOR-04** — **`__check_auth` checks every entry of `auth_contexts` against the key's allowlist**
-  (owner 2026-10-08, [NET-ALL-27](README.md#NET-ALL-27)). Each key of `scaas-account` carries the `(contract, function)`
+  (owner 2026-10-08, [NET-ALL-27](README.md#NET-ALL-27)). Each key of `SmartKeyAccount` carries the `(contract, function)`
   pairs it may authorise (a passkey that pays, only a seed key changes keys…), aligned with Universal Account key
   purposes ([CTR-UA-10](../contracts/accounts.md#CTR-UA-10)); a context outside it fails. SPECIFIED. Transitional
-  (BUILT): `_contexts` is ignored (`account/src/lib.rs:215`), so any one passkey can `add_key` an attacker's key.
+  (BUILT): `_contexts` is ignored (`smart-key-account/src/lib.rs:215`), so any one passkey can `add_key` an attacker's key.
 - Not on the mesh (above). Seed role keys of a `C…` account use `kindNo` 18
   ([CLI-SGN-30](../clients/signers-clientkeys.md#CLI-SGN-30)).
 - Confidential payments: Soroban has BLS12-381 (CAP-59) and BN254 (CAP-74, protocol 25) host functions plus Poseidon, so

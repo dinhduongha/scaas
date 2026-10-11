@@ -1,5 +1,30 @@
 # HANDOFF — scaas
 
+## Session 2026-10-11 (P4)
+
+**State:** P4 on branch `p4-accounts`, merge pending the final review. Plan `docs/superpowers/plans/2026-10-11-p4-accounts-mandates.md`.
+1001 forge tests; size gate 0 errors (every token +8 B for the `_selfSender` hook, baseline raised; `MandateWallet` 15,509 B, `HederaMandateWallet` 15,997 B, both under the cap); clientkeys 56 (54 pass, 2 skipped);
+Solana 42, Sui 68, Aptos 105 (+ entry check), Soroban 28, Cosmos 10, TON 28; e2e 4/4 and e2e_hedera 1/1; mutation probe 79/79 killed.
+
+**Built:** `src/account/SmartKeyAccount.sol` and `SmartKeyAccountFactory.sol` (`chainUid` constructor argument, `chainUid()`),
+`src/wallet/MandateWallet.sol` (`owner`, `chainUid`; `epoch[token]`, `revoke(token, epoch)`, `payUnderMandate(…, epoch)` (selector `0x781fc8a8`), `mtxPayUnderMandate`, `mtxRevoke`,
+`mtxExecuteAsOwner`, `mandatePayLane`, `mandateRevokeLane`), `src/hedera/HederaMandateWallet.sol` (HIP-632 for 64-byte signatures,
+`mtxExecuteAsOwnerRaw`), `MetaTxBase._selfSender`; Solana `state::SmartKeyAccount`; clientkeys `metaTxTypedData`,
+`ownerCallTypedData`/`checkOwnerCall` on the salted `MetaTransaction`; KATs `smart_key_account_kat.json`, `mandate_pay_kat.json`,
+`mandate_revoke_kat.json`, `smart_key_account_create2.json`; deploy JSON `smart_key_account_factory` / `_implementation`. Tests
+`test/account/SmartKeyAccount.t`, `AccountKat.t`, `test/wallet/MandateWallet.t`. The typed-struct line is in
+`smartcontracts/evm/legacy/p4/` (not built).
+
+**Rulings L1–L18 (plan header).** **L1** the `_selfSender` hook; **L2** the account checks itself through its own
+`isValidSignature`; **L3** `cancelRecovery` allowlisted; **L4** `SubjectKey` keeps its name; **L6** pre-P4 clones and wallets are
+redeployed (every chain is a test chain); **L7** `NotDelegate`, lane encodings; **L11** Hedera HIP-632 on every wallet entry; **L12** (reversed by the owner) the rename
+covers the contract accounts (EVM, Solana, Soroban); Sui/Aptos keep `meta::Account<T>` (a per-token balance object), TON/Cosmos have none; **L13** Solana discriminator follows
+the name, no state migration; **L14** deploy JSON keys renamed.
+Controller rulings after the reviews, pending the owner (mandates.md CTR-ACC-07): the delegate's pay names the mandate epoch (`StaleEpoch(current, signed)`; a revoke, and any `setMandate` even a plain expiry extension, voids queued delegate pays; the pay job re-reads `epoch(token)` and re-signs); `setMandate` keeps `periodStart`/`spentInPeriod` when the delegate and `periodSeconds` are unchanged. Documented, no code: an owner hand-pay plus a delegate pay of the same `entryRef` can pay twice; the kill-switch revoke job must re-read the epoch after a `setMandate`. M1/M2 are EVM-only (TODO: one follow-up per other family).
+
+**Not done / next:** bamboo-dms follows before P4 contracts reach a chain Odoo uses (owner call with `chainUid`, mandate digests and the pay calldata with the epoch, its relay job still on pre-P4 names like `revokeWithSig`, CREATE2 file, JSON key; TODO P4); the node's
+call table for the renamed rows (P5); open questions in the plan (agent mandates from `docs/research/node-ai-agents.md`).
+
 ## Session 2026-10-11 (P3)
 
 **State:** P3 on branch `p3-zether`, merge pending; head is the fix-wave-2 commit on `f847471` (final review I1, m1–m7). Plan `docs/superpowers/plans/2026-10-11-p3-zether-kinds.md`.

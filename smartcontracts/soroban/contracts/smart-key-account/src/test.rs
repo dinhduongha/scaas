@@ -35,7 +35,7 @@ fn setup() -> T {
     });
     let ed = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
     let pk = BytesN::from_array(&env, &ed.verifying_key().to_bytes());
-    let account = env.register(Account, (Key::Ed25519(pk),));
+    let account = env.register(SmartKeyAccount, (Key::Ed25519(pk),));
     let admin = Address::generate(&env);
     let mk = |env: &Env| {
         let id = env.register(Token, (admin.clone(), 7u32, SStr::from_str(env, "SCaaS"), SStr::from_str(env, "BMB")));
@@ -170,7 +170,7 @@ fn add_passkey(t: &T) -> u32 {
         origin: Bytes::from_slice(&t.env, ORIGIN.as_bytes()),
     });
     t.env.mock_all_auths();
-    AccountClient::new(&t.env, &t.account).add_key(&key)
+    SmartKeyAccountClient::new(&t.env, &t.account).add_key(&key)
 }
 
 struct Assertion {
@@ -271,7 +271,7 @@ fn passkey_batch_merkle() {
 fn last_key_cannot_be_removed() {
     let t = setup();
     t.env.mock_all_auths();
-    let c = AccountClient::new(&t.env, &t.account);
+    let c = SmartKeyAccountClient::new(&t.env, &t.account);
     assert!(c.try_remove_key(&0).is_err());
     let id = add_passkey(&t);
     c.remove_key(&0);
@@ -282,7 +282,7 @@ fn last_key_cannot_be_removed() {
 #[test]
 fn adding_a_key_needs_an_existing_key() {
     let t = setup();
-    let c = AccountClient::new(&t.env, &t.account);
+    let c = SmartKeyAccountClient::new(&t.env, &t.account);
     let other = ed25519_dalek::SigningKey::from_bytes(&[8u8; 32]);
     let key = Key::Ed25519(BytesN::from_array(&t.env, &other.verifying_key().to_bytes()));
     let args: soroban_sdk::Vec<Val> = (key.clone(),).into_val(&t.env);
@@ -312,7 +312,7 @@ fn dex_settles_on_real_signatures_once_per_signature() {
     let t = setup();
     let e = &t.env;
     let bob_key = ed25519_dalek::SigningKey::from_bytes(&[8u8; 32]);
-    let bob = e.register(Account, (Key::Ed25519(BytesN::from_array(e, &bob_key.verifying_key().to_bytes())),));
+    let bob = e.register(SmartKeyAccount, (Key::Ed25519(BytesN::from_array(e, &bob_key.verifying_key().to_bytes())),));
     let admin = Address::generate(e);
     let dex = DexClient::new(e, &e.register(Dex, (admin, Address::generate(e))));
     e.mock_all_auths();

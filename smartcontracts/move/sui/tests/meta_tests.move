@@ -315,7 +315,7 @@ fun passkey_account_keeps_one_origin() {
     sc.end();
 }
 
-/// Guardian khôi phục sau `RECOVERY_DELAY` (2 ngày, như `SubjectAccount` EVM): khoá mới ký được.
+/// Guardian khôi phục sau `RECOVERY_DELAY` (2 ngày, như `SmartKeyAccount` EVM): khoá mới ký được.
 #[test]
 fun guardian_recovers_after_the_delay() {
     let mut sc = funded();

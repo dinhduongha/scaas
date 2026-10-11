@@ -13,7 +13,7 @@ Passkeys can serve either way: as a `webauthn-p256` Universal Account, or as a k
 ([passkeys on chain](#passkeys)). Delegated, capped payment from a payer's own wallet is a separate contract:
 [mandates.md](mandates.md).
 
-<p align="center"><img src="../assets/account-forms.svg" width="860" alt="Accounts and keys: a native account (the chain’s own account, no registration); a Universal Account, the default (specified, nothing built: an id derived from key data or a policy, registered once per chain in the UARegistry with proof of possession); a SmartKeyAccount, optional (built: an ERC-1271 clone from SmartKeyAccountFactory with P-256 passkeys and secp256k1 keys, guardian recovery, key changes signed by the account itself). A passkey can be a webauthn-p256 UA or a SmartKeyAccount key. Every token kind accepts all three and checks the signature itself. MandateWallet (built; revocation epoch specified) is a payment authority, not an account: the payer deposits, a delegate pays approved payees within per-payment and per-period caps."></p>
+<p align="center"><img src="../assets/account-forms.svg" width="860" alt="Accounts and keys: a native account (the chain’s own account, no registration); a Universal Account, the default (specified, nothing built: an id derived from key data or a policy, registered once per chain in the UARegistry with proof of possession); a SmartKeyAccount, optional (built: an ERC-1271 clone from SmartKeyAccountFactory with P-256 passkeys and secp256k1 keys, guardian recovery, key changes signed by the account itself). A passkey can be a webauthn-p256 UA or a SmartKeyAccount key. Every token kind accepts all three and checks the signature itself. MandateWallet (built, with its revocation epoch) is a payment authority, not an account: the payer deposits, a delegate pays approved payees within per-payment and per-period caps."></p>
 
 <a id="universal-account"></a>
 **Contents**
@@ -625,7 +625,7 @@ Non-EVM families ([NET-ALL-20](../networks/README.md#NET-ALL-20)):
 
 | Family | Today (subject) | With UA |
 |---|---|---|
-| Soroban | `Address` (`G…`, `C…`); `scaas-account` keys `Ed25519`, `Passkey` (1-of-N) | native kinds unchanged; `webauthn-p256` key ids follow the derivation when the account binds them; seed role keys of a `C…` account use `kindNo` 18; registry = the account factory's persistent map |
+| Soroban | `Address` (`G…`, `C…`); `SmartKeyAccount` keys `Ed25519`, `Passkey` (1-of-N) | native kinds unchanged; `webauthn-p256` key ids follow the derivation when the account binds them; seed role keys of a `C…` account use `kindNo` 18; registry = the account factory's persistent map |
 | Aptos | `owner: address`; account keys ed25519 / WebAuthn | native unchanged; non-native owner keys keyed by UA id; `account_of(ua)` for passkey-first accounts |
 | Sui | native address (flags 0/1/2/6) | native unchanged (Sui passkeys are native, flag 6); `Registry<T>` gains a `key_owner` table |
 | Solana | `owner: [u8;32]`; passkey owner `sha256("scaas.owner.p256" ‖ pk33)` | passkey owner = `webauthn-p256` UA id, stored with `owner_kind`, shown only as URN; PDA `["acct", ua]`; PDA `["ukey", keyHash]` enforces keyHash uniqueness |
@@ -812,7 +812,7 @@ Other families:
 |---|---|---|---|
 | Hedera | the EVM registry with `hederaNative = true` (`0x0003` members via HIP-632) | yes | HSCS has the bn254 precompiles; EIP-2537 per probe; budget 10.5 M (15 M cap) |
 | Cosmos | `ua-registry` CosmWasm contract; tokens query it (`WasmQuery::Smart`) | yes | software keccak; secp256k1/P-256 host verify; derived ids shown as URN, never the account HRP |
-| Soroban | persistent entries in the `scaas-account` factory (`UA(ua)`, `KEY(keyHash)`), TTL extended by the node like other persistent state | yes | `secp256r1_verify`, `ed25519_verify` host functions |
+| Soroban | persistent entries in the `SmartKeyAccount` factory (`UA(ua)`, `KEY(keyHash)`), TTL extended by the node like other persistent state | yes | `secp256r1_verify`, `ed25519_verify` host functions |
 | Sui | `Registry<T>`: `Table<vector<u8>, address>` for `key_owner`; account objects keyed by UA | yes | native verify functions |
 | Aptos | resource under the package root: `Table<vector<u8>, address>` | yes | pure-Move P-256 (UNAUDITED) |
 | Solana | PDAs `["ua", ua]` (record) and `["ukey", keyHash]` (claim) | yes | precompile-instruction verification |
@@ -1370,7 +1370,7 @@ On EVM the subject account is the built registry's `AuthScheme.SMART_ACCOUNT_127
 account, holding several passkeys `(qx, qy, rpIdHash)`; key types are `P256_WEBAUTHN(qx,qy,rpIdHash)` or
 `SECP256K1(address)`; the account signature was first specified as `abi.encode(keyIndex, payload)` and is now
 `abi.encode(keyIndex, bytes32[] proof, bytes sig)` for both key types. Key lifecycle: `addKey`/`removeKey`/`setGuardian`
-only through `mtxExecuteAsOwner` signed by an existing key (own nonce), or `recover(newKey)` by the guardian after
+only through `mtxExecuteAsOwner` signed by an existing key (the account's lane nonce), or `recover(newKey)` by the guardian after
 `RECOVERY_DELAY` (default 2 days, cancellable by a key); the account never has zero keys. P-256 verification per
 family: Sui `ecdsa_r1::secp256r1_verify`; Soroban `env.crypto().secp256r1_verify` (CAP-51); Cosmos `secp256r1_verify`
 (cosmwasm-std 2.1+); Hedera as EVM (probe the precompile, Solidity fallback); TON: TVM has
@@ -1388,7 +1388,7 @@ a seed key; precompile and Solidity gas; end to end: add a second key (seed when
 
 Status: **BUILT** (`smartcontracts/evm/src/account/`).
 
-<a id="CTR-ACC-11"></a>**CTR-ACC-11** — **The multi-key ERC-1271 contract account is named `SmartKeyAccount` (factory `SmartKeyAccountFactory`) in every chain family**: "smart" marks a contract account, "key" its many keys. **Transitional:** built code and non-EVM programs still use `SubjectAccount`; including the EIP-712 domain name, built `SCaaS SubjectAccount`, target `SCaaS SmartKeyAccount`; the vectors change with it; renamed in P4 (every family at once).
+<a id="CTR-ACC-11"></a>**CTR-ACC-11** — **The multi-key ERC-1271 contract account is named `SmartKeyAccount` (factory `SmartKeyAccountFactory`) in every chain family that has a contract account**: "smart" marks a contract account, "key" its many keys. Done for EVM (contract, factory, domain `SCaaS SmartKeyAccount`, vectors), the Solana PDA type and the Soroban contract (crate `scaas-smart-key-account`); Sui/Aptos keep `meta::Account<T>`, a per-token balance object and not a contract account, and TON/Cosmos have none ([networks](../networks/README.md)); the built `SubjectAccount` is in `smartcontracts/evm/legacy/p4/`.
 
 <a id="subjectaccount"></a>
 <a id="CTR-ACC-09"></a>**CTR-ACC-09** — **`SmartKeyAccount` is option (b), kept as built**: an optional ERC-1271 smart
@@ -1404,8 +1404,8 @@ identifier features. Tokens verify a `SmartKeyAccount` through ERC-1271 with the
 - Keys: multiple authorized keys (`P256_WEBAUTHN(x, y, rpIdHash, originHash)`, `SECP256K1(address)`), never zero keys (`LastKey`);
   guardian `initiateRecovery(newKey)` → anyone `completeRecovery` after `RECOVERY_DELAY`. Its
   `SECP256K1` keys come from the role path `m/7622'/0'/<account>'/2'/<i>'` ([CLI-SGN-30](../clients/signers-clientkeys.md#CLI-SGN-30)),
-  never from the EOA path (the factory salt and the 400 k cap as built: `SmartKeyAccountFactory.sol:21-23`,
-  `MetaToken.sol:141-144`); registering a key whose address equals the subject's own EOA (its payer address) on the
+  never from the EOA path (the factory salt and the 400 k cap as built: `SmartKeyAccountFactory.salt`,
+  `MetaTokenBase._erc1271Gas`); registering a key whose address equals the subject's own EOA (its payer address) on the
   same account is refused ([CLI-SGN-07](../clients/signers-clientkeys.md#CLI-SGN-07)). Its P-256 keys are passkeys
   (per `rpId`). A passkey that is a `webauthn-p256` UA may **also** be a `SmartKeyAccount` key: same kind, same
   WebAuthn scheme, digests differ (the account's challenge is the token's EIP-712 digest with `from` = the account);
@@ -1416,10 +1416,9 @@ identifier features. Tokens verify a `SmartKeyAccount` through ERC-1271 with the
   Its keys include P-256 passkeys that have no address, so the signer of the `MetaTransaction` is **the account**:
   `from = address(this)` is allowed here (the `SelfSender` guard of tokens is overridden) and `_requireValidSignature`
   checks the signature against the account's own key set (its ERC-1271 logic), signed by an existing key. Domain
-  `("SCaaS SubjectAccount", "1", chainId, account, chain_uid)` (built; target `SCaaS SmartKeyAccount`, P4), the 2D lane nonce, fee mode `NONE` (the relayer pays
-  gas). `mtxExecuteAsOwner(data, nonce, validUntil, signature)` keeps its signature as the named builder of that
-  `MetaTransaction` with `batch = 0`. A plain EOA never rotates. **Transitional (BUILT):** `executeAsOwner` verifies
-  its own `OwnerCall(bytes data,uint256 nonce,uint256 validUntil)` with a single nonce.
+  `("SCaaS SmartKeyAccount", "1", chainId, account, chain_uid)`, the 2D lane nonce, fee mode `NONE` (the relayer pays
+  gas); `cancelRecovery` and the base `cancelNonce` are allowlisted too. `mtxExecuteAsOwner(data, nonce, validUntil,
+  signature)` is the named builder of that `MetaTransaction` with `batch = 0`. A plain EOA never rotates. BUILT (P4).
 - The client backup predicate ([CLI-SGN-13](../clients/signers-clientkeys.md#CLI-SGN-13)) applies to it unchanged;
   derived UAs are "single-key, no recovery" by construction and the app shows that.
 - `msig` UAs may list a `SmartKeyAccount` as a member (native contract member).
@@ -1470,7 +1469,7 @@ implementation pins the chain's `SmartKeyAccount` implementation (constructor pa
 gas on chains without the precompile. Other contract wallets (Safe, …) keep 50 k. `Deploy.s.sol` deploys
 `SmartKeyAccountFactory` before the token and records its address in `deployments/<chainid>.json`. The same rule is
 applied by `SCaaSDex` ([CTR-DEX-08](dex.md#CTR-DEX-08)) and to Zether envelopes ([CTR-ZTH-21](zether.md#CTR-ZTH-21)).
-`SmartKeyAccount` has its own salted domain `("SCaaS SubjectAccount","1", chainId, account, chain_uid)` (built; target `SCaaS SmartKeyAccount`, P4); the factory
+`SmartKeyAccount` has its own salted domain `("SCaaS SmartKeyAccount","1", chainId, account, chain_uid)`; the factory
 takes `chain_uid` as a constructor argument and passes it to `new SmartKeyAccount(chainUid)`, so a user's account has a
 different address on each chain and the node and app predict it per chain ([CTR-GEN-05](README.md#CTR-GEN-05)).
 
@@ -1483,7 +1482,7 @@ is rejected for now: it would change every 1271 digest, every KAT and every clie
 |---|---|
 | `initialize(firstKey, guardian)` | factory only, once |
 | `isValidSignature(digest, sig)` | ERC-1271; [CTR-ACC-02](#CTR-ACC-02) encoding |
-| `mtxExecuteAsOwner(data, nonce, validUntil, signature)` | self-call of `addKey`/`removeKey`/`rotateKey`/`setGuardian`/`execute`; the nonce increments before the call |
+| `mtxExecuteAsOwner(data, nonce, validUntil, signature)`, `mtxExecute` | self-call of `addKey`/`removeKey`/`rotateKey`/`setGuardian`/`cancelRecovery`/`execute`, signed as the account; the lane nonce increments before the call |
 | `initiateRecovery` / `completeRecovery` / `cancelRecovery` | [CTR-ACC-03](#CTR-ACC-03) |
 | factory `predict`, `deploy` | idempotent, [CTR-ACC-01](#CTR-ACC-01) |
 

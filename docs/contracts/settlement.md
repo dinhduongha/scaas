@@ -57,7 +57,7 @@ intent is a booked fact. Every kind below shares these properties:
 | DEX order book | `SCaaSDex.mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces`; token side `mtxTrade` | each party signs a `TradeOrder`; the venue lane | token (Path A) or DEX (Path B, outside legs); DEX conservation | one signed rate, split relayer / treasury by the DEX | tx, then the DEX watcher | token side **BUILT** (P2a); `SCaaSDex` **BUILT** (P2b-1 SCaaS legs, P2b-2 outside legs); `SCaaSDexV1` pair `settle` **BUILT** | [CTR-DEX-13](dex.md#CTR-DEX-13) to [-19](dex.md#CTR-DEX-19), [-22](dex.md#CTR-DEX-22), [-24](dex.md#CTR-DEX-24) |
 | Exchange against AMMs | `mtxExchange`, `mtxExchangeVia` | the same signed orders; the venue lane | token or DEX, DEX conservation | signed rate on the floor; surplus to the signers | tx, then the DEX watcher | **BUILT** (P2c, `SCaaSDex`) | [CTR-DEX-20](dex.md#CTR-DEX-20) to [-23](dex.md#CTR-DEX-23) |
 | Confidential (Zether) | `zetherTransfer*`, `zetherShield`, `zetherUnshield`, roll-over; `zetherWrapShield`, `zetherUnshieldUnwrap` (`UNDERLYING_ZETHER`) | owner signs the call, the proof binds the envelope; any relayer | token verifier | outer NONE / FIXED (never PERCENT), inner `confidentialFee` | tx (dev chains) | **BUILT, UNAUDITED** (the `*_ZETHER` kinds, P3; dev chains only); PQZ **SPECIFIED** | [zether.md](zether.md), [pq-zether.md](pq-zether.md) |
-| Mandate | `payUnderMandate` (named `mtxPayUnderMandate`), `revoke` | delegate signs; any relayer | `MandateWallet` | NONE; relayer pays gas | tx | **BUILT**; epoch and `mtx` names **SPECIFIED** | [CTR-ACC-06](mandates.md#CTR-ACC-06), [-07](mandates.md#CTR-ACC-07) |
+| Mandate | `payUnderMandate` (named `mtxPayUnderMandate`), `revoke` | delegate signs; any relayer | `MandateWallet` | NONE; relayer pays gas | tx | **BUILT** (P4: epoch, `mtx` names) | [CTR-ACC-06](mandates.md#CTR-ACC-06), [-07](mandates.md#CTR-ACC-07) |
 | Asset-suite action | forced transfer, freeze, `VestingGrant.release`, `Distribution` claim, `ExchangeOffer` | issuer / compliance role, or a permissionless claim | token or action contract | by action | tx | **SPECIFIED**, nothing built | [asset-suite.md](asset-suite.md) |
 | Tender | `commitBid` (deposit is a `MetaTransfer`), `revealBid`, `withdrawDeposit` | bidder signs only the deposit | tender and token | NONE | tx | **SPECIFIED**, nothing built | [CTR-TND-01](tender.md#CTR-TND-01), [-03](tender.md#CTR-TND-03) |
 | Gas sponsorship | node policy; `SponsorshipPool` | the sponsor's node | node | native-gas refund | not on the transfer path | policy **SPECIFIED**, pool **PLANNED** | [NODE-SPN-01](../node/sponsorship.md#NODE-SPN-01), [NODE-SPN-04](../node/sponsorship.md#NODE-SPN-04) |
@@ -257,17 +257,17 @@ fails ([CTR-ZTH-06](zether.md#CTR-ZTH-06)). PQZ mirrors the names with `pqz` and
 
 ### 3.8 Mandates
 
-A delegate signs `payUnderMandate(token, payee, amount, entryRef)`; the `MandateWallet` checks delegate, revocation,
+A delegate signs `payUnderMandate(token, payee, amount, entryRef, epoch)`; the `MandateWallet` checks delegate, epoch, revocation,
 expiry, approved payee, per-payment and per-period caps and single-use `entryRef`, then pays with
 `payWithFee(..., NONE, ...)` from its own balance, no allowance ([CTR-ACC-06](mandates.md#CTR-ACC-06)). A revoke signed
-by the delegate is bound to the mandate's epoch ([CTR-ACC-07](mandates.md#CTR-ACC-07), **SPECIFIED**).
+by the delegate is bound to the mandate's epoch as well ([CTR-ACC-07](mandates.md#CTR-ACC-07), **BUILT**, P4).
 
 - **Atomic:** a cap or payee failure reverts the payment and `entryRef` stays unused; reconciliation is that of a
   manual payment.
 - **Node:** a `call` job to the wallet's named entry point from the call table
   ([NODE-JOB-01](../node/job-api.md#NODE-JOB-01)); the node checks the wallet's `chainUid()` against the chain profile.
-- **Transitional (BUILT):** the built entry points are `payUnderMandate(token, payee, amount, entryRef, validUntil,
-  sig)`, `revokeWithSig`, `executeAsOwner`, each with its own typed struct and no salt in the domain.
+- **Built (P4):** the wallet is on `MetaTxBase` with the salted domain; the typed-struct entry points (`revokeWithSig`,
+  `executeAsOwner`, a pay without the epoch) are in `legacy/p4/`.
 
 ### 3.9 Asset-suite actions
 

@@ -57,7 +57,7 @@ are normative targets for future versions and keep the built conventions: custom
 contract itself, lane nonces, contract-only allowances, no proxy upgrades.
 
 EIP-712 domains: name per implementation (`"SCaaS MetaToken"`, `"SCaaS ZetherToken"`, `"SCaaS MandateWallet"`,
-`"SCaaS SubjectAccount"` (built; target `SCaaS SmartKeyAccount`, P4), `"SCaaS Dex"`, `"SCaaS PqzToken"`, `"SCaaS UARegistry"`), version `"1"` (the UA
+`"SCaaS SmartKeyAccount"`, `"SCaaS Dex"`, `"SCaaS PqzToken"`, `"SCaaS UARegistry"`), version `"1"` (the UA
 registry: its generation), `chainId`,
 `verifyingContract` = the clone or contract itself, `salt` = the chain's `chain_uid` ([CTR-GEN-05](#CTR-GEN-05)). All
 clones of one implementation share the name; replay safety comes from `verifyingContract` and the salt
@@ -233,7 +233,7 @@ by rolling to block 1), else the script stops; unset it defaults to that hash.
 
 The script creates `deployments/` itself. It deploys `OpenFactory` with `NoUnderlyingToken` as version 1 of `NONE` (`UnderlyingToken` is over
 EIP-170 and waits for the size work) and, for the node until P5, the v1 line: `OpenFactoryV1` with `MetaToken` (version 1
-of `META`, when the registrar is the deployer), `SubjectAccountFactory`, `MetaTxDex` and `SCaaSDexV1`. The JSON gains
+of `META`, when the registrar is the deployer), `MetaTxDex` and `SCaaSDexV1`, plus `SmartKeyAccountFactory`. The JSON gains
 `token_factory`, `implementation_none`, `dex_implementation` (the `SCaaSDex` implementation) and `chain_uid`. `forge script … --broadcast` needs `--sender <deployer address>`; `DEPLOY_SALT` is optional.
 
 <a id="CTR-GEN-06"></a>**CTR-GEN-06** — **Every SCaaS EVM contract is deployed through a deterministic CREATE2

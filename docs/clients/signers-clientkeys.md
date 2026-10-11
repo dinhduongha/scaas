@@ -122,8 +122,8 @@ Every signature not made by a human on a device — custodial wallets, delegated
 users, bounded by policy. Checks before any signature:
 
 1. Destination contract ∈ allowlist (token, mandate wallet, DEX).
-2. Operation ∈ allowed ops/selectors (a payment `MetaTransfer`, the `MandateWallet` `payUnderMandate` call,
-   `mtxExecute` with an allowed self-call selector, [CLI-SGN-34](#CLI-SGN-34); as built `payUnderMandate` and
+2. Operation ∈ allowed ops/selectors (a payment `MetaTransfer`, the `MandateWallet` `payUnderMandate` call (with the current epoch),
+   `mtxExecute` with an allowed self-call selector, [CLI-SGN-34](#CLI-SGN-34); as built on v1 tokens
    `executeMetaTransaction` with an allowed op);
    never `approve` on a SCaaS token — an EOA never approves one ([CLI-SGN-36](#CLI-SGN-36),
    [CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)).
@@ -222,8 +222,8 @@ which works offline, or from the contract's `eip712Domain()` read once and cache
 payments, self-calls, trade orders), mandate wallets, subject accounts, the DEX and the registry. What protects the
 user is the contract — a contract on another chain computes its digest with that chain's `chain_uid`, so the signature
 fails there whichever wallet made it; the client check catches a wrong profile or a hostile server before the user is
-asked. Transitional (BUILT): only the Universal Account domains carry `salt` (the existing check of the PoP flow,
-[integration.md](../integration.md)); the other domains are unsalted until the salted contracts are deployed.
+asked. Transitional (BUILT): clientkeys builds and checks `salt` for the Universal Account (PoP flow,
+[integration.md](../integration.md)) and, since P4, the `SmartKeyAccount` owner call; the v1 token checks stay unsalted (P5).
 
 <a id="CLI-SGN-34"></a>**CLI-SGN-34** — **A meta-transaction's `data` is decoded and shown before the user signs;
 a selector outside the token's allowlist is refused.** Status: **SPECIFIED**. clientkeys and the app encode
@@ -314,7 +314,7 @@ by `fam/*`; passkeys stay origin-bound ([CLI-APP-14](app.md#CLI-APP-14)).
 | EVM, Hedera | RIP-7212 `0x100` or OZ Solidity | `SmartKeyAccount` | `(x, y)` + `rpIdHash`, `keccak(origin)` | per key | BUILT |
 | Sui | native `secp256r1_verify`, flag 6 | `Account<T>` (`open_passkey`) | 33 B | `origins` ≤ 8 | contract BUILT; signer first |
 | Solana | precompile `Secp256r1SigVerify1111…` (SIMD-0075), low-S, ≤ 8 per instruction | PDA (`open_passkey`) | 33 B | `origins` ≤ 8, same-rpId rule | contract BUILT; second |
-| Soroban | host `secp256r1_verify` (CAP-51) | `scaas-account` `C…` | 65 B | per key | contract BUILT; third |
+| Soroban | host `secp256r1_verify` (CAP-51) | `SmartKeyAccount` `C…` | 65 B | per key | contract BUILT; third |
 | Aptos | pure-Move `scaas::p256` (UNAUDITED, ≈ 4 100 gas per signature) | `Account` object | 65 B | `origins` | contract BUILT (unaudited); fourth |
 | Cosmos | cosmwasm `secp256r1_verify` | none (passkey id only) | 33 B | none | not yet |
 | TON | TVM `P256_CHKSIGNS` | jetton wallet, one passkey | 33 B + `rpIdHash` + `originPrefix` | prefix | not yet |
@@ -526,7 +526,7 @@ Reading the key set (clients re-read after any key change reaches finality and c
 | Sui | `Account<T>` fields `keys`, `guardian` (`sui_getObject`) | `keys` | `guardian != @0x0` |
 | Aptos | `Account` resource | `keys` | `option::is_some(guardian)` |
 | Solana | `SmartKeyAccount` PDA (Borsh) | `keys` | `guardian`; also `policy & 1` |
-| Soroban | `scaas-account` key map | values (no duplicate check on chain) | none |
+| Soroban | `SmartKeyAccount` key map | values (no duplicate check on chain) | none |
 | TON | jetton wallet `pubkey`, `passkey` | the bound ones | none |
 
 Per-family applicability is in [networks/README](../networks/README.md#key-lifecycle) (Soroban and TON are satisfied by
@@ -614,7 +614,7 @@ decryption-adjacent oracle; untagged digests replay across protocols. Owner deci
 
 <a id="CLI-SGN-30"></a>**CLI-SGN-30** — **The EVM seed path is the EOA only; every subject-account key that is not the
 native owner and every derived kind comes from the UA tree `m/7622'/0'/<account>'/<kindNo>'/<i>'`.** The role `kindNo` is
-the kind of the account the key serves: EVM/Hedera `SmartKeyAccount` 2, Solana 16, Soroban `scaas-account` `C…` 18
+the kind of the account the key serves: EVM/Hedera `SmartKeyAccount` 2, Solana 16, Soroban `SmartKeyAccount` `C…` 18
 (`soroban-contract`), Aptos 19, Sui 20. Owner decisions (one chain-independent tree under purpose `7622'`; Soroban
 `kindNo` 18). Existing dev accounts whose SECP256K1 key is the EOA key rotate at the UA migration.
 

@@ -173,7 +173,7 @@ entries that call the verifier; a contract adds a gasless function by adding one
 |---|---|---|---|
 | Aptos | `scaas::metacall::verify(…, function, args_hash): address` (`public`) | `mtx_<name>(lane, from, args…, lane_id, nonce, valid_until, relayer, auth)` rebuilds the `MetaCall` from typed arguments | `mtx_transfer`, `mtx_pay`, `mtx_execute_transfer`, `mtx_batch_transfer` |
 | Sui | `scaas::metacall::verify` (`public`) | as Aptos | `mtx_transfer<T>`, `mtx_pay<T>`, `mtx_execute_transfer<T>` |
-| Soroban | none: the host verifies; `scaas-account.__check_auth` checks contexts ([NET-SOR-04](soroban.md#NET-SOR-04)) | the function itself, `from.require_auth_for_args(args)`, named `mtx_<name>` | SEP-41 `transfer` (standard name), `mtx_pay` |
+| Soroban | none: the host verifies; `SmartKeyAccount.__check_auth` checks contexts ([NET-SOR-04](soroban.md#NET-SOR-04)) | the function itself, `from.require_auth_for_args(args)`, named `mtx_<name>` | SEP-41 `transfer` (standard name), `mtx_pay` |
 | CosmWasm | `scaas-metacall` crate: `verify(deps, env, info, payload, auth) -> Addr` | `MtxExecute{payload, auth}`, `payload.msg` = the inner allowlisted message, matched in the contract's own `execute` with the verified `from` (never a self-message, which would carry the contract as sender) | `MtxTransfer`, `MtxPay`, `MtxExecuteTransfer` |
 | TON | Tact trait `MetaCallVerifier` | `MtxExecute{call, auth, body}`: `hash(body) == args_hash`, then the contract dispatches `body`'s opcode over its allowlist | `MtxTransfer`, `MtxPay`, `MtxExecuteTransfer` |
 | Solana | `scaas-metacall` crate (instruction-sysvar signature check, lane PDA) | one instruction `mtx_<name>` per gasless function with its fixed accounts ([NET-SOL-04](solana.md#NET-SOL-04)); the library checks `function` = its own discriminator | `mtx_transfer`, `mtx_pay`, `mtx_execute_transfer` |
@@ -446,7 +446,7 @@ The **backup-key switch** ([CLI-SGN-12](../clients/signers-clientkeys.md#CLI-SGN
 | Sui | `Account<T>` | 8 | yes | as EVM | no | no |
 | Aptos | `Account` object | 8 | yes | as EVM | no | no |
 | Solana | `SmartKeyAccount` PDA | 8 | yes | as EVM | opt-in (no de-duplication) | no |
-| Soroban | `scaas-account` `C…` | multi | no | **≥ 2 distinct keys** (owner) | no | no |
+| Soroban | `SmartKeyAccount` `C…` | multi | no | **≥ 2 distinct keys** (owner) | no | no |
 | TON | `ScaasJettonWallet` | 2 (`pubkey` + one passkey) | no | **both keys** (owner) | no | no |
 | Cosmos | none (native; multi-key seam) | 1 | no | seed: native; passkey-only: **unsatisfiable** | no | no |
 

@@ -116,9 +116,9 @@ pub struct Settle<'info> {
     #[account(seeds = [b"mkt", market.base_mint.as_ref(), market.quote_mint.as_ref()], bump = market.bump)]
     pub market: Box<Account<'info, Market>>,
     #[account(seeds = [b"acct", a.maker.as_ref()], bump = subject_a.bump)]
-    pub subject_a: Box<Account<'info, SubjectAccount>>,
+    pub subject_a: Box<Account<'info, SmartKeyAccount>>,
     #[account(seeds = [b"acct", b.maker.as_ref()], bump = subject_b.bump)]
-    pub subject_b: Box<Account<'info, SubjectAccount>>,
+    pub subject_b: Box<Account<'info, SmartKeyAccount>>,
     #[account(init_if_needed, payer = lane, space = 8 + Fill::INIT_SPACE,
               seeds = [b"fill", market.key().as_ref(), hash_a.as_ref()], bump)]
     pub fill_a: Box<Account<'info, Fill>>,
@@ -174,7 +174,7 @@ fn check_order(
     network: &[u8; 32],
     market: &Market,
     market_key: &Pubkey,
-    subject: &SubjectAccount,
+    subject: &SmartKeyAccount,
     counterparty: &[u8; 32],
     lane: &Pubkey,
     min_nonce: u64,
@@ -286,7 +286,7 @@ pub struct CancelSigned<'info> {
     #[account(seeds = [b"mkt", market.base_mint.as_ref(), market.quote_mint.as_ref()], bump = market.bump)]
     pub market: Account<'info, Market>,
     #[account(seeds = [b"acct", order.maker.as_ref()], bump = subject.bump)]
-    pub subject: Account<'info, SubjectAccount>,
+    pub subject: Account<'info, SmartKeyAccount>,
     #[account(init_if_needed, payer = lane, space = 8 + Fill::INIT_SPACE,
               seeds = [b"fill", market.key().as_ref(), order_hash.as_ref()], bump)]
     pub fill: Account<'info, Fill>,
@@ -323,7 +323,7 @@ pub struct InvalidateNonces<'info> {
     #[account(seeds = [b"mkt", market.base_mint.as_ref(), market.quote_mint.as_ref()], bump = market.bump)]
     pub market: Account<'info, Market>,
     #[account(seeds = [b"acct", subject.owner.as_ref()], bump = subject.bump)]
-    pub subject: Account<'info, SubjectAccount>,
+    pub subject: Account<'info, SmartKeyAccount>,
     #[account(init_if_needed, payer = lane, space = 8 + MinNonce::INIT_SPACE,
               seeds = [b"minnonce", market.key().as_ref(), subject.key().as_ref()], bump)]
     pub min_nonce: Account<'info, MinNonce>,

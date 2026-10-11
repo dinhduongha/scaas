@@ -16,3 +16,11 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   own underlying) with their tests (`ZetherToken.t`, `ZetherMulti.t`, `ZetherRevertPaths.t`, `ZetherGate.t` and the
   fixture), as they stood on `main` before P3 replaced them by the `*_ZETHER` kinds; not built. Nothing in the node or
   the e2e read them. `OpenFactoryV1` keeps its `ZETHER` kind (mock-tested) until the v1 line moves (P5).
+- `p4/`: the built `SubjectAccount` and `SubjectAccountFactory` (typed `OwnerCall`, own nonce, domain `SCaaS SubjectAccount`
+  without salt) and their test `SubjectAccount.t.sol`, as they stood on `main` before P4 put `SmartKeyAccount` on
+  `MetaTxBase` (CTR-ACC-10, CTR-ACC-11); and the built `MandateWallet` / `HederaMandateWallet` (typed `PayUnderMandate`,
+  `RevokeMandate`, `OwnerCall`, no epoch, no salt) with `MandateWallet.t.sol`, `MandateWalletKat.t.sol` and the Hedera
+  wallet test cut from `test/hedera/HederaMetaToken.t.sol` (CTR-ACC-06, CTR-ACC-07); not built. Clones and wallets
+  deployed from them keep working with their own code.
+  The backed-up `SubjectAccount.t.sol` reads `test/vectors/subject_account_create2.json`, which is now
+  `smart_key_account_create2.json` (only its `note` differs); restore the old name to run it.

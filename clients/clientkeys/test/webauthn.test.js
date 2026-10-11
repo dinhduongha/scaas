@@ -63,7 +63,7 @@ test('software authenticator: SPKI → (x,y), assertion verifies over sha256(aut
   assert.throws(() => publicKeyFromSpki(auth.spki.subarray(1)), /SPKI/);
 });
 
-test('clientDataJSON shape is what SubjectAccount checks (RS4-2)', async () => {
+test('clientDataJSON shape is what SmartKeyAccount checks (RS4-2)', async () => {
   const auth = await softAuthenticator({ rpId: RP, origin: ORIGIN });
   const a = await auth.get(new Uint8Array(32).fill(0xab));
   assert.equal(new TextDecoder().decode(a.clientDataJSON),

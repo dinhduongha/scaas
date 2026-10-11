@@ -11,7 +11,7 @@ import {UniversalAccountRegistry} from "../../src/registry/UniversalAccountRegis
 import {ZetherDisclosure} from "../../src/zether/ZetherDisclosure.sol";
 import {ZetherStatements} from "../../src/zether/ZetherStatements.sol";
 import {ZetherVerifierBn254, ZetherVerifierBls12381} from "../../src/zether/ZetherVerifier.sol";
-import {SubjectAccountFactory} from "../../src/account/SubjectAccountFactory.sol";
+import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {NoUnderlyingZetherToken} from "../../src/zether/NoUnderlyingZetherToken.sol";
 import {UnderlyingZetherToken} from "../../src/zether/UnderlyingZetherToken.sol";
@@ -33,7 +33,7 @@ contract DeployHarness is DeployBase {
 contract ZetherDeployTest is Test {
     /// EIP-7825 (Osaka): the per-transaction gas cap.
     uint256 constant TX_GAS_CAP = 1 << 24;
-    address ska = new SubjectAccountFactory().IMPLEMENTATION();
+    address ska = new SmartKeyAccountFactory(ZUID).IMPLEMENTATION();
 
     function _at(DeployHarness h, bytes memory initCode) internal pure returns (address) {
         return vm.computeCreate2Address(keccak256("scaas.deploy.v1"), keccak256(initCode), address(h));
