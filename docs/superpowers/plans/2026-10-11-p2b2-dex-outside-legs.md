@@ -92,7 +92,7 @@ to a scratch worktree from `main` and run green (full suite 910, Dex 36, DexOuts
   codehash of its clones, as `MetaTokenBase` does; `_cap(signer)` serves outside legs, `mtxCancelOrders` and
   `mtxInvalidateNonces`. SCaaS legs keep their token's cap.
 - **H4 — Bounded `MatchFailed`.** `mtxSettle` self-calls `settleOne` with a low-level `call` and copies at most
-  `MAX_REASON = 256` bytes of revert data (enough for every DEX/token error and an `Error(string)` of ~188 bytes), so a
+  `MAX_REASON = 256` bytes of revert data (enough for every DEX/token error and an `Error(string)` of ~160 bytes), so a
   token that reverts with megabytes costs only its own settlement.
 - **H5 — m8: `SigCheckGasStarved` reverts the whole `mtxSettle`** (CTR-DEX-08: "the whole transaction reverts"). It is the
   only "starved" error in the code (`SigCheck`), raised by the DEX for outside legs and by a token for SCaaS legs; the DEX
