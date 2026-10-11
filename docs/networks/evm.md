@@ -143,7 +143,9 @@ profile's RPC quorum) and passes it as the `chain_uid` constructor argument of e
 the Universal Account registry, and any later contract that checks a signature. Every deployment — implementations,
 factories, registry, DEX — goes through one deterministic CREATE2 deployer with a fixed per-contract salt, so an
 address depends only on the init code: a contract whose constructor takes `chain_uid` (and every clone of it) has a
-different address on each chain, one without a chain-specific argument the same address on every chain. Before the
+different address on each chain, one without a chain-specific argument the same address on every chain.
+
+Before the
 run passes, the deploy gate requires, for each deployed contract, `chainUid()` = the RPC's genesis hash = the chain
 profile's `chain_uid`; refuses a genesis hash already present in another chain profile
 ([NET-ALL-25](README.md#NET-ALL-25)); and requires the factory to have registered only implementations whose
@@ -171,7 +173,9 @@ and re-run. `forge script … --broadcast` needs `--sender <deployer address>`, 
 places the linked libraries from that sender, not by CREATE2. It deploys `OpenFactory` with `NoUnderlyingToken` as
 version 1 of `NONE` (`UnderlyingToken` is over EIP-170 and is not deployed until the size work) and, for the node until
 P5, the v1 line (`OpenFactoryV1` with `MetaToken` as version 1 of `META`, `MetaTxDex`), `SubjectAccountFactory` and
-`SCaaSDexV1` (plus the `SCaaSDex` implementation, registered as DEX version 1 on the factory), optionally a tier-1 demo token ([deploy](../contracts/README.md#build-ci-and-pins)). It writes
+`SCaaSDexV1` (plus the `SCaaSDex` implementation, registered as DEX version 1 on the factory), optionally a tier-1 demo token ([deploy](../contracts/README.md#build-ci-and-pins)).
+
+It writes
 `deployments/<chainid>.json` (`factory`, `implementation`, `dex`, `subject_account_factory`,
 `subject_account_implementation`, `scaas_dex`, `demo_token`, and `token_factory`, `implementation_none`, `dex_implementation`, `chain_uid`),
 which seeds the client and the node configuration. Zether and the registry are not in the deploy script (dev chains only). Integration tests use `anvil --hardfork osaka --gas-limit 16777216 --code-size-limit 65536` (64 KiB code, as EIP-7954 proposes; owner 2026-10-11 — real chains keep 24,576, so a contract that only fits this anvil still cannot be deployed there).

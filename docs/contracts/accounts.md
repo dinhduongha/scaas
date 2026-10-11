@@ -115,7 +115,9 @@ the registry refuses the rest (`UAIdInNativeSpace`; honest probability 2^-96, th
 20-byte ids (EVM, Cosmos secp256k1) are zero-padded into the same 32-byte space, so on those families the two spaces
 are disjoint by construction and `>> 160` tells them apart. **Canonical form everywhere** (node, mesh, client systems,
 vectors): lower-case hex; a 32-byte value whose top 96 bits are zero is the 20-byte native id and is always written,
-keyed and compared in its 20-byte form. On families whose native ids are full 32-byte values (Solana, Aptos, Sui,
+keyed and compared in its 20-byte form.
+
+On families whose native ids are full 32-byte values (Solana, Aptos, Sui,
 Soroban, TON) native and derived ids share one space (collision 2^-128 birthday, infeasible) but **shape cannot tell
 them apart**: records, owners and subject accounts there store an explicit `owner_kind` and dispatch by kind, never by
 id shape. Different kinds over the same point give different ids because the tag differs (Schnorr-bn254 over `Y` ≠
@@ -156,7 +158,9 @@ where `POP_TAG = keccak256("scaas.ua.purpose.pop.v1")`, `chainKeyHash = keccak25
 form (`evm:<chainid>`) **computed from `block.chainid` in the constructor** (never a constructor string), `chainUid` the
 chain's immutable unique id (the genesis hash, [NET-ALL-22](../networks/README.md#NET-ALL-22); the chain id alone is not
 unique), `registry_id` the 32-byte registry address/id, and `authRef = 0` for every non-Zether kind; then signed as a
-tagged message of the kind ([CTR-UA-12](#CTR-UA-12)). When `authRef ≠ 0` the authority **co-signs**: `register` also
+tagged message of the kind ([CTR-UA-12](#CTR-UA-12)).
+
+When `authRef ≠ 0` the authority **co-signs**: `register` also
 requires `requireAuthorized(authRef, PURPOSE_AUTHREF, pop_digest, authPop)` (purpose `authref`), so nobody can name a
 victim's account as the authority of theirs. Every field of the record therefore follows from signed data: `register`
 derives no state from `msg.sender` or from any unsigned argument, so anyone may submit it (gasless, relayable) and
@@ -164,6 +168,24 @@ front-running yields the identical record or a revert. Binding the caller would 
 nothing once the record is caller-independent; `authRef` is the one record field not implied by `keyData`, and an
 unsigned `authRef` would let a front-runner freeze a Zether account or strip its separate authority. A future field
 taken from `msg.sender` or left unsigned would turn front-running into capture; tests T-REG-3/3b guard it.
+
+Registration as a flow:
+
+```mermaid
+sequenceDiagram
+    participant K as Key holder
+    participant R as Anyone (relayer)
+    participant G as UA registry
+    K->>K: sign pop_digest as a tagged message of the kind
+    K->>R: kind, keyData, pop, authRef
+    R->>G: register (gasless, relayable)
+    G->>G: verify PoP, one key one purpose
+    opt authRef is not 0
+        G->>G: authority co-signs, requireAuthorized(authRef, authref, pop_digest, authPop)
+    end
+    G-->>R: record derived only from signed data
+    Note over K,G: a front-runner gets the identical record or a revert
+```
 
 <a id="rogue-key"></a>
 <a id="CTR-UA-08"></a>**CTR-UA-08** — **Rogue-key protection is decided per aggregate kind** (owner: the MuSig2/FROST
@@ -409,13 +431,16 @@ every EVM chain** (owner). Verification uses a native precompile where one is pr
 and a **pure-Solidity verifier** everywhere else. Every check, the registration PoP included, completes **in one
 transaction** within the chain's `UA_VERIFY_BUDGET = min(12,000,000, ⌊0.7 × chain per-transaction gas cap⌋)` (EIP-7825
 chains: 12 M ≈ 70 % of 16,777,216; Hedera, 15 M cap: 10.5 M), a constructor immutable published in the chain profile.
+
 **Each kind's verify cap is measured per chain** (worst-case accepting and rejecting input, test T-GAS) and set as a
 constructor immutable `verifyCap[kind]`, also published: e.g. `mldsa65` ≈ 20 k with the chain-7622 precompile, the
 measured Solidity worst case elsewhere. Estimates (measured by the PQ-kind stream): ML-DSA-65 1.2–8.1 M, ML-DSA-44
 lower, FN-DSA-512 0.6–2.5 M, ed25519 0.3–1.2 M. On public chains an enabled kind's measured cap must stay ≤ ~50 % of the
 budget, so a later gas repricing cannot push it over after funds are held. **If a measured verifier exceeds that bound
 on a chain, the kind is disabled there (verifier address 0: not registrable), never "registrable but unusable"**: a
-registrable but unusable kind can *receive* and then never spend, locking funds. Multi-transaction verification with
+registrable but unusable kind can *receive* and then never spend, locking funds.
+
+Multi-transaction verification with
 stored partial state and chunked verify are rejected (resumable state is a new replay/griefing surface and a second
 audit target for no gain while the estimates fit). Structures are bounded by the same caps (register step 4): a hybrid
 `{mldsa65, p256}` fits everywhere, but a quorum of two Solidity-verified PQ members (2 × up to 8.1 M) does not, so the
@@ -495,7 +520,9 @@ cannot rotate ([CTR-UA-13](#CTR-UA-13)); a timelocked `rotateZetherAuth` was the
 ledger. To ERC-20 observers the UA ledger is the **sub-ledger of one sentinel address**
 `UA_POOL = address(uint160(uint256(keccak256("scaas.ua.pool.v1"))))`: `balanceOf(UA_POOL)` returns `_uaTotal` (= Σ
 `_uaBalance`, kept by every UA-ledger write; the native slot of `UA_POOL` is never written), so `totalSupply == Σ
-balanceOf(native incl. UA_POOL)`. Every movement emits `UATransfer(bytes32 from, bytes32 to, uint256 value)` when a side
+balanceOf(native incl. UA_POOL)`.
+
+Every movement emits `UATransfer(bytes32 from, bytes32 to, uint256 value)` when a side
 is derived, and every move that changes a native balance also emits ERC-20 `Transfer`: native → UA is
 `Transfer(sender, UA_POOL)`, UA → native (including a fee from a UA to `feeRecipient`) is `Transfer(UA_POOL, to)`; UA →
 UA emits `UATransfer` only. Native `transfer`/`transferFrom` and v3 `to` refuse `UA_POOL` (`UAPoolNotPayable`).
@@ -563,7 +590,9 @@ UA allowlist (`unwrap(…)`; on `PqzToken` its four PQZ selectors); **`approve` 
 function, for native `from` too**
 (`MetaTxUnknownOp`; natives use the address-typed path; a UA-ledger allowance model waits for DEX v2). The base **keeps the
 address-typed entry points** (`mtxExecute`, `mtx*`) unchanged; they and the `ua*` functions share one
-nonce map, `_uaNonce[pad(addr)]`, so one native nonce cannot be used on both paths (test T-V3-1). Fees are paid from the
+nonce map, `_uaNonce[pad(addr)]`, so one native nonce cannot be used on both paths (test T-V3-1).
+
+Fees are paid from the
 `from` ledger to `feeRecipient` (an address, native ledger; from a UA `from` it emits `Transfer(UA_POOL, feeRecipient)`);
 the `FeeRecipientIsPayee` check compares `bytes32(uint256(uint160(feeRecipient)))` with `t.to`. Event per item (both
 structs):
@@ -846,7 +875,9 @@ classification is by code at verify time.** Wherever a native EVM id is verified
 members, a native `authRef` and its co-sign, v3's native path): empty code ⇒ ECDSA low-s by the address; code that is
 exactly the EIP-7702 designator `0xef0100 ‖ address` (23 bytes) ⇒ ECDSA low-s by the address is accepted, and otherwise
 ERC-1271 on the address (which runs the delegate code) under the 50 k cap; any other code ⇒ ERC-1271 only (50 k; 400 k for
-`SmartKeyAccount` clones). A member's stated kind `0x0001`/`0x0002` is a label checked for MEMBER, never the dispatch. The
+`SmartKeyAccount` clones). A member's stated kind `0x0001`/`0x0002` is a label checked for MEMBER, never the dispatch.
+
+The
 base key of a 7702 account controls it at protocol level (it can send a transaction itself, re-delegate or clear the
 delegation), so no signature rule of ours can make it weaker than root; refusing its ECDSA would add no security and
 break plain 7702 wallets, while the 1271 fallback lets delegated wallets with session keys or passkeys sign. v2's
@@ -889,7 +920,9 @@ BBS pseudonym feature): such a presentation discloses neither `credentialSubject
 holder binding below is not used for it. Its presentation header must carry the relying party's `aud` and `nonce`, but
 it proves only "a holder of a credential bound to this pseudonym presented it", not "this account presented it": **a bbs
 presentation is never accepted where the legal-recourse evidence trail applies** — those workflows require the
-account-signed binding (SD-JWT VC + `scaas-ua` KB-JWT, `nonce` = deal reference / `intent_id`). Until that feature is a
+account-signed binding (SD-JWT VC + `scaas-ua` KB-JWT, `nonce` = deal reference / `intent_id`).
+
+Until that feature is a
 final W3C/IETF text with an implementation in our libraries, bbs is not offered: a bbs presentation bound to the stable
 UA (the same id on every chain) would be linkable anyway. Status: W3C Bitstring Status List (or IETF Token Status List);
 `validUntil` on every credential. `credentialSubject.id`: `did:pkh:<caip10>` for native accounts (e.g.
@@ -1180,7 +1213,9 @@ Zether measurement that BLS12-381 is ~2 % more expensive at Bulletproofs-scale M
 different operations. Measured on the private chain (2026-08-31, EIP-2537 live): the BLS12-381 pairing with k = 2 costs 103,959 gas, **less**
 than the bn254 pairing (114,091), so `bls-bn254-minsig` exists only for chains without EIP-2537. Final EIP-2537
 addresses differ from early drafts (`G2ADD` is `0x0d`, not `0x0e`; `MAP_FP_TO_G1` is `0x10`, not `0x11`; a draft
-address hits another precompile and, on all-zero input, still returns bytes). Skipping `clear_cofactor` is correct
+address hits another precompile and, on all-zero input, still returns bytes).
+
+Skipping `clear_cofactor` is correct
 there: RFC 9380 computes `P = clear_cofactor(Q0 + Q1)`, but EIP-2537's `MAP_FP_TO_G1` already clears the cofactor, so
 the verifier computes `h·Q0 + h·Q1`, equal to `h·(Q0+Q1)` (scalar multiplication is a group homomorphism); checked on
 chain: `G1MSM(H(m), 1) == H(m)`. `G1ADD`/`G2ADD` check only on-curve, while `G1MSM`/`G2MSM`/`PAIRING_CHECK` also check
@@ -1308,7 +1343,9 @@ Verifier checks, in order: `authenticatorData` ≥ 37 bytes; `rpIdHash` (its fir
 `,"crossOrigin":false` and then `}` (end) or `,`; the origin equals a stored origin **exactly** (stored per key as
 `keccak(origin)` on EVM; no prefix match); `s ≤ n/2` (low-s; WebAuthn returns DER and authenticators do not enforce
 low-s, so clients convert DER to `(r, s)` and normalize `s := n − s` when `s > n/2`, still valid); then P-256 over
-`sha256(authenticatorData ‖ sha256(clientDataJSON))`. The EVM check (`type == "webauthn.get"`, the challenge, the
+`sha256(authenticatorData ‖ sha256(clientDataJSON))`.
+
+The EVM check (`type == "webauthn.get"`, the challenge, the
 origin) is the bounded WebAuthn Level 3 algorithm (§5.8.1.2 of the standard): a fixed prefix, the origin up to the
 next `"`, then only the two endings above (the EVM `_clientDataOk` grammar); a browser that orders members
 differently fails closed. Shared vectors `smartcontracts/test/vectors/webauthn_kat.json` (accept shapes of Safari
@@ -1325,7 +1362,9 @@ P-256; Solana Secp256r1 precompile; TON passkey auth kind in the jetton wallet. 
 exists today on EVM and Soroban only; the other families verify one digest per assertion. In the generic form the leaf is
 `H(H(0x00 ‖ digest))` with `H` the family hash (the OpenZeppelin double-hash recommendation against second
 preimages), and each operation carries `(assertion, proof)`: the verifier checks the proof (digest → root), then the
-assertion over the root. On EVM the subject account is the built registry's `AuthScheme.SMART_ACCOUNT_1271 = 7` kind of
+assertion over the root.
+
+On EVM the subject account is the built registry's `AuthScheme.SMART_ACCOUNT_1271 = 7` kind of
 account, holding several passkeys `(qx, qy, rpIdHash)`; key types are `P256_WEBAUTHN(qx,qy,rpIdHash)` or
 `SECP256K1(address)`; the account signature was first specified as `abi.encode(keyIndex, payload)` and is now
 `abi.encode(keyIndex, bytes32[] proof, bytes sig)` for both key types. Key lifecycle: `addKey`/`removeKey`/`setGuardian`
@@ -1409,6 +1448,14 @@ raw message.
 recovery). An existing key cancels through `mtxExecuteAsOwner(cancelRecovery)`; `setGuardian` cancels a pending recovery.
 The guardian may be a multisig contract. Watching `RecoveryInitiated` events is the owner's defence against a
 compromised guardian (the 2-day delay plus cancel by key).
+
+```mermaid
+stateDiagram-v2
+    [*] --> Normal
+    Normal --> RecoveryPending: guardian initiateRecovery(newKey)
+    RecoveryPending --> Normal: existing key cancelRecovery, or setGuardian
+    RecoveryPending --> Normal: anyone completeRecovery after RECOVERY_DELAY, newKey added
+```
 
 <a id="signcount"></a>
 <a id="CTR-ACC-04"></a>**CTR-ACC-04** — The authenticator `signCount` is not checked: synced passkeys always return 0.

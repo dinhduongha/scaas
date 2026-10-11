@@ -31,6 +31,21 @@ requirement). Pi Network is the same family with network passphrases "Pi Testnet
 314159 (passphrases confirmed by the owner at deploy). Networks: Stellar `pubnet`, `testnet`, `standalone`; Pi
 `pi-mainnet`, `pi-testnet`.
 
+```mermaid
+sequenceDiagram
+    participant S as Subject (Freighter, seed signer)
+    participant R as Relayer lane (G account)
+    participant F as Fee account (optional)
+    participant C as Token contract
+    S->>S: sign HashIdPreimage SorobanAuthorization (network id, contract, function, args, nonce, expiry)
+    S->>R: payload and signature
+    R->>R: build SorobanAuthorizationEntry, simulateTransaction
+    R->>F: lane transaction (fee-bump CAP-15, optional)
+    R->>C: InvokeHostFunction, source = lane, seq = committed + 1
+    C->>C: host checks authorization, each (address, nonce) once
+    C-->>R: getTransaction SUCCESS or FAILED (billed)
+```
+
 ## 2. Payload
 
 <a id="payload"></a>

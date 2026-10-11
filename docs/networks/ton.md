@@ -173,7 +173,9 @@ jetton wallet stores `domains` (a set of `sha256(domain)`), initialised at lazy 
 (`sender() == owner`: a wallet transaction the user sees, not a `signData`). `AUTH_TONCONNECT` requires `sha256(domain) ∈
 domains` and `timestamp ≤ now() + 300`; an empty set refuses TON Connect auth (the passkey still works). Owner decision
 (2026-10-07) between two designs: the set, rather than one `domainHash` pinned in each wallet's init data, because SCaaS
-is multi-tenant and many portals share one token — a pinned hash would need one master (token) per portal domain. Why a
+is multi-tenant and many portals share one token — a pinned hash would need one master (token) per portal domain.
+
+Why a
 contract check at all: `SignedOp` is an ordinary message anyone may relay (relayer `addr_none`), so an off-chain domain
 check never runs when a phishing dApp relays its own; as built `checkTonConnect` hashes the relayer-supplied domain and
 timestamp without checking them (`common.tact:264-272`, `jetton.tact:202-206`). Rejected alternatives: a `domainHash` in each wallet's init data with `hash(domainCell) == domainHash` (otherwise `E_SIG`)
@@ -268,7 +270,9 @@ checked at intake and at lease; a job whose signed floor (op 1 `extra`, op 2 `Tr
 `extra.forward_nanoton` (never trusted, [NODE-LANE-16](../node/submit-lanes.md#NODE-LANE-16)) exceeds it ⇒
 `422 VALUE_OUT_TOO_HIGH`; the lane's attached `value = max(attach, forward + 0.1 TON)` with `forward ≤` the cap; the value
 sent feeds the breaker as `value_out` = the forward actually sent minus the `excesses` returned
-([NODE-LANE-13](../node/submit-lanes.md#NODE-LANE-13)). Contract (new wallet code and master): a constant
+([NODE-LANE-13](../node/submit-lanes.md#NODE-LANE-13)).
+
+Contract (new wallet code and master): a constant
 `MAX_FORWARD_TON` (0.1 TON) — `SignedOp.forwardTon > MAX_FORWARD_TON` ⇒ `E_VALUE`; DEX: `TradeLeg` carries `excessTo` (=
 `SignedOp.responseDestination`, the lane) and `refundLeg` returns tokens to their owner with `responseDestination =
 excessTo`, so a failed leg returns excess TON to the lane. Why (critical): as built the attached forward is `max(...)`
@@ -276,7 +280,9 @@ without a cap (`ton.rs:1138-1149`), accepting even the unsigned JSON `extra.forw
 `forwardTon >= m.extra` (`jetton.tact:235`); the receiving wallet forwards exactly that amount to its owner
 (`jetton.tact:149-161`); W5 out-action mode 3 (`ton.rs:699`); a broken DEX leg is refunded with `SendRemainingValue` and
 `responseDestination =` the order owner (`dex.tact:279-297`), returning the lane's forward TON to the signer; the breaker
-saw only fees (`adapter.rs:270-276`). So one `pay` signed with a floor ≈ the lane balance drained the lane to the signer.
+saw only fees (`adapter.rs:270-276`).
+
+So one `pay` signed with a floor ≈ the lane balance drained the lane to the signer.
 The ERP pull path is safe (`extra = 0`, no `forward_nanoton`; `fam_ton.py:302-306` in the example connector). SPECIFIED —
 **blocking**, see the rule at the top. Tests: node — signed floor > cap ⇒ 422, JSON `forward_nanoton` > cap ⇒ 422, `value`
 never above `max(attach, cap + 0.1 TON)`, the breaker adds the forward; sandbox — `forwardTon` above the constant ⇒
@@ -301,6 +307,25 @@ arrives); fills are **all-or-nothing** (no partial fill); `Refund` is permission
 it; gas is paid from the TON attached to the order); cancel = op `revoke` on the order's lane/nonce. A deliberate
 deviation from the EVM DEX: TON has no cross-contract atomicity. BUILT.
 
+```mermaid
+sequenceDiagram
+    participant A as Maker A
+    participant B as Maker B
+    participant W as DEX jetton wallet
+    participant D as ScaasDex
+    participant K as Anyone (keeper)
+    A->>W: signed jetton transfer with TradeLeg
+    W->>D: transfer_notification
+    D->>D: recompute digest, check leg, store orders[digest]
+    B->>W: signed jetton transfer with TradeLeg
+    W->>D: transfer_notification
+    K->>D: Match{a, b}
+    D->>D: check minOut after fee, counterparty, maxFeePpm
+    D-->>A: pay leg (fill or kill)
+    D-->>B: pay leg
+    Note over D: a broken leg is refunded, Refund is permissionless after valid_until
+```
+
 `ScaasDex`: `SetMarket{a, b, enabled, makerPpm, takerPpm}` (admin; ppm ≤ 10 000 = 1 %); the DEX derives its own jetton
 wallet per master with `initOf`. A broken leg (`parseLeg` fails, a duplicate) is refunded ([NET-TON-14](#NET-TON-14)). A leg arrives as a
 `transfer_notification` from the DEX's jetton wallet: the DEX
@@ -310,7 +335,9 @@ otherwise refunded at once. `TradeParams{tokenOut(master), minOut, counterparty 
 `Match{a, b}`: counter tokens, `amount_b − fee_a ≥ minOut_a` and vice versa (the minimum is measured after the DEX fee),
 counterparty (if bound), maker fee (the earlier order) / taker fee ≤ each order's `maxFeePpm` ⇒ pay both legs, fees into
 `fees[master]`, delete both orders, `emit TradeSettled` (not booked by clients, as on EVM); a failed match throws (no
-change). `Refund{digest}` permissionless when `now ≥ valid_until`. Cancel = a 0-token `CancelTag` notification from the
+change). `Refund{digest}` permissionless when `now ≥ valid_until`.
+
+Cancel = a 0-token `CancelTag` notification from the
 DEX's jetton wallet with `sender` = the owner: right owner + right token ⇒ refund; per-pair message ordering means a cancel
 cannot overtake its order leg, so the DEX keeps no cancel table. Wallet → master lookup is O(1) (map). The settlement
 relayer binding (an optional `relayer` in `TradeParams`, compared with `sender()` at `Match` and on the hint path) is

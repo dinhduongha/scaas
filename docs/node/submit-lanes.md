@@ -258,6 +258,26 @@ loop every poll_ms:
                    expired) is replaced by a 0-value self-send to the lane at that nonce (gap-filler)
 ```
 
+One job through the runner, in order:
+
+```mermaid
+flowchart TD
+    Q["queued"] -->|"lease (CAS)"| L["leased"]
+    L --> SIM{"simulate on the<br/>node's own RPC"}
+    SIM -->|"transport error, timeout"| Q
+    SIM -->|"gas > max_gas_per_tx"| DEAD["dead"]
+    SIM -->|"revert, nonce consumed"| CON["consumed"]
+    SIM -->|"revert, not consumed"| DEAD
+    SIM -->|ok| SIGN["sign (nonce = next++),<br/>tx_hash known"]
+    SIGN --> J["journal: signed"]
+    J --> SEND["eth_sendRawTransaction:<br/>broadcast"]
+    SEND --> R{"receipt?"}
+    R -->|"status 1"| MINED["mined"]
+    R -->|"status 0"| CC["consumption check:<br/>reverted or consumed"]
+    R -->|"stuck_after_secs"| REP["replace at the same nonce,<br/>maxFee x1.25 up to cap"]
+    REP --> SEND
+```
+
 The gateway's and the mesh scheduler's work go through the same runner, the same nonce counter and the same simulation
 gate. `final` of a job never comes from the runner: it comes from the event feed
 ([job-api.md#states](job-api.md#states)), so a job is final also when someone else executed it.
@@ -356,7 +376,9 @@ job never published on the bus (only the subject or someone it gave the payload 
 exemptions of unwrap jobs ([unwrap jobs](#unwrap-jobs)) and of regulated-token compliance refusals
 ([contracts/asset-suite.md](../contracts/asset-suite.md)). ≥ 3 in 24 h ⇒ the subject gets one live job per chain and
 a re-simulation right before signing; ≥ 10 in 24 h, or `cost ≥ chain.grief_cost_cap` ⇒ intake refuses `429
-SUBJECT_THROTTLED` until 24 h after the last count. A namespace aggregate feeds a `scaas_grief_*` metric and alert; the
+SUBJECT_THROTTLED` until 24 h after the last count.
+
+A namespace aggregate feeds a `scaas_grief_*` metric and alert; the
 chain-level breaker stays `revert_streak`. Fresh lanes per request (Cosmos, Sui, Solana, Aptos) make per-lane counting
 useless, and a new signature costs the subject nothing: only a counter keyed by subject bounds post-simulation flips
 (balance moved, nonce burnt, key changed). Fresh subjects are cheap on some families; the namespace aggregate and
@@ -522,7 +544,9 @@ jobs journaled together.** `mtxBatchTransfer` groups `metatx` jobs with `struct 
 one batch ([CTR-MTX-11](../contracts/metatx.md#CTR-MTX-11), [CTR-MTX-24](../contracts/metatx.md#CTR-MTX-24)), so no other relayer can consume an item between
 simulation and inclusion; a subject's `cancelNonce` remains the only race. One `leased → signed` transaction writes
 the batch's `outer_tx` row, journals every item with the same `lane_label`, `outer_nonce`, `tx_hash` and bumps
-`lane.journal_max` once; each item keeps its own digest (G2), state and `job_event`. A failing batch is re-simulated
+`lane.journal_max` once; each item keeps its own digest (G2), state and `job_event`.
+
+A failing batch is re-simulated
 and resubmitted without the failing item (`dead` with its decoded reason; the item counts toward
 [NODE-LANE-15](#NODE-LANE-15)). Measured cost is split evenly over the items (remainder to the lowest `uid`), so
 `usage_day` sums to the fee paid. **Never batched**: unwrap ops, `receiver_fee` jobs, `call` jobs, sponsored jobs

@@ -65,7 +65,9 @@ effective price`, or the family's fee field). Budget per UTC day; rate caps per 
 Admission reserves `max_cost_per_tx` per sponsored job and stores the reserved amount and day on the job; the
 reservation is replaced by the measured cost, booked to that same day, at `mined`/`reverted`. A sponsored transaction
 is built so that its maximum chargeable fee (`gas_limit × max_fee_cap` on EVM, fee bumps included) is `≤
-max_cost_per_tx`, so measured ≤ reserved and a day's spend never exceeds its budget. **Rate counters are taken at
+max_cost_per_tx`, so measured ≤ reserved and a day's spend never exceeds its budget.
+
+**Rate counters are taken at
 accept with the reservation**: the job stores `sponsor_hour`, the hour and payer-hour `tx_count` are checked and
 incremented in the same transaction as the day reservation, and a job that ends before broadcast releases all three
 (otherwise one payer could reserve a whole day's budget with jobs that never reach lease). A sponsored job needs
@@ -85,6 +87,24 @@ waive).
 <a id="evaluation"></a>Matching and the budget reservation happen at accept on job data only (plus a local signature
 check on public doors), with the rate counts; the fee cap at lease; booking at the end. The result is stored on the
 job.
+
+```mermaid
+flowchart TD
+    subgraph accept["Accept (step 8 transaction)"]
+        M{"match(job):<br/>first policy that fits"}
+        M -->|none| NS["no sponsor:<br/>door fee floor applies"]
+        M -->|policy p| AD{"admit(job, p):<br/>signature, TOO_SHORT,<br/>BUDGET, RATE"}
+        AD -->|ok| RES["reserve max_cost_per_tx,<br/>count day, hour, payer-hour"]
+        AD -->|not ok, reject| REJ["429 SPONSOR_BUDGET /<br/>SPONSOR_RATE / SPONSOR_TOO_SHORT"]
+        AD -->|not ok, unsponsored| NS
+    end
+    RES --> L{"lease, after simulation:<br/>max fee above reserved?"}
+    L -->|yes| DEAD["dead SPONSOR_TX_CAP"]
+    L -->|no| SEND["broadcast"]
+    SEND --> BOOK["mined / reverted:<br/>reservation becomes cost_spent"]
+    DEAD --> REL["release reservation<br/>and tx_count"]
+    RES -.->|"dead, consumed or cancelled<br/>before broadcast"| REL
+```
 
 ```
 match(job) -> Option<policy>:                                  -- accept, after intake step 7

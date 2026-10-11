@@ -555,6 +555,23 @@ the same `accept()` with its own rate stages ([gossip.md#validation](gossip.md#v
 
 ### 4.2 Forward vs submit vs reject
 
+```mermaid
+flowchart TD
+    IN["envelope"] --> L0{"L0 shape, spec,<br/>family, chain"}
+    L0 -->|fail| REJ["reject with code,<br/>not written"]
+    L0 --> L1{"L1 hops, duplicate,<br/>peer rate"}
+    L1 -->|"HOP_LIMIT, RATE_LIMITED"| REJ
+    L1 -->|DUPLICATE| NOOP["no-op"]
+    L1 --> L2{"L2 digest, expiry,<br/>signatures, hub.sig"}
+    L2 -->|fail| REJ
+    L2 --> L3{"L3 privacy, policy lookup"}
+    L3 -->|"PRIVATE_FROM_OPEN_PEER,<br/>UNSUPPORTED"| REJ
+    L3 --> MS{"may_submit?"}
+    MS -->|no| HOLD["pooled: hold and serve"]
+    MS -->|"yes, exclusive to another peer"| WAIT["pooled, exclusive_until set"]
+    MS -->|"yes, free or ours or expired"| SUB["submittable"]
+```
+
 | Outcome | Condition | Store |
 |---|---|---|
 | reject | any L0–L3 code | not written; counted |
@@ -618,6 +635,13 @@ for row in submittable (oldest first):
     CAS submittable → submitting; INSERT the job in ~mesh (origin key = intent_id), release on refusal
     insert failed ⇒ CAS submitting → submittable (dropping the guard releases the digest)
 jitter(row) = u16(first 2 bytes of sha256(intent_id ‖ self.peer_id)) mod post_exclusive_jitter_ms   # differs per node
+```
+
+```mermaid
+stateDiagram-v2
+    pooled --> submittable: may_submit and exclusive window over
+    submittable --> submitting: guard acquired, job INSERTed in ~mesh
+    submitting --> submittable: insert failed
 ```
 
 The first draft handed the work to the lane channel with `try_send`; inserting a job in `~mesh` replaced it, so every

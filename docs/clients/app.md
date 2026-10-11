@@ -358,7 +358,9 @@ rejection (4001 or equivalent) is not an error. The dev key (`signers/dev.ts`) i
 imports clientkeys only. Its API is `unlock(pin | prf)`, `account(family, role, i)` (public data only), `sign(request)`
 (bytes the main thread built and checked, plus the envelope name), `signUA(purpose, digest)` and `lock()`. Seed, entropy and
 private keys never cross `postMessage`. The vault v2 store, the idle timer (5 min), the hide timer (5 min) and scrypt
-allocation all live in the worker; the Zether worker follows the same rule. Vault specifics: IndexedDB `scaas-clientkeys`,
+allocation all live in the worker; the Zether worker follows the same rule.
+
+Vault specifics: IndexedDB `scaas-clientkeys`,
 store `kv`, keys `device-key:v1`, `vault:seed:<account label>`, `vault:zether-conf:<curve>:<coin>:<account>`; at creation
 request `navigator.storage.persist()` and show a refusal if denied, show "clearing this site's data = losing this device"
 before the first device-bound write, and on a scrypt `RangeError` stop with "this device cannot create a passphrase vault"
@@ -377,6 +379,26 @@ unlocked ([vault threat model](signers-clientkeys.md#vault)).
 | Wallets | `wallets/<family>.js`, `wallets/evm.js` (EIP-6963 + `walletKind`), `wallet-signer.js` entry |
 
 ## 6. Submission and status
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant A as App (main thread)
+    participant K as Signer (key worker, passkey, extension)
+    participant G as Node gateway
+    participant C as Chain
+    U->>A: enter terms
+    A->>A: signingInput(terms), decode, checkTerms, show the review
+    U->>A: approve
+    A->>K: SignRequest (bytes the app built)
+    K-->>A: signature (verified locally before sending)
+    A->>G: POST /v1/metatx or /v1/ops
+    G-->>A: 202 accepted by relayer
+    loop poll
+        A->>C: read lane nonce and events
+    end
+    C-->>A: nonce consumed and PaymentSettled means Done
+```
 
 <a id="submission"></a><a id="CLI-APP-07"></a>**CLI-APP-07** — **Two submission paths: the gateway for every family, or
 self-paid.** (1) **Gateway**: EVM and Hedera use `POST /v1/metatx` (Hedera with 64-byte HIP-632 signatures allowed); the six
@@ -555,7 +577,9 @@ without any allowance; fields and review per [CLI-SGN-35](signers-clientkeys.md#
 the order's expected role, `minFill` default half the amount (FOK sets it to the amount), cancel on the sell token
 (`CancelOrder` per order, `InvalidateNonces` per order lane); an outside sell token uses a `DexOrder` with an
 allowance to the listed DEX's `DexPuller` ([CTR-DEX-22](../contracts/dex.md#CTR-DEX-22)); exchange-path options (listed
-pools, cycles, surplus) per [CLI-SGN-37](signers-clientkeys.md#CLI-SGN-37). As built: order fields (`dex.rs:540-580`): `taker` 0 (public book); amounts in `(0, 2^128)`; base amount ≥ the market
+pools, cycles, surplus) per [CLI-SGN-37](signers-clientkeys.md#CLI-SGN-37).
+
+As built: order fields (`dex.rs:540-580`): `taker` 0 (public book); amounts in `(0, 2^128)`; base amount ≥ the market
 `min_base_amount`; `expiry` default 1 d, within `(now + 5 s, now + 30 d]`; FOK and IOC mutually exclusive; `maxFeePpm` = the
 market fee by default; `relayer` = `/v1/gateway` `dex.relayer` (home-bound), or 0 on `unbound` markets (resting GTC only);
 relayer fee `feeMode` 0 by default, otherwise within `/v1/gateway` `dex.relayer_fee_policy` (`feeMode ≤ 2`, ppm cap 10 000);

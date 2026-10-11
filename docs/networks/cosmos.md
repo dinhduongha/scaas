@@ -33,6 +33,22 @@ Three contracts in `smartcontracts/cosmos/` (own Rust workspace, `cosmwasm-std` 
 Adapter `scaas-node/src/adapters/cosmos.rs`; devnet `cosmwasm/wasmd:v0.61.15` (wasmvm 3, module `x/wasm`), ports 31990–31999. Chains are
 keyed `cosmos:<chain-id>`.
 
+The built path (**Transitional (BUILT)**, see [payload](#payload)):
+
+```mermaid
+sequenceDiagram
+    participant S as Subject (Keplr, Leap, passkey)
+    participant R as Relayer lane
+    participant T as scaas-token contract
+    S->>S: sign sorted-key JSON MetaOp (ADR-036 signArbitrary)
+    S->>R: payload bytes + auth
+    R->>T: MsgExecuteContract Relay{payload, auth} (lane's own account sequence)
+    T->>T: network, contract, domain, valid_until, nonce for (from, lane)
+    T->>T: verify the scheme: sha256 of the sign doc and secp256k1_verify, or passkey
+    T->>T: address from the public key equals from
+    T-->>R: event meta_tx_executed (digest = sha256(payload))
+```
+
 ## 2. Payload
 
 <a id="payload"></a>
@@ -139,7 +155,9 @@ it to equal the `rpIdHash` inside the owner's `webauthn-p256` key data and to be
 origin through the shared `clientDataJSON` grammar ([NET-ALL-04](README.md#NET-ALL-04)); it requires UP **and** UV and
 `s ≤ n/2` before `secp256r1_verify`. The owner is the 32-byte UA id ([NET-ALL-21](README.md#NET-ALL-21)), not a
 truncated address (owner decision); v1 passkey addresses (dev chains only) are no longer accepted — as built the contract
-checks `from == bech32(prefix, sha256("scaas.passkey.v1" ‖ pk)[..20])`. SPECIFIED. Why: as built the decoder checks
+checks `from == bech32(prefix, sha256("scaas.passkey.v1" ‖ pk)[..20])`.
+
+SPECIFIED. Why: as built the decoder checks
 only the UP flag (`ad[32] & 0x01`) and `type`/challenge by substring `contains` (`cosmos/metaop/src/lib.rs:130-148`;
 `metaop/src/lib.rs:131-144`; no low-s check before `secp256r1_verify`, `cosmos/metaop/src/lib.rs:147`), with no rpIdHash, origin, UV or low-s check, so any page that can obtain an assertion
 for the rpId (sibling subdomain, related origin, delegated iframe) signs any `MetaOp`. The low-s check closes
@@ -255,7 +273,9 @@ excluded; the DEX re-reads both legs' nonces before settling.** A subject is an 
 transactions: between `simulate` and inclusion it can `Transfer` its whole balance (`token/src/lib.rs:126-130`), or
 `Relay` the same payload itself, or send a `revoke` on the same `(from, lane)` (an empty `relayer` lets anyone send,
 `token/src/lib.rs:191`) — the lane's transaction then fails in DeliverTx and pays the full fee; a new lane per request
-makes it repeatable at no cost to the subject (no relayer fee off EVM). Node: the failed DeliverTx fee feeds the
+makes it repeatable at no cost to the subject (no relayer fee off EVM).
+
+Node: the failed DeliverTx fee feeds the
 breaker ([NODE-LANE-13](../node/submit-lanes.md#NODE-LANE-13)) and every billed failure counts against the payload's
 `from` ([NODE-LANE-15](../node/submit-lanes.md#NODE-LANE-15); a `consumed` of an unpublished job counts too — that is
 exactly the "send it first" pattern). DEX: right before signing `Settle`, re-read `Nonce{owner, lane}` of **both** legs

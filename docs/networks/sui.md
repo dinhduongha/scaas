@@ -49,6 +49,17 @@ move to a per-subject `Keys` object ([NET-SUI-02](#NET-SUI-02)).
 | `dex::Dex` | shared | `AdminCap` | parent of the `Market`s (admin only) |
 | `dex::Market` | shared, **derived** from `Dex` per type pair | `AdminCap` (`list_market`) | fees, `filled`, `min_nonce` of ONE market |
 
+```mermaid
+flowchart TD
+    AC["AdminCap (owned)"] -->|"set_network once"| RT["meta::Root (shared, one)"]
+    RT -->|"derived by TypeName(T), anyone: new_registry"| RG["meta::Registry&lt;T&gt; (shared)"]
+    RG -->|"derived by owner address: open"| AX["meta::Account&lt;T&gt; (shared)"]
+    AC -->|creates| DX["dex::Dex (shared)"]
+    DX -->|"derived per type pair: list_market"| MK["dex::Market (shared)"]
+    MD["mandate::Mandate&lt;T&gt; (shared)"] -.->|"take / put (package only)"| AX
+    DX -.->|"take / put (package only)"| AX
+```
+
 <a id="NET-SUI-03"></a>**NET-SUI-03** — **`Account<T>` and `Registry<T>` are derived objects.** The id of
 `Account<T>` = `derive_address(registry_id, owner)` =
 `blake2b256(0xf0 ‖ registry ‖ u64le(32) ‖ owner ‖ bcs(TypeTag 0x2::derived_object::DerivedObjectKey<address>))`. So (1)
@@ -250,7 +261,9 @@ Account<B>, taker_buy: &mut Account<A>, maker: Order, maker_auth, taker: Order, 
 clock, ctx)` checks flags, expiry, `nonce >= min_nonce[maker]`, relayer, taker, signature (key of `maker_sell.owner`),
 cross-matching tokens (by type, enforced by generics), distinct parties, a listed market; `fill > 0`,
 `filled + fill <= sell_amount`, FOK; cross-multiplied price on u128; fee `ppm <= max_fee_ppm`, cap 10 000 ppm (1 %)
-checked at `set_market`. Funds move account → account (the fee recipient receives a `Coin`); IOC closes the remainder.
+checked at `set_market`.
+
+Funds move account → account (the fee recipient receives a `Coin`); IOC closes the remainder.
 Events `OrderFilled` (each side) + `Matched`; the indexer normalises only `MetaTransactionExecuted`/`PaymentSettled`
 (`sui.rs:383-392`), so Sui DEX fills are **not** in the event feed until the non-EVM venue exists
 ([CLI-APP-21](../clients/app.md#CLI-APP-21)). Cancel: `cancel(market, &Account<A>, order, auth)` signs
@@ -313,7 +326,9 @@ bytes + object ref + version), written in the `leased → signed` transaction, s
 ([NODE-LANE-19](../node/submit-lanes.md#NODE-LANE-19)); `pay_tx` sets `TransactionExpiration::Epoch(current epoch + 1)`,
 so a held-back transaction never surfaces after one epoch. `build()` processes the journal first: landed, or the coin
 moved on (the old transaction can never run) ⇒ delete; still pending ⇒ resend the identical bytes and build the new
-transaction on ANOTHER coin (none free ⇒ wait). SPECIFIED. Why: as built the journal is a local directory
+transaction on ANOTHER coin (none free ⇒ wait).
+
+SPECIFIED. Why: as built the journal is a local directory
 (`params.lane_journal/<chain>-lane<i>.json`, fsync + rename, written by `sign()` before the signed report and before
 sending) with
 **one** entry per lane — job B's `sign` overwrites job A's pending entry (`sui.rs:495-505, 693-707`), a failed resend of

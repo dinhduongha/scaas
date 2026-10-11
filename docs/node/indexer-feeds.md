@@ -47,6 +47,21 @@ loop:
   cursor = to
 ```
 
+The same loop as a picture:
+
+```mermaid
+flowchart TD
+    S["cursor = chain_index.indexed_block"] --> H["head_final from ≥ quorum endpoints<br/>(tag, depth or instant)"]
+    H --> T["to = min(head_final, cursor + 1000)"]
+    T --> W{"to > cursor?"}
+    W -->|no| SL["sleep poll_ms"] --> H
+    W -->|yes| Q{"≥ quorum endpoints agree<br/>on the hash at to?"}
+    Q -->|no| RED["no progress, warning,<br/>/readyz red"]
+    Q -->|yes| E["events(cursor+1, to) from ≥ quorum endpoints,<br/>same normalized list"]
+    E --> TX["one transaction:<br/>INSERT feed_item(range) + UPDATE chain_index"]
+    TX --> C["cursor = to"] --> H
+```
+
 Finality per family (values re-checked per chain before it is enabled, [runbooks.md#production-gates](runbooks.md#production-gates);
 family details in [networks/](../networks/README.md)):
 
@@ -98,7 +113,9 @@ with the same block/ledger/checkpoint hash at that height (`tag` mode: min `fina
 `events(from, to)` is evaluated against ≥ `quorum` independent endpoints and must return the **same normalized list**
 (the adapter's own output, so one comparison serves every family; EVM: sorted `(block_number, block_hash, tx_hash,
 log_index, address, topics, data)`); disagreement ⇒ no ingest, warning, `/readyz` red. `quorum = 1` is
-single-provider trust: allowed, reported at start and as gauge `scaas_finality_quorum{chain}`. Receipt proofs
+single-provider trust: allowed, reported at start and as gauge `scaas_finality_quorum{chain}`.
+
+Receipt proofs
 (`eth_getBlockReceipts` against `receiptsRoot`) may replace the set comparison where providers serve them; not
 required. Per family: EVM/Hedera `eth_getLogs`; Aptos per-transaction agreement (**BUILT**; the Indexer-API hint may
 omit transactions, which only delays booking); Sui event query per checkpoint range; Solana per-signature transaction
@@ -287,7 +304,9 @@ equal `balanceOf(a)` at `recordBlock` for a sampled set (archive RPC quorum) or 
 **must** classify every leaf that has code — every `AssetFactory` clone (known from its events, including
 counterfactual grant addresses funded before `GrantCreated`, found with `predictGrant` of pending client grants) and the
 token's own address are excluded or attributed — and any other contract leaf **fails the build** unless the policy
-lists it. Tree: OZ `StandardMerkleTree` v1, leaf encoding `["uint256","address","uint256"]` = `(index, account,
+lists it.
+
+Tree: OZ `StandardMerkleTree` v1, leaf encoding `["uint256","address","uint256"]` = `(index, account,
 amount)`, leaf = `keccak256(bytes.concat(keccak256(abi.encode(index, account, amount))))`, `sortLeaves = true`,
 sorted-pair node hashing as `MerkleProof.verify`. Output: root, total, leafCount, leaves file (CSV + JSON), proofs. API (job-API conventions, namespace-scoped):
 `POST /v1/snapshots {chain, token, block, policy}` → `{id}`; `GET /v1/snapshots/{id}` → `{state, root, total,

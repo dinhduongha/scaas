@@ -106,6 +106,30 @@ A duplicate returns `200` with the stored state (idempotent).
 `op` is exactly the `signed_op` payload of a job and what every adapter's `build` consumes; `op.family` must be the
 chain's. Accept checks, in order:
 
+```mermaid
+flowchart TD
+    A["POST /v1/ops"] --> C1{"1 chain served?"}
+    C1 -->|no| E1["UNKNOWN_CHAIN"]
+    C1 -->|yes| C2{"2 family = chain family?"}
+    C2 -->|no| E2["BAD_PAYLOAD"]
+    C2 -->|yes| C3{"3 payload decodes, digest matches?"}
+    C3 -->|no| E2
+    C3 -->|yes| C4{"4 token or asset registered?"}
+    C4 -->|no| E4["TOKEN_NOT_SERVED"]
+    C4 -->|yes| C5{"5 now < valid_until within max?"}
+    C5 -->|no| E5["EXPIRED"]
+    C5 -->|yes| C6{"6 family signature verify"}
+    C6 -->|bad| E6["BAD_SIGNATURE"]
+    C6 -->|ok or no verifier| C7{"7 bound relayer is a lane?"}
+    C7 -->|no| E7["RELAYER_NOT_OURS"]
+    C7 -->|yes| C8{"8 simulation passes?"}
+    C8 -->|revert| E8["SIMULATION_REVERT"]
+    C8 -->|yes| C9["9 INSERT signed_op job in ~gateway"]
+    C9 --> OK["202 queued, intent_id"]
+```
+
+In words:
+
 1. `chain` is served (`UNKNOWN_CHAIN`).
 2. `family` equals the chain's family (`BAD_PAYLOAD`).
 3. The payload decodes; the node computes the digest; a client digest that differs fails (`BAD_PAYLOAD`).
@@ -148,14 +172,18 @@ to the chain's `chain_uid`.** Status: **SPECIFIED**. At chain activation, at eve
 block hash (EVM/Hedera: block 0, from ≥ `finality_quorum` endpoints) equals `chain.chain_uid`, and that every
 registered SCaaS contract of the chain has code and a `chainUid()` equal to `chain.chain_uid`: each registered token
 implementation and the factory, every `chain_contract` row (DEX, account factory, tender, role-holder contracts that
-sign with a SCaaS domain) and `ua_registry`. A token clone needs no own check — it runs its implementation's code and
+sign with a SCaaS domain) and `ua_registry`.
+
+A token clone needs no own check — it runs its implementation's code and
 the factory registers only implementations whose `chainUid()` equals its own. Contracts deployed per user —
 `MandateWallet`, `SmartKeyAccount` — are read once before the node relays anything for them (cached; a mismatch ⇒
 `403 CALL_TARGET_REFUSED`, [NODE-JOB-19](job-api.md#NODE-JOB-19)). Non-EVM families compare the family's network id
 where the RPC exposes it (Soroban network id, Solana genesis hash), else trust the profile constant
 ([NET-ALL-22](../networks/README.md#NET-ALL-22)). A mismatch of the genesis hash or of a chain-wide contract holds the
 chain (readiness reason `chain_uid mismatch`, as `finality violated`): nothing is leased, UA routes answer
-`UNKNOWN_CHAIN`. Every EIP-712 domain `salt` the node computes (token, subject account, mandate wallet, DEX, registry),
+`UNKNOWN_CHAIN`.
+
+Every EIP-712 domain `salt` the node computes (token, subject account, mandate wallet, DEX, registry),
 `pop_digest` and the `metatx-cancel` digest use `chain.chain_uid`, never the chain id alone. The post-quantum Zether
 chain profile adds the same binding for its registry and tokens (RPC genesis hash `==` profile `genesis_hash` `==`
 `registry.chainUid()` `==` each token's `chainUid`, [ops.md#pqz](ops.md#pqz)). Why: a contract cannot read its own
@@ -185,7 +213,9 @@ applies its `min_fee` floor (the mesh policy row's `min_fee`, [mesh.md#acceptanc
 **effective** fee; a matching sponsor policy waives it and caps the spend with its budget
 ([NODE-SPN-01](sponsorship.md#NODE-SPN-01)); (c) defaults: `profile = private` keeps fee 0 (the B2B default),
 `profile = public` refuses fee-0 door-A intents unless a sponsor policy matches; (d) a per-`from` token bucket
-(default 60 per hour, in memory) on top of the reverse-proxy per-IP limit. The hourly gas budget
+(default 60 per hour, in memory) on top of the reverse-proxy per-IP limit.
+
+The hourly gas budget
 ([NODE-LANE-05](submit-lanes.md#NODE-LANE-05)) can then not be filled by unsponsored fee-0 traffic on public chains;
 public fee-0 payers need a sponsor policy row. Every door also applies
 [NODE-MESH-16](mesh.md#NODE-MESH-16), the node-wide grief score [NODE-LANE-15](submit-lanes.md#NODE-LANE-15) and

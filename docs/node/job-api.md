@@ -253,6 +253,27 @@ submitting lane the order's `fee` from minted units. `mtxTrade` is never a job: 
    namespace, [NODE-SPN-01](sponsorship.md#NODE-SPN-01)). Deadlock/serialization failure ⇒ retry the transaction
    (≤ 3).
 
+The checks as a flow, each refusal with its code:
+
+```mermaid
+flowchart TD
+    IN["POST /v1/jobs item"] --> S1{"1 scope submit,<br/>namespace active,<br/>chain granted"}
+    S1 -->|no| E1["403 CHAIN_NOT_GRANTED"]
+    S1 --> S2{"2 payload decodes,<br/>digest matches"}
+    S2 -->|no| E2["422 BAD_PAYLOAD"]
+    S2 --> S3{"3 token registered, active,<br/>in the namespace subset"}
+    S3 -->|no| E3["422 UNKNOWN_TOKEN"]
+    S3 --> S4{"4 call: allow_call and<br/>call table row"}
+    S4 -->|no| E4["403 CALL_NOT_ALLOWED /<br/>CALL_TARGET_REFUSED"]
+    S4 --> S5{"5 now &lt; valid_until<br/>≤ now + max_valid_for_secs"}
+    S5 -->|no| E5["422 EXPIRED / VALID_TOO_LONG"]
+    S5 --> S6{"6 relayer bound<br/>to a lane of the chain"}
+    S6 -->|no| E6["422 RELAYER_NOT_OURS"]
+    S6 --> S7["7 normalize, kind rules,<br/>denylist, sponsorship match"]
+    S7 --> S8["8 one transaction: re-check authority,<br/>idempotency, INSERT"]
+    S8 --> OK["created: true, state queued"]
+```
+
 <a id="NODE-JOB-14"></a>**NODE-JOB-14** — **Intake authority is re-checked inside the insert transaction.** The
 transaction that inserts a job (or a tombstone) re-reads, with locking reads (`FOR SHARE`; SQLite: inside
 `BEGIN IMMEDIATE`), the namespace row (`state`, `allow_call`, `all_tokens`, quotas), the `namespace_chain` row, the
@@ -332,7 +353,9 @@ registered token of the chain (any kind) or the token factory (a token's own sig
 `metatx` jobs, [NODE-JOB-20](#NODE-JOB-20)); `call` jobs carry no native value. Lane keys never hold
 a role on any contract ([NODE-GEN-01](README.md#NODE-GEN-01), owner 2026-10-07): a role-restricted call reaches its
 target only through a Safe of the role holders (the `Safe.execTransaction` row, [NODE-JOB-19](#NODE-JOB-19)), and the
-lane only relays an `execTransaction` the role holders already signed. Refusal: `403 CALL_TARGET_REFUSED` at accept (step 4), re-checked at lease; on the legacy
+lane only relays an `execTransaction` the role holders already signed.
+
+Refusal: `403 CALL_TARGET_REFUSED` at accept (step 4), re-checked at lease; on the legacy
 pull path `dead` with `CALL_TARGET_REFUSED` before simulation. A new call shape needs a table row (a node release).
 Selector matching suffices outside the token/role set: a lane's authority is only `msg.sender` of the direct call,
 never of calls the target makes. One operator session (or a stolen one) could otherwise turn a lane that holds fee
@@ -343,7 +366,9 @@ immutable after creation ([INT-ERP-05](../integration.md#INT-ERP-05)).
 through their own contract.** Besides the account, mandate, DEX and UA rows, the table has rows only for
 permissionless or self-authenticating selectors on registered targets: tender `commitBid` (carries the signed deposit
 intent), `revealBid`, `withdrawDeposit`, `settleTender` (anyone after the award window); vesting `release` and
-distribution `claim`, `claimMany`; `ExchangeOffer.exchange` legs. Every **role-restricted** call (`createTender`,
+distribution `claim`, `claimMany`; `ExchangeOffer.exchange` legs.
+
+Every **role-restricted** call (`createTender`,
 `cancelTender`, `disqualifyWinner`, bond release/claim, issuer and compliance interventions, `attest`, factory
 `create*`, a token's `mint`, rate administration and guardian calls) goes through the role holder's own contract —
 `SmartKeyAccount.mtxExecuteAsOwner`, or `Safe.execTransaction` on a registered role-holder contract — so a lane is never

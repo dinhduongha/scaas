@@ -80,6 +80,14 @@ mode is enabled:
 
 Anything else ⇒ `401`. API keys are never looked at here ([NODE-ADM-06](#NODE-ADM-06)).
 
+```mermaid
+flowchart LR
+    T["Authorization: Bearer token<br/>on /v1/admin/*"] --> P{"token prefix"}
+    P -->|"scaas_s1."| B["built-in session verifier<br/>user:name, roles of the user row"]
+    P -->|"three base64url segments<br/>(oidc mode on)"| O["OIDC verifier<br/>oidc:iss|sub, mapped roles"]
+    P -->|anything else| X["401"]
+```
+
 <a id="credential-separation"></a><a id="NODE-ADM-06"></a>**NODE-ADM-06** — **API keys never reach admin routes, nor
 client-side apps; admin credentials never reach the job API**: HMAC API keys are verified only on the job-API
 listener; the admin router accepts only built-in session tokens and (when enabled) OIDC tokens. **Configuration
@@ -150,6 +158,22 @@ memory only ([CLI-APP-11](../clients/app.md#CLI-APP-11)).
   sufficient).
 - **External-client API keys** are managed by `key_custodian` users through `/v1/admin/keys`, the app, or the CLI; the
   secret is shown once; rotate = `generation + 1`; revoke is hot. They authenticate nothing on the admin listener.
+
+The session of a built-in user:
+
+```mermaid
+sequenceDiagram
+    participant U as Operator or app
+    participant N as Node admin API
+    U->>N: POST /v1/admin/login {name, password}
+    N-->>U: scaas_s1. token (TTL 900 s), roles
+    U->>N: /v1/admin/* with Bearer token
+    U->>N: POST /v1/admin/session/refresh
+    Note over U,N: allowed while now < auth_time + 43 200 s
+    N-->>U: new token
+    U->>N: POST /v1/admin/logout
+    N-->>U: session_epoch + 1 ends every session of that user
+```
 
 ## 4. Roles
 
