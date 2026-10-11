@@ -97,6 +97,11 @@ fn deploy(rpc: &str, chain_id: u64, holder: Address) -> Value {
     // P4: the account keys are `smart_key_account_*` (the node reads neither; Odoo seeds from them)
     assert!(dep["smart_key_account_factory"].is_string() && dep["smart_key_account_implementation"].is_string());
     assert!(dep.get("subject_account_factory").is_none(), "pre-P4 deploy JSON key");
+    // P5: the v1 line left the deploy (`legacy/p5/`); two demo tokens from the `OpenFactory`
+    for k in ["factory", "implementation", "dex", "scaas_dex"] {
+        assert!(dep.get(k).is_none(), "v1 deploy JSON key {k}");
+    }
+    assert!(dep["demo_token"].is_string() && dep["demo_token_2"].is_string());
     dep
 }
 

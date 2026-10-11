@@ -2,15 +2,11 @@
 pragma solidity ^0.8.20;
 
 import {Test, console} from "forge-std/Test.sol";
-import {OpenFactoryV1} from "../../src/factory/OpenFactoryV1.sol";
-import {IOpenFactoryV1} from "../../src/common/IOpenFactoryV1.sol";
-import {MetaToken} from "../../src/metatx/MetaToken.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
 import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
-import {IERC20MetaTxV1} from "../../src/metatx/IERC20MetaTxV1.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
@@ -21,9 +17,11 @@ contract Always1271 {
     function isValidSignature(bytes32, bytes memory) external pure returns (bytes4) { return 0x1626ba7e; }
 }
 
-/// @title Bảng gas v2 so với v1 (TW2 §10.3): clone `MetaToken` v1 và clone `NoUnderlyingToken` v2, cùng kịch bản.
-/// @notice v1 = `executeMetaTransaction` (legacy struct); v2 = `mtxExecuteTransfer` (`MetaTransfer`), named builders,
-///         `mtxExecute` (self-call). Ngân sách: mọi hàng của đường chung ≤ v1 + 300; hàm có tên ≤ đường chung cùng
+/// @title Bảng gas v2 so với v1 (TW2 §10.3): clone `NoUnderlyingToken` v2 against the v1 numbers frozen at P5.
+/// @notice v1 = `executeMetaTransaction` (legacy struct) on a `MetaToken` clone, measured by this file's pre-P5 version
+///         (`legacy/p5/test/v2/MetaTxGasV2.t.sol`) on main `e468d8c` and frozen in the `V1_*` constants: the v1 line
+///         left the build in P5. v2 = `mtxExecuteTransfer` (`MetaTransfer`), named builders, `mtxExecute`
+///         (self-call). Ngân sách: mọi hàng của đường chung ≤ v1 + 300; hàm có tên ≤ đường chung cùng
 ///         intent. A row that no longer holds logs both numbers (`log_named_uint`) instead of asserting.
 ///         Cùng một hàm test đo nhiều lần nên phải `vm.cool` mọi địa chỉ chạm tới trước mỗi lần đo (EIP-2929 không
 ///         reset giữa các lời gọi trong một hàm test — xem `MetaTxGas.t.sol`), và mỗi lần đo chạy trên một token RIÊNG
@@ -35,11 +33,20 @@ contract MetaTxGasV2Test is Test {
     uint256 constant BUDGET = 300;
     uint256 constant WARM = 1;
     uint256 constant COLD = 2;
+    // v1 `executeMetaTransaction` per row, frozen at P5 (see the title)
+    uint256 constant V1_A = 36_017;
+    uint256 constant V1_B = 53_117;
+    uint256 constant V1_C = 44_329;
+    uint256 constant V1_D = 44_275;
+    uint256 constant V1_E = 44_521;
+    uint256 constant V1_F = 53_117;
+    uint256 constant V1_G = 50_762;
+    uint256 constant V1_P = 58_040;
+    uint256 constant V1_H = 23_142;
     address signer;
     address relayer = address(0xBEEF);
     address recipient = address(0xCAFE);
     address feeTaker = address(0xFEE);
-    MetaToken v1;
     NoUnderlyingToken v2;
     NoUnderlyingToken v2b; // same state as v2, for the named-vs-generic rows
     NoUnderlyingToken v2c;
@@ -50,9 +57,6 @@ contract MetaTxGasV2Test is Test {
     function setUp() public {
         vm.warp(1_800_000_000);
         signer = vm.addr(PK);
-        OpenFactoryV1 f1 = new OpenFactoryV1(address(this));
-        f1.registerImplementation(IOpenFactoryV1.TokenKind.META, 1, address(new MetaToken(address(f1), address(0))));
-        v1 = MetaToken(f1.createMetaToken(1, address(0), abi.encode("V1", "V1", uint8(18), uint256(0), address(this)), "a"));
         OpenFactory f2 = new OpenFactory(address(this), UID);
         f2.registerImplementation(IOpenFactory.TokenKind.NONE, 1,
             address(new NoUnderlyingToken(address(f2), address(0), UID, false)));
@@ -62,7 +66,6 @@ contract MetaTxGasV2Test is Test {
         v2 = _v2(f2, "a");
         v2b = _v2(f2, "b");
         v2c = _v2(f2, "c");
-        _fund(address(v1));
         // a 1:1 wrapper for the wrap / unwrap rows
         usdc = new MockERC20("USD Coin", "USDC", 6);
         address[] memory us = new address[](1);
@@ -91,8 +94,7 @@ contract MetaTxGasV2Test is Test {
     function _fund(address t) internal {
         address[5] memory holders = [signer, recipient, relayer, address(acct), feeTaker];
         for (uint256 i; i < 5; ++i) NoUnderlyingToken(t).mint(holders[i], i == 0 ? 1_000_000 ether : 1 ether);
-        if (t == address(v1)) _exec(t, _mt(0, WARM, 0, 0, address(0)));
-        else _execT(t, _x(_mt(0, WARM, 0, 0, address(0))));
+        _execT(t, _mt(0, WARM, 0, 0, address(0)));
     }
 
     /// Calldata `sel(words..., bytes sig)` dựng tay: bộ mã hoá ABI không via-IR hết stack với 10–11 tham số
@@ -102,24 +104,13 @@ contract MetaTxGasV2Test is Test {
             new bytes((32 - sig.length % 32) % 32));
     }
 
+    /// The v1 rows' intent as a `MetaTransfer`: `value` 1 ether to `recipient`, `entryRef` 0.
     function _mt(uint32 mode, uint256 batch, uint256 nonce, uint256 fee, address feeRcpt)
-        internal view returns (MetaTxLib.LegacyMetaTransaction memory m)
+        internal view returns (MetaTxLib.MetaTransfer memory)
     {
-        m = MetaTxLib.LegacyMetaTransaction({from: signer, to: recipient, value: 1 ether, data: "", batch: batch,
+        return MetaTxLib.MetaTransfer({from: signer, to: recipient, value: 1 ether, entryRef: 0, batch: batch,
             nonce: nonce, validUntil: block.timestamp + 600, mode: mode, relayer: relayer, fee: fee,
             feeRecipient: feeRcpt});
-    }
-
-    function _sig(address t, MetaTxLib.LegacyMetaTransaction memory m) internal view returns (bytes memory) {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PK, IERC20MetaTxV1(t).metaTxDigest(m));
-        return abi.encodePacked(r, s, v);
-    }
-
-    /// The same intent as a `MetaTransfer` (v2).
-    function _x(MetaTxLib.LegacyMetaTransaction memory m) internal pure returns (MetaTxLib.MetaTransfer memory) {
-        return MetaTxLib.MetaTransfer({from: m.from, to: m.to, value: m.value, entryRef: 0, batch: m.batch,
-            nonce: m.nonce, validUntil: m.validUntil, mode: m.mode, relayer: m.relayer, fee: m.fee,
-            feeRecipient: m.feeRecipient});
     }
 
     function _sigT(address t, MetaTxLib.MetaTransfer memory x) internal view returns (bytes memory) {
@@ -139,8 +130,7 @@ contract MetaTxGasV2Test is Test {
 
     function _cool(address t) internal {
         vm.cool(t);
-        if (t != address(v1)) vm.cool(MetaTokenBase(t).implementation());
-        else vm.cool(v1.implementation());
+        vm.cool(MetaTokenBase(t).implementation());
         vm.cool(signer);
         vm.cool(relayer);
         vm.cool(recipient);
@@ -151,10 +141,9 @@ contract MetaTxGasV2Test is Test {
 
     /// Mỗi lần đo bắt đầu từ CÙNG một snapshot (kể cả tập địa chỉ/slot đã warm), nên thứ tự đo không làm lệch:
     /// một tài khoản dùng chung mà `vm.cool` không làm lạnh được làm lần đo thứ hai rẻ hơn ~2 500 nếu không có
-    /// snapshot. Mọi calldata (và chữ ký, vốn gọi `metaTxDigest`) dựng TRƯỚC `_snap()`; id snapshot là biến cục bộ
+    /// snapshot. Mọi calldata (và chữ ký, vốn gọi `mtxTransferDigest`) dựng TRƯỚC `_snap()`; id snapshot là biến cục bộ
     /// vì `revertToState` hoàn lại cả storage của chính hợp đồng test.
     function _snap() internal returns (uint256) {
-        _cool(address(v1));
         _cool(address(v2));
         _cool(address(v2b));
         _cool(address(v2c));
@@ -170,106 +159,80 @@ contract MetaTxGasV2Test is Test {
         assertTrue(ok);
     }
 
-    function _cdExec(address t, MetaTxLib.LegacyMetaTransaction memory m) internal view returns (bytes memory) {
-        return abi.encodeCall(IERC20MetaTxV1.executeMetaTransaction, (m, _sig(t, m)));
-    }
-
-    function _exec(address t, MetaTxLib.LegacyMetaTransaction memory m) internal {
-        vm.prank(relayer);
-        (bool ok,) = t.call(_cdExec(t, m));
-        assertTrue(ok);
-    }
-
-    function _row(string memory label, MetaTxLib.LegacyMetaTransaction memory m) internal returns (uint256 g1, uint256 g2) {
-        bytes memory c1 = _cdExec(address(v1), m);
-        bytes memory c2 = _cdT(address(v2), _x(m));
-        uint256 s = _snap();
-        g1 = _measure(address(v1), c1);
-        vm.revertToState(s);
+    function _row(string memory label, MetaTxLib.MetaTransfer memory x, uint256 g1) internal returns (uint256 g2) {
+        bytes memory c2 = _cdT(address(v2), x);
+        _snap();
         g2 = _measure(address(v2), c2);
         console.log(label);
-        console.log("   v1 / v2 / delta", g1, g2, g2 > g1 ? g2 - g1 : 0);
+        console.log("   v1 (frozen) / v2 / delta", g1, g2, g2 > g1 ? g2 - g1 : 0);
         assertLe(g2, g1 + BUDGET, label);
     }
 
-    function test_gasA_warmBatchNoFee() public { _row("A warm batch, NONE", _mt(0, WARM, 1, 0, address(0))); }
+    function test_gasA_warmBatchNoFee() public { _row("A warm batch, NONE", _mt(0, WARM, 1, 0, address(0)), V1_A); }
 
-    function test_gasB_coldBatchNoFee() public { _row("B cold batch, NONE", _mt(0, COLD, 0, 0, address(0))); }
+    function test_gasB_coldBatchNoFee() public { _row("B cold batch, NONE", _mt(0, COLD, 0, 0, address(0)), V1_B); }
 
     function test_gasC_warmFixedFee() public {
-        _row("C warm batch, FIXED fee", _mt(MetaTxLib.MODE_FEE_FIXED, WARM, 1, 0.001 ether, relayer));
+        _row("C warm batch, FIXED fee", _mt(MetaTxLib.MODE_FEE_FIXED, WARM, 1, 0.001 ether, relayer), V1_C);
     }
 
     function test_gasD_warmPercentFee() public {
-        _row("D warm batch, PERCENT fee", _mt(MetaTxLib.MODE_FEE_PERCENT, WARM, 1, 5_000, relayer));
+        _row("D warm batch, PERCENT fee", _mt(MetaTxLib.MODE_FEE_PERCENT, WARM, 1, 5_000, relayer), V1_D);
     }
 
     function test_gasE_warmFixedRestricted() public {
         _row("E warm batch, FIXED+restrict", _mt(MetaTxLib.MODE_FEE_FIXED | MetaTxLib.MODE_RESTRICT_RELAYER
-            | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT, WARM, 1, 0.001 ether, feeTaker));
+            | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT, WARM, 1, 0.001 ether, feeTaker), V1_E);
     }
 
     function test_gasF_newRecipient() public {
-        MetaTxLib.LegacyMetaTransaction memory m = _mt(0, WARM, 1, 0, address(0));
-        m.to = address(0xD00D);
-        _row("F warm batch, new recipient", m);
+        MetaTxLib.MetaTransfer memory x = _mt(0, WARM, 1, 0, address(0));
+        x.to = address(0xD00D);
+        _row("F warm batch, new recipient", x, V1_F);
     }
 
     function test_gasG_erc1271() public {
-        MetaTxLib.LegacyMetaTransaction memory m = _mt(0, COLD, 0, 0, address(0));
-        m.from = address(acct);
-        bytes memory cd = abi.encodeCall(IERC20MetaTxV1.executeMetaTransaction, (m, hex"deadbeef"));
-        bytes memory c2 = abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (_x(m), hex"deadbeef"));
-        uint256 s = _snap();
-        uint256 g1 = _measure(address(v1), cd);
-        vm.revertToState(s);
+        MetaTxLib.MetaTransfer memory x = _mt(0, COLD, 0, 0, address(0));
+        x.from = address(acct);
+        bytes memory c2 = abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (x, hex"deadbeef"));
+        _snap();
         uint256 g2 = _measure(address(v2), c2);
-        console.log("G cold batch, ERC-1271  v1 / v2", g1, g2);
-        assertLe(g2, g1 + BUDGET);
+        console.log("G cold batch, ERC-1271  v1 (frozen) / v2", V1_G, g2);
+        assertLe(g2, V1_G + BUDGET);
     }
 
     function test_gasP_payOpColdLane() public {
-        MetaTxLib.LegacyMetaTransaction memory m = _mt(MetaTxLib.MODE_RESTRICT_RELAYER, 0, 0, 0, address(0));
+        MetaTxLib.MetaTransfer memory x = _mt(MetaTxLib.MODE_RESTRICT_RELAYER, 0, 0, 0, address(0));
         bytes32 payId = keccak256("inv");
-        m.data = abi.encodeWithSelector(bytes4(keccak256("pay(bytes32)")), payId);
-        m.batch = v2.payLane(payId);
-        MetaTxLib.MetaTransfer memory x = _x(m);
         x.entryRef = payId;
-        bytes memory c1 = _cdExec(address(v1), m);
+        x.batch = v2.payLane(payId);
         bytes memory c2 = _cdT(address(v2), x);
-        bytes memory cn = _named(v2.mtxPay.selector, abi.encode(signer, recipient, 1 ether, payId, m.validUntil,
-            m.mode, relayer, 0, address(0)), _sigT(address(v2), x));
+        bytes memory cn = _named(v2.mtxPay.selector, abi.encode(signer, recipient, 1 ether, payId, x.validUntil,
+            x.mode, relayer, 0, address(0)), _sigT(address(v2), x));
         uint256 s = _snap();
-        uint256 g1 = _measure(address(v1), c1);
-        vm.revertToState(s);
         uint256 g2 = _measure(address(v2), c2);
         vm.revertToState(s);
         uint256 gn = _measure(address(v2), cn);
-        console.log("P pay, fresh lane  v1 op / v2 mtxExecuteTransfer / mtxPay", g1, g2, gn);
-        assertLe(g2, g1 + BUDGET);
+        console.log("P pay, fresh lane  v1 op (frozen) / v2 mtxExecuteTransfer / mtxPay", V1_P, g2, gn);
+        assertLe(g2, V1_P + BUDGET);
         // no longer holds on `ERC20MetaTx` (mtxPay ≈ +2.6k over mtxExecuteTransfer on a fresh lane: the PAYABLE gate's cold SLOAD): logged, not asserted
         emit log_named_uint("P mtxPay", gn);
         emit log_named_uint("P mtxExecuteTransfer", g2);
     }
 
     function test_gasH_cancel() public {
-        uint256 s = _snap();
+        _snap();
         vm.prank(signer);
         uint256 g0 = gasleft();
-        v1.cancelMetaNonce(99);
-        uint256 g1 = g0 - gasleft();
-        vm.revertToState(s);
-        vm.prank(signer);
-        g0 = gasleft();
         v2.cancelNonce(99);
         uint256 g2 = g0 - gasleft();
-        console.log("H cancel (cold)  v1 cancelMetaNonce / v2 cancelNonce", g1, g2); // v2 adds the event + guard
+        console.log("H cancel (cold)  v1 cancelMetaNonce (frozen) / v2 cancelNonce", V1_H, g2); // v2 adds the event + guard
     }
 
     // ------------------------------------------------------------------ named vs generic (v2)
 
     function test_gasNamedTransferVersusGeneric_logOnly() public {
-        MetaTxLib.MetaTransfer memory x = _x(_mt(MetaTxLib.MODE_RESTRICT_RELAYER, WARM, 1, 0, address(0)));
+        MetaTxLib.MetaTransfer memory x = _mt(MetaTxLib.MODE_RESTRICT_RELAYER, WARM, 1, 0, address(0));
         bytes memory cg = _cdT(address(v2), x);
         bytes memory cn = _named(v2.mtxTransfer.selector, abi.encode(signer, recipient, 1 ether, WARM, 1,
             x.validUntil, x.mode, relayer), _sigT(address(v2), x));
@@ -286,7 +249,7 @@ contract MetaTxGasV2Test is Test {
 
     function test_gasNamedTransferWithFeeVersusGeneric_logOnly() public {
         uint32 mode = MetaTxLib.MODE_FEE_PERCENT | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT;
-        MetaTxLib.MetaTransfer memory x = _x(_mt(mode, WARM, 1, 5_000, feeTaker));
+        MetaTxLib.MetaTransfer memory x = _mt(mode, WARM, 1, 5_000, feeTaker);
         bytes memory cg = _cdT(address(v2), x);
         bytes memory cn = _named(v2.mtxTransferWithFee.selector, abi.encode(signer, recipient, 1 ether, WARM, 1,
             x.validUntil, mode, relayer, 5_000, feeTaker), _sigT(address(v2), x));
@@ -304,7 +267,7 @@ contract MetaTxGasV2Test is Test {
         MetaTxLib.MetaTransfer[] memory xs = new MetaTxLib.MetaTransfer[](3);
         bytes[] memory ss = new bytes[](3);
         for (uint256 i; i < 3; ++i) {
-            xs[i] = _x(_mt(MetaTxLib.MODE_RESTRICT_RELAYER, 10 + i, 0, 0, address(0)));
+            xs[i] = _mt(MetaTxLib.MODE_RESTRICT_RELAYER, 10 + i, 0, 0, address(0));
             ss[i] = _sigT(address(v2), xs[i]);
         }
         bytes memory cd = abi.encodeCall(v2.mtxBatchTransfer, (xs, ss));
@@ -344,7 +307,7 @@ contract MetaTxGasV2Test is Test {
     }
 
     function test_gasCalldata() public view {
-        MetaTxLib.MetaTransfer memory x = _x(_mt(MetaTxLib.MODE_RESTRICT_RELAYER, WARM, 1, 0, address(0)));
+        MetaTxLib.MetaTransfer memory x = _mt(MetaTxLib.MODE_RESTRICT_RELAYER, WARM, 1, 0, address(0));
         bytes memory s = _sigT(address(v2), x);
         _cd("I calldata mtxExecuteTransfer", abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (x, s)));
         _cd("I calldata mtxTransfer", _named(v2.mtxTransfer.selector, abi.encode(signer, recipient, 1 ether, WARM, 1,
