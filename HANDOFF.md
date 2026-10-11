@@ -1,8 +1,33 @@
 # HANDOFF — scaas
 
+## Session 2026-10-11 (P2b-2)
+
+**State:** P2b-2 on branch `p2b2-dex`, merge pending the final review (code `f4afbca`, plan `7b77cd1`, tests `6b9c645`). Plan
+`docs/superpowers/plans/2026-10-11-p2b2-dex-outside-legs.md`. 913 forge tests.
+
+**Built:** `src/dex/DexPuller.sol` (`pull(token, from, amount)`, only the DEX), `ISCaaSDex.sol` and `SCaaSDex.sol` extended: outside
+legs as `DexOrder` in the DEX domain (`dexOrderDigest`, `cancelOrderDigest`, `invalidateNoncesDigest`, `pulled`, `minNonce`,
+`puller()`), `TradeLib` on the DEX's own `scaas.trade` state, `mtxCancelOrders` / `mtxInvalidateNonces`, the ERC-1271 cap by
+codehash (the constructor takes the `SmartKeyAccount` implementation), `MatchFailed` reason capped at 256 bytes,
+`SigCheckGasStarved` reverting the whole `mtxSettle`, payouts by `SafeERC20`. Tests: `Dex.t.sol` 36, `DexOutside.t.sol` 21
+(19 plus a hook-token re-entry test pinning `nonReentrant` on all entries, and a starved check inside a SCaaS leg).
+Sizes: `SCaaSDex` 14,722 B, `DexPuller` 624 B, every token +9 B (the `precheck` argument; baseline raised).
+
+**Rulings H1-H10 (plan header).** **H1** an outside leg is a `DexOrder` checked by `TradeLib` on the DEX's state; `ESCROW`
+refused. **H2** the `DexPuller` is deployed by `initialize` (a clone runs no constructor). **H3** the cap by codehash;
+Hedera passes no implementation, so 50 k. **H4** `MatchFailed` keeps 256 bytes (an `Error(string)` of ~160 bytes whole).
+**H5** `SigCheckGasStarved` reverts the whole call; a listed token, or a party's contract `destination` through a hook
+token, can forge the selector, so hook tokens are never listed and the node splits such a batch per settlement. **H6** DEX
+cancels: bad-signature or closed items skipped, never expire. **H7** `checkOrder` not built (pending the owner). **H8**
+inexact tokens are the admin's listing job, conservation the backstop. **H9** tests. **H10** size baseline +9 B per token.
+
+**Not done / next:** `checkOrder` for the new DEX (H7, with the node's P7 intake); the DEX invariant suite (dex.md section 14);
+Hedera ED25519 accounts cannot sign `DexOrder` or DEX cancels (no HIP-632 branch; `IS_HEDERA` in `SCaaSDex` later); P2c plan:
+`mtxExchange` / `mtxExchangeVia`, `setExchangeTarget`, `setListedOnly`.
+
 ## Session 2026-10-11 (P2b-1)
 
-**State:** P2b-1 on branch `p2b-dex`, merge pending the final review (code `27b9e92`, plan `80303f9`). Plan
+**State:** P2b-1 on branch `p2b-dex`, merged `0510c7d` (code `27b9e92`, plan `80303f9`). Plan
 `docs/superpowers/plans/2026-10-11-p2b1-scaasdex-clone.md`. 891 forge tests.
 
 **Built:** `src/dex/ISCaaSDex.sol`, `SCaaSDex.sol` (clone implementation, ERC-7201 `scaas.dex`, salted domain `("SCaaS

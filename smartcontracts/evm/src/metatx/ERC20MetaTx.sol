@@ -61,7 +61,7 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken {
     ///         `o.from` to `o.dex` and nowhere else.
     function mtxTrade(TradeOrder calldata o, bytes calldata sig, TradeFill calldata f) external nonReentrant {
         bytes32 h = tradeOrderDigest(o);
-        TradeLib.precheck(o, f, h, msg.sender);
+        TradeLib.precheck(o, f, h, msg.sender, address(this));
         _requireValidSignature(o.from, h, sig);
         _transfer(o.from, o.dex, TradeLib.record(o, f, h));
     }

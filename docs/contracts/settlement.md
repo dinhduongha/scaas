@@ -54,7 +54,7 @@ intent is a booked fact. Every kind below shares these properties:
 | Receiver pays | `mtxPayReceiverFee` | payer signs `MetaTransfer`, payee co-signs `ReceiverFee`; the bound relayer | token | absolute fee from the payee's balance | tx | **BUILT** (EVM, Hedera) | [CTR-MTX-05](metatx.md#CTR-MTX-05), [-06](metatx.md#CTR-MTX-06) |
 | Generic gasless call | `mtxExecute`, `mtxBatch`, `executeMetaTransaction` | subject signs `MetaTransaction`; any relayer | the contract's selector allowlist | per fee class, after the call | tx | **BUILT** | [CTR-MTX-12](metatx.md#CTR-MTX-12), [-19](metatx.md#CTR-MTX-19), [-20](metatx.md#CTR-MTX-20) |
 | Signature wrap | `mtxWrap` | holder signs a `TradeOrder` in the underlying's domain; any relayer | underlying and wrapper | order `fee` to the relayer, out of the minted units | tx | **BUILT** (P2a, `UnderlyingToken`) | [CTR-TOK-20](token-wrappers.md#CTR-TOK-20) |
-| DEX order book | `SCaaSDex.mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces`; token side `mtxTrade` | each party signs a `TradeOrder`; the venue lane | token (Path A) or DEX (Path B, outside legs); DEX conservation | one signed rate, split relayer / treasury by the DEX | tx, then the DEX watcher | token side **BUILT** (P2a); `SCaaSDex` clone in progress (P2b-1), outside legs in progress (P2b-2); pair `settle` **BUILT** | [CTR-DEX-13](dex.md#CTR-DEX-13) to [-19](dex.md#CTR-DEX-19), [-22](dex.md#CTR-DEX-22), [-24](dex.md#CTR-DEX-24) |
+| DEX order book | `SCaaSDex.mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces`; token side `mtxTrade` | each party signs a `TradeOrder`; the venue lane | token (Path A) or DEX (Path B, outside legs); DEX conservation | one signed rate, split relayer / treasury by the DEX | tx, then the DEX watcher | token side **BUILT** (P2a); `SCaaSDex` **BUILT** (P2b-1 SCaaS legs, P2b-2 outside legs); `SCaaSDexV1` pair `settle` **BUILT** | [CTR-DEX-13](dex.md#CTR-DEX-13) to [-19](dex.md#CTR-DEX-19), [-22](dex.md#CTR-DEX-22), [-24](dex.md#CTR-DEX-24) |
 | Exchange against AMMs | `mtxExchange`, `mtxExchangeVia` | the same signed orders; the venue lane | token or DEX, DEX conservation | signed rate on the floor; surplus to the signers | tx, then the DEX watcher | **SPECIFIED** (P2c) | [CTR-DEX-20](dex.md#CTR-DEX-20) to [-23](dex.md#CTR-DEX-23) |
 | Confidential (Zether) | target `zetherTransfer*`, `zetherShield`, `zetherUnshield`, roll-over; built `transferConfidential*`, `fund`, `burn` | owner signs the call, the proof binds the envelope; any relayer | token verifier | outer NONE / FIXED (never PERCENT), inner `confidentialFee` | tx (dev chains) | **BUILT, UNAUDITED** (dev chains only); target kinds P3 **SPECIFIED**; PQZ **SPECIFIED** | [zether.md](zether.md), [pq-zether.md](pq-zether.md) |
 | Mandate | `payUnderMandate` (named `mtxPayUnderMandate`), `revoke` | delegate signs; any relayer | `MandateWallet` | NONE; relayer pays gas | tx | **BUILT**; epoch and `mtx` names **SPECIFIED** | [CTR-ACC-06](mandates.md#CTR-ACC-06), [-07](mandates.md#CTR-ACC-07) |
@@ -214,13 +214,13 @@ sequenceDiagram
   cursor ([NODE-DEX-15](../node/dex-venue.md#NODE-DEX-15), [NODE-DEX-04](../node/dex-venue.md#NODE-DEX-04),
   [NODE-DEX-16](../node/dex-venue.md#NODE-DEX-16)); `settled` is final, a late settled trade debits a restored order
   ([NODE-DEX-10](../node/dex-venue.md#NODE-DEX-10)).
-- **Status and Transitional (BUILT):** the token side (`mtxTrade`, cancels, `TradeLib`) is built in P2a. The
-  `SCaaSDex` clone with SCaaS legs is in progress (P2b-1, on branch `p2b-dex`, not merged when this page was
-  written), outside-token legs and `DexPuller` are in progress (P2b-2). What the node uses until P5 is the built pair
-  `settle(Match[])`: DEX-signed `Order`s over allowances, one pair per self-call, fees per market, a separate relayer
-  fee, `OrderFilled` / `Matched` / `MatchFailed`; on `main` it is still `src/dex/SCaaSDex.sol` and P2b-1 renames it
-  `SCaaSDexV1` ([dex.md section 13](dex.md#transitional-built)). The legacy `MetaTxDex` pairs two `MetaTransaction`
-  legs and is removed by the rebuild.
+- **Status and Transitional (BUILT):** the token side (`mtxTrade`, cancels, `TradeLib`) is built in P2a; the
+  `SCaaSDex` clone (`createDex`) with SCaaS legs in P2b-1; outside-token legs (`DexOrder`, `DexPuller`), the DEX's
+  `mtxCancelOrders` / `mtxInvalidateNonces` and the ERC-1271 cap in P2b-2. `MatchFailed` keeps the first 256 bytes of
+  the revert data (controller ruling, pending the owner) and a starved ERC-1271 check reverts the whole call (CTR-DEX-08). What the
+  node uses until P5 is the pair `settle(Match[])` of `SCaaSDexV1` (the DEX built before P2b, renamed): DEX-signed
+  `Order`s over allowances, one pair per self-call, fees per market, a separate relayer fee, `OrderFilled` / `Matched` /
+  `MatchFailed` ([dex.md section 13](dex.md#transitional-built)). The legacy `MetaTxDex` stays until its planned removal (P5).
 
 ### 3.6 Exchange against AMM routes
 
