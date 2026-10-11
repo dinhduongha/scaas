@@ -2800,7 +2800,7 @@ Change (2026-10-11): owner — only under `auditorMode = OPTIONAL` (CTR-ZTH-49);
 ### CTR-ZTH-50 — Commit-reveal stores a sender memo; the sender recovers from storage alone
 - old: — · status: current · owner: yes · date: 2026-10-11 · normative: contracts/zether.md#CTR-ZTH-50 · superseded-by: —
 
-**Why.** Commit-reveal kept only a 32-byte hash, so the sender needed logs or calldata to open its own transfer. Storing `salt ‖ (v_j ‖ toUA_j) XOR keystream` (16 + 40·M bytes, ≈ 3 slots with the commitment at M = 1 against ≈ 9 for a full bn254 bundle) lets the sender rebuild every bundle from its seed and storage; `s`, the key and `Y_a` are recomputed. No MAC: a wrong decryption fails the commitment. The memo hash is in the signed statement, so a relayer cannot alter or drop it. Receiver and auditor still need `TransferBundles` logs or calldata (R6 open).
+**Why.** Commit-reveal kept only a 32-byte hash, so the sender needed logs or calldata to open its own transfer. Storing `salt ‖ (flags ‖ (v_j ‖ toUA_j)) XOR keystream` (17 + 40·M bytes, `flags` bit0 = auditor included, so recovery needs no guessing; flags byte and keystream label: controller ruling, pending the owner; ≈ 3 slots with the commitment at M = 1 against ≈ 9 for a full bn254 bundle) lets the sender rebuild every bundle from its seed and storage; `s`, the key and `Y_a` are recomputed. No MAC: a wrong decryption fails the commitment. The memo hash is in the signed statement, so a relayer cannot alter or drop it. Receiver and auditor still need `TransferBundles` logs or calldata (R6 open).
 **Cost if wrong.** Without the memo a sender whose logs are gone cannot open its own commit-reveal transfers.
 **Source.** owner, 2026-10-11; background `research/zether-disclosure.md` §4, §6, §7, §9.
 
@@ -3222,7 +3222,7 @@ Change (2026-10-11): owner — the seed is bound to a fresh published 16-byte sa
 ### CTR-PQZ-23 — PQZ storage modes and sender memo as classical
 - old: — · status: current · owner: yes · date: 2026-10-11 · normative: contracts/pq-zether.md#CTR-PQZ-23 · superseded-by: —
 
-**Why.** The owner applies CTR-ZTH-38/48/50 to PQZ: `disclosureMode` at `initialize`, `pqzTransfer` / `pqzTransferCommit` / `pqzTransferNoBundle`, the 56-byte memo for the one recipient. A stored PQZ bundle is ≈ 16.7 KB (SSTORE2, ≈ 3.4 M gas estimate), which is why commit-reveal matters more here.
+**Why.** The owner applies CTR-ZTH-38/48/50 to PQZ: `disclosureMode` at `initialize`, `pqzTransfer` / `pqzTransferCommit` / `pqzTransferNoBundle`, the 57-byte memo for the one recipient. A stored PQZ bundle is ≈ 16.7 KB (SSTORE2, ≈ 3.4 M gas estimate), which is why commit-reveal matters more here.
 **Cost if wrong.** Two classes with different disclosure storage semantics for the same entry names.
 **Source.** owner, 2026-10-11; background `research/zether-disclosure.md` §4, §6, §7, §9.
 
