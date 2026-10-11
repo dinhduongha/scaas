@@ -1,0 +1,64 @@
+// SPDX-License-Identifier: Apache-2.0
+pragma solidity ^0.8.24;
+
+import {Test, console2} from "forge-std/Test.sol";
+import {SlhDsaSha2128s, UASlhdsaVerifier} from "../../src/ua/SlhDsa.sol";
+
+/// SLH-DSA with every hypertree layer's WOTS+ message forced to 0: 510 chain steps per layer, the most work any input
+/// can force (a valid signature reaching it needs seven 2^-128 events). Same code as `verify` otherwise.
+contract SlhWorstCase {
+    function run(bytes calldata pk, bytes calldata mprime, bytes calldata sig) external view returns (uint256 node) {
+        bytes32 seed = bytes32(pk[0:16]);
+        bytes32 inner = sha256(abi.encodePacked(bytes16(sig[0:16]), bytes16(seed), bytes16(pk[16:32]), mprime));
+        uint256 dg = uint256(sha256(abi.encodePacked(bytes16(sig[0:16]), bytes16(seed), inner, uint32(0))));
+        uint256 idxTree = (dg >> 32) & ((1 << 54) - 1);
+        uint256 idxLeaf = (dg >> 16) & 0x1ff;
+        uint256 b = SlhDsaSha2128s.buf(seed, 160);
+        uint256 t = SlhDsaSha2128s.buf(seed, 704);
+        node = SlhDsaSha2128s.forsPk(sig, dg >> 88, idxTree, idxLeaf, b, t);
+        for (uint256 j; j < 7; ++j) {
+            if (j != 0) {
+                idxLeaf = idxTree & 0x1ff;
+                idxTree >>= 9;
+            }
+            node = SlhDsaSha2128s.xmssPk(sig, SlhDsaSha2128s.HT_OFF + j * SlhDsaSha2128s.XMSS_LEN, 0, j, idxTree, idxLeaf, b, t);
+        }
+    }
+}
+
+/// T-GAS for the PQ kinds (accounts.md CTR-UA-23): execution gas of one `verify` call (the registry's capped
+/// `staticcall`), valid signature; SLH-DSA also at its worst case. `forge test --match-contract PqGasTest -vv` prints the
+/// numbers. Budget on EIP-7825 chains: `UA_VERIFY_BUDGET` = 12,000,000; an enabled kind on a public chain ≤ ~50 % =
+/// 6,000,000. The bounds are the values measured on 2026-10-12 (solc 0.8.37, osaka) plus ~10 %.
+contract PqGasTest is Test {
+    function _kat() internal view returns (string memory) {
+        return vm.readFile("../vectors/ua/pq_kat.json");
+    }
+
+    /// Gas of `verifier.verify(pk, ua_msg, sig)` for the vector of kind `name` (must be valid).
+    function _one(string memory kat, string memory name, address verifier) internal view returns (uint256 used) {
+        string memory k = string.concat(".kinds.", name);
+        bytes memory call = abi.encodeWithSignature("verify(bytes,bytes32,bytes)", vm.parseJsonBytes(kat, string.concat(k, ".pk")),
+            bytes32(vm.parseJsonBytes(kat, string.concat(k, ".ua_msg"))), vm.parseJsonBytes(kat, string.concat(k, ".sig")));
+        uint256 g = gasleft();
+        (bool ok, bytes memory ret) = verifier.staticcall(call);
+        used = g - gasleft();
+        require(ok && abi.decode(ret, (bool)), "not valid");
+    }
+
+    function test_gas_slhdsa() public {
+        string memory kat = _kat();
+        uint256 valid = _one(kat, "slhdsa128s", address(new UASlhdsaVerifier()));
+        SlhWorstCase w = new SlhWorstCase();
+        bytes memory pk = vm.parseJsonBytes(kat, ".kinds.slhdsa128s.pk");
+        bytes memory sig = vm.parseJsonBytes(kat, ".kinds.slhdsa128s.sig");
+        bytes memory mprime = abi.encodePacked(bytes2(0), vm.parseJsonBytes(kat, ".kinds.slhdsa128s.signed_message"));
+        uint256 g = gasleft();
+        w.run(pk, mprime, sig);
+        uint256 worst = g - gasleft();
+        console2.log("slhdsa128s verify (valid)", valid);
+        console2.log("slhdsa128s worst case (510 steps x 7 layers)", worst);
+        assertLt(valid, worst);
+        assertLt(worst, 1_460_000, "SLH-DSA gas gate: the worst case stays far inside 6,000,000");
+    }
+}
