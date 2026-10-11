@@ -2,8 +2,7 @@
 
 ## Session 2026-10-11 (P2a)
 
-**State:** P2a on branch p2a-trade, merge pending the final review (worktree `.claude/worktrees/p2a`; code commit
-`a78d4d8`, plan commit `dbbaed5`). Plan `docs/superpowers/plans/2026-10-11-p2a-trade-token-side.md`. 840 forge tests.
+**State:** P2a merged into `main` as `6a5c6b0` and pushed (code `a78d4d8`, fixes `341e3eb`, `a930c27`; plan `dbbaed5`). Plan `docs/superpowers/plans/2026-10-11-p2a-trade-token-side.md`. 855 forge tests.
 
 **Built:** `src/trade/ITradeToken.sol` (structs, events, errors) and `TradeLib` (ERC-7201 `scaas.trade`
 `0x2c9c6bfc…2f00`; `precheck` → the token's signature check → `record`); in `ERC20MetaTx` (every kind) `mtxTrade`,
