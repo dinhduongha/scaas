@@ -44,6 +44,11 @@ contract MockUnderlyingZether is UnderlyingToken {
 
 /// The Zether gate of `OpenFactory` (CTR-ZTH-02, CTR-TOK-03): off by default, registrar only, dev chains only, the
 /// verifier checked at creation; the `conf` fields are the confidential kinds' only (CTR-TOK-25); the domain name hook.
+/// Answers every call, returning nothing.
+contract PermissiveFallback {
+    fallback() external {}
+}
+
 contract FactoryZetherTest is Test {
     OpenFactory f;
     address registrar = address(0xF00D);
@@ -117,8 +122,13 @@ contract FactoryZetherTest is Test {
         vm.expectRevert(abi.encodeWithSelector(ZetherSafety.ZetherNotDevChain.selector, 100));
         f.createToken(NZ, 1, _conf(address(okVer)), "fork");
         vm.chainId(31337);
+        vm.recordLogs();
         vm.prank(registrar);
         f.setZetherEnabled(false);
+        logs = vm.getRecordedLogs();
+        assertEq(logs.length, 1);
+        assertEq(logs[0].topics[0], IOpenFactory.ZetherEnabled.selector);
+        assertEq(abi.decode(logs[0].data, (bool)), false, "the disable event says false");
         vm.expectRevert(IOpenFactory.ZetherDisabled.selector);
         f.createToken(NZ, 1, _conf(address(okVer)), "off again");
     }
@@ -132,6 +142,10 @@ contract FactoryZetherTest is Test {
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VerifierUnsupportedOnThisChain.selector, address(badVer),
             "bls12-381"));
         f.createToken(NZ, 1, _conf(address(badVer)), "a");
+        // a permissive fallback answers every call with empty data: typed refusal, not a decode revert (review T1 M2)
+        address perm = address(new PermissiveFallback());
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VerifierUnsupportedOnThisChain.selector, perm, ""));
+        f.createToken(NZ, 1, _conf(perm), "a");
         address mute = address(usd); // has code, answers neither function
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VerifierUnsupportedOnThisChain.selector, mute, ""));
         f.createTokenUnregistered(UZ, address(undZ), _underlying(mute), "a");

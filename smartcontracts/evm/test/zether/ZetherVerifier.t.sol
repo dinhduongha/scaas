@@ -4,11 +4,12 @@ pragma solidity ^0.8.20;
 import {Test, console2} from "forge-std/Test.sol";
 import {ZetherVerifierBn254, ZetherVerifierBls12381} from "../../src/zether/ZetherVerifier.sol";
 import {IZetherVerifier} from "../../src/zether/IZetherVerifier.sol";
+import {G1Bls12381} from "../../src/zether/ZetherCurves.sol";
 import {ZetherProver} from "./helpers/ZetherProver.sol";
 
 /// @notice Verifier đứng một mình: proof đúng qua, mọi thay đổi một bit / một trường / một witness sai
 ///         đều bị từ chối. Statement dựng tay theo zether.md §7 (header 416 byte, `chainUid` là word 3; token và
-///         `ZetherStatements` dựng y hệt — xem ZetherNone.t.sol).
+///         `ZetherStatements` dựng y hệt — xem ZetherNone.t.sol `test_statementHeaderCarriesChainUid`).
 contract ZetherVerifierTest is Test {
     bytes32 constant OP_T = keccak256("SCAAS-ZETHER-OP-TRANSFER-V1");
     bytes32 constant OP_B = keccak256("SCAAS-ZETHER-OP-BURN-V1");
@@ -229,16 +230,25 @@ contract ZetherVerifierTest is Test {
         return bytes.concat(cOut, dOut, cDeb, cAud);
     }
 
-    /// CTR-ZTH-22 (b): a BLS12-381 point on the curve but outside the subgroup in the statement is refused (the MSM
-    /// precompile checks the subgroup).
-    function test_blsNonSubgroupPointRejected() public view {
+    /// CTR-ZTH-22 (b): a BLS12-381 point on the curve but outside the subgroup is refused by the subgroup check of
+    /// G1MSM (0x0c), not by the statement binding: as `Y_f` it reaches E1's MSM, which reverts `BadPoint`, while any
+    /// subgroup point there only makes the proof fail (`false`). Without the check the verifier would return false.
+    function test_blsNonSubgroupPointRejected() public {
         Case memory k = Case(bls, 1000, 300, 5, true);
         bytes memory st = _transferStatement(k, k.amount);
         bytes memory pr = _proveTransfer(k, st, k.amount);
         assertTrue(_ok(bls, st, pr, true));
+        bytes memory good = bls.g1MulBase(7);
+        for (uint256 i; i < 128; ++i) st[416 + i] = good[i]; // Y_f
+        assertFalse(bls.verifyTransfer(st, pr));
         bytes memory bad = vm.parseJsonBytes(vm.readFile("test/vectors/zether/curve_misc.json"), ".blsNonSubgroup");
-        for (uint256 i; i < 128; ++i) st[416 + 5 * 128 + i] = bad[i]; // C_out
-        assertFalse(_ok(bls, st, pr, true));
+        for (uint256 i; i < 128; ++i) st[416 + i] = bad[i];
+        vm.expectRevert(G1Bls12381.BadPoint.selector);
+        bls.verifyTransfer(st, pr);
+        uint256[] memory one = new uint256[](1);
+        one[0] = 1;
+        vm.expectRevert(G1Bls12381.BadPoint.selector);
+        bls.g1Msm(bad, one);
     }
 
     function test_nonCanonicalScalarRejected() public view {

@@ -136,6 +136,40 @@ contract ZetherRelayTest is ZetherFixture {
         vm.prank(relayer);
         vm.expectRevert(IZetherToken.ProofRejected.selector);
         tok.mtxExecute(m, sig);
+        // the same lane, its next nonce: the nonce is in the binding
+        (m,) = _relayedSingle(7, 25);
+        MetaTxLib.MetaTransaction memory c = _mt(abi.encodeCall(IMetaTx.cancelNonce, (99)), 7, RR, 0);
+        _exec(c, _sign(PAYER_PK, c));
+        m.nonce = 1;
+        sig = _sign(PAYER_PK, m);
+        vm.prank(relayer);
+        vm.expectRevert(IZetherToken.ProofRejected.selector);
+        tok.mtxExecute(m, sig);
+    }
+
+    /// Every selector `mtxSelectors()` publishes runs relayed once: the enforced `_mtxRule` agrees with the published
+    /// list (review T4 I1).
+    function test_everyListedSelectorRuns() public {
+        _public(tok, payer, 3 * SCALE);
+        (bytes4[] memory s,,) = tok.mtxSelectors();
+        assertEq(s.length, 8);
+        uint256 bal = 500;
+        for (uint256 i; i < s.length; ++i) {
+            MetaTxLib.MetaTransaction memory m = _mt("", 200 + i, RR, 0);
+            if (s[i] == IMetaTx.cancelNonce.selector) m.data = abi.encodeCall(IMetaTx.cancelNonce, (55));
+            else if (s[i] == NoUnderlyingToken.burn.selector) m.data = abi.encodeCall(NoUnderlyingToken.burn, (7));
+            else {
+                m.data = _zetherOpCall(s[i], bal, tok.envelopeBinding(m));
+                if (s[i] != ZetherLayer.zetherShield.selector) bal -= 10;
+            }
+            _exec(m, _sign(PAYER_PK, m));
+        }
+        assertEq(tok.mtxNonce(payer, 55), 1, "cancelNonce");
+        assertEq(tok.balanceOf(payer), 1000 - 7, "burn; shield");
+        assertTrue(_holds(tok, bob, 3 + 4 * 10, false), "shield; four transfers");
+        assertTrue(_holds(tok, alice, bal, true));
+        assertEq(bal, 450);
+        assertEq(tok.balanceOf(address(0xB0C)), 10 * SCALE, "unshield");
     }
 
     /// A direct proof (binding 0) put into an envelope: the statement is RELAYED there ⇒ refused.

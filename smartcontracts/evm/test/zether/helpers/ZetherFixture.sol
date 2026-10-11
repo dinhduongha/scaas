@@ -257,6 +257,33 @@ abstract contract ZetherFixture is Test {
         return bytes.concat(abi.encode(uint256(st.accSeq), uint256(st.sendCounter)), from.y);
     }
 
+    /// @dev The calldata of the Zether-layer op `sel` on `tok` for an envelope with binding `b`: shield 3 to bob, else
+    ///      10 from alice's acc balance `bal` (to bob, or unshielded to 0xB0C). Used to relay every listed selector once.
+    function _zetherOpCall(bytes4 sel, uint256 bal, bytes32 b) internal view returns (bytes memory) {
+        if (sel == ZetherLayer.zetherShield.selector) return abi.encodeCall(ZetherLayer.zetherShield, (bob.y, 3));
+        if (sel == ZetherLayer.zetherUnshield.selector) {
+            (bytes memory pl, bytes memory pr) = _proveUnshield(tok, alice, 10, bal, address(0xB0C), _none(), b);
+            return abi.encodeCall(ZetherLayer.zetherUnshield, (pl, pr, bytes(""), _none(), address(0xB0C), 10));
+        }
+        if (sel == ZetherLayer.zetherTransferSingle.selector) {
+            Tx memory t = _proveTransfer(tok, alice, bob, 10, bal, _none(), b);
+            return abi.encodeCall(ZetherLayer.zetherTransferSingle, (t.payload, t.proof, bytes(""), _none()));
+        }
+        ZetherTypes.TransferMode mode = sel == ZetherLayer.zetherTransfer.selector ? ZetherTypes.TransferMode.HASH
+            : sel == ZetherLayer.zetherTransferBundle.selector ? ZetherTypes.TransferMode.BUNDLE : ZetherTypes.TransferMode.NONE;
+        require(mode != ZetherTypes.TransferMode.NONE || sel == ZetherLayer.zetherTransferNoBundle.selector, "not a Zether op");
+        return _multiCall(sel, mode, bal, b);
+    }
+
+    function _multiCall(bytes4 sel, ZetherTypes.TransferMode mode, uint256 bal, bytes32 b) internal view returns (bytes memory) {
+        User[] memory to = new User[](1);
+        to[0] = bob;
+        uint256[] memory vs = new uint256[](1);
+        vs[0] = 10;
+        Tx memory u = _proveMulti(tok, alice, to, vs, bal, _none(), mode, b);
+        return abi.encodeWithSelector(sel, u.payload, u.proof, bytes(""), _none());
+    }
+
     function _direct(ZetherLayer t, Tx memory r, ZetherTypes.UA ben) internal returns (bytes32) {
         return t.zetherTransferSingle(r.payload, r.proof, "", ben);
     }

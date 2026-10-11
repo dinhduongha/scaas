@@ -44,6 +44,25 @@ contract HookLeg is MockERC20 {
 /// @notice Kind `UNDERLYING_ZETHER` (CTR-ZTH-44/45): the legs' underlying straight into a shielded balance and back,
 ///         nothing minted either way; the reserve invariant counts the shielded value; `mtxWrap`, the native leg, the
 ///         direct unshield-unwrap binding its leg and `minOut`, relaying, re-entry.
+/// A native-leg recipient: re-enters the token from `receive()`, or refuses the coin.
+contract NativeRecipient {
+    address t;
+    bytes p;
+    bool refuse;
+
+    function arm(address t_, bytes memory p_, bool refuse_) external {
+        (t, p, refuse) = (t_, p_, refuse_);
+    }
+
+    receive() external payable {
+        require(!refuse, "refused");
+        if (t != address(0)) {
+            (bool ok, bytes memory ret) = t.call(p);
+            if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        }
+    }
+}
+
 contract ZetherUnderlyingTest is ZetherFixture {
     UnderlyingZetherToken internal undImpl;
     UnderlyingZetherToken internal w;
@@ -398,6 +417,37 @@ contract ZetherUnderlyingTest is ZetherFixture {
         z.zetherWrapShield(address(0), 3e16, alice.ua);
     }
 
+    /// The native leg's unshield-unwrap payout (review T5 m3): a recipient re-entering from `receive()` hits the guard,
+    /// a refusing one reverts the whole call with nothing debited, an accepting one is paid exactly.
+    function test_nativeLeg_unshieldUnwrapPayout() public {
+        address[] memory legs = new address[](1);
+        uint256[] memory dens = new uint256[](1);
+        dens[0] = 1e12;
+        UnderlyingZetherToken z = _wrapper(legs, _ones(1), dens, "native2", false);
+        ZetherLayer zt = ZetherLayer(address(z));
+        vm.deal(address(this), 1 ether);
+        z.zetherWrapShield{value: 3e16}(address(0), 3e16, alice.ua); // 1 shielded unit = SCALE·1e12 wei
+        zt.zetherRollOver(alice.ua);
+        NativeRecipient rc = new NativeRecipient();
+        bytes memory pl = _unshieldPayload(zt, alice);
+        bytes memory st = stm.unshieldUnwrapStatement(address(z), pl, 2, address(rc), _none(), address(0), 0, 0);
+        bytes memory pr = _proveU(alice, st, 2, 3, _none(), zt);
+        rc.arm(address(z), abi.encodeCall(ZetherLayer.zetherRollOver, (bob.ua)), false);
+        vm.expectRevert(IMetaTx.Reentrancy.selector);
+        z.zetherUnshieldUnwrap(pl, pr, "", _none(), address(0), address(rc), 2, 0);
+        rc.arm(address(0), "", true);
+        vm.expectRevert();
+        z.zetherUnshieldUnwrap(pl, pr, "", _none(), address(0), address(rc), 2, 0);
+        assertEq(z.totalShielded(), 3, "nothing debited");
+        rc.arm(address(0), "", false);
+        z.zetherUnshieldUnwrap(pl, pr, "", _none(), address(0), address(rc), 2, 0);
+        assertEq(address(rc).balance, 2e16);
+        assertEq(address(z).balance, 1e16);
+        (,, uint256 res,,) = z.legOf(address(0));
+        assertEq(res, 1e16);
+        assertEq(z.totalShielded(), 1);
+    }
+
     // ------------------------------------------------------------------ re-entry and the allowlist
 
     /// A hook leg that calls the token back mid-payout or mid-pull hits the contract-wide guard.
@@ -450,5 +500,95 @@ contract ZetherUnderlyingTest is ZetherFixture {
         assertEq(w.kind(), AdminLib.KIND_UNDERLYING_ZETHER);
         (, string memory n,,,,,) = w.eip712Domain();
         assertEq(n, "SCaaS ZetherToken");
+    }
+
+    /// Relay `data` on lane `batch`; `err` non-empty: expect that revert.
+    function _relay(bytes memory data, uint256 batch, bytes memory err) internal {
+        MetaTxLib.MetaTransaction memory m = _envOf(batch);
+        m.data = data;
+        (uint8 v, bytes32 r, bytes32 sg) = vm.sign(PAYER_PK, w.mtxDigest(m));
+        vm.prank(relayer);
+        if (err.length != 0) vm.expectRevert(err);
+        w.mtxExecute(m, abi.encodePacked(r, sg, v));
+    }
+
+    /// K6 and CTR-MTX-19 on kind 3 (review T5 m2): `_mtxRule` refuses these inside `mtxExecute`, not only the view.
+    function test_allowlistRefusals_underlyingZether() public {
+        bytes[9] memory refused = [
+            abi.encodeWithSignature("unwrap(uint256,address)", 1, payer),
+            abi.encodeWithSignature("proposeRate(address,uint96,uint96)", address(usd), 1, 1),
+            abi.encodeWithSignature("cancelRate()"),
+            abi.encodeWithSignature("executeRate()"),
+            abi.encodeWithSignature("disableWrap(address,bytes32)", address(usd), bytes32(0)),
+            abi.encodeCall(ZetherLayer.zetherRollOver, (alice.ua)),
+            abi.encodeCall(ZetherLayer.zetherRollOverSigned, (alice.ua, 1, 1, bytes(""))),
+            abi.encodeCall(ZetherLayer.zetherSetRollOverMode, (alice.ua, ZetherTypes.RollOverMode.PUBLIC, 1, bytes(""))),
+            abi.encodeWithSelector(IUnderlyingToken.mtxWrap.selector)
+        ];
+        for (uint256 i; i < refused.length; ++i) {
+            _relay(refused[i], 100 + i, abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, bytes4(refused[i])));
+        }
+    }
+
+    /// Every selector kind 3 publishes runs relayed once (review T4 I1). On this two-leg token the two single-asset
+    /// entries reach the call and revert `UnderlyingRequired`: the rule let them through.
+    function test_everyListedSelectorRuns_underlyingZether() public {
+        _shielded(70, 0);
+        _public(tok, payer, 100 * SCALE);
+        usd.mint(payer, 100 * SCALE);
+        vm.prank(payer);
+        usd.approve(address(w), type(uint256).max);
+        (bytes4[] memory s,,) = w.mtxSelectors();
+        assertEq(s.length, 14);
+        uint256 bal = 70;
+        for (uint256 i; i < s.length; ++i) {
+            bytes memory data = _k3Call(s[i], bal, w.envelopeBinding(_envOf(300 + i)));
+            uint256 sc = w.accountState(alice.ua).sendCounter;
+            bool single = s[i] == bytes4(keccak256("wrap(uint256)")) || s[i] == bytes4(keccak256("unwrap(uint256,address,uint256)"));
+            _relay(data, 300 + i, single ? abi.encodeWithSelector(IUnderlyingToken.UnderlyingRequired.selector) : bytes(""));
+            if (w.accountState(alice.ua).sendCounter != sc) bal -= 10;
+        }
+        assertEq(bal, 10, "four transfers, an unshield, an unshield-unwrap");
+        assertTrue(_holds(tok, alice, 10, true));
+        assertTrue(_holds(tok, bob, 3 + 4 * 10 + 1, false), "shield; transfers; wrap-shield");
+        assertEq(w.mtxNonce(payer, 55), 1, "cancelNonce");
+        assertEq(w.balanceOf(payer), (100 + 10 - 5 - 3) * SCALE, "wrap; unwrap; shield");
+        assertEq(usd.balanceOf(payer), (100 - 10 + 5 - 1 - 1) * SCALE, "wrap; unwrap; wrap-shield; addReserve");
+        assertEq(w.balanceOf(address(0xB0C)), 10 * SCALE, "unshield");
+        assertEq(usd.balanceOf(address(0xB0C)), 10 * SCALE, "unshield-unwrap");
+    }
+
+    /// The envelope `_relay` signs on lane `batch`, without `data` (which the binding leaves out).
+    function _envOf(uint256 batch) internal view returns (MetaTxLib.MetaTransaction memory m) {
+        m = MetaTxLib.MetaTransaction({
+            from: payer, data: "", batch: batch, nonce: 0, validUntil: block.timestamp + 300,
+            mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: relayer, fee: 0, feeRecipient: address(0)
+        });
+    }
+
+    function _k3Call(bytes4 sel, uint256 bal, bytes32 b) internal view returns (bytes memory) {
+        if (sel == IMetaTx.cancelNonce.selector) return abi.encodeCall(IMetaTx.cancelNonce, (55));
+        if (sel == bytes4(keccak256("wrap(uint256)"))) return abi.encodeWithSignature("wrap(uint256)", SCALE);
+        if (sel == bytes4(keccak256("unwrap(uint256,address,uint256)"))) {
+            return abi.encodeWithSignature("unwrap(uint256,address,uint256)", SCALE, payer, SCALE);
+        }
+        if (sel == bytes4(keccak256("wrap(address,uint256)"))) {
+            return abi.encodeWithSignature("wrap(address,uint256)", address(usd), 10 * SCALE);
+        }
+        if (sel == bytes4(keccak256("unwrap(address,uint256,address,uint256)"))) {
+            return abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(usd), 5 * SCALE, payer, 0);
+        }
+        if (sel == bytes4(keccak256("addReserve(address,uint256)"))) {
+            return abi.encodeWithSignature("addReserve(address,uint256)", address(usd), SCALE);
+        }
+        if (sel == UnderlyingZetherToken.zetherWrapShield.selector) {
+            return abi.encodeCall(UnderlyingZetherToken.zetherWrapShield, (address(usd), SCALE, bob.ua));
+        }
+        if (sel == UnderlyingZetherToken.zetherUnshieldUnwrap.selector) {
+            (bytes memory pl, bytes memory pr) = _unwrapProof(10, bal, address(0xB0C), address(usd), 0, b);
+            return abi.encodeCall(UnderlyingZetherToken.zetherUnshieldUnwrap,
+                (pl, pr, bytes(""), _none(), address(usd), address(0xB0C), 10, 0));
+        }
+        return _zetherOpCall(sel, bal, b);
     }
 }

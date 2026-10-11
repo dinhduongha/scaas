@@ -480,3 +480,13 @@ fn multi_negatives_bn254() {
 fn multi_negatives_bls12_381() {
     multi_negatives::<Bls12381>();
 }
+
+/// K1: `s` is chain-specific — the same transfer on a re-created chain (same chainId, other chainUid) never reuses it.
+#[test]
+fn s_depends_on_chain_uid() {
+    let (x, y) = (Fr::<Bn254>::from(7u64), generator::<Bn254>());
+    let mut other = header(0);
+    other.chain_uid[31] ^= 1;
+    assert_ne!(derive_s::<Bn254>(&x, &header(0), &y, 5), derive_s::<Bn254>(&x, &other, &y, 5));
+    assert_ne!(derive_s_multi::<Bn254>(&x, &header(0), &[(y, 5)]), derive_s_multi::<Bn254>(&x, &other, &[(y, 5)]));
+}

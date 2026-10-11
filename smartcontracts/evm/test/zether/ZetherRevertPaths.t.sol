@@ -20,6 +20,16 @@ import {ZetherVerifierBn254, ZetherVerifierBls12381} from "../../src/zether/Zeth
 import {Puller} from "../helpers/WalletMocks.sol";
 import {ZetherKeys} from "./helpers/ZetherKeys.sol";
 import {AuthScheme} from "../../src/common/AuthScheme.sol";
+import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
+
+/// `NONE_ZETHER` with one guarded call-out to the caller (`reenter`): a frame that holds the guard.
+contract GuardHarness is NoUnderlyingZetherToken {
+    constructor(address f, bytes32 uid, address r, ITransferDisclosure d) NoUnderlyingZetherToken(f, address(0), uid, r, d) {}
+
+    function holdGuard(bytes calldata data) external nonReentrant {
+        ZetherRevertPathsTest(msg.sender).reenter(data);
+    }
+}
 
 /// @notice The revert paths of the confidential layer on `NONE_ZETHER` (the relaying ones are in `ZetherRelay.t`, the
 ///         underlying ones in `ZetherUnderlying.t`): shield, transfer and unshield shapes, the confidential config at
@@ -84,6 +94,47 @@ contract ZetherRevertPathsTest is ZetherFixture {
         Tx memory t = _aliceTx();
         ZetherTypes.UA ghost = ZetherTypes.toUA(ZetherKeys.pub(0x6057, false));
         _call(t.payload, t.proof, ghost, abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, ghost));
+    }
+
+    /// The beneficiary is in the statement: a valid fee-bearing proof made for carol is refused with another registered
+    /// beneficiary, and passes with carol (review T3 m2).
+    function test_otherBeneficiaryRejected() public {
+        _fund(tok, alice, 100);
+        tok.zetherRollOver(alice.ua);
+        Tx memory t = _proveTransfer(tok, alice, bob, 10, 100, carol.ua, 0);
+        _call(t.payload, t.proof, bob.ua, abi.encodeWithSelector(IZetherToken.ProofRejected.selector));
+        _direct(tok, t, carol.ua);
+        assertTrue(_holds(tok, carol, FEE, false));
+    }
+
+    /// Every confidential entry point is `nonReentrant` (review T3 m1). The NONE kind makes no outside call inside a
+    /// guarded frame, so a harness (this implementation plus one guarded call-out) is etched over the implementation:
+    /// a call back into any entry point from that frame hits the guard before its body.
+    function test_everyEntryPointNonReentrant() public {
+        vm.etch(address(noneImpl), address(new GuardHarness(address(factory), ZUID, address(reg), dis)).code);
+        ZetherTypes.UA n = _none();
+        bytes[10] memory calls = [
+            abi.encodeCall(ZetherLayer.zetherShield, (alice.y, 1)),
+            abi.encodeCall(ZetherLayer.zetherTransfer, ("", "", "", n)),
+            abi.encodeCall(ZetherLayer.zetherTransferBundle, ("", "", "", n)),
+            abi.encodeCall(ZetherLayer.zetherTransferNoBundle, ("", "", "", n)),
+            abi.encodeCall(ZetherLayer.zetherTransferSingle, ("", "", "", n)),
+            abi.encodeCall(ZetherLayer.zetherUnshield, ("", "", "", n, address(0xD), 1)),
+            abi.encodeCall(ZetherLayer.zetherRollOver, (alice.ua)),
+            abi.encodeCall(ZetherLayer.zetherRollOverBatch, (new ZetherTypes.UA[](0))),
+            abi.encodeCall(ZetherLayer.zetherRollOverSigned, (alice.ua, 1, 1, "")),
+            abi.encodeCall(ZetherLayer.zetherSetRollOverMode, (alice.ua, ZetherTypes.RollOverMode.PUBLIC, 1, ""))
+        ];
+        for (uint256 i; i < calls.length; ++i) {
+            vm.expectRevert(IMetaTx.Reentrancy.selector);
+            GuardHarness(address(tok)).holdGuard(calls[i]);
+        }
+    }
+
+    /// The harness's call-out: back into the token.
+    function reenter(bytes calldata data) external {
+        (bool ok, bytes memory ret) = address(tok).call(data);
+        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
     }
 
     /// Amount and recipient are in the statement; checks before any precompile.
@@ -292,6 +343,14 @@ contract ZetherRevertPathsTest is ZetherFixture {
         assertEq(address(uint160(uint256(vm.load(address(tok), ns)))), address(ver));
         assertEq(uint256(vm.load(address(tok), bytes32(uint256(ns) + 1))), SCALE);
         assertEq(uint256(vm.load(address(tok), bytes32(uint256(ns) + 4))), 30);
+        // review T3 m4: maxShielded, confidentialFee, auditorKey (none here), psid, p, then acct[alice].pendingSeq
+        assertEq(uint256(vm.load(address(tok), bytes32(uint256(ns) + 2))), uint256(1) << 40);
+        assertEq(uint256(vm.load(address(tok), bytes32(uint256(ns) + 3))), FEE);
+        assertEq(uint256(vm.load(address(tok), bytes32(uint256(ns) + 5))), 0);
+        assertEq(vm.load(address(tok), bytes32(uint256(ns) + 6)), ver.proofSystemId());
+        assertEq(uint256(vm.load(address(tok), bytes32(uint256(ns) + 7))), 64);
+        bytes32 a = keccak256(abi.encode(alice.ua, uint256(ns) + 8)); // accC, accD, pendC, pendD, then the seqs
+        assertEq(uint64(uint256(vm.load(address(tok), bytes32(uint256(a) + 4))) >> 64), 1, "pendingSeq");
     }
 
     /// CTR-ZTH-02: the verifiers refuse to deploy outside the dev chains (as the registry and `initialize`).

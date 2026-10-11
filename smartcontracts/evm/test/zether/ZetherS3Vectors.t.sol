@@ -6,6 +6,22 @@ import {stdJson} from "forge-std/StdJson.sol";
 import {ZetherVerifierBn254, ZetherVerifierBls12381} from "../../src/zether/ZetherVerifier.sol";
 import {IZetherVerifier} from "../../src/zether/IZetherVerifier.sol";
 import {ZetherTranscript as T} from "../../src/zether/ZetherTranscript.sol";
+import {ITransferDisclosure} from "../../src/zether/ITransferDisclosure.sol";
+import {ZetherDisclosure} from "../../src/zether/ZetherDisclosure.sol";
+
+/// Token views `ZetherDisclosure` reads, etched at a vector's token address.
+contract S3Token {
+    IZetherVerifier public verifier;
+    bytes32 public chainUid;
+    bytes public auditorKey;
+    bytes entry;
+
+    function set(IZetherVerifier v, bytes32 uid, bytes memory ya, bytes memory e) external {
+        (verifier, chainUid, auditorKey, entry) = (v, uid, ya, e);
+    }
+
+    function transferEntry(bytes32) external view returns (bytes memory) { return entry; }
+}
 
 /// @notice Proof do prover Rust của luồng S3 (`r3-zether-prover`, chép vào `test/vectors/zether/s3/`) —
 ///         một hiện thực ĐỘC LẬP của đặc tả. Đúng thì qua verifier Solidity; lật bất kỳ bit nào thì không.
@@ -15,10 +31,12 @@ contract ZetherS3VectorsTest is Test {
     string constant DIR = "test/vectors/zether/s3/";
     ZetherVerifierBn254 bn;
     ZetherVerifierBls12381 bls;
+    ZetherDisclosure disc;
 
     function setUp() public {
         bn = new ZetherVerifierBn254();
         bls = new ZetherVerifierBls12381();
+        disc = new ZetherDisclosure();
     }
 
     function _v(string memory curve) internal view returns (IZetherVerifier) {
@@ -145,67 +163,47 @@ contract ZetherS3VectorsTest is Test {
         assertEq(ben, j.readBytes32(".request.beneficiary"));
     }
 
-    /// Mở tiết lộ của S3 kiểm theo đúng phương trình §5.1 (chainId/token của vector): bốn kind trên transfer một
-    ///      người nhận (leg 0) và bốn kind trên leg 1 của transfer nhiều người nhận; đổi leg thì không mở.
-    function _checkDisclosure(string memory file) internal view {
+    /// Mở tiết lộ của S3 qua contract `ZetherDisclosure` thật (token giả etch tại địa chỉ token của vector): bốn kind
+    ///      trên transfer một người nhận (leg 0) và bốn kind trên leg 1 của transfer nhiều người nhận. Leg chép sang
+    ///      index kế tiếp thì không mở (index nằm trong challenge). `uid != 0`: chain B (cùng chainid, khác chainUid).
+    function _checkDisclosure(string memory file, bytes32 uid) internal returns (uint256 ok) {
         string memory j = vm.readFile(string.concat(DIR, file));
         IZetherVerifier v = _v(j.readString(".curve"));
+        address impl = address(new S3Token());
         uint256 n;
         for (; vm.keyExistsJson(j, string.concat(".cases[", vm.toString(n), "]")); ++n) {
             string memory c = string.concat(".cases[", vm.toString(n), "]");
             assertTrue(j.readBool(string.concat(c, ".expect")));
             uint256 idx = j.readUint(string.concat(c, ".index"));
-            assertTrue(_disclose(v, j, c, idx), "S3 opening rejected");
-            if (j.readUint(string.concat(c, ".kind")) != 0) assertFalse(_disclose(v, j, c, idx + 1), "opening moved leg");
+            address tok = j.readAddress(string.concat(c, ".token"));
+            vm.etch(tok, impl.code);
+            bytes memory leg = bytes.concat(j.readBytes(string.concat(c, ".Yt")), j.readBytes(string.concat(c, ".Cout")),
+                j.readBytes(string.concat(c, ".Dout")), j.readBytes(string.concat(c, ".Caud")));
+            S3Token(tok).set(v, uid == 0 ? j.readBytes32(string.concat(c, ".chainUid")) : uid,
+                j.readBytes(string.concat(c, ".Ya")), bytes.concat(new bytes(idx * leg.length), leg, leg));
+            vm.chainId(j.readUint(string.concat(c, ".chainId")));
+            if (!_disclose(j, c, tok, idx)) continue;
+            ++ok;
+            if (j.readUint(string.concat(c, ".kind")) != 0) assertFalse(_disclose(j, c, tok, idx + 1), "opening moved leg");
         }
         assertEq(n, 8);
     }
 
-    /// `(K, M, B)`: RECEIVER_X `(Y_t, C_out, D_out)`, AUDITOR `(Y_a, C_aud, D_out)`, SENDER_CP `(D_out, C_out, Y_t)`.
-    function _disclose(IZetherVerifier v, string memory j, string memory c, uint256 idx) internal view returns (bool) {
-        uint256 kind = j.readUint(string.concat(c, ".kind"));
-        if (kind == 0) return _senderS(v, j, c);
-        if (kind == 2) return _cp(v, j, c, idx, [".Ya", ".Caud", ".Dout"]);
-        if (kind == 3) return _cp(v, j, c, idx, [".Dout", ".Cout", ".Yt"]);
-        return _cp(v, j, c, idx, [".Yt", ".Cout", ".Dout"]);
+    function _disclose(string memory j, string memory c, address tok, uint256 idx) internal view returns (bool) {
+        return disc.verifyTransferAmount(tok, j.readBytes32(string.concat(c, ".entryRef")), idx,
+            j.readUint(string.concat(c, ".amount")), ITransferDisclosure.OpeningKind(j.readUint(string.concat(c, ".kind"))),
+            j.readBytes(string.concat(c, ".opening")), "");
     }
 
-    function _senderS(IZetherVerifier v, string memory j, string memory c) internal view returns (bool) {
-        uint256 s = abi.decode(j.readBytes(string.concat(c, ".opening")), (uint256));
-        bytes memory cOut = v.g1Add(v.g1MulBase(j.readUint(string.concat(c, ".amount"))), v.g1Mul(j.readBytes(string.concat(c, ".Yt")), s));
-        return keccak256(v.g1MulBase(s)) == keccak256(j.readBytes(string.concat(c, ".Dout")))
-            && keccak256(cOut) == keccak256(j.readBytes(string.concat(c, ".Cout")));
-    }
+    function test_s3DisclosureBn254() public { assertEq(_checkDisclosure("disclosure_bn254.json", 0), 8); }
+    function test_s3DisclosureBls12381() public { assertEq(_checkDisclosure("disclosure_bls12381.json", 0), 8); }
 
-    /// `[z]G == A1 + [e]K` và `[z]B == A2 + [e](M − [amount]G)`; `kmb` = tên trường của K, M, B.
-    function _cp(IZetherVerifier v, string memory j, string memory c, uint256 idx, string[3] memory kmb)
-        internal view returns (bool)
-    {
-        (bytes memory a1, bytes memory a2, uint256 z) = abi.decode(j.readBytes(string.concat(c, ".opening")), (bytes, bytes, uint256));
-        uint256 e = _e(v, j, c, idx, bytes.concat(a1, a2));
-        if (keccak256(v.g1MulBase(z)) != keccak256(v.g1Add(a1, v.g1Mul(j.readBytes(string.concat(c, kmb[0])), e)))) return false;
-        return _cpB(v, j, c, kmb, a2, z, e);
+    /// Chain B (same chainid, another chainUid, a re-created chain): every Chaum-Pedersen opening (kinds 1-3) fails.
+    /// The two SENDER_S openings still pass by design: no challenge, bound through `entryRef` and the chain-specific `s`.
+    function test_s3DisclosureRefusedOnAnotherChainUid() public {
+        assertEq(_checkDisclosure("disclosure_bn254.json", keccak256("chain B")), 2);
+        assertEq(_checkDisclosure("disclosure_bls12381.json", keccak256("chain B")), 2);
     }
-
-    function _cpB(IZetherVerifier v, string memory j, string memory c, string[3] memory kmb, bytes memory a2, uint256 z, uint256 e)
-        internal view returns (bool)
-    {
-        bytes memory mMinus = v.g1Sub(j.readBytes(string.concat(c, kmb[1])), v.g1MulBase(j.readUint(string.concat(c, ".amount"))));
-        return keccak256(v.g1Mul(j.readBytes(string.concat(c, kmb[2])), z)) == keccak256(v.g1Add(a2, v.g1Mul(mMinus, e)));
-    }
-
-    /// `e = H(DISCLOSE_TAG ‖ chainid ‖ chainUid ‖ token ‖ entryRef ‖ j ‖ amount ‖ kind ‖ A1 ‖ A2)` (CTR-ZTH-36).
-    function _e(IZetherVerifier v, string memory j, string memory c, uint256 idx, bytes memory a1a2) internal view returns (uint256) {
-        return T.hashToScalar(keccak256(bytes.concat(
-            abi.encodePacked("SCAAS-ZETHER-DISCLOSE-V1", j.readUint(string.concat(c, ".chainId")),
-                j.readBytes32(string.concat(c, ".chainUid")), j.readAddress(string.concat(c, ".token"))),
-            abi.encodePacked(j.readBytes32(string.concat(c, ".entryRef")), idx, j.readUint(string.concat(c, ".amount")),
-                uint8(j.readUint(string.concat(c, ".kind"))), a1a2)
-        )), v.groupOrder());
-    }
-
-    function test_s3DisclosureBn254() public view { _checkDisclosure("disclosure_bn254.json"); }
-    function test_s3DisclosureBls12381() public view { _checkDisclosure("disclosure_bls12381.json"); }
 
     function test_s3SchnorrMatches() public view {
         string[2] memory files = ["schnorr_bn254.json", "schnorr_bls12381.json"];

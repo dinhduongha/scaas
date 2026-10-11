@@ -197,12 +197,11 @@ contract OpenFactory is IOpenFactory {
         if (!zetherEnabled) revert ZetherDisabled();
         ZetherSafety.requireDevChain(); // a flag set on a dev chain does not survive a chain id change (fork)
         if (verifier == address(0)) revert VerifierRequiredForZether();
-        if (verifier.code.length == 0) revert VerifierUnsupportedOnThisChain(verifier, "");
-        bool ok;
-        try IZetherVerifier(verifier).isSupportedOnThisChain() returns (bool s) { ok = s; } catch {}
-        if (ok) return;
+        // low level: no code, or a fallback answering with empty data, fails typed rather than with a decode revert
+        (bool answered, uint256 w) = _word(verifier, IZetherVerifier.isSupportedOnThisChain.selector);
+        if (answered && w == 1) return;
         string memory curve;
-        try IZetherVerifier(verifier).curveName() returns (string memory c) { curve = c; } catch {}
+        if (answered) try IZetherVerifier(verifier).curveName() returns (string memory c) { curve = c; } catch {}
         revert VerifierUnsupportedOnThisChain(verifier, curve);
     }
 

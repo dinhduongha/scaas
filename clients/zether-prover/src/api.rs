@@ -129,15 +129,16 @@ fn ct_json<C: ZCurve>(c: &Ciphertext<C>) -> Value {
     json!({"C": hx(&encode_point::<C>(&c.c)), "D": hx(&encode_point::<C>(&c.d))})
 }
 
-/// `envelopeBinding` (relayed), else `unwrapBinding` (a direct `zetherUnshieldUnwrap`), else direct.
-fn header(v: &Value, amount: u64, recipient: [u8; 20]) -> R<Header> {
+/// `envelopeBinding` (relayed), or `unwrapBinding` (a direct `zetherUnshieldUnwrap`, burns only), or direct.
+/// Both at once, or `unwrapBinding` on a transfer, is refused: the token never builds such a statement.
+fn header(v: &Value, amount: u64, recipient: [u8; 20], burn: bool) -> R<Header> {
     let has = |k: &str| v.get(k).is_some_and(|x| !x.is_null());
-    let binding = if has("envelopeBinding") {
-        Binding::Relayed(fixed(v, "envelopeBinding")?)
-    } else if has("unwrapBinding") {
-        Binding::Unwrap(fixed(v, "unwrapBinding")?)
-    } else {
-        Binding::Direct
+    let binding = match (has("envelopeBinding"), has("unwrapBinding")) {
+        (true, true) => return Err("`envelopeBinding` and `unwrapBinding` are exclusive".into()),
+        (true, false) => Binding::Relayed(fixed(v, "envelopeBinding")?),
+        (false, true) if burn => Binding::Unwrap(fixed(v, "unwrapBinding")?),
+        (false, true) => return Err("`unwrapBinding` is for `proveBurn` only".into()),
+        (false, false) => Binding::Direct,
     };
     Ok(Header {
         chain_id: num(v, "chainId")?,
@@ -177,7 +178,7 @@ fn transfer_multi_sig(mode: TransferMode) -> &'static str {
 
 pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value, rng: &mut Rn) -> R<Value> {
     let k = key::<C>(v)?;
-    let h = header(v, 0, [0; 20])?;
+    let h = header(v, 0, [0; 20], false)?;
     let y_aud = if v.get("yAud").is_some_and(|x| !x.is_null()) { point::<C>(v, "yAud")? } else { G::<C>::zero() };
     let (st, p, w) = zether::prove_transfer(
         gens,
@@ -214,7 +215,7 @@ pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v
 /// Relayed like the single format (`envelopeBinding`, CTR-ZTH-34).
 pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value, rng: &mut Rn) -> R<Value> {
     let k = key::<C>(v)?;
-    let h = header(v, 0, [0; 20])?;
+    let h = header(v, 0, [0; 20], false)?;
     let mode = match v.get("mode").filter(|x| !x.is_null()) {
         None => TransferMode::Hash,
         Some(m) => m.as_str().and_then(TransferMode::from_name).ok_or("`mode` must be \"hash\", \"bundle\" or \"none\"")?,
@@ -254,7 +255,7 @@ pub fn prove_burn_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &V
     let k = key::<C>(v)?;
     let amount = num(v, "amount")?;
     let recipient: [u8; 20] = fixed(v, "recipient")?;
-    let h = header(v, amount, recipient)?;
+    let h = header(v, amount, recipient, true)?;
     let (st, p, w) =
         zether::prove_burn(gens, &k, h.clone(), ct::<C>(v, "acc")?, num(v, "balance")?, rng).map_err(e)?;
     let (stmt, proof, payload) = (st.encode(), p.encode(), st.payload());
@@ -264,8 +265,11 @@ pub fn prove_burn_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &V
         "proof": hx(&proof),
         "payload": hx(&payload),
         "authDigest": hx(&zether::auth_digest(&stmt)),
-        "directCalldata": hx(&envelope::unshield_call(&payload, &proof, &[], &h.beneficiary, &recipient, amount)),
     });
+    // An unwrap-bound proof fits only `zetherUnshieldUnwrap` (no builder yet, K15): `zetherUnshield` would refuse it.
+    if !matches!(h.binding, Binding::Unwrap(_)) {
+        out["directCalldata"] = hx(&envelope::unshield_call(&payload, &proof, &[], &h.beneficiary, &recipient, amount)).into();
+    }
     if include_witness(v) {
         out["witness"] = json!({"x": sc::<C>(&w.x), "b": sc::<C>(&w.b), "amount": amount.to_string(),
             "bPrime": sc::<C>(&w.b_prime), "gammaB": sc::<C>(&w.gamma_b)});

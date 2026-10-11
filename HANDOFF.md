@@ -3,7 +3,7 @@
 ## Session 2026-10-11 (P3)
 
 **State:** P3 on branch `p3-zether`, merge pending the final review (code `bfee47d`). Plan `docs/superpowers/plans/2026-10-11-p3-zether-kinds.md`.
-969 forge tests; `zether-prover` `cargo test` green; e2e 4/4 and 1/1.
+976 forge tests; `zether-prover` `cargo test` 53 green; e2e 4/4 and 1/1. Fix wave 1 (review follow-ups): S3 disclosure vectors through `ZetherDisclosure` (chain-B negative), every published selector relayed once on both kinds, the stronger invariant (legs 1:1 and 3/7, rate changes, surplus never drops), `OpenFactory._checkZether` probes low level (typed error on a permissive fallback), the prover API refuses `unwrapBinding` outside `proveBurn`.
 
 **Built:** `src/zether/ZetherLib.sol` (external, `scaas.zether`), `ZetherLayer.sol`, `NoUnderlyingZetherToken.sol` (kind 2),
 `UnderlyingZetherToken.sol` (kind 3: `zetherWrapShield`, `zetherUnshieldUnwrap`), `ZetherStatements.sol`, the new

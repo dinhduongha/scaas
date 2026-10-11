@@ -235,6 +235,9 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
 
     /// @notice The envelope binding a proof inside the self-call carries (CTR-ZTH-34): every envelope field except
     ///         `data`. 0 (none) by default; a confidential token returns its own (Zether, and PQZ with its own tag).
+    ///         Step 5 writes it only when non-zero, which is safe only while an override is never 0 or always 0: one
+    ///         that returns 0 for some envelopes would let that `mtxBatch` item read the previous item's binding, so
+    ///         such an override needs step 5 to write the slot unconditionally.
     function _envelopeBinding(MetaTxLib.MetaTransaction memory) internal view virtual returns (bytes32) {
         return bytes32(0);
     }
