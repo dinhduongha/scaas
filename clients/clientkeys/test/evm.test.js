@@ -3,32 +3,61 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import {
-  hashTypedData, secpSubjectKey, accountSalt, predictAccount, accountSignature, merkleBatch, processProof,
+  hashTypedData, hashStruct, secpSubjectKey, accountSalt, predictAccount, accountSignature, merkleBatch, processProof,
   batchLeaf, evmAddress, passkeySubjectKey, addKeyCalldata, ownerCallTypedData, checkOwnerCall, checkPayment,
-  keyProofMessage, metaTxTypedData,
+  keyProofMessage, metaTxTypedData, metaTransferTypedData, checkCall, tradeOrderTypedData, orderCancelTypedData,
+  checkTradeOrder,
 } from '../src/evm.js';
 import { abiEncode, hex, fromHex, keccak_256, utf8ToBytes } from '../src/bytes.js';
 
 const vectors = new URL('../../../smartcontracts/evm/test/vectors/', import.meta.url);
 const read = (f) => JSON.parse(readFileSync(new URL(f, vectors)));
 
-test('EIP-712 digest of the typed data Odoo issues = MetaTx KAT (MetaTxKat.t.sol)', () => {
-  const k = read('metatx_v1_kat.json');
-  const td = {
-    types: {
-      EIP712Domain: [{ name: 'name', type: 'string' }, { name: 'version', type: 'string' },
-        { name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' }],
-      MetaTransaction: ['from:address', 'to:address', 'value:uint256', 'data:bytes', 'batch:uint256', 'nonce:uint256',
-        'validUntil:uint256', 'mode:uint32', 'relayer:address', 'fee:uint256', 'feeRecipient:address']
-        .map((s) => ({ name: s.split(':')[0], type: s.split(':')[1] })),
-    },
-    primaryType: 'MetaTransaction',
-    domain: { name: k.domain_name, version: k.domain_version, chainId: Number(k.chain_id), verifyingContract: k.verifying_contract },
-    // mode 1: relayer bound, feeRecipient canonical-zeroed (as dms_blockchain/lib/eip712.typed_data does).
-    message: { from: k.from, to: k.to, value: k.value, data: k.data, batch: k.batch, nonce: k.nonce, validUntil: k.valid_until,
-      mode: Number(k.mode), relayer: k.relayer, fee: k.fee, feeRecipient: '0x' + '00'.repeat(20) },
-  };
+test('MetaTransfer payment = forge KAT (TokenKat.t.sol, metatransfer_kat.json)', () => {
+  const k = read('metatransfer_kat.json');   // mode 35: relayer and fee recipient bound, FIXED fee
+  const td = metaTransferTypedData({ name: k.domain_name, contract: k.verifying_contract, chainId: k.chain_id, chainUid: k.salt,
+    message: { from: k.from, to: k.to, value: k.value, entryRef: k.entry_ref, batch: k.batch, nonce: k.nonce,
+      validUntil: k.valid_until, mode: Number(k.mode), relayer: k.relayer, fee: k.fee, feeRecipient: k.fee_recipient } });
   assert.equal(hex(hashTypedData(td)), k.digest);
+  const unbound = metaTransferTypedData({ name: k.domain_name, contract: k.verifying_contract, chainId: k.chain_id,
+    chainUid: k.salt, message: { ...td.message, mode: 0x20 } });
+  assert.equal(unbound.message.feeRecipient, '0x' + '00'.repeat(20), 'unbound fields are hashed as 0');
+});
+
+/** `abi.encode(TradeOrder)` (13 static words) as forge wrote it into the KATs. */
+function decodeOrder(abi) {
+  const w = (i) => fromHex(abi).subarray(32 * i, 32 * i + 32);
+  const addr = (i) => hex(w(i).subarray(12));
+  const num = (i) => BigInt(hex(w(i))).toString();
+  return { from: addr(0), receiveToken: addr(1), amount: num(2), receiveAmount: num(3), minFill: num(4), fee: num(5),
+    relayer: addr(6), dex: addr(7), destination: addr(8), flags: Number(num(9)), batch: num(10), nonce: num(11),
+    validUntil: num(12) };
+}
+
+test('TradeOrder, CancelOrder, InvalidateNonces in the token domain = forge KAT (TradeKat.t.sol, trade_kat.json)', () => {
+  const k = read('trade_kat.json');
+  const o = decodeOrder(k.order_abi);
+  const td = tradeOrderTypedData({ token: k.verifying_contract, chainId: 7622, chainUid: k.salt, order: o });
+  assert.equal(hex(hashTypedData(td)), k.order_hash);
+  const at = { contract: k.verifying_contract, chainId: 7622, chainUid: k.salt };
+  assert.equal(hex(hashTypedData(orderCancelTypedData({ ...at, orderHash: k.order_hash }))), k.cancel_digest);
+  assert.equal(hex(hashTypedData(orderCancelTypedData({ ...at, invalidate: { from: o.from, batch: 7, minNonce: 43 } }))),
+    k.invalidate_digest);
+});
+
+test('DexOrder (nested TradeOrder) and the DEX cancels in the DEX domain = forge KAT (DexKat.t.sol, dex_order_kat.json)', () => {
+  const k = read('dex_order_kat.json');
+  const o = decodeOrder(k.maker_order_abi);
+  const td = tradeOrderTypedData({ dex: k.dex, sellToken: k.outside_token, chainId: 7622, chainUid: k.salt, order: o });
+  assert.equal(hex(hashStruct(td.types, 'DexOrder', td.message)), k.dex_order_struct_hash);
+  assert.equal(hex(hashTypedData(td)), k.dex_order_hash);
+  const at = { name: 'SCaaS Dex', contract: k.dex, chainId: 7622, chainUid: k.salt };
+  assert.equal(hex(hashTypedData(orderCancelTypedData({ ...at, orderHash: k.dex_order_hash }))), k.cancel_digest);
+  assert.equal(hex(hashTypedData(orderCancelTypedData({ ...at, invalidate: { from: o.from, batch: 1, minNonce: 5 } }))),
+    k.invalidate_digest);
+  const t = decodeOrder(k.taker_order_abi);
+  assert.equal(hex(hashTypedData(tradeOrderTypedData({ token: k.token, chainId: 7622, chainUid: k.salt, order: t }))),
+    k.taker_order_hash);
 });
 
 test('SmartKeyAccount owner call = forge KAT (AccountKat.t.sol, smart_key_account_kat.json)', () => {
@@ -230,53 +259,114 @@ function concatSel(sig) {
   return new Uint8Array([...keccak_256(utf8ToBytes(sig)).subarray(0, 4), ...new Uint8Array(96)]);
 }
 
-/** MetaTransaction exactly as Odoo `eip712.typed_data` issues it for a pay. */
-function odooPayment(over = {}, dom = {}) {
-  const k = read('metatx_v1_kat.json');
-  return {
-    types: {
-      EIP712Domain: [{ name: 'name', type: 'string' }, { name: 'version', type: 'string' },
-        { name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' }],
-      MetaTransaction: ['from:address', 'to:address', 'value:uint256', 'data:bytes', 'batch:uint256', 'nonce:uint256',
-        'validUntil:uint256', 'mode:uint32', 'relayer:address', 'fee:uint256', 'feeRecipient:address']
-        .map((s) => ({ name: s.split(':')[0], type: s.split(':')[1] })),
-    },
-    primaryType: 'MetaTransaction',
-    domain: { name: 'SCaaS MetaToken', version: '1', chainId: 31337, verifyingContract: k.verifying_contract, ...dom },
-    message: { from: ACCOUNT, to: '0x' + '5e'.repeat(20), value: '125000500000', data: hex(concatPay()), batch: '7',
-      nonce: '0', validUntil: String(NOW + 300), mode: 1, relayer: '0x' + '02'.repeat(20), fee: '0',
-      feeRecipient: '0x' + '00'.repeat(20), ...over },
-  };
+const TOKEN = '0x' + 'cd'.repeat(20);
+const REF = '0x' + '09'.repeat(32);
+
+/** A payment `MetaTransfer` as a server issues it, in the token's salted domain. */
+function serverPayment(over = {}, dom = {}) {
+  const td = metaTransferTypedData({ contract: TOKEN, chainId: 7622, chainUid: UID, message: { from: ACCOUNT,
+    to: '0x' + '5e'.repeat(20), value: '125000500000', entryRef: REF, batch: '7', nonce: '0', validUntil: String(NOW + 300),
+    mode: 1, relayer: '0x' + '02'.repeat(20), ...over } });
+  td.domain = { ...td.domain, ...dom };
+  return td;
 }
 
-function concatPay() {
-  return new Uint8Array([...keccak_256(utf8ToBytes('pay(bytes32)')).subarray(0, 4), ...new Uint8Array(32).fill(9)]);
-}
-
-test('payment: the client signs only a pay of the amount it showed, from its own account, on its chain', () => {
-  const intent = { account: ACCOUNT, chainId: 31337, amount: 125000.5, decimals: 6, now: NOW };
-  const td = odooPayment();
+test('payment: the client signs only a MetaTransfer of the amount it showed, from its account, on its chain', () => {
+  const intent = { account: ACCOUNT, chainId: 7622, chainUid: UID, amount: 125000.5, decimals: 6, now: NOW };
+  const td = serverPayment();
   const ok = checkPayment(td, intent);
   assert.equal(hex(ok.digest), hex(hashTypedData(td)));
   assert.equal(ok.payee, '0x' + '5e'.repeat(20));
-  checkPayment(odooPayment({ value: '125000000000' }), { ...intent, amount: 125000 });
-  checkPayment(odooPayment({ mode: 0, relayer: '0x' + '00'.repeat(20) }), intent);
+  assert.equal(ok.entryRef, REF);
+  checkPayment(serverPayment({ value: '125000000000' }), { ...intent, amount: 125000 });
+  checkPayment(serverPayment({ mode: 0, relayer: '0x' + '00'.repeat(20) }), intent);
+  checkPayment(td, { ...intent, entryRef: REF, expectedToken: TOKEN });
+  assert.throws(() => checkPayment(td, { ...intent, expectedToken: '0x' + 'ce'.repeat(20) }), /wrong token/, 'CLI-SGN-08');
+  const unsalted = serverPayment();
+  unsalted.types = { ...unsalted.types, EIP712Domain: unsalted.types.EIP712Domain.slice(0, 4) };
+  delete unsalted.domain.salt;
+  const v1 = { ...serverPayment(), primaryType: 'MetaTransaction' };
   const refused = [
-    odooPayment({ value: '125000500001' }),                       // more than shown
-    odooPayment({ from: '0x' + 'bd'.repeat(20) }),
-    odooPayment({ data: hex(concatSel('trade(address,uint256,address)')) }),
-    odooPayment({ data: '0x' }),
-    odooPayment({ fee: '1' }),
-    odooPayment({ validUntil: String(NOW - 1) }),
-    odooPayment({ validUntil: String(NOW + 8 * 86400) }),
-    odooPayment({}, { chainId: 1 }),
-    odooPayment({}, { verifyingContract: ACCOUNT }),
+    serverPayment({ value: '125000500001' }),                       // more than shown
+    serverPayment({ from: '0x' + 'bd'.repeat(20) }),
+    serverPayment({ entryRef: '0x' + '00'.repeat(32) }),             // a plain transfer, not a payment
+    serverPayment({ fee: '1', mode: 0x21 }),
+    serverPayment({ validUntil: String(NOW - 1) }),
+    serverPayment({ validUntil: String(NOW + 8 * 86400) }),
+    serverPayment({}, { chainId: '1' }),
+    serverPayment({}, { verifyingContract: ACCOUNT }),
+    serverPayment({}, { salt: '0x' + '11'.repeat(32) }),             // another chain_uid (CLI-SGN-33)
+    unsalted,
+    v1,                                                              // the v1 struct
   ];
   for (const [i, bad] of refused.entries()) assert.throws(() => checkPayment(bad, intent), /Refusing to sign/, `case ${i}`);
+  assert.throws(() => checkPayment(td, { ...intent, entryRef: '0x' + '08'.repeat(32) }), /reference differs/);
   assert.throws(() => checkPayment(td, { ...intent, amount: 1e21 }), /Refusing to sign/);
-  // an owner call disguised as a payment, on the payment's own chain: its contract is the account, not a token
-  assert.throws(() => checkPayment(serverOwnerCall(addKeyCalldata(NEW_KEY), { chainId: 31337 }), intent),
-    /Refusing to sign: wrong token/);
+  // an owner call disguised as a payment, on the payment's own chain: its struct is a MetaTransaction
+  assert.throws(() => checkPayment(serverOwnerCall(addKeyCalldata(NEW_KEY)), intent), /Refusing to sign: this is not a payment/);
+});
+
+test('self-call: decoded against the published allowlist; transfers, payments and approvals are never calls', () => {
+  const k = read('metatx_kat.json');   // cancelNonce(42), relayer bound
+  const allowlist = [{ selector: '0xcfdd7aea', name: 'cancelNonce', feeClass: 1 }];
+  const want = { account: k.from, chainId: 7622, chainUid: k.salt, allowlist, now: 1_800_000_000 };
+  const call = (over = {}) => metaTxTypedData({ name: k.domain_name, contract: k.verifying_contract, chainId: 7622,
+    chainUid: k.salt, message: { from: k.from, data: k.data, batch: k.batch, nonce: k.nonce, validUntil: k.valid_until,
+      mode: Number(k.mode), relayer: k.relayer, ...over } });
+  const ok = checkCall(call(), want);
+  assert.equal(hex(ok.digest), k.digest);
+  assert.equal(ok.name, 'cancelNonce');
+  const word = (n) => n.toString(16).padStart(64, '0');
+  for (const [i, data] of [
+    '0x12345678' + word(1),                                          // not on the allowlist
+    '0xa9059cbb' + word(1) + word(2),                                // transfer
+    '0x095ea7b3' + word(1) + word(2),                                // approve
+    '0x23b872dd' + word(1) + word(2) + word(3),                      // transferFrom
+    '0x',
+  ].entries()) {
+    assert.throws(() => checkCall(call({ data }), { ...want, allowlist: [...allowlist,
+      { selector: '0xa9059cbb', name: 'transfer', feeClass: 2 }, { selector: '0x095ea7b3', name: 'approve', feeClass: 1 }] }),
+    /Refusing to sign/, `case ${i}`);
+  }
+  assert.throws(() => checkCall(call({ mode: 0x11 }), want), /percentage fee/);
+  assert.throws(() => checkCall(call(), { ...want, chainUid: '0x' + '11'.repeat(32) }), /unexpected call fields/);
+  assert.throws(() => checkCall(call({ from: ACCOUNT }), want), /not from your account/);
+});
+
+test('trade order: only a DEX on the pinned list, a wrap only into a pinned wrapper (CLI-SGN-35, CLI-SGN-36)', () => {
+  const DEX = '0x' + 'de'.repeat(20);
+  const WRAPPER = '0x' + 'aa'.repeat(20);
+  const order = { from: ACCOUNT, receiveToken: '0x' + 'bb'.repeat(20), amount: '1000', receiveAmount: '2000', minFill: '0',
+    fee: '3000', relayer: '0x' + '02'.repeat(20), dex: DEX, destination: '0x' + '00'.repeat(20), flags: 0, batch: '1',
+    nonce: '1', validUntil: String(NOW + 600) };
+  const want = { account: ACCOUNT, chainId: 7622, chainUid: UID, dexes: [DEX], wrappers: [WRAPPER], now: NOW };
+  const td = (o, outside) => outside
+    ? tradeOrderTypedData({ dex: o.dex, sellToken: '0x' + '0c'.repeat(20), chainId: 7622, chainUid: UID, order: o })
+    : tradeOrderTypedData({ token: TOKEN, chainId: 7622, chainUid: UID, order: o });
+  const ok = checkTradeOrder(td(order), want);
+  assert.deepEqual(ok.warnings, []);
+  assert.equal(ok.minFill, 500n, 'a minFill below half is shown as half');
+  assert.equal(hex(ok.digest), hex(hashTypedData(td(order))));
+  checkTradeOrder(td(order, true), want);
+  assert.deepEqual(checkTradeOrder(td({ ...order, destination: '0x' + '77'.repeat(20) }), want).warnings,
+    ['someone else receives the proceeds']);
+  // a wrap by signature: dex = receiveToken = the wrapper, all or nothing
+  checkTradeOrder(td({ ...order, dex: WRAPPER, receiveToken: WRAPPER, minFill: '1000' }), want);
+  const refused = [
+    td({ ...order, dex: '0x' + 'ee'.repeat(20) }),                   // unlisted DEX
+    td({ ...order, dex: WRAPPER, receiveToken: WRAPPER }),           // a wrap that is not all or nothing
+    td({ ...order, dex: WRAPPER, minFill: '1000' }),                 // a wrap paying out something else
+    td({ ...order, fee: '10001' }),
+    td({ ...order, flags: 2 }),                                      // ESCROW without IOC
+    td({ ...order, flags: 8 }),
+    td({ ...order, minFill: '1001' }),
+    td({ ...order, from: '0x' + 'bd'.repeat(20) }),
+    td({ ...order, validUntil: String(NOW - 1) }),
+  ];
+  const wrongDex = td(order, true);
+  wrongDex.domain = { ...wrongDex.domain, verifyingContract: '0x' + 'ee'.repeat(20) };
+  refused.push(wrongDex);                                            // a DexOrder signed for another DEX
+  for (const [i, bad] of refused.entries()) assert.throws(() => checkTradeOrder(bad, want), /Refusing to sign/, `case ${i}`);
 });
 
 const KEY_PROOF_ZERO = '0xfa7987471ecf88572865d4f53880fda17e67fadcae78beb98eb39504833f66de';
