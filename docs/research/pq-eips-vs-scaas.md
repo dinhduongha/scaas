@@ -232,7 +232,7 @@ own verification primitive covers it; SCaaS adds no PQ kind of its own off EVM.
 
 Kept open; none blocks the current contract phase (DEX, then Zether kinds) or the node phases.
 
-- **Q1 ML-DSA context.** FIPS 204 prefixes the message with `0x00 ‖ len(ctx) ‖ ctx`, so a signature made with
+- **Q1 ML-DSA context.** **Decided (owner 2026-10-11):** empty context, tag in the message, `pq_msg = keccak256(TAG(kind) ‖ ua_msg)`, P6 ([CTR-UA-23](../contracts/accounts.md#CTR-UA-23)). FIPS 204 prefixes the message with `0x00 ‖ len(ctx) ‖ ctx`, so a signature made with
   `ctx = kind_tag` cannot be checked by an empty-context verifier such as EIP-8355. Does SCaaS keep `ctx = kind_tag`
   (and need a context-taking precompile, as chain 7622's `MLDSA65` is), or does a later kind version move the tag into
   the message with an empty context, so a standard precompile could serve it? Both are compatible with CTR-UA-23's
@@ -243,7 +243,7 @@ Kept open; none blocks the current contract phase (DEX, then Zether kinds) or th
 - **Q3 FN-DSA final.** FIPS 206 is still a draft (final expected late 2026 / early 2027 **[unverified]**). Does the
   final encoding match the frozen `fndsa512` vectors, and is EIP-8052's SHAKE256 hash-to-point exactly FN-DSA's? The
   Keccak-PRNG variant is not.
-- **Q4 Hash-based kind.** Ethereum's base layer prefers hash-based (8288 leanSPHINCS, leanXMSS); SLH-DSA verifies in
+- **Q4 Hash-based kind.** **Decided (owner 2026-10-11):** kind `slhdsa128s` (0x0133, SLH-DSA-SHA2-128s), SPECIFIED (P6), public chains after a gas measurement ([CTR-UA-23](../contracts/accounts.md#CTR-UA-23)). Ethereum's base layer prefers hash-based (8288 leanSPHINCS, leanXMSS); SLH-DSA verifies in
   Solidity at ~0.6 M and SPHINCS- at ~0.1 M with no precompile, the only PQ family whose Solidity verifier comes near
   the 100 k / 400 k bounds of §4 (at the price of 4–8 KB signatures). Is an `slh-dsa` (or leanSPHINCS) UA kind worth reserving next to the lattice kinds? Stateful XMSS/WOTS keys
   would need the leaf-state discipline of EIP-8310, which SCaaS clients do not have.

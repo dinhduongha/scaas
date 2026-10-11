@@ -274,7 +274,7 @@ key register under two kinds. Structures have no keyHash (members do).
 `MSG_TAG = keccak256("scaas.ua.msg.v1")` (so no `ua_msg` preimage is ever an id preimage) and
 `purposeTag = keccak256(bytes("scaas.ua.purpose.<p>.v1"))` — the `bytes32` every interface takes, used as-is, never
 hashed again. `digest` is the operation's own domain-separated digest (EIP-712 on EVM, the family digest elsewhere). The
-kind's scheme then signs `ua_msg` its own way. **Native signers behind the registry** (`requireAuthorized` on a native
+kind's scheme then signs `ua_msg` its own way (ML-DSA and SLH-DSA: `pq_msg`, [CTR-UA-23](#CTR-UA-23)). **Native signers behind the registry** (`requireAuthorized` on a native
 id: `msig` members, native `authRef`, PoP co-sign) sign the EIP-712 struct `UAAuth(bytes32 ua, bytes32 purpose, bytes32
 digest)` under the registry's domain, never a raw hash; native kinds on token-local paths keep their wallet-native
 signing (EIP-712 / family envelope) untouched. Cross-kind and cross-purpose replay die at the hash; native wallets
@@ -334,9 +334,10 @@ Derived kinds (registered; `d` = key data):
 | `0x0113` | `frost-bn254` | `Y (64) ‖ u16 t ‖ u16 n ‖ n × (t × C_ik (64) ‖ R_i (64) ‖ μ_i (32))`, 2 ≤ t ≤ n ≤ 16 | `bn254-g1` | DKG PoKs and `Y = Σ C_i0` **and** one FROST(bn254, keccak256) sig by `Y` | as 0x0104 (its H2 is the scaas Schnorr challenge), `Y` from `keyPtr` | EVM |
 | `0x0120` | `msig` | `u16 threshold ‖ u16 count ‖ count × (u16 kind ‖ bytes32 id ‖ u16 weight)`, ids strictly increasing | — | none of its own; every member registered or native, kind ∈ MEMBER | inside the registry (members via their own kinds) | EVM → all |
 | `0x0121` | *reserved* (was `bls12381-multi`, cut) | — | — | — | — | — |
-| `0x0130` | `mldsa44` | `pk` (1312) | `mldsa44` | ML-DSA-44 sign(`ua_msg`, ctx = `kind_tag`) | precompile where probed, else pure Solidity | every EVM chain |
+| `0x0130` | `mldsa44` | `pk` (1312) | `mldsa44` | ML-DSA-44 sign(`pq_msg`, empty ctx), SPECIFIED (P6); transitional: sign(`ua_msg`, ctx = `kind_tag`) ([CTR-UA-23](#CTR-UA-23)) | precompile where probed, else pure Solidity | every EVM chain |
 | `0x0131` | `mldsa65` | `pk` (1952) | `mldsa65` | as 0x0130 | chain 7622 precompile `0x…0F10` ([CTR-PQZ-10](pq-zether.md#CTR-PQZ-10)), else Solidity | every EVM chain |
 | `0x0132` | `fndsa512` | `pk` (897) | `fndsa512` | FN-DSA-512 (Falcon), FIPS 206 draft encoding pinned by vectors | as 0x0130 | every EVM chain |
+| `0x0133` | `slhdsa128s` | `pk` (32) | `slhdsa128s` | SLH-DSA-SHA2-128s (FIPS 205) sign(`pq_msg`, empty ctx), sig 7,856 B; SPECIFIED (P6) | pure Solidity on SHA-256 `0x02` (no EIP proposes an SLH-DSA precompile), precompile only if probed | EVM; public chains only after the P6 gas gate ([CTR-UA-23](#CTR-UA-23)) |
 | `0x0140` | `zether-bn254` | `Y` (64) | `bn254-g1` | scaas Schnorr by `x` under the **Zether** Schnorr tag (`SCAAS-ZETHER-SCHNORR-V1`) on `ua_msg` | existing Zether Schnorr | EVM |
 | `0x0141` | `zether-bls12381` | `Y` (128) | `bls12381-g1` | as 0x0140 on BLS12-381 | existing | EVM (EIP-2537 chains) |
 | `0x0142` | `pqz-mlwe` ([CTR-PQZ-13](pq-zether.md#CTR-PQZ-13)) | `pk` (16 384) | `pqz-mlwe` | `R_REG` lattice proof over `uaMessage(0x0142, POP_TAG, popDigest(ua, authRef))` + the `authRef` co-sign | `UAPqzVerifier` → PQZ precompile `0x…0F01` op 3 | chain 7622 only ([CTR-PQZ-01](pq-zether.md#CTR-PQZ-01)); `authRef` PQ-only ([CTR-PQZ-12](pq-zether.md#CTR-PQZ-12)); `keyPtr` = SSTORE2(pk) |
@@ -428,7 +429,7 @@ Which kind for whom (guidance for apps and client systems):
 
 <a id="pq-kinds"></a>
 <a id="CTR-UA-23"></a>**CTR-UA-23** — **PQ signing kinds (`mldsa44`, `mldsa65`, `fndsa512`) and `ed25519` are enabled on
-every EVM chain** (owner). Verification uses a native precompile where one is probed (chain 7622: `MLDSA65` at
+every EVM chain** (owner). **Message (owner 2026-10-11, SPECIFIED (P6)):** ML-DSA and SLH-DSA kinds sign the 32-byte `pq_msg = keccak256(TAG(kind) ‖ ua_msg)` with the **empty** FIPS 204 / FIPS 205 context (pure signing, not the pre-hash variants): EIP-8051 takes exactly a 32-byte message and EIP-8355 takes the raw message with an always-empty context, so a 32-byte digest whose preimage starts with the kind tag is the one form both verify unchanged (`kind_tag ‖ ua_msg` would not fit 8051); key data, `TAG(kind)` and UA ids do not change, the vectors change in P6. *Transitional:* the current spec and prototype sign `ua_msg` with `ctx = kind_tag`. Verification uses a native precompile where one is probed (chain 7622: `MLDSA65` at
 `0x…0F10`, [CTR-PQZ-10](pq-zether.md#CTR-PQZ-10); any future EIP-8051/8052/8355 address by probe, never by assumption)
 and a **pure-Solidity verifier** everywhere else. Every check, the registration PoP included, completes **in one
 transaction** within the chain's `UA_VERIFY_BUDGET = min(12,000,000, ⌊0.7 × chain per-transaction gas cap⌋)` (EIP-7825
@@ -440,12 +441,10 @@ measured Solidity worst case elsewhere. Estimates (measured by the PQ-kind strea
 lower, FN-DSA-512 0.6–2.5 M, ed25519 0.3–1.2 M. On public chains an enabled kind's measured cap must stay ≤ ~50 % of the
 budget, so a later gas repricing cannot push it over after funds are held. **If a measured verifier exceeds that bound
 on a chain, the kind is disabled there (verifier address 0: not registrable), never "registrable but unusable"**: a
-registrable but unusable kind can *receive* and then never spend, locking funds.
+registrable but unusable kind can *receive* and then never spend, locking funds. **`slhdsa128s`** (0x0133, SLH-DSA-SHA2-128s, FIPS 205; owner 2026-10-11, SPECIFIED (P6)) is the hash-based backup if lattice assumptions fall, in line with the Ethereum Foundation's hash-based direction: no EIP proposes an SLH-DSA precompile, so it verifies in pure Solidity on the SHA-256 precompile `0x02` unless a precompile is probed, and it is **enabled on public chains only after P6 measures its verification gas against the chain's per-transaction cap and `UA_VERIFY_BUDGET`** (the non-FIPS Keccak variant SPHINCS- was estimated at 94–276 k gas; the FIPS SHA2 variant is unmeasured).
 
-Multi-transaction verification with
-stored partial state and chunked verify are rejected (resumable state is a new replay/griefing surface and a second
-audit target for no gain while the estimates fit). Structures are bounded by the same caps (register step 4): a hybrid
-`{mldsa65, p256}` fits everywhere, but a quorum of two Solidity-verified PQ members (2 × up to 8.1 M) does not, so the
+Multi-transaction verification with stored partial state and chunked verify are rejected (resumable state is a new replay/griefing surface and a second
+audit target for no gain while the estimates fit). Structures are bounded by the same caps (register step 4): a hybrid `{mldsa65, p256}` fits everywhere, but a quorum of two Solidity-verified PQ members (2 × up to 8.1 M) does not, so the
 `{mldsa65 ×3} t=2` treasury form is registrable only where an ML-DSA precompile exists (chain 7622). `fndsa512` freezes
 the FIPS 206 draft encoding in the vectors; a final FIPS 206 with a different encoding is a new kind version
 (`…fndsa512.v2`), never a silent change. The earlier `PQ_COMMITMENT` scheme ("verify off chain") is retired. PQ checks
@@ -845,7 +844,7 @@ native   : ECDSA / 1271 over uaAuthDigest(ua, purposeTag, digest), classified by
 | `bls12381-minsig` | G1 sig (128) | `HashToCurve.hashToG1(ua_msg, DST)` with `DST_SIG = "SCAAS-UA-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_SIG_"`, PoP uses `…_POP_`; sig in subgroup, ≠ O |
 | `bls-bn254-minsig` | G1 sig (64) | `mapToG1("SCAAS-UA-BLS-BN254-SIG-V1" ‖ ua_msg)` (POP label for PoP); pairing `0x08` |
 | `msig` | `abi.encode(MemberSig[] sigs)`, `MemberSig{uint16 index; bytes keyData; bytes sig}` with strictly increasing `index`; the structure's key data is `auth.keyData` (not repeated) | for each: member `kind,id` from the structure; native ⇒ ECDSA/1271 over `uaAuthDigest(id, PURPOSE_MEMBER, member_digest)`; derived ⇒ `keccak(TAG(kind) ‖ keyData) == id` (stored kinds: `vk` from the member's `keyPtr`; no `kindOf` per member at verify: records are immutable and were checked at registration), verifier over `uaMessage(kind, PURPOSE_MEMBER, member_digest)`; `member_digest = keccak256(ua ‖ ua_msg)`; **stops at the threshold**: a `MemberSig` after Σ weight ≥ threshold ⇒ `UAUnauthorized` (keeps register step 4's bound sound) |
-| `mldsa*` / `fndsa512` | raw signature | precompile if probed, else Solidity verifier, `pk` from `keyPtr` (EXTCODECOPY); ML-DSA context string = `kind_tag` |
+| `mldsa*` / `fndsa512` / `slhdsa128s` | raw signature | precompile if probed, else Solidity verifier (`slhdsa128s`: on SHA-256 `0x02`), `pk` from `keyPtr` (EXTCODECOPY); ML-DSA and SLH-DSA verify `pq_msg` with the empty context ([CTR-UA-23](#CTR-UA-23), SPECIFIED (P6); transitional: ML-DSA context string = `kind_tag` over `ua_msg`) |
 | `pqz-mlwe` | as [pq-zether.md](pq-zether.md) | proofs via the PQZ precompile; authorization via its PQ `authRef` |
 | `zether-*` (self, owner ops) | `R ‖ z` | Zether Schnorr with tag `SCAAS-ZETHER-SCHNORR-V1` over `ua_msg` — never the UA Schnorr tag, so a Zether key never produces a `schnorr-*` signature |
 
@@ -863,6 +862,7 @@ Per-chain enablement:
 | `bls12381-*`, `schnorr-bls12381`, `zether-bls12381` | chains where the `CurveCapability` probe passes (returndata compared) | EIP-2537 |
 | `bls-bn254-minsig` | private chains only | ~100-bit pairing security |
 | `mldsa44/65`, `fndsa512` | every EVM chain (owner); precompile where probed | Solidity ML-DSA-65 1.2–8.1 M, FN-DSA-512 0.6–2.5 M (estimates); measured cap ≤ ~50 % of the chain's `UA_VERIFY_BUDGET` on public chains, else disabled on that chain ([CTR-UA-23](#CTR-UA-23)) |
+| `slhdsa128s` | SPECIFIED (P6): public chains only after P6 measures it ([CTR-UA-23](#CTR-UA-23)) | pure Solidity on SHA-256 `0x02`; SPHINCS- (Keccak, non-FIPS) estimated 94–276 k, SLH-DSA-SHA2-128s unmeasured |
 | `pqz-mlwe` | chain 7622 only | [CTR-PQZ-01](pq-zether.md#CTR-PQZ-01), [CTR-PQZ-10](pq-zether.md#CTR-PQZ-10) |
 
 The enabled set, each kind's measured `verifyCap` and the chain's `verifyBudget` are constructor arguments (verifier
