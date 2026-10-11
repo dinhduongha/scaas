@@ -378,7 +378,7 @@ fn multi_valid_and_effects<C: ZCurve>() {
     for (vs, aud, mode) in [
         (vec![250_000u64], true, TransferMode::Hash),
         (vec![0, 7, 0, 100], false, TransferMode::Bundle),
-        (vec![1, 2, 3, 4, 5, 6, 7, 8], true, TransferMode::NoBundle),
+        (vec![1, 2, 3, 4, 5, 6, 7], true, TransferMode::NoBundle), // M = 8 with the auditor: over the gas cap on BLS12-381
     ] {
         let (st, p, w) = multi(&f, header(300), mode, aud, &vs);
         verify_transfer_multi(&f.gens, &st, &p).unwrap();
@@ -434,8 +434,24 @@ fn multi_negatives<C: ZCurve>() {
     bad(pm(&[(y(10), 1), (y(10), 2)], header(0), &mut r)); // duplicate
     bad(pm(&[(y(10), 1), (f.from.y, 2)], header(0), &mut r)); // self
     bad(pm(&[(y(10), BAL), (y(11), 1)], header(0), &mut r)); // Σv > balance
-    // 16 is the cap (BUNDLE: commit-reveal + auditor at M >= 8 on BLS12-381 is over the EIP-7825 gas cap, refused)
-    prove_transfer_multi(&f.gens, &f.from, header(0), TransferMode::Bundle, &many(16), ya, f.acc, BAL, &mut r).unwrap();
+    // 16 = MAX_RECIPIENTS is the statement's bound (no form builds 16 under the gas cap: `gas_table_edges`): a 16-leg
+    // statement validates and round-trips, a 17-leg one does not
+    let (st, _, _) = multi(&f, header(0), TransferMode::Hash, true, &[0, 500, 0]);
+    let mut s16 = st.clone();
+    for i in 0..13 {
+        s16.legs.push(Leg { y_t: y(40 + i), c_out: st.legs[0].c_out, c_aud: st.legs[0].c_aud });
+    }
+    s16.validate().unwrap();
+    assert!(MultiTransferStatement::<C>::decode(&s16.encode()).unwrap() == s16, "16 legs decode");
+    s16.legs.push(Leg { y_t: y(60), c_out: st.legs[0].c_out, c_aud: st.legs[0].c_aud });
+    bad(s16.validate());
+    bad(MultiTransferStatement::<C>::decode(&s16.encode()).map(|_| ()));
+    // review T1 m2: a memo hash exactly on commit-reveal
+    let mut h = st.clone();
+    h.mode = TransferMode::Bundle;
+    bad(h.validate());
+    h.header.memo_hash = [0; 32];
+    h.validate().unwrap();
 
     let (st, _, w) = multi(&f, header(300), TransferMode::Hash, true, &[0, 500, 0]);
     let one = Fr::<C>::one();
@@ -483,6 +499,53 @@ fn multi_negatives<C: ZCurve>() {
     // A single-recipient statement never decodes as a multi one (other opTag, psid, layout).
     let (single, _, _) = transfer(&f, header(0), true, 5);
     assert!(MultiTransferStatement::<C>::decode(&single.encode()).is_err());
+}
+
+/// Review T1 m2: the single format has no memo: a caller's memo hash is dropped, and a statement with one is refused.
+#[test]
+fn single_has_no_memo_hash() {
+    let f = fx::<Bn254>();
+    let mut h = header(0);
+    h.memo_hash = [7; 32];
+    let (mut st, _, _) = transfer(&f, h, true, 5);
+    assert_eq!(st.header.memo_hash, [0; 32]);
+    st.header.memo_hash = [7; 32];
+    assert!(st.validate().is_err());
+}
+
+/// Review T1 I1: the most recipients per (stored form, auditor in / out) under the EIP-7825 cap less the 1 % margin, from
+/// the measured §19 cells: the edge builds, one more is refused with the estimate. Columns: compact, bundle, none; each
+/// (auditor in, out).
+fn gas_table_edges<C: ZCurve>(want: [[usize; 2]; 3]) {
+    let f = fx::<C>();
+    let ya = f.aud.y;
+    for (mode, row) in [TransferMode::Hash, TransferMode::Bundle, TransferMode::NoBundle].into_iter().zip(want) {
+        for (aud, max) in [(true, row[0]), (false, row[1])] {
+            assert_eq!(max_recipients::<C>(mode, aud), max, "{} {mode:?} auditor {aud}", C::NAME);
+            assert!(transfer_gas::<C>(mode, aud, max) <= TX_GAS_CAP - GAS_MARGIN);
+            assert!(transfer_gas::<C>(mode, aud, max + 1) > TX_GAS_CAP - GAS_MARGIN);
+            let rs = |n: usize| (0..n as u32).map(|i| (key::<C>(10 + i).y, 1)).collect::<Vec<_>>();
+            let y_a = if aud { ya } else { G::<C>::zero() };
+            let build = |n| prove_transfer_multi(&f.gens, &f.from, header(0), mode, &rs(n), y_a, f.acc, BAL, &mut rng());
+            assert!(build(max).is_ok(), "{} {mode:?} auditor {aud}: M = {max} builds", C::NAME);
+            match build(max + 1).map(|_| ()) {
+                Err(ZError::GasCap { m, gas, cap, max_m, .. }) => {
+                    assert_eq!((m, gas, cap, max_m), (max + 1, transfer_gas::<C>(mode, aud, max + 1), TX_GAS_CAP, max));
+                }
+                other => panic!("{} {mode:?} auditor {aud}: M = {} not refused: {other:?}", C::NAME, max + 1),
+            }
+        }
+    }
+}
+
+#[test]
+fn gas_table_edges_bn254() {
+    gas_table_edges::<Bn254>([[9, 9], [8, 8], [9, 9]]);
+}
+
+#[test]
+fn gas_table_edges_bls12_381() {
+    gas_table_edges::<Bls12381>([[7, 7], [6, 7], [7, 8]]);
 }
 
 #[test]
@@ -537,6 +600,11 @@ fn memo_roundtrip() {
     assert_ne!(open_memo::<Bn254>(&x, &h, &ua, &memo).unwrap().2, legs, "another chain: garbage");
     assert_ne!(open_memo::<Bn254>(&Fr::<Bn254>::from(8u64), &header(0), &ua, &memo).unwrap().2, legs, "another key");
     assert!(open_memo::<Bn254>(&x, &header(0), &ua, &memo[..memo.len() - 1]).is_err(), "length");
+    // review T1 m4: the longest memo (M = MAX_RECIPIENTS, 657 B), which no build reaches under the gas cap
+    let legs16: Vec<_> = (1..=16u64).map(|i| (generator::<Bn254>() * Fr::<Bn254>::from(i), i)).collect();
+    let long = seal_memo::<Bn254>(&x, &header(0), &ua, &salt, true, &legs16);
+    assert_eq!(long.len(), 657);
+    assert_eq!(open_memo::<Bn254>(&x, &header(0), &ua, &long).unwrap().2[15].amount, 16);
     let off = seal_memo::<Bn254>(&x, &header(0), &ua, &salt, false, &[(y1, 1200u64)]);
     assert!(!open_memo::<Bn254>(&x, &header(0), &ua, &off).unwrap().1, "the auditor flag");
 }

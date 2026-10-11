@@ -74,6 +74,8 @@ interface IZetherToken {
     error AuditorRequired();
     /// @notice `NONE` auditor: a transfer carries an auditor leg (some `C_aud_j ≠ O`).
     error AuditorForbidden();
+    /// @notice Commit-reveal: the memo's clear salt is not the payload's (storage-only recovery needs it, CTR-ZTH-50).
+    error MemoSaltMismatch();
     /// @notice A `COMPACT` token refuses `zetherTransferNoBundle` and `zetherTransferSingle` (CTR-ZTH-48).
     error TransferEntryDisabled(uint8 disclosureMode);
     /// @notice `ConfidentialConfig.disclosureMode` is neither BUNDLE nor COMPACT (CTR-ZTH-48).

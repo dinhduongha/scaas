@@ -24,7 +24,7 @@ interface IFactoryToken {
     /// @notice `*_ZETHER` kinds only; every other kind requires it empty. `maxShielded` (the total cap, `≤ 2^54`) and
     ///         `confidentialFee` (the inner fee, `< 2^64` and `< maxShielded`) are per token (CTR-ZTH-04, CTR-ZTH-05).
     ///         The two modes are fixed for the token's life (CTR-ZTH-38, CTR-ZTH-42): `disclosureMode` 0 `BUNDLE` (the
-    ///         default: every transfer entry, the bundle one by default) or 1 `COMMIT` (the hash entry only);
+    ///         default: every transfer entry, `zetherTransfer` stores the record) or 1 `COMPACT` (commit-reveal only);
     ///         `auditorMode` 0 `NONE` (no key, every `C_aud = O`), 1 `FULL` (key, every transfer includes the auditor)
     ///         or 2 `OPTIONAL` (key, the sender may leave the auditor out per transfer). `ZetherTypes` names the values.
     struct ConfidentialConfig {

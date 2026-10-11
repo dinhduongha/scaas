@@ -328,6 +328,9 @@ impl<C: ZCurve> TransferStatement<C> {
         if self.y_f == self.y_t {
             return Err(ZError::BadStatement("Y_from == Y_to"));
         }
+        if h.memo_hash != [0u8; 32] {
+            return Err(ZError::BadStatement("a memo hash on the single format"));
+        }
         if self.d_out.is_zero() {
             return Err(ZError::BadStatement("D_out = O"));
         }
@@ -667,7 +670,7 @@ pub fn prove_transfer<C: ZCurve, R: RngCore + CryptoRng>(
         .checked_sub(v as u128 + header.fee as u128)
         .ok_or(ZError::BadStatement("insufficient balance"))? as u64;
     let (salt, s) = draw_salt::<C, R>(&key.x, &header, &key.ua(), rng);
-    header.salt = salt;
+    (header.salt, header.memo_hash) = (salt, [0; 32]); // the single format has no memo
     let (vf, sf) = (Fr::<C>::from(v), s);
     let st = TransferStatement {
         y_f: key.y,
@@ -701,12 +704,83 @@ pub fn prove_transfer<C: ZCurve, R: RngCore + CryptoRng>(
 
 /// `1 ≤ M ≤ MAX_RECIPIENTS` recipients per transfer.
 pub const MAX_RECIPIENTS: usize = 16;
-/// EIP-7825: the per-transaction gas cap (2^24).
+/// EIP-7825: the per-transaction gas cap (2^24), intrinsic and calldata included.
 pub const TX_GAS_CAP: u64 = 16_777_216;
-/// Measured gas of a BLS12-381 commit-reveal transfer with the auditor at `M = GAS_CAP_MIN_M` (~17.03M, controller
-/// ruling P3b): over [`TX_GAS_CAP`], so the prover refuses to build it; fewer recipients fit.
-pub const GAS_CAP_MIN_M: usize = 8;
-const GAS_CAP_KNOWN: u64 = 17_030_000;
+/// Headroom the prover keeps under [`TX_GAS_CAP`]: 1 % (167,772 gas). It covers the relayed envelope (+85 k execution,
+/// zether.md §19, and its few hundred calldata bytes), the straight-line interpolation between the measured `M` and
+/// a few hundred gas of bytecode drift; the measured cells are already the dear case (every recipient's first credit).
+pub const GAS_MARGIN: u64 = TX_GAS_CAP / 100;
+
+/// zether.md §19 (a), measured execution gas (`gasleft()` around the call, fresh state, inner fee) at `M = 1, 2, 4, 8`
+/// and the call's calldata bytes, per stored form and auditor in / out. Re-measure with §19 and the edges move
+/// (`gas_table_edges` pins them).
+const GAS_AT: [usize; 4] = [1, 2, 4, 8];
+fn gas_cells(bls: bool, mode: TransferMode, auditor: bool) -> ([u64; 4], [u64; 4]) {
+    use TransferMode::*;
+    match (bls, mode, auditor) {
+        (false, Hash, true) => ([3_239_635, 4_809_467, 7_916_175, 14_198_340], [4_004, 5_732, 9_220, 16_164]),
+        (false, Hash, false) => ([3_212_449, 4_754_406, 7_804_810, 13_972_187], [4_004, 5_732, 9_220, 16_164]),
+        (false, Bundle, true) => ([3_368_038, 5_068_803, 8_481_710, 15_353_653], [3_940, 5_636, 9_028, 15_812]),
+        (false, Bundle, false) => ([3_301_051, 4_954_040, 8_270_846, 14_948_398], [3_940, 5_636, 9_028, 15_812]),
+        (false, NoBundle, true) => ([3_142_904, 4_664_842, 7_720_023, 13_875_749], [3_940, 5_636, 9_028, 15_812]),
+        (false, NoBundle, false) => ([3_115_717, 4_609_779, 7_608_659, 13_649_593], [3_940, 5_636, 9_028, 15_812]),
+        (true, Hash, true) => ([3_680_488, 5_470_832, 9_068_513, 16_533_815], [7_076, 10_276, 16_708, 29_540]),
+        (true, Hash, false) => ([3_639_184, 5_386_415, 8_894_955, 16_170_317], [7_076, 10_276, 16_708, 29_540]),
+        (true, Bundle, true) => ([3_984_226, 6_080_832, 10_335_337, 19_090_805], [7_012, 10_180, 16_516, 29_188]),
+        (true, Bundle, false) => ([3_863_321, 5_837_216, 9_843_379, 18_090_504], [7_012, 10_180, 16_516, 29_188]),
+        (true, NoBundle, true) => ([3_581_588, 5_321_839, 8_863_490, 16_191_841], [7_012, 10_180, 16_516, 29_188]),
+        (true, NoBundle, false) => ([3_540_283, 5_237_423, 8_689_932, 15_828_339], [7_012, 10_180, 16_516, 29_188]),
+    }
+}
+
+/// Straight line between the measured `M` (above 8: the 4 → 8 slope).
+fn interp(y: &[u64; 4], m: usize) -> u64 {
+    let i = GAS_AT[1..].iter().position(|&x| m <= x).unwrap_or(2);
+    let (m0, m1) = (GAS_AT[i] as i128, GAS_AT[i + 1] as i128);
+    (y[i] as i128 + (y[i + 1] as i128 - y[i] as i128) * (m as i128 - m0) / (m1 - m0)) as u64
+}
+
+/// The transaction gas of a multi-recipient transfer: §19 execution + 21,000 intrinsic + 16 gas per calldata byte.
+pub fn transfer_gas<C: ZCurve>(mode: TransferMode, auditor: bool, m: usize) -> u64 {
+    let (exec, cd) = gas_cells(C::NAME == "bls12381", mode, auditor);
+    interp(&exec, m) + 21_000 + 16 * interp(&cd, m)
+}
+
+/// The largest `M` whose [`transfer_gas`] fits [`TX_GAS_CAP`] less [`GAS_MARGIN`] (`zetherTransfer*` builds above it
+/// are refused, [`ZError::GasCap`]).
+pub fn max_recipients<C: ZCurve>(mode: TransferMode, auditor: bool) -> usize {
+    (1..=MAX_RECIPIENTS).rev().find(|&m| transfer_gas::<C>(mode, auditor, m) <= TX_GAS_CAP - GAS_MARGIN).unwrap_or(0)
+}
+
+/// Refuse a build over the cap, naming the estimate, the most recipients this form takes and the cheaper forms that
+/// fit at this `M` (leaving the auditor out is the sender's choice on an `OPTIONAL` token only; `bundle` and `none`
+/// need a `BUNDLE` token).
+fn check_gas<C: ZCurve>(mode: TransferMode, auditor: bool, m: usize) -> Result<(), ZError> {
+    let gas = transfer_gas::<C>(mode, auditor, m);
+    if gas <= TX_GAS_CAP - GAS_MARGIN {
+        return Ok(());
+    }
+    let aud = |a: bool| if a { "with the auditor" } else { "without the auditor" };
+    let alternatives = TransferMode::ALL
+        .into_iter()
+        .flat_map(|f| [(f, true), (f, false)])
+        .filter(|&(f, a)| (a <= auditor) && (f, a) != (mode, auditor))
+        .filter_map(|(f, a)| {
+            let g = transfer_gas::<C>(f, a, m);
+            (g <= TX_GAS_CAP - GAS_MARGIN).then(|| format!("{} {} (~{g})", f.name(), aud(a)))
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    Err(ZError::GasCap {
+        what: format!("{} {} {}", C::NAME, mode.name(), aud(auditor)),
+        m,
+        gas,
+        cap: TX_GAS_CAP,
+        margin: GAS_MARGIN,
+        max_m: max_recipients::<C>(mode, auditor),
+        alternatives: if alternatives.is_empty() { "none".into() } else { alternatives },
+    })
+}
 
 /// Where the token keeps the disclosure bundles; part of `opTag`, so a relayer cannot switch it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -841,6 +915,9 @@ impl<C: ZCurve> MultiTransferStatement<C> {
         }
         if self.legs.is_empty() || self.legs.len() > MAX_RECIPIENTS {
             return Err(ZError::BadStatement("recipient count"));
+        }
+        if (h.memo_hash != [0u8; 32]) != (self.mode == TransferMode::Hash) {
+            return Err(ZError::BadStatement("a memo hash exactly on commit-reveal"));
         }
         if self.y_f.is_zero() || self.d_out.is_zero() {
             return Err(ZError::BadStatement("Y_f or D_out = O"));
@@ -1103,9 +1180,7 @@ pub fn prove_transfer_multi<C: ZCurve, R: RngCore + CryptoRng>(
     if recipients.is_empty() || recipients.len() > MAX_RECIPIENTS {
         return Err(ZError::BadStatement("recipient count"));
     }
-    if C::NAME == "bls12381" && mode == TransferMode::Hash && !y_aud.is_zero() && recipients.len() >= GAS_CAP_MIN_M {
-        return Err(ZError::GasCap { gas: GAS_CAP_KNOWN, cap: TX_GAS_CAP, min_m: GAS_CAP_MIN_M });
-    }
+    check_gas::<C>(mode, !y_aud.is_zero(), recipients.len())?;
     let (salt, s) = draw_salt::<C, R>(&key.x, &header, &key.ua(), rng);
     header.salt = salt;
     let memo = if mode == TransferMode::Hash {

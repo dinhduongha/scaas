@@ -109,7 +109,7 @@ contract ZetherDisclosure is ITransferDisclosure {
         bytes memory all = IZetherToken(token).transferEntry(entryRef);
         if (all.length == 0) revert UnknownEntry(entryRef);
         uint256 len = 4 * l.p;
-        if ((all.length - 16) % len != 0) {
+        if (all.length < 16 || (all.length - 16) % len != 0) {
             if (keccak256(bundles) != bytes32(all)) revert BundlesMismatch(entryRef);
             all = bundles;
         }

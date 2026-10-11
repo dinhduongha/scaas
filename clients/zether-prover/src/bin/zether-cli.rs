@@ -4,7 +4,7 @@
 //!   zether-cli <command>          JSON request on stdin, JSON result on stdout
 //!
 //! Commands: keygen, encrypt, decrypt, proveTransfer, verifyTransfer, proveTransferMulti, verifyTransferMulti,
-//! proveBurn, verifyBurn, recoverTransfer, pop, shieldCalldata, envelope (see `zether_prover::api`).
+//! proveBurn, verifyBurn, openMemo, recoverTransfer, pop, shieldCalldata, envelope (see `zether_prover::api`).
 
 use std::io::Read;
 use std::process::ExitCode;

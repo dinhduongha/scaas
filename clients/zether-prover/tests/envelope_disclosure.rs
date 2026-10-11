@@ -219,7 +219,7 @@ fn relayed_and_disclosure_bls12_381() {
 #[test]
 fn entry_point_selectors_match_the_spec() {
     // CTR-ZTH-45: the zether-prefixed names; the multi-recipient default is `zetherTransfer`, commit-reveal
-    // `zetherTransferCommit`, the single format `zetherTransferSingle` (same four arguments, no outer fee on a direct call).
+    // `zetherTransferCompact`, the single format `zetherTransferSingle` (same four arguments, no outer fee on a direct call).
     assert_eq!(hex::encode(selector("zetherTransfer(bytes,bytes,bytes,bytes32)")), "d228e5c0");
     assert_eq!(hex::encode(selector("zetherTransferSingle(bytes,bytes,bytes,bytes32)")), "4d2e578f");
     assert_eq!(hex::encode(selector("zetherUnshield(bytes,bytes,bytes,bytes32,address,uint256)")), "983c7842");

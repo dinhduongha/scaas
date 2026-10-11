@@ -457,7 +457,7 @@ library ZetherLib {
     }
 
     /// @notice As `prepareSingle`, for `M` recipients: pairwise distinct, none the sender, all registered; a `COMPACT`
-    ///         token takes HASH only; the memo exactly on HASH, its hash in the header.
+    ///         token takes HASH only; the memo exactly on HASH, its clear salt the payload's, its hash in the header.
     function prepareMulti(
         Ctx memory c,
         Acct memory a,
@@ -480,7 +480,10 @@ library ZetherLib {
         if (memo.length != (mode == ZetherTypes.TransferMode.HASH ? 17 + 40 * pp.to.length : 0)) {
             revert IZetherToken.BadPayload(payload.length);
         }
-        if (memo.length != 0) pp.memoHash = keccak256(memo);
+        if (memo.length != 0) {
+            if (bytes16(memo[0:16]) != pp.salt) revert IZetherToken.MemoSaltMismatch();
+            pp.memoHash = keccak256(memo);
+        }
         pp.statement = _multiStatement(c, a, payload, pp, mode);
     }
 

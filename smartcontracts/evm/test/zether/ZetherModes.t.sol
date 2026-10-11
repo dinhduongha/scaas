@@ -15,6 +15,7 @@ import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {ZetherKeys} from "./helpers/ZetherKeys.sol";
 import {ZUID} from "./helpers/ZetherFixture.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
+import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
 /// @notice The two modes fixed at `initialize` (CTR-ZTH-48, CTR-ZTH-49), every pair on a kind: `disclosureMode`
 ///         `BUNDLE` (`zetherTransfer` stores `R = salt ‖ B_1 ‖ … ‖ B_M`, `zetherTransferCompact` commits, `…NoBundle`
@@ -159,7 +160,8 @@ abstract contract ZetherModesSuite is ZetherFixture {
     // ------------------------------------------------------------------ the memo and the salt are signed
 
     /// The memo's hash (header word 14) and the salt (word 13) are in the statement: a relayer that changes either after
-    /// proving is refused; the memo has exactly `17 + 40·M` bytes on commit-reveal and none elsewhere (CTR-ZTH-50).
+    /// proving is refused; the memo has exactly `17 + 40·M` bytes on commit-reveal and none elsewhere, and starts with
+    /// the payload's salt (`MemoSaltMismatch`, CTR-ZTH-50).
     function test_memoAndSaltBoundByTheProof() public {
         tok = _newToken(true, "memo", 0);
         _fund(tok, alice, 100);
@@ -171,6 +173,12 @@ abstract contract ZetherModesSuite is ZetherFixture {
         tok.zetherTransferCompact(memo1, t.proof, "", _none());
         bytes memory salt1 = bytes.concat(t.payload);
         salt1[70] ^= 0x01;
+        // review T2 m2: the memo's clear salt must be the payload's, before the proof (and in the statement view)
+        vm.expectRevert(IZetherToken.MemoSaltMismatch.selector);
+        tok.zetherTransferCompact(salt1, t.proof, "", _none());
+        vm.expectRevert(IZetherToken.MemoSaltMismatch.selector);
+        stm.transferStatement(address(tok), salt1, _none(), ZetherTypes.TransferMode.HASH, 0);
+        salt1[salt1.length - 97 + 6] ^= 0x01; // the same flip in the memo: the proof refuses it
         vm.expectRevert(IZetherToken.ProofRejected.selector);
         tok.zetherTransferCompact(salt1, t.proof, "", _none());
         bytes memory short = new bytes(t.payload.length - 1);
@@ -181,6 +189,60 @@ abstract contract ZetherModesSuite is ZetherFixture {
         tok.zetherTransfer(t.payload, t.proof, "", _none()); // a memo on the BUNDLE form
         tok.zetherTransferCompact(t.payload, t.proof, "", _none());
         assertTrue(_holds(tok, bob, 9, false));
+    }
+
+    // ------------------------------------------------------------------ mixed legs, the storage slot
+
+    /// FULL refuses a mix (one leg left out) with `AuditorRequired`, NONE a mix (one leg with an auditor ciphertext) with
+    /// `AuditorForbidden`, direct, relayed and in the statement view (OPTIONAL: `AuditorLegsMixed`, `ZetherMulti.t`).
+    function test_mixedLegsByMode() public {
+        uint256 p = ver.g1EncodedBytes();
+        (dMode, aMode) = (BUNDLE, FULL);
+        tok = _newToken(true, "mixFull", 0);
+        _fund(tok, alice, 500);
+        tok.zetherRollOver(alice.ua);
+        bytes memory pl = bytes.concat(_multiPayload(tok, alice, _two(), _vs(9), 7, tok.accountState(alice.ua)), _memo(2));
+        for (uint256 i; i < p; ++i) pl[112 + 5 * p + i] = 0; // leg 1: C_aud = O, leg 2 ≠ O
+        vm.expectRevert(IZetherToken.AuditorRequired.selector);
+        tok.zetherTransferCompact(pl, "", "", _none());
+        vm.expectRevert(IZetherToken.AuditorRequired.selector);
+        stm.transferStatement(address(tok), pl, _none(), ZetherTypes.TransferMode.HASH, 0);
+        (dMode, aMode) = (BUNDLE, NONE);
+        tok = _newToken(false, "mixNone", 0);
+        _fund(tok, alice, 500);
+        tok.zetherRollOver(alice.ua);
+        audForce = true;
+        pl = _multiPayload(tok, alice, _two(), _vs(9), 7, tok.accountState(alice.ua));
+        audForce = false;
+        for (uint256 i; i < p; ++i) pl[112 + 5 * p + i] = 0;
+        vm.expectRevert(IZetherToken.AuditorForbidden.selector);
+        tok.zetherTransfer(pl, "", "", _none());
+        vm.expectRevert(IZetherToken.AuditorForbidden.selector);
+        stm.transferStatement(address(tok), pl, _none(), ZetherTypes.TransferMode.NONE, 0);
+        uint256 pk = 0x9A7E5;
+        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
+            from: vm.addr(pk), data: abi.encodeCall(ZetherLayer.zetherTransferNoBundle, (pl, bytes(""), bytes(""), _none())),
+            batch: 3, nonce: 0, validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: relayer,
+            fee: 0, feeRecipient: address(0)
+        });
+        (uint8 v, bytes32 r, bytes32 s_) = vm.sign(pk, tok.mtxDigest(m));
+        vm.prank(relayer);
+        vm.expectRevert(IZetherToken.AuditorForbidden.selector);
+        tok.mtxExecute(m, abi.encodePacked(r, s_, v));
+    }
+
+    /// M3 (review T2 m5): `disclosureMode` at byte 20 and `auditorMode` at byte 21 of the verifier's slot (`ns`), nothing
+    /// above; the scale still at `ns + 1`.
+    function test_modesPackedInTheVerifierSlot() public {
+        (dMode, aMode) = (COMPACT, OPTIONAL);
+        tok = _newToken(true, "pack", 0);
+        bytes32 ns = 0xd1eef6cbeb7b383e0a92b3cb723053d5c39c76707d89da6b14ff91b83198ce00;
+        uint256 w = uint256(vm.load(address(tok), ns));
+        assertEq(address(uint160(w)), address(ver));
+        assertEq((w >> 160) & 0xff, COMPACT, "disclosureMode, byte 20");
+        assertEq((w >> 168) & 0xff, OPTIONAL, "auditorMode, byte 21");
+        assertEq(w >> 176, 0);
+        assertEq(uint256(vm.load(address(tok), bytes32(uint256(ns) + 1))), SCALE);
     }
 
     // ------------------------------------------------------------------ invalid configs (both kinds)
@@ -285,6 +347,18 @@ abstract contract ZetherModesSuite is ZetherFixture {
 contract ZetherModesNoneTest is ZetherModesSuite {
     function setUp() public {
         _stack(false);
+        _users();
+    }
+
+    function _kind() internal pure override returns (IOpenFactory.TokenKind) {
+        return IOpenFactory.TokenKind.NONE_ZETHER;
+    }
+}
+
+/// @notice The same suite on BLS12-381 (review T2 m6): the 480-byte header and the modes end to end through a token.
+contract ZetherModesBlsTest is ZetherModesSuite {
+    function setUp() public {
+        _stack(true);
         _users();
     }
 

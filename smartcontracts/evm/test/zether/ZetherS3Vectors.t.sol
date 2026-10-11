@@ -225,6 +225,14 @@ contract ZetherS3VectorsTest is Test {
         assertEq(_checkDisclosure("disclosure_bls12381.json", keccak256("chain B")), 2);
     }
 
+    /// Review T2 m4: a foreign token's entry shorter than the salt is not a record: `BundlesMismatch`, not a panic.
+    function test_shortEntryIsNotARecord() public {
+        S3Token t = new S3Token();
+        t.set(bn, bytes32(0), "", hex"0102");
+        vm.expectRevert(abi.encodeWithSelector(ITransferDisclosure.BundlesMismatch.selector, bytes32("ref")));
+        disc.verifyTransferAmount(address(t), "ref", 0, 1, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(1), "");
+    }
+
     function test_s3SchnorrMatches() public view {
         string[2] memory files = ["schnorr_bn254.json", "schnorr_bls12381.json"];
         IZetherVerifier[2] memory vs = [IZetherVerifier(address(bn)), IZetherVerifier(address(bls))];
