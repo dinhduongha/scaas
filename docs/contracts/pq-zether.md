@@ -1166,7 +1166,7 @@ disks for that or prune ([NODE-OPS-15](../node/ops.md#NODE-OPS-15)).
 |---|---|---|
 | `PqzSafety` (library) | [CTR-PQZ-01](#CTR-PQZ-01) allowlist + self-test helper | |
 | `UAPqzVerifier` | UA `IUAKindVerifier` for `0x0142` | stateless; precompile address immutable |
-| `UAMldsaVerifier` | UA verifier for `mldsa44`/`mldsa65` on chain 7622 | stateless; used by the UA `UARegistry` |
+| `UAMldsaVerifier` | UA verifier for `mldsa44`/`mldsa65` (BUILT, P6a: EIP-8355 precompile by probe, else Solidity) | stateless; used by the UA `UARegistry` |
 | `ERC20MetaTx` (the one token base) | ERC20 + EIP712 + `IERC20MetaTx`, both structs, the address and UA paths, UA ledger | [CTR-MTX-07](metatx.md#CTR-MTX-07); `PqzToken --sizes` ≤ 24,576 B, else the `ua*` entry points move to a `fallback` decoder as MetaToken v3 |
 | `PqzToken` | shield, transfer, unshield, refresh, rollover, disclosure, meta-tx, `ITransferDisclosure`, `wrap`/`unwrap` | clone per token via `OpenFactory.createPqzToken` (flag-gated); immutable |
 | `PqzCt` (library) | `add`/`sub` on 64-bit lanes, `addTrivial(digits)` for the plain term, the `< q` check, `ctHash` | pure Solidity, no precompile |
@@ -1229,12 +1229,12 @@ split, never a silent acceptance (fail closed).
    gateway) with per-client rate limits and a concurrency cap on `eth_call`/`eth_estimateGas` (Nethermind's own JSON-RPC
    concurrency and gas-cap keys to be confirmed); public RPC is authenticated where the deployment allows it.
 
-<a id="self-test"></a>**Contract self-test.** Constructors of `UAPqzVerifier`, `UAMldsaVerifier` and
+<a id="self-test"></a>**Contract self-test.** The constructor of `UAPqzVerifier` and
 `PqzToken.initialize` call `OP_SELFTEST` and require the expected hash (a constant compiled into the contract; it folds
 in the precompile's own valid and invalid verify results). `UAPqzVerifier`'s constructor and `PqzToken.initialize`
 also take a valid `R_REG` vector (≈ 40 KB, too large to compile into code under EIP-170) as an argument, require
 `keccak256(vector) == SELFTEST_VECTOR_HASH`, require `OP_REGISTER` on it to return 1, then flip one proof bit in memory
-and require 0. `UAMldsaVerifier` checks `MLDSA65` on one valid and one invalid vector. Any mismatch ⇒ `SelfTestFailed`.
+and require 0. `UAMldsaVerifier` probes `MLDSA65` with one valid and one invalid vector and falls back to Solidity on a mismatch; the chain-7622 deploy requires the probe to pass. Any other mismatch ⇒ `SelfTestFailed`.
 This, not the allowlist alone, is what keeps PQZ off chains whose client is not ours.
 
 The chain profile, the private-chain runbook and the node's `pqz` profile flag

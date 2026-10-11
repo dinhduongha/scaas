@@ -237,16 +237,40 @@ Kept open; none blocks the current contract phase (DEX, then Zether kinds) or th
   (and need a context-taking precompile, as chain 7622's `MLDSA65` is), or does a later kind version move the tag into
   the message with an empty context, so a standard precompile could serve it? Both are compatible with CTR-UA-23's
   "new verifier in a new generation" rule; nothing is built yet.
+- **Q1 finding (P6a, 2026-10-12): EIP-8051's μ.** The draft's pseudocode computes `μ = shake_256(tr + message)` over a
+  32-byte message with a 32-byte `tr` (key 20,512 B), i.e. `ML-DSA.Verify_internal` without the FIPS 204 prefix
+  `0x00 ‖ len(ctx) ‖ ctx`. Its own vectors disagree: all 100 records of `assets/eip-8051/mldsa_nist.rsp` (33-byte
+  messages, 2,560-byte secret keys, i.e. a 64-byte `tr`) verify as FIPS 204 **pure ML-DSA with the empty context** and
+  none verifies without the prefix (checked with `@noble/post-quantum` 0.7.1); the reference Solidity (ZKNox
+  `ETHDILITHIUM`, `ZKNOX_dilithium.sol`) also builds `M' = 0x00 ‖ 0x00 ‖ m` and reads a 64-byte `tr`, and stores
+  `NTT(t1·2^d)` where the text says `t1`. A precompile built from the text would reject every SCaaS (and every FIPS 204)
+  signature; SCaaS's probe (a valid and a flipped `pq_msg` vector, exact 32-byte answers) refuses such a precompile
+  rather than mis-verifying. P6a's expanded-key layout follows the reference implementation: `Â ‖ tr (64) ‖
+  NTT(t1·2^d)`, u32 big-endian, 20,544 B for ML-DSA-44. EIP-8355 has no such gap: empty context, FIPS 204 `M'`.
 - **Q2 EIP-8051 key format.** If 8051 (expanded 20 512-byte key, 32-byte message) rather than 8355 wins, the stored
   key per UA grows about tenfold and the message becomes a digest. Would SCaaS store the expanded key, or expand it per
   call?
+- **Q2 finding (P6a).** Measured pure-Solidity ML-DSA (`test/ua/PqGas.t.sol`): 11.4 M (ML-DSA-44) / 18.9 M (ML-DSA-65)
+  on the FIPS 204 key — `ExpandA` alone is ~80 / ~150 Keccak-f permutations at ~66 k gas each — and 4.1 M / 5.8 M on the
+  expanded key. Without a precompile, ML-DSA fits CTR-UA-23's ~50 % bound only if the registry stores the expanded key;
+  what that costs at registration (SSTORE2 of 20.5 / 36.9 KB, and proving the expansion on chain) is the P6c question. Practical consequence: without an EIP-8355 precompile or a stored expanded key, ML-DSA is over budget on public chains, so `slhdsa128s` and `fndsa512` are the practical PQ kinds there. The verifiers are home-written and unaudited: an audit is required before any public chain enables them.
 - **Q3 FN-DSA final.** FIPS 206 is still a draft (final expected late 2026 / early 2027 **[unverified]**). Does the
   final encoding match the frozen `fndsa512` vectors, and is EIP-8052's SHAKE256 hash-to-point exactly FN-DSA's? The
   Keccak-PRNG variant is not.
+- **Q3 finding (P6a).** No FIPS 206 draft is public yet (NIST slides 2025: "initial public draft soon"; an IETF LAMPS
+  draft of May 2026 still says "forthcoming"), so `fndsa512` is the NIST third-round Falcon-512 (v1.2) with EIP-8052's
+  SHAKE256 hash-to-point over a 32-byte message: verified against the NIST KATs published with EIP-8052 (pk and
+  compressed `s2` from `kat_FALCONCORE_512.rsp`, the salt from `kat_HASHTOPOINT_512.rsp`). EIP-8052's text has small
+  gaps: the precompile input splits the 666 bytes as salt 40 ‖ `s2` 626 while the padded format is header 1 ‖ salt 40 ‖
+  625; `FALCON_CORE` takes `h` in the NTT domain; it accepts `‖(s1, s2)‖² < ⌊β²⌋` where the reference code and noble
+  accept `≤`. Falcon keys from a seed are implementation-specific (noble's note), so SCaaS pins derivation to one
+  implementation by vectors.
 - **Q4 Hash-based kind.** **Decided (owner 2026-10-11):** kind `slhdsa128s` (0x0133, SLH-DSA-SHA2-128s), SPECIFIED (P6), public chains after a gas measurement ([CTR-UA-23](../contracts/accounts.md#CTR-UA-23)). Ethereum's base layer prefers hash-based (8288 leanSPHINCS, leanXMSS); SLH-DSA verifies in
   Solidity at ~0.6 M and SPHINCS- at ~0.1 M with no precompile, the only PQ family whose Solidity verifier comes near
   the 100 k / 400 k bounds of §4 (at the price of 4–8 KB signatures). Is an `slh-dsa` (or leanSPHINCS) UA kind worth reserving next to the lattice kinds? Stateful XMSS/WOTS keys
-  would need the leaf-state discipline of EIP-8310, which SCaaS clients do not have.
+  would need the leaf-state discipline of EIP-8310, which SCaaS clients do not have. *P6a:* SLH-DSA-SHA2-128s verifies in
+  Solidity on SHA-256 `0x02` for 0.79 M gas (valid) and at most 1.32 M (the worst case any input can force) — the gas
+  gate passes.
 - **Q5 Solidity cost basis.** Fireblocks' 1.23 M is **ML-DSA-44**, while `pq-zether.md` §3 and the CTR-UA-23
   estimates attribute it to ML-DSA-65; the ML-DSA-65 worst case is likely higher **[inference]**. The per-chain
   T-GAS measurement settles it before any cap is set.
