@@ -16,8 +16,8 @@ import {FeeMode} from "../common/FeePolicy.sol";
 ///         wallet, which pays by `IERC20Payment.payWithFee` as `msg.sender`, so `PaymentSettled` carries `entryRef`
 ///         as a manual payment does. Every signed action is a `MetaTransaction` self-call (domain `("SCaaS
 ///         MandateWallet", "1", chainId, wallet, chain_uid)`, fee mode `NONE`): the delegate signs
-///         `payUnderMandate` and `revoke(token, epoch)`; the owner signs `setMandate`, `setPayee`, `revoke(token)` and
-///         `execute`. `mtxPayUnderMandate`, `mtxRevoke` and `mtxExecuteAsOwner` are the named builders and derive
+///         `payUnderMandate(…, epoch)` and `revoke(token, epoch)`; the owner signs `setMandate`, `setPayee`,
+///         `revoke(token)` and `execute`. `mtxPayUnderMandate`, `mtxRevoke` and `mtxExecuteAsOwner` are the named builders and derive
 ///         their lanes. ERC-1271 answers for the owner (ECDSA), so the owner also pays by hand with `from = wallet`.
 contract MandateWallet is MetaTxBase, IERC1271 {
     struct Mandate {
@@ -34,7 +34,7 @@ contract MandateWallet is MetaTxBase, IERC1271 {
     mapping(address token => Mandate) public mandates;
     mapping(address token => mapping(address payee => bool)) public payeeAllowed;
     mapping(bytes32 entryRef => bool) public refUsed;
-    /// @notice Bumped by every `setMandate` and every revoke (CTR-ACC-07): a delegate's signed revoke names it.
+    /// @notice Bumped by every `setMandate` and every revoke (CTR-ACC-07): a delegate's signed pay and revoke name it.
     mapping(address token => uint64) public epoch;
 
     event MandateSet(address indexed token, address indexed delegate, uint256 maxPerPayment,
@@ -77,8 +77,12 @@ contract MandateWallet is MetaTxBase, IERC1271 {
         // periodSeconds == 0 would reset the period cap at every payment.
         if (delegate == address(0) || periodSeconds == 0 || maxPerPayment == 0
             || maxPerPayment > maxPerPeriod) revert BadMandate();
-        mandates[token] = Mandate(delegate, expiry, periodSeconds, uint64(block.timestamp),
-                                  maxPerPayment, maxPerPeriod, 0);
+        // Same delegate and period length: the running period and what it spent carry over, so an edit (a new expiry,
+        // new caps) never grants a fresh period budget; a new delegate or period length (or a revoke first) restarts it.
+        Mandate storage md = mandates[token];
+        bool keep = md.delegate == delegate && md.periodSeconds == periodSeconds;
+        mandates[token] = Mandate(delegate, expiry, periodSeconds, keep ? md.periodStart : uint64(block.timestamp),
+                                  maxPerPayment, maxPerPeriod, keep ? md.spentInPeriod : 0);
         ++epoch[token];
         emit MandateSet(token, delegate, maxPerPayment, maxPerPeriod, periodSeconds, expiry);
     }
@@ -103,12 +107,17 @@ contract MandateWallet is MetaTxBase, IERC1271 {
 
     // ------------------------------------------------------------------ delegate
 
-    /// @notice The delegate's payment: `_msgSender()` is the mandate's delegate, the mandate is live, the payee approved,
-    ///         `0 < amount ≤ maxPerPayment`, the period total `≤ maxPerPeriod`, `entryRef` unused.
-    function payUnderMandate(address token, address payee, uint256 amount, bytes32 entryRef) external nonReentrant {
+    /// @notice The delegate's payment: `_msgSender()` is the mandate's delegate, `epoch_` the current epoch (so a revoke,
+    ///         or any `setMandate`, voids every pay signed before it, also when the same delegate is set again), the
+    ///         mandate is live, the payee approved, `0 < amount ≤ maxPerPayment`, the period total `≤ maxPerPeriod`,
+    ///         `entryRef` unused.
+    function payUnderMandate(address token, address payee, uint256 amount, bytes32 entryRef, uint64 epoch_)
+        external nonReentrant
+    {
         Mandate storage md = mandates[token];
         if (md.delegate == address(0)) revert NoMandate();
         if (_msgSender() != md.delegate) revert NotDelegate();
+        if (epoch_ != epoch[token]) revert StaleEpoch(epoch[token], epoch_);
         if (block.timestamp > md.expiry) revert MandateExpired();
         if (!payeeAllowed[token][payee]) revert PayeeNotAllowed(payee);
         if (amount == 0 || amount > md.maxPerPayment) revert OverPaymentCap(amount, md.maxPerPayment);
@@ -137,10 +146,12 @@ contract MandateWallet is MetaTxBase, IERC1271 {
 
     // ------------------------------------------------------------------ named builders (CTR-MTX-21)
 
-    /// @notice `MetaTransaction{from: delegate, data: payUnderMandate(…), batch: mandatePayLane(entryRef), nonce: 0}`.
-    function mtxPayUnderMandate(address token, address payee, uint256 amount, bytes32 entryRef, uint256 validUntil,
-                                bytes calldata sig) external nonReentrant {
-        _named(_delegateOf(token), abi.encodeCall(MandateWallet.payUnderMandate, (token, payee, amount, entryRef)),
+    /// @notice `MetaTransaction{from: delegate, data: payUnderMandate(…, epoch), batch: mandatePayLane(entryRef),
+    ///         nonce: 0}`.
+    function mtxPayUnderMandate(address token, address payee, uint256 amount, bytes32 entryRef, uint64 epoch_,
+                                uint256 validUntil, bytes calldata sig) external nonReentrant {
+        _named(_delegateOf(token),
+            abi.encodeCall(MandateWallet.payUnderMandate, (token, payee, amount, entryRef, epoch_)),
             mandatePayLane(entryRef), 0, validUntil, sig);
     }
 
@@ -194,7 +205,7 @@ contract MandateWallet is MetaTxBase, IERC1271 {
     bytes4 private constant _REVOKE_SIGNED = bytes4(keccak256("revoke(address,uint64)"));
 
     function _mtxRule(bytes4 sel) internal view override returns (MtxRule memory) {
-        if (sel == MandateWallet.payUnderMandate.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 132);
+        if (sel == MandateWallet.payUnderMandate.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 164);
         if (sel == _REVOKE_SIGNED) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 68);
         if (sel == MandateWallet.setMandate.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 196);
         if (sel == MandateWallet.setPayee.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 100);

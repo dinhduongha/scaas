@@ -227,9 +227,10 @@ contract SmartKeyAccount is MetaTxBase, IERC1271 {
     /// @dev The account is the signer of its own key management (CTR-ACC-10).
     function _selfSender() internal pure override {}
 
-    /// @dev `from == this`: one of the account's keys, through its own `isValidSignature` (a static self-call, so a
-    ///      malformed signature is a `MetaTxBadSignature`, not an empty revert); anyone else (only `cancelNonce` on
-    ///      their own lane runs for them): EOA or ERC-1271 through `SigCheck`.
+    /// @dev `from == this`: one of the account's keys, through its own `isValidSignature` as a static self-call with
+    ///      uncapped gas (`SigCheck` caps ERC-1271 at 50k; the Solidity P-256 verifier needs about 280k on a chain
+    ///      without the P256VERIFY precompile); anyone else (only `cancelNonce` on their own lane runs for them): EOA or
+    ///      ERC-1271 through `SigCheck`.
     function _requireValidSignature(address from, bytes32 digest, bytes calldata sig) internal view override {
         if (from != address(this)) return super._requireValidSignature(from, digest, sig);
         (bool ok, bytes memory ret) =

@@ -92,7 +92,7 @@ contract SmartKeyAccountKatTest is MtxKatBase {
     }
 }
 
-/// `mandate_pay_kat.json` and `mandate_revoke_kat.json`: the delegate's `payUnderMandate` on its derived pay lane and
+/// `mandate_pay_kat.json` and `mandate_revoke_kat.json`: the delegate's `payUnderMandate(…, epoch 1)` on its derived pay lane and
 /// its epoch-bound `revoke(token, 1)` on the derived revoke lane, as `mtxPayUnderMandate` / `mtxRevoke` build them
 /// (mode 0, no fee); both really execute.
 contract MandateWalletKatTest is MtxKatBase {
@@ -116,12 +116,12 @@ contract MandateWalletKatTest is MtxKatBase {
         bytes32 ref = keccak256("scaas.kat.entryRef");
         MetaTxLib.MetaTransaction memory m;
         m.from = vm.addr(DELEGATE_PK);
-        m.data = abi.encodeCall(MandateWallet.payUnderMandate, (address(tok), PAYEE, 12_345_678, ref));
+        m.data = abi.encodeCall(MandateWallet.payUnderMandate, (address(tok), PAYEE, 12_345_678, ref, uint64(1)));
         m.batch = w.mandatePayLane(ref);
         m.validUntil = 1_800_000_300;
         bytes32 digest = w.mtxDigest(m);
         bytes memory sig = _ecdsa(DELEGATE_PK, digest);
-        w.mtxPayUnderMandate(address(tok), PAYEE, 12_345_678, ref, m.validUntil, sig);
+        w.mtxPayUnderMandate(address(tok), PAYEE, 12_345_678, ref, 1, m.validUntil, sig);
         assertEq(tok.balanceOf(PAYEE), 12_345_678);
         _kat("pay", "./test/vectors/mandate_pay_kat.json", "SCaaS MandateWallet", address(w), m, digest, sig);
 

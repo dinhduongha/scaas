@@ -13,6 +13,9 @@ import {IERC20Payment} from "../../src/metatx/IERC20Payment.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {SmartKeyAccount, SubjectKey, KeyKind} from "../../src/account/SmartKeyAccount.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
+import {OpenFactoryV1} from "../../src/factory/OpenFactoryV1.sol";
+import {IOpenFactoryV1} from "../../src/common/IOpenFactoryV1.sol";
+import {MetaToken} from "../../src/metatx/MetaToken.sol";
 
 /// Software authenticator: a fixed P-256 key, authenticatorData/clientDataJSON in the WebAuthn format (L3 §5.8.1.1),
 /// the signature normalised to low-s as clients do.
@@ -380,7 +383,47 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         bytes memory sig = _pk(0, PASSKEY, D);
         uint256 g = gasleft();
         assertTrue(_valid(acct, D, sig));
-        emit log_named_uint("isValidSignature, passkey, native P256VERIFY", g - gasleft());
+        emit log_named_uint("isValidSignature, passkey (P256VERIFY under the repo EVM)", g - gasleft());
+    }
+
+    /// L2: on a chain without the P256VERIFY precompile the Solidity verifier needs about 280k, so the account's own
+    /// signature check must stay the uncapped static self-call; `SigCheck`'s 50k cap would kill every passkey owner
+    /// call there. `0x100` answers like a missing precompile (a failed call: OZ `P256` then runs `verifySolidity`).
+    function test_passkeyOwnerCallWithoutPrecompile() public {
+        vm.mockCallRevert(address(0x100), bytes(""), bytes(""));
+        bytes memory sig = _pk(0, PASSKEY, D);
+        uint256 g = gasleft();
+        assertTrue(_valid(acct, D, sig));
+        uint256 used = g - gasleft();
+        assertGt(used, 100_000, "no precompile: the Solidity verifier ran");
+        emit log_named_uint("isValidSignature, passkey, Solidity P-256 (no precompile)", used);
+        _ownerCall(abi.encodeCall(SmartKeyAccount.addKey, (_seedKey(SEED))), 0, PASSKEY, true);
+        assertEq(acct.keyCount(), 2);
+    }
+
+    /// v1 `MetaToken` (deployed with the new `IMPLEMENTATION` until P5 retires it) pays from a clone with a passkey,
+    /// also without the precompile, where only the clones' 400k ERC-1271 allowance fits the Solidity verifier.
+    function test_v1MetaTokenPaysFromCloneWithPasskey() public {
+        OpenFactoryV1 f1 = new OpenFactoryV1(address(0xF00D));
+        MetaToken impl1 = new MetaToken(address(f1), fac.IMPLEMENTATION());
+        vm.prank(address(0xF00D));
+        f1.registerImplementation(IOpenFactoryV1.TokenKind.META, 1, address(impl1));
+        MetaToken t1 = MetaToken(f1.createMetaToken(1, address(0),
+            abi.encode("Token V", "V", uint8(0), uint256(1000), address(this)), keccak256("V")));
+        t1.transfer(address(acct), 1000);
+        vm.mockCallRevert(address(0x100), bytes(""), bytes(""));
+        for (uint256 i; i < 2; ++i) {
+            bytes32 ref = bytes32(i + 1);
+            MetaTxLib.LegacyMetaTransaction memory m = MetaTxLib.LegacyMetaTransaction({
+                from: address(acct), to: shop, value: 400, data: abi.encodeWithSignature("pay(bytes32)", ref),
+                batch: i, nonce: 0, validUntil: block.timestamp + 300, mode: RR, relayer: relayer, fee: 0,
+                feeRecipient: address(0)});
+            bytes memory sig = _pk(0, PASSKEY, t1.metaTxDigest(m));
+            vm.prank(relayer);
+            t1.executeMetaTransaction(m, sig);
+            if (i == 0) vm.clearMockedCalls();          // the second with the precompile
+        }
+        assertEq(t1.balanceOf(shop), 800);
     }
 
     // ------------------------------------------------------------------ key management (CTR-ACC-10)
@@ -739,8 +782,9 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         acct.initialize(_seedKey(SEED), address(0));
     }
 
-    /// The implementation, and so every account, differs per chain (the factory passes `chain_uid`).
-    function test_accountAddressDependsOnChainUid() public {
+    /// The implementation differs per chain (the factory passes `chain_uid`, an immutable); the account address then
+    /// differs only because `Deploy.s.sol` CREATE2-deploys the factory with `chain_uid` in its initcode.
+    function test_implementationDependsOnChainUid() public {
         SmartKeyAccountFactory other = new SmartKeyAccountFactory(keccak256("another chain"));
         assertTrue(other.IMPLEMENTATION().codehash != fac.IMPLEMENTATION().codehash, "chain_uid is an immutable");
         assertEq(SmartKeyAccount(payable(other.IMPLEMENTATION())).chainUid(), keccak256("another chain"));

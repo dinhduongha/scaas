@@ -164,15 +164,21 @@ export function addKeyCalldata(key) {
 }
 
 /** A `MetaTransaction` (CTR-MTX-15) of the SCaaS contract `contract` in its salted domain `(name, "1", chainId,
- *  contract, chainUid)`; unset fields are 0 (no relayer or fee binding, fee mode NONE). */
+ *  contract, chainUid)`; unset fields are 0 (no relayer or fee binding, fee mode NONE). Canonical zeroing as the
+ *  contract hashes it (metatx.md #digest): `relayer` is 0 unless mode bit 1, `feeRecipient` 0 unless mode bit 2.
+ *  `chainId` may be a number, a decimal or hex string, or a BigInt (kept exact); `chainUid` must be 32 bytes. */
 export function metaTxTypedData({ name, contract, chainId, chainUid, message }) {
+  const salt = chainUid instanceof Uint8Array ? hex(chainUid) : String(chainUid);
+  if (!/^0x[0-9a-fA-F]{64}$/.test(salt)) refuse('the chain_uid is not 32 bytes');
   const m = { from: ZERO_ADDRESS, data: '0x', batch: '0', nonce: '0', validUntil: '0', mode: 0, relayer: ZERO_ADDRESS,
     fee: '0', feeRecipient: ZERO_ADDRESS, ...message };
+  const mode = BigInt(m.mode);
   return {
     types: MTX_TYPES, primaryType: 'MetaTransaction',
-    domain: { name, version: '1', chainId: Number(chainId), verifyingContract: contract, salt: hex(fromHex(chainUid)) },
+    domain: { name, version: '1', chainId: String(chainId), verifyingContract: contract, salt: salt.toLowerCase() },
     message: { ...m, data: typeof m.data === 'string' ? m.data : hex(m.data), batch: String(m.batch),
-      nonce: String(m.nonce), validUntil: String(m.validUntil), fee: String(m.fee) },
+      nonce: String(m.nonce), validUntil: String(m.validUntil), fee: String(m.fee),
+      relayer: mode & 1n ? m.relayer : ZERO_ADDRESS, feeRecipient: mode & 2n ? m.feeRecipient : ZERO_ADDRESS },
   };
 }
 

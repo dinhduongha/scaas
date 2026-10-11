@@ -10,6 +10,7 @@ import {FeeMode} from "../../src/common/FeePolicy.sol";
 import {MandateWallet} from "../../src/wallet/MandateWallet.sol";
 import {HederaMandateWallet} from "../../src/hedera/HederaMandateWallet.sol";
 import {MockHederaAccountService} from "../hedera/HederaMocks.sol";
+import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
 
 /// A "token" whose `payWithFee` answers false without moving anything.
 contract FalsePayToken {
@@ -50,9 +51,14 @@ abstract contract MandateFixture is V2Fixture {
     /// The `MetaTransaction` `mtxPayUnderMandate` builds.
     function _payM(address payee, uint256 amount, bytes32 ref) internal view returns (MetaTxLib.MetaTransaction memory m) {
         m.from = delegate;
-        m.data = abi.encodeCall(MandateWallet.payUnderMandate, (address(t), payee, amount, ref));
+        m.data = abi.encodeCall(MandateWallet.payUnderMandate, (address(t), payee, amount, ref, _e()));
         m.batch = w.mandatePayLane(ref);
         m.validUntil = block.timestamp + 300;
+    }
+
+    /// The current epoch of `t`: what the delegate's pay names.
+    function _e() internal view returns (uint64) {
+        return w.epoch(address(t));
     }
 
     function _pay(address payee, uint256 amount, bytes32 ref) internal {
@@ -63,9 +69,10 @@ abstract contract MandateFixture is V2Fixture {
     function _payExpect(address payee, uint256 amount, bytes32 ref, bytes memory err) internal {
         MetaTxLib.MetaTransaction memory m = _payM(payee, amount, ref);
         bytes memory sig = _sig(DELEGATE_PK, w.mtxDigest(m));
+        uint64 e = _e();
         if (err.length != 0) vm.expectRevert(err);
         vm.prank(relayer);
-        w.mtxPayUnderMandate(address(t), payee, amount, ref, m.validUntil, sig);
+        w.mtxPayUnderMandate(address(t), payee, amount, ref, e, m.validUntil, sig);
     }
 
     function _owner(bytes memory data) internal {
@@ -105,7 +112,7 @@ contract MandateWalletTest is MandateFixture {
         vm.prank(relayer);
         w.mtxExecute(m, sig);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
-        w.mtxPayUnderMandate(address(t), npp, 10, keccak256("same"), m.validUntil, sig);
+        w.mtxPayUnderMandate(address(t), npp, 10, keccak256("same"), 1, m.validUntil, sig);
     }
 
     function test_per_payment_cap_and_zero() public {
@@ -142,7 +149,7 @@ contract MandateWalletTest is MandateFixture {
         w.setMandate(address(t2), delegate, 10, 10, 1 days, uint64(block.timestamp + 1 days));
         MetaTxLib.MetaTransaction memory m;
         (m.from, m.batch, m.validUntil) = (delegate, w.mandatePayLane("t2"), block.timestamp + 300);
-        m.data = abi.encodeCall(MandateWallet.payUnderMandate, (address(t2), npp, 5, bytes32("t2")));
+        m.data = abi.encodeCall(MandateWallet.payUnderMandate, (address(t2), npp, 5, bytes32("t2"), 1));
         bytes memory sig = _sig(DELEGATE_PK, w.mtxDigest(m));
         vm.expectRevert(abi.encodeWithSelector(MandateWallet.PayeeNotAllowed.selector, npp));
         w.mtxExecute(m, sig);
@@ -160,7 +167,7 @@ contract MandateWalletTest is MandateFixture {
         bytes memory sig = _sig(DELEGATE_PK, w.mtxDigest(m));
         vm.warp(m.validUntil + 1);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxExpired.selector, m.validUntil, m.validUntil + 1));
-        w.mtxPayUnderMandate(address(t), npp, 10, keccak256("x"), m.validUntil, sig);
+        w.mtxPayUnderMandate(address(t), npp, 10, keccak256("x"), 1, m.validUntil, sig);
     }
 
     /// `entryRef` pays once per wallet, also on another lane through `mtxExecute`.
@@ -184,26 +191,26 @@ contract MandateWalletTest is MandateFixture {
         // a stranger's signature under the delegate's name
         sig = _sig(0xBAD, w.mtxDigest(_payM(npp, 10, keccak256("x"))));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        w.mtxPayUnderMandate(address(t), npp, 10, keccak256("x"), block.timestamp + 300, sig);
+        w.mtxPayUnderMandate(address(t), npp, 10, keccak256("x"), 1, block.timestamp + 300, sig);
         // and the delegate calling directly is the delegate (it pays its own gas)
         vm.prank(delegate);
-        w.payUnderMandate(address(t), npp, 10, keccak256("direct"));
+        w.payUnderMandate(address(t), npp, 10, keccak256("direct"), 1);
         vm.prank(stranger);
         vm.expectRevert(MandateWallet.NotDelegate.selector);
-        w.payUnderMandate(address(t), npp, 10, keccak256("direct2"));
+        w.payUnderMandate(address(t), npp, 10, keccak256("direct2"), 1);
     }
 
     function test_signature_binds_amount_payee_ref_and_token() public {
         uint256 vu = block.timestamp + 300;
         bytes memory sig = _sig(DELEGATE_PK, w.mtxDigest(_payM(npp, 10, keccak256("x"))));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        w.mtxPayUnderMandate(address(t), npp, 999, keccak256("x"), vu, sig);
+        w.mtxPayUnderMandate(address(t), npp, 999, keccak256("x"), 1, vu, sig);
         vm.prank(owner);
         w.setPayee(address(t), stranger, true);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        w.mtxPayUnderMandate(address(t), stranger, 10, keccak256("x"), vu, sig);
+        w.mtxPayUnderMandate(address(t), stranger, 10, keccak256("x"), 1, vu, sig);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);  // another ref: another lane and another digest
-        w.mtxPayUnderMandate(address(t), npp, 10, keccak256("y"), vu, sig);
+        w.mtxPayUnderMandate(address(t), npp, 10, keccak256("y"), 1, vu, sig);
     }
 
     /// A new delegate voids what the old one signed (the struct's `from` is the current delegate).
@@ -213,7 +220,7 @@ contract MandateWalletTest is MandateFixture {
         vm.prank(owner);
         w.setMandate(address(t), stranger, 1_000, 2_500, 1 days, uint64(block.timestamp + 30 days));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        w.mtxPayUnderMandate(address(t), npp, 10, keccak256("old"), m.validUntil, sig);
+        w.mtxPayUnderMandate(address(t), npp, 10, keccak256("old"), 2, m.validUntil, sig);
         vm.expectRevert(MandateWallet.NotDelegate.selector);
         w.mtxExecute(m, sig);
     }
@@ -238,7 +245,7 @@ contract MandateWalletTest is MandateFixture {
         _payExpect(npp, 10, keccak256("x"), abi.encodeWithSelector(MandateWallet.NoMandate.selector));
         vm.prank(delegate);
         vm.expectRevert(MandateWallet.NoMandate.selector);
-        w.payUnderMandate(address(t), npp, 10, keccak256("x"));
+        w.payUnderMandate(address(t), npp, 10, keccak256("x"), 2);
     }
 
     /// A token that answers false moved nothing: the payment reverts, so `entryRef` and the period stay unspent.
@@ -250,7 +257,7 @@ contract MandateWalletTest is MandateFixture {
         vm.stopPrank();
         vm.prank(delegate);
         vm.expectRevert(MandateWallet.PayFailed.selector);
-        w.payUnderMandate(address(f), npp, 10, keccak256("f"));
+        w.payUnderMandate(address(f), npp, 10, keccak256("f"), 1);
         assertFalse(w.refUsed(keccak256("f")));
     }
 
@@ -285,6 +292,81 @@ contract MandateWalletTest is MandateFixture {
         w.setMandate(address(t), delegate, 1_000, 2_500, 1 days, uint64(block.timestamp + 30 days));  // epoch 5
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
         w.mtxRevoke(address(t), 3, m.validUntil, sig);
+    }
+
+    /// A revoke kills every pay signed before it, also when the owner sets the same delegate again (the pay names the
+    /// epoch); a pay signed under the new epoch works.
+    function test_pay_signature_is_bound_to_its_epoch() public {
+        MetaTxLib.MetaTransaction memory m = _payM(npp, 900, keccak256("pending"));
+        bytes memory sig = _sig(DELEGATE_PK, w.mtxDigest(m));
+        vm.startPrank(owner);
+        w.revoke(address(t));                                                     // epoch 2
+        w.setMandate(address(t), delegate, 1_000, 2_500, 1 days, uint64(block.timestamp + 30 days));  // epoch 3
+        vm.stopPrank();
+        vm.expectRevert(abi.encodeWithSelector(MandateWallet.StaleEpoch.selector, 3, 1));
+        w.mtxPayUnderMandate(address(t), npp, 900, keccak256("pending"), 1, m.validUntil, sig);
+        vm.expectRevert(abi.encodeWithSelector(MandateWallet.StaleEpoch.selector, 3, 1));
+        w.mtxExecute(m, sig);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);                    // the relayer cannot restamp it
+        w.mtxPayUnderMandate(address(t), npp, 900, keccak256("pending"), 3, m.validUntil, sig);
+        vm.prank(delegate);
+        vm.expectRevert(abi.encodeWithSelector(MandateWallet.StaleEpoch.selector, 3, 2));
+        w.payUnderMandate(address(t), npp, 900, keccak256("pending"), 2);
+        _pay(npp, 900, keccak256("pending"));                                     // re-signed under epoch 3
+        assertEq(t.balanceOf(npp), 900);
+    }
+
+    // ------------------------------------------------------------------ setMandate and the running period
+
+    /// Same delegate and period length: an edit keeps the period's start and spend, so it grants no fresh budget.
+    function test_setMandate_keeps_the_period_budget() public {
+        _pay(npp, 1_000, keccak256("a"));
+        _pay(npp, 1_000, keccak256("b"));
+        uint64 start = uint64(block.timestamp);
+        vm.warp(block.timestamp + 1 hours);
+        vm.prank(owner);                                                          // a later expiry, higher caps
+        w.setMandate(address(t), delegate, 1_000, 3_000, 1 days, uint64(block.timestamp + 60 days));
+        (uint64 ps, uint128 spent) = _period();
+        assertEq(ps, start);
+        assertEq(spent, 2_000);
+        _pay(npp, 1_000, keccak256("c"));
+        _payExpect(npp, 1, keccak256("d"), abi.encodeWithSelector(MandateWallet.OverPeriodCap.selector, 3_001, 3_000));
+        vm.warp(start + 1 days);                                                  // the period still ends on time
+        _pay(npp, 1_000, keccak256("d"));
+        assertEq(t.balanceOf(npp), 4_000);
+    }
+
+    /// A new delegate, a new period length, or a revoke first: the period restarts empty.
+    function test_setMandate_resets_on_new_delegate_or_period() public {
+        _pay(npp, 1_000, keccak256("a"));
+        vm.warp(block.timestamp + 1 hours);
+        vm.prank(owner);
+        w.setMandate(address(t), stranger, 1_000, 2_500, 1 days, uint64(block.timestamp + 30 days));
+        (uint64 ps, uint128 spent) = _period();
+        assertEq(ps, block.timestamp);
+        assertEq(spent, 0);
+        vm.prank(owner);
+        w.setMandate(address(t), delegate, 1_000, 2_500, 1 days, uint64(block.timestamp + 30 days));
+        _pay(npp, 1_000, keccak256("b"));
+        vm.warp(block.timestamp + 1 hours);
+        vm.prank(owner);
+        w.setMandate(address(t), delegate, 1_000, 2_500, 2 days, uint64(block.timestamp + 30 days));
+        (ps, spent) = _period();
+        assertEq(ps, block.timestamp);
+        assertEq(spent, 0);
+        _pay(npp, 1_000, keccak256("c"));
+        vm.warp(block.timestamp + 1 hours);
+        vm.startPrank(owner);
+        w.revoke(address(t));
+        w.setMandate(address(t), delegate, 1_000, 2_500, 2 days, uint64(block.timestamp + 30 days));
+        vm.stopPrank();
+        (ps, spent) = _period();
+        assertEq(ps, block.timestamp);
+        assertEq(spent, 0);
+    }
+
+    function _period() internal view returns (uint64 start, uint128 spent) {
+        (,,, start,,, spent) = w.mandates(address(t));
     }
 
     function test_only_the_delegate_revokes_by_signature() public {
@@ -410,7 +492,7 @@ contract MandateWalletTest is MandateFixture {
     function test_allowlistPinned() public view {
         (bytes4[] memory s, uint8[] memory c, uint8[] memory a) = w.mtxSelectors();
         bytes4[7] memory want = [IMetaTx.cancelNonce.selector,
-            bytes4(keccak256("payUnderMandate(address,address,uint256,bytes32)")),
+            bytes4(keccak256("payUnderMandate(address,address,uint256,bytes32,uint64)")),
             bytes4(keccak256("revoke(address,uint64)")),
             bytes4(keccak256("setMandate(address,address,uint128,uint128,uint64,uint64)")),
             bytes4(keccak256("setPayee(address,address,bool)")),
@@ -436,7 +518,7 @@ contract MandateWalletTest is MandateFixture {
     function test_unlistedSelectorsAndShapes() public {
         bytes[4] memory calls = [
             abi.encodeCall(MandateWallet.mtxExecuteAsOwner, ("", 0, 0, "")),
-            abi.encodeCall(MandateWallet.mtxPayUnderMandate, (address(t), npp, 1, 0, 0, "")),
+            abi.encodeCall(MandateWallet.mtxPayUnderMandate, (address(t), npp, 1, 0, 0, 0, "")),
             abi.encodeCall(MandateWallet.mtxRevoke, (address(t), 1, 0, "")),
             abi.encodeCall(MandateWallet.isValidSignature, (bytes32(0), ""))
         ];
@@ -446,8 +528,8 @@ contract MandateWalletTest is MandateFixture {
         bytes memory sp = abi.encodeCall(MandateWallet.setPayee, (address(t), stranger, true));
         assertEq(sp.length, 100);
         _signedFails(abi.encodePacked(sp, bytes1(0)), abi.encodeWithSelector(IMetaTx.MtxDataShape.selector, bytes4(sp)));
-        bytes memory pu = abi.encodeCall(MandateWallet.payUnderMandate, (address(t), npp, 1, 0));
-        assertEq(pu.length, 132);
+        bytes memory pu = abi.encodeCall(MandateWallet.payUnderMandate, (address(t), npp, 1, 0, 1));
+        assertEq(pu.length, 164);
         _signedFails(abi.encodePacked(pu, bytes1(0)), abi.encodeWithSelector(IMetaTx.MtxDataShape.selector, bytes4(pu)));
         bytes memory sm = abi.encodeCall(MandateWallet.setMandate, (address(t), delegate, 1, 1, 1, 1));
         assertEq(sm.length, 196);
@@ -496,7 +578,7 @@ contract MandateWalletTest is MandateFixture {
         vm.prank(owner);
         w.revoke(address(t));
         vm.expectRevert(MandateWallet.NoMandate.selector);
-        w.mtxPayUnderMandate(address(t), npp, 1, 0, block.timestamp, "");
+        w.mtxPayUnderMandate(address(t), npp, 1, 0, 2, block.timestamp, "");
         vm.expectRevert(MandateWallet.NoMandate.selector);
         w.mtxRevoke(address(t), 2, block.timestamp, "");
     }
@@ -506,17 +588,20 @@ contract MandateWalletTest is MandateFixture {
         bytes memory sig = _sig(DELEGATE_PK, w.mtxDigest(m));
         vm.prank(relayer);
         uint256 g = gasleft();
-        w.mtxPayUnderMandate(address(t), npp, 700, keccak256("g"), m.validUntil, sig);
+        w.mtxPayUnderMandate(address(t), npp, 700, keccak256("g"), 1, m.validUntil, sig);
         emit log_named_uint("mtxPayUnderMandate (first payment of the period)", g - gasleft());
     }
 }
 
-/// NET-HED-03: an ED25519 owner (no code, 64-byte signature) through HIP-632 over the same `MetaTransaction` digest
-/// and lane; the delegate stays ECDSA; ERC-1271 for the owner stays ECDSA.
+/// NET-HED-03: any signer without code and a 64-byte signature (an ED25519 owner or delegate) goes through HIP-632 over
+/// the same `MetaTransaction` digest and lane, on every entry; the delegate may be ECDSA or ED25519; a signer with code
+/// never takes HIP-632; ERC-1271 for the owner stays ECDSA.
 contract HederaMandateWalletTest is MandateFixture {
     address constant HAS = address(0x16a);
     uint256 constant ED_KEY = 0x0E1;
+    uint256 constant ED_DEL = 0x0E2;
     address edOwner;
+    address edDel = address(uint160(2_000_002));
     HederaMandateWallet hw;
 
     function setUp() public override {
@@ -524,6 +609,7 @@ contract HederaMandateWalletTest is MandateFixture {
         vm.etch(HAS, type(MockHederaAccountService).runtimeCode);
         edOwner = address(uint160(2_000_001));
         MockHederaAccountService(HAS).setEdKey(edOwner, vm.addr(ED_KEY));
+        MockHederaAccountService(HAS).setEdKey(edDel, vm.addr(ED_DEL));
         hw = new HederaMandateWallet(edOwner, UID_);
         t.mint(address(hw), 1_000);
     }
@@ -584,9 +670,82 @@ contract HederaMandateWalletTest is MandateFixture {
         hw.mtxExecuteAsOwnerRaw(m.data, 1, m.validUntil, _ed(hw.mtxDigest(m)));
         MetaTxLib.MetaTransaction memory p;
         (p.from, p.batch, p.validUntil) = (delegate, hw.mandatePayLane(bytes32(uint256(7))), block.timestamp + 300);
-        p.data = abi.encodeCall(MandateWallet.payUnderMandate, (address(t), npp, 50, bytes32(uint256(7))));
+        p.data = abi.encodeCall(MandateWallet.payUnderMandate, (address(t), npp, 50, bytes32(uint256(7)), 1));
         bytes memory sig = _sig(DELEGATE_PK, hw.mtxDigest(p));
-        hw.mtxPayUnderMandate(address(t), npp, 50, bytes32(uint256(7)), p.validUntil, sig);
+        hw.mtxPayUnderMandate(address(t), npp, 50, bytes32(uint256(7)), 1, p.validUntil, sig);
         assertEq(t.balanceOf(npp), 50);
+    }
+
+    function _edAs(uint256 k, bytes32 d) internal pure returns (bytes memory) {
+        (bytes32 r, bytes32 vs) = vm.signCompact(k, d);
+        return abi.encodePacked(r, vs);
+    }
+
+    function _ownerRaw(bytes memory data, uint256 n) internal {
+        MetaTxLib.MetaTransaction memory m = _edOwnerCall(data, n);
+        hw.mtxExecuteAsOwnerRaw(data, n, m.validUntil, _ed(hw.mtxDigest(m)));
+    }
+
+    /// A mandate on `t` for `d` (100 per payment, 300 per day) with `npp` approved, set by the ED25519 owner.
+    function _mandateFor(address d) internal {
+        _ownerRaw(abi.encodeCall(MandateWallet.setMandate, (address(t), d, 100, 300, 1 days,
+            uint64(block.timestamp + 1 days))), 0);
+        _ownerRaw(abi.encodeCall(MandateWallet.setPayee, (address(t), npp, true)), 1);
+    }
+
+    function _edPayM(address from, bytes32 ref) internal view returns (MetaTxLib.MetaTransaction memory p) {
+        (p.from, p.batch, p.validUntil) = (from, hw.mandatePayLane(ref), block.timestamp + 300);
+        p.data = abi.encodeCall(MandateWallet.payUnderMandate, (address(t), npp, 50, ref, hw.epoch(address(t))));
+    }
+
+    /// An ED25519 delegate pays and revokes through the named builders; its pay is bound to the epoch too.
+    function test_ed25519DelegatePaysAndRevokes() public {
+        _mandateFor(edDel);
+        MetaTxLib.MetaTransaction memory p = _edPayM(edDel, "e");
+        hw.mtxPayUnderMandate(address(t), npp, 50, "e", 1, p.validUntil, _edAs(ED_DEL, hw.mtxDigest(p)));
+        assertEq(t.balanceOf(npp), 50);
+        MetaTxLib.MetaTransaction memory late = _edPayM(edDel, "late");
+        bytes memory lateSig = _edAs(ED_DEL, hw.mtxDigest(late));
+        p.data = abi.encodeWithSignature("revoke(address,uint64)", address(t), uint64(1));
+        p.batch = hw.mandateRevokeLane(address(t), 1);
+        hw.mtxRevoke(address(t), 1, p.validUntil, _edAs(ED_DEL, hw.mtxDigest(p)));
+        (address d,,,,,,) = hw.mandates(address(t));
+        assertEq(d, address(0));
+        _ownerRaw(abi.encodeCall(MandateWallet.setMandate, (address(t), edDel, 100, 300, 1 days,
+            uint64(block.timestamp + 1 days))), 2);                                // same delegate, epoch 3
+        vm.expectRevert(abi.encodeWithSelector(MandateWallet.StaleEpoch.selector, 3, 1));
+        hw.mtxExecute(late, lateSig);
+    }
+
+    /// A `from` with code never takes HIP-632, even when the account service would vouch for its 64-byte signature.
+    function test_contractSignerNeverTakesHip632() public {
+        Mock1271Wallet cw = new Mock1271Wallet(delegate);
+        MockHederaAccountService(HAS).setEdKey(address(cw), vm.addr(ED_DEL));
+        _mandateFor(address(cw));
+        MetaTxLib.MetaTransaction memory p = _edPayM(address(cw), "c");
+        bytes memory sig = _edAs(ED_DEL, hw.mtxDigest(p));
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        hw.mtxPayUnderMandate(address(t), npp, 50, "c", 1, p.validUntil, sig);
+    }
+
+    /// The ED25519 owner through `mtxBatch` and the EIP-1776 alias; an ECDSA EOA's 64-byte (compact) signature is not
+    /// taken for an ED25519 one.
+    function test_ed25519OwnerThroughBatchAndAlias() public {
+        MetaTxLib.MetaTransaction[] memory ms = new MetaTxLib.MetaTransaction[](1);
+        bytes[] memory ss = new bytes[](1);
+        (ms[0].from, ms[0].data, ms[0].batch, ms[0].validUntil) =
+            (edOwner, abi.encodeCall(MandateWallet.setPayee, (address(t), npp, true)), 9, block.timestamp + 300);
+        ss[0] = _ed(hw.mtxDigest(ms[0]));
+        hw.mtxBatch(ms, ss);
+        assertTrue(hw.payeeAllowed(address(t), npp));
+        ms[0].nonce = 1;
+        ms[0].data = abi.encodeCall(MandateWallet.setPayee, (address(t), npp, false));
+        assertTrue(hw.executeMetaTransaction(ms[0], _ed(hw.mtxDigest(ms[0]))));
+        assertFalse(hw.payeeAllowed(address(t), npp));
+        MetaTxLib.MetaTransaction memory m;
+        (m.from, m.data, m.validUntil) = (owner, abi.encodeCall(IMetaTx.cancelNonce, (1)), block.timestamp + 300);
+        bytes memory sg = _edAs(OWNER_PK, hw.mtxDigest(m));
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        hw.mtxExecute(m, sg);
     }
 }
