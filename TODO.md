@@ -18,6 +18,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
 | P3 | `*_ZETHER` kinds: `ZetherLayer`, `ZetherLib`, `ZetherStatements`, shield / unshield paths; `ZetherToken` to `legacy/p3/` (owner: backup, not delete) (done, merged `dc9d219`; P3b modes pending) | MT-6 |
 | P4 | `MandateWallet`, `SmartKeyAccount` (rename: EVM, Solana, Soroban) on `MetaTxBase`; the typed-struct line to `legacy/p4/` (done, merged `ebacaac`) | MT-7 (+ rename in NM-*) |
 | P5 | Node, clientkeys, encoders for the new ABI | MT-8, MT-9 |
+| P6 | PQ Zether after P5 (owner 2026-10-11): the E-S0…E-S8 stream ([pq-zether.md](docs/contracts/pq-zether.md)) on the finished token tree (`PqzToken` with CTR-PQZ-23/24 modes); PQ signatures as compatible as possible with the Ethereum drafts, both directions: ML-DSA ([EIP-8051](https://eips.ethereum.org/EIPS/eip-8051), [EIP-8355](https://eips.ethereum.org/EIPS/eip-8355): empty FIPS 204 context with domain separation in the message, the EIP key and message encodings incl. the expanded key) and Falcon/FN-DSA ([EIP-8052](https://eips.ethereum.org/EIPS/eip-8052): its hash variant and encoding); precompiles found by probe at the EIP addresses, the 7622 addresses moved out of the EIP-1352 range; see [pq-eips-vs-scaas.md](docs/research/pq-eips-vs-scaas.md) Q1–Q3, Q6 | UA PQ kinds, E-S* |
 
 **P1 start checklist (owner decisions 2026-10-08):**
 - [x] Keep the old code for reference: git tag `ref/pre-token-tree` on the last commit before P1, and copy the v1/v2 token
