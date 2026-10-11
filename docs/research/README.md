@@ -41,3 +41,4 @@ output) are kept while the repository is private and are dropped before a public
 | [_REVIEW-01-UPGRADE.md](_REVIEW-01-UPGRADE.md) | Review: `01-token-factory` và toàn bộ cơ chế upgrade |
 | [_USER-DECISIONS.md](_USER-DECISIONS.md) | Quyết định của user + phát hiện từ code thật |
 | [eip7702-eip8141-vs-metatx.md](eip7702-eip8141-vs-metatx.md) | EIP-7702 and EIP-8141 compared with the SCaaS meta-transaction (2026-10-11) |
+| [pq-eips-vs-scaas.md](pq-eips-vs-scaas.md) | Post-quantum EIP drafts and SCaaS (2026-10-11) |
