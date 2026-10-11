@@ -221,6 +221,20 @@ loop (cron, after each new outbox commit and every minute):
   COMMIT
 ```
 
+Per-item outcome of a push, in groups:
+
+```mermaid
+flowchart TD
+    R["per-item result of POST /v1/jobs"] --> OK["accepted"]
+    R --> PERM["permanent refusal:<br/>BAD_PAYLOAD, UNKNOWN_TOKEN, EXPIRED, BAD_SIGNATURE, …"]
+    R --> ATT["IDEMPOTENCY_MISMATCH,<br/>PREVIOUS_GENERATION_LIVE"]
+    R --> HOLD["DUPLICATE_DIGEST, DUPLICATE_CALL, SUBJECT_THROTTLED,<br/>SPONSOR_*, transport, 429, 503"]
+    OK --> SENT["push_state = sent,<br/>node_uid, apply snapshot"]
+    PERM --> DEAD["business job dead or failed<br/>with last_error, fail dependants"]
+    ATT --> ATN["push_state = attention,<br/>GET /v1/jobs/uid, never mark dead"]
+    HOLD --> LOC["stay local, retry<br/>(idempotent)"]
+```
+
 The `push_attempted` marker decides cancel semantics: an unmarked row can be killed locally; a marked row may exist on
 the node and must be cancelled there. HTTP runs after the marker commits and holds no row lock except the batch's own
 rows; other writers of those rows (cancel, dependency failure) lock with `FOR UPDATE` and wait at most one batch.
@@ -332,6 +346,26 @@ Per-namespace filtering at serve time: only contracts in the namespace token sub
 | Business booking | Only from `PaymentSettled` (or the family equivalent) in a range, matched on `(chain, contract, to, entryRef)`; isolate business hooks (savepoint) so a failing hook never blocks the cursor |
 | Consumed | `consumed` keeps the business request pending; it becomes final via the event, or dead if no event arrives by `valid_until + grace + 1 h` (superseded) |
 | Latency | Poll with `wait = 0` every minute, and every ~10 s while pushed jobs are live (≤ 25 s long-poll available for clients that can hold a connection) |
+
+One payment from push to booking:
+
+```mermaid
+sequenceDiagram
+    participant E as Client (ERP)
+    participant N as Node
+    participant C as Chain
+    E->>E: business transaction and outbox row, one COMMIT
+    E->>N: POST /v1/jobs
+    N-->>E: results (uid, created, state)
+    N->>C: lease, simulate, journal, broadcast
+    E->>N: GET /v1/jobs?cursor= (every minute, ~10 s while jobs are live)
+    N-->>E: job snapshots (signed, broadcast, mined)
+    C-->>N: PaymentSettled and MetaTransactionExecuted
+    N->>N: finality gate and RPC quorum
+    E->>N: GET /v1/events?cursor=
+    N-->>E: finalized range
+    E->>E: final on MetaTransactionExecuted(digest), book on PaymentSettled (chain, contract, to, entryRef)
+```
 
 **Consumption and `landed_elsewhere`.** A job whose subject nonce was used by another digest or relayer is `consumed`
 ("nonce used elsewhere"); allowed from `nonce_leased`, `signed` and `broadcast`. Applying it records
@@ -580,7 +614,9 @@ wallet) — debit the token journal's default account, credit the market's incom
 an approved paying wallet of a company) — debit the market's relayer-expense account, credit that company's token journal
 default account. Target (SPECIFIED, [dex-venue.md#trade-orders](node/dex-venue.md#trade-orders)): there is no separate
 relayer fee; each order pays one DEX fee (its signed `fee` rate on what it receives), which the DEX splits in the same
-call between the submitting relayer and the treasury. The ERP books from the DEX's `LegSettled` record: for a
+call between the submitting relayer and the treasury.
+
+The ERP books from the DEX's `LegSettled` record: for a
 company's own order, `received − dexFee` into its token journal and `dexFee` to the market's fee-expense account; for
 the operator, its treasury share (and the relayer share, when its own lane submitted) as market income. A token's
 `TradeFilled` alone is never booked (an escrowed leg shows the whole amount pulled with nothing received). On the
@@ -601,6 +637,25 @@ per company. The token keeps ElGamal `acc/pending` balances with a decrypt bound
 
 A buyer pays a supplier's invoice with a public payment token (a META tier 2 wrapper of a stablecoin). Both companies may
 use the same or different nodes.
+
+```mermaid
+sequenceDiagram
+    participant B as Buyer ERP
+    participant S as Buyer signer
+    participant N as Node
+    participant C as Chain
+    participant P as Supplier ERP
+    B->>B: 1 bill approved, 2 payment request with a random entryRef
+    B->>S: 3 typed data with pay(entryRef)
+    S-->>B: signature (device, or delegated within limits)
+    B->>N: 4 outbox row and POST /v1/jobs
+    N->>C: 5 lease, simulate, journal, broadcast
+    C-->>N: PaymentSettled(buyer to supplier, amount, entryRef)
+    N-->>B: 6 finalized range (finality gate and RPC quorum)
+    N-->>P: 6 the same event, from its node or a wallet watch
+    B->>B: 7 job final, bill paid
+    P->>P: 7 match entryRef, book the receipt
+```
 
 | # | Step | System | Detail | Status |
 |---|---|---|---|---|

@@ -133,6 +133,11 @@ users, bounded by policy. Checks before any signature:
    B2B outflow) ⇒ maker-checker, class 4 (governance/keys) ⇒ a quorum of ≥ 2 approvers distinct from the requester. Rescue/exit operations
    are never throttled.
 
+```mermaid
+flowchart LR
+    R["sign request"] --> C1{"1 contract"} --> C2{"2 operation"} --> C3{"3 caps"} --> C4{"4 validUntil"} --> C5{"5 risk class"} --> S["signature"]
+```
+
 Today an ERP client applies checks 1–4 in process before calling the dev-only environment custody adapter
 ([INT-ERP-08](../integration.md#INT-ERP-08)); the mandate path enforces caps on chain. The service itself (`SigningPolicyService`) is PLANNED; the dev adapter is the
 `env:` custody adapter.
