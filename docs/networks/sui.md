@@ -49,6 +49,17 @@ move to a per-subject `Keys` object ([NET-SUI-02](#NET-SUI-02)).
 | `dex::Dex` | shared | `AdminCap` | parent of the `Market`s (admin only) |
 | `dex::Market` | shared, **derived** from `Dex` per type pair | `AdminCap` (`list_market`) | fees, `filled`, `min_nonce` of ONE market |
 
+```mermaid
+flowchart TD
+    AC["AdminCap (owned)"] -->|"set_network once"| RT["meta::Root (shared, one)"]
+    RT -->|"derived by TypeName(T), anyone: new_registry"| RG["meta::Registry&lt;T&gt; (shared)"]
+    RG -->|"derived by owner address: open"| AX["meta::Account&lt;T&gt; (shared)"]
+    AC -->|creates| DX["dex::Dex (shared)"]
+    DX -->|"derived per type pair: list_market"| MK["dex::Market (shared)"]
+    MD["mandate::Mandate&lt;T&gt; (shared)"] -.->|"take / put (package only)"| AX
+    DX -.->|"take / put (package only)"| AX
+```
+
 <a id="NET-SUI-03"></a>**NET-SUI-03** — **`Account<T>` and `Registry<T>` are derived objects.** The id of
 `Account<T>` = `derive_address(registry_id, owner)` =
 `blake2b256(0xf0 ‖ registry ‖ u64le(32) ‖ owner ‖ bcs(TypeTag 0x2::derived_object::DerivedObjectKey<address>))`. So (1)

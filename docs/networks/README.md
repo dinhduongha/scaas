@@ -96,6 +96,21 @@ per-subject sequential nonce ([NODE-MESH-07](../node/mesh.md#NODE-MESH-07); owne
    `drain` entry over the stored `ExtendRef`/PDA seeds for every subject on that chain — the failure mode SCaaS
    exists to remove. Cost: no hotfix in place.
 
+Principle 2 in a picture:
+
+```mermaid
+flowchart LR
+    subgraph ACC["Account sequence as the ordering (not the SCaaS path)"]
+        SQ["subject account sequence"] --> X1["op on contract 1, stuck"] --> Y1["op on contract 2, blocked behind it"]
+    end
+    subgraph LANE["Contract-level lanes (default on every network)"]
+        SG["subject signs: network, contract, lane,<br/>nonce, expiry, operation hash"] --> C1["contract 1: own lane and nonce"]
+        SG --> C2["contract 2: own lane and nonce"]
+        C1 --> RL["relayer submits from its own account<br/>and pays native gas"]
+        C2 --> RL
+    end
+```
+
 ## 3. Common on-chain model
 
 <a id="model"></a>
@@ -440,6 +455,21 @@ blocking, and every family passes the anti-lock test.**
 | Cosmos | lane account | account sequence per lane, one transaction in flight | the subject sends no transaction |
 | TON | lane wallet (W5) | seqno per lane, one transaction in flight | the subject sends no transaction; the subject's jetton wallet keeps its own lanes/nonces |
 | Solana | lane key with its own durable nonce account | one durable-nonce value per landed transaction | write-locks of two ops of one subject on different contracts are disjoint ([NET-SOL-04](solana.md#NET-SOL-04)) |
+
+```mermaid
+sequenceDiagram
+    participant S as Subject
+    participant R as Relayer
+    participant C1 as Contract 1
+    participant C2 as Contract 2
+    S->>R: signed op X (contract 1)
+    S->>R: signed op Y (contract 2)
+    R--xC1: X held back or stuck
+    R->>C2: Y
+    C2-->>R: Y succeeds
+    R->>C1: X
+    C1-->>R: X succeeds
+```
 
 Mandatory test per network (**anti-lock**): the subject signs op X on contract 1 and op Y on contract 2; X is held
 back (not sent, or sent stuck); Y still succeeds; then X succeeds. Soroban is off the mesh, so its anti-lock test runs

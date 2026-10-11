@@ -341,6 +341,19 @@ apply because pk + message are compared verbatim, not merely "an ed25519 instruc
 also pays the base fee: a `relay_pay` transaction = 10 000 lamports (one lane + one precompile signature; LiteSVM and a
 real validator), 51 580 CU. BUILT.
 
+One relayed transaction, as built:
+
+```mermaid
+flowchart LR
+    subgraph TX["Transaction (fee payer = relayer lane)"]
+        I0["instruction precompile_ix:<br/>Ed25519 or Secp256r1 verify<br/>(runtime checks the signature)"]
+        I1["our program instruction mtx_…<br/>Auth{kind, key_index, precompile_ix, sig_index}"]
+    end
+    I1 -->|"load_instruction_at_checked<br/>(instructions sysvar)"| I0
+    I1 --> CK["compare program id, all three indexes = u16::MAX,<br/>pk and message byte for byte"]
+    CK --> EX["lane PDA nonce, execute"]
+```
+
 <a id="NET-SOL-24"></a>**NET-SOL-24** — **The Solana passkey verifier refuses `"crossOrigin":true` and any `"topOrigin"`**
 (the common grammar, [NET-ALL-04](README.md#NET-ALL-04); as on Aptos, `auth.move:99`). SPECIFIED (as built `auth::passkey`
 does not check them, `auth.rs:175-193`). LiteSVM test: an assertion vector with those fields ⇒ `BadWebAuthn`.

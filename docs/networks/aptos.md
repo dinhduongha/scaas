@@ -80,6 +80,15 @@ What Move can verify (checked 2026-10-04; references `aptos-stdlib/sources/crypt
 | `Dex` | `create_object_address(root, b"dex")` | admin | parent of the markets, admin only |
 | `Market` | `create_object_address(dex, b"mkt" ‖ bcs(base) ‖ bcs(quote))` | admin `list_market` | fees, `filled`, `min_nonce` of **one** pair |
 
+```mermaid
+flowchart TD
+    PK["package scaas<br/>(immutable code object)"] --> RT["Root<br/>create_object_address(@scaas, 'scaas.root')"]
+    RT -->|"'acct' ‖ owner"| AC["Account<br/>keys, guardian, lanes, balances"]
+    RT -->|"'mandate' ‖ owner ‖ seed"| MD["Mandate"]
+    RT -->|"'dex'"| DX["Dex"]
+    DX -->|"'mkt' ‖ base ‖ quote"| MK["Market"]
+```
+
 `create_object_address(src, seed) = sha3_256(src ‖ seed ‖ 0xFE)`, so the client, the relayer and connectors compute
 every address **without RPC**. A named object cannot be created twice, so the chain enforces one Account per subject.
 Cross vectors Move = client verifier = Rust.

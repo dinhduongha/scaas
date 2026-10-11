@@ -33,6 +33,22 @@ Three contracts in `smartcontracts/cosmos/` (own Rust workspace, `cosmwasm-std` 
 Adapter `scaas-node/src/adapters/cosmos.rs`; devnet `cosmwasm/wasmd:v0.61.15` (wasmvm 3, module `x/wasm`), ports 31990–31999. Chains are
 keyed `cosmos:<chain-id>`.
 
+The built path (**Transitional (BUILT)**, see [payload](#payload)):
+
+```mermaid
+sequenceDiagram
+    participant S as Subject (Keplr, Leap, passkey)
+    participant R as Relayer lane
+    participant T as scaas-token contract
+    S->>S: sign sorted-key JSON MetaOp (ADR-036 signArbitrary)
+    S->>R: payload bytes + auth
+    R->>T: MsgExecuteContract Relay{payload, auth} (lane's own account sequence)
+    T->>T: network, contract, domain, valid_until, nonce for (from, lane)
+    T->>T: verify the scheme: sha256 of the sign doc and secp256k1_verify, or passkey
+    T->>T: address from the public key equals from
+    T-->>R: event meta_tx_executed (digest = sha256(payload))
+```
+
 ## 2. Payload
 
 <a id="payload"></a>

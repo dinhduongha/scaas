@@ -541,6 +541,18 @@ and `UARegistered` carries `pk` (16 KB of log data, ≈ 0.13 M gas). Registratio
 | `sendCounter` | uint64 | debit (+1) | in the statement; replay protection; [CTR-PQZ-19](#CTR-PQZ-19) |
 | `entry[entryRef]` | bytes32 | transfer | `bundleHash` for disclosure |
 
+The slots above, as a flow:
+
+```mermaid
+flowchart LR
+    SH["pqzShield:<br/>plainPending += amount"] --> PL["plainPending<br/>(public integer)"]
+    CR["proven transfer credit:<br/>pendingCount++"] --> PD["pending[i]<br/>(pendingHash)"]
+    PD -->|"pqzRollOver, anyone:<br/>acc += cts, rolled += n"| ACC["acc<br/>(accHash)"]
+    ACC -->|"debit proves over T =<br/>acc + Σ inline + plain term"| DEB["fresh encryption of b'"]
+    PL -->|"plainUsed ≤ plainPending"| DEB
+    DEB -->|"new acc, floor = p,<br/>sendCounter++"| ACC
+```
+
 Credit cap: a proven credit reverts `RefreshRequired(ua)` when `accUnits + (pendingCount − rolled) + 1 + 1 > K_MAX` (the
 new credit and the reserved plain term). `pqzShield` and fee credits never hit the cap. Token globals: `underlying`,
 `shieldScale`, `maxShielded ≤ 2^62`, `totalShielded`, `confidentialFee`, `auditorUA` (or 0), `registry`,

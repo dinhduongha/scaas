@@ -301,6 +301,25 @@ arrives); fills are **all-or-nothing** (no partial fill); `Refund` is permission
 it; gas is paid from the TON attached to the order); cancel = op `revoke` on the order's lane/nonce. A deliberate
 deviation from the EVM DEX: TON has no cross-contract atomicity. BUILT.
 
+```mermaid
+sequenceDiagram
+    participant A as Maker A
+    participant B as Maker B
+    participant W as DEX jetton wallet
+    participant D as ScaasDex
+    participant K as Anyone (keeper)
+    A->>W: signed jetton transfer with TradeLeg
+    W->>D: transfer_notification
+    D->>D: recompute digest, check leg, store orders[digest]
+    B->>W: signed jetton transfer with TradeLeg
+    W->>D: transfer_notification
+    K->>D: Match{a, b}
+    D->>D: check minOut after fee, counterparty, maxFeePpm
+    D-->>A: pay leg (fill or kill)
+    D-->>B: pay leg
+    Note over D: a broken leg is refunded, Refund is permissionless after valid_until
+```
+
 `ScaasDex`: `SetMarket{a, b, enabled, makerPpm, takerPpm}` (admin; ppm ≤ 10 000 = 1 %); the DEX derives its own jetton
 wallet per master with `initOf`. A broken leg (`parseLeg` fails, a duplicate) is refunded ([NET-TON-14](#NET-TON-14)). A leg arrives as a
 `transfer_notification` from the DEX's jetton wallet: the DEX

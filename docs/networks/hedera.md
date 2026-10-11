@@ -87,6 +87,17 @@ only 65 bytes (no EIP-2098), so 64 bytes are never ECDSA here, and the precompil
 = EC, 64 = ED). Key ↔ account is bound **on chain** by the precompile (it reads the account's key from Hedera state),
 so a public key sent by a client is never a basis for authority.
 
+```mermaid
+flowchart TD
+    V["HederaMetaToken._requireValidSignature"] --> Q1{"from has code?"}
+    Q1 -->|yes| E1271["ERC-1271 (unchanged)"]
+    Q1 -->|no| Q2{"signature exactly 64 bytes?"}
+    Q2 -->|yes| H["HIP-632 isAuthorizedRaw at 0x16a<br/>CALL, capped at 100 000 gas"]
+    H -->|"true"| OK["authorised"]
+    H -->|"false or revert"| NO["not authorised"]
+    Q2 -->|no| EC["parent ecrecover (65 bytes)"]
+```
+
 Precompile behaviour (read from the consensus node's `IsAuthorizedRawCall.java` and tried on testnet on
 2026-10-03):
 
