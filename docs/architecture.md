@@ -97,7 +97,7 @@ forced transfer against a recorded order. Among them:
   disables a flag that was not locked, renounces; [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)), and the role
   holders of those flags, such as the `rateAdmin` (step-capped, timelocked rate changes) and the `guardian` (only
   `disableWrap`) ([CTR-TOK-10](contracts/token-wrappers.md#CTR-TOK-10));
-- the `SCaaSDex` `admin` (as built `setMarket` with a market fee of at most 1 %, bounded by each order's signed
+- the `SCaaSDexV1` `admin` (as built `setMarket` with a market fee of at most 1 %, bounded by each order's signed
   `maxFeePpm`; specified: four powers — listing, the split of each order's signed fee between relayer and treasury,
   exchange targets, listed-only mode — never the amount, [CTR-DEX-03](contracts/dex.md#CTR-DEX-03));
 - the admin `mint` of the standalone non-EVM tokens on Soroban, TON and CosmWasm (a supply power, not a balance power);
@@ -220,7 +220,7 @@ uses Zether; hiding the relationship itself is out of scope by design ("not a mi
 
 When every leg is on chain, use one-transaction settlement. When a leg is off chain, anchor the on-chain leg **after**
 the off-chain leg is irrevocable, or give the saga a funded on-chain compensation path. Atomic settlement is BUILT for
-payments (the `pay` op), the DEX (`SCaaSDex.settle`, legacy `MetaTxDex`; specified: `SCaaSDex.mtxSettle`, one
+payments (the `pay` op), the DEX (`SCaaSDexV1.settle`, legacy `MetaTxDex`; specified: `SCaaSDex.mtxSettle`, one
 taker against several makers, each leg verified by its sell token) and mandates (`MandateWallet.payUnderMandate`,
 specified name `mtxPayUnderMandate`); generic saga orchestration is a client concern.
 
@@ -680,7 +680,7 @@ sequenceDiagram
 
 Role-free `TradeOrder`s rest in the node's book and settle in one call that pays every party
 ([CTR-DEX-15](contracts/dex.md#CTR-DEX-15), [node/dex-venue.md](node/dex-venue.md)); built: DEX-signed orders over
-allowances, `SCaaSDex.settle`, `OrderFilled` / `Matched`.
+allowances, `SCaaSDexV1.settle`, `OrderFilled` / `Matched`.
 
 ```mermaid
 sequenceDiagram
@@ -688,7 +688,7 @@ sequenceDiagram
     participant TK as Taker wallet
     participant VEN as Node gateway and venue
     participant LANE as Submit lane
-    participant DEX as SCaaSDex
+    participant DEX as SCaaSDexV1
     participant ST as Sell token (SCaaS)
     participant PUL as DexPuller
     MK->>VEN: POST /v1/dex/orders (TradeOrder, sig)

@@ -368,7 +368,7 @@ equals `chain.chain_uid` ([NODE-GW-07](gateway.md#NODE-GW-07)); a mismatch ⇒ `
 
 Transitional (BUILT): the deployed contracts and the node's built table use the earlier names —
 `SmartKeyAccount.executeAsOwner(bytes,uint256,uint256,bytes)`, `MandateWallet.payUnderMandate`/`revokeWithSig`/`executeAsOwner`,
-`SCaaSDex.settle`/`cancel`/`invalidateNonces` — and the DEX row also matches the chain's single `dex` field. The
+`SCaaSDexV1.settle`/`cancel`/`invalidateNonces` — and the DEX row also matches the chain's single `dex` field. The
 renamed rows replace them in the release that deploys the renamed contracts; no deployed chain keeps both.
 
 ## 12. Job states

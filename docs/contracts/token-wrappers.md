@@ -678,8 +678,8 @@ struct DexConfig { address admin; uint32 relayerSharePpm; address treasury; bool
   owner, underlyings)`, where `lockedFeatures` is the value the token stored (`locked | (features & ALWAYS_LOCKED)`, read
   back from `lockedFeatures()` after `initialize`), not the requested one; `DexCreated(dex, creator, version, implementation, admin)` for a DEX clone
   ([CTR-DEX-24](dex.md#CTR-DEX-24)).
-- **Registry views:** `isToken(addr)`, `isDex(addr)`, `versionOf(addr)`. `isDex` is advisory: clients and the node use it,
-  tokens never consult it ([CTR-DEX-24](dex.md#CTR-DEX-24)).
+- **Registry views:** `isToken`, `versionOf`; for a DEX `isDex`, `dexVersionOf` (advisory, tokens never consult them,
+  [CTR-DEX-24](dex.md#CTR-DEX-24)); catalogue `registerDexImplementation`, `dexImplementationOf`, `latestDexVersion`.
 - One `IOpenFactory` and one `IFactoryToken` (the v2 interfaces are gone; the v1 ones are `IOpenFactoryV1` and
   `IFactoryTokenV1`).
 
@@ -691,8 +691,8 @@ and `roles`.
 <a id="transitional-built-tokens"></a>
 
 **Transitional (BUILT, P1e).** `OpenFactory` (`src/factory/OpenFactory.sol`, `IOpenFactory.sol`, `IFactoryToken.sol`) is
-built as [CTR-TOK-03](#CTR-TOK-03) and [CTR-TOK-25](#CTR-TOK-25) specify, except that it creates no Zether token,
-DEX (`createDex`, `isDex`, `DexCreated`: P2) and has no `setZetherEnabled` (P3). `NoUnderlyingToken` and
+built as [CTR-TOK-03](#CTR-TOK-03) and [CTR-TOK-25](#CTR-TOK-25) specify, except that it creates no Zether token and has
+no `setZetherEnabled` (P3); `createDex` and the DEX catalogue are built (P2b-1, [CTR-DEX-24](dex.md#CTR-DEX-24)). `NoUnderlyingToken` and
 `UnderlyingToken` implement `initialize(creator, version, TokenConfig)` and a constant `kind()` (0 and 1). The v1 line
 (`ERC20MetaTxV1`, `MetaToken`, `HederaMetaToken`, `ZetherToken`, `MetaTxDex`) stays in the build as `OpenFactoryV1`,
 `IOpenFactoryV1` and `IFactoryTokenV1` (`createMetaToken`, `createZetherToken`) until the node, clientkeys (P5) and Zether (P3) move; it then goes to

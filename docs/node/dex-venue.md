@@ -1,6 +1,6 @@
 # DEX venue
 
-The DEX venue is the node's off-chain order book in front of `SCaaSDex` ([contracts/dex.md](../contracts/dex.md)):
+The DEX venue is the node's off-chain order book in front of `SCaaSDexV1` until P5, then `SCaaSDex` ([contracts/dex.md](../contracts/dex.md)):
 it admits signed orders at the gateway, matches them price-time, and settles each match — one taker against one or
 more makers — with `mtxSettle` jobs in `~dex`. The contracts are the arbiter of every fill; the venue only decides
 which matches are worth sending. Status: book, matcher, intake, routes and watcher **BUILT** (book persisted in the
@@ -329,7 +329,7 @@ through the legacy `dex_book_load`, then resumes markets in the node.
 
 <a id="gossip"></a><a id="NODE-DEX-12"></a>**NODE-DEX-12** — **DEX book gossip, two order modes per market.**
 **Home-bound** (default; `dex.rs` l.552–554): an order bound to relayer `r` is matched and settled **only by the home** that proved `r` in
-its announce ([gossip.md#announce](gossip.md#announce)); `SCaaSDex._accept` (`relayer ∈ {0, sender}`, l.263) makes this
+its announce ([gossip.md#announce](gossip.md#announce)); `SCaaSDexV1._accept` (`relayer ∈ {0, sender}`, l.263) makes this
 **hard**, and with `filled + fill ≤ sellAmount` (l.267) and each pair in `try settleOne` (`MatchFailed`) **no fill can be
 settled twice in either mode**; the rules below only keep honest nodes from wasting gas and showing phantom fills. Other nodes keep read-only replicas — a home register (highest `home_seq` wins) joined with chain facts
 (`filled = max`, `closed = or`) — and replicate/advertise only **DEX-trusted homes**. **Relayer-unbound**
