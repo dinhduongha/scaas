@@ -1,0 +1,231 @@
+// SPDX-License-Identifier: Apache-2.0
+pragma solidity ^0.8.20;
+
+import {V2Fixture} from "./helpers/V2Fixture.sol";
+import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
+import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {ITradeToken} from "../../src/trade/ITradeToken.sol";
+import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
+
+/// The sell token's side of a `TradeOrder` (CTR-DEX-15, -14, -04, -05, -02). This test contract plays the DEX: it is
+/// a contract and it is `o.dex`.
+contract TradeTest is V2Fixture {
+    uint256 constant ALICE_PK = 0xA11CE;
+    address alice = vm.addr(ALICE_PK);
+    address other = address(0x07E5);
+    NoUnderlyingToken t;
+    NoUnderlyingToken t2;
+
+    function setUp() public {
+        t = _none(alice, 1_000_000, address(0));
+        t2 = _none(alice, 1_000_000, address(0));
+    }
+
+    function _order(uint256 amount, uint256 receiveAmount) internal view returns (ITradeToken.TradeOrder memory o) {
+        o.from = alice;
+        o.receiveToken = address(t2);
+        o.amount = amount;
+        o.receiveAmount = receiveAmount;
+        o.dex = address(this);
+        o.batch = 1;
+        o.nonce = 1;
+        o.validUntil = block.timestamp + 300;
+    }
+
+    function _sign(NoUnderlyingToken tok, ITradeToken.TradeOrder memory o) internal view returns (bytes memory) {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, tok.tradeOrderDigest(o));
+        return abi.encodePacked(r, s, v);
+    }
+
+    function _fill(uint256 sell, uint256 recv, uint256 fee) internal view returns (ITradeToken.TradeFill memory) {
+        return ITradeToken.TradeFill(sell, recv, fee, relayer);
+    }
+
+    function _trade(ITradeToken.TradeOrder memory o, ITradeToken.TradeFill memory f) internal {
+        t.mtxTrade(o, _sign(t, o), f);
+    }
+
+    function _expect(bytes4 sel, ITradeToken.TradeOrder memory o, ITradeToken.TradeFill memory f) internal {
+        bytes memory sig = _sign(t, o);
+        vm.expectRevert(abi.encodeWithSelector(sel, t.tradeOrderDigest(o)));
+        t.mtxTrade(o, sig, f);
+    }
+
+    // ------------------------------------------------------------------ Path A
+
+    function test_pathA_partialFillsToTheDex_thenTheRemainderCloses() public {
+        ITradeToken.TradeOrder memory o = _order(1000, 2000);
+        bytes32 h = t.tradeOrderDigest(o);
+        vm.expectEmit(address(t));
+        emit ITradeToken.TradeFilled(h, alice, 600, 1200, 0);
+        _trade(o, _fill(600, 1200, 0));
+        assertEq(t.balanceOf(address(this)), 600);
+        assertEq(t.pulled(h), 600);
+        _trade(o, _fill(400, 800, 0)); // the remainder may close below the minimum
+        assertEq(t.pulled(h), 1000);
+        _expect(ITradeToken.OrderClosed.selector, o, _fill(1, 2, 0));
+    }
+
+    function test_pathA_bounds() public {
+        ITradeToken.TradeOrder memory o = _order(1000, 2000);
+        _expect(ITradeToken.ZeroFill.selector, o, _fill(0, 0, 0));
+        _expect(ITradeToken.Overfill.selector, o, _fill(1001, 2002, 0));
+        _expect(ITradeToken.BelowMinFill.selector, o, _fill(499, 998, 0)); // 50 % floor
+        _expect(ITradeToken.PriceLimit.selector, o, _fill(600, 1199, 0));
+        _expect(ITradeToken.FeeAboveSigned.selector, o, _fill(600, 1200, 1)); // fee 0 signed
+        o.fee = 3_000; // 0.3 % of 1200 = 3.6 -> 4 (rounded up)
+        _trade(o, _fill(600, 1200, 4));
+        ITradeToken.TradeOrder memory o2 = _order(1000, 2000);
+        o2.nonce = 2;
+        o2.fee = 3_000;
+        _expect(ITradeToken.FeeAboveSigned.selector, o2, _fill(600, 1200, 5));
+    }
+
+    function test_minFill_signerAboveTheFloor_andFillOrKill() public {
+        ITradeToken.TradeOrder memory o = _order(1000, 2000);
+        o.minFill = 800;
+        _expect(ITradeToken.BelowMinFill.selector, o, _fill(700, 1400, 0));
+        o.minFill = 1000; // fill-or-kill
+        _expect(ITradeToken.BelowMinFill.selector, o, _fill(999, 1998, 0));
+        _trade(o, _fill(1000, 2000, 0));
+        o.minFill = 1001;
+        o.nonce = 2;
+        _expect(ITradeToken.BadMinFill.selector, o, _fill(1000, 2000, 0));
+    }
+
+    function test_ioc_closesAtItsSinglePull() public {
+        ITradeToken.TradeOrder memory o = _order(1000, 2000);
+        o.flags = 1; // IOC
+        _trade(o, _fill(600, 1200, 0));
+        assertEq(t.pulled(t.tradeOrderDigest(o)), 1000);
+        _expect(ITradeToken.OrderClosed.selector, o, _fill(400, 800, 0));
+    }
+
+    // ------------------------------------------------------------------ Path B
+
+    function test_pathB_escrowPullsTheWholeAmountOnce() public {
+        ITradeToken.TradeOrder memory o = _order(1000, 2000);
+        o.flags = 3; // IOC | ESCROW
+        _expect(ITradeToken.EscrowFillShape.selector, o, _fill(999, 0, 0));
+        _expect(ITradeToken.EscrowFillShape.selector, o, _fill(1000, 2000, 0));
+        _trade(o, _fill(1000, 0, 0));
+        assertEq(t.balanceOf(address(this)), 1000);
+        _expect(ITradeToken.OrderClosed.selector, o, _fill(1000, 0, 0));
+        o.flags = 2; // ESCROW without IOC
+        o.nonce = 2;
+        _expect(ITradeToken.BadFlags.selector, o, _fill(1000, 0, 0));
+        o.flags = 8; // unknown bit
+        _expect(ITradeToken.BadFlags.selector, o, _fill(1000, 0, 0));
+    }
+
+    // ------------------------------------------------------------------ caller, identities, shape
+
+    function test_onlyTheNamedDex_andItMustBeAContract() public {
+        ITradeToken.TradeOrder memory o = _order(1000, 2000);
+        bytes memory sig = _sign(t, o);
+        vm.prank(other);
+        vm.expectRevert(abi.encodeWithSelector(ITradeToken.NotDex.selector, other));
+        t.mtxTrade(o, sig, _fill(600, 1200, 0));
+        o.dex = other; // an EOA
+        sig = _sign(t, o);
+        vm.prank(other);
+        vm.expectRevert(abi.encodeWithSelector(ITradeToken.DexNotContract.selector, other));
+        t.mtxTrade(o, sig, _fill(600, 1200, 0));
+    }
+
+    function test_selfOrder_relayer_expiry_shape() public {
+        ITradeToken.TradeOrder memory o = _order(1000, 2000);
+        o.relayer = address(0x5E1);
+        bytes memory sig = _sign(t, o);
+        vm.expectRevert(abi.encodeWithSelector(ITradeToken.WrongRelayer.selector, t.tradeOrderDigest(o), relayer));
+        t.mtxTrade(o, sig, _fill(600, 1200, 0));
+        o = _order(1000, 2000);
+        o.validUntil = block.timestamp - 1;
+        _expect(ITradeToken.OrderExpired.selector, o, _fill(600, 1200, 0));
+        o = _order(0, 2000);
+        _expect(ITradeToken.ZeroAmount.selector, o, _fill(600, 1200, 0));
+        o = _order(1000, 0);
+        _expect(ITradeToken.ZeroAmount.selector, o, _fill(600, 1200, 0));
+        o = _order(1000, 2000);
+        o.fee = 10_001;
+        _expect(ITradeToken.FeeAboveCap.selector, o, _fill(600, 1200, 0));
+        o = _order(1000, 2000);
+        o.receiveToken = address(t); // a cycle order X -> X is allowed by the token
+        _trade(o, _fill(600, 1200, 0));
+    }
+
+    function test_badSignature_andReplayOnAnotherToken() public {
+        ITradeToken.TradeOrder memory o = _order(1000, 2000);
+        bytes memory sigOnT2 = _sign(t2, o); // signed in t2's domain
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        t.mtxTrade(o, sigOnT2, _fill(600, 1200, 0));
+    }
+
+    function test_erc1271Signer() public {
+        Mock1271Wallet w = new Mock1271Wallet(alice);
+        vm.prank(alice);
+        t.transfer(address(w), 1000);
+        ITradeToken.TradeOrder memory o = _order(1000, 2000);
+        o.from = address(w);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, t.tradeOrderDigest(o));
+        t.mtxTrade(o, abi.encodePacked(r, s, v), _fill(600, 1200, 0));
+        assertEq(t.balanceOf(address(this)), 600);
+    }
+
+    // ------------------------------------------------------------------ cancel (CTR-DEX-02)
+
+    function test_cancel_closesForever_replayIsANoOp() public {
+        ITradeToken.TradeOrder memory o = _order(1000, 2000);
+        bytes32 h = t.tradeOrderDigest(o);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, t.cancelOrderDigest(h));
+        bytes memory c = abi.encodePacked(r, s, v);
+        vm.expectEmit(address(t));
+        emit ITradeToken.OrderCancelled(h, alice);
+        vm.prank(other); // anyone submits
+        t.mtxCancelOrder(o, c);
+        assertEq(t.pulled(h), 1000);
+        vm.recordLogs();
+        t.mtxCancelOrder(o, c);
+        assertEq(vm.getRecordedLogs().length, 0);
+        _expect(ITradeToken.OrderClosed.selector, o, _fill(600, 1200, 0));
+        (v, r, s) = vm.sign(0xBAD, t.cancelOrderDigest(h));
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        t.mtxCancelOrder(o, abi.encodePacked(r, s, v));
+    }
+
+    function test_invalidateNonces_strictlyIncreasing_capped() public {
+        ITradeToken.TradeOrder memory o = _order(1000, 2000);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, t.invalidateNoncesDigest(alice, 1, 2));
+        vm.expectEmit(address(t));
+        emit ITradeToken.NoncesInvalidated(alice, 1, 2);
+        t.mtxInvalidateNonces(alice, 1, 2, abi.encodePacked(r, s, v));
+        assertEq(t.minNonce(alice, 1), 2);
+        _expect(ITradeToken.NonceInvalidated.selector, o, _fill(600, 1200, 0)); // nonce 1 < 2
+        bytes memory again = abi.encodePacked(r, s, v);
+        vm.expectRevert(abi.encodeWithSelector(ITradeToken.MinNonceNotIncreasing.selector, 2, 2));
+        t.mtxInvalidateNonces(alice, 1, 2, again);
+        uint256 big = 2 ** 128 + 1;
+        (v, r, s) = vm.sign(ALICE_PK, t.invalidateNoncesDigest(alice, 1, big));
+        vm.expectRevert(abi.encodeWithSelector(ITradeToken.MinNonceAboveCap.selector, big));
+        t.mtxInvalidateNonces(alice, 1, big, abi.encodePacked(r, s, v));
+        o.batch = 2; // another lane is untouched
+        _trade(o, _fill(600, 1200, 0));
+    }
+
+    // ------------------------------------------------------------------ never gasless
+
+    function test_tradeEntriesAreNotAllowlisted() public {
+        bytes4[3] memory sels = [t.mtxTrade.selector, t.mtxCancelOrder.selector, t.mtxInvalidateNonces.selector];
+        (bytes4[] memory s,,) = t.mtxSelectors();
+        for (uint256 i; i < sels.length; ++i) {
+            for (uint256 j; j < s.length; ++j) assertTrue(s[j] != sels[i]);
+        }
+    }
+
+    function test_typehashesArePinned() public pure {
+        assertEq(keccak256(
+            "TradeOrder(address from,address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,"
+            "uint256 fee,address relayer,address dex,address destination,uint8 flags,uint256 batch,uint256 nonce,"
+            "uint256 validUntil)"), 0xffe350903bdef674d7c33448fa7ce9b1cd306aa838f3ce1bbdd82aca46773f5d);
+    }
+}

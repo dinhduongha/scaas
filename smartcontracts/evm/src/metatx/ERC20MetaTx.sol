@@ -10,13 +10,16 @@ import {IERC20Payment} from "./IERC20Payment.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 import {SigCheck} from "../common/SigCheck.sol";
+import {ITradeToken} from "../trade/ITradeToken.sol";
+import {TradeLib} from "../trade/TradeLib.sol";
 
 /// @title The token base of every SCaaS token (CTR-MTX-07): ERC-20 on `MetaTxBase`.
 /// @notice Adds to the generic base: the fee in this token (`_chargeFee` by fee class, CTR-MTX-20), the typed
 ///         `MetaTransfer` path (`mtxExecuteTransfer`, `mtxBatchTransfer`, CTR-MTX-23/24) on the same lanes, the
 ///         allowance rule (CTR-TOK-01) and "no tokens at the token's own address" (CTR-MTX-18). Domain
-///         `("SCaaS MetaToken", "1", chainId, clone, chain_uid)` for every kind (CTR-MTX-02).
-abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment {
+///         `("SCaaS MetaToken", "1", chainId, clone, chain_uid)` for every kind (CTR-MTX-02). The sell side of a
+///         `TradeOrder` (CTR-DEX-15) through `TradeLib`.
+abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken {
     using MetaTxLib for MetaTxLib.MetaTransfer;
 
     constructor(bytes32 chainUid_) ERC20("", "") MetaTxBase("SCaaS MetaToken", chainUid_) {}
@@ -30,6 +33,49 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment {
 
     function mtxTransferDigest(MetaTxLib.MetaTransfer calldata t) external view returns (bytes32) {
         return _hashTypedDataV4(t.hashStruct());
+    }
+
+    // ------------------------------------------------------------------ trade orders (CTR-DEX-15, CTR-DEX-02)
+
+    function tradeOrderDigest(TradeOrder calldata o) public view returns (bytes32) {
+        return _hashTypedDataV4(TradeLib.hashStruct(o));
+    }
+
+    function cancelOrderDigest(bytes32 orderHash) public view returns (bytes32) {
+        return _hashTypedDataV4(keccak256(abi.encode(TradeLib.CANCEL_ORDER_TYPEHASH, orderHash)));
+    }
+
+    function invalidateNoncesDigest(address from, uint256 batch, uint256 newMin) public view returns (bytes32) {
+        return _hashTypedDataV4(keccak256(abi.encode(TradeLib.INVALIDATE_NONCES_TYPEHASH, from, batch, newMin)));
+    }
+
+    function pulled(bytes32 orderHash) external view returns (uint256) {
+        return TradeLib.$().pulled[orderHash];
+    }
+
+    function minNonce(address from, uint256 batch) external view returns (uint256) {
+        return TradeLib.$().minNonce[from][batch];
+    }
+
+    /// @notice Only `o.dex` calls (a direct read of the caller, CTR-MTX-18); never allowlisted. Moves the fill from
+    ///         `o.from` to `o.dex` and nowhere else.
+    function mtxTrade(TradeOrder calldata o, bytes calldata sig, TradeFill calldata f) external nonReentrant {
+        bytes32 h = tradeOrderDigest(o);
+        TradeLib.precheck(o, f, h, msg.sender);
+        _requireValidSignature(o.from, h, sig);
+        _transfer(o.from, o.dex, TradeLib.record(o, f, h));
+    }
+
+    /// @notice Cancel signatures never expire (CTR-DEX-02); anyone may submit one.
+    function mtxCancelOrder(TradeOrder calldata o, bytes calldata sig) external nonReentrant {
+        bytes32 h = tradeOrderDigest(o);
+        _requireValidSignature(o.from, cancelOrderDigest(h), sig);
+        TradeLib.cancel(o, h);
+    }
+
+    function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes calldata sig) external nonReentrant {
+        _requireValidSignature(from, invalidateNoncesDigest(from, batch, newMin), sig);
+        TradeLib.invalidate(from, batch, newMin);
     }
 
     // ------------------------------------------------------------------ typed path (CTR-MTX-23, CTR-MTX-24)

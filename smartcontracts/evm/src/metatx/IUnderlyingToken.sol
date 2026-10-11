@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.24;
 
+import {ITradeToken} from "../trade/ITradeToken.sol";
+
 /// @title Kind `UNDERLYING` (CTR-TOK-21): 1–8 legs, each an ERC-20 or the native coin (`address(0)`, CTR-TOK-26).
 /// @notice Events and errors raised by `UnderlyingLib` (an external library) are declared here so that they are in the
 ///         token ABI. The creation config is `IFactoryToken.TokenConfig` (`legs`, `rate`).
@@ -43,6 +45,11 @@ interface IUnderlyingToken {
     error WrapPausedForRateChange(address u);
     /// @notice `msg.value` must equal `amount` on the native leg and be 0 on any other leg (CTR-TOK-26).
     error NativeValueMismatch(uint256 value, uint256 expected);
+    /// @notice `mtxWrap` (CTR-TOK-20): a signature cannot carry coin; the order must buy this token; the underlying
+    ///         must deliver exactly `o.amount`.
+    error NativeNotGasless();
+    error WrapOrderInvalid(address receiveToken);
+    error WrapReceivedMismatch(uint256 expected, uint256 received);
     /// @notice Raised by OpenZeppelin inside UnderlyingLib (same selectors), listed for the ABI.
     error FailedCall();
     error SafeERC20FailedOperation(address token);
@@ -58,6 +65,10 @@ interface IUnderlyingToken {
     function unwrap(address underlying, uint256 wrapped, address recipient, uint256 minOut)
         external returns (uint256 out, uint256 burned);
     function addReserve(address underlying, uint256 amount) external payable;
+    /// @notice Wrap a SCaaS underlying by the holder's `TradeOrder` (`dex` = this token, `receiveToken` = this
+    ///         token, `receiveAmount` = the minimum minted, `minFill = amount`); `fee` pays the submitter in minted units.
+    function mtxWrap(address underlying, ITradeToken.TradeOrder calldata o, bytes calldata sig)
+        external returns (uint256 minted);
     function disableWrap(address underlying, bytes32 reason) external;
     function proposeRate(address underlying, uint96 num, uint96 den) external;
     function cancelRate() external;
