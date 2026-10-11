@@ -173,7 +173,7 @@ P5, the v1 line (`OpenFactoryV1` with `MetaToken` as version 1 of `META`, `MetaT
 `SCaaSDex`, optionally a tier-1 demo token ([deploy](../contracts/README.md#build-ci-and-pins)). It writes
 `deployments/<chainid>.json` (`factory`, `implementation`, `dex`, `subject_account_factory`,
 `subject_account_implementation`, `scaas_dex`, `demo_token`, and `token_factory`, `implementation_none`, `chain_uid`),
-which seeds the client and the node configuration. Zether and the registry are not in the deploy script (dev chains only). Integration tests use `anvil --hardfork osaka`.
+which seeds the client and the node configuration. Zether and the registry are not in the deploy script (dev chains only). Integration tests use `anvil --hardfork osaka --gas-limit 16777216 --code-size-limit 65536` (64 KiB code, as EIP-7954 proposes; owner 2026-10-11 — real chains keep 24,576, so a contract that only fits this anvil still cannot be deployed there).
 
 Every contract is a non-upgradeable clone or a fixed deployment ([CTR-GEN-02](../contracts/README.md#CTR-GEN-02)):
 upgradeable proxies (UUPS / ERC-1822) are not used, and a fix is a new implementation version registered on the factory

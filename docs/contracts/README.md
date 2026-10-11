@@ -189,7 +189,7 @@ own job (Move test, Soroban, CosmWasm, Tact, Solana) as the family is added.
 |---|---|
 | Solidity | `solc_version = "0.8.37"`, `evm_version = "osaka"`, `optimizer_runs = 200`, `via_ir = false` (the 13-parameter named function is decoded by hand instead, see [metatx.md](metatx.md#named-functions)) |
 | OpenZeppelin, forge-std | `v5.2.0`, `v1.16.2` |
-| EVM profiles | every profile is `osaka` (owner 2026-10-11): `private7622` (the private reference chain, [NET-EVM-02](../networks/evm.md#NET-EVM-02)), `zether`, `gnosis`, `celo`, `bsc`, `polygon`, `base`; test chains run anvil `--hardfork osaka` |
+| EVM profiles | every profile is `osaka` (owner 2026-10-11): `private7622` (the private reference chain, [NET-EVM-02](../networks/evm.md#NET-EVM-02)), `zether`, `gnosis`, `celo`, `bsc`, `polygon`, `base`; test chains run anvil `--hardfork osaka --gas-limit 16777216 --code-size-limit 65536` |
 | Invariant runs | `[invariant] runs = 64, depth = 32, fail_on_revert = true` |
 | Storage layout | `extra_output = ["storageLayout"]`; the v2 layout is pinned by `test_storageLayoutIsPinned` against committed JSON |
 | Size | CI runs `scripts/size_gate.py` ([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)): token implementations ≤ 20,480 B, other contracts ≤ 24,576 B (EIP-170), init code ≤ 49,152 B (EIP-3860); a contract in `size-baseline.json` may not exceed its recorded size |

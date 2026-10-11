@@ -61,7 +61,7 @@ fn now() -> u64 {
 
 async fn start_anvil(chain_id: u64, port: u16) -> (Anvil, String) {
     let child = Command::new("anvil")
-        .args(["--chain-id", &chain_id.to_string(), "--hardfork", "osaka", "--gas-limit", "16777216", "--port", &port.to_string(), "--silent"])
+        .args(["--chain-id", &chain_id.to_string(), "--hardfork", "osaka", "--gas-limit", "16777216", "--code-size-limit", "65536", "--port", &port.to_string(), "--silent"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
