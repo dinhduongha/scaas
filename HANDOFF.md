@@ -1,8 +1,37 @@
 # HANDOFF — scaas
 
+## Session 2026-10-12 (P6a paused) — resume here
+
+**State:** main `ed12c7a` (pushed): P1–P5 and P3b merged (P5 = `d245a29`), P6 roadmap + P6a plan committed.
+P6a (PQ signature verifiers) is fully implemented on branch `p6a-pq` in worktree `.claude/worktrees/p6a`
+(`81739c6` T1 clientkeys PQ + vectors, `4ad20be` T2 PqUA + SLH-DSA, `a121068` T3 SHAKE/NTT + Falcon-512,
+`121271f` T4 ML-DSA-44/65, `4b7fd98` T5 docs) — **not merged, not pushed**. Forge 911 passed, clientkeys 72 + 2 skipped,
+size gate 0 errors. Reference branch `p6a-val` (the plan's validated replay) can be deleted after the merge.
+SDD ledger (git-ignored, on disk): `.claude/worktrees/p6a/.superpowers/sdd/2026-10-12-p6a-pq-verifiers/progress.md`
+with briefs, reports and reviews.
+
+**Reviews:** T1 done (Important: `pq-external.mjs` records but never checks the pinned SHA-256 — tampered input accepted;
+minors: account/index range, a negative non-empty-context case, Falcon KAT marker/salt). T3 done (compliant; Important:
+four correct Falcon checks unpinned by tests — pk length 897, h_i < q, −0, unused s2 bits; minors: |s2| ≤ 2047 needs a
+decode harness, `Shake` without `reserve()` returns false instead of reverting, stale test file name `PqVerifiers.t.sol`).
+**T2 (SLH-DSA) and T4 (ML-DSA) reviews were stopped mid-run at the pause — re-run them** (T4 must also answer what trust
+an expanded ML-DSA key needs, since the registry (P6c) decides the stored key form). T5 (docs) review folds into the final.
+
+**Next steps:** (1) re-run the T2 and T4 reviews; (2) one fix wave for all review findings; (3) final whole-branch review
+(Opus); (4) merge `p6a-pq` into main and push; (5) then P6b (E-S0 parameter spike, can run independently).
+
+**Owner decisions needed before P6c (UA registry gen 1 with the PQ kinds):** scope (pull UA F0/F1 into P6, or run them
+first as their own phase) and the stored ML-DSA key form (FIPS key: verify over budget without a precompile; expanded key:
+verify fits, but proving the expansion on chain costs ≈ 7.3 / 13.1 M + SSTORE2 4.1 / 7.4 M). Measured verify gas:
+SLH-DSA-SHA2-128s 787,953 (worst 1,321,231), Falcon-512 2,266,836, ML-DSA-44/65 FIPS key 11.38 M / 18.89 M,
+expanded key 4.09 M / 5.77 M. On public chains without a precompile the practical PQ kinds are `slhdsa128s` and
+`fndsa512`. The verifiers are home-written and unaudited — audit before any public chain enables them.
+Decided this session: no hybrid (classical + PQ) UA kind; P6 sub-phases P6a…P6j in `docs/superpowers/plans/2026-10-12-p6-roadmap.md`
+(chain-7622 docker/chainspec changes in P6f need the owner's approval).
+
 ## Session 2026-10-11 (P5)
 
-**State:** P5 on branch `p5-node` (main's P3b merged in), final review done, fix wave 3 in. Plan `docs/superpowers/plans/2026-10-11-p5-node-clients-new-abi.md`.
+**State:** P5 merged (`d245a29`, pushed); main's P3b merged in before the merge. Plan `docs/superpowers/plans/2026-10-11-p5-node-clients-new-abi.md`.
 890 forge tests (main 1047 + `DexKatTest` 1 − 158 v1 tests moved to `legacy/p5/`; 10 skipped, P3b's env-gated measurements); size gate 0 errors; `scaas-node` lib 278, mesh vectors (46 cases, sha256 `bde85091870f6bea608d6e3430b70fcf00b34f73c6e6d3dc659009582b39c4ad`) + fuzz, clippy clean; e2e 4/4 and e2e_hedera 1/1; clientkeys 62 (60 pass, 2 skipped); node mutation probe 110/110 killed (fix-wave-1 95, final review W1–W10, fix wave 3 5) (private `CARGO_TARGET_DIR`; a shared target gave false survivors).
 
 **Built:** `scaas-node` on the new tree: `src/abi.rs` (`MetaTransaction`, `MetaTransfer`, `TradeOrder`, `Leg`, `DexOrder`,
