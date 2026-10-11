@@ -89,7 +89,7 @@ so a public key sent by a client is never a basis for authority.
 
 ```mermaid
 flowchart TD
-    V["HederaMetaToken._requireValidSignature"] --> Q1{"from has code?"}
+    V["MetaTokenBase._requireValidSignature (IS_HEDERA)"] --> Q1{"from has code?"}
     Q1 -->|yes| E1271["ERC-1271 (unchanged)"]
     Q1 -->|no| Q2{"signature exactly 64 bytes?"}
     Q2 -->|yes| H["HIP-632 isAuthorizedRaw at 0x16a<br/>CALL, capped at 100 000 gas"]
@@ -136,13 +136,12 @@ function isAuthorized(address account, bytes memory message, bytes memory signat
 <a id="NET-HED-11"></a>**NET-HED-11** — **The HIP-632 system contract is called with `CALL`, never `STATICCALL`.**
 `IsAuthorizedRawCall` does not implement `allowsStaticFrame()` (default `false`), and `AbstractNativeSystemContract` HALTs a
 system contract in a static frame. Tested on testnet (initcode through `eth_call`, 2026-10-03): same arguments, STATICCALL ⇒
-`ok = false` with no data; CALL ⇒ `ok = true` + `false`. Because `ERC20MetaTx._requireValidSignature` is `view`,
-`HederaMetaToken` calls through a function pointer cast to `view` (`HederaAccountAuth.asView`) — safe because the
+`ok = false` with no data; CALL ⇒ `ok = true` + `false`. Because `MetaTxBase._requireValidSignature` is `view`,
+`HederaLib.requireValid` calls through a function pointer cast to `view` (`HederaAccountAuth.asView`) — safe because the
 only caller is `executeMetaTransaction` (non-view) and `0x16a` writes no state and calls back nothing; the forge
 mock writes storage, so it too HALTs under STATICCALL (a regression test). BUILT. Removing `view` from the parent so
 the cast disappears is an open clean-up item, done only when the parent signature changes for another reason (the
-cast sits in v1, `HederaMetaToken.sol:28`, and in `HederaLib.sol` (`requireValid`);
-marked in `HederaAccountAuth.sol:31`).
+cast sits in `HederaLib.sol` (`requireValid`), marked in `HederaAccountAuth.sol:31`).
 
 <a id="NET-HED-15"></a>**NET-HED-15** — **Hedera ED25519 subjects need a raw signer.** The contracts accept raw
 ED25519 over the 32-byte EIP-712 digest only. HashPack/WalletConnect `hedera_signMessage` (HIP-820) signs
@@ -212,9 +211,8 @@ except `CONTRACT_REVERT_EXECUTED` requeues — `hedera.rs:96-98` `requeues`, `:1
 
 Every "yes" row feeds the breaker ([NODE-LANE-13](../node/submit-lanes.md#NODE-LANE-13)) and the `from` subject's grief
 score ([NODE-LANE-15](../node/submit-lanes.md#NODE-LANE-15)). Why: a wallet contract as `from` whose
-`isValidSignature` burns ≈ 0 gas under `eth_estimateGas` but the full 50 k ERC-1271 cap (`MetaToken._erc1271Gas`,
-`MetaToken.sol:141-144`) at consensus makes an
-out-of-gas, which as built requeues until `validUntil`, each round costing the lane ≥ 80 % × (estimate × 1.2).
+`isValidSignature` burns ≈ 0 gas under `eth_estimateGas` but the full 50 k ERC-1271 cap (`MetaTokenBase._erc1271Gas`,
+`SigCheck.ERC1271_GAS`) at consensus makes an out-of-gas, which as built requeues until `validUntil`, each round costing the lane ≥ 80 % × (estimate × 1.2).
 Tests: receipt `INSUFFICIENT_GAS` ⇒ `reverted`, no requeue; `WRONG_NONCE` twice ⇒ second `reverted`; a job beyond
 `max_attempts` ⇒ `dead ATTEMPTS_EXHAUSTED`; a failed receipt's fee lands in `spent`. Other outcomes: no receipt at
 the mirror yet ⇒ `TxStatus::Unknown` (the runner waits until the payload expires); receipt `status 0x0` with ABI revert data or
@@ -287,9 +285,9 @@ signers are not contracts, so they can never call `approve` on a SCaaS token
 <a id="hts"></a>
 
 An HTS token (e.g. USDC on Hedera) has an ERC-20 facade at its long-zero address (HIP-218/376). It is used only
-behind a **tier-2 wrapper** (`HederaMetaToken(underlying = token HTS)` in v1) with the HTS token as `underlying`; the
+behind a **tier-2 wrapper** (an `UNDERLYING` token with `IS_HEDERA`) with the HTS token as `underlying`; the
 contract must **associate** the HTS token before receiving it (`SUCCESS (22)` or `TOKEN_ALREADY_ASSOCIATED_TO_ACCOUNT (194)`;
-v1 `HederaMetaToken.sol:34-42`, v2 `HederaLib.sol` (`checkAndAssociate`), [wrappers](#wrappers)); users grant the HTS allowance **to the wrapper
+`HederaLib.sol` (`checkAndAssociate`), [wrappers](#wrappers)); users grant the HTS allowance **to the wrapper
 contract** (valid under [CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)). Risk, stated: protocol-level HTS
 allowances cannot be restricted to contracts, so the system never uses an HTS allowance outside a wrapper.
 
@@ -307,7 +305,7 @@ warning, which also goes into the wrapper's risk disclosure. SPECIFIED.
 <a id="NET-HED-14"></a>**NET-HED-14** — **Hedera v2 wrappers check every underlying in `initialize`, fail-closed,
 through the HTS precompile `0x167`.** There are no Hedera wrapper children (P1d): `UnderlyingLib` init calls
 `HederaLib.checkAndAssociate` under `IS_HEDERA`, and a native (HBAR) leg has 8 decimals, the tinybar (controller ruling, pending the owner): a native wrap's `amount` is in tinybars while the relay's transaction `value` is in weibars (18 decimals), so a client passing an 18-decimal amount gets `NativeValueMismatch` (it fails safe); the HIP-632 signature rule is the `IS_HEDERA` branch in `MetaTokenBase`
-(`HederaLib.requireValid`), exactly as `HederaMetaToken` does, and kind `NONE` on Hedera is `NoUnderlyingToken` with `IS_HEDERA`. In `initialize`, for every underlying `u`:
+(`HederaLib.requireValid`), as the v1 `HederaMetaToken` (`legacy/p5`) did, and kind `NONE` on Hedera is `NoUnderlyingToken` with `IS_HEDERA`. In `initialize`, for every underlying `u`:
 
 1. `isToken(u)` → `(rc, isHts)`; `rc ≠ SUCCESS` ⇒ `HtsQueryFailed(u, rc)`.
 2. If `isHts`: `getTokenCustomFees(u)` with `rc ≠ SUCCESS` or an undecodable result ⇒ `HtsQueryFailed(u, rc)`; any
@@ -325,21 +323,13 @@ fail-closed, and the permissionless associate function is removed.** Why: an HTS
 fractional or royalty fee breaks a wrapper — `MetaToken.wrap` measures what actually arrived (fine for receiver-side fees)
 but `unwrap` sends exactly `amount` (`MetaToken.sol:134-139`), so a fixed fee in the same token or a fractional fee with `netOfTransfers = true` is
 taken from the wrapper again (`balanceOf(this) < totalSupply`, the last redeemer is stuck), and a fixed fee in HBAR
-makes every `unwrap` revert (the wrapper holds no HBAR), locking the reserve. v2 refuses these; the built v1
-`HederaMetaToken` only associates (the permissionless `associateUnderlying()` calling `0x167
-associateToken(this, underlying)`), is still registered as `META v1` (`DeployHedera.s.sol:29-30`), and anyone may create
-it through the open factory (`OpenFactoryV1.createMetaToken`, permissionless, `:91-96`; `deprecate` does not block
-creation — `_registered` checks only non-zero, `:167-170`).
+makes every `unwrap` revert (the wrapper holds no HBAR), locking the reserve. v2 refuses these in `initialize`
+([NET-HED-14](#NET-HED-14)). The v1 `HederaMetaToken`, which only associated (the permissionless
+`associateUnderlying()`), was removed from the build in P5: it, `OpenFactoryV1` and their tests are in `legacy/p5`;
+`DeployHedera.s.sol` registers no `META v1`, so no v1 Hedera token can be created. BUILT (P5).
 
-Fix (SPECIFIED): `MetaToken.initialize` calls an
-`internal virtual _checkUnderlying(u)` hook (empty by default); `HederaMetaToken` overrides it with
-`HederaLib.checkAndAssociate(u)` and reverts `UnderlyingInvalid` on any fee; `associateUnderlying()` is deleted
-(association inside `initialize` means a token that cannot associate is never born, and the auto-association slot is
-no longer a detour); a new implementation is deployed, registered as a new META version on the Hedera factory, and
-`deprecate(META, 1)` follows. Until then the wizard and the node's token registry refuse a v1 Hedera token whose
-underlying is an HTS token with custom fees. Forge tests (mock `0x167`): v1 on an underlying with
-fixed/fractional/royalty fees ⇒ creation reverts; no fee ⇒ associated once, wrap/unwrap conserve the reserve; `isToken`
-failure ⇒ `HtsQueryFailed`.
+Forge tests (`HederaV2.t.sol`, mock `0x167`): any custom fee ⇒ creation reverts; every HTS leg is associated; a
+failed or undecodable query ⇒ `HtsQueryFailed`.
 
 Classical Zether on Hedera is feasible for the bn254 variant only: HSCS has the bn254 precompiles (`0x06`–`0x08`) but
 not BLS12-381 (EIP-2537). The 15 M gas per transaction cap fits one Bulletproofs verification (several million gas,
@@ -378,7 +368,7 @@ the proof is independent of the signing key.
   reviewed.
 - **Gaps:** `solo` (≥ 8 GB RAM, many containers) does not run on the shared build host. Anvil differs from Hedera:
   it has a mempool, no real `0x16a`/`0x167`, and does not charge 80 % of the gas limit. The positive HIP-632 path is
-  untried on a live network. With a funded testnet account: deploy `HederaMetaToken`, pay once with an ED25519
+  untried on a live network. With a funded testnet account: deploy a v2 `IS_HEDERA` token, pay once with an ED25519
   account and once with an ECDSA alias; confirm that `msg.sender` (and the receiving/signing address) of an ECDSA
   account with an alias is the alias, not the long-zero form; confirm the relay returns Hedera codes (`WRONG_NONCE`…)
   in `revertReason` / precheck errors as the adapter reads them.

@@ -417,8 +417,8 @@ if `signer.codehash` is the `SmartKeyAccount` clone codehash (immutable at deplo
 does, [CTR-ACC-05](accounts.md#CTR-ACC-05)), else 50 k; at most 32 bytes of returndata are copied; before the call it
 requires `gasleft() ≥ cap · 64/63 + margin`, otherwise the whole transaction reverts (EIP-150: a relayer must not
 starve the call to turn a valid signature into an invalid one). `mtxCancelOrders` needs no `try`: a capped check
-only returns `false` ⇒ the item is skipped. The node does not restore an ERC-1271 order whose settlement failed out of
-gas. Why: the v1 DEX called `SignatureChecker` without a cap (`SCaaSDexV1.sol:383-384`, `legacy/p5/`), so a contract maker
+only returns `false` ⇒ the item is skipped. Not built (Q2 open): the node not restoring an ERC-1271 order whose
+settlement failed out of gas; today it restores every failed leg still open and funded. Why: the v1 DEX called `SignatureChecker` without a cap (`SCaaSDexV1.sol:383-384`, `legacy/p5/`), so a contract maker
 that answers correctly under `eth_call` but burns gas or returns huge returndata in the real block breaks a whole
 `settle` batch (the remaining 1/64 gas is not enough for the next pairs) and **every** `cancel` batch. SCaaS legs get
 the same cap inside their token. Status **BUILT** (P2b-2).

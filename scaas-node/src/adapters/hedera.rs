@@ -307,6 +307,9 @@ mod tests {
         reports: Vec<Value>,
         /// `eth_getBlockByNumber` (Null = a pruned RPC: the pin is trusted).
         block0: Value,
+        /// `eth_getBlockByNumber` answers this JSON-RPC error instead; `block0_reads` counts the asks.
+        block0_err: Option<Value>,
+        block0_reads: u32,
         /// Revert data of an `mtxInvalidateNonces` simulation.
         invalidate_revert: Option<Vec<u8>>,
     }
@@ -319,7 +322,13 @@ mod tests {
         let ok = |r: Value| json!({"jsonrpc": "2.0", "id": id, "result": r});
         axum::Json(match b["method"].as_str().unwrap_or_default() {
             "eth_getBalance" => ok(json!(n.balance)),
-            "eth_getBlockByNumber" => ok(n.block0.clone()),
+            "eth_getBlockByNumber" => {
+                n.block0_reads += 1;
+                match n.block0_err.clone() {
+                    Some(e) => json!({"jsonrpc": "2.0", "id": id, "error": e}),
+                    None => ok(n.block0.clone()),
+                }
+            }
             "eth_getCode" => ok(json!("0x")),
             "eth_call" => {
                 let input = b["params"][0]["input"].as_str().or(b["params"][0]["data"].as_str()).unwrap_or_default().to_string();
@@ -354,6 +363,9 @@ mod tests {
                 n.reports.push(b);
                 json!({"ok": true})
             }
+            "node_config" => json!({"evm_chain_number": 296, "finality_mode": "instant", "finality_depth": 0,
+                "finality_quorum": 1, "indexed_block": 0, "journal_max_nonce": null, "inflight": [],
+                "tokens": [{"address": format!("{:#x}", Address::repeat_byte(0x70)), "decimals": 6}]}),
             _ => json!({"error": "unexpected"}),
         })
     }
@@ -477,15 +489,42 @@ mod tests {
         let (states, s) = step_with(net(), inv(Address::repeat_byte(0x71))).await;
         assert_eq!(states, ["dead"]);
         assert!(last_error(&s).contains("TOKEN_NOT_SERVED"), "{}", last_error(&s));
-        // N2: the recorded testnet block 0 is not the pinned word
+        // N2: the recorded testnet block 0 is not the pinned word: the lane never takes a job (and its task, so the
+        // node, keeps running: review P5 m1)
         let block: Value = serde_json::from_str::<Value>(include_str!("../../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone();
-        let (a, o, _) = adapter(Net { balance: "0x1", block0: block, ..Default::default() }).await;
+        let (a, o, s) = adapter(Net { balance: "0x1", block0: block, jobs: vec![job(now() + 300)], ..Default::default() }).await;
         assert!(a.start_check().await.is_err());
         let run = crate::adapter::lane_runner(Arc::new(a), o, 0, "t#0".into(), std::time::Duration::from_millis(10),
             Arc::new(Mutex::new(crate::breaker::Breaker::new(Default::default()))), Default::default());
-        tokio::time::timeout(std::time::Duration::from_secs(5), run).await.expect("the lane stops at start");
+        assert!(tokio::time::timeout(std::time::Duration::from_millis(1500), run).await.is_err(), "the lane task keeps running");
+        assert_eq!(s.lock().unwrap().jobs.len(), 1, "a lane on the wrong chain takes no job");
         let (a, _, _) = adapter(Net { balance: "0x1", ..Default::default() }).await;
         a.start_check().await.expect("a pruned RPC trusts the pin");
+    }
+
+    /// Review P5 m1: with a pinned chain_uid, an RPC that errors on block 0 keeps the lane stopped, never the node: the
+    /// lane asks again with backoff and starts once block 0 reads (here pruned, so the pin is trusted).
+    #[tokio::test]
+    async fn a_block_zero_rpc_error_keeps_the_lane_stopped_and_retries() {
+        let err = json!({"code": -32603, "message": "block 0 unavailable"});
+        let (a, o, s) = adapter(Net { balance: "0x1", block0_err: Some(err), jobs: vec![job(now() + 300)], ..Default::default() }).await;
+        let run = tokio::spawn(crate::adapter::lane_runner(Arc::new(a), o, 0, "t#0".into(), std::time::Duration::from_millis(10),
+            Arc::new(Mutex::new(crate::breaker::Breaker::new(Default::default()))), Default::default()));
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+        {
+            let mut n = s.lock().unwrap();
+            assert_eq!((n.jobs.len(), n.block0_reads), (1, 2), "stopped, asked again after 1 s");
+            n.block0_err = None;
+        }
+        for _ in 0..50 {
+            if s.lock().unwrap().jobs.is_empty() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        assert!(s.lock().unwrap().jobs.is_empty(), "the lane started once block 0 read");
+        assert!(!run.is_finished());
+        run.abort();
     }
 
     /// The Hedera vector (`HederaKat.t.sol` + `gen_hedera_kat.py`): the salted `MetaTransfer` digest of an `IS_HEDERA`

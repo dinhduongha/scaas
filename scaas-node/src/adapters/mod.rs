@@ -53,6 +53,10 @@ mod tests {
     fn example_config_builds_every_family() {
         let mut cfg: Config = toml::from_str(include_str!("../../node.example.toml")).unwrap();
         cfg.validate().unwrap();
+        // review P5 m3: the EVM example pins the recorded block 0 of chain 7622
+        let uids: serde_json::Value = serde_json::from_str(include_str!("../../../smartcontracts/evm/chain-uids.json")).unwrap();
+        let want = uids["chains"].as_array().unwrap().iter().find(|c| c["chainId"] == 7622).unwrap()["chainUid"].as_str().unwrap();
+        assert_eq!(cfg.chains.iter().find(|c| c.family == "evm").unwrap().chain_uid, Some(want.parse().unwrap()));
         let families: BTreeSet<&str> = cfg.chains.iter().map(|c| c.family.as_str()).collect();
         assert_eq!(families, BTreeSet::from(["aptos", "cosmos", "evm", "hedera", "solana", "soroban", "sui", "ton"]));
         let words = format!("{}art", "abandon ".repeat(23));

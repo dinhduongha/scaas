@@ -2,8 +2,8 @@
 
 ## Session 2026-10-11 (P5)
 
-**State:** P5 on branch `p5-node`, merge pending the final review. Plan `docs/superpowers/plans/2026-10-11-p5-node-clients-new-abi.md`.
-844 forge tests (1002 − 158 v1 tests moved to `legacy/p5/`); size gate 0 errors; `scaas-node` lib 269, mesh vectors (46 cases, sha256 `bde85091870f6bea608d6e3430b70fcf00b34f73c6e6d3dc659009582b39c4ad`) + fuzz, clippy clean; e2e 4/4 and e2e_hedera 1/1; clientkeys 60 (58 pass, 2 skipped); mutation probe 95/95 killed (private `CARGO_TARGET_DIR`; a shared target gave false survivors).
+**State:** P5 on branch `p5-node` (main's P3b merged in), final review done, fix wave 3 in. Plan `docs/superpowers/plans/2026-10-11-p5-node-clients-new-abi.md`.
+890 forge tests (main 1047 + `DexKatTest` 1 − 158 v1 tests moved to `legacy/p5/`; 10 skipped, P3b's env-gated measurements); size gate 0 errors; `scaas-node` lib 278, mesh vectors (46 cases, sha256 `bde85091870f6bea608d6e3430b70fcf00b34f73c6e6d3dc659009582b39c4ad`) + fuzz, clippy clean; e2e 4/4 and e2e_hedera 1/1; clientkeys 62 (60 pass, 2 skipped); node mutation probe 110/110 killed (fix-wave-1 95, final review W1–W10, fix wave 3 5) (private `CARGO_TARGET_DIR`; a shared target gave false survivors).
 
 **Built:** `scaas-node` on the new tree: `src/abi.rs` (`MetaTransaction`, `MetaTransfer`, `TradeOrder`, `Leg`, `DexOrder`,
 `Settlement`, `IToken`, `ISCaaSDex`, `IMandateWallet` errors), `src/metatx.rs` (`Mtx { Call, Transfer }`, salted
@@ -26,6 +26,12 @@ by codehash, exactly 32 bytes returned); a revert naming no order probes each SC
 pending amount per order, closing fills wait for it; drops are committed before the 503. The Hedera lane checks `chain_uid`
 at start and reports `already_invalidated`; jobs rebuilt after a restart pass the guard and the 2^24 gas clamp (a refused
 one is only logged and gap-filled).
+Fix wave 2 changed the clientkeys API: every check takes the client-built intent (`checkPayment` needs `payee`, `entryRef`,
+`expectedToken`, `amount`; `checkCall` takes `call = {contract, data}`; `checkTradeOrder` the client's `order`; new
+`checkCancel`, `payLane`), pins the payment lane and returns the fee. Fix wave 3 (final review): venue/guard/adapter
+chain-I/O tests; a lane whose `chain_uid` check fails stays stopped and retries with backoff (the node keeps running);
+the gateway runs the guard before simulating; settle refusals name the failing settlements; a guard-refused rebuilt
+job is reported (`mined` from its hash, `dead` when the gap-fill lands); `node.example.toml` pins `chain_uid`.
 
 **Rulings N1–N18 (plan header).** **N1** `struct` absent = `transfer`, unknown fields refused; **N2** `chain_uid` from block 0
 or config, a mismatch stops the lane; **N3** call table only for built contracts, `mtxExecuteAsOwner` under the wallet rule,
@@ -46,7 +52,7 @@ the spec rules CTR-ZTH-30/38/42/48/49/50 flipped to built, §19 re-measured, PQZ
 
 **Rulings to confirm (controller, pending the owner):** the commitment `keccak256(R)` over `R = salt ‖ B_1 ‖ … ‖ B_M` (the spec table now says so), the `…/v2` proof system id label, `seed_zether` = the R33 conf key `x`, `AuditorForbidden` for NONE, the registry's `keyOf`, the `uint8` config fields with typed errors.
 
-**Not done / next:** R6 (archive of `TransferBundles` for receiver and auditor), transfers over the EIP-7825 cap (the prover refuses them by its measured transaction gas limits per curve, form, auditor and direct / relayed, zether.md §19; no contract cap), the node's gas padding clamped to 2^24 (P5), the client ABI (P5).
+**Not done / next:** R6 (archive of `TransferBundles` for receiver and auditor), transfers over the EIP-7825 cap (the prover refuses them by its measured transaction gas limits per curve, form, auditor and direct / relayed, zether.md §19; no contract cap), the client ABI (P5). Done in P5: the node's gas padding clamped to 2^24.
 
 ## Session 2026-10-11 (P4)
 

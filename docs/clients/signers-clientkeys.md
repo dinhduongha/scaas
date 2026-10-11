@@ -254,7 +254,7 @@ the signer is the last place a phishing `dex` can be stopped. Cost: a new DEX ne
 trade on it.
 
 <a id="CLI-SGN-36"></a>**CLI-SGN-36** — **A client never asks an EOA to approve a SCaaS token; wrapping a SCaaS
-underlying is signed, not approved.** Status: **BUILT** in clientkeys (P5: no approve builder; `checkTradeOrder` with `wrappers`). On a SCaaS token only a contract may call `approve`
+underlying is signed, not approved.** Status: **BUILT** in clientkeys (P5: no approve builder; `checkTradeOrder` with `wrappers`, a flat list: defence in depth, the wrapper itself checks the underlying). On a SCaaS token only a contract may call `approve`
 ([CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)), and `approve` is on no token allowlist, so no client offers
 an approve screen, typed data or permit for one. A wrap whose underlying is a SCaaS token is a `TradeOrder` signed in
 the **underlying's** domain with `dex` = `receiveToken` = the wrapper, `receiveAmount` = the minimum to mint,

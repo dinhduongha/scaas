@@ -213,17 +213,17 @@ refused; the order open on chain (`pulled`, `minNonce`), its signature valid; th
 and never guessed.** An `mtxSettle` settlement that fails in simulation is attributed from the revert data of
 `eth_call settleOne(s, relayer)` with `from = DEX`: an `orderHash` in it (token and DEX errors carry one,
 [NODE-DEX-15](#NODE-DEX-15)) names the order; without one, each maker's on-chain state is read (open amount, nonce,
-balance or allowance to the puller, signature) and a maker that can no longer settle is the one at fault; with no
-separate relayer fee there is no fee token to limit (`SCaaSDexV1` limited it against a fake fee token answering 2^255). Built (P5). A `SigCheckGasStarved` revert of a multi-settlement
-simulation is split and each settlement simulated alone, never retried whole with more gas (CTR-DEX-08). Only a reason that points at the new order
-answers `400`; one that points at the maker ⇒ the maker is dropped (`invalid`) and matching retries (≤ 3 rounds). A
-maker that fails in 2 pairs with 2 different takers is removed. Recovery after a failed settle (`sync_once`) uses the same
-attribution: only the side at fault is not restored.
+balance or allowance to the puller, signature) and a maker that can no longer settle is the one at fault; failing
+both, each SCaaS leg's own `mtxTrade` called as the DEX calls it (outside legs name themselves); no evidence ⇒ `503`.
+Built (P5). A `SigCheckGasStarved` revert of a multi-settlement simulation is split and each settlement simulated alone, never retried whole with more gas (CTR-DEX-08). Only a reason that points at the new order
+answers `400`; one that points at the maker ⇒ the maker is dropped (`invalid`) and matching retries (≤ 3 rounds). Not
+built: removing a maker that fails in 2 pairs with 2 different takers; `sync_once` leaves out every leg of a re-matched
+settlement that does not simulate (planned: only the side at fault).
 
 <a id="oog-pairs"></a><a id="NODE-DEX-06"></a>**NODE-DEX-06** — **ERC-1271 orders whose check ran out of gas are never
-restored.** The contract caps an ERC-1271 signature check ([CTR-DEX-08](../contracts/dex.md#CTR-DEX-08)); a pair whose
-reason is out-of-gas in that check ⇒ that ERC-1271 order is not restored to the book. (`_erc1271Gas(signer)`: 400k for the
-`SmartKeyAccount` clone codehash, else 50k; exactly 32 bytes of return data; a 7702 designator signs as an EOA.)
+restored (PLANNED, Q2 open).** The contract caps an ERC-1271 check ([CTR-DEX-08](../contracts/dex.md#CTR-DEX-08)); built:
+the venue checks signatures with that cap and restores every failed leg still open and funded. (`_erc1271Gas(signer)`:
+400k for the `SmartKeyAccount` clone codehash, else 50k; exactly 32 bytes of return data; a 7702 designator is an EOA.)
 
 ## <a id="routes"></a>6. Routes
 

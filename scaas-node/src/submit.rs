@@ -106,6 +106,9 @@ struct Sent {
     fees: (u128, u128),
     at: Instant,
     _guard: Option<InflightGuard>,
+    /// A job tracked after a restart whose payload is not re-signed (refused by the guard, or unreadable): reported
+    /// from its own hash (`hashes[0]`) or from the gap-fill that takes its nonce (review P5 m7).
+    orphan: Option<i64>,
 }
 
 /// NODE-LANE-10 (R84) for the outbox: the unbound `relayer`/`feeRecipient` are normalized here as the gateway does
@@ -256,7 +259,8 @@ impl Submitter {
             let gas = me.cfg.max_gas_per_tx.min(guard::MAX_TX_GAS);
             // Tập in-flight dựng lại từ việc đang theo dõi (§8.6).
             let guard = work.as_ref().and_then(|w| w.meta?.digest).and_then(|d| me.digests.try_acquire(d));
-            me.inflight.insert(n, Sent { work, hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard });
+            let orphan = work.is_none().then_some(j.job_id);
+            me.inflight.insert(n, Sent { work, hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard, orphan });
         }
         info!(chain = me.cfg.evm_chain_number, chain_uid = %uid, next = me.next, tracked = me.inflight.len(), "submit ready");
         Ok(me)
@@ -348,7 +352,7 @@ impl Submitter {
         if let Err(e) = self.chain.send_raw(&raw).await {
             warn!(nonce, "gap-fill send: {e:#}");
         }
-        self.inflight.insert(nonce, Sent { work: None, hashes: vec![hash], gas: GAP_FILL_GAS, fees, at: Instant::now(), _guard: None });
+        self.inflight.insert(nonce, Sent { work: None, hashes: vec![hash], gas: GAP_FILL_GAS, fees, at: Instant::now(), _guard: None, orphan: None });
         warn!(nonce, "gap-filled");
         Ok(())
     }
@@ -428,7 +432,7 @@ impl Submitter {
             // Không trả nonce lại: tx đã ký nằm trong journal; vòng `track` sẽ thay thế nó.
             Err(e) => warn!(nonce, "send failed, will replace: {e:#}"),
         }
-        self.inflight.insert(nonce, Sent { work: Some(w), hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard });
+        self.inflight.insert(nonce, Sent { work: Some(w), hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard, orphan: None });
     }
 
     /// Mô phỏng revert. Meta-tx mà nonce chủ thể đã qua ⇒ `consumed` (R80: relayer khác có thể đã đưa nó lên chain),
@@ -623,6 +627,7 @@ impl Submitter {
     /// `consumed`, không `reverted` (Odoo đặt `failed` và chạy `_fail_dependents`); không đọc được ⇒ giữ, vòng sau.
     async fn settle(&mut self, n: u64, h: B256, rc: TransactionReceipt) {
         let work = self.inflight.get(&n).and_then(|s| s.work.clone());
+        let orphan = self.inflight.get(&n).and_then(|s| Some((s.orphan?, s.hashes.first() == Some(&h))));
         let consumed = match &work {
             Some(w) if !rc.status() => match self.consumed(w).await {
                 Ok(c) => c,
@@ -638,7 +643,18 @@ impl Submitter {
         if let Ok(mut k) = self.breaker.lock() {
             k.spend(now(), paid);
         }
-        let Some(w) = work else { return };
+        let Some(w) = work else {
+            match orphan {
+                Some((id, true)) if rc.status() => _ = self.report(id, "mined", Some(h), None, None).await,
+                Some((id, true)) => _ = self.report(id, "reverted", None, None, None).await,
+                Some((id, false)) => {
+                    let why = "not re-signed after a restart (refused by the guard or unreadable); nonce gap-filled";
+                    _ = self.report(id, "dead", None, None, Some(why.into())).await;
+                }
+                None => {}
+            }
+            return;
+        };
         match (rc.status(), consumed, w.job_id) {
             (false, true, _) => self.report_consumed(&w).await,
             (true, _, Some(id)) => _ = self.report(id, "mined", Some(h), None, None).await,
@@ -1292,6 +1308,37 @@ mod tests {
             let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| c.max_gas_per_tx = 1 << 25).await.unwrap();
             let sent = s.inflight.get(&0).expect("tracked");
             assert_eq!((sent.work.is_some(), sent.gas), (kept, guard::MAX_TX_GAS));
+        }
+    }
+
+    /// Review P5 m7: a job tracked after a restart and refused by the guard is still reported: `mined` when its own
+    /// transaction lands, `dead` when the gap-fill takes its nonce.
+    #[tokio::test]
+    async fn a_refused_rebuilt_job_is_reported_from_its_hash_or_the_gap_fill() {
+        let tracked = json!([{"job_id": 7, "nonce": 0, "state": "broadcast",
+            "tx_hash": format!("{:#x}", B256::repeat_byte(0x77)), "payload": job(7)}]);
+        for original in [true, false] {
+            let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), count: 1, ..Default::default() }).await;
+            let (odoo, o) = fake_odoo(Fake { tokens: json!([]), inflight: tracked.clone(), ..Default::default() }).await;
+            let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+            assert!(s.inflight.get(&0).expect("tracked").work.is_none(), "refused: only gap-filled");
+            if original {
+                rpc.lock().unwrap().receipts.insert(B256::repeat_byte(0x77), true);
+            } else {
+                rpc.lock().unwrap().count = 0; // still pending: the stuck nonce is replaced by a gap-fill
+                s.track().await;
+                let fill = rpc.lock().unwrap().sent.last().cloned().expect("gap-fill");
+                assert_eq!((fill.1, fill.2.len()), (s.address(), 0));
+                rpc.lock().unwrap().receipts.insert(fill.0, true);
+            }
+            s.track().await;
+            assert_eq!(s.inflight_count(), 0);
+            let last = o.lock().unwrap().reports.last().cloned().unwrap();
+            match original {
+                true => assert_eq!((last["chain_state"].as_str(), last["tx_hash"].as_str()),
+                                   (Some("mined"), Some(&*format!("{:#x}", B256::repeat_byte(0x77))))),
+                false => assert!(last["chain_state"] == "dead" && last["error"].as_str().unwrap().contains("gap-filled"), "{last}"),
+            }
         }
     }
 }

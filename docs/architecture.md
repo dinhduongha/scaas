@@ -687,7 +687,7 @@ sequenceDiagram
     participant TK as Taker wallet
     participant VEN as Node gateway and venue
     participant LANE as Submit lane
-    participant DEX as SCaaSDexV1
+    participant DEX as SCaaSDex
     participant ST as Sell token (SCaaS)
     participant PUL as DexPuller
     MK->>VEN: POST /v1/dex/orders (TradeOrder, sig)

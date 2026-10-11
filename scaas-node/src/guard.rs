@@ -62,7 +62,8 @@ pub const CALL_TABLE: [([u8; 4], &str, Rule); 10] = [
 pub const ENTRIES: [[u8; 4]; 3] = [SEL_MTX_CANCEL_ORDER, SEL_MTX_INVALIDATE_NONCES, SEL_MTX_WRAP];
 
 /// 21 000 intrinsic + the 400 k `SmartKeyAccount` ERC-1271 cap the contract must still hold at the call (×64/63)
-/// + `SigCheck`'s 5 000 margin (P1b note c): a contract signer's meta-tx never gets less.
+/// + `SigCheck`'s 5 000 margin (P1b note c): a contract signer's meta-tx never gets less. Entries get no floor (P5
+///   review m6, closed): a starved `SigCheck` reverts `SigCheckGasStarved`, so their estimate already covers the call.
 pub const ERC1271_FLOOR: u64 = 21_000 + 400_000 * 64 / 63 + 5_000;
 
 /// EIP-7825: no transaction may carry more gas than 2^24, whatever the estimate plus its margin says.
@@ -304,14 +305,24 @@ pub async fn gas(chain: &Chain, w: &Work, max: u64) -> Result<u64, SimError> {
 
 /// Size `mtxSettle` gas by simulation (P2b-2, NODE-DEX-15): from the estimate +20 %, raise ×1.5 until every planned
 /// settlement settles, never past `max`. A whole-call revert is the job's answer as it is (never retried with more gas:
-/// `SigCheckGasStarved` is forgeable by a hook-token destination).
+/// `SigCheckGasStarved` is forgeable by a hook-token destination); a transport error is transient, never a size. At the
+/// cap the refusal names the settlements still failing (review P5 m4: a state failure looks the same as too little gas).
 pub async fn settle_gas(chain: &Chain, to: Address, data: &Bytes, estimate: u64, max: u64) -> Result<u64, SimError> {
     let mut g = gas_limit(estimate, false).min(max);
     loop {
-        if settled_all(&chain.call_with_gas(to, data.clone(), g).await?) {
+        let ret = chain.call_with_gas(to, data.clone(), g).await?;
+        if settled_all(&ret) {
             return Ok(g);
         }
-        g = next_gas(g, max).ok_or_else(|| SimError::Revert(format!("mtxSettle does not settle every settlement within {max} gas")))?;
+        let Some(next) = next_gas(g, max) else {
+            let failing: Vec<usize> = <Vec<bool> as SolValue>::abi_decode(&ret)
+                .map(|v| v.iter().enumerate().filter(|(_, ok)| !**ok).map(|(i, _)| i).collect())
+                .unwrap_or_default();
+            return Err(SimError::Revert(format!(
+                "mtxSettle does not settle every settlement within {max} gas: settlements {failing:?} fail at the cap \
+                 (a state failure, or more gas than the cap)")));
+        };
+        g = next;
     }
 }
 
@@ -426,6 +437,46 @@ mod tests {
         assert!(!settled_all(&ok(vec![true, false])), "an empty MatchFailed is out of gas: more gas, never invalid");
         assert!(!settled_all(&ok(vec![])));
         assert!(!settled_all(&[1, 2, 3]));
+    }
+
+    /// An RPC answering `answer` to every `eth_call`; `(url, gas of each eth_call)`.
+    async fn rpc(answer: serde_json::Value) -> (String, Arc<Mutex<Vec<u64>>>) {
+        let gases: Arc<Mutex<Vec<u64>>> = Default::default();
+        let g = gases.clone();
+        let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<serde_json::Value>| {
+            let (answer, g) = (answer.clone(), g.clone());
+            async move {
+                let gas = r["params"][0]["gas"].as_str().map_or(0, |x| u64::from_str_radix(&x[2..], 16).unwrap());
+                g.lock().unwrap().push(gas);
+                let mut out = serde_json::json!({"jsonrpc": "2.0", "id": r["id"]});
+                let key = if answer.get("code").is_some() { "error" } else { "result" };
+                out[key] = answer;
+                axum::Json(out)
+            }
+        }));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        (url, gases)
+    }
+
+    /// Settle sizing on the chain: a transport error is transient (the job goes back to the queue), never a size; at
+    /// the cap the refusal names the settlements still failing (review P5 m4).
+    #[tokio::test]
+    async fn settle_sizing_tells_transport_from_size_and_names_what_fails() {
+        let chain = |url: &str| {
+            let cfg = ChainCfg { evm_chain_number: 7, rpc_urls: vec![url.into()], ..Default::default() };
+            Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap()
+        };
+        let (to, data) = (Address::repeat_byte(0xd0), Bytes::from(SEL_MTX_SETTLE.to_vec()));
+        let (url, gases) = rpc(serde_json::json!({"code": -32603, "message": "upstream unavailable"})).await;
+        assert!(matches!(settle_gas(&chain(&url), to, &data, 100_000, 3_000_000).await, Err(SimError::Transport(_))));
+        assert_eq!(gases.lock().unwrap().len(), 1, "no ladder on a transport error");
+        let ret = format!("0x{}", alloy::hex::encode(<Vec<bool> as SolValue>::abi_encode(&vec![true, false, true])));
+        let (url, gases) = rpc(serde_json::json!(ret)).await;
+        let Err(SimError::Revert(r)) = settle_gas(&chain(&url), to, &data, 100_000, 300_000).await else { panic!() };
+        assert!(r.contains("settlements [1] fail at the cap"), "{r}");
+        assert_eq!(*gases.lock().unwrap(), vec![120_000, 180_000, 270_000, 300_000]);
     }
 
     #[test]

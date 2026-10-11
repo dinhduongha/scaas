@@ -194,12 +194,16 @@ pub async fn lane_runner(
     inflight: InflightSet,
 ) {
     let key = adapter.chain_key().to_string();
-    if let Err(e) = adapter.start_check().await {
-        tracing::error!(chain = %key, lane, "lane not started: {e:#}");
-        return;
+    // Review P5 m1: a failed chain_uid check (a wrong pin, or an RPC that errors on block 0) keeps THIS lane stopped and
+    // asks again with backoff; the node and its other chains keep running (fail closed per lane).
+    let mut backoff = BACKOFF_MIN;
+    while let Err(e) = adapter.start_check().await {
+        tracing::error!(chain = %key, lane, retry_in = ?backoff, "lane not started: {e:#}");
+        tokio::time::sleep(backoff).await;
+        backoff = (backoff * 2).min(BACKOFF_MAX);
     }
     info!(chain = %key, lane, address = %adapter.lanes()[lane].address, "lane ready");
-    let mut backoff = BACKOFF_MIN;
+    backoff = BACKOFF_MIN;
     while let Err(e) = recover_lane(adapter.as_ref(), &odoo, lane, &worker).await {
         warn!(chain = %key, lane, "restart recovery: {e:#}");
         tokio::time::sleep(backoff).await;
@@ -511,9 +515,9 @@ pub(crate) mod tests {
         assert_eq!(Family::parse("near"), None);
     }
 
-    /// Adapter giả: lane luôn bị CheckTx từ chối, indexer ghi lại tập contract được đưa vào.
+    /// Adapter giả: lane luôn bị CheckTx từ chối, indexer ghi lại tập contract được đưa vào; `.1` đếm `refresh_tokens`.
     #[derive(Default)]
-    struct Mock(std::sync::Mutex<Vec<Vec<String>>>);
+    struct Mock(std::sync::Mutex<Vec<Vec<String>>>, std::sync::atomic::AtomicU32);
 
     #[async_trait]
     impl ChainAdapter for Mock {
@@ -552,6 +556,21 @@ pub(crate) mod tests {
             self.0.lock().unwrap().push(contracts.to_vec());
             Ok(vec![])
         }
+        fn refresh_tokens(&self, _: &crate::odoo::NodeConfig) {
+            self.1.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
+    /// Review T4 I2/m1: the running lane re-reads the registered tokens (every 15 s, the first round at once), not only
+    /// at recovery: a token registered after the lane started is served without a restart.
+    #[tokio::test]
+    async fn the_lane_loop_refreshes_the_registered_tokens() {
+        let (odoo, _) = fake_odoo(Fake { tokens: serde_json::json!([]), ..Default::default() }).await;
+        let a = Arc::new(Mock::default());
+        let k = Arc::new(Mutex::new(Breaker::new(crate::config::BreakerCfg::default())));
+        let run = lane_runner(a.clone(), odoo, 0, "n#0".into(), Duration::from_millis(10), k, InflightSet::default());
+        let _ = tokio::time::timeout(Duration::from_millis(500), run).await;
+        assert_eq!(a.1.load(std::sync::atomic::Ordering::SeqCst), 2, "recovery, then the loop's first round");
     }
 
     #[derive(Default)]

@@ -1239,6 +1239,15 @@ mod tests {
         unfunded: HashSet<Address>,
         /// `(from, to, gas)` of every `isValidSignature` call.
         sig_calls: Vec<(Address, Address, u64)>,
+        /// `isValidSignature` of this signer answers this JSON-RPC error instead.
+        sig_errors: HashMap<Address, Value>,
+        /// In a settlement the leg reverts with words that are no order hash (`MetaTxInsufficientForFee(1, 0)`), and its
+        /// own `mtxTrade` reverts too.
+        wordy: HashSet<B256>,
+        /// Tokens without `mtxTrade` (an outside token): every `mtxTrade` on them reverts.
+        no_trade: HashSet<Address>,
+        /// `eth_getLogs` answers these (the watcher's final range is blocks 6..=10).
+        logs: Vec<Value>,
     }
     type W = Arc<std::sync::Mutex<World>>;
 
@@ -1259,6 +1268,11 @@ mod tests {
                     let a: Address = p[0].as_str().unwrap().parse().unwrap();
                     Ok(hexs(w.codes.get(&a).map(|c| c.as_ref()).unwrap_or_default()))
                 }
+                "eth_blockNumber" => Ok(json!("0xa")),
+                "eth_getBlockByNumber" => {
+                    Ok(serde_json::from_str::<Value>(include_str!("../../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone())
+                }
+                "eth_getLogs" => Ok(Value::Array(w.logs.clone())),
                 "eth_call" => {
                     let input = alloy::hex::decode(&p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap()[2..]).unwrap();
                     let to: Address = p[0]["to"].as_str().unwrap().parse().unwrap();
@@ -1271,7 +1285,7 @@ mod tests {
                             Some(IToken::BelowMinFill { orderHash: h }.abi_encode())
                         } else if w.bad_sig.contains(&h) || w.silent.contains(&h) {
                             Some(IToken::MetaTxBadSignature {}.abi_encode())
-                        } else if w.unfunded.contains(&o.from) {
+                        } else if w.wordy.contains(&h) || w.unfunded.contains(&o.from) {
                             Some(IToken::MetaTxInsufficientForFee { needed: U256::from(1), available: U256::ZERO }.abi_encode())
                         } else {
                             None
@@ -1291,7 +1305,10 @@ mod tests {
                     } else if sel == MAGIC_1271 {
                         let gas = u64::from_str_radix(&p[0]["gas"].as_str().unwrap()[2..], 16).unwrap();
                         w.sig_calls.push((from, to, gas));
-                        Ok(hexs(w.answers.get(&to).map(|b| b.as_ref()).unwrap_or_default()))
+                        match w.sig_errors.get(&to) {
+                            Some(e) => Err(e.clone()),
+                            None => Ok(hexs(w.answers.get(&to).map(|b| b.as_ref()).unwrap_or_default())),
+                        }
                     } else if sel == ISCaaSDex::mtxSettleCall::SELECTOR {
                         let c = ISCaaSDex::mtxSettleCall::abi_decode(&input).unwrap();
                         let ok: Vec<bool> = c.s.iter().map(|s| legs(s).iter().all(|(t, o)| fails(&w, *t, o).is_none())).collect();
@@ -1306,7 +1323,11 @@ mod tests {
                     } else if sel == IToken::mtxTradeCall::SELECTOR {
                         assert_eq!(from, DEX, "a leg is probed as the DEX pulls it");
                         let h = oh(&IToken::mtxTradeCall::abi_decode(&input).unwrap().o);
-                        if w.bad_sig.contains(&h) { revert(IToken::MetaTxBadSignature {}.abi_encode()) } else { Ok(hexs(&[])) }
+                        if w.bad_sig.contains(&h) || w.wordy.contains(&h) || w.no_trade.contains(&to) {
+                            revert(IToken::MetaTxBadSignature {}.abi_encode())
+                        } else {
+                            Ok(hexs(&[]))
+                        }
                     } else {
                         panic!("unexpected eth_call {}", alloy::hex::encode(sel))
                     }
@@ -1526,6 +1547,80 @@ mod tests {
         v.sync_once().await.unwrap();
         let book = v.book.lock().await;
         assert_eq!((book.get(oh(&ask)).unwrap().remaining, book.pending_of(oh(&ask))), (U256::from(100), U256::ZERO));
+    }
+
+    /// Review T3 I1 at the watcher: a mined `LegSettled` releases the order's pending fill, so its remainder (below the
+    /// minimum fill) closes at once, with no restart or reload.
+    #[tokio::test]
+    async fn a_mined_leg_releases_its_pending_fill() {
+        let (maker, taker) = (PrivateKeySigner::random(), PrivateKeySigner::random());
+        let ask = order(maker.address(), QUOTE, 100, 200, 1); // min 50 base
+        let (v, world) = venue(World::default(), vec![(ask.clone(), sig_of(&maker, oh(&ask)))]).await;
+        assert_eq!(take(&v, &taker, 120, 60, 1).await.unwrap().status, "filled");
+        assert_eq!(v.book.lock().await.pending_of(oh(&ask)), U256::from(60));
+        let ev = ISCaaSDex::LegSettled { r#ref: B256::repeat_byte(1), orderHash: oh(&ask), from: maker.address(),
+            destination: maker.address(), sold: U256::from(60), received: U256::from(120), dexFee: U256::ZERO,
+            refund: U256::ZERO, relayerShare: U256::ZERO, treasuryShare: U256::ZERO };
+        world.lock().unwrap().logs.push(serde_json::to_value(log_of(ev.encode_log_data())).unwrap());
+        let (idx, _) = crate::adapter::tests::fake_odoo(crate::adapter::tests::Fake { tokens: json!([]), ..Default::default() }).await;
+        let v = Venue { indexer: Some(idx), ..v };
+        assert!(v.watch_once().await.unwrap());
+        assert_eq!(v.book.lock().await.pending_of(oh(&ask)), U256::ZERO);
+        let r = take(&v, &PrivateKeySigner::random(), 80, 40, 1).await.unwrap();
+        assert_eq!((r.status, r.fills[0]["maker_hash"].as_str().unwrap()), ("filled", &*format!("{:#x}", oh(&ask))));
+    }
+
+    /// Review T3 C1 at the RPC edge: a reverting (or starved) ERC-1271 wallet is `false`, as a failed `staticcall` is;
+    /// an RPC failure is no verdict (503 at intake, a resting maker is never dropped for it).
+    #[tokio::test]
+    async fn a_reverting_wallet_is_invalid_and_an_rpc_failure_is_no_verdict() {
+        let wallet = Address::repeat_byte(0x71);
+        let mut w = World::default();
+        w.codes.insert(wallet, Bytes::from_static(&[0x60, 0x01]));
+        let (v, world) = venue(w, vec![]).await;
+        let (d, sig) = (B256::repeat_byte(1), Bytes::from_static(&[0xab; 65]));
+        for e in [json!({"code": 3, "message": "execution reverted", "data": "0x"}), json!({"code": -32000, "message": "out of gas"})] {
+            world.lock().unwrap().sig_errors.insert(wallet, e.clone());
+            assert!(!v.valid_sig(BASE, wallet, d, &sig).await.unwrap(), "{e}");
+        }
+        world.lock().unwrap().sig_errors.insert(wallet, json!({"code": -32603, "message": "upstream unavailable"}));
+        assert!(v.valid_sig(BASE, wallet, d, &sig).await.is_err());
+    }
+
+    /// Outside legs are never probed through `mtxTrade` (an outside token has none: an honest maker would revert there
+    /// and be blamed); they are blamed only on their own evidence, the hash their revert names (N8).
+    #[tokio::test]
+    async fn outside_legs_are_blamed_only_on_their_own_evidence() {
+        let (maker, taker) = (PrivateKeySigner::random(), PrivateKeySigner::random());
+        let (ask, bid) = (order(maker.address(), QUOTE, 10, 20, 1), order(taker.address(), BASE, 20, 10, 1));
+        let leg = |o: &TradeOrder, sell: Address, k: &PrivateKeySigner| Resting { hash: oh(o), sell, order: o.clone(),
+            sig: sig_of(k, oh(o)), remaining: o.amount, seq: 1 };
+        let s = PlannedSettlement { tag: B256::repeat_byte(1), market_id: 1, taker: leg(&bid, QUOTE, &taker),
+            taker_fill: U256::from(20), makers: vec![(leg(&ask, BASE, &maker), U256::from(10), U256::from(20))] };
+        let mut w = World::default();
+        w.no_trade.insert(BASE);
+        let (v, world) = venue(w, vec![]).await;
+        let v = Venue { kinds: [(BASE, KIND_OUTSIDE), (QUOTE, KIND_SCAAS)].into_iter().collect(), ..v };
+        assert_eq!(v.leg_faults(&s).await.unwrap(), Vec::<B256>::new(), "the outside maker is never probed");
+        world.lock().unwrap().named.insert(oh(&ask));
+        assert_eq!(v.fault(&s).await, vec![oh(&ask)], "its own revert names it");
+    }
+
+    /// A revert whose words name no leg (an amount, a zero) names nobody: the makers' health and each SCaaS leg's own
+    /// pull decide, and the taker fills at the next maker instead of a 503 loop.
+    #[tokio::test]
+    async fn revert_words_that_name_no_leg_are_no_names() {
+        let taker = PrivateKeySigner::random();
+        let (sly, honest) = (PrivateKeySigner::random(), PrivateKeySigner::random());
+        let sly_ask = order(sly.address(), QUOTE, 10, 20, 1);
+        let good_ask = order(honest.address(), QUOTE, 10, 22, 1);
+        let makers = vec![(sly_ask.clone(), sig_of(&sly, oh(&sly_ask))), (good_ask.clone(), sig_of(&honest, oh(&good_ask)))];
+        let mut w = World::default();
+        w.wordy.insert(oh(&sly_ask));
+        let (v, _) = venue(w, makers).await;
+        let r = take(&v, &taker, 22, 10, 1).await.unwrap();
+        assert_eq!((r.status, r.fills[0]["maker_hash"].as_str().unwrap()), ("filled", &*format!("{:#x}", oh(&good_ask))));
+        assert!(!in_book(&v.rows().await, &sly_ask));
     }
 
     /// A failed fill hands back no more than the chain still has open after the book and the other planned fills.

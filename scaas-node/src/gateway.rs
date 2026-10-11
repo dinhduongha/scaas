@@ -31,6 +31,8 @@ pub struct GwChain {
     pub breaker: Option<Arc<Mutex<Breaker>>>,
     /// `[[chains]] fee_recipient` (R84): đích của phí khi người ký không ràng buộc `feeRecipient`.
     pub fee_recipient: Option<Address>,
+    /// The lanes' guard (PAY-FIX2, NODE-GW-07, NODE-JOB-20), run before the simulation (review P5 m2).
+    pub guard: Arc<crate::guard::Guard>,
 }
 
 #[derive(Clone, Default)]
@@ -167,6 +169,13 @@ async fn post_metatx(State(s): State<AppState>, Json(r): Json<SignedReq>) -> Rep
         Ok(w) => w,
         Err(e) => return e,
     };
+    // the lane runs the same guard again; here a refusal is the client's 400 before any simulation, never a 202
+    if let Err(e) = c.guard.check(&c.chain, &w).await {
+        return match SimError::from(e) {
+            SimError::Revert(r) => bad(r),
+            t => sim_reply(t),
+        };
+    }
     if let Err(e) = c.chain.simulate(w.to, w.data.clone()).await {
         return sim_reply(e);
     }
@@ -310,6 +319,7 @@ mod tests {
             dex: None,
             breaker: Some(Arc::new(Mutex::new(k))),
             fee_recipient: None,
+            guard: Arc::new(crate::guard::Guard::new(&cfg, Arc::new(RwLock::new(vec![token])))),
         };
         let app = router(AppState { chains: Arc::new([(7, gw)].into_iter().collect()) });
         let body = json!({"chain": 7, "token": format!("{token:#x}"), "signature": "0x00", "m": {
@@ -322,6 +332,42 @@ mod tests {
         assert_eq!(r.status(), StatusCode::SERVICE_UNAVAILABLE);
         let b = axum::body::to_bytes(r.into_body(), 4096).await.unwrap();
         assert!(String::from_utf8_lossy(&b).contains("circuit breaker open: balance_floor"), "not the RPC error");
+    }
+
+    /// Review P5 m2: the guard runs before the simulation: a meta-tx on a contract of another chain is the client's 400
+    /// (`CHAIN_UID_MISMATCH`), never a 202 refused later at the lane. The fake RPC fails every simulation.
+    #[tokio::test]
+    async fn the_guard_refuses_before_the_simulation() {
+        let app = axum::Router::new().route("/", post(|Json(r): Json<Value>| async move {
+            Json(match r["method"].as_str().unwrap() {
+                "eth_getBlockByNumber" => json!({"jsonrpc": "2.0", "id": r["id"], "result": null}),
+                "eth_call" => json!({"jsonrpc": "2.0", "id": r["id"], "result": format!("0x{:064x}", 1)}),
+                _ => json!({"jsonrpc": "2.0", "id": r["id"], "error": {"code": -32603, "message": "no simulation here"}}),
+            })
+        }));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        let cfg = crate::config::ChainCfg { evm_chain_number: 7, rpc_urls: vec![url], chain_uid: Some(B256::repeat_byte(0x24)),
+                                            ..Default::default() };
+        let token = Address::repeat_byte(0xcd);
+        let tokens = Arc::new(RwLock::new(vec![token]));
+        let (tx, mut rx) = mpsc::channel(1);
+        let gw = GwChain { chain: Arc::new(Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap()),
+            tx, tokens: tokens.clone(), dex: None, breaker: None, fee_recipient: None,
+            guard: Arc::new(crate::guard::Guard::new(&cfg, tokens)) };
+        let app = router(AppState { chains: Arc::new([(7, gw)].into_iter().collect()) });
+        let body = json!({"chain": 7, "token": format!("{token:#x}"), "signature": format!("0x{}", "11".repeat(65)), "m": {
+            "from": format!("{:#x}", Address::repeat_byte(1)), "to": format!("{:#x}", Address::repeat_byte(2)), "value": "1",
+            "entryRef": format!("{:#x}", B256::ZERO), "batch": "0", "nonce": "0", "validUntil": "99999999999", "mode": 0,
+            "relayer": format!("{:#x}", Address::ZERO), "fee": "0", "feeRecipient": format!("{:#x}", Address::ZERO)}});
+        let req = Request::builder().method("POST").uri("/v1/metatx").header("content-type", "application/json")
+            .body(Body::from(body.to_string())).unwrap();
+        let r = app.oneshot(req).await.unwrap();
+        assert_eq!(r.status(), StatusCode::BAD_REQUEST);
+        let b = axum::body::to_bytes(r.into_body(), 4096).await.unwrap();
+        assert!(String::from_utf8_lossy(&b).contains("CHAIN_UID_MISMATCH"), "{}", String::from_utf8_lossy(&b));
+        assert!(rx.try_recv().is_err(), "nothing queued");
     }
 
     /// A `call` request (`MetaTransaction`): `cancelNonce(1)` with a FIXED fee.

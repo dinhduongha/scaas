@@ -997,3 +997,12 @@ invalidateNonces(maker, newMin, sig)	obsolete	v1 MetaToken / MetaTxDex / OpenFac
 keccak256("scaas/zether/sigma-bullets/bn254/n64-n64/v1")	renamed	the `…/n64-n64/v2` proof system id with the 480-byte header (P3b), contracts/zether.md#statement-byte-layout
 keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v1")	renamed	the `…/n64-n64/v2` proof system id with the 480-byte header (P3b), contracts/zether.md#statement-byte-layout
 4200000	superseded	the classical-Zether node cap is ≥ 4 500 000 after P3b (measured relayed single-transfer limits), node/submit-lanes.md#NODE-LANE-09
+MetaToken.sol:141-144	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+HederaMetaToken.sol:34-42	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+:34-42	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+HederaMetaToken.sol:28	internal-path	v1 file or line of the superseded v1 line; the v1 sources and tests are in smartcontracts/evm/legacy/p5 and scaas-node/legacy/p5 (P5)
+MetaToken._erc1271Gas	renamed	MetaTokenBase._erc1271Gas (v2, cap SigCheck.ERC1271_GAS); v1 in smartcontracts/evm/legacy/p5 (P5), networks/hedera.md
+HederaMetaToken._requireValidSignature	renamed	MetaTokenBase._requireValidSignature under IS_HEDERA (HederaLib.requireValid); v1 in smartcontracts/evm/legacy/p5 (P5), networks/hedera.md#NET-HED-11
+HederaMetaToken(underlying = token HTS)	renamed	an UNDERLYING token with IS_HEDERA (v2); v1 in smartcontracts/evm/legacy/p5 (P5), networks/hedera.md#hts
+scaas-node/src/config.rs:415-416	internal-path	the max_gas_per_tx default moved to scaas-node/src/config.rs:429-430, contracts/zether.md
+2^255	obsolete	the v1 SCaaSDexV1 relayer-fee-token limit; the SCaaSDex clone has no separate relayer fee token (P5), node/dex-venue.md#NODE-DEX-02
