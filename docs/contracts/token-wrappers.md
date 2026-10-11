@@ -461,7 +461,7 @@ function mtxWrap(address underlying, TradeOrder calldata o, bytes calldata sig) 
 ```
 
 1. resolve the leg: `_legOf(underlying)` (UnderlyingToken; Zether: `underlying == this.underlying()`), which refuses an
-   unknown "underlying" whose `mtxTrade` could be a no-op (`UnderlyingInvalid`); require `wrapEnabled`, no pending
+   unknown "underlying" whose `mtxTrade` could be a no-op (built: `UnknownUnderlying(u)`, controller ruling, pending the owner); require `wrapEnabled`, no pending
    rate change and no reserve shortfall;
 2. require `o.receiveToken == address(this)` (`WrapOrderInvalid`); the relayer binding is the underlying's (`submitter` = `msg.sender`, `WrongRelayer`);
 3. quote `minted = ⌊o.amount · num / den⌋` (Zether: `o.amount`, 1:1) and `wrapFee = ⌈minted · o.fee / 10⁶⌉`
@@ -474,7 +474,7 @@ function mtxWrap(address underlying, TradeOrder calldata o, bytes calldata sig) 
 
 No allowance; only the named wrapper can pull, and only at the signed minimum. The call to the underlying is a wrap
 talking to its underlying, as the direct wrap's pull is, not the meta-tx pipeline calling out. `mtxWrap` is not
-allowlisted (`msg.sender` must be a contract other than the token); the node runs it as a metatx-job entry point.
+allowlisted, so never a self-call; the submitter may be any address, an EOA relayer included; the node runs it as a metatx-job entry point.
 Clients refuse by default to build or sign such an order when `dex` is not a registered wrapper of that underlying
 ([CTR-DEX-19](dex.md#CTR-DEX-19)).
 

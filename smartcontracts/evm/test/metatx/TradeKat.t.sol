@@ -78,11 +78,15 @@ contract TradeKatTest is Test {
         string memory out = vm.serializeString(k, "invalidate_signature", vm.toString(_sign(invDigest)));
         if (vm.envOr("WRITE_KAT", false)) vm.writeJson(out, OUT);
 
+        // every field of the file on disk is the freshly built one (and no field is missing or extra)
         string memory onDisk = vm.readFile(OUT);
-        assertEq(vm.parseJsonBytes32(onDisk, ".order_hash"), h);
-        assertEq(vm.parseJsonBytes32(onDisk, ".cancel_digest"), cancelDigest);
-        assertEq(vm.parseJsonBytes32(onDisk, ".invalidate_digest"), invDigest);
-        assertEq(vm.parseJsonAddress(onDisk, ".verifying_contract"), address(tok));
-        assertEq(vm.parseJsonBytes(onDisk, ".order_signature"), _sign(h));
+        string[] memory keys = vm.parseJsonKeys(out, "$");
+        assertEq(vm.parseJsonKeys(onDisk, "$").length, keys.length);
+        assertEq(keys.length, 20);
+        for (uint256 i; i < keys.length; ++i) {
+            assertEq(
+                vm.parseJsonString(onDisk, string.concat(".", keys[i])),
+                vm.parseJsonString(out, string.concat(".", keys[i])), keys[i]);
+        }
     }
 }

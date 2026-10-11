@@ -77,10 +77,12 @@ library TradeLib {
             if (move == 0) revert ITradeToken.ZeroFill(h);
             if (move > o.amount - p) revert ITradeToken.Overfill(h);
             if (move != o.amount - p) {
-                // effective minimum: max(minFill, ceil(amount/2)); received side: receiveFill >= receiveAmount/2
-                uint256 half = (o.amount * MIN_FILL_PPM + PPM - 1) / PPM;
+                // effective minimum: max(minFill, ceil(amount/2)); received side: receiveFill >= ceil(receiveAmount/2).
+                // Written as halves, not products, so a huge amount cannot overflow: equal to the MIN_FILL_PPM =
+                // 500_000 form (ceil(x * 500_000 / 1e6) = x - x / 2); the constants stay for the spec's reading.
+                uint256 half = o.amount - o.amount / 2;
                 uint256 m = o.minFill > half ? o.minFill : half;
-                if (move < m || f.receiveFill * PPM < o.receiveAmount * MIN_FILL_PPM) {
+                if (move < m || f.receiveFill < o.receiveAmount - o.receiveAmount / 2) {
                     revert ITradeToken.BelowMinFill(h);
                 }
             }

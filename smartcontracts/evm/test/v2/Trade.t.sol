@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {V2Fixture} from "./helpers/V2Fixture.sol";
+import {V2Fixture, UID_} from "./helpers/V2Fixture.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
 import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
+import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
+import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {TradeLib} from "../../src/trade/TradeLib.sol";
 
 /// The sell token's side of a `TradeOrder` (CTR-DEX-15, -14, -04, -05, -02). This test contract plays the DEX: it is
 /// a contract and it is `o.dex`.
@@ -108,7 +111,12 @@ contract TradeTest is V2Fixture {
         o.flags = 3; // IOC | ESCROW
         _expect(ITradeToken.EscrowFillShape.selector, o, _fill(999, 0, 0));
         _expect(ITradeToken.EscrowFillShape.selector, o, _fill(1000, 2000, 0));
+        _expect(ITradeToken.EscrowFillShape.selector, o, _fill(1000, 0, 1)); // no DEX fee on an escrow
+        bytes32 h = t.tradeOrderDigest(o);
+        vm.expectEmit(address(t));
+        emit ITradeToken.TradeFilled(h, alice, 1000, 0, 0);
         _trade(o, _fill(1000, 0, 0));
+        assertEq(t.pulled(h), 1000);
         assertEq(t.balanceOf(address(this)), 1000);
         _expect(ITradeToken.OrderClosed.selector, o, _fill(1000, 0, 0));
         o.flags = 2; // ESCROW without IOC
@@ -222,10 +230,111 @@ contract TradeTest is V2Fixture {
         }
     }
 
-    function test_typehashesArePinned() public pure {
-        assertEq(keccak256(
+    function _domainSep() internal view returns (bytes32) {
+        return keccak256(abi.encode(
+            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
+            keccak256("SCaaS MetaToken"), keccak256("1"), block.chainid, address(t), UID_));
+    }
+
+    function _typed(bytes32 structHash) internal view returns (bytes32) {
+        return keccak256(abi.encodePacked(hex"1901", _domainSep(), structHash));
+    }
+
+    function _orderStruct(bytes32 typeHash, ITradeToken.TradeOrder memory o) internal pure returns (bytes32) {
+        return keccak256(abi.encode(
+            typeHash, o.from, o.receiveToken, o.amount, o.receiveAmount, o.minFill, o.fee, o.relayer, o.dex,
+            o.destination, o.flags, o.batch, o.nonce, o.validUntil));
+    }
+
+    /// The three type strings of CTR-DEX-13 / CTR-DEX-02, hashed here, are what the library and the token digests use.
+    function test_typehashesArePinned() public view {
+        bytes32 order = keccak256(
             "TradeOrder(address from,address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,"
             "uint256 fee,address relayer,address dex,address destination,uint8 flags,uint256 batch,uint256 nonce,"
-            "uint256 validUntil)"), 0xffe350903bdef674d7c33448fa7ce9b1cd306aa838f3ce1bbdd82aca46773f5d);
+            "uint256 validUntil)");
+        bytes32 cancel = keccak256("CancelOrder(bytes32 orderHash)");
+        bytes32 inv = keccak256("InvalidateNonces(address from,uint256 batch,uint256 minNonce)");
+        assertEq(TradeLib.TRADE_ORDER_TYPEHASH, order);
+        assertEq(TradeLib.CANCEL_ORDER_TYPEHASH, cancel);
+        assertEq(TradeLib.INVALIDATE_NONCES_TYPEHASH, inv);
+        assertEq(order, 0xffe350903bdef674d7c33448fa7ce9b1cd306aa838f3ce1bbdd82aca46773f5d);
+        ITradeToken.TradeOrder memory o = _order(1000, 2000);
+        assertEq(t.tradeOrderDigest(o), _typed(_orderStruct(order, o)));
+        assertEq(t.cancelOrderDigest(bytes32(uint256(5))), _typed(keccak256(abi.encode(cancel, uint256(5)))));
+        assertEq(t.invalidateNoncesDigest(alice, 3, 4), _typed(keccak256(abi.encode(inv, alice, uint256(3), uint256(4)))));
+    }
+
+    // ------------------------------------------------------------------ more bounds and edges
+
+    function test_selfOrder_fromOrDexIsTheToken() public {
+        ITradeToken.TradeOrder memory o = _order(1000, 2000);
+        o.from = address(t);
+        bytes32 h = t.tradeOrderDigest(o);
+        vm.expectRevert(abi.encodeWithSelector(ITradeToken.SelfOrder.selector, h));
+        t.mtxTrade(o, "", _fill(600, 1200, 0));
+        o = _order(1000, 2000);
+        o.dex = address(t);
+        h = t.tradeOrderDigest(o);
+        vm.prank(address(t));
+        vm.expectRevert(abi.encodeWithSelector(ITradeToken.SelfOrder.selector, h));
+        t.mtxTrade(o, "", _fill(600, 1200, 0));
+    }
+
+    function test_minFill_oddAmountRoundsTheHalfUp() public {
+        // half of 1001 = 500.5 -> 501; receiveAmount 2000 keeps the received side (>= 1000) out of play
+        ITradeToken.TradeOrder memory o = _order(1001, 2000);
+        _expect(ITradeToken.BelowMinFill.selector, o, _fill(500, 1000, 0));
+        _trade(o, _fill(501, 1001, 0));
+        assertEq(t.pulled(t.tradeOrderDigest(o)), 501);
+    }
+
+    function test_hugeAmount_partFillDoesNotOverflow() public {
+        NoUnderlyingToken big = _none(alice, type(uint256).max, address(0));
+        ITradeToken.TradeOrder memory o = _order(type(uint256).max, 1);
+        uint256 sell = o.amount - o.amount / 2;
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, big.tradeOrderDigest(o));
+        big.mtxTrade(o, abi.encodePacked(r, s, v), _fill(sell, 1, 0));
+        assertEq(big.balanceOf(address(this)), sell);
+        assertEq(big.pulled(big.tradeOrderDigest(o)), sell);
+    }
+
+    function test_edges_minNonceCap_relayerIsSubmitter_validUntilIsNow() public {
+        bytes32 d = t.invalidateNoncesDigest(alice, 1, 2 ** 128);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, d);
+        t.mtxInvalidateNonces(alice, 1, 2 ** 128, abi.encodePacked(r, s, v));
+        assertEq(t.minNonce(alice, 1), 2 ** 128);
+        ITradeToken.TradeOrder memory o = _order(1000, 2000);
+        o.batch = 2;
+        o.relayer = relayer; // the fill's submitter is `relayer`
+        o.validUntil = block.timestamp; // the last valid second
+        _trade(o, _fill(600, 1200, 0));
+        assertEq(t.balanceOf(address(this)), 600);
+    }
+
+    function test_replayOnAnotherChain_andCancelSignedOnAnotherToken() public {
+        ITradeToken.TradeOrder memory o = _order(1000, 2000);
+        bytes memory sig = _sign(t, o);
+        bytes32 h = t.tradeOrderDigest(o);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, t2.cancelOrderDigest(h));
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        t.mtxCancelOrder(o, abi.encodePacked(r, s, v));
+        vm.chainId(block.chainid + 1);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        t.mtxTrade(o, sig, _fill(600, 1200, 0));
+    }
+
+    function test_tradeEntriesThroughMtxExecuteAreNotAllowlisted() public {
+        ITradeToken.TradeOrder memory o = _order(1000, 2000);
+        bytes[3] memory data = [
+            abi.encodeCall(t.mtxTrade, (o, _sign(t, o), _fill(600, 1200, 0))),
+            abi.encodeCall(t.mtxCancelOrder, (o, _sign(t, o))),
+            abi.encodeCall(t.mtxInvalidateNonces, (alice, 1, 2, _sign(t, o)))];
+        for (uint256 i; i < 3; ++i) {
+            MetaTxLib.MetaTransaction memory m = _call(alice, data[i], i + 1, RR);
+            bytes memory sig = _signCall(ALICE_PK, address(t), m);
+            vm.prank(relayer);
+            vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, bytes4(data[i])));
+            MetaTokenBase(address(t)).mtxExecute(m, sig);
+        }
     }
 }

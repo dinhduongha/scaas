@@ -83,7 +83,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
 
 **P5 — MT-8, MT-9**
 - [ ] v1 line to backup: once the node (`src/abi.rs` v1 struct, `executeMetaTransaction`, salt-less domain; e2e v1 `MetaToken` demo tokens) and clientkeys (`metatx_v1_kat.json`) are on the new ABI, move the v1 contracts and the v1 deploy path to `smartcontracts/evm/legacy/` (E1).
-- [ ] **MT-8** Node: two `sol!` structs, `metatx`/`ua_metatx` jobs name their struct (`call` | `transfer`), selector tables for
+- [ ] **MT-8** Node: `mtxInvalidateNonces` replay reverts `MinNonceNotIncreasing` (strictly increasing): the cancel job treats that revert as success; two `sol!` structs, `metatx`/`ua_metatx` jobs name their struct (`call` | `transfer`), selector tables for
       every contract on `MetaTxBase` (NODE-JOB-20), call table names, breaker per `(from, selector)` (`MetaTransfer` =
       `transfer`/`pay`), batching via `mtxBatchTransfer`/`mtxBatch` never mixed (NODE-LANE-11), `chainUid()` check
       (NODE-GW-07), DEX venue `mtxSettle` (NODE-DEX-15/16), intake `allowance(from, puller)`, TradeEngine with
