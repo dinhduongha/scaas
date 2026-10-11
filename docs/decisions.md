@@ -2709,7 +2709,7 @@ Change (2026-10-08): `m.to`/`m.value` are gone from the struct; a public transfe
 ### CTR-ZTH-38 — Three transfer entries; the plain name is the mode's default
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-38 · superseded-by: —
 
-Change (2026-10-11): owner — `zetherTransfer` stores the full record on a BUNDLE token and is commit-reveal on a COMMIT token (CTR-ZTH-48); `zetherTransferCommit` is commit-reveal on both; `zetherTransferNoBundle` is BUNDLE-only; `zetherTransferBundle` goes. Salt and memo travel inside `payload`. Built (P3): `zetherTransfer` = HASH (default), `zetherTransferBundle` = BUNDLE. Source add: owner, 2026-10-11.
+Change (2026-10-11): owner — `zetherTransfer` stores the full record on a BUNDLE token and is commit-reveal on a COMPACT token (CTR-ZTH-48); `zetherTransferCompact` is commit-reveal on both; `zetherTransferNoBundle` is BUNDLE-only; `zetherTransferBundle` goes. Salt and memo travel inside `payload`. Built (P3): `zetherTransfer` = HASH (default), `zetherTransferBundle` = BUNDLE. Source add: owner, 2026-10-11.
 
 **Why.** Disclosure storage is the per-transfer cost the sender should choose: only `keccak256` of the bundles (default, bundles in an event), the full bundle, or nothing (off-chain disclosure from calldata). The mode is in the statement `opTag`, so a relayer cannot switch it.
 **Cost if wrong.** Always storing the full bundle costs ≈ +375 k gas (BLS) per leg; storing nothing makes on-chain disclosure impossible.
@@ -2782,11 +2782,11 @@ Change (2026-10-11): owner — only under `auditorMode = OPTIONAL` (CTR-ZTH-49);
 **Cost if wrong.** Every control combination on a confidential kind would need its own audited implementation.
 **Source.** `history/specs/2026-10-08-token-tree-design.md` T11, §6.3.
 
-### CTR-ZTH-48 — disclosureMode BUNDLE or COMMIT, chosen at initialize
+### CTR-ZTH-48 — disclosureMode BUNDLE or COMPACT, chosen at initialize
 - old: — · status: current · owner: yes · date: 2026-10-11 · normative: contracts/zether.md#CTR-ZTH-48 · superseded-by: —
 
-**Rule.** Owner decisions of 2026-10-11, in one place: (1) `disclosureMode ∈ {BUNDLE, COMMIT}` at `initialize`, immutable: on BUNDLE `zetherTransfer` stores the full bundle (default) and a caller may save gas with `zetherTransferCommit` or `zetherTransferNoBundle`; on COMMIT only commit-reveal, the no-bundle entry reverts typed (CTR-ZTH-38). (2) `auditorMode ∈ {NONE, FULL, OPTIONAL}` at `initialize`, immutable; FULL refuses opt-outs, OPTIONAL keeps CTR-ZTH-42 (CTR-ZTH-49). (3) `s` from the seed with a fresh published 16-byte salt per build (CTR-ZTH-30). (4) Commit-reveal stores a sender memo (salt ‖ amounts and recipients XOR an HKDF keystream) so the sender opens from seed + storage alone (CTR-ZTH-50). (5) A who-can-open table per storage (zether.md §14). (6) PQ Zether follows the same rules (CTR-PQZ-19, CTR-PQZ-23, CTR-PQZ-24). All SPECIFIED; code in P3b.
-**Why.** The creator, not each sender, decides whether a token keeps its disclosure data on chain. COMMIT is a subset of BUNDLE, so one implementation per kind serves both and the kinds stay `NONE_ZETHER` / `UNDERLYING_ZETHER` (CTR-TOK-21); separate implementations per mode were rejected, to be revisited only if EIP-170 forces smaller bytecode.
+**Rule.** Owner decisions of 2026-10-11, in one place: (1) `disclosureMode ∈ {BUNDLE, COMPACT}` at `initialize`, immutable: on BUNDLE `zetherTransfer` stores the full bundle (default) and a caller may save gas with `zetherTransferCompact` or `zetherTransferNoBundle`; on COMPACT only commit-reveal, the no-bundle entry reverts typed (CTR-ZTH-38). (2) `auditorMode ∈ {NONE, FULL, OPTIONAL}` at `initialize`, immutable; FULL refuses opt-outs, OPTIONAL keeps CTR-ZTH-42 (CTR-ZTH-49). (3) `s` from the seed with a fresh published 16-byte salt per build (CTR-ZTH-30). (4) Commit-reveal stores a sender memo (salt ‖ amounts and recipients XOR an HKDF keystream) so the sender opens from seed + storage alone (CTR-ZTH-50). (5) A who-can-open table per storage (zether.md §14). (6) PQ Zether follows the same rules (CTR-PQZ-19, CTR-PQZ-23, CTR-PQZ-24). All SPECIFIED; code in P3b.
+**Why.** The creator, not each sender, decides whether a token keeps its disclosure data on chain. COMPACT is a subset of BUNDLE, so one implementation per kind serves both and the kinds stay `NONE_ZETHER` / `UNDERLYING_ZETHER` (CTR-TOK-21); separate implementations per mode were rejected, to be revisited only if EIP-170 forces smaller bytecode.
 **Cost if wrong.** A per-sender choice leaves no on-chain guarantee of where disclosure data lives; a separate implementation per mode doubles the audit surface.
 **Source.** owner, 2026-10-11; background `research/zether-disclosure.md` §4, §6, §7, §9.
 
@@ -3222,7 +3222,7 @@ Change (2026-10-11): owner — the seed is bound to a fresh published 16-byte sa
 ### CTR-PQZ-23 — PQZ storage modes and sender memo as classical
 - old: — · status: current · owner: yes · date: 2026-10-11 · normative: contracts/pq-zether.md#CTR-PQZ-23 · superseded-by: —
 
-**Why.** The owner applies CTR-ZTH-38/48/50 to PQZ: `disclosureMode` at `initialize`, `pqzTransfer` / `pqzTransferCommit` / `pqzTransferNoBundle`, the 57-byte memo for the one recipient. A stored PQZ bundle is ≈ 16.7 KB (SSTORE2, ≈ 3.4 M gas estimate), which is why commit-reveal matters more here.
+**Why.** The owner applies CTR-ZTH-38/48/50 to PQZ: `disclosureMode` at `initialize`, `pqzTransfer` / `pqzTransferCompact` / `pqzTransferNoBundle`, the 57-byte memo for the one recipient. A stored PQZ bundle is ≈ 16.7 KB (SSTORE2, ≈ 3.4 M gas estimate), which is why commit-reveal matters more here.
 **Cost if wrong.** Two classes with different disclosure storage semantics for the same entry names.
 **Source.** owner, 2026-10-11; background `research/zether-disclosure.md` §4, §6, §7, §9.
 

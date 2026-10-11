@@ -486,7 +486,7 @@ revealing the randomness that would open every leg, decoys included; a recipient
 auditor key — best held as a k-of-n threshold key — reads the per-transfer auditor ciphertext and nothing else, and a
 sender may leave the auditor out of a transfer, visibly, when the token's immutable `auditorMode` is OPTIONAL ([CTR-ZTH-40](contracts/zether.md#CTR-ZTH-40),
 [CTR-ZTH-41](contracts/zether.md#CTR-ZTH-41), [CTR-ZTH-42](contracts/zether.md#CTR-ZTH-42)). How much of each
-transfer is stored is fixed per token (`disclosureMode` BUNDLE or COMMIT, specified) and chosen per call within it (
+transfer is stored is fixed per token (`disclosureMode` BUNDLE or COMPACT, specified) and chosen per call within it (
 [CTR-ZTH-38](contracts/zether.md#CTR-ZTH-38)).
 
 Verification and disclosure sit **outside** the token: one verifier per curve, the stateless `ZetherDisclosure` and
