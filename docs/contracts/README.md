@@ -19,6 +19,8 @@ the rules every one of them shares. Status tags (**BUILT**, **SPECIFIED**, **PLA
 | [mandates.md](mandates.md) | `MandateWallet`: delegated, capped payment from the payer's own wallet; auto-pay client integration | **BUILT**; revocation epoch **SPECIFIED** |
 | [settlement.md](settlement.md) | map of every settlement kind: entry points, who checks what, fees, finality (adds no rules) | overview |
 
+<p align="center"><img src="../assets/token-axes.svg" width="860" alt="Token model on two axes. Kind = confidential layer: NONE and UNDERLYING (plain, built in P1), NONE_ZETHER and UNDERLYING_ZETHER (target, P3; classical Zether built and unaudited on dev chains), NONE_PQZ and UNDERLYING_PQZ (reserved, not built; PQ Zether specified and unaudited) and NONE_ZETHER_PQZ and UNDERLYING_ZETHER_PQZ (reserved, not built). Who signs = the account: an EOA (ECDSA, built), a SmartKeyAccount (ERC-1271, built) or a Universal Account with a PQ key mldsa44, mldsa65 or fndsa512 through the UA ledger in the token base (specified, not built); every kind accepts the same intents from each."></p>
+
 How the families relate:
 
 ```mermaid

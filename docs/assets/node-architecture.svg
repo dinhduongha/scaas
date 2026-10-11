@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640" viewBox="0 0 960 640" role="img" aria-labelledby="t d">
+  <title id="t">Inside scaas-node</title>
+  <desc id="d">One binary. Doors: gateway (door A), job API, admin, mesh bus, gossip. One store. Workers: submit lanes sign and pay gas on the chains; the indexer reads final events back into feeds; DEX venue; sponsorship. Status per part is shown on each card.</desc>
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#57606a"/>
+    </marker>
+    <style>
+      text { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2328; }
+      .h { font-size: 22px; font-weight: 700; }
+      .sub { font-size: 13px; fill: #57606a; }
+      .tier { font-size: 15px; font-weight: 700; }
+      .tiers { font-size: 12px; fill: #57606a; }
+      .b { font-size: 13.5px; font-weight: 700; }
+      .s { font-size: 11px; fill: #424a53; }
+      .lab { font-size: 11.5px; fill: #424a53; }
+      .chip { font-size: 10px; font-weight: 700; }
+      .flow { stroke: #57606a; stroke-width: 1.5; fill: none; }
+      .back { stroke: #57606a; stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
+      .card { fill: #ffffff; stroke: #d97706; }
+    </style>
+  </defs>
+  <rect x="0.5" y="0.5" width="959" height="639" rx="16" fill="#f8fafc" stroke="#d0d7de"/>
+  <text class="h" x="24" y="40">Inside scaas-node</text>
+  <text class="sub" x="24" y="61">Five doors, one store, workers that use it; the node never holds subject funds or subject keys</text>
+  <text class="lab" x="116" y="96" text-anchor="middle">wallets, apps, third parties</text>
+  <text class="lab" x="298" y="96" text-anchor="middle">ERP, server-side clients</text>
+  <text class="lab" x="480" y="96" text-anchor="middle">console app, shell, Prometheus</text>
+  <text class="lab" x="662" y="96" text-anchor="middle">admitted peers (mTLS / QUIC)</text>
+  <text class="lab" x="844" y="96" text-anchor="middle">open mesh (libp2p)</text>
+  <rect x="16" y="120" width="928" height="352" rx="12" fill="#fef3c7" stroke="#d97706"/>
+  <text class="tier" x="30" y="146">scaas-node</text><text class="tiers" x="122" y="146">one Rust binary; modules switched on in [modules]</text>
+  <line class="flow" x1="116" y1="102" x2="116" y2="119" marker-end="url(#ah)"/>
+  <line class="flow" x1="298" y1="102" x2="298" y2="119" marker-end="url(#ah)"/>
+  <line class="flow" x1="480" y1="102" x2="480" y2="119" marker-end="url(#ah)"/>
+  <line class="flow" x1="662" y1="102" x2="662" y2="119" marker-end="url(#ah)"/>
+  <line class="flow" x1="844" y1="102" x2="844" y2="119" marker-end="url(#ah)"/>
+  <rect class="card" x="30" y="166" width="172" height="80" rx="8"/>
+  <text class="b" x="42" y="187">Gateway (door A)</text>
+  <rect x="42" y="197" width="42" height="16" rx="8" fill="#dafbe1"/><text class="chip" x="63" y="209" text-anchor="middle" fill="#1a7f37">BUILT</text>
+  <text class="s" x="90" y="209">/v1/metatx, DEX</text>
+  <rect x="42" y="219" width="70" height="16" rx="8" fill="#ddf4ff"/><text class="chip" x="77" y="231" text-anchor="middle" fill="#0969da">SPECIFIED</text>
+  <text class="s" x="118" y="231">the rest</text>
+  <line class="flow" x1="116" y1="247" x2="116" y2="270" marker-end="url(#ah)"/>
+  <rect class="card" x="212" y="166" width="172" height="80" rx="8"/>
+  <text class="b" x="224" y="187">Job API</text>
+  <rect x="224" y="197" width="70" height="16" rx="8" fill="#ddf4ff"/><text class="chip" x="259" y="209" text-anchor="middle" fill="#0969da">SPECIFIED</text>
+  <text class="s" x="300" y="209">HMAC per key</text>
+  <line class="flow" x1="298" y1="247" x2="298" y2="270" marker-end="url(#ah)"/>
+  <rect class="card" x="394" y="166" width="172" height="80" rx="8"/>
+  <text class="b" x="406" y="187">Admin</text>
+  <rect x="406" y="197" width="42" height="16" rx="8" fill="#dafbe1"/><text class="chip" x="427" y="209" text-anchor="middle" fill="#1a7f37">BUILT</text>
+  <text class="s" x="454" y="209">health, metrics</text>
+  <rect x="406" y="219" width="70" height="16" rx="8" fill="#ddf4ff"/><text class="chip" x="441" y="231" text-anchor="middle" fill="#0969da">SPECIFIED</text>
+  <text class="s" x="482" y="231">admin API</text>
+  <line class="flow" x1="480" y1="247" x2="480" y2="270" marker-end="url(#ah)"/>
+  <rect class="card" x="576" y="166" width="172" height="80" rx="8"/>
+  <text class="b" x="588" y="187">Mesh bus</text>
+  <rect x="588" y="197" width="42" height="16" rx="8" fill="#dafbe1"/><text class="chip" x="609" y="209" text-anchor="middle" fill="#1a7f37">BUILT</text>
+  <text class="s" x="636" y="209">envelope library</text>
+  <rect x="588" y="219" width="70" height="16" rx="8" fill="#ddf4ff"/><text class="chip" x="623" y="231" text-anchor="middle" fill="#0969da">SPECIFIED</text>
+  <text class="s" x="664" y="231">transports</text>
+  <line class="flow" x1="662" y1="247" x2="662" y2="270" marker-end="url(#ah)"/>
+  <rect class="card" x="758" y="166" width="172" height="80" rx="8"/>
+  <text class="b" x="770" y="187">Gossip</text>
+  <rect x="770" y="197" width="70" height="16" rx="8" fill="#ddf4ff"/><text class="chip" x="805" y="209" text-anchor="middle" fill="#0969da">SPECIFIED</text>
+  <text class="s" x="846" y="209">libp2p, PQ</text>
+  <line class="flow" x1="844" y1="247" x2="844" y2="270" marker-end="url(#ah)"/>
+  <rect class="card" x="30" y="272" width="900" height="76" rx="8"/>
+  <text class="b" x="42" y="293">Store: the only durable state (jobs and journal, feeds, config, audit log, DEX book, mesh and gossip tables)</text>
+  <rect x="42" y="303" width="42" height="16" rx="8" fill="#dafbe1"/><text class="chip" x="63" y="315" text-anchor="middle" fill="#1a7f37">BUILT</text>
+  <text class="s" x="90" y="315">SQLite, owner lock, fencing, counters, CAS, audit chain</text>
+  <rect x="42" y="325" width="70" height="16" rx="8" fill="#ddf4ff"/><text class="chip" x="77" y="337" text-anchor="middle" fill="#0969da">SPECIFIED</text>
+  <text class="s" x="118" y="337">job source, PostgreSQL / MySQL</text>
+  <line class="flow" x1="139" y1="350" x2="139" y2="374" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <rect class="card" x="30" y="376" width="219" height="80" rx="8"/>
+  <text class="b" x="42" y="397">Submit lanes</text>
+  <rect x="42" y="407" width="42" height="16" rx="8" fill="#dafbe1"/><text class="chip" x="63" y="419" text-anchor="middle" fill="#1a7f37">BUILT</text>
+  <text class="s" x="90" y="419">runners, simulation, breakers</text>
+  <rect x="42" y="429" width="70" height="16" rx="8" fill="#ddf4ff"/><text class="chip" x="77" y="441" text-anchor="middle" fill="#0969da">SPECIFIED</text>
+  <text class="s" x="118" y="441">store journal, batching</text>
+  <line class="flow" x1="366" y1="350" x2="366" y2="374" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <rect class="card" x="257" y="376" width="219" height="80" rx="8"/>
+  <text class="b" x="269" y="397">Indexer and feeds</text>
+  <rect x="269" y="407" width="42" height="16" rx="8" fill="#dafbe1"/><text class="chip" x="290" y="419" text-anchor="middle" fill="#1a7f37">BUILT</text>
+  <text class="s" x="317" y="419">finality gate (legacy sink)</text>
+  <rect x="269" y="429" width="70" height="16" rx="8" fill="#ddf4ff"/><text class="chip" x="304" y="441" text-anchor="middle" fill="#0969da">SPECIFIED</text>
+  <text class="s" x="345" y="441">store-backed feeds</text>
+  <line class="flow" x1="593" y1="350" x2="593" y2="374" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <rect class="card" x="484" y="376" width="219" height="80" rx="8"/>
+  <text class="b" x="496" y="397">DEX venue</text>
+  <rect x="496" y="407" width="42" height="16" rx="8" fill="#dafbe1"/><text class="chip" x="517" y="419" text-anchor="middle" fill="#1a7f37">BUILT</text>
+  <text class="s" x="544" y="419">book in the legacy client</text>
+  <rect x="496" y="429" width="70" height="16" rx="8" fill="#ddf4ff"/><text class="chip" x="531" y="441" text-anchor="middle" fill="#0969da">SPECIFIED</text>
+  <text class="s" x="572" y="441">store-backed</text>
+  <line class="flow" x1="820" y1="350" x2="820" y2="374" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <rect class="card" x="711" y="376" width="219" height="80" rx="8"/>
+  <text class="b" x="723" y="397">Sponsorship</text>
+  <rect x="723" y="407" width="70" height="16" rx="8" fill="#ddf4ff"/><text class="chip" x="758" y="419" text-anchor="middle" fill="#0969da">SPECIFIED</text>
+  <text class="s" x="799" y="419">policies, budgets</text>
+  <rect x="723" y="429" width="60" height="16" rx="8" fill="#fff8c5"/><text class="chip" x="753" y="441" text-anchor="middle" fill="#9a6700">PLANNED</text>
+  <text class="s" x="789" y="441">SponsorshipPool</text>
+  <line class="flow" x1="139" y1="457" x2="139" y2="514" marker-end="url(#ah)"/>
+  <text class="lab" x="150" y="496">sign, broadcast, pay gas</text>
+  <line class="back" x1="366" y1="514" x2="366" y2="459" marker-end="url(#ah)"/>
+  <text class="lab" x="378" y="496">final events, RPC quorum</text>
+  <rect x="16" y="516" width="928" height="52" rx="12" fill="#ede9fe" stroke="#7c3aed"/>
+  <text class="tier" x="30" y="547">Smart chains</text>
+  <text class="tiers" x="140" y="547">lanes hold gas only · nothing is booked before finality · clients book from the jobs and events feeds</text>
+  <rect x="24" y="594" width="42" height="16" rx="8" fill="#dafbe1"/><text class="chip" x="45" y="606" text-anchor="middle" fill="#1a7f37">BUILT</text>
+  <text class="lab" x="74" y="606">in the code today</text>
+  <rect x="203.4" y="594" width="70" height="16" rx="8" fill="#ddf4ff"/><text class="chip" x="238.4" y="606" text-anchor="middle" fill="#0969da">SPECIFIED</text>
+  <text class="lab" x="281.4" y="606">designed, not built</text>
+  <rect x="423.2" y="594" width="60" height="16" rx="8" fill="#fff8c5"/><text class="chip" x="453.2" y="606" text-anchor="middle" fill="#9a6700">PLANNED</text>
+  <text class="lab" x="491.20000000000005" y="606">direction agreed, design to follow</text>
+</svg>
