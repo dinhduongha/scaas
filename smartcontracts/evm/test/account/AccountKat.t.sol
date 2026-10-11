@@ -5,6 +5,10 @@ import {Test} from "forge-std/Test.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {SmartKeyAccount, SubjectKey, KeyKind} from "../../src/account/SmartKeyAccount.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
+import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {MandateWallet} from "../../src/wallet/MandateWallet.sol";
+import {noneInit} from "../v2/helpers/V2Fixture.sol";
 
 /// Shared writer of the account-side `MetaTransaction` KATs (metatx.md §15: the `MandateWallet` and `SmartKeyAccount`
 /// vectors are `MetaTransaction` vectors in their own domains), chain 7622 with its real `chain_uid`.
@@ -85,5 +89,48 @@ contract SmartKeyAccountKatTest is MtxKatBase {
         assertEq(a.keyCount(), 2);
         vm.serializeString("ska", "signer_key", vm.toString(vm.addr(SEED)));
         _kat("ska", "./test/vectors/smart_key_account_kat.json", "SCaaS SmartKeyAccount", address(a), m, digest, sig);
+    }
+}
+
+/// `mandate_pay_kat.json` and `mandate_revoke_kat.json`: the delegate's `payUnderMandate` on its derived pay lane and
+/// its epoch-bound `revoke(token, 1)` on the derived revoke lane, as `mtxPayUnderMandate` / `mtxRevoke` build them
+/// (mode 0, no fee); both really execute.
+contract MandateWalletKatTest is MtxKatBase {
+    uint256 internal constant OWNER_PK = 0x0A11CE;
+    uint256 internal constant DELEGATE_PK = 0xDE1E;
+    address internal constant PAYEE = address(0x4EE);
+
+    function test_mandateWalletKat() public {
+        vm.chainId(7622);
+        vm.warp(1_800_000_000);
+        NoUnderlyingToken tok =
+            NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), UID, false))));
+        tok.initialize(address(this), 1, noneInit("Points", "PTS", 6, 0, address(this), address(this)));
+        MandateWallet w = new MandateWallet(vm.addr(OWNER_PK), UID);
+        tok.mint(address(w), 1_000e6);
+        vm.startPrank(vm.addr(OWNER_PK));
+        w.setMandate(address(tok), vm.addr(DELEGATE_PK), 100e6, 250e6, 1 days, 1_900_000_000);
+        w.setPayee(address(tok), PAYEE, true);
+        vm.stopPrank();
+
+        bytes32 ref = keccak256("scaas.kat.entryRef");
+        MetaTxLib.MetaTransaction memory m;
+        m.from = vm.addr(DELEGATE_PK);
+        m.data = abi.encodeCall(MandateWallet.payUnderMandate, (address(tok), PAYEE, 12_345_678, ref));
+        m.batch = w.mandatePayLane(ref);
+        m.validUntil = 1_800_000_300;
+        bytes32 digest = w.mtxDigest(m);
+        bytes memory sig = _ecdsa(DELEGATE_PK, digest);
+        w.mtxPayUnderMandate(address(tok), PAYEE, 12_345_678, ref, m.validUntil, sig);
+        assertEq(tok.balanceOf(PAYEE), 12_345_678);
+        _kat("pay", "./test/vectors/mandate_pay_kat.json", "SCaaS MandateWallet", address(w), m, digest, sig);
+
+        m.data = abi.encodeWithSignature("revoke(address,uint64)", address(tok), uint64(1));
+        m.batch = w.mandateRevokeLane(address(tok), 1);
+        digest = w.mtxDigest(m);
+        sig = _ecdsa(DELEGATE_PK, digest);
+        w.mtxRevoke(address(tok), 1, m.validUntil, sig);
+        assertEq(w.epoch(address(tok)), 2);
+        _kat("revoke", "./test/vectors/mandate_revoke_kat.json", "SCaaS MandateWallet", address(w), m, digest, sig);
     }
 }
