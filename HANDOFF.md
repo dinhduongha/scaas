@@ -1,5 +1,14 @@
 # HANDOFF — scaas
 
+## Session 2026-10-11 (P3b)
+
+**State:** P3b (Zether storage and auditor modes, owner 2026-10-11) built from the plan `docs/superpowers/plans/2026-10-11-p3b-zether-modes.md`;
+the spec rules CTR-ZTH-30/38/42/48/49/50 flipped to built, §19 re-measured, PQZ (CTR-PQZ-19/23/24) spec only.
+
+**Rulings to confirm (controller, pending the owner):** the commitment `keccak256(R)` over `R = salt ‖ B_1 ‖ … ‖ B_M` (the spec table now says so), the `…/v2` proof system id label, `seed_zether` = the R33 conf key `x`, `AuditorForbidden` for NONE, the registry's `keyOf`, the `uint8` config fields with typed errors.
+
+**Not done / next:** R6 (archive of `TransferBundles` for receiver and auditor), the BLS12-381 M = 8 compact transfer with the auditor, over the EIP-7825 cap (the prover refuses it; no contract cap), the client ABI (P5).
+
 ## Session 2026-10-11 (P4)
 
 **State:** P4 on branch `p4-accounts`, merge pending the final review. Plan `docs/superpowers/plans/2026-10-11-p4-accounts-mandates.md`.
