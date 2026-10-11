@@ -10,6 +10,7 @@ chạy private trước).
 | client | Nethermind 1.39.0 |
 | consensus | Clique, period 5s, **một** signer `0xdE36845C…` |
 | gasLimit | `0x1000000` = 16.777.216 |
+| maxCodeSize | **64 KiB** (`0x10000`) from block 6432 (2026-10-11, owner: ahead of Glamsterdam); 24,576 before. Probed: 65,536 B deploys, 65,537 B refused |
 | EVM thực tế | **through Fusaka + BPO2** (since the 2026-08-31 chainspec fix) |
 | MinGasPrice | 0 (base fee 0, gas free) |
 
