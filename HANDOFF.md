@@ -3,7 +3,7 @@
 ## Session 2026-10-11 (P2b-2)
 
 **State:** P2b-2 on branch `p2b2-dex`, merge pending the final review (code `f4afbca`, plan `7b77cd1`, tests `6b9c645`). Plan
-`docs/superpowers/plans/2026-10-11-p2b2-dex-outside-legs.md`. 912 forge tests.
+`docs/superpowers/plans/2026-10-11-p2b2-dex-outside-legs.md`. 913 forge tests.
 
 **Built:** `src/dex/DexPuller.sol` (`pull(token, from, amount)`, only the DEX), `ISCaaSDex.sol` and `SCaaSDex.sol` extended: outside
 legs as `DexOrder` in the DEX domain (`dexOrderDigest`, `cancelOrderDigest`, `invalidateNoncesDigest`, `pulled`, `minNonce`,
@@ -11,7 +11,7 @@ legs as `DexOrder` in the DEX domain (`dexOrderDigest`, `cancelOrderDigest`, `in
 codehash (the constructor takes the `SmartKeyAccount` implementation), `MatchFailed` reason capped at 256 bytes,
 `SigCheckGasStarved` reverting the whole `mtxSettle`, payouts by `SafeERC20`. Tests: `Dex.t.sol` 36, `DexOutside.t.sol` 21
 (19 plus a hook-token re-entry test pinning `nonReentrant` on all entries, and a starved check inside a SCaaS leg).
-Sizes: `SCaaSDex` 14,672 B, `DexPuller` 624 B, every token +9 B (the `precheck` argument; baseline raised).
+Sizes: `SCaaSDex` 14,722 B, `DexPuller` 624 B, every token +9 B (the `precheck` argument; baseline raised).
 
 **Rulings H1-H10 (plan header).** **H1** an outside leg is a `DexOrder` checked by `TradeLib` on the DEX's state; `ESCROW`
 refused. **H2** the `DexPuller` is deployed by `initialize` (a clone runs no constructor). **H3** the cap by codehash;

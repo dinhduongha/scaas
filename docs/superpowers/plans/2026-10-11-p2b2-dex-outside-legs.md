@@ -48,7 +48,7 @@ to a scratch worktree from `main` and run green (full suite 910, Dex 36, DexOuts
   `vm.expectPartialRevert`: the external call would consume the cheatcode. Every DEX-only check has a named killer test
   (mutation table, Task 1 Step 8).
 - Code size is not a concern (owner: wait for the Glamsterdam fork); the ratchet baseline records sizes. Measured:
-  `SCaaSDex` 14,672 B (was 9,574), `DexPuller` 624 B, `TradeLib` 3,140 B, `NoUnderlyingToken` 22,960 B (+9),
+  `SCaaSDex` 14,722 B (was 9,574), `DexPuller` 624 B, `TradeLib` 3,140 B, `NoUnderlyingToken` 22,960 B (+9),
   `UnderlyingToken` 29,983 B (+9) — the two token entries of `size-baseline.json` are raised by those 9 bytes.
 - Commit trailer `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Never `git add claude-code-api.txt`.
 

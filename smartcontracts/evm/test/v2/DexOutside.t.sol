@@ -94,7 +94,9 @@ contract Reenter {
 /// to the puller, `ESCROW` refused, cancels per DEX, the ERC-1271 cap by codehash, a bounded `MatchFailed` reason, a
 /// starved signature check reverting the whole call, conservation catching inexact tokens.
 contract DexOutsideTest is Test {
-    uint256 constant GAS_STARVED = 330_000; // reaches the SCaaS token's 50 k ERC-1271 check with too little left
+    // Starves the SCaaS taker's 400 k ERC-1271 check (the token's cap for a `work` clone). Measured (5 k steps) for that
+    // batch: 305 k-745 k revert `SigCheckGasStarved` (below 305 k no data, from 750 k both settle); 530 k is mid-window.
+    uint256 constant GAS_STARVED = 530_000;
     uint256 constant ALICE_PK = 0xA11CE;
     uint256 constant DAVE_PK = 0xDA7E;
     address alice = vm.addr(ALICE_PK);
@@ -112,7 +114,7 @@ contract DexOutsideTest is Test {
         work = address(new Work1271());
         f = new OpenFactory(address(this), UID_);
         f.registerImplementation(IOpenFactory.TokenKind.NONE, 1,
-            address(new NoUnderlyingToken(address(f), address(0), UID_, false)));
+            address(new NoUnderlyingToken(address(f), work, UID_, false)));
         f.registerDexImplementation(1, address(new SCaaSDex(address(f), UID_, work)));
         a = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 1,
             noneInit("A", "A", 0, 1e6, alice, address(0)), "a"));
@@ -401,6 +403,12 @@ contract DexOutsideTest is Test {
 
     // ------------------------------------------------------------------ ERC-1271 (CTR-DEX-08)
 
+    /// The DEX exposes the `SmartKeyAccount` implementation it was built with, as the tokens do (the deploy compares).
+    function test_smartKeyAccountImpl_isExposed() public view {
+        assertEq(dex.SMART_KEY_ACCOUNT_IMPL(), work);
+        assertEq(a.SMART_KEY_ACCOUNT_IMPL(), dex.SMART_KEY_ACCOUNT_IMPL());
+    }
+
     function test_erc1271OutsideSigner_settles() public {
         Mock1271Wallet w = new Mock1271Wallet(dave);
         _fund(usdc, address(w));
@@ -547,16 +555,16 @@ contract DexOutsideTest is Test {
         assertEq(r.errs(3), ISCaaSDex.NotSelf.selector);
     }
 
-    /// `SigCheckGasStarved` raised by a SCaaS token's own check (Path A taker with an ERC-1271 signer, too little gas
-    /// left at the token) reverts the whole `mtxSettle`, not just that settlement and not as `MatchFailed`.
+    /// `SigCheckGasStarved` raised by a SCaaS token's own check (Path A taker that is a `SmartKeyAccount` clone, so the
+    /// token grants 400 k, with too little gas left at the token) reverts the whole `mtxSettle`, not just that
+    /// settlement and not as `MatchFailed`.
     function test_starvedCheckInsideASCaaSLeg_revertsTheBatch() public {
-        Mock1271Wallet w = new Mock1271Wallet(alice);
+        address w = Clones.clone(work);
         vm.prank(alice);
-        a.transfer(address(w), 1000);
+        a.transfer(w, 1000);
+        ITradeToken.TradeOrder memory t = _order(w, address(usdc), 1000, 2000, 2);
         ISCaaSDex.Settlement memory sw = _settlement(_dave(address(usdc), 2, 2000), 2);
-        ITradeToken.TradeOrder memory t = sw.taker.o;
-        t.from = address(w);
-        sw.taker = _taker(t, sw.taker.fill); // the wallet's owner signs; the wallet answers ERC-1271
+        sw.taker = ISCaaSDex.Leg(address(a), t, hex"00", 1000);
         ISCaaSDex.Settlement[] memory ss = _two(_settlement(_dave(address(usdc), 1, 2000), 1), sw);
         vm.prank(relayer);
         vm.expectPartialRevert(ISCaaSDex.SigCheckGasStarved.selector);

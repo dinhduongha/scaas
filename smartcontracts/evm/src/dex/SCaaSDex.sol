@@ -62,6 +62,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     bytes32 private constant _STORAGE = 0xb144ea5327f344ea7e3b34dd1898f534c8ce28f9f54d0d89a1b78f8fcf7dac00;
 
     address public immutable FACTORY;
+    /// @notice This chain's `SmartKeyAccount` implementation (0 = none), as the tokens expose it; the deploy checks they agree.
+    address public immutable SMART_KEY_ACCOUNT_IMPL;
     /// @dev EIP-1167 runtime codehash of this chain's `SmartKeyAccount` clones (0 = none), as the token's.
     bytes32 private immutable _SMART_KEY_CLONE_CODEHASH;
 
@@ -80,6 +82,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         SaltedEIP712("SCaaS Dex", "1", chainUid_)
     {
         FACTORY = factory_;
+        SMART_KEY_ACCOUNT_IMPL = smartKeyAccountImpl_;
         _SMART_KEY_CLONE_CODEHASH = smartKeyAccountImpl_ == address(0) ? bytes32(0) : keccak256(abi.encodePacked(
             hex"363d3d373d3d3d363d73", smartKeyAccountImpl_, hex"5af43d82803e903d91602b57fd5bf3"));
         _s().initialized = true;

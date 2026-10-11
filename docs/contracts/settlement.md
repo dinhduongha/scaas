@@ -215,10 +215,10 @@ sequenceDiagram
 - **Status and Transitional (BUILT):** the token side (`mtxTrade`, cancels, `TradeLib`) is built in P2a; the
   `SCaaSDex` clone (`createDex`) with SCaaS legs in P2b-1; outside-token legs (`DexOrder`, `DexPuller`), the DEX's
   `mtxCancelOrders` / `mtxInvalidateNonces` and the ERC-1271 cap in P2b-2. `MatchFailed` keeps the first 256 bytes of
-  the revert data and a starved ERC-1271 check reverts the whole call (controller ruling, pending the owner). What the
+  the revert data (controller ruling, pending the owner) and a starved ERC-1271 check reverts the whole call (CTR-DEX-08). What the
   node uses until P5 is the pair `settle(Match[])` of `SCaaSDexV1` (the DEX built before P2b, renamed): DEX-signed
   `Order`s over allowances, one pair per self-call, fees per market, a separate relayer fee, `OrderFilled` / `Matched` /
-  `MatchFailed` ([dex.md section 13](dex.md#transitional-built)). The legacy `MetaTxDex` is removed by the rebuild.
+  `MatchFailed` ([dex.md section 13](dex.md#transitional-built)). The legacy `MetaTxDex` stays until its planned removal (P5).
 
 ### 3.6 Exchange against AMM routes
 
