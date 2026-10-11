@@ -12,6 +12,16 @@ import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {UID_, noneInit} from "./helpers/V2Fixture.sol";
 
+/// ERC-1271 makers that must not take other settlements down with them.
+contract Burner1271 {
+    function isValidSignature(bytes32, bytes calldata) external pure returns (bytes4 r) { r = 0; while (true) {} }
+}
+contract Bomb1271 {
+    function isValidSignature(bytes32, bytes calldata) external pure returns (bytes4) {
+        assembly { return(0, 200000) }
+    }
+}
+
 /// `SCaaSDex` as a factory clone (CTR-DEX-24) settling SCaaS legs (CTR-DEX-16, -17, -11): one taker against many makers,
 /// every leg pulled through its token's `mtxTrade`, every party paid in the same call, the fee split, conservation.
 contract DexTest is Test {
@@ -213,6 +223,207 @@ contract DexTest is Test {
         dex.setMarket(address(a), address(b), false);
         _expectOne(_book(), abi.encodeWithSelector(ISCaaSDex.MarketNotListed.selector, address(a), address(b)));
     }
+
+    // ------------------------------------------------------------------ what only the DEX enforces
+
+    function test_legSettled_receivedIsNetOfTheFee_everyField() public {
+        ISCaaSDex.Settlement[] memory ss = _one(_book());
+        bytes32 hT = a.tradeOrderDigest(ss[0].taker.o);
+        bytes32 hB = b.tradeOrderDigest(ss[0].makers[0].o);
+        bytes32 hC = b.tradeOrderDigest(ss[0].makers[1].o);
+        vm.recordLogs();
+        vm.prank(relayer);
+        dex.mtxSettle(ss);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 n;
+        // taker, then the makers in order
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] != ISCaaSDex.LegSettled.selector) continue;
+            if (n == 0) _checkLeg(logs[i], hT, alice, 1020, 2000, 6, 1);
+            if (n == 1) _checkLeg(logs[i], hB, bob, 1000, 500, 1, 0);
+            if (n == 2) _checkLeg(logs[i], hC, carol, 1000, 520, 1, 0);
+            ++n;
+        }
+        assertEq(n, 3);
+    }
+
+    function _checkLeg(Vm.Log memory lg, bytes32 h, address from, uint256 sold, uint256 gross, uint256 fee, uint256 rel)
+        internal view
+    {
+        assertEq(lg.emitter, address(dex));
+        assertEq(lg.topics[1], "r1");
+        assertEq(lg.topics[2], h);
+        assertEq(address(uint160(uint256(lg.topics[3]))), from);
+        (address dest, uint256 s_, uint256 recv, uint256 dexFee, uint256 refund, uint256 rs, uint256 ts) =
+            abi.decode(lg.data, (address, uint256, uint256, uint256, uint256, uint256, uint256));
+        assertEq(dest, from);
+        assertEq(s_, sold);
+        assertEq(dexFee, fee);
+        assertEq(recv + dexFee, gross); // `received` is net
+        assertEq(refund, 0);
+        assertEq(rs, rel);
+        assertEq(rs + ts, dexFee);
+    }
+
+    function test_pathB_takerBelowItsLimit_priceLimit() public {
+        ISCaaSDex.Settlement memory s;
+        s.ref = "r";
+        s.makers = new ISCaaSDex.Leg[](1);
+        s.makers[0] = _leg(BOB_PK, b, _order(bob, a, 1000, 500, 0), 1000);
+        ITradeToken.TradeOrder memory o = _order(alice, b, 500, 1050, 0); // wants 2.1 B per A, the maker gives 2
+        o.flags = 3;
+        s.taker = _leg(ALICE_PK, a, o, 500);
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.PriceLimit.selector, a.tradeOrderDigest(o)));
+    }
+
+    function test_pathB_takerPartialMatch_refundsInA() public {
+        ISCaaSDex.Settlement memory s = _book();
+        ITradeToken.TradeOrder memory o = _order(alice, b, 1200, 2000, 0);
+        o.flags = 3; // IOC | ESCROW: pulls 1200, matched 1020
+        s.taker = _leg(ALICE_PK, a, o, 1020);
+        ISCaaSDex.Settlement[] memory ss = _one(s);
+        vm.recordLogs();
+        vm.prank(relayer);
+        dex.mtxSettle(ss);
+        assertEq(a.balanceOf(alice), 1e6 - 1020); // 180 came back
+        assertEq(b.balanceOf(alice), 2000);
+        assertEq(a.balanceOf(address(dex)), 0);
+        assertEq(b.balanceOf(address(dex)), 0);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] != ISCaaSDex.LegSettled.selector || address(uint160(uint256(logs[i].topics[3]))) != alice) continue;
+            (, uint256 sold,,, uint256 refund,,) = abi.decode(logs[i].data, (address, uint256, uint256, uint256, uint256, uint256, uint256));
+            assertEq(sold, 1020);
+            assertEq(refund, 180);
+        }
+    }
+
+    function test_makerReceiveTokenIsNotTheTakersSellToken_tokenMismatch() public {
+        ISCaaSDex.Settlement memory s = _book();
+        s.makers[0] = _leg(BOB_PK, b, _order(bob, b, 1000, 500, 1_000), 1000); // sells B for B; sellToken is right
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.TokenMismatch.selector));
+    }
+
+    function test_destination_proceedsGoThere_andNeverToTheDex() public {
+        address dest = address(0xDE57);
+        ISCaaSDex.Settlement memory s = _book();
+        ITradeToken.TradeOrder memory o = _order(alice, b, 1020, 1900, 3_000);
+        o.destination = dest;
+        s.taker = _leg(ALICE_PK, a, o, 1020);
+        ISCaaSDex.Settlement[] memory ss = _one(s);
+        vm.prank(relayer);
+        dex.mtxSettle(ss);
+        assertEq(b.balanceOf(dest), 1994);
+        assertEq(b.balanceOf(alice), 0);
+        // to the DEX itself: the balance check refuses it
+        o.destination = address(dex);
+        o.nonce = 2;
+        s.taker = _leg(ALICE_PK, a, o, 1020);
+        s.makers[0].o.nonce = 2;
+        s.makers[0] = _leg(BOB_PK, b, s.makers[0].o, 1000);
+        s.makers[1].o.nonce = 2;
+        s.makers[1] = _leg(CAROL_PK, b, s.makers[1].o, 1000);
+        s.taker = _leg(ALICE_PK, a, o, 1020);
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.ConservationBroken.selector, address(b)));
+    }
+
+    function test_makerDestinationIsTheDex_conservationBroken() public {
+        ISCaaSDex.Settlement memory s = _book();
+        ITradeToken.TradeOrder memory o = _order(bob, a, 1000, 500, 1_000);
+        o.destination = address(dex);
+        s.makers[0] = _leg(BOB_PK, b, o, 1000);
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.ConservationBroken.selector, address(a)));
+    }
+
+    function test_classification_deprecatedAndUnregisteredAreOutside() public {
+        address impl = address(new NoUnderlyingToken(address(f), address(0), UID_, false));
+        address u = f.createTokenUnregistered(
+            IOpenFactory.TokenKind.NONE, impl, noneInit("C", "C", 0, 1e6, alice, address(0)), "c");
+        vm.startPrank(admin);
+        dex.setMarket(address(a), u, true);
+        assertEq(dex.tokenKind(u), 2);
+        assertEq(dex.tokenKind(address(a)), 1);
+        vm.stopPrank();
+        vm.prank(registrar);
+        f.deprecate(IOpenFactory.TokenKind.NONE, 1, "x");
+        assertEq(dex.tokenKind(address(a)), 1); // a snapshot: unchanged until the market is listed again
+        vm.prank(admin);
+        dex.setMarket(address(a), address(b), true);
+        assertEq(dex.tokenKind(address(a)), 2);
+        assertEq(dex.tokenKind(address(b)), 2);
+    }
+
+    // ------------------------------------------------------------------ CTR-DEX-11: the fee rounds up
+
+    /// Bob sells `n` B for `n` A at no fee; Alice sells `n` A at `fee` ppm and receives `n` B gross. Returns the fee.
+    function _swap(uint256 n, uint256 fee, uint256 nonce) internal returns (uint256 dexFee) {
+        ISCaaSDex.Settlement memory s;
+        s.ref = "r";
+        s.makers = new ISCaaSDex.Leg[](1);
+        ITradeToken.TradeOrder memory mo = _order(bob, a, n, n, 0);
+        mo.nonce = nonce;
+        s.makers[0] = _leg(BOB_PK, b, mo, n);
+        ITradeToken.TradeOrder memory to = _order(alice, b, n, n, fee);
+        to.nonce = nonce;
+        s.taker = _leg(ALICE_PK, a, to, n);
+        ISCaaSDex.Settlement[] memory ss = _one(s);
+        uint256 before = b.balanceOf(alice);
+        vm.prank(relayer);
+        dex.mtxSettle(ss);
+        dexFee = n - (b.balanceOf(alice) - before);
+    }
+
+    function test_feeRoundsUp() public {
+        assertEq(_swap(333, 3_000, 1), 1); // ceil(0.999)
+        assertEq(b.balanceOf(alice), 332);
+        assertEq(_swap(1, 3_000, 2), 1); // a 1-unit receive pays 1 and receives 0
+        assertEq(b.balanceOf(alice), 332);
+        assertEq(_swap(1_000, 3_000, 3), 3); // an exact multiple is unchanged
+    }
+
+    function test_feeRoundsUp_splittingNeverPaysLess() public {
+        uint256 ten;
+        for (uint256 i; i < 10; ++i) ten += _swap(100, 3_000, 10 + i);
+        uint256 one = _swap(1_000, 3_000, 30);
+        assertEq(one, 3);
+        assertEq(ten, 10);
+        assertGe(ten, one);
+    }
+
+    function testFuzz_feeRoundsUp(uint256 n, uint256 fee) public {
+        n = bound(n, 1, 400_000);
+        fee = bound(fee, 0, 10_000);
+        uint256 dexFee = _swap(n, fee, 1);
+        assertLe(dexFee, n);
+        assertGe(dexFee * 1e6, n * fee);
+        if (dexFee != 0) assertLt((dexFee - 1) * 1e6, n * fee); // and the smallest such
+    }
+
+    // ------------------------------------------------------------------ a hostile ERC-1271 maker costs only its own settlement
+
+    function _hostileMaker(address w) internal {
+        vm.prank(bob);
+        b.transfer(w, 1000);
+        ISCaaSDex.Settlement[] memory ss = new ISCaaSDex.Settlement[](2);
+        ss[0] = _book();
+        ss[0].makers[0] = ISCaaSDex.Leg(address(b), _order(w, a, 1000, 500, 1_000), hex"00", 1000);
+        ss[1] = _book();
+        ss[1].ref = "r2";
+        ss[1].makers[0].o.nonce = 2;
+        ss[1].makers[0] = _leg(BOB_PK, b, ss[1].makers[0].o, 1000);
+        ss[1].makers[1].o.nonce = 2;
+        ss[1].makers[1] = _leg(CAROL_PK, b, ss[1].makers[1].o, 1000);
+        ss[1].taker.o.nonce = 2;
+        ss[1].taker = _leg(ALICE_PK, a, ss[1].taker.o, 1020);
+        vm.prank(relayer);
+        bool[] memory ok = dex.mtxSettle{gas: 3_000_000}(ss);
+        assertFalse(ok[0]);
+        assertTrue(ok[1]);
+        assertEq(b.balanceOf(alice), 1994);
+    }
+
+    function test_gasBurning1271Maker_othersStillSettle() public { _hostileMaker(address(new Burner1271())); }
+    function test_returndataBomb1271Maker_othersStillSettle() public { _hostileMaker(address(new Bomb1271())); }
 
     function test_outsideTokenLegsAreNotBuiltYet() public {
         MockERC20 usdc = new MockERC20("USD Coin", "USDC", 6);

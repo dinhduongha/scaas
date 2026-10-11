@@ -33,6 +33,8 @@ interface ISCaaSDex {
 
     event MarketSet(address indexed base, address indexed quote, bool listed);
     event FeeSplitSet(uint32 relayerSharePpm, address treasury);
+    /// @notice `received` is net of the DEX fee: the party gets `receiveFill - dexFee`, so `received + dexFee` is the gross
+    ///         and `relayerShare + treasuryShare == dexFee`. `destination` is where `received` went.
     event LegSettled(bytes32 indexed ref, bytes32 indexed orderHash, address indexed from, address destination,
         uint256 sold, uint256 received, uint256 dexFee, uint256 refund, uint256 relayerShare, uint256 treasuryShare);
     event MatchFailed(bytes32 indexed ref, bytes reason);

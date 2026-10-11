@@ -230,13 +230,12 @@ reason)`); if none succeeds the whole call reverts, so the relayer's simulation 
    (`ConservationBroken(token)`).
 
 **Transitional (BUILT, P2b-1).** `SCaaSDex` (`src/dex/SCaaSDex.sol`; a clone, namespace `scaas.dex`, salted domain `("SCaaS
-Dex","1",chainId,clone,chain_uid)`) builds this for SCaaS legs, each settlement in a self-call (`settleOne`). Outside-token
-legs, `DexOrder`, the `DexPuller`, DEX-side cancels, `checkOrder` and the ERC-1271 cap are P2b-2, the exchange path P2c
-(controller ruling, pending the owner): an outside token's market lists but settling it reverts `OutsideLegNotBuilt(token)`.
-Path A bounds are the token's; on Path B the DEX checks `Overfill`, `BelowMinFill`, `PriceLimit` on the matched part. Also
-`SelfTrade` (a maker's `from` equals the taker's), `DuplicateOrder`, `DexMismatch`, `NoMakers`, `FillMismatch(expected,
-got)`, `NothingSettled`, `FeeSplitInvalid`; a maker receives `ceil(fill · receiveAmount / amount)`. The DEX built before is
-`SCaaSDexV1` ([§13](#transitional-built)).
+Dex","1",chainId,clone,chain_uid)`) builds this for SCaaS legs, each in a self-call (`settleOne`). Outside-token legs,
+`DexOrder`, the `DexPuller`, DEX-side cancels, `checkOrder` and the ERC-1271 cap are P2b-2, the exchange path P2c (controller
+ruling, pending the owner): an outside token's market lists but settling it reverts `OutsideLegNotBuilt(token)`. Path A
+bounds are the token's; on Path B the DEX checks `Overfill`, `BelowMinFill`, `PriceLimit` on the matched part. Also
+`SelfTrade`, `DuplicateOrder`, `NoMakers`, `FillMismatch`, `NothingSettled`; a maker receives `ceil(fill · receiveAmount /
+amount)`. Before it: `SCaaSDexV1` ([§13](#transitional-built)).
 
 | Leg | Pulled into the DEX | Bounds checked by |
 |---|---|---|
@@ -273,7 +272,8 @@ settlement — a taker that submits its own match is rebated part of the maker's
 copied from the mempool for the share; clients therefore default `relayer` to the venue node. Role-based pricing (maker
 vs taker rates) is the node's intake policy — it does not match an order whose signed `fee` is below its venue's rate
 for the role the order would play — not an on-chain setting. Fees never stay in the DEX (`FeeWouldStick` if the split
-would leave a remainder there).
+would leave a remainder there). P2b-1: `FeeWouldStick` is not built — `FeeSplitInvalid` refuses a treasury of 0 or the
+DEX at `initialize`/`setFeeSplit`, so no share can stay (conservation backstops; controller ruling, pending the owner).
 
 <a id="CTR-DEX-11"></a>**CTR-DEX-11** — **The DEX fee rounds up.** `dexFee = Math.mulDiv(receiveFill, fee, PPM,
 Math.Rounding.Ceil)` (non-EVM: `(fill·ppm + PPM − 1) / PPM` on a double-width integer), and the token's
@@ -328,7 +328,7 @@ by the DEX** (a contract SCaaS does not control cannot verify it):
 
 | Item | Rule |
 |---|---|
-| Classification | at `setMarket` the DEX records each token's kind: **SCaaS** iff the chain's `OpenFactory` reports it was made from a registered, non-deprecated implementation (`versionOf`, as [CTR-TND-07](tender.md#CTR-TND-07)), else **outside**. Never taken from the leg: a submitter-chosen kind could send a fallback-only "token" down the `mtxTrade` path |
+| Classification | at `setMarket` the DEX records each token's kind: **SCaaS** iff the chain's `OpenFactory` reports it was made from a registered, non-deprecated implementation (`versionOf`, as [CTR-TND-07](tender.md#CTR-TND-07)), else **outside** — a snapshot at `setMarket`: re-list after a deprecation. Never taken from the leg: a submitter-chosen kind could send a fallback-only "token" down the `mtxTrade` path |
 | Signed struct | the same `TradeOrder`, signed in the **DEX's** domain `("SCaaS Dex","1", chainId, DEX, chain_uid)` as `DexOrder(address sellToken,TradeOrder order)TradeOrder(…)`; `o.dex == address(this)` is required (the domain already binds the DEX; a different `dex` field would be a second, conflicting truth) |
 | Fill state | on the DEX: `pulled[h]` and `minNonce[from][batch]`, `h` = the `DexOrder` digest |
 | Checks | the full [CTR-DEX-15](#CTR-DEX-15) list, enforced by the DEX: relayer binding, expiry, nonce, flags, zero amounts, `minFill ≤ amount`, fee cap, signature (`_validSig` with the ERC-1271 cap, [CTR-DEX-08](#CTR-DEX-08)), `p < amount`, `sellFill > 0`, overfill, effective minimum, price, fee bound |

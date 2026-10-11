@@ -93,7 +93,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
 
     function _onlyAdmin() private view returns (DexStorage storage s) {
         s = _s();
-        if (msg.sender != s.admin || msg.sender == address(0)) revert NotAdmin(msg.sender);
+        if (msg.sender != s.admin) revert NotAdmin(msg.sender);
     }
 
     /// @dev SCaaS iff the factory made it from a registered (version ≠ 0), non-deprecated implementation.
@@ -221,7 +221,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         _send(recvToken, submitter, relayerShare);
         _send(recvToken, s.treasury, treasuryShare);
         _send(l.sellToken, l.o.from, c.refund);
-        emit LegSettled(ref, c.h, l.o.from, to, c.sold, c.recv, c.fee, c.refund, relayerShare, treasuryShare);
+        emit LegSettled(ref, c.h, l.o.from, to, c.sold, c.recv - c.fee, c.fee, c.refund, relayerShare, treasuryShare);
     }
 
     function _send(address token, address to, uint256 amount) private {
