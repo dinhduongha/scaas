@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="580" viewBox="0 0 960 580" role="img" aria-labelledby="t d">
   <title id="t">Accounts and keys</title>
-  <desc id="d">Three account forms. Native account: the chain’s own account (EVM EOA or ERC-1271 contract, Solana, Stellar, Aptos, Sui, Cosmos, TON), no registration. Universal Account, the default (specified, nothing built): an id derived from key data or a policy, for passkeys, P-256, ed25519, Schnorr, BLS, MuSig2 and FROST groups, weighted multisig, post-quantum and Zether keys, registered once per chain in the UARegistry with proof of possession. SmartKeyAccount, optional (built): an ERC-1271 clone from SmartKeyAccountFactory with several P-256 passkey and secp256k1 keys and guardian recovery. A passkey can serve as a UA or as a SmartKeyAccount key. Every token kind accepts all three forms and verifies the signature itself. MandateWallet (built) is a payment authority, not an account: the payer owns it and deposits into it, a delegate pays approved payees within per-payment and per-period caps until expiry or revocation.</desc>
+  <desc id="d">Three account forms. Native account: the chain’s own account (EVM EOA or ERC-1271 contract, Solana, Stellar, Aptos, Sui, Cosmos, TON), no registration. Universal Account, the default (specified, nothing built): an id derived from key data or a policy, for passkeys, P-256, ed25519, Schnorr, BLS, MuSig2 and FROST groups, weighted multisig, post-quantum and Zether keys, registered once per chain in the UARegistry with proof of possession. SmartKeyAccount, optional (built, on MetaTxBase): an ERC-1271 clone from SmartKeyAccountFactory with several P-256 passkey and secp256k1 keys and guardian recovery. A passkey can serve as a UA or as a SmartKeyAccount key. Every token kind accepts all three forms and verifies the signature itself. MandateWallet (built, on MetaTxBase with a revocation epoch) is a payment authority, not an account: the payer owns it and deposits into it, a delegate pays approved payees within per-payment and per-period caps until expiry or revocation.</desc>
   <defs>
     <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#57606a"/>
@@ -54,7 +54,7 @@
   <text class="s" x="658" y="226">anyone completeRecovery after the delay</text>
   <text class="s" x="658" y="245">key changes: MetaTransactions signed by</text>
   <text class="s" x="658" y="264">the account itself (stable address)</text>
-  <text class="n" x="658" y="283">built code still named SubjectAccount until P4</text>
+  <text class="n" x="658" y="283">on MetaTxBase, domain SCaaS SmartKeyAccount</text>
   <rect x="430" y="300" width="420" height="26" rx="13" fill="#ffffff" stroke="#57606a" stroke-dasharray="4 3"/>
   <text class="lab" x="640" y="317" text-anchor="middle">a passkey can be a webauthn-p256 UA or a SmartKeyAccount key</text>
   <line class="flow" x1="166" y1="315" x2="166" y2="352" marker-end="url(#ah)"/>
@@ -66,7 +66,7 @@
 
   <rect x="16" y="420" width="928" height="110" rx="12" fill="#fef3c7" stroke="#d97706"/>
   <text class="tier" x="30" y="445">MandateWallet</text>
-  <rect x="150" y="433" width="42" height="16" rx="8" fill="#dafbe1"/><text class="chip" x="171" y="445" text-anchor="middle" fill="#1a7f37">BUILT</text><text class="s" x="198" y="445">revocation epoch</text><rect x="290" y="433" width="70" height="16" rx="8" fill="#ddf4ff"/><text class="chip" x="325" y="445" text-anchor="middle" fill="#0969da">SPECIFIED</text>
+  <rect x="150" y="433" width="42" height="16" rx="8" fill="#dafbe1"/><text class="chip" x="171" y="445" text-anchor="middle" fill="#1a7f37">BUILT</text><text class="s" x="198" y="445">on MetaTxBase, revocation epoch</text>
   <text class="s" x="30" y="466">A payment authority, not an account: delegated, capped payment from the payer's own wallet</text>
   <rect x="30" y="478" width="150" height="40" rx="8" fill="#ffffff" stroke="#d97706"/>
   <text class="b" x="105" y="503" text-anchor="middle">Payer (owner)</text>

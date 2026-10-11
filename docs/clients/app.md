@@ -200,7 +200,7 @@ Fake wallets are not duplicated: end-to-end tests inject clientkeys `test/wallet
 `key` is the node's `chain_key` (`config.rs:746`); non-EVM curated tokens and assets carry `symbol`/`decimals` the same
 way; a chain without `gatewayNode` has the self-paid path only. `npm run config:from-deployments -- <rpc>` reads
 `smartcontracts/evm/deployments/<chainid>.json` and maps `scaas_dex` → `contracts.dex`, `factory` →
-`contracts.factoryV1`, `token_factory` (was `factory_v2`) → `contracts.factoryV2`, `subject_account_factory` → `contracts.subjectAccountFactory`;
+`contracts.factoryV1`, `token_factory` (was `factory_v2`) → `contracts.factoryV2`, `smart_key_account_factory` (P4; was `subject_account_factory`) → `contracts.smartKeyAccountFactory`;
 the deployment's `dex` key is `MetaTxDex`, a different contract, and is not mapped; other families are written by hand.
 Target (SPECIFIED): the deployment file also carries `chain_uid` and the DEX list ([NET-EVM-05](../networks/evm.md#NET-EVM-05)),
 mapped to `chainUid` and `contracts.dexes` (with `contracts.dex` = the venue's DEX, which must be on the list); the
@@ -750,7 +750,7 @@ Unit (Vitest / `node --test`, no network):
 
 | Area | Vectors / method |
 |---|---|
-| EVM encoders | `metatx_kat` (v3), `metatx_v1_kat` (built v1, until P5), `metatransfer_kat`, `dex_kat`, `hedera_kat`, `wrap_rate_vectors`, `subject_account_create2`, `webauthn_soft` |
+| EVM encoders | `metatx_kat` (v3), `metatx_v1_kat` (built v1, until P5), `metatransfer_kat`, `dex_kat`, `hedera_kat`, `wrap_rate_vectors`, `smart_key_account_create2`, `smart_key_account_kat`, `mandate_pay_kat`, `mandate_revoke_kat`, `webauthn_soft` |
 | Non-EVM encoders (clientkeys) | `mesh-envelope-v1.2.json` cross-language payloads, `ton-vectors.json`, `fam_*.json` per family, `sui_vectors.json`, the seed-signed vectors, `solana_derivation.json` |
 | UA (clientkeys) | `smartcontracts/vectors/ua/*`: ids, keyHash, `ua_msg`, PoP, `UAMetaTransaction` digests; `deriveUAKey` paths under `m/7622'` |
 | Backup / vault | `backup_policy.json` plus the de-duplication and `msig` rows; `vault_v2_fixture.json` |

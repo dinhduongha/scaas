@@ -3,7 +3,7 @@
 A mandate lets a delegate pay from a payer's own wallet within limits the chain enforces: per payment, per period,
 to approved payees, until an expiry, revocable at any time. It is a payment authority, not an account: the payer keeps
 its own account ([accounts.md](accounts.md)) and the funds sit in its `MandateWallet`. Status: **BUILT**
-(`smartcontracts/evm/src/wallet/`); revocation epoch, the `mtx` names and the salted domain **SPECIFIED**.
+(`smartcontracts/evm/src/wallet/`, on `MetaTxBase` since P4; the typed-struct wallet before it is in `legacy/p4/`).
 
 ## <a id="mandatewallet"></a>1. `MandateWallet`
 
@@ -14,20 +14,21 @@ for its owner (so the owner can still pay by hand from it with a meta-tx, ECDSA 
 `{delegate, expiry, periodSeconds, periodStart, maxPerPayment, maxPerPeriod, spentInPeriod}` plus allowed payees. The
 owner sets the payees — the partner's approved receiving addresses. The wallet is a `MetaTxBase` contract
 ([CTR-MTX-22](metatx.md#CTR-MTX-22)): every signed action is a `MetaTransaction` self-call, fee mode `NONE`. The
-delegate signs `MetaTransaction{from: delegate, data: payUnderMandate(token, payee, amount, entryRef), …}`; the
-function checks on chain `_msgSender() == mandate.delegate`, not revoked, not expired, payee allowed, ≤ the per-payment
+delegate signs `MetaTransaction{from: delegate, data: payUnderMandate(token, payee, amount, entryRef, epoch), …}`; the
+function checks on chain `_msgSender() == mandate.delegate`, `epoch == epoch[token]` (`StaleEpoch`), not revoked, not expired, payee allowed, ≤ the per-payment
 cap, ≤ the per-period cap and `entryRef` unused (it stays the payment reference and single-use per wallet), then pays
 through `IERC20Payment.payWithFee(to, amount, NONE, 0, 0, entryRef)` — the direct payment path that `IERC20Payment` already
 has, `msg.sender` = the wallet — no allowance. Kill switch: `revoke(token)` by the owner (directly or signed with
 `from` = the owner), or `revoke(token, epoch)` signed by the delegate (so a platform revokes at once through a relayer,
 [CTR-ACC-07](#CTR-ACC-07)).
 
-**Named entry points.** `mtxPayUnderMandate(token, payee, amount, entryRef, validUntil, sig)`,
+**Named entry points.** `mtxPayUnderMandate(token, payee, amount, entryRef, epoch, validUntil, sig)`,
 `mtxRevoke(token, epoch, validUntil, sig)` and `mtxExecuteAsOwner(data, nonce, validUntil, sig)` keep their signatures
 and only build the matching `MetaTransaction`; their signatures carry no lane, so they derive it as `mtxPay` does:
 `mtxPayUnderMandate` → `batch = uint256(keccak256("scaas.mandate.pay" ‖ entryRef))`, `nonce = 0` (one payment per
 `entryRef`); `mtxRevoke` → `batch = uint256(keccak256("scaas.mandate.revoke" ‖ token ‖ epoch))`, `nonce = 0`;
-`mtxExecuteAsOwner` → `batch = 0`. The lane nonce replaces the replay checks of the earlier typed structs. `PaymentSettled` still carries `entryRef`, so
+`mtxExecuteAsOwner` → `batch = 0` (`‖` is `abi.encodePacked`, the epoch 8 bytes; views `mandatePayLane`,
+`mandateRevokeLane`). Each builder reverts `NoMandate` when the token has no delegate. The lane nonce replaces the replay checks of the earlier typed structs. `PaymentSettled` still carries `entryRef`, so
 reconciliation is exactly that of a manual payment (the design sketch was `payUnderMandate(order, delegateSig)`).
 
 **Why a wallet per payer** rather than an allowance to one shared mandate contract: a
@@ -41,12 +42,9 @@ is `("SCaaS MandateWallet","1", chainId, wallet, salt = chain_uid)` with `chain_
 chain profile ([CTR-GEN-05](README.md#CTR-GEN-05)); because the deployer chooses that value per wallet, the node checks
 the wallet's `chainUid()` against the chain profile before relaying anything for it.
 
-**Transitional (BUILT):** the
-entry points are named `payUnderMandate(token, payee, amount, entryRef, validUntil, sig)`, `revokeWithSig` and
-`executeAsOwner`, each verifying its own typed struct (`PayUnderMandate(address token,address payee,uint256
-amount,bytes32 entryRef,uint256 validUntil)`, `RevokeMandate(…)`, the owner call) instead of a `MetaTransaction`, and
-the domain has no `salt`; the renames follow [CTR-MTX-21](metatx.md#CTR-MTX-21), the move onto `MetaTxBase`
-[CTR-MTX-22](metatx.md#CTR-MTX-22).
+**Errors** (besides the base's): `NotOwner`, `NotDelegate` (`_msgSender()` is not the mandate's delegate), `NoMandate`,
+`MandateExpired`, `PayeeNotAllowed`, `OverPaymentCap`, `OverPeriodCap`, `RefAlreadyPaid`, `StaleEpoch(current, signed)`,
+`BadMandate`, `PayFailed` (a token answering false: the whole payment reverts), `CallFailed`, `ZeroOwner`.
 
 Delegated payment and the kill switch, as a sequence:
 
@@ -57,9 +55,9 @@ sequenceDiagram
     participant R as Relayer
     participant W as MandateWallet
     O->>W: deposit funds, setMandate, setPayee
-    D->>R: signed MetaTransaction payUnderMandate(token, payee, amount, entryRef)
+    D->>R: signed MetaTransaction payUnderMandate(token, payee, amount, entryRef, epoch)
     R->>W: mtxExecute (anyone may submit)
-    W->>W: delegate, not revoked, not expired, payee, caps, entryRef unused
+    W->>W: delegate, epoch current, not revoked, not expired, payee, caps, entryRef unused
     W->>W: payWithFee(to, amount, NONE, 0, 0, entryRef), no allowance
     W-->>R: PaymentSettled (entryRef)
     D->>R: signed revoke(token, epoch)
@@ -72,10 +70,12 @@ sequenceDiagram
 keeps `epoch[token]` (uint64), incremented by every `setMandate` and every revoke; the delegate's signed revoke is a
 `MetaTransaction` with `data = revoke(token, epoch)` on the lane `keccak256("scaas.mandate.revoke" ‖ token ‖ epoch)`,
 and `revoke(address,uint64)` requires `epoch == epoch[token]`, so a public revoke signature cannot be replayed until
-its `validUntil` to delete a mandate the owner re-established. The built wallet has the typed `RevokeMandate(address
-token,uint256 validUntil)` and no epoch; the client digest builders and the forge KAT change together. EVM only: the Solana mandate binds a generation, and the Sui/Aptos/Cosmos mandates are one-shot. Tests:
-revoke, `setMandate` again, replay ⇒ `BadSignature`/`StaleEpoch`; a current-epoch revoke works; client digest == forge
-vector. Status **SPECIFIED**.
+its `validUntil` to delete a mandate the owner re-established. **The delegate's pay names the epoch too** (controller ruling, pending the owner; the spec tied only the revoke to it):
+`payUnderMandate(token, payee, amount, entryRef, epoch)` (selector `0x781fc8a8`) reverts `StaleEpoch(current, signed)` when `epoch != epoch[token]`; the
+argument is in the signed `data`, so it binds every relay path (a lane would not: `mtxExecute` and `mtxBatch` accept any lane), and a relayer cannot restamp it (`MetaTxBadSignature`). A revoke, and any `setMandate` — also a plain expiry extension — void every queued delegate pay; the pay job re-reads `epoch(token)` and re-signs on `StaleEpoch`, and the kill-switch revoke job re-reads it after a `setMandate`. **`setMandate` keeps the running period** (same ruling): `periodStart` and `spentInPeriod` carry over when the delegate and `periodSeconds` are unchanged, otherwise both reset; expiry and caps always take the new values, so an extension does not double the window's allowance (revoke, then set, is the deliberate reset). **An owner hand-pay and a delegate pay of the same `entryRef` can both pay**: `RefAlreadyPaid` covers only the wallet's delegate pays, so pay one way per invoice. Forge KATs `mandate_pay_kat.json` and `mandate_revoke_kat.json`, read by
+clientkeys. EVM only in P4: the Solana mandate binds a generation, and the Sui/Aptos/Cosmos mandates are one-shot; the other families keep their rules (TODO). Tests:
+revoke, `setMandate` again, replay ⇒ `StaleEpoch`; a stale pay ⇒ `StaleEpoch`; a current-epoch revoke works; client digest == forge
+vector. Status **BUILT** (P4).
 
 **Hedera ED25519 owners** pay from a `MandateWallet` only through `HederaMandateWallet.mtxExecuteAsOwnerRaw`
 (`HederaMandateWallet.sol`): ERC-1271 runs under STATICCALL, where HIP-632 `isAuthorizedRaw` halts, so a meta-tx with
@@ -84,9 +84,9 @@ vector. Status **SPECIFIED**.
 
 | Entry point | Rule |
 |---|---|
-| `setMandate(token, delegate, maxPerPayment, maxPerPeriod, periodSeconds, expiry)`, `setPayee` | owner |
+| `setMandate(token, delegate, maxPerPayment, maxPerPeriod, periodSeconds, expiry)`, `setPayee`, `execute` | owner (directly, or signed: `mtxExecute`, `mtxExecuteAsOwner`) |
 | `revoke` | owner; bumps `epoch[token]` |
-| `payUnderMandate(token, payee, amount, entryRef)` | delegate-signed `MetaTransaction` (`mtxExecute`, or the named `mtxPayUnderMandate(token, payee, amount, entryRef, validUntil, sig)`); anyone submits |
+| `payUnderMandate(token, payee, amount, entryRef, epoch)` | delegate-signed `MetaTransaction` (`mtxExecute`, or the named `mtxPayUnderMandate(token, payee, amount, entryRef, epoch, validUntil, sig)`); anyone submits |
 | `revoke(token, epoch)` | delegate-signed `MetaTransaction` (`mtxExecute`, or the named `mtxRevoke`) |
 | `mtxExecuteAsOwner` (owner-signed `MetaTransaction`), `isValidSignature` | owner |
 
@@ -107,7 +107,7 @@ How a client system uses mandates (the reference ERP implements it; the contract
   state, kill switch) creates exactly one run per (policy, invoice, event) under a uniqueness constraint, so a retry
   never pays twice; it checks the caps, takes the payee from the issuing company's approved receiving wallet on the
   same chain and token, and then follows **the manual payment path**: custodial signs the meta-tx through the
-  adapter, delegated signs the `payUnderMandate` `MetaTransaction` and pushes a `call` job to `MandateWallet.mtxPayUnderMandate`. Every signature
+  adapter, delegated signs the `payUnderMandate` `MetaTransaction` (with the current `epoch(token)`) and pushes a `call` job to `MandateWallet.mtxPayUnderMandate`. Every signature
   passes the signing-policy checks (target token, `pay` op, caps, `validUntil − now ≤ 300 s`; the signing-policy service, `SigningPolicyService`, applies `validUntil ≤ 300 s`). A failure marks the
   run `failed` and is raised, never silent; the kill switch also queues a `mtxRevoke` job for delegated wallets. The node executes such `call` jobs only for
   allowlisted selectors and targets ([NODE-JOB-01](../node/job-api.md#NODE-JOB-01)), so it is never a "blind signer" of

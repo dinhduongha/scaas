@@ -122,8 +122,8 @@ Every signature not made by a human on a device — custodial wallets, delegated
 users, bounded by policy. Checks before any signature:
 
 1. Destination contract ∈ allowlist (token, mandate wallet, DEX).
-2. Operation ∈ allowed ops/selectors (a payment `MetaTransfer`, the `MandateWallet` `payUnderMandate` call,
-   `mtxExecute` with an allowed self-call selector, [CLI-SGN-34](#CLI-SGN-34); as built `payUnderMandate` and
+2. Operation ∈ allowed ops/selectors (a payment `MetaTransfer`, the `MandateWallet` `payUnderMandate` call (with the current epoch),
+   `mtxExecute` with an allowed self-call selector, [CLI-SGN-34](#CLI-SGN-34); as built on v1 tokens
    `executeMetaTransaction` with an allowed op);
    never `approve` on a SCaaS token — an EOA never approves one ([CLI-SGN-36](#CLI-SGN-36),
    [CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)).
@@ -222,8 +222,8 @@ which works offline, or from the contract's `eip712Domain()` read once and cache
 payments, self-calls, trade orders), mandate wallets, subject accounts, the DEX and the registry. What protects the
 user is the contract — a contract on another chain computes its digest with that chain's `chain_uid`, so the signature
 fails there whichever wallet made it; the client check catches a wrong profile or a hostile server before the user is
-asked. Transitional (BUILT): only the Universal Account domains carry `salt` (the existing check of the PoP flow,
-[integration.md](../integration.md)); the other domains are unsalted until the salted contracts are deployed.
+asked. Transitional (BUILT): clientkeys builds and checks `salt` for the Universal Account (PoP flow,
+[integration.md](../integration.md)) and, since P4, the `SmartKeyAccount` owner call; the v1 token checks stay unsalted (P5).
 
 <a id="CLI-SGN-34"></a>**CLI-SGN-34** — **A meta-transaction's `data` is decoded and shown before the user signs;
 a selector outside the token's allowlist is refused.** Status: **SPECIFIED**. clientkeys and the app encode

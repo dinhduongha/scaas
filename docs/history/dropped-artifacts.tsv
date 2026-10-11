@@ -828,3 +828,8 @@ script/DeployZether.s.sol	obsolete	never built; the Zether stack deploys with DE
 ZetherMetaTx._requireValidSignature	renamed	MetaTxBase._requireValidSignature (P3), contracts/accounts.md
 ZetherToken.registered(ua)	renamed	ZetherLayer.registered(ua) (P3), contracts/accounts.md
 ConfidentialTransfer(entryRef)	obsolete	old ZetherToken OP_ZTRANSFER event (legacy/p3); the kinds emit ZetherTransfer with entryRef, contracts/zether.md
+contracts.subjectAccountFactory	renamed	contracts.smartKeyAccountFactory, from the deploy key smart_key_account_factory (P4), clients/app.md
+subject_account_create2	renamed	smart_key_account_create2 (P4), clients/app.md
+"SCaaS SubjectAccount"	renamed	"SCaaS SmartKeyAccount" (P4, CTR-ACC-11), contracts/accounts.md
+SCaaS SubjectAccount	renamed	SCaaS SmartKeyAccount (P4, CTR-ACC-11), contracts/accounts.md
+payUnderMandate(token, payee, amount, entryRef, validUntil, sig)	renamed	payUnderMandate(token, payee, amount, entryRef, epoch), named mtxPayUnderMandate(…, epoch, validUntil, sig) (P4), contracts/mandates.md

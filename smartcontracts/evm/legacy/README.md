@@ -22,3 +22,5 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `RevokeMandate`, `OwnerCall`, no epoch, no salt) with `MandateWallet.t.sol`, `MandateWalletKat.t.sol` and the Hedera
   wallet test cut from `test/hedera/HederaMetaToken.t.sol` (CTR-ACC-06, CTR-ACC-07); not built. Clones and wallets
   deployed from them keep working with their own code.
+  The backed-up `SubjectAccount.t.sol` reads `test/vectors/subject_account_create2.json`, which is now
+  `smart_key_account_create2.json` (only its `note` differs); restore the old name to run it.
