@@ -385,16 +385,7 @@ against 32 for random bytes). Boring wins.
 ### 4.5 Shared randomness against malicious recipients
 
 <a id="shared-randomness"></a>
-<a id="CTR-PQZ-04"></a>**CTR-PQZ-04** — **Multi-recipient shared randomness.** One `(r, e1)` per operation: the transfer's
-`u` is shared by the receiver's credit, the sender's new balance and the auditor copy; only `v` differs per recipient.
-This saves two 16 KB `u` per transfer (mKEM). Revealing `r` would reveal the sender's new balance, so disclosure never
-reveals `r` ([CTR-PQZ-14](#CTR-PQZ-14)). The **auditor** is as classical ([CTR-ZTH-09](zether.md#CTR-ZTH-09)): one
-immutable registered PQZ UA per token, set at `initialize` (or none); it reads exactly the per-transfer `v_a`, never
-anyone's balance. The security of shared `r` against **malicious** recipients is an explicit assumption, not KKPP's
-honest-key theorem: MLWE with at most 16 adversarially chosen integer linear hints on the **joint** secret `(r, e1)`
-per recipient key, 32 when receiver and auditor collude. If the estimate misses the target, the fallback is **split
-randomness**: `(r, e1)` shared by `v_t` and `v_a` only, and the sender's `v_f` under its own `(r_f, e1_f)` and `u_f`
-(+16,384 B, ≈ +0.5 M gas per transfer), so hints only open ciphertexts of amounts the hinting parties already know.
+<a id="CTR-PQZ-04"></a>**CTR-PQZ-04** — **Multi-recipient shared randomness.** One `(r, e1)` per operation: the transfer's `u` is shared by the receiver's credit, the sender's new balance and the auditor copy; only `v` differs per recipient. This saves two 16 KB `u` per transfer (mKEM). Revealing `r` would reveal the sender's new balance, so disclosure never reveals `r` ([CTR-PQZ-14](#CTR-PQZ-14)). The **auditor** is as classical ([CTR-ZTH-09](zether.md#CTR-ZTH-09)): one immutable registered PQZ UA per token, set at `initialize` (or none, by `auditorMode`, [CTR-PQZ-24](#CTR-PQZ-24)); it reads exactly the per-transfer `v_a`, never anyone's balance. The security of shared `r` against **malicious** recipients is an explicit assumption, not KKPP's honest-key theorem: MLWE with at most 16 adversarially chosen integer linear hints on the **joint** secret `(r, e1)` per recipient key, 32 when receiver and auditor collude. If the estimate misses the target, the fallback is **split randomness**: `(r, e1)` shared by `v_t` and `v_a` only, and the sender's `v_f` under its own `(r_f, e1_f)` and `u_f` (+16,384 B, ≈ +0.5 M gas per transfer), so hints only open ciphertexts of amounts the hinting parties already know.
 
 KKPP-style mKEM security holds for honestly generated keys. `R_REG` proves only the ℓ2 norms of `(s, e)`, not their
 distribution, and every recipient learns its own decryption-noise term. For a registered `pk = A s + e` the recipient
@@ -540,7 +531,7 @@ and `UARegistered` carries `pk` (16 KB of log data, ≈ 0.13 M gas). Registratio
 | `pendingHash[i]` | bytes32 | proven credit `i`; deleted below `floor` | `ctHash` of credit `i` |
 | `plainPending` | uint256 | `pqzShield` (+amount), fee credit (+fee), debit (−`plainUsed`) | public amounts not yet in `acc` |
 | `sendCounter` | uint64 | debit (+1) | in the statement; replay protection; [CTR-PQZ-19](#CTR-PQZ-19) |
-| `entry[entryRef]` | bytes32 | transfer | `bundleHash` for disclosure |
+| `entry[entryRef]` | bytes32 + memo, or an SSTORE2 pointer | transfer | `bundleHash` and memo, or the bundle ([CTR-PQZ-23](#CTR-PQZ-23)) |
 
 The slots above, as a flow:
 
@@ -631,7 +622,7 @@ the v3 path) instead of pulled with `transferFrom`, because the token cannot pul
 
 Caller: anyone, directly (`envelopeBinding = 0`) or as an envelope op ([CTR-PQZ-15](#CTR-PQZ-15); the outer-fee balance
 check then runs before everything below). Inputs: `payload = be32(p) ‖ be32(validUntilBlock) ‖ be32(plainUsed) ‖
-fromUA ‖ toUA ‖ beneficiaryUA ‖ out` (`out = u ‖ v_t ‖ v_f ‖ v_a`), `acc` (current, 16,512 B), `inline` (ciphertexts
+fromUA ‖ toUA ‖ beneficiaryUA ‖ salt(16) ‖ out` (a commit-reveal payload appends `memo`) (`out = u ‖ v_t ‖ v_f ‖ v_a`), `acc` (current, 16,512 B), `inline` (ciphertexts
 between `p` and `rolled`), `proof`, `authSig`.
 
 Contract checks, cheap first: `block.number ≤ validUntilBlock`; both UAs registered, `from ≠ to`; beneficiary
@@ -663,7 +654,7 @@ acc[from]    = (u, v_f);  accHash[from] = ctHash(u ‖ v_f)
 plainPending[from] −= plainUsed
 pending[to]  ← (u, v_t)                                       (pendingHash, pendingCount++)
 plainPending[ben] += fee                 if fee > 0   (event PqzPlainCredit)
-entry[entryRef] = keccak256(u ‖ v_t ‖ v_a ‖ toUA)
+entry[entryRef] = keccak256(R) ‖ memo, R or nothing   (by entry, CTR-PQZ-23)
 sendCounter[from]++
 emit PqzTransfer(entryRef, fromUA, toUA, out);  emit PqzCredit(toUA, index, entryRef)
 ```
@@ -703,12 +694,13 @@ classical `C_deb` disappears. The proof carries a decryption relation, which the
 in another form.
 
 <a id="derived-randomness"></a>
-<a id="CTR-PQZ-19"></a>**CTR-PQZ-19** — **Encryption randomness is derived**, so the sender can re-create it for
-disclosure: `seed_enc = HKDF-SHA256(ikm = pqzKeySeed, salt = "SCAAS-PQZ-ENC-V1", info = be32(chainId) ‖ token(20) ‖ fromUA
-‖ be8(sendCounter) ‖ toUA ‖ be8(v) ‖ be8(b') ‖ u8(auditorOn))`. Message-bound, so a re-proof with another amount at the
-same counter uses other randomness. Masking randomness *inside* the proof is hedged (`H(secret ‖ statement ‖ 32 B
-CSPRNG)`). Classical Zether uses counter-only derivation ([CTR-ZTH-30](zether.md#CTR-ZTH-30)); reusing `r` across two
-messages here would leak `Δ·(m − m')` up to small noise.
+<a id="CTR-PQZ-19"></a>**CTR-PQZ-19** — **Encryption randomness is derived from the seed and a published salt**, so the sender can re-create it for disclosure (owner 2026-10-11: the classical salt rule, [CTR-ZTH-30](zether.md#CTR-ZTH-30), applies to PQZ): `seed_enc = HKDF-SHA256(ikm = pqzKeySeed, salt = "SCAAS-PQZ-ENC-V2", info = chainUid ‖ token(20) ‖ fromUA ‖ be8(sendCounter) ‖ salt)`, with `salt` = 16 fresh random bytes per build, carried in the payload and the statement header, hence in `PqzTransfer`, the stored bundle, the commitment and the no-bundle calldata; the contract does not check it. A fresh salt per build means a re-proof at the same counter never reuses `r` (reusing `r` across two messages leaks `Δ·(m − m')` up to small noise), and the sender remembers no amount. Masking randomness *inside* the proof is hedged (`H(secret ‖ statement ‖ 32 B CSPRNG)`). Replaces the message-bound form (`info = be32(chainId) ‖ token ‖ fromUA ‖ be8(sendCounter) ‖ toUA ‖ be8(v) ‖ be8(b') ‖ u8(auditorOn)`, never built).
+
+<a id="pqz-storage-modes"></a>
+<a id="CTR-PQZ-23"></a>**CTR-PQZ-23** — **Storage modes and the sender memo as classical** (owner, 2026-10-11; spec only): `disclosureMode ∈ {BUNDLE, COMMIT}` at `initialize`, immutable ([CTR-ZTH-48](zether.md#CTR-ZTH-48)). The bundle is `R = salt ‖ u ‖ v_t ‖ v_a ‖ toUA` (16,688 B with the auditor, 16,560 B without). Entries as [CTR-ZTH-38](zether.md#CTR-ZTH-38), the plain name being the mode's default: `pqzTransfer` stores `R` with SSTORE2 on a BUNDLE token (≈ 3.4 M gas at 200 gas per code byte, **estimate**, against ≈ 0.52 M of calldata) and is commit-reveal on a COMMIT token; `pqzTransferCommit` is commit-reveal on both (`entry[entryRef] = keccak256(R)` plus the sender memo); `pqzTransferNoBundle` stores nothing and reverts `TransferEntryDisabled` on a COMMIT token. Salt and memo travel inside `payload`. The memo is [CTR-ZTH-50](zether.md#CTR-ZTH-50) with `pqzKeySeed` and `info = "PQZ/memo/v1" ‖ chainUid ‖ token(20) ‖ fromUA ‖ be8(sendCounter) ‖ salt`: `memo = salt ‖ ((be8(v) ‖ toUA) XOR ks)`, 56 B for the one recipient, `memoHash` in the statement header. The sender recovers from storage alone: `sendCounter` → `entryRef` → memo → `seed_enc` → `r, e1, e2_t, e2_a` → `u ‖ v_t ‖ v_a` with `pk_t` from the registry → the hash check → a `SENDER_S` proof. Receiver and auditor read `R` from storage (full record) or from `PqzTransfer` logs / calldata.
+
+<a id="pqz-auditor-mode"></a>
+<a id="CTR-PQZ-24"></a>**CTR-PQZ-24** — **Auditor modes as classical** (owner, 2026-10-11; spec only): `auditorMode ∈ {NONE, FULL, OPTIONAL}` at `initialize`, immutable ([CTR-ZTH-49](zether.md#CTR-ZTH-49)), with `auditorUA`. NONE: `auditorUA = 0`, `auditorOn = 0` and no `v_a`. FULL: `auditorOn = 1` on every transfer, else `AuditorRequired`; the auditor reads every transfer from creation and can rebuild balances by bookkeeping. OPTIONAL: the sender's per-transfer choice, publicly visible as `auditorOn = 0` (no `v_a`), statement row 5 skipped. The factory refuses FULL or OPTIONAL without `auditorUA`, NONE with one and unknown values (`BadAuditorMode`).
 
 ### 7.5 Burn and refresh
 
@@ -747,7 +739,7 @@ prove at `p = pendingCount` and retry once on `InlineTooFar`, so a busy merchant
 
 <a id="statement"></a>
 
-Header (576 bytes):
+Header (640 bytes; `salt` and `memoHash` per [CTR-PQZ-23](#CTR-PQZ-23)):
 
 | Offset | Field |
 |---|---|
@@ -769,9 +761,11 @@ Header (576 bytes):
 | 480 | `plainUsed` ([CTR-PQZ-06](#CTR-PQZ-06)) |
 | 512 | `chainUid` (the token's copy of `registry.chainUid()`, [CTR-PQZ-01](#CTR-PQZ-01)) |
 | 544 | `envelopeBinding` ([CTR-PQZ-15](#CTR-PQZ-15)): 0 for a direct call, else the v1 or v3 binding of the envelope that carries the op |
+| 576 | `salt` (16 zero bytes ‖ the build salt, [CTR-PQZ-19](#CTR-PQZ-19); burn/refresh 0) |
+| 608 | `memoHash` (`keccak256(memo)` on commit-reveal, else 0) |
 
 Body: `pk_f ‖ [pk_t] ‖ [pk_a] ‖ T ‖ out` (`T` already includes the plain term). Transfer with auditor:
-576 + 3·16,384 + 16,512 + 16,768 = **83,008 B**; burn: 576 + 16,384 + 16,512 + 16,512 = **49,984 B**. The contract
+640 + 3·16,384 + 16,512 + 16,768 = **83,072 B**; burn: 640 + 16,384 + 16,512 + 16,512 = **50,048 B**. (Before the salt and memo rows, with the 576-byte header: 83,008 B and 49,984 B.) The contract
 builds it from storage, SSTORE2 reads and calldata; the prover builds it identically (vector `statement_*.json`).
 
 `authDigest = keccak256("SCAAS-PQZ-AUTH-V1" ‖ keccak256(statement))`. The authorization signature is over these 32
@@ -797,7 +791,7 @@ reverts `CiphertextOffState(bundleHash)`; new view `transferCiphertextHash(entry
 noise must not leak ([CTR-PQZ-04](#CTR-PQZ-04)); the indexer or the parties supply the bundle bytes.
 
 `verifyTransferAmount(entryRef, amount, kind, opening)` with `opening = abi.encode(bytes bundle, bytes proof)`,
-`bundle = u ‖ v_t ‖ v_a ‖ toUA`, `keccak256(bundle) == entry[entryRef]`, `amount < 2^64`; statement
+`bundle = R` ([CTR-PQZ-23](#CTR-PQZ-23)), `keccak256(bundle) == entry[entryRef]` (or the stored `R`), `amount < 2^64`; statement
 `opTag(DISCLOSE-<KIND>) ‖ proofSystemId ‖ chainId ‖ chainUid ‖ token ‖ registry ‖ entryRef ‖ be32(amount) ‖ u8(kind) ‖
 pk ‖ u ‖ v`. The contract loads `pk` from the **registry** (`keyPtr` of `toUA` for `SENDER_S`/`RECEIVER_X`, of the
 token's `auditorUA` for `AUDITOR`), never from the opening; `v = v_t`, or `v_a` for `AUDITOR`:
@@ -927,8 +921,7 @@ again. An earlier ≈ 2 M estimate, which had motivated a mixin reading `m.data`
 [CTR-ZTH-45](zether.md#CTR-ZTH-45)). PQZ entry points are `pqzShield`, `pqzWrapShield`, `pqzTransfer`, `pqzUnshield`,
 `pqzUnshieldUnwrap`, `pqzRollOver`; kinds `NONE_PQZ`, `UNDERLYING_PQZ` (and `*_ZETHER_PQZ`) are reserved
 ([CTR-TOK-21](token-wrappers.md#CTR-TOK-21)). There is no `pqzRegister`. Renamed from the earlier specified names
-`fund`, `pqzBurn`, `rollOver`. *Open (owner review pending):* the disclosure changes Z9/Z10/Z12 and
-multi-recipient transfers are not ruled for PQZ.
+`fund`, `pqzBurn`, `rollOver`. *Open (owner review pending):* the disclosure changes Z9/Z10 and multi-recipient transfers are not ruled for PQZ; Z12 is [CTR-PQZ-24](#CTR-PQZ-24).
 
 **Binding** ([CTR-ZTH-06](zether.md#CTR-ZTH-06), plus `chainUid`; `m.data` excluded because it contains the proof;
 `MetaTransaction` has no `to`/`value`):

@@ -2650,6 +2650,8 @@ Change (2026-10-08): `MetaTransaction` has no `to`/`value`, so the binding drops
 ### CTR-ZTH-30 — Derive s from seed via PRF
 - old: UD:§13.2 · status: current · owner: yes · date: 2026-08-30 · normative: contracts/zether.md#CTR-ZTH-30 · superseded-by: —
 
+Change (2026-10-11): owner — `s = HKDF-SHA256(seed_zether, "ZTX/s/v2" ‖ chainUid ‖ token ‖ fromUA ‖ sendCounter ‖ salt)` with 16 fresh random bytes per build, published with the transfer and not checked by the contract (SPECIFIED, P3b). The counter-only form reused `s` on a retry (`C_aud₁ − C_aud₂ = [v₁ − v₂]G`, failed-transaction calldata is public); the built amount-mixing form made the sender remember amounts. Source add: owner, 2026-10-11.
+
 **Why.** The sender randomness `s` is derived from the seed by a PRF, so nothing per transfer needs storing. The research sketch was s = HKDF-SHA256(seed_zether, info = "ZTX/s/v1" ‖ chainId ‖ tokenAddress ‖ fromUA ‖ sendCounter) with the `sendCounter` read from the chain, so a wallet restored from its seed alone can still prove every past transfer.
 **Cost if wrong.** Stored randomness is one more secret to lose or leak.
 **Source.** `research/_USER-DECISIONS.md:727`
@@ -2704,8 +2706,10 @@ Change (2026-10-08): `m.to`/`m.value` are gone from the struct; a public transfe
 **Cost if wrong.** Without it each decoy is a separate transfer at ≈ 3.3 M gas; without the kept single format, existing proofs and vectors break.
 **Source.** `history/specs/2026-10-08-zether-multi-recipient-design.md` §2 (Z1-Z3, Z7, Z8), §3, §4.
 
-### CTR-ZTH-38 — Three storage modes: HASH (default), BUNDLE, NONE
+### CTR-ZTH-38 — Three transfer entries; the plain name is the mode's default
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-38 · superseded-by: —
+
+Change (2026-10-11): owner — `zetherTransfer` stores the full record on a BUNDLE token and is commit-reveal on a COMMIT token (CTR-ZTH-48); `zetherTransferCommit` is commit-reveal on both; `zetherTransferNoBundle` is BUNDLE-only; `zetherTransferBundle` goes. Salt and memo travel inside `payload`. Built (P3): `zetherTransfer` = HASH (default), `zetherTransferBundle` = BUNDLE. Source add: owner, 2026-10-11.
 
 **Why.** Disclosure storage is the per-transfer cost the sender should choose: only `keccak256` of the bundles (default, bundles in an event), the full bundle, or nothing (off-chain disclosure from calldata). The mode is in the statement `opTag`, so a relayer cannot switch it.
 **Cost if wrong.** Always storing the full bundle costs ≈ +375 k gas (BLS) per leg; storing nothing makes on-chain disclosure impossible.
@@ -2734,6 +2738,8 @@ Change (2026-10-08): `m.to`/`m.value` are gone from the struct; a public transfe
 
 ### CTR-ZTH-42 — The sender may leave the auditor out of one transfer
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-42 · superseded-by: —
+
+Change (2026-10-11): owner — only under `auditorMode = OPTIONAL` (CTR-ZTH-49); NONE forces every `C_aud = O`, FULL every `C_aud ≠ O`. Built (P3): open on every token with an auditor key. Source add: owner, 2026-10-11.
 
 **Why.** On a token whose auditor is on, the sender may set every `C_aud_j = O` and the statement `Y_a = O`; a mix reverts. The owner accepted that the auditor then reads nothing for that transfer and that the opt-out is publicly visible.
 **Cost if wrong.** Without it the auditor-on token forces every transfer into the auditor's view; with a mix allowed a proof could verify under either choice.
@@ -2775,6 +2781,28 @@ Change (2026-10-08): `m.to`/`m.value` are gone from the struct; a public transfe
 **Why.** Flags 5–8 (`FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`, CTR-AS-17) are refused on `NONE_ZETHER` / `UNDERLYING_ZETHER`; valid flags are `PAYABLE`, `MINTABLE`/`BURNABLE` (`NONE_ZETHER`), `RATE_ADJUSTABLE`/`WRAP_DISABLEABLE` (`UNDERLYING_ZETHER`). A confidential balance can be frozen but not seized on public chains.
 **Cost if wrong.** Every control combination on a confidential kind would need its own audited implementation.
 **Source.** `history/specs/2026-10-08-token-tree-design.md` T11, §6.3.
+
+### CTR-ZTH-48 — disclosureMode BUNDLE or COMMIT, chosen at initialize
+- old: — · status: current · owner: yes · date: 2026-10-11 · normative: contracts/zether.md#CTR-ZTH-48 · superseded-by: —
+
+**Rule.** Owner decisions of 2026-10-11, in one place: (1) `disclosureMode ∈ {BUNDLE, COMMIT}` at `initialize`, immutable: on BUNDLE `zetherTransfer` stores the full bundle (default) and a caller may save gas with `zetherTransferCommit` or `zetherTransferNoBundle`; on COMMIT only commit-reveal, the no-bundle entry reverts typed (CTR-ZTH-38). (2) `auditorMode ∈ {NONE, FULL, OPTIONAL}` at `initialize`, immutable; FULL refuses opt-outs, OPTIONAL keeps CTR-ZTH-42 (CTR-ZTH-49). (3) `s` from the seed with a fresh published 16-byte salt per build (CTR-ZTH-30). (4) Commit-reveal stores a sender memo (salt ‖ amounts and recipients XOR an HKDF keystream) so the sender opens from seed + storage alone (CTR-ZTH-50). (5) A who-can-open table per storage (zether.md §14). (6) PQ Zether follows the same rules (CTR-PQZ-19, CTR-PQZ-23, CTR-PQZ-24). All SPECIFIED; code in P3b.
+**Why.** The creator, not each sender, decides whether a token keeps its disclosure data on chain. COMMIT is a subset of BUNDLE, so one implementation per kind serves both and the kinds stay `NONE_ZETHER` / `UNDERLYING_ZETHER` (CTR-TOK-21); separate implementations per mode were rejected, to be revisited only if EIP-170 forces smaller bytecode.
+**Cost if wrong.** A per-sender choice leaves no on-chain guarantee of where disclosure data lives; a separate implementation per mode doubles the audit surface.
+**Source.** owner, 2026-10-11; background `research/zether-disclosure.md` §4, §6, §7, §9.
+
+### CTR-ZTH-49 — auditorMode NONE, FULL or OPTIONAL, chosen at initialize
+- old: — · status: current · owner: yes · date: 2026-10-11 · normative: contracts/zether.md#CTR-ZTH-49 · superseded-by: —
+
+**Why.** A regulated token needs coverage the sender cannot opt out of (FULL: every transfer from creation, balances reconstructible by bookkeeping); others want the auditor optional per transfer (OPTIONAL) or absent (NONE). The factory refuses FULL/OPTIONAL without a key, NONE with one, and unknown values. One implementation: the token-side difference is a few checks, E6 lives in the shared verifier, and the immutable public config gives the same assurance.
+**Cost if wrong.** Without FULL an auditor-enabled token proves no coverage (research finding R3); a key under NONE would be a dead key the public reads as coverage.
+**Source.** owner, 2026-10-11; background `research/zether-disclosure.md` §4, §6, §7, §9.
+
+### CTR-ZTH-50 — Commit-reveal stores a sender memo; the sender recovers from storage alone
+- old: — · status: current · owner: yes · date: 2026-10-11 · normative: contracts/zether.md#CTR-ZTH-50 · superseded-by: —
+
+**Why.** Commit-reveal kept only a 32-byte hash, so the sender needed logs or calldata to open its own transfer. Storing `salt ‖ (v_j ‖ toUA_j) XOR keystream` (16 + 40·M bytes, ≈ 3 slots with the commitment at M = 1 against ≈ 9 for a full bn254 bundle) lets the sender rebuild every bundle from its seed and storage; `s`, the key and `Y_a` are recomputed. No MAC: a wrong decryption fails the commitment. The memo hash is in the signed statement, so a relayer cannot alter or drop it. Receiver and auditor still need `TransferBundles` logs or calldata (R6 open).
+**Cost if wrong.** Without the memo a sender whose logs are gone cannot open its own commit-reveal transfers.
+**Source.** owner, 2026-10-11; background `research/zether-disclosure.md` §4, §6, §7, §9.
 
 ### CTR-ZTH-80 — Range bits 32 and DECRYPT_BOUND 2^40
 - old: R34(params) · status: superseded · owner: yes · date: 2026-10-03 · normative: — · superseded-by: CTR-ZTH-18, CTR-ZTH-19
@@ -3164,6 +3192,8 @@ Change (2026-10-08): `PqzToken` sits on the one token base and relays like `Zeth
 ### CTR-PQZ-19 — Message-bound derived encryption randomness
 - old: R288 · status: current · owner: no · date: 2026-10-06 · normative: contracts/pq-zether.md#CTR-PQZ-19 · superseded-by: —
 
+Change (2026-10-11): owner — the seed is bound to a fresh published 16-byte salt instead of the amounts (CTR-ZTH-30 for PQZ): a re-proof still never reuses `r`, and the sender remembers no amount. Source add: owner, 2026-10-11.
+
 **Why.** Encryption randomness is derived from a message-bound seed, so the sender can re-derive it for disclosure and a re-proof never reuses `r`.
 **Cost if wrong.** Reusing `r` across two messages leaks `Δ·(m − m')` up to noise.
 **Source.** `history/specs/2026-10-06-pq-zether-design.md:376`
@@ -3185,9 +3215,23 @@ Change (2026-10-08): `PqzToken` sits on the one token base and relays like `Zeth
 ### CTR-PQZ-22 — PQZ entry-point names mirror classical Zether; kinds reserved
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/pq-zether.md#CTR-PQZ-22 · superseded-by: —
 
-**Why.** `pqzShield`, `pqzWrapShield`, `pqzTransfer`, `pqzUnshield`, `pqzUnshieldUnwrap`, `pqzRollOver` follow CTR-ZTH-45; `NONE_PQZ`, `UNDERLYING_PQZ` and `*_ZETHER_PQZ` are reserved kinds (CTR-TOK-21). Open: the disclosure changes Z9/Z10/Z12 and multi-recipient transfers are not ruled for PQZ (owner review pending).
+**Why.** `pqzShield`, `pqzWrapShield`, `pqzTransfer`, `pqzUnshield`, `pqzUnshieldUnwrap`, `pqzRollOver` follow CTR-ZTH-45; `NONE_PQZ`, `UNDERLYING_PQZ` and `*_ZETHER_PQZ` are reserved kinds (CTR-TOK-21). Open: the disclosure changes Z9/Z10 and multi-recipient transfers are not ruled for PQZ (owner review pending); Z12 is CTR-PQZ-24.
 **Cost if wrong.** Two naming schemes for the same operations across the two classes.
 **Source.** `history/specs/2026-10-08-token-tree-design.md` T5, §6.2.
+
+### CTR-PQZ-23 — PQZ storage modes and sender memo as classical
+- old: — · status: current · owner: yes · date: 2026-10-11 · normative: contracts/pq-zether.md#CTR-PQZ-23 · superseded-by: —
+
+**Why.** The owner applies CTR-ZTH-38/48/50 to PQZ: `disclosureMode` at `initialize`, `pqzTransfer` / `pqzTransferCommit` / `pqzTransferNoBundle`, the 56-byte memo for the one recipient. A stored PQZ bundle is ≈ 16.7 KB (SSTORE2, ≈ 3.4 M gas estimate), which is why commit-reveal matters more here.
+**Cost if wrong.** Two classes with different disclosure storage semantics for the same entry names.
+**Source.** owner, 2026-10-11; background `research/zether-disclosure.md` §4, §6, §7, §9.
+
+### CTR-PQZ-24 — PQZ auditor modes as classical
+- old: — · status: current · owner: yes · date: 2026-10-11 · normative: contracts/pq-zether.md#CTR-PQZ-24 · superseded-by: —
+
+**Why.** CTR-ZTH-49 for PQZ: `auditorMode` with `auditorUA`; FULL forces `auditorOn = 1`, OPTIONAL is the per-transfer choice (the Z12 question of CTR-PQZ-22), NONE has no auditor UA.
+**Cost if wrong.** A PQZ token could not offer guaranteed audit coverage.
+**Source.** owner, 2026-10-11; background `research/zether-disclosure.md` §4, §6, §7, §9.
 
 ### CTR-PQZ-80 — PqzMetaTx: own mixin with op arguments sliced from calldata
 - old: — · status: superseded · owner: yes · date: 2026-10-08 · normative: — · superseded-by: CTR-PQZ-21
